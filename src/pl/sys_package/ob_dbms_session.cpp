@@ -74,7 +74,7 @@ int ObDBMSSession::set_identifier(sql::ObExecContext &ctx,
   if (OB_FAIL(ret)) {
     // do nothing
   } else {
-    ObFLTControlInfoManager mgr(GET_MY_SESSION(ctx)->get_effective_tenant_id());
+    ObFLTControlInfoManager mgr;
     if (OB_FAIL(mgr.init())) {
       LOG_WARN("failed to init full link trace info manager", K(ret));
     } else if (OB_FAIL(mgr.find_appropriate_con_info(*session))) {

@@ -131,7 +131,7 @@ int ObSemiStructColumnEncodeCtx::init_sub_schema()
   int ret = OB_SUCCESS;
   ObTimeGuard timeguard(__func__, 1_s);
   // inference local schema
-  ObArenaAllocator tmp_allocator("SemiTmp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_allocator("SemiTmp", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObJsonSchemaFlatter json_schema_flatter(&tmp_allocator);
   if (sub_schema_.is_inited()) { // donot infer if is inited
   } else if (OB_ISNULL(datums_)) {

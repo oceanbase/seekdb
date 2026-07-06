@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "deps/oblib/unittest/lib/unittest_diagnostic_info_util.h"
+#include "lib/unittest_diagnostic_info_util.h"
 #include <gtest/gtest.h>
 #include "lib/utility/utility.h"
 #include "lib/coro/testing.h"

@@ -223,7 +223,6 @@ public:
   virtual ~ObRARowStore() { reset(); }
 
   int init(int64_t mem_limit,
-      uint64_t tenant_id,
       int64_t mem_ctx_id = common::ObCtxIds::DEFAULT_CTX_ID,
       const char *label = common::ObModIds::OB_SQL_ROW_STORE);
 
@@ -246,17 +245,17 @@ public:
   bool is_inited() const { return inited_; }
   bool is_file_open() const { return fd_ >= 0; }
 
-  void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   void set_mem_ctx_id(const int64_t ctx_id) { ctx_id_ = ctx_id; }
   void set_mem_limit(const int64_t limit) { mem_limit_ = limit; }
 
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline int64_t get_mem_limit() const { return mem_limit_; }
   inline int64_t get_row_cnt() const { return row_cnt_; }
   inline int64_t get_mem_hold() const { return mem_hold_; }
   inline int64_t get_file_size() const { return file_size_; }
 
-  TO_STRING_KV(K_(tenant_id), K_(label), K_(ctx_id),  K_(mem_limit),
+  TO_STRING_KV(K_(label), K_(ctx_id),  K_(mem_limit),
       K_(save_row_cnt), K_(row_cnt), K_(fd), K_(file_size));
 
 private:
@@ -287,7 +286,6 @@ private:
 
 private:
   bool inited_;
-  uint64_t tenant_id_;
   const char *label_;
   int64_t ctx_id_;
   int64_t mem_limit_;

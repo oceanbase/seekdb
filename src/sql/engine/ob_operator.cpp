@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_operator.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_operator_factory.h"
 #include "observer/ob_server.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
@@ -435,7 +436,7 @@ int ObOpSpec::create_operator_recursive(ObExecContext &exec_ctx, ObOperator *&op
         op->get_monitor_info().set_operator_id(id_);
         op->get_monitor_info().set_operator_type(type_);
         op->get_monitor_info().set_plan_depth(plan_depth_);
-        op->get_monitor_info().set_tenant_id(GET_MY_SESSION(exec_ctx)->get_effective_tenant_id());
+        
         op->get_monitor_info().open_time_ = oceanbase::common::ObClockGenerator::getClock();
         op->get_monitor_info().set_rich_format(use_rich_format_);
         op->get_monitor_info().set_plan_hash_value(plan_->get_plan_hash_value());
@@ -878,7 +879,7 @@ int ObOperator::open()
           LOG_WARN("init skip vector failed", K(ret));
         }
         #ifdef ENABLE_DEBUG_LOG
-        else if (OB_FAIL(init_dummy_mem_context(ctx_.get_my_session()->get_effective_tenant_id()))) {
+        else if (OB_FAIL(init_dummy_mem_context())) {
           LOG_WARN("failed to get mem context", K(ret));
         } else if (OB_LIKELY(nullptr == dummy_ptr_)
                 && OB_ISNULL(dummy_ptr_ = static_cast<char *>(dummy_mem_context_->get_malloc_allocator().alloc(sizeof(char))))) {
@@ -1106,7 +1107,7 @@ int ObOperator::try_register_rt_monitor_node(int64_t rows)
   int ret = OB_SUCCESS;
   if (!ctx_.is_rt_monitor_node_registered() &&
               match_rt_monitor_condition(rows)) {
-    ObPlanMonitorNodeList *list = MTL(ObPlanMonitorNodeList*);
+    ObPlanMonitorNodeList *list = share::g_mp->plan_monitor_node_list();
     const ObOpSpec *root_spec = spec_.plan_->get_root_op_spec();
     if (OB_ISNULL(list) || OB_ISNULL(root_spec)) {
       /*do nothing*/
@@ -1129,7 +1130,7 @@ int ObOperator::try_deregister_rt_monitor_node()
   int ret = OB_SUCCESS;
   if (spec_.id_ == ctx_.get_register_op_id()
       && ctx_.is_rt_monitor_node_registered()) {
-    ObPlanMonitorNodeList *list = MTL(ObPlanMonitorNodeList*);
+    ObPlanMonitorNodeList *list = share::g_mp->plan_monitor_node_list();
     if (OB_ISNULL(list)) {
       // ignore ret
       LOG_WARN("fail to revert monitor node", K(list));
@@ -1241,7 +1242,7 @@ int ObOperator::submit_op_monitor_node()
     // Some records that meets the conditions needs to be archived
     // Reference document:
     op_monitor_info_.close_time_ = oceanbase::common::ObClockGenerator::getClock();
-    ObPlanMonitorNodeList *list = MTL(ObPlanMonitorNodeList*);
+    ObPlanMonitorNodeList *list = share::g_mp->plan_monitor_node_list();
     if (list && spec_.plan_ && ctx_.get_physical_plan_ctx()) {
       if (spec_.plan_->get_phy_plan_hint().monitor_
           || (ctx_.get_my_session()->is_user_session()
@@ -1920,13 +1921,13 @@ inline int ObOperator::get_next_row_vectorizely()
 }
 
 #ifdef ENABLE_DEBUG_LOG
-inline int ObOperator::init_dummy_mem_context(uint64_t tenant_id)
+inline int ObOperator::init_dummy_mem_context()
 {
   int ret = common::OB_SUCCESS;
   if (OB_LIKELY(NULL == dummy_mem_context_)) {
     lib::ContextParam param;
     param.set_properties(lib::USE_TL_PAGE_OPTIONAL)
-      .set_mem_attr(tenant_id, "ObSqlOp",
+      .set_mem_attr("ObSqlOp",
                      common::ObCtxIds::DEFAULT_CTX_ID);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(dummy_mem_context_, param))) {
       SQL_ENG_LOG(WARN, "create entity failed", K(ret));

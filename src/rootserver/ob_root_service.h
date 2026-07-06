@@ -18,16 +18,16 @@
 #define OCEANBASE_ROOTSERVER_OB_ROOT_SERVICE_H_
 
 #include "lib/net/ob_addr.h"
-#include "lib/thread/ob_work_queue.h"
+#include "lib/task/ob_timer.h"
+#include "lib/thread/ob_async_task_queue.h"
 
 #include "share/object_storage/ob_object_storage_struct.h"
-#include "share/ob_tenant_id_schema_version.h"
+#include "share/ob_schema_version_info.h"
 #include "share/ob_unit_replica_counter.h"
 #include "share/ob_ls_id.h"
 #include "share/ob_max_id_cache.h"
 
 #include "rpc/ob_packet.h"
-#include "observer/ob_restore_ctx.h"
 #include "rootserver/ob_ddl_service.h"
 #include "rootserver/ob_tenant_ddl_service.h"
 #include "rootserver/ob_root_minor_freeze.h"
@@ -35,7 +35,6 @@
 #include "rootserver/ob_root_inspection.h"
 #include "rootserver/ob_rs_event_history_table_operator.h"
 #include "rootserver/ob_snapshot_info_manager.h"
-#include "rootserver/ob_upgrade_executor.h"
 #include "rootserver/ob_schema_history_recycler.h"
 #include "rootserver/ob_catalog_ddl_service.h"
 #include "rootserver/ob_ccl_ddl_service.h"
@@ -138,7 +137,6 @@ public:
 
   int init(common::ObServerConfig &config, common::ObConfigManager &config_mgr,
            common::ObAddr &self, common::ObMySQLProxy &sql_proxy,
-           observer::ObRestoreCtx &restore_ctx,
            share::schema::ObMultiVersionSchemaService *schema_mgr_);
   inline bool is_inited() const { return inited_; }
   void destroy();
@@ -200,14 +198,6 @@ public:
   int create_hidden_table(const obcall::ObCreateHiddenTableArg &arg, obcall::ObCreateHiddenTableRes &res);
   int send_auto_split_tablet_task_request(const obcall::ObAutoSplitTabletBatchArg &arg, obcall::ObAutoSplitTabletBatchRes &res);
   int split_global_index_tablet(const obcall::ObAlterTableArg &arg);
-  /**
-   * For recover restore table ddl, data insert into the target table is selected from another tenant.
-   * The function is used to create a hidden target table without any change on the source table,
-   * and then register a recover task into ddl task queue to finish the all procedures.
-   * The format about the command is,
-   * alter system recover table test.t1 to tenant backup_oracle_tenant from '$ARCHIVE_FILES_PATH' with 'pool_list=small_pool_0&primary_zone=z1' remap table test.t1:recover_test.t3;
-  */
-  int recover_restore_table_ddl(const obcall::ObRecoverRestoreTableDDLArg &arg);
   int execute_ddl_task(const obcall::ObAlterTableArg &arg, common::ObSArray<uint64_t> &obj_ids);
   int cancel_ddl_task(const obcall::ObCancelDDLTaskArg &arg);
   int alter_tablegroup(const obcall::ObAlterTablegroupArg &arg);
@@ -312,9 +302,6 @@ public:
   int create_package(const obcall::ObCreatePackageArg &arg);
   int create_package_with_res(const obcall::ObCreatePackageArg &arg,
                               obcall::ObRoutineDDLRes &res);
-  int alter_package(const obcall::ObAlterPackageArg &arg);
-  int alter_package_with_res(const obcall::ObAlterPackageArg &arg,
-                              obcall::ObRoutineDDLRes &res);
   int drop_package(const obcall::ObDropPackageArg &arg);
   //----End of functions for managing package----
 
@@ -370,15 +357,8 @@ public:
   int admin_refresh_io_calibration(const obcall::ObAdminRefreshIOCalibrationArg &arg);
   int admin_clear_merge_error(const obcall::ObAdminMergeArg &arg);
   int admin_upgrade_virtual_schema();
-  int run_upgrade_job(const obcall::ObUpgradeJobArg &arg);
   int admin_flush_cache(const obcall::ObAdminFlushCacheArg &arg);
-  int admin_upgrade_cmd(const obcall::Bool &arg);
-  int admin_rolling_upgrade_cmd(const obcall::ObAdminRollingUpgradeArg &arg);
   int admin_set_tracepoint(const obcall::ObAdminSetTPArg &arg);
-  int admin_set_backup_config(const obcall::ObAdminSetConfigArg &arg);
-  /* physical restore */
-  int rebuild_index_in_restore(const obcall::ObRebuildIndexInRestoreArg &arg);
-  /*-----------------*/
   int refresh_time_zone_info(const obcall::ObRefreshTimezoneArg &arg);
   int request_time_zone_info(const common::ObRequestTZInfoArg &arg, common::ObRequestTZInfoResult &result);
   // async tasks and callbacks
@@ -413,11 +393,9 @@ public:
       const obcall::ObGetRecycleSchemaVersionsArg &arg,
       obcall::ObGetRecycleSchemaVersionsResult &result);
   int standby_upgrade_virtual_schema(const obcall::ObDDLNopOpreatorArg &arg);
-  int check_backup_scheduler_working(obcall::Bool &is_working);
   int purge_recyclebin_objects(int64_t purge_each_time);
   int flush_opt_stat_monitoring_info(const obcall::ObFlushOptStatArg &arg);
   int recompile_all_views_batch(const obcall::ObRecompileAllViewsBatchArg &arg);
-  int parallel_htable_ddl(const obcall::ObHTableDDLArg &arg, obcall::ObHTableDDLRes &res);
 private:
   int check_parallel_ddl_conflict(
       share::schema::ObSchemaGetterGuard &schema_guard,
@@ -439,32 +417,25 @@ private:
       const obcall::ObCreateTableArg &arg,
       share::schema::ObTableSchema &table_schema);
   int clear_special_cluster_schema_status();
-  int check_tenant_gts_config(const int64_t tenant_id, bool &tenant_gts_config_ok,
+  int check_tenant_gts_config(bool &tenant_gts_config_ok,
                               share::schema::ObSchemaGetterGuard &schema_guard);
-  int check_database_config(const int64_t tenant_id, bool &db_config_ok,
+  int check_database_config(bool &db_config_ok,
                             share::schema::ObSchemaGetterGuard &schema_guard);
-  int check_table_config(const int64_t tenant_id, bool &table_config_ok, bool &table_split_ok,
+  int check_table_config(bool &table_config_ok, bool &table_split_ok,
                          share::schema::ObSchemaGetterGuard &schema_guard,
                          const int64_t snapshot_schema_version);
-  int check_tablegroup_config(const int64_t tenant_id, bool &tablegroup_config_ok,
+  int check_tablegroup_config(bool &tablegroup_config_ok,
                               bool &tablegroup_split_ok,
                               share::schema::ObSchemaGetterGuard &schema_guard,
                               const int64_t snapshot_schema_version);
-  int check_restore_tenant_after_major_freeze(ObArray<ObString> &not_allow_reasons,
-                                              const int64_t snapshot_schema_version,
-                                              const ObArray<uint64_t> &tenant_ids);
   int get_tenants_created_after_snapshot(const int64_t snapshot_schema_version,
-                                         ObArray<uint64_t> &tenant_ids);
+                                         ObArray<uint64_t> &batch_ids);
   int query_ddl_table_after_major_freeze(int &row_cnt, int64_t &schema_version_cursor,
-                                         ObArray<uint64_t> &tenant_ids);
+                                         ObArray<uint64_t> &batch_ids);
   bool continue_check(const int ret);
-  inline static bool cmp_tenant_id(const uint64_t lhs, const uint64_t tenant_id) {
-    return lhs < tenant_id;
-  }
 
   int table_allow_ddl_operation(const obcall::ObAlterTableArg &arg);
-  int get_table_schema(uint64_t tenant_id,
-                       const common::ObString &database_name,
+  int get_table_schema(const common::ObString &database_name,
                        const common::ObString &table_name,
                        const bool is_index,
                        const int64_t session_id,
@@ -475,7 +446,7 @@ private:
 
   int precheck_interval_part(const obcall::ObAlterTableArg &arg);
 
-  int parallel_ddl_pre_check_(const uint64_t tenant_id);
+  int parallel_ddl_pre_check_();
   int check_tx_share_memory_limit_(obcall::ObAdminSetConfigItem &item);
   int check_memstore_limit_(obcall::ObAdminSetConfigItem &item);
   int check_tenant_memstore_limit_(obcall::ObAdminSetConfigItem &item);
@@ -504,7 +475,6 @@ private:
 
   common::ObMySQLProxy sql_proxy_;
   common::ObCommonSqlProxy oracle_sql_proxy_;
-  observer::ObRestoreCtx *restore_ctx_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
 
   // minor freeze

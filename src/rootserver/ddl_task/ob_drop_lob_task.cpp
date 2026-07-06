@@ -41,7 +41,6 @@ ObDropLobTask::~ObDropLobTask()
 }
 
 int ObDropLobTask::init(
-    const uint64_t tenant_id,
     const int64_t task_id,
     const uint64_t aux_lob_meta_table_id,
     const uint64_t data_table_id,
@@ -51,10 +50,10 @@ int ObDropLobTask::init(
     const obcall::ObDDLArg &ddl_arg)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || task_id <= 0 || OB_INVALID_ID == data_table_id
+  if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == data_table_id
       || schema_version <= 0 || parent_task_id < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(tenant_id), K(task_id), K(data_table_id),
+    LOG_WARN("invalid arguments", KR(ret), K(task_id), K(data_table_id),
         K(schema_version), K(parent_task_id));
   } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
     ret = OB_ERR_SYS;
@@ -63,7 +62,7 @@ int ObDropLobTask::init(
     LOG_WARN("deep copy drop index arg failed", KR(ret));
   } else {
     set_gmt_create(ObTimeUtility::current_time());
-    tenant_id_ = tenant_id;
+    
     object_id_ = data_table_id;
     target_object_id_ = aux_lob_meta_table_id;
     schema_version_ = schema_version;
@@ -71,7 +70,7 @@ int ObDropLobTask::init(
     parent_task_id_ = parent_task_id;
     consumer_group_id_ = consumer_group_id;
     task_version_ = OB_DROP_LOB_TASK_VERSION;
-    dst_tenant_id_ = tenant_id_;
+    
     dst_schema_version_ = schema_version_;
     is_inited_ = true;
     ddl_tracing_.open();
@@ -91,7 +90,7 @@ int ObDropLobTask::init(
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, root service is null", KR(ret));
   } else {
-    tenant_id_ = task_record.tenant_id_;
+  
     object_id_ = task_record.object_id_;
     target_object_id_ = task_record.target_object_id_;
     schema_version_ = task_record.schema_version_;
@@ -99,11 +98,11 @@ int ObDropLobTask::init(
     parent_task_id_ = task_record.parent_task_id_;
     task_version_ = task_record.task_version_;
     ret_code_ = task_record.ret_code_;
-    dst_tenant_id_ = tenant_id_;
+    
     dst_schema_version_ = schema_version_;
     if (nullptr != task_record.message_.ptr()) {
       int64_t pos = 0;
-      if (OB_FAIL(deserialize_params_from_message(task_record.tenant_id_, task_record.message_.ptr(), task_record.message_.length(), pos))) {
+      if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(), task_record.message_.length(), pos))) {
         LOG_WARN("deserialize params from message failed", KR(ret));
       }
     }
@@ -144,9 +143,9 @@ int ObDropLobTask::drop_lob_impl()
   if (OB_ISNULL(root_service_)) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, root_service is nullptr", KR(ret));
-  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(tenant_id_, schema_guard))) {
-    LOG_WARN("get tenant schema failed", KR(ret), K(tenant_id_));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, object_id_, data_table_schema))) {
+  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("get tenant schema failed", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_table_schema))) {
     LOG_WARN("get data table schema failed", KR(ret), K(object_id_));
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_SCHEMA_ERROR;
@@ -156,8 +155,9 @@ int ObDropLobTask::drop_lob_impl()
   } else {
     int64_t ddl_rpc_timeout = 0;
     obcall::ObDropLobArg arg;
-    arg.tenant_id_ = tenant_id_;
-    arg.exec_tenant_id_ = tenant_id_;
+    
+    
+    
     arg.data_table_id_ = object_id_;
     arg.aux_lob_meta_table_id_ = target_object_id_;
     arg.task_id_ = task_id_;
@@ -213,14 +213,14 @@ int ObDropLobTask::cleanup_impl()
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, tenant_id_, task_id_))) {
+  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, task_id_))) {
     LOG_WARN("delete task record failed", KR(ret), K(task_id_), K(schema_version_));
   } else {
     need_retry_ = false;      // clean succ, stop the task
   }
 
   if (OB_SUCC(ret) && parent_task_id_ > 0) {
-    const ObDDLTaskID parent_task_id(tenant_id_, parent_task_id_);
+    const ObDDLTaskID parent_task_id(parent_task_id_);
     ObSysDDLSchedulerUtil::on_ddl_task_finish(parent_task_id, get_task_key(), ret_code_, trace_id_);
   }
   LOG_INFO("clean task finished", KR(ret), K(*this));
@@ -290,10 +290,10 @@ int ObDropLobTask::check_switch_succ_()
     LOG_WARN("error sys", KR(ret));
   } else if (OB_FAIL(refresh_schema_version())) {
     LOG_WARN("refresh schema version failed", KR(ret));
-  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(tenant_id_, schema_guard))) {
-    LOG_WARN("get tenant schema failed", KR(ret), K(tenant_id_));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, object_id_, data_table_schema_ptr))) {
-    LOG_WARN("faild to get_table_schema", KR(ret), K(tenant_id_), K(object_id_));
+  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("get tenant schema failed", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_table_schema_ptr))) {
+    LOG_WARN("faild to get_table_schema", KR(ret), K(object_id_));
   } else if (OB_ISNULL(data_table_schema_ptr)) {
     // drop lob task may retry because rpc timeout, and data table dropped before retry, so we should ignore this situation
     task_status_ = ObDDLTaskStatus::SUCCESS;
@@ -340,14 +340,14 @@ int ObDropLobTask::serialize_params_to_message(char *buf, const int64_t buf_size
   return ret;
 }
 
-int ObDropLobTask::deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t buf_size, int64_t &pos)
+int ObDropLobTask::deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   obcall::ObDDLArg tmp_ddl_arg;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || nullptr == buf || buf_size <= 0)) {
+  if (OB_UNLIKELY(!true || nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(tenant_id), KP(buf), K(buf_size));
-  } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(tenant_id, buf, buf_size, pos))) {
+    LOG_WARN("invalid arg", KR(ret), KP(buf), K(buf_size));
+  } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, buf_size, pos))) {
     LOG_WARN("ObDDLTask deserlize failed", KR(ret));
   } else if (OB_FAIL(tmp_ddl_arg.deserialize(buf, buf_size, pos))) {
     LOG_WARN("deserialize failed", KR(ret));

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include "storage/ddl/ob_tablet_slice_writer.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
 #include "sql/engine/pdml/static/ob_px_sstable_insert_op.h"
@@ -23,7 +24,7 @@
 #include "storage/ddl/ob_lob_macro_block_writer.h"
 #include "storage/direct_load/ob_direct_load_vector_utils.h"
 #include "sql/engine/ob_batch_rows.h"
-#include "share/ob_tablet_autoincrement_service.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 
 #define USING_LOG_PREFIX STORAGE
 
@@ -35,7 +36,7 @@ using namespace oceanbase::blocksstable;
 using namespace oceanbase::sql;
 
 ObTabletSliceWriter::ObTabletSliceWriter()
-  : is_inited_(false), allocator_(ObMemAttr(MTL_ID(), "cg_mb_writers")), slice_idx_(-1), storage_column_count_(0), storage_schema_(nullptr), row_count_(0), unique_index_id_(0)
+  : is_inited_(false), allocator_(ObMemAttr("cg_mb_writers")), slice_idx_(-1), storage_column_count_(0), storage_schema_(nullptr), row_count_(0), unique_index_id_(0)
 {
 
 }
@@ -218,7 +219,7 @@ int ObTabletSliceWriter::close()
 
 ObTabletSliceIncWriter::ObTabletSliceIncWriter()
   : is_inited_(false),
-    allocator_(ObMemAttr(MTL_ID(), "slice_mb_writer")),
+    allocator_(ObMemAttr("slice_mb_writer")),
     storage_column_count_(0),
     macro_block_writer_(nullptr),
     row_count_(0)
@@ -312,7 +313,7 @@ int ObTabletSliceIncWriter::close()
 
 ObRsSliceWriter::ObRsSliceWriter()
   : is_inited_(false), rowkey_column_count_(0), sql_column_count_(0), lob_writer_(nullptr), storage_slice_writer_(nullptr),
-    row_arena_(ObMemAttr(MTL_ID(), "slice_row_arena")), current_row_()
+    row_arena_(ObMemAttr("slice_row_arena")), current_row_()
 {
 
 }
@@ -348,7 +349,7 @@ int ObRsSliceWriter::init(const ObWriteMacroParam &write_param)
     sql_column_count_ = writer_param_.ddl_table_schema_.column_items_.count() - ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
     const int64_t request_column_count = writer_param_.ddl_table_schema_.column_items_.count();
     if (!writer_param_.tablet_param_.with_cs_replica_) {
-      if (OB_ISNULL(storage_slice_writer_ = OB_NEW(ObTabletSliceWriter, ObMemAttr(MTL_ID(), "stor_slice_wrt")))) {
+      if (OB_ISNULL(storage_slice_writer_ = OB_NEW(ObTabletSliceWriter, ObMemAttr("stor_slice_wrt")))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(ret));
       } else if (OB_FAIL(static_cast<ObTabletSliceWriter *>(storage_slice_writer_)->init(writer_param_))) {
@@ -357,14 +358,14 @@ int ObRsSliceWriter::init(const ObWriteMacroParam &write_param)
     } else {
       ObWriteMacroParam &write_param = const_cast<ObWriteMacroParam &>(writer_param_);
       write_param.max_batch_size_ = ObTabletSliceBufferTempFileWriter::ObDDLRowBuffer::DEFAULT_MAX_BATCH_SIZE;
-      if (OB_ISNULL(storage_slice_writer_ = OB_NEW(ObCsReplicaTabletSliceWriter, ObMemAttr(MTL_ID(), "stor_slice_wrt")))) {
+      if (OB_ISNULL(storage_slice_writer_ = OB_NEW(ObCsReplicaTabletSliceWriter, ObMemAttr("stor_slice_wrt")))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to allocate  memory", K(ret));
       } else if (OB_FAIL(static_cast<ObCsReplicaTabletSliceWriter *>(storage_slice_writer_)->init(write_param))) {
         LOG_WARN("init storage slice writer failed", K(ret), K(writer_param_));
       }
     }
-    if (FAILEDx(ObDDLUtil::init_datum_row_with_snapshot(request_column_count, rowkey_column_count_, writer_param_.snapshot_version_, current_row_))) {
+    if (FAILEDx(ObDDLStorageUtil::init_datum_row_with_snapshot(request_column_count, rowkey_column_count_, writer_param_.snapshot_version_, current_row_))) {
       LOG_WARN("init datum row failed", K(ret), K(request_column_count), K(rowkey_column_count_), K(writer_param_));
     }
     if (OB_SUCC(ret)) {
@@ -515,8 +516,8 @@ int ObHeapSliceInfo::init_autoinc_interval(const ObTabletID &tablet_id, const in
   } else {
     ObTabletAutoincrementService &auto_inc = ObTabletAutoincrementService::get_instance();
     autoinc_interval_.cache_size_ = AUTO_INC_CACHE_INTERVAL;
-    if (OB_FAIL(auto_inc.get_tablet_cache_interval(MTL_ID(), autoinc_interval_))) {
-      LOG_WARN("autoinc service get tablet cache failed", K(ret), K(MTL_ID()));
+    if (OB_FAIL(auto_inc.get_tablet_cache_interval(autoinc_interval_))) {
+      LOG_WARN("autoinc service get tablet cache failed", K(ret));
     }
   }
   return ret;
@@ -788,9 +789,9 @@ void ObCsReplicaTabletSliceWriter::reset()
  */
 
 ObCsSliceWriter::ObCsSliceWriter()
-  : arena_(ObMemAttr(MTL_ID(), "ddl_cs_writer")),
+  : arena_(ObMemAttr("ddl_cs_writer")),
     need_convert_storage_column_(false), direct_write_macro_block_(false), row_buffer_size_(256),
-    need_check_rowkey_order_(true), rowkey_arena_(ObMemAttr(MTL_ID(), "ddl_ck_rowkey"))
+    need_check_rowkey_order_(true), rowkey_arena_(ObMemAttr("ddl_ck_rowkey"))
 {
 
 }
@@ -832,14 +833,14 @@ int ObCsSliceWriter::init(
     need_check_rowkey_order_ = (need_check_rowkey_order_ && !(writer_param_.ddl_table_schema_.table_item_.vec_dim_ > 0)); // vector index not check order
     const int64_t request_column_count = writer_param_.ddl_table_schema_.column_items_.count();
     if (direct_write_macro_block_) {
-      if (OB_ISNULL(storage_slice_writer_ = OB_NEW(ObTabletSliceWriter, ObMemAttr(MTL_ID(), "slice_mb_writer")))) {
+      if (OB_ISNULL(storage_slice_writer_ = OB_NEW(ObTabletSliceWriter, ObMemAttr("slice_mb_writer")))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(ret));
       } else if (OB_FAIL(static_cast<ObTabletSliceWriter *>(storage_slice_writer_)->init(writer_param_))) {
         LOG_WARN("init slice macro block writer failed", K(ret), K(writer_param_));
       }
     } else {
-      if (OB_ISNULL(storage_slice_writer_ = OB_NEW(ObTabletSliceTempFileWriter, ObMemAttr(MTL_ID(), "slice_tmp_writr")))) {
+      if (OB_ISNULL(storage_slice_writer_ = OB_NEW(ObTabletSliceTempFileWriter, ObMemAttr("slice_tmp_writr")))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(ret));
       } else if (OB_FAIL(static_cast<ObTabletSliceTempFileWriter *>(storage_slice_writer_)->init(writer_param_))) {
@@ -852,7 +853,7 @@ int ObCsSliceWriter::init(
     } else if (row_buffer_size_ > 0 && OB_FAIL(init_row_buffer(row_buffer_size_))) {
       LOG_WARN("init row buffer failed", K(ret));
     } else if (need_check_rowkey_order_ || (!is_append_batch && need_convert_storage_column_)) {
-      if (OB_FAIL(ObDDLUtil::init_datum_row_with_snapshot(
+      if (OB_FAIL(ObDDLStorageUtil::init_datum_row_with_snapshot(
               request_column_count, rowkey_column_count_, writer_param_.snapshot_version_, current_row_))) {
         LOG_WARN("init datum row failed", K(ret), K(request_column_count), K(rowkey_column_count_), K(writer_param_));
       }
@@ -1009,7 +1010,7 @@ int ObCsSliceWriter::convert_to_storage_vector(ObIArray<ObIVector *> &vectors, O
       const int64_t sql_column_idx = idx < rowkey_column_count_ ? idx : idx - ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
       ObIVector *&cur_vector = vectors.at(sql_column_idx);
       selector.rescan();
-      if (OB_FAIL(ObDDLUtil::handle_lob_column(tablet_id_,
+      if (OB_FAIL(ObDDLStorageUtil::handle_lob_column(tablet_id_,
                                                slice_idx_,
                                                writer_param_,
                                                true, // need_all_cells
@@ -1091,7 +1092,7 @@ int ObCsSliceWriter::init_last_rowkey()
     }
   }
   if (OB_SUCC(ret)) {
-    void *buf = ob_malloc(sizeof(ObStorageDatum) * rowkey_column_count_, ObMemAttr(MTL_ID(), "ddl_last_rk"));
+    void *buf = ob_malloc(sizeof(ObStorageDatum) * rowkey_column_count_, ObMemAttr("ddl_last_rk"));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret), K(rowkey_column_count_));
@@ -1247,7 +1248,7 @@ int ObCsSliceWriter::flush_row_buffer()
   } else if (OB_LIKELY(row_buffer_.size() > 0)) {
     buffer_batch_rows_.row_count_ = row_buffer_.size();
     const ObDDLTableSchema &ddl_table_schema = writer_param_.ddl_table_schema_;
-    if (OB_FAIL(ObDDLUtil::check_null_and_length(ddl_table_schema.table_item_.is_index_table_,
+    if (OB_FAIL(ObDDLStorageUtil::check_null_and_length(ddl_table_schema.table_item_.is_index_table_,
                                                  ddl_table_schema.table_item_.has_lob_rowkey_,
                                                  ddl_table_schema.table_item_.rowkey_column_num_,
                                                  buffer_batch_rows_))) {

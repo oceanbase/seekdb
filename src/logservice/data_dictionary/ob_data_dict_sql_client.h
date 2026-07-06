@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_DICT_SERVICE_DATA_DICTIONARY_SQL_CLIENT_
 #define OCEANBASE_DICT_SERVICE_DATA_DICTIONARY_SQL_CLIENT_
 
-#include "lib/mysqlclient/ob_mysql_result.h"    // ObMySQLResult
+#include "common/mysqlclient/ob_mysql_result.h"    // ObMySQLResult
 #include "logservice/palf/lsn.h"                // LSN
 #include "share/scn.h"                // SCN
 #include "share/ob_ls_id.h"                     // ObLSArray
@@ -41,17 +41,13 @@ public:
   void destroy();
 public:
   int get_ls_info(
-      const uint64_t tenant_id,
       const share::SCN &snapshot_scn,
       share::ObLSArray &ls_array);
   int get_schema_version(
-      const uint64_t tenant_id,
       const share::SCN &snapshot_scn,
       int64_t &schema_version);
 public:
-  int report_data_dict_persist_info(
-      const uint64_t tenant_id,
-      const share::SCN &snapshot_scn,
+  int report_data_dict_persist_info(const share::SCN &snapshot_scn,
       const palf::LSN &start_lsn,
       const palf::LSN &end_lsn);
 private:

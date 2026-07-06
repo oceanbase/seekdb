@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_BATCH_CREATE_TABLET_PRETTY_ARG
 #define OCEANBASE_STORAGE_OB_BATCH_CREATE_TABLET_PRETTY_ARG
 
+#include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include <stdint.h>
 
 namespace oceanbase

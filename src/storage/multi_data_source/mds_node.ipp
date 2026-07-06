@@ -393,8 +393,7 @@ void UserMdsNode<K, V>::report_event_(const char (&event_str)[N],
   } else if (OB_FAIL(fill_event_(event, event_str, stack_buffer, buffer_size))) {
     MDS_LOG(WARN, "fail fill mds event", K(*this));
   } else {
-    observer::MdsEventKey key(MTL_ID(),
-                              p_mds_row_->p_mds_unit_->p_mds_table_->ls_id_,
+    observer::MdsEventKey key(p_mds_row_->p_mds_unit_->p_mds_table_->ls_id_,
                               p_mds_row_->p_mds_unit_->p_mds_table_->tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, p_mds_row_->p_mds_unit_->p_mds_table_, file, line, function_name);
   }

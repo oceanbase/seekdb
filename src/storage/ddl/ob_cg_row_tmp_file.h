@@ -39,7 +39,7 @@ public:
     slice_idx_(-1),
     cg_idx_(-1),
     column_count_(0),
-    allocator_(ObMemAttr(MTL_ID(), "CGRowFile")),
+    allocator_(ObMemAttr("CGRowFile")),
     store_(),
     bdrs_(),
     brs_(),
@@ -106,7 +106,7 @@ public:
     cg_row_file_arr_for_output_(nullptr),
     sync_chunk_data_(nullptr)
   {
-    cg_row_file_arr_.set_attr(ObMemAttr(MTL_ID(), "CGRowFileArr"));
+    cg_row_file_arr_.set_attr(ObMemAttr("CGRowFileArr"));
   }
   ~ObCGRowFilesGenerater()
   {

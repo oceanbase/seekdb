@@ -19,6 +19,7 @@
 #include "log_iterator_impl.h"           // LogIteratorImpl
 #include "log_iterator_storage.h"        // LogIteratorStorage
 #include "log_define.h"                  // PALF_INITIAL_PROPOSAL_ID
+#include "lib/profile/ob_trace_id.h"  // ObCurTraceId(self-contained include fix)
 namespace oceanbase
 {
 namespace share

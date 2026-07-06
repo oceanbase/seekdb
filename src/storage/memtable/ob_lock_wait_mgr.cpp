@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_lock_wait_mgr.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "observer/ob_server.h"
 
@@ -23,9 +25,9 @@ using namespace oceanbase;
 void request_finish_callback()
 {
   bool unused = false;
-  memtable::ObLockWaitMgr *lock_wait_mgr = MTL(memtable::ObLockWaitMgr*);
+  memtable::ObLockWaitMgr *lock_wait_mgr = share::g_mp->lock_wait_mgr();
   if (OB_ISNULL(lock_wait_mgr)) {
-    TRANS_LOG(TRACE, "MTL(lock wait mgr) is null", K(MTL_ID()));
+    TRANS_LOG(TRACE, "MTL(lock wait mgr) is null");
   } else {
     lock_wait_mgr->post_process(false, unused);
   }
@@ -586,7 +588,7 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
         transaction::ObTransService *tx_service = nullptr;
         uint32_t holder_session_id = sql::ObSQLSessionInfo::INVALID_SESSID;
         uint32_t client_sid = sql::ObSQLSessionInfo::INVALID_SESSID;
-        if (OB_ISNULL(tx_service = MTL(transaction::ObTransService *))) {
+        if (OB_ISNULL(tx_service = share::g_mp->trans_service())) {
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(ERROR, "ObTransService is null", K(sess_id), K(tx_id), K(holder_tx_id), K(ls_id));
         } else if (OB_FAIL(sql::ObBasicSessionInfo::get_client_sid(sess_id, client_sid))) {
@@ -612,8 +614,7 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
                       client_sid,
                       holder_session_id,
                       tx_id,
-                      holder_tx_id,
-                      ls_id);
+                      holder_tx_id);
             node->set_need_wait();
             advance_tlocal_request_lock_wait_stat(rpc::RequestLockWaitStat::RequestStat::CONFLICTED);
           }
@@ -667,7 +668,7 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
       transaction::ObTransService *tx_service = nullptr;
       uint32_t holder_session_id = sql::ObSQLSessionInfo::INVALID_SESSID;
       uint32_t client_sid = sql::ObSQLSessionInfo::INVALID_SESSID;
-      if (OB_ISNULL(tx_service = MTL(transaction::ObTransService *))) {
+      if (OB_ISNULL(tx_service = share::g_mp->trans_service())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(ERROR, "ObTransService is null", K(sess_id), K(tx_id), K(holder_tx_id), K(ls_id));
       } else if (OB_FAIL(sql::ObBasicSessionInfo::get_client_sid(sess_id, client_sid))) {
@@ -687,8 +688,7 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
                   client_sid,
                   holder_session_id,
                   tx_id,
-                  holder_tx_id,
-                  ls_id);
+                  holder_tx_id);
         node->set_need_wait();
         node->set_lock_mode(lock_mode);
         advance_tlocal_request_lock_wait_stat(rpc::RequestLockWaitStat::RequestStat::CONFLICTED);

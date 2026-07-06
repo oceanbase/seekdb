@@ -72,7 +72,6 @@ int ObReservedSnapshotTableStorage::create_table_if_not_exists()
 }
 
 int ObReservedSnapshotTableStorage::insert_or_update(
-    const uint64_t tenant_id,
     const ObIArray<ObReservedSnapshotEntry> &entries)
 {
   int ret = OB_SUCCESS;
@@ -143,12 +142,10 @@ int ObReservedSnapshotTableStorage::insert_or_update(
 }
 
 int ObReservedSnapshotTableStorage::update_status(
-    const uint64_t tenant_id,
     const common::ObAddr &svr_addr,
     const uint64_t status)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   UNUSED(svr_addr);
   if (!is_inited()) {
     ret = OB_NOT_INIT;
@@ -178,13 +175,11 @@ int ObReservedSnapshotTableStorage::update_status(
 }
 
 int ObReservedSnapshotTableStorage::get(
-    const uint64_t tenant_id,
     const uint64_t snapshot_type,
     const common::ObAddr &svr_addr,
     ObReservedSnapshotEntry &entry)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   entry.reset();
   if (!is_inited()) {
     ret = OB_NOT_INIT;
@@ -229,12 +224,9 @@ int ObReservedSnapshotTableStorage::get(
   return ret;
 }
 
-int ObReservedSnapshotTableStorage::get_all(
-    const uint64_t tenant_id,
-    ObIArray<ObReservedSnapshotEntry> &entries)
+int ObReservedSnapshotTableStorage::get_all(ObIArray<ObReservedSnapshotEntry> &entries)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   entries.reset();
   if (!is_inited()) {
     ret = OB_NOT_INIT;
@@ -288,11 +280,9 @@ int ObReservedSnapshotTableStorage::get_all(
 }
 
 int ObReservedSnapshotTableStorage::delete_expired(
-    const uint64_t tenant_id,
     const common::ObAddr &svr_addr)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   UNUSED(svr_addr);
   if (!is_inited()) {
     ret = OB_NOT_INIT;

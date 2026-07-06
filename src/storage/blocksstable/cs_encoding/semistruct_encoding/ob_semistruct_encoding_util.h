@@ -32,17 +32,17 @@ public:
   static const int MAX_NOT_ENCODE_COUNT = 16;
 public:
   ObSemiStructColumnEncodeCtx():
-    allocator_("SemiEnc", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    allocator_("SemiEnc", OB_MALLOC_NORMAL_BLOCK_SIZE),
     column_index_(-1),
     col_desc_(),
     datums_(nullptr),
     sub_schema_(),
-    sub_col_datums_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SemiEnc", MTL_ID())),
-    hashtables_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SemiEnc", MTL_ID())),
+    sub_col_datums_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SemiEnc")),
+    hashtables_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SemiEnc")),
     hashtable_factory_(),
-    encoder_allocator_(cs_encoder_sizes, lib::ObMemAttr(MTL_ID(), "SemiEnc")),
-    sub_encoders_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SemiEnc", MTL_ID())),
-    sub_col_ctxs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SemiEnc", MTL_ID())),
+    encoder_allocator_(cs_encoder_sizes, lib::ObMemAttr("SemiEnc")),
+    sub_encoders_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SemiEnc")),
+    sub_col_ctxs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SemiEnc")),
     previous_cs_encoding_(),
     encoding_ctx_(nullptr),
     all_string_buf_writer_(nullptr),
@@ -127,8 +127,8 @@ public:
 
 public:
   ObSemiStructEncodeCtx():
-    allocator_("SemiEncCtx", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-    col_ctxs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SemiEncCtx", MTL_ID()))
+    allocator_("SemiEncCtx", OB_MALLOC_NORMAL_BLOCK_SIZE),
+    col_ctxs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SemiEncCtx"))
   {}
 
   ~ObSemiStructEncodeCtx() { reset(); }

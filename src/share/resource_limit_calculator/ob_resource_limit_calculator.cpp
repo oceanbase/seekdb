@@ -16,7 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_resource_limit_calculator.h"
-#include "storage/tx_storage/ob_ls_service.h"
+#include "share/rc/ob_tenant_base.h"  // MTL macro, previously hidden behind the ls_service include chain(free within share)
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -57,7 +58,7 @@ int ObLogicResourceStatIterator::get_next(ObResourceInfo &info)
         ret = OB_ITER_END;
       } else if (!is_valid_logic_res_type(curr_type_)) {
         need_retry = true;
-      } else if (OB_FAIL(MTL(ObResourceLimitCalculator *)->get_logic_resource_stat(curr_type_,
+      } else if (OB_FAIL(share::g_mp->resource_limit_calculator()->get_logic_resource_stat(curr_type_,
                                                                                    info))) {
         LOG_WARN("get_next failed", K(ret), K(curr_type_));
       }
@@ -105,7 +106,7 @@ int ObResourceConstraintIterator::set_ready(const int64_t res_type)
   } else if (!is_valid_logic_res_type(res_type)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(res_type));
-  } else if (OB_FAIL(MTL(ObResourceLimitCalculator *)->get_logic_resource_constraint_value(res_type,
+  } else if (OB_FAIL(share::g_mp->resource_limit_calculator()->get_logic_resource_constraint_value(res_type,
                                                                                            res_))) {
     LOG_WARN("get resource constraint value failed", K(ret), K(res_type));
   } else {
@@ -204,24 +205,7 @@ int ObResourceLimitCalculator::mtl_init(ObResourceLimitCalculator *&calculator)
   return calculator->init();
 }
 
-int ObResourceLimitCalculator::init()
-{
-  int ret = OB_SUCCESS;
-  if (IS_INIT) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("resource limit calculator already initialized", K(ret));
-  } else {
-    WLockGuard guard(lock_);
-#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name, subhandler)      \
-    if (OB_SUCC(ret)) {                                               \
-        handlers_[n] = subhandler;                                    \
-    }
-#include "share/resource_limit_calculator/ob_resource_limit_calculator_def.h"
-#undef DEF_RESOURCE_LIMIT_CALCULATOR
-    is_inited_ = true;
-  }
-  return ret;
-}
+// moved definition to storage/tx_storage/ob_ls_service.cpp(X-macro inventory)
 
 int ObResourceLimitCalculator::get_logic_resource_stat(
     const int64_t type,
@@ -267,83 +251,9 @@ int ObResourceLimitCalculator::get_logic_resource_constraint_value(
   return ret;
 }
 
-int ObResourceLimitCalculator::get_tenant_min_phy_resource_value(
-    ObMinPhyResourceResult &res)
-{
-  int ret = OB_SUCCESS;
-  ObIResourceLimitCalculatorHandler *handler = NULL;
-  ObMinPhyResourceResult min_res;
-  ObMinPhyResourceResult tmp;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_RUNNING;
-    LOG_WARN("resource limit calculator not running", K(ret));
-  } else {
-    RLockGuard guard(lock_);
-#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name, subhandler)           \
-    if (OB_SUCC(ret)) {                                                    \
-      if (OB_ISNULL(handler = handlers_[n])) {                             \
-        ret = OB_NOT_RUNNING;                                              \
-        LOG_WARN("the tenant may destroyed", K(ret), K(n), KP(handler));   \
-      } else if (OB_FAIL(handler->cal_min_phy_resource_needed(tmp))) {     \
-        LOG_WARN("get resource stat failed", K(ret), K(n), K(#name));      \
-      } else if (OB_FAIL(min_res.inc_update(tmp))) {                       \
-        LOG_WARN("inc_update failed", K(min_res), K(tmp));                 \
-      } else {                                                             \
-        tmp.reset();                                                       \
-      }                                                                    \
-    }
-#include "share/resource_limit_calculator/ob_resource_limit_calculator_def.h"
-#undef DEF_RESOURCE_LIMIT_CALCULATOR
+// moved definition to storage/tx_storage/ob_ls_service.cpp(X-macro inventory)
 
-    if (OB_SUCC(ret)) {
-      res = min_res;
-      ret = res.get_copy_assign_ret();
-    }
-  }
-  return ret;
-}
-
-int ObResourceLimitCalculator::get_tenant_min_phy_resource_value(
-    const ObUserResourceCalculateArg &arg,
-    ObMinPhyResourceResult &res)
-{
-  int ret = OB_SUCCESS;
-  ObIResourceLimitCalculatorHandler *handler = NULL;
-  ObMinPhyResourceResult min_res;
-  ObMinPhyResourceResult tmp;
-  int64_t res_type = 0;
-  int64_t need_num = 0;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_RUNNING;
-    LOG_WARN("resource limit calculator not running", K(ret));
-  } else {
-    RLockGuard guard(lock_);
-#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name, subhandler)              \
-    if (OB_SUCC(ret)) {                                                       \
-      if (OB_ISNULL(handler = handlers_[n])) {                                \
-        ret = OB_NOT_RUNNING;                                                 \
-        LOG_WARN("the tenant may destroyed", K(ret), K(n), KP(handler));      \
-      } else if (OB_FAIL(arg.get_type_value(n, need_num))) {                  \
-        LOG_WARN("get needed num failed", K(ret), K(n));                      \
-      } else if (OB_FAIL(handler->cal_min_phy_resource_needed(need_num,       \
-                                                              tmp))) {        \
-        LOG_WARN("get resource stat failed", K(ret), K(n), K(need_num));      \
-      } else if (OB_FAIL(min_res.inc_update(tmp))) {                          \
-        LOG_WARN("inc_update failed", K(ret), K(min_res), K(tmp));            \
-      } else {                                                                \
-        tmp.reset();                                                          \
-      }                                                                       \
-    }
-#include "share/resource_limit_calculator/ob_resource_limit_calculator_def.h"
-#undef DEF_RESOURCE_LIMIT_CALCULATOR
-
-    if (OB_SUCC(ret)) {
-      res = min_res;
-      ret = res.get_copy_assign_ret();
-    }
-  }
-  return ret;
-}
+// moved definition to storage/tx_storage/ob_ls_service.cpp(X-macro inventory, second overload)
 
 int ObResourceLimitCalculator::get_tenant_logical_resource(ObUserResourceCalculateArg &arg)
 {

@@ -51,7 +51,7 @@ ObTableLoadMemCompactCtx::ObTableLoadMemCompactCtx()
     round_ctx_cnt_(0),
     is_inited_(false)
 {
-  enc_params_.set_tenant_id(MTL_ID());
+  
 }
 
 ObTableLoadMemCompactCtx::~ObTableLoadMemCompactCtx() {}
@@ -86,7 +86,7 @@ int ObTableLoadMemCompactCtx::init()
     LOG_WARN("invalid args", KR(ret), KP(store_ctx_), K(table_data_desc_), KP(column_descs_),
              KP(datum_utils_), KP(dml_row_handler_), K(max_round_ctx_cnt_), K(compact_chunk_cnt_),
              K(range_cnt_));
-  } else if (OB_FAIL(chunk_allocator_.init("TLD_MCChunk", MTL_ID()))) {
+  } else if (OB_FAIL(chunk_allocator_.init("TLD_MCChunk"))) {
     LOG_WARN("fail to init chunk allocator", KR(ret));
   } else if (OB_FAIL(ObDirectLoadMemContext::init_enc_params(
                *column_descs_, table_data_desc_.rowkey_column_num_,
@@ -116,7 +116,7 @@ int ObTableLoadMemCompactCtx::acquire_chunk(ChunkType *&chunk)
       if (OB_ISNULL(chunk = chunk_allocator_.alloc())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to alloc chunk", KR(ret));
-      } else if (OB_FAIL(chunk->init(MTL_ID(), sort_memory))) {
+      } else if (OB_FAIL(chunk->init(sort_memory))) {
         LOG_WARN("fail to init chunk", KR(ret));
       }
     }
@@ -193,9 +193,9 @@ int ObTableLoadMemCompactCtx::add_result_table(const ObDirectLoadTableHandle &ta
 ObTableLoadMemCompactRoundCtx::ObTableLoadMemCompactRoundCtx(ObTableLoadMemCompactCtx *ctx)
   : ctx_(ctx), is_inited_(false)
 {
-  chunks_.set_tenant_id(MTL_ID());
-  ranges_.set_tenant_id(MTL_ID());
-  table_handles_.set_tenant_id(MTL_ID());
+  
+  
+  
 }
 
 ObTableLoadMemCompactRoundCtx::~ObTableLoadMemCompactRoundCtx()
@@ -319,7 +319,7 @@ int ObTableLoadMemCompactSampleTask::process()
 
     // 随机采样
     ObArray<ConstRowType *> sample_rows;
-    sample_rows.set_tenant_id(MTL_ID());
+    
     int64_t row_cnt = 0;
     for (int64_t i = 0; i < chunks.count(); ++i) {
       row_cnt += chunks.at(i)->get_size();

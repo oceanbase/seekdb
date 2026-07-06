@@ -16,7 +16,9 @@
 
 #ifndef __SHARE_OB_EXTERNAL_CATALOG_H__
 #define __SHARE_OB_EXTERNAL_CATALOG_H__
-#include "share/external_table/ob_external_table_file_mgr.h"
+
+#include "share/schema/ob_schema_struct.h"  // ObDatabaseSchema, previously hidden behind a transitive include(free within share)
+#include "share/schema/ob_table_schema.h"  // ObTableSchema complete type(free within share)
 
 namespace oceanbase
 {
@@ -31,7 +33,7 @@ struct ObCatalogBasicTableInfo
   int64_t last_modification_time_s = 0;
 };
 
-// ObIExternalCatalog don't care about tenant_id, database_id, table_id
+// ObIExternalCatalog don't care about tenant, database_id, table_id
 class ObIExternalCatalog
 {
 public:
@@ -61,21 +63,18 @@ class ObICatalogMetaGetter
 {
 public:
   virtual ~ObICatalogMetaGetter() = default;
-  virtual int list_namespace_names(const uint64_t tenant_id, const uint64_t catalog_id, common::ObIArray<common::ObString> &ns_names) = 0;
-  virtual int list_table_names(const uint64_t tenant_id,
-                               const uint64_t catalog_id,
+  virtual int list_namespace_names(const uint64_t catalog_id, common::ObIArray<common::ObString> &ns_names) = 0;
+  virtual int list_table_names(const uint64_t catalog_id,
                                const common::ObString &ns_name,
                                const ObNameCaseMode case_mode,
                                common::ObIArray<common::ObString> &tbl_names) = 0;
   // database_schema's database_id should assign correct before call this function
-  virtual int fetch_namespace_schema(const uint64_t tenant_id,
-                                     const uint64_t catalog_id,
+  virtual int fetch_namespace_schema(const uint64_t catalog_id,
                                      const common::ObString &ns_name,
                                      const ObNameCaseMode case_mode,
                                      share::schema::ObDatabaseSchema &database_schema) = 0;
   // table_schema's table_id/database_id should assign correct before call this function
-  virtual int fetch_table_schema(const uint64_t tenant_id,
-                                 const uint64_t catalog_id,
+  virtual int fetch_table_schema(const uint64_t catalog_id,
                                  const common::ObString &ns_name,
                                  const common::ObString &tbl_name,
                                  const ObNameCaseMode case_mode,

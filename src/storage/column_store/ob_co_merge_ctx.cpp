@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_co_merge_ctx.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/column_store/ob_co_merge_dag.h"
 #include "storage/tablet/ob_tablet_medium_info_reader.h"
 
@@ -36,7 +37,7 @@ ObCOTabletMergeCtx::ObCOTabletMergeCtx(
     merged_sstable_array_(nullptr),
     cg_schedule_status_array_(nullptr),
     cg_tables_handle_lock_(),
-    merged_cg_tables_handle_(MTL_ID()),
+    merged_cg_tables_handle_(),
     mocked_row_store_cg_(),
     mocked_row_store_table_read_info_(),
     dag_net_merge_history_()
@@ -303,7 +304,7 @@ int ObCOTabletMergeCtx::prepare_schema()
 {
   int ret = OB_SUCCESS;
   const bool need_medium_info = is_medium_merge(get_merge_type()) || is_major_merge(get_merge_type());
-  ObArenaAllocator allocator("GetMediumInfo", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator allocator("GetMediumInfo", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObMediumCompactionInfo *medium_info = nullptr;
   if (need_medium_info && OB_FAIL(OB_FAIL(ObTabletMediumInfoReader::get_medium_info_with_merge_version(get_merge_version(), *get_tablet(), allocator, medium_info)))) {
     LOG_WARN("fail to get medium info with merge version", K(ret), KPC(this));
@@ -585,7 +586,7 @@ int ObCOTabletMergeCtx::inner_loop_prepare_index_tree(
   const ObITableReadInfo *rowkey_read_info = nullptr;
   const ObITableReadInfo *cg_idx_read_info = nullptr;
   const ObStorageColumnGroupSchema *cg_schema_ptr = nullptr;
-  if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->get_index_read_info(cg_idx_read_info))) {
+  if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(cg_idx_read_info))) {
     LOG_WARN("failed to get index read info from ObTenantCGReadInfoMgr", KR(ret));
   }
   for (int64_t i = start_cg_idx; OB_SUCC(ret) && i < end_cg_idx; i++) {
@@ -682,7 +683,7 @@ int ObCOTabletMergeCtx::revert_pushed_table_handle(
   const int64_t exist_cg_tables_cnt)
 {
   int ret = OB_SUCCESS;
-  ObTablesHandleArray tmp_tables_array(MTL_ID());
+  ObTablesHandleArray tmp_tables_array;
   int64_t cg_idx = 0;
   ObMutexGuard guard(cg_tables_handle_lock_);
   for (int64_t idx = 0; OB_SUCC(ret) && idx < merged_cg_tables_handle_.get_count(); ++idx) {

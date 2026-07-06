@@ -46,7 +46,7 @@ int ObExprConcat::calc_text(common::ObObj &result,
   int ret = OB_SUCCESS;
   int32_t max_length = OB_MAX_PACKET_LENGTH;
   // use a temp allocator to read lob data, the input allocator may not alloc more then once
-  common::ObArenaAllocator temp_allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  common::ObArenaAllocator temp_allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObTextStringIter str_iter1(obj1);
   ObTextStringIter str_iter2(obj2);
   int64_t str1_byte_len = 0;

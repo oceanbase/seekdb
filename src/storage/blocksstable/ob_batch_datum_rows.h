@@ -18,7 +18,7 @@
 #define OB_BATCH_DATUM_ROWS_H_
 
 #include "lib/container/ob_array.h"
-#include "share/vector/ob_i_vector.h"
+#include "sql/engine/vector/ob_i_vector.h"
 #include "storage/blocksstable/ob_datum_row.h"
 
 namespace oceanbase
@@ -32,7 +32,7 @@ public:
   ObBatchDatumRows() 
     : row_count_(0) 
   {
-    vectors_.set_tenant_id(MTL_ID());
+    
   }
   ~ObBatchDatumRows() {}
   void reset();

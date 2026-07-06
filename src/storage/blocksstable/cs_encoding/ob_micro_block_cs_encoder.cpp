@@ -106,19 +106,19 @@ int ObMicroBlockCSEncoder::alloc_and_init_encoder_(const int64_t column_index, O
 ObMicroBlockCSEncoder::ObMicroBlockCSEncoder()
   : allocator_("CSEncAlloc", OB_MALLOC_MIDDLE_BLOCK_SIZE),
     ctx_(), row_buf_holder_(), data_buffer_(), all_string_data_buffer_(),
-    all_col_datums_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CSBlkEnc", MTL_ID())),
-    pivot_allocator_(lib::ObMemAttr(MTL_ID(), blocksstable::OB_ENCODING_LABEL_PIVOT), OB_MALLOC_MIDDLE_BLOCK_SIZE),
-    datum_row_offset_arr_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CSBlkEnc", MTL_ID())),
-    vec_batch_info_arrs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CSBlkEnc", MTL_ID())),
+    all_col_datums_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CSBlkEnc")),
+    pivot_allocator_(lib::ObMemAttr(blocksstable::OB_ENCODING_LABEL_PIVOT), OB_MALLOC_MIDDLE_BLOCK_SIZE),
+    datum_row_offset_arr_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CSBlkEnc")),
+    vec_batch_info_arrs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CSBlkEnc")),
     appended_batch_count_(0), appended_row_count_(0),
     estimate_size_(0), estimate_size_limit_(0), all_headers_size_(0),
     expand_pct_(DEFAULT_ESTIMATE_REAL_SIZE_PCT),
-    encoders_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CSBlkEnc", MTL_ID())),
-    stream_offsets_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CSBlkEnc", MTL_ID())),
-    encoder_allocator_(cs_encoder_sizes, lib::ObMemAttr(MTL_ID(), "CSBlkEnc")),
-    hashtables_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CSBlkEnc", MTL_ID())),
+    encoders_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CSBlkEnc")),
+    stream_offsets_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CSBlkEnc")),
+    encoder_allocator_(cs_encoder_sizes, lib::ObMemAttr("CSBlkEnc")),
+    hashtables_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CSBlkEnc")),
     hashtable_factory_(),
-    col_ctxs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CSBlkEnc", MTL_ID())),
+    col_ctxs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CSBlkEnc")),
     length_(0), is_inited_(false),
     is_all_column_force_raw_(false),
     encoder_freezed_(false),
@@ -1863,7 +1863,7 @@ int ObMicroBlockCSEncoder::semistruct_prescan_(const int64_t column_index)
   ObColumnCSEncodingCtx &col_ctx = col_ctxs_.at(column_index);
   ObSemiStructColumnEncodeCtx *semistruct_col_ctx = nullptr;
   col_ctx.semistruct_ctx_ = nullptr;
-  if (OB_ISNULL(semistruct_encode_ctx_) && OB_ISNULL(semistruct_encode_ctx_ = OB_NEW(ObSemiStructEncodeCtx, ObMemAttr(MTL_ID(), "SemiEncCtx")))) {
+  if (OB_ISNULL(semistruct_encode_ctx_) && OB_ISNULL(semistruct_encode_ctx_ = OB_NEW(ObSemiStructEncodeCtx, ObMemAttr("SemiEncCtx")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc semistruct_encoder fail", K(ret), "size", sizeof(ObSemiStructEncodeCtx));
   } else if (OB_FAIL(semistruct_encode_ctx_->get_col_ctx(column_index, semistruct_col_ctx))) {

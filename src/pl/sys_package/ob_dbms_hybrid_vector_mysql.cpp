@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX PL
 #include "ob_dbms_hybrid_vector_mysql.h"
-#include "src/share/hybrid_search/ob_hybrid_search_executor.h"
+#include "sql/hybrid_search/ob_hybrid_search_executor.h"
 
 namespace oceanbase {
 namespace pl {

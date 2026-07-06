@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "observer/virtual_table/ob_tenant_all_tables.h"
-#include "share/schema/ob_schema_printer.h"
+#include "sql/printer/ob_schema_printer.h"
 #include "share/ob_autoincrement_service.h"
-#include "observer/ob_sql_client_decorator.h"
+#include "share/ob_sql_client_decorator.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -57,13 +57,12 @@ namespace observer
                     "and a.table_type in (0, 1, 2, 3, 4, 14) " \
                     "and b.database_name != '__recyclebin' " \
                     "and b.in_recyclebin = 0 " \
-                    "and 0 = sys_privilege_check('table_acc', effective_tenant_id(), b.database_name, a.table_name) " \
+                    "and 0 = sys_privilege_check('table_acc', 1, b.database_name, a.table_name) " \
                     "where a.table_id = %ld "
 
 ObTenantAllTables::ObTenantAllTables()
     : ObVirtualTableIterator(),
       sql_proxy_(NULL),
-      tenant_id_(OB_INVALID_ID),
       database_id_(OB_INVALID_ID),
       table_schemas_(),
       table_schema_idx_(0),
@@ -81,10 +80,9 @@ int ObTenantAllTables::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == schema_guard_
-                  || OB_INVALID_ID == tenant_id_
                   || NULL == allocator_)) {
     ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "data member doesn't init", K(ret), K(schema_guard_), K(tenant_id_), K(allocator_));
+    SERVER_LOG(WARN, "data member doesn't init", K(ret), K(schema_guard_), K(allocator_));
   } else if (OB_UNLIKELY(NULL == (option_buf_ = static_cast<char *>(allocator_->alloc(MAX_TABLE_STATUS_CREATE_OPTION_LENGTH))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     SERVER_LOG(ERROR, "fail to alloc memory", K(ret));
@@ -115,10 +113,9 @@ int ObTenantAllTables::inner_open()
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "select a table which is used for show clause");
       } else {
-        if (OB_FAIL(schema_guard_->get_table_schemas_in_database(tenant_id_,
-                                                               database_id_,
+        if (OB_FAIL(schema_guard_->get_table_schemas_in_database(database_id_,
                                                                table_schemas_))) {
-          SERVER_LOG(WARN, "fail to get table schemas in database", K(ret), K(tenant_id_), K(database_id_));
+          SERVER_LOG(WARN, "fail to get table schemas in database", K(ret), K(database_id_));
         } else if (table_schemas_.empty()) {
           // do nothing
         } else if (OB_FAIL(seq_values_.create(FETCH_SEQ_NUM_ONCE,
@@ -183,10 +180,10 @@ int ObTenantAllTables::get_sequence_value()
     const ObTableSchema *table_schema = table_schemas_.at(i);
     if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "table schema is NULL", K(ret), K(i), K(tenant_id_), K(database_id_));
+      SERVER_LOG(WARN, "table schema is NULL", K(ret), K(i), K(database_id_));
     } else if (table_schema->get_autoinc_column_id() != 0) {
       key.reset();
-      key.tenant_id_ = table_schema->get_tenant_id();//always same as tenant_id_
+      //always same as sys tenant
       key.table_id_  = table_schema->get_table_id();
       key.column_id_ = table_schema->get_autoinc_column_id();
       autoinc_version = table_schema->get_truncate_version();
@@ -211,8 +208,7 @@ int ObTenantAllTables::get_sequence_value()
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "autokeys count is not equal to truncate versions count", KR(ret), K(order_autokeys.count()), K(order_autoinc_versions.count()),
                                                                                  K(noorder_autokeys.count()), K(noorder_autoinc_versions.count()));
-    } else if (OB_FAIL(share::ObAutoincrementService::get_instance().get_sequence_values(
-              tenant_id_, order_autokeys, noorder_autokeys,
+    } else if (OB_FAIL(share::ObAutoincrementService::get_instance().get_sequence_values(order_autokeys, noorder_autokeys,
               order_autoinc_versions, noorder_autoinc_versions, seq_values_))) {
       SERVER_LOG(WARN, "failed to get sequence value", K(ret));
     }
@@ -227,7 +223,7 @@ int ObTenantAllTables::get_table_stats()
     const ObTableSchema *table_schema = table_schemas_.at(i);
     if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "table schema is NULL", K(ret), K(i), K(tenant_id_), K(database_id_));
+      SERVER_LOG(WARN, "table schema is NULL", K(ret), K(i), K(database_id_));
     } else {
       TableStatistics tab_stat;
       ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy_, false, OB_INVALID_TIMESTAMP, false);
@@ -240,7 +236,7 @@ int ObTenantAllTables::get_table_stats()
       } else {
         SMART_VAR(ObMySQLProxy::MySQLResult, res) {
           sqlclient::ObMySQLResult *result = NULL;
-          if (OB_FAIL(sql_client_retry_weak.read(res, tenant_id_, sql.ptr()))) {
+          if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
             LOG_WARN("execute sql failed", "sql", sql.ptr(), K(ret));
           } else if (OB_ISNULL(result = res.get_result())) {
             ret = OB_ERR_UNEXPECTED;
@@ -292,7 +288,6 @@ void ObTenantAllTables::reset()
 {
   session_ = NULL;
   sql_proxy_ = NULL;
-  tenant_id_ = OB_INVALID_ID;
   database_id_ = OB_INVALID_ID;
   table_schemas_.reset();
   table_schema_idx_ = 0;
@@ -327,19 +322,19 @@ int ObTenantAllTables::inner_get_next_row()
                   || NULL == session_
                   || NULL == (cells = cur_row_.cells_)
                   || NULL == option_buf_
-                  || !is_valid_id(tenant_id_)
+                  || false
                   || !is_valid_id(database_id_))) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "data member dosen't init", K(ret), K(allocator_), K(schema_guard_),
-               K(session_), K(cells), K(option_buf_), K(tenant_id_), K(database_id_));
+               K(session_), K(cells), K(option_buf_), K(database_id_));
   } else {
     ObSchemaPrinter schema_printer(*schema_guard_);
     const ObDatabaseSchema *db_schema = NULL;
-    if (OB_FAIL(schema_guard_->get_database_schema(tenant_id_, database_id_, db_schema))) {
-      SERVER_LOG(WARN, "Failed to get database schema", K(ret), K_(tenant_id));
+    if (OB_FAIL(schema_guard_->get_database_schema( database_id_, db_schema))) {
+      SERVER_LOG(WARN, "Failed to get database schema", K(ret));
     } else if (OB_ISNULL(db_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "db_schema should not be null", K(ret), K_(tenant_id), K_(database_id));
+      SERVER_LOG(WARN, "db_schema should not be null", K(ret), K_(database_id));
     } else {
       database_name = db_schema->get_database_name_str();
       TableStatistics tstat;
@@ -357,7 +352,7 @@ int ObTenantAllTables::inner_get_next_row()
         } else {
           if (OB_ISNULL(table_schema = table_schemas_.at(table_schema_idx_))) {
             ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "table schema is NULL", K(ret), K(table_schema_idx_), K(tenant_id_), K(database_id_));
+            SERVER_LOG(WARN, "table schema is NULL", K(ret), K(table_schema_idx_), K(database_id_));
           } else {
             uint64_t cell_idx = 0;
             int stat_ret = OB_SUCCESS;
@@ -484,7 +479,8 @@ int ObTenantAllTables::inner_get_next_row()
                     uint64_t auto_increment = 0;
                     int err = OB_SUCCESS;
                     key.reset();
-                    key.tenant_id_ = table_schema->get_tenant_id();
+                    
+                    
                     key.table_id_  = table_schema->get_table_id();
                     key.column_id_ = table_schema->get_autoinc_column_id();
                     err = seq_values_.get_refactored(key, auto_increment);

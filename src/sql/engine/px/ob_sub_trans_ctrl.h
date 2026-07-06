@@ -18,6 +18,7 @@
 #define __SQL_ENGINE_PX_SUB_TRANS_UTIL_H__
 
 #include "sql/ob_sql_trans_control.h"
+#include "storage/ddl/ob_ddl_struct.h"  // ObDirectLoadType(previously hidden behind a transitive include)
 
 namespace oceanbase
 {

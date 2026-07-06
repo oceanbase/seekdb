@@ -231,31 +231,19 @@ int ObInnerKVItem::parse_from(sqlclient::ObMySQLResult &result)
 /**
  * ------------------------------ObInnerKVItemTenantIdWrapper---------------------
  */
-const char *ObInnerKVItemTenantIdWrapper::TENANT_ID_COLUMN_NAME = "tenant_id";
 
 ObInnerKVItemTenantIdWrapper::ObInnerKVItemTenantIdWrapper(ObInnerKVItem *item)
-  : ObInnerKVItem(nullptr), tenant_id_(OB_INVALID_TENANT_ID), item_(item)
+  : ObInnerKVItem(nullptr), item_(item)
 {
 
 }
 
-int ObInnerKVItemTenantIdWrapper::set_tenant_id(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  if(OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(ret), K(tenant_id));
-  } else {
-    tenant_id_ = tenant_id;
-  }
-  return ret;
-}
 
 
 // Return if primary key valid.
 bool ObInnerKVItemTenantIdWrapper::is_pkey_valid() const
 {
-  return nullptr != item_ && item_->is_pkey_valid() && (is_sys_tenant(tenant_id_) || is_user_tenant(tenant_id_));
+  return nullptr != item_ && item_->is_pkey_valid() && (true);
 }
 
 bool ObInnerKVItemTenantIdWrapper::is_valid() const
@@ -292,13 +280,11 @@ int ObInnerKVItemTenantIdWrapper::fill_dml(share::ObDMLSqlSplicer &dml) const
 int ObInnerKVItemTenantIdWrapper::parse_from(sqlclient::ObMySQLResult &result)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = OB_SYS_TENANT_ID;
+  
 
-  //EXTRACT_INT_FIELD_MYSQL(result, TENANT_ID_COLUMN_NAME, tenant_id, uint64_t);
+  //EXTRACT_INT_FIELD_MYSQL(result, TENANT_ID_COLUMN_NAME, tenant, uint64_t);
   
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(set_tenant_id(tenant_id))) {
-    LOG_WARN("failed to set tenant id", K(ret), K(tenant_id));
   } else if (OB_FAIL(item_->parse_from(result))) {
     LOG_WARN("failed to parse result", K(ret), K(*this));
   }
@@ -322,13 +308,13 @@ ObInnerKVTableOperator::~ObInnerKVTableOperator()
 }
 
 int ObInnerKVTableOperator::init(
-  const char *tname, const ObIExecTenantIdProvider &exec_tenant_id_provider)
+  const char *tname)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObInnerKVTableOperator init twice", K(ret));
-  } else if (OB_FAIL(operator_.init(tname, exec_tenant_id_provider))) {
+  } else if (OB_FAIL(operator_.init(tname))) {
     LOG_WARN("failed to init operator", K(ret), K(tname));
   } else {
     is_inited_ = true;

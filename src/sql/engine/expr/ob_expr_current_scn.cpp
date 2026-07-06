@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_current_scn.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -53,7 +54,7 @@ int ObExprCurrentScn::eval_current_scn(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     LOG_WARN("session is null", K(ret));
   } else {
     share::SCN current_scn;
-    ObTransService *txs = MTL(transaction::ObTransService*);
+    ObTransService *txs = share::g_mp->trans_service();
     int64_t query_timeout = 0;
     session->get_query_timeout(query_timeout);
     int64_t expire_ts = session->get_query_start_time() + query_timeout;

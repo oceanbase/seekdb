@@ -21,7 +21,7 @@
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/queue/ob_link.h"
-#include "ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "ob_tablet_id.h"
 #include "share/ob_ls_id.h"
 #include "share/scn.h"
@@ -31,7 +31,7 @@
 #include <cstdint>
 #include <type_traits>
 #include "mds_writer.h"
-#include "deps/oblib/src/common/meta_programming/ob_type_traits.h"
+#include "common/meta_programming/ob_type_traits.h"
 #include "runtime_utility/mds_lock.h"
 #include "lib/string/ob_string_holder.h"
 #include "meta_programming/ob_meta_copy.h"

@@ -51,8 +51,7 @@ namespace dtl {
  *  chid = start_ch_id + j * N + i;
  * }
  **/
-void ObDtlChannelGroup::make_transmit_channel(const uint64_t tenant_id,
-                                    const ObAddr &peer_exec_addr,
+void ObDtlChannelGroup::make_transmit_channel(const ObAddr &peer_exec_addr,
                                     uint64_t chid,
                                     ObDtlChannelInfo &ci_producer,
                                     bool is_local)
@@ -63,11 +62,10 @@ void ObDtlChannelGroup::make_transmit_channel(const uint64_t tenant_id,
   ci_producer.type_ = DTL_CT_LOCAL;
   ci_producer.peer_ = peer_exec_addr;
   ci_producer.role_ = DTL_CR_PUSHER;
-  ci_producer.tenant_id_ = tenant_id;
+  
 }
 
-void ObDtlChannelGroup::make_receive_channel(const uint64_t tenant_id,
-                                    const ObAddr &peer_exec_addr,
+void ObDtlChannelGroup::make_receive_channel(const ObAddr &peer_exec_addr,
                                     uint64_t chid,
                                     ObDtlChannelInfo &ci_consumer,
                                     bool is_local)
@@ -78,11 +76,10 @@ void ObDtlChannelGroup::make_receive_channel(const uint64_t tenant_id,
   ci_consumer.type_ = DTL_CT_LOCAL;
   ci_consumer.peer_ = peer_exec_addr;
   ci_consumer.role_ = DTL_CR_PUSHER;
-  ci_consumer.tenant_id_ = tenant_id;
+  
 }
 
-int ObDtlChannelGroup::make_channel(const uint64_t tenant_id,
-                                    const ObAddr &producer_exec_addr,
+int ObDtlChannelGroup::make_channel(const ObAddr &producer_exec_addr,
                                     const ObAddr &consumer_exec_addr,
                                     ObDtlChannelInfo &ci_producer,
                                     ObDtlChannelInfo &ci_consumer)
@@ -96,12 +93,12 @@ int ObDtlChannelGroup::make_channel(const uint64_t tenant_id,
   ci_producer.type_ = DTL_CT_LOCAL;
   ci_producer.peer_ = consumer_exec_addr;
   ci_producer.role_ = DTL_CR_PUSHER;
-  ci_producer.tenant_id_ = tenant_id;
+  
   ci_consumer.chid_ = (chid << 1) + 1;
   ci_consumer.type_ = DTL_CT_LOCAL;
   ci_consumer.peer_ = producer_exec_addr;
   ci_consumer.role_ = DTL_CR_PULLER;
-  ci_consumer.tenant_id_ = tenant_id;
+  
   return ret;
 }
 
@@ -113,7 +110,7 @@ int ObDtlChannelGroup::link_channel(const ObDtlChannelInfo &ci, ObDtlChannel *&c
   if (OB_UNLIKELY(ci.type_ != DTL_CT_LOCAL)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("only local dtl channel is supported", KP(chid), K(ret), K(ci.type_));
-  } else if (OB_FAIL(DTL.create_local_channel(ci.tenant_id_, ci.chid_, ci.peer_, chan, dfc))) {
+  } else if (OB_FAIL(DTL.create_local_channel(ci.chid_, ci.peer_, chan, dfc))) {
     LOG_WARN("create local channel fail", KP(chid), K(ret));
   }
   LOG_TRACE("trace create local channel", KP(chid), K(ret), K(ci.peer_), K(ci.type_));

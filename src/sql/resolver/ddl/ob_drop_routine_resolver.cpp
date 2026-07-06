@@ -51,7 +51,8 @@ int ObDropProcedureResolver::resolve(const ParseNode &parse_tree)
   }
   else {
     obcall::ObDropRoutineArg &routine_arg = proc_stmt->get_routine_arg();
-    routine_arg.tenant_id_ = session_info_->get_effective_tenant_id();
+    
+    
     routine_arg.db_name_ = db_name;
     routine_arg.routine_name_ = sp_name;
     routine_arg.routine_type_ = share::schema::ROUTINE_PROCEDURE_TYPE;
@@ -117,15 +118,15 @@ int ObDropFunctionResolver::resolve(const ParseNode &parse_tree)
       ObString lower_name;
       OZ (ob_write_string(*allocator_, sp_name, lower_name));
       OX (ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, lower_name));
-      OZ (schema_checker_->get_udf_info(
-        session_info_->get_effective_tenant_id(), lower_name, udf_info, exist));
+      OZ (schema_checker_->get_udf_info( lower_name, udf_info, exist));
       if (OB_FAIL(ret)) {
       } else if (exist) {
         ObDropFuncStmt *drop_func_stmt = NULL;
         CK (OB_NOT_NULL(drop_func_stmt = create_stmt<ObDropFuncStmt>()));
         if (OB_SUCC(ret)) {
           obcall::ObDropUserDefinedFunctionArg &drop_func_arg = drop_func_stmt->get_drop_func_arg();
-          drop_func_arg.tenant_id_ = session_info_->get_effective_tenant_id();
+          
+          
           drop_func_arg.name_ = lower_name;
           drop_func_arg.if_exist_ =  if_exist;
           need_try_pl_function = false;
@@ -140,7 +141,7 @@ int ObDropFunctionResolver::resolve(const ParseNode &parse_tree)
       LOG_WARN("create drop function stmt failed");
     } else {
       obcall::ObDropRoutineArg &routine_arg = routine_stmt->get_routine_arg();
-      routine_arg.tenant_id_ = session_info_->get_effective_tenant_id();
+      
       routine_arg.db_name_ = pl_y ? db_name : session_info_->get_database_name();
       routine_arg.routine_name_ = sp_name;
       routine_arg.routine_type_ = share::schema::ROUTINE_FUNCTION_TYPE;

@@ -16,7 +16,7 @@
  
 #include <gtest/gtest.h>
 #define private public
-#include "lib/roaringbitmap/ob_rb_utils.h"
+#include "share/roaringbitmap/ob_rb_utils.h"
 
 #undef private
 

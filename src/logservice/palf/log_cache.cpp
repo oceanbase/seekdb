@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX PALF
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "log_cache.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "palf_env_impl.h"
@@ -94,7 +95,7 @@ int LogHotCache::read(const LSN &read_begin_lsn,
     int64_t cost_ts = ObTimeUtility::fast_current_time() - start_ts;
     hit_cnt = ATOMIC_AAF(&hit_count_, 1);
     read_size = ATOMIC_AAF(&read_size_, out_read_size);
-    EVENT_TENANT_INC(ObStatEventIds::PALF_READ_COUNT_FROM_HOT_CACHE, MTL_ID());
+    EVENT_TENANT_INC(ObStatEventIds::PALF_READ_COUNT_FROM_HOT_CACHE);
     EVENT_ADD(ObStatEventIds::PALF_READ_SIZE_FROM_HOT_CACHE, out_read_size);
     EVENT_ADD(ObStatEventIds::PALF_READ_TIME_FROM_HOT_CACHE, cost_ts);
     PALF_LOG(TRACE, "read_data_from_buffer success", K(ret), K_(palf_id), K(read_begin_lsn),
@@ -190,14 +191,13 @@ bool LogCacheUtils::is_in_last_cache_line(const LSN &input)
 
 //============================================= LogKVCacheKey ==========================
 LogKVCacheKey::LogKVCacheKey()
-    : tenant_id_(OB_INVALID_TENANT_ID), palf_id_(INVALID_PALF_ID), aligned_lsn_(LOG_INVALID_LSN_VAL),
+    : palf_id_(INVALID_PALF_ID), aligned_lsn_(LOG_INVALID_LSN_VAL),
       flashback_version_(OB_INVALID_TIMESTAMP) {}
 
-LogKVCacheKey::LogKVCacheKey(const uint64_t tenant_id, 
-                             const int64_t palf_id,
+LogKVCacheKey::LogKVCacheKey(const int64_t palf_id,
                              const LSN aligned_lsn,
                              const int64_t flashback_version)
-    : tenant_id_(tenant_id), palf_id_(palf_id), aligned_lsn_(aligned_lsn),
+    : palf_id_(palf_id), aligned_lsn_(aligned_lsn),
       flashback_version_(flashback_version) {}
 
 LogKVCacheKey::~LogKVCacheKey() 
@@ -207,13 +207,13 @@ LogKVCacheKey::~LogKVCacheKey()
 
 bool LogKVCacheKey::is_valid() const
 {
-  return is_valid_tenant_id(tenant_id_) && aligned_lsn_.is_valid() &&
+  return true && aligned_lsn_.is_valid() &&
          is_valid_palf_id(palf_id_) && is_valid_flashback_version(flashback_version_);
 }
 
 void LogKVCacheKey::reset() 
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   palf_id_ = INVALID_PALF_ID;
   aligned_lsn_.reset();
   flashback_version_ = OB_INVALID_TIMESTAMP;
@@ -222,7 +222,7 @@ void LogKVCacheKey::reset()
 bool LogKVCacheKey::operator ==(const ObIKVCacheKey &other) const
 {
   const LogKVCacheKey &other_key = reinterpret_cast<const LogKVCacheKey &>(other);
-  return tenant_id_ == other_key.tenant_id_ && palf_id_ == other_key.palf_id_ &&
+  return true && palf_id_ == other_key.palf_id_ &&
          aligned_lsn_ == other_key.aligned_lsn_ &&
          flashback_version_ == other_key.flashback_version_;
 }
@@ -230,17 +230,13 @@ bool LogKVCacheKey::operator ==(const ObIKVCacheKey &other) const
 uint64_t LogKVCacheKey::hash() const
 {
   uint64_t hash_code = 0;
-  hash_code = murmurhash(&tenant_id_, sizeof(tenant_id_), hash_code);
   hash_code = murmurhash(&palf_id_, sizeof(palf_id_), hash_code);
   hash_code = murmurhash(&aligned_lsn_, sizeof(aligned_lsn_), hash_code);
   hash_code = murmurhash(&flashback_version_, sizeof(flashback_version_), hash_code);
   return hash_code;
 }
 
-uint64_t LogKVCacheKey::get_tenant_id() const
-{
-  return tenant_id_;
-}
+
 
 int64_t LogKVCacheKey::size() const
 {
@@ -254,7 +250,7 @@ int LogKVCacheKey::deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&k
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(ret), K(buf_len), K(size()));
   } else {
-    LogKVCacheKey *new_key = new (buf) LogKVCacheKey(tenant_id_, palf_id_, aligned_lsn_, flashback_version_);
+    LogKVCacheKey *new_key = new (buf) LogKVCacheKey(palf_id_, aligned_lsn_, flashback_version_);
     if (OB_ISNULL(new_key)) {
       ret = OB_ERR_UNEXPECTED;
       CLOG_LOG(WARN, "new_key ptr is null", K(ret), K(*this));
@@ -447,13 +443,13 @@ int LogColdCache::init(const int64_t palf_id,
   } else if (OB_FAIL(log_storage->get_logical_block_size(logical_block_size_))) {
     PALF_LOG(WARN, "get_logical_block_size failed", K(ret), K(palf_id));
   } else {
-    tenant_id_ = palf_env_impl->get_tenant_id();
+    
     palf_id_ = palf_id;
     palf_env_impl_ = palf_env_impl;
     log_reader_ = log_storage->get_log_reader();
     kv_cache_ = &OB_LOG_KV_CACHE.get_instance();
     is_inited_ = true;
-    PALF_LOG(INFO, "LogColdCache init successfully", K_(is_inited), K_(tenant_id), K(palf_id), K(log_storage));
+    PALF_LOG(INFO, "LogColdCache init successfully", K_(is_inited), K(palf_id), K(log_storage));
   }
 
   return ret;
@@ -466,7 +462,7 @@ LogColdCache::~LogColdCache()
 
 void LogColdCache::destroy()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   palf_id_ = INVALID_PALF_ID;
   palf_env_impl_ = NULL;
   log_reader_ = NULL;
@@ -483,13 +479,13 @@ int LogColdCache::alloc_kv_pair(const int64_t flashback_version,
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(WARN, "LogColdCache is not inited", K(ret));
-  } else if (OB_FAIL(kv_cache_->alloc(tenant_id_, sizeof(LogKVCacheKey),
+  } else if (OB_FAIL(kv_cache_->alloc(sizeof(LogKVCacheKey),
                                       sizeof(LogKVCacheValue) + CACHE_LINE_SIZE,
                                       fill_buf.kvpair_, fill_buf.handle_,
                                       fill_buf.inst_handle_))) {
     PALF_LOG(WARN, "alloc kvpair failed", K(ret), K(palf_id_));
   } else {
-    fill_buf.kvpair_->key_ = new (fill_buf.kvpair_->key_) LogKVCacheKey(tenant_id_, palf_id_, aligned_lsn, flashback_version);
+    fill_buf.kvpair_->key_ = new (fill_buf.kvpair_->key_) LogKVCacheKey(palf_id_, aligned_lsn, flashback_version);
     fill_buf.buf_ = reinterpret_cast<char *>(fill_buf.kvpair_->value_) + sizeof(LogKVCacheValue);
     fill_buf.kvpair_->value_ = new (fill_buf.kvpair_->value_) LogKVCacheValue(fill_buf.buf_, CACHE_LINE_SIZE);
     
@@ -506,7 +502,7 @@ int LogColdCache::read(const int64_t flashback_version,
                        int64_t &out_read_size,
                        LogIOContext &io_ctx)
 {
-  #define PRINT_INFO K_(palf_id), K_(tenant_id)
+  #define PRINT_INFO K_(palf_id)
 
   int ret = OB_SUCCESS;
   bool enable_fill_cache = false;
@@ -642,7 +638,7 @@ int LogColdCache::get_cache_lines_(const LSN &lsn,
                                    int64_t &out_read_size,
                                    LogIteratorInfo *iterator_info)
 {
-  #define PRINT_INFO K_(palf_id), K_(tenant_id)
+  #define PRINT_INFO K_(palf_id)
 
   int ret = OB_SUCCESS;
   int64_t read_pos = 0;
@@ -671,7 +667,7 @@ int LogColdCache::get_cache_lines_(const LSN &lsn,
     iterator_info->inc_cache_read_size(out_read_size);
   }
 
-  log_cache_stat_.print_stat_info(kv_cache_->store_size(tenant_id_), palf_id_);
+  log_cache_stat_.print_stat_info(kv_cache_->store_size(), palf_id_);
 
   #undef PRINT_INFO
   return ret;
@@ -684,13 +680,13 @@ int LogColdCache::get_cache_line_(const LSN &cache_read_lsn,
                                   char *buf,
                                   int64_t &curr_round_read_size)
 {
-  #define PRINT_INFO K_(palf_id), K_(tenant_id)
+  #define PRINT_INFO K_(palf_id)
 
   int ret = OB_SUCCESS;
   curr_round_read_size = 0;
   LSN aligned_lsn = LogCacheUtils::lower_align_with_start(cache_read_lsn, CACHE_LINE_SIZE);
   offset_t diff = cache_read_lsn - aligned_lsn;
-  LogKVCacheKey key(tenant_id_, palf_id_, aligned_lsn, flashback_version);
+  LogKVCacheKey key(palf_id_, aligned_lsn, flashback_version);
   LogKVCacheValueHandle val_handle;
   int tmp_ret = OB_SUCCESS;
   char *cache_log_buf = NULL;
@@ -728,7 +724,7 @@ int LogColdCache::fill_cache_lines_(const int64_t flashback_version,
                                     char *buf) 
 {
   int ret = OB_SUCCESS;
-  #define PRINT_INFO K_(palf_id), K_(tenant_id)
+  #define PRINT_INFO K_(palf_id)
 
   if (!is_valid_flashback_version(flashback_version) || !lsn.is_valid() || 0 >= fill_size) {
     ret = OB_INVALID_ARGUMENT;
@@ -794,7 +790,7 @@ int LogColdCache::fill_cache_line_(const int64_t flashback_version,
                                    char *buf)
 {
   int ret = OB_SUCCESS;
-  LogKVCacheKey new_key(tenant_id_, palf_id_, fill_lsn, flashback_version);
+  LogKVCacheKey new_key(palf_id_, fill_lsn, flashback_version);
   LogKVCacheValue new_value;
   if (OB_FAIL(new_value.init(buf + fill_pos, fill_size))) {
     PALF_LOG(WARN, "new value init failed", K(ret), K(new_key), K(new_value));

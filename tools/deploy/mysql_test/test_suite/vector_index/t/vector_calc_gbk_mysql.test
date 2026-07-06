@@ -17,7 +17,7 @@ set ob_query_timeout=1000000000;
 set ob_trx_timeout=1000000000;
 drop database if exists vector_test;
 --enable_warnings
-create database vector_test default charset gbk;
+create database vector_test default charset utf8mb4;
 use vector_test;
 
 --disable_warnings

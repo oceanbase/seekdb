@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/tablet/ob_tablet_to_ls_iterator.h"
-#include "src/share/ob_rpc_struct.h"
+#include "share/ob_rpc_struct.h"
 
 namespace oceanbase
 {
@@ -25,7 +25,6 @@ namespace share
 {
 ObTenantTabletToLSIterator::ObTenantTabletToLSIterator()
     : inited_(false),
-      tenant_id_(OB_INVALID_TENANT_ID),
       inner_idx_(0),
       ls_white_list_(),
       inner_tablet_infos_(),
@@ -34,30 +33,24 @@ ObTenantTabletToLSIterator::ObTenantTabletToLSIterator()
 }
 
 int ObTenantTabletToLSIterator::init(
-    common::ObISQLClient &sql_proxy,
-    const uint64_t tenant_id)
+    common::ObISQLClient &sql_proxy)
 {
   const ObArray<ObLSID> ls_white_list;
-  return init(sql_proxy, tenant_id, ls_white_list);
+  return init(sql_proxy, ls_white_list);
 }
 
 int ObTenantTabletToLSIterator::init(
     common::ObISQLClient &sql_proxy,
-    const uint64_t tenant_id,
     const common::ObIArray<ObLSID> &ls_white_list)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", KR(ret), K(tenant_id));
   } else if (OB_FAIL(ls_white_list_.assign(ls_white_list))) {
     LOG_WARN("assign LS white list fail", KR(ret), K(ls_white_list));
   } else {
     sql_proxy_ = &sql_proxy;
-    tenant_id_ = tenant_id;
     inited_ = true;
   }
   return ret;
@@ -123,13 +116,12 @@ int ObTenantTabletToLSIterator::prefetch_()
     const int64_t range_size = GCONF.tablet_meta_table_scan_batch_count;
     if (OB_FAIL(ObTabletToLSTableOperator::range_get_tablet_info(
         *sql_proxy_,
-        tenant_id_,
         ls_white_list_,
         last_tablet_id,
         range_size,
         inner_tablet_infos_))) {
       LOG_WARN("fail to range get by operator", KR(ret),
-          K_(tenant_id), K_(ls_white_list), K(last_tablet_id), K(range_size), K(inner_tablet_infos_));
+          K_(ls_white_list), K(last_tablet_id), K(range_size), K(inner_tablet_infos_));
     } else if (inner_tablet_infos_.count() <= 0) {
       ret = OB_ITER_END;
     }

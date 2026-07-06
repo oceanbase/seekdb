@@ -22,7 +22,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "share/config/ob_server_config.h"  // GCONF
 #include "share/config/ob_config_manager.h"  // GCTX.config_mgr_
-#include "lib/allocator/ob_mod_define.h"  // ObModIds
+#include "lib/utility/ob_mod_define.h"  // ObModIds
 #include "lib/string/ob_string.h"  // ObString
 #include <string.h>  // strlen, MEMCPY
 

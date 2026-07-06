@@ -20,7 +20,7 @@
 #include "lib/ob_define.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_print_utils.h"
-#include "lib/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_client.h"
 #include "lib/container/ob_iarray.h"
 
 namespace oceanbase
@@ -56,13 +56,13 @@ public:
   int init(common::ObISQLClient *sql_proxy) { sql_proxy_ = sql_proxy; return common::OB_SUCCESS; }
 
   int update_next_date(
-    uint64_t tenant_id, ObDBMSSchedJobInfo &job_info, int64_t next_date);
+    ObDBMSSchedJobInfo &job_info, int64_t next_date);
 
   int update_for_start(
-    uint64_t tenant_id, ObDBMSSchedJobInfo &job_info, int64_t next_date, ObAddr execute_addr);
+    ObDBMSSchedJobInfo &job_info, int64_t next_date, ObAddr execute_addr);
 
   int update_for_start_execute(
-    uint64_t tenant_id, ObDBMSSchedJobInfo &job_info);
+    ObDBMSSchedJobInfo &job_info);
 
   int update_for_missed(ObDBMSSchedJobInfo &job_info);
   int update_for_zone_not_exist(ObDBMSSchedJobInfo &job_info);
@@ -74,35 +74,35 @@ public:
   int update_for_kill(ObDBMSSchedJobInfo &job_info);
   int get_dbms_sched_job_is_killed(const ObDBMSSchedJobInfo &job_info, bool &is_killed);
   int get_dbms_sched_job_info(
-    uint64_t tenant_id, bool is_oracle_tenant, uint64_t job_id, const common::ObString &job_name,
+    bool is_oracle_tenant, uint64_t job_id, const common::ObString &job_name,
     common::ObIAllocator &allocator, ObDBMSSchedJobInfo &job_info);
   int get_dbms_sched_job_infos_in_tenant(
-    uint64_t tenant_id, bool is_oracle_tenant,
+    bool is_oracle_tenant,
     common::ObIAllocator &allocator, common::ObIArray<ObDBMSSchedJobInfo> &job_infos);
 
   int get_dbms_sched_job_class_info(
-    uint64_t tenant_id, bool is_oracle_tenant, const common::ObString job_class_name,
+    bool is_oracle_tenant, const common::ObString job_class_name,
     common::ObIAllocator &allocator, ObDBMSSchedJobClassInfo &job_class_info);
 
   int get_dbms_sched_job_class_infos_in_tenant(
-    uint64_t tenant_id, bool is_oracle_tenant,
+    bool is_oracle_tenant,
     common::ObIAllocator &allocator, common::ObIArray<ObDBMSSchedJobClassInfo> &job_class_infos);
 
   int extract_info(
-    common::sqlclient::ObMySQLResult &result, int64_t tenant_id, bool is_oracle_tenant,
+    common::sqlclient::ObMySQLResult &result, bool is_oracle_tenant,
     common::ObIAllocator &allocator, ObDBMSSchedJobInfo &job_info);
   int extract_job_class_info(
-    sqlclient::ObMySQLResult &result, int64_t tenant_id, bool is_oracle_tenant,
+    sqlclient::ObMySQLResult &result, bool is_oracle_tenant,
     ObIAllocator &allocator, ObDBMSSchedJobClassInfo &job_class_info);
 
-  int check_job_can_running(int64_t tenant_id, int64_t alive_job_count, bool &can_running);
+  int check_job_can_running(int64_t alive_job_count, bool &can_running);
 
-  int purge_run_detail(uint64_t tenant_id);
+  int purge_run_detail();
 
 private:
-  int _purge(uint64_t tenant_id, const ObString &job_class_name, int64_t log_history);
-  int _purge_fallback(uint64_t tenant_id, int64_t log_history);
-  int _purge_old(uint64_t tenant_id);
+  int _purge(const ObString &job_class_name, int64_t log_history);
+  int _purge_fallback(int64_t log_history);
+  int _purge_old();
   int _build_job_drop_dml(int64_t now, ObDBMSSchedJobInfo &job_info, ObSqlString &sql);
   int _build_job_finished_dml(int64_t now, ObDBMSSchedJobInfo &job_info, ObSqlString &sql);
   int _build_job_rollback_start_dml(ObDBMSSchedJobInfo &job_info, ObSqlString &sql);

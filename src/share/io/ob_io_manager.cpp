@@ -16,19 +16,24 @@
 
 #define USING_LOG_PREFIX COMMON
 
+#include "share/resource_limit_calculator/ob_resource_commmon.h"
 #include "ob_io_manager.h"
+#include "share/resource_manager/ob_cgroup_ctrl.h"  // ObCgroupCtrl complete type, previously hidden behind a transitive include(free within share)
+#include "share/ob_share_util.h"  // ObShareUtil, previously hidden behind a transitive include(free within share)
+#include "share/ob_server_struct.h"  // GCTX, previously hidden behind a transitive include(free within share)
 #include "share/errsim_module/ob_errsim_module_interface_imp.h"
-#include "observer/ob_server.h"
-#include "src/share/io/io_schedule/ob_io_schedule_v2.h"
+#include "share/io/io_schedule/ob_io_schedule_v2.h"
 #include "lib/restore/ob_object_device.h"
 #include "share/ob_io_device_helper.h"
 
+using namespace oceanbase::obcall;
+using namespace oceanbase::share;
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 
 const int64_t STANDARD_IOPS_SIZE = 16 * (1<<10);
 
-OB_SERIALIZE_MEMBER(ObTrafficControl::ObStorageKey, storage_id_, category_, tenant_id_);
+OB_SERIALIZE_MEMBER(ObTrafficControl::ObStorageKey, storage_id_, category_);
 namespace oceanbase
 {
 namespace common
@@ -186,7 +191,7 @@ int64_t ObTrafficControl::ObSharedDeviceControlV2::get_limit(const obcall::Resou
 ObTrafficControl::ObTrafficControl()
 {
   int ret = OB_SUCCESS;
-  set_device_bandwidth(observer::ObServer::DEFAULT_ETHERNET_SPEED);
+  set_device_bandwidth(common::OB_DEFAULT_ETHERNET_SPEED);
   if (OB_FAIL(shared_device_map_v2_.create(7, "IO_TC_MAP_V2"))) {
     LOG_WARN("create io share device map v2 failed", K(ret));
   }
@@ -199,7 +204,7 @@ int ObTrafficControl::calc_usage(ObIORequest &req)
 {
   int ret = OB_SUCCESS;
   const ObStorageIdMod &id = ((ObObjectDevice*)(req.fd_.device_handle_))->get_storage_id_mod();
-  ObIORecordKey key(ObStorageKey(id.storage_id_, req.tenant_id_, id.get_category()), req.tenant_id_);
+  ObIORecordKey key(ObStorageKey(id.storage_id_, id.get_category()));
   ObSharedDeviceIORecord *record = nullptr;
   if (req.fd_.device_handle_->is_object_device() != true) {
     ret = OB_ERR_UNEXPECTED;
@@ -297,7 +302,7 @@ void ObTrafficControl::print_bucket_status_V2()
       } else if (bw_in || bw_out || req_in || req_out || tag) {
         _LOG_INFO("[IO STATUS BUCKET] storage={%u, %ld, %ld}, in=[%ld / %ld]kB/s, out=[%ld / %ld]kB/s, ips=[%ld / %ld], ops=[%ld / %ld]",
                   entry.first.get_category(),
-                  entry.first.get_tenant_id(),
+                  1UL,
                   entry.first.get_storage_id(),
                   bw_in / 1024,
                   entry.second->limits_[static_cast<int>(ResourceType::ibw)] / 1024,
@@ -355,93 +360,7 @@ int ObTrafficControl::ObSharedDeviceControlV2::ObSDGroupList::is_group_key_exist
   return ret;
 }
 
-int ObTrafficControl::gc_tenant_infos()
-{
-  int ret = OB_SUCCESS;
-  if (REACH_TIME_INTERVAL(1 * 60 * 1000L * 1000L)) {  // 60s
-    DRWLock::WRLockGuard guard(rw_lock_);
-    struct GCTenantSharedDeviceInfosV2
-    {
-      GCTenantSharedDeviceInfosV2(
-          const ObVector<uint64_t> &tenant_ids, ObSEArray<ObTrafficControl::ObStorageKey, 7> &gc_tenant_infos)
-          : tenant_ids_(tenant_ids), gc_tenant_infos_(gc_tenant_infos)
-      {}
-      int operator()(hash::HashMapPair<ObTrafficControl::ObStorageKey, ObTrafficControl::ObSharedDeviceControlV2 *> &pair)
-      {
-        bool is_find = false;
-        for (int i = 0; !is_find && i < tenant_ids_.size(); ++i) {
-          if (0 == pair.first.get_tenant_id() || tenant_ids_.at(i) == pair.first.get_tenant_id()) {
-            is_find = true;
-          }
-        }
-        if (false == is_find) {
-          gc_tenant_infos_.push_back(pair.first);
-        }
-        return OB_SUCCESS;
-      }
-      const ObVector<uint64_t> &tenant_ids_;
-      ObSEArray<ObTrafficControl::ObStorageKey, 7> &gc_tenant_infos_;
-    };
-    struct GCTenantRecordInfos
-    {
-      GCTenantRecordInfos(
-          const ObVector<uint64_t> &tenant_ids, ObSEArray<ObTrafficControl::ObIORecordKey, 7> &gc_tenant_infos)
-          : tenant_ids_(tenant_ids), gc_tenant_infos_(gc_tenant_infos)
-      {}
-      int operator()(hash::HashMapPair<ObTrafficControl::ObIORecordKey, ObTrafficControl::ObSharedDeviceIORecord> &pair)
-      {
-        bool is_find = false;
-        for (int i = 0; !is_find && i < tenant_ids_.size(); ++i) {
-          if (0 == pair.first.id_.get_tenant_id() || tenant_ids_.at(i) == pair.first.id_.get_tenant_id()) {
-            is_find = true;
-          }
-        }
-        if (false == is_find) {
-          gc_tenant_infos_.push_back(pair.first);
-        }
-        return OB_SUCCESS;
-      }
-      const ObVector<uint64_t> &tenant_ids_;
-      ObSEArray<ObTrafficControl::ObIORecordKey, 7> &gc_tenant_infos_;
-    };
-    ObVector<uint64_t> tenant_ids;
-    ObSEArray<ObTrafficControl::ObIORecordKey, 7> gc_tenant_record_infos;
-    ObSEArray<ObTrafficControl::ObStorageKey, 7> gc_tenant_shared_device_infos_v2;
-    GCTenantRecordInfos fn(tenant_ids, gc_tenant_record_infos);
-    GCTenantSharedDeviceInfosV2 fn3(tenant_ids, gc_tenant_shared_device_infos_v2);
-    if(OB_ISNULL(GCTX.omt_)) {
-    } else if (FALSE_IT(GCTX.omt_->get_tenant_ids(tenant_ids))) {
-    } else if (OB_FAIL(io_record_map_.foreach_refactored(fn))) {
-      LOG_WARN("SSNT:failed to get gc tenant record infos", K(ret));
-    } else if (OB_FAIL(shared_device_map_v2_.foreach_refactored(fn3))) {
-      LOG_WARN("SSNT:failed to get gc tenant shared device infos", K(ret));
-    } else {
-      for (int i = 0; i < gc_tenant_record_infos.count(); ++i) {
-        if (OB_SUCCESS != io_record_map_.erase_refactored(gc_tenant_record_infos.at(i))) {
-          LOG_WARN("SSNT:failed to erase gc tenant record infos", K(ret), K(gc_tenant_record_infos.at(i)));
-        } else {
-          LOG_INFO("SSNT:erase gc tenant record infos", K(ret), K(gc_tenant_record_infos.at(i)));
-        }
-      }
-      for (int i = 0; i < gc_tenant_shared_device_infos_v2.count(); ++i) {
-        int tmp_ret = OB_SUCCESS;
-        ObTrafficControl::ObSharedDeviceControlV2 *val_ptr = nullptr;
-        if (OB_TMP_FAIL(shared_device_map_v2_.erase_refactored(gc_tenant_shared_device_infos_v2.at(i), &val_ptr))) {
-          LOG_WARN("SSNT:failed to erase gc tenant shared device infos", K(tmp_ret), K(gc_tenant_shared_device_infos_v2.at(i)), K(val_ptr));
-        } else if (OB_ISNULL(val_ptr)) {
-          tmp_ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("SSNT:failed to erase gc tenant shared device infos", K(tmp_ret), K(gc_tenant_shared_device_infos_v2.at(i)), K(val_ptr));
-        } else if (FALSE_IT(val_ptr->destroy())) {
-          LOG_WARN("SSNT:failed to destroy shared device control", K(tmp_ret), K(gc_tenant_shared_device_infos_v2.at(i)), K(val_ptr));
-        } else if (FALSE_IT(ob_delete(val_ptr))) {
-        } else {
-          LOG_INFO("SSNT:erase gc tenant shared device infos succ", K(ret), K(tmp_ret), K(gc_tenant_shared_device_infos_v2.at(i)), K(val_ptr));
-        }
-      }
-    }
-  }
-  return ret;
-}
+// moved definition to the upper-layer owner cpp(omt/timer real user)
 
 ObIOManager::ObIOManager()
   : is_inited_(false),
@@ -476,17 +395,17 @@ int ObIOManager::init(const int64_t memory_limit,
   } else if (OB_UNLIKELY(memory_limit <= 0|| schedule_queue_count <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(memory_limit), K(schedule_queue_count));
-  } else if (OB_FAIL(allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, "IO_MGR", OB_SYS_TENANT_ID, memory_limit))) {
+  } else if (OB_FAIL(allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, "IO_MGR", memory_limit))) {
     LOG_WARN("init io allocator failed", K(ret));
   } else if (OB_FAIL(channel_map_.create(7, "IO_CHANNEL_MAP"))) {
     LOG_WARN("create channel map failed", K(ret));
   } else if (OB_FAIL(fault_detector_.init())) {
     LOG_WARN("init io fault detector failed", K(ret));
-  } else if (OB_ISNULL(server_io_manager_ = OB_NEW(ObTenantIOManager, ObMemAttr(OB_SYS_TENANT_ID, "IO_MGR")))) {
-  } else if (OB_FAIL(server_io_manager_->init(OB_SYS_TENANT_ID, ObTenantIOConfig::default_instance()))) {
+  } else if (OB_ISNULL(server_io_manager_ = OB_NEW(ObTenantIOManager, ObMemAttr("IO_MGR")))) {
+  } else if (OB_FAIL(server_io_manager_->init(ObTenantIOConfig::default_instance()))) {
     LOG_WARN("init server tenant io mgr failed", K(ret));
   } else {
-    ObMemAttr attr(OB_SYS_TENANT_ID, "IO_MGR");
+    ObMemAttr attr("IO_MGR");
     allocator_.set_attr(attr);
     io_config_.set_default_value();
     is_inited_ = true;
@@ -731,8 +650,8 @@ int ObIOManager::detect_read(const ObIOInfo &info, ObIOHandle &handle)
   } else if (OB_UNLIKELY(!info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(info), K(lbt()));
-  } else if (OB_FAIL(get_tenant_io_manager(info.tenant_id_, tenant_holder))) {
-    LOG_WARN("get tenant io manager failed", K(ret), K(info.tenant_id_));
+  } else if (OB_FAIL(get_tenant_io_manager(tenant_holder))) {
+    LOG_WARN("get tenant io manager failed", K(ret));
   } else if (OB_FAIL(tenant_holder.get_ptr()->detect_aio(info, handle))) {
     LOG_WARN("tenant io manager do aio failed", K(ret), K(info), KPC(tenant_holder.get_ptr()));
   } else if (OB_FAIL(handle.wait())) {
@@ -747,15 +666,15 @@ int ObIOManager::tenant_aio(const ObIOInfo &info, ObIOHandle &handle)
   ObRefHolder<ObTenantIOManager> tenant_holder;
 #ifdef ERRSIM
   const ObErrsimModuleType type = THIS_WORKER.get_module_type();
-  if (is_errsim_module(info.tenant_id_, type.type_)) {
+  if (is_errsim_module(type.type_)) {
     ret = OB_IO_ERROR;
-    LOG_ERROR("[ERRSIM MODULE] errsim IO error", K(ret), "tenant_id", info.tenant_id_);
+    LOG_ERROR("[ERRSIM MODULE] errsim IO error", K(ret));
     return ret;
   }
 #endif
 
-  if (OB_FAIL(get_tenant_io_manager(info.tenant_id_, tenant_holder))) {
-    LOG_WARN("get tenant io manager failed", K(ret), K(info.tenant_id_));
+  if (OB_FAIL(get_tenant_io_manager(tenant_holder))) {
+    LOG_WARN("get tenant io manager failed", K(ret));
   } else if (OB_FAIL(tenant_holder.get_ptr()->inner_aio(info, handle))) {
     LOG_WARN("tenant io manager do aio failed", K(ret), K(info), KPC(tenant_holder.get_ptr()));
   }
@@ -797,13 +716,6 @@ ObIOFaultDetector &ObIOManager::get_device_health_detector()
 int ObIOManager::get_device_health_status(ObDeviceHealthStatus &dhs, int64_t &device_abnormal_time)
 {
   return fault_detector_.get_device_health_status(dhs, device_abnormal_time);
-}
-
-int ObIOManager::reset_device_health()
-{
-  int ret = OB_SUCCESS;
-  fault_detector_.reset_device_health();
-  return ret;
 }
 
 int ObIOManager::add_device_channel(ObIODevice *device_handle,
@@ -881,49 +793,46 @@ int ObIOManager::get_device_channel(const ObIORequest &req, ObDeviceChannel *&de
   return ret;
 }
 
-int ObIOManager::refresh_tenant_io_unit_config(const uint64_t tenant_id,
-    const ObTenantIOConfig::UnitConfig &tenant_io_unit_config)
+int ObIOManager::refresh_tenant_io_unit_config(const ObTenantIOConfig::UnitConfig &tenant_io_unit_config)
 {
   int ret = OB_SUCCESS;
   ObRefHolder<ObTenantIOManager> tenant_holder;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) ||
+  } else if (OB_UNLIKELY(!true ||
                          !tenant_io_unit_config.is_valid())) { 
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(tenant_io_unit_config));
-  } else if (OB_FAIL(get_tenant_io_manager(tenant_id, tenant_holder))) {
-    LOG_WARN("get tenant io manager failed", K(ret), K(tenant_id));
+    LOG_WARN("invalid argument", K(ret), K(tenant_io_unit_config));
+  } else if (OB_FAIL(get_tenant_io_manager(tenant_holder))) {
+    LOG_WARN("get tenant io manager failed", K(ret));
   } else if (OB_FAIL(tenant_holder.get_ptr()->update_basic_io_unit_config(tenant_io_unit_config))) {
-    LOG_WARN("update tenant io config failed", K(ret), K(tenant_id), K(tenant_io_unit_config));
+    LOG_WARN("update tenant io config failed", K(ret), K(tenant_io_unit_config));
   }
   return ret;
 }
 
-int ObIOManager::refresh_tenant_io_param_config(const uint64_t tenant_id,
-    const ObTenantIOConfig::ParamConfig &tenant_io_param_config)
+int ObIOManager::refresh_tenant_io_param_config(const ObTenantIOConfig::ParamConfig &tenant_io_param_config)
 {
   int ret = OB_SUCCESS;
   ObRefHolder<ObTenantIOManager> tenant_holder;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) ||
+  } else if (OB_UNLIKELY(!true ||
                          !tenant_io_param_config.is_valid())) { 
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(tenant_io_param_config));
-  } else if (OB_FAIL(get_tenant_io_manager(tenant_id, tenant_holder))) {
-    LOG_WARN("get tenant io manager failed", K(ret), K(tenant_id));
+    LOG_WARN("invalid argument", K(ret), K(tenant_io_param_config));
+  } else if (OB_FAIL(get_tenant_io_manager(tenant_holder))) {
+    LOG_WARN("get tenant io manager failed", K(ret));
   } else if (OB_FAIL(tenant_holder.get_ptr()->update_basic_io_param_config(tenant_io_param_config))) {
-    LOG_WARN("update tenant io config failed", K(ret), K(tenant_id), K(tenant_io_param_config));
+    LOG_WARN("update tenant io config failed", K(ret), K(tenant_io_param_config));
   }
   return ret;
 }
 
 // for unittest
-int ObIOManager::modify_group_io_config(const uint64_t tenant_id,
-                                        const uint64_t index,
+int ObIOManager::modify_group_io_config(const uint64_t index,
                                         const int64_t min_percent,
                                         const int64_t max_percent,
                                         const int64_t weight_percent)
@@ -933,21 +842,20 @@ int ObIOManager::modify_group_io_config(const uint64_t tenant_id,
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
-  } else if (OB_FAIL(get_tenant_io_manager(tenant_id, tenant_holder))) {
-    LOG_WARN("get tenant io manager failed", K(ret), K(tenant_id));
+  } else if (OB_FAIL(get_tenant_io_manager(tenant_holder))) {
+    LOG_WARN("get tenant io manager failed", K(ret));
   } else if (OB_FAIL(tenant_holder.get_ptr()->modify_group_io_config(index, min_percent, max_percent, weight_percent,
                                                                     false, false))) {
-    LOG_WARN("update tenant io config failed", K(ret), K(tenant_id), K(min_percent), K(max_percent), K(weight_percent));
+    LOG_WARN("update tenant io config failed", K(ret), K(min_percent), K(max_percent), K(weight_percent));
   } else if (OB_FAIL(tenant_holder.get_ptr()->refresh_group_io_config())) {
     LOG_WARN("fail to refresh group config", K(ret));
   }
   return ret;
 }
 
-int ObIOManager::get_tenant_io_manager(const uint64_t tenant_id, ObRefHolder<ObTenantIOManager> &tenant_holder) const
+int ObIOManager::get_tenant_io_manager(ObRefHolder<ObTenantIOManager> &tenant_holder) const
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   if (OB_NOT_NULL(server_io_manager_)) {
     tenant_holder.hold(server_io_manager_);
   }
@@ -958,32 +866,7 @@ int ObIOManager::get_tenant_io_manager(const uint64_t tenant_id, ObRefHolder<ObT
 }
 
 
-void ObIOManager::print_tenant_status()
-{
-  int ret = OB_SUCCESS;
-  ObVector<uint64_t> tenant_ids;
-  if (OB_NOT_NULL(GCTX.omt_)) {
-    GCTX.omt_->get_tenant_ids(tenant_ids);
-    for (int64_t i = 0; OB_SUCC(ret) && i < tenant_ids.size(); ++i) {
-      const uint64_t cur_tenant_id = tenant_ids.at(i);
-      ObRefHolder<ObTenantIOManager> tenant_holder;
-      if (is_virtual_tenant_id(cur_tenant_id)) {
-        // do nothing
-      } else if (OB_FAIL(get_tenant_io_manager(cur_tenant_id, tenant_holder))) {
-        if (OB_HASH_NOT_EXIST != ret) {
-          LOG_WARN("get tenant io manager failed", K(ret), K(cur_tenant_id));
-        } else {
-          ret = OB_SUCCESS;
-        }
-      } else {
-        tenant_holder.get_ptr()->print_io_status();
-      }
-    }
-  }
-  if (OB_NOT_NULL(server_io_manager_)) {
-    server_io_manager_->print_io_status();
-  }
-}
+// moved definition to the upper-layer owner cpp(omt/timer real user)
 
 void ObIOManager::print_channel_status()
 {
@@ -1008,16 +891,16 @@ void ObIOManager::print_status()
   tc_.print_bucket_status_V2();
 }
 
-int64_t ObIOManager::get_object_storage_io_timeout_ms(const uint64_t tenant_id) const
+int64_t ObIOManager::get_object_storage_io_timeout_ms() const
 {
   int ret = OB_SUCCESS;
   int64_t timeout_ms = DEFAULT_OBJECT_STORAGE_IO_TIMEOUT_MS;
   ObRefHolder<ObTenantIOManager> tenant_holder;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
+  if (OB_UNLIKELY(!true)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(get_tenant_io_manager(tenant_id, tenant_holder))) {
-    LOG_WARN("fail to get tenant io manager", KR(ret), K(tenant_id));
+    LOG_WARN("invalid tenant id", KR(ret));
+  } else if (OB_FAIL(get_tenant_io_manager(tenant_holder))) {
+    LOG_WARN("fail to get tenant io manager", KR(ret));
   } else if (OB_ISNULL(tenant_holder.get_ptr())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tenant holder ptr is null", KR(ret));
@@ -1034,9 +917,7 @@ int ObTenantIOManager::mtl_new(ObTenantIOManager *&io_service)
   int ret = OB_SUCCESS;
   void *buf = nullptr;
   io_service = nullptr;
-  if (is_virtual_tenant_id(MTL_ID())) {
-    // do nothing
-  } else if (OB_ISNULL(buf = ob_malloc(sizeof(ObTenantIOManager), ObMemAttr(MTL_ID(), "IO_MGR")))) {
+  if (OB_ISNULL(buf = ob_malloc(sizeof(ObTenantIOManager), ObMemAttr("IO_MGR")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     FLOG_WARN("failed to alloc tenant io mgr", K(ret));
   } else {
@@ -1048,18 +929,15 @@ int ObTenantIOManager::mtl_new(ObTenantIOManager *&io_service)
 int ObTenantIOManager::mtl_init(ObTenantIOManager *&io_service)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   if (OB_ISNULL(io_service)) {
-    if (is_virtual_tenant_id(tenant_id)) {
-      // do nothing
-    } else {
+    {
       ret = OB_INVALID_ARGUMENT;
     }
-  } else if (OB_FAIL(io_service->init(tenant_id,
-                                      ObTenantIOConfig::default_instance()))) {
-    FLOG_WARN("mtl iit tenant io manager failed", K(tenant_id));
+  } else if (OB_FAIL(io_service->init(ObTenantIOConfig::default_instance()))) {
+    FLOG_WARN("mtl iit tenant io manager failed", K(1UL));
   } else {
-    FLOG_INFO("mtl init tenant io manager success", K(tenant_id), KPC(io_service));
+    FLOG_INFO("mtl init tenant io manager success", K(1UL), KPC(io_service));
   }
   return ret;
 }
@@ -1071,7 +949,7 @@ void ObTenantIOManager::mtl_destroy(ObTenantIOManager *&io_service)
     io_service->~ObTenantIOManager();
     ob_free(io_service);
     io_service = nullptr;
-    FLOG_INFO("mtl destroy tenant io manager success", K(MTL_ID()));
+    FLOG_INFO("mtl destroy tenant io manager success");
   }
 }
 
@@ -1082,7 +960,6 @@ ObTenantIOManager::ObTenantIOManager()
     io_memory_limit_(0),
     request_count_(0),
     result_count_(0),
-    tenant_id_(0),
     io_config_(),
     io_allocator_(),
     callback_mgr_(),
@@ -1097,39 +974,38 @@ ObTenantIOManager::~ObTenantIOManager()
   destroy();
 }
 
-int ObTenantIOManager::init(const uint64_t tenant_id,
-         const ObTenantIOConfig &io_config)
+int ObTenantIOManager::init(const ObTenantIOConfig &io_config)
 {
   int ret = OB_SUCCESS;
   const uint8_t IO_MODE_CNT = static_cast<uint8_t>(ObIOMode::MAX_MODE) + 1;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id)
+  } else if (OB_UNLIKELY(!true
         || !io_config.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(io_config));
-  } else if (OB_FAIL(init_memory_pool(tenant_id, io_config.param_config_.memory_limit_))) {
+    LOG_WARN("invalid argument", K(ret), K(io_config));
+  } else if (OB_FAIL(init_memory_pool( io_config.param_config_.memory_limit_))) {
     LOG_WARN("init tenant io memory pool failed", K(ret), K(io_config), K(io_memory_limit_), K(request_count_), K(request_count_));
-  } else if (OB_FAIL(io_func_infos_.init(tenant_id))) {
-    LOG_WARN("init io func infos failed", K(ret), K(tenant_id));
-  } else if (OB_FAIL(io_usage_.init(tenant_id, io_config.group_configs_.count() / IO_MODE_CNT))) {
+  } else if (OB_FAIL(io_func_infos_.init())) {
+    LOG_WARN("init io func infos failed", K(ret));
+  } else if (OB_FAIL(io_usage_.init(io_config.group_configs_.count() / IO_MODE_CNT))) {
     LOG_WARN("init io usage failed", K(ret), K(io_usage_), K(io_config.group_configs_.count()));
-  } else if (OB_FAIL(io_sys_usage_.init(tenant_id, SYS_MODULE_CNT))) { // local and remote
+  } else if (OB_FAIL(io_sys_usage_.init(SYS_MODULE_CNT))) { // local and remote
     LOG_WARN("init io usage failed", K(ret), K(io_sys_usage_), K(SYS_MODULE_CNT), K(SYS_MODULE_CNT * 2));
   } else if (OB_FAIL(io_mem_stats_.init(SYS_MODULE_CNT , io_config.group_configs_.count() / IO_MODE_CNT))) {
     LOG_WARN("init io usage failed", K(ret), K(io_mem_stats_), K(SYS_MODULE_CNT), K(io_config.group_configs_.count()));
-  } else if (OB_FAIL(init_group_index_map(tenant_id, io_config))) {
+  } else if (OB_FAIL(init_group_index_map(io_config))) {
     LOG_WARN("init group map failed", K(ret));
   } else if (OB_FAIL(io_config_.deep_copy(io_config))) {
     LOG_WARN("copy io config failed", K(ret), K(io_config_));
   } else if(OB_FAIL(io_config_.group_configs_.reserve(16L * IO_MODE_CNT))) {
     //rerserve space for 16 groups to avoid concurrency problem
     LOG_WARN("reserve group configs failed", K(ret));
-  } else if (OB_FAIL(qsched_.init(tenant_id, io_config))) {
+  } else if (OB_FAIL(qsched_.init(io_config))) {
     LOG_WARN("init qsched failed", K(ret), K(io_config));
   } else {
-    tenant_id_ = tenant_id;
+    
     inc_ref();
     is_inited_ = true;
   }
@@ -1147,7 +1023,7 @@ void ObTenantIOManager::destroy()
   if (is_inited_) {
     while (1 != get_ref_cnt()) {
       if (REACH_TIME_INTERVAL(1000L * 1000L)) { //1s
-        LOG_INFO("wait tenant io manager quit", K(MTL_ID()), K(start_ts), K(get_ref_cnt()));
+        LOG_INFO("wait tenant io manager quit", K(start_ts), K(get_ref_cnt()));
       }
       ob_usleep((useconds_t)10L * 1000L); //10ms
     }
@@ -1163,8 +1039,8 @@ void ObTenantIOManager::destroy()
   result_count_ = 0;
   group_id_index_map_.destroy();
   io_allocator_.destroy();
-  LOG_INFO("destroy tenant io manager success", K(tenant_id_));
-  tenant_id_ = 0;
+  LOG_INFO("destroy tenant io manager success");
+  
   is_inited_ = false;
 }
 
@@ -1178,9 +1054,9 @@ int ObTenantIOManager::start()
     LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (is_working()) {
     // do nothing
-  } else if (OB_FAIL(callback_mgr_.init(tenant_id_, callback_thread_count,
+  } else if (OB_FAIL(callback_mgr_.init(callback_thread_count,
                      callback_thread_count * DEFAULT_QUEUE_DEPTH))) {
-    LOG_WARN("init callback manager failed", K(ret), K(tenant_id_), K(callback_thread_count));
+    LOG_WARN("init callback manager failed", K(ret), K(callback_thread_count));
   } else {
     is_working_ = true;
   }
@@ -1198,13 +1074,13 @@ bool ObTenantIOManager::is_working() const
   return ATOMIC_LOAD(&is_working_);
 }
 
-int ObTenantIOManager::calc_io_memory(const uint64_t tenant_id, const int64_t memory)
+int ObTenantIOManager::calc_io_memory(const int64_t memory)
 {
   int ret = OB_SUCCESS;
   int64_t memory_benchmark = memory / (1L * 1024L * 1024L * 1024L); //base ob 1G
   //1w req occupies 1.52M
   //1w result occupies 2.44M
-  if (lib::is_mini_mode() && OB_SERVER_TENANT_ID == tenant_id) {
+  if (lib::is_mini_mode() && true) {
     request_count_ = 5000;
     result_count_ = 5000;
     io_memory_limit_ = 256L * 1024L * 1024L;
@@ -1233,18 +1109,18 @@ int ObTenantIOManager::calc_io_memory(const uint64_t tenant_id, const int64_t me
   return ret;
 }
 
-int ObTenantIOManager::init_memory_pool(const uint64_t tenant_id, const int64_t memory)
+int ObTenantIOManager::init_memory_pool(const int64_t memory)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(tenant_id <= 0 || memory <= 0)) {
+  if (OB_UNLIKELY(memory <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid io argument", K(ret), K(tenant_id), K(memory));
-  } else if (OB_FAIL(calc_io_memory(tenant_id, memory))) {
+    LOG_WARN("invalid io argument", K(ret), K(memory));
+  } else if (OB_FAIL(calc_io_memory( memory))) {
     LOG_WARN("calc tenant io memory failed", K(ret), K(memory), K(io_memory_limit_), K(request_count_), K(request_count_));
-  } else if (OB_FAIL(io_allocator_.init(tenant_id, io_memory_limit_))) {
-    LOG_WARN("init io allocator failed", K(ret), K(tenant_id), K(io_memory_limit_));
+  } else if (OB_FAIL(io_allocator_.init(io_memory_limit_))) {
+    LOG_WARN("init io allocator failed", K(ret), K(io_memory_limit_));
   } else {
-    LOG_INFO("init tenant io memory pool success", K(tenant_id), K(memory), K(io_memory_limit_), K(request_count_), K(request_count_));
+    LOG_INFO("init tenant io memory pool success", K(memory), K(io_memory_limit_), K(request_count_), K(request_count_));
   }
   return ret;
 }
@@ -1255,7 +1131,7 @@ int ObTenantIOManager::update_memory_pool(const int64_t memory)
   if (OB_UNLIKELY(memory <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid io argument", K(ret), K(memory));
-  } else if (OB_FAIL(calc_io_memory(tenant_id_, memory))) {
+  } else if (OB_FAIL(calc_io_memory( memory))) {
     LOG_WARN("calc tenant io memory failed", K(ret), K(memory), K(io_memory_limit_), K(request_count_), K(request_count_));
   } else if (OB_FAIL(io_allocator_.update_memory_limit(io_memory_limit_))) {
     LOG_WARN("update io memory limit failed", K(ret), K(io_memory_limit_));
@@ -1359,26 +1235,15 @@ int ObTenantIOManager::inner_aio(const ObIOInfo &info, ObIOHandle &handle)
   handle.reset();
   ObIORequest *req = nullptr;
   RequestHolder req_holder;
-  bool is_data_disk_healthy = true;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(!is_working())) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("tenant not working", K(ret), K(tenant_id_));
+    LOG_WARN("tenant not working", K(ret));
   } else if (OB_ISNULL(info.fd_.device_handle_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("device handle is null", K(ret), K(info));
-  } else if (OB_FAIL(ObShareUtil::check_data_disk_health_status(is_data_disk_healthy))) {
-    LOG_WARN("fail to check data disk status", KR(ret));
-  } else if ((SLOG_IO != info.flag_.get_sys_module_id() &&
-              CLOG_READ_IO != info.flag_.get_sys_module_id() && 
-              CLOG_WRITE_IO != info.flag_.get_sys_module_id()) &&
-              !info.fd_.device_handle_->is_object_device() &&
-              !is_data_disk_healthy) {
-    ret = OB_DISK_HUNG;
-    // for temporary positioning issue, get lbt of log replay
-    LOG_DBA_ERROR(OB_DISK_HUNG, "msg", "disk has fatal error");
   } else if (OB_FAIL(alloc_req_and_result(info, handle, req, req_holder))) {
     LOG_WARN("pre set io args failed", K(ret), K(info));
   } else if (OB_FAIL(qsched_.schedule_request(*req))) {
@@ -1406,7 +1271,7 @@ int ObTenantIOManager::detect_aio(const ObIOInfo &info, ObIOHandle &handle)
     LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(!is_working())) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("tenant not working", K(ret), K(tenant_id_));
+    LOG_WARN("tenant not working", K(ret));
   } else if (OB_UNLIKELY(info.callback_ != nullptr || info.user_data_buf_ != nullptr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("callback and user_data_bug should be nullptr", K(ret), K(info.callback_));
@@ -1454,7 +1319,7 @@ int ObTenantIOManager::enqueue_callback(ObIORequest &req)
     LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(!is_working())) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("tenant not working", K(ret), K(tenant_id_));
+    LOG_WARN("tenant not working", K(ret));
   } else if (OB_FAIL(callback_mgr_.enqueue_callback(req))) {
     LOG_WARN("push io request into callback queue failed", K(ret), K(req));
   }
@@ -1469,7 +1334,7 @@ int ObTenantIOManager::update_basic_io_unit_config(const ObTenantIOConfig::UnitC
     LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(!is_working())) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("tenant not working", K(ret), K(tenant_id_));
+    LOG_WARN("tenant not working", K(ret));
   } else {
     // update basic io config
     if (io_config_.unit_config_.weight_ != io_unit_config.weight_
@@ -1477,7 +1342,7 @@ int ObTenantIOManager::update_basic_io_unit_config(const ObTenantIOConfig::UnitC
         || io_config_.unit_config_.min_iops_ != io_unit_config.min_iops_
         || io_config_.unit_config_.max_net_bandwidth_ != io_unit_config.max_net_bandwidth_
         || io_config_.unit_config_.net_bandwidth_weight_ != io_unit_config.net_bandwidth_weight_) {
-      LOG_INFO("update io unit config", K(tenant_id_), K(io_config_.unit_config_), K(io_unit_config));
+      LOG_INFO("update io unit config", K(io_config_.unit_config_), K(io_unit_config));
       io_config_.unit_config_ =io_unit_config;
       if (OB_FAIL(qsched_.update_config(io_config_))) {
         LOG_WARN("refresh tenant io config failed", K(ret), K(io_config_));
@@ -1496,11 +1361,11 @@ int ObTenantIOManager::update_basic_io_param_config(const ObTenantIOConfig::Para
     LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(!is_working())) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("tenant not working", K(ret), K(tenant_id_));
+    LOG_WARN("tenant not working", K(ret));
   } else {
     if (OB_FAIL(ret)) {
     } else if (io_config_.param_config_.memory_limit_ != io_param_config.memory_limit_) {
-      LOG_INFO("update io memory limit", K(tenant_id_), K(io_param_config.memory_limit_), K(io_config_.param_config_.memory_limit_));
+      LOG_INFO("update io memory limit", K(io_param_config.memory_limit_), K(io_config_.param_config_.memory_limit_));
       if (OB_FAIL(update_memory_pool(io_param_config.memory_limit_))) {
         LOG_WARN("fail to update tenant io manager memory pool", K(ret), K(io_memory_limit_), K(io_param_config.memory_limit_));
       } else {
@@ -1510,13 +1375,13 @@ int ObTenantIOManager::update_basic_io_param_config(const ObTenantIOConfig::Para
     }
     if (OB_FAIL(ret)) {
     } else if (io_config_.param_config_.callback_thread_count_ != io_param_config.callback_thread_count_) {
-      LOG_INFO("update io callback thread count", K(tenant_id_), K(io_param_config.callback_thread_count_), K(io_config_.param_config_.callback_thread_count_));
+      LOG_INFO("update io callback thread count", K(io_param_config.callback_thread_count_), K(io_config_.param_config_.callback_thread_count_));
       io_config_.param_config_.callback_thread_count_ = io_param_config.callback_thread_count_;
       need_adjust_callback = true;
     }
     if (OB_SUCC(ret) && need_adjust_callback) {
       int64_t callback_thread_count = io_config_.get_callback_thread_count();
-      MTL_SWITCH(tenant_id_) {
+      MOD_SCOPE {
         if (OB_FAIL(callback_mgr_.update_thread_count(callback_thread_count))) {
           LOG_WARN("callback manager adjust thread failed", K(ret), K(io_param_config));
         }
@@ -1524,7 +1389,7 @@ int ObTenantIOManager::update_basic_io_param_config(const ObTenantIOConfig::Para
     }
     if (OB_FAIL(ret)) {
     } else if (io_config_.param_config_.object_storage_io_timeout_ms_ != io_param_config.object_storage_io_timeout_ms_) {
-      LOG_INFO("update object storage io timeout ms", K_(tenant_id), "ori_object_storage_io_timeout_ms",
+      LOG_INFO("update object storage io timeout ms", "ori_object_storage_io_timeout_ms",
                io_config_.param_config_.object_storage_io_timeout_ms_, "new_object_storage_io_timeout_ms",
                io_param_config.object_storage_io_timeout_ms_);
       io_config_.param_config_.object_storage_io_timeout_ms_ = io_param_config.object_storage_io_timeout_ms_;
@@ -1619,11 +1484,10 @@ int ObTenantIOManager::alloc_io_result(ObIOResult *&result)
   return ret;
 }
 
-int ObTenantIOManager::init_group_index_map(const int64_t tenant_id,
-                                            const ObTenantIOConfig &io_config)
+int ObTenantIOManager::init_group_index_map(const ObTenantIOConfig &io_config)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(tenant_id, "GROUP_INDEX_MAP");
+  ObMemAttr attr("GROUP_INDEX_MAP");
   if (OB_FAIL(group_id_index_map_.create(7, attr, attr))) {
     LOG_WARN("create group index map failed", K(ret));
   } else {
@@ -1666,7 +1530,7 @@ int ObTenantIOManager::modify_group_io_config(const uint64_t index,
     LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(!is_working())) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("tenant not working", K(ret), K(tenant_id_));
+    LOG_WARN("tenant not working", K(ret));
   } else if (index < 0 || (index >= io_config_.group_configs_.count()) ||
              min_percent < 0 || min_percent > 100 ||
              max_percent < 0 || max_percent > 100 ||
@@ -1697,7 +1561,7 @@ int ObTenantIOManager::refresh_group_io_config()
     LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(!is_working())) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("tenant not working", K(ret), K(tenant_id_));
+    LOG_WARN("tenant not working", K(ret));
   } else if (OB_LIKELY(!io_config_.group_config_change_)) {
     // group config not change, do nothing
   } else if (OB_FAIL(io_usage_.refresh_group_num(io_config_.group_configs_.count() / 3))) {
@@ -1707,7 +1571,7 @@ int ObTenantIOManager::refresh_group_io_config()
   } else if (OB_FAIL(qsched_.update_config(io_config_))) {
     LOG_WARN("refresh io config failed", K(ret), K(io_config_));
   } else {
-    LOG_INFO("refresh group io config success", K(tenant_id_), K(io_config_));
+    LOG_INFO("refresh group io config success", K(io_config_));
     io_config_.group_config_change_ = false;
   }
 
@@ -1861,7 +1725,7 @@ int ObTenantIOManager::print_io_status()
             info.at(i).avg_device_delay_us_,
             info.at(i).avg_total_delay_us_
             );
-        LOG_INFO("[IO STATUS GROUP]", K_(tenant_id), KCSTRING(io_status));
+        LOG_INFO("[IO STATUS GROUP]", KCSTRING(io_status));
         need_print_io_config = true;
       }
     }
@@ -1955,14 +1819,14 @@ int ObTenantIOManager::print_io_status()
                  sys_info.at(i).avg_device_delay_us_,
                  sys_info.at(i).avg_total_delay_us_
                  );
-        LOG_INFO("[IO STATUS GROUP SYS]", K_(tenant_id), KCSTRING(io_status));
+        LOG_INFO("[IO STATUS GROUP SYS]", KCSTRING(io_status));
         need_print_io_config = true;
       }
     }
     if (need_print_io_config) {
       int64_t iops = ips + ops;
       double failed_iops = failed_ips + failed_ops;
-      LOG_INFO("[IO STATUS TENANT]", K_(tenant_id), K_(ref_cnt), K_(io_config),
+      LOG_INFO("[IO STATUS TENANT]", K_(ref_cnt), K_(io_config),
           "hold_mem", io_allocator_.get_allocated_size(),
           "[FAILED]: "
           "fail_ips", lround(failed_ips),
@@ -1987,7 +1851,7 @@ int ObTenantIOManager::print_io_status()
     // print callback status
     {
       (void)callback_mgr_.to_string(io_status, sizeof(io_status));
-      LOG_INFO("[IO STATUS CALLBACK]", K_(tenant_id), KCSTRING(io_status));
+      LOG_INFO("[IO STATUS CALLBACK]", KCSTRING(io_status));
     }
   }
   return ret;
@@ -2046,7 +1910,7 @@ int ObTenantIOManager::print_io_function_status()
                     avg_submit_delay,
                     avg_device_delay,
                     avg_total_delay);
-          LOG_INFO("[IO STATUS FUNCTION]", K_(tenant_id), KCSTRING(io_status));
+          LOG_INFO("[IO STATUS FUNCTION]", KCSTRING(io_status));
         }
       }
     }
@@ -2074,8 +1938,8 @@ int ObTenantIOManager::get_throttled_time(uint64_t group_id, int64_t &throttled_
 {
   int ret = OB_SUCCESS;
   int64_t current_throttled_time_us = -1;
-  if (OB_FAIL(GCTX.cgroup_ctrl_->get_throttled_time(tenant_id_, current_throttled_time_us, group_id))) {
-    LOG_WARN("get throttled time failed", K(ret), K(tenant_id_), K(group_id));
+  if (OB_FAIL(GCTX.cgroup_ctrl_->get_throttled_time(current_throttled_time_us, group_id))) {
+    LOG_WARN("get throttled time failed", K(ret), K(group_id));
   } else if (current_throttled_time_us > 0) {
     uint64_t idx = 0;
     const uint64_t GROUP_MODE_CNT = static_cast<uint64_t>(ObIOGroupMode::MODECNT);

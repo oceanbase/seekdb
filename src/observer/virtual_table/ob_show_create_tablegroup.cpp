@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "observer/virtual_table/ob_show_create_tablegroup.h"
-#include "share/schema/ob_schema_printer.h"
+#include "sql/printer/ob_schema_printer.h"
 #include "sql/session/ob_sql_session_info.h"
 
 using namespace oceanbase::common;
@@ -55,10 +55,9 @@ int ObShowCreateTablegroup::inner_get_next_row(common::ObNewRow *&row)
       } else if (OB_UNLIKELY(OB_INVALID_ID == show_tablegroup_id)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_USER_ERROR(OB_ERR_UNEXPECTED, "this table is used for show clause, can't be selected");
-      } else if (OB_UNLIKELY(NULL == (tg_schema = schema_guard_->get_tablegroup_schema(
-                 effective_tenant_id_, show_tablegroup_id)))) {
+      } else if (OB_UNLIKELY(NULL == (tg_schema = schema_guard_->get_tablegroup_schema( show_tablegroup_id)))) {
         ret = OB_TABLEGROUP_NOT_EXIST;
-        LOG_WARN("fail to get tablegroup schema", K(ret), K_(effective_tenant_id), K(show_tablegroup_id));
+        LOG_WARN("fail to get tablegroup schema", K(ret), K(show_tablegroup_id));
       } else {
         if (OB_FAIL(fill_row_cells(show_tablegroup_id, tg_schema->get_tablegroup_name_str()))) {
           LOG_WARN("fail to fill row cells", K(ret),
@@ -150,15 +149,14 @@ int ObShowCreateTablegroup::fill_row_cells(uint64_t show_tablegroup_id,
           // create_tablegroup
           ObSchemaPrinter schema_printer(*schema_guard_);
           int64_t pos = 0;
-          if (OB_FAIL(schema_printer.print_tablegroup_definition(effective_tenant_id_,
-                                                                 show_tablegroup_id,
+          if (OB_FAIL(schema_printer.print_tablegroup_definition(show_tablegroup_id,
                                                                  db_def_buf,
                                                                  db_def_buf_size,
                                                                  pos,
                                                                  false,
                                                                  TZ_INFO(session_)))) {
             LOG_WARN("Generate tablegroup definition failed",
-                     KR(ret), K(effective_tenant_id_), K(show_tablegroup_id));
+                     KR(ret), K(show_tablegroup_id));
           } else {
             const ObColumnSchemaV2 *column_schema = NULL;
             if (OB_ISNULL(table_schema_) ||

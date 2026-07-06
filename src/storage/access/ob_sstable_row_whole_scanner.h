@@ -60,7 +60,7 @@ public:
       : iter_param_(nullptr),
       access_ctx_(nullptr),
       sstable_(nullptr),
-      allocator_(common::ObModIds::OB_SSTABLE_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+      allocator_(common::ObModIds::OB_SSTABLE_READER, OB_MALLOC_NORMAL_BLOCK_SIZE),
       io_buf_(),
       prefetch_macro_cursor_(0),
       cur_macro_cursor_(0),

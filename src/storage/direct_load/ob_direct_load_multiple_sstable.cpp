@@ -88,7 +88,7 @@ ObDirectLoadMultipleSSTableCreateParam::ObDirectLoadMultipleSSTableCreateParam()
     rowkey_count_(0),
     max_data_block_size_(0)
 {
-  fragments_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadMultipleSSTableCreateParam::~ObDirectLoadMultipleSSTableCreateParam()
@@ -152,8 +152,8 @@ void ObDirectLoadMultipleSSTableMeta::reset()
 ObDirectLoadMultipleSSTable::ObDirectLoadMultipleSSTable()
   : allocator_("TLD_MSSTable"), is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  fragments_.set_tenant_id(MTL_ID());
+  
+  
   table_type_ = ObDirectLoadTableType::MULTIPLE_SSTABLE;
 }
 

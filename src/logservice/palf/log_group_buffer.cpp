@@ -53,13 +53,13 @@ int LogGroupBuffer::init(const LSN &start_lsn)
     PALF_LOG(WARN, "invalid arguments", K(ret), K(start_lsn));
   } else {
     int64_t group_buffer_size = FOLLOWER_DEFAULT_GROUP_BUFFER_SIZE;
-    // omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+    // omt::ObTenantConfigGuard tenant_config(&GCONF);
     // if (!tenant_config.is_valid()) {
-    //  PALF_LOG(WARN, "get tenant config failed", K(ret), K(tenant_id));
+    //  PALF_LOG(WARN, "get tenant config failed", K(ret));
     //  // TODO: add tenant config
     //  // group_buffer_size = tenant_config->_log_groupgation_buffer_size;
     //}
-    ObMemAttr mem_attr(MTL_ID(), "LogGroupBuffer");
+    ObMemAttr mem_attr("LogGroupBuffer");
     if (NULL == (data_buf_ = static_cast<char *>(mtl_malloc(group_buffer_size, mem_attr)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       PALF_LOG(ERROR, "alloc memory failed", K(ret));

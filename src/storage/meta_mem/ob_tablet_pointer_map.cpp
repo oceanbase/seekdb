@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_tablet_pointer_map.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
@@ -311,6 +313,7 @@ int ObTabletPointerMap::get_meta_obj_with_filter(
   return ret;
 }
 
+
 int ObTabletPointerMap::load_and_hook_meta_obj(
     const ObTabletMapKey &key,
     ObTabletPointerHandle &ptr_hdl,
@@ -402,7 +405,7 @@ int ObTabletPointerMap::load_meta_obj(
   } else if (OB_FAIL(ResourceMap::hash_func_(key, hash_val))) {
     STORAGE_LOG(WARN, "fail to calc hash", K(ret), K(key));
   } else {
-    common::ObArenaAllocator arena_allocator(common::ObMemAttr(MTL_ID(), "LoadMetaObj"));
+    common::ObArenaAllocator arena_allocator(common::ObMemAttr("LoadMetaObj"));
     char *buf = nullptr;
     int64_t buf_len = 0;
     {
@@ -445,14 +448,14 @@ int ObTabletPointerMap::read_from_disk(
 {
   int ret = OB_SUCCESS;
   const int64_t buf_len = load_addr.size();
-  const ObMemAttr mem_attr(MTL_ID(), "MetaPointer");
+  const ObMemAttr mem_attr("MetaPointer");
   ObMetaDiskAddr real_load_addr = load_addr;
   if (!is_full_load && load_addr.is_raw_block()) {
     if (load_addr.size() > ObTabletCommon::MAX_TABLET_FIRST_LEVEL_META_SIZE) {
       real_load_addr.set_size(ObTabletCommon::MAX_TABLET_FIRST_LEVEL_META_SIZE);
     }
   }
-  if (OB_FAIL(MTL(ObTenantStorageMetaService*)->read_from_disk(real_load_addr, ls_epoch, allocator, r_buf, r_len))) {
+  if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->read_from_disk(real_load_addr, ls_epoch, allocator, r_buf, r_len))) {
     if (OB_SEARCH_NOT_FOUND != ret) {
       STORAGE_LOG(WARN, "fail to read from addr", K(ret), K(real_load_addr), K(ls_epoch));
     }
@@ -477,7 +480,7 @@ int ObTabletPointerMap::load_meta_obj(
   } else if (OB_FAIL(ResourceMap::hash_func_(key, hash_val))) {
     STORAGE_LOG(WARN, "fail to calc hash", K(ret), K(key));
   } else {
-    common::ObArenaAllocator arena_allocator(common::ObMemAttr(MTL_ID(), "LoadMetaObj"));
+    common::ObArenaAllocator arena_allocator(common::ObMemAttr("LoadMetaObj"));
     char *buf = nullptr;
     int64_t buf_len = 0;
     {
@@ -569,7 +572,7 @@ int ObTabletPointerMap::get_meta_obj_with_external_memory(
         if (CLICK_FAIL(load_meta_obj(key, t_ptr, allocator, disk_addr, t))) {
           STORAGE_LOG(WARN, "load obj from disk fail", K(ret), K(key), KPC(t_ptr), K(lbt()));
         } else {
-          ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+          ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
           ObTabletPointerHandle tmp_ptr_hdl(*this);
           common::ObBucketHashWLockGuard lock_guard(ResourceMap::bucket_lock_, hash_val);
           // some other thread finish loading

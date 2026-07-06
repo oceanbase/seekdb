@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <cstdlib>
 #include <cstddef>
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/oblog/ob_log.h"
 
 namespace oceanbase
@@ -42,17 +42,17 @@ class IBlockMgr
 {
 public:
   IBlockMgr() {}
-  IBlockMgr(int64_t tenant_id, int64_t ctx_id)
-    : tenant_id_(tenant_id), ctx_id_(ctx_id) {}
+  IBlockMgr(int64_t ctx_id)
+    : ctx_id_(ctx_id) {}
   virtual ABlock *alloc_block(uint64_t size, const ObMemAttr &attr) = 0;
   virtual void free_block(ABlock *block) = 0;
   virtual int64_t sync_wash(int64_t wash_size) = 0;
-  virtual int64_t get_tenant_id() { return tenant_id_; }
+  
   virtual int64_t get_ctx_id() { return ctx_id_; }
-  void set_tenant_id(const int64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   void set_ctx_id(const int64_t ctx_id) { ctx_id_ = ctx_id; }
 protected:
-  int64_t tenant_id_;
+  
   int64_t ctx_id_;
 }; // end of class IBlockMgr
 

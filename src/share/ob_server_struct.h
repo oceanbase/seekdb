@@ -23,7 +23,7 @@
 #include "share/ob_cluster_role.h"              // ObClusterRole
 #include "share/ob_rpc_struct.h"
 #include "share/ob_server_status.h"
-#include "observer/omt/ob_multi_tenant.h"
+#include "share/config/ob_config_manager.h"
 
 namespace oceanbase
 {
@@ -70,7 +70,6 @@ class ObPtfMgr;
 
 namespace transaction
 {
-class ObIWeakReadService;
 }
 
 namespace obmysql
@@ -92,17 +91,12 @@ namespace observer
 {
 class ObService;
 class ObVTIterCreator;
-class ObTableService;
 class ObSrvNetworkFrame;
 class ObIDiskReport;
 class ObResourceInnerSQLConnectionPool;
 class ObStartupAccelTaskHandler;
 } // end of namespace observer
 
-namespace obgrpc
-{
-class ObGrpcServer;
-} // end of namespace obgrpc
 
 namespace plugin
 {
@@ -145,7 +139,6 @@ struct ObGlobalContext
   observer::ObResourceInnerSQLConnectionPool *res_inner_conn_pool_;
   common::ObInOutBandwidthThrottle *bandwidth_throttle_;
   common::ObITabletScan *vt_par_ser_;
-  common::ObITabletScan *et_access_service_;
   sql::ObSQLSessionMgr *session_mgr_;
   sql::ObSql *sql_engine_;
   pl::ObPL *pl_engine_;
@@ -160,16 +153,13 @@ struct ObGlobalContext
   int64_t start_service_time_;
   obmysql::ObDiag *diag_;
   common::ObMysqlRandom *scramble_rand_;
-  observer::ObTableService *table_service_;
   share::ObCgroupCtrl *cgroup_ctrl_;
   observer::ObSrvNetworkFrame *net_frame_;
-  obgrpc::ObGrpcServer *grpc_server_;
 
   observer::ObIDiskReport *disk_reporter_;
   logservice::ObServerLogBlockMgr *log_block_mgr_;
 
   bool inited_;
-  transaction::ObIWeakReadService *weak_read_service_;
   share::ObSchemaStatusProxy *schema_status_proxy_;
   int64_t flashback_scn_;
   int64_t ssl_key_expired_time_;
@@ -217,6 +207,10 @@ struct ObGlobalContext
   // instead of self_addr_
   const ObAddr &self_addr() const { return self_addr_seq_.get_addr(); }
   const int64_t &self_seq() const { return self_addr_seq_.get_seq(); }
+  bool is_shared_storage_mode() const
+  {
+    return false;
+  }
 private:
   ObGlobalContext() { MEMSET(this, 0, sizeof(*this)); init(); }
   ObGlobalContext(const ObGlobalContext &other);

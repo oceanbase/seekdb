@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_LIB_HASH_FUNC_OB_HASH_FUNC_
 #define OCEANBASE_LIB_HASH_FUNC_OB_HASH_FUNC_
-#include "lib/hash/xxhash.h"
+#include "lib/hash_func/xxhash.h"
 #include "lib/hash_func/wyhash.h"
 #include "lib/hash_func/murmur_hash.h"
 #include "lib/utility/ob_template_utils.h"

@@ -706,11 +706,50 @@ const char *ObSharedObjectIOCallback::get_data()
 
 //=================================== ObSharedObjectReaderWriter =============================
 const MacroBlockId ObSharedObjectHeader::DEFAULT_MACRO_ID(0, MacroBlockId::AUTONOMIC_BLOCK_INDEX, 0);
+
+struct ObSharedObjectReaderWriter::ObSharedObjectWriteSession final
+{
+public:
+  ObSharedObjectWriteSession()
+    : data_("SHARE_BLOCK", 0, false, false/*use_fixed_blk*/),
+      clean_object_handle_(), clean_offset_(0), clean_align_offset_(0),
+      clean_hanging_(false), has_clean_state_(false)
+  {}
+  ~ObSharedObjectWriteSession() = default;
+
+  void set_clean_state(const ObSharedObjectReaderWriter &writer)
+  {
+    clean_object_handle_ = writer.object_handle_;
+    clean_offset_ = writer.offset_;
+    clean_align_offset_ = writer.align_offset_;
+    clean_hanging_ = writer.hanging_;
+    has_clean_state_ = true;
+  }
+
+  void rollback(ObSharedObjectReaderWriter &writer)
+  {
+    if (has_clean_state_) {
+      writer.object_handle_.reset();
+      writer.object_handle_ = clean_object_handle_;
+      writer.offset_ = clean_offset_;
+      writer.align_offset_ = clean_align_offset_;
+      writer.hanging_ = clean_hanging_;
+    }
+  }
+
+public:
+  ObSelfBufferWriter data_;
+private:
+  ObStorageObjectHandle clean_object_handle_;
+  int64_t clean_offset_;
+  int64_t clean_align_offset_;
+  bool clean_hanging_;
+  bool has_clean_state_;
+};
+
 ObSharedObjectReaderWriter::ObSharedObjectReaderWriter()
-    : mutex_(), data_("SHARE_BLOCK", 0, false, false/*use_fixed_blk*/),
-      object_handle_(), offset_(0), align_offset_(0), write_align_size_(0),
-      hanging_(false), need_align_(false), need_cross_(false),
-      is_inited_(false)
+    : mutex_(), object_handle_(), offset_(0), align_offset_(0),
+      write_align_size_(0), hanging_(false), is_inited_(false)
 {}
 
 ObSharedObjectReaderWriter::~ObSharedObjectReaderWriter()
@@ -718,47 +757,50 @@ ObSharedObjectReaderWriter::~ObSharedObjectReaderWriter()
   reset();
 }
 
-int ObSharedObjectReaderWriter::init(
-    const bool need_align,
-    const bool need_cross)
+int ObSharedObjectReaderWriter::init()
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("Init twice", K(ret));
-  } else if (!need_align || need_cross) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Not supported", K(ret), K(need_align), K(need_cross));
-  } else if (OB_FAIL(data_.ensure_space(DEFAULT_MACRO_BLOCK_SIZE))) {
-    LOG_WARN("Fail to ensure space", K(ret));
-  } else if (OB_FAIL(data_.clean())) {
-    LOG_WARN("fail to memset 0 data_", KR(ret));
   } else {
     offset_ = 0;
     align_offset_ = 0;
     write_align_size_ = DIO_READ_ALIGN_SIZE; // 4K
     hanging_ = false;
-    need_align_ = need_align;
-    need_cross_ = need_cross;
-    if (OB_FAIL(reserve_header())) {
-        LOG_WARN("fail to reserve header when init", K(ret));
-      } else {
-        is_inited_ = true;
-      }
+    is_inited_ = true;
   }
   return ret;
 }
 void ObSharedObjectReaderWriter::reset()
 {
-  data_.reset();
   object_handle_.reset();
   offset_ = 0;
   align_offset_ = 0;
   write_align_size_ = 0;
   hanging_ = false;
-  need_align_ = false;
-  need_cross_ = false;
   is_inited_ = false;
+}
+
+int ObSharedObjectReaderWriter::ensure_data_buffer_for_write_(ObSharedObjectWriteSession &write_session)
+{
+  int ret = OB_SUCCESS;
+  if (!write_session.data_.is_valid()
+      && OB_FAIL(write_session.data_.ensure_space(DEFAULT_MACRO_BLOCK_SIZE))) {
+    LOG_WARN("Fail to ensure space", K(ret));
+  } else if (OB_SUCC(ret)
+      && DEFAULT_MACRO_BLOCK_SIZE == write_session.data_.capacity()
+      && 0 == write_session.data_.pos()
+      && OB_FAIL(write_session.data_.clean())) {
+    LOG_WARN("fail to memset 0 data_", KR(ret));
+  } else if (0 == offset_) {
+    if (OB_FAIL(reserve_header(write_session))) {
+      LOG_WARN("fail to reserve header for shared object writer", K(ret));
+    }
+  } else if (OB_FAIL(write_session.data_.set_pos(offset_))) {
+    LOG_WARN("fail to restore data buffer position", K(ret), K_(offset), K(write_session.data_));
+  }
+  return ret;
 }
 
 int callback_do_write_io(const ObSharedObjectWriteInfo &write_info) 
@@ -797,6 +839,8 @@ int ObSharedObjectReaderWriter::async_write(
   write_args.object_opt_ = curr_opt;
   ObSharedObjectHeader header;
   ObSharedObjectsWriteCtx tmp_write_ctx;
+  ObSharedObjectWriteSession write_session;
+  bool need_callback_do_write_io = false;
   {
     lib::ObMutexGuard guard(mutex_);
     if (IS_NOT_INIT) {
@@ -805,8 +849,14 @@ int ObSharedObjectReaderWriter::async_write(
     } else if (OB_UNLIKELY(!write_info.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid arg", K(ret), K(write_info));
+    } else if (OB_UNLIKELY(hanging_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected dirty shared object writer state", K(ret), K_(offset), K_(align_offset), K_(hanging));
+    } else {
+      write_session.set_clean_state(*this);
     }
     if (FAILEDx(inner_write_block(
+        write_session,
         header,
         write_info,
         write_args,
@@ -814,9 +864,14 @@ int ObSharedObjectReaderWriter::async_write(
         tmp_write_ctx))) {
       LOG_WARN("fail to write block", K(ret), K(write_info), K(write_args));
     }
+    if (OB_FAIL(ret)) {
+      write_session.rollback(*this);
+    } else {
+      need_callback_do_write_io = true;
+    }
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(callback_do_write_io(write_info))) {
+  } else if (need_callback_do_write_io && OB_FAIL(callback_do_write_io(write_info))) {
     LOG_WARN("failed to start write callback", K(ret));
   }
   return ret;
@@ -828,6 +883,7 @@ int ObSharedObjectReaderWriter::async_batch_write(
     blocksstable::ObStorageObjectOpt &curr_opt)
 {
   int ret = OB_SUCCESS;
+  ObSharedObjectWriteSession write_session;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("Not init", K(ret));
@@ -835,19 +891,28 @@ int ObSharedObjectReaderWriter::async_batch_write(
     lib::ObMutexGuard guard(mutex_);
     ObSharedObjectWriteArgs write_args;
     ObSharedObjectsWriteCtx write_ctx;
+    if (OB_UNLIKELY(hanging_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected dirty shared object writer state", K(ret), K_(offset), K_(align_offset), K_(hanging));
+    } else {
+      write_session.set_clean_state(*this);
+    }
     for (int64_t i = 0; OB_SUCC(ret) && i < write_infos.count(); ++i) {
       // only the last need flush and align
       write_args.need_flush_ = (i == write_infos.count() - 1);
-      write_args.need_align_ = (i == write_infos.count() - 1) ? need_align_ : false;
+      write_args.need_align_ = (i == write_infos.count() - 1);
       write_args.object_opt_ = curr_opt;
       write_ctx.clear();
-      if (OB_FAIL(inner_async_write(write_infos.at(i), write_args, shared_obj_handle, write_ctx))) {
+      if (OB_FAIL(inner_async_write(write_session, write_infos.at(i), write_args, shared_obj_handle, write_ctx))) {
         LOG_WARN("Fail to async write block", K(ret), K(i), K(write_infos.at(i)), K(write_args));
       } else if (OB_FAIL(shared_obj_handle.write_ctxs_.push_back(write_ctx))) {
         LOG_WARN("Fail to add write ctx", K(ret), K(write_ctx));
       } else {
         curr_opt = write_ctx.next_opt_;
       }
+    }
+    if (OB_FAIL(ret)) {
+      write_session.rollback(*this);
     }
   }
 
@@ -864,22 +929,28 @@ int ObSharedObjectReaderWriter::async_link_write(
     ObSharedObjectLinkHandle &shared_obj_handle)
 {
   int ret = OB_SUCCESS;
+  ObSharedObjectWriteSession write_session;
   {
     lib::ObMutexGuard guard(mutex_);
     ObSharedObjectWriteArgs write_args;
     ObSharedObjectsWriteCtx write_ctx;
     write_args.object_opt_ = curr_opt;
     write_args.need_flush_ = true;
-    write_args.need_align_ = need_align_;
+    write_args.need_align_ = true;
     write_args.is_linked_ = true;
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
       LOG_WARN("Not init", K(ret));
+    } else if (OB_UNLIKELY(hanging_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected dirty shared object writer state", K(ret), K_(offset), K_(align_offset), K_(hanging));
     } else if (OB_FAIL(shared_obj_handle.wait())) {
       LOG_WARN("Fail to wait other blocks finish", K(ret), K(shared_obj_handle));
+    } else {
+      write_session.set_clean_state(*this);
     }
 
-    if (FAILEDx(inner_async_write(write_info, write_args, shared_obj_handle, write_ctx))) {
+    if (FAILEDx(inner_async_write(write_session, write_info, write_args, shared_obj_handle, write_ctx))) {
       LOG_WARN("Fail to inner async write block", K(ret), K(write_info), K(write_args));
     } else if (OB_FAIL(shared_obj_handle.write_ctx_.set_addr(write_ctx.addr_))) {
       LOG_WARN("Fail to set addr to write ctx", K(ret), K(write_ctx));
@@ -890,6 +961,9 @@ int ObSharedObjectReaderWriter::async_link_write(
         }
       }
     }
+    if (OB_FAIL(ret)) {
+      write_session.rollback(*this);
+    }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(callback_do_write_io(write_info))) {
@@ -899,21 +973,20 @@ int ObSharedObjectReaderWriter::async_link_write(
 }
 
 int ObSharedObjectReaderWriter::inner_async_write(
+    ObSharedObjectWriteSession &write_session,
     const ObSharedObjectWriteInfo &write_info,
     const ObSharedObjectWriteArgs &write_args,
     ObSharedObjectBaseHandle &shared_obj_handle,
     ObSharedObjectsWriteCtx &write_ctx)
 {
   int ret = OB_SUCCESS;
-  if (need_cross_ && OB_FAIL(write_cross_block(write_info, write_args, shared_obj_handle))) {
-    LOG_WARN("Fail to write cross block", K(ret), K(write_info));
-  } else if (OB_FAIL(write_block(write_info, write_args, shared_obj_handle, write_ctx))) {
+  if (OB_FAIL(write_block(write_session, write_info, write_args, shared_obj_handle, write_ctx))) {
     LOG_WARN("Fail to write block", K(ret), K(write_info));
   }
   return ret;
 }
 
-int ObSharedObjectReaderWriter::reserve_header()
+int ObSharedObjectReaderWriter::reserve_header(ObSharedObjectWriteSession &write_session)
 {
   int ret = OB_SUCCESS;
   ObMacroBlockCommonHeader common_header;
@@ -923,9 +996,10 @@ int ObSharedObjectReaderWriter::reserve_header()
   } else if (OB_UNLIKELY(offset_ > 0 || align_offset_ > 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to reserve header", K(ret), K_(offset), K_(align_offset));
-  } else if (OB_FAIL(common_header.build_serialized_header(data_.current(), common_header.get_serialize_size()))) {
+  } else if (OB_FAIL(common_header.build_serialized_header(
+      write_session.data_.current(), common_header.get_serialize_size()))) {
     LOG_WARN("fail to write common header", K(ret), K(common_header));
-  } else if (OB_FAIL(data_.advance(common_header.get_serialize_size()))) {
+  } else if (OB_FAIL(write_session.data_.advance(common_header.get_serialize_size()))) {
     LOG_WARN("Fail to advance size", K(ret), K(common_header));
   } else {
     offset_ = common_header.get_serialize_size();
@@ -935,25 +1009,26 @@ int ObSharedObjectReaderWriter::reserve_header()
   if (OB_FAIL(ret)) { // recover from failure
     offset_ = 0;
     hanging_ = false;
-    data_.reuse();
-    data_.clean();
+    write_session.data_.reuse();
+    write_session.data_.clean();
   }
   return ret;
 }
 
-int ObSharedObjectReaderWriter::switch_object(ObStorageObjectHandle &object_handle,
+int ObSharedObjectReaderWriter::switch_object(ObSharedObjectWriteSession &write_session,
+                                              ObStorageObjectHandle &object_handle,
                                               const blocksstable::ObStorageObjectOpt &next_opt)
 {
   int ret = OB_SUCCESS;
   object_handle.reset();
   if (hanging_) {
     ObStorageObjectWriteInfo write_info;
-    write_info.buffer_ = data_.data() + align_offset_;
+    write_info.buffer_ = write_session.data_.data() + align_offset_;
     write_info.offset_ = align_offset_;
     write_info.size_ = upper_align(offset_ - align_offset_, write_align_size_);
     write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
     write_info.io_desc_.set_sealed();
-    write_info.mtl_tenant_id_ = MTL_ID();
+    
 
     // do not use object_handle_ to write, since it will be reset if failed
     object_handle = object_handle_;
@@ -962,29 +1037,26 @@ int ObSharedObjectReaderWriter::switch_object(ObStorageObjectHandle &object_hand
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(do_switch(next_opt))) {
+    if (OB_FAIL(do_switch(write_session, next_opt))) {
       LOG_WARN("fail to switch block", K(ret), K(next_opt));
     }
   }
   return ret;
 }
 
-int ObSharedObjectReaderWriter::do_switch(const ObStorageObjectOpt &opt)
+int ObSharedObjectReaderWriter::do_switch(ObSharedObjectWriteSession &write_session,
+                                          const ObStorageObjectOpt &opt)
 {
   int ret = OB_SUCCESS;
   hanging_ = false;
-  data_.reuse();
+  write_session.data_.reuse();
   object_handle_.reset();
   offset_ = 0;
   align_offset_ = 0;
   if (OB_FAIL(OB_STORAGE_OBJECT_MGR.alloc_object(opt, object_handle_))) {
     LOG_WARN("fail to alloc object", K(ret));
-  } else if (OB_FAIL(data_.clean())) {
+  } else if (OB_FAIL(write_session.data_.clean())) {
     LOG_WARN("fail to memset 0 data_", KR(ret));
-  } else {
-    if (OB_FAIL(reserve_header())) {
-      LOG_WARN("fail to reserve header when init", K(ret));
-    }
   }
   return ret;
 }
@@ -1011,7 +1083,25 @@ int ObSharedObjectReaderWriter::calc_store_size(
   return ret;
 }
 
+int ObSharedObjectReaderWriter::check_object_size_(
+    const int64_t total_size,
+    const bool need_align)
+{
+  int ret = OB_SUCCESS;
+  ObMacroBlockCommonHeader common_header;
+  const int64_t header_size = common_header.get_serialize_size();
+  const int64_t next_align_offset = upper_align(header_size + total_size, write_align_size_);
+  const int64_t store_size = need_align ? next_align_offset - header_size : total_size;
+  if (OB_UNLIKELY(header_size + store_size > DEFAULT_MACRO_BLOCK_SIZE)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("Not supported object size", K(ret), K(total_size), K(need_align),
+        K(header_size), K(store_size));
+  }
+  return ret;
+}
+
 int ObSharedObjectReaderWriter::inner_write_block(
+    ObSharedObjectWriteSession &write_session,
     const ObSharedObjectHeader &header,
     const ObSharedObjectWriteInfo &write_info,
     const ObSharedObjectWriteArgs &write_args,
@@ -1026,7 +1116,11 @@ int ObSharedObjectReaderWriter::inner_write_block(
   bool need_align = write_args.need_align_;
   bool need_flush = write_args.need_flush_;
   write_ctx.next_opt_ = write_args.object_opt_;
-  if (OB_FAIL(calc_store_size(blk_size, need_align, store_size, align_store_size))) {
+  if (OB_FAIL(check_object_size_(blk_size, need_align))) {
+    LOG_WARN("object is too large for shared object writer", K(ret), K(blk_size), K(need_align));
+  } else if (OB_FAIL(ensure_data_buffer_for_write_(write_session))) {
+    LOG_WARN("fail to ensure shared object data buffer", K(ret), K_(offset), K_(align_offset));
+  } else if (OB_FAIL(calc_store_size(blk_size, need_align, store_size, align_store_size))) {
     LOG_WARN("fail to calc store size", K(ret));
   } else if (!object_handle_.get_macro_id().is_valid()
       && OB_FAIL(OB_STORAGE_OBJECT_MGR.alloc_object(write_args.object_opt_, object_handle_))) {
@@ -1034,31 +1128,39 @@ int ObSharedObjectReaderWriter::inner_write_block(
   } else if (store_size + offset_ > DEFAULT_MACRO_BLOCK_SIZE) {
     if (OB_FAIL(write_ctx.advance_data_seq())) {
       LOG_WARN("Fail to get next opt", K(ret), K(write_args), K(write_ctx.next_opt_));
-    } else if (OB_FAIL(switch_object(object_handle, write_ctx.next_opt_))) {
+    } else if (OB_FAIL(switch_object(write_session, object_handle, write_ctx.next_opt_))) {
       LOG_WARN("Fail to switch new block", K(ret));
-    } else if (object_handle.is_valid() && OB_FAIL(shared_obj_handle.add_object_handle(object_handle))) {
-      LOG_WARN("Fail to flush last macro block", K(ret), K(object_handle));
-    } else if (OB_FAIL(calc_store_size(blk_size, need_align, store_size, align_store_size))) {
-      LOG_WARN("fail to calc store size", K(ret));
+    } else {
+      write_session.set_clean_state(*this);
+      if (object_handle.is_valid() && OB_FAIL(shared_obj_handle.add_object_handle(object_handle))) {
+        LOG_WARN("Fail to flush last macro block", K(ret), K(object_handle));
+      } else if (OB_FAIL(ensure_data_buffer_for_write_(write_session))) {
+        LOG_WARN("fail to ensure shared object data buffer", K(ret), K_(offset), K_(align_offset));
+      } else if (OB_FAIL(calc_store_size(blk_size, need_align, store_size, align_store_size))) {
+        LOG_WARN("fail to calc store size", K(ret));
+      } else if (OB_UNLIKELY(store_size + offset_ > DEFAULT_MACRO_BLOCK_SIZE)) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_WARN("Not supported object size", K(ret), K_(offset), K_(align_offset), K(store_size));
+      }
     }
   }
 
   if (OB_SUCC(ret)) {
     object_handle.reset();
     int64_t pos = 0;
-    const int64_t prev_pos = data_.pos();
+    const int64_t prev_pos = write_session.data_.pos();
     const int64_t prev_offset = offset_;
     const int64_t prev_align_offset = align_offset_;
     const bool prev_hanging = hanging_;
-    if (write_args.with_header_ && OB_FAIL(header.serialize(data_.current(), header.header_size_, pos))) {
+    if (write_args.with_header_ && OB_FAIL(header.serialize(write_session.data_.current(), header.header_size_, pos))) {
       LOG_WARN("Fail to serialize header", K(ret), K(header));
     } else {
-      MEMCPY(data_.current() + pos, write_info.buffer_, write_info.size_);
+      MEMCPY(write_session.data_.current() + pos, write_info.buffer_, write_info.size_);
       ObStorageObjectWriteInfo object_info;
-      object_info.buffer_ = data_.data() + align_offset_;
+      object_info.buffer_ = write_session.data_.data() + align_offset_;
       object_info.offset_ = align_offset_;
       object_info.size_ = align_store_size;
-      object_info.mtl_tenant_id_ = MTL_ID();
+      
       object_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
       object_info.io_desc_.set_unsealed();
       object_info.io_desc_.set_sys_module_id(ObIOModule::SHARED_BLOCK_RW_IO);
@@ -1082,7 +1184,7 @@ int ObSharedObjectReaderWriter::inner_write_block(
           LOG_WARN("Fail to set block addr", K(ret));
         } else if (OB_FAIL(shared_obj_handle.add_meta_addr(addr))) {
           LOG_WARN("Fail to add meta addr", K(ret), K(addr));
-        } else if (OB_FAIL(data_.advance(store_size))) {
+        } else if (OB_FAIL(write_session.data_.advance(store_size))) {
           LOG_WARN("Fail to advance size", K(ret), K(store_size));
         } else if (OB_FAIL(write_ctx.set_addr(addr))) {
           LOG_WARN("Fail to add addr to write ctx", K(ret), K(addr));
@@ -1103,6 +1205,7 @@ int ObSharedObjectReaderWriter::inner_write_block(
           } else {
             hanging_ = false;
             align_offset_ = lower_align(offset_, write_align_size_);
+            write_session.set_clean_state(*this);
           }
         } else if (!need_flush) {
           hanging_ = true;
@@ -1115,7 +1218,7 @@ int ObSharedObjectReaderWriter::inner_write_block(
     // roll back status
     if (OB_FAIL(ret)) {
       int tmp_ret = OB_SUCCESS;
-      if (OB_TMP_FAIL(data_.set_pos(prev_pos))) {
+      if (OB_TMP_FAIL(write_session.data_.set_pos(prev_pos))) {
         LOG_ERROR("fail to roll back data buffer", K(ret), K(tmp_ret), K(prev_pos), K(header), K(write_args));
         ob_usleep(1000 * 1000);
         ob_abort();
@@ -1136,6 +1239,7 @@ void ObSharedObjectReaderWriter::get_cur_shared_block(blocksstable::MacroBlockId
 }
 
 int ObSharedObjectReaderWriter::write_block(
+    ObSharedObjectWriteSession &write_session,
     const ObSharedObjectWriteInfo &write_info,
     const ObSharedObjectWriteArgs &write_args,
     ObSharedObjectBaseHandle &shared_obj_handle,
@@ -1160,22 +1264,11 @@ int ObSharedObjectReaderWriter::write_block(
     header.next_macro_id_ = ObSharedObjectHeader::DEFAULT_MACRO_ID;
     header.prev_addr_ = prev_addr;
     header.header_size_ = header.get_serialize_size();
-    if (OB_FAIL(inner_write_block(header, write_info, write_args, shared_obj_handle, write_ctx))) {
+    if (OB_FAIL(inner_write_block(write_session, header, write_info, write_args, shared_obj_handle, write_ctx))) {
       LOG_WARN("Fail to write block", K(ret), K(write_info), K(write_args));
     }
   }
   return ret;
-}
-
-int ObSharedObjectReaderWriter::write_cross_block(
-    const ObSharedObjectWriteInfo &write_info,
-    const ObSharedObjectWriteArgs &write_args,
-    ObSharedObjectBaseHandle &shared_obj_handle)
-{
-  UNUSED(write_info);
-  UNUSED(write_args);
-  UNUSED(shared_obj_handle);
-  return OB_NOT_SUPPORTED;
 }
 
 int ObSharedObjectReaderWriter::async_read(
@@ -1187,12 +1280,9 @@ int ObSharedObjectReaderWriter::async_read(
   ObStorageObjectReadInfo object_read_info;
   object_read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
   object_read_info.io_timeout_ms_ = read_info.io_timeout_ms_;
-#ifdef OB_BUILD_SHARED_STORAGE
-  object_read_info.ls_epoch_id_ = read_info.ls_epoch_;
-#endif
   object_read_info.io_desc_.set_sys_module_id(ObIOModule::SHARED_BLOCK_RW_IO);
   object_read_info.io_callback_ = read_info.io_callback_;
-  object_read_info.mtl_tenant_id_ = MTL_ID();
+  
   if (OB_UNLIKELY(!read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid shared block read info", K(ret), K(read_info));

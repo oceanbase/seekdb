@@ -141,7 +141,7 @@ int ObMacroBlockDataIterator::next_micro_block(ObMicroBlock &micro_block)
 
 ObIndexBlockMicroIterator::ObIndexBlockMicroIterator()
   : data_iter_(), range_(), micro_block_(),
-    macro_handle_(), allocator_("IBMI_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()), is_inited_(false) {}
+    macro_handle_(), allocator_("IBMI_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE), is_inited_(false) {}
 
 void ObIndexBlockMicroIterator::reset()
 {
@@ -187,7 +187,7 @@ int ObIndexBlockMicroIterator::init(
     read_info.io_desc_.set_sys_module_id(ObIOModule::INDEX_BLOCK_MICRO_ITER_IO);
     read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
     read_info.macro_block_id_ = macro_desc.macro_block_id_;
-    read_info.mtl_tenant_id_ = MTL_ID();
+    
 
     if (OB_ISNULL(read_info.buf_ = reinterpret_cast<char*>(allocator_.alloc(read_info.size_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

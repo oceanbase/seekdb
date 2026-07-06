@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_field.h"
-#include "rpc/obmysql/ob_mysql_global.h"
+#include "common/timezone/ob_time_convert.h"
+#include "common/mysqlclient/ob_mysql_global.h"
 
 namespace oceanbase
 {

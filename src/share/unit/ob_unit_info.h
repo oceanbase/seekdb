@@ -129,22 +129,18 @@ public:
   ObTenantServers();
   virtual ~ObTenantServers();
   /*
-    If ObTenantServers is invalid, initialize it with tenant_id, 
-    and insert both server and a valid migrate_server to server_. 
-    If ObTenantServers is valid and the server to be inserted belongs to the same tenant, 
-    perform only the insertion operation without changing the tenant_id.
+    If ObTenantServers is invalid, initialize it
+    and insert both server and a valid migrate_server to server_.
+    If ObTenantServers is valid, perform only the insertion operation.
 
-    @param[in] tenant_id        The server belongs to which tenant，
-                                Used for initialization
     @param[in] server           The server to be inserted
     @param[in] migrate_server   The server to be inserted
                                 If invalid, do not perform the insertion
     @return
-      - OB_INVALID_ARGUMENT     Tenant_id, server, or renew_time is invalid.
-      - OB_CONFLICT_VALUE       Already initialized; tenant mismatch
+      - OB_INVALID_ARGUMENT     server or renew_time is invalid.
+      - OB_CONFLICT_VALUE       Already initialized
   */
   virtual int init_or_insert_server(
-      const uint64_t tenant_id, 
       const common::ObAddr &server,
       const common::ObAddr &migrate_server,
       const int64_t renew_time);
@@ -152,9 +148,9 @@ public:
   virtual void reset();
   virtual bool is_valid() const;
   virtual inline common::ObArray<common::ObAddr> get_servers() const { return servers_; }
-  virtual inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   virtual inline int64_t get_renew_time() const { return renew_time_; };
-  TO_STRING_KV(K_(tenant_id), K_(servers), K_(renew_time));
+  TO_STRING_KV(K_(servers), K_(renew_time));
 private:
   /*
     The input server will be inserted into the server_ of ObTenantServers. 
@@ -162,7 +158,6 @@ private:
   */
   virtual int insert_server_(const common::ObAddr &server);
 protected:
-  uint64_t tenant_id_;
   common::ObArray<common::ObAddr> servers_;
   int64_t renew_time_;
 };

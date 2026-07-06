@@ -392,7 +392,7 @@ int ObMLogBuilder::create_or_replace_mlog(share::schema::ObSchemaGetterGuard &sc
                                           obcall::ObCreateMLogRes &create_mlog_res)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = create_mlog_arg.tenant_id_;
+  
   uint64_t compat_version = 0;
   const ObTableSchema *base_table_schema = nullptr;
   schema_guard.set_session_id(create_mlog_arg.session_id_);
@@ -400,12 +400,12 @@ int ObMLogBuilder::create_or_replace_mlog(share::schema::ObSchemaGetterGuard &sc
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObMLogBuilder not init", KR(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, compat_version))) {
-    LOG_WARN("failed to get data version", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(compat_version))) {
+    LOG_WARN("failed to get data version", KR(ret));
   } else if (!create_mlog_arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(create_mlog_arg));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, create_mlog_arg.database_name_,
+  } else if (OB_FAIL(schema_guard.get_table_schema( create_mlog_arg.database_name_,
                                                    create_mlog_arg.table_name_,
                                                    false /* is_index */, base_table_schema))) {
     LOG_WARN("failed to get table schema", KR(ret), K(create_mlog_arg));
@@ -422,9 +422,9 @@ int ObMLogBuilder::create_or_replace_mlog(share::schema::ObSchemaGetterGuard &sc
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "create materialized view log on a non-user table is");
   } else if (base_table_schema->is_materialized_view()) {
     const ObTableSchema *container_table_schema = nullptr;
-    if (OB_FAIL(schema_guard.get_table_schema(tenant_id, base_table_schema->get_data_table_id(),
+    if (OB_FAIL(schema_guard.get_table_schema( base_table_schema->get_data_table_id(),
                                               container_table_schema))) {
-      LOG_WARN("failed to get table schema", KR(ret), K(tenant_id));
+      LOG_WARN("failed to get table schema", KR(ret));
     } else if (OB_ISNULL(container_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null container table schema", KR(ret), KP(container_table_schema));
@@ -465,7 +465,7 @@ int ObMLogBuilder::create_mlog(ObSchemaGetterGuard &schema_guard,
                                const uint64_t data_version)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = create_mlog_arg.tenant_id_;
+  
   bool in_tenant_space = true;
   uint64_t base_table_id = 0;
 
@@ -493,8 +493,8 @@ int ObMLogBuilder::create_mlog(ObSchemaGetterGuard &schema_guard,
   } else if (base_table_schema->is_in_splitting()) {
     ret = OB_OP_NOT_ALLOW;
     LOG_WARN("can not create mlog during splitting", KR(ret), K(create_mlog_arg));
-  } else if (OB_FAIL(ddl_service_.check_restore_point_allow(tenant_id, *base_table_schema))) {
-    LOG_WARN("failed to check restore point allow", KR(ret), K(tenant_id), K(base_table_id));
+  } else if (OB_FAIL(ddl_service_.check_restore_point_allow(*base_table_schema))) {
+    LOG_WARN("failed to check restore point allow", KR(ret), K(base_table_id));
   } else if (OB_FAIL(ddl_service_.check_fk_related_table_ddl(*base_table_schema,
                                                              ObDDLType::DDL_CREATE_INDEX))) {
     LOG_WARN("check whether the foreign key related table is executing ddl failed", KR(ret));
@@ -521,13 +521,13 @@ int ObMLogBuilder::do_create_mlog(
     ObArenaAllocator allocator("DdlTaskTmp");
     ObDDLSQLTransaction trans(&ddl_service_.get_schema_service());
     int64_t refreshed_schema_version = 0;
-    const uint64_t tenant_id = base_table_schema.get_tenant_id();
-    if (OB_FAIL(schema_guard.get_schema_version(tenant_id, refreshed_schema_version))) {
-      LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id));
+    
+    if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
+      LOG_WARN("failed to get tenant schema version", KR(ret));
     } else if (OB_FAIL(trans.start(&ddl_service_.get_sql_proxy(),
-                                   tenant_id,
+                                   
                                    refreshed_schema_version))) {
-      LOG_WARN("failed to start trans", KR(ret), K(tenant_id), K(refreshed_schema_version));
+      LOG_WARN("failed to start trans", KR(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(src_table_schema.assign(base_table_schema))) {
       LOG_WARN("failed to assign table schema", KR(ret));
     } else if (!src_table_schema.is_valid()) {
@@ -540,13 +540,13 @@ int ObMLogBuilder::do_create_mlog(
     } else {
       // submit build mlog task
       // creating mlog reuses create_index ddl task
-      create_index_arg.tenant_id_ = create_mlog_arg.tenant_id_;
+      
+      
       create_index_arg.data_table_id_ = create_mlog_arg.base_table_id_;
       create_index_arg.index_table_id_ = OB_INVALID_ID;
       create_index_arg.session_id_ = create_mlog_arg.session_id_;
       create_index_arg.index_action_type_ = ObIndexArg::ADD_MLOG;
-      ObCreateDDLTaskParam param(mlog_schema.get_tenant_id(),
-                                  ObDDLType::DDL_CREATE_MLOG,
+      ObCreateDDLTaskParam param(ObDDLType::DDL_CREATE_MLOG,
                                   &src_table_schema,
                                   &mlog_schema,
                                   0 /*object_id*/,
@@ -579,7 +579,7 @@ int ObMLogBuilder::do_create_mlog(
       if (OB_FAIL(ret)) {
       } else if (create_mlog_arg.create_tmp_mlog_ && OB_FAIL(
                      ObDDLTaskRecordOperator::update_parent_task_message(
-                         tenant_id, create_mlog_arg.task_id_, mlog_schema,
+                         create_mlog_arg.task_id_, mlog_schema,
                          create_mlog_res.mlog_table_id_, create_mlog_res.task_id_,
                          ObDDLUpdateParentTaskIDType::UPDATE_VEC_REBUILD_CREATE_INDEX_TASK_ID,
                          allocator, trans))) {
@@ -597,7 +597,7 @@ int ObMLogBuilder::do_create_mlog(
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ddl_service_.publish_schema(tenant_id))) {
+      if (OB_FAIL(ddl_service_.publish_schema())) {
         LOG_WARN("failed to publish schema", KR(ret));
       } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
         LOG_WARN("failed to schedule ddl task", KR(ret), K(task_record));
@@ -614,7 +614,7 @@ int ObMLogBuilder::replace_mlog(ObSchemaGetterGuard &schema_guard,
                                 const uint64_t data_version)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = create_mlog_arg.tenant_id_;
+  
   int64_t refreshed_schema_version = 0;
   const ObTableSchema *orig_mlog_schema = nullptr;
   const ObDatabaseSchema *database_schema = nullptr;
@@ -632,22 +632,22 @@ int ObMLogBuilder::replace_mlog(ObSchemaGetterGuard &schema_guard,
     ret = OB_ERR_MLOG_EXIST;
     LOG_WARN("a tmp materialized view log already exists on table, can't replace it",
              K(create_mlog_arg.table_name_), K(base_table_schema->get_mlog_tid()));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, base_table_schema->get_mlog_tid(),
+  } else if (OB_FAIL(schema_guard.get_table_schema( base_table_schema->get_mlog_tid(),
                                                    orig_mlog_schema))) {
     LOG_WARN("failed to get mlog schema", KR(ret), "mlog id", base_table_schema->get_mlog_tid());
   } else if (OB_ISNULL(orig_mlog_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig_mlog_schema is null", KR(ret), "mlog id", base_table_schema->get_mlog_tid());
-  } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id, base_table_schema->get_database_id(), database_schema))) {
-    LOG_WARN("get_database_schema failed", K(tenant_id), K(base_table_schema->get_database_id()), K(ret));
+  } else if (OB_FAIL(schema_guard.get_database_schema( base_table_schema->get_database_id(), database_schema))) {
+    LOG_WARN("get_database_schema failed", K(base_table_schema->get_database_id()), K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database schema should not be null", K(ret));
-  } else if (OB_FAIL(schema_guard.get_schema_version(tenant_id, refreshed_schema_version))) {
-    LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
+    LOG_WARN("failed to get tenant schema version", KR(ret));
   } else if (OB_FAIL(
-                 trans.start(&ddl_service_.get_sql_proxy(), tenant_id, refreshed_schema_version))) {
-    LOG_WARN("failed to start trans", KR(ret), K(tenant_id), K(refreshed_schema_version));
+                 trans.start(&ddl_service_.get_sql_proxy(), refreshed_schema_version))) {
+    LOG_WARN("failed to start trans", KR(ret), K(refreshed_schema_version));
   } else {
     ObTableLockOwnerID owner_id;
     const int64_t old_index_table_id = OB_INVALID_ID;
@@ -657,8 +657,7 @@ int ObMLogBuilder::replace_mlog(ObSchemaGetterGuard &schema_guard,
     rebuild_index_arg.database_name_ = database_schema->get_database_name_str();
     rebuild_index_arg.create_mlog_arg_.assign(create_mlog_arg);
     rebuild_index_arg.rebuild_index_type_ = obcall::ObRebuildIndexArg::RebuildIndexType::REBUILD_INDEX_TYPE_MLOG;
-    ObCreateDDLTaskParam param(orig_mlog_schema->get_tenant_id(), 
-                               ObDDLType::DDL_REPLACE_MLOG,
+    ObCreateDDLTaskParam param(ObDDLType::DDL_REPLACE_MLOG,
                                orig_mlog_schema, 
                                nullptr,
                                0 /*object_id*/,
@@ -693,7 +692,7 @@ int ObMLogBuilder::replace_mlog(ObSchemaGetterGuard &schema_guard,
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(ddl_service_.publish_schema(tenant_id))) {
+    if (OB_FAIL(ddl_service_.publish_schema())) {
       LOG_WARN("failed to publish schema", KR(ret));
     } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
       LOG_WARN("failed to schedule ddl task", KR(ret), K(task_record));
@@ -752,13 +751,12 @@ int ObMLogBuilder::set_basic_infos(
 {
   int ret = OB_SUCCESS;
   const ObDatabaseSchema *database = NULL;
-  const uint64_t tenant_id = base_table_schema.get_tenant_id();
+  
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObMLogBuilder not init", KR(ret));
-  } else if (OB_FAIL(schema_guard.get_database_schema(
-        tenant_id, base_table_schema.get_database_id(), database))) {
-    LOG_WARN("failed to get database_schema", K(ret), K(tenant_id),
+  } else if (OB_FAIL(schema_guard.get_database_schema( base_table_schema.get_database_id(), database))) {
+    LOG_WARN("failed to get database_schema", K(ret),
         "database_id", base_table_schema.get_database_id());
   } else if (OB_ISNULL(database)) {
     ret = OB_ERR_UNEXPECTED;
@@ -786,7 +784,7 @@ int ObMLogBuilder::set_basic_infos(
       mlog_schema.set_table_state_flag(base_table_schema.get_table_state_flag());
       mlog_schema.set_table_id(create_mlog_arg.mlog_table_id_);
       mlog_schema.set_data_table_id(base_table_schema.get_table_id());
-      mlog_schema.set_tenant_id(base_table_schema.get_tenant_id());
+      
       mlog_schema.set_database_id(base_table_schema.get_database_id());
       mlog_schema.set_tablegroup_id(OB_INVALID_ID);
       mlog_schema.set_def_type(base_table_schema.get_def_type());
@@ -815,13 +813,13 @@ int ObMLogBuilder::set_table_columns(
 {
   int ret = OB_SUCCESS;
   bool is_table_with_logic_pk = false;
-  const uint64_t tenant_id = base_table_schema.get_tenant_id();
+  
   ObSchemaGetterGuard schema_guard;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObMLogBuilder not init", KR(ret));
   } else if (OB_FAIL(ddl_service_.get_tenant_schema_guard_with_version_in_inner_table(
-    tenant_id, schema_guard))) {
+    schema_guard))) {
     LOG_WARN("get schema guard in inner table failed", K(ret));
   } else if (OB_FAIL(base_table_schema.is_table_with_logic_pk(schema_guard, is_table_with_logic_pk))) {
     LOG_WARN("fail to get is table with logic pk", KR(ret));

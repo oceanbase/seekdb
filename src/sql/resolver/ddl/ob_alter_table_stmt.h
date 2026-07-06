@@ -48,8 +48,6 @@ public:
   uint64_t get_alter_table_action_count() { return alter_table_action_count_; }
   void inc_alter_table_action_count() { ++alter_table_action_count_; }
 
-  int64_t get_alter_external_table_type() { return alter_external_table_type_; }
-  void set_alter_external_table_type(int64_t type) { alter_external_table_type_ = type; }
 
   bool is_alter_system() const { return is_alter_system_; }
   void set_is_alter_system(const bool flag) { is_alter_system_ = flag; }
@@ -89,14 +87,10 @@ public:
   int fill_session_vars(const ObBasicSessionInfo &session);
   inline const common::ObTimeZoneInfoWrap &get_tz_info_wrap()
   { return alter_table_arg_.tz_info_wrap_; }
-  void set_tenant_id(const uint64_t tenant_id)
-  { alter_table_arg_.alter_table_schema_.set_tenant_id(tenant_id);}
+  
   void set_sql_mode(ObSQLMode sql_mode)
   { alter_table_arg_.alter_table_schema_.set_sql_mode(sql_mode);}
-  uint64_t get_tenant_id()
-  {
-    return alter_table_arg_.alter_table_schema_.get_tenant_id();
-  }
+  
   bool has_rename_action() const
   { return alter_table_arg_.has_rename_action(); }
   virtual obcall::ObDDLArg &get_ddl_arg() { return alter_table_arg_; }
@@ -135,7 +129,6 @@ private:
   ObRawExpr *interval_expr_;
   ObRawExpr *transition_expr_;
   uint64_t alter_table_action_count_;
-  int64_t alter_external_table_type_;
   obcall::ObExchangePartitionArg exchange_partition_arg_;
 };
 

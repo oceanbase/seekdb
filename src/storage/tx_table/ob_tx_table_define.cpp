@@ -25,7 +25,7 @@ namespace storage
 void *TxDataDefaultAllocator::alloc(const int64_t size)
 {
   common::ObMemAttr attr;
-  attr.tenant_id_ = MTL_ID();
+  
   attr.label_ = "TX_DATA_ITER";
   if (size <= 0) {
     abort();

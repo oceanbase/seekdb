@@ -31,9 +31,8 @@ public:
   OB_INLINE ObKVCacheHazardNode* get_next() const { return hazard_next_; }
   OB_INLINE void set_version(const uint64_t version) { version_ = version; }
   OB_INLINE uint64_t get_version() const { return version_; }
-  VIRTUAL_TO_STRING_KV(K_(tenant_id), KP_(hazard_next), K_(version));
+  VIRTUAL_TO_STRING_KV(KP_(hazard_next), K_(version));
 public:
-  uint64_t tenant_id_;
 private:
   ObKVCacheHazardNode *hazard_next_;
   uint64_t version_;  // version of node when delete
@@ -53,7 +52,7 @@ public:
   void delete_node(ObKVCacheHazardNode &node);
 
   // Local retire: Retire nodes in delete_list whose version is less than version
-  void retire(const uint64_t version, const uint64_t tenant_id);
+  void retire(const uint64_t version);
   TO_STRING_KV(K_(acquired_version), KP_(delete_list), K_(waiting_nodes_count), K_(last_retire_version));
 
 private:
@@ -76,7 +75,7 @@ public:
   int delete_node(const int64_t slot_id, ObKVCacheHazardNode *node);
   int acquire(int64_t &slot_id);  // Thread start to access shared memory, acquire version to protect this version
   void release(const int64_t slot_id);  // Thread finish access process, release protected version.
-  int retire(const uint64_t tenant_id = OB_INVALID_TENANT_ID);  // Global retire, call retire() of every slot
+  int retire();  // Global retire, call retire() of every slot
   int print_current_status() const ;
 
 private:

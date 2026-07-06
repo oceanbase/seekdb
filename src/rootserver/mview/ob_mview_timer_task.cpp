@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/mview/ob_mview_timer_task.h"
+#include "observer/omt/ob_multi_tenant.h"  // ObSharedTimer complete type, previously hidden behind a transitive include, make the dependency explicit
+#include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "share/ob_global_stat_proxy.h"
 
@@ -29,7 +31,7 @@ using namespace common;
 int ObMViewTimerTask::schedule_task(const int64_t delay, bool repeate, bool immediate)
 {
   int ret = OB_SUCCESS;
-  omt::ObSharedTimer *timer = MTL(omt::ObSharedTimer *);
+  omt::ObSharedTimer *timer = share::g_mp->shared_timer();
   if (OB_ISNULL(timer)) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("shared timer is NULL", KR(ret));
@@ -43,7 +45,7 @@ int ObMViewTimerTask::schedule_task(const int64_t delay, bool repeate, bool imme
 void ObMViewTimerTask::cancel_task()
 {
   int ret = OB_SUCCESS;
-  omt::ObSharedTimer *timer = MTL(omt::ObSharedTimer *);
+  omt::ObSharedTimer *timer = share::g_mp->shared_timer();
   if (OB_ISNULL(timer)) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("shared timer is NULL", KR(ret));
@@ -55,7 +57,7 @@ void ObMViewTimerTask::cancel_task()
 void ObMViewTimerTask::wait_task()
 {
   int ret = OB_SUCCESS;
-  omt::ObSharedTimer *timer = MTL(omt::ObSharedTimer *);
+  omt::ObSharedTimer *timer = share::g_mp->shared_timer();
   if (OB_ISNULL(timer)) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("shared timer is NULL", KR(ret));
@@ -64,8 +66,7 @@ void ObMViewTimerTask::wait_task()
   }
 }
 
-int ObMViewTimerTask::need_schedule_major_refresh_mv_task(const uint64_t tenant_id,
-                                                          bool &need_schedule)
+int ObMViewTimerTask::need_schedule_major_refresh_mv_task(bool &need_schedule)
 {
   int ret = OB_SUCCESS;
   common::ObISQLClient *sql_proxy = GCTX.sql_proxy_;
@@ -73,35 +74,25 @@ int ObMViewTimerTask::need_schedule_major_refresh_mv_task(const uint64_t tenant_
   share::ObSnapshotTableProxy snapshot_proxy;
   need_schedule = false;
 
-  if (tenant_id == OB_SYS_TENANT_ID) {
+  {
     // skip sys tenant
-  } else if (OB_UNLIKELY(OB_ISNULL(sql_proxy))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", KR(ret));
-  } else if (OB_FAIL(snapshot_proxy.check_snapshot_exist(*sql_proxy, tenant_id,
-                                                         share::SNAPSHOT_FOR_MAJOR_REFRESH_MV,
-                                                         contains_major_refresh_mview))) {
-    LOG_WARN("fail to check if tenant contains major refresh snapshot", KR(ret), K(tenant_id));
-  } else if (contains_major_refresh_mview) {
-    need_schedule = true;
   }
 
   return ret;
 }
 
-int ObMViewTimerTask::need_push_major_mv_merge_scn(const uint64_t tenant_id,
-                                                   bool &need_push,
+int ObMViewTimerTask::need_push_major_mv_merge_scn(bool &need_push,
                                                    share::SCN &lastest_merge_scn,
                                                    share::SCN &major_mv_merge_scn)
 {
   int ret = OB_SUCCESS;
   need_push = false;
   bool need_schedule = false;
-  ObGlobalStatProxy global_proxy(*GCTX.sql_proxy_, tenant_id);
-  compaction::ObTenantTabletScheduler* tablet_scheduler = MTL(compaction::ObTenantTabletScheduler*);
+  ObGlobalStatProxy global_proxy(*GCTX.sql_proxy_);
+  compaction::ObTenantTabletScheduler* tablet_scheduler = share::g_mp->tenant_tablet_scheduler();
 
-  if (OB_FAIL(need_schedule_major_refresh_mv_task(tenant_id, need_schedule))) {
-    LOG_WARN("failed to check need schedule", KR(ret), K(tenant_id));
+  if (OB_FAIL(need_schedule_major_refresh_mv_task( need_schedule))) {
+    LOG_WARN("failed to check need schedule", KR(ret));
   } else if (!need_schedule) {
     // do nothing
   } else if (OB_ISNULL(tablet_scheduler)) {
@@ -112,7 +103,7 @@ int ObMViewTimerTask::need_push_major_mv_merge_scn(const uint64_t tenant_id,
     LOG_WARN("failed to convert_for_gts", KR(ret));
   } else if (OB_FAIL(global_proxy.get_major_refresh_mv_merge_scn(false /*select for update*/,
                                                                  major_mv_merge_scn))) {
-    LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret), K(tenant_id));
+    LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret));
   }
 
   if (OB_FAIL(ret)) {

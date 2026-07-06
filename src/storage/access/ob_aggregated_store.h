@@ -42,7 +42,7 @@ class ObCGAggCells : public ObAggGroupBase
 public:
   ObCGAggCells() : agg_cells_() 
   {
-    agg_cells_.set_attr(ObMemAttr(MTL_ID(), "PDAggStore"));
+    agg_cells_.set_attr(ObMemAttr("PDAggStore"));
   }
   virtual ~ObCGAggCells() { reset(); }
   void reset();

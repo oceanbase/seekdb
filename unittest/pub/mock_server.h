@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "common/server_framework/ob_net_easy.h"
+#include "rpc/frame/ob_net_easy.h"
 #include "common/server_framework/ob_net_rpc_handler.h"
 #include "observer/ob_rpc_processor.h"
 

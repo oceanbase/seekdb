@@ -34,12 +34,13 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/lock/ob_scond.h"
 #include "storage/tx_storage/ob_ls_service.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "../mock_utils/msg_bus.h"
 #include "../mock_utils/basic_fake_define.h"
 #include "../mock_utils/ob_fake_tx_rpc.h"
-#include "share/allocator/ob_shared_memory_allocator_mgr.h"
-#include "share/stat/ob_opt_stat_monitor_manager.h"
+#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 
 namespace oceanbase {
@@ -132,6 +133,48 @@ enum ObTxNodeRole {
   Follower = 2,
 };
 
+// Single-tenant seekdb dissolves ObTenantBase::set<T>/get<T> module slots;
+// modules now route through share::g_mp (ObIModuleProvider). This test injects
+// its fakes by overriding the relevant getters and pointing g_mp at this node.
+class ObTxNode;
+class FakeModuleProvider : public share::ObIModuleProvider
+{
+public:
+  storage::ObTenantFreezer *tenant_freezer() override { return tenant_freezer_; }
+  ObPartTransCtxObjPool *part_trans_ctx_obj_pool() override { return part_trans_ctx_obj_pool_; }
+  share::ObSharedMemAllocMgr *shared_mem_alloc_mgr() override { return shared_mem_alloc_mgr_; }
+  transaction::ObTransService *trans_service() override { return trans_service_; }
+  common::ObOptStatMonitorManager *opt_stat_monitor_manager() override { return opt_stat_monitor_manager_; }
+  memtable::ObLockWaitMgr *lock_wait_mgr() override { return lock_wait_mgr_; }
+  storage::ObLSService *ls_service() override { return ls_service_; }
+
+  storage::ObTenantFreezer *tenant_freezer_ = nullptr;
+  ObPartTransCtxObjPool *part_trans_ctx_obj_pool_ = nullptr;
+  share::ObSharedMemAllocMgr *shared_mem_alloc_mgr_ = nullptr;
+  transaction::ObTransService *trans_service_ = nullptr;
+  common::ObOptStatMonitorManager *opt_stat_monitor_manager_ = nullptr;
+  memtable::ObLockWaitMgr *lock_wait_mgr_ = nullptr;
+  storage::ObLSService *ls_service_ = nullptr;
+};
+
+// Publish a test FakeModuleProvider as the process-global module set for an IT case.
+// Single-tenant seekdb routes module access through share::g_mp; a fake IT harness
+// must: (1) wire the provider's shared_mem_alloc_mgr so alloc/throttle resolve,
+// (2) point g_mp at it, (3) set g_modules_ready so MOD_SCOPE-gated paths (e.g.
+// ObPartTransCtx::submit_log_impl_) run instead of being silently skipped -- the
+// real observer sets this true during tenant start (omt/ob_tenant.cpp), and
+// (4) init the alloc mgr. Intentionally never clears g_mp: the providers are static
+// and outlive every fixture, and clearing it in TearDown would crash members that
+// deref g_mp while destructing (member dtors run after TearDown).
+inline void publish_test_module_provider(FakeModuleProvider &provider,
+                                         share::ObSharedMemAllocMgr &alloc_mgr)
+{
+  provider.shared_mem_alloc_mgr_ = &alloc_mgr;
+  share::g_mp = &provider;
+  share::g_modules_ready = true;
+  alloc_mgr.init();
+}
+
 class ObTxNode final : public MsgEndPoint {
 public:
   ObTxNode(const int64_t ls_id,
@@ -172,6 +215,7 @@ public:
   template <typename ...Args>                                   \
   ret func_name(Args &&...args) __attribute__((optnone)) {      \
     ObTenantEnv::set_tenant(&tenant_);                          \
+    share::g_mp = &provider_;                                   \
     TRANS_LOG(INFO, "[call_tx_api]", KPC(this));                \
     return delegate_obj.func_name(std::forward<Args>(args)...); \
   }
@@ -303,6 +347,7 @@ public:
   ObOptStatMonitorManager fake_opt_stat_mgr_;
   ObLockWaitMgr fake_lock_wait_mgr_;
   ObLSService ls_service_;
+  FakeModuleProvider provider_;
   common::hash::ObHashSet<int16_t> drop_msg_type_set_;
   std::function<int(int,void *)> extra_msg_handler_;
   char buf_[256];

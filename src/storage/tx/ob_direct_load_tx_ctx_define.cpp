@@ -82,7 +82,7 @@ int ObDLIBatchSet::deserialize(const char *buf, const int64_t data_len, int64_t 
   int64_t hash_count = 0;
   const int64_t origin_pos = pos;
   const common::ObTabletID invalid_tablet_id(common::ObTabletID::INVALID_TABLET_ID);
-  ObMemAttr mem_attr(MTL_ID(), "DLI_BATCH_HASH");
+  ObMemAttr mem_attr("DLI_BATCH_HASH");
   if (!created() && OB_FAIL(create(32, mem_attr, mem_attr))) {
     TRANS_LOG(WARN, "create batch hash set failed", K(ret));
   } else if (OB_FAIL(serialization::decode(buf, data_len, pos, hash_count))) {
@@ -141,7 +141,7 @@ int ObDLIBatchSet::before_submit_ddl_start(const ObDDLIncLogBasic &key, const sh
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  ObMemAttr mem_attr(MTL_ID(), "DLI_BATCH_HASH");
+  ObMemAttr mem_attr("DLI_BATCH_HASH");
   if (!key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(ret), K(key));
@@ -327,7 +327,7 @@ int ObDLIBatchSet::assign(const ObDLIBatchSet &other)
 {
   int ret = OB_SUCCESS;
 
-  ObMemAttr mem_attr(MTL_ID(), "DLI_BATCH_HASH");
+  ObMemAttr mem_attr("DLI_BATCH_HASH");
   if (!other.created() || other.empty()) {
     reuse();
     // do nothing

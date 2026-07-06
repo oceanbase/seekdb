@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "share/schema/ob_schema_struct.h"
 
 namespace oceanbase
@@ -51,7 +51,6 @@ public:
   OB_INLINE const ObString &get_##name() const { return name##_; } \
   OB_INLINE int set_##name(const ObString &name) { return deep_copy_str(name, name##_); }
 
-  DEFINE_GETTER_AND_SETTER(uint64_t, tenant_id);
   DEFINE_GETTER_AND_SETTER(uint64_t, mview_id);
   DEFINE_GETTER_AND_SETTER(ObMViewBuildMode, build_mode);
   DEFINE_GETTER_AND_SETTER(ObMVRefreshMode, refresh_mode);
@@ -79,52 +78,42 @@ public:
             refresh_mode_ == ObMVRefreshMode::MAJOR_COMPACTION);
   }
 
-  int gen_insert_mview_dml(const uint64_t exec_tenant_id, ObDMLSqlSplicer &dml) const;
-  int gen_update_mview_attribute_dml(const uint64_t exec_tenant_id, ObDMLSqlSplicer &dml) const;
-  int gen_update_mview_last_refresh_info_dml(const uint64_t exec_tenant_id,
-                                             ObDMLSqlSplicer &dml) const;
+  int gen_insert_mview_dml(ObDMLSqlSplicer &dml) const;
+  int gen_update_mview_attribute_dml(ObDMLSqlSplicer &dml) const;
+  int gen_update_mview_last_refresh_info_dml(ObDMLSqlSplicer &dml) const;
 
   static int insert_mview_info(ObISQLClient &sql_client, const ObMViewInfo &mview_info);
   static int update_mview_attribute(ObISQLClient &sql_client, const ObMViewInfo &mview_info);
   static int update_mview_last_refresh_info(ObISQLClient &sql_client,
                                             const ObMViewInfo &mview_info);
   static int drop_mview_info(ObISQLClient &sql_client, const ObMViewInfo &mview_info);
-  static int drop_mview_info(ObISQLClient &sql_client, const uint64_t tenant_id,
+  static int drop_mview_info(ObISQLClient &sql_client,
                              const uint64_t mview_id);
-  static int fetch_mview_info(ObISQLClient &sql_client, uint64_t tenant_id, uint64_t mview_id,
+  static int fetch_mview_info(ObISQLClient &sql_client, uint64_t mview_id,
                               ObMViewInfo &mview_info, bool for_update = false,
                               bool nowait = false);
-  static int batch_fetch_mview_ids(ObISQLClient &sql_client, uint64_t tenant_id,
+  static int batch_fetch_mview_ids(ObISQLClient &sql_client,
                                    uint64_t last_mview_id, ObIArray<uint64_t> &mview_ids,
                                    int64_t limit = -1);
-  static int update_major_refresh_mview_scn(ObISQLClient &sql_client, const uint64_t tenant_id,
+  static int update_major_refresh_mview_scn(ObISQLClient &sql_client,
                                             const SCN &scn);
-  static int get_min_major_refresh_mview_scn(ObISQLClient &sql_client, const uint64_t tenant_id,
+  static int get_min_major_refresh_mview_scn(ObISQLClient &sql_client,
                                              int64_t snapshot_for_tx, share::SCN &scn);
-  static int contains_major_refresh_mview_in_creation(ObISQLClient &sql_client,
-                                                      const uint64_t tenant_id, bool &contains);
-  static int contains_major_refresh_mview(ObISQLClient &sql_client,
-                                          const uint64_t tenant_id, bool &contains);
-  static int update_mview_data_attr(ObISQLClient &sql_client,
-                                    const uint64_t tenant_id,
-                                    const uint64_t refresh_scn,
-                                    const uint64_t target_data_sync_scn,
-                                    ObMViewInfo &mview_info);
+  static int contains_major_refresh_mview_in_creation(ObISQLClient &sql_client, bool &contains);
+  static int contains_major_refresh_mview(ObISQLClient &sql_client, bool &contains);
+  // moved definition to: update_mview_data_attr -> sql::ObMVDepUtils (sql/resolver/mv/ob_mv_dep_utils)
   static int bacth_fetch_mview_infos(ObISQLClient &sql_client,
-                                     const uint64_t tenant_id,
                                      const uint64_t refresh_scn,
                                      const ObIArray<uint64_t> &mview_ids,
                                      ObIArray<ObMViewInfo> &mview_infos);
   static int extract_mview_info(common::sqlclient::ObMySQLResult *result,
-                                const uint64_t tenant_id,
                                 ObMViewInfo &mview_info);
   static int check_satisfy_target_data_sync_scn(const ObMViewInfo &mview_info,
                                                 const uint64_t target_data_sync_ts,
                                                 bool &satisfy);
-  static int get_mview_id_from_container_id(ObISQLClient &sql_client,
-                                                         uint64_t tenant_id, uint64_t container_id,
+  static int get_mview_id_from_container_id(ObISQLClient &sql_client, uint64_t container_id,
                                                          uint64_t &mview_id);
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(mview_id),
                K_(build_mode),
                K_(refresh_mode),
@@ -147,7 +136,7 @@ public:
   static constexpr char *MVIEW_REFRESH_JOB_PREFIX = const_cast<char *>("MVIEW_REFRESH$J_");
 
 private:
-  uint64_t tenant_id_;
+  
   uint64_t mview_id_;
   ObMViewBuildMode build_mode_;
   ObMVRefreshMode refresh_mode_;

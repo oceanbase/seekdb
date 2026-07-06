@@ -40,7 +40,7 @@ public:
   ObReserveArenaAllocator<1024> test_allocator_;
 };
 TestReserveArenaAllocator::TestReserveArenaAllocator():
-  test_allocator_(ObMemAttr(500, ObModIds::OB_STORE_ROW_EXISTER), OB_MALLOC_NORMAL_BLOCK_SIZE)
+  test_allocator_(ObMemAttr(ObModIds::OB_STORE_ROW_EXISTER), OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
 }
 

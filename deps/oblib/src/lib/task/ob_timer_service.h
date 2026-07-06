@@ -124,16 +124,16 @@ private:
   static constexpr int64_t INITIAL_ELEMENT_NUM = 1024L;
   using TokenAlloc = hash::SimpleAllocer<TaskToken, INITIAL_ELEMENT_NUM>;
 public:
-  explicit ObTimerService(uint64_t tenant_id = OB_SERVER_TENANT_ID);
+  explicit ObTimerService();
   ~ObTimerService();
   static ObTimerService& get_instance()
   {
-    static ObTimerService ts(OB_SERVER_TENANT_ID);
+    static ObTimerService ts{};
     return ts;
   }
   ObTimerService(const ObTimerService &) = delete;
   ObTimerService &operator=(const ObTimerService &) = delete;
-  TO_STRING_KV(KP(this), K(tenant_id_),
+  TO_STRING_KV(KP(this),
       K(priority_task_queue_.size()),
       K(running_task_set_.size()),
       K(uncanceled_task_set_.size()),
@@ -152,7 +152,7 @@ public:
   int cancel_task(const ObTimer *timer, const ObTimerTask *task);
   int wait_task(const ObTimer *timer, const ObTimerTask *task);
   bool task_exist(const ObTimer *timer, const ObTimerTask &task);
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   bool is_never_started() const { return is_never_started_; }
   bool is_stopped() const { return is_stopped_; }
 private:
@@ -180,7 +180,7 @@ private:
   bool is_never_started_;
   bool is_stopped_;
   bool is_destroyed_;
-  uint64_t tenant_id_;
+  
   obutil::ObMonitor<obutil::Mutex> monitor_;
   TokenAlloc token_alloc_;
   ObVector<TaskToken *> priority_task_queue_;

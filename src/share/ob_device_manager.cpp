@@ -29,30 +29,21 @@ int ObTenantStsCredentialMgr::get_sts_credential(
     char *sts_credential, const int64_t sts_credential_buf_len)
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_id = ObObjectStorageTenantGuard::get_tenant_id();
+  
   if (OB_ISNULL(sts_credential) || OB_UNLIKELY(sts_credential_buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "invalid args", K(ret),
-        K(tenant_id), KP(sts_credential), K(sts_credential_buf_len));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || is_virtual_tenant_id(tenant_id))) {
-    // If the tenant is invalid or illegal, the sts_credential of the system tenant will be used as
-    // a backup. Please refer to the following document for specific reasons.
-    // 
-    tenant_id = OB_SYS_TENANT_ID;
-    OB_LOG(WARN, "invalid tenant ctx, use sys tenant", K(ret), K(tenant_id));
-  } 
+        KP(sts_credential), K(sts_credential_buf_len));
+  }
   if (OB_SUCC(ret)) {
-    if (is_meta_tenant(tenant_id)) {
-      tenant_id = gen_user_tenant_id(tenant_id);
-    }
     const char *tmp_credential = nullptr;
 
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+    common::ObServerConfig *tenant_config = &GCONF;
     int tmp_ret = OB_SUCCESS;
     // If the tenant does not have sts_credential, return OB_EAGAIN to wait for the next try.
     if (OB_TMP_FAIL(check_sts_credential(tenant_config))) {
       ret = OB_EAGAIN;
-      OB_LOG(WARN, "fail to check sts credential, should try again", K(ret), K(tmp_ret), K(tenant_id));
+      OB_LOG(WARN, "fail to check sts credential, should try again", K(ret), K(tmp_ret));
     } else {
       tmp_credential = tenant_config->sts_credential;
     }
@@ -60,25 +51,25 @@ int ObTenantStsCredentialMgr::get_sts_credential(
     if (OB_SUCC(ret)) {
       if (OB_FAIL(databuff_printf(sts_credential, sts_credential_buf_len,
                                        "%s", tmp_credential))) {
-        OB_LOG(WARN, "fail to deep copy sts_credential", K(ret), K(tenant_id), KP(tmp_credential));
+        OB_LOG(WARN, "fail to deep copy sts_credential", K(ret), KP(tmp_credential));
       } else if (OB_UNLIKELY(sts_credential[0] == '\0')) {
         ret = OB_ERR_UNEXPECTED;
-        OB_LOG(WARN, "sts_credential is null", K(ret), K(tenant_id), KP(tmp_credential));
+        OB_LOG(WARN, "sts_credential is null", K(ret), KP(tmp_credential));
       }
-      OB_LOG(INFO, "get sts credential successfully", K(tenant_id));
+      OB_LOG(INFO, "get sts credential successfully");
     }
     if (OB_FAIL(ret) && REACH_TIME_INTERVAL(LOG_INTERVAL_US)) {
-      OB_LOG(WARN, "try to get sts credential", K(ret), K(tenant_id), KP(tmp_credential));
+      OB_LOG(WARN, "try to get sts credential", K(ret), KP(tmp_credential));
     }
   }
   return ret;
 }
 
-int ObTenantStsCredentialMgr::check_sts_credential(omt::ObTenantConfigGuard &tenant_config) const
+int ObTenantStsCredentialMgr::check_sts_credential(common::ObServerConfig *tenant_config) const
 {
   int ret = OB_SUCCESS;
   const char *sts_credential = nullptr;
-  if (OB_UNLIKELY(!tenant_config.is_valid())) {
+  if (OB_UNLIKELY(nullptr == tenant_config)) {
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "tenant config is invalid", K(ret));
   } else if (OB_ISNULL(sts_credential = tenant_config->sts_credential)) {
@@ -114,7 +105,7 @@ ObDeviceManager::ObDeviceManager() : allocator_(), device_count_(0), is_init_(fa
 int ObDeviceManager::init_devices_env()
 {
   int ret = OB_SUCCESS;
-  const ObMemAttr mem_attr(OB_SYS_TENANT_ID, "DEVICE_MANAGER");
+  const ObMemAttr mem_attr("DEVICE_MANAGER");
   if (is_init_) {
     //do nothing, does not return error code
   } else {

@@ -18,7 +18,6 @@
 
 #include "ob_phy_table_location_info.h"
 #include "sql/das/ob_das_location_router.h"
-#include "storage/tx/wrs/ob_black_list.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;
@@ -79,24 +78,15 @@ int ObOptTabletLoc::assign_with_only_readable_replica(const ObObjectID &partitio
       leader_replica_idx = i;
     }
     if (ObReplicaTypeCheck::is_readable_replica(replica_loc.get_replica_type())) {
-      transaction::ObBLKey bl_key;
-      bool in_black_list = false;
-      if (OB_FAIL(bl_key.init(replica_loc.get_server(), ls_location.get_tenant_id(), ls_location.get_ls_id()))) {
-        LOG_WARN("init black list key failed", K(ret));
-      } else if (OB_FAIL(ObBLService::get_instance().check_in_black_list(bl_key, in_black_list))) {
-        LOG_WARN("check in black list failed", K(ret));
-      } else if (!in_black_list) {
-        if ((route_policy == COLUMN_STORE_ONLY && replica_loc.get_replica_type() != REPLICA_TYPE_COLUMNSTORE) ||
-            (route_policy != COLUMN_STORE_ONLY && replica_loc.get_replica_type() == REPLICA_TYPE_COLUMNSTORE) ||
-            (route_policy == FORCE_READONLY_ZONE && replica_loc.get_replica_type() != REPLICA_TYPE_READONLY)) {
-          // skip the tmp_replica_loc
-          LOG_TRACE("skip the replica due to the replica policy.", K(ret), K(replica_loc));
-        } else if (OB_FAIL(replica_locations_.push_back(replica_loc))) {
-          LOG_WARN("Failed to push back replica locations",
-                   K(ret), K(i), K(replica_loc), K(replica_locations_));
-        }
-      } else {
-        LOG_INFO("the replica location is invalid", K(bl_key), K(replica_loc));
+      // Single-node single-replica: no replica blacklist.
+      if ((route_policy == COLUMN_STORE_ONLY && replica_loc.get_replica_type() != REPLICA_TYPE_COLUMNSTORE) ||
+          (route_policy != COLUMN_STORE_ONLY && replica_loc.get_replica_type() == REPLICA_TYPE_COLUMNSTORE) ||
+          (route_policy == FORCE_READONLY_ZONE && replica_loc.get_replica_type() != REPLICA_TYPE_READONLY)) {
+        // skip the tmp_replica_loc
+        LOG_TRACE("skip the replica due to the replica policy.", K(ret), K(replica_loc));
+      } else if (OB_FAIL(replica_locations_.push_back(replica_loc))) {
+        LOG_WARN("Failed to push back replica locations",
+                 K(ret), K(i), K(replica_loc), K(replica_locations_));
       }
     }
   }

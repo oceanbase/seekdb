@@ -260,7 +260,7 @@ struct ObTabletLSPairCache
 public:
   ObTabletLSPairCache();
   ~ObTabletLSPairCache();
-  void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   void reuse();
   void destroy();
   int try_refresh(const bool force_refresh = false);
@@ -272,7 +272,7 @@ public:
     const uint64_t table_id,
     const ObTabletID tablet_id,
     share::ObLSID &ls_id) const;
-  TO_STRING_KV(K_(tenant_id), K_(last_refresh_ts), "map_cnt", map_.size());
+  TO_STRING_KV(K_(last_refresh_ts), "map_cnt", map_.size());
 private:
   int refresh();
   int rebuild_map_by_tablet_cnt();
@@ -280,7 +280,6 @@ private:
   const static int64_t REFRESH_CACHE_TIME_INTERVAL = 60 * 1000 * 1000; // 1m
   const static int64_t TABLET_LS_MAP_BUCKET_CNT = 3000;
   const static int64_t TABLET_LS_MAP_BUCKET_MAX_CNT = 300000;
-  uint64_t tenant_id_;
   int64_t last_refresh_ts_;
   hash::ObHashMap<common::ObTabletID, share::ObLSID> map_;
 };
@@ -295,7 +294,6 @@ public:
   void add_skip_verify_table(const uint64_t table_id);
   void add_tablet(const share::ObTabletReplica &replica);
   void add_tablet(
-    const uint64_t tenant_id,
     const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id);
   int get_uncompact_info(

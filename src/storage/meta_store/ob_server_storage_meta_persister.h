@@ -33,7 +33,7 @@ class ObServerStorageMetaPersister
 {
 public:
   ObServerStorageMetaPersister()
-    : is_inited_(false),
+    : is_inited_(false), is_shared_storage_(false),
       server_slogger_(nullptr) {}
   ObServerStorageMetaPersister(const ObServerStorageMetaPersister &) = delete;
   ObServerStorageMetaPersister &operator=(const ObServerStorageMetaPersister &) = delete;
@@ -44,24 +44,26 @@ public:
   void wait();
   void destroy();
   int prepare_create_tenant(const omt::ObTenantMeta &meta, int64_t &epoch);
-  int commit_create_tenant(const uint64_t tenant_id, const int64_t epoch);
-  int abort_create_tenant(const uint64_t tenant_id, const int64_t epoch);
-  int commit_delete_tenant(const uint64_t tenant_id, const int64_t epoch);
+  int commit_create_tenant(const int64_t epoch);
+  int abort_create_tenant(const int64_t epoch);
+  int commit_delete_tenant(const int64_t epoch);
   int update_tenant_super_block(const int64_t tenant_epoch, const ObTenantSuperBlock &super_block);
   int update_tenant_unit(const int64_t epoch, const share::ObUnitInfoGetter::ObTenantConfig &unit);
-  int clear_tenant_log_dir(const uint64_t tenant_id);
+  int clear_tenant_log_dir();
   
 private:
   int write_prepare_create_tenant_slog_(const omt::ObTenantMeta &meta);
-  int write_abort_create_tenant_slog_(uint64_t tenant_id);
-  int write_commit_create_tenant_slog_(uint64_t tenant_id);
-  int write_prepare_delete_tenant_slog_(uint64_t tenant_id);
-  int write_commit_delete_tenant_slog_(uint64_t tenant_id);
+  int write_abort_create_tenant_slog_();
+  int write_commit_create_tenant_slog_();
+  int write_prepare_delete_tenant_slog_();
+  int write_commit_delete_tenant_slog_();
   int write_update_tenant_super_block_slog_(const ObTenantSuperBlock &super_block);
   int write_update_tenant_unit_slog_(const share::ObUnitInfoGetter::ObTenantConfig &unit);
 
+
 private:
   bool is_inited_;
+  bool is_shared_storage_;
   storage::ObStorageLogger *server_slogger_;
   common::ObConcurrentFIFOAllocator allocator_;
   

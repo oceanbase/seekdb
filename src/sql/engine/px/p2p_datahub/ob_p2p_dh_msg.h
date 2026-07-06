@@ -26,6 +26,7 @@ namespace oceanbase
 {
 namespace sql
 {
+class ObDynamicFilterExecutor;
 
 class ObBatchRows;
 class ObPxQueryRangeInfo;
@@ -73,8 +74,7 @@ static int transform_vec_p2p_msg_type(const ObP2PDatahubMsgType &in_type, ObP2PD
 
 public:
   ObP2PDatahubMsgBase() : trace_id_(), p2p_datahub_id_(OB_INVALID_ID),
-      px_sequence_id_(OB_INVALID_ID), task_id_(OB_INVALID_ID),
-      tenant_id_(OB_INVALID_ID), timeout_ts_(0),
+      px_sequence_id_(OB_INVALID_ID), task_id_(OB_INVALID_ID), timeout_ts_(0),
       start_time_(0), msg_type_(NOT_INIT),
       lock_(), allocator_(), msg_receive_cur_cnt_(0),
       msg_receive_expect_cnt_(0), is_active_(true),
@@ -151,7 +151,7 @@ public:
   ObP2PDatahubMsgType get_msg_type() const { return msg_type_; }
   void set_msg_type(ObP2PDatahubMsgType type) { msg_type_ = type; }
   int64_t get_p2p_datahub_id() const { return p2p_datahub_id_; }
-  int64_t get_tenant_id() const { return tenant_id_; }
+  
   int64_t get_timeout_ts() const { return timeout_ts_; }
   void reset_status() {
     is_active_ = true;
@@ -161,8 +161,7 @@ public:
   bool is_active() const { return is_active_; }
   void set_is_active(bool flag) { is_active_ = flag; }
   bool is_empty() const { return is_empty_; }
-  int init(int64_t p2p_dh_id, int64_t px_seq_id, int64_t task_id,
-      int64_t tenant_id, int64_t timeout_ts);
+  int init(int64_t p2p_dh_id, int64_t px_seq_id, int64_t task_id, int64_t timeout_ts);
   common::ObIAllocator &get_allocator() { return allocator_; }
   int64_t get_task_id() const { return task_id_; }
   void set_is_ready(bool flag) { is_ready_ = flag; }
@@ -186,7 +185,7 @@ public:
   int proc_filter_empty(ResVec *res_vec, const ObBitVector &skip, const EvalBound &bound,
                       int64_t &total_count, int64_t &filter_count);
   int preset_not_match(IntegerFixedVec *res_vec, const EvalBound &bound);
-  TO_STRING_KV(K(p2p_datahub_id_), K_(px_sequence_id), K(tenant_id_), K(timeout_ts_), K(is_active_), K(msg_type_));
+  TO_STRING_KV(K(p2p_datahub_id_), K_(px_sequence_id), K(timeout_ts_), K(is_active_), K(msg_type_));
 protected:
   int fill_empty_query_range(const ObPxQueryRangeInfo &query_range_info,
                              common::ObIAllocator &allocator, ObNewRange &query_range);
@@ -196,7 +195,7 @@ protected:
   int64_t p2p_datahub_id_;
   int64_t px_sequence_id_;
   int64_t task_id_;
-  int64_t tenant_id_;
+  
   int64_t timeout_ts_;
   int64_t start_time_;
   ObP2PDatahubMsgType msg_type_;

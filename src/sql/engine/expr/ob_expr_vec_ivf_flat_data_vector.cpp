@@ -88,7 +88,7 @@ int ObExprVecIVFFlatDataVector::generate_data_vector(
 {
   int ret = OB_SUCCESS;
 
-  common::ObArenaAllocator tmp_allocator("IVFFlatExprVec", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  common::ObArenaAllocator tmp_allocator("IVFFlatExprVec", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObExpr *calc_vector_expr = expr.args_[0];
   ObExpr *calc_distance_algo_expr = expr.args_[1];
   ObDatum *res = nullptr;

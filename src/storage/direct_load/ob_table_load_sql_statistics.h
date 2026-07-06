@@ -1,0 +1,69 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "sql/optimizer/stat/ob_opt_column_stat.h"
+#include "sql/optimizer/stat/ob_opt_osg_column_stat.h"
+namespace oceanbase { namespace common { class ObOptTableStat; } }
+#include "sql/optimizer/stat/ob_stat_define.h"
+
+namespace oceanbase
+{
+namespace table
+{
+
+struct ObTableLoadSqlStatistics
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObTableLoadSqlStatistics() : allocator_("TLD_Opstat"), selector_(nullptr), selector_size_(0)
+  {
+    
+    table_stat_array_.set_block_allocator(ModulePageAllocator(allocator_));
+    col_stat_array_.set_block_allocator(ModulePageAllocator(allocator_));
+  }
+  ~ObTableLoadSqlStatistics() { reset(); }
+  void reset();
+  OB_INLINE int64_t get_table_stat_count() const { return table_stat_array_.count(); }
+  OB_INLINE int64_t get_col_stat_count() const { return col_stat_array_.count(); }
+  OB_INLINE bool is_empty() const { return table_stat_array_.empty() && col_stat_array_.empty(); }
+  int create(const int64_t column_count, const int64_t max_batch_size = 0);
+  int merge(const ObTableLoadSqlStatistics &other);
+  int get_table_stat(int64_t idx, ObOptTableStat *&table_stat);
+  int get_col_stat(int64_t idx, ObOptOSGColumnStat *&osg_col_stat);
+  int get_table_stat_array(ObIArray<ObOptTableStat *> &table_stat_array) const;
+  int get_col_stat_array(ObIArray<ObOptColumnStat *> &col_stat_array) const;
+  int get_table_stats(TabStatIndMap &table_stats) const;
+  int get_col_stats(ColStatIndMap &col_stats) const;
+  ObOptOSGSampleHelper& get_sample_helper() { return sample_helper_; }
+  int sample_batch(int64_t &size, const uint16_t *&selector);
+  int sample_selective(const uint16_t *&selector, int64_t &size);
+  TO_STRING_KV(K_(col_stat_array), K_(table_stat_array));
+private:
+  int allocate_table_stat(ObOptTableStat *&table_stat);
+  int allocate_col_stat(ObOptOSGColumnStat *&col_stat);
+public:
+  common::ObArray<ObOptTableStat *> table_stat_array_;
+  common::ObArray<ObOptOSGColumnStat *> col_stat_array_;
+  common::ObArenaAllocator allocator_;
+  ObOptOSGSampleHelper sample_helper_;
+  uint16_t *selector_;
+  int64_t selector_size_;
+};
+
+} // namespace table
+} // namespace oceanbase

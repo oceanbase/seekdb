@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_lua_api.h"
 
 #ifdef __linux__
@@ -95,7 +96,7 @@ static ObFIFOAllocator &get_global_allocator()
 {
   static ObFIFOAllocator allocator;
   if (OB_UNLIKELY(!allocator.is_inited())) {
-    IGNORE_RETURN allocator.init(&LuaAllocator::get_instance(), (1 << 13) - 8, lib::ObMemAttr(OB_SERVER_TENANT_ID, "LuaAlloc"), 0, 0, INT64_MAX);
+    IGNORE_RETURN allocator.init(&LuaAllocator::get_instance(), (1 << 13) - 8, lib::ObMemAttr("LuaAlloc"), 0, 0, INT64_MAX);
   }
   return allocator;
 }
@@ -106,7 +107,6 @@ static constexpr const char *usage_str =
 "string = usage()\n"
 "print_to_client(arg1, arg2...)\n"
 "int = now()\n"
-"{int, int, ...} = get_tenant_id_list()\n"
 "int = get_tenant_mem_limit(int)\n"
 "int = get_tenant_sysstat_by_id(int, int)\n"
 "int = get_tenant_sysstat_by_name(int, string)\n"
@@ -403,7 +403,7 @@ int now(lua_State* L)
 {
   int argc = lua_gettop(L);
   if (0 != argc) {
-    OB_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "call get_tenant_id_list() failed, bad arguments count, should be 0.");
+    OB_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "call now() failed, bad arguments count, should be 0.");
     lua_pushinteger(L, 0);
   } else {
     lua_pushinteger(L, common::ObTimeUtility::fast_current_time());
@@ -411,28 +411,6 @@ int now(lua_State* L)
   return 1;
 }
 
-// list = get_tenant_id_list()
-int get_tenant_id_list(lua_State* L)
-{
-  int argc = lua_gettop(L);
-  if (0 != argc) {
-    OB_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "call get_tenant_id_list() failed, bad arguments count, should be 0.");
-  } else {
-    lua_newtable(L);
-    uint64_t *tenant_ids = nullptr;
-    int count = 0;
-    if (OB_NOT_NULL(tenant_ids = (uint64_t *)diagnose::alloc(OB_MAX_SERVER_TENANT_CNT * sizeof(uint64_t)))) {
-      get_tenant_ids(tenant_ids, OB_MAX_SERVER_TENANT_CNT, count);
-    }
-    for (int64_t i = 0; i < count; ++i) {
-      lua_pushinteger(L, i + 1);
-      lua_pushinteger(L, tenant_ids[i]);
-      lua_settable(L, -3);
-    }
-    diagnose::free(tenant_ids);
-  }
-  return 1;
-}
 
 // int = get_tenant_mem_limit(int)
 int get_tenant_mem_limit(lua_State* L)
@@ -442,14 +420,14 @@ int get_tenant_mem_limit(lua_State* L)
     OB_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "call get_tenant_mem_limit() failed, bad arguments count, should be 1.");
   } else {
     luaL_checktype(L, 1, LUA_TNUMBER);
-    lua_pushinteger(L, ObMallocAllocator::get_instance()->get_tenant_limit(lua_tointeger(L, 1)));
+    lua_pushinteger(L, ObMallocAllocator::get_instance()->get_tenant_limit());
   }
   return 1;
 }
 
 
 // forward declaration
-int get_tenant_sysstat(int64_t tenant_id, int64_t stat_id, int64_t &value);
+int get_tenant_sysstat(int64_t stat_id, int64_t &value);
 
 // int = get_tenant_sysstat_by_id(int, int)
 int get_tenant_sysstat_by_id(lua_State* L)
@@ -462,13 +440,13 @@ int get_tenant_sysstat_by_id(lua_State* L)
   } else {
     luaL_checktype(L, 1, LUA_TNUMBER);
     luaL_checktype(L, 2, LUA_TNUMBER);
-    int tenant_id = lua_tointeger(L, 1);
+    
     int stat_id = lua_tointeger(L, 2);
     int64_t value = 0;
     for (int i = 0; i < ObStatEventIds::STAT_EVENT_SET_END; ++i) {
       if (OB_STAT_EVENTS[i].stat_id_ == stat_id) {
-        if (OB_FAIL(get_tenant_sysstat(tenant_id, i, value))) {
-          OB_LOG(ERROR, "failed to get tenant diag info", K(ret), K(tenant_id), K(i), K(stat_id));
+        if (OB_FAIL(get_tenant_sysstat(i, value))) {
+          OB_LOG(ERROR, "failed to get tenant diag info", K(ret), K(i), K(stat_id));
         } else {
           lua_pushinteger(L, value);
         }
@@ -493,14 +471,14 @@ int get_tenant_sysstat_by_name(lua_State* L)
   } else {
     luaL_checktype(L, 1, LUA_TNUMBER);
     luaL_checktype(L, 2, LUA_TSTRING);
-    int tenant_id = lua_tointeger(L, 1);
+    
     const char *name = lua_tostring(L, 2);
     int64_t value = 0;
     ret = OB_ENTRY_NOT_EXIST;
     for (int i = 0; i < ObStatEventIds::STAT_EVENT_SET_END; ++i) {
       if (0 == strcmp(OB_STAT_EVENTS[i].name_, name)) {
-        if (OB_FAIL(get_tenant_sysstat(tenant_id, i, value))) {
-          OB_LOG(ERROR, "failed to get tenant diag info", K(ret), K(tenant_id), K(i), K(name));
+        if (OB_FAIL(get_tenant_sysstat(i, value))) {
+          OB_LOG(ERROR, "failed to get tenant diag info", K(ret), K(i), K(name));
         } else {
           lua_pushinteger(L, value);
         }
@@ -621,12 +599,6 @@ int select_processlist(lua_State* L)
       }
       // sql_port
       gen_.next_column(GCONF.mysql_port);
-      // proxy_sessid
-      if (ObBasicSessionInfo::VALID_PROXY_SESSID == sess_info->get_proxy_sessid()) {
-        gen_.next_column();
-      } else {
-        gen_.next_column(sess_info->get_proxy_sessid());
-      }
       // master_sessid
       if (ObBasicSessionInfo::INVALID_SESSID == sess_info->get_master_sessid()) {
         gen_.next_column();
@@ -720,7 +692,6 @@ int select_processlist(lua_State* L)
       "state",
       "info",
       "sql_port",
-      "proxy_sessid",
       "master_sessid",
       "user_client_ip",
       "user_host",
@@ -754,9 +725,7 @@ int select_sysstat(lua_State* L)
     OB_LOG(ERROR, "call select_sysstat() failed, bad arguments count, should be less than 2.");
     lua_pushnil(L);
   } else {
-    common::ObVector<uint64_t> ids;
     std::vector<const char*> columns = {
-      "tenant_id",
       "statistic",
       "value",
       "value_type",
@@ -766,7 +735,6 @@ int select_sysstat(lua_State* L)
       "can_visible"
     };
     LuaVtableGenerator gen(L, columns);
-    UNUSED(ids);
   }
   return 1;
 }
@@ -780,9 +748,7 @@ int select_memory_info(lua_State *L)
     OB_LOG(ERROR, "call select_memory_info() failed, bad arguments count, should be less than 2.");
     lua_pushnil(L);
   } else {
-    uint64_t *tenant_ids = nullptr;
     std::vector<const char*> columns = {
-      "tenant_id",
       "ctx_id",
       "ctx_name",
       "label",
@@ -791,17 +757,11 @@ int select_memory_info(lua_State *L)
       "count"
     };
     LuaVtableGenerator gen(L, columns);
-    int tenant_cnt = 0;
-    if (OB_NOT_NULL(tenant_ids = (uint64_t *)diagnose::alloc(OB_MAX_SERVER_TENANT_CNT * sizeof(uint64_t)))) {
-      get_tenant_ids(tenant_ids, OB_MAX_SERVER_TENANT_CNT, tenant_cnt);
-    }
-    for (int64_t i = 0; i < tenant_cnt && !gen.is_end(); ++i) {
-      auto tenant_id = tenant_ids[i];
+    if (!gen.is_end()) {
       for (int64_t ctx_id = 0; ctx_id < ObCtxIds::MAX_CTX_ID; ++ctx_id) {
-        auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(tenant_id, ctx_id);
+        auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(ctx_id);
         if (nullptr == ta) {
-          ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(tenant_id,
-                                                                                      ctx_id);
+          ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(ctx_id);
         }
         if (nullptr == ta) {
           // do nothing
@@ -814,8 +774,6 @@ int select_memory_info(lua_State *L)
             int64_t count = l_item->count_;
 
             gen.next_row();
-            // tenant_id
-            gen.next_column(tenant_id);
             // ctx_id
             gen.next_column(ctx_id);
             // ctx_name
@@ -835,8 +793,6 @@ int select_memory_info(lua_State *L)
         }
       }
     }
-
-    diagnose::free(tenant_ids);
   }
   return 1;
 }
@@ -849,10 +805,7 @@ int select_tenant_ctx_memory_info(lua_State *L)
     OB_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "call select_tenant_ctx_memory_info() failed, bad arguments count, should be less than 2.");
     lua_pushnil(L);
   } else {
-    uint64_t *tenant_ids = nullptr;
-    int tenant_cnt = 0;
     std::vector<const char*> columns = {
-      "tenant_id",
       "ctx_id",
       "ctx_name",
       "hold",
@@ -860,25 +813,17 @@ int select_tenant_ctx_memory_info(lua_State *L)
       "limit"
     };
     LuaVtableGenerator gen(L, columns);
-    if (OB_NOT_NULL(tenant_ids = (uint64_t *)diagnose::alloc(OB_MAX_SERVER_TENANT_CNT * sizeof(uint64_t)))) {
-      get_tenant_ids(tenant_ids, OB_MAX_SERVER_TENANT_CNT, tenant_cnt);
-    }
-
-    for (int64_t i = 0; i < tenant_cnt && !gen.is_end(); ++i) {
-      auto tenant_id = tenant_ids[i];
+    if (!gen.is_end()) {
       for (int64_t ctx_id = 0; ctx_id < ObCtxIds::MAX_CTX_ID; ++ctx_id) {
-        auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(tenant_id, ctx_id);
+        auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(ctx_id);
         if (nullptr == ta) {
-          ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(tenant_id,
-                                                                                      ctx_id);
+          ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(ctx_id);
         }
         if (nullptr == ta) {
           // do nothing
         } else {
           gen.next_row();
 
-          // tenant_id
-          gen.next_column(tenant_id);
           // ctx_id
           gen.next_column(ctx_id);
           // ctx_name
@@ -894,8 +839,6 @@ int select_tenant_ctx_memory_info(lua_State *L)
         }
       }
     }
-
-    diagnose::free(tenant_ids);
   }
   return 1;
 }
@@ -906,7 +849,7 @@ int select_trans_stat(lua_State *L)
   int ret = OB_SUCCESS;
   int argc = lua_gettop(L);
   ObTransService *trans_service = nullptr;
-  ObArray<uint64_t> tenant_ids;
+  ObArray<uint64_t> batch_ids;
   ObTxStat tx_stat;
   if (argc > 1) {
     OB_LOG(ERROR, "call select_trans_stat() failed, bad arguments count, should be 0.");
@@ -914,16 +857,15 @@ int select_trans_stat(lua_State *L)
   } else if (OB_ISNULL(GCTX.omt_)) {
     OB_LOG(ERROR, "omt is nullptr");
     lua_pushnil(L);
-  } else if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_ids))) {
-    OB_LOG(ERROR, "failed to get tenant_ids", K(ret));
+  } else if (OB_FAIL(batch_ids.push_back(0/*single*/))) {
+    OB_LOG(ERROR, "failed to get batch_ids", K(ret));
     lua_pushnil(L);
   } else {
     HEAP_VAR(ObTxStatIterator, iter) {
       iter.reset();
-      for (int i = 0; i < tenant_ids.count() && OB_SUCC(ret); ++i) {
-        uint64_t tenant_id = tenant_ids.at(i);
-        MTL_SWITCH(tenant_id) {
-          auto* txs = MTL(transaction::ObTransService*);
+      if (OB_SUCC(ret)) {
+        MOD_SCOPE {
+          auto* txs = share::g_mp->trans_service();
           if (OB_FAIL(txs->iterate_all_observer_tx_stat(iter))) {
             OB_LOG(ERROR, "iterate transaction stat failed", K(ret));
           }
@@ -940,7 +882,6 @@ int select_trans_stat(lua_State *L)
       static constexpr int64_t OB_MAX_BUFFER_SIZE = 512;
       static constexpr int64_t OB_MIN_BUFFER_SIZE = 128;
       std::vector<const char*> columns = {
-        "tenant_id",
         "tx_type",
         "tx_id",
         "session_id",
@@ -970,8 +911,6 @@ int select_trans_stat(lua_State *L)
       LuaVtableGenerator gen(L, columns);
       while (OB_SUCC(ret) && !gen.is_end()) {
         gen.next_row();
-        // tenant_id
-        gen.next_column(tx_stat.tenant_id_);
         // tx_type
         gen.next_column(tx_stat.tx_type_);
         // tx_id
@@ -1054,7 +993,6 @@ int select_sql_workarea_active(lua_State *L)
     OB_LOG(ERROR, "GCTX.omt_ is NULL");
     lua_pushnil(L);
   } else {
-    ObArray<uint64_t> ids;
     common::ObSEArray<sql::ObSqlWorkareaProfileInfo, 20> wa_actives;
     std::vector<const char*> columns = {
       "plan_id",
@@ -1070,16 +1008,13 @@ int select_sql_workarea_active(lua_State *L)
       "max_mem_used",
       "number_passes",
       "tempseg_size",
-      "tenant_id",
       "policy"
     };
     LuaVtableGenerator gen(L, columns);
-    GCTX.omt_->get_mtl_tenant_ids(ids);
-    for (int64_t i = 0; i < ids.size() && !gen.is_end(); ++i) {
-      uint64_t tenant_id = ids[i];
+    if (!gen.is_end()) {
       wa_actives.reset();
-      MTL_SWITCH(tenant_id) {
-        auto *sql_mem_mgr = MTL(ObTenantSqlMemoryManager*);
+      MOD_SCOPE {
+        auto *sql_mem_mgr = share::g_mp->tenant_sql_memory_manager();
         if (OB_NOT_NULL(sql_mem_mgr) && OB_FAIL(sql_mem_mgr->get_all_active_workarea(wa_actives))) {
           OB_LOG(ERROR, "failed to get workarea stat", K(ret));
         }
@@ -1113,8 +1048,6 @@ int select_sql_workarea_active(lua_State *L)
         gen.next_column(wa_active.profile_.get_number_pass());
         // tempseg_size
         gen.next_column(wa_active.profile_.get_max_dumped_size());
-        // tenant_id
-        gen.next_column(tenant_id);
         // policy
         if (wa_active.profile_.get_auto_policy()) {
           gen.next_column(EXECUTION_AUTO_POLICY);
@@ -1149,7 +1082,6 @@ int select_sys_task_status(lua_State *L)
         "start_time",
         "task_type",
         "task_id",
-        "tenant_id",
         "comment",
         "is_cancel"
       };
@@ -1171,8 +1103,6 @@ int select_sys_task_status(lua_State *L)
             gen.next_column(task_id);
           }
         }
-        // tenant_id
-        gen.next_column(status.tenant_id_);
         // comment
         gen.next_column(status.comment_);
         // is_cancel
@@ -1200,7 +1130,6 @@ int select_dump_tenant_info(lua_State *L)
   } else {
     auto *omt = GCTX.omt_;
     std::vector<const char*> columns = {
-      "tenant_id",
       "compat_mode",
       "unit_min_cpu",
       "unit_max_cpu",
@@ -1234,8 +1163,6 @@ int select_dump_tenant_info(lua_State *L)
     LuaVtableGenerator gen(L, columns);
     auto func = [&] (omt::ObTenant &t) {
       gen.next_row();
-      // tenant_id
-      gen.next_column(t.id_);
       // compat_mode
       gen.next_column(static_cast<int64_t>(t.get_compat_mode()));
       // unit_min_cpu
@@ -1297,8 +1224,10 @@ int select_dump_tenant_info(lua_State *L)
       gen.row_end();
       return OB_SUCCESS;
     };
-    if (OB_FAIL(omt->for_each(func))) {
-      OB_LOG(ERROR, "omt for each failed", K(ret));
+    omt::ObTenant *the_tenant = nullptr;
+    if (OB_SUCCESS == omt->get_tenant(the_tenant) && OB_NOT_NULL(the_tenant)
+        && OB_FAIL(func(*the_tenant))) {
+      OB_LOG(ERROR, "run tenant func failed", K(ret));
     }
   }
   return 1;
@@ -1353,30 +1282,20 @@ int select_tenant_memory_info(lua_State *L)
     OB_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "call select_tenant_memory_info() failed, bad arguments count, should be less than 2.");
     lua_pushnil(L);
   } else {
-    uint64_t *tenant_ids = nullptr;
-    int tenant_cnt = 0;
     std::vector<const char*> columns = {
-      "tenant_id",
       "hold",
       "limit"
     };
     LuaVtableGenerator gen(L, columns);
-    if (OB_NOT_NULL(tenant_ids = (uint64_t *)diagnose::alloc(OB_MAX_SERVER_TENANT_CNT * sizeof(uint64_t)))) {
-      get_tenant_ids(tenant_ids, OB_MAX_SERVER_TENANT_CNT, tenant_cnt);
-    }
-    for (int64_t i = 0; i < tenant_cnt && !gen.is_end(); ++i) {
-      auto tenant_id = tenant_ids[i];
+    if (!gen.is_end()) {
       gen.next_row();
-      // tenant_id
-      gen.next_column(tenant_id);
       // hold
-      gen.next_column(ObMallocAllocator::get_instance()->get_tenant_hold(tenant_id));
+      gen.next_column(ObMallocAllocator::get_instance()->get_tenant_hold());
       // limit
-      gen.next_column(ObMallocAllocator::get_instance()->get_tenant_limit(tenant_id));
+      gen.next_column(ObMallocAllocator::get_instance()->get_tenant_limit());
 
       gen.row_end();
     }
-    diagnose::free(tenant_ids);
   }
   return 1;
 }
@@ -1438,13 +1357,12 @@ int select_compaction_diagnose_info(lua_State *L)
   } else {
     int ret = OB_SUCCESS;
     compaction::ObCompactionDiagnoseIterator diagnose_info_iter;
-    // OB_SYS_TENANT_ID means dump all
-    if (OB_FAIL(diagnose_info_iter.open(OB_SYS_TENANT_ID))) {
+    // sys tenant means dump all
+    if (OB_FAIL(diagnose_info_iter.open())) {
       OB_LOG(ERROR, "Fail to open suggestion iter", K(ret));
       lua_pushnil(L);
     } else {
       std::vector<const char*> columns = {
-        "tenant_id",
         "merge_type",
         "ls_id",
         "tablet_id",
@@ -1456,8 +1374,6 @@ int select_compaction_diagnose_info(lua_State *L)
       compaction::ObCompactionDiagnoseInfo diagnose_info;
       while (OB_SUCC(diagnose_info_iter.get_next_info(diagnose_info)) && !gen.is_end()) {
         gen.next_row();
-        // tenant_id
-        gen.next_column(diagnose_info.tenant_id_);
         // merge_type
         gen.next_column(merge_type_to_str(diagnose_info.merge_type_));
         // ls_id
@@ -1491,18 +1407,13 @@ int select_server_schema_info(lua_State *L)
   } else {
     int ret = OB_SUCCESS;
     const static int64_t DEFAULT_TENANT_NUM = 10;
-    ObSEArray<uint64_t, DEFAULT_TENANT_NUM> tenant_ids;
     share::schema::ObSchemaGetterGuard guard;
     auto& schema_service = OBSERVER.get_root_service().get_schema_service();
-    if (OB_FAIL(schema_service.get_tenant_schema_guard(OB_SYS_TENANT_ID, guard))) {
+    if (OB_FAIL(schema_service.get_tenant_schema_guard(guard))) {
       OB_LOG(ERROR, "fail to get schema guard", K(ret));
-      lua_pushnil(L);
-    } else if (OB_FAIL(guard.get_tenant_ids(tenant_ids))) {
-      OB_LOG(ERROR, "fail to get tenant_ids", K(ret));
       lua_pushnil(L);
     } else {
       std::vector<const char*> columns = {
-        "tenant_id",
         "refreshed_schema_version",
         "received_schema_version",
         "schema_count",
@@ -1510,28 +1421,26 @@ int select_server_schema_info(lua_State *L)
         "min_sstable_schema_version"
       };
       LuaVtableGenerator gen(L, columns);
-      for (uint64_t idx = 0; idx < tenant_ids.count() && !gen.is_end(); ++idx) {
-        const uint64_t tenant_id = tenant_ids[idx];
+      if (!gen.is_end()) {
+        
         int64_t refreshed_schema_version = OB_INVALID_VERSION;
         int64_t received_schema_version = OB_INVALID_VERSION;
         int64_t schema_count = OB_INVALID_ID;
         int64_t schema_size = OB_INVALID_ID;
-        if (OB_FAIL(schema_service.get_tenant_refreshed_schema_version(tenant_id, refreshed_schema_version))) {
-          OB_LOG(ERROR, "fail to get tenant refreshed schema version", K(ret), K(tenant_id), K(refreshed_schema_version));
-        } else if (OB_FAIL(schema_service.get_tenant_received_broadcast_version(tenant_id, received_schema_version))) {
-          OB_LOG(ERROR, "fail to get tenant receieved schema version", K(ret), K(tenant_id), K(received_schema_version));
+        if (OB_FAIL(schema_service.get_tenant_refreshed_schema_version(refreshed_schema_version))) {
+          OB_LOG(ERROR, "fail to get tenant refreshed schema version", K(ret), K(refreshed_schema_version));
+        } else if (OB_FAIL(schema_service.get_tenant_received_broadcast_version(received_schema_version))) {
+          OB_LOG(ERROR, "fail to get tenant receieved schema version", K(ret), K(received_schema_version));
         } else {
           int tmp_ret = OB_SUCCESS;
-          if (OB_SUCCESS != (tmp_ret = schema_service.get_tenant_schema_guard(tenant_id, guard))) {
-            OB_LOG(ERROR, "fail to get schema guard", K(tmp_ret), K(tenant_id));
-          } else if (OB_SUCCESS != (tmp_ret = guard.get_schema_count(tenant_id, schema_count))) {
-            OB_LOG(ERROR, "fail to get schema count", K(tmp_ret), K(tenant_id));
-          } else if (OB_SUCCESS != (tmp_ret = guard.get_schema_size(tenant_id, schema_size))) {
-            OB_LOG(ERROR, "fail to get schema size", K(tmp_ret), K(tenant_id));
+          if (OB_SUCCESS != (tmp_ret = schema_service.get_tenant_schema_guard(guard))) {
+            OB_LOG(ERROR, "fail to get schema guard", K(tmp_ret));
+          } else if (OB_SUCCESS != (tmp_ret = guard.get_schema_count(schema_count))) {
+            OB_LOG(ERROR, "fail to get schema count", K(tmp_ret));
+          } else if (OB_SUCCESS != (tmp_ret = guard.get_schema_size(schema_size))) {
+            OB_LOG(ERROR, "fail to get schema size", K(tmp_ret));
           }
           gen.next_row();
-          // tenant_id
-          gen.next_column(tenant_id);
           // refreshed_schema_version
           gen.next_column(refreshed_schema_version);
           // received_schema_version
@@ -1561,60 +1470,51 @@ int select_schema_slot(lua_State *L)
   } else {
     int ret = OB_SUCCESS;
     auto& schema_service = OBSERVER.get_root_service().get_schema_service();
-    const static int64_t DEFAULT_TENANT_NUM = 10;
-    ObSEArray<uint64_t, DEFAULT_TENANT_NUM> tenant_ids;
-    if (OB_FAIL(schema_service.get_schema_store_tenants(tenant_ids))) {
-      OB_LOG(ERROR, "fail to get schema store tenants", K(ret));
-      lua_pushnil(L);
-    } else {
-      std::vector<const char*> columns = {
-        "tenant_id",
-        "slot_id",
-        "schema_version",
-        "schema_count",
-        "total_ref_cnt",
-        "ref_info"
-      };
-      LuaVtableGenerator gen(L, columns);
-      for (int64_t idx = 0; idx < tenant_ids.count() && !gen.is_end(); ++idx) {
-        const static int64_t DEFAULT_SLOT_NUM = 32;
-        ObSEArray<ObSchemaSlot, DEFAULT_SLOT_NUM> schema_slot_infos;
-        uint64_t tenant_id = tenant_ids[idx];
-        if (OB_FAIL(schema_service.get_tenant_slot_info(get_global_allocator(), tenant_id, schema_slot_infos))) {
-          OB_LOG(ERROR, "fail to get tenant slot info", K(ret), K(tenant_id));
-        } else {
-          for (int64_t slot_idx = 0; slot_idx < schema_slot_infos.count() && !gen.is_end(); ++slot_idx) {
-            auto& schema_slot = schema_slot_infos.at(slot_idx);
-            gen.next_row();
-            // tenant_id
-            gen.next_column(schema_slot.get_tenant_id());
-            // slot_id
-            gen.next_column(schema_slot.get_slot_id());
-            // schema_version
-            gen.next_column(schema_slot.get_schema_version());
-            // schema_count
-            gen.next_column(schema_slot.get_schema_count());
-            // total_ref_cnt
-            gen.next_column(schema_slot.get_ref_cnt());
-            // ref_info
-            if (OB_NOT_NULL(schema_slot.get_mod_ref_infos().ptr())) {
-              gen.next_column(schema_slot.get_mod_ref_infos());
-            } else {
-              gen.next_column("");
-            }
-
-            gen.row_end();
+    std::vector<const char*> columns = {
+      "slot_id",
+      "schema_version",
+      "schema_count",
+      "total_ref_cnt",
+      "ref_info"
+    };
+    LuaVtableGenerator gen(L, columns);
+    // Single-tenant: always fetch slot info for the sys tenant store directly.
+    {
+      const static int64_t DEFAULT_SLOT_NUM = 32;
+      ObSEArray<ObSchemaSlot, DEFAULT_SLOT_NUM> schema_slot_infos;
+      if (OB_FAIL(schema_service.get_tenant_slot_info(get_global_allocator(), 1UL, schema_slot_infos))) {
+        OB_LOG(ERROR, "fail to get tenant slot info", K(ret));
+      } else {
+        for (int64_t slot_idx = 0; slot_idx < schema_slot_infos.count() && !gen.is_end(); ++slot_idx) {
+          auto& schema_slot = schema_slot_infos.at(slot_idx);
+          gen.next_row();
+          // slot_id
+          gen.next_column(schema_slot.get_slot_id());
+          // schema_version
+          gen.next_column(schema_slot.get_schema_version());
+          // schema_count
+          gen.next_column(schema_slot.get_schema_count());
+          // total_ref_cnt
+          gen.next_column(schema_slot.get_ref_cnt());
+          // ref_info
+          if (OB_NOT_NULL(schema_slot.get_mod_ref_infos().ptr())) {
+            gen.next_column(schema_slot.get_mod_ref_infos());
+          } else {
+            gen.next_column("");
           }
+          gen.row_end();
         }
-        for (int64_t slot_idx = 0; slot_idx < schema_slot_infos.count(); ++slot_idx) {
-          auto* ptr = schema_slot_infos.at(slot_idx).get_mod_ref_infos().ptr();
-          if (OB_NOT_NULL(ptr)) {
-            get_global_allocator().free((void*)ptr);
-          }
-          schema_slot_infos.at(slot_idx).reset();
-        }
-        schema_slot_infos.reset();
       }
+      for (int64_t slot_idx = 0; slot_idx < schema_slot_infos.count(); ++slot_idx) {
+        auto* ptr = schema_slot_infos.at(slot_idx).get_mod_ref_infos().ptr();
+        if (OB_NOT_NULL(ptr)) {
+          get_global_allocator().free((void*)ptr);
+        }
+        schema_slot_infos.at(slot_idx).reset();
+      }
+    }
+    if (OB_FAIL(ret)) {
+      lua_pushnil(L);
     }
   }
   return 1;
@@ -1752,7 +1652,6 @@ int select_malloc_sample_info(lua_State *L)
     OB_LOG(ERROR, "failed to create memory info map", K(ret));
   } else {
     std::vector<const char*> columns = {
-      "tenant_id",
       "ctx_id",
       "mod_name",
       "back_trace",
@@ -1763,8 +1662,6 @@ int select_malloc_sample_info(lua_State *L)
     LuaVtableGenerator gen(L, columns);
     for (auto it = malloc_sample_map.begin(); it != malloc_sample_map.end() && !gen.is_end(); ++it) {
       gen.next_row();
-      // tenant_id
-      gen.next_column(it->first.tenant_id_);
       // ctx_id
       gen.next_column(it->first.ctx_id_);
       // mod_name
@@ -1790,10 +1687,9 @@ int select_malloc_sample_info(lua_State *L)
 
 // API end
 
-int get_tenant_sysstat(int64_t tenant_id, int64_t statistic, int64_t &value)
+int get_tenant_sysstat(int64_t statistic, int64_t &value)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   UNUSED(statistic);
   value = 0;
   {
@@ -1818,7 +1714,6 @@ void APIRegister::register_api(lua_State* L)
   lua_register(L, "usage", usage);
   lua_register(L, "print_to_client", print_to_client);
   lua_register(L, "now", now);
-  lua_register(L, "get_tenant_id_list", get_tenant_id_list);
   lua_register(L, "get_tenant_mem_limit", get_tenant_mem_limit);
   lua_register(L, "get_tenant_sysstat_by_id", get_tenant_sysstat_by_id);
   lua_register(L, "get_tenant_sysstat_by_name", get_tenant_sysstat_by_name);

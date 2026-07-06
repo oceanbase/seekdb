@@ -40,9 +40,8 @@ public:
   void set_limit(int64_t limit) { limit_ = limit; }
   inline int64_t size() const { return ATOMIC_LOAD(&size_); }
 
-  int init(int64_t limit, const char* name, const uint64_t tenant_id) {
+  int init(int64_t limit, const char* name) {
     UNUSED(name);
-    UNUSED(tenant_id);
     limit_ = limit;
     return OB_SUCCESS;
   }
@@ -182,7 +181,7 @@ public:
       ObMemAttr attr;
       attr.label_ = "ObPrioQueue2";
       attr.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
-      attr.tenant_id_ = OB_SERVER_TENANT_ID;
+      
 
       for (i = 0; i < queue_num && OB_SUCCESS == ret; i++) {
         void *buf = NULL;

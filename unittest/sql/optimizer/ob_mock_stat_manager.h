@@ -17,7 +17,7 @@
 #ifndef _OB_MOCK_STAT_MANAGER_H
 #define _OB_MOCK_STAT_MANAGER_H 1
 #include "sql/optimizer/ob_opt_default_stat.h"
-#include "lib/timezone/ob_time_convert.h"
+#include "common/timezone/ob_time_convert.h"
 #include "sql/resolver/ob_schema_checker.h"
 #include "share/schema/ob_column_schema.h"
 namespace test

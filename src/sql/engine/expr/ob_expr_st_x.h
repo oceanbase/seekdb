@@ -18,8 +18,8 @@
 #define OCEANBASE_SQL_OB_EXPR_ST_X
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "lib/geo/ob_geo_ibin.h"
-#include "lib/geo/ob_srs_info.h"
+#include "share/geo/ob_geo_ibin.h"
+#include "share/geo/ob_srs_info.h"
 
 namespace oceanbase
 {

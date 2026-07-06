@@ -39,7 +39,6 @@ namespace schema
 class ObTableSchema;
 }
 class ObPartitionLocation;
-struct ObFBPartitionParam;
 }
 namespace observer
 {
@@ -67,8 +66,7 @@ protected:
   void assign_sql(const char * sql, int64_t sql_length) { sql_.assign_ptr(sql, sql_length); }
 private:
   int response_result(ObMySQLResultSet &result, bool force_sync_resp, bool &async_resp_used);
-  int get_tenant_schema_info_(const uint64_t tenant_id,
-                      ObTenantCachedSchemaGuardInfo *cache_info,
+  int get_tenant_schema_info_(ObTenantCachedSchemaGuardInfo *cache_info,
                       share::schema::ObSchemaGetterGuard *&schema_guard,
                       int64_t &tenant_version,
                       int64_t &sys_version);
@@ -112,12 +110,6 @@ private:
                    const bool is_rollback_cmd) const;
   void update_audit_info(const ObWaitEventStat &total_wait_desc,
                          ObAuditRecordData &record);
-  int fill_feedback_session_info(ObMySQLResultSet &result,
-                                 sql::ObSQLSessionInfo &session);
-  int build_fb_partition_param(
-    const share::schema::ObTableSchema &table_schema,
-    const share::ObPartitionLocation &partition_loc,
-    share::ObFBPartitionParam &param);
   int try_batched_multi_stmt_optimization(sql::ObSQLSessionInfo &session,
                                           ObSMConnection *conn,
                                           common::ObIArray<ObString> &queries,

@@ -27,7 +27,7 @@ if(WIN32)
   # Windows install layout:
   #   bin/     - seekdb.exe, observer.exe, ob_admin.exe, runtime DLLs
   #   etc/     - seekdb.cnf, JSON configs
-  #   share/   - admin SQL, timezone, srs, upgrade, help
+  #   share/   - admin SQL, timezone, srs, help
   ##############################################################################
 
   # ── VC++ runtime redistributable (MSVCP140.dll, VCRUNTIME140.dll, etc.) ──
@@ -124,8 +124,6 @@ message(STATUS "Bundled ${_bundled} runtime DLLs into bin/")
   install(FILES
     src/share/parameter/default_parameter.json
     src/share/system_variable/default_system_variable.json
-    tools/upgrade/oceanbase_upgrade_dep.yml
-    tools/upgrade/deps_compat.yml
     ${CMAKE_BINARY_DIR}/src/share/ob_system_variable_init.json
     ${INSTALL_EXTRA_FILES}
     DESTINATION etc
@@ -159,15 +157,6 @@ message(STATUS "Bundled ${_bundled} runtime DLLs into bin/")
     tools/spatial_reference_systems.data
     tools/default_srs_data_mysql.sql
     DESTINATION share/srs
-    COMPONENT server)
-
-  # Upgrade -> share/upgrade/
-  install(FILES
-    tools/upgrade/upgrade_pre.py
-    tools/upgrade/upgrade_post.py
-    tools/upgrade/upgrade_checker.py
-    tools/upgrade/upgrade_health_checker.py
-    DESTINATION share/upgrade
     COMPONENT server)
 
   # Management script -> bin/
@@ -212,7 +201,7 @@ else()
   #   usr/lib/systemd/system/       - seekdb.service
   #   usr/libexec/seekdb/           - python scripts
   #   etc/seekdb/                   - configs
-  #   usr/share/seekdb/             - admin, timezone, srs, upgrade, help
+  #   usr/share/seekdb/             - admin, timezone, srs, help
   ##############################################################################
 
   configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/telemetry.sh.template
@@ -261,8 +250,6 @@ else()
   install(FILES
     src/share/parameter/default_parameter.json
     src/share/system_variable/default_system_variable.json
-    tools/upgrade/oceanbase_upgrade_dep.yml
-    tools/upgrade/deps_compat.yml
     ${CMAKE_BINARY_DIR}/src/share/ob_system_variable_init.json
     ${INSTALL_EXTRA_FILES}
     tools/systemd/profile/seekdb.cnf
@@ -300,41 +287,6 @@ else()
     tools/default_srs_data_mysql.sql
     DESTINATION usr/share/seekdb/srs
     COMPONENT server)
-
-  # Install upgrade scripts to /usr/share/seekdb/upgrade
-  install(FILES
-    tools/upgrade/upgrade_pre.py
-    tools/upgrade/upgrade_post.py
-    tools/upgrade/upgrade_checker.py
-    tools/upgrade/upgrade_health_checker.py
-    DESTINATION usr/share/seekdb/upgrade
-    COMPONENT server)
-
-  # Install ocp configuration to /usr/share/seekdb/software_package
-  install(DIRECTORY
-    DESTINATION usr/share/seekdb/software_package
-    COMPONENT server)
-
-  if(OB_BUILD_OBADMIN)
-    if(NOT APPLE)
-      list(APPEND CPACK_COMPONENTS_ALL utils)
-      install(PROGRAMS
-        ${CMAKE_BINARY_DIR}/tools/ob_admin/ob_admin
-        ${CMAKE_BINARY_DIR}/tools/ob_error/src/ob_error
-        ${DEVTOOLS_DIR}/bin/obstack
-        DESTINATION usr/bin
-        COMPONENT utils
-      )
-    else()
-      list(APPEND CPACK_COMPONENTS_ALL utils)
-      install(PROGRAMS
-        ${CMAKE_BINARY_DIR}/tools/ob_admin/ob_admin
-        ${CMAKE_BINARY_DIR}/tools/ob_error/src/ob_error
-        DESTINATION usr/bin
-        COMPONENT utils
-      )
-    endif()
-  endif()
 
 endif()
 

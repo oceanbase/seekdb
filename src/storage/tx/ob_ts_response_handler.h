@@ -47,18 +47,16 @@ class ObTsResponseTask : public observer::ObSrvTask
 public:
   ObTsResponseTask() { reset(); }
   ~ObTsResponseTask() {}
-  int init(const uint64_t tenant_id,
-           const int64_t arg1,
+  int init(const int64_t arg1,
            ObTsMgr *ts_mgr,
            int ts_type);
   void reset();
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   int64_t get_arg1() const { return arg1_; }
   rpc::frame::ObReqProcessor &get_processor() { return handler_; }
   int get_ts_type() const { return ts_type_; }
   TO_STRING_KV(KP(this), K_(arg1), K_(ts_type));
 private:
-  uint64_t tenant_id_;
   int64_t arg1_;
   ObTsResponseHandler handler_;
   int ts_type_;

@@ -37,11 +37,11 @@ connection obsys2;
 sleep 2;
 alter system minor freeze;
 sleep 2;
-select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_table where table_name like concat('%', (select table_id from __all_table where table_name like "ddl_t1"), '%'))
                                              and table_type = 14;
-select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_table where table_name like concat('%', (select table_id from __all_table where table_name like "ddl_t1"), '%'))
                                              and table_type = 21;
-select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_table where table_name like concat('%', (select table_id from __all_table where table_name like "ddl_t1"), '%'))
                                              and table_type = 22;
 
 set ob_global_debug_sync = 'now signal signal1';
@@ -64,15 +64,20 @@ connection obsys2;
 sleep 2;
 alter system minor freeze;
 sleep 5;
-select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_table where table_name like concat('%', (select table_id from __all_table where table_name like "ddl_t1"), '%'))
                                              and table_type = 14;
-select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_table where table_name like concat('%', (select table_id from __all_table where table_name like "ddl_t1"), '%'))
                                              and table_type = 21;
-select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_table where table_name like concat('%', (select table_id from __all_table where table_name like "ddl_t1"), '%'))
                                              and table_type = 22;
 
 set ob_global_debug_sync = 'now signal signal1';
 set ob_global_debug_sync = 'BEFORE_TABLET_FULL_DIRECT_LOAD_MGR_CLOSE clear';
 connection obsys;
 reap;
-select count(*) from __all_virtual_column_group where table_id = (select table_id from __all_virtual_table where table_name like "ddl_t1");
+select count(*) from __all_column_group where table_id = (select table_id from __all_table where table_name like "ddl_t1");
+
+--disable_warnings
+drop table if exists ddl_t1;
+drop table if exists foo;
+--enable_warnings

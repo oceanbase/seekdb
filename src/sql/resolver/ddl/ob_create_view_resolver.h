@@ -60,12 +60,10 @@ public:
   static int resolve_select_node_for_force_view(bool &add_undefined_columns,
                                                 ParseNode *select_stmt_node,
                                                 ObIArray<SelectItem> &select_items);
-  static int add_undefined_column_infos(const uint64_t tenant_id,
-                                        ObIArray<SelectItem> &select_items,
+  static int add_undefined_column_infos(ObIArray<SelectItem> &select_items,
                                         ObTableSchema &table_schema,
                                         const common::ObIArray<ObString> &column_list);
-  static int add_column_infos(const uint64_t tenant_id,
-                              ObSelectStmt &select_stmt,
+  static int add_column_infos(ObSelectStmt &select_stmt,
                               ObTableSchema &table_schema,
                               common::ObIAllocator &alloc,
                               sql::ObSQLSessionInfo &session_info,

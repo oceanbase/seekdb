@@ -30,7 +30,7 @@ public:
   TestObjectSet()
   {
     ObTenantCtxAllocatorGuard ta = ObMallocAllocator::get_instance()->
-        get_tenant_ctx_allocator(OB_SYS_TENANT_ID, ObCtxIds::GLIBC);
+        get_tenant_ctx_allocator(ObCtxIds::GLIBC);
     ObjectSetV2::set_block_mgr(&ta->get_block_mgr());
   }
 };
@@ -38,7 +38,7 @@ public:
 TEST_F(TestObjectSet, basic)
 {
   uint64_t size = 2048;
-  ObMemAttr attr(OB_SYS_TENANT_ID, "test", ObCtxIds::GLIBC);
+  ObMemAttr attr("test", ObCtxIds::GLIBC);
   // check the status of block is FULL->PARTITIAL->FULL->PARTITIAL->EMPTY
   // check the order of alloc_object is local->avail->new_block
   const int max_cnt = 16;
@@ -80,17 +80,16 @@ TEST_F(TestObjectSet, basic)
 
 TEST(TestMallocAllocator, recycle_tenant_allocator)
 {
-  int64_t tenant_id = 1001;
   int64_t ctx_id = ObCtxIds::DEFAULT_CTX_ID;
   const char label[] = "Test";
-  ObMemAttr attr(tenant_id, label, ctx_id);
+  ObMemAttr attr(label, ctx_id);
   auto ma = ObMallocAllocator::get_instance();
-  ASSERT_EQ(OB_SUCCESS, ma->create_and_add_tenant_allocator(tenant_id));
+  ASSERT_EQ(OB_SUCCESS, ma->create_and_add_tenant_allocator());
   void *ptr = ma->alloc(1024, attr);
   AObject *obj = reinterpret_cast<AObject*>((char*)ptr - AOBJECT_HEADER_SIZE);
   char bt[MAX_BACKTRACE_LENGTH] = {'\0'};
   parray(bt, MAX_BACKTRACE_LENGTH, (int64_t*)(obj->bt()), AOBJECT_BACKTRACE_COUNT);
-  auto ta = ma->get_tenant_ctx_allocator(tenant_id, ctx_id);
+  auto ta = ma->get_tenant_ctx_allocator(ctx_id);
   char first_label[AOBJECT_LABEL_SIZE + 1] = {'\0'};
   char first_bt[MAX_BACKTRACE_LENGTH] = {'\0'};
   ta->check_has_unfree(first_label, first_bt);

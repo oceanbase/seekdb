@@ -37,11 +37,10 @@ int ObDropLocationResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   ParseNode *node = const_cast<ParseNode*>(&parse_tree);
   ObDropLocationStmt *drop_location_stmt = NULL;
-  uint64_t tenant_id = OB_INVALID_ID; 
+   
   if (OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (FALSE_IT(tenant_id = session_info_->get_effective_tenant_id())) {
   } else if (OB_ISNULL(node)
       || OB_UNLIKELY(node->type_ != T_DROP_LOCATION)
       || OB_UNLIKELY(node->num_child_ != LOCATION_NODE_COUNT)) {
@@ -55,7 +54,7 @@ int ObDropLocationResolver::resolve(const ParseNode &parse_tree)
     LOG_ERROR("failed to get drop location stmt", K(ret));
   } else {
     stmt_ = drop_location_stmt;
-    drop_location_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+    
   }
 
   // location name

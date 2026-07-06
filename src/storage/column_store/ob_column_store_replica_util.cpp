@@ -63,7 +63,6 @@ int ObCSReplicaUtil::check_need_process_for_cs_replica_for_ddl(
 
 int ObCSReplicaUtil::get_cs_replica_ls_set(
     const ObIArray<share::ObLSID> &ls_id_array,
-    int64_t tenant_id,
     hash::ObHashSet<share::ObLSID> &contain_cs_replica_ls_id_set)
 {
   int ret = OB_SUCCESS;
@@ -71,26 +70,6 @@ int ObCSReplicaUtil::get_cs_replica_ls_set(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else if (ls_id_array.empty()) {
-  } else if (!is_user_tenant(tenant_id)) {
-  } else {
-    const int64_t cluster_id = GCONF.cluster_id;
-    ObSEArray<share::ObLSID, 4> sorted_ls_id_array;
-    ObSEArray<share::ObLSID, 4> unique_ls_id_array;
-    if (OB_FAIL(sorted_ls_id_array.reserve(ls_id_array.count()))) {
-      LOG_WARN("failed to reserve array", K(ret));
-    } else if (OB_FAIL(sorted_ls_id_array.assign(ls_id_array))) {
-      LOG_WARN("failed to assign array", K(ret));
-    } else {
-      // remove duplicated ls_id to do batch_get
-      lib::ob_sort(sorted_ls_id_array.begin(), sorted_ls_id_array.end());
-      for (int64_t idx = 0; OB_SUCC(ret) && idx < sorted_ls_id_array.count(); ++idx) {
-        if (!sorted_ls_id_array.at(idx).is_user_ls()) {
-        } else if (idx >= 1 && sorted_ls_id_array.at(idx) == sorted_ls_id_array.at(idx - 1)) {
-        } else if (OB_FAIL(unique_ls_id_array.push_back(sorted_ls_id_array.at(idx)))) {
-          LOG_WARN("failed to push back", K(ret));
-        }
-      }
-    }
   }
   return ret;
 }
@@ -100,21 +79,7 @@ int ObCSReplicaUtil::check_need_process_cs_replica_for_offline_ddl(
     bool &need_process)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = orig_table_schema.get_tenant_id();
-  bool is_column_group_store = false;
   need_process = false;
-  if (!is_user_tenant(tenant_id) || !orig_table_schema.is_user_table()) {
-  } else if (OB_FAIL(orig_table_schema.get_is_column_store(is_column_group_store))) {
-    LOG_WARN("fail to check schema is column group store", K(ret));
-  } else if (is_column_group_store) {
-    // originally column store 
-#ifdef ERRSIM
-  } else if (OB_UNLIKELY(EN_LS_NOT_SEE_CS_REPLICA_FOR_COMPLEMENT_DAG)) {
-    int tmp_ret = EN_LS_NOT_SEE_CS_REPLICA_FOR_COMPLEMENT_DAG;   
-    need_process = false;
-    LOG_INFO("ERRSIM EN_LS_NOT_SEE_CS_REPLICA_FOR_COMPLEMENT_DAG, not see cs replica when set ddl type", K(tmp_ret), K(need_process));
-#endif
-  }
   return ret;
 }
 
@@ -225,18 +190,18 @@ int ObCSReplicaUtil::get_full_column_array_from_table_schema(
   uint64_t table_id = OB_INVALID_ID;
   const ObTabletID tablet_id = update_param.tablet_id_;
   const int64_t expected_stored_column_cnt = update_param.major_column_cnt_ - ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
-  const int64_t tenant_id = MTL_ID();
+  
   const ObTableSchema *table_schema = nullptr;
   ObSchemaGetterGuard schema_guard;
   ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
-  if (OB_FAIL(schema_service.get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("failed to get schema guard", K(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_schema_version(tenant_id, tenant_schema_version))) {
-    LOG_WARN("failed to get tenant schema version", K(ret), K(tenant_id));
+  if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("failed to get schema guard", K(ret));
+  } else if (OB_FAIL(schema_guard.get_schema_version(tenant_schema_version))) {
+    LOG_WARN("failed to get tenant schema version", K(ret));
   } else if (OB_FAIL(compaction::ObMediumCompactionScheduleFunc::get_table_id(schema_service, tablet_id, tenant_schema_version, table_id))) {
     LOG_WARN("failed to get table id", K(ret), K(tablet_id), K(tenant_schema_version));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
-    LOG_WARN("failed to get table schema", K(ret), K(tenant_id), K(table_id));
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
+    LOG_WARN("failed to get table schema", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_IS_DELETED;
     LOG_WARN("table is deleted", K(ret), K(table_id));
@@ -245,7 +210,7 @@ int ObCSReplicaUtil::get_full_column_array_from_table_schema(
     uint64_t tenant_data_version = 0;
     if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, full_storage_schema))) {
       LOG_WARN("alloc and new failed", K(ret));
-    } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_data_version))) {
+    } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
       LOG_WARN("unable to get tenant data version", K(ret));
     } else if (OB_FAIL(full_storage_schema->init(allocator, *table_schema, simplified_schema.get_compat_mode(), 
                   false/*skip_column_info*/, tenant_data_version, true/*generate_cs_replica_cg_array*/))) {
@@ -428,7 +393,7 @@ ObGlobalCSReplicaMgr::~ObGlobalCSReplicaMgr()
   }
 }
 
-int ObGlobalCSReplicaMgr::try_init(const int64_t tenant_id, const ObIArray<share::ObLSID> &ls_id_array)
+int ObGlobalCSReplicaMgr::try_init(const ObIArray<share::ObLSID> &ls_id_array)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -436,8 +401,8 @@ int ObGlobalCSReplicaMgr::try_init(const int64_t tenant_id, const ObIArray<share
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(cs_replica_ls_id_set_.create(CS_REPLICA_LS_ID_SET_BUCKET_NUM, "CSRplLSIDSet", "CSRplLSIDSet"))) { // use 500 tenant memory since the tenant may not been created
     LOG_WARN("failed to create cs replica set", K(ret));
-  } else if (OB_FAIL(ObCSReplicaUtil::get_cs_replica_ls_set(ls_id_array, tenant_id, cs_replica_ls_id_set_))) {
-    LOG_WARN("failed to get cs replica ls set", K(ret), K(tenant_id), K(ls_id_array));
+  } else if (OB_FAIL(ObCSReplicaUtil::get_cs_replica_ls_set(ls_id_array, cs_replica_ls_id_set_))) {
+    LOG_WARN("failed to get cs replica ls set", K(ret), K(ls_id_array));
   } else {
     is_inited_ = true;
   }

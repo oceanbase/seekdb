@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
+#include "share/ob_tenant_timezone_mgr.h"
 #include "sql/engine/ob_exec_context.h"
 
 using namespace oceanbase::common;
@@ -480,7 +480,7 @@ int ObExprUtil::set_expr_asscii_result(const ObExpr &expr, ObEvalCtx &ctx,
                                           const common::ObCollationType src_coll_type)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator temp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator temp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObString out;
   if (ascii.empty()) {
     if (OB_FAIL(out_res.init_with_batch_idx(0, datum_idx))) {
@@ -536,7 +536,7 @@ int ObExprUtil::set_expr_ascii_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
       }
     }
   } else { // text tc
-    ObArenaAllocator temp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator temp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObString out;
     char *buf = NULL;
     ObTextStringDatumResult res(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
@@ -753,7 +753,7 @@ int ObSolidifiedVarsContext::get_local_tz_info(const sql::ObBasicSessionInfo *se
       const ObTZInfoMap *tz_info_map = NULL;
       if (OB_ISNULL(tz_info_map = session->get_timezone_info()->get_tz_info_map())) {
         ObTZMapWrap tz_map_wrap;
-        if (OB_SUCC(OTTZ_MGR.get_tenant_tz(session->get_effective_tenant_id(), tz_map_wrap))) {
+        if (OB_SUCC(OTTZ_MGR.get_tenant_tz(tz_map_wrap))) {
           tz_info_map = tz_map_wrap.get_tz_map();
         } else {
           LOG_WARN("get tz info map failed", K(ret));

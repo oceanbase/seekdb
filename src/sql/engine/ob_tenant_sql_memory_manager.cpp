@@ -300,9 +300,9 @@ int ObTenantSqlMemoryManager::ObSqlWorkAreaCalcInfo::calculate_global_bound_size
 int ObTenantSqlMemoryManager::mtl_new(ObTenantSqlMemoryManager *&sql_mem_mgr)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
+  
   sql_mem_mgr = OB_NEW(ObTenantSqlMemoryManager,
-                        ObMemAttr(tenant_id, "SqlMemMgr"), tenant_id);
+                        ObMemAttr("SqlMemMgr"));
   if (nullptr == sql_mem_mgr) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc tenant sql memory manager", K(ret));
@@ -314,11 +314,11 @@ int ObTenantSqlMemoryManager::mtl_new(ObTenantSqlMemoryManager *&sql_mem_mgr)
 int ObTenantSqlMemoryManager::mtl_init(ObTenantSqlMemoryManager *&sql_mem_mgr)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
+  
   if (OB_FAIL(sql_mem_mgr->allocator_.init(
             lib::ObMallocAllocator::get_instance(),
             OB_MALLOC_NORMAL_BLOCK_SIZE,
-            ObMemAttr(tenant_id, "SqlMemMgr")))) {
+            ObMemAttr("SqlMemMgr")))) {
     LOG_WARN("failed to init fifo allocator", K(ret));
   } else {
     int64_t work_area_interval_size = sizeof(ObSqlWorkAreaInterval) * INTERVAL_NUM;
@@ -333,7 +333,7 @@ int ObTenantSqlMemoryManager::mtl_init(ObTenantSqlMemoryManager *&sql_mem_mgr)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc profile list", K(ret));
     } else {
-      sql_mem_mgr->tenant_id_ = tenant_id;
+      
       // 1M
       int64_t total_size = 0;
       int64_t pre_total_size = total_size;
@@ -386,8 +386,7 @@ int ObTenantSqlMemoryManager::mtl_init(ObTenantSqlMemoryManager *&sql_mem_mgr)
       if (OB_SUCC(ret)) {
         if (OB_FAIL(sql_mem_mgr->wa_ht_.create(MAX_WORKAREA_STAT_CNT,
             "SqlMemMgr",
-            "SqlMemMgr",
-            tenant_id))) {
+            "SqlMemMgr"))) {
           LOG_WARN("failed to create hashmap", K(ret));
         } else if (OB_FAIL(sql_mem_mgr->workarea_stats_.prepare_allocate(
             MAX_WORKAREA_STAT_CNT))) {
@@ -415,7 +414,7 @@ int ObTenantSqlMemoryManager::mtl_init(ObTenantSqlMemoryManager *&sql_mem_mgr)
         sql_mem_mgr->workarea_histograms_.reset();
       }
     }
-    LOG_INFO("init sql memory manager", K(work_area_interval_size), K(tenant_id), K(ret));
+    LOG_INFO("init sql memory manager", K(work_area_interval_size), K(ret));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != sql_mem_mgr) {
@@ -819,11 +818,11 @@ int ObTenantSqlMemoryManager::get_max_work_area_size(
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null");
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id_, schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("get schema guard failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_tenant_system_variable(
-    tenant_id_, SYS_VAR_OB_SQL_WORK_AREA_PERCENTAGE, var_schema))) {
-    LOG_WARN("get tenant system variable failed", K(ret), K(tenant_id_));
+    SYS_VAR_OB_SQL_WORK_AREA_PERCENTAGE, var_schema))) {
+    LOG_WARN("get tenant system variable failed", K(ret));
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("var_schema is null");
@@ -832,11 +831,11 @@ int ObTenantSqlMemoryManager::get_max_work_area_size(
   } else if (OB_FAIL(value.get_int(pctg))) {
     LOG_WARN("get int from value failed", K(ret), K(value));
   } else {
-    int64_t tenant_max_memory_limit = get_tenant_memory_limit(tenant_id_);
-    int64_t tenant_memory_hold = get_tenant_memory_hold(tenant_id_);
+    int64_t tenant_max_memory_limit = get_tenant_memory_limit();
+    int64_t tenant_memory_hold = get_tenant_memory_hold();
     int64_t tenant_work_area_max_size = tenant_max_memory_limit * pctg / 100;
     int64_t tenant_work_area_memory_hold =
-      get_tenant_memory_hold(tenant_id_, common::ObCtxIds::WORK_AREA);
+      get_tenant_memory_hold(common::ObCtxIds::WORK_AREA);
     int64_t max_tenant_memory_size = std::max(MIN_TENANT_MEMORY,
                                               tenant_max_memory_limit - tenant_memory_hold);
     int64_t max_workarea_memory_size = std::max(MIN_TENANT_MEMORY,
@@ -849,7 +848,7 @@ int ObTenantSqlMemoryManager::get_max_work_area_size(
         wash_ratio = -tmp_ret;
       }
       if (0 <= wash_ratio && wash_ratio <=6 && auto_calc) {
-        if (OB_FAIL(ObKVGlobalCache::get_instance().get_washable_size(tenant_id_, washable_size))) {
+        if (OB_FAIL(ObKVGlobalCache::get_instance().get_washable_size(washable_size))) {
           LOG_WARN("failed to get washable memory size", K(ret));
         } else {
           max_tenant_memory_size += washable_size;
@@ -865,7 +864,7 @@ int ObTenantSqlMemoryManager::get_max_work_area_size(
         } else {
           ObTenantResourceMgrHandle resource_handle;
           if (OB_FAIL(ObResourceMgr::get_instance().get_tenant_resource_mgr(
-              tenant_id_, resource_handle))) {
+              resource_handle))) {
             ret = OB_SUCCESS;
           } else {
             // TODO: kvcache can roughly evict how much memory, currently there is no data, Hanyi will provide an interface later
@@ -918,7 +917,7 @@ int ObTenantSqlMemoryManager::get_max_work_area_size(
         K(tenant_work_area_memory_hold), K(tenant_work_area_max_size), K(max_wa_memory_size),
         K(tmp_max_wa_memory_size), K(pre_mem_target), K(remain_memory_size), K(ratio),
         K(alloc_ratio), K(hold_ratio), K(tenant_memory_hold), K(washable_size),
-        K(max_workarea_memory_size), K(max_tenant_memory_size), K(wash_ratio), K_(tenant_id));
+        K(max_workarea_memory_size), K(max_tenant_memory_size), K(wash_ratio));
     }
   }
   return ret;
@@ -1072,14 +1071,11 @@ int ObTenantSqlMemoryManager::count_profile_into_work_area_intervals(
 bool ObTenantSqlMemoryManager::enable_auto_sql_memory_manager()
 {
   bool auto_memory_mgr = false;
-  ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
-  if (tenant_config.is_valid()) {
-    const ObString tmp_str(tenant_config->workarea_size_policy.str());
+  {
+    const ObString tmp_str(GCONF.workarea_size_policy.str());
     auto_memory_mgr = !tmp_str.case_compare("AUTO");
-    LOG_TRACE("get work area policy config", K(tenant_id_), K(auto_memory_mgr), K(tmp_str),
-      K(tenant_config->workarea_size_policy.str()));
-  } else {
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "failed to init tenant config", K(tenant_id_));
+    LOG_TRACE("get work area policy config", K(auto_memory_mgr), K(tmp_str),
+      K(GCONF.workarea_size_policy.str()));
   }
   return auto_memory_mgr;
 }
@@ -1162,7 +1158,7 @@ int ObTenantSqlMemoryManager::calculate_global_bound_size_by_interval_info(
       if (auto_calc) {
         LOG_INFO("timer to calc global bound size", K(ret), K(global_bound_size_),
           K(manual_calc_cnt_), K(drift_size_), K(pre_drift_size), K(wa_max_memory_size),
-          K(sql_mem_callback_.get_total_alloc_size()), K(tenant_id_), K(profile_cnt_),
+          K(sql_mem_callback_.get_total_alloc_size()), K(profile_cnt_),
           K(pre_profile_cnt_), K(pre_profile_cnt), K(calc_info.get_global_bound_size()),
           K(total_memory_size), K(cur_profile_cnt), K(calc_info.get_mem_target()), K(auto_calc),
           K(sql_mem_callback_.get_total_dump_size()));
@@ -1219,7 +1215,7 @@ int ObTenantSqlMemoryManager::calculate_global_bound_size(ObIAllocator *allocato
       // last set enable auto memory manager, so others read the variable to avoiding dirty read
       enable_auto_memory_mgr_ = true;
       if (auto_calc) {
-        LOG_INFO("work area memory zero", K(tenant_id_), K(global_bound_size_));
+        LOG_INFO("work area memory zero", K(global_bound_size_));
       }
     } else {
       if (OB_ISNULL(allocator)) {

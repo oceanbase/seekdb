@@ -20,7 +20,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/lock/ob_spin_lock.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "logservice/ob_log_base_type.h"
 #include "share/scn.h"
 #include "share/ob_autoincrement_param.h"
@@ -194,7 +194,7 @@ public:
     K_(is_switching));
 
 private:
-  int check_leader_(const uint64_t tenant_id, bool &is_leader);
+  int check_leader_(bool &is_leader);
   int fetch_next_node_(const ObGAISNextAutoIncValReq &request, ObAutoIncCacheNode &node);
   int read_value_from_inner_table_(const share::AutoincKey &key,
                                    const int64_t &inner_autoinc_version,

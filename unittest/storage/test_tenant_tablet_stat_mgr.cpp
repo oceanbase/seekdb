@@ -42,15 +42,11 @@ public:
   void batch_report_stat(int64_t report_num);
 
 private:
-  const uint64_t tenant_id_;
-  ObTenantBase tenant_base_;
   ObTenantTabletStatMgr *stat_mgr_;
 };
 
 TestTenantTabletStatMgr::TestTenantTabletStatMgr()
-  : tenant_id_(1),
-    tenant_base_(tenant_id_),
-    stat_mgr_(nullptr)
+  : stat_mgr_(nullptr)
 {
 }
 
@@ -75,14 +71,8 @@ void TestTenantTabletStatMgr::SetUp()
 
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
   stat_mgr_ = OB_NEW(ObTenantTabletStatMgr, ObModIds::TEST);
-  ret = stat_mgr_->init(tenant_id_);
+  ret = stat_mgr_->init();
   ASSERT_EQ(OB_SUCCESS, ret);
-  tenant_base_.set(stat_mgr_);
-
-  ObTenantEnv::set_tenant(&tenant_base_);
-  ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
-  ASSERT_EQ(tenant_id_, MTL_ID());
-  ASSERT_EQ(stat_mgr_, MTL(ObTenantTabletStatMgr *));
 }
 
 void TestTenantTabletStatMgr::TearDown()
@@ -91,7 +81,6 @@ void TestTenantTabletStatMgr::TearDown()
   ObTimerService::get_instance().stop();
   ObTimerService::get_instance().wait();
   ObTimerService::get_instance().destroy();
-  ObTenantEnv::set_tenant(nullptr);
 }
 
 void TestTenantTabletStatMgr::report(ObTenantTabletStatMgr *mgr, const ObTabletStat &stat)
@@ -127,13 +116,6 @@ void TestTenantTabletStatMgr::batch_report_stat(int64_t report_num)
 
 namespace unittest
 {
-TEST_F(TestTenantTabletStatMgr, basic)
-{
-  EXPECT_EQ(OB_SYS_TENANT_ID, MTL_ID());
-  ObTenantTabletStatMgr *stat_mgr = MTL(ObTenantTabletStatMgr *);
-  ASSERT_TRUE(NULL != stat_mgr);
-}
-
 TEST_F(TestTenantTabletStatMgr, basic_tablet_stat_bucket)
 {
   ObTabletStat tablet_stat;
@@ -375,8 +357,7 @@ TEST_F(TestTenantTabletStatMgr, basic_tablet_stat_mgr)
 {
   int ret = OB_SUCCESS;
 
-  EXPECT_EQ(OB_SYS_TENANT_ID, MTL_ID());
-  ObTenantTabletStatMgr *stat_mgr = MTL(ObTenantTabletStatMgr *);
+  ObTenantTabletStatMgr *stat_mgr = stat_mgr_;
   ASSERT_TRUE(NULL != stat_mgr);
 
   ObTabletStat tablet_stat;
@@ -426,8 +407,7 @@ TEST_F(TestTenantTabletStatMgr, basic_tablet_stat_mgr)
 
 TEST_F(TestTenantTabletStatMgr, multi_report_tablet_stat)
 {
-  EXPECT_EQ(OB_SYS_TENANT_ID, MTL_ID());
-  ObTenantTabletStatMgr *stat_mgr = MTL(ObTenantTabletStatMgr *);
+  ObTenantTabletStatMgr *stat_mgr = stat_mgr_;
   ASSERT_TRUE(NULL != stat_mgr);
   ASSERT_TRUE(stat_mgr->is_inited_);
 
@@ -445,8 +425,7 @@ TEST_F(TestTenantTabletStatMgr, multi_report_tablet_stat)
 
 TEST_F(TestTenantTabletStatMgr, bacth_clear_tablet_stat)
 {
-  EXPECT_EQ(OB_SYS_TENANT_ID, MTL_ID());
-  ObTenantTabletStatMgr *stat_mgr = MTL(ObTenantTabletStatMgr *);
+  ObTenantTabletStatMgr *stat_mgr = stat_mgr_;
   ASSERT_TRUE(NULL != stat_mgr);
   ASSERT_TRUE(stat_mgr->is_inited_);
 

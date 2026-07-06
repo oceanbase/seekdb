@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_priv_st_geohash.h"
-#include "lib/geo/ob_geo_func_register.h"
+#include "share/geo/ob_geo_func_register.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 
 using namespace oceanbase::common;
@@ -297,8 +297,8 @@ int ObExprPrivSTGeoHash::eval_priv_st_geohash(const ObExpr &expr, ObEvalCtx &ctx
   int ret = OB_SUCCESS;
   bool is_null_res = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_PRIV_ST_GEOHASH);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_GEOHASH);
   ObGeometry *geo = nullptr;
   ObString geohash_res;
   ObGeogBox *gbox = nullptr;
@@ -309,7 +309,7 @@ int ObExprPrivSTGeoHash::eval_priv_st_geohash(const ObExpr &expr, ObEvalCtx &ctx
   if (OB_FAIL(process_input_geometry(expr, ctx, temp_allocator, is_null_res, geo, precision))) {
     LOG_WARN("fail to process input geometry", K(ret), K(is_null_res), K(geo), K(precision));
   } 
-  ObGeoBoostAllocGuard guard(tenant_id);
+  ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
   if (OB_FAIL(ret)) {
   } else if (is_null_res) {

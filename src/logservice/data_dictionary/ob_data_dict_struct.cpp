@@ -17,7 +17,7 @@
 #include "ob_data_dict_struct.h"
 
 #include "share/schema/ob_column_schema.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 
 #define DEFINE_DESERIALIZE_DATA_DICT(TypeName) \
   int TypeName::deserialize(const ObDictMetaHeader &header, const char* buf, const int64_t data_len, int64_t& pos)
@@ -234,7 +234,7 @@ ObDictTenantMeta::ObDictTenantMeta(ObIAllocator *allocator) : allocator_(allocat
 
 void ObDictTenantMeta::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   schema_version_ = OB_INVALID_VERSION;
   if (nullptr != allocator_ && nullptr != tenant_name_.ptr()) {
     allocator_->free(tenant_name_.ptr());
@@ -326,7 +326,7 @@ int ObDictTenantMeta::init(const schema::ObTenantSchema &tenant_schema)
   } else if (OB_FAIL(deep_copy_str(tenant_schema.get_tenant_name_str(), tenant_name_, *allocator_))) {
     DDLOG(WARN, "assign tenant_name failed", KR(ret), K(tenant_schema), KPC(this));
   } else {
-    tenant_id_ = tenant_schema.get_tenant_id();
+    
     schema_version_ = tenant_schema.get_schema_version();
     tenant_status_ = tenant_schema.get_status();
     charset_type_ = tenant_schema.get_charset_type();
@@ -385,7 +385,7 @@ ObDictDatabaseMeta::ObDictDatabaseMeta(ObIAllocator *allocator) : allocator_(all
 
 void ObDictDatabaseMeta::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   database_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_TIMESTAMP;
   if (nullptr != allocator_ && nullptr != database_name_.ptr()) {
@@ -517,7 +517,7 @@ int ObDictDatabaseMeta::assign_(DATABASE_SCHEMA &database_schema)
   } else if (OB_FAIL(deep_copy_str(database_schema.get_database_name_str(), database_name_, *allocator_))) {
     DDLOG(WARN, "assign tenant_name failed", KR(ret), K(database_schema), KPC(this));
   } else {
-    tenant_id_ = database_schema.get_tenant_id();
+    
     database_id_ = database_schema.get_database_id();
     schema_version_ = database_schema.get_schema_version();
     charset_type_ = database_schema.get_charset_type();
@@ -832,7 +832,7 @@ ObDictTableMeta::ObDictTableMeta(ObIAllocator *allocator)
 
 void ObDictTableMeta::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   database_id_ = OB_INVALID_ID;
   table_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_TIMESTAMP;
@@ -1029,7 +1029,7 @@ int ObDictTableMeta::assign_(const TABLE_SCHEMA &table_schema)
   } else if (OB_FAIL(deep_copy_str(table_schema.get_table_name_str(), table_name_, *allocator_))) {
     DDLOG(WARN, "copy table_name failed", KR(ret), K(table_schema), KPC(this));
   } else {
-    tenant_id_ = table_schema.get_tenant_id();
+    
     database_id_ = table_schema.get_database_id();
     table_id_ = table_schema.get_table_id();
     schema_version_ = table_schema.get_schema_version();

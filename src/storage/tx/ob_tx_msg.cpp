@@ -23,7 +23,6 @@ namespace transaction
 OB_SERIALIZE_MEMBER(ObTxMsg,
                     type_,
                     cluster_version_,
-                    tenant_id_,
                     tx_id_,
                     receiver_,
                     sender_addr_,
@@ -187,7 +186,7 @@ OB_DEF_DESERIALIZE(ObTxRollbackSPMsg)
 bool ObTxMsg::is_valid() const
 {
   bool ret = false;
-  if (type_ != TX_UNKNOWN && cluster_version_ > 0 && is_valid_tenant_id(tenant_id_)
+  if (type_ != TX_UNKNOWN && cluster_version_ > 0 && true
       && tx_id_.is_valid() && timestamp_ > 0 && request_id_ > -1
       && sender_.is_valid() && receiver_.is_valid() && sender_addr_.is_valid()
       && cluster_id_ > OB_INVALID_CLUSTER_ID) {

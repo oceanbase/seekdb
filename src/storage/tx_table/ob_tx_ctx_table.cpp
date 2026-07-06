@@ -15,6 +15,7 @@
  */
 
 #include "ob_tx_ctx_table.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 
@@ -109,7 +110,6 @@ int ObTxCtxTableRecoverHelper::recover_one_tx_ctx_(transaction::ObLSTxCtxMgr* ls
   uint64_t cluster_version = ctx_info.cluster_version_;
   transaction::ObTxCreateArg arg(true,  /* for_replay */
                                  PartCtxSource::RECOVER,
-                                 MTL_ID(),
                                  ctx_info.tx_id_,
                                  ctx_info.ls_id_,
                                  ctx_info.cluster_id_,     /* cluster_id */
@@ -119,7 +119,7 @@ int ObTxCtxTableRecoverHelper::recover_one_tx_ctx_(transaction::ObLSTxCtxMgr* ls
                                  0, /*associated_session_id*/
                                  scheduler,
                                  INT64_MAX,
-                                 MTL(ObTransService*));
+                                 share::g_mp->trans_service());
   if (OB_FAIL(ls_tx_ctx_mgr->create_tx_ctx(arg,
                                            tx_ctx_existed, /*tx_ctx_existed*/
                                            tx_ctx))) {
@@ -267,7 +267,7 @@ OB_WEAK_SYMBOL int ObTxCtxTable::acquire_ref_(const ObLSID& ls_id)
   ls_id_ = ls_id;
 
   if (NULL == ls_tx_ctx_mgr_) {
-    if (OB_ISNULL(txs = MTL(ObTransService*))) {
+    if (OB_ISNULL(txs = share::g_mp->trans_service())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "trans_service get fail", K(ret));
     } else if (OB_FAIL(txs->get_tx_ctx_mgr().get_ls_tx_ctx_mgr(ls_id, ls_tx_ctx_mgr_))) {
@@ -289,7 +289,7 @@ OB_WEAK_SYMBOL int ObTxCtxTable::release_ref_()
   transaction::ObTransService *txs = NULL;
 
   if (NULL != ls_tx_ctx_mgr_) {
-    if (OB_ISNULL(txs = MTL(ObTransService*))) {
+    if (OB_ISNULL(txs = share::g_mp->trans_service())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "trans_service get fail", K(ret));
     } else if (OB_FAIL(txs->get_tx_ctx_mgr().revert_ls_tx_ctx_mgr(ls_tx_ctx_mgr_))) {

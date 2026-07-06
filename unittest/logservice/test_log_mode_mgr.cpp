@@ -39,9 +39,6 @@ const ObAddr addr6(ObAddr::IPV4, "127.0.0.6", 1000);
 const ObAddr addr7(ObAddr::IPV4, "127.0.0.7", 1000);
 const ObAddr addr8(ObAddr::IPV4, "127.0.0.8", 1000);
 const ObAddr addr9(ObAddr::IPV4, "127.0.0.9", 1000);
-ObRegion region1("BEIJING");
-ObRegion region2("SHANGHAI");
-ObRegion default_region(DEFAULT_REGION_NAME);
 
 class TestLogModeMgr : public ::testing::Test
 {

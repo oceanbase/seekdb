@@ -28,7 +28,6 @@ void ObTransStat::reset()
   is_inited_ = false;
   addr_.reset();
   trans_id_.reset();
-  tenant_id_ = OB_INVALID_TENANT_ID;
   is_exiting_ = false;
   is_readonly_ = false;
   has_decided_ = false;
@@ -60,7 +59,6 @@ void ObTransLockStat::reset()
 {
   is_inited_ = false;
   addr_.reset();
-  tenant_id_ = 0;
   memtable_key_.reset();
   session_id_ = 0;
   proxy_session_id_ = 0;

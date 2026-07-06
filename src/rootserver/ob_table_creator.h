@@ -37,15 +37,13 @@ class ObTableCreator
 {
 public:
   ObTableCreator(
-      const uint64_t tenant_id,
       const share::SCN &frozen_scn,
       ObMySQLTransaction &trans)
-                : tenant_id_(tenant_id),
-                  tablet_creator_(tenant_id, frozen_scn, trans),
+                : tablet_creator_(frozen_scn, trans),
                   trans_(trans),
                   ls_id_array_(),
                   inited_(false),
-                  fork_table_info_builder_(tenant_id) {}
+                  fork_table_info_builder_{} {}
 
   virtual ~ObTableCreator();
   int init(const bool need_tablet_cnt_check);
@@ -123,7 +121,6 @@ private:
       ObSqlString &tablet_list);
 
 private:
-  const uint64_t tenant_id_;
   ObTabletCreator tablet_creator_;
   ObMySQLTransaction &trans_;
   common::ObArray<share::ObLSID> ls_id_array_;

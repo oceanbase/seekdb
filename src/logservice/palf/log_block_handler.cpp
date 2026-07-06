@@ -455,7 +455,7 @@ int LogBlockHandler::inner_write_impl_(const ObIOFd &io_fd, const char *buf, con
     }
   } while (OB_FAIL(ret));
   int64_t cost_ts = ObTimeUtility::fast_current_time() - start_ts;
-  EVENT_TENANT_INC(ObStatEventIds::PALF_WRITE_IO_COUNT, MTL_ID());
+  EVENT_TENANT_INC(ObStatEventIds::PALF_WRITE_IO_COUNT);
   EVENT_ADD(ObStatEventIds::PALF_WRITE_SIZE, count);
   EVENT_ADD(ObStatEventIds::PALF_WRITE_TIME, cost_ts);
   ATOMIC_AAF(&ob_pwrite_used_ts_, cost_ts);

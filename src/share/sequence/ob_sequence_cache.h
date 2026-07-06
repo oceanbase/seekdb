@@ -19,7 +19,7 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/hash/ob_link_hashmap.h"
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 #include "share/sequence/ob_sequence_dml_proxy.h"
 #include "share/sequence/ob_sequence_option.h"
 
@@ -77,16 +77,16 @@ private:
 struct CacheItemKey
 {
 public:
-  CacheItemKey() : tenant_id_(0), key_(0) {}
-  CacheItemKey(const uint64_t tenant_id, const uint64_t key) : tenant_id_(tenant_id), key_(key) {}
+  CacheItemKey() : key_(0) {}
+  CacheItemKey(const uint64_t key) : key_(key) {}
   ~CacheItemKey() = default;
   bool operator==(const CacheItemKey &other) const
   {
-    return tenant_id_ == other.tenant_id_ && other.key_ == key_;
+    return true && other.key_ == key_;
   }
 
   int compare(const CacheItemKey &other) {
-    int ret = tenant_id_ < other.tenant_id_ ? -1 : (tenant_id_ > other.tenant_id_) ? 1 : 0;
+    int ret = 0;
     if (0 == ret) {
       ret = key_ < other.key_ ? -1 : (key_ > other.key_) ? 1 : 0;
     }
@@ -97,11 +97,9 @@ public:
   {
     uint64_t hash_val = 0;
     hash_val = common::murmurhash(&key_, sizeof(key_), hash_val);
-    hash_val = common::murmurhash(&tenant_id_, sizeof(tenant_id_), hash_val);
     return hash_val;
   }
-  TO_STRING_KV(K_(tenant_id), K_(key));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(key));
   uint64_t key_;
 };
 
@@ -185,13 +183,13 @@ public:
   int nextval(const share::schema::ObSequenceSchema &schema,
               common::ObIAllocator &allocator, // used for various temporary calculations
               ObSequenceValue &nextval);
-  int remove(uint64_t tenant_id, uint64_t sequence_id, obcall::ObSeqCleanCacheRes &cache_res);
+  int remove(uint64_t sequence_id, obcall::ObSeqCleanCacheRes &cache_res);
 
 private:
   /* functions */
   int get_item(CacheItemKey &key, ObSequenceCacheItem *&item);
 
-  int del_item(uint64_t tenant_id, CacheItemKey &key, obcall::ObSeqCleanCacheRes &cache_res);
+  int del_item(CacheItemKey &key, obcall::ObSeqCleanCacheRes &cache_res);
 
   int prefetch_sequence_cache(const schema::ObSequenceSchema &schema,
                               ObSequenceCacheItem &cache,

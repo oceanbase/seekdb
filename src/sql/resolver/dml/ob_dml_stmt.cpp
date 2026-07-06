@@ -196,19 +196,11 @@ int TableItem::deep_copy(ObIRawExprCopier &expr_copier,
   mr_mv_flags_ = other.mr_mv_flags_;
   node_ = other.node_; // should deep copy ? seems to be unnecessary
   flashback_query_type_ = other.flashback_query_type_;
-  // dblink
-  dblink_id_ = other.dblink_id_;
-  is_reverse_link_ = other.is_reverse_link_;
-  dblink_name_ = other.dblink_name_;
-  link_database_name_ = other.link_database_name_;
   // ddl related
   ddl_schema_version_ = other.ddl_schema_version_;
   ddl_table_id_ = other.ddl_table_id_;
   ref_query_ = other.ref_query_;
-  //external table
-  external_table_partition_ = other.external_table_partition_;
   catalog_name_ = other.catalog_name_;
-  external_location_id_ = other.external_location_id_;
   SampleInfo *buf = NULL;
   if (is_json_table() 
       && OB_FAIL(deep_copy_json_table_def(*other.json_table_def_, expr_copier, allocator))) {
@@ -363,8 +355,6 @@ ObDMLStmt::ObDMLStmt(stmt::StmtType type)
       subquery_exprs_(),
       user_var_exprs_(),
       check_constraint_items_(),
-      dblink_id_(OB_INVALID_ID),
-      is_reverse_link_(false),
       has_vec_approx_(false),
       match_exprs_()
 {
@@ -477,8 +467,6 @@ int ObDMLStmt::assign(const ObDMLStmt &other)
     is_contains_assignment_ = other.is_contains_assignment_;
     affected_last_insert_id_ = other.affected_last_insert_id_;
     has_part_key_sequence_ = other.has_part_key_sequence_;
-    dblink_id_ = other.dblink_id_;
-    is_reverse_link_ = other.is_reverse_link_;
     has_vec_approx_ = other.has_vec_approx_;
   }
   return ret;
@@ -645,8 +633,6 @@ int ObDMLStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
     has_part_key_sequence_ = other.has_part_key_sequence_;
     has_fetch_ = other.has_fetch_;
     is_fetch_with_ties_ = other.is_fetch_with_ties_;
-    dblink_id_ = other.dblink_id_;
-    is_reverse_link_ = other.is_reverse_link_;
     has_vec_approx_ = other.has_vec_approx_;
   }
   return ret;
@@ -3634,25 +3620,6 @@ int ObDMLStmt::get_child_stmt_size(int64_t &child_size) const
   return ret;
 }
 
-bool ObDMLStmt::has_link_table() const
-{
-  bool bret = false;
-  for (int i = 0; !bret && i < table_items_.count(); i++) {
-    if (OB_NOT_NULL(table_items_.at(i))) {
-      if (table_items_.at(i)->is_generated_table() || 
-          table_items_.at(i)->is_temp_table() ||
-          table_items_.at(i)->is_lateral_table()) {
-        if (OB_NOT_NULL(table_items_.at(i)->ref_query_)) {
-          bret = table_items_.at(i)->ref_query_->has_link_table();
-        }
-      } else {
-        bret = table_items_.at(i)->is_link_table();
-      }
-    }
-  }
-  return bret;
-}
-
 int ObDMLStmt::get_relation_exprs(common::ObIArray<ObRawExpr *> &relation_exprs, DmlStmtScope scope) const
 {
   ObStmtExprGetter visitor;
@@ -4742,56 +4709,6 @@ int ObDMLStmt::check_has_subquery_in_function_table(bool &has_subquery_in_functi
 bool ObDMLStmt::is_set_stmt() const
 {
   return is_select_stmt() ? (static_cast<const ObSelectStmt*>(this)->is_set_stmt()) : false;
-}
-
-int ObDMLStmt::disable_writing_external_table(bool basic_stmt_is_dml /* defualt false */)
-{
-  int ret = OB_SUCCESS;
-  bool disable_write_table = false;
-  const TableItem *table_item = NULL;
-  if (stmt::T_SELECT == get_stmt_type()) {
-    for (int64_t i = 0; OB_SUCC(ret) && !disable_write_table && i < table_items_.count(); ++i) {
-      if (OB_ISNULL(table_item = table_items_.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected NULL ptr", K(ret));
-      } else if (schema::EXTERNAL_TABLE == table_item->table_type_ &&
-                  (table_item->for_update_ || basic_stmt_is_dml)) {
-        disable_write_table = true;
-      }
-    }
-  } else if (is_dml_write_stmt()) {
-    ObSEArray<ObDmlTableInfo*, 4> dml_table_infos;
-    if (OB_FAIL(static_cast<ObDelUpdStmt*>(this)->get_dml_table_infos(dml_table_infos))) {
-      LOG_WARN("failed to get dml table infos");
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && !disable_write_table && i < dml_table_infos.count(); ++i) {
-      if (OB_ISNULL(dml_table_infos.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected NULL ptr", K(ret));
-      } else if (OB_ISNULL(table_item = get_table_item_by_id(dml_table_infos.at(i)->table_id_))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected NULL ptr", K(ret));
-      } else if (schema::EXTERNAL_TABLE == table_item->table_type_) {
-        disable_write_table = true;
-      } else if (table_item->is_view_table_ && NULL != table_item->ref_query_) {
-        OZ( SMART_CALL(table_item->ref_query_->disable_writing_external_table(true)) );
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    ObSEArray<ObSelectStmt*, 4> child_stmts;
-    if (disable_write_table) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "DML operation on External Table"); 
-    } else if (OB_FAIL(get_child_stmts(child_stmts))) {
-      LOG_WARN("failed to get stmt's child_stmts", K(ret));
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < child_stmts.count(); ++i) {
-        OZ( SMART_CALL(child_stmts.at(i)->disable_writing_external_table()) );
-      }
-    }
-  }
-  return ret;
 }
 
 int ObDMLStmt::disable_writing_materialized_view() const

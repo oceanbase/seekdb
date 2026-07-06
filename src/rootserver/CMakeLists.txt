@@ -1,4 +1,5 @@
 ob_set_subtarget(ob_rootserver ALONE
+  ob_debug_sync_rs.cpp
   ob_ddl_service.cpp
   ob_ddl_service_launcher.cpp
   ob_root_service.cpp
@@ -7,15 +8,21 @@ ob_set_subtarget(ob_rootserver ALONE
 )
 
 ob_set_subtarget(ob_rootserver common
+  ddl_task/ob_ddl_common_rs_impl.cpp
+  ob_snapshot_table_proxy.cpp
+  ddl_task/ob_ddl_longops.cpp
+  ob_sequence_ddl_proxy.cpp
   ob_bootstrap.cpp
   ob_ddl_help.cpp
   ob_ddl_operator.cpp
+  ob_dependency_ddl_helper.cpp
   ob_ddl_sql_generator.cpp
   ob_index_builder.cpp
   ob_mlog_builder.cpp
   ob_partition_creator.cpp
   ob_root_minor_freeze.cpp
   ob_root_utils.cpp
+  ob_dynamic_partition_manager.cpp
   ob_root_inspection.cpp
   ob_rs_event_history_table_operator.cpp
   ob_tenant_event_history_table_operator.cpp
@@ -27,7 +34,6 @@ ob_set_subtarget(ob_rootserver common
   ob_tablet_drop.cpp
   ob_table_creator.cpp
   ob_thread_idling.cpp
-  ob_upgrade_executor.cpp
   ob_vertical_partition_builder.cpp
   ob_tenant_thread_helper.cpp
   ob_system_admin_util.cpp
@@ -70,7 +76,6 @@ ob_set_subtarget(ob_rootserver ddl_task
   ddl_task/ob_modify_autoinc_task.cpp
   ddl_task/ob_table_redefinition_task.cpp
   ddl_task/ob_partition_split_task.cpp
-  ddl_task/ob_recover_restore_table_task.cpp
   ddl_task/ob_ddl_tablet_scheduler.cpp
   ddl_task/ob_drop_vec_ivf_index_task.cpp
   ddl_task/ob_rebuild_index_task.cpp
@@ -91,10 +96,6 @@ ob_set_subtarget(ob_rootserver parallel_ddl
   parallel_ddl/ob_create_index_helper.cpp
   parallel_ddl/ob_update_index_status_helper.cpp
   parallel_ddl/ob_drop_table_helper.cpp
-  parallel_ddl/ob_htable_ddl_handler.cpp
-  parallel_ddl/ob_set_kv_attribute_helper.cpp
-  parallel_ddl/ob_create_tablegroup_helper.cpp
-  parallel_ddl/ob_drop_tablegroup_helper.cpp
   parallel_ddl/ob_table_helper.cpp
   parallel_ddl/ob_create_table_like_helper.cpp
 )
@@ -147,15 +148,12 @@ ob_set_subtarget(ob_rootserver direct_load
 ob_set_subtarget(ob_rootserver fork_table
   fork_table/ob_fork_table_info_builder.cpp
   fork_table/ob_fork_table_helper.cpp
+  fork_table/ob_fork_table_util.cpp
+  ob_domain_index_builder_util.cpp
   fork_table/ob_fork_table_service.cpp
   fork_table/ob_fork_table_task.cpp
 )
 
-ob_set_subtarget(ob_rootserver standby
-  standby/ob_service_grpc.cpp
-  standby/ob_standby_service.cpp
-  standby/ob_tenant_role_transition_service.cpp
-)
 
 ob_set_subtarget(ob_rootserver truncate_info
   truncate_info/ob_truncate_info_service.cpp

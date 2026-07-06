@@ -36,13 +36,12 @@ class ObLobQueryIter;
 struct ObLobRemoteQueryCtx
 {
   ObLobRemoteQueryCtx()
-    : tenant_id_(OB_INVALID_TENANT_ID), qtype_(obcall::ObLobQueryArg::QueryType::READ),
+    : qtype_(obcall::ObLobQueryArg::QueryType::READ),
       query_iter_(nullptr), length_(0), read_buf_(nullptr), read_buf_len_(0) {}
   ~ObLobRemoteQueryCtx();
   // get next block of lob data for READ; runs the in-process iterator under the lob's tenant.
   int get_next_block(ObString &data);
 
-  uint64_t tenant_id_;
   obcall::ObLobQueryArg::QueryType qtype_;
   ObLobQueryIter *query_iter_; // READ: in-process lob query iterator (owned)
   uint64_t length_;            // GET_LENGTH: lob length

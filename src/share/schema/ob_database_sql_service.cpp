@@ -16,15 +16,23 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_database_sql_service.h"
-#include "rootserver/ob_root_service.h"
+
+#include "lib/ob_errno.h"
+#include "lib/oblog/ob_log.h"
+#include "lib/oblog/ob_log_level.h"
+#include "lib/oblog/ob_log_print_kv.h"
+#include "lib/string/ob_sql_string.h"
+#include "lib/string/ob_string.h"
+#include "mysqlclient/ob_isql_client.h"
+#include "object/ob_object.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
+#include "share/ob_dml_sql_splicer.h"
+#include "share/schema/ob_schema_struct.h"
+#include "share/schema/ob_schema_utils.h"
 
 namespace oceanbase
 {
 using namespace common;
-namespace rootserver
-{
-class ObRootService;
-}
 namespace share
 {
 namespace schema
@@ -37,8 +45,8 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
 {
   int ret = OB_SUCCESS;
   ObSqlString sql_string;
-  const uint64_t tenant_id = database_schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   if (!database_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("database schema is invalid", K(ret));
@@ -48,19 +56,19 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
     if (OB_SUCC(ret)) {
       const int64_t INVALID_REPLICA_NUM = -1;
       if (OB_FAIL(dml.add_pk_column("database_id", ObSchemaUtils::get_extract_schema_id(
-                                                      exec_tenant_id, database_schema.get_database_id())))
+                                                      database_schema.get_database_id())))
           || OB_FAIL(dml.add_column("database_name", ObHexEscapeSqlStr(database_schema.get_database_name_str())))
           || OB_FAIL(dml.add_column("collation_type", database_schema.get_collation_type()))
           || OB_FAIL(dml.add_column("comment", database_schema.get_comment()))
           || OB_FAIL(dml.add_column("read_only", database_schema.is_read_only()))
           || OB_FAIL(dml.add_column("default_tablegroup_id", ObSchemaUtils::get_extract_schema_id(
-                                                             exec_tenant_id, database_schema.get_default_tablegroup_id())))
+                                                             database_schema.get_default_tablegroup_id())))
           || OB_FAIL(dml.add_column("in_recyclebin", database_schema.is_in_recyclebin()))
           || OB_FAIL(dml.add_gmt_modified())) {
         LOG_WARN("add column failed", K(ret));
       }
     }
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
 
     // insert into __all_database
     if (OB_FAIL(ret)) {
@@ -88,7 +96,7 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
     // log operations
     if (OB_SUCC(ret) && !is_only_history) {
       ObSchemaOperation create_db_op;
-      create_db_op.tenant_id_ = database_schema.get_tenant_id();
+      
       create_db_op.database_id_ = database_schema.get_database_id();
       create_db_op.tablegroup_id_ = 0;
       create_db_op.table_id_ = 0;
@@ -110,8 +118,8 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
 {
   int ret = OB_SUCCESS;
   ObSqlString sql_string;
-  const uint64_t tenant_id = database_schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   if (!database_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("database scheam is invalid", K(ret));
@@ -121,18 +129,18 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
     if (OB_SUCC(ret)) {
       const int64_t INVALID_REPLICA_NUM = -1;
       if (OB_FAIL(dml.add_pk_column("database_id", ObSchemaUtils::get_extract_schema_id(
-                                       exec_tenant_id, database_schema.get_database_id())))
+                                       database_schema.get_database_id())))
           || OB_FAIL(dml.add_column("database_name", ObHexEscapeSqlStr(database_schema.get_database_name_str())))
           || OB_FAIL(dml.add_column(OBJ_GET_K(database_schema, collation_type)))
           || OB_FAIL(dml.add_column("read_only", database_schema.is_read_only()))
           || OB_FAIL(dml.add_column("default_tablegroup_id", ObSchemaUtils::get_extract_schema_id(
-                                    exec_tenant_id, database_schema.get_default_tablegroup_id())))
+                                    database_schema.get_default_tablegroup_id())))
           || OB_FAIL(dml.add_column("in_recyclebin", database_schema.is_in_recyclebin()))
           || OB_FAIL(dml.add_gmt_modified())) {
         LOG_WARN("add column failed", K(ret));
       }
     }
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
 
     // insert into __all_database
     if (FAILEDx(exec.exec_update(OB_ALL_DATABASE_TNAME, dml, affected_rows))) {
@@ -162,7 +170,7 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
     // log operations
     if (OB_SUCC(ret)) {
       ObSchemaOperation alter_db_op;
-      alter_db_op.tenant_id_ = database_schema.get_tenant_id();
+      
       alter_db_op.database_id_ = database_schema.get_database_id();
       alter_db_op.tablegroup_id_ = 0;
       alter_db_op.table_id_ = 0;
@@ -186,16 +194,16 @@ int ObDatabaseSqlService::delete_database(const ObDatabaseSchema &db_schema,
   ObSqlString sql;
   int64_t affected_rows = 0;
   const int64_t IS_DELETED = 1;
-  const uint64_t tenant_id = db_schema.get_tenant_id();
+  
   const uint64_t database_id = db_schema.get_database_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
 
   // delete from __all_database
   if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE database_id = %lu",
                             OB_ALL_DATABASE_TNAME,
-                            ObSchemaUtils::get_extract_schema_id(exec_tenant_id, database_id)))) {
+                            ObSchemaUtils::get_extract_schema_id(database_id)))) {
     LOG_WARN("assign_fmt failed", K(ret));
-  } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+  } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
     LOG_WARN("execute sql failed", K(sql), K(ret));
   } else if (!is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
@@ -205,9 +213,9 @@ int ObDatabaseSqlService::delete_database(const ObDatabaseSchema &db_schema,
     if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(database_id, schema_version, is_deleted) "
                                "VALUES(%lu, %ld, %ld)",
                                OB_ALL_DATABASE_HISTORY_TNAME,
-                               ObSchemaUtils::get_extract_schema_id(exec_tenant_id, database_id),
+                               ObSchemaUtils::get_extract_schema_id(database_id),
                                new_schema_version, IS_DELETED))) {
-    } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+    } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
       LOG_WARN("execute sql failed", K(sql), K(ret));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
@@ -218,7 +226,7 @@ int ObDatabaseSqlService::delete_database(const ObDatabaseSchema &db_schema,
   // log operations
   if (OB_SUCC(ret)) {
     ObSchemaOperation delete_db_op;
-    delete_db_op.tenant_id_ = tenant_id;
+    
     delete_db_op.database_id_ = database_id;
     delete_db_op.tablegroup_id_ = 0;
     delete_db_op.table_id_ = 0;

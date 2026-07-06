@@ -19,7 +19,7 @@ connect (sys,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
 
 connect (mysql,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
 connection sys;
-let $cnt = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_table where table_type = 1, cnt, 1);
+let $cnt = query_get_value(select count(*) as cnt from oceanbase.__all_table where table_type = 1, cnt, 1);
 
 ##gather some necessary sys table stat.
 connection mysql;
@@ -29,8 +29,8 @@ let $idx = 1;
 while ($idx <= $cnt)
 {
 connection sys;
-let $database_name = query_get_value(select d.database_name from oceanbase.__all_virtual_table as t join oceanbase.__all_virtual_database as d on t.database_id = d.database_id where table_type = 1 order by t.table_id, database_name, $idx);
-let $table_name = query_get_value(select table_name from oceanbase.__all_virtual_table where table_type = 1 order by table_id, table_name, $idx);
+let $database_name = query_get_value(select d.database_name from oceanbase.__all_table as t join oceanbase.__all_database as d on t.database_id = d.database_id where table_type = 1 order by t.table_id, database_name, $idx);
+let $table_name = query_get_value(select table_name from oceanbase.__all_table where table_type = 1 order by table_id, table_name, $idx);
 connection mysql;
 eval desc $database_name.$table_name;
 

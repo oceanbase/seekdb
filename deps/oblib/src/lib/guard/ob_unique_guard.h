@@ -120,7 +120,7 @@ struct DefaultUniqueGuardAllocator : public ObIAllocator {
 #ifdef UNITTEST_DEBUG
     total_alive_num++;
 #endif
-    static lib::ObMemAttr attr(OB_SERVER_TENANT_ID, "ObGuard");
+    static lib::ObMemAttr attr("ObGuard");
     SET_USE_500(attr);
     return ob_malloc(size, attr);
   }

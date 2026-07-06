@@ -18,8 +18,9 @@
 #define OCEANBASE_STORAGE_OB_TABLET_SPLIT_TASK_H
 
 #include "share/ob_ddl_common.h"
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/ob_storage_rpc_arg.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "storage/access/ob_table_param.h"
 #include "storage/access/ob_table_access_context.h"
 #include "storage/access/ob_store_row_iterator.h"
 #include "storage/access/ob_sstable_row_whole_scanner.h"
@@ -47,7 +48,7 @@ public:
   int init(const ObTabletSplitParam &param);
   int init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
   int init(const obcall::ObTabletSplitArg &arg);
-  TO_STRING_KV(K_(is_inited), K_(tenant_id), K_(ls_id), K_(table_id), K_(schema_version), 
+  TO_STRING_KV(K_(is_inited), K_(ls_id), K_(table_id), K_(schema_version), 
                K_(task_id), K_(source_tablet_id), K_(dest_tablets_id), K_(compaction_scn), K_(user_parallelism), 
                K_(compat_mode), K_(data_format_version), K_(consumer_group_id),
                K_(can_reuse_macro_block), K_(split_sstable_type), K_(parallel_datum_rowkey_list),
@@ -56,7 +57,6 @@ private:
   common::ObArenaAllocator rowkey_allocator_; // for DatumRowkey.
 public:
   bool is_inited_;
-  uint64_t tenant_id_;
   share::ObLSID ls_id_;
   int64_t table_id_;
   int64_t schema_version_; // always the data table schema version

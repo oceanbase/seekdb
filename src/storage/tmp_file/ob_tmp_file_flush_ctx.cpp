@@ -95,10 +95,10 @@ int ObTmpFileBatchFlushContext::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTmpFileBatchFlushContext init twice", KR(ret));
-  } else if (OB_FAIL(file_ctx_hash_.create(256, ObMemAttr(MTL_ID(), "TFileFLCtx")))) {
+  } else if (OB_FAIL(file_ctx_hash_.create(256, ObMemAttr("TFileFLCtx")))) {
     LOG_WARN("failed to create hash map", K(ret));
   } else {
-    flush_failed_array_.set_attr(ObMemAttr(MTL_ID(), "TFFlushFailArr"));
+    flush_failed_array_.set_attr(ObMemAttr("TFFlushFailArr"));
     state_ = FlushCtxState::FSM_F1;
     is_inited_ = true;
   }
@@ -304,7 +304,7 @@ ObTmpFileFlushTask::ObTmpFileFlushTask()
     flush_infos_(),
     flush_write_block_task_(*this)
 {
-  flush_infos_.set_attr(ObMemAttr(MTL_ID(), "TFFlushInfos"));
+  flush_infos_.set_attr(ObMemAttr("TFFlushInfos"));
 }
 
 void ObTmpFileFlushTask::destroy()
@@ -341,8 +341,8 @@ int ObTmpFileFlushTask::prealloc_block_buf()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("prealloc block buf twice", KR(ret), KPC(this));
   } else if (OB_FAIL(ObTmpBlockCache::get_instance().prealloc_block(
-                     ObTmpBlockCacheKey(block_index_, MTL_ID()), inst_handle_, kvpair_, block_handle_))) {
-    LOG_WARN("fail to prealloc block", KR(ret), K(block_index_), K(MTL_ID()));
+                     ObTmpBlockCacheKey(block_index_), inst_handle_, kvpair_, block_handle_))) {
+    LOG_WARN("fail to prealloc block", KR(ret), K(block_index_));
   }
   return ret;
 }

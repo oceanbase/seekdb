@@ -18,6 +18,7 @@
 #include "sql/engine/px/p2p_datahub/ob_runtime_filter_msg.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 #include "sql/engine/join/hash_join/ob_hash_join_vec_op.h"
+#include "sql/engine/basic/ob_pushdown_filter.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -44,7 +45,7 @@ OB_DEF_DESERIALIZE(ObRFBloomFilterMsg)
 {
   int ret = OB_SUCCESS;
   BASE_DESER((ObRFBloomFilterMsg, ObP2PDatahubMsgBase));
-  bloom_filter_.allocator_.set_tenant_id(tenant_id_);
+  
   bloom_filter_.allocator_.set_label("ObPxBFDESER");
 
   LST_DO_CODE(OB_UNIS_DECODE,
@@ -391,7 +392,7 @@ int ObRFBloomFilterMsg::deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr)
 {
   int ret = OB_SUCCESS;
   ObRFBloomFilterMsg *bf_msg = nullptr;
-  ObMemAttr attr(tenant_id_, "PxBfMsg");
+  ObMemAttr attr("PxBfMsg");
   if (OB_FAIL(PX_P2P_DH.alloc_msg<ObRFBloomFilterMsg>(attr, bf_msg))) {
     LOG_WARN("fail to alloc rf msg", K(ret));
   } else if (OB_FAIL(bf_msg->assign(*this))) {
@@ -419,7 +420,7 @@ int ObRFBloomFilterMsg::assign(const ObP2PDatahubMsgBase &msg)
     LOG_WARN("failed to assign base data", K(ret));
   } else if (OB_FAIL(next_peer_addrs_.assign(other_msg.next_peer_addrs_))) {
     LOG_WARN("fail to assign bf msg", K(ret));
-  } else if (OB_FAIL(bloom_filter_.assign(other_msg.bloom_filter_, msg.get_tenant_id()))) {
+  } else if (OB_FAIL(bloom_filter_.assign(other_msg.bloom_filter_))) {
     LOG_WARN("fail to assign bf msg", K(ret));
   } else if (OB_FAIL(filter_indexes_.prepare_allocate(other_msg.filter_indexes_.count()))) {
     LOG_WARN("failed to prepare_allocate filter indexes", K(ret));
@@ -1033,7 +1034,7 @@ int ObRFBloomFilterMsg::generate_filter_indexes(
   int64_t start_idx = 0, end_idx = 0;
   int64_t group_addr_cnt = each_group_size > addr_cnt ?
         addr_cnt : each_group_size;
-  lib::ObMemAttr attr(tenant_id_, "TmpBFIdxAlloc");
+  lib::ObMemAttr attr("TmpBFIdxAlloc");
   common::ObArenaAllocator tmp_allocator(attr);
   BloomFilterIndex filter_index;
   ObSEArray<BloomFilterIndex *, 64> tmp_filter_indexes;
@@ -1157,7 +1158,7 @@ int ObRFRangeFilterMsg::deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr)
 {
   int ret = OB_SUCCESS;
   ObRFRangeFilterMsg *rf_msg = nullptr;
-  ObMemAttr attr(tenant_id_, "PxRangeMsg");
+  ObMemAttr attr("PxRangeMsg");
   if (OB_FAIL(PX_P2P_DH.alloc_msg<ObRFRangeFilterMsg>(attr, rf_msg))) {
     LOG_WARN("fail to alloc rf msg", K(ret));
   } else if (OB_FAIL(rf_msg->assign(*this))) {
@@ -1665,7 +1666,7 @@ int ObRFInFilterMsg::deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr)
   int ret = OB_SUCCESS;
   ObRFInFilterMsg *in_msg = nullptr;
   int64_t row_cnt = max(serial_rows_.count(), 1);
-  ObMemAttr attr(tenant_id_, "PxInMsg");
+  ObMemAttr attr("PxInMsg");
   if (OB_FAIL(PX_P2P_DH.alloc_msg<ObRFInFilterMsg>(attr, in_msg))) {
     LOG_WARN("fail to alloc rf msg", K(ret));
   } else if (OB_FAIL(in_msg->assign(*this))) {

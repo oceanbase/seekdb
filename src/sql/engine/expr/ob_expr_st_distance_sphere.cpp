@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_distance_sphere.h"
-#include "lib/geo/ob_geo_func_register.h"
+#include "share/geo/ob_geo_func_register.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 
 using namespace oceanbase::common;
@@ -87,8 +87,8 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
   uint32_t arg_num = expr.arg_cnt_;
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_ST_DISTANCE_SPHERE);
+  
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_DISTANCE_SPHERE);
   omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs1 = NULL;
   const ObSrsItem *srs2 = NULL;
@@ -178,7 +178,7 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
     }
   }
 
-  ObGeoBoostAllocGuard guard(tenant_id);
+  ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
   if (OB_FAIL(ret) || is_null_result) {
   } else if (OB_FAIL(guard.init())) {

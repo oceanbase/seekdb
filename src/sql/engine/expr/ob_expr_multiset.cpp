@@ -487,8 +487,7 @@ int ObExprMultiSet::eval_composite_relative_anonymous_block(ObExecContext &exec_
 
     out_args.reuse();
 
-    CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr(MTL_ID(),
-                                                              GET_PL_MOD_STRING(pl::OB_PL_MULTISET),
+    CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr(GET_PL_MOD_STRING(pl::OB_PL_MULTISET),
                                                               ObCtxIds::DEFAULT_CTX_ID)) {
       char old_sql_id[common::OB_MAX_SQL_ID_LENGTH + 1];
       MEMCPY(old_sql_id, exec_ctx.get_sql_ctx()->sql_id_, (int32_t)sizeof(exec_ctx.get_sql_ctx()->sql_id_));

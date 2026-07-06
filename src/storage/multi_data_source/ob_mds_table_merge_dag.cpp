@@ -15,9 +15,10 @@
  */
 
 #include "storage/multi_data_source/ob_mds_table_merge_dag.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/multi_data_source/ob_mds_table_merge_task.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag_param.h"
-#include "share/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet.h"
 
@@ -85,7 +86,7 @@ int ObMdsTableMergeDag::fill_compat_mode_()
 
   ObLSHandle tmp_ls_handle;
   ObTabletHandle tmp_tablet_handle;
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id_, tmp_ls_handle, ObLSGetMod::COMPACT_MODE))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, tmp_ls_handle, ObLSGetMod::COMPACT_MODE))) {
     LOG_WARN("failed to get log stream", K(ret), K(ls_id_));
   } else if (OB_FAIL(tmp_ls_handle.get_ls()->get_tablet_svr()->get_tablet(
       tablet_id_, tmp_tablet_handle, 0/*timeout_us*/, storage::ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {

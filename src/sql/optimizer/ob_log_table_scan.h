@@ -23,7 +23,7 @@
 #include "sql/resolver/dml/ob_sql_hint.h"
 #include "sql/engine/px/p2p_datahub/ob_runtime_filter_query_range.h"
 #include "sql/optimizer/ob_log_set.h"
-#include "src/share/vector_index/ob_plugin_vector_index_adaptor.h"
+#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
 
 namespace oceanbase
 {
@@ -619,12 +619,6 @@ public:
   inline const common::ObIArray<uint64_t> &get_ddl_output_column_ids() const
   { return ddl_output_column_ids_; }
 
-  inline common::ObIArray<ObRawExpr *> &get_ext_file_column_exprs()
-  { return ext_file_column_exprs_; }
-
-  inline common::ObIArray<ObRawExpr *> &get_ext_column_convert_exprs()
-  { return ext_column_convert_exprs_; }
-
   /**
    *  Get pushdown aggr expressions
    */
@@ -849,7 +843,6 @@ public:
                                       uint64_t scan_table_id);
   int adjust_print_access_info(ObIArray<ObRawExpr*> &access_exprs);
   static int replace_gen_column(ObLogPlan *plan, ObRawExpr *part_expr, ObRawExpr *&new_part_expr);
-  int extract_file_column_exprs_recursively(ObRawExpr *expr);
   int generate_auto_split_filter();
   int construct_table_split_range_filter(ObSQLSessionInfo *session, const int64_t filter_type);
   int create_exec_param_for_auto_split(const ObRawExprResType &type, ObRawExpr *&expr);
@@ -1197,9 +1190,6 @@ protected: // memeber variables
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> spatial_exprs_;
   // columns required for accessing a domain index (fulltext and JSON multi-value index)
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> domain_exprs_;
-  //for external table
-  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> ext_file_column_exprs_;
-  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> ext_column_convert_exprs_;
   // for map access expr to a real column expr
   common::ObArray<std::pair<ObRawExpr *, ObRawExpr *>, common::ModulePageAllocator, true> real_expr_map_;
   // aggr func pushdwon to table scan

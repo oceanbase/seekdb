@@ -259,7 +259,7 @@ int ObErrLogService::catch_err_and_gen_sql(ObIAllocator &alloc, const ObSQLSessi
   return ret;
 }
 
-int ObErrLogService::execute_write(uint64_t tenant_id, char *sql_str)
+int ObErrLogService::execute_write(char *sql_str)
 {
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
@@ -270,7 +270,7 @@ int ObErrLogService::execute_write(uint64_t tenant_id, char *sql_str)
     LOG_WARN("sql_proxy or sql_str should not be null");
   } else if (OB_FAIL(inner_sql_proxy.init(sql_proxy->get_pool()))) {
     LOG_WARN("init inner sql proxy failed", K(ret));
-  } else if (OB_FAIL(inner_sql_proxy.write(tenant_id, sql_str, affected_rows))) {
+  } else if (OB_FAIL(inner_sql_proxy.write(sql_str, affected_rows))) {
     LOG_WARN("execute sql failed", K(ret), K(sql_str));
   }
   return ret;
@@ -296,8 +296,7 @@ int ObErrLogService::insert_err_log_record(const ObSQLSessionInfo *session,
              K(err_log_ct_def.reject_limit_), K(err_log_rt_def.curr_err_log_record_num_));
   } else {
     lib::ContextParam param;
-    param.set_mem_attr(MTL_ID(),
-                       ObModIds::OB_SQL_INSERT,
+    param.set_mem_attr(ObModIds::OB_SQL_INSERT,
                        ObCtxIds::DEFAULT_CTX_ID)
       .set_properties(lib::USE_TL_PAGE_OPTIONAL)
       .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE)
@@ -317,7 +316,7 @@ int ObErrLogService::insert_err_log_record(const ObSQLSessionInfo *session,
                                             sql_str,
                                             type))) {
         LOG_WARN("fail to execute gen_insert_sql_str", K(ret));
-      } else if (OB_FAIL(execute_write(session->get_effective_tenant_id(), sql_str))) {
+      } else if (OB_FAIL(execute_write(sql_str))) {
         LOG_WARN("fail to execute execute_write", K(ret), K(sql_str));
       }
     }

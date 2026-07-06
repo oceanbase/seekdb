@@ -45,7 +45,7 @@ int ObRenameUserResolver::resolve(const ParseNode &parse_tree)
       LOG_ERROR("Failed to create ObRenameUserStmt", K(ret));
     } else {
       stmt_ = rename_user_stmt;
-      rename_user_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+      
       for (int i = 0; i < node->num_child_ && OB_SUCCESS == ret; ++i) {
         ParseNode *rename_info = NULL;
         if (OB_ISNULL(rename_info = node->children_[i])) {

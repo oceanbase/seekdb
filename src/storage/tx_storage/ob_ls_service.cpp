@@ -17,8 +17,9 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_ls_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ls/ob_ls.h"
-#include "storage/high_availability/ob_restore_status.h"
+#include "share/ls/ob_restore_status.h"
 #include "logservice/ob_log_service.h"
 #include "observer/ob_srv_network_frame.h"
 #include "storage/tx_storage/ob_ls_safe_destroy_task.h"
@@ -26,6 +27,12 @@
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
 #include "storage/tx/ob_trans_service.h"
+#include "share/ob_share_util.h"  // relocated-definition owner
+#include "storage/allocator/ob_mds_allocator.h"  // relocated-definition owner
+#include "storage/allocator/ob_tx_data_allocator.h"  // relocated-definition owner
+#include "storage/allocator/ob_shared_memory_allocator_mgr.h"  // needed by relocated destructor logic in the throttle helper
+#include "share/ob_global_autoinc_service.h"  // relocated-definition owner
+#include "share/resource_limit_calculator/ob_resource_limit_calculator.h"  // relocated-definition owner
 
 namespace oceanbase
 {
@@ -41,7 +48,6 @@ ObLSService::ObLSService()
   : is_inited_(false),
     is_running_(false),
     is_stopped_(false),
-    tenant_id_(OB_INVALID_ID),
     ls_map_(),
     ls_allocator_(),
     iter_allocator_(),
@@ -70,7 +76,6 @@ void ObLSService::destroy()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls iter cnt is not 0", K(ret), K_(iter_cnt), KP(this));
   }
-  tenant_id_ = OB_INVALID_ID;
   ls_map_.reset();
   ls_allocator_.destroy();
   iter_allocator_.destroy();
@@ -86,7 +91,7 @@ bool ObLSService::is_empty()
                   ATOMIC_LOAD(&safe_ls_destroy_task_cnt_) == 0);
   if (!is_safe && REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
     bool is_t3m_meta_released = false;
-    MTL(ObTenantMetaMemMgr*)->check_all_meta_mem_released(is_t3m_meta_released, "ObLSService"); //just for debug
+    share::g_mp->tenant_meta_mem_mgr()->check_all_meta_mem_released(is_t3m_meta_released, "ObLSService"); //just for debug
     LOG_INFO("ls service is not empty and not safe to destroy", K(ls_map_.is_empty()),
              K_(safe_ls_destroy_task_cnt), K(is_t3m_meta_released));
   }
@@ -136,20 +141,19 @@ int ObLSService::get_resource_constraint_value_(ObResoureConstraintValue &constr
   int64_t memory_value = INT64_MAX;
   int64_t clog_disk_value = INT64_MAX;
   // 1. configuration
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
-  if (OB_LIKELY(tenant_config.is_valid())) {
-    config_value = (tenant_config->_max_ls_cnt_per_server != 0
-                    ? tenant_config->_max_ls_cnt_per_server : config_value);
+  if (OB_LIKELY(true)) {
+    config_value = (GCONF._max_ls_cnt_per_server != 0
+                    ? GCONF._max_ls_cnt_per_server : config_value);
   }
 
   // 2. memory
-  const int64_t tenant_memory = lib::get_tenant_memory_limit(MTL_ID());
+  const int64_t tenant_memory = lib::get_tenant_memory_limit();
   memory_value = OB_MAX(tenant_memory - SMALL_TENANT_MEMORY_LIMIT, 0) / TENANT_MEMORY_PER_LS_NEED +
     OB_MAX_LS_NUM_PER_TENANT_PER_SERVER_FOR_SMALL_TENANT;
 
   // 3. clog disk
   palf::PalfOptions palf_opts;
-  if (OB_FAIL(MTL(ObLogService*)->get_palf_options(palf_opts))) {
+  if (OB_FAIL(share::g_mp->log_service()->get_palf_options(palf_opts))) {
     LOG_WARN("get palf options failed", K(ret));
   } else {
     const palf::PalfDiskOptions &disk_opts = palf_opts.disk_options_;
@@ -304,12 +308,12 @@ int ObLSService::wait()
 
 int ObLSService::mtl_init(ObLSService* &ls_service)
 {
-  uint64_t tenant_id = MTL_ID();
+  
 
-  return ls_service->init(tenant_id);
+  return ls_service->init();
 }
 
-int ObLSService::init(const uint64_t tenant_id)
+int ObLSService::init()
 {
   int ret = OB_SUCCESS;
   const char *OB_LS_SERVICE = "LSSvr";
@@ -320,27 +324,24 @@ int ObLSService::init(const uint64_t tenant_id)
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ls service is inited.", K_(is_inited), K(ret));
-  } else if (!is_valid_tenant_id(tenant_id)) {
+  } else if (!true) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tenant_id));
+    LOG_WARN("invalid arguments", K(ret));
   } else if (OB_FAIL(ls_allocator_.init(common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                         OB_LS_SERVICE,
-                                        tenant_id,
                                         LS_ALLOC_TOTAL_LIMIT))) {
     LOG_WARN("fail to init ls allocator, ", K(ret));
   } else if (OB_FAIL(iter_allocator_.init(common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                           OB_LS_ITER,
-                                          tenant_id,
                                           ITER_ALLOC_TOTAL_LIMIT))) {
     LOG_WARN("fail to init iter allocator, ", K(ret));
-  } else if (OB_FAIL(ls_map_.init(tenant_id, &ls_allocator_))) {
+  } else if (OB_FAIL(ls_map_.init(&ls_allocator_))) {
     LOG_WARN("fail to init ls map", K(ret));
   } else if (OB_FAIL(storage_svr_rpc_proxy_.init(GCTX.self_addr()))) {
     LOG_WARN("failed to init storage svr rpc proxy", K(ret));
   } else if (OB_FAIL(storage_rpc_.init(&storage_svr_rpc_proxy_, GCTX.self_addr()))) {
     STORAGE_LOG(WARN, "fail to init partition service rpc", K(ret));
   } else {
-    tenant_id_ = tenant_id;
     is_inited_ = true;
   }
   return ret;
@@ -373,7 +374,7 @@ int ObLSService::inner_create_ls_(const share::ObLSID &lsid,
   int ret = OB_SUCCESS;
 
   const char *OB_LS_MODE = "ObLS";
-  ObMemAttr memattr(tenant_id_, OB_LS_MODE);
+  ObMemAttr memattr(OB_LS_MODE);
   void *buf = NULL;
   if (OB_ISNULL(buf = ls_allocator_.alloc(sizeof(ObLS), memattr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -381,7 +382,6 @@ int ObLSService::inner_create_ls_(const share::ObLSID &lsid,
   } else if (FALSE_IT(ls = new (buf) ObLS())) {
 
   } else if (OB_FAIL(ls->init(lsid,
-                              tenant_id_,
                               migration_status,
                               restore_status,
                               create_scn,
@@ -935,7 +935,7 @@ void ObLSService::remove_ls_(ObLS *ls, const bool remove_from_disk, const bool w
   static const int64_t SLEEP_TS = 100_ms;
   int64_t retry_cnt = 0;
   int64_t success_step = 0;
-  transaction::ObTransService *tx_svr = MTL(transaction::ObTransService*);
+  transaction::ObTransService *tx_svr = share::g_mp->trans_service();
 
   do {
     // We must do prepare_for_safe_destroy to remove tablets from ObLSTabletService before writing the remove_ls_slog,
@@ -1207,7 +1207,7 @@ int ObLSService::get_ls_iter(common::ObSharedGuard<ObLSIterator> &guard, ObLSGet
   ObLSIterator *ls_iter = NULL;
   void *buf = NULL;
   const char* LS = "ObLSIter";
-  ObMemAttr attr(tenant_id_, LS);
+  ObMemAttr attr(LS);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -1285,20 +1285,20 @@ int ObLSService::get_restore_status_(
     ObRestoreStatus &restore_status)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   restore_status = ObRestoreStatus::Status::NONE;
   bool is_primary = true;
 
-  if (is_sys_tenant(tenant_id) || is_meta_tenant(tenant_id)) {
-    if (OB_FAIL(ObShareUtil::is_primary_cluster(is_primary))) {
-      LOG_WARN("fail to check whether is primary cluster", KR(ret));
-    } else if (is_primary) {
-      restore_status = ObRestoreStatus::Status::NONE;
-    } else {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("only supported primary cluster now", KR(ret));
-    }
+
+  if (OB_FAIL(ObShareUtil::is_primary_cluster(is_primary))) {
+    LOG_WARN("fail to check whether is primary cluster", KR(ret));
+  } else if (is_primary) {
+    restore_status = ObRestoreStatus::Status::NONE;
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("only supported primary cluster now", KR(ret));
   }
+
   return ret;
 }
 
@@ -1359,3 +1359,361 @@ int ObLSService::dump_ls_info()
 
 } // storage
 } // oceanbase
+
+
+// ===== definition moved from share/ob_share_util.cpp =====
+// real user ObLSService/ObLS complete type(previously hidden behind share_util's removed include chain); declaration remains in share/ob_share_util.h(transitional state)
+namespace oceanbase
+{
+namespace share
+{
+
+// get_sys_ls_readable_scn has been demoted to storage::free function(see end of file)
+
+
+}  // namespace share
+}  // namespace oceanbase
+
+// ===== definition moved from src/storage/allocator/ob_mds_allocator.cpp / src/storage/allocator/ob_tx_data_allocator.cpp =====
+namespace oceanbase
+{
+namespace share
+{
+
+ObMdsThrottleGuard::~ObMdsThrottleGuard()
+{
+  int ret = OB_SUCCESS;
+  ObLSHandle ls_handle;
+  ObThrottleInfoGuard share_ti_guard;
+  ObThrottleInfoGuard module_ti_guard;
+
+  if (OB_ISNULL(throttle_tool_)) {
+    MDS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "throttle tool is unexpected nullptr", KP(throttle_tool_));
+  } else if (throttle_tool_->is_throttling<ObTenantMdsAllocator>(share_ti_guard, module_ti_guard)) {
+
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+      STORAGE_LOG(WARN, "get ls handle failed", KR(ret), K(ls_id_));
+    } else if (OB_ISNULL(ls_handle.get_ls())) {
+      ret = OB_ERR_UNEXPECTED;
+      STORAGE_LOG(ERROR, "get ls handle failed", KR(ret), K(ls_id_));
+    } else {
+      (void)TxShareMemThrottleUtil::do_throttle<ObTenantMdsAllocator>(for_replay_,
+                                                                      abs_expire_time_,
+                                                                      share::mds_throttled_alloc(),
+                                                                      share::g_mp->tenant_freezer()->exist_ls_throttle_is_skipping(),
+                                                                      ls_handle.get_ls()->is_offline(),
+                                                                      *throttle_tool_,
+                                                                      share_ti_guard,
+                                                                      module_ti_guard);
+    }
+
+    if (throttle_tool_->still_throttling<ObTenantMdsAllocator>(share_ti_guard, module_ti_guard)) {
+      (void)throttle_tool_->skip_throttle<ObTenantMdsAllocator>(
+          share::mds_throttled_alloc(), share_ti_guard, module_ti_guard);
+
+      if (module_ti_guard.is_valid()) {
+        module_ti_guard.throttle_info()->reset();
+      }
+    } 
+
+    // reset mds throttled alloc size
+    share::mds_throttled_alloc() = 0;
+  } else {
+    // do not need throttle, exit directly
+  }
+}
+
+ObTxDataThrottleGuard::~ObTxDataThrottleGuard()
+{
+  int ret = OB_SUCCESS;
+  ObLSHandle ls_handle;
+  ObThrottleInfoGuard share_ti_guard;
+  ObThrottleInfoGuard module_ti_guard;
+
+  if (OB_ISNULL(throttle_tool_)) {
+    MDS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "throttle tool is unexpected nullptr", KP(throttle_tool_));
+  } else if (throttle_tool_->is_throttling<ObTenantTxDataAllocator>(share_ti_guard, module_ti_guard)) {
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+      STORAGE_LOG(WARN, "get ls handle failed", KR(ret), K(ls_id_));
+    } else if (OB_ISNULL(ls_handle.get_ls())) {
+      ret = OB_ERR_UNEXPECTED;
+      STORAGE_LOG(ERROR, "get ls handle failed", KR(ret), K(ls_id_));
+    } else {
+      (void)TxShareMemThrottleUtil::do_throttle<ObTenantTxDataAllocator>(for_replay_,
+                                                                         abs_expire_time_,
+                                                                         share::tx_data_throttled_alloc(),
+                                                                         share::g_mp->tenant_freezer()->exist_ls_throttle_is_skipping(),
+                                                                      ls_handle.get_ls()->is_offline(),
+                                                                         *throttle_tool_,
+                                                                         share_ti_guard,
+                                                                         module_ti_guard);
+    }
+
+    if (throttle_tool_->still_throttling<ObTenantTxDataAllocator>(share_ti_guard, module_ti_guard)) {
+      (void)throttle_tool_->skip_throttle<ObTenantTxDataAllocator>(
+          share::tx_data_throttled_alloc(), share_ti_guard, module_ti_guard);
+
+      if (module_ti_guard.is_valid()) {
+        module_ti_guard.throttle_info()->reset();
+      }
+    }
+
+    // reset tx data throttled alloc size
+    share::tx_data_throttled_alloc() = 0;
+  } else {
+    // do not need throttle, exit directly
+  }
+}
+
+}  // namespace share
+}  // namespace oceanbase
+
+// ===== definition moved from share/ob_global_autoinc_service.cpp(ObLS real user) =====
+namespace oceanbase
+{
+namespace share
+{
+
+int ObGlobalAutoIncService::check_leader_(bool &is_leader)
+{
+  int ret = OB_SUCCESS;
+  is_leader = ATOMIC_LOAD(&is_leader_);
+  if (OB_LIKELY(is_leader)) {
+  } else if (ATOMIC_LOAD(&is_switching_)) {
+    ret = OB_NOT_MASTER;
+    LOG_WARN("service is switching to leader", K(ret), KP(this), K(*this));
+  } else {
+    // try to get role from logstream
+    ObRole role = ObRole::INVALID_ROLE;
+    int64_t proposal_id = 0;
+    ObSpinLockGuard lock(cache_ls_lock_);
+    if (OB_ISNULL(cache_ls_)) {
+      ret = OB_NOT_MASTER;
+      LOG_WARN("cache ls is null", K(ret));
+    } else if (OB_FAIL(cache_ls_->get_log_handler()->get_role(role, proposal_id))) {
+      int tmp_ret = ret;
+      ret = OB_NOT_MASTER;
+      LOG_WARN("get ls role fail", K(ret), K(tmp_ret));
+    } else if (common::ObRole::LEADER == role) {
+      is_leader = true;
+    } else {
+      is_leader = false;
+    }
+  }
+
+  return ret;
+}
+
+}  // namespace share
+}  // namespace oceanbase
+
+// ===== definition moved from share resource_limit_calculator(X-macro inventory 2fn) =====
+namespace oceanbase
+{
+namespace share
+{
+
+int ObResourceLimitCalculator::init()
+{
+  int ret = OB_SUCCESS;
+  if (IS_INIT) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("resource limit calculator already initialized", K(ret));
+  } else {
+    WLockGuard guard(lock_);
+#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name, subhandler)      \
+    if (OB_SUCC(ret)) {                                               \
+        handlers_[n] = subhandler;                                    \
+    }
+#include "share/resource_limit_calculator/ob_resource_limit_calculator_def.h"
+#undef DEF_RESOURCE_LIMIT_CALCULATOR
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+
+int ObResourceLimitCalculator::get_tenant_min_phy_resource_value(
+    ObMinPhyResourceResult &res)
+{
+  int ret = OB_SUCCESS;
+  ObIResourceLimitCalculatorHandler *handler = NULL;
+  ObMinPhyResourceResult min_res;
+  ObMinPhyResourceResult tmp;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_RUNNING;
+    LOG_WARN("resource limit calculator not running", K(ret));
+  } else {
+    RLockGuard guard(lock_);
+#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name, subhandler)           \
+    if (OB_SUCC(ret)) {                                                    \
+      if (OB_ISNULL(handler = handlers_[n])) {                             \
+        ret = OB_NOT_RUNNING;                                              \
+        LOG_WARN("the tenant may destroyed", K(ret), K(n), KP(handler));   \
+      } else if (OB_FAIL(handler->cal_min_phy_resource_needed(tmp))) {     \
+        LOG_WARN("get resource stat failed", K(ret), K(n), K(#name));      \
+      } else if (OB_FAIL(min_res.inc_update(tmp))) {                       \
+        LOG_WARN("inc_update failed", K(min_res), K(tmp));                 \
+      } else {                                                             \
+        tmp.reset();                                                       \
+      }                                                                    \
+    }
+#include "share/resource_limit_calculator/ob_resource_limit_calculator_def.h"
+#undef DEF_RESOURCE_LIMIT_CALCULATOR
+
+    if (OB_SUCC(ret)) {
+      res = min_res;
+      ret = res.get_copy_assign_ret();
+    }
+  }
+  return ret;
+}
+
+
+}  // namespace share
+}  // namespace oceanbase
+
+// ===== definition moved from share resource_limit_calculator(second overload) =====
+namespace oceanbase
+{
+namespace share
+{
+
+int ObResourceLimitCalculator::get_tenant_min_phy_resource_value(
+    const ObUserResourceCalculateArg &arg,
+    ObMinPhyResourceResult &res)
+{
+  int ret = OB_SUCCESS;
+  ObIResourceLimitCalculatorHandler *handler = NULL;
+  ObMinPhyResourceResult min_res;
+  ObMinPhyResourceResult tmp;
+  int64_t res_type = 0;
+  int64_t need_num = 0;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_RUNNING;
+    LOG_WARN("resource limit calculator not running", K(ret));
+  } else {
+    RLockGuard guard(lock_);
+#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name, subhandler)              \
+    if (OB_SUCC(ret)) {                                                       \
+      if (OB_ISNULL(handler = handlers_[n])) {                                \
+        ret = OB_NOT_RUNNING;                                                 \
+        LOG_WARN("the tenant may destroyed", K(ret), K(n), KP(handler));      \
+      } else if (OB_FAIL(arg.get_type_value(n, need_num))) {                  \
+        LOG_WARN("get needed num failed", K(ret), K(n));                      \
+      } else if (OB_FAIL(handler->cal_min_phy_resource_needed(need_num,       \
+                                                              tmp))) {        \
+        LOG_WARN("get resource stat failed", K(ret), K(n), K(need_num));      \
+      } else if (OB_FAIL(min_res.inc_update(tmp))) {                          \
+        LOG_WARN("inc_update failed", K(ret), K(min_res), K(tmp));            \
+      } else {                                                                \
+        tmp.reset();                                                          \
+      }                                                                       \
+    }
+#include "share/resource_limit_calculator/ob_resource_limit_calculator_def.h"
+#include "storage/tx/ob_tx_data_define.h"  // needed by relocated functions
+#undef DEF_RESOURCE_LIMIT_CALCULATOR
+
+    if (OB_SUCC(ret)) {
+      res = min_res;
+      ret = res.get_copy_assign_ret();
+    }
+  }
+  return ret;
+}
+
+
+}  // namespace share
+}  // namespace oceanbase
+
+// ===== tx_data_allocator(TX_DATA_SLICE_SIZE fns) =====
+namespace oceanbase
+{
+namespace share
+{
+
+
+}  // namespace share
+}  // namespace oceanbase
+
+// ===== tx_data init/alloc =====
+namespace oceanbase
+{
+namespace share
+{
+
+OB_WEAK_SYMBOL int ObTenantTxDataAllocator::init(const char *label)
+{
+  int ret = OB_SUCCESS;
+  ObMemAttr mem_attr;
+  mem_attr.label_ = label;
+  mem_attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
+  throttle_tool_ = &(share_mem_alloc_mgr->share_resource_throttle_tool());
+  if (IS_INIT){
+    ret = OB_INIT_TWICE;
+    SHARE_LOG(WARN, "init tenant mds allocator twice", KR(ret), KPC(this));
+  } else if (OB_ISNULL(throttle_tool_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
+  } else if (OB_FAIL(slice_allocator_.init(
+                 storage::TX_DATA_SLICE_SIZE, OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_, mem_attr))) {
+    SHARE_LOG(WARN, "init slice allocator failed", KR(ret));
+  } else {
+    slice_allocator_.set_nway(ObTenantTxDataAllocator::ALLOC_TX_DATA_MAX_CONCURRENCY);
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+
+OB_WEAK_SYMBOL void *ObTenantTxDataAllocator::alloc(const bool enable_throttle, const int64_t abs_expire_time)
+{
+  // do throttle if needed
+  if (OB_LIKELY(enable_throttle)) {
+    bool is_throttled = false;
+    (void)throttle_tool_->alloc_resource<ObTenantTxDataAllocator>(
+        storage::TX_DATA_SLICE_SIZE, abs_expire_time, is_throttled);
+
+    if (OB_UNLIKELY(is_throttled)) {
+      share::tx_data_throttled_alloc() += storage::TX_DATA_SLICE_SIZE;
+    }
+  }
+
+  // allocate memory
+  void *res = slice_allocator_.alloc();
+  return res;
+}
+
+
+}  // namespace share
+}  // namespace oceanbase
+
+// from share::ObShareUtil demoted  storage free function(A-set member-split cleanup)
+namespace oceanbase
+{
+namespace storage
+{
+using namespace oceanbase::share;
+int get_sys_ls_readable_scn(SCN &readable_scn)
+{
+  int ret = OB_SUCCESS;
+  ObLSService *ls_svr = share::g_mp->ls_service();
+  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
+  share::SCN offline_scn;
+  if (OB_ISNULL(ls_svr)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("pointer is null", KR(ret), KP(ls_svr));
+  } else if (OB_FAIL(ls_svr->get_ls(SYS_LS, ls_handle, ObLSGetMod::RS_MOD))) {
+      LOG_WARN("get log stream failed", KR(ret));
+  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("log stream is null", KR(ret), K(ls_handle));
+  } else if (OB_FAIL(ls->get_max_decided_scn(readable_scn))) {
+    LOG_WARN("failed to get_max_decided_scn", KR(ret), KPC(ls));
+  }
+  return ret;
+}
+}  // namespace storage
+}  // namespace oceanbase

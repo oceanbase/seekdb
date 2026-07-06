@@ -32,7 +32,6 @@ using namespace sql;
 ObMViewPurgeLogExecutor::ObMViewPurgeLogExecutor()
   : ctx_(nullptr),
     session_info_(nullptr),
-    tenant_id_(OB_INVALID_TENANT_ID),
     master_table_id_(OB_INVALID_ID)
 {
 }
@@ -47,13 +46,13 @@ int ObMViewPurgeLogExecutor::execute(ObExecContext &ctx, const ObMViewPurgeLogAr
   CK(OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
   OV(OB_LIKELY(arg.is_valid()), OB_INVALID_ARGUMENT, arg);
   OZ(schema_checker_.init(*ctx.get_sql_ctx()->schema_guard_, session_info_->get_server_sid()));
-  OX(tenant_id_ = session_info_->get_effective_tenant_id());
+  OX();
   OZ(resolve_arg(arg));
 
   if (OB_SUCC(ret)) {
     ObMLogPurgeParam purge_param;
     ObMLogPurger purger;
-    purge_param.tenant_id_ = tenant_id_;
+    
     purge_param.master_table_id_ = master_table_id_;
     purge_param.purge_log_parallel_ = arg.purge_log_parallel_;
     if (OB_FAIL(purger.init(ctx, purge_param))) {
@@ -91,8 +90,7 @@ int ObMViewPurgeLogExecutor::resolve_arg(const ObMViewPurgeLogArg &arg)
     } else if (OB_UNLIKELY(database_name.empty())) {
       ret = OB_ERR_NO_DB_SELECTED;
       LOG_WARN("No database selected", KR(ret));
-    } else if (OB_FAIL(schema_checker_.get_table_schema_with_synonym(
-                 tenant_id_, database_name, table_name, false /*is_index_table*/, has_synonym,
+    } else if (OB_FAIL(schema_checker_.get_table_schema_with_synonym(database_name, table_name, false /*is_index_table*/, has_synonym,
                  new_db_name, new_tbl_name, table_schema))) {
       LOG_WARN("fail to get table schema with synonym", KR(ret), K(database_name), K(table_name));
     } else if (OB_ISNULL(table_schema)) {
@@ -101,9 +99,9 @@ int ObMViewPurgeLogExecutor::resolve_arg(const ObMViewPurgeLogArg &arg)
     } else if (table_schema->is_materialized_view()) {
       // when need to purge a materialized view, we need to purge its container table
       const share::schema::ObTableSchema *container_table_schema = nullptr;
-      if (OB_FAIL(schema_checker_.get_table_schema(tenant_id_, table_schema->get_data_table_id(),
+      if (OB_FAIL(schema_checker_.get_table_schema( table_schema->get_data_table_id(),
                                                    container_table_schema))) {
-        LOG_WARN("fail to get table schema", KR(ret), K(tenant_id_),
+        LOG_WARN("fail to get table schema", KR(ret),
                  K(table_schema->get_data_table_id()));
       } else {
         table_schema = container_table_schema;

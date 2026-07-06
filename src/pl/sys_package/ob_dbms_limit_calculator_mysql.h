@@ -53,7 +53,6 @@ private:
       const int64_t buf_len,
       int64_t &pos);
   static int get_json_result_(
-      const int64_t tenant_id,
       const ObAddr &addr,
       const ObMinPhyResourceResult &res,
       char *buf,

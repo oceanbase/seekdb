@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/compaction/ob_batch_freeze_tablets_dag.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -117,7 +118,7 @@ int ObBatchFreezeTabletsTask::inner_process()
   ObLSHandle ls_handle;
   ObLS *ls = nullptr;
   int64_t weak_read_ts = 0;
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(param.ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(param.ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
     LOG_WARN("failed to get log stream", K(ret), K(param));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
@@ -142,7 +143,7 @@ int ObBatchFreezeTabletsTask::inner_process()
       LOG_WARN_RET(tmp_ret, "get invalid tablet pair", K(cur_pair));
     } else if (cur_pair.schedule_merge_scn_ > weak_read_ts) {
       // no need to force freeze
-    } else if (OB_TMP_FAIL(MTL(ObTenantFreezer *)->tablet_freeze(param.ls_id_, 
+    } else if (OB_TMP_FAIL(share::g_mp->tenant_freezer()->tablet_freeze(param.ls_id_, 
                                                                  cur_pair.tablet_id_,
                                                                  true/*is_sync*/,
                                                                  max_retry_time_us,
@@ -179,7 +180,7 @@ int ObBatchFreezeTabletsTask::schedule_tablet_major_after_freeze(
   int ret = OB_SUCCESS;
   ObTabletHandle tablet_handle;
   ObTablet *tablet = NULL;
-  if (!MTL(ObTenantTabletScheduler *)->could_major_merge_start()) {
+  if (!share::g_mp->tenant_tablet_scheduler()->could_major_merge_start()) {
     // merge is suspended
   } else if (OB_FAIL(ls.get_tablet_svr()->get_tablet(
                  cur_pair.tablet_id_, tablet_handle, 0 /*timeout_us*/,

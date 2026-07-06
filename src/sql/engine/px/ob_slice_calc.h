@@ -281,7 +281,7 @@ public:
 
   int init_partition_cache_map();
 
-  virtual int init(uint64_t tenant_id = OB_SERVER_TENANT_ID);
+  virtual int init();
 
   virtual int destroy() {
     int ret = OB_SUCCESS;
@@ -291,7 +291,7 @@ public:
     return ret;
   }
 
-  int build_repart_ch_map(ObPxPartChMap &map, uint64_t tenant_id);
+  int build_repart_ch_map(ObPxPartChMap &map);
   int build_part2tablet_id_map();
   int64_t get_last_tablet_id() { return tablet_id_; }
   int64_t *get_tablet_ids_ptr() { return tablet_ids_; }
@@ -369,7 +369,7 @@ protected:
   {}
   ~ObSlaveMapRepartIdxCalcBase() = default;
 protected:
-  virtual int init(uint64_t tenant_id = OB_SERVER_TENANT_ID) override;
+  virtual int init() override;
   virtual int destroy() override;
 protected:
   // Store all task ids corresponding to the same partition
@@ -444,7 +444,7 @@ public:
   int get_slice_idx_batch_inner(const ObIArray<ObExpr*> &, ObEvalCtx &eval_ctx,
                               ObBitVector &skip, const int64_t batch_size,
                               int64_t *&indexes);
-  virtual int init(uint64_t tenant_id) override;
+  virtual int init() override;
   virtual int destroy() override;
 private:
   int get_task_idx_by_tablet_id(int64_t tablet_id , int64_t &task_idx);
@@ -947,7 +947,7 @@ public:
         ddl_slice_id_expr_(ddl_slice_id_expr)
   {}
   virtual ~ObSlaveMapPkeyRangeIdxCalc();
-  virtual int init(uint64_t tenant_id = OB_SERVER_TENANT_ID) override;
+  virtual int init() override;
   virtual int destroy() override;
   template <bool USE_VEC>
   int get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx,
@@ -1066,7 +1066,7 @@ public:
   {}
   ~ObSlaveMapPkeyHashIdxCalc() = default;
 
-  int init(uint64_t tenant_id = OB_SERVER_TENANT_ID) override;
+  int init() override;
   int destroy() override;
 
   // for static engine
@@ -1235,7 +1235,7 @@ public:
   }
 
   ~ObNullAwareAffinitizedRepartSliceIdxCalc() = default;
-  virtual int init(uint64_t tenant_id) override;
+  virtual int init() override;
   template <bool USE_VEC>
   int get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx,
                               SliceIdxArray &slice_idx_array, ObBitVector *skip = NULL);

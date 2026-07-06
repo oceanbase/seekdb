@@ -19,7 +19,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/ob_errno.h"
-#include "share/ob_tenant_mem_limit_getter.h"
+#include "storage/tx_storage/ob_tenant_mem_limit_getter.h"
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "storage/fts/dict/ob_ft_cache_dict.h"
 #include "storage/fts/dict/ob_ft_dat_dict.h"
@@ -194,7 +194,7 @@ TEST_F(FTParserTest, test_cache)
   dat.mem_block_size_ = sizeof(ObFTDAT);
   ObFTDAT *ptr = &dat;
 
-  ObDictCacheKey key(1, 1, ObFTDictType::DICT_IK_MAIN, 0);
+  ObDictCacheKey key(1, ObFTDictType::DICT_IK_MAIN, 0);
   ObDictCacheValue value(ptr);
   ret = cache.put(key, value);
   ASSERT_EQ(OB_SUCCESS, ret);

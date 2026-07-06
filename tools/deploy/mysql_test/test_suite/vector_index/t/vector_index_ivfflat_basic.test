@@ -516,14 +516,14 @@ set ob_default_lob_inrow_threshold=8192;
 create table tv (c1 int, vec vector(256), vector index idv(vec) with(distance=l2, type=ivf_flat));
 
 let $data_table_id = query_get_value(SELECT table_id
-                                     FROM oceanbase.__all_virtual_table
+                                     FROM oceanbase.__all_table
                                      WHERE table_name = 'tv', table_id, 1);
 
 # expect 3 vec aux index tables, all 8192
 --disable_query_log
 --replace_regex /__idx_[0-9]*/__idx_DATA_TABLE_ID/g
 eval SELECT table_name
-     FROM oceanbase.__all_virtual_table
+     FROM oceanbase.__all_table
      WHERE data_table_id = $data_table_id
        AND table_name LIKE '__idx%' and lob_inrow_threshold = 8192;
 --enable_query_log

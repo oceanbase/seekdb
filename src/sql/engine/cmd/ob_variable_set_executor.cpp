@@ -16,9 +16,10 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 
-#include "observer/ob_sql_client_decorator.h"
+#include "share/ob_sql_client_decorator.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_root_service.h"
 #include "observer/ob_server.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
@@ -101,7 +102,7 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
       if (OB_ISNULL(expr_ctx.exec_ctx_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("expr_ctx.exec_ctx_ is NULL", K(ret));
-      } else if (OB_FAIL(password_ctx.init(stmt.get_actual_tenant_id()))) {
+      } else if (OB_FAIL(password_ctx.init())) {
         LOG_WARN("fail to init password ctx", K(ret));
       } else {
         expr_ctx.exec_ctx_->set_sql_proxy(sql_proxy);
@@ -165,7 +166,7 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
             }
           } else {
             ObSetVar set_var(node.variable_name_, node.set_scope_, node.is_set_default_,
-                             stmt.get_actual_tenant_id(), *expr_ctx.calc_buf_, *sql_proxy);
+                             *expr_ctx.calc_buf_, *sql_proxy);
             ObObj out_obj;
             const bool is_set_stmt = true;
             if (OB_FAIL(session->get_sys_variable_by_name(node.variable_name_, sys_var))) {
@@ -173,10 +174,10 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                 // session did not find a system variable with this name, possibly new version data sent over during proxy synchronization,
                 // Therefore first check in the system table __all_sys_variable
                 ret = OB_SUCCESS;
-                const uint64_t tenant_id = session->get_effective_tenant_id();
-                const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+                
+                
                 ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy,
-                                                           exec_tenant_id,
+                                                           false,
                                                            OB_ALL_SYS_VARIABLE_TID);
                 ObObj tmp_val;
                 ObSqlString sql;
@@ -186,7 +187,7 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                       OB_ALL_SYS_VARIABLE_TNAME,
                       node.variable_name_.length(), node.variable_name_.ptr()))) {
                     LOG_WARN("assign sql string failed", K(ret));
-                  } else if (OB_FAIL(sql_client_retry_weak.read(res, exec_tenant_id, sql.ptr()))) {
+                  } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
                     LOG_WARN("execute sql failed", K(sql), K(ret));
                   } else if (OB_ISNULL(result = res.get_result())) {
                     ret = OB_ERR_UNEXPECTED;
@@ -219,7 +220,7 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                           ctx, set_var, *sys_var, value_obj, out_obj, is_set_stmt))) {
                 LOG_WARN("fail to check", K(ret), K(node), K(*sys_var), K(value_obj));
               } else if (FALSE_IT(value_obj = out_obj)) {
-              } else if (OB_FAIL(cast_value(ctx, node, stmt.get_actual_tenant_id(),
+              } else if (OB_FAIL(cast_value(ctx, node,
                                             *expr_ctx.calc_buf_, *sys_var, value_obj, out_obj))) {
                 LOG_WARN("fail to cast value", K(ret), K(node), K(*sys_var), K(value_obj));
               } else if (FALSE_IT(value_obj = out_obj)) {
@@ -239,8 +240,7 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                 } else {}
               } else if (ObSetVar::SET_SCOPE_GLOBAL == node.set_scope_
                         && node.variable_name_ == OB_SV_RESOURCE_MANAGER_PLAN) {
-                if (OB_FAIL(update_resource_mapping_rule_version(*sql_proxy,
-                              session->get_effective_tenant_id()))) {
+                if (OB_FAIL(update_resource_mapping_rule_version(*sql_proxy))) {
                   LOG_WARN("fail to update resource mapping rule version", K(ret));
                 }
               } else if (node.variable_name_ == OB_SV_VALIDATE_PASSWORD_LENGTH
@@ -288,17 +288,16 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
 
               if (OB_FAIL(ret)) {
               } else if (set_var.var_name_ == OB_SV_COMPATIBILITY_MODE) {
-                if (!(OB_SYS_TENANT_ID == session->get_effective_tenant_id())
-                    || !GCONF.in_upgrade_mode()) {
+                if (!GCONF.in_upgrade_mode()) {
                   ret = OB_OP_NOT_ALLOW;
                   LOG_WARN("Compatibility mode can be changed only under upgrade mode and system tenant",
-                           K(ret), K(session->get_effective_tenant_id()));
+                           K(ret));
                   LOG_USER_ERROR(OB_OP_NOT_ALLOW,
                           "Compatibility mode be changed not under upgrade mode and system tenant");
                 } else if (ObSetVar::SET_SCOPE_SESSION != set_var.set_scope_) {
                   ret = OB_OP_NOT_ALLOW;
                   LOG_WARN("Compatibility mode can be changed only under session scope",
-                           K(ret), K(session->get_effective_tenant_id()));
+                           K(ret));
                   LOG_USER_ERROR(OB_OP_NOT_ALLOW,
                           "Compatibility mode be changed not in session scope");
                 }
@@ -457,7 +456,7 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   observer::ObInnerSQLConnectionPool *pool = NULL;
   sqlclient::ObISQLConnection *conn = NULL;
-  uint64_t tenant_id = 0;
+  
   if (OB_ISNULL(session_info) || OB_ISNULL(sql_proxy) || OB_ISNULL(sql_proxy->get_pool())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session_info), K(sql_proxy));
@@ -468,7 +467,6 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
   } else if (OB_FAIL(pool->acquire(session_info, conn))) {
     LOG_WARN("failed to acquire connection", K(ret));
   } else {
-    tenant_id = session_info->get_effective_tenant_id();
     int64_t idx = 0;
     ObObj tmp_value;
     SMART_VAR(ObISQLClient::ReadResult, res) {
@@ -480,7 +478,7 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
         conn->set_check_priv(true);
       }
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(conn->execute_read(tenant_id, subquery_expr.ptr(), res))) {
+      } else if (OB_FAIL(conn->execute_read(subquery_expr.ptr(), res))) {
         LOG_WARN("failed to execute sql", K(ret), K(subquery_expr));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -571,8 +569,8 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL", K(ret));
   } else {
-    arg.tenant_id_ = set_var.actual_tenant_id_;
-    arg.exec_tenant_id_ = set_var.actual_tenant_id_;
+    
+    
     ObString first_stmt;
     if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
       LOG_WARN("fail to get first stmt" , K(ret));
@@ -702,7 +700,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
       int64_t max_read_stale_time = 0;
       if (OB_FAIL(val.get_int(max_read_stale_time))) {
         LOG_WARN("fail to get int value", K(ret), K(val));
-      } else if (max_read_stale_time != ObSysVarFactory::INVALID_MAX_READ_STALE_TIME &&
+      } else if (max_read_stale_time != share::ObSysVarMeta::INVALID_MAX_READ_STALE_TIME &&
                  max_read_stale_time < GCONF.weak_read_version_refresh_interval) {
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT,
@@ -725,7 +723,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
       } else if (OB_FAIL(sysvar_schema.set_value(extra_var_value))) {
         LOG_WARN("set sysvar schema value failed", K(ret));
       } else {
-        sysvar_schema.set_tenant_id(arg.tenant_id_);
+        
         if (OB_FAIL(arg.sys_var_list_.push_back(sysvar_schema))) {
           LOG_WARN("store sys var to array failed", K(ret));
         }
@@ -744,7 +742,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
     int64_t sys_var_val_length = OB_MAX_SYS_VAR_VAL_LENGTH;
     if (set_var.var_name_ == OB_SV_TCP_INVITED_NODES) {
       uint64_t data_version = 0;
-      if (OB_FAIL(GET_MIN_DATA_VERSION(set_var.actual_tenant_id_, data_version))) {
+      if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
         LOG_WARN("fail to get tenant data version", KR(ret));
       } else {
         sys_var_val_length = OB_MAX_TCP_INVITED_NODES_LENGTH;
@@ -759,7 +757,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
     } else if (OB_FAIL(sysvar_schema.set_value(val_str))) {
       LOG_WARN("set sysvar schema value failed", K(ret));
     } else {
-      sysvar_schema.set_tenant_id(arg.tenant_id_);
+      
       if (OB_FAIL(arg.sys_var_list_.push_back(sysvar_schema))) {
         LOG_WARN("store sys var to array failed", K(ret));
       }
@@ -873,7 +871,7 @@ int ObVariableSetExecutor::check_and_convert_sys_var(ObExecContext &ctx,
     static const common::ObString DEFAULT_VALUE_TERRITORY("AMERICA");
     static const common::ObString DEFAULT_VALUE_SORT("BINARY");
     static const common::ObString DEFAULT_VALUE_COMP("BINARY");
-    static const common::ObString DEFAULT_VALUE_NCHAR_CHARACTERSET("AL16UTF16");
+    static const common::ObString DEFAULT_VALUE_NCHAR_CHARACTERSET("AL32UTF8");
     static const common::ObString DEFAULT_VALUE_DATE_LANGUAGE("AMERICAN");
     static const common::ObString DEFAULT_VALUE_NCHAR_CONV_EXCP("FALSE");
     static const common::ObString DEFAULT_VALUE_CALENDAR("GREGORIAN");
@@ -914,7 +912,6 @@ int ObVariableSetExecutor::check_and_convert_sys_var(ObExecContext &ctx,
 
 int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
                                       const ObVariableSetStmt::VariableSetNode &var_node,
-                                      uint64_t actual_tenant_id,
                                       ObIAllocator &calc_buf,
                                       const ObBasicSysVar &sys_var,
                                       const ObObj &in_val,
@@ -928,18 +925,17 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("my session is null");
   } else if (var_node.is_set_default_) {
-    uint64_t tenant_id = actual_tenant_id;
+    
     if (ObSetVar::SET_SCOPE_SESSION == var_node.set_scope_) {
       ObSchemaGetterGuard schema_guard;
       const ObSysVarSchema *var_schema = NULL;
       const ObDataTypeCastParams dtc_params =
             ObBasicSessionInfo::create_dtc_params(ctx.get_my_session());
       if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-                  tenant_id,
                   schema_guard))) {
         LOG_WARN("get schema guard failed", K(ret));
-      } else if (OB_FAIL(schema_guard.get_tenant_system_variable(tenant_id, var_node.variable_name_, var_schema))) {
-        LOG_WARN("get tenant system variable failed", K(ret), K(tenant_id), K(var_node.variable_name_));
+      } else if (OB_FAIL(schema_guard.get_tenant_system_variable(var_node.variable_name_, var_schema))) {
+        LOG_WARN("get tenant system variable failed", K(ret), K(var_node.variable_name_));
       } else if (OB_FAIL(var_schema->get_value(&calc_buf, dtc_params, out_val))) {
         LOG_WARN("get value from sysvar schema failed", K(ret));
       }
@@ -994,7 +990,7 @@ int ObVariableSetExecutor::process_session_autocommit_hook(ObExecContext &exec_c
       LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR, (int)strlen(OB_SV_AUTOCOMMIT), OB_SV_AUTOCOMMIT,
                      (int)strlen(autocommit_str), autocommit_str);
     } else {
-      // in xa trans or dblink trans
+      // in xa trans
       if (in_trans && my_session->associated_xa()) {
         const transaction::ObXATransID xid = my_session->get_xid();
         transaction::ObTxDesc *tx_desc = my_session->get_tx_desc();
@@ -1006,10 +1002,6 @@ int ObVariableSetExecutor::process_session_autocommit_hook(ObExecContext &exec_c
         } else if (true == orig_ac && 1 == autocommit) {
           if (transaction::ObGlobalTxType::XA_TRANS == global_tx_type) {
             // do nothing
-          } else if (transaction::ObGlobalTxType::DBLINK_TRANS == global_tx_type) {
-            // in dblink trans, this case is not posssible
-            ret = OB_ERR_UNEXPECTED;
-            LOG_ERROR("unexpected case for dblink trans", K(ret), K(xid));
           } else {
             ret = OB_ERR_UNEXPECTED;
             LOG_ERROR("unexpected global trans type", K(ret), K(xid), K(global_tx_type));
@@ -1018,14 +1010,6 @@ int ObVariableSetExecutor::process_session_autocommit_hook(ObExecContext &exec_c
           // in xa trans
           if (transaction::ObGlobalTxType::XA_TRANS == global_tx_type) {
             LOG_INFO("set autocommit off in xa trans", K(ret), K(xid));
-          // in dblink trans
-          } else if (transaction::ObGlobalTxType::DBLINK_TRANS == global_tx_type) {
-            if (my_session->need_restore_auto_commit()) {
-              ret = OB_OP_NOT_ALLOW;
-              LOG_WARN("not allow to set autocommit off", K(ret), K(xid));
-            } else {
-              LOG_INFO("set autocommit off in dblink trans", K(ret), K(xid));
-            }
           } else {
             ret = OB_ERR_UNEXPECTED;
             LOG_ERROR("unexpected global trans type", K(ret), K(xid), K(global_tx_type));
@@ -1130,8 +1114,7 @@ int ObVariableSetExecutor::process_last_insert_id_hook(ObPhysicalPlanCtx *plan_c
   return ret;
 }
 
-int ObVariableSetExecutor::update_resource_mapping_rule_version(ObMySQLProxy &sql_proxy,
-                                                                uint64_t tenant_id)
+int ObVariableSetExecutor::update_resource_mapping_rule_version(ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
@@ -1140,7 +1123,6 @@ int ObVariableSetExecutor::update_resource_mapping_rule_version(ObMySQLProxy &sq
     STORAGE_LOG(WARN, "append table name failed, ", K(ret));
   } else {
     ObSqlString values;
-    SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id), "tenant_id", "%lu");
     SQL_COL_APPEND_CSTR_VALUE(sql, values, "ob_current_resource_mapping_version", "name");
     SQL_COL_APPEND_VALUE(sql, values, 5, "data_type", "%d");
     // need use microsecond in case insert multiple rules in one second concurrently.
@@ -1153,7 +1135,7 @@ int ObVariableSetExecutor::update_resource_mapping_rule_version(ObMySQLProxy &sq
                                   static_cast<int32_t>(values.length()),
                                   values.ptr()))) {
         LOG_WARN("append sql failed, ", K(ret));
-      } else if (OB_FAIL(sql_proxy.write(tenant_id,
+      } else if (OB_FAIL(sql_proxy.write(
                                       sql.ptr(),
                                       affected_rows))) {
         LOG_WARN("fail to execute sql", K(sql), K(ret));
@@ -1227,7 +1209,7 @@ int ObVariableSetExecutor::switch_to_session_variable(const ObObj &value,
   return ret;
 }
 
-int ObVariableSetExecutor::ObValidatePasswordCtx::init(uint64_t tenant_id)
+int ObVariableSetExecutor::ObValidatePasswordCtx::init()
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(GCTX.schema_service_)) {
@@ -1235,21 +1217,21 @@ int ObVariableSetExecutor::ObValidatePasswordCtx::init(uint64_t tenant_id)
     LOG_WARN("schema_service_ is null");
   } else {
     ObSchemaGetterGuard schema_guard;
-    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed", K(ret));
-    } else if (OB_FAIL(get_current_val(schema_guard, tenant_id,
+    } else if (OB_FAIL(get_current_val(schema_guard,
                                        share::SYS_VAR_VALIDATE_PASSWORD_LENGTH,
                                        cur_length_))) {
       LOG_WARN("fail to get validate_password_length", K(ret));
-    } else if (OB_FAIL(get_current_val(schema_guard, tenant_id,
+    } else if (OB_FAIL(get_current_val(schema_guard,
                                        share::SYS_VAR_VALIDATE_PASSWORD_MIXED_CASE_COUNT,
                                        cur_mixed_case_count_))) {
       LOG_WARN("fail to get validate_password_mixed_case_count", K(ret));
-    } else if (OB_FAIL(get_current_val(schema_guard, tenant_id,
+    } else if (OB_FAIL(get_current_val(schema_guard,
                                        share::SYS_VAR_VALIDATE_PASSWORD_NUMBER_COUNT,
                                        cur_number_count_))) {
       LOG_WARN("fail to get validate_password_number_count", K(ret));
-    } else if (OB_FAIL(get_current_val(schema_guard, tenant_id,
+    } else if (OB_FAIL(get_current_val(schema_guard,
                                        share::SYS_VAR_VALIDATE_PASSWORD_SPECIAL_CHAR_COUNT,
                                        cur_special_count_))) {
       LOG_WARN("fail to get validate_password_special_char_count", K(ret));
@@ -1262,15 +1244,14 @@ int ObVariableSetExecutor::ObValidatePasswordCtx::init(uint64_t tenant_id)
 
 int ObVariableSetExecutor::ObValidatePasswordCtx::get_current_val(
     ObSchemaGetterGuard &schema_guard,
-    uint64_t tenant_id,
     ObSysVarClassType var_id,
     uint64_t &val)
 {
   int ret = OB_SUCCESS;
   const schema::ObSysVarSchema *var_schema = NULL;
   ObObj val_obj;
-  if (OB_FAIL(schema_guard.get_tenant_system_variable(tenant_id, var_id, var_schema))) {
-    LOG_WARN("fail to get system variable", K(ret), K(tenant_id), K(var_id));
+  if (OB_FAIL(schema_guard.get_tenant_system_variable(var_id, var_schema))) {
+    LOG_WARN("fail to get system variable", K(ret), K(var_id));
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("var_schema is null");
@@ -1328,7 +1309,7 @@ int ObVariableSetExecutor::cascade_set_validate_password(ObExecContext &ctx,
   } else {
     ObObj value_obj;
     ObSetVar set_var(OB_SV_VALIDATE_PASSWORD_LENGTH, ObSetVar::SET_SCOPE_GLOBAL, false,
-                             stmt.get_actual_tenant_id(), calc_buf, sql_proxy);
+                             calc_buf, sql_proxy);
     value_obj.set_uint64(password_ctx.expect_length_);
     if (OB_FAIL(update_global_variables(ctx, stmt, set_var, value_obj))) {
       LOG_WARN("failed to update global variables", K(ret));
@@ -1337,11 +1318,11 @@ int ObVariableSetExecutor::cascade_set_validate_password(ObExecContext &ctx,
   return ret;
 }
 
-int ObVariableSetExecutor::is_support(const share::ObSetVar &set_var)
+int ObVariableSetExecutor::is_support(const sql::ObSetVar &set_var)
 {
   int ret = OB_SUCCESS;
   ObSysVarClassType var_id = SYS_VAR_INVALID;
- if(SYS_VAR_INVALID == (var_id = ObSysVarFactory::find_sys_var_id_by_name(set_var.var_name_))) {
+ if(SYS_VAR_INVALID == (var_id = share::ObSysVarMeta::find_sys_var_id_by_name(set_var.var_name_))) {
     ret = OB_ERR_SYS_VARIABLE_UNKNOWN;
     LOG_WARN("unknown variable", K(set_var.var_name_), K(ret));
   } else if (((SYS_VAR_DEBUG <= var_id && SYS_VAR_STORED_PROGRAM_CACHE >= var_id) ||

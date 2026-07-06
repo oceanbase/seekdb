@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_delete_lob_meta_row_task.h"
+#include "share/rc/ob_module_provider.h"
 #include "rootserver/ob_root_service.h"
-#include "share/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/access/ob_table_scan_iterator.h"
 
 namespace oceanbase
@@ -37,7 +38,7 @@ namespace storage
 int ObDeleteLobMetaRowParam::init(const ObDDLBuildSingleReplicaRequestArg &arg)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = arg.tenant_id_;
+  
   const int64_t table_id = arg.source_table_id_;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -51,7 +52,6 @@ int ObDeleteLobMetaRowParam::init(const ObDDLBuildSingleReplicaRequestArg &arg)
 
   if (OB_SUCC(ret)) {
     is_inited_ = true;
-    tenant_id_ = tenant_id;
     table_id_ = table_id;
     schema_id_ = arg.dest_schema_id_;
     schema_version_ = arg.schema_version_;
@@ -133,8 +133,7 @@ uint64_t ObDeleteLobMetaRowDag::hash() const
     tmp_ret = OB_ERR_SYS;
     LOG_ERROR("table schema must not be NULL", K(tmp_ret), K(is_inited_), K(param_));
   } else {
-    hash_val = param_.tenant_id_ 
-             + param_.table_id_
+    hash_val = param_.table_id_
              + param_.schema_id_
              + param_.ls_id_.hash()
              + param_.tablet_id_.hash()
@@ -156,7 +155,7 @@ bool ObDeleteLobMetaRowDag::operator==(const ObIDag &other) const
       tmp_ret = OB_ERR_SYS;
       LOG_ERROR("invalid argument", K(tmp_ret), K(param_), K(dag.param_));
     } else {
-      is_equal = (param_.tenant_id_ == dag.param_.tenant_id_) && (param_.tenant_id_ == dag.param_.tenant_id_) &&
+      is_equal = (true) && (true) &&
                  (param_.table_id_ == dag.param_.table_id_) && (param_.schema_id_ == dag.param_.schema_id_) &&
                  (param_.ls_id_ == dag.param_.ls_id_) && (param_.tablet_id_ == dag.param_.tablet_id_) && 
                  (param_.dest_tablet_id_ == dag.param_.dest_tablet_id_) && 
@@ -221,8 +220,8 @@ int ObDeleteLobMetaRowDag::report_replica_build_status()
 #endif
     obcall::ObDDLBuildSingleReplicaResponseArg arg;
     ObAddr rs_addr = GCTX.self_addr();
-    arg.tenant_id_ = param_.tenant_id_;
-    arg.dest_tenant_id_ = param_.tenant_id_;
+    
+    
     arg.ls_id_ = param_.ls_id_;
     arg.dest_ls_id_ = param_.ls_id_;
     arg.tablet_id_ = param_.tablet_id_;
@@ -279,17 +278,17 @@ int ObDeleteLobMetaRowTask::init_scan_param(ObTableScanParam& scan_param)
     ret = OB_NOT_INIT;
     LOG_WARN("ObDeleteLobMetaRowTask has not been inited", K(ret));
   } else {
-    const uint64_t tenant_id = param_->tenant_id_;
+    
     const int64_t table_id = param_->table_id_;
     const int64_t schema_version = param_->schema_version_;
     if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
-                                            tenant_id, schema_guard))) {
-      LOG_WARN("get tenant schema failed", K(ret), K(tenant_id));
-    } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
+                                            schema_guard))) {
+      LOG_WARN("get tenant schema failed", K(ret));
+    } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
       LOG_WARN("get table schema failed", K(ret), K(table_id));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("table not exist", K(ret), K(table_id), K(tenant_id));
+      LOG_WARN("table not exist", K(ret), K(table_id));
     } else {
       scan_param.tablet_id_ = param_->tablet_id_;
       scan_param.schema_version_ = param_->schema_version_;
@@ -306,8 +305,8 @@ int ObDeleteLobMetaRowTask::init_scan_param(ObTableScanParam& scan_param)
                             false // read_latest
                           );
       scan_param.scan_flag_.flag_ = query_flag.flag_;
-      scan_param.key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamKR"));
-      scan_param.ss_key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamSSKR"));
+      scan_param.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
+      scan_param.ss_key_ranges_.set_attr(ObMemAttr("ScanParamSSKR"));
       scan_param.index_id_ = 0;
       for (uint32_t i = 0; OB_SUCC(ret) && i < table_schema->get_column_count(); i++) {
         const ObColumnSchemaV2 *column_schema = table_schema->get_column_schema_by_idx(i);
@@ -387,12 +386,12 @@ int ObDeleteLobMetaRowTask::process()
   } else {
     ObTableScanParam scan_param;
     transaction::ObTxDesc *tx_desc = nullptr;
-    transaction::ObTransService *txs = MTL(transaction::ObTransService*);
+    transaction::ObTransService *txs = share::g_mp->trans_service();
     ObNewRowIterator *scan_iter = nullptr;
-    ObAccessService *tsc_service = MTL(ObAccessService *);
+    ObAccessService *tsc_service = share::g_mp->access_service();
     blocksstable::ObDatumRow *datum_row = nullptr;
     ObTableScanIterator *table_scan_iter = nullptr;
-    storage::ObLobManager* lob_mngr = MTL(storage::ObLobManager*);
+    storage::ObLobManager* lob_mngr = share::g_mp->lob_manager();
     ObIDag *tmp_dag = get_dag();
     const uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
     if (OB_ISNULL(txs) || OB_ISNULL(tsc_service) || OB_ISNULL(lob_mngr)) {

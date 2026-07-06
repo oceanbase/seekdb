@@ -78,9 +78,8 @@ public:
 class ObInitChannelPieceMsgCtx : public ObPieceMsgCtx
 {
 public:
-  ObInitChannelPieceMsgCtx(uint64_t op_id, int64_t task_cnt, int64_t timeout_ts, int64_t tenant_id)
-    : ObPieceMsgCtx(op_id, task_cnt, timeout_ts), received_(0),
-                    tenant_id_(tenant_id)/*, whole_msg_()*/ {}
+  ObInitChannelPieceMsgCtx(uint64_t op_id, int64_t task_cnt, int64_t timeout_ts)
+    : ObPieceMsgCtx(op_id, task_cnt, timeout_ts), received_(0)/*, whole_msg_()*/ {}
   ~ObInitChannelPieceMsgCtx() = default;
   INHERIT_TO_STRING_KV("meta", ObPieceMsgCtx, K_(received));
   virtual int send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs) override;
@@ -91,7 +90,7 @@ public:
                                  int64_t task_cnt,
                                  ObPieceMsgCtx *&msg_ctx);
   int received_; // number of pieces already received
-  int64_t tenant_id_;
+  
   ObInitChannelWholeMsg whole_msg_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObInitChannelPieceMsgCtx);

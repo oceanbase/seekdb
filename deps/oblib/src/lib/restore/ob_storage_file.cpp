@@ -806,7 +806,7 @@ int ObStorageFileUtil::list_directories(
         int pret = snprintf(sub_dir_path, OB_MAX_URI_LENGTH, "%s/%s", dir_path, entry.d_name);
         if (pret < 0 || pret >= OB_MAX_URI_LENGTH) {
           ret = OB_BUF_NOT_ENOUGH;
-          OB_LOG(WARN, "format tenant_id fail", K(ret), KCSTRING(dir_path));
+          OB_LOG(WARN, "format dir path fail", K(ret), KCSTRING(dir_path));
         } else {
           struct stat sb;
           if (-1 == stat(sub_dir_path, &sb)) {

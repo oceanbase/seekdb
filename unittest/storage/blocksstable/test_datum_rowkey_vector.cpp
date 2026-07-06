@@ -20,7 +20,7 @@
 #define private public
 #define protected public
 #include "storage/blocksstable/ob_datum_rowkey_vector.h"
-#include "src/share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 namespace oceanbase
 {
 

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_to_pinyin.h"
-#include "objit/common/ob_item_type.h"
+#include "sql/parser/ob_item_type.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/ob_exec_context.h"
 #include "lib/charset/ob_charset_string_helper.h"

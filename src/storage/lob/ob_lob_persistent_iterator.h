@@ -99,7 +99,7 @@ class ObLobMetaIterator : public ObLobMetaBaseIterator
 public:
   ObLobMetaIterator(const ObLobAccessCtx *access_ctx):
     ObLobMetaBaseIterator(),
-    scan_allocator_("LobScan", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    scan_allocator_("LobScan", OB_MALLOC_NORMAL_BLOCK_SIZE),
     access_ctx_(access_ctx)
   {}
 

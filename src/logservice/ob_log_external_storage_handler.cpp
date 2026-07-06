@@ -15,7 +15,7 @@
  */
 
 #include "ob_log_external_storage_handler.h"
-#include "share/backup/ob_backup_io_adapter.h"                                // ObBackupIoAdapter
+#include "share/io/ob_backup_io_adapter.h"                                // ObBackupIoAdapter
 #include "ob_log_external_storage_utils.h"                                    // get_and_init_io_device
 
 namespace oceanbase
@@ -212,6 +212,7 @@ int ObLogExternalStorageHandler::pread(const common::ObString &uri,
   }
   return ret;
 }
+
 
 bool ObLogExternalStorageHandler::is_valid_concurrency_(const int64_t concurrency) const
 {

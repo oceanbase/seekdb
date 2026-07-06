@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/mview/ob_mview_maintenance_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/resolver/mv/ob_mv_dep_utils.h"
 #include "logservice/ob_log_service.h"
 
@@ -53,15 +54,15 @@ int ObMViewMaintenanceService::mtl_init(ObMViewMaintenanceService *&service)
 int ObMViewMaintenanceService::init()
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   const uint64_t bucket_num = 64;
-  ObMemAttr attr(tenant_id, "MViewService");
+  ObMemAttr attr("MViewService");
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObMViewMaintenanceService init twice", KR(ret), KP(this));
-  } else if (!is_valid_tenant_id(tenant_id)) {
+  } else if (!true) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", KR(ret), K(tenant_id));
+    LOG_WARN("invalid tenant id", KR(ret));
   } else {
     if (OB_FAIL(mlog_maintenance_task_.init())) {
       LOG_WARN("fail to init mlog maintenance task", KR(ret));
@@ -102,7 +103,7 @@ int ObMViewMaintenanceService::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObMViewMaintenanceService not init", KR(ret), KP(this));
-  } else if (!is_meta_tenant(MTL_ID()) && OB_FAIL(mview_update_cache_task_.start())) { // run on every tenant server
+  } else if (OB_FAIL(mview_update_cache_task_.start())) { // run on every tenant server
     LOG_WARN("fail to start mview update cache task", KR(ret));
   } else {
     // do nothing
@@ -163,7 +164,7 @@ void ObMViewMaintenanceService::destroy()
 int ObMViewMaintenanceService::inner_switch_to_leader()
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   int64_t start_time_us = ObTimeUtility::current_time();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -191,7 +192,7 @@ int ObMViewMaintenanceService::inner_switch_to_leader()
       LOG_WARN("fail to start mview update deps task", KR(ret));
     } else if (OB_FAIL(mview_mds_task_.update_mview_mds_op())) {
       LOG_WARN("fail to update mview mds op", KR(ret));
-    } else if (OB_FAIL(MTL(logservice::ObLogService *)->
+    } else if (OB_FAIL(share::g_mp->log_service()->
                        get_palf_role(share::SYS_LS, role, proposal_id))) {
       LOG_WARN("fail to get palf role", KR(ret), K(role), K(proposal_id));
     } else {
@@ -199,14 +200,14 @@ int ObMViewMaintenanceService::inner_switch_to_leader()
     }
   }
   const int64_t cost_us = ObTimeUtility::current_time() - start_time_us;
-  FLOG_INFO("mview_maintenance: switch_to_leader", KR(ret), K(tenant_id), K(cost_us));
+  FLOG_INFO("mview_maintenance: switch_to_leader", KR(ret), K(cost_us));
   return ret;
 }
 
 int ObMViewMaintenanceService::inner_switch_to_follower()
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   int64_t start_time_us = ObTimeUtility::current_time();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -214,7 +215,7 @@ int ObMViewMaintenanceService::inner_switch_to_follower()
   } else if (FALSE_IT(sys_ls_task_stop_())) {
   }
   const int64_t cost_us = ObTimeUtility::current_time() - start_time_us;
-  FLOG_INFO("mview_maintenance: switch_to_follower", KR(ret), K(tenant_id), K(cost_us));
+  FLOG_INFO("mview_maintenance: switch_to_follower", KR(ret), K(cost_us));
   return ret;
 }
 
@@ -324,7 +325,6 @@ int ObMViewMaintenanceService::update_mview_refresh_info_cache(
 int ObMViewMaintenanceService::
     get_mview_last_refresh_info(const ObIArray<uint64_t> &src_mview_ids,
                                 ObMySQLProxy *sql_proxy,
-                                const uint64_t tenant_id,
                                 const share::SCN &scn,
                                 ObIArray<uint64_t> &mview_ids,
                                 ObIArray<uint64_t> &last_refresh_scns,
@@ -335,24 +335,22 @@ int ObMViewMaintenanceService::
   last_refresh_scns.reuse();
   mview_refresh_modes.reuse();
   uint64_t data_version = 0;
-  if (OB_ISNULL(sql_proxy) || tenant_id == OB_INVALID_TENANT_ID) {
+  if (OB_ISNULL(sql_proxy) || false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
+    LOG_WARN("invalid argument", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObSqlString sql;
       sqlclient::ObMySQLResult *mysql_result = NULL;
-      if (OB_FAIL(get_mview_last_refresh_info_sql_(scn, src_mview_ids, tenant_id, sql))) {
+      if (OB_FAIL(get_mview_last_refresh_info_sql_(scn, src_mview_ids, sql))) {
         LOG_WARN("failed to get last refresh scn sql", K(ret), K(sql));
-      } else if (OB_FAIL(sql_proxy->read(res,
-                                         tenant_id,
-                                         sql.ptr()))) {
-        LOG_WARN("fail to execute sql", K(ret), K(sql), K(tenant_id));
+      } else if (OB_FAIL(sql_proxy->read(res, sql.ptr()))) {
+        LOG_WARN("fail to execute sql", K(ret), K(sql));
       } else if (OB_FAIL(mview_update_cache_task_.extract_sql_result(res.get_result(),
                                                   mview_ids,
                                                   last_refresh_scns,
                                                   mview_refresh_modes))) {
-        LOG_WARN("failt to extract sql result", K(ret), K(sql), K(tenant_id));
+        LOG_WARN("failt to extract sql result", K(ret), K(sql));
       }
     }
   }
@@ -405,14 +403,13 @@ int ObMViewMaintenanceService::fetch_mv_refresh_scns(
 int ObMViewMaintenanceService::get_mview_last_refresh_info_sql_(
                                const share::SCN &scn,
                                const ObIArray<uint64_t> &mview_ids,
-                               const uint64_t tenant_id,
                                ObSqlString &sql)
 {
   int ret = OB_SUCCESS;
   ObSqlString mview_id_array;
-  if (OB_UNLIKELY(mview_ids.empty() || tenant_id == OB_INVALID_TENANT_ID)) {
+  if (OB_UNLIKELY(mview_ids.empty() || false)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect error", K(ret), K(mview_ids), K(tenant_id));
+    LOG_WARN("unexpect error", K(ret), K(mview_ids));
   } else if (OB_UNLIKELY(mview_ids.count() > 100)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("more than 100 different materialized view id used in last_refresh_scn", K(ret), K(mview_ids.count()));
@@ -457,7 +454,7 @@ int ObMViewMaintenanceService::get_mview_refresh_info(const ObIArray<uint64_t> &
 {
   int ret = OB_SUCCESS;
   bool hit_cache = false;
-  const uint64_t tenant_id = MTL_ID();
+  
   ObSEArray<uint64_t, 2> refresh_modes;
   ObSEArray<uint64_t, 2> refresh_scns;
   if (!is_inited_) {
@@ -466,14 +463,14 @@ int ObMViewMaintenanceService::get_mview_refresh_info(const ObIArray<uint64_t> &
   } else if (OB_ISNULL(sql_proxy)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(sql_proxy));
-  } else if (!is_valid_tenant_id(tenant_id)) {
+  } else if (!true) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", KR(ret), K(tenant_id));
+    LOG_WARN("invalid tenant id", KR(ret));
   } else if (src_mview_ids.empty()) {
     // do nothing
   } else if (OB_FAIL(fetch_mv_refresh_scns(src_mview_ids, read_snapshot,
                                            mview_ids, refresh_scns, hit_cache))){
-    LOG_WARN("fail to fetch mv refresh scns", KR(ret), K(tenant_id), K(src_mview_ids));
+    LOG_WARN("fail to fetch mv refresh scns", KR(ret), K(src_mview_ids));
   }
   if (OB_FAIL(ret)) {
   } else if (hit_cache) {
@@ -485,12 +482,11 @@ int ObMViewMaintenanceService::get_mview_refresh_info(const ObIArray<uint64_t> &
     mview_refresh_scns.reuse();
     if (OB_FAIL(get_mview_last_refresh_info(src_mview_ids,
                                             sql_proxy,
-                                            tenant_id,
                                             read_snapshot,
                                             mview_ids,
                                             mview_refresh_scns,
                                             refresh_modes))) {
-      LOG_WARN("fail to get mview last refresh info", K(ret), K(src_mview_ids), K(tenant_id));
+      LOG_WARN("fail to get mview last refresh info", K(ret), K(src_mview_ids), K(1UL));
     }
   }
 #ifdef ERRSIM
@@ -508,7 +504,7 @@ int ObMViewMaintenanceService::get_mview_refresh_info(const ObIArray<uint64_t> &
 #endif
   if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
     LOG_INFO("get_mview_refresh_info", K(ret), K(src_mview_ids), K(mview_ids),
-            K(tenant_id), K(hit_cache),
+            K(hit_cache),
             K(mview_refresh_scns), K(read_snapshot));
   }
   return ret;
@@ -543,20 +539,20 @@ int ObMViewMaintenanceService::get_all_mview_deps()
 {
   int ret = OB_SUCCESS;
   using namespace sql;
-  const uint64_t tenant_id = MTL_ID();
+  
   ObSEArray<ObMVDepInfo, 32> mv_dep_infos;
   hash::ObHashSet<uint64_t> update_set;
   uint64_t start_ts = ObTimeUtility::current_time();
   ObSchemaGetterGuard schema_guard;
-  if (!is_valid_tenant_id(tenant_id) || OB_ISNULL(GCTX.sql_proxy_)) {
+  if (!true || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected tenant id or sql porxy", KR(ret), K(tenant_id), KP(GCTX.sql_proxy_));
+    LOG_WARN("unexpected tenant id or sql porxy", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(update_set.create(10))) {
     LOG_WARN("fail to create update set", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", KR(ret));
   } else if (OB_FAIL(ObMVDepUtils::get_all_mview_dep_infos(
-                     GCTX.sql_proxy_, tenant_id, mv_dep_infos))) {
+                     GCTX.sql_proxy_, mv_dep_infos))) {
     LOG_WARN("fail to get mv deps", K(ret));
   } else {
     // TODO:: optimise rwlock
@@ -577,12 +573,12 @@ int ObMViewMaintenanceService::get_all_mview_deps()
       }
       const ObTableSchema *table_schema = nullptr;
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, curr_dep_info.p_obj_, table_schema))) {
-        LOG_WARN("fail to get table schema", K(ret), K(tenant_id), K(curr_dep_info.p_obj_));
+      } else if (OB_FAIL(schema_guard.get_table_schema( curr_dep_info.p_obj_, table_schema))) {
+        LOG_WARN("fail to get table schema", K(ret), K(curr_dep_info.p_obj_));
       } else if (OB_ISNULL(table_schema)) {
         // A dep on B and B complete refreshed, container table changed, ignore this null
         // if can not refresh success, it would return error when refreshing
-        LOG_INFO("table schema is null, maybe dep is deleted", K(ret), K(tenant_id), K(curr_dep_info.p_obj_));
+        LOG_INFO("table schema is null, maybe dep is deleted", K(ret), K(curr_dep_info.p_obj_));
       } else if (table_schema->is_materialized_view()) {
         dep_ids.push_back(curr_dep_info.p_obj_);
       }
@@ -659,12 +655,12 @@ int ObMViewMaintenanceService::get_target_nested_mview_deps(
 {
   int ret = OB_SUCCESS;
   target_mview_deps.reuse();
-  const uint64_t tenant_id = MTL_ID();
+  
   bool check_res = false;
   uint64_t curr_ts = ObTimeUtility::current_time();
-  if (!is_valid_tenant_id(tenant_id) || OB_ISNULL(GCTX.sql_proxy_)) {
+  if (!true || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected tenant id or sql porxy", KR(ret), K(tenant_id), KP(GCTX.sql_proxy_));
+    LOG_WARN("unexpected tenant id or sql porxy", KR(ret), KP(GCTX.sql_proxy_));
   } else if (curr_ts - mview_deps_timestamp_ > CacheValidInterval ||
              OB_ISNULL(mview_deps_.get(mview_id))) {
     LOG_INFO("no cached mview deps or cache expired", K(mview_id));
@@ -681,7 +677,7 @@ int ObMViewMaintenanceService::get_target_nested_mview_deps(
         common::sqlclient::ObMySQLResult *result = nullptr;
         if (OB_FAIL(get_nested_mview_list_check_sql(target_mview_deps, check_sql))) {
           LOG_WARN("fail to get target nested mview list check sql", K(ret), K(mview_id));
-        } else if (OB_FAIL(GCTX.sql_proxy_->read(res, tenant_id, check_sql.ptr()))) {
+        } else if (OB_FAIL(GCTX.sql_proxy_->read(res, check_sql.ptr()))) {
           LOG_WARN("fail to exec sql", K(ret), K(check_sql));
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
@@ -763,8 +759,8 @@ int ObMViewMaintenanceService::gen_target_nested_mview_topo_order(
   MViewDegrees mview_degrees;
   mview_reverse_deps.clear();
   const uint64_t bucket_num = 16;
-  const uint64_t tenant_id = MTL_ID();
-  ObMemAttr attr(tenant_id, "MViewService");
+  
+  ObMemAttr attr("MViewService");
   if (target_mview_deps.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(target_mview_deps.size()));

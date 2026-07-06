@@ -236,7 +236,7 @@ class ObHashPartInfrastructure :public common::ObDLinkBase<ObHashPartInfrastruct
 {
 public:
   ObHashPartInfrastructure() :
-    tenant_id_(UINT64_MAX), mem_context_(nullptr), alloc_(nullptr), arena_alloc_(nullptr),
+    mem_context_(nullptr), alloc_(nullptr), arena_alloc_(nullptr),
     hash_table_(), preprocess_part_(), left_part_list_(), right_part_list_(), rewind_part_list_(),
     left_part_map_(), right_part_map_(), io_event_observer_(nullptr),
     sql_mem_processor_(nullptr), hash_funcs_(nullptr), sort_collations_(nullptr), cmp_funcs_(nullptr),
@@ -339,7 +339,7 @@ private:
   using HpGroupAggrFunc = std::function<int64_t ()>;
   bool is_left() const { return InputSide::LEFT == cur_side_; }
   bool is_right() const { return InputSide::RIGHT == cur_side_; }
-  inline int init_mem_context(uint64_t tenant_id);
+  inline int init_mem_context();
 
   typedef int (ObHashPartInfrastructure::*InitPartitionFunc)
       (ObIntraPartition *part, int64_t nth_part, int64_t limit, int32_t delta_shift);
@@ -417,7 +417,7 @@ private:
 
   int update_mem_status_periodically();
 public:
-  int init(uint64_t tenant_id, bool enable_sql_dumped, bool unique, bool need_pre_part,
+  int init(bool enable_sql_dumped, bool unique, bool need_pre_part,
     int64_t ways, ObSqlMemMgrProcessor *sql_mem_processor, bool need_rewind = false);
 
   void reset();
@@ -742,7 +742,7 @@ public:
   {
     return slice_cnt_func_ ? true : false;
   }
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(preprocess_part),
                K_(enable_sql_dumped),
                K_(unique),
@@ -771,7 +771,7 @@ private:
   static const int64_t MIN_MEM_BOUND = 2 * 1024 * 1024; // 2M
   static const int64_t MIN_PERIOD_ROW_CNT = 16;
   const int64_t EXTEND_BKT_NUM_PUSH_DOWN = INIT_L3_CACHE_SIZE / sizeof(ObHashPartCols);
-  uint64_t tenant_id_;
+  
   lib::MemoryContext mem_context_;
   common::ObIAllocator *alloc_;
   common::ObArenaAllocator *arena_alloc_;
@@ -844,14 +844,14 @@ ObHashPartInfrastructure<HashCol, HashRowStore>::~ObHashPartInfrastructure()
 }
 
 template<typename HashCol, typename HashRowStore>
-inline int ObHashPartInfrastructure<HashCol, HashRowStore>::init_mem_context(uint64_t tenant_id)
+inline int ObHashPartInfrastructure<HashCol, HashRowStore>::init_mem_context()
 {
   int ret = common::OB_SUCCESS;
   if (OB_LIKELY(NULL == mem_context_)) {
     void *buf = nullptr;
     lib::ContextParam param;
     param.set_properties(lib::USE_TL_PAGE_OPTIONAL)
-      .set_mem_attr(tenant_id, "HashPartInfra",
+      .set_mem_attr("HashPartInfra",
                     common::ObCtxIds::WORK_AREA)
       .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
@@ -873,17 +873,17 @@ inline int ObHashPartInfrastructure<HashCol, HashRowStore>::init_mem_context(uin
 
 template<typename HashCol, typename HashRowStore>
 int ObHashPartInfrastructure<HashCol, HashRowStore>::init(
-  uint64_t tenant_id, bool enable_sql_dumped, bool unique, bool need_pre_part,
+  bool enable_sql_dumped, bool unique, bool need_pre_part,
   int64_t ways, ObSqlMemMgrProcessor *sql_mem_processor, bool need_rewind)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(init_mem_context(tenant_id))) {
-    SQL_ENG_LOG(WARN, "failed to init mem_context", K(ret), K(tenant_id));
+  if (OB_FAIL(init_mem_context())) {
+    SQL_ENG_LOG(WARN, "failed to init mem_context", K(ret));
   } else if (need_rewind && 2 == ways) {
     ret = OB_NOT_SUPPORTED;
     SQL_ENG_LOG(WARN, "Two-way input does not support rewind", K(ret), K(need_rewind), K(ways));
   } else {
-    tenant_id_ = tenant_id;
+    
     enable_sql_dumped_ = enable_sql_dumped;
     unique_ = unique;
     need_pre_part_ = need_pre_part;
@@ -1171,7 +1171,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::init_set_part(
     part->part_key_.part_shift_ = part_shift_ + delta_shift;
     part->part_key_.level_ = cur_level_ + 1;
     part->part_key_.nth_part_ = nth_part;
-    if (OB_FAIL(part->store_.init(limit, tenant_id_, ObCtxIds::WORK_AREA,
+    if (OB_FAIL(part->store_.init(limit, ObCtxIds::WORK_AREA,
                           ObModIds::OB_SQL_HASH_SET, true /* enable dump */,
                           sizeof(uint64_t)))) {
       SQL_ENG_LOG(WARN, "failed to init row store", K(ret));
@@ -1202,7 +1202,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::init_default_part(
     part->part_key_.part_shift_ = part_shift_ + delta_shift;
     part->part_key_.level_ = cur_level_ + 1;
     part->part_key_.nth_part_ = nth_part;
-    if (OB_FAIL(part->store_.init(limit, tenant_id_, ObCtxIds::WORK_AREA,
+    if (OB_FAIL(part->store_.init(limit, ObCtxIds::WORK_AREA,
                           "HashInfraOp", true /* enable dump */,
                           sizeof(uint64_t)))) {
       SQL_ENG_LOG(WARN, "failed to init row store", K(ret));
@@ -1723,10 +1723,10 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::create_dumped_partitions(
   } else if (!has_create_part_map_) {
     has_create_part_map_ = true;
     if (OB_FAIL(left_part_map_.create(
-        512, "HashInfraOp", "HashInfraOp", tenant_id_))) {
+        512, "HashInfraOp", "HashInfraOp"))) {
       SQL_ENG_LOG(WARN, "failed to create hash map", K(ret));
     } else if (OB_FAIL(right_part_map_.create(
-        512, "HashInfraOp", "HashInfraOp", tenant_id_))) {
+        512, "HashInfraOp", "HashInfraOp"))) {
       SQL_ENG_LOG(WARN, "failed to create hash map", K(ret));
     }
   }

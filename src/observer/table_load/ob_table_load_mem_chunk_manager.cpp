@@ -37,7 +37,7 @@ ObTableLoadChunkNode::~ObTableLoadChunkNode()
 ObTableLoadMemChunkManager::ObTableLoadMemChunkManager()
   : store_ctx_(nullptr), mem_ctx_(nullptr), is_inited_(false)
 {
-  chunk_nodes_.set_attr(ObMemAttr(MTL_ID(), "TLD_ChunkNode"));
+  chunk_nodes_.set_attr(ObMemAttr("TLD_ChunkNode"));
 }
 
 ObTableLoadMemChunkManager::~ObTableLoadMemChunkManager() {}

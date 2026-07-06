@@ -18,6 +18,7 @@
 #define PRINT_TS(x) (ObPrintTableStore(x))
 
 #include "ob_tablet_table_store.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "storage/ddl/ob_direct_load_struct.h"
@@ -615,7 +616,7 @@ bool ObTabletTableStore::check_read_tables(
 class ObTmpSSTable : public ObSSTable
 {
 public:
-  ObTmpSSTable() : arena_(ObMemAttr(MTL_ID(), "tmp_sst"))
+  ObTmpSSTable() : arena_(ObMemAttr("tmp_sst"))
   {
     key_.table_type_ = ObITable::DDL_MERGE_CO_SSTABLE;
     is_tmp_sstable_ = true;// for enable ref count
@@ -694,7 +695,7 @@ int ObTabletTableStore::calculate_ddl_read_tables(
     } else if (has_co_ddl_memtable) {
       const SCN ddl_start_scn = ddl_mem_sstables_[0]->get_ddl_start_scn();
       ObTableHandleV2 ddl_tmp_handle;
-      ObArenaAllocator arena(ObMemAttr(MTL_ID(), "Ddl_Com_Store"));
+      ObArenaAllocator arena(ObMemAttr("Ddl_Com_Store"));
       ObTabletDDLCompleteMdsUserData ddl_complete_data;
       ObStorageSchema *storage_schema = nullptr;
       ObTmpSSTable *ddl_tmp_sstable = nullptr;
@@ -702,7 +703,7 @@ int ObTabletTableStore::calculate_ddl_read_tables(
         LOG_WARN("failed to get ddl complete mds user data", K(ret));
       } else if (ddl_complete_data.snapshot_version_ > snapshot_version) {
         // skip
-      } else if (OB_ISNULL(ddl_tmp_sstable = OB_NEW(ObTmpSSTable, ObMemAttr(MTL_ID(), "ddl_tmp")))) {
+      } else if (OB_ISNULL(ddl_tmp_sstable = OB_NEW(ObTmpSSTable, ObMemAttr("ddl_tmp")))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(ret));
       } else if (OB_FAIL(ddl_tmp_handle.set_sstable(ddl_tmp_sstable, ObMallocAllocator::get_instance()))) {
@@ -856,7 +857,7 @@ int ObTabletTableStore::get_table(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("found null table pointer", K(ret), K(table_key));
   } else if (table->is_memtable()) {
-    ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr *);
+    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
     if (OB_FAIL(handle.set_table(table, t3m, table->get_key().table_type_))) {
       LOG_WARN("Failed to set memtable to handle", K(ret), K(handle), K(table_key), KPC(table));
     }
@@ -1642,7 +1643,7 @@ OB_INLINE int ObTabletTableStore::check_major_sstable_empty(const share::SCN &dd
 OB_INLINE int ObTabletTableStore::check_ddl_complete(const ObTablet &tablet, bool &is_empty) const
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator arena(ObMemAttr(MTL_ID(), "DdlCom_Sto"));
+  ObArenaAllocator arena(ObMemAttr("DdlCom_Sto"));
   ObTabletDDLCompleteMdsUserData data;
   if (OB_FAIL(tablet.get_ddl_complete(share::SCN::max_scn(), arena, data))) {
     if (OB_EMPTY_RESULT == ret) {
@@ -2135,7 +2136,7 @@ int ObTabletTableStore::check_ready_for_read(const ObTablet &tablet)
 
   if (OB_SIZE_OVERFLOW == ret) {
     compaction::ObPartitionMergePolicy::diagnose_table_count_unsafe(compaction::MAJOR_MERGE, ObDiagnoseTabletType::TYPE_SPECIAL, tablet);
-    MTL(concurrency_control::ObMultiVersionGarbageCollector *)->report_sstable_overflow();
+    share::g_mp->multi_version_garbage_collector()->report_sstable_overflow();
   }
   return ret;
 }
@@ -3515,7 +3516,7 @@ int64_t ObPrintTableStore::to_string(char *buf, const int64_t buf_len) const
       J_NEWLINE();
       // table_type|max_merge_version
       //      |upper_trans_version|start_scn|end_scn|ref|buffer_minor
-      BUF_PRINTF("[%ld][%s][T%ld] [", GETTID(), GETTNAME(), GET_TENANT_ID());
+      BUF_PRINTF("[%ld][%s] [", GETTID(), GETTNAME());
       BUF_PRINTO(PC(trace_id));
       BUF_PRINTF("] ");
       BUF_PRINTF(" %-18s %-22s %-16s %-16s %-19s %-19s %-19s %-19s %-4s %-16s \n",
@@ -3612,7 +3613,7 @@ void ObPrintTableStore::table_to_string(
 {
   if (nullptr != table) {
     ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
-    BUF_PRINTF("[%ld][%s][T%ld] [", GETTID(), GETTNAME(), GET_TENANT_ID());
+    BUF_PRINTF("[%ld][%s] [", GETTID(), GETTNAME());
     BUF_PRINTO(PC(trace_id));
     BUF_PRINTF("] ");
     const char* table_name = table->is_sstable()
@@ -3645,7 +3646,7 @@ void ObPrintTableStore::ddl_kv_to_string(
 {
   if (nullptr != table) {
     ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
-    BUF_PRINTF("[%ld][%s][T%ld] [", GETTID(), GETTNAME(), GET_TENANT_ID());
+    BUF_PRINTF("[%ld][%s] [", GETTID(), GETTNAME());
     BUF_PRINTO(PC(trace_id));
     BUF_PRINTF("] ");
     const char *table_name = ObITable::get_table_type_name(ObITable::DDL_MEM_SSTABLE);

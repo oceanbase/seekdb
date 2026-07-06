@@ -67,6 +67,10 @@ public:
 };
 pthread_key_t FreeItid::the_key;
 
+// Construct early so ~FreeItid is registered with atexit before libc may
+// re-enter OB malloc hooks from nested __cxa_atexit during static init.
+static FreeItid g_free_itid __attribute__((init_priority(101)));
+
 static bool itid_lock = 0;
 
 uint64_t itid_slots[1024] = {};
@@ -104,10 +108,9 @@ int64_t alloc_itid()
 
 void defer_free_itid(int64_t &itid)
 {
-  static FreeItid free;
   if (itid != INVALID_ITID) {
     int ret = OB_SUCCESS;
-    if (OB_FAIL(free.set_itid(itid))) {
+    if (OB_FAIL(g_free_itid.set_itid(itid))) {
       free_itid(itid);
       itid = INVALID_ITID;
     }

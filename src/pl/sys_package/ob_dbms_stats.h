@@ -17,13 +17,13 @@
 #ifndef OB_DBMS_STAT_H
 #define OB_DBMS_STAT_H
 
-#include "share/stat/ob_stat_define.h"
+#include "sql/optimizer/stat/ob_stat_define.h"
 #include "share/schema/ob_schema_struct.h"
 #include "sql/engine/ob_exec_context.h"
 #include "pl/ob_pl_type.h"
-#include "share/stat/ob_dbms_stats_preferences.h"
-#include "share/stat/ob_opt_stat_gather_stat.h"
-#include "share/stat/ob_dbms_stats_copy_table_stats.h"
+#include "sql/optimizer/stat/ob_dbms_stats_preferences.h"
+#include "sql/optimizer/stat/ob_opt_stat_gather_stat.h"
+#include "sql/optimizer/stat/ob_dbms_stats_copy_table_stats.h"
 
 namespace oceanbase
 {
@@ -405,12 +405,10 @@ public:
   static int get_part_ids_from_schema(const share::schema::ObTableSchema *table_schema,
                                       common::ObIArray<ObObjectID> &target_part_ids);
 
-  static int update_stat_cache(const uint64_t rpc_tenant_id,
-                               const ObTableStatParam &param,
+  static int update_stat_cache(const ObTableStatParam &param,
                                ObOptStatRunningMonitor *running_monitor = NULL);
 
-  static int update_stat_cache(const uint64_t tenant_id,
-                               obcall::ObUpdateStatCacheArg &stat_arg,
+  static int update_stat_cache(obcall::ObUpdateStatCacheArg &stat_arg,
                                ObOptStatRunningMonitor *running_monitor = NULL);
 
   static int parse_set_table_stat_options(ObExecContext &ctx,
@@ -483,20 +481,17 @@ public:
 
   static int do_gather_table_stats(sql::ObExecContext &ctx,
                                    const int64_t table_id,
-                                   const uint64_t tenant_id,
                                    const int64_t duration_time,
                                    int64_t &succeed_cnt,
                                    ObOptStatTaskInfo &task_info);
 
 
   static int build_stat_table_by_async_table(sql::ObExecContext &ctx,
-                                             const uint64_t tenant_id,
                                              const ObTableSchema &table_schema,
                                              const AsyncStatTable &async_table,
                                              StatTable &stat_table);
 
   static int get_table_stale_percent(sql::ObExecContext &ctx,
-                                     const uint64_t tenant_id,
                                      const share::schema::ObTableSchema &table_schema,
                                      const double stale_percent_threshold,
                                      StatTable &stat_table);
@@ -520,7 +515,6 @@ public:
                                    ObOptStatTaskInfo &task_info);
 
   static int get_table_stale_percent_threshold(ObMySQLProxy *mysql_proxy,
-                                               const uint64_t tenant_id,
                                                const uint64_t table_id,
                                                double &stale_percent_threshold);
   static int extract_copy_stat_helper(sql::ParamStore &params,
@@ -543,8 +537,7 @@ public:
                               sql::ParamStore &params,
                               common::ObObj &result);
   
-  static int update_system_stats_cache(const uint64_t rpc_tenant_id,
-                                      const uint64_t tenant_id);
+  static int update_system_stats_cache();
 
   static void update_optimizer_gather_stat_info(const ObOptStatTaskInfo *task_info,
                                                 const ObOptStatGatherStat *gather_stat);
@@ -579,12 +572,10 @@ private:
                                ObStatPrefs *&stat_pref);
 
   static int get_non_partitioned_table_stale_percent(sql::ObExecContext &ctx,
-                                                     const uint64_t tenant_id,
                                                      const share::schema::ObTableSchema &table_schema,
                                                      StatTable &stat_table);
 
   static int get_partition_table_stale_percent(sql::ObExecContext &ctx,
-                                               const uint64_t tenant_id,
                                                const share::schema::ObTableSchema &table_schema,
                                                const double stale_percent_threshold,
                                                StatTable &stat_table);
@@ -624,7 +615,7 @@ private:
   static int parse_degree_option(ObExecContext &ctx, const ObObjParam &degree,
                                  ObTableStatParam &stat_param);
 
-  static int refresh_tenant_schema_guard(ObExecContext &ctx, const uint64_t tenant_id);
+  static int refresh_tenant_schema_guard(ObExecContext &ctx);
 
   static int adjust_auto_gather_stat_option(const ObIArray<ObPartitionStatInfo> &partition_stat_infos,
                                             ObTableStatParam &param);
@@ -643,7 +634,6 @@ private:
                                       ObOptStatTaskInfo &task_info);
 
   static int do_async_gather_table_stats(sql::ObExecContext &ctx,
-                                         const uint64_t tenant_id,
                                          const AsyncStatTable &async_table,
                                          const int64_t duration_time,
                                          int64_t &succeed_cnt,

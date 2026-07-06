@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_lob_data_reader.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_lob_manager.h"
 
 namespace oceanbase
@@ -28,7 +29,7 @@ namespace storage
 
 ObLobDataReader::ObLobDataReader()
   : is_inited_(false), tablet_id_(), access_ctx_(nullptr),
-    allocator_(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    allocator_(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
 }
 
@@ -84,7 +85,7 @@ int ObLobDataReader::read_lob_data_impl(blocksstable::ObStorageDatum &datum, ObC
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Invalid datum len", K(ret), K(datum));
   } else {
-    ObLobManager* lob_mngr = MTL(ObLobManager*);
+    ObLobManager* lob_mngr = share::g_mp->lob_manager();
     if (OB_ISNULL(lob_mngr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get lob manager failed.", K(ret));

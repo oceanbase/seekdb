@@ -26,6 +26,7 @@ namespace oceanbase
 {
 namespace rootserver
 {
+class ObDDLOperator;
 class ObMviewAlterService
 {
 public:
@@ -37,12 +38,11 @@ public:
                                           const uint64_t tenant_data_version);
 
 private:
-  static int alter_mview_attributes(const uint64_t tenant_id,
-                                    const ObTableSchema *orig_table_schema,
+  static int alter_mview_attributes(const ObTableSchema *orig_table_schema,
                                     obcall::ObAlterTableArg &alter_table_arg,
                                     ObDDLOperator &ddl_operator, ObSchemaGetterGuard &schema_guard,
                                     ObDDLSQLTransaction &trans);
-  static int alter_mlog_attributes(const uint64_t tenant_id, const ObTableSchema *orig_table_schema,
+  static int alter_mlog_attributes(const ObTableSchema *orig_table_schema,
                                    obcall::ObAlterTableArg &alter_table_arg,
                                    ObDDLOperator &ddl_operator, ObSchemaGetterGuard &schema_guard,
                                    ObDDLSQLTransaction &trans);

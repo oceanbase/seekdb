@@ -41,12 +41,11 @@ public:
 public:	
 	ObTableLoadResourceService() 
     : resource_manager_(nullptr),
-      tenant_id_(common::OB_INVALID_ID),
       is_inited_(false)
   {
   }
   virtual ~ObTableLoadResourceService();
-	int init(const uint64_t tenant_id);
+	int init();
   static int mtl_init(ObTableLoadResourceService *&service);
 	int start() { return common::OB_SUCCESS; };
   void stop();
@@ -76,13 +75,13 @@ public:
 	int switch_to_follower_gracefully();
 	void switch_to_follower_forcedly();
 
-  static int get_leader_addr(const uint64_t tenant_id, const share::ObLSID &ls_id, common::ObAddr &leader);
+  static int get_leader_addr(const share::ObLSID &ls_id, common::ObAddr &leader);
   static int local_apply_resource(ObDirectLoadResourceApplyArg &arg, ObDirectLoadResourceOpRes &res);
   static int local_release_resource(ObDirectLoadResourceReleaseArg &arg);
   static int local_update_resource(ObDirectLoadResourceUpdateArg &arg);
   static int apply_resource(ObDirectLoadResourceApplyArg &arg, ObDirectLoadResourceOpRes &res);
   static int release_resource(ObDirectLoadResourceReleaseArg &arg);
-	uint64_t get_tenant_id() const { return tenant_id_; }
+	
 private:
 	int alloc_resource_manager();
 	int delete_resource_manager();
@@ -92,7 +91,6 @@ private:
   mutable lib::ObMutex switch_lock_;
   mutable obsys::ObRWLock rw_lock_;
 	ObTableLoadResourceManager *resource_manager_;
-  uint64_t tenant_id_;
 	bool is_inited_;
 };
 

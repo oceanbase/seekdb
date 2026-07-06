@@ -149,8 +149,7 @@ static void sm_conn_unlock_tenant(ObSMConnection& conn)
     conn.tenant_->unlock();
     conn.is_tenant_locked_ = false;
     conn.tenant_ = NULL;
-    LOG_INFO("unlock session of tenant",K(conn.sessid_),
-             "proxy_sessid", conn.proxy_sessid_, K(conn.tenant_id_));
+    LOG_INFO("unlock session of tenant",K(conn.sessid_));
   }
 }
 
@@ -166,21 +165,18 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
         sql::ObSQLSessionInfo *sess_info = NULL;
         sql::ObSessionGetterGuard guard(*GCTX.session_mgr_, conn.sessid_);
         if (OB_UNLIKELY(OB_SUCCESS != (tmp_ret = guard.get_session(sess_info)))) {
-          LOG_WARN_RET(tmp_ret, "fail to get session", K(tmp_ret), K(conn.sessid_),
-                  "proxy_sessid", conn.proxy_sessid_);
+          LOG_WARN_RET(tmp_ret, "fail to get session", K(tmp_ret), K(conn.sessid_));
         } else if (OB_ISNULL(sess_info)) {
           tmp_ret = OB_ERR_UNEXPECTED;
-          LOG_WARN_RET(tmp_ret, "session info is NULL", K(tmp_ret), K(conn.sessid_),
-                  "proxy_sessid", conn.proxy_sessid_);
+          LOG_WARN_RET(tmp_ret, "session info is NULL", K(tmp_ret), K(conn.sessid_));
         } else {
           disconnect_state = sess_info->get_disconnect_state();
           trace_id = sess_info->get_current_trace_id();
         }
       }
       sql::ObFreeSessionCtx ctx;
-      ctx.tenant_id_ = conn.tenant_id_;
+      
       ctx.sessid_ = conn.sessid_;
-      ctx.proxy_sessid_ = conn.proxy_sessid_;
       ctx.has_inc_active_num_ = conn.has_inc_active_num_;
 
       //free session in task
@@ -192,8 +188,7 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
       } else if (OB_UNLIKELY(NULL == conn.tenant_)) {
         ret = OB_TENANT_NOT_EXIST;
       } else if (OB_FAIL(conn.tenant_->recv_request(*task))) {
-        LOG_WARN("push disconnect task fail", K(conn.sessid_),
-                  "proxy_sessid", conn.proxy_sessid_, K(ret));
+        LOG_WARN("push disconnect task fail", K(conn.sessid_), K(ret));
         ob_delete(task);
       }
       // free session locally
@@ -213,9 +208,6 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
   share::ObTaskController::get().allow_next_syslog();
   LOG_INFO("connection close",
            "sessid", conn.sessid_,
-           "proxy_sessid", conn.proxy_sessid_,
-           "tenant_id", conn.tenant_id_,
-           "from_proxy", conn.is_proxy_,
            "from_java_client", conn.is_java_client_,
            "c/s protocol", get_cs_protocol_type_name(conn.get_cs_protocol_type()),
            "is_need_clear_sessid_", conn.is_need_clear_sessid_,
@@ -236,18 +228,16 @@ int ObSMConnectionCallback::on_disconnect(observer::ObSMConnection& conn)
     sql::ObSQLSessionInfo *sess_info = NULL;
     sql::ObSessionGetterGuard guard(*(GCTX.session_mgr_), conn.sessid_);
     if (OB_FAIL(guard.get_session(sess_info))) {
-      LOG_WARN("fail to get session", K(conn.sessid_),
-                "proxy_sessid", conn.proxy_sessid_);
+      LOG_WARN("fail to get session", K(conn.sessid_));
     } else if (OB_ISNULL(sess_info)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session info is NULL", K(conn.sessid_),
-                "proxy_sessid", conn.proxy_sessid_);
+      LOG_WARN("session info is NULL", K(conn.sessid_));
     } else {
       sess_info->set_session_state(sql::SESSION_KILLED);
       sess_info->set_mark_killed(true);
     }
   }
-  LOG_INFO("kill and revert session", K(conn.sessid_), "proxy_sessid", conn.proxy_sessid_, K(ret));
+  LOG_INFO("kill and revert session", K(conn.sessid_), K(ret));
   return ret;
 }
 

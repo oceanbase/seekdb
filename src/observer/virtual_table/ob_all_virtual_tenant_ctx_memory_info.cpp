@@ -53,23 +53,19 @@ void ObAllVirtualTenantCtxMemoryInfo::reset()
 int ObAllVirtualTenantCtxMemoryInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  int tenant_cnt = 0;
   if (has_start_) {
     // do nothing
   } else {
-    get_tenant_ids(tenant_ids_, OB_MAX_SERVER_TENANT_CNT, tenant_cnt);
-    for (int i = 0; i < tenant_cnt; ++i) {
-      uint64_t tenant_id = tenant_ids_[i];
+    {
       for (int ctx_id = 0; OB_SUCC(ret) && ctx_id < ObCtxIds::MAX_CTX_ID; ctx_id++) {
-        auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(tenant_id, ctx_id);
+        auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(ctx_id);
         if (NULL == ta) {
-          ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(tenant_id,
-                                                                                      ctx_id);
+          ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(ctx_id);
         }
         if (OB_ISNULL(ta)) {
           // do nothing
         } else {
-          ret = add_row(tenant_id, ctx_id, ta->get_hold(), ta->get_used(), ta->get_limit());
+          ret = add_row(ctx_id, ta->get_hold(), ta->get_used(), ta->get_limit());
         }
       }
     }
@@ -91,7 +87,7 @@ int ObAllVirtualTenantCtxMemoryInfo::inner_get_next_row(ObNewRow *&row)
   return ret;
 }
 
-int ObAllVirtualTenantCtxMemoryInfo::add_row(uint64_t tenant_id, int64_t ctx_id, int64_t hold, int64_t used, int64_t limit)
+int ObAllVirtualTenantCtxMemoryInfo::add_row(int64_t ctx_id, int64_t hold, int64_t used, int64_t limit)
 {
   int ret = OB_SUCCESS;
   ObObj *cells = nullptr;

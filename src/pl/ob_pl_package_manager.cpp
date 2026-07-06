@@ -26,11 +26,11 @@
 
 #include "ob_pl_package_manager.h"
 #include "pl/ob_pl_package.h"
-#include "pl/ob_pl_compile.h"
+#include "pl/ob_pl_build.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/session/ob_session_val_map.h"
 #include "pl/ob_pl_dependency_util.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 
 namespace oceanbase
 {
@@ -312,16 +312,7 @@ int ObPLPackageManager::read_and_exec_package_sql(ObMySQLProxy &sql_proxy,
       // but we need to create system packages with oralce compatibility
       // here hack to oracle mode
       bool eof = false;
-      bool create_external_table = false;
       ObSessionParam param;
-      ObSessionParam *param_ptr = nullptr;
-      int64_t sql_mode = SMO_STRICT_ALL_TABLES | SMO_NO_ZERO_IN_DATE | SMO_NO_AUTO_CREATE_USER;
-      // allow affected_rows > 0 when exec sql in external_table_alert_log.sql
-      if (strcmp(stream.get_name(), "external_table_alert_log") == 0) {
-        create_external_table = true;
-        param.sql_mode_ = &sql_mode;
-        param_ptr = &param;
-      }
       // do not cache the compilation results of system packages into the PL cache when loading system packages.
       param.enable_pl_cache_ = false;
       HEAP_VAR(char[OB_MAX_SQL_LENGTH], sql_buf) {
@@ -329,31 +320,18 @@ int ObPLPackageManager::read_and_exec_package_sql(ObMySQLProxy &sql_proxy,
           if (FAILEDx(read_package_sql(stream, sql_buf, OB_MAX_SQL_LENGTH, eof))) {
             LOG_WARN("fail to read package sql data", K(ret));
           } else if (strlen(sql_buf) != 0
-                     && OB_FAIL(sql_proxy.write(OB_SYS_TENANT_ID,
-                                                sql_buf,
+                     && OB_FAIL(sql_proxy.write(sql_buf,
                                                 affected_rows,
                                                 static_cast<int64_t>(compa_mode),
                                                 &param))) {
             LOG_WARN("fail to exec package sql", K(sql_buf), K(ret));
-          } else if (affected_rows != 0 && !create_external_table) {
+          } else if (affected_rows != 0) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("affected_rows expected to be zero", K(ret), K(affected_rows), K(stream.get_name()));
           } else {
-            OZ (ObSPIService::force_refresh_schema(OB_SYS_TENANT_ID));
+            OZ (ObSPIService::force_refresh_schema());
           }
           LOG_INFO("package source data consumed", K(ret), K(stream));
-        }
-      }
-      if (create_external_table && OB_SUCC(ret)) {
-        common::ObString alter_table_sql("alter external table sys_external_tbs.__all_external_alert_log_info auto_refresh immediate");
-        if (OB_FAIL(sql_proxy.write(OB_SYS_TENANT_ID,
-                                    alter_table_sql,
-                                    affected_rows,
-                                    static_cast<int64_t>(compa_mode),
-                                    param_ptr))) {
-          LOG_WARN("fail to alter auto_refresh flag of external table ", K(ret), K(alter_table_sql));
-        } else {
-          LOG_INFO("seccess to alter auto_refresh flag", KR(ret), K(alter_table_sql));
         }
       }
     }
@@ -369,7 +347,6 @@ extern int oracle_syspack_file_list_length;
 extern int mysql_syspack_file_list_length;
 extern ObSysPackageFile oracle_syspack_file_list[];
 extern ObSysPackageFile mysql_syspack_file_list[];
-// for now! we only have one special system package "__DBMS_UPGRADE"
 extern int oracle_special_syspack_file_list_length;
 extern int mysql_special_syspack_file_list_length;
 extern ObSysPackageFile oracle_special_syspack_file_list[];
@@ -725,22 +702,21 @@ int ObPLPackageManager::get_package_expr(const ObPLResolveCtx &resolve_ctx,
   CK (OB_NOT_NULL(package_spec_info));
   CK (package_spec_info->get_package_id() == package_id);
   if (OB_SUCC(ret)) {
-    ObPLCompiler compiler(resolve_ctx.allocator_,
+    ObPLBuilder builder(resolve_ctx.allocator_,
                           resolve_ctx.session_info_,
                           resolve_ctx.schema_guard_,
                           resolve_ctx.package_guard_,
                           resolve_ctx.sql_proxy_);
-    const uint64_t tenant_id = package_spec_info->get_tenant_id();
+    
     uint64_t db_id = package_spec_info->get_database_id();
     uint64_t package_spec_id = package_spec_info->get_package_id();
     ObPLBlockNS *null_parent_ns = NULL;
     const ObDatabaseSchema *db_schema = NULL;
-    uint64_t effective_tenant_id = resolve_ctx.session_info_.get_effective_tenant_id();
+    
     HEAP_VAR(ObPLPackageAST, package_spec_ast, resolve_ctx.allocator_) {
       ObString source;
       if (package_spec_info->is_for_trigger()) {
-        OZ (ObTriggerInfo::gen_package_source(package_spec_info->get_tenant_id(),
-                                              package_spec_info->get_package_id(),
+        OZ (ObTriggerInfo::gen_package_source(package_spec_info->get_package_id(),
                                               source,
                                               PACKAGE_TYPE,
                                               resolve_ctx.schema_guard_,
@@ -750,7 +726,7 @@ int ObPLPackageManager::get_package_expr(const ObPLResolveCtx &resolve_ctx,
       }
       OZ (ObSQLUtils::convert_sql_text_from_schema_for_resolve(
         resolve_ctx.allocator_, resolve_ctx.session_info_.get_dtc_params(), source));
-      OZ (resolve_ctx.schema_guard_.get_database_schema(tenant_id, db_id, db_schema));
+      OZ (resolve_ctx.schema_guard_.get_database_schema( db_id, db_schema));
       OZ (package_spec_ast.init(db_schema->get_database_name_str(),
                                 package_spec_info->get_package_name(),
                                 PL_PACKAGE_SPEC,
@@ -759,9 +735,9 @@ int ObPLPackageManager::get_package_expr(const ObPLResolveCtx &resolve_ctx,
                                 package_spec_info->get_schema_version(),
                                 NULL));
       {
-        ObPLCompilerEnvGuard guard(
+        ObPLBuilderEnvGuard guard(
           *package_spec_info, resolve_ctx.session_info_, resolve_ctx.schema_guard_, package_spec_ast, ret);
-        OZ (compiler.analyze_package(source, null_parent_ns,
+        OZ (builder.analyze_package(source, null_parent_ns,
                                      package_spec_ast, package_spec_info->is_for_trigger()));
       }
       CK (expr_idx >= 0 && package_spec_ast.get_exprs().count() > expr_idx);
@@ -1054,7 +1030,7 @@ int ObPLPackageManager::update_special_package_status(const ObPLResolveCtx &reso
 
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (get_tenant_id_by_object_id(package_id) == OB_SYS_TENANT_ID && 
+  } else if (true && 
                0 == package_spec->get_name().compare("DBMS_PROFILER")) {
   }
 
@@ -1068,47 +1044,51 @@ int ObPLPackageManager::load_package_spec(const ObPLResolveCtx &resolve_ctx,
 {
   int ret = OB_SUCCESS;
   package_spec = NULL;
-  const uint64_t tenant_id = package_spec_info.get_tenant_id();
+  
   uint64_t db_id = package_spec_info.get_database_id();
   uint64_t package_id = package_spec_info.get_package_id();
   ObPLBlockNS *null_parent_ns = NULL;
-  uint64_t effective_tenant_id = resolve_ctx.session_info_.get_effective_tenant_id();
-  HEAP_VAR(ObPLPackageAST, package_spec_ast, resolve_ctx.allocator_) {
-    const ObDatabaseSchema *db_schema = NULL;
-    ObPLCompiler compiler(resolve_ctx.allocator_,
-                          resolve_ctx.session_info_,
-                          resolve_ctx.schema_guard_,
-                          resolve_ctx.package_guard_,
-                          resolve_ctx.sql_proxy_);
-    OZ (resolve_ctx.schema_guard_.get_database_schema(tenant_id, db_id, db_schema));
-    CK (OB_NOT_NULL(db_schema));
-    OZ (package_spec_ast.init(db_schema->get_database_name_str(),
-                              package_spec_info.get_package_name(),
-                              PL_PACKAGE_SPEC,
-                              package_spec_info.get_database_id(),
-                              package_id,
-                              package_spec_info.get_schema_version(),
-                              NULL));
-    // generate cacheobj_guard to protect package and package will be destoried by map's destructor
-    ObCacheObjGuard* cacheobj_guard = NULL;
-    void* buf = NULL;
-    if (OB_ISNULL(buf = resolve_ctx.package_guard_.alloc_.alloc(sizeof(ObCacheObjGuard)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory.", K(ret));
-    } else if (FALSE_IT(cacheobj_guard = new (buf)ObCacheObjGuard(PACKAGE_SPEC_HANDLE))) {
-      // do nothing
-    } else {
-      OZ (ObCacheObjectFactory::alloc(*cacheobj_guard, ObLibCacheNameSpace::NS_PKG,
-                                                            effective_tenant_id));
-      OX (package_spec = static_cast<ObPLPackage*>(cacheobj_guard->get_cache_obj()));
-      CK (OB_NOT_NULL(package_spec));
-      OZ (package_spec->init(package_spec_ast));
+  const ObDatabaseSchema *db_schema = NULL;
+  OZ (resolve_ctx.schema_guard_.get_database_schema(db_id, db_schema));
+  CK (OB_NOT_NULL(db_schema));
+  // Allocate the package cacheobj first, then resolve its AST on the package's own
+  // long-lived allocator so the tree-walking interpreter can walk routine ASTs
+  // after compile returns. The resolve-time arena would otherwise free them.
+  ObCacheObjGuard* cacheobj_guard = NULL;
+  void* buf = NULL;
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(buf = resolve_ctx.package_guard_.alloc_.alloc(sizeof(ObCacheObjGuard)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate memory.", K(ret));
+  } else if (FALSE_IT(cacheobj_guard = new (buf)ObCacheObjGuard(PACKAGE_SPEC_HANDLE))) {
+    // do nothing
+  } else {
+    OZ (ObCacheObjectFactory::alloc(*cacheobj_guard, ObLibCacheNameSpace::NS_PKG));
+    OX (package_spec = static_cast<ObPLPackage*>(cacheobj_guard->get_cache_obj()));
+    CK (OB_NOT_NULL(package_spec));
+    if (OB_SUCC(ret)) {
+      common::ObIAllocator &pkg_alloc = package_spec->get_allocator();
+      ObPLPackageAST *package_spec_ast = OB_NEWx(ObPLPackageAST, (&pkg_alloc), pkg_alloc);
+      ObPLBuilder builder(pkg_alloc,
+                            resolve_ctx.session_info_,
+                            resolve_ctx.schema_guard_,
+                            resolve_ctx.package_guard_,
+                            resolve_ctx.sql_proxy_);
+      CK (OB_NOT_NULL(package_spec_ast));
+      OZ (package_spec_ast->init(db_schema->get_database_name_str(),
+                                 package_spec_info.get_package_name(),
+                                 PL_PACKAGE_SPEC,
+                                 package_spec_info.get_database_id(),
+                                 package_id,
+                                 package_spec_info.get_schema_version(),
+                                 NULL));
+      OZ (package_spec->init(*package_spec_ast));
       // Use SMART_CALL_LARGE for PL package compilation
       // Package resolving can consume a lot of stack space when SQL in the package is complex
-      OZ (SMART_CALL_LARGE(compiler.compile_package(package_spec_info,
-                                  null_parent_ns,
-                                  package_spec_ast,
-                                  *package_spec)));
+      OZ (SMART_CALL_LARGE(builder.build_package(package_spec_info,
+                                null_parent_ns,
+                                *package_spec_ast,
+                                *package_spec)));
       if (OB_SUCC(ret)) {
         if (package_spec->get_can_cached() && resolve_ctx.need_add_pl_cache_
             && OB_FAIL(add_package_to_plan_cache(resolve_ctx, package_spec))) {
@@ -1119,12 +1099,12 @@ int ObPLPackageManager::load_package_spec(const ObPLResolveCtx &resolve_ctx,
                     K(ret), K(package_id), K(package_spec->get_can_cached()));
         }
       }
-      OZ (resolve_ctx.package_guard_.put(package_id, cacheobj_guard), package_id);
-      if (OB_FAIL(ret) && OB_NOT_NULL(package_spec)) {
-        // pointer should be free manually
-        cacheobj_guard->~ObCacheObjGuard();
-        package_spec = NULL;
-      }
+    }
+    OZ (resolve_ctx.package_guard_.put(package_id, cacheobj_guard), package_id);
+    if (OB_FAIL(ret) && OB_NOT_NULL(package_spec)) {
+      // pointer should be free manually
+      cacheobj_guard->~ObCacheObjGuard();
+      package_spec = NULL;
     }
   }
   return ret;
@@ -1137,95 +1117,95 @@ int ObPLPackageManager::load_package_body(const ObPLResolveCtx &resolve_ctx,
 {
   int ret = OB_SUCCESS;
   package_body = NULL;
-  ObPLCompiler compiler(resolve_ctx.allocator_,
-                        resolve_ctx.session_info_,
-                        resolve_ctx.schema_guard_,
-                        resolve_ctx.package_guard_,
-                        resolve_ctx.sql_proxy_);
-  const uint64_t tenant_id = package_spec_info.get_tenant_id();
   uint64_t db_id = package_spec_info.get_database_id();
   uint64_t package_spec_id = package_spec_info.get_package_id();
   uint64_t package_body_id = package_body_info.get_package_id();
   ObPLBlockNS *null_parent_ns = NULL;
   const ObDatabaseSchema *db_schema = NULL;
-  uint64_t effective_tenant_id = resolve_ctx.session_info_.get_effective_tenant_id();
-  HEAP_VARS_2((ObPLPackageAST, package_spec_ast, resolve_ctx.allocator_),
-              (ObPLPackageAST, package_body_ast, resolve_ctx.allocator_)) {
-    ObString source;
-    if (package_spec_info.is_for_trigger()) {
-      OZ (ObTriggerInfo::gen_package_source(package_spec_info.get_tenant_id(),
-                                            package_spec_info.get_package_id(),
-                                            source,
-                                            share::schema::PACKAGE_TYPE,
-                                            resolve_ctx.schema_guard_,
-                                            resolve_ctx.allocator_));
-    } else {
-      source = package_spec_info.get_source();
-    }
-    OZ (resolve_ctx.schema_guard_.get_database_schema(tenant_id, db_id, db_schema));
-    CK (OB_NOT_NULL(db_schema));
-    OZ (package_spec_ast.init(db_schema->get_database_name_str(),
-                              package_spec_info.get_package_name(),
-                              PL_PACKAGE_SPEC,
-                              package_spec_info.get_database_id(),
-                              package_spec_id,
-                              package_spec_info.get_schema_version(),
-                              NULL));
-    if (package_spec_info.is_invoker_right()) {
-      OX (package_spec_ast.get_compile_flag().add_invoker_right());
-    }
-    OZ (ObSQLUtils::convert_sql_text_from_schema_for_resolve(
-          resolve_ctx.allocator_, resolve_ctx.session_info_.get_dtc_params(), source));
-    {
-      ObPLCompilerEnvGuard guard(
-        package_spec_info, resolve_ctx.session_info_, resolve_ctx.schema_guard_, package_spec_ast, ret);
-      OZ (compiler.analyze_package(source, null_parent_ns,
-                                   package_spec_ast, package_spec_info.is_for_trigger()));
-    }
-
-    OZ (package_body_ast.init(db_schema->get_database_name_str(),
-                              package_body_info.get_package_name(),
-                              PL_PACKAGE_BODY,
-                              package_body_info.get_database_id(),
-                              package_body_id,
-                              package_body_info.get_schema_version(),
-                              &package_spec_ast));
-    // generate cacheobj_guard to protect package and package will be
-    // destoried by map's destructor
-    ObCacheObjGuard* cacheobj_guard = NULL;
-    void* buf = NULL;
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(buf = resolve_ctx.package_guard_.alloc_.alloc(sizeof(ObCacheObjGuard)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory.", K(ret));
-    } else if (FALSE_IT(cacheobj_guard = new (buf)ObCacheObjGuard(PACKAGE_BODY_HANDLE))) {
-      // do nothing
-    } else {
-      OZ (ObCacheObjectFactory::alloc(*cacheobj_guard, ObLibCacheNameSpace::NS_PKG,
-                                                            effective_tenant_id));
-      OX (package_body = static_cast<ObPLPackage*>(cacheobj_guard->get_cache_obj()));
-      CK (OB_NOT_NULL(package_body));
-      OZ (package_body->init(package_body_ast));
-
-      OZ (ObPLDependencyUtil::add_dependency_objects(&package_body_ast.get_dependency_table(), package_spec_ast.get_dependency_table()));
+  OZ (resolve_ctx.schema_guard_.get_database_schema(db_id, db_schema));
+  CK (OB_NOT_NULL(db_schema));
+  // Allocate the body cacheobj first, then resolve both spec and body ASTs on the
+  // body package's own long-lived allocator. The body's routine ASTs reference the
+  // re-resolved spec AST, so both must outlive compile for the interpreter to walk
+  // them; the resolve-time arena would otherwise free them.
+  ObCacheObjGuard* cacheobj_guard = NULL;
+  void* buf = NULL;
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(buf = resolve_ctx.package_guard_.alloc_.alloc(sizeof(ObCacheObjGuard)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate memory.", K(ret));
+  } else if (FALSE_IT(cacheobj_guard = new (buf)ObCacheObjGuard(PACKAGE_BODY_HANDLE))) {
+    // do nothing
+  } else {
+    OZ (ObCacheObjectFactory::alloc(*cacheobj_guard, ObLibCacheNameSpace::NS_PKG));
+    OX (package_body = static_cast<ObPLPackage*>(cacheobj_guard->get_cache_obj()));
+    CK (OB_NOT_NULL(package_body));
+    if (OB_SUCC(ret)) {
+      common::ObIAllocator &pkg_alloc = package_body->get_allocator();
+      ObPLBuilder builder(pkg_alloc,
+                            resolve_ctx.session_info_,
+                            resolve_ctx.schema_guard_,
+                            resolve_ctx.package_guard_,
+                            resolve_ctx.sql_proxy_);
+      ObPLPackageAST *package_spec_ast = OB_NEWx(ObPLPackageAST, (&pkg_alloc), pkg_alloc);
+      ObPLPackageAST *package_body_ast = OB_NEWx(ObPLPackageAST, (&pkg_alloc), pkg_alloc);
+      ObString source;
+      CK (OB_NOT_NULL(package_spec_ast));
+      CK (OB_NOT_NULL(package_body_ast));
+      if (OB_SUCC(ret) && package_spec_info.is_for_trigger()) {
+        OZ (ObTriggerInfo::gen_package_source(package_spec_info.get_package_id(),
+                                              source,
+                                              share::schema::PACKAGE_TYPE,
+                                              resolve_ctx.schema_guard_,
+                                              pkg_alloc));
+      } else if (OB_SUCC(ret)) {
+        source = package_spec_info.get_source();
+      }
+      OZ (package_spec_ast->init(db_schema->get_database_name_str(),
+                                 package_spec_info.get_package_name(),
+                                 PL_PACKAGE_SPEC,
+                                 package_spec_info.get_database_id(),
+                                 package_spec_id,
+                                 package_spec_info.get_schema_version(),
+                                 NULL));
+      if (OB_SUCC(ret) && package_spec_info.is_invoker_right()) {
+        OX (package_spec_ast->get_compile_flag().add_invoker_right());
+      }
+      OZ (ObSQLUtils::convert_sql_text_from_schema_for_resolve(
+            pkg_alloc, resolve_ctx.session_info_.get_dtc_params(), source));
+      if (OB_SUCC(ret)) {
+        ObPLBuilderEnvGuard guard(
+          package_spec_info, resolve_ctx.session_info_, resolve_ctx.schema_guard_, *package_spec_ast, ret);
+        OZ (builder.analyze_package(source, null_parent_ns,
+                                     *package_spec_ast, package_spec_info.is_for_trigger()));
+      }
+      OZ (package_body_ast->init(db_schema->get_database_name_str(),
+                                 package_body_info.get_package_name(),
+                                 PL_PACKAGE_BODY,
+                                 package_body_info.get_database_id(),
+                                 package_body_id,
+                                 package_body_info.get_schema_version(),
+                                 package_spec_ast));
+      OZ (package_body->init(*package_body_ast));
+      OZ (ObPLDependencyUtil::add_dependency_objects(&package_body_ast->get_dependency_table(), package_spec_ast->get_dependency_table()));
       // Use SMART_CALL_LARGE for PL package body compilation
       // Package resolving can consume a lot of stack space when SQL in the package is complex
-      OZ (SMART_CALL_LARGE(compiler.compile_package(package_body_info,
-                                  &(package_spec_ast.get_body()->get_namespace()),
-                                  package_body_ast,
-                                  *package_body)));
+      OZ (SMART_CALL_LARGE(builder.build_package(package_body_info,
+                                &(package_spec_ast->get_body()->get_namespace()),
+                                *package_body_ast,
+                                *package_body)));
       if (OB_SUCC(ret)
           && package_body->get_can_cached() && resolve_ctx.need_add_pl_cache_
           && OB_FAIL(add_package_to_plan_cache(resolve_ctx, package_body))) {
         LOG_WARN("add package body to plan cache failed", K(package_body_id), K(ret));
         ret = OB_SUCCESS; //cache add failed, need not fail execute path
       }
-      OZ (resolve_ctx.package_guard_.put(package_body_id, cacheobj_guard));
-      if (OB_FAIL(ret) && OB_NOT_NULL(package_body)) {
-        // pointer should be free manually
-        cacheobj_guard->~ObCacheObjGuard();
-        package_body = NULL;
-      }
+    }
+    OZ (resolve_ctx.package_guard_.put(package_body_id, cacheobj_guard));
+    if (OB_FAIL(ret) && OB_NOT_NULL(package_body)) {
+      // pointer should be free manually
+      cacheobj_guard->~ObCacheObjGuard();
+      package_body = NULL;
     }
   }
   return ret;
@@ -1285,17 +1265,17 @@ int ObPLPackageManager::get_package_schema_info(ObSchemaGetterGuard &schema_guar
   package_body_info = NULL;
   int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
   if (!ObTriggerInfo::is_trigger_package_id(package_id)) {
-    const uint64_t tenant_id = get_tenant_id_by_object_id(package_id);
+    
     const ObPackageInfo *tmp_package_info = NULL;
-    if (OB_FAIL(schema_guard.get_package_info(tenant_id, package_id, tmp_package_info))) {
-      LOG_WARN("failed to get package info", K(tenant_id), K(package_id), K(ret));
+    if (OB_FAIL(schema_guard.get_package_info( package_id, tmp_package_info))) {
+      LOG_WARN("failed to get package info", K(package_id), K(ret));
     } else if (OB_ISNULL(tmp_package_info)) {
       ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
       LOG_WARN("package info is NULL", K(package_id), K(ret));
     } else {
       if (share::schema::PACKAGE_TYPE == tmp_package_info->get_type()) {
         package_spec_info = tmp_package_info;
-        if (OB_FAIL(schema_guard.get_package_info(tmp_package_info->get_tenant_id(),
+        if (OB_FAIL(schema_guard.get_package_info(
                                                   tmp_package_info->get_database_id(),
                                                   tmp_package_info->get_package_name(),
                                                   share::schema::PACKAGE_BODY_TYPE,
@@ -1305,7 +1285,7 @@ int ObPLPackageManager::get_package_schema_info(ObSchemaGetterGuard &schema_guar
         }
       } else {
         package_body_info = tmp_package_info;
-        if (OB_FAIL(schema_guard.get_package_info(tmp_package_info->get_tenant_id(),
+        if (OB_FAIL(schema_guard.get_package_info(
                                                   tmp_package_info->get_database_id(),
                                                   tmp_package_info->get_package_name(),
                                                   share::schema::PACKAGE_TYPE,
@@ -1318,7 +1298,7 @@ int ObPLPackageManager::get_package_schema_info(ObSchemaGetterGuard &schema_guar
           {
             ObString db_name("");
             const ObDatabaseSchema *database_schema = NULL;
-            if (OB_SUCCESS == schema_guard.get_database_schema(tmp_package_info->get_tenant_id(),
+            if (OB_SUCCESS == schema_guard.get_database_schema(
                 tmp_package_info->get_database_id(), database_schema)) {
               if (NULL != database_schema) {
                 db_name =database_schema->get_database_name_str();
@@ -1333,8 +1313,7 @@ int ObPLPackageManager::get_package_schema_info(ObSchemaGetterGuard &schema_guar
       }
     }
   } else {
-    if (OB_FAIL(schema_guard.get_package_info_from_trigger(MTL_ID(),
-                                                           package_id,
+    if (OB_FAIL(schema_guard.get_package_info_from_trigger(package_id,
                                                            package_spec_info,
                                                            package_body_info))) {
       LOG_WARN("failed to get package info from trigger", K(ret), K(package_id));
@@ -1366,9 +1345,9 @@ int ObPLPackageManager::get_cached_package_spec(const ObPLResolveCtx &resolve_ct
   } else if (OB_HASH_NOT_EXIST == ret) {
     ret = OB_SUCCESS;
     const ObPackageInfo *package_info = NULL;
-    const uint64_t tenant_id = get_tenant_id_by_object_id(package_id);
-    OZ (resolve_ctx.schema_guard_.get_package_info(tenant_id, package_id, package_info), package_id);
-    OV (OB_NOT_NULL(package_info), OB_ERR_UNEXPECTED, K(tenant_id), K(package_id));
+    
+    OZ (resolve_ctx.schema_guard_.get_package_info( package_id, package_info), package_id);
+    OV (OB_NOT_NULL(package_info), OB_ERR_UNEXPECTED, K(package_id));
     OZ (get_package_from_plan_cache(resolve_ctx, package_id, package_spec), package_id);
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(package_spec)) {
@@ -1634,7 +1613,7 @@ int ObPLPackageManager::add_package_to_plan_cache(const ObPLResolveCtx &resolve_
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("plan cache is null");
   } else {
-    int64_t tenant_id = resolve_ctx.session_info_.get_effective_tenant_id();
+    
     uint64_t package_id = package->get_id();
     //ObArenaAllocator allocator(ObModIds::OB_PL_TEMP);
 
@@ -1650,7 +1629,7 @@ int ObPLPackageManager::add_package_to_plan_cache(const ObPLResolveCtx &resolve_
       pc_ctx.key_.db_id_ = database_id;
       pc_ctx.key_.key_id_ = package_id;
       pc_ctx.key_.sessid_ =
-        (get_tenant_id_by_object_id(package_id) != OB_SYS_TENANT_ID && resolve_ctx.session_info_.is_pl_debug_on())
+        (false && resolve_ctx.session_info_.is_pl_debug_on())
           ? resolve_ctx.session_info_.get_server_sid() : 0;
       pc_ctx.key_.mode_ = resolve_ctx.session_info_.get_pl_profiler() != nullptr
                           ? ObPLObjectKey::ObjectMode::PROFILE : ObPLObjectKey::ObjectMode::NORMAL;
@@ -1712,7 +1691,7 @@ int ObPLPackageManager::get_package_from_plan_cache(const ObPLResolveCtx &resolv
       pc_ctx.key_.db_id_ = database_id;
       pc_ctx.key_.key_id_ = package_id;
       pc_ctx.key_.sessid_ =
-        (get_tenant_id_by_object_id(package_id) != OB_SYS_TENANT_ID && resolve_ctx.session_info_.is_pl_debug_on())
+        (false && resolve_ctx.session_info_.is_pl_debug_on())
           ? resolve_ctx.session_info_.get_server_sid() : 0;
       pc_ctx.key_.mode_ = resolve_ctx.session_info_.get_pl_profiler() != nullptr
                           ? ObPLObjectKey::ObjectMode::PROFILE : ObPLObjectKey::ObjectMode::NORMAL;

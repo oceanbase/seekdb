@@ -17,10 +17,10 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-#include "share/vector/ob_fixed_length_vector.h"
-#include "share/vector/ob_discrete_vector.h"
+#include "sql/engine/vector/ob_fixed_length_vector.h"
+#include "sql/engine/vector/ob_discrete_vector.h"
 #include "share/datum/ob_datum_funcs.h"
-#include "share/vector/expr_cmp_func.h"
+#include "sql/engine/vector/expr_cmp_func.h"
 #include "unittest/share/vector/util.h"
 
 

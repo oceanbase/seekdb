@@ -62,10 +62,7 @@ public:
   {
     arg_.set_database_name(db_name);
   }
-  void set_tenant_id(uint64_t tenant_id)
-  {
-    arg_.set_tenant_id(tenant_id);
-  }
+  
   void set_is_system_generated()
   {
     arg_.set_is_system_generated();

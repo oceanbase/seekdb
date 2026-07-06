@@ -1,82 +1,36 @@
 add_subdirectory(compress)
 add_subdirectory(restore)
 
-ob_set_subtarget(oblib_lib_extra ALONE
-  timezone/ob_timezone_util.cpp
-  geo/ob_geo_func_difference1.cpp
-  geo/ob_geo_func_difference2.cpp
-  geo/ob_geo_func_difference3.cpp
-  geo/ob_geo_func_covered_by1.cpp
-  geo/ob_geo_func_covered_by2.cpp
-  geo/ob_geo_func_within1.cpp
-  geo/ob_geo_func_within2.cpp
-  geo/ob_geo_func_union1.cpp
-  geo/ob_geo_func_union2.cpp
-  geo/ob_geo_func_touches1.cpp
-  geo/ob_geo_func_touches2.cpp
-  geo/ob_geo_func_touches3.cpp
-  geo/ob_geo_func_equals1.cpp
-  geo/ob_geo_func_equals2.cpp
-  geo/ob_geo_func_equals3.cpp
-  geo/ob_geo_func_intersects.cpp
-  geo/ob_geo_func_symdifference1.cpp
-  geo/ob_geo_func_symdifference2.cpp
-  geo/ob_geo_func_symdifference3.cpp
-  geo/ob_geo_func_distance.cpp
-  geo/ob_geo_func_crosses1.cpp
-  geo/ob_geo_func_crosses2.cpp
-  geo/ob_geo_func_overlaps1.cpp
-  geo/ob_geo_func_overlaps2.cpp
-  geo/ob_geo_func_overlaps3.cpp
+ob_set_subtarget(oblib_lib downsink_qt
+  thread/ob_queue_thread.cpp
+  thread/ob_balance_filter.cpp
+)
+
+if (OB_ERRSIM)
+  ob_set_subtarget(oblib_lib errsim_module
+    errsim_module/ob_errsim_module_type.cpp
+    errsim_module/ob_tenant_errsim_event.cpp
+    errsim_module/ob_errsim_module_interface.cpp
+  )
+endif()
+
+ob_set_subtarget(oblib_lib downsink
+  time/ob_clock_generator.cpp
+  utility/ob_smart_call.cpp
+  utility/ob_smart_var.cpp
+  utility/ob_target_specific.cpp
+  utility/ob_common_utility.cpp
+  utility/data_buffer.cpp
 )
 
 ob_set_subtarget(oblib_lib charset
   charset/ob_ctype_bin.cc
   charset/ob_ctype.cc
-  charset/ob_ctype_gb18030_tab.cpp
-  charset/ob_ctype_gb18030.cc
-  charset/ob_ctype_gbk_tab.cpp
-  charset/ob_ctype_gbk.cc
-  charset/ob_ctype_latin1_tab.cpp
-  charset/ob_ctype_latin1.cc
-  charset/ob_ctype_ascii_tab.cpp
-  charset/ob_ctype_gb2312_tab.cpp
-  charset/ob_ctype_gb2312.cc
-  charset/ob_ctype_ascii.cc
-  charset/ob_ctype_tis620_tab.cpp
-  charset/ob_ctype_tis620.cc
   charset/ob_ctype_mb.cc
   charset/ob_ctype_simple.cc
-  charset/ob_ctype_uca.cc
   charset/ob_ctype_utf8.cc
-  charset/ob_ctype_utf16.cc
-  charset/ob_ctype_ujis_tab.cpp
-  charset/ob_ctype_ujis.cc
-  charset/ob_ctype_euckr_tab.cpp
-  charset/ob_ctype_euckr.cc
-  charset/ob_ctype_eucjpms_tab.cpp
-  charset/ob_ctype_eucjpms.cc
-  charset/ob_ctype_cp932_tab.cpp
-  charset/ob_ctype_cp932.cc
   charset/ob_dtoa.cc
-  charset/uca900_ja_tbls.cc
-  charset/uca900_zh_tbls.cc
-  charset/uca900_zh2_tbls.cc
-  charset/uca900_zh3_tbls.cc
   charset/ob_charset.cpp
-  charset/ob_ctype_sjis_tab.cpp
-  charset/ob_ctype_sjis.cc
-  charset/ob_ctype_big5_tab.cpp
-  charset/ob_ctype_big5.cc
-  charset/ob_ctype_hkscs_tab.cpp
-  charset/ob_ctype_hkscs31_tab.cpp
-  charset/ob_ctype_hkscs.cc
-  charset/ob_ctype_dec8_tab.cpp
-  charset/ob_ctype_cp850_tab.cpp
-  charset/ob_ctype_hp8_tab.cpp
-  charset/ob_ctype_macroman_tab.cpp
-  charset/ob_ctype_swe7_tab.cpp
-  charset/ob_ctype_extra.cc
 )
 
 
@@ -93,78 +47,8 @@ ob_set_subtarget(oblib_lib common
 )
 
 ob_set_subtarget(oblib_lib geo
-  geo/ob_geo_common.cpp
-  geo/ob_geo_bin.cpp
-  geo/ob_geo_ibin.cpp
-  geo/ob_geo_bin_iter.ipp
-  geo/ob_geo_tree.cpp
-  geo/ob_s2adapter.cpp
-  geo/ob_geo.cpp
-  geo/ob_wkt_parser.cpp
-  geo/ob_geo_utils.cpp
-  geo/ob_srs_wkt_parser.cpp
-  geo/ob_srs_info.cpp
-  geo/ob_geo_visitor.cpp
-  geo/ob_geo_wkb_size_visitor.cpp
-  geo/ob_geo_wkb_visitor.cpp
-  geo/ob_geo_coordinate_range_visitor.cpp
-  geo/ob_geo_latlong_check_visitor.cpp
-  geo/ob_geo_longtitude_correct_visitor.cpp
-  geo/ob_geo_to_tree_visitor.cpp
-  geo/ob_geo_to_s2_visitor.cpp
-  geo/ob_geo_to_wkt_visitor.cpp
-  geo/ob_geo_reverse_coordinate_visitor.cpp
-  geo/ob_geo_normalize_visitor.cpp
-  geo/ob_geo_denormalize_visitor.cpp
-  geo/ob_geo_wkb_check_visitor.cpp
-  geo/ob_geo_zoom_in_visitor.cpp
-  geo/ob_geo_func_envelope.cpp
-  geo/ob_geo_func_area.cpp
-  geo/ob_geo_func_correct.cpp
-  geo/ob_geo_func_disjoint.cpp
-  geo/ob_geo_func_utils.cpp
-  geo/ob_geo_func_distance_sphere.cpp
-  geo/ob_geo_func_transform.cpp
-  geo/ob_geo_func_box.cpp
-  geo/ob_geo_func_buffer.cpp
-  geo/ob_geo_func_isvalid.cpp
-  geo/ob_geometry_cast.cpp
-  geo/ob_wkb_to_json_visitor.cpp
-  geo/ob_wkb_to_json_bin_visitor.cpp
-  geo/ob_wkb_byte_order_visitor.cpp
-  geo/ob_geo_3d.cpp
-  geo/ob_geo_func_centroid.cpp
-  geo/ob_geo_interior_point_visitor.cpp
-  geo/ob_geo_box_clip_visitor.cpp
-  geo/ob_geo_elevation_visitor.cpp
-  geo/ob_geo_func_length.cpp
-  geo/ob_geo_mvt_encode_visitor.cpp
-  geo/ob_geo_mvt.cpp
-  geo/ob_vector_tile.pb-c.c
-  geo/ob_geo_affine_visitor.cpp
-  geo/ob_geo_grid_visitor.cpp
-  geo/ob_geo_simplify_visitor.cpp
-  geo/ob_geo_box_clip_visitor.cpp
-  geo/ob_geo_func_dissolve_polygon.cpp
-  geo/ob_geo_close_ring_visitor.cpp
-  geo/ob_geo_cache.cpp
-  geo/ob_geo_vertex_collect_visitor.cpp
-  geo/ob_geo_segment_collect_visitor.cpp
-  geo/ob_geo_cache_polygon.cpp
-  geo/ob_geo_cache_point.cpp
-  geo/ob_geo_cache_linestring.cpp
-  geo/ob_geo_segment_intersect_analyzer.cpp
-  geo/ob_geo_topology_calculate.cpp
-  geo/ob_point_location_analyzer.cpp
-  geo/ob_geo_point_location_visitor.cpp
 )
 
-ob_set_subtarget(oblib_lib roaringbitmap
-  roaringbitmap/ob_roaringbitmap.cpp
-  roaringbitmap/ob_rb_utils.cpp
-  roaringbitmap/ob_rb_bin.cpp
-  roaringbitmap/ob_rb_memory_mgr.cpp
-)
 
 ob_set_subtarget(oblib_lib encode
   encode/ob_base64_encode.cpp
@@ -215,28 +99,19 @@ ob_set_subtarget(oblib_lib common_mixed
   hash/ob_linear_hash_map.cpp
   hash/ob_dchash.cpp
   hash/ob_hashutils.cpp
-  hash/xxhash.c
+  hash_func/xxhash.c
   hash_func/murmur_hash.cpp
-  lob/ob_lob_base.cpp
   json/ob_json.cpp
   json/ob_json_print_utils.cpp
   json/ob_yson.cpp
-  json_type/ob_json_path.cpp
-  json_type/ob_json_tree.cpp
-  json_type/ob_json_bin.cpp
-  json_type/ob_json_base.cpp
-  json_type/ob_json_parse.cpp
-  json_type/ob_json_schema.cpp
-  json_type/ob_json_diff.cpp
   lds/ob_lds_define.cpp
   net/ob_addr.cpp
   net/ob_net_util.cpp
-  number/ob_number_v2.cpp
   objectpool/ob_pool.ipp
   objectpool/ob_server_object_pool.cpp
   profile/ob_trace_id.cpp
   profile/ob_trace_id_adaptor.cpp
-  queue/ob_dedup_queue.cpp
+  thread/ob_dedup_queue.cpp
   queue/ob_lighty_queue.cpp
   queue/ob_link_queue.cpp
   queue/ob_ms_queue.cpp
@@ -248,7 +123,6 @@ ob_set_subtarget(oblib_lib common_mixed
   stat/ob_latch_define.cpp
   stat/ob_stat_template.cpp
   statistic_event/ob_stat_event.cpp
-  string/ob_hex_utils_base.cpp
   string/ob_sql_string.cpp
   string/ob_string.cpp
   string/ob_strings.cpp
@@ -262,39 +136,12 @@ ob_set_subtarget(oblib_lib common_mixed
   time/ob_cur_time.cpp
   time/ob_time_utility.cpp
   time/ob_tsc_timestamp.cpp
-  timezone/ob_oracle_format_models.cpp
-  timezone/ob_time_convert.cpp
-  timezone/ob_timezone_info.cpp
   trace/ob_trace.cpp
   trace/ob_trace_event.cpp
   wait_event/ob_wait_class.cpp
   wait_event/ob_wait_event.cpp
-  wide_integer/ob_wide_integer.cpp
-  wide_integer/ob_wide_integer_cmp_funcs.cpp
-  wide_integer/ob_wide_integer_str_funcs.cpp
-  udt/ob_udt_type.cpp
-  udt/ob_collection_type.cpp
-  udt/ob_array_type.cpp
-  udt/ob_array_binary.cpp
-  udt/ob_array_nested.cpp
-  udt/ob_array_utils.cpp
-  udt/ob_vector_type.cpp
-  udt/ob_map_type.cpp
-  xml/ob_mul_mode_reader.cpp
-  xml/ob_xml_parser.cpp
-  xml/ob_libxml2_sax_handler.cpp
-  xml/ob_tree_base.cpp
-  xml/ob_xml_tree.cpp
-  xml/ob_xml_util.cpp
-  xml/ob_xpath.cpp
-  xml/ob_multi_mode_bin.cpp
-  xml/ob_xml_bin.cpp
-  xml/ob_multi_mode_interface.cpp
-  xml/ob_path_parser.cpp
-  xml/ob_binary_aggregate.cpp
   locale/ob_locale_type.cc
   locale/ob_locale.cpp
-  enumset/ob_enum_set_meta.cpp
   other/recursion.cpp
 )
 
@@ -311,22 +158,6 @@ ob_set_subtarget(oblib_lib lock
 )
 
 ob_set_subtarget(oblib_lib mysqlclient
-  mysqlclient/ob_isql_client.cpp
-  mysqlclient/ob_dblink_error_trans.cpp
-  mysqlclient/ob_mysql_connection.cpp
-  mysqlclient/ob_mysql_connection_pool.cpp
-  mysqlclient/ob_mysql_prepared_param.cpp
-  mysqlclient/ob_mysql_prepared_result.cpp
-  mysqlclient/ob_mysql_prepared_statement.cpp
-  mysqlclient/ob_mysql_proxy.cpp
-  mysqlclient/ob_mysql_proxy_util.cpp
-  mysqlclient/ob_mysql_result.cpp
-  mysqlclient/ob_mysql_result_impl.cpp
-  mysqlclient/ob_mysql_statement.cpp
-  mysqlclient/ob_mysql_transaction.cpp
-  mysqlclient/ob_server_connection_pool.cpp
-  mysqlclient/ob_single_connection_proxy.cpp
-  mysqlclient/ob_single_mysql_connection_pool.cpp
 )
 
 ob_set_subtarget(oblib_lib oblog
@@ -357,7 +188,6 @@ ob_set_subtarget(oblib_lib thread
   thread/ob_reentrant_thread.cpp
   thread/ob_simple_thread_pool.ipp
   thread/ob_map_queue_thread_pool.cpp
-  thread/ob_work_queue.cpp
   thread/thread_mgr.cpp
   thread/thread_mgr_interface.cpp
   thread/protected_stack_allocator.cpp
@@ -378,7 +208,6 @@ ob_set_subtarget(oblib_lib utility
   utility/ob_utility.cpp
   utility/utility.cpp
   utility/ob_backtrace.cpp
-  utility/ob_proto_trans_util.cpp
   utility/ob_unify_serialize.cpp
   utility/ob_hyperloglog.cpp
 )
@@ -397,7 +226,6 @@ ob_set_subtarget(oblib_lib ob_vector_util
 )
 
 ob_lib_add_target(oblib_lib)
-ob_lib_add_target(oblib_lib_extra without_pass)
 
 ob_set_subtarget(oblib_lib_bitmap common
   container/ob_bitmap.cpp
@@ -407,7 +235,7 @@ ob_lib_add_target(oblib_lib_bitmap)
 
 ob_set_subtarget(ob_malloc_object_list common_alloc
   alloc/abit_set.cpp
-  alloc/alloc_assist.cpp
+  utility/alloc_assist.cpp
   alloc/alloc_failed_reason.cpp
   alloc/alloc_func.cpp
   alloc/alloc_struct.cpp
@@ -428,14 +256,13 @@ ob_set_subtarget(ob_malloc_object_list common_alloc
   allocator/ob_allocator_v2.cpp
   allocator/ob_block_alloc_mgr.cpp
   allocator/ob_concurrent_fifo_allocator.cpp
-  allocator/ob_ctx_define.cpp
+  alloc/ob_ctx_define.cpp
   allocator/ob_delay_free_allocator.cpp
   allocator/ob_fifo_allocator.cpp
   allocator/ob_hazard_ref.cpp
-  allocator/ob_libeasy_mem_pool.cpp
   allocator/ob_malloc.cpp
   allocator/ob_mem_leak_checker.cpp
-  allocator/ob_mod_define.cpp
+  utility/ob_mod_define.cpp
   allocator/ob_page_manager.cpp
   allocator/ob_slice_alloc.cpp
   allocator/ob_tc_malloc.cpp
@@ -466,12 +293,12 @@ endif()
 if(WIN32)
   set(VCPKG_LIB_DIR "${OB_VCPKG_DIR}/lib")
   target_link_libraries(oblib_lib
-    PUBLIC ob_malloc compress restore oblib_grpc
+    PUBLIC ob_malloc compress restore
     ${VCPKG_LIB_DIR}/libxml2.lib
   )
 else()
   target_link_libraries(oblib_lib
-    PUBLIC ob_malloc compress restore oblib_grpc
+    PUBLIC ob_malloc compress restore
     ${DEP_DIR}/lib/libxml2.a
     ${DEP_DIR}/lib/liblzma.a
   )

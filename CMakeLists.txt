@@ -130,7 +130,6 @@ if(EXISTS "${STDC_SHARED_LIB_SYMLINK}")
 endif()
 
 add_subdirectory(deps/oblib)
-add_subdirectory(src/objit)
 add_subdirectory(src)
 add_subdirectory(sqlite-benchmark)
 
@@ -158,18 +157,6 @@ option(OB_BUILD_TEST "" OFF)
 # OB_BUILD_PACKAGE => build sql proxy parser
 cmake_dependent_option(
   OB_BUILD_LIBOB_SQL_PROXY_PARSER "Build lib_sql_proxy_parser" OFF
-  "NOT OB_BUILD_PACKAGE" ON
-)
-
-# OB_BUILD_PACKAGE => build OB_BUILD_LIBOBTABLE
-cmake_dependent_option(
-  OB_BUILD_LIBOBTABLE "Build liboblog" OFF
-  "NOT OB_BUILD_PACKAGE" ON
-)
-
-# OB_BUILD_PACKAGE => build OB_BUILD_OBADMIN
-cmake_dependent_option(
-  OB_BUILD_OBADMIN "Build ob_admin" OFF
   "NOT OB_BUILD_PACKAGE" ON
 )
 
@@ -224,3 +211,29 @@ elseif(WIN32)
     include(cmake/WIX.cmake)
   endif()
 endif()
+
+# === oblib module-layer DAG check ===========================================
+# Standalone make target (any build): cd <build_dir> && make module_layer_check
+# Validates module layering from the include graph (config: cmake/module_check/module_layers.conf):
+# a module may only include modules with layer <= its own; an upward edge exits non-zero with location + fix hint.
+# (Replaces the old decl-use/modulemap approach: the include graph alone suffices for layer governance.)
+add_custom_target(module_layer_check
+  COMMAND python3 ${CMAKE_SOURCE_DIR}/cmake/module_check/module_layer_check.py ${CMAKE_SOURCE_DIR}
+  COMMENT "Checking module-layer DAG (include graph)"
+  VERBATIM)
+# Strict gate: fail if any baseline residual remains (milestone/release check for "is oblib fully clean").
+# Strict gate: fail if any baseline residual remains (milestone/release check).
+add_custom_target(module_layer_check_strict
+  COMMAND python3 ${CMAKE_SOURCE_DIR}/cmake/module_check/module_layer_check.py ${CMAKE_SOURCE_DIR} --strict
+  COMMENT "Checking module-layer DAG (strict: fail on any residual)"
+  VERBATIM)
+# Legacy alias (muscle-memory / external scripts): make oblib_layer_check[_strict] still works.
+# Legacy alias (muscle-memory / external scripts): make oblib_layer_check[_strict] still works.
+add_custom_target(oblib_layer_check)
+add_dependencies(oblib_layer_check module_layer_check)
+add_custom_target(oblib_layer_check_strict)
+add_dependencies(oblib_layer_check_strict module_layer_check_strict)
+
+# Wiring: hang the layer check as a seekdb dependency. It has no deps of its own, so it runs in parallel with
+# compilation from the start (2s text scan, zero extra wall-clock); an upward edge fails make seekdb (fail-closed).
+add_dependencies(seekdb module_layer_check)

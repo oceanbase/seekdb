@@ -18,9 +18,10 @@
 #undef protected
 
 #include <gtest/gtest.h>
-#include "share/backup/ob_backup_io_adapter.h"
+#include "share/io/ob_backup_io_adapter.h"
 #include "share/ob_device_manager.h"
 #include "share/io/ob_io_manager.h"
+#include "share/rc/ob_tenant_base.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -50,10 +51,10 @@ public:
 
   static void SetUpTestCase()
   {
-    ObTenantBase *tenant_base = new ObTenantBase(OB_SYS_TENANT_ID);
+    ObTenantBase *tenant_base = new ObTenantBase();
     auto malloc = ObMallocAllocator::get_instance();
-    if (NULL == malloc->get_tenant_ctx_allocator(OB_SYS_TENANT_ID, 0)) {
-      malloc->create_and_add_tenant_allocator(OB_SYS_TENANT_ID);
+    if (NULL == malloc->get_tenant_ctx_allocator(0)) {
+      malloc->create_and_add_tenant_allocator();
     }
     tenant_base->init();
     ObTenantEnv::set_tenant(tenant_base);
@@ -64,7 +65,6 @@ public:
     EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_new(io_service));
     EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_init(io_service));
     EXPECT_EQ(OB_SUCCESS, io_service->start());
-    tenant_base->set(io_service);
     ObTenantEnv::set_tenant(tenant_base);
   }
 

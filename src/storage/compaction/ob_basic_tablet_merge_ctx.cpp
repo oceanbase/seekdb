@@ -15,10 +15,11 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_basic_tablet_merge_ctx.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet_medium_info_reader.h"
-#include "share/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/ob_storage_schema_util.h"
 #include "storage/ob_gc_upper_trans_helper.h"
 #include "ob_medium_list_checker.h"
@@ -59,7 +60,7 @@ ObStaticMergeParam::ObStaticMergeParam(ObTabletMergeDagParam &dag_param)
     major_sstable_status_(ObCOMajorSSTableStatus::INVALID_CO_MAJOR_SSTABLE_STATUS),
     sstable_logic_seq_(0),
     ls_handle_(),
-    tables_handle_(MTL_ID()),
+    tables_handle_(),
     concurrent_cnt_(0),
     data_version_(0),
     ls_rebuild_seq_(-1),
@@ -157,7 +158,7 @@ int ObStaticMergeParam::init_static_info(ObTabletHandle &tablet_handle)
 int ObStaticMergeParam::init_multi_version_column_descs()
 {
   int ret = OB_SUCCESS;
-  multi_version_column_descs_.set_attr(ObMemAttr(MTL_ID(), "MvColDescs"));
+  multi_version_column_descs_.set_attr(ObMemAttr("MvColDescs"));
   const bool is_major = is_major_or_meta_merge_type(get_merge_type());
   if (OB_UNLIKELY(!multi_version_column_descs_.empty())) {
     ret = OB_ERR_UNEXPECTED;
@@ -592,7 +593,7 @@ int ObBasicTabletMergeCtx::get_ls_and_tablet()
 {
   int ret = OB_SUCCESS;
   ObLSHandle &ls_handle = static_param_.ls_handle_;
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(static_param_.get_ls_id(), ls_handle, ObLSGetMod::COMPACT_MODE))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(static_param_.get_ls_id(), ls_handle, ObLSGetMod::COMPACT_MODE))) {
     LOG_WARN("failed to get log stream", K(ret), K(static_param_.get_ls_id()));
   } else if (ls_handle.get_ls()->is_offline()) {
     ret = OB_CANCELED;
@@ -862,7 +863,7 @@ void ObBasicTabletMergeCtx::add_sstable_merge_info(
 
 #undef ADD_COMMENT
   ObInfoParamBuffer info_allocator;
-  if (OB_SUCCESS == MTL(ObDagWarningHistoryManager *)->get_with_param(hash, warning_info, info_allocator)) {
+  if (OB_SUCCESS == share::g_mp->dag_warning_history_manager()->get_with_param(hash, warning_info, info_allocator)) {
     diagnose_info.dag_ret_ = warning_info.dag_ret_;
     diagnose_info.error_trace_ = warning_info.task_id_;
     diagnose_info.retry_cnt_ = warning_info.retry_cnt_;
@@ -873,15 +874,15 @@ void ObBasicTabletMergeCtx::add_sstable_merge_info(
 
   ObScheduleSuspectInfo ret_info;
   info_allocator.reuse();
-  if (OB_SUCCESS == MTL(compaction::ObScheduleSuspectInfoMgr *)->get_with_param(hash, ret_info, info_allocator)) {
+  if (OB_SUCCESS == share::g_mp->schedule_suspect_info_mgr()->get_with_param(hash, ret_info, info_allocator)) {
     diagnose_info.suspect_add_time_ = ret_info.add_time_;
     merge_history.info_param_ = ret_info.info_param_;
-    if (OB_TMP_FAIL(MTL(compaction::ObScheduleSuspectInfoMgr *)->delete_info(hash))) {
+    if (OB_TMP_FAIL(share::g_mp->schedule_suspect_info_mgr()->delete_info(hash))) {
       LOG_WARN_RET(tmp_ret, "failed to delete old suspect info", K(diagnose_info));
     }
   }
 
-  if (OB_TMP_FAIL(MTL(storage::ObTenantSSTableMergeInfoMgr*)->add_sstable_merge_info(merge_history))) {
+  if (OB_TMP_FAIL(share::g_mp->tenant_ss_table_merge_info_mgr()->add_sstable_merge_info(merge_history))) {
     LOG_WARN_RET(tmp_ret, "failed to add sstable merge info", K(merge_history));
   }
   merge_history.info_param_ = nullptr;
@@ -890,9 +891,9 @@ void ObBasicTabletMergeCtx::add_sstable_merge_info(
   if (!static_info.is_fake_) {
     int64_t cost_time = running_info.merge_finish_time_ - time_guard.add_time_;
     if (nullptr != merge_dag_) {
-      MTL(ObCompactionSuggestionMgr*)->analyze_merge_info(merge_history, merge_dag_->get_type(), cost_time);
+      share::g_mp->compaction_suggestion_mgr()->analyze_merge_info(merge_history, merge_dag_->get_type(), cost_time);
     } else {
-      MTL(ObCompactionSuggestionMgr*)->analyze_merge_info(merge_history, ObDagType::DAG_TYPE_CO_MERGE_BATCH_EXECUTE, cost_time);
+      share::g_mp->compaction_suggestion_mgr()->analyze_merge_info(merge_history, ObDagType::DAG_TYPE_CO_MERGE_BATCH_EXECUTE, cost_time);
     }
   }
 }
@@ -974,12 +975,12 @@ void ObBasicTabletMergeCtx::after_update_tablet_for_major()
   if (is_major_merge_type(get_merge_type())) {
     const ObLSID &ls_id = get_ls_id();
     const ObTabletID &tablet_id = get_tablet_id();
-    if (OB_TMP_FAIL(MTL(observer::ObTabletTableUpdater*)->submit_tablet_update_task(ls_id, tablet_id, true/*need_diagnose*/))) {
+    if (OB_TMP_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(ls_id, tablet_id, true/*need_diagnose*/))) {
       LOG_WARN_RET(tmp_ret, "failed to submit tablet update task to report", K(ls_id), K(tablet_id));
     } else if (OB_TMP_FAIL(get_ls()->get_tablet_svr()->update_tablet_report_status(tablet_id))) {
       LOG_WARN_RET(tmp_ret, "failed to update tablet report status", K(ls_id), K(tablet_id));
     }
-    if (OB_TMP_FAIL(MTL(ObTenantMediumChecker*)->add_tablet_ls(tablet_id, ls_id, get_merge_version()))) {
+    if (OB_TMP_FAIL(share::g_mp->tenant_medium_checker()->add_tablet_ls(tablet_id, ls_id, get_merge_version()))) {
       LOG_WARN_RET(tmp_ret, "failed to add tablet ls for check", K(ls_id), 
           K(tablet_id), "merge_version", get_merge_version());
     }
@@ -1275,7 +1276,7 @@ int ObBasicTabletMergeCtx::prepare_from_medium_compaction_info(const ObMediumCom
 int ObBasicTabletMergeCtx::alloc_mds_info_compaction_filter()
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_allocator(ObMemAttr(MTL_ID(), "MdsFilter"));
+  ObArenaAllocator tmp_allocator(ObMemAttr("MdsFilter"));
   ObMdsInfoDistinctMgr mds_info_mgr;
   int64_t schema_rowkey_cnt = 0;
   ObVersionRange read_version_range(get_read_base_version(), get_merge_version());
@@ -1398,12 +1399,12 @@ int ObBasicTabletMergeCtx::get_meta_compaction_info()
     LOG_WARN("get unexpected static param", K(ret), K(static_param_), KPC(static_param_.schema_));
   } else if (OB_FAIL(ObStorageSchemaUtil::alloc_storage_schema(mem_ctx_.get_allocator(), storage_schema))) {
     LOG_WARN("failed to alloc storage schema", K(ret));
-  } else if (OB_ISNULL(schema_service = MTL(ObTenantSchemaService *)->get_schema_service())) {
+  } else if (OB_ISNULL(schema_service = share::g_mp->tenant_schema_service()->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get schema service from MTL", K(ret));
   } else if (OB_FAIL(tablet->get_schema_version_from_storage_schema(schema_version))){
     LOG_WARN("failed to get schema version from tablet", KR(ret), KPC(tablet));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), min_data_version))) {
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(min_data_version))) {
     LOG_WARN("failed to get min data version", K(ret));
   } else if (OB_FAIL(ObMediumCompactionScheduleFunc::get_table_schema_to_merge(*schema_service,
                                                                                *tablet,
@@ -1491,7 +1492,7 @@ int ObBasicTabletMergeCtx::get_convert_compaction_info()
 
   if (OB_FAIL(OB_UNLIKELY(EN_COMPACTION_DISABLE_CONVERT_CO))) {
     LOG_INFO("EN_COMPACTION_DISABLE_CONVERT_CO: disable convert co merge", K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), min_data_version))) {
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(min_data_version))) {
     LOG_WARN("failed to get min data version", K(ret));
   } else if (OB_FAIL(static_param_.tablet_schema_guard_.load(schema_on_tablet))) {
     LOG_WARN("failed to load schema on tablet", K(ret), KPC(tablet));

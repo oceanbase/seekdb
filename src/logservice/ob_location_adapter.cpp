@@ -60,13 +60,13 @@ int ObLocationAdapter::get_leader(const int64_t id, common::ObAddr &leader)
 {
   int ret = OB_SUCCESS;
   int64_t cluster_id = 1L; // obcall CLUSTER_ID inlined
-  uint64_t tenant_id = MTL_ID();
+  
   ObLSID ls_id(id);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "location adapter is not inited", K(ret));
   } else if (OB_FAIL(location_service_->get_leader(
-                     cluster_id, tenant_id, ls_id, false, leader))) {
+                     cluster_id, ls_id, false, leader))) {
     if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
       CLOG_LOG(WARN, "location adapter get_leader failed", K(ret), K(id), K(leader));
     }
@@ -75,39 +75,7 @@ int ObLocationAdapter::get_leader(const int64_t id, common::ObAddr &leader)
   }
   return ret;
 }
-
-int ObLocationAdapter::get_leader(const uint64_t tenant_id, 
-                                  const int64_t id, 
-                                  const bool force_renew,
-                                  common::ObAddr &leader)
-{
-  int ret = OB_SUCCESS;
-  int64_t cluster_id = 1L; // obcall CLUSTER_ID inlined
-  ObLSID ls_id(id);
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    CLOG_LOG(WARN, "location adapter is not inited", K(ret));
-  } else if (OB_FAIL(location_service_->get_leader(cluster_id, tenant_id,
-                                                   ls_id, force_renew, leader))) {
-    if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-      CLOG_LOG(WARN, "location_service get_leader failed", K(ret), K(cluster_id), K(tenant_id), K(ls_id));
-    }  
-  }
-  return ret;
-}
-
 int ObLocationAdapter::nonblock_get_leader(int64_t id,
-                                           common::ObAddr &leader)
-{
-  int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
-  ObLSID ls_id(id);
-  ret = nonblock_get_leader(tenant_id, id, leader);
-  return ret;
-}
-
-int ObLocationAdapter::nonblock_get_leader(const uint64_t tenant_id,
-                                           int64_t id,
                                            common::ObAddr &leader)
 {
   int ret = OB_SUCCESS;
@@ -117,7 +85,7 @@ int ObLocationAdapter::nonblock_get_leader(const uint64_t tenant_id,
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "location adapter is not inited", K(ret));
   } else if (OB_FAIL(location_service_->nonblock_get_leader(
-                     cluster_id, tenant_id, ls_id, leader))) {
+                     cluster_id, ls_id, leader))) {
     if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
       CLOG_LOG(WARN, "location adapter nonblock_get_leader failed", K(ret), K(id), K(leader));
     }

@@ -133,7 +133,7 @@ int ObDASIndexMergeIter::MergeResultBuffer::init(int64_t max_size,
   if (OB_UNLIKELY(max_size <= 0) || OB_ISNULL(eval_ctx) || OB_ISNULL(exprs)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(max_size), K(eval_ctx), K(exprs), K(ret));
-  } else if (OB_FAIL(result_store_.init(UINT64_MAX, MTL_ID(), ObCtxIds::DEFAULT_CTX_ID, "DASIndexMerge"))) {
+  } else if (OB_FAIL(result_store_.init(UINT64_MAX, ObCtxIds::DEFAULT_CTX_ID, "DASIndexMerge"))) {
     LOG_WARN("failed to init result store", K(ret));
   } else {
     result_store_.set_allocator(alloc);
@@ -199,7 +199,7 @@ int ObDASIndexMergeIter::inner_init(ObDASIterParam &param)
     is_reverse_ = index_merge_param.is_reverse_;
     
     lib::ContextParam context_param;
-    context_param.set_mem_attr(MTL_ID(), "DASIndexMerge", ObCtxIds::DEFAULT_CTX_ID)
+    context_param.set_mem_attr("DASIndexMerge", ObCtxIds::DEFAULT_CTX_ID)
         .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_UNLIKELY(merge_type_ != INDEX_MERGE_UNION)) {
       ret = OB_INVALID_ARGUMENT;
@@ -275,10 +275,10 @@ int ObDASIndexMergeIter::init_scan_param(const share::ObLSID &ls_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(ctdef), KPC(rtdef), K(ls_id), K(tablet_id));
   } else {
-    uint64_t tenant_id = MTL_ID();
-    scan_param.tenant_id_ = tenant_id;
-    scan_param.key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamKR"));
-    scan_param.ss_key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamSSKR"));
+    
+    
+    scan_param.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
+    scan_param.ss_key_ranges_.set_attr(ObMemAttr("ScanParamSSKR"));
     scan_param.tx_lock_timeout_ = rtdef->tx_lock_timeout_;
     scan_param.index_id_ = ctdef->ref_table_id_;
     scan_param.is_get_ = ctdef->is_get_;

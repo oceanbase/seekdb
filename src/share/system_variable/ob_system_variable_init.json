@@ -2025,24 +2025,6 @@
     "background_cn": "",
     "ref_url": ""
   },
-  "ob_enable_jit": {
-    "id": 10048,
-    "name": "ob_enable_jit",
-    "default_value": "0",
-    "base_value": "0",
-    "data_type": "enum",
-    "info": "JIT execution engine mode, default is AUTO",
-    "flags": "GLOBAL | SESSION | NEED_SERIALIZE | INFLUENCE_PLAN",
-    "enum_names": [
-      "OFF",
-      "AUTO",
-      "FORCE"
-    ],
-    "publish_version": "",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": ""
-  },
   "ob_temp_tablespace_size_percentage": {
     "id": 10049,
     "name": "ob_temp_tablespace_size_percentage",
@@ -2309,8 +2291,8 @@
   "nls_nchar_characterset": {
     "id": 10074,
     "name": "nls_nchar_characterset",
-    "default_value": "AL16UTF16",
-    "base_value": "AL16UTF16",
+    "default_value": "AL32UTF8",
+    "base_value": "AL32UTF8",
     "data_type": "varchar",
     "info": "specifies the default characterset of the database, This parameter defines the encoding of the data in the NCHAR, NVARCHAR2 and NCLOB columns of a table.",
     "flags": "GLOBAL | NEED_SERIALIZE | ORACLE_ONLY | INFLUENCE_PLAN",
@@ -3160,19 +3142,6 @@
     "flags": "GLOBAL | SESSION",
     "publish_version": "400",
     "info_cn": "控制在insert into select下是否默认收集统计信息",
-    "background_cn": "",
-    "ref_url": ""
-  },
-  "_set_reverse_dblink_infos": {
-    "id": 10139,
-    "name": "_set_reverse_dblink_infos",
-    "default_value": "",
-    "base_value": "",
-    "data_type": "varchar",
-    "info": "used in the dblink write transaction, the TM side informs the RM side of the necessary information about establishing a reverse dblink by setting system variables",
-    "flags": "SESSION | ORACLE_ONLY",
-    "publish_version": "410",
-    "info_cn": "用于dblink写事务中, TM端通过设置系统变量的方式告知RM端关于建立反向dblink的必要信息",
     "background_cn": "",
     "ref_url": ""
   },
@@ -10195,26 +10164,6 @@
     "min_val": "512",
     "max_val": "16384",
     "publish_version": "425",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": ""
-  },
-  "ob_kv_mode": {
-    "id": 10642,
-    "name": "ob_kv_mode",
-    "default_value": "0",
-    "base_value": "0",
-    "data_type": "enum",
-    "enum_names": [
-      "ALL",
-      "TABLEAPI",
-      "HBASE",
-      "REDIS",
-      "NONE"
-    ],
-    "info": "Use this variable to select the interface mode for the OBKV tenant. You can select one of 'ALL, TABLEAPI, HBASE, REDIS, NONE', where 'ALL' is the default and 'NONE' represents the non-OBKV interface mode.",
-    "flags": "GLOBAL | READONLY",
-    "publish_version": "421",
     "info_cn": "",
     "background_cn": "",
     "ref_url": ""

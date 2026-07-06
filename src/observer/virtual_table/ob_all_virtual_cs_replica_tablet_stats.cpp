@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_cs_replica_tablet_stats.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -28,7 +29,6 @@ namespace observer
 /* --------------------------- ObAllVirtualTableLSTabletIter --------------------------- */
 ObAllVirtualTableLSTabletIter::ObAllVirtualTableLSTabletIter()
   : ObVirtualTableScannerIterator(),
-    ObMultiTenantOperator(),
     addr_(),
     ls_iter_guard_(),
     ls_tablet_iter_(ObMDSGetTabletMode::READ_WITHOUT_CHECK)
@@ -42,7 +42,6 @@ ObAllVirtualTableLSTabletIter::~ObAllVirtualTableLSTabletIter()
 
 void ObAllVirtualTableLSTabletIter::reset()
 {
-  omt::ObMultiTenantOperator::reset();
   inner_reset();
   addr_.reset();
   ObVirtualTableScannerIterator::reset();
@@ -63,24 +62,6 @@ int ObAllVirtualTableLSTabletIter::init(common::ObIAllocator *allocator, common:
     start_to_read_ = true;
   }
   return ret;
-}
-
-int ObAllVirtualTableLSTabletIter::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
-}
-
-bool ObAllVirtualTableLSTabletIter::is_need_process(uint64_t tenant_id)
-{
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
-    return true;
-  }
-  return false;
 }
 
 void ObAllVirtualTableLSTabletIter::inner_reset()
@@ -131,7 +112,7 @@ int ObAllVirtualTableLSTabletIter::get_next_tablet(ObTabletHandle &tablet_handle
   int ret = OB_SUCCESS;
   // when switch to a next new tenant, guard is reset and need rebuild ls iter.
   if (OB_ISNULL(ls_iter_guard_.get_ptr())) {
-    ObLSService *ls_service = MTL(ObLSService*);
+    ObLSService *ls_service = share::g_mp->ls_service();
     if (OB_ISNULL(ls_service)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "ls service is null", K(ret));
@@ -202,7 +183,7 @@ int ObAllVirtualCSReplicaTabletStats::check_need_iterate_ls(const ObLS &ls, bool
   return ret;
 }
 
-int ObAllVirtualCSReplicaTabletStats::process_curr_tenant(common::ObNewRow *&row)
+int ObAllVirtualCSReplicaTabletStats::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObTabletHandle tablet_handle;

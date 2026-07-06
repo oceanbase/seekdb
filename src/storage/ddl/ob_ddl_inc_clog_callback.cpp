@@ -17,6 +17,7 @@
  #define USING_LOG_PREFIX STORAGE
 
  #include "storage/ddl/ob_ddl_inc_clog_callback.h"
+#include "share/rc/ob_module_provider.h"
  #include "storage/tx_storage/ob_ls_service.h"
  
  namespace oceanbase
@@ -213,7 +214,7 @@
    common::ObTimeGuard timeguard("ObDDLIncCommitClogCb::on_success", 1 * 1000 * 1000); // 1s
    ObLS *ls = nullptr;
    ObLSHandle ls_handle;
-   if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
+   if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
      LOG_WARN("get ls failed", K(ret), K(ls_id_));
    } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
      ret = OB_ERR_UNEXPECTED;

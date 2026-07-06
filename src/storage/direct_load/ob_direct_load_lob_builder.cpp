@@ -50,7 +50,7 @@ ObDirectLoadLobBuilder::ObDirectLoadLobBuilder()
     is_closed_(false),
     is_inited_(false)
 {
-  inner_lob_allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadLobBuilder::~ObDirectLoadLobBuilder() {}

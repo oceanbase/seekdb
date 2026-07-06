@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr_st_area.h"
-#include "lib/geo/ob_geo_func_register.h"
+#include "share/geo/ob_geo_func_register.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 
 using namespace oceanbase::common;
@@ -65,8 +65,8 @@ int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   ObDatum *gis_datum = NULL;
   ObExpr *gis_arg = expr.args_[0];
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_ST_AREA);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_AREA);
   ObObjType input_type = gis_arg->datum_meta_.type_;
 
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg, ctx, gis_datum))) {
@@ -78,7 +78,7 @@ int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     omt::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs = NULL;
     ObString wkb = gis_datum->get_string();
-    ObGeoBoostAllocGuard guard(tenant_id);
+    ObGeoBoostAllocGuard guard{};
     lib::MemoryContext *mem_ctx = nullptr;
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum,
         gis_arg->datum_meta_, gis_arg->obj_meta_.has_lob_header(), wkb))) {

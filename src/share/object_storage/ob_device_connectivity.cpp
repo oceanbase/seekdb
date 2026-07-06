@@ -18,7 +18,7 @@
 
 #include "share/object_storage/ob_device_connectivity.h"
 #include "share/config/ob_server_config.h"
-#include "share/backup/ob_backup_io_adapter.h"
+#include "share/io/ob_backup_io_adapter.h"
 
 namespace oceanbase
 {

@@ -1,4 +1,4 @@
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -18,6 +18,8 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_root_minor_freeze.h"
+#include "share/ob_server_struct.h"
+#include "observer/ob_service.h" // for ObService
 
 #include "share/location_cache/ob_location_service.h"
 
@@ -104,25 +106,20 @@ int ObRootMinorFreeze::try_minor_freeze(const obcall::ObRootMinorFreezeArg &arg)
   } else {
     ParamsContainer params;
     if ((arg.ls_id_.is_valid() && arg.ls_id_.id() > 0) || arg.tablet_id_.is_valid()) {
-      if (1 == arg.tenant_ids_.count()) {
-        if (OB_FAIL(init_params_by_ls_or_tablet(arg.tenant_ids_.at(0), arg.ls_id_, arg.tablet_id_, params))) {
-          LOG_WARN("fail to init param by tablet_id");
-        }
-      } else {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("only one tenant is required for tablet_freeze", K(ret), K(arg));
-      }
-    } else if (arg.tenant_ids_.count() > 0) {
-      if (OB_FAIL(init_params_by_tenant(arg.tenant_ids_, arg.zone_, arg.server_list_, params))) {
-        LOG_WARN("fail to init param by tenant, ", K(ret), K(arg));
+      if (OB_FAIL(init_params_by_ls_or_tablet( arg.ls_id_, arg.tablet_id_, params))) {
+        LOG_WARN("fail to init param by tablet_id");
       }
     } else if (arg.server_list_.count() == 0 && arg.zone_.size() > 0) {
       if (OB_FAIL(init_params_by_zone(arg.zone_, params))) {
         LOG_WARN("fail to init param by zone, ", K(ret), K(arg));
       }
-    } else {
+    } else if (arg.server_list_.count() > 0) {
       if (OB_FAIL(init_params_by_server(arg.server_list_, params))) {
         LOG_WARN("fail to init param by server, ", K(ret), K(arg));
+      }
+    } else {
+      if (OB_FAIL(init_params_by_tenant(params))) {
+        LOG_WARN("fail to init param by tenant, ", K(ret), K(arg));
       }
     }
 
@@ -174,8 +171,7 @@ int ObRootMinorFreeze::is_server_belongs_to_zone(const ObAddr &addr,
   return ret;
 }
 
-int ObRootMinorFreeze::init_params_by_ls_or_tablet(const uint64_t tenant_id,
-                                                   share::ObLSID ls_id,
+int ObRootMinorFreeze::init_params_by_ls_or_tablet(share::ObLSID ls_id,
                                                    const common::ObTabletID &tablet_id,
                                                    ParamsContainer &params) const
 {
@@ -191,9 +187,9 @@ int ObRootMinorFreeze::init_params_by_ls_or_tablet(const uint64_t tenant_id,
     // get ls id by tablet_id
     if (tablet_id.is_ls_inner_tablet()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("can not minor freeze inner tablet without specifying ls id", K(tenant_id), K(ls_id), K(tablet_id));
-    } else if (OB_FAIL(GCTX.location_service_->get(tenant_id, tablet_id, expire_renew_time, is_cache_hit, ls_id))) {
-      LOG_WARN("fail to get ls id according to tablet_id", K(ret), K(tenant_id), K(tablet_id));
+      LOG_WARN("can not minor freeze inner tablet without specifying ls id", K(ls_id), K(tablet_id));
+    } else if (OB_FAIL(GCTX.location_service_->get(tablet_id, expire_renew_time, is_cache_hit, ls_id))) {
+      LOG_WARN("fail to get ls id according to tablet_id", K(ret), K(tablet_id));
     }
   } 
   
@@ -201,8 +197,8 @@ int ObRootMinorFreeze::init_params_by_ls_or_tablet(const uint64_t tenant_id,
   } else if (ls_id.is_valid()) {
     // get ls location by ls_id
     if (OB_FAIL(GCTX.location_service_->get(
-            GCONF.cluster_id, tenant_id, ls_id, expire_renew_time, is_cache_hit, location))) {
-      LOG_WARN("get ls location failed", KR(ret), K(tenant_id), K(ls_id), K(tablet_id));
+            GCONF.cluster_id, ls_id, expire_renew_time, is_cache_hit, location))) {
+      LOG_WARN("get ls location failed", KR(ret), K(ls_id), K(tablet_id));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -215,12 +211,12 @@ int ObRootMinorFreeze::init_params_by_ls_or_tablet(const uint64_t tenant_id,
     for (int i = 0; i < ls_locations.count() && OB_SUCC(ret); ++i) {
       const ObAddr &server = ls_locations.at(i).get_server();
       if (is_server_alive(server)) {
-        if (OB_FAIL(params.push_back_param(server, tenant_id, ls_id, tablet_id))) {
-          LOG_WARN("fail to add tenant & server, ", K(ret), K(tenant_id), K(ls_id), K(tablet_id));
+        if (OB_FAIL(params.push_back_param(server, ls_id, tablet_id))) {
+          LOG_WARN("fail to add tenant & server, ", K(ret), K(ls_id), K(tablet_id));
         }
       } else {
         int tmp_ret = OB_SERVER_NOT_ACTIVE;
-        LOG_WARN("server not alive or invalid", "server", server, K(tmp_ret), K(tenant_id), K(ls_id), K(tablet_id));
+        LOG_WARN("server not alive or invalid", "server", server, K(tmp_ret), K(ls_id), K(tablet_id));
       }
     }
   }
@@ -228,13 +224,10 @@ int ObRootMinorFreeze::init_params_by_ls_or_tablet(const uint64_t tenant_id,
   return ret;
 }
 
-int ObRootMinorFreeze::init_params_by_tenant(const ObIArray<uint64_t> &tenant_ids,
-                                             const ObZone &zone,
-                                             const ObIArray<ObAddr> &server_list,
-                                             ParamsContainer &params) const
+int ObRootMinorFreeze::init_params_by_tenant(ParamsContainer &params) const
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(params.push_back_param(GCTX.self_addr(), OB_SYS_TENANT_ID))) {
+  if (OB_FAIL(params.push_back_param(GCTX.self_addr()))) {
     LOG_WARN("fail to add tenant & server", KR(ret));
   }
   return ret;
@@ -276,7 +269,6 @@ int ObRootMinorFreeze::init_params_by_server(const ObIArray<ObAddr> &server_list
 }
 
 int ObRootMinorFreeze::ParamsContainer::push_back_param(const common::ObAddr &server,
-                                                        const uint64_t tenant_id,
                                                         share::ObLSID ls_id,
                                                         const common::ObTabletID &tablet_id)
 {
@@ -287,10 +279,8 @@ int ObRootMinorFreeze::ParamsContainer::push_back_param(const common::ObAddr &se
   param.arg.ls_id_ = ls_id;
   param.arg.tablet_id_ = tablet_id;
 
-  if (0 != tenant_id && OB_FAIL(param.arg.tenant_ids_.push_back(tenant_id))) {
-    LOG_WARN("fail to push tenant_id, ", K(ret));
-  } else if (OB_FAIL(params_.push_back(param))) {
-    LOG_WARN("fail to push tenant_id & server, ", K(ret));
+  if (OB_FAIL(params_.push_back(param))) {
+    LOG_WARN("fail to push server, ", K(ret));
   }
 
   return ret;

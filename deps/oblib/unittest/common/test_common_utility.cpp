@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 #define private public
-#include "common/ob_common_utility.h"
+#include "lib/utility/ob_common_utility.h"
 using namespace  oceanbase::common;
 TEST(TestBasicTimeGuard, tl_time_guard)
 {

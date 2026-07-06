@@ -19,7 +19,7 @@
 #include <gtest/gtest.h>
 #include <fstream>
 #include "lib/oblog/ob_log.h"
-#include "lib/utility/ob_test_util.h"
+#include "lib/thread/ob_test_util.h"
 #define private public
 #define protected public
 #include "sql/resolver/expr/ob_raw_expr.h"

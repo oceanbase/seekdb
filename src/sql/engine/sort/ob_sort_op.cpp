@@ -309,7 +309,6 @@ int ObSortOp::scan_all_then_sort()
   int ret = OB_SUCCESS;
   SMART_VAR(ObCompactStore, cache_store) {
     if (OB_FAIL(cache_store.init(2 * 1024 * 1024,
-        ctx_.get_my_session()->get_effective_tenant_id(),
         ObCtxIds::DEFAULT_CTX_ID, "SORT_CACHE_CTX", true/*enable dump*/, 0, true,
         MY_SPEC.compress_type_, &MY_SPEC.all_exprs_))) {
       LOG_WARN("init sample chunk store failed", K(ret));
@@ -365,7 +364,6 @@ int ObSortOp::scan_all_then_sort_batch()
   int ret = OB_SUCCESS;
   SMART_VAR(ObCompactStore, cache_store) {
     if (OB_FAIL(cache_store.init(16 * 1024,
-        ctx_.get_my_session()->get_effective_tenant_id(),
         ObCtxIds::DEFAULT_CTX_ID, "SORT_CACHE_CTX", true/*enable dump*/, 0, true,
         MY_SPEC.compress_type_, &MY_SPEC.all_exprs_))) {
       LOG_WARN("init sample chunk store failed", K(ret));
@@ -424,13 +422,12 @@ int ObSortOp::scan_all_then_sort_batch()
   return ret;
 }
 
-int ObSortOp::init_prefix_sort(int64_t tenant_id,
-                               int64_t row_count,
+int ObSortOp::init_prefix_sort(int64_t row_count,
                                bool is_batch,
                                int64_t topn_cnt)
 {
   int ret = OB_SUCCESS;
-  OZ(prefix_sort_impl_.init(tenant_id, MY_SPEC.prefix_pos_, MY_SPEC.all_exprs_,
+  OZ(prefix_sort_impl_.init(MY_SPEC.prefix_pos_, MY_SPEC.all_exprs_,
       &MY_SPEC.sort_collations_, &MY_SPEC.sort_cmp_funs_, &eval_ctx_, child_,
       this, ctx_, MY_SPEC.enable_encode_sortkey_opt_, sort_row_count_, topn_cnt,
       MY_SPEC.is_fetch_with_ties_));
@@ -448,8 +445,7 @@ int ObSortOp::init_prefix_sort(int64_t tenant_id,
   return ret;
 }
 
-int ObSortOp::init_sort(int64_t tenant_id,
-                        int64_t row_count,
+int ObSortOp::init_sort(int64_t row_count,
                         bool is_batch,
                         int64_t topn_cnt)
 {
@@ -459,7 +455,7 @@ int ObSortOp::init_sort(int64_t tenant_id,
       &ctx_, MY_SPEC.px_est_size_factor_, est_rows, est_rows))) {
     LOG_WARN("failed to get px size", K(ret));
   }
-  OZ(sort_impl_.init(tenant_id, &MY_SPEC.sort_collations_, &MY_SPEC.sort_cmp_funs_, &eval_ctx_,
+  OZ(sort_impl_.init(&MY_SPEC.sort_collations_, &MY_SPEC.sort_cmp_funs_, &eval_ctx_,
                      &ctx_, MY_SPEC.enable_encode_sortkey_opt_, MY_SPEC.is_local_merge_sort_,
                      false /* need_rewind */, MY_SPEC.part_cnt_, topn_cnt,
                      MY_SPEC.is_fetch_with_ties_, ObChunkDatumStore::BLOCK_SIZE,
@@ -485,13 +481,13 @@ int ObSortOp::inner_get_next_row()
   if (OB_UNLIKELY(iter_end_)) {
     ret = OB_ITER_END;
   } else if (is_first_) {
-    // The name 'get_effective_tenant_id()' is really confusing. Here what we want is to account
+    // Here what we want is to account
     // the resource usage(memory usage in this case) to a 'real' tenant rather than billing
     // the innocent DEFAULT tenant. We should think about changing the name of this function.
     is_first_ = false;
     int64_t topn_cnt = INT64_MAX;
     int64_t row_count = MY_SPEC.rows_;
-    const int64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+    
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
         &ctx_, MY_SPEC.px_est_size_factor_, MY_SPEC.rows_, row_count))) {
       LOG_WARN("failed to get px size", K(ret));
@@ -501,11 +497,11 @@ int ObSortOp::inner_get_next_row()
       iter_end_ = true; 
       ret = OB_ITER_END;
     } else if (MY_SPEC.prefix_pos_ > 0) {
-      if (OB_FAIL(init_prefix_sort(tenant_id, row_count, false, topn_cnt))) {
+      if (OB_FAIL(init_prefix_sort(row_count, false, topn_cnt))) {
         LOG_WARN("failed to init prefix sort", K(ret));
       }
     } else {
-      if (OB_FAIL(init_sort(tenant_id, row_count, false, topn_cnt))) {
+      if (OB_FAIL(init_sort(row_count, false, topn_cnt))) {
         LOG_WARN("failed to init sort", K(ret));
       }
     }
@@ -549,7 +545,7 @@ int ObSortOp::inner_get_next_batch(const int64_t max_row_cnt)
     is_first_ = false;
     int64_t topn_cnt = INT64_MAX;
     int64_t row_count = MY_SPEC.rows_;
-    const int64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+    
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
         &ctx_, MY_SPEC.px_est_size_factor_, MY_SPEC.rows_, row_count))) {
       LOG_WARN("failed to get px size", K(ret));
@@ -559,11 +555,11 @@ int ObSortOp::inner_get_next_batch(const int64_t max_row_cnt)
       brs_.end_ = true;
       brs_.size_ = 0;
     } else if (MY_SPEC.prefix_pos_ > 0) {
-      if (OB_FAIL(init_prefix_sort(tenant_id, row_count, true, topn_cnt))) {
+      if (OB_FAIL(init_prefix_sort(row_count, true, topn_cnt))) {
         LOG_WARN("failed to init batch prefix sort", K(ret));
       }
     } else {
-      if (OB_FAIL(init_sort(tenant_id, row_count, true, topn_cnt))) {
+      if (OB_FAIL(init_sort(row_count, true, topn_cnt))) {
         LOG_WARN("failed to init batch sort", K(ret));
       }
     }

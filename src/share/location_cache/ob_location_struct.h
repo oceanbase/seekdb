@@ -25,7 +25,7 @@
 #include "share/cache/ob_kv_storecache.h"
 #include "share/ob_ls_id.h"
 #include "share/ob_share_util.h" // for ObShareUtil
-#include "share/restore/ob_ls_restore_status.h"
+#include "share/ls/ob_ls_restore_status.h"
 #include "lib/lock/ob_thread_cond.h"
 
 namespace oceanbase
@@ -114,12 +114,10 @@ public:
   ObLSLocationCacheKey();
   ObLSLocationCacheKey(
       const int64_t cluster_id,
-      const uint64_t tenant_id,
       const ObLSID ls_id);
   virtual ~ObLSLocationCacheKey() {}
   int init(
        const int64_t cluster_id,
-       const uint64_t tenant_id,
        const ObLSID ls_id);
   int assign(const ObLSLocationCacheKey &other);
   void reset();
@@ -128,13 +126,12 @@ public:
   bool is_valid() const;
   uint64_t hash() const;
   int64_t size() const { return sizeof(*this); }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline ObLSID get_ls_id() const { return ls_id_; }
   inline int64_t get_cluster_id() const { return cluster_id_; }
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(cluster_id));
+  TO_STRING_KV(K_(ls_id), K_(cluster_id));
 private:
   int64_t cluster_id_;
-  uint64_t tenant_id_;
   ObLSID ls_id_;
 };
 
@@ -147,7 +144,7 @@ public:
   explicit ObLSLocation(common::ObIAllocator &allocator);
   ~ObLSLocation();
   int deep_copy(const ObLSLocation &ls_location);
-  int init(const int64_t cluster_id, const uint64_t tenant_id, const ObLSID &ls_id, const int64_t renew_time);
+  int init(const int64_t cluster_id, const ObLSID &ls_id, const int64_t renew_time);
   int init_fake_location(); // make fake location for virtual table in __all_virtual_proxy_schema
   void reset();
   int assign(const ObLSLocation &ls_location);
@@ -158,7 +155,7 @@ public:
   // compare all private members with other
   bool operator==(const ObLSLocation &other) const;
   int add_replica_location(const ObLSReplicaLocation &replica_location);
-  inline uint64_t get_tenant_id() const { return cache_key_.get_tenant_id(); }
+  
   inline ObLSID get_ls_id() const { return cache_key_.get_ls_id(); }
   const ObLSLocationCacheKey &get_cache_key() const { return cache_key_; }
   int get_replica_count(int64_t &full_replica_cnt, int64_t &non_paxos_replica_cnt);
@@ -197,8 +194,8 @@ public:
   int assign(const ObTabletLocation &ls_location);
   bool is_valid() const;
   bool operator==(const ObTabletLocation &other) const;
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
-  inline void set_tenant_id(const uint64_t &tenant_id) { tenant_id_ = tenant_id; }
+  
+  
   inline ObTabletID get_tablet_id() const { return tablet_id_; }
   inline void set_tablet_id(const ObTabletID &tablet_id)
   {
@@ -208,9 +205,9 @@ public:
   inline int64_t get_renew_time() const { return renew_time_; }
   int get_leader(ObLSReplicaLocation &leader) const;
   int add_replica_location(const ObLSReplicaLocation &replica_location);
-  TO_STRING_KV(K_(tenant_id), K_(tablet_id), K_(renew_time), K_(replica_locations));
+  TO_STRING_KV(K_(tablet_id), K_(renew_time), K_(replica_locations));
 private:
-  uint64_t tenant_id_;
+  
   ObTabletID tablet_id_;
   int64_t renew_time_;
   ObLSReplicaLocations replica_locations_;
@@ -220,21 +217,21 @@ class ObTabletLSKey
 {
   OB_UNIS_VERSION(1);
 public:
-  ObTabletLSKey() : tenant_id_(OB_INVALID_TENANT_ID), tablet_id_() {}
-  ObTabletLSKey(const uint64_t tenant_id, const ObTabletID &tablet_id)
-      : tenant_id_(tenant_id), tablet_id_(tablet_id) {}
+  ObTabletLSKey() : tablet_id_() {}
+  ObTabletLSKey(const ObTabletID &tablet_id)
+      : tablet_id_(tablet_id) {}
   ~ObTabletLSKey() {}
-  int init(const uint64_t tenant_id, const ObTabletID &tablet_id);
+  int init(const ObTabletID &tablet_id);
   void reset();
   bool is_valid() const;
   uint64_t hash() const;
   bool operator ==(const ObTabletLSKey &other) const;
   int64_t size() const { return sizeof(*this); }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline ObTabletID get_tablet_id() const { return tablet_id_; }
-  TO_STRING_KV(K_(tenant_id), K_(tablet_id));
+  TO_STRING_KV(K_(tablet_id));
 private:
-  uint64_t tenant_id_;
+  
   ObTabletID tablet_id_;
 };
 
@@ -248,14 +245,13 @@ public:
   int assign(const ObTabletLSCache &other);
   bool is_valid() const;
   bool operator==(const ObTabletLSCache &other) const;
-  inline uint64_t get_tenant_id() const { return cache_key_.get_tenant_id(); }
+  
   inline ObTabletID get_tablet_id() const { return cache_key_.get_tablet_id(); }
   inline ObLSID get_ls_id() const { return ls_id_; }
   inline int64_t get_renew_time() const { return renew_time_; }
   const ObTabletLSKey &get_cache_key() const { return cache_key_; }
   inline int64_t get_transfer_seq() const { return transfer_seq_; }
   int init(
-      const uint64_t tenant_id,
       const ObTabletID &tablet_id,
       const ObLSID &ls_id,
       const int64_t renew_time,
@@ -268,13 +264,13 @@ private:
    int64_t transfer_seq_;
 };
 
-//TODO: Reserved for tableapi. Need remove.
+// Reserved compatibility cache key.
 class ObTabletLSCacheKey : public common::ObIKVCacheKey
 {
 public:
-  ObTabletLSCacheKey() : tenant_id_(OB_INVALID_TENANT_ID), tablet_id_() {}
-  ObTabletLSCacheKey(const uint64_t tenant_id, const ObTabletID tablet_id)
-      : tenant_id_(tenant_id), tablet_id_(tablet_id) {}
+  ObTabletLSCacheKey() : tablet_id_() {}
+  ObTabletLSCacheKey(const ObTabletID tablet_id)
+      : tablet_id_(tablet_id) {}
   virtual ~ObTabletLSCacheKey() {}
   virtual bool operator ==(const ObIKVCacheKey &other) const;
   virtual bool operator !=(const ObIKVCacheKey &other) const;
@@ -282,11 +278,10 @@ public:
   virtual uint64_t hash() const;
   virtual int64_t size() const { return sizeof(*this); }
   virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const;
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline ObTabletID get_tablet_id() const { return tablet_id_; }
-  TO_STRING_KV(K_(tenant_id), K_(tablet_id));
+  TO_STRING_KV(K_(tablet_id));
 private:
-  uint64_t tenant_id_;
   ObTabletID tablet_id_;
 };
 

@@ -18,7 +18,7 @@
 
 #include "ob_table_load_control_rpc_struct.h"
 #include "observer/table_load/ob_table_load_rpc_executor.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 
 namespace oceanbase
 {
@@ -106,10 +106,9 @@ public:
 public:
   ObTableLoadControlRpcProxy()
     : allocator_("TLD_RpcProxy"),
-      timeout_(DEFAULT_TIMEOUT_US),
-      tenant_id_(MTL_ID())
+      timeout_(DEFAULT_TIMEOUT_US)
   {
-    allocator_.set_tenant_id(MTL_ID());
+    
   }
 
   ObTableLoadControlRpcProxy &to(ObAddr addr)
@@ -122,9 +121,8 @@ public:
     timeout_ = timeout;
     return *this;
   }
-  ObTableLoadControlRpcProxy &by(uint64_t tenant_id)
+  ObTableLoadControlRpcProxy &by()
   {
-    tenant_id_ = tenant_id;
     return *this;
   }
 
@@ -218,7 +216,6 @@ private:
   ObArenaAllocator allocator_;
   ObAddr addr_;
   int64_t timeout_;
-  uint64_t tenant_id_;
 };
 
 } // namespace observer

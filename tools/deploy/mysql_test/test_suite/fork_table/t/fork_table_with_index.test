@@ -307,7 +307,7 @@ while ($resignal_counter > 0)
 {
     connection obsys;
     set ob_global_debug_sync = 'now signal signal_fork_success_resume';
-    let $fork_task_cnt= `select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and object_id = $table_t2d_id and target_object_id = $table_t2d_fork_id`;
+    let $fork_task_cnt= `select count(*) from oceanbase.__all_ddl_task_status where ddl_type = 10009 and object_id = $table_t2d_id and target_object_id = $table_t2d_fork_id`;
     if ($fork_task_cnt == 0)
     {
         let $resignal_counter= 0;

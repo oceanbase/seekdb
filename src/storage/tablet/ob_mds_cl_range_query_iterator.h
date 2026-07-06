@@ -77,7 +77,7 @@ private:
 template <typename K, typename T>
 ObMdsRangeQueryIterator<K, T>::ObMdsRangeQueryIterator()
   : is_inited_(false),
-    allocator_(lib::ObMemAttr(MTL_ID(), "MdsRangeQuery")),
+    allocator_(lib::ObMemAttr("MdsRangeQuery")),
     cur_finished_(false),
     src_finished_(false),
     cur_kv_(nullptr),

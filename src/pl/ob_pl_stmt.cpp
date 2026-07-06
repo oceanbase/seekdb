@@ -596,7 +596,7 @@ int ObPLRoutineTable::make_routine_info(ObIAllocator &allocator,
     ObString dst_decl_str;
     new (routine_info) ObPLRoutineInfo(allocator);
     routine_info->set_type(type);
-    routine_info->set_tenant_id(get_tenant_id_by_object_id(pkg_id));
+    
     routine_info->set_db_id(database_id);
     routine_info->set_pkg_id(pkg_id);
     if (NESTED_PROCEDURE == type || NESTED_FUNCTION == type) {
@@ -1258,7 +1258,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       //search standard package first
       //then package name
       if (OB_SUCC(ret) && OB_INVALID_INDEX == var_idx) {
-        uint64_t tenant_id = session_info.get_effective_tenant_id();
+        
         int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
         uint64_t db_id = OB_INVALID_ID;
         const ObPackageInfo *package_info = nullptr;
@@ -1272,7 +1272,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
           // db_id == OB_INVALID_ID, search in sys tenant
           // db_id != OB_INVALID_ID, search in user tenant first, then sys tenant
           if (OB_INVALID_ID != db_id
-              && OB_FAIL(schema_guard.get_package_info(tenant_id,
+              && OB_FAIL(schema_guard.get_package_info(
                                                        db_id,
                                                        name,
                                                        share::schema::PACKAGE_TYPE,
@@ -1284,7 +1284,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
                          && (OB_INVALID_INDEX == parent_id
                              || is_oracle_sys_database_id(parent_id)
                              || is_oceanbase_sys_database_id(parent_id)))) {
-            if (OB_FAIL(schema_guard.get_package_info(OB_SYS_TENANT_ID,
+            if (OB_FAIL(schema_guard.get_package_info(
                                                       OB_SYS_DATABASE_ID,
                                                       name,
                                                       share::schema::PACKAGE_TYPE,
@@ -1307,9 +1307,9 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       }
       //then database name
       if (OB_SUCC(ret) && OB_INVALID_INDEX == var_idx && OB_INVALID_INDEX == parent_id) {
-        uint64_t tenant_id = session_info.get_effective_tenant_id();
+        
         uint64_t db_id = OB_INVALID_ID;
-        if (OB_FAIL(schema_guard.get_database_id(tenant_id, name, db_id))) {
+        if (OB_FAIL(schema_guard.get_database_id(name, db_id))) {
           LOG_WARN("get database id failed", K(ret));
         } else if (OB_INVALID_ID == db_id) {
           type = ObPLExternalNS::INVALID_VAR;
@@ -1321,7 +1321,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       }
       //then table name
       if (OB_SUCC(ret) && OB_INVALID_INDEX == var_idx) {
-        uint64_t tenant_id = session_info.get_effective_tenant_id();
+        
         uint64_t db_id = OB_INVALID_ID;
         uint64_t table_id = OB_INVALID_ID;
         const ObTableSchema *table = nullptr;
@@ -1332,7 +1332,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
         }
 
         if (OB_SUCC(ret) && OB_INVALID_ID != db_id) {
-          if (OB_FAIL(schema_guard.get_table_schema(tenant_id,
+          if (OB_FAIL(schema_guard.get_table_schema(
                                                     db_id,
                                                     name,
                                                     false /*is_index*/,
@@ -1347,8 +1347,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
               OZ (ObPLDependencyUtil::add_dependency_objects(dependency_table_, dependency_objects));
             }
           } else if (full_schema && OB_INVALID_ID == table_id) {
-            OZ (schema_guard.get_idx_schema_by_origin_idx_name(tenant_id,
-                                                               db_id,
+            OZ (schema_guard.get_idx_schema_by_origin_idx_name(db_id,
                                                                name,
                                                                table));
             if (OB_SUCC(ret) && OB_NOT_NULL(table)) {
@@ -1366,16 +1365,16 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       }
       // then routine
       if (OB_SUCC(ret) && OB_INVALID_INDEX == var_idx) {
-        uint64_t tenant_id = session_info.get_effective_tenant_id();
+        
         uint64_t db_id = parent_id;
         const ObRoutineInfo *routine_info = NULL;
         if (OB_INVALID_INDEX == db_id) {
           OZ (session_info.get_database_id(db_id));
         }
-        OZ (schema_guard.get_standalone_procedure_info(tenant_id, db_id, name, routine_info));
+        OZ (schema_guard.get_standalone_procedure_info(db_id, name, routine_info));
         if (NULL == routine_info && !ObPLResolver::is_unrecoverable_error(ret)) {
           ret = OB_SUCCESS;
-          OZ (schema_guard.get_standalone_function_info(tenant_id, db_id, name, routine_info));
+          OZ (schema_guard.get_standalone_function_info(db_id, name, routine_info));
         }
         if (ObPLResolver::is_unrecoverable_error(ret)) {
           // do nothing
@@ -1399,13 +1398,13 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       }
       // then trigger
       if (OB_SUCC(ret) && full_schema && OB_INVALID_INDEX == var_idx) {
-        uint64_t tenant_id = session_info.get_effective_tenant_id();
+        
         uint64_t db_id = parent_id;
         const ObTriggerInfo *trigger_info = NULL;
         if (OB_INVALID_ID == db_id) {
           OZ (session_info.get_database_id(db_id));
         }
-        OZ (schema_guard.get_trigger_info(tenant_id, db_id, name, trigger_info));
+        OZ (schema_guard.get_trigger_info( db_id, name, trigger_info));
         if (NULL == trigger_info) {
           ret = OB_SUCCESS;
           type = ObPLExternalNS::INVALID_VAR;
@@ -1416,13 +1415,13 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       }
       // then sequence
       if (OB_SUCC(ret) && full_schema && OB_INVALID_INDEX == var_idx) {
-        uint64_t tenant_id = session_info.get_effective_tenant_id();
+        
         uint64_t db_id = parent_id;
         const ObSequenceSchema *sequence_schema = NULL;
         if (OB_INVALID_ID == db_id) {
           OZ (session_info.get_database_id(db_id));
         }
-        OZ (schema_guard.get_sequence_schema_with_name(tenant_id, db_id, name, sequence_schema));
+        OZ (schema_guard.get_sequence_schema_with_name(db_id, name, sequence_schema));
         if (NULL == sequence_schema) {
           ret = OB_SUCCESS;
           type = ObPLExternalNS::INVALID_VAR;
@@ -1447,15 +1446,15 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
     break;
   case PKG_NS: {
     int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
-    uint64_t tenant_id = session_info.get_effective_tenant_id();
+    
     uint64_t package_id = OB_INVALID_ID;
 
-    if (OB_FAIL(schema_guard.get_package_id(tenant_id, parent_id, name, share::schema::PACKAGE_TYPE,
+    if (OB_FAIL(schema_guard.get_package_id(parent_id, name, share::schema::PACKAGE_TYPE,
                                             compatible_mode, package_id))) {
       LOG_WARN("get package id failed", K(ret));
     } else if (OB_INVALID_ID == package_id) {
       if (is_oceanbase_sys_database_id(parent_id)) {
-        if (OB_FAIL(schema_guard.get_package_id(OB_SYS_TENANT_ID, OB_SYS_DATABASE_ID,
+        if (OB_FAIL(schema_guard.get_package_id(OB_SYS_DATABASE_ID,
             name, share::schema::PACKAGE_TYPE, compatible_mode, package_id))) {
           LOG_WARN("get package id failed", K(ret));
         }
@@ -1472,16 +1471,16 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
   }
     break;
   case PKG_VAR: {
-    if (get_tenant_id_by_object_id(parent_id) != OB_SYS_TENANT_ID
-        && session_info.get_effective_tenant_id() != OB_SYS_TENANT_ID) {
+    if (false
+        && false) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "package in Mysql mode");
       LOG_WARN("package is not supported in Mysql mode", K(type), K(ret));
     } else {
       const share::schema::ObPackageInfo *package_info_resolve = NULL;
-      const uint64_t tenant_id = get_tenant_id_by_object_id(parent_id);
-      if (OB_FAIL(schema_guard.get_package_info(tenant_id, parent_id, package_info_resolve))) {
-        LOG_WARN("get package info resolve failed", K(ret), K(tenant_id));
+      
+      if (OB_FAIL(schema_guard.get_package_info( parent_id, package_info_resolve))) {
+        LOG_WARN("get package info resolve failed", K(ret));
       } else if (NULL == package_info_resolve) {
         ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
         LOG_WARN("self or resolve package not exist", K(ret));
@@ -1609,7 +1608,7 @@ int ObPLExternalNS::resolve_external_type_by_name(const ObString &db_name, const
       org_package_name, org_type_name);
   }
   if (OB_SUCC(ret) && OB_ISNULL(user_type)) {
-    uint64_t tenant_id = resolve_ctx_.session_info_.get_effective_tenant_id();
+    
     int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
     uint64_t db_id = OB_INVALID_ID;
     ObString package_name = org_package_name;
@@ -1622,7 +1621,7 @@ int ObPLExternalNS::resolve_external_type_by_name(const ObString &db_name, const
         LOG_WARN("database not valid", K(ret), K(db_id));
       }
     } else {
-      if (OB_FAIL(resolve_ctx_.schema_guard_.get_database_id(tenant_id, db_name, db_id))) {
+      if (OB_FAIL(resolve_ctx_.schema_guard_.get_database_id(db_name, db_id))) {
         LOG_WARN("get database id failed", K(ret));
       } else if (OB_INVALID_ID == db_id) {
         ret = OB_ERR_BAD_DATABASE;
@@ -1631,7 +1630,7 @@ int ObPLExternalNS::resolve_external_type_by_name(const ObString &db_name, const
     }
     if (OB_SUCC(ret) && !package_name.empty()) {
       // search package
-      if (OB_FAIL(resolve_ctx_.schema_guard_.get_package_info(tenant_id, db_id, package_name,
+      if (OB_FAIL(resolve_ctx_.schema_guard_.get_package_info( db_id, package_name,
                                                               share::schema::PACKAGE_TYPE, compatible_mode,
                                                               package_info))) {
          LOG_WARN("get package id failed", K(ret));
@@ -1646,7 +1645,7 @@ int ObPLExternalNS::resolve_external_type_by_name(const ObString &db_name, const
       if (OB_ISNULL(package_info)) {
         // try system package
         if (db_name.empty() || 0 == db_name.case_compare(OB_SYS_DATABASE_NAME)) {
-          if (OB_FAIL(resolve_ctx_.schema_guard_.get_package_info(OB_SYS_TENANT_ID, OB_SYS_DATABASE_ID,
+          if (OB_FAIL(resolve_ctx_.schema_guard_.get_package_info( OB_SYS_DATABASE_ID,
               package_name, share::schema::PACKAGE_TYPE, compatible_mode, package_info))) {
             LOG_WARN("get package id failed", K(ret));
           }
@@ -1733,7 +1732,6 @@ int ObPLExternalNS::resolve_external_routine(const ObString &db_name,
     ObRoutineType schema_routine_type =
       is_procedure(routine_type) ? ROUTINE_PROCEDURE_TYPE : ROUTINE_FUNCTION_TYPE;
     if (OB_FAIL(ObResolverUtils::get_routine(resolve_ctx_,
-                                          resolve_ctx_.session_info_.get_effective_tenant_id(),
                                           resolve_ctx_.session_info_.get_database_name(),
                                           db_name,
                                           package_name,
@@ -1847,7 +1845,7 @@ int ObPLBlockNS::find_sub_attr_by_name(const ObUserDefinedType &user_type,
                                        const ObObjAccessIdent &access_ident,
                                        ObSQLSessionInfo &session_info,
                                        ObRawExprFactory &expr_factory,
-                                       ObPLCompileUnitAST &func,
+                                       ObPLAstUnit &func,
                                        ObObjAccessIdx &access_idx,
                                        ObPLDataType &data_type,
                                        uint64_t &package_id,
@@ -2788,10 +2786,10 @@ int ObPLBlockNS::get_cursor_by_name(const ObExprResolveContext &ctx,
     CK (OB_NOT_NULL(ctx.session_info_->get_pl_engine()));
     CK (OB_NOT_NULL(ctx.secondary_namespace_->get_external_ns()));
     if (OB_SUCC(ret)) {
-      pl::ObPLPackageGuard package_guard(ctx.session_info_->get_effective_tenant_id());
+      pl::ObPLPackageGuard package_guard{};
       const pl::ObPLResolveCtx &resolve_ctx = ctx.secondary_namespace_->get_external_ns()
                                                 ->get_resolve_ctx();
-      uint64_t tenant_id = ctx.session_info_->get_effective_tenant_id();
+      
       int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
       const ObPackageInfo *package_info = NULL;
       ObPLPackageManager &package_manager =
@@ -2803,13 +2801,11 @@ int ObPLBlockNS::get_cursor_by_name(const ObExprResolveContext &ctx,
       CK (!package_name.empty());
       CK (!cursor_name.empty());
       OX (cursor = NULL);
-      OZ (resolve_ctx.schema_guard_.get_database_id(tenant_id, db_name, database_id));
-      OZ (resolve_ctx.schema_guard_.get_package_info(
-          tenant_id, database_id, package_name, share::schema::PACKAGE_TYPE, compatible_mode, package_info));
+      OZ (resolve_ctx.schema_guard_.get_database_id(db_name, database_id));
+      OZ (resolve_ctx.schema_guard_.get_package_info( database_id, package_name, share::schema::PACKAGE_TYPE, compatible_mode, package_info));
       if (OB_SUCC(ret)
           && OB_ISNULL(package_info) && db_name.case_compare(OB_SYS_DATABASE_NAME)) {
-        OZ (resolve_ctx.schema_guard_.get_package_info(
-          OB_SYS_TENANT_ID, OB_SYS_DATABASE_ID,
+        OZ (resolve_ctx.schema_guard_.get_package_info( OB_SYS_DATABASE_ID,
           package_name, share::schema::PACKAGE_TYPE, compatible_mode, package_info));
       }
       if (OB_SUCC(ret) && OB_ISNULL(package_info)) {
@@ -3469,7 +3465,7 @@ int ObPLFetchStmt::replace_questionmark_variable_type(ObPLFunctionAST &func,
   return ret;
 } 
 
-ObPLCompileUnitAST::~ObPLCompileUnitAST()
+ObPLAstUnit::~ObPLAstUnit()
 {
   if (NULL != body_) {
     body_->~ObPLStmtBlock();
@@ -3481,7 +3477,7 @@ ObPLCompileUnitAST::~ObPLCompileUnitAST()
   }
 }
 
-void ObPLCompileUnitAST::process_default_compile_flag()
+void ObPLAstUnit::process_default_compile_flag()
 {
   if (compile_flag_.has_flag()) {
     common::ObIArray<ObPLRoutineInfo *> &routine_infos = routine_table_.get_routine_infos();
@@ -3495,7 +3491,7 @@ void ObPLCompileUnitAST::process_default_compile_flag()
   return ;
 }
 
-int ObPLCompileUnitAST::extract_assoc_index(
+int ObPLAstUnit::extract_assoc_index(
   sql::ObRawExpr &expr, ObIArray<sql::ObRawExpr *> &exprs)
 {
   int ret = OB_SUCCESS;
@@ -3514,7 +3510,7 @@ int ObPLCompileUnitAST::extract_assoc_index(
 }
 
 
-int ObPLCompileUnitAST::add_expr(sql::ObRawExpr* expr, bool is_simple_integer)
+int ObPLAstUnit::add_expr(sql::ObRawExpr* expr, bool is_simple_integer)
 {
   int ret = OB_SUCCESS;
   bool exists = false;
@@ -3532,7 +3528,7 @@ int ObPLCompileUnitAST::add_expr(sql::ObRawExpr* expr, bool is_simple_integer)
 }
 
 
-int ObPLCompileUnitAST::add_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
+int ObPLAstUnit::add_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
@@ -3543,7 +3539,7 @@ int ObPLCompileUnitAST::add_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
   return ret;
 }
 
-int ObPLCompileUnitAST::add_sql_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
+int ObPLAstUnit::add_sql_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
 {
   int ret = OB_SUCCESS;
   OZ (add_exprs(exprs));
@@ -3554,7 +3550,7 @@ int ObPLCompileUnitAST::add_sql_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
   return ret;
 }
 
-int ObPLCompileUnitAST::generate_symbol_debuginfo()
+int ObPLAstUnit::generate_symbol_debuginfo()
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < symbol_table_.get_count(); ++i) {

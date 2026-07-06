@@ -40,7 +40,6 @@ class ObSetCommentHelper : public ObDDLHelper
 public:
   ObSetCommentHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
-    const uint64_t tenant_id,
     const obcall::ObSetCommentArg &arg,
     obcall::ObParallelDDLRes &res);
   virtual ~ObSetCommentHelper();

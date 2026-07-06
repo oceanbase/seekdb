@@ -31,7 +31,7 @@
 #include "lib/time/ob_cur_time.h"
 #include "lib/lock/ob_recursive_mutex.h"
 #include "lib/hash/ob_link_hashmap.h"
-#include "lib/mysqlclient/ob_server_connection_pool.h"
+#include "common/mysqlclient/ob_server_connection_pool.h"
 #include "lib/stat/ob_diagnose_info.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
 #include "sql/ob_sql_config_provider.h"
@@ -90,8 +90,8 @@ class ObPlanItemMgr;
 class SessionInfoKey
 {
 public:
-  SessionInfoKey() : sessid_(0), proxy_sessid_(0) { }
-  SessionInfoKey(uint32_t sessid, uint64_t proxy_sessid = 0) : sessid_(sessid), proxy_sessid_(proxy_sessid) {}
+  SessionInfoKey() : sessid_(0) { }
+  explicit SessionInfoKey(uint32_t sessid) : sessid_(sessid) {}
   uint64_t hash() const
   { uint64_t hash_value = 0;
     hash_value = common::murmurhash(&sessid_, sizeof(sessid_), hash_value);
@@ -116,7 +116,6 @@ public:
   }
 public:
   uint32_t sessid_;
-  uint64_t proxy_sessid_; // do not participate in compare, only store value for ObCTASCleanUp traversal
 };
 
 struct ObContextUnit
@@ -181,7 +180,7 @@ public:
   // The cached information, which may be inconsistent with the version maintained by the schema service,
   // Caller needs to decide whether to call the refresh_tenant_schema_version interface based on the situation
   share::schema::ObSchemaGetterGuard &get_schema_guard() { return schema_guard_; }
-  int refresh_tenant_schema_guard(const uint64_t tenant_id);
+  int refresh_tenant_schema_guard();
   // Try to return the ref of schema_mgr, rule: perform a revert operation on schema_guard every 10s;
   // 1. If session has request access, then after each statement ends, attempt to trigger once;
   // 2. If session does not have frequent access, solve it through background traversal by session_mgr;
@@ -190,7 +189,6 @@ private:
   share::schema::ObSchemaGetterGuard schema_guard_;
   // Record the timestamp of re-acquiring schema guard, the background needs to have a fallback revert guard ref mechanism to avoid schema mgr slot from being unable to release
   int64_t ref_ts_;
-  uint64_t tenant_id_;
   int64_t schema_version_;
 };
 
@@ -403,28 +401,6 @@ struct ObSockFdParam
   TO_STRING_KV(K_(session_id), K_(m_addr_info), K_(collation));
 };
 typedef common::hash::ObHashMap<int64_t, ObSockFdParam, common::hash::NoPthreadDefendMode> ObSockFdMap;
-struct ObDBlinkSequenceIdKey{
-  ObDBlinkSequenceIdKey()
-  :dblink_id_(OB_INVALID_ID) 
-  {}
-  ObDBlinkSequenceIdKey(const common::ObString &name, uint64_t dblink_id)
-  :sequence_name_(name),dblink_id_(dblink_id)
-  {}
-  ~ObDBlinkSequenceIdKey(){}
-  int hash(uint64_t &res) const
-  {
-    res = 0;
-    res = common::murmurhash(sequence_name_.ptr(), sequence_name_.length(), 0);
-    res = common::murmurhash(&dblink_id_, sizeof(uint64_t), res);
-    return OB_SUCCESS;
-  }
-  bool operator==(const ObDBlinkSequenceIdKey &rv) const
-  { return dblink_id_ == rv.dblink_id_ && sequence_name_ == rv.sequence_name_; }
-  common::ObString sequence_name_;
-  uint64_t dblink_id_;
-};
-typedef common::hash::ObHashMap<ObDBlinkSequenceIdKey, uint64_t,
-                                common::hash::NoPthreadDefendMode> ObDBlinkSequenceIdMap;
 typedef common::hash::ObHashMap<common::ObString,
                                 ObContextUnit *,
                                 common::hash::NoPthreadDefendMode,
@@ -573,11 +549,11 @@ public:
     public:
       CursorCache() : mem_context_(nullptr), next_cursor_id_(1LL << 31), pl_cursor_map_(), pl_non_session_cursor_map_() {}
       virtual ~CursorCache() { NULL != mem_context_ ? DESTROY_CONTEXT(mem_context_) : (void)(NULL); }
-      int init(uint64_t tenant_id)
+      int init()
       {
         int ret = OB_SUCCESS;
         if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context_,
-            lib::ContextParam().set_mem_attr(tenant_id, ObModIds::OB_PL)))) {
+            lib::ContextParam().set_mem_attr(ObModIds::OB_PL)))) {
           SQL_ENG_LOG(WARN, "create memory entity failed");
         } else if (OB_ISNULL(mem_context_)) {
           ret = OB_ERR_UNEXPECTED;
@@ -669,7 +645,6 @@ public:
                                  is_external_consistent_(false),
                                  enable_batched_multi_statement_(false),
                                  enable_sql_extension_(false),
-                                 saved_tenant_info_(0),
                                  enable_bloom_filter_(true),
                                  px_join_skew_handling_(true),
                                  px_join_skew_minfreq_(30),
@@ -746,7 +721,6 @@ public:
     bool is_external_consistent_;
     bool enable_batched_multi_statement_;
     bool enable_sql_extension_;
-    uint64_t saved_tenant_info_;
     bool enable_bloom_filter_;
     bool px_join_skew_handling_;
     int64_t px_join_skew_minfreq_;
@@ -791,17 +765,16 @@ public:
 
 
 public:
-  ObSQLSessionInfo(const uint64_t tenant_id=OB_SERVER_TENANT_ID);
+  ObSQLSessionInfo();
   virtual ~ObSQLSessionInfo();
 
-  int init(uint32_t sessid, uint64_t proxy_sessid,
+  int init(uint32_t sessid,
            common::ObIAllocator *bucket_allocator,
            const ObTZInfoMap *tz_info = NULL,
            int64_t sess_create_time = 0,
-           uint64_t tenant_id = OB_INVALID_TENANT_ID,
            int64_t client_create_time = 0);
   //for test
-  int test_init(uint32_t version, uint32_t sessid, uint64_t proxy_sessid,
+  int test_init(uint32_t version, uint32_t sessid,
            common::ObIAllocator *bucket_allocator);
   void destroy(bool skip_sys_var = false);
   void reset(bool skip_sys_var);
@@ -825,15 +798,6 @@ public:
     warnings_buf_.reset();
     pl_exact_err_msg_.reset();
   }
-  void restore_auto_commit()
-  {
-    if (restore_auto_commit_) {
-      set_autocommit(true);
-      restore_auto_commit_ = false;
-    }
-  }
-  void set_restore_auto_commit() { restore_auto_commit_ = true; }
-  bool need_restore_auto_commit() const { return restore_auto_commit_; }
   void reset_show_warnings_buf() { show_warnings_buf_.reset(); }
   ObPrivSet get_user_priv_set() const { return user_priv_set_; }
   ObPrivSet get_db_priv_set() const { return db_priv_set_; }
@@ -849,9 +813,6 @@ public:
   {
     global_sessid_ = global_sessid;
   }
-  void set_sql_request_level(int64_t sql_req_level) { sql_req_level_ = sql_req_level; }
-  int64_t get_sql_request_level() { return sql_req_level_; }
-  int64_t get_next_sql_request_level() { return sql_req_level_ + 1; }
   int64_t get_global_sessid() const { return global_sessid_; }
   void set_read_uncommited(bool read_uncommited) { read_uncommited_ = read_uncommited; }
   bool get_read_uncommited() const { return read_uncommited_; }
@@ -997,12 +958,6 @@ public:
 
   inline void set_ob20_protocol(bool is_20protocol) { is_ob20_protocol_ = is_20protocol; }
   inline bool is_ob20_protocol() { return is_ob20_protocol_; }
-  inline void set_session_sync_support(bool is_session_sync_support) { is_session_sync_support_ = is_session_sync_support; }
-  inline bool is_session_sync_support() { return is_session_sync_support_; }
-
-  inline void set_session_var_sync(bool is_session_var_sync)
-              { is_session_var_sync_ = is_session_var_sync; }
-  inline bool is_session_var_sync() { return is_session_var_sync_; }
 
   int replace_user_variable(const common::ObString &name, const ObSessionVariable &value);
   int replace_user_variable(
@@ -1138,11 +1093,9 @@ public:
   int add_changed_package_info(ObExecContext &exec_ctx);
   // Current session occurred sequence.nextval read sequence value,
   // All will be saved on the current session by the ObSequence operator
-  int get_sequence_value(uint64_t tenant_id,
-                         uint64_t seq_id,
+  int get_sequence_value(uint64_t seq_id,
                          share::ObSequenceValue &value);
-  int set_sequence_value(uint64_t tenant_id,
-                         uint64_t seq_id,
+  int set_sequence_value(uint64_t seq_id,
                          const share::ObSequenceValue &value);
   int drop_sequence_value_if_exists(uint64_t seq_id);
   int get_next_sequence_id(uint64_t &seq_id);
@@ -1413,8 +1366,6 @@ public:
   }
   int get_tmp_table_size(uint64_t &size);
   int ps_use_stream_result_set(bool &use_stream);
-  void set_proxy_version(uint64_t v) { proxy_version_ = v; }
-  uint64_t get_proxy_version() { return proxy_version_; }
 
   void set_ignore_stmt(bool v) { is_ignore_stmt_ = v; }
   bool is_ignore_stmt() const { return is_ignore_stmt_; }
@@ -1450,8 +1401,6 @@ public:
   int on_user_disconnect();
   virtual void reset_tx_variable(bool reset_next_scope = true);
   ObOptimizerTraceImpl& get_optimizer_tracer() { return optimizer_tracer_; }
-  void set_need_send_feedback_proxy_info(bool v) { need_send_feedback_proxy_info_ = v; }
-  bool is_need_send_feedback_proxy_info() const { return need_send_feedback_proxy_info_; }
   void set_is_lock_session(bool v) { is_lock_session_ = v; }
   bool is_lock_session() const { return is_lock_session_; }
   int64_t get_plsql_exec_time();
@@ -1461,56 +1410,20 @@ public:
   void set_failover_mode(const bool failover_mode) { failover_mode_ = failover_mode; }
   bool has_ccl_rule() const { return has_ccl_rule_; }
   int check_service_name_and_failover_mode() const;
-  int check_service_name_and_failover_mode(const uint64_t tenant_id) const;
   int64_t get_tx_id_with_thread_data_lock() { 
     ObSQLSessionInfo::LockGuard guard(get_thread_data_lock());
     return tx_desc_ != NULL ? tx_desc_->get_tx_id().get_id() : transaction::ObTransID().get_id();
   }
   int check_tenant_status()
   {
-    int ret = OB_SUCCESS;
-    if (GCONF._enable_unit_gc_wait && is_obproxy_mode()
-        && proxy_version_ >= unit_gc_min_sup_proxy_version_) {
-      bool is_already_set = false;
-      if (MTL_GET_TENANT_PREPARE_GC_STATE()) {
-        if (OB_FAIL(get_session_temp_table_used(is_already_set))) {
-          SQL_SESSION_LOG(WARN, "failed to get session temp table used", K(ret));
-        } else if (!is_already_set && !is_in_transaction()) {
-          ret = OB_TENANT_NOT_IN_SERVER;
-          SQL_SESSION_LOG(INFO, "unit has been migrated", K(ret));
-        }
-      }
-    }
-    return ret;
+    // obproxy support removed: unit-gc-wait migration check was proxy-only
+    return OB_SUCCESS;
   }
   int can_kill_session_immediately(bool &need_kill)
   {
-    int ret = OB_SUCCESS;
+    // obproxy support removed: unit-gc-wait was proxy-only
     need_kill = true;
-    if (GCONF._enable_unit_gc_wait && is_obproxy_mode()
-        && proxy_version_ >= unit_gc_min_sup_proxy_version_) {
-      need_kill = false;
-      bool is_already_set = false;
-      if (OB_FAIL(try_lock_query())) {
-        if (OB_UNLIKELY(OB_EAGAIN != ret)) {
-          SQL_SESSION_LOG(WARN, "fail to try lock query", K(ret));
-        } else {
-          ret = OB_SUCCESS;
-        }
-      } else {
-        // successful lock means that there is no request in the current session
-        if (OB_FAIL(get_session_temp_table_used(is_already_set))) {
-          SQL_SESSION_LOG(WARN, "failed to get session temp table used", K(ret));
-        } else if (!is_already_set && !is_in_transaction()) {
-          need_kill = true;
-        }
-        (void)unlock_query();
-      }
-    }
-    // SQL_ENG_LOG(INFO, "can kill session immediately", K(need_kill), K(is_obproxy_mode()),
-    //             K(proxy_version_), K(unit_gc_min_sup_proxy_version_), K(GCONF._enable_unit_gc_wait),
-    //             K(ret));
-    return ret;
+    return OB_SUCCESS;
   }
 public:
   bool has_tx_level_temp_table() const { return tx_desc_ && tx_desc_->with_temporary_table(); }
@@ -1519,7 +1432,7 @@ public:
   void destory_mem_context();
 private:
   void destroy_contexts_map(ObContextsMap &map, common::ObIAllocator &alloc);
-  inline int init_mem_context(uint64_t tenant_id);
+  inline int init_mem_context();
   void set_cur_exec_ctx(ObExecContext *cur_exec_ctx) { cur_exec_ctx_ = cur_exec_ctx; }
 
   static const int64_t MAX_STORED_PLANS_COUNT = 10240;
@@ -1575,8 +1488,7 @@ private:
     if (OB_UNLIKELY(!ps_session_info_map_.created())) {
       ret = ps_session_info_map_.create(common::hash::cal_next_prime(PS_BUCKET_NUM),
                                         common::ObModIds::OB_HASH_BUCKET_PS_SESSION_INFO,
-                                        common::ObModIds::OB_HASH_NODE_PS_SESSION_INFO,
-                                        orig_tenant_id_);
+                                        common::ObModIds::OB_HASH_NODE_PS_SESSION_INFO);
     }
     return ret;
   }
@@ -1588,8 +1500,7 @@ private:
     if (OB_UNLIKELY(!in_use_ps_stmt_id_set_.created())) {
       ret = in_use_ps_stmt_id_set_.create(common::hash::cal_next_prime(PS_BUCKET_NUM),
                                    common::ObModIds::OB_HASH_BUCKET_PS_SESSION_INFO,
-                                   common::ObModIds::OB_HASH_NODE_PS_SESSION_INFO,
-                                   orig_tenant_id_);
+                                   common::ObModIds::OB_HASH_NODE_PS_SESSION_INFO);
     }
     return ret;
   }
@@ -1604,8 +1515,7 @@ private:
     if (OB_UNLIKELY(!ps_name_id_map_.created())) {
       ret = ps_name_id_map_.create(common::hash::cal_next_prime(PS_BUCKET_NUM),
                                    common::ObModIds::OB_HASH_BUCKET_PS_SESSION_INFO,
-                                   common::ObModIds::OB_HASH_NODE_PS_SESSION_INFO,
-                                   orig_tenant_id_);
+                                   common::ObModIds::OB_HASH_NODE_PS_SESSION_INFO);
     }
     return ret;
   }
@@ -1634,7 +1544,6 @@ private:
   bool pl_ps_protocol_; // send query result use this protocol
   bool is_ob20_protocol_; // mark as whether use oceanbase 2.0 protocol
 
-  bool is_session_var_sync_; //session var sync support flag.
   common::hash::ObHashSet<common::ObString> *pl_sync_pkg_vars_ = NULL;
 
   void *inner_conn_;  // ObInnerSQLConnection * will cause .h included from each other.
@@ -1650,8 +1559,6 @@ private:
   // For performance optimization, tenant-level configuration items do not need to be retrieved in real time and are cached in the session, with a refresh triggered every 5s
   ObCachedTenantConfigInfo cached_tenant_config_info_;
   bool prelock_;
-  uint64_t proxy_version_;
-  uint64_t min_proxy_version_ps_; // proxy greater than this version, the same sql returns different Stmt id
   // New engine expression type inference requires using ignore_stmt to determine cast_mode,
   // Due to many interfaces not being able to get the ignore flag from stmt, it can only be passed through the session, so this can only be used during the plan generation phase
   // After CG this status will be cleared
@@ -1686,7 +1593,6 @@ private:
   bool is_send_control_info_ = false;  // whether send control info to client
   bool auto_flush_trace_ = false;
   bool coninfo_set_by_sess_ = false;
-  bool need_send_feedback_proxy_info_ = false;
   bool is_lock_session_ = false;
 
   ObSessInfoEncoder* sess_encoders_[SESSION_SYNC_MAX_TYPE] = {
@@ -1731,8 +1637,6 @@ private:
   //and remove the record when the SQL execution ends
   //in order to access exec ctx through session during SQL execution
   ObExecContext *cur_exec_ctx_;
-  bool restore_auto_commit_; // for dblink xa transaction to restore the value of auto_commit
-  int64_t sql_req_level_; // for sql request between cluster avoid dead lock, such as dblink dead lock 
   int64_t expect_group_id_;
   // When try packet retry failed, set this flag true and retry at current thread.
   // This situation is unexpected and will report a warning to user.
@@ -1743,16 +1647,13 @@ private:
   int32_t vport_;
   int64_t in_bytes_;
   int64_t out_bytes_;
-  common::ObSEArray<ObSequenceSchema*, 2> dblink_sequence_schemas_;
   bool client_non_standard_;
-  bool is_session_sync_support_; // session_sync_support flag.
   share::schema::ObUserLoginInfo login_info_;
   dbms_scheduler::ObDBMSSchedJobInfo *job_info_; // dbms_scheduler related.
   memtable::ObBtreeIterCache *btree_iter_cache_;
   bool failover_mode_;
   common::ObString audit_filter_name_;
   ObExecutingSqlStatRecord executing_sql_stat_record_;
-  uint64_t unit_gc_min_sup_proxy_version_;
   bool has_ccl_rule_;
   int64_t last_update_ccl_cnt_time_;
 #ifdef __ANDROID__
@@ -1768,15 +1669,13 @@ inline bool ObSQLSessionInfo::is_terminate(int &ret) const
     bret = true;
     SQL_ENG_LOG(WARN, "query interrupted session",
                 "query", get_current_query_string(),
-                "key", get_server_sid(),
-                "proxy_sessid", get_proxy_sessid());
+                "key", get_server_sid());
     ret = common::OB_ERR_QUERY_INTERRUPTED;
   } else if (QUERY_DEADLOCKED == get_session_state()) {
     bret = true;
     SQL_ENG_LOG(WARN, "query deadlocked",
                 "query", get_current_query_string(),
-                "key", get_server_sid(),
-                "proxy_sessid", get_proxy_sessid());
+                "key", get_server_sid());
     ret = common::OB_DEAD_LOCK;
   } else if (SESSION_KILLED == get_session_state()) {
     bret = true;

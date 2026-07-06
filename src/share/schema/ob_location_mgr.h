@@ -34,15 +34,13 @@ class ObLocationNameHashKey
 {
 public:
   ObLocationNameHashKey()
-    : tenant_id_(common::OB_INVALID_TENANT_ID), 
-    name_case_mode_(common::OB_NAME_CASE_INVALID),
+    : name_case_mode_(common::OB_NAME_CASE_INVALID),
     location_name_()
   {
   }
-  ObLocationNameHashKey(uint64_t tenant_id, 
-                        const common::ObNameCaseMode mode,
+  ObLocationNameHashKey(const common::ObNameCaseMode mode,
                         common::ObString location_name)
-    : tenant_id_(tenant_id), name_case_mode_(mode), location_name_(location_name)
+    : name_case_mode_(mode), location_name_(location_name)
   {
   }
   ~ObLocationNameHashKey()
@@ -51,25 +49,23 @@ public:
   uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-    hash_ret = common::murmurhash(&tenant_id_, sizeof(uint64_t), 0);
     common::ObCollationType cs_type = ObSchema::get_cs_type_with_cmp_mode(name_case_mode_);
-    hash_ret = common::ObCharset::hash(cs_type, location_name_, hash_ret);
+    hash_ret = common::ObCharset::hash(cs_type, location_name_, 0);
     return hash_ret;
   }
   bool operator == (const ObLocationNameHashKey &rv) const
   {
-    ObCompareNameWithTenantID name_cmp(tenant_id_, name_case_mode_);
-    return (tenant_id_ == rv.tenant_id_) 
+    ObCompareNameWithTenantID name_cmp(name_case_mode_);
+    return (true) 
            && (name_case_mode_ == rv.name_case_mode_) 
            && (0 == name_cmp.compare(location_name_ ,rv.location_name_));
   }
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   void set_location_name(const common::ObString &location_name) { location_name_ = location_name;}
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   const common::ObString &get_location_name() const { return location_name_; }
-  TO_STRING_KV(K_(tenant_id), K_(name_case_mode), K_(location_name));
+  TO_STRING_KV(K_(name_case_mode), K_(location_name));
 private:
-  uint64_t tenant_id_;
   common::ObNameCaseMode name_case_mode_;
   common::ObString location_name_;
 };
@@ -91,8 +87,7 @@ struct ObGetLocationKey<ObLocationNameHashKey, ObLocationSchema *>
   {
     return OB_ISNULL(schema) ?
           ObLocationNameHashKey()
-        : ObLocationNameHashKey(schema->get_tenant_id(), 
-                                schema->get_name_case_mode(), 
+        : ObLocationNameHashKey(schema->get_name_case_mode(), 
                                 schema->get_location_name_str());
   }
 };
@@ -124,13 +119,10 @@ public:
   int del_location(const ObTenantLocationId &id);
   int get_location_schema_by_id(const uint64_t location_id,
                                 const ObLocationSchema *&schema) const;
-  int get_location_schema_by_name(const uint64_t tenant_id,
-                                  const ObNameCaseMode mode,
+  int get_location_schema_by_name(const ObNameCaseMode mode,
                                   const common::ObString &name,
                                   const ObLocationSchema *&schema) const;
-  int get_location_schemas_in_tenant(const uint64_t tenant_id,
-                                      common::ObIArray<const ObLocationSchema *> &schemas) const;
-  int del_location_schemas_in_tenant(const uint64_t tenant_id);
+  int get_location_schemas_in_tenant(common::ObIArray<const ObLocationSchema *> &schemas) const;
   int get_location_schema_count(int64_t &schema_count) const;
   int get_schema_statistics(ObSchemaStatisticsInfo &schema_info) const;
 private:
@@ -161,14 +153,12 @@ private:
 
 OB_INLINE bool ObLocationMgr::schema_compare(const ObLocationSchema *lhs, const ObLocationSchema *rhs)
 {
-  return lhs->get_tenant_id() != rhs->get_tenant_id()
-      ? lhs->get_tenant_id() < rhs->get_tenant_id()
-      : lhs->get_location_id() < rhs->get_location_id();
+  return lhs->get_location_id() < rhs->get_location_id();
 }
 
 OB_INLINE bool ObLocationMgr::schema_equal(const ObLocationSchema *lhs, const ObLocationSchema *rhs)
 {
-  return lhs->get_tenant_id() == rhs->get_tenant_id()
+  return true
       && lhs->get_location_id() == rhs->get_location_id();
 }
 

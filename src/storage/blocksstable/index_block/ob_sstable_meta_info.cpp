@@ -198,7 +198,7 @@ int ObRootBlockInfo::load_root_block_data(
     char *orig_buf = nullptr;
     const char *dst_buf = nullptr;
     int64_t dst_buf_size = 0;
-    const ObMemAttr mem_attr(MTL_ID(), "RootBlkInfo");
+    const ObMemAttr mem_attr("RootBlkInfo");
     if (OB_ISNULL(orig_buf = static_cast<char *>(ob_malloc(addr_.size(), mem_attr)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc buf", K(ret), K(addr_));
@@ -290,7 +290,7 @@ int ObRootBlockInfo::read_block_data(
     read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
     read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
     read_info.buf_ = buf;
-    read_info.mtl_tenant_id_ = MTL_ID();
+    
     read_info.bypass_micro_cache_ = true;
     read_info.io_desc_.set_sys_module_id(ObIOModule::ROOT_BLOCK_IO);
     if (OB_FAIL(addr.get_block_addr(read_info.macro_block_id_, read_info.offset_, read_info.size_))) {
@@ -360,7 +360,7 @@ int ObRootBlockInfo::deserialize_(
   } else if (addr_.is_none()) {
     // do nothing
   } else if (addr_.is_block()) {
-    const ObMemAttr mem_attr(MTL_ID(), "RootBlkInfo");
+    const ObMemAttr mem_attr("RootBlkInfo");
     char *orig_buf = nullptr;
     if (OB_ISNULL(orig_buf = static_cast<char *>(ob_malloc(addr_.size(), mem_attr)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -960,7 +960,7 @@ int ObSSTableMacroInfo::deserialize_(
     char *reader_buf = nullptr;
     int64_t pos = 0;
     int64_t reader_len = 0;
-    ObMemAttr mem_attr(MTL_ID(), "SSTableBlockId");
+    ObMemAttr mem_attr("SSTableBlockId");
     if (OB_FAIL(block_reader.init(entry_id_, mem_attr))) {
       LOG_WARN("fail to initialize reader", K(ret), K(entry_id_));
     } else if (OB_FAIL(block_reader.get_next_item(reader_buf, reader_len, addr))) {// read data ids
@@ -1007,7 +1007,7 @@ int ObSSTableMacroInfo::read_block_ids(
 {
   int ret = OB_SUCCESS;
   ObLinkedMacroBlockItemReader block_reader;
-  ObMemAttr mem_attr(MTL_ID(), "SSTableBlockId");
+  ObMemAttr mem_attr("SSTableBlockId");
   if (OB_UNLIKELY(!entry_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(entry_id));
@@ -1127,7 +1127,7 @@ int ObSSTableMacroInfo::write_block_ids(
     storage::ObSSTableLinkBlockWriteInfo * const link_write_info) const
 {
   int ret = OB_SUCCESS;
-  ObMemAttr mem_attr(MTL_ID(), "SSTableBlockId");
+  ObMemAttr mem_attr("SSTableBlockId");
   if (OB_UNLIKELY(0 == data_block_count_ && 0 == other_block_count_) || 
       OB_UNLIKELY((0 != data_block_count_ && OB_ISNULL(data_block_ids_)) ||
       OB_UNLIKELY((0 != other_block_count_ && OB_ISNULL(other_block_ids_)))) ||
@@ -1165,7 +1165,7 @@ int ObSSTableMacroInfo::flush_ids(
   } else {
     int64_t len = 0;
     OB_UNIS_ADD_LEN_ARRAY(blk_ids, blk_cnt);
-    const ObMemAttr attr(MTL_ID(), ObModIds::OB_BUFFER);
+    const ObMemAttr attr(ObModIds::OB_BUFFER);
     int64_t pos = 0;
     char *buf = nullptr;
     if (OB_ISNULL(buf = static_cast<char *>(ob_malloc(len, attr)))) {

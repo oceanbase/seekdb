@@ -22,8 +22,8 @@
 #include "lib/hash_func/murmur_hash.h"
 #include "common/object/ob_obj_type.h"
 #include "common/ob_tablet_id.h"
-#include "storage/memtable/ob_multi_source_data.h"
-#include "storage/meta_mem/ob_storage_meta_cache.h"
+#include "storage/memtable/ob_i_multi_source_data_unit.h"  // inherits only pure interfaces(conf L2)
+#include "storage/meta_mem/ob_i_storage_meta_obj.h"  // inherits only pure interfaces(conf L2)
 
 namespace oceanbase
 {
@@ -36,42 +36,33 @@ static const uint64_t DEFAULT_TABLET_INCREMENT_CACHE_SIZE = 10000;       // 1w
 struct ObTabletAutoincKey final
 {
 public:
-  ObTabletAutoincKey() : tenant_id_(0), tablet_id_(0) {}
+  ObTabletAutoincKey() : tablet_id_(0) {}
   void reset()
   {
-    tenant_id_ = 0;
     tablet_id_.reset();
   }
   bool operator==(const ObTabletAutoincKey &other) const
   {
-    return other.tenant_id_    == tenant_id_
+    return true
            && other.tablet_id_  == tablet_id_;
   }
 
   int compare(const ObTabletAutoincKey &other) {
     int ret = OB_SUCCESS;
-    if (tenant_id_ < other.tenant_id_) {
-      ret = -1;
-    } else if (tenant_id_ > other.tenant_id_) {
-      ret = 1;
-    } else {
-      ret = tablet_id_.compare(other.tablet_id_);
-    }
+    ret = tablet_id_.compare(other.tablet_id_);
     return ret;
   }
 
   uint64_t hash() const
   {
     uint64_t hash_val = tablet_id_.hash();
-    hash_val = common::murmurhash(&tenant_id_, sizeof(tenant_id_), hash_val);
     return hash_val;
   }
 
-  inline bool is_valid() const { return tenant_id_ != 0 && tablet_id_.is_valid(); }
+  inline bool is_valid() const { return tablet_id_.is_valid(); }
 
-  TO_STRING_KV(K_(tenant_id), K_(tablet_id));
+  TO_STRING_KV(K_(tablet_id));
 public:
-  uint64_t tenant_id_;
   common::ObTabletID tablet_id_;
 };
 
@@ -130,17 +121,15 @@ struct ObTabletAutoincParam final
 {
 public:
   ObTabletAutoincParam()
-    : tenant_id_(OB_INVALID_ID),
-      auto_increment_cache_size_(DEFAULT_TABLET_INCREMENT_CACHE_SIZE)
+    : auto_increment_cache_size_(DEFAULT_TABLET_INCREMENT_CACHE_SIZE)
   {}
   bool is_valid() const
   {
-    return OB_INVALID_ID != tenant_id_ && auto_increment_cache_size_ > 0;
+    return auto_increment_cache_size_ > 0;
   }
 
-  TO_STRING_KV(K_(tenant_id), K_(auto_increment_cache_size));
+  TO_STRING_KV(K_(auto_increment_cache_size));
 public:
-  uint64_t tenant_id_;
   int64_t auto_increment_cache_size_; // how many tablet seqs to cache on one tablet node
   OB_UNIS_VERSION(1);
 };

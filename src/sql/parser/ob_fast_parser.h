@@ -563,7 +563,6 @@ protected:
 	 */
 
 	int process_insert_or_replace(const char *str, const int64_t size);
-	virtual int process_values(const char *str) = 0;
 
 	int get_one_insert_row_str(ObRawSql &raw_sql,
                              ObString &str,
@@ -643,12 +642,12 @@ public:
 		static_cast<ProcessIdfFunc>(&ObFastParserMysql::process_identifier));
 	}
 	~ObFastParserMysql() {}
-	virtual int process_values(const char *str) override;
 	ObIArray<ObValuesTokenPos> &get_values_tokens() { return values_tokens_; }
 private:
 	ObSQLMode sql_mode_;
 	int parse_next_token();
 	int process_identifier(bool is_number_begin);
+	int process_values(const char *str);
 	/** 
 	 * In case of two adjacent string literal, such as " 'a' 'b' ", the two string will be
 	 * concatenate into 'ab'. However, the string 'a' will used as the column name if it appears
@@ -679,7 +678,6 @@ public:
 		static_cast<ProcessIdfFunc>(&ObFastParserOracle::process_identifier));
 	}
 	~ObFastParserOracle() {}
-	virtual int process_values(const char *str) override;
 private:
 	int parse_next_token();
 	int process_identifier(bool is_number_begin);

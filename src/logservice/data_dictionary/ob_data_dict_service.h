@@ -54,7 +54,6 @@ public:
   static int mtl_init(ObDataDictService *&datadict_service);
 public:
   int init(
-      const uint64_t tenant_id,
       share::schema::ObMultiVersionSchemaService *schema_service,
       storage::ObLSService *ls_service);
   int start();
@@ -118,7 +117,6 @@ private:
   bool is_inited_;
   bool is_leader_;
   volatile bool stop_flag_;
-  uint64_t tenant_id_;
   ObArenaAllocator allocator_;
   ObDataDictSqlClient sql_client_;
   ObDataDictStorage storage_;

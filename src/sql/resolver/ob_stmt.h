@@ -26,7 +26,7 @@
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/resolver/ob_stmt_type.h"
 #include "share/schema/ob_dependency_info.h"      // ObReferenceObjTable
-#include "lib/allocator/ob_pooled_allocator.h"
+#include "lib/objectpool/ob_pooled_allocator.h"
 namespace oceanbase
 {
 namespace sql
@@ -325,7 +325,6 @@ public:
             // package
             || stmt_type == stmt::T_CREATE_PACKAGE
             || stmt_type == stmt::T_CREATE_PACKAGE_BODY
-            || stmt_type == stmt::T_ALTER_PACKAGE
             || stmt_type == stmt::T_DROP_PACKAGE
 
             // trigger
@@ -467,8 +466,6 @@ public:
         // || stmt_type == stmt::T_CREATE_TRIGGER
         // || stmt_type == stmt::T_DROP_TRIGGER
         // || stmt_type == stmt::T_ALTER_TRIGGER
-        // || stmt_type == stmt::T_CREATE_DBLINK
-        // || stmt_type == stmt::T_DROP_DBLINK
 
         // keystore
         // || stmt_type == stmt::T_CREATE_KEYSTORE
@@ -515,7 +512,6 @@ public:
            || stmt_type == stmt::T_SHOW_CHARSET
            || stmt_type == stmt::T_SHOW_COLLATION
            || stmt_type == stmt::T_SHOW_STATUS
-           || stmt_type == stmt::T_SHOW_TENANT
            || stmt_type == stmt::T_SHOW_CREATE_TENANT
            || stmt_type == stmt::T_SHOW_TRACE
            || stmt_type == stmt::T_SHOW_ENGINES

@@ -99,11 +99,11 @@ int ObExprCurrentRole::calc_result_type0(ObExprResType &type, ObExprTypeCtx &typ
 int ObExprCurrentRole::eval_current_role(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
+  
   ObSchemaGetterGuard schema_guard;
   ObSQLSessionInfo *session_info = NULL;
   ObSqlString data;
-  lib::ObMemAttr attr(tenant_id, ObModIds::OB_SQL_STRING);
+  lib::ObMemAttr attr(ObModIds::OB_SQL_STRING);
   data.set_attr(attr);
 
   if (OB_ISNULL(session_info = ctx.exec_ctx_.get_my_session())) {
@@ -112,14 +112,14 @@ int ObExprCurrentRole::eval_current_role(const ObExpr &expr, ObEvalCtx &ctx, ObD
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get schema_service", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("failed to get schema guard", K(ret));
   } else {
     const ObIArray<uint64_t> &roles = session_info->get_enable_role_array();
 
     for (int i = 0; OB_SUCC(ret) && i < roles.count(); i++) {
       const ObUserInfo *user_info = NULL;
-      OZ (schema_guard.get_user_info(tenant_id, roles.at(i), user_info));
+      OZ (schema_guard.get_user_info(roles.at(i), user_info));
       if (OB_ISNULL(user_info)) {
         //ignored
       } else {
@@ -189,7 +189,7 @@ int ObExprIsEnabledRole::calc_result_type2(ObExprResType &type,
 int ObExprIsEnabledRole::eval_is_enabled_role(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
+  
   ObSchemaGetterGuard schema_guard;
   ObSQLSessionInfo *session_info = NULL;
   ObDatum *user = NULL;
@@ -203,7 +203,7 @@ int ObExprIsEnabledRole::eval_is_enabled_role(const ObExpr &expr, ObEvalCtx &ctx
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get schema_service", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("failed to get schema guard", K(ret));
   } else if (OB_UNLIKELY(2 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -217,7 +217,7 @@ int ObExprIsEnabledRole::eval_is_enabled_role(const ObExpr &expr, ObEvalCtx &ctx
     const ObIArray<uint64_t> &roles = session_info->get_enable_role_array();
     const ObUserInfo *user_info = NULL;
     for (int i = 0; OB_SUCC(ret) && !is_enabled_role && i < roles.count(); i++) {
-      if (OB_FAIL(schema_guard.get_user_info(tenant_id, roles.at(i), user_info))) {
+      if (OB_FAIL(schema_guard.get_user_info(roles.at(i), user_info))) {
         LOG_WARN("failed to get user info", K(ret));
       } else if (OB_ISNULL(user_info)) {
         //ignored

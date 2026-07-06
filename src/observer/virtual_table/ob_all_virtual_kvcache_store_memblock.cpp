@@ -94,7 +94,7 @@ int ObAllVirtualKVCacheStoreMemblock::inner_open()
   memblock_infos_.reset();
   if (OB_FAIL(set_ip())) {
     SERVER_LOG(WARN, "Fail to get ip in ObAllVirtualKVCacheStoreMemblock", K(ret));
-  } else if (OB_FAIL(ObKVGlobalCache::get_instance().get_memblock_info(effective_tenant_id_, memblock_infos_))) {  // get memblock info from kvcache
+  } else if (OB_FAIL(ObKVGlobalCache::get_instance().get_memblock_info(memblock_infos_))) {  // get memblock info from kvcache
     SERVER_LOG(WARN, "Fail to get memblock information from global cache", K(ret));
   }
 

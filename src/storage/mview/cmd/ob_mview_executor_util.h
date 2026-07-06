@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 #include "share/schema/ob_schema_struct.h"
 
 namespace oceanbase
@@ -27,7 +27,7 @@ class ObMViewExecutorUtil
 {
 public:
 
-  static int check_min_data_version(const uint64_t tenant_id, const uint64_t min_data_version,
+  static int check_min_data_version(const uint64_t min_data_version,
                                     const char *errmsg);
   static int split_table_list(const common::ObString &table_list,
                               common::ObIArray<common::ObString> &tables);
@@ -42,7 +42,7 @@ public:
   static int to_collection_level(const common::ObString &str,
                                  share::schema::ObMVRefreshStatsCollectionLevel &collection_level);
 
-  static int generate_refresh_id(const uint64_t tenant_id, int64_t &refresh_id);
+  static int generate_refresh_id(int64_t &refresh_id);
 
   static bool is_mview_refresh_retry_ret_code(int ret_code);
 };

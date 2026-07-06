@@ -62,7 +62,7 @@ int ObAllVirtualMemoryInfo::inner_get_next_row(ObNewRow *&row)
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
     } else {
-      auto add_row = [&](uint64_t tenant_id, int64_t ctx_id,
+      auto add_row = [&](int64_t ctx_id,
                          const char *mod_name,
                          int64_t hold, int64_t used, int64_t count) {
         int ret = OB_SUCCESS;
@@ -137,24 +137,11 @@ int ObAllVirtualMemoryInfo::inner_get_next_row(ObNewRow *&row)
         }
         return ret;
       };
-      int tenant_cnt = 0;
-
-      // sys tenant show all tenant memory info
-      if (is_sys_tenant(effective_tenant_id_)) {
-        get_tenant_ids(tenant_ids_, OB_MAX_SERVER_TENANT_CNT, tenant_cnt);
-      } else {
-        // user tenant show self tenant memory info
-        tenant_ids_[0] = effective_tenant_id_;
-        tenant_cnt = 1;
-      }
-
-      for (int tenant_idx = 0; OB_SUCC(ret) && tenant_idx < tenant_cnt; tenant_idx++) {
-        uint64_t tenant_id = tenant_ids_[tenant_idx];
+      {
         for (int ctx_id = 0; ctx_id < ObCtxIds::MAX_CTX_ID; ctx_id++) {
-          auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(tenant_id, ctx_id);
+          auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(ctx_id);
           if (nullptr == ta) {
-            ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(tenant_id,
-                                                                                        ctx_id);
+            ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(ctx_id);
           }
           if (nullptr == ta) {
             continue;
@@ -162,7 +149,7 @@ int ObAllVirtualMemoryInfo::inner_get_next_row(ObNewRow *&row)
           if (OB_SUCC(ret)) {
             ret = ta->iter_label([&](lib::ObLabel &label, LabelItem *l_item)
               {
-                return add_row(tenant_id, ctx_id, label.str_, l_item->hold_, l_item->used_, l_item->count_);
+                return add_row(ctx_id, label.str_, l_item->hold_, l_item->used_, l_item->count_);
               });
           }
         }

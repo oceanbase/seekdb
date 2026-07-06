@@ -74,15 +74,6 @@ set(CPACK_ARCHIVE_SERVER_FILE_NAME
 set(CPACK_ARCHIVE_UTILS_FILE_NAME
   "${CPACK_PACKAGE_NAME}-utils-${CPACK_PACKAGE_VERSION}-${CPACK_PACKAGE_RELEASE}-${CPACK_SYSTEM_NAME}-${MACOS_ARCH}")
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/ocp/software_package.template
-              ${CMAKE_CURRENT_SOURCE_DIR}/tools/ocp/software_package
-              @ONLY)
-
-install(FILES
-  tools/ocp/software_package
-  DESTINATION usr/share/seekdb/software_package
-  COMPONENT server)
-
 message(STATUS "Cpack Components:${CPACK_COMPONENTS_ALL}")
 
 # refs https://stackoverflow.com/questions/48711342/what-does-the-cpack-preinstall-target-do

@@ -43,7 +43,6 @@ ObMViewDependencyService::~ObMViewDependencyService()
 int ObMViewDependencyService::remove_mview_dep_infos(
     common::ObMySQLTransaction &trans,
     share::schema::ObSchemaGetterGuard &schema_guard,
-    const uint64_t tenant_id,
     const uint64_t mview_table_id)
 {
   int ret = OB_SUCCESS;
@@ -53,11 +52,11 @@ int ObMViewDependencyService::remove_mview_dep_infos(
   // hence, do nothing if __all_mview_dep does not exists
   bool all_mview_dep_table_exists = false;
   if (OB_FAIL(share::schema::ObSchemaUtils::check_sys_table_exist_by_sql(
-      trans, tenant_id, OB_ALL_MVIEW_DEP_TID, all_mview_dep_table_exists))) {
+      trans, OB_ALL_MVIEW_DEP_TID, all_mview_dep_table_exists))) {
     LOG_WARN("failed to check whether __all_mview_dep table exists", KR(ret));
   } else if (all_mview_dep_table_exists) {
     if (OB_FAIL(ObMVDepUtils::get_table_ids_only_referenced_by_given_mv(
-        trans, tenant_id, mview_table_id, stale_ref_table_ids))) {
+        trans, mview_table_id, stale_ref_table_ids))) {
       LOG_WARN("failed to get table ids only referenced by given mv", KR(ret));
     } else if (!stale_ref_table_ids.empty()) {
       ObUpdateMViewRefTableOpt opt;
@@ -65,29 +64,27 @@ int ObMViewDependencyService::remove_mview_dep_infos(
       opt.set_mv_flag(ObTableReferencedByFastLSMMVFlag::IS_NOT_REFERENCED_BY_FAST_LSM_MV);
       if (OB_FAIL(update_mview_reference_table_status(trans,
                                                       schema_guard,
-                                                      tenant_id,
                                                       stale_ref_table_ids,
                                                       opt))) {
-        LOG_WARN("failed to update mview reference table status", KR(ret), K(tenant_id),
+        LOG_WARN("failed to update mview reference table status", KR(ret),
                  K(stale_ref_table_ids), K(opt));
       }
     } else if (OB_FAIL(ObMVDepUtils::get_table_ids_only_referenced_by_given_fast_lsm_mv(
-                   trans, tenant_id, mview_table_id, stale_fast_lsm_ref_table_ids))) {
+                   trans, mview_table_id, stale_fast_lsm_ref_table_ids))) {
       LOG_WARN("failed to get table ids only referenced by given fast lsm mv", KR(ret));
     } else if (!stale_fast_lsm_ref_table_ids.empty()) {
       ObUpdateMViewRefTableOpt opt;
       opt.set_mv_flag(ObTableReferencedByFastLSMMVFlag::IS_NOT_REFERENCED_BY_FAST_LSM_MV);
       if (OB_FAIL(update_mview_reference_table_status(trans,
                                                       schema_guard,
-                                                      tenant_id,
                                                       stale_fast_lsm_ref_table_ids,
                                                       opt))) {
-        LOG_WARN("failed to update mview reference table status", KR(ret), K(tenant_id),
+        LOG_WARN("failed to update mview reference table status", KR(ret),
                  K(stale_fast_lsm_ref_table_ids), K(opt));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(sql::ObMVDepUtils::delete_mview_dep_infos(
-        trans, tenant_id, mview_table_id))) {
+        trans, mview_table_id))) {
       LOG_WARN("failed to delete mview dep infos", KR(ret), K(mview_table_id));
     }
   }
@@ -97,7 +94,6 @@ int ObMViewDependencyService::remove_mview_dep_infos(
 int ObMViewDependencyService::update_mview_dep_infos(
     ObMySQLTransaction &trans,
     ObSchemaGetterGuard &schema_guard,
-    const uint64_t tenant_id,
     const uint64_t mview_table_id,
     const common::ObIArray<ObDependencyInfo> &dep_infos)
 {
@@ -114,26 +110,26 @@ int ObMViewDependencyService::update_mview_dep_infos(
   // hence, do nothing if __all_mview_dep does not exists
   bool all_mview_dep_table_exists = false;
 
-  if ((OB_INVALID_TENANT_ID == tenant_id) || (OB_INVALID_ID == mview_table_id)) {
+  if ((false) || (OB_INVALID_ID == mview_table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id or mview_table_id", KR(ret), K(tenant_id), K(mview_table_id));
+    LOG_WARN("invalid mview_table_id", KR(ret), K(mview_table_id));
   } else if (OB_FAIL(share::schema::ObSchemaUtils::check_sys_table_exist_by_sql(
-      trans, tenant_id, OB_ALL_MVIEW_DEP_TID, all_mview_dep_table_exists))) {
+      trans, OB_ALL_MVIEW_DEP_TID, all_mview_dep_table_exists))) {
     LOG_WARN("failed to check is system table name", KR(ret));
   } else if (all_mview_dep_table_exists) {
-    if (OB_FAIL(ObMViewInfo::fetch_mview_info(trans, tenant_id, mview_table_id, mview_info,
+    if (OB_FAIL(ObMViewInfo::fetch_mview_info(trans, mview_table_id, mview_info,
                                               false /*for_update*/, true /*nowait*/))) {
       LOG_WARN("fail to fetch mview info", KR(ret), K(mview_table_id));
     } else if (OB_FAIL(sql::ObMVDepUtils::convert_to_mview_dep_infos(dep_infos, cur_mv_dep_infos))) {
       LOG_WARN("failed to convert to mview dep infos", KR(ret));
     } else if (OB_FAIL(sql::ObMVDepUtils::get_mview_dep_infos(
-        trans, tenant_id, mview_table_id, prev_mv_dep_infos))) {
+        trans, mview_table_id, prev_mv_dep_infos))) {
       LOG_WARN("failed to get mview dep infos", KR(ret));
     } else if (OB_FAIL(ObMVDepUtils::get_table_ids_only_referenced_by_given_mv(
-        trans, tenant_id, mview_table_id, table_ids_only_ref_by_this_mv))) {
+        trans, mview_table_id, table_ids_only_ref_by_this_mv))) {
       LOG_WARN("failed to get table ids only referenced by given mv", KR(ret));
     } else if (OB_FAIL(ObMVDepUtils::get_table_ids_only_referenced_by_given_fast_lsm_mv(
-        trans, tenant_id, mview_table_id, table_ids_only_ref_by_this_fast_lsm_mv))) {
+        trans, mview_table_id, table_ids_only_ref_by_this_fast_lsm_mv))) {
       LOG_WARN("failed to get table ids only referenced by given fast lsm mv", KR(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && (i < cur_mv_dep_infos.count()); ++i) {
@@ -184,10 +180,9 @@ int ObMViewDependencyService::update_mview_dep_infos(
       opt.set_mv_flag(ObTableReferencedByFastLSMMVFlag::IS_NOT_REFERENCED_BY_FAST_LSM_MV);
       if (OB_FAIL(update_mview_reference_table_status(trans,
                                                       schema_guard,
-                                                      tenant_id,
                                                       stale_ref_table_ids,
                                                       opt))) {
-        LOG_WARN("failed to update mview reference table status", KR(ret), K(tenant_id),
+        LOG_WARN("failed to update mview reference table status", KR(ret),
                  K(stale_ref_table_ids), K(opt));
       }
     }
@@ -197,10 +192,9 @@ int ObMViewDependencyService::update_mview_dep_infos(
       opt.set_mv_flag(ObTableReferencedByFastLSMMVFlag::IS_NOT_REFERENCED_BY_FAST_LSM_MV);
       if (OB_FAIL(update_mview_reference_table_status(trans,
                                                       schema_guard,
-                                                      tenant_id,
                                                       stale_fast_lsm_ref_table_ids,
                                                       opt))) {
-        LOG_WARN("failed to update mview reference table status", KR(ret), K(tenant_id),
+        LOG_WARN("failed to update mview reference table status", KR(ret),
                  K(stale_fast_lsm_ref_table_ids), K(opt));
       }
     }
@@ -212,14 +206,13 @@ int ObMViewDependencyService::update_mview_dep_infos(
         opt.set_mv_flag(ObTableReferencedByFastLSMMVFlag::IS_REFERENCED_BY_FAST_LSM_MV);
       }
       if (OB_FAIL(sql::ObMVDepUtils::delete_mview_dep_infos(
-          trans, tenant_id, mview_table_id))) {
+          trans, mview_table_id))) {
         LOG_WARN("failed to delete mview dep infos", KR(ret), K(mview_table_id));
       } else if (OB_FAIL(sql::ObMVDepUtils::insert_mview_dep_infos(
-          trans, tenant_id, mview_table_id, cur_mv_dep_infos))) {
+          trans, mview_table_id, cur_mv_dep_infos))) {
         LOG_WARN("failed to insert mview dep infos", KR(ret), K(new_ref_table_ids));
       } else if (OB_FAIL(update_mview_reference_table_status(trans,
                                                              schema_guard,
-                                                             tenant_id,
                                                              new_ref_table_ids,
                                                              opt))) {
         LOG_WARN("failed to update mview reference table status", KR(ret), K(opt));
@@ -233,7 +226,6 @@ int ObMViewDependencyService::update_mview_dep_infos(
 int ObMViewDependencyService::update_mview_reference_table_status(
     ObMySQLTransaction &trans,
     ObSchemaGetterGuard &schema_guard,
-    const uint64_t tenant_id,
     const ObIArray<uint64_t> &ref_table_ids,
     const ObUpdateMViewRefTableOpt &update_opt)
 {
@@ -243,14 +235,13 @@ int ObMViewDependencyService::update_mview_reference_table_status(
     int64_t new_schema_version = OB_INVALID_VERSION;
     const uint64_t ref_table_id = ref_table_ids.at(i);
     const ObTableSchema *ref_table_schema = NULL;
-    if (OB_FAIL(schema_guard.get_table_schema(
-        tenant_id, ref_table_id, ref_table_schema))) {
-      LOG_WARN("failed to get table schema", KR(ret), K(tenant_id), K(ref_table_id));
+    if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, ref_table_schema))) {
+      LOG_WARN("failed to get table schema", KR(ret), K(ref_table_id));
     } else if (OB_ISNULL(ref_table_schema)) {
       // the reference table has already been dropped, ignore it
-      LOG_TRACE("ref table schema is null", KR(ret), K(tenant_id), K(ref_table_id));
-    } else if (OB_FAIL(schema_service_.gen_new_schema_version(tenant_id, new_schema_version))) {
-      LOG_WARN("fail to gen new schema_version", KR(ret), K(tenant_id));
+      LOG_TRACE("ref table schema is null", KR(ret), K(ref_table_id));
+    } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
+      LOG_WARN("fail to gen new schema_version", KR(ret));
     } else if ((update_opt.need_update_table_flag_ && ref_table_schema->get_table_mode_struct().table_referenced_by_mv_flag_ != update_opt.table_flag_) ||
                 (update_opt.need_update_mv_flag_ && ref_table_schema->get_mv_mode_struct().table_referenced_by_fast_lsm_mv_flag_ != update_opt.mv_flag_)) {
       SMART_VAR(ObTableSchema, new_ref_table_schema) {

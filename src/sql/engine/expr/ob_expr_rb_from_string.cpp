@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_rb_from_string.h"
 #include "sql/engine/expr/ob_expr_rb_func_helper.h"
-#include "lib/roaringbitmap/ob_rb_utils.h"
+#include "share/roaringbitmap/ob_rb_utils.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -64,7 +64,7 @@ int ObExprRbFromString::eval_rb_from_string(const ObExpr &expr,
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(ObRbExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session()), "ROARINGBITMAP"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("ROARINGBITMAP"));
   ObDatum *datum = NULL;
   bool is_null_result = false;
   ObString rb_str;

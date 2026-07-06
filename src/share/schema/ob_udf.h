@@ -52,7 +52,7 @@ public:
   };
 
 public:
-  ObUDF() : ObSchema(), tenant_id_(common::OB_INVALID_ID), udf_id_(common::OB_INVALID_ID), name_(), ret_(UDFRetType::UDF_RET_UNINITIAL),
+  ObUDF() : ObSchema(), udf_id_(common::OB_INVALID_ID), name_(), ret_(UDFRetType::UDF_RET_UNINITIAL),
   dl_(), type_(UDFType::UDF_TYPE_UNINITIAL), schema_version_(common::OB_INVALID_VERSION)
   { reset(); };
   explicit ObUDF(common::ObIAllocator *allocator);
@@ -64,7 +64,7 @@ public:
   bool operator==(const ObUDF &r) const;
 
   //set methods
-  inline void set_tenant_id(const uint64_t id) { tenant_id_ = id; }
+  
   inline void set_ret(const enum UDFRetType ret) { ret_ = ret; }
   inline void set_type(const enum UDFType type) { type_ = type; }
   inline void set_ret(const int ret) { ret_ = UDFRetType(ret); }
@@ -76,7 +76,7 @@ public:
 
 
   //get methods
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline uint64_t get_udf_id() const { return udf_id_; }
   inline enum UDFRetType get_ret() const { return ret_; }
   inline enum UDFType get_type() const { return type_; }
@@ -97,7 +97,7 @@ public:
   bool is_normal_udf() const { return type_ == FUNCTION; };
   bool is_agg_udf() const { return type_ == AGGREGATE; };
 
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(udf_id),
                K_(name),
                K_(ret),
@@ -106,7 +106,7 @@ public:
                K_(schema_version));
 
 private:
-  uint64_t tenant_id_;
+  
   uint64_t udf_id_;
   common::ObString name_;
   enum UDFRetType ret_;
@@ -122,13 +122,13 @@ class ObUDFMeta
 {
   OB_UNIS_VERSION_V(1);
 public :
-  ObUDFMeta() : tenant_id_(common::OB_INVALID_ID), name_(), ret_(ObUDF::UDFRetType::UDF_RET_UNINITIAL),
+  ObUDFMeta() : name_(), ret_(ObUDF::UDFRetType::UDF_RET_UNINITIAL),
       dl_(), type_(ObUDF::UDFType::UDF_TYPE_UNINITIAL) {
   }
   virtual ~ObUDFMeta() = default;
 
   void assign(const ObUDFMeta &other) {
-    tenant_id_ = other.tenant_id_;
+    
     name_ = other.name_;
     ret_ = other.ret_;
     dl_ = other.dl_;
@@ -136,7 +136,7 @@ public :
   }
 
   ObUDFMeta &operator=(const class ObUDFMeta &other) {
-    tenant_id_ = other.tenant_id_;
+    
     name_ = other.name_;
     ret_ = other.ret_;
     dl_ = other.dl_;
@@ -144,13 +144,13 @@ public :
     return *this;
   }
 
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(name),
                K_(ret),
                K_(dl),
                K_(type));
 
-  uint64_t tenant_id_;
+  
   common::ObString name_;
   ObUDF::UDFRetType ret_;
   common::ObString dl_;

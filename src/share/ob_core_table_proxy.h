@@ -159,8 +159,7 @@ public:
   };
 
   ObCoreTableProxy(const char *table_name,
-                   common::ObISQLClient &sql_client,
-                   const uint64_t tenant_id);
+                   common::ObISQLClient &sql_client);
   virtual ~ObCoreTableProxy();
 
   bool is_valid() const { return NULL != table_name_ && NULL != sql_client_; }
@@ -256,7 +255,6 @@ private:
   int64_t cur_idx_;
   common::ObArray<Row> all_row_;
   common::ObArenaAllocator allocator_;
-  uint64_t tenant_id_;
 
   DISALLOW_COPY_AND_ASSIGN(ObCoreTableProxy);
 };

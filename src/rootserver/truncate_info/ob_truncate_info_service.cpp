@@ -84,26 +84,25 @@ ObTruncatePartKeyInfo::~ObTruncatePartKeyInfo()
 
 int ObTruncatePartKeyInfo::init(
     ObIAllocator &allocator,
-    const uint64_t tenant_id,
     const ObTableSchema &data_table_schema)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObPartitionLevel part_level = data_table_schema.get_part_level();
   const uint64_t data_table_id = data_table_schema.get_table_id();
-  if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("Failed to get tenant schema guard", K(ret), K(tenant_id));
-  } else if (OB_FAIL(create_tmp_session(tenant_id, schema_guard, free_session_ctx_, session_))) {
+  if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("Failed to get tenant schema guard", K(ret));
+  } else if (OB_FAIL(create_tmp_session(schema_guard, free_session_ctx_, session_))) {
     LOG_WARN("Failed to create temp session", K(ret));
   } else if (OB_UNLIKELY(ObPartitionLevel::PARTITION_LEVEL_ONE != part_level
       && ObPartitionLevel::PARTITION_LEVEL_TWO != part_level)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid part level", K(ret), K(part_level), K(tenant_id), K(data_table_id));
+    LOG_WARN("invalid part level", K(ret), K(part_level), K(data_table_id));
   } else if (OB_FAIL(resolve_part_expr(allocator, schema_guard, data_table_schema, PARTITION_LEVEL_ONE, part_expr_))) {
-    LOG_WARN("Failed to resolve part expr", K(ret), K(tenant_id), K(data_table_id));
+    LOG_WARN("Failed to resolve part expr", K(ret), K(data_table_id));
   } else if (ObPartitionLevel::PARTITION_LEVEL_TWO == part_level
       && OB_FAIL(resolve_part_expr(allocator, schema_guard, data_table_schema, PARTITION_LEVEL_TWO, subpart_expr_))) {
-    LOG_WARN("Failed to resolve subpart expr", K(ret), K(tenant_id), K(data_table_id));
+    LOG_WARN("Failed to resolve subpart expr", K(ret), K(data_table_id));
   }
   return ret;
 }
@@ -295,7 +294,6 @@ int ObTruncatePartKeyInfo::resolve_part_expr(
 }
 
 int ObTruncatePartKeyInfo::create_tmp_session(
-    const uint64_t tenant_id,
     ObSchemaGetterGuard &schema_guard,
     ObFreeSessionCtx &free_session_ctx,
     ObSQLSessionInfo *&session)
@@ -303,30 +301,28 @@ int ObTruncatePartKeyInfo::create_tmp_session(
   int ret = OB_SUCCESS;
   session = nullptr;
   uint32_t sid = ObSQLSessionInfo::INVALID_SESSID;
-  uint64_t proxy_sid = 0;
   const schema::ObTenantSchema *tenant_info = nullptr;
   const ObDatabaseSchema *database_schema = nullptr;
   if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
-    LOG_WARN("Failed to create sess id", K(ret), K(tenant_id));
+    LOG_WARN("Failed to create sess id", K(ret));
   } else if (OB_FAIL(GCTX.session_mgr_->create_session(
-             OB_SYS_TENANT_ID, sid, proxy_sid, ObTimeUtility::current_time(), session))) {
+             sid, ObTimeUtility::current_time(), session))) {
     session = nullptr;
-    LOG_WARN("Failed to create session", K(ret), K(sid), K(tenant_id));
+    LOG_WARN("Failed to create session", K(ret), K(sid));
   } else {
     free_session_ctx.sessid_ = sid;
-    free_session_ctx.proxy_sessid_ = proxy_sid;
   }
-  if (FAILEDx(schema_guard.get_tenant_info(tenant_id, tenant_info))) {
-    LOG_WARN("Failed to get tenant info", K(ret), K(tenant_id));
+  if (FAILEDx(schema_guard.get_tenant_info(tenant_info))) {
+    LOG_WARN("Failed to get tenant info", K(ret));
   } else if (OB_ISNULL(tenant_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null tenant schema", K(ret), K(tenant_id));
+    LOG_WARN("Unexpected null tenant schema", K(ret));
   } else if (OB_FAIL(session->load_default_sys_variable(false, false))) {
-    LOG_WARN("Failed to load default sys variable", K(ret), K(tenant_id));
+    LOG_WARN("Failed to load default sys variable", K(ret));
   } else if (OB_FAIL(session->load_default_configs_in_pc())) {
-    LOG_WARN("Failed to load default configs in pc", K(ret), K(tenant_id));
-  } else if (OB_FAIL(session->init_tenant(tenant_info->get_tenant_name(), tenant_id))) {
-     LOG_WARN("Failed to init tenant in session", K(ret), K(tenant_id));
+    LOG_WARN("Failed to load default configs in pc", K(ret));
+  } else if (OB_FAIL(session->init_tenant(tenant_info->get_tenant_name()))) {
+     LOG_WARN("Failed to init tenant in session", K(ret));
   } else {
     session->set_inner_session();
     session->set_compatibility_mode(ObCompatibilityMode::MYSQL_MODE);
@@ -442,9 +438,9 @@ int ObTruncateInfoService::init(ObMySQLProxy &sql_proxy)
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_FAIL(part_key_info_.init(allocator_, get_tenant_id(), data_table_schema_))) {
+  } else if (OB_FAIL(part_key_info_.init(allocator_, data_table_schema_))) {
     LOG_WARN("failed to init part_key_info", KR(ret));
-  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(sql_proxy, get_tenant_id(), ddl_task_id_))) {
+  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(sql_proxy, ddl_task_id_))) {
     LOG_WARN("fetch new task id failed", K(ret));
   } else {
     is_inited_ = true;
@@ -495,10 +491,7 @@ int ObTruncateInfoService::check_stored_ref_columns_for_index(
   return ret;
 }
 
-uint64_t ObTruncateInfoService::get_tenant_id() const
-{
-  return arg_.exec_tenant_id_;
-}
+
 
 #ifdef ERRSIM
 int errsim_truncate_trans(const int64_t data_table_id, const int64_t index_table_id)
@@ -531,14 +524,14 @@ int ObTruncateInfoService::execute(ObMySQLTransaction &trans,
   } else if (OB_UNLIKELY(is_column_store)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported write truncate info for column store global index", KR(ret), K(is_column_store), K(index_table_schema));
-  } else if (OB_FAIL(ObDDLLock::lock_for_modify_truncate_info_in_trans(get_tenant_id(), index_table_schema.get_table_id(), trans))) {
+  } else if (OB_FAIL(ObDDLLock::lock_for_modify_truncate_info_in_trans(index_table_schema.get_table_id(), trans))) {
     LOG_WARN("failed to lock global index", KR(ret), "index_table_id", index_table_schema.get_table_id());
   } else if (OB_FAIL(index_table_schema.get_tablet_ids(index_tablet_array_))) {
     LOG_WARN("failed to get tablet id from index schema", KR(ret), K(index_table_schema));
   } else if (index_tablet_array_.empty()) {
     // do nothing
-  } else if (OB_FAIL(ObTabletToLSTableOperator::batch_get_ls(trans, get_tenant_id(), index_tablet_array_, ls_id_array_))) {
-    LOG_WARN("failed to get ls id array", KR(ret), K(get_tenant_id()), K_(index_tablet_array));
+  } else if (OB_FAIL(ObTabletToLSTableOperator::batch_get_ls(trans, index_tablet_array_, ls_id_array_))) {
+    LOG_WARN("failed to get ls id array", KR(ret), K(1UL), K_(index_tablet_array));
   } else if (OB_ISNULL(conn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn is NULL", KR(ret));
@@ -551,7 +544,7 @@ int ObTruncateInfoService::execute(ObMySQLTransaction &trans,
 #ifdef ERRSIM
     ret = errsim_truncate_trans(data_table_schema_.get_table_id(), index_table_schema.get_table_id());
 #endif
-    LOG_INFO("[TRUNCATE_INFO] success to write truncate info for index schema", K(get_tenant_id()), K_(arg),
+    LOG_INFO("[TRUNCATE_INFO] success to write truncate info for index schema", K(1UL), K_(arg),
       "data_table_id", data_table_schema_.get_table_id(),
       "index_table_id", index_table_schema.get_table_id());
   }
@@ -888,7 +881,7 @@ int ObTruncateInfoService::loop_index_tablet_id_to_register_(
     truncate_arg.ls_id_ = ls_id_array_.at(j);
     truncate_arg.index_tablet_id_ = index_tablet_array_.at(j);
     if (OB_FAIL(register_mds_(conn, truncate_arg))) {
-      LOG_WARN("failed to register mds", KR(ret), K(get_tenant_id()), K(j),
+      LOG_WARN("failed to register mds", KR(ret), K(1UL), K(j),
                K_(index_tablet_array), K_(ls_id_array), K(truncate_arg));
     }
   } // for
@@ -909,7 +902,7 @@ int ObTruncateInfoService::register_mds_(
   } else if (OB_FAIL(arg.serialize(buf, buf_len, pos))) {
     LOG_WARN("fail to serialize", KR(ret), K(arg));
   } else if (OB_FAIL(retry_register_mds_(conn, arg, buf, buf_len))) {
-    LOG_WARN("fail to register mds", KR(ret), K(get_tenant_id()), K(arg));
+    LOG_WARN("fail to register mds", KR(ret), K(1UL), K(arg));
   }
   return ret;
 }
@@ -931,12 +924,11 @@ int ObTruncateInfoService::retry_register_mds_(
       if (ctx.is_timeouted()) {
         ret = OB_TIMEOUT;
         LOG_WARN("already timeout", KR(ret), K(ctx));
-      } else if (OB_FAIL(conn.register_multi_data_source(
-                    get_tenant_id(), arg.ls_id_,
+      } else if (OB_FAIL(conn.register_multi_data_source(arg.ls_id_,
                     transaction::ObTxDataSourceType::SYNC_TRUNCATE_INFO,
                     buf, buf_len))) {
         if (need_retry_errno(ret)) {
-          LOG_INFO("fail to register_tx_data, try again", KR(ret), K(get_tenant_id()), K(arg));
+          LOG_INFO("fail to register_tx_data, try again", KR(ret), K(1UL), K(arg));
           ob_usleep(SLEEP_INTERVAL);
         } else {
           LOG_WARN("fail to register_tx_data", KR(ret), K(arg), K(buf), K(buf_len));

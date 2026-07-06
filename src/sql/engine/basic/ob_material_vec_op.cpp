@@ -39,11 +39,11 @@ int ObMaterialVecOp::inner_open()
       &ctx_, MY_SPEC.px_est_size_factor_, row_count, row_count))) {
     LOG_WARN("failed to get px size", K(ret));
   } else {
-    int64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+    
     lib::ContextParam param;
-    param.set_mem_attr(tenant_id, ObModIds::OB_SQL_SORT_ROW, ObCtxIds::WORK_AREA)
+    param.set_mem_attr(ObModIds::OB_SQL_SORT_ROW, ObCtxIds::WORK_AREA)
       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
-    ObMemAttr mem_attr(tenant_id, ObModIds::OB_SQL_SORT_ROW, ObCtxIds::WORK_AREA);
+    ObMemAttr mem_attr(ObModIds::OB_SQL_SORT_ROW, ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
       LOG_WARN("create entity failed");
     } else if (OB_ISNULL(mem_context_)) {
@@ -59,8 +59,7 @@ int ObMaterialVecOp::inner_open()
       LOG_WARN("init row store failed");
     } else {
       const int64_t size = OB_INVALID_ID == row_count ? 0 : row_count * MY_SPEC.width_;
-      if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(),
-                                          tenant_id, size, MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
+      if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), size, MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
         LOG_WARN("failed to init sql memory manager processor", K(ret));
       } else {
         store_.set_allocator(mem_context_->get_malloc_allocator());

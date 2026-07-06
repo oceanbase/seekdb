@@ -112,7 +112,7 @@ public:
   ObTabletToLSCache() : is_inited_(false), tx_ctx_mgr_(NULL), map_() { }
   ~ObTabletToLSCache() { destroy(); }
 
-  int init(int64_t tenant_id, ObTxCtxMgr *tx_ctx_mgr);
+  int init(ObTxCtxMgr *tx_ctx_mgr);
   void destroy();
   int create_tablet(const common::ObTabletID &tablet_id, const share::ObLSID &ls_id);
   int remove_tablet(const common::ObTabletID &tablet_id, const share::ObLSID &ls_id);

@@ -161,11 +161,6 @@ desc roaringbitmap_ddl_t;
 # print ddl
 select ddl_stmt_str from oceanbase.__all_ddl_operation where ddl_stmt_str like '%roaringbitmap%' order by gmt_create desc limit 22;
 
-connect (con1,$OBMYSQL_MS0,root@sys,,Oceanbase,$OBMYSQL_PORT);
-connection con1;
-select TABLE_NAME, COLUMN_NAME, DATA_TYPE, DATA_LENGTH, DATA_PRECISION, DATA_SCALE from  CDB_TAB_COLS_V$ where table_name='roaringbitmap_ddl_t';
-connection default;
-
 # cleanup
 --disable_warnings
 drop table if exists t1,t2,t3,t4,t5,t6,t7,t8,t9;

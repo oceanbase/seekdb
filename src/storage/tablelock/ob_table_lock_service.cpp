@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX TABLELOCK
 #include "storage/tablelock/ob_table_lock_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablelock/ob_table_lock_local_executor.h"
 
 #include "storage/tx/ob_trans_service.h"
@@ -62,13 +63,12 @@ ObTableLockService::ObTableLockCtx::ObTableLockCtx() :
   is_for_replace_(false)
 {
   is_enable_lock_priority_ = false;
-  uint64_t tenant_id = MTL_ID();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
-  if (!tenant_config.is_valid()) {
+  
+  if (!true) {
     // if tenant config is invalid, this config will be set as false
-    LOG_WARN_RET(OB_INVALID_ARGUMENT, "tenant config is invalid", K(tenant_id));
+    LOG_WARN_RET(OB_INVALID_ARGUMENT, "tenant config is invalid");
   } else {
-    is_enable_lock_priority_ = tenant_config->enable_lock_priority;
+    is_enable_lock_priority_ = GCONF.enable_lock_priority;
   }
 }
 
@@ -327,7 +327,7 @@ int ObTableLockService::ObOBJLockGarbageCollector::garbage_collect_for_all_ls_()
   if (tg_id_ < 0) {
     ret = OB_NOT_INIT;
     LOG_WARN("timer of ObTableLockService::ObOBJLockGarbageCollector is not running", K(ret), K_(tg_id));
-  } else if (OB_ISNULL(ls_service = MTL(ObLSService *))) {
+  } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("mtl ObLSService should not be null", K(ret));
   } else if (OB_FAIL(ls_service->get_ls_iter(ls_iter_guard, ObLSGetMod::TABLELOCK_MOD))) {
@@ -1138,7 +1138,7 @@ int ObTableLockService::handle_parallel_rpc_response_(RpcProxy &proxy_batch,
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  ObTransService *txs = MTL(ObTransService*);
+  ObTransService *txs = share::g_mp->trans_service();
   ObLSID ls_id;
 
   can_retry = true;
@@ -1441,7 +1441,6 @@ int ObTableLockService::rpc_call_(RpcProxy &proxy_batch,
   if (OB_FAIL(proxy_batch.call(addr,
                                 timeout_us,
                                 GCONF.cluster_id,
-                                MTL_ID(),
                                 group_id,
                                 request))) {
     LOG_WARN("failed to all async rpc", KR(ret), K(addr), K(timeout_us), K(request));
@@ -1482,7 +1481,6 @@ int ObTableLockService::get_table_partition_level_(const ObTableID table_id,
   if (OB_FAIL(ObSchemaUtils::get_latest_table_schema(
       *sql_proxy_,
       allocator,
-      MTL_ID(),
       table_id,
       table_schema))) {
     LOG_WARN("can not get table schema", K(ret), K(table_id));
@@ -1615,7 +1613,7 @@ int ObTableLockService::send_rpc_task_(RpcProxy &proxy_batch,
   if (OB_FAIL(retry_ctx.rpc_ls_array_.push_back(ls_id))) {
     LOG_WARN("push_back lsid failed", K(ret), K(ls_id));
   } else if (OB_FAIL(get_ls_leader_(
-               ctx.tx_desc_->get_cluster_id(), ctx.tx_desc_->get_tenant_id(), ls_id, ctx.abs_timeout_ts_, addr))) {
+               ctx.tx_desc_->get_cluster_id(), ls_id, ctx.abs_timeout_ts_, addr))) {
     if (need_renew_location_(ret)) {
       retry_ctx.need_retry_ = true;
       ret = OB_SUCCESS;
@@ -1893,7 +1891,7 @@ int ObTableLockService::check_op_allowed_(const uint64_t table_id,
                                           bool &is_allowed)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
+  
 
   is_allowed = true;
 
@@ -1906,8 +1904,8 @@ int ObTableLockService::check_op_allowed_(const uint64_t table_id,
     is_allowed = false;
   } else {
     bool is_primary = true;
-    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(tenant_id, is_primary))) {
-      LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret), K(tenant_id));
+    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
+      LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
     } else if (!is_primary) {
       is_allowed = false;
     }
@@ -1943,35 +1941,33 @@ int ObTableLockService::get_tablet_ls_(
 {
   int ret = OB_SUCCESS;
   bool unused_cache_hit;
-  const uint64_t tenant_id = MTL_ID();
+  
   if (LOCK_ALONE_TABLET == ctx.task_type_ || UNLOCK_ALONE_TABLET == ctx.task_type_
       || REPLACE_LOCK_ALONE_TABLET == ctx.task_type_) {
     // we have specified the ls, just do lock and unlock at the specified ls
     ls_id = ctx.ls_id_;
   } else if (force_refresh) {
-    if (OB_FAIL(location_service_->get(tenant_id,
-                                       tablet_id,
+    if (OB_FAIL(location_service_->get(tablet_id,
                                        INT64_MAX,
                                        unused_cache_hit,
                                        ls_id))) {
       LOG_WARN("failed to sync get ls by tablet failed.",
-               K(ret), K(tenant_id), K(tablet_id));
+               K(ret), K(1UL), K(tablet_id));
     }
-  } else if (OB_FAIL(location_service_->nonblock_get(tenant_id, tablet_id, ls_id))) {
+  } else if (OB_FAIL(location_service_->nonblock_get(tablet_id, ls_id))) {
     if (OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST == ret &&
-        OB_FAIL(location_service_->get(tenant_id,
-                                       tablet_id,
+        OB_FAIL(location_service_->get(tablet_id,
                                        INT64_MAX,
                                        unused_cache_hit,
                                        ls_id))) {
       LOG_WARN("failed to sync get ls by tablet failed.",
-               K(ret), K(tenant_id), K(tablet_id));
+               K(ret), K(1UL), K(tablet_id));
     } else if (OB_FAIL(ret)) {
-      LOG_WARN("failed to get ls by tablet", K(ret), K(tenant_id),
+      LOG_WARN("failed to get ls by tablet", K(ret), K(1UL),
                K(tablet_id));
     }
   }
-  LOG_DEBUG("get tablet ls", K(ret), K(tenant_id), K(tablet_id), K(ls_id));
+  LOG_DEBUG("get tablet ls", K(ret), K(1UL), K(tablet_id), K(ls_id));
 
   return ret;
 }
@@ -2190,17 +2186,6 @@ int ObTableLockService::get_ls_lock_map_(ObTableLockCtx &ctx,
   return ret;
 }
 
-int ObTableLockService::check_cluster_version_after_(const uint64_t version)
-{
-  int ret = OB_SUCCESS;
-  uint64_t compat_version = GET_MIN_CLUSTER_VERSION();
-  if (compat_version < version) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("cluster version check failed, not supported now", K(ret), K(compat_version), K(version));
-  }
-  return ret;
-}
-
 bool ObTableLockService::need_retry_trans_(const ObTableLockCtx &ctx,
                                            const int64_t ret) const
 {
@@ -2289,7 +2274,6 @@ bool ObTableLockService::is_can_retry_err_(const int ret) const
 
 int ObTableLockService::get_ls_leader_(
     const int64_t cluster_id,
-    const uint64_t tenant_id,
     const ObLSID &ls_id,
     const int64_t abs_timeout_ts,
     ObAddr &addr)
@@ -2303,17 +2287,16 @@ int ObTableLockService::get_ls_leader_(
     ret = OB_NOT_INIT;
     LOG_WARN("table lock service not inited", K(ret));
   } else if (OB_FAIL(location_service_->get_leader(cluster_id,
-                                                   tenant_id,
                                                    ls_id,
                                                    true, /* force renew */
                                                    addr))) {
     LOG_WARN("failed to get ls leader with retry until timeout",
-             K(ret), K(cluster_id), K(tenant_id), K(ls_id), K(addr));
+             K(ret), K(cluster_id), K(ls_id), K(addr));
   } else {
     LOG_DEBUG("get ls leader from location_service",
-              K(ret), K(cluster_id), K(tenant_id), K(ls_id), K(addr));
+              K(ret), K(cluster_id), K(ls_id), K(addr));
   }
-  LOG_DEBUG("ObTableLockService::process_obj_lock_", K(ret), K(tenant_id), K(ls_id), K(addr));
+  LOG_DEBUG("ObTableLockService::process_obj_lock_", K(ret), K(ls_id), K(addr));
 
   return ret;
 }
@@ -2330,7 +2313,7 @@ int ObTableLockService::start_tx_(ObTableLockCtx &ctx)
   tx_param.cluster_id_ = GCONF.cluster_id;
   // no session id here
 
-  ObTransService *txs = MTL(ObTransService*);
+  ObTransService *txs = share::g_mp->trans_service();
   if (ctx.trans_state_.is_start_trans_executed()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("start_trans is executed", K(ret));
@@ -2363,7 +2346,7 @@ int ObTableLockService::end_tx_(ObTableLockCtx &ctx, const bool is_rollback)
       || !ctx.trans_state_.is_start_trans_success()) {
     LOG_INFO("end_trans skip", K(ret), K(ctx));
   } else {
-    ObTransService *txs = MTL(ObTransService*);
+    ObTransService *txs = share::g_mp->trans_service();
     const int64_t stmt_timeout_ts = ctx.abs_timeout_ts_;
     if (is_rollback) {
       if (OB_FAIL(txs->rollback_tx(*ctx.tx_desc_))) {
@@ -2398,7 +2381,7 @@ int ObTableLockService::start_sub_tx_(ObTableLockCtx &ctx)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("start_sub_tx is executed", K(ret));
   } else {
-    ObTransService *txs = MTL(ObTransService*);
+    ObTransService *txs = share::g_mp->trans_service();
     const ObTxParam &tx_param = ctx.tx_param_;
     const ObTxIsolationLevel &isolation_level = tx_param.isolation_;
     const int64_t expire_ts = ctx.abs_timeout_ts_;
@@ -2424,7 +2407,7 @@ int ObTableLockService::end_sub_tx_(ObTableLockCtx &ctx, const bool is_rollback)
   } else {
     const auto &savepoint = ctx.current_savepoint_;
     const int64_t expire_ts = OB_MAX(ctx.abs_timeout_ts_, DEFAULT_TIMEOUT_US + ObTimeUtility::current_time());
-    ObTransService *txs = MTL(ObTransService*);
+    ObTransService *txs = share::g_mp->trans_service();
     if (is_rollback &&
         OB_FAIL(txs->rollback_to_implicit_savepoint(*ctx.tx_desc_,
                                                     savepoint,
@@ -2450,7 +2433,7 @@ int ObTableLockService::start_stmt_(ObTableLockCtx &ctx)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("start_stmt_ is executed", K(ret));
   } else {
-    ObTransService *txs = MTL(ObTransService*);
+    ObTransService *txs = share::g_mp->trans_service();
     const ObTxParam &tx_param = ctx.tx_param_;
     const ObTxIsolationLevel &isolation_level = tx_param.isolation_;
     const int64_t expire_ts = ctx.abs_timeout_ts_;
@@ -2476,7 +2459,7 @@ int ObTableLockService::end_stmt_(ObTableLockCtx &ctx, const bool is_rollback)
   } else {
     const auto &savepoint = ctx.stmt_savepoint_;
     const int64_t expire_ts = OB_MAX(ctx.abs_timeout_ts_, DEFAULT_TIMEOUT_US + ObTimeUtility::current_time());
-    ObTransService *txs = MTL(ObTransService*);
+    ObTransService *txs = share::g_mp->trans_service();
     // just rollback the whole stmt, if it is needed.
     if (is_rollback &&
         OB_FAIL(txs->rollback_to_implicit_savepoint(*ctx.tx_desc_,
@@ -2499,13 +2482,13 @@ int ObTableLockService::get_table_schema_(const ObTableLockCtx &ctx,
                                           ObSimpleTableSchemaV2 *&table_schema)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
 
   if (OB_UNLIKELY(ctx.is_alone_tablet_lock_task() || ctx.is_obj_lock_task())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("only get schema_version for LOCK TABLE and UNLOCK TABLE request", K(ret), K(ctx));
   } else if (OB_FAIL(ObSchemaUtils::get_latest_table_schema(
-               *sql_proxy_, allocator, tenant_id, ctx.table_id_, table_schema))) {
+               *sql_proxy_, allocator, ctx.table_id_, table_schema))) {
     if (OB_TABLE_NOT_EXIST == ret) {
       LOG_INFO("table not exist, check whether it meets expectations", K(ret), K(ctx));
     } else {

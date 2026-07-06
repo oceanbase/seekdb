@@ -17,8 +17,6 @@ add_library(mock_tx_log_adapter SHARED
 
 # target_link_libraries(mock_tx_ctx PUBLIC oceanbase mockcontainer)
 target_link_libraries(mock_tx_log_adapter PUBLIC oceanbase mockcontainer)
-add_dependencies(mock_tx_log_adapter oblib_grpc)
-
 # function(c2pc_unittest case)
 #   ob_unittest(${ARGV})
 #   target_link_libraries(${case} PUBLIC mock_2pc_ctx)
@@ -36,7 +34,6 @@ endfunction()
 tx_unittest(test_ls_log_writer)
 tx_unittest(test_ob_trans_hashmap)
 
-storage_unittest(test_ob_black_list)
 storage_unittest(test_ob_tx_log)
 storage_unittest(test_ob_timestamp_service)
 storage_unittest(test_ob_tx_msg)

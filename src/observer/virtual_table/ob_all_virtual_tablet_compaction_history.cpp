@@ -15,6 +15,7 @@
  */
 
 #include "ob_all_virtual_tablet_compaction_history.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -45,32 +46,13 @@ ObAllVirtualTabletCompactionHistory::~ObAllVirtualTabletCompactionHistory()
 int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    if (ret != OB_ITER_END) {
-      SERVER_LOG(WARN, "execute fail", K(ret));
-    }
-  }
-  return ret;
-}
-
-bool ObAllVirtualTabletCompactionHistory::is_need_process(uint64_t tenant_id)
-{
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
-    return true;
-  }
-  return false;
-}
-
-int ObAllVirtualTabletCompactionHistory::process_curr_tenant(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
   row = nullptr;
   const int64_t col_count = output_column_ids_.count();
   ObObj *cells = cur_row_.cells_;
   int64_t compression_ratio = 0;
   int n = 0;
   if (!major_merge_info_iter_.is_opened() && !minor_merge_info_iter_.is_opened()) {
-    if (OB_FAIL(MTL(ObTenantSSTableMergeInfoMgr *)->open_iter(major_merge_info_iter_, minor_merge_info_iter_))) {
+    if (OB_FAIL(share::g_mp->tenant_ss_table_merge_info_mgr()->open_iter(major_merge_info_iter_, minor_merge_info_iter_))) {
       STORAGE_LOG(WARN, "fail to open ObTenantSSTableMergeInfoMgr::Iterator", K(ret));
     }
   }
@@ -280,7 +262,8 @@ int ObAllVirtualTabletCompactionHistory::process_curr_tenant(ObNewRow *&row)
 }
 void ObAllVirtualTabletCompactionHistory::reset()
 {
-  omt::ObMultiTenantOperator::reset();
+  major_merge_info_iter_.reset();
+  minor_merge_info_iter_.reset();
   ObVirtualTableScannerIterator::reset();
   memset(ip_buf_, 0, sizeof(ip_buf_));
   memset(parallel_merge_info_buf_, 0, sizeof(parallel_merge_info_buf_));

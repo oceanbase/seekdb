@@ -130,7 +130,7 @@ int ObExprNvl::calc_result_type2(ObExprResType &type,
       bool enable_decimalint = false;
       if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session, enable_decimalint))) {
         LOG_WARN("fail to check_enable_decimalint",
-            K(ret), K(session->get_effective_tenant_id()));
+            K(ret));
       } else if (enable_decimalint) {
         type.set_type(ObDecimalIntType);
       } else {

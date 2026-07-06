@@ -19,7 +19,7 @@
 
 #include "sql/engine/ob_tenant_sql_memory_manager.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "common/row/ob_row.h"
 
 
@@ -36,15 +36,14 @@ public:
 public:
   void destroy();
   void reset();
-  int init(const uint64_t effective_tenant_id);
-  int get_next_wa_active(sql::ObSqlWorkareaProfileInfo *&wa_active, uint64_t &tenant_id);
+  int init();
+  int get_next_wa_active(sql::ObSqlWorkareaProfileInfo *&wa_active);
 private:
   int get_next_batch_wa_active();
 private:
   common::ObSEArray<sql::ObSqlWorkareaProfileInfo, 32> wa_actives_;
-  common::ObSEArray<uint64_t, 16> tenant_ids_;
   int64_t cur_nth_wa_;
-  int64_t cur_nth_tenant_;
+  bool done_;
 };
 
 class ObSqlWorkareaActive : public common::ObVirtualTableScannerIterator
@@ -78,7 +77,6 @@ private:
     DB_ID,
   };
   int fill_row(
-    uint64_t tenant_id,
     sql::ObSqlWorkareaProfileInfo &wa_active,
     common::ObNewRow *&row);
   int get_server_ip_and_port();

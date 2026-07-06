@@ -24,7 +24,10 @@
 #endif
 #define private public
 #define protected public
-#include "share/scheduler/ob_partition_auto_split_helper.h"
+#include "storage/ls/ob_ls.h"
+#include "storage/tablet/ob_tablet.h"
+#include "storage/meta_mem/ob_tablet_handle.h"
+#include "observer/scheduler/ob_partition_auto_split_helper.h"
 #undef private
 
 namespace oceanbase
@@ -47,11 +50,9 @@ class TestSplitTaskScheduler : public ::testing::Test
 {
 public:
   TestSplitTaskScheduler() 
-    : rs_scheduler_(ObRsAutoSplitScheduler::get_instance()), polling_mgr_(rs_scheduler_.polling_mgr_), sys_tenant_(OB_SYS_TENANT_ID)
+    : rs_scheduler_(ObRsAutoSplitScheduler::get_instance()), polling_mgr_(rs_scheduler_.polling_mgr_), sys_tenant_(OB_SERVER_TENANT_ID)
     {
-      ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(TEST_TENANT_A_ID);
-      ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(TEST_TENANT_B_ID);
-      ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(TEST_TENANT_C_ID);
+      ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
       init(); 
     }
   virtual void SetUp();
@@ -104,9 +105,9 @@ TEST_F(TestSplitTaskScheduler, simple_push_and_pop)
 {
   ObArray<ObAutoSplitTask> task_array;
   ObArray<uint64_t> ids;
-  ObAutoSplitTask task_a(TEST_TENANT_A_ID, ls_id, 1/*tablet_id*/, 1/*auto_split_size*/, 2/*used_disk_size*/, 0);
-  ObAutoSplitTask task_b(TEST_TENANT_A_ID, ls_id, 2/*tablet_id*/, 1/*auto_split_size*/, 3/*used_disk_size*/, 0);
-  ObAutoSplitTask task_c(TEST_TENANT_B_ID, ls_id, 3/*tablet_id*/, 1/*auto_split_size*/, 4/*used_disk_size*/, 0);
+  ObAutoSplitTask task_a(ls_id, 1/*tablet_id*/, 1/*auto_split_size*/, 2/*used_disk_size*/, 0);
+  ObAutoSplitTask task_b(ls_id, 2/*tablet_id*/, 1/*auto_split_size*/, 3/*used_disk_size*/, 0);
+  ObAutoSplitTask task_c(ls_id, 3/*tablet_id*/, 1/*auto_split_size*/, 4/*used_disk_size*/, 0);
   ASSERT_OK(task_array.push_back(task_a));
   ASSERT_OK(polling_mgr_.push_tasks(task_array));
   task_array.reuse();
@@ -153,8 +154,8 @@ TEST_F(TestSplitTaskScheduler, simple_push_and_pop)
 TEST_F(TestSplitTaskScheduler, test_reset) 
 {
   ObArray<ObAutoSplitTask> task_array;
-  ObAutoSplitTask task_a(TEST_TENANT_A_ID, ls_id, 1/*tablet_id*/, 1/*auto_split_size*/, 2/*used_disk_size*/, 0);
-  ObAutoSplitTask task_b(TEST_TENANT_A_ID, ls_id, 2/*tablet_id*/, 1/*auto_split_size*/, 3/*used_disk_size*/, 0);
+  ObAutoSplitTask task_a(ls_id, 1/*tablet_id*/, 1/*auto_split_size*/, 2/*used_disk_size*/, 0);
+  ObAutoSplitTask task_b(ls_id, 2/*tablet_id*/, 1/*auto_split_size*/, 3/*used_disk_size*/, 0);
   ASSERT_OK(task_array.push_back(task_a));
   ASSERT_OK(polling_mgr_.push_tasks(task_array));
   task_array.reuse();
@@ -181,12 +182,12 @@ TEST_F(TestSplitTaskScheduler, test_reset)
 TEST_F(TestSplitTaskScheduler, single_tenant_hard_push_and_pop)
 {
   ObArray<ObAutoSplitTask> task_array;
-  ObAutoSplitTask task_high_prio(TEST_TENANT_A_ID, ls_id, 1000/*tablet_id*/, 1/*auto_split_size*/, 1000/*used_disk_size*/, 0);
+  ObAutoSplitTask task_high_prio(ls_id, 1000/*tablet_id*/, 1/*auto_split_size*/, 1000/*used_disk_size*/, 0);
   ASSERT_OK(task_array.push_back(task_high_prio));
   ASSERT_OK(polling_mgr_.push_tasks(task_array));
   task_array.reuse();
   for (int64_t i = 2; i < ObAutoSplitTaskCache::CACHE_MAX_CAPACITY + 10; ++i ) {
-    ASSERT_OK(task_array.push_back(ObAutoSplitTask(TEST_TENANT_A_ID, ls_id, i/*tablet_id*/, 1/*auto_split_size*/, i/*used_disk_size*/, 0)));
+    ASSERT_OK(task_array.push_back(ObAutoSplitTask(ls_id, i/*tablet_id*/, 1/*auto_split_size*/, i/*used_disk_size*/, 0)));
     ASSERT_OK(polling_mgr_.push_tasks(task_array));
     task_array.reuse();
   }
@@ -216,88 +217,8 @@ TEST_F(TestSplitTaskScheduler, single_tenant_hard_push_and_pop)
     }
   }
 
-  for (hash::ObHashMap<uint64_t, ObAutoSplitTaskCache*>::iterator iter = polling_mgr_.map_tenant_to_cache_.begin(); iter != polling_mgr_.map_tenant_to_cache_.end(); iter++) {
-    uint64_t tenant_id = iter->first;
-    ObAutoSplitTaskCache *&tenant_cache = iter->second;
-    ASSERT_TRUE(tenant_cache != nullptr);
-    ASSERT_EQ(0, tenant_cache->get_tasks_num());
-  }
-}
-
-TEST_F(TestSplitTaskScheduler, mutiple_tenants_hard_push_and_pop)
-{
-  ObArray<ObAutoSplitTask> task_array;
-  ObArray<int64_t> nums;
-  for (int64_t i = 2; i < 102; ++i) {
-    ASSERT_OK(nums.push_back(i));
-  }
-#ifdef __APPLE__
-  std::random_device rd;
-  std::mt19937 rng(rd());
-  std::shuffle(nums.begin(), nums.end(), rng);
-#else
-  std::random_shuffle(nums.begin(), nums.end());
-#endif
-  for (int64_t i = 0; i < nums.count(); ++i ) {
-    int64_t num = nums.at(i);
-    ASSERT_OK(task_array.push_back(ObAutoSplitTask(TEST_TENANT_A_ID, ls_id, num/*tablet_id*/, 1/*auto_split_size*/, num/*used_disk_size*/, 0)));
-    ASSERT_OK(polling_mgr_.push_tasks(task_array));
-    task_array.reuse();
-
-    ASSERT_OK(task_array.push_back(ObAutoSplitTask(TEST_TENANT_B_ID, ls_id, num/*tablet_id*/, 1/*auto_split_size*/, num/*used_disk_size*/, 0)));
-    ASSERT_OK(polling_mgr_.push_tasks(task_array));
-    task_array.reuse();
-
-    ASSERT_OK(task_array.push_back(ObAutoSplitTask(TEST_TENANT_C_ID, ls_id, num/*tablet_id*/, 1/*auto_split_size*/, num/*used_disk_size*/, 0)));
-    ASSERT_OK(polling_mgr_.push_tasks(task_array));
-    task_array.reuse();
-  }
-  ASSERT_EQ(3 * nums.count(), polling_mgr_.total_tasks_);
-  ASSERT_EQ(3, polling_mgr_.get_total_tenants());
-  ObArray<ObArray<ObAutoSplitTask>> tenants_task_array;
-  int64_t total_tasks = nums.count() * 3;
-
-  ObArray<int64_t> tenant_A_task_id;
-  ObArray<int64_t> tenant_B_task_id;
-  ObArray<int64_t> tenant_C_task_id;
-
-  while (total_tasks > 0) {
-    tenants_task_array.reuse();
-    ASSERT_OK(polling_mgr_.pop_tasks(5, tenants_task_array));
-    for (int64_t i = 0; i < tenants_task_array.count(); ++i) {
-      ObArray<ObAutoSplitTask> &task_array = tenants_task_array.at(i);
-      ASSERT_TRUE(task_array.count() > 0);
-      uint64_t tenant_id = task_array.at(0).tenant_id_;
-      for (int64_t j = 0; j < task_array.count(); ++j) {
-        total_tasks -= 1;
-        ASSERT_EQ(tenant_id, task_array.at(j).tenant_id_);
-        if (tenant_id == TEST_TENANT_A_ID) {
-          ASSERT_OK(tenant_A_task_id.push_back(task_array.at(j).tablet_id_.id_));
-        } else if (tenant_id == TEST_TENANT_B_ID) {
-          ASSERT_OK(tenant_B_task_id.push_back(task_array.at(j).tablet_id_.id_));
-        } else if (tenant_id == TEST_TENANT_C_ID) {
-          ASSERT_OK(tenant_C_task_id.push_back(task_array.at(j).tablet_id_.id_));
-        }
-      }
-    }
-  }
-
-  for (hash::ObHashMap<uint64_t, ObAutoSplitTaskCache*>::iterator iter = polling_mgr_.map_tenant_to_cache_.begin(); iter != polling_mgr_.map_tenant_to_cache_.end(); iter++) {
-    uint64_t tenant_id = iter->first;
-    ObAutoSplitTaskCache *&tenant_cache = iter->second;
-    ASSERT_TRUE(tenant_cache != nullptr);
-    ASSERT_EQ(0, tenant_cache->get_tasks_num());
-  }
-
-
-  ASSERT_EQ(100, tenant_A_task_id.count());
-  ASSERT_EQ(100, tenant_B_task_id.count());
-  ASSERT_EQ(100, tenant_C_task_id.count());
-  for (int64_t i = 100; i > 0 ; --i) {
-    ASSERT_EQ(i+1, tenant_A_task_id.at(100 - i));
-    ASSERT_EQ(i+1, tenant_B_task_id.at(100 - i));
-    ASSERT_EQ(i+1, tenant_C_task_id.at(100 - i));
-  }
+  ASSERT_TRUE(polling_mgr_.tenant_cache_ != nullptr);
+  ASSERT_EQ(0, polling_mgr_.tenant_cache_->get_tasks_num());
 }
 
 TEST_F(TestSplitTaskScheduler, parallel_push_and_pop)
@@ -324,11 +245,11 @@ TEST_F(TestSplitTaskScheduler, parallel_push_and_pop)
   for (int64_t i = 0; i < nums_1.count(); ++i ) {
     tmp_array.reuse();
     int64_t num_1 = nums_1.at(i);
-    ASSERT_OK(tmp_array.push_back(ObAutoSplitTask(TEST_TENANT_A_ID, ls_id, num_1/*tablet_id*/, 1/*auto_split_size*/, num_1/*used_disk_size*/, 0)));
+    ASSERT_OK(tmp_array.push_back(ObAutoSplitTask(ls_id, num_1/*tablet_id*/, 1/*auto_split_size*/, num_1/*used_disk_size*/, 0)));
     ASSERT_OK(task_array_1.push_back(tmp_array));
     tmp_array.reuse();
     int64_t num_2 = nums_2.at(i);
-    ASSERT_OK(tmp_array.push_back(ObAutoSplitTask(TEST_TENANT_A_ID, ls_id, num_2/*tablet_id*/, 1/*auto_split_size*/, num_2/*used_disk_size*/, 0)));
+    ASSERT_OK(tmp_array.push_back(ObAutoSplitTask(ls_id, num_2/*tablet_id*/, 1/*auto_split_size*/, num_2/*used_disk_size*/, 0)));
     ASSERT_OK(task_array_2.push_back(tmp_array));
   }
 

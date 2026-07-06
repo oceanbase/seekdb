@@ -15,6 +15,7 @@
  */
 
 #include "ob_data_checkpoint.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_checkpoint_service.h"
 #include "storage/ls/ob_ls.h"
 
@@ -259,14 +260,13 @@ SCN ObDataCheckpoint::get_active_rec_scn()
   return min_active_rec_scn;
 }
 
-int ObDataCheckpoint::flush(SCN recycle_scn, int64_t trace_id, bool need_freeze)
+int ObDataCheckpoint::flush(SCN recycle_scn, bool need_freeze)
 {
   int ret = OB_SUCCESS;
   if (is_tenant_freeze()) {
     const bool is_sync = false;
     const bool abs_timeout_ts = 0;
-    if (OB_FAIL(ls_->logstream_freeze(trace_id,
-                                      is_sync,
+    if (OB_FAIL(ls_->logstream_freeze(is_sync,
                                       abs_timeout_ts,
                                       get_freeze_source()))) {
       STORAGE_LOG(WARN, "minor freeze failed", K(ret), K(ls_->get_ls_id()));
@@ -278,9 +278,9 @@ int ObDataCheckpoint::flush(SCN recycle_scn, int64_t trace_id, bool need_freeze)
                   "skip flush data checkpoint cause active_rec_scn is larger than recycle_scn",
                   K(active_rec_scn),
                   K(recycle_scn));
-    } else if (OB_FAIL(freeze_base_on_needs_(trace_id, recycle_scn))) {
+    } else if (OB_FAIL(freeze_base_on_needs_(recycle_scn))) {
       STORAGE_LOG(WARN, "freeze_base_on_needs failed",
-                  K(ret), K(ls_->get_ls_id()), K(recycle_scn), K(trace_id));
+                  K(ret), K(ls_->get_ls_id()), K(recycle_scn));
     }
   } else if (OB_FAIL(traversal_flush_())) {
     STORAGE_LOG(WARN, "traversal_flush failed", K(ret), K(ls_->get_ls_id()));
@@ -291,7 +291,7 @@ int ObDataCheckpoint::flush(SCN recycle_scn, int64_t trace_id, bool need_freeze)
 int ObDataCheckpoint::ls_freeze(SCN rec_scn)
 {
   int ret = OB_SUCCESS;
-  ObCheckPointService *checkpoint_srv = MTL(ObCheckPointService *);
+  ObCheckPointService *checkpoint_srv = share::g_mp->check_point_service();
   set_ls_freeze_finished_(false);
   if (OB_FAIL(checkpoint_srv->add_ls_freeze_task(this, rec_scn))) {
     STORAGE_LOG(WARN, "ls_freeze add task failed", K(ret));
@@ -656,7 +656,7 @@ int ObDataCheckpoint::traversal_flush_()
       ObCheckpointIterator iterator;
       prepare_list_.get_iterator(iterator);
       flush_tasks.reset();
-      ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+      ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
 
       while (OB_SUCC(ret)
              && iterator.has_next()
@@ -901,8 +901,7 @@ int ObDataCheckpoint::get_need_flush_tablets_(const share::SCN recycle_scn,
   return ret;
 }
 
-int ObDataCheckpoint::freeze_base_on_needs_(const int64_t trace_id,
-    share::SCN recycle_scn)
+int ObDataCheckpoint::freeze_base_on_needs_(share::SCN recycle_scn)
 {
   int ret = OB_SUCCESS;
   if (get_rec_scn() <= recycle_scn && !is_flushing()) {
@@ -922,14 +921,12 @@ int ObDataCheckpoint::freeze_base_on_needs_(const int64_t trace_id,
     const bool abs_timeout_ts = 0;  // async freeze do not need
     if (OB_FAIL(ret)) {
     } else if (logstream_freeze) {
-      if (OB_FAIL(ls_->logstream_freeze(trace_id,
-                                        is_sync,
+      if (OB_FAIL(ls_->logstream_freeze(is_sync,
                                         abs_timeout_ts,
                                         get_freeze_source()))) {
         STORAGE_LOG(WARN, "minor freeze failed", K(ret), K(ls_->get_ls_id()));
       }
-    } else if (OB_FAIL(ls_->tablet_freeze(trace_id,
-                                          need_flush_tablets,
+    } else if (OB_FAIL(ls_->tablet_freeze(need_flush_tablets,
                                           is_sync,
                                           abs_timeout_ts,
                                           false, /*need_rewrite_meta*/

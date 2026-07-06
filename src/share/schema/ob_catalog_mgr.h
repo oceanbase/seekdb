@@ -34,35 +34,30 @@ class ObCatalogNameHashKey
 {
 public:
   ObCatalogNameHashKey()
-    : tenant_id_(common::OB_INVALID_TENANT_ID),
-      name_case_mode_(common::OB_NAME_CASE_INVALID),
+    : name_case_mode_(common::OB_NAME_CASE_INVALID),
       name_()
   {}
-  ObCatalogNameHashKey(uint64_t tenant_id,
-                       const common::ObNameCaseMode mode,
+  ObCatalogNameHashKey(const common::ObNameCaseMode mode,
                        common::ObString name)
-    : tenant_id_(tenant_id),
-      name_case_mode_(mode),
+    : name_case_mode_(mode),
       name_(name)
   {}
   ~ObCatalogNameHashKey() {}
   inline uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-    hash_ret = common::murmurhash(&tenant_id_, sizeof(uint64_t), 0);
     common::ObCollationType cs_type = ObSchema::get_cs_type_with_cmp_mode(name_case_mode_);
-    hash_ret = common::ObCharset::hash(cs_type, name_, hash_ret);
+    hash_ret = common::ObCharset::hash(cs_type, name_, 0);
     return hash_ret;
   }
   inline bool operator == (const ObCatalogNameHashKey &rv) const
   {
-    ObCompareNameWithTenantID name_cmp(tenant_id_, name_case_mode_);
-    return (tenant_id_ == rv.tenant_id_)
+    ObCompareNameWithTenantID name_cmp(name_case_mode_);
+    return (true)
            && (name_case_mode_ == rv.name_case_mode_)
            && (0 == name_cmp.compare(name_ ,rv.name_));
   }
 private:
-  uint64_t tenant_id_;
   common::ObNameCaseMode name_case_mode_;
   common::ObString name_;
 };
@@ -81,8 +76,7 @@ struct ObGetCatalogKey<ObCatalogNameHashKey, ObCatalogSchema *>
   ObCatalogNameHashKey operator() (const ObCatalogSchema *schema) const {
     return OB_ISNULL(schema)
            ? ObCatalogNameHashKey()
-           : ObCatalogNameHashKey(schema->get_tenant_id(),
-                                  schema->get_name_case_mode(),
+           : ObCatalogNameHashKey(schema->get_name_case_mode(),
                                   schema->get_catalog_name_str());
   }
 };
@@ -118,22 +112,17 @@ public:
   int del_catalog(const ObTenantCatalogId &id);
   int get_schema_by_id(const uint64_t catalog_id,
                        const ObCatalogSchema *&schema) const;
-  int get_schema_by_name(const uint64_t tenant_id,
-                         const ObNameCaseMode mode,
+  int get_schema_by_name(const ObNameCaseMode mode,
                          const common::ObString &name,
                          const ObCatalogSchema *&schema) const;
-  int get_schemas_in_tenant(const uint64_t tenant_id,
-                            common::ObIArray<const ObCatalogSchema *> &schemas) const;
-  int del_schemas_in_tenant(const uint64_t tenant_id);
+  int get_schemas_in_tenant(common::ObIArray<const ObCatalogSchema *> &schemas) const;
   inline static bool schema_cmp(const ObCatalogSchema *lhs,
                                 const ObCatalogSchema *rhs) {
-    return lhs->get_tenant_id() != rhs->get_tenant_id() ?
-          lhs->get_tenant_id() < rhs->get_tenant_id()
-        : lhs->get_catalog_id() < rhs->get_catalog_id();
+    return lhs->get_catalog_id() < rhs->get_catalog_id();
   }
   inline static bool schema_equal(const ObCatalogSchema *lhs,
                                   const ObCatalogSchema *rhs) {
-    return lhs->get_tenant_id() == rhs->get_tenant_id()
+    return true
         && lhs->get_catalog_id() == rhs->get_catalog_id();
   }
   static bool compare_with_tenant_catalog_id(const ObCatalogSchema *lhs, const ObTenantCatalogId &id);

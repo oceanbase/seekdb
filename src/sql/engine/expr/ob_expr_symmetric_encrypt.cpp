@@ -25,6 +25,35 @@ namespace oceanbase
 {
 namespace sql
 {
+// demoted from share::ObEncryptionUtil to sql free function(A-setmember split)
+int get_cipher_op_mode(share::ObCipherOpMode &op_mode, const ObSQLSessionInfo *session)
+{
+  int ret = OB_SUCCESS;
+  int64_t encryption = -1;
+  if (OB_ISNULL(session)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is NULL", K(ret));
+  } else if (OB_FAIL(session->get_sys_variable(share::SYS_VAR_BLOCK_ENCRYPTION_MODE, encryption))) {
+    LOG_WARN("fail to get block encryption variable", K(ret));
+  } else if (encryption >= 0 && encryption <= 17) {
+    encryption++;
+    op_mode = static_cast<share::ObCipherOpMode>(encryption);
+  } else if (18 == encryption) {
+    op_mode = share::ObCipherOpMode::ob_sm4_ecb;
+  } else if (19 == encryption) {
+    op_mode = share::ObCipherOpMode::ob_sm4_cbc;
+  } else if (20 == encryption) {
+    op_mode = share::ObCipherOpMode::ob_sm4_cfb128;
+  } else if (21 == encryption) {
+    op_mode = share::ObCipherOpMode::ob_sm4_ofb;
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Variable block_encryption_mode used");
+    LOG_WARN("got unsupported block encryption mode", K(ret), K(encryption));
+  }
+  return ret;
+}
+
 ObExprBaseEncrypt::ObExprBaseEncrypt(ObIAllocator& alloc, ObItemType func_type, const char* name)
   : ObFuncExprOperator(alloc,
                        func_type,
@@ -267,7 +296,7 @@ int ObExprAesEncrypt::eval_aes_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   int ret = OB_SUCCESS;
   ObCipherOpMode op_mode = ObCipherOpMode::ob_invalid_mode;
   ObString func_name(strlen(N_AES_ENCRYPT), N_AES_ENCRYPT);
-  if (OB_FAIL(ObEncryptionUtil::get_cipher_op_mode(op_mode, ctx.exec_ctx_.get_my_session()))) {
+  if (OB_FAIL(get_cipher_op_mode(op_mode, ctx.exec_ctx_.get_my_session()))) {
     LOG_WARN("fail to get cipher mode", K(ret));
   } else if (!ObEncryptionUtil::is_aes_encryption(op_mode)) {
     ret = OB_NOT_SUPPORTED;
@@ -299,7 +328,7 @@ int ObExprAesDecrypt::eval_aes_decrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   int ret = OB_SUCCESS;
   ObCipherOpMode op_mode = ObCipherOpMode::ob_invalid_mode;
   ObString func_name(strlen(N_AES_DECRYPT), N_AES_DECRYPT);
-  if (OB_FAIL(ObEncryptionUtil::get_cipher_op_mode(op_mode, ctx.exec_ctx_.get_my_session()))) {
+  if (OB_FAIL(get_cipher_op_mode(op_mode, ctx.exec_ctx_.get_my_session()))) {
     LOG_WARN("fail to get cipher mode", K(ret));
   } else if (!ObEncryptionUtil::is_aes_encryption(op_mode)) {
     ret = OB_NOT_SUPPORTED;
@@ -332,7 +361,7 @@ int ObExprSm4Encrypt::eval_sm4_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObCipherOpMode op_mode = ObCipherOpMode::ob_invalid_mode;
   ObString func_name(strlen(N_SM4_ENCRYPT), N_SM4_ENCRYPT);
 #ifdef OB_USE_BABASSL
-  if (OB_FAIL(ObEncryptionUtil::get_cipher_op_mode(op_mode, ctx.exec_ctx_.get_my_session()))) {
+  if (OB_FAIL(get_cipher_op_mode(op_mode, ctx.exec_ctx_.get_my_session()))) {
     LOG_WARN("fail to get cipher mode", K(ret));
   } else if (!ObEncryptionUtil::is_sm4_encryption(op_mode)) {
     ret = OB_NOT_SUPPORTED;
@@ -370,7 +399,7 @@ int ObExprSm4Decrypt::eval_sm4_decrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObCipherOpMode op_mode = ObCipherOpMode::ob_invalid_mode;
   ObString func_name(strlen(N_SM4_DECRYPT), N_SM4_DECRYPT);
 #ifdef OB_USE_BABASSL
-  if (OB_FAIL(ObEncryptionUtil::get_cipher_op_mode(op_mode, ctx.exec_ctx_.get_my_session()))) {
+  if (OB_FAIL(get_cipher_op_mode(op_mode, ctx.exec_ctx_.get_my_session()))) {
     LOG_WARN("fail to get cipher mode", K(ret));
   } else if (!ObEncryptionUtil::is_sm4_encryption(op_mode)) {
     ret = OB_NOT_SUPPORTED;

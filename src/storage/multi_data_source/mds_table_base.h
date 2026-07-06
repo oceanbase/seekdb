@@ -110,8 +110,7 @@ public:
   max_aborted_scn_(share::SCN::min_scn()),
   total_node_cnt_(0),
   construct_sequence_(0),
-  lock_(),
-  trace_id_(checkpoint::INVALID_TRACE_ID) { construct_sequence_ = ObMdsGlobalSequencer::generate_senquence(); }
+  lock_() { construct_sequence_ = ObMdsGlobalSequencer::generate_senquence(); }
   virtual ~MdsTableBase() {}
   int init(const ObTabletID tablet_id,
            const share::ObLSID ls_id,
@@ -188,13 +187,6 @@ public:
   bool is_removed_from_t3m() const;
   bool is_construct_sequence_matched(const int64_t seq) const { return seq == construct_sequence_; }
   int64_t get_removed_from_t3m_ts() const;
-  int64_t get_trace_id() const { return trace_id_; }
-  void set_trace_id(int64_t trace_id)
-  {
-    if (checkpoint::INVALID_TRACE_ID != trace_id) {
-      ATOMIC_STORE(&trace_id_, trace_id);
-    }
-  }
   VIRTUAL_TO_STRING_KV(KP(this));
 protected:
   void inc_valid_node_cnt();
@@ -215,8 +207,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.reset();
     event.event_ = "CONSTRUCTED";
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
+    observer::MdsEventKey key(ls_id_,
                               tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }
@@ -228,8 +219,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.reset();
     event.event_ = "DESTRUCTED";
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
+    observer::MdsEventKey key(ls_id_,
                               tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }
@@ -251,8 +241,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = event_str;
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
+    observer::MdsEventKey key(ls_id_,
                               tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }
@@ -272,8 +261,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = event_str;
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
+    observer::MdsEventKey key(ls_id_,
                               tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
 
@@ -294,8 +282,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = event_str;
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
+    observer::MdsEventKey key(ls_id_,
                               tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
@@ -315,8 +302,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = "RECYCLE";
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
+    observer::MdsEventKey key(ls_id_,
                               tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }
@@ -355,7 +341,6 @@ public:
   int64_t construct_sequence_;// To filter invalid dump DAG
   MdsTableMgrHandle mgr_handle_;
   mutable MdsLock lock_;
-  int64_t trace_id_;
 };
 
 bool check_node_scn_beflow_flush(const MdsNode &node, const share::SCN &flush_scn);

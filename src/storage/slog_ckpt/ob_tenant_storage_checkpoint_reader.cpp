@@ -37,7 +37,7 @@ int ObTenantStorageCheckpointReader::iter_read_meta_item(
   int ret = OB_SUCCESS;
   ObLinkedMacroBlockItemReader item_reader;
   block_list.reset();
-  ObMemAttr mem_attr(MTL_ID(), ObModIds::OB_CHECKPOINT);
+  ObMemAttr mem_attr(ObModIds::OB_CHECKPOINT);
 
   if (OB_UNLIKELY(IS_EMPTY_BLOCK_LIST(entry_block))) {
     LOG_INFO("has no snapshot of log stream", K(ret));

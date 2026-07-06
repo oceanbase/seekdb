@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <algorithm>
 #include <string.h>
-#include "lib/alloc/alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include "lib/utility/ob_print_utils.h"
 

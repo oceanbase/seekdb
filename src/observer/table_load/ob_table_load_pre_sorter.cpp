@@ -99,7 +99,7 @@ ObTableLoadPreSorter::ObTableLoadPreSorter(ObTableLoadStoreCtx *store_ctx)
     all_trans_finished_(false),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObTableLoadPreSorter::~ObTableLoadPreSorter()
@@ -256,7 +256,7 @@ int ObTableLoadPreSorter::close_chunk(int64_t chunk_node_id)
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadPreSorter is not init", KR(ret));
   } else {
-    ObMemAttr mem_attr(MTL_ID(), "TLD_ChunkSort");
+    ObMemAttr mem_attr("TLD_ChunkSort");
     ChunkSorter *chunk_sorter = nullptr;
     if (OB_ISNULL(chunk_sorter = OB_NEW(ChunkSorter,
                                         mem_attr,

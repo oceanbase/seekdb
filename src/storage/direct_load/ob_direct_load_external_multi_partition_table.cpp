@@ -60,7 +60,7 @@ ObDirectLoadExternalMultiPartitionTableBuilder::ObDirectLoadExternalMultiPartiti
     is_closed_(false),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadExternalMultiPartitionTableBuilder::~ObDirectLoadExternalMultiPartitionTableBuilder()

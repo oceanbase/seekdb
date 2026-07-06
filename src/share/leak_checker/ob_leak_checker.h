@@ -41,7 +41,7 @@ class ObBaseLeakChecker
 public:
   ObBaseLeakChecker();
   ~ObBaseLeakChecker();
-  int init(const uint64_t tenant_id);
+  int init();
   void reset();
   void record(const Key &k, const Value &v, const int64_t max_cnt=INT64_MAX);
   void release(const Key &k, Value &value);
@@ -69,9 +69,9 @@ ObBaseLeakChecker<Key, Value>::~ObBaseLeakChecker()
 }
 
 template<typename Key, typename Value>
-int ObBaseLeakChecker<Key, Value>::init(const uint64_t tenant_id)
+int ObBaseLeakChecker<Key, Value>::init()
 {
-  ObMemAttr attr(tenant_id, "leakChecker", ObCtxIds::DEFAULT_CTX_ID);
+  ObMemAttr attr("leakChecker", ObCtxIds::DEFAULT_CTX_ID);
   int ret = checker_info_.init(attr);
   if (OB_FAIL(ret)) {
     COMMON_LOG(ERROR, "failed to create hashmap", K(ret));

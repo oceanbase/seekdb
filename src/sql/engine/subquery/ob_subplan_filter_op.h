@@ -76,10 +76,10 @@ public:
   int init_mem_entity();
   int init_hashmap(const int64_t param_num)
   {
-    int64_t tenant_id = op_.get_exec_ctx().get_my_session()->get_effective_tenant_id();
+    
     return hashmap_.create(param_num * 2,
-                           ObMemAttr(tenant_id, "SqlSQIterBKT", ObCtxIds::DEFAULT_CTX_ID),
-                           ObMemAttr(tenant_id, "SqlSQIterND", ObCtxIds::DEFAULT_CTX_ID));
+                           ObMemAttr("SqlSQIterBKT", ObCtxIds::DEFAULT_CTX_ID),
+                           ObMemAttr("SqlSQIterND", ObCtxIds::DEFAULT_CTX_ID));
   }
   bool has_hashmap() const { return hashmap_.created(); }
   int init_probe_row(const int64_t cnt);

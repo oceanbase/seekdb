@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/tablet/ob_tablet_create_mds_helper.h"
+#include "share/rc/ob_module_provider.h"
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
 #include "share/ob_ls_id.h"
@@ -224,8 +226,8 @@ int ObTabletDDLCompleteMdsHelper::process(const char* buf, const int64_t len, co
     LOG_WARN("invalid arg", K(ret), K(arg));
   } else {
     ObLSHandle ls_handle;
-    ObLSService *ls_service = MTL(ObLSService*);
-    common::ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "Ddl_Com_MdsH"));
+    ObLSService *ls_service = share::g_mp->ls_service();
+    common::ObArenaAllocator allocator(ObMemAttr("Ddl_Com_MdsH"));
     ObTabletDDLCompleteMdsUserData data;
     /* set flag */
     if (OB_ISNULL(ls_service)) {
@@ -311,7 +313,7 @@ int ObTabletDDLCompleteMdsHelper::record_ddl_complete_arg_to_mds(
   char *buf = nullptr;
   int64_t buf_len = 0;
   int64_t pos = 0;
-  const uint64_t tenant_id = MTL_ID();
+  
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   if (OB_UNLIKELY(!complete_arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -328,19 +330,17 @@ int ObTabletDDLCompleteMdsHelper::record_ddl_complete_arg_to_mds(
   } else {
     ObMySQLTransaction trans;
     ObInnerSQLConnection *conn = nullptr;
-    if (OB_FAIL(trans.start(sql_proxy, tenant_id))) {
-      LOG_WARN("failed to start transaction", KR(ret), K(tenant_id));
+    if (OB_FAIL(trans.start(sql_proxy))) {
+      LOG_WARN("failed to start transaction", KR(ret));
     } else if (OB_ISNULL(conn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null connection", KR(ret), KP(conn));
-    } else if (OB_FAIL(conn->register_multi_data_source(
-        tenant_id, complete_arg.ls_id_, ObTxDataSourceType::DDL_COMPLETE_MDS, buf, buf_len))) {
-      LOG_WARN("failed to register multi data source", KR(ret), K(tenant_id), K(complete_arg.ls_id_));
+    } else if (OB_FAIL(conn->register_multi_data_source(complete_arg.ls_id_, ObTxDataSourceType::DDL_COMPLETE_MDS, buf, buf_len))) {
+      LOG_WARN("failed to register multi data source", KR(ret), K(complete_arg.ls_id_));
     } else if (OB_FAIL(trans.end(OB_SUCC(ret)))) {
       LOG_WARN("failed to end trans", KR(ret));
     } else {
       SERVER_EVENT_ADD("ddl", "ddl write complete mds",
-                       "tenant_id", tenant_id,
                        "ret", ret,
                        "trace_id", *ObCurTraceId::get_trace_id(),
                        "tablet_id", complete_arg.tablet_id_);

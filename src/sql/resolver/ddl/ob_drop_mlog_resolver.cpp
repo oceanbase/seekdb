@@ -39,7 +39,7 @@ int ObDropMLogResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   ParseNode &parse_node = const_cast<ParseNode &>(parse_tree);
   ObDropMLogStmt *drop_mlog_stmt = nullptr;
-  uint64_t tenant_id = OB_INVALID_TENANT_ID;
+  
 
   if (OB_UNLIKELY(T_DROP_MLOG != parse_node.type_)
       || OB_UNLIKELY(ENUM_TOTAL_COUNT != parse_node.num_child_)
@@ -49,7 +49,6 @@ int ObDropMLogResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null session info", KR(ret), KP_(session_info));
-  } else if (OB_FALSE_IT(tenant_id = session_info_->get_effective_tenant_id())) {
   } else if (OB_ISNULL(drop_mlog_stmt = create_stmt<ObDropMLogStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to create drop mlog stmt", KR(ret));
@@ -76,9 +75,7 @@ int ObDropMLogResolver::resolve(const ParseNode &parse_tree)
                                                    database_name))) {
       LOG_WARN("failed to resolve table name",
           KR(ret), K(data_table_name), K(database_name));
-    } else if (OB_FAIL(schema_checker_->get_table_schema_with_synonym(
-        session_info_->get_effective_tenant_id(),
-        database_name,
+    } else if (OB_FAIL(schema_checker_->get_table_schema_with_synonym(database_name,
         data_table_name,
         false/*is index table*/,
         has_synonym,
@@ -114,9 +111,8 @@ int ObDropMLogResolver::resolve(const ParseNode &parse_tree)
       const ObTableSchema *real_table_schema = nullptr;
       if (data_table_schema->is_materialized_view()) {
         const ObTableSchema *container_table_schema = nullptr;
-        if (OB_FAIL(schema_checker_->get_table_schema(
-            tenant_id, data_table_schema->get_data_table_id(), container_table_schema))) {
-          LOG_WARN("failed to get table schema", KR(ret), K(tenant_id));
+        if (OB_FAIL(schema_checker_->get_table_schema( data_table_schema->get_data_table_id(), container_table_schema))) {
+          LOG_WARN("failed to get table schema", KR(ret));
         } else if (OB_ISNULL(container_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null container table schema", KR(ret), KP(container_table_schema));
@@ -132,11 +128,11 @@ int ObDropMLogResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_TABLE_NO_MLOG;
         LOG_WARN("table has no materialized view log", KR(ret), K(mlog_table_id));
       } else if (OB_FALSE_IT(mlog_table_id = real_table_schema->get_mlog_tid())) {
-      } else if (OB_FAIL(schema_checker_->get_table_schema(tenant_id,
+      } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                            mlog_table_id,
                                                            mlog_table_schema,
                                                            false /*is_link*/))) {
-        LOG_WARN("failed to get table schema", KR(ret), K(tenant_id), K(mlog_table_id));
+        LOG_WARN("failed to get table schema", KR(ret), K(mlog_table_id));
       } else if (OB_ISNULL(mlog_table_schema)) {
         ret = OB_ERR_TABLE_NO_MLOG;
         LOG_WARN("mlog table schema is null", KR(ret));
@@ -152,7 +148,7 @@ int ObDropMLogResolver::resolve(const ParseNode &parse_tree)
     if (OB_SUCC(ret)) {
       drop_mlog_stmt->set_table_name(data_table_name);
       drop_mlog_stmt->set_database_name(database_name);
-      drop_mlog_stmt->set_tenant_id(tenant_id);
+      
       drop_mlog_stmt->set_mlog_name(mlog_name);
       drop_mlog_stmt->set_index_action_type(ObIndexArg::IndexActionType::DROP_MLOG);
     }

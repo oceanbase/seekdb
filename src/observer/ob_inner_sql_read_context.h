@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_OB_INNER_SQL_READ_CONTEXT_H_
 #define OCEANBASE_OBSERVER_OB_INNER_SQL_READ_CONTEXT_H_
 
-#include "lib/mysqlclient/ob_isql_result_handler.h"
+#include "common/mysqlclient/ob_isql_result_handler.h"
 #include "observer/virtual_table/ob_virtual_table_iterator_factory.h"
 #include "ob_inner_sql_result.h"
 #include "ob_inner_sql_connection.h"

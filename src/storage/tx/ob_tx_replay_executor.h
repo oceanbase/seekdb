@@ -67,7 +67,6 @@ public:
   TO_STRING_KV(KP(ctx_),
                KP(ls_),
                K(ls_id_),
-               K(tenant_id_),
                KP(ls_tx_srv_),
                KP(mt_ctx_),
                K(log_block_),
@@ -80,7 +79,6 @@ public:
 private:
   ObTxReplayExecutor(storage::ObLS *ls,
                      const share::ObLSID &ls_id,
-                     const uint64_t tenant_id,
                      storage::ObLSTxService *ls_tx_srv,
                      const palf::LSN &lsn,
                      const share::SCN &log_timestamp,
@@ -88,7 +86,6 @@ private:
       : ctx_(nullptr),
         ls_(ls),
         ls_id_(ls_id),
-        tenant_id_(tenant_id),
         ls_tx_srv_(ls_tx_srv),
         replay_queue_(0),
         replaying_log_entry_no_(0),
@@ -152,7 +149,6 @@ private:
   ReplayTxCtx *ctx_;
   storage::ObLS *ls_;
   share::ObLSID ls_id_;
-  uint64_t tenant_id_;
   storage::ObLSTxService *ls_tx_srv_;
 
   ObTxLogBlock log_block_;

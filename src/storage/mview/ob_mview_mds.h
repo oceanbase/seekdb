@@ -111,7 +111,7 @@ public:
       const int64_t len,
       const share::SCN &scn,
       mds::BufferCtx &ctx);
-  static int register_mview_mds(const uint64_t tenant_id, const ObMViewOpArg &arg, common::ObISQLClient &sql_client);
+  static int register_mview_mds(const ObMViewOpArg &arg, common::ObISQLClient &sql_client);
 };
 
 

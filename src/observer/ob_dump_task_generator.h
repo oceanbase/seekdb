@@ -30,7 +30,6 @@ class ObDumpTaskGenerator
        dump entity all
        dump entity p_entity='0xffffffffff',slot_idx=1000
        dump chunk all
-       dump chunk tenant_id=1,ctx_id=1
        dump chunk p_chunk='0xfffffffff'
        set option leak_mod = 'xxx'
        set option leak_rate = xxx

@@ -189,7 +189,6 @@ public:
                                  int64_t val_cnt,
                                  int32_t dup_cnt);
   static int get_candidate_routines(ObSchemaChecker &schema_checker,
-                              uint64_t tenant_id,
                               const ObString &current_database,
                               const ObString &db_name,
                               const ObString &package_name,
@@ -259,7 +258,6 @@ public:
                    const share::schema::ObRoutineInfo *&routine_info);
   static int get_routine(pl::ObPLPackageGuard &package_guard,
                          ObResolverParams &params,
-                         uint64_t tenant_id,
                          const ObString &current_database,
                          const ObString &db_name,
                          const ObString &package_name,
@@ -267,10 +265,8 @@ public:
                          const share::schema::ObRoutineType routine_type,
                          const common::ObIArray<ObRawExpr *> &expr_params,
                          const share::schema::ObRoutineInfo *&routine,
-                         const ObString &dblink_name = ObString(""),
                          ObIAllocator *allocator = NULL);
   static int get_routine(const pl::ObPLResolveCtx &resolve_ctx,
-                         uint64_t tenant_id,
                          const ObString &current_database,
                          const ObString &db_name,
                          const ObString &package_name,
@@ -279,13 +275,11 @@ public:
                          const common::ObIArray<ObRawExpr *> &expr_params,
                          const share::schema::ObRoutineInfo *&routine);
   static int resolve_sp_access_name(ObSchemaChecker &schema_checker,
-                                    uint64_t tenant_id,
                                     const ObString& current_database,
                                     const ParseNode &sp_access_name_node,
                                     ObString &db_name,
                                     ObString &package_name,
                                     ObString &routine_name,
-                                    ObString &dblink_name,
                                     ObIArray<ObSchemaObjVersion> *deps = nullptr);
   static int resolve_sp_name(ObSQLSessionInfo &session_info,
                              const ParseNode &sp_name_node,
@@ -389,7 +383,6 @@ public:
                                const int is_oracle_mode /*always 0 (MySQL mode)*/,
                                const bool is_for_pl_type,
                                const ObSessionNLSParams &nls_session_param,
-                               uint64_t tenant_id,
                                const bool enable_decimal_int_type,
                                const bool enable_mysql_compatible_dates,
                                const bool convert_real_type_to_decimal = false);
@@ -754,75 +747,6 @@ public:
                                                      const ObRawExprResType &column_type,
                                                      const ObString &column_name,
                                                      ObObj &part_value);
-  static ObRawExpr *find_file_column_expr(ObIArray<ObRawExpr *> &pseudo_exprs, 
-                                          int64_t table_id, 
-                                          int64_t column_idx, 
-                                          const ObString &expr_name);
-  static int calc_file_column_idx(const ObString &column_name, uint64_t &file_column_idx);
-  static int build_file_column_expr_for_odps(
-    ObRawExprFactory &expr_factory,
-    const ObSQLSessionInfo &session_info,
-    const uint64_t table_id,
-    const common::ObString &table_name,
-    const common::ObString &column_name,
-    int64_t column_idx,
-    const ObColumnSchemaV2 *column_schema,
-    ObRawExpr *&expr);
-  static int build_file_column_expr_for_csv(
-    ObRawExprFactory &expr_factory,
-    const ObSQLSessionInfo &session_info,
-    const uint64_t table_id,
-    const common::ObString &table_name,
-    const common::ObString &column_name,
-    int64_t column_idx,
-    ObRawExpr *&expr,
-    const ObExternalFileFormat &format);
-  static int build_file_column_expr_for_partition_list_col(
-    ObRawExprFactory &expr_factory,
-    const ObSQLSessionInfo &session_info,
-    const uint64_t table_id,
-    const common::ObString &table_name,
-    const common::ObString &column_name,
-    int64_t column_idx,
-    ObRawExpr *&expr,
-    const ObColumnSchemaV2 *generated_column);
-  static int build_file_column_expr_for_file_url(
-    ObRawExprFactory &expr_factory,
-    const ObSQLSessionInfo &session_info,
-    const uint64_t table_id,
-    const common::ObString &table_name,
-    const common::ObString &column_name,
-    ObRawExpr *&expr);
-
-  static int build_file_row_expr_for_parquet(
-    ObRawExprFactory &expr_factory,
-    const ObSQLSessionInfo &session_info,
-    const uint64_t table_id,
-    const common::ObString &table_name,
-    const common::ObString &column_name,
-    ObRawExpr *&expr);
-  static int build_file_column_expr_for_parquet(
-    ObRawExprFactory &expr_factory,
-    const ObSQLSessionInfo &session_info,
-    const uint64_t table_id,
-    const common::ObString &table_name,
-    const common::ObString &column_name,
-    ObRawExpr *get_path_expr,
-    ObRawExpr *cast_expr,
-    const ObColumnSchemaV2 *generated_column,
-    bool is_index_by_pos,
-    uint64_t column_idx,
-    ObRawExpr *&expr);
-  //only used for DDL resolver, resolve a PSEUDO column expr for validation and printer not for execution
-  static int resolve_external_table_column_def(ObRawExprFactory &expr_factory,
-                                               const ObSQLSessionInfo &session_info,
-                                               const ObQualifiedName &q_name,
-                                               common::ObIArray<ObRawExpr*> &real_exprs,
-                                               ObRawExpr *&expr,
-                                               const ObColumnSchemaV2 *gen_col_schema = NULL);
-  static bool is_external_file_column_name(const common::ObString &name);
-  static bool is_external_pseudo_column_name(const common::ObString &name);
-  static ObExternalFileFormat::FormatType resolve_external_file_column_type(const common::ObString &name);
   static int resolve_file_size_node(const ParseNode *file_size_node, int64_t &parse_int_value);
   static int resolve_varchar_file_size(const ParseNode *child, int64_t &parse_int_value);
 
@@ -890,13 +814,11 @@ public:
                                        ObSelectStmt *select_stmt,
                                        ObValuesTableDef *table_def);
 
-  static int64_t get_mysql_max_partition_num(const uint64_t tenant_id);
+  static int64_t get_mysql_max_partition_num();
   static int check_schema_valid_for_mview(const share::schema::ObTableSchema &table_schema);
   static int generate_subschema_id(ObSQLSessionInfo &session_info, 
                                    const common::ObIArray<common::ObString> &extended_type_info,
                                    uint16_t &subschema_id);
-  static bool is_external_pseudo_column(const ObRawExpr &expr);
-  static int cnt_external_pseudo_column(const ObRawExpr &expr, bool &contain);
   static bool is_pseudo_partition_column_name(const ObString name);
 
   static int append_escaped_identifier(common::ObSqlString &sql, const common::ObString &name);

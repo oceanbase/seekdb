@@ -32,10 +32,9 @@ class ObExprInnerInfoColsColumnDefPrinter : public ObExprOperator
 public:
   explicit ObExprInnerInfoColsColumnDefPrinter(common::ObIAllocator &alloc);
   virtual ~ObExprInnerInfoColsColumnDefPrinter();
-  virtual int calc_result_type3(ObExprResType &type,
+  virtual int calc_result_type2(ObExprResType &type,
                                 ObExprResType &type1,
                                 ObExprResType &type2,
-                                ObExprResType &type3,
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
@@ -196,10 +195,9 @@ class ObExprInnerInfoColsColumnKeyPrinter : public ObExprOperator
 public:
   explicit ObExprInnerInfoColsColumnKeyPrinter(common::ObIAllocator &alloc);
   virtual ~ObExprInnerInfoColsColumnKeyPrinter();
-  virtual int calc_result_type3(ObExprResType &type,
+  virtual int calc_result_type2(ObExprResType &type,
                                 ObExprResType &type1,
                                 ObExprResType &type2,
-                                ObExprResType &type3,
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,

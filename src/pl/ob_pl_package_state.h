@@ -140,9 +140,9 @@ public:
   ObPLPackageState(uint64_t package_id,
                    const ObPackageStateVersion &state_version,
                    bool serially_reusable)
-      : parent_alloc_(lib::ObMemAttr(MTL_ID(), "PLPkgSymbol"), OB_MALLOC_NORMAL_BLOCK_SIZE),
+      : parent_alloc_(lib::ObMemAttr("PLPkgSymbol"), OB_MALLOC_NORMAL_BLOCK_SIZE),
         inner_allocator_(PL_MOD_IDX::OB_PL_PACKAGE_SYMBOL, &parent_alloc_),
-        cursor_allocator_(lib::ObMemAttr(MTL_ID(), "PLPkgCursor"), OB_MALLOC_NORMAL_BLOCK_SIZE),
+        cursor_allocator_(lib::ObMemAttr("PLPkgCursor"), OB_MALLOC_NORMAL_BLOCK_SIZE),
         package_id_(package_id),
         state_version_(state_version),
         serially_reusable_(serially_reusable),
@@ -150,8 +150,8 @@ public:
         types_(),
         vars_(),
         has_instantiated_(false) {
-        types_.set_attr(lib::ObMemAttr(MTL_ID(), "PLPkgTypes"));
-        vars_.set_attr(lib::ObMemAttr(MTL_ID(), "PLPkgVars"));
+        types_.set_attr(lib::ObMemAttr("PLPkgTypes"));
+        vars_.set_attr(lib::ObMemAttr("PLPkgVars"));
         }
   virtual ~ObPLPackageState()
   {
@@ -233,7 +233,7 @@ public:
 
   ObPackageStateVersion& get_state_version() { return state_version_; }
   static int disable_expired_user_variables(sql::ObSQLSessionInfo &session, const ObString &key);
-  static int need_use_new_sync_policy(int64_t tenant_id, bool &use_new);
+  static int need_use_new_sync_policy(bool &use_new);
   static int get_invalid_value(ObObj &val);
   static int is_invalid_value(const ObObj &val, bool &is_invalid);
   static int get_oversize_value(ObObj &val);

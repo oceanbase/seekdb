@@ -21,7 +21,7 @@
 
 #include "share/schema/ob_table_schema.h"
 #include "share/schema/ob_column_schema.h"
-#include "src/share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 
 namespace oceanbase
 {
@@ -60,7 +60,6 @@ void TestSchemaPrepare::prepare_schema(
   const int64_t micro_block_size)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = TENANT_ID;
   const uint64_t table_id = TABLE_ID;
   ASSERT_TRUE(column_cnt >= rowkey_column_cnt);
   share::schema::ObColumnSchemaV2 column;
@@ -69,7 +68,6 @@ void TestSchemaPrepare::prepare_schema(
   table_schema.reset();
   ret = table_schema.set_table_name("test_merge_multi_version");
   ASSERT_EQ(OB_SUCCESS, ret);
-  table_schema.set_tenant_id(tenant_id);
   table_schema.set_tablegroup_id(1);
   table_schema.set_database_id(1);
   table_schema.set_table_id(table_id);

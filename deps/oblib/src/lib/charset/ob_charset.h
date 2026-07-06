@@ -64,40 +64,11 @@ enum ObCharsetType
 };
 
 /*
-*AGGREGATE_2CHARSET[CHARSET_UTF8MB4][CHARSET_GBK]=1 indicates that the result is the first parameter CHARSET_UTF8MB4
-*AGGREGATE_2CHARSET[CHARSET_GBK][CHARSET_UTF8MB4]=2 indicates that the result is the second parameter CHARSET_UTF8MB4
-*Only fill values 1&2 in the matrix for the cases that need to be considered, and fill 0 for the rest
-*return value means idx of the result type, 0 means OB_CANT_AGGREGATE_2COLLATIONS
-*there is no possibility to reach AGGREGATE_2CHARSET[CHARSET_UTF8MB4][CHARSET_UTF8MB4] and so on
+* return value means idx of the result type, 0 means OB_CANT_AGGREGATE_2COLLATIONS.
+* binary and utf8mb4 are the only supported charsets, and same-charset aggregation
+* does not reach this matrix. Cross-charset aggregation is unsupported.
 */
-static const int AGGREGATE_2CHARSET[CHARSET_MAX][CHARSET_MAX] = {
-//CHARSET_INVALID,CHARSET_BINARY,CHARSET_UTF8MB4...
-  {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},//CHARSET_INVALID
-  {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},//CHARSET_BINARY
-  {0,0,0,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},//CHARSET_UTF8MB4
-  {0,0,2,0,2,0,1,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0},//CHARSET_GBK
-  {0,0,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1},//CHARSET_UTF16
-  {0,0,2,0,2,0,1,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0},//CHARSET_GB18030
-  {0,0,2,2,2,2,0,2,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0},//CHARSET_LATIN1
-  {0,0,2,0,2,0,1,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0},//CHARSET_GB18030_2022
-  {0,0,2,2,2,2,2,2,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2},//CHARSET_ASCII
-  {0,0,2,0,2,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0},//CHARSET_TIS620
-  {0,0,2,1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1}, // UTF16LE
-  {0,0,2,0,2,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // SJIS
-  {0,0,2,0,2,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // BIG5
-  {0,0,2,0,2,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // HKSCS
-  {0,0,2,0,2,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // HKSCS31
-  {0,0,2,0,2,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0},// DEC8
-  {0,0,2,0,2,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0},// GB2312
-  {0,0,2,0,2,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // CP932
-  {0,0,2,0,2,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // EUCKR
-  {0,0,2,0,2,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // UJIS
-  {0,0,2,0,2,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // EUCJPMS
-  {0,0,2,0,2,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // cp850
-  {0,0,2,0,2,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // hp8
-  {0,0,2,0,2,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // macroman
-  {0,0,2,0,2,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // swe7
-};
+static const int AGGREGATE_2CHARSET[CHARSET_MAX][CHARSET_MAX] = {{0}};
 
 enum ObCollationType
 {
@@ -450,8 +421,8 @@ public:
   static const int32_t MAX_CASE_MULTIPLY = 4;
   // For example, latin1 1 byte, utf8mb4 4 bytes, the conversion factor is 4, which can also be understood as using up to 4 bytes to store one character
   static const int32_t CharConvertFactorNum = 4;
-  static const int64_t VALID_CHARSET_TYPES = 24;
-  static const int64_t VALID_COLLATION_TYPES = 167;
+  static const int64_t VALID_CHARSET_TYPES = 2;
+  static const int64_t VALID_COLLATION_TYPES = 3;
   static int init_charset();
   // strntodv2 is an enhanced version of strntod,
   // which handles nan/infinity values in oracle mode.
@@ -621,15 +592,13 @@ public:
   static bool is_valid_collation(int64_t coll_type_int);
   static bool is_valid_charset(int64_t cs_type_int);
   static bool is_gb18030_2022(int64_t coll_type_int) {
-    ObCollationType coll_type = static_cast<ObCollationType>(coll_type_int);
-    return CS_TYPE_GB18030_2022_BIN <= coll_type && coll_type <= CS_TYPE_GB18030_2022_STROKE_CS;
+    UNUSED(coll_type_int);
+    return false;
   }
   static bool is_gb_charset(int64_t cs_type_int)
   {
-    ObCharsetType charset_type = static_cast<ObCharsetType>(cs_type_int);
-    return CHARSET_GBK == charset_type
-      || CHARSET_GB18030 == charset_type
-      || CHARSET_GB18030_2022 == charset_type;
+    UNUSED(cs_type_int);
+    return false;
   }
   static ObCharsetType charset_type_by_coll(ObCollationType coll_type);
   static int check_valid_implicit_convert(ObCollationType src_type, ObCollationType dst_type);

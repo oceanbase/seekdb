@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL
 
 #include "sql/monitor/ob_sql_stat_record.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "lib/stat/ob_diagnose_info.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -591,7 +592,7 @@ int ObSqlStatRecordUtil::get_cache_obj(ObSqlStatRecordKey &key, ObCacheObjGuard&
   if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get multi tenant from GCTX", K(ret));
-  } else if (OB_ISNULL(lib_cache = MTL(ObPlanCache*))) {
+  } else if (OB_ISNULL(lib_cache = share::g_mp->plan_cache())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get plan cache", K(ret));
   } else if (OB_FAIL(lib_cache->get_cache_obj(cache_ctx, &key, guard))) {
@@ -614,12 +615,11 @@ int ObSqlStatRecordUtil::create_cache_obj(ObSqlStatRecordKey &key, ObCacheObjGua
   if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get multi tenant from GCTX", K(ret));
-  } else if (OB_ISNULL(lib_cache = MTL(ObPlanCache*))) {
+  } else if (OB_ISNULL(lib_cache = share::g_mp->plan_cache())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get plan cache", K(ret));
   } else if (OB_FAIL(ObCacheObjectFactory::alloc(guard,
-                                                 ObLibCacheNameSpace::NS_SQLSTAT,
-                                                 lib_cache->get_tenant_id()))) {
+                                                 ObLibCacheNameSpace::NS_SQLSTAT))) {
     LOG_WARN("fail to alloc new cache obj", K(ret));
   } else if (OB_ISNULL(cache_obj = static_cast<ObSqlStatRecordObj *>(guard.get_cache_obj()))) {
     ret = OB_ERR_UNEXPECTED;

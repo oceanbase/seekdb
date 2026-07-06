@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tx_data_table.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -43,31 +44,13 @@ ObAllVirtualTxDataTable::~ObAllVirtualTxDataTable()
 
 void ObAllVirtualTxDataTable::reset()
 {
-  // release tenant resources first
   mgr_handle_.reset();
-  omt::ObMultiTenantOperator::reset();
+  ls_iter_guard_.reset();
   addr_.reset();
   ObVirtualTableScannerIterator::reset();
 }
 
-void ObAllVirtualTxDataTable::release_last_tenant()
-{
-  // resources related with tenant must be released by this function
-  mgr_handle_.reset();
-  ls_iter_guard_.reset();
-}
-
-bool ObAllVirtualTxDataTable::is_need_process(uint64_t tenant_id)
-{
-  bool bool_ret = false;
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
-    bool_ret = true;
-  }
-
-  return bool_ret;
-}
-
-int ObAllVirtualTxDataTable::process_curr_tenant(common::ObNewRow *&row)
+int ObAllVirtualTxDataTable::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
 
@@ -79,7 +62,7 @@ int ObAllVirtualTxDataTable::process_curr_tenant(common::ObNewRow *&row)
     SERVER_LOG(WARN, "allocator_ shouldn't be nullptr", K(allocator_), KR(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
   } else if (ls_iter_guard_.get_ptr() == nullptr &&
-             OB_FAIL(MTL(ObLSService *)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+             OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
     SERVER_LOG(WARN, "get_ls_iter fail", KR(ret));
   } else if (OB_FAIL(get_next_tx_data_table_(tx_data_table))) {
     if (OB_ITER_END != ret) {

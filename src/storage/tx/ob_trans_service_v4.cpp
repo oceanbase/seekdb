@@ -15,6 +15,7 @@
  */
 
 #include "src/storage/tx/ob_trans_part_ctx.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -47,8 +48,7 @@ int ObTransService::create_ls(const share::ObLSID &ls_id,
   } else if (OB_ISNULL(tx_table = ls.get_tx_table())) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "get tx table fail", K(ret), K(ls_id));
-  } else if (OB_FAIL(tx_ctx_mgr_.create_ls(tenant_id_,
-                                           ls_id,
+  } else if (OB_FAIL(tx_ctx_mgr_.create_ls(ls_id,
                                            tx_table,
                                            ls.get_lock_table(),
                                            *ls.get_tx_svr(),
@@ -59,9 +59,9 @@ int ObTransService::create_ls(const share::ObLSID &ls_id,
     // do nothing
   }
   if (OB_FAIL(ret)) {
-    TRANS_LOG(WARN, "create ls failed", K(ret), K(tenant_id_), K(ls_id));
+    TRANS_LOG(WARN, "create ls failed", K(ret), K(ls_id));
   } else {
-    TRANS_LOG(INFO, "create ls success", K(tenant_id_), K(ls_id));
+    TRANS_LOG(INFO, "create ls success", K(ls_id));
   }
 
   return ret;
@@ -193,7 +193,7 @@ int ObTransService::do_commit_tx_(ObTxDesc &tx,
     }
   } else {
     // get gts cache as commit start scn
-    if (OB_FAIL(ts_mgr_->get_gts(tenant_id_, NULL, tx.commit_start_scn_))) {
+    if (OB_FAIL(ts_mgr_->get_gts(NULL, tx.commit_start_scn_))) {
       TRANS_LOG(WARN, "get gts cache fail", K(ret));
     }
     if (OB_FAIL(do_commit_tx_slowpath_(tx))) {
@@ -210,7 +210,7 @@ int ObTransService::do_commit_tx_(ObTxDesc &tx,
   return ret;
 }
 
-#define DELETED_UNRETRYABLE_ERROR(ret) (OB_LS_IS_DELETED == ret || OB_TENANT_HAS_BEEN_DROPPED == ret)
+#define DELETED_UNRETRYABLE_ERROR(ret) (OB_LS_IS_DELETED == ret)
 /*
  * try send commit msg to coordinator, and register retry task
  * if msg send fail, the retry task will retry later
@@ -655,7 +655,7 @@ int ObTransService::build_tx_sub_prepare_msg_(const ObTxDesc &tx, ObTxSubPrepare
 {
   int ret = OB_SUCCESS;
   msg.cluster_version_ = tx.cluster_version_;
-  msg.tenant_id_ = tx.tenant_id_;
+  
   msg.tx_id_ = tx.tx_id_;
   msg.expire_ts_ = tx.commit_expire_ts_;
   msg.receiver_ = tx.coord_id_;
@@ -683,7 +683,7 @@ int ObTransService::build_tx_sub_prepare_msg_(const ObTxDesc &tx, ObTxSubPrepare
 int ObTransService::build_tx_sub_commit_msg_(const ObTxDesc &tx, ObTxSubCommitMsg &msg)
 {
   int ret = OB_SUCCESS;
-  msg.tenant_id_ = tenant_id_;
+  
   msg.tx_id_ = tx.tx_id_;
   msg.receiver_ = tx.coord_id_;
   msg.sender_addr_ = self_;
@@ -698,7 +698,7 @@ int ObTransService::build_tx_sub_commit_msg_(const ObTxDesc &tx, ObTxSubCommitMs
 int ObTransService::build_tx_sub_rollback_msg_(const ObTxDesc &tx, ObTxSubRollbackMsg &msg)
 {
   int ret = OB_SUCCESS;
-  msg.tenant_id_ = tenant_id_;
+  
   msg.tx_id_ = tx.tx_id_;
   msg.receiver_ = tx.coord_id_;
   msg.sender_addr_ = self_;
@@ -777,7 +777,7 @@ int ObTransService::handle_trans_keepalive(const ObTxKeepaliveMsg &msg, ObTransR
   }
   ObTxKeepaliveRespMsg resp;
   resp.cluster_version_ = GET_MIN_CLUSTER_VERSION();
-  resp.tenant_id_ = tenant_id_;
+  
   resp.cluster_id_ = GCONF.cluster_id;
   resp.request_id_ = ObClockGenerator::getClock();
   resp.tx_id_ = tx_id;
@@ -875,9 +875,6 @@ int ObTransService::get_read_store_ctx(const ObTxReadSnapshot &snapshot,
         if (OB_TRANS_CTX_NOT_EXIST == ret && !exist) {
           ret = OB_SUCCESS;
         } else {
-          if (!MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID()) {
-            ret = OB_STANDBY_READ_ONLY;
-          }
           TRANS_LOG(WARN, "get tx ctx fail",
                     K(ret), K(store_ctx), K(snapshot), K(ls_id), K(exist), K(read_latest));
         }
@@ -956,7 +953,7 @@ int ObTransService::get_read_store_ctx(const ObTxReadSnapshot &snapshot,
       tx_ctx = NULL;
     }
   } else {
-    update_max_read_ts_(tenant_id_, ls_id, snapshot.core_.version_);
+    update_max_read_ts_(ls_id, snapshot.core_.version_);
   }
 
   TRANS_LOG(DEBUG, "get-read-store-ctx", K(ret), K(store_ctx), K(read_latest), K(snapshot));
@@ -1048,9 +1045,6 @@ int ObTransService::get_write_store_ctx(ObTxDesc &tx,
 
   // fail, rollback
   if (OB_FAIL(ret)) {
-    if (!MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID()) {
-      ret = OB_STANDBY_READ_ONLY;
-    }
     if (OB_NOT_NULL(tx_ctx)) {
       if (access_started) { tx_ctx->end_access(); }
       revert_tx_ctx_(store_ctx.ls_, tx_ctx);
@@ -1066,7 +1060,7 @@ int ObTransService::get_write_store_ctx(ObTxDesc &tx,
      *
      * so it's required to update `max_read_ts` for these write
      */
-    update_max_read_ts_(tenant_id_, ls_id, snap.version_);
+    update_max_read_ts_(ls_id, snap.version_);
   }
   TRANS_LOG(DEBUG, "get-write-store-ctx", K(ret),
             K(store_ctx), KPC(this), K(tx), K(snapshot), K(lbt()));
@@ -1172,8 +1166,7 @@ int ObTransService::create_tx_ctx_(const share::ObLSID &ls_id,
     ctx_source = PartCtxSource::REGISTER_MDS;
   }
   ObTxCreateArg arg(false,  /* for_replay */
-                    ctx_source,  /* speclial tx not blocked when in block_normal state */
-                    tx.tenant_id_,
+                    ctx_source,
                     tx.tx_id_,
                     ls_id,
                     tx.cluster_id_,
@@ -1299,7 +1292,7 @@ int ObTransService::validate_snapshot_version_(const SCN snapshot,
     const MonotonicTs stc_ahead = get_req_receive_mts_() - MonotonicTs(GET_GTS_AHEAD_INTERVAL);
     MonotonicTs tmp_receive_gts_ts(0);
     do {
-      ret = ts_mgr_->get_gts(tenant_id_, stc_ahead, NULL, gts, tmp_receive_gts_ts);
+      ret = ts_mgr_->get_gts(stc_ahead, NULL, gts, tmp_receive_gts_ts);
       if (ret == OB_EAGAIN) {
         if (expire_ts <= ObClockGenerator::getClock()) {
           ret = OB_TIMEOUT;
@@ -1378,10 +1371,8 @@ int ObTransService::check_replica_readable_(const ObTxReadSnapshot &snapshot,
     } else {
       if (OB_SUCC(wait_follower_readable_(ls, expire_ts, snapshot.core_.version_, src))) {
         TRANS_LOG(INFO, "read from follower", K(snapshot),  K(snapshot), K(ls));
-      } else if (MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID()) {
-        ret = OB_NOT_MASTER;
       } else {
-        ret = OB_REPLICA_NOT_READABLE;
+        ret = OB_NOT_MASTER;
       }
     }
   }
@@ -1407,11 +1398,10 @@ int ObTransService::wait_follower_readable_(ObLS &ls,
 {
   int ret = OB_REPLICA_NOT_READABLE;
   int64_t compare_timeout = 0;
-  const uint64_t tenant_id = MTL_ID();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
-  if (tenant_config.is_valid()) {
-    compare_timeout = tenant_config->_follower_snapshot_read_retry_duration;
-  }
+  
+
+  compare_timeout = GCONF._follower_snapshot_read_retry_duration;
+
   if (compare_timeout > 0) {
     int64_t compare_expired_time = ObClockGenerator::getClock() + compare_timeout;
     int64_t stmt_timeout = expire_ts - ObClockGenerator::getClock();
@@ -1420,7 +1410,7 @@ int ObTransService::wait_follower_readable_(ObLS &ls,
       if (OB_UNLIKELY(ObClockGenerator::getClock() >= expire_ts)) {
         ret = OB_TIMEOUT;
       } else if (check_ls_readable_(ls, snapshot, src)) {
-        TRANS_LOG(WARN, "read from follower", K(snapshot), K(ls.get_ls_id()), K(tenant_id));
+        TRANS_LOG(WARN, "read from follower", K(snapshot), K(ls.get_ls_id()));
         ret = OB_SUCCESS;
       } else if (ObClockGenerator::getClock() >= compare_expired_time) {
         break;
@@ -1468,7 +1458,7 @@ int ObTransService::build_tx_commit_msg_(const ObTxDesc &tx, ObTxCommitMsg &msg)
 {
   int ret = OB_SUCCESS;
   msg.cluster_version_ = tx.cluster_version_;
-  msg.tenant_id_ = tx.tenant_id_;
+  
   msg.tx_id_ = tx.tx_id_;
   msg.expire_ts_ = tx.commit_expire_ts_;
   msg.receiver_ = tx.coord_id_;
@@ -1515,7 +1505,7 @@ OB_NOINLINE int ObTransService::acquire_local_snapshot_(const share::ObLSID &ls_
   ObLSTxCtxMgr *ls_tx_ctx_mgr = NULL;
   const bool can_elr = MTL_TENANT_ROLE_CACHE_IS_PRIMARY() ? true : false;
   ObLSHandle ls_handle;
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD))) {
     TRANS_LOG(WARN, "get ls fail", K(ret), K(ls_id));
   } else if (!ls_handle.is_valid() || OB_ISNULL(ls_handle.get_ls())) {
     ret = OB_NOT_MASTER;
@@ -1542,7 +1532,7 @@ OB_NOINLINE int ObTransService::acquire_local_snapshot_(const share::ObLSID &ls_
   } else if (FALSE_IT(snapshot0 = tx_version_mgr_.get_max_commit_ts(can_elr))) {
   } else if (!snapshot0.is_valid_and_not_min()) {
     ret = OB_EAGAIN;
-  } else if (OB_FAIL(ts_mgr_->get_gts(tenant_id_, NULL, snapshot1))) {
+  } else if (OB_FAIL(ts_mgr_->get_gts(NULL, snapshot1))) {
   } else {
     snapshot = SCN::max(snapshot0, snapshot1);
   }
@@ -1607,7 +1597,7 @@ int ObTransService::acquire_global_snapshot__(const int64_t expire_ts,
   if (current_time >= expire_ts) {
     ret = OB_TIMEOUT;
     TRANS_LOG(WARN, "get gts timeout", K(ret), K(expire_ts), K(current_time));
-  } else if (OB_FAIL(ts_mgr_->get_gts_sync(tenant_id_, request_time, timeout_us, snapshot, gts_receive_ts))) {
+  } else if (OB_FAIL(ts_mgr_->get_gts_sync( request_time, timeout_us, snapshot, gts_receive_ts))) {
     TRANS_LOG(WARN, "get gts fail", K(ret), K(timeout_us), K(request_time));
     if (OB_TIMEOUT == ret) {
       ret = OB_GTS_NOT_READY;
@@ -1674,7 +1664,7 @@ int ObTransService::post_tx_abort_part_msg_(const ObTxDesc &tx_desc,
   int ret = OB_SUCCESS;
   ObTxAbortMsg msg;
   msg.cluster_version_ = tx_desc.cluster_version_;
-  msg.tenant_id_ = tx_desc.tenant_id_;
+  
   msg.tx_id_ = tx_desc.tx_id_;
   msg.receiver_ = p.id_;
   msg.sender_addr_ = self_;
@@ -1843,7 +1833,7 @@ int ObTransService::get_tx_state_from_tx_table_(const share::ObLSID &ls_id,
   int ret = OB_SUCCESS;
   ObTxTableGuard tx_table_guard;
   ObLSHandle ls_handle;
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD))) {
     TRANS_LOG(WARN, "get ls handle fail", K(ret), K(ls_id));
   } else if (OB_FAIL(ls_handle.get_ls()->get_tx_table()->get_tx_table_guard(tx_table_guard))) {
     TRANS_LOG(WARN, "get tx table guard failed", KR(ret), K(ls_id), KPC(this));
@@ -1895,7 +1885,7 @@ int ObTransService::handle_sp_rollback_request(ObTxRollbackSPMsg &msg,
   if (msg.use_async_resp()) {
     ObTxRollbackSPRespMsg resp;
     resp.cluster_version_ = msg.cluster_version_;
-    resp.tenant_id_ = msg.tenant_id_;
+    
     resp.sender_addr_ = self_;
     resp.sender_ = msg.receiver_;
     resp.receiver_ = msg.sender_;
@@ -2228,13 +2218,12 @@ int ObTransService::handle_trans_msg_callback(const share::ObLSID &sender_ls_id,
   return ret;
 }
 
-int ObTransService::update_max_read_ts_(const uint64_t tenant_id,
-                                        const share::ObLSID &lsid,
+int ObTransService::update_max_read_ts_(const share::ObLSID &lsid,
                                         const SCN ts)
 {
   int ret = OB_SUCCESS;
   tx_version_mgr_.update_max_read_ts(ts);
-  TRANS_LOG(TRACE, "update max read ts", K(ret), K(tenant_id), K(lsid), K(ts));
+  TRANS_LOG(TRACE, "update max read ts", K(ret), K(lsid), K(ts));
   return ret;
 }
 
@@ -2273,9 +2262,7 @@ int ObTransService::gen_trans_id(ObTransID &trans_id)
   int ret = OB_SUCCESS;
 
   int retry_times = 0;
-  if (!MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID()) {
-    ret = OB_STANDBY_READ_ONLY;
-  } else {
+  {
     const int MAX_RETRY_TIMES = 50;
     int64_t tx_id = 0;
     do {
@@ -3117,7 +3104,7 @@ int ObTransService::check_and_fill_state_info(const ObTransID &tx_id, ObStateInf
 void ObTransService::build_tx_ask_state_resp_(ObAskStateRespMsg &resp, const ObAskStateMsg &msg)
 {
   resp.cluster_version_ = msg.cluster_version_;
-  resp.tenant_id_ = msg.tenant_id_;
+  
   resp.tx_id_ = msg.tx_id_;
   resp.sender_addr_ = self_;
   resp.sender_ = msg.receiver_;
@@ -3149,7 +3136,7 @@ int ObTransService::handle_trans_collect_state(const ObCollectStateMsg &msg,
 void ObTransService::build_tx_collect_state_resp_(ObCollectStateRespMsg &resp, const ObCollectStateMsg &msg)
 {
   resp.cluster_version_ = msg.cluster_version_;
-  resp.tenant_id_ = msg.tenant_id_;
+  
   resp.tx_id_ = msg.tx_id_;
   resp.sender_addr_ = self_;
   resp.sender_ = msg.receiver_;
@@ -3218,7 +3205,7 @@ int ObTransService::do_standby_cleanup()
 bool ObTransService::is_ls_dropped_(const share::ObLSID ls_id) {
   int ret = OB_SUCCESS;
   bool bret = false;
-  ObLSService *ls_svr =  MTL(ObLSService *);
+  ObLSService *ls_svr =  share::g_mp->ls_service();
   storage::ObLSHandle handle;
   ObLS *ls;
   if (OB_ISNULL(ls_svr)) {

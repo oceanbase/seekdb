@@ -24,8 +24,9 @@
 #include "rpc/obmysql/packet/ompk_ok.h"
 #include "share/ob_define.h"
 #include "share/system_variable/ob_sys_var_class_type.h"
-#include "share/system_variable/ob_system_variable_factory.h"
+#include "sql/session/ob_system_variable_factory.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "share/system_variable/ob_sys_var_meta.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::obmysql;
@@ -61,9 +62,17 @@ bool is_digits_only(const ObString &str)
   return ret;
 }
 
+// The session timezone map is normally fetched from the global OTTZ_MGR, which
+// is not initialized in a standalone unit test. Pass an explicit (empty) tz map
+// so init() skips the OTTZ_MGR.get_tenant_tz() path (would return -4016 here).
+// Same pattern as unittest/sql/optimizer/test_location_part_id.cpp.
+static ObTZInfoMap g_tz_info_map;
 void init_session(ObArenaAllocator &allocator, ObSQLSessionInfo &session)
 {
-  ASSERT_EQ(OB_SUCCESS, session.init(1 /*sessid*/, 0 /*proxy_sessid*/, &allocator));
+  if (!g_tz_info_map.is_inited()) {
+    ASSERT_EQ(OB_SUCCESS, g_tz_info_map.init(SET_USE_500("TestTzMap")));
+  }
+  ASSERT_EQ(OB_SUCCESS, session.init(1 /*sessid*/, &allocator, &g_tz_info_map));
   {
     oceanbase::obmysql::ObMySQLCapabilityFlags cap;
     cap.capability_ = 0;
@@ -80,7 +89,7 @@ void assert_sys_var_show_str_eq(const ObIArray<ObStringKV> &vars,
                                 const ObString &expected)
 {
   ObString actual;
-  ASSERT_TRUE(find_sys_var_value(vars, ObSysVarFactory::get_sys_var_name_by_id(sys_var_id), actual));
+  ASSERT_TRUE(find_sys_var_value(vars, ObSysVarMeta::get_sys_var_name_by_id(sys_var_id), actual));
   ASSERT_EQ(expected, actual);
   ASSERT_FALSE(is_digits_only(actual));
 }
@@ -104,7 +113,7 @@ TEST(TestSessionTrackSysVar, charset_and_collation_show_string)
   ObSQLSessionInfo session;
   init_session(allocator, session);
 
-  const int64_t target_collation_id = CS_TYPE_UTF8MB4_0900_AI_CI; // 255
+  const int64_t target_collation_id = CS_TYPE_UTF8MB4_BIN; // 46
   const int64_t fallback_collation_id = CS_TYPE_UTF8MB4_GENERAL_CI; // 45
 
   ASSERT_EQ(OB_SUCCESS, session.update_sys_variable(SYS_VAR_COLLATION_CONNECTION, fallback_collation_id));

@@ -77,11 +77,10 @@ public:
   };
   void set_ss_tenant_level_meta_object_opt(
       const ObStorageObjectType object_type,
-      const int64_t tenant_id,
       const int64_t tenant_epoch_id)
   {
     object_type_ = object_type;
-    ss_tenant_level_opt_.tenant_id_ = tenant_id;
+    
     ss_tenant_level_opt_.tenant_epoch_id_ = tenant_epoch_id;
   };
   void set_ss_ls_level_meta_object_opt(
@@ -129,10 +128,10 @@ public:
     ss_shared_tablet_id_opt_.tablet_id_ = tablet_id;
   }
   void set_ss_is_shared_tenant_deleted_object_opt(
-    const uint64_t tenant_id)
+    )
   {
     object_type_ = ObStorageObjectType::IS_SHARED_TENANT_DELETED;
-    ss_shared_tenant_id_opt_.tenant_id_ = tenant_id;
+    
   }
   void set_ss_compaction_scheduler_object_opt(
       const ObStorageObjectType object_type, const int64_t ls_id)
@@ -230,7 +229,7 @@ private:
   // tenant level meta include: tenant_meta/unit_meta
   struct SSTenantLevelMetaObjectOpt
   {
-    uint64_t tenant_id_;
+    
     int64_t tenant_epoch_id_;
   };
   // ls level meta include:
@@ -295,10 +294,6 @@ private:
     uint64_t tablet_id_;
   };
 
-  struct SSSharedTenantIdOpt
-  {
-    uint64_t tenant_id_;
-  };
   struct SSCkmErrorDumpMacroObjectOpt
   {
     uint64_t tablet_id_;
@@ -327,7 +322,6 @@ public:
     SSTabletCompactionStatusObjectOpt ss_tablet_compaction_status_opt_;
     SSMajorPrewarmObjectOpt ss_major_prewarm_opt_;
     SSSharedTabletIdOpt ss_shared_tablet_id_opt_;
-    SSSharedTenantIdOpt ss_shared_tenant_id_opt_;
     SSCkmErrorDumpMacroObjectOpt ss_ckm_error_dump_macro_id_opt_;
   };
 
@@ -401,6 +395,7 @@ public:
     return super_block_.get_total_macro_block_count();
   }
   int read_or_format_super_block_(const bool need_format);
+
 
 private:
   ObObjectManager();

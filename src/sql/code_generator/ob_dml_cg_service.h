@@ -244,7 +244,6 @@ private:
   int fill_multivalue_extra_info_on_table_param(
                             share::schema::ObSchemaGetterGuard *guard,
                             const ObTableSchema *index_schema,
-                            uint64_t tenant_id,
                             ObDASDMLBaseCtDef &das_dml_ctdef);
 
   int get_table_schema_version(const ObLogicalOperator &op, uint64_t table_id, int64_t &schema_version);

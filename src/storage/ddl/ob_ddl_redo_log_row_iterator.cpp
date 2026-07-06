@@ -27,9 +27,9 @@ using namespace blocksstable;
 using namespace transaction;
 using namespace share::schema;
 
-ObDDLRedoLogRowIterator::ObDDLRedoLogRowIterator(ObIAllocator &allocator, const uint64_t tenant_id)
+ObDDLRedoLogRowIterator::ObDDLRedoLogRowIterator(ObIAllocator &allocator)
   : allocator_(allocator),
-    iter_(allocator, tenant_id), 
+    iter_(allocator), 
     rowkey_obobj_(nullptr),
     schema_rowkey_column_count_(0),
     is_inited_(false)

@@ -71,8 +71,7 @@ public:
 
     ~ObTenantConfig() {}
 
-    int init(const uint64_t tenant_id,
-             const uint64_t unit_id,
+    int init(const uint64_t unit_id,
              const ObUnitStatus unit_status,
              const ObUnitConfig &config,
              lib::Worker::CompatMode compat_mode,
@@ -88,7 +87,7 @@ public:
     bool operator==(const ObTenantConfig &other) const;
     int assign(const ObTenantConfig &other);
 
-    TO_STRING_KV(K_(tenant_id), K_(unit_id), K_(has_memstore),
+    TO_STRING_KV(K_(unit_id), K_(has_memstore),
                  "unit_status", get_unit_status_str(unit_status_),
                  K_(config), K_(mode), K_(create_timestamp), K_(is_removed),
                  K_(hidden_sys_data_disk_config_size),
@@ -96,7 +95,7 @@ public:
 
     bool is_valid() const
     {
-      return tenant_id_ != common::OB_INVALID_TENANT_ID &&
+      return true &&
           unit_id_ != common::OB_INVALID_ID && 
           unit_status_ != UNIT_ERROR_STAT &&
           config_.is_valid() && mode_ != lib::Worker::CompatMode::INVALID &&
@@ -111,7 +110,7 @@ public:
 
     int64_t gen_init_actual_data_disk_size(const share::ObUnitConfig &config) const;
 
-    uint64_t tenant_id_;
+    
     uint64_t unit_id_;
     ObUnitStatus unit_status_;
     ObUnitConfig config_;
@@ -149,14 +148,11 @@ public:
   virtual int get_tenants(common::ObIArray<uint64_t> &tenants);
   virtual int get_server_tenant_configs(const common::ObAddr &server,
                                         common::ObIArray<ObTenantConfig> &tenant_configs);
-  virtual int get_tenant_server_configs(const uint64_t tenant_id,
-                                        common::ObIArray<ObServerConfig> &server_configs);
+  virtual int get_tenant_server_configs(common::ObIArray<ObServerConfig> &server_configs);
   virtual int get_sys_unit_count(int64_t &sys_unit_cnt);
-  virtual int get_tenant_servers(const uint64_t tenant_id,
-                                 common::ObIArray<common::ObAddr> &servers);
-  virtual int check_tenant_small(const uint64_t tenant_id, bool &small_tenant);
-  int get_pools_of_tenant(const uint64_t tenant_id,
-                          common::ObIArray<ObResourcePool> &pools);
+  virtual int get_tenant_servers(common::ObIArray<common::ObAddr> &servers);
+  virtual int check_tenant_small(bool &small_tenant);
+  int get_pools_of_tenant(common::ObIArray<ObResourcePool> &pools);
 private:
   int get_units_of_server(const common::ObAddr &server,
                           common::ObIArray<ObUnit> &units);
@@ -178,13 +174,12 @@ private:
                     const uint64_t pool_id, int64_t &index) const;
   int find_config_idx(const common::ObIArray<ObUnitConfig> &configs,
                       const uint64_t config_id, int64_t &index) const;
-  int find_tenant_config_idx(const common::ObIArray<ObTenantConfig> &tenant_configs,
-                             const uint64_t tenant_id, int64_t &index) const;
+  int find_tenant_config_idx(const common::ObIArray<ObTenantConfig> &tenant_configs, int64_t &index) const;
   int find_server_config_idx(const common::ObIArray<ObServerConfig> &server_configs,
                              const common::ObAddr &server, int64_t &index) const;
   void build_unit_stat(const common::ObAddr &server, const ObUnit &unit, ObUnitStatus &unit_stat) const;
 
-  int get_compat_mode(const int64_t tenant_id, lib::Worker::CompatMode &compat_mode) const;
+  int get_compat_mode(lib::Worker::CompatMode &compat_mode) const;
 
 private:
   bool inited_;

@@ -102,10 +102,10 @@ int ObDASLocalLookupIter::rescan()
 int ObDASLocalLookupIter::init_scan_param(ObTableScanParam &param, const ObDASScanCtDef *ctdef, ObDASScanRtDef *rtdef)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
-  param.tenant_id_ = tenant_id;
-  param.key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamKR"));
-  param.ss_key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamSSKR"));
+  
+  
+  param.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
+  param.ss_key_ranges_.set_attr(ObMemAttr("ScanParamSSKR"));
   if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr ctdef or rtdef", K(ctdef), K(rtdef));
@@ -126,8 +126,6 @@ int ObDASLocalLookupIter::init_scan_param(ObTableScanParam &param, const ObDASSc
     param.force_refresh_lc_ = rtdef->force_refresh_lc_;
     param.output_exprs_ = &(ctdef->pd_expr_spec_.access_exprs_);
     param.aggregate_exprs_ = &(ctdef->pd_expr_spec_.pd_storage_aggregate_output_);
-    param.ext_file_column_exprs_ = &(ctdef->pd_expr_spec_.ext_file_column_exprs_);
-    param.ext_column_convert_exprs_ = &(ctdef->pd_expr_spec_.ext_column_convert_exprs_);
     param.calc_exprs_ = &(ctdef->pd_expr_spec_.calc_exprs_);
     param.table_param_ = &(ctdef->table_param_);
     param.op_ = rtdef->p_pd_expr_op_;

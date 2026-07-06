@@ -22,7 +22,7 @@
 #include "rootserver/ob_root_service.h"
 #include "share/ob_max_id_cache.h"
 #include "share/ob_max_id_fetcher.h"
-#include "deps/oblib/src/lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 
 #define ASSERT_SUCCESS(x) ASSERT_EQ((x), OB_SUCCESS)
 
@@ -36,7 +36,6 @@ uint64_t current_max_id = OB_INVALID_ID;
 uint64_t target_size = OB_INVALID_SIZE;
 bool hit = false;
 int ObMaxIdFetcher::batch_fetch_new_max_id_from_inner_table(
-    const uint64_t tenant_id,
     ObMaxIdType id_type,
     uint64_t &max_id,
     const uint64_t size)
@@ -77,14 +76,14 @@ TEST(MaxIdCache, basic)
   // The internal table value is 1 before the fetch and becomes
   // `ObMaxIdCacheItem::CACHE_SIZE + 1` after the fetch.
   set_id_size(1, ObMaxIdCacheItem::CACHE_SIZE);
-  ASSERT_SUCCESS(mgr.fetch_max_id(OB_SYS_TENANT_ID, OB_MAX_USED_OBJECT_ID_TYPE, id, 1));
+  ASSERT_SUCCESS(mgr.fetch_max_id(OB_MAX_USED_OBJECT_ID_TYPE, id, 1));
   ASSERT_EQ(id, 2);
   ASSERT_TRUE(hit);
   reset_id_size();
 
   // Fetch `ObMaxIdCacheItem::CACHE_SIZE - 1` times without hitting the internal table.
   for (int64_t i = 1; i < ObMaxIdCacheItem::CACHE_SIZE; i++) {
-    ASSERT_SUCCESS(mgr.fetch_max_id(OB_SYS_TENANT_ID, OB_MAX_USED_OBJECT_ID_TYPE, id, 1));
+    ASSERT_SUCCESS(mgr.fetch_max_id(OB_MAX_USED_OBJECT_ID_TYPE, id, 1));
     ASSERT_EQ(id, i + 2);
     ASSERT_FALSE(hit);
   }
@@ -93,13 +92,13 @@ TEST(MaxIdCache, basic)
   // The internal table value is `ObMaxIdCacheItem::CACHE_SIZE + 1` before the fetch
   // and becomes `ObMaxIdCacheItem::CACHE_SIZE * 2 + 1` after the fetch.
   set_id_size(ObMaxIdCacheItem::CACHE_SIZE + 1, ObMaxIdCacheItem::CACHE_SIZE);
-  ASSERT_SUCCESS(mgr.fetch_max_id(OB_SYS_TENANT_ID, OB_MAX_USED_OBJECT_ID_TYPE, id, 1));
+  ASSERT_SUCCESS(mgr.fetch_max_id(OB_MAX_USED_OBJECT_ID_TYPE, id, 1));
   ASSERT_EQ(id, ObMaxIdCacheItem::CACHE_SIZE + 2);
   ASSERT_TRUE(hit);
   reset_id_size();
 
   // Fetch `ObMaxIdCacheItem::CACHE_SIZE - 1` values without hitting the internal table.
-  ASSERT_SUCCESS(mgr.fetch_max_id(OB_SYS_TENANT_ID, OB_MAX_USED_OBJECT_ID_TYPE, id, ObMaxIdCacheItem::CACHE_SIZE - 1));
+  ASSERT_SUCCESS(mgr.fetch_max_id(OB_MAX_USED_OBJECT_ID_TYPE, id, ObMaxIdCacheItem::CACHE_SIZE - 1));
   ASSERT_EQ(id, ObMaxIdCacheItem::CACHE_SIZE + 3);
   ASSERT_FALSE(hit);
 
@@ -107,7 +106,7 @@ TEST(MaxIdCache, basic)
   // The internal table value is `ObMaxIdCacheItem::CACHE_SIZE * 2 + 1` before the fetch
   // and becomes `ObMaxIdCacheItem::CACHE_SIZE * 3 + 1` after the fetch.
   set_id_size(ObMaxIdCacheItem::CACHE_SIZE * 2 + 1, ObMaxIdCacheItem::CACHE_SIZE);
-  ASSERT_SUCCESS(mgr.fetch_max_id(OB_SYS_TENANT_ID, OB_MAX_USED_OBJECT_ID_TYPE, id, 1));
+  ASSERT_SUCCESS(mgr.fetch_max_id(OB_MAX_USED_OBJECT_ID_TYPE, id, 1));
   ASSERT_EQ(id, ObMaxIdCacheItem::CACHE_SIZE * 2 + 2);
   ASSERT_TRUE(hit);
   reset_id_size();
@@ -115,7 +114,7 @@ TEST(MaxIdCache, basic)
   // The internal table value is `ObMaxIdCacheItem::CACHE_SIZE * 3 + 1` before the fetch
   // and becomes `ObMaxIdCacheItem::CACHE_SIZE * 4 + 2` after the fetch.
   set_id_size(ObMaxIdCacheItem::CACHE_SIZE * 3 + 1, ObMaxIdCacheItem::CACHE_SIZE + 1);
-  ASSERT_SUCCESS(mgr.fetch_max_id(OB_SYS_TENANT_ID, OB_MAX_USED_OBJECT_ID_TYPE, id, ObMaxIdCacheItem::CACHE_SIZE + 1));
+  ASSERT_SUCCESS(mgr.fetch_max_id(OB_MAX_USED_OBJECT_ID_TYPE, id, ObMaxIdCacheItem::CACHE_SIZE + 1));
   // The remaining IDs from the previous cached range can still be reused.
   ASSERT_EQ(id, ObMaxIdCacheItem::CACHE_SIZE * 2 + 3);
   ASSERT_TRUE(hit);
@@ -127,7 +126,7 @@ TEST(MaxIdCache, basic)
   // `ObMaxIdCacheItem::CACHE_SIZE * 4 + 3`, it means IDs were allocated elsewhere,
   // so the sequence is no longer contiguous and the cached range must be discarded.
   set_id_size(ObMaxIdCacheItem::CACHE_SIZE * 4 + 3, ObMaxIdCacheItem::CACHE_SIZE);
-  ASSERT_SUCCESS(mgr.fetch_max_id(OB_SYS_TENANT_ID, OB_MAX_USED_OBJECT_ID_TYPE, id, ObMaxIdCacheItem::CACHE_SIZE));
+  ASSERT_SUCCESS(mgr.fetch_max_id(OB_MAX_USED_OBJECT_ID_TYPE, id, ObMaxIdCacheItem::CACHE_SIZE));
   ASSERT_EQ(id, ObMaxIdCacheItem::CACHE_SIZE * 4 + 4);
   ASSERT_TRUE(hit);
   reset_id_size();

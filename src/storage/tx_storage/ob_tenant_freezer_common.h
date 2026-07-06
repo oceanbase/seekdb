@@ -37,22 +37,19 @@ struct ObTenantFreezeArg
 
 struct ObRetryMajorInfo
 {
-  uint64_t tenant_id_;
   int64_t frozen_scn_;
 
   ObRetryMajorInfo()
-    : tenant_id_(UINT64_MAX),
-      frozen_scn_(0)
+    : frozen_scn_(0)
   {}
   bool is_valid() const {
-    return UINT64_MAX != tenant_id_;
+    return true;
   }
   void reset() {
-    tenant_id_ = UINT64_MAX;
     frozen_scn_ = 0;
   }
 
-  TO_STRING_KV(K_(tenant_id), K_(frozen_scn));
+  TO_STRING_KV(K_(frozen_scn));
 };
 
 // store a snapshot of the tenant info to make sure
@@ -138,7 +135,6 @@ public:
   TO_STRING_KV(K_(slow_freeze), K_(slow_freeze_timestamp), K_(freeze_interval),
                K_(last_freeze_timestamp), K_(slow_tablet));
 public:
-  uint64_t tenant_id_;
   bool is_loaded_;             // whether the memory limit set or not.
   int64_t frozen_scn_;         // used by major, the timestamp of frozen.
   int64_t freeze_cnt_;         // minor freeze times.

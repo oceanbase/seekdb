@@ -22,15 +22,14 @@
 #include "lib/alloc/memory_dump.h"
 #include "lib/alloc/memory_sanity.h"
 #include "lib/alloc/ob_malloc_callback.h"
-#include "common/ob_smart_var.h"
+#include "lib/utility/ob_smart_var.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 
-ObTenantCtxAllocatorV2::ObTenantCtxAllocatorV2(uint64_t tenant_id, uint64_t ctx_id,
+ObTenantCtxAllocatorV2::ObTenantCtxAllocatorV2(uint64_t ctx_id,
     ObTenantCtxAllocator *allocator)
-    : resource_handle_(), ref_cnt_(0),
-      tenant_id_(tenant_id), ctx_id_(ctx_id), allocator_(allocator),
+    : resource_handle_(), ref_cnt_(0), ctx_id_(ctx_id), allocator_(allocator),
       wash_related_chunks_(0), washed_blocks_(0), washed_size_(0)
 {}
 
@@ -94,7 +93,7 @@ int ObTenantCtxAllocatorV2::iter_label(VisitFunc func) const
       auto *up_litems = mem_dump.r_stat_->up2date_items_;
       auto &tcrs = mem_dump.r_stat_->tcrs_;
       int tcr_cnt = mem_dump.r_stat_->tcr_cnt_;
-      auto it = std::lower_bound(tcrs, tcrs + tcr_cnt, std::make_pair(tenant_id_, ctx_id_),
+      auto it = std::lower_bound(tcrs, tcrs + tcr_cnt, ctx_id_,
                                   &ObMemoryDump::TenantCtxRange::compare);
       if (ObCtxIds::KVSTORE_CACHE_ID == ctx_id_) {
         items[item_cnt].label_ = ObNewModIds::OB_KVSTORE_CACHE_MB;
@@ -111,7 +110,7 @@ int ObTenantCtxAllocatorV2::iter_label(VisitFunc func) const
         items[item_cnt++].item_ = &mb_item;
       }
       if (it != tcrs + tcr_cnt &&
-          it->tenant_id_ == tenant_id_ &&
+          true &&
           it->ctx_id_ == ctx_id_) {
         auto &tcr = *it;
         for (int64_t j = tcr.start_;
@@ -162,11 +161,10 @@ void ObTenantCtxAllocatorV2::print_usage() const
       idle_size += allocator_->idle_size_;
       free_size += allocator_->chunk_cnt_ * INTACT_ACHUNK_SIZE;
       ret = databuff_printf(buf, BUFLEN, pos,
-          "\n[MEMORY] tenant_id=%5ld ctx_id=%25s hold=% '15ld used=% '15ld limit=% '15ld"
+          "\n[MEMORY] ctx_id=%25s hold=% '15ld used=% '15ld limit=% '15ld"
           "\n[MEMORY] idle_size=% '10ld free_size=% '10ld"
           "\n[MEMORY] wash_related_chunks=% '10ld washed_blocks=% '10ld washed_size=% '10ld"
           "\n[MEMORY] request_cached_chunk_cnt=% '5ld",
-          tenant_id_,
           get_global_ctx_info().get_ctx_name(ctx_id_),
           ctx_hold_bytes,
           sum_item.hold_,
@@ -283,7 +281,7 @@ void ObTenantCtxAllocator::dec_hold(const int64_t size)
 void ObTenantCtxAllocatorV2::dec_hold(const int64_t size)
 {
   if (!resource_handle_.is_valid()) {
-    LIB_LOG_RET(ERROR, OB_INVALID_ARGUMENT, "resource_handle is invalid", K_(tenant_id), K_(ctx_id));
+    LIB_LOG_RET(ERROR, OB_INVALID_ARGUMENT, "resource_handle is invalid", K_(ctx_id));
   } else {
     bool reach_ctx_limit = false;
     resource_handle_.get_memory_mgr()->update_hold(-size, ctx_id_, ObLabel(), reach_ctx_limit);
@@ -298,14 +296,14 @@ int ObTenantCtxAllocator::set_idle(const int64_t set_size, const bool reserve/*=
   const int64_t size = lower_align(set_size, INTACT_ACHUNK_SIZE);
   if (size > limit || size < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "invalid argument", K_(tenant_id), K_(ctx_id),
+    LIB_LOG(ERROR, "invalid argument", K_(ctx_id),
             K(size), K(limit));
   } else if (!ctx_allocator_.get_resource_handle().is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(ERROR, "resource_handle is invalid", K(ret), K_(tenant_id), K_(ctx_id));
+    LIB_LOG(ERROR, "resource_handle is invalid", K(ret), K_(ctx_id));
   } else {
     ObMemAttr default_attr;
-    default_attr.tenant_id_ = tenant_id_;
+    
     default_attr.ctx_id_ = ctx_id_;
     const int64_t hold = get_hold();
     if (hold == size) {
@@ -322,7 +320,7 @@ int ObTenantCtxAllocator::set_idle(const int64_t set_size, const bool reserve/*=
           AChunk *chunk = ctx_allocator_.alloc_chunk(ACHUNK_SIZE, default_attr);
           if (OB_ISNULL(chunk)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LIB_LOG(ERROR, "alloc chunk failed", K(ret), K_(tenant_id), K_(ctx_id));
+            LIB_LOG(ERROR, "alloc chunk failed", K(ret), K_(ctx_id));
           } else {
             push_chunk(chunk);
           }
@@ -340,7 +338,7 @@ int ObTenantCtxAllocator::set_idle(const int64_t set_size, const bool reserve/*=
     if (OB_SUCC(ret)) {
       idle_size_ = size;
     }
-    LIB_LOG(INFO, "set idle finish", K(ret), K_(tenant_id), K_(ctx_id), K_(idle_size),
+    LIB_LOG(INFO, "set idle finish", K(ret), K_(ctx_id), K_(idle_size),
             K_(chunk_cnt));
   }
   return ret;
@@ -391,14 +389,14 @@ int64_t ObTenantCtxAllocator::sync_wash_(int64_t wash_size)
     washed_size = obj_mgr_.sync_wash(wash_size);
   }
   if (washed_size != 0 && REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-    _OB_LOG(INFO, "[MEM][WASH] tenant_id: %ld, ctx_id: %ld, washed_size: %ld", tenant_id_, ctx_id_, washed_size);
+    _OB_LOG(INFO, "[MEM][WASH] ctx_id: %ld, washed_size: %ld", ctx_id_, washed_size);
   }
   return washed_size;
 }
 
 int64_t ObTenantCtxAllocator::sync_wash()
 {
-  return ObMallocAllocator::get_instance()->sync_wash(tenant_id_, ctx_id_, INT64_MAX);
+  return ObMallocAllocator::get_instance()->sync_wash(ctx_id_, INT64_MAX);
 }
 
 void ObTenantCtxAllocatorV2::update_wash_stat(int64_t related_chunks, int64_t blocks, int64_t size)
@@ -445,11 +443,11 @@ void ObTenantCtxAllocator::on_free(AObject& obj, ABlock& block)
       block.obj_set_->get_block_mgr();
   abort_unless(NULL != blk_mgr);
 
-  int64_t tenant_id = blk_mgr->get_tenant_id();
+  
   int64_t ctx_id = blk_mgr->get_ctx_id();
   char label[lib::AOBJECT_LABEL_SIZE + 1];
   MEMCPY(label, obj.label_, sizeof(label));
-  ObMemAttr attr(tenant_id, label, ctx_id);
+  ObMemAttr attr(label, ctx_id);
   if (OB_NOT_NULL(malloc_callback)) {
     const int64_t size = obj.alloc_bytes_;
     (*malloc_callback)(attr, -size);

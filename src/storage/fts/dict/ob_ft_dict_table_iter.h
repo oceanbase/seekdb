@@ -17,7 +17,7 @@
 #ifndef _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_TABLE_ITER_H_
 #define _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_TABLE_ITER_H_
 
-#include "lib/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_client.h"
 #include "storage/fts/dict/ob_ft_dict_iterator.h"
 
 namespace oceanbase

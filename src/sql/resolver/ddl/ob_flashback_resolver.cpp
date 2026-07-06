@@ -47,7 +47,7 @@ int ObFlashBackTableFromRecyclebinResolver::resolve(const ParseNode &parser_tree
     }
   }
   if (OB_SUCC(ret)) {
-    flashback_table_from_recyclebin_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+    
     //flashback table
     ParseNode *table_node = parser_tree.children_[ORIGIN_TABLE_NODE];
     ObString origin_table_name;
@@ -120,8 +120,8 @@ int ObFlashBackTableToScnResolver::resolve(const ParseNode &parse_tree)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create flsahbck stmt", K(ret));
   } else {
-    uint64_t tenant_id = session_info_->get_effective_tenant_id();
-    stmt->set_tenant_id(tenant_id);
+    
+    
     obcall::ObFlashBackTableToScnArg &arg = stmt->flashback_table_to_scn_arg_;
     ParseNode *table_node = parse_tree.children_[TABLE_NODES];
     ObString db_name;
@@ -146,7 +146,7 @@ int ObFlashBackTableToScnResolver::resolve(const ParseNode &parse_tree)
           table_item.database_name_ = db_name;
           table_item.table_name_ = table_name;
           OZ (arg.tables_.push_back(table_item));
-          OZ (schema_checker_->get_table_schema(tenant_id,
+          OZ (schema_checker_->get_table_schema(
                                                 db_name,
                                                 table_name,
                                                 false, /*is_index*/
@@ -221,7 +221,7 @@ int ObFlashBackIndexResolver::resolve(const ParseNode &parser_tree)
     }
   }
   if (OB_SUCC(ret)) {
-    flashback_index_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+    
     //flashback table
     ParseNode *table_node = parser_tree.children_[ORIGIN_TABLE_NODE];
     ObString origin_table_name;
@@ -242,7 +242,7 @@ int ObFlashBackIndexResolver::resolve(const ParseNode &parser_tree)
           helper.convert(origin_table_name));
       LOG_WARN("flashback index db.xx should not specified with db name", K(ret));
     } else {
-      UNUSED(schema_checker_->get_table_schema(flashback_index_stmt->get_tenant_id(),
+      UNUSED(schema_checker_->get_table_schema(
                                                OB_RECYCLEBIN_SCHEMA_ID,
                                                origin_table_name,
                                                true, /*is_index*/
@@ -297,7 +297,7 @@ int ObFlashBackDatabaseResolver::resolve(const ParseNode &parser_tree)
     }
   }
   if (OB_SUCC(ret)) {
-    flashback_database_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+    
     ObString origin_db_name;
     ParseNode *origin_dbname_node = parser_tree.children_[ORIGIN_DB_NODE];
     if (OB_ISNULL(origin_dbname_node) || OB_UNLIKELY(T_IDENT != origin_dbname_node->type_)) {

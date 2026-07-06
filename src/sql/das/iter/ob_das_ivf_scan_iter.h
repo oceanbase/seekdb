@@ -22,7 +22,7 @@
 #include "sql/engine/expr/ob_expr_vector.h"
 #include "sql/das/iter/ob_das_vec_scan_utils.h"
 #include "sql/engine/expr/ob_expr_vec_ivf_sq8_data_vector.h"
-#include "share/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
 
 namespace oceanbase
 {
@@ -125,11 +125,9 @@ public:
     SIMPLE_RANGE = 1,
   };
 public:
-  ObIvfPreFilter(uint64_t tenant_id,
-               FilterType type = FilterType::ROARING_BITMAP,
+  ObIvfPreFilter(FilterType type = FilterType::ROARING_BITMAP,
                ObIAllocator *allocator = nullptr,
                uint8_t *bitmap = nullptr) : 
-               tenant_id_(tenant_id),
                type_(type),
                roaring_bitmap_(nullptr),
                rk_range_() {}
@@ -149,9 +147,8 @@ public:
   bool is_range_filter() { return type_ == FilterType::SIMPLE_RANGE; }
   bool test(const ObRowkey& main_rowkey);
   int add(int64_t id);
-  TO_STRING_KV(K(tenant_id_), K_(type), KP_(roaring_bitmap));
+  TO_STRING_KV(K_(type), KP_(roaring_bitmap));
 public:
-  uint64_t tenant_id_;
   FilterType type_;
   roaring::api::roaring64_bitmap_t *roaring_bitmap_;
   ObArray<const ObNewRange *> rk_range_;
@@ -164,8 +161,8 @@ public:
   ObDASIvfBaseScanIter()
       : ObDASIter(ObDASIterType::DAS_ITER_IVF_SCAN),
         mem_context_(nullptr),
-        vec_op_alloc_("IvfIdxLookupOp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-        persist_alloc_(ObMemAttr(MTL_ID(), "IvfScan")),
+        vec_op_alloc_("IvfIdxLookupOp", OB_MALLOC_NORMAL_BLOCK_SIZE),
+        persist_alloc_(ObMemAttr("IvfScan")),
         ls_id_(),
         tx_desc_(nullptr),
         snapshot_(nullptr),
@@ -203,8 +200,8 @@ public:
         similarity_threshold_(0)
   {
     dis_type_ = ObExprVectorDistance::ObVecDisType::MAX_TYPE;
-    saved_rowkeys_.set_attr(ObMemAttr(MTL_ID(), "VecIdxKeyRanges"));
-    pre_fileter_rowkeys_.set_attr(ObMemAttr(MTL_ID(), "VecIdxKeyRanges"));
+    saved_rowkeys_.set_attr(ObMemAttr("VecIdxKeyRanges"));
+    pre_fileter_rowkeys_.set_attr(ObMemAttr("VecIdxKeyRanges"));
   }
   virtual ~ObDASIvfBaseScanIter()
   {}
@@ -387,7 +384,7 @@ class ObDASIvfScanIter : public ObDASIvfBaseScanIter
 public:
   ObDASIvfScanIter() : ObDASIvfBaseScanIter()
   {
-    near_cid_.set_attr(ObMemAttr(MTL_ID(), "NearCidVecPos"));
+    near_cid_.set_attr(ObMemAttr("NearCidVecPos"));
   }
   virtual ~ObDASIvfScanIter()
   {}
@@ -439,8 +436,8 @@ public:
         m_(0),
         nbits_(0)
   {
-    near_cid_vec_.set_attr(ObMemAttr(MTL_ID(), "NearCidVecPos"));
-    near_cid_vec_dis_.set_attr(ObMemAttr(MTL_ID(), "NearCidVecDis"));
+    near_cid_vec_.set_attr(ObMemAttr("NearCidVecPos"));
+    near_cid_vec_dis_.set_attr(ObMemAttr("NearCidVecDis"));
   }
   virtual ~ObDASIvfPQScanIter()
   {}

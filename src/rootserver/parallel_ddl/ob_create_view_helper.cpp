@@ -36,12 +36,11 @@
 
 ObCreateViewHelper::ObCreateViewHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
-    const uint64_t tenant_id,
     const obcall::ObCreateTableArg &arg_,
     obcall::ObCreateTableRes &res,
     ObDDLSQLTransaction *external_trans,
     bool enable_ddl_parallel)
-  : ObDDLHelper(schema_service, tenant_id, "[parallel create view]", external_trans, enable_ddl_parallel),
+  : ObDDLHelper(schema_service, "[parallel create view]", external_trans, enable_ddl_parallel),
     arg_(arg_),
     res_(res),
     new_view_schema_(nullptr),
@@ -73,23 +72,23 @@ ObCreateViewHelper::~ObCreateViewHelper()
    } else if (OB_UNLIKELY(OB_INVALID_ID != arg_.schema_.get_table_id())) {
      ret = OB_NOT_SUPPORTED;
      LOG_WARN("create view with table_id in 4.x is not supported",
-              KR(ret), K_(tenant_id), "table_id", arg_.schema_.get_table_id());
+              KR(ret), "table_id", arg_.schema_.get_table_id());
    } else if (OB_UNLIKELY(OB_INVALID_ID != arg_.schema_.get_tablespace_id())) {
      ret = OB_NOT_SUPPORTED;
      LOG_WARN("create view with tablespace_id in 4.x is not supported",
-              KR(ret), K_(tenant_id), "tablespace_id", arg_.schema_.get_tablespace_id());
+              KR(ret), "tablespace_id", arg_.schema_.get_tablespace_id());
    } else if (OB_UNLIKELY(OB_INVALID_ID != arg_.schema_.get_tablegroup_id())) {
      ret = OB_NOT_SUPPORTED;
      LOG_WARN("create view with tablegroup_id in 4.x is not supported",
-              KR(ret), K_(tenant_id), "tablegroup_id", arg_.schema_.get_tablegroup_id());
+              KR(ret), "tablegroup_id", arg_.schema_.get_tablegroup_id());
    } else if (OB_UNLIKELY(arg_.schema_.is_duplicate_table())) {
      ret = OB_NOT_SUPPORTED;
      LOG_WARN("create duplicate view in 4.x is not supported",
-              KR(ret), K_(tenant_id), K(arg_.schema_.is_duplicate_table()));
+              KR(ret), K(arg_.schema_.is_duplicate_table()));
    } else if (OB_UNLIKELY(PARTITION_LEVEL_ZERO != arg_.schema_.get_part_level())) {
      ret = OB_NOT_SUPPORTED;
      LOG_WARN("create view with partition in 4.x is not supported",
-              KR(ret), K_(tenant_id), K(arg_.schema_.get_part_level()));
+              KR(ret), K(arg_.schema_.get_part_level()));
    }
    return ret;
  }
@@ -122,11 +121,11 @@ ObCreateViewHelper::~ObCreateViewHelper()
    if (OB_FAIL(check_inner_stat_())) {
      LOG_WARN("fail to check inner stat", KR(ret));
    } else if (OB_FAIL(add_lock_object_by_database_name_(database_name, transaction::tablelock::SHARE))) {
-     LOG_WARN("fail to lock database by name", KR(ret), K_(tenant_id), K(database_name));
+     LOG_WARN("fail to lock database by name", KR(ret), K(database_name));
    } else if (OB_FAIL(lock_databases_by_name_())) {
-     LOG_WARN("fail to lock databses by name", KR(ret), K_(tenant_id));
+     LOG_WARN("fail to lock databses by name", KR(ret));
    } else if (OB_FAIL(check_database_legitimacy_(database_name, database_id))) {
-     LOG_WARN("fail to check databse legitimacy", KR(ret), K(database_name),K_(tenant_id));
+     LOG_WARN("fail to check databse legitimacy", KR(ret), K(database_name));
    } else if (OB_UNLIKELY(database_id != arg_.schema_.get_database_id())) {
      ret = OB_ERR_PARALLEL_DDL_CONFLICT;
      LOG_WARN("database_id not consistent", KR(ret), K(database_id), K(arg_.schema_.get_database_id()));
@@ -163,9 +162,9 @@ int ObCreateViewHelper::lock_and_check_view_name_()
     LOG_WARN("fail to check to inner stat", KR(ret));
   } else if (OB_FAIL(add_lock_object_by_name_(database_name, table_name, share::schema::TABLE_SCHEMA,
              transaction::tablelock::EXCLUSIVE))) {
-    LOG_WARN("fail to lock object by table name", KR(ret), K_(tenant_id), K(database_name), K(table_name));
+    LOG_WARN("fail to lock object by table name", KR(ret), K(database_name), K(table_name));
   } else if (OB_FAIL(lock_existed_objects_by_name_())) {
-    LOG_WARN("fail to lock objects by name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock objects by name", KR(ret));
   }
   const ObTableSchema* table_schema = nullptr;
   uint64_t synonym_id = OB_INVALID_ID;
@@ -178,7 +177,7 @@ int ObCreateViewHelper::lock_and_check_view_name_()
     uint64_t mock_table_id = OB_INVALID_ID;
     if (OB_FAIL(schema_guard_wrapper_.get_mock_fk_parent_table_id(database_id,
                        table_name, mock_table_id))) {
-      LOG_WARN("fail to get mock table id", KR(ret), K_(tenant_id), K(database_id), K(table_name));
+      LOG_WARN("fail to get mock table id", KR(ret), K(database_id), K(table_name));
     } else if (OB_UNLIKELY(OB_INVALID_ID != mock_table_id)) {
       if (arg_.is_alter_view_) {
         ret = OB_ERR_WRONG_OBJECT;
@@ -186,17 +185,17 @@ int ObCreateViewHelper::lock_and_check_view_name_()
         LOG_USER_ERROR(OB_ERR_WRONG_OBJECT,
             helper.convert(database_name),
             helper.convert(table_name), "VIEW");
-        LOG_WARN("table exist", KR(ret), K_(tenant_id), K(database_id), K(table_name));
+        LOG_WARN("table exist", KR(ret), K(database_id), K(table_name));
       } else {
         ret = OB_ERR_TABLE_EXIST;
         LOG_USER_ERROR(OB_ERR_TABLE_EXIST, arg_.schema_.get_table_name_str().length(),
                    arg_.schema_.get_table_name_str().ptr());
-        LOG_WARN("mock table exist", KR(ret), K_(tenant_id), K(database_id), K(session_id), K(table_name),
+        LOG_WARN("mock table exist", KR(ret), K(database_id), K(session_id), K(table_name),
                                 K(mock_table_id), K(schema_version), K(arg_.if_not_exist_));
       }
     } else if (OB_FAIL(schema_guard_wrapper_.get_table_id(database_id, session_id, table_name,
                                                   orig_table_id_, table_type, schema_version))) {
-      LOG_WARN("fail to get table id", KR(ret), K_(tenant_id), K(database_id), K(session_id), K(table_name));
+      LOG_WARN("fail to get table id", KR(ret), K(database_id), K(session_id), K(table_name));
     } else if (OB_INVALID_ID == orig_table_id_) {
       // view not exist
       // alter view asks for existed view
@@ -213,7 +212,7 @@ int ObCreateViewHelper::lock_and_check_view_name_()
         ret = OB_ERR_TABLE_EXIST;
         LOG_USER_ERROR(OB_ERR_TABLE_EXIST, arg_.schema_.get_table_name_str().length(),
                    arg_.schema_.get_table_name_str().ptr());
-        LOG_WARN("table exist", KR(ret), K_(tenant_id), K(database_id), K(session_id), K(table_name),
+        LOG_WARN("table exist", KR(ret), K(database_id), K(session_id), K(table_name),
                               K_(orig_table_id), K(schema_version), K(arg_.if_not_exist_));
       // create or replace / alter view need to check schema type is USER/SYSTEM VIEW
       } else if (USER_VIEW == table_type
@@ -229,7 +228,7 @@ int ObCreateViewHelper::lock_and_check_view_name_()
         LOG_USER_ERROR(OB_ERR_WRONG_OBJECT,
                        helper.convert(database_name),
                        helper.convert(table_name), "VIEW");
-        LOG_WARN("table exist", KR(ret), K_(tenant_id), K(database_id), K(table_name));
+        LOG_WARN("table exist", KR(ret), K(database_id), K(table_name));
       }
     }
   }
@@ -243,7 +242,7 @@ int ObCreateViewHelper::lock_object_id_()
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(add_lock_object_by_id_(arg_.schema_.get_database_id(),
              share::schema::DATABASE_SCHEMA, transaction::tablelock::SHARE))) {
-    LOG_WARN("fail to add lock databse id", KR(ret), K_(tenant_id), K(arg_.schema_.get_database_id()));
+    LOG_WARN("fail to add lock databse id", KR(ret), K(arg_.schema_.get_database_id()));
   } else if (OB_INVALID_ID != orig_table_id_
              && OB_FAIL(add_lock_object_by_id_(orig_table_id_, VIEW_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
     LOG_WARN("fail to add lock object", KR(ret));
@@ -251,7 +250,7 @@ int ObCreateViewHelper::lock_object_id_()
     LOG_WARN("fail to lock existed objects by id", KR(ret));
   } else if (OB_INVALID_ID != orig_table_id_) {
     if (OB_FAIL(schema_guard_wrapper_.get_table_schema(orig_table_id_, orig_table_schema_))) {
-      LOG_WARN("fail to get table schema", KR(ret), K_(tenant_id), K_(orig_table_id));
+      LOG_WARN("fail to get table schema", KR(ret), K_(orig_table_id));
     } else if (OB_ISNULL(orig_table_schema_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("orig table schema is null", KR(ret));
@@ -274,15 +273,15 @@ int ObCreateViewHelper::lock_object_id_()
     } else if (OB_FAIL(add_lock_object_by_id_(info.schema_id_,
                                               info.schema_type_,
                                               transaction::tablelock::SHARE))) {
-      LOG_WARN("fail to lock based object schema id", KR(ret), K_(tenant_id));
+      LOG_WARN("fail to lock based object schema id", KR(ret));
     }
   }
   ObArray<std::pair<uint64_t, share::schema::ObObjectType>> dep_objs_before_lock;
   if (OB_FAIL(ret)) {
   } else if (OB_NOT_NULL(orig_table_schema_)) {
-    if (OB_FAIL(ObDependencyInfo::collect_all_dep_objs(tenant_id_, orig_table_schema_->get_table_id(),
+    if (OB_FAIL(ObDependencyInfo::collect_all_dep_objs(orig_table_schema_->get_table_id(),
                                                        *sql_proxy_, dep_objs_before_lock))) {
-      LOG_WARN("fail to collect dep obj", KR(ret), K_(tenant_id), K(orig_table_schema_->get_table_id()));
+      LOG_WARN("fail to collect dep obj", KR(ret), K(orig_table_schema_->get_table_id()));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < dep_objs_before_lock.count(); ++i) {
         ObSchemaType schema_type = transfer_obj_type_to_schema_type_for_dep_(dep_objs_before_lock.at(i).second);
@@ -309,8 +308,8 @@ int ObCreateViewHelper::lock_object_id_()
   if (FAILEDx(lock_existed_objects_by_id_())) {
     LOG_WARN("fail to lock objects by id", KR(ret));
   } else if (OB_NOT_NULL(orig_table_schema_)) {
-    if (OB_FAIL(ObDependencyInfo::collect_all_dep_objs(tenant_id_, orig_table_schema_->get_table_id(), *sql_proxy_, dep_objs_))) {
-      LOG_WARN("fail to collect dep obj", KR(ret), K_(tenant_id), K(orig_table_schema_->get_table_id()));
+    if (OB_FAIL(ObDependencyInfo::collect_all_dep_objs(orig_table_schema_->get_table_id(), *sql_proxy_, dep_objs_))) {
+      LOG_WARN("fail to collect dep obj", KR(ret), K(orig_table_schema_->get_table_id()));
     } else if (dep_objs_.count() != dep_objs_before_lock.count()) {
       ret = OB_ERR_PARALLEL_DDL_CONFLICT;
       LOG_WARN("dep objs count not consistent", KR(ret), K(dep_objs_.count()), K(dep_objs_before_lock.count()));
@@ -414,7 +413,7 @@ int ObCreateViewHelper::check_parallel_ddl_conflict_()
     if (OB_FAIL(ret)) { \
     } else if (0 == SCHEMA_TYPE##_ids.count()) { \
     } else if (OB_FAIL(schema_guard_wrapper_.get_##SCHEMA_TYPE##_schema_versions(SCHEMA_TYPE##_ids, SCHEMA_TYPE##_schema_versions))) { \
-      LOG_WARN("failed to get " #SCHEMA_TYPE " schema versions", KR(ret), K_(tenant_id), K(SCHEMA_TYPE##_ids)); \
+      LOG_WARN("failed to get " #SCHEMA_TYPE " schema versions", KR(ret), K(SCHEMA_TYPE##_ids)); \
     } else if (OB_FAIL(check_max_dependency_version_(SCHEMA_TYPE##_ids, SCHEMA_TYPE##_schema_versions))) { \
       LOG_WARN("fail to check max dependency version", KR(ret), K(SCHEMA_TYPE##_ids), K(SCHEMA_TYPE##_schema_versions)); \
     }
@@ -460,7 +459,7 @@ int ObCreateViewHelper::generate_schemas_()
   } else if (OB_FAIL(id_generator.next(object_id))) {
     LOG_WARN("fail to get next object id", KR(ret));
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, arg_.schema_, new_view_schema_))) {
-    LOG_WARN("fail to allocate new table schema", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to allocate new table schema", KR(ret));
   } else if (OB_UNLIKELY(OB_ISNULL(new_view_schema_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("new view schema is null", KR(ret));
@@ -473,7 +472,7 @@ int ObCreateViewHelper::generate_schemas_()
   if (OB_SUCC(ret) && OB_NOT_NULL(orig_table_schema_)) {
     const uint64_t orig_table_id = orig_table_schema_->get_table_id();
     if (OB_FAIL(schema_guard_wrapper_.get_obj_privs(orig_table_id, ObObjectType::TABLE, obj_privs_))) {
-      LOG_WARN("fail to get obj privs", KR(ret), K_(tenant_id), K(orig_table_id));
+      LOG_WARN("fail to get obj privs", KR(ret), K(orig_table_id));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < obj_privs_.count(); ++i) {
         std::pair<ObRawObjPrivArray, ObRawObjPrivArray> raw_obj_priv;
@@ -491,7 +490,7 @@ int ObCreateViewHelper::generate_schemas_()
     for (int64_t i = 0; OB_SUCC(ret) && i < trigger_list.count(); ++i) {
       const ObTriggerInfo* trigger_info = nullptr;
       if (OB_FAIL(schema_guard_wrapper_.get_trigger_info(trigger_list.at(i), trigger_info))) {
-        LOG_WARN("fail to get trigger info", KR(ret), K_(tenant_id), K(trigger_list.at(i)));
+        LOG_WARN("fail to get trigger info", KR(ret), K(trigger_list.at(i)));
       } else if (OB_ISNULL(trigger_info)) {
         ret = OB_ERR_PARALLEL_DDL_CONFLICT;
         LOG_WARN("trigger info is null, may be dropped", KR(ret));
@@ -506,7 +505,7 @@ int ObCreateViewHelper::generate_schemas_()
       if (ObObjectType::VIEW == dep_objs_.at(i).second) {
         const ObTableSchema* view_schema = nullptr;
         if (OB_FAIL(schema_guard_wrapper_.get_table_schema(dep_objs_.at(i).first, view_schema))) {
-          LOG_WARN("fail to get table schema", KR(ret), K_(tenant_id), K(dep_objs_.at(i).first));
+          LOG_WARN("fail to get table schema", KR(ret), K(dep_objs_.at(i).first));
         } else if (OB_ISNULL(view_schema)) {
           ret = OB_ERR_PARALLEL_DDL_CONFLICT;
         } else if (ObObjectStatus::INVALID == view_schema->get_object_status()) {
@@ -621,12 +620,12 @@ int ObCreateViewHelper::create_schemas_()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("new view schema is null", KR(ret));
     } else if (OB_FAIL(tsi_generator->get_current_version(last_schema_version))) {
-      LOG_WARN("fail to get end version", KR(ret), K_(tenant_id), K_(arg));
+      LOG_WARN("fail to get end version", KR(ret), K_(arg));
     } else if (OB_UNLIKELY(last_schema_version <= 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("last schema version is invalid", KR(ret), K_(tenant_id), K(last_schema_version));
-    } else if (OB_FAIL(ddl_operator.insert_ori_schema_version(get_trans_(), tenant_id_, new_view_schema_->get_table_id(), last_schema_version))) {
-      LOG_WARN("fail to insert ori schema version", KR(ret), K_(tenant_id), K(last_schema_version));
+      LOG_WARN("last schema version is invalid", KR(ret), K(last_schema_version));
+    } else if (OB_FAIL(ddl_operator.insert_ori_schema_version(get_trans_(), new_view_schema_->get_table_id(), last_schema_version))) {
+      LOG_WARN("fail to insert ori schema version", KR(ret), K(last_schema_version));
     }
   }
   RS_TRACE(create_schemas);
@@ -647,8 +646,8 @@ int ObCreateViewHelper::create_table_()
     LOG_WARN("new_view_schema_ is null", KR(ret));
   } else {
     int64_t new_schema_version = OB_INVALID_VERSION;
-    if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id_, new_schema_version))) {
-      LOG_WARN("fail to gen new schema version", KR(ret), K_(tenant_id));
+    if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
+      LOG_WARN("fail to gen new schema version", KR(ret));
     } else if (FALSE_IT(new_view_schema_->set_schema_version(new_schema_version))) {
     } else if (OB_FAIL(schema_service_impl->get_table_sql_service().create_table(
                        *new_view_schema_,
@@ -676,7 +675,7 @@ int ObCreateViewHelper::insert_schema_object_dependency_()
       if (OB_FAIL(dep.assign(arg_.dep_infos_.at(i)))) {
         LOG_WARN("fail to assign dependency info", KR(ret));
       } else {
-        dep.set_tenant_id(tenant_id_);
+        
         dep.set_dep_obj_id(new_view_schema_->get_table_id());
         dep.set_dep_obj_owner_id(new_view_schema_->get_table_id());
         dep.set_schema_version(new_view_schema_->get_schema_version());
@@ -725,7 +724,7 @@ int ObCreateViewHelper::modify_obj_status_()
       if (OB_ISNULL(view_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("view schema is null", KR(ret));
-      } else if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id_, new_schema_version))) {
+      } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
         LOG_WARN("fail to gen new schema version", KR(ret));
       } else {
         ObObjectStatus new_status = ObObjectStatus::INVALID;
@@ -760,7 +759,7 @@ int ObCreateViewHelper::drop_trigger_schemas_() {
       if (OB_ISNULL(trigger_info)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("trigger info is null", KR(ret));
-      } else if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id_, new_schema_version))) {
+      } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
         LOG_WARN("fail to gen schema version", KR(ret));
       } else if (OB_FAIL(schema_service->get_trigger_sql_service().drop_trigger(*trigger_info,
                                                                     false /* drop to recyclebin */,
@@ -768,19 +767,19 @@ int ObCreateViewHelper::drop_trigger_schemas_() {
                                                                     get_trans_(),
                                                                     nullptr /* ddl stmt str */))) {
         LOG_WARN("fail to drop trigger", KR(ret), KPC(trigger_info));
-      } else if (OB_FAIL(ObDependencyInfo::delete_schema_object_dependency(get_trans_(), tenant_id_,
+      } else if (OB_FAIL(ObDependencyInfo::delete_schema_object_dependency(get_trans_(),
                                                                            trigger_info->get_trigger_id(),
                                                                            new_schema_version /* not used */,
                                                                            trigger_info->get_object_type()))) {
         LOG_WARN("fail to delete schema object dependency", KR(ret), KPC(trigger_info));
-      } else if (OB_FAIL(pl::ObRoutinePersistentInfo::delete_dll_from_disk(get_trans_(), tenant_id_,
+      } else if (OB_FAIL(pl::ObRoutinePersistentInfo::delete_dll_from_disk(get_trans_(),
                  share::schema::ObTriggerInfo::get_trigger_spec_package_id(trigger_info->get_trigger_id()),
                                                                            trigger_info->get_database_id()))) {
-        LOG_WARN("fail to delete ddl from disk", KR(ret), K_(tenant_id), KPC(trigger_info));
-      } else if (OB_FAIL(pl::ObRoutinePersistentInfo::delete_dll_from_disk(get_trans_(), tenant_id_,
+        LOG_WARN("fail to delete ddl from disk", KR(ret), KPC(trigger_info));
+      } else if (OB_FAIL(pl::ObRoutinePersistentInfo::delete_dll_from_disk(get_trans_(),
                  share::schema::ObTriggerInfo::get_trigger_body_package_id(trigger_info->get_trigger_id()),
                                                                           trigger_info->get_database_id()))) {
-        LOG_WARN("fail to delete ddl from disk", KR(ret), K_(tenant_id), KPC(trigger_info));
+        LOG_WARN("fail to delete ddl from disk", KR(ret), KPC(trigger_info));
       }
       if (OB_SUCC(ret)) {
         ObErrorInfo error_info;
@@ -805,8 +804,8 @@ int ObCreateViewHelper::drop_obj_privs_()
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < obj_privs_.count(); ++i) {
       int64_t new_schema_version = OB_INVALID_VERSION;
-      if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id_, new_schema_version))) {
-        LOG_WARN("fail to gen new schema version", KR(ret), K_(tenant_id));
+      if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
+        LOG_WARN("fail to gen new schema version", KR(ret));
       } else if (OB_FAIL(schema_service->get_priv_sql_service().delete_obj_priv(obj_privs_.at(i),
                                                                                new_schema_version, get_trans_()))) {
         LOG_WARN("fail to drop obj privs", KR(ret), K(obj_privs_.at(i)));
@@ -829,7 +828,7 @@ int ObCreateViewHelper::handle_error_info_()
     // do nothing
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected compat mode add create view error info", KR(ret), K_(tenant_id));
+    LOG_WARN("unexpected compat mode add create view error info", KR(ret));
   }
   return ret;
 }
@@ -847,8 +846,8 @@ int ObCreateViewHelper::drop_table_()
   } else if (OB_ISNULL(orig_table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig_table_schema_ is null", KR(ret));
-  } else if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id_, new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", KR(ret), K_(tenant_id));
+  } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
+    LOG_WARN("fail to gen new schema_version", KR(ret));
   } else if (OB_FAIL(schema_service->get_table_sql_service().drop_table(*orig_table_schema_,
                                                                         new_schema_version,
                                                                         get_trans_(),
@@ -858,12 +857,12 @@ int ObCreateViewHelper::drop_table_()
                                                                         false /* is_force_drop_lonely_lob_aux_table */,
                                                                         nullptr /* schema_guard */,
                                                                         nullptr /* drop_table_set */))) {
-    LOG_WARN("fail to drop table", KR(ret), K_(tenant_id), K(*orig_table_schema_));
-  } else if (OB_FAIL(ObDependencyInfo::delete_schema_object_dependency(get_trans_(), tenant_id_,
+    LOG_WARN("fail to drop table", KR(ret), K(*orig_table_schema_));
+  } else if (OB_FAIL(ObDependencyInfo::delete_schema_object_dependency(get_trans_(),
                                                                        orig_table_schema_->get_table_id(),
                                                                        orig_table_schema_->get_schema_version() /*not used*/,
                                                                        ObObjectType::VIEW))) {
-    LOG_WARN("fail to delete schema object dependency", KR(ret), K_(tenant_id), K(orig_table_schema_->get_table_id()),
+    LOG_WARN("fail to delete schema object dependency", KR(ret), K(orig_table_schema_->get_table_id()),
                                                         K(orig_table_schema_->get_schema_version()));
   }
   return ret;
@@ -887,8 +886,7 @@ int ObCreateViewHelper::restore_obj_privs_()
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < obj_privs_.count(); ++i) {
       ObObjPriv &obj_priv = obj_privs_.at(i);
-      ObTablePrivSortKey table_key(obj_priv.get_tenant_id(),
-                                   obj_priv.get_grantee_id(),
+      ObTablePrivSortKey table_key(obj_priv.get_grantee_id(),
                                    database_schema_->get_database_name(),
                                    new_view_schema_->get_table_name());
       obj_priv.set_obj_id(new_view_schema_->get_table_id());
@@ -897,7 +895,7 @@ int ObCreateViewHelper::restore_obj_privs_()
       const ObRawObjPrivArray &no_option_priv = raw_obj_privs_.at(i).second;
       if (option_priv.count() > 0) {
         int64_t new_schema_version = OB_INVALID_VERSION;
-        if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id_, new_schema_version))) {
+        if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
           LOG_WARN("fail to gen new schema version", KR(ret));
         } else if (OB_FAIL(schema_service->get_priv_sql_service().grant_table_ora_only(
           nullptr /* ddl_stmt_str */, get_trans_(), option_priv, true /* option */, obj_priv_key,
@@ -907,7 +905,7 @@ int ObCreateViewHelper::restore_obj_privs_()
       }
       if (OB_SUCC(ret) && no_option_priv.count() > 0) {
         int64_t new_schema_version = OB_INVALID_VERSION;
-        if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id_, new_schema_version))) {
+        if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
           LOG_WARN("fail to gen new schema version", KR(ret));
         } else if (OB_FAIL(schema_service->get_priv_sql_service().grant_table_ora_only(
           nullptr /* ddl_stmt_str */, get_trans_(), no_option_priv, false /* option */,

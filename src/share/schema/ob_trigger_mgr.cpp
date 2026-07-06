@@ -30,7 +30,7 @@ namespace schema
 {
 
 OB_SERIALIZE_MEMBER(ObSimpleTriggerSchema,
-                    tenant_id_,
+                    
                     trigger_id_,
                     database_id_,
                     schema_version_,
@@ -59,7 +59,6 @@ int64_t ObSimpleTriggerSchema::get_convert_size() const
 int ObSimpleTriggerSchema::deep_copy(const ObSimpleTriggerSchema &other)
 {
   int ret = OB_SUCCESS;
-  OX (set_tenant_id(other.get_tenant_id()));
   OX (set_trigger_id(other.get_trigger_id()));
   OX (set_database_id(other.get_database_id()));
   OX (set_schema_version(other.get_schema_version()));
@@ -67,10 +66,7 @@ int ObSimpleTriggerSchema::deep_copy(const ObSimpleTriggerSchema &other)
   return ret;
 }
 
-uint64_t ObSimpleTriggerSchema::get_exec_tenant_id() const
-{
-  return ObSchemaUtils::get_exec_tenant_id(tenant_id_);
-}
+
 
 ObTriggerMgr::ObTriggerMgr()
     : local_allocator_(SET_USE_500(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
@@ -224,7 +220,6 @@ int ObTriggerMgr::add_trigger(const ObSimpleTriggerSchema &trigger_schema)
   int skip_map = OB_E(EventTable::EN_ADD_TRIGGER_SKIP_MAP) 0;
   if (OB_SUCC(ret) && skip_map == 0) {
     if (OB_NOT_NULL(replaced_trigger)) {
-      OX (name_wrapper.set_tenant_id(replaced_trigger->get_tenant_id()));
       OX (name_wrapper.set_database_id(replaced_trigger->get_database_id()));
       OX (name_wrapper.set_trigger_name(replaced_trigger->get_trigger_name()));
       OZ (trigger_id_map_.erase_refactored(trigger_id), trigger_id);
@@ -232,7 +227,6 @@ int ObTriggerMgr::add_trigger(const ObSimpleTriggerSchema &trigger_schema)
       OZ (trigger_name_map_.erase_refactored(name_wrapper), name_wrapper);
       ret = (ret == OB_HASH_NOT_EXIST) ? OB_SUCCESS : ret;
     }
-    OX (name_wrapper.set_tenant_id(new_trigger_schema->get_tenant_id()));
     OX (name_wrapper.set_database_id(new_trigger_schema->get_database_id()));
     OX (name_wrapper.set_trigger_name(new_trigger_schema->get_trigger_name()));
     OZ (trigger_id_map_.set_refactored(trigger_id, new_trigger_schema, overwrite), trigger_id);
@@ -255,8 +249,7 @@ int ObTriggerMgr::del_trigger(const ObTenantTriggerId &tenant_trigger_id)
   DEBUG_SYNC(DEL_TRIGGER_BEFORE_MAP);
   int skip_map = OB_E(EventTable::EN_ADD_TRIGGER_SKIP_MAP) 0;
   if (OB_SUCC(ret) && skip_map == 0) {
-    ObTriggerNameHashWrapper name_wrapper(deleted_trigger->get_tenant_id(),
-                                          deleted_trigger->get_database_id(),
+    ObTriggerNameHashWrapper name_wrapper(deleted_trigger->get_database_id(),
                                           deleted_trigger->get_trigger_name());
     OZ (trigger_id_map_.erase_refactored(trigger_id));
     ret = (ret == OB_HASH_NOT_EXIST) ? OB_SUCCESS : ret;
@@ -284,7 +277,6 @@ int ObTriggerMgr::try_rebuild_trigger_hashmap()
          OB_SUCC(ret) && iter != trigger_infos_.end(); ++iter) {
       ObSimpleTriggerSchema *trigger_info = *iter;
       OV (OB_NOT_NULL(trigger_info));
-      OX (name_wrapper.set_tenant_id(trigger_info->get_tenant_id()));
       OX (name_wrapper.set_database_id(trigger_info->get_database_id()));
       OX (name_wrapper.set_trigger_name(trigger_info->get_trigger_name()));
       OZ (trigger_id_map_.set_refactored(trigger_info->get_trigger_id(), trigger_info, over_write),
@@ -294,7 +286,6 @@ int ObTriggerMgr::try_rebuild_trigger_hashmap()
         if (OB_SUCCESS != hash_ret) {
           ret = OB_HASH_EXIST == hash_ret ? OB_SUCCESS : hash_ret;
           LOG_ERROR("build trigger name map failed", KR(ret), KR(hash_ret),
-                    "exist_tenant_id", trigger_info->get_tenant_id(),
                     "exist_database_id", trigger_info->get_database_id(),
                     "exist_trigger_name", trigger_info->get_trigger_name());
         }
@@ -346,7 +337,7 @@ int ObTriggerMgr::get_trigger_schema(uint64_t trigger_id, const ObSimpleTriggerS
   return ret;
 }
 
-int ObTriggerMgr::get_trigger_schema(uint64_t tenant_id, uint64_t database_id,
+int ObTriggerMgr::get_trigger_schema( uint64_t database_id,
                                      const ObString &trigger_name,
                                      const ObSimpleTriggerSchema *&trigger_schema) const
 {
@@ -355,12 +346,12 @@ int ObTriggerMgr::get_trigger_schema(uint64_t tenant_id, uint64_t database_id,
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id || OB_INVALID_ID == database_id || trigger_name.empty()) {
+  } else if (OB_INVALID_ID == database_id || trigger_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(database_id), K(trigger_name));
+    LOG_WARN("invalid argument", K(ret), K(database_id), K(trigger_name));
   } else {
     ObSimpleTriggerSchema *tmp_schema = NULL;
-    ObTriggerNameHashWrapper name_wrapper(tenant_id, database_id, trigger_name);
+    ObTriggerNameHashWrapper name_wrapper(database_id, trigger_name);
     int hash_ret = trigger_name_map_.get_refactored(name_wrapper, tmp_schema);
     if (OB_SUCCESS == hash_ret) {
       if (OB_ISNULL(tmp_schema)) {
@@ -374,10 +365,10 @@ int ObTriggerMgr::get_trigger_schema(uint64_t tenant_id, uint64_t database_id,
   return ret;
 }
 
-int ObTriggerMgr::get_trigger_schemas_in_tenant(uint64_t tenant_id, ObIArray<const ObSimpleTriggerSchema *> &trigger_schemas) const
+int ObTriggerMgr::get_trigger_schemas_in_tenant(ObIArray<const ObSimpleTriggerSchema *> &trigger_schemas) const
 {
   int ret = OB_SUCCESS;
-  ObTenantTriggerId tenant_trigger_id_lower(tenant_id, OB_MIN_ID);
+  ObTenantTriggerId tenant_trigger_id_lower(OB_MIN_ID);
   ConstTriggerIter tenant_trigger_begin =
       trigger_infos_.lower_bound(tenant_trigger_id_lower, compare_with_tenant_trigger_id);
   bool is_stop = false;
@@ -387,7 +378,7 @@ int ObTriggerMgr::get_trigger_schemas_in_tenant(uint64_t tenant_id, ObIArray<con
     if (OB_ISNULL(trigger = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(trigger));
-    } else if (tenant_id != trigger->get_tenant_id()) {
+    } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(trigger_schemas.push_back(trigger))) {
       LOG_WARN("push back trigger failed", K(ret));
@@ -396,36 +387,11 @@ int ObTriggerMgr::get_trigger_schemas_in_tenant(uint64_t tenant_id, ObIArray<con
   return ret;
 }
 
-int ObTriggerMgr::del_trigger_schemas_in_tenant(uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else {
-    ObArray<const ObSimpleTriggerSchema *> schemas;
-    if (OB_FAIL(get_trigger_schemas_in_tenant(tenant_id, schemas))) {
-      LOG_WARN("get trigger schemas failed", K(ret), K(tenant_id));
-    } else {
-      FOREACH_CNT_X(schema, schemas, OB_SUCC(ret)) {
-        ObTenantTriggerId tenant_trigger_id(tenant_id, (*schema)->get_trigger_id());
-        if (OB_FAIL(del_trigger(tenant_trigger_id))) {
-          LOG_WARN("del trigger failed", K(tenant_trigger_id), K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTriggerMgr::get_trigger_schemas_in_database(uint64_t tenant_id, uint64_t database_id,
+int ObTriggerMgr::get_trigger_schemas_in_database(uint64_t database_id,
                                                   ObIArray<const ObSimpleTriggerSchema *> &trigger_schemas) const
 {
   int ret = OB_SUCCESS;
-  ObTenantTriggerId tenant_trigger_id_lower(tenant_id, OB_MIN_ID);
+  ObTenantTriggerId tenant_trigger_id_lower(OB_MIN_ID);
   ConstTriggerIter tenant_trigger_begin =
       trigger_infos_.lower_bound(tenant_trigger_id_lower, compare_with_tenant_trigger_id);
   bool is_stop = false;
@@ -435,7 +401,7 @@ int ObTriggerMgr::get_trigger_schemas_in_database(uint64_t tenant_id, uint64_t d
     if (OB_ISNULL(trigger = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(trigger));
-    } else if (tenant_id != trigger->get_tenant_id()) {
+    } else if (false) {
       is_stop = true;
     } else if (trigger->get_database_id() != database_id) {
       // do-nothing

@@ -16,7 +16,7 @@
 
 #define private public
 #define protected public
-#include "deps/oblib/src/common/storage/ob_device_common.h"
+#include "lib/restore/ob_device_common.h"
 #undef private
 #include "./blocksstable/ob_data_file_prepare.h"
 #include "mtlenv/mock_tenant_module_env.h"
@@ -29,6 +29,16 @@ using namespace blocksstable;
 using namespace common;
 using namespace share::schema;
 static ObSimpleMemLimitGetter getter;
+
+// Single-tenant seekdb: route the test's ObTenantIOManager / ObTenantTmpFileManager through share::g_mp.
+class FakeModuleProvider : public share::ObIModuleProvider
+{
+public:
+  common::ObTenantIOManager *tenant_io_manager() override { return io_manager_; }
+  tmp_file::ObTenantTmpFileManager *tenant_tmp_file_manager() override { return tmp_file_mgr_; }
+  common::ObTenantIOManager *io_manager_ = nullptr;
+  tmp_file::ObTenantTmpFileManager *tmp_file_mgr_ = nullptr;
+};
 
 namespace unittest
 {
@@ -197,20 +207,22 @@ void TestParallelExternalSort::SetUp()
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"));
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache"));
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
-  static ObTenantBase tenant_ctx(OB_SYS_TENANT_ID);
+  static ObTenantBase tenant_ctx(OB_SERVER_TENANT_ID);
+  static FakeModuleProvider provider;
+  share::g_mp = &provider;
   ObTenantEnv::set_tenant(&tenant_ctx);
   ObTenantIOManager *io_service = nullptr;
   EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_new(io_service));
   EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_init(io_service));
   EXPECT_EQ(OB_SUCCESS, io_service->start());
-  tenant_ctx.set(io_service);
+  provider.io_manager_ = io_service;
 
   tmp_file::ObTenantTmpFileManager *tf_mgr = nullptr;
   EXPECT_EQ(OB_SUCCESS, mtl_new_default(tf_mgr));
   EXPECT_EQ(OB_SUCCESS, tmp_file::ObTenantTmpFileManager::mtl_init(tf_mgr));
   tf_mgr->get_sn_file_manager().page_cache_controller_.write_buffer_pool_.default_wbp_memory_limit_ = 40*1024*1024;
   EXPECT_EQ(OB_SUCCESS, tf_mgr->start());
-  tenant_ctx.set(tf_mgr);
+  provider.tmp_file_mgr_ = tf_mgr;
 
   ObTenantEnv::set_tenant(&tenant_ctx);
   SERVER_STORAGE_META_SERVICE.is_started_ = true;
@@ -244,9 +256,7 @@ int TestParallelExternalSort::init_tenant_mgr()
   self.set_ip_addr("127.0.0.1", 8086);
   const int64_t ulmt = 128LL << 30;
   const int64_t llmt = 128LL << 30;
-  ret = getter.add_tenant(OB_SYS_TENANT_ID, ulmt, llmt);
-  EXPECT_EQ(OB_SUCCESS, ret);
-  ret = getter.add_tenant(OB_SERVER_TENANT_ID, ulmt, llmt);
+  ret = getter.add_tenant(ulmt, llmt);
   EXPECT_EQ(OB_SUCCESS, ret);
   lib::set_memory_limit(128LL << 32);
   return ret;
@@ -391,9 +401,9 @@ int TestParallelExternalSort::build_reader(const ObVector<TestItem *> &items, co
     ObFragmentWriterV2<TestItem> writer;
     int64_t dir_id = -1;
     std::sort(items.begin(), items.end(), compare);
-    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(OB_SYS_TENANT_ID, dir_id))) {
+    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(dir_id))) {
       COMMON_LOG(WARN, "fail to allocate file directory", K(ret));
-    } else if (OB_FAIL(writer.open(buf_cap, expire_timestamp, OB_SYS_TENANT_ID, dir_id))) {
+    } else if (OB_FAIL(writer.open(buf_cap, expire_timestamp, dir_id))) {
       COMMON_LOG(WARN, "fail to open writer", K(ret));
     }
 
@@ -405,7 +415,7 @@ int TestParallelExternalSort::build_reader(const ObVector<TestItem *> &items, co
     if (OB_SUCC(ret)) {
       if (OB_FAIL(writer.sync())) {
         COMMON_LOG(WARN, "fail to flush data", K(ret));
-      } else if (OB_FAIL(reader.init(writer.get_fd(), writer.get_dir_id(), expire_timestamp, OB_SYS_TENANT_ID, writer.get_sample_item(),
+      } else if (OB_FAIL(reader.init(writer.get_fd(), writer.get_dir_id(), expire_timestamp, writer.get_sample_item(),
           buf_cap))) {
         COMMON_LOG(WARN, "fail to open reader", K(ret));
       }
@@ -501,9 +511,9 @@ void TestParallelExternalSort::test_sort_round(const int64_t buf_cap, const int6
   const int64_t expire_timestamp = 0;
   ret = generate_items(items_cnt, false, total_items);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = sort_round.init(task_cnt, buf_cap, expire_timestamp, OB_SYS_TENANT_ID, &compare);
+  ret = sort_round.init(task_cnt, buf_cap, expire_timestamp, &compare);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = next_round.init(task_cnt, buf_cap, expire_timestamp, OB_SYS_TENANT_ID, &compare);
+  ret = next_round.init(task_cnt, buf_cap, expire_timestamp, &compare);
   ASSERT_EQ(OB_SUCCESS, ret);
   for (int64_t i = 0; OB_SUCC(ret) && i < task_cnt; ++i) {
     ret = shuffle_items(i, task_cnt, total_items, task_items);
@@ -546,7 +556,7 @@ void TestParallelExternalSort::test_multi_sort_round(const int64_t buf_cap, cons
   const int64_t expire_timestamp = 0;
   ret = generate_items(items_cnt, false, total_items);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = curr_round->init(merge_count, buf_cap, expire_timestamp, OB_SYS_TENANT_ID, &compare);
+  ret = curr_round->init(merge_count, buf_cap, expire_timestamp, &compare);
   ASSERT_EQ(OB_SUCCESS, ret);
   for (int64_t i = 0; OB_SUCC(ret) && i < task_cnt; ++i) {
     ret = shuffle_items(i, task_cnt, total_items, task_items);
@@ -563,7 +573,7 @@ void TestParallelExternalSort::test_multi_sort_round(const int64_t buf_cap, cons
   ASSERT_EQ(OB_SUCCESS, ret);
   while (curr_round->get_fragment_count() >= merge_count)
   {
-    ret = next_round->init(merge_count, buf_cap, expire_timestamp, OB_SYS_TENANT_ID, &compare);
+    ret = next_round->init(merge_count, buf_cap, expire_timestamp, &compare);
     ASSERT_EQ(OB_SUCCESS, ret);
     ret = curr_round->do_merge(*next_round);
     ASSERT_EQ(OB_SUCCESS, ret);
@@ -571,7 +581,7 @@ void TestParallelExternalSort::test_multi_sort_round(const int64_t buf_cap, cons
     ret = next_round->clean_up();
     ASSERT_EQ(OB_SUCCESS, ret);
   }
-  ret = next_round->init(merge_count, buf_cap, expire_timestamp, OB_SYS_TENANT_ID, &compare);
+  ret = next_round->init(merge_count, buf_cap, expire_timestamp, &compare);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = curr_round->do_merge(*next_round);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -602,7 +612,7 @@ void TestParallelExternalSort::test_memory_sort_round(const int64_t buf_mem_limi
   const TestItem *item = NULL;
   ret = generate_items(items_cnt, false, total_items);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = sort_round.init(merge_count, buf_cap, expire_timestamp, OB_SYS_TENANT_ID, &compare);
+  ret = sort_round.init(merge_count, buf_cap, expire_timestamp, &compare);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = memory_sort_round.init(buf_mem_limit, expire_timestamp, &compare, &sort_round);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -629,7 +639,7 @@ void TestParallelExternalSort::test_sort(const int64_t buf_mem_limit, const int6
   ObVector<TestItem *>total_items;
   TestItemCompare compare(ret);
   const int64_t expire_timestamp = 0;
-  ret = external_sort.init(buf_mem_limit, file_buf_size, expire_timestamp, OB_SYS_TENANT_ID, &compare);
+  ret = external_sort.init(buf_mem_limit, file_buf_size, expire_timestamp, &compare);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = generate_items(items_cnt, false, total_items);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -653,7 +663,7 @@ void TestParallelExternalSort::test_multi_task_sort(const int64_t buf_mem_limit,
   const TestItem *item = NULL;
   const int64_t expire_timestamp = 0;
   for (int64_t i = 0; OB_SUCC(ret) && i < task_cnt; ++i) {
-    ret = external_sort[i].init(buf_mem_limit / task_cnt, file_buf_size, expire_timestamp, OB_SYS_TENANT_ID, &compare);
+    ret = external_sort[i].init(buf_mem_limit / task_cnt, file_buf_size, expire_timestamp, &compare);
     ASSERT_EQ(OB_SUCCESS, ret);
   }
   ret = generate_items(items_cnt, false, total_items);
@@ -670,7 +680,7 @@ void TestParallelExternalSort::test_multi_task_sort(const int64_t buf_mem_limit,
     STORAGE_LOG(INFO, "task i items", K(i), K(task_items));
   }
 
-  ret = combine_sort.init(buf_mem_limit / task_cnt, file_buf_size, expire_timestamp, OB_SYS_TENANT_ID, &compare);
+  ret = combine_sort.init(buf_mem_limit / task_cnt, file_buf_size, expire_timestamp, &compare);
   ASSERT_EQ(OB_SUCCESS, ret);
   for (int64_t i = 0; OB_SUCC(ret) && i < task_cnt; ++i) {
     ret = external_sort[i].transfer_final_sorted_fragment_iter(combine_sort);
@@ -702,10 +712,10 @@ TEST_F(TestParallelExternalSort, test_writer)
   int ret = OB_SUCCESS;
   int64_t dir_id = -1;
 
-  ret = FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(OB_SYS_TENANT_ID, dir_id);
+  ret = FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(dir_id);
   ASSERT_EQ(OB_SUCCESS, ret);
   // single macro buffer, total write bytes is less than single macro buffer length
-  ret = writer.open(buf_cap, expire_timestamp, OB_SYS_TENANT_ID, dir_id);
+  ret = writer.open(buf_cap, expire_timestamp, dir_id);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = generate_items(10, true, items);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -716,7 +726,7 @@ TEST_F(TestParallelExternalSort, test_writer)
 
   // single macro buffer, total write bytes is more than single macro buffer length
   writer.reset();
-  ret = writer.open(buf_cap, expire_timestamp, OB_SYS_TENANT_ID, dir_id);
+  ret = writer.open(buf_cap, expire_timestamp, dir_id);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = generate_items(10000, true, items);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -727,7 +737,7 @@ TEST_F(TestParallelExternalSort, test_writer)
 
   // multiple macro buffers, total write bytes is less than total capacity of buffers
   writer.reset();
-  ret = writer.open(2 * buf_cap, expire_timestamp, OB_SYS_TENANT_ID, dir_id);
+  ret = writer.open(2 * buf_cap, expire_timestamp, dir_id);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = generate_items(100, true, items);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -738,7 +748,7 @@ TEST_F(TestParallelExternalSort, test_writer)
 
   // multiple macro buffers, total write bytes is more than total capacity of buffers
   writer.reset();
-  ret = writer.open(2 * buf_cap, expire_timestamp, OB_SYS_TENANT_ID, dir_id);
+  ret = writer.open(2 * buf_cap, expire_timestamp, dir_id);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = generate_items(10000, true, items);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -759,10 +769,10 @@ TEST_F(TestParallelExternalSort, test_reader)
   int ret = OB_SUCCESS;
   int64_t dir_id = -1;
 
-  ret = FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(OB_SYS_TENANT_ID, dir_id);
+  ret = FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(dir_id);
   ASSERT_EQ(OB_SUCCESS, ret);
   // single macro buffer, total write bytes is less than single macro buffer length
-  ret = writer.open(buf_cap, expire_timestamp, OB_SYS_TENANT_ID, dir_id);
+  ret = writer.open(buf_cap, expire_timestamp, dir_id);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = generate_items(100, true, items);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -773,7 +783,7 @@ TEST_F(TestParallelExternalSort, test_reader)
 
   ret = writer.sync();
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = reader.init(writer.get_fd(), writer.get_dir_id(), expire_timestamp, OB_SYS_TENANT_ID, writer.get_sample_item(), buf_cap);
+  ret = reader.init(writer.get_fd(), writer.get_dir_id(), expire_timestamp, writer.get_sample_item(), buf_cap);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = reader.open();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -787,7 +797,7 @@ TEST_F(TestParallelExternalSort, test_reader)
 
   // single macro buffer, total write bytes is more than single macro buffer length
   writer.reset();
-  ret = writer.open(buf_cap, expire_timestamp, OB_SYS_TENANT_ID, dir_id);
+  ret = writer.open(buf_cap, expire_timestamp, dir_id);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = generate_items(100, true, items);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -799,7 +809,7 @@ TEST_F(TestParallelExternalSort, test_reader)
   reader.reset();
   ret = writer.sync();
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = reader.init(writer.get_fd(), writer.get_dir_id(), expire_timestamp, OB_SYS_TENANT_ID, writer.get_sample_item(), buf_cap);
+  ret = reader.init(writer.get_fd(), writer.get_dir_id(), expire_timestamp, writer.get_sample_item(), buf_cap);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = reader.open();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -813,7 +823,7 @@ TEST_F(TestParallelExternalSort, test_reader)
 
   // multiple macro buffers, total write bytes is less than capacity of buffers
   writer.reset();
-  ret = writer.open(3 * buf_cap, expire_timestamp, OB_SYS_TENANT_ID, dir_id);
+  ret = writer.open(3 * buf_cap, expire_timestamp, dir_id);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = generate_items(1300, true, items);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -825,7 +835,7 @@ TEST_F(TestParallelExternalSort, test_reader)
   reader.reset();
   ret = writer.sync();
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = reader.init(writer.get_fd(), writer.get_dir_id(), expire_timestamp, OB_SYS_TENANT_ID, writer.get_sample_item(), 3 * buf_cap);
+  ret = reader.init(writer.get_fd(), writer.get_dir_id(), expire_timestamp, writer.get_sample_item(), 3 * buf_cap);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = reader.prefetch();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -839,7 +849,7 @@ TEST_F(TestParallelExternalSort, test_reader)
 
   // multiple macro buffers, total write bytes is more than capacity of buffers
   writer.reset();
-  ret = writer.open(3 * buf_cap, expire_timestamp, OB_SYS_TENANT_ID, dir_id);
+  ret = writer.open(3 * buf_cap, expire_timestamp, dir_id);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = generate_items(10000, true, items);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -851,7 +861,7 @@ TEST_F(TestParallelExternalSort, test_reader)
   reader.reset();
   ret = writer.sync();
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = reader.init(writer.get_fd(), writer.get_dir_id(), expire_timestamp, OB_SYS_TENANT_ID, writer.get_sample_item(), 3 * buf_cap);
+  ret = reader.init(writer.get_fd(), writer.get_dir_id(), expire_timestamp, writer.get_sample_item(), 3 * buf_cap);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = reader.open();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1006,7 +1016,7 @@ TEST_F(TestParallelExternalSort, test_get_before_sort)
   ObVector<TestItem *>total_items;
   TestItemCompare compare(ret);
   const int64_t expire_timestamp = 0;
-  ret = external_sort.init(buf_mem_limit, file_buf_size, expire_timestamp, OB_SYS_TENANT_ID, &compare);
+  ret = external_sort.init(buf_mem_limit, file_buf_size, expire_timestamp, &compare);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = generate_items(10, false, total_items);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1029,7 +1039,7 @@ TEST_F(TestParallelExternalSort, test_sort_then_get)
   ObVector<TestItem *>total_items;
   TestItemCompare compare(ret);
   const int64_t expire_timestamp = 0;
-  ret = external_sort.init(buf_mem_limit, file_buf_size, expire_timestamp, OB_SYS_TENANT_ID, &compare);
+  ret = external_sort.init(buf_mem_limit, file_buf_size, expire_timestamp, &compare);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = generate_items(81920, false, total_items);
   ASSERT_EQ(OB_SUCCESS, ret);

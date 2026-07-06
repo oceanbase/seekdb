@@ -23,7 +23,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/allocator/ob_fifo_allocator.h"
 #include "share/rc/ob_tenant_base.h"
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "lib/utility/ob_template_utils.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/list/ob_dlist.h"
@@ -123,9 +123,20 @@ class ObLocalAllocator : public common::ObIAllocator
 public:
   ObLocalAllocator(
       const lib::ObLabel &label,
-      const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE)
+      const int64_t page_size)
     : ref_mem_ctx_(nullptr),
-      allocator_(label, page_size, MTL_ID(), ObCtxIds::DEFAULT_CTX_ID),
+      allocator_(label, page_size, ObCtxIds::DEFAULT_CTX_ID),
+      hist_mem_hold_(0)
+  {
+    ObCompactionMemoryContext *mem_ctx = CURRENT_MEM_CTX();
+    if (nullptr != mem_ctx) {
+      bind_mem_ctx(*mem_ctx);
+    }
+  }
+  ObLocalAllocator(
+      const lib::ObLabel &label)
+    : ref_mem_ctx_(nullptr),
+      allocator_(label),
       hist_mem_hold_(0)
   {
     ObCompactionMemoryContext *mem_ctx = CURRENT_MEM_CTX();
@@ -135,24 +146,11 @@ public:
   }
 
   ObLocalAllocator(
-      const uint64_t tenant_id,
-      const lib::ObLabel &label)
-    : ref_mem_ctx_(nullptr),
-      allocator_(label, tenant_id),
-      hist_mem_hold_(0)
-  {
-    static_assert(std::is_same<T, common::DefaultPageAllocator>::value, "error allocator type");
-    ObCompactionMemoryContext *mem_ctx = CURRENT_MEM_CTX();
-    if (nullptr != mem_ctx) {
-      bind_mem_ctx(*mem_ctx);
-    }
-  }
-  ObLocalAllocator(
       ObCompactionMemoryContext &mem_ctx,
       const lib::ObLabel &label,
       const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE)
     : ref_mem_ctx_(nullptr),
-      allocator_(label, page_size, MTL_ID(), ObCtxIds::DEFAULT_CTX_ID),
+      allocator_(label, page_size, ObCtxIds::DEFAULT_CTX_ID),
       hist_mem_hold_(0)
   {
     bind_mem_ctx(mem_ctx);
@@ -209,7 +207,6 @@ public:
   DELEGATE_WITHOUT_RET(allocator_, reset_remain_one_page);
   DELEGATE_WITHOUT_RET(allocator_, reuse);
   DELEGATE_WITHOUT_RET(allocator_, set_label);
-  DELEGATE_WITHOUT_RET(allocator_, set_tenant_id);
   DELEGATE_WITH_RET(allocator_, set_tracer, bool);
   DELEGATE_WITH_RET(allocator_, revert_tracer, bool);
   DELEGATE_WITHOUT_RET(allocator_, set_ctx_id);
@@ -272,7 +269,7 @@ class ObCompactionBuffer
 {
 public:
   ObCompactionBuffer(const lib::ObLabel &label = "compaction_buf", const int64_t page_size = DEFAULT_MIDDLE_BLOCK_SIZE)
-    : allocator_(MTL_ID(), label),
+    : allocator_(label),
       is_inited_(false),
       capacity_(0),
       buffer_size_(0),

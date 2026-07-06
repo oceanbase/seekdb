@@ -19,7 +19,7 @@
 #include "logservice/palf/log_cache.h"
 #undef private
 #include "logservice/common_util/ob_log_time_utils.h"
-#include "share/ob_tenant_mem_limit_getter.h"
+#include "storage/tx_storage/ob_tenant_mem_limit_getter.h"
 #include "logservice/palf/palf_env_impl.h"
 
 namespace oceanbase
@@ -72,7 +72,7 @@ void TestLogCache::SetUp()
   EXPECT_EQ(OB_SUCCESS, OB_LOG_KV_CACHE.init(OB_LOG_KV_CACHE_NAME, 1));
 
   // init MTL
-  ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(1001);
+  ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
   ObTenantBase tbase(1001);
   ObTenantEnv::set_tenant(&tbase);
 }
@@ -81,7 +81,7 @@ void TestLogCache::TearDown()
 {
   PALF_LOG(INFO, "recycle_tenant_allocator start");
   OB_LOG_KV_CACHE.destroy();
-  ObMallocAllocator::get_instance()->recycle_tenant_allocator(1001);
+  ObMallocAllocator::get_instance()->recycle_tenant_allocator();
 }
 
 LogStorage log_storage;
@@ -95,7 +95,6 @@ TEST_F(TestLogCache, test_basic_func)
   int64_t palf_id = 1;
   LogColdCache cold_cache;
   cold_cache.init(palf_id, &palf_env_impl, &log_storage);
-  cold_cache.tenant_id_ = 1001;
   cold_cache.is_inited_ = true;
   LSN lsn(0);
   int64_t in_read_size = MAX_LOG_BODY_SIZE;
@@ -209,7 +208,6 @@ TEST_F(TestLogCache, test_flashback)
   int64_t palf_id = 1;
   LogColdCache cold_cache;
   cold_cache.init(palf_id, &palf_env_impl, &log_storage);
-  cold_cache.tenant_id_ = 1001;
   LSN lsn(0);
   int64_t in_read_size = MAX_LOG_BODY_SIZE;
   char *buf = reinterpret_cast<char *>(ob_malloc(MAX_LOG_BUFFER_SIZE, "LOG_KV_CACHE"));

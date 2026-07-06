@@ -24,7 +24,6 @@ using namespace oceanbase::sql;
 
 ObDropRoleStmt::ObDropRoleStmt(ObIAllocator *name_pool)
     : ObDDLStmt(name_pool, stmt::T_DROP_ROLE),
-      tenant_id_(OB_INVALID_ID),
       role_name_(),
       if_exists_(false)
 {
@@ -32,7 +31,6 @@ ObDropRoleStmt::ObDropRoleStmt(ObIAllocator *name_pool)
 
 ObDropRoleStmt::ObDropRoleStmt()
     : ObDDLStmt(NULL, stmt::T_DROP_ROLE),
-      tenant_id_(OB_INVALID_ID),
       role_name_(),
       if_exists_(false)
 {

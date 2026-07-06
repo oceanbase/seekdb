@@ -46,7 +46,7 @@ ObMLogInfo &ObMLogInfo::operator=(const ObMLogInfo &src_schema)
   if (this != &src_schema) {
     reset();
     int &ret = error_ret_;
-    tenant_id_ = src_schema.tenant_id_;
+    
     mlog_id_ = src_schema.mlog_id_;
     purge_mode_ = src_schema.purge_mode_;
     purge_start_ = src_schema.purge_start_;
@@ -78,7 +78,7 @@ bool ObMLogInfo::is_valid() const
 {
   bool bret = false;
   if (OB_LIKELY(ObSchema::is_valid())) {
-    bret = (OB_INVALID_TENANT_ID != tenant_id_ && OB_INVALID_ID != mlog_id_ &&
+    bret = (true && OB_INVALID_ID != mlog_id_ &&
             ObMLogPurgeMode::MAX != purge_mode_ && OB_INVALID_VERSION != schema_version_);
   }
   return bret;
@@ -86,7 +86,7 @@ bool ObMLogInfo::is_valid() const
 
 void ObMLogInfo::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   mlog_id_ = OB_INVALID_ID;
   purge_mode_ = ObMLogPurgeMode::MAX;
   purge_start_ = OB_INVALID_TIMESTAMP;
@@ -112,7 +112,6 @@ int64_t ObMLogInfo::get_convert_size() const
 }
 
 OB_SERIALIZE_MEMBER(ObMLogInfo,
-                    tenant_id_,
                     mlog_id_,
                     purge_mode_,
                     purge_start_,
@@ -125,7 +124,7 @@ OB_SERIALIZE_MEMBER(ObMLogInfo,
                     last_purge_trace_id_,
                     schema_version_);
 
-int ObMLogInfo::gen_insert_mlog_dml(const uint64_t exec_tenant_id, ObDMLSqlSplicer &dml) const
+int ObMLogInfo::gen_insert_mlog_dml(ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dml.add_pk_column("mlog_id", mlog_id_)) ||
@@ -155,16 +154,16 @@ int ObMLogInfo::gen_insert_mlog_dml(const uint64_t exec_tenant_id, ObDMLSqlSplic
 int ObMLogInfo::insert_mlog_info(ObISQLClient &sql_client, const ObMLogInfo &mlog_info)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = mlog_info.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   ObDMLSqlSplicer dml;
   if (OB_UNLIKELY(!mlog_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mlog_info));
-  } else if (OB_FAIL(mlog_info.gen_insert_mlog_dml(exec_tenant_id, dml))) {
+  } else if (OB_FAIL(mlog_info.gen_insert_mlog_dml(dml))) {
     LOG_WARN("fail to gen insert mlog dml", KR(ret), K(mlog_info));
   } else {
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (OB_FAIL(exec.exec_insert(OB_ALL_MLOG_TNAME, dml, affected_rows))) {
       LOG_WARN("execute update failed", KR(ret));
@@ -176,8 +175,7 @@ int ObMLogInfo::insert_mlog_info(ObISQLClient &sql_client, const ObMLogInfo &mlo
   return ret;
 }
 
-int ObMLogInfo::gen_update_mlog_attribute_dml(const uint64_t exec_tenant_id,
-                                              ObDMLSqlSplicer &dml) const
+int ObMLogInfo::gen_update_mlog_attribute_dml(ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dml.add_pk_column("mlog_id", mlog_id_)) ||
@@ -197,16 +195,16 @@ int ObMLogInfo::gen_update_mlog_attribute_dml(const uint64_t exec_tenant_id,
 int ObMLogInfo::update_mlog_attribute(ObISQLClient &sql_client, const ObMLogInfo &mlog_info)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = mlog_info.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   ObDMLSqlSplicer dml;
   if (OB_UNLIKELY(!mlog_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mlog_info));
-  } else if (OB_FAIL(mlog_info.gen_update_mlog_attribute_dml(exec_tenant_id, dml))) {
+  } else if (OB_FAIL(mlog_info.gen_update_mlog_attribute_dml(dml))) {
     LOG_WARN("fail to gen update mlog attribute dml", KR(ret), K(mlog_info));
   } else {
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (OB_FAIL(exec.exec_update(OB_ALL_MLOG_TNAME, dml, affected_rows))) {
       LOG_WARN("execute update failed", KR(ret));
@@ -218,8 +216,7 @@ int ObMLogInfo::update_mlog_attribute(ObISQLClient &sql_client, const ObMLogInfo
   return ret;
 }
 
-int ObMLogInfo::gen_update_mlog_last_purge_info_dml(const uint64_t exec_tenant_id,
-                                                    ObDMLSqlSplicer &dml) const
+int ObMLogInfo::gen_update_mlog_last_purge_info_dml(ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_INVALID_SCN_VAL == last_purge_scn_ ||
@@ -243,16 +240,16 @@ int ObMLogInfo::gen_update_mlog_last_purge_info_dml(const uint64_t exec_tenant_i
 int ObMLogInfo::update_mlog_last_purge_info(ObISQLClient &sql_client, const ObMLogInfo &mlog_info)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = mlog_info.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   ObDMLSqlSplicer dml;
   if (OB_UNLIKELY(!mlog_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mlog_info));
-  } else if (OB_FAIL(mlog_info.gen_update_mlog_last_purge_info_dml(exec_tenant_id, dml))) {
+  } else if (OB_FAIL(mlog_info.gen_update_mlog_last_purge_info_dml(dml))) {
     LOG_WARN("fail to gen update mlog last purge info dml", KR(ret), K(mlog_info));
   } else {
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (OB_FAIL(exec.exec_update(OB_ALL_MLOG_TNAME, dml, affected_rows))) {
       LOG_WARN("execute update failed", KR(ret));
@@ -267,31 +264,31 @@ int ObMLogInfo::update_mlog_last_purge_info(ObISQLClient &sql_client, const ObML
 int ObMLogInfo::drop_mlog_info(ObISQLClient &sql_client, const ObMLogInfo &mlog_info)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = mlog_info.get_tenant_id();
+  
   if (OB_UNLIKELY(!mlog_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mlog_info));
   } else if (OB_FAIL(
-               drop_mlog_info(sql_client, mlog_info.get_tenant_id(), mlog_info.get_mlog_id()))) {
+               drop_mlog_info(sql_client, mlog_info.get_mlog_id()))) {
     LOG_WARN("fail to drop mlog info", KR(ret), K(mlog_info));
   }
   return ret;
 }
 
-int ObMLogInfo::drop_mlog_info(ObISQLClient &sql_client, const uint64_t tenant_id,
+int ObMLogInfo::drop_mlog_info(ObISQLClient &sql_client,
                                const uint64_t mlog_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == mlog_id)) {
+  if (OB_UNLIKELY(false || OB_INVALID_ID == mlog_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tenant_id), K(mlog_id));
+    LOG_WARN("invalid args", KR(ret), K(mlog_id));
   } else {
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     ObDMLSqlSplicer dml;
     if (OB_FAIL(dml.add_pk_column("mlog_id", mlog_id))) {
       LOG_WARN("add column failed", KR(ret));
     } else {
-      ObDMLExecHelper exec(sql_client, exec_tenant_id);
+      ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (OB_FAIL(exec.exec_delete(OB_ALL_MLOG_TNAME, dml, affected_rows))) {
         LOG_WARN("execute update failed", KR(ret));
@@ -304,11 +301,11 @@ int ObMLogInfo::drop_mlog_info(ObISQLClient &sql_client, const uint64_t tenant_i
   return ret;
 }
 
-int ObMLogInfo::fetch_mlog_info(ObISQLClient &sql_client, uint64_t tenant_id, uint64_t mlog_id,
+int ObMLogInfo::fetch_mlog_info(ObISQLClient &sql_client, uint64_t mlog_id,
                                 ObMLogInfo &mlog_info, bool for_update, bool nowait)
 {
   int ret = OB_SUCCESS;
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
 
   SMART_VAR(ObMySQLProxy::MySQLResult, res)
   {
@@ -321,7 +318,7 @@ int ObMLogInfo::fetch_mlog_info(ObISQLClient &sql_client, uint64_t tenant_id, ui
       LOG_WARN("fail to append sql", KR(ret));
     } else if (for_update && nowait && OB_FAIL(sql.append(" for update nowait"))) {
       LOG_WARN("fail to append sql", KR(ret));
-    } else if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {
+    } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
       LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -331,10 +328,10 @@ int ObMLogInfo::fetch_mlog_info(ObISQLClient &sql_client, uint64_t tenant_id, ui
         LOG_WARN("fail to get next", KR(ret));
       } else {
         ret = OB_ENTRY_NOT_EXIST;
-        LOG_WARN("mlog info not exist", KR(ret), K(tenant_id), K(mlog_id));
+        LOG_WARN("mlog info not exist", KR(ret), K(mlog_id));
       }
     } else {
-      mlog_info.set_tenant_id(tenant_id);
+      
       EXTRACT_INT_FIELD_TO_CLASS_MYSQL(*result, mlog_id, mlog_info, uint64_t);
       EXTRACT_INT_FIELD_TO_CLASS_MYSQL(*result, purge_mode, mlog_info, ObMLogPurgeMode);
       EXTRACT_TIMESTAMP_FIELD_TO_CLASS_MYSQL_SKIP_RET(*result, purge_start, mlog_info, nullptr);
@@ -354,13 +351,13 @@ int ObMLogInfo::fetch_mlog_info(ObISQLClient &sql_client, uint64_t tenant_id, ui
   return ret;
 }
 
-int ObMLogInfo::batch_fetch_mlog_ids(ObISQLClient &sql_client, uint64_t tenant_id,
+int ObMLogInfo::batch_fetch_mlog_ids(ObISQLClient &sql_client,
                                      uint64_t last_mlog_id, ObIArray<uint64_t> &mlog_ids,
                                      int64_t limit)
 {
   int ret = OB_SUCCESS;
   mlog_ids.reset();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
   SMART_VAR(ObMySQLProxy::MySQLResult, res)
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
@@ -375,7 +372,7 @@ int ObMLogInfo::batch_fetch_mlog_ids(ObISQLClient &sql_client, uint64_t tenant_i
       LOG_WARN("fail to append sql", KR(ret));
     } else if (limit > 0 && OB_FAIL(sql.append_fmt(" limit %ld", limit))) {
       LOG_WARN("fail to append sql", KR(ret));
-    } else if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {
+    } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
       LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;

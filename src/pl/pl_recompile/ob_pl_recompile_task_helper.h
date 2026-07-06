@@ -17,7 +17,7 @@
 #define OCEANBASE_SRC_PL_OB_PL_RECOMPILE_TASK_HELPER_H_
 
 #include "share/schema/ob_schema_struct.h"
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "sql/engine/ob_exec_context.h"
 #include "observer/ob_inner_sql_connection_pool.h"
 
@@ -67,25 +67,20 @@ public:
   ObString ref_obj_name_;
 };
   static int collect_delta_recompile_obj_data(common::ObMySQLProxy* sql_proxy,
-                                                      uint64_t tenant_id,
                                                       ObIAllocator& allocator,
                                                       int64_t& last_max_schema_version);
   static int collect_delta_error_data(common::ObMySQLProxy* sql_proxy,
-                                                      uint64_t tenant_id,
                                                       int64_t last_max_schema_version,
                                                       ObIAllocator& allocator,
                                                       ObIArray<ObPLRecompileInfo>& dep_objs); 
   static int collect_delta_ddl_operation_data(common::ObMySQLProxy* sql_proxy,
-                                      uint64_t tenant_id,
                                       ObIArray<ObPLRecompileInfo>& dep_objs,
                                       ObArray<int64_t>& ddl_alter_obj_infos,
                                       common::hash::ObHashMap<int64_t, std::pair<ObString, int64_t>>& ddl_drop_obj_map);                                                     
   static int batch_insert_recompile_obj_info(common::ObMySQLProxy* sql_proxy,
-                                                      uint64_t tenant_id,
                                                       int64_t cur_max_schema_version,
                                                       ObIArray<ObPLRecompileInfo>& dep_objs);   
   static int batch_recompile_obj(common::ObMySQLProxy* sql_proxy,
-                                              uint64_t tenant_id,
                                               int64_t max_schema_version,
                                               ObISQLConnection *connection,
                                               ObIArray<ObPLRecompileInfo>& dep_objs,
@@ -93,35 +88,28 @@ public:
                                               int64_t recompile_start);  
   static int construct_select_dep_table_sql(ObSqlString& query_inner_sql,
                                       common::hash::ObHashMap<int64_t, std::pair<ObString, int64_t>>& ddl_drop_obj_map,
-                                      ObIArray<int64_t>& ddl_alter_obj_infos,
-                                      uint64_t tenant_id);
+                                      ObIArray<int64_t>& ddl_alter_obj_infos);
   static int get_recompile_pl_objs(common::ObMySQLProxy* sql_proxy,
                                       common::hash::ObHashMap<ObString, int64_t>& dropped_ref_objs,
                                       ObIArray<ObPLRecompileInfo>& dep_objs,
-                                      uint64_t tenant_id,
                                       ObIAllocator& allocator);                                                                  
   static int update_dropped_obj(common::hash::ObHashMap<ObString, int64_t>& dropped_ref_objs,
-                                  common::ObMySQLProxy* sql_proxy,
-                                  uint64_t tenant_id);
+                                  common::ObMySQLProxy* sql_proxy);
   static int update_recomp_table(ObIArray<ObPLRecompileInfo>& dep_objs,
                                   common::ObMySQLProxy* sql_proxy,
-                                  uint64_t tenant_id,
                                   int64_t last_max_schema_version,
                                   int64_t start,
                                   int64_t end);                              
   static int recompile_single_obj(ObPLRecompileInfo& obj_info,
-                                  ObISQLConnection *connection,
-                                  uint64_t tenant_id);
+                                  ObISQLConnection *connection);
   static bool is_pl_create_ddl_operation(ObSchemaOperationType op_type); 
   static bool is_pl_drop_ddl_operation(ObSchemaOperationType op_type); 
   static bool is_sql_create_ddl_operation(ObSchemaOperationType op_type); 
   static bool is_sql_drop_ddl_operation(ObSchemaOperationType op_type); 
   static bool is_pl_object_type(ObObjectType obj_type); 
   static int init_tenant_recompile_job(const share::schema::ObSysVariableSchema &sys_variable,
-                                      uint64_t tenant_id,
                                       ObMySQLTransaction &trans);
   static int check_job_exists(ObMySQLTransaction &trans,
-                                            const uint64_t tenant_id,
                                             const ObString &job_name,
                                             bool &is_job_exists);                                                                                                        
                                               

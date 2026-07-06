@@ -154,8 +154,8 @@ class ObIHashPartInfrastructure
 {
 public:
   using HpGroupAggrFunc = std::function<int64_t ()>;
-  ObIHashPartInfrastructure(int64_t tenant_id, lib::MemoryContext &mem_context) :
-    tenant_id_(tenant_id), mem_context_(mem_context), alloc_(nullptr),
+  ObIHashPartInfrastructure(lib::MemoryContext &mem_context) :
+    mem_context_(mem_context), alloc_(nullptr),
     preprocess_part_(), left_part_list_(), right_part_list_(), rewind_part_list_(),
     left_part_map_(), right_part_map_(), io_event_observer_(nullptr), sql_mem_processor_(nullptr),
     sort_collations_(nullptr), eval_ctx_(nullptr), cur_left_part_(nullptr),
@@ -266,7 +266,7 @@ public:
                               int64_t max_bucket = MAX_BUCKET_NUM) = 0;
   virtual int exists_batch(const common::ObIArray<ObExpr*> &exprs, const ObBatchRows &brs, ObBitVector *skip,
               uint64_t *hash_values_for_batch) = 0;
-  int init(uint64_t tenant_id, bool enable_sql_dumped, bool unique, bool need_pre_part,
+  int init(bool enable_sql_dumped, bool unique, bool need_pre_part,
     int64_t ways, int64_t max_batch_size, const common::ObIArray<ObExpr*> &exprs,
     ObSqlMemMgrProcessor *sql_mem_processor, const common::ObCompressorType compressor_type,
     bool need_rewind);
@@ -549,7 +549,7 @@ protected:
   static const int64_t MAX_PART_LEVEL = 4;
   static const int64_t MIN_MEM_BOUND = 2 * 1024 * 1024; // 2M
   static const int64_t MIN_PERIOD_ROW_CNT = 16;
-  uint64_t tenant_id_;
+  
   lib::MemoryContext &mem_context_;
   common::ObIAllocator *alloc_;
   ObIntraPartition preprocess_part_;
@@ -613,9 +613,9 @@ template<typename HashBucket>
 class ObHashPartInfrastructureVec final: public ObIHashPartInfrastructure
 {
 public:
-  ObHashPartInfrastructureVec(int64_t tenant_id, lib::MemoryContext &mem_context)
-    : ObIHashPartInfrastructure(tenant_id, mem_context),
-      hash_table_(tenant_id)
+  ObHashPartInfrastructureVec(lib::MemoryContext &mem_context)
+    : ObIHashPartInfrastructure(mem_context),
+      hash_table_()
   {
   }
   virtual ~ObHashPartInfrastructureVec();
@@ -748,16 +748,15 @@ public:
   void destroy();
   bool is_destroyed() const { return is_destroyed_; }
   bool is_inited() const { return is_inited_; }
-  int init(uint64_t tenant_id, bool enable_sql_dumped, bool unique, bool need_pre_part,
+  int init(bool enable_sql_dumped, bool unique, bool need_pre_part,
     int64_t ways, int64_t max_batch_size, const common::ObIArray<ObExpr*> &exprs,
     ObSqlMemMgrProcessor *sql_mem_processor, const common::ObCompressorType compressor_type,
     bool need_rewind = false);
-  int init_mem_context(uint64_t tenant_id);
+  int init_mem_context();
   int decide_hp_infras_type(const common::ObIArray<ObExpr*> &exprs, BucketType &bkt_type, uint64_t &payload_len);
   template<typename BktType>
-  int alloc_hp_infras_impl_instance(const int64_t tenant_id, ObIHashPartInfrastructure *&hp_infras);
-  int init_hp_infras(const int64_t tenant_id,
-                     const common::ObIArray<ObExpr*> &exprs,
+  int alloc_hp_infras_impl_instance(ObIHashPartInfrastructure *&hp_infras);
+  int init_hp_infras(const common::ObIArray<ObExpr*> &exprs,
                      ObIHashPartInfrastructure *&hp_infras);
   void set_io_event_observer(ObIOEventObserver *observer);
   void set_push_down();
@@ -938,7 +937,7 @@ int ObHashPartInfrastructureVec<HashBucket>::init_hash_table(int64_t initial_siz
 {
   int ret = OB_SUCCESS;
   lib::ObMemAttr mem_attr;
-  mem_attr.tenant_id_ = tenant_id_;
+  
   mem_attr.label_ = "HashPartInfra";
   mem_attr.ctx_id_ = common::ObCtxIds::WORK_AREA;
   bool nullable = true;
@@ -1106,8 +1105,7 @@ probe_batch(uint64_t *hash_values_for_batch,
 
 //////////////////// end ObHashPartInfrastructureVec //////////////////
 template<typename BktType>
-int ObHashPartInfrastructureVecImpl::alloc_hp_infras_impl_instance(const int64_t tenant_id,
-                                                                   ObIHashPartInfrastructure *&hp_infras)
+int ObHashPartInfrastructureVecImpl::alloc_hp_infras_impl_instance(ObIHashPartInfrastructure *&hp_infras)
 {
   int ret = OB_SUCCESS;
   hp_infras = nullptr;
@@ -1118,15 +1116,17 @@ int ObHashPartInfrastructureVecImpl::alloc_hp_infras_impl_instance(const int64_t
     ret = OB_ALLOCATE_MEMORY_FAILED;
     SQL_ENG_LOG(WARN, "failed to create hash part infras instance", K(ret));
   } else {
-    hp_infras = new (buf) ObHashPartInfrastructureVec<BktType>(tenant_id, mem_context_);
+    hp_infras = new (buf) ObHashPartInfrastructureVec<BktType>(mem_context_);
   }
   return ret;
 }
 
-template class ObHashPartInfrastructureVec<HPInfrasBktGeneral>;
-template class ObHashPartInfrastructureVec<HPInfrasFixedBktByte48>;
-template class ObHashPartInfrastructureVec<HPInfrasFixedBktByte56>;
-template class ObHashPartInfrastructureVec<HPInfrasFixedBktByte64>;
+// Definitions live in ob_hp_infras_vec_op.cpp; declared extern here so every includer
+// (groupby/distinct/set/agg vec ops) stops re-instantiating the full bucket cross-product.
+extern template class ObHashPartInfrastructureVec<HPInfrasBktGeneral>;
+extern template class ObHashPartInfrastructureVec<HPInfrasFixedBktByte48>;
+extern template class ObHashPartInfrastructureVec<HPInfrasFixedBktByte56>;
+extern template class ObHashPartInfrastructureVec<HPInfrasFixedBktByte64>;
 ///////////////////////////////////////////////////////////////////////////////////
 
 

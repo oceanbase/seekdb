@@ -30,7 +30,6 @@ namespace tmp_file
 
 int ObTmpFileInfo::init(
     const ObCurTraceId::TraceId &trace_id,
-    const uint64_t tenant_id,
     const int64_t dir_id,
     const int64_t fd,
     const int64_t file_size,
@@ -64,7 +63,7 @@ int ObTmpFileInfo::init(
   int ret = OB_SUCCESS;
   // common info
   trace_id_ = trace_id;
-  tenant_id_ = tenant_id;
+  
   dir_id_ = dir_id;
   fd_ = fd;
   file_size_ = file_size;
@@ -107,7 +106,7 @@ void ObTmpFileInfo::reset()
 {
   // common info
   trace_id_.reset();
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   dir_id_ = ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID;
   fd_ = ObTmpFileGlobal::INVALID_TMP_FILE_FD;
   file_size_ = 0;
@@ -211,7 +210,6 @@ int ObITmpFileHandle::init(ObITmpFile *tmp_file)
 ObITmpFile::ObITmpFile()
     : is_inited_(false),
       mode_(ObTmpFileMode::INVALID),
-      tenant_id_(OB_INVALID_TENANT_ID),
       dir_id_(ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID),
       fd_(ObTmpFileGlobal::INVALID_TMP_FILE_FD),
       is_deleting_(false),
@@ -264,8 +262,7 @@ ObITmpFile::~ObITmpFile()
   reset();
 }
 
-int ObITmpFile::init(const int64_t tenant_id,
-                     const int64_t dir_id,
+int ObITmpFile::init(const int64_t dir_id,
                      const int64_t fd,
                      ObTmpWriteBufferPool *wbp,
                      ObTmpFileFlushPriorityManager *flush_prio_mgr,
@@ -280,9 +277,9 @@ int ObITmpFile::init(const int64_t tenant_id,
     LOG_WARN("init twice", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_TMP_FILE_FD == fd ||
                          ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID == dir_id ||
-                         !is_valid_tenant_id(tenant_id))) {
+                         !true)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(fd), K(dir_id));
+    LOG_WARN("invalid argument", KR(ret), K(fd), K(dir_id));
   } else if (OB_ISNULL(wbp) || OB_ISNULL(flush_prio_mgr) || OB_ISNULL(callback_allocator) ||
              OB_ISNULL(wbp_index_cache_allocator) || OB_ISNULL(wbp_index_cache_bkt_allocator)) {
     ret = OB_INVALID_ARGUMENT;
@@ -295,7 +292,7 @@ int ObITmpFile::init(const int64_t tenant_id,
     is_inited_ = true;
     dir_id_ = dir_id;
     fd_ = fd;
-    tenant_id_ = tenant_id;
+    
     wbp_ = wbp;
     flush_prio_mgr_ = flush_prio_mgr;
     callback_allocator_ = callback_allocator;
@@ -323,7 +320,7 @@ void ObITmpFile::reset()
   if (is_inited_) {
     is_inited_ = false;
     mode_ = ObTmpFileMode::INVALID;
-    tenant_id_ = OB_INVALID_TENANT_ID;
+    
     dir_id_ = ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID;
     fd_ = ObTmpFileGlobal::INVALID_TMP_FILE_FD;
     is_deleting_ = false;
@@ -417,7 +414,7 @@ int ObITmpFile::aio_pread(ObTmpFileIOCtx &io_ctx)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tmp file has not been inited", KR(ret), K(tenant_id_), KPC(this));
+    LOG_WARN("tmp file has not been inited", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(is_deleting_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("attempt to read a deleting file", KR(ret), K(fd_));
@@ -604,7 +601,7 @@ int ObITmpFile::aio_write(ObTmpFileIOCtx &io_ctx)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tmp file has not been inited", KR(ret), K(tenant_id_), KPC(this));
+    LOG_WARN("tmp file has not been inited", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(!io_ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(fd_), K(io_ctx));
@@ -724,7 +721,7 @@ int ObITmpFile::inner_write_continuous_pages_(ObTmpFileIOCtx &io_ctx)
       ret = OB_SUCCESS;
       is_alloc_failed = true;
       if (TC_REACH_COUNT_INTERVAL(10)) {
-        LOG_INFO("fail to alloc memory", K(tenant_id_), K(fd_), K(write_size),
+        LOG_INFO("fail to alloc memory", K(fd_), K(write_size),
                                          K(page_entry_idxs), K(io_ctx));
       }
     } else {
@@ -932,10 +929,10 @@ int ObITmpFile::truncate(const int64_t truncate_offset)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tmp file has not been inited", KR(ret), K(tenant_id_), K(fd_), KPC(this));
+    LOG_WARN("tmp file has not been inited", KR(ret), K(fd_), KPC(this));
   } else if (OB_UNLIKELY(is_deleting_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("attempt to truncate a deleting file", KR(ret), K(tenant_id_), K(fd_), KPC(this));
+    LOG_WARN("attempt to truncate a deleting file", KR(ret), K(fd_), KPC(this));
   } else if (OB_UNLIKELY(truncate_offset <= 0 || truncate_offset > file_size_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid truncate_offset", KR(ret), K(fd_), K(truncate_offset), K(file_size_), KPC(this));

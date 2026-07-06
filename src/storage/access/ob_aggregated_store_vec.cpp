@@ -34,7 +34,7 @@ ObAggGroupVec::ObAggGroupVec()
     need_access_data_(false),
     need_get_row_ids_(false)
 {
-  agg_cells_.set_attr(ObMemAttr(MTL_ID(), "PDAggStore"));
+  agg_cells_.set_attr(ObMemAttr("PDAggStore"));
 }
 
 ObAggGroupVec::ObAggGroupVec(ObColumnParam* col_param, sql::ObExpr* project_expr, 
@@ -49,7 +49,7 @@ ObAggGroupVec::ObAggGroupVec(ObColumnParam* col_param, sql::ObExpr* project_expr
     need_access_data_(false),
     need_get_row_ids_(false)
 {
-  agg_cells_.set_attr(ObMemAttr(MTL_ID(), "PDAggStore"));
+  agg_cells_.set_attr(ObMemAttr("PDAggStore"));
 }
 
 ObAggGroupVec::~ObAggGroupVec()
@@ -234,7 +234,7 @@ ObAggregatedStoreVec::ObAggregatedStoreVec(
         need_access_data_(false),
         need_get_row_ids_(false)
 {
-  agg_groups_.set_attr(ObMemAttr(MTL_ID(), "PDAggStore"));
+  agg_groups_.set_attr(ObMemAttr("PDAggStore"));
 }
 
 ObAggregatedStoreVec::~ObAggregatedStoreVec()
@@ -384,7 +384,7 @@ int ObAggregatedStoreVec::init_agg_groups(const ObTableAccessParam &param)
 int ObAggregatedStoreVec::check_agg_store_valid() 
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(MTL_ID(), common::ObModIds::OB_HASH_BUCKET);
+  ObMemAttr attr(common::ObModIds::OB_HASH_BUCKET);
   if (OB_FAIL(col_mask_set_.create(agg_groups_.count() * 2, attr))) {
     LOG_WARN("Failed to create mask column set", K(ret), K(agg_groups_.count()));
   }

@@ -22,7 +22,7 @@
 
 #include "mock_ls_tablet_service.h"
 
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 #include "storage/ob_dml_running_ctx.h"
 
 #undef private

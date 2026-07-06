@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_COMMON_UNIT_OB_RESOURCE_POOL_H_
 #define OCEANBASE_COMMON_UNIT_OB_RESOURCE_POOL_H_
 
-#include "lib/ob_define.h"                        // is_valid_tenant_id, ObReplicaType
+#include "lib/ob_define.h"                        // ObReplicaType
 #include "lib/utility/ob_unify_serialize.h"       // OB_UNIS_VERSION
 #include "lib/string/ob_fixed_length_string.h"    // ObFixedLengthString
 #include "lib/container/ob_se_array.h"            // ObSEArray
@@ -38,7 +38,7 @@ public:
   void reset();
   bool is_valid() const;
   int assign(const ObResourcePool &other);
-  bool is_granted_to_tenant() const { return is_valid_tenant_id(tenant_id_); }
+  bool is_granted_to_tenant() const { return true; }
   DECLARE_TO_STRING;
 
   uint64_t resource_pool_id_;
@@ -46,7 +46,7 @@ public:
   int64_t unit_count_;
   uint64_t unit_config_id_;
   common::ObSEArray<common::ObZone, DEFAULT_ZONE_COUNT> zone_list_;
-  uint64_t tenant_id_;
+  
   common::ObReplicaType replica_type_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObResourcePool);

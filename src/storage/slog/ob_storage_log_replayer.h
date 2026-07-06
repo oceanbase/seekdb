@@ -83,8 +83,7 @@ public:
   // read checkpoints and replay redo logs
   int replay(
       const common::ObLogCursor &replay_start_cursor,
-      common::ObLogCursor &finish_cursor,
-      const uint64_t tenant_id);
+      common::ObLogCursor &finish_cursor);
 
   int replay_over();
 
@@ -104,7 +103,7 @@ public:
       FILE *stream);
 
 private:
-  int check_empty_dir(bool &is_empty_dir, const uint64_t tenant_id);
+  int check_empty_dir(bool &is_empty_dir);
 
 public:
   static const int MAX_SLOG_NAME_LEN = 128;

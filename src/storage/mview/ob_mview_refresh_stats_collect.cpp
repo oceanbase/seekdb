@@ -38,7 +38,6 @@ using namespace observer;
 
 ObMViewRefreshStatsCollection::ObMViewRefreshStatsCollection()
   : ctx_(nullptr),
-    tenant_id_(OB_INVALID_TENANT_ID),
     refresh_id_(OB_INVALID_ID),
     mview_id_(OB_INVALID_ID),
     retry_id_(OB_INVALID_ID),
@@ -49,7 +48,7 @@ ObMViewRefreshStatsCollection::ObMViewRefreshStatsCollection()
 
 ObMViewRefreshStatsCollection::~ObMViewRefreshStatsCollection() {}
 
-int ObMViewRefreshStatsCollection::init(ObExecContext &ctx, const uint64_t tenant_id,
+int ObMViewRefreshStatsCollection::init(ObExecContext &ctx,
                                         const int64_t refresh_id, const uint64_t mview_id)
 {
   int ret = OB_SUCCESS;
@@ -57,17 +56,16 @@ int ObMViewRefreshStatsCollection::init(ObExecContext &ctx, const uint64_t tenan
     ret = OB_INIT_TWICE;
     LOG_WARN("ObMViewRefreshStatsCollection init twice", KR(ret), KP(this));
   } else if (OB_UNLIKELY(nullptr == ctx.get_my_session() || nullptr == ctx.get_sql_proxy() ||
-                         OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == refresh_id ||
+                         false || OB_INVALID_ID == refresh_id ||
                          OB_INVALID_ID == mview_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(ctx), K(tenant_id), K(refresh_id), K(mview_id));
+    LOG_WARN("invalid args", KR(ret), K(ctx), K(refresh_id), K(mview_id));
   } else {
     ctx_ = &ctx;
-    tenant_id_ = tenant_id;
     refresh_id_ = refresh_id;
     mview_id_ = mview_id;
     retry_id_ = 0;
-    refresh_stats_.set_tenant_id(tenant_id_);
+    
     refresh_stats_.set_refresh_id(refresh_id_);
     refresh_stats_.set_mview_id(mview_id_);
     refresh_stats_.set_retry_id(retry_id_);
@@ -113,7 +111,7 @@ int ObMViewRefreshStatsCollection::collect_before_refresh(ObMViewRefreshCtx &ref
     refresh_stats_.set_refresh_type(refresh_ctx.refresh_type_);
     refresh_stats_.set_num_steps(refresh_ctx.refresh_sqls_.count());
     if (ObMVRefreshStatsCollectionLevel::ADVANCED == collection_level_) {
-      if (OB_TMP_FAIL(ObMViewRefreshHelper::get_table_row_num(trans, tenant_id_, mview_id_,
+      if (OB_TMP_FAIL(ObMViewRefreshHelper::get_table_row_num(trans, mview_id_,
                                                               SCN::invalid_scn(), num_rows))) {
         LOG_WARN("fail to get mview row num before refresh", KR(tmp_ret), K(mview_id_));
       }
@@ -134,15 +132,15 @@ int ObMViewRefreshStatsCollection::collect_after_refresh(ObMViewRefreshCtx &refr
   } else if (OB_ISNULL(refresh_ctx.trans_) || OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null trans", KR(ret), KP(refresh_ctx.trans_), KP(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id_, schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id_));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", KR(ret));
   } else {
     ObMViewTransaction &trans = *refresh_ctx.trans_;
     const ObIArray<ObDependencyInfo> &dependency_infos = refresh_ctx.dependency_infos_;
     const ObIArray<ObMLogInfo> &mlog_infos = refresh_ctx.mlog_infos_;
     int64_t num_rows = 0;
     if (ObMVRefreshStatsCollectionLevel::ADVANCED == collection_level_ &&
-        OB_TMP_FAIL(ObMViewRefreshHelper::get_table_row_num(trans, tenant_id_, mview_id_,
+        OB_TMP_FAIL(ObMViewRefreshHelper::get_table_row_num(trans, mview_id_,
                                                             SCN::invalid_scn(), num_rows))) {
       LOG_WARN("fail to get mview row num after refresh", KR(tmp_ret), K(mview_id_));
     }
@@ -157,8 +155,8 @@ int ObMViewRefreshStatsCollection::collect_after_refresh(ObMViewRefreshCtx &refr
         int64_t num_rows = 0;
         const ObTableSchema *table_schema = nullptr;
         ObScnRange &tmp_scn_range = refresh_ctx.mview_refresh_scn_range_;
-        if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, dep.get_ref_obj_id(), table_schema))) {
-          LOG_WARN("fail to get table schema", KR(ret), K(tenant_id_));
+        if (OB_FAIL(schema_guard.get_table_schema( dep.get_ref_obj_id(), table_schema))) {
+          LOG_WARN("fail to get table schema", KR(ret));
         } else if (OB_ISNULL(table_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("table schema is null", KR(ret));
@@ -171,20 +169,20 @@ int ObMViewRefreshStatsCollection::collect_after_refresh(ObMViewRefreshCtx &refr
           ObWarningBufferIgnoreScope ignore_warning_guard;
           if (mlog_info.is_valid() &&
               OB_TMP_FAIL(ObMViewRefreshHelper::get_mlog_dml_row_num(
-                trans, tenant_id_, mlog_info.get_mlog_id(), tmp_scn_range,
+                trans, mlog_info.get_mlog_id(), tmp_scn_range,
                 num_rows_ins, num_rows_upd, num_rows_del))) {
             LOG_WARN("fail to get mlog dml row num", KR(tmp_ret), K(mlog_info));
           }
           if (ObMVRefreshStatsCollectionLevel::ADVANCED == collection_level_ &&
               OB_TMP_FAIL(ObMViewRefreshHelper::get_table_row_num(
-                trans, tenant_id_, dep.get_ref_obj_id(), tmp_scn_range.end_scn_,
+                trans, dep.get_ref_obj_id(), tmp_scn_range.end_scn_,
                 num_rows))) {
             LOG_WARN("fail to get based table row num", KR(tmp_ret), K(dep));
           }
         }
         if (OB_SUCC(ret)) {
           ObMViewRefreshChangeStats change_stats;
-          change_stats.set_tenant_id(tenant_id_);
+          
           change_stats.set_refresh_id(refresh_id_);
           change_stats.set_mview_id(mview_id_);
           change_stats.set_retry_id(retry_id_);
@@ -228,7 +226,7 @@ int ObMViewRefreshStatsCollection::collect_stmt_stats(ObMViewRefreshCtx &refresh
     }
     if (OB_SUCC(ret)) {
       ObMViewRefreshStmtStats stmt_stats;
-      stmt_stats.set_tenant_id(tenant_id_);
+      
       stmt_stats.set_refresh_id(refresh_id_);
       stmt_stats.set_mview_id(mview_id_);
       stmt_stats.set_retry_id(retry_id_);
@@ -283,7 +281,6 @@ int ObMViewRefreshStatsCollection::commit(ObISQLClient &sql_client)
 ObMViewRefreshStatsCollector::ObMViewRefreshStatsCollector()
   : allocator_("MVRefStatsColl"),
     ctx_(nullptr),
-    tenant_id_(OB_INVALID_TENANT_ID),
     refresh_id_(OB_INVALID_ID),
     is_inited_(false)
 {
@@ -300,8 +297,7 @@ ObMViewRefreshStatsCollector::~ObMViewRefreshStatsCollector()
   mv_ref_stats_map_.reuse();
 }
 
-int ObMViewRefreshStatsCollector::init(ObExecContext &ctx, const ObMViewRefreshArg &refresh_arg,
-                                       const uint64_t tenant_id, const int64_t refresh_id,
+int ObMViewRefreshStatsCollector::init(ObExecContext &ctx, const ObMViewRefreshArg &refresh_arg, const int64_t refresh_id,
                                        const int64_t mv_cnt)
 {
   int ret = OB_SUCCESS;
@@ -309,17 +305,16 @@ int ObMViewRefreshStatsCollector::init(ObExecContext &ctx, const ObMViewRefreshA
     ret = OB_INIT_TWICE;
     LOG_WARN("ObMViewRefreshStatsCollector init twice", KR(ret), KP(this));
   } else if (OB_UNLIKELY(nullptr == ctx.get_my_session() || nullptr == ctx.get_sql_proxy() ||
-                         !refresh_arg.is_valid() || OB_INVALID_TENANT_ID == tenant_id ||
+                         !refresh_arg.is_valid() || false ||
                          OB_INVALID_ID == refresh_id || mv_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(ctx), K(refresh_arg), K(tenant_id), K(refresh_id),
+    LOG_WARN("invalid args", KR(ret), K(ctx), K(refresh_arg), K(refresh_id),
              K(mv_cnt));
   } else {
-    allocator_.set_tenant_id(tenant_id);
+    
     ctx_ = &ctx;
-    tenant_id_ = tenant_id;
     refresh_id_ = refresh_id;
-    run_stats_.set_tenant_id(tenant_id_);
+    
     run_stats_.set_refresh_id(refresh_id);
     run_stats_.set_run_user_id(ctx.get_my_session()->get_priv_user_id());
     run_stats_.set_num_mvs_total(mv_cnt);
@@ -347,7 +342,7 @@ int ObMViewRefreshStatsCollector::init(ObExecContext &ctx, const ObMViewRefreshA
     } else if (OB_FAIL(run_stats_.set_trace_id(ObCurTraceId::get_trace_id_str(trace_id_buf, sizeof(trace_id_buf))))) {
       LOG_WARN("fail to set trace id", KR(ret));
     } else if (OB_FAIL(
-                 mv_ref_stats_map_.create(1024, "MVRefStatsMap", "MVRefStatsMap", tenant_id))) {
+                 mv_ref_stats_map_.create(1024, "MVRefStatsMap", "MVRefStatsMap"))) {
       LOG_WARN("fail to create hashmap", KR(ret));
     } else {
       is_inited_ = true;
@@ -373,7 +368,7 @@ int ObMViewRefreshStatsCollector::alloc_collection(const uint64_t mview_id,
       if (OB_ISNULL(new_stats_collection = OB_NEWx(ObMViewRefreshStatsCollection, &allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to new ObMViewRefreshStatsCollection", KR(ret));
-      } else if (OB_FAIL(new_stats_collection->init(*ctx_, tenant_id_, refresh_id_, mview_id))) {
+      } else if (OB_FAIL(new_stats_collection->init(*ctx_, refresh_id_, mview_id))) {
         LOG_WARN("fail to init stats collection", KR(ret));
       } else if (OB_FAIL(mv_ref_stats_map_.set_refactored(mview_id, new_stats_collection))) {
         LOG_WARN("fail to set refactored", KR(ret));
@@ -400,16 +395,16 @@ int ObMViewRefreshStatsCollector::commit()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObMViewRefreshStatsCollector not init", KR(ret), KP(this));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id_, data_version))) {
-    LOG_WARN("fail to get data version", KR(ret), K(tenant_id_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id_, schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id_));
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
+    LOG_WARN("fail to get data version", KR(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", KR(ret));
   } else {
     run_stats_.end_time_ = ObTimeUtil::current_time();
     run_stats_.elapsed_time_ = (run_stats_.end_time_ - run_stats_.start_time_) / 1000 / 1000;
 
     ObMySQLTransaction trans;
-    if (OB_FAIL(trans.start(ctx_->get_sql_proxy(), tenant_id_))) {
+    if (OB_FAIL(trans.start(ctx_->get_sql_proxy()))) {
       LOG_WARN("fail to start trans", KR(ret));
     }
     int64_t last_refresh_parallelism = 0;
@@ -441,8 +436,8 @@ int ObMViewRefreshStatsCollector::commit()
           const ObMViewRefreshChangeStats &change_stats = collection->change_stats_array_.at(i);
           const uint64_t base_table_id = change_stats.get_detail_table_id();
           const ObTableSchema *table_schema = nullptr;
-          if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, base_table_id, table_schema))) {
-            LOG_WARN("fail to get table schema", KR(ret), K(tenant_id_), K(base_table_id));
+          if (OB_FAIL(schema_guard.get_table_schema( base_table_id, table_schema))) {
+            LOG_WARN("fail to get table schema", KR(ret), K(base_table_id));
           } else if (OB_ISNULL(table_schema)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("table schema is null", KR(ret), K(base_table_id));

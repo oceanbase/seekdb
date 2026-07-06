@@ -15,13 +15,13 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "obmp_packet_sender.h"
 #include "rpc/obmysql/packet/ompk_error.h"
 #include "rpc/obmysql/packet/ompk_eof.h"
 #include "observer/mysql/obmp_utils.h"
 #include "observer/mysql/ob_mysql_result_set.h"
 #include "sql/session/ob_sess_info_verify.h"
-#include "observer/mysql/ob_feedback_proxy_utils.h"
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -50,7 +50,6 @@ void ObOKPParam::reset()
   take_trace_id_to_client_ = false;
   warnings_count_ = 0;
   lii_ = 0;
-  reroute_info_ = NULL;
 }
 
 int64_t ObOKPParam::to_string(char *buf, const int64_t buf_len) const
@@ -293,10 +292,6 @@ int ObMPPacketSender::response_packet(obmysql::ObMySQLPacket &pkt, sql::ObSQLSes
   int ret = OB_SUCCESS;
   extra_info_kvs_.reset();
   extra_info_ecds_.reset();
-  bool need_sync_sys_var = true;
-  if (pkt.get_mysql_packet_type() == ObMySQLPacketType::PKT_ERR) {
-    need_sync_sys_var = false;
-  }
   if (!conn_valid_) {
     ret = OB_CONNECT_ERROR;
     LOG_WARN("connection already disconnected", K(ret));
@@ -311,26 +306,6 @@ int ObMPPacketSender::response_packet(obmysql::ObMySQLPacket &pkt, sql::ObSQLSes
                                       &extra_info_kvs_, &extra_info_ecds_, *session,
                                       conn_->proxy_cap_flags_.is_new_extra_info_support()))) {
       LOG_WARN("failed to add flt extra info", K(ret));
-  } else if (conn_->is_support_sessinfo_sync() && proto20_context_.is_proto20_used_) {
-    proto20_context_.txn_free_route_ = false;
-    if (OB_FAIL(ObMPUtils::append_modfied_sess_info(session->get_extra_info_alloc(),
-                                                    *session, &extra_info_kvs_, &extra_info_ecds_,
-                                                    conn_->proxy_cap_flags_.is_new_extra_info_support(), need_sync_sys_var))) {
-      SERVER_LOG(WARN, "fail to add modified session info", K(ret));
-    } else {
-      // do nothing
-    }
-  }
-
-  // ObProxy only handles extra_info in EOF or OK packet, so we
-  // only feedback proxy_info when respond EOF or OK pacekt here
-  if (OB_FAIL(ret)) {
-  } else if (proto20_context_.is_proto20_used_ && conn_->proxy_cap_flags_.is_feedback_proxy_info_support()
-             && (pkt.get_mysql_packet_type() == ObMySQLPacketType::PKT_EOF
-                 || pkt.get_mysql_packet_type() == ObMySQLPacketType::PKT_OKP)
-             && OB_FAIL(ObFeedbackProxyUtils::append_feedback_proxy_info(
-               session->get_extra_info_alloc(), &extra_info_ecds_, *session))) {
-    LOG_WARN("failed to add feedback_proxy_info", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -374,7 +349,7 @@ int ObMPPacketSender::send_error_packet(int err,
   int ret = OB_SUCCESS;
   sql::ObSQLSessionInfo *session = NULL;
   BACKTRACE(ERROR, (OB_SUCCESS == err), "BUG send error packet but err code is 0");
-  if (OB_ERR_PROXY_REROUTE != err) {
+  {
     int client_error = common::ob_mysql_errno(err);
     // OB error codes that are not compatible with mysql will be displayed using
     // OB error codes
@@ -384,7 +359,7 @@ int ObMPPacketSender::send_error_packet(int err,
   }
   OMPKError epacket;
   ObSqlString fin_msg;
-  if (OB_SUCCESS == err || (OB_ERR_PROXY_REROUTE == err && OB_ISNULL(extra_err_info))) {
+  if (OB_SUCCESS == err) {
     // @BUG work around
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("error code is incorrect", K(err));
@@ -417,7 +392,7 @@ int ObMPPacketSender::send_error_packet(int err,
       }
     }
     if (OB_SUCC(ret)) {
-      ObArenaAllocator allocator(ObMemAttr(conn_->tenant_id_, "WARN_MSG"));
+      ObArenaAllocator allocator(ObMemAttr("WARN_MSG"));
       ObString new_message = message;
       ObCollationType client_cs_type = CS_TYPE_UTF8MB4_BIN;
 
@@ -582,10 +557,6 @@ int ObMPPacketSender::send_error_packet(int err,
             ok_param.is_partition_hit_ = is_partition_hit;
             ok_param.take_trace_id_to_client_ = true;
           }
-          if (OB_ERR_PROXY_REROUTE == err) {
-            ObFeedbackRerouteInfo *rt_info = static_cast<ObFeedbackRerouteInfo *>(extra_err_info);
-            ok_param.reroute_info_ = rt_info;
-          }
           if (OB_FAIL(send_ok_packet(*session, ok_param, &epacket))) {
             LOG_WARN("failed to send ok packet", K(ok_param), K(ret));
           }
@@ -630,11 +601,9 @@ int ObMPPacketSender::get_session(ObSQLSessionInfo *&sess_info)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn or sessoin mgr is NULL", K(ret), KP(conn_), K(GCTX.session_mgr_));
   } else if (OB_FAIL(GCTX.session_mgr_->get_session(conn_->sessid_, sess_info))) {
-    LOG_WARN("get session fail", K(ret), "sessid", conn_->sessid_,
-              "proxy_sessid", conn_->proxy_sessid_);
+    LOG_WARN("get session fail", K(ret), "sessid", conn_->sessid_);
   } else {
-    NG_TRACE_EXT(session, OB_ID(sid), sess_info->get_server_sid(),
-                 OB_ID(tenant_id), sess_info->get_priv_tenant_id());
+    NG_TRACE_EXT(session, OB_ID(sid), sess_info->get_server_sid());
   }
   return ret;
 }
@@ -741,9 +710,6 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
             } else {
               if (OB_FAIL(ObMPUtils::add_changed_session_info(okp, session))) {
                 SERVER_LOG(WARN, "fail to add changed session info", K(ret));
-              } else if (ok_param.reroute_info_ != NULL
-                         && OB_FAIL(ObMPUtils::add_client_reroute_info(okp, session, *ok_param.reroute_info_))) {
-                LOG_WARN("failed to add reroute info", K(ret));
               }
             }
           }
@@ -776,10 +742,8 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
       flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = (ac ? 1 : 0);
       flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = ok_param.has_more_result_;
       flags.status_flags_.OB_SERVER_STATUS_NO_BACKSLASH_ESCAPES = is_no_backslash_escapes;
-      if (!conn_->is_proxy_) {
-        // in java client or others, use slow query bit to indicate partition hit or not
-        flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !ok_param.is_partition_hit_;
-      }
+      // in java client or others, use slow query bit to indicate partition hit or not
+      flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !ok_param.is_partition_hit_;
       flags.status_flags_.OB_SERVER_STATUS_CURSOR_EXISTS = ok_param.cursor_exist_ ? 1 : 0;
       flags.status_flags_.OB_SERVER_STATUS_LAST_ROW_SENT = ok_param.send_last_row_ ? 1 : 0;
       flags.status_flags_.OB_SERVER_PS_OUT_PARAMS = ok_param.has_pl_out_ ? 1 : 0;
@@ -865,7 +829,6 @@ void ObMPPacketSender::disconnect()
       if (conn != NULL) {
         LOG_WARN_RET(OB_SUCCESS, "server close connection",
                  "sessid", conn->sessid_,
-                 "proxy_sessid", conn->proxy_sessid_,
                  "stack", lbt());
         sql::ObSQLSessionInfo *session = NULL;
         get_session(session);
@@ -1192,20 +1155,8 @@ int ObMPPacketSender::update_transmission_checksum_flag(const ObSQLSessionInfo &
   if (OB_UNLIKELY(!conn_valid_)) {
     ret = OB_CONNECT_ERROR;
     LOG_WARN("connection in error, maybe has disconnected", K(ret));
-  } else if (conn_->proxy_cap_flags_.is_checksum_swittch_support()) {
-    bool is_enable_checksum = false;
-    if (OB_FAIL(session.is_use_transmission_checksum(is_enable_checksum))) {
-      if (OB_ERR_SYS_VARIABLE_UNKNOWN == ret || OB_SYS_VARS_MAYBE_DIFF_VERSION == ret) {
-        LOG_INFO("is enable checksum system variable maby from diff version");
-        ret = OB_SUCCESS;
-      } else {
-        LOG_WARN("is use transmission checksum failed", K(ret));
-      }
-    } else {
-      comp_context_.is_checksum_off_ = !is_enable_checksum;
-      proto20_context_.is_checksum_off_ = !is_enable_checksum;
-    }
   }
+  // obproxy support removed: OB_CAP_CHECKSUM_SWITCH was proxy-only
   return ret;
 }
 

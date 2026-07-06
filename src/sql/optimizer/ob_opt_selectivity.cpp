@@ -18,8 +18,8 @@
 #include "ob_opt_selectivity.h"
 #include "sql/rewrite/ob_query_range_define.h"
 #include "sql/rewrite/ob_transform_utils.h"
-#include "share/stat/ob_opt_stat_manager.h"
-#include "share/stat/ob_dbms_stats_utils.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/ob_sel_estimator.h"
 using namespace oceanbase::common;
@@ -444,9 +444,7 @@ int OptTableMeta::init_column_meta(const OptSelectivityCtx &ctx,
     if ((OB_ISNULL(ctx.get_opt_stat_manager()) || OB_ISNULL(ctx.get_session_info()))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret), K(ctx.get_opt_stat_manager()), K(ctx.get_session_info()));
-    } else if (OB_FAIL(ctx.get_opt_stat_manager()->batch_get_column_stats(
-                   ctx.get_session_info()->get_effective_tenant_id(),
-                   ref_table_id_,
+    } else if (OB_FAIL(ctx.get_opt_stat_manager()->batch_get_column_stats(ref_table_id_,
                    stat_parts_,
                    column_ids,
                    rows_,
@@ -1189,7 +1187,7 @@ int ObOptSelectivity::calculate_selectivity(const OptTableMetas &table_metas,
   } else if (OB_FAIL(ObOptimizerUtil::append_exprs_no_dup(predicates, input_predicates))) {
     LOG_WARN("failed to assign", K(ret));
   } else {
-    factory.get_allocator().set_tenant_id(ctx.get_session_info()->get_effective_tenant_id());
+    
   }
   // remove redundant predicates
   for (int64_t i = 0; OB_SUCC(ret) && i < ctx.get_deduce_infos().count(); i ++) {
@@ -1256,7 +1254,7 @@ int ObOptSelectivity::calculate_join_selectivity(const OptTableMetas &table_meta
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else {
-    factory.get_allocator().set_tenant_id(ctx.get_session_info()->get_effective_tenant_id());
+    
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < predicates.count(); ++i) {
     const ObRawExpr *qual = predicates.at(i);
@@ -1359,7 +1357,7 @@ int ObOptSelectivity::calc_selectivity_by_dynamic_sampling(const OptSelectivityC
                                          ds_result_items))) {
     LOG_WARN("failed to init ds result items", K(ret));
   } else {
-    ObArenaAllocator allocator("ObOpTableDS", OB_MALLOC_NORMAL_BLOCK_SIZE, ctx.get_session_info()->get_effective_tenant_id());
+    ObArenaAllocator allocator("ObOpTableDS", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObDynamicSampling dynamic_sampling(const_cast<ObOptimizerContext &>(ctx.get_opt_ctx()), allocator);
     int64_t start_time = ObTimeUtility::current_time();
     bool throw_ds_error = false;
@@ -1744,7 +1742,7 @@ int ObOptSelectivity::get_column_range_sel(const OptTableMetas &table_metas,
   const ObDMLStmt *stmt = ctx.get_stmt();
   uint64_t tid = col_expr.get_table_id();
   uint64_t cid = col_expr.get_column_id();
-  ObArenaAllocator allocator("ObSelRange", OB_MALLOC_NORMAL_BLOCK_SIZE, ctx.get_session_info()->get_effective_tenant_id());
+  ObArenaAllocator allocator("ObSelRange", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObQueryRangeArray ranges;
   ObSEArray<ColumnItem, 1> column_items;
   bool use_hist = false;
@@ -1828,7 +1826,7 @@ int ObOptSelectivity::get_column_range_min_max(const OptSelectivityCtx &ctx,
   const ObDMLStmt *stmt = ctx.get_stmt();
   uint64_t tid = 0;
   uint64_t cid = 0;
-  ObArenaAllocator allocator("ObSelRange", OB_MALLOC_NORMAL_BLOCK_SIZE, ctx.get_session_info()->get_effective_tenant_id());
+  ObArenaAllocator allocator("ObSelRange", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObQueryRangeArray ranges;
   ObSEArray<ColumnItem, 1> column_items;
   if (OB_ISNULL(stmt) || OB_ISNULL(col_expr) ||
@@ -2348,8 +2346,7 @@ int ObOptSelectivity::get_column_min_max(const OptTableMetas &table_metas,
         LOG_WARN("get unexpected null", K(ret), K(ctx.get_opt_stat_manager()),
                                         K(ctx.get_session_info()));
       } else if (table_meta->use_opt_stat() && 
-                 OB_FAIL(ctx.get_opt_stat_manager()->get_column_stat(ctx.get_session_info()->get_effective_tenant_id(),
-                                                                     table_meta->get_ref_table_id(),
+                 OB_FAIL(ctx.get_opt_stat_manager()->get_column_stat(table_meta->get_ref_table_id(),
                                                                      table_meta->get_stat_parts(),
                                                                      column_id,
                                                                      table_meta->get_rows(),
@@ -2518,7 +2515,6 @@ int ObOptSelectivity::get_histogram_by_column(const OptTableMetas &table_metas,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(ctx.get_session_info()));
   } else if (OB_FAIL(ctx.get_opt_stat_manager()->get_column_stat(
-            ctx.get_session_info()->get_effective_tenant_id(),
             table_meta->get_ref_table_id(),
             table_meta->get_hist_parts().at(0),
             column_id,
@@ -3712,7 +3708,7 @@ int ObOptSelectivity::classify_quals_deprecated(const OptSelectivityCtx &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else {
-    factory.get_allocator().set_tenant_id(ctx.get_session_info()->get_effective_tenant_id());
+    
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < quals.count(); ++i) {
     column_exprs.reset();
@@ -3819,7 +3815,7 @@ int ObOptSelectivity::classify_quals(const OptTableMetas &table_metas,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else {
-    factory.get_allocator().set_tenant_id(ctx.get_session_info()->get_effective_tenant_id());
+    
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < quals.count(); ++i) {
     column_exprs.reset();
@@ -4061,7 +4057,6 @@ int ObOptSelectivity::get_join_pred_rows(const ObHistogram &left_hist,
 //   if (OB_FAIL(collect_ds_join_param(table_metas, ctx, predicates, ds_join_param))) {
 //     LOG_WARN("failed to collect ds join param", K(ret));
 //   } else if (ds_join_param.is_valid()) {
-//     ObArenaAllocator allocator("ObOpJoinDS", OB_MALLOC_NORMAL_BLOCK_SIZE, ctx.get_opt_ctx().get_session_info()->get_effective_tenant_id());
 //     ObDynamicSampling dynamic_sampling(const_cast<ObOptimizerContext&>(ctx.get_opt_ctx()),
 //                                           allocator,
 //                                           ObDynamicSamplingType::OB_JOIN_DS);
@@ -4920,7 +4915,6 @@ int ObHistSelHelper::init(const OptTableMetas &table_metas,
       ObOptColumnStatHandle column_stat;
       ObGlobalTableStat stat;
       if (OB_FAIL(ctx.get_opt_stat_manager()->get_column_stat(
-                    ctx.get_session_info()->get_effective_tenant_id(),
                     table_meta->get_ref_table_id(),
                     table_meta->get_hist_parts().at(i),
                     column_id,
@@ -4931,7 +4925,6 @@ int ObHistSelHelper::init(const OptTableMetas &table_metas,
                 !column_stat.stat_->get_histogram().is_valid()) {
         // do nothing
       } else if (OB_FAIL(ctx.get_opt_stat_manager()->get_table_stat(
-                    ctx.get_session_info()->get_effective_tenant_id(),
                     table_meta->get_ref_table_id(),
                     table_meta->get_hist_parts().at(i),
                     1.0,

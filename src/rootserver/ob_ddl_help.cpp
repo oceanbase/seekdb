@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX RS
 #include "rootserver/ob_ddl_help.h"
+#include "observer/schema/ob_schema_service_sql_impl.h"
 #include "rootserver/ob_ddl_service.h"
-#include "share/schema/ob_schema_service_sql_impl.h"
 namespace oceanbase
 {
 using namespace common;
@@ -60,7 +60,7 @@ int ObTableGroupHelp::add_tables_to_tablegroup(ObMySQLTransaction &trans,
   } else {
     ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
     const bool is_index = false;
-    const uint64_t tenant_id = arg.tenant_id_;
+    
     ObString tablegroup_name = tablegroup_schema.get_tablegroup_name();
     // first table is used for tablegroup is empty, but add list's num more than one to compare partition
     const ObTableSchema *first_table_schema = NULL;
@@ -74,18 +74,17 @@ int ObTableGroupHelp::add_tables_to_tablegroup(ObMySQLTransaction &trans,
       uint64_t database_id = common::OB_INVALID_ID;
       //check database exist
       if (OB_FAIL(schema_guard.get_database_id(
-                  tenant_id, table_item.database_name_, database_id))) {
+                  table_item.database_name_, database_id))) {
         LOG_WARN("failed to get database schema!", K(database_id),
-                 K(tenant_id), K(table_item));
-      } else if (OB_FAIL(schema_guard.get_table_schema(
-                  tenant_id, database_id, table_item.table_name_, is_index, table_schema))) {
-        LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(database_id), K(table_item));
+                 K(table_item));
+      } else if (OB_FAIL(schema_guard.get_table_schema( database_id, table_item.table_name_, is_index, table_schema))) {
+        LOG_WARN("fail to get table schema", KR(ret), K(database_id), K(table_item));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         ObCStringHelper helper;
         LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(table_item.database_name_),
                                            helper.convert(table_item.table_name_));
-        LOG_WARN("table not exist!", KR(ret), K(tenant_id), K(database_id), K(table_item));
+        LOG_WARN("table not exist!", KR(ret), K(database_id), K(table_item));
       } else if (is_inner_table(table_schema->get_table_id())) {
         //the tablegroup of sys table must be oceanbase
         ret = OB_OP_NOT_ALLOW;
@@ -105,9 +104,6 @@ int ObTableGroupHelp::add_tables_to_tablegroup(ObMySQLTransaction &trans,
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("alter tablegroup of materialized view log is not supported", KR(ret));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter tablegroup of materialized view log is");
-      } else if (table_schema->is_external_table()) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter tablegroup of external table is");
       } else {
         if (is_contain(table_ids, table_schema->get_table_id())) {
           duplicate_table = true;
@@ -137,7 +133,7 @@ int ObTableGroupHelp::add_tables_to_tablegroup(ObMySQLTransaction &trans,
         } else {
           ObString sql_str = sql.string();
           if (OB_FAIL(ddl_operator.alter_tablegroup(schema_guard, new_table_schema, trans, &sql_str))) {
-            LOG_WARN("ddl operator alter tablegroup failed", KR(ret), K(tenant_id), K(tablegroup_id));
+            LOG_WARN("ddl operator alter tablegroup failed", KR(ret), K(tablegroup_id));
           } else if (table_items_count >= 2 && i == 0) {
             first_table_schema = table_schema;
           }
@@ -179,11 +175,11 @@ int ObTableGroupHelp::check_table_alter_tablegroup(
     const share::schema::ObTablegroupSchema *new_tg = nullptr;
     const int64_t orig_tg_id = orig_table_schema.get_tablegroup_id();
     const int64_t new_tg_id = new_table_schema.get_tablegroup_id();
-    const uint64_t tenant_id = orig_table_schema.get_tenant_id();
+    
     if (OB_INVALID_ID == orig_tg_id) {
       // Did not belong to any tablegroup
-    } else if (OB_FAIL(schema_guard.get_tablegroup_schema(tenant_id, orig_tg_id, orig_tg))) {
-      LOG_WARN("fail to get tablegroup schema", KR(ret), K(tenant_id), K(orig_tg_id));
+    } else if (OB_FAIL(schema_guard.get_tablegroup_schema( orig_tg_id, orig_tg))) {
+      LOG_WARN("fail to get tablegroup schema", KR(ret), K(orig_tg_id));
     } else if (OB_UNLIKELY(nullptr == orig_tg)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("orig tg ptr is null", KR(ret), K(orig_tg_id));
@@ -191,8 +187,8 @@ int ObTableGroupHelp::check_table_alter_tablegroup(
     if (OB_FAIL(ret)) {
     } else if (OB_INVALID_ID == new_tg_id) {
       // Did not belong to any tablegroup
-    } else if (OB_FAIL(schema_guard.get_tablegroup_schema(tenant_id, new_tg_id, new_tg))) {
-      LOG_WARN("fail to get tablegroup schema", KR(ret), K(tenant_id), K(new_tg_id));
+    } else if (OB_FAIL(schema_guard.get_tablegroup_schema( new_tg_id, new_tg))) {
+      LOG_WARN("fail to get tablegroup schema", KR(ret), K(new_tg_id));
     } else if (OB_UNLIKELY(nullptr == new_tg)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("orig tg ptr is null", KR(ret), K(new_tg_id));
@@ -218,7 +214,7 @@ int ObTableGroupHelp::check_table_partition_in_tablegroup(const ObTableSchema *f
                                                           const ObTablegroupSchema *tablegroup)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = table.get_tenant_id();
+  
   const uint64_t tablegroup_id = table.get_tablegroup_id();
   const ObTablegroupSchema *tablegroup_schema = tablegroup;
   if (OB_UNLIKELY(OB_INVALID_ID == tablegroup_id)) {
@@ -230,9 +226,9 @@ int ObTableGroupHelp::check_table_partition_in_tablegroup(const ObTableSchema *f
   } else if (OB_NOT_NULL(tablegroup_schema) && OB_UNLIKELY(tablegroup_id != tablegroup_schema->get_tablegroup_id())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablegroup id is not match with specified tablegroup schema id", KR(ret), K(tablegroup_id), KPC(tablegroup_schema));
-  } else if (OB_ISNULL(tablegroup_schema) && OB_FAIL(schema_guard.get_tablegroup_schema(tenant_id,
+  } else if (OB_ISNULL(tablegroup_schema) && OB_FAIL(schema_guard.get_tablegroup_schema(
       tablegroup_id, tablegroup_schema))) {
-    LOG_WARN("fail to get tablegroup schema", KR(ret), K(tenant_id), KT(tablegroup_id));
+    LOG_WARN("fail to get tablegroup schema", KR(ret), KT(tablegroup_id));
   } else if (OB_ISNULL(tablegroup_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablegroup schema is null", KR(ret), KT(tablegroup_id));
@@ -269,12 +265,12 @@ int ObTableGroupHelp::check_all_table_partition_option(const ObTablegroupSchema 
   int ret = OB_SUCCESS;
   is_matched = true;
   ObSqlString user_error;
-  const uint64_t tenant_id = tablegroup_schema.get_tenant_id();
+  
   const uint64_t tablegroup_id = tablegroup_schema.get_tablegroup_id();
   ObArray<const schema::ObSimpleTableSchemaV2 *> table_schemas;
 
-  if (OB_FAIL(schema_guard.get_table_schemas_in_tablegroup(tenant_id, tablegroup_id, table_schemas))) {
-    LOG_WARN("fail get table schemas from tablegroup", KR(ret), K(tenant_id), K(tablegroup_id));
+  if (OB_FAIL(schema_guard.get_table_schemas_in_tablegroup(tablegroup_id, table_schemas))) {
+    LOG_WARN("fail get table schemas from tablegroup", KR(ret), K(tablegroup_id));
   } else if (0 == table_schemas.count()) {
     // do nothing
   } else {
@@ -317,10 +313,9 @@ int ObTableGroupHelp::check_table_partition_option(const ObTableSchema *table_sc
   if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table schema is NULL", KR(ret));
-  } else if (OB_FAIL(schema_guard.get_primary_table_schema_in_tablegroup(table_schema->get_tenant_id(),
-                                                                         table_schema->get_tablegroup_id(),
+  } else if (OB_FAIL(schema_guard.get_primary_table_schema_in_tablegroup(table_schema->get_tablegroup_id(),
                                                                          tmp_table_schema))) {
-    LOG_WARN("fail get table schemas from tablegroup", KR(ret), K(table_schema->get_tenant_id()), K(table_schema->get_tablegroup_id()));
+    LOG_WARN("fail get table schemas from tablegroup", KR(ret), K(table_schema->get_tablegroup_id()));
   } else if (OB_ISNULL(first_table_schema) && OB_ISNULL(tmp_table_schema)) {
     // do nothing
   } else {

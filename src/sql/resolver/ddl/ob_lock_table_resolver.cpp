@@ -52,13 +52,12 @@ int ObLockTableResolver::resolve_mysql_mode_(const ParseNode &parse_tree)
   ParseNode *lock_list = NULL;
   ObString db_name;
 
-  uint64_t tenant_id = session_info_->get_effective_tenant_id();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
-  if (!tenant_config.is_valid()) {
+  
+  if (!true) {
     ret = OB_INVALID_ARGUMENT;
     // if tenant config is invalid, this config will be set as false
-    LOG_WARN("tenant config is invalid", K(tenant_id));
-  } else if (tenant_config->enable_lock_priority) {
+    LOG_WARN("tenant config is invalid");
+  } else if (GCONF.enable_lock_priority) {
     ObLockTableStmt *lock_stmt = static_cast<ObLockTableStmt *>(stmt_);
     if (parse_tree.num_child_ == 0) {
       // it is unlock table stmt
@@ -96,7 +95,7 @@ int ObLockTableResolver::resolve_mysql_mode_(const ParseNode &parse_tree)
 
 int ObLockTableResolver::resolve_mysql_lock_node_(const ParseNode &lock_node)
 {
-  // TODO: forbid dblink、function table、json table's lock table.
+  // TODO: forbid function table and json table's lock table.
   int ret = OB_SUCCESS;
   if (lock_node.type_ != T_MYSQL_LOCK_NODE) {
     ret = OB_ERR_UNEXPECTED;

@@ -17,17 +17,17 @@
 #ifndef SRC_SQL_ENGINE_BASIC_OB_OPTIMIZER_STATS_GATHERING_OP_H_
 #define SRC_SQL_ENGINE_BASIC_OB_OPTIMIZER_STATS_GATHERING_OP_H_
 #include "sql/engine/ob_operator.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "sql/engine/expr/ob_expr_sys_op_opnsize.h"
 #include "lib/hash/ob_hashmap.h"
 #include "sql/engine/px/datahub/components/ob_dh_opt_stats_gather.h"
-#include "share/stat/ob_opt_table_stat.h"
-#include "share/stat/ob_opt_column_stat.h"
-#include "share/stat/ob_opt_osg_column_stat.h"
+#include "sql/optimizer/stat/ob_opt_table_stat.h"
+#include "sql/optimizer/stat/ob_opt_column_stat.h"
+#include "sql/optimizer/stat/ob_opt_osg_column_stat.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
-#include "share/stat/ob_basic_stats_estimator.h"
-#include "share/stat/ob_dbms_stats_executor.h"
-#include "share/stat/ob_stat_define.h"
+#include "sql/optimizer/stat/ob_basic_stats_estimator.h"
+#include "sql/optimizer/stat/ob_dbms_stats_executor.h"
+#include "sql/optimizer/stat/ob_stat_define.h"
 
 namespace oceanbase
 {
@@ -110,9 +110,9 @@ private:
   // generate stat_param that is used to write inner_table.
   int generate_stat_param(ObTableStatParam &param);
 
-  // get tab stat by key(tenant_id, table_id, partition_id), if NOT_EXISTS, alloc a new one.
+  // get tab stat by key(tenant, table_id, partition_id), if NOT_EXISTS, alloc a new one.
   int get_tab_stat_by_key(ObOptTableStat::Key &key, ObOptTableStat *&tab_stat);
-  // get tab stat by key(tenant_id, table_id, partition_id, column_id), if NOT_EXISTS, alloc a new one.
+  // get tab stat by key(tenant, table_id, partition_id, column_id), if NOT_EXISTS, alloc a new one.
   int get_col_stat_by_key(ObOptColumnStat::Key &key, ObOptOSGColumnStat *&osg_col_stat);
 
   int merge_tab_stat(ObOptTableStat *src_tab_stat);
@@ -122,7 +122,7 @@ private:
   int get_tab_stats(common::ObIArray<ObOptTableStat*>& tab_stats); 
   int get_col_stats(common::ObIArray<ObOptColumnStat*>& col_stats); 
 
-  uint64_t tenant_id_;
+  
 
   TabStatIndMap table_stats_map_;
   OSGColStatIndMap osg_col_stats_map_;

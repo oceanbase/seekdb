@@ -21,6 +21,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "mtlenv/mock_tenant_module_env.h"
 #include "storage/tablet/ob_tablet_binding_info.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 
@@ -385,6 +386,8 @@ public:
   virtual ~TestTablet();
   virtual void SetUp();
   virtual void TearDown();
+  static void SetUpTestCase();
+  static void TearDownTestCase();
   void pull_ddl_memtables(ObIArray<ObDDLKV *> &ddl_kvs)
   {
     for (int64_t i = 0; i < ddl_kv_count_; ++i) {
@@ -407,6 +410,20 @@ TestTablet::TestTablet()
 
 TestTablet::~TestTablet()
 {
+}
+
+void TestTablet::SetUpTestCase()
+{
+  ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
+  EXPECT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
+}
+
+void TestTablet::TearDownTestCase()
+{
+  MockTenantModuleEnv::get_instance().destroy();
+  ObTimerService::get_instance().stop();
+  ObTimerService::get_instance().wait();
+  ObTimerService::get_instance().destroy();
 }
 
 void TestTablet::SetUp()

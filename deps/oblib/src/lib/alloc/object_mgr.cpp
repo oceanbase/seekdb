@@ -25,7 +25,7 @@ SubObjectMgr::SubObjectMgr(ObTenantCtxAllocator &ta,
                            const uint32_t ablock_size,
                            const bool enable_dirty_list,
                            IBlockMgr *blk_mgr)
-  : IBlockMgr(ta.get_tenant_id(), ta.get_ctx_id()),
+  : IBlockMgr(ta.get_ctx_id()),
     ta_(ta),
     mutex_(common::ObLatchIds::ALLOC_OBJECT_LOCK),
     normal_locker_(mutex_), no_log_locker_(mutex_),
@@ -76,7 +76,7 @@ ObjectMgr::ObjectMgr(ObTenantCtxAllocator &ta,
                      int parallel,
                      bool enable_dirty_list,
                      IBlockMgr *blk_mgr)
-  : IBlockMgr(ta.get_tenant_id(), ta.get_ctx_id()),
+  : IBlockMgr(ta.get_ctx_id()),
     ta_(ta),
     enable_no_log_(enable_no_log),
     ablock_size_(ablock_size),
@@ -261,11 +261,10 @@ SubObjectMgr *ObjectMgr::create_sub_mgr()
 {
   SubObjectMgr *sub_mgr = nullptr;
   ObMemAttr attr;
-  attr.tenant_id_ = OB_SYS_TENANT_ID;
+  
   attr.label_ = common::ObModIds::OB_TENANT_CTX_ALLOCATOR;
   attr.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
-  auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(attr.tenant_id_,
-    attr.ctx_id_);
+  auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(attr.ctx_id_);
 
   class SubObjectMgrWrapper {
   public:
@@ -383,7 +382,7 @@ bool ObjectMgr::check_has_unfree(char *first_label, char *first_bt)
 ObjectMgrV2::ObjectMgrV2(int parallel, IBlockMgr *blk_mgr)
   : parallel_(parallel)
 {
-  if (blk_mgr->get_tenant_id() == OB_SERVER_TENANT_ID &&
+  if (true &&
       blk_mgr->get_ctx_id() == ObCtxIds::GLIBC) {
     parallel_ = OBJECT_SET_CNT;
   }

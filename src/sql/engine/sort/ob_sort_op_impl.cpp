@@ -570,8 +570,8 @@ bool ObSortOpImpl::Compare::operator()(
 ObSortOpImpl::ObSortOpImpl() :
   inited_(false), local_merge_sort_(false), need_rewind_(false), got_first_row_(false),
   sorted_(false), enable_encode_sortkey_(false),
-  page_allocator_("PartSortBucket", MTL_ID(), ObCtxIds::WORK_AREA), mem_context_(NULL),
-  mem_entify_guard_(mem_context_), tenant_id_(OB_INVALID_ID), sort_collations_(nullptr),
+  page_allocator_("PartSortBucket", ObCtxIds::WORK_AREA), mem_context_(NULL),
+  mem_entify_guard_(mem_context_), sort_collations_(nullptr),
   sort_cmp_funs_(nullptr), eval_ctx_(nullptr), datum_store_(ObModIds::OB_SQL_SORT_ROW),
   inmem_row_size_(0), mem_check_interval_mask_(1), row_idx_(0), heap_iter_begin_(false),
   imms_heap_(NULL), ems_heap_(NULL), next_stored_row_func_(&ObSortOpImpl::array_next_stored_row),
@@ -589,8 +589,8 @@ ObSortOpImpl::ObSortOpImpl() :
 ObSortOpImpl::ObSortOpImpl(ObMonitorNode &op_monitor_info)
   : inited_(false), local_merge_sort_(false), need_rewind_(false),
     got_first_row_(false), sorted_(false), enable_encode_sortkey_(false),
-    page_allocator_("PartSortBucket", MTL_ID(), ObCtxIds::WORK_AREA), mem_context_(NULL),
-    mem_entify_guard_(mem_context_), tenant_id_(OB_INVALID_ID), sort_collations_(nullptr),
+    page_allocator_("PartSortBucket", ObCtxIds::WORK_AREA), mem_context_(NULL),
+    mem_entify_guard_(mem_context_), sort_collations_(nullptr),
     sort_cmp_funs_(nullptr), eval_ctx_(nullptr), datum_store_(ObModIds::OB_SQL_SORT_ROW), inmem_row_size_(0), mem_check_interval_mask_(1),
     row_idx_(0), heap_iter_begin_(false), imms_heap_(NULL), ems_heap_(NULL),
     next_stored_row_func_(&ObSortOpImpl::array_next_stored_row),
@@ -704,7 +704,6 @@ int ObSortOpImpl::enlarge_partition_topn_buckets()
 // Set the note in ObPrefixSortImpl::init(): %sort_columns may be zero, to compatible with
 // the wrong generated prefix sort.
 int ObSortOpImpl::init(
-  const uint64_t tenant_id,
   const ObIArray<ObSortFieldCollation> *sort_collations,
   const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
   ObEvalCtx *eval_ctx,
@@ -726,14 +725,11 @@ int ObSortOpImpl::init(
   if (is_inited()) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
   } else if (OB_ISNULL(sort_collations) || OB_ISNULL(sort_cmp_funs)
              || OB_ISNULL(eval_ctx) || OB_ISNULL(exec_ctx)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument: argument is null", K(ret),
-              K(tenant_id), K(sort_collations), K(sort_cmp_funs), K(eval_ctx));
+              K(sort_collations), K(sort_cmp_funs), K(eval_ctx));
   } else if (OB_FAIL(comp_.init(sort_collations, sort_cmp_funs,
                       exec_ctx, enable_encode_sortkey && !(part_cnt > 0)))) {
     LOG_WARN("failed to init compare functions", K(ret));
@@ -741,7 +737,7 @@ int ObSortOpImpl::init(
     local_merge_sort_ = in_local_order;
     need_rewind_ = need_rewind;
     enable_encode_sortkey_ = enable_encode_sortkey;
-    tenant_id_ = tenant_id;
+    
     sort_collations_ = sort_collations;
     sort_cmp_funs_ = sort_cmp_funs;
     eval_ctx_ = eval_ctx;
@@ -756,7 +752,7 @@ int ObSortOpImpl::init(
     is_fetch_with_ties_ = is_fetch_with_ties;
     int64_t batch_size = eval_ctx_->max_batch_size_;
     lib::ContextParam param;
-    param.set_mem_attr(tenant_id, ObModIds::OB_SQL_SORT_ROW, ObCtxIds::WORK_AREA)
+    param.set_mem_attr(ObModIds::OB_SQL_SORT_ROW, ObCtxIds::WORK_AREA)
       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (NULL == mem_context_ && OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
       LOG_WARN("create entity failed", K(ret));
@@ -764,8 +760,7 @@ int ObSortOpImpl::init(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null memory entity returned", K(ret));
     } else if (OB_FAIL(datum_store_.init(
-        INT64_MAX /* mem limit, big enough to hold all rows in memory */,
-        tenant_id_, ObCtxIds::WORK_AREA, ObModIds::OB_SQL_SORT_ROW,
+        INT64_MAX, ObCtxIds::WORK_AREA, ObModIds::OB_SQL_SORT_ROW,
         false /*+ disable dump */,
         0, /* row_extra_size */
         default_block_size))) {
@@ -773,7 +768,7 @@ int ObSortOpImpl::init(
     } else if (use_heap_sort_ && OB_FAIL(init_topn())) {
       LOG_WARN("init topn failed", K(ret));
     } else if (use_heap_sort_ && nullptr != pd_topn_filter_info && pd_topn_filter_info->enabled_
-               && OB_FAIL(pd_topn_filter_.init(is_fetch_with_ties, pd_topn_filter_info, tenant_id,
+               && OB_FAIL(pd_topn_filter_.init(is_fetch_with_ties, pd_topn_filter_info,
                                                sort_collations, exec_ctx, mem_context_))) {
       LOG_WARN("failed to init pd_topn_filter_");
     } else if (use_partition_topn_sort_ && OB_FAIL(init_partition_topn(est_rows))) {
@@ -970,8 +965,7 @@ int ObSortOpImpl::build_chunk(const int64_t level, Input &input, int64_t extra_s
       (&mem_context_->get_malloc_allocator()), level, use_compact_store()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret));
-  } else if (OB_FAIL(chunk->datum_store_.init(1/*+ mem limit, small limit for dump immediately */,
-                        tenant_id_, ObCtxIds::WORK_AREA, ObModIds::OB_SQL_SORT_ROW,
+  } else if (OB_FAIL(chunk->datum_store_.init(1, ObCtxIds::WORK_AREA, ObModIds::OB_SQL_SORT_ROW,
                         true/*+ enable dump */, extra_size/* for InMemoryTopnSort */, true,
                         compress_type_, sort_exprs_))) {
     LOG_WARN("init row store failed", K(ret));
@@ -1128,7 +1122,6 @@ int ObSortOpImpl::before_add_row()
       int64_t size = OB_INVALID_ID == input_rows_ ? 0 : input_rows_ * input_width_;
       if (OB_FAIL(sql_mem_processor_.init(
                   &mem_context_->get_malloc_allocator(),
-                  tenant_id_,
                   size, op_monitor_info_->op_type_, op_monitor_info_->op_id_, exec_ctx_))) {
         LOG_WARN("failed to init sql mem processor", K(ret));
       } else {
@@ -2405,8 +2398,7 @@ int ObSortOpImpl::add_heap_sort_row(const common::ObIArray<ObExpr*> &exprs,
     // heap sort will extend rowsize twice to reuse the space
     int64_t size = OB_INVALID_ID == input_rows_ ? 0 : input_rows_ * input_width_ * 2;
     if (OB_FAIL(sql_mem_processor_.init(
-               &mem_context_->get_malloc_allocator(),
-               tenant_id_, size, op_monitor_info_->op_type_, op_monitor_info_->op_id_, &eval_ctx_->exec_ctx_))) {
+               &mem_context_->get_malloc_allocator(), size, op_monitor_info_->op_type_, op_monitor_info_->op_id_, &eval_ctx_->exec_ctx_))) {
       LOG_WARN("failed to init sql mem processor", K(ret));
     } 
   } else {
@@ -2919,8 +2911,7 @@ void ObPrefixSortImpl::reset()
   ObSortOpImpl::reset();
 }
 
-int ObPrefixSortImpl::init(const int64_t tenant_id,
-    const int64_t prefix_pos,
+int ObPrefixSortImpl::init(const int64_t prefix_pos,
     const common::ObIArray<ObExpr *> &all_exprs,
     const ObIArray<ObSortFieldCollation> *sort_collations,
     const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
@@ -2937,13 +2928,12 @@ int ObPrefixSortImpl::init(const int64_t tenant_id,
   if (is_inited()) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_INVALID_ID == tenant_id
-      || OB_ISNULL(sort_collations) || OB_ISNULL(sort_cmp_funs)
+  } else if (OB_ISNULL(sort_collations) || OB_ISNULL(sort_cmp_funs)
       || OB_ISNULL(eval_ctx) || OB_ISNULL(child_op) || OB_ISNULL(self_op)
       || prefix_pos <= 0 || prefix_pos > sort_collations->count()
       || sort_collations->count() != sort_cmp_funs->count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(prefix_pos));
+    LOG_WARN("invalid argument", K(ret), K(prefix_pos));
   } else {
     int64_t batch_size = eval_ctx->max_batch_size_;
     prefix_pos_ = prefix_pos;
@@ -2964,7 +2954,7 @@ int ObPrefixSortImpl::init(const int64_t tenant_id,
     self_op_ = self_op;
     exec_ctx_ = &exec_ctx;
     sort_row_count_ = &sort_row_cnt;
-    if (OB_FAIL(ObSortOpImpl::init(tenant_id, &base_sort_collations_, &base_sort_cmp_funs_,
+    if (OB_FAIL(ObSortOpImpl::init(&base_sort_collations_, &base_sort_cmp_funs_,
                                    eval_ctx, &exec_ctx, enable_encode_sortkey, false, false,
                                    0, topn_cnt, is_fetch_with_ties))) {
       LOG_WARN("sort impl init failed", K(ret));
@@ -2985,8 +2975,7 @@ int ObPrefixSortImpl::init(const int64_t tenant_id,
         LOG_WARN("allocate memory failed",
                  K(ret), K(batch_size), KP(selector_), KP(immediate_prefix_rows_));
       } else if (OB_FAIL(immediate_prefix_store_.init(
-                  INT64_MAX /* mem limit, big enough to hold all rows in memory */,
-                  tenant_id_, ObCtxIds::WORK_AREA, ObModIds::OB_SQL_SORT_ROW,
+                  INT64_MAX, ObCtxIds::WORK_AREA, ObModIds::OB_SQL_SORT_ROW,
                   false /*+ disable dump */))) {
         LOG_WARN("init row store failed", K(ret));
       } else if (OB_FAIL(brs_holder_.init(all_exprs, *eval_ctx))) {

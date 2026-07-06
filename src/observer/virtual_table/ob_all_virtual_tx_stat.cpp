@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tx_stat.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "observer/ob_server.h"
 
@@ -32,7 +33,6 @@ void ObGVTxStat::reset()
   ctx_addr_buffer_[0] = '\0';
 
   ObVirtualTableScannerIterator::reset();
-  all_tenants_.reset();
   xid_.reset();
   init_ = false;
   cstring_helper_.reset();
@@ -45,7 +45,6 @@ void ObGVTxStat::destroy()
   memset(ctx_addr_buffer_, 0, CTX_ADDR_BUFFER_SIZE);
 
   ObVirtualTableScannerIterator::reset();
-  all_tenants_.reset();
   xid_.reset();
   init_ = false;
   cstring_helper_.reset();
@@ -59,15 +58,14 @@ int ObGVTxStat::prepare_start_to_read_()
     SERVER_LOG(WARN, "invalid argument, allocator_ or txs_ is null", "allocator",
         OB_P(allocator_));
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_SUCCESS != (ret = fill_tenant_ids_())) {
+  } else if (OB_SUCCESS != (ret = fill_ids_())) {
     SERVER_LOG(WARN, "fail to fill tenant ids", K(ret));
   } else {
-    for (int i = 0; i < all_tenants_.count() && OB_SUCC(ret); i++) {
-      int64_t cur_tenant_id = all_tenants_.at(i);
-      MTL_SWITCH(cur_tenant_id) {
-        transaction::ObTransService *txs = MTL(transaction::ObTransService*);
+    {
+      MOD_SCOPE {
+        transaction::ObTransService *txs = share::g_mp->trans_service();
         if (OB_SUCCESS != (ret = txs->iterate_all_observer_tx_stat(tx_stat_iter_))) {
-          SERVER_LOG(WARN, "iterate transaction stat error", K(ret), K(cur_tenant_id));
+          SERVER_LOG(WARN, "iterate transaction stat error", K(ret));
           // when interate tenant failed, show all info collected, not need return error code
           if (OB_NOT_RUNNING == ret || OB_NOT_INIT == ret) {
             ret = OB_SUCCESS;
@@ -112,33 +110,16 @@ int ObGVTxStat::get_next_tx_info_(ObTxStat &tx_stat)
   return ret;
 }
 
-int ObGVTxStat::fill_tenant_ids_()
+int ObGVTxStat::fill_ids_()
 {
   int ret = OB_SUCCESS;
 
   if (OB_UNLIKELY(!init_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "not init", K(ret));
-  } else if (OB_INVALID_TENANT_ID == effective_tenant_id_) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(ERROR, "invalid tenant id", KR(ret), K_(effective_tenant_id));
   } else if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "fail to get multi tenant from GCTX", K(ret));
-  } else {
-    omt::TenantIdList tmp_all_tenants;
-    tmp_all_tenants.set_label(ObModIds::OB_TENANT_ID_LIST);
-    GCTX.omt_->get_tenant_ids(tmp_all_tenants);
-    for (int64_t i = 0; OB_SUCC(ret) && i < tmp_all_tenants.size(); ++i) {
-      uint64_t tenant_id = tmp_all_tenants[i];
-      if (!is_virtual_tenant_id(tenant_id) && // skip virtual tenant
-          (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
-        if (OB_FAIL(all_tenants_.push_back(tenant_id))) {
-          SERVER_LOG(WARN, "fail to push back tenant id", KR(ret), K(tenant_id));
-        }
-      }
-    }
-    SERVER_LOG(INFO, "succeed to get tenant ids", K(all_tenants_));
   }
 
   return ret;

@@ -197,7 +197,7 @@ int ObSqlUdtUtils::convert_collection_to_string(ObObj &coll_obj, const ObSqlColl
   ObIArrayType *arr_obj = NULL;
   ObString coll_data = coll_obj.get_string();
   ObStringBuffer buf(allocator);
-  ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObCollectionArrayType *arr_type = static_cast<ObCollectionArrayType *>(coll_meta.collection_meta_);
   if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&lob_allocator,
                                                         ObLongTextType,
@@ -239,7 +239,6 @@ int ObSqlUdtUtils::cast_sql_record_to_pl_record(sql::ObExecContext *exec_ctx,
 int ObSqlUdtMetaUtils::generate_udt_meta_from_schema(ObSchemaGetterGuard *schema_guard,
                                                      ObSubSchemaCtx *subschema_ctx,
                                                      common::ObIAllocator &allocator,
-                                                     uint64_t tenant_id,
                                                      uint64_t udt_id,
                                                      ObSqlUDTMeta &udt_meta)
 {

@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_obj_lock.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 
@@ -47,13 +48,6 @@ ObAllVirtualObjLock::~ObAllVirtualObjLock()
 
 void ObAllVirtualObjLock::reset()
 {
-  omt::ObMultiTenantOperator::reset();
-  addr_.reset();
-  ObVirtualTableScannerIterator::reset();
-}
-
-void ObAllVirtualObjLock::release_last_tenant()
-{
   ls_ = nullptr;
   if (OB_NOT_NULL(tx_ctx_)) {
     ls_tx_ctx_iter_.revert_tx_ctx(tx_ctx_);
@@ -67,24 +61,8 @@ void ObAllVirtualObjLock::release_last_tenant()
   prio_op_iter_.reset();
   start_to_read_ = false;
   is_iter_priority_list_ = true;
-}
-
-int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
-}
-
-bool ObAllVirtualObjLock::is_need_process(uint64_t tenant_id)
-{
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
-    return true;
-  }
-  return false;
+  addr_.reset();
+  ObVirtualTableScannerIterator::reset();
 }
 
 int ObAllVirtualObjLock::get_next_ls()
@@ -328,7 +306,7 @@ int ObAllVirtualObjLock::prepare_start_to_read()
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
   } else if (OB_ISNULL(ls_iter_guard_.get_ptr())
-             && OB_FAIL(MTL(ObLSService *)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+             && OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
     SERVER_LOG(WARN, "init ls_iter_guard_ failed", K(ret));
   } else if (OB_FAIL(get_next_ls())) {
     SERVER_LOG(WARN, "init ls_ failed", K(ret));
@@ -340,7 +318,7 @@ int ObAllVirtualObjLock::prepare_start_to_read()
   return ret;
 }
 
-int ObAllVirtualObjLock::process_curr_tenant(ObNewRow *&row)
+int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   transaction::tablelock::ObTableLockOp lock_op;

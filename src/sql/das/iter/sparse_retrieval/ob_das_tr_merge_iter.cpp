@@ -27,7 +27,7 @@ namespace sql
 ObDASTRMergeIter::ObDASTRMergeIter()
   : ObDASIter(ObDASIterType::DAS_ITER_TEXT_RETRIEVAL_MERGE),
     mem_context_(nullptr),
-    myself_allocator_(lib::ObMemAttr(MTL_ID(), "SRMergeIterSelf"), OB_MALLOC_NORMAL_BLOCK_SIZE),
+    myself_allocator_(lib::ObMemAttr("SRMergeIterSelf"), OB_MALLOC_NORMAL_BLOCK_SIZE),
     ir_ctdef_(nullptr),
     ir_rtdef_(nullptr),
     tx_desc_(nullptr),
@@ -99,7 +99,7 @@ int ObDASTRMergeIter::inner_init(ObDASIterParam &param)
       LOG_WARN("inv idx agg and fwd idx agg are not both needed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {
       lib::ContextParam mem_param;
-      mem_param.set_mem_attr(MTL_ID(), "TextMergeIter", ObCtxIds::DEFAULT_CTX_ID);
+      mem_param.set_mem_attr("TextMergeIter", ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, mem_param))) {
         LOG_WARN("failed to create text retrieval iterator memory context", K(ret));
       }
@@ -312,10 +312,10 @@ int ObDASTRMergeIter::init_das_iter_scan_param(const ObLSID &ls_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(ctdef), KPC(rtdef), K(ls_id), K(tablet_id));
   } else {
-    uint64_t tenant_id = MTL_ID();
-    scan_param.tenant_id_ = tenant_id;
-    scan_param.key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamKR"));
-    scan_param.ss_key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamSSKR"));
+    
+    
+    scan_param.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
+    scan_param.ss_key_ranges_.set_attr(ObMemAttr("ScanParamSSKR"));
     scan_param.tx_lock_timeout_ = rtdef->tx_lock_timeout_;
     scan_param.index_id_ = ctdef->ref_table_id_;
     scan_param.is_get_ = false; // scan
@@ -1109,7 +1109,7 @@ static int get_query_tokens_by_compacting_repeated_token(ObString &query_str,
   char split_boost_tag = '^';
   hash::ObHashMap<ObString, double> token_map;
   const int64_t ft_word_bkt_cnt = MAX(query_str.length() / 10, 2);
-  if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr(MTL_ID(), "FTWordMap")))) {
+  if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
     LOG_WARN("failed to create token map", K(ret));
   }
   while (!query_str.empty() && OB_SUCC(ret)) {
@@ -1332,7 +1332,7 @@ int ObDASTRMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_ctdef,
       ObFtsEvalNode *parant_node =nullptr;
       hash::ObHashMap<ObString, int32_t> tokens_map;
       const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
-      if (OB_FAIL(tokens_map.create(ft_word_bkt_cnt, common::ObMemAttr(MTL_ID(), "FTWordMap")))) {
+      if (OB_FAIL(tokens_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
         LOG_WARN("failed to create token map", K(ret));
       } else if (OB_FAIL(ObFtsEvalNode::fts_boolean_node_create(parant_node, node, cs_type, alloc, query_tokens, tokens_map, has_duplicate_boolean_tokens))) {
         LOG_WARN("failed to get query tokens", K(ret));
@@ -1356,7 +1356,7 @@ int ObDASTRMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_ctdef,
     const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
     if (OB_FAIL(tokenize_helper.init(&alloc, parser_name, parser_properties))) {
       LOG_WARN("failed to init tokenize helper", K(ret));
-    } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr(MTL_ID(), "FTWordMap")))) {
+    } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
       LOG_WARN("failed to create token map", K(ret));
     } else if (OB_FAIL(tokenize_helper.segment(
                            meta,

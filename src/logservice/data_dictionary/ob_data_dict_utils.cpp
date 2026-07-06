@@ -25,10 +25,10 @@ namespace oceanbase
 namespace datadict
 {
 
-void *ob_dict_malloc(const int64_t nbyte, const uint64_t tenant_id)
+void *ob_dict_malloc(const int64_t nbyte)
 {
   ObMemAttr mem_attr;
-  mem_attr.tenant_id_ = tenant_id;
+  
   mem_attr.label_ = "ObDataDict";
   return ob_malloc(nbyte, mem_attr);
 }

@@ -53,7 +53,7 @@ int ObDropDirectoryResolver::resolve(const ParseNode &parse_tree)
     LOG_ERROR("failed to get drop directory stmt", K(ret));
   } else {
     stmt_ = drop_directory_stmt;
-    drop_directory_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+    
   }
 
   // directory name

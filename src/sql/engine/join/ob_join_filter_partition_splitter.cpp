@@ -77,7 +77,7 @@ ObJoinFilterPartitionSplitter::~ObJoinFilterPartitionSplitter()
   stores_mgr_.reset();
 }
 
-int ObJoinFilterPartitionSplitter::init(int64_t tenant_id, lib::MemoryContext mem_context,
+int ObJoinFilterPartitionSplitter::init(lib::MemoryContext mem_context,
                                         ObEvalCtx &eval_ctx,
                                         ObSqlMemMgrProcessor *sql_mem_processor,
                                         const ObExprPtrIArray &hash_join_hash_exprs,
@@ -86,7 +86,7 @@ int ObJoinFilterPartitionSplitter::init(int64_t tenant_id, lib::MemoryContext me
                                         const common::ObCompressorType compress_type)
 {
   int ret = OB_SUCCESS;
-  tenant_id_ = tenant_id;
+  
   mem_context_ = mem_context;
   arena_alloc_ = &mem_context->get_arena_allocator();
   malloc_alloc_ = &mem_context->get_malloc_allocator();
@@ -186,7 +186,7 @@ int ObJoinFilterPartitionSplitter::create_partitions(ObIOEventObserver *io_event
       }
       for (int64_t i = 0; i < part_count_ && OB_SUCC(ret); i++) {
         ObPartitionStore *part_store =
-            new (mem + sizeof(ObPartitionStore) * i) ObPartitionStore(tenant_id_, *malloc_alloc_);
+            new (mem + sizeof(ObPartitionStore) * i) ObPartitionStore(*malloc_alloc_);
         if (OB_FAIL(partition_array_.push_back(part_store))) {
           LOG_WARN("failed to push_back part_store");
         } else if (OB_FAIL(part_store->init(*exprs, max_batch_size_, compress_type_,

@@ -43,7 +43,7 @@ insert into test_lock_uncommitted_data_t value(6, 6);
 
 
 connection conn0;
-let $__table_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_virtual_table where table_name= 'test_lock_uncommitted_data_t', table_id, 1);
+let $__table_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_table where table_name= 'test_lock_uncommitted_data_t', table_id, 1);
 
 --source mysql_test/include/minor_freeze_tablet_and_wait_done.inc
 

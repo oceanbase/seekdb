@@ -104,7 +104,7 @@ int ObInfoSchemaKvCacheTable::inner_open()
   if (OB_FAIL(set_ip())) {
     SERVER_LOG(WARN, "Fail to set ip from addr", K(ret), K(addr_));
   } else if (OB_FAIL(ObKVGlobalCache::get_instance().get_cache_inst_info(inst_handles_))) {
-    SERVER_LOG(WARN, "Fail to get cache info", K(ret), K(effective_tenant_id_));
+    SERVER_LOG(WARN, "Fail to get cache info", K(ret));
   }
 
   return ret;

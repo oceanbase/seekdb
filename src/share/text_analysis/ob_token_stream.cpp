@@ -231,7 +231,7 @@ int ObTokenStopWordNormalizer::filter_special_marks(const ObDatum &check_token, 
 
 ObBasicEnglishNormalizer::ObBasicEnglishNormalizer()
   : ObTokenNormalizer(),
-    norm_allocator_("TxtTokGrpFilter", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    norm_allocator_("TxtTokGrpFilter", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
 }
 
@@ -323,7 +323,7 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
 
 ObTextTokenGroupNormalizer::ObTextTokenGroupNormalizer()
   : ObTokenNormalizer(),
-    token_allocator_("TxtTokGrpFilter", OB_MALLOC_MIDDLE_BLOCK_SIZE, MTL_ID()),
+    token_allocator_("TxtTokGrpFilter", OB_MALLOC_MIDDLE_BLOCK_SIZE),
     grouping_map_(),
     map_iter_(),
     map_end_iter_(),
@@ -357,9 +357,8 @@ int ObTextTokenGroupNormalizer::inner_init(const ObCharsetInfo *cs, ObITokenStre
   } else if (OB_FAIL(grouping_map_.create(
       DEFAULT_HASH_MAP_BUCKET_CNT,
       "TxtTokGrpHash",
-      "TxtTokGrpHash",
-      MTL_ID()))) {
-    LOG_WARN("failed to create grouping hash map", K(ret), K(MTL_ID()));
+      "TxtTokGrpHash"))) {
+    LOG_WARN("failed to create grouping hash map", K(ret));
   }
   return ret;
 }

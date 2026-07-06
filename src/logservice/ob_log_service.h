@@ -20,23 +20,18 @@
 #include "common/ob_role.h"
 #include "lib/ob_define.h"
 #include "applyservice/ob_log_apply_service.h"
-#include "cdcservice/ob_cdc_service.h"
 #include "logrpc/ob_log_rpc_req.h"
 #include "logrpc/ob_log_service_rpc_shell.h"
 #include "palf/log_block_pool_interface.h"             // ILogBlockPool
 #include "palf/log_define.h"
 #include "rcservice/ob_role_change_service.h"
-#include "restoreservice/ob_log_restore_service.h"     // ObLogRestoreService
 #include "replayservice/ob_log_replay_service.h"
-#include "restoreservice/ob_log_restore_service.h"
 #include "ob_net_keepalive_adapter.h"
 #include "ob_ls_adapter.h"
 #include "ob_location_adapter.h"
 #include "ob_log_flashback_service.h"                    // ObLogFlashbackService
 #include "ob_log_handler.h"
-#include "restoreservice/ob_log_restore_handler.h"      // ObLogRestoreHandler
 #include "ob_log_monitor.h"
-#include "cdcservice/ob_cdc_service.h"
 
 namespace oceanbase
 {
@@ -76,7 +71,6 @@ class ObLSService;
 
 namespace logservice
 {
-class ObLogRestoreService;  // Forward declaration
 
 class ObLogService
 {
@@ -113,21 +107,17 @@ public:
                 const share::ObTenantRole &tenant_role,
                 const palf::PalfBaseInfo &palf_base_info,
                 const bool allow_log_sync,
-                ObLogHandler &log_handler,
-                ObLogRestoreHandler &restore_handler);
+                ObLogHandler &log_handler);
   //Delete log stream interface: After the outer call to create_ls(), if subsequent processes fail, remove_ls() needs to be called
   int remove_ls(const share::ObLSID &id,
-                ObLogHandler &log_handler,
-                ObLogRestoreHandler &restore_handler);
+                ObLogHandler &log_handler);
 
   int check_palf_exist(const share::ObLSID &id, bool &exist) const;
   //Downtime restart recovery log stream interface, including generating and initializing the corresponding ObReplayStatus structure
   // @param [in] id, log stream identifier
   // @param [out] log_handler, new log stream returned in the form of ObLogHandler, ensuring the lifecycle of the log stream when used by upper layers
-  // @param [out] restore_handler, new log stream returned in the form of ObLogRestoreHandler, used for follower synchronization logs
   int add_ls(const share::ObLSID &id,
-             ObLogHandler &log_handler,
-             ObLogRestoreHandler &restore_handler);
+             ObLogHandler &log_handler);
 
   int open_palf(const share::ObLSID &id,
                 palf::PalfHandleGuard &palf_handle);
@@ -184,17 +174,17 @@ public:
   int iterate_apply(const ObFunction<int(const ObApplyStatus&)> &func);
   int iterate_replay(const ObFunction<int(const ObReplayStatus&)> &func);
 
-  // @desc: flashback all log_stream's redo log of tenant 'tenant_id'
-  // @params [in] const uint64_t tenant_id: id of tenant which should be flashbacked
+  // @desc: flashback all log_stream's redo log of tenant 'tenant'
+  // @params [in] const uint64_t tenant: id of tenant which should be flashbacked
   // @params [in] const SCN &flashback_scn: flashback point
   // @params [in] const int64_t timeout_us: timeout time (us)
   // @return
   //   - OB_SUCCESS
-  //   - OB_INVALID_ARGUEMENT: invalid tenant_id or flashback_scn
+  //   - OB_INVALID_ARGUEMENT: invalid tenant or flashback_scn
   //   - OB_NOT_SUPPORTED: meta tenant or sys tenant can't be flashbacked
   //   - OB_EAGAIN: another flashback operation is doing
   //   - OB_TIMEOUT: timeout
-  int flashback(const uint64_t tenant_id, const share::SCN &flashback_scn, const int64_t timeout_us);
+  int flashback(const share::SCN &flashback_scn, const int64_t timeout_us);
 
   int diagnose_role_change(RCDiagnoseInfo &diagnose_info);
   int diagnose_replay(const share::ObLSID &id, ReplayDiagnoseInfo &diagnose_info);
@@ -204,7 +194,6 @@ public:
 
   palf::PalfEnv *get_palf_env() { return palf_env_; }
   ObLogReplayService *get_log_replay_service()  { return &replay_service_; }
-  ObLogRestoreService *get_log_restore_service() { return &restore_service_; }
   ObLogApplyService *get_log_apply_service()  { return &apply_service_; }
   obcall::ObLogServiceRpcProxy *get_rpc_proxy() { return &rpc_proxy_; }
   ObLogFlashbackService *get_flashback_service() { return &flashback_service_; }
@@ -213,7 +202,6 @@ public:
   class ObLogRestoreNetDriver;
   ObLogRestoreNetDriver *get_restore_net_driver();
   // Get CDC service for log fetcher (standby log sync server side)
-  oceanbase::cdc::ObCdcService *get_cdc_service();
   int check_need_do_checkpoint(bool &need_do_checkpoint);
 
 private:
@@ -222,8 +210,7 @@ private:
                  const share::ObTenantRole &tenant_role,
                  const palf::PalfBaseInfo &palf_base_info,
                  const bool allow_log_sync,
-                 ObLogHandler &log_handler,
-                 ObLogRestoreHandler &restore_handler);
+                 ObLogHandler &log_handler);
   struct GetUnrecycableLogDiskSizeFunctor {
     GetUnrecycableLogDiskSizeFunctor() : unrecycable_log_disk_size_(0) {}
     ~GetUnrecycableLogDiskSizeFunctor() { unrecycable_log_disk_size_ = 0; }
@@ -231,22 +218,9 @@ private:
     int64_t unrecycable_log_disk_size_;
   };
 private:
-  class ObDefaultLocalityCb : public palf::PalfLocalityInfoCb
-  {
-  public:
-    int get_server_region(const common::ObAddr &server, common::ObRegion &region) const override final
-    {
-      int ret = OB_SUCCESS;
-      if (!server.is_valid()) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        region = DEFAULT_REGION_NAME;
-      }
-      return ret;
-    }
-  };
   bool is_inited_;
   bool is_running_;
+  bool enable_shared_storage_;
 
   common::ObAddr self_;
   palf::PalfEnv *palf_env_;
@@ -262,15 +236,21 @@ private:
   ObLogFlashbackService flashback_service_;
   ObLogMonitor monitor_;
   ObSpinLock update_palf_opts_lock_;
-  ObDefaultLocalityCb default_locality_cb_;
   // Restore service for standby log sync
-  ObLogRestoreService restore_service_;
   // CDC service for log fetcher (standby log sync server side)
-  oceanbase::cdc::ObCdcService cdc_service_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLogService);
 };
 
 } // end namespace logservice
 } // end namespace oceanbase
+namespace oceanbase
+{
+namespace logservice
+{
+// demoted from share::ObShareUtil(checks whether the clog disk is full or hung, through MTL ObLogService)
+int check_clog_disk_full_or_hang(bool &clog_disk_is_full, bool &clog_disk_is_hang);
+}
+}
+
 #endif // OCEANBASE_LOGSERVICE_OB_LOG_SERVICE_

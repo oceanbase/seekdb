@@ -28,6 +28,7 @@
 #include "storage/ls/ob_ls_tablet_service.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
 #include "storage/tablet/ob_tablet_obj_load_helper.h"
 #include "storage/init_basic_struct.h"
@@ -121,7 +122,7 @@ inline int TestTabletHelper::create_tablet(
     ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   ObLSTabletService *ls_tablet_svr = ls_handle.get_ls()->get_tablet_svr();
   const lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   ObArenaAllocator schema_allocator;
@@ -210,7 +211,7 @@ inline int TestTabletHelper::remove_tablet(const ObLSHandle &ls_handle, const Ob
   ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle);
   const share::ObLSID &ls_id = ls_handle.get_ls()->get_ls_id();
 
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   ObTabletCreateDeleteMdsUserData data;
   ObTabletStatus status(ObTabletStatus::DELETING);
   data.tablet_status_ = status;

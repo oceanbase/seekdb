@@ -19,15 +19,14 @@ endif()
 
 target_include_directories(
   oblib_base_without_pass INTERFACE
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/src
-  ${CMAKE_SOURCE_DIR}/src/plugin/include
+  # oblib exposes no src-reachable -I -- not even the repo root ${CMAKE_SOURCE_DIR}.
+  # So any include of src from oblib lib+unittests at compile time (both share/.. and full src/.. spellings)
+  # is file-not-found. oblib itself needs no repo root: 0 src/.. ; 2 deps/.. resolved via same-directory.
+  # src's repo root and src are provided by src's own base (see src/CMakeLists.txt); the grep guard becomes a redundant backstop.
   ${CMAKE_SOURCE_DIR}/deps/easy/src
   ${CMAKE_SOURCE_DIR}/deps/oblib/src
   ${CMAKE_SOURCE_DIR}/deps/oblib/src/common
   ${CMAKE_SOURCE_DIR}/deps/easy/src/include
-  ${CMAKE_SOURCE_DIR}/src/objit/include
-  ${CMAKE_SOURCE_DIR}/src/objit/src
   ${DEP_DIR}/include
   ${DEP_DIR}/include/libxml2
   $<$<NOT:$<PLATFORM_ID:Darwin>>:${SYS_INCLUDE_DIR}>
@@ -349,7 +348,7 @@ else()
     $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${_LIB_PATH}/libarrow.a>
     $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${_LIB_PATH}/libparquet.a>
     $<$<AND:$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>,$<NOT:$<PLATFORM_ID:Darwin>>>:${_LIB_PATH}/libarrow_bundled_dependencies.a>
-    $<$<AND:$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>,$<PLATFORM_ID:Darwin>>:-L/opt/homebrew/lib -lutf8proc -lthrift -lre2 -lbrotlicommon -lbrotlienc -lbrotlidec -lbz2 -llz4 -lzstd>
+    $<$<AND:$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>,$<PLATFORM_ID:Darwin>>:-L/opt/homebrew/lib -lutf8proc -lthrift -lre2 -lbrotlicommon -lbrotlienc -lbrotlidec -lbz2 -llz4 -lzstd -lsnappy>
     $<$<PLATFORM_ID:Linux>:-L${DEP_DIR}/var/usr/lib64 -L${DEP_DIR}/var/usr/lib -L${DEP_3RD_DIR}/usr/lib -L${DEP_3RD_DIR}/usr/lib64>
     ${LIBAIO_LINK_OPTION} $<$<NOT:$<BOOL:${ANDROID}>>:-lpthread> -ldl
     $<$<BOOL:${ANDROID}>:-llog>
@@ -380,7 +379,6 @@ set(oblib_extra_objects "" CACHE INTERNAL oblib_extra_objects)
 add_subdirectory(lib)
 add_subdirectory(common)
 add_subdirectory(rpc)
-add_subdirectory(grpc)
 
 # Define static library which contains previous object libraries.
 message(STATUS "oblib_extra_objects ${oblib_extra_objects}")

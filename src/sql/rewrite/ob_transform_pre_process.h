@@ -132,19 +132,6 @@ private:
 	 */
 	int eliminate_having(ObDMLStmt *stmt, bool &trans_happened);
 
-	/*
-	 * following functions are used to replace func is serving tenant
-	 */
-	int replace_func_is_serving_tenant(ObDMLStmt *&stmt, bool &trans_happened);
-	int recursive_replace_func_is_serving_tenant(ObDMLStmt &stmt,
-                                               ObRawExpr *&cond_expr,
-                                               bool &trans_happened);
-	int calc_const_raw_expr_and_get_int(const ObStmt &stmt,
-                                      ObRawExpr *const_expr,
-                                      ObExecContext &exec_ctx,
-                                      ObSQLSessionInfo *session,
-                                      ObIAllocator &allocator,
-                                      int64_t &result);
   int transform_special_expr(ObDMLStmt *&stmt, bool &trans_happened);
 	int collect_all_tableitem(ObDMLStmt *stmt,
                             TableItem *table_item,

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "ob_das_scan_op.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_das_extra_data.h"
 #include "storage/concurrency_control/ob_data_validation_service.h"
 #include "sql/das/iter/ob_das_iter_utils.h"
@@ -56,11 +57,6 @@ OB_SERIALIZE_MEMBER(ObDASScanCtDef,
                     group_id_expr_,
                     result_output_,
                     is_get_,
-                    is_external_table_,
-                    external_file_location_,
-                    external_file_access_info_,
-                    external_files_,
-                    external_file_format_str_,
                     trans_info_expr_,
                     group_by_column_ids_,
                     ir_scan_type_,
@@ -72,12 +68,10 @@ OB_SERIALIZE_MEMBER(ObDASScanCtDef,
                     multivalue_type_,
                     index_merge_idx_,
                     flags_,
-                    partition_infos_,
                     domain_id_idxs_,
                     domain_types_,
                     domain_tids_,
                     pre_range_graph_,
-                    external_file_pattern_,
                     external_object_ctx_,
                     semantic_index_info_);
 
@@ -281,10 +275,10 @@ int ObDASScanOp::swizzling_remote_task(ObDASRemoteInfo *remote_info)
 int ObDASScanOp::init_scan_param()
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
-  scan_param_.tenant_id_ = tenant_id;
-  scan_param_.key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamKR"));
-  scan_param_.ss_key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamSSKR"));
+  
+  
+  scan_param_.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
+  scan_param_.ss_key_ranges_.set_attr(ObMemAttr("ScanParamSSKR"));
   scan_param_.tx_lock_timeout_ = scan_rtdef_->tx_lock_timeout_;
   scan_param_.index_id_ = scan_ctdef_->ref_table_id_;
   scan_param_.is_get_ = scan_ctdef_->is_get_;
@@ -303,8 +297,6 @@ int ObDASScanOp::init_scan_param()
   scan_param_.frozen_version_ = scan_rtdef_->frozen_version_;
   scan_param_.force_refresh_lc_ = scan_rtdef_->force_refresh_lc_;
   scan_param_.output_exprs_ = &(scan_ctdef_->pd_expr_spec_.access_exprs_);
-  scan_param_.ext_file_column_exprs_ = &(scan_ctdef_->pd_expr_spec_.ext_file_column_exprs_);
-  scan_param_.ext_column_convert_exprs_ = &(scan_ctdef_->pd_expr_spec_.ext_column_convert_exprs_);
   scan_param_.calc_exprs_ = &(scan_ctdef_->pd_expr_spec_.calc_exprs_);
   scan_param_.aggregate_exprs_ = &(scan_ctdef_->pd_expr_spec_.pd_storage_aggregate_output_);
   scan_param_.table_param_ = &(scan_ctdef_->table_param_);
@@ -360,24 +352,6 @@ int ObDASScanOp::init_scan_param()
   scan_param_.pd_storage_filters_ = scan_rtdef_->p_pd_expr_op_->pd_storage_filters_;
   if (FAILEDx(scan_param_.column_ids_.assign(scan_ctdef_->access_column_ids_))) {
     LOG_WARN("init column ids failed", K(ret));
-  }
-  //external table scan params
-  if (OB_SUCC(ret) && scan_ctdef_->is_external_table_) {
-    scan_param_.partition_infos_ = &(scan_ctdef_->partition_infos_);
-    scan_param_.external_file_access_info_ = scan_ctdef_->external_file_access_info_.str_;
-    scan_param_.external_file_location_ = scan_ctdef_->external_file_location_.str_;
-    if (OB_FAIL(scan_param_.external_file_format_.load_from_string(scan_ctdef_->external_file_format_str_.str_, *scan_param_.allocator_))) {
-      LOG_WARN("fail to load from string", K(ret));
-    } else {
-      uint64_t max_idx = 0;
-      for (int i = 0; i < scan_param_.ext_file_column_exprs_->count(); i++) {
-        if (scan_param_.ext_file_column_exprs_->at(i)->type_ == T_PSEUDO_EXTERNAL_FILE_COL) {
-          max_idx = std::max(max_idx, scan_param_.ext_file_column_exprs_->at(i)->extra_);
-        }
-      }
-      scan_param_.external_file_format_.csv_format_.file_column_nums_ = static_cast<int64_t>(max_idx);
-      scan_param_.external_file_format_.csv_format_.ignore_extra_fields_ = true;
-    }
   }
   LOG_DEBUG("init scan param", K(ret), K(scan_param_));
   return ret;
@@ -579,11 +553,6 @@ void ObDASScanOp::reset_access_datums_ptr(const ObDASBaseCtDef *ctdef, ObEvalCtx
         ObEvalInfo &info = (*e)->get_eval_info(eval_ctx);
         info.point_to_frame_ = true;
       }
-      FOREACH_CNT(e, scan_ctdef->pd_expr_spec_.ext_file_column_exprs_) {
-        (*e)->locate_datums_for_update(eval_ctx, capacity);
-        ObEvalInfo &info = (*e)->get_eval_info(eval_ctx);
-        info.point_to_frame_ = true;
-      }
       if (scan_ctdef->trans_info_expr_ != nullptr) {
         ObExpr *trans_expr = scan_ctdef->trans_info_expr_;
         trans_expr->locate_datums_for_update(eval_ctx, capacity);
@@ -748,7 +717,7 @@ int ObDASScanOp::fill_task_result(ObIDASTaskResult &task_result, bool &has_more,
 int ObDASScanOp::fill_extra_result(const ObDASTCBInterruptInfo &interrupt_info)
 {
   int ret = OB_SUCCESS;
-  ObDASTaskResultMgr &result_mgr = MTL(ObDataAccessService *)->get_task_res_mgr();
+  ObDASTaskResultMgr &result_mgr = share::g_mp->data_access_service()->get_task_res_mgr();
   const ExprFixedArray &result_output = get_result_outputs();
   ObEvalCtx &eval_ctx = scan_rtdef_->p_pd_expr_op_->get_eval_ctx();
   ObNewRowIterator *output_result_iter = get_output_result_iter();
@@ -1581,19 +1550,18 @@ int ObDASScanResult::init(const ObIDASTaskOp &op, common::ObIAllocator &alloc)
   UNUSED(alloc);
   int ret = OB_SUCCESS;
   const ObDASScanOp &scan_op = static_cast<const ObDASScanOp&>(op);
-  uint64_t tenant_id = MTL_ID();
+  
   need_check_output_datum_ = scan_op.need_check_output_datum();
   enable_rich_format_ = scan_op.enable_rich_format();
   LOG_DEBUG("das scan result init", K(enable_rich_format_));
   //if (!enable_rich_format_) {
   if (OB_FAIL(datum_store_.init(UINT64_MAX,
-                               tenant_id,
                                ObCtxIds::DEFAULT_CTX_ID,
                                "DASScanResult",
                                false/*enable_dump*/))) {
     LOG_WARN("init datum store failed", K(ret));
   } else {
-    ObMemAttr mem_attr(tenant_id, "DASScanResult", ObCtxIds::DEFAULT_CTX_ID);
+    ObMemAttr mem_attr("DASScanResult", ObCtxIds::DEFAULT_CTX_ID);
     const ExprFixedArray &result_output = scan_op.get_result_outputs();
     int64_t max_batch_size = static_cast<const ObDASScanCtDef *>(scan_op.get_ctdef())
                              ->pd_expr_spec_.max_batch_size_;
@@ -1907,16 +1875,16 @@ int ObLocalIndexLookupOp::check_lookup_row_cnt()
 OB_INLINE ObITabletScan &ObLocalIndexLookupOp::get_tsc_service()
 {
   return is_virtual_table(lookup_ctdef_->ref_table_id_) ?
-      *GCTX.vt_par_ser_ : *(MTL(ObAccessService *));
+      *GCTX.vt_par_ser_ : *(share::g_mp->access_service());
 }
 
 OB_INLINE int ObLocalIndexLookupOp::init_scan_param()
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
-  scan_param_.tenant_id_ = tenant_id;
-  scan_param_.key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamKR"));
-  scan_param_.ss_key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamSSKR"));
+  
+  
+  scan_param_.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
+  scan_param_.ss_key_ranges_.set_attr(ObMemAttr("ScanParamSSKR"));
   scan_param_.tx_lock_timeout_ = lookup_rtdef_->tx_lock_timeout_;
   scan_param_.index_id_ = lookup_ctdef_->ref_table_id_;
   scan_param_.is_get_ = lookup_ctdef_->is_get_;

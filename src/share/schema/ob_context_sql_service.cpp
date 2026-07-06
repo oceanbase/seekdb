@@ -16,7 +16,21 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_context_sql_service.h"
-#include "observer/ob_srv_network_frame.h"
+
+#include "lib/ob_define.h"
+#include "lib/ob_errno.h"
+#include "lib/oblog/ob_log.h"
+#include "lib/oblog/ob_log_level.h"
+#include "lib/oblog/ob_log_print_kv.h"
+#include "lib/string/ob_sql_string.h"
+#include "lib/string/ob_string.h"
+#include "lib/utility/alloc_assist.h"
+#include "mysqlclient/ob_isql_client.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
+#include "share/ob_dml_sql_splicer.h"
+#include "share/schema/ob_schema_service.h"
+#include "share/schema/ob_schema_struct.h"
+#include "share/schema/ob_schema_utils.h"
 
 namespace oceanbase
 {
@@ -42,7 +56,7 @@ int ObContextSqlService::insert_context(const ObContextSchema &context_schema,
       LOG_WARN("failed to add context", K(ret));
     } else {
       ObSchemaOperation opt;
-      opt.tenant_id_ = context_schema.get_tenant_id();
+      
       opt.context_id_ = context_schema.get_context_id();
       opt.context_name_ = context_schema.get_namespace();
       opt.op_type_ = OB_DDL_CREATE_CONTEXT;
@@ -65,11 +79,11 @@ int ObContextSqlService::alter_context(const ObContextSchema &context_schema,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("sql_client is NULL", K(ret));
   } else {
-    uint64_t tenant_id = context_schema.get_tenant_id();
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
+    
     // modify __all_context table
     if (OB_SUCC(ret)) {
-      ObDMLExecHelper exec(*sql_client, exec_tenant_id);
+      ObDMLExecHelper exec(*sql_client);
       ObDMLSqlSplicer dml;
       bool is_history = false;
       // udpate __all_context table
@@ -98,7 +112,7 @@ int ObContextSqlService::alter_context(const ObContextSchema &context_schema,
     // log operation
     if (OB_SUCC(ret)) {
       ObSchemaOperation opt;
-      opt.tenant_id_ = context_schema.get_tenant_id();
+      
       opt.context_id_ = context_schema.get_context_id();
       opt.context_name_ = context_schema.get_namespace();
       opt.op_type_ = OB_DDL_ALTER_CONTEXT;
@@ -112,8 +126,7 @@ int ObContextSqlService::alter_context(const ObContextSchema &context_schema,
   return ret;
 }
 
-int ObContextSqlService::delete_context(const uint64_t tenant_id,
-                                        const uint64_t context_id,
+int ObContextSqlService::delete_context(const uint64_t context_id,
                                         const ObString &ctx_namespace,
                                         const int64_t new_schema_version,
                                         const ObContextType &type,
@@ -123,27 +136,24 @@ int ObContextSqlService::delete_context(const uint64_t tenant_id,
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
   ObSqlString sql;
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
   const int64_t IS_DELETED = 1;
 
   if (OB_ISNULL(sql_client)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid sql client is NULL", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid context info in drop context", K(tenant_id), K(ret));
   } else {
     // insert into __all_context_history
     if (FAILEDx(sql.assign_fmt(
                 "INSERT INTO %s(context_id, namespace, schema_version, is_deleted)"
                 " VALUES(%lu,\'%s\',%ld,%ld)",
                 OB_ALL_CONTEXT_HISTORY_TNAME,
-                ObSchemaUtils::get_extract_schema_id(exec_tenant_id, context_id),
+                ObSchemaUtils::get_extract_schema_id(context_id),
                 ctx_namespace.ptr(),
                 new_schema_version, IS_DELETED))) {
       LOG_WARN("assign insert into all tenant context history fail",
-               K(tenant_id), K(context_id), K(ret));
-    } else if (OB_FAIL(sql_client->write(exec_tenant_id, sql.ptr(), affected_rows))) {
+               K(context_id), K(ret));
+    } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
       LOG_WARN("execute sql fail", K(sql), K(ret));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
@@ -153,16 +163,16 @@ int ObContextSqlService::delete_context(const uint64_t tenant_id,
     // delete from __all_context
     if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE context_id=%lu",
                                OB_ALL_CONTEXT_TNAME,
-                               ObSchemaUtils::get_extract_schema_id(exec_tenant_id, context_id)))) {
+                               ObSchemaUtils::get_extract_schema_id(context_id)))) {
       LOG_WARN("append_fmt failed", K(ret));
-    } else if (OB_FAIL(sql_client->write(exec_tenant_id, sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", K(tenant_id), K(sql), K(ret));
+    } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
+      LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no row deleted", K(sql), K(affected_rows), K(ret));
     } else {
       LOG_INFO("success delete context schema",
-               K(tenant_id),
+               
                K(context_id),
                K(ctx_namespace),
                K(OB_ALL_CONTEXT_TNAME));
@@ -171,7 +181,7 @@ int ObContextSqlService::delete_context(const uint64_t tenant_id,
     // log operation
     if (OB_SUCC(ret)) {
       ObSchemaOperation opt;
-      opt.tenant_id_ = tenant_id;
+      
       opt.context_id_ = context_id;
       opt.op_type_ = OB_DDL_DROP_CONTEXT;
       opt.context_name_ = ctx_namespace;
@@ -194,21 +204,20 @@ int ObContextSqlService::drop_context(const ObContextSchema &context_schema,
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  const uint64_t tenant_id = context_schema.get_tenant_id();
+  
   const uint64_t context_id = context_schema.get_context_id();
   const ObString &ctx_namespace = context_schema.get_namespace();
   need_clean = false;
   if (OB_ISNULL(sql_client)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid sql client is NULL", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id
-                         || OB_INVALID_ID == context_id
+  } else if (OB_UNLIKELY(OB_INVALID_ID == context_id
                          || ctx_namespace.length() <= 0
                          || new_schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid context info in drop context",
              K(context_schema.get_namespace()), K(ret));
-  } else if (OB_FAIL(delete_context(tenant_id, context_id, ctx_namespace,
+  } else if (OB_FAIL(delete_context(context_id, ctx_namespace,
                                     new_schema_version, context_schema.get_context_type(),
                                     sql_client, ddl_stmt_str))) {
     LOG_WARN("failed to delete context", K(context_schema.get_namespace()), K(ret));
@@ -225,13 +234,13 @@ int ObContextSqlService::add_context(common::ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
   const char *tname[] = {OB_ALL_CONTEXT_TNAME, OB_ALL_CONTEXT_HISTORY_TNAME};
-  const uint64_t tenant_id = context_schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(tname); i++) {
     ObDMLSqlSplicer dml;
     bool is_history = (0 == STRCMP(tname[i], OB_ALL_CONTEXT_HISTORY_TNAME));
     int64_t affected_rows = 0;
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
     if (only_history && 0 == STRCMP(tname[i], OB_ALL_CONTEXT_TNAME)) {
       continue;
     } else if (OB_FAIL(format_dml_sql(context_schema, dml, is_history))) {
@@ -251,9 +260,9 @@ int ObContextSqlService::format_dml_sql(const ObContextSchema &context_schema,
                                         bool &is_history)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = context_schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-  if (OB_FAIL(dml.add_pk_column("context_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, context_schema.get_context_id())))
+  
+  
+  if (OB_FAIL(dml.add_pk_column("context_id", ObSchemaUtils::get_extract_schema_id(context_schema.get_context_id())))
       || OB_FAIL(dml.add_column("namespace", context_schema.get_namespace()))
       || OB_FAIL(dml.add_column("schema_version", context_schema.get_schema_version()))
       || OB_FAIL(dml.add_column("database_name", context_schema.get_schema_name()))

@@ -34,7 +34,7 @@ commit;
 --echo // expected hit_count 2
 --enable_result_log
 --disable_warnings
-select  hit_count from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like "select * from t1 where c1 = ?;";
+select  hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like "select * from t1 where c1 = ?;";
 --enable_warnings
 
 drop table t1;

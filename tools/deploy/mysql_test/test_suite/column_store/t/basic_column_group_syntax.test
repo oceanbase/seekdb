@@ -19,8 +19,8 @@ create table cg_tt2(d int, e int);
 alter table cg_tt1 modify column c varchar(20);
 alter table cg_tt1 drop column c;
 
-let $cg_tt1_table_id= query_get_value(select table_id from __all_virtual_table where table_name='cg_tt1', table_id, 1);
-let $cg_tt2_table_id= query_get_value(select table_id from __all_virtual_table where table_name='cg_tt2', table_id, 1);
+let $cg_tt1_table_id= query_get_value(select table_id from __all_table where table_name='cg_tt1', table_id, 1);
+let $cg_tt2_table_id= query_get_value(select table_id from __all_table where table_name='cg_tt2', table_id, 1);
 
 ## In cg_tt1 table schema, there exists 4 column_group: __cg_default, __cg_all, __cg_a, __cg_b
 let $cg_tt1_cg_cnt = query_get_value(select count(*) as cg_cnt from __all_column_group where table_id=$cg_tt1_table_id, cg_cnt, 1);

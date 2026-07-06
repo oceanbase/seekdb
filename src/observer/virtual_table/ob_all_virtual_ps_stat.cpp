@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_ps_stat.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "observer/ob_server_utils.h"
 #include "sql/plan_cache/ob_ps_cache.h"
@@ -27,22 +28,10 @@ using namespace common;
 int ObAllVirtualPsStat::inner_open()
 {
   int ret = OB_SUCCESS;
-  // sys tenant show all tenant infos
-  if (is_sys_tenant(effective_tenant_id_)) {
-    if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_id_array_))) {
-      SERVER_LOG(WARN, "failed to add tenant id", K(ret));
-    }
-  } else {
-    // user tenant show self tenant infos
-    if (OB_FAIL(tenant_id_array_.push_back(effective_tenant_id_))) {
-      SERVER_LOG(WARN, "failed to push back tenant id", KR(ret), K(effective_tenant_id_),
-          K(tenant_id_array_));
-    }
-  }
   return ret;
 }
 
-int ObAllVirtualPsStat::fill_cells(ObPsCache &ps_cache, uint64_t tenant_id)
+int ObAllVirtualPsStat::fill_cells(ObPsCache &ps_cache)
 {
   int ret = OB_SUCCESS;
   ObObj *cells = cur_row_.cells_;
@@ -88,23 +77,20 @@ int ObAllVirtualPsStat::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
 
-  if (tenant_id_array_idx_ >= tenant_id_array_.count()) {
+  if (iter_end_) {
     ret = OB_ITER_END;
   } else {
-    uint64_t tenant_id = tenant_id_array_.at(tenant_id_array_idx_);
-    ++tenant_id_array_idx_;
-    MTL_SWITCH(tenant_id) {
-      ObPsCache *ps_cache = MTL(ObPsCache*);
+    iter_end_ = true;
+    MOD_SCOPE {
+      ObPsCache *ps_cache = share::g_mp->ps_cache();
       if (OB_ISNULL(ps_cache)) {
-        SERVER_LOG(DEBUG, "ps_cache is NULL, ignore this", K(ret), K(tenant_id),
-            K(effective_tenant_id_));
+        SERVER_LOG(DEBUG, "ps_cache is NULL, ignore this", K(ret));
       } else if (false == ps_cache->is_inited()) {
         SERVER_LOG(DEBUG, "ps_cache is not init, ignore this", K(ret));
-      } else if (OB_FAIL(fill_cells(*ps_cache, tenant_id))) {
-        SERVER_LOG(WARN, "fill_cells failed", K(ret), K(tenant_id));
+      } else if (OB_FAIL(fill_cells(*ps_cache))) {
+        SERVER_LOG(WARN, "fill_cells failed", K(ret));
       } else {
-        SERVER_LOG(DEBUG, "fill_cells succeed", K(tenant_id), K(effective_tenant_id_),
-            K(tenant_id_array_), K(tenant_id_array_idx_));
+        SERVER_LOG(DEBUG, "fill_cells succeed");
       }
     }
     // ignore error

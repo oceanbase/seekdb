@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LIB_STORAGE_OB_IO_MANAGER_H
 #define OCEANBASE_LIB_STORAGE_OB_IO_MANAGER_H
 
-#include "common/storage/ob_io_device.h"
+#include "lib/restore/ob_io_device.h"
 #include "share/io/io_schedule/ob_io_schedule_v2.h"
 #include "share/io/ob_io_struct.h"
 
@@ -83,27 +83,27 @@ public:
     OB_UNIS_VERSION(1);
 
   public:
-    explicit ObStorageKey() : storage_id_(0), tenant_id_(0), category_(ObStorageInfoType::ALL_ZONE_STORAGE)
+    explicit ObStorageKey() : storage_id_(0), category_(ObStorageInfoType::ALL_ZONE_STORAGE)
     {}
-    explicit ObStorageKey(uint64_t storage_id, uint64_t tenant_id, ObStorageInfoType category)
-        : storage_id_(storage_id), tenant_id_(tenant_id), category_(category)
+    explicit ObStorageKey(uint64_t storage_id, ObStorageInfoType category)
+        : storage_id_(storage_id), category_(category)
     {
       if (ObStorageInfoType::ALL_ZONE_STORAGE == category_) {
-        tenant_id_ = OB_INVALID_TENANT_ID;
+        
       } else {
-        tenant_id_ = gen_user_tenant_id(tenant_id_);
+        
       }
     }
     int assign(const ObTrafficControl::ObStorageKey &other)
     {
       storage_id_ = other.storage_id_;
-      tenant_id_ = other.tenant_id_;
+      
       category_ = other.category_;
       return OB_SUCCESS;
     }
     uint64_t hash() const
     {
-      return (storage_id_ << 48) ^ (tenant_id_ << 32) ^ ((uint64_t)category_ << 16);
+      return (storage_id_ << 48) ^ ((uint64_t)category_ << 16);
     }
     int hash(uint64_t &res) const
     {
@@ -112,7 +112,7 @@ public:
     }
     bool operator==(const ObStorageKey &that) const
     {
-      return storage_id_ == that.storage_id_ && tenant_id_ == that.tenant_id_ && category_ == that.category_;
+      return storage_id_ == that.storage_id_ && category_ == that.category_;
     }
     bool operator!=(const ObStorageKey &that) const
     {
@@ -122,19 +122,16 @@ public:
     {
       return storage_id_;
     }
-    uint64_t get_tenant_id() const
-    {
-      return tenant_id_;
-    }
+    
     ObStorageInfoType get_category() const
     {
       return category_;
     }
-    TO_STRING_KV(K(storage_id_), K_(tenant_id), K_(category));
+    TO_STRING_KV(K(storage_id_), K_(category));
 
   private:
     uint64_t storage_id_;
-    uint64_t tenant_id_;  // tenant_id of storage
+      // tenant of storage
     ObStorageInfoType category_;
   };
 
@@ -163,22 +160,21 @@ private:
 public:
   struct ObIORecordKey
   {
-    explicit ObIORecordKey() : tenant_id_(0), id_()
+    explicit ObIORecordKey() : id_()
     {}
-    explicit ObIORecordKey(const ObStorageKey &id, uint64_t tenant_id) : tenant_id_(tenant_id), id_(id)
+    explicit ObIORecordKey(const ObStorageKey &id) : id_(id)
     {}
     int hash(uint64_t &res) const
     {
       id_.hash(res);
-      res ^= tenant_id_;
       return OB_SUCCESS;
     }
     bool operator==(const ObIORecordKey &that) const
     {
-      return tenant_id_ == that.tenant_id_ && id_ == that.id_;
+      return true && id_ == that.id_;
     }
-    TO_STRING_KV(K(tenant_id_), K(id_));
-    uint64_t tenant_id_; // tenant_id of req
+    TO_STRING_KV(K(id_));
+     // tenant of req
     ObStorageKey id_;
   };
 
@@ -285,7 +281,6 @@ public:
   // device health management
   ObIOFaultDetector &get_device_health_detector();
   int get_device_health_status(ObDeviceHealthStatus &dhs, int64_t &device_abnormal_time);
-  int reset_device_health();
 
   // device channel management
   int add_device_channel(ObIODevice *device_handle, const int64_t async_channel_count, const int64_t sync_channel_count,
@@ -294,15 +289,15 @@ public:
   int get_device_channel(const ObIORequest &req, ObDeviceChannel *&device_channel);
 
   // tenant management
-  int refresh_tenant_io_unit_config(const uint64_t tenant_id, const ObTenantIOConfig::UnitConfig &tenant_io_unit_config);
+  int refresh_tenant_io_unit_config(const ObTenantIOConfig::UnitConfig &tenant_io_unit_config);
   // tenant management
-  int refresh_tenant_io_param_config(const uint64_t tenant_id, const ObTenantIOConfig::ParamConfig &tenant_io_param_config);
-  int get_tenant_io_manager(const uint64_t tenant_id, ObRefHolder<ObTenantIOManager> &tenant_holder) const;
+  int refresh_tenant_io_param_config(const ObTenantIOConfig::ParamConfig &tenant_io_param_config);
+  int get_tenant_io_manager(ObRefHolder<ObTenantIOManager> &tenant_holder) const;
   OB_INLINE bool is_inited()
   {
     return is_inited_;
   }
-  int modify_group_io_config(const uint64_t tenant_id, const uint64_t index, const int64_t min_percent,
+  int modify_group_io_config(const uint64_t index, const int64_t min_percent,
       const int64_t max_percent, const int64_t weight_percent);
   ObTrafficControl &get_tc()
   {
@@ -311,7 +306,7 @@ public:
   void print_tenant_status();
   void print_channel_status();
   void print_status();
-  int64_t get_object_storage_io_timeout_ms(const uint64_t tenant_id) const;
+  int64_t get_object_storage_io_timeout_ms() const;
 
 private:
   friend class ObTenantIOManager;
@@ -344,7 +339,7 @@ public:
 public:
   ObTenantIOManager();
   ~ObTenantIOManager();
-  int init(const uint64_t tenant_id, const ObTenantIOConfig &io_config);
+  int init(const ObTenantIOConfig &io_config);
   int init_io_config();
   void destroy();
   int start();
@@ -373,10 +368,10 @@ public:
   int try_alloc_result_until_timeout(const int64_t timeout_ts, ObIOResult *&result);
   int alloc_io_request(ObIORequest *&req);
   int alloc_io_result(ObIOResult *&result);
-  int init_group_index_map(const int64_t tenant_id, const ObTenantIOConfig &io_config);
+  int init_group_index_map(const ObTenantIOConfig &io_config);
   int get_group_index(const ObIOGroupKey &key, uint64_t &index);
-  int calc_io_memory(const uint64_t tenant_id, const int64_t memory);
-  int init_memory_pool(const uint64_t tenant_id, const int64_t memory);
+  int calc_io_memory(const int64_t memory);
+  int init_memory_pool(const int64_t memory);
   int update_memory_pool(const int64_t memory);
   int modify_group_io_config(const uint64_t index,
                              const int64_t min_percent,
@@ -403,7 +398,7 @@ public:
   const ObIOFuncUsages& get_io_func_infos();
   OB_INLINE int64_t get_object_storage_io_timeout_ms() const { return io_config_.param_config_.object_storage_io_timeout_ms_; }
 
-  TO_STRING_KV(K(is_inited_), K(tenant_id_), K(ref_cnt_), K(io_memory_limit_), K(request_count_), K(result_count_),
+  TO_STRING_KV(K(is_inited_), K(ref_cnt_), K(io_memory_limit_), K(request_count_), K(result_count_),
        K(io_config_), K(io_allocator_), K(callback_mgr_), K(io_memory_limit_),
        K(request_count_), K(result_count_));
 private:
@@ -415,7 +410,7 @@ private:
   int64_t io_memory_limit_;
   int64_t request_count_;
   int64_t result_count_;
-  uint64_t tenant_id_;
+  
   ObTenantIOConfig io_config_;
   ObIOAllocator io_allocator_;
   ObIOCallbackManager callback_mgr_;

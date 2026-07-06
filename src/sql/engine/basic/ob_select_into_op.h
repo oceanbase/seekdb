@@ -23,8 +23,7 @@
 #include <parquet/api/writer.h>
 #endif
 #include "lib/file/ob_file.h"
-#include "share/backup/ob_backup_struct.h"
-#include "sql/engine/table/ob_external_table_access_service.h"
+#include "share/io/ob_backup_storage_info.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "sql/engine/basic/ob_select_into_basic.h"
 #include "sql/engine/basic/ob_external_file_writer.h"
@@ -148,8 +147,6 @@ public:
       curr_partition_num_(0),
       external_properties_(),
       format_type_(ObExternalFileFormat::FormatType::CSV_FORMAT),
-      is_odps_cpp_table_(false),
-      is_odps_java_table_(false),
       block_id_(0),
       need_commit_(true)
 #ifndef OB_BUILD_EMBED_MODE
@@ -382,8 +379,6 @@ private:
   int curr_partition_num_;
   ObExternalFileFormat external_properties_;
   ObExternalFileFormat::FormatType format_type_;
-  bool is_odps_cpp_table_;
-  bool is_odps_java_table_;
   uint32_t block_id_;
   bool need_commit_;
   // Handle parquet variables

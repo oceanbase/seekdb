@@ -290,7 +290,7 @@ int ObDASSPIVMergeIter::inner_init(ObDASIterParam &param)
 
     if (OB_ISNULL(mem_context_)) {
       lib::ContextParam param;
-      param.set_mem_attr(MTL_ID(), "SPIV_MERGE", ObCtxIds::DEFAULT_CTX_ID);
+      param.set_mem_attr("SPIV_MERGE", ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
         LOG_WARN("failed to create vector spiv_merge memory context", K(ret));
       }
@@ -309,7 +309,7 @@ int ObDASSPIVMergeIter::inner_init(ObDASIterParam &param)
       LOG_WARN("distance type not support yet", K(ret), K(dis_type_));
     } else if (OB_FALSE_IT(set_algo())) {
     } else if (vec_aux_ctdef_->is_pre_filter()){
-      if (OB_FAIL(valid_docid_set_.create(16, ObMemAttr(MTL_ID(), "ValidDocidSet")))) {
+      if (OB_FAIL(valid_docid_set_.create(16, ObMemAttr("ValidDocidSet")))) {
         LOG_WARN("failed to create docid set", K(ret));
       }
     }

@@ -26,15 +26,15 @@ namespace schema
 {
 struct ObObjMysqlPrivSortKey
 {
-  ObObjMysqlPrivSortKey() : tenant_id_(common::OB_INVALID_ID), user_id_(common::OB_INVALID_ID), object_name_(), object_type_(common::OB_INVALID_ID)
+  ObObjMysqlPrivSortKey() : user_id_(common::OB_INVALID_ID), object_name_(), object_type_(common::OB_INVALID_ID)
   {}
-  ObObjMysqlPrivSortKey(const uint64_t tenant_id, const uint64_t user_id,
+  ObObjMysqlPrivSortKey(const uint64_t user_id,
                      const common::ObString &object_name, const uint64_t &object_type)
-      : tenant_id_(tenant_id), user_id_(user_id), object_name_(object_name), object_type_(object_type)
+      : user_id_(user_id), object_name_(object_name), object_type_(object_type)
   {}
   bool operator==(const ObObjMysqlPrivSortKey &rhs) const
   {
-    return (tenant_id_ == rhs.tenant_id_) && (user_id_ == rhs.user_id_)
+    return (true) && (user_id_ == rhs.user_id_)
            && (object_name_ == rhs.object_name_) && (object_type_ == rhs.object_type_);
   }
   bool operator!=(const ObObjMysqlPrivSortKey &rhs) const
@@ -43,9 +43,9 @@ struct ObObjMysqlPrivSortKey
   }
   bool operator<(const ObObjMysqlPrivSortKey &rhs) const
   {
-    ObCompareNameWithTenantID name_cmp(tenant_id_);
-    bool bret = tenant_id_ < rhs.tenant_id_;
-    if (false == bret && tenant_id_ == rhs.tenant_id_) {
+    ObCompareNameWithTenantID name_cmp;
+    bool bret = false;
+    if (false == bret && true) {
       bret = user_id_ < rhs.user_id_;
       if (false == bret && user_id_ == rhs.user_id_) {
         bret = object_type_ < rhs.object_type_;
@@ -65,7 +65,6 @@ struct ObObjMysqlPrivSortKey
   inline uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-    hash_ret = common::murmurhash(&tenant_id_, sizeof(tenant_id_), 0);
     hash_ret = common::murmurhash(&user_id_, sizeof(user_id_), hash_ret);
     hash_ret = common::murmurhash(object_name_.ptr(), object_name_.length(), hash_ret);
     hash_ret = common::murmurhash(&object_type_, sizeof(object_type_), hash_ret);
@@ -73,13 +72,13 @@ struct ObObjMysqlPrivSortKey
   }
   bool is_valid() const
   {
-    return (tenant_id_ != common::OB_INVALID_ID) && (user_id_ != common::OB_INVALID_ID);
+    return (true) && (user_id_ != common::OB_INVALID_ID);
   }
 
   int deep_copy(const ObObjMysqlPrivSortKey &src, common::ObIAllocator &allocator)
   {
     int ret = OB_SUCCESS;
-    tenant_id_ = src.tenant_id_;
+    
     user_id_ = src.user_id_;
     object_type_ = src.object_type_;
     if (OB_FAIL(common::ob_write_string(allocator, src.object_name_, object_name_))) {
@@ -88,8 +87,8 @@ struct ObObjMysqlPrivSortKey
     return ret;
   }
 
-  TO_STRING_KV(K_(tenant_id), K_(user_id), K_(object_name), K_(object_type));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(user_id), K_(object_name), K_(object_type));
+  
   uint64_t user_id_;
   common::ObString object_name_;
   uint64_t object_type_;
@@ -122,7 +121,7 @@ public:
 
   //for sort
   ObObjMysqlPrivSortKey get_sort_key() const
-  { return ObObjMysqlPrivSortKey(tenant_id_, user_id_, obj_name_, obj_type_); }
+  { return ObObjMysqlPrivSortKey(user_id_, obj_name_, obj_type_); }
   static bool cmp(const ObObjMysqlPriv *lhs, const ObObjMysqlPriv *rhs)
   { return (NULL != lhs && NULL != rhs) ? lhs->get_sort_key() < rhs->get_sort_key() : false; }
   static bool cmp_sort_key(const ObObjMysqlPriv *lhs, const ObObjMysqlPrivSortKey &sort_key)
@@ -140,7 +139,7 @@ public:
   inline const char* get_obj_name() const { return extract_str(obj_name_); }
   inline uint64_t get_obj_type() const { return obj_type_; }
 
-  TO_STRING_KV(K_(tenant_id), K_(user_id), K_(obj_name), K_(obj_type),
+  TO_STRING_KV(K_(user_id), K_(obj_name), K_(obj_type),
                "privileges", ObPrintPrivSet(priv_set_));
   //other methods
   virtual bool is_valid() const;

@@ -24,12 +24,12 @@ namespace oceanbase
 namespace blocksstable
 {
 
-ObIndexBlockBareIterator::ObIndexBlockBareIterator(const uint64_t tenant_id)
-    : ObMicroBlockBareIterator(tenant_id),
+ObIndexBlockBareIterator::ObIndexBlockBareIterator()
+    : ObMicroBlockBareIterator{},
       rowkey_column_count_(0),
       cur_row_idx_(0),
       row_count_(0),
-      row_(tenant_id)
+      row_{}
 {}
 
 ObIndexBlockBareIterator::~ObIndexBlockBareIterator()

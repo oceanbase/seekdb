@@ -645,11 +645,7 @@ struct AbsFuncIniter
 static bool abs_eval_func_init_ret = ObArrayConstIniter<ObMaxType, AbsFuncIniter>::init();
 
 static_assert(ObMaxType == sizeof(abs_funcs) / sizeof(void *), "unexpected size");
-
 static_assert(ObMaxType == sizeof(abs_vec_funcs) / sizeof(void *), "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_ABS_EVAL, abs_funcs, ARRAYSIZEOF(abs_funcs));
-
-REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_ABS_EVAL_VEC, abs_vec_funcs, ARRAYSIZEOF(abs_vec_funcs));
 
 ObExprAbs::ObExprAbs(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_OP_ABS, N_ABS, 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION),

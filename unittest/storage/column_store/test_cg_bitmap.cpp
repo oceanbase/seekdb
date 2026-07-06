@@ -22,7 +22,7 @@
 
 #define private public
 #define OK(ass) ASSERT_EQ(OB_SUCCESS, (ass))
-#include "common/ob_target_specific.h"
+#include "lib/utility/ob_target_specific.h"
 #include "storage/ob_storage_struct.h"
 
 

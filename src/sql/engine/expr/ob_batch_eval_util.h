@@ -20,8 +20,8 @@
 #include <type_traits>
 
 #include "sql/engine/expr/ob_expr.h"
-#include "share/vector/ob_uniform_base.h"
-#include "share/vector/ob_discrete_base.h"
+#include "sql/engine/vector/ob_uniform_base.h"
+#include "sql/engine/vector/ob_discrete_base.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 
 namespace oceanbase

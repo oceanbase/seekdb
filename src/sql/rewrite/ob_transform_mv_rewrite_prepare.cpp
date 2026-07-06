@@ -87,7 +87,7 @@ int ObTransformMVRewritePrepare::check_table_has_mv(const ObDMLStmt *stmt,
       LOG_WARN("table item is null", K(ret), K(i), K(stmt->get_table_size()));
     } else if (!table->is_basic_table()) {
       // do nothing
-    } else if (OB_FAIL(ctx_->schema_checker_->get_table_schema(ctx_->session_info_->get_effective_tenant_id(),
+    } else if (OB_FAIL(ctx_->schema_checker_->get_table_schema(
                                                                table->ref_id_,
                                                                table_schema))) {
       LOG_WARN("failed to get table schema", K(ret), K(i), K(table->ref_id_));
@@ -194,7 +194,7 @@ int ObTransformMVRewritePrepare::get_mv_list(const ObDMLStmt *root_stmt,
     LOG_WARN("failed to assign sql", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      if (OB_FAIL(sql_proxy->read(res, ctx_->session_info_->get_effective_tenant_id(), sql.ptr()))) {
+      if (OB_FAIL(sql_proxy->read(res, sql.ptr()))) {
         LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_ISNULL(mysql_result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -309,14 +309,14 @@ int ObTransformMVRewritePrepare::generate_mv_info(ObIArray<uint64_t> &mv_list,
     const ObTableSchema *mv_schema = NULL;
     const ObDatabaseSchema *db_schema = NULL;
     bool is_valid = true;
-    if (OB_FAIL(ctx_->schema_checker_->get_table_schema(ctx_->session_info_->get_effective_tenant_id(),
+    if (OB_FAIL(ctx_->schema_checker_->get_table_schema(
                                                         mv_list.at(i),
                                                         mv_schema))) {
       LOG_WARN("failed to get mv schema", K(ret), K(mv_list.at(i)));
     } else if (OB_ISNULL(mv_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("mv schema is null", K(ret), K(mv_list.at(i)));
-    } else if (OB_FAIL(ctx_->schema_checker_->get_database_schema(ctx_->session_info_->get_effective_tenant_id(),
+    } else if (OB_FAIL(ctx_->schema_checker_->get_database_schema(
                                                                   mv_schema->get_database_id(),
                                                                   db_schema))) {
       LOG_WARN("failed to get data base schema", K(ret), K(mv_schema->get_database_id()));
@@ -333,7 +333,7 @@ int ObTransformMVRewritePrepare::generate_mv_info(ObIArray<uint64_t> &mv_list,
     } else {
       uint64_t data_table_id = mv_schema->get_data_table_id();
       const ObTableSchema *data_table_schema = NULL;
-      if (OB_FAIL(ctx_->schema_checker_->get_table_schema(ctx_->session_info_->get_effective_tenant_id(),
+      if (OB_FAIL(ctx_->schema_checker_->get_table_schema(
                                                           data_table_id,
                                                           data_table_schema))) {
         LOG_WARN("failed to get data table schema", K(ret), K(data_table_id));

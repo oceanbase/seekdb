@@ -31,7 +31,7 @@ namespace blocksstable
 class ObMicroBlockBareIterator
 {
 public:
-  ObMicroBlockBareIterator(const uint64_t tenant_id = MTL_ID());
+  ObMicroBlockBareIterator();
   virtual ~ObMicroBlockBareIterator();
   void reset();
   void reuse();
@@ -138,7 +138,7 @@ private:
 class ObMacroBlockRowBareIterator
 {
 public:
-  ObMacroBlockRowBareIterator(common::ObIAllocator &allocator, const uint64_t tenant_id = MTL_ID());
+  ObMacroBlockRowBareIterator(common::ObIAllocator &allocator);
   virtual ~ObMacroBlockRowBareIterator();
   void reset();
   int open(

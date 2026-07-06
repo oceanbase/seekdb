@@ -24,8 +24,7 @@
 #include <parquet/api/writer.h>
 #endif
 #include "lib/file/ob_file.h"
-#include "share/backup/ob_backup_struct.h"
-#include "sql/engine/table/ob_external_table_access_service.h"
+#include "share/io/ob_backup_storage_info.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "ob_select_into_basic.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
@@ -148,7 +147,7 @@ public:
     row_batch_size_(64),
     row_batch_offset_(0),
     batch_has_written_(true),
-    batch_allocator_("ParquetOrc", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    batch_allocator_("ParquetOrc", OB_MALLOC_NORMAL_BLOCK_SIZE)
   {}
 
   virtual ~ObBatchFileWriter()

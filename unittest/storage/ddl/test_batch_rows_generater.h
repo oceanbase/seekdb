@@ -19,11 +19,11 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "lib/container/ob_array.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 #include "storage/blocksstable/ob_batch_datum_rows.h"
 #include "common/object/ob_obj_type.h"
 #include "unittest/storage/blocksstable/cs_encoding/ob_row_vector_converter.h"
-#include "sql/engine/expr/ob_array_cast.h"
+#include "share/object/ob_array_cast.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "storage/blocksstable/ob_datum_row.h"
 

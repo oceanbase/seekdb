@@ -36,11 +36,6 @@ public:
   virtual ~ObServerReloadConfig();
 
   int operator()();
-  class ObReloadTenantFreezerConfOp
-  {
-  public:
-    int operator()();
-  };
 private:
   void reload_tenant_scheduler_config_();
   void reload_tenant_freezer_config_();

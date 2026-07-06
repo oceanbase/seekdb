@@ -109,7 +109,7 @@ public:
   }
   ObTabletStatusCache()
     : tablet_id_(),
-      allocator_(ObMemAttr(MTL_ID(), "MediumList")),
+      allocator_(ObMemAttr("MediumList")),
       medium_list_(nullptr),
       tablet_merge_finish_(false),
       execute_state_(EXECUTE_STATE_MAX),

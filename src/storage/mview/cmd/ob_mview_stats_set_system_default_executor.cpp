@@ -31,7 +31,6 @@ using namespace sql;
 ObMViewStatsSetSystemDefaultExecutor::ObMViewStatsSetSystemDefaultExecutor()
   : ctx_(nullptr),
     session_info_(nullptr),
-    tenant_id_(OB_INVALID_TENANT_ID),
     op_type_(OpType::MAX),
     collection_level_(ObMVRefreshStatsCollectionLevel::MAX),
     retention_period_(0)
@@ -48,24 +47,24 @@ int ObMViewStatsSetSystemDefaultExecutor::execute(ObExecContext &ctx,
   CK(OB_NOT_NULL(session_info_ = ctx.get_my_session()));
   CK(OB_NOT_NULL(ctx.get_sql_proxy()));
   OV(OB_LIKELY(arg.is_valid()), OB_INVALID_ARGUMENT, arg);
-  OX(tenant_id_ = session_info_->get_effective_tenant_id());
+  OX();
   OZ(resolve_arg(arg));
 
   if (OB_SUCC(ret)) {
     ObMySQLTransaction trans;
     ObMViewRefreshStatsParams stats_params;
-    if (OB_FAIL(trans.start(ctx.get_sql_proxy(), tenant_id_))) {
+    if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
       LOG_WARN("fail to start trans", KR(ret));
     } else if (OB_FAIL(ObMViewRefreshStatsParams::fetch_sys_defaults(
-                 trans, tenant_id_, stats_params, true /*for_update*/))) {
-      LOG_WARN("fail to fetch sys defaults", KR(ret), K(tenant_id_));
+                 trans, stats_params, true /*for_update*/))) {
+      LOG_WARN("fail to fetch sys defaults", KR(ret));
     } else if (OpType::SET_COLLECTION_LEVEL == op_type_ &&
                FALSE_IT(stats_params.set_collection_level(collection_level_))) {
     } else if (OpType::SET_RETENTION_PERIOD == op_type_ &&
                FALSE_IT(stats_params.set_retention_period(retention_period_))) {
     } else if (OB_FAIL(
-                 ObMViewRefreshStatsParams::set_sys_defaults(trans, tenant_id_, stats_params))) {
-      LOG_WARN("fail to set sys defaults", KR(ret), K(tenant_id_), K(stats_params));
+                 ObMViewRefreshStatsParams::set_sys_defaults(trans, stats_params))) {
+      LOG_WARN("fail to set sys defaults", KR(ret), K(stats_params));
     }
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;

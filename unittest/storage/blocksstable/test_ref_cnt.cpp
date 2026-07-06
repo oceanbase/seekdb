@@ -62,8 +62,7 @@ TestRefCnt::~TestRefCnt()
 void TestRefCnt::SetUp()
 {
   int ret = OB_SUCCESS;
-  ret = getter.add_tenant(OB_SERVER_TENANT_ID,
-                          2 * 1024L * 1024L, 4 * 1024L * 1024L);
+  ret = getter.add_tenant(2 * 1024L * 1024L, 4 * 1024L * 1024L);
   ASSERT_EQ(OB_SUCCESS, ret);
   TestDataFilePrepare::SetUp();
 }

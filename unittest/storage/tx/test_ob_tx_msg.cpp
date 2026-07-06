@@ -64,7 +64,6 @@ public:
   {
     int ret = OB_SUCCESS;
     msg.cluster_version_ = cluster_version_;
-    msg.tenant_id_ = tenant_id_;
     msg.tx_id_ = tx_id_;
     msg.receiver_ = receiver_;
     msg.sender_addr_ = self_;
@@ -82,7 +81,6 @@ public:
   void build_tx_commit_resp_msg(ObTxCommitRespMsg &msg)
   {
     msg.cluster_version_ = cluster_version_;
-    msg.tenant_id_ = tenant_id_;
     msg.tx_id_ = tx_id_;
     msg.receiver_ = receiver_;
     msg.sender_addr_ = self_;
@@ -97,7 +95,6 @@ public:
   void build_tx_abort_msg(ObTxAbortMsg &msg)
   {
     msg.cluster_version_ = cluster_version_;
-    msg.tenant_id_ = tenant_id_;
     msg.tx_id_ = tx_id_;
     msg.receiver_ = receiver_;
     msg.sender_addr_ = self_;
@@ -111,7 +108,6 @@ public:
   void build_tx_rollback_sp_msg(ObTxRollbackSPMsg &msg, ObTxDesc *tx)
   {
     msg.cluster_version_ = cluster_version_;
-    msg.tenant_id_ = tenant_id_;
     msg.tx_id_ = tx_id_;
     msg.receiver_ = receiver_;
     msg.sender_addr_ = self_;
@@ -128,7 +124,6 @@ public:
   void build_tx_keepalive_msg(ObTxKeepaliveMsg &msg)
   {
     msg.cluster_version_ = cluster_version_;
-    msg.tenant_id_ = tenant_id_;
     msg.cluster_id_ = cluster_id_;
     msg.request_id_ = op_sn_;
     msg.tx_id_ = tx_id_;
@@ -142,7 +137,6 @@ public:
   {
     int ret = OB_SUCCESS;
     msg.cluster_version_ = cluster_version_;
-    msg.tenant_id_ = tenant_id_;
     msg.tx_id_ = tx_id_;
     msg.receiver_ = receiver_;
     msg.sender_addr_ = self_;
@@ -159,7 +153,6 @@ public:
   {
     int ret = OB_SUCCESS;
     msg.cluster_version_ = cluster_version_;
-    msg.tenant_id_ = tenant_id_;
     msg.tx_id_ = tx_id_;
     msg.receiver_ = receiver_;
     msg.sender_addr_ = self_;
@@ -177,7 +170,6 @@ public:
   void build_tx_2pc_pre_commit_msg(Ob2pcPreCommitReqMsg &msg)
   {
     msg.cluster_version_ = cluster_version_;
-    msg.tenant_id_ = tenant_id_;
     msg.tx_id_ = tx_id_;
     msg.receiver_ = receiver_;
     msg.sender_addr_ = self_;
@@ -191,7 +183,6 @@ public:
   void build_tx_2pc_pre_commit_resp_msg(Ob2pcPreCommitRespMsg &msg)
   {
     msg.cluster_version_ = cluster_version_;
-    msg.tenant_id_ = tenant_id_;
     msg.tx_id_ = tx_id_;
     msg.receiver_ = receiver_;
     msg.sender_addr_ = self_;
@@ -206,7 +197,6 @@ public:
   {
     int ret = OB_SUCCESS;
     msg.cluster_version_ = cluster_version_;
-    msg.tenant_id_ = tenant_id_;
     msg.tx_id_ = tx_id_;
     msg.receiver_ = receiver_;
     msg.sender_addr_ = self_;
@@ -224,7 +214,6 @@ public:
   void build_tx_2pc_abort_msg(Ob2pcAbortReqMsg &msg)
   {
     msg.cluster_version_ = cluster_version_;
-    msg.tenant_id_ = tenant_id_;
     msg.tx_id_ = tx_id_;
     msg.receiver_ = receiver_;
     msg.sender_addr_ = self_;
@@ -238,7 +227,6 @@ public:
   {
     int ret = OB_SUCCESS;
     msg.cluster_version_ = cluster_version_;
-    msg.tenant_id_ = tenant_id_;
     msg.tx_id_ = tx_id_;
     msg.receiver_ = receiver_;
     msg.sender_addr_ = self_;
@@ -258,7 +246,6 @@ public:
   void build_tx_sub_commit_msg(ObTxSubCommitMsg &msg)
   {
     msg.cluster_version_ = cluster_version_;
-    msg.tenant_id_ = tenant_id_;
     msg.tx_id_ = tx_id_;
     msg.receiver_ = receiver_;
     msg.sender_addr_ = self_;
@@ -273,7 +260,6 @@ public:
   void build_tx_sub_rollback_msg(ObTxSubRollbackMsg &msg)
   {
     msg.cluster_version_ = cluster_version_;
-    msg.tenant_id_ = tenant_id_;
     msg.tx_id_ = tx_id_;
     msg.receiver_ = receiver_;
     msg.sender_addr_ = self_;
@@ -317,7 +303,6 @@ TEST_F(TestObTxMsg, trans_commit_msg)
   ASSERT_EQ(OB_SUCCESS, msg1.deserialize(buffer, pos, start_index));
   EXPECT_EQ(msg.get_msg_type(), msg1.get_msg_type());
   EXPECT_EQ(msg.cluster_version_, msg1.cluster_version_);
-  EXPECT_EQ(msg.get_tenant_id(), msg1.get_tenant_id());
   EXPECT_EQ(msg.get_trans_id(), msg1.get_trans_id());
   EXPECT_EQ(msg.get_receiver(), msg1.get_receiver());
   EXPECT_EQ(msg.get_epoch(), msg1.get_epoch());
@@ -351,7 +336,6 @@ TEST_F(TestObTxMsg, trans_commit_resp_msg)
   ASSERT_EQ(OB_SUCCESS, msg1.deserialize(buffer, pos, start_index));
   EXPECT_EQ(msg.get_msg_type(), msg1.get_msg_type());
   EXPECT_EQ(msg.cluster_version_, msg1.cluster_version_);
-  EXPECT_EQ(msg.get_tenant_id(), msg1.get_tenant_id());
   EXPECT_EQ(msg.get_trans_id(), msg1.get_trans_id());
   EXPECT_EQ(msg.get_receiver(), msg1.get_receiver());
   EXPECT_EQ(msg.get_epoch(), msg1.get_epoch());
@@ -385,7 +369,6 @@ TEST_F(TestObTxMsg, trans_abort_msg)
   ASSERT_EQ(OB_SUCCESS, msg1.deserialize(buffer, pos, start_index));
   EXPECT_EQ(msg.get_msg_type(), msg1.get_msg_type());
   EXPECT_EQ(msg.cluster_version_, msg1.cluster_version_);
-  EXPECT_EQ(msg.get_tenant_id(), msg1.get_tenant_id());
   EXPECT_EQ(msg.get_trans_id(), msg1.get_trans_id());
   EXPECT_EQ(msg.get_receiver(), msg1.get_receiver());
   EXPECT_EQ(msg.get_epoch(), msg1.get_epoch());
@@ -422,7 +405,6 @@ TEST_F(TestObTxMsg, trans_rollback_sp_msg)
   ASSERT_EQ(OB_SUCCESS, msg1.deserialize(buffer, pos, start_index));
   EXPECT_EQ(msg.get_msg_type(), msg1.get_msg_type());
   EXPECT_EQ(msg.cluster_version_, msg1.cluster_version_);
-  EXPECT_EQ(msg.get_tenant_id(), msg1.get_tenant_id());
   EXPECT_EQ(msg.get_trans_id(), msg1.get_trans_id());
   EXPECT_EQ(msg.get_receiver(), msg1.get_receiver());
   EXPECT_EQ(msg.get_epoch(), msg1.get_epoch());
@@ -461,7 +443,6 @@ TEST_F(TestObTxMsg, trans_keepalive_msg)
   ASSERT_EQ(OB_SUCCESS, msg1.deserialize(buffer, pos, start_index));
   EXPECT_EQ(msg.get_msg_type(), msg1.get_msg_type());
   EXPECT_EQ(msg.cluster_version_, msg1.cluster_version_);
-  EXPECT_EQ(msg.get_tenant_id(), msg1.get_tenant_id());
   EXPECT_EQ(msg.get_trans_id(), msg1.get_trans_id());
   EXPECT_EQ(msg.get_receiver(), msg1.get_receiver());
   EXPECT_EQ(msg.get_epoch(), msg1.get_epoch());
@@ -494,7 +475,6 @@ TEST_F(TestObTxMsg, trans_2pc_prepare_msg)
   ASSERT_EQ(OB_SUCCESS, msg1.deserialize(buffer, pos, start_index));
   EXPECT_EQ(msg.get_msg_type(), msg1.get_msg_type());
   EXPECT_EQ(msg.cluster_version_, msg1.cluster_version_);
-  EXPECT_EQ(msg.get_tenant_id(), msg1.get_tenant_id());
   EXPECT_EQ(msg.get_trans_id(), msg1.get_trans_id());
   EXPECT_EQ(msg.get_receiver(), msg1.get_receiver());
   EXPECT_EQ(msg.get_epoch(), msg1.get_epoch());
@@ -528,7 +508,6 @@ TEST_F(TestObTxMsg, trans_2pc_prepare_resp_msg)
   ASSERT_EQ(OB_SUCCESS, msg1.deserialize(buffer, pos, start_index));
   EXPECT_EQ(msg.get_msg_type(), msg1.get_msg_type());
   EXPECT_EQ(msg.cluster_version_, msg1.cluster_version_);
-  EXPECT_EQ(msg.get_tenant_id(), msg1.get_tenant_id());
   EXPECT_EQ(msg.get_trans_id(), msg1.get_trans_id());
   EXPECT_EQ(msg.get_receiver(), msg1.get_receiver());
   EXPECT_EQ(msg.get_epoch(), msg1.get_epoch());
@@ -560,7 +539,6 @@ TEST_F(TestObTxMsg, trans_2pc_pre_commit_msg)
   ASSERT_EQ(OB_SUCCESS, msg1.deserialize(buffer, pos, start_index));
   EXPECT_EQ(msg.get_msg_type(), msg1.get_msg_type());
   EXPECT_EQ(msg.cluster_version_, msg1.cluster_version_);
-  EXPECT_EQ(msg.get_tenant_id(), msg1.get_tenant_id());
   EXPECT_EQ(msg.get_trans_id(), msg1.get_trans_id());
   EXPECT_EQ(msg.get_receiver(), msg1.get_receiver());
   EXPECT_EQ(msg.get_epoch(), msg1.get_epoch());
@@ -593,7 +571,6 @@ TEST_F(TestObTxMsg, trans_2pc_pre_commit_resp_msg)
   ASSERT_EQ(OB_SUCCESS, msg1.deserialize(buffer, pos, start_index));
   EXPECT_EQ(msg.get_msg_type(), msg1.get_msg_type());
   EXPECT_EQ(msg.cluster_version_, msg1.cluster_version_);
-  EXPECT_EQ(msg.get_tenant_id(), msg1.get_tenant_id());
   EXPECT_EQ(msg.get_trans_id(), msg1.get_trans_id());
   EXPECT_EQ(msg.get_receiver(), msg1.get_receiver());
   EXPECT_EQ(msg.get_epoch(), msg1.get_epoch());
@@ -626,7 +603,6 @@ TEST_F(TestObTxMsg, trans_2pc_commit_msg)
   ASSERT_EQ(OB_SUCCESS, msg1.deserialize(buffer, pos, start_index));
   EXPECT_EQ(msg.get_msg_type(), msg1.get_msg_type());
   EXPECT_EQ(msg.cluster_version_, msg1.cluster_version_);
-  EXPECT_EQ(msg.get_tenant_id(), msg1.get_tenant_id());
   EXPECT_EQ(msg.get_trans_id(), msg1.get_trans_id());
   EXPECT_EQ(msg.get_receiver(), msg1.get_receiver());
   EXPECT_EQ(msg.get_epoch(), msg1.get_epoch());
@@ -659,7 +635,6 @@ TEST_F(TestObTxMsg, trans_2pc_abort_msg)
   ASSERT_EQ(OB_SUCCESS, msg1.deserialize(buffer, pos, start_index));
   EXPECT_EQ(msg.get_msg_type(), msg1.get_msg_type());
   EXPECT_EQ(msg.cluster_version_, msg1.cluster_version_);
-  EXPECT_EQ(msg.get_tenant_id(), msg1.get_tenant_id());
   EXPECT_EQ(msg.get_trans_id(), msg1.get_trans_id());
   EXPECT_EQ(msg.get_receiver(), msg1.get_receiver());
   EXPECT_EQ(msg.get_epoch(), msg1.get_epoch());
@@ -691,7 +666,6 @@ TEST_F(TestObTxMsg, trans_sub_prepare_msg)
   ASSERT_EQ(OB_SUCCESS, msg1.deserialize(buffer, pos, start_index));
   EXPECT_EQ(msg.get_msg_type(), msg1.get_msg_type());
   EXPECT_EQ(msg.cluster_version_, msg1.cluster_version_);
-  EXPECT_EQ(msg.get_tenant_id(), msg1.get_tenant_id());
   EXPECT_EQ(msg.get_trans_id(), msg1.get_trans_id());
   EXPECT_EQ(msg.get_receiver(), msg1.get_receiver());
   EXPECT_EQ(msg.get_epoch(), msg1.get_epoch());
@@ -725,7 +699,6 @@ TEST_F(TestObTxMsg, trans_sub_commit_msg)
   ASSERT_EQ(OB_SUCCESS, msg1.deserialize(buffer, pos, start_index));
   EXPECT_EQ(msg.get_msg_type(), msg1.get_msg_type());
   EXPECT_EQ(msg.cluster_version_, msg1.cluster_version_);
-  EXPECT_EQ(msg.get_tenant_id(), msg1.get_tenant_id());
   EXPECT_EQ(msg.get_trans_id(), msg1.get_trans_id());
   EXPECT_EQ(msg.get_receiver(), msg1.get_receiver());
   EXPECT_EQ(msg.get_epoch(), msg1.get_epoch());
@@ -758,7 +731,6 @@ TEST_F(TestObTxMsg, trans_sub_rollback_msg)
   ASSERT_EQ(OB_SUCCESS, msg1.deserialize(buffer, pos, start_index));
   EXPECT_EQ(msg.get_msg_type(), msg1.get_msg_type());
   EXPECT_EQ(msg.cluster_version_, msg1.cluster_version_);
-  EXPECT_EQ(msg.get_tenant_id(), msg1.get_tenant_id());
   EXPECT_EQ(msg.get_trans_id(), msg1.get_trans_id());
   EXPECT_EQ(msg.get_receiver(), msg1.get_receiver());
   EXPECT_EQ(msg.get_epoch(), msg1.get_epoch());

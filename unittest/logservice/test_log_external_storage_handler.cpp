@@ -16,10 +16,12 @@
 
 #define private public
 #define protected public
+#include "share/rc/ob_tenant_base.h"
 #include "logservice/ob_log_external_storage_handler.h"
 #include "logservice/ob_log_external_storage_utils.h"
-#include "share/backup/ob_backup_io_adapter.h"
+#include "share/io/ob_backup_io_adapter.h"
 #include "share/io/ob_io_manager.h"
+#include "share/rc/ob_tenant_base.h"
 #undef protected
 #undef private
 #include "share/ob_device_manager.h"
@@ -264,6 +266,9 @@ TEST(TestLogExternalStorageHandler, test_log_external_storage_handler)
 }
 }
 
+using namespace oceanbase;
+using namespace oceanbase::common;
+
 int main(int argc, char **argv)
 {
   system("rm -rf test_log_external_storage_handler.log*");
@@ -274,15 +279,8 @@ int main(int argc, char **argv)
   EXPECT_EQ(OB_SUCCESS, ObDeviceManager::get_instance().init_devices_env());
   EXPECT_EQ(OB_SUCCESS, ObIOManager::get_instance().init(1000000000));
   EXPECT_EQ(OB_SUCCESS, ObIOManager::get_instance().start());
-  ObTenantIOConfig tenant_io_config = ObTenantIOConfig::default_instance();
-  oceanbase::share::ObTenantBase *tenant_base = MTL_NEW(oceanbase::share::ObTenantBase, "unittest", OB_SERVER_TENANT_ID);
-  ObTenantIOManager *tio_manager = NULL;
-  ObTenantIOManager::mtl_new(tio_manager);
-  ObTenantIOManager::mtl_init(tio_manager);
-  tenant_base->set(tio_manager);
-  tenant_base->unit_min_cpu_ = 100;
-  tenant_base->unit_min_cpu_ = 100;
-  oceanbase::share::ObTenantEnv::set_tenant(tenant_base);
+  static oceanbase::share::ObTenantBase tenant_base;
+  oceanbase::share::ObTenantEnv::set_tenant(&tenant_base);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

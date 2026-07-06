@@ -41,7 +41,6 @@ int ObConcurrentFIFOAllocator::init(const int64_t total_limit,
   if (OB_FAIL(inner_allocator_.init(
           page_size,
           "ConFifoAlloc",
-          OB_SERVER_TENANT_ID,
           cache_page_count,
           total_limit))) {
     LIB_LOG(WARN, "fail to init inner allocator", K(ret));
@@ -66,10 +65,9 @@ int ObConcurrentFIFOAllocator::init(const int64_t page_size,
 
 int ObConcurrentFIFOAllocator::init(const int64_t page_size,
                                     const lib::ObLabel &label,
-                                    const uint64_t tenant_id,
                                     const int64_t total_limit)
 {
-  return init(page_size, ObMemAttr(tenant_id, label), total_limit);
+  return init(page_size, ObMemAttr(label), total_limit);
 }
 
 

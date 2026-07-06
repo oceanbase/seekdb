@@ -18,6 +18,7 @@
 
 
 #include "ob_i_tablet_memtable.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ls/ob_freezer.h"
 #include "storage/tablet/ob_tablet_memtable_mgr.h"
 
@@ -123,7 +124,7 @@ int ObITabletMemtable::get_ls_current_right_boundary_(SCN &current_right_boundar
 
 int ObITabletMemtable::set_memtable_mgr_(storage::ObTabletMemtableMgr *mgr)
 {
-  ObTabletMemtableMgrPool *pool = MTL(ObTabletMemtableMgrPool*);
+  ObTabletMemtableMgrPool *pool = share::g_mp->tablet_memtable_mgr_pool();
   return memtable_mgr_handle_.set_memtable_mgr(mgr, pool);
 }
 

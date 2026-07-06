@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/ddl/ob_inc_ddl_merge_helper.h" 
+#include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
@@ -78,7 +79,7 @@ int ObIncMinDDLMergeHelper::process_prepare_task(ObIDag *dag,
   } else if (!tablet_handle.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tablet handle should not be invalid", K(ret));
-  } else if (OB_FAIL(slice_idxes.create(DDL_SLICE_BUCKET_NUM, ObMemAttr(MTL_ID(), "slice_idx_set")))) {
+  } else if (OB_FAIL(slice_idxes.create(DDL_SLICE_BUCKET_NUM, ObMemAttr("slice_idx_set")))) {
     LOG_WARN("create slice index set failed", K(ret));
   } else {
     clog_checkpoint_scn = tablet_handle.get_obj()->get_clog_checkpoint_scn();
@@ -165,7 +166,7 @@ int ObIncMinDDLMergeHelper::merge_cg_slice(ObIDag *dag,
   ObTabletDDLParam tablet_ddl_param;
   ObArray<ObDDLBlockMeta> sorted_metas;
   ObArray<ObSSTable*> ddl_sstables;
-  ObArenaAllocator arena(ObMemAttr(MTL_ID(), "merge_cg_slice"));
+  ObArenaAllocator arena(ObMemAttr("merge_cg_slice"));
   
   /* prepare param */
   if (nullptr == dag || !dag_merge_param.is_valid() || cg_idx < 0 || start_slice_idx > end_slice_idx) {
@@ -263,7 +264,7 @@ int ObIncMinDDLMergeHelper::assemble_sstable(ObDDLTabletMergeDagParamV2 &dag_mer
   ObWriteTabletParam           *tablet_param = nullptr;
   ObDDLTabletContext::MergeCtx *merge_ctx    = nullptr;
 
-  ObLSService *ls_service = MTL(ObLSService*);
+  ObLSService *ls_service = share::g_mp->ls_service();
   ObLSHandle ls_handle;
 
   ObDDLKV *ddl_kv = nullptr;

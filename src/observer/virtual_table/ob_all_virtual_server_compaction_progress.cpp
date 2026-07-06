@@ -15,6 +15,7 @@
  */
 
 #include "ob_all_virtual_server_compaction_progress.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_server_compaction_event_history.h"
 
 namespace oceanbase
@@ -41,7 +42,7 @@ int ObAllVirtualServerCompactionProgress::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     SERVER_LOG(WARN, "ObAllVirtualServerCompactionProgress has been inited", K(ret));
-  } else if (OB_FAIL(progress_iter_.open(effective_tenant_id_))) {
+  } else if (OB_FAIL(progress_iter_.open())) {
     SERVER_LOG(WARN, "Fail to open suggestion iter", K(ret));
   } else {
     is_inited_ = true;
@@ -123,8 +124,8 @@ int ObAllVirtualServerCompactionProgress::fill_cells()
     case ESTIMATED_FINISH_TIME:
       if (share::ObIDag::DAG_STATUS_FINISH != progress_.status_) {
         update_estimated_finish_time = 0;
-        MTL_SWITCH(progress_.tenant_id_) {
-          if (OB_TMP_FAIL(MTL(ObTenantDagScheduler*)->get_max_major_finish_time(progress_.merge_version_, update_estimated_finish_time))) {
+        MOD_SCOPE {
+          if (OB_TMP_FAIL(share::g_mp->tenant_dag_scheduler()->get_max_major_finish_time(progress_.merge_version_, update_estimated_finish_time))) {
             SERVER_LOG(WARN, "failed to get max major_finish_time", K(tmp_ret));
           }
         }
@@ -141,8 +142,8 @@ int ObAllVirtualServerCompactionProgress::fill_cells()
       MEMSET(event_buf_, '\0', sizeof(event_buf_));
       tmp_event.reset();
       if (share::ObIDag::DAG_STATUS_FINISH != progress_.status_) {
-        MTL_SWITCH(progress_.tenant_id_) {
-          MTL(compaction::ObServerCompactionEventHistory *)->get_last_event(tmp_event);
+        MOD_SCOPE {
+          share::g_mp->server_compaction_event_history()->get_last_event(tmp_event);
           if (tmp_event.compaction_scn_ == progress_.merge_version_) {
             if (OB_FAIL(tmp_event.generate_event_str(event_buf_, sizeof(event_buf_)))) {
               SERVER_LOG(WARN, "failed to generate event str", K(ret), K(tmp_event));

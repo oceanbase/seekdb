@@ -16,6 +16,10 @@
 
 
 #include "ob_data_dict_sql_client.h"
+#include "lib/string/ob_sql_string.h"
+#include "common/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 
 #define IF_CLIENT_VALID \
     if (IS_NOT_INIT) { \
@@ -67,20 +71,18 @@ void ObDataDictSqlClient::destroy()
 }
 
 int ObDataDictSqlClient::get_ls_info(
-    const uint64_t tenant_id,
     const share::SCN &snapshot_scn,
     share::ObLSArray &ls_array)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ls_array.push_back(SYS_LS))) {
     DDLOG(WARN, "push_back normal ls into ls_array failed", KR(ret),
-              K(tenant_id), K(snapshot_scn));
+              K(snapshot_scn));
   }
   return ret;
 }
 
 int ObDataDictSqlClient::get_schema_version(
-    const uint64_t tenant_id,
     const share::SCN &snapshot_scn,
     int64_t &schema_version)
 {
@@ -99,18 +101,18 @@ int ObDataDictSqlClient::get_schema_version(
         if (OB_FAIL(sql.assign_fmt(query_tenant_schema_version_sql_format,
             OB_ALL_DDL_OPERATION_TNAME, gts_ts))) {
           DDLOG(WARN, "assign_fmt to sql_string failed", KR(ret),
-              K(tenant_id), K(snapshot_scn), K(gts_ts));
-        } else if (OB_FAIL(sql_proxy_->read(result, tenant_id, sql.ptr()))) {
+              K(snapshot_scn), K(gts_ts));
+        } else if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
           DDLOG(WARN, "read from sql_proxy_ for schema_version failed", KR(ret),
-              K(tenant_id), "sql", sql.ptr());
+              "sql", sql.ptr());
         } else if (OB_ISNULL(result.get_result())) {
           ret = OB_ERR_UNEXPECTED;
           DDLOG(WARN, "get sql result failed", KR(ret), "sql", sql.ptr());
         } else if (OB_FAIL(parse_record_from_row_(*result.get_result(), record_count, schema_version))) {
           DDLOG(WARN, "parse_record_from_row_ for schema_version failed", KR(ret),
-              K(tenant_id), K(snapshot_scn), "sql", sql.ptr());
+              K(snapshot_scn), "sql", sql.ptr());
         } else {
-          DDLOG(INFO, "get_schema_version", K(tenant_id), K(schema_version));
+          DDLOG(INFO, "get_schema_version", K(schema_version));
         }
       }
     }
@@ -119,9 +121,7 @@ int ObDataDictSqlClient::get_schema_version(
   return ret;
 }
 
-int ObDataDictSqlClient::report_data_dict_persist_info(
-    const uint64_t tenant_id,
-    const share::SCN &snapshot_scn,
+int ObDataDictSqlClient::report_data_dict_persist_info(const share::SCN &snapshot_scn,
     const palf::LSN &start_lsn,
     const palf::LSN &end_lsn)
 {
@@ -133,7 +133,7 @@ int ObDataDictSqlClient::report_data_dict_persist_info(
         || OB_UNLIKELY(! end_lsn.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       DDLOG(WARN, "invalid args used for reporting to DATA_DICT_PERSIST_INFO", KR(ret),
-          K(tenant_id), K(snapshot_scn), K(start_lsn), K(end_lsn));
+          K(snapshot_scn), K(start_lsn), K(end_lsn));
     } else {
       ObSqlString sql;
       int64_t affected_rows = 0;
@@ -142,13 +142,13 @@ int ObDataDictSqlClient::report_data_dict_persist_info(
       if (OB_FAIL(sql.assign_fmt(report_data_dict_persist_info_sql_format,
           OB_ALL_DATA_DICTIONARY_IN_LOG_TNAME, gts_ts, start_lsn.val_, end_lsn.val_))) {
         DDLOG(WARN, "assign_fmt to sql_string failed", KR(ret),
-            K(tenant_id), K(snapshot_scn), K(gts_ts), K(start_lsn), K(end_lsn));
-      } else if (OB_FAIL(sql_proxy_->write(tenant_id, sql.ptr(), affected_rows))) {
+            K(snapshot_scn), K(gts_ts), K(start_lsn), K(end_lsn));
+      } else if (OB_FAIL(sql_proxy_->write(sql.ptr(), affected_rows))) {
         DDLOG(WARN, "write to all_data_dictionary_in_log failed", KR(ret),
-            K(tenant_id), "sql", sql.ptr());
+            "sql", sql.ptr());
       } else if (OB_UNLIKELY(affected_rows <= 0)) {
         ret = OB_ERR_UNEXPECTED;
-        DDLOG(WARN, "write affected_rows should not be zero", KR(ret), K(tenant_id), "sql", sql.ptr(), K(snapshot_scn));
+        DDLOG(WARN, "write affected_rows should not be zero", KR(ret), "sql", sql.ptr(), K(snapshot_scn));
       }
     }
   }

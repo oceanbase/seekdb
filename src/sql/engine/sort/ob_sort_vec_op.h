@@ -102,7 +102,7 @@ private:
   int get_next_batch_prescan_store(const int64_t max_rows, int64_t &read_rows,
                                    const ObCompactRow **sk_stored_rows,
                                    const ObCompactRow **addon_stored_rows = nullptr);
-  int init_sort(int64_t tenant_id, int64_t row_count, int64_t topn_cnt = INT64_MAX);
+  int init_sort(int64_t row_count, int64_t topn_cnt = INT64_MAX);
   int init_temp_row_store(const common::ObIArray<ObExpr *> &exprs, const int64_t batch_size,
                           const ObMemAttr &mem_attr, const bool is_sort_key, ObCompressorType compress_type,
                           ObTempRowStore &row_store);

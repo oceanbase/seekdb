@@ -19,10 +19,10 @@
 #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
 #include "sql/engine/expr/ob_expr_json_value.h"
 #include "sql/engine/expr/ob_expr_json_query.h"
-#include "lib/xml/ob_binary_aggregate.h"
+#include "common/xml/ob_binary_aggregate.h"
 #include "sql/engine/expr/ob_expr_rb_func_helper.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "lib/roaringbitmap/ob_rb_utils.h"
+#include "share/roaringbitmap/ob_rb_utils.h"
 
 namespace oceanbase
 {
@@ -680,7 +680,7 @@ int ObJsonTableOp::switch_iterator()
 int ObJsonTableOp::init()
 {
   INIT_SUCC(ret);
-  uint64_t tenant_id = -1;
+  
   if (!is_inited_) {
     const ObJsonTableSpec* spec_ptr = reinterpret_cast<const ObJsonTableSpec*>(&spec_);
     jt_ctx_.spec_ptr_ = const_cast<ObJsonTableSpec*>(spec_ptr);
@@ -692,12 +692,11 @@ int ObJsonTableOp::init()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("session is NULL", K(ret));
       } else {
-        tenant_id = session->get_effective_tenant_id();
         is_inited_ = true;
         jt_ctx_.spec_ptr_ = const_cast<ObJsonTableSpec*>(spec_ptr);
         jt_ctx_.eval_ctx_ = &eval_ctx_;
         jt_ctx_.exec_ctx_ = &get_exec_ctx();
-        jt_ctx_.row_alloc_.set_tenant_id(tenant_id);
+        
         jt_ctx_.op_exec_alloc_ = allocator_;
         jt_ctx_.is_evaled_ = false;
         jt_ctx_.is_charset_converted_ = false;

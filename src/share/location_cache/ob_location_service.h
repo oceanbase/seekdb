@@ -38,7 +38,7 @@ public:
   // Gets log stream location synchronously.
   //
   // @param [in] cluster_id: target cluster which the ls belongs to
-  // @param [in] tenant_id: target tenant which the ls belongs to
+  // @param [in] tenant: target tenant which the ls belongs to
   // @param [in] ls_id: target ls
   // @param [in] expire_renew_time: The oldest renew time of cache which the user can tolerate.
   //                                Setting it to 0 means that the cache will not be renewed.
@@ -49,7 +49,6 @@ public:
   //         OB_GET_LOCATION_TIME_OUT if get location by inner sql timeout.
   int get(
       const int64_t cluster_id,
-      const uint64_t tenant_id,
       const ObLSID &ls_id,
       const int64_t expire_renew_time,
       bool &is_cache_hit,
@@ -64,7 +63,6 @@ public:
   //         OB_GET_LOCATION_TIME_OUT if get location by inner sql timeout.
   int get_leader(
       const int64_t cluster_id,
-      const uint64_t tenant_id,
       const ObLSID &ls_id,
       const bool force_renew,
       common::ObAddr &leader);
@@ -73,7 +71,7 @@ public:
   // it will renew location and try to get leader again until abs_retry_timeout.
   //
   // @param [in] cluster_id: target cluster which the ls belongs to
-  // @param [in] tenant_id: target tenant which the ls belongs to
+  // @param [in] tenant: target tenant which the ls belongs to
   // @param [in] ls_id: target ls
   // @param [out] leader: leader address of the log stream.
   // @param [in] abs_retry_timeout: absolute timestamp for retry timeout.
@@ -83,7 +81,6 @@ public:
   //         OB_LS_LEADER_NOT_EXIST if no leader in location.
   int get_leader_with_retry_until_timeout(
       const int64_t cluster_id,
-      const uint64_t tenant_id,
       const ObLSID &ls_id,
       common::ObAddr &leader,
       const int64_t abs_retry_timeout = 0,
@@ -95,7 +92,6 @@ public:
   // @return OB_LS_LOCATION_NOT_EXIST if no records in sys table.
   int nonblock_get(
       const int64_t cluster_id,
-      const uint64_t tenant_id,
       const ObLSID &ls_id,
       ObLSLocation &location);
 
@@ -106,7 +102,6 @@ public:
   //         OB_LS_LEADER_NOT_EXIST if no leader in location.
   int nonblock_get_leader(
       const int64_t cluster_id,
-      const uint64_t tenant_id,
       const ObLSID &ls_id,
       common::ObAddr &leader);
 
@@ -115,7 +110,7 @@ public:
   // ------------- Interfaces for tablet to log stream (just for local cluster) -------------
   // Gets the mapping between the tablet and log stream synchronously.
   //
-  // @param [in] tenant_id: target tenant which the tablet belongs to
+  // @param [in] tenant: target tenant which the tablet belongs to
   // @param [in] expire_renew_time: The oldest renew time of cache which the user can tolerate.
   //                                Setting it to 0 means that the cache will not be renewed.
   //                                Setting it to INT64_MAX means renewing cache synchronously.
@@ -123,7 +118,6 @@ public:
   // @return OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST if no records in sys table.
   //         OB_GET_LOCATION_TIME_OUT if get location by inner sql timeout.
   int get(
-      const uint64_t tenant_id,
       const ObTabletID &tablet_id,
       const int64_t expire_renew_time,
       bool &is_cache_hit,
@@ -133,7 +127,6 @@ public:
   //
   // @return OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST if no records in sys table.
   int nonblock_get(
-      const uint64_t tenant_id,
       const ObTabletID &tablet_id,
       ObLSID &ls_id);
 
@@ -142,7 +135,7 @@ public:
   // ----------------------- Interfaces for virtual table location -------------------------
   // Gets location for virtual table synchronously.
   //
-  // @param [in] tenant_id: Tenant for virtual table.
+  // @param [in] tenant: Tenant for virtual table.
   // @param [in] table_id: Virtual table id.
   // @param [in] expire_renew_time: The oldest renew time of cache which the user can tolerate.
   //                                Setting it to 0 means that the cache will not be renewed.
@@ -150,35 +143,28 @@ public:
   // @param [out] is_cache_hit: If hit in cache.
   // @param [out] locations: Array of virtual table locations.
   // @return OB_LOCATION_NOT_EXIST if can not find location.
-  int vtable_get(
-      const uint64_t tenant_id,
-      const uint64_t table_id,
+  int vtable_get(const uint64_t table_id,
       const int64_t expire_renew_time,
       bool &is_cache_hit,
       ObIArray<common::ObAddr> &locations);
 
-  int external_table_get(const uint64_t tenant_id,
-                         const uint64_t table_id,
-                         ObIArray<common::ObAddr> &locations);
-
   // Nonblock way to renew the virtual table location
   //
-  // @param [in] tenant_id: Tenant for virtual table.
+  // @param [in] tenant: Tenant for virtual table.
   // @param [in] table_id: Virtual table id.
   // --------------------- End interfaces for virtual table location -----------------------
 
   /* check if the ls exists by querying __all_ls_status and __all_tenant_info
    *
-   * @param[in] tenant_id:   target tenant_id
    * @param[in] ls_id:       target ls_id
    * @param[out] state:      EXISTING/DELETED/UNCREATED
    * @return
    *  - OB_SUCCESS:          check successfully
    *  - OB_TENANT_NOT_EXIST: tenant not exist
-   *  - OB_INVALID_ARGUMENT: invalid ls_id or tenant_id
+   *  - OB_INVALID_ARGUMENT: invalid ls_id
    *  - other:               other failures
    */
-  static int check_ls_exist(const uint64_t tenant_id, const ObLSID &ls_id, ObLSExistState &state);
+  static int check_ls_exist(const ObLSID &ls_id, ObLSExistState &state);
 
   int init(
       schema::ObMultiVersionSchemaService &schema_service,

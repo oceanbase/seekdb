@@ -23,13 +23,12 @@ using namespace oceanbase::common;
 TEST(TestMallocAllocator, idle)
 {
   ObMallocAllocator *malloc_allocator = ObMallocAllocator::get_instance();
-  const uint64_t tenant_id = OB_SYS_TENANT_ID;
   const uint64_t ctx_id = 1;
-  auto ta = malloc_allocator->get_tenant_ctx_allocator(tenant_id, ctx_id);
+  auto ta = malloc_allocator->get_tenant_ctx_allocator(ctx_id);
   ASSERT_TRUE(NULL != ta);
-  ASSERT_EQ(OB_SUCCESS, malloc_allocator->set_tenant_limit(tenant_id, 1024 * 1024 * 1024));
+  ASSERT_EQ(OB_SUCCESS, malloc_allocator->set_tenant_limit(1024 * 1024 * 1024));
 
-  ASSERT_EQ(OB_SUCCESS, malloc_allocator->set_tenant_ctx_idle(tenant_id, ctx_id,
+  ASSERT_EQ(OB_SUCCESS, malloc_allocator->set_tenant_ctx_idle(ctx_id,
                                                               OB_MALLOC_BIG_BLOCK_SIZE));
 }
 

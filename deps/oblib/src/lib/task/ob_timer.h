@@ -40,7 +40,7 @@ public:
   }
   ~ObTimer();
   int init(const char* timer_name = nullptr,
-           const ObMemAttr &attr = ObMemAttr(OB_SERVER_TENANT_ID, "timer")); // init and start
+           const ObMemAttr &attr = ObMemAttr("timer")); // init and start
   bool inited() const;
   int start();  // only start
   void stop();  // only stop

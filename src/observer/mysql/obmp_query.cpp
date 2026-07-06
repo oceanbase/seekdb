@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/mysql/obmp_query.h"
 
 #include "share/ob_resource_limit.h"
@@ -99,7 +100,6 @@ int ObMPQuery::process()
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());
     session.set_current_trace_id(ObCurTraceId::get_trace_id());
     session.init_use_rich_format();
-    session.set_proxy_version(conn->is_proxy_ ? conn->proxy_version_ : 0);
     int64_t val = 0;
     const bool check_throttle = !is_root_user(sess->get_user_id());
     if (check_throttle && !sess->is_inner() && sess->get_raw_audit_record().try_cnt_ == 0
@@ -136,17 +136,17 @@ int ObMPQuery::process()
         //session has been killed some moment ago
         ret = OB_ERR_SESSION_INTERRUPTED;
         LOG_WARN("session has been killed", K(session.get_session_state()), K_(sql),
-                 K(session.get_server_sid()), "proxy_sessid", session.get_proxy_sessid(), K(ret));
+                 K(session.get_server_sid()), K(ret));
       } else if (OB_FAIL(session.check_and_init_retry_info(*cur_trace_id, sql_))) {
         // Note, the logic for retry info and last query trace id should be written inside the query lock, otherwise there will be concurrency issues
         LOG_WARN("fail to check and init retry info", K(ret), K(*cur_trace_id), K_(sql));
       } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
         LOG_WARN("fail to get query timeout", K_(sql), K(ret));
       } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                  session.get_effective_tenant_id(), tenant_version))) {
+                  tenant_version))) {
         LOG_WARN("fail get tenant broadcast version", K(ret));
       } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                  OB_SYS_TENANT_ID, sys_version))) {
+                  sys_version))) {
         LOG_WARN("fail get tenant broadcast version", K(ret));
       } else if (pkt.exist_trace_info()
                  && OB_FAIL(session.update_sys_variable(SYS_VAR_OB_TRACE_INFO,
@@ -166,7 +166,7 @@ int ObMPQuery::process()
         LOG_WARN("failed to update flt extra info", K(ret));
       } else if (OB_FAIL(session.check_tenant_status())) {
         need_disconnect = false;
-        LOG_INFO("unit has been migrated, need deny new request", K(ret), K(MTL_ID()), K(sql_));
+        LOG_INFO("unit has been migrated, need deny new request", K(ret), K(sql_));
       } else if (OB_FAIL(session.gen_configs_in_pc_str())) {
         LOG_WARN("fail to generate configuration strings that can influence execution plan",
                  K(ret));
@@ -466,9 +466,7 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
 
     // obproxy may use 'SET @@last_schema_version = xxxx' to set newest schema,
     // observer will force refresh schema if local_schema_version < last_schema_version;
-    if (!do_trans_ctrl_opt && OB_FAIL(check_and_refresh_schema(session.get_login_tenant_id(),
-                                         session.get_effective_tenant_id(),
-                                         &session))) {
+    if (!do_trans_ctrl_opt && OB_FAIL(check_and_refresh_schema(&session))) {
       LOG_WARN("failed to check_and_refresh_schema", K(ret));
     } else if (!do_trans_ctrl_opt && OB_FAIL(session.update_timezone_info())) {
       LOG_WARN("fail to update time zone info", K(ret));
@@ -569,8 +567,7 @@ OB_NOINLINE int ObMPQuery::process_with_tmp_context(ObSQLSessionInfo &session,
   //create a temporary memory context to process retry or the rest sql of multi-query,
   //avoid memory dynamic leaks caused by query retry or too many multi-query items
   lib::ContextParam param;
-  param.set_mem_attr(MTL_ID(),
-      ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
+  param.set_mem_attr(ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
     .set_page_size(OB_MALLOC_REQ_NORMAL_BLOCK_SIZE)
     .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
@@ -590,8 +587,7 @@ OB_NOINLINE int ObMPQuery::process_with_tmp_context(ObSQLSessionInfo &session,
   return ret;
 }
 
-OB_INLINE int ObMPQuery::get_tenant_schema_info_(const uint64_t tenant_id,
-                                                ObTenantCachedSchemaGuardInfo *cache_info,
+OB_INLINE int ObMPQuery::get_tenant_schema_info_(ObTenantCachedSchemaGuardInfo *cache_info,
                                                 ObSchemaGetterGuard *&schema_guard,
                                                 int64_t &tenant_version,
                                                 int64_t &sys_version)
@@ -603,22 +599,22 @@ OB_INLINE int ObMPQuery::get_tenant_schema_info_(const uint64_t tenant_id,
   if (!cached_guard.is_inited()) {
     // First get schema guard
     need_refresh = true;
-  } else if (tenant_id != cached_guard.get_tenant_id()) {
+  } else if (false) {
     // change tenant
     need_refresh = true;
   } else {
     int64_t tmp_tenant_version = 0;
     int64_t tmp_sys_version = 0;
-    if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(tenant_id, tmp_tenant_version))) {
-      LOG_WARN("get tenant refreshed schema version error", K(ret), K(tenant_id));
-    } else if (OB_FAIL(cached_guard.get_schema_version(tenant_id, tenant_version))) {
-      LOG_WARN("fail get schema version", K(ret), K(tenant_id));
+    if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(tmp_tenant_version))) {
+      LOG_WARN("get tenant refreshed schema version error", K(ret));
+    } else if (OB_FAIL(cached_guard.get_schema_version(tenant_version))) {
+      LOG_WARN("fail get schema version", K(ret));
     } else if (tmp_tenant_version != tenant_version) {
       //Need to obtain schema guard
       need_refresh = true;
-    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(OB_SYS_TENANT_ID, tmp_sys_version))) {
-      LOG_WARN("get sys tenant refreshed schema version error", K(ret), "sys_tenant_id", OB_SYS_TENANT_ID);
-    } else if (OB_FAIL(cached_guard.get_schema_version(OB_SYS_TENANT_ID, sys_version))) {
+    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(tmp_sys_version))) {
+      LOG_WARN("get sys tenant refreshed schema version error", K(ret));
+    } else if (OB_FAIL(cached_guard.get_schema_version(sys_version))) {
       LOG_WARN("fail get sys schema version", K(ret));
     } else if (tmp_sys_version != sys_version) {
       //Need to obtain schema guard
@@ -631,14 +627,14 @@ OB_INLINE int ObMPQuery::get_tenant_schema_info_(const uint64_t tenant_id,
     if (!need_refresh) {
       //Get the latest schema guard cached on the session
       schema_guard = &(cache_info->get_schema_guard());
-    } else if (OB_FAIL(cache_info->refresh_tenant_schema_guard(tenant_id))) {
-      LOG_WARN("refresh tenant schema guard failed", K(ret), K(tenant_id));
+    } else if (OB_FAIL(cache_info->refresh_tenant_schema_guard())) {
+      LOG_WARN("refresh tenant schema guard failed", K(ret));
     } else {
       //Get the latest schema guard cached on the session
       schema_guard = &(cache_info->get_schema_guard());
-      if (OB_FAIL(schema_guard->get_schema_version(tenant_id, tenant_version))) {
-        LOG_WARN("fail get schema version", K(ret), K(tenant_id));
-      } else if (OB_FAIL(schema_guard->get_schema_version(OB_SYS_TENANT_ID, sys_version))) {
+      if (OB_FAIL(schema_guard->get_schema_version(tenant_version))) {
+        LOG_WARN("fail get schema version", K(ret));
+      } else if (OB_FAIL(schema_guard->get_schema_version(sys_version))) {
         LOG_WARN("fail get sys schema version", K(ret));
       } else {
         // do nothing
@@ -802,7 +798,7 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
       // then it is necessary to reply with an error_packet as a footer.
       // Otherwise, no one will help send the error packet to the client, which may cause the client to hang waiting for a response.
       bool is_partition_hit = session.get_err_final_partition_hit(ret);
-      int err = send_error_packet(ret, NULL, is_partition_hit, (void *)ctx_.get_reroute_info());
+      int err = send_error_packet(ret, NULL, is_partition_hit);
       if (OB_SUCCESS != err) {  // send error packet
         LOG_WARN("send error packet failed", K(ret), K(err));
       }
@@ -944,7 +940,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
   SQL_INFO_GUARD(sql, session.get_cur_sql_id());
   ObIAllocator &allocator = CURRENT_CONTEXT->get_arena_allocator();
   SMART_VAR(ObMySQLResultSet, result, session, allocator) {
-    if (OB_FAIL(get_tenant_schema_info_(session.get_effective_tenant_id(),
+    if (OB_FAIL(get_tenant_schema_info_(
                                         &cached_schema_info,
                                         schema_guard,
                                         tenant_version,
@@ -1135,7 +1131,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
           // then it is necessary to reply with an error_packet below as a conclusion. Otherwise, no one will help send the error packet to the client afterwards,
           // May cause the client to hang waiting for a response.
           bool is_partition_hit = session.get_err_final_partition_hit(ret);
-          int err = send_error_packet(ret, NULL, is_partition_hit, (void *)ctx_.get_reroute_info());
+          int err = send_error_packet(ret, NULL, is_partition_hit);
           if (OB_SUCCESS != err) {  // send error packet
             LOG_WARN("send error packet failed", K(ret), K(err));
           }
@@ -1279,7 +1275,6 @@ int ObMPQuery::store_params_value_to_str(ObIAllocator &allocator,
 //                                       0,
 //                                       is_cache_hit))) {
 //      LOG_WARN("failed to get partition location", K(ret));
-//    } else if (OB_FAIL(schema_guard->get_table_schema(partition_key.get_tenant_id(),
 //                                                      partition_key.get_table_id(),
 //                                                      table_schema))) {
 //      LOG_WARN("failed to get table schema", K(ret), K(partition_key));
@@ -1401,7 +1396,6 @@ int ObMPQuery::is_readonly_stmt(ObMySQLResultSet &result, bool &is_readonly)
     case stmt::T_SHOW_COLLATION:
     case stmt::T_SHOW_TABLEGROUPS:
     case stmt::T_SHOW_STATUS:
-    case stmt::T_SHOW_TENANT:
     case stmt::T_SHOW_CREATE_TENANT:
     case stmt::T_SHOW_TRACE:
     case stmt::T_SHOW_TRIGGERS:
@@ -1425,8 +1419,7 @@ int ObMPQuery::is_readonly_stmt(ObMySQLResultSet &result, bool &is_readonly)
     case stmt::T_SHOW_CATALOGS:
     case stmt::T_SHOW_CREATE_CATALOG:
     case stmt::T_SHOW_LOCATIONS:
-    case stmt::T_SHOW_CREATE_LOCATION:
-    case stmt::T_LOCATION_UTILS_LIST: {
+    case stmt::T_SHOW_CREATE_LOCATION: {
       is_readonly = true;
       break;
     }

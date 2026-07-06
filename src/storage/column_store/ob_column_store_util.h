@@ -17,6 +17,7 @@
 #define _OB_COLUMN_STORE_UTIL_H
 
 #include "lib/ob_define.h"
+#include "storage/column_store/ob_column_store_const.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/container/ob_iarray.h"
 #include "storage/blocksstable/ob_datum_range.h"
@@ -28,25 +29,6 @@ namespace storage
 class ObITable;
 struct ObTableAccessParam;
 
-typedef int64_t ObCSRowId;
-const ObCSRowId OB_INVALID_CS_ROW_ID = -1;
-const uint32_t OB_CS_INVALID_CG_IDX = INT32_MAX;
-const uint32_t OB_CS_VIRTUAL_CG_IDX = INT32_MAX - 1;
-const uint32_t OB_CS_COLUMN_REPLICA_ROWKEY_CG_IDX = 0;
-
-OB_INLINE bool is_virtual_cg(const uint32_t cg_idx)
-{
-  return OB_CS_VIRTUAL_CG_IDX == cg_idx;
-}
-
-enum BlockScanState
-{
-  BLOCKSCAN_RANGE = 0,
-  SWITCH_RANGE,
-  BLOCKSCAN_FINISH,
-  SCAN_FINISH,
-  MAX_STATE,
-};
 
 struct ObCSRange
 {

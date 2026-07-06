@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_direct_load_mgr_v3.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
@@ -32,7 +34,7 @@ int ObDirectLoadMgrUtil::check_cs_replica_exist(const ObLSID &ls_id, const ObTab
 {
   int ret = OB_SUCCESS;
   ObLSHandle ls_handle;
-  ObLSService *ls_service = MTL(ObLSService*);
+  ObLSService *ls_service = share::g_mp->ls_service();
   ObTabletHandle tablet_handle;
   if (!ls_id.is_valid() || !tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -65,9 +67,9 @@ int ObDirectLoadMgrUtil::get_lob_tablet_id(const ObLSID &ls_id, const ObTabletID
   if (!ls_id.is_valid() || !tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id));
-  } else if (OB_ISNULL(ls_service = MTL(ObLSService*))) {
+  } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret), K(MTL_ID()));
+    LOG_WARN("unexpected err", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
     LOG_WARN("failed to get log stream", K(ret), K(ls_id));
   } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
@@ -88,7 +90,7 @@ int ObDirectLoadMgrUtil::is_ddl_need_major_merge(const ObTablet &tablet, bool &d
   int ret = OB_SUCCESS;
   ddl_need_merging = false;
   ObTableStoreIterator ddl_iter;
-  ObArenaAllocator arena(ObMemAttr(MTL_ID(), "Ddl_Com_MgrU"));
+  ObArenaAllocator arena(ObMemAttr("Ddl_Com_MgrU"));
   ObTabletDDLCompleteMdsUserData ddl_complete;
   if (!tablet.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -120,9 +122,9 @@ int ObDirectLoadMgrUtil::check_tablet_major_exist(const ObLSID &ls_id, const ObT
   if (!ls_id.is_valid() || !tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id));
-  } else if (OB_ISNULL(ls_service = MTL(ObLSService*))) {
+  } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret), K(MTL_ID()));
+    LOG_WARN("unexpected err", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
     LOG_WARN("failed to get log stream", K(ret), K(ls_id));
   } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
@@ -179,8 +181,7 @@ int ObDirectLoadMgrUtil::alloc_direct_load_mgr(
  * !!!note don't return eagin
  * otherwise, direct load mgr may lead to px retry again and again
 */
-int ObDirectLoadMgrUtil::create_idem_tablet_direct_load_mgr(const uint64_t tenant_id,
-                                                            const int64_t execution_id,
+int ObDirectLoadMgrUtil::create_idem_tablet_direct_load_mgr(const int64_t execution_id,
                                                             ObIAllocator &allocator,
                                                             const ObTabletDirectLoadInsertParam &build_param,
                                                             bool &is_major_sstable_exist,
@@ -196,9 +197,9 @@ int ObDirectLoadMgrUtil::create_idem_tablet_direct_load_mgr(const uint64_t tenan
   direct_load_mgr_handle.reset();
   lob_direct_load_mgr_handle.reset();
   /* get lob tablet_id*/
-  if (!build_param.is_valid() || 0 >= tenant_id || 0 > execution_id) {
+  if (!build_param.is_valid() || 0 > execution_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(build_param), K(tenant_id), K(execution_id));
+    LOG_WARN("invalid argument", K(ret), K(build_param), K(execution_id));
   } else if (OB_FAIL(get_lob_tablet_id(build_param.common_param_.ls_id_, build_param.common_param_.tablet_id_, lob_tablet_id))) {
     LOG_WARN("failed to get lob_tablet_id", K(ret), K(build_param.common_param_));
   } else if (OB_FAIL(check_tablet_major_exist(ls_id, tablet_id, is_major_sstable_exist))) {
@@ -268,8 +269,7 @@ ObDirectLoadType ObDirectLoadMgrUtil::load_data_get_direct_load_type(const bool 
  *    - for previous version, mgr handle should get from tenant direct load mgr
  *    - for idem version,     mgr handle are local param, get from the return param
 */
-int ObDirectLoadMgrUtil::create_tablet_direct_load_mgr(const int64_t tenant_id,
-                                                       const int64_t execution_id,
+int ObDirectLoadMgrUtil::create_tablet_direct_load_mgr(const int64_t execution_id,
                                                        const int64_t context_id,
                                                        const ObTabletDirectLoadInsertParam &build_param,
                                                        ObIAllocator &allocator,
@@ -281,12 +281,12 @@ int ObDirectLoadMgrUtil::create_tablet_direct_load_mgr(const int64_t tenant_id,
   is_major_eixst = false;
   data_mgr_handle.reset();
   lob_mgr_handle.reset();
-  if (tenant_id <= 0 || execution_id < 0 || !build_param.is_valid()) {
+  if (execution_id < 0 || !build_param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(execution_id), K(build_param));
+    LOG_WARN("invalid argument", K(ret), K(execution_id), K(build_param));
   } else if (!is_idem_type(build_param.common_param_.direct_load_type_)) {
-    ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
-    ObLSService *ls_service = MTL(ObLSService*);
+    ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
+    ObLSService *ls_service = share::g_mp->ls_service();
     ObLSHandle ls_handle;
     ObTabletHandle tablet_handle;
     if (OB_ISNULL(tenant_direct_load_mgr)) {
@@ -297,9 +297,9 @@ int ObDirectLoadMgrUtil::create_tablet_direct_load_mgr(const int64_t tenant_id,
     } 
 
     if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(ls_service = MTL(ObLSService *))) {
+    } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected err", K(ret), K(MTL_ID()));
+      LOG_WARN("unexpected err", K(ret));
     } else if (OB_FAIL(ls_service->get_ls(build_param.common_param_.ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
       LOG_WARN("failed to get log stream", K(ret), K(build_param));
     } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, build_param.common_param_.tablet_id_, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
@@ -312,8 +312,8 @@ int ObDirectLoadMgrUtil::create_tablet_direct_load_mgr(const int64_t tenant_id,
       LOG_WARN("invalid version", K(ret), K(tablet_handle.get_obj()->get_tablet_meta()), K(build_param));
     }
   } else if (is_idem_type(build_param.common_param_.direct_load_type_)) {
-    if (OB_FAIL(ObDirectLoadMgrUtil::create_idem_tablet_direct_load_mgr(tenant_id, execution_id, allocator, build_param, is_major_eixst, data_mgr_handle, lob_mgr_handle))) {
-      LOG_WARN("failed to create tablet direct load mgr", K(ret), K(tenant_id), K(execution_id), K(build_param));
+    if (OB_FAIL(ObDirectLoadMgrUtil::create_idem_tablet_direct_load_mgr( execution_id, allocator, build_param, is_major_eixst, data_mgr_handle, lob_mgr_handle))) {
+      LOG_WARN("failed to create tablet direct load mgr", K(ret), K(execution_id), K(build_param));
     }
   }
   return ret;
@@ -386,7 +386,7 @@ int ObDirectLoadMgrUtil::generate_merge_param(const ObTabletDDLCompleteMdsUserDa
       } else if (OB_ISNULL(storage_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("storage schema is null", K(ret));
-      } else if (OB_FAIL(ObCODDLUtil::get_base_cg_idx(storage_schema, base_cg_idx))) {
+      } else if (OB_FAIL(ObDDLStorageUtil::get_base_cg_idx(storage_schema, base_cg_idx))) {
         LOG_WARN("failed to get base cg idx", K(ret), K(storage_schema));
       } else {
         merge_param.table_key_.table_type_ = ObITable::TableType::DDL_DUMP_SSTABLE;
@@ -401,9 +401,7 @@ int ObDirectLoadMgrUtil::generate_merge_param(const ObTabletDDLCompleteMdsUserDa
   return ret;
 }
 
-int ObDirectLoadMgrUtil::prepare_schema_item_for_vec_idx_data(
-    const uint64_t tenant_id,
-    ObSchemaGetterGuard &schema_guard,
+int ObDirectLoadMgrUtil::prepare_schema_item_for_vec_idx_data(ObSchemaGetterGuard &schema_guard,
     const ObTableSchema *table_schema,
     const ObTableSchema *&data_table_schema,
     ObIAllocator &allocator,
@@ -425,11 +423,11 @@ int ObDirectLoadMgrUtil::prepare_schema_item_for_vec_idx_data(
   }
   const ObTableSchema *with_param_table_schema = nullptr;
   // get data schema
-  if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_schema->get_data_table_id(), data_table_schema))) {
-    LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(table_schema->get_data_table_id()));
+  if (OB_FAIL(schema_guard.get_table_schema( table_schema->get_data_table_id(), data_table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(table_schema->get_data_table_id()));
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(tenant_id), K(table_schema->get_data_table_id()));
+    LOG_WARN("table not exist", K(ret), K(table_schema->get_data_table_id()));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_id(*data_table_schema, *table_schema, col_ids))) {
     LOG_WARN("fail to get vector index id", K(ret));
   } else if (col_ids.count() != 1) {
@@ -460,11 +458,11 @@ int ObDirectLoadMgrUtil::prepare_schema_item_for_vec_idx_data(
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, with_param_table_tid, with_param_table_schema))) {
-    LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(with_param_table_tid));
+  } else if (OB_FAIL(schema_guard.get_table_schema( with_param_table_tid, with_param_table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(with_param_table_tid));
   } else if (OB_ISNULL(with_param_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(tenant_id), K(with_param_table_tid));
+    LOG_WARN("table not exist", K(ret), K(with_param_table_tid));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(*with_param_table_schema, *data_table_schema, schema_item.vec_dim_))) {
     LOG_WARN("fail to get vector col dim", K(ret));
   } else if (schema_item.vec_dim_ == 0) {
@@ -485,9 +483,9 @@ int ObDirectLoadMgrUtil::get_tablet_handle(const ObLSID &ls_id, const ObTabletID
   if (!ls_id.is_valid() || !tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id));
-  } else if (OB_ISNULL(ls_service = MTL(ObLSService *))) {
+  } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret), K(MTL_ID()));
+    LOG_WARN("unexpected err", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
      LOG_WARN("failed to get log stream", K(ret), K(ls_id));
   } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {

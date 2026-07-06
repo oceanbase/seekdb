@@ -35,8 +35,8 @@ ObInterColSubStrEncoder::ObInterColSubStrEncoder()
       fix_data_size_(-1), start_pos_byte_(0),
       val_len_byte_(0)
 {
-  start_pos_array_.set_attr(ObMemAttr(MTL_ID(), "IntColSubStrEnc"));
-  exc_row_ids_.set_attr(ObMemAttr(MTL_ID(), "IntColSubStrEnc"));
+  start_pos_array_.set_attr(ObMemAttr("IntColSubStrEnc"));
+  exc_row_ids_.set_attr(ObMemAttr("IntColSubStrEnc"));
 }
 
 ObInterColSubStrEncoder::~ObInterColSubStrEncoder()

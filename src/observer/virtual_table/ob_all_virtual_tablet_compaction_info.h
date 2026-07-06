@@ -39,7 +39,7 @@ public:
 public:
   virtual void reset();
 private:
-  virtual int process_curr_tenant(common::ObNewRow *&row) override;
+  virtual int inner_get_next_row(common::ObNewRow *&row) override;
 private:
   char medium_info_buf_[common::OB_MAX_VARCHAR_LENGTH];
 private:

@@ -49,8 +49,7 @@ int ObStorageLogWriter::init(
     const char *log_dir,
     const int64_t log_file_size,
     const int64_t max_log_size,
-    const blocksstable::ObLogFileSpec &log_file_spec,
-    const uint64_t tenant_id)
+    const blocksstable::ObLogFileSpec &log_file_spec)
 {
   int ret = OB_SUCCESS;
 
@@ -71,7 +70,7 @@ int ObStorageLogWriter::init(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Invalid arguments", K(ret), KP(log_dir),
         K(log_file_size), K(max_log_size));
-  } else if (OB_FAIL(ObBaseLogWriter::init(log_cfg, thread_name, tenant_id))) {
+  } else if (OB_FAIL(ObBaseLogWriter::init(log_cfg, thread_name))) {
     STORAGE_REDO_LOG(WARN, "Fail to init ObBaseLogWriter", K(ret));
   } else if (OB_FAIL(ObLogPolicyParser::parse_retry_write_policy(log_file_spec.retry_write_policy_,
       retry_write_policy_))) {
@@ -81,13 +80,13 @@ int ObStorageLogWriter::init(
       log_write_policy_))) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Fail to parse log write policy", K(ret), K(log_file_spec));
-  } else if (OB_FAIL(nop_log_.init(tenant_id, ObLogConstants::LOG_FILE_ALIGN_SIZE))) {
+  } else if (OB_FAIL(nop_log_.init(ObLogConstants::LOG_FILE_ALIGN_SIZE))) {
     STORAGE_REDO_LOG(WARN, "Fail to init nop log", K(ret));
-  } else if (OB_FAIL(batch_write_buf_.init(ObLogConstants::LOG_FILE_ALIGN_SIZE, buf_size, tenant_id))) {
+  } else if (OB_FAIL(batch_write_buf_.init(ObLogConstants::LOG_FILE_ALIGN_SIZE, buf_size))) {
     STORAGE_REDO_LOG(WARN, "Fail to init batch write buf", K(ret), K(buf_size));
-  } else if (OB_FAIL(file_handler_.init(log_dir, log_file_size, tenant_id))) {
+  } else if (OB_FAIL(file_handler_.init(log_dir, log_file_size))) {
     STORAGE_REDO_LOG(WARN, "Fail to create file handler", K(ret), KP(log_dir));
-  } else if (OB_SERVER_TENANT_ID != tenant_id && OB_FAIL(slog_write_runner_.init(this))) {
+  } else if (OB_FAIL(slog_write_runner_.init(this))) {  // seekdb: always init (was 500!=1)
     STORAGE_REDO_LOG(WARN, "Fail to init slog write runner.", K(ret));
   } else {
     is_inited_ = true;

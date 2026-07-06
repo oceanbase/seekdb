@@ -30,7 +30,6 @@ public:
   LogIOWorkerWrapper();
   ~LogIOWorkerWrapper();
   int init(const LogIOWorkerConfig &config,
-           const int64_t tenant_id,
            int cb_thread_pool_tg_id,
            ObIAllocator *allocaotr,
            IPalfEnvImpl *palf_env_impl);
@@ -47,7 +46,6 @@ public:
   
 private:
   int create_and_init_log_io_workers_(const LogIOWorkerConfig &config,
-                                      const int64_t tenant_id,
                                       int cb_thread_pool_tg_id,
                                       ObIAllocator *allocaotr,
                                       IPalfEnvImpl *palf_env_impl);

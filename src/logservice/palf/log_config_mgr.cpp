@@ -33,7 +33,6 @@ LogConfigMgr::LogConfigMgr()
       alive_paxos_replica_num_(0),
       all_learnerlist_(),
       running_args_(),
-      region_(DEFAULT_REGION_NAME),
       lock_(common::ObLatchIds::PALF_CM_CONFIG_LOCK),
       palf_id_(),
       self_(),
@@ -64,7 +63,6 @@ LogConfigMgr::LogConfigMgr()
       register_time_us_(OB_INVALID_TIMESTAMP),
       register_parent_reason_(RegisterParentReason::INVALID),
       parent_(),
-      parent_region_(DEFAULT_REGION_NAME),
       parent_keepalive_time_us_(OB_INVALID_TIMESTAMP),
       last_submit_register_req_time_us_(OB_INVALID_TIMESTAMP),
       last_first_register_time_us_(OB_INVALID_TIMESTAMP),
@@ -160,7 +158,6 @@ void LogConfigMgr::destroy()
     register_time_us_ = OB_INVALID_TIMESTAMP;
     register_parent_reason_ = RegisterParentReason::INVALID;
     parent_.reset();
-    parent_region_ = DEFAULT_REGION_NAME;
     parent_keepalive_time_us_ = OB_INVALID_TIMESTAMP;
     reset_registering_state_();
     children_.reset();
@@ -177,7 +174,6 @@ void LogConfigMgr::destroy()
     all_learnerlist_.reset();
     last_sync_meta_for_arb_election_leader_time_us_ = OB_INVALID_TIMESTAMP;
     forwarding_config_proposal_id_ = INVALID_PROPOSAL_ID;
-    region_ = DEFAULT_REGION_NAME;
     state_ = ConfigChangeState::INIT;
     reconfig_barrier_.reset();
     checking_barrier_.reset();
@@ -262,40 +258,6 @@ int LogConfigMgr::set_initial_config_info_(const LogConfigInfoV2 &config_info,
         PALF_LOG(INFO, "set_initial_config_info_ success", K_(palf_id), K_(self), K_(log_ms_meta), K(config_info), \
             K_(alive_paxos_memberlist), K_(alive_paxos_replica_num), KP(this));
       }
-    }
-  }
-  return ret;
-}
-
-int LogConfigMgr::get_region(common::ObRegion &region) const
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else {
-    region = region_;
-  }
-  return ret;
-}
-
-int LogConfigMgr::set_region(const common::ObRegion &region)
-{
-  int ret = OB_SUCCESS;
-  bool need_register = false;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (region.is_empty()) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", KR(ret), K_(palf_id), K_(self), K(region));
-  } else {
-    const common::ObRegion old_region = region_;
-    region_ = region;
-    PALF_EVENT("set_region success", palf_id_, K_(self), K(old_region), K_(region));
-    SpinLockGuard guard(parent_lock_);
-    if (old_region != region && OB_FAIL(after_region_changed_(old_region, region))) {
-      PALF_LOG(WARN, "after_region_changed_ failed", KR(ret), K_(palf_id), K_(self), K(old_region), K(region));
-    } else {
-      PALF_LOG(INFO, "after_region_changed_ success", KR(ret), K_(palf_id), K_(self), K(old_region), K(region));
     }
   }
   return ret;
@@ -2531,10 +2493,10 @@ int LogConfigMgr::after_register_parent_done_(const LogLearner &parent,
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "snprintf failed", KR(ret), K(reason_str), "reason", register_parent_reason_2_str_(reason));
   } else if (OB_TMP_FAIL(plugins_->record_parent_child_change_event(palf_id_, true /*is_register*/,
-      true /* is_parent*/, parent.server_, parent.region_, parent.register_time_us_, reason_str))) {
+      true /* is_parent*/, parent.server_, parent.register_time_us_, reason_str))) {
     PALF_LOG(WARN, "record_parent_child_change_event failed", KR(tmp_ret), K_(palf_id), K_(self), K(parent));
   }
-  PALF_EVENT("register_parent", palf_id_, K(ret), K_(self), K_(region), K(parent),
+  PALF_EVENT("register_parent", palf_id_, K(ret), K_(self), K(parent),
       "reason", register_parent_reason_2_str_(reason));
   return ret;
 }
@@ -2551,32 +2513,10 @@ int LogConfigMgr::after_retire_parent_done_(const LogLearner &parent,
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "snprintf failed", KR(ret), K(reason_str), K(reason));
   } else if (OB_TMP_FAIL(plugins_->record_parent_child_change_event(palf_id_, false /*is_register*/,
-      true /* is_parent*/, parent.server_, parent.region_, parent.register_time_us_, reason_str))) {
+      true /* is_parent*/, parent.server_, parent.register_time_us_, reason_str))) {
     PALF_LOG(WARN, "record_parent_child_change_event failed", KR(tmp_ret), K_(palf_id), K_(self), K(parent), K(reason));
   }
-  PALF_EVENT("retire_parent", palf_id_, K(ret), K_(self), K_(region), K(parent), "reason", retire_parent_reason_2_str_(reason));
-  return ret;
-}
-
-int LogConfigMgr::after_region_changed_(const common::ObRegion &old_region, const common::ObRegion &new_region)
-{
-  // re_register parent when region is changed
-  // do not need retire children manually when region is changed,
-  // children will be retired in check_children_health automatically.
-  int ret = OB_SUCCESS;
-  if (parent_.is_valid() || is_registering_()) {
-    const common::ObAddr old_parent = parent_;
-    if (OB_FAIL(retire_parent_(RetireParentReason::SELF_REGION_CHANGED))) {
-      PALF_LOG(WARN, "retire_parent failed",  KR(ret), K_(palf_id), K_(self), K_(parent));
-    } else if (FALSE_IT(reset_parent_info_())) {
-      // if i'm registering when change region, need reset all parent info and
-      // start a new regisration with new region.
-    } else if (OB_FAIL(register_parent_(RegisterParentReason::SELF_REGION_CHANGED))) {
-      PALF_LOG(WARN, "register_parent failed", KR(ret), K_(palf_id), K_(self), K(old_region), K(new_region));
-    } else {
-      PALF_LOG(INFO, "re_register_parent reason: region_changed", K_(palf_id), K_(self), K(old_parent), K(old_region), K(new_region));
-    }
-  }
+  PALF_EVENT("retire_parent", palf_id_, K(ret), K_(self), K(parent), "reason", retire_parent_reason_2_str_(reason));
   return ret;
 }
 
@@ -2604,9 +2544,9 @@ int LogConfigMgr::register_parent_(const RegisterParentReason &reason)
   } else {
     const bool is_to_leader = true;
     const int64_t curr_time_us = ObTimeUtility::current_time();
-    LogLearner child_self(self_, region_, curr_time_us);
+    LogLearner child_self(self_, curr_time_us);
     if (OB_FAIL(log_engine_->submit_register_parent_req(leader, child_self, is_to_leader))) {
-      // NB: register_req sends my addr_, region_ and register_time_us_
+      // NB: register_req sends my addr_ and register_time_us_
       PALF_LOG(WARN, "submit_register_parent_req failed", KR(ret), K_(palf_id), K_(self), K(leader), K(child_self), K(is_to_leader));
     } else {
       last_submit_register_req_time_us_ = curr_time_us;
@@ -2642,7 +2582,6 @@ int LogConfigMgr::handle_register_parent_resp(const LogLearner &server,
     } else if (REGISTER_DONE == reg_ret) {
       // register done, just set parent_ and clean registering state
       parent_ = server.server_;
-      parent_region_ = server.region_;
       parent_keepalive_time_us_ = common::ObTimeUtility::current_time();
       reason = register_parent_reason_;
       reset_registering_state_();
@@ -2650,19 +2589,13 @@ int LogConfigMgr::handle_register_parent_resp(const LogLearner &server,
     } else if (REGISTER_CONTINUE == reg_ret && candidate_list.get_member_number() > 0) {
       common::ObAddr reg_dst;
       const int64_t reg_dst_idx = ObRandom::rand(0, candidate_list.get_member_number() - 1);
-      LogLearner child_self(self_, region_, register_time_us_);
+      LogLearner child_self(self_, register_time_us_);
       if (OB_FAIL(candidate_list.get_server_by_index(reg_dst_idx, reg_dst))) {
         PALF_LOG(WARN, "get_server_by_index failed", KR(ret), K_(palf_id), K_(self), K(candidate_list), K(reg_dst));
       } else if (OB_FAIL(log_engine_->submit_register_parent_req(reg_dst, child_self, false))) {
         PALF_LOG(WARN, "submit_register_parent_req failed", KR(ret), K_(palf_id), K_(self), K(reg_dst));
       } else {
         last_submit_register_req_time_us_ = common::ObTimeUtility::current_time();
-      }
-    } else if (REGISTER_DIFF_REGION == reg_ret) {
-      const char *reason = "diff_region";
-      PALF_LOG(INFO, "re_register_parent reason", K(reason), K_(palf_id), K_(self), K_(region), K(server));
-      if (OB_FAIL(register_parent_(RegisterParentReason::INVALID))) {
-        PALF_LOG(WARN, "re_register failed", KR(ret), K_(palf_id), K_(self), K(server));
       }
     } else if (REGISTER_NOT_MASTER == reg_ret) {
       // skip, wait retry
@@ -2699,12 +2632,12 @@ int LogConfigMgr::retire_parent_(const RetireParentReason &reason)
   if (!parent_.is_valid()) {
     // parent is already invalid, skip
   } else {
-    LogLearner child_self(self_, region_, register_time_us_);
+    LogLearner child_self(self_, register_time_us_);
     if (OB_FAIL(log_engine_->submit_retire_parent_req(parent_, child_self))) {
       PALF_LOG(WARN, "submit_retire_parent_req failed", KR(ret), K_(palf_id), K_(self), K_(parent), K_(register_time_us));
     } else {
       PALF_LOG(INFO, "submit_retire_parent_req success", K_(palf_id), K_(self), K_(parent), K_(register_time_us));
-      after_retire_parent_done_(LogLearner(parent_, parent_region_, register_time_us_), reason);
+      after_retire_parent_done_(LogLearner(parent_, register_time_us_), reason);
       reset_parent_info_();
     }
   }
@@ -2745,7 +2678,7 @@ int LogConfigMgr::handle_learner_keepalive_req(const LogLearner &parent)
     PALF_LOG(WARN, "handle_keepalive failed", KR(ret), K_(palf_id), K_(self), K(parent), K(parent_), K_(register_time_us));
   } else {
     parent_keepalive_time_us_ = common::ObTimeUtility::current_time();
-    LogLearner child_itself(self_, region_, register_time_us_);
+    LogLearner child_itself(self_, register_time_us_);
     if (OB_FAIL(log_engine_->submit_learner_keepalive_resp(parent.server_, child_itself))) {
       PALF_LOG(WARN, "submit_learner_keepalive_resp failed", KR(ret), K_(palf_id), K_(self), K(parent));
     } else {
@@ -2804,7 +2737,6 @@ void LogConfigMgr::reset_parent_info_()
   register_time_us_ = OB_INVALID_TIMESTAMP;
   register_parent_reason_ = RegisterParentReason::INVALID;
   parent_.reset();
-  parent_region_ = DEFAULT_REGION_NAME;
   parent_keepalive_time_us_ = OB_INVALID_TIMESTAMP;
   last_submit_register_req_time_us_ = OB_INVALID_TIMESTAMP;
 }
@@ -2815,8 +2747,6 @@ int LogConfigMgr::handle_register_parent_req(const LogLearner &child, const bool
 {
   int ret = OB_SUCCESS;
   LogCandidateList candidate_list;
-  LogLearnerList retired_children;
-  LogLearnerList diff_region_children;
   RegisterReturn reg_ret = INVALID_REG_RET;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -2830,48 +2760,34 @@ int LogConfigMgr::handle_register_parent_req(const LogLearner &child, const bool
     SpinLockGuard guard(child_lock_);
     int64_t idx = -1;
     const bool is_in_children = (-1 != (idx = children_.get_index_by_addr(child.server_)));
-    if (is_in_children && children_.get_learner(idx).region_ == child.region_) {
-      // if child is already in the children list and child's region don't change,
+    if (is_in_children) {
+      // if child is already in the children list,
       // replace old child in children_list
       children_.get_learner(idx).register_time_us_ = child.register_time_us_;
       children_.get_learner(idx).update_keepalive_ts();
       reg_ret = REGISTER_DONE;
-    } else if (is_in_children && FALSE_IT(children_.remove_learner(child.server_))) {
-      // if child is already in the children list and child's region has changed,
-      // remove it from children_ and re-register.
     } else if (is_to_leader) {
       if (OB_FAIL(generate_candidate_list_(child, candidate_list))) {
         PALF_LOG(WARN, "generate_candidate_list failed", KR(ret), K_(palf_id), K_(self), K(child));
       } else if (candidate_list.get_member_number() > 0) {
         // register continue
         reg_ret = REGISTER_CONTINUE;
+      } else if (children_.is_full()) {
+        ret = OB_NOT_SUPPORTED;
+        PALF_LOG(ERROR, "leader's children is full", KR(ret), K_(palf_id), K_(self), K(child), K_(children));
       } else {
         // register to self
-        if (children_.is_full() && OB_FAIL(remove_duplicate_region_child_(retired_children))) {
-          PALF_LOG(WARN, "remove_duplicate_region_child failed", KR(ret), K_(palf_id), K_(self));
-        } else if (children_.is_full()) {
-          // child is not in same region with any leader's child, and leader's children_list is full
-          // It means there are OB_MAX_CHILD_MEMBER_NUMBER in children_ and their regions are different from each other
-          ret = OB_NOT_SUPPORTED;
-          PALF_LOG(ERROR, "leader's children is full and their regions are different", KR(ret), K_(palf_id), K_(self), K(child), K_(children));
+        LogLearner dst_child(child);
+        dst_child.keepalive_ts_ = common::ObTimeUtility::current_time();
+        dst_child.register_time_us_ = child.register_time_us_;
+        if (OB_FAIL(children_.add_learner(dst_child))) {
+          PALF_LOG(WARN, "handle_register_parent_req failed", KR(ret), K_(palf_id), K_(self), K(is_to_leader), K(dst_child));
+        } else if (OB_FAIL(log_sync_children_.add_learner(dst_child))) {
+          PALF_LOG(WARN, "add_learner failed", KR(ret), K_(palf_id), K_(self), K_(log_sync_children), K(dst_child));
         } else {
-          LogLearner dst_child(child);
-          dst_child.keepalive_ts_ = common::ObTimeUtility::current_time();
-          dst_child.register_time_us_ = child.register_time_us_;
-          if (OB_FAIL(children_.add_learner(dst_child))) {
-            PALF_LOG(WARN, "handle_register_parent_req failed", KR(ret), K_(palf_id), K_(self), K(is_to_leader), K(dst_child));
-          } else if (OB_FAIL(log_sync_children_.add_learner(dst_child))) {
-            PALF_LOG(WARN, "add_learner failed", KR(ret), K_(palf_id), K_(self), K_(log_sync_children), K(dst_child));
-          } else {
-            reg_ret = REGISTER_DONE;
-          }
+          reg_ret = REGISTER_DONE;
         }
       }
-    } else if (child.region_ != region_) {
-      // follower will reject register req which region is different
-      reg_ret = REGISTER_DIFF_REGION;
-    } else if (OB_FAIL(remove_diff_region_child_(diff_region_children))) {
-      PALF_LOG(WARN, "remove_diff_region_child_ failed", KR(ret), K_(palf_id), K_(self), K_(children), K(child));
     } else if (children_.get_member_number() < OB_MAX_CHILD_MEMBER_NUMBER_IN_FOLLOWER) {
       // register to self
       LogLearner dst_child(child);
@@ -2888,7 +2804,7 @@ int LogConfigMgr::handle_register_parent_req(const LogLearner &child, const bool
         PALF_LOG(WARN, "generate_candidate_list failed", KR(ret), K_(palf_id), K_(self), K(child));
     } else if (candidate_list.get_member_number() <= 0) {
       ret = OB_ERR_UNEXPECTED;
-      PALF_LOG(ERROR, "candidate_list is empty", KR(ret), K_(palf_id), K_(self), K(candidate_list), K_(region), K_(children));
+      PALF_LOG(ERROR, "candidate_list is empty", KR(ret), K_(palf_id), K_(self), K(candidate_list), K_(children));
     } else {
       // register continue
       reg_ret = REGISTER_CONTINUE;
@@ -2896,10 +2812,9 @@ int LogConfigMgr::handle_register_parent_req(const LogLearner &child, const bool
   }
   if (OB_SUCC(ret)){
     SpinLockGuard guard(child_lock_);
-    LogLearner parent(self_, region_, child.register_time_us_);
+    LogLearner parent(self_, child.register_time_us_);
     if (reg_ret == REGISTER_DONE ||
-        reg_ret == REGISTER_CONTINUE ||
-        reg_ret == REGISTER_DIFF_REGION) {
+        reg_ret == REGISTER_CONTINUE) {
       if (OB_FAIL(log_engine_->submit_register_parent_resp(child.server_, parent, candidate_list, reg_ret))) {
         PALF_LOG(WARN, "submit_register_parent_resp failed", KR(ret), K_(palf_id), K_(self), K(child));
       }
@@ -2909,11 +2824,6 @@ int LogConfigMgr::handle_register_parent_req(const LogLearner &child, const bool
     }
     PALF_LOG(INFO, "handle_register_parent_req success", K(ret), K(child), K(is_to_leader), K(candidate_list),
         K(reg_ret), K_(children), "member_list", log_ms_meta_.curr_.config_.log_sync_memberlist_);
-  }
-  if (OB_FAIL(submit_retire_children_req_(retired_children, RetireChildReason::CHILDREN_LIST_FULL))) {
-    PALF_LOG(WARN, "submit_retire_children_req failed", KR(ret), K_(palf_id), K_(self), K(retired_children));
-  } else if (OB_FAIL(submit_retire_children_req_(diff_region_children, RetireChildReason::DIFFERENT_REGION_WITH_PARENT))) {
-    PALF_LOG(WARN, "submit_retire_children_req failed", KR(ret), K_(palf_id), K_(self), K(retired_children));
   }
   return ret;
 }
@@ -2966,16 +2876,10 @@ int LogConfigMgr::handle_learner_keepalive_resp(const LogLearner &child)
 // caller guarantees role do not change
 // common::
 // 1. check if children are timeout
-// for leader:
-// 2. guarantee regions of children are unique
-// for follower:
-// 2. guarantee regions of children are same with region_
 void LogConfigMgr::check_children_health()
 {
   int ret = OB_SUCCESS;
   LogLearnerList dead_children;
-  LogLearnerList diff_region_children;
-  LogLearnerList dup_region_children;
   LogLearnerList parent_disable_sync_retire_children;
   const bool is_leader = state_mgr_->is_leader_active();
   const bool enable_vote = state_mgr_->is_allow_vote();
@@ -2989,14 +2893,6 @@ void LogConfigMgr::check_children_health()
       if (OB_FAIL(remove_timeout_child_(dead_children))) {
         PALF_LOG(WARN, "remove_timeout_child failed", KR(ret), K_(palf_id), K_(self));
       }
-      // 2. remove child which region are different from mine in follower
-      if (!is_leader && OB_FAIL(remove_diff_region_child_(diff_region_children))) {
-        PALF_LOG(WARN, "remove_diff_region_child_in_follower failed", KR(ret), K_(palf_id), K_(self));
-      }
-      // 3. remove duplicate region children in leader
-      if (is_leader && OB_FAIL(remove_duplicate_region_child_(dup_region_children))) {
-        PALF_LOG(WARN, "remove_duplicate_region_child failed", KR(ret), K_(palf_id), K_(self));
-      }
       // 4. parent is disable_sync or disable_vote, retire all children.
       if (!enable_sync || !enable_vote) {
         parent_disable_sync_retire_children = children_;
@@ -3007,7 +2903,7 @@ void LogConfigMgr::check_children_health()
     if (children_.is_valid() && palf_reach_time_interval(PALF_PARENT_KEEPALIVE_INTERVAL_US, last_submit_keepalive_time_us_)) {
       // reach keepalive interval, submit keepalive req
       SpinLockGuard guard(child_lock_);
-      LogLearner parent_self(self_, region_, OB_INVALID_TIMESTAMP);
+      LogLearner parent_self(self_, OB_INVALID_TIMESTAMP);
       for (int64_t i = 0; i < children_.get_member_number(); ++i) {
         LogLearner child;
         if (OB_FAIL(children_.get_learner(i, child))) {
@@ -3025,12 +2921,6 @@ void LogConfigMgr::check_children_health()
     } else if (OB_FAIL(submit_retire_children_req_(parent_disable_sync_retire_children, RetireChildReason::PARENT_DISABLE_SYNC))) {
       // overwrite ret
       PALF_LOG(WARN, "submit_retire_children_req failed", KR(ret), K_(palf_id), K_(self), K(dead_children));
-    } else if (!is_leader && OB_FAIL(submit_retire_children_req_(diff_region_children,
-        RetireChildReason::DIFFERENT_REGION_WITH_PARENT))) {
-      PALF_LOG(WARN, "submit_retire_children_req failed", KR(ret), K_(palf_id), K_(self), K(diff_region_children));
-    } else if (is_leader && OB_FAIL(submit_retire_children_req_(dup_region_children,
-        RetireChildReason::DUPLICATE_REGION_IN_LEADER))) {
-      PALF_LOG(WARN, "submit_retire_children_req failed", KR(ret), K_(palf_id), K_(self), K(dup_region_children));
     }
     // 6. update log_sync_children_
     {
@@ -3070,26 +2960,6 @@ int LogConfigMgr::remove_timeout_child_(LogLearnerList &dead_children)
   return ret;
 }
 
-int LogConfigMgr::remove_diff_region_child_(LogLearnerList &diff_region_children)
-{
-  int ret = OB_SUCCESS;
-  LogLearnerCond diff_region_cond;
-  LogLearnerAction diff_region_action;
-  // if child's region is different from mine and i'm follower, add it to diff_region_children
-  if (OB_FAIL(diff_region_cond.assign([this](const LogLearner &child) { return child.region_ != region_;}))) {
-    PALF_LOG(WARN, "diff_region_cond assign failed", KR(ret), K_(palf_id), K_(self));
-  } else if (OB_FAIL(diff_region_action.assign([&diff_region_children](const LogLearner &child) {return diff_region_children.add_learner(child);}))) {
-    PALF_LOG(WARN, "diff_region_action assign failed", KR(ret), K_(palf_id), K_(self));
-  } else if (OB_FAIL(children_if_cond_then_action_(diff_region_cond, diff_region_action))) {
-    PALF_LOG(WARN, "children_if_cond_then_action failed", KR(ret), K_(palf_id), K_(self));
-  } else if (OB_FAIL(remove_children_(children_, diff_region_children))) {
-    PALF_LOG(WARN, "remove_children failed", KR(ret), K(diff_region_children), K_(children));
-  } else if (diff_region_children.get_member_number() > 0) {
-    PALF_LOG(INFO, "remove_diff_region_child success", K(ret), K_(palf_id), K_(self), K_(children), K(diff_region_children));
-  }
-  return ret;
-}
-
 int LogConfigMgr::remove_child_is_not_learner_(LogLearnerList &removed_children)
 {
   int ret = OB_SUCCESS;
@@ -3107,50 +2977,6 @@ int LogConfigMgr::remove_child_is_not_learner_(LogLearnerList &removed_children)
     PALF_LOG(WARN, "remove_children failed", KR(ret), K(removed_children), K_(children));
   } else if (removed_children.get_member_number() > 0) {
     PALF_LOG(INFO, "remove_child_is_not_learner success", K(ret), K_(palf_id), K_(self), K_(children), K(removed_children));
-  }
-  return ret;
-}
-
-int LogConfigMgr::remove_duplicate_region_child_(LogLearnerList &dup_region_children)
-{
-  int ret = OB_SUCCESS;
-  common::hash::ObHashMap<ObRegion, int> region_map;
-  LogLearnerCond cond;
-  LogLearnerAction action;
-  const int64_t REGION_MAP_SIZE = MIN(OB_MAX_MEMBER_NUMBER + children_.get_member_number(), MAX_ZONE_NUM);
-  if (children_.get_member_number() == 0) {
-    // skip
-  } else if (OB_FAIL(region_map.create(REGION_MAP_SIZE,
-      ObMemAttr(MTL_ID(), ObModIds::OB_HASH_NODE, ObCtxIds::DEFAULT_CTX_ID)))) {
-    PALF_LOG(WARN, "region_map init failed", KR(ret), K_(palf_id), K_(self));
-  } else if (OB_FAIL(get_member_regions_(region_map))) {
-    PALF_LOG(WARN, "get_member_region failed", KR(ret), K_(palf_id), K_(self));
-  } else if (OB_FAIL(cond.assign([](const LogLearner &child)->bool { UNUSED(child); return true; }))) {
-    PALF_LOG(WARN, "cond assign failed", KR(ret), K_(palf_id), K_(self));
-  } else if (OB_FAIL(action.assign(
-    [&region_map, &dup_region_children, this](const LogLearner &child)->int {
-    int ret = OB_SUCCESS;
-    int unused_val = 0;
-    if (OB_FAIL(region_map.get_refactored(child.region_, unused_val))) {
-      if (OB_HASH_NOT_EXIST == ret) {
-        if (OB_FAIL(region_map.set_refactored(child.region_, 1))) {
-          PALF_LOG(WARN, "region_map.insert failed", KR(ret), K_(palf_id), K_(self), K(child));
-        }
-      } else {
-        PALF_LOG(WARN, "region_map.get failed", KR(ret), K_(palf_id), K_(self), K(child));
-      }
-    } else if (OB_FAIL(dup_region_children.add_learner(child))) {
-      PALF_LOG(WARN, "retired_children.add_learner failed", KR(ret), K_(palf_id), K_(self), K(child));
-    }
-    return ret;
-  }))) {
-    PALF_LOG(WARN, "action assign failed", KR(ret), K_(palf_id), K_(self));
-  } else if (OB_FAIL(children_if_cond_then_action_(cond, action))) {
-    PALF_LOG(WARN, "children_if_cond_then_action failed", KR(ret), K_(palf_id), K_(self));
-  } else if (OB_FAIL(remove_children_(children_, dup_region_children))) {
-    PALF_LOG(WARN, "remove dup_region_children from children_ failed", KR(ret), K_(children), K(dup_region_children));
-  } else if (dup_region_children.get_member_number() > 0) {
-    PALF_LOG(INFO, "remove_duplicate_region_child success", K(ret), K_(palf_id), K_(self), K_(children), K(dup_region_children));
   }
   return ret;
 }
@@ -3188,7 +3014,6 @@ int LogConfigMgr::remove_children_(LogLearnerList &this_children, const LogLearn
   return ret;
 }
 
-// generate candidate_list in which region of candidate is same with child's
 int LogConfigMgr::generate_candidate_list_(const LogLearner &child, LogCandidateList &candidate_list)
 {
   int ret = OB_SUCCESS;
@@ -3206,17 +3031,14 @@ int LogConfigMgr::generate_candidate_list_(const LogLearner &child, LogCandidate
 int LogConfigMgr::generate_candidate_list_from_member_(const LogLearner &child, LogCandidateList &candidate_list)
 {
   int ret = OB_SUCCESS;
+  UNUSED(child);
   const ObMemberList &curr_member_list = log_ms_meta_.curr_.config_.log_sync_memberlist_;
   for (int64_t i = 0; i < curr_member_list.get_member_number(); ++i) {
     ObAddr addr;
-    ObRegion region;
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = curr_member_list.get_server_by_index(i, addr))) {
       PALF_LOG(WARN, "get_server_by_index failed", KR(ret), K(curr_member_list), K(i));
-    } else if (OB_SUCCESS != (tmp_ret = plugins_->get_server_region(addr, region) &&
-        FALSE_IT(region = DEFAULT_REGION_NAME))) {
-      PALF_LOG(WARN, "get_server_region failed", KR(tmp_ret), K_(palf_id), K_(self), K(addr));
-    } else if (addr == self_ || region != child.region_) {
+    } else if (addr == self_) {
       // skip
     } else if (OB_SUCCESS == (tmp_ret = candidate_list.add_learner(common::ObMember(addr, 1)))) {
     } else if (OB_ENTRY_EXIST == tmp_ret) {
@@ -3235,13 +3057,12 @@ int LogConfigMgr::generate_candidate_list_from_member_(const LogLearner &child, 
 int LogConfigMgr::generate_candidate_list_from_children_(const LogLearner &child, LogCandidateList &candidate_list)
 {
   int ret = OB_SUCCESS;
+  UNUSED(child);
   for (int64_t i = 0; i < children_.get_member_number(); ++i) {
     LogLearner learner;
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = children_.get_learner(i, learner))) {
-      PALF_LOG(WARN, "get_region failed", KR(tmp_ret), K_(children));
-    } else if (child.region_ != learner.region_) {
-      // continue
+      PALF_LOG(WARN, "get_learner failed", KR(tmp_ret), K_(children));
     } else if (OB_SUCCESS == (tmp_ret = candidate_list.add_learner(common::ObMember(learner.server_, 1)))) {
     } else if (OB_ENTRY_EXIST == tmp_ret) {
       continue;
@@ -3261,7 +3082,7 @@ int LogConfigMgr::submit_retire_children_req_(const LogLearnerList &retired_chil
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  LogLearner parent(self_, region_, OB_INVALID_ARGUMENT);
+  LogLearner parent(self_, OB_INVALID_ARGUMENT);
   for (int64_t i = 0; i < retired_children.get_member_number(); ++i) {
     LogLearner retired_child;
     if (OB_SUCCESS != (tmp_ret = retired_children.get_learner(i, retired_child))) {
@@ -3276,29 +3097,6 @@ int LogConfigMgr::submit_retire_children_req_(const LogLearnerList &retired_chil
   return ret;
 }
 
-int LogConfigMgr::get_member_regions_(common::hash::ObHashMap<ObRegion, int> &region_map) const
-{
-  int ret = OB_SUCCESS;
-  const ObMemberList &curr_member_list = log_ms_meta_.curr_.config_.log_sync_memberlist_;
-  for (int64_t i = 0; i < curr_member_list.get_member_number(); ++i) {
-    ObAddr addr;
-    ObRegion region;
-    int tmp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (tmp_ret = curr_member_list.get_server_by_index(i, addr))) {
-      PALF_LOG(WARN, "get_server_by_index failed", KR(ret), K(curr_member_list), K(i));
-    } else if (addr == self_) {
-      // skip
-    } else if (OB_SUCCESS != (tmp_ret = plugins_->get_server_region(addr, region)) &&
-        FALSE_IT(region = DEFAULT_REGION_NAME)) {
-      PALF_LOG(WARN, "get_server_region failed", KR(ret), K(addr));
-    } else if (OB_SUCCESS != (tmp_ret = region_map.set_refactored(region, 1)) &&
-        OB_HASH_EXIST != tmp_ret) {
-      PALF_LOG(WARN, "region_map.insert_or_update failed", KR(ret), K_(palf_id), K_(self), K(region));
-    }
-  }
-  return ret;
-}
-
 int LogConfigMgr::after_register_child_done_(const LogLearner &child) const
 {
   int ret = OB_SUCCESS;
@@ -3306,10 +3104,10 @@ int LogConfigMgr::after_register_child_done_(const LogLearner &child) const
   const int64_t MAX_BUF_LEN = 50;
   char reason_str[MAX_BUF_LEN] = {'\0'};
   if (OB_FAIL(plugins_->record_parent_child_change_event(palf_id_, true /*is_register*/,
-      false /* is_parent*/, child.server_, child.region_, child.register_time_us_, reason_str))) {
+      false /* is_parent*/, child.server_, child.register_time_us_, reason_str))) {
     PALF_LOG(WARN, "record_parent_child_change_event failed", KR(tmp_ret), K_(palf_id), K_(self), K(child));
   }
-  PALF_EVENT("register_child", palf_id_, K(ret), K_(self), K_(region), K(child));
+  PALF_EVENT("register_child", palf_id_, K(ret), K_(self), K(child));
   return ret;
 }
 
@@ -3325,11 +3123,11 @@ int LogConfigMgr::after_retire_child_done_(const LogLearner &child,
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "snprintf failed", KR(ret), K(reason_str), K(reason));
   } else if (OB_TMP_FAIL(plugins_->record_parent_child_change_event(palf_id_, false /*is_register*/,
-      false /* is_parent*/, child.server_, child.region_, child.register_time_us_, reason_str))) {
+      false /* is_parent*/, child.server_, child.register_time_us_, reason_str))) {
     PALF_LOG(WARN, "record_parent_child_change_event failed", KR(tmp_ret), K_(palf_id), K_(self),
         K(child), "reason", retire_child_reason_2_str_(reason));
   }
-  PALF_EVENT("retire_child", palf_id_, K(ret), K_(self), K_(region), K(child), "reason", retire_child_reason_2_str_(reason));
+  PALF_EVENT("retire_child", palf_id_, K(ret), K_(self), K(child), "reason", retire_child_reason_2_str_(reason));
   return ret;
 }
 //================================ Parent ================================

@@ -15,9 +15,9 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "src/share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 #include "ob_cg_bitmap.h"
-#include "common/ob_target_specific.h"
+#include "lib/utility/ob_target_specific.h"
 
 #if OB_USE_MULTITARGET_CODE
 #include <emmintrin.h>

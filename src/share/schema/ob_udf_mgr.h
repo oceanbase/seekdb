@@ -38,7 +38,7 @@ public:
   ObSimpleUDFSchema(const ObSimpleUDFSchema &src_schema);
   virtual ~ObSimpleUDFSchema();
   ObSimpleUDFSchema &operator =(const ObSimpleUDFSchema &other);
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(udf_id),
                K_(schema_version),
                K_(udf_name),
@@ -48,8 +48,8 @@ public:
   virtual void reset();
   inline bool is_valid() const;
   inline int64_t get_convert_size() const;
-  inline void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
+  
   inline void set_udf_id(const uint64_t udf_id) { udf_id_ = udf_id; }
   inline uint64_t get_udf_id() const { return udf_id_; }
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
@@ -60,7 +60,7 @@ public:
   inline const common::ObString &get_udf_name_str() const { return udf_name_; }
   inline common::ObString get_udf_name_str() { return udf_name_; }
   inline ObTenantUDFId get_tenant_udf_id() const
-  { return ObTenantUDFId(tenant_id_, udf_name_); }
+  { return ObTenantUDFId(udf_name_); }
 
   //the ObSimpleUDFSchema must have the same interface just like ObUDF.
   //ObSchemaRetrieveUtils's template function will use these interface.
@@ -80,7 +80,7 @@ public:
   inline const common::ObString &get_name_str() const { return udf_name_; }
 
 private:
-  uint64_t tenant_id_;
+  
   uint64_t udf_id_;
   common::ObString udf_name_;
   enum ObUDF::UDFRetType ret_;
@@ -101,31 +101,27 @@ class ObUDFHashWrapper
 {
 public:
   ObUDFHashWrapper()
-    : tenant_id_(common::OB_INVALID_ID),
-      udf_name_() {}
-  ObUDFHashWrapper(uint64_t tenant_id, const common::ObString &udf_name)
-    : tenant_id_(tenant_id),
-      udf_name_(udf_name) {}
+    : udf_name_() {}
+  ObUDFHashWrapper(const common::ObString &udf_name)
+    : udf_name_(udf_name) {}
   ~ObUDFHashWrapper() {}
   inline uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-    hash_ret = common::murmurhash(&tenant_id_, sizeof(uint64_t), 0);
-    hash_ret = common::murmurhash(get_udf_name().ptr(), get_udf_name().length(), hash_ret);
+    hash_ret = common::murmurhash(get_udf_name().ptr(), get_udf_name().length(), 0);
     return hash_ret;
   }
   inline bool operator==(const ObUDFHashWrapper &rv) const{
-    return (tenant_id_ == rv.get_tenant_id())
+    return (true)
         && (udf_name_ == rv.get_udf_name());
   }
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   inline void set_udf_name(const common::ObString &udf_name) { udf_name_ = udf_name; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline const common::ObString &get_udf_name() const { return udf_name_; }
-  TO_STRING_KV(K_(tenant_id), K_(udf_name));
+  TO_STRING_KV(K_(udf_name));
 
 private:
-  uint64_t tenant_id_;
   common::ObString udf_name_;
 };
 
@@ -135,7 +131,7 @@ struct ObGetUDFKey<ObUDFHashWrapper, ObSimpleUDFSchema *>
   ObUDFHashWrapper operator() (const ObSimpleUDFSchema * udf) const {
     ObUDFHashWrapper hash_wrap;
     if (!OB_ISNULL(udf)) {
-      hash_wrap.set_tenant_id(udf->get_tenant_id());
+      
       hash_wrap.set_udf_name(udf->get_udf_name());
     }
     return hash_wrap;
@@ -167,12 +163,9 @@ public:
   int get_udf_schema(const uint64_t udf_id,
                      const ObSimpleUDFSchema *&udf_schema) const;
   int get_udf_info_version(uint64_t udf_id, int64_t &udf_version) const;
-  int get_udf_schema_with_name(const uint64_t tenant_id,
-                               const common::ObString &name,
+  int get_udf_schema_with_name(const common::ObString &name,
                                const ObSimpleUDFSchema *&udf_schema) const;
-  int get_udf_schemas_in_tenant(const uint64_t tenant_id,
-      common::ObIArray<const ObSimpleUDFSchema *> &udf_schemas) const;
-  int del_schemas_in_tenant(const uint64_t tenant_id);
+  int get_udf_schemas_in_tenant(common::ObIArray<const ObSimpleUDFSchema *> &udf_schemas) const;
   inline static bool compare_udf(const ObSimpleUDFSchema *lhs,
                                  const ObSimpleUDFSchema *rhs) {
     return lhs->get_tenant_udf_id() < rhs->get_tenant_udf_id();

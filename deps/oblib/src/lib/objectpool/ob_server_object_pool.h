@@ -123,7 +123,7 @@ public:
         ctx = PTR_META2OBJ(cmeta);
       }
       if (NULL == ctx) {
-        ObMemAttr attr(tenant_id_, LABEL);
+        ObMemAttr attr(LABEL);
         SET_USE_500(attr);
         char *p = static_cast<char*>(ob_malloc(item_size_, attr));
         if (NULL == p) {
@@ -177,9 +177,9 @@ public:
    * Since it is a global singleton, this work is completed at program startup
    * TODO: Change to on-demand allocation
    */
-  ObServerObjectPool(const int64_t tenant_id, const bool regist, const bool is_mini_mode,
+  ObServerObjectPool(const bool regist, const bool is_mini_mode,
                      const int64_t cpu_count)
-    : tenant_id_(tenant_id), regist_(regist), is_mini_mode_(is_mini_mode),
+    : regist_(regist), is_mini_mode_(is_mini_mode),
       cpu_count_(cpu_count), arena_num_(0),
       arena_(NULL), cnt_per_arena_(0), item_size_(0), buf_(nullptr), is_inited_(false)
   {}
@@ -195,11 +195,11 @@ public:
     cnt_per_arena_ = is_mini ? 4 : 64;
     int64_t s = (sizeof(T) + sizeof(Meta)); // Each cached object header has a Meta field to store necessary information and linked list pointers
     item_size_ = upper_align(s, CACHE_ALIGN_SIZE); // Align according to the cache line to ensure that there will be no false sharing between objects
-    ObMemAttr attr(tenant_id_, LABEL);
+    ObMemAttr attr(LABEL);
     SET_USE_500(attr);
     void *ptr = NULL;
     if (OB_ISNULL(ptr = ob_malloc(sizeof(ObPoolArenaHead) * arena_num_,
-                                  SET_USE_500(ObMemAttr(tenant_id_, LABEL))))) {
+                                  SET_USE_500(ObMemAttr(LABEL))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       COMMON_LOG(ERROR, "allocate memory failed", K(ret), K(typeid(T).name()));
     } else if ((buf_ = ob_malloc(arena_num_ * cnt_per_arena_ * item_size_, attr)) == NULL) {
@@ -266,7 +266,7 @@ public:
         is_inited_ = false;
       }
       if (has_unfree) {
-        COMMON_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "server object leak", K(tenant_id_), K(typeid(T).name()));
+        COMMON_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "server object leak", K(typeid(T).name()));
       }
     }
   }
@@ -282,7 +282,7 @@ private:
     int64_t magic;
     char padding__[8];
   };
-  const int64_t tenant_id_;
+  
   const bool regist_;
   const bool is_mini_mode_;
   const int64_t cpu_count_;
@@ -313,17 +313,11 @@ inline ObServerObjectPool<T>& get_server_object_pool() {
 #define sop_borrow(type)                                                                                        \
   ({                                                                                                            \
     type *iter = common::get_server_object_pool<type>().borrow_object();                                        \
-    if (OB_NOT_NULL(iter)) {                                                                                    \
-      storage::ObStorageLeakChecker::get_instance().handle_hold(iter); \
-    }                                                                                                           \
     (iter);                                                                                                     \
   })
 
 #define sop_return(type, ptr)                                                                                   \
   do {                                                                                                          \
-    if (OB_NOT_NULL(ptr)) {                                                                                     \
-      storage::ObStorageLeakChecker::get_instance().handle_reset(ptr); \
-    }                                                                                                           \
     common::get_server_object_pool<type>().return_object(ptr);                                                  \
   } while (false)
 

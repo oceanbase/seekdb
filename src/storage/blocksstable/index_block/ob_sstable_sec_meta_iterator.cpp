@@ -24,7 +24,7 @@ namespace blocksstable
 {
 
 ObSSTableSecMetaIterator::ObSSTableSecMetaIterator()
-  : tenant_id_(OB_INVALID_TENANT_ID), rowkey_read_info_(nullptr), sstable_meta_hdl_(),
+  : rowkey_read_info_(nullptr), sstable_meta_hdl_(),
     prefetch_flag_(), idx_cursor_(), macro_reader_(), block_cache_(nullptr),
     micro_reader_(nullptr), micro_reader_helper_(), block_meta_tree_(nullptr), ddl_iter_(),
     query_range_(nullptr), start_bound_micro_block_(), end_bound_micro_block_(),
@@ -36,7 +36,7 @@ ObSSTableSecMetaIterator::ObSSTableSecMetaIterator()
 void ObSSTableSecMetaIterator::reset()
 {
   rowkey_read_info_ = nullptr;
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   sstable_meta_hdl_.reset();
   prefetch_flag_.reset();
   idx_cursor_.reset();
@@ -93,7 +93,7 @@ int ObSSTableSecMetaIterator::open(
     LOG_WARN("get meta handle fail", K(ret), K(sstable));
   } else {
     rowkey_read_info_ = &rowkey_read_info;
-    tenant_id_ = MTL_ID();
+    
     prefetch_flag_.set_not_use_block_cache();
     query_range_ = &query_range;
     is_reverse_scan_ = is_reverse_scan;
@@ -183,7 +183,7 @@ int ObSSTableSecMetaIterator::open(
     }
   }
 
-  lib::ObMemAttr mem_attr(MTL_ID(), "SecMetaBlkIO");
+  lib::ObMemAttr mem_attr("SecMetaBlkIO");
   if (OB_FAIL(ret) || is_ddl_mem_sstable) {
     // do nothing
   } else if (is_prefetch_end_) {
@@ -208,7 +208,7 @@ int ObSSTableSecMetaIterator::open(
     curr_block_end_idx_ = -1;
     is_inited_ = true;
     LOG_DEBUG("Open secondary meta iterator", K(ret), K(meta_type), K(is_reverse_scan),
-        K(sample_step), K_(step_cnt), K_(curr_block_idx), K_(tenant_id), KPC_(query_range), K_(is_precise_rowkey));
+        K(sample_step), K_(step_cnt), K_(curr_block_idx), KPC_(query_range), K_(is_precise_rowkey));
   }
   return ret;
 }
@@ -520,8 +520,8 @@ int ObSSTableSecMetaIterator::get_micro_block(
   if (OB_SUCC(ret)) {
     ObMicroBlockCacheKey key;
     idx_row_header.has_valid_logic_micro_id() ?
-      key.set(tenant_id_, idx_row_header.get_logic_micro_id(), idx_row_header.get_data_checksum()) :
-      key.set(tenant_id_, macro_id, idx_row_header.get_block_offset() + nested_offset, idx_row_header.get_block_size());
+      key.set(idx_row_header.get_logic_micro_id(), idx_row_header.get_data_checksum()) :
+      key.set(macro_id, idx_row_header.get_block_offset() + nested_offset, idx_row_header.get_block_size());
     if (OB_FAIL(block_cache_->get_cache_block(key, data_handle.cache_handle_))) {
       if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
         LOG_WARN("Fail to get micro block handle from cache", K(ret), K(idx_row_header));
@@ -533,7 +533,6 @@ int ObSSTableSecMetaIterator::get_micro_block(
         data_handle.allocator_ = &io_allocator_;
         // TODO: @saitong.zst not safe here, remove tablet_handle from SecMeta prefetch interface, disable cache decoders
         if (OB_FAIL(block_cache_->prefetch(
-            tenant_id_,
             macro_id,
             idx_info,
             prefetch_flag_.is_use_block_cache(),

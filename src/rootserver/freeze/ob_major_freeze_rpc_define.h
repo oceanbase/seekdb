@@ -46,18 +46,13 @@ enum class ObTenantAdminMergeType
 struct ObSimpleFreezeInfo
 {
 public:
-  uint64_t tenant_id_;
 
   ObSimpleFreezeInfo()
-    : tenant_id_(OB_INVALID_TENANT_ID)
-  {}
+    {}
 
-  ObSimpleFreezeInfo(const uint64_t tenant_id)
-    : tenant_id_(tenant_id)
-  {}
 
-  bool is_valid() const { return (OB_INVALID_TENANT_ID != tenant_id_); }
-  TO_STRING_KV(K_(tenant_id));
+  bool is_valid() const { return (true); }
+  TO_STRING_EMPTY();
   OB_UNIS_VERSION(1);
 };
 
@@ -79,8 +74,6 @@ public:
     {}
 
   bool is_valid() const { return info_.is_valid(); }
-
-  uint64_t tenant_id() const { return info_.tenant_id_; }
 
   TO_STRING_KV(K_(info), "freeze_reason", major_freeze_reason_to_str(freeze_reason_));
 
@@ -106,19 +99,17 @@ public:
 struct ObTenantAdminMergeRequest
 {
 public:
-  uint64_t tenant_id_;
   ObTenantAdminMergeType type_;
   ObTenantAdminMergeRequest()
-    : tenant_id_(OB_INVALID_TENANT_ID), type_(ObTenantAdminMergeType::INVALID_TYPE) {}
-  ObTenantAdminMergeRequest(const uint64_t tenant_id, const ObTenantAdminMergeType &admin_type)
-    : tenant_id_(tenant_id), type_(admin_type) {}
+    : type_(ObTenantAdminMergeType::INVALID_TYPE) {}
+  ObTenantAdminMergeRequest(const ObTenantAdminMergeType &admin_type)
+    : type_(admin_type) {}
 
-  bool is_valid() const { return OB_INVALID_TENANT_ID != tenant_id_; }
+  bool is_valid() const { return true; }
 
-  uint64_t tenant_id() const { return tenant_id_; }
   ObTenantAdminMergeType get_type() const { return type_; }
 
-  TO_STRING_KV(K_(tenant_id), K_(type));
+  TO_STRING_KV(K_(type));
 
   OB_UNIS_VERSION(1);
 };
@@ -142,18 +133,16 @@ struct ObTabletMajorFreezeRequest
 {
 public:
   ObTabletMajorFreezeRequest()
-    : tenant_id_(0),
-      ls_id_(),
+    : ls_id_(),
       tablet_id_(),
       is_rebuild_column_group_()
     {}
   ~ObTabletMajorFreezeRequest() = default;
   bool is_valid() const
   {
-    return is_valid_tenant_id(tenant_id_) && ls_id_.is_valid() && tablet_id_.is_valid();
+    return true && ls_id_.is_valid() && tablet_id_.is_valid();
   }
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(tablet_id));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(ls_id), K_(tablet_id));
   share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   bool is_rebuild_column_group_;

@@ -15,6 +15,7 @@
  */
 
 #include "observer/dbms_scheduler/ob_dbms_sched_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/rc/ob_tenant_base.h"
 #define USING_LOG_PREFIX SERVER
 
@@ -33,21 +34,20 @@ int ObDBMSSchedService::mtl_init(ObDBMSSchedService *&dbms_sched_service)
 int ObDBMSSchedService::init()
 {
   int ret = OB_SUCCESS;
-  tenant_id_ = MTL_ID();
-  if (!is_user_tenant(tenant_id_) && !is_sys_tenant(tenant_id_) && !is_meta_tenant(tenant_id_)) {
+  if (false) {
     // do nothing
   } else if (job_master_.is_inited()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("has inited", KR(ret), "tenant_id", tenant_id_);
-  } else if (OB_FAIL(job_master_.init(GCTX.sql_proxy_, GCTX.schema_service_, tenant_id_))) {
-    LOG_WARN("[DBMS_SCHED_SERVICE] job master init failed", "tenant_id", tenant_id_);
+    LOG_WARN("has inited", KR(ret));
+  } else if (OB_FAIL(job_master_.init(GCTX.sql_proxy_, GCTX.schema_service_))) {
+    LOG_WARN("[DBMS_SCHED_SERVICE] job master init failed");
   } else if (OB_FAIL(ObTenantThreadHelper::create(
       "DBMSSched",
       lib::TGDefIDs::DBMSSchedService,
       *this))) {
     LOG_WARN("[DBMS_SCHED_SERVICE] fail to create thread", KR(ret));
   } else {
-    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService init success", "tenant_id", tenant_id_);
+    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService init success");
   }
   return ret;
 }
@@ -55,17 +55,17 @@ int ObDBMSSchedService::init()
 int ObDBMSSchedService::start()
 {
   int ret = OB_SUCCESS;
-  if (!is_user_tenant(tenant_id_) && !is_sys_tenant(tenant_id_) && !is_meta_tenant(tenant_id_)) {
+  if (false) {
     // do nothing
   } else if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.start())) {
-    LOG_WARN("[DBMS_SCHED_SERVICE] job master start failed", K(ret), "tenant_id", tenant_id_);
+    LOG_WARN("[DBMS_SCHED_SERVICE] job master start failed", K(ret));
   } else if (OB_FAIL(ObTenantThreadHelper::start())) {
     LOG_WARN("[DBMS_SCHED_SERVICE] failed to start thread", KR(ret));
   } else {
-    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService start success", "tenant_id", tenant_id_);
+    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService start success");
   }
   return ret;
 }
@@ -73,60 +73,60 @@ int ObDBMSSchedService::start()
 void ObDBMSSchedService::do_work()
 {
   int ret = OB_SUCCESS;
-  if (!is_user_tenant(tenant_id_) && !is_sys_tenant(tenant_id_) && !is_meta_tenant(tenant_id_)) {
+  if (false) {
     // do nothing
   } else if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.scheduler())) {
-    LOG_WARN("[DBMS_SCHED_SERVICE] job master sched failed", K(ret), "tenant_id", tenant_id_);
+    LOG_WARN("[DBMS_SCHED_SERVICE] job master sched failed", K(ret));
   }
 }
 
 void ObDBMSSchedService::stop()
 {
   int ret = OB_SUCCESS;
-  if (!is_user_tenant(tenant_id_) && !is_sys_tenant(tenant_id_) && !is_meta_tenant(tenant_id_)) {
+  if (false) {
     // do nothing
   } else if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.stop())) {
-    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService stop failure", "tenant_id", tenant_id_);
+    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService stop failure");
   } else {
     ObTenantThreadHelper::stop();
-    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService stop success", "tenant_id", tenant_id_);
+    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService stop success");
   }
 }
 
 void ObDBMSSchedService::wait()
 {
   int ret = OB_SUCCESS;
-  if (!is_user_tenant(tenant_id_) && !is_sys_tenant(tenant_id_) && !is_meta_tenant(tenant_id_)) {
+  if (false) {
     // do nothing
   } else if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else {
     ObTenantThreadHelper::wait();
-    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService wait success", "tenant_id", tenant_id_);
+    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService wait success");
   }
 }
 
 void ObDBMSSchedService::destroy()
 {
   int ret = OB_SUCCESS;
-  if (!is_user_tenant(tenant_id_) && !is_sys_tenant(tenant_id_) && !is_meta_tenant(tenant_id_)) {
+  if (false) {
     // do nothing
   } else if (job_master_.is_inited()) {
     if (OB_FAIL(job_master_.destroy())) {
-      LOG_WARN("[DBMS_SCHED_SERVICE] job master destroy failed", K(ret), "tenant_id", tenant_id_);
+      LOG_WARN("[DBMS_SCHED_SERVICE] job master destroy failed", K(ret));
     } else {
-      LOG_INFO("[DBMS_SCHED_SERVICE] job master destroy success", "tenant_id", tenant_id_);
+      LOG_INFO("[DBMS_SCHED_SERVICE] job master destroy success");
     }
     ObTenantThreadHelper::destroy();
   }
-  LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService destroy success", "tenant_id", tenant_id_);
+  LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService destroy success");
 }
 
 void ObDBMSSchedService::switch_to_follower_forcedly()
@@ -136,24 +136,24 @@ void ObDBMSSchedService::switch_to_follower_forcedly()
 int ObDBMSSchedService::switch_to_leader()
 {
   int ret = OB_SUCCESS;
-  if (!is_user_tenant(tenant_id_) && !is_sys_tenant(tenant_id_) && !is_meta_tenant(tenant_id_)) {
+  if (false) {
     // do nothing
   } else if (job_master_.is_inited()) {
     job_master_.switch_to_leader();
     ObTenantThreadHelper::switch_to_leader();
-    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch leader", "tenant_id", tenant_id_);
+    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch leader");
   }
   return ret;
 }
 int ObDBMSSchedService::switch_to_follower_gracefully()
 {
   int ret = OB_SUCCESS;
-  if (!is_user_tenant(tenant_id_) && !is_sys_tenant(tenant_id_) && !is_meta_tenant(tenant_id_)) {
+  if (false) {
     // do nothing
   } else if (job_master_.is_inited()) {
     job_master_.switch_to_follower();
     ObTenantThreadHelper::switch_to_follower_gracefully();
-    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch follower", "tenant_id", tenant_id_);
+    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch follower");
   }
   return ret;
 }
@@ -162,7 +162,7 @@ int ObDBMSSchedService::resume_leader()
   int ret = OB_SUCCESS;
   if (!is_leader()) {
     if (OB_FAIL(switch_to_leader())) {
-       LOG_INFO("[DBMS_SCHED_SERVICE] resume leader failed", "tenant_id", tenant_id_);
+       LOG_INFO("[DBMS_SCHED_SERVICE] resume leader failed");
     }
   }
   return ret;
@@ -171,8 +171,8 @@ int ObDBMSSchedService::resume_leader()
 void ObDBMSSchedService::wakeup_scheduler()
 {
   int ret = OB_SUCCESS;
-  MTL_SWITCH(OB_SYS_TENANT_ID) {
-    rootserver::ObDBMSSchedService *svc = MTL(rootserver::ObDBMSSchedService*);
+  MOD_SCOPE {
+    rootserver::ObDBMSSchedService *svc = share::g_mp->dbms_sched_service();
     if (OB_NOT_NULL(svc)) {
       svc->job_master_.wakeup();
     }

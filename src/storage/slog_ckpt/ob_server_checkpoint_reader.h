@@ -34,8 +34,8 @@ public:
 
   int read_checkpoint(const ObServerSuperBlock &super_block);
   common::ObIArray<blocksstable::MacroBlockId> &get_meta_block_list();
-  int get_tenant_metas(common::hash::ObHashMap<uint64_t, omt::ObTenantMeta> &tenant_meta_map);
-  const common::ObArray<omt::ObTenantMeta> &get_tenant_meta_list() const { return tenant_meta_list_; }
+  // Single sys tenant meta, valid=false if checkpoint has none
+  int get_tenant_meta(omt::ObTenantMeta &tenant_meta, bool &is_valid);
 
 private:
   int read_tenant_meta_checkpoint(const blocksstable::MacroBlockId &entry_block);
@@ -43,7 +43,8 @@ private:
 
 private:
   ObLinkedMacroBlockItemReader tenant_meta_item_reader_;
-  common::ObArray<omt::ObTenantMeta> tenant_meta_list_;
+  omt::ObTenantMeta tenant_meta_;
+  bool tenant_meta_valid_ = false;
 
 };
 

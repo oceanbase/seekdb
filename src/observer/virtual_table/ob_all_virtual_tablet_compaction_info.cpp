@@ -44,7 +44,7 @@ void ObAllVirtualTabletCompactionInfo::reset()
   MEMSET(medium_info_buf_, '\0', OB_MAX_VARCHAR_LENGTH);
 }
 
-int ObAllVirtualTabletCompactionInfo::process_curr_tenant(common::ObNewRow *&row)
+int ObAllVirtualTabletCompactionInfo::inner_get_next_row(common::ObNewRow *&row)
 {
   // each get_next_row will switch to required tenant, and released guard later
   int ret = OB_SUCCESS;

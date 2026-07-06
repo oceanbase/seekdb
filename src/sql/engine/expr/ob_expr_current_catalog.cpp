@@ -55,14 +55,13 @@ int ObExprCurrentCatalog::eval_current_catalog(const ObExpr &expr, ObEvalCtx &ct
   UNUSED(expr);
   const ObSQLSessionInfo *session_info = NULL;
   ObSchemaGetterGuard schema_guard;
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   uint64_t catalog_id = OB_INVALID_ID;
   const ObCatalogSchema *catalog_schema = NULL;
   if (OB_ISNULL(session_info = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info is null", K(ret));
   } else {
-    tenant_id = session_info->get_effective_tenant_id();
     catalog_id = session_info->get_current_default_catalog();
   }
   if (OB_SUCC(ret)) {
@@ -74,10 +73,10 @@ int ObExprCurrentCatalog::eval_current_catalog(const ObExpr &expr, ObEvalCtx &ct
       if (OB_ISNULL(GCTX.schema_service_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected NULL GCTX.schema_service_", K(ret));
-      } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+      } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
         LOG_WARN("failed to get tenant schema guard", K(ret));
-      } else if (OB_FAIL(schema_guard.get_catalog_schema_by_id(tenant_id, catalog_id, catalog_schema))) {
-        LOG_WARN("failed to get user info", K(ret), K(tenant_id), K(catalog_id));
+      } else if (OB_FAIL(schema_guard.get_catalog_schema_by_id( catalog_id, catalog_schema))) {
+        LOG_WARN("failed to get user info", K(ret), K(catalog_id));
       } else if (OB_ISNULL(catalog_schema)) {
         expr_datum.set_null();
       } else {

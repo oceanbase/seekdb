@@ -15,9 +15,8 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_server.h"
+#include "share/rc/ob_module_provider.h"
 
-#include "grpc/ob_grpc_context.h"
-#include "grpc/ob_grpc_server.h"
 #include "observer/ob_service.h"
 #include "observer/ob_server_struct.h"
 #include "share/config/ob_server_config.h"
@@ -136,7 +135,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
     uint64_t readable_scn_val = 0;
     storage::ObLSHandle ls_handle;
     share::ObLSID sys_ls_id(share::ObLSID::SYS_LS_ID);
-    storage::ObLSService *ls_svr = MTL(storage::ObLSService*);
+    storage::ObLSService *ls_svr = share::g_mp->ls_service();
     storage::ObLS *ls = NULL;
     if (OB_ISNULL(ls_svr)) {
       ret = OB_ERR_UNEXPECTED;
@@ -227,11 +226,10 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(resource_info.log_disk_in_use_);
           break;
         case RPC_CERT_EXPIRE_TIME:
-          cur_row_.cells_[i].set_int(obgrpc::get_rpc_cert_expire_time());
+          cur_row_.cells_[i].set_int(0);
           break;
         case RPC_TLS_ENABLED:
-          cur_row_.cells_[i].set_int(GCTX.grpc_server_ != nullptr &&
-                                      GCTX.grpc_server_->is_tls_enabled());
+          cur_row_.cells_[i].set_int(0);
           break;
         case MEMORY_LIMIT:
           cur_row_.cells_[i].set_int(GMEMCONF.get_server_memory_limit());

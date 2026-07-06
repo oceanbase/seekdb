@@ -142,13 +142,13 @@ private:
   uint64_t owner_id_;
 };
 
-// For example, if you want to switch to TenantSpace, the most convenient interface for the upper layer is to only provide tenant_id.
-// The TenantSpace is obtained by the framework, if the tenant_id is used as the parameter of the TenantGuard, the TenantGuard will do the search,
+// For example, if you want to switch to TenantSpace, the most convenient interface for the upper layer is to only provide tenant.
+// The TenantSpace is obtained by the framework, if the tenant is used as the parameter of the TenantGuard, the TenantGuard will do the search,
 // Will destroy the Guard's positioning, we keep the Guard simple (Guard only does the switching function), so the logic of obtaining TenantSpace is placed on the outer layer
 class ObTenantSpaceFetcher
 {
 public:
-  ObTenantSpaceFetcher(uint64_t tenant_id);
+  ObTenantSpaceFetcher();
   ~ObTenantSpaceFetcher();
   int get_ret() const { return ret_; }
   ObTenantSpace &entity()
@@ -448,8 +448,7 @@ public:
   T_Guard *guard_;
 };
 
-extern int get_tenant_ctx_with_tenant_lock(const uint64_t tenant_id,
-                                           ObTenantSpace *&tenant_ctx);
+extern int get_tenant_ctx_with_tenant_lock(ObTenantSpace *&tenant_ctx);
 
 } // end of namespace lib
 } // end of namespace oceanbase

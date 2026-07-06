@@ -103,7 +103,7 @@ public:
   ObJoinFilterPartitionSplitter() {}
   ~ObJoinFilterPartitionSplitter();
 
-  int init(int64_t tenant_id, lib::MemoryContext mem_context, ObEvalCtx &eval_ctx,
+  int init(lib::MemoryContext mem_context, ObEvalCtx &eval_ctx,
            ObSqlMemMgrProcessor *sql_mem_processor, const ObExprPtrIArray &hash_join_hash_exprs,
            const ObExprPtrIArray &output_exprs, uint16_t extra_hash_count, int64_t max_batch_size,
            const common::ObCompressorType compress_type);
@@ -151,7 +151,7 @@ private:
 
 private:
   BatchTempRowStoresMgr stores_mgr_;
-  int64_t tenant_id_{0};
+  
   int64_t max_batch_size_{0};
   int64_t part_count_{0};
   int64_t total_row_count_{0};

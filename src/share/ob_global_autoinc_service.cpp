@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include "lib/lock/ob_mutex.h"
 #include "share/ob_global_autoinc_service.h"
-#include "src/share/sequence/ob_sequence_cache.h"
+#include "share/sequence/ob_sequence_cache.h"
 
 namespace oceanbase
 {
@@ -98,7 +99,7 @@ int ObAutoIncCacheNode::with_new_end(const uint64_t new_end)
 int ObGlobalAutoIncService::init(const ObAddr &addr, ObMySQLProxy *mysql_proxy)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(MTL_ID(), ObModIds::OB_AUTOINCREMENT);
+  ObMemAttr attr(ObModIds::OB_AUTOINCREMENT);
   if (OB_ISNULL(mysql_proxy)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(mysql_proxy));
@@ -167,7 +168,7 @@ int ObGlobalAutoIncService::handle_next_autoinc_request(
   } else if (OB_UNLIKELY(!request.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(request));
-  } else if (OB_FAIL(check_leader_(key.tenant_id_, is_leader))) {
+  } else if (OB_FAIL(check_leader_( is_leader))) {
     LOG_WARN("check leader failed", K(ret), K(request.sender_), K(self_));
   } else if (OB_UNLIKELY(!is_leader)) {
     ret = OB_NOT_MASTER;
@@ -177,7 +178,7 @@ int ObGlobalAutoIncService::handle_next_autoinc_request(
   } else {
     ObAutoIncCacheNode cache_node;
     int err = autoinc_map_.get_refactored(key.table_id_, cache_node);
-    const int64_t tenant_id = key.tenant_id_;
+    
     const int64_t request_version = request.autoinc_version_;
     LOG_TRACE("begin handle req autoinc request", K(request), K(cache_node));
     if (OB_UNLIKELY(OB_SUCCESS != err && OB_HASH_NOT_EXIST != err)) {
@@ -200,7 +201,7 @@ int ObGlobalAutoIncService::handle_next_autoinc_request(
     } else if (OB_UNLIKELY(request_version < cache_node.autoinc_version_)) {
       ret = OB_AUTOINC_CACHE_NOT_EQUAL;
       LOG_WARN("request autoinc_version is less than autoinc_version_ in table_node,"
-               "it should retry", KR(ret), K(tenant_id), K(key), K(request_version), K(cache_node));
+               "it should retry", KR(ret), K(key), K(request_version), K(cache_node));
     }
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(!cache_node.is_valid())) {
@@ -261,13 +262,13 @@ int ObGlobalAutoIncService::handle_curr_autoinc_request(const ObGAISAutoIncKeyAr
   } else if (OB_UNLIKELY(!request.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(request));
-  } else if (OB_FAIL(check_leader_(key.tenant_id_, is_leader))) {
+  } else if (OB_FAIL(check_leader_( is_leader))) {
     LOG_WARN("check leader failed", K(ret), K(request.sender_), K(self_));
   } else if (OB_FAIL(mutex.lock())) {
     LOG_WARN("fail to get lock", K(ret));
   } else {
     ObAutoIncCacheNode cache_node;
-    const int64_t tenant_id = key.tenant_id_;
+    
     int err = autoinc_map_.get_refactored(key.table_id_, cache_node);
     const int64_t request_version = request.autoinc_version_;
     LOG_TRACE("start handle get autoinc request", K(request), K(cache_node));
@@ -284,14 +285,14 @@ int ObGlobalAutoIncService::handle_curr_autoinc_request(const ObGAISAutoIncKeyAr
       // read value from inner table
     } else if (OB_FAIL(read_value_from_inner_table_(key, request_version, sequence_value,
                                                     sync_value))) {
-      LOG_WARN("fail to read value from inner table", KR(ret), K(tenant_id), K_(key.table_id));
+      LOG_WARN("fail to read value from inner table", KR(ret), K_(key.table_id));
     } else if (OB_UNLIKELY(cache_node.is_received()) && (sequence_value - 1 == cache_node.end_)) {
       sequence_value = cache_node.start_;
       sync_value = cache_node.sync_value_;
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(result.init(sequence_value, sync_value))) {
-        LOG_WARN("failed to init result", KR(ret), K(tenant_id), K_(key.table_id),
+        LOG_WARN("failed to init result", KR(ret), K_(key.table_id),
                   K(request_version), K(cache_node));
       }
     }
@@ -314,7 +315,7 @@ int ObGlobalAutoIncService::handle_push_autoinc_request(
   } else if (OB_UNLIKELY(!request.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(request));
-  } else if (OB_FAIL(check_leader_(key.tenant_id_, is_leader))) {
+  } else if (OB_FAIL(check_leader_( is_leader))) {
     LOG_WARN("check leader failed", K(ret), K(request.sender_), K(self_));
   } else if (OB_UNLIKELY(!is_leader)) {
     ret = OB_NOT_MASTER;
@@ -323,7 +324,7 @@ int ObGlobalAutoIncService::handle_push_autoinc_request(
     LOG_WARN("fail to get lock", K(ret));
   } else {
     ObAutoIncCacheNode cache_node;
-    const int64_t tenant_id = key.tenant_id_;
+    
     int err = autoinc_map_.get_refactored(key.table_id_, cache_node);
     const int64_t request_version = request.autoinc_version_;
     const uint64_t insert_value = request.base_value_;
@@ -381,7 +382,7 @@ int ObGlobalAutoIncService::handle_clear_autoinc_cache_request(const ObGAISAutoI
   } else if (OB_UNLIKELY(!request.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(request));
-  } else if (OB_FAIL(check_leader_(key.tenant_id_, is_leader))) {
+  } else if (OB_FAIL(check_leader_( is_leader))) {
     LOG_WARN("check leader failed", K(ret), K(request.sender_), K(self_));
   } else if (OB_UNLIKELY(!is_leader)) {
     ret = OB_NOT_MASTER;
@@ -411,35 +412,8 @@ int ObGlobalAutoIncService::handle_next_sequence_request(
   return sequence_cache->nextval(request.schema_, allocator ,result.nextval_);
 }
 
-int ObGlobalAutoIncService::check_leader_(const uint64_t tenant_id, bool &is_leader)
-{
-  int ret = OB_SUCCESS;
-  is_leader = ATOMIC_LOAD(&is_leader_);
-  if (OB_LIKELY(is_leader)) {
-  } else if (ATOMIC_LOAD(&is_switching_)) {
-    ret = OB_NOT_MASTER;
-    LOG_WARN("service is switching to leader", K(ret), KP(this), K(*this));
-  } else {
-    // try to get role from logstream
-    ObRole role = ObRole::INVALID_ROLE;
-    int64_t proposal_id = 0;
-    ObSpinLockGuard lock(cache_ls_lock_);
-    if (OB_ISNULL(cache_ls_)) {
-      ret = OB_NOT_MASTER;
-      LOG_WARN("cache ls is null", K(ret));
-    } else if (OB_FAIL(cache_ls_->get_log_handler()->get_role(role, proposal_id))) {
-      int tmp_ret = ret;
-      ret = OB_NOT_MASTER;
-      LOG_WARN("get ls role fail", K(ret), K(tmp_ret));
-    } else if (common::ObRole::LEADER == role) {
-      is_leader = true;
-    } else {
-      is_leader = false;
-    }
-  }
-
-  return ret;
-}
+// moved definition to storage/tx_storage/ob_ls_service.cpp(ObLS real user)
+// Note: master tenant-elim changed the original body(removed the tenant_id parameter), HOST(ob_ls_service.cpp) must be synced (see routing item)
 
 int ObGlobalAutoIncService::fetch_next_node_(const ObGAISNextAutoIncValReq &request,
                                              ObAutoIncCacheNode &node)
@@ -520,7 +494,7 @@ int ObGlobalAutoIncService::inner_switch_to_follower()
 {
   int ret = OB_SUCCESS;
   const int64_t start_time_us = ObTimeUtility::current_time();
-  ObMutexGuard lock(switching_mutex_);
+  lib::ObMutexGuard lock(switching_mutex_);
   LOG_INFO("start to switch to follower", KP(this), K(*this));
   ATOMIC_STORE(&is_switching_, true);
   ATOMIC_STORE(&is_leader_, false);
@@ -554,8 +528,8 @@ int ObGlobalAutoIncService::broadcast_global_autoinc_cache()
       LOG_WARN("fail to wait all requests to finish", K(ret));
     } else if (autoinc_map_.size() > 0) {
       const int64_t size = serialize_size_autoinc_cache();
-      const uint64_t tenant_id = MTL_ID();
-      ObMemAttr attr(tenant_id, ObModIds::OB_AUTOINCREMENT);
+      
+      ObMemAttr attr(ObModIds::OB_AUTOINCREMENT);
       char *buffer = NULL;
       int64_t pos = 0;
       ObGAISBroadcastAutoIncCacheReq msg;
@@ -564,8 +538,8 @@ int ObGlobalAutoIncService::broadcast_global_autoinc_cache()
         LOG_WARN("fail to alloc cache buffer", K(ret), K(size));
       } else if (OB_FAIL(serialize_autoinc_cache(buffer, size, pos))) {
         LOG_WARN("fail to serialize global autoinc cache", K(ret));
-      } else if (OB_FAIL(msg.init(tenant_id, buffer, pos))) {
-        LOG_WARN("fail to init msg", K(ret), K(tenant_id), K(buffer), K(pos));
+      } else if (OB_FAIL(msg.init(buffer, pos))) {
+        LOG_WARN("fail to init msg", K(ret), K(buffer), K(pos));
       } else if (OB_UNLIKELY(!msg.is_valid())) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid argument", K(ret), K(msg));
@@ -590,16 +564,16 @@ int ObGlobalAutoIncService::receive_global_autoinc_cache(
     const ObGAISBroadcastAutoIncCacheReq &request)
 {
   int ret = OB_SUCCESS;
-  ObMutexGuard lock(switching_mutex_);
+  lib::ObMutexGuard lock(switching_mutex_);
   ATOMIC_STORE(&is_switching_, true);
   ATOMIC_STORE(&is_leader_, false);
   int64_t pos = 0;
   if (OB_UNLIKELY(!request.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(request));
-  } else if (OB_UNLIKELY(request.tenant_id_ != MTL_ID())) {
+  } else if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(request), K(MTL_ID()));
+    LOG_WARN("invalid argument", K(ret), K(request));
   } else if (OB_FAIL(wait_all_requests_to_finish())) {
     LOG_WARN("fail to wait all requests to finish", K(ret));
   } else if (OB_FAIL(deserialize_autoinc_cache(request.buf_, request.buf_size_, pos))) {

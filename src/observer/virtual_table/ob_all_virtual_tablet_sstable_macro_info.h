@@ -19,8 +19,8 @@
 #include "common/row/ob_row.h"
 #include "lib/guard/ob_shared_guard.h"
 #include "observer/omt/ob_multi_tenant.h"
-#include "share/ob_scanner.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "share/rc/ob_tenant_base.h"
 #include "storage/blocksstable/index_block/ob_index_block_macro_iterator.h"
 #include "storage/blocksstable/index_block/ob_index_block_dual_meta_iterator.h"
@@ -29,7 +29,6 @@
 #include "storage/meta_mem/ob_tablet_handle.h"
 #include "observer/omt/ob_multi_tenant.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
 
 namespace oceanbase
 {
@@ -41,8 +40,7 @@ class ObTabletMeta;
 namespace observer
 {
 
-class ObAllVirtualTabletSSTableMacroInfo : public common::ObVirtualTableScannerIterator,
-                                           public omt::ObMultiTenantOperator
+class ObAllVirtualTabletSSTableMacroInfo : public common::ObVirtualTableScannerIterator
 {
   enum COLUMN_ID_LIST
   {
@@ -109,10 +107,6 @@ private:
     ObRowStoreType row_store_type_;
   };
 private:
-  virtual bool is_need_process(uint64_t tenant_id) override;
-  virtual int process_curr_tenant(common::ObNewRow *&row) override;
-  virtual void release_last_tenant() override;
-
   int set_key_ranges(const common::ObIArray<common::ObNewRange> &key_ranges);
   int gen_row(const MacroInfo &macro_info, common::ObNewRow *&row);
   int next_tenant();
@@ -120,7 +114,7 @@ private:
   int get_next_tablet();
   int get_next_sstable();
   void clean_cur_sstable();
-  bool check_tenant_need_ignore(uint64_t tenant_id);
+  bool check_tenant_need_ignore();
   bool check_tablet_need_ignore(const ObTabletMeta &tablet_meta);
   bool check_sstable_need_ignore(const ObITable::TableKey &table_key);
   int gen_sstable_range(common::ObNewRange &range);

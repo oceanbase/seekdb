@@ -32,7 +32,7 @@ int ObDatumJsonCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret, co
   cmp_ret = 0;
   ObString l_data;
   ObString r_data;
-  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObTextStringIter l_instr_iter(ObJsonType, CS_TYPE_BINARY, l.get_string(), is_lob);
   ObTextStringIter r_instr_iter(ObJsonType, CS_TYPE_BINARY, r.get_string(), is_lob);
   if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
@@ -74,7 +74,7 @@ int ObDatumGeoCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret, con
   cmp_ret = 0;
   ObString l_data;
   ObString r_data;
-  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObTextStringIter l_instr_iter(ObGeometryType, CS_TYPE_BINARY, l.get_string(), is_lob);
   ObTextStringIter r_instr_iter(ObGeometryType, CS_TYPE_BINARY, r.get_string(), is_lob);
   if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
@@ -98,7 +98,7 @@ int ObDatumCollectionCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_r
   cmp_ret = 0;
   ObString l_data;
   ObString r_data;
-  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObTextStringIter l_instr_iter(ObGeometryType, CS_TYPE_BINARY, l.get_string(), is_lob);
   ObTextStringIter r_instr_iter(ObGeometryType, CS_TYPE_BINARY, r.get_string(), is_lob);
   if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
@@ -125,7 +125,7 @@ int ObDatumRoaringbitmapCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cm
   cmp_ret = 0;
   ObString l_data;
   ObString r_data;
-  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObTextStringIter l_instr_iter(ObRoaringBitmapType, CS_TYPE_BINARY, l.get_string(), is_lob);
   ObTextStringIter r_instr_iter(ObRoaringBitmapType, CS_TYPE_BINARY, r.get_string(), is_lob);
   if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
@@ -155,7 +155,7 @@ int ObDatumTextCmpImpl::cmp_out_row(const ObDatum &l, const ObDatum &r, int &cmp
   ObString r_data;
   const ObLobCommon& rlob = r.get_lob_data();
   const ObLobCommon& llob = l.get_lob_data();
-  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObTextStringIter l_instr_iter(ObLongTextType, cs, l.get_string(), true); // longtext only indicates its a lob type
   ObTextStringIter r_instr_iter(ObLongTextType, cs, r.get_string(), true);
   if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
@@ -182,7 +182,7 @@ int ObDatumTextStringCmpImpl::cmp_out_row(const ObDatum &l, const ObDatum &r, in
   int ret = OB_SUCCESS;
   cmp_ret = 0;
   ObString l_data;
-  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObTextStringIter l_instr_iter(ObLongTextType, cs, l.get_string(), true); // longtext only indicates its a lob type
   if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
     COMMON_LOG(WARN, "Lob: init left lob str iter failed", K(ret), K(cs), K(l));
@@ -204,7 +204,7 @@ int ObDatumStringTextCmpImpl::cmp_out_row(const ObDatum &l, const ObDatum &r, in
   cmp_ret = 0;
   const ObLobCommon& rlob = r.get_lob_data();
   ObString r_data;
-  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObTextStringIter r_instr_iter(ObLongTextType, cs, r.get_string(), true);  // longtext only indicates its a lob type
   if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
     COMMON_LOG(WARN, "Lob: init right lob str iter failed", K(ret), K(ret), K(r));

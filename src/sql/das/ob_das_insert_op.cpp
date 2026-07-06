@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_insert_op.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/dml/ob_dml_service.h"
 #include "sql/das/ob_das_domain_utils.h"
 #include "storage/ob_query_iterator_factory.h"
@@ -52,7 +53,7 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_INSERT, ObDASDMLIterator>::write_rows(cons
                                                                             int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *as = MTL(ObAccessService *);
+  ObAccessService *as = share::g_mp->access_service();
   if (ctdef.table_param_.get_data_table().is_mlog_table()
       && !ctdef.is_access_mlog_as_master_table_) {
     ObDASMLogDMLIterator mlog_iter(ls_id, tablet_id, dml_param_, &iter, DAS_OP_TABLE_INSERT);
@@ -208,7 +209,7 @@ int ObDASInsertOp::insert_row_with_fetch()
   int64_t affected_rows = 0;
   ObDASConflictIterator *result_iter = nullptr;
   void *buf = nullptr;
-  ObAccessService *as = MTL(ObAccessService *);
+  ObAccessService *as = share::g_mp->access_service();
   ObDMLBaseParam dml_param;
   ObDASDMLIterator dml_iter(ins_ctdef_, insert_buffer_, op_alloc_);
   storage::ObStoreCtxGuard store_ctx_guard;
@@ -222,9 +223,9 @@ int ObDASInsertOp::insert_row_with_fetch()
     if (das_gts_opt_info_.isolation_level_ != transaction::ObTxIsolationLevel::RC) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected isolation_level", K(ret), K(das_gts_opt_info_));
-    } else if (OB_ISNULL(txs = MTL_WITH_CHECK_TENANT(transaction::ObTransService*, MTL_ID()))) {
+    } else if (OB_ISNULL(txs = MTL_WITH_CHECK(transaction::ObTransService*))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("get_tx_service", K(ret), K(MTL_ID()));
+      LOG_ERROR("get_tx_service", K(ret));
     } else if (OB_FAIL(txs->get_ls_read_snapshot(*trans_desc_,
                                                  das_gts_opt_info_.isolation_level_,
                                                  ls_id_,
@@ -475,7 +476,7 @@ int ObDASInsertOp::init_task_info(uint32_t row_extend_size)
 {
   int ret = OB_SUCCESS;
   if (!insert_buffer_.is_inited()
-      && OB_FAIL(insert_buffer_.init(op_alloc_, row_extend_size, MTL_ID(), "DASInsertBuffer"))) {
+      && OB_FAIL(insert_buffer_.init(op_alloc_, row_extend_size, "DASInsertBuffer"))) {
     LOG_WARN("init insert buffer failed", K(ret));
   }
   return ret;
@@ -570,17 +571,16 @@ int ObDASInsertResult::init(const ObIDASTaskOp &op, common::ObIAllocator &alloc)
 {
   int ret = OB_SUCCESS;
   const ObDASInsertOp &ins_op = static_cast<const ObDASInsertOp&>(op);
-  uint64_t tenant_id = 0;
+  
   const ObDASBaseCtDef *base_ctdef = ins_op.get_ctdef();
   if (OB_ISNULL(base_ctdef)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("base ctdef is null", K(ret));
   } else {
     const ObDASDMLBaseCtDef *ins_ctdef = static_cast<const ObDASDMLBaseCtDef*>(base_ctdef);
-    tenant_id = MTL_ID();
     // replace and insert_up pull back conflict data's das_write_buff temporarily does not need to carry pay_load
     if (!result_buffer_.is_inited()
-        && OB_FAIL(result_buffer_.init(alloc, 0 /*row_extend_size*/, tenant_id, "DASInsRsultBuffer"))) {
+        && OB_FAIL(result_buffer_.init(alloc, 0, "DASInsRsultBuffer"))) {
       LOG_WARN("init result buffer failed", K(ret));
     }
   }

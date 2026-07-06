@@ -53,6 +53,152 @@ void ObExprRegexContext::destroy()
   }
 }
 
+int ObExprRegexContext::convert_to_regexp_utf16(ObIAllocator &alloc,
+                                                const ObString &src,
+                                                const ObCollationType src_coll,
+                                                ObString &dst)
+{
+  int ret = OB_SUCCESS;
+  dst.reset();
+  if (OB_UNLIKELY(src.length() < 0 || (src.length() > 0 && OB_ISNULL(src.ptr())))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid regexp source string", K(ret), K(src));
+  } else if (CS_TYPE_UTF16_BIN == src_coll || CS_TYPE_UTF16_GENERAL_CI == src_coll) {
+    dst = src;
+  } else if (CS_TYPE_BINARY == src_coll) {
+    const int64_t dst_len = src.length() * static_cast<int64_t>(sizeof(UChar));
+    char *buf = NULL;
+    if (0 == dst_len) {
+      // Empty string is represented by an empty ObString. get_valid_unicode_string()
+      // will allocate the one-UChar scratch buffer required by ICU.
+    } else if (OB_ISNULL(buf = static_cast<char *>(alloc.alloc(dst_len)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate regexp utf16 buffer failed", K(ret), K(dst_len));
+    } else {
+      UChar *u_buf = reinterpret_cast<UChar *>(buf);
+      for (int64_t i = 0; i < src.length(); ++i) {
+        u_buf[i] = htons(static_cast<uint16_t>(static_cast<unsigned char>(src.ptr()[i])));
+      }
+      dst.assign_ptr(buf, static_cast<ObString::obstr_size_t>(dst_len));
+    }
+  } else if (CS_TYPE_UTF8MB4_GENERAL_CI == src_coll || CS_TYPE_UTF8MB4_BIN == src_coll) {
+    int32_t u_len = 0;
+    UErrorCode u_error_code = U_ZERO_ERROR;
+    if (src.length() > INT32_MAX) {
+      ret = OB_SIZE_OVERFLOW;
+      LOG_WARN("regexp source string too long", K(ret), K(src.length()));
+    } else {
+      u_strFromUTF8(NULL, 0, &u_len, src.ptr(), static_cast<int32_t>(src.length()), &u_error_code);
+      if (U_BUFFER_OVERFLOW_ERROR != u_error_code && U_STRING_NOT_TERMINATED_WARNING != u_error_code
+          && U_ZERO_ERROR != u_error_code) {
+        ret = OB_ERR_INCORRECT_STRING_VALUE;
+        LOG_WARN("failed to calculate regexp utf16 length", K(ret), K(u_errorName(u_error_code)), K(src_coll));
+      } else if (0 == u_len) {
+        // Keep dst empty.
+      } else {
+        const int64_t dst_len = static_cast<int64_t>(u_len) * sizeof(UChar);
+        UChar *u_buf = NULL;
+        if (OB_ISNULL(u_buf = static_cast<UChar *>(alloc.alloc(dst_len)))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("allocate regexp utf16 buffer failed", K(ret), K(dst_len));
+        } else {
+          u_error_code = U_ZERO_ERROR;
+          int32_t actual_len = 0;
+          u_strFromUTF8(u_buf, u_len, &actual_len, src.ptr(), static_cast<int32_t>(src.length()), &u_error_code);
+          if (U_FAILURE(u_error_code)) {
+            ret = OB_ERR_INCORRECT_STRING_VALUE;
+            LOG_WARN("failed to convert regexp string to utf16", K(ret), K(u_errorName(u_error_code)), K(src_coll));
+          } else {
+            for (int32_t i = 0; i < actual_len; ++i) {
+              u_buf[i] = htons(static_cast<uint16_t>(u_buf[i]));
+            }
+            dst.assign_ptr(reinterpret_cast<char *>(u_buf),
+                           static_cast<ObString::obstr_size_t>(actual_len * sizeof(UChar)));
+          }
+        }
+      }
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected regexp source collation", K(ret), K(src_coll));
+  }
+  return ret;
+}
+
+int ObExprRegexContext::convert_from_regexp_utf16(ObIAllocator &alloc,
+                                                  const ObString &src,
+                                                  const ObCollationType dst_coll,
+                                                  ObString &dst)
+{
+  int ret = OB_SUCCESS;
+  dst.reset();
+  if (OB_UNLIKELY(src.length() < 0 || (src.length() > 0 && OB_ISNULL(src.ptr()))
+                  || 0 != src.length() % static_cast<int64_t>(sizeof(UChar)))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid regexp utf16 string", K(ret), K(src));
+  } else if (0 == src.length()) {
+    // Keep dst empty.
+  } else {
+    const int32_t u_len = static_cast<int32_t>(src.length() / sizeof(UChar));
+    const int64_t host_len = static_cast<int64_t>(u_len) * sizeof(UChar);
+    UChar *u_buf = NULL;
+    if (OB_ISNULL(u_buf = static_cast<UChar *>(alloc.alloc(host_len)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate regexp host utf16 buffer failed", K(ret), K(host_len));
+    } else {
+      const UChar *src_u = reinterpret_cast<const UChar *>(src.ptr());
+      for (int32_t i = 0; i < u_len; ++i) {
+        u_buf[i] = ntohs(static_cast<uint16_t>(src_u[i]));
+      }
+      if (CS_TYPE_UTF16_BIN == dst_coll || CS_TYPE_UTF16_GENERAL_CI == dst_coll) {
+        dst = src;
+      } else if (CS_TYPE_BINARY == dst_coll) {
+        char *buf = NULL;
+        if (OB_ISNULL(buf = static_cast<char *>(alloc.alloc(u_len)))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("allocate regexp binary buffer failed", K(ret), K(u_len));
+        } else {
+          for (int32_t i = 0; i < u_len; ++i) {
+            buf[i] = static_cast<char>(u_buf[i] & 0xff);
+          }
+          dst.assign_ptr(buf, u_len);
+        }
+      } else if (CS_TYPE_UTF8MB4_GENERAL_CI == dst_coll || CS_TYPE_UTF8MB4_BIN == dst_coll) {
+        int32_t utf8_len = 0;
+        UErrorCode u_error_code = U_ZERO_ERROR;
+        u_strToUTF8(NULL, 0, &utf8_len, u_buf, u_len, &u_error_code);
+        if (U_BUFFER_OVERFLOW_ERROR != u_error_code && U_STRING_NOT_TERMINATED_WARNING != u_error_code
+            && U_ZERO_ERROR != u_error_code) {
+          ret = OB_ERR_INCORRECT_STRING_VALUE;
+          LOG_WARN("failed to calculate regexp utf8 length", K(ret), K(u_errorName(u_error_code)), K(dst_coll));
+        } else if (0 == utf8_len) {
+          // Keep dst empty.
+        } else {
+          char *buf = NULL;
+          if (OB_ISNULL(buf = static_cast<char *>(alloc.alloc(utf8_len)))) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("allocate regexp utf8 buffer failed", K(ret), K(utf8_len));
+          } else {
+            u_error_code = U_ZERO_ERROR;
+            int32_t actual_len = 0;
+            u_strToUTF8(buf, utf8_len, &actual_len, u_buf, u_len, &u_error_code);
+            if (U_FAILURE(u_error_code)) {
+              ret = OB_ERR_INCORRECT_STRING_VALUE;
+              LOG_WARN("failed to convert regexp utf16 string to utf8", K(ret), K(u_errorName(u_error_code)), K(dst_coll));
+            } else {
+              dst.assign_ptr(buf, actual_len);
+            }
+          }
+        }
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected regexp destination collation", K(ret), K(dst_coll));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObExprRegexContext::init(ObExprStringBuf &string_buf,
                              const ObExprRegexpSessionVariables &regex_vars,
                              const ObString &origin_pattern,
@@ -73,24 +219,16 @@ int ObExprRegexContext::init(ObExprStringBuf &string_buf,
   } else if (CS_TYPE_UTF16_BIN != pattern_cs_type &&
             CS_TYPE_UTF16_GENERAL_CI != pattern_cs_type) {
     //pattern is nchar or nvarchar
-    if (origin_pattern.length() >= 2) {
-      if (OB_FAIL(ObExprUtil::convert_string_collation(origin_pattern,
-                                                  pattern_cs_type,
-                                                  origin_pattern_utf16,
-                                                  ObCharset::is_bin_sort(pattern_cs_type) ? CS_TYPE_UTF16_BIN : CS_TYPE_UTF16_GENERAL_CI,
-                                                  string_buf))) {
+    if (origin_pattern.length() > 0) {
+      if (OB_FAIL(convert_to_regexp_utf16(string_buf, origin_pattern, pattern_cs_type, origin_pattern_utf16))) {
         LOG_WARN("convert charset failed", K(ret));
       }
     } else {
-      //because uregex_open returns error if u_pattern_length is 0 or u_pattern is null,
-      //use ".{0}" to represent an empty pattern when the valid length of the pattern is 0, 
+      // Because uregex_open returns error if u_pattern_length is 0 or u_pattern is null,
+      // use ".{0}" to represent an empty pattern when the valid length of the pattern is 0,
       //for example: regexp_count(convert(t1.c1, 'utf8'),'a')
       ObString const_pattern(".{0}");
-      if (OB_FAIL(ObExprUtil::convert_string_collation(const_pattern,
-                                                CS_TYPE_UTF8MB4_BIN,
-                                                origin_pattern_utf16,
-                                                CS_TYPE_UTF16_BIN,
-                                                string_buf))) {
+      if (OB_FAIL(convert_to_regexp_utf16(string_buf, const_pattern, CS_TYPE_UTF8MB4_BIN, origin_pattern_utf16))) {
         LOG_WARN("convert charset failed", K(ret));
       }
     }

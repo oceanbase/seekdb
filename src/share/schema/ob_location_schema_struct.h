@@ -30,8 +30,8 @@ class ObTenantLocationId : public ObTenantCommonSchemaId
   OB_UNIS_VERSION(1);
 public:
   ObTenantLocationId() : ObTenantCommonSchemaId() {}
-  ObTenantLocationId(const uint64_t tenant_id, const uint64_t location_id)
-    : ObTenantCommonSchemaId(tenant_id, location_id) {}
+  ObTenantLocationId(const uint64_t location_id)
+    : ObTenantCommonSchemaId(location_id) {}
 };
 
 class ObLocationSchema : public ObSchema
@@ -52,7 +52,7 @@ public:
 
   int64_t get_convert_size() const;
 
-  inline void set_tenant_id(const uint64_t id) { tenant_id_ = id; }
+  
   inline void set_schema_version(int64_t version) { schema_version_ = version; }
   inline void set_location_id(const uint64_t location_id) { location_id_ = location_id; }
   inline int set_location_name(const char *name) { return deep_copy_str(name, location_name_); }
@@ -62,7 +62,7 @@ public:
   inline int set_location_access_info(const char *access_info) { return deep_copy_str(access_info, location_access_info_); }
   inline int set_location_access_info(const common::ObString &access_info) { return deep_copy_str(access_info, location_access_info_); }
   inline void set_name_case_mode(const common::ObNameCaseMode mode) {name_case_mode_ = mode; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline int64_t get_schema_version() const { return schema_version_; }
   inline uint64_t get_location_id() const { return location_id_; }
   inline const char *get_location_name() const { return extract_str(location_name_); }
@@ -73,12 +73,12 @@ public:
   inline const common::ObString &get_location_access_info_str() const { return location_access_info_; }
   inline common::ObNameCaseMode get_name_case_mode() const { return name_case_mode_; }
 
-  inline ObTenantLocationId get_tenant_location_id() const { return ObTenantLocationId(tenant_id_, location_id_); }
+  inline ObTenantLocationId get_tenant_location_id() const { return ObTenantLocationId(location_id_); }
 
-  TO_STRING_KV(K_(tenant_id), K_(location_id), K_(schema_version),
+  TO_STRING_KV(K_(location_id), K_(schema_version),
                K_(location_name), K_(location_url), K_(location_access_info));
 private:
-  uint64_t tenant_id_;
+  
   uint64_t location_id_;
   int64_t schema_version_;
   common::ObString location_name_;

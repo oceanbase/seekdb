@@ -411,7 +411,6 @@ enum RegisterReturn
   REGISTER_DONE = 1,
   REGISTER_CONTINUE = 2,
   REGISTER_NOT_MASTER = 3,
-  REGISTER_DIFF_REGION = 4,
 };
 
 struct LogRegisterParentResp

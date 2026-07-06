@@ -26,8 +26,7 @@ namespace observer
 ObMemLeakCheckerInfo::ObMemLeakCheckerInfo()
   : ObVirtualTableIterator(),
     opened_(false),
-    addr_(NULL),
-    tenant_id_(-1)
+    addr_(NULL)
 {
   leak_checker_ = &get_mem_leak_checker();
   label_ = leak_checker_->get_str();
@@ -43,7 +42,6 @@ void ObMemLeakCheckerInfo::reset()
   opened_ = false;
   leak_checker_ = NULL;
   addr_ = NULL;
-  tenant_id_ = -1;
   label_ = nullptr;
 }
 

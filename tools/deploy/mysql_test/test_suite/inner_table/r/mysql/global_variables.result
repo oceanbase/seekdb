@@ -14,7 +14,7 @@ set @@global.auto_increment_increment = 1;
 set @@session.auto_increment_increment = 1;
 show create view  global_variables;
 View	Create View	character_set_client	collation_connection
-GLOBAL_VARIABLES	CREATE VIEW `GLOBAL_VARIABLES` AS    SELECT `variable_name` as VARIABLE_NAME, `value` as VARIABLE_VALUE  FROM oceanbase.__tenant_virtual_global_variable 	utf8mb4	utf8mb4_general_ci
+GLOBAL_VARIABLES	CREATE VIEW `GLOBAL_VARIABLES` AS    SELECT `variable_name` as VARIABLE_NAME, `value` as VARIABLE_VALUE  FROM oceanbase.__all_virtual_global_variable 	utf8mb4	utf8mb4_general_ci
 desc global_variables;
 Field	Type	Null	Key	Default	Extra
 VARIABLE_NAME	varchar(128)	NO			

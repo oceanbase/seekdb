@@ -68,10 +68,10 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("task executor ctx can not be NULL", K(task_ctx), K(ret));
         } else if (OB_FAIL(GCTX.schema_service_->get_tenant_received_broadcast_version(
-                    ctx.get_my_session()->get_effective_tenant_id(), tenant_version))) {
+                    tenant_version))) {
           LOG_WARN("fail get tenant schema version", K(ret));
         } else if (OB_FAIL(GCTX.schema_service_->get_tenant_received_broadcast_version(
-                    OB_SYS_TENANT_ID, sys_version))) {
+                    sys_version))) {
           LOG_WARN("fail get sys schema version", K(ret));
         } else {
           sql_ctx.retry_times_ = 0;

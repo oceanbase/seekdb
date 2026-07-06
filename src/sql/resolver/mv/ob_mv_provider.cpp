@@ -25,6 +25,7 @@
 #include "sql/resolver/mv/ob_outer_join_mjv_printer.h"
 #include "sql/resolver/mv/ob_union_all_mv_printer.h"
 #include "sql/rewrite/ob_transformer_impl.h"
+#include "sql/session/ob_local_session_var.h"
 
 namespace oceanbase
 {
@@ -51,7 +52,7 @@ int ObMVProvider::init_mv_provider(ObSQLSessionInfo *session_info,
     LOG_WARN("unexpected null", K(ret), K(session_info));
   } else {
     lib::ContextParam param;
-    param.set_mem_attr(session_info->get_effective_tenant_id(), "MVProvider", ObCtxIds::DEFAULT_CTX_ID)
+    param.set_mem_attr("MVProvider", ObCtxIds::DEFAULT_CTX_ID)
          .set_properties(lib::USE_TL_PAGE_OPTIONAL)
          .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE);
     CREATE_WITH_TEMP_CONTEXT(param) {
@@ -260,8 +261,7 @@ int ObMVProvider::print_mv_operators(ObMVPrinterCtx &mv_printer_ctx,
   return ret;
 }
 
-int ObMVProvider::check_mv_refreshable(const uint64_t tenant_id,
-                                       const uint64_t mview_id,
+int ObMVProvider::check_mv_refreshable(const uint64_t mview_id,
                                        ObSQLSessionInfo *session_info,
                                        ObSchemaGetterGuard *schema_guard,
                                        bool &can_fast_refresh,
@@ -269,9 +269,9 @@ int ObMVProvider::check_mv_refreshable(const uint64_t tenant_id,
 {
   int ret = OB_SUCCESS;
   can_fast_refresh = false;
-  ObMVProvider mv_provider(tenant_id, mview_id);
+  ObMVProvider mv_provider(mview_id);
   if (OB_FAIL(mv_provider.init_mv_provider(session_info, schema_guard, NULL, true))) {
-    LOG_WARN("fail to init mv provider", KR(ret), K(tenant_id));
+    LOG_WARN("fail to init mv provider", KR(ret));
   } else if (OB_UNLIKELY(ObMVRefreshableType::OB_MV_REFRESH_INVALID == mv_provider.refreshable_type_)) {
     // column type for mv is changed after it is created
     ret = OB_NOT_SUPPORTED;
@@ -347,8 +347,7 @@ int ObMVProvider::get_major_refresh_operators(ObSQLSessionInfo *session_info,
 }
 
 // expand_view will used to generate plan, need use alloc to deep copy the query str
-int ObMVProvider::get_real_time_mv_expand_view(const uint64_t tenant_id,
-                                               const uint64_t mview_id,
+int ObMVProvider::get_real_time_mv_expand_view(const uint64_t mview_id,
                                                ObSQLSessionInfo *session_info,
                                                ObSchemaGetterGuard *schema_guard,
                                                ObIAllocator &alloc,
@@ -358,7 +357,7 @@ int ObMVProvider::get_real_time_mv_expand_view(const uint64_t tenant_id,
   int ret = OB_SUCCESS;
   expand_view.reset();
   is_major_refresh_mview = false;
-  ObMVProvider mv_provider(tenant_id, mview_id);
+  ObMVProvider mv_provider(mview_id);
   if (OB_FAIL(mv_provider.init_mv_provider(session_info, schema_guard, NULL, false))) {
     LOG_WARN("failed to init mv provider", K(ret));
   } else if (OB_UNLIKELY(ObMVRefreshableType::OB_MV_COMPLETE_REFRESH >= mv_provider.refreshable_type_)) {
@@ -536,9 +535,10 @@ int ObMVProvider::check_mview_dep_session_vars(const ObTableSchema &mv_schema,
   if (OB_UNLIKELY(!mv_schema.is_materialized_view())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected table schema", K(ret), K(mv_schema));
-  } else if (OB_FAIL(mv_schema.get_local_session_var().get_different_vars_from_session(&session,
-                                                                                       local_diff_vars,
-                                                                                       cur_var_vals))) {
+  } else if (OB_FAIL(ObLocalSessionVarHelper::get_different_vars_from_session(mv_schema.get_local_session_var(),
+                                                                              &session,
+                                                                              local_diff_vars,
+                                                                              cur_var_vals))) {
     LOG_WARN("failed to check vars same with session ", K(ret), K(mv_schema.get_local_session_var()));
   } else if (local_diff_vars.empty()) {
     is_vars_matched = true;
@@ -564,11 +564,11 @@ int ObMVProvider::check_mview_dep_session_vars(const ObTableSchema &mv_schema,
       if (OB_ISNULL(sys_var = local_diff_vars.at(i))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null", K(ret), K(sys_var));
-      } else if (OB_FAIL(ObSysVarFactory::get_sys_var_name_by_id(sys_var->type_, var_name))) {
+      } else if (OB_FAIL(share::ObSysVarMeta::get_sys_var_name_by_id(sys_var->type_, var_name))) {
         LOG_WARN("get sysvar name failed", K(ret));
-      } else if (OB_FAIL(ObSessionSysVar::get_sys_var_val_str(sys_var->type_, sys_var->val_, alloc, local_var_val))) {
+      } else if (OB_FAIL(ObLocalSessionVarHelper::get_sys_var_val_str(sys_var->type_, sys_var->val_, alloc, local_var_val))) {
         LOG_WARN("failed to get sys var str", K(ret));
-      } else if (OB_FAIL(ObSessionSysVar::get_sys_var_val_str(sys_var->type_, cur_var_vals.at(i), alloc, cur_var_val))) {
+      } else if (OB_FAIL(ObLocalSessionVarHelper::get_sys_var_val_str(sys_var->type_, cur_var_vals.at(i), alloc, cur_var_val))) {
         LOG_WARN("failed to get sys var str", K(ret));
       } else {
         OPT_TRACE(i, ".", var_name, ",  old value:", local_var_val, ",  current value:", cur_var_val);
@@ -608,7 +608,7 @@ int ObMVProvider::get_complete_refresh_mview_str(const ObTableSchema &mv_schema,
   int ret = OB_SUCCESS;
   mview_str.reset();
   lib::ContextParam param;
-  param.set_mem_attr(session_info.get_effective_tenant_id(), "MVProvider", ObCtxIds::DEFAULT_CTX_ID)
+  param.set_mem_attr("MVProvider", ObCtxIds::DEFAULT_CTX_ID)
        .set_properties(lib::USE_TL_PAGE_OPTIONAL)
        .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE);
   CREATE_WITH_TEMP_CONTEXT(param) {

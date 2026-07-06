@@ -66,7 +66,7 @@ int ObExprGetMySQLRoutineParameterTypeStr::get_mysql_routine_parameter_type_str(
     CK (OB_NOT_NULL(ctx.exec_ctx_.get_my_session()));
     CK (OB_NOT_NULL(ctx.exec_ctx_.get_sql_ctx()));
     CK (OB_NOT_NULL(ctx.exec_ctx_.get_sql_ctx()->schema_guard_));
-    OZ (ctx.exec_ctx_.get_sql_ctx()->schema_guard_->get_routine_info(pl::get_tenant_id_by_object_id(routine_id), routine_id, routine_info), routine_id);
+    OZ (ctx.exec_ctx_.get_sql_ctx()->schema_guard_->get_routine_info( routine_id, routine_info), routine_id);
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(routine_info)) {
       ret = OB_ERR_SP_DOES_NOT_EXIST;

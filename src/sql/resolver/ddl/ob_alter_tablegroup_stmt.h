@@ -33,7 +33,6 @@ public:
   ObAlterTablegroupStmt();
   virtual ~ObAlterTablegroupStmt();
 
-  virtual void set_tenant_id(const uint64_t tenant_id) override;
 
   const common::ObString &get_tablegroup_name();
   int add_table_item(const obcall::ObTableItem &table_item);
@@ -64,9 +63,7 @@ inline obcall::ObAlterTablegroupArg &ObAlterTablegroupStmt::get_alter_tablegroup
   return alter_tablegroup_arg_;
 }
 
-inline void ObAlterTablegroupStmt::set_tenant_id(const uint64_t tenant_id) {
-  alter_tablegroup_arg_.tenant_id_ = tenant_id;
-}
+
 
 inline const common::ObString &ObAlterTablegroupStmt::get_tablegroup_name()
 {

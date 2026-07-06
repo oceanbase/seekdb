@@ -15,14 +15,16 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "sql/engine/cmd/ob_ccl_rule_executor.h"
 #include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_root_service.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "sql/resolver/ddl/ob_create_ccl_rule_stmt.h"
 #include "sql/resolver/ddl/ob_drop_ccl_rule_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 #include "lib/worker.h"
 #include "rootserver/ob_root_utils.h"
 #include "observer/ob_server_event_history_table_operator.h"
@@ -71,7 +73,6 @@ int ObCreateCCLRuleExecutor::execute(ObExecContext &ctx, ObCreateCCLRuleStmt &st
     }
   }
   SERVER_EVENT_ADD("ddl", "create ccl rule execute finish",
-    "tenant_id", MTL_ID(),
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "rpc_dst", GCTX.self_addr(),
@@ -116,7 +117,6 @@ int ObDropCCLRuleExecutor::execute(ObExecContext &ctx, ObDropCCLRuleStmt &stmt)
     }
   }
   SERVER_EVENT_ADD("ddl", "drop ccl rule execute finish",
-    "tenant_id", MTL_ID(),
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "rpc_dst", GCTX.self_addr());

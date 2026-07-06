@@ -25,10 +25,10 @@
 #include "lib/function/ob_function.h"
 #include "share/ob_unit_getter.h"
 #include "storage/ls/ob_ls_state.h"
-#include "storage/high_availability/ob_storage_ha_struct.h"
+#include "storage/ob_storage_ha_struct.h"
 #include "logservice/ob_log_handler.h"
-#include "share/restore/ob_ls_restore_status.h"
-#include "storage/high_availability/ob_restore_status.h"
+#include "share/ls/ob_ls_restore_status.h"
+#include "share/ls/ob_restore_status.h"
 #include "storage/tx/ob_id_service.h"
 #include "storage/ls/ob_ls_saved_info.h"
 #include "share/scn.h"
@@ -56,8 +56,7 @@ public:
   ObLSMeta();
   ObLSMeta(const ObLSMeta &ls_meta);
   ~ObLSMeta() {}
-  int init(const uint64_t tenant_id,
-           const share::ObLSID &ls_id,
+  int init(const share::ObLSID &ls_id,
            const ObMigrationStatus &migration_status,
            const ObRestoreStatus &restore_status,
            const int64_t create_scn,
@@ -123,7 +122,6 @@ public:
   ObLSStoreFormat get_store_format() const;
 
   int init(
-      const uint64_t tenant_id,
       const share::ObLSID &ls_id,
       const ObMigrationStatus &migration_status,
       const ObRestoreStatus &restore_status,
@@ -169,7 +167,7 @@ public:
     common::ObLatch &lock_;
     int ret_;
   };
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(ls_persistent_state),
+  TO_STRING_KV(K_(ls_id), K_(ls_persistent_state),
                K_(clog_checkpoint_scn), K_(clog_base_lsn),
                K_(rebuild_seq), K_(migration_status), K(offline_scn_),
                K_(restore_status), K_(replayable_point), K_(tablet_change_checkpoint_scn),
@@ -180,7 +178,7 @@ private:
 public:
   mutable common::ObLatch rw_lock_;     // only for atomic read/write in memory.
   mutable common::ObLatch update_lock_; // only one process can update ls meta. both for write slog and memory
-  uint64_t tenant_id_;
+  
   share::ObLSID ls_id_;
 
 private:

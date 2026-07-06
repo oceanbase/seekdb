@@ -161,7 +161,6 @@ namespace share
   static const char* const OB_SV_SQL_THROTTLE_NETWORK = "sql_throttle_network";
   static const char* const OB_SV_SQL_THROTTLE_LOGICAL_READS = "sql_throttle_logical_reads";
   static const char* const OB_SV_AUTO_INCREMENT_CACHE_SIZE = "auto_increment_cache_size";
-  static const char* const OB_SV_ENABLE_JIT = "ob_enable_jit";
   static const char* const OB_SV_TEMP_TABLESPACE_SIZE_PERCENTAGE = "ob_temp_tablespace_size_percentage";
   static const char* const OB_SV_PLUGIN_DIR = "plugin_dir";
   static const char* const OB_SV_OPTIMIZER_USE_SQL_PLAN_BASELINES = "optimizer_use_sql_plan_baselines";
@@ -241,7 +240,6 @@ namespace share
   static const char* const OB_SV_LOG_ROW_VALUE_OPTIONS = "log_row_value_options";
   static const char* const OB_SV_MAX_READ_STALE_TIME = "ob_max_read_stale_time";
   static const char* const OB_SV__OPTIMIZER_GATHER_STATS_ON_LOAD = "_optimizer_gather_stats_on_load";
-  static const char* const OB_SV__SET_REVERSE_DBLINK_INFOS = "_set_reverse_dblink_infos";
   static const char* const OB_SV__FORCE_ORDER_PRESERVE_SET = "_force_order_preserve_set";
   static const char* const OB_SV__SHOW_DDL_IN_COMPAT_MODE = "_show_ddl_in_compat_mode";
   static const char* const OB_SV_PARALLEL_DEGREE_POLICY = "parallel_degree_policy";
@@ -744,7 +742,6 @@ namespace share
   static const char* const OB_SV_TABLE_DEFINITION_CACHE = "table_definition_cache";
   static const char* const OB_SV_INNODB_SORT_BUFFER_SIZE = "innodb_sort_buffer_size";
   static const char* const OB_SV_KEY_CACHE_BLOCK_SIZE = "key_cache_block_size";
-  static const char* const OB_SV_KV_MODE = "ob_kv_mode";
   static const char* const OB_SV___OB_CLIENT_CAPABILITY_FLAG = "__ob_client_capability_flag";
   static const char* const OB_SV_ENABLE_PARAMETER_ANONYMOUS_BLOCK = "ob_enable_parameter_anonymous_block";
   static const char* const OB_SV_CHARACTER_SETS_DIR = "character_sets_dir";

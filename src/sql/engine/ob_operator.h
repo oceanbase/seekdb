@@ -28,10 +28,10 @@
 #include "sql/engine/ob_io_event_observer.h"
 #include "sql/ob_sql_define.h"
 #include "sql/engine/ob_batch_rows.h"
-#include "share/diagnosis/ob_sql_plan_monitor_node_list.h"
+#include "sql/monitor/ob_sql_plan_monitor_node_list.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_trigger_info.h"
-#include "common/ob_common_utility.h"
+#include "lib/utility/ob_common_utility.h"
 
 namespace oceanbase
 {
@@ -675,7 +675,7 @@ protected:
     UNUSED(ret);
   }
   #ifdef ENABLE_DEBUG_LOG
-  inline int init_dummy_mem_context(uint64_t tenant_id);
+  inline int init_dummy_mem_context();
   #endif
 public:
   uint64_t cpu_begin_time_; // start of counting cpu time

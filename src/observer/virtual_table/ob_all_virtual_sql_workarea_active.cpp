@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_all_virtual_sql_workarea_active.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -24,8 +25,8 @@ using namespace oceanbase::observer;
 using namespace oceanbase::share;
 
 ObSqlWorkareaActiveIterator::ObSqlWorkareaActiveIterator() :
-  wa_actives_(), tenant_ids_(), cur_nth_wa_(0),
-  cur_nth_tenant_(0)
+  wa_actives_(), cur_nth_wa_(0),
+  done_(false)
 {}
 
 void ObSqlWorkareaActiveIterator::destroy()
@@ -36,23 +37,16 @@ void ObSqlWorkareaActiveIterator::destroy()
 void ObSqlWorkareaActiveIterator::reset()
 {
   wa_actives_.reset();
-  tenant_ids_.reset();
   cur_nth_wa_ = 0;
-  cur_nth_tenant_ = 0;
+  done_ = false;
 }
 
-int ObSqlWorkareaActiveIterator::init(const uint64_t effective_tenant_id)
+int ObSqlWorkareaActiveIterator::init()
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null of omt", KR(ret));
-  } else if (is_sys_tenant(effective_tenant_id)) {
-    if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_ids_))) {
-      LOG_WARN("failed to get_mtl_tenant_ids", KR(ret));
-    }
-  } else if (OB_FAIL(tenant_ids_.push_back(effective_tenant_id))) {
-    LOG_WARN("failed to push back tenant_id", KR(ret), K(effective_tenant_id));
   }
   return ret;
 }
@@ -62,25 +56,23 @@ int ObSqlWorkareaActiveIterator::get_next_batch_wa_active()
   int ret = OB_SUCCESS;
   cur_nth_wa_ = 0;
   wa_actives_.reset();
-  if (cur_nth_tenant_ >= tenant_ids_.count()) {
+  if (done_) {
     ret = OB_ITER_END;
   } else {
-    uint64_t tenant_id = tenant_ids_.at(cur_nth_tenant_);
-    MTL_SWITCH(tenant_id) {
+    MOD_SCOPE {
       ObTenantSqlMemoryManager *sql_mem_mgr = nullptr;
-      sql_mem_mgr = MTL(ObTenantSqlMemoryManager*);
+      sql_mem_mgr = share::g_mp->tenant_sql_memory_manager();
       if (nullptr != sql_mem_mgr && OB_FAIL(sql_mem_mgr->get_all_active_workarea(wa_actives_))) {
         LOG_WARN("failed to get workarea stat", K(ret));
       }
     }
-    ++cur_nth_tenant_;
+    done_ = true;
   }
   return ret;
 }
 
 int ObSqlWorkareaActiveIterator::get_next_wa_active(
-  ObSqlWorkareaProfileInfo *&wa_active,
-  uint64_t &tenant_id)
+  ObSqlWorkareaProfileInfo *&wa_active)
 {
   int ret = OB_SUCCESS;
   if (0 > cur_nth_wa_ || cur_nth_wa_ > wa_actives_.count()) {
@@ -94,7 +86,6 @@ int ObSqlWorkareaActiveIterator::get_next_wa_active(
   }
   if (OB_SUCC(ret)) {
     wa_active = &wa_actives_.at(cur_nth_wa_);
-    tenant_id = tenant_ids_.at(cur_nth_tenant_ - 1);
     ++cur_nth_wa_;
   }
   return ret;
@@ -138,7 +129,6 @@ int ObSqlWorkareaActive::get_server_ip_and_port()
 }
 
 int ObSqlWorkareaActive::fill_row(
-  uint64_t tenant_id,
   ObSqlWorkareaProfileInfo &wa_active,
   common::ObNewRow *&row)
 {
@@ -239,7 +229,7 @@ int ObSqlWorkareaActive::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
-    if (OB_FAIL(iter_.init(effective_tenant_id_))) {
+    if (OB_FAIL(iter_.init())) {
       LOG_WARN("failed to init iterator", K(ret));
     } else {
       start_to_read_ = true;
@@ -249,14 +239,13 @@ int ObSqlWorkareaActive::inner_get_next_row(common::ObNewRow *&row)
     }
   }
   ObSqlWorkareaProfileInfo *wa_active = nullptr;
-  uint64_t tenant_id = 0;
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (OB_FAIL(iter_.get_next_wa_active(wa_active, tenant_id))) {
+  } else if (OB_FAIL(iter_.get_next_wa_active(wa_active))) {
     if (OB_ITER_END != ret) {
       LOG_WARN("failed to get next channel", K(ret));
     }
-  } else if (OB_FAIL(fill_row(tenant_id, *wa_active, row))) {
+  } else if (OB_FAIL(fill_row(*wa_active, row))) {
     LOG_WARN("failed to get row from channel info", K(ret));
   }
   return ret;

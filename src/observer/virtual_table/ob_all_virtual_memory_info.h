@@ -18,7 +18,7 @@
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_MEMORY_INFO_H_
 
 #include "lib/container/ob_array.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 
 namespace oceanbase
 {
@@ -47,7 +47,6 @@ private:
     ALLOC_COUNT,
     FREE_COUNT,
   };
-  uint64_t tenant_ids_[OB_MAX_SERVER_TENANT_CNT];
   char ip_buf_[common::OB_IP_STR_BUFF];
   int64_t col_count_;
   bool has_start_;

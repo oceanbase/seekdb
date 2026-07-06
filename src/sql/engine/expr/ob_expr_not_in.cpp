@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_not_in.h"
-#include "deps/oblib/src/common/ob_range.h"
+#include "common/ob_range.h"
 
 namespace oceanbase
 {

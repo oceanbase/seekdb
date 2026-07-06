@@ -368,7 +368,7 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
     ObPxSqcMeta &sqc = sqc_arg_.sqc_;
     ObJoinFilterSpec *filter_spec = reinterpret_cast<ObJoinFilterSpec *>(&root);
     ObJoinFilterOpInput *filter_input = NULL;
-    int64_t tenant_id = ctx.get_my_session()->get_effective_tenant_id();
+    
     ObOperatorKit *kit = ctx.get_operator_kit(root.id_);
     if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -570,26 +570,6 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
       }
       LOG_DEBUG("debug wf input", K(wf_spec->role_type_), K(sqc.get_task_count()),
                 K(sqc.get_total_task_count()));
-    }
-  } else if (root.get_type() == PHY_SELECT_INTO) {
-    ObPxSqcMeta &sqc = sqc_arg_.sqc_;
-    ObSelectIntoSpec *select_into_spec = reinterpret_cast<ObSelectIntoSpec *>(&root);
-    sql::ObExternalFileFormat external_properties;
-    ObString &properties = select_into_spec->external_properties_.str_;
-    if (properties.empty()) {
-      // do nothing
-    } else if (OB_FAIL(external_properties.load_from_string(properties, ctx.get_allocator()))) {
-      LOG_WARN("failed to init external_odps_format", K(ret));
-    } else if (sql::ObExternalFileFormat::ODPS_FORMAT != external_properties.format_type_) {
-      // do nothing
-    } else { 
-      if (!GCONF._use_odps_jni_connector) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support odps cpp connector", K(ret));
-      } else {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support odps jni connector", K(ret));
-      }
     }
   }
   if (OB_SUCC(ret)) {
@@ -916,7 +896,7 @@ int ObPxSubCoord::start_ddl()
     uint64_t unused_taget_object_id = 0;
     bool is_offline_index_rebuild = false;
 
-    if (OB_FAIL(ObDDLUtil::get_data_information(MTL_ID(), ddl_task_id,
+    if (OB_FAIL(ObDDLUtil::get_data_information(ddl_task_id,
             tenant_data_version, snapshot_version, unused_task_status, unused_taget_object_id, schema_version, is_no_logging, is_offline_index_rebuild))) {
       LOG_WARN("get ddl task info failed", K(ret), K(ddl_task_id));
     } else if (tenant_data_version < DDL_IDEM_DATA_FORMAT_VERSION ) {
@@ -1028,7 +1008,6 @@ int ObPxSubCoord::rebuild_sqc_access_table_locations()
         ObDASLocationRouter &loc_router = DAS_CTX(*sqc_arg_.exec_ctx_).get_location_router();
         OZ(ObTableLocation::get_full_leader_table_loc(loc_router,
            sqc_arg_.exec_ctx_->get_allocator(),
-           sqc_arg_.exec_ctx_->get_my_session()->get_effective_tenant_id(),
            location_keys.at(i).table_location_key_,
            location_keys.at(i).ref_table_id_,
            table_loc));

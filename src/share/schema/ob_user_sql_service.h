@@ -51,7 +51,6 @@ public:
       const common::ObString *ddl_stmt_str,
       common::ObISQLClient &sql_client);
   virtual int drop_user(
-      const uint64_t tenant_id,
       const uint64_t user_id,
       const uint64_t new_schema_version,
       const common::ObString *ddl_stmt_str,
@@ -91,8 +90,7 @@ public:
                         const int64_t new_schema_version,
                         const common::ObString *ddl_stmt_str,
                         common::ObISQLClient &sql_client);
-  virtual int update_user_schema_version(const uint64_t tenant_id,
-                                         const common::ObArray<ObUserInfo> &user_infos,
+  virtual int update_user_schema_version(const common::ObArray<ObUserInfo> &user_infos,
                                          const common::ObString *ddl_stmt_str,
                                          common::ObISQLClient &sql_client);
   static int add_user_history(const ObUserInfo &user, 
@@ -100,8 +98,7 @@ public:
                               common::ObISQLClient &sql_client,
                               const bool is_from_inner_sql);
                               
-  static int gen_user_dml(const uint64_t exec_tenant_id, 
-                          const ObUserInfo &user, 
+  static int gen_user_dml(const ObUserInfo &user, 
                           share::ObDMLSqlSplicer &dml,
                           const bool is_from_inner_sql);
   virtual int replace_user(
@@ -112,9 +109,7 @@ public:
       const ObSchemaOperationType type);
 
 private:
-  int drop_user_delete_role_grantee_map(
-      const uint64_t tenant_id,
-      bool is_role,
+  int drop_user_delete_role_grantee_map(bool is_role,
       const uint64_t new_schema_version,
       const ObUserInfo *user,
       const ObString *ddl_stmt_str,

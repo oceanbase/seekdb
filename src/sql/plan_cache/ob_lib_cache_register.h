@@ -28,7 +28,7 @@ LIB_CACHE_OBJ_DEF(NS_SQLSTAT, "SQLSTAT", sql::ObSqlStatRecordKey, sql::ObSqlStat
 #ifndef OCEANBASE_SQL_PLAN_CACHE_OB_LIB_CACHE_REGISTER_
 #define OCEANBASE_SQL_PLAN_CACHE_OB_LIB_CACHE_REGISTER_
 
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/alloc/alloc_struct.h"
 #include "sql/plan_cache/ob_pc_ref_handle.h"
 
@@ -65,8 +65,7 @@ typedef int (*CNAllocFunc) (lib::MemoryContext &mem_ctx,
                             ObPlanCache *lib_cahe);
 typedef int (*COAllocFunc) (lib::MemoryContext &mem_ctx,
                             ObILibCacheObject *&cache_obj,
-                            CacheRefHandleID ref_handle,
-                            uint64_t tenant_id);
+                            CacheRefHandleID ref_handle);
 typedef int (*CKAllocFunc) (ObIAllocator &allocator,
                             ObILibCacheKey *&cache_key);
 

@@ -115,10 +115,9 @@ public:
 struct ObTenantDDLSimContext
 {
 public:
-  ObTenantDDLSimContext() : tenant_id_(0), type_(SIM_TYPE_ALL), seed_(0), trigger_percent_(0), fixed_points_(nullptr) {}
+  ObTenantDDLSimContext() : type_(SIM_TYPE_ALL), seed_(0), trigger_percent_(0), fixed_points_(nullptr) {}
   DECLARE_TO_STRING;
 public:
-  uint64_t tenant_id_;
   ObSimType type_;
   int64_t seed_;
   int64_t trigger_percent_;
@@ -131,23 +130,22 @@ public:
   struct TaskSimPoint
   {
   public:
-    TaskSimPoint(const uint64_t tenant_id = 0, const uint64_t task_id = 0, const ObDDLSimPointID point_id = MIN_DDL_SIM_POINT_ID)
-      : tenant_id_(tenant_id), task_id_(task_id), point_id_(point_id) {}
+    TaskSimPoint(const uint64_t task_id = 0, const ObDDLSimPointID point_id = MIN_DDL_SIM_POINT_ID)
+      : task_id_(task_id), point_id_(point_id) {}
     int hash(uint64_t &hash_val) const
     {
       hash_val = 0;
-      hash_val = murmurhash(&tenant_id_, sizeof(tenant_id_), hash_val);
       hash_val = murmurhash(&task_id_, sizeof(task_id_), hash_val);
       hash_val = murmurhash(&point_id_, sizeof(point_id_), hash_val);
       return OB_SUCCESS;
     }
     bool operator ==(const TaskSimPoint &other) const
     {
-      return tenant_id_ == other.tenant_id_ && task_id_ == other.task_id_ && point_id_ == other.point_id_;
+      return task_id_ == other.task_id_ && point_id_ == other.point_id_;
     }
-    TO_STRING_KV(K(tenant_id_), K(task_id_), K(point_id_));
+    TO_STRING_KV(K(task_id_), K(point_id_));
   public:
-    uint64_t tenant_id_;
+    
     uint64_t task_id_;
     ObDDLSimPointID point_id_;
   };
@@ -165,13 +163,12 @@ private:
   bool is_inited_;
   ObDDLSimPoint all_points_[MAX_DDL_SIM_POINT_ID];
   hash::ObHashMap<TaskSimPoint, int64_t> task_sim_map_;
-  hash::ObHashMap<uint64_t, ObTenantDDLSimContext> tenant_map_;
   ObArenaAllocator arena_;
 };
 
 #ifdef ERRSIM
-#define DDL_SIM(tenant_id, task_id, sim_point, args...) ::oceanbase::share::ObDDLSimPointMgr::get_instance().try_sim(tenant_id, task_id, {sim_point, ##args})
-#define DDL_SIM_WHEN(condition, tenant_id, task_id, sim_point, args...) (condition) ? DDL_SIM(tenant_id, task_id, sim_point, args) : OB_SUCCESS
+#define DDL_SIM(task_id, sim_point, args...) ::oceanbase::share::ObDDLSimPointMgr::get_instance().try_sim(task_id, {sim_point, ##args})
+#define DDL_SIM_WHEN(condition, task_id, sim_point, args...) (condition) ? DDL_SIM(task_id, sim_point, args) : OB_SUCCESS
 #else
 #define DDL_SIM(...) OB_SUCCESS
 #define DDL_SIM_WHEN(...) OB_SUCCESS

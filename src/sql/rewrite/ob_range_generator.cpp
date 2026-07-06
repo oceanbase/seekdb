@@ -16,13 +16,13 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_range_generator.h"
-#include "lib/timezone/ob_time_convert.h"
+#include "common/timezone/ob_time_convert.h"
 #include "lib/container/ob_array_serialization.h"
-#include "lib/geo/ob_geo_utils.h"
+#include "share/geo/ob_geo_utils.h"
 #include "lib/rc/ob_rc.h"
 #include "sql/resolver/dml/ob_dml_stmt.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 #include "src/share/object/ob_obj_cast_util.h"
@@ -1699,7 +1699,7 @@ int ObRangeGenerator::generate_tmp_geo_param(const ObRangeNode &node,
   ObString wkb_str;
   double distance = NAN;
   bool is_valid = false;
-  ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObDomainOpType op_type = GET_RANGE_NODE_DOMAIN_TYPE(&node);
   if (OB_UNLIKELY(!node.is_domain_node_ ||
                   node.node_id_ < 0 || 
@@ -1775,7 +1775,7 @@ int ObRangeGenerator::get_intersects_tmp_geo_param(uint32_t input_srid,
                                                    ObTmpGeoParam *geo_param)
 {
   int ret = OB_SUCCESS;
-  common::ObArenaAllocator tmp_alloc(lib::ObLabel("GisIndex"), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  common::ObArenaAllocator tmp_alloc(lib::ObLabel("GisIndex"), OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObS2Cellids cells;
   ObS2Cellids cells_with_ancestors;
   ObSpatialMBR mbr_filter(op_type);
@@ -1827,7 +1827,7 @@ int ObRangeGenerator::get_intersects_tmp_geo_param(uint32_t input_srid,
   }
   
   if (OB_SUCC(ret)) {
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(MTL_ID(), "S2Adapter"));
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("S2Adapter"));
     // build s2 object from wkb
     if (OB_FAIL(ObGeoTypeUtil::get_type_from_wkb((buffer_geo.empty() ? wkb_str : buffer_geo), geo_type))) {
       LOG_WARN("fail to get geo type by wkb", K(ret));
@@ -1902,7 +1902,7 @@ int ObRangeGenerator::get_coveredby_tmp_geo_param(uint32_t input_srid,
                                                   ObTmpGeoParam *geo_param)
 {
   int ret = OB_SUCCESS;
-  common::ObArenaAllocator tmp_alloc(lib::ObLabel("GisIndex"), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  common::ObArenaAllocator tmp_alloc(lib::ObLabel("GisIndex"), OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObS2Cellids cells;
   ObSpatialMBR mbr_filter(op_type);
   const ObSrsItem *srs_item = NULL;
@@ -1928,7 +1928,7 @@ int ObRangeGenerator::get_coveredby_tmp_geo_param(uint32_t input_srid,
   }
   
   if (OB_SUCC(ret)) {
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(MTL_ID(), "S2Adapter"));
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("S2Adapter"));
     // build s2 object from wkb
     if (OB_FAIL(s2object->init((buffer_geo.empty() ? wkb_str : buffer_geo), srs_bound))) {
       LOG_WARN("Init s2object failed", K(ret));
@@ -1948,7 +1948,7 @@ int ObRangeGenerator::get_coveredby_tmp_geo_param(uint32_t input_srid,
       }
     } else {
       hash::ObHashSet<uint64_t> cellid_set;
-      if (OB_FAIL(cellid_set.create(128, "CoveredByKeyPart", "HashNode", MTL_ID()))) {
+      if (OB_FAIL(cellid_set.create(128, "CoveredByKeyPart", "HashNode"))) {
         LOG_WARN("failed to create cellid set", K(ret));
       } else if (!cellid_set.created()) {
         ret = OB_NOT_INIT;
@@ -2216,7 +2216,7 @@ int ObRangeGenerator::get_spatial_relationship_by_mask(const ObObj& extra, ObDom
     op_type = ObDomainOpType::T_DOMAIN_OP_END;
   } else {
     ObString mask_str(extra.get_string());
-    common::ObArenaAllocator temp_allocator(lib::ObLabel("GisIndex"), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    common::ObArenaAllocator temp_allocator(lib::ObLabel("GisIndex"), OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObString upper_str;
     void* ptr = NULL;
     char *cmp_str = NULL;

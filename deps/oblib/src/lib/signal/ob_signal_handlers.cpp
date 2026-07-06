@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 #define _GNU_SOURCE 1
 #include "ob_signal_handlers.h"
+#include "lib/profile/ob_trace_id.h"
 #include "lib/signal/ob_signal_struct.h"
 #ifndef _WIN32
 #include <dirent.h>
@@ -25,7 +26,7 @@
 #include "lib/utility/utility.h"
 #include "lib/signal/ob_libunwind.h"
 #include "lib/utility/ob_hang_fatal_error.h"
-#include "common/ob_common_utility.h"
+#include "lib/utility/ob_common_utility.h"
 #include "lib/signal/ob_signal_utils.h"
 #else
 #include <windows.h>
@@ -206,11 +207,9 @@ void coredump_cb(volatile int sig, volatile int sig_code, void* volatile sig_add
     int64_t ip = con->uc_mcontext.regs[30];
     int64_t bp = con->uc_mcontext.regs[29];
 #endif
-    #ifndef OB_BUILD_EMBED_MODE
-      void* addrs[64];
-      int n_addr = light_backtrace(addrs, ARRAYSIZEOF(addrs), bp);
-      len += safe_parray(bt, sizeof(bt) - 1, (int64_t*)addrs, n_addr);
-    #endif
+    void* addrs[64];
+    int n_addr = light_backtrace(addrs, ARRAYSIZEOF(addrs), bp);
+    len += safe_parray(bt, sizeof(bt) - 1, (int64_t*)addrs, n_addr);
 #else
     int64_t ip = -1;
     int64_t bp = -1;

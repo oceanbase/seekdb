@@ -767,7 +767,7 @@ c3	varchar(10)	YES		NULL
 c4	int(11)	YES		NULL	
 c5	MAP(INT,INT)	YES		NULL	
 c6	json	YES		NULL	
-alter table t1 modify c3 varchar(5) charset 'gbk';
+alter table t1 modify c3 varchar(5) charset 'utf8mb4';
 desc t1;
 Field	Type	Null	Key	Default	Extra
 c1	tinyint(4)	NO	PRI	NULL	

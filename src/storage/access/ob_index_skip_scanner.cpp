@@ -24,7 +24,7 @@ using namespace blocksstable;
 namespace storage
 {
 ObAdvanceSkipScanner::ObAdvanceSkipScanner(const ObStorageDatumUtils &datum_utils)
-  : range_alloc_("SS_RANGE", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+  : range_alloc_("SS_RANGE", OB_MALLOC_NORMAL_BLOCK_SIZE),
     is_inited_(false),
     left_border_reached_(false),
     micro_start_(-1),

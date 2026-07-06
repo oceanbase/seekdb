@@ -243,7 +243,7 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("package serialize value is oversize", K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "package sync oversize value");
-    } else if (OB_FAIL(value_map.create(4, ObModIds::OB_PL_TEMP, ObModIds::OB_HASH_NODE, MTL_ID()))) {
+    } else if (OB_FAIL(value_map.create(4, ObModIds::OB_PL_TEMP, ObModIds::OB_HASH_NODE))) {
       LOG_WARN("fail to create hash map", K(ret));
     } else if (OB_FAIL(ObPLPackageState::decode_pkg_var_value(*cur_ser_val, state_version, value_map))) {
       LOG_WARN("fail to decode pkg var value", K(ret));

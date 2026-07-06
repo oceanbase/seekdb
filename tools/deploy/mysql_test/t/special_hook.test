@@ -14,5 +14,5 @@ select @@version_comment limit 1;
 SELECT @@session.auto_increment_increment;
 SHOW COLLATION;
 SHOW CHARACTER SET;
-SET NAMES latin1;
+SET NAMES utf8mb4;
 disconnect conn1;

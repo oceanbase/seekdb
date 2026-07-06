@@ -36,7 +36,7 @@ ObMergeDistinctVecOp::ObMergeDistinctVecOp(ObExecContext &exec_ctx, const ObOpSp
     : ObOperator(exec_ctx, spec, input),
     first_got_row_(true),
     alloc_(ObModIds::OB_SQL_MERGE_GROUPBY,
-      OB_MALLOC_NORMAL_BLOCK_SIZE, exec_ctx.get_my_session()->get_effective_tenant_id(), ObCtxIds::WORK_AREA),
+      OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::WORK_AREA),
     last_row_(alloc_)
 {
 }

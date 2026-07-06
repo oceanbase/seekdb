@@ -50,6 +50,7 @@ int ObExprRegexpLike::calc_result_typeN(ObExprResType &type,
     LOG_WARN("param number of regexp_replace at least 2 and at most 3", K(ret), K(param_num));
   } else {
     bool is_case_sensitive = ObCharset::is_bin_sort(types[0].get_collation_type());
+    ObCollationType regexp_res_coll = types[0].get_collation_type();
     for (int i = 0; OB_SUCC(ret) && i < param_num; i++) {
       if (!types[i].is_null() && !is_type_valid_regexp(types[i].get_type())) {
         ret = OB_INVALID_ARGUMENT;
@@ -63,6 +64,7 @@ int ObExprRegexpLike::calc_result_typeN(ObExprResType &type,
       } else if (OB_FAIL(aggregate_charsets_for_comparison(cmp_type, types, 2, type_ctx))) {
         LOG_WARN("fail to aggregate charsets for comparison");
       } else {
+        regexp_res_coll = cmp_type.get_calc_collation_type();
         is_case_sensitive = ObCharset::is_bin_sort(cmp_type.get_calc_collation_type());
       }
     }
@@ -87,21 +89,19 @@ int ObExprRegexpLike::calc_result_typeN(ObExprResType &type,
       type.set_scale(DEFAULT_SCALE_FOR_INTEGER);
       ObExprOperator::calc_result_flag2(type, types[0], types[1]);
       need_utf8 = false;
+      const ObCollationType regexp_calc_coll =
+          ObExprRegexContext::get_regexp_calc_collation(regexp_res_coll, is_case_sensitive);
       if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(1), need_utf8))) {
         LOG_WARN("fail to check need utf8", K(ret));
-      } else if (need_utf8) {
-        types[1].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_UTF8MB4_GENERAL_CI);
       } else {
-        types[1].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF16_BIN : CS_TYPE_UTF16_GENERAL_CI);
+        types[1].set_calc_collation_type(regexp_calc_coll);
       }
       need_utf8 = false;
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(0), need_utf8))) {
         LOG_WARN("fail to check need utf8", K(ret));
-      } else if (need_utf8) {
-        types[0].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_UTF8MB4_GENERAL_CI);
       } else {
-        types[0].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF16_BIN : CS_TYPE_UTF16_GENERAL_CI);
+        types[0].set_calc_collation_type(regexp_calc_coll);
       }
     }
   }
@@ -158,14 +158,8 @@ int ObExprRegexpLike::regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
       LOG_WARN("evaluate parameters failed", K(ret));
     }
   } else if (OB_UNLIKELY(expr.arg_cnt_ < 2 ||
-                         (expr.args_[0]->datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_GENERAL_CI &&
-                           expr.args_[0]->datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN &&
-                           expr.args_[0]->datum_meta_.cs_type_ != CS_TYPE_UTF16_GENERAL_CI &&
-                           expr.args_[0]->datum_meta_.cs_type_ != CS_TYPE_UTF16_BIN) ||
-                         (expr.args_[1]->datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_GENERAL_CI &&
-                          expr.args_[1]->datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN &&
-                          expr.args_[1]->datum_meta_.cs_type_ != CS_TYPE_UTF16_GENERAL_CI &&
-                          expr.args_[1]->datum_meta_.cs_type_ != CS_TYPE_UTF16_BIN))) {
+                         !RegExpCtx::is_regexp_calc_collation(expr.args_[0]->datum_meta_.cs_type_) ||
+                         !RegExpCtx::is_regexp_calc_collation(expr.args_[1]->datum_meta_.cs_type_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(expr));
   } else if (!pattern->is_null() && pattern->get_string().empty()) {
@@ -232,8 +226,8 @@ int ObExprRegexpLike::regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
                                         expected_ci_coll;
       if (expr.args_[0]->datum_meta_.cs_type_ != expected_bin_coll
           && expr.args_[0]->datum_meta_.cs_type_ != expected_ci_coll) {
-        if (OB_FAIL(ObExprUtil::convert_string_collation(
-              text_str, expr.args_[0]->datum_meta_.cs_type_, text_utf, res_coll_type, tmp_alloc))) {
+        if (OB_FAIL(RegExpCtx::convert_to_regexp_utf16(
+              tmp_alloc, text_str, expr.args_[0]->datum_meta_.cs_type_, text_utf))) {
           LOG_WARN("convert charset failed", K(ret));
         }
       } else {

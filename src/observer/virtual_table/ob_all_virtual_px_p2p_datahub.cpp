@@ -30,15 +30,15 @@ int ObAllPxP2PDatahubTable::P2PMsgTraverseCall::operator() (
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(entry.second)) {
-    if (!is_sys_tenant(tenant_id_) &&
-        entry.second->get_tenant_id() != tenant_id_) {
+    if (false &&
+        false) {
       /*do nothing*/
     } else {
       P2PDatahubNode node;
       node.p2p_datahub_id_ = entry.second->get_p2p_datahub_id();
       node.msg_type_ = (int64_t)entry.second->get_msg_type();
       node.start_time_ = entry.second->get_start_time();
-      node.tenant_id_ = entry.second->get_tenant_id();
+      
       node.trace_id_ = entry.second->get_trace_id();
       node.timeout_ts_ = entry.second->get_timeout_ts();
       if (OB_FAIL(node_array_.push_back(node))) {
@@ -69,7 +69,7 @@ void ObAllPxP2PDatahubTable::reset()
 int ObAllPxP2PDatahubTable::p2p_datahub_map_to_array()
 {
   int ret = OB_SUCCESS;
-  P2PMsgTraverseCall call(node_array_, effective_tenant_id_);
+  P2PMsgTraverseCall call(node_array_);
   if (OB_FAIL(PX_P2P_DH.get_map().foreach_refactored(call))) {
     SERVER_LOG(WARN,  "fail to convert map to array", K(ret));
   }

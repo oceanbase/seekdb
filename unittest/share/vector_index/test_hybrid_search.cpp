@@ -19,9 +19,9 @@
 #include <stdexcept>
 #define private public
 #define protected public
-#include "share/hybrid_search/ob_query_parse.h"
-#include "common/ob_smart_var.h"
-#include "common/ob_clock_generator.h"
+#include "sql/hybrid_search/ob_query_parse.h"
+#include "lib/utility/ob_smart_var.h"
+#include "lib/time/ob_clock_generator.h"
 #undef private
 #undef protected
 

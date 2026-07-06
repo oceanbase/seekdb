@@ -119,7 +119,7 @@ void ObInterruptUtil::update_schema_error_code(ObExecContext *exec_ctx, int &cod
   int ret = OB_SUCCESS;
   int prev_code = code;
   if (is_schema_error(code) && OB_NOT_NULL(exec_ctx) && OB_NOT_NULL(exec_ctx->get_my_session())) {
-    uint64_t tenant_id = exec_ctx->get_my_session()->get_effective_tenant_id();
+    
     ObSchemaGetterGuard current_moment_schema_guard;
     int64_t current_moment_schema_version = -1;
     int64_t query_tenant_begin_schema_version =
@@ -128,10 +128,10 @@ void ObInterruptUtil::update_schema_error_code(ObExecContext *exec_ctx, int &cod
       code = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid tenant_schema_version", K(ret), K(query_tenant_begin_schema_version));
     } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-                 tenant_id, current_moment_schema_guard))) {
+                 current_moment_schema_guard))) {
       LOG_WARN("get tenant schema guard failed", K(ret));
     } else if (OB_FAIL(current_moment_schema_guard.get_schema_version(
-                 tenant_id, current_moment_schema_version))) {
+                 current_moment_schema_version))) {
       LOG_WARN("get schema version failed", K(ret));
     }
     // 1. First we will check current_moment_schema_version is equal to
@@ -161,11 +161,11 @@ void ObInterruptUtil::update_schema_error_code(ObExecContext *exec_ctx, int &cod
 
     // overwrite to make sure sql will retry
     if (OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH == code
-        && GSCHEMASERVICE.is_schema_error_need_retry(NULL, tenant_id)) {
+        && GSCHEMASERVICE.is_schema_error_need_retry(NULL)) {
       code = OB_ERR_REMOTE_SCHEMA_NOT_FULL;
     }
 
-    LOG_TRACE("update_schema_error_code, exec_ctx is not null", K(ret), K(prev_code), K(code), K(tenant_id), K(px_worker_execute_start_schema_version), K(current_moment_schema_version),
+    LOG_TRACE("update_schema_error_code, exec_ctx is not null", K(ret), K(prev_code), K(code), K(px_worker_execute_start_schema_version), K(current_moment_schema_version),
               K(exec_ctx->get_task_exec_ctx().get_query_tenant_begin_schema_version()), K(lbt()));
   } else {
     LOG_TRACE("update_schema_error_code, exec_ctx is null", K(lbt()));

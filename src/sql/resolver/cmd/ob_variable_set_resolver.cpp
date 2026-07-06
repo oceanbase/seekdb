@@ -77,7 +77,6 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
     LOG_WARN("failed to check feature enable", K(ret));
   } else {
     stmt_ = variable_set_stmt;
-    variable_set_stmt->set_actual_tenant_id(session_info_->get_effective_tenant_id());
     ParseNode *set_node = NULL;
     ObVariableSetStmt::VariableSetNode var_node;
     for (int64_t i = 0; OB_SUCC(ret) && i < parse_tree.num_child_; ++i) {
@@ -389,7 +388,6 @@ int ObAlterSessionSetResolver::resolve(const ParseNode &parse_tree)
   } else {
     // start resolve
     stmt_ = variable_set_stmt;
-    variable_set_stmt->set_actual_tenant_id(session_info_->get_effective_tenant_id());
     ParseNode *set_clause_node = NULL;
     ParseNode *set_param_node = NULL;
     ObVariableSetStmt::VariableSetNode var_node;

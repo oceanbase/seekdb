@@ -217,7 +217,6 @@ int ObAccessPathEstimation::get_valid_est_methods(ObOptimizerContext &ctx,
     valid_methods = EST_DEFAULT;
   } else {
     // some basic check
-    share::schema::ObTableType table_type = paths.at(0)->est_cost_info_.table_meta_info_->table_type_;
     uint64_t ref_table_id = paths.at(0)->ref_table_id_;
     if (is_inner_path) {
       valid_methods &= ~EST_STORAGE;
@@ -236,11 +235,6 @@ int ObAccessPathEstimation::get_valid_est_methods(ObOptimizerContext &ctx,
     }
     if (OB_NOT_NULL(table_meta) && !need_ds_basic_stat(*table_meta)) {
       valid_methods &= ~EST_DS_BASIC;
-    }
-    if (table_type == EXTERNAL_TABLE) {
-      // TODO [EXTERNAL TABLE]
-      valid_methods &= ~EST_STORAGE;
-      valid_methods &= ~EST_DS_METHODS;
     }
     if (is_virtual_table(ref_table_id)) {
       if (!ObDynamicSamplingUtils::is_ds_virtual_table(ref_table_id)) {
@@ -411,7 +405,7 @@ int ObAccessPathEstimation::choose_best_est_method(ObOptimizerContext &ctx,
 
   // check is complex scene
   if (OB_SUCC(ret) && !is_simple_scene && !is_complex_scene && (valid_methods & EST_DS_FULL)) {
-    ObSelEstimatorFactory factory(ctx.get_session_info()->get_effective_tenant_id());
+    ObSelEstimatorFactory factory;
     const OptSelectivityCtx* sel_ctx = NULL;
     if (OB_UNLIKELY(paths.empty()) ||
         OB_ISNULL(paths.at(0)) ||
@@ -538,26 +532,6 @@ int ObAccessPathEstimation::check_path_can_use_storage_estimation(const AccessPa
   return ret;
 }
 
-int ObAccessPathEstimation::process_external_table_default_estimation(AccessPath *path)
-{
-  //TODO [ExternalTable] need refine
-  int ret = OB_SUCCESS;
-  double output_row_count = 0.0;
-  if (OB_ISNULL(path)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("path is null", K(ret), K(path));
-  } else {
-    ObCostTableScanInfo &est_cost_info = path->est_cost_info_;
-    est_cost_info.batch_type_ = ObSimpleBatch::T_SCAN;
-    output_row_count = static_cast<double>(OB_EST_DEFAULT_VIRTUAL_TABLE_ROW_COUNT);
-    path->est_cost_info_.logical_query_range_row_count_ = output_row_count;
-    path->est_cost_info_.phy_query_range_row_count_ = output_row_count;
-    path->est_cost_info_.index_back_row_count_ = 0;
-    path->est_cost_info_.output_row_count_ = output_row_count;
-  }
-  return ret;
-}
-
 int ObAccessPathEstimation::process_vtable_default_estimation(AccessPath *path)
 {
   int ret = OB_SUCCESS;
@@ -602,12 +576,6 @@ int ObAccessPathEstimation::process_table_default_estimation(ObOptimizerContext 
     } else if (is_virtual_table(path->ref_table_id_)) {
       if (OB_FAIL(process_vtable_default_estimation(path))) {
         LOG_WARN("failed to process vtable default estimation", K(ret));
-      } else if (i == 0 && OB_FAIL(update_table_stat_info_by_default(path))) {
-        LOG_WARN("failed to update table stat by default", K(ret));
-      }
-    } else if (EXTERNAL_TABLE == path->est_cost_info_.table_meta_info_->table_type_) {
-      if (OB_FAIL(process_external_table_default_estimation(path))) {
-        LOG_WARN("failed to process external table default estimation", K(ret));
       } else if (i == 0 && OB_FAIL(update_table_stat_info_by_default(path))) {
         LOG_WARN("failed to update table stat by default", K(ret));
       }
@@ -660,7 +628,7 @@ int ObAccessPathEstimation::process_storage_estimation(ObOptimizerContext &ctx,
                                                        bool &is_success)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator arena("CardEstimation", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator arena("CardEstimation", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObArray<ObBatchEstTasks *> tasks;
   ObArray<ObAddr> prefer_addrs;
   int64_t partition_limit = 0;
@@ -1518,8 +1486,7 @@ int ObAccessPathEstimation::get_valid_partition_info(ObOptimizerContext &ctx,
       LOG_WARN("failed to push back part id", K(ret));
     }
   }
-  if (FAILEDx(ctx.get_opt_stat_manager()->get_table_stat(ctx.get_session_info()->get_effective_tenant_id(),
-                                                         table_partition_info.get_ref_table_id(),
+  if (FAILEDx(ctx.get_opt_stat_manager()->get_table_stat(table_partition_info.get_ref_table_id(),
                                                          all_part_ids,
                                                          part_stats))) {
     LOG_WARN("failed to get table stats", K(ret));
@@ -1579,7 +1546,8 @@ int ObAccessPathEstimation::add_index_info(ObOptimizerContext &ctx,
     index_est_arg->range_columns_count_ = ap.est_cost_info_.range_columns_.count();
     index_est_arg->tablet_id_ = part.tablet_id_;
     index_est_arg->ls_id_ = part.ls_id_;
-    index_est_arg->tenant_id_ = ctx.get_session_info()->get_effective_tenant_id();
+    
+    
     index_est_arg->tx_id_ = ctx.get_session_info()->get_tx_id();
   }
   // FIXME, move following codes
@@ -1986,8 +1954,7 @@ int ObAccessPathEstimation::storage_estimate_full_table_rowcount(ObOptimizerCont
     if (OB_ISNULL(ctx.get_session_info())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
-    } else if ((is_virtual_table(meta.ref_table_id_))
-               || EXTERNAL_TABLE == meta.table_type_) {
+    } else if (is_virtual_table(meta.ref_table_id_)) {
       // do nothing
     } else if (OB_FAIL(ObSQLUtils::choose_best_replica_for_estimation(
                 part_loc_info,
@@ -2013,7 +1980,7 @@ int ObAccessPathEstimation::storage_estimate_full_table_rowcount(ObOptimizerCont
       path_arg.batch_.type_ = ObSimpleBatch::T_SCAN;
       path_arg.tablet_id_ = best_index_part.tablet_id_;
       path_arg.ls_id_ = best_index_part.ls_id_;
-      path_arg.tenant_id_ = ctx.get_session_info()->get_effective_tenant_id();
+      
       path_arg.tx_id_ = ctx.get_session_info()->get_tx_id();
       if (OB_FAIL(ObSQLUtils::make_whole_range(arena,
                                                meta.ref_table_id_,
@@ -2066,8 +2033,7 @@ int ObAccessPathEstimation::storage_estimate_range_rowcount(ObOptimizerContext &
   if (OB_ISNULL(ctx.get_session_info()) || (!estimate_whole_range && OB_ISNULL(ranges))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if ((is_virtual_table(meta.ref_table_id_))
-             || EXTERNAL_TABLE == meta.table_type_) {
+  } else if (is_virtual_table(meta.ref_table_id_)) {
     need_fallback = true;
   } else if (OB_FAIL(ctx.get_global_hint().opt_params_.get_sys_var(ObOptParamHint::PARTITION_INDEX_DIVE_LIMIT,
                                                                    ctx.get_session_info(),
@@ -2138,7 +2104,7 @@ int ObAccessPathEstimation::storage_estimate_range_rowcount(ObOptimizerContext &
       path_arg.batch_.type_ = ObSimpleBatch::T_SCAN;
       path_arg.tablet_id_ = best_index_part.tablet_id_;
       path_arg.ls_id_ = best_index_part.ls_id_;
-      path_arg.tenant_id_ = ctx.get_session_info()->get_effective_tenant_id();
+      
       path_arg.tx_id_ = ctx.get_session_info()->get_tx_id();
       if (OB_FAIL(construct_scan_range_batch(ctx.get_allocator(), chosen_scan_ranges, path_arg.batch_))) {
         LOG_WARN("failed to construct scan range batch", K(ret));
@@ -2210,8 +2176,7 @@ int ObAccessPathEstimation::estimate_full_table_rowcount_by_meta_table(ObOptimiz
   } else if (OB_ISNULL(ctx.get_session_info()) || OB_ISNULL(ctx.get_opt_stat_manager())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(ctx.get_session_info()), K(ctx.get_opt_stat_manager()));
-  } else if (OB_FAIL(ctx.get_opt_stat_manager()->get_table_rowcnt(ctx.get_session_info()->get_effective_tenant_id(),
-                                                                  meta.ref_table_id_,
+  } else if (OB_FAIL(ctx.get_opt_stat_manager()->get_table_rowcnt(meta.ref_table_id_,
                                                                   all_tablet_ids,
                                                                   all_ls_ids,
                                                                   meta.table_row_count_))) {
@@ -2262,7 +2227,7 @@ int ObAccessPathEstimation::process_dynamic_sampling_estimation(ObOptimizerConte
       LOG_WARN("failed to init ds result items", K(ret));
     } else if (!ds_result_items.empty()) {
       OPT_TRACE_TITLE("BEGIN DYNAMIC SAMPLE ESTIMATION");
-      ObArenaAllocator allocator("ObOpTableDS", OB_MALLOC_NORMAL_BLOCK_SIZE, ctx.get_session_info()->get_effective_tenant_id());
+      ObArenaAllocator allocator("ObOpTableDS", OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObDynamicSampling dynamic_sampling(ctx, allocator);
       int64_t start_time = ObTimeUtility::current_time();
       bool throw_ds_error = false;

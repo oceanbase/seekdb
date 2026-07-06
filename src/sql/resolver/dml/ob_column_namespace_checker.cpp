@@ -284,8 +284,7 @@ int ObColumnNamespaceChecker::check_column_exists(const TableItem &table_item, c
     if (0 == col_name.case_compare("ORA_ROWSCN") || 0 == col_name.case_compare(OB_MLOG_OLD_NEW_COLUMN_NAME)) {
       //only basic table has ora_rowscn
       is_exist = true;
-    } else if (OB_FAIL(params_.schema_checker_->check_column_exists(params_.session_info_->get_effective_tenant_id(),
-                                                                    table_id,
+    } else if (OB_FAIL(params_.schema_checker_->check_column_exists(table_id,
                                                                     col_name,
                                                                     is_exist))) {
       LOG_WARN("check column exists failed", K(ret));
@@ -329,7 +328,7 @@ int ObColumnNamespaceChecker::check_column_exists(const TableItem &table_item, c
   } else if (table_item.is_fake_cte_table()) {
     // cte table check columns according to the generate way
     if (OB_FAIL(params_.schema_checker_->check_column_exists(
-        params_.session_info_->get_effective_tenant_id(), table_id, col_name, is_exist))) {
+        table_id, col_name, is_exist))) {
       LOG_WARN("check column exists failed", K(ret));
     }
   } else if (table_item.is_function_table()) {
@@ -346,19 +345,6 @@ int ObColumnNamespaceChecker::check_column_exists(const TableItem &table_item, c
                                                                 col_name,
                                                                 is_exist))) {
       LOG_WARN("failed to check json table column exist", K(ret), K(col_name));
-    }
-  } else if (table_item.is_link_table()) {
-    const share::schema::ObColumnSchemaV2 *col_schema = NULL;
-    ObSqlSchemaGuard *sql_schema_guard = params_.schema_checker_->get_sql_schema_guard();
-    if (OB_ISNULL(sql_schema_guard)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expected dblink schema guard", K(ret));
-    } else if (OB_FAIL(sql_schema_guard->get_column_schema(table_id, col_name, col_schema, true))) {
-      LOG_WARN("failed to get col schema");
-    } else if (OB_NOT_NULL(col_schema)) {
-      is_exist = true;
-    } else {
-      is_exist = false;
     }
   } else if (table_item.is_values_table()) {
     ObSEArray<ObColumnRefRawExpr *, 4> values_desc;

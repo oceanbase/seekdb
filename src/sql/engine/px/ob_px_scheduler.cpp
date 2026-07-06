@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/px/ob_px_scheduler.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/px/ob_dfo_scheduler.h"
 #include "sql/engine/px/datahub/components/ob_dh_winbuf.h"
 #include "sql/engine/join/ob_join_filter_op.h"
@@ -286,7 +287,7 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
   } else if (OB_FAIL(ctx.get_feedback_info().merge_feedback_info(pkt.fb_info_))) {
     LOG_WARN("fail to merge feedback info", K(ret));
   } else if (OB_ISNULL(session->get_tx_desc())) {
-  } else if (OB_FAIL(MTL(transaction::ObTransService*)
+  } else if (OB_FAIL(share::g_mp->trans_service()
                     ->add_tx_exec_result(*session->get_tx_desc(),
                                           pkt.get_trans_result()))) {
     LOG_WARN("fail merge result", K(ret),
@@ -610,7 +611,7 @@ int ObPxTerminateMsgProc::on_sqc_finish_msg(ObExecContext &ctx, const ObPxFinish
   } else if (OB_FAIL(ctx.get_feedback_info().merge_feedback_info(pkt.fb_info_))) {
     LOG_WARN("fail to merge feedback info", K(ret));
   } else if (OB_ISNULL(session->get_tx_desc())) {
-  } else if (OB_FAIL(MTL(transaction::ObTransService*)
+  } else if (OB_FAIL(share::g_mp->trans_service()
                      ->add_tx_exec_result(*session->get_tx_desc(),
                                           pkt.get_trans_result()))) {
     LOG_WARN("fail report tx result", K(ret),

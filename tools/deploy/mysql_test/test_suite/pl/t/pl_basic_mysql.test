@@ -905,7 +905,7 @@ end//
 delimiter ;//
 #connection obsys;
 select route_sql from oceanbase.__all_routine where routine_name = 'p' and database_id = (select database_id from oceanbase.__all_database where database_name = database());
-#select route_sql from oceanbase.__all_virtual_routine where routine_name = 'p';
+#select route_sql from oceanbase.__all_routine where routine_name = 'p';
 #connection default;
 drop procedure p;
 drop table a;
@@ -923,7 +923,7 @@ delimiter ;//
 #connection obsys;
 #connection obsys;
 select route_sql from oceanbase.__all_routine where routine_name = 'p' and database_id = (select database_id from oceanbase.__all_database where database_name = database());
-#select route_sql from oceanbase.__all_virtual_routine where routine_name = 'p';
+#select route_sql from oceanbase.__all_routine where routine_name = 'p';
 #connection default;
 drop procedure p;
 drop table b;
@@ -1577,7 +1577,7 @@ end //
 delimiter ;//
 #connection obsys;
 select route_sql from oceanbase.__all_routine where routine_name = 'p' and database_id = (select database_id from oceanbase.__all_database where database_name = database());
-#select route_sql from oceanbase.__all_virtual_routine where routine_name = 'p';
+#select route_sql from oceanbase.__all_routine where routine_name = 'p';
 #connection default;
 drop table a;
 drop procedure p;

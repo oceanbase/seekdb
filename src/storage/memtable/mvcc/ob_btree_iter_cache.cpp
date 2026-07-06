@@ -44,7 +44,7 @@ void *ObBtreeIterCache::alloc(int64_t size)
     freelist_ = freelist_->next_;
     --free_count_;
   } else {
-    ptr = ob_malloc(size, ObMemAttr(OB_SYS_TENANT_ID, "BtreeIterCache"));
+    ptr = ob_malloc(size, ObMemAttr("BtreeIterCache"));
   }
   return ptr;
 }
@@ -75,7 +75,7 @@ void *btree_iter_alloc(int64_t size)
     }
   }
   if (OB_ISNULL(ptr)) {
-    ptr = ob_malloc(size, ObMemAttr(OB_SYS_TENANT_ID, "BtreeIter"));
+    ptr = ob_malloc(size, ObMemAttr("BtreeIter"));
   }
   return ptr;
 }

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_inner_table_option_printer.h"
 #include "sql/engine/ob_exec_context.h"
-#include "share/schema/ob_schema_printer.h"
+#include "sql/printer/ob_schema_printer.h"
 
 
 namespace oceanbase
@@ -27,7 +27,7 @@ namespace sql
 {
 
 ObExprInnerTableOptionPrinter::ObExprInnerTableOptionPrinter(ObIAllocator &alloc)
-    : ObStringExprOperator(alloc, T_FUN_SYS_INNER_TABLE_OPTION_PRINTER, N_INNER_TABLE_OPTION_PRINTER, 3,
+    : ObStringExprOperator(alloc, T_FUN_SYS_INNER_TABLE_OPTION_PRINTER, N_INNER_TABLE_OPTION_PRINTER, 2,
                            VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
 {
   need_charset_convert_ = false;
@@ -37,17 +37,15 @@ ObExprInnerTableOptionPrinter::~ObExprInnerTableOptionPrinter()
 {
 }
 
-inline int ObExprInnerTableOptionPrinter::calc_result_type3(ObExprResType &type,
+inline int ObExprInnerTableOptionPrinter::calc_result_type2(ObExprResType &type,
                                                             ObExprResType &type1,
                                                             ObExprResType &type2,
-                                                            ObExprResType &type3,
                                                             common::ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
   type1.set_calc_type(ObIntType);
   type2.set_calc_type(ObIntType);
-  type3.set_calc_type(ObIntType);
   type.set_type(ObVarcharType);
   type.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
   type.set_collation_level(common::CS_LEVEL_IMPLICIT);
@@ -57,7 +55,7 @@ inline int ObExprInnerTableOptionPrinter::calc_result_type3(ObExprResType &type,
 int ObExprInnerTableOptionPrinter::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
 {
   int ret = OB_SUCCESS;
-  CK(3 == rt_expr.arg_cnt_);
+  CK(2 == rt_expr.arg_cnt_);
   rt_expr.eval_func_ = &ObExprInnerTableOptionPrinter::eval_inner_table_option_printer;
   return ret;
 }
@@ -67,7 +65,6 @@ int ObExprInnerTableOptionPrinter::eval_inner_table_option_printer(const ObExpr 
   int ret = OB_SUCCESS;
   share::schema::ObSchemaGetterGuard schema_guard;
   const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
-  ObDatum *tenant_id = nullptr;
   ObDatum *database_id = nullptr;
   ObDatum *table_id = nullptr;
   const ObTableSchema *table_schema = nullptr;
@@ -77,11 +74,11 @@ int ObExprInnerTableOptionPrinter::eval_inner_table_option_printer(const ObExpr 
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get schema_service", K(ret));
-  } else if (OB_FAIL(expr.eval_param_value(ctx, tenant_id, database_id, table_id))) {
+  } else if (OB_FAIL(expr.eval_param_value(ctx, database_id, table_id))) {
     LOG_WARN("failed to eval table id", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(session->get_effective_tenant_id(), schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("failed to get schema guard", K(ret));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id->get_int(), table_id->get_int(), table_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id->get_int(), table_schema))) {
     LOG_WARN("failed to get table schema", K(ret), K(table_id->get_int()));
   } else if (nullptr == table_schema) {
     expr_datum.set_null();
@@ -121,7 +118,7 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprInnerTableOptionPrinter, raw_expr) {
 }
 
 ObExprInnerTableSequenceGetter::ObExprInnerTableSequenceGetter(ObIAllocator &alloc)
-    : ObExprOperator(alloc, T_FUN_SYS_INNER_TABLE_SEQUENCE_GETTER, N_INNER_TABLE_SEQUENCE_GETTER, 3,
+    : ObExprOperator(alloc, T_FUN_SYS_INNER_TABLE_SEQUENCE_GETTER, N_INNER_TABLE_SEQUENCE_GETTER, 2,
                            VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
 {
 }
@@ -130,17 +127,15 @@ ObExprInnerTableSequenceGetter::~ObExprInnerTableSequenceGetter()
 {
 }
 
-inline int ObExprInnerTableSequenceGetter::calc_result_type3(ObExprResType &type,
+inline int ObExprInnerTableSequenceGetter::calc_result_type2(ObExprResType &type,
                                                              ObExprResType &type1,
                                                              ObExprResType &type2,
-                                                             ObExprResType &type3,
                                                              common::ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
   type1.set_calc_type(ObIntType);
   type2.set_calc_type(ObIntType);
-  type3.set_calc_type(ObIntType);
   type.set_type(ObUInt64Type);
   return ret;
 }
@@ -148,7 +143,7 @@ inline int ObExprInnerTableSequenceGetter::calc_result_type3(ObExprResType &type
 int ObExprInnerTableSequenceGetter::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
 {
   int ret = OB_SUCCESS;
-  CK(3 == rt_expr.arg_cnt_);
+  CK(2 == rt_expr.arg_cnt_);
   rt_expr.eval_func_ = &ObExprInnerTableSequenceGetter::eval_inner_table_sequence_getter;
   return ret;
 }
@@ -158,7 +153,6 @@ int ObExprInnerTableSequenceGetter::eval_inner_table_sequence_getter(const ObExp
   int ret = OB_SUCCESS;
   share::schema::ObSchemaGetterGuard schema_guard;
   const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
-  ObDatum *tenant_id = nullptr;
   ObDatum *table_id = nullptr;
   ObDatum *auto_inc_col_id = nullptr;
   const ObTableSchema *table_schema = nullptr;
@@ -168,20 +162,20 @@ int ObExprInnerTableSequenceGetter::eval_inner_table_sequence_getter(const ObExp
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get schema_service", K(ret));
-  } else if (OB_FAIL(expr.eval_param_value(ctx, tenant_id, table_id, auto_inc_col_id))) {
+  } else if (OB_FAIL(expr.eval_param_value(ctx, table_id, auto_inc_col_id))) {
     LOG_WARN("failed to eval table id", K(ret));
   } else if (auto_inc_col_id->is_null() || 0 == auto_inc_col_id->get_int()) {
     expr_datum.set_null();
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(session->get_effective_tenant_id(), schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("failed to get schema guard", K(ret));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id->get_int(), table_id->get_int(), table_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id->get_int(), table_schema))) {
     LOG_WARN("failed to get table schema", K(ret), K(table_id->get_int()));
   } else if (nullptr == table_schema) {
     expr_datum.set_null();
   } else {
     uint64_t auto_increment = 0;
     if (OB_FAIL(share::ObAutoincrementService::get_instance().get_sequence_value(
-          table_schema->get_tenant_id(), table_schema->get_table_id(),
+          table_schema->get_table_id(),
           table_schema->get_autoinc_column_id(), table_schema->is_order_auto_increment_mode(),
           table_schema->get_truncate_version(), auto_increment))) {
       SHARE_SCHEMA_LOG(WARN, "fail to get auto_increment value", K(ret));

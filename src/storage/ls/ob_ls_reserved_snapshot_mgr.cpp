@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE
 #include "ob_ls_reserved_snapshot_mgr.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -45,10 +46,10 @@ ObLSReservedSnapshotMgr::~ObLSReservedSnapshotMgr()
   destroy();
 }
 
-int ObLSReservedSnapshotMgr::init(const int64_t tenant_id, ObLS *ls, ObLogHandler *log_handler)
+int ObLSReservedSnapshotMgr::init(ObLS *ls, ObLogHandler *log_handler)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(tenant_id, "DepTabletSet");
+  ObMemAttr attr("DepTabletSet");
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObLSReservedSnapshotMgr is inited", K(ret), KP(ls));
@@ -308,7 +309,7 @@ int ObLSReservedSnapshotMgr::prepare_struct_in_lock(
       ObLogBaseType::RESERVED_SNAPSHOT_LOG_BASE_TYPE,
       ObReplayBarrierType::PRE_BARRIER/*need_replay_pre_barrier*/);
 
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_->get_ls_id(), ls_handle_, ObLSGetMod::STORAGE_MOD))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_->get_ls_id(), ls_handle_, ObLSGetMod::STORAGE_MOD))) {
     LOG_WARN("failed to get log stream", K(ret), "ls_id", ls_->get_ls_id());
   } else if (OB_FAIL(log_header.serialize(clog_buf_, CLOG_BUF_LEN, pos))) {
     LOG_WARN("failed to serialize log header", K(ret));

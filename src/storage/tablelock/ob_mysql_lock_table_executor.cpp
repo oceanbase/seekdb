@@ -16,11 +16,12 @@
 
 #define USING_LOG_PREFIX TABLELOCK
 #include "storage/tablelock/ob_mysql_lock_table_executor.h"
+#include "share/rc/ob_module_provider.h"
 
-#include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "lib/mysqlclient/ob_mysql_result.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_result.h"
 #include "lib/utility/ob_fast_convert.h"
-#include "lib/alloc/alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 #include "observer/ob_inner_sql_connection.h"
 #include "share/ob_table_access_helper.h"
 #include "sql/engine/ob_exec_context.h"
@@ -141,7 +142,7 @@ int ObMySQLLockTableExecutor::lock_table_(sql::ObSQLSessionInfo *session,
                                           const int64_t timeout_us)
 {
   int ret = OB_SUCCESS;
-  ObTableLockService *lock_service = MTL(ObTableLockService *);
+  ObTableLockService *lock_service = share::g_mp->table_lock_service();
   ObLockTableRequest arg;
   bool need_record_to_lock_table = true;
   ObTxDesc *tx_desc = session->get_tx_desc();

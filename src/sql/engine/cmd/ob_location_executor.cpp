@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_location_executor.h"
 #include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_root_service.h"
 #include "sql/resolver/ddl/ob_create_location_stmt.h"
 #include "sql/resolver/ddl/ob_drop_location_stmt.h"
 #include "sql/engine/ob_exec_context.h"

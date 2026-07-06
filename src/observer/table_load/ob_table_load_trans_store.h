@@ -24,7 +24,7 @@
 #include "share/ob_autoincrement_param.h"
 #include "share/object/ob_obj_cast.h"
 #include "share/schema/ob_column_schema.h"
-#include "share/table/ob_table_load_row_array.h"
+#include "observer/table_load/ob_table_load_row_array.h"
 #include "storage/direct_load/ob_direct_load_datum_row.h"
 #include "storage/direct_load/ob_direct_load_i_table.h"
 
@@ -52,7 +52,7 @@ class ObTableLoadTransStore
 public:
   ObTableLoadTransStore(ObTableLoadTransCtx *trans_ctx) : trans_ctx_(trans_ctx)
   {
-    session_store_array_.set_tenant_id(MTL_ID());
+    
   }
   ~ObTableLoadTransStore() { reset(); }
   int init();
@@ -234,7 +234,7 @@ private:
   common::ObArray<const share::schema::ObColumnSchemaV2 *> column_schemas_;
   struct SessionContext
   {
-    SessionContext(int32_t session_id, uint64_t tenant_id, ObDataTypeCastParams cast_params);
+    SessionContext(int32_t session_id, ObDataTypeCastParams cast_params);
     ~SessionContext();
     const int32_t session_id_;
     ObDirectLoadDatumRow datum_row_;

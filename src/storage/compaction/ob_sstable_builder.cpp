@@ -47,7 +47,7 @@ int ObSSTableRebuildMicroBlockIter::prefetch()
       read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
       read_info.macro_block_id_ = macro_id_array_.at(prefetch_idx_);
       read_info.buf_ = io_buf_[io_index];
-      read_info.mtl_tenant_id_ = MTL_ID();
+      
 
       if (OB_FAIL(ObObjectManager::async_read_object(read_info, macro_io_handle))) {
         LOG_WARN("Fail to read macro block", K(ret), K(read_info));
@@ -122,7 +122,7 @@ int ObSSTableRebuildMicroBlockIter::get_next_micro_block(
  * ---------------------------------------------------------ObSSTableBuilder--------------------------------------------------------------
  */
 ObSSTableBuilder::ObSSTableBuilder()
-  : allocator_(ObMemAttr(MTL_ID(), "sstBuilder")),
+  : allocator_(ObMemAttr("sstBuilder")),
     index_builder_(false /* not use buffer*/),
     data_store_desc_(),
     index_read_info_(NULL),
@@ -229,7 +229,7 @@ int ObSSTableRebuilder::build_res_with_rewrite_macros(
 {
   int ret = OB_SUCCESS;
   ObSEArray<MacroBlockId, DEFAULT_MACRO_ID_COUNT> macro_id_array;
-  macro_id_array.set_attr(ObMemAttr(MTL_ID(), "sstBuilder", ObCtxIds::MERGE_NORMAL_CTX_ID));
+  macro_id_array.set_attr(ObMemAttr("sstBuilder", ObCtxIds::MERGE_NORMAL_CTX_ID));
   ObLocalArena local_arena("MetaIter");
   blocksstable::ObSSTableIndexBuilder::ObMacroMetaIter iter;
   int64_t multiplexed_macro_block_count = 0;

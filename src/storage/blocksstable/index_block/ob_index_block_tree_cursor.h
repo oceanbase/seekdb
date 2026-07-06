@@ -280,7 +280,7 @@ private:
   // Micro Block Cache Read/Prefetch
   TreeType tree_type_;
   ObCGRowKeyTransHelper rowkey_helper_;
-  int64_t tenant_id_;
+  
   int64_t rowkey_column_cnt_;
 
   ObIndexBlockTreePathItem *curr_path_item_;

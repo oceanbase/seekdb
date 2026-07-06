@@ -17,7 +17,9 @@
 #define USING_LOG_PREFIX STORAGE
 
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_storage_meta_cache.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
 #include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
@@ -28,14 +30,12 @@ using namespace blocksstable;
 namespace storage
 {
 ObStorageMetaKey::ObStorageMetaKey()
-  : tenant_id_(0),
-    phy_addr_()
+  : phy_addr_()
 {
 }
 
-ObStorageMetaKey::ObStorageMetaKey(const uint64_t tenant_id, const ObMetaDiskAddr &phy_addr)
-  : tenant_id_(tenant_id),
-    phy_addr_(phy_addr)
+ObStorageMetaKey::ObStorageMetaKey(const ObMetaDiskAddr &phy_addr)
+  : phy_addr_(phy_addr)
 {
 }
 
@@ -47,13 +47,10 @@ bool ObStorageMetaKey::operator ==(const ObIKVCacheKey &other) const
 {
   const ObStorageMetaKey &other_key = reinterpret_cast<const ObStorageMetaKey &> (other);
   return phy_addr_ == other_key.phy_addr_
-      && tenant_id_ == other_key.tenant_id_;
+      && true;
 }
 
-uint64_t ObStorageMetaKey::get_tenant_id() const
-{
-  return tenant_id_;
-}
+
 
 uint64_t ObStorageMetaKey::hash() const
 {
@@ -75,14 +72,14 @@ int ObStorageMetaKey::deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid storage meta cache key", K(ret), K(*this));
   } else {
-    key = new (buf) ObStorageMetaKey(tenant_id_, phy_addr_);
+    key = new (buf) ObStorageMetaKey(phy_addr_);
   }
   return ret;
 }
 
 bool ObStorageMetaKey::is_valid() const
 {
-  return phy_addr_.is_valid() && tenant_id_ > 0;
+  return phy_addr_.is_valid();
 }
 
 const ObMetaDiskAddr &ObStorageMetaKey::get_meta_addr() const
@@ -219,7 +216,7 @@ int ObStorageMetaValue::process_sstable(
 {
   UNUSED(tablet);
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "ProSStable"));
+  ObArenaAllocator allocator(common::ObMemAttr("ProSStable"));
   blocksstable::ObSSTable sstable;
   ObIStorageMetaObj *tiny_meta = nullptr;
   char *tmp_buf = nullptr;
@@ -294,7 +291,7 @@ int ObStorageMetaValue::process_table_store(
     const ObTablet *tablet)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "ProcMetaVaule"));
+  ObArenaAllocator allocator(common::ObMemAttr("ProcMetaVaule"));
   ObTabletTableStore table_store;
   ObIStorageMetaObj *tiny_meta = nullptr;
   char *tmp_buf = nullptr;
@@ -536,7 +533,7 @@ int ObStorageMetaCache::get_meta(
   if (OB_UNLIKELY(!key.is_valid() || type >= ObStorageMetaValue::MAX)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key), K(type));
-  } else if (OB_FAIL(meta_handle.cache_handle_.new_value(MTL(ObTenantMetaMemMgr *)->get_meta_cache_io_allocator()))) {
+  } else if (OB_FAIL(meta_handle.cache_handle_.new_value(share::g_mp->tenant_meta_mem_mgr()->get_meta_cache_io_allocator()))) {
     LOG_WARN("fail to new cache handle value", K(ret));
   } else if (OB_FAIL(get(key, meta_handle.cache_handle_.get_cache_value()->value_,
       meta_handle.cache_handle_.get_cache_value()->cache_handle_))) {
@@ -621,7 +618,7 @@ int ObStorageMetaCache::prefetch(
     LOG_WARN("invalid arguments", K(ret), K(key), K(type));
   } else {
     void *buf = nullptr;
-    common::ObIAllocator &io_allocator = MTL(ObTenantMetaMemMgr *)->get_meta_cache_io_allocator();
+    common::ObIAllocator &io_allocator = share::g_mp->tenant_meta_mem_mgr()->get_meta_cache_io_allocator();
     ObStorageMetaIOCallback *callback = nullptr;
     if (OB_ISNULL(buf = io_allocator.alloc(sizeof(ObStorageMetaIOCallback)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -655,11 +652,11 @@ int ObStorageMetaCache::get_meta_and_bypass_cache(
   if (OB_UNLIKELY(!key.is_valid() || type >= ObStorageMetaValue::MAX)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key), K(type));
-  } else if (OB_FAIL(handle.cache_handle_.new_value(MTL(ObTenantMetaMemMgr *)->get_meta_cache_io_allocator()))) {
+  } else if (OB_FAIL(handle.cache_handle_.new_value(share::g_mp->tenant_meta_mem_mgr()->get_meta_cache_io_allocator()))) {
     LOG_WARN("fail to new cache handle value", K(ret));
   } else {
     void *buf = nullptr;
-    common::ObIAllocator &io_allocator = MTL(ObTenantMetaMemMgr *)->get_meta_cache_io_allocator();
+    common::ObIAllocator &io_allocator = share::g_mp->tenant_meta_mem_mgr()->get_meta_cache_io_allocator();
     ObStorageMetaIOCallback *callback = nullptr;
     if (OB_ISNULL(buf = io_allocator.alloc(sizeof(ObStorageMetaIOCallback)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

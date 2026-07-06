@@ -71,11 +71,11 @@ public:
   int init();
   void destroy();
 public:
-  ObSqlTask *alloc(const uint64_t tenant_id);
+  ObSqlTask *alloc();
   void free(ObSqlTask *task);
   static ObSqlTaskFactory &get_instance();
 private:
-  ObSqlTask *alloc_(const uint64_t tenant_id);
+  ObSqlTask *alloc_();
   void free_(ObSqlTask *task);
 };
 

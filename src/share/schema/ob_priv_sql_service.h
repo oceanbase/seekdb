@@ -137,7 +137,6 @@ public:
     const common::ObString &grantor,
     const common::ObString &grantor_host);
   virtual int gen_routine_priv_dml(
-    const uint64_t exec_tenant_id,
     const ObRoutinePrivSortKey &routine_priv_key,
     const ObPrivSet &priv_set,
     ObDMLSqlSplicer &dml,
@@ -152,7 +151,6 @@ public:
       common::ObISQLClient &sql_client);
 
   virtual int grant_revoke_role(
-      const uint64_t tenant_id,
       const share::schema::ObUserInfo &user_info,
       const common::ObIArray<uint64_t> &role_ids,
       const share::schema::ObUserInfo *specified_role_info,
@@ -164,7 +162,6 @@ public:
       const uint64_t option);
   
   virtual int grant_sys_priv_to_ur(
-      const uint64_t tenant_id,
       const uint64_t grantee_id,
       const uint64_t option,
       const ObRawPrivArray &priv_array,
@@ -189,7 +186,6 @@ public:
         const common::ObString &grantor,
         const common::ObString &grantor_host);
   virtual int gen_obj_mysql_priv_dml(
-        const uint64_t exec_tenant_id,
         const ObObjMysqlPrivSortKey &obj_mysql_priv_key,
         const ObPrivSet &priv_set,
         ObDMLSqlSplicer &dml,
@@ -231,13 +227,11 @@ private:
       const common::ObString &grantor_host);
 
   int gen_db_priv_dml(
-      const uint64_t exec_tenant_id,
       const ObOriginalDBKey &db_priv_key,
       const ObPrivSet &priv_set,
       share::ObDMLSqlSplicer &dml);
   
   int gen_table_priv_dml(
-      const uint64_t exec_tenant_id,
       const ObTablePrivSortKey &table_priv_key,
       const ObPrivSet &priv_set,
       share::ObDMLSqlSplicer &dml,
@@ -245,22 +239,18 @@ private:
       const common::ObString &grantor_host);
 
   int gen_column_priv_dml(
-      const uint64_t exec_tenant_id,
       const ObColumnPrivSortKey &column_priv_key,
       const uint64_t priv_id,
       const ObPrivSet &priv_set,
       ObDMLSqlSplicer &dml);
 
   int gen_grant_sys_priv_dml(
-      const uint64_t exec_tenant_id,
-      const uint64_t tenant_id,
       const uint64_t grantee_id,
       const uint64_t option,
       const ObRawPriv &raw_priv,
       ObDMLSqlSplicer &dml);
 
   int insert_objauth(
-      const uint64_t exec_tenant_id,
       const ObObjPrivSortKey &obj_priv_key, 
       const int64_t new_schema_version,
       const share::ObRawObjPrivArray &obj_priv_array,
@@ -270,7 +260,6 @@ private:
       ObDMLSqlSplicer &dml);
 
   int gen_obj_priv_dml_ora(
-    const uint64_t exec_tenant_id,
     const ObObjPrivSortKey &obj_priv_key,
     share::ObRawObjPriv &raw_obj_priv,
     const uint64_t option,
@@ -279,7 +268,6 @@ private:
 
   static int gen_delete_routine_priv_sql(
     ObISQLClient &sql_client,
-    const uint64_t exec_tenant_id,
     const ObRoutinePrivSortKey &routine_priv_key,
     ObDMLSqlSplicer &dml);
   int add_obj_mysql_priv_history(

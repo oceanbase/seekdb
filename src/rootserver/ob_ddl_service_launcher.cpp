@@ -16,7 +16,10 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "logservice/ob_log_service.h" // for ObLogService
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
+#include "share/rc/ob_module_provider.h"
 #include "lib/lock/ob_spin_rwlock.h" // for SpinRWLock
 #include "ob_ddl_service_launcher.h"
 #include "observer/ob_server_event_history_table_operator.h" // for SERVER_EVENT_ADD
@@ -39,16 +42,14 @@ int ObDDLServiceLauncher::mtl_init(ObDDLServiceLauncher *&ddl_service_launcher)
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time();
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] begin mtl_init for ddl_service_launcher");
-  if (!is_sys_tenant(MTL_ID())) {
-    LOG_INFO("ddl service launcher should run on SYS tenant", KR(ret), "tenant_id", MTL_ID());
-  } else if (OB_NOT_NULL(ddl_service_launcher)) {
+  if (OB_NOT_NULL(ddl_service_launcher)) {
     if (OB_FAIL(ddl_service_launcher->init())) {
       LOG_WARN("failed to init ddl_service_launcher", KR(ret));
     }
   }
   int64_t duration_time = ObTimeUtility::current_time() - start_time;
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] finish mtl_init for ddl_service_launcher",
-            KR(ret), "tenant_id", MTL_ID(), K(duration_time));
+            KR(ret),  K(duration_time));
   return ret;
 }
 
@@ -57,10 +58,7 @@ int ObDDLServiceLauncher::init()
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time();
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] begin init for ddl_service_launcher");
-  if (!is_sys_tenant(MTL_ID())) {
-    // do nothing, only sys tenant should create this launcher
-    LOG_INFO("ddl service launcher should start on sys tenant", "tenant_id", MTL_ID());
-  } else if (OB_UNLIKELY(inited_)) {
+  if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
   } else {
@@ -68,7 +66,7 @@ int ObDDLServiceLauncher::init()
   }
   int64_t duration_time = ObTimeUtility::current_time() - start_time;
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] finish init for ddl_service_launcher", KR(ret),
-            "tenant_id", MTL_ID(), K(duration_time));
+             K(duration_time));
   return ret;
 }
 
@@ -77,14 +75,12 @@ void ObDDLServiceLauncher::destroy()
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time();
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] begin destroy for ddl_service_launcher");
-  if (!is_sys_tenant(MTL_ID())) {
-    LOG_INFO("new ddl scheduler should run on SYS tenant", "tenant_id", MTL_ID());
-  } else {
+  {
     inited_ = false;
   }
   int64_t duration_time = ObTimeUtility::current_time() - start_time;
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] finish destroy for ddl_service_launcher", KR(ret),
-            "tenant_id", MTL_ID(), K(duration_time));
+             K(duration_time));
 }
 
 int ObDDLServiceLauncher::switch_to_leader()
@@ -92,9 +88,7 @@ int ObDDLServiceLauncher::switch_to_leader()
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time();
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] begin switch_to_leader for ddl_service_launcher");
-  if (!is_sys_tenant(MTL_ID())) {
-    LOG_INFO("ddl service launcher should run on SYS tenant", KR(ret), "tenant_id", MTL_ID());
-  } else if (OB_UNLIKELY(!inited_)) {
+  if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ddl service launcher is not inited", KR(ret), K_(inited));
   } else if (OB_FAIL(inner_start_ddl_service_with_lock_(
@@ -105,7 +99,7 @@ int ObDDLServiceLauncher::switch_to_leader()
   }
   int64_t duration_time = ObTimeUtility::current_time() - start_time;
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] finish switch_to_leader for ddl_service_launcher", KR(ret),
-            "tenant_id", MTL_ID(), K(duration_time));
+             K(duration_time));
   return ret;
 }
 
@@ -119,12 +113,12 @@ int ObDDLServiceLauncher::get_sys_palf_role_and_epoch(
   if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.omt_));
-  } else if (OB_UNLIKELY(!GCTX.omt_->has_tenant(OB_SYS_TENANT_ID))) {
+  } else if (OB_UNLIKELY(!GCTX.omt_->has_tenant())) {
     ret = OB_TENANT_NOT_EXIST;
     LOG_WARN("local server does not have SYS tenant resource", KR(ret));
   } else {
-    MTL_SWITCH(OB_SYS_TENANT_ID) {
-      logservice::ObLogService *log_service = MTL(logservice::ObLogService*);
+    MOD_SCOPE {
+      logservice::ObLogService *log_service = share::g_mp->log_service();
       if (OB_ISNULL(log_service)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("mtl ObLogService should not be null", KR(ret), KP(log_service));
@@ -156,7 +150,7 @@ int ObDDLServiceLauncher::start_ddl_service_with_old_logic(
   }
   int64_t duration_time = ObTimeUtility::current_time() - start_time;
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] finish start ddl service by old logic", KR(ret),
-            "tenant_id", MTL_ID(), K(duration_time));
+             K(duration_time));
   return ret;
 }
 
@@ -183,9 +177,7 @@ int ObDDLServiceLauncher::switch_to_follower_gracefully()
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time();
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] begin switch_to_follower_gracefully for ddl_service_launcher");
-  if (!is_sys_tenant(MTL_ID())) {
-    LOG_INFO("ddl service launcher should run on SYS tenant", KR(ret), "tenant_id", MTL_ID());
-  } else if (OB_UNLIKELY(!inited_)) {
+  if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ddl service launcher is not inited", KR(ret), K_(inited));
   } else {
@@ -200,7 +192,7 @@ int ObDDLServiceLauncher::switch_to_follower_gracefully()
   // rw_lock_ is released now
   int64_t duration_time = ObTimeUtility::current_time() - start_time;
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] finish switch_to_follower_gracefully for ddl_service_launcher", KR(ret),
-            "tenant_id", MTL_ID(), K(duration_time));
+             K(duration_time));
   return ret;
 }
 
@@ -229,7 +221,7 @@ int ObDDLServiceLauncher::init_sequence_id_(
       if (OB_FAIL(schema_service->init_sequence_id_by_rs_epoch(new_rs_epoch))) {
         LOG_WARN("init sequence id by rootservice epoch failed", KR(ret), K(new_rs_epoch));
       } else if (OB_FAIL(GCTX.root_service_->get_schema_service().get_tenant_refreshed_schema_version(
-                             OB_SYS_TENANT_ID, schema_version))) {
+                             schema_version))) {
         LOG_WARN("fail to get sys tenant refreshed schema version", KR(ret));
       } else if (schema_version <= OB_CORE_SCHEMA_VERSION + 1) {
         // in bootstrap and new schema mode, to avoid write failure while schema_version change,

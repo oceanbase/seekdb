@@ -15,6 +15,7 @@
  */
 
 #include "ob_all_virtual_ha_diagnose.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -48,26 +49,19 @@ int ObAllVirtualHADiagnose::inner_get_next_row(common::ObNewRow *&row)
       }
       return ret;
     };
-    auto func_iterate_tenant = [&func_iter_ls]() -> int
-    {
-      int ret = OB_SUCCESS;
-      storage::ObLSService *ls_service = MTL(storage::ObLSService*);
-      if (NULL == ls_service) {
-        SERVER_LOG(INFO, "tenant has no ObLSService", K(MTL_ID()));
-      } else if (OB_FAIL(ls_service->iterate_diagnose(func_iter_ls))) {
-        if (OB_NOT_RUNNING == ret) {
-          ret = OB_SUCCESS;
-        } else {
-          SERVER_LOG(WARN, "iter ls failed", K(ret));
-        }
+    storage::ObLSService *ls_service = share::g_mp->ls_service();
+    if (NULL == ls_service) {
+      SERVER_LOG(INFO, "tenant has no ObLSService");
+    } else if (OB_FAIL(ls_service->iterate_diagnose(func_iter_ls))) {
+      if (OB_NOT_RUNNING == ret) {
+        ret = OB_SUCCESS;
       } else {
-        SERVER_LOG(INFO, "iter ls succ", K(ret));
+        SERVER_LOG(WARN, "iter ls failed", K(ret));
       }
-      return ret;
-    };
-    if (NULL == omt_) {
-      SERVER_LOG(INFO, "omt is NULL", K(MTL_ID()));
-    } else if (OB_FAIL(omt_->operate_each_tenant_for_sys_or_self(func_iterate_tenant))) {
+    } else {
+      SERVER_LOG(INFO, "iter ls succ", K(ret));
+    }
+    if (OB_FAIL(ret)) {
       SERVER_LOG(WARN, "iter tenant failed", K(ret));
     } else {
       scanner_it_ = scanner_.begin();

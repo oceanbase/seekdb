@@ -40,7 +40,7 @@ ObStorageLogger::~ObStorageLogger()
   destroy();
 }
 
-int ObStorageLogger::init(ObStorageLoggerManager &slogger_manager, const uint64_t tenant_id)
+int ObStorageLogger::init(ObStorageLoggerManager &slogger_manager, const bool is_server)
 {
   int ret = OB_SUCCESS;
   const int64_t max_log_file_size = slogger_manager.max_log_file_size_;
@@ -52,19 +52,12 @@ int ObStorageLogger::init(ObStorageLoggerManager &slogger_manager, const uint64_
     ret = OB_INIT_TWICE;
     STORAGE_REDO_LOG(WARN, "The ObStorageLogger has been inited.", K(ret));
   } else {
-    if (OB_SERVER_TENANT_ID == tenant_id) {
+    if (is_server) {  // seekdb: server-level slog (super block / tenant meta), distinct stream for replay ordering
       log_writer_ = &server_log_writer_;
       pret = snprintf(tnt_slog_dir_, MAX_PATH_SIZE, "%s/server", slogger_manager.get_root_dir());
-    } else if (is_virtual_tenant_id(tenant_id)) {
-      ret = OB_ERR_UNEXPECTED;
-      STORAGE_REDO_LOG(WARN, "Virtual tenant shouldn't create slogger.", K(ret), K(tenant_id));
-    } else if (OB_SYS_TENANT_ID == tenant_id) {
+    } else {  // the single (process) tenant storage slog
       log_writer_ = &tenant_log_writer_;
       pret = snprintf(tnt_slog_dir_, MAX_PATH_SIZE, "%s/sys", slogger_manager.get_root_dir());
-    } else {
-      log_writer_ = &tenant_log_writer_;
-      pret = snprintf(tnt_slog_dir_, MAX_PATH_SIZE, "%s/tenant_%" PRIu64,
-                    slogger_manager.get_root_dir(), tenant_id);
     }
   }
 
@@ -72,10 +65,10 @@ int ObStorageLogger::init(ObStorageLoggerManager &slogger_manager, const uint64_
     // do nothing
   } else if (pret < 0 || pret >= MAX_PATH_SIZE) {
     ret = OB_BUF_NOT_ENOUGH;
-    STORAGE_REDO_LOG(ERROR, "construct tenant slog path fail", K(ret), K(tenant_id));
+    STORAGE_REDO_LOG(ERROR, "construct tenant slog path fail", K(ret));
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(tnt_slog_dir_))) {
     STORAGE_REDO_LOG(WARN, "fail to create tenant dir.", K(ret), K_(tnt_slog_dir));
-  } else if (OB_FAIL(log_writer_->init(tnt_slog_dir_, max_log_file_size, max_log_size, log_file_spec, tenant_id))) {
+  } else if (OB_FAIL(log_writer_->init(tnt_slog_dir_, max_log_file_size, max_log_size, log_file_spec))) {
     STORAGE_REDO_LOG(WARN, "fail to init log_writer_", K(ret), K_(tnt_slog_dir), K(max_log_file_size));
   } else {
     slogger_mgr_ = &slogger_manager;
@@ -291,7 +284,7 @@ int ObStorageLogger::write_log(ObIArray<ObStorageLogParam> &param_arr)
   return ret;
 }
 
-int ObStorageLogger::remove_useless_log_file(const int64_t end_file_id, const uint64_t tenant_id)
+int ObStorageLogger::remove_useless_log_file(const int64_t end_file_id)
 {
   int ret = OB_SUCCESS;
   int64_t start_file_id = 0;
@@ -299,7 +292,7 @@ int ObStorageLogger::remove_useless_log_file(const int64_t end_file_id, const ui
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     STORAGE_REDO_LOG(WARN, "slogger has not been inited", K(ret), K(is_inited_));
-  } else if (OB_FAIL(get_start_file_id(start_file_id, tenant_id))) {
+  } else if (OB_FAIL(get_start_file_id(start_file_id))) {
     STORAGE_REDO_LOG(ERROR, "Fail to get file id. ", K(ret), K(start_file_id));
   } else {
     for (; OB_SUCC(ret) && start_file_id < end_file_id; ++start_file_id) {
@@ -399,14 +392,14 @@ int ObStorageLogger::build_log_item(
   return ret;
 }
 
-int ObStorageLogger::get_start_file_id(int64_t &start_file_id, const uint64_t tenant_id)
+int ObStorageLogger::get_start_file_id(int64_t &start_file_id)
 {
   int ret = OB_SUCCESS;
   ObLogFileHandler file_handler;
   int64_t min_log_id = 0;
   int64_t max_log_id = 0;
 
-  if (OB_FAIL(file_handler.init(tnt_slog_dir_, 256 << 20/*file_size*/, tenant_id))) {
+  if (OB_FAIL(file_handler.init(tnt_slog_dir_, 256 << 20))) {
     STORAGE_REDO_LOG(WARN, "Fail to init log file handler.", K(ret));
   } else if (OB_FAIL(file_handler.get_file_id_range(min_log_id, max_log_id))
       && OB_ENTRY_NOT_EXIST != ret) {

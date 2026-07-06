@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_table_load_client_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/table_load/ob_table_load_client_task.h"
 #include "observer/table_load/ob_table_load_service.h"
 
@@ -42,7 +43,7 @@ int ObTableLoadClientService::alloc_task(ObTableLoadClientTask *&client_task)
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else if (OB_UNLIKELY(service->is_stop())) {
@@ -58,7 +59,7 @@ void ObTableLoadClientService::revert_task(ObTableLoadClientTask *client_task)
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else {
@@ -70,7 +71,7 @@ int ObTableLoadClientService::add_task(ObTableLoadClientTask *client_task)
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else if (OB_UNLIKELY(service->is_stop())) {
@@ -88,7 +89,7 @@ int ObTableLoadClientService::get_task(const ObTableLoadUniqueKey &key,
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else if (OB_UNLIKELY(service->is_stop())) {
@@ -105,7 +106,7 @@ int ObTableLoadClientService::get_task_brief(const ObTableLoadUniqueKey &key,
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else if (OB_UNLIKELY(service->is_stop())) {
@@ -126,7 +127,7 @@ void ObTableLoadClientService::revert_task_brief(ObTableLoadClientTaskBrief *cli
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else {

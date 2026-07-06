@@ -26,7 +26,7 @@
 
 namespace oceanbase {
 namespace common {
-int ObClusterVersion::get_tenant_data_version(const uint64_t tenant_id, uint64_t &data_version)
+int ObClusterVersion::get_tenant_data_version(uint64_t &data_version)
 {
   data_version = DATA_CURRENT_VERSION;
   return OB_SUCCESS;
@@ -38,7 +38,6 @@ void* ObMemstoreAllocator::alloc(AllocHandle& handle, int64_t size, const int64_
 {
   int ret = OB_SUCCESS;
   int64_t align_size = upper_align(size, sizeof(int64_t));
-  uint64_t tenant_id = arena_.get_tenant_id();
   bool is_out_of_mem = false;
   if (!handle.is_id_valid()) {
     COMMON_LOG(TRACE, "MTALLOC.first_alloc", KP(&handle.mt_));
@@ -108,14 +107,14 @@ ObTxNode::ObTxNode(const int64_t ls_id,
   addr_(addr),
   ls_id_(ls_id),
   tenant_id_(1001),
-  tenant_(tenant_id_, 0, 10, *GCTX.cgroup_ctrl_),
-  fake_part_trans_ctx_pool_(1001, false, false, 4),
+  tenant_(0, 10, *GCTX.cgroup_ctrl_),
+  fake_part_trans_ctx_pool_(false, false, 4),
   memtable_(NULL),
   msg_consumer_(get_identifer_str(),
                 &msg_queue_,
                 std::bind(&ObTxNode::handle_msg_,
                           this, std::placeholders::_1)),
-  t3m_(tenant_id_),
+  t3m_(),
   fake_rpc_(&msg_bus, addr, &get_location_adapter_()),
   lock_memtable_(),
   fake_tx_log_adapter_(nullptr)
@@ -125,12 +124,14 @@ ObTxNode::ObTxNode(const int64_t ls_id,
   msg_consumer_.set_name(name_);
   role_ = Leader;
   tenant_.enable_tenant_ctx_check_ = false;
-  tenant_.set(&fake_tenant_freezer_);
-  tenant_.set(&fake_part_trans_ctx_pool_);
+  provider_.tenant_freezer_ = &fake_tenant_freezer_;
+  provider_.part_trans_ctx_obj_pool_ = &fake_part_trans_ctx_pool_;
   fake_shared_mem_alloc_mgr_.init();
-  tenant_.set(&fake_shared_mem_alloc_mgr_);
+  provider_.shared_mem_alloc_mgr_ = &fake_shared_mem_alloc_mgr_;
+  share::g_mp = &provider_;
   tenant_.start();
   ObTenantEnv::set_tenant(&tenant_);
+  share::g_mp = &provider_;
   ObTableHandleV2 lock_memtable_handle;
   lock_memtable_handle.set_table(&lock_memtable_, &t3m_, ObITable::LOCK_MEMTABLE);
   lock_memtable_.key_.table_type_ = ObITable::LOCK_MEMTABLE;
@@ -152,14 +153,14 @@ ObTxNode::ObTxNode(const int64_t ls_id,
                &get_gti_source_(),
                &get_ts_mgr_(),
                &schema_service_));
-  tenant_.set(&txs_);
-  OZ(fake_opt_stat_mgr_.init(tenant_id_));
-  tenant_.set(&fake_opt_stat_mgr_);
+  provider_.trans_service_ = &txs_;
+  OZ(fake_opt_stat_mgr_.init());
+  provider_.opt_stat_monitor_manager_ = &fake_opt_stat_mgr_;
   OZ(fake_lock_wait_mgr_.init());
-  tenant_.set(&fake_lock_wait_mgr_);
+  provider_.lock_wait_mgr_ = &fake_lock_wait_mgr_;
   ls_service_.is_inited_ = true;
-  OZ(ls_service_.ls_map_.init(tenant_id_, lib::ObMallocAllocator::get_instance()));
-  tenant_.set(&ls_service_);
+  OZ(ls_service_.ls_map_.init(lib::ObMallocAllocator::get_instance()));
+  provider_.ls_service_ = &ls_service_;
   OZ (create_memtable_(100000, memtable_));
   {
     ObColDesc col_desc;
@@ -184,6 +185,7 @@ ObTxDescGuard ObTxNode::get_tx_guard() {
 int ObTxNode::start() {
   int ret = OB_SUCCESS;
   ObTenantEnv::set_tenant(&tenant_);
+  share::g_mp = &provider_;
 
   if (ObTxNodeRole::Leader == role_) {
     fake_tx_log_adapter_ = new ObFakeTxLogAdapter();
@@ -299,6 +301,7 @@ ObTxNode::~ObTxNode() __attribute__((optnone)) {
   int ret = OB_SUCCESS;
   TRANS_LOG(INFO, "destroy TxNode", KPC(this));
   ObTenantEnv::set_tenant(&tenant_);
+  share::g_mp = &provider_;
   OZ(txs_.tx_ctx_mgr_.revert_ls_tx_ctx_mgr(fake_tx_table_.tx_ctx_table_.ls_tx_ctx_mgr_));
   fake_tx_table_.tx_ctx_table_.ls_tx_ctx_mgr_ = nullptr;
   bool is_tx_clean = false;
@@ -359,8 +362,7 @@ int ObTxNode::create_memtable_(const int64_t tablet_id, memtable::ObMemtable *&m
 
 int ObTxNode::create_ls_(const ObLSID ls_id) {
   int ret = OB_SUCCESS;
-  OZ(txs_.tx_ctx_mgr_.create_ls(tenant_id_,
-                                ls_id,
+  OZ(txs_.tx_ctx_mgr_.create_ls(ls_id,
                                 &fake_tx_table_,
                                 &fake_lock_table_,
                                 *fake_ls_.get_tx_svr(),
@@ -372,7 +374,7 @@ int ObTxNode::create_ls_(const ObLSID ls_id) {
   fake_ls_.ls_meta_.ls_id_ = ls_id;
   fake_ls_.get_tx_svr()->online();
   fake_ls_.get_ref_mgr().inc(ObLSGetMod::TXSTORAGE_MOD);
-  MTL(ObLSService*)->ls_map_.add_ls(fake_ls_);
+  share::g_mp->ls_service()->ls_map_.add_ls(fake_ls_);
   return ret;
 }
 
@@ -380,7 +382,7 @@ int ObTxNode::drop_ls_(const ObLSID ls_id) {
   int ret = OB_SUCCESS;
   OZ(txs_.tx_ctx_mgr_.remove_ls(ls_id, true));
   get_location_adapter_().remove(ls_id);
-  OZ(MTL(ObLSService*)->ls_map_.del_ls(ls_id));
+  OZ(share::g_mp->ls_service()->ls_map_.del_ls(ls_id));
   return ret;
 }
 
@@ -388,6 +390,7 @@ int ObTxNode::recv_msg_callback_(TxMsgCallbackMsg &msg)
 {
   TRANS_LOG(INFO, "recv msg callback", K(msg), KPC(this));
   ObTenantEnv::set_tenant(&tenant_);
+  share::g_mp = &provider_;
   int ret = OB_SUCCESS;
   switch(msg.type_) {
   case TxMsgCallbackMsg::SAVEPOINT_ROLLBACK:
@@ -442,6 +445,7 @@ int ObTxNode::sync_recv_msg(const ObAddr &sender, ObString &m, ObString &resp)
 int ObTxNode::handle_msg_(MsgPack *pkt)
 {
   ObTenantEnv::set_tenant(&tenant_);
+  share::g_mp = &provider_;
   TRANS_LOG(INFO, "begin to handle_msg", "msg_ptr", OB_P(pkt->body_.ptr()), KPC(this));
   int ret = OB_SUCCESS;
   MsgInfo msg_info;
@@ -531,6 +535,7 @@ int ObTxNode::read(const ObTxReadSnapshot &snapshot,
   TRANS_LOG(INFO, "read", K(key), K(snapshot), KPC(this));
   int ret = OB_SUCCESS;
   ObTenantEnv::set_tenant(&tenant_);
+  share::g_mp = &provider_;
   ObStoreCtx read_store_ctx;
   read_store_ctx.ls_ = &fake_ls_;
   read_store_ctx.ls_id_ = ls_id_;
@@ -626,6 +631,7 @@ int ObTxNode::write(ObTxDesc &tx,
   TRANS_LOG(INFO, "write", K(key), K(value), K(snapshot), K(tx), KPC(this));
   int ret = OB_SUCCESS;
   ObTenantEnv::set_tenant(&tenant_);
+  share::g_mp = &provider_;
   ObStoreCtx write_store_ctx;
   auto iter = new ObTableStoreIterator();
   iter->reset();
@@ -693,6 +699,7 @@ int ObTxNode::write_begin(ObTxDesc &tx,
 {
   int ret = OB_SUCCESS;
   ObTenantEnv::set_tenant(&tenant_);
+  share::g_mp = &provider_;
   auto iter = new ObTableStoreIterator();
   iter->reset();
   ObITable *mtb = memtable_;
@@ -712,6 +719,7 @@ int ObTxNode::write_one_row(ObStoreCtx& write_store_ctx, const int64_t key, cons
 {
   int ret = OB_SUCCESS;
   ObTenantEnv::set_tenant(&tenant_);
+  share::g_mp = &provider_;
 
   ObArenaAllocator allocator;
   ObTableReadInfo read_info;
@@ -760,6 +768,7 @@ int ObTxNode::write_end(ObStoreCtx& write_store_ctx)
 {
   int ret = OB_SUCCESS;
   ObTenantEnv::set_tenant(&tenant_);
+  share::g_mp = &provider_;
 
   delete write_store_ctx.table_iter_;
   write_store_ctx.table_iter_ = nullptr;
@@ -774,6 +783,7 @@ int ObTxNode::replay(const void *buffer,
                      const int64_t ts_ns)
 {
   ObTenantEnv::set_tenant(&tenant_);
+  share::g_mp = &provider_;
   int ret = OB_SUCCESS;
   logservice::ObLogBaseHeader base_header;
   int64_t tmp_pos = 0;
@@ -785,7 +795,6 @@ int ObTxNode::replay(const void *buffer,
     log_scn.convert_for_tx(ts_ns);
     ObFakeTxReplayExecutor executor(&fake_ls_,
                                     ls_id_,
-                                    tenant_id_,
                                     fake_ls_.get_tx_svr(),
                                     lsn,
                                     log_scn,

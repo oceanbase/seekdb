@@ -68,10 +68,10 @@ ObDirectLoadMultipleHeapTableCompactor::ObDirectLoadMultipleHeapTableCompactor()
     is_stop_(false),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  index_scanners_.set_tenant_id(MTL_ID());
-  base_data_fragment_idxs_.set_tenant_id(MTL_ID());
-  data_fragments_.set_tenant_id(MTL_ID());
+  
+  
+  
+  
 }
 
 ObDirectLoadMultipleHeapTableCompactor::~ObDirectLoadMultipleHeapTableCompactor()

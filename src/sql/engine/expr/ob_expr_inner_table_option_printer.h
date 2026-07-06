@@ -29,10 +29,9 @@ class ObExprInnerTableOptionPrinter : public ObStringExprOperator
 public:
   explicit  ObExprInnerTableOptionPrinter(common::ObIAllocator &alloc);
   virtual ~ObExprInnerTableOptionPrinter();
-  virtual int calc_result_type3(ObExprResType &type,
+  virtual int calc_result_type2(ObExprResType &type,
                                 ObExprResType &type1,
                                 ObExprResType &type2,
-                                ObExprResType &type3,
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
@@ -49,10 +48,9 @@ class ObExprInnerTableSequenceGetter : public ObExprOperator
 public:
   explicit  ObExprInnerTableSequenceGetter(common::ObIAllocator &alloc);
   virtual ~ObExprInnerTableSequenceGetter();
-  virtual int calc_result_type3(ObExprResType &type,
+  virtual int calc_result_type2(ObExprResType &type,
                                 ObExprResType &type1,
                                 ObExprResType &type2,
-                                ObExprResType &type3,
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,

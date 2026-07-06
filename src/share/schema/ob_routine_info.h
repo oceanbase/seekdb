@@ -19,7 +19,8 @@
 #include "share/schema/ob_schema_struct.h"
 #include "common/object/ob_object.h"
 #include "lib/container/ob_fixed_array.h"
-#include "pl/ob_pl_type.h"
+#include "pl/ob_pl_integer_type.h"
+namespace oceanbase { namespace pl { class ObPLDataType; } }
 #include "ob_trigger_info.h"
 
 
@@ -47,7 +48,6 @@ enum ObParamExternType
   SP_EXTERN_PKGVAR_OR_TABCOL, // package.var%type or table.col%type
   SP_EXTERN_LOCAL_VAR,        // declare v number; function f return is v%type;
   SP_EXTERN_SYS_REFCURSOR,
-  SP_EXTERN_DBLINK,
 };
 
 enum ObRoutineParamInOut
@@ -133,7 +133,7 @@ public:
   virtual int find_param_by_name(const common::ObString &name, int64_t &position) const = 0;
   virtual int get_routine_param(int64_t position, ObIRoutineParam *&param) const = 0;
   virtual const ObIRoutineParam* get_ret_info() const = 0;
-  virtual uint64_t get_tenant_id() const = 0;
+  
   virtual uint64_t get_database_id() const = 0;
   virtual uint64_t get_package_id() const = 0;
   virtual void set_deterministic() = 0;
@@ -192,7 +192,7 @@ public:
   void reset();
   int64_t get_convert_size() const;
   //getter
-  OB_INLINE uint64_t get_tenant_id() const { return tenant_id_; }
+  
   OB_INLINE uint64_t get_routine_id() const { return routine_id_; }
   OB_INLINE int64_t get_sequence() const { return sequence_; }
   OB_INLINE int64_t get_subprogram_id() const { return subprogram_id_; }
@@ -211,7 +211,7 @@ public:
   OB_INLINE const common::ObIArray<common::ObString> &get_extended_type_info() const { return extended_type_info_; }
 
   //setter
-  OB_INLINE void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   OB_INLINE void set_routine_id(uint64_t routine_id) { routine_id_ = routine_id; }
   OB_INLINE void set_sequence(int64_t sequence) { sequence_ = sequence; }
   OB_INLINE void set_subprogram_id(int64_t subprogram_id) { subprogram_id_ = subprogram_id; }
@@ -293,47 +293,8 @@ public:
   {
     return static_cast<pl::ObPLIntegerType>((flag_ & SP_PARAM_INTEGER_MASK) >> 2);
   }
-  OB_INLINE pl::ObPLDataType get_pl_data_type() const
-  {
-    pl::ObPLDataType type;
-    if (is_pl_integer_type()) {
-      type.set_pl_integer_type(get_pl_integer_type(), get_param_type());
-      pl::ObPLIntegerType pls_type = type.get_pl_integer_type();
-      switch (pls_type) {
-        case pl::PL_PLS_INTEGER:
-        case pl::PL_BINARY_INTEGER:
-        case pl::PL_SIMPLE_INTEGER: {
-          type.set_range(-2147483648, 2147483647);
-          type.set_not_null(pl::PL_SIMPLE_INTEGER == pls_type);
-        }
-        break;
-        case pl::PL_NATURAL:
-        case pl::PL_NATURALN: {
-          type.set_range(0, 2147483647);
-          type.set_not_null(pl::PL_NATURALN == pls_type);
-        }
-        break;
-        case pl::PL_POSITIVE:
-        case pl::PL_POSITIVEN: {
-          type.set_range(1, 2147483647);
-          type.set_not_null(pl::PL_POSITIVEN == pls_type);
-        }
-        break;
-        case pl::PL_SIGNTYPE: {
-          type.set_range(-1, 1);
-        }
-        break;
-        default: // do nothing ...
-        break;
-      }
-    } else if (is_sys_refcursor_type()) {
-      type.set_type(pl::PL_REF_CURSOR_TYPE);
-      type.set_type_from(pl::PL_TYPE_SYS_REFCURSOR);
-    } else {
-      type.set_data_type(get_param_type());
-    }
-    return type;
-  }
+  // get_pl_data_type constructs by value in the body pl::ObPLDataType, moved definition to pl/ob_pl_type.cpp
+  pl::ObPLDataType get_pl_data_type() const;
   OB_INLINE bool is_schema_routine_param() const { return true; }
 
   virtual bool is_in_param() const { return is_in_sp_param(); }
@@ -364,7 +325,7 @@ public:
     flag_ = flag_ | SP_PARAM_SELF << 6;
   }
 
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(routine_id),
                K_(sequence),
                K_(subprogram_id),
@@ -380,7 +341,7 @@ public:
                K_(type_subname),
                K_(extended_type_info));
 private:
-  uint64_t tenant_id_;            //set by sys
+              //set by sys
   uint64_t routine_id_;           //set by sys
   int64_t sequence_;              //set by sys, current level index
   int64_t subprogram_id_;         //set by sys, 0 indicate standalone routine, others indicate pacakge routine index
@@ -419,7 +380,7 @@ public:
   int get_routine_param(int64_t idx, ObIRoutineParam*& param) const;
   const ObIRoutineParam* get_ret_info() const;
   // getter
-  OB_INLINE uint64_t get_tenant_id() const { return tenant_id_; }
+  
   OB_INLINE uint64_t get_database_id() const { return database_id_; }
   OB_INLINE uint64_t get_package_id() const { return package_id_; }
   OB_INLINE uint64_t get_owner_id() const { return owner_id_; }
@@ -446,7 +407,7 @@ public:
   OB_INLINE TgTimingEvent get_tg_timing_event() const { return tg_timing_event_; }
 
   // setter
-  OB_INLINE void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   OB_INLINE void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   OB_INLINE void set_package_id(uint64_t package_id) { package_id_ = package_id; }
   OB_INLINE void set_owner_id(int64_t owner_id) { owner_id_ = owner_id; }
@@ -584,8 +545,7 @@ public:
     return is_udt_routine() && SP_FLAG_STATIC == (flag_ & SP_FLAG_STATIC);
   }
 
-  TO_STRING_KV(K_(tenant_id),
-               K_(database_id),
+  TO_STRING_KV(K_(database_id),
                K_(package_id),
                K_(owner_id),
                K_(routine_id),
@@ -604,7 +564,7 @@ public:
                K_(type_id),
                K_(routine_params));
 private:
-  uint64_t tenant_id_;            //set by user,
+//set by user,
   uint64_t database_id_;          //set by sys,
   uint64_t package_id_;           //set by user,OB_INVALID_ID for standalone routine
   uint64_t owner_id_;             //set by user,
@@ -625,12 +585,8 @@ private:
   common::ObSEArray<ObRoutineParam *, 64> routine_params_;
   //set by user, for function, idx 0 param is ret type
   TgTimingEvent tg_timing_event_;
-  uint64_t dblink_id_;
-  common::ObString dblink_db_name_;
-  common::ObString dblink_pkg_name_;
 };
 }  // namespace schema
 }  // namespace share
 }  // namespace oceanbase
 #endif /* OCEANBASE_SRC_SHARE_SCHEMA_OB_ROUTINE_INFO_H_ */
-

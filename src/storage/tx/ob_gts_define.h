@@ -29,8 +29,6 @@ namespace oceanbase
 namespace transaction
 {
 
-typedef common::ObIntWarp ObTsTenantInfo;
-
 enum ObGTSCacheTaskType
 {
   INVALID_GTS_TASK_TYPE = -1,

@@ -18,10 +18,12 @@
 #define OCEANBASE_STORAGE_OB_META_OBJ_STRUCT_H_
 
 #include "common/log/ob_log_constants.h"
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/ob_define.h"
 #include "storage/meta_mem/ob_tenant_meta_obj_pool.h"
 #include "storage/blocksstable/ob_macro_block_handle.h"
+#include "storage/meta_mem/ob_i_storage_meta_obj.h"  // interfaces have been made layer-neutral(conf L2), backfill
 
 namespace oceanbase
 {
@@ -197,21 +199,13 @@ protected:
   ObTenantMetaMemMgr *t3m_;
 };
 
-class ObIStorageMetaObj
-{
-public:
-  ObIStorageMetaObj() = default;
-  virtual ~ObIStorageMetaObj() = default;
-  virtual int deep_copy(char *buf, const int64_t buf_len, ObIStorageMetaObj *&value) const = 0;
-  virtual int64_t get_deep_copy_size() const = 0;
-};
 
 template <typename T>
 ObMetaObj<T>::ObMetaObj()
   : pool_(nullptr),
     allocator_(nullptr),
     ptr_(nullptr),
-    t3m_(MTL(ObTenantMetaMemMgr*))
+    t3m_(share::g_mp->tenant_meta_mem_mgr())
 {
 }
 

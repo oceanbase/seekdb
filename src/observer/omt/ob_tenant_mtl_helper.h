@@ -25,7 +25,7 @@ template<class T>
 typename std::enable_if<std::is_pointer<T>::value, int>::type mtl_new_default(T &m)
 {
   int ret = oceanbase::common::OB_SUCCESS;
-  oceanbase::ObMemAttr attr(oceanbase::share::ObTenantEnv::get_tenant()->id(), oceanbase::ObModIds::OMT_TENANT);
+  oceanbase::ObMemAttr attr(oceanbase::ObModIds::OMT_TENANT);
   void *buf = oceanbase::ob_malloc(sizeof(typename std::remove_pointer<T>::type), attr);
   if (OB_ISNULL(buf)) {
     ret = oceanbase::common::OB_ALLOCATE_MEMORY_FAILED;

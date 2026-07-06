@@ -15,12 +15,12 @@
  */
 
 #include <gtest/gtest.h>
-#include "share/system_variable/ob_system_variable.h"
+#include "sql/session/ob_system_variable.h"
 #include "share/inner_table/ob_inner_table_schema.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_schema_utils.h"
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "lib/string/ob_sql_string.h"
 using namespace oceanbase::sql;
 

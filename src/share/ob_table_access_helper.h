@@ -20,8 +20,8 @@
 #include "common/ob_range.h"
 #include "lib/function/ob_function.h"
 #include "lib/list/ob_dlist.h"
-#include "lib/mysqlclient/ob_isql_client.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "lib/ob_define.h"
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_print_utils.h"
@@ -31,7 +31,7 @@
 #include "share/ob_errno.h"
 #include "share/ob_ls_id.h"
 #include "share/rc/ob_tenant_base.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 #include <cstdio>
 #include <cstring>
 #include <type_traits>
@@ -66,7 +66,7 @@ public:
     ObString str = arg_str.get_ob_string();
     if (OB_UNLIKELY(str.empty())) {
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(ERROR, "invalid argument", KR(ret), K(MTL_ID()), K(str), K(character));
+      OB_LOG(ERROR, "invalid argument", KR(ret), K(str), K(character));
     } else {
       const char *find_pos = nullptr;
       do {
@@ -75,21 +75,21 @@ public:
           ObString splited_str = str.split_on(find_pos);
           if (splited_str.empty()) {
             ret = OB_ERR_UNEXPECTED;
-            OB_LOG(ERROR, "split str failed, not expected", KR(ret), K(MTL_ID()), K(str), K(character));
+            OB_LOG(ERROR, "split str failed, not expected", KR(ret), K(str), K(character));
           } else {
             if (CLICK_FAIL(result.push_back(ObStringHolder()))) {
-              OB_LOG(WARN, "push back string to array failed", KR(ret), K(MTL_ID()), K(str), K(character));
+              OB_LOG(WARN, "push back string to array failed", KR(ret), K(str), K(character));
             } else if (CLICK_FAIL(result.at(result.count() - 1).assign(splited_str))) {
-              OB_LOG(WARN, "create string holder failed", KR(ret), K(MTL_ID()), K(str), K(character));
+              OB_LOG(WARN, "create string holder failed", KR(ret), K(str), K(character));
             }
           }
         }
       } while(OB_SUCC(ret) && OB_NOT_NULL(find_pos));
       if (OB_SUCC(ret) && OB_ISNULL(find_pos)) {
         if (CLICK_FAIL(result.push_back(ObStringHolder()))) {
-          OB_LOG(WARN, "push back final str to array failed", KR(ret), K(MTL_ID()), K(str), K(character));
+          OB_LOG(WARN, "push back final str to array failed", KR(ret), K(str), K(character));
         } else if (CLICK_FAIL(result.at(result.count() - 1).assign(str))) {
-          OB_LOG(WARN, "create string holder failed", KR(ret), K(MTL_ID()), K(str), K(character));
+          OB_LOG(WARN, "create string holder failed", KR(ret), K(str), K(character));
         }
       }
     }
@@ -116,7 +116,7 @@ public:
                                         T &&...strs)
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
-    #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(begin), K(end), K(connect_str)
+    #define PRINT_WRAPPER KR(ret), K(begin), K(end), K(connect_str)
     int ret = OB_SUCCESS;
     int64_t pos = 0;
     if (CLICK_FAIL(databuff_printf(buffer, len, pos, begin))) {
@@ -138,7 +138,7 @@ public:
                                               const ObIArray<T> &array)
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
-    #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(begin), K(end), K(connect_str)
+    #define PRINT_WRAPPER KR(ret), K(begin), K(end), K(connect_str)
     int ret = OB_SUCCESS;
     int64_t pos = 0;
     if (CLICK_FAIL(databuff_printf(buffer, len, pos, begin))) {
@@ -153,7 +153,7 @@ public:
   }
   // Get single line information
   template <int N, typename ...T>
-  static int read_single_row(const uint64_t tenant_id,
+  static int read_single_row(
                              const char* (&columns)[N],
                              const ObString &table,
                              const ObString &where_condition,
@@ -161,7 +161,7 @@ public:
   {
     static_assert(N > 0, "columns size must greater than 0");
     static_assert(sizeof...(T) == N, "number of value size must equal than N");
-    return read_and_convert_to_values_(tenant_id,
+    return read_and_convert_to_values_(
                                        columns,
                                        N,
                                        table,
@@ -169,13 +169,13 @@ public:
                                        values...);
   }
   template <typename ...T>
-  static int read_single_row(const uint64_t tenant_id,
+  static int read_single_row(
                              const std::initializer_list<const char *> &columns,
                              const ObString &table,
                              const ObString &where_condition,
                              T &...values)
   {
-    #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(table), K(where_condition)
+    #define PRINT_WRAPPER KR(ret), K(table), K(where_condition)
     int ret = OB_SUCCESS;
     if (columns.size() != sizeof...(T)) {
       ret = OB_SIZE_OVERFLOW;
@@ -186,7 +186,7 @@ public:
       for (int64_t idx = 0; iter != std::end(columns); ++idx && ++iter) {
         columns_array[idx] = *iter;
       }
-      if (OB_FAIL(read_and_convert_to_values_(tenant_id,
+      if (OB_FAIL(read_and_convert_to_values_(
                                               columns_array,
                                               columns.size(),
                                               table,
@@ -200,7 +200,7 @@ public:
   }
   // Get multi-line information
   template <int N, typename ...T>
-  static int read_multi_row(const uint64_t tenant_id,
+  static int read_multi_row(
                             const char* (&columns)[N],
                             const ObString &table,
                             const ObString &condition,
@@ -208,7 +208,7 @@ public:
   {
     static_assert(N > 0, "columns size must greater than 0");
     static_assert(sizeof...(T) == N, "number of value size must equal than N");
-    return read_and_convert_to_tuples_(tenant_id,
+    return read_and_convert_to_tuples_(
                                        columns,
                                        N,
                                        table,
@@ -216,13 +216,13 @@ public:
                                        output_array);
   }
   template <typename ...T>
-  static int read_multi_row(const uint64_t tenant_id,
+  static int read_multi_row(
                             const std::initializer_list<const char *> &columns,
                             const ObString &table,
                             const ObString &condition,
                             common::ObIArray<ObTuple<T...>> &output_array)
   {
-    #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(table), K(condition)
+    #define PRINT_WRAPPER KR(ret), K(table), K(condition)
     int ret = OB_SUCCESS;
     if (columns.size() != sizeof...(T)) {
       ret = OB_SIZE_OVERFLOW;
@@ -233,7 +233,7 @@ public:
       for (int64_t idx = 0; iter != std::end(columns); ++idx && ++iter) {
         columns_array[idx] = *iter;
       }
-      if (OB_FAIL(read_and_convert_to_tuples_(tenant_id,
+      if (OB_FAIL(read_and_convert_to_tuples_(
                                               columns_array,
                                               columns.size(),
                                               table,
@@ -245,12 +245,11 @@ public:
     return ret;
     #undef PRINT_WRAPPER
   }
-  static int insert_row(const uint64_t tenant_id,
-                        const ObString &table,
+  static int insert_row(const ObString &table,
                         const ObString &value)
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
-    #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(table), K(value), K(sql)
+    #define PRINT_WRAPPER KR(ret), K(table), K(value), K(sql)
     int ret = OB_SUCCESS;
     ObSqlString sql;
     int64_t affected_rows = 0;
@@ -267,7 +266,7 @@ public:
     } else if (OB_ISNULL(GCTX.sql_proxy_)) {
       ret = OB_ERR_UNEXPECTED;
       OB_LOG_(WARN, "GCTX.sql_proxy_ is nullptr");
-    } else if (CLICK_FAIL(GCTX.sql_proxy_->write(tenant_id, sql.ptr(), affected_rows))) {
+    } else if (CLICK_FAIL(GCTX.sql_proxy_->write(sql.ptr(), affected_rows))) {
       OB_LOG_(WARN, "GCTX.sql_proxy_ insert row failed");
     } else {
       OB_LOG_(INFO, "GCTX.sql_proxy_ insert row success");
@@ -276,13 +275,13 @@ public:
     #undef PRINT_WRAPPER
   }
   template <int N, typename ...T>
-  static int insert_row(const uint64_t write_tenant,
+  static int insert_row(
                         const ObString &table,
                         const char* (&columns)[N],
                         T &&...value)
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
-    #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(table), K(sql)
+    #define PRINT_WRAPPER KR(ret), K(table), K(sql)
     int ret = OB_SUCCESS;
     ObSqlString sql;
     int64_t affected_rows = 0;
@@ -308,7 +307,7 @@ public:
     } else if (OB_ISNULL(GCTX.sql_proxy_)) {
       ret = OB_ERR_UNEXPECTED;
       OB_LOG_(WARN, "GCTX.sql_proxy_ is nullptr");
-    } else if (CLICK_FAIL(GCTX.sql_proxy_->write(write_tenant, sql.ptr(), affected_rows))) {
+    } else if (CLICK_FAIL(GCTX.sql_proxy_->write(sql.ptr(), affected_rows))) {
       OB_LOG_(WARN, "GCTX.sql_proxy_ insert row failed");
     } else {
       OB_LOG_(INFO, "GCTX.sql_proxy_ insert row success");
@@ -317,12 +316,11 @@ public:
     #undef PRINT_WRAPPER
   }
 
-  static int delete_row(const uint64_t tenant_id,
-                        const ObString &table,
+  static int delete_row(const ObString &table,
                         const ObString &value)
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
-    #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(table), K(value), K(sql)
+    #define PRINT_WRAPPER KR(ret), K(table), K(value), K(sql)
     int ret = OB_SUCCESS;
     ObSqlString sql;
     int64_t affected_rows = 0;
@@ -337,7 +335,7 @@ public:
     } else if (OB_ISNULL(GCTX.sql_proxy_)) {
       ret = OB_ERR_UNEXPECTED;
       OB_LOG_(WARN, "GCTX.sql_proxy_ is nullptr");
-    } else if (CLICK_FAIL(GCTX.sql_proxy_->write(tenant_id, sql.ptr(), affected_rows))) {
+    } else if (CLICK_FAIL(GCTX.sql_proxy_->write(sql.ptr(), affected_rows))) {
       OB_LOG_(WARN, "GCTX.sql_proxy_ delete row failed");
     } else {
       OB_LOG_(INFO, "GCTX.sql_proxy_ delete row success");
@@ -349,7 +347,7 @@ public:
   static int set_parameter(const ObString &value)
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
-    #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(value), K(sql)
+    #define PRINT_WRAPPER KR(ret), K(value), K(sql)
     int ret = OB_SUCCESS;
     ObSqlString sql;
     int64_t affected_rows = 0;
@@ -362,7 +360,7 @@ public:
     } else if (OB_ISNULL(GCTX.sql_proxy_)) {
       ret = OB_ERR_UNEXPECTED;
       OB_LOG_(WARN, "GCTX.sql_proxy_ is nullptr");
-    } else if (CLICK_FAIL(GCTX.sql_proxy_->write(MTL_ID(), sql.ptr(), affected_rows))) {
+    } else if (CLICK_FAIL(GCTX.sql_proxy_->write(sql.ptr(), affected_rows))) {
       OB_LOG_(WARN, "GCTX.sql_proxy_ execute alter system failed");
     } else {
       OB_LOG_(INFO, "GCTX.sql_proxy_ execute alter system success");
@@ -372,7 +370,7 @@ public:
   }
 private:
   template <typename ...T>
-  static int read_and_convert_to_values_(const uint64_t tenant_id,
+  static int read_and_convert_to_values_(
                                          const char **columns,
                                          const int64_t culumn_size,
                                          const ObString &table,
@@ -380,7 +378,7 @@ private:
                                          T &...values)
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
-    #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(table), K(condition)
+    #define PRINT_WRAPPER KR(ret), K(table), K(condition)
     int ret = common::OB_SUCCESS; 
     if (OB_ISNULL(GCTX.sql_proxy_)) {
       ret = OB_NULL_CHECK_ERROR;
@@ -388,7 +386,7 @@ private:
     } else {
       HEAP_VAR(ObMySQLProxy::MySQLResult, res) {
         common::sqlclient::ObMySQLResult *result = nullptr;
-        if (OB_FAIL(get_my_sql_result_(columns, culumn_size, table, condition, *GCTX.sql_proxy_, tenant_id, res, result))) {
+        if (OB_FAIL(get_my_sql_result_(columns, culumn_size, table, condition, *GCTX.sql_proxy_, res, result))) {
           OB_LOG_(WARN, "fail to get ObMySQLResult");
         } else if (OB_NOT_NULL(result)) {
           int64_t iter_times = 0;
@@ -420,7 +418,7 @@ private:
     #undef PRINT_WRAPPER
   }
   template <typename ...T>
-  static int read_and_convert_to_tuples_(const uint64_t tenant_id,
+  static int read_and_convert_to_tuples_(
                                          const char **columns,
                                          const int64_t culumn_size,
                                          const ObString &table,
@@ -428,7 +426,7 @@ private:
                                          common::ObIArray<ObTuple<T...>> &output_array)
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
-    #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(table), K(condition)
+    #define PRINT_WRAPPER KR(ret), K(table), K(condition)
     int ret = common::OB_SUCCESS;
     if (OB_ISNULL(GCTX.sql_proxy_)) {
       ret = OB_NULL_CHECK_ERROR;
@@ -436,7 +434,7 @@ private:
     } else {
       HEAP_VAR(ObMySQLProxy::MySQLResult, res) {
         common::sqlclient::ObMySQLResult *result = nullptr;
-        if (OB_FAIL(get_my_sql_result_(columns, culumn_size, table, condition, *GCTX.sql_proxy_, tenant_id, res, result))) {
+        if (OB_FAIL(get_my_sql_result_(columns, culumn_size, table, condition, *GCTX.sql_proxy_, res, result))) {
           OB_LOG_(WARN, "fail to get ObMySQLResult");
         } else if (OB_NOT_NULL(result)) {
           int64_t iter_times = 0;
@@ -468,12 +466,11 @@ private:
                                 const ObString &table,
                                 const ObString &condition,
                                 ObISQLClient &proxy,
-                                const uint64_t tenant_id,
                                 ObMySQLProxy::MySQLResult &res,
                                 common::sqlclient::ObMySQLResult *&result)
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
-    #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(tenant_id), K(columns), K(table), K(condition), K(sql), K(columns_str)
+    #define PRINT_WRAPPER KR(ret), K(columns), K(table), K(condition), K(sql), K(columns_str)
     int ret = OB_SUCCESS;
     ObSqlString sql;
     char columns_str[STACK_BUFFER_SIZE] = {0};
@@ -501,7 +498,7 @@ private:
         OB_LOG_(WARN, "failed to convert condition");
       } else if (CLICK_FAIL(sql.append_fmt("SELECT %s FROM %s %s", columns_str, table_str, condition_str))) {
         OB_LOG_(WARN, "failed to append sql");
-      } else if (CLICK_FAIL(proxy.read(res, tenant_id, sql.ptr()))) {
+      } else if (CLICK_FAIL(proxy.read(res, sql.ptr()))) {
         OB_LOG_(WARN, "GCTX.sql_proxy_ read failed");
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -519,7 +516,7 @@ private:
                           T &&str)
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
-    #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(connect_str), K(str)
+    #define PRINT_WRAPPER KR(ret), K(connect_str), K(str)
     int ret = OB_SUCCESS;
     if (CLICK_FAIL(databuff_printf(buffer, len, pos, str))) {
       OB_LOG_(WARN, "databuff_printf string failed");
@@ -553,7 +550,7 @@ private:
                           Rest &&...strs)
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
-    #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(connect_str), K(str)
+    #define PRINT_WRAPPER KR(ret), K(connect_str), K(str)
     int ret = OB_SUCCESS;
     if (CLICK_FAIL(databuff_printf(buffer, len, pos, str))) {
       OB_LOG_(WARN, "databuff_printf string failed");
@@ -573,7 +570,7 @@ private:
                           const ObIArray<T> &array)
   {
     TIMEGUARD_INIT(OCCAM, 1_s);
-    #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(connect_str), K(array), K(i)
+    #define PRINT_WRAPPER KR(ret), K(connect_str), K(array), K(i)
     int ret = OB_SUCCESS;
     for (int i = 0; i < array.count() && OB_SUCC(ret); ++i) {
       if (CLICK_FAIL(databuff_printf(buffer, len, pos, array.at(i)))) {
@@ -595,10 +592,10 @@ private:
     int ret = common::OB_SUCCESS;
     int64_t value = 0;
     if (CLICK_FAIL(row->get_int(column, value))) {
-      OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(MTL_ID()), K(column));
+      OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(column));
     } else {
       ls_id = share::ObLSID(value);
-      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(MTL_ID()), K(column), K(value));
+      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(column), K(value));
     }
     return ret;
   }
@@ -610,10 +607,10 @@ private:
     int ret = common::OB_SUCCESS;
     int64_t value = 0;
     if (CLICK_FAIL(row->get_int(column, value))) {
-      OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(MTL_ID()), K(column));
+      OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(column));
     } else {
       tablet_id = common::ObTabletID(value);
-      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(MTL_ID()), K(column), K(value));
+      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(column), K(value));
     }
     return ret;
   }
@@ -624,9 +621,9 @@ private:
     TIMEGUARD_INIT(OCCAM, 1_s);
     int ret = common::OB_SUCCESS;
     if (CLICK_FAIL(row->get_int(column, value))) {
-      OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(MTL_ID()), K(column));
+      OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(column));
     } else {
-      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(MTL_ID()), K(column), K(value));
+      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(column), K(value));
     }
     return ret;
   }
@@ -637,9 +634,9 @@ private:
     TIMEGUARD_INIT(OCCAM, 1_s);
     int ret = common::OB_SUCCESS;
     if (CLICK_FAIL(row->get_uint(column, value))) {
-      OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(MTL_ID()), K(column));
+      OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(column));
     } else {
-      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(MTL_ID()), K(column), K(value));
+      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(column), K(value));
     }
     return ret;
   }
@@ -651,9 +648,9 @@ private:
     int ret = common::OB_SUCCESS;
     ObString temp_str;
     if (CLICK_FAIL(row->get_varchar(column, temp_str))) {
-      OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(MTL_ID()), K(column));
+      OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(column));
     } else if (CLICK_FAIL(value.assign(temp_str))) {
-      OB_LOG(WARN, "create ObStringHolder success", KR(ret), K(MTL_ID()), K(column));
+      OB_LOG(WARN, "create ObStringHolder success", KR(ret), K(column));
     }
     return ret;
   }
@@ -664,9 +661,9 @@ private:
     TIMEGUARD_INIT(OCCAM, 1_s);
     int ret = common::OB_SUCCESS;
     if (CLICK_FAIL(row->get_bool(column, value))) {
-      OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(MTL_ID()), K(column));
+      OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(column));
     } else {
-      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(MTL_ID()), K(column), K(value));
+      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(column), K(value));
     }
     return ret;
   }
@@ -688,11 +685,11 @@ private:
     TIMEGUARD_INIT(OCCAM, 1_s);
     int ret = common::OB_SUCCESS;
     if (CLICK_FAIL(get_signle_column_from_signle_row_(row, columns[FLOOR], value))) {
-      OB_LOG(WARN, "get value failed", KR(ret), K(MTL_ID()), K(FLOOR), K(columns[FLOOR]));
+      OB_LOG(WARN, "get value failed", KR(ret), K(FLOOR), K(columns[FLOOR]));
     } else if (CLICK_FAIL(get_values_from_row_<FLOOR + 1>(row, columns, others...))) {
-      OB_LOG(WARN, "get others value failed", KR(ret), K(MTL_ID()), K(FLOOR), K(columns[FLOOR]));
+      OB_LOG(WARN, "get others value failed", KR(ret), K(FLOOR), K(columns[FLOOR]));
     } else {
-      OB_LOG(TRACE, "get value success", KR(ret), K(MTL_ID()), K(FLOOR), K(columns[FLOOR]), K(value));// DUBUG
+      OB_LOG(TRACE, "get value success", KR(ret), K(FLOOR), K(columns[FLOOR]), K(value));// DUBUG
     }
     return ret;
   }
@@ -711,7 +708,7 @@ private:
       static_assert(FLOOR > 0 && FLOOR <= sizeof...(T), "unexpected compile error");
       int ret = common::OB_SUCCESS;
       if (CLICK_FAIL(get_signle_column_from_signle_row_(row, columns[FLOOR], std::get<FLOOR>(tuple.tuple())))) {
-        OB_LOG(WARN, "get value failed", KR(ret), K(MTL_ID()), K(columns[FLOOR]));
+        OB_LOG(WARN, "get value failed", KR(ret), K(columns[FLOOR]));
       } else {
         ret = AccessHelper<FLOOR - 1, T...>::get_values_to_tuple_from_row(row, columns, tuple);
       }
@@ -730,7 +727,7 @@ private:
       TIMEGUARD_INIT(OCCAM, 1_s);
       int ret = common::OB_SUCCESS;
       if (CLICK_FAIL(get_signle_column_from_signle_row_(row, columns[0], std::get<0>(tuple.tuple())))) {
-        OB_LOG(WARN, "get value failed", KR(ret), K(MTL_ID()), K(columns[0]));
+        OB_LOG(WARN, "get value failed", KR(ret), K(columns[0]));
       }
       return ret;
     }

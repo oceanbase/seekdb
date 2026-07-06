@@ -192,7 +192,7 @@ public:
   virtual bool check_disk_space_enough() = 0;
   virtual int64_t get_rebuild_replica_log_lag_threshold() const = 0;
   virtual int get_io_start_time(int64_t &last_working_time) = 0;
-  virtual int64_t get_tenant_id() = 0;
+  
   // should be removed in version 4.2.0.0
   virtual int update_replayable_point(const SCN &replayable_scn) = 0;
   virtual int get_throttling_options(PalfThrottleOptions &option) = 0;
@@ -213,7 +213,6 @@ public:
            const char *base_dir,
            const common::ObAddr &self,
            const int64_t cluster_id,
-           const int64_t tenant_id,
            common::ObILogAllocator *alloc_mgr,
            ILogBlockPool *log_block_pool,
            PalfMonitorCb *monitor,
@@ -265,7 +264,7 @@ public:
   int for_each(const common::ObFunction<int(IPalfHandleImpl *ipalf_handle_impl)> &func) override final;
   common::ObILogAllocator* get_log_allocator() override final;
   int get_io_start_time(int64_t &last_working_time) override final;
-  int64_t get_tenant_id() override final;
+  
   int update_replayable_point(const SCN &replayable_scn) override final;
   int get_throttling_options(PalfThrottleOptions &option);
   void period_calc_disk_usage() override final;
@@ -322,7 +321,6 @@ private:
   int remove_stale_incomplete_palf_();
 
   int init_log_io_worker_config_(const int log_writer_parallelism,
-                                 const int64_t tenant_id,
                                  LogIOWorkerConfig &config);
 
   int check_can_update_log_disk_options_(const PalfDiskOptions &disk_options);
@@ -361,7 +359,7 @@ private:
 
   LogIOWorkerConfig log_io_worker_config_;
   bool diskspace_enough_;
-  int64_t tenant_id_;
+  
   LogIOAdapter io_adapter_;
   bool is_inited_;
   bool is_running_;

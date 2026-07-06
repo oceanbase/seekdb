@@ -59,7 +59,7 @@ public:
   {
     reset();
   }
-  int init(const int64_t tenant_id, const share::ObLSID ls_id, const ObTransID tx_id);
+  int init(const share::ObLSID ls_id, const ObTransID tx_id);
   void reset();
   void destroy();
 
@@ -119,7 +119,6 @@ private:
   ObTxBufferNodeArray final_notify_array_; 
 
 #ifdef ENABLE_DEBUG_LOG
-  int64_t tenant_id_;
   share::ObLSID ls_id_;
   ObTransID  tx_id_;
 

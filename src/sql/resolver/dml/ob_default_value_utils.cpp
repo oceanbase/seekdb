@@ -1098,19 +1098,13 @@ int ObDefaultValueUtils::build_nullable_expr(const ColumnItem *column, ObRawExpr
 int ObDefaultValueUtils::build_default_expr_for_generated_column(const ColumnItem &column, ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
-  bool contain = false;
   if (OB_ISNULL(column.expr_) || OB_ISNULL(stmt_) || OB_ISNULL(params_)
       || OB_ISNULL(params_->expr_factory_) || OB_ISNULL(column.expr_->get_dependant_expr())) {
     ret = OB_NOT_INIT;
     LOG_WARN("column expr is null", K_(column.expr), K_(stmt));
-  } else if (OB_FAIL(ObResolverUtils::cnt_external_pseudo_column(*column.expr_->get_dependant_expr(), contain))) {
-    LOG_WARN("failed to check if contain external pseudo column", K(ret));
-    // Generated column contains pseudo columns  default value is null
-  } else if (contain && OB_FAIL(ObRawExprUtils::build_null_expr(*params_->expr_factory_, expr))) {
-    LOG_WARN("fail to build null expr", K(ret));
-  } else if (!contain && OB_FAIL(ObDMLResolver::copy_schema_expr(*params_->expr_factory_,
-                                                                 column.expr_->get_dependant_expr(),
-                                                                 expr))) {
+  } else if (OB_FAIL(ObDMLResolver::copy_schema_expr(*params_->expr_factory_,
+                                                     column.expr_->get_dependant_expr(),
+                                                     expr))) {
     LOG_WARN("failed to copy dependant expr", K(ret));
   }
   return ret;
@@ -1137,20 +1131,19 @@ int ObDefaultValueUtils::build_default_expr_for_identity_column(const ColumnItem
     ret = OB_NOT_INIT;
     LOG_WARN("column expr is null", K(column.expr_), K(stmt_), K(params_), K(ret));
   } else {
-    uint64_t tenant_id = params_->session_info_->get_effective_tenant_id();
+    
     const ObColumnSchemaV2 *column_schema = NULL;
     const ObSequenceSchema *sequence_schema = NULL;
     const ObString dummy_db_name;
     uint64_t sequence_id;
-    bool is_link = ObSqlSchemaGuard::is_link_table(stmt_, column.table_id_);
-    if (OB_FAIL(params_->schema_checker_->get_column_schema(tenant_id,
-                column.base_tid_, column.base_cid_, column_schema, is_link))) {
+    if (OB_FAIL(params_->schema_checker_->get_column_schema(
+                column.base_tid_, column.base_cid_, column_schema))) {
       LOG_WARN("get column schema fail", K(ret));
     } else {
       sequence_id = column_schema->get_sequence_id();
       const ObString seq_oper("NEXTVAL");
       if (OB_FAIL(params_->schema_checker_->get_schema_guard()->get_sequence_schema
-                      (tenant_id, sequence_id, sequence_schema))) {
+                      ( sequence_id, sequence_schema))) {
         LOG_WARN("get column schema fail", K(ret));
       } else if (OB_FAIL(ObRawExprUtils::build_seq_nextval_expr(
                   expr, resolver_->session_info_, resolver_->params_.expr_factory_, dummy_db_name,

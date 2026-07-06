@@ -21,7 +21,7 @@
 #include "lib/utility/ob_unify_serialize.h" // NEED_SERIALIZE_AND_DESERIALIZE
 #include "lib/container/ob_se_array.h"
 #include "lib/utility/ob_print_utils.h" // TO_STRING_KV
-#include "lib/mysqlclient/ob_mysql_proxy.h" // ObMySQLProxy
+#include "common/mysqlclient/ob_mysql_proxy.h" // ObMySQLProxy
 #include "share/scn.h"
 
 
@@ -76,14 +76,13 @@ public:
   ~ObDataDictMetaInfoHeader();
   void reset();
   int generate(
-      const uint64_t tenant_id,
       const int32_t item_cnt,
       const uint64_t max_snapshot_scn,
       const uint64_t min_snapshot_scn,
       const char *data,
       const int64_t data_size);
 
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   OB_INLINE int16_t get_meta_version() const {
     return meta_version_;
   }
@@ -103,7 +102,7 @@ public:
   bool check_integrity(const char *data, const int64_t data_size) const;
 
   bool operator==(const ObDataDictMetaInfoHeader& that) const {
-    return magic_ == that.magic_ && meta_version_ == that.meta_version_ && tenant_id_ == that.tenant_id_ &&
+    return magic_ == that.magic_ && meta_version_ == that.meta_version_ &&
         item_cnt_ == that.item_cnt_ && min_snapshot_scn_ == that.min_snapshot_scn_ &&
         max_snapshot_scn_ == that.max_snapshot_scn_ && data_size_ == that.data_size_ &&
         checksum_ == that.checksum_;
@@ -113,7 +112,6 @@ public:
 
   TO_STRING_KV(K_(magic),
                K_(meta_version),
-               K_(tenant_id),
                K_(item_cnt),
                K_(min_snapshot_scn),
                K_(max_snapshot_scn),
@@ -122,7 +120,7 @@ public:
 private:
   int16_t   magic_;
   int16_t   meta_version_;
-  uint64_t  tenant_id_;
+  
   int32_t   item_cnt_;
   uint64_t  min_snapshot_scn_;
   uint64_t  max_snapshot_scn_;
@@ -147,7 +145,7 @@ public:
     return header_.get_meta_version();
   }
 
-  uint64_t get_tenant_id() const { return header_.get_tenant_id(); }
+  
 
   const ObDataDictMetaInfoHeader& get_header() const {
     return header_;
@@ -170,9 +168,8 @@ class MetaInfoQueryHelper {
   static const char *QUERY_META_INFO_SQL_STR;
   static const char *DATA_DICT_META_TABLE_NAME;
 public:
-  explicit MetaInfoQueryHelper(common::ObMySQLProxy &sql_proxy, uint64_t tenant_id) :
-      sql_proxy_(sql_proxy),
-      tenant_id_(tenant_id) {}
+  explicit MetaInfoQueryHelper(common::ObMySQLProxy &sql_proxy) :
+      sql_proxy_(sql_proxy) {}
 
   int get_data(
       const share::SCN &base_scn,
@@ -204,7 +201,7 @@ private:
 
 private:
   common::ObMySQLProxy &sql_proxy_;
-  uint64_t tenant_id_;
+  
 };
 
 }

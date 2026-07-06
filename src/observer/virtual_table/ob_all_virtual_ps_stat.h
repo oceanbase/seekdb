@@ -37,7 +37,7 @@ public:
   virtual int inner_get_next_row() override;
   virtual int inner_open() override;
 private:
-  int fill_cells(sql::ObPsCache &ps_cache, uint64_t tenant_id);
+  int fill_cells(sql::ObPsCache &ps_cache);
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualPsStat);
 };
 

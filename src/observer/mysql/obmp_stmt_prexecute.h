@@ -135,10 +135,6 @@ protected:
             || sql::stmt::T_CALL_PROCEDURE == stmt_type;
   }
 
-  virtual void set_proxy_version(uint64_t v)
-  { ObMPBase::set_proxy_version(v); }
-  virtual uint64_t get_proxy_version()
-  { return ObMPBase::get_proxy_version(); }
   virtual bool is_prexecute() const { return true; }
 
 private:

@@ -90,16 +90,15 @@ public:
   }
   static int64_t get_max_col_count() { return ITER_POOL_MAX_COL_CNT_LIMIT; }
   static const int64_t ITER_POOL_ITER_MEM_LIMIT = 256L << 10; // 256K
-  TO_STRING_KV(K_(is_inited), K_(is_washing), K_(is_disabled), K_(get_cnt), K_(tenant_id), K_(bucket_cnt),
+  TO_STRING_KV(K_(is_inited), K_(is_washing), K_(is_disabled), K_(get_cnt), K_(bucket_cnt),
                K_(tenant_mem_user_limit), K_(tenant_mem_user_hold), KP_(cached_node_array));
 private:
   OB_INLINE bool check_need_iterator_pool()
   {
-    bool need = is_not_virtual_tenant_id(tenant_id_) &&
-                !is_meta_tenant(tenant_id_);
+    bool need = true;
     if (need) {
-      tenant_mem_user_limit_ = lib::get_tenant_memory_limit(tenant_id_);
-      tenant_mem_user_hold_ = lib::get_tenant_memory_hold(tenant_id_);
+      tenant_mem_user_limit_ = lib::get_tenant_memory_limit();
+      tenant_mem_user_hold_ = lib::get_tenant_memory_hold();
       need = tenant_mem_user_limit_ > ITER_POOL_TENANT_MIN_MEM_THRESHOLD;
     }
     return need;
@@ -134,7 +133,6 @@ private:
   bool is_washing_;
   bool is_disabled_;
   uint64_t get_cnt_;
-  uint64_t tenant_id_;
   int64_t bucket_cnt_;
   int64_t tenant_mem_user_limit_;
   int64_t tenant_mem_user_hold_;

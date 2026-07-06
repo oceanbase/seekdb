@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_ls_info.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -38,34 +39,9 @@ ObAllVirtualLSInfo::~ObAllVirtualLSInfo()
 
 void ObAllVirtualLSInfo::reset()
 {
-  // Note that cross-tenant resources must be released by ObMultiTenantOperator, therefore it must be called first
-  omt::ObMultiTenantOperator::reset();
+  ls_iter_guard_.reset();
   addr_.reset();
   ObVirtualTableScannerIterator::reset();
-}
-
-void ObAllVirtualLSInfo::release_last_tenant()
-{
-  ls_iter_guard_.reset();
-}
-
-int ObAllVirtualLSInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    if (OB_ITER_END != ret) {
-      SERVER_LOG(WARN, "execute fail", KR(ret));
-    }
-  }
-  return ret;
-}
-
-bool ObAllVirtualLSInfo::is_need_process(uint64_t tenant_id)
-{
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
-    return true;
-  }
-  return false;
 }
 
 int ObAllVirtualLSInfo::next_ls_info_(ObLSVTInfo &ls_info)
@@ -90,7 +66,7 @@ int ObAllVirtualLSInfo::next_ls_info_(ObLSVTInfo &ls_info)
   return ret;
 }
 
-int ObAllVirtualLSInfo::process_curr_tenant(ObNewRow *&row)
+int ObAllVirtualLSInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObLSVTInfo ls_info;
@@ -98,7 +74,7 @@ int ObAllVirtualLSInfo::process_curr_tenant(ObNewRow *&row)
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
-  } else if (ls_iter_guard_.get_ptr() == nullptr && OB_FAIL(MTL(ObLSService*)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+  } else if (ls_iter_guard_.get_ptr() == nullptr && OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
     SERVER_LOG(WARN, "get_ls_iter fail", K(ret));
   } else if (OB_FAIL(next_ls_info_(ls_info))) {
     if (OB_ITER_END != ret) {

@@ -6,8 +6,6 @@ add_library(sql_ut_base OBJECT
   optimizer/test_optimizer_utils.cpp
   )
 target_link_libraries(sql_ut_base PUBLIC mockcontainer)
-add_dependencies(sql_ut_base oblib_grpc)
-
 function(sql_unittest case)
   ob_unittest(${ARGV})
   target_link_libraries(${case} PRIVATE sql_ut_base)

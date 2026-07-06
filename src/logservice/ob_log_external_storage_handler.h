@@ -125,6 +125,7 @@ public:
             int64_t &real_read_size,
             palf::LogIOContext &io_ctx);
 
+
   int64_t get_recommend_concurrency_in_single_file() const
   {
     return palf::PALF_PHY_BLOCK_SIZE / SINGLE_TASK_MINIMUM_SIZE;

@@ -48,16 +48,10 @@ public:
     create_mlog_arg_.mlog_name_ = mlog_name;
   }
   inline const common::ObString &get_mlog_name() const { return create_mlog_arg_.mlog_name_; }
-  void set_tenant_id(const uint64_t tenant_id)
-  {
-    create_mlog_arg_.tenant_id_ = tenant_id;
-  }
-  inline uint64_t get_tenant_id() const { return create_mlog_arg_.tenant_id_; }
-  void set_exec_tenant_id(const uint64_t exec_tenant_id)
-  {
-    create_mlog_arg_.exec_tenant_id_ = exec_tenant_id;
-  }
-  inline uint64_t get_exec_tenant_id() const { return create_mlog_arg_.exec_tenant_id_; }
+  
+  
+  
+  
   inline void set_data_table_id(const uint64_t table_id)
   {
     create_mlog_arg_.base_table_id_ = table_id;

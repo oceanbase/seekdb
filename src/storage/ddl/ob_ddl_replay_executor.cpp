@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ddl_replay_executor.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
@@ -136,11 +138,10 @@ int ObDDLReplayExecutor::check_need_replay_ddl_inc_log_(
     }
   }
 #ifdef ERRSIM
-  if (GCONF.errsim_tenant_id == MTL_ID() && tablet->get_tablet_meta().ha_status_.is_restore_status_remote()) {
+  if (tablet->get_tablet_meta().ha_status_.is_restore_status_remote()) {
     if (REACH_COUNT_INTERVAL(10000L)) {
       SERVER_EVENT_ADD("ddl_replay", "check_need_replay_ddl_inc_log",
                        "result", ret,
-                       "tenant_id", MTL_ID(),
                        "ls_id", ls->get_ls_id().id(),
                        "tablet_id", tablet->get_tablet_meta().tablet_id_.id());
     }
@@ -279,7 +280,7 @@ int ObDDLStartReplayExecutor::replay_ddl_start(ObTabletHandle &tablet_handle, co
   ObLSHandle ls_handle;
   ObLS *ls = nullptr;
   ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
-  ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
+  ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
   const int64_t unused_context_id = -1;
   bool need_replay = true;
   ObTabletID tablet_id;
@@ -301,7 +302,7 @@ int ObDDLStartReplayExecutor::replay_ddl_start(ObTabletHandle &tablet_handle, co
   } else if (FALSE_IT(tablet_id = tablet_handle.get_obj()->get_tablet_id())) {
   } else if (OB_ISNULL(tenant_direct_load_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), K(MTL_ID()));
+    LOG_WARN("unexpected error", K(ret));
   } else {
     ObTabletDirectLoadInsertParam direct_load_param;
     direct_load_param.is_replay_ = true;
@@ -481,7 +482,7 @@ int ObDDLRedoReplayExecutor::do_inc_replay_(
     object_write_info.io_desc_ = write_info.io_desc_;
     object_write_info.io_desc_.set_sealed();
     object_write_info.io_timeout_ms_ = write_info.io_timeout_ms_;
-    object_write_info.mtl_tenant_id_ = MTL_ID();
+    
     ObStorageObjectHandle macro_handle;
     const ObDDLMacroBlockRedoInfo &redo_info = log_->get_redo_info();
     const ObITable::TableKey &table_key = redo_info.table_key_;
@@ -634,7 +635,7 @@ int ObDDLRedoReplayExecutor::do_full_replay_(
     write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
     write_info.io_desc_.set_sealed();
     write_info.io_timeout_ms_ = max(DDL_FLUSH_MACRO_BLOCK_TIMEOUT / 1000L, GCONF._data_storage_io_timeout / 1000L);
-    write_info.mtl_tenant_id_ = MTL_ID();
+    
 
     if (OB_FAIL(ObObjectManager::async_write_object(opt, write_info, macro_handle))) {
       LOG_WARN("fail to async write block", K(ret), K(write_info), K(macro_handle));
@@ -665,7 +666,7 @@ int ObDDLRedoReplayExecutor::do_full_replay_(
       bool is_major_sstable_exist = false;
       uint64_t data_format_version = redo_info.data_format_version_;
       ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
-      ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
+      ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
       if (OB_ISNULL(tenant_direct_load_mgr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected err", K(ret));
@@ -851,10 +852,10 @@ int ObDDLCommitReplayExecutor::replay_ddl_commit(ObTabletHandle &tablet_handle)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("need replay but tablet handle is invalid", K(ret), K(need_replay), K(tablet_handle), K_(log), K_(scn));
   } else if (OB_FALSE_IT(tablet_id = tablet_handle.get_obj()->get_tablet_id())) {
-  } else if (OB_ISNULL(MTL(ObTenantDirectLoadMgr *))) {
+  } else if (OB_ISNULL(share::g_mp->tenant_direct_load_mgr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), K(MTL_ID()));
-  } else if (OB_FAIL(MTL(ObTenantDirectLoadMgr *)->get_tablet_mgr_and_check_major(
+    LOG_WARN("unexpected error", K(ret));
+  } else if (OB_FAIL(share::g_mp->tenant_direct_load_mgr()->get_tablet_mgr_and_check_major(
           ls_->get_ls_id(),
           tablet_id,
           true/* is_full_direct_load */,
@@ -924,7 +925,7 @@ int ObSplitStartReplayExecutor::prepare_param_from_log(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(ls_id), K(handle), K(info), K(scn));
   } else {
-    param.tenant_id_           = MTL_ID();
+    
     param.ls_id_               = ls_id;
     param.table_id_            = info.table_id_;
     param.schema_version_      = info.schema_version_;
@@ -960,7 +961,7 @@ int ObSplitStartReplayExecutor::prepare_param_from_log(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(ls_id), K(handle), K(info), K(scn));
   } else {
-    param.tenant_id_              = MTL_ID();
+    
     param.ls_id_                  = ls_id;
     param.source_table_id_        = info.table_id_;
     param.dest_schema_id_         = info.lob_table_id_;
@@ -994,23 +995,6 @@ int ObSplitStartReplayExecutor::check_need_wait_split_finished(
 {
   int ret = OB_SUCCESS;
   need_wait_split_finished = false;
-  if (MTL_TENANT_ROLE_CACHE_IS_RESTORE()) {
-    ObLSHandle ls_handle;
-    bool is_tablet_status_need_to_split = true;
-    ObTabletRestoreStatus::STATUS restore_status;
-    if (OB_FAIL(handle.get_obj()->get_restore_status(restore_status))) {
-      LOG_WARN("get restore status failed", K(ret), K(handle));
-    } else if (ObTabletRestoreStatus::is_full(restore_status)) {
-      LOG_TRACE("full restore status, ignore to wait", K(ret), K(restore_status));
-    } else if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
-      LOG_WARN("failed to get log stream", K(ret), K(ls_id));
-    } else if (OB_FAIL(ObTabletSplitUtil::check_tablet_restore_status(
-        dest_tablets_id, ls_handle, handle, is_tablet_status_need_to_split))) {
-      LOG_WARN("failed to check tablet status", K(ret), K(handle));
-    } else if (is_tablet_status_need_to_split) {
-      need_wait_split_finished = true;
-    }
-  }
   return ret;
 }
 
@@ -1205,7 +1189,7 @@ int ObSplitFinishReplayExecutor::modify_tablet_restore_status_if_need(
     LOG_WARN("unexpected nullptr of src_tablet", K(ret), KP(src_tablet));
   } else if (OB_FAIL(src_tablet->get_restore_status(src_restore_status))) {
     LOG_WARN("failed to get restore status of tablet", K(ret), K(src_tablet));
-  } else if (OB_ISNULL(ls_service = MTL(ObLSService *))) {
+  } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr of ls service", K(ret), KPC(ls), K(ls_service));
   } else if (OB_FAIL(ls_service->get_ls(ls->get_ls_id(), ls_handle, ObLSGetMod::DDL_MOD))) {
@@ -1291,20 +1275,20 @@ int ObTabletFreezeReplayExecutor::do_replay_(ObTabletHandle &handle)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KPC(log_));
   } else {
-    uint64_t tenant_id = MTL_ID();
+    
     const ObTabletID &tablet_id = log_->tablet_id_;
     const int64_t abs_timeout_ts = ObClockGenerator::getClock() + 10LL * 1000LL * 1000LL;
     const bool need_rewrite_tablet_meta = false;
-    MTL_SWITCH(tenant_id) {
+    MOD_SCOPE {
       const ObLSID ls_id = ls_->get_ls_id();
       storage::ObTenantFreezer* freezer = nullptr;
-      if (OB_ISNULL(freezer = MTL(storage::ObTenantFreezer*))) {
+      if (OB_ISNULL(freezer = share::g_mp->tenant_freezer())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ObTenantFreezer shouldn't be null", K(ret), K(tenant_id));
+        LOG_WARN("ObTenantFreezer shouldn't be null", K(ret));
       } else if (OB_FAIL(freezer->tablet_freeze(ls_id, tablet_id, true/*is_sync*/, abs_timeout_ts, need_rewrite_tablet_meta, ObFreezeSourceFlag::TABLET_SPLIT))) {
-        LOG_WARN("fail to freeze tablet", K(ret), K(tenant_id), K(ls_id), K(tablet_id));
+        LOG_WARN("fail to freeze tablet", K(ret), K(ls_id), K(tablet_id));
       } else {
-        LOG_INFO("succeed to freeze tablet", K(ret), K(tenant_id), K(ls_id), K(tablet_id));
+        LOG_INFO("succeed to freeze tablet", K(ret), K(ls_id), K(tablet_id));
       }
     }
   }
@@ -1496,6 +1480,7 @@ int ObTabletForkFinishReplayExecutor::do_replay_(ObTabletHandle &handle)
   }
   return ret;
 }
+
 
 // ObDDLIncMinorStartReplayExecutor
 ObDDLIncMinorStartReplayExecutor::ObDDLIncMinorStartReplayExecutor()

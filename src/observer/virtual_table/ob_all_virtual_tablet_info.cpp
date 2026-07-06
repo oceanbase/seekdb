@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tablet_info.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/multi_data_source/runtime_utility/common_define.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -40,35 +41,10 @@ ObAllVirtualTabletInfo::~ObAllVirtualTabletInfo()
 
 void ObAllVirtualTabletInfo::reset()
 {
-  omt::ObMultiTenantOperator::reset();
   addr_.reset();
   ls_tablet_iter_.reset();
   ls_iter_guard_.reset();
   ObVirtualTableScannerIterator::reset();
-}
-
-void ObAllVirtualTabletInfo::release_last_tenant()
-{
-  ls_iter_guard_.reset();
-  ls_tablet_iter_.reset();
-}
-
-int ObAllVirtualTabletInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
-}
-
-bool ObAllVirtualTabletInfo::is_need_process(uint64_t tenant_id)
-{
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
-    return true;
-  }
-  return false;
 }
 
 int ObAllVirtualTabletInfo::get_next_ls(ObLS *&ls)
@@ -126,7 +102,7 @@ int ObAllVirtualTabletInfo::get_next_tablet(ObTabletHandle &tablet_handle)
   return ret;
 }
 
-int ObAllVirtualTabletInfo::process_curr_tenant(ObNewRow *&row)
+int ObAllVirtualTabletInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObTabletHandle tablet_handle;
@@ -140,7 +116,7 @@ int ObAllVirtualTabletInfo::process_curr_tenant(ObNewRow *&row)
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
-  } else if (ls_iter_guard_.get_ptr() == nullptr && OB_FAIL(MTL(ObLSService*)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+  } else if (ls_iter_guard_.get_ptr() == nullptr && OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
     SERVER_LOG(WARN, "get_ls_iter fail", K(ret));
   } else if (OB_FAIL(get_next_tablet(tablet_handle))) {
     if (OB_ITER_END != ret) {

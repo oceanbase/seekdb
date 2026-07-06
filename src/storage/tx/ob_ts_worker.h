@@ -37,7 +37,7 @@ public:
   void wait();
   void destroy();
 public:
-  int push_task(const uint64_t tenant_id, ObTsResponseTask *task);
+  int push_task(ObTsResponseTask *task);
   void handle(void *task);
 public:
   static const int64_t MAX_TASK_NUM = 10240;

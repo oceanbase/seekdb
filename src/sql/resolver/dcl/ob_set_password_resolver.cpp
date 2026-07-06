@@ -78,7 +78,7 @@ int ObSetPasswordResolver::resolve(const ParseNode &parse_tree)
       LOG_ERROR("Failed to create ObSetPasswordStmt", K(ret));
     } else {
       stmt_ = set_pwd_stmt;
-      set_pwd_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+      
       ObString user_name;
       ObString host_name;
       const ObString &session_user_name = session_info_->get_user_name();

@@ -18,9 +18,9 @@
 #define OCEANBASE_SQL_OB_SUBSCHEMA_CTX_H
 
 #include "lib/oblog/ob_log_module.h"
-#include "lib/udt/ob_collection_type.h"
+#include "common/udt/ob_collection_type.h"
 #include "common/ob_field.h"
-#include "lib/enumset/ob_enum_set_meta.h"
+#include "common/enumset/ob_enum_set_meta.h"
 
 namespace oceanbase
 {

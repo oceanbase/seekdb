@@ -233,15 +233,15 @@ insert into t_dim_table (seq, log) values
 set ob_enable_index_direct_select = 'ON';
 
 --disable_query_log
-let $data_table_id_single = query_get_value("SELECT table_id FROM oceanbase.__all_virtual_table A, oceanbase.__all_database B WHERE A.table_name = 't_ir_single_column' and A.database_id = B.database_id and database_name = 'fts'", table_id, 1);
-let $fts_index_table_name_single = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 and data_table_id = $data_table_id_single, table_name, 1);
+let $data_table_id_single = query_get_value("SELECT table_id FROM oceanbase.__all_table A, oceanbase.__all_database B WHERE A.table_name = 't_ir_single_column' and A.database_id = B.database_id and database_name = 'fts'", table_id, 1);
+let $fts_index_table_name_single = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 and data_table_id = $data_table_id_single, table_name, 1);
 let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_single and column_name like '__doc_id_%', column_name, 1);
 let $__word_segment_17 = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_single and column_name like '__word_segment_%', column_name, 1);
 let $__word_count_17 = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_single and column_name like '__word_count_%', column_name, 1);
 eval select /*+opt_param('hidden_column_visible','true')*/ __pk_increment as doc_id, $__word_segment_17 as word, $__word_count_17 as word_count from $fts_index_table_name_single;
 
-let $data_table_id_multi = query_get_value("SELECT table_id FROM oceanbase.__all_virtual_table A, oceanbase.__all_database B WHERE A.table_name = 't_ir_multi_column' and A.database_id = B.database_id and database_name = 'fts'", table_id, 1);
-let $fts_index_table_name_multi = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 and data_table_id = $data_table_id_multi, table_name, 1);
+let $data_table_id_multi = query_get_value("SELECT table_id FROM oceanbase.__all_table A, oceanbase.__all_database B WHERE A.table_name = 't_ir_multi_column' and A.database_id = B.database_id and database_name = 'fts'", table_id, 1);
+let $fts_index_table_name_multi = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 and data_table_id = $data_table_id_multi, table_name, 1);
 let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_multi and column_name like '__doc_id_%', column_name, 1);
 let $__word_segment_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_multi and column_name like '__word_segment_%', column_name, 1);
 let $__word_count_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_multi and column_name like '__word_count_%', column_name, 1);

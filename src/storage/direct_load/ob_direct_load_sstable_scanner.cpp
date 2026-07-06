@@ -51,7 +51,7 @@ ObDirectLoadSSTableScanner::ObDirectLoadSSTableScanner()
     allocator_("TLD_SSTScanner"),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadSSTableScanner::~ObDirectLoadSSTableScanner() {}
@@ -221,13 +221,13 @@ int ObDirectLoadSSTableScanner::inner_open()
   int64_t data_buf_size = sstable_data_block_size_;
   int64_t start_idx = 0;
   int64_t end_idx = 0;
-  const uint64_t tenant_id = MTL_ID();
+  
   int64_t index_size = sstable_->get_meta().index_block_size_;
   data_block_reader_.reset();
   if (OB_FAIL(fragment_operator_.init(sstable_))) {
     LOG_WARN("Fail to init fragment opeartor", K(ret));
   } else if (OB_FAIL(index_block_reader_.init(
-               tenant_id, index_size, sstable_->get_fragment_array().at(0).index_file_handle_))) {
+               index_size, sstable_->get_fragment_array().at(0).index_file_handle_))) {
     LOG_WARN("Fail to init index_block_reader", K(ret));
   } else if (OB_FAIL(locate_lower_bound(query_range_->start_key_, start_idx))) {
     LOG_WARN("fail to local lower bound", KR(ret));
@@ -385,7 +385,7 @@ int ObDirectLoadSSTableScanner::read_buffer(uint64_t offset, uint64_t size)
     int64_t read_size = size;
     if (large_buf_ == nullptr) {
       int64_t large_buf_size = OB_STORAGE_OBJECT_MGR.get_macro_block_size();
-      ObMemAttr attr(MTL_ID(), "TLD_LargeBuf");
+      ObMemAttr attr("TLD_LargeBuf");
       if (OB_ISNULL(large_buf_ = static_cast<char *>(ob_malloc(large_buf_size, attr)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to allocate buffer", KR(ret), K(large_buf_size));
@@ -403,7 +403,7 @@ int ObDirectLoadSSTableScanner::read_buffer(uint64_t offset, uint64_t size)
 int ObDirectLoadSSTableScanner::get_large_buffer(int64_t buf_size)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(MTL_ID(), "TLD_LargeBuf");
+  ObMemAttr attr("TLD_LargeBuf");
   if (OB_ISNULL(large_buf_ = static_cast<char *>(ob_malloc(buf_size, attr)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate buffer", KR(ret), K(buf_size));
@@ -580,7 +580,7 @@ ObDirectLoadIndexBlockMetaIterator::ObDirectLoadIndexBlockMetaIterator()
     allocator_("TLD_IDBMeta"),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadIndexBlockMetaIterator::~ObDirectLoadIndexBlockMetaIterator() {}
@@ -604,13 +604,13 @@ int ObDirectLoadIndexBlockMetaIterator::init(ObDirectLoadSSTable *sstable)
     LOG_WARN("Invalid argument", K(ret), KPC(sstable));
   } else {
     sstable_ = sstable;
-    const uint64_t tenant_id = MTL_ID();
+    
     int64_t index_size = sstable_->get_meta().index_block_size_;
     if (!sstable_->is_empty()) {
       if (OB_FAIL(fragment_operator_.init(sstable_))) {
         LOG_WARN("Failed to init fragment operator", K(ret));
       } else if (OB_FAIL(index_block_reader_.init(
-                   tenant_id, index_size,
+                   index_size,
                    sstable_->get_fragment_array().at(0).index_file_handle_))) {
         LOG_WARN("Fail to init index_block_reader", K(ret));
       } else if (OB_FAIL(

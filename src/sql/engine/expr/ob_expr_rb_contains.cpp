@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_rb_contains.h"
 #include "sql/engine/expr/ob_expr_rb_func_helper.h"
-#include "lib/roaringbitmap/ob_rb_utils.h"
-#include "lib/roaringbitmap/ob_rb_bin.h"
+#include "share/roaringbitmap/ob_rb_utils.h"
+#include "share/roaringbitmap/ob_rb_bin.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -73,7 +73,7 @@ int ObExprRbContains::eval_rb_contains(const ObExpr &expr,
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(ObRbExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session()), "ROARINGBITMAP"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("ROARINGBITMAP"));
 
   bool is_contains = true;
   ObExpr *rb1_arg = expr.args_[0];
@@ -148,7 +148,7 @@ int ObExprRbContains::eval_rb_contains_vector(const ObExpr &expr,
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(ObRbExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session()), "ROARINGBITMAP"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("ROARINGBITMAP"));
   
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound)) || OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
     LOG_WARN("fail to eval params", K(ret));

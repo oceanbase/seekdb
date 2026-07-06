@@ -28,12 +28,12 @@
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/aggregate/ob_exec_hash_struct.h"
 #include "lib/string/ob_fixed_length_string.h"
-#include "share/stat/ob_topk_hist_estimator.h"
+#include "sql/optimizer/stat/ob_topk_hist_estimator.h"
 #include "sql/engine/user_defined_function/ob_pl_user_defined_agg_function.h"
 #include "sql/engine/expr/ob_expr_dll_udf.h"
 #include "sql/engine/expr/ob_rt_datum_arith.h"
-#include "lib/geo/ob_geo_mvt.h"
-#include "lib/roaringbitmap/ob_rb_utils.h"
+#include "share/geo/ob_geo_mvt.h"
+#include "share/roaringbitmap/ob_rb_utils.h"
 #include "sql/engine/basic/ob_hp_infrastructure_manager.h"
 #include "sql/engine/expand/ob_expand_vec_op.h"
 
@@ -345,8 +345,7 @@ public:
     virtual ~ExtraResult();
     bool is_inited() const { return is_inited_; }
     virtual void reuse();
-    int init_distinct_set(const uint64_t tenant_id,
-                          const ObAggrInfo &aggr_info,
+    int init_distinct_set(const ObAggrInfo &aggr_info,
                           ObEvalCtx &eval_ctx,
                           const bool need_rewind,
                           ObIOEventObserver *io_event_observer);
@@ -458,7 +457,7 @@ public:
     void reuse_self();
     virtual void reuse() override;
 
-    int init(const uint64_t tenant_id, const ObAggrInfo &aggr_info,
+    int init(const ObAggrInfo &aggr_info,
              ObEvalCtx &eval_ctx, const bool need_rewind, int64_t dir_id,
              ObIOEventObserver *io_event_observer);
 
@@ -527,7 +526,7 @@ public:
     void reuse_self();
     virtual void reuse() override;
 
-    int init(const uint64_t tenant_id, const ObAggrInfo &aggr_info,
+    int init(const ObAggrInfo &aggr_info,
              ObEvalCtx &eval_ctx, const bool need_rewind, 
              ObIOEventObserver *io_event_observer,
              ObMonitorNode &op_monitor_info);
@@ -762,8 +761,7 @@ public:
   ObAggregateProcessor(ObEvalCtx &eval_ctx,
                        ObIArray<ObAggrInfo> &aggr_infos,
                        const lib::ObLabel &label,
-                       ObMonitorNode &op_monitor_info,
-                       const int64_t tenant_id);
+                       ObMonitorNode &op_monitor_info);
   ~ObAggregateProcessor() { destroy(); };
 
   int init();
@@ -816,7 +814,7 @@ public:
   inline int64_t get_aggr_used_size() const { return aggr_alloc_.used(); }
   inline int64_t get_aggr_hold_size() const { return aggr_alloc_.total(); }
   inline common::ObIAllocator &get_aggr_alloc() { return aggr_alloc_; }
-  inline void set_tenant_id(const uint64_t tenant_id) { aggr_alloc_.set_tenant_id(tenant_id); }
+  
   int generate_group_row(GroupRow *&new_group_row, const int64_t group_id);
   int fill_group_row(GroupRow *new_group_row, const int64_t group_id);
   int init_one_group(const int64_t group_id = 0, bool fill_pos = false);

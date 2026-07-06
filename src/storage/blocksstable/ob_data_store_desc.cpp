@@ -181,7 +181,7 @@ int ObStaticDataStoreDesc::init(
         uint64_t compat_version = 0;
         if (cluster_version > 0) {
           major_working_cluster_version_ = cluster_version;
-        } else if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), compat_version))) {
+        } else if (OB_FAIL(GET_MIN_DATA_VERSION(compat_version))) {
           STORAGE_LOG(WARN, "fail to get data version", K(ret));
         } else {
           major_working_cluster_version_ = compat_version;
@@ -624,7 +624,7 @@ int ObDataStoreDesc::get_emergency_row_store_type()
     } else {
       char *endptr = nullptr;
       ObTabletID emergency_tablet_id(std::strtoull(partition_key, &endptr, 0));
-      uint64_t emergency_tenant_id = 0;
+      
       uint64_t emergency_ls_id = 0;
       if (OB_ISNULL(endptr)) {
         ret = OB_INVALID_ARGUMENT;
@@ -650,25 +650,19 @@ int ObDataStoreDesc::get_emergency_row_store_type()
             STORAGE_LOG(WARN, "Invalid emergency partition key for skiping encoding", K(ret), K(partition_key));
           } else {
             endptr++;
-            emergency_tenant_id = std::strtoull(endptr, &endptr, 0);
+            (void)(std::strtoull(endptr, &endptr, 0));
           }
           if (OB_SUCC(ret)) {
             oceanbase::share::ObTaskController::get().allow_next_syslog();
-            if (EMERGENCY_TENANT_ID_MAGIC == emergency_tenant_id
-                && EMERGENCY_LS_ID_MAGIC == emergency_ls_id
-                && EMERGENCY_TABLET_ID_MAGIC == emergency_tablet_id) {
-              STORAGE_LOG(INFO, "Magic emergency partition key set to skip encoding for all the tablet",
-                  K(emergency_tenant_id), K(emergency_ls_id), K(emergency_tablet_id), K(*this));
-              row_store_type_ = FLAT_ROW_STORE;
-            } else if (get_tablet_id() == emergency_tablet_id
+            if (get_tablet_id() == emergency_tablet_id
                           && get_ls_id().id() == emergency_ls_id
-                          && MTL_ID() == emergency_tenant_id) {
+                          && true) {
               STORAGE_LOG(INFO, "Succ to find specified emergency partition to skip encoding",
-                  K(emergency_tenant_id), K(emergency_ls_id), K(emergency_tablet_id), K(*this));
+                  K(emergency_ls_id), K(emergency_tablet_id), K(*this));
               row_store_type_ = FLAT_ROW_STORE;
             } else {
               STORAGE_LOG(INFO, "this partition is not the emergency partition to skip encoding",
-                  K(emergency_tenant_id), K(emergency_ls_id), K(emergency_tablet_id), K(*this));
+                  K(emergency_ls_id), K(emergency_tablet_id), K(*this));
             }
           }
         }
@@ -912,10 +906,9 @@ int ObWholeDataStoreDesc::init(
 
   if (is_ddl) {
     // for ddl and direct load, we only limit the encoding granularit for share nothing mode
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
-    if (tenant_config.is_valid()) {
-      encoding_granularity = tenant_config->ob_encoding_granularity;
-    }
+
+    encoding_granularity = GCONF.ob_encoding_granularity;
+
   }
 
   if (OB_FAIL(static_desc_.init(is_ddl, merge_schema, ls_id, tablet_id, tablet_transfer_seq, merge_type,

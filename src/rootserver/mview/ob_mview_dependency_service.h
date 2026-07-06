@@ -71,17 +71,14 @@ public:
   ~ObMViewDependencyService();
   int update_mview_dep_infos(common::ObMySQLTransaction &trans,
                              share::schema::ObSchemaGetterGuard &schema_guard,
-                             const uint64_t tenant_id,
                              const uint64_t mview_table_id,
                              const common::ObIArray<share::schema::ObDependencyInfo> &dep_infos);
   int remove_mview_dep_infos(common::ObMySQLTransaction &trans,
                              share::schema::ObSchemaGetterGuard &schema_guard,
-                             const uint64_t tenant_id,
                              const uint64_t mview_table_id);
   int update_mview_reference_table_status(
       common::ObMySQLTransaction &trans,
       share::schema::ObSchemaGetterGuard &schema_guard,
-      const uint64_t tenant_id,
       const ObIArray<uint64_t> &ref_table_ids,
       const ObUpdateMViewRefTableOpt &update_opt);
 private:

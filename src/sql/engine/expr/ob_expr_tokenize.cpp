@@ -19,15 +19,15 @@
 #include "lib/alloc/alloc_struct.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
-#include "lib/json_type/ob_json_base.h"
-#include "lib/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_base.h"
+#include "common/json_type/ob_json_tree.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "object/ob_object.h"
 #include "plugin/sys/ob_plugin_helper.h"
-#include "share/ob_fts_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "share/ob_json_access_utils.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "storage/fts/ob_fts_parser_property.h"
@@ -91,14 +91,14 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   int64_t doc_len = 0;
   ObFTWordMap token_map;
 
-  ObArenaAllocator tmp_parse_alloc(ObMemAttr(MTL_ID(), "Tmp buffer"));
+  ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
 
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid output mode", K(ret), K(mode));
   } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_))) {
     LOG_WARN("Fail to init tokenize helper", K(ret));
-  } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr(MTL_ID(), "FTWordMap")))) {
+  } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
     LOG_WARN("Fail to create token map", K(ret));
   } else if (
       (0 != param.fulltext_.length())
@@ -136,7 +136,7 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
 }
 
 ObExprTokenize::TokenizeParam ::TokenizeParam()
-  : allocator_(ObMemAttr(MTL_ID(), "TokenizeParam")),
+  : allocator_(ObMemAttr("TokenizeParam")),
     parser_name_(ObString(OB_DEFAULT_FULLTEXT_PARSER_NAME)),
     meta_(),
     fulltext_(),
@@ -225,8 +225,8 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
   ObString raw_parser_name = ObString::make_string(OB_DEFAULT_FULLTEXT_PARSER_NAME);
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
 
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;
@@ -239,8 +239,8 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse parser params.", K(ret));
   } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
     LOG_WARN("Fail to reform parser params.", K(ret));
-  } else if (OB_FAIL(param.try_load_dictionary_for_ik(tenant_id))) {
-    LOG_WARN("fail to try load dictionary for ik", K(ret), K(tenant_id));
+  } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
+    LOG_WARN("fail to try load dictionary for ik", K(ret));
   }
   return ret;
 }
@@ -436,28 +436,26 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
   return ret;
 }
 
-int ObExprTokenize::TokenizeParam::try_load_dictionary_for_ik(const uint64_t tenant_id)
+int ObExprTokenize::TokenizeParam::try_load_dictionary_for_ik()
 {
   int ret = OB_SUCCESS;
   bool need_to_load_dic = false;
   ObTenantDicLoaderHandle dic_loader_handle;
-  if (OB_FAIL(ObFtsIndexBuilderUtil::check_need_to_load_dic(tenant_id,
-                                                            parser_name_,
+  if (OB_FAIL(ObFtsIndexBuilderUtil::check_need_to_load_dic(parser_name_,
                                                             need_to_load_dic))) {
     LOG_WARN("fail to check need to load dic",
-        K(ret), K(tenant_id), K(parser_name_), K(need_to_load_dic));
+        K(ret), K(parser_name_), K(need_to_load_dic));
   } else if (need_to_load_dic) {
     if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(
-                    tenant_id,
                     ObString::make_string(ObFTSLiteral::PARSER_NAME_IK), // currently only ik, use parser_name_ without version suffix
                     ObCharset::charset_type_by_coll(meta_.get_collation_type()),
                     dic_loader_handle))) {
-      LOG_WARN("fail to get dic loader", K(ret), K(tenant_id));
+      LOG_WARN("fail to get dic loader", K(ret));
     } else if (OB_UNLIKELY(!dic_loader_handle.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("dic loader handle is not valid", K(ret), K(tenant_id), K(dic_loader_handle));
-    } else if (OB_FAIL(dic_loader_handle.get_loader()->try_load_dictionary_in_trans(tenant_id))) {
-      LOG_WARN("fail to try load dictionary", K(ret), K(tenant_id), K(dic_loader_handle));
+      LOG_WARN("dic loader handle is not valid", K(ret), K(dic_loader_handle));
+    } else if (OB_FAIL(dic_loader_handle.get_loader()->try_load_dictionary_in_trans())) {
+      LOG_WARN("fail to try load dictionary", K(ret), K(dic_loader_handle));
     }
   }
   return ret;

@@ -19,12 +19,12 @@
 #include "observer/table_load/ob_table_load_object_allocator.h"
 #include "observer/table_load/ob_table_load_task.h"
 #include "share/table/ob_table_load_array.h"
-#include "share/table/ob_table_load_row_array.h"
+#include "observer/table_load/ob_table_load_row_array.h"
 #include "share/table/ob_table_load_define.h"
 #include "sql/engine/cmd/ob_load_data_impl.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
-#include "common/storage/ob_io_device.h"
+#include "lib/restore/ob_io_device.h"
 #include "observer/table_load/ob_table_load_exec_ctx.h"
 #include "observer/table_load/ob_table_load_instance.h"
 #include "storage/direct_load/ob_direct_load_struct.h"
@@ -82,7 +82,7 @@ private:
   public:
     LoadExecuteParam();
     bool is_valid() const;
-    TO_STRING_KV(K_(tenant_id),
+    TO_STRING_KV(
                  K_(database_id),
                  K_(table_id),
                  K_(combined_name),
@@ -104,7 +104,7 @@ private:
                  K_(online_sample_percent),
                  K_(tablet_ids));
   public:
-    uint64_t tenant_id_;
+    
     uint64_t database_id_;
     uint64_t table_id_;
     common::ObString database_name_;

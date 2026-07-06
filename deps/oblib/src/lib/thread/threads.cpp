@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX LIB
 #include "threads.h"
-#include "lib/signal/ob_signal_struct.h"
 #include "lib/worker.h"
 #include "lib/resource/ob_affinity_ctrl.h"
 #include "lib/utility/ob_platform_utils.h"
@@ -24,8 +23,11 @@ using namespace oceanbase;
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 
-// Use 512KB stack size, OB has SMART_CALL mechanism to extend stack when needed
-int64_t global_thread_stack_size = (1L << 19) - SIG_STACK_SIZE - ACHUNK_PRESERVE_SIZE;
+// Keep the protected stack allocation within the configured stack-size class.
+// This is not a sigaltstack reservation; no alternate signal stack is installed.
+const int64_t THREAD_STACK_RESERVED_SIZE = 16L << 10;
+// Use 256KB stack size by default. OB has SMART_CALL mechanism to extend stack when needed.
+int64_t global_thread_stack_size = (1L << 18) - THREAD_STACK_RESERVED_SIZE - ACHUNK_PRESERVE_SIZE;
 thread_local uint64_t ThreadPool::thread_idx_ = 0;
 static IRunWrapper *g_default_run_wrapper = nullptr;
 // Get the thread-local tenant context, for use when checking at thread pool startup
@@ -76,7 +78,7 @@ int Threads::do_set_thread_count(int64_t n_threads, bool async_recycle)
     } else if (n_threads == n_threads_) {
     } else {
       auto new_threads = reinterpret_cast<Thread**>(
-          ob_malloc(sizeof (Thread*) * n_threads, ObMemAttr(0 == GET_TENANT_ID() ? OB_SERVER_TENANT_ID : GET_TENANT_ID(), "Coro", ObCtxIds::DEFAULT_CTX_ID, OB_NORMAL_ALLOC)));
+          ob_malloc(sizeof (Thread*) * n_threads, ObMemAttr("Coro", ObCtxIds::DEFAULT_CTX_ID, OB_NORMAL_ALLOC)));
       if (new_threads == nullptr) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
@@ -218,7 +220,7 @@ int Threads::start()
     ob_abort();
   } else if (n_threads_ > 0) {
     threads_ = reinterpret_cast<Thread**>(
-      ob_malloc(sizeof (Thread*) * n_threads_, ObMemAttr(0 == GET_TENANT_ID() ? OB_SERVER_TENANT_ID : GET_TENANT_ID(), "Coro", ObCtxIds::DEFAULT_CTX_ID, OB_NORMAL_ALLOC)));
+      ob_malloc(sizeof (Thread*) * n_threads_, ObMemAttr("Coro", ObCtxIds::DEFAULT_CTX_ID, OB_NORMAL_ALLOC)));
     if (threads_ == nullptr) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     }
@@ -264,7 +266,7 @@ int Threads::create_thread(Thread *&thread, int64_t idx, int32_t numa_node)
 {
   int ret = OB_SUCCESS;
   thread = nullptr;
-  const auto buf = ob_malloc(sizeof (Thread), ObMemAttr(0 == GET_TENANT_ID() ? OB_SERVER_TENANT_ID : GET_TENANT_ID(), "Coro", ObCtxIds::DEFAULT_CTX_ID, OB_NORMAL_ALLOC));
+  const auto buf = ob_malloc(sizeof (Thread), ObMemAttr("Coro", ObCtxIds::DEFAULT_CTX_ID, OB_NORMAL_ALLOC));
   if (buf == nullptr) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
@@ -328,9 +330,8 @@ void Threads::destroy()
 }
 
 
-void Threads::set_numa_info(uint64_t tenant_id, bool enable_numa_aware, int32_t group_index)
+void Threads::set_numa_info(bool enable_numa_aware, int32_t group_index)
 {
-  UNUSED(tenant_id);
   if (false == enable_numa_aware) {
   } else {
     int num_nodes = AFFINITY_CTRL.get_num_nodes();

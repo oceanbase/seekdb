@@ -81,7 +81,7 @@ private:
 private:
   static const int32_t HANDLE_BUFFER_SIZE = 16;
   static const int32_t MAX_SECONDAY_META_COLUMN_COUNT = OB_MAX_ROWKEY_COLUMN_NUMBER + 3;
-  int64_t tenant_id_;
+  
   const ObITableReadInfo *rowkey_read_info_;
   ObSSTableMetaHandle sstable_meta_hdl_;
   common::ObQueryFlag prefetch_flag_;

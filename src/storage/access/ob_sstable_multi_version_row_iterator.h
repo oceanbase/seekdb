@@ -84,7 +84,7 @@ public:
       pending_row_(nullptr),
       base_rowkeys_(nullptr)
   {
-    multi_version_ranges_.set_attr(ObMemAttr(MTL_ID(), "MVersionRanges"));
+    multi_version_ranges_.set_attr(ObMemAttr("MVersionRanges"));
   }
   virtual ~ObSSTableMultiVersionRowMultiGetter() {}
   virtual void reset() override;
@@ -111,7 +111,7 @@ public:
   ObSSTableMultiVersionRowMultiScanner()
       : multi_version_ranges_()
   {
-    multi_version_ranges_.set_attr(ObMemAttr(MTL_ID(), "MVersionRanges"));
+    multi_version_ranges_.set_attr(ObMemAttr("MVersionRanges"));
   }
   virtual ~ObSSTableMultiVersionRowMultiScanner() {}
   virtual void reset() override;

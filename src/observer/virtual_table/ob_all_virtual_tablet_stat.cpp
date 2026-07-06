@@ -15,6 +15,7 @@
  */
 
 #include "ob_all_virtual_tablet_stat.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -36,51 +37,24 @@ ObAllVirtualTabletStat::~ObAllVirtualTabletStat()
   reset();
 }
 
-int ObAllVirtualTabletStat::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    if (ret != OB_ITER_END) {
-      SERVER_LOG(WARN, "execute fail", K(ret));
-    }
-  }
-  return ret;
-}
-
 void ObAllVirtualTabletStat::reset()
 {
-  omt::ObMultiTenantOperator::reset();
   MEMSET(ip_buf_, 0, sizeof(ip_buf_));
   tablet_stats_.reset();
   cur_idx_ = 0;
+  need_collect_stats_ = true;
   ObVirtualTableScannerIterator::reset();
 }
 
-bool ObAllVirtualTabletStat::is_need_process(uint64_t tenant_id)
-{
-  bool bret = false;
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
-    bret = true;
-  }
-  return bret;
-}
-
-void ObAllVirtualTabletStat::release_last_tenant()
-{
-  tablet_stats_.reset();
-  cur_idx_ = 0;
-  need_collect_stats_ = true;
-}
-
-int ObAllVirtualTabletStat::process_curr_tenant(ObNewRow *&row)
+int ObAllVirtualTabletStat::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   row = nullptr;
-  const uint64_t tenant_id = MTL_ID();
+  
   if (need_collect_stats_) {
     tablet_stats_.reset();
-    if (OB_FAIL(MTL(ObTenantTabletStatMgr *)->get_all_tablet_stats(tablet_stats_))) {
-      SERVER_LOG(WARN, "failed to get all tablet stats", K(ret), K(tenant_id));
+    if (OB_FAIL(share::g_mp->tenant_tablet_stat_mgr()->get_all_tablet_stats(tablet_stats_))) {
+      SERVER_LOG(WARN, "failed to get all tablet stats", K(ret));
     } else {
       need_collect_stats_ = false;
       cur_idx_ = 0;

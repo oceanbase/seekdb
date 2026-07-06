@@ -22,7 +22,7 @@
 #include "observer/table_load/ob_table_load_table_ctx.h"
 #include "observer/table_load/ob_table_load_task.h"
 #include "observer/table_load/ob_table_load_task_scheduler.h"
-#include "share/stat/ob_dbms_stats_utils.h"
+#include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "share/schema/ob_part_mgr_util.h"
 
 namespace oceanbase
@@ -42,7 +42,6 @@ using namespace table;
 ObTableLoadClientTaskParam::ObTableLoadClientTaskParam()
   : allocator_("TLD_CTask"),
     task_id_(0),
-    tenant_id_(OB_INVALID_TENANT_ID),
     user_id_(OB_INVALID_ID),
     database_id_(OB_INVALID_ID),
     table_name_(),
@@ -55,7 +54,7 @@ ObTableLoadClientTaskParam::ObTableLoadClientTaskParam()
     column_names_(),
     part_names_()
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
   column_names_.set_block_allocator(ModulePageAllocator(allocator_));
   part_names_.set_block_allocator(ModulePageAllocator(allocator_));
 }
@@ -66,7 +65,6 @@ void ObTableLoadClientTaskParam::reset()
 {
   client_addr_.reset();
   task_id_ = 0;
-  tenant_id_ = OB_INVALID_TENANT_ID;
   user_id_ = OB_INVALID_ID;
   database_id_ = OB_INVALID_ID;
   table_name_.reset();
@@ -88,7 +86,6 @@ int ObTableLoadClientTaskParam::assign(const ObTableLoadClientTaskParam &other)
     reset();
     client_addr_ = other.client_addr_;
     task_id_ = other.task_id_;
-    tenant_id_ = other.tenant_id_;
     user_id_ = other.user_id_;
     database_id_ = other.database_id_;
     parallel_ = other.parallel_;
@@ -111,7 +108,7 @@ int ObTableLoadClientTaskParam::assign(const ObTableLoadClientTaskParam &other)
 
 bool ObTableLoadClientTaskParam::is_valid() const
 {
-  return client_addr_.is_valid() && task_id_ > 0 && OB_INVALID_TENANT_ID != tenant_id_ &&
+  return client_addr_.is_valid() && task_id_ > 0 &&
          OB_INVALID_ID != user_id_ && OB_INVALID_ID != database_id_ && !table_name_.empty() &&
          parallel_ > 0 && max_error_row_count_ >= 0 &&
          ObLoadDupActionType::LOAD_INVALID_MODE != dup_action_ && timeout_us_ > 0 &&
@@ -239,7 +236,7 @@ public:
                      ObIArray<uint64_t> &column_ids, ObIArray<ObTabletID> &tablet_ids)
   {
     int ret = OB_SUCCESS;
-    const uint64_t tenant_id = task_param.get_tenant_id();
+    
     const uint64_t database_id = task_param.get_database_id();
     ObSchemaGetterGuard *schema_guard = nullptr;
     const ObTableSchema *table_schema = nullptr;
@@ -259,8 +256,8 @@ public:
     }
     // resolve table_name_
     else if (OB_FAIL(ObTableLoadSchema::get_table_schema(
-               *schema_guard, tenant_id, database_id, task_param.get_table_name(), table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(database_id),
+               *schema_guard, database_id, task_param.get_table_name(), table_schema))) {
+      LOG_WARN("fail to get table schema", KR(ret), K(database_id),
                K(task_param.get_table_name()));
     }
     // resolve column_names_
@@ -277,11 +274,10 @@ public:
       LOG_WARN("fail to get tmp store compressor type", KR(ret));
     }
     // opt stat gather
-    else if (OB_FAIL(ObTableLoadSchema::get_tenant_optimizer_gather_stats_on_load(
-               tenant_id, online_opt_stat_gather))) {
-      LOG_WARN("fail to get tenant optimizer gather stats on load", KR(ret), K(tenant_id));
+    else if (OB_FAIL(ObTableLoadSchema::get_tenant_optimizer_gather_stats_on_load( online_opt_stat_gather))) {
+      LOG_WARN("fail to get tenant optimizer gather stats on load", KR(ret));
     } else if (online_opt_stat_gather && OB_FAIL(ObDbmsStatsUtils::get_sys_online_estimate_percent(
-                                           *(client_exec_ctx.exec_ctx_), tenant_id,
+                                           *(client_exec_ctx.exec_ctx_),
                                            table_schema->get_table_id(), online_sample_percent))) {
       LOG_WARN("failed to get sys online sample percent", K(ret));
     } else if (OB_FAIL(resolve_part_names(table_schema, task_param.get_part_names(), tablet_ids))) {
@@ -301,7 +297,7 @@ public:
       }
     }
     if (OB_SUCC(ret)) {
-      load_param.tenant_id_ = tenant_id;
+      
       load_param.table_id_ = table_schema->get_table_id();
       load_param.parallel_ = task_param.get_parallel();
       load_param.session_count_ = task_param.get_parallel();
@@ -497,7 +493,7 @@ ObTableLoadClientTask::ObTableLoadClientTask()
     is_in_map_(false),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
   free_session_ctx_.sessid_ = sql::ObSQLSessionInfo::INVALID_SESSID;
 }
 
@@ -543,7 +539,7 @@ int ObTableLoadClientTask::init(const ObTableLoadClientTaskParam &param)
 int ObTableLoadClientTask::create_session_info()
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = param_.get_tenant_id();
+  
   const uint64_t user_id = param_.get_user_id();
   const uint64_t database_id = param_.get_database_id();
   const ObTenantSchema *tenant_info = nullptr;
@@ -552,21 +548,21 @@ int ObTableLoadClientTask::create_session_info()
   if (OB_NOT_NULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected session info not null", KR(ret));
-  } else if (OB_FAIL(schema_guard_.get_tenant_info(tenant_id, tenant_info))) {
+  } else if (OB_FAIL(schema_guard_.get_tenant_info(tenant_info))) {
     LOG_WARN("get tenant info failed", K(ret));
   } else if (OB_ISNULL(tenant_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tenant schema", K(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard_.get_user_info(tenant_id, user_id, user_info))) {
+    LOG_WARN("invalid tenant schema", K(ret));
+  } else if (OB_FAIL(schema_guard_.get_user_info(user_id, user_info))) {
     LOG_WARN("get user info failed", K(ret));
   } else if (OB_ISNULL(user_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid user_info", K(ret), K(tenant_id), K(user_id));
-  } else if (OB_FAIL(schema_guard_.get_database_schema(tenant_id, database_id, database_schema))) {
+    LOG_WARN("invalid user_info", K(ret), K(user_id));
+  } else if (OB_FAIL(schema_guard_.get_database_schema( database_id, database_schema))) {
     LOG_WARN("get database schema failed", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid database schema", K(ret), K(tenant_id), K(database_id));
+    LOG_WARN("invalid database schema", K(ret), K(database_id));
   } else if (OB_FAIL(ObTableLoadUtils::create_session_info(session_info_, free_session_ctx_))) {
     LOG_WARN("create session id failed", KR(ret));
   } else {
@@ -578,7 +574,7 @@ int ObTableLoadClientTask::create_session_info()
                             param_.get_table_name().ptr(), param_.get_task_id()));
     OZ(session_info_->load_default_sys_variable(false /*print_info_log*/, false /*is_sys_tenant*/)); // load default session parameters
     OZ(session_info_->load_default_configs_in_pc());
-    OX(session_info_->init_tenant(tenant_info->get_tenant_name(), tenant_id));
+    OX(session_info_->init_tenant(tenant_info->get_tenant_name()));
     OX(session_info_->set_priv_user_id(user_id));
     OX(session_info_->store_query_string(query_str.string()));
     OX(session_info_->set_user(user_info->get_user_name(), user_info->get_host_name_str(),
@@ -599,7 +595,7 @@ int ObTableLoadClientTask::create_session_info()
 int ObTableLoadClientTask::init_exec_ctx()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObTableLoadSchema::get_schema_guard(param_.get_tenant_id(), schema_guard_))) {
+  if (OB_FAIL(ObTableLoadSchema::get_schema_guard(schema_guard_))) {
     LOG_WARN("get_schema_guard failed", K(ret));
   } else if (OB_FAIL(create_session_info())) {
     LOG_WARN("fail to create session info", KR(ret));
@@ -652,9 +648,9 @@ int ObTableLoadClientTask::start()
   } else if (OB_FAIL(set_status_initializing())) {
     LOG_WARN("fail to set status initializing", KR(ret));
   } else {
-    ObMemAttr attr(param_.get_tenant_id(), "TLD_CTExecTask");
+    ObMemAttr attr("TLD_CTExecTask");
     ObTableLoadTask *task = nullptr;
-    if (OB_ISNULL(task = OB_NEW(ObTableLoadTask, attr, param_.get_tenant_id()))) {
+    if (OB_ISNULL(task = OB_NEW(ObTableLoadTask, attr))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObTableLoadTask", KR(ret));
     } else if (OB_FAIL(task->set_processor<ClientTaskExectueProcessor>(this))) {

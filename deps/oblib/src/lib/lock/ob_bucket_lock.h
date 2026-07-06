@@ -18,10 +18,10 @@
 #define OB_BUCKET_LOCK_H_
 #include "lib/lock/ob_latch.h"
 #include "lib/stat/ob_latch_define.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/container/ob_array.h"
 #include "lib/time/ob_tsc_timestamp.h"
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 
 namespace oceanbase
 {
@@ -35,8 +35,7 @@ public:
   int init(
       const uint64_t bucket_cnt,
       const uint32_t latch_id = ObLatchIds::DEFAULT_BUCKET_LOCK,
-      const lib::ObLabel &label = ObModIds::BUCKET_LOCK,
-      const uint64_t tenant_id = OB_SERVER_TENANT_ID);
+      const lib::ObLabel &label = ObModIds::BUCKET_LOCK);
   int init(
       const uint64_t bucket_cnt,
       const uint32_t latch_id,

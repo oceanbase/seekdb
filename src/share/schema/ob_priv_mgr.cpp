@@ -400,7 +400,7 @@ int ObPrivMgr::get_db_priv_iter(const ObOriginalDBKey &db_priv_key,
   int ret = OB_SUCCESS;
   target_db_priv_iter = NULL;
 
-  ObTenantUserId tenant_user_id(db_priv_key.tenant_id_, db_priv_key.user_id_);
+  ObTenantUserId tenant_user_id(db_priv_key.user_id_);
   DBPrivIter tenant_db_priv_begin =
       db_privs_.lower_bound(tenant_user_id, ObDBPriv::cmp_tenant_user_id);
   bool is_stop = false;
@@ -411,7 +411,7 @@ int ObPrivMgr::get_db_priv_iter(const ObOriginalDBKey &db_priv_key,
     if (OB_ISNULL(db_priv = *db_priv_iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(db_priv), K(ret));
-    } else if (db_priv_key.tenant_id_ != db_priv->get_tenant_id()
+    } else if (false
                || db_priv_key.user_id_ != db_priv->get_user_id()) {
       is_stop = true;
     } else if (db_priv_key != db_priv->get_original_key()) {
@@ -432,10 +432,10 @@ int ObPrivMgr::get_db_priv(const ObOriginalDBKey &db_priv_key,
   int ret = OB_SUCCESS;
   db_priv = NULL;
 
-  const uint64_t tenant_id = db_priv_key.tenant_id_;
+  
   const uint64_t user_id = db_priv_key.user_id_;
   const ObString &db = db_priv_key.db_;
-  ObTenantUserId tenant_user_id(tenant_id, user_id);
+  ObTenantUserId tenant_user_id(user_id);
   ConstDBPrivIter tenant_db_priv_begin =
       db_privs_.lower_bound(tenant_user_id, ObDBPriv::cmp_tenant_user_id);
   bool is_stop = false;
@@ -446,7 +446,7 @@ int ObPrivMgr::get_db_priv(const ObOriginalDBKey &db_priv_key,
     if (OB_ISNULL(tmp_db_priv = *db_priv_iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(tmp_db_priv), K(ret));
-    } else if (tenant_id != tmp_db_priv->get_tenant_id()
+    } else if (false
                || user_id != tmp_db_priv->get_user_id()) {
       is_stop = true;
     } else if (0 != wild_compare(db, tmp_db_priv->get_database_name_str(),
@@ -460,7 +460,7 @@ int ObPrivMgr::get_db_priv(const ObOriginalDBKey &db_priv_key,
   //anonymous user
   if (OB_SUCC(ret)) {
     if (!db_is_pattern && !is_empty_user(user_id) && NULL == db_priv) {
-      ObOriginalDBKey new_db_priv_key(tenant_id, OB_EMPTY_USER_ID, db);
+      ObOriginalDBKey new_db_priv_key(OB_EMPTY_USER_ID, db);
       if (OB_FAIL(get_db_priv(new_db_priv_key, db_priv, false))) {
         LOG_WARN("get db priv failed", K(ret), K(new_db_priv_key));
       }
@@ -570,7 +570,7 @@ int ObPrivMgr::get_sys_priv_iter(const ObSysPrivKey &sys_priv_key,
   bool is_stop = false;
   SysPrivIter sys_priv_begin;
 
-  ObTenantUserId tenant_user_id(sys_priv_key.tenant_id_, sys_priv_key.grantee_id_);
+  ObTenantUserId tenant_user_id(sys_priv_key.grantee_id_);
   //DBPrivIter tenant_db_priv_begin =
   //    db_privs_.lower_bound(tenant_user_id, ObDBPriv::cmp_tenant_user_id);
 
@@ -836,7 +836,6 @@ int ObPrivMgr::del_column_priv(const ObColumnPrivIdKey &column_priv_key)
     // defense code, should not happed
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed column priv schema return NULL, ",
-             "tenant_id", column_priv_key.tenant_id_,
              "column_priv", column_priv_key.priv_id_,
              K(ret));
   }
@@ -861,7 +860,6 @@ int ObPrivMgr::del_column_priv(const ObColumnPrivIdKey &column_priv_key)
     // defense code, should not happed
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed column priv schema return NULL, ",
-             "tenant_id", column_priv_key.tenant_id_,
              "column_priv", column_priv_key.priv_id_,
              K(ret));
   }
@@ -1185,19 +1183,18 @@ int ObPrivMgr::get_column_priv_set(const ObColumnPrivSortKey &column_priv_key,
   return ret;
 }
 
-int ObPrivMgr::table_grant_in_db(const uint64_t tenant_id,
-                                 const uint64_t user_id,
+int ObPrivMgr::table_grant_in_db(const uint64_t user_id,
                                  const ObString &db,
                                  bool &is_grant) const
 {
   int ret = OB_SUCCESS;
   is_grant = false;
 
-  if (OB_INVALID_ID == tenant_id || OB_INVALID_ID == user_id || db.length() == 0) {
+  if (OB_INVALID_ID == user_id || db.length() == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument exist", K(tenant_id), K(user_id), K(db), K(ret));
+    LOG_WARN("Invalid argument exist", K(user_id), K(db), K(ret));
   } else {
-    ObTablePrivDBKey table_priv_db_key(tenant_id, user_id, db);
+    ObTablePrivDBKey table_priv_db_key(user_id, db);
     ConstTablePrivIter iter =
         table_privs_.lower_bound(table_priv_db_key, ObTablePriv::cmp_db_key);
     if (iter != table_privs_.end()) {
@@ -1212,19 +1209,18 @@ int ObPrivMgr::table_grant_in_db(const uint64_t tenant_id,
   return ret;
 }
 
-int ObPrivMgr::routine_grant_in_db(const uint64_t tenant_id,
-                                 const uint64_t user_id,
+int ObPrivMgr::routine_grant_in_db(const uint64_t user_id,
                                  const ObString &db,
                                  bool &is_grant) const
 {
   int ret = OB_SUCCESS;
   is_grant = false;
 
-  if (OB_INVALID_ID == tenant_id || OB_INVALID_ID == user_id || db.length() == 0) {
+  if (OB_INVALID_ID == user_id || db.length() == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument exist", K(tenant_id), K(user_id), K(db), K(ret));
+    LOG_WARN("Invalid argument exist", K(user_id), K(db), K(ret));
   } else {
-    ObRoutinePrivDBKey routine_priv_db_key(tenant_id, user_id, db);
+    ObRoutinePrivDBKey routine_priv_db_key(user_id, db);
     ConstRoutinePrivIter iter =
         routine_privs_.lower_bound(routine_priv_db_key, ObRoutinePriv::cmp_db_key);
     if (iter != routine_privs_.end()) {
@@ -1239,17 +1235,16 @@ int ObPrivMgr::routine_grant_in_db(const uint64_t tenant_id,
   return ret;
 }
 
-int ObPrivMgr::get_column_priv_in_db(const uint64_t tenant_id,
-                                 const uint64_t user_id,
+int ObPrivMgr::get_column_priv_in_db(const uint64_t user_id,
                                  const ObString &db,
                                  ObIArray<const ObColumnPriv *> &column_privs) const
 {
   int ret = OB_SUCCESS;
-  if (OB_INVALID_ID == tenant_id || OB_INVALID_ID == user_id || db.length() == 0) {
+  if (OB_INVALID_ID == user_id || db.length() == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument exist", K(tenant_id), K(user_id), K(db), K(ret));
+    LOG_WARN("Invalid argument exist", K(user_id), K(db), K(ret));
   } else {
-    ObTablePrivDBKey db_priv_key(tenant_id, user_id, db);
+    ObTablePrivDBKey db_priv_key(user_id, db);
     ConstColumnPrivIter iter =
         column_privs_sort_by_name_.lower_bound(db_priv_key, ObColumnPriv::cmp_db_key);
     while (OB_SUCC(ret) && iter != column_privs_sort_by_name_.end()) {
@@ -1270,17 +1265,16 @@ int ObPrivMgr::get_column_priv_in_db(const uint64_t tenant_id,
 }
 
 
-int ObPrivMgr::get_column_priv_by_id(const uint64_t tenant_id,
-                                     const uint64_t priv_id,
+int ObPrivMgr::get_column_priv_by_id(const uint64_t priv_id,
                                      const ObColumnPriv *&column_priv) const
 {
   int ret = OB_SUCCESS;
   column_priv = NULL;
-  if (OB_INVALID_ID == tenant_id || OB_INVALID_ID == priv_id) {
+  if (OB_INVALID_ID == priv_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument exist", K(tenant_id), K(priv_id), K(ret));
+    LOG_WARN("Invalid argument exist", K(priv_id), K(ret));
   } else {
-    ObColumnPrivIdKey column_priv_key(tenant_id, priv_id);
+    ObColumnPrivIdKey column_priv_key(priv_id);
     ConstColumnPrivIter iter =
     column_privs_sort_by_id_.lower_bound(column_priv_key, ObColumnPriv::cmp_by_id_key);
     const ObColumnPriv *col_priv = NULL;
@@ -1288,7 +1282,7 @@ int ObPrivMgr::get_column_priv_by_id(const uint64_t tenant_id,
       if (OB_ISNULL(col_priv = *iter)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("Invalid user table priv pointer", K(ret));
-      } else if (tenant_id != col_priv->get_tenant_id() || priv_id != col_priv->get_priv_id()) {
+      } else if (false || priv_id != col_priv->get_priv_id()) {
         //do nothing
       } else {
         column_priv = col_priv;
@@ -1298,8 +1292,7 @@ int ObPrivMgr::get_column_priv_by_id(const uint64_t tenant_id,
   return ret;
 }
 
-int ObPrivMgr::get_column_priv_id(const uint64_t tenant_id,
-                                 const uint64_t user_id,
+int ObPrivMgr::get_column_priv_id(const uint64_t user_id,
                                  const ObString &db,
                                  const ObString &table,
                                  const ObString &column,
@@ -1307,12 +1300,12 @@ int ObPrivMgr::get_column_priv_id(const uint64_t tenant_id,
 {
   int ret = OB_SUCCESS;
   column_priv_id = OB_INVALID_ID;
-  if (OB_INVALID_ID == tenant_id || OB_INVALID_ID == user_id 
+  if (OB_INVALID_ID == user_id 
       || db.length() == 0 || table.length() == 0 || column.length() == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument exist", K(tenant_id), K(user_id), K(db), K(table), K(column), K(ret));
+    LOG_WARN("Invalid argument exist", K(user_id), K(db), K(table), K(column), K(ret));
   } else {
-    ObColumnPrivSortKey column_priv_key(tenant_id, user_id, db, table, column);
+    ObColumnPrivSortKey column_priv_key(user_id, db, table, column);
     ConstColumnPrivIter iter =
     column_privs_sort_by_name_.lower_bound(column_priv_key, ObColumnPriv::cmp_sort_key);
     const ObColumnPriv *column_priv = NULL;
@@ -1330,19 +1323,18 @@ int ObPrivMgr::get_column_priv_id(const uint64_t tenant_id,
   return ret;
 }
 
-int ObPrivMgr::get_column_priv_in_table(const uint64_t tenant_id,
-                                 const uint64_t user_id,
+int ObPrivMgr::get_column_priv_in_table(const uint64_t user_id,
                                  const ObString &db,
                                  const ObString &table,
                                  ObIArray<const ObColumnPriv *> &column_privs) const
 {
   int ret = OB_SUCCESS;
   column_privs.reset();
-  if (OB_INVALID_ID == tenant_id || OB_INVALID_ID == user_id || db.length() == 0 || table.length() == 0) {
+  if (OB_INVALID_ID == user_id || db.length() == 0 || table.length() == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument exist", K(tenant_id), K(user_id), K(db), K(ret));
+    LOG_WARN("Invalid argument exist", K(user_id), K(db), K(ret));
   } else {
-    ObTablePrivSortKey table_priv_key(tenant_id, user_id, db, table);
+    ObTablePrivSortKey table_priv_key(user_id, db, table);
     ConstColumnPrivIter iter =
         column_privs_sort_by_name_.lower_bound(table_priv_key, ObColumnPriv::cmp_table_key);
     while (OB_SUCC(ret) && iter != column_privs_sort_by_name_.end()) {
@@ -1362,14 +1354,13 @@ int ObPrivMgr::get_column_priv_in_table(const uint64_t tenant_id,
   return ret;
 }
 
-int ObPrivMgr::get_column_privs_in_user(const uint64_t tenant_id,
-                                       const uint64_t user_id,
+int ObPrivMgr::get_column_privs_in_user(const uint64_t user_id,
                                        ObIArray<const ObColumnPriv *> &column_privs) const
 {
   int ret = OB_SUCCESS;
   column_privs.reset();
 
-  ObTenantUserId tenant_user_id(tenant_id, user_id);
+  ObTenantUserId tenant_user_id(user_id);
   ConstColumnPrivIter tenant_column_priv_begin =
       column_privs_sort_by_name_.lower_bound(tenant_user_id, ObColumnPriv::cmp_tenant_user_id);
   bool is_stop = false;
@@ -1379,7 +1370,7 @@ int ObPrivMgr::get_column_privs_in_user(const uint64_t tenant_id,
     if (OB_ISNULL(column_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(column_priv));
-    } else if (tenant_id != column_priv->get_tenant_id()
+    } else if (false
                || user_id != column_priv->get_user_id()) {
       is_stop = true;
     } else if (OB_FAIL(column_privs.push_back(column_priv))) {
@@ -1390,14 +1381,13 @@ int ObPrivMgr::get_column_privs_in_user(const uint64_t tenant_id,
   return ret;
 }
 
-int ObPrivMgr::get_db_privs_in_tenant(const uint64_t tenant_id,
-                                      ObIArray<const ObDBPriv *> &db_privs) const
+int ObPrivMgr::get_db_privs_in_tenant(ObIArray<const ObDBPriv *> &db_privs) const
 {
   int ret = OB_SUCCESS;
   db_privs.reset();
 
   ConstDBPrivIter tenant_db_priv_begin =
-      db_privs_.lower_bound(tenant_id, ObDBPriv::cmp_tenant_id);
+      db_privs_.begin();
   bool is_stop = false;
   for (ConstDBPrivIter iter = tenant_db_priv_begin;
       OB_SUCC(ret) && iter != db_privs_.end() && !is_stop; ++iter) {
@@ -1405,7 +1395,7 @@ int ObPrivMgr::get_db_privs_in_tenant(const uint64_t tenant_id,
     if (OB_ISNULL(db_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(db_priv));
-    } else if (tenant_id != db_priv->get_tenant_id()) {
+    } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(db_privs.push_back(db_priv))) {
       LOG_WARN("push back db priv faield", K(ret));
@@ -1415,14 +1405,13 @@ int ObPrivMgr::get_db_privs_in_tenant(const uint64_t tenant_id,
   return ret;
 }
 
-int ObPrivMgr::get_db_privs_in_user(const uint64_t tenant_id,
-                                    const uint64_t user_id,
+int ObPrivMgr::get_db_privs_in_user(const uint64_t user_id,
                                     ObIArray<const ObDBPriv *> &db_privs) const
 {
   int ret = OB_SUCCESS;
   db_privs.reset();
 
-  ObTenantUserId tenant_user_id(tenant_id, user_id);
+  ObTenantUserId tenant_user_id(user_id);
   ConstDBPrivIter tenant_db_priv_begin =
       db_privs_.lower_bound(tenant_user_id, ObDBPriv::cmp_tenant_user_id);
   bool is_stop = false;
@@ -1432,7 +1421,7 @@ int ObPrivMgr::get_db_privs_in_user(const uint64_t tenant_id,
     if (OB_ISNULL(db_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(db_priv));
-    } else if (tenant_id != db_priv->get_tenant_id()
+    } else if (false
                || user_id != db_priv->get_user_id()) {
       is_stop = true;
     } else if (OB_FAIL(db_privs.push_back(db_priv))) {
@@ -1443,14 +1432,13 @@ int ObPrivMgr::get_db_privs_in_user(const uint64_t tenant_id,
   return ret;
 }
 
-int ObPrivMgr::get_table_privs_in_tenant(const uint64_t tenant_id,
-                                         ObIArray<const ObTablePriv *> &table_privs) const
+int ObPrivMgr::get_table_privs_in_tenant(ObIArray<const ObTablePriv *> &table_privs) const
 {
   int ret = OB_SUCCESS;
   table_privs.reset();
 
   ConstTablePrivIter tenant_table_priv_begin =
-      table_privs_.lower_bound(tenant_id, ObTablePriv::cmp_tenant_id);
+      table_privs_.begin();
   bool is_stop = false;
   for (ConstTablePrivIter iter = tenant_table_priv_begin;
       OB_SUCC(ret) && iter != table_privs_.end() && !is_stop; ++iter) {
@@ -1458,7 +1446,7 @@ int ObPrivMgr::get_table_privs_in_tenant(const uint64_t tenant_id,
     if (OB_ISNULL(table_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Table priv pointer should not be null", K(ret));
-    } else if (tenant_id != table_priv->get_tenant_id()) {
+    } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(table_privs.push_back(table_priv))) {
       LOG_WARN("push back table priv failed", K(ret));
@@ -1469,14 +1457,13 @@ int ObPrivMgr::get_table_privs_in_tenant(const uint64_t tenant_id,
 }
 
 
-int ObPrivMgr::get_table_privs_in_user(const uint64_t tenant_id,
-                                       const uint64_t user_id,
+int ObPrivMgr::get_table_privs_in_user(const uint64_t user_id,
                                        ObIArray<const ObTablePriv *> &table_privs) const
 {
   int ret = OB_SUCCESS;
   table_privs.reset();
 
-  ObTenantUserId tenant_user_id(tenant_id, user_id);
+  ObTenantUserId tenant_user_id(user_id);
   ConstTablePrivIter tenant_table_priv_begin =
       table_privs_.lower_bound(tenant_user_id, ObTablePriv::cmp_tenant_user_id);
   bool is_stop = false;
@@ -1486,7 +1473,7 @@ int ObPrivMgr::get_table_privs_in_user(const uint64_t tenant_id,
     if (OB_ISNULL(table_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(table_priv));
-    } else if (tenant_id != table_priv->get_tenant_id()
+    } else if (false
                || user_id != table_priv->get_user_id()) {
       is_stop = true;
     } else if (OB_FAIL(table_privs.push_back(table_priv))) {
@@ -1497,14 +1484,13 @@ int ObPrivMgr::get_table_privs_in_user(const uint64_t tenant_id,
   return ret;
 }
 
-int ObPrivMgr::get_routine_privs_in_user(const uint64_t tenant_id,
-                                       const uint64_t user_id,
+int ObPrivMgr::get_routine_privs_in_user(const uint64_t user_id,
                                        ObIArray<const ObRoutinePriv *> &routine_privs) const
 {
   int ret = OB_SUCCESS;
   routine_privs.reset();
 
-  ObTenantUserId tenant_user_id(tenant_id, user_id);
+  ObTenantUserId tenant_user_id(user_id);
   ConstRoutinePrivIter tenant_routine_priv_begin =
       routine_privs_.lower_bound(tenant_user_id, ObRoutinePriv::cmp_tenant_user_id);
   bool is_stop = false;
@@ -1514,7 +1500,7 @@ int ObPrivMgr::get_routine_privs_in_user(const uint64_t tenant_id,
     if (OB_ISNULL(routine_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(routine_priv));
-    } else if (tenant_id != routine_priv->get_tenant_id()
+    } else if (false
                || user_id != routine_priv->get_user_id()) {
       is_stop = true;
     } else if (OB_FAIL(routine_privs.push_back(routine_priv))) {
@@ -1525,14 +1511,13 @@ int ObPrivMgr::get_routine_privs_in_user(const uint64_t tenant_id,
   return ret;
 }
 
-int ObPrivMgr::get_obj_privs_in_grantee(const uint64_t tenant_id,
-                                        const uint64_t grantee_id,
+int ObPrivMgr::get_obj_privs_in_grantee(const uint64_t grantee_id,
                                         ObIArray<const ObObjPriv *> &obj_privs) const
 {
   int ret = OB_SUCCESS;
   obj_privs.reset();
 
-  ObTenantUserId tenant_user_id(tenant_id, grantee_id);
+  ObTenantUserId tenant_user_id(grantee_id);
   ConstObjPrivIter tenant_obj_priv_begin =
       obj_privs_.lower_bound(tenant_user_id, ObObjPriv::cmp_tenant_user_id);
   bool is_stop = false;
@@ -1542,7 +1527,7 @@ int ObPrivMgr::get_obj_privs_in_grantee(const uint64_t tenant_id,
     if (OB_ISNULL(obj_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_priv));
-    } else if (tenant_id != obj_priv->get_tenant_id()
+    } else if (false
                || grantee_id != obj_priv->get_grantee_id()) {
       is_stop = true;
     } else if (OB_FAIL(obj_privs.push_back(obj_priv))) {
@@ -1554,8 +1539,7 @@ int ObPrivMgr::get_obj_privs_in_grantee(const uint64_t tenant_id,
 }
 
 /* we should iterate all the elments here.*/
-int ObPrivMgr::get_obj_privs_in_grantor(const uint64_t tenant_id,
-                                        const uint64_t grantor_id,
+int ObPrivMgr::get_obj_privs_in_grantor(const uint64_t grantor_id,
                                         ObIArray<const ObObjPriv *> &obj_privs,
                                         bool reset_flag) const
 {
@@ -1569,7 +1553,7 @@ int ObPrivMgr::get_obj_privs_in_grantor(const uint64_t tenant_id,
     if (OB_ISNULL(obj_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_priv));
-    } else if (tenant_id == obj_priv->get_tenant_id()
+    } else if (true
                && grantor_id == obj_priv->get_grantor_id()) {
       if (OB_FAIL(obj_privs.push_back(obj_priv))) {
         LOG_WARN("push back obj priv failed", K(ret));
@@ -1580,8 +1564,7 @@ int ObPrivMgr::get_obj_privs_in_grantor(const uint64_t tenant_id,
 }
 
 /* obj_id/obj_type is not used for sorting, so we should iterate all the elments here.*/
-int ObPrivMgr::get_obj_privs_in_obj(const uint64_t tenant_id,
-                                    const uint64_t obj_id,
+int ObPrivMgr::get_obj_privs_in_obj(const uint64_t obj_id,
                                     const uint64_t obj_type,
                                     ObIArray<const ObObjPriv *> &obj_privs,
                                     bool reset_flag) const
@@ -1596,7 +1579,7 @@ int ObPrivMgr::get_obj_privs_in_obj(const uint64_t tenant_id,
     if (OB_ISNULL(obj_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_priv));
-    } else if (tenant_id == obj_priv->get_tenant_id()
+    } else if (true
                && obj_id == obj_priv->get_obj_id()
                && obj_type == obj_priv->get_objtype()) {
       if (OB_FAIL(obj_privs.push_back(obj_priv))) {
@@ -1609,9 +1592,7 @@ int ObPrivMgr::get_obj_privs_in_obj(const uint64_t tenant_id,
 
 /* we should iterate all the elments here.
    in: grantor, objid(with colid), objtype */
-int ObPrivMgr::get_obj_privs_in_grantor_obj_id(
-    const uint64_t tenant_id,
-    const ObObjPrivSortKey &obj_key,
+int ObPrivMgr::get_obj_privs_in_grantor_obj_id(const ObObjPrivSortKey &obj_key,
     ObIArray<const ObObjPriv *> &obj_privs) const
 {
   int ret = OB_SUCCESS;
@@ -1626,7 +1607,7 @@ int ObPrivMgr::get_obj_privs_in_grantor_obj_id(
     if (OB_ISNULL(obj_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_priv));
-    } else if (tenant_id == obj_priv->get_tenant_id()
+    } else if (true
                && grantor_id == obj_priv->get_grantor_id()
                && obj_id == obj_priv->get_obj_id()
                && obj_type == obj_priv->get_objtype()
@@ -1644,9 +1625,7 @@ int ObPrivMgr::get_obj_privs_in_grantor_obj_id(
    no matter who granted(without caring grantor) */
 
 /* input: grantor, obj_id, grantee_id */
-int ObPrivMgr::get_obj_privs_in_grantor_ur_obj_id(
-    const uint64_t tenant_id,
-    const ObObjPrivSortKey &obj_key,
+int ObPrivMgr::get_obj_privs_in_grantor_ur_obj_id(const ObObjPrivSortKey &obj_key,
     ObIArray<const ObObjPriv *> &obj_privs) const
 {
   int ret = OB_SUCCESS;
@@ -1656,7 +1635,7 @@ int ObPrivMgr::get_obj_privs_in_grantor_ur_obj_id(
   const uint64_t grantor_id = obj_key.grantor_id_;
   obj_privs.reset();
 
-  ObTenantUrObjId tenant_ur_obj_id(tenant_id, grantee_id, obj_id, obj_type, 0);
+  ObTenantUrObjId tenant_ur_obj_id(grantee_id, obj_id, obj_type, 0);
   ConstObjPrivIter tenant_obj_priv_begin =
       obj_privs_.lower_bound(tenant_ur_obj_id, ObObjPriv::cmp_tenant_ur_obj_id);
   bool is_stop = false;
@@ -1666,7 +1645,7 @@ int ObPrivMgr::get_obj_privs_in_grantor_ur_obj_id(
     if (OB_ISNULL(obj_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_priv));
-    } else if (tenant_id != obj_priv->get_tenant_id()
+    } else if (false
                || grantee_id != obj_priv->get_grantee_id()
                || obj_id != obj_priv->get_obj_id()
                || obj_type != obj_priv->get_objtype()) {
@@ -1681,9 +1660,7 @@ int ObPrivMgr::get_obj_privs_in_grantor_ur_obj_id(
   return ret;
 }
 
-int ObPrivMgr::get_obj_privs_in_ur_and_obj(
-    const uint64_t tenant_id,
-    const ObObjPrivSortKey &obj_key,
+int ObPrivMgr::get_obj_privs_in_ur_and_obj(const ObObjPrivSortKey &obj_key,
     ObPackedObjPriv &obj_privs) const
 {
   int ret = OB_SUCCESS;
@@ -1693,7 +1670,7 @@ int ObPrivMgr::get_obj_privs_in_ur_and_obj(
   const uint64_t col_id = obj_key.col_id_;
   obj_privs = 0;
 
-  ObTenantUrObjId tenant_ur_obj_id(tenant_id, grantee_id, obj_id, obj_type, col_id);
+  ObTenantUrObjId tenant_ur_obj_id(grantee_id, obj_id, obj_type, col_id);
   ConstObjPrivIter tenant_obj_priv_begin =
       obj_privs_.lower_bound(tenant_ur_obj_id, ObObjPriv::cmp_tenant_ur_obj_id);
   bool is_stop = false;
@@ -1703,7 +1680,7 @@ int ObPrivMgr::get_obj_privs_in_ur_and_obj(
     if (OB_ISNULL(obj_priv)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_priv));
-    } else if (tenant_id != obj_priv->get_tenant_id()
+    } else if (false
                || grantee_id != obj_priv->get_grantee_id()
                || obj_id != obj_priv->get_obj_id()
                || obj_type != obj_priv->get_objtype()
@@ -1716,14 +1693,13 @@ int ObPrivMgr::get_obj_privs_in_ur_and_obj(
   return ret;
 }
 
-int ObPrivMgr::get_sys_privs_in_tenant(const uint64_t tenant_id,
-                                       ObIArray<const ObSysPriv *> &sys_privs) const
+int ObPrivMgr::get_sys_privs_in_tenant(ObIArray<const ObSysPriv *> &sys_privs) const
 {
   int ret = OB_SUCCESS;
   sys_privs.reset();
 
   ConstSysPrivIter tenant_sys_priv_begin =
-      sys_privs_.lower_bound(tenant_id, ObSysPriv::cmp_tenant_id);
+      sys_privs_.begin();
   bool is_stop = false;
   for (ConstSysPrivIter iter = tenant_sys_priv_begin;
       OB_SUCC(ret) && iter != sys_privs_.end() && !is_stop; ++iter) {
@@ -1731,7 +1707,7 @@ int ObPrivMgr::get_sys_privs_in_tenant(const uint64_t tenant_id,
     if (OB_ISNULL(sys_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(sys_priv));
-    } else if (tenant_id != sys_priv->get_tenant_id()) {
+    } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(sys_privs.push_back(sys_priv))) {
       LOG_WARN("push back sys priv failed", K(ret));
@@ -1741,12 +1717,11 @@ int ObPrivMgr::get_sys_privs_in_tenant(const uint64_t tenant_id,
   return ret;
 }
 
-int ObPrivMgr::get_sys_priv_in_grantee(const uint64_t tenant_id,
-                                       const uint64_t grantee_id,
+int ObPrivMgr::get_sys_priv_in_grantee(const uint64_t grantee_id,
                                        ObSysPriv *&sys_priv) const
 {
   int ret = OB_SUCCESS;
-  ObTenantUserId tenant_user_id(tenant_id, grantee_id);
+  ObTenantUserId tenant_user_id(grantee_id);
   ConstSysPrivIter tenant_sys_priv_begin =
       sys_privs_.lower_bound(tenant_user_id, ObSysPriv::cmp_tenant_grantee_id);
   sys_priv = NULL;
@@ -1756,8 +1731,7 @@ int ObPrivMgr::get_sys_priv_in_grantee(const uint64_t tenant_id,
     if (OB_ISNULL(*iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(sys_priv));
-    } else if (tenant_id != (*iter)->get_tenant_id()
-               || grantee_id != (*iter)->get_grantee_id()) {
+    } else if (grantee_id != (*iter)->get_grantee_id()) {
       is_stop = true;
     } else {
       sys_priv = *iter;
@@ -1893,13 +1867,12 @@ int ObPrivMgr::get_catalog_priv_set(const ObCatalogPrivSortKey &catalog_priv_key
   return ret;
 }
 
-int ObPrivMgr::get_catalog_privs_in_user(const uint64_t tenant_id,
-                                         const uint64_t user_id,
+int ObPrivMgr::get_catalog_privs_in_user(const uint64_t user_id,
                                          ObIArray<const ObCatalogPriv *> &catalog_privs) const
 {
   int ret = OB_SUCCESS;
   catalog_privs.reset();
-  ObTenantUserId tenant_user_id(tenant_id, user_id);
+  ObTenantUserId tenant_user_id(user_id);
   ConstCatalogPrivIter tenant_catalog_priv_begin =
       catalog_privs_.lower_bound(tenant_user_id, ObCatalogPriv::cmp_tenant_user_id);
   bool is_stop = false;
@@ -1909,7 +1882,7 @@ int ObPrivMgr::get_catalog_privs_in_user(const uint64_t tenant_id,
     if (OB_ISNULL(catalog_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null ptr", K(ret), K(catalog_priv));
-    } else if (tenant_id != catalog_priv->get_tenant_id()
+    } else if (false
                || user_id != catalog_priv->get_user_id()) {
       is_stop = true;
     } else if (OB_FAIL(catalog_privs.push_back(catalog_priv))) {
@@ -2134,14 +2107,13 @@ int ObPrivMgr::get_obj_mysql_priv_set(const ObObjMysqlPrivSortKey &obj_mysql_pri
   return ret;
 }
 
-int ObPrivMgr::get_obj_mysql_privs_in_user(const uint64_t tenant_id,
-                                           const uint64_t user_id,
+int ObPrivMgr::get_obj_mysql_privs_in_user(const uint64_t user_id,
                                            ObIArray<const ObObjMysqlPriv *> &obj_mysql_privs) const
 {
   int ret = OB_SUCCESS;
   obj_mysql_privs.reset();
 
-  ObTenantUserId tenant_user_id(tenant_id, user_id);
+  ObTenantUserId tenant_user_id(user_id);
   ConstObjMysqlPrivIter tenant_obj_mysql_priv_begin =
       obj_mysql_privs_.lower_bound(tenant_user_id, ObObjMysqlPriv::cmp_tenant_user_id);
   bool is_stop = false;
@@ -2151,7 +2123,7 @@ int ObPrivMgr::get_obj_mysql_privs_in_user(const uint64_t tenant_id,
     if (OB_ISNULL(obj_mysql_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_mysql_priv));
-    } else if (tenant_id != obj_mysql_priv->get_tenant_id()
+    } else if (false
                 || user_id != obj_mysql_priv->get_user_id()) {
       is_stop = true;
     } else if (OB_FAIL(obj_mysql_privs.push_back(obj_mysql_priv))) {
@@ -2162,8 +2134,7 @@ int ObPrivMgr::get_obj_mysql_privs_in_user(const uint64_t tenant_id,
   return ret;
 }
 
-int ObPrivMgr::get_obj_mysql_privs_in_obj(const uint64_t tenant_id,
-  const ObString &obj_name,
+int ObPrivMgr::get_obj_mysql_privs_in_obj(const ObString &obj_name,
   const uint64_t obj_type,
   ObIArray<const ObObjMysqlPriv *> &obj_privs,
   bool reset_flag) const
@@ -2178,7 +2149,7 @@ int ObPrivMgr::get_obj_mysql_privs_in_obj(const uint64_t tenant_id,
     if (OB_ISNULL(obj_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_priv));
-    } else if (tenant_id == obj_priv->get_tenant_id()
+    } else if (true
               && obj_name == obj_priv->get_obj_name()
               && obj_type == obj_priv->get_obj_type()) {
       if (OB_FAIL(obj_privs.push_back(obj_priv))) {

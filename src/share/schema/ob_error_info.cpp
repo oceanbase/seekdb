@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_error_info.h"
 #include "lib/oblog/ob_warning_buffer.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -54,7 +54,6 @@ ObErrorInfo &ObErrorInfo::operator =(const ObErrorInfo &src_schema)
   if (this != &src_schema) {
     reset();
     int &ret = error_ret_;
-    tenant_id_ = src_schema.tenant_id_;
     database_id_ = src_schema.database_id_;
     obj_id_ = src_schema.obj_id_;
     obj_seq_ = src_schema.obj_seq_;
@@ -85,7 +84,7 @@ bool ObErrorInfo::is_user_field_valid() const
 {
   bool ret = false;
   if (ObSchema::is_valid()) {
-    ret = (OB_INVALID_ID != tenant_id_);
+    ret = true;
   }
   return ret;
 }
@@ -115,7 +114,6 @@ int ObErrorInfo::collect_error_info(const IObErrorInfo *info,
     if (fill_info) {
       (set_obj_id(info->get_object_id()));
       (set_database_id(info->get_database_id()));
-      (set_tenant_id(info->get_tenant_id()));
       (set_schema_version(info->get_schema_version()));
       (set_obj_type(static_cast<uint64_t>(obj_type == ObObjectType::INVALID ? info->get_object_type() : obj_type)));
       if (NULL != buf) {
@@ -172,22 +170,22 @@ int ObErrorInfo::add_error(common::ObISQLClient & sql_client,
 {
   int ret = OB_SUCCESS;
   const ObErrorInfo & error_info = *this;
-  const uint64_t tenant_id = error_info.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   ObDMLSqlSplicer dml;
-  if (OB_FAIL(gen_error_dml(exec_tenant_id, dml))) {
+  if (OB_FAIL(gen_error_dml(dml))) {
     LOG_WARN("gen table dml failed", K(ret));
   } else {
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (!only_history) {
-      ObDMLExecHelper exec(sql_client, exec_tenant_id);
+      ObDMLExecHelper exec(sql_client);
       if (is_replace) {
-        if (OB_FAIL(exec.exec_update(OB_ALL_TENANT_ERROR_TNAME, dml, affected_rows))) {
+        if (OB_FAIL(exec.exec_update(OB_ALL_ERROR_TNAME, dml, affected_rows))) {
           LOG_WARN("execute update failed", K(ret));
         }
       } else {
-        if (OB_FAIL(exec.exec_insert(OB_ALL_TENANT_ERROR_TNAME, dml, affected_rows))) {
+        if (OB_FAIL(exec.exec_insert(OB_ALL_ERROR_TNAME, dml, affected_rows))) {
           LOG_WARN("execute insert failed", K(ret));
         }
       }
@@ -200,10 +198,9 @@ int ObErrorInfo::add_error(common::ObISQLClient & sql_client,
   return ret;
 }
 
-int ObErrorInfo::gen_error_dml(const uint64_t exec_tenant_id,
-                                     ObDMLSqlSplicer &dml)
+int ObErrorInfo::gen_error_dml(ObDMLSqlSplicer &dml)
 {
-  UNUSED(exec_tenant_id);
+  UNUSED(1UL);
   int ret = OB_SUCCESS;
 
   const ObErrorInfo &error_info = *this;
@@ -234,24 +231,16 @@ int ObErrorInfo::update_error_info(const IObErrorInfo *info, const ObObjectType 
     (set_obj_id(info->get_object_id()));
     (set_obj_type(static_cast<uint64_t>(obj_type == ObObjectType::INVALID ? info->get_object_type() : obj_type)));
     (set_database_id(info->get_database_id()));
-    (set_tenant_id(info->get_tenant_id()));
     (set_schema_version(info->get_schema_version()));
   }
   return ret;
 }
 
-uint64_t ObErrorInfo::extract_tenant_id() const
-{
-  const uint64_t tenant_id = get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-  return ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, get_tenant_id());
-}
-
 uint64_t ObErrorInfo::extract_obj_id() const
 {
-  const uint64_t tenant_id = get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-  return ObSchemaUtils::get_extract_schema_id(exec_tenant_id, get_obj_id());
+  
+  
+  return ObSchemaUtils::get_extract_schema_id(get_obj_id());
 }
 
 
@@ -260,7 +249,7 @@ int ObErrorInfo::del_error(common::ObMySQLProxy *sql_proxy)
   int ret = OB_SUCCESS;
   bool with_snap_shot = true;
   common::ObMySQLTransaction trans;
-  if (OB_FAIL(trans.start(sql_proxy, get_tenant_id(), with_snap_shot))) {
+  if (OB_FAIL(trans.start(sql_proxy, with_snap_shot))) {
     LOG_WARN("fail start trans", K(ret));
   } else {
     if (OB_FAIL(del_error(trans))) {
@@ -283,8 +272,8 @@ int ObErrorInfo::del_error(ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
   ObErrorInfo &error_info = *this;
-  const uint64_t tenant_id = error_info.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   ObSqlString sql;
   int64_t affected_rows = 0;
   if (ERROR_STATUS_NO_ERROR != error_info.get_error_status()) {
@@ -293,13 +282,13 @@ int ObErrorInfo::del_error(ObISQLClient &sql_client)
   } else if (OB_FAIL(sql.assign_fmt("delete FROM %s WHERE obj_id = %ld \
                                                   AND obj_seq = %ld \
                                                   AND obj_type = %ld", 
-             OB_ALL_TENANT_ERROR_TNAME, 
+             OB_ALL_ERROR_TNAME, 
              error_info.extract_obj_id(),
              error_info.get_obj_seq(),
              error_info.get_obj_type()))) {
     LOG_WARN("delete from __all_error table failed.", K(ret));
   } else {
-    if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+    if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
       LOG_WARN("execute query failed", K(ret), K(sql));
     } else {
       // do nothing
@@ -320,7 +309,7 @@ int ObErrorInfo::get_error_obj_seq(common::ObISQLClient &sql_client,
   } else if (OB_FAIL(sql.assign_fmt("SELECT obj_id, obj_seq FROM %s WHERE obj_id = %ld  \
                                                                   AND obj_seq = %ld\
                                                                   AND obj_type = %ld",
-             OB_ALL_TENANT_ERROR_TNAME,
+             OB_ALL_ERROR_TNAME,
              error_info.extract_obj_id(),
              error_info.get_obj_seq(),
              error_info.get_obj_type()))) {
@@ -328,7 +317,7 @@ int ObErrorInfo::get_error_obj_seq(common::ObISQLClient &sql_client,
     LOG_WARN("assign select object sequence failed.", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      if (OB_FAIL(sql_client.read(res, error_info.get_tenant_id(), sql.ptr()))) {
+      if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
         LOG_WARN("execute query failed", K(ret), K(sql));
       } else {
         sqlclient::ObMySQLResult *result = res.get_result();
@@ -396,7 +385,7 @@ int ObErrorInfo::handle_error_info(const IObErrorInfo *info,
   } else if (!MTL_TENANT_ROLE_CACHE_IS_PRIMARY()) {
     // do nothing
   }
-  else if (OB_FAIL(trans.start(GCTX.sql_proxy_, get_tenant_id(), true))) {
+  else if (OB_FAIL(trans.start(GCTX.sql_proxy_, true))) {
     LOG_WARN("fail start trans", K(ret));
   } else if (OB_FAIL(handle_error_info(trans, info, obj_type))) {
     LOG_WARN("handle error info failed.", K(ret));
@@ -434,7 +423,6 @@ int ObErrorInfo::delete_error(const IObErrorInfo *info,
 
 void ObErrorInfo::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   database_id_ = OB_INVALID_ID;
   obj_id_ = OB_INVALID_ID;
   obj_type_ = 0;  //obobjtype::invalid
@@ -461,7 +449,6 @@ OB_DEF_SERIALIZE(ObErrorInfo)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-              tenant_id_,
               obj_id_,
               obj_type_,
               obj_seq_,
@@ -482,7 +469,6 @@ OB_DEF_DESERIALIZE(ObErrorInfo)
   int ret = OB_SUCCESS;
   reset();
   LST_DO_CODE(OB_UNIS_DECODE,
-              tenant_id_,
               obj_id_,
               obj_type_,
               obj_seq_,
@@ -502,7 +488,6 @@ OB_DEF_SERIALIZE_SIZE(ObErrorInfo)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              tenant_id_,
               obj_id_,
               obj_type_,
               obj_seq_,

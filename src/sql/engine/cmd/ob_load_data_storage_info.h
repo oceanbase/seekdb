@@ -16,7 +16,7 @@
 #pragma once
 
 #include "lib/utility/ob_macro_utils.h"
-#include "share/backup/ob_backup_struct.h"
+#include "share/io/ob_backup_storage_info.h"
 
 namespace oceanbase
 {

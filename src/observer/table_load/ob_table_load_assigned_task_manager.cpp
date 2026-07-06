@@ -46,7 +46,7 @@ int ObTableLoadAssignedTaskManager::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTableLoadAssignedTaskManager init twice", KR(ret), KP(this));
-  } else if (OB_FAIL(assigned_tasks_map_.create(bucket_num, "TLD_AssignedMgr", "TLD_AssignedMgr", MTL_ID()))) {
+  } else if (OB_FAIL(assigned_tasks_map_.create(bucket_num, "TLD_AssignedMgr", "TLD_AssignedMgr"))) {
     LOG_WARN("fail to create hashmap", KR(ret), K(bucket_num));
   } else {
     is_inited_ = true;

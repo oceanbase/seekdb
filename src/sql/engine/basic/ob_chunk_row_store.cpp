@@ -228,7 +228,7 @@ int ObChunkRowStore::Block::swizzling(int64_t *col_cnt)
 }
 
 ObChunkRowStore::ObChunkRowStore(common::ObIAllocator *alloc /* = NULL */)
-  : inited_(false), tenant_id_(0), label_(nullptr), ctx_id_(0), mem_limit_(0),
+  : inited_(false), label_(nullptr), ctx_id_(0), mem_limit_(0),
     cur_blk_(NULL), max_blk_size_(0), min_blk_size_(INT64_MAX), default_block_size_(BLOCK_SIZE),
     n_blocks_(0), col_count_(0),
     row_cnt_(0), enable_dump_(true), has_dumped_(false), dumped_row_cnt_(0),
@@ -243,7 +243,6 @@ ObChunkRowStore::ObChunkRowStore(common::ObIAllocator *alloc /* = NULL */)
 }
 
 int ObChunkRowStore::init(int64_t mem_limit,
-    uint64_t tenant_id,
     int64_t mem_ctx_id /* = common::ObCtxIds::DEFAULT_CTX_ID */,
     const char *label /* = common::ObNewModIds::OB_SQL_CHUNK_ROW_STORE) */,
     bool enable_dump /* = true */,
@@ -257,7 +256,7 @@ int ObChunkRowStore::init(int64_t mem_limit,
     LOG_WARN("init twice", K(ret));
   } else {
     enable_dump_ = enable_dump;
-    tenant_id_ = tenant_id;
+    
     ctx_id_ = mem_ctx_id;
     label_ = label;
     if (0 == GCONF._chunk_row_store_mem_limit) {
@@ -286,14 +285,14 @@ void ObChunkRowStore::reset()
   row_cnt_ = 0;
 
   if (is_file_open()) {
-    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.remove(tenant_id_, io_.fd_))) {
+    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.remove(io_.fd_))) {
       LOG_WARN("remove file failed", K(ret), K_(io_.fd));
     } else {
       LOG_TRACE("close file success", K(ret), K_(io_.fd));
     }
     io_.fd_ = -1;
   }
-  tenant_id_ = common::OB_SERVER_TENANT_ID;
+  
   n_block_in_file_ = 0;
 
   while (!blocks_.is_empty()) {
@@ -353,7 +352,7 @@ void *ObChunkRowStore::alloc_blk_mem(const int64_t size, const bool for_iterator
   if (size < 0) {
     LOG_WARN("invalid argument", K(size));
   } else {
-    ObMemAttr attr(tenant_id_, label_, ctx_id_);
+    ObMemAttr attr(label_, ctx_id_);
     void *mem = allocator_->alloc(size, attr);
     if (NULL == mem) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -638,7 +637,7 @@ int ObChunkRowStore::add_row(const common::ObNewRow &row, StoredRow **stored_row
     if (STORE_MODE::FULL == row_store_mode_ && NULL != row.projector_ && row.projector_size_ > 0) {
       LOG_DEBUG("has projector", K(row.projector_size_), K(row.count_));
       if (OB_ISNULL(projector_)) {
-        ObMemAttr attr(tenant_id_, label_, ctx_id_);
+        ObMemAttr attr(label_, ctx_id_);
         projector_size_ = row.projector_size_;
         const int64_t size = projector_size_ * sizeof(*projector_);
         projector_ = static_cast<int32_t *>(allocator_->alloc(size));
@@ -1469,7 +1468,7 @@ int ObChunkRowStore::get_timeout(int64_t &timeout_ms)
 int ObChunkRowStore::alloc_dir_id()
 {
   int ret = OB_SUCCESS;
-  if (-1 == io_.dir_id_ && OB_FAIL(ObChunkStoreUtil::alloc_dir_id(tenant_id_, io_.dir_id_))) {
+  if (-1 == io_.dir_id_ && OB_FAIL(ObChunkStoreUtil::alloc_dir_id(io_.dir_id_))) {
     LOG_WARN("allocate file directory failed", K(ret));
   }
   return ret;
@@ -1492,7 +1491,7 @@ int ObChunkRowStore::write_file(void *buf, int64_t size)
       if (-1 == io_.dir_id_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("temp file dir id is not init", K(ret), K(io_.dir_id_));
-      } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.open(tenant_id_, io_.fd_, io_.dir_id_))) {
+      } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.open(io_.fd_, io_.dir_id_))) {
         LOG_WARN("open file failed", K(ret));
       } else {
         file_size_ = 0;
@@ -1505,7 +1504,7 @@ int ObChunkRowStore::write_file(void *buf, int64_t size)
   }
   if (OB_SUCC(ret) && size > 0) {
     set_io(size, static_cast<char *>(buf));
-    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.write(tenant_id_, io_))) {
+    if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.write(io_))) {
       LOG_WARN("write to file failed", K(ret), K_(io), K(timeout_ms));
     }
   }
@@ -1544,9 +1543,9 @@ int ObChunkRowStore::read_file(void *buf, const int64_t size, const int64_t offs
     io_.io_timeout_ms_ = timeout_ms;
     tmp_file::ObTmpFileIOHandle handle;
     if (0 == read_size
-        && OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.get_tmp_file_size(tenant_id_, io_.fd_, tmp_file_size))) {
+        && OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.get_tmp_file_size(io_.fd_, tmp_file_size))) {
       LOG_WARN("failed to get tmp file size", K(ret));
-    } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.pread(tenant_id_, io_, offset, handle))) {
+    } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.pread(io_, offset, handle))) {
       if (OB_ITER_END != ret) {
         LOG_WARN("read form file failed", K(ret), K(io_), K(offset), K(timeout_ms));
       }
@@ -1572,11 +1571,11 @@ bool ObChunkRowStore::need_dump(int64_t extra_size)
   return dump;
 }
 
-int ObChunkStoreUtil::alloc_dir_id(const uint64_t tenant_id, int64_t &dir_id)
+int ObChunkStoreUtil::alloc_dir_id(int64_t &dir_id)
 {
   int ret = OB_SUCCESS;
   dir_id = 0;
-  if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(tenant_id, dir_id))) {
+  if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(dir_id))) {
     LOG_WARN("allocate file directory failed", K(ret));
   }
   return ret;
@@ -1610,7 +1609,6 @@ OB_DEF_SERIALIZE(ObChunkRowStore)
     LOG_WARN("chunk row store not support serialize if enable dump", K(ret));
   }
   LST_DO_CODE(OB_UNIS_ENCODE,
-              tenant_id_,
               ctx_id_,
               mem_limit_,
               default_block_size_,
@@ -1645,11 +1643,11 @@ OB_DEF_DESERIALIZE(ObChunkRowStore)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE,
-              tenant_id_,
+              
               ctx_id_,
               mem_limit_);
   if (!is_inited()) {
-    if (OB_FAIL(init(mem_limit_, tenant_id_,
+    if (OB_FAIL(init(mem_limit_,
                      ctx_id_, "ChunkRowDE", false/*enable_dump*/))) {
       LOG_WARN("fail to init chunk row store", K(ret));
     }
@@ -1689,7 +1687,6 @@ OB_DEF_SERIALIZE_SIZE(ObChunkRowStore)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              tenant_id_,
               ctx_id_,
               mem_limit_,
               default_block_size_,

@@ -249,7 +249,7 @@ int ObHashJoinBatch::set_iterator()
 int ObHashJoinBatch::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(chunk_row_store_.init(0, tenant_id_,
+  if (OB_FAIL(chunk_row_store_.init(0,
     common::ObCtxIds::WORK_AREA, common::ObModIds::OB_ARENA_HASH_JOIN, true, 8))) {
     LOG_WARN("failed to init chunk row store", K(ret));
   } else {
@@ -406,7 +406,7 @@ int ObHashJoinBatchMgr::get_or_create_batch(
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       batch_count_ ++;
-      batch_pair.left_ = new (buf1) ObHashJoinBatch(alloc_, buf_mgr_, tenant_id_, level, part_shift, batchno);
+      batch_pair.left_ = new (buf1) ObHashJoinBatch(alloc_, buf_mgr_, level, part_shift, batchno);
     }
     if (OB_SUCC(ret)) {
       buf2 = alloc_.alloc(sizeof(ObHashJoinBatch));
@@ -414,7 +414,7 @@ int ObHashJoinBatchMgr::get_or_create_batch(
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
         batch_count_ ++;
-        batch_pair.right_ = new (buf2) ObHashJoinBatch(alloc_, buf_mgr_, tenant_id_, level, part_shift, batchno);
+        batch_pair.right_ = new (buf2) ObHashJoinBatch(alloc_, buf_mgr_, level, part_shift, batchno);
       }
     }
     if (OB_SUCC(ret)) {

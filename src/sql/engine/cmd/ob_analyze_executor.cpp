@@ -15,11 +15,11 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "share/stat/ob_dbms_stats_executor.h"
+#include "sql/optimizer/stat/ob_dbms_stats_executor.h"
 #include "pl/sys_package/ob_dbms_stats.h"
 #include "sql/engine/cmd/ob_analyze_executor.h"
-#include "share/stat/ob_dbms_stats_lock_unlock.h"
-#include "share/stat/ob_dbms_stats_utils.h"
+#include "sql/optimizer/stat/ob_dbms_stats_lock_unlock.h"
+#include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "src/observer/virtual_table/ob_all_virtual_dml_stats.h"
 
 //#define COMPUTE_FREQUENCY_HISTOGRAM
@@ -51,10 +51,10 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session));
   } else {
-    uint64_t tenant_id = session->get_effective_tenant_id();
+    
     bool is_primary = true;
-    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(tenant_id, is_primary))) {
-      LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret), K(tenant_id));
+    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
+      LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
     } else if (OB_UNLIKELY(!is_primary)) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "analyze table during non-primary tenant");
@@ -80,13 +80,13 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected error", K(ret), K(params));
         } else {
-          ObArenaAllocator tmp_alloc("DeleteStats", OB_MALLOC_NORMAL_BLOCK_SIZE, params.at(0).tenant_id_);
+          ObArenaAllocator tmp_alloc("DeleteStats", OB_MALLOC_NORMAL_BLOCK_SIZE);
           params.at(0).allocator_ = &tmp_alloc;//use the temp allocator to free memory after delete stats.
           if (OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, params.at(0)))) {
             LOG_WARN("failed to check stat locked", K(ret));
           } else if (OB_FAIL(ObDbmsStatsExecutor::delete_table_stats(ctx, params.at(0), cascade_columns))) {
             LOG_WARN("failed to delete table stats", K(ret));
-          } else if (OB_FAIL(pl::ObDbmsStats::update_stat_cache(session->get_rpc_tenant_id(), params.at(0)))) {
+          } else if (OB_FAIL(pl::ObDbmsStats::update_stat_cache(params.at(0)))) {
             LOG_WARN("failed to update stat cache", K(ret));
           } else if (cascade_indexes && params.at(0).part_name_.empty()) {
             if (OB_FAIL(pl::ObDbmsStats::delete_table_index_stats(ctx, params.at(0)))) {
@@ -106,7 +106,7 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
           int64_t i = 0;
           for (; OB_SUCC(ret) && i < params.count(); ++i) {
             ObTableStatParam &param = params.at(i);
-            ObArenaAllocator tmp_alloc("OptStatGather", OB_MALLOC_NORMAL_BLOCK_SIZE, param.tenant_id_);
+            ObArenaAllocator tmp_alloc("OptStatGather", OB_MALLOC_NORMAL_BLOCK_SIZE);
             param.allocator_ = &tmp_alloc;//use the temp allocator to free memory after gather stats.
             start_time = ObTimeUtility::current_time();
             ObOptStatGatherStat gather_stat(task_info);
@@ -125,7 +125,7 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
               LOG_WARN("failed to do flush database monitoring info", K(ret));
             } else if (OB_FAIL(ObDbmsStatsExecutor::gather_table_stats(ctx, param, running_monitor))) {
               LOG_WARN("failed to gather table stats", K(ret));
-            } else if (OB_FAIL(pl::ObDbmsStats::update_stat_cache(session->get_rpc_tenant_id(), param))) {
+            } else if (OB_FAIL(pl::ObDbmsStats::update_stat_cache(param))) {
               LOG_WARN("failed to update stat cache", K(ret));
             } else {
               LOG_TRACE("succeed to gather table stats", K(param));

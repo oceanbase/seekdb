@@ -31,16 +31,15 @@ class ObGtiRequest
 {
   OB_UNIS_VERSION(1);
 public:
-  ObGtiRequest() : tenant_id_(0), range_(0) {}
+  ObGtiRequest() : range_(0) {}
   ~ObGtiRequest() {}
-  int init(const uint64_t tenant_id, const int64_t range);
+  int init(const int64_t range);
   bool is_valid() const;
 public:
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   int64_t get_range() const { return range_; }
-  TO_STRING_KV(K_(tenant_id), K_(range));
+  TO_STRING_KV(K_(range));
 private:
-  uint64_t tenant_id_;
   int64_t range_;
 };
 
@@ -55,18 +54,17 @@ class ObGtiRpcResult
 public:
   ObGtiRpcResult() { reset(); }
   virtual ~ObGtiRpcResult() {}
-  int init(const uint64_t tenant_id, const int status, const int64_t start_id, const int64_t end_id);
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  int init(const int status, const int64_t start_id, const int64_t end_id);
+  
   int get_status() const { return status_; }
   int64_t get_start_id() const { return start_id_; }
   int64_t get_end_id() const { return end_id_; }
   void reset();
   bool is_valid() const;
-  TO_STRING_KV(K_(tenant_id), K_(status), K_(start_id), K_(end_id));
+  TO_STRING_KV(K_(status), K_(start_id), K_(end_id));
 public:
   static const int64_t OB_GTI_RPC_TIMEOUT = 1 * 1000 * 1000;
 private:
-  uint64_t tenant_id_;
   int status_;
   int64_t start_id_;
   int64_t end_id_;
@@ -75,7 +73,7 @@ private:
 class ObGtiRPCCB
 {
 public:
-  ObGtiRPCCB() : is_inited_(false), tenant_id_(0), gti_source_(NULL) {}
+  ObGtiRPCCB() : is_inited_(false), gti_source_(NULL) {}
   ~ObGtiRPCCB() {}
   int init(transaction::ObGtiSource *gti_source)
   {
@@ -97,7 +95,7 @@ public:
   {
     return process_(result, dst, rcode);
   }
-  void set_tenant_id(uint64_t tenant_id) {tenant_id_ = tenant_id;}
+  
 private:
   int process_(const obcall::ObGtiRpcResult &result, const common::ObAddr &dst,
                rpc::frame::ObResultCode &rcode)
@@ -109,11 +107,11 @@ private:
     if (!is_inited_) {
       TRANS_LOG(WARN, "ObGtiRPCCB not inited");
       ret = OB_NOT_INIT;
-    } else if (!is_valid_tenant_id(tenant_id_)) {
-      TRANS_LOG(WARN, "tenant_id is invalid", K_(tenant_id), K(dst));
+    } else if (!true) {
+      TRANS_LOG(WARN, "invalid argument", K(dst));
       ret = OB_ERR_UNEXPECTED;
     } else {
-      MTL_SWITCH(tenant_id_) {
+      MOD_SCOPE {
         if (OB_SUCCESS != rcode.rcode_) {
           status = rcode.rcode_;
           TRANS_LOG(WARN, "gti rpc error", K(rcode), K(dst));
@@ -138,13 +136,12 @@ private:
           TRANS_LOG(INFO, "gti request callback", KR(ret), K(result), K(rcode));
         }
       } else {
-        TRANS_LOG(WARN, "tenant switch fail", K_(tenant_id), K(dst));
+        TRANS_LOG(WARN, "tenant switch fail", K(dst));
       }
     }
     return ret;
   }
   bool is_inited_;
-  uint64_t tenant_id_;
   transaction::ObGtiSource *gti_source_;
 };
 

@@ -36,13 +36,11 @@ class ObIndexNameCache
 {
 public:
   ObIndexNameCache() = delete;
-  ObIndexNameCache(const uint64_t tenant_id,
-                   common::ObMySQLProxy &sql_proxy);
+  ObIndexNameCache(common::ObMySQLProxy &sql_proxy);
   ~ObIndexNameCache() {}
 
   void reset_cache();
-  int check_index_name_exist(const uint64_t tenant_id,
-                             const uint64_t database_id,
+  int check_index_name_exist(const uint64_t database_id,
                              const ObString &index_name,
                              bool &is_exist);
   int add_index_name(const share::schema::ObTableSchema &index_schema);
@@ -51,7 +49,6 @@ private:
   int try_load_cache_();
 private:
   lib::ObMutex mutex_;
-  uint64_t tenant_id_;
   common::ObMySQLProxy &sql_proxy_;
   common::ObArenaAllocator allocator_;
   ObIndexNameMap cache_;
@@ -83,24 +80,23 @@ public:
   // will be called in the following cases:
   // 1. before non parallel ddl commit.
   // 2. after non parallel ddl commit failed.
-  int reset_cache(const uint64_t tenant_id);
+  int reset_cache();
 
   // lock object by original index name first before call check_index_name_exist().
-  int check_index_name_exist(const uint64_t tenant_id,
-                             const uint64_t database_id,
+  int check_index_name_exist(const uint64_t database_id,
                              const ObString &index_name,
                              bool &is_exist);
 
   // call add_index_name() before parallel ddl trans commit.
   int add_index_name(const share::schema::ObTableSchema &index_schema);
 private:
-  int check_tenant_can_be_skipped_(const uint64_t tenant_id, bool &can_skip);
-  int try_init_index_name_cache_map_(const uint64_t tenant_id);
+  int check_tenant_can_be_skipped_(bool &can_skip);
+  int try_init_index_name_cache_map_();
 private:
   common::SpinRWLock rwlock_;
   common::ObArenaAllocator allocator_;
-  // index_name_cache_map_ won't be erased()
-  common::hash::ObHashMap<uint64_t, ObIndexNameCache*, common::hash::ReadWriteDefendMode> index_name_cache_map_;
+  // single-tenant: only sys tenant entry, collapsed to single member
+  ObIndexNameCache *index_name_cache_member_;
   common::ObMySQLProxy *sql_proxy_;
   bool inited_;
 };

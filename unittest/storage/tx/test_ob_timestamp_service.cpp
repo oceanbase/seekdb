@@ -31,32 +31,28 @@ public:
   MyResponseRpc() {}
   ~MyResponseRpc() {}
 public:
-  void set_valid_arg(const uint64_t tenant_id,
-                     const int status,
+  void set_valid_arg(const int status,
                      const ObAddr &sender,
                      const ObAddr self)
   {
-    tenant_id_ = tenant_id;
     status_ = status;
     sender_ = sender;
     self_ = self;
   }
-  int post(const uint64_t tenant_id, const ObAddr &server, const ObGtsErrResponse &msg)
+  int post(const ObAddr &server, const ObGtsErrResponse &msg)
   {
     int ret = OB_SUCCESS;
     if (!msg.is_valid() ||
-        tenant_id != tenant_id_ ||
         msg.get_status() != status_ ||
         msg.get_sender() != sender_ ||
         server != self_) {
       ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid argument", K(ret), K(tenant_id), K(server), K(msg), K(*this));
+      TRANS_LOG(WARN, "invalid argument", K(ret), K(server), K(msg), K(*this));
     }
     return ret;
   }
-  TO_STRING_KV(K_(tenant_id), K_(status), K_(sender), K_(self));
+  TO_STRING_KV(K_(status), K_(sender), K_(self));
 private:
-  uint64_t tenant_id_;
   int status_;
   ObAddr sender_;
   ObAddr self_;
@@ -91,7 +87,6 @@ public:
       TRANS_LOG(DEBUG, "handle gts request", K(request));
       int64_t gts = 0;
       const MonotonicTs srr = request.get_srr();
-      const uint64_t tenant_id = request.get_tenant_id();
       const ObAddr &requester = request.get_sender();
       int64_t end_id;
       if (requester == self_) {
@@ -102,17 +97,17 @@ public:
         TRANS_LOG(WARN, "get timestamp failed", KR(ret));
         int tmp_ret = OB_SUCCESS;
         ObGtsErrResponse response;
-        if (OB_SUCCESS != (tmp_ret = result.init(tenant_id, ret, srr, 0, 0))) {
+        if (OB_SUCCESS != (tmp_ret = result.init(ret, srr, 0, 0))) {
           TRANS_LOG(WARN, "gts result init failed", K(tmp_ret), K(request));
-        } else if (OB_SUCCESS != (tmp_ret = response.init(tenant_id, srr, ret, self_))) {
+        } else if (OB_SUCCESS != (tmp_ret = response.init(srr, ret, self_))) {
           TRANS_LOG(WARN, "gts err response init failed", K(tmp_ret), K(request));
-        } else if (OB_SUCCESS != (tmp_ret = rpc_.post(tenant_id, requester, response))) {
+        } else if (OB_SUCCESS != (tmp_ret = rpc_.post(requester, response))) {
           TRANS_LOG(WARN, "post gts err response failed", K(tmp_ret), K(response));
         } else {
           TRANS_LOG(DEBUG, "post gts err response success", K(response));
         }
       } else {
-        if (OB_FAIL(result.init(tenant_id, ret, srr, gts, gts))) {
+        if (OB_FAIL(result.init(ret, srr, gts, gts))) {
           TRANS_LOG(WARN, "gts result init failed", KR(ret), K(request));
         }
       }
@@ -123,17 +118,16 @@ public:
   {
     int ret = OB_SUCCESS;
     int64_t gts = 0;
-    const uint64_t tenant_id = request.get_tenant_id();
     const MonotonicTs srr = request.get_srr();
     int64_t end_id;
     if (OB_FAIL(get_number(1, ObTimeUtility::current_time_ns(), gts, end_id))) {
       TRANS_LOG(WARN, "get timestamp failed", KR(ret));
       int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = result.init(tenant_id, ret, srr, 0, 0))) {
+      if (OB_SUCCESS != (tmp_ret = result.init(ret, srr, 0, 0))) {
         TRANS_LOG(WARN, "gts result init failed", K(tmp_ret), K(request));
       }
     } else {
-      if (OB_FAIL(result.init(tenant_id, ret, srr, gts, gts))) {
+      if (OB_FAIL(result.init(ret, srr, gts, gts))) {
         TRANS_LOG(WARN, "local gts result init failed", KR(ret), K(request));
       }
     }
@@ -186,15 +180,13 @@ TEST_F(TestObGtsMgr, handle_gts_request_by_leader)
   MyResponseRpc response_rpc;
   ts_service.init(server);
 
-  const uint64_t tenant_id = 1001;
   const MonotonicTs srr = MonotonicTs::current_time();
   const int64_t ts_range = 1;
-  response_rpc.set_valid_arg(tenant_id, OB_SUCCESS, server, client);
+  response_rpc.set_valid_arg(OB_SUCCESS, server, client);
   ObGtsRequest request;
   ObGtsRpcResult result;
-  EXPECT_EQ(OB_SUCCESS, request.init(tenant_id, srr, ts_range, client));
+  EXPECT_EQ(OB_SUCCESS, request.init(srr, ts_range, client));
   EXPECT_EQ(OB_SUCCESS, ts_service.handle_request(request, result));
-  EXPECT_EQ(tenant_id, result.get_tenant_id());
   EXPECT_EQ(OB_SUCCESS, result.get_status());
   EXPECT_EQ(srr, result.get_srr());
   EXPECT_EQ(ts_range - 1, result.get_gts_end() - result.get_gts_start());
@@ -209,15 +201,13 @@ TEST_F(TestObGtsMgr, handle_local_gts_request)
   MyResponseRpc response_rpc;
   ts_service.init(server);
 
-  const uint64_t tenant_id = 1001;
   const MonotonicTs srr = MonotonicTs::current_time();
   const int64_t ts_range = 1;
-  response_rpc.set_valid_arg(tenant_id, OB_SUCCESS, server, server);
+  response_rpc.set_valid_arg(OB_SUCCESS, server, server);
   ObGtsRequest request;
   ObGtsRpcResult result;
-  EXPECT_EQ(OB_SUCCESS, request.init(tenant_id, srr, ts_range, server));
+  EXPECT_EQ(OB_SUCCESS, request.init(srr, ts_range, server));
   EXPECT_EQ(OB_SUCCESS, ts_service.handle_request(request, result));
-  EXPECT_EQ(tenant_id, result.get_tenant_id());
   EXPECT_EQ(OB_SUCCESS, result.get_status());
   EXPECT_EQ(srr, result.get_srr());
   EXPECT_EQ(ts_range - 1, result.get_gts_end() - result.get_gts_start());
@@ -232,15 +222,13 @@ TEST_F(TestObGtsMgr, invalid_argument)
   MyTimestampService ts_service;
   MyResponseRpc response_rpc;
 
-  const uint64_t tenant_id = 1001;
   const MonotonicTs srr = MonotonicTs::current_time();
   const MonotonicTs stc;
   const int64_t ts_range = 1;
   ObGtsRequest request;
-  EXPECT_EQ(OB_INVALID_ARGUMENT, request.init(0, srr, ts_range, client));
-  EXPECT_EQ(OB_INVALID_ARGUMENT, request.init(tenant_id, stc, ts_range, client));
-  EXPECT_EQ(OB_INVALID_ARGUMENT, request.init(tenant_id, srr, 0, client));
-  EXPECT_EQ(OB_INVALID_ARGUMENT, request.init(tenant_id, srr, ts_range, ObAddr()));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, request.init(stc, ts_range, client));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, request.init(srr, 0, client));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, request.init(srr, ts_range, ObAddr()));
 }
 
 }//end of unittest

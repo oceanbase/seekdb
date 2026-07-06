@@ -22,9 +22,8 @@
 #include "sql/rewrite/ob_transform_utils.h"
 #include "pl/ob_pl_resolver.h"
 #include "sql/parser/parse_malloc.h"
-#include "share/vector_index/ob_vector_index_util.h"
-#include "share/external_table/ob_external_table_utils.h"
-#include "share/domain_id/ob_domain_id.h"
+#include "observer/vector_index/ob_vector_index_util.h"
+#include "sql/das/ob_domain_id.h"
 
 namespace oceanbase
 {
@@ -107,7 +106,7 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
       } else {
         const bool is_updatable_generated_table = (table->is_generated_table() || table->is_temp_table())
             && table->is_view_table_;
-        if (!table->is_basic_table() && !table->is_link_table() && !is_updatable_generated_table) {
+        if (!table->is_basic_table() && !is_updatable_generated_table) {
           ret = OB_ERR_NON_UPDATABLE_TABLE;
           const ObString &table_name = table->alias_name_;
           ObString scope_name = "UPDATE";
@@ -241,7 +240,7 @@ int ObDelUpdResolver::resolve_column_and_values(const ParseNode &assign_list,
             const share::schema::ObTableSchema *table_schema = NULL;
             ObArray<ColumnItem> column_items;
             CK (OB_NOT_NULL(table_item));
-            if (table_item->is_basic_table() || table_item->is_link_table()) {
+            if (table_item->is_basic_table()) {
               OZ (resolve_all_basic_table_columns(*table_item, false, &column_items));
             } else if (table_item->is_generated_table() || table_item->is_temp_table()) {
               OZ (resolve_all_generated_table_columns(*table_item, column_items));
@@ -575,8 +574,8 @@ int ObDelUpdResolver::resolve_additional_assignments(ObIArray<ObTableAssignment>
     } else if (OB_ISNULL(session_info_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session_info_ is null", K(ret));
-    } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
-        table_item->get_base_table_item().ref_id_, table_schema, table_item->is_link_table()))) {
+    } else if (OB_FAIL(schema_checker_->get_table_schema(
+        table_item->get_base_table_item().ref_id_, table_schema))) {
       LOG_WARN("fail to get table schema", K(ret), KPC(table_item));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -871,7 +870,7 @@ int ObDelUpdResolver::set_base_table_for_updatable_view(TableItem &table_item,
   } else {
     if (table_item.is_view_table_) {
       const ObTableSchema *table_schema = NULL;
-      if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(), stmt->get_view_ref_id(), table_schema, table_item.is_link_table()))) {
+      if (OB_FAIL(schema_checker_->get_table_schema( stmt->get_view_ref_id(), table_schema))) {
         LOG_WARN("get table schema failed", K(ret));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -902,7 +901,7 @@ int ObDelUpdResolver::set_base_table_for_updatable_view(TableItem &table_item,
           table_item.view_base_item_ = new_table_item;
           if (new_table_item->is_basic_table()) {
             const ObTableSchema *base_table_schema = NULL;
-            if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+            if (OB_FAIL(schema_checker_->get_table_schema(
                         new_table_item->ref_id_, base_table_schema))) {
               LOG_WARN("get table schema failed", K(ret));
             } else if (OB_ISNULL(base_table_schema)) {
@@ -971,7 +970,7 @@ int ObDelUpdResolver::set_base_table_for_view(TableItem &table_item, const bool 
   } else {
     if (table_item.is_view_table_) {
       const ObTableSchema *table_schema = NULL;
-      if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(), stmt->get_view_ref_id(), table_schema, table_item.is_link_table()))) {
+      if (OB_FAIL(schema_checker_->get_table_schema( stmt->get_view_ref_id(), table_schema))) {
         LOG_WARN("get table schema failed", K(ret));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -1004,12 +1003,10 @@ int ObDelUpdResolver::set_base_table_for_view(TableItem &table_item, const bool 
       } else if (NULL == base) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table item is null", K(ret));
-      } else if (base->is_link_table()) {
-        table_item.view_base_item_ = base;
       } else if (base->is_basic_table()) {
         table_item.view_base_item_ = base;
         const ObTableSchema *base_table_schema = NULL;
-        if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+        if (OB_FAIL(schema_checker_->get_table_schema(
                     base->ref_id_, base_table_schema))) {
           LOG_WARN("get table schema failed", K(ret));
         } else if (OB_ISNULL(base_table_schema)) {
@@ -1081,7 +1078,7 @@ int ObDelUpdResolver::check_same_base_table(const TableItem &table_item,
         ret = OB_ERR_VIEW_MULTIUPDATE;
         LOG_WARN("Can not modify more than one base table through a join view", K(ret), K(col_ref));
       } else {
-        if (new_table_item->is_basic_table() || new_table_item->is_link_table()) {
+        if (new_table_item->is_basic_table()) {
           // is base table, do nothing
         } else if (new_table_item->is_generated_table() || new_table_item->is_temp_table()) {
           const bool inner_log_error = false;
@@ -1184,7 +1181,7 @@ int ObDelUpdResolver::add_all_column_to_updatable_view(ObDMLStmt &stmt,
   } else if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("params_.session_info_ is null", K(ret));
-  } else if (!table_item.is_basic_table() && !table_item.is_link_table() && !table_item.is_generated_table()
+  } else if (!table_item.is_basic_table() && !table_item.is_generated_table()
              && !table_item.is_temp_table()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("unexpected table item", K(ret), K(table_item));
@@ -1202,7 +1199,7 @@ int ObDelUpdResolver::add_all_column_to_updatable_view(ObDMLStmt &stmt,
   }
   if (OB_SUCC(ret)) {
     ColumnItem *col_item = NULL;
-    if (table_item.is_basic_table() || table_item.is_link_table()) {
+    if (table_item.is_basic_table()) {
       bool has_pk = false;
       if (stmt::T_SELECT == stmt.get_stmt_type()) {
         // select_items_is_pk must happend before add_select_item_func
@@ -1217,7 +1214,7 @@ int ObDelUpdResolver::add_all_column_to_updatable_view(ObDMLStmt &stmt,
       const ObTableSchema *table_schema = NULL;
       if (OB_FAIL(ret)) {
         // do nothing
-      } else if (OB_FAIL(schema_checker_->get_table_schema(params_.session_info_->get_effective_tenant_id(), table_item.ref_id_, table_schema, table_item.is_link_table()))) {
+      } else if (OB_FAIL(schema_checker_->get_table_schema( table_item.ref_id_, table_schema))) {
         LOG_WARN("get table schema failed", K(ret));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -1269,12 +1266,12 @@ int ObDelUpdResolver::check_err_log_table(ObString &table_name, ObString &databa
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = NULL;
-  uint64_t tenant_id = session_info_->get_effective_tenant_id();
+  
   ObDelUpdStmt *del_upd_stmt = get_del_upd_stmt();
   if (OB_ISNULL(del_upd_stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(tenant_id,
+  } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        database_name,
                                                        table_name,
                                                        false,
@@ -1387,10 +1384,8 @@ int ObDelUpdResolver::resolve_err_log_table(const ParseNode *node)
   ObString synonym_db_name;
   bool is_db_explicit;
   const ParseNode *relation_factor_node = NULL;
-  bool use_sys_tenant = false;
   uint64_t table_id = OB_INVALID_ID;
   ObDelUpdStmt *del_upd_stmt = get_del_upd_stmt();
-  bool is_reverse_link = false; // no use
   ObArray<uint64_t> ref_obj_ids;
   CK (OB_NOT_NULL(del_upd_stmt));
   if (OB_ISNULL(relation_factor_node = node->children_[0])) {
@@ -1408,8 +1403,6 @@ int ObDelUpdResolver::resolve_err_log_table(const ParseNode *node)
                                                            catalog_name,
                                                            database_name,
                                                            is_db_explicit,
-                                                           use_sys_tenant,
-                                                           is_reverse_link,
                                                            ref_obj_ids))) {
     if (OB_TABLE_NOT_EXIST == ret || OB_ERR_BAD_DATABASE == ret) {
       if (is_information_schema_database_id(database_id)) {
@@ -1428,7 +1421,7 @@ int ObDelUpdResolver::resolve_err_log_table(const ParseNode *node)
     LOG_WARN("check error logging table is not meetting requirement", K(ret), K(table_name), K(database_name));
   }
   LOG_DEBUG("after resolver table_name", K(table_name), K(database_id), K(database_name),
-      K(is_db_explicit), K(use_sys_tenant));
+      K(is_db_explicit));
   return ret;
 }
 
@@ -1479,10 +1472,9 @@ int ObDelUpdResolver::add_all_columns_to_stmt(const TableItem &table_item,
   if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("params_.session_info_ is null", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(params_.session_info_->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        base_table_item.ref_id_,
-                                                       table_schema,
-                                                       base_table_item.is_link_table()))) {
+                                                       table_schema))) {
     LOG_WARN("not find table schema", K(ret), K(base_table_item));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1495,8 +1487,6 @@ int ObDelUpdResolver::add_all_columns_to_stmt(const TableItem &table_item,
       if (OB_ISNULL(column)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid column schema", K(column));
-      } else if (schema::EXTERNAL_TABLE == base_table_item.table_type_
-                 && ObExternalTableUtils::is_skipped_insert_column(*column)) {
       } else if (OB_FAIL(add_column_to_stmt(table_item, *column, column_exprs))) {
         LOG_WARN("add column item to stmt failed", K(ret));
       }
@@ -1513,10 +1503,9 @@ int ObDelUpdResolver::add_all_lob_columns_to_stmt(const TableItem &table_item,
   if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("params_.session_info_ is null", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(params_.session_info_->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        base_table_item.ref_id_,
-                                                       table_schema,
-                                                       base_table_item.is_link_table()))) {
+                                                       table_schema))) {
     LOG_WARN("not find table schema", K(ret), K(base_table_item));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1579,10 +1568,9 @@ int ObDelUpdResolver::add_all_rowkey_columns_to_stmt(const TableItem &table_item
   } else if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("params_.session_info_ is null", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(params_.session_info_->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        base_table_item.ref_id_,
-                                                       table_schema,
-                                                       base_table_item.is_link_table()))) {
+                                                       table_schema))) {
     LOG_WARN("table schema not found", K(base_table_item));
   } else if (NULL == table_schema) {
     ret = OB_ERR_UNEXPECTED;
@@ -1592,13 +1580,11 @@ int ObDelUpdResolver::add_all_rowkey_columns_to_stmt(const TableItem &table_item
     for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_info.get_size(); ++i) {
       if (OB_FAIL(rowkey_info.get_column_id(i, rowkey_column_id))) {
         LOG_WARN("get rowkey info failed", K(ret), K(i), K(rowkey_info));
-      } else if (OB_FAIL(get_column_schema(base_table_item.ref_id_, rowkey_column_id, column_schema, true, base_table_item.is_link_table()))) {
+      } else if (OB_FAIL(get_column_schema(base_table_item.ref_id_, rowkey_column_id, column_schema, true))) {
         LOG_WARN("get column schema failed", K(rowkey_column_id));
       } else if (OB_ISNULL(column_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid column schema", K(column_schema));
-      } else if (schema::EXTERNAL_TABLE == base_table_item.table_type_
-                 && ObExternalTableUtils::is_skipped_insert_column(*column_schema)) {
       } else if (OB_FAIL(add_column_to_stmt(table_item, *column_schema, column_exprs))) {
         LOG_WARN("add column to stmt failed", K(ret), K(table_item));
       }
@@ -1636,10 +1622,9 @@ int ObDelUpdResolver::add_index_related_columns_to_stmt(const TableItem &table_i
     const ObTableSchema *table_schema = NULL;
     const ObTableSchema *index_schema = NULL;
     const ObColumnSchemaV2 *column_schema = NULL;
-    uint64_t tenant_id = params_.session_info_->get_effective_tenant_id();
+    
 
-    if (OB_FAIL(schema_checker_->get_table_schema(tenant_id, base_table_id, table_schema,
-                                                  table_item.get_base_table_item().is_link_table()))) {
+    if (OB_FAIL(schema_checker_->get_table_schema( base_table_id, table_schema))) {
       LOG_WARN("invalid table id", K(base_table_id));
     } else if (NULL == (column_schema = table_schema->get_column_schema(base_column_id))) {
       LOG_WARN("get column schema failed", K(ret), K(base_table_id), K(base_column_id));
@@ -1654,8 +1639,7 @@ int ObDelUpdResolver::add_index_related_columns_to_stmt(const TableItem &table_i
       uint64_t index_tids[OB_MAX_AUX_TABLE_PER_MAIN_TABLE];
       int64_t index_count = OB_MAX_AUX_TABLE_PER_MAIN_TABLE;
       // get all the indexes
-      if (OB_FAIL(schema_checker_->get_can_write_index_array(tenant_id,
-                                                             base_table_id,
+      if (OB_FAIL(schema_checker_->get_can_write_index_array(base_table_id,
                                                              index_tids,
                                                              index_count))) {
         LOG_WARN("fail to get index", K(ret));
@@ -1663,7 +1647,7 @@ int ObDelUpdResolver::add_index_related_columns_to_stmt(const TableItem &table_i
         for (int64_t i = 0; OB_SUCC(ret) && i < index_count; ++i) {
           uint64_t index_id = index_tids[i];
           // get index schema
-          if (OB_FAIL(schema_checker_->get_table_schema(tenant_id, index_id, index_schema))) {
+          if (OB_FAIL(schema_checker_->get_table_schema( index_id, index_schema))) {
             LOG_WARN("get index schema failed", K(index_id));
           } else {
             //only add the column items in the index schema which contain the column_id
@@ -1693,14 +1677,12 @@ int ObDelUpdResolver::add_all_index_rowkey_to_stmt(const TableItem &table_item,
   } else if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("params_.session_info_ is null", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_can_write_index_array(
-              params_.session_info_->get_effective_tenant_id(),
-              table_item.get_base_table_item().ref_id_, idx_tids, idx_count))) {
+  } else if (OB_FAIL(schema_checker_->get_can_write_index_array(table_item.get_base_table_item().ref_id_, idx_tids, idx_count))) {
     LOG_WARN("failed to get all index", K(ret));
   } else {
     // Secondly, for each index, all all its rowkey
     for (int64_t i = 0; OB_SUCC(ret) && i < idx_count; ++i) {
-      if (OB_FAIL(schema_checker_->get_table_schema(params_.session_info_->get_effective_tenant_id(),
+      if (OB_FAIL(schema_checker_->get_table_schema(
                                                     idx_tids[i], index_schema))) {
         LOG_WARN("get index schema failed", "index_id", idx_tids[i], K(ret));
       } else if (OB_FAIL(add_all_index_rowkey_to_stmt(table_item, index_schema, column_exprs))) {
@@ -1735,7 +1717,7 @@ int ObDelUpdResolver::add_all_index_rowkey_to_stmt(const TableItem &table_item,
         if ((*b)->is_shadow_column()) {
           continue;
         }
-        if (OB_FAIL(get_column_schema(base_table_id, rowkey_column_id, column_schema, true, table_item.get_base_table_item().is_link_table()))) {
+        if (OB_FAIL(get_column_schema(base_table_id, rowkey_column_id, column_schema, true))) {
           LOG_WARN("get column schema failed", K(ret), K(base_table_id), K(rowkey_column_id));
         } else if (OB_ISNULL(column_schema)) {
           ret = OB_ERR_UNEXPECTED;
@@ -1765,7 +1747,7 @@ int ObDelUpdResolver::add_all_partition_key_columns_to_stmt(const TableItem &tab
   } else if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("params_.session_info_ is null", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(params_.session_info_->get_effective_tenant_id(), base_table_id, table_schema, table_item.is_link_table()))) {
+  } else if (OB_FAIL(schema_checker_->get_table_schema( base_table_id, table_schema))) {
     LOG_WARN("table schema not found", K(base_table_id), K(table_item));
   } else if (NULL == table_schema) {
     ret = OB_ERR_UNEXPECTED;
@@ -1784,8 +1766,7 @@ int ObDelUpdResolver::add_all_partition_key_columns_to_stmt(const TableItem &tab
         if (OB_FAIL(get_column_schema(base_table_id,
                                       rowkey_column_id,
                                       column_schema,
-                                      true,
-                                      table_item.is_link_table()))) {
+                                      true))) {
           LOG_WARN("get column schema failed", K(base_table_id), K(rowkey_column_id));
         } else if (OB_FAIL(add_column_to_stmt(table_item, *column_schema, column_exprs, stmt))) {
           LOG_WARN("add column to stmt failed", K(ret), K(table_item), KPC(column_schema));
@@ -1818,18 +1799,18 @@ int ObDelUpdResolver::check_need_fired_trigger(const TableItem* table_item)
                               ? table_item->ref_query_->get_view_ref_id()
                               : table_item->get_base_table_item().ref_id_;
       } else if (!table_item->alias_name_.empty() && table_item->is_view_table_) {
-        uint64_t tenant_id = session_info_->get_effective_tenant_id();
+        
         CK (OB_NOT_NULL(schema_checker_));
         CK (OB_NOT_NULL(schema_guard = schema_checker_->get_schema_guard()))
-        OZ (schema_guard->get_table_id(tenant_id, table_item->database_name_,
+        OZ (schema_guard->get_table_id(table_item->database_name_,
                                       table_item->table_name_, false /*is_index*/,
                                       ObSchemaGetterGuard::ALL_NON_HIDDEN_TYPES, table_id));
       }
     }
-    OZ (schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(), table_id, table_schema), table_id);
+    OZ (schema_checker_->get_table_schema( table_id, table_schema), table_id);
     CK (OB_NOT_NULL(table_schema));
     if (OB_SUCC(ret)) {
-      const uint64_t tenant_id = table_schema->get_tenant_id();
+      
       const ObIArray<uint64_t> &tg_list = table_schema->get_trigger_list();
       const ObTriggerInfo *tg_info = NULL;
       uint64_t tg_id = OB_INVALID_ID;
@@ -1855,7 +1836,7 @@ int ObDelUpdResolver::check_need_fired_trigger(const TableItem* table_item)
       }
       for (int64_t i = 0; OB_SUCC(ret) && !has && i < tg_list.count(); i++) {
         OX (tg_id = tg_list.at(i));
-        OZ (schema_guard->get_trigger_info(tenant_id, tg_id, tg_info));
+        OZ (schema_guard->get_trigger_info( tg_id, tg_info));
         OV (OB_NOT_NULL(tg_info));
         OX (has = (tg_info->is_enable() && tg_info->has_event(dml_event)));
       }
@@ -2015,7 +1996,7 @@ int ObDelUpdResolver::view_pullup_part_exprs()
       } else if (OB_ISNULL(table) || OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_) || OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table item is null", K(ret));
-      } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+      } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        table->get_base_table_item().ref_id_,
                                                        table_schema))) {
         LOG_WARN("fail to get table schema", K(ret), K(table->get_base_table_item().ref_id_));
@@ -2148,7 +2129,7 @@ int ObDelUpdResolver::resolve_check_constraints(const TableItem* table_item,
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_info_ is null", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        table_item->get_base_table_item().ref_id_,
                                                        table_schema))) {
     LOG_WARN("fail to get table schema", K(ret), K(table_item->get_base_table_item().ref_id_));
@@ -2424,7 +2405,7 @@ int ObDelUpdResolver::build_column_conv_function_with_value_desc(ObInsertTableIn
       if (OB_ISNULL(table_item)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get null table item", K(ret));
-      } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+      } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                            table_item->ddl_table_id_, table_schema))) {
         LOG_WARN("get table schema failed", K(ret), K(table_item->ddl_table_id_));
       } else if (OB_ISNULL(table_schema)) {
@@ -2442,10 +2423,9 @@ int ObDelUpdResolver::build_column_conv_function_with_value_desc(ObInsertTableIn
           OB_ISNULL(schema_guard = schema_checker_->get_schema_guard())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid schema checker", K(schema_checker_));
-      } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+      } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                            table_info.ref_table_id_,
-                                                           table_schema,
-                                                           table_info.is_link_table_))) {
+                                                           table_schema))) {
         LOG_WARN("fail to get table schema", K(ret), KPC(table_item));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -2498,10 +2478,9 @@ int ObDelUpdResolver::build_column_conv_function_with_default_expr(ObInsertTable
         OB_ISNULL(schema_guard = schema_checker_->get_schema_guard())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid schema checker", K(schema_checker_));
-    } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+    } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                          table_info.ref_table_id_,
-                                                         table_schema,
-                                                         table_info.is_link_table_))) {
+                                                         table_schema))) {
       LOG_WARN("fail to get table schema", K(ret));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -2509,17 +2488,16 @@ int ObDelUpdResolver::build_column_conv_function_with_default_expr(ObInsertTable
     } else if (OB_ISNULL(column_item)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null column item", K(ret), K(column_item));
-    } else if (!table_info.is_link_table_ && OB_FAIL(schema_checker_->get_column_schema(
-                                                     session_info_->get_effective_tenant_id(),
+    } else if (OB_FAIL(schema_checker_->get_column_schema(
                                                      table_info.ref_table_id_,
                                                      OB_INVALID_ID == column_item->base_cid_ ? column_item->column_id_ : column_item->base_cid_,
                                                      col_schema,
                                                      true/*get_hidden*/))) {
       LOG_WARN("fail to get column schema", K(ret), KPC(tbl_col), KPC(column_item));
-    } else if (!table_info.is_link_table_ && OB_ISNULL(col_schema)) {
+    } else if (OB_ISNULL(col_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("column schema is nullptr", K(ret), KPC(tbl_col), KPC(column_item));
-    } else if (!table_info.is_link_table_ && ObDomainIdUtils::is_domain_id_index_col(col_schema)) {
+    } else if (ObDomainIdUtils::is_domain_id_index_col(col_schema)) {
       if (OB_FAIL(copy_schema_expr(*params_.expr_factory_,
                                   column_item->expr_->get_dependant_expr(),
                                   function_expr))) {
@@ -2583,7 +2561,7 @@ int ObDelUpdResolver::generate_autoinc_params(ObInsertTableInfo &table_info)
   if (OB_ISNULL(del_upd_stmt) || OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(del_upd_stmt), K(params_.session_info_));
-   } else if (OB_FAIL(schema_checker_->get_table_schema(params_.session_info_->get_effective_tenant_id(),
+   } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                         table_info.ref_table_id_,
                                                         table_schema))) {
     LOG_WARN("fail to get table schema", K(ret), K(table_info.ref_table_id_));
@@ -2634,7 +2612,7 @@ int ObDelUpdResolver::build_autoinc_param(
   } else {
     const uint64_t column_id = column_schema->get_column_id();
     const ObObjType column_type = column_schema->get_data_type();
-    param.tenant_id_ = params_.session_info_->get_effective_tenant_id();
+    
     param.autoinc_table_id_ = table_id;
     param.autoinc_first_part_num_ = table_schema->get_first_part_num();
     param.autoinc_table_part_num_ = table_schema->get_all_part_num();
@@ -2694,7 +2672,6 @@ int ObDelUpdResolver::resolve_insert_columns(const ParseNode *node,
   int ret = OB_SUCCESS;
   TableItem *table_item = NULL;
   ObDelUpdStmt *del_upd_stmt = get_del_upd_stmt();
-  bool is_ext_part_column = false;
   if (OB_ISNULL(del_upd_stmt) || OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid insert stmt", K(del_upd_stmt), K_(session_info), K_(schema_checker));
@@ -2746,13 +2723,6 @@ int ObDelUpdResolver::resolve_insert_columns(const ParseNode *node,
       } else if (!session_info_->get_ddl_info().is_ddl() && OB_HIDDEN_SESS_CREATE_TIME_COLUMN_ID == column_expr->get_column_id()) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify __sess_create_time value");
-      } else if (schema::EXTERNAL_TABLE == table_item->table_type_
-                 && OB_FAIL(is_external_table_partition_column(*table_item, column_expr->get_column_id(), is_ext_part_column))) {
-        LOG_WARN("failed to check external table column", K(ret));
-      } else if (is_ext_part_column) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("column list should not contain external table partition column", K(ret));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "contain external table partition column in insert column list");
       } else if (OB_FAIL(mock_values_column_ref(column_expr))) {
         LOG_WARN("mock values column reference failed", K(ret));
       }
@@ -2764,7 +2734,7 @@ int ObDelUpdResolver::resolve_insert_columns(const ParseNode *node,
     }
     ObArray<ColumnItem> column_items;
     if (OB_SUCC(ret)) {
-      if (table_item->is_basic_table() || table_item->is_link_table()) {
+      if (table_item->is_basic_table()) {
         if (OB_FAIL(resolve_all_basic_table_columns(*table_item, false, &column_items))) {
           LOG_WARN("resolve all basic table columns failed", K(ret));
         }
@@ -2788,10 +2758,7 @@ int ObDelUpdResolver::resolve_insert_columns(const ParseNode *node,
           ret = OB_ERR_FIELD_SPECIFIED_TWICE;
           ObCStringHelper helper;
           LOG_USER_ERROR(OB_ERR_FIELD_SPECIFIED_TWICE, helper.convert(column_items.at(i).column_name_));
-        } else if (schema::EXTERNAL_TABLE == table_item->table_type_
-                   && OB_FAIL(is_external_table_partition_column(*table_item, column_id, is_ext_part_column))) {
-          LOG_WARN("failed to check external table column", K(ret));
-        } else if (!is_ext_part_column && OB_FAIL(mock_values_column_ref(column_items.at(i).expr_))) {
+        } else if (OB_FAIL(mock_values_column_ref(column_items.at(i).expr_))) {
           LOG_WARN("mock values column reference failed", K(ret));
         }
       }
@@ -2822,31 +2789,6 @@ int ObDelUpdResolver::resolve_insert_columns(const ParseNode *node,
         }
       }
     }
-  }
-  return ret;
-}
-int ObDelUpdResolver::is_external_table_partition_column(const TableItem &table_item,
-                                                         uint64_t column_id,
-                                                         bool &is_part_column)
-{
-  int ret = OB_SUCCESS;
-  const ObTableSchema* table_schema = NULL;
-  const ObColumnSchemaV2 *column_schema = NULL;
-  is_part_column = false;
-  if (OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
-                                                       table_item.ref_id_,
-                                                       table_schema,
-                                                       table_item.is_link_table()))) {
-    LOG_WARN("fail to get table schema", K(ret), K(table_item.ref_id_));
-  } else if (OB_ISNULL(table_schema)
-             || OB_ISNULL(column_schema = table_schema->get_column_schema(column_id))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column schema is null", K(ret));
-  } else {
-    is_part_column = column_schema->is_tbl_part_key_column();
   }
   return ret;
 }
@@ -2982,7 +2924,7 @@ int ObDelUpdResolver::resolve_insert_values(const ParseNode *node,
             } else if (OB_FAIL(check_basic_column_generated(column_expr, del_upd_stmt,
                                                             is_generated_column))) {
               LOG_WARN("check column generated failed", K(ret));
-            } else if (is_generated_column && schema::EXTERNAL_TABLE != table_item->table_type_) {
+            } else if (is_generated_column) {
               ret = OB_NON_DEFAULT_VALUE_FOR_GENERATED_COLUMN;
               ColumnItem *orig_col_item = NULL;
               if (NULL != (orig_col_item = del_upd_stmt->get_column_item_by_id(table_info.table_id_, column_id))
@@ -3239,7 +3181,7 @@ int ObDelUpdResolver::get_part_key_ids(const int64_t table_id, common::ObIArray<
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_info_ is null", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        table_id, table_schema))) {
     LOG_WARN("table schema not found", "table_id", table_id);
   } else if (NULL == table_schema) {
@@ -3343,17 +3285,16 @@ int ObDelUpdResolver::check_heap_table_update(ObTableAssignment &tas)
   } else if (OB_ISNULL(table = stmt->get_table_item_by_id(tas.table_id_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get table_item", K(ret), K(tas));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(params_.session_info_->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        table->get_base_table_item().ref_id_,
-                                                       table_schema, table->is_link_table()))) {
+                                                       table_schema))) {
     LOG_WARN("fail to get table schema", K(ret),
              "base_table_id", table->get_base_table_item().ref_id_);
   } else if (table_schema->is_table_with_pk()) {
     // Not a heap table, nothing needs to be done
   } else if (OB_FAIL(check_update_part_key(tas,
                                            table->get_base_table_item().ref_id_,
-                                           is_update_part_key,
-                                           table->get_base_table_item().is_link_table()))) {
+                                           is_update_part_key))) {
     LOG_WARN("fail to check whether update part key", K(ret), K(tas),
              "base_table_id", table->get_base_table_item().ref_id_);
   } else if (OB_FAIL(check_vec_hnsw_index_vid_opt(tas, table_schema, is_vec_hnsw_index_vid_opt))) {
@@ -3380,14 +3321,12 @@ int ObDelUpdResolver::generate_insert_table_info(const TableItem &table_item,
   if (OB_ISNULL(del_upd_stmt) || OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(del_upd_stmt), K(schema_checker_), K(session_info_));
-  } else if (OB_FAIL(schema_checker_->get_can_write_index_array(session_info_->get_effective_tenant_id(),
-                                                                base_table_item.ref_id_,
+  } else if (OB_FAIL(schema_checker_->get_can_write_index_array(base_table_item.ref_id_,
                                                                 index_tid, gindex_cnt, true))) {
     LOG_WARN("failed to get global index", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        base_table_item.ref_id_,
-                                                       table_schema,
-                                                       base_table_item.is_link_table()))) {
+                                                       table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -3406,7 +3345,6 @@ int ObDelUpdResolver::generate_insert_table_info(const TableItem &table_item,
       table_info.loc_table_id_ = base_table_item.table_id_;
       table_info.ref_table_id_ = base_table_item.ref_id_;
       table_info.table_name_ = table_schema->get_table_name_str();
-      table_info.is_link_table_ = base_table_item.is_link_table();
     }
   } else {
     uint64_t view_id = OB_INVALID_ID;
@@ -3447,15 +3385,10 @@ int ObDelUpdResolver::replace_gen_col_dependent_col(ObInsertTableInfo& table_inf
     if (OB_ISNULL(col_expr = table_info.column_exprs_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
-    } else if (table_info.is_link_table_) {
-      if (col_expr->is_generated_column()) {
-        need_replace_col = true;
-      }
     } else if (OB_ISNULL(column_item = del_upd_stmt->get_column_item_by_id(table_info.table_id_, col_expr->get_column_id()))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get column item", K(ret), K(table_info), KPC(col_expr));
     } else if (OB_FAIL(schema_checker_->get_column_schema(
-                         session_info_->get_effective_tenant_id(),
                          OB_INVALID_ID == column_item->base_cid_ || OB_INVALID_ID == column_item->base_tid_? table_info.ref_table_id_ : column_item->base_tid_,
                          OB_INVALID_ID == column_item->base_cid_ ? column_item->column_id_ : column_item->base_cid_,
                          col_schema,

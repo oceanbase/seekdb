@@ -4,6 +4,7 @@
 
 connect (conn_user,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
 connection conn_user;
+alter system set _enable_add_fulltext_index_to_existing_table = false;
 
 --disable_warnings
 drop database if exists post_create_vec;

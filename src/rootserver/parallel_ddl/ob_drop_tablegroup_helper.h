@@ -38,7 +38,6 @@ class ObDropTablegroupHelper : public ObDDLHelper
 public:
   ObDropTablegroupHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
-    const uint64_t tenant_id,
     const obcall::ObDropTablegroupArg &arg,
     obcall::ObParallelDDLRes &res,
     ObDDLSQLTransaction *external_trans = nullptr);

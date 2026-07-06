@@ -42,7 +42,7 @@ class ObMajorFreezeService : public logservice::ObIReplaySubHandler,
 {
 public:
   ObMajorFreezeService() 
-    : is_inited_(false), tenant_id_(common::OB_INVALID_ID), 
+    : is_inited_(false), 
       is_launched_(false), lock_(common::ObLatchIds::MAJOR_FREEZE_SERVICE_LOCK),
       rw_lock_(common::ObLatchIds::MAJOR_FREEZE_LOCK),
       switch_lock_(common::ObLatchIds::MAJOR_FREEZE_SWITCH_LOCK),
@@ -50,7 +50,7 @@ public:
   {}
   virtual ~ObMajorFreezeService();
 
-  int init(const uint64_t tenant_id);
+  int init();
 
   int flush(share::SCN &rec_scn)
   {
@@ -84,7 +84,7 @@ public:
   int resume_merge();
   int clear_merge_error();
 
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
 
   int start() { return common::OB_SUCCESS; };
   void stop();
@@ -110,7 +110,6 @@ private:
 
 private:
   bool is_inited_;
-  uint64_t tenant_id_;
   bool is_launched_;
   // lock_: used for avoiding launching, suspend, resume, etc. ops concurrently execute
   common::ObRecursiveMutex lock_;

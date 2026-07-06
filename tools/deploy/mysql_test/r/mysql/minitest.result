@@ -240,7 +240,6 @@ ob_default_lob_inrow_threshold	8192
 ob_early_lock_release	OFF
 ob_enable_aggregation_pushdown	ON
 ob_enable_index_direct_select	OFF
-ob_enable_jit	OFF
 ob_enable_parameter_anonymous_block	ON
 ob_enable_plan_cache	ON
 ob_enable_pl_cache	ON
@@ -254,7 +253,6 @@ ob_hnsw_ef_search	64
 ob_hnsw_extra_info_max_size	1024
 ob_interm_result_mem_limit	2147483648
 ob_ivf_nprobes	8
-ob_kv_mode	ALL
 ob_log_level	disabled
 ob_max_read_stale_time	-1
 ob_org_cluster_id	0
@@ -292,7 +290,6 @@ ob_default_lob_inrow_threshold	8192
 ob_early_lock_release	OFF
 ob_enable_aggregation_pushdown	ON
 ob_enable_index_direct_select	OFF
-ob_enable_jit	OFF
 ob_enable_parameter_anonymous_block	ON
 ob_enable_plan_cache	ON
 ob_enable_pl_cache	ON
@@ -303,7 +300,6 @@ ob_enable_transmission_checksum	ON
 ob_enable_truncate_flashback	ON
 ob_hnsw_extra_info_max_size	1024
 ob_interm_result_mem_limit	2147483648
-ob_kv_mode	ALL
 ob_log_level	disabled
 ob_max_read_stale_time	-1
 ob_plan_cache_evict_high_percentage	90

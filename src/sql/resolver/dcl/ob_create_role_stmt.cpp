@@ -24,7 +24,6 @@ using namespace oceanbase::sql;
 
 ObCreateRoleStmt::ObCreateRoleStmt(ObIAllocator *name_pool)
     : ObDDLStmt(name_pool, stmt::T_CREATE_ROLE),
-      tenant_id_(OB_INVALID_ID),
       role_name_(),
       password_(),
       need_enc_(false),
@@ -34,7 +33,6 @@ ObCreateRoleStmt::ObCreateRoleStmt(ObIAllocator *name_pool)
 
 ObCreateRoleStmt::ObCreateRoleStmt()
     : ObDDLStmt(NULL, stmt::T_CREATE_ROLE),
-      tenant_id_(OB_INVALID_ID),
       role_name_(),
       password_(),
       need_enc_(false),

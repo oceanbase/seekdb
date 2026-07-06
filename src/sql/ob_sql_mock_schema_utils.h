@@ -53,7 +53,7 @@ class ObSQLMockedTables
 {
 private:
   // hit 25 bits
-  // normal table id, high 24 bits is tenant_id, then 1 bit to determine this is table group id
+  // normal table id, high 24 bits is tenant, then 1 bit to determine this is table group id
   // so here we use 25 bits to specify this is a mocked rowid index table id
   const static uint64_t ROWID_INDEX_HIGH_BITS = 0xFEFDFC8;
 public:

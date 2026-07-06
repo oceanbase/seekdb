@@ -88,7 +88,7 @@ public:
   ~ObLongopsIterator();
   void reset();
   int init(ObLongopsMgr *longops_mgr);
-  int get_next(const uint64_t tenant_id, ObLongopsValue &value);
+  int get_next(ObLongopsValue &value);
   inline bool is_inited() const { return is_inited_; }
 private:
   bool is_inited_;

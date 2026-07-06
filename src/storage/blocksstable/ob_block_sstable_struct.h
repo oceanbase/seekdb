@@ -19,7 +19,7 @@
 
 #include "common/log/ob_log_cursor.h"
 #include "common/ob_store_format.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/compress/ob_compress_util.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_se_array.h"
@@ -473,7 +473,7 @@ struct ObMicroBlockEncodingCtx
     minimum_rows_(1),
     semistruct_encoding_type_()
   {
-    previous_encodings_.set_attr(ObMemAttr(MTL_ID(), "MicroEncodeCtx"));
+    previous_encodings_.set_attr(ObMemAttr("MicroEncodeCtx"));
   }
   bool is_valid() const;
   bool is_enable_semistruct_encoding() const { return semistruct_encoding_type_.is_enable_semistruct_encoding();}

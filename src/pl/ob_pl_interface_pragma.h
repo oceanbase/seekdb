@@ -17,7 +17,6 @@
 #include "lib/string/ob_string.h"
 #include "lib/hash/ob_hashmap.h"
 #include "sql/engine/ob_exec_context.h"
-#include "pl/sys_package/ob_dbms_upgrade.h"
 #include "pl/sys_package/ob_dbms_stats.h"
 #include "pl/sys_package/ob_dbms_scheduler_mysql.h"
 #include "pl/sys_package/ob_dbms_application.h"
@@ -30,7 +29,6 @@
 #include "pl/sys_package/ob_dbms_mview_mysql.h"
 #include "pl/sys_package/ob_dbms_mview_stats_mysql.h"
 #include "pl/sys_package/ob_dbms_limit_calculator_mysql.h"
-#include "pl/sys_package/ob_dbms_external_table.h"
 #include "pl/sys_package/ob_dbms_vector_mysql.h"
 #include "pl/sys_package/ob_dbms_hybrid_vector_mysql.h"
 #include "pl/pl_recompile/ob_pl_recompile_task_helper.h"
@@ -42,12 +40,6 @@
   INTERFACE_DEF(INTERFACE_START, "TEST", (ObPLInterfaceImpl::call))
 
   /*************************.. add interface here ..*****************************/
-  // start of __dbms_upgrade
-  INTERFACE_DEF(INTERFACE_DBMS_UPGRADE_SINGLE, "UPGRADE_SINGLE", (ObDBMSUpgrade::upgrade_single))
-  INTERFACE_DEF(INTERFACE_DBMS_UPGRADE_ALL, "UPGRADE_ALL", (ObDBMSUpgrade::upgrade_all))
-  INTERFACE_DEF(INTERFACE_DBMS_FLUSH_DLL_NCOMP, "FLUSH_DLL_NCOMP", (ObDBMSUpgrade::flush_dll_ncomp))
-  // end of __dbms_upgrade
-
   // start of dbms_application_info
   INTERFACE_DEF(INTERFACE_DBMS_READ_CLIENT_INFO, "READ_CLIENT_INFO", (ObDBMSAppInfo::read_client_info))
   INTERFACE_DEF(INTERFACE_DBMS_READ_MODULE, "READ_MODULE", (ObDBMSAppInfo::read_module))
@@ -199,9 +191,6 @@
   INTERFACE_DEF(INTERFACE_DBMS_OB_LIMIT_CALCULATOR_PHY_RES_CALCULATE_BY_STADNBY_TENANT, "PHY_RES_CALCULATE_BY_STANDBY_TENANT", (ObDBMSLimitCalculator::phy_res_calculate_by_standby_tenant))
   // end of dbms_ob_limit_calculator
 
-  // start of dbms_external_table
-  INTERFACE_DEF(INTERFACE_DBMS_EXTERNAL_TABLE_AUTO_REFRESH_EXTERNAL_TABLE, "AUTO_REFRESH_EXTERNAL_TABLE", (ObDBMSExternalTable::auto_refresh_external_table))
-  //end of dbms_external_table
 
   // start of dbms_ddl
   // end of dbms_ddl

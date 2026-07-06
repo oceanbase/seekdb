@@ -33,10 +33,8 @@ public:
   void cancel_task();
   void wait_task();
 
-  static int need_schedule_major_refresh_mv_task(const uint64_t tenant_id,
-                                                 bool &need_schedule);
-  static int need_push_major_mv_merge_scn(const uint64_t tenant_id,
-                                          bool &need_push,
+  static int need_schedule_major_refresh_mv_task(bool &need_schedule);
+  static int need_push_major_mv_merge_scn(bool &need_push,
                                           share::SCN &latest_merge_scn,
                                           share::SCN &major_mv_merge_scn);
 };

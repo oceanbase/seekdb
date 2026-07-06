@@ -105,8 +105,8 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
   uint32_t arg_num = expr.arg_cnt_;
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, get_func_name());
+  
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, get_func_name());
   omt::ObSrsCacheGuard srs_guard;
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   const ObSrsItem *srs = NULL;

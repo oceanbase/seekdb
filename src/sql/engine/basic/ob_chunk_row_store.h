@@ -358,7 +358,6 @@ public:
   virtual ~ObChunkRowStore() { reset(); }
 
   int init(int64_t mem_limit,
-      uint64_t tenant_id,
       int64_t mem_ctx_id = common::ObCtxIds::DEFAULT_CTX_ID,
       const char *label = common::ObModIds::OB_SQL_CHUNK_ROW_STORE,
       bool enable_dump = true,
@@ -388,7 +387,6 @@ public:
   OB_INLINE bool is_inited() const { return inited_; }
   bool is_file_open() const { return io_.fd_ >= 0; }
 
-  //void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
   //void set_mem_ctx_id(const int64_t ctx_id) { ctx_id_ = ctx_id; }
   void set_mem_limit(const int64_t limit) { mem_limit_ = limit; }
   inline int64_t get_mem_limit() { return mem_limit_; }
@@ -421,9 +419,9 @@ public:
   // The current strategy for dir id is that the upper-level logic (usually an operator) applies for it uniformly, and then sets it over
   void set_dir_id(int64_t dir_id) { io_.dir_id_ = dir_id; }
   int alloc_dir_id();
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
   const char *get_label() { return label_; }
-  TO_STRING_KV(K_(tenant_id), K_(label), K_(ctx_id),  K_(mem_limit),
+  TO_STRING_KV(K_(label), K_(ctx_id),  K_(mem_limit),
       K_(row_cnt), K_(file_size));
 
 private:
@@ -474,7 +472,7 @@ private:
   }
 private:
   bool inited_;
-  uint64_t tenant_id_;
+  
   const char *label_;
   int64_t ctx_id_;
   int64_t mem_limit_;
@@ -535,7 +533,7 @@ inline int ObChunkRowStore::BlockBuffer::advance(int64_t size)
 class ObChunkStoreUtil
 {
 public:
-  static int alloc_dir_id(const uint64_t tenant_id, int64_t &dir_id);
+  static int alloc_dir_id(int64_t &dir_id);
 };
 
 } // end namespace sql

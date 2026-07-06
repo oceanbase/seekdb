@@ -20,7 +20,7 @@
 #include "share/ob_define.h"
 #include "lib/container/ob_array.h"
 #include "lib/allocator/ob_allocator.h"
-#include "share/ob_scanner.h"
+#include "sql/ob_scanner.h"
 #include "sql/executor/ob_task.h"
 #include "sql/executor/ob_task_info.h"
 #include "sql/executor/ob_slice_id.h"
@@ -41,9 +41,9 @@ class ObQueryRetryInfo;
 class RemoteExecuteStreamHandle
 {
 public:
-  RemoteExecuteStreamHandle(const char *label, uint64_t tenant_id) :
+  RemoteExecuteStreamHandle(const char *label) :
     use_remote_protocol_v2_(false),
-    result_(label, NULL, common::ObScanner::DEFAULT_MAX_SERIALIZE_SIZE, tenant_id),
+    result_(label, NULL, common::ObScanner::DEFAULT_MAX_SERIALIZE_SIZE),
     rc_(common::OB_SUCCESS),
     dst_addr_()
   {
@@ -108,15 +108,13 @@ public:
   //FIXME qianfu only for compatibility, remove after 1.4.0
   static const uint64_t INVALID_CLUSTER_VERSION = 0;
 public:
-  ObExecutorRpcCtx(uint64_t rpc_tenant_id,
-                   int64_t timeout_timestamp,
+  ObExecutorRpcCtx(int64_t timeout_timestamp,
                    uint64_t min_cluster_version,
                    ObQueryRetryInfo *retry_info,
                    ObSQLSessionInfo *session,
                    bool is_plain_select,
                    int32_t group_id)
-    : rpc_tenant_id_(rpc_tenant_id),
-      timeout_timestamp_(timeout_timestamp),
+    : timeout_timestamp_(timeout_timestamp),
       min_cluster_version_(min_cluster_version),
       retry_info_(retry_info),
       session_(session),
@@ -126,7 +124,7 @@ public:
   }
   ~ObExecutorRpcCtx() {}
 
-  uint64_t get_rpc_tenant_id() const { return rpc_tenant_id_; }
+  
   inline int64_t get_timeout_timestamp() const { return timeout_timestamp_; }
   // The timeout provided to the storage layer will be reduced by 100ms
   // The timeout here needs to be aligned.
@@ -141,14 +139,14 @@ public:
   inline ObQueryRetryInfo *get_retry_info_for_update() const { return retry_info_; }
   bool is_retry_for_rpc_timeout() const { return is_plain_select_; }
   int32_t get_group_id() const { return group_id_; }
-  TO_STRING_KV(K_(rpc_tenant_id),
+  TO_STRING_KV(
                K_(timeout_timestamp),
                K_(min_cluster_version),
                K_(retry_info),
                K_(is_plain_select),
                K_(group_id));
 private:
-  uint64_t rpc_tenant_id_;
+  
   int64_t timeout_timestamp_;
   uint64_t min_cluster_version_;
   // retry_info_ == NULL indicates that no feedback information needs to be provided to the retry module for this rpc

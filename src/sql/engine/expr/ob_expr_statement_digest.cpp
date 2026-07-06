@@ -94,14 +94,13 @@ int calc_digest_text(ObIAllocator &allocator,
   HEAP_VARS_3((ObExecContext, exec_ctx, temp_allocator),
               (ObPhysicalPlanCtx, phy_plan_ctx, allocator), (ObSqlCtx, sql_ctx))
   {
-    uint64_t tenant_id = session->get_effective_tenant_id();
+    
     exec_ctx.set_physical_plan_ctx(&phy_plan_ctx);
     exec_ctx.set_my_session(session);
-    exec_ctx.set_mem_attr(ObMemAttr(tenant_id, ObModIds::OB_SQL_EXEC_CONTEXT, ObCtxIds::EXECUTE_CTX_ID));
+    exec_ctx.set_mem_attr(ObMemAttr(ObModIds::OB_SQL_EXEC_CONTEXT, ObCtxIds::EXECUTE_CTX_ID));
     sql_ctx.session_info_ = session;
     sql_ctx.schema_guard_ = schema_guard;
-    ObPlanCacheCtx pc_ctx(sql_str, PC_TEXT_MODE, allocator, sql_ctx, exec_ctx,
-                          session->get_effective_tenant_id());
+    ObPlanCacheCtx pc_ctx(sql_str, PC_TEXT_MODE, allocator, sql_ctx, exec_ctx);
     ObCharsets4Parser charsets4parser = session->get_charsets4parser();
     charsets4parser.string_collation_ = cs_type;
     ObParser parser(allocator, session->get_sql_mode(), charsets4parser);

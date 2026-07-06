@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_ai_embed.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/omt/ob_tenant_ai_service.h"
 
 using namespace oceanbase::common;
@@ -90,12 +91,12 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
     res.set_null();
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-    uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, N_AI_EMBED));
+    
+    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_EMBED));
     ObAIFuncExprInfo *info = nullptr;
     omt::ObAiServiceGuard ai_service_guard;
-    omt::ObTenantAiService *ai_service = MTL(omt::ObTenantAiService*);
+    omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
     const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
     ObString model_id = arg_model_id->get_string();
     ObString content = arg_content->get_string();
@@ -172,9 +173,9 @@ int ObExprAIEmbed::get_vector_params(const ObExpr &expr,
     ObIVector *res_vec = expr.get_vector(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-    uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, N_AI_EMBED));
+    
+    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_EMBED));
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(
           temp_allocator,
           model_vec,
@@ -294,12 +295,12 @@ int ObExprAIEmbed::eval_ai_embed_vector(const ObExpr &expr, ObEvalCtx &ctx,
     LOG_WARN("fail to get vector params", K(ret));
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-    uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, N_AI_EMBED));
+    
+    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_EMBED));
     ObAIFuncExprInfo *info = nullptr;
     omt::ObAiServiceGuard ai_service_guard;
-    omt::ObTenantAiService *ai_service = MTL(omt::ObTenantAiService*);
+    omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
     const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
     ObArray<ObString> header_array;
     ObArray<ObJsonObject *> bodies;
@@ -374,12 +375,12 @@ int ObExprAIEmbed::eval_ai_embed_vector_v2(const ObExpr &expr, ObEvalCtx &ctx,
       LOG_WARN("fail to get vector params", K(ret));
     } else {
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-      uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-      MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
-      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, N_AI_EMBED));
+      
+      MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_EMBED));
       ObAIFuncExprInfo *info = nullptr;
       omt::ObAiServiceGuard ai_service_guard;
-      omt::ObTenantAiService *ai_service = MTL(omt::ObTenantAiService*);
+      omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
       const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
       ObArray<ObString> header_array;
       ObJsonObject *body = nullptr;

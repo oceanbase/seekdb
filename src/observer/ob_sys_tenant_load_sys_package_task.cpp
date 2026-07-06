@@ -35,15 +35,15 @@ ObSysTenantLoadSysPackageTask::ObSysTenantLoadSysPackageTask()
 {
 }
 
-int ObSysTenantLoadSysPackageTask::init(const uint64_t tenant_id)
+int ObSysTenantLoadSysPackageTask::init()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_UNLIKELY(!is_sys_tenant(tenant_id))) {
+  } else if (OB_UNLIKELY(!true)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("ObSysTenantLoadSysPackageTask should only run on sys tenant", KR(ret), K(tenant_id));
+    LOG_WARN("ObSysTenantLoadSysPackageTask should only run on sys tenant", KR(ret));
   } else {
     inited_ = true;
     fail_count_ = 0;

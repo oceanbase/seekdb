@@ -15,6 +15,7 @@
  */
 
 #include "ob_all_virtual_tablet_pointer_status.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::storage;
@@ -38,7 +39,10 @@ ObAllVirtualTabletPtr::~ObAllVirtualTabletPtr()
 
 void ObAllVirtualTabletPtr::reset()
 {
-  omt::ObMultiTenantOperator::reset();
+  if (OB_NOT_NULL(tablet_iter_)) {
+    tablet_iter_->~ObTenantTabletPtrWithInMemObjIterator();
+    tablet_iter_ = nullptr;
+  }
   addr_.reset();
   if (OB_NOT_NULL(iter_buf_)) {
     allocator_->free(iter_buf_);
@@ -67,32 +71,6 @@ int ObAllVirtualTabletPtr::init(ObIAllocator *allocator, common::ObAddr &addr)
   return ret;
 }
 
-int ObAllVirtualTabletPtr::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "fail to execute", K(ret));
-  }
-  return ret;
-}
-
-void ObAllVirtualTabletPtr::release_last_tenant()
-{
-  if (OB_NOT_NULL(tablet_iter_)) {
-    tablet_iter_->~ObTenantTabletPtrWithInMemObjIterator();
-    tablet_iter_ = nullptr;
-  }
-}
-
-bool ObAllVirtualTabletPtr::is_need_process(uint64_t tenant_id)
-{
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)){
-    return true;
-  }
-  return false;
-}
-
 int ObAllVirtualTabletPtr::get_next_tablet_pointer(
     ObTabletMapKey &key,
     ObTabletPointerHandle &ptr_hdl,
@@ -100,7 +78,7 @@ int ObAllVirtualTabletPtr::get_next_tablet_pointer(
 {
   int ret = OB_SUCCESS;
   if (nullptr == tablet_iter_) {
-    ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
     tablet_iter_ = new (iter_buf_) ObTenantTabletPtrWithInMemObjIterator(*t3m);
     if (OB_ISNULL(tablet_iter_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -120,7 +98,7 @@ int ObAllVirtualTabletPtr::get_next_tablet_pointer(
   return ret;
 }
 
-int ObAllVirtualTabletPtr::process_curr_tenant(ObNewRow *&row)
+int ObAllVirtualTabletPtr::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObTabletMapKey key;
@@ -183,7 +161,7 @@ int ObAllVirtualTabletPtr::process_curr_tenant(ObNewRow *&row)
           break;
         case OLD_CHAIN:
           MEMSET(old_chain_, 0, STR_LEN);
-          if (OB_FAIL(MTL(ObTenantMetaMemMgr*)->print_old_chain(key, *tablet_pointer, STR_LEN, old_chain_))) {
+          if (OB_FAIL(share::g_mp->tenant_meta_mem_mgr()->print_old_chain(key, *tablet_pointer, STR_LEN, old_chain_))) {
             SERVER_LOG(WARN, "fail to print old chain", K(ret), K(key), KPC(tablet_pointer));
           } else {
             cur_row_.cells_[i].set_varchar(old_chain_);

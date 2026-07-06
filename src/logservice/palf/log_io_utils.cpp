@@ -103,7 +103,6 @@ static int ob_fallocate(int fd, int, int64_t, int64_t len) {
 static int ob_ftruncate(int fd, int64_t len) {
   return _chsize_s(fd, len) == 0 ? 0 : -1;
 }
-#define ftruncate ob_ftruncate
 static ssize_t ob_pwrite(int fd, const void *buf, size_t count, int64_t offset) {
   long long prev = _lseeki64(fd, 0, SEEK_CUR);
   _lseeki64(fd, offset, SEEK_SET);
@@ -111,7 +110,6 @@ static ssize_t ob_pwrite(int fd, const void *buf, size_t count, int64_t offset) 
   _lseeki64(fd, prev, SEEK_SET);
   return written;
 }
-#define pwrite ob_pwrite
 static ssize_t ob_pread(int fd, void *buf, size_t count, int64_t offset) {
   long long prev = _lseeki64(fd, 0, SEEK_CUR);
   _lseeki64(fd, offset, SEEK_SET);
@@ -119,7 +117,6 @@ static ssize_t ob_pread(int fd, void *buf, size_t count, int64_t offset) {
   _lseeki64(fd, prev, SEEK_SET);
   return nread;
 }
-#define pread ob_pread
 #else
 #include <unistd.h>
 #endif
@@ -536,7 +533,7 @@ int reuse_block_at(const int dir_fd, const char *block_path)
       int64_t remain = PALF_PHY_BLOCK_SIZE;
       while (OB_SUCC(ret) && remain > 0) {
         int64_t to_write = (remain > 64 * 1024) ? 64 * 1024 : remain;
-        ssize_t n = pwrite(fd, zero_buf, to_write, written);
+        ssize_t n = ob_pwrite(fd, zero_buf, to_write, written);
         if (n != to_write) {
           ret = convert_sys_errno();
           PALF_LOG(ERROR, "pwrite failed", K(ret), K(block_path));

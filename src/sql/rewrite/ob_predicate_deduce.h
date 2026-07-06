@@ -33,9 +33,9 @@ class ObPredicateDeduce {
 
 public:
   ObPredicateDeduce(ObDMLStmt &stmt) : stmt_(stmt) {
-    graph_.set_attr(ObMemAttr(MTL_ID(), "Graph"));
-    type_safety_.set_attr(ObMemAttr(MTL_ID(), "TypeSafety"));
-    topo_order_.set_attr(ObMemAttr(MTL_ID(), "TopoOrder"));
+    graph_.set_attr(ObMemAttr("Graph"));
+    type_safety_.set_attr(ObMemAttr("TypeSafety"));
+    topo_order_.set_attr(ObMemAttr("TopoOrder"));
   }
 
   int add_predicate(ObRawExpr *pred, bool &is_added);

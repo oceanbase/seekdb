@@ -133,7 +133,7 @@ private:
   sql::ObSQLSessionInfo *session_info_;
   sql::ObSchemaChecker schema_checker_;
 
-  uint64_t tenant_id_;
+  
   ObArray<uint64_t> mview_ids_;
   ObArray<share::schema::ObMVRefreshMethod> refresh_methods_;
   ObArray<share::schema::ObMViewInfo> mview_infos_;

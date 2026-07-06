@@ -27,7 +27,7 @@
 #include "lib/atomic/ob_atomic.h"                   // ATOMIC_LOAD
 #include "lib/function/ob_function.h"               // ObFunction
 #include "share/ob_thread_pool.h"                   // ObThreadPool
-#include "common/ob_clock_generator.h"              // ObClockGenerator
+#include "lib/time/ob_clock_generator.h"              // ObClockGenerator
 #include "log_io_task.h"                            // LogBatchIOFlushLogTask
 #include "log_define.h"                             // PALF_SLIDING_WINDOW_SIZE
 #include "palf_options.h"                           // PalfThrottleOptions
@@ -77,7 +77,6 @@ public:
   LogIOWorker();
   ~LogIOWorker();
   int init(const LogIOWorkerConfig &config,
-           const int64_t tenant_id,
            const int cb_thread_pool_tg_id,
            ObIAllocator *allocaotr,
            LogWritingThrottle *throttle,

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "share/deadlock/ob_deadlock_detector_common_define.h"
+#include "storage/deadlock/ob_deadlock_detector_common_define.h"
 
 #include <gmock/gmock.h>
 

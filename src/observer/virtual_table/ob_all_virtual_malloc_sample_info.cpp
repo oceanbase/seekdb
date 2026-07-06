@@ -67,7 +67,7 @@ int ObMallocSampleInfo::inner_get_next_row(ObNewRow *&row)
   }
 
   for (; OB_SUCC(ret) && it_ != malloc_sample_map_.end(); ++it_) {
-    if (is_sys_tenant(effective_tenant_id_) || effective_tenant_id_ == it_->first.tenant_id_) {
+    if (true || true) {
       if (OB_FAIL(fill_row(row))) {
         SERVER_LOG(WARN, "failed to fill row", K(ret));
       }

@@ -36,7 +36,7 @@
 #include "lib/oblog/ob_warning_buffer.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "lib/timezone/ob_time_convert.h"
+#include "common/timezone/ob_time_convert.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/utility/ob_print_utils.h"
 
@@ -155,7 +155,9 @@ void ObLiteEmbed::open_inner(const char* db_dir, const int64_t port)
     throw_embed_error("open seekdb", ret);
   }
   // TODO promise service ready
-  omt::ObTenantNodeBalancer::get_instance().handle();
+  if (OB_NOT_NULL(GCTX.omt_)) {
+    GCTX.omt_->refresh_sys_tenant();
+  }
 }
 
 int ObLiteEmbed::do_open_(const char* db_dir, int64_t port)
@@ -359,20 +361,20 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name, const
     LOG_WARN("db not init", KR(ret));
   } else if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
     LOG_WARN("Failed to create sess id", KR(ret));
-  } else if (OB_FAIL(GCTX.session_mgr_->create_session(OB_SYS_TENANT_ID, sid, 0, ObTimeUtility::current_time(), session))) {
+  } else if (OB_FAIL(GCTX.session_mgr_->create_session(1UL, sid, ObTimeUtility::current_time(), session))) {
     session = nullptr;
     LOG_WARN("Failed to create session", KR(ret), K(sid));
   } else if (FALSE_IT(common::ob_setup_tsi_warning_buffer(&session->get_warnings_buffer()))) {
   } else if (FALSE_IT(embed_conn->get_session() = session)) {
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("failed to get schema guard", KR(ret));
-  } else if (OB_FAIL(schema_guard.get_user_info(OB_SYS_TENANT_ID, OB_SYS_USER_ID, user_info))) {
+  } else if (OB_FAIL(schema_guard.get_user_info(OB_SYS_USER_ID, user_info))) {
     LOG_WARN("failed to get user info", KR(ret));
   } else if (OB_ISNULL(user_info)) {
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("schema user info is null", KR(ret));
   } else if (OB_NOT_NULL(db_name) && STRLEN(db_name) > 0) {
-    if (OB_FAIL(schema_guard.get_database_schema(OB_SYS_TENANT_ID, ObString(db_name), database_schema))) {
+    if (OB_FAIL(schema_guard.get_database_schema( ObString(db_name), database_schema))) {
       LOG_WARN("failed to get database", KR(ret), K(db_name));
     } else if (OB_ISNULL(database_schema)) {
       ret = OB_ERR_BAD_DATABASE;
@@ -383,7 +385,7 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name, const
   if (OB_SUCC(ret)) {
     OZ (session->load_default_sys_variable(false, true));
     OZ (session->load_default_configs_in_pc());
-    OZ (session->init_tenant(OB_SYS_TENANT_NAME, OB_SYS_TENANT_ID));
+    OZ (session->init_tenant(OB_SYS_TENANT_NAME, 1UL));
     OZ (session->load_all_sys_vars(schema_guard));
     if (OB_NOT_NULL(db_name) && STRLEN(db_name) > 0) {
       OZ (session->set_default_database(db_name));
@@ -399,7 +401,7 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name, const
     param_val.set_int(60 * 1000 * 1000);
     OZ(session->update_sys_variable(SYS_VAR_OB_QUERY_TIMEOUT, param_val));
     if (OB_NOT_NULL(db_name) && STRLEN(db_name) > 0) {
-      OZ (schema_guard.get_db_priv_set(OB_SYS_TENANT_ID, user_info->get_user_id(), db_name, db_priv_set));
+      OZ (schema_guard.get_db_priv_set(1UL, user_info->get_user_id(), db_name, db_priv_set));
       OX (session->set_db_priv_set(db_priv_set));
     }
     OX (session->get_enable_role_array().reuse());
@@ -468,7 +470,7 @@ int ObLiteEmbedConn::prepare_stmt(const char* sql, uint64_t &stmt_id, int64_t &p
   } else {
     LOG_INFO("[PS_DEBUG] calling conn_->stmt_prepare", K(sql));
     ObString sql_str(sql);
-    ret = conn_->stmt_prepare(OB_SYS_TENANT_ID, sql_str, stmt_id, param_count);
+    ret = conn_->stmt_prepare(1UL, sql_str, stmt_id, param_count);
     LOG_INFO("[PS_DEBUG] conn_->stmt_prepare returned", KR(ret), K(sql));
     if (OB_FAIL(ret)) {
       LOG_WARN("stmt_prepare failed", KR(ret), K(sql));
@@ -494,7 +496,7 @@ int ObLiteEmbedConn::execute_stmt(uint64_t stmt_id, const common::ParamStore &pa
   if (OB_ISNULL(session_) || OB_ISNULL(conn_)) {
     ret = OB_CONNECT_ERROR;
     LOG_WARN("session or conn is null", KR(ret), KP(session_), KP(conn_));
-  } else if (OB_FAIL(conn_->stmt_execute(OB_SYS_TENANT_ID, stmt_id, params, affected))) {
+  } else if (OB_FAIL(conn_->stmt_execute(1UL, stmt_id, params, affected))) {
     LOG_WARN("stmt_execute failed", KR(ret), K(stmt_id));
   } else {
     affected_rows = static_cast<uint64_t>(affected);
@@ -512,7 +514,7 @@ int ObLiteEmbedConn::close_stmt(uint64_t stmt_id)
   if (OB_ISNULL(session_) || OB_ISNULL(conn_)) {
     ret = OB_CONNECT_ERROR;
     LOG_WARN("session or conn is null", KR(ret));
-  } else if (OB_FAIL(conn_->stmt_close(OB_SYS_TENANT_ID, stmt_id))) {
+  } else if (OB_FAIL(conn_->stmt_close(stmt_id))) {
     LOG_WARN("stmt_close failed", KR(ret), K(stmt_id));
   } else {
     FLOG_INFO("close_stmt success", K(stmt_id));
@@ -524,7 +526,7 @@ int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &
 {
   int ret = OB_SUCCESS;
   ObString sql_string(sql);
-  lib::ObMemAttr mem_attr(OB_SYS_TENANT_ID, "EmbedAlloc");
+  lib::ObMemAttr mem_attr(1UL, "EmbedAlloc");
   result_seq = ATOMIC_AAF(&result_seq_, 1);
   ObCurTraceId::init(GCTX.self_addr());
   int64_t start_time = ObTimeUtility::current_time();
@@ -557,7 +559,7 @@ int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("alloc mem failed", KR(ret));
       } else if (FALSE_IT(new (result_) common::ObCommonSqlProxy::ReadResult())) {
-      } else if (OB_FAIL(conn_->execute_read(OB_SYS_TENANT_ID, sql_string, *result_, true))) {
+      } else if (OB_FAIL(conn_->execute_read(1UL, sql_string, *result_, true))) {
         LOG_WARN("execute sql failed", KR(ret), K(sql), K(session_->is_in_transaction()));
       } else {
         observer::ObInnerSQLResult& res = static_cast<observer::ObInnerSQLResult&>(*result_->get_result());
@@ -569,7 +571,7 @@ int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &
     } else {
       // Use execute_write for non-SELECT queries (INSERT, UPDATE, DELETE, CREATE, BEGIN, etc.)
       int64_t affected = 0;
-      ret = conn_->execute_write(OB_SYS_TENANT_ID, sql_string, affected, true);
+      ret = conn_->execute_write(sql_string, affected, true);
       if (OB_FAIL(ret)) {
         LOG_WARN("execute sql failed", KR(ret), K(sql), K(session_->is_in_transaction()));
       } else {
@@ -757,7 +759,7 @@ void ObLiteEmbedConn::begin()
     conn_->rollback();
     LOG_WARN("last trans need rollback", KP(conn_));
   }
-  if (FAILEDx(conn_->start_transaction(OB_SYS_TENANT_ID))) {
+  if (FAILEDx(conn_->start_transaction(1UL))) {
     LOG_WARN("start trans failed", KR(ret));
   }
   if (OB_FAIL(ret)) {
@@ -801,7 +803,7 @@ void ObLiteEmbedConn::rollback()
 int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlclient::ObMySQLResult& result, ObObjMeta& obj_meta, pybind11::object &val)
 {
   int ret = OB_SUCCESS;
-  lib::ObMemAttr mem_attr(OB_SYS_TENANT_ID, "EmbedAlloc");
+  lib::ObMemAttr mem_attr(1UL, "EmbedAlloc");
   ObArenaAllocator allocator(mem_attr);
   ObInnerSQLResult &inner_result = reinterpret_cast<ObInnerSQLResult&>(result);
   ObObjType type = obj_meta.get_type();
@@ -1100,7 +1102,7 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
     case ObTextType:
     case ObMediumTextType:
     case ObLongTextType: {
-      MTL_SWITCH(OB_SYS_TENANT_ID) {
+      MOD_SCOPE {
         ObObj obj;
         ObString real_data;
         if (OB_FAIL(result.get_obj(col_idx, obj))) {
@@ -1122,7 +1124,7 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
       break;
     }
     case ObJsonType: {
-      MTL_SWITCH(OB_SYS_TENANT_ID) {
+      MOD_SCOPE {
         ObObj obj;
         ObString obj_str;
         if (OB_FAIL(result.get_obj(col_idx, obj))) {
@@ -1149,7 +1151,7 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
     }
     case ObGeometryType:
     case ObRoaringBitmapType: {
-      MTL_SWITCH(OB_SYS_TENANT_ID) {
+      MOD_SCOPE {
         ObObj obj;
         ObString obj_str;
         if (OB_FAIL(result.get_obj(col_idx, obj))) {
@@ -1165,7 +1167,7 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
       break;
     }
     case ObCollectionSQLType: {
-      MTL_SWITCH(OB_SYS_TENANT_ID) {
+      MOD_SCOPE {
         ObObj obj;
         ObArenaAllocator allocator(mem_attr);
         ObString res_str;

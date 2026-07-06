@@ -508,8 +508,7 @@ int ObTransformLateMaterialization::evaluate_stmt_cost(ObIArray<ObParentDMLStmt>
   } else {
     ctx_->eval_cost_ = true;
     lib::ContextParam param;
-    param.set_mem_attr(ctx_->session_info_->get_effective_tenant_id(),
-                       "CostBasedRewrit",
+    param.set_mem_attr("CostBasedRewrit",
                        ObCtxIds::DEFAULT_CTX_ID)
          .set_properties(lib::USE_TL_PAGE_OPTIONAL)
          .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -1350,8 +1349,6 @@ int ObTransformLateMaterialization::check_is_allow_column_store(const ObSelectSt
       OB_ISNULL(table_schema) || OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("got unexpected NULL ptr", K(ret));
-  } else if (table_item->is_link_table()) {
-    is_allow = false;
   } else if (OB_FAIL(table_schema->has_all_column_group(has_all_column_group))) {
     LOG_WARN("failed to check has row store", K(ret));
   } else if (OB_FAIL(table_schema->get_is_column_store(has_normal_column_group))) {

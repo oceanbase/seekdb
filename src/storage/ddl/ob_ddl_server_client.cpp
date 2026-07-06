@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ddl_server_client.h"
 #include "rootserver/ob_rs_serial_call.h"
 #include "share/ob_ddl_sim_point.h"
@@ -59,11 +60,11 @@ int ObDDLServerClient::create_hidden_table(
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(OB_DDL_HEART_BEAT_TASK_CONTAINER.set_register_task_id(res.task_id_, res.tenant_id_))) {
+  } else if (OB_FAIL(OB_DDL_HEART_BEAT_TASK_CONTAINER.set_register_task_id(res.task_id_))) {
     LOG_WARN("failed to set register task id", K(ret), K(res));
   } 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(wait_task_reach_pending(arg.get_tenant_id(), res.task_id_, snapshot_version, data_format_version, *GCTX.sql_proxy_, res.is_no_logging_))) {
+    if (OB_FAIL(wait_task_reach_pending(res.task_id_, snapshot_version, data_format_version, *GCTX.sql_proxy_, res.is_no_logging_))) {
       LOG_WARN("failed to wait table lock. remove register task id and abort redef table task.", K(ret), K(arg), K(res));
     }
 #ifdef ERRSIM
@@ -76,18 +77,15 @@ int ObDDLServerClient::create_hidden_table(
       int tmp_ret = OB_SUCCESS;
       obcall::ObAbortRedefTableArg abort_redef_table_arg;
       abort_redef_table_arg.task_id_ = res.task_id_;
-      abort_redef_table_arg.tenant_id_ = arg.get_tenant_id();
+      
+      
       if (OB_TMP_FAIL(abort_redef_table(abort_redef_table_arg, &session))) {
         LOG_WARN("failed to abort redef table", K(tmp_ret), K(abort_redef_table_arg));
       }
       // abort_redef_table() function last step must remove heart_beat task, so there is no need to call heart_beat_clear()
     }
   }
-  char tenant_id_buffer[256];
-  snprintf(tenant_id_buffer, sizeof(tenant_id_buffer), "tenant_id:%ld, dest_tenant_id:%ld", 
-            arg.get_tenant_id(), arg.get_dest_tenant_id());
   SERVER_EVENT_ADD("ddl", "create hidden table",
-    "tenant_id", tenant_id_buffer,
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "task_id", res.task_id_,
@@ -103,7 +101,7 @@ int ObDDLServerClient::copy_table_dependents(
     sql::ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = arg.tenant_id_;
+  
   const int64_t retry_interval = 100 * 1000L;
   ObAddr rs_leader_addr = GCTX.self_addr();
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -111,12 +109,12 @@ int ObDDLServerClient::copy_table_dependents(
     LOG_WARN("invalid arg", K(ret), K(arg));
     while (OB_SUCC(ret)) {
       int tmp_ret = OB_SUCCESS;
-      if (OB_FAIL(check_need_stop(tenant_id))) {
-        LOG_WARN("fail to basic check", K(ret), K(tenant_id));
+      if (OB_FAIL(check_need_stop())) {
+        LOG_WARN("fail to basic check", K(ret));
       } else if (OB_FAIL(ObDDLExecutorUtil::handle_session_exception(session))) {
         LOG_WARN("fail to handle session exception", K(ret));
-        if (OB_TMP_FAIL(ObDDLExecutorUtil::cancel_ddl_task(tenant_id))) {
-          LOG_WARN("cancel ddl task failed", K(tmp_ret), K(tenant_id));
+        if (OB_TMP_FAIL(ObDDLExecutorUtil::cancel_ddl_task())) {
+          LOG_WARN("cancel ddl task failed", K(tmp_ret));
         }
       } else if (OB_FAIL(GCTX.root_service_->copy_table_dependents(arg))) {
         LOG_WARN("copy table dependents failed", K(ret), K(arg));
@@ -139,7 +137,6 @@ int ObDDLServerClient::copy_table_dependents(
   }
 
   SERVER_EVENT_ADD("ddl", "copy table dependents",
-    "tenant_id", arg.tenant_id_,
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "task_id", arg.task_id_,
@@ -151,7 +148,7 @@ int ObDDLServerClient::copy_table_dependents(
 int ObDDLServerClient::abort_redef_table(const obcall::ObAbortRedefTableArg &arg, sql::ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = arg.tenant_id_;
+  
   const int64_t retry_interval = 100 * 1000L;
   ObAddr rs_leader_addr = GCTX.self_addr();
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -160,8 +157,8 @@ int ObDDLServerClient::abort_redef_table(const obcall::ObAbortRedefTableArg &arg
   } else {
     while (OB_SUCC(ret)) {
       int tmp_ret = OB_SUCCESS;
-      if (OB_FAIL(check_need_stop(tenant_id))) {
-        LOG_WARN("fail to basic check", K(ret), K(tenant_id));
+      if (OB_FAIL(check_need_stop())) {
+        LOG_WARN("fail to basic check", K(ret));
       } else if (OB_FAIL(GCTX.root_service_->abort_redef_table(arg))) {
         LOG_WARN("abort redef table failed", K(ret), K(arg));
         if (OB_ENTRY_NOT_EXIST == ret) {
@@ -192,24 +189,23 @@ int ObDDLServerClient::abort_redef_table(const obcall::ObAbortRedefTableArg &arg
       const int64_t origin_timeout_ts = THIS_WORKER.get_timeout_ts();
       int64_t MAX_ABORT_WAIT_TIMEOUT = 60 * 1000 * 1000; //60s
       THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + MAX_ABORT_WAIT_TIMEOUT);
-      if (OB_FAIL(sql::ObDDLExecutorUtil::wait_ddl_finish(arg.tenant_id_, arg.task_id_, DDL_DIRECT_LOAD, session))) {
+      if (OB_FAIL(sql::ObDDLExecutorUtil::wait_ddl_finish(arg.task_id_, DDL_DIRECT_LOAD, session))) {
         if (OB_CANCELED == ret) {
           ret = OB_SUCCESS;
           LOG_INFO("ddl abort success", K_(arg.task_id));
         } else {
-          LOG_WARN("wait ddl finish failed", K(ret), K(arg.tenant_id_), K(arg.task_id_));
+          LOG_WARN("wait ddl finish failed", K(ret), K(arg.task_id_));
         }
       }
       THIS_WORKER.set_timeout_ts(origin_timeout_ts);
     }
     int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(heart_beat_clear(arg.task_id_, tenant_id))) {
+    if (OB_TMP_FAIL(heart_beat_clear(arg.task_id_))) {
       LOG_WARN("heart beat clear failed", K(tmp_ret), K(arg.task_id_));
     }
   }
 
   SERVER_EVENT_ADD("ddl", "abort redef table",
-    "tenant_id", arg.tenant_id_,
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "task_id", arg.task_id_,
@@ -224,7 +220,7 @@ int ObDDLServerClient::finish_redef_table(const obcall::ObFinishRedefTableArg &f
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  const uint64_t tenant_id = finish_redef_arg.tenant_id_;
+  
   const int64_t retry_interval = 100 * 1000L;
   ObAddr rs_leader_addr = GCTX.self_addr();
   if (OB_UNLIKELY(!finish_redef_arg.is_valid() || !build_single_arg.is_valid())) {
@@ -233,11 +229,11 @@ int ObDDLServerClient::finish_redef_table(const obcall::ObFinishRedefTableArg &f
   } else {
     while (OB_SUCC(ret)) {
       int tmp_ret = OB_SUCCESS;
-      if (OB_FAIL(check_need_stop(tenant_id))) {
-        LOG_WARN("fail to basic check", K(ret), K(tenant_id));
+      if (OB_FAIL(check_need_stop())) {
+        LOG_WARN("fail to basic check", K(ret));
       } else if (OB_FAIL(ObDDLExecutorUtil::handle_session_exception(session))) {
         LOG_WARN("session execption happened", K(ret));
-        if (OB_TMP_FAIL(ObDDLExecutorUtil::cancel_ddl_task(tenant_id))) {
+        if (OB_TMP_FAIL(ObDDLExecutorUtil::cancel_ddl_task())) {
           LOG_WARN("cancel ddl task failed", K(tmp_ret));
           ret = OB_SUCCESS;
         }
@@ -261,22 +257,21 @@ int ObDDLServerClient::finish_redef_table(const obcall::ObFinishRedefTableArg &f
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(build_ddl_single_replica_response(build_single_arg))) {
         LOG_WARN("build ddl single replica response", K(ret), K(build_single_arg));
-    } else if (OB_FAIL(sql::ObDDLExecutorUtil::wait_ddl_finish(finish_redef_arg.tenant_id_, finish_redef_arg.task_id_, DDL_DIRECT_LOAD, &session))) {
-      LOG_WARN("failed to wait ddl finish", K(ret), K(finish_redef_arg.tenant_id_), K(finish_redef_arg.task_id_));
+    } else if (OB_FAIL(sql::ObDDLExecutorUtil::wait_ddl_finish(finish_redef_arg.task_id_, DDL_DIRECT_LOAD, &session))) {
+      LOG_WARN("failed to wait ddl finish", K(ret), K(finish_redef_arg.task_id_));
     }
-    if (OB_TMP_FAIL(heart_beat_clear(finish_redef_arg.task_id_, tenant_id))) {
+    if (OB_TMP_FAIL(heart_beat_clear(finish_redef_arg.task_id_))) {
       LOG_WARN("heart beat clear failed", K(tmp_ret), K(finish_redef_arg.task_id_));
     }
   }
 
   SERVER_EVENT_ADD("ddl", "finish redef table",
-    "tenant_id", finish_redef_arg.tenant_id_,
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "task_id", finish_redef_arg.task_id_,
     "snapshot_version", build_single_arg.snapshot_version_,
     "rpc_dst", rs_leader_addr,
-    build_single_arg.ls_id_);
+    "info", build_single_arg.ls_id_);
   LOG_INFO("finish redef table.", K(ret), "ddl_event_info", ObDDLEventInfo(), K(finish_redef_arg), K(build_single_arg), K(rs_leader_addr));
   return ret;
 }
@@ -296,9 +291,7 @@ int ObDDLServerClient::build_ddl_single_replica_response(const obcall::ObDDLBuil
   return ret;
 }
 
-int ObDDLServerClient::wait_task_reach_pending(
-    const uint64_t tenant_id, 
-    const int64_t task_id, 
+int ObDDLServerClient::wait_task_reach_pending(const int64_t task_id, 
     int64_t &snapshot_version, 
     uint64_t &data_format_version,
     ObMySQLProxy &sql_proxy,
@@ -312,26 +305,25 @@ int ObDDLServerClient::wait_task_reach_pending(
   THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + OB_MAX_USER_SPECIFIED_TIMEOUT);
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     sqlclient::ObMySQLResult *result = NULL;
-    if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == tenant_id)) {
+    if (OB_UNLIKELY(task_id <= 0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(task_id), K(tenant_id));
-    } else if (OB_FAIL(DDL_SIM(tenant_id, task_id, WAIT_REDEF_TASK_REACH_PENDING_FAILED))) {
-      LOG_WARN("ddl sim failure", K(ret), K(tenant_id), K(task_id));
+      LOG_WARN("invalid argument", K(ret), K(task_id));
+    } else if (OB_FAIL(DDL_SIM(task_id, WAIT_REDEF_TASK_REACH_PENDING_FAILED))) {
+      LOG_WARN("ddl sim failure", K(ret), K(task_id));
     } else {
       while (OB_SUCC(ret)) {
         uint64_t unused_target_object_id = 0;
         int64_t unused_schema_version = 0;
         share::ObDDLTaskStatus task_status = share::ObDDLTaskStatus::PREPARE;
         bool unused_is_offline_index_rebuild = false;
-        if (OB_FAIL(ObDDLUtil::get_data_information(tenant_id, task_id, data_format_version,
+        if (OB_FAIL(ObDDLUtil::get_data_information(task_id, data_format_version,
             snapshot_version, task_status, unused_target_object_id, unused_schema_version, is_no_logging, unused_is_offline_index_rebuild))) {
           if (OB_LIKELY(OB_ITER_END == ret)) {
             ret = OB_ENTRY_NOT_EXIST;
             ObAddr unused_addr;
             int64_t forward_user_msg_len = 0;
             ObDDLErrorMessageTableOperator::ObBuildDDLErrorMessage error_message;
-            if (OB_SUCCESS == ObDDLErrorMessageTableOperator::get_ddl_error_message(
-                              tenant_id, task_id, -1 /*target_object_id*/, 
+            if (OB_SUCCESS == ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /*target_object_id*/, 
                               unused_addr, false/*is_ddl_retry_task*/, 
                               *GCTX.sql_proxy_, error_message, forward_user_msg_len)) {
               if (OB_SUCCESS != error_message.ret_code_) {
@@ -340,7 +332,7 @@ int ObDDLServerClient::wait_task_reach_pending(
             }
             LOG_WARN("ddl task execute end", K(ret));
           } else {
-            LOG_WARN("get information failed", K(ret), K(tenant_id), K(task_id));
+            LOG_WARN("get information failed", K(ret), K(task_id));
           }
         } else if (rootserver::ObTableRedefinitionTask::check_task_status_is_pending(task_status)) {
           break;
@@ -351,39 +343,26 @@ int ObDDLServerClient::wait_task_reach_pending(
   return ret;
 }
 
-int ObDDLServerClient::heart_beat_clear(const int64_t task_id, const uint64_t tenant_id)
+int ObDDLServerClient::heart_beat_clear(const int64_t task_id)
 {
   int ret = OB_SUCCESS;
   if (task_id <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_id));
-  } else if (OB_FAIL(OB_DDL_HEART_BEAT_TASK_CONTAINER.remove_register_task_id(task_id, tenant_id))) {
+  } else if (OB_FAIL(OB_DDL_HEART_BEAT_TASK_CONTAINER.remove_register_task_id(task_id))) {
     LOG_WARN("failed to remove register task id", K(ret), K(task_id));
   }
   return ret;
 }
 
-int ObDDLServerClient::check_need_stop(const uint64_t tenant_id)
+int ObDDLServerClient::check_need_stop()
 {
+  // form-6 (other-failure) collapse: single-sys-tenant never dropped / never standby, so the
+  // check_tenant_status_normal -> DROPPED/STANDBY error model is dead. Only server-stop remains.
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  bool is_tenant_dropped = false;
-  bool is_tenant_standby = false;
-  if (OB_FAIL(ret)) {
-  } else if (OB_TMP_FAIL(ObDDLUtil::check_tenant_status_normal(GCTX.sql_proxy_, tenant_id))) {
-    if (OB_TENANT_HAS_BEEN_DROPPED == tmp_ret) {
-      ret = OB_TENANT_HAS_BEEN_DROPPED;
-      LOG_WARN("tenant has been dropped", K(ret), K(tenant_id));
-    } else if (OB_STANDBY_READ_ONLY == tmp_ret) {
-      ret = OB_STANDBY_READ_ONLY;
-      LOG_WARN("tenant is standby now, stop wait", K(ret), K(tenant_id));
-    }
-  }
-  
-  if (OB_FAIL(ret)) {
-  } else if (observer::ObServer::get_instance().is_stopped()) {
+  if (observer::ObServer::get_instance().is_stopped()) {
     ret = OB_TIMEOUT;
-    LOG_WARN("server is stopping", K(ret), K(tenant_id));
+    LOG_WARN("server is stopping", K(ret));
   }
   return ret;
 }

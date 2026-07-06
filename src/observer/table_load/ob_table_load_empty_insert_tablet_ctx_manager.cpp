@@ -144,7 +144,7 @@ int ObTableLoadEmptyInsertTabletCtxManager::execute(
   ObTableLoadSchema table_load_schema;
   ObDirectLoadInsertTableParam insert_table_param;
   ObDirectLoadInsertDataTableContext tmp_insert_table_ctx;
-  if (OB_FAIL(table_load_schema.init(MTL_ID(), table_id, ddl_param.schema_version_))) {
+  if (OB_FAIL(table_load_schema.init(table_id, ddl_param.schema_version_))) {
     LOG_WARN("fail to init table load schema", KR(ret));
   }
   insert_table_param.table_id_ = table_id;
@@ -235,7 +235,7 @@ int ObTableLoadEmptyInsertTabletCtxManager::execute_for_dag(
     ObTableLoadEmptyInsertDag *dag = nullptr;
     const ObDagId *cur_dag_id = ObCurTraceId::get_trace_id();
     ObArenaAllocator allocator;
-    allocator.set_attr(ObMemAttr(MTL_ID(), "TLD_EI_Dag"));
+    allocator.set_attr(ObMemAttr("TLD_EI_Dag"));
     if (OB_FAIL(ObTenantDagScheduler::alloc_dag(allocator, false /*is_ha_dag*/, dag))) {
       LOG_WARN("alloc ddl dag failed", KR(ret));
     } else if (OB_FAIL(dag->init(&dag_init_param, cur_dag_id))) {

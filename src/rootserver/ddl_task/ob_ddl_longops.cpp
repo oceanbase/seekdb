@@ -1,0 +1,114 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#define USING_LOG_PREFIX SHARE
+
+#include "ob_ddl_longops.h"
+#include "rootserver/ddl_task/ob_ddl_task.h"
+
+using namespace oceanbase::rootserver;
+using namespace oceanbase::share;
+
+ObDDLLongopsKey::ObDDLLongopsKey()
+  : task_id_(OB_INVALID_ID)
+{
+}
+
+int ObDDLLongopsKey::to_key_string()
+{
+  int ret = OB_SUCCESS;
+  int64_t name_pos = 0;
+  int64_t target_pos = 0;
+  if (OB_FAIL(databuff_printf(name_, MAX_LONG_OPS_NAME_LENGTH, name_pos, "DDL TASK"))) {
+    LOG_WARN("fail to set name string", K(ret));
+  } else if (OB_FAIL(databuff_printf(target_, MAX_LONG_OPS_TARGET_LENGTH, target_pos, "task_id=%ld, ", task_id_))) {
+    LOG_WARN("fail to convert index_table_id to string", K(ret));
+  }
+  return ret;
+}
+
+ObDDLLongopsStatCollector::ObDDLLongopsStatCollector()
+  : is_inited_(false), ddl_task_(nullptr)
+{
+}
+
+int ObDDLLongopsStatCollector::init(rootserver::ObDDLTask *ddl_task)
+{
+  int ret = OB_SUCCESS;
+  if (IS_INIT) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("ObDDLLongopsStatCollector init twice", K(ret));
+  } else if (OB_ISNULL(ddl_task)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(ddl_task));
+  } else {
+    ddl_task_ = ddl_task;
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+int ObDDLLongopsStatCollector::collect(ObLongopsValue &value)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObDDLLongopsStatCollector is not inited", K(ret));
+  } else if (OB_FAIL(ddl_task_->collect_longops_stat(value))) {
+    LOG_WARN("failed to collect ddl task longops stat", K(ret));
+  }
+  return ret;
+}
+
+ObDDLLongopsStat::ObDDLLongopsStat()
+  : is_inited_(false), key_(), value_(), collector_()
+{
+}
+
+int ObDDLLongopsStat::get_longops_value(ObLongopsValue &value)
+{
+  int ret = OB_SUCCESS;
+  value.reset();
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObDDLLongopsStat is not inited", K(ret));
+  } else if (OB_FAIL(collector_.collect(value))) {
+    LOG_WARN("failed to collect longops value", K(ret));
+  } else {
+    value_ = value;
+  }
+  return ret;
+}
+
+int ObDDLLongopsStat::init(ObDDLTask *ddl_task)
+{
+  int ret = OB_SUCCESS;
+  if (IS_INIT) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("ObDDLLongopsStat init twice", K(ret));
+  } else if (OB_ISNULL(ddl_task)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(ddl_task));
+  } else if (OB_FAIL(collector_.init(ddl_task))) {
+    LOG_WARN("failed to init collector", K(ret));
+  } else {
+  
+    
+    key_.task_id_ = ddl_task->get_task_id();
+    key_.to_key_string();
+    is_inited_ = true;
+  }
+  return ret;
+}

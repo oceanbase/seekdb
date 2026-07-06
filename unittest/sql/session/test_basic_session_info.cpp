@@ -33,16 +33,16 @@ TEST(test_basic_session_info, init_set_get)
   OBSERVER.init_schema();
   OBSERVER.init_tz_info_mgr();
   common::ObArenaAllocator allocator(ObModIds::OB_SQL_SESSION);
-  ObBasicSessionInfo session_info(OB_SERVER_TENANT_ID);
+  ObBasicSessionInfo session_info;
   easy_connection_t conn;
   bool autocommit = false;
   bool is_valid  = false;
   ObArenaAllocator calc_buf(ObModIds::OB_SQL_SESSION);
-  ASSERT_EQ(OB_SUCCESS, session_info.test_init(0, 0, &allocator));
+  ASSERT_EQ(OB_SUCCESS, session_info.test_init(0, &allocator));
   {
     ObString tenant_name = ObString::make_string("yyy");
     ObString user_name = ObString::make_string("aaa");
-    session_info.init_tenant(tenant_name, 1);
+    session_info.init_tenant(tenant_name);
     session_info.set_user(user_name, OB_DEFAULT_HOST_NAME, 1);
     ObObj autocommit_obj, min_val, max_val;
     ObObj autocommit_type;
@@ -82,7 +82,7 @@ TEST(test_basic_session_info, load_variables)
   SMART_VAR(sql::ObSQLSessionInfo, session_info) {
     ObBasicSessionInfo::LockGuard lock_guard(session_info.get_query_lock());
     ASSERT_EQ(OB_SUCCESS, ObPreProcessSysVars::init_sys_var());
-    ASSERT_EQ(OB_SUCCESS, session_info.test_init(0, 0, 0, &allocator));
+    ASSERT_EQ(OB_SUCCESS, session_info.test_init(0, 0, &allocator));
     if (OB_SUCCESS != (ret = ObPreProcessSysVars::change_initial_value())){
       LOG_ERROR("Change initial value failed !", K(ret));
     }

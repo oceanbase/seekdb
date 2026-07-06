@@ -32,7 +32,7 @@ mv_mode
 select mview_name, query, refresh_method, refresh_mode, rewrite_enabled, on_query_computation from oceanbase.DBA_MVIEWS where mview_name = 'collect_info_mv';
 mview_name	query	refresh_method	refresh_mode	rewrite_enabled	on_query_computation
 collect_info_mv	select `db1`.`collect_info`.`user_id` AS `user_id`,`db1`.`collect_info`.`item_id` AS `item_id`,`db1`.`collect_item`.`item_id` AS `dup_item_id`,`db1`.`collect_item`.`price` AS `price` from (`db1`.`collect_info` join `db1`.`collect_item` on (`db1`.`collect_info`.`item_id` = `db1`.`collect_item`.`item_id`))	FAST	MAJOR_COMPACTION	Y	Y
-select mview_name, query, refresh_method, refresh_mode, rewrite_enabled, on_query_computation from oceanbase.CDB_MVIEWS where mview_name = 'collect_info_mv' and owner = 'db1';
+select mview_name, query, refresh_method, refresh_mode, rewrite_enabled, on_query_computation from oceanbase.DBA_MVIEWS where mview_name = 'collect_info_mv' and owner = 'db1';
 mview_name	query	refresh_method	refresh_mode	rewrite_enabled	on_query_computation
 collect_info_mv	select `db1`.`collect_info`.`user_id` AS `user_id`,`db1`.`collect_info`.`item_id` AS `item_id`,`db1`.`collect_item`.`item_id` AS `dup_item_id`,`db1`.`collect_item`.`price` AS `price` from (`db1`.`collect_info` join `db1`.`collect_item` on (`db1`.`collect_info`.`item_id` = `db1`.`collect_item`.`item_id`))	FAST	MAJOR_COMPACTION	Y	Y
 show create table collect_info_mv;

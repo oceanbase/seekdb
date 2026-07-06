@@ -89,11 +89,10 @@ int ObNestedLoopJoinOp::inner_open()
     }
     if (OB_ISNULL(batch_mem_ctx_)) {
       ObSQLSessionInfo *session = ctx_.get_my_session();
-      uint64_t tenant_id =session->get_effective_tenant_id();
+      
       lib::ContextParam param;
       const int64_t mem_limit = 8 * 1024 * 1024; //8M;
-      param.set_mem_attr(tenant_id,
-                         ObModIds::OB_SQL_NLJ_CACHE,
+      param.set_mem_attr(ObModIds::OB_SQL_NLJ_CACHE,
                          ObCtxIds::WORK_AREA)
         .set_properties(lib::USE_TL_PAGE_OPTIONAL);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(batch_mem_ctx_, param))) {
@@ -491,10 +490,9 @@ int ObNestedLoopJoinOp::group_read_left_operate()
       } else {
         if (OB_ISNULL(mem_context_)) {
           ObSQLSessionInfo *session = ctx_.get_my_session();
-          uint64_t tenant_id =session->get_effective_tenant_id();
+          
           lib::ContextParam param;
-          param.set_mem_attr(tenant_id,
-                             ObModIds::OB_SQL_NLJ_CACHE,
+          param.set_mem_attr(ObModIds::OB_SQL_NLJ_CACHE,
                              ObCtxIds::WORK_AREA)
             .set_properties(lib::USE_TL_PAGE_OPTIONAL);
           if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
@@ -502,7 +500,7 @@ int ObNestedLoopJoinOp::group_read_left_operate()
           } else if (OB_ISNULL(mem_context_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("null memory entity returned", K(ret));
-          } else if (OB_FAIL(left_store_.init(UINT64_MAX, tenant_id, ObCtxIds::WORK_AREA))) {
+          } else if (OB_FAIL(left_store_.init(UINT64_MAX, ObCtxIds::WORK_AREA))) {
             LOG_WARN("init row store failed", K(ret));
           } else {
             left_store_.set_allocator(mem_context_->get_malloc_allocator());
@@ -738,10 +736,9 @@ int ObNestedLoopJoinOp::group_get_left_batch(const ObBatchRows *&group_left_brs)
       } else {
         if (OB_ISNULL(mem_context_)) {
           ObSQLSessionInfo *session = ctx_.get_my_session();
-          uint64_t tenant_id =session->get_effective_tenant_id();
+          
           lib::ContextParam param;
-          param.set_mem_attr(tenant_id,
-                             ObModIds::OB_SQL_NLJ_CACHE,
+          param.set_mem_attr(ObModIds::OB_SQL_NLJ_CACHE,
                              ObCtxIds::WORK_AREA)
             .set_properties(lib::USE_TL_PAGE_OPTIONAL);
           if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
@@ -749,7 +746,7 @@ int ObNestedLoopJoinOp::group_get_left_batch(const ObBatchRows *&group_left_brs)
           } else if (OB_ISNULL(mem_context_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("null memory entity returned", K(ret));
-          } else if (OB_FAIL(left_store_.init(UINT64_MAX, tenant_id, ObCtxIds::WORK_AREA))) {
+          } else if (OB_FAIL(left_store_.init(UINT64_MAX, ObCtxIds::WORK_AREA))) {
             LOG_WARN("init row store failed", K(ret));
           } else {
             left_store_.set_allocator(mem_context_->get_malloc_allocator());

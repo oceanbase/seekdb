@@ -48,14 +48,13 @@ void ObPLCacheObject::reset()
   max_concurrent_num_ = ObMaxConcurrentParam::UNLIMITED;
 }
 
-int ObPLCacheObject::set_tenant_sys_schema_version(schema::ObSchemaGetterGuard &schema_guard, 
-                                                    int64_t tenant_id)
+int ObPLCacheObject::set_tenant_sys_schema_version(schema::ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
   int64_t tenant_schema_version = OB_INVALID_VERSION;
   int64_t sys_schema_version = OB_INVALID_VERSION;
-  OZ (schema_guard.get_schema_version(tenant_id, tenant_schema_version));
-  OZ (schema_guard.get_schema_version(OB_SYS_TENANT_ID, sys_schema_version));
+  OZ (schema_guard.get_schema_version(tenant_schema_version));
+  OZ (schema_guard.get_schema_version(sys_schema_version));
   OX (set_tenant_schema_version(tenant_schema_version));
   OX (set_sys_schema_version(sys_schema_version));
   return ret;

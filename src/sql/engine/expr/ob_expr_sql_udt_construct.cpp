@@ -177,8 +177,8 @@ int ObExprUdtConstruct::eval_udt_construct(const ObExpr &expr, ObEvalCtx &ctx, O
   ObDatum *null_bit = NULL;
   bool is_null = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_PRIV_SQL_UDT_CONSTRUCT);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_SQL_UDT_CONSTRUCT);
   ObSqlUdtNullBitMap sub_nested_bitmap;
   const ObExprUdtConstructInfo *info
                   = static_cast<ObExprUdtConstructInfo *>(expr.extra_info_);

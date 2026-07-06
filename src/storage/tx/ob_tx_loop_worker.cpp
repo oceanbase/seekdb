@@ -15,8 +15,11 @@
  */
 
 #include "storage/tx/ob_tx_loop_worker.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_leak_checker.h"
+#include "storage/tx/ob_weak_read_util.h"
+#include "storage/ls/ob_ls.h"
 
 namespace oceanbase
 {
@@ -116,7 +119,7 @@ void ObTxLoopWorker::runTimerTask()
 
     // tx gc, interval = 5s
     if (common::ObClockGenerator::getClock() - last_tx_gc_ts_ > TX_GC_INTERVAL) {
-      TRANS_LOG(INFO, "tx gc loop thread is running", K(MTL_ID()));
+      TRANS_LOG(INFO, "tx gc loop thread is running");
       last_tx_gc_ts_ = common::ObClockGenerator::getClock();
       can_gc_tx = true;
     }
@@ -180,13 +183,13 @@ int ObTxLoopWorker::scan_all_ls_(bool can_tx_gc,
 
   int64_t ls_cnt = 0;
 
-  if (OB_ISNULL(MTL(ObLSService *))
-      || OB_FAIL(MTL(ObLSService *)->get_ls_iter(ls_iter_guard, ObLSGetMod::TRANS_MOD))
+  if (OB_ISNULL(share::g_mp->ls_service())
+      || OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard, ObLSGetMod::TRANS_MOD))
       || !ls_iter_guard.is_valid()) {
     if (OB_SUCCESS == ret) {
       ret = OB_INVALID_ARGUMENT;
     }
-    TRANS_LOG(WARN, "[Tx Loop Worker] get ls iter failed", K(ret), KP(MTL(ObLSService *)));
+    TRANS_LOG(WARN, "[Tx Loop Worker] get ls iter failed", K(ret), KP(share::g_mp->ls_service()));
   } else if (OB_ISNULL(iter_ptr = ls_iter_guard.get_ptr())) {
     TRANS_LOG(WARN, "[Tx Loop Worker] ls iter_ptr is nullptr", KP(iter_ptr));
   } else {
@@ -243,6 +246,11 @@ int ObTxLoopWorker::scan_all_ls_(bool can_tx_gc,
       // keep alive, interval = 5s
       do_keep_alive_(cur_ls_ptr, min_start_scn, status);
 
+      // Single-node lite: drive each LS's local weak-read timestamp here (the
+      // tenant WRS service that used to do this has been deleted). Keeps
+      // ls_weak_read_ts_ advancing for readability/compaction/replay.
+      do_update_ls_weak_read_ts_(cur_ls_ptr);
+
       if (can_gc_retain_ctx) {
         do_retain_ctx_gc_(cur_ls_ptr);
       }
@@ -277,14 +285,34 @@ void ObTxLoopWorker::do_keep_alive_(ObLS *ls_ptr, const SCN &min_start_scn, MinS
   UNUSED(ret);
 }
 
+void ObTxLoopWorker::do_update_ls_weak_read_ts_(ObLS *ls_ptr)
+{
+  int ret = OB_SUCCESS;
+  SCN version;
+  bool need_skip = false;
+  bool is_user_ls = false;
+  const int64_t max_stale_time = ObWeakReadUtil::max_stale_time_for_weak_consistency(
+      ObWeakReadUtil::IGNORE_TENANT_EXIST_WARN);
+  if (OB_ISNULL(ls_ptr)) {
+    // do nothing
+  } else if (OB_FAIL(ls_ptr->get_ls_wrs_handler()->generate_ls_weak_read_snapshot_version(
+                 *ls_ptr, need_skip, is_user_ls, version, max_stale_time))) {
+    if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
+      TRANS_LOG(WARN, "[Tx Loop Worker] generate ls weak read snapshot version fail",
+                K(ret), K(ls_ptr->get_ls_id()));
+    }
+  }
+  UNUSED(ret);
+}
+
 void ObTxLoopWorker::do_tx_gc_(ObLS *ls_ptr, SCN &min_start_scn, MinStartScnStatus &status)
 {
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ls_ptr->get_tx_svr()->check_scheduler_status(min_start_scn, status))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] check tx scheduler failed", K(ret), K(MTL_ID()), K(*ls_ptr));
+    TRANS_LOG(WARN, "[Tx Loop Worker] check tx scheduler failed", K(ret), K(*ls_ptr));
   } else {
-    TRANS_LOG(INFO, "[Tx Loop Worker] check tx scheduler success", K(MTL_ID()), K(*ls_ptr));
+    TRANS_LOG(INFO, "[Tx Loop Worker] check tx scheduler success", K(*ls_ptr));
   }
 
   UNUSED(ret);
@@ -294,7 +322,7 @@ void ObTxLoopWorker::refresh_tenant_config_()
 {
   int ret = OB_SUCCESS;
   ObTransService *txs = NULL;
-  if (OB_ISNULL(txs = MTL(ObTransService *))) {
+  if (OB_ISNULL(txs = share::g_mp->trans_service())) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "unexpected transaction service", K(ret), KP(txs));
   } else {
@@ -313,16 +341,16 @@ void ObTxLoopWorker::update_max_commit_ts_()
     int64_t n = ObClockGenerator::getClock();
     if (n >= expire_ts) {
       ret = OB_TIMEOUT;
-    } else if (OB_FAIL(OB_TS_MGR.get_gts(MTL_ID(), NULL, snapshot))) {
+    } else if (OB_FAIL(OB_TS_MGR.get_gts(NULL, snapshot))) {
       if (OB_EAGAIN == ret) {
         ob_usleep(500, true/*is_idle_sleep*/);
       } else {
-        TRANS_LOG(WARN, "get gts fail", "tenant_id", MTL_ID());
+        TRANS_LOG(WARN, "get gts fail");
       }
     } else if (OB_UNLIKELY(!snapshot.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "invalid snapshot from gts", K(snapshot));
-    } else if (OB_ISNULL(txs = MTL(ObTransService *))) {
+    } else if (OB_ISNULL(txs = share::g_mp->trans_service())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "unexpected transaction service", K(ret), KP(txs));
     } else {
@@ -338,15 +366,15 @@ void ObTxLoopWorker::do_retain_ctx_gc_(ObLS *ls_ptr)
   ObTxRetainCtxMgr *retain_ctx_mgr = ls_ptr->get_tx_svr()->get_retain_ctx_mgr();
   if (OB_ISNULL(retain_ctx_mgr)) {
     // ignore ret
-    TRANS_LOG(WARN, "[Tx Loop Worker] retain_ctx_mgr  is not inited", K(ret), K(MTL_ID()),
+    TRANS_LOG(WARN, "[Tx Loop Worker] retain_ctx_mgr  is not inited", K(ret),
               K(*ls_ptr));
 
   } else if (OB_FAIL(retain_ctx_mgr->try_gc_retain_ctx(ls_ptr))) {
     TRANS_LOG(WARN, "[Tx Loop Worker] retain_ctx_mgr try to gc retain ctx failed", K(ret),
-              K(MTL_ID()), K(*ls_ptr));
+              K(*ls_ptr));
   } else {
     TRANS_LOG(DEBUG, "[Tx Loop Worker] retain_ctx_mgr try to gc retain ctx success", K(ret),
-              K(MTL_ID()), K(*ls_ptr));
+              K(*ls_ptr));
   }
 
   retain_ctx_mgr->print_retain_ctx_info(ls_ptr->get_ls_id());

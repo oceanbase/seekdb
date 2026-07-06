@@ -17,15 +17,15 @@
 #ifndef OB_ALL_VIRTUAL_TX_STAT_H_
 #define OB_ALL_VIRTUAL_TX_STAT_H_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "share/ob_scanner.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
 #include "lib/container/ob_se_array.h"
 #include "common/ob_simple_iterator.h"
 #include "storage/tx/ob_trans_ctx.h"
 #include "storage/tx/ob_tx_ls_log_writer.h"
 #include "storage/tx/ob_trans_ctx_mgr_v4.h"
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "storage/tx/ob_tx_stat.h"
 
 namespace oceanbase
@@ -55,7 +55,7 @@ public:
   virtual void destroy();
 private:
   int prepare_start_to_read_();
-  int fill_tenant_ids_();
+  int fill_ids_();
   int get_next_tx_info_(transaction::ObTxStat &tx_stat);
   bool is_valid_timestamp_(const int64_t timestamp) const;
 private:
@@ -104,7 +104,6 @@ private:
 private:
   bool init_;
   transaction::ObTxStatIterator tx_stat_iter_;
-  common::ObArray<uint64_t> all_tenants_;
   transaction::ObXATransID xid_;
   ObCStringHelper cstring_helper_;
 private:

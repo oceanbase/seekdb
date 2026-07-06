@@ -28,9 +28,9 @@ using namespace share;
 namespace sql {
 
 /* ObArrowMemPool */
-void ObArrowMemPool::init(uint64_t tenant_id)
+void ObArrowMemPool::init()
 {
-  mem_attr_ = ObMemAttr(tenant_id, "ArrowMemPool");
+  mem_attr_ = ObMemAttr("ArrowMemPool");
 }
 
 arrow::Status ObArrowMemPool::Allocate(int64_t size, int64_t alignment, uint8_t** out)
@@ -86,115 +86,6 @@ void ObArrowMemPool::ReleaseUnused() {
 int64_t ObArrowMemPool::bytes_allocated() const {
   LOG_DEBUG("ObArrowMemPool::bytes_allocated", "stack", lbt());
   return total_hold_size_;
-}
-
-/* ObArrowFile */
-int ObArrowFile::open()
-{
-  return file_reader_.open(file_name_);
-}
-
-arrow::Status ObArrowFile::Seek(int64_t position) {
-  position_ = position;
-  return arrow::Status::OK();
-}
-
-arrow::Result<int64_t> ObArrowFile::Read(int64_t nbytes, void *out)
-{
-  int ret = OB_SUCCESS;
-  arrow::Result<int64_t> ret_code;
-  int64_t read_size = -1;
-  if (file_prefetch_buffer_.in_prebuffer_range(position_, nbytes)) {
-    file_prefetch_buffer_.fetch(position_, nbytes, out);
-    position_ += nbytes;
-    ret_code = nbytes;
-  } else if (OB_FAIL(file_reader_.pread(out, nbytes, position_, read_size))) {
-    LOG_WARN("fail to read file", K(ret), K(nbytes));
-    ret_code =
-      arrow::Result<int64_t>(arrow::Status(arrow::StatusCode::IOError, "read file failed"));
-  } else {
-    position_ += read_size;
-    ret_code = read_size;
-  }
-  LOG_DEBUG("Read(int64_t nbytes, void *out)", K(nbytes));
-  return ret_code;
-}
-
-arrow::Result<std::shared_ptr<arrow::Buffer>> ObArrowFile::Read(int64_t nbytes)
-{
-  ARROW_ASSIGN_OR_RAISE(auto buffer, arrow::AllocateResizableBuffer(nbytes, pool_));
-  ARROW_ASSIGN_OR_RAISE(int64_t bytes_read, Read(nbytes, buffer->mutable_data()));
-  if (bytes_read < nbytes) {
-    RETURN_NOT_OK(buffer->Resize(bytes_read));
-  }
-  LOG_DEBUG("ObArrowFile::Read(int64_t nbytes)", K(nbytes));
-  return std::move(buffer);
-}
-
-
-arrow::Result<int64_t> ObArrowFile::ReadAt(int64_t position, int64_t nbytes, void* out)
-{
-  int ret = OB_SUCCESS;
-  arrow::Result<int64_t> ret_code;
-  int64_t read_size = -1;
-  if (file_prefetch_buffer_.in_prebuffer_range(position, nbytes)) {
-    file_prefetch_buffer_.fetch(position, nbytes, out);
-    position_ = position + nbytes;
-    ret_code = nbytes;
-  } else if (OB_FAIL(file_reader_.pread(out, nbytes, position, read_size))) {
-    LOG_WARN("fail to read file", K(ret), K(position), K(nbytes));
-    ret_code =
-      arrow::Result<int64_t>(arrow::Status(arrow::StatusCode::IOError, "read at file failed"));
-  } else {
-    position_ = position + read_size;
-    ret_code = read_size;
-  }
-  LOG_DEBUG("ObArrowFile::Read(int64_t nbytes)", K(nbytes));
-  return ret_code;
-}
-
-arrow::Result<std::shared_ptr<arrow::Buffer>> ObArrowFile::ReadAt(int64_t position, int64_t nbytes)
-{
-  ARROW_ASSIGN_OR_RAISE(auto buffer, AllocateResizableBuffer(nbytes, pool_));
-  ARROW_ASSIGN_OR_RAISE(int64_t bytes_read,
-                        ReadAt(position, nbytes, buffer->mutable_data()));
-  if (bytes_read < nbytes) {
-    RETURN_NOT_OK(buffer->Resize(bytes_read));
-    buffer->ZeroPadding();
-  }
-  LOG_DEBUG("ObArrowFile::ReadAt(int64_t position, int64_t nbytes)", K(nbytes));
-  return std::move(buffer);
-}
-
-
-arrow::Result<int64_t> ObArrowFile::Tell() const
-{
-  return position_;
-}
-
-arrow::Result<int64_t> ObArrowFile::GetSize()
-{
-  int ret = OB_SUCCESS;
-  arrow::Result<int64_t> ret_code;
-  int64_t file_size = 0;
-  if (OB_FAIL(file_reader_.get_file_size(file_name_, file_size))) {
-    LOG_WARN("fail to get file size", K(ret), K(file_name_));
-    ret_code = arrow::Result<int64_t>(arrow::Status(arrow::StatusCode::IOError, "get file size"));
-  } else {
-    ret_code = file_size;
-  }
-  return ret_code;
-}
-
-arrow::Status ObArrowFile::Close()
-{
-  file_reader_.close();
-  return arrow::Status::OK();
-}
-
-bool ObArrowFile::closed() const
-{
-  return !file_reader_.is_opened();
 }
 
 /*ObParquetOutputStream*/

@@ -1,4 +1,5 @@
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
+#include "share/ob_dml_sql_splicer.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -186,7 +187,7 @@ int ObTableLockDetectFuncList::get_active_server_session_list_(const int64_t &cl
     LOG_WARN("generate full table_name failed", K(OB_SYS_DATABASE_NAME), K(OB_ALL_CLIENT_TO_SERVER_SESSION_INFO_TNAME));
   } else if (OB_FAIL(databuff_printf(where_cond, 128, "WHERE client_session_id = %ld", client_session_id))) {
     LOG_WARN("generate where condition failed", K(client_session_id));
-  } else if (OB_FAIL(ObTableAccessHelper::read_multi_row(MTL_ID(),
+  } else if (OB_FAIL(ObTableAccessHelper::read_multi_row(
                                                          {"server_session_id"},
                                                          full_table_name,
                                                          where_cond,
@@ -194,7 +195,7 @@ int ObTableLockDetectFuncList::get_active_server_session_list_(const int64_t &cl
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("read from inner table __all_client_to_server_session_info failed", K(ret), K(MTL_ID()));
+      LOG_WARN("read from inner table __all_client_to_server_session_info failed", K(ret));
     }
   } else {
     const ObAddr &self_addr = GCTX.self_addr();
@@ -231,7 +232,7 @@ int ObTableLockDetectFuncList::get_owner_id_list_from_table_(ObIAllocator &alloc
     LOG_WARN("generate full table_name failed");
   } else {
     ObArray<ObTuple<int64_t, int64_t>> tmp_owner_ids;
-    if (OB_FAIL(ObTableAccessHelper::read_multi_row(MTL_ID(), {"owner_type", "owner_id"}, table_name, where_cond, tmp_owner_ids))) {
+    if (OB_FAIL(ObTableAccessHelper::read_multi_row({"owner_type", "owner_id"}, table_name, where_cond, tmp_owner_ids))) {
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
       } else {
@@ -459,7 +460,7 @@ int ObTableLockDetector::remove_expired_lock_id()
                             now,
                             detect_table_cond.ptr(),
                             delete_limit));
-  OZ (ObTableAccessHelper::delete_row(MTL_ID(), dbms_lock_table_name, where_cond.string()));
+  OZ (ObTableAccessHelper::delete_row(dbms_lock_table_name, where_cond.string()));
   return ret;
 }
 
@@ -593,7 +594,7 @@ int ObTableLockDetector::get_lock_owner_by_lock_id(const uint64_t &lock_id, ObTa
 {
   int ret = OB_SUCCESS;
   ObSqlString where_cond;
-  uint64_t tenant_id = MTL_ID();
+  
   char table_name[OB_MAX_TABLE_NAME_BUF_LENGTH] = {0};
   int64_t owner_id = 0;
   int64_t owner_type = 0;
@@ -605,7 +606,7 @@ int ObTableLockDetector::get_lock_owner_by_lock_id(const uint64_t &lock_id, ObTa
                             static_cast<int>(EXCLUSIVE)));
   OZ (get_table_name(table_name));
   OZ (ObTableAccessHelper::read_single_row(
-      tenant_id, {"owner_id", "owner_type"}, table_name, where_cond.string(), owner_id, owner_type));
+      {"owner_id", "owner_type"}, table_name, where_cond.string(), owner_id, owner_type));
   OX (lock_owner.convert_from_value(static_cast<ObLockOwnerType>(owner_type), owner_id));
 
   return ret;

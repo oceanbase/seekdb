@@ -52,21 +52,15 @@ struct ObRoutePolicyCtx
   ObRoutePolicyCtx()
     :policy_type_(POLICY_TYPE_MAX),
      consistency_level_(common::INVALID_CONSISTENCY),
-     is_proxy_priority_hit_support_(false),
-     tenant_id_(OB_INVALID_TENANT_ID),
      max_read_stale_time_(0)
    {}
 
   TO_STRING_KV(K(policy_type_),
                K(consistency_level_),
-               K(is_proxy_priority_hit_support_),
-               K(tenant_id_),
                K(max_read_stale_time_));
 
   ObRoutePolicyType policy_type_;
   common::ObConsistencyLevel consistency_level_;
-  bool is_proxy_priority_hit_support_;
-  uint64_t tenant_id_;
   int64_t max_read_stale_time_;
 };
 
@@ -76,9 +70,6 @@ public:
   enum PositionType
   {
     SAME_SERVER = 0,
-    SAME_IDC = 1,
-    SAME_REGION = 2,
-    OTHER_REGION = 3,
     POSITION_TYPE_MAX,
   };
   enum MergeStatus
@@ -106,9 +97,7 @@ public:
       if (merge_status_ == other_attr.merge_status_
           && zone_type_ == other_attr.zone_type_) {
         if (pos_type_ == SAME_SERVER) {
-          bool_ret = (other_attr.pos_type_ == SAME_SERVER || other_attr.pos_type_ == SAME_IDC);
-        } else if (pos_type_ == SAME_IDC) {
-          bool_ret = (other_attr.pos_type_ == SAME_SERVER || other_attr.pos_type_ == SAME_IDC);
+          bool_ret = (other_attr.pos_type_ == SAME_SERVER);
         } else {
           bool_ret = (pos_type_ == other_attr.pos_type_);
         }
@@ -197,11 +186,6 @@ public:
   {
     return UNMERGE_FOLLOWER_FIRST == ctx.policy_type_;
   }
-
-  static bool is_same_idc(const share::ObServerLocality &locality1,
-                          const share::ObServerLocality &locality2);
-  static bool is_same_region(const share::ObServerLocality &locality1,
-                             const share::ObServerLocality &locality2);
 
 protected:
   int init_candidate_replica(CandidateReplica &candi_replica);

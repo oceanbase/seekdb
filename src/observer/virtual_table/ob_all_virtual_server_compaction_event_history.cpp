@@ -40,7 +40,7 @@ int ObAllVirtualServerCompactionEventHistory::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     SERVER_LOG(WARN, "ObAllVirtualServerCompactionEventHistory has been inited", K(ret));
-  } else if (OB_FAIL(event_iter_.open(effective_tenant_id_))) {
+  } else if (OB_FAIL(event_iter_.open())) {
     SERVER_LOG(WARN, "Fail to open suggestion iter", K(ret));
   } else {
     is_inited_ = true;

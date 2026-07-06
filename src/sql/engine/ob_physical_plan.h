@@ -19,7 +19,7 @@
 #include "lib/container/ob_vector.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/list/ob_dlist.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "common/ob_field.h"
 #include "sql/ob_sql_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
@@ -275,8 +275,6 @@ public:
   bool has_nested_sql() const { return has_nested_sql_; }
   void set_session_id(uint64_t v) { session_id_ = v; }
   uint64_t get_session_id() const { return session_id_; }
-  common::ObIArray<uint64_t> &get_immediate_refresh_external_table_ids() { return immediate_refresh_external_table_ids_; }
-  bool is_contain_immediate_refresh_external_table() const { return immediate_refresh_external_table_ids_.count() > 0; }
   bool contains_temp_table() const {return 0 != session_id_; }
   void set_returning(bool is_returning) { is_returning_ = is_returning; }
   bool is_returning() const { return is_returning_; }
@@ -319,13 +317,9 @@ public:
   inline bool is_use_pdml() const { return use_pdml_; }
   inline void set_use_temp_table(bool value) { use_temp_table_ = value; }
   inline bool is_use_temp_table() const { return use_temp_table_; }
-  inline void set_has_link_table(bool value) { has_link_table_ = value; }
-  inline bool has_link_table() const { return has_link_table_; }
   inline void set_has_link_sfd(bool value) { has_link_sfd_ = value; }
   inline bool has_link_sfd() const { return has_link_sfd_; }
 
-  inline void set_has_link_udf(bool value) { has_link_udf_ = value; }
-  inline bool has_link_udf() const { return has_link_udf_; }
   void set_batch_size(const int64_t v) { batch_size_ = v; }
   int64_t get_batch_size() const { return batch_size_; }
   bool is_vectorized() const { return batch_size_ > 0; }
@@ -408,11 +402,6 @@ public:
   inline void set_is_late_materialized(const bool is_late_mat)
   {
     is_late_materialized_ = is_late_mat;
-  }
-
-  inline bool is_use_jit() const
-  {
-    return stat_.is_use_jit_;
   }
 
   inline void set_is_dep_base_table(bool v) { is_dep_base_table_ = v; }
@@ -589,7 +578,6 @@ private:
   bool contain_table_scan_; // whether it contains primary key scan
   bool has_nested_sql_; // whether nested statements may be executed
   uint64_t  session_id_; // When the plan includes temporary tables, record table_schema->session_id, used to determine if the plan can be reused
-  common::ObFixedArray<uint64_t, common::ObIAllocator> immediate_refresh_external_table_ids_;
 
   int64_t concurrent_num_;           // plan current number of concurrent executions
   int64_t max_concurrent_num_;       // plan maximum number of concurrent executions, -1 indicates no limit
@@ -597,7 +585,7 @@ private:
   TableLocationFixedArray table_locations_; // ordinary table's table location, participate in plan cache plan selection
   TableLocationFixedArray das_table_locations_; // DAS table's table location, used for calculating DAS partition information
 
-  ObString dummy_string_;  // for compatible with 3.x JIT func_ member
+  ObString dummy_string_;  // for compatibility with the removed 3.x native PL entry member
   PhyRowParamMap row_param_map_;
   bool is_update_uniq_index_;
   // Determine whether the base tables involved in this plan contain a global index
@@ -655,9 +643,7 @@ public:
   int64_t is_new_engine_;
   bool use_pdml_; //is parallel dml plan
   bool use_temp_table_;
-  bool has_link_table_;
   bool has_link_sfd_;
-  bool has_link_udf_;
   bool need_serial_exec_;//mark if need serial execute?
   bool temp_sql_can_prepare_;
   bool is_need_trans_;

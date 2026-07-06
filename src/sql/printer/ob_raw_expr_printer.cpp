@@ -139,7 +139,6 @@ int ObRawExprPrinter::print(ObRawExpr *expr)
       && !expr->is_pseudo_column_expr()
      // questionmark is a const expr, if it is prepare, it needs to be printed as :0 this kind of thing, cannot use alias to replace
       && T_QUESTIONMARK != expr->get_expr_type()
-      && scope_ != T_DBLINK_SCOPE
       && scope_ != T_FIELD_LIST_SCOPE
       && scope_ != T_GROUP_SCOPE
       && scope_ != T_WHERE_SCOPE
@@ -158,25 +157,7 @@ int ObRawExprPrinter::print(ObRawExpr *expr)
     }
     case ObRawExpr::EXPR_EXEC_PARAM: {
       ObExecParamRawExpr *exec_expr = static_cast<ObExecParamRawExpr*>(expr);
-      if (print_params_.for_dblink_) {
-        bool print_ref = exec_expr->is_ref_same_dblink();
-        if ((OB_E(EventTable::EN_GENERATE_PLAN_WITH_RECONSTRUCT_SQL) OB_SUCCESS) == OB_SUCCESS) {
-          //do nothing
-        } else {
-          print_ref = true;
-        }
-        if (OB_ISNULL(exec_expr->get_ref_expr())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null", K(ret));
-        } else if (exec_expr->get_ref_expr()->is_query_ref_expr()) {
-          print_ref = true;
-        }
-        if (print_ref) {
-          PRINT_EXPR(exec_expr->get_ref_expr());
-        } else {
-          PRINT_EXPR(exec_expr);
-        }
-      } else {
+      {
         PRINT_EXPR(exec_expr->get_ref_expr());
       }
       break;
@@ -300,14 +281,6 @@ int ObRawExprPrinter::print(ObConstRawExpr *expr)
                OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, "date "))) {
       LOG_WARN("fail to print date string", K(ret));
     } else if (T_BOOL == expr->get_expr_type()) {
-      /**
-       * For SQL like "select * from T1 where C1 = 1 and C1 = 2",
-       * because the where clause is always false, 
-       * the optimizer will replace the filter with startup_filter.
-       * Therefore, dblink needs to handle this special case 
-       * by rewriting startup_filter as "0 = 1" or "1 = 1".
-       * 
-       */
       if (OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, expr->get_value().get_bool() ? "(1 = 1)" : "(0 = 1)"))) {
         LOG_WARN("fail to print startup filter", K(ret));
       }
@@ -397,19 +370,7 @@ int ObRawExprPrinter::print(ObColumnRefRawExpr *expr)
   } else {
     ObArenaAllocator arena_alloc;
     ObString col_name = expr->get_column_name();
-    if (print_params_.for_dblink_) {
-      if (!expr->is_cte_generated_column() &&
-          !expr->get_database_name().empty()) {
-        PRINT_IDENT_WITH_QUOT(expr->get_database_name());
-        DATA_PRINTF(".");
-      }
-      if (!expr->get_table_name().empty()) {
-        ObString table_name = expr->get_table_name();
-        PRINT_IDENT_WITH_QUOT(table_name);
-        DATA_PRINTF(".");
-      }
-      PRINT_IDENT_WITH_QUOT(col_name);
-    } else if (expr->is_cte_generated_column()) {
+    if (expr->is_cte_generated_column()) {
       ObString table_name = expr->get_synonym_name().empty() ?
                                                   expr->get_table_name() : expr->get_synonym_name();
       if (OB_SUCC(ret)) {
@@ -799,11 +760,7 @@ int ObRawExprPrinter::print(ObOpRawExpr *expr)
     }
     case T_OP_BOOL:{
       CK(1 == expr->get_param_count());
-      if (print_params_.for_dblink_) {
-        DATA_PRINTF("!!(");
-        PRINT_EXPR(expr->get_param_expr(0));
-        DATA_PRINTF(")");
-      } else if (expr->has_flag(IS_INNER_ADDED_EXPR)) {
+      if (expr->has_flag(IS_INNER_ADDED_EXPR)) {
         // ignore print inner added expr
         PRINT_EXPR(expr->get_param_expr(0));
       } else {
@@ -3180,15 +3137,8 @@ int ObRawExprPrinter::print(ObSysFunRawExpr *expr)
         break;
       }
       case T_FUN_PAD: {
-        if (print_params_.for_dblink_) {
-          // Oracle do not have function pad,
-          // but resolver will add pad above some expr.
-          // So, only print the first param
-          PRINT_EXPR(expr->get_param_expr(0));
-        } else {
-          DATA_PRINTF("%.*s", LEN_AND_PTR(func_name));
-          OZ(inner_print_fun_params(*expr));
-        }
+        DATA_PRINTF("%.*s", LEN_AND_PTR(func_name));
+        OZ(inner_print_fun_params(*expr));
         break;
       }
       case T_FUN_SYS_REGEXP_LIKE: {
@@ -3342,7 +3292,7 @@ int ObRawExprPrinter::print(ObUDFRawExpr *expr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt_ is NULL of buf_ is NULL or pos_ is NULL or expr is NULL", K(ret));
   } else {
-    if (!print_params_.for_dblink_) {
+    {
       if (!expr->get_database_name().empty()) {
         if (expr->get_database_name().case_compare("oceanbase") != 0) {
           PRINT_IDENT_WITH_QUOT(expr->get_database_name());
@@ -3353,35 +3303,10 @@ int ObRawExprPrinter::print(ObUDFRawExpr *expr)
         LOG_WARN("schema_guard for print raw expr is null", K(ret));
       } else {
 
+// Implicit database-name resolution is gated on the sys
+// tenant and becomes an unconditional no-op (schema-lookup else chain unreachable).
 #define PRINT_IMPLICIT_DATABASE_NAME(OBJECT, object_id, get_object_info_func, get_name_func) \
 do { \
-  const uint64_t tenant_id = pl::get_tenant_id_by_object_id(object_id); \
-  const share::schema::ObDatabaseSchema *database_schema = NULL; \
-  const share::schema::OBJECT *object_info = NULL; \
-  ObSchemaChecker checker; \
-  bool exist = false; \
-  bool is_private_syn = false; \
-  if (OB_SYS_TENANT_ID == tenant_id) { \
-  } else if (OB_FAIL(schema_guard_->get_object_info_func(tenant_id, object_id, object_info))) { \
-    LOG_WARN("failed to get udt info", K(ret), KPC(expr), K(tenant_id)); \
-  } else if (OB_ISNULL(object_info)) { \
-  } else if (OB_FAIL(schema_guard_->get_database_schema(tenant_id, object_info->get_database_id(), database_schema))) { \
-    LOG_WARN("failed to get database schema", K(ret), KPC(expr), K(tenant_id)); \
-  } else if (OB_ISNULL(database_schema)) { \
-    ret = OB_ERR_UNEXPECTED; \
-    LOG_WARN("database schema info is null", K(ret), K(database_schema), KPC(expr), K(tenant_id)); \
-  } else if (OB_FAIL(checker.init(*schema_guard_, schema_guard_->get_session_id()))) { \
-    LOG_WARN("failed to init schema checker", K(ret)); \
-  } else if (OB_FAIL(checker.check_exist_same_name_object_with_synonym(tenant_id, \
-                                                                       database_schema->get_database_id(), \
-                                                                       database_schema->get_database_name_str(), \
-                                                                       exist, \
-                                                                       is_private_syn))) { \
-    LOG_WARN("failed to check exist same name object with database name", K(ret), KPC(database_schema)); \
-  } else if (!exist) { \
-    PRINT_IDENT_WITH_QUOT(database_schema->get_database_name_str()); \
-    DATA_PRINTF("."); \
-  } \
 } while (0)
 
         if (expr->get_pkg_id() != OB_INVALID_ID) { // package or udt udf
@@ -3394,12 +3319,6 @@ do { \
       }
 
 #undef PRINT_IMPLICIT_DATABASE_NAME
-    } else {
-      if (!expr->get_dblink_name().empty()
-          && !expr->get_database_name().empty()) {
-        PRINT_IDENT_WITH_QUOT(expr->get_database_name());
-        DATA_PRINTF(".");
-      }
     }
 
     if (!expr->get_package_name().empty() &&

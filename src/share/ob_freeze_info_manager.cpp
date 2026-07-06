@@ -111,7 +111,6 @@ int ObFreezeInfoList::get_freeze_info(
 
 /****************************** ObFreezeInfoManager ******************************/
 int ObFreezeInfoManager::init(
-    uint64_t tenant_id,
     common::ObMySQLProxy &proxy)
 {
   int ret = OB_SUCCESS;
@@ -119,7 +118,7 @@ int ObFreezeInfoManager::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
   } else {
-    tenant_id_ = tenant_id;
+    
     sql_proxy_ = &proxy;
     is_inited_ = true;
   }
@@ -133,7 +132,7 @@ int ObFreezeInfoManager::reload(const share::SCN &min_frozen_scn)
   ObSEArray<ObFreezeInfo, 8> freeze_infos;
   share::SCN latest_snapshot_gc_scn;
 
-  if (OB_FAIL(fetch_new_freeze_info(tenant_id_, min_frozen_scn, *sql_proxy_, freeze_infos, latest_snapshot_gc_scn))) {
+  if (OB_FAIL(fetch_new_freeze_info(min_frozen_scn, *sql_proxy_, freeze_infos, latest_snapshot_gc_scn))) {
     LOG_WARN("failed to load updated info", K(ret));
   } else if (OB_FAIL(update_freeze_info(freeze_infos, latest_snapshot_gc_scn))) {
     LOG_WARN("failed to update freeze info", K(ret));
@@ -146,19 +145,18 @@ int ObFreezeInfoManager::reload(const share::SCN &min_frozen_scn)
 }
 
 int ObFreezeInfoManager::fetch_new_freeze_info(
-    const int64_t tenant_id,
     const share::SCN &min_frozen_scn,
     common::ObMySQLProxy &sql_proxy,
     common::ObIArray<ObFreezeInfo> &freeze_infos,
     share::SCN &latest_snapshot_gc_scn)
 {
   int ret = OB_SUCCESS;
-  ObFreezeInfoProxy freeze_info_proxy(tenant_id);
+  ObFreezeInfoProxy freeze_info_proxy{};
 
   // 1. get snapshot_gc_scn
   if (OB_FAIL(ObGlobalStatProxy::get_snapshot_gc_scn(
-             sql_proxy, tenant_id, latest_snapshot_gc_scn))) {
-    LOG_WARN("fail to select for update snapshot_gc_scn", KR(ret), K(tenant_id));
+             sql_proxy, latest_snapshot_gc_scn))) {
+    LOG_WARN("fail to select for update snapshot_gc_scn", KR(ret));
   // 2. acquire freeze info in same trans, ensure we can get the latest freeze info
   } else if (OB_FAIL(freeze_info_proxy.get_freeze_info_larger_or_equal_than(
              sql_proxy, min_frozen_scn, freeze_infos))) {

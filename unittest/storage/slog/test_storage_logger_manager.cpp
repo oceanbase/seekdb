@@ -155,14 +155,14 @@ TEST_F(TestStorageLoggerManager, test_slogger_basic)
 
   // test get_start_file_id
   int64_t start_id = 0;
-  ret = slogger->get_start_file_id(start_id, 5);
+  ret = slogger->get_start_file_id(start_id);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(cursor.file_id_, start_id);
 
   // test normal file remove
-  ret = slogger->remove_useless_log_file(cursor.file_id_+1, OB_SERVER_TENANT_ID);
+  ret = slogger->remove_useless_log_file(cursor.file_id_+1);
   ASSERT_EQ(OB_SUCCESS, ret);
-  slogger->get_start_file_id(start_id, 5);
+  slogger->get_start_file_id(start_id);
   ASSERT_EQ(1, start_id);
 
   slogger->destroy();

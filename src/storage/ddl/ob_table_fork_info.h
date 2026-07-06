@@ -36,7 +36,6 @@ class ObTableForkInfo final
 public:
   ObTableForkInfo();
   ObTableForkInfo(
-      const uint64_t tenant_id,
       const share::ObLSID &ls_id,
       const uint64_t table_id,
       const int64_t schema_version,
@@ -52,12 +51,12 @@ public:
   bool is_valid() const;
   int generate_fork_params(common::ObIArray<ObTabletForkParam> &params) const;
   int get_tablet_fork_param(const common::ObTabletID &tablet_id, ObTabletForkParam &tablet_fork_param) const;
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(table_id), K_(schema_version), K_(task_id),
+  TO_STRING_KV(K_(ls_id), K_(table_id), K_(schema_version), K_(task_id),
                K_(source_tablet_ids), K_(dest_tablet_ids),
                K_(fork_snapshot_version), K_(compat_mode),
                K_(data_format_version), K_(consumer_group_id));
 public:
-  uint64_t tenant_id_;
+  
   share::ObLSID ls_id_;
   uint64_t table_id_;
   int64_t schema_version_;

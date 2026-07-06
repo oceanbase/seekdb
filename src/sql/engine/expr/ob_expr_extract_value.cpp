@@ -82,8 +82,8 @@ int ObExprExtractValue::eval_mysql_extract_value(const ObExpr &expr, ObEvalCtx &
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
+  
+  MultimodeAlloctor allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
   ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &res);
   ObString xml_frag;
   ObString xpath_expr;
@@ -92,7 +92,7 @@ int ObExprExtractValue::eval_mysql_extract_value(const ObExpr &expr, ObEvalCtx &
   ObStringBuffer xml_res(&allocator);
 
   ObMulModeMemCtx* xml_mem_ctx = nullptr;
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, "XMLModule"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("XMLModule"));
   if (OB_FAIL(ObXmlUtil::create_mulmode_tree_context(&allocator, xml_mem_ctx))) {
     LOG_WARN("fail to create tree memory context", K(ret));
   } else if (expr.arg_cnt_ != 2) {

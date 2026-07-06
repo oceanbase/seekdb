@@ -628,8 +628,8 @@ private:
     int64_t min_bound_size_;
   };
 public:
-  ObTenantSqlMemoryManager(int64_t tenant_id) :
-    wa_intervals_(nullptr), min_bound_size_(0), tenant_id_(tenant_id),
+  ObTenantSqlMemoryManager() :
+    wa_intervals_(nullptr), min_bound_size_(0),
     enable_auto_memory_mgr_(false), mutex_(common::ObLatchIds::SQL_MEMORY_MGR_MUTEX_LOCK), profile_lists_(nullptr),
     drift_size_(0), profile_cnt_(0), pre_profile_cnt_(0), global_bound_size_(0),
     mem_target_(0), max_workarea_size_(0), workarea_hold_size_(0), max_auto_workarea_size_(0),
@@ -663,7 +663,7 @@ public:
   // OB_INLINE int64_t get_max_memory_work_area_size()
   // {
   //   int64_t percent_execpt_memstore = 100 - GCONF.memstore_limit_percentage;
-  //   return lib::get_tenant_memory_limit(tenant_id_) * percent_execpt_memstore / 100;
+  //   return lib::get_tenant_memory_limit(tenant_) * percent_execpt_memstore / 100;
   // }
 
   OB_INLINE bool enable_auto_memory_mgr() { return enable_auto_memory_mgr_; }
@@ -765,7 +765,7 @@ private:
   common::ObFIFOAllocator allocator_;
   ObSqlWorkAreaInterval *wa_intervals_;
   int64_t min_bound_size_;
-  int64_t tenant_id_;
+  
 
   bool enable_auto_memory_mgr_;
   bool pre_enable_auto_memory_mgr_;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_storage_estimator.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "storage/tx/ob_ts_mgr.h"
 
@@ -32,7 +33,7 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
   //est path rows
   ObTableScanParam param;
   share::SCN max_readable_scn;
-  if (OB_FAIL(OB_TS_MGR.get_gts(MTL_ID(), nullptr, max_readable_scn))) {
+  if (OB_FAIL(OB_TS_MGR.get_gts(nullptr, max_readable_scn))) {
     LOG_WARN("failed to get gts", K(ret));
   } else {
     param.frozen_version_ = static_cast<int64_t>(max_readable_scn.get_val_for_sql());
@@ -45,9 +46,7 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
     param.tablet_id_ = arg.index_params_.at(i).tablet_id_;
     param.ls_id_ = arg.index_params_.at(i).ls_id_;
     param.tx_id_ = arg.index_params_.at(i).tx_id_;
-    if (OB_FAIL(storage_estimate_rowcount(
-                  arg.index_params_.at(i).tenant_id_,
-                  param,
+    if (OB_FAIL(storage_estimate_rowcount(param,
                   arg.index_params_.at(i).batch_,
                   est_res))) {
       LOG_WARN("failed to estimate index row count", K(ret));
@@ -88,8 +87,7 @@ int ObStorageEstimator::estimate_block_count_and_row_count(const obcall::ObEstBl
 }
 
 // estimate scan rowcount
-int ObStorageEstimator::storage_estimate_rowcount(const uint64_t tenant_id,
-                                                  ObTableScanParam &param,
+int ObStorageEstimator::storage_estimate_rowcount(ObTableScanParam &param,
                                                   const ObSimpleBatch &batch,
                                                   obcall::ObEstPartResElement &res)
 {
@@ -101,9 +99,7 @@ int ObStorageEstimator::storage_estimate_rowcount(const uint64_t tenant_id,
     res.logical_row_count_ = static_cast<int64_t>(rc_logical);
     res.physical_row_count_ = static_cast<int64_t>(rc_physical);
     res.reliable_ = true;
-  } else if (OB_FAIL(storage_estimate_partition_batch_rowcount(
-                       tenant_id,
-                       batch,
+  } else if (OB_FAIL(storage_estimate_partition_batch_rowcount(batch,
                        param,
                        res.est_records_,
                        rc_logical,
@@ -120,16 +116,14 @@ int ObStorageEstimator::storage_estimate_rowcount(const uint64_t tenant_id,
   return ret;
 }
 //@shanyan.g Adjustment layer operates at the partition level
-int ObStorageEstimator::storage_estimate_partition_batch_rowcount(
-    const uint64_t tenant_id,
-    const ObSimpleBatch &batch,
+int ObStorageEstimator::storage_estimate_partition_batch_rowcount(const ObSimpleBatch &batch,
     storage::ObTableScanParam &table_scan_param,
     ObIArray<ObEstRowCountRecord> &est_records,
     double &logical_row_count,
     double &physical_row_count)
 {
   int ret = OB_SUCCESS;
-  MTL_SWITCH(tenant_id) {
+  MOD_SCOPE {
     int64_t rc_logical = 0;
     int64_t rc_physical = 0;
     ObArenaAllocator allocator;
@@ -137,7 +131,7 @@ int ObStorageEstimator::storage_estimate_partition_batch_rowcount(
     ObAccessService *access_service = NULL;
     storage::ObTableScanRange table_scan_range;
 
-    if (OB_ISNULL(access_service = MTL(ObAccessService *))) {
+    if (OB_ISNULL(access_service = share::g_mp->access_service())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret), K(access_service));
     } else if (OB_FAIL(table_scan_range.init(table_scan_param, batch, allocator))) {
@@ -180,11 +174,11 @@ int ObStorageEstimator::storage_estimate_block_count_and_row_count(
     res.sstable_row_count_ = sstable_row_count;
     res.memtable_row_count_ = memtable_row_count;
   } else {
-    const uint64_t tenant_id = arg.tenant_id_;
-    MTL_SWITCH(tenant_id) {
+    
+    MOD_SCOPE {
       const int64_t timeout_us = THIS_WORKER.get_timeout_remain();
       ObAccessService *access_service = NULL;
-      if (OB_ISNULL(access_service = MTL(ObAccessService *))) {
+      if (OB_ISNULL(access_service = share::g_mp->access_service())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret), K(access_service));
       } else if (OB_FAIL(access_service->estimate_block_count_and_row_count(arg.ls_id_,
@@ -237,11 +231,11 @@ int ObStorageEstimator::storage_estimate_skip_rate(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected cg skip rate", K(ret));
   } else {
-    const uint64_t tenant_id = arg.tenant_id_;
-    MTL_SWITCH(tenant_id) {
+    
+    MOD_SCOPE {
       const int64_t timeout_us = THIS_WORKER.get_timeout_remain();
       ObAccessService *access_service = NULL;
-      if (OB_ISNULL(access_service = MTL(ObAccessService *))) {
+      if (OB_ISNULL(access_service = share::g_mp->access_service())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret), K(access_service));
       } else if (OB_FAIL(access_service->estimate_skip_index_sortedness(arg.ls_id_,

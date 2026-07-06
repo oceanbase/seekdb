@@ -181,7 +181,7 @@ SELECT j, JSON_TYPE(j->'$[0]') FROM t;
 
 drop table t;
 
-SELECT JSON_SEARCH('["abc"]', 'one', CAST('abc' AS CHAR CHARSET utf16));
+SELECT JSON_SEARCH('["abc"]', 'one', CAST('abc' AS CHAR charset utf8mb4));
  
 --disable_warnings
 drop table if exists json_test;

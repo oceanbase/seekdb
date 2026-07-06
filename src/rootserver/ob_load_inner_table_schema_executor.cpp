@@ -19,7 +19,7 @@
 #include "ob_load_inner_table_schema_executor.h"
 
 #include "share/inner_table/ob_load_inner_table_schema.h"
-#include "deps/oblib/src/lib/utility/utility.h"
+#include "lib/utility/utility.h"
 #include "share/ob_server_struct.h"
 #include "share/location_cache/ob_location_service.h"
 #include "share/ob_global_stat_proxy.h"
@@ -79,7 +79,7 @@ int ObLoadInnerTableSchemaExecutor::load_inner_table_schema(
   } else if (OB_FAIL(insert_header.append_fmt("INSERT INTO %s(%s) VALUES ", info.get_inner_table_name(),
               info.get_inner_table_column_names()))) {
     LOG_WARN("failed to append insert header", KR(ret), K(info));
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_, arg.get_tenant_id()))) {
+  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
     LOG_WARN("failed to start trans", KR(ret), K(arg));
   } else {
     ObSqlString sql;
@@ -106,7 +106,7 @@ int ObLoadInnerTableSchemaExecutor::load_inner_table_schema(
           current_row_count++;
         }
       }
-      if (FAILEDx(trans.write(arg.get_tenant_id(), sql.ptr(), affected_rows))) {
+      if (FAILEDx(trans.write(sql.ptr(), affected_rows))) {
         LOG_WARN("failed to write sql", KR(ret), K(sql), K(arg));
       } else if (current_row_count != affected_rows) {
         ret = OB_ERR_UNEXPECTED;
@@ -131,12 +131,9 @@ int ObLoadInnerTableSchemaExecutor::append_arg(const ObIArray<int64_t> &insert_i
   obcall::ObLoadTenantTableSchemaArg arg;
   if (insert_idx.count() == 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("idx is empty", KR(ret), K(tenant_id_), K(info), K(insert_idx));
-  } else if (!is_valid_tenant_id(tenant_id_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant_id is invalid", KR(ret), K_(tenant_id));
-  } else if (OB_FAIL(arg.init(tenant_id_, info.get_inner_table_id(), &infos_, insert_idx, DATA_CURRENT_VERSION))) {
-    LOG_WARN("failed to init arg", KR(ret), K(tenant_id_), K(info), K(insert_idx));
+    LOG_WARN("idx is empty", KR(ret), K(info), K(insert_idx));
+  } else if (OB_FAIL(arg.init(info.get_inner_table_id(), &infos_, insert_idx, DATA_CURRENT_VERSION))) {
+    LOG_WARN("failed to init arg", KR(ret), K(info), K(insert_idx));
   } else if (OB_FAIL(args_.push_back(arg))) {
     LOG_WARN("failed to push_back", KR(ret), K(arg));
   }
@@ -209,11 +206,10 @@ int ObLoadInnerTableSchemaExecutor::init_args_(ObIArray<ObTableSchema> &table_sc
   return ret;
 }
 
-int ObLoadInnerTableSchemaExecutor::init(ObIArray<ObTableSchema> &table_schemas,
-    const uint64_t tenant_id, const int64_t max_cpu)
+int ObLoadInnerTableSchemaExecutor::init(ObIArray<ObTableSchema> &table_schemas, const int64_t max_cpu)
 {
   int ret = OB_SUCCESS;
-  tenant_id_ = tenant_id;
+  
   if (max_cpu <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parallel count should be positive", KR(ret), K(max_cpu));
@@ -226,20 +222,18 @@ int ObLoadInnerTableSchemaExecutor::init(ObIArray<ObTableSchema> &table_schemas,
   } else {
     inited_ = true;
   }
-  FLOG_INFO("ObLoadInnerTableSchemaExecutor inited", KR(ret), K(tenant_id_),
+  FLOG_INFO("ObLoadInnerTableSchemaExecutor inited", KR(ret),
       K(parallel_count_), K(load_rpc_timeout_));
   return ret;
 }
 
 
-int ObLoadInnerTableSchemaExecutor::load_schema_version(
-    const uint64_t tenant_id,
-    common::ObISQLClient &client,
+int ObLoadInnerTableSchemaExecutor::load_schema_version(common::ObISQLClient &client,
     const int64_t core_schema_version,
     const int64_t sys_schema_version)
 {
   int ret = OB_SUCCESS;
-  share::ObGlobalStatProxy proxy(client, tenant_id);
+  share::ObGlobalStatProxy proxy(client);
   if (OB_FAIL(proxy.set_core_schema_version(core_schema_version))) {
     LOG_WARN("failed to set core_schema_version", KR(ret));
   } else if (OB_FAIL(proxy.set_sys_schema_version(sys_schema_version))) {
@@ -252,7 +246,7 @@ int ObLoadInnerTableSchemaExecutor::execute()
 {
   int ret = OB_SUCCESS;
   const int64_t start_ts = ObTimeUtility::current_time();
-  FLOG_INFO("start to load inner table schema", KR(ret), K_(tenant_id));
+  FLOG_INFO("start to load inner table schema", KR(ret));
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", KR(ret), K_(inited));
@@ -264,7 +258,7 @@ int ObLoadInnerTableSchemaExecutor::execute()
       }
     }
   }
-  FLOG_INFO("finish load all inner table schema", KR(ret), K_(tenant_id),
+  FLOG_INFO("finish load all inner table schema", KR(ret),
       "cost", ObTimeUtility::current_time() - start_ts);
   return ret;
 }

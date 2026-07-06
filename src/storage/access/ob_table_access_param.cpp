@@ -19,7 +19,7 @@
 #include "ob_table_access_param.h"
 #include "storage/ob_relative_table.h"
 #include "storage/tablet/ob_tablet.h"
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 
 namespace oceanbase
 {
@@ -345,7 +345,7 @@ int ObTableAccessParam::init(
     iter_param_.pushdown_filter_ = scan_param.pd_storage_filters_;
     iter_param_.ls_id_ = scan_param.ls_id_;
     iter_param_.is_column_replica_table_ = table_param.is_column_replica_table();
-     // disable blockscan if scan order is KeepOrder(for iterator iterator and table api)
+     // disable blockscan if scan order is KeepOrder
      // disable blockscan if use index skip scan as no large range to scan
     if (OB_UNLIKELY(ObQueryFlag::KeepOrder == scan_param.scan_flag_.scan_order_ ||
                     scan_param.use_index_skip_scan() ||

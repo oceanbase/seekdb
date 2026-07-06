@@ -36,11 +36,10 @@ public:
   void free(T *t);
 
   int init(const lib::ObLabel &label = nullptr,
-           const uint64_t tenant_id = common::OB_SERVER_TENANT_ID,
            const int64_t block_size = common::OB_MALLOC_NORMAL_BLOCK_SIZE,
            const int64_t min_obj_count_on_block = DEFAULT_MIN_OBJ_COUNT_ON_BLOCK,
            const int64_t limit_num = INT64_MAX) {
-    return small_allocator_.init(sizeof(T), label, tenant_id, block_size, min_obj_count_on_block, limit_num);
+    return small_allocator_.init(sizeof(T), label, block_size, min_obj_count_on_block, limit_num);
   }
 
   int64_t size() const { return ATOMIC_LOAD(&size_); }
@@ -57,7 +56,7 @@ T *ObTableLoadObjectAllocator<T>::alloc(Args&&... args)
   T *t = nullptr;
   void *buf = nullptr;
   if (OB_NOT_NULL(buf = small_allocator_.alloc())) {
-    t = new (buf) T(args...);
+    t = new (buf) T(std::forward<Args>(args)...);
     ATOMIC_AAF(&size_, 1);
   }
   return t;

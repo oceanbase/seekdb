@@ -18,7 +18,7 @@
 #include "ob_cg_tile_scanner.h"
 #include "ob_co_sstable_rows_filter.h"
 #include "storage/access/ob_where_optimizer.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 
 namespace oceanbase
 {

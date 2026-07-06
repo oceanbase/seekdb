@@ -18,8 +18,8 @@
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_SCHEMA_SLOT_H_
 
 
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "share/ob_scanner.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "common/row/ob_row.h"
 #include "lib/string/ob_string.h"
@@ -43,8 +43,8 @@ class ObAllVirtualSchemaSlot: public common::ObVirtualTableScannerIterator
   };
 public:
   explicit ObAllVirtualSchemaSlot(share::schema::ObMultiVersionSchemaService &schema_service)
-             : tenant_idx_(OB_INVALID_INDEX), slot_idx_(0), 
-               tenant_ids_(), schema_service_(schema_service), schema_slot_infos_() {}
+             : t_loop_idx_(OB_INVALID_INDEX), slot_idx_(0), 
+               schema_service_(schema_service), schema_slot_infos_() {}
   virtual ~ObAllVirtualSchemaSlot() {}
 public:
   virtual int inner_open();
@@ -53,12 +53,11 @@ public:
   int get_next_tenant_slot_info(ObSchemaSlot &schema_slot);
 
 private:
-  int64_t tenant_idx_;// tenant_iterator
+  int64_t t_loop_idx_;// tenant_iterator
   int64_t slot_idx_;// slot iterator
   const static int64_t DEFAULT_TENANT_NUM = 10;
   const static int64_t DEFAULT_SLOT_NUM = 128;
   char ip_buffer_[OB_MAX_SERVER_ADDR_SIZE];
-  common::ObSEArray<uint64_t, DEFAULT_TENANT_NUM> tenant_ids_;
   share::schema::ObMultiVersionSchemaService &schema_service_;
   common::ObSEArray<ObSchemaSlot, DEFAULT_SLOT_NUM> schema_slot_infos_;// specified tenant's all slot info
 }; //class ObAllVirtualSchemaSlot

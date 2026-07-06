@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LIB_RESTORE_OB_STORAGE_INFO_H_
 #define OCEANBASE_LIB_RESTORE_OB_STORAGE_INFO_H_
 
-#include "common/storage/ob_device_common.h"
+#include "lib/restore/ob_device_common.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include <curl/curl.h>
@@ -328,13 +328,13 @@ class ObStsCredential
 public:
   ObStsCredential();
   virtual ~ObStsCredential();
-  int init(const uint64_t tenant_id);
+  int init();
   void reset();
   int get_sts_credential();
   static int register_sts_credential_mgr(ObTenantStsCredentialBaseMgr *sts_credential_mgr);
-  TO_STRING_KV(K_(tenant_id), K_(sts_ak), KP_(sts_sk), K_(sts_url),  KP_(sts_credential_mgr));
+  TO_STRING_KV(K_(sts_ak), KP_(sts_sk), K_(sts_url),  KP_(sts_credential_mgr));
 public:
-  uint64_t tenant_id_;
+  
   char sts_ak_[OB_MAX_STS_AK_LENGTH];
   char sts_sk_[OB_MAX_STS_SK_LENGTH];
   char sts_url_[OB_MAX_STS_URL_LENGTH];
@@ -361,13 +361,13 @@ public:
   bool is_valid() const;
 
   int construct_signed_url(char *url_buf, const int64_t url_buf_len) const;
-  TO_STRING_KV(K_(is_inited), KP_(role_arn), KP_(external_id), K_(tenant_id));
+  TO_STRING_KV(K_(is_inited), KP_(role_arn), KP_(external_id));
 
 public:
   char role_arn_[OB_MAX_ROLE_ARN_LENGTH];
   char external_id_[OB_MAX_EXTERNAL_ID_LENGTH];
-  // tenant_id is used to distinguish different tenants
-  uint64_t tenant_id_;
+  // tenant is used to distinguish different tenants
+  
   bool is_inited_;
 
 private:

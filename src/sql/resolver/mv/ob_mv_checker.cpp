@@ -269,9 +269,6 @@ const char *ObMVChecker::get_table_type_str(const TableItem::TableType type)
   case TableItem::TEMP_TABLE:
     type_str = "TEMP_TABLE";
     break;
-  case TableItem::LINK_TABLE:
-    type_str = "LINK_TABLE";
-    break;
   case TableItem::JSON_TABLE:
     type_str = "JSON_TABLE";
     break;
@@ -739,7 +736,7 @@ int ObMVChecker::check_mjv_refresh_type(const ObSelectStmt &stmt, ObMVRefreshabl
   bool match_major_refresh = false;
   bool has_outer_join = false;
   bool is_valid = false;
-  uint64_t tenant_id = MTL_ID();
+  
   if (OB_FAIL(check_join_mv_fast_refresh_valid(stmt, false, is_valid, has_outer_join))) {
     LOG_WARN("failed to check join mv fast refresh valid", K(ret));
   } else if (!is_valid) {

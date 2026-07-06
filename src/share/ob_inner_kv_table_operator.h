@@ -126,7 +126,6 @@ public:
   explicit ObInnerKVItemTenantIdWrapper(ObInnerKVItem *item);
   virtual ~ObInnerKVItemTenantIdWrapper() {}
 
-  int set_tenant_id(const uint64_t tenant_id);
 
   // Set the name of kv item.
   int set_kv_name(const char *name) override
@@ -154,38 +153,30 @@ public:
   // Fill primary key and value to dml.
   int fill_dml(share::ObDMLSqlSplicer &dml) const override;
 
-  VIRTUAL_TO_STRING_KV(K_(tenant_id), K_(*item));
+  VIRTUAL_TO_STRING_KV(K_(*item));
 
 private:
   static const char *TENANT_ID_COLUMN_NAME;
-  uint64_t tenant_id_;
   ObInnerKVItem *item_;
 };
 
 
 // Define kv table operator.
-class ObInnerKVTableOperator final : public ObIExecTenantIdProvider
+class ObInnerKVTableOperator final
 {
 public:
   ObInnerKVTableOperator();
   ~ObInnerKVTableOperator();
 
-  uint64_t get_exec_tenant_id() const override
-  {
-    return operator_.get_exec_tenant_id();
-  }
+  
 
   // get name of the operation table
   // const char *get_table_name() const;
   CONST_DELEGATE_WITH_RET(operator_, get_table_name, const char *);
 
-  // Get exec tenant id provider
-  // const ObIExecTenantIdProvider *get_exec_tenant_id_provider() const;
-  CONST_DELEGATE_WITH_RET(operator_, get_exec_tenant_id_provider, const ObIExecTenantIdProvider *);
-
   // Init operator with operation table name.
   int init(
-    const char *tname, const ObIExecTenantIdProvider &exec_tenant_id_provider);
+    const char *tname);
 
   int get_item(
     common::ObISQLClient &proxy, const bool need_lock, ObInnerKVItem &item) const;

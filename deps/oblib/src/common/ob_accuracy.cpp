@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_accuracy.h"
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 
 namespace oceanbase
 {

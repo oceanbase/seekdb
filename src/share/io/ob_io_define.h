@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LIB_STORAGE_IO_DEFINE
 #define OCEANBASE_LIB_STORAGE_IO_DEFINE
 
-#include "common/storage/ob_io_device.h"
+#include "lib/restore/ob_io_device.h"
 #include "lib/container/ob_array_iterator.h"
 #include "lib/container/ob_array_wrap.h"
 #include "lib/container/ob_heap.h"
@@ -28,8 +28,8 @@
 #include "lib/restore/ob_storage.h"
 #include "lib/thread/thread_mgr_interface.h"
 #include "lib/worker.h"
+#include "share/ob_define.h"
 #include "share/resource_manager/ob_resource_plan_info.h"
-#include "storage/ob_storage_checked_object_base.h"
 
 namespace oceanbase
 {
@@ -45,6 +45,8 @@ class ObBackupDeviceHelper;
 namespace common
 {
 
+// default NIC bandwidth 10000Mbit→1250MBps(moved down from observer ObServer:base vocabulary for IO scheduling)
+constexpr int64_t OB_DEFAULT_ETHERNET_SPEED = 10000 / 8 * 1024 * 1024;
 class ObObjectDevice;
 class ObIOCallbackManager;
 
@@ -55,7 +57,6 @@ static constexpr int64_t MAX_IO_WAIT_TIME_MS = 300L * 1000L;     // 5min
 static constexpr int64_t GROUP_START_NUM = 1L;
 static constexpr int64_t DEFAULT_IO_WAIT_TIME_US = 5000L * 1000L;  // 5s
 static constexpr int64_t MAX_DETECT_READ_WARN_TIMES = 10L;
-static constexpr int64_t MAX_DETECT_READ_ERROR_TIMES = 100L;
 static constexpr int64_t DEFAULT_OBJECT_STORAGE_IO_TIMEOUT_MS = 20 * 1000L;
 
 enum class ObIOMode : uint8_t { READ = 0, WRITE = 1, MAX_MODE };
@@ -282,11 +283,11 @@ public:
   virtual void reset();
   bool is_valid() const;
   ObSNIOInfo &operator=(const ObSNIOInfo &other);
-  TO_STRING_KV(K(tenant_id_), K(fd_), K(offset_), K(size_), K(timeout_us_), K(flag_), KP(callback_), KP(buf_),
+  TO_STRING_KV(K(fd_), K(offset_), K(size_), K(timeout_us_), K(flag_), KP(callback_), KP(buf_),
       KP(user_data_buf_), K_(part_id));
 
 public:
-  uint64_t tenant_id_;
+  
   ObIOFd fd_;
   int64_t offset_;
   int64_t size_;
@@ -422,13 +423,13 @@ struct ObIOGroupKey
 
 struct ObIOSSGrpKey
 {
-  ObIOSSGrpKey() : tenant_id_(0), group_key_()
+  ObIOSSGrpKey() : group_key_()
   {}
-  ObIOSSGrpKey(const int64_t tenant_id, const ObIOGroupKey group_key) : tenant_id_(tenant_id), group_key_(group_key)
+  ObIOSSGrpKey(const ObIOGroupKey group_key) : group_key_(group_key)
   {}
   uint64_t hash() const
   {
-    uint64_t hash_val = static_cast<uint64_t>(tenant_id_);
+    uint64_t hash_val = 0;
     uint64_t hash_val_2 = static_cast<uint64_t>(group_key_.hash());
     hash_val = common::murmurhash(&hash_val_2, sizeof(hash_val_2), hash_val);
     return hash_val;
@@ -440,20 +441,20 @@ struct ObIOSSGrpKey
   }
   bool operator==(const ObIOSSGrpKey &that) const
   {
-    return tenant_id_ == that.tenant_id_ && group_key_ == that.group_key_;
+    return true && group_key_ == that.group_key_;
   }
   ObIOSSGrpKey& operator=(const ObIOSSGrpKey &other)
   {
     if (this != &other) {
-      tenant_id_ = other.tenant_id_;
+      
       group_key_ = other.group_key_;
     }
     return *this;
   }
   ObIOMode get_mode() const { return group_key_.mode_; };
-  int64_t tenant_id_;
+  
   ObIOGroupKey group_key_;
-  TO_STRING_KV(K(tenant_id_), K(group_key_));
+  TO_STRING_KV(K(group_key_));
 };
 
 
@@ -487,7 +488,7 @@ public:
   ObThreadCond &get_cond() { return cond_; }
 
   TO_STRING_KV(K(is_inited_), K(is_finished_), K(is_canceled_), K(has_estimated_), K(complete_size_), K(offset_), K(size_),
-               K(timeout_us_), K(result_ref_cnt_), K(out_ref_cnt_), K(flag_), K(ret_code_), K(tenant_id_), KP(tenant_io_mgr_),
+               K(timeout_us_), K(result_ref_cnt_), K(out_ref_cnt_), K(flag_), K(ret_code_), KP(tenant_io_mgr_),
                KP(user_data_buf_), KP(buf_), KP(io_callback_), K_(time_log));
   DISALLOW_COPY_AND_ASSIGN(ObIOResult);
 private:
@@ -510,7 +511,7 @@ private:
   int64_t offset_;
   int64_t size_;
   int64_t timeout_us_;
-  uint64_t tenant_id_;
+  
   int64_t aligned_size_;
   ObTenantIOManager *tenant_io_mgr_;
   const char *buf_;
@@ -541,7 +542,6 @@ public:
   ObIOGroupKey get_group_key() const;
   bool is_sys_module() const;
   oceanbase::share::ObFunctionType get_func_type() const;
-  bool is_local_clog_not_isolated();
   bool is_object_device_req() const;
   char *calc_io_buf();  // calc the aligned io_buf of raw_buf_, which interact with the operating system
   const ObIOFlag &get_flag() const;
@@ -562,7 +562,7 @@ public:
 
   int64_t get_remained_io_timeout_us();
 
-  TO_STRING_KV(K(is_inited_), K(tenant_id_), KP(control_block_), K(ref_cnt_), KP(raw_buf_), K(fd_), K(is_object_device_req()),
+  TO_STRING_KV(K(is_inited_), KP(control_block_), K(ref_cnt_), KP(raw_buf_), K(fd_), K(is_object_device_req()),
                K(trace_id_), K(retry_count_), KP(tenant_io_mgr_), K_(storage_accesser),
                KPC(io_result_), K_(part_id));
 private:
@@ -597,7 +597,7 @@ protected:
   int64_t align_size_; // align io size, use this and don't use calc_io_offset_and_size_()
   int64_t align_offset_;
   ObIOCB *control_block_;
-  uint64_t tenant_id_;
+  
   ObTenantIOManager *tenant_io_mgr_;
   ObRefHolder<ObStorageAccesser> storage_accesser_;
   ObIOFd fd_;
@@ -637,7 +637,7 @@ public:
   IOReqList req_list_;
 };
 
-class ObIOHandle final : public storage::ObStorageCheckedObjectBase
+class ObIOHandle final
 {
 public:
   ObIOHandle();
@@ -664,8 +664,6 @@ public:
   int check_is_finished(bool &is_finished);
   void clear_io_callback();
   ObIOCallback *get_io_callback();
-  bool need_trace() const;
-  storage::ObStorageCheckID get_check_id() const { return storage::ObStorageCheckID::IO_HANDLE; }
   TO_STRING_KV_WITH_HELPER("io_result", helper.convert(result_));
 
 private:
@@ -732,7 +730,7 @@ public:
   bool is_valid() const;
   int deep_copy(const ObTenantIOConfig &other_config);
   int parse_group_config(const char *config_str);
-  int add_single_group_config(const uint64_t tenant_id, const ObIOGroupKey &key, const char *group_name,
+  int add_single_group_config(const ObIOGroupKey &key, const char *group_name,
       int64_t min_percent, int64_t max_percent, int64_t weight_percent);
   int get_group_config(const uint64_t index, int64_t &min, int64_t &max, int64_t &weight) const;
   int64_t get_callback_thread_count() const;

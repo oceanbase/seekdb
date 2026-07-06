@@ -33,7 +33,6 @@ class TestDiagnoseInfoMgr : public ::testing::Test
 public:
   TestDiagnoseInfoMgr()
   : ls_id_(TEST_LS_ID),
-    tenant_base_(TEST_TENANT_ID),
     suspect_info_mgr_(NULL),
     diagnose_tablet_mgr_(NULL),
     is_inited_(false)
@@ -49,7 +48,6 @@ public:
   static constexpr int64_t TEST_TENANT_ID = 1001;
   static constexpr int64_t TEST_LS_ID = 9001;
   share::ObLSID ls_id_;
-  ObTenantBase tenant_base_;
   ObScheduleSuspectInfoMgr *suspect_info_mgr_;
   ObDiagnoseTabletMgr *diagnose_tablet_mgr_;
   ObDiagnoseInfoParam<2, 0> param_;
@@ -59,24 +57,19 @@ public:
 void TestDiagnoseInfoMgr::SetUp()
 {
   if (!is_inited_) {
-    ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(TEST_TENANT_ID);
+    ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
     is_inited_ = true;
   }
   if (OB_ISNULL(suspect_info_mgr_)) {
     suspect_info_mgr_ = OB_NEW(ObScheduleSuspectInfoMgr, ObModIds::TEST);
   }
-  tenant_base_.set(suspect_info_mgr_);
 
   if (OB_ISNULL(diagnose_tablet_mgr_)) {
     diagnose_tablet_mgr_ = OB_NEW(ObDiagnoseTabletMgr, ObModIds::TEST);
   }
-  tenant_base_.set(diagnose_tablet_mgr_);
-
-  ObTenantEnv::set_tenant(&tenant_base_);
-  ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
 
   ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-  ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(TEST_TENANT_ID, 1LL << 30));
+  ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(1LL << 30));
 }
 
 void TestDiagnoseInfoMgr::TearDown()
@@ -89,8 +82,6 @@ void TestDiagnoseInfoMgr::TearDown()
     diagnose_tablet_mgr_->destroy();
     diagnose_tablet_mgr_ = nullptr;
   }
-  tenant_base_.destroy();
-  ObTenantEnv::set_tenant(nullptr);
 }
 
 int TestDiagnoseInfoMgr::gene_suspect_info(

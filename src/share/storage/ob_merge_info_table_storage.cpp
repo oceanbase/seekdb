@@ -118,10 +118,9 @@ int ObMergeInfoTableStorage::insert_or_update(const ObGlobalMergeInfo &global_me
   return ret;
 }
 
-int ObMergeInfoTableStorage::get(const uint64_t tenant_id, ObGlobalMergeInfo &global_merge_info)
+int ObMergeInfoTableStorage::get(ObGlobalMergeInfo &global_merge_info)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   global_merge_info.reset();
   if (!is_inited()) {
     ret = OB_NOT_INIT;

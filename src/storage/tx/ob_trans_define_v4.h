@@ -142,7 +142,6 @@ public:
   _XX(END_STMT_FAIL)                                    \
   _XX(EXPLICIT_ROLLBACK)                                \
   _XX(CREATE_SAVEPOINT_FAIL)                            \
-  // used for dblink create savepoint
 
 enum ObTxAbortCause
 {
@@ -554,7 +553,7 @@ class ObTxDesc final : public share::ObLightHashLink<ObTxDesc>
   friend class ObTxnFreeRouteCtx;
   OB_UNIS_VERSION(1);
 protected:
-  uint64_t tenant_id_;        // FIXME: removable
+          // FIXME: removable
   // Identify the ownership of data when the A database and
   // the B database synchronize data with each other
   int64_t cluster_id_;
@@ -577,7 +576,7 @@ protected:
   uint32_t sess_id_;                   // sesssion id of txn start, for XA it is XA_START session id
   uint32_t assoc_sess_id_;             // the session which associated with
   uint32_t client_sid_;                // client session id, which is produced by proxy
-  ObGlobalTxType global_tx_type_;      // global trans type, i.e., xa or dblink
+  ObGlobalTxType global_tx_type_;      // global trans type
 
   uint64_t op_sn_;                     // Tx level operation sequence No
 
@@ -756,7 +755,6 @@ public:
                K_(tx_id),
                K_(state),
                K_(addr),
-               K_(tenant_id),
                "session_id", sess_id_,
                "assoc_session_id", assoc_sess_id_,
                "client_sid", client_sid_,
@@ -808,7 +806,7 @@ public:
   int merge_conflict_txs(const ObIArray<ObTransIDAndAddr> &conflict_ids);
   bool has_conflict_txs() const { return conflict_txs_.count() > 0; }
   bool contain(const ObTransID &trans_id) const { return tx_id_ == trans_id; } /*used by TransHashMap*/
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   void set_cluster_id(uint64_t cluster_id) { cluster_id_ = cluster_id; }
   uint64_t get_cluster_id() const { return cluster_id_; }
   uint32_t get_session_id() const { return sess_id_; }
@@ -904,7 +902,6 @@ public:
   void release_implicit_savepoint(const ObTxSEQ savepoint);
   ObTransTraceLog &get_tlog() { return tlog_; }
   bool is_xa_terminate_state_() const;
-  // for dblink
   ObGlobalTxType get_global_tx_type(const ObXATransID &xid) const;
   void set_global_tx_type(const ObGlobalTxType global_tx_type)
   { global_tx_type_ = global_tx_type; }
@@ -1068,7 +1065,7 @@ class ObTxInfo
   friend class ObTransService;
   OB_UNIS_VERSION(1);
 protected:
-  uint64_t tenant_id_;
+  
   int64_t cluster_id_;
   uint64_t cluster_version_;
   int64_t seq_base_;
@@ -1090,8 +1087,7 @@ protected:
   ObTxSavePointList savepoints_;
 public:
   ObTxInfo(): seq_base_(0) {}
-  TO_STRING_KV(K_(tenant_id),
-               K_(session_id),
+  TO_STRING_KV(K_(session_id),
                K_(tx_id),
                K_(access_mode),
                K_(isolation),

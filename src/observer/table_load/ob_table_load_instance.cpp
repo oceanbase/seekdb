@@ -16,7 +16,10 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/table_load/ob_table_load_instance.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/tx/ob_ts_mgr.h"  // transaction::get_tenant_gts
 #include "observer/table_load/ob_table_load_coordinator.h"
 #include "observer/table_load/ob_table_load_index_long_wait.h"
 #include "observer/table_load/ob_table_load_redef_table.h"
@@ -94,7 +97,6 @@ int ObTableLoadInstance::init(ObTableLoadParam &param,
     }
 
     SERVER_EVENT_ADD("direct_load", "start",
-                     "tenant_id", MTL_ID(),
                      "trace_id", *ObCurTraceId::get_trace_id(),
                      K(db_id),
                      K(query_sql),
@@ -105,7 +107,7 @@ int ObTableLoadInstance::init(ObTableLoadParam &param,
     }
     // check tenant
     else if (OB_FAIL(ObTableLoadService::check_tenant())) {
-      LOG_WARN("fail to check tenant", KR(ret), K(param.tenant_id_));
+      LOG_WARN("fail to check tenant", KR(ret));
     }
     // start stmt
     else if (OB_FAIL(start_stmt(param, tablet_ids))) {
@@ -119,10 +121,9 @@ int ObTableLoadInstance::init(ObTableLoadParam &param,
                                                                    param.load_level_,
                                                                    column_ids))) {
       LOG_WARN("fail to check support direct load", KR(ret), K(param));
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
       if (OB_NOT_SUPPORTED == ret
-          && tenant_config.is_valid()
-          && tenant_config->direct_load_allow_fallback) {
+          && true
+          && GCONF.direct_load_allow_fallback) {
         ret = OB_EAGAIN;
       }
     }
@@ -195,7 +196,7 @@ int ObTableLoadInstance::start_stmt(
 {
   int ret = OB_SUCCESS;
   stmt_ctx_.reset();
-  stmt_ctx_.tenant_id_ = param.tenant_id_;
+  
   stmt_ctx_.table_id_ = param.table_id_;
   stmt_ctx_.session_info_ = execute_ctx_->get_session_info();
   stmt_ctx_.is_incremental_ = ObDirectLoadMethod::is_incremental(param.method_);
@@ -251,7 +252,6 @@ int ObTableLoadInstance::end_stmt(const bool commit)
   LOG_INFO("end stmt succeed", KR(ret));
 
   SERVER_EVENT_ADD("direct_load", "end",
-                 "tenant_id", MTL_ID(),
                  "trace_id", *ObCurTraceId::get_trace_id(),
                  "ret_code", ret);
   return ret;
@@ -294,7 +294,7 @@ int ObTableLoadInstance::build_tx_param()
 int ObTableLoadInstance::start_sql_tx()
 {
   int ret = OB_SUCCESS;
-  ObTransService *txs = MTL(ObTransService *);
+  ObTransService *txs = share::g_mp->trans_service();
   ObSQLSessionInfo *session_info = stmt_ctx_.session_info_;
   ObTxDesc *&tx_desc = session_info->get_tx_desc();
   if (stmt_ctx_.use_insert_into_select_tx_) { // insert into select path, tx_desc should be available
@@ -340,7 +340,7 @@ int ObTableLoadInstance::end_sql_tx(const bool commit)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  ObTransService *txs = MTL(ObTransService *);
+  ObTransService *txs = share::g_mp->trans_service();
   ObSQLSessionInfo *session_info = stmt_ctx_.session_info_;
   ObTxDesc *tx_desc = stmt_ctx_.tx_desc_;
   execute_ctx_->tx_desc_ = nullptr;
@@ -443,7 +443,7 @@ int ObTableLoadInstance::lock_tablets_in_tx(const ObIArray<ObTabletID> &tablet_i
 int ObTableLoadInstance::try_lock_in_tx(const ObLockRequest &lock_arg)
 {
   int ret = OB_SUCCESS;
-  ObTableLockService *table_lock_service = MTL(ObTableLockService *);
+  ObTableLockService *table_lock_service = share::g_mp->table_lock_service();
   ObTxDesc *tx_desc = stmt_ctx_.tx_desc_;
   bool lock_succeed = false;
   int64_t sleep_time = 100 * 1000L; // 100ms
@@ -480,24 +480,24 @@ int ObTableLoadInstance::init_ddl_param_for_inc_direct_load()
   share::SCN current_scn;
   int64_t schema_version = 0;
   uint64_t tenant_data_version = 0;
-  const uint64_t tenant_id = stmt_ctx_.tenant_id_;
+  
   const uint64_t table_id = stmt_ctx_.table_id_;
   ObTableLoadDDLParam &ddl_param = stmt_ctx_.ddl_param_;
   if (OB_ISNULL(schema_guard = execute_ctx_->exec_ctx_->get_sql_ctx()->schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema guard in exe ctx is nullptr", KR(ret));
-  } else if (OB_FAIL(schema_guard->get_table_schema(tenant_id, table_id, table_schema))) {
+  } else if (OB_FAIL(schema_guard->get_table_schema( table_id, table_schema))) {
     LOG_WARN("fail to get table schema", KR(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
-    LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
-  } else if (OB_FAIL(ObCommonIDUtils::gen_unique_id_by_rpc(tenant_id, raw_id))) {
-    LOG_WARN("failed to gen unique id by rpc", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(share::ObShareUtil::get_tenant_gts(tenant_id, current_scn))) {
-    LOG_WARN("failed to get gts", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_data_version))) {
-    LOG_WARN("failed to get min data version", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(ObDDLUtil::get_no_logging_param(tenant_id, ddl_param.is_no_logging_))) {
+    LOG_WARN("fail to get table schema", KR(ret), K(table_id));
+  } else if (OB_FAIL(ObCommonIDUtils::gen_unique_id_by_rpc( raw_id))) {
+    LOG_WARN("failed to gen unique id by rpc", KR(ret));
+  } else if (OB_FAIL(transaction::get_tenant_gts(current_scn))) {
+    LOG_WARN("failed to get gts", KR(ret));
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
+    LOG_WARN("failed to get min data version", KR(ret));
+  } else if (OB_FAIL(ObDDLUtil::get_no_logging_param(ddl_param.is_no_logging_))) {
     LOG_WARN("fail to get no logging param", KR(ret));
   } else {
     ddl_param.dest_table_id_ = table_id;
@@ -519,7 +519,7 @@ int ObTableLoadInstance::start_redef_table(
   ObTableLoadDDLParam &ddl_param = stmt_ctx_.ddl_param_;
   ObTableLoadRedefTableStartArg start_arg;
   ObTableLoadRedefTableStartRes start_res;
-  start_arg.tenant_id_ = param.tenant_id_;
+  
   start_arg.table_id_ = param.table_id_;
   start_arg.parallelism_ = param.parallel_;
   start_arg.is_load_data_ = !param.px_mode_;
@@ -550,7 +550,7 @@ int ObTableLoadInstance::commit_redef_table()
 {
   int ret = OB_SUCCESS;
   ObTableLoadRedefTableFinishArg arg;
-  arg.tenant_id_ = stmt_ctx_.tenant_id_;
+  
   arg.table_id_ = stmt_ctx_.table_id_;
   arg.dest_table_id_ = stmt_ctx_.ddl_param_.dest_table_id_;
   arg.task_id_ = stmt_ctx_.ddl_param_.task_id_;
@@ -567,7 +567,7 @@ int ObTableLoadInstance::abort_redef_table()
 {
   int ret = OB_SUCCESS;
   ObTableLoadRedefTableAbortArg arg;
-  arg.tenant_id_ = stmt_ctx_.tenant_id_;
+  
   arg.task_id_ = stmt_ctx_.ddl_param_.task_id_;
   if (OB_FAIL(ObTableLoadRedefTable::abort(arg, *stmt_ctx_.session_info_))) {
     LOG_WARN("fail to abort redef table", KR(ret), K(arg));
@@ -730,7 +730,7 @@ int ObTableLoadInstance::end_direct_load(const bool commit)
 int ObTableLoadInstance::add_tx_result_to_user_session()
 {
   int ret = OB_SUCCESS;
-  ObTransService *txs = MTL(ObTransService *);
+  ObTransService *txs = share::g_mp->trans_service();
   ObSQLSessionInfo *session_info = stmt_ctx_.session_info_;
   ObTxDesc *tx_desc = session_info->get_tx_desc();
   if (OB_ISNULL(table_ctx_)) {

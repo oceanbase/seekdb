@@ -23,7 +23,6 @@
 #include "lib/lock/ob_mutex.h"
 #include "lib/stat/ob_latch_define.h"
 #include "lib/utility/ob_print_utils.h"
-#include "lib/timezone/ob_time_convert.h"
 #include "lib/thread_local/ob_tsi_factory.h"
 #include "lib/ob_lib_config.h"
 namespace oceanbase
@@ -48,6 +47,9 @@ struct ObTraceEvent
   int16_t yson_end_pos_;
 };
 
+// non-template helper: moves datetime formatting (which depends on common/timezone) into the .cpp，so this header no longer depends on the DB-domain layer
+int trace_event_datetime_to_str(const int64_t ts_us, char *buf, const int64_t buf_len, int64_t &pos);
+
 template<int64_t EVENT_COUNT, int64_t INFO_BUFFER_SIZE>
 class ObTraceEventRecorderBase : public ObSeqEventRecorder<ObTraceEvent, EVENT_COUNT, INFO_BUFFER_SIZE>
 {
@@ -71,7 +73,7 @@ public:
       event_name = NAME(ev.id_);
       if (prev_ts == 0) {
         (void)::oceanbase::common::databuff_printf(buf, buf_len, pos, "begin_ts=%ld ", ev.timestamp_);
-        common::ObTimeConverter::datetime_to_str(ev.timestamp_, nullptr, nls_format, 6, buf, buf_len, pos);
+        common::trace_event_datetime_to_str(ev.timestamp_, buf, buf_len, pos);
         prev_ts = ev.timestamp_;
       }
       if (NULL == event_name) {

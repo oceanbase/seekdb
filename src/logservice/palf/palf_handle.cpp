@@ -675,31 +675,6 @@ int PalfHandle::advance_election_epoch_and_downgrade_priority(const int64_t prop
                                                                           reason);
 }
 
-int PalfHandle::set_locality_cb(PalfLocalityInfoCb *locality_cb)
-{
-  int ret = OB_SUCCESS;
-  CHECK_VALID;
-  if (OB_ISNULL(locality_cb)) {
-    PALF_LOG(INFO, "no need set_locality_cb", KR(ret), KP(locality_cb));
-  } else if (OB_FAIL(palf_handle_impl_->set_locality_cb(locality_cb))) {
-    PALF_LOG(WARN, "set_locality_cb failed", KR(ret));
-  } else {
-  }
-  return ret;
-}
-
-int PalfHandle::reset_locality_cb()
-{
-  int ret = OB_SUCCESS;
-  CHECK_VALID;
-  if (OB_FAIL(palf_handle_impl_->reset_locality_cb())) {
-    PALF_LOG(WARN, "reset_locality_cb failed", KR(ret));
-  } else {
-    PALF_LOG(INFO, "reset_locality_cb success", KR(ret));
-  }
-  return ret;
-}
-
 int PalfHandle::stat(PalfStat &palf_stat) const
 {
   CHECK_VALID;

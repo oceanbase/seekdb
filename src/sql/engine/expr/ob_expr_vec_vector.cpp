@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "sql/engine/expr/ob_expr_vec_vector.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -111,7 +112,7 @@ int ObExprVecVector::cg_expr(
       ObEvalCtx::TempAllocGuard tmp_alloc_g(eval_ctx);
       common::ObArenaAllocator &ctx_allocator = tmp_alloc_g.get_allocator();
       ObLobAccessParam param;
-      ObLobManager* lob_mngr = MTL(ObLobManager*);
+      ObLobManager* lob_mngr = share::g_mp->lob_manager();
       int64_t timeout = 0;
       int64_t query_st = eval_ctx.exec_ctx_.get_my_session()->get_query_start_time();
       if (OB_ISNULL(lob_mngr)) {

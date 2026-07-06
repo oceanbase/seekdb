@@ -25,9 +25,9 @@
 #include "lib/utility/ob_platform_utils.h"
 #include "lib/ob_abort.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "lib/alloc/alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 #include "lib/alloc/abit_set.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/list/ob_dlink_node.h"
 #include "lib/atomic/ob_atomic.h"
 
@@ -130,18 +130,16 @@ struct ObMemAttr
 {
   friend ObMemAttr DoNotUseMe(ObMemAttr &attr);
   friend ObMemAttr UseUnexpected500(ObMemAttr &attr);
-  uint64_t tenant_id_;
+  
   ObLabel label_;
   uint64_t ctx_id_;
   int32_t sub_ctx_id_;
   ObAllocPrio prio_;
   explicit ObMemAttr(
-    uint64_t tenant_id = common::OB_SYS_TENANT_ID,
     ObLabel label = ObLabel(),
     uint64_t ctx_id = 0,
     ObAllocPrio prio = OB_NORMAL_ALLOC)
-      : tenant_id_(tenant_id),
-        label_(label),
+      : label_(label),
         ctx_id_(ctx_id),
         prio_(prio),
         use_500_(false),
@@ -187,12 +185,12 @@ inline ObMemAttr UseUnexpected500(ObMemAttr &attr)
   }                                                                       \
   inline ObMemAttr func_name(const ObLabel &label)                        \
   {                                                                       \
-    ObMemAttr attr(OB_SERVER_TENANT_ID, label);                           \
+    ObMemAttr attr(label);                                                \
     return func_name(attr);                                               \
   }                                                                       \
   inline ObMemAttr func_name(const ObLabel &label, const uint64_t ctx_id) \
   {                                                                       \
-    ObMemAttr attr(OB_SERVER_TENANT_ID, label, ctx_id);                   \
+    ObMemAttr attr(label, ctx_id);                                        \
     return func_name(attr);                                               \
   }
 
@@ -684,8 +682,7 @@ public:
   ~ObMallocHookAttrGuard();
   static ObMemAttr &get_tl_mem_attr()
   {
-    static thread_local ObMemAttr tl_mem_attr(OB_SERVER_TENANT_ID,
-                                              "glibc_malloc",
+    static thread_local ObMemAttr tl_mem_attr("glibc_malloc",
                                               ObCtxIds::GLIBC);
     return tl_mem_attr;
   }

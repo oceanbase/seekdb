@@ -42,8 +42,8 @@ using namespace common::number;
 ObTableLoadTransBucketWriter::SessionContext::SessionContext()
   : session_id_(0), allocator_("TLD_TB_SessCtx"), last_receive_sequence_no_(0)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  load_bucket_array_.set_tenant_id(MTL_ID());
+  
+  
 }
 
 ObTableLoadTransBucketWriter::SessionContext::~SessionContext()
@@ -75,7 +75,7 @@ ObTableLoadTransBucketWriter::ObTableLoadTransBucketWriter(ObTableLoadTransCtx *
     flush_count_(0),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObTableLoadTransBucketWriter::~ObTableLoadTransBucketWriter()
@@ -146,8 +146,7 @@ int ObTableLoadTransBucketWriter::init_session_ctx_array()
           LOG_WARN("fail to init bucket", KR(ret));
         }
       } else {
-        if (OB_FAIL(session_ctx->load_bucket_map_.create(1024, "TLD_BucketMap", "TLD_BucketMap",
-                                                         param_.tenant_id_))) {
+        if (OB_FAIL(session_ctx->load_bucket_map_.create(1024, "TLD_BucketMap", "TLD_BucketMap"))) {
           LOG_WARN("fail to init partition bucket map", KR(ret));
         }
       }
@@ -198,7 +197,7 @@ int ObTableLoadTransBucketWriter::handle_partition_with_autoinc_identity(
 {
   int ret = OB_SUCCESS;
   const int64_t row_count = obj_rows.count();
-  ObArenaAllocator autoinc_allocator("TLD_Autoinc", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator autoinc_allocator("TLD_Autoinc", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObDataTypeCastParams cast_params(coordinator_ctx_->partition_calc_.session_info_->get_timezone_info());
   ObCastCtx cast_ctx(&autoinc_allocator, &cast_params, cast_mode_,
                       ObCharset::get_system_collation());
@@ -364,7 +363,7 @@ int ObTableLoadTransBucketWriter::write_for_partitioned(SessionContext &session_
   ObArray<int64_t> row_idxs;
   ObTableLoadErrorRowHandler *error_row_handler =
         coordinator_ctx_->error_row_handler_;
-  allocator.set_tenant_id(MTL_ID());
+  
   partition_ids.set_block_allocator(common::ModulePageAllocator(allocator));
   part_keys.set_block_allocator(common::ModulePageAllocator(allocator));
   row_idxs.set_block_allocator(common::ModulePageAllocator(allocator));

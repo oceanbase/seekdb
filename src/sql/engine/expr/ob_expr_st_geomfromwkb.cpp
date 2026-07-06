@@ -17,9 +17,9 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_geomfromwkb.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
-#include "lib/geo/ob_geo_wkb_check_visitor.h"
-#include "lib/geo/ob_wkb_byte_order_visitor.h"
-#include "lib/geo/ob_geo_3d.h"
+#include "share/geo/ob_geo_wkb_check_visitor.h"
+#include "share/geo/ob_wkb_byte_order_visitor.h"
+#include "share/geo/ob_geo_3d.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -94,8 +94,8 @@ int ObIExprSTGeomFromWKB::eval_geom_wkb(const ObExpr &expr, ObEvalCtx &ctx, ObDa
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, get_func_name());
+  
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, get_func_name());
   ObDatum *datum = NULL;
   int num_args = expr.arg_cnt_;
   bool is_null_result = false;

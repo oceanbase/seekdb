@@ -23,7 +23,7 @@
 #include "lib/container/ob_iarray.h"
 #include "lib/oblog/ob_log_module.h"
 #include "share/schema/ob_table_schema.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 
 namespace oceanbase
 {
@@ -316,7 +316,7 @@ public:
     const int64_t rowkey_cnt, 
     const common::ObIArray<share::schema::ObColDesc> &columns,
     ObMemtableKeyBuffer *memtable_key_buffer = nullptr) 
-    : allocator_(common::ObMemAttr(MTL_ID(), "ObMemtableKey")),
+    : allocator_(common::ObMemAttr("ObMemtableKey")),
       rowkey_cnt_(rowkey_cnt),
       columns_(columns),
       memtable_key_buffer_(memtable_key_buffer),

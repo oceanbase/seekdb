@@ -36,12 +36,6 @@ using namespace lib;
 namespace common
 {
 
-void get_tenant_ids(uint64_t *ids, int cap, int &cnt)
-{
-  auto *instance = ObMallocAllocator::get_instance();
-  cnt = 0;
-  ids[cnt++] = OB_SYS_TENANT_ID;
-}
 
 #ifndef _WIN32
 RLOCAL(sigjmp_buf, jmp);
@@ -198,18 +192,18 @@ int ObMemoryDump::init()
       LOG_INFO("pre memory size", K(sizeof(PreAllocMemory)));
       print_buf_ = pre_mem->print_buf_;
       array_ = pre_mem->array_buf_;
-      tenant_ids_ = (uint64_t*)pre_mem->tenant_ids_buf_;
+      
       print_buf_ = pre_mem->print_buf_;
-      if (OB_FAIL(lmap_.create(1000, ObMemAttr(OB_SERVER_TENANT_ID, "MemDumpMap", ObCtxIds::DEFAULT_CTX_ID, OB_HIGH_ALLOC)))) {
+      if (OB_FAIL(lmap_.create(1000, ObMemAttr("MemDumpMap", ObCtxIds::DEFAULT_CTX_ID, OB_HIGH_ALLOC)))) {
         LOG_WARN("create map failed", K(ret));
       } else {
         r_stat_ = new (pre_mem->stats_buf_) Stat();
         w_stat_ = new (r_stat_ + 1) Stat();
         dump_context_ = context;
         is_inited_ = true;
-        if (OB_FAIL(r_stat_->malloc_sample_map_.create(1000, ObMemAttr(OB_SERVER_TENANT_ID, "MallocInfoMap", ObCtxIds::DEFAULT_CTX_ID, OB_HIGH_ALLOC)))) {
+        if (OB_FAIL(r_stat_->malloc_sample_map_.create(1000, ObMemAttr("MallocInfoMap", ObCtxIds::DEFAULT_CTX_ID, OB_HIGH_ALLOC)))) {
           LOG_WARN("create memory info map for reading failed", K(ret));
-        } else if (OB_FAIL(w_stat_->malloc_sample_map_.create(1000, ObMemAttr(OB_SERVER_TENANT_ID, "MallocInfoMap", ObCtxIds::DEFAULT_CTX_ID, OB_HIGH_ALLOC)))) {
+        } else if (OB_FAIL(w_stat_->malloc_sample_map_.create(1000, ObMemAttr("MallocInfoMap", ObCtxIds::DEFAULT_CTX_ID, OB_HIGH_ALLOC)))) {
           LOG_WARN("create memory info map for writing failed", K(ret));
         }
       }
@@ -294,26 +288,26 @@ void ObMemoryDump::print_malloc_sample_info()
   typedef ObSortedVector<ObMallocSamplePair*> MallocSamplePairVector;
   ObLatchRGuard guard(iter_lock_, ObLatchIds::MEM_DUMP_ITER_LOCK);
   ObMallocSampleMap &map = r_stat_->malloc_sample_map_;
-  ObMemAttr attr(OB_SERVER_TENANT_ID, "MallocSampleInf", ObCtxIds::DEFAULT_CTX_ID, lib::OB_HIGH_ALLOC);
+  ObMemAttr attr("MallocSampleInf", ObCtxIds::DEFAULT_CTX_ID, lib::OB_HIGH_ALLOC);
   MallocSamplePairVector vector(map.size(), nullptr, attr);
   for (ObMallocSampleIter it = map.begin(); OB_SUCC(ret) && it != map.end(); ++it) {
     MallocSamplePairVector::iterator pos;
     ret = vector.insert(&(*it), pos, ObMallocSamplePairCmp());
   }
   int64_t log_pos = 0;
-  int64_t tenant_id = OB_SERVER_TENANT_ID;
+  
   int64_t ctx_id = ObCtxIds::DEFAULT_CTX_ID;
   const char *label = "";
   int64_t bt_cnt = 0;
   const int64_t MAX_LABEL_BT_CNT = 5;
   for (MallocSamplePairVector::iterator it = vector.begin(); OB_SUCC(ret) && it != vector.end(); ++it) {
-    if ((*it)->first.tenant_id_ != tenant_id || (*it)->first.ctx_id_ != ctx_id) {
+    if ((*it)->first.ctx_id_ != ctx_id) {
       if (log_pos > 0) {
-        _LOG_INFO("\n[MEMORY][BT] tenant_id=%5ld ctx_id=%25s\n%.*s",
-              tenant_id, get_global_ctx_info().get_ctx_name(ctx_id), static_cast<int>(log_pos), print_buf_);
+        _LOG_INFO("\n[MEMORY][BT] ctx_id=%25s\n%.*s",
+              get_global_ctx_info().get_ctx_name(ctx_id), static_cast<int>(log_pos), print_buf_);
         log_pos = 0;
       }
-      tenant_id = (*it)->first.tenant_id_;
+      (void)(1UL);
       ctx_id = (*it)->first.ctx_id_;
       label = (*it)->first.label_;
       bt_cnt = 0;
@@ -327,15 +321,15 @@ void ObMemoryDump::print_malloc_sample_info()
       ret = databuff_printf(print_buf_, PRINT_BUF_LEN, log_pos, "[MEMORY][BT] mod=%15s, alloc_bytes=% '15ld, alloc_count=% '15ld, bt=%s\n",
             label, (*it)->second.alloc_bytes_, (*it)->second.alloc_count_, bt);
       if (OB_SUCC(ret) && log_pos > PRINT_BUF_LEN / 2) {
-        _LOG_INFO("\n[MEMORY][BT] tenant_id=%5ld ctx_id=%25s\n%.*s",
-            tenant_id, get_global_ctx_info().get_ctx_name(ctx_id), static_cast<int>(log_pos), print_buf_);
+        _LOG_INFO("\n[MEMORY][BT] ctx_id=%25s\n%.*s",
+            get_global_ctx_info().get_ctx_name(ctx_id), static_cast<int>(log_pos), print_buf_);
         log_pos = 0;
       }
     }
   }
   if (OB_SUCC(ret) && log_pos > 0) {
-    _LOG_INFO("\n[MEMORY][BT] tenant_id=%5ld ctx_id=%25s\n%.*s",
-        tenant_id, get_global_ctx_info().get_ctx_name(ctx_id), static_cast<int>(log_pos), print_buf_);
+    _LOG_INFO("\n[MEMORY][BT] ctx_id=%25s\n%.*s",
+        get_global_ctx_info().get_ctx_name(ctx_id), static_cast<int>(log_pos), print_buf_);
   }
 }
 
@@ -571,13 +565,13 @@ int label_stat(AChunk *chunk, ABlock *block, AObject *object,
   return ret;
 }
 
-int malloc_sample_stat(uint64_t tenant_id, uint64_t ctx_id,
+int malloc_sample_stat(uint64_t ctx_id,
                        AObject *object, ObMallocSampleMap &malloc_sample_map)
 {
   int ret = OB_SUCCESS;
   if (object->in_use_ && object->on_malloc_sample_) {
     ObMallocSampleKey key;
-    key.tenant_id_ = tenant_id;
+    
     key.ctx_id_ = ctx_id;
     MEMCPY((char*)key.bt_, object->bt(), AOBJECT_BACKTRACE_SIZE);
     STRNCPY(key.label_, object->label_, sizeof(key.label_));
@@ -606,27 +600,25 @@ void ObMemoryDump::handle(void *task)
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else if (STAT_LABEL == m_task->type_) {
-    int tenant_cnt = 0;
-    get_tenant_ids(tenant_ids_, MAX_TENANT_CNT, tenant_cnt);
-    lib::ob_sort(tenant_ids_, tenant_ids_ + tenant_cnt);
+    int tenant_cnt = 1;
     w_stat_->tcr_cnt_ = 0;
     w_stat_->malloc_sample_map_.clear();
     int64_t item_used = 0;
     int64_t log_pos = 0;
     IGNORE_RETURN databuff_printf(print_buf_, PRINT_BUF_LEN, log_pos,
                                   "\ntenant_cnt: %d, max_chunk_cnt: %d\n" \
-                                  "%-15s%-15s%-15s%-15s%-15s\n",
+                                  "%-15s%-15s%-15s%-15s\n",
                                   tenant_cnt, MAX_CHUNK_CNT,
-                                  "tenant_id", "ctx_id", "chunk_cnt", "label_cnt",
+                                  "ctx_id", "chunk_cnt", "label_cnt",
                                   "segv_cnt");
     const int64_t start_ts = ObTimeUtility::current_time();
     ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-    for (int tenant_idx = 0; tenant_idx < tenant_cnt; tenant_idx++) {
-      uint64_t tenant_id = tenant_ids_[tenant_idx];
+    for (int tdx = 0; tdx < tenant_cnt; tdx++) {
+      
       for (int ctx_id = 0; ctx_id < ObCtxIds::MAX_CTX_ID; ctx_id++) {
-        ObTenantCtxAllocatorGuard ta = ma->get_tenant_ctx_allocator(tenant_id, ctx_id);
+        ObTenantCtxAllocatorGuard ta = ma->get_tenant_ctx_allocator(ctx_id);
         if (nullptr == ta) {
-          ta = ma->get_tenant_ctx_allocator_unrecycled(tenant_id, ctx_id);
+          ta = ma->get_tenant_ctx_allocator_unrecycled(ctx_id);
         }
         if (nullptr == ta) {
           continue;
@@ -652,14 +644,14 @@ void ObMemoryDump::handle(void *task)
                     UNUSEDx(chunk, block);
                     return OB_SUCCESS;
                   },
-                  [tenant_id, ctx_id, &lmap, w_stat, &item_used]
+                  [ctx_id, &lmap, w_stat, &item_used]
                   (AChunk *chunk, ABlock *block, AObject *object) {
                     int ret = OB_SUCCESS;
                     if (object->in_use_) {
                      if (OB_FAIL(label_stat(chunk, block, object, lmap, w_stat->up2date_items_,
                                            ARRAYSIZEOF(w_stat->up2date_items_), item_used))) {
                         // do-nothing
-                      } else if (OB_FAIL(malloc_sample_stat(tenant_id, ctx_id, object,
+                      } else if (OB_FAIL(malloc_sample_stat(ctx_id, object,
                                                             w_stat->malloc_sample_map_))) {
                         // do-nothing
                       }
@@ -681,7 +673,7 @@ void ObMemoryDump::handle(void *task)
         } // iter chunk end
         if (OB_SUCC(ret)) {
           auto &tcr = w_stat_->tcrs_[w_stat_->tcr_cnt_++];
-          tcr.tenant_id_ = tenant_id;
+          
           tcr.ctx_id_ = ctx_id;
           tcr.start_ = orig_item_used;
           tcr.end_ = item_used;
@@ -692,8 +684,8 @@ void ObMemoryDump::handle(void *task)
         }
         if (OB_SUCC(ret) && (chunk_cnt != 0 || segv_cnt != 0)) {
           IGNORE_RETURN databuff_printf(print_buf_, PRINT_BUF_LEN, log_pos,
-                                        "%-15lu%-15d%-15d%-15ld%-15d\n",
-                                        tenant_id, ctx_id, chunk_cnt,
+                                        "%-15d%-15d%-15ld%-15d\n",
+                                        ctx_id, chunk_cnt,
                                         item_used - orig_item_used, segv_cnt);
         }
       } // iter ctx end
@@ -719,10 +711,10 @@ void ObMemoryDump::handle(void *task)
       std::swap(r_stat_, w_stat_);
     }
 
-    for (int tenant_idx = 0; tenant_idx < tenant_cnt; tenant_idx++) {
-      uint64_t tenant_id = tenant_ids_[tenant_idx];
-      ma->print_tenant_memory_usage(tenant_id);
-      ma->print_tenant_ctx_memory_usage(tenant_id);
+    for (int tdx = 0; tdx < tenant_cnt; tdx++) {
+      
+      ma->print_tenant_memory_usage();
+      ma->print_tenant_ctx_memory_usage();
     }
 
     print_malloc_sample_info();
@@ -773,17 +765,14 @@ void ObMemoryDump::handle(void *task)
       // chunk
       int cnt = 0;
       if (m_task->dump_all_) {
-        int tenant_cnt = 0;
-        get_tenant_ids(tenant_ids_, MAX_TENANT_CNT, tenant_cnt);
-        lib::ob_sort(tenant_ids_, tenant_ids_ + tenant_cnt);
-        for (int tenant_idx = 0; tenant_idx < tenant_cnt; tenant_idx++) {
-          uint64_t tenant_id = tenant_ids_[tenant_idx];
+        int tenant_cnt = 1;
+        for (int tdx = 0; tdx < tenant_cnt; tdx++) {
+          
           for (int ctx_id = 0; ctx_id < ObCtxIds::MAX_CTX_ID; ctx_id++) {
             auto ta =
-              ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(tenant_id, ctx_id);
+              ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(ctx_id);
             if (nullptr == ta) {
-              ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(tenant_id,
-                                                                                          ctx_id);
+              ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(ctx_id);
             }
             if (nullptr != ta) {
               ta->get_chunks(chunks_, MAX_CHUNK_CNT, cnt);
@@ -791,11 +780,9 @@ void ObMemoryDump::handle(void *task)
           }
         }
       } else if (m_task->dump_tenant_ctx_) {
-        auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(m_task->tenant_id_,
-                                                                              m_task->ctx_id_);
+        auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(m_task->ctx_id_);
         if (nullptr == ta) {
-          ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(m_task->tenant_id_,
-                                                                                      m_task->ctx_id_);
+          ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator_unrecycled(m_task->ctx_id_);
         }
         if (nullptr != ta) {
           ta->get_chunks(chunks_, MAX_CHUNK_CNT, cnt);

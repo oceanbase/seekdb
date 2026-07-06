@@ -89,8 +89,7 @@ class ObTransCtx: public share::ObLightHashLink<ObTransCtx>
   friend class CtxLock;
 public:
   ObTransCtx(const char *ctx_type_str = "unknow", const int64_t ctx_type = ObTransCtxType::UNKNOWN)
-      : tenant_id_(OB_INVALID_TENANT_ID),
-      trans_expired_time_(0), ctx_create_time_(0),
+      : trans_expired_time_(0), ctx_create_time_(0),
       trans_service_(NULL), tlog_(NULL),
       cluster_version_(0), ls_tx_ctx_mgr_(NULL),
       session_id_(UINT32_MAX),
@@ -148,7 +147,7 @@ public:
   void set_exiting() { is_exiting_ = true; }
   bool is_exiting() const { return is_exiting_; }
   int64_t get_trans_expired_time() const { return trans_expired_time_; }
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   const ObTransID &get_trans_id() const { return trans_id_; }
   uint64_t get_cluster_version() const { return cluster_version_; }
   int64_t get_ctx_create_time() const { return ctx_create_time_; }
@@ -165,7 +164,7 @@ public:
   // thread unsafe
   VIRTUAL_TO_STRING_KV(KP(this), K_(ref),
                        K_(trans_id),
-                       K_(tenant_id),
+                       
                        K_(is_exiting),
                        K_(trans_expired_time),
                        K_(cluster_version),
@@ -233,7 +232,7 @@ protected:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTransCtx);
 protected:
-  uint64_t tenant_id_;
+  
   share::ObLSID ls_id_;
   ObTransID trans_id_;
 

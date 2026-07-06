@@ -74,7 +74,9 @@ set ob_read_consistency = STRONG;
 set ob_route_policy=READONLY_ZONE_FIRST;
 
 connection obsys;
+--disable_warnings
 alter system major freeze tenant = sys;
+--enable_warnings
 --source mysql_test/include/wait_daily_merge.inc
 
 connection conn1;

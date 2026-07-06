@@ -149,7 +149,7 @@ int ObDirectLoadPartitionDelLobTask::init_iterator(ObITabletSliceRowIterator *&r
   } else {
     row_iterator = nullptr;
     RowIterator *iter = nullptr;
-    ObMemAttr attr(MTL_ID(), "TLD_SliceIter");
+    ObMemAttr attr("TLD_SliceIter");
     if (OB_ISNULL(iter = OB_NEW(RowIterator, attr))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocate memory", KR(ret));

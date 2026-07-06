@@ -19,7 +19,7 @@
 #include "common/object/ob_obj_type.h"
 #include "lib/string/ob_string.h"
 #include "share/schema/ob_schema_getter_guard.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 #include "share/schema/ob_table_schema.h"
 #include "share/table/ob_table_load_array.h"
 #include "share/table/ob_table_load_define.h"
@@ -32,21 +32,18 @@ namespace observer
 class ObTableLoadSchema
 {
 public:
-  static int get_schema_guard(uint64_t tenant_id,
-                              share::schema::ObSchemaGetterGuard &schema_guard,
+  static int get_schema_guard(share::schema::ObSchemaGetterGuard &schema_guard,
                               const int64_t schema_version = common::OB_INVALID_VERSION);
   static int get_table_schema(share::schema::ObSchemaGetterGuard &schema_guard,
-                              uint64_t tenant_id,
                               uint64_t database_id,
                               const common::ObString &table_name,
                               const share::schema::ObTableSchema *&table_schema);
   // Get the latest schema_guard and table_schema
-  static int get_table_schema(uint64_t tenant_id, uint64_t table_id,
+  static int get_table_schema( uint64_t table_id,
                               share::schema::ObSchemaGetterGuard &schema_guard,
                               const share::schema::ObTableSchema *&table_schema);
   // Specify schema_guard to obtain table_schema
-  static int get_table_schema(share::schema::ObSchemaGetterGuard &schema_guard,
-                              uint64_t tenant_id, uint64_t table_id,
+  static int get_table_schema(share::schema::ObSchemaGetterGuard &schema_guard, uint64_t table_id,
                               const share::schema::ObTableSchema *&table_schema);
 
   static int get_user_column_schemas(const share::schema::ObTableSchema *table_schema,
@@ -67,7 +64,7 @@ public:
   static int check_is_heap_table_with_single_unique_index(share::schema::ObSchemaGetterGuard &schema_guard,
                                        const share::schema::ObTableSchema *table_schema,
                                        bool &bret);
-  static int get_tenant_optimizer_gather_stats_on_load(const uint64_t tenant_id, bool &value);
+  static int get_tenant_optimizer_gather_stats_on_load(bool &value);
   static int get_tablet_ids_by_part_ids(const ObTableSchema *table_schema,
                                         const ObIArray<ObObjectID> &part_ids,
                                         ObIArray<ObTabletID> &tablet_ids);
@@ -77,7 +74,7 @@ public:
   ObTableLoadSchema();
   ~ObTableLoadSchema();
   void reset();
-  int init(uint64_t tenant_id, uint64_t table_id, const int64_t schema_version);
+  int init(uint64_t table_id, const int64_t schema_version);
   bool is_delete_insert_merge_engine() const
   {
     return is_delete_insert_engine_;

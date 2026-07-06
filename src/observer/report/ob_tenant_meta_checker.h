@@ -50,7 +50,6 @@ public:
   virtual ~ObTenantMetaChecker() {}
   static int mtl_init(ObTenantMetaChecker *&checker);
   int init(
-      const uint64_t tenant_id,
       share::ObTabletTableOperator *tt_operator);
   int start();
   void stop();
@@ -73,7 +72,6 @@ private:
 
   bool inited_;
   bool stopped_;
-  uint64_t tenant_id_;
   int tablet_checker_tg_id_;
   share::ObTabletTableOperator *tt_operator_; // operator to process __all_tablet_meta_table
   ObTenantTabletMetaTableCheckTask tablet_meta_check_task_; // timer task to check tablet meta

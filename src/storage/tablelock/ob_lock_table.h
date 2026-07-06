@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_STORAGE_OB_LOCK_TABLE_H_
 #define OCEANBASE_STORAGE_OB_LOCK_TABLE_H_
+#include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include <stdint.h>
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/task/ob_timer.h"
@@ -174,8 +175,7 @@ private:
   // We use the method to recover the lock_table for reboot.
   int restore_lock_table_(storage::ObITable &sstable);
   int recover_(const blocksstable::ObDatumRow &row);
-  int get_table_schema_(const uint64_t tenant_id,
-                        share::schema::ObTableSchema &schema);
+  int get_table_schema_(share::schema::ObTableSchema &schema);
   int switch_to_follower_();
 
 private:

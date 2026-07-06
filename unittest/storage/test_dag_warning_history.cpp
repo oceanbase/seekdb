@@ -19,7 +19,9 @@
 #define private public
 #define protected public
 
-#include "share/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "share/ob_unit_getter.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -31,49 +33,42 @@ using namespace compaction;
 
 namespace unittest
 {
+// T3d single-tenant: tenant slot/MTL read mechanism removed. This test publishes
+// its locally-created manager through share::g_mp and a file-local MTL(T) shim.
+class TestDagWarnProvider : public share::ObIModuleProvider
+{
+public:
+  share::ObDagWarningHistoryManager *mgr_ = nullptr;
+  share::ObDagWarningHistoryManager * dag_warning_history_manager() override { return mgr_; }
+};
+#define MTL(TYPE) (static_cast<TYPE>(::oceanbase::share::g_mp->dag_warning_history_manager()))
 static const int64_t INFO_PAGE_SIZE = (1 << 13); // 8KB
 class TestDagWarningHistory : public ::testing::Test
 {
 public:
   TestDagWarningHistory()
-    : tenant_id_(1001),
-      dag_history_mgr_(nullptr),
-      tenant_base_(1001),
+    : dag_history_mgr_(nullptr),
       inited_(false)
   { }
   ~TestDagWarningHistory() {}
   void SetUp()
   {
-    if (!inited_) {
-      ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(tenant_id_);
-      ObMallocAllocator::get_instance()->set_tenant_limit(tenant_id_, 1LL << 30);
-      inited_ = true;
-    }
-    ObUnitInfoGetter::ObTenantConfig unit_config;
-    unit_config.mode_ = lib::Worker::CompatMode::MYSQL;
-    unit_config.tenant_id_ = 0;
-    TenantUnits units;
-    ASSERT_EQ(OB_SUCCESS, units.push_back(unit_config));
-
+    inited_ = true;
     dag_history_mgr_ = OB_NEW(ObDagWarningHistoryManager, ObModIds::TEST);
-    tenant_base_.set(dag_history_mgr_);
-
-    ObTenantEnv::set_tenant(&tenant_base_);
-    ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
-
+    provider_.mgr_ = dag_history_mgr_;
+    share::g_mp = &provider_;
   }
   void calc_info_cnt_per_page(ObIDag &dag, int64_t &info_mem, int64_t &info_cnt_per_page);
   void TearDown()
   {
     dag_history_mgr_->~ObDagWarningHistoryManager();
     dag_history_mgr_ = nullptr;
-    tenant_base_.destroy();
-    ObTenantEnv::set_tenant(nullptr);
+    provider_.mgr_ = nullptr;
+    share::g_mp = nullptr;
   }
 private:
-  const uint64_t tenant_id_;
   ObDagWarningHistoryManager *dag_history_mgr_;
-  ObTenantBase tenant_base_;
+  TestDagWarnProvider provider_;
   bool inited_;
   DISALLOW_COPY_AND_ASSIGN(TestDagWarningHistory);
 };
@@ -180,7 +175,7 @@ TEST_F(TestDagWarningHistory, simple_add)
   //not init
   ret = MTL(ObDagWarningHistoryManager *)->add_dag_warning_info(&dag);
   ASSERT_NE(OB_SUCCESS, ret);
-  ret = MTL(ObDagWarningHistoryManager *)->init(true, MTL_ID(), "DagWarnHis", INFO_PAGE_SIZE);
+  ret = MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis", INFO_PAGE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = MTL(ObDagWarningHistoryManager *)->add_dag_warning_info(&dag);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -213,7 +208,7 @@ TEST_F(TestDagWarningHistory, simple_del)
 
   ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  ret = MTL(ObDagWarningHistoryManager *)->init(true, MTL_ID(), "DagWarnHis", INFO_PAGE_SIZE);
+  ret = MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis", INFO_PAGE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   ObBasicDag dag;
@@ -250,7 +245,7 @@ TEST_F(TestDagWarningHistory, simple_loop_get)
 
   ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  ret = MTL(ObDagWarningHistoryManager *)->init(true, MTL_ID(), "DagWarnHis", INFO_PAGE_SIZE);
+  ret = MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis", INFO_PAGE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   const int64_t max_cnt = 4000;
@@ -308,7 +303,7 @@ TEST_F(TestDagWarningHistory, resize)
 
   ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  ret = MTL(ObDagWarningHistoryManager *)->init(true, MTL_ID(), "DagWarnHis", INFO_PAGE_SIZE);
+  ret = MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis", INFO_PAGE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   int64_t info_cnt_per_page = 0;
@@ -365,7 +360,7 @@ TEST_F(TestDagWarningHistory, gc_info)
   int ret = OB_SUCCESS;
   ObDagWarningHistoryManager* manager = MTL(ObDagWarningHistoryManager *);
   ASSERT_TRUE(nullptr != manager);
-  ret = MTL(ObDagWarningHistoryManager *)->init(true, MTL_ID(), "DagWarnHis", INFO_PAGE_SIZE);
+  ret = MTL(ObDagWarningHistoryManager *)->init(true, "DagWarnHis", INFO_PAGE_SIZE);
   ASSERT_EQ(OB_SUCCESS, ret);
   const int64_t page_cnt = 10;
   ret = MTL(ObDagWarningHistoryManager *)->set_max(page_cnt * INFO_PAGE_SIZE);

@@ -87,8 +87,8 @@ int ObExprPrivSTAsEwkt::eval_priv_st_asewkt(const ObExpr &expr, ObEvalCtx &ctx, 
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_PRIV_ST_ASEWKT);
+  
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_ASEWKT);
   int num_args = expr.arg_cnt_;
   bool is_null_result = false;
   ObString res_wkt;
@@ -141,7 +141,7 @@ int ObExprPrivSTAsEwkt::calc_resultN(common::ObObj &result,
                                      common::ObExprCtx &expr_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   bool is_null_result = false;
   ObString res_wkt;
   int64_t maxdecimaldigits = DEFAULT_DIGITS_IN_DOUBLE;

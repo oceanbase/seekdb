@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_index_block_builder.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
 #include "share/ob_io_device_helper.h"
 
@@ -236,7 +237,7 @@ ObSSTableMergeRes::ObSSTableMergeRes()
   MEMSET(encrypt_key_, 0, share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH);
   table_backup_flag_.clear();
   if (share::is_reserve_mode()) {
-    ObMemAttr attr(MTL_ID(), "SSTMrgeResArr", ObCtxIds::MERGE_RESERVE_CTX_ID);
+    ObMemAttr attr("SSTMrgeResArr", ObCtxIds::MERGE_RESERVE_CTX_ID);
     data_block_ids_.set_attr(attr);
     other_block_ids_.set_attr(attr);
     data_column_checksums_.set_attr(attr);
@@ -1613,7 +1614,7 @@ int ObSSTableIndexBuilder::close_with_macro_seq_inner(
 {
   int ret = OB_SUCCESS;
   res.reset();
-  ObArenaAllocator load_allocator("IndexLoader", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator load_allocator("IndexLoader", OB_MALLOC_NORMAL_BLOCK_SIZE);
   const uint64_t data_version = ObBaseIndexBlockBuilder::get_data_version(data_store_desc_.get_desc());
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -1800,7 +1801,7 @@ int ObSSTableIndexBuilder::rewrite_small_sstable(ObSSTableMergeRes &res)
       upper_align(roots_[0]->last_macro_size_, DIO_READ_ALIGN_SIZE);
   read_info.io_desc_.set_mode(ObIOMode::READ);
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
-  read_info.mtl_tenant_id_ = MTL_ID();
+  
   read_info.io_timeout_ms_ =
       std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
   read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_INDEX_BUILDER_IO);
@@ -1822,7 +1823,7 @@ int ObSSTableIndexBuilder::rewrite_small_sstable(ObSSTableMergeRes &res)
     } else if (OB_FAIL(read_handle.wait())) {
       STORAGE_LOG(WARN, "fail to wait io finish", K(ret), K(read_info));
     } else {
-      ObSharedMacroBlockMgr *shared_block_mgr = MTL(ObSharedMacroBlockMgr*);
+      ObSharedMacroBlockMgr *shared_block_mgr = share::g_mp->shared_macro_block_mgr();
       if (OB_FAIL(shared_block_mgr->write_block(
           read_info.buf_, read_handle.get_data_size(), block_info, *(roots_[0]->data_write_ctx_)))) {
         STORAGE_LOG(WARN, "fail to write small sstable through shared_block_mgr", K(ret));
@@ -1886,7 +1887,7 @@ int ObSSTableIndexBuilder::do_check_and_rewrite_sstable(
                         macro_header.fixed_header_.meta_block_size_,
                     DIO_READ_ALIGN_SIZE);
     if (align_size < SMALL_SSTABLE_THRESHOLD) { // need to be rewritten
-      ObSharedMacroBlockMgr *shared_block_mgr = MTL(ObSharedMacroBlockMgr*);
+      ObSharedMacroBlockMgr *shared_block_mgr = share::g_mp->shared_macro_block_mgr();
       if (OB_FAIL(shared_block_mgr->write_block(
           data_buf, align_size, block_info, *(roots_[0]->data_write_ctx_)))) {
         STORAGE_LOG(WARN, "fail to write small sstable through shared_block_mgr", K(ret));
@@ -1921,7 +1922,7 @@ int ObSSTableIndexBuilder::load_single_macro_block(
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
   read_info.io_timeout_ms_ =
       std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
-  read_info.mtl_tenant_id_ = MTL_ID();
+  
   read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_INDEX_BUILDER_IO);
 
   if (OB_ISNULL(read_info.buf_ = reinterpret_cast<char *>(

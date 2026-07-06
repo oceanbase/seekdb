@@ -756,7 +756,7 @@ int ObTabletMdsData::load_auto_inc_seq(
       LOG_WARN("failed to copy auto inc seq", K(ret));
     }
   } else if (complex_addr.is_disk_object()) {
-    ObArenaAllocator io_allocator(common::ObMemAttr(MTL_ID(), "TmpIO"));
+    ObArenaAllocator io_allocator(common::ObMemAttr("TmpIO"));
     char *io_buf = nullptr;
     int64_t buf_len = -1;
     int64_t io_pos = 0;

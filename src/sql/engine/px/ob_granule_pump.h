@@ -20,7 +20,6 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/string/ob_string.h"
 #include "lib/lock/ob_spin_lock.h"
-#include "share/external_table/ob_external_table_file_mgr.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/table/ob_table_scan_op.h"
 #include "sql/engine/px/ob_px_dtl_msg.h"
@@ -31,7 +30,6 @@
 namespace oceanbase
 {
 namespace share {
-  struct ObExternalFileInfo;
 }
 namespace sql
 {
@@ -101,7 +99,6 @@ public :
     op_info_.reset();
     tablet_arrays_.reset();
     run_time_pruning_flags_.reset();
-    external_table_files_.reset();
     query_range_by_runtime_filter_.reset();
     locations_order_.reset();
   }
@@ -128,7 +125,6 @@ public :
   int pruning_ret_;
   //-----end
   common::ObArray<ObPxTabletInfo> partitions_info_; // not used after 4.0, used for pkey split range with row info
-  common::ObArray<share::ObExternalFileInfo> external_table_files_;
   int64_t parallelism_;
   int64_t tablet_size_;
   uint64_t gi_attri_flag_;
@@ -464,7 +460,6 @@ public:
                               const bool check_task_exist, int64_t &idx);
 
 private:
-  int init_external_odps_table_downloader(ObGranulePumpArgs &args);
   int fetch_granule_by_worker_id(const ObGITaskSet *&task_set,
                                  int64_t &pos,
                                  ObGranuleTaskInfo &info,
@@ -495,7 +490,6 @@ private:
                const ObIArray<const ObTableScanSpec*> &scan_ops,
                const common::ObIArray<DASTabletLocArray> &tablet_arrays,
                common::ObIArray<ObPxTabletInfo> &partitions_info,
-               const common::ObIArray<share::ObExternalFileInfo> &external_table_files,
                const ObTableModifySpec* modify_op,
                int64_t parallelism,
                int64_t tablet_size,

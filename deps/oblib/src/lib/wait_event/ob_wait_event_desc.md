@@ -204,10 +204,6 @@ The read and write operation on tenant map in global io manager instance should 
 
 The read and write operation on diagnose info in global io detector instance should be mutually exclusive.
 
-## latch: table api interface lock
-
-table api query session lock. avoid concurrent access to same session.
-
 ## spinlock: palf sw last submit log info lock wait
 
 The read and write operation on last submit log info in sliding window of palf should be mutually exclusive.

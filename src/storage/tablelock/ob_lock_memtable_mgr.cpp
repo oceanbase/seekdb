@@ -36,8 +36,8 @@ ObLockMemtableMgr::ObLockMemtableMgr()
     lock_def_()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(lock_def_.init(lib::ObMemAttr(MTL_ID(), "LockMemtableMgr")))) {
-    LOG_WARN("lock memtable mgr lock init error", K(ret), "tenant_id", MTL_ID());
+  if (OB_FAIL(lock_def_.init(lib::ObMemAttr("LockMemtableMgr")))) {
+    LOG_WARN("lock memtable mgr lock init error", K(ret));
   }
   lock_.lock_type_ = LockType::OB_QSYNC_LOCK;
   lock_.lock_ = &lock_def_;

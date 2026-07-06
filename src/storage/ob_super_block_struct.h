@@ -72,49 +72,21 @@ enum class ObTenantCreateStatus
   MAX
 };
 
-struct ObTenantItem
-{
-public:
-  ObTenantItem() :
-    tenant_id_(OB_INVALID_TENANT_ID),
-    epoch_(0),
-    status_(ObTenantCreateStatus::MAX) {}
-  virtual ~ObTenantItem() {}
-  bool is_valid() const
-  {
-    return OB_INVALID_TENANT_ID != tenant_id_ && epoch_ > 0 &&
-        ObTenantCreateStatus::MAX != status_;
-  }
-
-  TO_STRING_KV(K_(tenant_id), K_(epoch), K_(status));
-  OB_UNIS_VERSION_V(1);
-
-public:
-  uint64_t tenant_id_;
-  int64_t epoch_;
-  ObTenantCreateStatus status_;
-};
-
 struct ServerSuperBlockBody final
 {
 public:
   static const int64_t SUPER_BLOCK_BODY_VERSION = 1;
-  static const int64_t MAX_TENANT_COUNT = 512;
 
   int64_t create_timestamp_;  // create timestamp
   int64_t modify_timestamp_;  // last modified timestamp
   int64_t macro_block_size_;
 
-  // only meaningful for shared-nothing
   int64_t total_macro_block_count_;
   int64_t total_file_size_;
   common::ObLogCursor replay_start_point_;
+  // entry to the (single) server tenant-meta checkpoint
   blocksstable::MacroBlockId tenant_meta_entry_;
 
-  // only meaningful for shared-storage
-  int64_t auto_inc_tenant_epoch_;
-  int64_t tenant_cnt_;
-  ObTenantItem tenant_item_arr_[MAX_TENANT_COUNT];
   ServerSuperBlockBody();
   bool is_valid() const;
   void reset();
@@ -126,9 +98,7 @@ public:
                K_(total_macro_block_count),
                K_(total_file_size),
                K_(replay_start_point),
-               K_(tenant_meta_entry),
-               K_(auto_inc_tenant_epoch),
-               K_(tenant_cnt));
+               K_(tenant_meta_entry));
 
   OB_UNIS_VERSION(SUPER_BLOCK_BODY_VERSION);
 };
@@ -237,7 +207,7 @@ public:
   static const int64_t TENANT_SUPER_BLOCK_VERSION = 4;
   static const int64_t MAX_LS_COUNT = 128;
   ObTenantSuperBlock();
-  ObTenantSuperBlock(const uint64_t tenant_id, const bool is_hidden = false);
+  ObTenantSuperBlock(const bool is_hidden);
   ~ObTenantSuperBlock() = default;
   ObTenantSuperBlock(const ObTenantSuperBlock &other);
   ObTenantSuperBlock &operator==(const ObTenantSuperBlock &other) = delete;
@@ -252,7 +222,7 @@ public:
   int check_new_snapshot(const share::ObTenantSnapshotID &snapshot_id) const;
   bool is_trivial_version() const { return version_ == TENANT_SUPER_BLOCK_VERSION_V1; }
 
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(replay_start_point),
                K_(ls_meta_entry),
                K_(tablet_meta_entry),
@@ -265,7 +235,7 @@ public:
 
   OB_UNIS_VERSION(TENANT_SUPER_BLOCK_VERSION);
 public:
-  uint64_t tenant_id_;
+  
   // only meaningful for shared-nothing
   common::ObLogCursor replay_start_point_;
   blocksstable::MacroBlockId ls_meta_entry_;
@@ -314,7 +284,7 @@ struct ObLSActiveTabletArray
 {
 public:
   ObLSActiveTabletArray()
-    : items_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("ActiveItems", MTL_ID())) {}
+    : items_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("ActiveItems")) {}
 
   ObLSActiveTabletArray(const ObLSActiveTabletArray &) = delete;
   ObLSActiveTabletArray &operator=(const ObLSActiveTabletArray &) = delete;
@@ -390,7 +360,7 @@ struct ObLSPendingFreeTabletArray
 {
 public:
   ObLSPendingFreeTabletArray()
-    : items_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("PendFreeItems", MTL_ID())) {}
+    : items_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("PendFreeItems")) {}
 
   ObLSPendingFreeTabletArray(const ObLSPendingFreeTabletArray &) = delete;
   ObLSPendingFreeTabletArray &operator=(const ObLSPendingFreeTabletArray &) = delete;

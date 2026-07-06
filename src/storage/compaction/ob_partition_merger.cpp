@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_partition_merger.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_tenant_tablet_scheduler.h"
 #include "storage/blocksstable/ob_data_macro_block_merge_writer.h"
 
@@ -651,7 +652,7 @@ int ObPartitionMajorMerger::merge_partition(
     } else if (OB_FAIL(close())){
       STORAGE_LOG(WARN, "failed to close partition merger", K(ret));
     } else if (merge_param_.is_mv_merge() &&
-          MTL(ObTenantTabletScheduler*)->get_mview_validation().need_do_validation() &&
+          share::g_mp->tenant_tablet_scheduler()->get_mview_validation().need_do_validation() &&
           OB_FAIL(ObMviewCompactionHelper::validate_row_count(merge_param_, macro_writer_->get_merge_block_info().total_row_count_))) {
       STORAGE_LOG(WARN, "failed to validate mv result", K(ret));
     }
@@ -864,7 +865,7 @@ ObPartitionMinorMerger::ObPartitionMinorMerger(
     const ObStaticMergeParam &static_param)
   : ObPartitionMerger(allocator, static_param),
     minimum_iter_idxs_(DEFAULT_ITER_COUNT * sizeof(int64_t), ModulePageAllocator(allocator)),
-    obj_copy_allocator_("MinorMergeObj", OB_MALLOC_MIDDLE_BLOCK_SIZE, MTL_ID(), ObCtxIds::MERGE_NORMAL_CTX_ID),
+    obj_copy_allocator_("MinorMergeObj", OB_MALLOC_MIDDLE_BLOCK_SIZE, ObCtxIds::MERGE_NORMAL_CTX_ID),
     nop_pos_(),
     row_queue_()
 {

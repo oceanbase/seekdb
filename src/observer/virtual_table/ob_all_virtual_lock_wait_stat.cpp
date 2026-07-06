@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_lock_wait_stat.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "observer/ob_server_utils.h"
@@ -30,40 +31,14 @@ namespace observer
 
 void ObAllVirtualLockWaitStat::reset()
 {
-  omt::ObMultiTenantOperator::reset();
+  rowkey_[0] = '\0';
+  lock_mode_[0] = '\0';
+  start_to_read_ = false;
+  node_iter_ = nullptr;
   ObVirtualTableScannerIterator::reset();
 }
 
-bool ObAllVirtualLockWaitStat::is_need_process(uint64_t tenant_id)
-{
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
-    return true;
-  }
-  return false;
-}
-
-void ObAllVirtualLockWaitStat::release_last_tenant()
-{
-  rowkey_[0] = '\0';
-  lock_mode_[0] = '\0';
-
-  // let next tenant to init init txs_,
-  // ls_id_iter_ and tx_lock_stat_iter_
-  start_to_read_ = false;
-  node_iter_ = nullptr;
-}
-
 int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
-}
-
-int ObAllVirtualLockWaitStat::process_curr_tenant(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -73,7 +48,7 @@ int ObAllVirtualLockWaitStat::process_curr_tenant(ObNewRow *&row)
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
   } else if (!start_to_read_ && OB_FAIL(make_this_ready_to_read())) {
     SERVER_LOG(WARN, "prepare_start_to_read_ error", K(ret), K(start_to_read_));
-  } else if (OB_ISNULL(node_iter_ = MTL(memtable::ObLockWaitMgr *)
+  } else if (OB_ISNULL(node_iter_ = share::g_mp->lock_wait_mgr()
                                         ->next(node_iter_, &cur_node_))) {
     ret = OB_ITER_END;
   } else {
@@ -301,7 +276,7 @@ int ObAllVirtualLockWaitStat::get_rowkey_holder(int64_t hash, transaction::ObTra
 {
   int ret = OB_SUCCESS;
   ObLockWaitMgr *lwm = NULL;
-  if (OB_ISNULL(lwm = MTL(ObLockWaitMgr*))) {
+  if (OB_ISNULL(lwm = share::g_mp->lock_wait_mgr())) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(ERROR, "MTL(LockWaitMgr) is null");
   } else if (OB_FAIL(lwm->get_hash_holder(hash, holder))){

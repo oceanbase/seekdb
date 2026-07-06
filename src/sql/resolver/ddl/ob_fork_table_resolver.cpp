@@ -57,7 +57,7 @@ int ObForkTableResolver::resolve(const ParseNode &parse_tree)
   } else {
     stmt_ = fork_table_stmt;
     obcall::ObForkTableArg &fork_table_arg = fork_table_stmt->get_fork_table_arg();
-    fork_table_arg.tenant_id_ = session_info_->get_effective_tenant_id();
+    
     fork_table_arg.if_not_exist_ = false;
   }
 

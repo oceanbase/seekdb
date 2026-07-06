@@ -29,7 +29,7 @@ int ObDASIDCache::init(const common::ObAddr &server)
 {
   int ret = OB_SUCCESS;
   void *request_buf = nullptr;
-  alloc_.set_attr(ObMemAttr(MTL_ID(), "DASIDCache"));
+  alloc_.set_attr(ObMemAttr("DASIDCache"));
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
@@ -95,7 +95,7 @@ int ObDASIDCache::update_das_id(const int64_t start_id, const int64_t end_id)
   const int64_t cache_idx = ATOMIC_LOAD(&cache_idx_);
   const int64_t cur_idx = ATOMIC_LOAD(&cur_idx_);
   if (cache_idx - cur_idx >= MAX_CACHE_NUM - 1) {
-    LOG_TRACE("drop das id", K(MTL_ID()), K(start_id), K(end_id));
+    LOG_TRACE("drop das id", K(start_id), K(end_id));
   } else {
     IdCache *id_cache = &(id_cache_[cache_idx % MAX_CACHE_NUM]);
     inc_update(&(id_cache->start_id), start_id);
@@ -110,7 +110,7 @@ int ObDASIDCache::get_das_id(int64_t &das_id, const bool force_renew)
 {
   int ret = OB_SUCCESS;
   int save_ret = OB_SUCCESS;
-  const int64_t tenant_id = MTL_ID();
+  
   while (OB_SUCCESS == ret) {
     const int64_t cur_idx = ATOMIC_LOAD(&cur_idx_);
     IdCache *id_cache = &(id_cache_[cur_idx % MAX_CACHE_NUM]);
@@ -139,8 +139,8 @@ int ObDASIDCache::get_das_id(int64_t &das_id, const bool force_renew)
       ObDASIDRequest req;
       obcall::ObDASIDRpcResult res;
       retry_request_cnt_++;
-      if (OB_FAIL(req.init(MTL_ID(), get_preallocate_count_()))) {
-        LOG_WARN("ObDASIDRequest init fail", KR(ret), K(MTL_ID()));
+      if (OB_FAIL(req.init(get_preallocate_count_()))) {
+        LOG_WARN("ObDASIDRequest init fail", KR(ret));
       } else if (OB_FAIL(id_request_rpc_->fetch_new_range(req, res, retry_timeout, force_renew))) {
         LOG_WARN("fetch new range failed", KR(ret));
       } else if (OB_UNLIKELY(!res.is_valid())) {

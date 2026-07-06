@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_EXE
 
 #include "sql/engine/ob_exec_context.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/executor/ob_remote_task_executor.h"
 
 using namespace oceanbase::common;
@@ -62,8 +63,7 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
       // Set task_info to OB_TASK_STATE_RUNNING state, which may be used for retries later
       task_info->set_state(OB_TASK_STATE_RUNNING);
       const int32_t group_id = OB_INVALID_ID == session->get_expect_group_id() ? 0 : session->get_expect_group_id();
-      ObExecutorRpcCtx rpc_ctx(session->get_rpc_tenant_id(),
-                               plan_ctx->get_timeout_timestamp(),
+      ObExecutorRpcCtx rpc_ctx(plan_ctx->get_timeout_timestamp(),
                                query_ctx.get_task_exec_ctx().get_min_cluster_version(),
                                retry_info,
                                query_ctx.get_my_session(),
@@ -205,7 +205,7 @@ int ObRemoteTaskExecutor::handle_tx_after_rpc(ObScanner *scanner,
     } else if (OB_ISNULL(scanner)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("task result is NULL", K(ret));
-    } else if (OB_FAIL(MTL(transaction::ObTransService*)
+    } else if (OB_FAIL(share::g_mp->trans_service()
                        ->add_tx_exec_result(*tx_desc,
                                             scanner->get_trans_result()))) {
       LOG_WARN("fail to report tx result", K(ret),

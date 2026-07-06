@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_STORAGE_DICT_OB_DICT_H_
 #define OCEANBASE_STORAGE_DICT_OB_DICT_H_
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_dml_sql_splicer.h"
 
 namespace oceanbase
@@ -58,8 +58,8 @@ public:
   ObTenantDicLoader() : is_inited_(false), is_load_(false), ref_cnt_(0) { }
   virtual ~ObTenantDicLoader() { }
   virtual int init() = 0;
-  int try_load_dictionary_in_trans(const uint64_t tenant_id, ObMySQLTransaction &trans);
-  int try_load_dictionary_in_trans(const uint64_t tenant_id);
+  int try_load_dictionary_in_trans(ObMySQLTransaction &trans);
+  int try_load_dictionary_in_trans();
   OB_INLINE const ObArray<ObDicTableInfo>& get_dic_tables_info() const
   {
     return dic_tables_info_;
@@ -84,8 +84,8 @@ public:
   static constexpr int64_t DEFAULT_TIMEOUT_US = 3 * 60 * 1000 * 1000; // 3 min
 
 protected:
-  int load_dictionary_in_trans(const uint64_t tenant_id, ObMySQLTransaction &trans);
-  int check_need_load_dic(const uint64_t tenant_id, bool &check_need_load_dic);
+  int load_dictionary_in_trans(ObMySQLTransaction &trans);
+  int check_need_load_dic(bool &check_need_load_dic);
   // When defining new loading class for some dictionary tables
   // please implement the all virtual functions in this base class to meet differentiation requirements
   virtual int get_dic_item(const uint64_t i, const uint64_t pos, ObDicItem& item) = 0;

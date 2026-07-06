@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_SESSION_INFO_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_SESSION_INFO_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/session/ob_sql_session_mgr.h"
 namespace oceanbase
 {
@@ -52,7 +52,6 @@ private:
     TIME,
     STATE,
     INFO,
-    PROXY_SESSID,
     MASTER_SESSID,
     USER_CLIENT_IP,
     USER_HOST,

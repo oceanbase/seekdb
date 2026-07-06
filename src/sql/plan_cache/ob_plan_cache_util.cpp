@@ -19,6 +19,7 @@
 #include "ob_plan_cache_util.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/optimizer/ob_direct_load_optimizer_ctx.h"
+#include "share/config/ob_config_helper.h"  // relocated-definition owner
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::omt;
@@ -272,11 +273,6 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
             LOG_INFO("Physical Location from Location Cache", K(candi_table_loc));
           }
         }
-        if (OB_SUCC(ret)) {
-          if (table_location.get_loc_meta().is_external_table_) {
-            need_check_on_same_server = false;
-          }
-        }
       } // for end
     }
 
@@ -399,7 +395,6 @@ int ObConfigInfoInPC::load_influence_plan_config()
   int ret = OB_SUCCESS;
   // Note: if you need to add a tenant config please
   //        uncomment next line to retrive tenant config.
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
 
   // For Cluster configs
   // here to add value of configs that can influence execution plan.
@@ -412,31 +407,31 @@ int ObConfigInfoInPC::load_influence_plan_config()
 
   // For Tenant configs
   // tenant config use tenant_config to get configs
-  if (tenant_config.is_valid()) {
-    pushdown_storage_level_ = tenant_config->_pushdown_storage_level;
-    rowsets_enabled_ = tenant_config->_rowsets_enabled;
-    enable_px_batch_rescan_ = tenant_config->_enable_px_batch_rescan;
-    bloom_filter_enabled_ = tenant_config->_bloom_filter_enabled;
-    px_join_skew_handling_ = tenant_config->_px_join_skew_handling;
-    px_join_skew_minfreq_ = static_cast<int8_t>(tenant_config->_px_join_skew_minfreq);
-    min_cluster_version_ = GET_MIN_CLUSTER_VERSION();
-    enable_spf_batch_rescan_ = tenant_config->_enable_spf_batch_rescan;
-    enable_var_assign_use_das_ = tenant_config->_enable_var_assign_use_das;
-    enable_das_keep_order_ = tenant_config->_enable_das_keep_order;
-    enable_index_merge_ = tenant_config->_enable_index_merge;
-    enable_parallel_das_dml_ = tenant_config->_enable_parallel_das_dml;
-    direct_load_allow_fallback_ = tenant_config->direct_load_allow_fallback;
-    default_load_mode_ = ObDefaultLoadMode::get_type_value(tenant_config->default_load_mode.get_value_string());
-    hash_rollup_policy_ = tenant_config->_use_hash_rollup.case_compare("auto") == 0 ?
-                            0 :
-                            (tenant_config->_use_hash_rollup.case_compare("forced") == 0 ? 1 : 2);
-    enable_nlj_spf_use_rich_format_ = tenant_config->_enable_nlj_spf_use_rich_format;
-    enable_distributed_das_scan_ = tenant_config->_enable_distributed_das_scan;
-    enable_das_batch_rescan_flag_ = tenant_config->_enable_das_batch_rescan_flag;
-    enable_topn_runtime_filter_ = tenant_config->_enable_topn_runtime_filter;
-    min_const_integer_precision_ = static_cast<int8_t>(tenant_config->_min_const_integer_precision);
-    enable_px_task_rebalance_ = tenant_config->_enable_px_task_rebalance;
-  }
+
+  pushdown_storage_level_ = GCONF._pushdown_storage_level;
+  rowsets_enabled_ = GCONF._rowsets_enabled;
+  enable_px_batch_rescan_ = GCONF._enable_px_batch_rescan;
+  bloom_filter_enabled_ = GCONF._bloom_filter_enabled;
+  px_join_skew_handling_ = GCONF._px_join_skew_handling;
+  px_join_skew_minfreq_ = static_cast<int8_t>(GCONF._px_join_skew_minfreq);
+  min_cluster_version_ = GET_MIN_CLUSTER_VERSION();
+  enable_spf_batch_rescan_ = GCONF._enable_spf_batch_rescan;
+  enable_var_assign_use_das_ = GCONF._enable_var_assign_use_das;
+  enable_das_keep_order_ = GCONF._enable_das_keep_order;
+  enable_index_merge_ = GCONF._enable_index_merge;
+  enable_parallel_das_dml_ = GCONF._enable_parallel_das_dml;
+  direct_load_allow_fallback_ = GCONF.direct_load_allow_fallback;
+  default_load_mode_ = ObDefaultLoadMode::get_type_value(GCONF.default_load_mode.get_value_string());
+  hash_rollup_policy_ = GCONF._use_hash_rollup.case_compare("auto") == 0 ?
+                          0 :
+                          (GCONF._use_hash_rollup.case_compare("forced") == 0 ? 1 : 2);
+  enable_nlj_spf_use_rich_format_ = GCONF._enable_nlj_spf_use_rich_format;
+  enable_distributed_das_scan_ = GCONF._enable_distributed_das_scan;
+  enable_das_batch_rescan_flag_ = GCONF._enable_das_batch_rescan_flag;
+  enable_topn_runtime_filter_ = GCONF._enable_topn_runtime_filter;
+  min_const_integer_precision_ = static_cast<int8_t>(GCONF._min_const_integer_precision);
+  enable_px_task_rebalance_ = GCONF._enable_px_task_rebalance;
+
 
   return ret;
 }
@@ -537,3 +532,23 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
 
 }
 }
+
+// ===== definition moved from src/share/config/ob_config_helper.cpp =====
+namespace oceanbase
+{
+namespace common
+{
+
+bool ObConfigPlanCacheGCChecker::check(const ObConfigItem &t) const
+{
+  bool is_valid = false;
+  for (int i = 0; i < ARRAYSIZEOF(sql::plan_cache_gc_confs) && !is_valid; i++) {
+    if (0 == ObString::make_string(sql::plan_cache_gc_confs[i]).case_compare(t.str())) {
+      is_valid = true;
+    }
+  }
+  return is_valid;
+}
+
+}  // namespace common
+}  // namespace oceanbase

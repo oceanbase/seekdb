@@ -21,7 +21,7 @@
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "storage/blocksstable/ob_datum_row_utils.h"
 #include "share/schema/ob_schema_struct.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 
 using namespace oceanbase::common;
 

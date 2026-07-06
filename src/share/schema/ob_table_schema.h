@@ -18,6 +18,8 @@
 #define OCEANBASE_SCHEMA_TABLE_SCHEMA
 
 #include <string.h>
+#include "share/session/ob_local_session_var.h"
+#include "share/rc/ob_tenant_base.h"  // MTL_ID, previously hidden behind a removed include chain, make the dependency explicit(free within share)
 #include <stdlib.h>
 #include <assert.h>
 #include <algorithm>
@@ -650,7 +652,7 @@ public:
   virtual bool is_valid() const = 0;
 
   /* merge related function*/
-  virtual inline uint64_t get_tenant_id() const { return OB_INVALID_ID; }
+  
   virtual inline int64_t get_tablet_size() const { return INVAID_RET; }
   virtual inline int64_t get_rowkey_column_num() const { return INVAID_RET; }
   virtual inline int64_t get_column_count() const { return INVAID_RET; }
@@ -787,10 +789,9 @@ public:
   void reset();
   virtual void reset_partition_schema();
   bool is_valid() const;
-  bool is_link_valid() const;
   int64_t get_convert_size() const;
-  inline void set_tenant_id(const uint64_t tenant_id) override { tenant_id_ = tenant_id; }
-  inline uint64_t get_tenant_id() const override { return tenant_id_; }
+  
+  
   inline virtual void set_table_id(const uint64_t table_id) override { table_id_ = table_id; }
   inline virtual uint64_t get_table_id() const { return table_id_; }
   inline void set_tablet_id(const ObTabletID &tablet_id) { tablet_id_ = tablet_id; }
@@ -1012,30 +1013,18 @@ public:
                                       ObSqlString *user_error = NULL);
   int check_if_tablet_exists(const common::ObTabletID &tablet_id, bool &exists) const;
 
-  int add_simple_foreign_key_info(const uint64_t tenant_id,
-                                  const uint64_t database_id,
+  int add_simple_foreign_key_info(const uint64_t database_id,
                                   const uint64_t table_id,
                                   const int64_t foreign_key_id,
                                   const common::ObString &foreign_key_name);
   int set_simple_foreign_key_info_array(const common::ObIArray<ObSimpleForeignKeyInfo> &simple_fk_info_array);
   inline const common::ObIArray<ObSimpleForeignKeyInfo> &get_simple_foreign_key_info_array() const { return simple_foreign_key_info_array_; }
-  int add_simple_constraint_info(const uint64_t tenant_id,
-                                 const uint64_t database_id,
+  int add_simple_constraint_info(const uint64_t database_id,
                                  const uint64_t table_id,
                                  const int64_t constraint_id,
                                  const common::ObString &constraint_name);
   int set_simple_constraint_info_array(const common::ObIArray<ObSimpleConstraintInfo> &simple_cst_info_array);
   inline const common::ObIArray<ObSimpleConstraintInfo> &get_simple_constraint_info_array() const { return simple_constraint_info_array_; }
-  // dblink.
-  inline void save_local_schema_version(const int64_t local_version)
-  {
-    link_schema_version_ = schema_version_;
-    schema_version_ = local_version;
-  }
-  inline int set_link_database_name(const common::ObString &database_name)
-  { return deep_copy_str(database_name, link_database_name_); }
-  inline const common::ObString &get_link_database_name() const { return link_database_name_; }
-
   // only index table schema can invoke this function
   int get_index_name(common::ObString &index_name) const;
   int get_mlog_name(common::ObString &mlog_name) const;
@@ -1089,9 +1078,9 @@ public:
   { return common::OB_RECYCLEBIN_SCHEMA_ID == database_id_; }
   virtual inline bool is_external_table() const override { return EXTERNAL_TABLE == table_type_; }
   inline ObTenantTableId get_tenant_table_id() const
-  { return ObTenantTableId(tenant_id_, table_id_); }
+  { return ObTenantTableId(table_id_); }
   inline ObTenantTableId get_tenant_data_table_id() const
-  { return ObTenantTableId(tenant_id_, data_table_id_); }
+  { return ObTenantTableId(data_table_id_); }
   inline bool should_not_validate_data_index_ckm() const;
   inline bool should_check_major_merge_progress() const;
   inline bool is_multivalue_index() const;
@@ -1239,7 +1228,6 @@ public:
 
   DECLARE_VIRTUAL_TO_STRING;
 protected:
-  uint64_t tenant_id_;
   uint64_t table_id_;
   int64_t schema_version_;
   uint64_t database_id_;
@@ -1262,14 +1250,6 @@ protected:
   share::ObDuplicateReadConsistency duplicate_read_consistency_;
   int64_t truncate_version_;
 
-
-  // dblink.
-  // No serialization required
-  uint64_t dblink_id_;
-  uint64_t link_table_id_;
-  int64_t link_schema_version_;
-  common::ObString link_database_name_;
-  // TODO(jiuren): need link_table_name_?
   int64_t max_dependency_version_;
   uint64_t association_table_id_;
   bool in_offline_ddl_white_list_;
@@ -1311,8 +1291,7 @@ public:
   static const int64_t DEFAULT_COLUMN_GROUP_ARRAY_CAPACITY = 8;
   bool cmp_table_id(const ObTableSchema *a, const ObTableSchema *b)
   {
-    return a->get_tenant_id() < b->get_tenant_id() ||
-        a->get_database_id() < b->get_database_id() ||
+    return a->get_database_id() < b->get_database_id() ||
         a->get_table_id() < b->get_table_id();
   }
   static void construct_partition_key_column(const ObColumnSchemaV2 &column,
@@ -1329,7 +1308,6 @@ public:
                                                   common::ObIAllocator &allocator,
                                                   ObConstraintType cst_type,
                                                   share::schema::ObSchemaGetterGuard &schema_guard,
-                                                  const uint64_t tenant_id,
                                                   const uint64_t database_id,
                                                   const int64_t retry_times,
                                                   bool &cst_name_generated);
@@ -1474,7 +1452,6 @@ public:
   void forbid_auto_partition();
   void clear_constraint();
   int set_ttl_definition(const common::ObString &ttl_definition) { return deep_copy_str(ttl_definition, ttl_definition_); }
-  int set_kv_attributes(const common::ObString &kv_attributes) { return deep_copy_str(kv_attributes, kv_attributes_); }
   int set_index_params(const common::ObString &index_params) { return deep_copy_str(index_params, index_params_); }
   int set_exec_env(const common::ObString &exec_env) { return deep_copy_str(exec_env, exec_env_); }
   void set_lob_inrow_threshold(const int64_t lob_inrow_threshold) { lob_inrow_threshold_ = lob_inrow_threshold;}
@@ -1515,7 +1492,7 @@ public:
   int64_t get_replica_num() const;
   int64_t get_tablet_size() const { return tablet_size_; }
   int64_t get_pctfree() const { return pctfree_; }
-  inline ObTenantTableId get_tenant_table_id() const {return ObTenantTableId(tenant_id_, table_id_);}
+  inline ObTenantTableId get_tenant_table_id() const {return ObTenantTableId(table_id_);}
   inline int64_t get_index_tid_count() const { return simple_index_infos_.count(); }
   inline int64_t get_aux_vp_tid_count() const { return aux_vp_tid_array_.count(); }
   virtual inline bool is_primary_aux_vp_table() const override { return aux_vp_tid_array_.count() > 0 && is_primary_vp_table(); }
@@ -1569,7 +1546,6 @@ public:
   inline ObViewSchema &get_view_schema() { return view_schema_; }
   inline const ObViewSchema &get_view_schema() const { return view_schema_; }
   inline const common::ObString &get_ttl_definition() const { return ttl_definition_; }
-  inline const common::ObString &get_kv_attributes() const { return kv_attributes_; }
   inline const common::ObString &get_index_params() const { return index_params_; }
   inline const common::ObString &get_exec_env() const { return exec_env_; }
   inline int64_t get_lob_inrow_threshold() const { return lob_inrow_threshold_; }
@@ -1626,7 +1602,7 @@ public:
   uint64 get_index_attributes_set() { return index_attributes_set_; }
 
   bool has_depend_table(uint64_t table_id) const;
-  int get_orig_default_row(const common::ObIArray<share::schema::ObColDesc> &column_ids, blocksstable::ObDatumRow &default_row) const;
+  // get_orig_default_row has been demoted to storage::get_orig_default_row free function(storage/ob_i_store.h)
   int get_cur_default_row(const common::ObIArray<share::schema::ObColDesc> &column_ids,
       common::ObNewRow &default_row) const;
   void reset_column_info();
@@ -1825,7 +1801,6 @@ public:
   int check_rowkey_cover_partition_keys(const common::ObPartitionKeyInfo &part_key);
   int check_index_table_cover_partition_keys(const common::ObPartitionKeyInfo &part_key) const;
   int check_create_index_on_hidden_primary_key(const ObTableSchema &index_table) const;
-  int check_skip_index_valid() const;
 
   int get_subpart_ids(const int64_t part_id, common::ObIArray<int64_t> &subpart_ids) const;
 
@@ -1878,8 +1853,6 @@ public:
 
   int get_fk_check_index_tid(ObSchemaGetterGuard &schema_guard, const common::ObIArray<uint64_t> &parent_column_ids, uint64_t &scan_index_tid) const;
   int check_rowkey_column(const common::ObIArray<uint64_t> &parent_column_ids, bool &is_rowkey) const;
-  int is_hbase_table(bool &is_h_table) const;
-
   // trigger
   inline const common::ObIArray<uint64_t> &get_trigger_list() const
   {
@@ -2026,8 +1999,8 @@ public:
   uint64_t get_mlog_tid() const { return mlog_tid_; }
   void set_tmp_mlog_tid(const uint64_t& table_id) { tmp_mlog_tid_ = table_id; }
   uint64_t get_tmp_mlog_tid() const { return tmp_mlog_tid_; }
-  inline sql::ObLocalSessionVar &get_local_session_var() { return local_session_vars_; }
-  inline const sql::ObLocalSessionVar &get_local_session_var() const { return local_session_vars_; }
+  inline share::ObLocalSessionVar &get_local_session_var() { return local_session_vars_; }
+  inline const share::ObLocalSessionVar &get_local_session_var() const { return local_session_vars_; }
   inline void set_mv_mode(const int64_t mv_mode) { mv_mode_.mode_ = mv_mode; }
   inline int64_t get_mv_mode() const { return mv_mode_.mode_; }
   
@@ -2250,8 +2223,6 @@ protected:
 
   // table ttl
   common::ObString ttl_definition_;
-  // kv attributes
-  common::ObString kv_attributes_;
   ObNameGeneratedType name_generated_type_;
   int64_t lob_inrow_threshold_;
   int64_t auto_increment_cache_size_;
@@ -2268,7 +2239,7 @@ protected:
   CgIdHashArray *cg_id_hash_arr_;
   CgNameHashArray *cg_name_hash_arr_;
   uint64_t mlog_tid_;
-  sql::ObLocalSessionVar local_session_vars_;
+  share::ObLocalSessionVar local_session_vars_;
   // vector index
   common::ObString index_params_;
   // exec_env
@@ -2755,7 +2726,7 @@ int ObTableSchema::add_column(const ColumnType &column)
   const char* thread_name = ob_get_origin_thread_name();
   const bool in_replay_thread = OB_NOT_NULL(thread_name)
                                 && 0 == STRCMP(thread_name, REPLAY_SERVICE_THREAD_NAME);
-  const uint64_t mtl_tenant_id = MTL_ID();
+  
   if (!column.is_valid()) {
     ret = common::OB_INVALID_ARGUMENT;
     SHARE_SCHEMA_LOG(WARN, "The column is not valid", KR(ret));
@@ -2773,7 +2744,7 @@ int ObTableSchema::add_column(const ColumnType &column)
   } else if (!is_view_table()
             && !is_external_object_id(table_id_)
             && OB_FAIL(check_row_length(NULL, &column))) {
-    SHARE_SCHEMA_LOG(WARN, "check row length failed", KR(ret), K(tenant_id_), K(table_id_), K(column));
+    SHARE_SCHEMA_LOG(WARN, "check row length failed", KR(ret), K(table_id_), K(column));
   } else {
     if (NULL == (local_column = new (buf) ColumnType(allocator_))) {
       ret = common::OB_ERR_UNEXPECTED;
@@ -2890,12 +2861,12 @@ int ObTableSchema::add_column(const ColumnType &column)
     }
   }
   if (OB_FAIL(ret)) {
-    SHARE_SCHEMA_LOG(WARN, "add column failed", KR(ret), K(mtl_tenant_id),
-                     K(tenant_id_), K(table_id_), K(in_replay_thread),
+    SHARE_SCHEMA_LOG(WARN, "add column failed", KR(ret),
+                     K(table_id_), K(in_replay_thread),
                      "thead_name", OB_NOT_NULL(thread_name) ? thread_name : "NULL", K(column));
   } else {
-    SHARE_SCHEMA_LOG(TRACE, "add column success", KR(ret), K(mtl_tenant_id),
-                     K(tenant_id_), K(table_id_), K(in_replay_thread),
+    SHARE_SCHEMA_LOG(TRACE, "add column success", KR(ret),
+                     K(table_id_), K(in_replay_thread),
                      "thead_name", OB_NOT_NULL(thread_name) ? thread_name : "NULL", K(column));
   }
   return ret;

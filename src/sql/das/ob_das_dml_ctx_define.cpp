@@ -417,12 +417,11 @@ ObDASWriteBuffer::~ObDASWriteBuffer()
 
 int ObDASWriteBuffer::init(ObIAllocator &das_alloc,
                            uint32_t row_extend_size,
-                           uint64_t tenant_id,
                            const char *label,
                            int64_t mem_ctx_id)
 {
   int ret = OB_SUCCESS;
-  mem_attr_.tenant_id_ = tenant_id;
+  
   mem_attr_.label_ = label;
   mem_attr_.ctx_id_ = mem_ctx_id;
   das_alloc_ = &das_alloc;
@@ -631,7 +630,6 @@ OB_NOINLINE int ObDASWriteBuffer::create_datum_store()
   } else {
     datum_store_ = new(buf) ObChunkDatumStore(mem_attr_.label_);
     if (OB_FAIL(datum_store_->init(UINT64_MAX,
-                                   mem_attr_.tenant_id_,
                                    mem_attr_.ctx_id_,
                                    mem_attr_.label_,
                                    false/*enable_dump*/,

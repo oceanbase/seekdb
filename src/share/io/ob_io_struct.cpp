@@ -17,9 +17,11 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_io_struct.h"
+#include "share/ob_server_struct.h"  // GCTX, previously hidden behind a transitive include(free within share)
+#include "share/ob_thread_mgr.h"  // TG framework, previously hidden behind a transitive include(free within share)
+#include "share/rc/ob_tenant_base.h"  // MTL_ID, previously hidden behind a transitive include(free within share)
 #include "share/ob_io_device_helper.h"
-#include "observer/ob_server.h"
-#include "common/storage/ob_fd_simulator.h"
+#include "lib/restore/ob_fd_simulator.h"
 
 
 #ifdef _WIN32
@@ -102,7 +104,6 @@ void ObIOConfig::set_default_value()
   write_failure_detect_interval_ = 60 * 1000 * 1000; // 1 min
   read_failure_black_list_interval_ = 60 * 1000 * 1000; // Cooperate with the adjustment of tolerance_time to 1min
   data_storage_warning_tolerance_time_ = 5L * 1000L * 1000L; // 5s, same as parameter seed
-  data_storage_error_tolerance_time_ = 300L * 1000L * 1000L; // 300s
   disk_io_thread_count_ = 8;
   sync_io_thread_count_ = 0;
   data_storage_io_timeout_ms_ = 120L * 1000L; // 120s
@@ -113,7 +114,6 @@ bool ObIOConfig::is_valid() const
   return write_failure_detect_interval_ > 0
       && read_failure_black_list_interval_ > 0
       && data_storage_warning_tolerance_time_ > 0
-      && data_storage_error_tolerance_time_ >= data_storage_warning_tolerance_time_
       && disk_io_thread_count_ > 0 && disk_io_thread_count_ <= MAX_IO_THREAD_COUNT
       && sync_io_thread_count_ >= 0 && sync_io_thread_count_ <= MAX_SYNC_IO_THREAD_COUNT
       && data_storage_io_timeout_ms_ > 0;
@@ -169,20 +169,19 @@ ObIOAllocator::~ObIOAllocator()
   destroy();
 }
 
-int ObIOAllocator::init(const uint64_t tenant_id, const int64_t memory_limit)
+int ObIOAllocator::init(const int64_t memory_limit)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("io allocator init twice", K(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || memory_limit <= 0)) {
+  } else if (OB_UNLIKELY(!true || memory_limit <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(memory_limit));
+    LOG_WARN("invalid argument", K(ret), K(memory_limit));
   } else if (OB_FAIL(inner_allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE,
                                            ObModIds::OB_IO_CONTROL,
-                                           tenant_id,
                                            memory_limit))) {
-    LOG_WARN("init inner allocator failed", K(ret), K(tenant_id), K(memory_limit));
+    LOG_WARN("init inner allocator failed", K(ret), K(memory_limit));
   } else if(FALSE_IT(inner_allocator_.set_nway(16))) {
   } else {
     memory_limit_ = memory_limit;
@@ -345,12 +344,12 @@ ObIOFuncUsages::ObIOFuncUsages()
 {
 }
 
-int ObIOFuncUsages::init(const uint64_t tenant_id)
+int ObIOFuncUsages::init()
 {
   int ret = OB_SUCCESS;
   int FUNC_NUM = static_cast<uint8_t>(share::ObFunctionType::MAX_FUNCTION_NUM);
   int GROUP_MODE_NUM = static_cast<uint8_t>(ObIOGroupMode::MODECNT);
-  func_usages_.set_attr(ObMemAttr(tenant_id, "IOFuncUsages"));
+  func_usages_.set_attr(ObMemAttr("IOFuncUsages"));
   for (int i = 0; i < FUNC_NUM && OB_SUCC(ret); ++i) {
     ObIOFuncUsage func_usage;
     if (OB_FAIL(func_usage.reserve(GROUP_MODE_NUM))) {
@@ -408,18 +407,18 @@ ObIOUsage::~ObIOUsage()
   lock_.destroy();
 }
 
-int ObIOUsage::init(const uint64_t tenant_id, const int64_t group_num)
+int ObIOUsage::init(const int64_t group_num)
 {
   int ret =OB_SUCCESS;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
+  if (OB_UNLIKELY(!true)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else if (FALSE_IT(info_.set_attr(ObMemAttr(tenant_id, "IOUsageInfo")))) {
-  } else if (FALSE_IT(failed_req_info_.set_attr(ObMemAttr(tenant_id, "IOUsageInfo")))) {
-  } else if (FALSE_IT(group_throttled_time_us_.set_attr(ObMemAttr(tenant_id, "CPUUSage")))) {
+    LOG_WARN("invalid argument", K(ret));
+  } else if (FALSE_IT(info_.set_attr(ObMemAttr("IOUsageInfo")))) {
+  } else if (FALSE_IT(failed_req_info_.set_attr(ObMemAttr("IOUsageInfo")))) {
+  } else if (FALSE_IT(group_throttled_time_us_.set_attr(ObMemAttr("CPUUSage")))) {
   } else if (OB_FAIL(refresh_group_num(group_num))) {
     LOG_WARN("refresh io usage array failed", K(ret), K(group_num));
-  } else if (OB_FAIL(lock_.init(lib::ObMemAttr(tenant_id, "IOUsage")))) {
+  } else if (OB_FAIL(lock_.init(lib::ObMemAttr("IOUsage")))) {
     LOG_WARN("init lock failed", K(ret));
   }
   return ret;
@@ -753,27 +752,7 @@ int ObIOTuner::init()
   return ret;
 }
 
-int ObIOTuner::send_detect_task()
-{
-  int ret = OB_SUCCESS;
-  ObArray<MacroBlockId> macro_ids;
-  macro_ids.set_attr(ObMemAttr(OB_SYS_TENANT_ID, "back_io_detect"));
-  if (!OB_SERVER_BLOCK_MGR.is_started() || 0 == OB_SERVER_BLOCK_MGR.get_used_macro_block_count()) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("block manager not init", K(ret));
-  } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.get_limited_iter_macro_ids(macro_ids, 128))) {
-    LOG_WARN("fail to get macro ids", K(ret), K(macro_ids));
-  } else if (OB_UNLIKELY(0 == macro_ids.count())) {
-    // skip
-  } else {
-    MacroBlockId &rand_id = macro_ids.at(ObRandom::rand(0, macro_ids.count() - 1));
-    if (OB_FAIL(
-            OB_IO_MANAGER.get_device_health_detector().record_timing_task(rand_id.first_id(), rand_id.second_id()))) {
-      LOG_WARN("fail to record timing task", K(ret), K(rand_id));
-    }
-  }
-  return ret;
-}
+// send_detect_task moved definition to storage/blocksstable/ob_block_manager.cpp(SERVER_BLOCK_MGR real user)
 
 void ObIOTuner::stop()
 {
@@ -1463,8 +1442,8 @@ int ObSyncIOChannel::do_sync_io(ObIORequest &req)
   ObIODevice *device_handle = req.fd_.device_handle_;
 
   const int64_t timeout_us = MIN(req.get_remained_io_timeout_us(), 
-      OB_IO_MANAGER.get_object_storage_io_timeout_ms(req.tenant_id_) * 1000LL);
-  ObObjectStorageTenantGuard guard(req.tenant_id_, timeout_us);
+      OB_IO_MANAGER.get_object_storage_io_timeout_ms() * 1000LL);
+  ObObjectStorageTenantGuard guard(timeout_us);
 
   // no need to perform io for req that has already been canceled
   if (req.is_canceled()) {
@@ -1799,7 +1778,7 @@ ObIOCallbackManager::~ObIOCallbackManager()
   destroy();
 }
 
-int ObIOCallbackManager::init(const int64_t tenant_id, const int64_t thread_count,
+int ObIOCallbackManager::init(const int64_t thread_count,
                               const int32_t queue_depth)
 {
   int ret = OB_SUCCESS;
@@ -1813,7 +1792,7 @@ int ObIOCallbackManager::init(const int64_t tenant_id, const int64_t thread_coun
     config_thread_count_ = thread_count;
     if (OB_FAIL(ObLinkQueueThreadPool::set_thread_count(thread_count))) {
       LOG_WARN("set thread count failed", K(ret), K(thread_count));
-    } else if (OB_FAIL(ObLinkQueueThreadPool::init(thread_count, queue_depth, "DiskCB", tenant_id))) {
+    } else if (OB_FAIL(ObLinkQueueThreadPool::init(thread_count, queue_depth, "DiskCB"))) {
       LOG_WARN("init link thread pool failed", K(ret), K(thread_count), K(queue_depth));
     } else {
       is_inited_ = true;
@@ -1919,7 +1898,7 @@ void ObIOCallbackManager::handle(LinkTask *task)
         } else {
           if (nullptr != req->get_callback()) {
             if (OB_FAIL(req->get_callback()->process(req->get_io_data_buf(), req->io_result_->size_))) {
-              LOG_WARN("fail to callback", K(ret), K(*req), K(MTL_ID()));
+              LOG_WARN("fail to callback", K(ret), K(*req));
             }
             time_guard.click("callback_process");
           }
@@ -1986,9 +1965,6 @@ const char *oceanbase::common::device_health_status_to_str(const ObDeviceHealthS
     case DEVICE_HEALTH_WARNING:
       hstr = "WARNING";
       break;
-    case DEVICE_HEALTH_ERROR:
-      hstr = "ERROR";
-      break;
     default:
       hstr = "UNKNOWN";
       break;
@@ -2007,10 +1983,7 @@ ObIOFaultDetector::ObIOFaultDetector(const ObIOConfig &io_config)
     lock_(ObLatchIds::IO_FAULT_DETECTOR_LOCK),
     io_config_(io_config),
     is_device_warning_(false),
-    last_device_warning_ts_(0),
-    is_device_error_(false),
-    begin_device_error_ts_(0),
-    last_device_error_ts_(0)
+    last_device_warning_ts_(0)
 {
 
 }
@@ -2040,9 +2013,7 @@ void ObIOFaultDetector::destroy()
   TG_STOP(TGDefIDs::IO_HEALTH);
   TG_WAIT(TGDefIDs::IO_HEALTH);
   is_device_warning_ = false;
-  is_device_error_ = false;
-  begin_device_error_ts_ = 0;
-  last_device_error_ts_ = 0;
+  last_device_warning_ts_ = 0;
   is_inited_ = false;
 }
 
@@ -2075,13 +2046,12 @@ void ObIOFaultDetector::handle(void *task)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(task));
   } else {
-    const int64_t LONG_AIO_TIMEOUT_MS = 30000; // 30s
     RetryTask *retry_task = reinterpret_cast<RetryTask *>(task);
     retry_task->io_info_.flag_.set_unlimited();
     retry_task->io_info_.flag_.set_detect();
-    if ((is_device_warning_ || is_device_error_) && retry_task->io_info_.flag_.is_time_detect()) {
+    if (is_device_warning_ && retry_task->io_info_.flag_.is_time_detect()) {
       //ignore
-    } else if (!is_supported_detect_read_(retry_task->io_info_.tenant_id_, retry_task->io_info_.fd_)) {
+    } else if (!is_supported_detect_read_( retry_task->io_info_.fd_)) {
       //ignore
     } else {
       int64_t timeout_ms = retry_task->timeout_ms_;
@@ -2093,13 +2063,11 @@ void ObIOFaultDetector::handle(void *task)
       const int64_t diagnose_begin_ts = ObTimeUtility::fast_current_time();
       bool is_retry_succ = false;
       int64_t fs_error_times = 0;
-      while (OB_SUCC(ret) && !OB_IO_MANAGER.is_stopped() && !is_retry_succ && !is_device_error_) {
+      while (OB_SUCC(ret) && !OB_IO_MANAGER.is_stopped() && !is_retry_succ && !is_device_warning_) {
         ObIOHandle handle;
         const int64_t current_retry_ts = ObTimeUtility::fast_current_time();
         const int64_t warn_ts = diagnose_begin_ts + io_config_.data_storage_warning_tolerance_time_;
-        const int64_t error_ts = diagnose_begin_ts + io_config_.data_storage_error_tolerance_time_;
-        const int64_t left_timeout_ms = !is_device_warning_ ?
-          (warn_ts - current_retry_ts) / 1000 : (error_ts - current_retry_ts) / 1000;
+        const int64_t left_timeout_ms = (warn_ts - current_retry_ts) / 1000;
         // timeout of retry io increase exponentially
         timeout_ms = min(left_timeout_ms, min(MAX_IO_RETRY_TIMEOUT_MS, max(timeout_ms * 2, MIN_IO_RETRY_TIMEOUT_MS)));
         int sys_io_errno = 0;
@@ -2129,10 +2097,7 @@ void ObIOFaultDetector::handle(void *task)
         }
         if (OB_SUCC(ret) && !is_retry_succ) {
           const int64_t current_ts = ObTimeUtility::fast_current_time();
-          if (current_ts >= error_ts || (sys_io_errno != 0 && fs_error_times >= MAX_DETECT_READ_ERROR_TIMES)) {
-            set_device_error();
-            LOG_WARN("ObIOManager::detect IO retry timeout, device error", K(ret), K(current_ts), K(error_ts), K(retry_task->io_info_));
-          } else if (current_ts >= warn_ts || (sys_io_errno != 0 && fs_error_times >= MAX_DETECT_READ_WARN_TIMES)) {
+          if (current_ts >= warn_ts || (sys_io_errno != 0 && fs_error_times >= MAX_DETECT_READ_WARN_TIMES)) {
             set_device_warning();
             LOG_WARN("ObIOManager::detect IO retry reach limit, device warning", K(ret), K(sys_io_errno), K(current_ts), K(current_ts), K(fs_error_times), K(retry_task->io_info_));
           }
@@ -2151,7 +2116,7 @@ int ObIOFaultDetector::get_device_health_status(ObDeviceHealthStatus &dhs,
   dhs = DEVICE_HEALTH_NORMAL;
   device_abnormal_time = 0;
 
-  if (is_device_warning_ && last_device_warning_ts_ > 0 && !is_device_error_) {
+  if (is_device_warning_ && last_device_warning_ts_ > 0) {
     const int64_t period = ObTimeUtility::fast_current_time() - last_device_warning_ts_;
     if (period > io_config_.read_failure_black_list_interval_) {
       last_device_warning_ts_ = 0;
@@ -2159,10 +2124,7 @@ int ObIOFaultDetector::get_device_health_status(ObDeviceHealthStatus &dhs,
     }
   }
 
-  if (is_device_error_) {
-    dhs = DEVICE_HEALTH_ERROR;
-    device_abnormal_time = begin_device_error_ts_;
-  } else if (is_device_warning_) {
+  if (is_device_warning_) {
     dhs = DEVICE_HEALTH_WARNING;
     device_abnormal_time = last_device_warning_ts_;
   } else {
@@ -2173,15 +2135,6 @@ int ObIOFaultDetector::get_device_health_status(ObDeviceHealthStatus &dhs,
   return ret;
 }
 
-void ObIOFaultDetector::reset_device_health()
-{
-  is_device_warning_ = false;
-  last_device_warning_ts_ = 0;
-  is_device_error_ = false;
-  begin_device_error_ts_ = 0;
-  last_device_error_ts_ = 0;
-}
-
 int ObIOFaultDetector::record_timing_task(const int64_t first_id, const int64_t second_id)
 {
   int ret = OB_SUCCESS;
@@ -2190,7 +2143,7 @@ int ObIOFaultDetector::record_timing_task(const int64_t first_id, const int64_t 
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc RetryTask failed", K(ret));
   } else {
-    retry_task->io_info_.tenant_id_ = OB_SERVER_TENANT_ID;
+    
     retry_task->io_info_.size_ = 4096;
     retry_task->io_info_.user_data_buf_ = nullptr;
     retry_task->io_info_.buf_ = nullptr;
@@ -2218,7 +2171,7 @@ int ObIOFaultDetector::set_detect_task_io_info_(
     ObIOInfo &io_info, const ObIOResult &result, const ObIORequest &req)
 {
   int ret = OB_SUCCESS;
-  io_info.tenant_id_ = req.tenant_id_;
+  
   io_info.timeout_us_ = result.timeout_us_;
   io_info.callback_ = nullptr;
   io_info.buf_ = result.buf_;
@@ -2231,7 +2184,7 @@ int ObIOFaultDetector::set_detect_task_io_info_(
   return ret;
 }
 
-bool ObIOFaultDetector::is_supported_detect_read_(const uint64_t tenant_id, const ObIOFd &fd)
+bool ObIOFaultDetector::is_supported_detect_read_(const ObIOFd &fd)
 {
   bool bret = true;
   int ret = OB_SUCCESS;
@@ -2322,7 +2275,6 @@ int ObIOFaultDetector::record_read_failure_(const ObIOResult &result, const ObIO
 }
 
 // set disk warning and record warn_ts
-// until warn_ts + io_config.read_failure_black_list_interval, this server is not allowed to be partition leader
 void ObIOFaultDetector::set_device_warning()
 {
   last_device_warning_ts_ = ObTimeUtility::fast_current_time();
@@ -2330,27 +2282,8 @@ void ObIOFaultDetector::set_device_warning()
   LOG_WARN_RET(OB_IO_ERROR, "disk maybe corrupted");
 }
 
-// set disk error and record error_ts
-// if the disk is confirmed normal, the administrator can reset disk status by:
-// alter system set disk valid server [=] 'ip:port'
-void ObIOFaultDetector::set_device_error()
-{
-  if (!is_device_warning_) {
-    set_device_warning();
-  }
-  if (!is_device_error_) {
-    begin_device_error_ts_ = ObTimeUtility::fast_current_time();
-  }
-  last_device_error_ts_ = ObTimeUtility::fast_current_time();
-  is_device_error_ = true;
-  LOG_ERROR_RET(OB_IO_ERROR, "set_disk_error: attention!!!");
-  LOG_DBA_ERROR_V2(OB_COMMON_DISK_INVALID, OB_DISK_ERROR,
-                    "The disk may be corrupted. ",
-                    "[suggestion] check disk.");
-}
-
 ObIOTracer::ObIOTracer()
-  : is_inited_(false), tenant_id_(OB_INVALID_TENANT_ID), trace_map_()
+  : is_inited_(false), trace_map_()
 {
 
 }
@@ -2360,20 +2293,19 @@ ObIOTracer::~ObIOTracer()
   destroy();
 }
 
-int ObIOTracer::init(const uint64_t tenant_id)
+int ObIOTracer::init()
 {
   int ret = OB_SUCCESS;
   const ObMemAttr attr = SET_USE_500("io_trace_map");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
+  } else if (OB_UNLIKELY(!true)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
+    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(trace_map_.create(1009, attr))) {
     LOG_WARN("create trace map failed", K(ret));
   } else {
-    tenant_id_ = tenant_id;
     is_inited_ = true;
   }
   if (OB_UNLIKELY(!is_inited_)) {
@@ -2385,7 +2317,6 @@ int ObIOTracer::init(const uint64_t tenant_id)
 void ObIOTracer::destroy()
 {
   trace_map_.destroy();
-  tenant_id_ = OB_INVALID_TENANT_ID;
   is_inited_ = false;
 }
 
@@ -2554,5 +2485,5 @@ int64_t ObIOTracer::to_string(char *buf, const int64_t len) const
 }
 void ObIOTracer::print_status()
 {
-  LOG_INFO("[IO STATUS TRACER]", K_(tenant_id), K(*this));
+  LOG_INFO("[IO STATUS TRACER]", K(*this));
 }

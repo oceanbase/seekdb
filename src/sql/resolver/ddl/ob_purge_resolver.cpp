@@ -46,7 +46,7 @@ int ObPurgeTableResolver::resolve(const ParseNode &parser_tree)
   if (OB_SUCC(ret)) {
     //Purge table
     ParseNode *table_node = parser_tree.children_[TABLE_NODE];
-    uint64_t tenant_id = session_info_->get_effective_tenant_id();
+    
     uint64_t db_id = OB_INVALID_ID;
     ObString db_name;
     ObString table_name;
@@ -61,13 +61,13 @@ int ObPurgeTableResolver::resolve(const ParseNode &parser_tree)
       LOG_WARN("purge tables in recyclebin dropped from other schema is not supported",
                K(ret), K(db_name), K(session_info_->get_database_name()));
       LOG_WARN("purge table db.xx should not specified with db name", K(ret));
-    } else if (OB_FAIL(schema_checker_->get_database_id(tenant_id, db_name, db_id))) {
-      LOG_WARN("fail to get database id", K(ret), K(tenant_id), K(db_name));
+    } else if (OB_FAIL(schema_checker_->get_database_id(db_name, db_id))) {
+      LOG_WARN("fail to get database id", K(ret), K(db_name));
     } else if (table_name.empty()){
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("table name should not be empty", K(ret));
     } else {
-      purge_table_stmt->set_tenant_id(tenant_id);
+      
       purge_table_stmt->set_database_id(db_id);
       purge_table_stmt->set_table_name(table_name);
     }
@@ -101,7 +101,7 @@ int ObPurgeIndexResolver::resolve(const ParseNode &parser_tree)
   if (OB_SUCC(ret)) {
     //Purge table
     ParseNode *table_node = parser_tree.children_[TABLE_NODE];
-    uint64_t tenant_id = session_info_->get_effective_tenant_id();
+    
     uint64_t db_id = OB_INVALID_ID;
     ObString db_name;
     ObString table_name;
@@ -119,20 +119,20 @@ int ObPurgeIndexResolver::resolve(const ParseNode &parser_tree)
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "purge indexes in recyclebin dropped from other schema");
       LOG_WARN("purge indexes in recyclebin dropped from other schema is not supported",
                K(ret), K(db_name), K(session_info_->get_database_name()));
-    } else if (OB_FAIL(schema_checker_->get_database_id(tenant_id, db_name, db_id))) {
-      LOG_WARN("fail to get database id", K(ret), K(tenant_id), K(db_name));
+    } else if (OB_FAIL(schema_checker_->get_database_id(db_name, db_id))) {
+      LOG_WARN("fail to get database id", K(ret), K(db_name));
     } else if (table_name.empty()){
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("table name should not be empty", K(ret));
     } else {
-      UNUSED(schema_checker_->get_table_schema(tenant_id,
+      UNUSED(schema_checker_->get_table_schema(
                                                OB_RECYCLEBIN_SCHEMA_ID,
                                                table_name,
                                                true, /*is_index*/
                                                false, /*cte_table_fisrt*/
                                                false/*is_hidden*/,
                                                table_schema));
-      purge_index_stmt->set_tenant_id(tenant_id);
+      
       purge_index_stmt->set_database_id(db_id);
       purge_index_stmt->set_table_name(table_name);
       purge_index_stmt->set_table_id(OB_NOT_NULL(table_schema) ? table_schema->get_table_id() : OB_INVALID_ID);
@@ -167,7 +167,7 @@ int ObPurgeDatabaseResolver::resolve(const ParseNode &parser_tree)
     }
   }
   if (OB_SUCC(ret)) {
-    purge_database_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+    
     ObString db_name;
     ParseNode *dbname_node = parser_tree.children_[DATABASE_NODE];
     int32_t max_database_name_length = OB_MAX_DATABASE_NAME_LENGTH;
@@ -214,7 +214,7 @@ int ObPurgeRecycleBinResolver::resolve(const ParseNode &parser_tree)
   }
   if (OB_SUCC(ret)) {
     int64_t current_time = ObTimeUtility::current_time();
-    purge_recyclebin_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+    
     purge_recyclebin_stmt->set_expire_time(current_time);
     purge_recyclebin_stmt->set_purge_num(obcall::ObPurgeRecycleBinArg::DEFAULT_PURGE_EACH_TIME);
   }

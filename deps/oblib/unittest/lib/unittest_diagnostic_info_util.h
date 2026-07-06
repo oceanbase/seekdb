@@ -19,7 +19,7 @@
 
 #define private public
 #define protected public
-#include "deps/oblib/src/lib/ob_lib_config.h"
+#include "lib/ob_lib_config.h"
 #undef private
 #undef protected
 

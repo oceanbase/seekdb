@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ddl/ob_cg_block_tmp_file.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
 #include "storage/blocksstable/index_block/ob_macro_meta_temp_store.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
@@ -29,7 +30,9 @@ namespace storage
 {
 static int64_t get_tmp_file_io_timeout_ms()
 {
-  return GCONF._data_storage_io_timeout / 1000L;
+  return GCTX.is_shared_storage_mode() ?
+         OB_IO_MANAGER.get_object_storage_io_timeout_ms() :
+         GCONF._data_storage_io_timeout / 1000L;
 }
 
 /**
@@ -153,9 +156,9 @@ int ObCGBlockFile::BlockStore::open()
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("block store file initialized twice", K(ret));
-  } else if (OB_FAIL(MTL(ObTenantTmpFileManager*)->alloc_dir(file_dir_))) {
+  } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->alloc_dir(file_dir_))) {
     LOG_WARN("failed to alloc file dir", K(ret));
-  } else if (OB_FAIL(MTL(ObTenantTmpFileManager*)->open(fd_, file_dir_, nullptr/*label*/))) {
+  } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->open(fd_, file_dir_, nullptr/*label*/))) {
     LOG_WARN("failed to open tmp file", K(ret), K(file_dir_));
   } else {
     file_size_ = 0;
@@ -174,7 +177,7 @@ int ObCGBlockFile::BlockStore::close()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("cg block tmp file do not initialized", K(ret));
-  } else if (OB_FAIL(MTL(ObTenantTmpFileManager*)->remove(fd_))) {
+  } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->remove(fd_))) {
     LOG_WARN("fail to remove tmp file fd", K(ret), K(fd_));
   } else {
     is_inited_ = false;
@@ -201,7 +204,7 @@ int ObCGBlockFile::BlockStore::append_cg_block(const ObCGBlock &cg_block)
     tmp_file::ObTmpFileIOInfo io_info;
     if (OB_FAIL(get_io_info(buf, macro_buffer_size, timeout_ms, io_info))) {
       LOG_WARN("fail to get io info", K(ret));
-    } else if (OB_FAIL(MTL(ObTenantTmpFileManager*)->write(MTL_ID(), io_info))) {
+    } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->write(io_info))) {
       LOG_WARN("fail to write cg block data", K(ret), K(io_info));
     } else {
       file_size_ += macro_buffer_size;
@@ -237,7 +240,7 @@ int ObCGBlockFile::BlockStore::get_next_cg_block(ObCGBlock &cg_block)
       
       if (OB_FAIL(get_io_info(buf, read_buffer_size, timeout_ms, io_info))) {
         LOG_WARN("fail to get io info", K(ret));
-      } else if (OB_FAIL(MTL(ObTenantTmpFileManager*)->pread(MTL_ID(), io_info, file_offset_, handle))) { // TODO @youchuan.yc using aio
+      } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->pread(io_info, file_offset_, handle))) { // TODO @youchuan.yc using aio
         LOG_WARN("fail to read tmp file", K(ret), K(io_info), K(file_offset_));
       } else {
         file_offset_ += read_buffer_size;
@@ -332,7 +335,7 @@ int ObCGBlockFile::BlockStore::write_cg_block_header(const ObCGBlock::StoreHeade
         K(ret), K(cg_block_store_header), K(store_header_size), K(pos));
   } else if (OB_FAIL(get_io_info(header_buf, store_header_size, timeout_ms, io_info))) {
     LOG_WARN("fail to get io info", K(ret));
-  } else if (OB_FAIL(MTL(ObTenantTmpFileManager*)->write(MTL_ID(), io_info))) {
+  } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->write(io_info))) {
     LOG_WARN("fail to write cg block data", K(ret), K(io_info));
   } else {
     file_size_ += store_header_size;
@@ -355,7 +358,7 @@ int ObCGBlockFile::BlockStore::read_cg_block_header(ObCGBlock::StoreHeader &cg_b
     LOG_WARN("cg block file offset is not as expected", K(ret), K(file_offset_));
   } else if (OB_FAIL(get_io_info(header_buf, store_header_size, timeout_ms, io_info))) {
     LOG_WARN("fail to get io info", K(ret));
-  } else if (OB_FAIL(MTL(ObTenantTmpFileManager*)->pread(MTL_ID(), io_info, file_offset_, handle))) {
+  } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->pread(io_info, file_offset_, handle))) {
     LOG_WARN("fail to read tmp file", K(ret), K(io_info), K(file_offset_));
   } else {
     int64_t pos = 0;

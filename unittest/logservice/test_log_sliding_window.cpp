@@ -96,15 +96,15 @@ void TestLogSlidingWindow::SetUp()
   palf_id_ = 1001;
   self_.set_ip_addr("127.0.0.1", 12345);
 
-  int ret = ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(tenant_id);
+  int ret = ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
   OB_ASSERT(OB_SUCCESS == ret);
-  ObMemAttr attr(tenant_id, ObModIds::OB_TENANT_MUTIL_ALLOCATOR);
+  ObMemAttr attr(ObModIds::OB_TENANT_MUTIL_ALLOCATOR);
   void *buf = ob_malloc(sizeof(common::ObTenantMutilAllocator), attr);
   if (NULL == buf) {
     CLOG_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "alloc memory failed");
     OB_ASSERT(FALSE);
   }
-  alloc_mgr_ = new (buf) common::ObTenantMutilAllocator(tenant_id);
+  alloc_mgr_ = new (buf) common::ObTenantMutilAllocator();
   plugins_ = new LogPlugins();
   data_buf_ = (char*)ob_malloc(64 * 1024 * 1024, attr);
   // init MTL
@@ -116,7 +116,7 @@ void TestLogSlidingWindow::TearDown()
 {
   ob_free(alloc_mgr_);
   ob_free(data_buf_);
-  ObMallocAllocator::get_instance()->recycle_tenant_allocator(tenant_id);
+  ObMallocAllocator::get_instance()->recycle_tenant_allocator();
 }
 
 void gen_default_palf_base_info_(PalfBaseInfo &palf_base_info)

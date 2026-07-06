@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_set_password_executor.h"
 #include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_root_service.h"
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "sql/resolver/dcl/ob_set_password_stmt.h"
 #include "sql/engine/ob_exec_context.h"
@@ -45,15 +46,12 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  const uint64_t tenant_id = stmt.get_tenant_id();
+  
   const common::ObStrings *user_passwd = NULL;
   const int64_t FIX_MEMBER_CNT = 7;
   if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant is invalid", K(ret));
   } else if (OB_ISNULL(user_passwd = stmt.get_user_password())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("user_passwd is null", K(ret));
@@ -93,14 +91,14 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
     } else {
       char enc_buf[ENC_BUF_LEN] = {0};
       ObSetPasswdArg arg;
-      arg.tenant_id_ = tenant_id;
+      
       arg.user_ = user_name;
       arg.host_ = host_name;
       arg.ssl_type_ = ssl_type_enum;
       arg.ssl_cipher_ = ssl_cipher;
       arg.x509_issuer_ = x509_issuer;
       arg.x509_subject_ = x509_subject;
-      arg.exec_tenant_id_ = tenant_id;
+      
       arg.max_connections_per_hour_ = stmt.get_max_connections_per_hour();
       arg.max_user_connections_= stmt.get_max_user_connections();
       arg.modify_max_connections_ = stmt.get_modify_max_connections();

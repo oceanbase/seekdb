@@ -61,7 +61,6 @@ void TestTenantAllZoneMergeStrategy::gen_zone_merge_info(
     const int64_t broadcast_version,
     ObZoneMergeInfo &zone_merge_info)
 {
-  zone_merge_info.tenant_id_ = CUR_TENANT_ID;
   zone_merge_info.frozen_scn_.set_scn(frozen_version);
   zone_merge_info.broadcast_scn_.set_scn(broadcast_version);
 }
@@ -70,14 +69,12 @@ void TestTenantAllZoneMergeStrategy::gen_global_merge_info(
     const int64_t global_broadcast_version,
     ObGlobalMergeInfo &global_merge_info)
 {
-  global_merge_info.tenant_id_ = CUR_TENANT_ID;
   global_merge_info.global_broadcast_scn_.set_scn(global_broadcast_version);
 }
 
 void TestTenantAllZoneMergeStrategy::SetUp()
 {
-  const uint64_t tenant_id = CUR_TENANT_ID;
-  zone_merge_mgr_.init(tenant_id, sql_proxy_);
+  zone_merge_mgr_.init(sql_proxy_);
   zone_merge_mgr_.set_is_loaded(true);
 
   ObServerConfig &config = ObServerConfig::get_instance();
@@ -93,9 +90,8 @@ void TestTenantAllZoneMergeStrategy::SetUp()
 
 TEST_F(TestTenantAllZoneMergeStrategy, get_next_zone)
 {
-  const uint64_t tenant_id = CUR_TENANT_ID;
   ObTenantAllZoneMergeStrategy merge_strategy;
-  ASSERT_EQ(OB_SUCCESS, merge_strategy.init(tenant_id, &zone_merge_mgr_));
+  ASSERT_EQ(OB_SUCCESS, merge_strategy.init(&zone_merge_mgr_));
   
   ObArray<ObZone> to_merge;
   ASSERT_EQ(OB_SUCCESS, merge_strategy.get_next_zone(to_merge));

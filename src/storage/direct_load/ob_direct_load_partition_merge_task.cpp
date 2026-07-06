@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/direct_load/ob_direct_load_partition_merge_task.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
 #include "observer/table_load/ob_table_load_table_ctx.h"
 #include "storage/direct_load/ob_direct_load_compare.h"
 #include "storage/direct_load/ob_direct_load_conflict_check.h"
@@ -90,7 +91,7 @@ int ObDirectLoadPartitionMergeTask::process()
     ObMacroDataSeq block_start_seq;
     ObArenaAllocator allocator("TLD_MergeExec");
     ObArray<ObDirectLoadIStoreRowIterator *> row_iters;
-    allocator.set_tenant_id(MTL_ID());
+    
     row_iters.set_block_allocator(ModulePageAllocator(allocator));
     ObDirectLoadMgrAgent ddl_agent;
     if (OB_FAIL(merge_param_->insert_table_ctx_->get_tablet_context(tablet_id, insert_tablet_ctx_))) {
@@ -104,7 +105,7 @@ int ObDirectLoadPartitionMergeTask::process()
       LOG_WARN("ddl agent should not be null", K(ret));
     }
     // For full import, regardless of whether a partition has data or not, a ddl object needs to be created to create a major sstable for that partition
-    else if (OB_FAIL(ObDDLUtil::init_macro_block_seq(parallel_idx_, block_start_seq))) {
+    else if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(parallel_idx_, block_start_seq))) {
       LOG_WARN("fail to set parallel degree", KR(ret), K(parallel_idx_));
     } else if (OB_FAIL(insert_tablet_ctx_->open_sstable_slice(block_start_seq, parallel_idx_/*slice_idx*/, slice_id, ddl_agent))) {
       LOG_WARN("fail to open sstable slice ", KR(ret), K(block_start_seq));
@@ -219,7 +220,7 @@ int ObDirectLoadPartitionMergeTask::init_iterator(ObITabletSliceRowIterator *&ro
   } else {
     row_iterator = nullptr;
     ObDirectLoadDagInsertTableRowIterator *iter = nullptr;
-    ObMemAttr attr(MTL_ID(), "TLD_SliceIter");
+    ObMemAttr attr("TLD_SliceIter");
     if (OB_ISNULL(iter = OB_NEW(ObDirectLoadDagInsertTableRowIterator, attr))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc memory", KR(ret));
@@ -370,7 +371,7 @@ int ObDirectLoadPartitionOriginDataUnrescanMergeTask::process()
     ObDirectLoadInsertTableBatchRowDirectWriter direct_writer;
     ObDirectLoadInsertTableRowInfo row_info;
     ObArenaAllocator allocator("TLD_UODMerge");
-    allocator.set_tenant_id(MTL_ID());
+    
     ObDirectLoadOriginTableScanner *row_iter = nullptr;
     if (OB_FAIL(origin_table_->scan(*range_, allocator, row_iter, false /*skip_read_lob*/))) {
       LOG_WARN("fail to scan origin table", KR(ret));

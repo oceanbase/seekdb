@@ -745,7 +745,7 @@ int ObIndexBlockMacroIterator::get_cs_range(
   read_info.io_desc_.set_sys_module_id(ObIOModule::INDEX_BLOCK_MICRO_ITER_IO);
   read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
   read_info.macro_block_id_ = block_id;
-  read_info.mtl_tenant_id_ = MTL_ID();
+  
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;

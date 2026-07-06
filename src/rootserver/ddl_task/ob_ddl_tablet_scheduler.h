@@ -29,8 +29,7 @@ class ObDDLTabletScheduler final
 public:
   ObDDLTabletScheduler();
   ~ObDDLTabletScheduler();
-  int init(const uint64_t tenant_id,
-           const uint64_t table_id,
+  int init(const uint64_t table_id,
            const uint64_t ref_data_table_id,
            const int64_t  task_id,
            const int64_t  parallelism,
@@ -44,7 +43,7 @@ public:
                              common::ObAddr &leader_addr,
                              ObIArray<ObTabletID> &tablets);
   int confirm_batch_tablets_status(const int64_t execution_id, const bool finish_status, const share::ObLSID &ls_id, const ObIArray<ObTabletID> &tablets);
-  TO_STRING_KV(K_(is_inited), K_(tenant_id), K_(table_id), K_(ref_data_table_id),
+  TO_STRING_KV(K_(is_inited), K_(table_id), K_(ref_data_table_id),
               K_(task_id), K_(parallelism), K_(snapshot_version), K_(trace_id), K_(all_tablets), K_(running_task_ls_ids_before));
 private:
   int get_next_parallelism(int64_t &parallelism);
@@ -67,7 +66,6 @@ private:
   void destroy();
 private:
   bool is_inited_;
-  uint64_t tenant_id_;
   uint64_t table_id_;
   uint64_t ref_data_table_id_;
   int64_t task_id_;

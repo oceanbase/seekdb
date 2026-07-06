@@ -145,7 +145,6 @@ public:
   MOCK_METHOD1(delete_frozen_status, int(const int64_t major_version));
   MOCK_METHOD0(admin_wash_ilog_cache, int());
   MOCK_METHOD1(set_zone_priority, void(const int64_t zone_priority));
-  MOCK_METHOD1(set_region, int(const common::ObRegion &region));
 };
 
 }  // namespace storage

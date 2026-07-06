@@ -15,4 +15,3 @@
  */
 
 #include "lib/ob_define.h"
-__thread uint64_t tl_thread_tenant_id = oceanbase::common::OB_SERVER_TENANT_ID;

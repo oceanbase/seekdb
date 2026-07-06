@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_UNITTEST_LOGSERVICE_MOCK_CONTAINER_ELECTION_
 #define OCEANBASE_UNITTEST_LOGSERVICE_MOCK_CONTAINER_ELECTION_
 
-#include "logservice/palf/election/interface/election.h"
+#include "logservice/palf/election_self.h"
 
 namespace oceanbase
 {
@@ -30,64 +30,47 @@ namespace mockelection
 class MockElection : public palf::election::Election
 {
 public:
-  MockElection() {}
+  MockElection() : leader_epoch_(0), role_(common::ObRole::FOLLOWER) {}
   ~MockElection() {}
 
-  int start()
-  {
-    int ret = OB_SUCCESS;
-    return ret;
-  }
   void stop() override final
   {}
   int can_set_memberlist(const palf::LogConfigVersion &new_config_version) const override final
   {
-    int ret = OB_SUCCESS;
     UNUSED(new_config_version);
-    return ret;
+    return OB_SUCCESS;
   }
   // Set member list
   int set_memberlist(const MemberList &new_member_list) override final
   {
-    int ret = OB_SUCCESS;
     UNUSED(new_member_list);
-    return ret;
+    return OB_SUCCESS;
   }
-  int revoke(const RoleChangeReason &reason)
-  {
-    UNUSED(reason);
-    int ret = OB_SUCCESS;
-    return ret;
-  }
-  int set_priority(ElectionPriority *) override final { return  OB_SUCCESS; }
-  int reset_priority() override final { return  OB_SUCCESS; }
+  int set_priority(ElectionPriority *) override final { return OB_SUCCESS; }
+  int reset_priority() override final { return OB_SUCCESS; }
   // Get the current role of the election
   int get_role(common::ObRole &role, int64_t &epoch) const override final
   {
-    int ret = OB_SUCCESS;
     role = role_;
     epoch = leader_epoch_;
-    return ret;
+    return OB_SUCCESS;
   }
   // If you are the leader, then you get the accurate leader, if you are not the leader, then you get the lease owner
   int get_current_leader_likely(common::ObAddr &p_addr,
                                 int64_t &p_cur_leader_epoch) const override final
   {
-    int ret = OB_SUCCESS;
     p_addr = leader_;
     p_cur_leader_epoch = leader_epoch_;
-    return ret;
+    return OB_SUCCESS;
   }
   // For internal testing to switch the main use
   virtual int change_leader_to(const common::ObAddr &dest_addr) override final
   {
-    int ret = OB_SUCCESS;
     UNUSED(dest_addr);
-    return ret;
+    return OB_SUCCESS;
   }
   virtual int temporarily_downgrade_protocol_priority(const int64_t time_us, const char *reason) override final
   {
-    int ret = OB_SUCCESS;
     UNUSED(time_us);
     UNUSED(reason);
     return OB_SUCCESS;
@@ -104,44 +87,13 @@ public:
     UNUSED(buf_len);
     return 0;
   }
-  // Process message
-  virtual int handle_message(const ElectionPrepareRequestMsg &msg) override final
-  {
-    int ret = OB_SUCCESS;
-    UNUSED(msg);
-    return ret;
-  }
-  virtual int handle_message(const ElectionAcceptRequestMsg &msg) override final
-  {
-    int ret = OB_SUCCESS;
-    UNUSED(msg);
-    return ret;
-  }
-  virtual int handle_message(const ElectionPrepareResponseMsg &msg) override final
-  {
-    int ret = OB_SUCCESS;
-    UNUSED(msg);
-    return ret;
-  }
-  virtual int handle_message(const ElectionAcceptResponseMsg &msg) override final
-  {
-    int ret = OB_SUCCESS;
-    UNUSED(msg);
-    return ret;
-  }
-  virtual int handle_message(const ElectionChangeLeaderMsg &msg) override final
-  {
-    int ret = OB_SUCCESS;
-    UNUSED(msg);
-    return ret;
-  }
 public:
   common::ObAddr self_;
   common::ObAddr leader_;
   int64_t leader_epoch_;
   common::ObRole role_;
 };
-} // end of election
+} // end of mockelection
 } // end of palf
 } // end of oceanbase
 

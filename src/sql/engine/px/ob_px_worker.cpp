@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_px_worker.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "sql/engine/px/ob_px_admission.h"
 #include "observer/omt/ob_tenant.h"
@@ -167,10 +168,12 @@ void PxWorkerFunctor::operator ()(bool need_exec)
         ObThreadLogLevelUtils::init(env_arg_.get_log_level());
       }
     }
-    MTL_SWITCH(sqc_handler->get_tenant_id()) {
-      CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, sqc_handler->get_tenant_id()) {
+    // single process owner id (de-tenant: replaces former sys-tenant resource-owner arg)
+    static const uint64_t PROCESS_OWNER_ID = 1;
+    MOD_SCOPE {
+      CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, PROCESS_OWNER_ID) {
         if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context,
-            lib::ContextParam().set_mem_attr(MTL_ID(), ObModIds::OB_SQL_PX)))) {
+            lib::ContextParam().set_mem_attr(ObModIds::OB_SQL_PX)))) {
           LOG_WARN("create memory entity failed", K(ret));
         } else {
           WITH_CONTEXT(mem_context) {
@@ -254,7 +257,7 @@ int ObPxThreadWorker::run(ObPxRpcInitTaskArgs &task_arg)
 {
   int ret = OB_SUCCESS;
   int64_t group_id = THIS_WORKER.get_group_id();
-  omt::ObPxPools* px_pools = MTL(omt::ObPxPools*);
+  omt::ObPxPools* px_pools = share::g_mp->px_pools();
   if (OB_ISNULL(px_pools)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail get px pools", K(ret));

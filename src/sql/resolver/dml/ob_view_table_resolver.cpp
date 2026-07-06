@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/dml/ob_view_table_resolver.h"
-#include "share/catalog/ob_catalog_utils.h"
+#include "sql/session/ob_basic_session_info.h"
 namespace oceanbase
 {
 using namespace common;
@@ -71,11 +71,10 @@ int ObViewTableResolver::expand_view(TableItem &view_item)
         || OB_ISNULL(schema_guard = schema_checker_->get_schema_guard())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
-    } else if (OB_FAIL(schema_guard->get_database_id(session_info_->get_effective_tenant_id(),
-                                                     view_item.database_name_,
+    } else if (OB_FAIL(schema_guard->get_database_id(view_item.database_name_,
                                                      database_id))) {
       LOG_WARN("failed to get database id", K(ret));
-    } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+    } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                   view_item.ref_id_,
                                                   view_schema))) {
       LOG_WARN("get table schema failed", K(view_item));
@@ -165,35 +164,6 @@ int ObViewTableResolver::resolve_generate_table(const ParseNode &table_node, con
   }
   return ret;
 }
-// use_sys_tenant flag indicates whether to obtain schema as a system tenant
-int ObViewTableResolver::check_need_use_sys_tenant(bool &use_sys_tenant) const
-{
-  int ret = OB_SUCCESS;
-  // If the current tenant is already the system tenant, then ignore
-  const ObTableSchema *table_schema = NULL;
-  if (OB_ISNULL(session_info_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("session info is null");
-  } else if (OB_SYS_TENANT_ID == session_info_->get_effective_tenant_id()) {
-    use_sys_tenant = false;
-  } else {
-    use_sys_tenant = true;
-  }
-  // If the current stmt is not expanded from a system view, then ignore
-  if (OB_SUCC(ret) && use_sys_tenant) {
-    if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(), current_view_item.ref_id_, table_schema))) {
-      LOG_WARN("fail to get table_schema", K(ret));
-    } else if (NULL == table_schema) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("table_schema should not be NULL", K(ret));
-    } else if (!table_schema->is_sys_view()) {
-      use_sys_tenant = false;
-    }
-  }
-
-  return ret;
-}
-
 int ObViewTableResolver::check_in_sysview(bool &in_sysview) const
 {
   int ret = OB_SUCCESS;

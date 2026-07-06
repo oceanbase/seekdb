@@ -26,6 +26,7 @@
 #include "logservice/ob_log_base_header.h"
 #include "logservice/ob_log_handler.h"
 #include "share/scn.h"
+#include "storage/tablelock/ob_table_lock_rpc_struct.h"
 
 namespace oceanbase
 {
@@ -224,7 +225,7 @@ public:
 
   // =========== INHERITED FROM ObCommonCheckPoint ==========
   virtual share::SCN get_rec_scn();
-  virtual int flush(share::SCN recycle_scn, int64_t trace_id, bool need_freeze = true);
+  virtual int flush(share::SCN recycle_scn, bool need_freeze = true);
 
   virtual ObTabletID get_tablet_id() const;
 

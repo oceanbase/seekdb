@@ -22,6 +22,7 @@
 #define private public
 
 #include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+#include "mtlenv/mock_tenant_module_env.h"
 
 namespace oceanbase
 {
@@ -36,6 +37,8 @@ public:
 
   virtual void SetUp() override;
   virtual void TearDown() override;
+  static void SetUpTestCase();
+  static void TearDownTestCase();
 
   static const int64_t MAX_TEST_TABLET_CNT_IN_OBJ_POOL = 10000;
 
@@ -45,8 +48,8 @@ private:
 };
 
 TestTenantMetaObjPool::TestTenantMetaObjPool()
-  : obj_pool_(common::OB_SERVER_TENANT_ID, MAX_TEST_TABLET_CNT_IN_OBJ_POOL, "TestPool", ObCtxIds::META_OBJ_CTX_ID),
-    t3m_(common::OB_SERVER_TENANT_ID)
+  : obj_pool_(MAX_TEST_TABLET_CNT_IN_OBJ_POOL, "TestPool", ObCtxIds::META_OBJ_CTX_ID),
+    t3m_()
 {
 }
 
@@ -56,6 +59,19 @@ void TestTenantMetaObjPool::SetUp()
 
 void TestTenantMetaObjPool::TearDown()
 {
+}
+
+void TestTenantMetaObjPool::SetUpTestCase()
+{
+  ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
+  EXPECT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
+}
+
+void TestTenantMetaObjPool::TearDownTestCase()
+{
+  MockTenantModuleEnv::get_instance().destroy();
+  ObTimerService::get_instance().stop();
+  ObTimerService::get_instance().wait();
 }
 
 class TestConcurrentMetaObjPool : public share::ObThreadPool

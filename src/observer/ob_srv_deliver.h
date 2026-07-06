@@ -50,14 +50,12 @@ class QueueThread
 {
 public:
   QueueThread(const char *thread_name = nullptr,
-              uint64_t tenant_id = OB_SERVER_TENANT_ID,
               uint64_t group_id = share::OBCG_DEFAULT)
-      : thread_(queue_, thread_name, tenant_id, group_id), tg_id_(-1),
-        tenant_id_(tenant_id), n_thread_(0) {}
+      : thread_(queue_, thread_name, group_id), tg_id_(-1), n_thread_(0) {}
 
   ~QueueThread() { destroy(); }
 
-  int init() { return queue_.init(tenant_id_); }
+  int init() { return queue_.init(); }
 
 public:
   int set_thread_count(int thread_cnt) {
@@ -89,10 +87,8 @@ public:
   }
   class Thread : public lib::TGRunnable {
   public:
-    Thread(ObReqQueue &queue, const char *thread_name, 
-            const uint64_t tenant_id, const uint64_t group_id)
-        : queue_(queue), thread_name_(thread_name), 
-          tenant_id_(tenant_id), group_id_(group_id) {}
+    Thread(ObReqQueue &queue, const char *thread_name, const uint64_t group_id)
+        : queue_(queue), thread_name_(thread_name), group_id_(group_id) {}
     void run1()
     {
       if (thread_name_ != nullptr) {
@@ -105,14 +101,14 @@ public:
   private:
     ObReqQueue &queue_;
     const char *thread_name_;
-    const uint64_t tenant_id_;
+    
     const uint64_t group_id_;
   } thread_;
   ObReqQueue queue_;
   int tg_id_;
 
 private:
-  uint64_t tenant_id_;
+  
   int n_thread_;
 };
 

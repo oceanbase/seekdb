@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/virtual_table/ob_all_virtual_ccl_status.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server_utils.h"
 #include "sql/ob_sql_ccl_rule_manager.h"
 
@@ -67,35 +68,10 @@ void ObAllVirtualCCLStatus::reset()
   cur_idx_ = 0;
   MEMSET(svr_ip_buf_, 0, common::OB_IP_STR_BUFF);
   tmp_ccl_status_.reset();
-  omt::ObMultiTenantOperator::reset();
   ObVirtualTableScannerIterator::reset();
 }
 
 int ObAllVirtualCCLStatus::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    LOG_WARN("execute fail", K(ret));
-  }
-  return ret;
-}
-
-bool ObAllVirtualCCLStatus::is_need_process(uint64_t tenant_id)
-{
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
-    return true;
-  }
-  return false;
-}
-
-void ObAllVirtualCCLStatus::release_last_tenant()
-{
-  cur_idx_ = 0;
-  tmp_ccl_status_.reset();
-}
-
-int ObAllVirtualCCLStatus::process_curr_tenant(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   row = nullptr;
@@ -108,9 +84,9 @@ int ObAllVirtualCCLStatus::process_curr_tenant(ObNewRow *&row)
     LOG_WARN("allocator_ should not be NULL", K(ret));
   } else if (FALSE_IT(get_all_op.set_allocator(allocator_))) {
   } else if (tmp_ccl_status_.count() == 0) {
-    if (OB_FAIL(MTL(ObSQLCCLRuleManager *)->get_rule_level_concurrency_map().foreach_refactored(get_all_op))) {
+    if (OB_FAIL(share::g_mp->sqlccl_rule_manager()->get_rule_level_concurrency_map().foreach_refactored(get_all_op))) {
       LOG_WARN("fail to get ccl status from rule_level_concurrency_map", K(ret));
-    } else if (OB_FAIL(MTL(ObSQLCCLRuleManager *)->get_format_sqlid_level_concurrency_map().foreach_refactored(get_all_op))) {
+    } else if (OB_FAIL(share::g_mp->sqlccl_rule_manager()->get_format_sqlid_level_concurrency_map().foreach_refactored(get_all_op))) {
       LOG_WARN("fail to get ccl status from format_sqlid_level_concurrency_map", K(ret));
     }
   }

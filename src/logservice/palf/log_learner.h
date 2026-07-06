@@ -23,7 +23,6 @@
 #include "lib/utility/ob_print_utils.h"      // print...
 #include "lib/utility/ob_unify_serialize.h"  // serialize
 #include "lib/utility/ob_macro_utils.h"      // some macro
-#include "common/ob_region.h"                // common::ObRegion
 #include "common/ob_learner_list.h"          // common::BaseLearnerList
 
 namespace oceanbase
@@ -37,7 +36,6 @@ class LogLearner
 public:
   LogLearner();
   LogLearner(const common::ObAddr &server, const int64_t register_time_us);
-  LogLearner(const common::ObAddr &server, const common::ObRegion &region, const int64_t register_time_us);
   LogLearner(const LogLearner &child);
   virtual ~LogLearner();
   bool is_valid() const;
@@ -49,13 +47,11 @@ public:
   bool operator==(const LogLearner &val) const;
   bool operator!=(const LogLearner &val) const;
   LogLearner &operator=(const LogLearner &val);
-  TO_STRING_KV(K_(server), K_(region), K_(register_time_us), K_(keepalive_ts));
+  TO_STRING_KV(K_(server), K_(register_time_us), K_(keepalive_ts));
 
 public:
   // net addr of LogLearner
   common::ObAddr server_;
-  // Region info
-  common::ObRegion region_;
   // <parent, child, register_time_us_> uniquely identifies a available
   // registration when this child is in children list of parent
   int64_t register_time_us_;

@@ -63,7 +63,7 @@ public:
 
   ObReferedMap(const lib::ObLabel &label = ObModIds::OB_REFERED_MAP) : inited_(false), allocator_(),
     bucket_allocator_(), hash_table_()
-  { allocator_.set_attr(ObMemAttr(common::OB_SERVER_TENANT_ID, label)); }
+  { allocator_.set_attr(ObMemAttr(label)); }
   virtual ~ObReferedMap() {}
 
   int init(const int64_t bucket_num);

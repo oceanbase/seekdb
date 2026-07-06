@@ -1287,10 +1287,9 @@ void do_destroy(Array &array, NormalPointerTag, BucketAllocator &alloc)
 struct DefaultSimpleAllocerAllocator
 {
 public:
-  explicit DefaultSimpleAllocerAllocator(uint64_t tenant_id = OB_SERVER_TENANT_ID,
-                                         const lib::ObLabel &label = ObModIds::OB_HASH_NODE)
+  explicit DefaultSimpleAllocerAllocator(const lib::ObLabel &label = ObModIds::OB_HASH_NODE)
   {
-    attr_.tenant_id_ = tenant_id;
+    
     attr_.label_ = label;
   }
   void *alloc(const int64_t sz)

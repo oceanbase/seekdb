@@ -15,6 +15,7 @@
  */
 
 #include "storage/tablet/ob_tablet_ddl_complete_replay_executor.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_print_utils.h"
@@ -111,7 +112,7 @@ int ObTabletDDLCompleteReplayExecutor::update_tablet_table_store(ObTablet &table
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
   ObLSHandle ls_handle;
-  ObLSService *ls_service = MTL(ObLSService*);
+  ObLSService *ls_service = share::g_mp->ls_service();
   ObTabletHandle new_tablet_handle;
 
   const ObSSTable *first_major_sstable = nullptr;

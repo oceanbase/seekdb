@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ob_dml_running_ctx.h"
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 #include "storage/tablet/ob_tablet.h"
 #include "storage/memtable/ob_memtable_context.h"
 #include "storage/tx/ob_trans_part_ctx.h"
@@ -80,13 +80,13 @@ int ObDMLRunningCtx::init(
     LOG_WARN("invalid argument", K(ret), K(store_ctx_),
         K(dml_param_), KP(schema_service));
   } else {
-    const uint64_t tenant_id = MTL_ID();
+    
     const uint64_t table_id = dml_param_.table_param_->get_data_table().get_table_id();
     const int64_t version = dml_param_.schema_version_;
     const int64_t tenant_schema_version = dml_param_.tenant_schema_version_;
-    if (dml_param_.check_schema_version_ && OB_FAIL(check_schema_version(*schema_service, tenant_id, table_id,
+    if (dml_param_.check_schema_version_ && OB_FAIL(check_schema_version(*schema_service, table_id,
         tenant_schema_version, version, tablet_handle))) {
-      LOG_WARN("failed to check schema version", K(ret), K(tenant_id), K(tenant_schema_version), K(table_id), K(version));
+      LOG_WARN("failed to check schema version", K(ret), K(tenant_schema_version), K(table_id), K(version));
     }
   }
 
@@ -269,7 +269,6 @@ int ObDMLRunningCtx::init_cmp_funcs()
 
 int ObDMLRunningCtx::check_schema_version(
     share::schema::ObMultiVersionSchemaService &schema_service,
-    const uint64_t tenant_id,
     const uint64_t table_id,
     const int64_t tenant_schema_version,
     const int64_t table_version,
@@ -278,14 +277,14 @@ int ObDMLRunningCtx::check_schema_version(
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = nullptr;
   bool check_formal = !is_inner_table(table_id);
-  int tmp_ret = check_tenant_schema_version(schema_service, tenant_id, table_id, tenant_schema_version);
+  int tmp_ret = check_tenant_schema_version(schema_service, table_id, tenant_schema_version);
   if (OB_SUCCESS == tmp_ret) {
     // Check tenant schema first. If not pass, then check table level schema version
-  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(tenant_id, schema_guard_))) {
-    LOG_WARN("failed to get tenant schema guard", K(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard_))) {
+    LOG_WARN("failed to get tenant schema guard", K(ret));
   } else if (check_formal && OB_FAIL(schema_guard_.check_formal_guard())) {
-    LOG_WARN("schema_guard is not formal", K(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard_.get_table_schema(tenant_id, table_id, table_schema))) {
+    LOG_WARN("schema_guard is not formal", K(ret));
+  } else if (OB_FAIL(schema_guard_.get_table_schema( table_id, table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
@@ -322,7 +321,6 @@ int ObDMLRunningCtx::check_schema_version(
 
 int ObDMLRunningCtx::check_tenant_schema_version(
     share::schema::ObMultiVersionSchemaService &schema_service,
-    const uint64_t tenant_id,
     const uint64_t table_id,
     const int64_t tenant_schema_version)
 {
@@ -332,21 +330,21 @@ int ObDMLRunningCtx::check_tenant_schema_version(
     //inner table can't skip table schema check
     ret = OB_SCHEMA_EAGAIN;
   } else if (tenant_schema_version > 0
-             && OB_FAIL(schema_service.get_tenant_refreshed_schema_version(tenant_id, latest_tenant_version))) {
-    LOG_WARN("failed to get tenant schema version", K(ret), K(tenant_id), K(tenant_schema_version));
+             && OB_FAIL(schema_service.get_tenant_refreshed_schema_version(latest_tenant_version))) {
+    LOG_WARN("failed to get tenant schema version", K(ret), K(tenant_schema_version));
   } else if (tenant_schema_version < 0 || latest_tenant_version < 0) {
     ret = OB_SCHEMA_EAGAIN;
   } else if (!share::schema::ObSchemaService::is_formal_version(latest_tenant_version)) {
     ret = OB_SCHEMA_EAGAIN;
     LOG_INFO("local schema_version is not formal, try again", K(ret),
-             K(tenant_id), K(tenant_schema_version), K(latest_tenant_version));
+             K(tenant_schema_version), K(latest_tenant_version));
   } else if (latest_tenant_version > 0 && tenant_schema_version == latest_tenant_version) {
     // no schema change, do nothing
     ret = OB_SUCCESS;
   } else {
     ret = OB_SCHEMA_EAGAIN;
     LOG_INFO("need check table schema version", K(ret),
-             K(tenant_id), K(tenant_schema_version), K(latest_tenant_version));
+             K(tenant_schema_version), K(latest_tenant_version));
   }
   return ret;
 }

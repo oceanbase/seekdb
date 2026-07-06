@@ -18,12 +18,12 @@
 #define OCEANBASE_SQL_OB_EXPR_VECTOR
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "lib/udt/ob_array_type.h"
-#include "share/vector_type/ob_vector_l2_distance.h"
-#include "share/vector_type/ob_vector_cosine_distance.h"
-#include "share/vector_type/ob_vector_ip_distance.h"
-#include "share/vector_type/ob_vector_l1_distance.h"
-#include "share/vector_type/ob_sparse_vector_ip_distance.h"
+#include "common/udt/ob_array_type.h"
+#include "storage/vector_type/ob_vector_l2_distance.h"
+#include "storage/vector_type/ob_vector_cosine_distance.h"
+#include "storage/vector_type/ob_vector_ip_distance.h"
+#include "storage/vector_type/ob_vector_l1_distance.h"
+#include "storage/vector_type/ob_sparse_vector_ip_distance.h"
 
 
 namespace oceanbase

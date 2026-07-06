@@ -16,7 +16,7 @@
 
 #include "lib/file/file_directory_utils.h"
 
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 #include "lib/utility/ob_hang_fatal_error.h"
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
 #include "lib/string/ob_sql_string.h"

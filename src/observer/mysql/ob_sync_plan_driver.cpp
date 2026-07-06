@@ -141,10 +141,8 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
       flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = result.has_more_result();
       flags.status_flags_.OB_SERVER_STATUS_CURSOR_EXISTS = is_prexecute_ ? true : false;
       flags.status_flags_.OB_SERVER_STATUS_LAST_ROW_SENT = is_prexecute_ ? true : false;
-      if (!session_.is_obproxy_mode()) {
-        // in java client or others, use slow query bit to indicate partition hit or not
-        flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_.partition_hit().get_bool();
-      }
+      // in java client or others, use slow query bit to indicate partition hit or not
+      flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_.partition_hit().get_bool();
 
       eofp.set_server_status(flags);
 
@@ -260,7 +258,7 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
     } else {
       int sret = OB_SUCCESS;
       bool is_partition_hit = session_.get_err_final_partition_hit(ret);
-      if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL, is_partition_hit, (void *)ctx_.get_reroute_info()))) {
+      if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL, is_partition_hit))) {
         LOG_WARN("send error packet fail", K(sret), K(ret));
       }
     }

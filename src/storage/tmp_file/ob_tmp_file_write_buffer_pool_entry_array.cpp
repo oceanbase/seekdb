@@ -72,11 +72,11 @@ int ObTmpWriteBufferPoolEntryArray::init()
     LOG_WARN("tmp file entry array init twice", KR(ret));
   } else if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(),
                                      OB_MALLOC_MIDDLE_BLOCK_SIZE,
-                                     ObMemAttr(MTL_ID(), "TmpFileEntArPt")))) {
+                                     ObMemAttr("TmpFileEntArPt")))) {
     LOG_WARN("fail to init allocator", KR(ret), K(OB_MALLOC_NORMAL_BLOCK_SIZE));
   } else {
-    extend_allocator_.set_attr(ObMemAttr(MTL_ID(), "TmpFileEntBkt"));
-    buckets_.set_attr(ObMemAttr(MTL_ID(), "TmpFileEntBktAr"));
+    extend_allocator_.set_attr(ObMemAttr("TmpFileEntBkt"));
+    buckets_.set_attr(ObMemAttr("TmpFileEntBktAr"));
     size_ = 0;
     is_inited_ = true;
   }

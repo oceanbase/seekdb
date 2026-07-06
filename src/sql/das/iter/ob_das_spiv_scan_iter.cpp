@@ -47,7 +47,7 @@ int ObDASSPIVScanIter::inner_init(ObDASIterParam &param)
 
     if (OB_ISNULL(mem_context_)) {
       lib::ContextParam param;
-      param.set_mem_attr(MTL_ID(), "SPIV_SCAN", ObCtxIds::DEFAULT_CTX_ID);
+      param.set_mem_attr("SPIV_SCAN", ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
         LOG_WARN("failed to create vector spiv_scan memory context", K(ret));
       }

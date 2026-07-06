@@ -47,7 +47,6 @@ int ObLongopsMgr::init()
     LOG_WARN("failed to init resource map", K(ret));
   } else if (OB_FAIL(allocator_.init(DEFAULT_ALLOCATOR_PAGE_SIZE,
                                      lib::ObLabel("LongopsMgr"),
-                                     OB_SERVER_TENANT_ID,
                                      memory_limit))) {
     LOG_WARN("failed to init allocator", K(ret));
   } else {
@@ -225,7 +224,7 @@ int ObLongopsIterator::init(ObLongopsMgr *longops_mgr)
   return ret;
 }
 
-int ObLongopsIterator::get_next(const uint64_t tenant_id, ObLongopsValue &value)
+int ObLongopsIterator::get_next(ObLongopsValue &value)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -235,7 +234,7 @@ int ObLongopsIterator::get_next(const uint64_t tenant_id, ObLongopsValue &value)
     bool need_retry = true;
     while (OB_SUCC(ret) && need_retry && key_cursor_ < key_snapshot_.count()) {
       const ObILongopsKey &key = key_snapshot_.at(key_cursor_);
-      if (!is_sys_tenant(tenant_id) && key.tenant_id_ != tenant_id) {
+      if (false && false) {
         // Normal user tenants can only check their own longops tasks.
       } else if (OB_FAIL(longops_mgr_->get_longops(key, value))) {
         if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {

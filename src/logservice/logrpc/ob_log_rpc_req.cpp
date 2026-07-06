@@ -336,22 +336,19 @@ OB_SERIALIZE_MEMBER(LogChangeAccessModeCmd, src_, ls_id_, mode_version_, access_
 
 // ============= LogFlashbackMsg start =============
 LogFlashbackMsg::LogFlashbackMsg()
-    : src_tenant_id_(OB_INVALID_TENANT_ID),
-      src_(),
+    : src_(),
       ls_id_(-1),
       mode_version_(palf::INVALID_PROPOSAL_ID),
       flashback_scn_(),
       is_flashback_req_(false) { }
 
 LogFlashbackMsg::LogFlashbackMsg(
-    const uint64_t src_tenant_id,
     const common::ObAddr &src,
     const int64_t ls_id,
     const int64_t mode_version,
     const SCN &flashback_scn,
     const bool is_flashback_req)
-    : src_tenant_id_(src_tenant_id),
-      src_(src),
+    : src_(src),
       ls_id_(ls_id),
       mode_version_(mode_version),
       flashback_scn_(flashback_scn),
@@ -359,7 +356,7 @@ LogFlashbackMsg::LogFlashbackMsg(
 
 bool LogFlashbackMsg::is_valid() const
 {
-  return is_valid_tenant_id(src_tenant_id_) &&
+  return true &&
          src_.is_valid() &&
          -1 != ls_id_ &&
          palf::INVALID_PROPOSAL_ID != mode_version_ &&
@@ -368,7 +365,7 @@ bool LogFlashbackMsg::is_valid() const
 
 void LogFlashbackMsg::reset()
 {
-  src_tenant_id_ = OB_INVALID_TENANT_ID;
+  
   src_.reset();
   ls_id_ = -1;
   mode_version_ = palf::INVALID_PROPOSAL_ID;
@@ -376,17 +373,15 @@ void LogFlashbackMsg::reset()
   is_flashback_req_ = false;
 }
 
-OB_SERIALIZE_MEMBER(LogFlashbackMsg, src_tenant_id_, src_, ls_id_,
+OB_SERIALIZE_MEMBER(LogFlashbackMsg, src_, ls_id_,
     mode_version_, flashback_scn_, is_flashback_req_);
 // ============= LogFlashbackMsg end =============
 
 // ============= LogGetCkptReq begin ===========
 LogGetCkptReq::LogGetCkptReq(
     const common::ObAddr &src,
-    const uint64_t tenant_id,
     const share::ObLSID &ls_id)
   : src_(src),
-    tenant_id_(tenant_id),
     ls_id_(ls_id) { }
 
 LogGetCkptReq::~LogGetCkptReq()
@@ -396,16 +391,15 @@ LogGetCkptReq::~LogGetCkptReq()
 
 bool LogGetCkptReq::is_valid() const
 {
-  return src_.is_valid() && OB_INVALID_TENANT_ID != tenant_id_ && ls_id_.is_valid();
+  return src_.is_valid() && ls_id_.is_valid();
 }
 
 void LogGetCkptReq::reset()
 {
   src_.reset();
-  tenant_id_ = OB_INVALID_TENANT_ID;
   ls_id_.reset();
 }
-OB_SERIALIZE_MEMBER(LogGetCkptReq, src_, tenant_id_, ls_id_);
+OB_SERIALIZE_MEMBER(LogGetCkptReq, src_, ls_id_);
 // ============= LogGetCkptReq end =============
 
 // ============= LogGetCkptResp begin ===========

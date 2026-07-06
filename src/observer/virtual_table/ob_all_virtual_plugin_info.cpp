@@ -58,7 +58,7 @@ void ObAllVirtualPluginInfo::reset() {
 int ObAllVirtualPluginInfo::inner_open()
 {
   int ret = OB_SUCCESS;
-  ObMemAttr mem_attr(MTL_ID(), "Plugin");
+  ObMemAttr mem_attr("Plugin");
 
   if (FALSE_IT(plugin_entries_.set_attr(mem_attr))) {
   } else if (OB_FAIL(GCTX.plugin_mgr_->list_all_plugin_entries(plugin_entries_))) {

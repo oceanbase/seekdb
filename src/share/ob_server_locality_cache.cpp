@@ -29,8 +29,6 @@ ObServerLocality::ObServerLocality()
     addr_(),
     zone_(),
     zone_type_(ObZoneType::ZONE_TYPE_INVALID),
-    idc_(),
-    region_(),
     start_service_time_(0),
     server_stop_time_(0),
     server_status_(ObServerStatus::OB_DISPLAY_MAX)
@@ -49,8 +47,6 @@ void ObServerLocality::reset()
   addr_.reset();
   zone_.reset();
   zone_type_ = ObZoneType::ZONE_TYPE_INVALID;
-  idc_.reset();
-  region_.reset();
   start_service_time_ = 0;
   server_stop_time_ = 0;
   server_status_ = ObServerStatus::OB_DISPLAY_MAX;
@@ -61,10 +57,6 @@ int ObServerLocality::assign(const ObServerLocality &other)
   int ret = OB_SUCCESS;
   if (OB_FAIL(zone_.assign(other.zone_))) {
     LOG_WARN("fail to assign zone", K(ret), K(zone_), K(other.zone_));
-  } else if (OB_FAIL(idc_.assign(other.idc_))) {
-    LOG_WARN("fail to assign idc", K(ret), K(idc_), K(other.idc_));
-  } else if (OB_FAIL(region_.assign(other.region_))) {
-    LOG_WARN("fail to assign region", K(ret), K(region_), K(other.region_));
   } else {
     addr_ = other.addr_;
     zone_type_ = other.zone_type_;
@@ -84,8 +76,6 @@ int ObServerLocality::init(const char *svr_ip,
                            const int32_t svr_port,
                            const ObZone &zone,
                            const ObZoneType zone_type,
-                           const ObIDC &idc,
-                           const ObRegion &region,
                            bool is_active)
 {
   int ret = OB_SUCCESS;
@@ -97,10 +87,6 @@ int ObServerLocality::init(const char *svr_ip,
     LOG_ERROR("fail to set addr", K(ret), K(svr_ip), K(svr_port));
   } else if (OB_FAIL(zone_.assign(zone))) {
     LOG_WARN("fail to assign zone", K(ret), K(zone_), K(zone));
-  } else if (OB_FAIL(idc_.assign(idc))) {
-    LOG_WARN("fail to assign idc", K(idc), K(idc_), K(ret));
-  } else if (OB_FAIL(region_.assign(region))) {
-    LOG_WARN("fail to assign region", K(ret), K(region_), K(region));
   } else {
     zone_type_ = zone_type;
     inited_ = true;

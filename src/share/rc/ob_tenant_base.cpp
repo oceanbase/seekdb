@@ -16,10 +16,13 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_tenant_base.h"
+#include "observer/omt/ob_tenant_mtl_helper.h"  // get_mtl_ptr real user(dual MTL framework definitions, header already legalized as conf L2)
+#include "share/rc/ob_module_provider.h"
+#include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "share/resource_manager/ob_cgroup_ctrl.h"
-#include "src/share/schema/ob_schema_struct.h"
-#include "observer/omt/ob_tenant_mtl_helper.h"
+#include "share/schema/ob_schema_struct.h"
 #include "lib/resource/ob_affinity_ctrl.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -28,7 +31,7 @@ namespace common
 {
 uint64_t mtl_get_id()
 {
-  return MTL_ID();
+  return 1;
 }
 }
 
@@ -38,18 +41,19 @@ namespace common
 
 int64_t __attribute__((used)) get_mtl_id()
 {
-  return MTL_ID();
+  return 1;
 }
 
-void __attribute__((used)) lib_mtl_switch(int64_t tenant_id, std::function<void(int)> fn)
+ObRbMemMgr *__attribute__((used)) get_rb_mem_mgr()
+{
+  return ::oceanbase::share::g_mp->rb_mem_mgr();
+}
+
+void __attribute__((used)) lib_mtl_switch(std::function<void(int)> fn)
 {
   int ret = OB_SUCCESS;
   MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-  if (tenant_id != MTL_ID()) {
-    if (OB_FAIL(guard.switch_to(tenant_id))) {
-      LOG_WARN("failed to switch to tenant", K(ret), K(tenant_id));
-    }
-  }
+  
   fn(ret);
 }
 
@@ -75,21 +79,9 @@ namespace share
 {
 using namespace oceanbase::common;
 
-#define INIT_BIND_FUNC_TMP(IDX) \
-  ObTenantBase::new_m##IDX##_func_name ObTenantBase::new_m##IDX##_func = nullptr; \
-  ObTenantBase::init_m##IDX##_func_name ObTenantBase::init_m##IDX##_func = nullptr; \
-  ObTenantBase::start_m##IDX##_func_name ObTenantBase::start_m##IDX##_func = nullptr; \
-  ObTenantBase::stop_m##IDX##_func_name ObTenantBase::stop_m##IDX##_func = nullptr; \
-  ObTenantBase::wait_m##IDX##_func_name ObTenantBase::wait_m##IDX##_func = nullptr; \
-  ObTenantBase::destroy_m##IDX##_func_name ObTenantBase::destroy_m##IDX##_func = nullptr;
-#define INIT_BIND_FUNC(UNUSED, IDX) INIT_BIND_FUNC_TMP(IDX)
-LST_DO2(INIT_BIND_FUNC, (), MTL_MEMBERS);
 
-#define CONSTRUCT_MEMBER(T, IDX) m##IDX##_()
-ObTenantBase::ObTenantBase(const uint64_t id, const int64_t epoch, bool enable_tenant_ctx_check)
-    : LST_DO2(CONSTRUCT_MEMBER, (,), MTL_MEMBERS),
-    id_(id),
-    epoch_(epoch),
+ObTenantBase::ObTenantBase(const int64_t epoch, bool enable_tenant_ctx_check)
+    : epoch_(epoch),
     inited_(false),
     created_(false),
     mtl_init_ctx_(nullptr),
@@ -104,24 +96,16 @@ ObTenantBase::ObTenantBase(const uint64_t id, const int64_t epoch, bool enable_t
     marked_prepare_gc_ts_(0)
 {
 }
-#undef CONSTRUCT_MEMBER
 
 ObTenantBase &ObTenantBase::operator=(const ObTenantBase &ctx)
 {
   if (this == &ctx) {
     return *this;
   }
-  id_ = ctx.id_;
   epoch_ = ctx.epoch_;
   mtl_init_ctx_ = ctx.mtl_init_ctx_;
   tenant_role_value_ = ctx.tenant_role_value_;
   switchover_epoch_ = ctx.switchover_epoch_;
-#define CONSTRUCT_MEMBER_TMP2(IDX) \
-  m##IDX##_ = ctx.m##IDX##_;
-#define CONSTRUCT_MEMBER2(UNUSED, IDX) CONSTRUCT_MEMBER_TMP2(IDX)
-  LST_DO2(CONSTRUCT_MEMBER2, (), MTL_MEMBERS);
-#undef CONSTRUCT_MEMBER_TMP2
-#undef CONSTRUCT_MEMBER2
   return *this;
 }
 
@@ -142,7 +126,7 @@ int ObTenantBase::init(ObCgroupCtrl *cgroup)
 {
   int ret = OB_SUCCESS;
 
-  ObMemAttr attr(id_, "DynamicFactor");
+  ObMemAttr attr("DynamicFactor");
   if (inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice error", K(ret));
@@ -152,7 +136,7 @@ int ObTenantBase::init(ObCgroupCtrl *cgroup)
     LOG_WARN("fail to create thread dynamic_factor_map", K(ret));
   } else {
     if (cgroup == nullptr) {
-      LOG_WARN("ObTenantBase init cgroup is null", K(id_));
+      LOG_WARN("ObTenantBase init cgroup is null");
     } else {
       cgroups_ = cgroup;
     }
@@ -162,130 +146,6 @@ int ObTenantBase::init(ObCgroupCtrl *cgroup)
   return ret;
 }
 
-int ObTenantBase::create_mtl_module()
-{
-  int ret = OB_SUCCESS;
-  lib::ObDisableDiagnoseGuard disable_guard;
-  if (created_) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("create twice error", K(ret));
-  }
-
-  LOG_INFO("create_mtl_module", K(id_));
-  #define CREATE_TMP(IDX)                                                                   \
-    if (OB_SUCC(ret)) {                                                                     \
-      void *mtl_ptr = nullptr;                                                              \
-      if (nullptr == ObTenantBase::new_m##IDX##_func) {                                     \
-      } else if (OB_FAIL(ObTenantBase::new_m##IDX##_func(m##IDX##_))) {                     \
-        LOG_WARN("mtl create failed", K(ret), "type", typeid(m##IDX##_).name());            \
-      } else if (get_mtl_ptr(m##IDX##_, mtl_ptr)) {                                         \
-        LOG_INFO("finish create mtl"#IDX, "type", typeid(m##IDX##_).name(), KP(mtl_ptr));   \
-      }                                                                                     \
-    }
-  #define CREATE(UNUSED, IDX) CREATE_TMP(IDX)
-    LST_DO2(CREATE, (), MTL_MEMBERS);
-
-  if (OB_SUCC(ret)) {
-    created_ = true;
-  }
-
-  return ret;
-}
-
-int ObTenantBase::init_mtl_module()
-{
-  int ret = OB_SUCCESS;
-  LOG_INFO("init_mtl_module", K(id_));
-  #define INIT_TMP(IDX)                                                                          \
-    if (OB_SUCC(ret)) {                                                                          \
-      int64_t start_time_us = ObTimeUtility::current_time();                                     \
-      if (nullptr == ObTenantBase::init_m##IDX##_func) {                                         \
-      } else if (OB_FAIL(ObTenantBase::init_m##IDX##_func(m##IDX##_))) {                         \
-        LOG_WARN("mtl init failed", K(ret), "type", typeid(m##IDX##_).name());                   \
-      }                                                                                          \
-      int64_t cost_time_us = ObTimeUtility::current_time() - start_time_us;                      \
-      LOG_INFO("finish init mtl"#IDX, K(cost_time_us), "type", typeid(m##IDX##_).name());        \
-    }
-  #define INIT(UNUSED, IDX) INIT_TMP(IDX)
-    LST_DO2(INIT, (), MTL_MEMBERS);
-
-  return ret;
-}
-int ObTenantBase::start_mtl_module()
-{
-  int ret = OB_SUCCESS;
-  LOG_INFO("start_mtl_module", K(id_));
-
-  #define START_TMP(IDX)                                                                       \
-    if (OB_SUCC(ret)) {                                                                        \
-      int64_t start_time_us = ObTimeUtility::current_time();                                   \
-      if (nullptr == ObTenantBase::start_m##IDX##_func) {                                      \
-      } else if (OB_FAIL(ObTenantBase::start_m##IDX##_func(m##IDX##_))) {                      \
-        LOG_WARN("mtl start failed", K(ret), "type", typeid(m##IDX##_).name());                \
-      }                                                                                        \
-      int64_t cost_time_us = ObTimeUtility::current_time() - start_time_us;                    \
-      LOG_INFO("finish start mtl"#IDX, K(cost_time_us), "type", typeid(m##IDX##_).name());     \
-    }
-  #define START(UNUSED, IDX) START_TMP(IDX)
-    LST_DO2(START, (), MTL_MEMBERS);
-
-  return ret;
-
-}
-
-void ObTenantBase::stop_mtl_module()
-{
-  LOG_INFO("stop_mtl_module", K(id_));
-  // Single-tenant: re-assert tenant context so MTL() inside module stop()
-  // resolves to this tenant's own modules during teardown
-  // (g_tenant_ptr may point to the dummy ctx at this point).
-  ObTenantEnv::set_tenant(this);
-  ObSEArray<FuncWrapper, 100> func_arr;
-#define STOP_TMP(IDX)                                                                               \
-  if (ObTenantBase::stop_m##IDX##_func != nullptr) {                                                \
-    FuncWrapper fw;                                                                                 \
-    fw.func_ = [this] () {                                                                          \
-      int64_t start_time_us = ObTimeUtility::current_time();                                        \
-      this->stop_m##IDX##_func(this->m##IDX##_);                                                    \
-      int64_t cost_time_us = ObTimeUtility::current_time() - start_time_us;                         \
-      FLOG_INFO("finish stop mtl"#IDX, K(cost_time_us), "type", typeid(this->m##IDX##_).name());    \
-    };                                                                                              \
-    func_arr.push_back(fw);                                                                         \
-  }
-#define STOP(UNUSED, IDX) STOP_TMP(IDX)
-  LST_DO2(STOP, (), MTL_MEMBERS);
-  int count = int(func_arr.count());
-  for (int i = count - 1; i >= 0; i--) {
-      func_arr.at(i).func_();
-  }
-}
-
-void ObTenantBase::wait_mtl_module()
-{
-  LOG_INFO("wait_mtl_module", K(id_));
-  // Single-tenant: re-assert tenant context so MTL() inside module wait()
-  // resolves to this tenant's own modules during teardown
-  // (g_tenant_ptr may point to the dummy ctx at this point).
-  ObTenantEnv::set_tenant(this);
-  ObSEArray<FuncWrapper, 100> func_arr;
-#define WAIT_TMP(IDX)                                                                             \
-  if (ObTenantBase::wait_m##IDX##_func != nullptr) {                                              \
-    FuncWrapper fw;                                                                               \
-    fw.func_ = [this] () {                                                                        \
-      int64_t start_time_us = ObTimeUtility::current_time();                                      \
-      this->wait_m##IDX##_func(this->m##IDX##_);                                                  \
-      int64_t cost_time_us = ObTimeUtility::current_time() - start_time_us;                       \
-      FLOG_INFO("finish wait mtl"#IDX, K(cost_time_us), "type", typeid(this->m##IDX##_).name());  \
-    };                                                                                            \
-    func_arr.push_back(fw);                                                                       \
-  }
-#define WAIT(UNUSED, IDX) WAIT_TMP(IDX)
-  LST_DO2(WAIT, (), MTL_MEMBERS);
-  int count = int(func_arr.count());
-  for (int i = count - 1; i >= 0; i--) {
-      func_arr.at(i).func_();
-  }
-}
 
 void ObTenantBase::destroy()
 {
@@ -303,46 +163,6 @@ void ObTenantBase::destroy()
 }
 
 
-void ObTenantBase::destroy_mtl_module()
-{
-  LOG_INFO("destroy_mtl_module", K(id_));
-  // Single-tenant: re-assert tenant context so MTL() inside module destroy()
-  // resolves to this tenant's own modules during teardown
-  // (g_tenant_ptr may point to the dummy ctx at this point).
-  ObTenantEnv::set_tenant(this);
-   ObSEArray<FuncWrapper, 100> func_arr;
-#define DESTROY_TMP(IDX)                                                                                           \
-  if (ObTenantBase::destroy_m##IDX##_func != nullptr) {                                                            \
-    FuncWrapper fw;                                                                                                \
-    fw.func_ = [this] () {                                                                                         \
-      int ret = OB_SUCCESS;                                                                                        \
-      void *mtl_ptr = nullptr;                                                                                     \
-      if (get_mtl_ptr(this->m##IDX##_, mtl_ptr)) {                                                                 \
-        if (nullptr == mtl_ptr) {                                                                                  \
-         LOG_WARN("mtl is nullptr before destroy", "type", typeid(this->m##IDX##_).name());                        \
-        }                                                                                                          \
-      }                                                                                                            \
-      int64_t start_time_us = ObTimeUtility::current_time();                                                       \
-      this->destroy_m##IDX##_func(this->m##IDX##_);                                                                \
-      int64_t cost_time_us = ObTimeUtility::current_time() - start_time_us;                                        \
-      FLOG_INFO("finish destroy mtl"#IDX, K(cost_time_us), KP(mtl_ptr), "type", typeid(this->m##IDX##_).name());   \
-      if (get_mtl_ptr(this->m##IDX##_, mtl_ptr)) {                                                                 \
-        if (nullptr != mtl_ptr) {                                                                                  \
-          LOG_WARN("mtl is not nullptr after destroy", "type", typeid(this->m##IDX##_).name());                    \
-        }                                                                                                          \
-      }                                                                                                            \
-    };                                                                                                             \
-    func_arr.push_back(fw);                                                                                        \
-  }
-#define DESTROY(UNUSED, IDX) DESTROY_TMP(IDX)
-  LST_DO2(DESTROY, (), MTL_MEMBERS);
-  int count = int(func_arr.count());
-  for (int i = count - 1; i >= 0; i--) {
-      func_arr.at(i).func_();
-  }
-
-  created_ = false;
-}
 
 ObCgroupCtrl *ObTenantBase::get_cgroup()
 {
@@ -371,10 +191,10 @@ int ObTenantBase::pre_run()
   ObCgroupCtrl *cgroup_ctrl = get_cgroup();
   if (OB_NOT_NULL(cgroup_ctrl) && cgroup_ctrl->is_valid()) {
     // add thread to tenant OBCG_DEFAULT cgroup
-    ret = cgroup_ctrl->add_self_to_cgroup_(id_);
+    ret = cgroup_ctrl->add_self_to_cgroup_();
   }
 
-  LOG_INFO("tenant thread pre_run", K(ret), K(thread_count_), K(id_), K(GET_GROUP_ID()));
+  LOG_INFO("tenant thread pre_run", K(ret), K(thread_count_), K(GET_GROUP_ID()));
   return ret;
 }
 
@@ -387,7 +207,7 @@ int ObTenantBase::end_run()
     thread_list_.remove(node);
   }
   ATOMIC_DEC(&thread_count_);
-  LOG_INFO("tenant thread end_run", K(ret), K(thread_count_), K(id_), K(GET_GROUP_ID()));
+  LOG_INFO("tenant thread end_run", K(ret), K(thread_count_), K(GET_GROUP_ID()));
   return ret;
 }
 
@@ -478,19 +298,6 @@ int ObTenantBase::update_thread_cnt(double tenant_unit_cpu)
   return ret;
 }
 
-bool ObTenantBase::is_primary_or_invalid_tenant()
-{
-  // Lightweight version: check server_role instead of tenant_role
-  // If the entire cluster is standby, then all tenants are read-only
-  if (GCTX.is_standby_cluster()) {
-    return false;  // Standby returns false, prohibit write operations
-  }
-  // Primary: maintain original logic (compatibility)
-  share::ObTenantRole::Role tenant_role = get_tenant_role();
-  return share::is_primary_tenant(tenant_role)
-         || share::is_invalid_tenant(tenant_role);
-}
-
 void ObTenantEnv::set_tenant(ObTenantBase *ctx)
 {
   // Single tenant: fall back to the dummy when no tenant is provided.
@@ -515,23 +322,11 @@ int ObTenantSwitchGuard::switch_to(ObTenantBase *ctx)
 bool check_allow_switch(uint64_t src_tenant, uint64_t dest_tenant)
 {
   bool allow = true;
-  if (src_tenant > OB_USER_TENANT_ID && dest_tenant > OB_USER_TENANT_ID) {
-    if (is_user_tenant(src_tenant)) {
-      if (gen_meta_tenant_id(src_tenant) != dest_tenant) {
-        allow = false;
-      }
-    } else if (is_meta_tenant(src_tenant)) {
-      if (gen_user_tenant_id(src_tenant) != dest_tenant) {
-        allow = false;
-      }
-    }
-  }
   return allow;
 }
 
-int ObTenantSwitchGuard::switch_to(uint64_t tenant_id, bool need_check_allow)
+int ObTenantSwitchGuard::switch_to(bool need_check_allow)
 {
-  UNUSED(tenant_id);
   UNUSED(need_check_allow);
   // Single tenant: g_tenant_ptr starts as &g_tenant_ctx (dummy, no MTL services).
   // It becomes the real ObTenant* after create_mtl_module() completes.
@@ -546,7 +341,7 @@ void ObTenantSwitchGuard::release()
   reset();
 }
 
-ObTenantBase g_tenant_ctx(OB_INVALID_TENANT_ID, 0);
+ObTenantBase g_tenant_ctx(0);
 
 } // end of namespace share
 } // end of namespace oceanbase

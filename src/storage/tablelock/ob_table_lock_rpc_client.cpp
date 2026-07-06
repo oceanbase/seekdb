@@ -31,7 +31,6 @@ namespace tablelock
 
 static inline int get_ls_leader(
     const int64_t cluster_id,
-    const uint64_t tenant_id,
     const ObLSID &ls_id,
     const int64_t abs_timeout_ts,
     ObAddr &addr)
@@ -43,15 +42,14 @@ static inline int get_ls_leader(
     LOG_WARN("location_service not inited", K(ret));
   } else if (OB_FAIL(location_service->get_leader_with_retry_until_timeout(
       cluster_id,
-      tenant_id,
       ls_id,
       addr,
       abs_timeout_ts))) {
     LOG_WARN("failed to get ls leader with retry until timeout",
-        K(ret), K(cluster_id), K(tenant_id), K(ls_id), K(addr), K(abs_timeout_ts));
+        K(ret), K(cluster_id), K(ls_id), K(addr), K(abs_timeout_ts));
   } else {
     LOG_DEBUG("get ls leader from location_service",
-        K(ret), K(cluster_id), K(tenant_id), K(ls_id), K(addr), K(abs_timeout_ts));
+        K(ret), K(cluster_id), K(ls_id), K(addr), K(abs_timeout_ts));
   }
   return ret;
 }

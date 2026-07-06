@@ -106,9 +106,8 @@ int ObSystemConfig::read_int64(const ObSystemConfigKey &key,
 }
 
 
-// tenant_id is OB_INVALID_TENANT_ID(0) means it's cluster parameter
+// tenant is OB_INVALID_TENANT_ID(0) means it's cluster parameter
 int ObSystemConfig::read_config(
-    const uint64_t tenant_id,
     const ObSystemConfigKey &key,
     ObConfigItem &item) const
 {

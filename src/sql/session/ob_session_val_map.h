@@ -18,7 +18,7 @@
 #define _OB_SESSION_VAL_MAP_H 1
 
 #include "lib/hash/ob_hashmap.h"
-#include "lib/allocator/ob_pooled_allocator.h"
+#include "lib/objectpool/ob_pooled_allocator.h"
 #include "common/ob_string_buf.h"
 
 namespace oceanbase
@@ -53,8 +53,7 @@ public:
                                   > VarNameValMap;
 public:
   ObSessionValMap();
-  ObSessionValMap(const int64_t block_size, const common::ObWrapperAllocator &block_allocator,
-                  const int64_t tenant_id=OB_SERVER_TENANT_ID);
+  ObSessionValMap(const int64_t block_size, const common::ObWrapperAllocator &block_allocator);
   virtual ~ObSessionValMap();
   // clear all user variable, keep hash table inited
   void reuse();

@@ -127,7 +127,7 @@ class ObDirectLoadTmpFileManager
 public:
   ObDirectLoadTmpFileManager();
   ~ObDirectLoadTmpFileManager();
-  int init(uint64_t tenant_id);
+  int init();
   int alloc_dir(int64_t &dir_id);
   int alloc_file(int64_t dir_id, ObDirectLoadTmpFileHandle &tmp_file_handle);
   void put_file(ObDirectLoadTmpFile *tmp_file);

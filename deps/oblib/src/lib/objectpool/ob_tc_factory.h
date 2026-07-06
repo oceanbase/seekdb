@@ -114,8 +114,8 @@ class ObTCFactory
 public:
   static ObTCFactory *get_instance();
 
-  T *get(int32_t type_id, const uint64_t tenant_id = OB_SERVER_TENANT_ID);
-  void put(T *ptr, const uint64_t tenant_id = OB_SERVER_TENANT_ID);
+  T *get(int32_t type_id);
+  void put(T *ptr);
 
   void stat();
   void set_mem_limit(const int64_t mem_limit) { mem_limit_ = mem_limit; }
@@ -191,9 +191,8 @@ ObTCFactory<T, MAX_CLASS_NUM, LABEL, MEM_LIMIT, MAX_FREE_LIST_LENGTH>
 template <typename T, int64_t MAX_CLASS_NUM, const char *LABEL,
 int64_t MEM_LIMIT, int32_t MAX_FREE_LIST_LENGTH>
 T *ObTCFactory<T, MAX_CLASS_NUM, LABEL, MEM_LIMIT, MAX_FREE_LIST_LENGTH>::get(
-    int32_t type_id, const uint64_t tenant_id)
+    int32_t type_id)
 {
-  UNUSED(tenant_id);
   T *ptr_ret = NULL;
   if (OB_UNLIKELY(0 > type_id) || OB_UNLIKELY(type_id >= MAX_CLASS_NUM)) {
     LIB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "invalid class type id", K(type_id));
@@ -270,9 +269,8 @@ template <typename T, int64_t MAX_CLASS_NUM, const char *LABEL,
 template <typename T, int64_t MAX_CLASS_NUM, const char *LABEL,
 int64_t MEM_LIMIT, int32_t MAX_FREE_LIST_LENGTH>
 void ObTCFactory<T, MAX_CLASS_NUM, LABEL, MEM_LIMIT, MAX_FREE_LIST_LENGTH>::put(
-    T *ptr, const uint64_t tenant_id)
+    T *ptr)
 {
-  UNUSED(tenant_id);
   if (OB_LIKELY(NULL != ptr)) {
     global_factory_t *gfactory = global_factory_t::get_instance();
     if (OB_ISNULL(gfactory)) {

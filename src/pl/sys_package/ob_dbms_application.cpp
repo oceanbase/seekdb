@@ -73,7 +73,7 @@ int ObDBMSAppInfo::set_action(sql::ObExecContext &ctx, sql::ParamStore &params, 
     OZ (sess->get_app_info_encoder().set_action_name(sess, action_name));
 
     FLTControlInfo con;
-    ObFLTControlInfoManager mgr(GET_MY_SESSION(ctx)->get_effective_tenant_id());
+    ObFLTControlInfoManager mgr;
     if (OB_FAIL(ret)) {
 
     } else if (OB_FAIL(mgr.init())) {
@@ -110,7 +110,7 @@ int ObDBMSAppInfo::set_client_info(sql::ObExecContext &ctx, sql::ParamStore &par
     OZ (sess->get_app_info_encoder().set_client_info(sess, client_info));
 
     FLTControlInfo con;
-    ObFLTControlInfoManager mgr(GET_MY_SESSION(ctx)->get_effective_tenant_id());
+    ObFLTControlInfoManager mgr;
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(mgr.init())) {
@@ -155,7 +155,7 @@ int ObDBMSAppInfo::set_module(sql::ObExecContext &ctx, sql::ParamStore &params, 
     OZ (sess->get_app_info_encoder().set_action_name(sess, action_name));
 
     FLTControlInfo con;
-    ObFLTControlInfoManager mgr(GET_MY_SESSION(ctx)->get_effective_tenant_id());
+    ObFLTControlInfoManager mgr;
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(mgr.init())) {

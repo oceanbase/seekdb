@@ -17,8 +17,8 @@
 #ifndef SRC_OBSERVER_DBMS_SCHED_JOB_EXECUTOR_H_
 #define SRC_OBSERVER_DBMS_SCHED_JOB_EXECUTOR_H_
 
-#include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/utility/ob_mod_define.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_table_operator.h"
 
@@ -40,7 +40,7 @@ public:
   virtual ~ObDBMSSchedJobExecutor() {}
   int init(
     common::ObMySQLProxy *sql_proxy, share::schema::ObMultiVersionSchemaService *schema_service);
-  int run_dbms_sched_job(uint64_t tenant_id, bool is_oracle_tenant, uint64_t job_id, const ObString &job_name);
+  int run_dbms_sched_job(bool is_oracle_tenant, uint64_t job_id, const ObString &job_name);
   int init_env(ObDBMSSchedJobInfo &job_info, sql::ObSQLSessionInfo &session);
 
 private:
@@ -48,13 +48,13 @@ private:
   static int init_session(
     sql::ObSQLSessionInfo &session,
     share::schema::ObSchemaGetterGuard &schema_guard,
-    const common::ObString &tenant_name, uint64_t tenant_id,
+    const common::ObString &tenant_name,
     const common::ObString &database_name, uint64_t database_id,
     const share::schema::ObUserInfo* user_info,
     ObDBMSSchedJobInfo &job_info);
-  int create_session(const uint64_t tenant_id, sql::ObFreeSessionCtx &free_session_ctx, sql::ObSQLSessionInfo *&session_info);
+  int create_session(sql::ObFreeSessionCtx &free_session_ctx, sql::ObSQLSessionInfo *&session_info);
   int destroy_session(sql::ObFreeSessionCtx &free_session_ctx, sql::ObSQLSessionInfo *session_info);
-  int run_dbms_sched_job(uint64_t tenant_id, ObDBMSSchedJobInfo &job_info);
+  int run_dbms_sched_job(ObDBMSSchedJobInfo &job_info);
 
   bool inited_;
   ObDBMSSchedTableOperator table_operator_;

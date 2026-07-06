@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "lib/ob_name_id_def.h"
+#include "lib/json/ob_yson.h"
 #include "storage/tx/ob_trans_memory_stat.h"
 #include <gtest/gtest.h>
 

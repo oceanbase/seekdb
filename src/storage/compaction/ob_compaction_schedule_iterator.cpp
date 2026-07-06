@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/compaction/ob_compaction_schedule_iterator.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -29,7 +30,7 @@ ObBasicMergeScheduleIterator::ObTabletArray::ObTabletArray()
     array_(),
     is_inited_(false)
 {
-  array_.set_attr(ObMemAttr(MTL_ID(), "CompIter"));
+  array_.set_attr(ObMemAttr("CompIter"));
 }
 
 int ObBasicMergeScheduleIterator::ObTabletArray::consume_tablet_id(ObTabletID &tablet_id)
@@ -60,7 +61,7 @@ ObBasicMergeScheduleIterator::ObBasicMergeScheduleIterator()
     ls_ids_(),
     tablet_ids_()
 {
-  ls_ids_.set_attr(ObMemAttr(MTL_ID(), "CompIter"));
+  ls_ids_.set_attr(ObMemAttr("CompIter"));
 }
 
 int ObBasicMergeScheduleIterator::init(const int64_t schedule_batch_size)
@@ -71,7 +72,7 @@ int ObBasicMergeScheduleIterator::init(const int64_t schedule_batch_size)
     LOG_WARN("invalid argument", KR(ret), K(schedule_batch_size));
   } else if (!is_valid()) {
     ls_ids_.reuse();
-    if (OB_FAIL(MTL(ObLSService *)->get_ls_ids(ls_ids_))) {
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls_ids(ls_ids_))) {
       LOG_WARN("failed to get all ls id", K(ret));
     } else {
       ls_idx_ = -1;
@@ -226,7 +227,7 @@ ObCompactionScheduleIterator::ObCompactionScheduleIterator(
     report_scn_flag_(false),
     tablet_get_mode_(storage::ObMDSGetTabletMode::READ_ALL_COMMITED)
 {
-  ls_ids_.set_attr(ObMemAttr(MTL_ID(), "CompIter"));
+  ls_ids_.set_attr(ObMemAttr("CompIter"));
 }
 
 int ObCompactionScheduleIterator::build_iter(const int64_t schedule_batch_size)
@@ -256,7 +257,7 @@ void ObCompactionScheduleIterator::reset()
 
 int ObCompactionScheduleIterator::get_cur_ls_handle(ObLSHandle &ls_handle)
 {
-  int ret = MTL(ObLSService *)->get_ls(ls_ids_[ls_idx_], ls_handle, ObLSGetMod::COMPACT_MODE);
+  int ret = share::g_mp->ls_service()->get_ls(ls_ids_[ls_idx_], ls_handle, ObLSGetMod::COMPACT_MODE);
 #ifdef ERRSIM
   if (OB_SUCC(ret) && ls_ids_[ls_idx_].id() > share::ObLSID::SYS_LS_ID) {
     ret = OB_E(EventTable::EN_COMPACTION_ITER_LS_NOT_EXIST) ret;

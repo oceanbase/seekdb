@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tablet_ddl_kv_info.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 
@@ -43,41 +44,19 @@ ObAllVirtualTabletDDLKVInfo::~ObAllVirtualTabletDDLKVInfo()
 
 void ObAllVirtualTabletDDLKVInfo::reset()
 {
-  omt::ObMultiTenantOperator::reset();
-  addr_.reset();
-  ObVirtualTableScannerIterator::reset();
-}
-
-void ObAllVirtualTabletDDLKVInfo::release_last_tenant()
-{
   ddl_kv_idx_ = -1;
   ddl_kvs_handle_.reset();
   curr_tablet_id_.reset();
   ls_tablet_iter_.reset();
   ls_iter_guard_.reset();
-}
-
-int ObAllVirtualTabletDDLKVInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
-}
-
-bool ObAllVirtualTabletDDLKVInfo::is_need_process(uint64_t tenant_id)
-{
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
-    return true;
-  }
-  return false;
+  addr_.reset();
+  ObVirtualTableScannerIterator::reset();
 }
 
 int ObAllVirtualTabletDDLKVInfo::get_next_ls(ObLS *&ls)
 {
   int ret = OB_SUCCESS;
-  if (nullptr == ls_iter_guard_.get_ptr() && OB_FAIL(MTL(ObLSService*)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+  if (nullptr == ls_iter_guard_.get_ptr() && OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
     SERVER_LOG(WARN, "fail to get ls iter", K(ret));
   } else if (OB_FAIL(ls_iter_guard_->get_next(ls))) {
     if (OB_ITER_END != ret) {
@@ -153,7 +132,7 @@ int ObAllVirtualTabletDDLKVInfo::get_next_ddl_kv(ObDDLKV *&ddl_kv)
   return ret;
 }
 
-int ObAllVirtualTabletDDLKVInfo::process_curr_tenant(ObNewRow *&row)
+int ObAllVirtualTabletDDLKVInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObDDLKV *cur_kv = nullptr;

@@ -18,7 +18,7 @@
 #define OCEANBASE_DDL_EPOCH_H
 
 #include "lib/container/ob_se_array.h"
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 
 namespace oceanbase
 {
@@ -36,9 +36,8 @@ class ObMultiVersionSchemaService;
 
 struct ObDDLEpoch
 {
-  uint64_t tenant_id_;
   int64_t ddl_epoch_;
-  TO_STRING_KV(K_(tenant_id), K_(ddl_epoch));
+  TO_STRING_KV(K_(ddl_epoch));
 };
 
 
@@ -58,18 +57,17 @@ public:
       mutex_for_promote_() {}
   int init(ObMySQLProxy *sql_proxy, share::schema::ObMultiVersionSchemaService *schema_service);
   // Get local ddl_epoch
-  int get_ddl_epoch(uint64_t tenant_id, int64_t &ddl_epoch);
+  int get_ddl_epoch(int64_t &ddl_epoch);
   // Increase the internal table ddl_epoch
-  int promote_ddl_epoch(const uint64_t tenant_id, int64_t wait_us, int64_t &ddl_epoch_ret);
-  int remove_ddl_epoch(const uint64_t tenant_id);
+  int promote_ddl_epoch(int64_t wait_us, int64_t &ddl_epoch_ret);
+  int remove_ddl_epoch();
   int remove_all_ddl_epoch();
   int check_and_lock_ddl_epoch(
       common::ObMySQLTransaction &trans,
-      const uint64_t tenant_id,
       const int64_t ddl_epoch_local);
 private:
-  int promote_ddl_epoch_inner_(const uint64_t tenant_id, int64_t &new_ddl_epoch);
-  int update_ddl_epoch_(uint64_t tenant_id, const int64_t ddl_epoch);
+  int promote_ddl_epoch_inner_(int64_t &new_ddl_epoch);
+  int update_ddl_epoch_(const int64_t ddl_epoch);
 private:
   bool inited_;
   ObMySQLProxy *sql_proxy_;

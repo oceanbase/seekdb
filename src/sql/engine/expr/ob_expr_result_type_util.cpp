@@ -178,13 +178,12 @@ int ObExprResultTypeUtil::get_div_result_type(ObObjType &result_type,
     LOG_ERROR("the wrong type", K(type1),K(type2),K(ret));
   } else {
     result_type = DIV_RESULT_TYPE[type1][type2];
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
     // FIXME: @zuojiao.hzj : remove this after we can keep high division calc scale
     // using decimal int as division calc types
     bool can_use_decint_div = (ob_is_decimal_int(type1) || ob_is_integer_type(type1))
                            && (ob_is_decimal_int(type2) || ob_is_integer_type(type2))
-                           && tenant_config.is_valid()
-                           && tenant_config->_enable_decimal_int_type;
+                           && true
+                           && GCONF._enable_decimal_int_type;
     if (ob_is_decimal_int(result_type)) {
       result_type = ObNumberType;
     }

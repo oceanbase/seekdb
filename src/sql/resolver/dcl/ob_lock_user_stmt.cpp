@@ -18,12 +18,12 @@
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 ObLockUserStmt::ObLockUserStmt(common::ObIAllocator *name_pool)
-    : ObDDLStmt(name_pool, stmt::T_LOCK_USER), tenant_id_(OB_INVALID_ID) , locked_(false)
+    : ObDDLStmt(name_pool, stmt::T_LOCK_USER) , locked_(false)
 {
 }
 
 ObLockUserStmt::ObLockUserStmt()
-    : ObDDLStmt(NULL, stmt::T_LOCK_USER), tenant_id_(OB_INVALID_ID) , locked_(false)
+    : ObDDLStmt(NULL, stmt::T_LOCK_USER) , locked_(false)
 {
 }
 

@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_minor_freeze_info.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -27,7 +28,6 @@ namespace observer
 
 ObAllVirtualMinorFreezeInfo::ObAllVirtualMinorFreezeInfo()
   : ObVirtualTableScannerIterator(),
-    ObMultiTenantOperator(),
     addr_(),
     ls_iter_guard_(),
     diagnose_info_(),
@@ -42,7 +42,6 @@ ObAllVirtualMinorFreezeInfo::~ObAllVirtualMinorFreezeInfo()
 
 void ObAllVirtualMinorFreezeInfo::reset()
 {
-  omt::ObMultiTenantOperator::reset();
   addr_.reset();
   ls_iter_guard_.reset();
   diagnose_info_.reset();
@@ -50,32 +49,6 @@ void ObAllVirtualMinorFreezeInfo::reset()
   memset(ip_buf_, 0, common::OB_IP_STR_BUFF);
   memset(memtables_info_string_, 0, OB_MAX_CHAR_LENGTH);
   ObVirtualTableScannerIterator::reset();
-}
-
-void ObAllVirtualMinorFreezeInfo::release_last_tenant()
-{
-  ls_iter_guard_.reset();
-  diagnose_info_.reset();
-  memtables_info_.reset();
-  memset(memtables_info_string_, 0, OB_MAX_CHAR_LENGTH);
-}
-
-int ObAllVirtualMinorFreezeInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
-}
-
-bool ObAllVirtualMinorFreezeInfo::is_need_process(uint64_t tenant_id)
-{
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
-    return true;
-  }
-  return false;
 }
 
 int ObAllVirtualMinorFreezeInfo::get_next_ls(ObLS *&ls)
@@ -101,7 +74,7 @@ int ObAllVirtualMinorFreezeInfo::get_next_ls(ObLS *&ls)
   return ret;
 }
 
-int ObAllVirtualMinorFreezeInfo::process_curr_tenant(ObNewRow *&row)
+int ObAllVirtualMinorFreezeInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObFreezerStat freeze_stat;
@@ -109,7 +82,7 @@ int ObAllVirtualMinorFreezeInfo::process_curr_tenant(ObNewRow *&row)
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
-  } else if (ls_iter_guard_.get_ptr() == nullptr && OB_FAIL(MTL(ObLSService*)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+  } else if (ls_iter_guard_.get_ptr() == nullptr && OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
     SERVER_LOG(WARN, "get_ls_iter fail", K(ret));
   } else if (OB_FAIL(get_next_freeze_stat(freeze_stat))) {
     if (OB_ITER_END != ret) {

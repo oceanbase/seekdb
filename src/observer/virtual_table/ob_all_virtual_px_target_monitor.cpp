@@ -26,9 +26,7 @@ namespace observer
 {
 
 ObAllVirtualPxTargetMonitor::ObAllVirtualPxTargetMonitor()
-    : tenand_array_(),
-      tenant_idx_(0),
-      target_info_array_(),
+    : target_info_array_(),
       target_usage_idx_(0)
 {
   svr_ip_buff_[0] = '\0';
@@ -38,8 +36,6 @@ ObAllVirtualPxTargetMonitor::ObAllVirtualPxTargetMonitor()
 int ObAllVirtualPxTargetMonitor::init()
 {
   int ret = OB_SUCCESS;
-  tenand_array_.reset();
-  tenant_idx_ = 0;
   target_info_array_.reset();
   target_usage_idx_ = 0;
   return ret;
@@ -48,16 +44,9 @@ int ObAllVirtualPxTargetMonitor::init()
 int ObAllVirtualPxTargetMonitor::inner_open()
 {
   int ret = OB_SUCCESS;
-  // sys tenant show all tenant infos
-  if (is_sys_tenant(effective_tenant_id_)) {
-    if (OB_FAIL(OB_PX_TARGET_MGR.get_all_tenant(tenand_array_))) {
-      LOG_WARN("get all tenant failed", K(ret));
-    }
-  } else {
-    // user tenant show self tenant info
-    if (OB_FAIL(tenand_array_.push_back(effective_tenant_id_))) {
-      LOG_WARN("push back tenant array fail", KR(ret), K(effective_tenant_id_));
-    }
+  // single server: one row set, no per-server iteration
+  if (OB_FAIL(OB_PX_TARGET_MONITOR.get_all_target_info(target_info_array_))) {
+    LOG_WARN("get all target_info failed", K(ret));
   }
   return ret;
 }
@@ -83,13 +72,13 @@ int ObAllVirtualPxTargetMonitor::inner_get_next_row(common::ObNewRow *&row)
     for (uint64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        
+
         case IS_LEADER: {
           cur_row_.cells_[i].set_bool(target_info.is_leader_);
           break;
         }
         case VERSION: {
-          cur_row_.cells_[i].set_uint64(target_info.version_);
+          cur_row_.cells_[i].set_uint64(0);
           break;
         }
         case PEER_IP: {
@@ -140,19 +129,9 @@ int ObAllVirtualPxTargetMonitor::inner_get_next_row(common::ObNewRow *&row)
 int ObAllVirtualPxTargetMonitor::get_next_target_info(ObPxTargetInfo &target_info)
 {
   int ret = OB_SUCCESS;
-  while (OB_SUCC(ret) && target_usage_idx_ >= target_info_array_.count()) {
-    if (tenant_idx_ == tenand_array_.count()) {
-      ret = OB_ITER_END;
-    } else {
-      uint64_t tenant_id = tenand_array_.at(tenant_idx_++);
-      target_info_array_.reset();
-      target_usage_idx_ = 0;
-      if (OB_FAIL(OB_PX_TARGET_MGR.get_all_target_info(tenant_id, target_info_array_))) {
-        LOG_WARN("get all target_info failed", K(ret), K(tenant_id));
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
+  if (target_usage_idx_ >= target_info_array_.count()) {
+    ret = OB_ITER_END;
+  } else {
     target_info = target_info_array_.at(target_usage_idx_++);
   }
   return ret;
@@ -161,7 +140,6 @@ int ObAllVirtualPxTargetMonitor::get_next_target_info(ObPxTargetInfo &target_inf
 int ObAllVirtualPxTargetMonitor::inner_close()
 {
   int ret = OB_SUCCESS;
-  tenand_array_.destroy();
   target_info_array_.destroy();
   return ret;
 }

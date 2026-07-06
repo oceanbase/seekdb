@@ -73,7 +73,7 @@ int ObExprSpatialCollection::calc_resultN(common::ObObj &result,
                                           common::ObExprCtx &expr_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObWkbBuffer res_wkb_buf(tmp_allocator);
   uint32_t srid = 0;
   ObGeoType geo_type = get_geo_type();
@@ -253,8 +253,8 @@ int ObExprSpatialCollection::eval_spatial_collection(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, get_func_name());
+  
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, get_func_name());
   ObWkbBuffer res_wkb_buf(tmp_allocator);
   uint32_t srid = 0;
   bool is_null_result = false;

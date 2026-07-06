@@ -27,7 +27,7 @@ CachedIteratorNode::CachedIteratorNode()
     is_exception_occur_(false),
     iter_(nullptr),
     stmt_iter_pool_(nullptr),
-    iter_allocator_("GlobalIter", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    iter_allocator_("GlobalIter", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
 }
 
@@ -88,11 +88,10 @@ ObGlobalIteratorPool::ObGlobalIteratorPool()
     is_washing_(false),
     is_disabled_(false),
     get_cnt_(0),
-    tenant_id_(MTL_ID()),
     bucket_cnt_(0),
     tenant_mem_user_limit_(0),
     tenant_mem_user_hold_(0),
-    allocator_(ObModIds::OB_TABLE_SCAN_ITER, OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id_)
+    allocator_(ObModIds::OB_TABLE_SCAN_ITER, OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   MEMSET(cached_node_array_, 0, sizeof(cached_node_array_));
 }
@@ -166,7 +165,6 @@ void ObGlobalIteratorPool::destroy()
   is_washing_ = false;
   is_disabled_ = false;
   get_cnt_ = 0;
-  tenant_id_ = OB_INVALID_TENANT_ID;
   bucket_cnt_ = 0;
   tenant_mem_user_limit_ = 0;
   tenant_mem_user_hold_ = 0;
@@ -201,9 +199,9 @@ int ObGlobalIteratorPool::inner_get(const ObQRIterType type, CachedIteratorNode 
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(tenant_id_ != MTL_ID())) {
+  } else if (OB_UNLIKELY(false)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("[Global Iterator Pool] Unexpected tenant id", K(ret), K(tenant_id_), K(MTL_ID()));
+    LOG_WARN("[Global Iterator Pool] Unexpected tenant id", K(ret));
   } else if (OB_UNLIKELY(type > ITER_POOL_MAX_CACHED_ITER_TYPE || type <= T_INVALID_ITER_TYPE)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[Global Iterator Pool] Invalid argument", K(ret), K(type));
@@ -240,8 +238,8 @@ void ObGlobalIteratorPool::wash()
   if (IS_NOT_INIT) {
   } else if (is_washing()) {
   } else if (false == ATOMIC_VCAS(&is_washing_, false, true)) {
-    tenant_mem_user_limit_ = lib::get_tenant_memory_limit(tenant_id_);
-    tenant_mem_user_hold_ = lib::get_tenant_memory_hold(tenant_id_);
+    tenant_mem_user_limit_ = lib::get_tenant_memory_limit();
+    tenant_mem_user_hold_ = lib::get_tenant_memory_hold();
     const bool need_wash = tenant_mem_user_hold_ * 100 > tenant_mem_user_limit_ * ITER_POOL_WASH_HIGH_THRESHOLD;
     const bool disabled = is_disabled();
     if (!need_wash) {
@@ -264,7 +262,7 @@ void ObGlobalIteratorPool::wash()
           }
         }
       }
-      tenant_mem_user_hold_ = lib::get_tenant_memory_hold(tenant_id_);
+      tenant_mem_user_hold_ = lib::get_tenant_memory_hold();
       const bool can_enable = calc_bucket_cnt() >= bucket_cnt_ && tenant_mem_user_hold_ * 100 < tenant_mem_user_limit_ * ITER_POOL_WASH_LOW_THRESHOLD;
       if (can_enable) {
         ATOMIC_STORE(&is_disabled_, false);

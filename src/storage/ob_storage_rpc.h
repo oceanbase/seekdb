@@ -18,27 +18,23 @@
 #define OCEABASE_STORAGE_RPC
 
 #include "lib/net/ob_addr.h"
+#include "storage/ob_storage_rpc_arg.h"
+#include "storage/tx/ob_tx_result_struct.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include "rpc/frame/ob_result_code.h"
 #include "common/ob_member.h"
 #include "storage/ob_storage_struct.h"
 #include "observer/ob_server_struct.h"
 #include "storage/ob_storage_schema.h"
-#include "storage/high_availability/ob_storage_ha_struct.h"
+#include "storage/ob_storage_ha_struct.h"
 #include "storage/blocksstable/ob_sstable_meta.h"
 #include "storage/ls/ob_ls_meta_package.h"
 #include "tablet/ob_tablet_meta.h"
-#include "share/restore/ob_ls_restore_status.h"
+#include "share/ls/ob_ls_restore_status.h"
 #include "share/transfer/ob_transfer_info.h"
 #include "storage/lob/ob_lob_rpc_struct.h"
 #include "storage/blocksstable/ob_logic_macro_id.h"
 #include "storage/meta_mem/ob_tablet_pointer.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "close_modules/shared_storage/storage/high_availability/ob_migration_warmup_struct.h"
-#include "close_modules/shared_storage/storage/shared_storage/micro_cache/ob_ss_micro_cache_common_meta.h"
-#include "close_modules/shared_storage/storage/shared_storage/prewarm/ob_ha_prewarm_struct.h"
-#include "close_modules/shared_storage/storage/shared_storage/ob_ss_micro_cache.h"
-#endif
 
 namespace oceanbase
 {
@@ -71,8 +67,7 @@ public:
 
   bool is_valid() const;
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(table_key), "arg_count", arg_list_.count());
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(ls_id), K_(table_key), "arg_count", arg_list_.count());
   share::ObLSID ls_id_;
   storage::ObITable::TableKey table_key_;
   common::ObSArray<ObCopyMacroBlockArg> arg_list_;
@@ -105,9 +100,8 @@ public:
   ~ObCopyMacroBlockRangeArg() {}
 
   bool is_valid() const;
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(table_key), K_(data_version), K_(backfill_tx_scn), K_(copy_macro_range_info));
+  TO_STRING_KV(K_(ls_id), K_(table_key), K_(data_version), K_(backfill_tx_scn), K_(copy_macro_range_info));
 
-  uint64_t tenant_id_;
   share::ObLSID ls_id_;
   storage::ObITable::TableKey table_key_;
   int64_t data_version_;
@@ -119,7 +113,7 @@ public:
   DISALLOW_COPY_AND_ASSIGN(ObCopyMacroBlockRangeArg);
 };
 
-// Simplified version for single-replica scenario (no tenant_id/ls_id needed)
+// Simplified version for single-replica scenario (no tenant/ls_id needed)
 struct ObRestoreCopyMacroBlockRangeArg final
 {
   OB_UNIS_VERSION(1);
@@ -159,9 +153,8 @@ public:
   ObCopyTabletInfoArg();
   virtual ~ObCopyTabletInfoArg() {}
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(tablet_id_list), K_(need_check_seq),
+  TO_STRING_KV(K_(ls_id), K_(tablet_id_list), K_(need_check_seq),
       K_(ls_rebuild_seq), K_(is_only_copy_major), K_(version));
-  uint64_t tenant_id_;
   share::ObLSID ls_id_;
   common::ObSArray<common::ObTabletID> tablet_id_list_;
   bool need_check_seq_;
@@ -225,11 +218,10 @@ public:
   void reset();
   int assign(const ObCopyTabletsSSTableInfoArg &arg);
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(need_check_seq),
+  TO_STRING_KV(K_(ls_id), K_(need_check_seq),
       K_(ls_rebuild_seq), K_(is_only_copy_major), K_(tablet_sstable_info_arg_list),
       K_(version));
 
-  uint64_t tenant_id_;
   share::ObLSID ls_id_;
   bool need_check_seq_;
   int64_t ls_rebuild_seq_;
@@ -262,8 +254,7 @@ public:
   ObCopyLSInfoArg();
   virtual ~ObCopyLSInfoArg() {}
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(ls_id));
   share::ObLSID ls_id_;
   uint64_t version_;
 };
@@ -289,8 +280,7 @@ public:
   ObFetchLSMetaInfoArg();
   virtual ~ObFetchLSMetaInfoArg() {}
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(version));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(ls_id), K_(version));
   share::ObLSID ls_id_;
   uint64_t version_;
 };
@@ -316,8 +306,7 @@ public:
   ObFetchLSMemberListArg();
   virtual ~ObFetchLSMemberListArg() {}
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(ls_id));
   share::ObLSID ls_id_;
 };
 
@@ -352,8 +341,7 @@ public:
   ObFetchLSMemberAndLearnerListArg();
   virtual ~ObFetchLSMemberAndLearnerListArg() {}
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(ls_id));
   share::ObLSID ls_id_;
 };
 
@@ -378,8 +366,7 @@ public:
   bool is_valid() const;
   int assign(const ObCopySSTableMacroRangeInfoArg &arg);
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(tablet_id), K_(copy_table_key_array), K_(macro_range_max_marco_count));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(copy_table_key_array), K_(macro_range_max_marco_count));
   share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   common::ObSArray<ObITable::TableKey> copy_table_key_array_;
@@ -445,8 +432,7 @@ public:
   virtual ~ObNotifyRestoreTabletsArg() {}
   bool is_valid() const;
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(tablet_id_array), K_(restore_status), K_(leader_proposal_id));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(ls_id), K_(tablet_id_array), K_(restore_status), K_(leader_proposal_id));
   share::ObLSID ls_id_;
   common::ObSArray<common::ObTabletID> tablet_id_array_;
   share::ObLSRestoreStatus restore_status_; // indicate the type of data to restore
@@ -460,8 +446,7 @@ public:
   ObNotifyRestoreTabletsResp();
   virtual ~ObNotifyRestoreTabletsResp() {}
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(restore_status));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(ls_id), K_(restore_status));
   share::ObLSID ls_id_;
   ObRestoreStatus restore_status_; // restore status
 };
@@ -474,8 +459,7 @@ public:
   ObInquireRestoreResp();
   virtual ~ObInquireRestoreResp() {}
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(is_leader), K_(restore_status));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(ls_id), K_(is_leader), K_(restore_status));
   share::ObLSID ls_id_;
   bool is_leader_;
   ObRestoreStatus restore_status_; // leader restore status
@@ -489,8 +473,7 @@ public:
   virtual ~ObInquireRestoreArg() {}
   bool is_valid() const;
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(restore_status));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(ls_id), K_(restore_status));
   share::ObLSID ls_id_;
   share::ObLSRestoreStatus restore_status_; // restore status
 };
@@ -503,8 +486,7 @@ public:
   virtual ~ObRestoreUpdateLSMetaArg() {}
   bool is_valid() const;
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_meta_package));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(ls_meta_package));
   storage::ObLSMetaPackage ls_meta_package_;
 };
 
@@ -516,8 +498,7 @@ public:
   ObCheckSrcTransferTabletsArg();
   ~ObCheckSrcTransferTabletsArg() {}
 
-  TO_STRING_KV(K_(tenant_id), K_(src_ls_id), K_(tablet_info_array));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(src_ls_id), K_(tablet_info_array));
   share::ObLSID src_ls_id_;
   common::ObSArray<share::ObTransferTabletInfo> tablet_info_array_;
 private:
@@ -531,8 +512,7 @@ public:
   ObGetLSActiveTransCountArg();
   ~ObGetLSActiveTransCountArg() {}
 
-  TO_STRING_KV(K_(tenant_id), K_(src_ls_id));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(src_ls_id));
   share::ObLSID src_ls_id_;
 };
 
@@ -557,8 +537,7 @@ public:
   ObCopyLSViewArg();
   ~ObCopyLSViewArg() {}
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(ls_id));
   share::ObLSID ls_id_;
 };
 

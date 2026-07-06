@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX TABLELOCK
 #include "storage/tablelock/ob_lock_func_executor.h"
+#include "share/ob_dml_sql_splicer.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "sql/engine/ob_exec_context.h"
 #include "storage/tablelock/ob_table_lock_service.h"
@@ -109,7 +111,7 @@ int ObGetLockExecutor::lock_obj_(sql::ObSQLSessionInfo *session,
                                  const int64_t timeout_us)
 {
   int ret = OB_SUCCESS;
-  ObTableLockService *lock_service = MTL(ObTableLockService *);
+  ObTableLockService *lock_service = share::g_mp->table_lock_service();
   ObLockObjsRequest arg;
   bool need_record_to_lock_table = true;
   ObTxDesc *tx_desc = session->get_tx_desc();
@@ -165,7 +167,7 @@ int ObGetLockExecutor::generate_lock_id_(const ObString &lock_name,
   if (OB_ISNULL(lock_handle)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lock handle can not be null", K(ret));
-  } else if (OB_FAIL(ObCommonIDUtils::gen_unique_id(MTL_ID(), unique_lock_id))) {
+  } else if (OB_FAIL(ObCommonIDUtils::gen_unique_id(unique_lock_id))) {
     LOG_WARN("generate unique id for lock handle failed", K(ret));
   } else {
     uint64_t hash_val = 0;

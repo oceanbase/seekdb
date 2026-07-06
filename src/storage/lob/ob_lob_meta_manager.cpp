@@ -200,7 +200,7 @@ int ObLobMetaManager::getlength_remote(ObLobAccessParam &param, uint64_t &char_l
   ObLobRemoteQueryCtx *remote_ctx = nullptr;
   // cross-tenant LOB obcall RPC removed: GET_LENGTH is computed in-process (single bounded
   // value) by ObLobRemoteUtil::query, so just read the cached length here.
-  if (OB_FAIL(ObLobRemoteUtil::query(param, ObLobQueryArg::QueryType::GET_LENGTH, param.addr_, remote_ctx))) {
+  if (OB_FAIL(ObLobRemoteUtil::query(param, obcall::ObLobQueryArg::QueryType::GET_LENGTH, param.addr_, remote_ctx))) {
     LOG_WARN("fail to init remote query ctx", K(ret));
   } else {
     char_len = remote_ctx->length_;

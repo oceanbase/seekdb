@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_task.h"
 #include "sql/engine/px/ob_px_util.h"
 
@@ -295,7 +296,7 @@ OB_SERIALIZE_MEMBER(ObPingSqlTaskResult, err_code_, ret_status_);
 OB_DEF_SERIALIZE(ObRemoteTask)
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_id = OB_INVALID_ID;
+  
   ParamStore *ps_params = nullptr;
   ParamStore empty_param_store;
   //for serialize ObObjParam' param_meta_
@@ -306,7 +307,6 @@ OB_DEF_SERIALIZE(ObRemoteTask)
     ret = OB_NOT_INIT;
     LOG_WARN("remote task not init", K(ret), K_(remote_sql_info), K_(session_info), K(ps_params));
   } else {
-    tenant_id = session_info_->get_effective_tenant_id();
     if (!remote_sql_info_->use_ps_) {
       ps_params = &empty_param_store;
     } else {
@@ -323,7 +323,6 @@ OB_DEF_SERIALIZE(ObRemoteTask)
               remote_sql_info_->use_ps_,
               remote_sql_info_->remote_sql_,
               *ps_params,
-              tenant_id,
               *session_info_,
               remote_sql_info_->is_batched_stmt_,
               dependency_tables_,
@@ -352,7 +351,7 @@ OB_DEF_SERIALIZE_SIZE(ObRemoteTask)
       || OB_ISNULL(remote_sql_info_->ps_params_)) {
     LOG_WARN_RET(OB_NOT_INIT, "remote task not init", K_(remote_sql_info), K_(session_info), K(ps_params));
   } else {
-    int64_t tenant_id = session_info_->get_effective_tenant_id();
+    
     if (!remote_sql_info_->use_ps_) {
       ps_params = &empty_param_store;
     } else {
@@ -367,7 +366,6 @@ OB_DEF_SERIALIZE_SIZE(ObRemoteTask)
                 remote_sql_info_->use_ps_,
                 remote_sql_info_->remote_sql_,
                 *ps_params,
-                tenant_id,
                 *session_info_,
                 remote_sql_info_->is_batched_stmt_,
                 dependency_tables_,
@@ -390,7 +388,6 @@ OB_DEF_SERIALIZE_SIZE(ObRemoteTask)
 OB_DEF_DESERIALIZE(ObRemoteTask)
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_id = OB_INVALID_ID;
   ParamStore *ps_params = nullptr;
   ObObjMeta tmp_meta;
   ParamFlag tmp_flag;
@@ -408,13 +405,12 @@ OB_DEF_DESERIALIZE(ObRemoteTask)
               task_id_,
               remote_sql_info_->use_ps_,
               remote_sql_info_->remote_sql_,
-              *ps_params,
-              tenant_id);
+              *ps_params);
   if (OB_SUCC(ret)) {
-    // Subsequent session creation requires dependency on tenant_id
+    // Subsequent session creation requires dependency on tenant
     remote_sql_info_->ps_param_cnt_ = static_cast<int32_t>(ps_params->count());
-    if (OB_FAIL(exec_ctx_->create_my_session(tenant_id))) {
-      LOG_WARN("create my session failed", K(ret), K(tenant_id));
+    if (OB_FAIL(exec_ctx_->create_my_session())) {
+      LOG_WARN("create my session failed", K(ret));
     } else {
       session_info_ = exec_ctx_->get_my_session();
       ObSQLSessionInfo::LockGuard query_guard(session_info_->get_query_lock());

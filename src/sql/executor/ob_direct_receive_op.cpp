@@ -144,8 +144,7 @@ int ObDirectReceiveOp::inner_close()
         } else {
           ObQueryRetryInfo retry_info;
           const int32_t group_id = OB_INVALID_ID == session->get_expect_group_id() ? 0 : session->get_expect_group_id();
-          ObExecutorRpcCtx rpc_ctx(session->get_effective_tenant_id(),
-              plan_ctx->get_timeout_timestamp(),
+          ObExecutorRpcCtx rpc_ctx(plan_ctx->get_timeout_timestamp(),
               ctx_.get_task_exec_ctx().get_min_cluster_version(),
               &retry_info,
               session,

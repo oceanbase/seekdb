@@ -31,7 +31,7 @@ int ObScalarAggregateVecOp::inner_open()
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObGroupByVecOp::inner_open())) {
     LOG_WARN("groupby inner open failed", K(ret));
-  } else if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(ctx_.get_my_session()->get_effective_tenant_id(), dir_id_))) {
+  } else if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(dir_id_))) {
     LOG_WARN("failed to allocate dir id", K(ret));
   } else if (OB_FAIL(init_mem_context())) {
     LOG_WARN("init memory context failed", K(ret));
@@ -215,8 +215,7 @@ int ObScalarAggregateVecOp::init_mem_context()
   int ret = OB_SUCCESS;
   if (mem_context_ == nullptr) {
     lib::ContextParam param;
-    param.set_mem_attr(ctx_.get_my_session()->get_effective_tenant_id(),
-        ObModIds::OB_SQL_AGGR_FUNC,
+    param.set_mem_attr(ObModIds::OB_SQL_AGGR_FUNC,
         ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
       LOG_WARN("memory entity create failed", K(ret));
@@ -229,18 +228,18 @@ int ObScalarAggregateVecOp::init_hp_infras_group_mgr()
 {
   int ret = OB_SUCCESS;
   int64_t distinct_cnt = 0;
-  uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+  
   if (aggr_processor_.has_distinct()) {
     int64_t est_rows = MY_SPEC.rows_;
     aggr_processor_.set_io_event_observer(&io_event_observer_);
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(&ctx_, MY_SPEC.px_est_size_factor_, est_rows,
                                                   est_rows))) {
       LOG_WARN("failed to get px size", K(ret));
-    } else if (OB_FAIL(sql_mem_processor_.init(&ctx_.get_allocator(), tenant_id,
+    } else if (OB_FAIL(sql_mem_processor_.init(&ctx_.get_allocator(),
                                                est_rows * MY_SPEC.width_, MY_SPEC.type_,
                                                MY_SPEC.id_, &ctx_))) {
       LOG_WARN("failed to init sql mem processor", K(ret));
-    } else if (OB_FAIL(hp_infras_mgr_.init(tenant_id, GCONF.is_sql_operator_dump_enabled(),
+    } else if (OB_FAIL(hp_infras_mgr_.init(GCONF.is_sql_operator_dump_enabled(),
                                            est_rows, MY_SPEC.width_, true /*unique*/, 1 /*ways*/,
                                            &eval_ctx_, &sql_mem_processor_, &io_event_observer_,
                                            MY_SPEC.compress_type_))) {

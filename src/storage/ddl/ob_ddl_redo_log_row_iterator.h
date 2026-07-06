@@ -28,7 +28,7 @@ namespace storage
 class ObDDLRedoLogRowIterator
 {
 public:
-  ObDDLRedoLogRowIterator(common::ObIAllocator &allocator, const uint64_t tenant_id);
+  ObDDLRedoLogRowIterator(common::ObIAllocator &allocator);
   ~ObDDLRedoLogRowIterator();
   void reset();
 private:

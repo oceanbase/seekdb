@@ -165,7 +165,7 @@ class ObPartTransCtx : public ObTransCtx,
 public:
   ObPartTransCtx()
       : ObTransCtx("participant", ObTransCtxType::PARTICIPANT), ObTsCbTask(),
-        is_inited_(false), mt_ctx_(), reserve_allocator_("PartCtx", MTL_ID()),
+        is_inited_(false), mt_ctx_(), reserve_allocator_("PartCtx"),
         exec_info_(reserve_allocator_),
         mds_cache_(reserve_allocator_),
         has_extra_log_cb_group_(false),
@@ -178,8 +178,7 @@ public:
   { /*reset();*/ }
   ~ObPartTransCtx() { destroy(); }
   void destroy();
-  int init(const uint64_t tenant_id,
-           const common::ObAddr &scheduler,
+  int init(const common::ObAddr &scheduler,
            const uint32_t session_id,
            const uint32_t client_sid,
            const uint32_t associated_session_id,
@@ -219,7 +218,7 @@ public:
   int get_gts_callback(const MonotonicTs srr, const share::SCN &gts, const MonotonicTs receive_gts_ts);
   int gts_elapse_callback(const MonotonicTs srr, const share::SCN &gts);
   MonotonicTs get_stc() const { return stc_; }
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   int64_t get_role_state() const { return role_state_; }
 
   int dump_2_text(FILE *fd);
@@ -302,7 +301,7 @@ public:
   static const int64_t RESERVED_MEM_SIZE = 256;
 private:
   void default_init_();
-  int init_memtable_ctx_(const uint64_t tenant_id, const share::ObLSID &ls_id);
+  int init_memtable_ctx_(const share::ObLSID &ls_id);
   // Please use it carefully, because it only refer to the downstream_state_
   bool is_in_durable_2pc_() const;
   bool is_logging_() const;
@@ -729,7 +728,6 @@ private:
                                    ObTxMsg &msg);
   static void build_tx_common_msg_(const share::ObLSID &receiver,
                                    const int64_t cluster_version,
-                                   const int64_t tenant_id,
                                    const int64_t tx_id,
                                    const common::ObAddr& self_addr,
                                    const share::ObLSID &self_ls_id,

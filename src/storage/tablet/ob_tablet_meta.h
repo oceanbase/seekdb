@@ -37,7 +37,7 @@
 #include "storage/tablet/ob_tablet_mds_data.h"
 #include "storage/tablet/ob_tablet_full_memory_mds_data.h"
 #include "storage/tx/ob_trans_define.h"
-#include "storage/high_availability/ob_tablet_ha_status.h"
+#include "storage/ob_tablet_ha_status.h"
 #include "storage/tablet/ob_tablet_table_store_flag.h"
 #include "share/scn.h"
 #include "storage/tablet/ob_tablet_mds_data.h"

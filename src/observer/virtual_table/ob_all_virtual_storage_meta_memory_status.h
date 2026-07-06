@@ -20,13 +20,11 @@
 #include "common/row/ob_row.h"
 #include "lib/guard/ob_shared_guard.h"
 #include "observer/omt/ob_multi_tenant.h"
-#include "share/ob_scanner.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "share/rc/ob_tenant_base.h"
 #include "lib/container/ob_se_array.h"
 #include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
-
 
 namespace oceanbase
 {
@@ -37,8 +35,7 @@ namespace storage
 namespace observer
 {
 
-class ObAllVirtualStorageMetaMemoryStatus : public common::ObVirtualTableScannerIterator,
-                                            public omt::ObMultiTenantOperator
+class ObAllVirtualStorageMetaMemoryStatus : public common::ObVirtualTableScannerIterator
 {
 private:
   enum COLUMN_ID_LIST
@@ -59,13 +56,6 @@ public:
   virtual void reset();
 
 private:
-  // Filter to get the tenants that need processing
-  virtual bool is_need_process(uint64_t tenant_id) override;
-  // Process the tenant of the current iteration
-  virtual int process_curr_tenant(common::ObNewRow *&row) override;
-  // Release the resources of the previous tenant
-  virtual void release_last_tenant() override;
-
 private:
   static const int64_t STRING_LEN = 128;
   static const int64_t POOL_NUM = 10;
@@ -74,7 +64,6 @@ private:
   common::ObAddr addr_;
   char ip_buf_[common::OB_IP_STR_BUFF];
   char address_[STRING_LEN];
-  /* The resources for cross-tenant access must be handled and released by ObMultiTenantOperator */
   int64_t pool_idx_;
   ObSEArray<ObTenantMetaMemStatus, POOL_NUM> status_arr_;
 private:

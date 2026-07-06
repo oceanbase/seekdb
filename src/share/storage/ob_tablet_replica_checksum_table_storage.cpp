@@ -22,7 +22,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/net/ob_addr.h"
 #include "share/ob_tablet_replica_checksum_operator.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 #include "share/storage/ob_sqlite_table_schema.h"
 
@@ -73,9 +73,7 @@ int ObTabletReplicaChecksumTableStorage::create_table_if_not_exists()
   return ret;
 }
 
-int ObTabletReplicaChecksumTableStorage::batch_insert_or_update(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletReplicaChecksumItem> &items)
+int ObTabletReplicaChecksumTableStorage::batch_insert_or_update(const ObIArray<ObTabletReplicaChecksumItem> &items)
 {
   int ret = OB_SUCCESS;
   if (!is_inited()) {
@@ -85,7 +83,6 @@ int ObTabletReplicaChecksumTableStorage::batch_insert_or_update(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("items is empty", K(ret));
   } else {
-    UNUSED(tenant_id);
     const char *upsert_sql =
       "INSERT INTO __all_tablet_replica_checksum "
       "(tablet_id, compaction_scn, "
@@ -182,7 +179,6 @@ int ObTabletReplicaChecksumTableStorage::batch_insert_or_update(
 }
 
 int ObTabletReplicaChecksumTableStorage::batch_remove(
-    const uint64_t tenant_id,
     const ObIArray<ObTabletReplica> &replicas)
 {
   int ret = OB_SUCCESS;
@@ -243,9 +239,7 @@ int ObTabletReplicaChecksumTableStorage::batch_remove(
   return ret;
 }
 
-int ObTabletReplicaChecksumTableStorage::remove_residual(
-    const uint64_t tenant_id,
-    const common::ObAddr &server,
+int ObTabletReplicaChecksumTableStorage::remove_residual(const common::ObAddr &server,
     const int64_t limit,
     int64_t &affected_rows)
 {
@@ -277,7 +271,6 @@ int ObTabletReplicaChecksumTableStorage::remove_residual(
 }
 
 int ObTabletReplicaChecksumTableStorage::batch_get(
-    const uint64_t tenant_id,
     const ObIArray<ObTabletLSPair> &pairs,
     const SCN &compaction_scn,
     ObReplicaCkmArray &items,
@@ -291,7 +284,6 @@ int ObTabletReplicaChecksumTableStorage::batch_get(
   } else if (pairs.empty()) {
     // do nothing
   } else {
-    UNUSED(tenant_id);
     // Build SQL with IN clause
     common::ObSqlString sql;
     if (OB_FAIL(sql.append_fmt(
@@ -383,9 +375,7 @@ int ObTabletReplicaChecksumTableStorage::batch_get(
   return ret;
 }
 
-int ObTabletReplicaChecksumTableStorage::range_get(
-    const uint64_t tenant_id,
-    const common::ObTabletID &start_tablet_id,
+int ObTabletReplicaChecksumTableStorage::range_get(const common::ObTabletID &start_tablet_id,
     const int64_t range_size,
     ObIArray<ObTabletReplicaChecksumItem> &items,
     int64_t &tablet_cnt)
@@ -481,9 +471,7 @@ int ObTabletReplicaChecksumTableStorage::range_get(
   return ret;
 }
 
-int ObTabletReplicaChecksumTableStorage::get_min_compaction_scn(
-    const uint64_t tenant_id,
-    uint64_t &min_compaction_scn)
+int ObTabletReplicaChecksumTableStorage::get_min_compaction_scn(uint64_t &min_compaction_scn)
 {
   int ret = OB_SUCCESS;
   min_compaction_scn = UINT64_MAX;
@@ -523,9 +511,7 @@ int ObTabletReplicaChecksumTableStorage::get_min_compaction_scn(
   return ret;
 }
 
-int ObTabletReplicaChecksumTableStorage::get_max_row_count(
-    const uint64_t tenant_id,
-    const common::ObTabletID &tablet_id,
+int ObTabletReplicaChecksumTableStorage::get_max_row_count(const common::ObTabletID &tablet_id,
     const ObLSID &ls_id,
     int64_t &max_row_count)
 {
@@ -568,15 +554,12 @@ int ObTabletReplicaChecksumTableStorage::get_max_row_count(
   return ret;
 }
 
-int ObTabletReplicaChecksumTableStorage::batch_check_checksum(
-    const uint64_t tenant_id,
-    const ObIArray<common::ObTabletID> &tablet_ids,
+int ObTabletReplicaChecksumTableStorage::batch_check_checksum(const ObIArray<common::ObTabletID> &tablet_ids,
     const int64_t start_idx,
     const int64_t end_idx,
     bool &has_error)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   has_error = false;
   if (!is_inited()) {
     ret = OB_NOT_INIT;

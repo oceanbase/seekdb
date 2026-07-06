@@ -37,25 +37,25 @@ private:
   void update_all_tenants();
 
 private:
-  int read_obj(uint64_t tenant_id, share::ObSysVarClassType sys_var, common::ObObj &obj);
-  int read_int64(uint64_t tenant_id, share::ObSysVarClassType sys_var, int64_t &val);
+  int read_obj(share::ObSysVarClassType sys_var, common::ObObj &obj);
+  int read_int64(share::ObSysVarClassType sys_var, int64_t &val);
   // There's no system variable with double type, so here the function
   // would transform variable with decimal type to double instead. If
   // someone adds double type system variable in the future, be
   // careful when using this method.
-  int read_double(uint64_t tenant_id, share::ObSysVarClassType sys_var, double &val);
+  int read_double(share::ObSysVarClassType sys_var, double &val);
 
   // Update tenant work area settings.
-  int update_tenant_wa_percentage(uint64_t tenant_id);
+  int update_tenant_wa_percentage();
   // Read tenant sql throttle settings from tenant system variables
   // and set to corresponding tenant.
-  int update_tenant_sql_throttle(uint64_t tenant_id);
+  int update_tenant_sql_throttle();
   // Read tenant ctx memory limit settings from tenant system variables
   // and set to corresponding tenant.
-  int update_tenant_ctx_memory_throttle(uint64_t tenant_id);
+  int update_tenant_ctx_memory_throttle();
   // Read tenant work area memory settings from tenant system variables.
-  int read_tenant_wa_percentage(uint64_t tenant_id, int64_t &pctg);
-  int update_tenant_rpc_percentage(uint64_t tenant_id);
+  int read_tenant_wa_percentage(int64_t &pctg);
+  int update_tenant_rpc_percentage();
 private:
   common::ObArenaAllocator allocator_;
 };

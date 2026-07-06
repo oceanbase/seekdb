@@ -68,7 +68,7 @@ int ObGTSTaskQueue::foreach_task(const MonotonicTs srr,
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(srr), K(gts));
   } else {
-    int64_t last_tenant_id = OB_INVALID_TENANT_ID;
+    
     MAKE_TENANT_SWITCH_SCOPE_GUARD(ts_guard);
     while (OB_SUCCESS == ret) {
       common::ObLink *data = NULL;
@@ -77,15 +77,9 @@ int ObGTSTaskQueue::foreach_task(const MonotonicTs srr,
       if (NULL == task) {
         break;
       } else {
-        const uint64_t tenant_id = task->get_tenant_id();
+        
         const int64_t request_ts = 0/*task->get_request_ts()*/;
-        if (tenant_id != last_tenant_id) {
-          if (OB_FAIL(ts_guard.switch_to(tenant_id))) {
-            TRANS_LOG(ERROR, "switch tenant failed", K(ret), K(tenant_id));
-          } else {
-            last_tenant_id = tenant_id;
-          }
-        }
+        
         if (OB_SUCC(ret)) {
           SCN scn;
           scn.convert_for_gts(gts);
@@ -121,12 +115,12 @@ int ObGTSTaskQueue::foreach_task(const MonotonicTs srr,
           } else {
             if (GET_GTS == task_type_) {
               const int64_t total_used = ObTimeUtility::current_time() - request_ts;
-              ObTransStatistic::get_instance().add_gts_acquire_total_time(tenant_id, total_used);
-              ObTransStatistic::get_instance().add_gts_acquire_total_wait_count(tenant_id, 1);
+              ObTransStatistic::get_instance().add_gts_acquire_total_time( total_used);
+              ObTransStatistic::get_instance().add_gts_acquire_total_wait_count( 1);
             } else if (WAIT_GTS_ELAPSING == task_type_) {
               const int64_t total_used = ObTimeUtility::current_time() - request_ts;
-              ObTransStatistic::get_instance().add_gts_wait_elapse_total_time(tenant_id, total_used);
-              ObTransStatistic::get_instance().add_gts_wait_elapse_total_wait_count(tenant_id, 1);
+              ObTransStatistic::get_instance().add_gts_wait_elapse_total_time( total_used);
+              ObTransStatistic::get_instance().add_gts_wait_elapse_total_wait_count( 1);
             } else {
               // do nothing
             }
@@ -173,8 +167,8 @@ int ObGTSTaskQueue::gts_callback_interrupted(const int errcode, const share::ObL
       if (NULL == task) {
         break;
       } else {
-        const uint64_t tenant_id = task->get_tenant_id();
-        MTL_SWITCH(tenant_id) {
+        
+        MOD_SCOPE {
           if (OB_FAIL(task->gts_callback_interrupted(errcode, ls_id))) {
             if (OB_EAGAIN != ret) {
               error_count++;

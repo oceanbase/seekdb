@@ -21,7 +21,7 @@
 #include "lib/ob_define.h"
 #include "lib/rc/context.h"
 #include "lib/runtime.h"
-#include "common/errsim_module/ob_errsim_module_type.h"
+#include "lib/errsim_module/ob_errsim_module_type.h"
 
 namespace oceanbase
 {
@@ -107,9 +107,8 @@ public:
   int64_t get_timeout_remain() const;
   bool is_timeout() const;
 
-  OB_INLINE void set_rpc_tenant(uint64_t tenant_id) { rpc_tenant_id_ = tenant_id; }
-  OB_INLINE void reset_rpc_tenant() { rpc_tenant_id_ = 0; }
-  OB_INLINE uint64_t get_rpc_tenant() const { return rpc_tenant_id_; }
+  OB_INLINE void set_rpc_tenant() {  }
+  OB_INLINE void reset_rpc_tenant() {  }
 
   // check wait is disabled if f is true
   void set_disable_wait_flag(bool f) { disable_wait_ = f; }
@@ -145,7 +144,7 @@ public:
   void *group_;
 protected:
   // Thread runtime memory is allocated from this allocator
-  // Initial tenant_id=500, in processing request, tenant_id is updated to the tenant id of the request
+  // Initial allocator memory state, updated while processing a request
   // You can specify ctx_id individually, this ctx_id remains unchanged
   ObIAllocator *allocator_;
   int64_t st_current_priority_;
@@ -164,7 +163,7 @@ private:
   //ingnore net time, equal to (receive_ts - send_ts).
   int64_t ntp_offset_;
 
-  uint64_t rpc_tenant_id_;
+  
 
   // Used to prevent the thread holding the lock from being suspended by check_wait
   bool disable_wait_;

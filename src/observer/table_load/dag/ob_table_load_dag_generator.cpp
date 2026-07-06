@@ -18,7 +18,7 @@
 
 #include "observer/table_load/dag/ob_table_load_dag_generator.h"
 #include "lib/queue/ob_fixed_queue.h"
-#include "lib/xml/ob_multi_mode_interface.h"
+#include "common/xml/ob_multi_mode_interface.h"
 #include "observer/table_load/dag/ob_table_load_dag.h"
 #include "observer/table_load/dag/ob_table_load_dag_exec_ctx.h"
 #include "observer/table_load/dag/ob_table_load_dag_task.h"
@@ -38,7 +38,7 @@ class ObTableLoadArrayQueue
 public:
   ObTableLoadArrayQueue() : capacity_(0), front_(0), rear_(0), count_(0), is_inited_(false)
   {
-    array_.set_tenant_id(MTL_ID());
+    
   }
 
   ~ObTableLoadArrayQueue() { array_.reset(); }
@@ -146,9 +146,9 @@ private:
 public:
   ObTableLoadDagOpQueue() : is_inited_(false)
   {
-    table_op_set_.set_tenant_id(MTL_ID());
-    adj_.set_tenant_id(MTL_ID());
-    in_degree_.set_tenant_id(MTL_ID());
+    
+    
+    
   }
   virtual ~ObTableLoadDagOpQueue()
   {
@@ -196,7 +196,7 @@ int ObTableLoadDagOpQueue::init_table_op_set(ObTableLoadTableOp *root_op)
   TableOpMap table_op_map;
   if (OB_FAIL(table_op_queue.init(100))) {
     LOG_WARN("fail to init table op queue", KR(ret));
-  } else if (OB_FAIL(table_op_map.create(100, "TLD_TableOpMap", "TLD_TableOpMap", MTL_ID()))) {
+  } else if (OB_FAIL(table_op_map.create(100, "TLD_TableOpMap", "TLD_TableOpMap"))) {
     LOG_WARN("fail to create table op map", KR(ret));
   } else if (OB_FAIL(table_op_queue.push(root_op))) {
     LOG_WARN("fail to push", KR(ret));
@@ -230,7 +230,7 @@ int ObTableLoadDagOpQueue::init_adjacency()
   int ret = OB_SUCCESS;
   TableOpMap table_op_map;
   int64_t table_op_count = table_op_set_.count();
-  if (OB_FAIL(table_op_map.create(100, "TLD_TableOpMap", "TLD_TableOpMap", MTL_ID()))) {
+  if (OB_FAIL(table_op_map.create(100, "TLD_TableOpMap", "TLD_TableOpMap"))) {
     LOG_WARN("fail to create table op map", KR(ret));
   } else if (OB_FAIL(adj_.prepare_allocate(table_op_count))) {
     LOG_WARN("fail to prepare allocate", KR(ret));
@@ -388,7 +388,7 @@ int ObTableLoadDagGenerator::table_op_list_to_executable_op_list(
 {
   int ret = OB_SUCCESS;
   common::ObArenaAllocator tmp_allocator("TLD_OP");
-  tmp_allocator.set_tenant_id(MTL_ID());
+  
   ObStack<ObTableLoadOp *> op_stack(&tmp_allocator);
   for (int64_t i = 0; OB_SUCC(ret) && i < table_ops.count(); i++) {
     if (OB_FAIL(op_stack.push(table_ops.at(i)))) {

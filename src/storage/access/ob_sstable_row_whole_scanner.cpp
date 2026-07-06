@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_sstable_row_whole_scanner.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -208,7 +209,7 @@ int ObSSTableRowWholeScanner::inner_open(
     const ObITableReadInfo *rowkey_read_info = nullptr;
 
     if (table->is_normal_cg_sstable()) {
-      if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->get_index_read_info(rowkey_read_info))) {
+      if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(rowkey_read_info))) {
         STORAGE_LOG(WARN, "unexpected null index read info", K(ret));
       }
     } else {
@@ -296,7 +297,7 @@ int ObSSTableRowWholeScanner::open(
       read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
       read_info.buf_ = io_buf_[0].data();
       read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
-      read_info.mtl_tenant_id_ = MTL_ID();
+      
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, scan_handle.macro_io_handle_))) {
@@ -448,7 +449,7 @@ int ObSSTableRowWholeScanner::prefetch()
       read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
       read_info.buf_ = io_buf_[io_index].data();
       read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
-      read_info.mtl_tenant_id_ = MTL_ID();
+      
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, scan_handle.macro_io_handle_))) {

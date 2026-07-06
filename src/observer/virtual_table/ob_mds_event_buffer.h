@@ -50,25 +50,22 @@ class ObAllVirtualMdsEventHistory;
 class ObMdsEventBuffer;
 struct MdsEventKey {
   MdsEventKey() = default;
-  MdsEventKey(uint64_t tenant_id, share::ObLSID ls_id, common::ObTabletID tablet_id)
-  : tenant_id_(tenant_id),
-  ls_id_(ls_id),
+  MdsEventKey(share::ObLSID ls_id, common::ObTabletID tablet_id)
+  : ls_id_(ls_id),
   tablet_id_(tablet_id) {}
   bool operator<(const MdsEventKey &rhs) {
-    return tenant_id_ < rhs.tenant_id_ && ls_id_ < rhs.ls_id_ && tablet_id_ < rhs.tablet_id_;
+    return ls_id_ < rhs.ls_id_ || (ls_id_ == rhs.ls_id_ && tablet_id_ < rhs.tablet_id_);
   }
   bool operator==(const MdsEventKey &rhs) {
-    return tenant_id_ == rhs.tenant_id_ && ls_id_ == rhs.ls_id_ && tablet_id_ == rhs.tablet_id_;
+    return true && ls_id_ == rhs.ls_id_ && tablet_id_ == rhs.tablet_id_;
   }
   uint64_t hash() const {
     uint64_t hash = 0;
-    hash = murmurhash(&tenant_id_, sizeof(tenant_id_), hash);
-    hash = murmurhash(&tablet_id_, sizeof(tablet_id_), hash);
+    hash = murmurhash(&tablet_id_, sizeof(tablet_id_), 0);
     hash = murmurhash(&ls_id_, sizeof(ls_id_), hash);
     return hash;
   }
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(tablet_id));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(ls_id), K_(tablet_id));
   share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
 };

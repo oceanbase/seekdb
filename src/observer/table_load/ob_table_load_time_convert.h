@@ -19,8 +19,8 @@
 #include "common/object/ob_object.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/ob_define.h"
-#include "lib/timezone/ob_oracle_format_models.h"
-#include "lib/timezone/ob_time_convert.h"
+#include "common/timezone/ob_oracle_format_models.h"
+#include "common/timezone/ob_time_convert.h"
 #include "share/object/ob_obj_cast.h"
 
 namespace oceanbase

@@ -48,11 +48,10 @@ class ObSchemaCacheKey : public common::ObIKVCacheKey
 public:
   ObSchemaCacheKey();
   ObSchemaCacheKey(const ObSchemaType schema_type,
-                   const uint64_t tenant_id,
                    const uint64_t schema_id,
                    const uint64_t schema_version);
   virtual ~ObSchemaCacheKey() {}
-  virtual uint64_t get_tenant_id() const;
+  
   virtual bool operator ==(const ObIKVCacheKey &other) const;
   virtual uint64_t hash() const;
   virtual int hash(uint64_t &hash_value) const  { hash_value = hash(); return OB_SUCCESS; }
@@ -61,12 +60,10 @@ public:
                         const int64_t buf_len,
                         ObIKVCacheKey *&key) const;
   TO_STRING_KV(K_(schema_type),
-               K_(tenant_id),
                K_(schema_id),
                K_(schema_version));
 
   ObSchemaType schema_type_;
-  uint64_t tenant_id_;
   uint64_t schema_id_;
   uint64_t schema_version_;
 };
@@ -108,27 +105,23 @@ class ObTabletCacheKey : public common::ObIKVCacheKey
 {
 public:
   ObTabletCacheKey();
-  ObTabletCacheKey(const uint64_t tenant_id,
-                   const ObTabletID &tablet_id,
+  ObTabletCacheKey(const ObTabletID &tablet_id,
                    const uint64_t schema_version);
-  int init(const uint64_t tenant_id,
-           const ObTabletID &tablet_id,
+  int init(const ObTabletID &tablet_id,
            const uint64_t schema_version);
   bool is_valid() const;
   virtual ~ObTabletCacheKey() {}
   virtual bool operator ==(const ObIKVCacheKey &other) const;
   virtual uint64_t hash() const;
   virtual int64_t size() const;
-  // here get_tenant_id() means tenant_id which is used for alloca memory for kvcache
-  virtual uint64_t get_tenant_id() const;
+  // here tenant is used for alloca memory for kvcache
+  
   virtual int deep_copy(char *buf,
                         const int64_t buf_len,
                         ObIKVCacheKey *&key) const;
-  TO_STRING_KV(K_(tenant_id),
-               K_(tablet_id),
+  TO_STRING_KV(K_(tablet_id),
                K_(schema_version));
 private:
-  uint64_t tenant_id_;
   ObTabletID tablet_id_;
   int64_t schema_version_;
 };
@@ -162,30 +155,25 @@ public:
   int init();
   void destroy();
   int get_schema(const ObSchemaType schema_type,
-                 const uint64_t tenant_id,
                  const uint64_t schema_id,
                  const int64_t schema_version,
                  common::ObKVCacheHandle &handle,
                  const ObSchema *&schema);
   int put_schema(const ObSchemaType schema_type,
-                 const uint64_t tenant_id,
                  const uint64_t schema_id,
                  const int64_t schema_version,
                  const ObSchema &schema);
   int put_and_fetch_schema(const ObSchemaType schema_type,
-                           const uint64_t tenant_id,
                            const uint64_t schema_id,
                            const int64_t schema_version,
                            const ObSchema &schema,
                            common::ObKVCacheHandle &handle,
                            const ObSchema *&new_schema);
   int get_schema_history_cache(const ObSchemaType schema_type,
-                               const uint64_t tenant_id,
                                const uint64_t schema_id,
                                const int64_t schema_version,
                                int64_t &precise_schema_version);
   int put_schema_history_cache(const ObSchemaType schema_type,
-                               const uint64_t tenant_id,
                                const uint64_t schema_id,
                                const int64_t schema_version,
                                const int64_t precise_schema_version);
@@ -193,7 +181,7 @@ public:
 
 
   // @param[in]:
-  // - key: (tenant_id, tablet_id, schema_version)
+  // - key: (tenant, tablet_id, schema_version)
   // @param[out]:
   // - table_id: table_id is OB_INVALID_ID means that
   //             tablet-table history doesn't exist
@@ -202,7 +190,7 @@ public:
   int get_tablet_cache(const ObTabletCacheKey &key,
                        uint64_t &table_id);
   // @param[in]:
-  // - key: (tenant_id, tablet_id, schema_version)
+  // - key: (tenant, tablet_id, schema_version)
   // - table_id: (table_id)
   int put_tablet_cache(const ObTabletCacheKey &key,
                        const uint64_t table_id);
@@ -216,7 +204,6 @@ private:
   typedef common::ObKVCache<ObTabletCacheKey, ObTabletCacheValue> TabletCache;
   bool check_inner_stat() const;
   bool is_valid_key(const ObSchemaType schema_type,
-                    const uint64_t tenant_id,
                     const uint64_t schema_id,
                     const int64_t schema_version) const;
   bool need_use_sys_cache(const ObSchemaCacheKey &cache_key) const;
@@ -268,13 +255,11 @@ public:
                    common::ObIAllocator &allocator,
                    ObSchema *&schema);
 private:
-  int fetch_tenant_schema(uint64_t tenant_id,
-                          int64_t schema_version,
+  int fetch_tenant_schema(int64_t schema_version,
                           common::ObIAllocator &allocator,
                           ObTenantSchema *&tenant_schema);
   int fetch_sys_variable_schema(
       const ObRefreshSchemaStatus &schema_status,
-      uint64_t tenant_id,
       int64_t schema_version,
       common::ObIAllocator &allocator,
       ObSysVariableSchema *&sys_variable_schema);

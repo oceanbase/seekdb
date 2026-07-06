@@ -18,8 +18,9 @@
 #define OCEANBASE_STORAGE_OB_TENANT_META_OBJ_MGR_H_
 
 #include "lib/objectpool/ob_resource_pool.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
+#include "share/config/ob_tenant_config_mgr.h"
 
+#include "share/config/ob_server_config.h"
 namespace oceanbase
 {
 namespace storage
@@ -169,7 +170,6 @@ private:
   typedef common::ObBaseResourcePool<T, RPMetaObjLabel> BasePool;
 public:
   ObTenantMetaObjPool(
-      const uint64_t tenant_id,
       const int64_t max_free_list_num,
       const lib::ObLabel &label,
       const uint64_t ctx_id,
@@ -281,26 +281,24 @@ void ObTenantMetaObjPool<T>::free_node_(typename BasePool::Node *ptr)
 
 template <class T>
 ObTenantMetaObjPool<T>::ObTenantMetaObjPool(
-    const uint64_t tenant_id,
     const int64_t max_free_list_num,
     const lib::ObLabel &label,
     const uint64_t ctx_id,
     TryWashTabletFunc *wash_func,
     const bool allow_over_max_free_num)
   : ObBaseResourcePool<T, RPMetaObjLabel>(max_free_list_num, &allocator_,
-      lib::ObMemAttr(tenant_id, label, ctx_id)),
+      lib::ObMemAttr(label, ctx_id)),
       wash_func_(wash_func),
       used_obj_cnt_(0),
       allow_over_max_free_num_(allow_over_max_free_num)
 {
   int ret = OB_SUCCESS;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
-  const int64_t mem_limit = tenant_config.is_valid()
-      ? tenant_config->_storage_meta_memory_limit_percentage : OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
-  if (ObCtxIds::META_OBJ_CTX_ID == ctx_id && OB_FAIL(lib::set_meta_obj_limit(tenant_id, mem_limit))) {
-    STORAGE_LOG(WARN, "fail to set meta object memory limit", K(ret), K(tenant_id), K(mem_limit));
+  const int64_t mem_limit = true
+      ? GCONF._storage_meta_memory_limit_percentage : OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
+  if (ObCtxIds::META_OBJ_CTX_ID == ctx_id && OB_FAIL(lib::set_meta_obj_limit(mem_limit))) {
+    STORAGE_LOG(WARN, "fail to set meta object memory limit", K(ret), K(mem_limit));
   } else if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(), common::OB_MALLOC_MIDDLE_BLOCK_SIZE,
-      lib::ObMemAttr(tenant_id, label, ctx_id)))) {
+      lib::ObMemAttr(label, ctx_id)))) {
     STORAGE_LOG(WARN, "fail to initialize pool FIFO allocator", K(ret));
   }
   abort_unless(OB_SUCCESS == ret);

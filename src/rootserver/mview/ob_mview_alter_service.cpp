@@ -35,7 +35,7 @@ int ObMviewAlterService::alter_mview_or_mlog_in_trans(obcall::ObAlterTableArg &a
 {
   int ret = OB_SUCCESS;
   AlterTableSchema &alter_table_schema = alter_table_arg.alter_table_schema_;
-  const uint64_t tenant_id = alter_table_schema.get_tenant_id();
+  
   const ObTableSchema *orig_table_schema = NULL;
   const ObString &origin_database_name = alter_table_schema.get_origin_database_name();
   const ObString &origin_table_name = alter_table_schema.get_origin_table_name();
@@ -47,23 +47,23 @@ int ObMviewAlterService::alter_mview_or_mlog_in_trans(obcall::ObAlterTableArg &a
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database name or table name is empty", K(alter_table_schema), K(origin_database_name),
              K(origin_table_name), K(ret));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, origin_database_name,
+  } else if (OB_FAIL(schema_guard.get_table_schema( origin_database_name,
                                                    origin_table_name, false, orig_table_schema))) {
-    LOG_WARN("failed to get table schema", K(ret), K(tenant_id), K(origin_database_name),
+    LOG_WARN("failed to get table schema", K(ret), K(origin_database_name),
              K(origin_table_name));
   } else if (NULL == orig_table_schema) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig_table_schema is null", KR(ret), KP(orig_table_schema));
-  } else if (OB_FAIL(schema_guard.get_schema_version(tenant_id, schema_version))) {
-    LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {
+    LOG_WARN("failed to get tenant schema version", KR(ret));
   } else {
     ObDDLSQLTransaction trans(schema_service);
     ObDDLOperator ddl_operator(*schema_service, *sql_proxy);
-    if (OB_FAIL(trans.start(sql_proxy, tenant_id, schema_version))) {
-      LOG_WARN("start transaction failed", KR(ret), K(tenant_id), K(schema_version));
-    } else if (orig_table_schema->is_materialized_view() && OB_FAIL(alter_mview_attributes(tenant_id, orig_table_schema, alter_table_arg, ddl_operator, schema_guard, trans))) {
+    if (OB_FAIL(trans.start(sql_proxy, schema_version))) {
+      LOG_WARN("start transaction failed", KR(ret), K(schema_version));
+    } else if (orig_table_schema->is_materialized_view() && OB_FAIL(alter_mview_attributes(orig_table_schema, alter_table_arg, ddl_operator, schema_guard, trans))) {
       LOG_WARN("failed to alter mview attributes", KR(ret), K(alter_table_arg));
-    } else if (alter_table_arg.is_alter_mlog_attributes_ && OB_FAIL(alter_mlog_attributes(tenant_id, orig_table_schema, alter_table_arg, ddl_operator, schema_guard, trans))) {
+    } else if (alter_table_arg.is_alter_mlog_attributes_ && OB_FAIL(alter_mlog_attributes( orig_table_schema, alter_table_arg, ddl_operator, schema_guard, trans))) {
       LOG_WARN("failed to alter mlog attributes", KR(ret), K(alter_table_arg));
     }
 
@@ -79,9 +79,7 @@ int ObMviewAlterService::alter_mview_or_mlog_in_trans(obcall::ObAlterTableArg &a
 
   return ret;
 }
-int ObMviewAlterService::alter_mview_attributes(
-    const uint64_t tenant_id,
-    const ObTableSchema *orig_table_schema,
+int ObMviewAlterService::alter_mview_attributes(const ObTableSchema *orig_table_schema,
     obcall::ObAlterTableArg &alter_table_arg, 
     ObDDLOperator &ddl_operator,
     ObSchemaGetterGuard &schema_guard,
@@ -99,22 +97,20 @@ int ObMviewAlterService::alter_mview_attributes(
   } else if (!orig_table_schema->is_materialized_view()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig table schema is not mview", KR(ret), K(orig_table_schema));
-  } else if (OB_FAIL(schema_guard.get_table_schema(
-                 tenant_id, orig_table_schema->get_data_table_id(), container_table_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema( orig_table_schema->get_data_table_id(), container_table_schema))) {
     LOG_WARN("failed to get mv container table schema", KR(ret));
   } else if (OB_ISNULL(container_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("mv container table schema is null", KR(ret));
-  } else if (OB_FAIL(schema_guard.get_database_schema(
-                 tenant_id, orig_table_schema->get_database_id(), db_schema))) {
+  } else if (OB_FAIL(schema_guard.get_database_schema( orig_table_schema->get_database_id(), db_schema))) {
     LOG_WARN("failed to get database schema", KR(ret), "db_id",
              orig_table_schema->get_database_id());
   } else if (OB_ISNULL(db_schema)) {
     ret = OB_ERR_BAD_DATABASE;
-    LOG_WARN("db schema is NULL", KR(ret), K(tenant_id), "db_id",
+    LOG_WARN("db schema is NULL", KR(ret), "db_id",
              orig_table_schema->get_database_id());
   } else if (OB_FAIL(ObMViewInfo::fetch_mview_info(
-                 trans, tenant_id, orig_table_schema->get_table_id(), mview_info, true))) {
+                 trans, orig_table_schema->get_table_id(), mview_info, true))) {
     LOG_WARN("failed to fetch mview info", KR(ret), "mview_id", orig_table_schema->get_table_id());
   } else {
     HEAP_VAR(ObTableSchema, new_mview_schema)
@@ -220,8 +216,7 @@ int ObMviewAlterService::alter_mview_attributes(
   return ret;
 }
 
-int ObMviewAlterService::alter_mlog_attributes(const uint64_t tenant_id,
-                                               const ObTableSchema *orig_table_schema,
+int ObMviewAlterService::alter_mlog_attributes(const ObTableSchema *orig_table_schema,
                                                obcall::ObAlterTableArg &alter_table_arg,
                                                ObDDLOperator &ddl_operator,
                                                ObSchemaGetterGuard &schema_guard,
@@ -240,9 +235,9 @@ int ObMviewAlterService::alter_mlog_attributes(const uint64_t tenant_id,
   } else if (orig_table_schema->is_materialized_view()) {
     // nested materialized view
     const ObTableSchema *container_table_schema = nullptr;
-    if (OB_FAIL(schema_guard.get_table_schema(tenant_id, orig_table_schema->get_data_table_id(),
+    if (OB_FAIL(schema_guard.get_table_schema( orig_table_schema->get_data_table_id(),
                                               container_table_schema))) {
-      LOG_WARN("failed to get table schema", KR(ret), K(tenant_id));
+      LOG_WARN("failed to get table schema", KR(ret));
     } else if (OB_ISNULL(container_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null container table schema", KR(ret), KP(container_table_schema));
@@ -257,21 +252,20 @@ int ObMviewAlterService::alter_mlog_attributes(const uint64_t tenant_id,
   } else if (!data_table_schema->has_mlog_table()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table doesn't have mlog", KR(ret));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, data_table_schema->get_mlog_tid(),
+  } else if (OB_FAIL(schema_guard.get_table_schema( data_table_schema->get_mlog_tid(),
                                                    mlog_table_schema))) {
     LOG_WARN("failed to get mlog schema", KR(ret));
   } else if (OB_ISNULL(mlog_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("mlog table schema is null", KR(ret));
-  } else if (OB_FAIL(schema_guard.get_database_schema(
-                 tenant_id, data_table_schema->get_database_id(), db_schema))) {
+  } else if (OB_FAIL(schema_guard.get_database_schema( data_table_schema->get_database_id(), db_schema))) {
     LOG_WARN("failed to get database schema", KR(ret));
   } else if (OB_ISNULL(db_schema)) {
     ret = OB_ERR_BAD_DATABASE;
     LOG_WARN("failed to get database schema", KR(ret), "db_id",
              data_table_schema->get_database_id());
   } else if (OB_FAIL(ObMLogInfo::fetch_mlog_info(
-                 trans, tenant_id, mlog_table_schema->get_table_id(), mlog_info, true))) {
+                 trans, mlog_table_schema->get_table_id(), mlog_info, true))) {
     LOG_WARN("failed to get mlog info", KR(ret), K(mlog_table_schema));
   } else {
     HEAP_VAR(ObTableSchema, new_mlog_schema){

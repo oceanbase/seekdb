@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_spatial_mbr.h"
-#include "lib/geo/ob_geo_utils.h"
+#include "share/geo/ob_geo_utils.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

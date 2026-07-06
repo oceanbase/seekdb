@@ -36,14 +36,12 @@ public:
   ObTenantTabletToLSIterator();
   virtual ~ObTenantTabletToLSIterator() {}
   int init(
-      common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id);
+      common::ObISQLClient &sql_proxy);
   // init with LS white list
   // ls_white_list: LS white list that only output tablets on the LS white list.
   //                If list is empty, it means ALL LS are in white list.
   int init(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const common::ObIArray<ObLSID> &ls_white_list);
   int next(ObTabletLSPair &pair);
   int next(ObTabletToLSInfo &info);
@@ -51,7 +49,6 @@ private:
   int prefetch_();
 
   bool inited_;
-  uint64_t tenant_id_;
   int64_t inner_idx_;
   common::ObSEArray<ObLSID, 1> ls_white_list_;
   common::ObArray<ObTabletToLSInfo> inner_tablet_infos_;

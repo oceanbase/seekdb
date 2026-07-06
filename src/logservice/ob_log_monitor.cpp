@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_log_monitor.h"
 #include "observer/ob_server_event_history_table_operator.h"   // SERVER_EVENT_ADD_WITH_RETRY
 
@@ -21,8 +22,8 @@ namespace oceanbase
 {
 namespace logservice
 {
-#define LOG_MONITOR_EVENT_FMT_PREFIX "LOG", type_to_string_(event), "TENANT_ID", mtl_id, "LS_ID", palf_id
-#define LOG_MONITOR_EVENT_STR_FMT_PREFIX "LOG", event_str, "TENANT_ID", mtl_id, "LS_ID", palf_id
+#define LOG_MONITOR_EVENT_FMT_PREFIX "LOG", type_to_string_(event), "LS_ID", palf_id
+#define LOG_MONITOR_EVENT_STR_FMT_PREFIX "LOG", event_str, "LS_ID", palf_id
 
 // =========== PALF Event Reporting ===========
 int ObLogMonitor::record_set_initial_member_list_event(const int64_t palf_id,
@@ -31,7 +32,6 @@ int ObLogMonitor::record_set_initial_member_list_event(const int64_t palf_id,
                                                        const char *extra_info)
 {
   int ret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const EventType event = EventType::SET_INITIAL_MEMBER_LIST;
   if (OB_NOT_NULL(extra_info)) {
     SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
@@ -39,7 +39,7 @@ int ObLogMonitor::record_set_initial_member_list_event(const int64_t palf_id,
         "REPLICA_NUM", replica_num,
         "", NULL,
         "", NULL,
-        extra_info);
+        "info", extra_info);
   } else {
     SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
         "MEMBER_LIST", member_list,
@@ -51,7 +51,6 @@ int ObLogMonitor::record_set_initial_member_list_event(const int64_t palf_id,
 int ObLogMonitor::record_election_leader_change_event(const int64_t palf_id, const common::ObAddr &dest_addr)
 {
   int ret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const EventType event = EventType::ELECTION_LEADER_CHANGE;
   SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX, "LEADER", dest_addr);
   return ret;
@@ -65,7 +64,6 @@ int ObLogMonitor::record_reconfiguration_event(const char *sub_event,
                                               const char* extra_info)
 {
   int ret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const EventType event = EventType::RECONFIGURATION;
   const int64_t MAX_BUF_LEN = 50;
   char event_str[MAX_BUF_LEN] = {'\0'};
@@ -74,16 +72,14 @@ int ObLogMonitor::record_reconfiguration_event(const char *sub_event,
     CLOG_LOG(ERROR, "snprintf failed", KR(ret), K(event), K(sub_event));
   } else if (OB_NOT_NULL(extra_info)) {
     SERVER_EVENT_ADD_WITH_RETRY("LOG", event_str,
-        "TENANT_ID", mtl_id,
         "LS_ID", palf_id,
         "CONFIG_VERSION", config_version,
         "PREV_REPLICA_NUM", prev_replica_num,
         "CURR_REPLICA_NUM", curr_replica_num,
         "", NULL,
-        extra_info);
+        "info", extra_info);
   } else {
     SERVER_EVENT_ADD_WITH_RETRY("LOG", event_str,
-        "TENANT_ID", mtl_id,
         "LS_ID", palf_id,
         "CONFIG_VERSION", config_version,
         "PREV_REPLICA_NUM", prev_replica_num,
@@ -98,7 +94,6 @@ int ObLogMonitor::record_replica_type_change_event(const int64_t palf_id,
                                                    const char *extra_info)
 {
   int ret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const EventType event = EventType::REPLICA_TYPE_TRANSITION;
   if (OB_NOT_NULL(extra_info)) {
     SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
@@ -106,7 +101,7 @@ int ObLogMonitor::record_replica_type_change_event(const int64_t palf_id,
         "PREV_REPLICA_TYPE", prev_replica_type,
         "CURR_REPLICA_TYPE", curr_replica_type,
         "", NULL,
-        extra_info);
+        "info", extra_info);
   } else {
     SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
         "CONFIG_VERSION", config_version,
@@ -125,7 +120,6 @@ int ObLogMonitor::record_access_mode_change_event(const int64_t palf_id,
                                                   const char *extra_info)
 {
   int ret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const EventType event = EventType::ACCESS_MODE_TRANSITION;
   const int64_t MAX_BUF_LEN = 32;
   char prev_access_mode_str[MAX_BUF_LEN] = {'\0'};
@@ -140,7 +134,7 @@ int ObLogMonitor::record_access_mode_change_event(const int64_t palf_id,
         "CURR_MODE_VERSION", curr_mode_verion,
         "PREV_ACCESS_MODE", prev_access_mode_str,
         "CURR_ACCESS_MODE", curr_access_mode_str,
-        extra_info);
+        "info", extra_info);
   } else {
     SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
         "PREV_MODE_VERSION", prev_mode_version,
@@ -154,7 +148,6 @@ int ObLogMonitor::record_access_mode_change_event(const int64_t palf_id,
 int ObLogMonitor::record_set_base_lsn_event(const int64_t palf_id, const palf::LSN &new_base_lsn)
 {
   int ret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const EventType event = EventType::SET_BASE_LSN;
   SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
       "NEW_BASE_LSN", new_base_lsn);
@@ -164,7 +157,6 @@ int ObLogMonitor::record_set_base_lsn_event(const int64_t palf_id, const palf::L
 int ObLogMonitor::record_enable_sync_event(const int64_t palf_id)
 {
   int ret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const EventType event = EventType::ENABLE_SYNC;
   SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX);
   return ret;
@@ -173,7 +165,6 @@ int ObLogMonitor::record_enable_sync_event(const int64_t palf_id)
 int ObLogMonitor::record_disable_sync_event(const int64_t palf_id)
 {
   int ret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const EventType event = EventType::DISABLE_SYNC;
   SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX);
   return ret;
@@ -182,7 +173,6 @@ int ObLogMonitor::record_disable_sync_event(const int64_t palf_id)
 int ObLogMonitor::record_enable_vote_event(const int64_t palf_id)
 {
   int ret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const EventType event = EventType::ENABLE_VOTE;
   SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX);
   return ret;
@@ -191,7 +181,6 @@ int ObLogMonitor::record_enable_vote_event(const int64_t palf_id)
 int ObLogMonitor::record_disable_vote_event(const int64_t palf_id)
 {
   int ret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const EventType event = EventType::DISABLE_VOTE;
   SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX);
   return ret;
@@ -200,7 +189,6 @@ int ObLogMonitor::record_disable_vote_event(const int64_t palf_id)
 int ObLogMonitor::record_advance_base_info_event(const int64_t palf_id, const palf::PalfBaseInfo &palf_base_info)
 {
   int ret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const EventType event = EventType::ADVANCE_BASE_INFO;
   SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
       "PALF_BASE_INFO", palf_base_info);
@@ -212,7 +200,6 @@ int ObLogMonitor::record_rebuild_event(const int64_t palf_id,
                                        const palf::LSN &base_lsn)
 {
   int ret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const EventType event = EventType::REBUILD;
   SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
       "SOURCE_SERVER", server,
@@ -227,7 +214,6 @@ int ObLogMonitor::record_flashback_event(const int64_t palf_id,
                                          const share::SCN &curr_max_scn)
 {
   int ret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const EventType event = EventType::FLASHBACK;
   SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
       "MODE_VERSION", mode_version,
@@ -244,7 +230,6 @@ int ObLogMonitor::record_truncate_event(const int64_t palf_id,
                                         const int64_t truncate_end_block_id)
 {
   int ret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const EventType event = EventType::TRUNCATE;
   SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
       "LSN", lsn,
@@ -263,7 +248,6 @@ int ObLogMonitor::record_role_change_event(const int64_t palf_id,
 {
   int ret = OB_SUCCESS;
   int pret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const EventType event = EventType::ROLE_TRANSITION;
   const int64_t MAX_BUF_LEN = 50;
   char prev_str[MAX_BUF_LEN] = {'\0'};
@@ -285,7 +269,7 @@ int ObLogMonitor::record_role_change_event(const int64_t palf_id,
           "CURRENT", curr_str,
           "", NULL,
           "", NULL,
-          extra_info);
+          "info", extra_info);
     } else {
       SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
           "PREVIOUS", prev_str,
@@ -300,13 +284,11 @@ int ObLogMonitor::record_parent_child_change_event(const int64_t palf_id,
                                                    const bool is_register, /* true: register; false; retire; */
                                                    const bool is_parent,   /* true: parent; false: child; */
                                                    const common::ObAddr &server,
-                                                   const common::ObRegion &region,
                                                    const int64_t register_time_us,
                                                    const char *extra_info)
 {
   int ret = OB_SUCCESS;
   int pret = OB_SUCCESS;
-  const int64_t mtl_id = MTL_ID();
   const char *action_str = (is_register)? "REGISTER": "RETIRE";
   const char *object_str = (is_parent)? "PARENT": "CHILD";
   const int64_t MAX_BUF_LEN = 50;
@@ -320,14 +302,12 @@ int ObLogMonitor::record_parent_child_change_event(const int64_t palf_id,
     if (OB_NOT_NULL(extra_info)) {
       SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_STR_FMT_PREFIX,
           object_str, server,
-          "REGION", region,
           "REGISTER_TIME_US", register_time_us,
           "", NULL,
-          extra_info);
+          "info", extra_info);
     } else {
       SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_STR_FMT_PREFIX,
           object_str, server,
-          "REGION", region,
           "REGISTER_TIME_US", register_time_us,
           "", NULL);
     }

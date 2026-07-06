@@ -24,7 +24,7 @@
 #include "lib/list/ob_dlist.h"
 #include "common/row/ob_row.h"
 #include "common/row/ob_row_iterator.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
 #include "sql/engine/basic/ob_sql_mem_callback.h"
@@ -974,7 +974,6 @@ public:
   virtual ~ObChunkDatumStore() { reset(); }
 
   int init(int64_t mem_limit,
-      uint64_t tenant_id,
       int64_t mem_ctx_id = common::ObCtxIds::DEFAULT_CTX_ID,
       const char *label = common::ObModIds::OB_SQL_CHUNK_ROW_STORE,
       bool enable_dump = true,
@@ -1035,7 +1034,6 @@ public:
   OB_INLINE bool is_inited() const { return inited_; }
   bool is_file_open() const { return io_.fd_ >= 0; }
 
-  //void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
   //void set_mem_ctx_id(const int64_t ctx_id) { ctx_id_ = ctx_id; }
   void set_mem_limit(const int64_t limit) { mem_limit_ = limit; }
   void set_dumped(bool dumped) { enable_dump_ = dumped; }
@@ -1075,7 +1073,7 @@ public:
   // The current strategy for dir id is that the upper-level logic (usually an operator) applies for it uniformly, and then sets it over
   void set_dir_id(int64_t dir_id) { io_.dir_id_ = dir_id; }
   int alloc_dir_id();
-  TO_STRING_KV(K_(tenant_id), K_(label), K_(ctx_id),  K_(mem_limit),
+  TO_STRING_KV(K_(label), K_(ctx_id),  K_(mem_limit),
       K_(row_cnt), K_(file_size), K_(enable_dump));
 
   int append_datum_store(const ObChunkDatumStore &other_store);
@@ -1086,7 +1084,7 @@ public:
   {
     return nullptr == cur_blk_ ? 0 : cur_blk_->get_buffer()->mem_size();
   }
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   int64_t get_mem_ctx_id() const { return ctx_id_;}
   const char* get_label() const { return label_; }
   void free_tmp_dump_blk();
@@ -1157,7 +1155,7 @@ private:
   static inline int64_t row_copy_size(const common::ObDatum *datums, const int64_t cnt);
 private:
   bool inited_;
-  uint64_t tenant_id_;
+  
   const char *label_;
   int64_t ctx_id_;
   int64_t mem_limit_;

@@ -17,8 +17,9 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "ob_load_data_parser.h"
-#include "lib/string/ob_hex_utils_base.h"
+#include "common/ob_hex_utils_base.h"
 #include "src/sql/engine/ob_exec_context.h"
+#include "sql/resolver/cmd/ob_load_data_stmt.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;

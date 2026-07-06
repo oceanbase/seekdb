@@ -20,9 +20,9 @@
 #include "sql/engine/ob_exec_context.h"
 #include "pl/ob_pl_type.h"
 #include "lib/ob_define.h"
-#include "share/stat/ob_opt_table_stat.h"
-#include "share/stat/ob_opt_column_stat.h"
-#include "share/stat/ob_opt_column_stat_cache.h"
+#include "sql/optimizer/stat/ob_opt_table_stat.h"
+#include "sql/optimizer/stat/ob_opt_column_stat.h"
+#include "sql/optimizer/stat/ob_opt_column_stat_cache.h"
 #include "sql/resolver/ddl/ob_create_index_stmt.h"
 
 namespace oceanbase
@@ -35,21 +35,18 @@ class ObDbmsSpace
 public:
   struct IndexCostInfo final { 
   public:
-    IndexCostInfo(): tenant_id_(OB_SYS_TENANT_ID),
-                 table_id_(common::OB_INVALID_ID),
+    IndexCostInfo(): table_id_(common::OB_INVALID_ID),
                  part_ids_(),
                  column_ids_(),
                  compression_ratio_(1.0),
                  default_index_len_(0),
                  svr_addr_(),
-                 tablet_ids_(),
-                 table_tenant_id_(OB_INVALID_TENANT_ID) {}
+                 tablet_ids_() {}
     ~IndexCostInfo() = default; 
-    TO_STRING_KV(K_(tenant_id), K_(table_id), K_(part_ids), K_(column_ids),
+    TO_STRING_KV(K_(table_id), K_(part_ids), K_(column_ids),
                  K_(compression_ratio), K_(default_index_len), K_(svr_addr),
-                 K_(tablet_ids), K_(table_tenant_id));
+                 K_(tablet_ids));
   public:
-    uint64_t tenant_id_;
     uint64_t table_id_;
     ObSEArray<int64_t, 1> part_ids_;
     ObSEArray<uint64_t, 4> column_ids_;
@@ -57,7 +54,7 @@ public:
     uint64_t default_index_len_;
     ObSEArray<ObAddr, 1> svr_addr_;
     ObSEArray<ObTabletID, 4> tablet_ids_;
-    uint64_t table_tenant_id_;
+    
   };
 
   struct OptStats final {
@@ -101,7 +98,6 @@ public:
 
   // interface for auto_split
   /* in param:
-   *  info tenant_id_; // default set to OB_SYS_TENANT_ID
    *  info table_id_; // data table's table id;
    *  info.part_ids_; // the part id(data table) we need to calc.
    *  info.column_ids_; // index columns' column id (in data table schema).
@@ -202,8 +198,7 @@ private:
                                           IndexCostInfo &info);
   static int get_svr_info_from_schema(const ObTableSchema *table_schema,
                                       ObIArray<ObAddr> &addr_list,
-                                      ObIArray<ObTabletID> &tablet_list,
-                                      uint64_t &tenant_id);
+                                      ObIArray<ObTabletID> &tablet_list);
   
   static int generate_part_key_str(ObSqlString &target_str,
                                    const ObIArray<ObAddr> &addr_list);

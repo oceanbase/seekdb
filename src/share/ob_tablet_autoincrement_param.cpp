@@ -83,7 +83,6 @@ int ObTabletCacheInterval::fetch(uint64_t count, ObTabletCacheInterval &dest)
 }
 
 OB_SERIALIZE_MEMBER(ObTabletAutoincParam,
-                    tenant_id_,
                     auto_increment_cache_size_);
 
 OB_SERIALIZE_MEMBER(ObMigrateTabletAutoincSeqParam, src_tablet_id_, dest_tablet_id_, ret_code_, autoinc_seq_);

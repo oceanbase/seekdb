@@ -21,15 +21,36 @@ namespace oceanbase
 namespace sql
 {
 
-static const int COMPILATION_UNIT = 7;
+static const int COMPILATION_UNIT = 16;
+
+static constexpr int vec_cast_compilation_bound(const int unit_idx)
+{
+  constexpr int BOUNDS[COMPILATION_UNIT + 1] = {
+    VEC_TC_NULL,
+    VEC_TC_UINTEGER,
+    VEC_TC_DOUBLE,
+    VEC_TC_NUMBER,
+    VEC_TC_DATE,
+    VEC_TC_YEAR,
+    VEC_TC_STRING,
+    VEC_TC_ENUM_SET_INNER,
+    VEC_TC_INTERVAL_YM,
+    VEC_TC_JSON,
+    VEC_TC_DEC_INT32,
+    VEC_TC_DEC_INT64,
+    VEC_TC_DEC_INT128,
+    VEC_TC_DEC_INT256,
+    VEC_TC_DEC_INT512,
+    VEC_TC_COLLECTION,
+    MAX_VEC_TC
+  };
+  return BOUNDS[unit_idx];
+}
 
 #define DEF_COMPILATION_VARS(name, max_val, unit_idx)                                              \
-  constexpr int name##_unit_size =                                                                 \
-    max_val / COMPILATION_UNIT + (max_val % COMPILATION_UNIT == 0 ? 0 : 1);                        \
-  constexpr int name##_start =                                                                     \
-    (name##_unit_size * unit_idx < max_val ? name##_unit_size * unit_idx : max_val);               \
-  constexpr int name##_end =                                                                       \
-    (name##_start + name##_unit_size >= max_val ? max_val : name##_start + name##_unit_size);
+  static_assert(max_val == MAX_VEC_TC, "vector cast compilation bounds only support MAX_VEC_TC");  \
+  constexpr int name##_start = vec_cast_compilation_bound(unit_idx);                               \
+  constexpr int name##_end = vec_cast_compilation_bound(unit_idx + 1);
 
 #define DEF_COMPILE_FUNC_INIT(unit_idx)                                                                 \
   void __init_vec_cast_func##unit_idx()                                                                 \

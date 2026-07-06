@@ -51,11 +51,11 @@ void ObDASRetryCtrl::tablet_location_retry_proc(ObDASRef &das_ref,
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid schema service", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(MTL_ID(), schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     // tenant could be dropped
     task_op.set_errcode(ret);
-    LOG_WARN("get tenant schema guard fail", KR(ret), K(MTL_ID()));
-  } else if (OB_FAIL(schema_guard.get_table_schema(MTL_ID(), ref_table_id, table_schema))) {
+    LOG_WARN("get tenant schema guard fail", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
     task_op.set_errcode(ret);
     LOG_WARN("failed to get table schema", KR(ret), K(ref_table_id));
   } else if (OB_ISNULL(table_schema)) {

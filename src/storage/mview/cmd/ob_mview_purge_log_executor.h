@@ -58,7 +58,7 @@ private:
   sql::ObSQLSessionInfo *session_info_;
   sql::ObSchemaChecker schema_checker_;
 
-  uint64_t tenant_id_;
+  
   uint64_t master_table_id_;
 };
 

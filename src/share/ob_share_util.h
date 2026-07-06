@@ -80,43 +80,40 @@ class ObShareUtil
 public:
   // priority to set timeout_ctx: ctx > worker > default_timeout
   static int set_default_timeout_ctx(common::ObTimeoutCtx &ctx, const int64_t default_timeout);
+  // moved up from rootserver::ObRootUtils(body uses only GCONF.rpc_timeout + set_default_timeout_ctx, share-clean)
+  static int get_rs_default_timeout_ctx(common::ObTimeoutCtx &ctx);
   // priority to get timeout: ctx > worker > default_timeout
   static int get_abs_timeout(const int64_t default_timeout, int64_t &abs_timeout);
   static int get_ctx_timeout(const int64_t default_timeout, int64_t &timeout);
 
   static int fetch_current_data_version(
              common::ObISQLClient &client,
-             const uint64_t tenant_id,
              uint64_t &data_version);
 
   // get ora_rowscn from one row
-  // @params[in]: tenant_id, the table owner
+  // @params[in]: tenant, the table owner
   // @params[in]: sql, the sql should be "select ORA_ROWSCN from xxx", where count() is 1
   // @params[out]: the ORA_ROWSCN
   static int get_ora_rowscn(
     common::ObISQLClient &client,
-    const uint64_t tenant_id,
     const ObSqlString &sql,
     SCN &ora_rowscn);
-  static int mtl_get_tenant_role(const uint64_t tenant_id, ObTenantRole::Role &tenant_role);
-  static int mtl_check_if_tenant_role_is_primary(const uint64_t tenant_id, bool &is_primary);
-  static int mtl_check_if_tenant_role_is_standby(const uint64_t tenant_id, bool &is_standby);
-  static int table_get_tenant_role(const uint64_t tenant_id, ObTenantRole &tenant_role);
-  static int table_check_if_tenant_role_is_primary(const uint64_t tenant_id, bool &is_primary);
-  static int table_check_if_tenant_role_is_standby(const uint64_t tenant_id, bool &is_standby);
+  static int mtl_get_tenant_role(ObTenantRole::Role &tenant_role);
+  static int mtl_check_if_tenant_role_is_primary(bool &is_primary);
+  static int mtl_check_if_tenant_role_is_standby(bool &is_standby);
+  static int table_get_tenant_role(ObTenantRole &tenant_role);
+  static int table_check_if_tenant_role_is_primary(bool &is_primary);
+  static int table_check_if_tenant_role_is_standby(bool &is_standby);
   static const char *replica_type_to_string(const ObReplicaType type);
   static ObReplicaType string_to_replica_type(const char *str);
   static ObReplicaType string_to_replica_type(const ObString &str);
   static inline uint64_t compute_server_index(uint64_t server_id) {
     return server_id % (MAX_SERVER_COUNT + 1);
   }
-  static int get_sys_ls_readable_scn(SCN &readable_scn);
-  static int check_clog_disk_full_or_hang(
-             bool &clog_disk_is_full,
-             bool &clog_disk_is_hang);
-  static int check_data_disk_health_status(
-             bool &is_data_disk_healthy);
-  static int get_tenant_gts(const uint64_t &tenant_id, SCN &gts_scn);
+  // get_sys_ls_readable_scn has been demoted to storage::free function(see end of file storage ns)
+  // check_clog_disk_full_or_hang has been demoted to logservice::free function
+  // get_tenant_gts has been demoted to storage::free function(transaction::get_tenant_gts, see end of file storage/transaction ns and ob_ts_mgr.cpp)
+  // Note: master still keeps ObShareUtil::get_tenant_gts(SCN&) shape and still has callers, changed to transaction::get_tenant_gts (see routing item)
   static int gen_sys_unit(ObUnit &unit);
   static int gen_sys_resource_pool(ObResourcePool &resource_pool);
   static int gen_default_sys_tenant_schema(schema::ObTenantSchema &tenant_schema);
@@ -124,4 +121,7 @@ public:
 };
 }//end namespace share
 }//end namespace oceanbase
+namespace oceanbase { namespace storage {
+} }
+
 #endif //OCEANBASE_SHARE_OB_SHARE_UTIL_H_

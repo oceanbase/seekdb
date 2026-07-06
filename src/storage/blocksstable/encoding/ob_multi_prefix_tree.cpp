@@ -125,7 +125,7 @@ int ObMultiPrefixTree::HashTable::build(TreeNode &tnode, const int64_t move_step
  *  ObMultiPrefixTree
  */
 ObMultiPrefixTree::ObMultiPrefixTree() : is_inited_(false),
-    alloc_(blocksstable::OB_ENCODING_LABEL_MULTI_PREFIX_TREE, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    alloc_(blocksstable::OB_ENCODING_LABEL_MULTI_PREFIX_TREE, OB_MALLOC_NORMAL_BLOCK_SIZE),
     tree_nodes_(NULL), cell_nodes_(NULL),
     tnode_cnt_(0), cnode_cnt_(0), cnode_cnt_limit_(0), ht_(),
     null_cnt_(0), nope_cnt_(0)
@@ -460,7 +460,7 @@ ObMultiPrefixTreeFactory::ObMultiPrefixTreeFactory()
     : allocator_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObMalloc(blocksstable::OB_ENCODING_LABEL_PREFIX_TREE_FACTORY)),
       prefix_trees_()
 {
-  lib::ObMemAttr attr(MTL_ID(), blocksstable::OB_ENCODING_LABEL_PREFIX_TREE_FACTORY);
+  lib::ObMemAttr attr(blocksstable::OB_ENCODING_LABEL_PREFIX_TREE_FACTORY);
   allocator_.set_attr(attr);
   prefix_trees_.set_attr(attr);
 }

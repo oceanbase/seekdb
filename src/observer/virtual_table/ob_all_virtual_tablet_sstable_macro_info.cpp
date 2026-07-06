@@ -15,6 +15,7 @@
  */
 
 #include "ob_all_virtual_tablet_sstable_macro_info.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 
@@ -144,7 +145,17 @@ ObAllVirtualTabletSSTableMacroInfo::~ObAllVirtualTabletSSTableMacroInfo()
 
 void ObAllVirtualTabletSSTableMacroInfo::reset()
 {
-  omt::ObMultiTenantOperator::reset();
+  clean_cur_sstable();
+  cols_desc_.reset();
+  table_store_iter_.reset();
+  tablet_handle_.reset();
+  if (OB_NOT_NULL(tablet_iter_)) {
+    tablet_iter_->~ObTenantTabletIterator();
+    tablet_iter_ = nullptr;
+  }
+  iter_allocator_.reset();
+  rowkey_allocator_.reset();
+  tablet_allocator_.reset();
   addr_.reset();
 
   if (OB_NOT_NULL(iter_buf_)) {
@@ -242,7 +253,7 @@ int ObAllVirtualTabletSSTableMacroInfo::get_macro_info(
   macro_read_info.offset_ = 0;
   macro_read_info.size_ = OB_STORAGE_OBJECT_MGR.get_macro_block_size();
   macro_read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
-  macro_read_info.mtl_tenant_id_ = MTL_ID();
+  
 
   if (OB_ISNULL(io_buf_) && OB_ISNULL(io_buf_ =
       reinterpret_cast<char*>(allocator_->alloc(OB_STORAGE_OBJECT_MGR.get_macro_block_size())))) {
@@ -310,7 +321,7 @@ int ObAllVirtualTabletSSTableMacroInfo::get_macro_info(
     SERVER_LOG(WARN, "invalid argument", K(ret), K(macro_desc));
   } else if (curr_sstable_->is_normal_cg_sstable()) {
     const storage::ObITableReadInfo *index_read_info = nullptr;
-    if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->get_index_read_info(index_read_info))) {
+    if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
       SERVER_LOG(WARN, "failed to get index read info from ObTenantCGReadInfoMgr", KR(ret));
     } else if (OB_FAIL(macro_desc.range_.to_store_range(index_read_info->get_columns_desc(),
                                                  rowkey_allocator_,
@@ -554,41 +565,7 @@ void ObAllVirtualTabletSSTableMacroInfo::clean_cur_sstable()
   other_blk_iter_.reset();
 }
 
-int ObAllVirtualTabletSSTableMacroInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "fail to execute", K(ret));
-  }
-  return ret;
-}
-
-void ObAllVirtualTabletSSTableMacroInfo::release_last_tenant()
-{
-  clean_cur_sstable();
-  cols_desc_.reset();
-  table_store_iter_.reset();
-  tablet_handle_.reset();
-  if (OB_NOT_NULL(tablet_iter_)) {
-    tablet_iter_->~ObTenantTabletIterator();
-    tablet_iter_ = nullptr;
-  }
-  iter_allocator_.reset();
-  rowkey_allocator_.reset();
-  tablet_allocator_.reset();
-}
-
-bool ObAllVirtualTabletSSTableMacroInfo::is_need_process(uint64_t tenant_id)
-{
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)){
-    bool need_ignore = check_tenant_need_ignore(tenant_id);
-    return !need_ignore;
-  }
-  return false;
-}
-
-int ObAllVirtualTabletSSTableMacroInfo::process_curr_tenant(common::ObNewRow *&row)
+int ObAllVirtualTabletSSTableMacroInfo::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   MacroInfo macro_info;
@@ -614,10 +591,10 @@ int ObAllVirtualTabletSSTableMacroInfo::get_next_tablet()
   tablet_handle_.reset();
   tablet_allocator_.reuse();
   if (nullptr == tablet_iter_) {
-    tablet_allocator_.set_tenant_id(MTL_ID());
-    iter_allocator_.set_tenant_id(MTL_ID());
-    rowkey_allocator_.set_tenant_id(MTL_ID());
-    ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+    
+    
+    
+    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
     if (OB_ISNULL(tablet_iter_ = new (iter_buf_) ObTenantTabletIterator(*t3m, tablet_allocator_, nullptr/*no op*/))) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "fail to new tablet_iter_", K(ret));
@@ -716,12 +693,11 @@ int ObAllVirtualTabletSSTableMacroInfo::get_next_sstable()
   return ret;
 }
 
-bool ObAllVirtualTabletSSTableMacroInfo::check_tenant_need_ignore(uint64_t tenant_id)
+bool ObAllVirtualTabletSSTableMacroInfo::check_tenant_need_ignore()
 {
   // In this feature branch, rowkey of __all_virtual_tablet_sstable_macro_info is:
   //   (tablet_id, end_log_scn, macro_idx_in_sstable)
-  // It doesn't contain tenant_id/svr_ip/svr_port/ls_id, so we cannot safely prune tenants by key_ranges_.
-  UNUSED(tenant_id);
+  // It doesn't contain tenant/svr_ip/svr_port/ls_id, so we cannot safely prune tenants by key_ranges_.
   return false;
 }
 

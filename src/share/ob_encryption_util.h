@@ -116,7 +116,6 @@ public:
   static bool is_aes_encryption(const ObCipherOpMode opmode);
   static bool is_sm4_encryption(const ObCipherOpMode opmode);
   static bool is_ecb_mode(const ObCipherOpMode opmode);
-  static int get_cipher_op_mode(ObCipherOpMode &op_mode, const sql::ObSQLSessionInfo *session);
 };
 
 struct ObBackupEncryptionMode final
@@ -131,7 +130,6 @@ struct ObBackupEncryptionMode final
     MAX_MODE
   };
   static bool is_valid(const EncryptionMode &mode);
-  static bool is_valid_for_log_archive(const EncryptionMode &mode);
   static const char *to_str(const EncryptionMode &mode);
   static EncryptionMode parse_str(const char *str);
   static EncryptionMode parse_str(const common::ObString &str);

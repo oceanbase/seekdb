@@ -100,8 +100,8 @@ ObTableLoadDagStoreChunkWriter::ObTableLoadDagStoreChunkWriter()
     is_single_part_(false),
     is_closed_(false)
 {
-  table_builder_allocator_.set_tenant_id(MTL_ID());
-  table_builders_.set_attr(ObMemAttr(MTL_ID(), "TLD_TblBuilder"));
+  
+  table_builders_.set_attr(ObMemAttr("TLD_TblBuilder"));
 }
 
 ObTableLoadDagStoreChunkWriter::~ObTableLoadDagStoreChunkWriter()
@@ -137,7 +137,7 @@ int ObTableLoadDagStoreChunkWriter::init(ObTableLoadDagWriteChannel *write_chann
     is_single_part_ =
       (store_ctx_->write_ctx_.is_multiple_mode_ ||
        1 == write_channel_->op_->op_ctx_->store_table_ctx_->ls_partition_ids_.count());
-    if (OB_FAIL(table_builder_map_.create(64, "TLD_TB_Map", "TLD_TB_Map", MTL_ID()))) {
+    if (OB_FAIL(table_builder_map_.create(64, "TLD_TB_Map", "TLD_TB_Map"))) {
       LOG_WARN("fail to create hashmap", KR(ret));
     } else if (OB_FAIL(datum_row_.init(
                  write_channel_->op_->op_ctx_->table_store_.get_table_data_desc().column_count_))) {

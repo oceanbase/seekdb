@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_DTL
 
 #include "ob_dtl_local_channel.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 
@@ -25,20 +26,18 @@ namespace sql {
 namespace dtl {
 
 ObDtlLocalChannel::ObDtlLocalChannel(
-    const uint64_t tenant_id,
     const uint64_t id,
     const ObAddr &peer,
     DtlChannelType type)
-    : ObDtlBasicChannel(tenant_id, id, peer, type)
+    : ObDtlBasicChannel(id, peer, type)
 {}
 
 ObDtlLocalChannel::ObDtlLocalChannel(
-    const uint64_t tenant_id,
     const uint64_t id,
     const ObAddr &peer,
     const int64_t hash_val,
     DtlChannelType type)
-    : ObDtlBasicChannel(tenant_id, id, peer, hash_val, type)
+    : ObDtlBasicChannel(id, peer, hash_val, type)
 {}
 
 ObDtlLocalChannel::~ObDtlLocalChannel()
@@ -80,8 +79,8 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
     is_first = buf->is_data_msg() && 1 == buf->seq_no();
     is_eof = buf->is_eof();
     if (buf->is_data_msg() && buf->use_interm_result()) {
-      MTL_SWITCH(buf->tenant_id()) {
-        if (OB_FAIL(MTL(ObDTLIntermResultManager*)->process_interm_result(buf, peer_id_))) {
+      MOD_SCOPE {
+        if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->process_interm_result(buf, peer_id_))) {
           LOG_WARN("fail to process internal result", K(ret));
         }
       }

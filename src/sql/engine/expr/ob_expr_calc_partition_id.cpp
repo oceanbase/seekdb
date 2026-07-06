@@ -18,7 +18,7 @@
 #include "ob_expr_calc_partition_id.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_func_part_hash.h"
-#include "share/vector/expr_cmp_func.h"
+#include "sql/engine/vector/expr_cmp_func.h"
 
 namespace oceanbase
 {
@@ -111,10 +111,6 @@ static int64_t get_8_len_val(const char *payload)
 
 static GetPayloadFunc FAST_CALC_PART_GET_VAL_FUNCS[2] = {get_64_len_val, get_8_len_val};
 
-REG_SER_FUNC_ARRAY(OB_SFA_FAST_CALC_PART_VEC,
-                   FAST_CALC_PART_GET_VAL_FUNCS,
-                   sizeof(FAST_CALC_PART_GET_VAL_FUNCS) / sizeof(void *));
-
 ERRSIM_POINT_DEF(ERRSIM_USE_FAST_CALC_PART);
 int ObExprCalcPartitionBase::cg_expr(ObExprCGCtx &expr_cg_ctx,
                                    const ObRawExpr &raw_expr,
@@ -131,8 +127,7 @@ int ObExprCalcPartitionBase::cg_expr(ObExprCGCtx &expr_cg_ctx,
   } else if (0 == ref_table_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid ref table id", K(ref_table_id), K(ret));
-  } else if (OB_FAIL(expr_cg_ctx.schema_guard_->get_table_schema(
-             MTL_ID(), ref_table_id, table_schema))) {
+  } else if (OB_FAIL(expr_cg_ctx.schema_guard_->get_table_schema( ref_table_id, table_schema))) {
     LOG_WARN("fail to get table schema", K(ref_table_id), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
@@ -159,7 +154,6 @@ int ObExprCalcPartitionBase::cg_expr(ObExprCGCtx &expr_cg_ctx,
       bool fallback = false;
       const ObExpr *part_expr = rt_expr.args_[0];
       if (T_OP_ROW != part_expr->type_ &&
-          !table_schema->is_external_table() &&
           (CALC_TABLET_ID == calc_part_info->calc_id_type_ || 
            CALC_PARTITION_ID == calc_part_info->calc_id_type_) && 
           ERRSIM_USE_FAST_CALC_PART == OB_SUCCESS) {
@@ -1068,8 +1062,7 @@ int ObExprCalcPartitionBase::calc_part_and_subpart_and_tablet_id(const ObExpr *c
       if (OB_ISNULL(eval_ctx.exec_ctx_.get_sql_ctx())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null sql_ctx", K(ret));
-      } else if (OB_FAIL(eval_ctx.exec_ctx_.get_sql_ctx()->schema_guard_->get_table_schema(
-          MTL_ID(), calc_part_info->ref_table_id_, table_schema))) {
+      } else if (OB_FAIL(eval_ctx.exec_ctx_.get_sql_ctx()->schema_guard_->get_table_schema( calc_part_info->ref_table_id_, table_schema))) {
         LOG_WARN("get table schema failed", K(ret));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -1130,12 +1123,11 @@ int ObExprCalcPartitionBase::add_interval_part(ObExecContext &exec_ctx,
 {
   int ret = OB_SUCCESS;
   if (MayAddIntervalPart::YES == calc_part_info.may_add_interval_part_) {
-    const uint64_t tenant_id = MTL_ID();
+    
     const ObTableSchema *table_schema = NULL;
     bool is_interval = false;
     CK (OB_NOT_NULL(exec_ctx.get_sql_ctx()));
-    OZ (exec_ctx.get_sql_ctx()->schema_guard_->get_table_schema(
-        tenant_id, calc_part_info.ref_table_id_, table_schema));
+    OZ (exec_ctx.get_sql_ctx()->schema_guard_->get_table_schema( calc_part_info.ref_table_id_, table_schema));
     CK (OB_NOT_NULL(table_schema));
     OX (is_interval = table_schema->is_interval_part());
     if (OB_SUCC(ret) && is_interval) {
@@ -1410,7 +1402,7 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_list_partition_base_in
     }
   }
   if (OB_SUCC(ret)) {
-    ObMemAttr list_part_map_attr(MTL_ID(), "LISTPART");
+    ObMemAttr list_part_map_attr("LISTPART");
     if (OB_FAIL(list_part_map_.create(list_val_cnt * 2,
                                   list_part_map_attr, list_part_map_attr))) {
       LOG_WARN("create interm_res hash table failed", K(ret));

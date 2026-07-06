@@ -15,6 +15,7 @@
  */
 
 #include "ob_compaction_suggestion.h"
+#include "share/rc/ob_module_provider.h"
 #include "src/storage/tx_storage/ob_ls_map.h"
 
 namespace oceanbase
@@ -417,7 +418,7 @@ int ObCompactionSuggestionMgr::analyze_for_suggestion(
     } else if (ObDagPrio::DAG_PRIO_COMPACTION_LOW == priority) {
       suggestion.merge_type_ = MEDIUM_MERGE;
     }
-    suggestion.tenant_id_ = MTL_ID();
+    
     suggestion.ls_id_ = UNKNOW_LS_ID.id();
     suggestion.tablet_id_ = UNKNOW_TABLET_ID.id();
     suggestion.merge_start_time_ = common::ObTimeUtility::fast_current_time();
@@ -574,32 +575,25 @@ int ObCompactionSuggestionMgr::analyze_merge_info(
   return ret;
 }
 
-int ObCompactionSuggestionIterator::open(const int64_t tenant_id)
+int ObCompactionSuggestionIterator::open()
 {
   int ret = OB_SUCCESS;
-  omt::TenantIdList all_tenants;
-  all_tenants.set_label(ObModIds::OB_TENANT_ID_LIST);
   if (is_opened_) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "The ObCompactionSuggestionIterator has been opened", K(ret));
-  } else if (!::is_valid_tenant_id(tenant_id)) {
+  } else if (!true) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(ret), K(tenant_id));
-  } else if (OB_SYS_TENANT_ID == tenant_id) { // sys tenant can get all tenants' info
-    GCTX.omt_->get_tenant_ids(all_tenants);
-  } else if (OB_FAIL(all_tenants.push_back(tenant_id))) {
-    STORAGE_LOG(WARN, "failed to push back tenant_id", K(ret), K(tenant_id));
+    STORAGE_LOG(WARN, "invalid argument", K(ret));
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < all_tenants.size(); ++i) {
-    uint64_t tenant_id = all_tenants[i];
-    if (!is_virtual_tenant_id(tenant_id)) { // skip virtual tenant
-      MTL_SWITCH(tenant_id) {
-        if (OB_FAIL(MTL(ObCompactionSuggestionMgr *)->get_suggestion_list(suggestion_array_))) {
+  if (OB_SUCC(ret)) {
+    { // skip virtual tenant
+      MOD_SCOPE {
+        if (OB_FAIL(share::g_mp->compaction_suggestion_mgr()->get_suggestion_list(suggestion_array_))) {
           STORAGE_LOG(WARN, "failed to get suggestion list", K(ret));
         }
       } else {
         if (OB_TENANT_NOT_IN_SERVER != ret) {
-          STORAGE_LOG(WARN, "switch tenant failed", K(ret), K(tenant_id));
+          STORAGE_LOG(WARN, "switch tenant failed", K(ret));
         } else {
           ret = OB_SUCCESS;
         }

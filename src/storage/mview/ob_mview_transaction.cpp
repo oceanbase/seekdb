@@ -162,13 +162,13 @@ int ObMViewTransaction::ObSessionSavedForInner::save(ObSQLSessionInfo *session_i
     LOG_WARN("invalid args", KR(ret), KP(session_info));
   } else {
     const int64_t max_database_name_len = OB_MAX_DATABASE_NAME_BUF_LENGTH * OB_MAX_CHAR_LEN;
-    const uint64_t tenant_id = session_info->get_effective_tenant_id();
+    
     const uint64_t database_id = session_info->get_database_id();
     const ObString database_name = session_info->get_database_name();
     ObSQLSessionInfo::StmtSavedValue *session_saved_value = nullptr;
     char *database_name_buf = nullptr;
     allocator_.reuse();
-    allocator_.set_tenant_id(tenant_id);
+    
     if (OB_ISNULL(session_saved_value = OB_NEWx(ObSQLSessionInfo::StmtSavedValue, &allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObSQLSessionInfo::StmtSavedValue", KR(ret));
@@ -323,19 +323,19 @@ int ObMViewTransaction::connect(ObSQLSessionInfo *session_info, ObISQLClient *sq
   return ret;
 }
 
-int ObMViewTransaction::start_transaction(uint64_t tenant_id)
+int ObMViewTransaction::start_transaction()
 {
   int ret = OB_SUCCESS;
   ObISQLConnection *conn = nullptr;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
+  if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tenant_id));
+    LOG_WARN("invalid args", KR(ret));
   } else if (OB_ISNULL(conn = get_connection())) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("conn_ is NULL", KR(ret));
   } else {
-    if (OB_FAIL(conn->start_transaction(tenant_id, false /*with_snapshot*/))) {
-      LOG_WARN("fail to start transaction", KR(ret), K(tenant_id));
+    if (OB_FAIL(conn->start_transaction(false /*with_snapshot*/))) {
+      LOG_WARN("fail to start transaction", KR(ret));
     }
     if (OB_SUCCESS == get_errno()) {
       set_errno(ret);
@@ -391,14 +391,14 @@ int ObMViewTransaction::start(
   } else if (OB_FAIL(connect(session_info, sql_client))) {
     LOG_WARN("fail to connect", KR(ret));
   } else {
-    const uint64_t tenant_id = session_info->get_effective_tenant_id();
+    
     start_time_ = ObTimeUtility::current_time();
-    if (OB_FAIL(start_transaction(tenant_id))) {
-      LOG_WARN("failed to start transaction", KR(ret), K(tenant_id));
+    if (OB_FAIL(start_transaction())) {
+      LOG_WARN("failed to start transaction", KR(ret));
     } else {
       session_info_ = session_info;
       in_trans_ = true;
-      LOG_DEBUG("start transaction success", K(tenant_id));
+      LOG_DEBUG("start transaction success");
     }
   }
   if (OB_FAIL(ret)) {

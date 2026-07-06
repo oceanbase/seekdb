@@ -34,11 +34,6 @@ struct ObProtoEncodeParam;
 class Obp20Encoder;
 } // end of namespace obmysql
 
-namespace share
-{
-class ObFeedbackRerouteInfo;
-}
-
 namespace observer
 {
 class ObMySQLResultSet;
@@ -58,8 +53,7 @@ struct ObOKPParam
       cursor_exist_(false),
       send_last_row_(false),
       has_pl_out_(false),
-      lii_(0),
-      reroute_info_(NULL)
+      lii_(0)
   { }
   void reset();
   int64_t to_string(char *buf, const int64_t buf_len) const;
@@ -86,8 +80,6 @@ struct ObOKPParam
   // Attention, in this case, lii is in ok packet's last insert id field
   // (encode by int<lenenc>), not in session track field;
   uint64_t lii_;
-
-  share::ObFeedbackRerouteInfo *reroute_info_;
 };
 
 class ObIMPPacketSender

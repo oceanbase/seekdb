@@ -134,9 +134,9 @@ int ObMergeJoinOp::inner_open()
   } else if (OB_FAIL(init_mem_context())) {
     LOG_WARN("fail to init memory context", K(ret));
   } else if (MY_SPEC.is_vectorized()) {
-    const uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
-    match_groups_.set_attr(ObMemAttr(tenant_id, "SqlMJGroups"));
-    output_cache_.set_attr(ObMemAttr(tenant_id, "SqlMJOutput"));
+    
+    match_groups_.set_attr(ObMemAttr("SqlMJGroups"));
+    output_cache_.set_attr(ObMemAttr("SqlMJOutput"));
     const ObIArray<ObMergeJoinSpec::EqualConditionInfo> &equal_cond_infos =
                                                           MY_SPEC.equal_cond_infos_;
     const int64_t left_width = left_->get_spec().width_;
@@ -150,18 +150,17 @@ int ObMergeJoinOp::inner_open()
     const int64_t cache_size = MY_SPEC.max_batch_size_ * BATCH_MULTIPLE_TIMES *
                                   (left_width + right_width);
     if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(),
-                                        tenant_id,
                                         std::max(static_cast<int64_t>(2L << 20), cache_size),
                                         MY_SPEC.type_,
                                         MY_SPEC.id_,
                                         &ctx_))) {
       LOG_WARN("failed to init sql memory manager processor", K(ret));
     } else if (OB_FAIL(left_brs_fetcher_.init(
-                tenant_id, true, left_, equal_cond_infos,
+                true, left_, equal_cond_infos,
                 &(MY_SPEC.left_child_fetcher_all_exprs_)))) {
       LOG_WARN("init left batch fetcher failed", K(ret));
     } else if (OB_FAIL(right_brs_fetcher_.init(
-                    tenant_id, false, right_, equal_cond_infos,
+                    false, right_, equal_cond_infos,
                     &(MY_SPEC.right_child_fetcher_all_exprs_)))) {
       LOG_WARN("init right batch fetcher failed", K(ret));
     }
@@ -169,16 +168,14 @@ int ObMergeJoinOp::inner_open()
                                                         K(profile_.get_expect_size()));
   } else {
     // non-vectorized
-    const uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+    
     if (!MY_SPEC.is_skip_cache()) {
-      if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(),
-                                          tenant_id, 256 * right_->get_spec().width_,
+      if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), 256 * right_->get_spec().width_,
                                           MY_SPEC.type_,
                                           MY_SPEC.id_,
                                           &ctx_))) {
         LOG_WARN("failed to init sql memory manager processor", K(ret));
-      } else if (OB_FAIL(right_cache_.init(UINT64_MAX/*mem_limit*/,
-                                    tenant_id,
+      } else if (OB_FAIL(right_cache_.init(UINT64_MAX,
                                     ObCtxIds::WORK_AREA,
                                     ObModIds::OB_SQL_MERGE_JOIN))) {
         LOG_WARN("init row store failed", K(ret));
@@ -850,10 +847,9 @@ int ObMergeJoinOp::init_mem_context()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(mem_context_)) {
     ObSQLSessionInfo *session = ctx_.get_my_session();
-    uint64_t tenant_id = session->get_effective_tenant_id();
+    
     lib::ContextParam param;
-    param.set_mem_attr(tenant_id,
-                        ObModIds::OB_SQL_MERGE_JOIN,
+    param.set_mem_attr(ObModIds::OB_SQL_MERGE_JOIN,
                         ObCtxIds::WORK_AREA)
       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
@@ -937,7 +933,7 @@ int ObMergeJoinOp::process_dump()
 }
 
 int ObMergeJoinOp::ChildBatchFetcher::init(
-    const uint64_t tenant_id, bool is_left, ObOperator *child,
+    bool is_left, ObOperator *child,
     const ObIArray<ObMergeJoinSpec::EqualConditionInfo> &equal_cond_infos,
     const ExprFixedArray *all_exprs)
 {
@@ -948,8 +944,7 @@ int ObMergeJoinOp::ChildBatchFetcher::init(
   // In that case, child return 1 row at a time, set local batch default 1
   batch_size_ =
       child->get_spec().max_batch_size_ == 0 ? 1 : child->get_spec().max_batch_size_;
-  if (OB_FAIL(datum_store_.init(0/*mem_limit*/,
-                                tenant_id,
+  if (OB_FAIL(datum_store_.init(0,
                                 ObCtxIds::WORK_AREA,
                                 ObModIds::OB_SQL_MERGE_JOIN))) {
     LOG_WARN("init datum store failed", K(ret));

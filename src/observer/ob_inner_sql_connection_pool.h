@@ -19,7 +19,7 @@
 
 #include "lib/allocator/page_arena.h"
 #include "lib/list/ob_dlist.h"
-#include "lib/mysqlclient/ob_isql_connection_pool.h"
+#include "common/mysqlclient/ob_isql_connection_pool.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "ob_inner_sql_connection.h"
 
@@ -79,7 +79,7 @@ public:
       char *to, const int64_t to_size, int64_t &out_size);
 
   // acquired connection must be released
-  virtual int acquire(const uint64_t tenant_id, common::sqlclient::ObISQLConnection *&conn, ObISQLClient *client_addr, const int32_t group_id) override;
+  virtual int acquire(common::sqlclient::ObISQLConnection *&conn, ObISQLClient *client_addr, const int32_t group_id) override;
   virtual int release(common::sqlclient::ObISQLConnection *conn, const bool success);
   int acquire_spi_conn(sql::ObSQLSessionInfo *session_info, observer::ObInnerSQLConnection *&conn);
   int acquire(sql::ObSQLSessionInfo *session_info,

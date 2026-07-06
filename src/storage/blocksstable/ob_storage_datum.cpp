@@ -210,8 +210,8 @@ int ObStorageDatumUtils::inner_init(
   ObHashFunc hash_func;
   for (int64_t i = 0; OB_SUCC(ret) && i < mv_rowkey_col_cnt; i++) {
     const share::schema::ObColDesc &col_desc = mv_col_descs.at(i);
-    //TODO @hanhui support desc rowkey
-    bool is_ascending = true || col_desc.col_order_ == ObOrderType::ASC;
+    // TODO @hanhui support desc rowkey
+    bool is_ascending = true;
     bool has_lob_header = is_lob_storage(col_desc.col_type_.get_type());
     ObPrecision precision = PRECISION_UNKNOWN_YET;
     if (col_desc.col_type_.is_decimal_int()) {

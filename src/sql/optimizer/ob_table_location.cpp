@@ -20,9 +20,8 @@
 #include "sql/engine/expr/ob_expr_func_part_hash.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/optimizer/ob_log_plan.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
+#include "share/ob_tenant_timezone_mgr.h"
 #include "sql/rewrite/ob_transform_utils.h"
-#include "share/external_table/ob_external_table_utils.h"
 
 using namespace oceanbase::transaction;
 using namespace oceanbase::sql;
@@ -956,9 +955,6 @@ int ObTableLocation::init_table_location(ObExecContext &exec_ctx,
     LOG_WARN("table not exist", K(loc_meta_.ref_table_id_));
   } else {
     table_type_ = table_schema->get_table_type();
-    loc_meta_.is_external_table_ = table_schema->is_external_table();
-    loc_meta_.is_external_files_on_disk_ =
-        ObSQLUtils::is_external_files_on_local_disk(table_schema->get_external_file_location());
   }
 
   if (OB_FAIL(ret)) {
@@ -1095,9 +1091,9 @@ int ObTableLocation::init_table_location_with_rowkey(ObSqlSchemaGuard &schema_gu
   } else if (OB_ISNULL(session_info = exec_ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
-  } else if (OB_FAIL(schema_checker.get_table_schema(session_info->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_checker.get_table_schema(
                                                      table_id, table_schema))) {
-    LOG_WARN("get table schema failed", K(session_info->get_effective_tenant_id()), K(table_id), K(ret));
+    LOG_WARN("get table schema failed", K(table_id), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", K(table_id));
@@ -1147,9 +1143,9 @@ int ObTableLocation::init_table_location_with_column_ids(ObSqlSchemaGuard &schem
   } else if (OB_ISNULL(session_info = exec_ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
-  } else if (OB_FAIL(schema_checker.get_table_schema(session_info->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_checker.get_table_schema(
                                                      table_id, table_schema))) {
-    LOG_WARN("get table schema failed", K(session_info->get_effective_tenant_id()), K(table_id), K(ret));
+    LOG_WARN("get table schema failed", K(table_id), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", K(table_id));
@@ -1278,10 +1274,6 @@ int ObTableLocation::init(
     LOG_WARN("fail to get sys variable", K(ret));
   } else {
     table_type_ = table_schema->get_table_type();
-    loc_meta_.is_external_table_ = table_schema->is_external_table();
-    ObString file_location;
-    OZ(ObExternalTableUtils::get_external_file_location(*table_schema, schema_guard, exec_ctx->get_allocator(), file_location));
-    loc_meta_.is_external_files_on_disk_ = ObSQLUtils::is_external_files_on_local_disk(file_location);
     loc_meta_.route_policy_ = route_policy;
   }
 
@@ -1384,9 +1376,7 @@ int ObTableLocation::get_is_weak_read(const ObDMLStmt &dml_stmt,
              dml_stmt.get_query_ctx()->is_contain_select_for_update_ ||
              (!ERRSIM_WEAK_READ_INNER_TABLE && dml_stmt.get_query_ctx()->is_contain_inner_table_)) {
     is_weak_read = false;
-  } else if (share::ObTenantEnv::get_tenant() == nullptr) { //table api can't invoke MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID 
-    is_weak_read = false;
-  } else if (!MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID()) {
+  } else if (share::ObTenantEnv::get_tenant() == nullptr) { // table api has no tenant ctx
     is_weak_read = false;
   } else {
     ObConsistencyLevel consistency_level = INVALID_CONSISTENCY;
@@ -1847,10 +1837,7 @@ int ObTableLocation::calculate_tablet_ids(ObExecContext &exec_ctx,
       }
       ObObjectID default_partition_id = OB_INVALID_ID;
       ObTabletID default_tablet_id;
-      if (loc_meta_.is_external_table_) {
-        default_partition_id = 0;
-        default_tablet_id = default_partition_id;
-      } else if (OB_FAIL(tablet_mapper.get_default_tablet_and_object_id(part_level_,
+      if (OB_FAIL(tablet_mapper.get_default_tablet_and_object_id(part_level_,
                                                                  part_hint_ids_,
                                                                  default_tablet_id,
                                                                  default_partition_id))) {
@@ -3953,10 +3940,10 @@ int ObTableLocation::send_add_interval_partition_rpc(
   }
 
   CK (OB_NOT_NULL(schema_guard));
-  OZ (schema_guard->get_table_schema(exec_ctx.get_my_session()->get_effective_tenant_id(),
+  OZ (schema_guard->get_table_schema(
                                      loc_meta_.table_loc_id_, table_schema));
   CK (OB_NOT_NULL(table_schema));
-  OZ (schema_guard->get_database_schema(table_schema->get_tenant_id(), table_schema->get_database_id(), db_schema));
+  OZ (schema_guard->get_database_schema( table_schema->get_database_id(), db_schema));
   CK (OB_NOT_NULL(db_schema));
 
   CK (1 <= row.get_count());
@@ -3981,7 +3968,7 @@ int ObTableLocation::send_add_interval_partition_rpc(
 
 
     tz_info.set_offset(0);
-    OZ (OTTZ_MGR.get_tenant_tz(table_schema->get_tenant_id(), tz_info.get_tz_map_wrap()));
+    OZ (OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap()));
 
     SMART_VAR(char[OB_MAX_DEFAULT_VALUE_LENGTH], high_bound_buf) {
       MEMSET(high_bound_buf, 0, OB_MAX_DEFAULT_VALUE_LENGTH);
@@ -4005,7 +3992,7 @@ int ObTableLocation::send_add_interval_partition_rpc(
                               ));
       OX (sql_proxy = GCTX.sql_proxy_);
       CK (OB_NOT_NULL(sql_proxy));
-      OZ (sql_proxy->write(table_schema->get_tenant_id(), sql.ptr(), affected_rows, MYSQL_MODE));
+      OZ (sql_proxy->write(sql.ptr(), affected_rows, MYSQL_MODE));
     }
   }
   return ret;
@@ -4031,7 +4018,7 @@ int ObTableLocation::send_add_interval_partition_rpc_new_engine(
   CK (OB_NOT_NULL(schema_guard));
   CK (OB_NOT_NULL(session));
   CK (OB_NOT_NULL(table_schema));
-  OZ (schema_guard->get_database_schema(table_schema->get_tenant_id(), table_schema->get_database_id(), db_schema));
+  OZ (schema_guard->get_database_schema( table_schema->get_database_id(), db_schema));
   CK (OB_NOT_NULL(db_schema));
 
   CK (1 <= row.get_count());
@@ -4060,7 +4047,7 @@ int ObTableLocation::send_add_interval_partition_rpc_new_engine(
 
 
     tz_info.set_offset(0);
-    OZ (OTTZ_MGR.get_tenant_tz(table_schema->get_tenant_id(), tz_info.get_tz_map_wrap()));
+    OZ (OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap()));
 
     SMART_VAR(char[OB_MAX_DEFAULT_VALUE_LENGTH], high_bound_buf) {
       MEMSET(high_bound_buf, 0, OB_MAX_DEFAULT_VALUE_LENGTH);
@@ -4086,7 +4073,7 @@ int ObTableLocation::send_add_interval_partition_rpc_new_engine(
                               ));
       OX (sql_proxy = GCTX.sql_proxy_);
       CK (OB_NOT_NULL(sql_proxy));
-      OZ (sql_proxy->write(table_schema->get_tenant_id(), sql.ptr(), affected_rows, MYSQL_MODE));
+      OZ (sql_proxy->write(sql.ptr(), affected_rows, MYSQL_MODE));
     }
   }
   return ret;
@@ -5576,7 +5563,6 @@ int ObTableLocation::try_split_integer_range(const common::ObIArray<common::ObNe
 
 int ObTableLocation::get_full_leader_table_loc(ObDASLocationRouter &loc_router,
                                                ObIAllocator &allocator,
-                                               uint64_t tenant_id,
                                                uint64_t table_id,
                                                uint64_t ref_table_id,
                                                ObDASTableLoc *&table_loc)
@@ -5587,11 +5573,11 @@ int ObTableLocation::get_full_leader_table_loc(ObDASLocationRouter &loc_router,
   ObSEArray<ObObjectID, 4> partition_ids;
   ObSEArray<ObObjectID, 4> first_level_part_ids;
   ObSchemaGetterGuard schema_guard;
-  OZ(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard));
-  OZ(schema_guard.get_table_schema(tenant_id, ref_table_id, table_schema));
+  OZ(GCTX.schema_service_->get_tenant_schema_guard(schema_guard));
+  OZ(schema_guard.get_table_schema( ref_table_id, table_schema));
   if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
-    LOG_WARN("table schema is null", K(ret), K(table_id), K(tenant_id), K(ref_table_id));
+    LOG_WARN("table schema is null", K(ret), K(table_id), K(ref_table_id));
   } else {
     OZ(table_schema->get_all_tablet_and_object_ids(tablet_ids, partition_ids, &first_level_part_ids));
     CK(table_schema->has_tablet());
@@ -5624,7 +5610,7 @@ int ObTableLocation::get_full_leader_table_loc(ObDASLocationRouter &loc_router,
       OX(tablet_loc->loc_meta_ = loc_meta);
       OX(tablet_loc->partition_id_ = partition_ids.at(i));
       OX(tablet_loc->first_level_part_id_ = first_level_part_ids.at(i));
-      OZ(loc_router.nonblock_get_leader(tenant_id, tablet_ids.at(i), *tablet_loc));
+      OZ(loc_router.nonblock_get_leader(tablet_ids.at(i), *tablet_loc));
       OZ(table_loc->add_tablet_loc(tablet_loc));
     }
   }

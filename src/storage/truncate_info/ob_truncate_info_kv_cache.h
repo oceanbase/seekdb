@@ -27,7 +27,6 @@ class ObTruncateInfoCacheKey final : public common::ObIKVCacheKey
 {
 public:
   ObTruncateInfoCacheKey(
-    const uint64_t tenant_id,
     const ObTabletID &tablet_id,
     const int64_t schema_version,
     const int64_t last_major_snapshot);
@@ -35,12 +34,11 @@ public:
   bool is_valid() const;
   virtual int equal(const ObIKVCacheKey &other, bool &equal) const override;
   virtual int hash(uint64_t &hash_value) const override;
-  virtual uint64_t get_tenant_id() const override { return tenant_id_; }
+  
   virtual int64_t size() const override { return sizeof(*this); }
   virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const override;
-  TO_STRING_KV(K_(tenant_id), K_(tablet_id), K_(schema_version), K_(last_major_snapshot));
+  TO_STRING_KV(K_(tablet_id), K_(schema_version), K_(last_major_snapshot));
 private:
-  uint64_t tenant_id_;
   ObTabletID tablet_id_;
   int64_t schema_version_;
   int64_t last_major_snapshot_; // truncate info array in kv_cache is related to last_major

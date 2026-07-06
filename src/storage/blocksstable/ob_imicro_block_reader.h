@@ -22,7 +22,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "common/ob_store_format.h"
 #include "common/ob_store_range.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 #include "storage/access/ob_table_read_info.h"
 #include "ob_block_sstable_struct.h"
 #include "ob_datum_range.h"
@@ -495,7 +495,7 @@ class ObBlockReaderAllocator
 {
 public:
   ObBlockReaderAllocator(const lib::ObLabel &label, bool reserve_memory = false)
-    : inner_allocator_(label, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    : inner_allocator_(label, OB_MALLOC_NORMAL_BLOCK_SIZE),
       reserve_memory_ (reserve_memory)
   {
   }

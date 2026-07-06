@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_checkpoint_executor.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_checkpoint_service.h"
 #include "logservice/ob_log_service.h"
 #include "observer/ob_server_event_history_table_operator.h"
@@ -153,10 +155,10 @@ void ObCheckpointExecutor::add_server_event_history_for_update_clog_checkpoint(
   if (update_clog_checkpoint_times_ > 0) {
     int64_t cur_time = ObClockGenerator::getClock();
     if (cur_time - last_add_server_history_time_ > ADD_SERVER_HISTORY_INTERVAL) {
-      const uint64_t tenant_id = MTL_ID();
+      
       const int64_t ls_id = ls_->get_ls_id().id();
       last_add_server_history_time_ = cur_time;
-      SERVER_EVENT_ADD("checkpoint", "update_clog_checkpoint", K(tenant_id), K(ls_id), K(checkpoint_scn), K(service_type), K_(update_clog_checkpoint_times)); 
+      SERVER_EVENT_ADD("checkpoint", "update_clog_checkpoint", K(ls_id), K(checkpoint_scn), K(service_type), K_(update_clog_checkpoint_times)); 
       update_clog_checkpoint_times_ = 0;
     }
   }
@@ -402,7 +404,7 @@ int ObCheckpointExecutor::calculate_min_recycle_scn_(const LSN clog_checkpoint_l
 
   ObLogService *log_service = nullptr;
   ObLSService *ls_service = nullptr;
-  if (OB_ISNULL(log_service = MTL(ObLogService *)) || OB_ISNULL(ls_service = MTL(ObLSService *))) {
+  if (OB_ISNULL(log_service = share::g_mp->log_service()) || OB_ISNULL(ls_service = share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "get_log_service failed", K(ret));
   } else if (OB_FAIL(log_service->get_palf_disk_usage(used_size, total_size))) {

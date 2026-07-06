@@ -1046,7 +1046,6 @@ int ObLogApplyService::init(PalfEnv *palf_env,
                             ObLSAdapter *ls_adapter)
 {
   int ret = OB_SUCCESS;
-  const uint64_t MAP_TENANT_ID = MTL_ID();
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     CLOG_LOG(WARN, "ObLogApplyService init twice", K(ret));
@@ -1058,7 +1057,7 @@ int ObLogApplyService::init(PalfEnv *palf_env,
     CLOG_LOG(WARN, "fail to create thread group", K(ret));
   } else if (OB_FAIL(MTL_REGISTER_THREAD_DYNAMIC(0.5, tg_id_))) {
     CLOG_LOG(WARN, "MTL_REGISTER_THREAD_DYNAMIC failed", K(ret), K(tg_id_));
-  } else if (OB_FAIL(apply_status_map_.init("APPLY_STATUS", MAP_TENANT_ID))) {
+  } else if (OB_FAIL(apply_status_map_.init("APPLY_STATUS"))) {
     CLOG_LOG(WARN, "apply_status_map_ init error", K(ret));
   } else {
     is_inited_ = true;
@@ -1133,7 +1132,7 @@ int ObLogApplyService::add_ls(const share::ObLSID &id)
 {
   int ret = OB_SUCCESS;
   ObApplyStatus *apply_status = NULL;
-  ObMemAttr attr(MTL_ID(), ObModIds::OB_LOG_APPLY_STATUS);
+  ObMemAttr attr(ObModIds::OB_LOG_APPLY_STATUS);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "apply service not init", K(ret));

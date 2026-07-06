@@ -26,11 +26,10 @@ namespace common
 class ObTenantIOSchedulerV2
 {
 public:
-  ObTenantIOSchedulerV2() : tenant_id_(0) {}
+  ObTenantIOSchedulerV2() {}
   ~ObTenantIOSchedulerV2() {}
-  int init(const uint64_t tenant_id, const ObTenantIOConfig &io_config) {
+  int init(const ObTenantIOConfig &io_config) {
     UNUSED(io_config);
-    tenant_id_ = tenant_id;
     return OB_SUCCESS;
   }
   void destroy() {}
@@ -41,7 +40,6 @@ public:
   int schedule_request(ObIORequest &req);
   static int64_t get_qindex(ObIORequest& req);
 private:
-  uint64_t tenant_id_;
 };
 
 }; // end namespace common

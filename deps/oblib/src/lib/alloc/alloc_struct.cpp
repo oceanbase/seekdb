@@ -74,8 +74,8 @@ int64_t ObMemAttr::to_string(char* buf, const int64_t buf_len) const
   int64_t pos = 0;
   (void)common::logdata_printf(
       buf, buf_len, pos,
-      "tenant_id=%ld, label=%s, ctx_id=%ld, prio=%d",
-      tenant_id_, (const char *)label_, ctx_id_, prio_);
+      "label=%s, ctx_id=%ld, prio=%d",
+      (const char *)label_, ctx_id_, prio_);
   return pos;
 }
 

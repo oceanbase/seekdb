@@ -170,7 +170,7 @@ int ObTableEstimator::estimate_multi_scan_row_count(
           LOG_WARN("Failed to split ranges", K(ret), K(tmp_cost));
         } else if (store_ranges.count() > 1) {
           LOG_TRACE("estimated logical row count may be not right, split range and do estimating again", K(tmp_cost), K(store_ranges));
-          common::ObArenaAllocator allocator("OB_STORAGE_EST", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+          common::ObArenaAllocator allocator("OB_STORAGE_EST", OB_MALLOC_NORMAL_BLOCK_SIZE);
           for (int64_t i = 0; OB_SUCC(ret) && i < store_ranges.count(); ++i) {
             ObPartitionEst sub_cost;
             ObDatumRange datum_range;

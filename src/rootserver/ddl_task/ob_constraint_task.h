@@ -28,7 +28,6 @@ class ObCheckConstraintValidationTask : public share::ObAsyncTask
 {
 public:
   ObCheckConstraintValidationTask(
-      const uint64_t tenant_id,
       const int64_t data_table_id,
       const int64_t constraint_id,
       const int64_t target_object_id,
@@ -42,7 +41,6 @@ public:
   virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
   virtual ObAsyncTask *deep_copy(char *buf, const int64_t buf_size) const override;
 private:
-  uint64_t tenant_id_;
   int64_t data_table_id_;
   int64_t constraint_id_;
   int64_t target_object_id_;
@@ -57,7 +55,6 @@ class ObForeignKeyConstraintValidationTask : public share::ObAsyncTask
 {
 public:
   ObForeignKeyConstraintValidationTask(
-      const uint64_t tenant_id,
       const int64_t data_table_id,
       const int64_t foregin_key_id,
       const int64_t schema_version,
@@ -80,7 +77,6 @@ private:
       const share::schema::ObDatabaseSchema &parent_database_schema,
       const share::schema::ObForeignKeyInfo &fk_info) const;
 private:
-  uint64_t tenant_id_;
   int64_t data_table_id_;
   int64_t foregin_key_id_;
   int64_t schema_version_;
@@ -109,7 +105,7 @@ public:
   virtual int process() override;
   int update_check_constraint_finish(const int ret_code);
   virtual int serialize_params_to_message(char *buf, const int64_t buf_size, int64_t &pos) const override;
-  virtual int deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t buf_size, int64_t &pos) override;
+  virtual int deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos) override;
   virtual int64_t get_serialize_param_size() const override;
 private:
   int hold_snapshot(common::ObMySQLTransaction &trans, const int64_t snapshot_version);

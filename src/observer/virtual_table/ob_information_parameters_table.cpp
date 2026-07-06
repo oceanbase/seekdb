@@ -26,8 +26,7 @@ namespace observer
 {
 
 ObInformationParametersTable::ObInformationParametersTable()
-    : ObVirtualTableScannerIterator(),
-      tenant_id_(OB_INVALID_ID)
+    : ObVirtualTableScannerIterator()
 {
 }
 
@@ -37,7 +36,6 @@ ObInformationParametersTable::~ObInformationParametersTable()
 
 void ObInformationParametersTable::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   ObVirtualTableScannerIterator::reset();
 }
 
@@ -56,8 +54,8 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
       switch (col_id) {
         case (SPECIFIC_SCHEMA): {
           const ObDatabaseSchema *db_schema = NULL;
-          if (OB_FAIL(schema_guard_->get_database_schema(tenant_id_, routine_info->get_database_id(), db_schema))) {
-            SERVER_LOG(WARN, "Failed to get database schema", K_(tenant_id), K(routine_info->get_database_id()), K(ret));
+          if (OB_FAIL(schema_guard_->get_database_schema( routine_info->get_database_id(), db_schema))) {
+            SERVER_LOG(WARN, "Failed to get database schema", K(routine_info->get_database_id()), K(ret));
           } else if (OB_ISNULL(db_schema)) {
             ret = OB_ERR_UNEXPECTED;
             SERVER_LOG(WARN, "Database schema should not be NULL", K(ret));
@@ -226,9 +224,6 @@ int ObInformationParametersTable::inner_get_next_row(common::ObNewRow *&row)
   if (OB_ISNULL(allocator_) || OB_ISNULL(schema_guard_) || OB_ISNULL(session_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "argument is NULL", K(allocator_), K(schema_guard_), K(session_), K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id_)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "tenant_id is invalid", K(ret));
   } else {
     if (!start_to_read_) {
       ObObj *cells = NULL;
@@ -237,7 +232,7 @@ int ObInformationParametersTable::inner_get_next_row(common::ObNewRow *&row)
         SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
       } else {
         ObArray<const ObRoutineInfo *> routine_array;
-        if (OB_FAIL(schema_guard_->get_routine_infos_in_tenant(tenant_id_, routine_array))) {
+        if (OB_FAIL(schema_guard_->get_routine_infos_in_tenant( routine_array))) {
           SERVER_LOG(WARN, "Get routine info with tenant id error", K(ret));
         } else {
           const ObRoutineInfo *routine_info = NULL;

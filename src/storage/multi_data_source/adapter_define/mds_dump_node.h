@@ -292,7 +292,6 @@ int MdsDumpNode::convert_to_user_mds_node(UserMdsNode<K, V> &user_mds_node, cons
   MDS_TG(1_ms);
   int64_t pos = 0;
   uint32_t generated_hash = generate_hash();
-  set_mds_mem_check_thread_local_info(ls_id, tablet_id, typeid(UserMdsNode<K, V>).name());
   meta::MetaSerializer<V> serializer(MdsAllocator::get_instance(), user_mds_node.user_data_);
   if (UINT32_MAX != crc_check_number_ && generated_hash != crc_check_number_) {
     ret = OB_ERR_UNEXPECTED;
@@ -307,7 +306,6 @@ int MdsDumpNode::convert_to_user_mds_node(UserMdsNode<K, V> &user_mds_node, cons
     user_mds_node.trans_version_ = trans_version_;
     user_mds_node.status_ = status_;
   }
-  reset_mds_mem_check_thread_local_info();
   return ret;
   #undef PRINT_WRAPPER
 }

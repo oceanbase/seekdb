@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 #include "ob_sub_column_path.h"
 #include "lib/utility/ob_fast_convert.h"
-#include "lib/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_tree.h"
 #include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase
@@ -134,7 +134,7 @@ int ObSubColumnPathItem::compare(const ObSubColumnPathItem &other, const bool us
 
 ObSubColumnPath::ObSubColumnPath()
 {
-  items_.set_attr(lib::ObMemAttr(MTL_ID(), "SemiPath"));
+  items_.set_attr(lib::ObMemAttr("SemiPath"));
 }
 
 OB_DEF_SERIALIZE_SIZE(ObSubColumnPath)

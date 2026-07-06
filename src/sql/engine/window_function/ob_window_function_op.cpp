@@ -306,10 +306,10 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
   return ret;
 }
 
-int ObWindowFunctionOp::WinFuncCell::reset_res(const int64_t tenant_id)
+int ObWindowFunctionOp::WinFuncCell::reset_res()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(res_.reset(tenant_id))) {
+  if (OB_FAIL(res_.reset())) {
     LOG_WARN("reset part rows store failed", K(ret));
   }
   return ret;
@@ -1133,7 +1133,7 @@ void ObWindowFunctionOp::Frame::prune_frame(const Frame &part_frame,
 
 template<class FuncType>
 int ObWindowFunctionOp::FuncAllocer::alloc(WinFuncCell *&return_func,
-    WinFuncInfo &wf_info, ObWindowFunctionOp &op, const int64_t tenant_id)
+    WinFuncInfo &wf_info, ObWindowFunctionOp &op)
 {
   int ret = OB_SUCCESS;
   void *tmp_ptr = local_allocator_->alloc(sizeof(FuncType));
@@ -1141,7 +1141,7 @@ int ObWindowFunctionOp::FuncAllocer::alloc(WinFuncCell *&return_func,
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     return_func = new (tmp_ptr) FuncType(wf_info, op);
-    ret = return_func->reset_res(tenant_id);
+    ret = return_func->reset_res();
   }
   return ret;
 }
@@ -1165,7 +1165,6 @@ int ObWindowFunctionOp::init()
       LOG_WARN("failed to get px size", K(ret));
     } else if (OB_FAIL(sql_mem_processor_.init(
         &mem_context_->get_malloc_allocator(),
-        ctx_.get_my_session()->get_effective_tenant_id(),
         (est_rows * MY_SPEC.width_ / MY_SPEC.estimated_part_cnt_),
         MY_SPEC.type_,
         MY_SPEC.id_,
@@ -1177,15 +1176,15 @@ int ObWindowFunctionOp::init()
     }
   }
   if (OB_SUCC(ret)) {
-    const uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
-    local_allocator_.set_tenant_id(tenant_id);
+    
+    
     local_allocator_.set_label(ObModIds::OB_SQL_WINDOW_LOCAL);
     local_allocator_.set_ctx_id(ObCtxIds::WORK_AREA);
-    rescan_alloc_.set_tenant_id(tenant_id);
+    
     rescan_alloc_.set_label("WfRescanAlloc");
-    patch_alloc_.set_tenant_id(tenant_id);
+    
     patch_alloc_.set_label("WfPatchAlloc");
-    ObMemAttr attr(tenant_id, "WfArray");
+    ObMemAttr attr("WfArray");
     participator_whole_msg_array_.set_attr(attr);
     pby_hash_values_.set_attr(attr);
     pby_hash_values_sets_.set_attr(attr);
@@ -1194,7 +1193,7 @@ int ObWindowFunctionOp::init()
     func_alloc.local_allocator_ = &local_allocator_;
     int64_t prev_pushdown_pby_col_count = -1;
     WFInfoFixedArray &wf_infos = *const_cast<WFInfoFixedArray *>(&MY_SPEC.wf_infos_);
-    if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(tenant_id, dir_id_))) {
+    if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(dir_id_))) {
       LOG_WARN("failed to alloc dir id", K(ret));
     } else if (OB_FAIL(curr_row_collect_values_.prepare_allocate(wf_infos.count()))) {
       LOG_WARN("cur row collect values prepare allocate failed", K(ret));
@@ -1291,7 +1290,7 @@ int ObWindowFunctionOp::init()
             } else if (OB_FAIL(aggr_infos->push_back(wf_info.aggr_info_))) {
               LOG_WARN("failed to push_back", K(wf_info.aggr_info_), K(ret));
             } else {
-              AggrCell *aggr_func = new (tmp_ptr) AggrCell(wf_info, *this, *aggr_infos, tenant_id);
+              AggrCell *aggr_func = new (tmp_ptr) AggrCell(wf_info, *this, *aggr_infos);
               aggr_func->aggr_processor_.set_in_window_func();
               if (OB_FAIL(aggr_func->aggr_processor_.init())) {
                 LOG_WARN("failed to initialize init_group_rows", K(ret));
@@ -1312,31 +1311,31 @@ int ObWindowFunctionOp::init()
           case T_WIN_FUN_RANK:
           case T_WIN_FUN_DENSE_RANK:
           case T_WIN_FUN_PERCENT_RANK: {
-            ret = func_alloc.alloc<NonAggrCellRankLike>(wf_cell, wf_info, *this, tenant_id);
+            ret = func_alloc.alloc<NonAggrCellRankLike>(wf_cell, wf_info, *this);
             break;
           }
           case T_WIN_FUN_CUME_DIST: {
-            ret = func_alloc.alloc<NonAggrCellCumeDist>(wf_cell, wf_info, *this, tenant_id);
+            ret = func_alloc.alloc<NonAggrCellCumeDist>(wf_cell, wf_info, *this);
             break;
           }
           case T_WIN_FUN_ROW_NUMBER: {
-            ret = func_alloc.alloc<NonAggrCellRowNumber>(wf_cell, wf_info, *this, tenant_id);
+            ret = func_alloc.alloc<NonAggrCellRowNumber>(wf_cell, wf_info, *this);
             break;
           }
           // first_value && last_value has been converted to nth_value when resolving
           //case T_WIN_FUN_FIRST_VALUE:
           //case T_WIN_FUN_LAST_VALUE:
           case T_WIN_FUN_NTH_VALUE: {
-            ret = func_alloc.alloc<NonAggrCellNthValue>(wf_cell, wf_info, *this, tenant_id);
+            ret = func_alloc.alloc<NonAggrCellNthValue>(wf_cell, wf_info, *this);
             break;
           }
           case T_WIN_FUN_LEAD:
           case T_WIN_FUN_LAG: {
-            ret = func_alloc.alloc<NonAggrCellLeadOrLag>(wf_cell, wf_info, *this, tenant_id);
+            ret = func_alloc.alloc<NonAggrCellLeadOrLag>(wf_cell, wf_info, *this);
             break;
           }
           case T_WIN_FUN_NTILE: {
-            ret = func_alloc.alloc<NonAggrCellNtile>(wf_cell, wf_info, *this, tenant_id);
+            ret = func_alloc.alloc<NonAggrCellNtile>(wf_cell, wf_info, *this);
             break;
           }
           default: {
@@ -1448,7 +1447,7 @@ int ObWindowFunctionOp::build_pby_hash_values_for_transmit()
 int ObWindowFunctionOp::build_participator_whole_msg_array()
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+  
   bool enable_dump = false;
   for (int64_t i = 0; OB_SUCC(ret) && i < pby_set_count_; ++i) {
     ObReportingWFWholeMsg *whole_msg = OB_NEWx(ObReportingWFWholeMsg, (&local_allocator_));
@@ -1467,9 +1466,9 @@ int ObWindowFunctionOp::init_mem_context()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(mem_context_)) {
     ObSQLSessionInfo *session = ctx_.get_my_session();
-    uint64_t tenant_id = session->get_effective_tenant_id();
+    
     lib::ContextParam param;
-    param.set_mem_attr(tenant_id, ObModIds::OB_SQL_WINDOW_ROW_STORE, ObCtxIds::WORK_AREA)
+    param.set_mem_attr(ObModIds::OB_SQL_WINDOW_ROW_STORE, ObCtxIds::WORK_AREA)
          .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
       LOG_WARN("create entity failed", K(ret));
@@ -1497,7 +1496,7 @@ int ObWindowFunctionOp::inner_open()
     && distinct_aggr_count_ > 0
     && OB_FAIL(hp_infras_mgr_.reserve_hp_infras(distinct_aggr_count_))) {
     LOG_WARN("failed to init hp infras group", K(ret), K(distinct_aggr_count_));
-  } else if (OB_FAIL(reset_for_scan(ctx_.get_my_session()->get_effective_tenant_id()))) {
+  } else if (OB_FAIL(reset_for_scan())) {
     LOG_WARN("reset_for_scan failed", K(ret));
   }
   LOG_DEBUG("window function inner open", K(MY_SPEC.single_part_parallel_));
@@ -1512,7 +1511,7 @@ int ObWindowFunctionOp::inner_rescan()
   } else if (OB_ISNULL(ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret));
-  } else if (OB_FAIL(reset_for_scan(ctx_.get_my_session()->get_effective_tenant_id()))) {
+  } else if (OB_FAIL(reset_for_scan())) {
     LOG_WARN("reset_for_scan failed", K(ret));
   }
   stat_ = ProcessStatus::PARTIAL;
@@ -1718,21 +1717,21 @@ int ObWindowFunctionOp::unset_it_age(Stores &s)
   return ret;
 }
 
-int ObWindowFunctionOp::reset_for_scan(const int64_t tenant_id)
+int ObWindowFunctionOp::reset_for_scan()
 {
   int ret = OB_SUCCESS;
   last_output_row_idx_ = common::OB_INVALID_INDEX;
   next_row_.reuse();
   child_iter_end_ = false;
-  ret = foreach_stores([&](Stores &s) { return s.reset(tenant_id);});
+  ret = foreach_stores([](Stores &s) { return s.reset();});
   return ret;
 }
 
-int ObWindowFunctionOp::reset_for_part_scan(const int64_t tenant_id)
+int ObWindowFunctionOp::reset_for_part_scan()
 {
   int ret = OB_SUCCESS;
   last_output_row_idx_ = OB_INVALID_INDEX;
-  foreach_stores([&](Stores &s) { return s.cur_->reset(tenant_id); });
+  foreach_stores([](Stores &s) { return s.cur_->reset(); });
   LOG_DEBUG("finish reset_for_part_scan", K(ret));
   return ret;
 }
@@ -2024,7 +2023,7 @@ int ObWindowFunctionOp::inner_get_next_row()
 
   if (OB_ITER_END == ret) {
     iter_end_ = true;
-    reset_for_scan(ctx_.get_my_session()->get_effective_tenant_id());
+    reset_for_scan();
   }
   return ret;
 }
@@ -2185,7 +2184,7 @@ int ObWindowFunctionOp::partial_next_row()
   } else if (OB_FAIL(ctx_.check_status())) {
     LOG_WARN("check physical plan status failed", K(ret));
   }
-  const uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+  
   WinFuncCell *first = wf_list_.get_first();
   WinFuncCell *end = wf_list_.get_header();
   //int64_t aggr_status_value = 0;
@@ -2197,7 +2196,7 @@ int ObWindowFunctionOp::partial_next_row()
       LOG_DEBUG("ObWindowFunctionOp::partial_next_row() begin compute",
                 K(input_rows_.cur_->count()), K(last_output_row_idx_), K(MY_SPEC.get_role_type()));
       // load && compute
-      if (OB_FAIL(reset_for_part_scan(tenant_id))) {
+      if (OB_FAIL(reset_for_part_scan())) {
         LOG_WARN("fail to reset_for_part_scan", K(ret));
       }
       int64_t check_times = 0;
@@ -3284,7 +3283,7 @@ int ObWindowFunctionOp::compute_wf_values(const WinFuncCell *end, int64_t &check
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx_);
   batch_info_guard.set_batch_idx(0);
   batch_info_guard.set_batch_size(1);
-  const uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+  
   WinFuncCell *first = wf_list_.get_first();
   int64_t prev_wf_pby_expr_count = -1; // prev_wf_pby_expr_count transmit to datahub
   for (WinFuncCell *wf = first; OB_SUCC(ret) && wf != end; wf = wf->get_next()) {
@@ -3333,7 +3332,7 @@ int ObWindowFunctionOp::compute_wf_values(const WinFuncCell *end, int64_t &check
     }
     // free prev buf, because result of all prev wf has been copied to this wf's part_rows_store
     if (OB_SUCC(ret) && first != wf) {
-      wf->get_prev()->res_.cur_->reset_buf(tenant_id);
+      wf->get_prev()->res_.cur_->reset_buf();
     }
   }
   // Row project flag is set when read row from RADatumStore, but the remain rows in batch
@@ -3915,7 +3914,7 @@ int ObWindowFunctionOp::do_partial_next_batch(const int64_t max_row_cnt, bool &d
   clear_evaluated_flag();
   int64_t check_times = 0;
   int64_t output_row_cnt = MIN(max_row_cnt, MY_SPEC.max_batch_size_);
-  const uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+  
   ObEvalCtx::BatchInfoScopeGuard guard(eval_ctx_);
   guard.set_batch_idx(0);
   if (OB_UNLIKELY(iter_end_)) {
@@ -3925,7 +3924,7 @@ int ObWindowFunctionOp::do_partial_next_batch(const int64_t max_row_cnt, bool &d
     LOG_WARN("check physical plan status failed", K(ret));
   } else if (input_rows_.processed_->to_output_rows() == 0
              && input_rows_.processed_->count() > 0) {
-    foreach_stores([&](Stores &s){ return s.processed_->reset(tenant_id); });
+    foreach_stores([&](Stores &s){ return s.processed_->reset(); });
   }
 
   // <1> vec compute
@@ -4080,9 +4079,9 @@ int ObWindowFunctionOp::init_hp_infras_group_mgr()
 {
   int ret = OB_SUCCESS;
   int64_t est_rows = MY_SPEC.rows_ / MY_SPEC.estimated_part_cnt_;
-  uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+  
   if (!hp_infras_mgr_.is_inited()) {
-    if (OB_FAIL(hp_infras_mgr_.init(tenant_id, GCONF.is_sql_operator_dump_enabled(), est_rows,
+    if (OB_FAIL(hp_infras_mgr_.init(GCONF.is_sql_operator_dump_enabled(), est_rows,
                                     MY_SPEC.width_, true /*unique*/, 1 /*ways*/, &eval_ctx_,
                                     &sql_mem_processor_, &io_event_observer_))) {
       LOG_WARN("failed to init hash infras group", K(ret));

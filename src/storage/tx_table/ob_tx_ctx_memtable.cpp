@@ -49,7 +49,6 @@ void ObTxCtxMemtable::reset()
   is_frozen_ = false;
   max_end_scn_.set_min();
   is_inited_ = false;
-  reset_trace_id();
 }
 
 int ObTxCtxMemtable::init(const ObITable::TableKey &table_key,
@@ -222,7 +221,7 @@ bool ObTxCtxMemtable::is_active_memtable()
   return !ATOMIC_LOAD(&is_frozen_);
 }
 
-int ObTxCtxMemtable::flush(SCN recycle_scn, const int64_t trace_id, bool need_freeze)
+int ObTxCtxMemtable::flush(SCN recycle_scn, bool need_freeze)
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(flush_lock_);
@@ -253,7 +252,6 @@ int ObTxCtxMemtable::flush(SCN recycle_scn, const int64_t trace_id, bool need_fr
     param.tablet_id_ = LS_TX_CTX_TABLET;
     param.merge_type_ = compaction::MINI_MERGE;
     param.merge_version_ = ObVersionRange::MIN_VERSION;
-    set_trace_id(trace_id);
     if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tx_table_merge_dag(param))) {
       if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
           TRANS_LOG(WARN, "failed to schedule tablet merge dag", K(ret));

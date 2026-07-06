@@ -15,6 +15,7 @@
  */
 
 #include "storage/concurrency_control/ob_data_validation_service.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -26,7 +27,7 @@ void ObDataValidationService::set_delay_resource_recycle(const ObLSID ls_id)
 {
   int ret = OB_SUCCESS;
   ObLSHandle handle;
-  ObLSService *ls_service = MTL(ObLSService*);
+  ObLSService *ls_service = share::g_mp->ls_service();
   ObLS *ls = nullptr;
   const bool need_delay_opt = GCONF._delay_resource_recycle_after_correctness_issue;
 

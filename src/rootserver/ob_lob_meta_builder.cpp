@@ -58,8 +58,8 @@ int ObLobMetaBuilder::generate_aux_lob_meta_schema(
     if (OB_FAIL(generate_schema(data_schema, aux_lob_meta_schema))) {
       LOG_WARN("generate_schema for aux vp table failed", K(data_schema), K(ret));
     } else if (OB_INVALID_ID == new_table_id
-               && OB_FAIL(schema_service->fetch_new_table_id(data_schema.get_tenant_id(), new_table_id))) {
-      LOG_WARN("failed to fetch_new_table_id", "tenant_id", data_schema.get_tenant_id(), K(ret));
+               && OB_FAIL(schema_service->fetch_new_table_id(new_table_id))) {
+      LOG_WARN("failed to fetch_new_table_id",  K(ret));
     } else if (OB_FAIL(generate_lob_meta_table_name(new_table_id, buf, buf_size, pos))) {
       LOG_WARN("failed to generate_lob_meta_table_name", K(ret), K(new_table_id));
     } else {
@@ -77,7 +77,7 @@ int ObLobMetaBuilder::generate_aux_lob_meta_schema(
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("column is null", K(ret));
           } else {
-            column->set_tenant_id(aux_lob_meta_schema.get_tenant_id());
+            
             column->set_table_id(aux_lob_meta_schema.get_table_id());
           }
         }
@@ -138,7 +138,7 @@ int ObLobMetaBuilder::set_basic_infos(
   aux_lob_meta_schema.set_tablet_id(0);
 
   // priority same with data table schema
-  aux_lob_meta_schema.set_tenant_id(data_schema.get_tenant_id());
+  
   aux_lob_meta_schema.set_database_id(data_schema.get_database_id());
   if (is_inner_table(data_schema.get_table_id())) {
     aux_lob_meta_schema.set_tablegroup_id(data_schema.get_tablegroup_id());

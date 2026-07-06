@@ -369,23 +369,15 @@ public: // getter & setter
   static int64_t get_filter_col_idx();
 
 private:
-  int create_data_tablet_(
-      const uint64_t tenant_id,
-      const share::ObLSID ls_id,
+  int create_data_tablet_(const share::ObLSID ls_id,
       const lib::Worker::CompatMode compat_mode,
       const share::SCN &create_scn);
-  int create_ctx_tablet_(
-      const uint64_t tenant_id,
-      const share::ObLSID ls_id,
+  int create_ctx_tablet_(const share::ObLSID ls_id,
       const lib::Worker::CompatMode compat_mode,
       const share::SCN &create_scn);
   int remove_tablet_(const common::ObTabletID &tablet_id);
-  int get_data_table_schema_(
-      const uint64_t tenant_id,
-      share::schema::ObTableSchema &schema);
-  int get_ctx_table_schema_(
-      const uint64_t tenant_id,
-      share::schema::ObTableSchema &schema);
+  int get_data_table_schema_(share::schema::ObTableSchema &schema);
+  int get_ctx_table_schema_(share::schema::ObTableSchema &schema);
   int restore_tx_ctx_table_(ObITable &trans_sstable);
   int load_tx_ctx_table_();
   int offline_tx_ctx_table_();

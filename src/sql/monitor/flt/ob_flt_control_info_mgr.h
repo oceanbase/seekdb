@@ -80,27 +80,24 @@ namespace sql
   class ObFLTConfRec {
   public:
     ObFLTConfRec():
-      tenant_id_(OB_INVALID_ID),
       type_(FLT_INVALID_TYPE),
       mod_name_(),
       act_name_(),
       control_info_() {}
   public:
-    uint64_t tenant_id_;
     ObFLTConfigType type_;
     ObString mod_name_;
     ObString act_name_;
     ObString identifier_name_;
     FLTControlInfo control_info_;
 
-    TO_STRING_KV(K_(tenant_id), K_(type), K_(mod_name), K_(act_name), K_(identifier_name), K_(control_info));
+    TO_STRING_KV(K_(type), K_(mod_name), K_(act_name), K_(identifier_name), K_(control_info));
   };
 
 
   class ObFLTControlInfoManager {
     public:
-    ObFLTControlInfoManager(uint64_t t_id) :
-      tenant_id_(t_id),
+    ObFLTControlInfoManager() :
       identifier_infos_(),
       mod_infos_(),
       tenant_info_()
@@ -144,7 +141,6 @@ namespace sql
     int apply_control_info();
 
     private:
-    uint64_t tenant_id_;
     // identifier trace
     common::ObSEArray<ObIdentifierConInfo, 1, common::ModulePageAllocator, true> identifier_infos_;
     // mod act trace
@@ -157,43 +153,39 @@ namespace sql
 
   struct ObFLTApplyByClientIDOp {
   public:
-    explicit ObFLTApplyByClientIDOp(uint64_t tenant_id, ObIdentifierConInfo id_con_info)
-                    : tenant_id_(tenant_id), id_con_info_(id_con_info) {}
+    explicit ObFLTApplyByClientIDOp(ObIdentifierConInfo id_con_info)
+                    : id_con_info_(id_con_info) {}
     bool operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessionInfo *sess_info);
 
   private:
-    uint64_t tenant_id_;
     ObIdentifierConInfo id_con_info_;
   };
   
   struct ObFLTApplyByModActOp {
   public:
-    explicit ObFLTApplyByModActOp(uint64_t tenant_id, ObModActConInfo mod_act_info)
-                    : tenant_id_(tenant_id), mod_act_info_(mod_act_info) {}
+    explicit ObFLTApplyByModActOp(ObModActConInfo mod_act_info)
+                    : mod_act_info_(mod_act_info) {}
     bool operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessionInfo *sess_info);
 
   private:
-    uint64_t tenant_id_;
     ObModActConInfo mod_act_info_;
   };
   
   struct ObFLTApplyByTenantOp {
   public:
-    explicit ObFLTApplyByTenantOp(uint64_t tenant_id, FLTControlInfo tenant_info)
-                    : tenant_id_(tenant_id), tenant_info_(tenant_info) {}
+    explicit ObFLTApplyByTenantOp(FLTControlInfo tenant_info)
+                    : tenant_info_(tenant_info) {}
     bool operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessionInfo *sess_info);
 
   private:
-    uint64_t tenant_id_;
     FLTControlInfo tenant_info_;
   };
 
   struct ObFLTResetSessOp {
   public:
-    explicit ObFLTResetSessOp(uint64_t tenant_id) : tenant_id_(tenant_id){}
+    explicit ObFLTResetSessOp() {}
     bool operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessionInfo *sess_info);
   private:
-    uint64_t tenant_id_; 
   };
 } // namespace sql
 } // namespace oceanbase

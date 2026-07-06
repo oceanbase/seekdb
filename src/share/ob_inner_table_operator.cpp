@@ -82,7 +82,7 @@ int ObIInnerTableRow::build_assignments(ObSqlString &assignments) const
  * ------------------------------ObInnerTableOperator---------------------
  */
 ObInnerTableOperator::ObInnerTableOperator()
-  : is_inited_(false), table_name_(), exec_tenant_id_provider_(nullptr), group_id_(0)
+  : is_inited_(false), table_name_(), group_id_(0)
 {
 
 }
@@ -93,7 +93,7 @@ ObInnerTableOperator::~ObInnerTableOperator()
 }
 
 int ObInnerTableOperator::init(
-    const char *tname, const ObIExecTenantIdProvider &exec_tenant_id_provider,
+    const char *tname,
     const int32_t group_id)
 {
   int ret = OB_SUCCESS;
@@ -106,7 +106,7 @@ int ObInnerTableOperator::init(
   } else if (OB_FAIL(table_name_.assign(tname))) {
     LOG_WARN("failed to assign table name", K(ret), K(tname));
   } else {
-    exec_tenant_id_provider_ = &exec_tenant_id_provider;
+    
     group_id_ = group_id;
     is_inited_ = true;
   }
@@ -114,25 +114,12 @@ int ObInnerTableOperator::init(
   return ret;
 }
 
-uint64_t ObInnerTableOperator::get_exec_tenant_id() const
-{
-  uint64_t tenant_id = OB_INVALID_TENANT_ID;
-  if (OB_NOT_NULL(exec_tenant_id_provider_)) {
-    tenant_id = exec_tenant_id_provider_->get_exec_tenant_id();
-  }
-  return tenant_id;
-}
+
 
 const char *ObInnerTableOperator::get_table_name() const
 {
   return table_name_.ptr();
 }
-
-const ObIExecTenantIdProvider *ObInnerTableOperator::get_exec_tenant_id_provider() const
-{
-  return exec_tenant_id_provider_;
-}
-
 
 int ObInnerTableOperator::get_row(
     ObISQLClient &proxy, const bool need_lock, const ObIInnerTableKey &key,
@@ -477,7 +464,7 @@ int ObInnerTableOperator::do_lock_row_(
   ObSqlString sql;
   ObSqlString predicates;
 
-  const uint64_t exec_tenant_id = get_exec_tenant_id();
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(key.build_pkey_predicates(predicates))) {
@@ -487,17 +474,17 @@ int ObInnerTableOperator::do_lock_row_(
   } else {
     HEAP_VAR(ObMySQLProxy::ReadResult, res) {
       ObMySQLResult *result = NULL;
-      if (OB_FAIL(trans.read(res, exec_tenant_id, sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql), K(exec_tenant_id));
+      if (OB_FAIL(trans.read(res, sql.ptr()))) {
+        LOG_WARN("failed to exec sql", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql), K(exec_tenant_id));
+        LOG_WARN("result is null", K(ret), K(sql));
       } else if (OB_FAIL(result->next())) {
         if (OB_ITER_END == ret) {
           ret = OB_ENTRY_NOT_EXIST;
-          LOG_WARN("row not exist, cannot lock", K(ret), K(sql), K(exec_tenant_id));
+          LOG_WARN("row not exist, cannot lock", K(ret), K(sql));
         } else {
-          LOG_WARN("get next failed", K(ret), K(sql), K(exec_tenant_id));
+          LOG_WARN("get next failed", K(ret), K(sql));
         }
       } else {
         // lock successfully.
@@ -515,7 +502,7 @@ int ObInnerTableOperator::do_get_row_(
   ObSqlString sql;
   ObSqlString predicates;
 
-  const uint64_t exec_tenant_id = get_exec_tenant_id();
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(sql.assign_fmt("select * from %s", tname))) {
@@ -529,16 +516,16 @@ int ObInnerTableOperator::do_get_row_(
   } else {
     HEAP_VAR(ObMySQLProxy::ReadResult, res) {
       ObMySQLResult *result = NULL;
-      if (OB_FAIL(proxy.read(res, exec_tenant_id, sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql), K(exec_tenant_id));
+      if (OB_FAIL(proxy.read(res, sql.ptr()))) {
+        LOG_WARN("failed to exec sql", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql), K(exec_tenant_id));
+        LOG_WARN("result is null", K(ret), K(sql));
       } else if (OB_FAIL(parse_one_row_(*result, row))) {
-        LOG_WARN("failed to parse row", K(ret), K(sql), K(exec_tenant_id));
+        LOG_WARN("failed to parse row", K(ret), K(sql));
       } else if (OB_ITER_END != result->next()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("multi value exist", K(ret), K(sql), K(exec_tenant_id), K(row));
+        LOG_WARN("multi value exist", K(ret), K(sql), K(row));
       } else {
         ret = OB_SUCCESS;
       }
@@ -555,15 +542,15 @@ int ObInnerTableOperator::do_insert_row_(ObISQLClient &proxy, const ObIInnerTabl
   ObDMLSqlSplicer dml;
   ObSqlString sql;
 
-  const uint64_t exec_tenant_id = get_exec_tenant_id();
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(row.fill_dml(dml))) {
     LOG_WARN("fail to fill dml", K(ret), K(this), K(row));
   } else if (OB_FAIL(dml.splice_insert_sql(tname, sql))) {
     LOG_WARN("failed to splice insert sql", K(ret), K(this), K(row));
-  } else if (OB_FAIL(proxy.write(exec_tenant_id, sql.ptr(), group_id_, affected_rows))) {
-    LOG_WARN("fail to exec sql", K(ret), K(sql), K(exec_tenant_id));
+  } else if (OB_FAIL(proxy.write(sql.ptr(), group_id_, affected_rows))) {
+    LOG_WARN("fail to exec sql", K(ret), K(sql));
   } else {
     LOG_INFO("insert one row", K(row), K(affected_rows), K(sql));
   }
@@ -578,15 +565,15 @@ int ObInnerTableOperator::do_update_row_(ObISQLClient &proxy, const ObIInnerTabl
   ObDMLSqlSplicer dml;
   ObSqlString sql;
 
-  const uint64_t exec_tenant_id = get_exec_tenant_id();
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(row.fill_dml(dml))) {
     LOG_WARN("fail to fill dml", K(ret), K(this), K(row));
   } else if (OB_FAIL(dml.splice_update_sql(tname, sql))) {
     LOG_WARN("failed to splice update sql", K(ret), K(this), K(row));
-  } else if (OB_FAIL(proxy.write(exec_tenant_id, sql.ptr(), group_id_, affected_rows))) {
-    LOG_WARN("fail to exec sql", K(ret), K(sql), K(exec_tenant_id));
+  } else if (OB_FAIL(proxy.write(sql.ptr(), group_id_, affected_rows))) {
+    LOG_WARN("fail to exec sql", K(ret), K(sql));
   } else {
     LOG_INFO("update one row", K(row), K(affected_rows), K(sql));
   }
@@ -601,15 +588,15 @@ int ObInnerTableOperator::do_insert_or_update_row_(ObISQLClient &proxy, const Ob
   ObDMLSqlSplicer dml;
   ObSqlString sql;
 
-  const uint64_t exec_tenant_id = get_exec_tenant_id();
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(row.fill_dml(dml))) {
     LOG_WARN("fail to fill dml", K(ret), K(this), K(row));
   } else if (OB_FAIL(dml.splice_insert_update_sql(tname, sql))) {
     LOG_WARN("failed to splice insert update sql", K(ret), K(this), K(row));
-  } else if (OB_FAIL(proxy.write(exec_tenant_id, sql.ptr(), group_id_, affected_rows))) {
-    LOG_WARN("fail to exec sql", K(ret), K(sql), K(exec_tenant_id));
+  } else if (OB_FAIL(proxy.write(sql.ptr(), group_id_, affected_rows))) {
+    LOG_WARN("fail to exec sql", K(ret), K(sql));
   } else {
     LOG_INFO("insert/update one row", K(row), K(affected_rows), K(sql));
   }
@@ -624,15 +611,15 @@ int ObInnerTableOperator::do_delete_row_(
   ObDMLSqlSplicer dml;
   ObSqlString sql;
 
-  const uint64_t exec_tenant_id = get_exec_tenant_id();
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(key.fill_pkey_dml(dml))) {
     LOG_WARN("fail to fill pkey dml", K(ret), K(this), K(key));
   } else if (OB_FAIL(dml.splice_delete_sql(tname, sql))) {
     LOG_WARN("failed to splice delete sql", K(ret), K(this), K(key));
-  } else if (OB_FAIL(proxy.write(exec_tenant_id, sql.ptr(), group_id_, affected_rows))) {
-    LOG_WARN("fail to exec sql", K(ret), K(sql), K(exec_tenant_id));
+  } else if (OB_FAIL(proxy.write(sql.ptr(), group_id_, affected_rows))) {
+    LOG_WARN("fail to exec sql", K(ret), K(sql));
   } else {
     LOG_INFO("delete one row", K(key), K(affected_rows), K(sql));
   }
@@ -648,7 +635,7 @@ int ObInnerTableOperator::do_get_column_(
   ObSqlString sql;
   ObSqlString predicates;
 
-  const uint64_t exec_tenant_id = get_exec_tenant_id();
+  
   const char *tname = get_table_name();
   const char *column_name = col.get_column_name();
 
@@ -666,16 +653,16 @@ int ObInnerTableOperator::do_get_column_(
   } else {
     HEAP_VAR(ObMySQLProxy::ReadResult, res) {
       ObMySQLResult *result = NULL;
-      if (OB_FAIL(proxy.read(res, exec_tenant_id, sql.ptr(), group_id_))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql), K(exec_tenant_id));
+      if (OB_FAIL(proxy.read(res, sql.ptr(), group_id_))) {
+        LOG_WARN("failed to exec sql", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql), K(exec_tenant_id));
+        LOG_WARN("result is null", K(ret), K(sql));
       } else if (OB_FAIL(parse_one_column_(*result, col))) {
-        LOG_WARN("failed to parse one column", K(ret), K(sql), K(exec_tenant_id));
+        LOG_WARN("failed to parse one column", K(ret), K(sql));
       } else if (OB_ITER_END != result->next()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("multi value exist", K(ret), K(sql), K(exec_tenant_id), K(col));
+        LOG_WARN("multi value exist", K(ret), K(sql), K(col));
       }
     }
   }
@@ -691,7 +678,7 @@ int ObInnerTableOperator::do_get_int_column_(
   ObSqlString sql;
   ObSqlString predicates;
 
-  const uint64_t exec_tenant_id = get_exec_tenant_id();
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(sql.assign_fmt("select %s from %s", column_name, tname))) {
@@ -705,16 +692,16 @@ int ObInnerTableOperator::do_get_int_column_(
   } else {
     HEAP_VAR(ObMySQLProxy::ReadResult, res) {
       ObMySQLResult *result = NULL;
-      if (OB_FAIL(proxy.read(res, exec_tenant_id, sql.ptr(), group_id_))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql), K(exec_tenant_id));
+      if (OB_FAIL(proxy.read(res, sql.ptr(), group_id_))) {
+        LOG_WARN("failed to exec sql", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql), K(exec_tenant_id));
+        LOG_WARN("result is null", K(ret), K(sql));
       } else if (OB_FAIL(parse_one_column_(*result, column_name, value))) {
-        LOG_WARN("failed to parse one column", K(ret), K(sql), K(exec_tenant_id));
+        LOG_WARN("failed to parse one column", K(ret), K(sql));
       } else if (OB_ITER_END != result->next()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("multi value exist", K(ret), K(sql), K(exec_tenant_id), K(value));
+        LOG_WARN("multi value exist", K(ret), K(sql), K(value));
       }
     }
   }
@@ -733,7 +720,7 @@ int ObInnerTableOperator::do_get_string_column_(
   ObSqlString sql;
   ObSqlString predicates;
 
-  const uint64_t exec_tenant_id = get_exec_tenant_id();
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(sql.assign_fmt("select %s from %s", column_name, tname))) {
@@ -747,16 +734,16 @@ int ObInnerTableOperator::do_get_string_column_(
   } else {
     HEAP_VAR(ObMySQLProxy::ReadResult, res) {
       ObMySQLResult *result = NULL;
-      if (OB_FAIL(proxy.read(res, exec_tenant_id, sql.ptr(), group_id_))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql), K(exec_tenant_id));
+      if (OB_FAIL(proxy.read(res, sql.ptr(), group_id_))) {
+        LOG_WARN("failed to exec sql", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql), K(exec_tenant_id));
+        LOG_WARN("result is null", K(ret), K(sql));
       } else if (OB_FAIL(parse_one_column_(*result, column_name, value))) {
-        LOG_WARN("failed to parse one column", K(ret), K(sql), K(exec_tenant_id));
+        LOG_WARN("failed to parse one column", K(ret), K(sql));
       } else if (OB_ITER_END != result->next()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("multi value exist", K(ret), K(sql), K(exec_tenant_id), K(value));
+        LOG_WARN("multi value exist", K(ret), K(sql), K(value));
       }
     }
   }
@@ -773,7 +760,7 @@ int ObInnerTableOperator::do_increase_column_by_(
   ObSqlString sql;
   ObSqlString predicates;
 
-  const uint64_t exec_tenant_id = get_exec_tenant_id();
+  
   const char *tname = get_table_name();
 
   if (OB_FAIL(sql.assign_fmt("update %s set %s=%s+%ld", tname, column_name, column_name, value))) {
@@ -782,8 +769,8 @@ int ObInnerTableOperator::do_increase_column_by_(
     LOG_WARN("fail to fill predicates", K(ret), K(key), K(column_name), K(value));
   } else if (OB_FAIL(sql.append_fmt(" where %s", predicates.ptr()))) {
     LOG_WARN("failed to append sql", K(ret), K(sql), K(predicates));
-  } else if (OB_FAIL(proxy.write(exec_tenant_id, sql.ptr(), group_id_, affected_rows))) {
-    LOG_WARN("fail to exec sql", K(ret), K(sql), K(exec_tenant_id));
+  } else if (OB_FAIL(proxy.write(sql.ptr(), group_id_, affected_rows))) {
+    LOG_WARN("fail to exec sql", K(ret), K(sql));
   } else {
     LOG_INFO("update one column", K(key), K(column_name), K(value), K(affected_rows), K(sql));
   }
@@ -799,7 +786,7 @@ int ObInnerTableOperator::do_update_column_(
   ObSqlString sql;
   ObSqlString predicates;
 
-  const uint64_t exec_tenant_id = get_exec_tenant_id();
+  
   const char *tname = get_table_name();
 
   if (OB_ISNULL(assignments)) {
@@ -811,8 +798,8 @@ int ObInnerTableOperator::do_update_column_(
     LOG_WARN("fail to fill predicates", K(ret), K(key), K(assignments));
   } else if (OB_FAIL(sql.append_fmt(" where %s", predicates.ptr()))) {
     LOG_WARN("failed to append sql", K(ret), K(sql), K(predicates));
-  } else if (OB_FAIL(proxy.write(exec_tenant_id, sql.ptr(), group_id_, affected_rows))) {
-    LOG_WARN("fail to exec sql", K(ret), K(sql), K(exec_tenant_id));
+  } else if (OB_FAIL(proxy.write(sql.ptr(), group_id_, affected_rows))) {
+    LOG_WARN("fail to exec sql", K(ret), K(sql));
   } else {
     LOG_INFO("update one column", K(key), K(assignments), K(affected_rows), K(sql));
   }
@@ -829,7 +816,7 @@ int ObInnerTableOperator::do_compare_and_swap_(
   ObSqlString sql;
   ObSqlString pkey_predicates;
 
-  const uint64_t exec_tenant_id = get_exec_tenant_id();
+  
   const char *tname = get_table_name();
 
   if (OB_ISNULL(assignments)) {
@@ -846,8 +833,8 @@ int ObInnerTableOperator::do_compare_and_swap_(
     LOG_WARN("failed to append sql", K(ret), K(sql), K(pkey_predicates));
   } else if (OB_FAIL(sql.append_fmt(" and %s", predicates))) {
     LOG_WARN("failed to append sql", K(ret), K(sql), K(assignments), K(predicates));
-  } else if (OB_FAIL(proxy.write(exec_tenant_id, sql.ptr(), group_id_, affected_rows))) {
-    LOG_WARN("fail to exec sql", K(ret), K(sql), K(exec_tenant_id));
+  } else if (OB_FAIL(proxy.write(sql.ptr(), group_id_, affected_rows))) {
+    LOG_WARN("fail to exec sql", K(ret), K(sql));
   } else {
     LOG_INFO("compare and swap one column", K(key), K(assignments), K(predicates), K(affected_rows), K(sql));
   }

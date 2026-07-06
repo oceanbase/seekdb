@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_partition_merge_progress.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_tenant_compaction_progress.h"
 #include "storage/column_store/ob_co_merge_dag.h"
 
@@ -361,7 +362,7 @@ int ObPartitionMajorMergeProgress::inner_update_progress_mgr(const int64_t total
   const int64_t scan_data_size_delta = (total_scanned_row_cnt - pre_scanned_row_cnt_) * avg_row_length_;
   const bool is_first_update = pre_scanned_row_cnt_ == 0;
 
-  if (OB_FAIL(MTL(ObTenantCompactionProgressMgr*)->update_progress(
+  if (OB_FAIL(share::g_mp->tenant_compaction_progress_mgr()->update_progress(
           ctx_->get_merge_version(),
           is_first_update ? estimated_total_size_ : 0,
           scan_data_size_delta,
@@ -380,7 +381,7 @@ int ObPartitionMajorMergeProgress::finish_progress(
 {
   int ret = OB_SUCCESS;
   estimated_finish_time_ = ObTimeUtility::fast_current_time();
-  if (OB_FAIL(MTL(ObTenantCompactionProgressMgr*)->update_progress(merge_version,
+  if (OB_FAIL(share::g_mp->tenant_compaction_progress_mgr()->update_progress(merge_version,
                                                                    0 == pre_scanned_row_cnt_ ? estimated_total_size_ : 0, // estimate_occupy_size_delta
                                                                    estimated_total_size_ - pre_scanned_row_cnt_ * avg_row_length_,// scanned_data_size_delta
                                                                    estimated_finish_time_,
@@ -407,7 +408,7 @@ int ObPartitionMajorMergeProgress::finish_merge_progress()
                                      &ctx->info_collector_.time_guard_,
                                      false/*is_co_merge*/))) {
     LOG_WARN("failed to update progress", K(ret), KPC(this));
-  } else if (OB_FAIL(MTL(ObTenantCompactionProgressMgr*)->update_compression_ratio(
+  } else if (OB_FAIL(share::g_mp->tenant_compaction_progress_mgr()->update_compression_ratio(
       ctx->get_merge_version(),
       ctx->get_merge_info().get_merge_history()))) {
     LOG_WARN("failed to update progress", K(ret));
@@ -447,7 +448,7 @@ int ObCOMajorMergeProgress::finish_merge_progress()
         if (OB_UNLIKELY(OB_ISNULL(ctx->cg_merge_info_array_) || OB_ISNULL(ctx->cg_merge_info_array_[i]))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("merge_info is unexpected null", K(ret), KPC(ctx));
-        } else if (OB_FAIL(MTL(ObTenantCompactionProgressMgr*)->update_compression_ratio(
+        } else if (OB_FAIL(share::g_mp->tenant_compaction_progress_mgr()->update_compression_ratio(
           ctx->get_merge_version(),
           ctx->cg_merge_info_array_[i]->get_merge_history()))) {
           LOG_WARN("failed to update progress", K(ret));

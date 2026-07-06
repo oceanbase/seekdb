@@ -60,7 +60,7 @@ int ObTsResponseHandler::run()
     TRANS_LOG(WARN, "ts mgr is null, unexpected error", KR(ret), KP_(ts_mgr));
   } else {
     ObTsResponseTask *task = static_cast<ObTsResponseTask *>(task_);
-    if (OB_FAIL(ts_mgr_->handle_gts_result(task->get_tenant_id(), task->get_arg1(), task->get_ts_type()))) {
+    if (OB_FAIL(ts_mgr_->handle_gts_result(task->get_arg1(), task->get_ts_type()))) {
       TRANS_LOG(WARN, "handle gts result failed", KR(ret), K(*task));
     }
     //op_reclaim_free(task);
@@ -71,31 +71,28 @@ int ObTsResponseHandler::run()
 
 void ObTsResponseTask::reset()
 {
-  tenant_id_ = 0;
   arg1_ = 0;
   handler_.reset();
   ts_type_ = TS_SOURCE_UNKNOWN;
 }
 
-int ObTsResponseTask::init(const uint64_t tenant_id,
-                           const int64_t arg1,
+int ObTsResponseTask::init(const int64_t arg1,
                            ObTsMgr *ts_mgr,
                            int ts_type)
 {
   int ret = OB_SUCCESS;
 
-  if (!is_valid_tenant_id(tenant_id)
+  if (!true
       || NULL == ts_mgr
       || !is_valid_ts_source(ts_type)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id), K(arg1), KP(ts_mgr), K(ts_type));
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(arg1), KP(ts_mgr), K(ts_type));
   } else if (OB_FAIL(handler_.init(this, ts_mgr))) {
     TRANS_LOG(WARN, "ObTsResponseHandler init error", KR(ret));
   } else {
     //Different from the task of sql disconnection, it is used for memory release
     set_type(ObRequest::OB_TS_TASK);
     arg1_ = arg1;
-    tenant_id_ = tenant_id;
     ts_type_ = ts_type;
   }
 

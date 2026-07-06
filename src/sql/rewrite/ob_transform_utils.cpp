@@ -26,7 +26,7 @@
 #include "sql/rewrite/ob_transform_pre_process.h"
 #include "sql/rewrite/ob_expand_aggregate_utils.h"
 #include "sql/ob_sql_utils.h"
-#include "share/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 
 
 namespace oceanbase {
@@ -434,7 +434,7 @@ int ObTransformUtils::is_columns_unique(const ObIArray<ObRawExpr *> &exprs,
   } else if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session_info is null", K(ret));
-  } else if (OB_FAIL(schema_checker->get_table_schema(session_info->get_effective_tenant_id(), table_id, table_schema))){
+  } else if (OB_FAIL(schema_checker->get_table_schema( table_id, table_schema))){
     LOG_WARN("failed to get table schema", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -463,7 +463,7 @@ int ObTransformUtils::is_columns_unique(const ObIArray<ObRawExpr *> &exprs,
           OB_SUCC(ret) && !is_unique && i < simple_index_infos.count();
           ++i) {
         const ObTableSchema *index_schema = NULL;
-        if (OB_FAIL(schema_checker->get_table_schema(table_schema->get_tenant_id(),
+        if (OB_FAIL(schema_checker->get_table_schema(
                     simple_index_infos.at(i).table_id_, index_schema))) {
           LOG_WARN("failed to get table schema", K(ret),
                    "index_id", simple_index_infos.at(i).table_id_);
@@ -1624,7 +1624,7 @@ int ObTransformUtils::is_column_nullable(const ObDMLStmt *stmt,
     LOG_WARN("failed to get table item", K(ret), K(col_expr->get_table_id()));
   } else if (table_item->is_basic_table()) {
     const ObColumnSchemaV2 *col_schema = NULL;
-    if (OB_FAIL(schema_checker->get_column_schema(session_info->get_effective_tenant_id(),
+    if (OB_FAIL(schema_checker->get_column_schema(
                                                   table_item->ref_id_,
                                                   col_expr->get_column_id(),
                                                   col_schema,
@@ -3293,7 +3293,7 @@ int ObTransformUtils::get_valid_index_id(ObSqlSchemaGuard *schema_guard,
   if (OB_ISNULL(schema_guard) || OB_ISNULL(stmt) || OB_ISNULL(table_item)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected NULL", K(ret), K(schema_guard), K(stmt), K(table_item));
-  } else if (OB_FAIL(schema_guard->get_table_schema(table_item->ref_id_, table_schema, table_item->is_link_table()))) {
+  } else if (OB_FAIL(schema_guard->get_table_schema(table_item->ref_id_, table_schema))) {
     LOG_WARN("fail to get table schema", K(ret), K(table_item->ref_id_));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -3346,7 +3346,7 @@ int ObTransformUtils::check_index_extract_query_range(const ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   ObArray<ColumnItem> range_columns;
   ObRawExpr *condition_expr = NULL;
-  ObArenaAllocator alloc(ObMemAttr(MTL_ID(), "RewriteMinMax"));
+  ObArenaAllocator alloc(ObMemAttr("RewriteMinMax"));
   void *tmp_ptr = NULL;
   const ParamStore *params = NULL;
   ObQueryCtx *query_ctx = NULL;
@@ -3786,7 +3786,7 @@ int ObTransformUtils::check_foreign_primary_join(const TableItem *first_table,
   if (OB_ISNULL(schema_checker) || OB_ISNULL(session_info) ||OB_ISNULL(first_table) || OB_ISNULL(second_table)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parameters have null", K(ret), K(schema_checker), K(first_table), K(second_table));
-  } else if (OB_FAIL(schema_checker->get_table_schema(session_info->get_effective_tenant_id(), first_table->ref_id_, table_schema, first_table->is_link_table()))){
+  } else if (OB_FAIL(schema_checker->get_table_schema( first_table->ref_id_, table_schema))){
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -3838,7 +3838,7 @@ int ObTransformUtils::check_foreign_primary_join(const TableItem *first_table,
   if (OB_ISNULL(schema_checker) || OB_ISNULL(first_table) || OB_ISNULL(second_table)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parameters have null", K(ret), K(schema_checker), K(first_table), K(second_table));
-  } else if (OB_FAIL(schema_checker->get_table_schema(session_info->get_effective_tenant_id(), first_table->ref_id_, table_schema, first_table->is_link_table()))){
+  } else if (OB_FAIL(schema_checker->get_table_schema( first_table->ref_id_, table_schema))){
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -4050,7 +4050,6 @@ int ObTransformUtils::check_exprs_unique_on_table_items(const ObDMLStmt *stmt,
     LOG_WARN("unexpected null", K(ret));
   } else {
     ObArenaAllocator alloc("CheckUnique", OB_MALLOC_NORMAL_BLOCK_SIZE,
-                           session_info->get_effective_tenant_id(),
                            ObCtxIds::DEFAULT_CTX_ID);
     ObFdItemFactory fd_item_factory(alloc);
     ObRawExprFactory expr_factory(alloc);
@@ -4169,7 +4168,6 @@ int ObTransformUtils::check_stmt_unique(const ObSelectStmt *stmt,
     /*do nothing*/
   } else {
     ObArenaAllocator alloc("CheckUnique", OB_MALLOC_NORMAL_BLOCK_SIZE,
-                           session_info->get_effective_tenant_id(),
                            ObCtxIds::DEFAULT_CTX_ID);
     ObFdItemFactory fd_item_factory(alloc);
     ObRawExprFactory expr_factory(alloc);
@@ -5562,7 +5560,7 @@ int ObTransformUtils::generate_unique_key_for_basic_table(ObTransformerCtx *ctx,
   } else if (OB_UNLIKELY(!item->is_basic_table())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table item is not expected basic table", K(*item));
-  } else if (OB_FAIL(ctx->schema_checker_->get_table_schema(ctx->session_info_->get_effective_tenant_id(), item->ref_id_, table_schema))) {
+  } else if (OB_FAIL(ctx->schema_checker_->get_table_schema( item->ref_id_, table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -8990,7 +8988,7 @@ int ObTransformUtils::get_base_column(const ObDMLStmt *stmt,
   } else if (OB_ISNULL(table = stmt->get_table_item_by_id(col->get_table_id()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table item is null", K(ret), K(table));
-  } else if (table->is_basic_table() || table->is_link_table()) {
+  } else if (table->is_basic_table()) {
     /*do nothing*/
   } else if (!table->is_generated_table() && !table->is_temp_table()) {
     ret = OB_ERR_UNEXPECTED;
@@ -12437,7 +12435,7 @@ int ObTransformUtils::check_is_json_constraint(ObTransformerCtx *ctx,
         }
       }
     }
-  } else if (OB_FAIL(ctx->schema_checker_->get_table_schema(ctx->session_info_->get_effective_tenant_id(),
+  } else if (OB_FAIL(ctx->schema_checker_->get_table_schema(
                                                             table->ref_id_, table_schema))) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("get table schema failed", K_(table->table_name), K(table->ref_id_), K(ret));
@@ -12672,7 +12670,7 @@ int ObTransformUtils::get_column_node_from_table(ObTransformerCtx *ctx,
       }
       tab_item = const_cast<TableItem *>(tmp_table_item);
       
-      if (OB_FAIL(ctx->schema_checker_->get_table_schema(ctx->session_info_->get_effective_tenant_id(),
+      if (OB_FAIL(ctx->schema_checker_->get_table_schema(
                                                                 tmp_table_item->ref_id_, table_schema))) { // get table schema
         if ((tmp_table_item->is_generated_table() 
               || tmp_table_item->is_temp_table()) 
@@ -12820,7 +12818,7 @@ int ObTransformUtils::check_is_index_part_key(ObTransformerCtx &ctx,
       LOG_WARN("table is null", K(ret), K(*col));
     } else if (!table->is_basic_table()) {
 
-    } else if (OB_FAIL(ctx.schema_checker_->get_column_schema(session_info->get_effective_tenant_id(),
+    } else if (OB_FAIL(ctx.schema_checker_->get_column_schema(
                                                               table->ref_id_,
                                                               col->get_column_id(),
                                                               column_schema,
@@ -12831,14 +12829,13 @@ int ObTransformUtils::check_is_index_part_key(ObTransformerCtx &ctx,
       LOG_WARN("column schema is null", K(ret));
     } else if (column_schema->is_rowkey_column()) {
       is_valid = true;
-    } else if (OB_FAIL(ctx.schema_checker_->check_column_has_index(column_schema->get_tenant_id(),
-                                                                    table->ref_id_,
+    } else if (OB_FAIL(ctx.schema_checker_->check_column_has_index(table->ref_id_,
                                                                     col->get_column_id(),
                                                                     is_valid))) {
       LOG_WARN("failed to check column is a key", K(ret));
     } else if (is_valid) {
       // do nothing
-    } else if (ctx.schema_checker_->check_if_partition_key(session_info->get_effective_tenant_id(),
+    } else if (ctx.schema_checker_->check_if_partition_key(
                           table->ref_id_, col->get_column_id(), is_valid)) {
       LOG_WARN("failed to check if partition key", K(ret));
     }
@@ -13054,7 +13051,7 @@ int ObTransformUtils::expand_mview_table(ObTransformerCtx *ctx, ObDMLStmt *upper
     bool is_major_refresh_mview = false;
     OPT_TRACE("expand real time materialized view: ", rt_mv_table->get_object_name());
     OPT_TRACE_BEGIN_SECTION;
-    if (OB_FAIL(ObMVProvider::get_real_time_mv_expand_view(ctx->session_info_->get_effective_tenant_id(),
+    if (OB_FAIL(ObMVProvider::get_real_time_mv_expand_view(
                                                            rt_mv_table->mview_id_,
                                                            ctx->session_info_,
                                                            ctx->sql_schema_guard_->get_schema_guard(),
@@ -13719,15 +13716,13 @@ int ObTransformUtils::calc_column_repeat_rate(ObTransformerCtx *ctx,
     LOG_WARN("get unexpected null", K(ret), K(ctx), K(table));
   } else if (!table->is_basic_table()) {
     // do nothing
-  } else if (OB_FAIL(ctx->schema_checker_->get_table_schema(
-                              ctx->session_info_->get_effective_tenant_id(), 
+  } else if (OB_FAIL(ctx->schema_checker_->get_table_schema( 
                               table->ref_id_, table_schema))) {
     LOG_WARN("get table schema failed", K(ret), KPC(table));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(ctx->opt_stat_mgr_->get_table_stat(ctx->session_info_->get_effective_tenant_id(),
-                                                        table->ref_id_,
+  } else if (OB_FAIL(ctx->opt_stat_mgr_->get_table_stat(table->ref_id_,
                                                         table_schema->is_partitioned_table() ? -1 : table->ref_id_,
                                                         1,
                                                         table_stat))) {
@@ -13735,8 +13730,7 @@ int ObTransformUtils::calc_column_repeat_rate(ObTransformerCtx *ctx,
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); ++i) {
       ObOptColumnStatHandle column_handle;
-      if (OB_FAIL(ctx->opt_stat_mgr_->get_column_stat(ctx->session_info_->get_effective_tenant_id(),
-                                                      table->ref_id_,
+      if (OB_FAIL(ctx->opt_stat_mgr_->get_column_stat(table->ref_id_,
                                                       table_schema->is_partitioned_table() ? -1 : table->ref_id_,
                                                       column_ids.at(i),
                                                       column_handle))) {
@@ -14740,7 +14734,7 @@ int ObTransformUtils::check_table_with_fts_or_multivalue_recursively(TableItem *
     }
   } else if (table->is_basic_table()) {
     const ObTableSchema* table_schema = NULL;
-    if (OB_FAIL(schema_checker->get_table_schema(session_info->get_effective_tenant_id(),
+    if (OB_FAIL(schema_checker->get_table_schema(
                                                  table->ref_id_,
                                                  table_schema))) {
       LOG_WARN("failed to get table schema", K(ret));

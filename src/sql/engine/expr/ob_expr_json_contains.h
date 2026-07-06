@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SQL_OB_EXPR_JSON_CONTAINS_H_
 #define OCEANBASE_SQL_OB_EXPR_JSON_CONTAINS_H_
 
-#include "lib/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_tree.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 
 using namespace oceanbase::common;

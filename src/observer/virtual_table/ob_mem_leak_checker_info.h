@@ -21,8 +21,8 @@
 #include "lib/net/ob_addr.h"
 #include "lib/allocator/ob_mem_leak_checker.h"
 
-#include "share/ob_virtual_table_iterator.h"
-#include "share/ob_scanner.h"
+#include "observer/virtual_table/ob_virtual_table_iterator.h"
+#include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
 
 namespace oceanbase
@@ -41,7 +41,7 @@ public:
   virtual ~ObMemLeakCheckerInfo();
 
   inline void set_addr(common::ObAddr &addr) {addr_ = &addr;}
-  inline void set_tenant_id(uint64_t tenant_id) {tenant_id_ = tenant_id;}
+  
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 private:
@@ -53,7 +53,6 @@ private:
   common::ObMemLeakChecker::mod_info_map_t::hashmap::const_iterator it_;
   common::ObMemLeakChecker::mod_info_map_t info_map_;
   common::ObAddr *addr_;
-  uint64_t tenant_id_;
   const char *label_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMemLeakCheckerInfo);

@@ -30,8 +30,7 @@ using namespace share::schema;
 using namespace dbms_scheduler;
 
 ObMLogMaintenanceTask::ObMLogMaintenanceTask()
-  : tenant_id_(OB_INVALID_TENANT_ID),
-    round_(0),
+  : round_(0),
     status_(StatusType::PREPARE),
     error_code_(OB_SUCCESS),
     last_fetch_mlog_id_(OB_INVALID_ID),
@@ -58,9 +57,8 @@ int ObMLogMaintenanceTask::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObMLogMaintenanceTask init twice", KR(ret), KP(this));
   } else {
-    const uint64_t tenant_id = MTL_ID();
-    tenant_id_ = tenant_id;
-    mlog_ids_.set_attr(ObMemAttr(tenant_id, "MLogIds"));
+    
+    mlog_ids_.set_attr(ObMemAttr("MLogIds"));
     is_inited_ = true;
   }
   return ret;
@@ -99,7 +97,6 @@ void ObMLogMaintenanceTask::destroy()
   cancel_task();
   wait_task();
   cleanup();
-  tenant_id_ = OB_INVALID_TENANT_ID;
   mlog_ids_.destroy();
 }
 
@@ -163,7 +160,7 @@ int ObMLogMaintenanceTask::prepare()
   }
   ++round_;
   prepare_cost_us_ = ObTimeUtil::current_time() - start_time_;
-  LOG_INFO("mlog maintenance task prepare success", K(tenant_id_), K(round_),
+  LOG_INFO("mlog maintenance task prepare success", K(round_),
             K(prepare_cost_us_));
   switch_status(StatusType::GC_MLOG, ret);
   return ret;
@@ -177,9 +174,9 @@ int ObMLogMaintenanceTask::gc_mlog()
     start_gc_mlog_time_ = ObTimeUtil::current_time();
   }
   if (mlog_ids_.empty()) { // fetch next batch
-    if (OB_FAIL(ObMLogInfo::batch_fetch_mlog_ids(*GCTX.sql_proxy_, tenant_id_, last_fetch_mlog_id_,
+    if (OB_FAIL(ObMLogInfo::batch_fetch_mlog_ids(*GCTX.sql_proxy_, last_fetch_mlog_id_,
                                                  mlog_ids_, MLOG_NUM_FETCH_PER_SCHED))) {
-      LOG_WARN("fail to batch fetch mlog ids", KR(ret), K(tenant_id_), K(last_fetch_mlog_id_));
+      LOG_WARN("fail to batch fetch mlog ids", KR(ret), K(last_fetch_mlog_id_));
     } else {
       fetch_mlog_num_ += mlog_ids_.count();
       fetch_finish_ = mlog_ids_.count() < MLOG_NUM_FETCH_PER_SCHED;
@@ -190,27 +187,27 @@ int ObMLogMaintenanceTask::gc_mlog()
   } else { // gc current batch
     ObSchemaGetterGuard schema_guard;
     int64_t tenant_schema_version = OB_INVALID_VERSION;
-    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id_, schema_guard))) {
-      LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id_));
-    } else if (OB_FAIL(schema_guard.get_schema_version(tenant_id_, tenant_schema_version))) {
-      LOG_WARN("fail to get schema version", KR(ret), K(tenant_id_));
+    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("fail to get tenant schema guard", KR(ret));
+    } else if (OB_FAIL(schema_guard.get_schema_version(tenant_schema_version))) {
+      LOG_WARN("fail to get schema version", KR(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < mlog_ids_.count(); ++i) {
       const uint64_t mlog_id = mlog_ids_.at(i);
       ObMLogInfo mlog_info;
       const ObTableSchema *table_schema = nullptr;
       bool is_exist = false;
-      if (OB_FAIL(ObMLogInfo::fetch_mlog_info(*GCTX.sql_proxy_, tenant_id_, mlog_id, mlog_info))) {
-        LOG_WARN("fail to fetch mlog info", KR(ret), K(tenant_id_), K(mlog_id));
+      if (OB_FAIL(ObMLogInfo::fetch_mlog_info(*GCTX.sql_proxy_, mlog_id, mlog_info))) {
+        LOG_WARN("fail to fetch mlog info", KR(ret), K(mlog_id));
       } else if (mlog_info.get_schema_version() > tenant_schema_version) {
         is_exist = true; // skip, wait next round
-      } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, mlog_id, table_schema))) {
-        LOG_WARN("fail to get table schema", KR(ret), K(tenant_id_), K(mlog_id));
+      } else if (OB_FAIL(schema_guard.get_table_schema( mlog_id, table_schema))) {
+        LOG_WARN("fail to get table schema", KR(ret), K(mlog_id));
       } else {
         is_exist = (nullptr != table_schema);
       }
       if (OB_SUCC(ret) && !is_exist) {
-        LOG_INFO("gc one mlog", K_(tenant_id), K(mlog_id));
+        LOG_INFO("gc one mlog", K(mlog_id));
         if (OB_FAIL(drop_mlog(mlog_id))) {
           LOG_WARN("fail to drop mlog", KR(ret), K(mlog_id));
         } else {
@@ -222,7 +219,7 @@ int ObMLogMaintenanceTask::gc_mlog()
   }
   if (OB_SUCC(ret) && fetch_finish_ && mlog_ids_.empty()) { // goto next status
     gc_mlog_cost_us_ = ObTimeUtility::current_time() - start_gc_mlog_time_;
-    LOG_INFO("mlog maintenance task gc mlog success", K(tenant_id_), K(round_), K(gc_mlog_cost_us_),
+    LOG_INFO("mlog maintenance task gc mlog success", K(round_), K(gc_mlog_cost_us_),
              K(fetch_mlog_num_), K(gc_mlog_num_));
     new_status = StatusType::SUCCESS;
   }
@@ -234,7 +231,7 @@ int ObMLogMaintenanceTask::finish()
 {
   int ret = OB_SUCCESS;
   cost_us_ = ObTimeUtility::current_time() - start_time_;
-  LOG_INFO("mlog maintenace task finish", K(tenant_id_), K(round_), K(status_), K(error_code_),
+  LOG_INFO("mlog maintenace task finish", K(round_), K(status_), K(error_code_),
            K(cost_us_), K(prepare_cost_us_), K(gc_mlog_cost_us_), K(fetch_mlog_num_),
            K(gc_mlog_num_));
   // cleanup
@@ -271,23 +268,23 @@ int ObMLogMaintenanceTask::drop_mlog(uint64_t mlog_id)
   } else {
     ObMySQLTransaction trans;
     ObMLogInfo mlog_info;
-    if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id_))) {
-      LOG_WARN("fail to start trans", KR(ret), K(tenant_id_));
-    } else if (OB_FAIL(ObMLogInfo::fetch_mlog_info(trans, tenant_id_, mlog_id, mlog_info,
+    if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+      LOG_WARN("fail to start trans", KR(ret));
+    } else if (OB_FAIL(ObMLogInfo::fetch_mlog_info(trans, mlog_id, mlog_info,
                                                    true /*for_update*/, true /*nowait*/))) {
       if (OB_LIKELY(OB_ERR_EXCLUSIVE_LOCK_CONFLICT_NOWAIT == ret)) {
-        LOG_WARN("can not lock mlog info", KR(ret), K_(tenant_id), K(mlog_id));
+        LOG_WARN("can not lock mlog info", KR(ret), K(mlog_id));
         ret = OB_SUCCESS; // skip, wait next round
       } else if (OB_LIKELY(OB_ENTRY_NOT_EXIST == ret)) {
-        LOG_WARN("mlog info not exist", KR(ret), K_(tenant_id), K(mlog_id));
+        LOG_WARN("mlog info not exist", KR(ret), K(mlog_id));
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to fetch mlog info", KR(ret), K(tenant_id_), K(mlog_id));
+        LOG_WARN("fail to fetch mlog info", KR(ret), K(mlog_id));
       }
     } else if (!mlog_info.get_purge_job().empty() &&
                OB_FAIL(ObDBMSSchedJobUtils::remove_dbms_sched_job(
-                 trans, tenant_id_, mlog_info.get_purge_job(), true /*if_exists*/))) {
-      LOG_WARN("fail to remove dbms sched job", KR(ret), K(tenant_id_), "job_name",
+                 trans, mlog_info.get_purge_job(), true /*if_exists*/))) {
+      LOG_WARN("fail to remove dbms sched job", KR(ret), "job_name",
                mlog_info.get_purge_job());
     } else if (OB_FAIL(ObMLogInfo::drop_mlog_info(trans, mlog_info))) {
       LOG_WARN("fail to drop mlog info", KR(ret), K(mlog_info));

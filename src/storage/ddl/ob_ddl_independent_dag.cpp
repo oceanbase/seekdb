@@ -15,6 +15,7 @@
  */
 
 #include "storage/ddl/ob_ddl_independent_dag.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_ddl_inc_task.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_cg_macro_block_write_task.h"
@@ -38,7 +39,7 @@ using namespace oceanbase::share::schema;
 ObDDLIndependentDag::ObDDLIndependentDag()
   : ObIndependentDag(share::ObDagType::DAG_TYPE_DDL),
     is_inited_(false),
-    arena_(ObMemAttr(MTL_ID(), "ddl_dag")),
+    arena_(ObMemAttr("ddl_dag")),
     direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID),
     ddl_thread_count_(0),
     pipeline_count_(0),
@@ -117,7 +118,7 @@ int ObDDLIndependentDag::init_by_param(const share::ObIDagInitParam *param)
 int ObDDLIndependentDag::init_ddl_table_schema()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObDDLTableSchema::fill_ddl_table_schema(MTL_ID(), ddl_task_param_.target_table_id_, arena_, ddl_table_schema_))) {
+  if (OB_FAIL(ObDDLTableSchema::fill_ddl_table_schema(ddl_task_param_.target_table_id_, arena_, ddl_table_schema_))) {
     LOG_WARN("fill ddl table schema failed", K(ret));
   }
   return ret;
@@ -126,7 +127,7 @@ int ObDDLIndependentDag::init_ddl_table_schema()
 int ObDDLIndependentDag::init_tablet_context_map()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(tablet_context_map_.create(ls_tablet_ids_.count(), ObMemAttr(MTL_ID(), "ddl_dag_ctx_map")))) {
+  if (OB_FAIL(tablet_context_map_.create(ls_tablet_ids_.count(), ObMemAttr("ddl_dag_ctx_map")))) {
     LOG_WARN("create tablet context map failed", K(ret), K(ls_tablet_ids_.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < ls_tablet_ids_.count(); ++i) {
@@ -256,7 +257,7 @@ int ObDDLIndependentDag::add_scan_chunk(ObDDLChunk &ddl_chunk, const int64_t tim
       LOG_WARN("push chunk failed", K(ret), KPC(ddl_slice));
     } else if (FALSE_IT(ddl_chunk.chunk_data_ = nullptr)) {
     } else if (need_end_chunk) {
-      ObChunk *end_chunk = OB_NEW(ObChunk, ObMemAttr(MTL_ID(), "ddl_end_chunk"));
+      ObChunk *end_chunk = OB_NEW(ObChunk, ObMemAttr("ddl_end_chunk"));
       if (OB_ISNULL(end_chunk)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(ret));
@@ -475,7 +476,7 @@ int ObDDLIndependentDag::check_is_first_ddl_kv(bool &is_first)
   int ret = OB_SUCCESS;
   is_first = true;
   for (int64_t i = 0; OB_SUCC(ret) && i < ls_tablet_ids_.count(); ++i) {
-    ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
     ObTabletMapKey key;
 
     key.ls_id_ = ls_tablet_ids_.at(i).first;

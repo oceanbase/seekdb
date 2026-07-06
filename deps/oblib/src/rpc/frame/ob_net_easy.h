@@ -20,6 +20,7 @@
 #include "rpc/frame/ob_req_handler.h"
 #include "rpc/frame/ob_req_transport.h"
 #include "lib/ssl/ob_ssl_config.h"
+#include "rpc/frame/ob_req_packet_code.h"
 
 // Load-bearing: downstream headers (e.g. observer/ob_srv_network_frame.h) use
 // obcall data structs (ObNetEndpointKey, ObSharedDeviceResourceArray) unqualified

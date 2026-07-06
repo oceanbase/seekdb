@@ -31,7 +31,6 @@ public:
   virtual ~ObDropVecIVFIndexTask();
 
   int init(
-      const uint64_t tenant_id,
       const int64_t task_id,
       const uint64_t data_table_id,
       const share::ObDDLType task_type,
@@ -48,7 +47,7 @@ public:
   int init(const ObDDLTaskRecord &task_record);
   virtual int process() override;
   virtual int serialize_params_to_message(char *buf, const int64_t buf_size, int64_t &pos) const override;
-  virtual int deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t buf_size, int64_t &pos) override;
+  virtual int deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos) override;
   virtual int64_t get_serialize_param_size() const override;
   virtual int on_child_task_finish(const uint64_t child_task_key, const int ret_code) override { return OB_SUCCESS; }
   
@@ -66,9 +65,7 @@ private:
   int drop_aux_ivfsq8_index_table(const share::ObDDLTaskStatus &status);
   int drop_aux_ivfpq_index_table(const share::ObDDLTaskStatus &status);
   
-  int check_drop_index_finish(
-      const uint64_t tenant_id,
-      const int64_t task_id,
+  int check_drop_index_finish(const int64_t task_id,
       const int64_t table_id,
       bool &has_finished);
   int wait_child_task_finish(

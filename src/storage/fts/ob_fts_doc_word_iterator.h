@@ -18,9 +18,9 @@
 #define OCEANBASE_STORAGE_FTS_DOC_WORD_ITERATOR_H
 
 #include "lib/allocator/page_arena.h"
-#include "share/datum/ob_datum.h"
-#include "share/ob_fts_index_builder_util.h"
-#include "share/schema/ob_table_param.h"
+#include "common/datum/ob_datum.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "storage/access/ob_table_param.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "storage/access/ob_dml_param.h"
 

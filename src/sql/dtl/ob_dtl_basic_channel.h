@@ -27,7 +27,7 @@
 #include "sql/dtl/ob_dtl_buf_allocator.h"
 #include "sql/dtl/ob_dtl_channel.h"
 #include "sql/dtl/ob_dtl_linked_buffer.h"
-#include "share/ob_scanner.h"
+#include "sql/ob_scanner.h"
 #include "observer/ob_server_struct.h"
 #include "sql/dtl/ob_dtl_fc_server.h"
 #include "sql/engine/px/ob_px_row_store.h"
@@ -132,7 +132,7 @@ public:
   virtual int write(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const bool is_eof) = 0;
   virtual int need_new_buffer(const ObDtlMsg &msg, ObEvalCtx *ctx, int64_t &need_size, bool &need_new) = 0;
   virtual void write_msg_type(ObDtlLinkedBuffer*) = 0;
-  virtual int init(ObDtlLinkedBuffer *buffer, uint64_t tenant_id) = 0;
+  virtual int init(ObDtlLinkedBuffer *buffer) = 0;
   virtual int serialize() = 0;
 
   virtual void reset() = 0;
@@ -161,9 +161,8 @@ public:
     return common::OB_SUCCESS;
   }
   virtual void write_msg_type(ObDtlLinkedBuffer* buffer) { UNUSED(buffer); }
-  virtual int init(ObDtlLinkedBuffer *buffer, uint64_t tenant_id)
+  virtual int init(ObDtlLinkedBuffer *buffer)
   {
-    UNUSED(tenant_id);
     write_buffer_ = buffer;
     return common::OB_SUCCESS;
   }
@@ -184,7 +183,7 @@ public:
   virtual ~ObDtlRowMsgWriter();
 
   virtual DtlWriterType type() { return type_; }
-  int init(ObDtlLinkedBuffer *buffer, uint64_t tenant_id);
+  int init(ObDtlLinkedBuffer *buffer);
   void reset();
 
   int write(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const bool is_eof);
@@ -240,7 +239,7 @@ public:
   virtual ~ObDtlDatumMsgWriter();
 
   virtual DtlWriterType type() { return type_; }
-  int init(ObDtlLinkedBuffer *buffer, uint64_t tenant_id);
+  int init(ObDtlLinkedBuffer *buffer);
   void reset();
 
   int write(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const bool is_eof);
@@ -316,7 +315,7 @@ public:
   virtual ~ObDtlVectorRowMsgWriter();
 
   virtual DtlWriterType type() { return type_; }
-  int init(ObDtlLinkedBuffer *buffer, uint64_t tenant_id);
+  int init(ObDtlLinkedBuffer *buffer);
   bool is_inited() const { return nullptr != write_buffer_; }
   int try_append_row(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx);
   int try_append_batch(const common::ObIArray<ObExpr*> &exprs, 
@@ -455,7 +454,7 @@ public:
   virtual ~ObDtlVectorMsgWriter();
 
   virtual DtlWriterType type() { return type_; }
-  int init(ObDtlLinkedBuffer *buffer, uint64_t tenant_id);
+  int init(ObDtlLinkedBuffer *buffer);
   void reset();
 
   int write(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const bool is_eof);
@@ -516,7 +515,7 @@ public:
   virtual ~ObDtlVectorFixedMsgWriter();
 
   virtual DtlWriterType type() { return type_; }
-  int init(ObDtlLinkedBuffer *buffer, uint64_t tenant_id);
+  int init(ObDtlLinkedBuffer *buffer);
   bool is_inited() const { return nullptr != write_buffer_; }
   void reset();
   OB_INLINE int64_t used() { return vector_buffer_.get_mem_used(); }
@@ -637,10 +636,8 @@ class ObDtlBasicChannel
 {
   friend class ObDtlChanAgent;
 public:
-  explicit ObDtlBasicChannel(const uint64_t tenant_id,
-     const uint64_t id, const common::ObAddr &peer, DtlChannelType type);
-  explicit ObDtlBasicChannel(const uint64_t tenant_id,
-     const uint64_t id, const common::ObAddr &peer, const int64_t hash_val, DtlChannelType type);
+  explicit ObDtlBasicChannel(const uint64_t id, const common::ObAddr &peer, DtlChannelType type);
+  explicit ObDtlBasicChannel(const uint64_t id, const common::ObAddr &peer, const int64_t hash_val, DtlChannelType type);
   virtual ~ObDtlBasicChannel();
 
   class ObDtlChannelBlockProc : public ObIDltChannelLoopPred
@@ -677,7 +674,7 @@ public:
   bool is_empty() const override;
 
   virtual int64_t get_peer_id() const { return peer_id_; }
-  virtual uint64_t get_tenant_id() const { return tenant_id_; }
+  
   virtual int64_t get_hash_val() const { return hash_val_; }
 
   int wait_unblocking_if_blocked();
@@ -767,7 +764,6 @@ protected:
   int64_t send_buffer_cnt_;
   int64_t recv_buffer_cnt_;
   int64_t processed_buffer_cnt_;
-  uint64_t tenant_id_;
   bool is_data_msg_;
   bool use_crs_writer_;
   int64_t hash_val_;

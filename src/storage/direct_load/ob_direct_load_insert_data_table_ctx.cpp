@@ -17,10 +17,12 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "storage/direct_load/ob_direct_load_insert_data_table_ctx.h"
-#include "share/ob_tablet_autoincrement_service.h"
-#include "share/stat/ob_stat_item.h"
-#include "share/table/ob_table_load_dml_stat.h"
-#include "share/table/ob_table_load_sql_statistics.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
+#include "storage/ob_tablet_autoincrement_service.h"
+#include "share/rc/ob_module_provider.h"
+#include "sql/optimizer/stat/ob_stat_item.h"
+#include "storage/direct_load/ob_table_load_dml_stat.h"
+#include "storage/direct_load/ob_table_load_sql_statistics.h"
 #include "storage/direct_load/ob_direct_load_batch_rows.h"
 #include "storage/direct_load/ob_direct_load_datum_row.h"
 #include "storage/direct_load/ob_direct_load_table_data_desc.h"
@@ -29,6 +31,7 @@
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "storage/tx/ob_ts_mgr.h"  // transaction::get_tenant_gts
 
 namespace oceanbase
 {
@@ -91,7 +94,7 @@ int ObDirectLoadInsertDataTabletContext::init(ObDirectLoadInsertDataTableContext
     if (param_->enable_dag_) {
       slice_idx_ = param_->reserved_parallel_;
     }
-    if (OB_FAIL(ObDDLUtil::init_macro_block_seq(param_->reserved_parallel_, start_seq_))) {
+    if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(param_->reserved_parallel_, start_seq_))) {
       LOG_WARN("fail to init macro block seq", KR(ret), K(param_->reserved_parallel_));
     } else {
       is_inited_ = true;
@@ -172,7 +175,7 @@ int ObDirectLoadInsertDataTabletContext::create_tablet_direct_load()
   if (is_create_) {
     // do nothing
   } else {
-    ObTenantDirectLoadMgr *sstable_insert_mgr = MTL(ObTenantDirectLoadMgr *);
+    ObTenantDirectLoadMgr *sstable_insert_mgr = share::g_mp->tenant_direct_load_mgr();
     ObTabletDirectLoadInsertParam direct_load_param;
     direct_load_param.is_replay_ = false;
     direct_load_param.common_param_.direct_load_type_ = direct_load_type_;
@@ -193,7 +196,7 @@ int ObDirectLoadInsertDataTabletContext::create_tablet_direct_load()
     direct_load_param.runtime_only_param_.seq_no_ = param_->trans_param_.tx_seq_.cast_to_int();
     direct_load_param.runtime_only_param_.max_batch_size_ = param_->max_batch_size_;
     bool unused_major_exsist = false;
-    if (OB_FAIL(ObDirectLoadMgrAgent::create_tablet_direct_load_mgr(MTL_ID(), context_id_ /* execution_id */, context_id_,
+    if (OB_FAIL(ObDirectLoadMgrAgent::create_tablet_direct_load_mgr(context_id_ /* execution_id */, context_id_,
                                                                    direct_load_param, allocator_, unused_major_exsist, handle_, lob_handle_))) {
       LOG_WARN("failed to create tablet direct load mgr", K(ret), K(direct_load_param));
     } else {
@@ -210,7 +213,7 @@ int ObDirectLoadInsertDataTabletContext::open_tablet_direct_load()
     // do nothing
   } else {
     if (!is_idem_type(direct_load_type_)) {
-      ObTenantDirectLoadMgr *sstable_insert_mgr = MTL(ObTenantDirectLoadMgr *);
+      ObTenantDirectLoadMgr *sstable_insert_mgr = share::g_mp->tenant_direct_load_mgr();
       if (OB_ISNULL(sstable_insert_mgr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get tenant direct load mgr", K(ret));
@@ -511,7 +514,7 @@ int ObDirectLoadInsertDataTabletContext::fill_lob_meta_sstable_slice(const int64
     LOG_WARN("task is cancel", KR(ret));
   } else {
     ObDirectLoadInsertTabletContext *tablet_ctx = nullptr;
-    ObTenantDirectLoadMgr *sstable_insert_mgr = MTL(ObTenantDirectLoadMgr *);
+    ObTenantDirectLoadMgr *sstable_insert_mgr = share::g_mp->tenant_direct_load_mgr();
     ObDirectLoadSliceInfo slice_info;
     slice_info.is_full_direct_load_ = !param_->is_incremental_;
     slice_info.is_lob_slice_ = true;
@@ -595,7 +598,7 @@ int ObDirectLoadInsertDataTabletContext::fill_column_group(const int64_t thread_
 ObDirectLoadInsertDataTableContext::ObDirectLoadInsertDataTableContext()
   : safe_allocator_(allocator_), lob_table_ctx_(nullptr)
 {
-  sql_stats_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadInsertDataTableContext::~ObDirectLoadInsertDataTableContext()
@@ -633,7 +636,7 @@ int ObDirectLoadInsertDataTableContext::init(
     ddl_ctrl_.direct_load_type_ = ObDirectLoadMgrAgent::load_data_get_direct_load_type(param.is_incremental_,
                                                                                        param.data_version_);
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(MTL(ObTenantDirectLoadMgr *)->alloc_execution_context_id(ddl_ctrl_.context_id_))) {
+    } else if (OB_FAIL(share::g_mp->tenant_direct_load_mgr()->alloc_execution_context_id(ddl_ctrl_.context_id_))) {
       LOG_WARN("alloc execution context id failed", K(ret));
     } else if (param_.enable_dag_ && OB_FAIL(init_dag(target_ls_partition_ids))) {
       LOG_WARN("fail to init dag", KR(ret));
@@ -641,7 +644,7 @@ int ObDirectLoadInsertDataTableContext::init(
       LOG_WARN("fail to create all tablet contexts", KR(ret), K(ls_partition_ids),
                K(target_ls_partition_ids));
     } else if (param_.online_opt_stat_gather_ &&
-               OB_FAIL(sql_stat_map_.create(1024, "TLD_SqlStatMap", "TLD_SqlStatMap", MTL_ID()))) {
+               OB_FAIL(sql_stat_map_.create(1024, "TLD_SqlStatMap", "TLD_SqlStatMap"))) {
       LOG_WARN("fail to create sql stat map", KR(ret));
     } else {
       is_inited_ = true;
@@ -669,8 +672,8 @@ int ObDirectLoadInsertDataTableContext::init_dag(
     // incremental direct load may generate multiple sstables,
     // the snapshot_version needs be updated each time to avoid duplicated MacroIds
     share::SCN current_scn;
-    if (OB_FAIL(share::ObShareUtil::get_tenant_gts(MTL_ID(), current_scn))) {
-      LOG_WARN("failed to get gts", KR(ret), K(MTL_ID()));
+    if (OB_FAIL(transaction::get_tenant_gts(current_scn))) {
+      LOG_WARN("failed to get gts", KR(ret));
     } else {
       init_param.ddl_task_param_.snapshot_version_ = current_scn.get_val_for_tx();
       init_param.tx_info_.tx_desc_ = param_.trans_param_.tx_desc_;
@@ -1091,7 +1094,7 @@ int ObDirectLoadInsertDataTableContext::collect_sql_stats(ObTableLoadDmlStat &dm
 int ObDirectLoadInsertDataTableContext::collect_dml_stat(ObTableLoadDmlStat &dml_stats)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   dml_stats.reset();
   FOREACH_X(iter, tablet_ctx_map_, OB_SUCC(ret))
   {
@@ -1100,7 +1103,7 @@ int ObDirectLoadInsertDataTableContext::collect_dml_stat(ObTableLoadDmlStat &dml
     if (OB_FAIL(dml_stats.allocate_dml_stat(dml_stat))) {
       LOG_WARN("fail to allocate table stat", KR(ret));
     } else {
-      dml_stat->tenant_id_ = tenant_id;
+      
       dml_stat->table_id_ = param_.table_id_;
       dml_stat->tablet_id_ = tablet_ctx->get_tablet_id().id();
       dml_stat->insert_row_count_ = tablet_ctx->get_row_count();

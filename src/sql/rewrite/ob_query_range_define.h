@@ -20,7 +20,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "common/object/ob_object.h"
 #include "sql/engine/expr/ob_expr_frame_info.h"
-#include "lib/geo/ob_geo_common.h"
+#include "share/geo/ob_geo_common.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/rewrite/ob_query_range_provider.h"
 #include "lib/hash/ob_placement_hashmap.h"

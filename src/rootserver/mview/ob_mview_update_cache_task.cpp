@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX RS
 #include "ob_mview_update_cache_task.h"
+#include "share/rc/ob_module_provider.h"
 #include "rootserver/mview/ob_mview_maintenance_service.h"
 
 namespace oceanbase
@@ -109,17 +110,17 @@ void ObMviewUpdateCacheTask::runTimerTask()
   ObSqlString sql;
   share::SCN read_snapshot(share::SCN::min_scn());
   share::SCN mview_refresh_snapshot;
-  const uint64_t tenant_id = MTL_ID();
+  
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   rootserver::ObMViewMaintenanceService *mview_maintenance_service =
-                                      MTL(rootserver::ObMViewMaintenanceService*);
+                                      share::g_mp->m_view_maintenance_service();
   if (OB_ISNULL(sql_proxy) || OB_ISNULL(mview_maintenance_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null or ObMViewMaintenanceService is null",
              KR(ret), KP(sql_proxy), KP(mview_maintenance_service));
-  } else if (!is_valid_tenant_id(tenant_id)) {
+  } else if (!true) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant id is invalid", KR(ret), K(tenant_id));
+    LOG_WARN("tenant id is invalid", KR(ret));
   } else {
     const int64_t refresh_mode = (int64_t)ObMVRefreshMode::MAJOR_COMPACTION;
     ObSEArray<uint64_t, 2> mview_ids;
@@ -130,15 +131,13 @@ void ObMviewUpdateCacheTask::runTimerTask()
       sqlclient::ObMySQLResult *mysql_result = NULL;
       if (OB_FAIL(get_mview_refresh_scn_sql(refresh_mode, sql))) {
         LOG_WARN("failed to get last refresh scn sql", K(ret));
-      } else if (OB_FAIL(sql_proxy->read(res,
-                                         tenant_id,
-                                         sql.ptr()))) {
-        LOG_WARN("fail to execute sql", K(ret), K(sql), K(tenant_id));
+      } else if (OB_FAIL(sql_proxy->read(res, sql.ptr()))) {
+        LOG_WARN("fail to execute sql", K(ret), K(sql));
       } else if (OB_FAIL(extract_sql_result(res.get_result(),
                                             mview_ids,
                                             mview_refresh_scns,
                                             mview_refresh_modes))) {
-        LOG_WARN("fail to extract sql result", K(ret), K(sql), K(tenant_id));
+        LOG_WARN("fail to extract sql result", K(ret), K(sql));
       }
     }
     if (OB_FAIL(ret)) {
@@ -147,7 +146,7 @@ void ObMviewUpdateCacheTask::runTimerTask()
                                                                                   mview_refresh_scns,
                                                                                   mview_refresh_modes))){
       LOG_WARN("fail to update mview refresh info cache", K(ret),
-               K(mview_ids), K(mview_refresh_scns), K(mview_refresh_modes), K(tenant_id));
+               K(mview_ids), K(mview_refresh_scns), K(mview_refresh_modes));
     }
   }
 }

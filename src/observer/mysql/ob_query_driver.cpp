@@ -145,10 +145,8 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
     flags.status_flags_.OB_SERVER_PS_OUT_PARAMS = need_set_ps_out_flag ? 1 : 0;
     // NULL == result indicates it is an old protocol ps cursor execute response, or fetch protocol response, cursor_exit = true
     flags.status_flags_.OB_SERVER_STATUS_CURSOR_EXISTS = NULL == result ? 1 : 0; 
-    if (!session_.is_obproxy_mode()) {
-      // in java client or others, use slow query bit to indicate partition hit or not
-      flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_.partition_hit().get_bool();
-    }
+    // in java client or others, use slow query bit to indicate partition hit or not
+    flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_.partition_hit().get_bool();
     eofp.set_server_status(flags);
 
     if (ps_cursor_execute && sender_.need_send_extra_ok_packet()) {
@@ -282,8 +280,7 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
       ObSMRow sm(protocol_type, *row, dtc_params,
                          session_,  
                          result.get_field_columns(),
-                         ctx_.schema_guard_,
-                         session_.get_effective_tenant_id());
+                         ctx_.schema_guard_);
       sm.set_packed(is_packed);
       OMPKRow rp(sm);
       rp.set_is_packed(is_packed);
@@ -518,7 +515,7 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value,
     ObLobLocatorV2 loc(value.get_string(), value.has_lob_header());
     if (loc.is_null()) { // maybe v1 empty lob
     } else { // lob locator v2
-      ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE, session_info->get_effective_tenant_id());
+      ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter instr_iter(value);
       if (OB_FAIL(ObTextStringHelper::build_text_iter(instr_iter, exec_ctx, session_info, allocator, &tmp_alloc))) {
         LOG_WARN("init lob str inter failed", K(ret), K(value));
@@ -608,77 +605,11 @@ int ObQueryDriver::convert_text_value_charset(ObObj& value,
       LOG_WARN("Lob: invalid collation", K(from_collation_type), K(to_collation_type), K(ret));
     } else if (CS_TYPE_BINARY != from_collation_type && CS_TYPE_BINARY != to_collation_type
         && strcmp(from_charset_info->csname, to_charset_info->csname) != 0) {
-      bool is_actual_return_lob_locator = session->is_client_use_lob_locator() && !value.is_json();
-      if (value.is_lob_storage() && value.has_lob_header() && OB_NOT_NULL(session) &&
-          is_actual_return_lob_locator && false) {
-        ObLobLocatorV2 lob;
-        ObString inrow_data;
-        if (OB_FAIL(process_lob_locator_results(value, 
-                                                session->is_client_use_lob_locator(),
-                                                session->is_client_support_lob_locatorv2(),
-                                                &allocator,
-                                                session,
-                                                exec_ctx))) {
-          LOG_WARN("fail to process lob locator", K(ret), K(value));
-        } else if (OB_FAIL(value.get_lob_locatorv2(lob))) {
-          LOG_WARN("fail to lob locator v2", K(ret), K(value));
-        } else if (!lob.has_inrow_data()) {
-          // do nothing
-        } else if (OB_FAIL(lob.get_inrow_data(inrow_data))) {
-          LOG_WARN("fail to get inrow data", K(ret), K(lob));
-        } else if (inrow_data.length() == 0) {
-          // do nothing
-        } else {
-          int64_t lob_data_byte_len = inrow_data.length();
-          int64_t offset_len = reinterpret_cast<uint64_t>(inrow_data.ptr()) - reinterpret_cast<uint64_t>(lob.ptr_);
-          int64_t res_len = offset_len + lob_data_byte_len * ObCharset::CharConvertFactorNum;
-          char *buf = static_cast<char*>(allocator.alloc(res_len));
-          if (OB_ISNULL(buf)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to alloc memory", K(ret), K(res_len));
-          } else {
-            MEMCPY(buf, lob.ptr_, offset_len);
-            uint32_t result_len = 0;
-            if (OB_FAIL(convert_string_charset(inrow_data, from_collation_type, to_collation_type,
-                                               buf + offset_len, res_len - offset_len, result_len))) {
-              LOG_WARN("Lob: convert string charset failed", K(ret));
-            } else {
-              lob.assign_buffer(buf, offset_len + result_len, lob.has_lob_header());
-              // refresh payload size
-              if (lob.has_extern()) {
-                ObMemLobExternHeader *ex_header = nullptr;
-                if (OB_FAIL(lob.get_extern_header(ex_header))) {
-                  LOG_WARN("fail to get extern header", K(ret), K(lob));
-                } else {
-                  ex_header->payload_size_ = result_len;
-                }
-              }
-              // refresh lob data size
-              if (OB_SUCC(ret)) {
-                ObLobCommon *lob_common = nullptr;
-                if (OB_FAIL(lob.get_disk_locator(lob_common))) {
-                  LOG_WARN("fail to get lob common", K(ret), K(lob));
-                } else if (lob_common->is_init_) {
-                  ObLobData *lob_data = reinterpret_cast<ObLobData*>(lob_common->buffer_);
-                  lob_data->byte_size_ = result_len;
-                }
-              }
-              if (OB_SUCC(ret)) {
-                LOG_DEBUG("Lob: new temp convert_text_value_charset in convert_text_value",
-                K(ret), K(raw_str), K(type), K(to_collation_type), K(from_collation_type),
-                K(from_charset_info->csname), K(to_charset_info->csname));
-                value.set_lob_value(type, buf, offset_len + result_len);
-                value.set_collation_type(to_collation_type);
-                value.set_has_lob_header();
-              }
-            }
-          }
-        }
-      } else {
+      {
         // get full data, buffer size is full byte length * ObCharset::CharConvertFactorNum
         ObString data_str = value.get_string();
         int64_t lob_data_byte_len = data_str.length();
-        ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE, session->get_effective_tenant_id());
+        ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE);
         if (!value.has_lob_header()) {
         } else {
           ObLobLocatorV2 loc(raw_str, value.has_lob_header());
@@ -778,4 +709,3 @@ int ObQueryDriver::is_com_filed_list_match_wildcard_str(ObResultSet &result,
 
 }
 }
-

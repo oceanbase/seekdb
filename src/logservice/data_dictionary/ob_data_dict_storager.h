@@ -38,7 +38,7 @@ public:
   void reset();
   void reuse();
 public:
-  int init(const uint64_t tenant_id);
+  int init();
   int prepare(const share::SCN &snapshot_scn, logservice::ObLogHandler *log_handler);
   // serialize dict_meta and generate meta_haeder
   // serialize meta_haeder and dict_meta to tmp_buf;
@@ -117,7 +117,6 @@ private:
   static const char *DEFAULT_DDL_MDS_MSG;
   static const int64_t DEFAULT_DDL_MDS_MSG_LEN;
 private:
-  uint64_t tenant_id_;
   ObIAllocator &allocator_;
   share::SCN snapshot_scn_;
   palf::LSN start_lsn_;

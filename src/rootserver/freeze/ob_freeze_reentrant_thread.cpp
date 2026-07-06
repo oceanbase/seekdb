@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS_COMPACTION
 
 #include "rootserver/freeze/ob_freeze_reentrant_thread.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -26,8 +27,8 @@ using namespace share;
 
 namespace rootserver
 {
-ObFreezeReentrantThread::ObFreezeReentrantThread(const uint64_t tenant_id)
-  : ObRsReentrantThread(true), tenant_id_(tenant_id),
+ObFreezeReentrantThread::ObFreezeReentrantThread()
+  : ObRsReentrantThread(true),
     sql_proxy_(nullptr), is_paused_(false), epoch_(-1)
 {}
 
@@ -87,25 +88,14 @@ int ObFreezeReentrantThread::obtain_proposal_id_from_ls(
 
   storage::ObLSHandle ls_handle;
   logservice::ObLogHandler *handler = nullptr;
-  logservice::ObLogRestoreHandler *restore_handler = nullptr;
-  if (OB_FAIL(MTL(storage::ObLSService*)->get_ls(SYS_LS, ls_handle, ObLSGetMod::RS_MOD))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(SYS_LS, ls_handle, ObLSGetMod::RS_MOD))) {
     LOG_WARN("fail to get ls", KR(ret));
-  } else if (is_primary_service) {
-    if (OB_ISNULL(ls_handle.get_ls())
-        || OB_ISNULL(handler = ls_handle.get_ls()->get_log_handler())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("should not null", KR(ret), K(is_primary_service));
-    } else if (OB_FAIL(handler->get_role(role, proposal_id))) {
-      LOG_WARN("fail to get role", KR(ret), K(is_primary_service));
-    }
-  } else {
-    if (OB_ISNULL(ls_handle.get_ls())
-        || OB_ISNULL(restore_handler = ls_handle.get_ls()->get_log_restore_handler())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("should not null", KR(ret), K(is_primary_service));
-    } else if (OB_FAIL(restore_handler->get_role(role, proposal_id))) {
-      LOG_WARN("fail to get role", KR(ret), K(is_primary_service));
-    }
+  } else if (OB_ISNULL(ls_handle.get_ls())
+      || OB_ISNULL(handler = ls_handle.get_ls()->get_log_handler())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("should not null", KR(ret), K(is_primary_service));
+  } else if (OB_FAIL(handler->get_role(role, proposal_id))) {
+    LOG_WARN("fail to get role", KR(ret), K(is_primary_service));
   }
   return ret;
 }

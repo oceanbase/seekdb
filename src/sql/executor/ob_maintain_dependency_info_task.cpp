@@ -24,9 +24,8 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
-ObMaintainObjDepInfoTask::ObMaintainObjDepInfoTask (const uint64_t tenant_id)
-  : tenant_id_(tenant_id),
-    gctx_(GCTX),
+ObMaintainObjDepInfoTask::ObMaintainObjDepInfoTask ()
+  : gctx_(GCTX),
     view_schema_(&alloc_),
     reset_view_column_infos_(false)
 {
@@ -47,7 +46,6 @@ int ObMaintainObjDepInfoTask::check_cur_maintain_task_is_valid(
   case share::schema::ObObjectType::VIEW: {
     const share::schema::ObSimpleTableSchemaV2 *table_schema = nullptr;
     if (OB_FAIL(schema_guard.get_simple_table_schema(
-                tenant_id_,
                 dep_obj_key.dep_obj_id_, table_schema))) {
       LOG_WARN("failed to get table schema", K(ret), K(dep_obj_key));
     } else if (OB_ISNULL(table_schema)) {
@@ -122,7 +120,7 @@ share::ObAsyncTask *ObMaintainObjDepInfoTask::deep_copy(char *buf, const int64_t
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("buffer size is not enough", K(ret), K(buf_size), K(need_size));
   } else {
-    task = new (buf) ObMaintainObjDepInfoTask(tenant_id_);
+    task = new (buf) ObMaintainObjDepInfoTask{};
     OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->get_insert_dep_objs().assign(insert_dep_objs_));
     OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->get_update_dep_objs().assign(update_dep_objs_));
     OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->get_delete_dep_objs().assign(delete_dep_objs_));
@@ -138,11 +136,11 @@ int ObMaintainObjDepInfoTask::process()
   int64_t last_version = 0;
   share::schema::ObSchemaGetterGuard schema_guard;
   SMART_VAR(obcall::ObDependencyObjDDLArg, dep_obj_info_arg) {
-    dep_obj_info_arg.tenant_id_ = tenant_id_;
-    dep_obj_info_arg.exec_tenant_id_ = tenant_id_;
+    
+    
     dep_obj_info_arg.reset_view_column_infos_ = reset_view_column_infos_;
-    OZ (gctx_.schema_service_->async_refresh_schema(tenant_id_, last_version));
-    OZ (gctx_.schema_service_->get_tenant_schema_guard(tenant_id_, schema_guard));
+    OZ (gctx_.schema_service_->async_refresh_schema(last_version));
+    OZ (gctx_.schema_service_->get_tenant_schema_guard(schema_guard));
     OZ (check_and_build_dep_info_arg(schema_guard, dep_obj_info_arg,
     insert_dep_objs_, share::schema::ObReferenceObjTable::INSERT_OP));
     OZ (check_and_build_dep_info_arg(schema_guard, dep_obj_info_arg,
@@ -287,6 +285,57 @@ void ObMaintainDepInfoTaskQueue::run2()
     }
   }
   LOG_INFO("async task queue stop");
+}
+
+int process_reference_obj_table(share::schema::ObReferenceObjTable &ref_obj_table,
+                                                     const uint64_t dep_obj_id,
+                                                     const share::schema::ObTableSchema *view_schema,
+                                                     sql::ObMaintainDepInfoTaskQueue &task_queue)
+{
+  int ret = OB_SUCCESS;
+  share::ObTenantRole::Role tenant_role;
+  bool is_standby = false;
+  if (OB_FAIL(share::ObShareUtil::mtl_check_if_tenant_role_is_standby(is_standby))) {
+    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_standby", KR(ret));
+  } else if (OB_UNLIKELY(!ref_obj_table.is_inited() || is_standby)) {
+    if (OB_INVALID_ID != dep_obj_id) {
+      OZ (task_queue.erase_view_id_from_set(dep_obj_id));
+    }
+  } else {
+    SMART_VAR(sql::ObMaintainObjDepInfoTask, task) {
+      share::schema::ObReferenceObjTable::ObGetDependencyObjOp op(&task.get_insert_dep_objs(),
+                              &task.get_update_dep_objs(),
+                              &task.get_delete_dep_objs());
+      if (OB_FAIL(ref_obj_table.get_ref_obj_table().foreach_refactored(op))) {
+        LOG_WARN("traverse ref_obj_version_table_ failed", K(ret));
+      } else if (nullptr != view_schema && OB_FAIL(task.assign_view_schema(*view_schema))) {
+        LOG_WARN("failed to assign view schema", K(ret));
+      } else if (OB_FAIL(op.get_callback_ret())) {
+        LOG_WARN("traverse ref_obj_version_table_ failed", K(ret));
+      } else if (task.is_empty_task()) {
+        if (OB_INVALID_ID != dep_obj_id) {
+          OZ (task_queue.erase_view_id_from_set(dep_obj_id));
+        }
+      } else if (task_queue.is_queue_almost_full()) {
+        ret = OB_SIZE_OVERFLOW;
+      } else if (OB_FAIL(task_queue.push(task))) {
+        if (OB_UNLIKELY(OB_SIZE_OVERFLOW != ret)) {
+          LOG_WARN("push task failed", K(ret));
+        }
+      }
+    }
+  }
+  if (OB_FAIL(ret) && OB_INVALID_ID != dep_obj_id) {
+    int tmp_ret = OB_SUCCESS;
+    if (OB_SUCCESS != (tmp_ret = task_queue.erase_view_id_from_set(dep_obj_id))) {
+      LOG_WARN("failed to erase obj id", K(tmp_ret), K(ret));
+    }
+    if (OB_SIZE_OVERFLOW == ret) {
+      ret = OB_SUCCESS;
+      LOG_TRACE("async queue is full");
+    }
+  }
+  return ret;
 }
 
 }  // namespace sql

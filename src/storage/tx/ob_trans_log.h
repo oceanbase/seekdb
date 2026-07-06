@@ -63,7 +63,7 @@ public:
   const ObTransID &get_trans_id() const { return trans_id_; }
   uint64_t get_cluster_id() const { return cluster_id_; }
   uint64_t get_cluster_version() const { return cluster_version_; }
-  // Update tenant_id for physical backup and restore
+  // Update tenant for physical backup and restore
   VIRTUAL_TO_STRING_KV(K_(log_type),  K_(trans_id), K_(cluster_id), K_(cluster_version));
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTransLog);
@@ -366,7 +366,6 @@ class ObTransMutatorLog : public ObTransLog
 public:
   ObTransMutatorLog()
     : ObTransLog(),
-      tenant_id_(common::OB_INVALID_TENANT_ID),
       trans_expired_time_(0),
       trans_param_(),
       log_no_(0),
@@ -376,7 +375,6 @@ public:
       cluster_version_(0) {}
   ObTransMutatorLog(ObTransMutatorLogHelper &helper)
     : ObTransLog(),
-      tenant_id_(common::OB_INVALID_TENANT_ID),
       trans_expired_time_(0),
       trans_param_(),
       log_no_(0),
@@ -387,7 +385,6 @@ public:
   ~ObTransMutatorLog() { destroy(); }
   void destroy() {}
 public:
-  uint64_t get_tenant_id() const { return tenant_id_; }
   int64_t get_trans_expired_time() const { return trans_expired_time_; }
   const ObStartTransParam &get_trans_param() const { return trans_param_; }
   int64_t get_log_no() const { return log_no_; }
@@ -400,7 +397,6 @@ public:
 public:
   TO_STRING_KV(K_(log_type));
 private:
-  int64_t tenant_id_;
   int64_t trans_expired_time_;
   ObStartTransParam trans_param_;
   int64_t log_no_;

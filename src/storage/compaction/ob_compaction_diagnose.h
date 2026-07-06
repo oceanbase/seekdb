@@ -18,9 +18,10 @@
 #define SRC_STORAGE_COMPACTION_OB_COMPACTION_DIAGNOSE_H_
 
 #include "storage/ob_i_store.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_tablet_merge_task.h"
 #include "lib/list/ob_dlist.h"
-#include "share/scheduler/ob_diagnose_config.h"
+#include "observer/scheduler/ob_diagnose_config.h"
 #include "storage/compaction/ob_compaction_tablet_diagnose.h"
 #include "share/compaction/ob_compaction_info_param.h"
 
@@ -242,7 +243,6 @@ public:
   static void add_compaction_info_param(char *buf, const int64_t buf_size, const char* str);
 
   int init(bool with_map,
-           const uint64_t tenant_id,
            const char* basic_label,
            const int64_t page_size=INFO_PAGE_SIZE,
            int64_t max_size=INFO_MAX_SIZE);
@@ -383,7 +383,6 @@ struct ObCompactionDiagnoseInfo
 {
   ObCompactionDiagnoseInfo()
     : merge_type_(),
-      tenant_id_(0),
       ls_id_(0),
       tablet_id_(0),
       timestamp_(0),
@@ -401,11 +400,10 @@ struct ObCompactionDiagnoseInfo
   };
   const static char *ObDiagnoseStatusStr[DIA_STATUS_MAX];
   static const char * get_diagnose_status_str(ObDiagnoseStatus status);
-  TO_STRING_KV("merge_type", merge_type_to_str(merge_type_), K_(tenant_id), K_(ls_id), K_(tablet_id),
+  TO_STRING_KV("merge_type", merge_type_to_str(merge_type_), K_(ls_id), K_(tablet_id),
     "status", get_diagnose_status_str(status_), K_(timestamp), K_(diagnose_info));
 
   compaction::ObMergeType merge_type_;
-  uint64_t tenant_id_;
   int64_t ls_id_;
   int64_t tablet_id_;
   int64_t timestamp_;
@@ -430,7 +428,7 @@ public:
   ~ObCompactionDiagnoseMgr() { reset(); }
   void reset();
   int init(common::ObIAllocator *allocator, ObCompactionDiagnoseInfo *info_array, const int64_t max_cnt);
-  int diagnose_all_tablets(const int64_t tenant_id);
+  int diagnose_all_tablets();
   int diagnose_tenant_tablet();
   int diagnose_tenant(
     bool &diagnose_major_flag,
@@ -562,12 +560,12 @@ public:
   {
   }
   virtual ~ObCompactionDiagnoseIterator() { reset(); }
-  int open(const int64_t tenant_id);
+  int open();
   int get_next_info(ObCompactionDiagnoseInfo &info);
   void reset();
 
 private:
-  int get_diagnose_info(const int64_t tenant_id);
+  int get_diagnose_info();
 private:
   const int64_t MAX_DIAGNOSE_INFO_CNT = 1000;
   ObArenaAllocator allocator_;
@@ -590,13 +588,13 @@ private:
     dag_hash.ls_id_ = ls_id;                                                   \
     dag_hash.tablet_id_ = tablet_id;                                           \
     int64_t hash_value = dag_hash.inner_hash();                                \
-    if (OB_TMP_FAIL(MTL(compaction::ObScheduleSuspectInfoMgr *)                \
+    if (OB_TMP_FAIL(share::g_mp->schedule_suspect_info_mgr()                \
                         ->delete_info(hash_value))) {                          \
       if (OB_HASH_NOT_EXIST != tmp_ret) {                                      \
         LOG_WARN_RET(tmp_ret, "failed to delete suspect info",                 \
                      K(tmp_ret), K(dag_hash));                                 \
       }                                                                        \
-    } else if (OB_TMP_FAIL(MTL(compaction::ObDiagnoseTabletMgr *)              \
+    } else if (OB_TMP_FAIL(share::g_mp->diagnose_tablet_mgr()              \
                                ->delete_diagnose_tablet(ls_id, tablet_id,      \
                                                         diagnose_type))) {     \
       if (OB_HASH_NOT_EXIST != tmp_ret) {                                      \
@@ -624,7 +622,7 @@ private:
     if (OB_NOT_NULL(diagnose_info)) { \
     diagnose_info->merge_type_ = type;                                                            \
     diagnose_info->ls_id_ = ls_id.id();                                                     \
-    diagnose_info->tenant_id_ = MTL_ID();                                                     \
+                                                         \
     diagnose_info->tablet_id_ = tablet_id.id();                                                \
     diagnose_info->status_ = status;                                                          \
     diagnose_info->timestamp_ = timestamp;                                                          \
@@ -731,9 +729,9 @@ ADD_SUSPECT_INFO(merge_type, diagnose_type, ls_id, UNKNOW_TABLET_ID, info_type, 
     info_param->struct_type_ = ObInfoParamStructType::SUSPECT_INFO_PARAM;                          \
     INT_TO_PARAM_##n_int                                                                          \
     info.info_param_ = info_param;                                                               \
-    if (OB_FAIL(MTL(ObScheduleSuspectInfoMgr *)->add_suspect_info(info.hash(), info))) { \
+    if (OB_FAIL(share::g_mp->schedule_suspect_info_mgr()->add_suspect_info(info.hash(), info))) { \
       STORAGE_LOG(WARN, "failed to add suspect info", K(ret), K(info));                          \
-    } else if (OB_FAIL(MTL(compaction::ObDiagnoseTabletMgr *)->add_diagnose_tablet(ls_id, tablet_id, diagnose_type))) {     \
+    } else if (OB_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(ls_id, tablet_id, diagnose_type))) {     \
       STORAGE_LOG(WARN, "failed to add diagnose tablet", K(ret), K(ls_id), K(tablet_id));         \
     } else {                                                                                      \
       STORAGE_LOG(DEBUG, "success to add suspect info", K(ret), K(info), K(info_type),              \
@@ -771,9 +769,9 @@ ADD_SUSPECT_INFO(merge_type, diagnose_type, ls_id, UNKNOW_TABLET_ID, info_type, 
     info.info_param_ = info_param;                                                                \
     if (OB_FAIL(ret) && OB_SIZE_OVERFLOW != ret) {                                                \
       STORAGE_LOG(WARN, "fail to fill parameter kv into info param", K(ret));                     \
-    } else if (OB_FAIL(MTL(ObScheduleSuspectInfoMgr *)->add_suspect_info(info.hash(), info))) { \
+    } else if (OB_FAIL(share::g_mp->schedule_suspect_info_mgr()->add_suspect_info(info.hash(), info))) { \
       STORAGE_LOG(WARN, "failed to add suspect info", K(ret), K(info));                          \
-    } else if (OB_FAIL(MTL(compaction::ObDiagnoseTabletMgr *)->add_diagnose_tablet(ls_id, tablet_id, diagnose_type))) { \
+    } else if (OB_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(ls_id, tablet_id, diagnose_type))) { \
       STORAGE_LOG(WARN, "failed to add diagnose tablet", K(ret), K(ls_id), K(tablet_id));         \
     } else {                                                                                      \
       STORAGE_LOG(DEBUG, "success to add suspect info", K(ret), K(info), K(info_type),             \

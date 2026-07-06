@@ -97,17 +97,7 @@ enum ObLogBaseType
   // for obj lock garbage collect service
   OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE = 27,
 
-  //for backup task scheduler service
-  BACKUP_TASK_SCHEDULER_LOG_BASE_TYPE = 31,
-
-  //for backup service
-  BACKUP_DATA_SERVICE_LOG_BASE_TYPE = 32,
-
-  //for backup task scheduler service
-  BACKUP_CLEAN_SERVICE_LOG_BASE_TYPE = 33,
-  
-  //for log archive service
-  BACKUP_ARCHIVE_SERVICE_LOG_BASE_TYPE = 34,
+  // 31 - 34 were used by removed backup/archive services. Do not reuse.
 
   COMMON_LS_SERVICE_LOG_BASE_TYPE = 36,
 
@@ -227,14 +217,6 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str ,"DUP_TABLE", str_len);
   } else if (log_type == OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE) {
     strncpy(str ,"OBJ_LOCK_GARBAGE_COLLECT_SERVICE", str_len);
-  } else if (log_type == BACKUP_DATA_SERVICE_LOG_BASE_TYPE) {
-    strncpy(str, "BACKUP_DATA_SERVICE", str_len);
-  } else if (log_type == BACKUP_CLEAN_SERVICE_LOG_BASE_TYPE) {
-    strncpy(str, "BACKUP_CLEAN_SERVICE", str_len);
-  } else if (log_type == BACKUP_ARCHIVE_SERVICE_LOG_BASE_TYPE) {
-    strncpy(str, "BACKUP_ARCHIVE_SERVICE", str_len);
-  } else if (log_type == BACKUP_TASK_SCHEDULER_LOG_BASE_TYPE) {
-    strncpy(str, "BACKUP_TASK_SCHEDULER", str_len);
   } else if (log_type == COMMON_LS_SERVICE_LOG_BASE_TYPE) {
     strncpy(str ,"COMMON_LS_SERVICE", str_len);
   } else if (log_type == LS_BLOCK_TX_SERVICE_LOG_BASE_TYPE) {

@@ -42,7 +42,7 @@ public:
 
 private:
   static int execute_sql(sql::ObExecContext &ctx, ObSqlString &sql, int64_t &affected_rows);
-  static int _generate_job_id(int64_t tenant_id, int64_t &max_job_id);
+  static int _generate_job_id(int64_t &max_job_id);
 };
 
 } // end of pl

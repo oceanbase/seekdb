@@ -147,7 +147,7 @@ int ObMajorChecksumInfo::init_from_sstable(
     data_checksum_ = sstable.get_data_checksum();
     exec_mode_ = exec_mode;
     ObSEArray<int64_t, OB_ROW_DEFAULT_COLUMNS_COUNT> tmp_col_ckm_array;
-    tmp_col_ckm_array.set_attr(ObMemAttr(MTL_ID(), "MajorCkmInfo"));
+    tmp_col_ckm_array.set_attr(ObMemAttr("MajorCkmInfo"));
     if (sstable.is_co_sstable()) {
       const ObCOSSTableV2 &co_sstable = static_cast<const ObCOSSTableV2 &>(sstable);
       if (OB_FAIL(co_sstable.fill_column_ckm_array(storage_schema, tmp_col_ckm_array))) {

@@ -71,7 +71,7 @@ int ObStorageLogItem::init(
 
   if (OB_SUCC(ret)) {
     if (nullptr == buf) {
-      const ObMemAttr attr(OB_SERVER_TENANT_ID, ObModIds::OB_SLOG_WRITER);
+      const ObMemAttr attr(ObModIds::OB_SLOG_WRITER);
       if (nullptr == (buf_ = reinterpret_cast<char *>(ob_malloc_align(align_size, buf_size, attr)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         STORAGE_REDO_LOG(WARN, "Fail to alloc local buf", K(ret), K(buf_size), K(attr));

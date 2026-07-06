@@ -24,8 +24,8 @@
  {
  namespace schema
  {
- const char *ObLocationSqlService::LOCATION_TABLES[2] = {OB_ALL_TENANT_LOCATION_TNAME,
-                                                           OB_ALL_TENANT_LOCATION_HISTORY_TNAME};
+ const char *ObLocationSqlService::LOCATION_TABLES[2] = {OB_ALL_LOCATION_TNAME,
+                                                           OB_ALL_LOCATION_HISTORY_TNAME};
  
  ObLocationSqlService::ObLocationSqlService(ObSchemaService &schema_service)
    : ObDDLSqlService(schema_service)
@@ -61,7 +61,7 @@
      LOG_WARN("fail to exec ddl sql", K(ret), K(schema), K(ddl_type));
    } else {
      ObSchemaOperation operation;
-     operation.tenant_id_ = schema.get_tenant_id();
+     
      operation.table_id_ = schema.get_location_id();
      operation.op_type_ = ddl_type;
      operation.schema_version_ = schema.get_schema_version();
@@ -79,8 +79,8 @@
    ObSqlString sql;
    ObSqlString values;
    int64_t affected_rows = 0;
-   uint64_t tenant_id = schema.get_tenant_id();
-   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+   
+   
    if (OB_UNLIKELY(!schema.is_valid())) {
      ret = OB_ERR_UNEXPECTED;
      LOG_WARN("invalid input argument", K(ret), K(schema));
@@ -101,7 +101,7 @@
                                   static_cast<int32_t>(values.length()),
                                   values.ptr()))) {
          LOG_WARN("append sql failed, ", K(ret));
-       } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+       } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
          LOG_WARN("fail to execute sql", K(sql), K(ret));
        } else if (!is_single_row(affected_rows)) {
          ret = OB_ERR_UNEXPECTED;
@@ -119,8 +119,8 @@
    ObSqlString sql;
    ObSqlString values;
    int64_t affected_rows = 0;
-   uint64_t tenant_id = schema.get_tenant_id();
-   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+   
+   
    if (OB_UNLIKELY(!schema.is_valid())) {
      ret = OB_ERR_UNEXPECTED;
      LOG_WARN("invalid input argument", K(ret), K(schema));
@@ -143,7 +143,7 @@
                                   static_cast<int32_t>(values.length()),
                                   values.ptr()))) {
          LOG_WARN("append sql failed, ", K(ret));
-       } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+       } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
          LOG_WARN("fail to execute sql", K(sql), K(ret));
        } else if (!is_single_row(affected_rows) && !is_double_row(affected_rows)) {
          ret = OB_ERR_UNEXPECTED;
@@ -161,8 +161,8 @@
     ObSqlString sql;
     ObSqlString values;
     int64_t affected_rows = 0;
-    uint64_t tenant_id = schema.get_tenant_id();
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
+    
     if (OB_UNLIKELY(!schema.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid input argument", K(ret), K(schema));
@@ -170,9 +170,9 @@
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE location_id = %lu",
                                  LOCATION_TABLES[THE_SYS_TABLE_IDX],
-                                 ObSchemaUtils::get_extract_schema_id(exec_tenant_id, schema.get_location_id())))) {
+                                 ObSchemaUtils::get_extract_schema_id(schema.get_location_id())))) {
         LOG_WARN("fail to assign sql format", K(ret));
-      } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+      } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
         LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
@@ -195,7 +195,7 @@
                                    static_cast<int32_t>(values.length()),
                                    values.ptr()))) {
           LOG_WARN("append sql failed, ", K(ret));
-        } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+        } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
           LOG_WARN("fail to execute sql", K(sql), K(ret));
         } else if (!is_single_row(affected_rows)) {
           ret = OB_ERR_UNEXPECTED;
@@ -210,10 +210,10 @@
  int ObLocationSqlService::gen_sql(common::ObSqlString &sql, common::ObSqlString &values, const ObLocationSchema &schema)
  {
    int ret = OB_SUCCESS;
-   uint64_t tenant_id = schema.get_tenant_id();
-   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+   
+   
    SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(
-                        exec_tenant_id, schema.get_location_id()), "location_id", "%lu");
+                        schema.get_location_id()), "location_id", "%lu");
    SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, schema.get_location_name_str().ptr(),
                                    schema.get_location_name_str().length(), "location_name");
    SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, schema.get_location_url_str().ptr(),

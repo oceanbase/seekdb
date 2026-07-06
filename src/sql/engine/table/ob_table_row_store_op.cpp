@@ -101,7 +101,6 @@ OB_DEF_DESERIALIZE(ObTableRowStoreOpInput)
     } else {
       ObChunkDatumStore *datum_store = new(ptr) ObChunkDatumStore("TableRowStoreOp", allocator_);
       if (OB_FAIL(datum_store->init(UINT64_MAX,
-                                    common::OB_SERVER_TENANT_ID,
                                     ObCtxIds::DEFAULT_CTX_ID,
                                     "TableRowStoreOp",
                                     false/*enable_dump*/))) {

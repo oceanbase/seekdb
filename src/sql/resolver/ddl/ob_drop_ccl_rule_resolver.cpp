@@ -43,7 +43,7 @@ int ObDropCCLRuleResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   ParseNode *node = const_cast<ParseNode*>(&parse_tree);
   ObDropCCLRuleStmt *drop_ccl_rule_stmt = NULL;
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   if (OB_ISNULL(node)
       || OB_UNLIKELY(node->type_ != T_DROP_CCL_RULE)) {
     ret = OB_ERR_UNEXPECTED;
@@ -54,13 +54,12 @@ int ObDropCCLRuleResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(node->children_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid node children", K(node), K(node->children_));
-  } else if (FALSE_IT(tenant_id = session_info_->get_effective_tenant_id())) {
   } else if (OB_ISNULL(drop_ccl_rule_stmt = create_stmt<ObDropCCLRuleStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create create_database_stmt", K(ret));
   } else {
     stmt_ = drop_ccl_rule_stmt;
-    drop_ccl_rule_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+    
     // 1.resolve if exists
     if (OB_SUCC(ret)) {
       if (node->children_[IF_EXIST] != NULL) {

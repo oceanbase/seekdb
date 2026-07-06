@@ -56,9 +56,7 @@ int ObAlterUserProfileResolver::resolve_set_role(const ParseNode &parse_tree)
     ObString host_name(OB_DEFAULT_HOST_NAME);
     uint64_t session_user_id = params_.session_info_->get_priv_user_id();
     const ObUserInfo *user_info = NULL;
-    if (OB_FAIL(params_.schema_checker_->get_user_info(
-         params_.session_info_->get_effective_tenant_id(),
-         session_user_id, user_info))) {
+    if (OB_FAIL(params_.schema_checker_->get_user_info(session_user_id, user_info))) {
       LOG_WARN("get user info failed", K(ret));
     } else if (NULL == user_info) {
       ret = OB_ERR_UNEXPECTED;
@@ -66,7 +64,8 @@ int ObAlterUserProfileResolver::resolve_set_role(const ParseNode &parse_tree)
     } else {
       
       obcall::ObAlterUserProfileArg &arg = stmt->get_ddl_arg();
-      arg.tenant_id_ = params_.session_info_->get_effective_tenant_id();
+      
+      
       stmt->set_set_role_flag(ObAlterUserProfileStmt::SET_ROLE);
 
       /* 1. resolve default role */
@@ -105,7 +104,7 @@ int ObAlterUserProfileResolver::resolve_role_list(
         const ObUserInfo *role_info = NULL;
         OZ (resolve_user_host(role, role_name, host_name));
         if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(params_.schema_checker_->get_user_info(arg.tenant_id_, role_name,
+        } else if (OB_FAIL(params_.schema_checker_->get_user_info(role_name,
                                                                   host_name, role_info))) {
           if (OB_USER_NOT_EXIST == ret) {
             if (obcall::OB_DEFAULT_ROLE_ALL_EXCEPT == arg.default_role_flag_) {
@@ -147,7 +146,7 @@ int ObAlterUserProfileResolver::resolve_role_list(
             } else {
               for (int j = 0; OB_SUCC(ret) && j < arg.user_ids_.count(); j++) {
                 const ObUserInfo *cur_user_info = NULL;
-                OZ (params_.schema_checker_->get_user_info(arg.tenant_id_, arg.user_ids_.at(j), cur_user_info));
+                OZ (params_.schema_checker_->get_user_info(arg.user_ids_.at(j), cur_user_info));
                 CK (OB_NOT_NULL(cur_user_info));
                 if (OB_SUCC(ret) && !has_exist_in_array(cur_user_info->get_role_id_array(), role_id)) {
                   ret = OB_ERR_ROLE_NOT_GRANTED_TO;
@@ -240,7 +239,7 @@ int ObAlterUserProfileResolver::resolve_default_role(const ParseNode &parse_tree
 {
   int ret = OB_SUCCESS;
   ObAlterUserProfileStmt *stmt = NULL;
-  uint64_t tenant_id = OB_INVALID_ID;
+  
 
   if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -263,8 +262,8 @@ int ObAlterUserProfileResolver::resolve_default_role(const ParseNode &parse_tree
     stmt->set_set_role_flag(ObAlterUserProfileStmt::SET_DEFAULT_ROLE);
 
     /* 1. resolve user */
-    tenant_id = params_.session_info_->get_effective_tenant_id();
-    arg.tenant_id_ = tenant_id;
+    
+    
     if (T_USER_WITH_HOST_NAME == parse_tree.children_[0]->type_) {
       ParseNode *user_with_host_name = parse_tree.children_[0];
       // Get user_name and host_name
@@ -286,8 +285,8 @@ int ObAlterUserProfileResolver::resolve_default_role(const ParseNode &parse_tree
           host_name = ObString(OB_DEFAULT_HOST_NAME);
         }
       }
-      OZ (params_.schema_checker_->get_user_info(tenant_id, user_name, host_name, user_info),
-            tenant_id, user_name, host_name);
+      OZ (params_.schema_checker_->get_user_info(user_name, host_name, user_info),
+            user_name, host_name);
       if (ret == OB_USER_NOT_EXIST) {
         ret = OB_ERR_UNKNOWN_AUTHID;
         LOG_USER_ERROR(OB_ERR_UNKNOWN_AUTHID, user_name.length(), user_name.ptr(), host_name.length(), host_name.ptr());
@@ -305,8 +304,8 @@ int ObAlterUserProfileResolver::resolve_default_role(const ParseNode &parse_tree
       ParseNode *user_list_node = parse_tree.children_[0];
       for (int i = 0; OB_SUCC(ret) && i < user_list_node->num_child_; i++) {
         OZ (ObDCLResolver::resolve_user_list_node(user_list_node->children_[i], user_list_node, user_name, host_name));
-        OZ (params_.schema_checker_->get_user_info(tenant_id, user_name, host_name, user_info),
-              tenant_id, user_name, host_name);
+        OZ (params_.schema_checker_->get_user_info(user_name, host_name, user_info),
+              user_name, host_name);
         if (OB_USER_NOT_EXIST == ret || OB_ISNULL(user_info)) {
           ret = OB_ERR_UNKNOWN_AUTHID;
           LOG_USER_ERROR(OB_ERR_UNKNOWN_AUTHID, user_name.length(), user_name.ptr(), host_name.length(), host_name.ptr());

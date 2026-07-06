@@ -15,15 +15,11 @@
  */
 
 #include <gtest/gtest.h>
-#include "logservice/leader_coordinator/table_accessor.h"
+#include "lib/container/ob_tuple.h"
 
 namespace oceanbase
 {
-using namespace share;
 using namespace common;
-using namespace palf;
-using namespace logservice;
-using namespace logservice::coordinator;
 namespace unittest
 {
 

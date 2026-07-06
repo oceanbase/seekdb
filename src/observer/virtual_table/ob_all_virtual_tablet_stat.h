@@ -16,17 +16,15 @@
 
 #ifndef OB_ALL_VIRTUAL_TABLET_STAT_H_
 #define OB_ALL_VIRTUAL_TABLET_STAT_H_
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "storage/ob_tenant_tablet_stat_mgr.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
 
 namespace oceanbase
 {
 namespace observer
 {
 
-class ObAllVirtualTabletStat : public common::ObVirtualTableScannerIterator,
-                               public omt::ObMultiTenantOperator
+class ObAllVirtualTabletStat : public common::ObVirtualTableScannerIterator
 {
 public:
   enum COLUMN_ID_LIST
@@ -49,9 +47,6 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 private:
-  virtual bool is_need_process(uint64_t tenant_id) override;
-  virtual void release_last_tenant() override;
-  virtual int process_curr_tenant(common::ObNewRow *&row) override;
 private:
   char ip_buf_[common::OB_IP_STR_BUFF];
   // each tenant has a maximum 20000 of stats, and each stat occupies 88bytes memory, so the maximum memory usage is around 2.75MB. 

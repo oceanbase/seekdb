@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX PL
 #include "ob_dbms_index_manager.h"
-#include "share/change_stream/ob_change_stream_mgr.h"
+#include "observer/change_stream/ob_change_stream_mgr.h"
 #include "share/rc/ob_tenant_base.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -45,7 +45,7 @@ int ObDBMSIndexManager::refresh(
     ret = OB_NOT_INIT;
     LOG_WARN("mysql proxy is not inited", KR(ret));
   } else if (OB_FAIL(ObChangeStreamMgr::wait_refresh_scn(
-                 *mysql_proxy, MTL_ID(), timeout_us))) {
+                 *mysql_proxy, timeout_us))) {
     LOG_WARN("wait change stream refresh failed", KR(ret));
   }
   return ret;

@@ -38,7 +38,7 @@ int ObMPResetConnection::process()
   ObSQLSessionInfo *session = NULL;
   ObSMConnection *conn = NULL;
   ObSchemaGetterGuard schema_guard;
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   const ObSysVariableSchema *sys_variable_schema = NULL;
   if (OB_FAIL(get_session(session))) {
     LOG_ERROR("get session  fail", K(ret));
@@ -56,13 +56,12 @@ int ObMPResetConnection::process()
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     session->update_last_active_time();
     session->set_query_start_time(ObTimeUtility::current_time());
-    LOG_TRACE("begin reset connection. ", K(session->get_server_sid()), K(session->get_effective_tenant_id()));
-    tenant_id = session->get_effective_tenant_id();
+    LOG_TRACE("begin reset connection. ", K(session->get_server_sid()));
     if (OB_FAIL(process_extra_info(*session, pkt, need_response_error))) {
       LOG_WARN("fail get process extra info", K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
       OB_LOG(WARN,"fail get schema guard", K(ret));
-    } else if (OB_FAIL(schema_guard.get_sys_variable_schema(tenant_id, sys_variable_schema))) {
+    } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
       LOG_WARN("get sys variable schema failed", K(ret));
     } else if (OB_ISNULL(sys_variable_schema)) {
       ret = OB_ERR_UNEXPECTED;

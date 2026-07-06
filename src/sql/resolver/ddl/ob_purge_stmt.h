@@ -38,8 +38,7 @@ public:
   {}
   virtual ~ObPurgeTableStmt() {}
   const obcall::ObPurgeTableArg& get_purge_table_arg() const { return purge_table_arg_; }
-  inline void set_tenant_id(const uint64_t tenant_id);
-  inline uint64_t get_tenant_id() const { return purge_table_arg_.tenant_id_; }
+  
   inline void set_database_id(const uint64_t database_id);
   inline uint64_t get_database_id() const { return purge_table_arg_.database_id_; }
   inline void set_table_name(const common::ObString &table_name);
@@ -51,10 +50,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObPurgeTableStmt);
 };
 
-inline void ObPurgeTableStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  purge_table_arg_.tenant_id_ = tenant_id;
-}
+
 
 inline void ObPurgeTableStmt::set_database_id(const uint64_t database_id)
 {
@@ -79,8 +75,7 @@ public:
   {}
   virtual ~ObPurgeIndexStmt() {}
   const obcall::ObPurgeIndexArg& get_purge_index_arg() const { return purge_index_arg_; }
-  inline void set_tenant_id(const uint64_t tenant_id);
-  inline uint64_t get_tenant_id() const { return purge_index_arg_.tenant_id_; }
+  
   inline void set_database_id(const uint64_t database_id_);
   inline uint64_t get_database_id() const { return purge_index_arg_.database_id_; }
   inline void set_table_id(const uint64_t table_id);
@@ -94,10 +89,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObPurgeIndexStmt);
 };
 
-inline void ObPurgeIndexStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  purge_index_arg_.tenant_id_ = tenant_id;
-}
+
 
 inline void ObPurgeIndexStmt::set_database_id(const uint64_t database_id)
 {
@@ -127,8 +119,7 @@ public:
   {}
   virtual ~ObPurgeDatabaseStmt() {}
   const obcall::ObPurgeDatabaseArg& get_purge_database_arg() const { return purge_db_arg_; }
-  inline void set_tenant_id(const uint64_t tenant_id);
-  uint64_t get_tenant_id() const { return purge_db_arg_.tenant_id_; }
+  
   void set_db_name(const common::ObString &db_name);
   virtual obcall::ObDDLArg &get_ddl_arg() { return purge_db_arg_; }
   TO_STRING_KV(K_(stmt_type),K_(purge_db_arg));
@@ -137,10 +128,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObPurgeDatabaseStmt);
 };
 
-inline void ObPurgeDatabaseStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  purge_db_arg_.tenant_id_ = tenant_id;
-}
+
 
 inline void ObPurgeDatabaseStmt::set_db_name(const common::ObString &db_name)
 {
@@ -159,10 +147,10 @@ public:
   {}
   virtual ~ObPurgeRecycleBinStmt() {}
   const obcall::ObPurgeRecycleBinArg& get_purge_recyclebin_arg() const { return purge_recyclebin_arg_; }
-  inline void set_tenant_id(const uint64_t tenant_id) { purge_recyclebin_arg_.tenant_id_ = tenant_id; }
+  
   inline void set_expire_time(const int64_t expire_time) { purge_recyclebin_arg_.expire_time_ = expire_time; }
   inline void set_purge_num(const int64_t purge_num) { purge_recyclebin_arg_.purge_num_ = purge_num; }
-  uint64_t get_tenant_id() const { return purge_recyclebin_arg_.tenant_id_; }
+  
   virtual obcall::ObDDLArg &get_ddl_arg() { return purge_recyclebin_arg_; }
   TO_STRING_KV(K_(stmt_type), K_(purge_recyclebin_arg));
 private:

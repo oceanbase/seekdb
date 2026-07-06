@@ -34,18 +34,17 @@ class ObGtsRequest
 {
   OB_UNIS_VERSION(1);
 public:
-  ObGtsRequest() : tenant_id_(0), srr_(0), range_size_(0), sender_() {}
+  ObGtsRequest() : srr_(0), range_size_(0), sender_() {}
   ~ObGtsRequest() {}
-  int init(const uint64_t tenant_id, const MonotonicTs srr, const int64_t range_size,
+  int init(const MonotonicTs srr, const int64_t range_size,
       const common::ObAddr &sender);
   bool is_valid() const;
 public:
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   MonotonicTs get_srr() const { return srr_; }
   const common::ObAddr &get_sender() const { return sender_; }
-  TO_STRING_KV(K_(tenant_id), K_(srr), K_(range_size), K_(sender));
+  TO_STRING_KV(K_(srr), K_(range_size), K_(sender));
 private:
-  uint64_t tenant_id_;
   MonotonicTs srr_;
   int64_t range_size_;
   common::ObAddr sender_;
@@ -55,19 +54,18 @@ class ObGtsErrResponse
 {
   OB_UNIS_VERSION(1);
 public:
-  ObGtsErrResponse() : tenant_id_(0), srr_(0), status_(0), sender_() {}
+  ObGtsErrResponse() : srr_(0), status_(0), sender_() {}
   ~ObGtsErrResponse() {}
-  int init(const uint64_t tenant_id, const MonotonicTs srr, const int status,
+  int init(const MonotonicTs srr, const int status,
       const common::ObAddr &sender);
   bool is_valid() const;
 public:
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   MonotonicTs get_srr() const { return srr_; }
   int get_status() const { return status_; }
   const common::ObAddr &get_sender() const { return sender_; }
-  TO_STRING_KV(K_(tenant_id), K_(srr), K_(status), K_(sender));
+  TO_STRING_KV(K_(srr), K_(status), K_(sender));
 private:
-  uint64_t tenant_id_;
   MonotonicTs srr_;
   int status_;
   common::ObAddr sender_;

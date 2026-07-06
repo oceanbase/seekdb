@@ -34,8 +34,7 @@ public:
   virtual ~ObTruncateTableStmt();
   void set_database_name(const common::ObString &db_name);
   void set_table_name(const common::ObString &table_name);
-  void set_tenant_id(const uint64_t tenant_id);
-  uint64_t get_tenant_id() const { return truncate_table_arg_.tenant_id_; }
+  
   const common::ObString& get_database_name() const { return truncate_table_arg_.database_name_; }
   const common::ObString& get_table_name() const { return truncate_table_arg_.table_name_; }
 
@@ -49,10 +48,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObTruncateTableStmt);
 };
 
-inline void ObTruncateTableStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  truncate_table_arg_.tenant_id_ = tenant_id;
-}
+
 
 inline const obcall::ObTruncateTableArg &ObTruncateTableStmt::get_truncate_table_arg() const
 {

@@ -18,11 +18,16 @@
 #define OB_TABLET_CREATOR_H
 
 #include "lib/hash/ob_hashmap.h"
-#include "lib/allocator/ob_cached_allocator.h"
+#include "lib/objectpool/ob_cached_allocator.h"
+#include "lib/container/ob_array.h"
+#include "lib/container/ob_iarray.h"
+#include "lib/allocator/ob_malloc.h"
 #include "common/ob_tablet_id.h"//ObTabletID
 #include "share/ob_rpc_struct.h"//ObBatchCreateTabletArg
 #include "share/ob_ls_id.h"//share::ObLSID
 #include "share/ob_ddl_common.h" // ObForkTabletInfo
+#include "common/mysqlclient/ob_mysql_transaction.h"
+#include "share/ob_define.h"
 
 namespace oceanbase
 {
@@ -97,7 +102,6 @@ public:
       next_(NULL)
   {}
   int init(const share::ObLSID &ls_key,
-           const int64_t tenant_id,
            const share::SCN &major_frozen_scn,
            const bool need_check_tablet_cnt);
   int try_add_table_schema(const share::schema::ObTableSchema *table_schema, 
@@ -139,11 +143,9 @@ public:
 const static int64_t BATCH_ARG_SIZE = 1024 * 1024;  // 1M
 
   ObTabletCreator(
-      const uint64_t tenant_id,
       const share::SCN &major_frozen_scn,
       ObMySQLTransaction &trans)
-                : tenant_id_(tenant_id),
-                  major_frozen_scn_(major_frozen_scn),
+                : major_frozen_scn_(major_frozen_scn),
                   allocator_("TbtCret"),
                   args_map_(),
                   trans_(trans),
@@ -165,7 +167,7 @@ private:
 private:
   const int64_t MAP_BUCKET_NUM = 1024;
 private:
-  const uint64_t tenant_id_;
+  
   const share::SCN major_frozen_scn_;
   ObArenaAllocator allocator_;
   common::hash::ObHashMap<share::ObLSID, ObBatchCreateTabletHelper*> args_map_;

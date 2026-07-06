@@ -22,10 +22,11 @@
 #include "lib/guard/ob_unique_guard.h"
 #include "lib/string/ob_sql_string.h"
 #include "lib/string/ob_string_holder.h"
-#include "lib/queue/ob_dedup_queue.h"
-#include "lib/thread/ob_work_queue.h"
+#include "lib/thread/ob_dedup_queue.h"
+#include "lib/task/ob_timer.h"
+#include "lib/thread/ob_async_task_queue.h"
 #include "lib/lock/ob_mutex.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "share/inner_table/ob_inner_table_schema.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "share/ob_occam_timer.h"
@@ -75,27 +76,27 @@ public:
   {
   public:
     ObEventTableUpdateTask(ObEventHistoryTableOperator &table_operator, const bool is_delete,
-        const int64_t create_time, const uint64_t exec_tenant_id);
+        const int64_t create_time);
     virtual ~ObEventTableUpdateTask() {}
-    int init(const char *ptr, const int64_t buf_size, const uint64_t exec_tenant_id = OB_SYS_TENANT_ID);
+    int init(const char *ptr, const int64_t buf_size);
     bool is_valid() const;
     virtual int64_t hash() const;
     virtual bool operator==(const common::IObDedupTask &other) const;
     virtual int64_t get_deep_copy_size() const { return sizeof(*this) + sql_.length(); }
     virtual common::IObDedupTask *deep_copy(char *buf, const int64_t buf_size) const;
     virtual int64_t get_abs_expired_time() const { return 0; }
-    virtual uint64_t get_exec_tenant_id() const { return exec_tenant_id_; }
+    
     virtual int process();
   public:
     void assign_ptr(char *ptr, const int64_t buf_size)
     { sql_.assign_ptr(ptr, static_cast<int32_t>(buf_size));}
-    TO_STRING_KV(K_(sql), K_(is_delete), K_(create_time), K_(exec_tenant_id));
+    TO_STRING_KV(K_(sql), K_(is_delete), K_(create_time));
   private:
     ObEventHistoryTableOperator &table_operator_;
     common::ObString sql_;
     bool is_delete_;
     int64_t create_time_;
-    uint64_t exec_tenant_id_;
+    
 
     DISALLOW_COPY_AND_ASSIGN(ObEventTableUpdateTask);
   };
@@ -120,7 +121,7 @@ public:
   // number of others should not less than 0, or more than 13
   // if number of others is not 13, should be even, every odd of them are name, every even of them are value
   template <typename ...Rest>
-  int async_add_tenant_event(const uint64_t tenant_id, const char *module, const char *event,
+  int async_add_tenant_event(const char *module, const char *event,
       const int64_t event_timestamp, const int user_ret, const int64_t cost_sec, Rest &&...others);
   // number of others should not less than 0, or more than 13
   template <typename ...Rest>
@@ -149,7 +150,7 @@ protected:
   }
   const common::ObAddr &get_addr() const { return self_addr_; }
   int add_task(const common::ObSqlString &sql, const bool is_delete = false,
-      const int64_t create_time = OB_INVALID_TIMESTAMP, const uint64_t exec_tenant_id = OB_SYS_TENANT_ID);
+      const int64_t create_time = OB_INVALID_TIMESTAMP);
   int gen_event_ts(int64_t &event_ts);
   // Helper method to build entry from variadic template args
   template <int Floor, bool Truncate, typename Name, typename Value, typename ...Rest>
@@ -168,7 +169,7 @@ protected:
   static const int64_t TASK_QUEUE_SIZE = 20 *1024;
   static const int64_t MAX_RETRY_COUNT = 12;
 
-  virtual int process_task(const common::ObString &sql, const bool is_delete, const int64_t create_time, const uint64_t exec_tenant_id);
+  virtual int process_task(const common::ObString &sql, const bool is_delete, const int64_t create_time);
 private:
   bool inited_;
   volatile bool stopped_;
@@ -306,7 +307,7 @@ int ObEventHistoryTableOperator::sync_add_event(const char *module, const char *
 
 template <typename ...Rest>
 int ObEventHistoryTableOperator::async_add_tenant_event(
-	  const uint64_t tenant_id, const char *module, const char *event, const int64_t event_timestamp,
+	  const char *module, const char *event, const int64_t event_timestamp,
     const int user_ret, const int64_t cost_sec, Rest &&...others)
 {
   static_assert(sizeof...(others) >= 0 && sizeof...(others) <= 13 &&
@@ -319,16 +320,13 @@ int ObEventHistoryTableOperator::async_add_tenant_event(
   } else if (OB_ISNULL(module) || OB_ISNULL(event)) {
     ret = common::OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "neither module or event can be NULL", KR(ret), KP(module), KP(event));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "tenant_id is invalid", KR(ret), K(tenant_id));
   } else if (!tenant_storage_.is_inited()) {
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "tenant storage not initialized", K(ret));
   } else {
     // Use dedicated SQLite table for tenant events
     ObTenantEventHistoryEntry entry;
-    entry.tenant_id_ = tenant_id;
+    
     entry.gmt_create_ = event_timestamp;
     entry.svr_addr_ = self_addr_;
     entry.module_.assign_ptr(module, static_cast<int32_t>(strlen(module)));

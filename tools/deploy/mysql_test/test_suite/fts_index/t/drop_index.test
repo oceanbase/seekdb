@@ -29,45 +29,45 @@ CREATE TABLE drop_index_articles (
     FULLTEXT INDEX ctx(title, content)
 );
 
-let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1, table_id, 1);
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles', table_id, 1);
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 13;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 14;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 15;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 16;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 
-eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_virtual_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1;
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles');
 
 --echo ====================== drop index =======================
 
 DROP INDEX ctx ON drop_index_articles;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 13;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 14;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 15;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 16;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 
-eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_virtual_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1;
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles');
 
 --echo ====================== add index ========================
 
 ALTER TABLE drop_index_articles ADD FULLTEXT INDEX ctx(title, content);
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 13;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 14;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 15;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 16;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 
-eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_virtual_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1;
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles');
 
 --echo ====================== drop table =======================
 
@@ -89,45 +89,45 @@ INSERT INTO drop_index_articles (title, content) VALUES
 ('Fulltext Index', 'Fulltext index can be very useful.'),
 ('OceanBase Test Case', 'Writing test cases helps ensure quality.');
 
-let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1, table_id, 1);
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles', table_id, 1);
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 13;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 14;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 15;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 16;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 
-eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_virtual_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1;
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles');
 
 --echo ====================== drop index =======================
 
 ALTER TABLE drop_index_articles DROP INDEX ctx;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 13;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 14;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 15;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 16;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 
-eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_virtual_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1;
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles');
 
 --echo ====================== add index ========================
 
 ALTER TABLE drop_index_articles ADD FULLTEXT INDEX ctx(title, content);
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 13;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 14;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 15;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 16;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 
-eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_virtual_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1;
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles');
 
 --echo ====================== drop table =======================
 
@@ -149,45 +149,45 @@ INSERT INTO drop_index_articles (title, content) VALUES
 ('Fulltext Index', 'Fulltext index can be very useful.'),
 ('OceanBase Test Case', 'Writing test cases helps ensure quality.');
 
-let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1, table_id, 1);
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles', table_id, 1);
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 13;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 14;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 15;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 16;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 
-eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_virtual_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1;
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles');
 
 --echo ====================== drop index =======================
 
 DROP INDEX ctx ON drop_index_articles;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 13;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 14;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 15;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 16;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 
-eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_virtual_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1;
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles');
 
 --echo ====================== add index ========================
 
 ALTER TABLE drop_index_articles ADD FULLTEXT INDEX ctx(title, content);
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 13;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 14;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 15;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 16;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 
-eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_virtual_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1;
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles');
 
 --echo ====================== drop table =======================
 
@@ -211,75 +211,75 @@ INSERT INTO drop_index_articles (title, content) VALUES
 ('Fulltext Index', 'Fulltext index can be very useful.'),
 ('OceanBase Test Case', 'Writing test cases helps ensure quality.');
 
-let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1, table_id, 1);
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles', table_id, 1);
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 13;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 14;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 15;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 16;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 
-eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_virtual_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1;
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles');
 
 --echo ====================== drop index =======================
 
 DROP INDEX ctx ON drop_index_articles;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 13;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 14;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 15;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 16;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 
-eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_virtual_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1;
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles');
 
-SELECT distinct(ddl_stmt_str) FROM oceanbase.__all_virtual_ddl_operation WHERE table_id IN (SELECT table_id FROM oceanbase.__all_virtual_table_history WHERE table_name = 'drop_index_articles' OR data_table_id IN (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) and tenant_id = 1) and tenant_id = 1 and ddl_stmt_str = 'DROP INDEX ctx ON drop_index_articles';
+SELECT distinct(ddl_stmt_str) FROM oceanbase.__all_ddl_operation WHERE table_id IN (SELECT table_id FROM oceanbase.__all_table_history WHERE table_name = 'drop_index_articles' OR data_table_id IN (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles')) and ddl_stmt_str = 'DROP INDEX ctx ON drop_index_articles';
 
 --echo ====================== drop index =======================
 
 ALTER TABLE drop_index_articles DROP INDEX ctx_t;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 13;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 14;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 15;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 16;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 
-eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_virtual_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1;
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles');
 
 --echo ====================== drop index =======================
 
 DROP INDEX ctx_c ON drop_index_articles;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 13;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 14;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 15;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 16;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 
-eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_virtual_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1;
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles');
 
 --echo ====================== add index ========================
 
 ALTER TABLE drop_index_articles ADD FULLTEXT INDEX ctx(title, content);
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 13;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 13;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 14;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 14;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 15;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 15;
 
-eval SELECT count(*) FROM oceanbase.__all_virtual_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1 AND index_type = 16;
+eval SELECT count(*) FROM oceanbase.__all_table WHERE data_table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles') AND index_type = 16;
 
-eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_virtual_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'drop_index_articles' AND tenant_id = 1) AND tenant_id = 1;
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[_0-9]+', '*') as column_name FROM oceanbase.__all_column WHERE table_id in (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'drop_index_articles');
 
 --echo ====================== drop table =======================
 
@@ -300,7 +300,7 @@ CREATE TABLE array_ol_ddl_col_mysql(
     PRIMARY KEY(id),
     FULLTEXT idx_full(content),
     INDEX idx_j ( (CAST(j AS CHAR(50) ARRAY)) )
-)CHARACTER SET gbk;
+)character set utf8mb4;
 
 CREATE UNIQUE INDEX idx_unique_seq ON array_ol_ddl_col_mysql(id);
 CREATE INDEX idx_id_seq ON array_ol_ddl_col_mysql(id, tag);

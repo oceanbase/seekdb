@@ -49,15 +49,13 @@ public:
   static int abort_redef_table(const obcall::ObAbortRedefTableArg &arg, sql::ObSQLSessionInfo *session = nullptr);
   static int build_ddl_single_replica_response(const obcall::ObDDLBuildSingleReplicaResponseArg &arg);
 private:
-  static int wait_task_reach_pending(
-      const uint64_t tenant_id, 
-      const int64_t task_id, 
+  static int wait_task_reach_pending(const int64_t task_id, 
       int64_t &snapshot_version,
       uint64_t &data_format_version, 
       ObMySQLProxy &sql_proxy,
       bool &is_no_logging);
-  static int heart_beat_clear(const int64_t task_id, const uint64_t tenant_id);
-  static int check_need_stop(const uint64_t tenant_id);
+  static int heart_beat_clear(const int64_t task_id);
+  static int check_need_stop();
 };
 
 }  // end of namespace observer

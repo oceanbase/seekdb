@@ -20,7 +20,7 @@
 #define private public
 #include "sql/test_sql_utils.h"
 #include "common/object/ob_obj_type.h"
-#include "lib/utility/ob_test_util.h"
+#include "lib/thread/ob_test_util.h"
 #include "sql/ob_sql_init.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
@@ -277,7 +277,7 @@ int main(int argc, char **argv)
   }
   init_sql_factories();
   ContextParam param;
-  param.set_mem_attr(1001, "Transformer", ObCtxIds::WORK_AREA)
+  param.set_mem_attr("Transformer", ObCtxIds::WORK_AREA)
        .set_page_size(OB_MALLOC_BIG_BLOCK_SIZE);
 
   ::testing::InitGoogleTest(&argc,argv);

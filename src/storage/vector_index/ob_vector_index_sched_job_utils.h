@@ -54,8 +54,7 @@ public:
   ObVectorIndexSchedJobUtils() : ObMViewSchedJobUtils() {}
   virtual ~ObVectorIndexSchedJobUtils() {}
 
-  static int add_scheduler_job(common::ObISQLClient &sql_client,
-                               const uint64_t tenant_id, const int64_t job_id,
+  static int add_scheduler_job(common::ObISQLClient &sql_client, const int64_t job_id,
                                const common::ObString &job_name,
                                const common::ObString &job_action,
                                const common::ObObj &start_date,
@@ -63,24 +62,19 @@ public:
                                const common::ObString &exec_env);
 
   static int add_vector_index_refresh_job(common::ObISQLClient &sql_client,
-                                          const uint64_t tenant_id,
                                           const uint64_t vidx_table_id,
                                           const common::ObString &exec_env);
 
   static int remove_vector_index_refresh_job(common::ObISQLClient &sql_client,
-                                             const uint64_t tenant_id,
                                              const uint64_t vidx_table_id);
 
   static int add_vector_index_rebuild_job(common::ObISQLClient &sql_client,
-                                          const uint64_t tenant_id,
                                           const uint64_t vidx_table_id,
                                           const common::ObString &exec_env);
 
   static int remove_vector_index_rebuild_job(common::ObISQLClient &sql_client,
-                                             const uint64_t tenant_id,
                                              const uint64_t vidx_table_id);
   static int get_vector_index_job_info(common::ObISQLClient &sql_client,
-                                       const uint64_t tenant_id,
                                        const uint64_t vidx_table_id,
                                        common::ObIAllocator &allocator,
                                        share::schema::ObSchemaGetterGuard &schema_guard,

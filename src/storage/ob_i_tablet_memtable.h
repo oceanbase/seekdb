@@ -18,6 +18,7 @@
 #define OCEANBASE_STORAGE_OB_I_TABLET_MEMTABLE_H_
 
 #include "lib/utility/ob_print_utils.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "storage/ob_i_memtable_mgr.h"
 #include "storage/memtable/ob_memtable_interface.h"

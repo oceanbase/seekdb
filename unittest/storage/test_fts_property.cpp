@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include "lib/json_type/ob_json_base.h"
-#include "lib/json_type/ob_json_parse.h"
-#include "lib/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_base.h"
+#include "common/json_type/ob_json_parse.h"
+#include "common/json_type/ob_json_tree.h"
 #include "lib/ob_errno.h"
 #include "lib/string/ob_string.h"
 #include "storage/fts/ob_fts_parser_property.h"

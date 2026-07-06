@@ -26,10 +26,6 @@ namespace obmysql
 {
 class OMPKOK;
 }
-namespace share
-{
-class ObFeedbackRerouteInfo;
-}
 namespace sql
 {
 class ObSQLSessionInfo;
@@ -47,19 +43,9 @@ class ObMPUtils
 {
 public:
   static int add_changed_session_info(obmysql::OMPKOK &ok_pkt, sql::ObSQLSessionInfo &session);
-  static int append_modfied_sess_info(common::ObIAllocator &allocator,
-                                      sql::ObSQLSessionInfo &sess,
-                                      ObIArray<obmysql::ObObjKV> *extra_info,
-                                      ObIArray<obmysql::Obp20Encoder*> *extra_info_ecds,
-                                      bool is_new_extra_info,
-                                      bool need_sync_sys_var = true);
   static int sync_session_info(sql::ObSQLSessionInfo &sess, const common::ObString &sess_infos);
   static int add_session_info_on_connect(obmysql::OMPKOK &okp, sql::ObSQLSessionInfo &session);
   static int add_min_cluster_version(obmysql::OMPKOK &okp, sql::ObSQLSessionInfo &session);
-  static int add_client_feedback(obmysql::OMPKOK &ok_pkt, sql::ObSQLSessionInfo &session);
-  static int add_client_reroute_info(obmysql::OMPKOK &pk_pkt,
-                                     sql::ObSQLSessionInfo &session,
-                                     share::ObFeedbackRerouteInfo &reroute_info);
   static int add_nls_format(obmysql::OMPKOK &pk_pkt,
                             sql::ObSQLSessionInfo &session,
                             const bool only_changed = false);

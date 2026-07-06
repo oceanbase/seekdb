@@ -18,7 +18,7 @@
 #include "ob_create_package_resolver.h"
 #include "ob_create_package_stmt.h"
 #include "pl/ob_pl_package.h"
-#include "pl/ob_pl_compile.h"
+#include "pl/ob_pl_build.h"
 
 namespace oceanbase
 {
@@ -39,7 +39,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
   CK (OB_NOT_NULL(parse_tree.children_));
   CK (OB_NOT_NULL(session_info_));
   if (OB_SUCC(ret) &&
-      OB_SYS_TENANT_ID != session_info_->get_effective_tenant_id()) {
+      false) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported package in mysql mode", K(ret), K(lbt()));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "not supported package in mysql mode");
@@ -48,7 +48,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
     bool resolve_success = true;
     HEAP_VAR(ObPLPackageAST, package_ast, *allocator_) {
       int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
-      ObPLPackageGuard package_guard(params_.session_info_->get_effective_tenant_id());
+      ObPLPackageGuard package_guard{};
       ObCreatePackageStmt *stmt = NULL;
       ParseNode *package_block_node = NULL ;
       ParseNode *sp_name_node = NULL;
@@ -84,8 +84,8 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
       if (OB_SUCC(ret)) {
         uint64_t database_id = OB_INVALID_ID;
         const share::schema::ObDatabaseSchema *database_schema = NULL;
-        OZ (schema_checker_->get_schema_guard()->get_database_id(session_info_->get_effective_tenant_id(), db_name, database_id));
-        OZ (schema_checker_->get_schema_guard()->get_database_schema(session_info_->get_effective_tenant_id(), database_id, database_schema));
+        OZ (schema_checker_->get_schema_guard()->get_database_id(db_name, database_id));
+        OZ (schema_checker_->get_schema_guard()->get_database_schema( database_id, database_schema));
         if (OB_FAIL(ret) || OB_ISNULL(database_schema)) {
           ret = OB_ERR_BAD_DATABASE;
           LOG_WARN("fail to get database schema", K(ret));
@@ -106,7 +106,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
         uint64_t db_id = OB_INVALID_ID;
         uint64_t package_id = OB_INVALID_ID;
         const ObPackageInfo *package_spec_info = NULL;
-        OZ (schema_checker_->get_package_info(session_info_->get_effective_tenant_id(),
+        OZ (schema_checker_->get_package_info(
                                               db_name,
                                               package_name,
                                               share::schema::PACKAGE_TYPE,
@@ -156,7 +156,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
           create_package_arg.is_replace_ = static_cast<bool>(parse_tree.int32_values_[0]);
           create_package_arg.is_editionable_ = !static_cast<bool>(parse_tree.int32_values_[1]);
           create_package_arg.db_name_ = db_name;
-          package_info.set_tenant_id(session_info_->get_effective_tenant_id());
+          
           package_info.set_owner_id(session_info_->get_user_id());
           package_info.set_type(share::schema::PACKAGE_TYPE);
           package_info.set_compatibility_mode(compa_mode);
@@ -176,7 +176,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
             LOG_WARN("set package name failed", K(ret), K(package_name));
           } else if (OB_FAIL(package_info.set_source(package_block))) {
             LOG_WARN("set package source failed", K(ret));
-          } else if (OB_SYS_TENANT_ID == session_info_->get_effective_tenant_id()) {
+          } else if (true) {
             // System tenant is creating system package, environment variables use Oracle tenant's default environment variables
             // sql_mode = "PIPES_AS_CONCAT,STRICT_ALL_TABLES,PAD_CHAR_TO_FULL_LENGTH"
             {
@@ -219,15 +219,15 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
       if (OB_SUCC(ret) && package_ast.is_inited()) {
         ObWarningBufferIgnoreScope ignore_errors_in_warning_buffer;
         HEAP_VAR(ObPLPackageAST, package_body_ast, *allocator_) {
-          ObPLPackageGuard package_guard(params_.session_info_->get_effective_tenant_id());
+          ObPLPackageGuard package_guard{};
           ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_mgr();
-          ObPLCompiler compiler(*params_.allocator_,
+          ObPLBuilder builder(*params_.allocator_,
                                 *params_.session_info_,
                                 *schema_guard,
                                 package_guard,
                                 *params_.sql_proxy_);
           const ObPackageInfo *package_body_info = NULL;
-          OZ (schema_checker_->get_package_info(session_info_->get_effective_tenant_id(),
+          OZ (schema_checker_->get_package_info(
                                                 db_name,
                                                 package_name,
                                                 share::schema::PACKAGE_BODY_TYPE,
@@ -247,7 +247,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
             if (OB_NOT_NULL(package_ast.get_body())) {
               (const_cast<ObPLBlockNS &>(package_ast.get_body()->get_namespace())).set_external_ns(NULL);
             }
-            OZ (compiler.analyze_package(source,
+            OZ (builder.analyze_package(source,
                                          &(package_ast.get_body()->get_namespace()),
                                          package_body_ast,
                                          false));
@@ -280,7 +280,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
       }
     }
     if (OB_NOT_NULL(session_info_)
-        && OB_SYS_TENANT_ID == session_info_->get_effective_tenant_id()
+        && true
         /*&& !session_info_->is_inner()*/) {
       // Low version upgrade to 2274, the old upgrade script included the creation of Package statements, some statements will produce Warning on 2274 Server
       // For example: Create Package pack IS Procedure proc(x Boolean := 1); End; will report a Warning of illegal default value for Boolean expression
@@ -360,7 +360,7 @@ int ObCreatePackageResolver::resolve_functions_spec(const ObPackageInfo &package
   for (int64_t i = ObPLRoutineTable::NORMAL_ROUTINE_START_IDX; OB_SUCC(ret) && i<routine_count; i++) {
     routine_info.reset();
     //process basic info
-    routine_info.set_tenant_id(package_info.get_tenant_id());
+    
     routine_info.set_owner_id(package_info.get_owner_id());
     routine_info.set_database_id(package_info.get_database_id());
     routine_info.set_package_id(package_info.get_package_id());
@@ -510,7 +510,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
   CK (OB_LIKELY(CREATE_PACKAGE_BODY_NODE_CHILD_COUNT == parse_tree.num_child_));
 
   if (OB_SUCC(ret) &&
-      OB_SYS_TENANT_ID != session_info_->get_effective_tenant_id()) {
+      false) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported package in mysql mode", K(ret), K(lbt()));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "package in mysql mode");
@@ -549,8 +549,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
 
     lib::ContextParam param;
     lib::MemoryContext memory_context;
-    OX (param.set_mem_attr(session_info_->get_effective_tenant_id(),
-                           ObModIds::OB_PL_TEMP,
+    OX (param.set_mem_attr(ObModIds::OB_PL_TEMP,
                            ObCtxIds::DEFAULT_CTX_ID)
         .set_properties(lib::USE_TL_PAGE_OPTIONAL)
         .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
@@ -569,9 +568,9 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
         HEAP_VARS_2((ObPLPackageAST, package_spec_ast, tmp_allocator),
                     (ObPLPackageAST, package_body_ast, tmp_allocator)) {
           ObString package_body_src(package_body_block_node->str_len_, package_body_block_node->str_value_);
-          ObPLPackageGuard package_guard(params_.session_info_->get_effective_tenant_id());
+          ObPLPackageGuard package_guard{};
           ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_mgr();
-          ObPLCompiler compiler(tmp_allocator,
+          ObPLBuilder builder(tmp_allocator,
                                 *params_.session_info_,
                                 *schema_guard,
                                 package_guard,
@@ -579,7 +578,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
           const ObPackageInfo *package_spec_info = NULL;
           int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
           ObString source;
-          OZ (schema_checker_->get_package_info(session_info_->get_effective_tenant_id(),
+          OZ (schema_checker_->get_package_info(
                                                 db_name,
                                                 package_name,
                                                 share::schema::PACKAGE_TYPE,
@@ -602,7 +601,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
 
           OX (source = package_spec_info->get_source());
           OZ (ObSQLUtils::convert_sql_text_from_schema_for_resolve(tmp_allocator, session_info_->get_dtc_params(), source));
-          OZ (compiler.analyze_package(source,NULL, package_spec_ast, false));
+          OZ (builder.analyze_package(source,NULL, package_spec_ast, false));
 
           OZ (package_body_ast.init(db_name,
                                     package_name,
@@ -612,7 +611,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
                                     OB_INVALID_VERSION,
                                     &package_spec_ast));
 
-          OZ (compiler.analyze_package(package_body_src,
+          OZ (builder.analyze_package(package_body_src,
                                     &(package_spec_ast.get_body()->get_namespace()),
                                     package_body_ast,
                                     false));
@@ -640,9 +639,8 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
             ObSEArray<ObRoutineInfo, 2> routine_spec_infos;
             uint64_t database_id = OB_INVALID_ID;
             OZ (schema_checker_->get_schema_guard()->get_database_id(
-              session_info_->get_effective_tenant_id(), db_name, database_id));
-            OZ (schema_checker_->get_schema_guard()->get_routine_infos_in_package(
-              session_info_->get_effective_tenant_id(), package_spec_info->get_package_id(),
+              db_name, database_id));
+            OZ (schema_checker_->get_schema_guard()->get_routine_infos_in_package(package_spec_info->get_package_id(),
               routine_infos));
 
             if (OB_SUCC(ret) && routine_infos.empty() && package_spec_ast.get_routine_table().get_count() > 1) {
@@ -694,7 +692,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
       create_package_arg.is_editionable_ = !static_cast<bool>(parse_tree.int32_values_[1]);
       create_package_arg.db_name_ = db_name;
 
-      package_info.set_tenant_id(session_info_->get_effective_tenant_id());
+      
       package_info.set_owner_id(session_info_->get_user_id());
       package_info.set_type(share::schema::PACKAGE_BODY_TYPE);
       package_info.set_compatibility_mode(compa_mode);
@@ -710,7 +708,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
       OZ (package_info.set_source(package_body_block), package_body_block);
 
       if (OB_SUCC(ret)) {
-        if (OB_UNLIKELY(OB_SYS_TENANT_ID == session_info_->get_effective_tenant_id())) {
+        if (OB_UNLIKELY(true)) {
           // System tenant is creating system package, environment variables use Oracle tenant's default environment variables
           // sql_mode = "PIPES_AS_CONCAT,STRICT_ALL_TABLES,PAD_CHAR_TO_FULL_LENGTH"
           {
@@ -735,7 +733,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
       }
     }
     if (OB_NOT_NULL(session_info_)
-        && OB_SYS_TENANT_ID == session_info_->get_effective_tenant_id()
+        && true
         /*&& !session_info_->is_inner()*/) {
       /* NOTE: REMOVE IS_INNER
        * Some system package like dbms_utility may produce warings in create stage under system tenant.

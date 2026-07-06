@@ -17,7 +17,8 @@
 #ifndef OCEANBASE_MEMTABLE_OB_MEMTABLE_
 #define OCEANBASE_MEMTABLE_OB_MEMTABLE_
 
-#include "share/allocator/ob_memstore_allocator.h"
+#include "storage/allocator/ob_memstore_allocator.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/ob_tenant_mgr.h"
 #include "share/ob_cluster_version.h"
 #include "lib/literals/ob_literals.h"

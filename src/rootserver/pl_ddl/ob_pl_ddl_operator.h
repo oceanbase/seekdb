@@ -65,12 +65,6 @@ public:
                      share::schema::ObErrorInfo &error_info,
                      common::ObIArray<share::schema::ObDependencyInfo> &dep_infos,
                      const common::ObString *ddl_stmt_str/*=NULL*/);
-  int alter_package(share::schema::ObPackageInfo &package_info,
-                    ObSchemaGetterGuard &schema_guard,
-                    common::ObMySQLTransaction &trans,
-                    ObIArray<ObRoutineInfo> &public_routine_infos,
-                    share::schema::ObErrorInfo &error_info,
-                    const common::ObString *ddl_stmt_str);
   int drop_package(const share::schema::ObPackageInfo &package_info,
                    common::ObMySQLTransaction &trans,
                    share::schema::ObSchemaGetterGuard &schema_guard,
@@ -113,8 +107,7 @@ public:
                                 const common::ObString &database_name,
                                 const common::ObString &table_name,
                                 common::ObMySQLTransaction &trans);
-  static int drop_trigger_in_drop_database(uint64_t tenant_id,
-                                           const ObDatabaseSchema &db_schema,
+  static int drop_trigger_in_drop_database(const ObDatabaseSchema &db_schema,
                                            ObDDLOperator &ddl_operator,
                                            ObMySQLTransaction &trans);
   static int drop_trigger_cascade(const share::schema::ObTableSchema &table_schema,
@@ -130,7 +123,6 @@ private:
   int fill_trigger_id(share::schema::ObSchemaService &schema_service,
                       share::schema::ObTriggerInfo &trigger_info);
   int update_routine_info(share::schema::ObRoutineInfo &routine_info,
-                          int64_t tenant_id,
                           int64_t parent_id,
                           int64_t owner_id,
                           int64_t database_id,

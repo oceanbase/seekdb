@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/mview/cmd/ob_mview_refresh_executor.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/ob_exec_context.h"
 #include "storage/mview/cmd/ob_mview_executor_util.h"
 #include "storage/mview/ob_mlog_purge.h"
@@ -34,7 +35,7 @@ using namespace sql;
 
 
 ObMViewRefreshExecutor::ObMViewRefreshExecutor()
-  : ctx_(nullptr), arg_(nullptr), session_info_(nullptr), schema_checker_(), tenant_id_(OB_INVALID_TENANT_ID) 
+  : ctx_(nullptr), arg_(nullptr), session_info_(nullptr), schema_checker_() 
 {
 }
 
@@ -49,7 +50,7 @@ int ObMViewRefreshExecutor::execute(ObExecContext &ctx, const ObMViewRefreshArg 
   CK(OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
   OV(OB_LIKELY(arg.is_valid()), OB_INVALID_ARGUMENT, arg);
   OZ(schema_checker_.init(*ctx.get_sql_ctx()->schema_guard_, session_info_->get_server_sid()));
-  OX(tenant_id_ = session_info_->get_effective_tenant_id());
+  OX();
   OZ(resolve_arg(arg));
   OZ(mview_infos_.prepare_allocate(mview_ids_.count()));
 
@@ -105,8 +106,7 @@ int ObMViewRefreshExecutor::resolve_arg(const ObMViewRefreshArg &arg)
       } else if (OB_UNLIKELY(database_name.empty())) {
         ret = OB_ERR_NO_DB_SELECTED;
         LOG_WARN("No database selected", KR(ret));
-      } else if (OB_FAIL(schema_checker_.get_table_schema_with_synonym(
-                   tenant_id_, database_name, table_name, false /*is_index_table*/, has_synonym,
+      } else if (OB_FAIL(schema_checker_.get_table_schema_with_synonym(database_name, table_name, false /*is_index_table*/, has_synonym,
                    new_db_name, new_tbl_name, table_schema))) {
         LOG_WARN("fail to get table schema with synonym", KR(ret), K(database_name), K(table_name));
       } else if (OB_ISNULL(table_schema) || OB_UNLIKELY(!table_schema->is_materialized_view())) {
@@ -150,10 +150,10 @@ int ObMViewRefreshExecutor::do_refresh()
   if (OB_ISNULL(ctx_) || OB_ISNULL(arg_) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null ptr", KP(ctx_), KP(arg_), KP(session_info_));
-  } else if (OB_FAIL(ObMViewExecutorUtil::generate_refresh_id(tenant_id_, refresh_id))) {
+  } else if (OB_FAIL(ObMViewExecutorUtil::generate_refresh_id( refresh_id))) {
     LOG_WARN("fail to generate refresh id", KR(ret));
   } else if (OB_FAIL(
-               stats_collector.init(*ctx_, *arg_, tenant_id_, refresh_id, mview_ids_.count()))) {
+               stats_collector.init(*ctx_, *arg_, refresh_id, mview_ids_.count()))) {
     LOG_WARN("fail to init stats collector", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < mview_ids_.count(); ++i) {
@@ -167,8 +167,8 @@ int ObMViewRefreshExecutor::do_refresh()
 
     ObMViewRefreshCtx refresh_ctx;
     ObMViewRefreshStatsCollection *refresh_stats_collection = nullptr;
-    refresh_ctx.allocator_.set_tenant_id(tenant_id_);
-    refresh_ctx.tenant_id_ = tenant_id_;
+    
+    
     refresh_ctx.mview_id_ = mview_id;
     if (OB_FAIL(stats_collector.alloc_collection(mview_id, refresh_stats_collection))) {
       LOG_WARN("fail to alloc collection", KR(ret), K(mview_id));
@@ -176,7 +176,7 @@ int ObMViewRefreshExecutor::do_refresh()
     // 1. refresh mview
     if (OB_SUCC(ret)) {
       ObMViewRefreshParam refresh_param;
-      refresh_param.tenant_id_ = tenant_id_;
+      
       refresh_param.mview_id_ = mview_id;
       refresh_param.refresh_method_ = refresh_method;
       refresh_param.parallelism_ = arg_->refresh_parallel_;
@@ -260,7 +260,7 @@ int ObMViewRefreshExecutor::do_refresh()
         } else if (ObMLogPurgeMode::IMMEDIATE_SYNC == mlog_info.get_purge_mode()) {
           ObMLogPurgeParam purge_param;
           ObMLogPurger purger;
-          purge_param.tenant_id_ = tenant_id_;
+          
           purge_param.master_table_id_ = dep.get_ref_obj_id();
           purge_param.purge_log_parallel_ = arg_->refresh_parallel_; // reuse refresh_parallel_ in purge_log
           if (OB_TMP_FAIL(purger.init(*ctx_, purge_param))) {
@@ -302,13 +302,12 @@ int ObMViewRefreshExecutor::get_and_check_mview_database_schema(
   if (OB_ISNULL(schema_guard)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("schema guard cannot be null", KR(ret), KP(schema_guard));
-  } else if (OB_FAIL(schema_guard->get_table_schema(tenant_id_, mview_id, table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(tenant_id_), K(mview_id));
+  } else if (OB_FAIL(schema_guard->get_table_schema( mview_id, table_schema))) {
+    LOG_WARN("fail to get table schema", KR(ret), K(mview_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table schema is nullptr", KR(ret), K(tenant_id_), K(mview_id));
-  } else if (OB_FAIL(schema_guard->get_database_schema(
-      tenant_id_, table_schema->get_database_id(), database_schema))) {
+    LOG_WARN("table schema is nullptr", KR(ret), K(mview_id));
+  } else if (OB_FAIL(schema_guard->get_database_schema( table_schema->get_database_id(), database_schema))) {
     LOG_WARN("fail to get database schema", KR(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -326,7 +325,7 @@ int ObMViewRefreshExecutor::do_nested_refresh_()
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   const uint64_t bucket_num = 16;
-  ObMemAttr attr(tenant_id_, "MViewRefresh");
+  ObMemAttr attr("MViewRefresh");
   using namespace rootserver;
   const uint64_t target_mview_id = mview_ids_.at(0);
   ObSEArray<uint64_t, 4> nested_mview_ids;
@@ -336,10 +335,9 @@ int ObMViewRefreshExecutor::do_nested_refresh_()
   share::SCN target_data_sync_scn;
   ObMySQLTransaction trans;
   int64_t start_ts = ObTimeUtility::fast_current_time();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
   bool nested_consistent_refresh = false;
   ObMViewMaintenanceService *mview_maintenance_service =
-                            MTL(ObMViewMaintenanceService*);
+                            share::g_mp->m_view_maintenance_service();
   if (OB_ISNULL(ctx_) || OB_ISNULL(arg_) ||
       OB_ISNULL(mview_maintenance_service) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -377,10 +375,9 @@ int ObMViewRefreshExecutor::do_nested_refresh_()
   if (OB_FAIL(ret)) {
   } else if (nested_consistent_refresh) {
     // nested too many mviews not support
-    if (OB_FAIL(trans.start(ctx_->get_sql_proxy(), tenant_id_))) {
+    if (OB_FAIL(trans.start(ctx_->get_sql_proxy()))) {
       LOG_WARN("fail to start trans", K(ret));
-    } else if (OB_FAIL(ObMViewExecutorUtil::generate_refresh_id(
-                       tenant_id_, refresh_id))) {
+    } else if (OB_FAIL(ObMViewExecutorUtil::generate_refresh_id( refresh_id))) {
       LOG_WARN("fail to generate refresh id", K(ret));
     } else if (OB_FAIL(register_nested_mview_mds_and_check(target_mview_id,
                        refresh_id, nested_mview_ids, target_data_sync_scn, trans))) {
@@ -421,7 +418,8 @@ int ObMViewRefreshExecutor::sync_check_nested_mview_mds(
 {
   int ret = OB_SUCCESS;
   obcall::ObCheckNestedMViewMdsArg arg;
-  arg.tenant_id_ = tenant_id_;
+  
+  
   arg.mview_id_ = mview_id;
   arg.refresh_id_ = refresh_id;
   arg.target_data_sync_scn_ = target_data_sync_scn;
@@ -486,7 +484,7 @@ int ObMViewRefreshExecutor::register_nested_mview_mds_(
   } else if (OB_FAIL(mds_arg.nested_mview_lists_.assign(nest_mview_ids))) {
     LOG_WARN("fail to assign nested mview ids", K(ret));
   } else if (OB_FAIL(ObMViewMdsOpHelper::
-                     register_mview_mds(tenant_id_, mds_arg, trans))) {
+                     register_mview_mds(mds_arg, trans))) {
     LOG_WARN("fail to register mview mds", K(ret), K(mds_arg));
   }
   return ret;
@@ -570,8 +568,7 @@ int ObMViewRefreshExecutor::scheduler_nested_mviews_sync_refresh_(
             ObSqlString table_name;
             ObMViewRefreshExecutor refresh_executor;
             share::SCN min_target_data_sync_scn;
-            if (OB_FAIL(ObMViewRefreshHelper::sync_get_min_target_data_sync_scn(tenant_id_,
-                        mview_id, min_target_data_sync_scn))) {
+            if (OB_FAIL(ObMViewRefreshHelper::sync_get_min_target_data_sync_scn(mview_id, min_target_data_sync_scn))) {
               LOG_WARN("fail to get min target data sync scn", K(ret));
             } else if (!min_target_data_sync_scn.is_valid() ||
                        min_target_data_sync_scn > target_data_sync_scn) {
@@ -582,8 +579,7 @@ int ObMViewRefreshExecutor::scheduler_nested_mviews_sync_refresh_(
               need_retry = true;
               LOG_INFO("curr mview need satisfy min target scn, need wait", K(mview_id),
                        K(min_target_data_sync_scn), K(target_data_sync_scn));
-            } else if (OB_FAIL(schema_checker_.get_table_schema(
-                               tenant_id_, mview_id, table_schema))) {
+            } else if (OB_FAIL(schema_checker_.get_table_schema( mview_id, table_schema))) {
               LOG_WARN("fail to get table schema", K(ret));
             } else if (OB_ISNULL(table_schema)) {
               LOG_INFO("mview not exist, skip refresh it, may try complete refresh", K(ret));
@@ -650,8 +646,7 @@ int ObMViewRefreshExecutor::scheduler_nested_mviews_refresh_(
       const uint64_t mview_id = nested_mview_ids.at(idx);
       ObSqlString table_name;
       if (OB_SUCC(ctx_->check_status())) {
-        if (OB_FAIL(schema_checker_.get_table_schema(
-                    tenant_id_, mview_id, table_schema))) {
+        if (OB_FAIL(schema_checker_.get_table_schema( mview_id, table_schema))) {
           LOG_WARN("fail to get table schema", K(ret));
         } else if (OB_ISNULL(table_schema)) {
           LOG_INFO("mview not exist, skip refresh it, may try complete refresh", K(ret));
@@ -698,8 +693,7 @@ int ObMViewRefreshExecutor::check_register_new_mview_list_(
           LOG_WARN("fail to get reverse dep mviews", K(ret));
         } else if (reverse_dep_mview_ids.count() > 0) {
           bool satisfy = false;
-          if (OB_FAIL(ObMViewRefreshHelper::check_dep_mviews_satisfy_target_scn(
-                      tenant_id_, target_data_sync_scn, share::SCN(), reverse_dep_mview_ids,
+          if (OB_FAIL(ObMViewRefreshHelper::check_dep_mviews_satisfy_target_scn(target_data_sync_scn, share::SCN(), reverse_dep_mview_ids,
                       trans, satisfy))) {
             LOG_WARN("fail to check dep mviews satisfy target scn", K(ret));
           } else if (satisfy) {
@@ -741,7 +735,7 @@ int ObMViewRefreshExecutor::generate_database_table_name_(
   if (OB_ISNULL(table_schema)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_INFO("table schema is null", K(ret), KP(table_schema));
-  } else if (OB_FAIL(schema_checker_.get_database_schema(tenant_id_,
+  } else if (OB_FAIL(schema_checker_.get_database_schema(
                      table_schema->get_database_id(), database_schema))) {
     LOG_WARN("fail to get database schema", KR(ret));
   } else if (OB_ISNULL(database_schema)) {
@@ -760,16 +754,16 @@ int ObMViewRefreshExecutor::set_collation_connection_var_(
                             ObMViewTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = tenant_id_; 
+   
   const ObTableSchema *mv_schema = nullptr;
-  sql::ObSessionSysVar *collation_connection_var = nullptr;
-  if (OB_FAIL(schema_checker_.get_table_schema(tenant_id, mview_id, mv_schema))) {
+  share::ObSessionSysVar *collation_connection_var = nullptr;
+  if (OB_FAIL(schema_checker_.get_table_schema( mview_id, mv_schema))) {
     LOG_WARN("fail to get table schema", K(ret), K(mview_id));
   } else if (OB_ISNULL(mv_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("mv schema is null", K(ret), KP(mv_schema));
   } else {
-    const sql::ObLocalSessionVar &session_vars = mv_schema->get_local_session_var();
+    const share::ObLocalSessionVar &session_vars = mv_schema->get_local_session_var();
     if (OB_FAIL(session_vars.get_local_var(ObSysVarClassType::SYS_VAR_COLLATION_CONNECTION,
                                            collation_connection_var))) {
       LOG_WARN("fail to get local session var", K(ret));

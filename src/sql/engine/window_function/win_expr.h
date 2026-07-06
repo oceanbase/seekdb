@@ -18,7 +18,7 @@
 #define OCEANBASE_WINDOW_FUNCTION_EXPR_H_
 
 #include "share/ob_define.h"
-#include "share/aggregate/processor.h"
+#include "sql/engine/aggregate/processor.h"
 // This file contains many template functions that were originally defined in CPP, [because of the effect of UNITY merging compilation units, they compiled, but the implementation of template code needs to be defined in header files], therefore, turning off UNITY caused observer to fail compilation
 // To solve the compilation problem after closing UNITY, move it to the header file
 // But this function uses OZ, CK macros, these two macros internal log print used LOG_WARN, requirement must define USING_LOG_PREFIX
@@ -159,9 +159,9 @@ struct Frame
 
 struct WinExprEvalCtx
 {
-  WinExprEvalCtx(RowStore &input_rows, WinFuncColExpr &win_col, const int64_t tenant_id) :
+  WinExprEvalCtx(RowStore &input_rows, WinFuncColExpr &win_col) :
     input_rows_(input_rows), win_col_(win_col),
-    allocator_(ObModIds::OB_SQL_WINDOW_LOCAL, OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id,
+    allocator_(ObModIds::OB_SQL_WINDOW_LOCAL, OB_MALLOC_NORMAL_BLOCK_SIZE,
                ObCtxIds::WORK_AREA),
     extra_(nullptr)
   {}

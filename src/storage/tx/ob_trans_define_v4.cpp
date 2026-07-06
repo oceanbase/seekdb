@@ -329,7 +329,7 @@ DEF_SERIALIZE_COMPAT_FOR_TX_DESC_FLAG(COMPAT_FOR_EXEC)
 DEF_SERIALIZE_COMPAT_FOR_TX_DESC_FLAG(COMPAT_FOR_TX_ROUTE)
 
 OB_SERIALIZE_MEMBER(ObTxDesc,
-                    tenant_id_,
+                    
                     cluster_id_,
                     cluster_version_,
                     sess_id_,
@@ -364,7 +364,7 @@ OB_SERIALIZE_MEMBER(ObTxSavePoint,
                     name_);
 
 OB_SERIALIZE_MEMBER(ObTxInfo,
-                    tenant_id_,
+                    
                     cluster_id_,
                     cluster_version_,
                     addr_,
@@ -391,8 +391,7 @@ OB_SERIALIZE_MEMBER(ObTxStmtInfo,
                     savepoints_);
 
 ObTxDesc::ObTxDesc()
-  : tenant_id_(0),
-    cluster_id_(-1),
+  : cluster_id_(-1),
     trace_info_(),
     cluster_version_(0),
     seq_base_(0),
@@ -520,7 +519,7 @@ void ObTxDesc::reset()
     FORCE_PRINT_TRACE(&tlog_, "[tx desc trace]");
   }
 #endif
-  tenant_id_ = 0;
+  
   cluster_id_ = -1;
   trace_info_.reset();
   cluster_version_ = 0;
@@ -1161,10 +1160,6 @@ int ObTxDesc::merge_conflict_txs_(const ObIArray<ObTransIDAndAddr> &conflict_txs
 
 // get global trans type for session
 // 1. if xid is empty or xa_ctx is null, PLAIN is returned.
-// 2. if xid from session is equal to xid in desc and global_tx_type is DBLINK_TRANS,
-//    DBLINK_TRANS is returned.
-// 3. if xid from session is not equal to xid in desc and global_tx_type is DBLINK_TRANS,
-//    XA_TRANS is returned.
 ObGlobalTxType ObTxDesc::get_global_tx_type(const ObXATransID &xid) const
 {
   ObGlobalTxType tx_type = ObGlobalTxType::PLAIN;
@@ -1345,7 +1340,7 @@ const char* ObTxReadSnapshot::get_source_name() const
  */
 
 ObTxExecResult::ObTxExecResult()
-  : allocator_("TxExecResult", 0 == MTL_ID() ? OB_SERVER_TENANT_ID : MTL_ID()),
+  : allocator_("TxExecResult"),
     incomplete_(false),
     touched_ls_list_(OB_MALLOC_NORMAL_BLOCK_SIZE, allocator_),
     parts_(OB_MALLOC_NORMAL_BLOCK_SIZE, allocator_),

@@ -31,7 +31,6 @@ enum class ObDuplicateScope : int64_t
 {
   DUPLICATE_SCOPE_NONE = 0,
   //DUPLICATE_SCOPE_ZONE,
-  //DUPLICATE_SCOPE_REGION,
   DUPLICATE_SCOPE_CLUSTER,
   DUPLICATE_SCOPE_MAX,
 };
@@ -40,7 +39,6 @@ const char *const duplicate_scope_strings[] =
 {
   "none",
   //"zone",
-  //"region",
   "cluster"
 };
 

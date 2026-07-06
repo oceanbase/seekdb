@@ -182,7 +182,7 @@ int ObRecycleMultiKVCache<K, V>::init(const char (&mem_tag)[N],// used for alloc
   } else if (OB_NOT_NULL(buffer_)) {
     ret = OB_INIT_TWICE;
     OCCAM_LOG(WARN, "init twice", PRINT_WRAPPER);
-  } else if (nullptr == (p_buffer = (char *)alloc.alloc(total_size, ObMemAttr(common::OB_SERVER_TENANT_ID, lib::ObLabel(mem_tag))))) {
+  } else if (nullptr == (p_buffer = (char *)alloc.alloc(total_size, ObMemAttr(lib::ObLabel(mem_tag))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     OCCAM_LOG(WARN, "fail to alloc memory", PRINT_WRAPPER);
   } else {

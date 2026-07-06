@@ -38,9 +38,9 @@ public:
   static const int64_t DEFAULT_LOG_CB_POOL_CNT = 4;
 
 public:
-  ObTxLogCbPoolMgr() : allocator_("TxLogCbPool", common::OB_SERVER_TENANT_ID) { reset(); }
+  ObTxLogCbPoolMgr() : allocator_("TxLogCbPool") { reset(); }
 
-  int init(const int64_t tenant_id, const ObLSID ls_id);
+  int init(const ObLSID ls_id);
   void reset();
   void destroy();
 

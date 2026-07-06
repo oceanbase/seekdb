@@ -17,8 +17,7 @@
 #ifndef OB_ALL_VIRTUAL_LOCK_WAIT_STAT_H_
 #define OB_ALL_VIRTUAL_LOCK_WAIT_STAT_H_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "rpc/ob_request.h"
 #include "observer/omt/ob_multi_tenant.h"
 
@@ -26,8 +25,7 @@ namespace oceanbase
 {
 namespace observer
 {
-class ObAllVirtualLockWaitStat : public common::ObVirtualTableScannerIterator,
-                                 public omt::ObMultiTenantOperator
+class ObAllVirtualLockWaitStat : public common::ObVirtualTableScannerIterator
 {
 public:
   ObAllVirtualLockWaitStat() : node_iter_(nullptr) {}
@@ -37,10 +35,6 @@ public:
   int inner_get_next_row(common::ObNewRow *&row) override;
   void reset() override;
 private:
-  bool is_need_process(uint64_t tenant_id) override;
-  int process_curr_tenant(common::ObNewRow *&row) override;
-  void release_last_tenant() override;
-
   int get_lock_type(int64_t hash, int &type);
   int get_rowkey_holder(int64_t hash, transaction::ObTransID &holder);
   int make_this_ready_to_read();

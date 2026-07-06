@@ -50,7 +50,7 @@ int ObSysTenantLoadSysPackageService::init()
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_FAIL(task_.init(MTL_ID()))) {
+  } else if (OB_FAIL(task_.init())) {
     LOG_WARN("failed to init ObSysTenantLoadSysPackageTask", KR(ret));
   } else {
     inited_ = true;
@@ -78,7 +78,7 @@ void ObSysTenantLoadSysPackageService::stop()
 {
   int ret = OB_SUCCESS;
   const int64_t start_time = ObTimeUtility::fast_current_time();
-  FLOG_INFO("start to stop sys package load service", K(MTL_ID()));
+  FLOG_INFO("start to stop sys package load service");
   //is_stopped_ = true;
   if (-1 == tg_id_) {
     LOG_WARN("invalid tg id when stop service", K_(tg_id));
@@ -86,25 +86,25 @@ void ObSysTenantLoadSysPackageService::stop()
     task_.stop(tg_id_);
   }
   const int64_t cost = ObTimeUtility::fast_current_time() - start_time;
-  FLOG_INFO("finish to stop sys package load service", K(MTL_ID()), K(cost));
+  FLOG_INFO("finish to stop sys package load service", K(cost));
 }
 
 int ObSysTenantLoadSysPackageService::wait()
 {
   int ret = OB_SUCCESS;
   const int64_t start_time = ObTimeUtility::fast_current_time();
-  FLOG_INFO("start to wait sys package load service", K(MTL_ID()));
+  FLOG_INFO("start to wait sys package load service");
   if (-1 != tg_id_) {
     TG_WAIT(tg_id_);
   }
   const int64_t cost = ObTimeUtility::fast_current_time() - start_time;
-  FLOG_INFO("finish to wait sys package load service", K(MTL_ID()), K(cost));
+  FLOG_INFO("finish to wait sys package load service", K(cost));
   return ret;
 }
 
 void ObSysTenantLoadSysPackageService::destroy()
 {
-  FLOG_INFO("start to destroy sys package load service", K(MTL_ID()));
+  FLOG_INFO("start to destroy sys package load service");
   //is_stopped_ = true;
   if (-1 != tg_id_) {
     TG_DESTROY(tg_id_);
@@ -114,15 +114,13 @@ void ObSysTenantLoadSysPackageService::destroy()
     task_.destroy();
     inited_ = false;
   }
-  FLOG_INFO("finish to destroy sys package load service", K(MTL_ID()));
+  FLOG_INFO("finish to destroy sys package load service");
 }
 
 int ObSysTenantLoadSysPackageService::switch_to_leader()
 {
   int ret = OB_SUCCESS;
-  if (!is_sys_tenant(MTL_ID())) {
-    // do nothing
-  } else if (OB_UNLIKELY(!inited_)) {
+  if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("service not inited", KR(ret), K_(inited));
   } else if (OB_FAIL(start())) {
@@ -142,9 +140,7 @@ void ObSysTenantLoadSysPackageService::switch_to_follower_forcedly()
 int ObSysTenantLoadSysPackageService::switch_to_follower_gracefully()
 {
   int ret = OB_SUCCESS;
-  if (!is_sys_tenant(MTL_ID())) {
-    // do nothing
-  } else if (OB_UNLIKELY(!inited_)) {
+  if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("service not inited", KR(ret), K_(inited));
   } else {

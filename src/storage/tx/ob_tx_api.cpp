@@ -15,9 +15,11 @@
  */
 
 #include "ob_trans_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_trans_part_ctx.h"
-#include "src/storage/tx/wrs/ob_i_weak_read_service.h"
-#include "storage/tx/wrs/ob_weak_read_util.h"
+#include "storage/tx/ob_weak_read_util.h"
+#include "storage/tx_storage/ob_ls_service.h"
+#include "storage/ls/ob_ls.h"
 #include "observer/omt/ob_tenant.h"
 // ------------------------------------------------------------------------------------------
 // Implimentation notes:
@@ -62,7 +64,7 @@ inline int ObTransService::init_tx_(ObTxDesc &tx,
                                     const uint64_t cluster_version)
 {
   int ret = OB_SUCCESS;
-  tx.tenant_id_ = tenant_id_;
+  
   tx.addr_      = self_;
   tx.sess_id_   = session_id;
   tx.assoc_sess_id_ = session_id;
@@ -73,7 +75,7 @@ inline int ObTransService::init_tx_(ObTxDesc &tx,
   tx.state_     = ObTxDesc::State::IDLE;
   tx.cluster_version_ = cluster_version;
   // cluster_version is invalid, need to get it
-  if (0 == cluster_version && OB_FAIL(GET_MIN_DATA_VERSION(tenant_id_, tx.cluster_version_))) {
+  if (0 == cluster_version && OB_FAIL(GET_MIN_DATA_VERSION(tx.cluster_version_))) {
     TRANS_LOG(WARN, "get min data version fail", K(ret), K(tx));
   }
   tx.seq_base_ = common::ObSequence::get_max_seq_no() - 1;
@@ -150,9 +152,9 @@ int ObTransService::release_tx(ObTxDesc &tx, const bool is_from_xa)
    */
   int ret = OB_SUCCESS;
   TRANS_LOG(TRACE, "release tx", KPC(this), K(tx));
-  // Single-tenant: MTL_ID() is constant and there is a single ObTransService.
+  // Single-tenant: sys tenant is constant and there is a single ObTransService.
   // The historical cross-tenant switch-and-retry now recurses forever because
-  // MTL_SWITCH no longer changes MTL_ID(); release directly on this service.
+  // MTL_SWITCH no longer changes sys tenant; release directly on this service.
   {
     ObTransTraceLog &tlog = tx.get_tlog();
     REC_TRANS_TRACE_EXT(&tlog, release, OB_Y(ret),
@@ -786,26 +788,40 @@ int ObTransService::get_weak_read_snapshot_version(const int64_t max_read_stale_
                                                    SCN &snapshot)
 {
   int ret = OB_SUCCESS;
-  bool monotinic_read = true;;
-  SCN wrs_scn;
-
-    // server weak read version
-  if (!ObWeakReadUtil::enable_monotonic_weak_read(tenant_id_)) {
-    if (local_single_ls) {
-      if (OB_FAIL(GCTX.weak_read_service_->get_server_version(tenant_id_, wrs_scn))) {
-        TRANS_LOG(WARN, "get server read snapshot fail", K(ret), KPC(this));
-      }
-      monotinic_read = false;
+  // Single-node lite: the weak-read snapshot is the local readable timestamp
+  // (min ls_weak_read_ts_ across local log streams), maintained by the tx loop
+  // worker. There is no cluster/server WRS aggregation anymore.
+  bool monotinic_read = ObWeakReadUtil::enable_monotonic_weak_read();
+  UNUSED(local_single_ls);
+  SCN wrs_scn = SCN::max_scn();
+  {
+    storage::ObLSService *ls_svr = share::g_mp->ls_service();
+    common::ObSharedGuard<storage::ObLSIterator> ls_iter;
+    storage::ObLS *ls = nullptr;
+    if (OB_ISNULL(ls_svr)) {
+      ret = OB_ERR_UNEXPECTED;
+      TRANS_LOG(WARN, "ls service is null", K(ret), KPC(this));
+    } else if (OB_FAIL(ls_svr->get_ls_iter(ls_iter, ObLSGetMod::TRANS_MOD))) {
+      TRANS_LOG(WARN, "get ls iter fail", K(ret), KPC(this));
     } else {
-      if (OB_FAIL(GCTX.weak_read_service_->get_cluster_version(tenant_id_, wrs_scn))) {
-        TRANS_LOG(WARN, "get weak read snapshot fail", K(ret), KPC(this));
+      int64_t ls_cnt = 0;
+      while (OB_SUCC(ret) && OB_SUCC(ls_iter->get_next(ls))) {
+        if (OB_ISNULL(ls)) {
+          ret = OB_ERR_UNEXPECTED;
+          TRANS_LOG(WARN, "ls is null", K(ret), KPC(this));
+        } else {
+          wrs_scn = SCN::min(wrs_scn, ls->get_ls_wrs_handler()->get_ls_weak_read_ts());
+          ls_cnt++;
+        }
+      }
+      if (OB_ITER_END == ret) {
+        ret = OB_SUCCESS;
+      }
+      if (OB_SUCC(ret) && (0 == ls_cnt || !wrs_scn.is_valid_and_not_min())) {
+        // No readable ls weak-read ts yet: fall back to gts-derived min version.
+        ret = ObWeakReadUtil::generate_min_weak_read_version(wrs_scn);
       }
     }
-    // wrs cluster version
-  } else if (OB_FAIL(GCTX.weak_read_service_->get_cluster_version(tenant_id_, wrs_scn))) {
-    TRANS_LOG(WARN, "get weak read snapshot fail", K(ret), KPC(this));
-  } else {
-    // do nothing
   }
   if (OB_SUCC(ret)) {
     if (monotinic_read
@@ -816,12 +832,10 @@ int ObTransService::get_weak_read_snapshot_version(const int64_t max_read_stale_
       // check snapshot version barrier which is setted by user system variable
       SCN gts_cache;
       SCN current_scn;
-      if (OB_FAIL(OB_TS_MGR.get_gts(tenant_id_, NULL, gts_cache))) {
+      if (OB_FAIL(OB_TS_MGR.get_gts(NULL, gts_cache))) {
         TRANS_LOG(WARN, "get ts sync error", K(ret), K(max_read_stale_us_for_user));
       } else {
-        const int64_t current_time_us = MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID()
-                ? std::max(ObTimeUtility::current_time(), gts_cache.convert_to_ts())
-                : gts_cache.convert_to_ts();
+        const int64_t current_time_us = std::max(ObTimeUtility::current_time(), gts_cache.convert_to_ts());
         current_scn.convert_from_ts(current_time_us - max_read_stale_us_for_user);
         snapshot = SCN::max(wrs_scn, current_scn);
       }
@@ -1680,7 +1694,7 @@ inline int ObTransService::rollback_savepoint_slowpath_(ObTxDesc &tx,
   }
   ObTxRollbackSPMsg msg;
   msg.cluster_version_ = tx.cluster_version_;
-  msg.tenant_id_ = tx.tenant_id_;
+  
   msg.sender_addr_ = self_;
   msg.sender_ = SCHEDULER_LS;
   msg.cluster_id_ = tx.cluster_id_;

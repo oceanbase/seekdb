@@ -623,10 +623,10 @@ TEST_F(TestDagScheduler, test_init)
   ASSERT_TRUE(nullptr != scheduler);
 
   // invalid thread cnt
-  EXPECT_EQ(OB_INVALID_ARGUMENT, scheduler->init(MTL_ID(), time_slice, time_slice, -1));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, scheduler->init( time_slice, time_slice, -1));
 
-  EXPECT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(),time_slice, time_slice, 100));
-  EXPECT_EQ(OB_INIT_TWICE, scheduler->init(MTL_ID()));
+  EXPECT_EQ(OB_SUCCESS, scheduler->init(time_slice, time_slice, 100));
+  EXPECT_EQ(OB_INIT_TWICE, scheduler->init());
 }
 
 
@@ -634,7 +634,7 @@ TEST_F(TestDagScheduler, DISABLED_basic_test)
 {
   ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
 
   int ret = OB_SUCCESS;
   TestDag *dag = NULL;
@@ -780,7 +780,7 @@ TEST_F(TestDagScheduler, test_cycle)
 {
   ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
 
   int ret = OB_SUCCESS;
   TestDag *dag = NULL;
@@ -838,7 +838,7 @@ TEST_F(TestDagScheduler, test_cycle)
 // {
 //   ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
 //   ASSERT_TRUE(nullptr != scheduler);
-//   ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+//   ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
 
 //   AtomicOperator op(0);
 //   TestDag *dag = NULL;
@@ -902,7 +902,7 @@ TEST_F(TestDagScheduler, stress_test)
 
   ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice, 64, 100 * 1000));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice, 64, 100 * 1000));
   DagSchedulerStressTester tester;
   tester.init(scheduler, stress_time);
   int64_t start_time = ObTimeUtility::fast_current_time();
@@ -916,7 +916,7 @@ TEST_F(TestDagScheduler, test_get_dag_count)
 {
   ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
 
   TestCompMidDag *dag = NULL;
   TestCompMidDag *dag2 = NULL;
@@ -967,7 +967,7 @@ TEST_F(TestDagScheduler, test_destroy_when_running)
 {
   ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
 
   void *buf = nullptr;
   ASSERT_TRUE(nullptr != (buf = allocator_.alloc(sizeof(AtomicOperator))));
@@ -1007,7 +1007,7 @@ TEST_F(TestDagScheduler, test_emergency_task)
 {
   ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice, 64));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice, 64));
 
   AtomicOperator op(0);
 
@@ -1065,7 +1065,7 @@ TEST_F(TestDagScheduler, test_check_ls_compaction_dag_exist_with_cancel)
 {
   ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice, 64));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice, 64));
   EXPECT_EQ(OB_SUCCESS, scheduler->set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_MID, 1));
   EXPECT_EQ(OB_SUCCESS, scheduler->set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_LOW, 1));
   EXPECT_EQ(1, scheduler->prio_sche_[ObDagPrio::DAG_PRIO_COMPACTION_MID].limits_);
@@ -1125,7 +1125,7 @@ TEST_F(TestDagScheduler, test_cancel_running_dag)
 {
   ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
 
   int64_t cnt = 10;
   int64_t cancel_seq = 0;
@@ -1234,7 +1234,7 @@ TEST_F(TestDagScheduler, test_generate_next_task_failed)
 {
   ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
 
   ObGenerateNextFailDag *dag = nullptr;
   EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(dag));
@@ -1247,7 +1247,7 @@ TEST_F(TestDagScheduler, test_maybe_cycle_tasks)
 {
   ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
   int ret = OB_SUCCESS;
   for (int64_t i = 0; i < 500; i++) {
     ObMayCycleDag *dag = nullptr;
@@ -1274,7 +1274,7 @@ TEST_F(TestDagScheduler, DISABLED_test_max_concurrent_task)
 {
   ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice, 64));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice, 64));
   EXPECT_EQ(OB_SUCCESS, scheduler->set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_MID, 7));
   EXPECT_EQ(7, scheduler->prio_sche_[ObDagPrio::DAG_PRIO_COMPACTION_MID].limits_);
 
@@ -1342,7 +1342,7 @@ TEST_F(TestDagScheduler, test_large_thread_cnt)
   ASSERT_TRUE(nullptr != scheduler);
 
   const int64_t cpu_cnt = 128;
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
   scheduler->cpu_cnt_ = cpu_cnt;
   scheduler->get_default_config(cpu_cnt);
   scheduler->dump_dag_status();
@@ -1357,7 +1357,7 @@ TEST_F(TestDagScheduler, test_large_thread_cnt)
   scheduler->destroy();
 
   const int64_t cpu_cnt_2 = 64;
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
   scheduler->cpu_cnt_ = cpu_cnt_2;
   scheduler->get_default_config(cpu_cnt_2);
   scheduler->dump_dag_status();
@@ -1370,7 +1370,7 @@ TEST_F(TestDagScheduler, test_large_thread_cnt)
   scheduler->destroy();
 
   const int64_t cpu_cnt_3 = 512;
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
   scheduler->cpu_cnt_ = cpu_cnt_3;
   scheduler->get_default_config(cpu_cnt_3);
   scheduler->dump_dag_status();
@@ -1400,7 +1400,7 @@ TEST_F(TestDagScheduler, test_large_thread_cnt_2)
   ASSERT_TRUE(nullptr != scheduler);
 
   const int64_t cpu_cnt = 256;
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
   scheduler->cpu_cnt_ = cpu_cnt;
   scheduler->get_default_config(cpu_cnt);
   scheduler->dump_dag_status();
@@ -1415,7 +1415,7 @@ TEST_F(TestDagScheduler, test_large_thread_cnt_2)
   scheduler->destroy();
 
   const int64_t cpu_cnt_2 = 64;
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
   scheduler->cpu_cnt_ = cpu_cnt_2;
   scheduler->get_default_config(cpu_cnt_2);
   scheduler->dump_dag_status();
@@ -1429,7 +1429,7 @@ TEST_F(TestDagScheduler, test_large_thread_cnt_2)
   scheduler->destroy();
 
   const int64_t cpu_cnt_3 = 512;
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
   scheduler->cpu_cnt_ = cpu_cnt_3;
   scheduler->get_default_config(cpu_cnt_3);
   scheduler->dump_dag_status();

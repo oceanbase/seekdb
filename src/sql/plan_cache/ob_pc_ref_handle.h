@@ -66,11 +66,11 @@ public:
     pre_calc_exprs_ = NULL;
   }
 
-  void init(uint64_t t_id, common::ObIAllocator* pc_alloc)
+  void init(common::ObIAllocator* pc_alloc)
   {
     lib::ObMemAttr attr;
     attr.label_ = "PRE_CALC_EXPR";
-    attr.tenant_id_ = t_id;
+    
     attr.ctx_id_ = common::ObCtxIds::PLAN_CACHE_CTX_ID;
     alloc_.set_attr(attr);
     pc_alloc_ = pc_alloc;
@@ -131,7 +131,6 @@ enum CacheRefHandleID
   LC_NODE_WR_HANDLE,
   LC_REF_CACHE_OBJ_STAT_HANDLE,
   PLAN_BASELINE_HANDLE,
-  TABLEAPI_NODE_HANDLE,
   SQL_PLAN_HANDLE,
   CALLSTMT_HANDLE,
   PC_DIAG_HANDLE,
@@ -147,8 +146,7 @@ class ObCacheRefHandleMgr
 friend class ObAllPlanCacheStat;
 public:
   ObCacheRefHandleMgr()
-    :tenant_id_(common::OB_INVALID_ID)
-  {
+    {
     clear_ref_handles();
   }
 
@@ -174,8 +172,8 @@ public:
     }
   }
 
-  inline void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
+  
 
 
   void clear_ref_handles()
@@ -194,7 +192,6 @@ private:
 
 private:
   volatile int64_t CACHE_REF_HANDLES[MAX_HANDLE];
-  uint64_t tenant_id_;
 };
 } // end namespace sql
 } // end namespace oceanbase

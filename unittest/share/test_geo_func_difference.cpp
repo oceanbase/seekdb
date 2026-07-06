@@ -17,8 +17,8 @@
 #include <gtest/gtest.h>
 #include <boost/foreach.hpp>
 #define private public
-#include "lib/geo/ob_geo_func_register.h"
-#include "lib/json_type/ob_json_common.h"
+#include "share/geo/ob_geo_func_register.h"
+#include "common/json_type/ob_json_common.h"
 #undef private
 
 

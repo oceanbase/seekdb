@@ -20,7 +20,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "share/ob_ddl_common.h"
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/access/ob_table_access_context.h"
 #include "storage/access/ob_store_row_iterator.h"
 #include "storage/access/ob_sstable_row_whole_scanner.h"
@@ -118,12 +118,12 @@ public:
   void reset();
   bool is_valid() const;
   int init(const ObTabletForkParam &param);
-  TO_STRING_KV(K_(is_inited), K_(tenant_id), K_(ls_id), K_(table_id), K_(schema_version),
+  TO_STRING_KV(K_(is_inited), K_(ls_id), K_(table_id), K_(schema_version),
                K_(task_id), K_(source_tablet_id), K_(dest_tablet_id), K_(fork_snapshot_version),
                K_(compat_mode), K_(data_format_version), K_(consumer_group_id));
 public:
   bool is_inited_;
-  uint64_t tenant_id_;
+  
   share::ObLSID ls_id_;
   uint64_t table_id_;
   int64_t schema_version_;

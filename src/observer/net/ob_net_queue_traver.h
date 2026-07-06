@@ -16,11 +16,11 @@
 #ifndef OCEANBASE_RPC_OB_NET_QUEUE_TRAVER_H
 #define OCEANBASE_RPC_OB_NET_QUEUE_TRAVER_H
 
-#include "deps/oblib/src/lib/queue/ob_link_queue.h"
-#include "deps/oblib/src/lib/queue/ob_priority_queue.h"
-#include "deps/oblib/src/rpc/frame/ob_req_queue_thread.h"
-#include "deps/oblib/src/rpc/obmysql/ob_mysql_packet.h"
-#include "deps/oblib/src/rpc/obmysql/obsm_struct.h"
+#include "lib/queue/ob_link_queue.h"
+#include "lib/queue/ob_priority_queue.h"
+#include "rpc/frame/ob_req_queue_thread.h"
+#include "rpc/obmysql/ob_mysql_packet.h"
+#include "rpc/obmysql/obsm_struct.h"
 #include "share/ob_define.h"
 #include "src/observer/ob_server_struct.h"
 #include "src/observer/omt/ob_multi_tenant.h"
@@ -52,7 +52,6 @@ public:
     ObNetQueueTraRes()
         : enqueue_timestamp_(0),
           retry_times_(0),
-          tenant_id_(-1),
           sql_session_id_(0),
           pcode_(-1),
           group_id_(-1),
@@ -64,7 +63,7 @@ public:
     int64_t enqueue_timestamp_;
     rpc::TraceId trace_id_;  // not init
     int32_t retry_times_;
-    int64_t tenant_id_;
+    
     uint32_t sql_session_id_;
     int32_t pcode_;
     int32_t group_id_;
@@ -72,7 +71,7 @@ public:
     int32_t req_level_;
     uint8_t priority_;
     TO_STRING_KV(
-        K(type_), K(enqueue_timestamp_), K_(trace_id), K(retry_times_), K(tenant_id_), K(sql_session_id_), K(pcode_), K(group_id_), K(mysql_cmd_), K(req_level_), K(priority_));
+        K(type_), K(enqueue_timestamp_), K_(trace_id), K(retry_times_), K(sql_session_id_), K(pcode_), K(group_id_), K(mysql_cmd_), K(req_level_), K(priority_));
   };
   static int get_trav_req_info(ObRequest *cur, ObNetQueueTraRes &tmp_info, int32_t group_id);
   std::function<void(const ObNetQueueTraRes&)> net_recorder_;

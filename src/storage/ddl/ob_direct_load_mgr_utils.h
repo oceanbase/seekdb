@@ -36,8 +36,7 @@ static bool need_process_vec_index(const ObIndexType & index_type)
       || schema::is_vec_index_snapshot_data_type(index_type);
   }
   static int get_tablet_handle(const ObLSID &ls_id, const ObTabletID &tablet_id, ObTabletHandle &tablet_handle);
-  static int create_tablet_direct_load_mgr(const int64_t tenant_id,
-                                           const int64_t execution_id,
+  static int create_tablet_direct_load_mgr(const int64_t execution_id,
                                            const int64_t context_id,
                                            const ObTabletDirectLoadInsertParam &build_param,
                                            ObIAllocator &allocator,
@@ -53,15 +52,13 @@ static bool need_process_vec_index(const ObIndexType & index_type)
   static int check_cs_replica_exist(const ObLSID &ls_id, const ObTabletID &tablet_id, bool &is_cs_replica_exist);
   static int is_ddl_need_major_merge(const ObTablet &tablet, bool &ddl_need_merging);
   static int alloc_direct_load_mgr(ObIAllocator &allocator, const ObDirectLoadType &direct_load_type, ObBaseTabletDirectLoadMgr *&direct_load_mgr);
-  static int prepare_schema_item_for_vec_idx_data(const uint64_t tenant_id,
-                                                  ObSchemaGetterGuard &schema_guard,
+  static int prepare_schema_item_for_vec_idx_data(ObSchemaGetterGuard &schema_guard,
                                                   const ObTableSchema *table_schema,
                                                   const ObTableSchema *&data_table_schema,
                                                   ObIAllocator &allocator,
                                                   ObTableSchemaItem &schema_item);
 protected:
-  static int create_idem_tablet_direct_load_mgr(const uint64_t tenant_id,
-                                                const int64_t execution_id,
+  static int create_idem_tablet_direct_load_mgr(const int64_t execution_id,
                                                 ObIAllocator &allocator,
                                                 const ObTabletDirectLoadInsertParam &build_param,
                                                 bool &is_major_sstable_exist,

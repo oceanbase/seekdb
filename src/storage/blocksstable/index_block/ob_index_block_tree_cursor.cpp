@@ -142,7 +142,7 @@ void ObIndexBlockTreePath::reset()
 int ObIndexBlockTreePath::init()
 {
   int ret = OB_SUCCESS;
-  ObMemAttr mem_attr(MTL_ID(), "IdxBlkTreePath");
+  ObMemAttr mem_attr("IdxBlkTreePath");
   if (OB_FAIL(allocator_.init(
       lib::ObMallocAllocator::get_instance(),
       OB_MALLOC_MIDDLE_BLOCK_SIZE,
@@ -334,8 +334,7 @@ int ObIndexBlockTreePath::PathItemStack::expand()
 
 ObIndexBlockTreeCursor::ObIndexBlockTreeCursor()
   : cursor_path_(), index_block_cache_(nullptr), reader_(nullptr), micro_reader_helper_(),
-    tree_type_(TreeType::TREE_TYPE_MAX), rowkey_helper_(),
-    tenant_id_(OB_INVALID_TENANT_ID), rowkey_column_cnt_(0),
+    tree_type_(TreeType::TREE_TYPE_MAX), rowkey_helper_(), rowkey_column_cnt_(0),
     curr_path_item_(), row_(),
     idx_row_parser_(), read_info_(nullptr), sstable_meta_handle_(),
     is_normal_cg_sstable_(false), is_inited_(false) {}
@@ -388,7 +387,7 @@ int ObIndexBlockTreeCursor::init(
     LOG_WARN("Rowkey column count not match between read info and sstable",
         K(ret), KPC(read_info), K(sstable_rowkey_col_cnt));
   } else {
-    tenant_id_ = MTL_ID();
+    
     ObRowStoreType root_row_store_type
         = static_cast<ObRowStoreType>(sstable_meta_handle_.get_sstable_meta().get_basic_meta().root_row_store_type_);
     curr_path_item_->row_store_type_ = root_row_store_type;
@@ -1406,8 +1405,8 @@ int ObIndexBlockTreeCursor::get_next_level_block(
   if (OB_SUCC(ret)) {
     ObMicroBlockCacheKey key;
     idx_row_header.has_valid_logic_micro_id() ?
-      key.set(tenant_id_, idx_row_header.get_logic_micro_id(), idx_row_header.get_data_checksum()) :
-      key.set(tenant_id_, macro_block_id, absolute_offset, idx_row_header.get_block_size());
+      key.set(idx_row_header.get_logic_micro_id(), idx_row_header.get_data_checksum()) :
+      key.set(macro_block_id, absolute_offset, idx_row_header.get_block_size());
     if (OB_FAIL(index_block_cache_->get_cache_block(key, curr_path_item_->cache_handle_))) {
       if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
         LOG_WARN("Fail to get micro block handle from block cache",
@@ -1440,7 +1439,7 @@ int ObIndexBlockTreeCursor::load_micro_block_data(const MacroBlockId &macro_bloc
   int ret = OB_SUCCESS;
   // Need to pay attention!!!
   // The allocator is used to allocate io data buffer, and its memory life cycle needs to be longer than the object handle.
-  ObArenaAllocator io_allocator("IBTC_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id_);
+  ObArenaAllocator io_allocator("IBTC_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObStorageObjectHandle macro_handle;
   ObMacroBlockReader macro_reader;
   ObStorageObjectReadInfo read_info;
@@ -1453,7 +1452,7 @@ int ObIndexBlockTreeCursor::load_micro_block_data(const MacroBlockId &macro_bloc
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
   read_info.io_desc_.set_sys_module_id(ObIOModule::INDEX_BLOCK_TREE_CURSOR_IO);
   read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
-  read_info.mtl_tenant_id_ = MTL_ID();
+  
 
   idx_row_header.fill_deserialize_meta(block_des_meta);
   if (OB_ISNULL(read_info.buf_ =

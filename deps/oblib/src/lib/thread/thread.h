@@ -23,7 +23,7 @@
 #include "lib/lock/ob_latch.h"
 #include "lib/net/ob_addr.h"
 #include "io/easy_io_struct.h"   // easy_addr_t (RpcGuard); formerly via ob_call_packet.h
-#include "rpc/frame/ob_req_packet_code.h"
+namespace oceanbase { namespace obcall {} }  // fwd obcall ns (reduce deps; replaces rpc/frame header)
 
 // Windows PThreads4W: pthread_t is a struct, not an integer
 #ifdef _WIN32
@@ -93,7 +93,7 @@ public:
   static Thread &current();
 
   bool has_set_stop() const;
-  uint64_t get_tenant_id() const;
+  
   using ThreadListNode = common::ObDLinkNode<lib::Thread *>;
   ThreadListNode *get_thread_list_node() { return &thread_list_node_; }
   int get_cpu_time_inc(int64_t &cpu_time_inc);

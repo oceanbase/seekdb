@@ -18,6 +18,7 @@
 #define OB_SQL_MEM_MGR_PROCESSOR_H
 
 #include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_tenant_sql_memory_manager.h"
 #include "sql/engine/basic/ob_chunk_row_store.h"
 
@@ -31,7 +32,7 @@ private:
 public:
   ObSqlMemMgrProcessor(ObSqlWorkAreaProfile &profile, ObMonitorNode &op_monitor_info) :
     profile_(profile), op_monitor_info_(&op_monitor_info),
-    sql_mem_mgr_(nullptr), mem_callback_(nullptr), tenant_id_(OB_INVALID_ID),
+    sql_mem_mgr_(nullptr), mem_callback_(nullptr),
     periodic_cnt_(1024), origin_max_mem_size_(0), default_available_mem_size_(0),
     is_auto_mgr_(false), dir_id_(0),
     dummy_ptr_(nullptr), dummy_alloc_(nullptr)
@@ -42,7 +43,7 @@ public:
 
   ObSqlMemMgrProcessor(ObSqlWorkAreaProfile &profile) :
     profile_(profile), op_monitor_info_(nullptr),
-    sql_mem_mgr_(nullptr), mem_callback_(nullptr), tenant_id_(OB_INVALID_ID),
+    sql_mem_mgr_(nullptr), mem_callback_(nullptr),
     periodic_cnt_(1024), origin_max_mem_size_(0), default_available_mem_size_(0),
     is_auto_mgr_(false), dir_id_(0),
     dummy_ptr_(nullptr), dummy_alloc_(nullptr) {}
@@ -56,7 +57,7 @@ public:
   OB_INLINE ObTenantSqlMemoryManager *get_sql_mem_mgr()
   {
     if (nullptr == sql_mem_mgr_) {
-      sql_mem_mgr_ = MTL(ObTenantSqlMemoryManager*);
+      sql_mem_mgr_ = share::g_mp->tenant_sql_memory_manager();
       if (OB_NOT_NULL(sql_mem_mgr_)) {
         mem_callback_ = sql_mem_mgr_->get_sql_memory_callback();
       }
@@ -67,7 +68,6 @@ public:
   // register and set cache size
   int init(
     ObIAllocator *allocator,
-    uint64_t tenant_id,
     int64_t cache_size,
     const ObPhyOperatorType op_type,
     const uint64_t op_id,
@@ -192,7 +192,6 @@ private:
   ObMonitorNode *op_monitor_info_;
   ObTenantSqlMemoryManager *sql_mem_mgr_;
   ObSqlMemoryCallback *mem_callback_;
-  uint64_t tenant_id_;
   int64_t periodic_cnt_;
   int64_t origin_max_mem_size_;
   int64_t default_available_mem_size_;
@@ -207,21 +206,18 @@ class ObSqlWorkareaUtil
 public:
   static int get_workarea_size(
     const ObSqlWorkAreaType wa_type,
-    const int64_t tenant_id,
     ObExecContext *exec_ctx,
     int64_t &value
   );
 
   static int get_workarea_size(
     const ObSqlWorkAreaType wa_type,
-    const int64_t tenant_id,
     ObSqlProfileExecInfo &exec_info,
     int64_t &value
   );
 
   static int get_workarea_size(
     const ObSqlWorkAreaType wa_type,
-    const int64_t tenant_id,
     int64_t &value,
     ObSQLSessionInfo *session = nullptr
   );

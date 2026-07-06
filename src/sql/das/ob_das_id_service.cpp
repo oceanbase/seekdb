@@ -40,18 +40,15 @@ int ObDASIDService::handle_request(const ObDASIDRequest &request, obcall::ObDASI
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(request));
   } else {
-    const uint64_t tenant_id = request.get_tenant_id();
+    
     const int64_t range = request.get_range();
     int64_t start_id = 0;
     int64_t end_id = 0;
-    if (is_user_tenant(MTL_ID())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get das id from user's service", KR(ret), K(request));
-    } else if (OB_FAIL(get_number(range, 0, start_id, end_id))) {
+    if (OB_FAIL(get_number(range, 0, start_id, end_id))) {
       LOG_WARN("get das id failed", KR(ret));
     }
     // overwrite ret
-    if (OB_FAIL(result.init(tenant_id, ret, start_id, end_id))) {
+    if (OB_FAIL(result.init(ret, start_id, end_id))) {
       LOG_WARN("das id result init failed", KR(ret), K(request));
     }
   }

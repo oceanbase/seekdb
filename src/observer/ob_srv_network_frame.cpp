@@ -420,8 +420,8 @@ oceanbase::rootserver::ObIngressBWAllocService *ObSrvNetworkFrame::get_ingress_s
 int ObSrvNetworkFrame::net_endpoint_register(const ObNetEndpointKey &endpoint_key, int64_t expire_time)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
-  if (!is_sys_tenant(tenant_id)) {
+  
+  if (false) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("endpoint register is only valid in sys tenant", K(ret), K(endpoint_key));
   } else if (ingress_service_.is_leader() && OB_FAIL(ingress_service_.register_endpoint(endpoint_key, expire_time))) {

@@ -21,7 +21,7 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/utility/ob_print_utils.h"
 #include "storage/blocksstable/ob_storage_datum.h"
-#include "share/vector_index/ob_vector_embedding_handler.h"
+#include "observer/vector_index/ob_vector_embedding_handler.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/atomic/ob_atomic.h"
 
@@ -102,7 +102,7 @@ class ObTaskBatchInfo
 {
 public:
   ObTaskBatchInfo() 
-    : allocator_("TaskBatch", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    : allocator_("TaskBatch", OB_MALLOC_NORMAL_BLOCK_SIZE),
       results_(),
       batch_size_(0),
       current_count_(0),
@@ -240,7 +240,7 @@ private:
 class ObEmbeddingTaskMgr
 {
 public:
-  ObEmbeddingTaskMgr() : allocator_("EmbedTaskMgr", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+  ObEmbeddingTaskMgr() : allocator_("EmbedTaskMgr", OB_MALLOC_NORMAL_BLOCK_SIZE),
                          embedding_handler_(nullptr), slot_ring_(), ring_capacity_(9),
                          cfg_(), is_inited_(false), is_failed_(false) {}
   ~ObEmbeddingTaskMgr();

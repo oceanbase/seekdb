@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE
 #include "ob_cg_iter_param_pool.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_tablet.h"
 
 namespace oceanbase
@@ -293,7 +294,7 @@ int ObCGIterParamPool::generate_for_column_store(const ObTableIterParam &row_par
         } else {
           cg_param.read_info_ = row_param.cg_read_infos_->at(cg_pos);
         }
-      } else if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->get_cg_read_info(col_descs.at(cg_pos), column_params->at(cg_pos), row_param.tablet_id_, cg_param.cg_read_info_handle_))) {
+      } else if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_cg_read_info(col_descs.at(cg_pos), column_params->at(cg_pos), row_param.tablet_id_, cg_param.cg_read_info_handle_))) {
         LOG_WARN("Fail to get cg read info",  K(ret), K(cg_idx), K(row_param));
       } else if (OB_UNLIKELY(!cg_param.cg_read_info_handle_.is_valid())) {
         ret = OB_ERR_UNEXPECTED;

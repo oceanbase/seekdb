@@ -486,12 +486,6 @@ int ObGroupByChecker::visit(ObColumnRefRawExpr &expr)
     LOG_WARN("failed to get belongs to stmt", K(ret));
   } else if (!belongs_to) {
   } else if (find_in_group_by(expr) || find_in_rollup(expr)) {
-  } else if (NULL != dblink_groupby_expr_) {
-    if (OB_FAIL(dblink_groupby_expr_->push_back(static_cast<oceanbase::sql::ObRawExpr *>(&expr)))) {
-      LOG_WARN("failed to push checked_expr into group_by_exprs", K(ret));
-    } else {
-      LOG_DEBUG("succ to push checked_expr into group_by_exprs", K(expr));
-    }
   } else {
     ret = OB_ERR_WRONG_FIELD_WITH_GROUP;
     ObString column_name = concat_qualified_name(expr.get_database_name(),
@@ -632,8 +626,7 @@ int ObGroupByChecker::visit(ObPseudoColumnRawExpr &expr)
   } else if (belongs_to) {
     if (find_in_group_by(expr) || find_in_rollup(expr)) {
       set_skip_expr(&expr);
-    } else if (T_ORA_ROWSCN != expr.get_expr_type() &&
-               NULL == dblink_groupby_expr_){
+    } else if (T_ORA_ROWSCN != expr.get_expr_type()) {
       ret = OB_ERR_WRONG_FIELD_WITH_GROUP;
       //LOG_USER_ERROR(ret, column_name.length(), column_name.ptr());
       LOG_DEBUG("pseudo column not in group by", K(*group_by_exprs_), K(expr));

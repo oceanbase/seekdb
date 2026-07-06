@@ -24,6 +24,7 @@
 #include "sql/rewrite/ob_transformer_impl.h"
 #include "storage/mview/ob_mview_refresh.h"
 #include "share/table/ob_ttl_util.h"
+#include "sql/session/ob_local_session_var.h"
 
 namespace oceanbase
 {
@@ -94,8 +95,6 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
   } else {
     ObString db_name;
     ObString view_name;
-    char *dblink_name_ptr = NULL;
-    int32_t dblink_name_len = 0;
     ObString view_define;
     ObString expanded_view;
     int64_t view_definition_start_pos = 0;
@@ -117,7 +116,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
     bool is_materialized_view = 2 == parse_tree.reserved_;
     table_schema.get_view_schema().set_materialized(is_materialized_view);
     table_schema.set_force_view(is_force_view);
-    table_schema.set_tenant_id(session_info_->get_effective_tenant_id());
+    
     //table_schema.set_tablegroup_id(OB_SYS_TABLEGROUP_ID);
     table_schema.set_define_user_id(session_info_->get_priv_user_id());
     table_schema.set_view_created_method_flag((ObViewCreatedMethodFlag)(create_arg.if_not_exist_ || is_force_view));
@@ -127,7 +126,6 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
     bool perserve_lettercase = false; // (mode != OB_LOWERCASE_AND_INSENSITIVE);
     ObArray<ObString> column_list;
     ObArray<ObString> comment_list;
-    bool has_dblink_node = false;
     ParseNode *mv_primary_key_node = NULL;
     share::schema::ObSchemaGetterGuard *schema_guard = NULL;
     uint64_t database_id = OB_INVALID_ID;
@@ -141,14 +139,10 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
       // do nothing
     } else if (OB_FAIL(resolve_table_relation_node(parse_tree.children_[VIEW_NODE],
                                                 view_name, db_name,
-                                                false, false, &dblink_name_ptr, &dblink_name_len, &has_dblink_node))) {
+                                                false, false))) {
       LOG_WARN("failed to resolve table relation node!", K(ret));
     } else if (OB_FAIL(set_database_name(db_name))) {
       SQL_RESV_LOG(WARN, "set database name failes", KR(ret));
-    } else if (has_dblink_node) { //don't care about dblink_name_len
-      ret = OB_ERR_MISSING_KEYWORD;
-      LOG_WARN("missing keyword when create view", K(ret));
-      LOG_USER_ERROR(OB_ERR_MISSING_KEYWORD);
     } else if (OB_FAIL(normalize_table_or_database_names(view_name))) {
       LOG_WARN("fail to normalize table name", K(view_name), K(ret));
     } else if (OB_FAIL(ob_write_string(*allocator_, db_name,
@@ -168,13 +162,12 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
     } else if (OB_ISNULL(schema_checker_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
-    } else if (OB_FAIL(schema_checker_->get_database_id(session_info_->get_effective_tenant_id(),
-                                                     stmt->get_database_name(),
+    } else if (OB_FAIL(schema_checker_->get_database_id(stmt->get_database_name(),
                                                      database_id))) {
       if (OB_ERR_BAD_DATABASE == ret) {
           LOG_USER_ERROR(OB_ERR_BAD_DATABASE, stmt->get_database_name().length(), stmt->get_database_name().ptr());
       }
-      SQL_RESV_LOG(WARN, "failed to get database id", K(ret), K(stmt->get_database_name()), K(session_info_->get_effective_tenant_id()));
+      SQL_RESV_LOG(WARN, "failed to get database id", K(ret), K(stmt->get_database_name()));
     } else if (OB_FALSE_IT(table_schema.set_database_id(database_id))) {
       //never reach
     } else if (OB_FAIL(ob_write_string(*allocator_,
@@ -268,9 +261,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
         if (!resolve_succ) {
           //if the first child stmt of set query resolve failed, real stmt is null
           ObArray<SelectItem> select_items;
-          if (!column_list.empty() && OB_FAIL(add_undefined_column_infos(
-                                                          session_info_->get_effective_tenant_id(),
-                                                          select_items,
+          if (!column_list.empty() && OB_FAIL(add_undefined_column_infos(select_items,
                                                           table_schema,
                                                           column_list))) {
             if (OB_FAIL(try_add_error_info(ret, create_arg.error_info_))) {
@@ -288,8 +279,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
                                             can_expand_star,
                                             add_undefined_columns))) {
         LOG_WARN("failed to check view columns", K(ret));
-      } else if (OB_FAIL(add_column_infos(session_info_->get_effective_tenant_id(),
-                                             *select_stmt,
+      } else if (OB_FAIL(add_column_infos(*select_stmt,
                                              table_schema,
                                              *allocator_,
                                              *session_info_,
@@ -349,7 +339,6 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
       ObMVAdditionalInfo *mv_ainfo = NULL;
       ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
       ObSEArray<ObConstraint,4> &csts = create_table_stmt->get_create_table_arg().constraint_list_;
-      ObTenantConfigGuard tenant_config(TENANT_CONF(session_info_->get_effective_tenant_id()));
       if (OB_FAIL(ObResolverUtils::check_schema_valid_for_mview(table_schema))) {
         LOG_WARN("failed to check schema valid for mview", KR(ret), K(table_schema));
       } else if (OB_FAIL(resolve_table_options(parse_tree.children_[TABLE_OPTION_NODE], false))) {
@@ -366,7 +355,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
         LOG_WARN("fail do resolve for materialized view", K(ret));
       } else if (OB_FAIL(load_mview_dep_session_vars(*session_info_, select_stmt, table_schema.get_local_session_var()))) {
         LOG_WARN("fail to load mview dep session variables", K(ret));
-      } else if (!tenant_config.is_valid()) {
+      } else if (!true) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tenant config is invalid", KR(ret));
       } else if (OB_NOT_NULL(parse_tree.children_[COLUMN_GROUP_NODE])
@@ -632,8 +621,7 @@ int ObCreateViewResolver::get_sel_priv_tables_in_subquery(const ObSelectStmt *se
       if (OB_ISNULL(table_item)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table_item is NULL ptr", K(ret));
-      } else if (!(table_item->is_basic_table() || table_item->is_view_table_) ||
-                 (table_item->database_name_.empty() && !table_item->dblink_name_.empty())) {
+      } else if (!(table_item->is_basic_table() || table_item->is_view_table_)) {
         /* do nothing */
       } else if (OB_FAIL(select_tables.get_refactored(table_item->ref_id_, dummy_item))) {
         if (OB_HASH_NOT_EXIST != ret) {
@@ -742,8 +730,7 @@ int ObCreateViewResolver::get_need_priv_tables(ObSelectStmt &root_stmt,
       if (OB_ISNULL(table_item)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table item is null");
-      } else if (!(table_item->is_basic_table() || table_item->is_view_table_) ||
-                 (table_item->database_name_.empty() && !table_item->dblink_name_.empty())) {
+      } else if (!(table_item->is_basic_table() || table_item->is_view_table_)) {
         /* do nothing */
       } else if (OB_FAIL(select_tables.get_refactored(table_item->ref_id_, dummy_item))) {
         if (OB_HASH_NOT_EXIST != ret) {
@@ -1368,7 +1355,7 @@ int ObCreateViewResolver::collect_dependency_infos(ObQueryCtx *query_ctx,
   CK (OB_NOT_NULL(session_info_));
   if (OB_SUCC(ret)) {
     ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
-    const uint64_t tenant_id = session_info_->get_effective_tenant_id();
+    
     if (OB_ISNULL(schema_guard)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema guard is null", K(ret));
@@ -1423,8 +1410,7 @@ int ObCreateViewResolver::resolve_select_node_for_force_view(bool &add_undefined
   return ret;
 }
 
-int ObCreateViewResolver::add_undefined_column_infos(const uint64_t tenant_id,
-                                                     ObIArray<SelectItem> &select_items,
+int ObCreateViewResolver::add_undefined_column_infos(ObIArray<SelectItem> &select_items,
                                                      ObTableSchema &table_schema,
                                                      const common::ObIArray<ObString> &column_list)
 {
@@ -1432,8 +1418,7 @@ int ObCreateViewResolver::add_undefined_column_infos(const uint64_t tenant_id,
   return ret;
 }
 
-int ObCreateViewResolver::add_column_infos(const uint64_t tenant_id,
-                                           ObSelectStmt &select_stmt,
+int ObCreateViewResolver::add_column_infos(ObSelectStmt &select_stmt,
                                            ObTableSchema &table_schema,
                                            ObIAllocator &alloc,
                                            ObSQLSessionInfo &session_info,
@@ -1446,7 +1431,7 @@ int ObCreateViewResolver::add_column_infos(const uint64_t tenant_id,
   ObColumnSchemaV2 column;
   int64_t cur_column_id = OB_APP_MIN_COLUMN_ID;
   share::schema::ObSchemaGetterGuard schema_guard;
-  if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+  if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", K(ret));
   } else {
     if ((!column_list.empty() && OB_UNLIKELY(column_list.count() != select_items.count()))
@@ -1568,7 +1553,7 @@ int ObCreateViewResolver::load_mview_dep_session_vars(ObSQLSessionInfo &session_
                                                       ObLocalSessionVar &dep_vars)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(dep_vars.reserve_max_local_vars_capacity())) {
+  if (OB_FAIL(ObLocalSessionVarHelper::reserve_max_local_vars_capacity(dep_vars))) {
     LOG_WARN("fail to reserve max local vars capacity", K(ret));
   } else if (OB_FAIL(get_dep_session_vars_from_stmt(session_info, stmt, dep_vars))) {
     LOG_WARN("fail to get dep session vars from stmt", K(ret));

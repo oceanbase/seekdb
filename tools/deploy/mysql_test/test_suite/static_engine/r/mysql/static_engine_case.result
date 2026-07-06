@@ -307,7 +307,7 @@ Warning	1292	Truncated incorrect DOUBLE value: 'here'
 
 // Case4: 测试不同字符集，大小写问题
 drop table t1;
-create table t1 (a varchar(100) collate utf8_general_ci, cond1 varchar(100) collate utf8_bin, cond2 varchar(100) collate utf8_general_ci);
+create table t1 (a varchar(100) collate utf8mb4_general_ci, cond1 varchar(100) collate utf8mb4_bin, cond2 varchar(100) collate utf8mb4_general_ci);
 EXPLAIN insert into t1 values('cond', 'COND', 'COND');
 Query Plan
 ==================================================
@@ -326,7 +326,7 @@ Outputs & filters:
       values({'cond', 'COND', 'COND'})
 insert into t1 values('cond', 'COND', 'COND');
 explain_protocol: 2
-// 返回Null，a和cond1以及a和cond2比较都会使用utf8_bin作为collation type(因为有aggregate collation的过程)
+// 返回Null，a和cond1以及a和cond2比较都会使用utf8mb4_bin作为collation type(因为有aggregate collation的过程)
 EXPLAIN select case a when cond1 then '1' when cond2 then '2' end from t1;
 Query Plan
 ===============================================
@@ -347,7 +347,7 @@ select case a when cond1 then '1' when cond2 then '2' end from t1;
 +----------------------------------------------------+
 | NULL                                               |
 +----------------------------------------------------+
-// 返回'neq', a和cond1比较使用的是utf8_bin
+// 返回'neq', a和cond1比较使用的是utf8mb4_bin
 EXPLAIN select case a when cond1 then 'eq' else 'neq' end from t1;
 Query Plan
 ===============================================
@@ -367,7 +367,7 @@ select case a when cond1 then 'eq' else 'neq' end from t1;
 +--------------------------------------------+
 | neq                                        |
 +--------------------------------------------+
-// 返回'eq', a和cond1比较使用的是utf8_general_ci
+// 返回'eq', a和cond1比较使用的是utf8mb4_general_ci
 EXPLAIN select case a when cond2 then 'eq' else 'neq' end from t1;
 Query Plan
 ===============================================

@@ -84,7 +84,6 @@ private:
   static const int64_t NOTIFY_RESOURCE_RPC_TIMEOUT = 9 * 1000 * 1000; // 9 second
 
   virtual int check_server_is_empty();
-  virtual int notify_sys_tenant_server_unit_resource();
   virtual int create_ls();
 
   int notify_sys_tenant_config_();

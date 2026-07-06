@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_VIRTUAL_DYNAMIC_PARTITION_TABLE_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_VIRTUAL_DYNAMIC_PARTITION_TABLE_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 
 namespace oceanbase
 {
@@ -56,9 +56,9 @@ private:
 private:
   bool is_inited_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
-  common::ObArray<uint64_t> tenant_ids_;
+  common::ObArray<uint64_t> batch_ids_;
   common::ObArray<uint64_t> cur_tenant_table_ids_;
-  int64_t tenant_idx_;
+  int64_t t_loop_idx_;
   int64_t table_idx_;
 };
 } // namespace observer

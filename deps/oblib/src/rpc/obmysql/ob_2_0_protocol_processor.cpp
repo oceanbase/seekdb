@@ -500,7 +500,6 @@ inline int Ob20ProtocolProcessor::after_process_mysql_packet(
     // Only then can we set the flag of re-routing
     // If a request is divided into multiple MySQL packages, each MySQL package will also set the re-routing flag
     ObMySQLRawPacket *input_packet = reinterpret_cast<ObMySQLRawPacket *>(ipacket);
-    input_packet->set_can_reroute_pkt(pkt20->get_flags().is_proxy_reroute());
     input_packet->set_is_weak_read(pkt20->get_flags().is_weak_read());
     // need test proxy_switch_route flag.
     input_packet->set_proxy_switch_route(pkt20->get_flags().proxy_switch_route());

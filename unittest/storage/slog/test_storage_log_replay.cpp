@@ -28,6 +28,16 @@ static ObSimpleMemLimitGetter getter;
 namespace storage
 {
 
+// Single-tenant seekdb: ObTenantBase module slots are gone; modules route
+// through share::g_mp (ObIModuleProvider). Inject the test's ObTenantIOManager
+// by overriding tenant_io_manager() and pointing g_mp at this provider.
+class FakeModuleProvider : public share::ObIModuleProvider
+{
+public:
+  common::ObTenantIOManager *tenant_io_manager() override { return io_manager_; }
+  common::ObTenantIOManager *io_manager_ = nullptr;
+};
+
 class TestStorageLogReplay : public TestDataFilePrepare
 {
 public:
@@ -53,6 +63,8 @@ public:
   ObLogCursor replay_finish_cursor_;
   blocksstable::ObLogFileSpec log_file_spec_;
   SimpleObStorageModule tenant_storage_;
+  FakeModuleProvider provider_;
+  share::ObIModuleProvider *old_mp_ = nullptr;
 };
 
 void TestStorageLogReplay::SetUp()
@@ -65,18 +77,18 @@ void TestStorageLogReplay::SetUp()
   log_file_spec_.log_write_policy_ = "truncate";
  
   TestDataFilePrepare::SetUp();
-  static ObTenantBase tenant_base(TEST_TENANT_ID);
-  ObTenantEnv::set_tenant(&tenant_base);
   ObTenantIOManager *io_service = nullptr;
   EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_new(io_service));
   EXPECT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_init(io_service));
   EXPECT_EQ(OB_SUCCESS, io_service->start());
-  tenant_base.set(io_service); 
-  ObTenantEnv::set_tenant(&tenant_base);
+  provider_.io_manager_ = io_service;
+  old_mp_ = share::g_mp;
+  share::g_mp = &provider_;
 }
 
 void TestStorageLogReplay::TearDown()
 {
+  share::g_mp = old_mp_;
   TestDataFilePrepare::TearDown();
 }
 
@@ -121,7 +133,7 @@ TEST_F(TestStorageLogReplay, test_basic)
   ret = replayer_.init(OB_FILE_SYSTEM_ROUTER.get_slog_dir(), log_file_spec_);
   ASSERT_EQ(OB_SUCCESS, ret);
   // test no redo log
-  ret = replayer_.replay(replay_start_cursor_, replay_finish_cursor_, OB_SERVER_TENANT_ID);
+  ret = replayer_.replay(replay_start_cursor_, replay_finish_cursor_);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(1, replay_finish_cursor_.file_id_);
   ASSERT_EQ(1, replay_finish_cursor_.log_id_);
@@ -152,7 +164,7 @@ TEST_F(TestStorageLogReplay, test_basic)
 
   ret = replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE, &redo_module);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = replayer_.replay(replay_start_cursor_, replay_finish_cursor_, TEST_TENANT_ID);
+  ret = replayer_.replay(replay_start_cursor_, replay_finish_cursor_);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_TRUE(tenant_storage_ == redo_module);
   ret = replayer_.unregister_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE);
@@ -191,7 +203,7 @@ TEST_F(TestStorageLogReplay, test_basic)
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE, &redo_module);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = replayer_.replay(replay_start_cursor_, replay_finish_cursor_, TEST_TENANT_ID);
+  ret = replayer_.replay(replay_start_cursor_, replay_finish_cursor_);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_TRUE(tenant_storage_ == redo_module);
   ret = replayer_.unregister_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE);
@@ -224,7 +236,7 @@ TEST_F(TestStorageLogReplay, test_basic)
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE, &redo_module);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = replayer_.replay(replay_start_cursor_, replay_finish_cursor_, TEST_TENANT_ID);
+  ret = replayer_.replay(replay_start_cursor_, replay_finish_cursor_);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_FALSE(tenant_storage_ == redo_module);
 
@@ -289,7 +301,7 @@ TEST_F(TestStorageLogReplay, test_switch_file_replay)
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE, &redo_module);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ret = replayer_.replay(replay_start_cursor_, replay_finish_cursor_, TEST_TENANT_ID);
+  ret = replayer_.replay(replay_start_cursor_, replay_finish_cursor_);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_TRUE(tenant_storage_ == redo_module);
   OB_DELETE(ObStorageLogger, ObModIds::TEST, slogger);
@@ -324,7 +336,7 @@ TEST_F(TestStorageLogReplay, test_mock_restart)
   // replay first slog file
   ASSERT_EQ(OB_SUCCESS, replayer_.init(slogger->get_dir(), log_file_spec_));
   ASSERT_EQ(OB_SUCCESS, replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE, &redo_module));
-  ASSERT_EQ(OB_SUCCESS, replayer_.replay(replay_start_cursor_, replay_finish_cursor_, TEST_TENANT_ID));
+  ASSERT_EQ(OB_SUCCESS, replayer_.replay(replay_start_cursor_, replay_finish_cursor_));
   replayer_.destroy();
   redo_module.reset();
 
@@ -344,7 +356,7 @@ TEST_F(TestStorageLogReplay, test_mock_restart)
   // replay first and second slog files
   ASSERT_EQ(OB_SUCCESS, replayer_.init(slogger->get_dir(), log_file_spec_));
   ASSERT_EQ(OB_SUCCESS, replayer_.register_redo_module(ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE, &redo_module));
-  ASSERT_EQ(OB_SUCCESS, replayer_.replay(replay_start_cursor_, replay_finish_cursor_, TEST_TENANT_ID));
+  ASSERT_EQ(OB_SUCCESS, replayer_.replay(replay_start_cursor_, replay_finish_cursor_));
   OB_DELETE(ObStorageLogger, ObModIds::TEST, slogger);
 }
 

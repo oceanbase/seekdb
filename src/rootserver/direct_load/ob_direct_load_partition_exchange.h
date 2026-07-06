@@ -28,8 +28,7 @@ class ObDirectLoadPartitionExchange : public ObPartitionExchange
 public:
   explicit ObDirectLoadPartitionExchange(ObDDLService &ddl_service);
   virtual ~ObDirectLoadPartitionExchange();
-  int exchange_multipart_table_partitions(const uint64_t tenant_id,
-                                          ObDDLSQLTransaction &trans,
+  int exchange_multipart_table_partitions(ObDDLSQLTransaction &trans,
                                           share::schema::ObSchemaGetterGuard &schema_guard,
                                           const share::schema::ObTableSchema &base_table_schema,
                                           const share::schema::ObTableSchema &inc_table_schema,

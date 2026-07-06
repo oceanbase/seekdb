@@ -49,7 +49,6 @@ OB_DEF_SERIALIZE_SIZE(ObLobQueryArg)
   int64_t len = 0;
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              tenant_id_,
               offset_,
               len_,
               cs_type_,
@@ -64,7 +63,6 @@ OB_DEF_SERIALIZE(ObLobQueryArg)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-              tenant_id_,
               offset_,
               len_,
               cs_type_,
@@ -79,7 +77,7 @@ OB_DEF_DESERIALIZE(ObLobQueryArg)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE,
-              tenant_id_,
+              
               offset_,
               len_,
               cs_type_,
@@ -91,8 +89,7 @@ OB_DEF_DESERIALIZE(ObLobQueryArg)
 }
 
 ObLobQueryArg::ObLobQueryArg()
-  : tenant_id_(0),
-    offset_(0),
+  : offset_(0),
     len_(0),
     cs_type_(common::ObCollationType::CS_TYPE_INVALID),
     scan_backward_(false),

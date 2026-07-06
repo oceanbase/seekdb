@@ -19,7 +19,7 @@
 
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/expr/ob_i_expr_extra_info.h"
-#include "deps/oblib/src/lib/udt/ob_udt_type.h"
+#include "common/udt/ob_udt_type.h"
 
 
 namespace oceanbase

@@ -23,19 +23,12 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/ob_define.h"
+#include "lib/string/ob_string.h"
+#include <typeinfo>
 #include "lib/wait_event/ob_inner_sql_wait_type.h"
 
 namespace oceanbase
 {
-
-namespace observer
-{
-class ObInnerSqlWaitGuard;
-}
-namespace sql
-{
-class ObEndTransAsyncCallback;
-}
 
 namespace common
 {
@@ -88,6 +81,7 @@ private:
 class ObTenantDiagnosticInfoSummaryGuard
 {
 public:
+  ObTenantDiagnosticInfoSummaryGuard() {}
   explicit ObTenantDiagnosticInfoSummaryGuard(int64_t, int64_t = 0, bool = false) {}
   explicit ObTenantDiagnosticInfoSummaryGuard(void *) {}
   ~ObTenantDiagnosticInfoSummaryGuard() {}
@@ -176,9 +170,9 @@ public:
 } /* namespace oceanbase */
 
 #define EVENT_ADD(stat_no, value)
-#define EVENT_TENANT_ADD(stat_no, value, tenant_id)
+#define EVENT_TENANT_ADD(stat_no, value)
 #define EVENT_INC(stat_no)
-#define EVENT_TENANT_INC(stat_no, tenant_id)
+#define EVENT_TENANT_INC(stat_no)
 #define EVENT_DEC(stat_no)
 
 // No-op stub: ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER

@@ -25,10 +25,10 @@ create procedure MY_proc() begin end;
 --error 1304
 create procedure MY_PROC() begin end;
 
-select routine_name from oceanbase.__all_virtual_routine where routine_name = 'my_proc' and tenant_id = effective_tenant_id();
-select routine_name from oceanbase.__all_virtual_routine where routine_name = 'My_proc' and tenant_id = effective_tenant_id();
-select routine_name from oceanbase.__all_virtual_routine where routine_name = 'MY_proc' and tenant_id = effective_tenant_id();
-select routine_name from oceanbase.__all_virtual_routine where routine_name = 'MY_PROC' and tenant_id = effective_tenant_id();
+select routine_name from oceanbase.__all_routine where routine_name = 'my_proc';
+select routine_name from oceanbase.__all_routine where routine_name = 'My_proc';
+select routine_name from oceanbase.__all_routine where routine_name = 'MY_proc';
+select routine_name from oceanbase.__all_routine where routine_name = 'MY_PROC';
 
 call my_proc();
 call My_proc();
@@ -46,10 +46,10 @@ create function MY_func() returns int return 1;
 --error 1304
 create function MY_FUNC() returns int return 1;
 
-select routine_name from oceanbase.__all_virtual_routine where routine_name = 'my_func' and tenant_id = effective_tenant_id();
-select routine_name from oceanbase.__all_virtual_routine where routine_name = 'My_func' and tenant_id = effective_tenant_id();
-select routine_name from oceanbase.__all_virtual_routine where routine_name = 'MY_func' and tenant_id = effective_tenant_id();
-select routine_name from oceanbase.__all_virtual_routine where routine_name = 'MY_FUNC' and tenant_id = effective_tenant_id();
+select routine_name from oceanbase.__all_routine where routine_name = 'my_func';
+select routine_name from oceanbase.__all_routine where routine_name = 'My_func';
+select routine_name from oceanbase.__all_routine where routine_name = 'MY_func';
+select routine_name from oceanbase.__all_routine where routine_name = 'MY_FUNC';
 
 select my_func();
 select My_func();

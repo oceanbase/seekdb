@@ -26,7 +26,7 @@ using namespace oceanbase::blocksstable;
 using namespace oceanbase::share;
 
 ObMacroMetaStoreManager::ObMacroMetaStoreManager()
-  : allocator_(ObMemAttr(MTL_ID(), "MbMetaStoreMgr")), mutex_(ObLatchIds::COLUMN_STORE_DDL_RESCAN_LOCK), dir_id_(-1)
+  : allocator_(ObMemAttr("MbMetaStoreMgr")), mutex_(ObLatchIds::COLUMN_STORE_DDL_RESCAN_LOCK), dir_id_(-1)
 {
 
 }
@@ -49,8 +49,8 @@ int ObMacroMetaStoreManager::add_macro_meta_store(const ObTabletID &tablet_id, c
   if (dir_id_ < 0) {
     ObMutexGuard guard(mutex_);
     if (dir_id_ < 0) {
-      if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(MTL_ID(), dir_id_))) {
-        LOG_WARN("alloc dir id failed", K(MTL_ID()));
+      if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(dir_id_))) {
+        LOG_WARN("alloc dir id failed");
       }
     }
   }

@@ -44,8 +44,8 @@ ObTableLoadRowProjector::ObTableLoadRowProjector()
     index_has_lob_(false),
     is_inited_(false)
 {
-  index_column_descs_.set_attr(ObMemAttr(MTL_ID(), "TLProject"));
-  main_table_rowkey_col_flag_.set_attr(ObMemAttr(MTL_ID(), "TLProject"));
+  index_column_descs_.set_attr(ObMemAttr("TLProject"));
+  main_table_rowkey_col_flag_.set_attr(ObMemAttr("TLProject"));
 }
 
 ObTableLoadRowProjector::~ObTableLoadRowProjector()
@@ -67,9 +67,9 @@ int ObTableLoadRowProjector::init(const ObTableSchema *src_table_schema,
   } else if (OB_ISNULL(src_table_schema) || OB_ISNULL(dest_table_schema)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(src_table_schema), KP(dest_table_schema));
-  } else if (OB_FAIL(tablet_projector_.create(1024, "TLD_ITP", "TLD_ITP", MTL_ID()))) {
+  } else if (OB_FAIL(tablet_projector_.create(1024, "TLD_ITP", "TLD_ITP"))) {
     LOG_WARN("fail to create tablet projector", KR(ret));
-  } else if (OB_FAIL(dest_tablet_id_to_part_id_map_.create(1024, "TLD_ITP", "TLD_ITP", MTL_ID()))) {
+  } else if (OB_FAIL(dest_tablet_id_to_part_id_map_.create(1024, "TLD_ITP", "TLD_ITP"))) {
     LOG_WARN("fail to create index tablet id to part id map", KR(ret));
   } else if (OB_FAIL(build_projector(src_table_schema, dest_table_schema))) {
     LOG_WARN("fail to build projector", KR(ret), KPC(src_table_schema), KPC(dest_table_schema));
@@ -87,15 +87,15 @@ int ObTableLoadRowProjector::init(const ObTableSchema *src_table_schema,
 int ObTableLoadRowProjector::init(const uint64_t src_table_id, const uint64_t dest_table_id)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *src_table_schema = nullptr;
   const ObTableSchema *dest_table_schema = nullptr;
-  if (OB_FAIL(ObTableLoadSchema::get_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, tenant_id, src_table_id, src_table_schema))) {
+  if (OB_FAIL(ObTableLoadSchema::get_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
+  } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, src_table_id, src_table_schema))) {
     LOG_WARN("fail to get table schema", KR(ret));
-  } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, tenant_id, dest_table_id, dest_table_schema))) {
+  } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, dest_table_id, dest_table_schema))) {
     LOG_WARN("fail to get table schema", KR(ret));
   } else if (OB_FAIL(init(src_table_schema, dest_table_schema))) {
     LOG_WARN("fail to do init", KR(ret));

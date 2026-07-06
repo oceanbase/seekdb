@@ -39,7 +39,7 @@
 #include "lib/utility/ob_print_utils.h"                  // databuff_printf
 #include "lib/container/ob_fixed_array.h"                // ObFixedArray
 #include "share/ob_force_print_log.h"                    // force_print
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 
 namespace oceanbase
 {
@@ -147,7 +147,6 @@ constexpr int64_t PALF_INITIAL_PROPOSAL_ID = 1;
 constexpr char PADDING_LOG_CONTENT_CHAR = '\0';
 const int64_t MIN_WRITING_THTOTTLING_TRIGGER_PERCENTAGE = 40;
 constexpr int64_t PALF_IO_WAIT_EVENT_TIMEOUT_MS = 100;
-const int64_t PALF_UPDATE_REGION_INTERVAL_US = 10 * 1000 * 1000L;                // 10s
 
 inline int64_t max_proposal_id(const int64_t a, const int64_t b)
 {

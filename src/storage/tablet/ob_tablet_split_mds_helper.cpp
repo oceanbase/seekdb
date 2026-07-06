@@ -18,7 +18,8 @@
 
 
 #include "ob_tablet_split_mds_helper.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_tablet_split_replay_executor.h"
 #include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -42,7 +43,7 @@ namespace storage
 
 bool ObTabletSplitMdsArg::is_valid() const
 {
-  return OB_INVALID_TENANT_ID != tenant_id_
+  return true
     && ls_id_.is_valid()
     && (split_data_tablet_ids_.count() == split_datas_.count() || 0 == split_datas_.count())
     && ((tablet_status_ != ObTabletStatus::NONE) ^ tablet_status_tablet_ids_.empty())
@@ -52,7 +53,6 @@ bool ObTabletSplitMdsArg::is_valid() const
 
 void ObTabletSplitMdsArg::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
   ls_id_.reset();
   split_data_tablet_ids_.reset();
   split_datas_.reset();
@@ -218,7 +218,6 @@ int ObTabletSplitMdsArg::prepare_basic_args(
 }
 
 int ObTabletSplitMdsArg::init_split_start_src(
-    const uint64_t tenant_id,
     const ObLSID &ls_id,
     const ObIArray<ObTableSchema *> &new_table_schemas,
     const ObIArray<ObTableSchema *> &upd_table_schemas,
@@ -227,7 +226,6 @@ int ObTabletSplitMdsArg::init_split_start_src(
 {
   int ret = OB_SUCCESS;
   reset();
-  tenant_id_ = tenant_id;
   ls_id_ = ls_id;
   tablet_status_ = ObTabletStatus::SPLIT_SRC;
   tablet_status_data_type_ = ObTabletMdsUserDataType::START_SPLIT_SRC;
@@ -263,14 +261,11 @@ int ObTabletSplitMdsArg::init_split_start_src(
   return ret;
 }
 
-int ObTabletSplitMdsArg::init_set_freeze_flag(
-    const uint64_t tenant_id,
-    const ObLSID &ls_id,
+int ObTabletSplitMdsArg::init_set_freeze_flag(const ObLSID &ls_id,
     const ObIArray<ObTabletID> &tablet_ids)
 {
   int ret = OB_SUCCESS;
   reset();
-  tenant_id_ = tenant_id;
   ls_id_ = ls_id;
   if (OB_FAIL(set_freeze_flag_tablet_ids_.assign(tablet_ids))) {
     LOG_WARN("failed to assign", K(ret));
@@ -278,9 +273,7 @@ int ObTabletSplitMdsArg::init_set_freeze_flag(
   return ret;
 }
 
-int ObTabletSplitMdsArg::init_split_start_dst(
-    const uint64_t tenant_id,
-    const ObLSID &ls_id,
+int ObTabletSplitMdsArg::init_split_start_dst(const ObLSID &ls_id,
     const ObIArray<const ObTableSchema *> &inc_table_schemas,
     const ObIArray<ObTabletID> &src_tablet_ids,
     const ObIArray<ObArray<ObTabletID>> &dst_tablet_ids,
@@ -289,7 +282,6 @@ int ObTabletSplitMdsArg::init_split_start_dst(
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator;
   reset();
-  tenant_id_ = tenant_id;
   ls_id_ = ls_id;
   tablet_status_tablet_ids_.reset(); // split dst tablet status is NORMAL but without major, so no need to change its tablet status
   tablet_status_ = ObTabletStatus::NONE;
@@ -360,16 +352,13 @@ int ObTabletSplitMdsArg::set_autoinc_seq_arg(const obcall::ObBatchSetTabletAutoi
   return ret;
 }
 
-int ObTabletSplitMdsArg::init_split_end_src(
-    const uint64_t tenant_id,
-    const ObLSID &ls_id,
+int ObTabletSplitMdsArg::init_split_end_src(const ObLSID &ls_id,
     const ObTabletID &src_data_tablet_id,
     const ObIArray<ObTabletID> &src_local_index_tablet_ids,
     const ObIArray<ObTabletID> &src_lob_tablet_ids)
 {
   int ret = OB_SUCCESS;
   reset();
-  tenant_id_ = tenant_id;
   ls_id_ = ls_id;
   split_data_tablet_ids_.reset();
   split_datas_.reset();
@@ -391,9 +380,7 @@ int ObTabletSplitMdsArg::init_split_end_src(
   return ret;
 }
 
-int ObTabletSplitMdsArg::init_split_end_dst(
-    const uint64_t tenant_id,
-    const ObLSID &ls_id,
+int ObTabletSplitMdsArg::init_split_end_dst(const ObLSID &ls_id,
     const int64_t auto_part_size,
     const ObIArray<ObTabletID> &dst_data_tablet_ids,
     const ObIArray<ObSArray<ObTabletID>> &dst_local_index_tablet_ids,
@@ -402,7 +389,6 @@ int ObTabletSplitMdsArg::init_split_end_dst(
   int ret = OB_SUCCESS;
   ObTabletSplitMdsUserData data;
   reset();
-  tenant_id_ = tenant_id;
   ls_id_ = ls_id;
   tablet_status_tablet_ids_.reset();
   tablet_status_ = ObTabletStatus::NORMAL;
@@ -465,14 +451,12 @@ int ObTabletSplitMdsArg::init_split_end_dst(
 }
 
 int ObTabletSplitMdsArg::init(
-    const uint64_t tenant_id,
     const share::ObLSID &ls_id,
     const ObIArray<ObTabletID> &tablet_ids,
     const ObIArray<ObTabletSplitMdsUserData> &split_datas)
 {
   int ret = OB_SUCCESS;
   reset();
-  tenant_id_ = tenant_id;
   ls_id_ = ls_id;
   if (OB_FAIL(split_data_tablet_ids_.assign(tablet_ids))) {
     LOG_WARN("failed to assign", K(ret));
@@ -486,7 +470,7 @@ int ObTabletSplitMdsArg::init(
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObTabletSplitMdsArg, tenant_id_, ls_id_, split_data_tablet_ids_, split_datas_, tablet_status_tablet_ids_, tablet_status_, tablet_status_data_type_, set_freeze_flag_tablet_ids_, autoinc_seq_arg_);
+OB_SERIALIZE_MEMBER(ObTabletSplitMdsArg, ls_id_, split_data_tablet_ids_, split_datas_, tablet_status_tablet_ids_, tablet_status_, tablet_status_data_type_, set_freeze_flag_tablet_ids_, autoinc_seq_arg_);
 
 int ObTabletSplitMdsArgPrepareSrcOp::operator()(const int64_t part_idx, ObBasePartition &part)
 {
@@ -654,10 +638,10 @@ int ObTabletSplitMdsHelper::get_split_info_with_cache(const ObTablet &tablet, Ob
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   const uint8_t bucket_id = get_itid() & 0xF;
   const ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
-  const ObTabletSplitCacheKey cache_key(tenant_id, tablet_id, bucket_id);
+  const ObTabletSplitCacheKey cache_key(tablet_id, bucket_id);
   ObTabletSplitCacheValueHandle cache_handle;
   if (OB_FAIL(ObStorageCacheSuite::get_instance().get_tablet_split_cache().get_split_cache(cache_key, cache_handle))) {
     if (OB_ENTRY_NOT_EXIST != ret) {
@@ -696,7 +680,7 @@ int ObTabletSplitMdsHelper::get_split_info(const ObTablet &tablet, ObIAllocator 
   } else if (data.is_split_dst()) {
     ObLSService *ls_service = nullptr;
     ObLSHandle ls_handle;
-    if (OB_ISNULL(ls_service = MTL(ObLSService*))) {
+    if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get ObLSService from MTL", K(ret), KP(ls_service));
     } else if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
@@ -738,14 +722,14 @@ int ObTabletSplitMdsHelper::batch_get_tablet_split(
     ObBatchGetTabletSplitRes &res)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = arg.tenant_id_;
+  
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(arg));
   } else {
-    MTL_SWITCH(tenant_id) {
-      ObLSService *ls_service = MTL(ObLSService *);
-      logservice::ObLogService *log_service = MTL(logservice::ObLogService*);
+    MOD_SCOPE {
+      ObLSService *ls_service = share::g_mp->ls_service();
+      logservice::ObLogService *log_service = share::g_mp->log_service();
       ObLSHandle ls_handle;
       ObLS *ls = nullptr;
       ObRole role = INVALID_ROLE;
@@ -758,10 +742,10 @@ int ObTabletSplitMdsHelper::batch_get_tablet_split(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid ls", K(ret), K(arg.ls_id_));
       } else if (OB_FAIL(ls->get_ls_role(role))) {
-        LOG_WARN("get role failed", K(ret), K(MTL_ID()), K(arg.ls_id_));
+        LOG_WARN("get role failed", K(ret), K(arg.ls_id_));
       } else if (OB_UNLIKELY(ObRole::LEADER != role)) {
         ret = OB_NOT_MASTER;
-        LOG_WARN("ls not leader", K(ret), K(MTL_ID()), K(arg.ls_id_));
+        LOG_WARN("ls not leader", K(ret), K(arg.ls_id_));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_ids_.count(); i++) {
           const ObTabletID &tablet_id = arg.tablet_ids_.at(i);
@@ -790,7 +774,7 @@ int ObTabletSplitMdsHelper::batch_get_tablet_split(
               }
             } else if (OB_UNLIKELY(mds::TwoPhaseCommitState::ON_COMMIT != trans_stat)) {
               ret = OB_EAGAIN;
-              LOG_WARN("check committed failed", K(ret), K(tenant_id), K(arg.ls_id_), K(tablet_id), K(tmp_data));
+              LOG_WARN("check committed failed", K(ret), K(arg.ls_id_), K(tablet_id), K(tmp_data));
             }
           }
         }
@@ -800,9 +784,7 @@ int ObTabletSplitMdsHelper::batch_get_tablet_split(
   return ret;
 }
 
-int ObTabletSplitMdsHelper::get_tablet_split_mds_by_rpc(
-    const uint64_t tenant_id,
-    const ObLSID &ls_id,
+int ObTabletSplitMdsHelper::get_tablet_split_mds_by_rpc(const ObLSID &ls_id,
     const ObIArray<ObTabletID> &tablet_ids,
     const int64_t abs_timeout_us,
     ObIArray<ObTabletSplitMdsUserData> &datas)
@@ -810,8 +792,8 @@ int ObTabletSplitMdsHelper::get_tablet_split_mds_by_rpc(
   int ret = OB_SUCCESS;
   obcall::ObBatchGetTabletSplitArg arg;
   obcall::ObBatchGetTabletSplitRes res;
-  if (OB_FAIL(arg.init(tenant_id, ls_id, tablet_ids, true/*check_committed*/))) {
-    LOG_WARN("failed to init arg", K(ret), K(tenant_id), K(ls_id));
+  if (OB_FAIL(arg.init(ls_id, tablet_ids, true/*check_committed*/))) {
+    LOG_WARN("failed to init arg", K(ret), K(ls_id));
   } else if (OB_FAIL(ex_rpc::sync_call([&]{
     return batch_get_tablet_split(abs_timeout_us, arg, res);
   }))) {
@@ -825,9 +807,7 @@ int ObTabletSplitMdsHelper::get_tablet_split_mds_by_rpc(
   return ret;
 }
 
-int ObTabletSplitMdsHelper::set_auto_part_size_for_create(
-    const uint64_t tenant_id,
-    const obcall::ObBatchCreateTabletArg &create_arg,
+int ObTabletSplitMdsHelper::set_auto_part_size_for_create(const obcall::ObBatchCreateTabletArg &create_arg,
     const ObIArray<int64_t> &auto_part_size_arr,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans)
@@ -867,7 +847,7 @@ int ObTabletSplitMdsHelper::set_auto_part_size_for_create(
             } else if (OB_FAIL(split_datas.push_back(tmp_data))) {
               LOG_WARN("failed to push back", K(ret));
             } else if (split_data_tablet_ids.count() >= ObTabletSplitMdsArg::BATCH_TABLET_CNT) {
-              if (OB_FAIL(arg.init(tenant_id, ls_id, split_data_tablet_ids, split_datas))) {
+              if (OB_FAIL(arg.init(ls_id, split_data_tablet_ids, split_datas))) {
                 LOG_WARN("failed to init tablet split mds arg", K(ret));
               } else if (OB_FAIL(register_mds(arg, false/*need_flush_redo*/, trans))) {
                 LOG_WARN("failed to register mds", K(ret));
@@ -881,7 +861,7 @@ int ObTabletSplitMdsHelper::set_auto_part_size_for_create(
       }
     }
     if (OB_SUCC(ret) && !split_data_tablet_ids.empty()) {
-      if (OB_FAIL(arg.init(tenant_id, ls_id, split_data_tablet_ids, split_datas))) {
+      if (OB_FAIL(arg.init(ls_id, split_data_tablet_ids, split_datas))) {
         LOG_WARN("failed to init tablet split mds arg", K(ret));
       } else if (OB_FAIL(register_mds(arg, false/*need_flush_redo*/, trans))) {
         LOG_WARN("failed to register mds", K(ret));
@@ -897,7 +877,6 @@ int ObModifyAutoPartSizeOp::operator()(ObTabletSplitMdsUserData &data)
 }
 
 int ObTabletSplitMdsHelper::modify_auto_part_size(
-    const uint64_t tenant_id,
     const ObIArray<ObTabletID> &tablet_ids,
     const int64_t auto_part_size,
     const int64_t abs_timeout_us,
@@ -905,16 +884,14 @@ int ObTabletSplitMdsHelper::modify_auto_part_size(
 {
   int ret = OB_SUCCESS;
   ObModifyAutoPartSizeOp op(auto_part_size);
-  if (OB_FAIL(modify_tablet_split_(tenant_id, tablet_ids, abs_timeout_us, op, trans))) {
+  if (OB_FAIL(modify_tablet_split_(tablet_ids, abs_timeout_us, op, trans))) {
     LOG_WARN("failed to modify table split", K(ret));
   }
   return ret;
 }
 
 template<typename F>
-int ObTabletSplitMdsHelper::modify_tablet_split_(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletID> &tablet_ids,
+int ObTabletSplitMdsHelper::modify_tablet_split_(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t abs_timeout_us,
     F &&op,
     ObMySQLTransaction &trans)
@@ -924,7 +901,7 @@ int ObTabletSplitMdsHelper::modify_tablet_split_(
     ObTabletSplitMdsArg arg;
     ObArray<std::pair<ObLSID, ObTabletID>> ls_tablets;
     ObArray<ObTabletID> this_batch_tablet_ids;
-    if (OB_FAIL(ObTabletBindingMdsHelper::get_sorted_ls_tablets(tenant_id, tablet_ids, ls_tablets, trans))) {
+    if (OB_FAIL(ObTabletBindingMdsHelper::get_sorted_ls_tablets(tablet_ids, ls_tablets, trans))) {
       LOG_WARN("failed to get sorted ls tablets", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < ls_tablets.count(); i++) {
@@ -936,14 +913,14 @@ int ObTabletSplitMdsHelper::modify_tablet_split_(
       } else if (is_last_or_next_ls_id_changed || this_batch_tablet_ids.count() >= ObTabletSplitMdsArg::BATCH_TABLET_CNT) {
 
         ObArray<ObTabletSplitMdsUserData> datas;
-        if (OB_FAIL(get_tablet_split_mds_by_rpc(tenant_id, ls_id, this_batch_tablet_ids, abs_timeout_us, datas))) {
+        if (OB_FAIL(get_tablet_split_mds_by_rpc(ls_id, this_batch_tablet_ids, abs_timeout_us, datas))) {
           LOG_WARN("failed to get tablet binding mds", K(ret));
         }
         for (int64_t j = 0; OB_SUCC(ret) && j < datas.count(); j++) {
           ret = op(datas.at(j));
         }
         if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(arg.init(tenant_id, ls_id, this_batch_tablet_ids, datas))) {
+        } else if (OB_FAIL(arg.init(ls_id, this_batch_tablet_ids, datas))) {
           LOG_WARN("failed to init", K(ret));
         } else if (OB_FAIL(register_mds(arg, false/*need_flush_redo*/, trans))) {
           LOG_WARN("failed to register mds", K(ret));
@@ -985,8 +962,7 @@ int ObTabletSplitMdsHelper::register_mds(
       LOG_WARN("failed to allocate", K(ret));
     } else if (OB_FAIL(arg.serialize(buf, size, pos))) {
       LOG_WARN("failed to serialize arg", K(ret));
-    } else if (OB_FAIL(static_cast<ObInnerSQLConnection *>(isql_conn)->register_multi_data_source(
-        arg.tenant_id_, arg.ls_id_, ObTxDataSourceType::TABLET_SPLIT, buf, pos, flag))) {
+    } else if (OB_FAIL(static_cast<ObInnerSQLConnection *>(isql_conn)->register_multi_data_source(arg.ls_id_, ObTxDataSourceType::TABLET_SPLIT, buf, pos, flag))) {
       LOG_WARN("failed to register mds", K(ret));
     }
   }
@@ -1033,7 +1009,7 @@ int ObTabletSplitMdsHelper::modify(
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_FAIL(MTL(ObLSService*)->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
     LOG_WARN("fail to get ls", KR(ret), K(arg));
   } else if (OB_UNLIKELY(nullptr == (ls = ls_handle.get_ls()))) {
     ret = OB_ERR_UNEXPECTED;

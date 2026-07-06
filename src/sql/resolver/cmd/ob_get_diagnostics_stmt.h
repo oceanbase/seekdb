@@ -21,7 +21,7 @@
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_array.h"
 #include "sql/resolver/ddl/ob_ddl_stmt.h"
-#include "share/system_variable/ob_system_variable.h"
+#include "sql/session/ob_system_variable.h"
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
 
 namespace oceanbase
@@ -93,7 +93,7 @@ private:
     ObSEArray<int64_t, 8> orgin_param_index_;
     ObString invalid_condition_name_;
 
-    obcall::ObDDLArg ddl_arg_; // return exec_tenant_id_
+    obcall::ObDDLArg ddl_arg_; // return exec_tid_
     DISALLOW_COPY_AND_ASSIGN(ObGetDiagnosticsStmt);
 };
 }//end of namespace sql

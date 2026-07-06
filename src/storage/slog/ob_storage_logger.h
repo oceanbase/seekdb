@@ -44,7 +44,7 @@ public:
 public:
   //NOT thread safe.
   //Init the redo log and do recovery if there is redo logs in log_dir.
-  int init(ObStorageLoggerManager &slogger_manager, const uint64_t tenant_id);
+  int init(ObStorageLoggerManager &slogger_manager, const bool is_server = false);
   int start();
   void stop();
   void wait();
@@ -53,7 +53,7 @@ public:
   int write_log(ObIArray<ObStorageLogParam> &param_arr);
   const char *get_dir() { return tnt_slog_dir_; }
   int get_active_cursor(common::ObLogCursor &log_cursor);
-  int remove_useless_log_file(const int64_t end_file_id, const uint64_t tenant_id);
+  int remove_useless_log_file(const int64_t end_file_id);
 
   int get_using_disk_space(int64_t &using_space) const;
   int start_log(const common::ObLogCursor &start_cursor);
@@ -63,7 +63,7 @@ private:
   static const int64_t MAX_APPEND_WAIT_TIME_MS = 365LL * 24 * 3600 * 1000000; // 1h
 
 private:
-  int get_start_file_id(int64_t &start_file_id, const uint64_t tenant_id);
+  int get_start_file_id(int64_t &start_file_id);
 
   // construct log item and fill it with single log
   int build_log_item(const ObStorageLogParam &param, ObStorageLogItem *&log_item);

@@ -62,7 +62,7 @@ struct ObSysVarFromJson{
   common::ObString get_meta_type_func_;
   common::ObString session_special_update_func_;
 
-  ObSysVarFromJson():id_(SYS_VAR_INVALID), name_(""), data_type_(common::ObNullType), default_value_(""), base_value_(""), min_val_(""), max_val_(""), enum_names_(""), info_(""), flags_(ObSysVarFlag::NONE), alias_(""), base_class_(""), on_check_and_convert_func_(), on_update_func_(), to_select_obj_func_(), to_show_str_func_(), get_meta_type_func_(), session_special_update_func_() {}
+  ObSysVarFromJson():id_(SYS_VAR_INVALID), name_(""), data_type_(common::ObNullType), default_value_(""), base_value_(""), min_val_(""), max_val_(""), enum_names_(""), info_(""), flags_(ObSysVarFlag::NONE), alias_(""), base_class_(""), on_check_and_convert_func_(""), on_update_func_(""), to_select_obj_func_(""), to_show_str_func_(""), get_meta_type_func_(""), session_special_update_func_("") {}
 };
 
 class ObSysVariables

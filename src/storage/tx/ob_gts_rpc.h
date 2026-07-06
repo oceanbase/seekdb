@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_TRANSACTION_OB_GTS_RPC_
 #define OCEANBASE_TRANSACTION_OB_GTS_RPC_
 
-#include "common/ob_queue_thread.h"
+#include "lib/thread/ob_queue_thread.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include "lib/utility/utility.h"
 #include "share/ob_define.h"
@@ -47,20 +47,19 @@ class ObGtsRpcResult
 public:
   ObGtsRpcResult() { reset(); }
   virtual ~ObGtsRpcResult() {}
-  int init(const uint64_t tenant_id, const int status,
+  int init(const int status,
            const transaction::MonotonicTs srr, const int64_t gts_start, const int64_t gts_end);
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   int get_status() const { return status_; }
   transaction::MonotonicTs get_srr() const { return srr_; }
   int64_t get_gts_start() const { return gts_start_; }
   int64_t get_gts_end() const { return gts_end_; }
   void reset();
   bool is_valid() const;
-  TO_STRING_KV(K_(tenant_id), K_(status), K_(srr), K_(gts_start), K_(gts_end));
+  TO_STRING_KV(K_(status), K_(srr), K_(gts_start), K_(gts_end));
 public:
   static const int64_t OB_GTS_RPC_TIMEOUT = 1 * 1000 * 1000;
 private:
-  uint64_t tenant_id_;
   int status_;
   transaction::MonotonicTs srr_;
   int64_t gts_start_;
@@ -70,7 +69,7 @@ private:
 class ObGtsRPCCB
 {
 public:
-  ObGtsRPCCB() : is_inited_(false), tenant_id_(0), ts_mgr_(NULL), ts_worker_(NULL) {}
+  ObGtsRPCCB() : is_inited_(false), ts_mgr_(NULL), ts_worker_(NULL) {}
   ~ObGtsRPCCB() {}
   int init(transaction::ObTsMgr *ts_mgr,
            transaction::ObTsWorker *ts_worker)
@@ -94,7 +93,7 @@ public:
   {
     return process_(result, dst, rcode);
   }
-  void set_tenant_id(uint64_t tenant_id) {tenant_id_ = tenant_id;}
+  
 private:
   int process_(const obcall::ObGtsRpcResult &result, const common::ObAddr &dst,
                rpc::frame::ObResultCode &rcode)
@@ -106,8 +105,8 @@ private:
     if (!is_inited_) {
       TRANS_LOG(WARN, "ObGtsRPCCB not inited");
       ret = OB_NOT_INIT;
-    } else if (!is_valid_tenant_id(tenant_id_)) {
-      TRANS_LOG(WARN, "tenant_id is invalid", K_(tenant_id), K(dst));
+    } else if (!true) {
+      TRANS_LOG(WARN, "invalid argument", K(dst));
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_SUCCESS != rcode.rcode_) {
       status = rcode.rcode_;
@@ -118,7 +117,7 @@ private:
       if (NULL == ts_mgr_) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "gts local cache mgr is NULL", K(ret));
-      } else if (OB_FAIL(ts_mgr_->refresh_gts_location(tenant_id_))) {
+      } else if (OB_FAIL(ts_mgr_->refresh_gts_location())) {
         TRANS_LOG(WARN, "refresh gts location fail", K(ret));
       } else {
         // do nothing
@@ -132,8 +131,7 @@ private:
         } else if (NULL == ts_worker_) {
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(WARN, "gts worker is NULL", KR(ret));
-        } else if (OB_FAIL(ts_mgr_->update_gts(result.get_tenant_id(),
-                                               result.get_srr(),
+        } else if (OB_FAIL(ts_mgr_->update_gts(result.get_srr(),
                                                result.get_gts_start(),
                                                transaction::TS_SOURCE_GTS,
                                                update))) {
@@ -148,9 +146,9 @@ private:
               ret = OB_ALLOCATE_MEMORY_FAILED;
               TRANS_LOG(ERROR, "alloc memory failed", KR(ret), KP(task));
             } else {
-              if (OB_FAIL(task->init(result.get_tenant_id(), i, ts_mgr_, transaction::TS_SOURCE_GTS))) {
+              if (OB_FAIL(task->init(i, ts_mgr_, transaction::TS_SOURCE_GTS))) {
                 TRANS_LOG(WARN, "gts task init error", KR(ret), KP(task), K(i), K(result));
-              } else if (OB_FAIL(ts_worker_->push_task(result.get_tenant_id(), task))) {
+              } else if (OB_FAIL(ts_worker_->push_task(task))) {
                 TRANS_LOG(WARN, "push gts task failed", KR(ret), KP(task), K(result));
               } else {
                 TRANS_LOG(DEBUG, "push gts task success", KP(task), K(result));
@@ -168,7 +166,6 @@ private:
     return ret;
   }
   bool is_inited_;
-  uint64_t tenant_id_;
   transaction::ObTsMgr *ts_mgr_;
   transaction::ObTsWorker *ts_worker_;
 };
@@ -188,7 +185,7 @@ public:
   virtual int wait() = 0;
   virtual void destroy() = 0;
 public:
-  virtual int post(const uint64_t tenant_id, const common::ObAddr &server,
+  virtual int post(const common::ObAddr &server,
       const ObGtsRequest &msg) = 0;
 };
 
@@ -205,7 +202,7 @@ public:
   int wait();
   void destroy();
 public:
-  int post(const uint64_t tenant_id, const common::ObAddr &server, const ObGtsRequest &msg);
+  int post(const common::ObAddr &server, const ObGtsRequest &msg);
 private:
   bool is_inited_;
   bool is_running_;

@@ -93,7 +93,6 @@ ObDmlTableInfo(ObDmlTableType table_type)
     check_constraint_exprs_(),
     view_check_exprs_(),
     part_ids_(),
-    is_link_table_(false),
     need_filter_null_(false)
   {}
   virtual ~ObDmlTableInfo() {}
@@ -141,7 +140,6 @@ ObDmlTableInfo(ObDmlTableType table_type)
   common::ObSEArray<ObRawExpr*, 8, common::ModulePageAllocator, true> view_check_exprs_;
   //partition used for base table
   common::ObSEArray<ObObjectID, 1, common::ModulePageAllocator, true> part_ids_;
-  bool is_link_table_;
   bool need_filter_null_;
 };
 

@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_tenant_tablet_scheduler_task_mgr.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 namespace oceanbase
@@ -74,7 +75,7 @@ void ObTenantTabletSchedulerTaskMgr::MergeLoopTask::runTimerTask()
   int64_t cost_ts = ObTimeUtility::fast_current_time();
   ObCurTraceId::init(GCONF.self_addr_);
   if (ObBasicMergeScheduler::could_start_loop_task()) {
-    if (OB_FAIL(MTL(ObTenantTabletScheduler *)->schedule_all_tablets_minor())) {
+    if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()->schedule_all_tablets_minor())) {
       LOG_WARN("Fail to merge all partition", K(ret));
     }
     cost_ts = ObTimeUtility::fast_current_time() - cost_ts;
@@ -88,7 +89,7 @@ void ObTenantTabletSchedulerTaskMgr::MediumLoopTask::runTimerTask()
   int64_t cost_ts = ObTimeUtility::fast_current_time();
   ObCurTraceId::init(GCONF.self_addr_);
   if (ObBasicMergeScheduler::could_start_loop_task()) {
-    if (OB_FAIL(MTL(ObTenantTabletScheduler *)->schedule_all_tablets_medium())) {
+    if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()->schedule_all_tablets_medium())) {
       LOG_WARN("Fail to merge all partition", K(ret));
     }
     cost_ts = ObTimeUtility::fast_current_time() - cost_ts;
@@ -101,10 +102,10 @@ void ObTenantTabletSchedulerTaskMgr::SSTableGCTask::runTimerTask()
   int ret = OB_SUCCESS;
   if (ObBasicMergeScheduler::could_start_loop_task()) {
     // use tenant config to loop minor && medium task
-    MTL(ObTenantTabletScheduler *)->reload_tenant_config();
+    share::g_mp->tenant_tablet_scheduler()->reload_tenant_config();
     int64_t cost_ts = ObTimeUtility::fast_current_time();
     ObCurTraceId::init(GCONF.self_addr_);
-    if (OB_FAIL(MTL(ObTenantTabletScheduler *)->update_upper_trans_version_and_gc_sstable())) {
+    if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()->update_upper_trans_version_and_gc_sstable())) {
       LOG_WARN("Fail to update upper_trans_version and gc sstable", K(ret));
     }
     cost_ts = ObTimeUtility::fast_current_time() - cost_ts;
@@ -117,16 +118,16 @@ void ObTenantTabletSchedulerTaskMgr::InfoPoolResizeTask::runTimerTask()
   int ret = OB_SUCCESS;
   int64_t cost_ts = ObTimeUtility::fast_current_time();
   ObCurTraceId::init(GCONF.self_addr_);
-  if (OB_FAIL(MTL(ObTenantTabletScheduler *)->set_max())) {
+  if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()->set_max())) {
     LOG_WARN("Fail to resize info pool", K(ret));
   }
-  if (OB_FAIL(MTL(ObTenantTabletScheduler *)->gc_info())) {
+  if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()->gc_info())) {
     LOG_WARN("Fail to gc info", K(ret));
   }
-  if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->gc_cg_info_array())) {
+  if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->gc_cg_info_array())) {
     LOG_WARN("Fail to gc info", K(ret));
   }
-  if (OB_FAIL(MTL(ObTenantTabletScheduler *)->refresh_tenant_status())) {
+  if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()->refresh_tenant_status())) {
     LOG_WARN("Fail to refresh tenant status", K(ret));
   }
   cost_ts = ObTimeUtility::fast_current_time() - cost_ts;
@@ -138,7 +139,7 @@ void ObTenantTabletSchedulerTaskMgr::TabletUpdaterRefreshTask::runTimerTask()
   int ret = OB_SUCCESS;
   int64_t cost_ts = ObTimeUtility::fast_current_time();
   ObCurTraceId::init(GCONF.self_addr_);
-  if (OB_FAIL(MTL(observer::ObTabletTableUpdater *)->set_thread_count())) {
+  if (OB_FAIL(share::g_mp->tablet_table_updater()->set_thread_count())) {
     LOG_WARN("Fail to reset thread count", K(ret));
   }
   cost_ts = ObTimeUtility::fast_current_time() - cost_ts;
@@ -150,7 +151,7 @@ void ObTenantTabletSchedulerTaskMgr::MediumCheckTask::runTimerTask()
   int ret = OB_SUCCESS;
   int64_t cost_ts = ObTimeUtility::fast_current_time();
   ObCurTraceId::init(GCONF.self_addr_);
-  if (OB_FAIL(MTL(ObTenantMediumChecker *)->check_medium_finish_schedule())) {
+  if (OB_FAIL(share::g_mp->tenant_medium_checker()->check_medium_finish_schedule())) {
     LOG_WARN("Fail to check_medium_finish and schedule", K(ret));
   }
   cost_ts = ObTimeUtility::fast_current_time() - cost_ts;

@@ -53,7 +53,7 @@ struct ApplyOnTabletOp {
           if (OB_FAIL(table_->convert_node_info_to_row_(row_array[idx], temp_buffer_, BUFFER_SIZE, table_->cur_row_))) {
             MDS_LOG(WARN, "failed to convert_node_info_to_row_", K(ret), K(*table_));
           } else if (OB_FAIL(table_->scanner_.add_row(table_->cur_row_))) {
-            MDS_LOG(WARN, "fail to add_row to scanner_", K(MTL_ID()), K(*table_));
+            MDS_LOG(WARN, "fail to add_row to scanner_", K(*table_));
           }
         }
       }
@@ -77,23 +77,6 @@ struct ApplyOnLSOp {
   ApplyOnTabletOp &apply_on_tablet_op_;
 };
 
-struct ApplyOnTenantOp {
-  ApplyOnTenantOp(ObAllVirtualMdsNodeStat *table, ApplyOnLSOp &op) : table_(table), op_(op) {}
-  int operator()() {
-    int ret = OB_SUCCESS;
-    if (table_->judege_in_ranges(MTL_ID(), table_->tenant_ranges_)) {
-      if (OB_FAIL(ObTenantMdsService::for_each_ls_in_tenant(op_))) {
-        MDS_LOG(WARN, "failed to do for_each_ls_in_tenant", K(ret));
-        ret = OB_SUCCESS;
-      }
-    } else {
-      MDS_LOG(TRACE, "not in ranges", K(MTL_ID()), K(ret), K(*table_));
-    }
-    return ret;
-  }
-  ObAllVirtualMdsNodeStat *table_;
-  ApplyOnLSOp &op_;
-};
 
 int ObAllVirtualMdsNodeStat::get_mds_table_handle_(ObTablet &tablet,
                                                    mds::MdsTableHandle &handle,
@@ -107,21 +90,24 @@ int ObAllVirtualMdsNodeStat::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (false == start_to_read_) {
     if (OB_FAIL(get_primary_key_ranges_())) {
-      MDS_LOG(WARN, "fail to get index scan ranges", KR(ret), K(MTL_ID()), K(*this));
+      MDS_LOG(WARN, "fail to get index scan ranges", KR(ret), K(*this));
     } else if (tablet_points_.empty()) {
       ret = OB_NOT_SUPPORTED;
-      MDS_LOG(WARN, "tenant_id/tablet_id must be specified", KR(ret), K(MTL_ID()), K(*this));
+      MDS_LOG(WARN, "tablet_id must be specified", KR(ret), K(*this));
     } else {
       char *temp_buffer = nullptr;
       if (OB_ISNULL(temp_buffer = (char *)mtl_malloc(BUFFER_SIZE, "VirMdsStat"))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        MDS_LOG(WARN, "fail to alloc buffer", K(MTL_ID()), K(*this));
+        MDS_LOG(WARN, "fail to alloc buffer", K(*this));
       } else {
         ApplyOnTabletOp apply_on_table_op(this, temp_buffer);
         ApplyOnLSOp apply_on_ls_op(this, apply_on_table_op);
-        ApplyOnTenantOp apply_on_tenant_op(this, apply_on_ls_op);
-        if (OB_FAIL(omt_->operate_each_tenant_for_sys_or_self(apply_on_tenant_op))) {
-          MDS_LOG(WARN, "ObMultiTenant operate_each_tenant_for_sys_or_self failed", K(ret), K(*this));
+        if (OB_FAIL(ObTenantMdsService::for_each_ls_in_tenant(apply_on_ls_op))) {
+          MDS_LOG(WARN, "failed to do for_each_ls_in_tenant", K(ret));
+          ret = OB_SUCCESS;
+        }
+        if (OB_FAIL(ret)) {
+          MDS_LOG(WARN, "iterate mds node failed", K(ret), K(*this));
         } else {
           scanner_it_ = scanner_.begin();
           start_to_read_ = true;
@@ -250,23 +236,16 @@ int ObAllVirtualMdsNodeStat::get_primary_key_ranges_()
         ObObj tablet_obj_low = (key_range.get_start_key().get_obj_ptr()[0]);
         ObObj tablet_obj_high = (key_range.get_end_key().get_obj_ptr()[0]);
 
-        // Use sys tenant for single-node mode
-        uint64_t tenant_low = 0;
-        uint64_t tenant_high = UINT64_MAX;
         ObTabletID tablet_low = tablet_obj_low.is_min_value() ? ObTabletID(0) : ObTabletID(tablet_obj_low.get_uint64());
         ObTabletID tablet_high = tablet_obj_high.is_max_value() ? ObTabletID(UINT64_MAX) : ObTabletID(tablet_obj_high.get_uint64());
 
-        if (OB_FAIL(tenant_ranges_.push_back(ObTuple<uint64_t, uint64_t>(tenant_low, tenant_high)))) {
-          MDS_LOG(WARN, "fail to push back", KR(ret), K(*this));
-        } else {
-          if (tablet_low == tablet_high) {
-            if (OB_FAIL(tablet_points_.push_back(tablet_low))) {
-              MDS_LOG(WARN, "fail to push back", KR(ret), K(*this));
-            }
-          } else if (OB_SUCCESS != (ret =
-            (tablet_ranges_.push_back(ObTuple<common::ObTabletID, common::ObTabletID>(tablet_low, tablet_high))))) {
+        if (tablet_low == tablet_high) {
+          if (OB_FAIL(tablet_points_.push_back(tablet_low))) {
             MDS_LOG(WARN, "fail to push back", KR(ret), K(*this));
           }
+        } else if (OB_SUCCESS != (ret =
+          (tablet_ranges_.push_back(ObTuple<common::ObTabletID, common::ObTabletID>(tablet_low, tablet_high))))) {
+          MDS_LOG(WARN, "fail to push back", KR(ret), K(*this));
         }
       }
     }

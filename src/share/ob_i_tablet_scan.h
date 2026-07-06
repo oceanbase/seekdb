@@ -18,23 +18,21 @@
 #define OCEANBASE_OB_I_TABLET_SCAN_H_
 
 #include "common/ob_common_types.h"
+#include "lib/literals/ob_literals.h"  // _MB literal, previously hidden behind a removed include chain, make the dependency explicit
+#include "sql/engine/cmd/ob_load_data_parser.h"  // ObExternalFileFormat by-value member real user(pure header is already conf L2)
 #include "common/ob_tablet_id.h"
 #include "common/sql_mode/ob_sql_mode.h"
 #include "lib/container/ob_array_array.h"
 #include "lib/container/ob_se_array.h"
-#include "lib/geo/ob_s2adapter.h"
+#include "share/geo/ob_s2adapter.h"
 #include "share/ob_i_sql_expression.h"
 #include "share/ob_ls_id.h"
 #include "share/schema/ob_schema_getter_guard.h"
-#include "storage/tx/ob_trans_define.h"
-#include "sql/engine/cmd/ob_load_data_parser.h"
-#include "share/diagnosis/ob_sql_plan_monitor_node_list.h"
 namespace oceanbase
 {
 namespace share
 {
 class ObLSID;
-class ObExternalTablePartInfoArray;
 class ObExternalObjectCtx;
 }
 namespace sql
@@ -372,7 +370,6 @@ class ObVTableScanParam
 public:
 
 ObVTableScanParam() :
-      tenant_id_(OB_INVALID_ID),
       index_id_(OB_INVALID_ID),
       timeout_(-1),
       sql_mode_(SMO_DEFAULT),
@@ -397,9 +394,6 @@ ObVTableScanParam() :
       pd_storage_flag_(false),
       row2exprs_projector_(NULL),
       table_scan_opt_(),
-      ext_file_column_exprs_(NULL),
-      ext_column_convert_exprs_(NULL),
-      partition_infos_(NULL),
       external_object_ctx_(NULL),
       schema_guard_(NULL),
       auto_split_filter_type_(OB_INVALID_ID),
@@ -426,7 +420,7 @@ ObVTableScanParam() :
     }
     destroy_schema_guard();
   }
-  ObObjectID tenant_id_;
+  
   // data tablet id
   ObTabletID tablet_id_;
   // log stream id
@@ -479,13 +473,7 @@ ObVTableScanParam() :
   storage::ObRow2ExprsProjector *row2exprs_projector_;
   ObTableScanOption table_scan_opt_;
 
-  // external table
-  const sql::ExprFixedArray *ext_file_column_exprs_;
-  const sql::ExprFixedArray *ext_column_convert_exprs_;
-  sql::ObExternalFileFormat external_file_format_;
-  ObString external_file_location_;
-  ObString external_file_access_info_;
-  const share::ObExternalTablePartInfoArray *partition_infos_;
+  // catalog mock schema objects
   const share::ObExternalObjectCtx *external_object_ctx_;
 
   virtual bool is_valid() const {

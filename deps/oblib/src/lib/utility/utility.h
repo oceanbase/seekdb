@@ -45,7 +45,7 @@ inline int usleep(useconds_t usec) {
 #include "lib/oblog/ob_trace_log.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/allocator/ob_malloc.h"
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 
 #ifdef __APPLE__
 #include <sys/types.h>  // includes BSD type definitions
@@ -1372,8 +1372,6 @@ private:
   int64_t base_;
   int64_t end_;
 };
-
-void get_addr_by_proxy_sessid(const uint64_t session_id, ObAddr &addr);
 
 int ob_atoll(const char *str, int64_t &res);
 int ob_atoull(const char *str, uint64_t &res);

@@ -24,7 +24,7 @@
 #include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_wrap_enum_set.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
-#include "ob_pl_compile.h"
+#include "ob_pl_build.h"
 #include "pl/ob_pl_dependency_util.h"
 #include "pl/ob_pl_package.h"
 #include "pl/parser/parse_stmt_item_type.h"
@@ -1067,7 +1067,7 @@ int ObPLResolver::get_const_number_variable_literal_value(ObRawExpr *expr, int64
 
 
 int ObPLResolver::resolve_sp_composite_type(const ParseNode *sp_data_type_node,
-                                            ObPLCompileUnitAST &func,
+                                            ObPLAstUnit &func,
                                             ObPLDataType &data_type,
                                             ObPLExternTypeInfo *extern_type_info)
 {
@@ -1258,10 +1258,8 @@ int ObPLResolver::resolve_sp_scalar_type(ObIAllocator &allocator,
     }
   } else {
     ObDataType scalar_data_type;
-    omt::ObTenantConfigGuard tcg(
-        TENANT_CONF(session_info.get_effective_tenant_id()));
     bool convert_real_to_decimal =
-        (tcg.is_valid() && tcg->_enable_convert_real_to_decimal);
+        (GCONF._enable_convert_real_to_decimal);
     bool enable_mysql_compatible_dates = false;
     if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(&session_info, false /*is_ddl*/,
                               enable_mysql_compatible_dates))) {
@@ -1272,7 +1270,6 @@ int ObPLResolver::resolve_sp_scalar_type(ObIAllocator &allocator,
                                       false,
                                       true,
                                       session_info.get_session_nls_params(),
-                                      session_info.get_effective_tenant_id(),
                                       false, // TODO
                                       enable_mysql_compatible_dates,
                                       convert_real_to_decimal))) {
@@ -1427,7 +1424,7 @@ int ObPLResolver::fill_record_type(
     ObResolverParams resolver_ctx;                                            \
     ParseNode *select_stmt_node = NULL;                                       \
                                                                               \
-    OZ (ctx.schema_guard_.get_database_schema(view_schema->get_tenant_id(),   \
+    OZ (ctx.schema_guard_.get_database_schema(   \
         view_schema->get_database_id(), db_schema));                          \
     CK (OB_NOT_NULL(db_schema));                                              \
     OZ (select_sql.append_fmt(    \
@@ -1600,13 +1597,11 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &schema_guard,
   CK (access_idents.count() > 0 && access_idents.count() <= 3);
   if (OB_FAIL(ret)) {
   } else if (3 == access_idents.count()) { //db.pkg.type
-    OZ (schema_guard.get_database_id(session_info.get_effective_tenant_id(),
-      access_idents.at(0).access_name_, extern_type_info->type_owner_));
+    OZ (schema_guard.get_database_id(access_idents.at(0).access_name_, extern_type_info->type_owner_));
     OX (extern_type_info->type_subname_ = access_idents.at(1).access_name_);
     OX (extern_type_info->flag_ = ObParamExternType::SP_EXTERN_PKG);
   } else if (2 == access_idents.count()) { // pkg.type or db.type
-    OZ (schema_guard.get_database_id(session_info.get_effective_tenant_id(),
-      access_idents.at(0).access_name_, extern_type_info->type_owner_));
+    OZ (schema_guard.get_database_id(access_idents.at(0).access_name_, extern_type_info->type_owner_));
     if (OB_ERR_BAD_DATABASE == ret || OB_INVALID_ID == extern_type_info->type_owner_) {
       ret = OB_SUCCESS;
       OX (extern_type_info->type_subname_ = access_idents.at(0).access_name_);
@@ -1638,8 +1633,7 @@ int ObPLResolver::resolve_extern_type_info(bool is_row_type,
     if (access_idents.count() <= 2 && access_idents.count() >= 1) {
       if (OB_FAIL(ret)) {
       } else if (2 == access_idents.count()) {
-        OZ (schema_guard.get_database_id(session_info.get_effective_tenant_id(),
-          access_idents.at(0).access_name_, extern_type_info->type_owner_));
+        OZ (schema_guard.get_database_id(access_idents.at(0).access_name_, extern_type_info->type_owner_));
       } else {
         OZ (session_info.get_database_id(extern_type_info->type_owner_));
       }
@@ -1650,8 +1644,7 @@ int ObPLResolver::resolve_extern_type_info(bool is_row_type,
     if (access_idents.count() <= 3 && access_idents.count() >= 2) {
       if (OB_FAIL(ret)) {
       } else if (3 == access_idents.count()) {
-        OZ (schema_guard.get_database_id(session_info.get_effective_tenant_id(),
-          access_idents.at(0).access_name_, extern_type_info->type_owner_));
+        OZ (schema_guard.get_database_id(access_idents.at(0).access_name_, extern_type_info->type_owner_));
       } else {
         OZ (session_info.get_database_id(extern_type_info->type_owner_));
       }
@@ -1685,8 +1678,7 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
       extern_type_info->type_owner_ = access_idxs.at(0).var_index_;
     } else {
       const ObTableSchema *table = NULL;
-      const uint64_t tenant_id = resolve_ctx_.session_info_.get_effective_tenant_id();
-      OZ (guard.get_table_schema(tenant_id, access_idxs.at(0).var_index_, table));
+      OZ (guard.get_table_schema( access_idxs.at(0).var_index_, table));
       CK (OB_NOT_NULL(table));
       if (OB_FAIL(ret)) {
       } else if (ObCharset::case_compat_mode_equal(extern_type_info->type_subname_, table->get_table_name_str())) {
@@ -1713,7 +1705,7 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
       : extern_type_info->type_subname_ = current_block_->get_namespace().get_package_name());
     if (OB_FAIL(ret)) {
     } else if (3 == access_idxs.count()) {
-      if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(access_idxs.at(1).var_index_)) {
+      if (true) {
         extern_type_info->type_owner_ = OB_SYS_DATABASE_ID;
       } else {
         extern_type_info->type_owner_ = access_idxs.at(0).var_index_;
@@ -1721,7 +1713,7 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
       OX (package_id = access_idxs.at(1).var_index_);
       OX (type = access_idxs.at(1).access_type_);
     } else if (2 == access_idxs.count()) {
-      if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(access_idxs.at(0).var_index_)) { // Var in the system package
+      if (true) { // Var in the system package
         extern_type_info->type_owner_ = OB_SYS_DATABASE_ID;
       } else {
         OZ(resolve_ctx_.session_info_.get_database_id(extern_type_info->type_owner_));
@@ -1750,8 +1742,8 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
       extern_type_info->type_owner_ = access_idxs.at(0).var_index_;
     } else {
       const ObTableSchema *table = NULL;
-      const uint64_t tenant_id = resolve_ctx_.session_info_.get_effective_tenant_id();
-      OZ (guard.get_table_schema(tenant_id, access_idxs.at(0).var_index_, table));
+      
+      OZ (guard.get_table_schema( access_idxs.at(0).var_index_, table));
       CK (OB_NOT_NULL(table));
       OX (extern_type_info->type_owner_ = table->get_database_id());
       if (OB_FAIL(ret)) {
@@ -1775,12 +1767,12 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
     } else if (access_idxs.count() > 1) { // db.pkg.type or pkg.type
       extern_type_info->type_subname_ = access_idxs.at(access_idxs.count() - 2).var_name_;
       if (3 == access_idxs.count()) {
-        if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(access_idxs.at(1).var_index_)) {
+        if (true) {
           extern_type_info->type_owner_ = OB_SYS_DATABASE_ID;
         } else {
           extern_type_info->type_owner_ = access_idxs.at(0).var_index_;
         }
-      } else if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(access_idxs.at(0).var_index_)) {
+      } else {
         extern_type_info->type_owner_ = OB_SYS_DATABASE_ID;
       }
     } else if (extract_package_id(access_idxs.at(0).var_index_)
@@ -1788,9 +1780,9 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
       // type (current package type or standard type)
       const ObPackageInfo *package_info = NULL;
       const uint64_t package_id = extract_package_id(access_idxs.at(0).var_index_);
-      const uint64_t tenant_id = get_tenant_id_by_object_id(package_id);
+      
       CK (1 == access_idxs.count());
-      OZ (guard.get_package_info(tenant_id, package_id, package_info));
+      OZ (guard.get_package_info( package_id, package_info));
       CK (OB_NOT_NULL(package_info));
       OX (extern_type_info->type_subname_ = package_info->get_package_name());
       OX (extern_type_info->type_owner_ = package_info->get_database_id());
@@ -1807,12 +1799,12 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
     OX (extern_type_info->type_name_ = access_idxs.at(access_idxs.count() - 1).var_name_);
     if (OB_FAIL(ret)) {
     } else if (2 == access_idxs.count()) {
-      if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(access_idxs.at(1).var_index_)) {
+      if (true) {
         extern_type_info->type_owner_ = OB_SYS_DATABASE_ID;
       } else {
         extern_type_info->type_owner_ = access_idxs.at(0).var_index_;
       }
-    } else if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(access_idxs.at(0).var_index_)) {
+    } else {
       extern_type_info->type_owner_ = OB_SYS_DATABASE_ID;
     }
     OZ (fill_schema_obj_version(guard,
@@ -1838,7 +1830,7 @@ int ObPLResolver::fill_schema_obj_version(ObSchemaGetterGuard &guard,
 #define FILL(class, func, type) \
 do { \
   const class *info = NULL; \
-  OZ (guard.func(tenant_id, obj_id, info)); \
+  OZ (guard.func(obj_id, info)); \
   CK (OB_NOT_NULL(info)); \
   OX (extern_type_info.obj_version_.object_id_ = obj_id); \
   OX (extern_type_info.obj_version_.version_ = info->get_schema_version()); \
@@ -1848,12 +1840,18 @@ do { \
   switch (type) {
     case ObParamExternType::SP_EXTERN_TAB:
     case ObParamExternType::SP_EXTERN_TAB_COL: {
-      const uint64_t tenant_id = resolve_ctx_.session_info_.get_effective_tenant_id();
-      FILL(ObTableSchema, get_table_schema, DEPENDENCY_TABLE);
+      
+      do {        const ObTableSchema *info = NULL;
+        OZ (guard.get_table_schema(obj_id, info));
+        CK (OB_NOT_NULL(info));
+        OX (extern_type_info.obj_version_.object_id_ = obj_id);
+        OX (extern_type_info.obj_version_.version_ = info->get_schema_version());
+        OX (extern_type_info.obj_version_.object_type_ = DEPENDENCY_TABLE);
+      } while (0);
     } break;
     case ObParamExternType::SP_EXTERN_PKG:
     case ObParamExternType::SP_EXTERN_PKG_VAR: {
-      const uint64_t tenant_id = get_tenant_id_by_object_id(obj_id);
+      
       CK (OB_NOT_NULL(current_block_));
       if (OB_SUCC(ret)) {
         if (OB_INVALID_ID == obj_id
@@ -1911,7 +1909,7 @@ bool ObPLResolver::is_data_type_name(const ObString &ident_name)
 }
 
 int ObPLResolver::resolve_sp_row_type(const ParseNode *sp_data_type_node,
-                                      ObPLCompileUnitAST &func,
+                                      ObPLAstUnit &func,
                                       ObPLDataType &pl_type,
                                       ObPLExternTypeInfo *extern_type_info,
                                       bool with_rowid)
@@ -2001,9 +1999,9 @@ int ObPLResolver::resolve_sp_row_type(const ParseNode *sp_data_type_node,
             const ObTableSchema* table_schema = NULL;
             ObRecordType *record_type = NULL;
             ObSEArray<ObDataType, 8> types;
-            const uint64_t tenant_id = session_info.get_effective_tenant_id();
+            
             OZ (session_info.get_database_id(db_id));
-            OZ (schema_guard.get_table_schema(tenant_id, access_idxs.at(idx_cnt - 1).var_index_, table_schema));
+            OZ (schema_guard.get_table_schema( access_idxs.at(idx_cnt - 1).var_index_, table_schema));
             CK (OB_NOT_NULL(table_schema));
             if (OB_FAIL(ret)) {
             } else if (with_rowid) {
@@ -2113,9 +2111,8 @@ int ObPLResolver::resolve_sp_row_type(const ParseNode *sp_data_type_node,
       }
     }
   } else {
-    // dblink not support
-    ret = OB_NOT_IMPLEMENT;
-    LOG_WARN("dblink not support", K(ret));
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected row type parse node", K(ret), "node_type", sp_data_type_node->type_);
   }
   CANCLE_LOG_CHECK_MODE();
   return ret;
@@ -2202,7 +2199,7 @@ int ObPLResolver::adjust_routine_param_type(ObPLDataType &type)
 // whether rowid is actual accessed or not.
 int ObPLResolver::resolve_sp_data_type(const ParseNode *sp_data_type_node,
                                        const ObString &ident_name,
-                                       ObPLCompileUnitAST &func,
+                                       ObPLAstUnit &func,
                                        ObPLDataType &data_type,
                                        ObPLExternTypeInfo *extern_type_info,
                                        bool with_rowid,
@@ -2221,9 +2218,6 @@ int ObPLResolver::resolve_sp_data_type(const ParseNode *sp_data_type_node,
     } else if (T_SP_TYPE == sp_data_type_node->type_
                || T_SP_ROWTYPE == sp_data_type_node->type_) {
       OZ (resolve_sp_row_type(sp_data_type_node, func, data_type, extern_type_info, with_rowid));
-    } else if (T_SP_DBLINK_TYPE == sp_data_type_node->type_) {
-      ret = OB_NOT_IMPLEMENT;
-      LOG_WARN("dblink not support", K(ret));
     } else {
       OX (data_type.set_enum_set_ctx(resolve_ctx_.enum_set_ctx_));
       OZ (resolve_sp_scalar_type(resolve_ctx_.allocator_,
@@ -2274,7 +2268,7 @@ int ObPLResolver::resolve_sp_data_type(const ParseNode *sp_data_type_node,
 int ObPLResolver::resolve_declare_var(const ObStmtNodeTree *parse_tree, ObPLDeclareVarStmt *stmt, ObPLFunctionAST &func)
 {
   int ret = OB_SUCCESS;
-  ObPLCompileUnitAST &unit_ast = static_cast<ObPLCompileUnitAST&>(func);
+  ObPLAstUnit &unit_ast = static_cast<ObPLAstUnit&>(func);
   if (OB_FAIL(check_declare_order(PL_VAR))) {
     LOG_WARN("fail to check decalre order", K(ret));
   } else {
@@ -2286,14 +2280,14 @@ int ObPLResolver::resolve_declare_var(const ObStmtNodeTree *parse_tree, ObPLDecl
 int ObPLResolver::resolve_declare_var(const ObStmtNodeTree *parse_tree, ObPLPackageAST &package_ast)
 {
   int ret = OB_SUCCESS;
-  ObPLCompileUnitAST &unit_ast = static_cast<ObPLCompileUnitAST&>(package_ast);
+  ObPLAstUnit &unit_ast = static_cast<ObPLAstUnit&>(package_ast);
   ret = resolve_declare_var_comm(parse_tree, NULL, unit_ast);
   return ret;
 }
 
 int ObPLResolver::resolve_declare_var_comm(const ObStmtNodeTree *parse_tree,
                                            ObPLDeclareVarStmt *stmt,
-                                           ObPLCompileUnitAST &unit_ast)
+                                           ObPLAstUnit &unit_ast)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(parse_tree));
@@ -3240,7 +3234,6 @@ int ObPLResolver::check_and_record_stmt_type(ObPLFunctionAST &func,
     case stmt::T_HELP:
     case stmt::T_SHOW_RECYCLEBIN:
     case stmt::T_SHOW_PROFILE:
-    case stmt::T_SHOW_TENANT:
     case stmt::T_SHOW_SEQUENCES:
     case stmt::T_SHOW_STATUS:
     case stmt::T_SHOW_CREATE_TENANT:
@@ -3508,7 +3501,6 @@ int ObPLResolver::resolve_static_sql(const ObStmtNodeTree *parse_tree, ObPLSql &
           static_sql.set_sql(prepare_result.route_sql_);
           static_sql.set_for_update(prepare_result.for_update_);
           static_sql.set_hidden_rowid(prepare_result.has_hidden_rowid_);
-          static_sql.set_link_table(prepare_result.has_link_table_);
           static_sql.set_skip_locked(prepare_result.is_skip_locked_);
         }
       }
@@ -3838,13 +3830,12 @@ int ObPLResolver::resolve_interface_pragma(const ObStmtNodeTree *parse_tree, ObP
   CK (OB_NOT_NULL(name_node = parse_tree->children_[0]));
 
   if (OB_SUCC(ret)) {
-    uint64_t pack_tenant_id = (ast.get_id() != OB_INVALID_ID) ? get_tenant_id_by_object_id(ast.get_id()) : resolve_ctx_.session_info_.get_effective_tenant_id();
+    
     uint64_t pack_database_id = (ast.get_database_id() != OB_INVALID_ID) ? ast.get_database_id() : resolve_ctx_.session_info_.get_database_id();
-    if (pack_tenant_id != OB_SYS_TENANT_ID || !is_oceanbase_sys_database_id(pack_database_id)) {
+    if (false || !is_oceanbase_sys_database_id(pack_database_id)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "PRAGMA INTERFACE used by Non-system users");
     LOG_WARN("PRAGMA INTERFACE Only allowed to be used by sys user", K(ret),
-                                                                     K(pack_tenant_id),
                                                                      K(pack_database_id));
     }
   }
@@ -3963,7 +3954,7 @@ int ObPLResolver::resolve_declare_cond(const ObStmtNodeTree *parse_tree,
 
 int ObPLResolver::resolve_declare_cond(const ObStmtNodeTree *parse_tree,
                                        ObPLDeclareCondStmt *stmt,
-                                       ObPLCompileUnitAST &func)
+                                       ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   UNUSED(func);
@@ -4381,15 +4372,13 @@ int ObPLResolver::resolve_call(const ObStmtNodeTree *parse_tree, ObPLCallStmt *s
       ObString package_name;
       ObString sp_name;
       ObArray<ObRawExpr *> expr_params;
-      ObString dblink_name;
       ObSEArray<ObSchemaObjVersion, 1> deps;
       if (T_SP_ACCESS_NAME != name_node->type_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Invalid procedure name node", K(name_node->type_), K(ret));
       } else if (OB_FAIL(ObResolverUtils::resolve_sp_access_name(schema_checker,
-                            resolve_ctx_.session_info_.get_effective_tenant_id(),
                             resolve_ctx_.session_info_.get_database_name(),
-                            *name_node, db_name, package_name, sp_name, dblink_name, &deps))) {
+                            *name_node, db_name, package_name, sp_name, &deps))) {
         LOG_WARN("resolve sp name failed", K(ret));
       }
       OZ (ObPLDependencyUtil::add_dependency_objects(&func.get_dependency_table(), deps));
@@ -4452,7 +4441,7 @@ int ObPLResolver::resolve_cparams_expr(const ParseNode *params_node,
   for (int64_t i = 0; OB_SUCC(ret) && i < params_node->num_child_; ++i) {
     ObRawExpr *expr = NULL;
     CK (params_node->children_[i]);
-    OZ (resolve_expr(params_node->children_[i], static_cast<ObPLCompileUnitAST&>(func), expr,
+    OZ (resolve_expr(params_node->children_[i], static_cast<ObPLAstUnit&>(func), expr,
                      combine_line_and_col(params_node->children_[i]->stmt_loc_), true, NULL));
     CK (OB_NOT_NULL(expr));
     OZ (exprs.push_back(expr));
@@ -5137,7 +5126,7 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
                                       ObPLBlockNS &sql_ns,
                                       ObPLDataType &cursor_type,
                                       const ObIArray<int64_t> &formal_params,
-                                      ObPLCompileUnitAST &func,
+                                      ObPLAstUnit &func,
                                       int64_t &cursor_index) // CURSOR index in the symbol table
 {
   int ret = OB_SUCCESS;
@@ -5386,7 +5375,7 @@ int ObPLResolver::resolve_declare_cursor(const ObStmtNodeTree *parse_tree, ObPLP
 }
 
 int ObPLResolver::resolve_declare_cursor(
-  const ObStmtNodeTree *parse_tree, ObPLDeclareCursorStmt *stmt, ObPLCompileUnitAST &func)
+  const ObStmtNodeTree *parse_tree, ObPLDeclareCursorStmt *stmt, ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(parse_tree) || OB_ISNULL(current_block_)) {
@@ -5501,7 +5490,7 @@ int ObPLResolver::resolve_declare_cursor(
 
 int ObPLResolver::resolve_cursor_common(const ObStmtNodeTree *name_node,
                                         const ObStmtNodeTree *type_node,
-                                        ObPLCompileUnitAST &func,
+                                        ObPLAstUnit &func,
                                         ObString &name,
                                         ObPLDataType &return_type)
 {
@@ -5521,7 +5510,7 @@ int ObPLResolver::resolve_cursor_common(const ObStmtNodeTree *name_node,
 }
 
 int ObPLResolver::resolve_cursor_formal_param(
-  const ObStmtNodeTree *param_list, ObPLCompileUnitAST &func, ObIArray<int64_t> &params)
+  const ObStmtNodeTree *param_list, ObPLAstUnit &func, ObIArray<int64_t> &params)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(current_block_) || OB_ISNULL(param_list)) {
@@ -6372,7 +6361,7 @@ int ObPLResolver::build_raw_expr(const ParseNode &node,
 }
 
 int ObPLResolver::build_raw_expr(const ParseNode *node,
-                                 ObPLCompileUnitAST &unit_ast,
+                                 ObPLAstUnit &unit_ast,
                                  ObRawExpr *&expr,
                                  const ObPLDataType *expected_type)
 {
@@ -6732,7 +6721,7 @@ int ObPLResolver::check_access_external_state(ObRawExpr *&expr,
 }
 
 int ObPLResolver::analyze_expr_type(ObRawExpr *&expr,
-                                    ObPLCompileUnitAST &unit_ast)
+                                    ObPLAstUnit &unit_ast)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(expr));
@@ -6772,7 +6761,7 @@ int ObPLResolver::set_udf_expr_line_number(ObRawExpr *expr, uint64_t line_number
 }
 
 int ObPLResolver::resolve_expr(const ParseNode *node,
-                               ObPLCompileUnitAST &unit_ast,
+                               ObPLAstUnit &unit_ast,
                                ObRawExpr *&expr,
                                uint64_t line_number,
                                bool need_add,
@@ -7050,7 +7039,7 @@ int ObPLResolver::check_anonymous_array_compatible (const ObPLINS &ns,
 int ObPLResolver::transform_subquery_expr(const ParseNode *node,
                                           ObRawExpr *&expr,
                                           const ObPLDataType *expected_type,
-                                          ObPLCompileUnitAST &func)
+                                          ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(expr));
@@ -7316,7 +7305,7 @@ int ObPLResolver::replace_to_const_expr_if_need(ObRawExpr *&expr)
   return ret;
 }
 
-int ObPLResolver::resolve_columns(ObRawExpr *&expr, ObArray<ObQualifiedName> &columns, ObPLCompileUnitAST &unit_ast)
+int ObPLResolver::resolve_columns(ObRawExpr *&expr, ObArray<ObQualifiedName> &columns, ObPLAstUnit &unit_ast)
 {
   int ret = OB_SUCCESS;
   ObArray<ObRawExpr*> real_exprs;
@@ -7372,7 +7361,7 @@ int ObPLResolver::resolve_raw_expr(const ParseNode &node,
     const ParamStore *p_param_list = (params.param_list_ != NULL && params.param_list_->count() > 0)
         ? (params.param_list_) : &param_list;
       ObPLStmtBlock *null_block = NULL;
-      ObPLPackageGuard dummy_pkg_guard(params.session_info_->get_effective_tenant_id());
+      ObPLPackageGuard dummy_pkg_guard{};
       ObPLPackageGuard *package_guard = (NULL != params.package_guard_ ? params.package_guard_ : &dummy_pkg_guard);
       ObPLResolver resolver(*(params.allocator_),
                             *(params.session_info_),
@@ -7397,7 +7386,7 @@ int ObPLResolver::resolve_raw_expr(const ParseNode &node,
         }
       }
 
-      OZ (ObPLCompiler::init_anonymous_ast(func_ast,
+      OZ (ObPLBuilder::init_anonymous_ast(func_ast,
                                             *(params.allocator_),
                                             *(params.session_info_),
                                             *(params.sql_proxy_),
@@ -7491,7 +7480,7 @@ int ObPLResolver::resolve_raw_expr(const ParseNode &node,
                                     is_prepare_protocol));
 
         for(int64_t i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
-          OZ (resolver.resolve_columns(expr, columns, static_cast<ObPLCompileUnitAST &>(func_ast)));
+          OZ (resolver.resolve_columns(expr, columns, static_cast<ObPLAstUnit &>(func_ast)));
         }
         // The call stack for this interface:
         // resolve_into_variable_node -> resolve_external_expr -> resolve_raw_expr
@@ -7587,8 +7576,7 @@ int ObPLResolver::resolve_inner_call(
             if (access_idxs.at(access_idxs.count() - 1).access_type_ == ObObjAccessIdx::IS_DB_NS
                 || access_idxs.at(access_idxs.count() - 1).access_type_ == ObObjAccessIdx::IS_PKG_NS
                 || access_idxs.at(access_idxs.count() - 1).access_type_ == ObObjAccessIdx::IS_LABEL_NS
-                || access_idxs.at(access_idxs.count() - 1).access_type_ == ObObjAccessIdx::IS_UDT_NS
-                || access_idxs.at(access_idxs.count() - 1).access_type_ == ObObjAccessIdx::IS_DBLINK_PKG_NS) {
+                || access_idxs.at(access_idxs.count() - 1).access_type_ == ObObjAccessIdx::IS_UDT_NS) {
               is_routine = true;
             }
           } else {
@@ -7626,9 +7614,8 @@ int ObPLResolver::resolve_inner_call(
         }
       }
     } else {
-      // PLFunction with dblink call statement cannot be added to plan cache
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("dblink not support", K(ret));
+      LOG_WARN("unexpected access parse tree", K(ret), "node_type", parse_tree->type_);
     }
 
     if (OB_SUCC(ret)) {
@@ -7783,7 +7770,7 @@ int ObPLResolver::resolve_obj_access_node(ParseNode *node,
                                           ObArray<pl::ObObjAccessIdx> &access_idxs)
 {
   int ret = OB_SUCCESS;
-  pl::ObPLPackageGuard dummy_pkg_guard(session_info.get_effective_tenant_id());
+  pl::ObPLPackageGuard dummy_pkg_guard{};
   pl::ObPLResolver pl_resolver(allocator,
                                session_info,
                                schema_guard,
@@ -7829,15 +7816,14 @@ int ObPLResolver::resolve_obj_access_node(const ParseNode &node,
                                           ObPLPackageGuard *package_guard)
 {
   int ret = OB_SUCCESS;
-  pl::ObPLPackageGuard dummy_pkg_guard(session_info.get_effective_tenant_id());
+  pl::ObPLPackageGuard dummy_pkg_guard{};
   if (NULL == package_guard) {
     package_guard = &dummy_pkg_guard;
     OZ (package_guard->init());
   }
   if (OB_SUCC(ret)) {
     ObArenaAllocator allocator(ObModIds::OB_MODULE_PAGE_ALLOCATOR,
-                              OB_MALLOC_NORMAL_BLOCK_SIZE,
-                              MTL_ID());
+                              OB_MALLOC_NORMAL_BLOCK_SIZE);
     // fake resolve_ctx, we only use session_info, schema_guard
     ObPLResolveCtx resolve_ctx(
       allocator, session_info, schema_guard, *package_guard, *(GCTX.sql_proxy_), false);
@@ -7946,7 +7932,7 @@ int ObPLResolver::resolve_obj_access_idents(const ParseNode &node,
 
 int ObPLResolver::resolve_obj_access_idents(const ParseNode &node,
                                             ObIArray<ObObjAccessIdent> &obj_access_idents,
-                                            ObPLCompileUnitAST &func)
+                                            ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   CK (OB_LIKELY(T_SP_OBJ_ACCESS_REF == node.type_));
@@ -8082,7 +8068,7 @@ int ObPLResolver::resolve_obj_access_idents(const ParseNode &node,
 int ObPLResolver::resolve_qualified_identifier(ObQualifiedName &q_name,
                                                ObIArray<ObQualifiedName> &columns,
                                                ObIArray<ObRawExpr*> &real_exprs,
-                                               ObPLCompileUnitAST &unit_ast,
+                                               ObPLAstUnit &unit_ast,
                                                ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
@@ -8102,7 +8088,7 @@ int ObPLResolver::resolve_qualified_identifier(ObQualifiedName &q_name,
 }
 
 int ObPLResolver::resolve_sqlcode_or_sqlerrm(ObQualifiedName &q_name,
-                                             ObPLCompileUnitAST &unit_ast,
+                                             ObPLAstUnit &unit_ast,
                                              ObRawExpr *&expr)
 {
   // This point is reached if it is definitely a parameterless SQLCODE or SQLERRM, parameterized SQLERRM has already been handled by is_sysfunc
@@ -8370,7 +8356,7 @@ int ObPLResolver::resolve_associative_array_construct(const ObQualifiedName &q_n
 }
 
 int ObPLResolver::resolve_udf_without_brackets(
-  ObQualifiedName &q_name, ObPLCompileUnitAST &unit_ast, ObRawExpr *&expr)
+  ObQualifiedName &q_name, ObPLAstUnit &unit_ast, ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
   ObUDFRawExpr *udf_expr = NULL;
@@ -8456,7 +8442,7 @@ int ObPLResolver::replace_udf_param_expr(
 int ObPLResolver::resolve_qualified_name(ObQualifiedName &q_name,
                                          ObIArray<ObQualifiedName> &columns,
                                          ObIArray<ObRawExpr*> &real_exprs,
-                                         ObPLCompileUnitAST &unit_ast,
+                                         ObPLAstUnit &unit_ast,
                                          ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
@@ -8500,7 +8486,7 @@ int ObPLResolver::resolve_qualified_name(ObQualifiedName &q_name,
     } else {
       if (OB_SUCC(ret)) {
         if (q_name.is_pl_udf()) {
-          if (q_name.dblink_name_.empty()) {
+          {
             ObSEArray<ObObjAccessIdx, 4> access_idxs;
             OZ (resolve_name(q_name, current_block_->get_namespace(), expr_factory_, &resolve_ctx_.session_info_, access_idxs, unit_ast));
             if (OB_FAIL(ret)) {
@@ -8514,9 +8500,6 @@ int ObPLResolver::resolve_qualified_name(ObQualifiedName &q_name,
                                       current_block_->get_namespace(),
                                       expr));
             }
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("dblink name is not empty", K(ret));
           }
           CK (OB_NOT_NULL(expr));
         } else { // if it is udf return access, need to be parsed as var
@@ -8575,7 +8558,7 @@ int ObPLResolver::resolve_qualified_name(ObQualifiedName &q_name,
   return ret;
 }
 
-int ObPLResolver::resolve_var(ObQualifiedName &q_name, ObPLCompileUnitAST &func, ObRawExpr *&expr,
+int ObPLResolver::resolve_var(ObQualifiedName &q_name, ObPLAstUnit &func, ObRawExpr *&expr,
                               bool for_write)
 {
   int ret = OB_SUCCESS;
@@ -8592,7 +8575,7 @@ int ObPLResolver::resolve_var(ObQualifiedName &q_name, ObPLCompileUnitAST &func,
 
 
 int ObPLResolver::resolve_udf_info(
-  ObUDFInfo &udf_info, ObIArray<ObObjAccessIdx> &access_idxs, ObPLCompileUnitAST &func,
+  ObUDFInfo &udf_info, ObIArray<ObObjAccessIdx> &access_idxs, ObPLAstUnit &func,
   const ObIRoutineInfo *routine_info)
 {
   int ret = OB_SUCCESS;
@@ -8602,7 +8585,6 @@ int ObPLResolver::resolve_udf_info(
   ObSchemaChecker schema_checker;
   ObProcType routine_type = STANDALONE_FUNCTION;
   ObSEArray<ObRawExpr*, 4> expr_params;
-  ObString dblink_name;
 
   CK (OB_NOT_NULL(udf_info.ref_expr_));
   CK (OB_NOT_NULL(current_block_));
@@ -8690,7 +8672,6 @@ int ObPLResolver::resolve_udf_info(
         share::schema::ObSchemaType schema_type = OB_MAX_SCHEMA;
         schema_type = package_routine_info->is_udt_routine() ? UDT_SCHEMA : PACKAGE_SCHEMA;
         OZ (resolve_ctx_.schema_guard_.get_schema_version(schema_type,
-                                                          package_routine_info->get_tenant_id(),
                                                           package_routine_info->get_pkg_id(),
                                                           cur_pkg_version));
       }
@@ -8744,8 +8725,7 @@ int ObPLResolver::resolve_udf_info(
       OX (udf_info.is_udt_udf_ = schema_routine_info->is_udt_routine());
 
       if (OB_SUCC(ret) && routine_id == schema_routine_info->get_subprogram_id() && !udf_info.is_udt_udf_) {
-        OZ (resolve_ctx_.schema_guard_.get_package_info(
-            schema_routine_info->get_tenant_id(), schema_routine_info->get_package_id(), package_info));
+        OZ (resolve_ctx_.schema_guard_.get_package_info( schema_routine_info->get_package_id(), package_info));
         CK (OB_NOT_NULL(package_info));
         OX (schema_version = package_info->get_schema_version());
       }
@@ -8903,9 +8883,8 @@ int ObPLResolver::check_local_variable_read_only(
 #define GET_TRIGGER_INFO  \
   ObSchemaChecker schema_checker; \
   const ObTriggerInfo *trg_info = NULL; \
-  const uint64_t tenant_id = resolve_ctx_.session_info_.get_effective_tenant_id();  \
   OZ (schema_checker.init(resolve_ctx_.schema_guard_, resolve_ctx_.session_info_.get_server_sid())); \
-  OZ (schema_checker.get_trigger_info(tenant_id, ns.get_db_name(), ns.get_package_name(), trg_info)); \
+  OZ (schema_checker.get_trigger_info( ns.get_db_name(), ns.get_package_name(), trg_info)); \
   CK (OB_NOT_NULL(trg_info));
   
     // check type udf member function attr readable. etc: a := 5; when a is type object attr
@@ -9068,8 +9047,8 @@ int ObPLResolver::check_package_accessible(
       && package_id != caller->get_namespace().get_package_id()) {
     const ObPackageInfo *pkg_info = NULL;
     AccessorItem caller_item;
-    const uint64_t tenant_id = get_tenant_id_by_object_id(package_id);
-    OZ (guard.get_package_info(tenant_id, package_id, pkg_info));
+    
+    OZ (guard.get_package_info( package_id, pkg_info));
     CK (OB_NOT_NULL(pkg_info));
     if (OB_SUCC(ret) && pkg_info->has_accessible_by_clause()) {
       OZ (get_caller_accessor_item(caller, caller_item));
@@ -9709,7 +9688,7 @@ int ObPLResolver::check_variable_accessible(ObRawExpr *expr, bool for_write)
 
 int ObPLResolver::resolve_var(ObQualifiedName &q_name, ObPLBlockNS &ns,
                               ObRawExprFactory &expr_factory, const ObSQLSessionInfo *session_info,
-                              ObPLCompileUnitAST &func, ObRawExpr *&expr, bool for_write)
+                              ObPLAstUnit &func, ObRawExpr *&expr, bool for_write)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObObjAccessIdx, 8> access_idxs;
@@ -9966,7 +9945,7 @@ int ObPLResolver::resolve_name(ObQualifiedName &q_name,
                                ObRawExprFactory &expr_factory,
                                const ObSQLSessionInfo *session_info,
                                ObIArray<ObObjAccessIdx> &access_idxs,
-                               ObPLCompileUnitAST &func)
+                               ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(q_name.access_idents_.empty())) {
@@ -10118,8 +10097,7 @@ int ObPLResolver::get_names_by_access_ident(ObObjAccessIdent &access_ident,
     // do nothing ...
   } else if (ObObjAccessIdx::IS_PKG_NS == access_idxs.at(cnt - 1).access_type_
              || ObObjAccessIdx::IS_UDT_NS == access_idxs.at(cnt - 1).access_type_
-             || ObObjAccessIdx::IS_LABEL_NS == access_idxs.at(cnt - 1).access_type_
-             || ObObjAccessIdx::IS_DBLINK_PKG_NS == access_idxs.at(cnt-1).access_type_) {
+             || ObObjAccessIdx::IS_LABEL_NS == access_idxs.at(cnt - 1).access_type_) {
     package_name = access_idxs.at(cnt - 1).var_name_;
     if (cnt >= 2) {
       OV (2 == cnt, OB_ERR_UNEXPECTED, K(cnt));
@@ -10211,7 +10189,7 @@ ObPLMockSelfArg::~ObPLMockSelfArg()
 int ObPLResolver::resolve_routine(ObObjAccessIdent &access_ident,
                                   const ObPLBlockNS &ns,
                                   ObIArray<ObObjAccessIdx> &access_idxs,
-                                  ObPLCompileUnitAST &func)
+                                  ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
 
@@ -10219,10 +10197,6 @@ int ObPLResolver::resolve_routine(ObObjAccessIdent &access_ident,
   const ObIRoutineInfo *routine_info = NULL;
   ObSEArray<ObRawExpr*, 4> expr_params;
   ObProcType routine_type = access_ident.is_pl_udf() ? STANDALONE_FUNCTION : STANDALONE_PROCEDURE;
-  bool is_dblink_pkg_ns = false;
-  if (access_idxs.count() > 0) {
-    is_dblink_pkg_ns = (ObObjAccessIdx::IS_DBLINK_PKG_NS == access_idxs.at(access_idxs.count()-1).access_type_);
-  }
   OZ (get_names_by_access_ident(
     access_ident, access_idxs, database_name, package_name, routine_name));
 
@@ -10252,18 +10226,13 @@ int ObPLResolver::resolve_routine(ObObjAccessIdent &access_ident,
     {
       ObPLMockSelfArg self(access_idxs, expr_params, expr_factory_, resolve_ctx_.session_info_);
       OZ (self.mock());
-      if (!is_dblink_pkg_ns) {
-        OZ (ns.resolve_routine(resolve_ctx_,
-                              database_name,
-                              package_name,
-                              routine_name,
-                              expr_params,
-                              routine_type,
-                              routine_info));
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("not support dblink ", K(ret));
-      }
+      OZ (ns.resolve_routine(resolve_ctx_,
+                            database_name,
+                            package_name,
+                            routine_name,
+                            expr_params,
+                            routine_type,
+                            routine_info));
     }
 
     if (OB_FAIL(ret)
@@ -10306,7 +10275,7 @@ int ObPLResolver::resolve_routine(ObObjAccessIdent &access_ident,
 int ObPLResolver::resolve_function(ObObjAccessIdent &access_ident,
                                    ObIArray<ObObjAccessIdx> &access_idxs,
                                    const ObIRoutineInfo *routine_info,
-                                   ObPLCompileUnitAST &func)
+                                   ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
 
@@ -10391,7 +10360,7 @@ int ObPLResolver::resolve_construct(ObObjAccessIdent &access_ident,
                                     const ObPLBlockNS &ns,
                                     ObIArray<ObObjAccessIdx> &access_idxs,
                                     uint64_t user_type_id,
-                                    ObPLCompileUnitAST &func)
+                                    ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   ObQualifiedName q_name;
@@ -10479,7 +10448,7 @@ int ObPLResolver::build_self_access_idx(ObObjAccessIdx &self_access_idx, const O
 int ObPLResolver::resolve_self_element_access(ObObjAccessIdent &access_ident,
                                               const ObPLBlockNS &ns,
                                               ObIArray<ObObjAccessIdx> &access_idxs,
-                                              ObPLCompileUnitAST &func)
+                                              ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   const ObPLBlockNS *udt_routine_ns = ns.get_udt_routine_ns();
@@ -10583,7 +10552,7 @@ int ObPLResolver::build_collection_index_expr(ObObjAccessIdent &access_ident,
                                               const ObPLBlockNS &ns,
                                               ObIArray<ObObjAccessIdx> &access_idxs,
                                               const ObUserDefinedType &user_type,
-                                              ObPLCompileUnitAST &func)
+                                              ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   if (!access_ident.params_.empty()
@@ -10635,7 +10604,7 @@ int ObPLResolver::build_collection_index_expr(ObObjAccessIdent &access_ident,
 int ObPLResolver::resolve_composite_access(ObObjAccessIdent &access_ident,
                                            ObIArray<ObObjAccessIdx> &access_idxs,
                                            const ObPLBlockNS &ns,
-                                           ObPLCompileUnitAST &func)
+                                           ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
 
@@ -10749,7 +10718,7 @@ int ObPLResolver::resolve_access_ident(ObObjAccessIdent &access_ident, // The id
                                        ObRawExprFactory &expr_factory,
                                        const ObSQLSessionInfo *session_info,
                                        ObIArray<ObObjAccessIdx> &access_idxs, // already resolved ident information, as the parent node of the current ident
-                                       ObPLCompileUnitAST &func,
+                                       ObPLAstUnit &func,
                                        bool is_routine,
                                        bool is_resolve_rowtype)
 {
@@ -10772,7 +10741,6 @@ int ObPLResolver::resolve_access_ident(ObObjAccessIdent &access_ident, // The id
       || ObObjAccessIdx::IS_TABLE_NS == access_idxs.at(cnt - 1).access_type_
       || ObObjAccessIdx::IS_LABEL_NS == access_idxs.at(cnt - 1).access_type_
       || ObObjAccessIdx::IS_UDT_NS == access_idxs.at(cnt - 1).access_type_
-      || ObObjAccessIdx::IS_DBLINK_PKG_NS == access_idxs.at(cnt-1).access_type_
       || is_routine) {
     bool label_symbol = false;
     if (cnt != 0) {
@@ -10848,8 +10816,7 @@ int ObPLResolver::resolve_access_ident(ObObjAccessIdent &access_ident, // The id
                || (ObPLExternalNS::TABLE_NS == type && is_routine)
                || (ObPLExternalNS::LABEL_NS == type && is_routine)
                || (ObPLExternalNS::DB_NS == type && is_routine)
-               || (ObPLExternalNS::PKG_NS == type && is_routine)
-               || (ObPLExternalNS::DBLINK_PKG_NS == type && is_routine)) {
+               || (ObPLExternalNS::PKG_NS == type && is_routine)) {
       if (is_routine) {
         if (ObPLExternalNS::UDT_MEMBER_ROUTINE == type && access_idxs.empty()) {
           ObObjAccessIdx self_access_idx;
@@ -10915,7 +10882,7 @@ int ObPLResolver::resolve_access_ident(ObObjAccessIdent &access_ident, // The id
 int ObPLResolver::build_collection_attribute_access(ObRawExprFactory &expr_factory,
                                                     const ObSQLSessionInfo *session_info,
                                                     const ObPLBlockNS &ns,
-                                                    ObPLCompileUnitAST &func,
+                                                    ObPLAstUnit &func,
                                                     const ObUserDefinedType &user_type,
                                                     ObIArray<ObObjAccessIdx> &access_idxs,
                                                     int64_t attr_index,
@@ -10929,7 +10896,7 @@ int ObPLResolver::build_collection_attribute_access(ObRawExprFactory &expr_facto
 
 int ObPLResolver::build_collection_access(ObObjAccessIdent &access_ident,
                                         ObIArray<ObObjAccessIdx> &access_idxs,
-                                        ObPLCompileUnitAST &func,
+                                        ObPLAstUnit &func,
                                         int64_t start_level)
 {
   int ret = OB_SUCCESS;
@@ -10939,7 +10906,7 @@ int ObPLResolver::build_collection_access(ObObjAccessIdent &access_ident,
 
 int ObPLResolver::build_return_access(ObObjAccessIdent &access_ident,
                                           ObIArray<ObObjAccessIdx> &access_idxs,
-                                          ObPLCompileUnitAST &func)
+                                          ObPLAstUnit &func)
 {
   return build_collection_access(access_ident, access_idxs, func, 1/*start level = 1*/);
 }
@@ -11047,7 +11014,7 @@ static ObPredefinedException PREDEFINED_EXCEPTIONS[] =
 int ObPLResolver::resolve_condition(const ObStmtNodeTree *parse_tree,
                                     const ObPLBlockNS &ns,
                                     const ObPLConditionValue **value,
-                                    ObPLCompileUnitAST &func)
+                                    ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(parse_tree));
@@ -11057,17 +11024,14 @@ int ObPLResolver::resolve_condition(const ObStmtNodeTree *parse_tree,
     ObString db_name;
     ObString package_name;
     ObString condition_name;
-    ObString dblink_name;
     ObSEArray<ObSchemaObjVersion, 1> deps;
     OZ (schema_checker.init(resolve_ctx_.schema_guard_, resolve_ctx_.session_info_.get_server_sid()));
     OZ (ObResolverUtils::resolve_sp_access_name(schema_checker,
-                                               resolve_ctx_.session_info_.get_effective_tenant_id(),
                                                resolve_ctx_.session_info_.get_database_name(),
                                                *parse_tree,
                                                db_name,
                                                package_name,
                                                condition_name,
-                                               dblink_name,
                                                &deps));
     OZ (ObPLDependencyUtil::add_dependency_objects(&func.get_dependency_table(), deps));
     if (OB_FAIL(ret)) {
@@ -11090,19 +11054,18 @@ int ObPLResolver::resolve_condition(const ObStmtNodeTree *parse_tree,
       // package name is not null and not equal to current ns, search global
       uint64_t database_id = OB_INVALID_ID;
       int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
-      uint64_t tenant_id = resolve_ctx_.session_info_.get_effective_tenant_id();
+      
       const ObPackageInfo *package_info = NULL;
       ObPLPackageManager &package_manager =
         resolve_ctx_.session_info_.get_pl_engine()->get_package_manager();
       db_name = db_name.empty() ? resolve_ctx_.session_info_.get_database_name() : db_name;
       const ObPLCondition *condition = NULL;
-      OZ (resolve_ctx_.schema_guard_.get_database_id(tenant_id, db_name, database_id));
-      OZ (resolve_ctx_.schema_guard_.get_package_info(
-          tenant_id, database_id, package_name, share::schema::PACKAGE_TYPE, compatible_mode, package_info));
+      OZ (resolve_ctx_.schema_guard_.get_database_id(db_name, database_id));
+      OZ (resolve_ctx_.schema_guard_.get_package_info( database_id, package_name, share::schema::PACKAGE_TYPE, compatible_mode, package_info));
       if (OB_SUCC(ret)
           && OB_ISNULL(package_info)
           && 0 == db_name.case_compare(OB_SYS_DATABASE_NAME)) {
-        OZ (resolve_ctx_.schema_guard_.get_package_info(OB_SYS_TENANT_ID,
+        OZ (resolve_ctx_.schema_guard_.get_package_info(
                                                 OB_SYS_DATABASE_ID,
                                                 package_name, share::schema::PACKAGE_TYPE,
                                                 compatible_mode, package_info));
@@ -11195,7 +11158,7 @@ int ObPLResolver::resolve_condition(const ObString &name, const ObPLBlockNS &ns,
 
 int ObPLResolver::resolve_handler_condition(const ObStmtNodeTree *parse_tree,
                                             ObPLConditionValue &condition,
-                                            ObPLCompileUnitAST &func)
+                                            ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(parse_tree)) {
@@ -11391,7 +11354,7 @@ int ObPLResolver::build_seq_value_expr(ObRawExpr *&expr,
 
 
 int ObPLResolver::resolve_sequence_object(const ObQualifiedName &q_name,
-                                          ObPLCompileUnitAST &unit_ast,
+                                          ObPLAstUnit &unit_ast,
                                           ObRawExpr *&real_ref_expr)
 {
   int ret = OB_SUCCESS;
@@ -11403,7 +11366,6 @@ int ObPLResolver::resolve_sequence_object(const ObQualifiedName &q_name,
       LOG_WARN("init schemachecker failed.");
     } else {
       // check if sequence is created. will also check synonym
-      uint64_t dblink_id = OB_INVALID_ID;
       if (OB_FAIL(ob_sequence_ns_checker_.check_sequence_namespace(q_name,
                                                                   &resolve_ctx_.session_info_,
                                                                   &sc,
@@ -11411,12 +11373,11 @@ int ObPLResolver::resolve_sequence_object(const ObQualifiedName &q_name,
         LOG_WARN_IGNORE_COL_NOTFOUND(ret, "check basic column namespace failed", K(ret), K(q_name));
       } else if(OB_FAIL(build_seq_value_expr(real_ref_expr, q_name, seq_id))) {
         LOG_WARN("failed to resolve seq.", K(ret));
-      } else if (OB_INVALID_ID == dblink_id) {
+      } else {
         int64_t schema_version = OB_INVALID_VERSION;
         ObSchemaObjVersion obj_version;
-        const uint64_t tenant_id = resolve_ctx_.session_info_.get_effective_tenant_id();
+        
         OZ (resolve_ctx_.schema_guard_.get_schema_version(SEQUENCE_SCHEMA,
-                                                          tenant_id,
                                                           seq_id,
                                                           schema_version));
         CK (schema_version != OB_INVALID_VERSION);
@@ -11424,9 +11385,6 @@ int ObPLResolver::resolve_sequence_object(const ObQualifiedName &q_name,
         OX (obj_version.object_type_ = DEPENDENCY_SEQUENCE);
         OX (obj_version.version_ = schema_version);
         OZ (ObPLDependencyUtil::add_dependency_object_impl(unit_ast.get_dependency_table(), obj_version));
-      } else {
-        ObSequenceRawExpr *seq_expr = static_cast<ObSequenceRawExpr*>(real_ref_expr);
-        unit_ast.set_can_cached(false);
       }
       if (OB_SUCC(ret)) {
         unit_ast.set_has_sequence();
@@ -11590,7 +11548,7 @@ int ObPLResolver::add_external_cursor(ObPLBlockNS &ns,
                                       const ObPLBlockNS *external_ns,
                                       const ObPLCursor &cursor,
                                       int64_t &index,
-                                      ObPLCompileUnitAST &func)
+                                      ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   OX (index = OB_INVALID_INDEX);
@@ -11752,7 +11710,7 @@ int ObPLResolver::resolve_obj_access_ref_for_cursor_node(
 }
 
 int ObPLResolver::resolve_cursor(
-  const ObStmtNodeTree *parse_tree, const ObPLBlockNS &ns, int64_t &index, ObPLCompileUnitAST &func)
+  const ObStmtNodeTree *parse_tree, const ObPLBlockNS &ns, int64_t &index, ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(parse_tree));
@@ -11841,7 +11799,7 @@ int ObPLResolver::resolve_cursor(
 }
 
 int ObPLResolver::resolve_package_cursor(
-  uint64_t package_id, const ObString &cursor_name, int64_t &index, ObPLCompileUnitAST &func)
+  uint64_t package_id, const ObString &cursor_name, int64_t &index, ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   int64_t idx = OB_INVALID_INDEX;
@@ -11855,8 +11813,7 @@ int ObPLResolver::resolve_package_cursor(
     LOG_USER_ERROR(OB_ERR_SP_CURSOR_MISMATCH, cursor_name.length(), cursor_name.ptr());
   }
   
-  OZ (resolve_ctx_.schema_guard_.get_package_info(
-    get_tenant_id_by_object_id(package_id), package_id, package_info));
+  OZ (resolve_ctx_.schema_guard_.get_package_info( package_id, package_info));
   CK (OB_NOT_NULL(package_info));
   OZ (ObPLDependencyUtil::add_dependency_object_impl(func.get_dependency_table(),
                                                      ObSchemaObjVersion(package_info->get_package_id(),
@@ -11929,7 +11886,7 @@ int ObPLResolver::resolve_questionmark_cursor(
 
 int ObPLResolver::resolve_local_cursor(
   const ObString &name, const ObPLBlockNS &ns,
-  int64_t &cursor, ObPLCompileUnitAST &func, bool check_mode, bool for_external_cursor)
+  int64_t &cursor, ObPLAstUnit &func, bool check_mode, bool for_external_cursor)
 {
   int ret = OB_SUCCESS;
   cursor = OB_INVALID_INDEX;
@@ -12340,7 +12297,7 @@ int ObPLResolver::check_param_default_expr_legal(ObRawExpr *expr, bool is_subpro
 }
 
 int ObPLResolver::resolve_routine_decl_param_list(const ParseNode *param_list,
-                                                  ObPLCompileUnitAST &unit_ast,
+                                                  ObPLAstUnit &unit_ast,
                                                   ObPLRoutineInfo &routine_info)
 {
   int ret = OB_SUCCESS;
@@ -12609,7 +12566,7 @@ int ObPLResolver::check_params_legal_in_body_routine(ObPLFunctionAST &routine_as
 }
 
 int ObPLResolver::resolve_routine_decl(const ObStmtNodeTree *parse_tree,
-                                       ObPLCompileUnitAST &unit_ast,
+                                       ObPLAstUnit &unit_ast,
                                        ObPLRoutineInfo *&routine_info,
                                        bool is_udt_routine,
                                        bool resolve_routine_def)
@@ -12940,7 +12897,7 @@ int ObPLResolver::resolve_routine_block(const ObStmtNodeTree *parse_tree,
 }
 
 int ObPLResolver::resolve_routine_def(const ObStmtNodeTree *parse_tree,
-                                      ObPLCompileUnitAST &unit_ast,
+                                      ObPLAstUnit &unit_ast,
                                       bool is_udt_routine)
 {
   int ret = OB_SUCCESS;
@@ -13121,7 +13078,7 @@ int64_t ObPLResolver::combine_line_and_col(const ObStmtLoc &loc)
 }
 
 int ObPLResolver::replace_map_or_order_expr(
-  uint64_t udt_id, ObRawExpr *&expr, ObPLCompileUnitAST &func)
+  uint64_t udt_id, ObRawExpr *&expr, ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   ObSEArray<const ObRoutineInfo *, 2> routine_infos;
@@ -13129,8 +13086,7 @@ int ObPLResolver::replace_map_or_order_expr(
   ObRawExpr *left = expr->get_param_expr(0);
   ObRawExpr *right = expr->get_param_expr(1);
   const ObUserDefinedType *user_type = NULL;
-  OZ (resolve_ctx_.schema_guard_.get_routine_infos_in_udt(
-                  get_tenant_id_by_object_id(udt_id), udt_id, routine_infos));
+  OZ (resolve_ctx_.schema_guard_.get_routine_infos_in_udt(udt_id, routine_infos));
   OZ (resolve_ctx_.get_user_type(udt_id, user_type));
   CK (OB_NOT_NULL(user_type));
   for (int64_t i = 0; OB_SUCC(ret) && i < routine_infos.count(); ++i) {
@@ -13201,7 +13157,7 @@ int ObPLResolver::replace_map_or_order_expr(
 }
 
 
-int ObPLResolver::replace_object_compare_expr(ObRawExpr *&expr, ObPLCompileUnitAST &unit_ast)
+int ObPLResolver::replace_object_compare_expr(ObRawExpr *&expr, ObPLAstUnit &unit_ast)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(expr));
@@ -13308,8 +13264,8 @@ int ObPLResolveCtx::get_user_type(uint64_t type_id, const ObUserDefinedType *&us
     // do nothing ...
   } else {
     const ObTableSchema* table_schema = NULL;
-    const uint64_t tenant_id = session_info_.get_effective_tenant_id();
-    OZ (schema_guard_.get_table_schema(tenant_id, type_id, table_schema), type_id);
+    
+    OZ (schema_guard_.get_table_schema( type_id, table_schema), type_id);
     if (OB_NOT_NULL(table_schema)) {
       ObRecordType* record_type = NULL;
       OZ (ObPLResolver::build_record_type_by_schema(*this, table_schema, record_type), type_id);
@@ -13339,20 +13295,20 @@ int ObPLResolver::check_var_type(ObString &name, uint64_t db_id, ObSchemaType &s
                                  const ObSimpleTableSchemaV2 *&schema)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = resolve_ctx_.session_info_.get_effective_tenant_id();
+  
   ObSchemaGetterGuard &schema_guard = resolve_ctx_.schema_guard_;
   bool is_exist = false;
   uint64_t seq_id = OB_INVALID_ID;
   bool is_sys_generated = false;
-  if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id, db_id, name, false, schema))) {
-    LOG_WARN("failed to get table schema", K(tenant_id), K(db_id), K(name), K(ret));
+  if (OB_FAIL(schema_guard.get_simple_table_schema( db_id, name, false, schema))) {
+    LOG_WARN("failed to get table schema", K(db_id), K(name), K(ret));
   } else if (OB_NOT_NULL(schema)) {
     // return when find a table schema
     schema_type = TABLE_SCHEMA;
-  } else if (OB_FAIL(schema_guard.check_sequence_exist_with_name(tenant_id, db_id, name,
+  } else if (OB_FAIL(schema_guard.check_sequence_exist_with_name(db_id, name,
                                                                  is_exist, seq_id,
                                                                  is_sys_generated))) {
-    LOG_WARN("fail to check sequence exist", K(tenant_id), K(db_id), K(name), K(ret));
+    LOG_WARN("fail to check sequence exist", K(db_id), K(name), K(ret));
   } else if (is_exist) {
     // return when find a seq id
     schema_type = SEQUENCE_SCHEMA;
@@ -13369,7 +13325,7 @@ int ObPLResolver::check_var_type(ObString &name1, ObString &name2, uint64_t db_i
   OZ (check_var_type(name1, db_id, schema_type, table_schema), name1, db_id);
   if (TABLE_SCHEMA == schema_type) {
     CK (OB_NOT_NULL(table_schema));
-    OZ (schema_guard.get_table_schema(table_schema->get_tenant_id(),
+    OZ (schema_guard.get_table_schema(
                                       table_schema->get_table_id(),
                                       t_schema));
     if (OB_SUCC(ret)) {
@@ -13473,7 +13429,7 @@ int ObPLResolver::fast_check_status(uint64_t n) const
 
 ObPLSwitchDatabaseGuard::ObPLSwitchDatabaseGuard(sql::ObSQLSessionInfo &session_info,
                                                  share::schema::ObSchemaGetterGuard &schema_guard,
-                                                 ObPLCompileUnitAST &func,
+                                                 ObPLAstUnit &func,
                                                  int &ret_val,
                                                  bool with_rowid)
   : ret_(ret_val),
@@ -13487,13 +13443,13 @@ ObPLSwitchDatabaseGuard::ObPLSwitchDatabaseGuard(sql::ObSQLSessionInfo &session_
     ObPLPackageAST &pkg_ast = static_cast<ObPLPackageAST &>(func);
     if (ObTriggerInfo::is_trigger_package_id(pkg_ast.get_id())
         || ObTriggerInfo::is_trigger_body_package_id(pkg_ast.get_id())) {
-      uint64_t tenant_id = session_info_.get_effective_tenant_id();
+      
       uint64_t trg_id = ObTriggerInfo::get_package_trigger_id(pkg_ast.get_id());
       const ObTriggerInfo *trg_info = NULL;
       const ObTableSchema *table_schema = NULL;
-      OZ (schema_guard.get_trigger_info(tenant_id, trg_id, trg_info));
+      OZ (schema_guard.get_trigger_info( trg_id, trg_info));
       OV (OB_NOT_NULL(trg_info), OB_ERR_UNEXPECTED, K(trg_id));
-      OZ (schema_guard.get_table_schema(tenant_id, trg_info->get_base_object_id(), table_schema));
+      OZ (schema_guard.get_table_schema( trg_info->get_base_object_id(), table_schema));
       OV (OB_NOT_NULL(table_schema), OB_ERR_UNEXPECTED, KPC(trg_info));
       OX (database_id_ = table_schema->get_database_id());
     }
@@ -13501,7 +13457,7 @@ ObPLSwitchDatabaseGuard::ObPLSwitchDatabaseGuard(sql::ObSQLSessionInfo &session_
   if (OB_SUCC(ret) 
       && session_info_.get_database_id() != database_id_
       && OB_INVALID_ID != database_id_) {
-    OZ (schema_guard.get_database_schema(session_info_.get_effective_tenant_id(),
+    OZ (schema_guard.get_database_schema(
                                          database_id_,
                                          db_schema));
     OV (OB_NOT_NULL(db_schema), OB_ERR_UNEXPECTED, K(database_id_));
@@ -13531,4 +13487,3 @@ ObPLSwitchDatabaseGuard::~ObPLSwitchDatabaseGuard()
 
 }
 }
-

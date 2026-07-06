@@ -21,10 +21,11 @@
 #include "lib/ob_errno.h"
 #include "lib/thread/thread.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "lib/alloc/alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 #include "lib/lock/ob_spin_rwlock.h"
 
 extern int64_t global_thread_stack_size;
+extern const int64_t THREAD_STACK_RESERVED_SIZE;
 namespace oceanbase {
 namespace lib {
 class ObPThread;
@@ -84,8 +85,6 @@ public:
     IRunWrapper *run_wrapper = run_wrapper_;
     return OB_NOT_NULL(run_wrapper) ? run_wrapper : get_default_run_wrapper();
   }
-
-
   struct NumaInfo {
   public:
     NumaInfo(): numa_node_(OB_NUMA_SHARED_INDEX), num_nodes_(UINT32_MAX), interleave_(false) {}
@@ -105,7 +104,7 @@ public:
   virtual void wait();
   void destroy();
   virtual void run(int64_t idx);
-   void set_numa_info(uint64_t tenant_id, bool enable_numa_aware, int32_t group_index);
+   void set_numa_info(bool enable_numa_aware, int32_t group_index);
 
 public:
   template <class Functor>

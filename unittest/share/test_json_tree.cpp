@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 #define private public
-#include "lib/json_type/ob_json_bin.h"
-#include "lib/json_type/ob_json_parse.h"
+#include "common/json_type/ob_json_bin.h"
+#include "common/json_type/ob_json_parse.h"
 #undef private
 
 using namespace std;

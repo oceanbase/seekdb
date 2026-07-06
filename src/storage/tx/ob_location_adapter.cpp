@@ -77,7 +77,6 @@ void ObLocationAdapter::statistics()
 }
 
 int ObLocationAdapter::nonblock_get_leader(const int64_t cluster_id,
-                                           const int64_t tenant_id,
                                            const ObLSID &ls_id,
                                            common::ObAddr &leader)
 {
@@ -106,14 +105,13 @@ int ObLocationAdapter::nonblock_get_leader(const int64_t cluster_id,
     TRANS_LOG(WARN, "invalid argument", K(ls_id));
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ret = get_leader_(cluster_id, tenant_id, ls_id, leader, is_sync);
+    ret = get_leader_(cluster_id, ls_id, leader, is_sync);
   }
 
   return ret;
 }
 
 int ObLocationAdapter::get_leader_(const int64_t cluster_id,
-                                   const int64_t tenant_id,
                                    const ObLSID &ls_id,
                                    common::ObAddr &leader,
                                    const bool is_sync)
@@ -128,17 +126,17 @@ int ObLocationAdapter::get_leader_(const int64_t cluster_id,
     ret = OB_INVALID_ARGUMENT;
   } else if (is_sync) {
     bool force_renew = false;
-    if (OB_FAIL(location_service_->get_leader(cluster_id, tenant_id, ls_id, force_renew, leader))) {
+    if (OB_FAIL(location_service_->get_leader(cluster_id, ls_id, force_renew, leader))) {
       TRANS_LOG(WARN, "get leader from locatition cache error", K(ret), K(ls_id));
       force_renew = true;
-      if (OB_SUCCESS != (ret = location_service_->get_leader(cluster_id, tenant_id, ls_id, force_renew, leader))) {
+      if (OB_SUCCESS != (ret = location_service_->get_leader(cluster_id, ls_id, force_renew, leader))) {
         TRANS_LOG(WARN, "get leader from locatition cache error again",
             KR(ret), K(ls_id), K(force_renew));
       }
       renew_access_++;
     }
   } else {
-    if (OB_FAIL(location_service_->nonblock_get_leader(cluster_id, tenant_id, ls_id, leader))) {
+    if (OB_FAIL(location_service_->nonblock_get_leader(cluster_id, ls_id, leader))) {
       TRANS_LOG(DEBUG, "nonblock get leader from locatition cache error", K(ret), K(ls_id));
     }
   }
@@ -159,7 +157,6 @@ int ObLocationAdapter::get_leader_(const int64_t cluster_id,
 }
 
 int ObLocationAdapter::nonblock_get(const int64_t cluster_id,
-                                    const int64_t tenant_id,
                                     const ObLSID &ls_id,
                                     ObLSLocation &location)
 {
@@ -182,11 +179,11 @@ int ObLocationAdapter::nonblock_get(const int64_t cluster_id,
   if (!is_inited_) {
     TRANS_LOG(WARN, "ob location adapter not inited");
     ret = OB_NOT_INIT;
-  } else if (!(is_valid_cluster_id(cluster_id) && is_valid_tenant_id(tenant_id) && ls_id.is_valid())) {
+  } else if (!(is_valid_cluster_id(cluster_id) && ls_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(cluster_id), K(tenant_id), K(ls_id));
-  } else if (OB_FAIL(location_service_->nonblock_get(cluster_id, tenant_id, ls_id, location))) {
-    TRANS_LOG(WARN, "nonblock get failed", KR(ret), K(cluster_id), K(tenant_id), K(ls_id));
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(cluster_id), K(ls_id));
+  } else if (OB_FAIL(location_service_->nonblock_get(cluster_id, ls_id, location))) {
+    TRANS_LOG(WARN, "nonblock get failed", KR(ret), K(cluster_id), K(ls_id));
   }
   return ret;
 }

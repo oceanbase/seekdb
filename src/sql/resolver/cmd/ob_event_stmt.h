@@ -36,7 +36,6 @@ public:
     SET_FALSE
   };
   ObEventInfo() :
-    tenant_id_(common::OB_INVALID_ID),
     user_id_(common::OB_INVALID_ID),
     database_id_(common::OB_INVALID_ID),
     start_time_(common::OB_INVALID_TIMESTAMP),
@@ -53,7 +52,7 @@ public:
     event_comment_(),
     event_rename_() {}
 
-  inline void set_tenant_id(const uint64_t id) { tenant_id_ = id; }
+  
   inline void set_database_id(const uint64_t id) { database_id_ = id; }
   inline void set_user_id(const uint64_t id) { user_id_ = id; }
   inline void set_event_definer(const char *event_definer) {  event_definer_ = event_definer; }
@@ -71,7 +70,7 @@ public:
   inline void set_event_database(const common::ObString &event_database) {  event_database_ = event_database; }
   inline void set_if_exist_or_if_not_exist(bool exist) { if_exist_or_if_not_exist_ = exist; }
   inline void set_exec_env(const common::ObString &exec_env) {  exec_env_ = exec_env; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline uint64_t get_user_id() const { return user_id_; }
   inline const common::ObString &get_event_definer() const { return event_definer_; }
@@ -89,8 +88,7 @@ public:
   inline const common::ObString &get_event_database() const { return event_database_; }
   inline const common::ObString &get_exec_env() const { return exec_env_; }
 
-  TO_STRING_KV(K(tenant_id_),
-               K(user_id_),
+  TO_STRING_KV(K(user_id_),
                K(database_id_),
                K(start_time_),
                K(end_time_),
@@ -108,7 +106,6 @@ public:
 
 private:
   // data members
-  uint64_t tenant_id_;
   uint64_t user_id_;
   uint64_t database_id_;
   int64_t start_time_;

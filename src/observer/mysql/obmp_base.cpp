@@ -44,7 +44,7 @@ namespace observer
 {
 
 ObMPBase::ObMPBase(const ObGlobalContext &gctx)
-    : gctx_(gctx), process_timestamp_(0), proxy_version_(0)
+    : gctx_(gctx), process_timestamp_(0)
 {
 }
 
@@ -262,11 +262,9 @@ int ObMPBase::create_session(ObSMConnection *conn, ObSQLSessionInfo *&sess_info)
     LOG_ERROR("session manager is null", K(ret));
   } else {
     if (OB_FAIL(gctx_.session_mgr_->create_session(conn, sess_info))) {
-      LOG_WARN("create session fail", "sessid", conn->sessid_,
-                "proxy_sessid", conn->proxy_sessid_, K(ret));
+      LOG_WARN("create session fail", "sessid", conn->sessid_, K(ret));
     } else {
-      LOG_DEBUG("create session successfully", "sessid", conn->sessid_,
-               "proxy_sessid", conn->proxy_sessid_);
+      LOG_DEBUG("create session successfully", "sessid", conn->sessid_);
       conn->is_sess_alloc_ = true;
       sess_info->set_user_session();
       sess_info->set_shadow(false);
@@ -293,9 +291,8 @@ int ObMPBase::free_session()
     LOG_ERROR("session manager is null", K(ret));
   } else {
     ObFreeSessionCtx ctx;
-    ctx.tenant_id_ = conn->tenant_id_;
+    
     ctx.sessid_ = conn->sessid_;
-    ctx.proxy_sessid_ = conn->proxy_sessid_;
     ctx.has_inc_active_num_ = conn->has_inc_active_num_;
     if (OB_FAIL(gctx_.session_mgr_->free_session(ctx))) {
       LOG_WARN("fail to free session", K(ctx), K(ret));
@@ -337,16 +334,11 @@ int ObMPBase::init_process_var(sql::ObSqlCtx &ctx,
     // construct sql context
     ctx.multi_stmt_item_ = multi_stmt_item;
     ctx.session_info_ = &session;
-    session.set_rpc_tenant_id(THIS_WORKER.get_rpc_tenant());
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
 
-    if (0 == multi_stmt_item.get_seq_num()) {
-      // The first sql
-      ctx.can_reroute_sql_ = (pkt.can_reroute_pkt() && get_conn()->is_support_proxy_reroute());
-    }
     ctx.is_protocol_weak_read_ = false; // never use weak read in lite-mode
     ctx.set_enable_strict_defensive_check(GCONF.enable_strict_defensive_check());
-    LOG_DEBUG("protocol flag info", K(ctx.can_reroute_sql_), K(ctx.is_protocol_weak_read_),
+    LOG_DEBUG("protocol flag info", K(ctx.is_protocol_weak_read_),
         K(ctx.get_enable_strict_defensive_check()));
   }
   return ret;
@@ -425,18 +417,13 @@ void ObMPBase::set_request_expect_group_id(sql::ObSQLSessionInfo *session)
 }
 
 // force refresh schema if local schema version < last schema version
-int ObMPBase::check_and_refresh_schema(uint64_t login_tenant_id,
-                                       uint64_t effective_tenant_id,
-                                       ObSQLSessionInfo *session_info)
+int ObMPBase::check_and_refresh_schema(ObSQLSessionInfo *session_info)
 {
   int ret = OB_SUCCESS;
   int64_t local_version = 0;
   int64_t last_version = 0;
 
-  if (login_tenant_id != effective_tenant_id) {
-    // do nothing
-    // 
-  } else if (OB_ISNULL(gctx_.schema_service_)) {
+  if (OB_ISNULL(gctx_.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("null schema service", K(ret), K(gctx_));
   } else {
@@ -452,14 +439,14 @@ int ObMPBase::check_and_refresh_schema(uint64_t login_tenant_id,
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(effective_tenant_id, local_version))) {
+      if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(local_version))) {
         LOG_WARN("fail to get tenant refreshed schema version", K(ret));
       } else if (OB_FAIL(session_info->get_ob_last_schema_version(last_version))) {
         LOG_WARN("failed to get_sys_variable", K(OB_SV_LAST_SCHEMA_VERSION));
       } else if (local_version >= last_version) {
         // skip
-      } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(effective_tenant_id, last_version))) {
-        LOG_WARN("failed to refresh schema", K(ret), K(effective_tenant_id), K(last_version));
+      } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(last_version))) {
+        LOG_WARN("failed to refresh schema", K(ret), K(last_version));
       }
       if (need_revert_session && OB_LIKELY(NULL != session_info)) {
         revert_session(session_info);
@@ -544,7 +531,7 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
 
     if (OB_SUCC(ret)) {
       const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(&session);
-      ObSMRow sm_row(obmysql::BINARY, tmp_row, dtc_params, session, fields, schema_guard, session.get_effective_tenant_id());
+      ObSMRow sm_row(obmysql::BINARY, tmp_row, dtc_params, session, fields, schema_guard);
       sm_row.set_packed(is_packed);
       obmysql::OMPKRow rp(sm_row);
       rp.set_is_packed(is_packed);
@@ -595,7 +582,7 @@ int ObMPBase::process_kill_client_session(sql::ObSQLSessionInfo &session, bool i
   } else if (OB_UNLIKELY(session.is_mark_killed())) {
     ret = OB_ERR_KILL_CLIENT_SESSION;
     LOG_WARN("client session need be killed", K(session.get_session_state()),
-            K(session.get_server_sid()), "proxy_sessid", session.get_proxy_sessid(),
+            K(session.get_server_sid()),
             K(session.get_client_sid()), K(ret));
   } else if (is_connect) {
     if (OB_UNLIKELY(OB_HASH_NOT_EXIST != (gctx_.session_mgr_->get_kill_client_sess_map().
@@ -603,12 +590,12 @@ int ObMPBase::process_kill_client_session(sql::ObSQLSessionInfo &session, bool i
       if (session.get_client_create_time() == create_time) {
         ret = OB_ERR_KILL_CLIENT_SESSION;
         LOG_WARN("client session need be killed", K(session.get_session_state()),
-                K(session.get_server_sid()), "proxy_sessid", session.get_proxy_sessid(),
+                K(session.get_server_sid()),
                 K(session.get_client_sid()), K(ret),K(create_time));
       } else {
         LOG_DEBUG("client session is created later", K(create_time),
                 K(session.get_client_create_time()),
-                K(session.get_server_sid()), "proxy_sessid", session.get_proxy_sessid(),
+                K(session.get_server_sid()),
                 K(session.get_client_sid()));
       }
     }
@@ -648,7 +635,7 @@ int ObMPBase::load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("null conn", K(ret));
   } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(
-                                  session->get_effective_tenant_id(), schema_guard))) {
+                                  schema_guard))) {
     OB_LOG(WARN,"fail get schema guard", K(ret));
   } else {
     SSL *ssl_st = SQL_REQ_OP.get_sql_ssl_st(req_);
@@ -674,11 +661,11 @@ int ObMPBase::load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session
       session->set_user_priv_set(session_priv.user_priv_set_);
       session->set_db_priv_set(session_priv.db_priv_set_);
       session->set_enable_role_array(enable_role_id_array);
-      if (OB_FAIL(session->set_tenant(login_info.tenant_name_, session_priv.tenant_id_))) {
+      if (OB_FAIL(session->set_tenant(login_info.tenant_name_))) {
         OB_LOG(WARN, "fail to set tenant", "tenant name", login_info.tenant_name_, K(ret));
       } else if (OB_FAIL(session->set_real_client_ip_and_port(login_info.client_ip_, session->get_client_addr_port()))) {
           LOG_WARN("failed to set_real_client_ip", K(ret));
-      } else if (OB_FAIL(schema_guard.get_sys_variable_schema(session_priv.tenant_id_, sys_variable_schema))) {
+      } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
         LOG_WARN("get sys variable schema failed", K(ret));
       } else if (OB_ISNULL(sys_variable_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -688,8 +675,7 @@ int ObMPBase::load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session
       } else if (OB_FAIL(session->update_database_variables(&schema_guard))) {
         OB_LOG(WARN, "failed to update database variables", K(ret));
       } else if (!session->get_database_name().empty() &&
-                  OB_FAIL(schema_guard.get_database_id(session->get_effective_tenant_id(),
-                                                      session->get_database_name(),
+                  OB_FAIL(schema_guard.get_database_id(session->get_database_name(),
                                                       db_id))) {
         OB_LOG(WARN, "failed to get database id", K(ret));
       } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {

@@ -16,7 +16,7 @@
 #ifndef OB_SHARE_TRUNCATE_INFO_TRUNCATE_EXPR_UTIL_H_
 #define OB_SHARE_TRUNCATE_INFO_TRUNCATE_EXPR_UTIL_H_
 #include "share/schema/ob_schema_struct.h"
-#include "src/share/ob_rpc_struct.h"
+#include "share/ob_rpc_struct.h"
 namespace oceanbase
 {
 namespace share

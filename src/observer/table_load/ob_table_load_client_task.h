@@ -21,7 +21,7 @@
 #include "observer/table_load/ob_table_load_instance.h"
 #include "observer/table_load/ob_table_load_struct.h"
 #include "share/table/ob_table_load_define.h"
-#include "share/table/ob_table_load_row_array.h"
+#include "observer/table_load/ob_table_load_row_array.h"
 #include "sql/session/ob_sql_session_mgr.h"
 #include "storage/direct_load/ob_direct_load_struct.h"
 
@@ -57,7 +57,7 @@ public:
 
   DEFINE_VAR_GETTER_AND_SETTER(ObAddr, client_addr);
   DEFINE_VAR_GETTER_AND_SETTER(uint64_t, task_id);
-  DEFINE_VAR_GETTER_AND_SETTER(uint64_t, tenant_id);
+  
   DEFINE_VAR_GETTER_AND_SETTER(uint64_t, user_id);
   DEFINE_VAR_GETTER_AND_SETTER(uint64_t, database_id);
   DEFINE_STR_GETTER_AND_SETTER(ObString, table_name);
@@ -75,7 +75,6 @@ public:
 
   TO_STRING_KV(K_(client_addr),
                K_(task_id),
-               K_(tenant_id),
                K_(user_id),
                K_(database_id),
                K_(table_name),
@@ -96,7 +95,6 @@ private:
   ObArenaAllocator allocator_;
   int64_t task_id_;
   ObAddr client_addr_;
-  uint64_t tenant_id_;
   uint64_t user_id_;
   uint64_t database_id_;
   ObString table_name_;

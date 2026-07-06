@@ -18,6 +18,7 @@
 
 
 #include "ob_tablet_table_updater.h"
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind the server_struct/tenant_base include chain, make the dependency explicit
 #include "share/tablet/ob_tablet_table_operator.h"  // for ObTabletOperator
 #include "observer/ob_service.h"                    // for is_mini_mode
 #include "share/ob_tablet_replica_checksum_operator.h" // for ObTabletReplicaChecksumItem
@@ -207,15 +208,13 @@ int ObTabletTableUpdater::init()
   } else if (OB_FAIL(update_queue_.init(this,
                                         update_task_thread_cnt,
                                         update_queue_size,
-                                        "TbltTblUp",
-                                        MTL_ID()))) {
+                                        "TbltTblUp"))) {
     LOG_WARN("init tablet table updater queue failed", KR(ret),
              "thread_count", update_task_thread_cnt,
              "queue_size", update_queue_size);
   } else {
     is_inited_ = true;
     is_stop_ = false;
-    tenant_id_ = MTL_ID();
   }
   if (OB_SUCC(ret)) {
     LOG_INFO("init a ObTabletTableUpdater success", K(update_task_thread_cnt));
@@ -246,7 +245,6 @@ void ObTabletTableUpdater::destroy()
   wait();
   is_inited_ = false;
   is_stop_ = true;
-  tenant_id_ = OB_INVALID_TENANT_ID;
 }
 
 int64_t ObTabletTableUpdater::cal_thread_count_()
@@ -260,7 +258,7 @@ int64_t ObTabletTableUpdater::cal_thread_count_()
     if (NULL == omt) {
       tmp_ret = OB_INVALID_ARGUMENT;
       LOG_WARN_RET(tmp_ret, "invalid argument", K(tmp_ret), KP(omt));
-    } else if (OB_TMP_FAIL(omt->get_tenant_cpu(tenant_id_, min_cpu, max_cpu))) {
+    } else if (OB_TMP_FAIL(omt->get_tenant_cpu(min_cpu, max_cpu))) {
       LOG_WARN_RET(tmp_ret, "fail to get tenant cpu", K(tmp_ret), K(min_cpu), K(max_cpu));
     } else {
       thread_cnt = std::max(MIN_UPDATE_TASK_THREAD_CNT, 
@@ -387,24 +385,18 @@ int ObTabletTableUpdater::reput_to_queue_(
   return ret;
 }
 
-int ObTabletTableUpdater::check_tenant_status_(
-    const uint64_t tenant_id,
-    bool &tenant_dropped,
-    bool &schema_not_ready)
+int ObTabletTableUpdater::check_tenant_status_(bool &schema_not_ready)
 {
   int ret = OB_SUCCESS;
   schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
   schema::ObSchemaGetterGuard guard;
-  tenant_dropped = false;
   schema_not_ready = false;
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service is null", KR(ret));
-  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(OB_SYS_TENANT_ID, guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(guard.check_if_tenant_has_been_dropped(tenant_id, tenant_dropped))) {
-    LOG_WARN("fail to check if tenant has been dropped", KR(ret), K(tenant_id));
-  } else if (!schema_service->is_tenant_full_schema(tenant_id)) {
+  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
+  } else if (!schema_service->is_tenant_full_schema()) {
     // need wait schema refresh
     schema_not_ready = true;
   }
@@ -560,8 +552,7 @@ int ObTabletTableUpdater::generate_tasks_(
     } else if (FALSE_IT(task->check_task_status())) {
     } else if (FALSE_IT(replica.reset())) {
     } else if (FALSE_IT(checksum_item.reset())) {
-    } else if (OB_FAIL(GCTX.ob_service_->fill_tablet_report_info(tenant_id_,
-                                                                 task->get_ls_id(),
+    } else if (OB_FAIL(GCTX.ob_service_->fill_tablet_report_info(task->get_ls_id(),
                                                                  task->get_tablet_id(),
                                                                  replica,
                                                                  checksum_item))) {
@@ -586,8 +577,7 @@ int ObTabletTableUpdater::generate_tasks_(
 
       if (OB_FAIL(ret) || !is_remove_task) {
         // do nothing
-      } else if (OB_FAIL(replica.init(tenant_id_,
-                                      task->get_tablet_id(),
+      } else if (OB_FAIL(replica.init(task->get_tablet_id(),
                                       task->get_ls_id(),
                                       GCONF.self_addr_,
                                       1/*snapshot_version*/,
@@ -635,9 +625,8 @@ int ObTabletTableUpdater::batch_process_tasks(
   UNUSED(stopped);
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  bool tenant_dropped = false;
   bool schema_not_ready = false;
-  const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id_);
+  
   const int64_t start_time = ObTimeUtility::current_time();
   ObArray<ObTabletReplica> update_tablet_replicas;
   ObArray<ObTabletReplica> remove_tablet_replicas;
@@ -661,19 +650,14 @@ int ObTabletTableUpdater::batch_process_tasks(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid batch_tasks", KR(ret), "task count", batch_tasks.count());
   } else {
-    (void)check_tenant_status_(meta_tenant_id, tenant_dropped, schema_not_ready);
+    (void)check_tenant_status_(schema_not_ready);
   }
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (tenant_dropped) {
-    if (REACH_TIME_INTERVAL(10_s)) { // 10s
-      FLOG_INFO("REPORT: tasks can't be processed because it's superior tenant has been dropped",
-          KR(ret), K(meta_tenant_id), K(batch_tasks));
-    }
   } else if (schema_not_ready) { // need wait schema refresh
     ret = OB_NEED_WAIT;
     if (REACH_TIME_INTERVAL(1_s)) { // 1s
-      LOG_WARN("tenant schema is not ready, need wait", KR(ret), K(meta_tenant_id), K(batch_tasks));
+      LOG_WARN("tenant schema is not ready, need wait", KR(ret), K(batch_tasks));
     }
     (void) throttle_(ret, ObTimeUtility::current_time() - start_time);
     if (OB_FAIL(reput_to_queue_(batch_tasks))) {
@@ -763,11 +747,11 @@ int ObTabletTableUpdater::do_batch_remove_(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->begin_transaction())) {
-      LOG_WARN("fail to start transaction", KR(ret), K_(tenant_id));
-    } else if (OB_FAIL(GCTX.tablet_operator_->batch_remove(guard.get_connection(), tenant_id_, replicas))) {
+      LOG_WARN("fail to start transaction", KR(ret));
+    } else if (OB_FAIL(GCTX.tablet_operator_->batch_remove(guard.get_connection(), replicas))) {
       LOG_WARN("do tablet table remove failed, try to reput to queue", KR(ret),
                "escape time", ObTimeUtility::current_time() - start_time);
-    } else if (OB_FAIL(ObTabletReplicaChecksumOperator::batch_remove_with_trans(guard.get_connection(), tenant_id_, replicas))) {
+    } else if (OB_FAIL(ObTabletReplicaChecksumOperator::batch_remove_with_trans(guard.get_connection(), replicas))) {
       LOG_WARN("do tablet table checksum remove failed, try to reput to queue", KR(ret),
                "escape time", ObTimeUtility::current_time() - start_time);
     }
@@ -833,7 +817,7 @@ int ObTabletTableUpdater::do_batch_update_(
     }
 #endif
     common::ObMySQLTransaction trans;
-    const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id_);
+    
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
       ret = OB_NOT_INIT;
@@ -845,11 +829,11 @@ int ObTabletTableUpdater::do_batch_update_(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to acquire connection", K(ret));
       } else if (OB_FAIL(guard->begin_transaction())) {
-        LOG_WARN("fail to start transaction", KR(ret), K_(tenant_id));
-      } else if (OB_FAIL(GCTX.tablet_operator_->batch_update(guard.get_connection(), tenant_id_, replicas))) {
+        LOG_WARN("fail to start transaction", KR(ret));
+      } else if (OB_FAIL(GCTX.tablet_operator_->batch_update(guard.get_connection(), replicas))) {
         LOG_WARN("do tablet table update failed, try to reput to queue", KR(ret),
               "escape time", ObTimeUtility::current_time() - start_time);
-      } else if (OB_FAIL(ObTabletReplicaChecksumOperator::batch_update_with_trans(guard.get_connection(), tenant_id_, checksums))) {
+      } else if (OB_FAIL(ObTabletReplicaChecksumOperator::batch_update_with_trans(guard.get_connection(), checksums))) {
         LOG_WARN("do tablet table checksum update failed, try to reput to queue", KR(ret),
              "escape time", ObTimeUtility::current_time() - start_time);
       }

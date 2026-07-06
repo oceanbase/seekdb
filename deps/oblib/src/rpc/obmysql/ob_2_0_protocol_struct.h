@@ -32,7 +32,6 @@ union Ob20ProtocolFlags
 
   bool is_extra_info_exist() const { return 1 == st_flags_.OB_EXTRA_INFO_EXIST; }
   bool is_last_packet() const { return 1 == st_flags_.OB_IS_LAST_PACKET; }
-  bool is_proxy_reroute() const { return 1 == st_flags_.OB_IS_PROXY_REROUTE; }
   bool is_new_extra_info() const { return 1 == st_flags_.OB_IS_NEW_EXTRA_INFO; }
   bool is_weak_read() const { return 1 == st_flags_.OB_IS_WEAK_READ; }
   bool txn_free_route() const { return 1 == st_flags_.OB_TXN_FREE_ROUTE; }

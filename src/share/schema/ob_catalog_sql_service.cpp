@@ -19,7 +19,7 @@
 #include "lib/oblog/ob_log.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_sql_string.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "ob_routine_info.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
@@ -60,7 +60,7 @@ int ObCatalogSqlService::apply_new_schema(const ObCatalogSchema &schema,
   } else {
     ObSchemaOperation operation;
 
-    operation.tenant_id_ = schema.get_tenant_id();
+    
     operation.catalog_id_ = schema.get_catalog_id();
     operation.op_type_ = ddl_type;
     operation.schema_version_ = schema.get_schema_version();
@@ -79,10 +79,10 @@ int ObCatalogSqlService::gen_sql(ObSqlString &sql,
                                  const ObCatalogSchema &schema)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(
-                       exec_tenant_id, schema.get_catalog_id()), "catalog_id", "%lu");
+                       schema.get_catalog_id()), "catalog_id", "%lu");
   SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, schema.get_catalog_name_str().ptr(),
                                   schema.get_catalog_name_str().length(), "catalog_name");
   SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, schema.get_catalog_properties_str().ptr(),
@@ -99,8 +99,8 @@ int ObCatalogSqlService::add_schema(ObISQLClient &sql_client,
   int64_t affected_rows = 0;
   const char *tname[] = {OB_ALL_CATALOG_TNAME, OB_ALL_CATALOG_HISTORY_TNAME};
   enum {THE_SYS_TABLE_IDX = 0, THE_HISTORY_TABLE_IDX = 1};
-  uint64_t tenant_id = schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   if (OB_UNLIKELY(!schema.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid input argument", K(ret), K(schema));
@@ -121,7 +121,7 @@ int ObCatalogSqlService::add_schema(ObISQLClient &sql_client,
                                  static_cast<int32_t>(values.length()),
                                  values.ptr()))) {
         LOG_WARN("append sql failed, ", K(ret));
-      } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+      } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
         LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
@@ -142,8 +142,8 @@ int ObCatalogSqlService::alter_schema(ObISQLClient &sql_client,
   int64_t affected_rows = 0;
   const char *tname[] = {OB_ALL_CATALOG_TNAME, OB_ALL_CATALOG_HISTORY_TNAME};
   enum {THE_SYS_TABLE_IDX = 0, THE_HISTORY_TABLE_IDX = 1};
-  uint64_t tenant_id = schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   if (OB_UNLIKELY(!schema.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid input argument", K(ret), K(schema));
@@ -166,7 +166,7 @@ int ObCatalogSqlService::alter_schema(ObISQLClient &sql_client,
                                  static_cast<int32_t>(values.length()),
                                  values.ptr()))) {
         LOG_WARN("append sql failed, ", K(ret));
-      } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+      } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
         LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (!is_single_row(affected_rows) && !is_double_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
@@ -187,8 +187,8 @@ int ObCatalogSqlService::drop_schema(ObISQLClient &sql_client,
   int64_t affected_rows = 0;
   const char *tname[] = {OB_ALL_CATALOG_TNAME, OB_ALL_CATALOG_HISTORY_TNAME};
   enum {THE_SYS_TABLE_IDX = 0, THE_HISTORY_TABLE_IDX = 1};
-  uint64_t tenant_id = schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   if (OB_UNLIKELY(!schema.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid input argument", K(ret), K(schema));
@@ -196,9 +196,9 @@ int ObCatalogSqlService::drop_schema(ObISQLClient &sql_client,
   if (OB_SUCC(ret)) {
     if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE catalog_id = %lu",
                               tname[THE_SYS_TABLE_IDX],
-                              ObSchemaUtils::get_extract_schema_id(exec_tenant_id, schema.get_catalog_id())))) {
+                              ObSchemaUtils::get_extract_schema_id(schema.get_catalog_id())))) {
       LOG_WARN("fail to assign sql format", K(ret));
-    } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+    } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
       LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
@@ -219,7 +219,7 @@ int ObCatalogSqlService::drop_schema(ObISQLClient &sql_client,
                                 static_cast<int32_t>(values.length()),
                                 values.ptr()))) {
         LOG_WARN("append sql failed, ", K(ret));
-      } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+      } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
         LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
@@ -232,14 +232,13 @@ int ObCatalogSqlService::drop_schema(ObISQLClient &sql_client,
   return ret;
 }
 
-int ObCatalogSqlService::gen_catalog_priv_dml(const uint64_t exec_tenant_id,
-                                              const ObCatalogPrivSortKey &catalog_priv_key,
+int ObCatalogSqlService::gen_catalog_priv_dml(const ObCatalogPrivSortKey &catalog_priv_key,
                                               const ObPrivSet &priv_set,
                                               share::ObDMLSqlSplicer &dml)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dml.add_pk_column("user_id", ObSchemaUtils::get_extract_schema_id(
-                                              exec_tenant_id, catalog_priv_key.user_id_)))
+                                              catalog_priv_key.user_id_)))
       || OB_FAIL(dml.add_pk_column("catalog_name", ObHexEscapeSqlStr(catalog_priv_key.catalog_)))
       || OB_FAIL(dml.add_column("priv_set", priv_set))
       || OB_FAIL(dml.add_gmt_modified())) {
@@ -256,15 +255,15 @@ int ObCatalogSqlService::grant_revoke_catalog(const ObCatalogPrivSortKey &catalo
 {
   int ret = OB_SUCCESS;
   const bool is_deleted = priv_set == 0;
-  const uint64_t tenant_id = catalog_priv_key.tenant_id_;
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   int64_t affected_rows = 0;
-  ObDMLExecHelper exec(sql_client, exec_tenant_id);
+  ObDMLExecHelper exec(sql_client);
   ObDMLSqlSplicer dml;
   if (!catalog_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(catalog_priv_key), K(ret));
-  } else if (OB_FAIL(gen_catalog_priv_dml(exec_tenant_id, catalog_priv_key, priv_set, dml))) {
+  } else if (OB_FAIL(gen_catalog_priv_dml(catalog_priv_key, priv_set, dml))) {
     LOG_WARN("gen_catalog_priv_dml failed", K(catalog_priv_key), K(priv_set), K(ret));
   }
   // insert into __all_catalog_privilege
@@ -299,7 +298,7 @@ int ObCatalogSqlService::grant_revoke_catalog(const ObCatalogPrivSortKey &catalo
   // log operations
   if (OB_SUCC(ret)) {
     ObSchemaOperation priv_operation;
-    priv_operation.tenant_id_ = catalog_priv_key.tenant_id_;
+    
     priv_operation.user_id_ = catalog_priv_key.user_id_;
     priv_operation.catalog_name_ = catalog_priv_key.catalog_;
     priv_operation.op_type_ = (is_deleted ? OB_DDL_DEL_CATALOG_PRIV : OB_DDL_GRANT_REVOKE_CATALOG);

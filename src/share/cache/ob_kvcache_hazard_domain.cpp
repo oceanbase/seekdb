@@ -69,8 +69,8 @@ void HazptrTLCache::flush()
 }
 
 HazardDomain::HazardDomain()
-    : bit_set_attr_(OB_SERVER_TENANT_ID, "CACHE_BITMAP"),
-      hazptr_attr_(OB_SERVER_TENANT_ID, "CACHE_HAZPTR"),
+    : bit_set_attr_("CACHE_BITMAP"),
+      hazptr_attr_("CACHE_HAZPTR"),
       hazptr_allocator_(hazptr_attr_),
       bit_set_(),
       bit_set_mu_(),

@@ -10,7 +10,7 @@ connection default;
 
 --disable_warnings
 drop table if exists t1;
-create table t1 (c1 varchar(100) CHARACTER SET  utf8, c2 varchar(100) CHARACTER SET  utf8, c3 varchar(100) CHARACTER set  utf16, c4 varchar(100) CHARACTER set  utf16);
+create table t1 (c1 varchar(100) CHARACTER SET  utf8, c2 varchar(100) CHARACTER SET  utf8, c3 varchar(100) CHARACTER SET  utf8mb4, c4 varchar(100) CHARACTER SET  utf8mb4);
 insert into t1 (c1, c2, c3, c4) values ('abcdef', 'b', 'xybkkbdedess', 'de');
 --enable_warnings
 

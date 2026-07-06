@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX TABLELOCK
 
 #include "storage/tablelock/ob_lock_memtable.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablelock/ob_table_lock_iterator.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/tablelock/ob_table_lock_deadlock.h"
@@ -242,7 +243,6 @@ void ObLockMemtable::reset()
   transfer_counter_ = 0;
   freezer_ = nullptr;
   is_inited_ = false;
-  reset_trace_id();
 }
 
 int ObLockMemtable::lock_(
@@ -453,7 +453,7 @@ int ObLockMemtable::check_tablet_write_allow_(const ObTableLockOp &lock_op,
   } else if (!lock_op.lock_id_.is_tablet_lock()) {
   } else if (OB_FAIL(lock_op.lock_id_.convert_to(tablet_id))) {
     LOG_WARN("convert lock id to tablet_id failed", K(ret), K(lock_op));
-  } else if (OB_FAIL(MTL(ObLSService*)->get_ls(ls_id_, ls_handle, ObLSGetMod::TABLELOCK_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::TABLELOCK_MOD))) {
     LOG_WARN("failed to get ls", K(ret), K(ls_id_));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
@@ -634,9 +634,9 @@ int ObLockMemtable::post_obj_lock_conflict_(ObMvccAccessCtx &acc_ctx,
     ? mem_ctx->get_lock_wait_start_ts()
     : current_ts;
   int64_t lock_wait_expire_ts = acc_ctx.eval_lock_expire_ts(lock_wait_start_ts);
-  if (OB_ISNULL(lock_wait_mgr = MTL_WITH_CHECK_TENANT(ObLockWaitMgr *, mem_ctx->get_tenant_id()))) {
+  if (OB_ISNULL(lock_wait_mgr = MTL_WITH_CHECK(ObLockWaitMgr *))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("can not get tenant lock_wait_mgr MTL", K(mem_ctx->get_tenant_id()));
+    LOG_WARN("can not get tenant lock_wait_mgr MTL");
   } else {
     int tmp_ret = OB_SUCCESS;
     auto tx_ctx = acc_ctx.tx_ctx_;
@@ -1181,7 +1181,6 @@ bool ObLockMemtable::is_active_memtable()
 }
 
 int ObLockMemtable::flush(SCN recycle_scn,
-                          int64_t trace_id,
                           bool need_freeze)
 {
   int ret = OB_SUCCESS;
@@ -1226,7 +1225,6 @@ int ObLockMemtable::flush(SCN recycle_scn,
       param.tablet_id_ = LS_LOCK_TABLET;
       param.merge_type_ = compaction::MINI_MERGE;
       param.merge_version_ = ObVersion::MIN_VERSION;
-      set_trace_id(trace_id);
       if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tx_table_merge_dag(param))) {
         if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
           LOG_WARN("failed to schedule lock_memtable merge dag", K(ret), K(this));

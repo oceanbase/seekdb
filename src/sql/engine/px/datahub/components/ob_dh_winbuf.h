@@ -106,9 +106,8 @@ public:
 class ObWinbufPieceMsgCtx : public ObPieceMsgCtx
 {
 public:
-  ObWinbufPieceMsgCtx(uint64_t op_id, int64_t task_cnt, int64_t timeout_ts, int64_t tenant_id)
-    : ObPieceMsgCtx(op_id, task_cnt, timeout_ts), received_(0),
-                    tenant_id_(tenant_id), whole_msg_() {}
+  ObWinbufPieceMsgCtx(uint64_t op_id, int64_t task_cnt, int64_t timeout_ts)
+    : ObPieceMsgCtx(op_id, task_cnt, timeout_ts), received_(0), whole_msg_() {}
   ~ObWinbufPieceMsgCtx() = default;
   virtual void destroy() { whole_msg_.reset(); }
   INHERIT_TO_STRING_KV("meta", ObPieceMsgCtx, K_(received));
@@ -120,7 +119,7 @@ public:
   virtual int send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs) override;
   virtual void reset_resource() override;
   int received_; // number of pieces already received
-  int64_t tenant_id_;
+  
   ObWinbufWholeMsg whole_msg_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObWinbufPieceMsgCtx);
@@ -212,10 +211,10 @@ public:
 class SPWinFuncPXPieceMsgCtx : public ObPieceMsgCtx
 {
 public:
-  SPWinFuncPXPieceMsgCtx(uint64_t op_id, int64_t task_cnt, int64_t timeout_ts, uint64_t tenant_id,
+  SPWinFuncPXPieceMsgCtx(uint64_t op_id, int64_t task_cnt, int64_t timeout_ts,
                          int64_t max_batch_size, const common::ObMemAttr &mem_attr) :
     ObPieceMsgCtx(op_id, task_cnt, timeout_ts),
-    received_(0), tenant_id_(tenant_id), max_batch_size_(max_batch_size), whole_msg_(mem_attr)
+    received_(0), max_batch_size_(max_batch_size), whole_msg_(mem_attr)
   {}
 
   static int alloc_piece_msg_ctx(const SPWinFuncPXPieceMsg &pkt, ObPxCoordInfo &coord_info,
@@ -226,7 +225,7 @@ public:
 
 public:
   int64_t received_; // number of piece msgs received
-  uint64_t tenant_id_;
+  
   int64_t max_batch_size_;
   SPWinFuncPXWholeMsg whole_msg_;
 

@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "share/schema/ob_schema_struct.h"
 
 namespace oceanbase
@@ -51,7 +51,6 @@ public:
   OB_INLINE const ObString &get_##name() const { return name##_; } \
   OB_INLINE int set_##name(const ObString &name) { return deep_copy_str(name, name##_); }
 
-  DEFINE_GETTER_AND_SETTER(uint64_t, tenant_id);
   DEFINE_GETTER_AND_SETTER(uint64_t, mlog_id);
   DEFINE_GETTER_AND_SETTER(ObMLogPurgeMode, purge_mode);
   DEFINE_GETTER_AND_SETTER(int64_t, purge_start);
@@ -67,24 +66,23 @@ public:
 #undef DEFINE_GETTER_AND_SETTER
 #undef DEFINE_STRING_GETTER_AND_SETTER
 
-  int gen_insert_mlog_dml(const uint64_t exec_tenant_id, ObDMLSqlSplicer &dml) const;
-  int gen_update_mlog_attribute_dml(const uint64_t exec_tenant_id, ObDMLSqlSplicer &dml) const;
-  int gen_update_mlog_last_purge_info_dml(const uint64_t exec_tenant_id,
-                                          ObDMLSqlSplicer &dml) const;
+  int gen_insert_mlog_dml(ObDMLSqlSplicer &dml) const;
+  int gen_update_mlog_attribute_dml(ObDMLSqlSplicer &dml) const;
+  int gen_update_mlog_last_purge_info_dml(ObDMLSqlSplicer &dml) const;
 
   static int insert_mlog_info(ObISQLClient &sql_client, const ObMLogInfo &mlog_info);
   static int update_mlog_attribute(ObISQLClient &sql_client, const ObMLogInfo &mlog_info);
   static int update_mlog_last_purge_info(ObISQLClient &sql_client, const ObMLogInfo &mlog_info);
   static int drop_mlog_info(ObISQLClient &sql_client, const ObMLogInfo &mlog_info);
-  static int drop_mlog_info(ObISQLClient &sql_client, const uint64_t tenant_id,
+  static int drop_mlog_info(ObISQLClient &sql_client,
                             const uint64_t mlog_id);
-  static int fetch_mlog_info(ObISQLClient &sql_client, uint64_t tenant_id, uint64_t mlog_id,
+  static int fetch_mlog_info(ObISQLClient &sql_client, uint64_t mlog_id,
                              ObMLogInfo &mlog_info, bool for_update = false, bool nowait = false);
-  static int batch_fetch_mlog_ids(ObISQLClient &sql_client, uint64_t tenant_id,
+  static int batch_fetch_mlog_ids(ObISQLClient &sql_client,
                                   uint64_t last_mlog_id, ObIArray<uint64_t> &mlog_ids,
                                   int64_t limit = -1);
 
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(mlog_id),
                K_(purge_mode),
                K_(purge_start),
@@ -101,7 +99,7 @@ public:
   static constexpr char *MLOG_PURGE_JOB_PREFIX = const_cast<char *>("MLOG_PURGE$J_");
 
 private:
-  uint64_t tenant_id_;
+  
   uint64_t mlog_id_;
   ObMLogPurgeMode purge_mode_;
   int64_t purge_start_;

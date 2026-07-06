@@ -751,7 +751,6 @@ public:
                                              NULL != gen_col_node_ || NULL != sub_gen_col_node_; }
   static int get_full_leader_table_loc(ObDASLocationRouter &loc_router,
                                        ObIAllocator &allocator,
-                                       uint64_t tenant_id,
                                        uint64_t table_id,
                                        uint64_t ref_table_id,
                                        ObDASTableLoc *&table_loc);

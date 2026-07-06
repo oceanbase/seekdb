@@ -48,18 +48,16 @@ class ObDtlFlowControl;
 //   auto dtl_cg = OB_NEW(ObDtlChannelGroup);
 //   if (dtl_cg != nullptr) {
 //      dtl_ct->init(DTL_CG_MEMORY_LIMIT);
-//      dtl_ct->make_channel(p1, c1);
-//      dtl_ct->make_channel(p1, c2);
-//      dtl_ct->make_channel(p2, c1);
-//      dtl_ct->make_channel(p2, c2);
+//      dtl_ct->make_channel(c1);
+//      dtl_ct->make_channel(c2);
+//      dtl_ct->make_channel(c1);
+//      dtl_ct->make_channel(c2);
 //   }
 //
 class ObDtlChannelGroup
 {
 public:
-  static int make_channel(
-      const uint64_t tenant_id,
-      const common::ObAddr &addr1,
+  static int make_channel(const common::ObAddr &addr1,
       const common::ObAddr &addr2,
       ObDtlChannelInfo &ci1,
       ObDtlChannelInfo &ci2);
@@ -67,13 +65,11 @@ public:
   static int unlink_channel(const ObDtlChannelInfo &ci);
   static int remove_channel(const ObDtlChannelInfo &ci, ObDtlChannel *&ch);
 
-  static void make_transmit_channel(const uint64_t tenant_id,
-                                  const common::ObAddr &peer_exec_addr,
+  static void make_transmit_channel(const common::ObAddr &peer_exec_addr,
                                   uint64_t ch_id,
                                   ObDtlChannelInfo &ci_producer,
                                   bool is_local);
-  static void make_receive_channel(const uint64_t tenant_id,
-                                  const common::ObAddr &peer_exec_addr,
+  static void make_receive_channel(const common::ObAddr &peer_exec_addr,
                                   uint64_t ch_id,
                                   ObDtlChannelInfo &ci_consumer,
                                   bool is_local);

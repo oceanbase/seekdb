@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_TENANT_SCHEDULER_RUNNING_JOB_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_TENANT_SCHEDULER_RUNNING_JOB_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/session/ob_sql_session_mgr.h"
 namespace oceanbase
 {
@@ -66,21 +66,19 @@ private:
     FillScanner()
         :ip_buf_(),
         port_(0),
-        effective_tenant_id_(OB_INVALID_TENANT_ID),
         scanner_(NULL),
         cur_row_(NULL),
         output_column_ids_() {}
     virtual ~FillScanner(){}
     int operator()(common::hash::HashMapPair<uint64_t, sql::ObSQLSessionInfo *> &entry);
-    int init(uint64_t effective_tenant_id,
-             common::ObScanner *scanner,
+    int init(common::ObScanner *scanner,
              common::ObNewRow *cur_row,
              const ObIArray<uint64_t> &column_ids);
     inline void reset();
   private:
       char ip_buf_[common::OB_IP_STR_BUFF];
       int32_t port_;
-      uint64_t effective_tenant_id_;
+      
       common::ObScanner *scanner_;
       common::ObNewRow *cur_row_;
       ObSEArray<uint64_t, common::OB_PREALLOCATED_NUM> output_column_ids_;

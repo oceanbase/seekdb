@@ -56,7 +56,7 @@ static uint64_t value_free CACHE_ALIGNED;
 static uint64_t node_alloc CACHE_ALIGNED;
 static uint64_t node_free CACHE_ALIGNED;
 
-ObMemAttr attr(1, ObNewModIds::OB_MEMSTORE);
+ObMemAttr attr(ObNewModIds::OB_MEMSTORE);
 
 static int64_t STEP = 0;
 

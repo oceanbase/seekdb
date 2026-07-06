@@ -19,9 +19,9 @@
 #include "sql/engine/expr/ob_expr_vec_ivf_center_id.h"
 #include "sql/engine/expr/ob_expr_calc_partition_id.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "share/vector_index/ob_vector_index_util.h"
-#include "share/vector_index/ob_plugin_vector_index_service.h"
-#include "share/vector_type/ob_vector_common_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "storage/vector_type/ob_vector_common_util.h"
 
 namespace oceanbase
 {
@@ -96,7 +96,7 @@ int ObExprVecIVFCenterID::calc_center_id(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(expr), KP(expr.args_));
   } else {;
-    common::ObArenaAllocator tmp_allocator("IVFExprCID", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    common::ObArenaAllocator tmp_allocator("IVFExprCID", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObTableID table_id;
     ObTabletID tablet_id;
     ObVectorIndexDistAlgorithm dis_algo = VIDA_MAX;

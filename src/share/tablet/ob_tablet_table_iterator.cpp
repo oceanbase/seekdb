@@ -30,30 +30,26 @@ using namespace schema;
 
 ObTabletMetaIterator::ObTabletMetaIterator()
   : is_inited_(false),
-    prefetch_tablet_idx_(0),
-    tenant_id_(OB_INVALID_TENANT_ID)
+    prefetch_tablet_idx_(0)
 {}
 
 void ObTabletMetaIterator::reset()
 {
   is_inited_ = false;
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   prefetch_tablet_idx_ = -1;
   prefetched_tablets_.reset();
 }
 
 int ObTabletMetaIterator::inner_init(
-    const uint64_t tenant_id)
+    )
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObLSTabletMetaIterator init twice", KR(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant_id invalid", KR(ret), K(tenant_id));
   } else {
-    tenant_id_ = tenant_id;
+    
   }
   return ret;
 }
@@ -85,7 +81,7 @@ int ObTabletMetaIterator::next(ObTabletInfo &tablet_info)
         ++prefetch_tablet_idx_;
       } else if (OB_FAIL(prefetch())) { // need to prefetch a batch of tablet_info
         if (OB_ITER_END != ret) {
-          LOG_WARN("fail to prefetch", KR(ret), K_(tenant_id), K_(prefetch_tablet_idx));
+          LOG_WARN("fail to prefetch", KR(ret), K_(prefetch_tablet_idx));
         }
         prefetch_tablet_idx_ = -1;
       } else {
@@ -138,15 +134,14 @@ int ObCompactionTabletMetaIterator::next(ObTabletInfo &tablet_info)
 }
 
 int ObCompactionTabletMetaIterator::init(
-    const uint64_t tenant_id,
     const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(batch_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(batch_size));
-  } else if (OB_FAIL(ObTabletMetaIterator::inner_init(tenant_id))) {
-    LOG_WARN("failed to init", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(ObTabletMetaIterator::inner_init())) {
+    LOG_WARN("failed to init", KR(ret));
   } else {
     batch_size_ = batch_size;
     is_inited_ = true;
@@ -159,9 +154,7 @@ int ObCompactionTabletMetaIterator::prefetch()
   int ret = OB_SUCCESS;
   if (prefetch_tablet_idx_ >= prefetched_tablets_.count()) {
     ObTabletID tmp_last_tablet_id;
-    if (OB_FAIL(ObTabletMetaTableCompactionOperator::range_scan_for_compaction(
-        tenant_id_,
-        compaction_scn_,
+    if (OB_FAIL(ObTabletMetaTableCompactionOperator::range_scan_for_compaction(compaction_scn_,
         end_tablet_id_,
         batch_size_,
         !first_check_/*add_report_scn_filter*/,
@@ -169,7 +162,7 @@ int ObCompactionTabletMetaIterator::prefetch()
         prefetched_tablets_))) {
       if (OB_ITER_END != ret) {
         LOG_WARN("fail to range get by operator", KR(ret),
-            K_(tenant_id), K_(end_tablet_id), K_(batch_size), K_(prefetched_tablets));
+            K_(end_tablet_id), K_(batch_size), K_(prefetched_tablets));
       } else {
         prefetch_tablet_idx_ = -1;
       }
@@ -198,14 +191,13 @@ ObTenantTabletMetaIterator::~ObTenantTabletMetaIterator()
 }
 
 int ObTenantTabletMetaIterator::init(
-    common::ObISQLClient &sql_proxy,
-    const uint64_t tenant_id)
+    common::ObISQLClient &sql_proxy)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObTabletMetaIterator::inner_init(tenant_id))) {
-    LOG_WARN("fail to init", KR(ret), K(tenant_id));
+  if (OB_FAIL(ObTabletMetaIterator::inner_init())) {
+    LOG_WARN("fail to init", KR(ret));
   } else if (OB_FAIL(tablet_table_operator_.init(GCTX.meta_db_pool_))) {
-    LOG_WARN("fail to init tablet table operator", KR(ret), K(tenant_id));
+    LOG_WARN("fail to init tablet table operator", KR(ret));
   } else {
     sql_proxy_ = &sql_proxy;
     valid_tablet_ls_pairs_.reuse();
@@ -213,7 +205,7 @@ int ObTenantTabletMetaIterator::init(
     is_inited_ = true;
     if (OB_FAIL(prefetch())) { // need to prefetch a batch of tablet_info
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to prefetch", KR(ret), K_(tenant_id), K_(prefetch_tablet_idx));
+        LOG_WARN("fail to prefetch", KR(ret), K_(prefetch_tablet_idx));
       }
     }
   }
@@ -235,11 +227,11 @@ int ObTenantTabletMetaIterator::prefetch()
   int ret = OB_SUCCESS;
   if (OB_FAIL(prefetch_valid_tablet_ids())) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to prefetch valid tablet ids", KR(ret), K_(tenant_id),
+      LOG_WARN("fail to prefetch valid tablet ids", KR(ret),
         K_(valid_tablet_ls_pairs_idx), K_(valid_tablet_ls_pairs));
     }
   } else if (OB_FAIL(prefetch_tablets())) {
-    LOG_WARN("fail to prefetch tablets", KR(ret), K_(tenant_id),
+    LOG_WARN("fail to prefetch tablets", KR(ret),
       K_(prefetch_tablet_idx), "prefetch count", prefetched_tablets_.count());
   }
   return ret;
@@ -258,13 +250,13 @@ int ObTenantTabletMetaIterator::prefetch_valid_tablet_ids()
     // tables' tablet_ids if it has user tables.
     if (first_prefetch_) {
       if (OB_FAIL(prefetch_sys_table_tablet_ids())) {
-        LOG_WARN("fail to prefetch sys tables' tablet_id", KR(ret), K_(tenant_id));
+        LOG_WARN("fail to prefetch sys tables' tablet_id", KR(ret));
       } else {
         first_prefetch_ = false;
       }
     } else if (OB_FAIL(prefetch_user_table_tablet_ids())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to prefetch user tables' tablet_id", KR(ret), K_(tenant_id));
+        LOG_WARN("fail to prefetch user tables' tablet_id", KR(ret));
       }
     }
   }
@@ -283,11 +275,10 @@ int ObTenantTabletMetaIterator::prefetch_tablets()
     prefetch_tablet_idx_ = 0;
     prefetched_tablets_.reuse();
 
-    if (OB_FAIL(tablet_table_operator_.batch_get(tenant_id_,
-                                                 valid_tablet_ls_pairs_,
+    if (OB_FAIL(tablet_table_operator_.batch_get(valid_tablet_ls_pairs_,
                                                  prefetched_tablets_))) {
       LOG_WARN("fail to do batch_get through tablet_table_operator", KR(ret),
-               K_(tenant_id), K_(valid_tablet_ls_pairs), K_(prefetched_tablets));
+               K_(valid_tablet_ls_pairs), K_(prefetched_tablets));
     }
   }
   return ret;
@@ -298,17 +289,17 @@ int ObTenantTabletMetaIterator::prefetch_sys_table_tablet_ids()
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   ObArray<const ObSimpleTableSchemaV2 *> table_schemas;
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_full_schema_guard(tenant_id_, schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret), K_(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(tenant_id_, table_schemas))) {
-    LOG_WARN("fail to get tenant table schemas", KR(ret), K_(tenant_id));
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_full_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(table_schemas))) {
+    LOG_WARN("fail to get tenant table schemas", KR(ret));
   } else {
     ObTabletLSPair pair;
     for (int64_t i = 0; (i < table_schemas.count()) && OB_SUCC(ret); ++i) {
       const ObSimpleTableSchemaV2 *simple_schema = table_schemas.at(i);
       if (OB_ISNULL(simple_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected err, table schema is null", KR(ret), K_(tenant_id));
+        LOG_WARN("unexpected err, table schema is null", KR(ret));
       } else {
         const uint64_t tid = simple_schema->get_table_id();
         if (is_sys_table(tid)) {
@@ -341,12 +332,11 @@ int ObTenantTabletMetaIterator::prefetch_user_table_tablet_ids()
   valid_tablet_ls_pairs_.reuse();
   if (OB_FAIL(ObTabletToLSTableOperator::range_get_tablet(
                                               *sql_proxy_,
-                                              tenant_id_,
                                               start_tablet_id,
                                               range_count,
                                               valid_tablet_ls_pairs_))) {
     LOG_WARN("fail to get a range of tablet through tablet_to_ls_table_operator",
-              KR(ret), K_(tenant_id), K(start_tablet_id), K(range_count),
+              KR(ret), K(start_tablet_id), K(range_count),
               K_(valid_tablet_ls_pairs));
   } else if (valid_tablet_ls_pairs_.count() <= 0) {
     ret = OB_ITER_END;
@@ -358,7 +348,6 @@ int ObTenantTabletMetaIterator::prefetch_user_table_tablet_ids()
 
 ObTenantTabletTableIterator::ObTenantTabletTableIterator()
     : inited_(false),
-      tenant_id_(OB_INVALID_TENANT_ID),
       inner_idx_(0),
       tt_operator_(NULL),
       inner_tablet_infos_(),
@@ -366,18 +355,15 @@ ObTenantTabletTableIterator::ObTenantTabletTableIterator()
 {
 }
 
-int ObTenantTabletTableIterator::init(ObTabletTableOperator &tt_operator, const uint64_t tenant_id)
+int ObTenantTabletTableIterator::init(ObTabletTableOperator &tt_operator)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", KR(ret), K(tenant_id));
   } else {
     tt_operator_ = &tt_operator;
-    tenant_id_ = tenant_id;
+    
     inited_ = true;
   }
   return ret;
@@ -429,13 +415,11 @@ int ObTenantTabletTableIterator::prefetch_()
     }
     inner_tablet_infos_.reset();
     const int64_t range_size = GCONF.tablet_meta_table_scan_batch_count;
-    if (OB_FAIL(tt_operator_->range_get(
-        tenant_id_,
-        last_tablet_id,
+    if (OB_FAIL(tt_operator_->range_get(last_tablet_id,
         range_size,
         inner_tablet_infos_))) {
       LOG_WARN("fail to range get by operator", KR(ret),
-          K_(tenant_id), K(last_tablet_id), K(range_size), K_(inner_tablet_infos));
+          K(last_tablet_id), K(range_size), K_(inner_tablet_infos));
     } else if (inner_tablet_infos_.count() <= 0) {
       ret = OB_ITER_END;
     }

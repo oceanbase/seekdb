@@ -20,8 +20,9 @@
 #include "share/ob_errno.h"
 #include "common/object/ob_object.h"
 #include "common/object/ob_obj_type.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "share/ob_cluster_version.h"
+#include "share/ob_i_lob_read_service.h"  // lob-read domain port(dependency inversion, replaces the direct dependency on storage::ObLobManager)
 
 namespace oceanbase
 {
@@ -39,7 +40,8 @@ namespace common
 {
 
 // Notice: cannot support obobj funcs/compare (in lib dir)
-enum ObTextStringIterState
+// fixed underlying type (: int): so the ObILobReadService port header can forward-declare this enum(dependency inversion)。
+enum ObTextStringIterState : int
 {
   TEXTSTRING_ITER_INVALID = 0,
   TEXTSTRING_ITER_INIT = 1,
@@ -338,5 +340,77 @@ public:
 
 } // end namespace common
 } // end namespace oceanbase
+
+// ── moved down from sql ob_expr_lob_utils(ObObj-level callers such as obj_cast;paths where exec_ctx is always null)──
+namespace oceanbase
+{
+namespace common
+{
+struct ObObjCastParams;
+namespace lob_helper
+{
+int read_real_string_data(ObIAllocator *allocator, const ObObj &obj, ObString &str);
+int read_real_string_data(ObIAllocator *allocator, ObObjType type, ObCollationType cs_type,
+                          bool has_lob_header, ObString &str);
+template <typename Allocator>
+int pack_to_disk_inrow_lob(Allocator &allocator, const ObString data, ObString &result)
+{
+  int ret = OB_SUCCESS;
+  int64_t total_len = data.length() + sizeof(ObLobCommon);
+  char* buf = nullptr;
+  if (OB_ISNULL(buf = (char*)allocator.alloc(total_len))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    COMMON_LOG(WARN, "alloc memory for lob fail", K(ret), K(total_len));
+  } else {
+    // default is inrow
+    ObLobCommon *lob_data = new(buf)ObLobCommon();
+    MEMCPY(lob_data->buffer_, data.ptr(), data.length());
+    result.assign_ptr(buf, total_len);
+  }
+  return ret;
+}
+
+template <typename Allocator>
+int pack_to_disk_inrow_lob(Allocator &allocator, const ObString data, const ObObjType type, ObObj &res_obj)
+{
+  int ret = OB_SUCCESS;
+  ObString result;
+  if (OB_FAIL(pack_to_disk_inrow_lob(allocator, data, result))) {
+    COMMON_LOG(WARN, "alloc memory for lob fail", K(ret), K(data));
+  } else {
+    res_obj.set_lob_value(type, result.ptr(), result.length());
+    res_obj.set_has_lob_header();
+  }
+  return ret;
+}
+
+}  // namespace lob_helper
+}  // namespace common
+
+// moved down from sql:ObObj-level text/lob result writer(keeps namespace sql so sql consumers do not change)
+namespace sql
+{
+class ObTextStringObObjResult : public common::ObTextStringResult
+{
+public:
+  ObTextStringObObjResult(const common::ObObjType type, common::ObObjCastParams *params, common::ObObj *res_obj, bool has_header) :
+    common::ObTextStringResult(type, has_header, NULL), params_(params), res_obj_(res_obj)
+  {}
+
+  ~ObTextStringObObjResult(){};
+
+  TO_STRING_KV(KP_(params), KP_(res_obj));
+  int init(int64_t res_len, ObIAllocator *allocator = NULL) override;
+  void set_result();
+
+private:
+  char * buff_alloc (const int64_t size);
+
+private:
+  common::ObObjCastParams *params_;
+  common::ObObj *res_obj_;
+};
+}  // namespace sql
+}  // namespace oceanbase
 
 #endif // OCEANBASE_SHARE_OB_LOB_ACCESS_UTILS_

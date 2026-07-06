@@ -33,14 +33,13 @@ struct ObTableLoadRedefTableStartArg
 {
 public:
   ObTableLoadRedefTableStartArg()
-    : tenant_id_(common::OB_INVALID_ID), table_id_(common::OB_INVALID_ID), parallelism_(0),
+    : table_id_(common::OB_INVALID_ID), parallelism_(0),
       is_load_data_(false), is_insert_overwrite_(false), tablet_ids_()
   {
   }
   ~ObTableLoadRedefTableStartArg() = default;
   void reset()
   {
-    tenant_id_ = common::OB_INVALID_ID;
     table_id_ = common::OB_INVALID_ID;
     parallelism_ = 0;
     is_load_data_ = false;
@@ -49,13 +48,12 @@ public:
   }
   bool is_valid() const
   {
-    return common::OB_INVALID_ID != tenant_id_ && common::OB_INVALID_ID != table_id_ &&
+    return common::OB_INVALID_ID != table_id_ &&
            0 != parallelism_;
   }
-  TO_STRING_KV(K_(tenant_id), K_(table_id), K_(parallelism),
+  TO_STRING_KV(K_(table_id), K_(parallelism),
                K_(is_load_data), K_(is_insert_overwrite), K_(tablet_ids));
 public:
-  uint64_t tenant_id_;
   uint64_t table_id_;
   uint64_t parallelism_;
   bool is_load_data_;
@@ -94,8 +92,7 @@ struct ObTableLoadRedefTableFinishArg
 {
 public:
   ObTableLoadRedefTableFinishArg()
-    : tenant_id_(common::OB_INVALID_ID),
-      table_id_(common::OB_INVALID_ID),
+    : table_id_(common::OB_INVALID_ID),
       dest_table_id_(common::OB_INVALID_ID),
       task_id_(0),
       schema_version_(0)
@@ -104,7 +101,6 @@ public:
   ~ObTableLoadRedefTableFinishArg() = default;
   void reset()
   {
-    tenant_id_ = common::OB_INVALID_ID;
     table_id_ = common::OB_INVALID_ID;
     dest_table_id_ = common::OB_INVALID_ID;
     task_id_ = 0;
@@ -112,12 +108,11 @@ public:
   }
   bool is_valid() const
   {
-    return common::OB_INVALID_ID != tenant_id_ && common::OB_INVALID_ID != table_id_ &&
+    return common::OB_INVALID_ID != table_id_ &&
            common::OB_INVALID_ID != dest_table_id_ && 0 != task_id_ && 0 != schema_version_;
   }
-  TO_STRING_KV(K_(tenant_id), K_(table_id), K_(dest_table_id), K_(task_id), K_(schema_version));
+  TO_STRING_KV(K_(table_id), K_(dest_table_id), K_(task_id), K_(schema_version));
 public:
-  uint64_t tenant_id_;
   uint64_t table_id_;
   uint64_t dest_table_id_;
   int64_t task_id_;
@@ -127,17 +122,15 @@ public:
 struct ObTableLoadRedefTableAbortArg
 {
 public:
-  ObTableLoadRedefTableAbortArg() : tenant_id_(common::OB_INVALID_ID), task_id_(0) {}
+  ObTableLoadRedefTableAbortArg() : task_id_(0) {}
   ~ObTableLoadRedefTableAbortArg() = default;
   void reset()
   {
-    tenant_id_ = common::OB_INVALID_ID;
     task_id_ = 0;
   }
-  bool is_valid() const { return common::OB_INVALID_ID != tenant_id_ && 0 != task_id_; }
-  TO_STRING_KV(K_(tenant_id), K_(task_id));
+  bool is_valid() const { return 0 != task_id_; }
+  TO_STRING_KV(K_(task_id));
 public:
-  uint64_t tenant_id_;
   int64_t task_id_;
 };
 
@@ -150,8 +143,7 @@ public:
   static int abort(const ObTableLoadRedefTableAbortArg &arg, sql::ObSQLSessionInfo &session_info);
 private:
   // Check if the original table and the hidden table are consistent
-  static int check_table_consistency(const uint64_t tenant_id,
-                                     const uint64_t table_id,
+  static int check_table_consistency(const uint64_t table_id,
                                      const uint64_t dest_table_id,
                                      const int64_t schema_version);
 };

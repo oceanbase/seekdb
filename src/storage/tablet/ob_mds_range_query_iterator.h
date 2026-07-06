@@ -103,7 +103,7 @@ private:
 template <typename K, typename T>
 ObSingleTabletMdsRangeQueryIterator<K, T>::ObSingleTabletMdsRangeQueryIterator()
   : is_inited_(false),
-    allocator_(lib::ObMemAttr(MTL_ID(), "range_query")),
+    allocator_(lib::ObMemAttr("range_query")),
     mds_table_iter_(),
     mds_sstable_iter_(),
     mds_table_end_(false),

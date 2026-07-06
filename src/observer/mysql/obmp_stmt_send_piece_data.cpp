@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/mysql/obmp_stmt_send_piece_data.h"
 
 #include "sql/ob_sql.h"
@@ -156,17 +157,17 @@ int ObMPStmtSendPieceData::process()
     } else if (OB_UNLIKELY(session.is_zombie())) {
       ret = OB_ERR_SESSION_INTERRUPTED;
       LOG_WARN("session has been killed", K(session.get_session_state()), K_(stmt_id), K_(param_id),
-               K(session.get_server_sid()), "proxy_sessid", session.get_proxy_sessid(), K(ret));
+               K(session.get_server_sid()), K(ret));
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
       LOG_WARN("packet too large than allowd for the session", K_(stmt_id), K_(param_id), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
       LOG_WARN("fail to get query timeout", K_(stmt_id), K_(param_id), K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                session.get_effective_tenant_id(), tenant_version))) {
+                tenant_version))) {
       LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                OB_SYS_TENANT_ID, sys_version))) {
+                sys_version))) {
       LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (pkt.exist_trace_info()
                && OB_FAIL(session.update_sys_variable(SYS_VAR_OB_TRACE_INFO,
@@ -357,7 +358,7 @@ int ObPiece::piece_init(ObSQLSessionInfo &session,
   set_stmt_id(stmt_id);
   set_param_id(param_id);
   param.set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE)
-      .set_mem_attr(session.get_effective_tenant_id(), "SendPieceProto", ObCtxIds::DEFAULT_CTX_ID);
+      .set_mem_attr("SendPieceProto", ObCtxIds::DEFAULT_CTX_ID);
   if (OB_ISNULL(piece_cache = session.get_piece_cache())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("piece cache is null", K(ret));
@@ -391,11 +392,11 @@ int ObPieceCache::init_piece_cache(ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
   if (!is_inited()) {
-    if (OB_FAIL(init(session.get_effective_tenant_id()))) {
+    if (OB_FAIL(init())) {
       LOG_WARN("piece_cache init fail", K(ret));
     }
   }
-  LOG_DEBUG("init piece cache. ", K(session.get_effective_tenant_id()));
+  LOG_DEBUG("init piece cache. ");
   return ret;
 }
 
@@ -430,7 +431,7 @@ int ObPieceCache::make_piece(int32_t stmt_id,
       }
     }
   }
-  LOG_DEBUG("make piece: ", K(ret), K(stmt_id), K(param_id), K(session.get_effective_tenant_id()));
+  LOG_DEBUG("make piece: ", K(ret), K(stmt_id), K(param_id));
   return ret;
 }
 

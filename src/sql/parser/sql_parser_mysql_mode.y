@@ -220,7 +220,7 @@ DYNAMIC_SAMPLING
 NEG_SIGN
 
 %token /*can not be relation name*/
-_BINARY _UTF8 _UTF8MB4 _UTF8MB3 _GBK _UTF16 _GB18030 _GB18030_2022 _LATIN1 _GB2312 _ASCII _TIS620 _UJIS _EUCKR _EUCJPMS _CP932 _UTF16LE _SJIS _BIG5 _DEC8 _CP850 _HP8 _MACROMAN _SWE7 _HKSCS _HKSCS31 CNNOP
+_BINARY _UTF8 _UTF8MB4 _UTF8MB3 CNNOP
 SELECT_HINT_BEGIN UPDATE_HINT_BEGIN DELETE_HINT_BEGIN INSERT_HINT_BEGIN REPLACE_HINT_BEGIN HINT_HINT_BEGIN HINT_END
 LOAD_DATA_HINT_BEGIN CREATE_HINT_BEGIN ALTER_HINT_BEGIN
 END_P SET_VAR DELIMITER
@@ -315,7 +315,7 @@ END_P SET_VAR DELIMITER
 
         JOB JSON JSON_ARRAYAGG JSON_OBJECTAGG JSON_QUERY JSON_VALUE JSON_TABLE
 
-        KEYWORD KEY_BLOCK_SIZE KEY_VERSION KEYTAB KRB5CONF KVCACHE KV_ATTRIBUTES
+        KEYWORD KEY_BLOCK_SIZE KEY_VERSION KEYTAB KRB5CONF KVCACHE
 
         LAG LANGUAGE LAST LAST_REFRESH_SCN LAST_VALUE LATERAL LEAD LEADER LEAVES LESS LEAK LEAK_MOD LEAK_RATE LIB LINESTRING LIST_
         LISTAGG LOB_INROW_THRESHOLD LOCAL LOCALITY LOCATION LOCKED LOCKS LOGFILE LOGONLY_REPLICA_NUM LOGS LOCK_ LOGICAL_READS
@@ -399,7 +399,6 @@ END_P SET_VAR DELIMITER
 %type <node> create_database_stmt drop_database_stmt alter_database_stmt use_database_stmt
 %type <node> opt_database_name database_option database_option_list opt_database_option_list database_factor databases_expr database_with_catalog_factor opt_databases
 %type <node> cur_timestamp_func cur_time_func cur_date_func now_synonyms_func utc_timestamp_func utc_time_func utc_date_func sys_interval_func sysdate_func cur_user_func
-%type <node> create_dblink_stmt drop_dblink_stmt dblink tenant opt_cluster opt_dblink
 %type <node> with_column_group column_group_list column_group_element
 %type <node> opt_range_partition_info opt_auto_split_tablet_size_option auto_split_tablet_size_option opt_partition_option partition_option hash_partition_option key_partition_option opt_use_partition use_partition range_partition_option subpartition_option opt_range_partition_list opt_range_subpartition_list range_partition_list range_subpartition_list range_partition_element range_subpartition_element range_partition_expr range_expr_list range_expr opt_part_id sample_clause opt_block seed sample_percent opt_sample_scope modify_partition_info modify_tg_partition_info opt_partition_range_or_list auto_partition_option auto_range_type partition_size auto_partition_type use_flashback partition_options partition_num opt_subpartition_range_or_list
 %type <node> subpartition_template_option subpartition_individual_option opt_hash_partition_list hash_partition_list hash_partition_element opt_hash_subpartition_list hash_subpartition_list hash_subpartition_element opt_subpartition_list opt_engine_option
@@ -493,11 +492,9 @@ END_P SET_VAR DELIMITER
 %type <node> ls opt_tenant_list_or_ls_or_tablet_id
 %type <node> opt_tenant_list_v2
 %type <node> suspend_or_resume tenant_name opt_tenant_name cache_name opt_cache_name file_id opt_file_id cancel_task_type
-%type <node> opt_verify
 %type <node> sql_id_or_schema_id_expr opt_sql_id_or_schema_id outline_type
 %type <node> namespace_expr opt_namespace
-%type <node> server_action server_list opt_server_list
-%type <node> upgrade_action
+%type <node> server_list
 %type <node> opt_index_name opt_key_or_index opt_index_options opt_fulltext_index_options fulltext_parser_properties_list fulltext_parser_properties opt_primary  opt_all
 %type <node> charset_key database_key charset_name charset_name_or_default collation_name compression_key databases_or_schemas trans_param_name trans_param_value
 %type <node> charset_introducer complex_string_literal literal number_literal now_or_signed_literal signed_literal
@@ -510,8 +507,8 @@ END_P SET_VAR DELIMITER
 %type <node> string_list text_string string_val_list ulong_num
 %type <node> list_expr list_partition_element list_partition_expr list_partition_list list_partition_option opt_list_partition_list opt_list_subpartition_list list_subpartition_list list_subpartition_element drop_partition_name_list
 %type <node> distribute_method distribute_method_list opt_distribute_method_list
-%type <node> load_data_stmt opt_load_local opt_duplicate opt_compression opt_load_charset opt_load_ignore_rows infile_string url_spec
-%type <node> lines_or_rows opt_field_or_var_spec field_or_vars_list field_or_vars opt_load_set_spec opt_load_data_extended_option_list load_data_extended_option_list load_data_extended_option opt_on_error
+%type <node> load_data_stmt opt_load_local opt_duplicate opt_compression opt_load_charset opt_load_ignore_rows infile_string
+%type <node> lines_or_rows opt_field_or_var_spec field_or_vars_list field_or_vars opt_load_set_spec opt_load_data_extended_option_list load_data_extended_option_list load_data_extended_option
 %type <node> load_set_list load_set_element load_data_with_opt_hint
 %type <node> ret_type opt_agg
 %type <node> opt_match_option
@@ -526,7 +523,7 @@ END_P SET_VAR DELIMITER
 %type <node> create_savepoint_stmt rollback_savepoint_stmt release_savepoint_stmt
 %type <node> opt_qb_name opt_qb_name_list_with_quotes parallel_hint pq_set_hint_desc pq_subquery_hint_desc
 %type <node> opt_sql_throttle_for_priority opt_sql_throttle_using_cond sql_throttle_one_or_more_metrics sql_throttle_metric
-%type <node> opt_tenant_info get_format_unit
+%type <node> get_format_unit
 %type <node> new_or_old new_or_old_column_ref diagnostics_info_ref
 %type <node> on_empty on_error json_on_response opt_returning_type opt_on_empty_or_error json_value_expr opt_ascii opt_truncate_clause
 %type <node> json_extract_unquote_expr json_extract_expr json_query_expr opt_multivalue opt_asis opt_array opt_pretty opt_wrapper opt_scalars opt_query_on_error_or_empty_or_mismatch  on_empty_query  on_error_query on_mismatch_query opt_response_query
@@ -534,10 +531,9 @@ END_P SET_VAR DELIMITER
 %type <node> get_diagnostics_stmt get_statement_diagnostics_stmt get_condition_diagnostics_stmt statement_information_item_list condition_information_item_list statement_information_item condition_information_item statement_information_item_name condition_information_item_name condition_arg
 %type <node> method_opt method_list method extension mvt_param
 %type <node> opt_storage_name opt_calibration_list calibration_info_list
-%type <node> external_file_format_list external_file_format external_properties_list external_properties external_table_partition_option opt_pattern opt_as_alias pattern_expr format_expr url_expr url_table_function_expr location_expr
+%type <node> external_file_format_list external_file_format external_properties_list external_properties
 %type <node> storage_cache_policy_attribute_list storage_cache_time_policy_attribute_list storage_cache_time_policy_attribute retention_time_unit
-%type <node> dynamic_sampling_hint add_external_table_partition_actions add_external_table_partition_action
-%type <node> external_table_partitions external_table_partition
+%type <node> dynamic_sampling_hint
 %type <node> skip_index_type opt_skip_index_type_list
 %type <node> opt_rebuild_column_store
 %type <node> vec_index_params vec_index_param vec_index_param_value opt_with_vector_index_parameters
@@ -557,14 +553,13 @@ END_P SET_VAR DELIMITER
 %type <node> any_expr opt_null_pos lambda_expr lambda_expr_params
 %type <node> opt_empty_table_list opt_repair_mode opt_repair_option_list repair_option repair_option_list opt_checksum_option
 %type <node> cache_index_stmt load_index_into_cache_stmt tbl_index_list tbl_index tbl_partition_list opt_tbl_partition_list tbl_index_or_partition_list tbl_index_or_partition opt_ignore_leaves key_cache_name
-%type <node> module_name info_type opt_infile
 %type <node_opt_parens> select_clause_set select_clause_set_body
 %type <node> dynamic_partition_option dynamic_partition_option_list sys_view_cast_opt
 %type <node> column_list_with_boost with_param_column_ref
 %type <node> es_sql_opt
 %type <node> operator_list
 %type <node> hybrid_search_expr hybrid_search_param
-%type <node> create_location_stmt alter_location_stmt drop_location_stmt location_name location_url opt_sub_path credential_option_list credential_option opt_credential location_utils_stmt
+%type <node> create_location_stmt alter_location_stmt drop_location_stmt location_name location_url credential_option_list credential_option opt_credential
 
 %type <node> vector_similarity_expr vector_similarity_metric
 %type <node> algorithm_opt lock_opt
@@ -715,8 +710,6 @@ stmt:
   | purge_stmt              { $$ = $1; check_question_mark($$, result); }
   | analyze_stmt            { $$ = $1; check_question_mark($$, result); }
   | load_data_stmt          { $$ = $1; check_question_mark($$, result); }
-  | create_dblink_stmt      { $$ = $1; check_question_mark($$, result); }
-  | drop_dblink_stmt        { $$ = $1; check_question_mark($$, result); }
   | create_sequence_stmt    { $$ = $1; check_question_mark($$, result); }
   | alter_sequence_stmt     { $$ = $1; check_question_mark($$, result); }
   | drop_sequence_stmt      { $$ = $1; check_question_mark($$, result); }
@@ -735,7 +728,6 @@ stmt:
   | create_location_stmt  { $$ = $1; check_question_mark($$, result); }
   | alter_location_stmt   { $$ = $1; check_question_mark($$, result); }
   | drop_location_stmt    { $$ = $1; check_question_mark($$, result); }
-  | location_utils_stmt   { $$ = $1; check_question_mark($$, result); }
   | create_ccl_rule_stmt       { $$ = $1; check_question_mark($$, result); }
   | drop_ccl_rule_stmt       { $$ = $1; check_question_mark($$, result); }
   ;
@@ -1147,204 +1139,6 @@ _UTF8
   $$->str_value_ = parse_strdup("binary", result->malloc_pool_, &($$->str_len_));
   if (OB_UNLIKELY(NULL == $$->str_value_)) {
     yyerror(NULL, result, "No more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _GBK
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("gbk", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _LATIN1
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("latin1", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _GB2312
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("gb2312", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _ASCII
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("ascii", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _TIS620
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("tis620", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _UJIS
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("ujis", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _EUCKR
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("euckr", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _EUCJPMS
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("eucjpms", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _CP932
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("cp932", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _GB18030
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("gb18030", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _GB18030_2022
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("gb18030_2022", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _UTF16
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("utf16", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _UTF16LE
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("utf16le", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _SJIS
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("sjis", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _BIG5
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("big5", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _HKSCS
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("hkscs", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _HKSCS31
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("hkscs31", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _DEC8
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("dec8", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _CP850
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("cp850", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _HP8
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("hp8", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _MACROMAN
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("macroman", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _SWE7
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("swe7", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
     YYABORT_NO_MEMORY;
   }
 }
@@ -1922,46 +1716,6 @@ simple_expr collation %prec NEG
 | USER_VARIABLE
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_OP_GET_USER_VAR, 1, $1);
-}
-;
-
-| relation_name '.' relation_name USER_VARIABLE
-{
-  ParseNode *dblink_node = $4;
-  if (NULL != dblink_node) {
-    dblink_node->type_ = T_DBLINK_NAME;
-  }
-  malloc_non_terminal_node($$, result->malloc_pool_, T_REMOTE_SEQUENCE, 4, NULL, $1, $3, $4);
-}
-| relation_name '.' relation_name '.' relation_name USER_VARIABLE
-{
-  ParseNode *dblink_node = $6;
-  if (NULL != dblink_node) {
-    dblink_node->type_ = T_DBLINK_NAME;
-  }
-  malloc_non_terminal_node($$, result->malloc_pool_, T_REMOTE_SEQUENCE, 4, $1, $3, $5, $6);
-}
-| id_dot_id USER_VARIABLE
-{
-  ParseNode* db_node = NULL;
-  ParseNode* tb_node = $1->children_[0];
-  ParseNode* col_node = $1->children_[1];
-  ParseNode *dblink_node = $2;
-  if (NULL != dblink_node) {
-    dblink_node->type_ = T_DBLINK_NAME;
-  }
-  malloc_non_terminal_node($$, result->malloc_pool_, T_REMOTE_SEQUENCE, 4, db_node, tb_node, col_node, $2);
-}
-| id_dot_id_dot_id USER_VARIABLE
-{
-  ParseNode* db_node = $1->children_[0];
-  ParseNode* tb_node = $1->children_[1];
-  ParseNode* col_node = $1->children_[2];
-  ParseNode *dblink_node = $2;
-  if (NULL != dblink_node) {
-    dblink_node->type_ = T_DBLINK_NAME;
-  }
-  malloc_non_terminal_node($$, result->malloc_pool_, T_REMOTE_SEQUENCE, 4, db_node, tb_node, col_node, dblink_node);
 }
 ;
 
@@ -4603,67 +4357,6 @@ opt_field_or_var_spec opt_load_set_spec opt_load_data_extended_option_list
                            NULL           /* 14. on_error */
                            );
 }
-| load_data_with_opt_hint opt_duplicate FROM url_spec
-INTO TABLE relation_factor opt_use_partition opt_field_or_var_spec opt_on_error
-{
-  if (NULL != $1) {
-    dup_string($1, result, @1.first_column, @1.last_column);
-  }
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LOAD_DATA_URL, 15,
-                           NULL,           /* 0. local */
-                           $4,             /* 1. filename */
-                           $2,             /* 2. duplicate  */
-                           $7,             /* 3. table */
-                           NULL,           /* 4. charset */
-                           NULL,           /* 5. field */
-                           NULL,           /* 6. line */
-                           NULL,           /* 7. ignore rows */
-                           $9,             /* 8. field or vars */
-                           NULL,           /* 9. set field  */
-                           $1,             /* 10. hint */
-                           NULL,           /* 11. extended option list */
-                           NULL,           /* 12. compression format */
-                           $8,             /* 13. partition */
-                           $10             /* 14. on_error */
-                           );
-}
-;
-
-opt_on_error:
-LOG ERRORS
-{
-  ParseNode *params = NULL;
-  malloc_terminal_node(params, result->malloc_pool_, T_INT);
-  params->value_ = 0;
-
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LOG_ERROR_LIMIT, 1, params);
-}
-| LOG ERRORS REJECT LIMIT INTNUM
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LOG_ERROR_LIMIT, 1, $5);
-}
-| LOG ERRORS REJECT LIMIT UNLIMITED
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_LOG_ERROR_UNLIMITED);
-}
-/* empty */
-| {
-  $$ = NULL;
-}
-;
-
-url_spec:
-url_table_function_expr
-{
-  dup_string($1, result, @1.first_column, @1.last_column);
-  $$ = $1;
-}
-| '(' select_with_opt_hint select_expr_list FROM url_table_function_expr ')'
-{
-  (void) $2;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SELECT, 2, $3, $5);
-  dup_string($$, result, @2.first_column, @5.last_column);
-}
 ;
 
 infile_string:
@@ -4889,12 +4582,6 @@ special_table_type:
 TEMPORARY
 {
   malloc_terminal_node($$, result->malloc_pool_, T_TEMPORARY);
-}
-| EXTERNAL
-{
-  result->contain_sensitive_data_ = true;
-	result->is_external_table_ = true;
-  malloc_terminal_node($$, result->malloc_pool_, T_EXTERNAL);
 }
 | /* EMPTY */
 { $$ = NULL; }
@@ -7340,29 +7027,11 @@ TABLE_MODE opt_equal_mark STRING_VALUE
   (void)($2);
   malloc_non_terminal_node($$, result->malloc_pool_, T_ENABLE_EXTENDED_ROWID, 1, $3);
 }
-| PARTITION_TYPE opt_equal_mark USER_SPECIFIED
-{
-  (void)($2) ; /* make bison mute */
-  malloc_terminal_node($$, result->malloc_pool_, T_EXTERNAL_USER_SPECIFIED_PARTITION);
-}
-| location_expr { $$ = $1; }
-| format_expr { $$ = $1; }
-| PROPERTIES opt_equal_mark '(' external_properties_list ')'
-{
-  (void)($2) ; /* make bison mute */
-  merge_nodes($$, result, T_EXTERNAL_PROPERTIES, $4);
-}
-| pattern_expr { $$ = $1; }
 | TTL opt_equal_mark '(' ttl_definition ')'
 {
   (void)($2) ; /* make bison mute */
   merge_nodes($$, result, T_TTL_DEFINITION, $4);
   dup_expr_string($$, result, @4.first_column, @4.last_column);
-}
-| KV_ATTRIBUTES opt_equal_mark STRING_VALUE
-{
-  (void)($2); /*  make bison mute*/
-  malloc_non_terminal_node($$, result->malloc_pool_, T_KV_ATTRIBUTES, 1, $3);
 }
 | DEFAULT_LOB_INROW_THRESHOLD opt_equal_mark INTNUM
 {
@@ -7387,30 +7056,6 @@ TABLE_MODE opt_equal_mark STRING_VALUE
 {
   (void)($2); /*  make bison mute*/
   malloc_non_terminal_node($$, result->malloc_pool_, T_ENABLE_MACRO_BLOCK_BLOOM_FILTER, 1, $3);  
-}
-| AUTO_REFRESH opt_equal_mark OFF
-{
-  (void)($2) ; /* make bison mute */
-  ParseNode *int_node = NULL;
-  malloc_terminal_node(int_node, result->malloc_pool_, T_INT);
-  int_node->value_ = 0;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_EXTERNAL_TABLE_AUTO_REFRESH, 1, int_node);
-}
-| AUTO_REFRESH opt_equal_mark IMMEDIATE
-{
-  (void)($2) ; /* make bison mute */
-  ParseNode *int_node = NULL;
-  malloc_terminal_node(int_node, result->malloc_pool_, T_INT);
-  int_node->value_ = 1;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_EXTERNAL_TABLE_AUTO_REFRESH, 1, int_node);
-}
-| AUTO_REFRESH opt_equal_mark INTERVAL
-{
-  (void)($2) ; /* make bison mute */
-  ParseNode *int_node = NULL;
-  malloc_terminal_node(int_node, result->malloc_pool_, T_INT);
-  int_node->value_ = 2;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_EXTERNAL_TABLE_AUTO_REFRESH, 1, int_node);
 }
 | DUPLICATE_READ_CONSISTENCY opt_equal_mark STRING_VALUE
 {
@@ -7581,38 +7226,6 @@ ENABLE COMP_EQ BOOL_VALUE
   malloc_non_terminal_node($$, result->malloc_pool_, T_DYNAMIC_PARTITION_BIGINT_PRECISION, 1, $3);
 }
 ;
-
-location_expr:
-LOCATION opt_equal_mark STRING_VALUE
-{
-  (void)($2) ; /* make bison mute */
-  malloc_non_terminal_node($$, result->malloc_pool_, T_EXTERNAL_FILE_LOCATION, 1, $3);
-  $$->stmt_loc_.first_column_ = @3.first_column - 1;
-  $$->stmt_loc_.last_column_ = @3.last_column - 1;
-  $$->str_len_ = $3->str_len_;
-  $$->str_value_ = $3->str_value_;
-}
-| LOCATION opt_equal_mark USER_VARIABLE opt_sub_path
-{
-  (void)($2) ; /* make bison mute */
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LOCATION_OBJECT, 2, $3, $4);
-  $$->stmt_loc_.first_column_ = @3.first_column - 1;
-  $$->stmt_loc_.last_column_ = @3.last_column - 1;
-  $$->str_len_ = $3->str_len_;
-  $$->str_value_ = $3->str_value_;
-};
-
-opt_sub_path:
-STRING_VALUE
-{
-  $$ = $1;
-}
-|
-{
-  $$ = NULL;
-}
-;
-
 
 storage_cache_policy_attribute_list:
 GLOBAL COMP_EQ STRING_VALUE
@@ -7836,27 +7449,6 @@ hash_partition_option
 | list_partition_option
 {
   $$ = $1;
-}
-| external_table_partition_option
-{
-  $$ = $1;
-}
-;
-
-external_table_partition_option: /* list partition without partition defines*/
-PARTITION BY '(' column_name_list ')'
-{
-  if (result->is_external_table_) {
-    ParseNode *column_names = NULL;
-    ParseNode *partition_defs = NULL;
-    merge_nodes(column_names, result, T_EXPR_LIST, $4);
-    malloc_terminal_node(partition_defs, result->malloc_pool_, T_PARTITION_LIST);
-    malloc_non_terminal_node($$, result->malloc_pool_, T_LIST_COLUMNS_PARTITION, 5, column_names, partition_defs, NULL, NULL, NULL);
-    dup_expr_string($$, result, @4.first_column, @4.last_column);
-  } else {
-    yyerror(&@3, result, "paritition by column is not allowed");
-    YYERROR;
-  }
 }
 ;
 
@@ -8818,17 +8410,6 @@ external_file_format
 {
   (void) ($2);
   malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
-}
-;
-
-opt_pattern:
-/* EMPTY */
-{
-  $$ = NULL;
-}
-| pattern_expr
-{
-  $$ = $1;
 }
 ;
 
@@ -13820,86 +13401,6 @@ relation_factor %prec LOWER_PARENS
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 2, $3, $6);
 }
-| url_expr opt_as_alias
-{
-  if ($2 == NULL) {
-    malloc_non_terminal_node($$, result->malloc_pool_, T_ORG, 4, $1, NULL, NULL, NULL);
-  } else {
-    malloc_non_terminal_node($$, result->malloc_pool_, T_ALIAS, 5, $1, $2, NULL, NULL, NULL);
-  }
-  $$->value_ = T_EXTERNAL_FILE_LOCATION;
-}
-;
-
-url_expr:
-STRING_VALUE '(' format_expr opt_pattern ')'
-{
-  ParseNode *location_node = NULL;
-  malloc_non_terminal_node(location_node, result->malloc_pool_, T_EXTERNAL_FILE_LOCATION, 1, $1);
-  location_node->stmt_loc_.first_column_ = @1.first_column - 1;
-  location_node->stmt_loc_.last_column_ = @1.last_column - 1;
-  location_node->str_len_ = $1->str_len_;
-  location_node->str_value_ = $1->str_value_;
-
-  result->contain_sensitive_data_ = true;
-
-  malloc_non_terminal_node($$, result->malloc_pool_, T_RELATION_FACTOR, 3, location_node, $3, $4);
-  $$->str_len_ = $1->str_len_;
-  $$->str_value_ = $1->str_value_;
-  $$->value_ = T_EXTERNAL_FILE_LOCATION;
-}
-| url_table_function_expr { $$ = $1; }
-;
-
-url_table_function_expr:
-SOURCE '(' external_properties_list ')'
-{
-  ParseNode *source_node = NULL;
-  merge_nodes(source_node, result, T_EXTERNAL_PROPERTIES, $3);
-
-  malloc_non_terminal_node($$, result->malloc_pool_, T_RELATION_FACTOR, 3, NULL, source_node, NULL);
-}
-| FILES '(' location_expr opt_comma format_expr opt_comma pattern_expr ')'
-{
-  (void)($4) ; /* make bison mute */
-  (void)($6) ; /* make bison mute */
-  malloc_non_terminal_node($$, result->malloc_pool_, T_RELATION_FACTOR, 3, $3, $5, $7);
-  $$->str_len_ = $3->str_len_;
-  $$->str_value_ = $3->str_value_;
-}
-| FILES '(' location_expr opt_comma format_expr ')'
-{
-  (void)($4) ; /* make bison mute */
-  malloc_non_terminal_node($$, result->malloc_pool_, T_RELATION_FACTOR, 3, $3, $5, NULL);
-  $$->str_len_ = $3->str_len_;
-  $$->str_value_ = $3->str_value_;
-}
-;
-
-pattern_expr:
-PATTERN opt_equal_mark STRING_VALUE
-{
-  (void)($2) ; /* make bison mute */
-  malloc_non_terminal_node($$, result->malloc_pool_, T_EXTERNAL_FILE_PATTERN, 1, $3);
-};
-
-format_expr:
-FORMAT opt_equal_mark '(' external_file_format_list ')'
-{
-  (void)($2) ; /* make bison mute */
-  merge_nodes($$, result, T_EXTERNAL_FILE_FORMAT, $4);
-};
-
-opt_as_alias:
-/* EMPTY */
-{
-  $$ = NULL;
-}
-|
-AS relation_name 
-{
-  $$ = $2;
-}
 ;
 
 dml_table_name:
@@ -14035,31 +13536,6 @@ PARTITION '(' name_list ')'
   merge_nodes(name_list, result, T_NAME_LIST, $3);
   malloc_non_terminal_node($$, result->malloc_pool_, T_USE_PARTITION, 1, name_list);
 }
-| PARTITION '(' external_table_partitions ')'
-{
-  ParseNode *partition_value = NULL;
-  merge_nodes(partition_value, result, T_EXTERNAL_TABLE_PARTITION, $3);
-  dup_expr_string(partition_value, result, @3.first_column, @3.last_column);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_USE_PARTITION, 1, partition_value);
-}
-
-external_table_partitions:
-external_table_partition
-{
-  $$ = $1;
-}
-| external_table_partitions ',' external_table_partition
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
-}
-;
-
-external_table_partition:
-relation_name COMP_EQ expr_const
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_PARTITION_LIST_ELEMENT, 2, $1, $3);
-}
-;
 
 use_flashback:
 AS OF SNAPSHOT bit_expr %prec LOWER_PARENS
@@ -14257,14 +13733,14 @@ opt_with_star:
 ;
 
 normal_relation_factor:
-relation_name opt_dblink
+relation_name
 {
-  malloc_non_terminal_node($$, result->malloc_pool_, T_RELATION_FACTOR, 3, NULL, $1, $2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_RELATION_FACTOR, 3, NULL, $1, NULL);
   dup_node_string($1, $$, result->malloc_pool_);
 }
-| relation_name '.' relation_name opt_dblink
+| relation_name '.' relation_name
 {
-  malloc_non_terminal_node($$, result->malloc_pool_, T_RELATION_FACTOR, 3, $1, $3, $4);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_RELATION_FACTOR, 3, $1, $3, NULL);
   dup_node_string($3, $$, result->malloc_pool_);
 }
 | relation_name '.' mysql_reserved_keyword
@@ -14274,11 +13750,11 @@ relation_name opt_dblink
   malloc_non_terminal_node($$, result->malloc_pool_, T_RELATION_FACTOR, 2, $1, table_name);
   dup_node_string(table_name, $$, result->malloc_pool_);
 }
-| id_dot_id opt_dblink
+| id_dot_id
 {
   ParseNode* db_node = $1->children_[0];
   ParseNode* tb_node = $1->children_[1];
-  malloc_non_terminal_node($$, result->malloc_pool_, T_RELATION_FACTOR, 3, db_node, tb_node, $2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_RELATION_FACTOR, 3, db_node, tb_node, NULL);
   dup_node_string(tb_node, $$, result->malloc_pool_);
 }
 | id_dot_id_dot_id
@@ -14310,15 +13786,6 @@ dot_relation_factor:
   malloc_non_terminal_node($$, result->malloc_pool_, T_RELATION_FACTOR, 2, NULL, table_name);
   dup_node_string(table_name, $$, result->malloc_pool_);
 }
-;
-
-opt_dblink:
-USER_VARIABLE  /* USER_VARIABLE is '@xxxx', see sql_parser.l */
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_DBLINK_NAME, 2, $1, NULL);
-}
-|
-{ $$ = NULL; }
 ;
 
 relation_factor_in_hint:
@@ -15465,8 +14932,6 @@ SHOW opt_extended_or_full TABLES opt_from_or_in_database_clause opt_show_conditi
 { malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_FUNCTION_CODE, 1, $4); }
 | SHOW TRIGGERS opt_from_or_in_database_clause opt_show_condition
 { malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_TRIGGERS, 2, $3, $4); }
-| SHOW SERVER STATUS opt_show_condition
-{ malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_SERVER_STATUS, 1, $4); }
 | SHOW opt_scope VARIABLES opt_show_condition
 {
   malloc_terminal_node($$, result->malloc_pool_, T_INT);
@@ -15633,15 +15098,6 @@ SHOW opt_extended_or_full TABLES opt_from_or_in_database_clause opt_show_conditi
   $$->value_ = $2[0];
   malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_STATUS, 2, $$, $4);
 }
-| SHOW TENANT opt_status
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_TENANT, 1, $3);
-}
-| SHOW create_with_opt_hint TENANT relation_name
-{
-  (void)($2);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_CREATE_TENANT, 1, $4);
-}
 | SHOW opt_storage ENGINES
 {
   (void)$2;
@@ -15714,10 +15170,6 @@ SHOW opt_extended_or_full TABLES opt_from_or_in_database_clause opt_show_conditi
 {
   (void)($2);
   malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_CREATE_LOCATION, 1, $4);
-}
-| SHOW FILES IN LOCATION USER_VARIABLE opt_sub_path opt_pattern
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LOCATION_UTILS_LIST, 3, $5, $6, $7);
 }
 ;
 
@@ -16767,69 +16219,6 @@ alter_with_opt_hint SEQUENCE relation_factor opt_sequence_option_list
 }
 ;
 
-/*****************************************************************************
- *
- *   create / drop database link grammer
- *
- ******************************************************************************/
-create_dblink_stmt:
-create_with_opt_hint DATABASE LINK dblink CONNECT TO user tenant DATABASE database_factor IDENTIFIED BY password ip_port opt_cluster
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_CREATE_DBLINK, 10,
-                           NULL,    /* opt_if_not_exists */
-                           $4,    /* dblink name */
-                           $7,    /* user name */
-                           $8,    /* tenant name */
-                           $10,   /* database name */
-                           $13,   /* password */
-                           NULL,   /* driver */
-                           $14,   /* host ip port*/
-                           $15,   /* optional cluster */
-                           NULL    /* optional self credential */);
-}
-| create_with_opt_hint DATABASE LINK IF not EXISTS dblink CONNECT TO user tenant DATABASE database_factor IDENTIFIED BY password ip_port opt_cluster
-{
-  (void)($1);
-  (void)($5);
-  malloc_terminal_node($$, result->malloc_pool_, T_IF_NOT_EXISTS);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_CREATE_DBLINK, 10,
-                           $$,    /* opt_if_not_exists */
-                           $7,    /* dblink name */
-                           $10,    /* user name */
-                           $11,    /* tenant name */
-                           $13,   /* database name */
-                           $16,   /* password */
-                           NULL,   /* driver */
-                           $17,   /* host ip port*/
-                           $18,   /* optional cluster */
-                           NULL    /* optional self credential */);
-}
-;
-
-drop_dblink_stmt:
-DROP DATABASE LINK opt_if_exists dblink
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_DROP_DBLINK, 2, $4, $5);
-}
-;
-
-dblink:
-relation_name
-{ $$ = $1; }
-;
-
-tenant:
-USER_VARIABLE    /* USER_VARIABLE is '@xxxx', see sql_parser.l */
-{ $$ = $1; }
-;
-
-opt_cluster:
-CLUSTER STRING_VALUE
-{ $$ = $2; }
-|
-{ $$ = NULL; }
-;
 
 
 /*****************************************************************************
@@ -18003,71 +17392,12 @@ alter_with_opt_hint TABLE relation_factor alter_table_actions
   $$->value_ = 0;
 }
 |
-alter_with_opt_hint EXTERNAL TABLE relation_factor alter_table_actions
-{
-  ParseNode *table_actions = NULL;
-  merge_nodes(table_actions, result, T_ALTER_TABLE_ACTION_LIST, $5);
-  ParseNode *external_node = NULL;
-  malloc_terminal_node(external_node, result->malloc_pool_, T_EXTERNAL);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_TABLE, 4, $4, table_actions, external_node, $1);
-  $$->value_ = 0;
-}
-|
 alter_with_opt_hint TABLE relation_factor alter_column_group_option
 {
   ParseNode *table_actions = NULL;
   merge_nodes(table_actions, result, T_ALTER_TABLE_ACTION_LIST, $4);
   malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_TABLE, 4, $3, table_actions, NULL, $1);
   $$->value_ = 0;
-}
-|
-alter_with_opt_hint EXTERNAL TABLE relation_factor ADD PARTITION '(' add_external_table_partition_actions ')' LOCATION STRING_VALUE
-{
-  ParseNode *action = NULL;
-  ParseNode *external_node = NULL;
-  merge_nodes(action, result, T_ALTER_EXTERNAL_PARTITION_ADD, $8);
-  ParseNode *external_action = NULL;
-  malloc_non_terminal_node(external_action, result->malloc_pool_, T_ALTER_EXTERNAL_PARTITION_OPTION, 2, action, $11);
-  ParseNode *table_action = NULL;
-  malloc_non_terminal_node(table_action, result->malloc_pool_, T_ALTER_TABLE_ACTION_LIST, 1, external_action);
-  malloc_terminal_node(external_node, result->malloc_pool_, T_EXTERNAL);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_TABLE, 4, $4, table_action, external_node, $1);
-  $$->value_ = 0;
-}
-|
-alter_with_opt_hint EXTERNAL TABLE relation_factor DROP PARTITION LOCATION STRING_VALUE
-{
-  (void)($1);
-  ParseNode *action = NULL;
-  ParseNode *external_node = NULL;
-  malloc_non_terminal_node(action, result->malloc_pool_, T_ALTER_EXTERNAL_PARTITION_DROP, 1, $8);
-  ParseNode *external_action = NULL;
-  malloc_non_terminal_node(external_action, result->malloc_pool_, T_ALTER_EXTERNAL_PARTITION_OPTION, 1, action);
-  ParseNode *table_action = NULL;
-  malloc_non_terminal_node(table_action, result->malloc_pool_, T_ALTER_TABLE_ACTION_LIST, 1, external_action);
-  malloc_terminal_node(external_node, result->malloc_pool_, T_EXTERNAL);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_TABLE, 4, $4, table_action, external_node, $1);
-  $$->value_ = 0;
-}
-;
-
-add_external_table_partition_actions:
-add_external_table_partition_action
-{
-  $$ = $1;
-}
-| add_external_table_partition_actions ',' add_external_table_partition_action
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
-}
-|
-{ $$ = NULL; }
-
-add_external_table_partition_action:
-column_name opt_equal_mark expr_const
-{
-  (void)($2);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_PARTITION_LIST_ELEMENT, 2, $1, $3);
 }
 ;
 
@@ -18141,10 +17471,6 @@ opt_set table_option_list_space_seperated
 DROP CONSTRAINT constraint_name
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_DROP_CONSTRAINT, 1, $3); // drop foreign key or check constraint, to be compatible with mysql
-}
-| REFRESH
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_ALTER_REFRESH_EXTERNAL_TABLE);
 }
 /*  | ORDER BY column_list
 //    {
@@ -19056,12 +18382,6 @@ alter_with_opt_hint SYSTEM FLUSH KVCACHE opt_tenant_name opt_cache_name
   malloc_non_terminal_node($$, result->malloc_pool_, T_FLUSH_KVCACHE, 2, $5, $6);
 }
 |
-alter_with_opt_hint SYSTEM FLUSH SS_MICRO_CACHE opt_tenant_name
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_FLUSH_SS_MICRO_CACHE, 1, $5);
-}
-|
 alter_with_opt_hint SYSTEM FLUSH DAG WARNINGS
 {
   (void)($1);
@@ -19074,25 +18394,10 @@ alter_with_opt_hint SYSTEM FLUSH ILOGCACHE opt_file_id
   malloc_non_terminal_node($$, result->malloc_pool_, T_FLUSH_ILOGCACHE, 1, $5);
 }
 |
-alter_with_opt_hint SYSTEM START MERGE zone_desc
-{
-  (void)($1);
-  ParseNode *start = NULL;
-  malloc_terminal_node(start, result->malloc_pool_, T_INT);
-  start->value_ = 1;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_MERGE_CONTROL, 2, start, $5);
-}
-|
 alter_with_opt_hint SYSTEM suspend_or_resume MERGE opt_tenant_list_v2
 {
   (void)($1);
   malloc_non_terminal_node($$, result->malloc_pool_, T_MERGE_CONTROL, 2, $3, $5);
-}
-|
-alter_with_opt_hint SYSTEM suspend_or_resume RECOVERY opt_zone_desc
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_RECOVERY_CONTROL, 2, $3, $5);
 }
 |
 alter_with_opt_hint SYSTEM CLEAR MERGE ERROR_P opt_tenant_list_v2
@@ -19125,57 +18430,31 @@ alter_with_opt_hint SYSTEM CHECKPOINT
   malloc_non_terminal_node($$, result->malloc_pool_, T_FREEZE, 3, type, NULL, NULL);
 }
 |
-alter_with_opt_hint SYSTEM MINOR FREEZE opt_tenant_list_or_ls_or_tablet_id opt_server_list opt_zone_desc
+alter_with_opt_hint SYSTEM MINOR FREEZE opt_tenant_list_or_ls_or_tablet_id
 {
   (void)($1);
   ParseNode *type = NULL;
   malloc_terminal_node(type, result->malloc_pool_, T_INT);
   type->value_ = 2;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_FREEZE, 4, type, $5, $6, $7);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FREEZE, 4, type, $5, NULL, NULL);
 }
 |
-alter_with_opt_hint SYSTEM CHECKPOINT SLOG opt_tenant_info ip_port
+alter_with_opt_hint SYSTEM REFRESH MEMORY STAT
 {
   (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_CHECKPOINT_SLOG, 2, $5, $6);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_MEMORY_STAT, 1, NULL);
 }
 |
-alter_with_opt_hint SYSTEM CLEAR ROOTTABLE opt_tenant_name
+alter_with_opt_hint SYSTEM WASH MEMORY FRAGMENTATION
 {
   (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_CLEAR_ROOT_TABLE, 1, $5);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_WASH_MEMORY_FRAGMENTATION, 1, NULL);
 }
 |
-alter_with_opt_hint SYSTEM server_action SERVER server_list opt_zone_desc
+alter_with_opt_hint SYSTEM REFRESH IO CALIBRATION opt_storage_name opt_calibration_list
 {
   (void)($1);
-  ParseNode *server_list = NULL;
-  merge_nodes(server_list, result, T_SERVER_LIST, $5);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ADMIN_SERVER, 3, $3, server_list, $6);
-}
-|
-alter_with_opt_hint SYSTEM REFRESH SCHEMA opt_server_or_zone
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_SCHEMA, 1, $5);
-}
-|
-alter_with_opt_hint SYSTEM REFRESH MEMORY STAT opt_server_or_zone
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_MEMORY_STAT, 1, $6);
-}
-|
-alter_with_opt_hint SYSTEM WASH MEMORY FRAGMENTATION opt_server_or_zone
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_WASH_MEMORY_FRAGMENTATION, 1, $6);
-}
-|
-alter_with_opt_hint SYSTEM REFRESH IO CALIBRATION opt_storage_name opt_calibration_list opt_server_or_zone
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_IO_CALIBRATION, 3, $6, $7, $8);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_IO_CALIBRATION, 3, $6, $7, NULL);
 }
 |
 alter_with_opt_hint SYSTEM opt_set alter_system_set_parameter_actions
@@ -19187,11 +18466,11 @@ alter_with_opt_hint SYSTEM opt_set alter_system_set_parameter_actions
   malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_SYSTEM_SET_PARAMETER, 1, $$);
 }
 |
-alter_with_opt_hint SYSTEM SET_TP alter_system_settp_actions opt_server_or_zone
+alter_with_opt_hint SYSTEM SET_TP alter_system_settp_actions
 {
   (void)($1);
   merge_nodes($$, result, T_SYTEM_SETTP_LIST, $4);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_SYSTEM_SETTP, 2, $$, $5);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_SYSTEM_SETTP, 2, $$, NULL);
 }
 |
 alter_with_opt_hint SYSTEM RELOAD GTS
@@ -19206,30 +18485,6 @@ alter_with_opt_hint SYSTEM UPGRADE VIRTUAL SCHEMA
   malloc_terminal_node($$, result->malloc_pool_, T_UPGRADE_VIRTUAL_SCHEMA);
 }
 |
-alter_with_opt_hint SYSTEM upgrade_action UPGRADE
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ADMIN_UPGRADE_CMD, 1, $3);
-}
-|
-alter_with_opt_hint SYSTEM RUN UPGRADE JOB STRING_VALUE opt_tenant_list_v2
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ADMIN_RUN_UPGRADE_JOB, 2, $6, $7);
-}
-|
-alter_with_opt_hint SYSTEM STOP UPGRADE JOB
-{
-  (void)($1);
-  malloc_terminal_node($$, result->malloc_pool_, T_ADMIN_STOP_UPGRADE_JOB);
-}
-|
-alter_with_opt_hint SYSTEM upgrade_action ROLLING UPGRADE
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ADMIN_ROLLING_UPGRADE_CMD, 1, $3);
-}
-|
 alter_with_opt_hint SYSTEM ENABLE SQL THROTTLE opt_sql_throttle_for_priority opt_sql_throttle_using_cond
 {
   (void)($1);
@@ -19242,42 +18497,6 @@ alter_with_opt_hint SYSTEM DISABLE SQL THROTTLE
   malloc_terminal_node($$, result->malloc_pool_, T_DISABLE_SQL_THROTTLE);
 }
 |
-alter_with_opt_hint SYSTEM SET DISK VALID ip_port
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SET_DISK_VALID, 1, $6);
-}
-|
-alter_with_opt_hint SYSTEM DROP TABLES IN SESSION INTNUM
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_SYSTEM_DROP_TEMP_TABLE, 1, $7);
-}
-|
-alter_with_opt_hint SYSTEM REFRESH TABLES IN SESSION INTNUM
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_SYSTEM_REFRESH_TEMP_TABLE, 1, $7);
-}
-|
-alter_with_opt_hint SYSTEM ACTIVATE STANDBY opt_verify
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ACTIVATE_STANDBY, 1, $5);
-}
-|
-alter_with_opt_hint SYSTEM SWITCHOVER TO STANDBY opt_verify
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SWITCHOVER_TO_STANDBY, 1, $6);
-}
-|
-alter_with_opt_hint SYSTEM SWITCHOVER TO PRIMARY opt_verify
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SWITCHOVER_TO_PRIMARY, 1, $6);
-}
-|
 alter_with_opt_hint DISKGROUP relation_name ADD DISK STRING_VALUE opt_disk_alias ip_port opt_zone_desc
 {
   (void)($1);
@@ -19288,57 +18507,6 @@ alter_with_opt_hint DISKGROUP relation_name DROP DISK STRING_VALUE ip_port opt_z
 {
   (void)($1);
   malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_DISKGROUP_DROP_DISK, 4, $3, $6, $7, $8);
-}
-|
-alter_with_opt_hint SYSTEM TRIGGER TTL opt_tenant_list_v2
-{
-  (void)($1);
-  ParseNode *type = NULL;
-  malloc_terminal_node(type, result->malloc_pool_, T_INT);
-  type->value_ = 0;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_TTL, 2, type, $5);
-}
-|
-alter_with_opt_hint SYSTEM SUSPEND TTL opt_tenant_list_v2
-{
-  (void)($1);
-  ParseNode *type = NULL;
-  malloc_terminal_node(type, result->malloc_pool_, T_INT);
-  type->value_ = 1;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_TTL, 2, type, $5);
-}
-|
-alter_with_opt_hint SYSTEM RESUME TTL opt_tenant_list_v2
-{
-  (void)($1);
-  ParseNode *type = NULL;
-  malloc_terminal_node(type, result->malloc_pool_, T_INT);
-  type->value_ = 2;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_TTL, 2, type, $5);
-}
-|
-alter_with_opt_hint SYSTEM CANCEL TTL opt_tenant_list_v2
-{
-  (void)($1);
-  ParseNode *type = NULL;
-  malloc_terminal_node(type, result->malloc_pool_, T_INT);
-  type->value_ = 3;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_TTL, 2, type, $5);
-}
-|
-alter_with_opt_hint SYSTEM info_type MODULE DATA module_name tenant_name opt_infile
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_MODULE_DATA, 4, $3, $6, $7, $8);
-}
-|
-alter_with_opt_hint SYSTEM TRIGGER STORAGE_CACHE_POLICY_EXECUTOR opt_tenant_name
-{
-  (void)($1);
-  ParseNode *action_type = NULL;
-  malloc_terminal_node(action_type, result->malloc_pool_, T_INT);
-  action_type->value_ = 0; /* 0:trigger */
-  malloc_non_terminal_node($$, result->malloc_pool_, T_TRIGGER_STORAGE_CACHE, 2, action_type, $5);
 }
 |
 alter_with_opt_hint SYSTEM RESET alter_system_reset_parameter_actions
@@ -19737,43 +18905,6 @@ GLOBAL
   $$->value_ = 0; // 0 表示flush租户当前server上对应的cache
 }
 
-server_action:
-ADD
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 1;
-}
-| DELETE
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 2;
-}
-| CANCEL DELETE
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 3;
-}
-| START
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 4;
-}
-| STOP
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 5;
-}
-| FORCE STOP
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 6;
-}
-| ISOLATE
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 7;
-}
-;
 
 server_list:
 STRING_VALUE
@@ -19786,17 +18917,21 @@ STRING_VALUE
 }
 ;
 
-opt_server_list:
-/*empty*/
-{
-  $$ = NULL;
-}
-| SERVER opt_equal_mark '(' server_list ')'
-{
-  (void)($2) ; /* make bison mute */
-  merge_nodes($$, result, T_SERVER_LIST, $4);
-}
-;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ip_port:
 SERVER opt_equal_mark STRING_VALUE
@@ -19829,6 +18964,11 @@ zone_desc
   $$ = NULL;
 }
 ;
+
+
+
+
+
 
 server_or_zone:
 ip_port
@@ -19966,40 +19106,7 @@ tenant_name
 }
 ;
 
-opt_verify:
-VERIFY
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 1; // 1 means VERIFY mode
-}
-| /* EMPTY */
-{
-  $$ = NULL;
-}
-;
 
-opt_tenant_info:
-TENANT_ID opt_equal_mark INTNUM
-{
-  (void)($2);
-  malloc_terminal_node($$, result->malloc_pool_, T_TENANT_ID);
-  $$->value_ = $3->value_;
-  $$->sql_str_off_ = $3->sql_str_off_;
-}
-|
-TENANT opt_equal_mark relation_name_or_string
-{
-  (void)($2);
-  malloc_terminal_node($$, result->malloc_pool_, T_TENANT_NAME);
-  $$->str_value_ = $3->str_value_;
-  $$->str_len_ = $3->str_len_;
-  $$->sql_str_off_ = $3->sql_str_off_;
-}
-| /* EMPTY */
-{
-  $$ = NULL;
-}
-;
 
 cache_name :
 CACHE opt_equal_mark relation_name_or_string
@@ -20039,39 +19146,8 @@ file_id
 }
 ;
 
-module_name:
-MODULE opt_equal_mark relation_name_or_string
-{
-  (void)($2);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_MODULE_NAME, 1, $3);
-}
-;
 
-info_type:
-LOAD
-{
-  // START is 0
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 0;
-}
-| CHECK
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 1;
-}
-;
 
-opt_infile:
-INFILE opt_equal_mark STRING_VALUE
-{
-  (void)($2);
-  $$ = $3;
-}
-| /* EMPTY */
-{
-  $$ = NULL;
-}
-;
 
 cancel_task_type:
 PARTITION MIGRATION
@@ -20328,18 +19404,6 @@ MINOR FREEZE
 ;
 */
 
-upgrade_action:
-BEGI
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 1;
-}
-| END
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_INT);
-  $$->value_ = 2;
-}
-;
 
 /*****************************************************************************
  *
@@ -20483,13 +19547,6 @@ NAME_OB
 location_url:
 STRING_VALUE
 { $$ = $1; }
-;
-location_utils_stmt:
-REMOVE FILES IN LOCATION USER_VARIABLE opt_sub_path opt_pattern
-{
-  $5->value_ = 1;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LOCATION_UTILS, 3, $5, $6, $7);
-}
 ;
 
 
@@ -21485,6 +20542,15 @@ isolation_level:
   malloc_terminal_node($$, result->malloc_pool_, T_INT);
   $$->value_ = 3;
 };
+
+
+
+
+
+
+
+
+
 
 /*===========================================================
  * savepoint
@@ -23797,7 +22863,6 @@ ACCESS_INFO
 |       MY_NAME
 |       CONNECT
 |       STATEMENT_ID
-|       KV_ATTRIBUTES
 |       OBJECT_ID
 |       TRANSFER
 |       SUM_OPNSIZE

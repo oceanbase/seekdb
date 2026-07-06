@@ -529,7 +529,6 @@ private:
 
   int create_modify_autoinc_task(
       common::ObISQLClient &proxy,
-      const uint64_t tenant_id,
       const int64_t table_id,
       const int64_t schema_version,
       const int64_t consumer_group_id,
@@ -627,19 +626,6 @@ int create_partition_split_task(
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record);
   
-  int create_recover_restore_table_task(
-      common::ObISQLClient &proxy,
-      const share::ObDDLType &type,
-      const share::schema::ObTableSchema *src_schema,
-      const share::schema::ObTableSchema *dest_schema,
-      const int64_t parallelism,
-      const int64_t consumer_group_id,
-      const int64_t task_id,
-      const int32_t sub_task_trace_id,
-      const obcall::ObAlterTableArg *alter_table_arg,
-      const uint64_t tenant_data_version,
-      ObIAllocator &allocator,
-      ObDDLTaskRecord &task_record);
   int create_fork_table_task(
       common::ObISQLClient &proxy,
       const share::schema::ObTableSchema *src_table_schema,
@@ -673,7 +659,6 @@ int create_partition_split_task(
   int schedule_drop_lob_task(const ObDDLTaskRecord &task_record);
   int schedule_ddl_retry_task(const ObDDLTaskRecord &task_record);
   int schedule_partition_split_task(const ObDDLTaskRecord &task_record);
-  int schedule_recover_restore_table_task(const ObDDLTaskRecord &task_record);
   int schedule_fork_table_task(const ObDDLTaskRecord &task_record);
   int add_sys_task(ObDDLTask *task);
   int remove_sys_task(ObDDLTask *task);
@@ -681,8 +666,7 @@ int create_partition_split_task(
   int remove_task_from_longops_mgr(ObDDLTask *ddl_task);
   int remove_ddl_task(ObDDLTask *ddl_task);
   void add_event_info(const ObDDLTaskRecord &ddl_record, const ObString &ddl_event_stmt);
-  int check_conflict_with_upgrade(
-      const uint64_t tenant_id);
+  int check_conflict_with_upgrade();
 
 private:
   static const int64_t TOTAL_LIMIT = 1024L * 1024L * 1024L;

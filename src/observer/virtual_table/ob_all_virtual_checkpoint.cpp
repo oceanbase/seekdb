@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_checkpoint.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -40,7 +41,8 @@ ObAllVirtualCheckpointInfo::~ObAllVirtualCheckpointInfo()
 
 void ObAllVirtualCheckpointInfo::reset()
 {
-  omt::ObMultiTenantOperator::reset();
+  ls_iter_guard_.reset();
+  ob_checkpoint_iter_.reset();
   addr_.reset();
   ObVirtualTableScannerIterator::reset();
 }
@@ -50,7 +52,7 @@ int ObAllVirtualCheckpointInfo::get_next_ls_(ObLS *&ls)
   int ret = OB_SUCCESS;
 
   if (ls_iter_guard_.get_ptr() == nullptr
-      && OB_FAIL(MTL(ObLSService*)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+      && OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
     SERVER_LOG(WARN, "get_ls_iter fail", K(ret));
   } else if (OB_FAIL(ls_iter_guard_->get_next(ls))) {
     if (OB_ITER_END != ret) {
@@ -123,30 +125,7 @@ int ObAllVirtualCheckpointInfo::get_next_(ObCheckpointVTInfo &checkpoint)
   return ret;
 }
 
-bool ObAllVirtualCheckpointInfo::is_need_process(uint64_t tenant_id)
-{
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
-    return true;
-  }
-  return false;
-}
-
-void ObAllVirtualCheckpointInfo::release_last_tenant()
-{
-  ls_iter_guard_.reset();
-  ob_checkpoint_iter_.reset();
-}
-
 int ObAllVirtualCheckpointInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
-}
-
-int ObAllVirtualCheckpointInfo::process_curr_tenant(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObCheckpointVTInfo checkpoint;

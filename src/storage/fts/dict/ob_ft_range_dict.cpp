@@ -19,12 +19,12 @@
 #include "storage/fts/dict/ob_ik_dic.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
-#include "lib/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_client.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/utility.h"
-#include "ob_smart_var.h"
+#include "lib/utility/ob_smart_var.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "storage/fts/dict/ob_ft_cache_container.h"
@@ -106,7 +106,7 @@ public:
     } else {
 
       ObFTTrie<void> *trie = (*all_tries_)[idx];
-      ObArenaAllocator dat_alloc(lib::ObMemAttr(MTL_ID(), "DATBuild"));
+      ObArenaAllocator dat_alloc(lib::ObMemAttr("DATBuild"));
       ObFTDATBuilder<void> builder(dat_alloc);
 
       ObFTDAT *dat_buff = nullptr;
@@ -150,7 +150,7 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
   int ret = OB_SUCCESS;
 
   // Phase 1: Collect words into tries range by range
-  ObArenaAllocator tmp_alloc(lib::ObMemAttr(MTL_ID(), "Tmp Allocator"));
+  ObArenaAllocator tmp_alloc(lib::ObMemAttr("Tmp Allocator"));
   ObVector<ObFTTrie<void> *, ObArenaAllocator> all_tries(&tmp_alloc);
 
   bool build_next_range = true;
@@ -211,7 +211,7 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
   // Phase 2: Build DATs concurrently using DATBuilderThreadPool
   if (OB_SUCC(ret) && all_tries.size() > 0) {
     ObArray<ObFTCacheRangeHandle *> handles;
-    handles.set_attr(lib::ObMemAttr(MTL_ID(), "DATBuild"));
+    handles.set_attr(lib::ObMemAttr("DATBuild"));
     for (int64_t i = 0; OB_SUCC(ret) && i < all_tries.size(); i++) {
       ObFTCacheRangeHandle *handle = nullptr;
       if (OB_FAIL(range_container.fetch_info_for_dict(handle))) {
@@ -255,7 +255,7 @@ int ObFTRangeDict::build_one_range(const ObFTDictDesc &desc,
   int ret = OB_SUCCESS;
   build_next_range = true;
 
-  ObArenaAllocator tmp_alloc(lib::ObMemAttr(MTL_ID(), "Temp trie"));
+  ObArenaAllocator tmp_alloc(lib::ObMemAttr("Temp trie"));
 
   ObFTDATBuilder<void> builder(tmp_alloc);
   storage::ObFTTrie<void> trie(tmp_alloc, desc.coll_type_);
@@ -505,7 +505,7 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
   uint64_t name = static_cast<uint64_t>(desc.type_);
 
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
-    ObDictCacheKey key(name, MTL_ID(), desc.type_, i);
+    ObDictCacheKey key(name, desc.type_, i);
     ObFTCacheRangeHandle *info = nullptr;
     if (OB_FAIL(range_container.fetch_info_for_dict(info))) {
       LOG_WARN("Failed to fetch info for dict.", K(ret));

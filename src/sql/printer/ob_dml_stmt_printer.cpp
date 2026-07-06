@@ -19,7 +19,7 @@
 #include "sql/printer/ob_select_stmt_printer.h"
 #include "sql/ob_sql_context.h"
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 #include "lib/charset/ob_charset.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/monitor/ob_sql_plan.h"
@@ -74,7 +74,6 @@ int ObDMLStmtPrinter::print_hint()
     DATA_PRINTF("%s", hint_begin);
     if (OB_SUCC(ret)) {
       const ObQueryHint &query_hint = stmt_->get_query_ctx()->get_query_hint();
-      ObQueryHint query_hint_dblink;
       PlanText plan_text;
       plan_text.buf_ = buf_;
       plan_text.buf_len_ = buf_len_;
@@ -135,7 +134,7 @@ int ObDMLStmtPrinter::print_from(bool need_from)
       // create view v as select 1 from dual where 1;
       DATA_PRINTF(" from DUAL");
     }
-    if (OB_SUCC(ret) && !print_params_.for_dblink_) {
+    if (OB_SUCC(ret)) {
       if (OB_FAIL(print_semi_join())) {
         LOG_WARN("failed to print semi info", K(ret));
       }
@@ -193,15 +192,6 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
     LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else {
     switch (table_item->type_) {
-    case TableItem::LINK_TABLE: {
-        if (OB_FAIL(print_base_table(table_item))) {
-          LOG_WARN("failed to print base table", K(ret), K(*table_item));
-        } else if (!no_print_alias && !table_item->alias_name_.empty()) {
-          DATA_PRINTF(" ");
-          PRINT_IDENT_WITH_QUOT(table_item->alias_name_);
-        }
-        break;
-      }
     case TableItem::BASE_TABLE: {
         if (OB_FAIL(print_base_table(table_item))) {
           LOG_WARN("failed to print base table", K(ret), K(*table_item));
@@ -310,14 +300,14 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
           LOG_WARN("table item ref query is null", K(ret));
         // generated_table cannot appear in view_definition
         // view is converted to a generated table in the resolver phase, and needs to be treated as a base table
-        } else if (table_item->is_view_table_ && !print_params_.for_dblink_) {
+        } else if (table_item->is_view_table_) {
           PRINT_TABLE_NAME(print_params_, table_item);
           if (OB_SUCC(ret)) {
             if (table_item->alias_name_.length() > 0) {
               DATA_PRINTF(" %.*s", LEN_AND_PTR(table_item->alias_name_));
             }
           }
-        } else if (table_item->cte_type_ != TableItem::NOT_CTE && !print_params_.for_dblink_) {
+        } else if (table_item->cte_type_ != TableItem::NOT_CTE) {
           PRINT_TABLE_NAME(print_params_, table_item);
           if (table_item->alias_name_.length() > 0) {
             DATA_PRINTF(" %.*s", LEN_AND_PTR(table_item->alias_name_));
@@ -400,14 +390,10 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
       break;
     }
     case TableItem::TEMP_TABLE: {
-      if (!print_params_.for_dblink_) {
-        PRINT_TABLE_NAME(print_params_, table_item);
-        if (!table_item->alias_name_.empty()) {
-          DATA_PRINTF(" ");
-          PRINT_IDENT_WITH_QUOT(table_item->alias_name_);
-        }
-      } else if (OB_FAIL(print_table_with_subquery(table_item))) {
-        LOG_WARN("failed to print table with subquery", K(ret));
+      PRINT_TABLE_NAME(print_params_, table_item);
+      if (OB_SUCC(ret) && !table_item->alias_name_.empty()) {
+        DATA_PRINTF(" ");
+        PRINT_IDENT_WITH_QUOT(table_item->alias_name_);
       }
       break;
     }
@@ -432,11 +418,7 @@ int ObDMLStmtPrinter::print_values_table(const TableItem &table_item, bool no_pr
 {
   int ret = OB_SUCCESS;
   ObValuesTableDef *table_def = table_item.values_table_def_;
-  if (print_params_.for_dblink_) {
-    if (OB_FAIL(print_values_table_to_union_all(table_item, no_print_alias))) {
-      LOG_WARN("failed to print values table for dblink", K(ret));
-    }
-  } else if (OB_UNLIKELY(!table_item.is_values_table()) || OB_ISNULL(table_def)) {
+  if (OB_UNLIKELY(!table_item.is_values_table()) || OB_ISNULL(table_def)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("values table def should not be NULL", K(ret), KP(table_def));
   } else {
@@ -469,150 +451,6 @@ int ObDMLStmtPrinter::print_values_table(const TableItem &table_item, bool no_pr
       }
     } else {
       DATA_PRINTF("%.*s", LEN_AND_PTR(table_item.get_table_name()));
-    }
-  }
-  return ret;
-}
-
-// it is used in dblink before
-int write_for_const_param(char *buf, int64_t buf_len, int64_t &pos, int64_t param_idx, int8_t type_value = 0)
-{
-  /*
-   * we need 4 bytes for every const param:
-   * 1 byte:  '\0' for meta info flag. '\0' can not appear in any sql stmt fmt.
-   * 1 byte:  meta info type. now we used 0 to indicate const param.
-   * 2 bytes: uint16 for param index.
-   */
-  const int64_t PARAM_LEN = sizeof(char) * 2 + sizeof(uint16_t);
-  int ret = OB_SUCCESS;
-  if (buf_len - pos < PARAM_LEN) {
-    ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("buffer is not enough", K(ret), K(buf_len), K(pos));
-  } else if (type_value < -1 || type_value > static_cast<int8_t>(ObObjType::ObMaxType)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid type_value", K(type_value), K(ret));
-  } else if (param_idx < 0 || param_idx > UINT16_MAX) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("param count should be between 0 and UINT16_MAX", K(ret), K(param_idx));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "param count not in the range 0 - UINT16_MAX");
-  } else {
-    buf[pos++] = 0;   // meta flag.
-    buf[pos++] = type_value;   // meta type.
-    *(uint16_t*)(buf + pos) = param_idx;
-    pos += sizeof(uint16_t);
-  }
-  return ret;
-}
-
-int ObDMLStmtPrinter::print_values_table_to_union_all(const TableItem &table_item, bool no_print_alias)
-{
-  int ret = OB_SUCCESS;
-  ObValuesTableDef *table_def = table_item.values_table_def_;
-  if (OB_UNLIKELY(!table_item.is_values_table()) || OB_ISNULL(table_def)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("values table def should not be NULL", K(ret), KP(table_def));
-  } else {
-    int64_t column_cnt = table_def->column_cnt_;
-    int64_t row_cnt = table_def->row_cnt_;
-    if (OB_UNLIKELY(column_cnt <= 0 || row_cnt <= 0
-                    || column_cnt != table_def->column_types_.count())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected column or row info in values table", K(ret), K(column_cnt), K(row_cnt), K(table_def->column_types_));
-    } else if (ObValuesTableDef::ACCESS_EXPR == table_def->access_type_ ||
-               ObValuesTableDef::FOLD_ACCESS_EXPR == table_def->access_type_) {
-      const ObIArray<ObRawExpr *> &values = table_def->access_exprs_;
-      if (OB_UNLIKELY(values.count() % column_cnt != 0 || values.empty())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("got unexpected param", K(ret));
-      }
-      DATA_PRINTF("(");
-      for (int64_t i = 0; OB_SUCC(ret) && i < values.count(); ++i) {
-        if (i % column_cnt == 0) {
-          if (i == 0) {
-            DATA_PRINTF("SELECT ");
-          } else {
-            DATA_PRINTF(" FROM DUAL UNION ALL SELECT ");
-          }
-        }
-        if (OB_SUCC(ret)) {
-          OZ (expr_printer_.do_print(values.at(i), T_FROM_SCOPE));
-          if (i < column_cnt) {
-            DATA_PRINTF(" AS \"column_%ld\"", i);
-          }
-          if ((i + 1) % column_cnt != 0) {
-            DATA_PRINTF(", ");
-          }
-        }
-      }
-      DATA_PRINTF(" FROM DUAL) \"%.*s\"", LEN_AND_PTR(table_item.alias_name_));
-    } else if (ObValuesTableDef::ACCESS_PARAM == table_def->access_type_) {
-      const int64_t start_idx = table_def->start_param_idx_;
-      const int64_t end_idx = table_def->end_param_idx_;
-      DATA_PRINTF("(");
-      if (param_store_ == NULL) {
-        for (int64_t i = 0; OB_SUCC(ret) && i < row_cnt; i++) {
-          if (i == 0) {
-            DATA_PRINTF("SELECT ");
-          } else {
-            DATA_PRINTF(" FROM DUAL UNION ALL SELECT ");
-          }
-          for (int64_t j = 0; OB_SUCC(ret) && j < column_cnt; j++) {
-            OZ (write_for_const_param(buf_, buf_len_, *pos_, start_idx + i * column_cnt + j));
-            if (i == 0) {
-              DATA_PRINTF(" AS \"column_%ld\"", j);
-            }
-            if (j + 1 != column_cnt) {
-              DATA_PRINTF(", ");
-            }
-          }
-        }
-      } else if (OB_ISNULL(param_store_) ||
-                 OB_UNLIKELY(start_idx < 0 || end_idx < start_idx) ||
-                 OB_UNLIKELY(start_idx >= param_store_->count() || end_idx >= param_store_->count())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(start_idx), K(end_idx));
-      } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < row_cnt; i++) {
-          if (i == 0) {
-            DATA_PRINTF("SELECT ");
-          } else {
-            DATA_PRINTF(" FROM DUAL UNION ALL SELECT ");
-          }
-          for (int64_t j = 0; OB_SUCC(ret) && j < column_cnt; j++) {
-            OZ (param_store_->at(start_idx + i * column_cnt + j).print_sql_literal(buf_, buf_len_, *pos_, print_params_));
-            if (i == 0) {
-              DATA_PRINTF(" AS \"column_%ld\"", j);
-            }
-            if (j + 1 != column_cnt) {
-              DATA_PRINTF(", ");
-            }
-          }
-        }
-      }
-      DATA_PRINTF(" FROM DUAL) \"%.*s\"", LEN_AND_PTR(table_item.alias_name_));
-    } else if (ObValuesTableDef::ACCESS_OBJ == table_def->access_type_) {
-      if (OB_UNLIKELY(table_def->access_objs_.count() != column_cnt * row_cnt)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("got unexpected param", K(ret));
-      }
-      DATA_PRINTF("(");
-      for (int64_t i = 0; OB_SUCC(ret) && i < row_cnt; i++) {
-        if (i == 0) {
-          DATA_PRINTF("SELECT ");
-        } else {
-          DATA_PRINTF(" FROM DUAL UNION ALL SELECT ");
-        }
-        for (int64_t j = 0; OB_SUCC(ret) && j < column_cnt; j++) {
-          OZ (table_def->access_objs_.at(j + i * column_cnt).print_sql_literal(buf_, buf_len_, *pos_, print_params_));
-          if (i == 0) {
-            DATA_PRINTF(" AS \"column_%ld\"", j);
-          }
-          if (j + 1 != column_cnt) {
-            DATA_PRINTF(", ");
-          }
-        }
-      }
-      DATA_PRINTF(" FROM DUAL) \"%.*s\"", LEN_AND_PTR(table_item.alias_name_));
     }
   }
   return ret;
@@ -1564,10 +1402,9 @@ int ObDMLStmtPrinter::print_base_table(const TableItem *table_item)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table_item should not be NULL", K(ret));
   } else if (TableItem::BASE_TABLE != table_item->type_
-      && TableItem::ALIAS_TABLE != table_item->type_
-      && TableItem::LINK_TABLE != table_item->type_) {
+      && TableItem::ALIAS_TABLE != table_item->type_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_type should be BASE_TABLE or ALIAS_TABLE or LINK_TABLE", K(ret),
+    LOG_WARN("table_type should be BASE_TABLE or ALIAS_TABLE", K(ret),
              K(table_item->type_));
   } else {
     PRINT_TABLE_NAME(print_params_, table_item);
@@ -1616,9 +1453,7 @@ int ObDMLStmtPrinter::print_base_table(const TableItem *table_item)
           explain_non_extend = !static_cast<const ObExplainStmt *>
                                 (stmt_->get_query_ctx()->root_stmt_)->is_explain_extended();
         }
-        if (OB_NOT_NULL(table_item->flashback_query_expr_) && 
-            // do not print flashback of link table when explain [basic]
-            !(table_item->is_link_table() && explain_non_extend)) {
+        if (OB_NOT_NULL(table_item->flashback_query_expr_)) {
           if (table_item->flashback_query_type_ == TableItem::USING_TIMESTAMP) {
             DATA_PRINTF(" as of timestamp "); 
             if (OB_FAIL(expr_printer_.do_print(table_item->flashback_query_expr_, T_NONE_SCOPE))) {
@@ -1714,73 +1549,6 @@ int ObDMLStmtPrinter::print_semi_join()
   return ret;
 }
 
-int ObDMLStmtPrinter::print_semi_info_to_subquery()
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(stmt_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
-  }
-  for (int i = 0; OB_SUCC(ret) && i < stmt_->get_semi_info_size(); ++i) {
-    SemiInfo *semi_info = stmt_->get_semi_infos().at(i);
-    const TableItem *right_table = NULL;
-    if (OB_ISNULL(semi_info)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null semi info", K(ret));
-    } else if (OB_ISNULL(right_table = stmt_->get_table_item_by_id(semi_info->right_table_id_))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null table item", K(ret));
-    } else {
-      DATA_PRINTF(" ");
-      // join type
-      ObString type_str("");
-      switch (semi_info->join_type_) {
-      case LEFT_SEMI_JOIN: {
-          type_str = "exists";
-          break;
-        }
-      case LEFT_ANTI_JOIN: {
-          type_str = "not exists";
-          break;
-        }
-      default: {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unknown join type", K(ret));
-          break;
-        }
-      }
-      DATA_PRINTF("%.*s(select 1 from ", LEN_AND_PTR(type_str));
-      // right table
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(print_table(right_table))) {
-          LOG_WARN("fail to print right table", K(ret), K(*right_table));
-        } else {
-          // join conditions
-          const ObIArray<ObRawExpr*> &join_conditions = semi_info->semi_conditions_;
-          int64_t join_conditions_size = join_conditions.count();
-          if (join_conditions_size > 0) {
-            DATA_PRINTF(" where ");
-            for (int64_t i = 0; OB_SUCC(ret) && i < join_conditions_size; ++i) {
-              if (OB_FAIL(expr_printer_.do_print(join_conditions.at(i), T_WHERE_SCOPE))) {
-                LOG_WARN("fail to print join condition", K(ret));
-              }
-              DATA_PRINTF(" and ");
-            }
-            if (OB_SUCC(ret)) {
-              *pos_ -= 5; // strlen(" and ")
-            }
-          }
-        }
-      }
-      DATA_PRINTF(") and ");
-    }
-  }
-  if (OB_SUCC(ret) && stmt_->get_semi_info_size() > 0) {
-    *pos_ -= 5; // strlen(" and ")
-  }
-  return ret;
-}
-
 int ObDMLStmtPrinter::print_where()
 {
   int ret = OB_SUCCESS;
@@ -1800,16 +1568,6 @@ int ObDMLStmtPrinter::print_where()
       }
       if (OB_SUCC(ret)) {
         *pos_ -= 5; // strlen(" and ")
-      }
-    }
-    if (print_params_.for_dblink_) {
-      if (condition_exprs_size == 0 && stmt_->get_semi_info_size() > 0) {
-        DATA_PRINTF(" where ");
-      } else if (condition_exprs_size > 0 && stmt_->get_semi_info_size() > 0) {
-        DATA_PRINTF(" and ");
-      }
-      if (OB_SUCC(ret) && OB_FAIL(print_semi_info_to_subquery())) {
-        LOG_WARN("failed to print semi info to subquery", K(ret));
       }
     }
   }
@@ -2108,9 +1866,6 @@ int ObDMLStmtPrinter::print_temp_table_as_cte()
     //do nothing
   } else if (!print_cte_) {
     //do nothing
-  } else if (print_params_.for_dblink_) {
-    // always print temp table as generated table
-    // do nothing
   } else if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null stmt", K(ret));

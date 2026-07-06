@@ -108,9 +108,6 @@ public:
                     const int64_t new_log_disk_size,
                     int64_t &allowed_log_disk_size,
                     ObLogService *log_service);
-
-  int force_update_tenant_log_disk(const uint64_t tenant_id,
-                                   const int64_t new_log_disk_size);
   TO_STRING_KV(K_(is_inited));
 
 private:

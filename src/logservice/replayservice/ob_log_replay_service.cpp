@@ -15,6 +15,7 @@
  */
 
 #include "ob_log_replay_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "logservice/ob_ls_adapter.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #ifdef OB_BUILD_LOG_STORAGE_COMPRESS
@@ -156,7 +157,7 @@ void ReplayProcessStat::runTimerTask()
     }
 
     if (-1 == estimate_time) {
-      CLOG_LOG(INFO, "dump tenant replay process", "tenant_id", MTL_ID(),
+      CLOG_LOG(INFO, "dump tenant replay process", 
                "unsubmitted_log_size(MB)", unsubmitted_log_size_MB,
                "unreplayed_log_size(MB)", unreplayed_log_size_MB,
                "submitted_log_size(MB)", submitted_log_size_MB,
@@ -166,7 +167,7 @@ void ReplayProcessStat::runTimerTask()
                "round_cost_time(second)", round_cost_time,
                "pending_replay_log_size(MB)", pending_replay_log_size_MB);
     } else {
-      CLOG_LOG(INFO, "dump tenant replay process", "tenant_id", MTL_ID(),
+      CLOG_LOG(INFO, "dump tenant replay process", 
                "unsubmitted_log_size(MB)", unsubmitted_log_size_MB,
                "unreplayed_log_size(MB)", unreplayed_log_size_MB,
                "estimate_time(second)", estimate_time,
@@ -206,9 +207,7 @@ int ObLogReplayService::init(PalfEnv *palf_env,
                              ObILogAllocator *allocator)
 {
   int ret = OB_SUCCESS;
-  const uint64_t MAP_TENANT_ID = MTL_ID();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MAP_TENANT_ID));
-  int64_t thread_quota = std::max(static_cast<int64_t>(1), static_cast<int64_t>(tenant_config.is_valid() ? tenant_config->cpu_quota_concurrency : 4));
+  int64_t thread_quota = std::max(static_cast<int64_t>(1), static_cast<int64_t>(true ? GCONF.cpu_quota_concurrency : 4));
 
   if (is_inited_) {
     ret = OB_INIT_TWICE;
@@ -222,7 +221,7 @@ int ObLogReplayService::init(PalfEnv *palf_env,
     CLOG_LOG(WARN, "fail to create thread group", K(ret));
   } else if (OB_FAIL(TG_SET_ADAPTIVE_THREAD(tg_id_, 0, thread_quota * MTL_CPU_COUNT()))) {
     CLOG_LOG(WARN, "set adaptive thread failed", K(ret));
-  } else if (OB_FAIL(replay_status_map_.init("REPLAY_STATUS", MAP_TENANT_ID))) {
+  } else if (OB_FAIL(replay_status_map_.init("REPLAY_STATUS"))) {
     CLOG_LOG(WARN, "replay_status_map_ init error", K(ret));
   } else if (OB_FAIL(replay_stat_.init(this))) {
     CLOG_LOG(WARN, "replay_stat_ init error", K(ret));
@@ -387,7 +386,7 @@ int ObLogReplayService::add_ls(const share::ObLSID &id)
 {
   int ret = OB_SUCCESS;
   ObReplayStatus *replay_status = NULL;
-  ObMemAttr attr(MTL_ID(), ObModIds::OB_LOG_REPLAY_STATUS);
+  ObMemAttr attr(ObModIds::OB_LOG_REPLAY_STATUS);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "replay service not init", K(ret));
@@ -871,7 +870,7 @@ bool ObLogReplayService::is_tenant_out_of_memory_() const
 {
   bool bool_ret = true;
   int64_t pending_size = get_pending_task_size();
-  bool is_pending_too_large = MTL(ObTenantFreezer *)->is_replay_pending_log_too_large(pending_size);
+  bool is_pending_too_large = share::g_mp->tenant_freezer()->is_replay_pending_log_too_large(pending_size);
   bool_ret = (pending_size >= PENDING_TASK_MEMORY_LIMIT || is_pending_too_large);
   return bool_ret;
 }

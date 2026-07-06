@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "observer/omt/ob_multi_tenant.h"
 #include "ob_table_load_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/omt/ob_tenant.h"
 #include "observer/table_load/ob_table_load_client_task.h"
 #include "observer/table_load/ob_table_load_coordinator_ctx.h"
@@ -49,7 +51,7 @@ void ObTableLoadService::ObGCTask::runTimerTask()
   LOG_DEBUG("table load start gc");
   ObTableLoadManager &manager = service_.get_manager();
   ObArray<ObTableLoadTableCtx *> table_ctx_array;
-  table_ctx_array.set_tenant_id(MTL_ID());
+  
   if (OB_FAIL(manager.get_all_table_ctx(table_ctx_array))) {
     LOG_WARN("fail to get all  table ctx", KR(ret));
   }
@@ -94,7 +96,7 @@ bool ObTableLoadService::ObGCTask::gc_mark_delete(ObTableLoadTableCtx *table_ctx
 bool ObTableLoadService::ObGCTask::gc_table_not_exist_ctx(ObTableLoadTableCtx *table_ctx)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   bool is_removed = false;
   if (OB_ISNULL(table_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -116,10 +118,10 @@ bool ObTableLoadService::ObGCTask::gc_table_not_exist_ctx(ObTableLoadTableCtx *t
     else {
       ObSchemaGetterGuard schema_guard;
       const ObTableSchema *table_schema = nullptr;
-      if (OB_FAIL(ObTableLoadSchema::get_table_schema(tenant_id, hidden_table_id, schema_guard,
+      if (OB_FAIL(ObTableLoadSchema::get_table_schema( hidden_table_id, schema_guard,
                                                       table_schema))) {
         if (OB_UNLIKELY(OB_TABLE_NOT_EXIST != ret && OB_TENANT_NOT_EXIST != ret)) {
-          LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(hidden_table_id));
+          LOG_WARN("fail to get table schema", KR(ret), K(hidden_table_id));
         } else {
           LOG_INFO("hidden table not exist, gc table load ctx", K(table_id), K(hidden_table_id));
           ObTableLoadService::remove_ctx(table_ctx);
@@ -159,7 +161,7 @@ void ObTableLoadService::ObClientTaskAutoAbortTask::runTimerTask()
   int ret = OB_SUCCESS;
   LOG_DEBUG("table load auto abort client task");
   ObArray<ObTableLoadClientTask *> client_task_array;
-  client_task_array.set_tenant_id(MTL_ID());
+  
   if (OB_FAIL(service_.manager_.get_all_client_task(client_task_array))) {
     LOG_WARN("fail to get all client task", KR(ret));
   } else {
@@ -219,7 +221,7 @@ void ObTableLoadService::ObClientTaskPurgeTask::purge_client_task()
 {
   int ret = OB_SUCCESS;
   ObArray<ObTableLoadClientTask *> client_task_array;
-  client_task_array.set_tenant_id(MTL_ID());
+  
   if (OB_FAIL(service_.manager_.get_all_client_task(client_task_array))) {
     LOG_WARN("fail to get all client task", KR(ret));
   }
@@ -248,7 +250,7 @@ void ObTableLoadService::ObClientTaskPurgeTask::purge_client_task_brief()
   int ret = OB_SUCCESS;
   const int64_t expired_ts = ObTimeUtil::current_time() - CLIENT_TASK_BRIEF_RETENTION_PERIOD;
   ObArray<ObTableLoadClientTaskBrief *> client_task_brief_array;
-  client_task_brief_array.set_tenant_id(MTL_ID());
+  
   if (OB_FAIL(service_.manager_.get_all_client_task_brief(client_task_brief_array))) {
     LOG_WARN("fail to get all client task brief", KR(ret));
   }
@@ -273,12 +275,12 @@ void ObTableLoadService::ObClientTaskPurgeTask::purge_client_task_brief()
 int ObTableLoadService::mtl_new(ObTableLoadService *&service)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
-  ObMemAttr attr(tenant_id, ObModIds::OMT_TENANT);
-  service = OB_NEW(ObTableLoadService, attr, tenant_id);
+  
+  ObMemAttr attr(ObModIds::OMT_TENANT);
+  service = OB_NEW(ObTableLoadService, attr);
   if (OB_ISNULL(service)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc memory", K(ret), K(tenant_id));
+    LOG_WARN("failed to alloc memory", K(ret));
   }
   return ret;
 }
@@ -297,10 +299,10 @@ void ObTableLoadService::mtl_destroy(ObTableLoadService *&service)
 int ObTableLoadService::check_tenant()
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   ObTenant *tenant = nullptr;
-  if (OB_FAIL(GCTX.omt_->get_tenant(tenant_id, tenant))) {
-    LOG_WARN("fail to get tenant", KR(ret), K(tenant_id));
+  if (OB_FAIL(GCTX.omt_->get_tenant(tenant))) {
+    LOG_WARN("fail to get tenant", KR(ret));
   } else if (tenant->get_unit_status() == ObUnitInfoGetter::ObUnitStatus::UNIT_MARK_DELETING
     || tenant->get_unit_status() == ObUnitInfoGetter::ObUnitStatus::UNIT_WAIT_GC_IN_OBSERVER
     || tenant->get_unit_status() == ObUnitInfoGetter::ObUnitStatus::UNIT_DELETING_IN_OBSERVER) {
@@ -327,12 +329,12 @@ int ObTableLoadService::check_support_direct_load(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(table_id));
   } else {
-    const uint64_t tenant_id = MTL_ID();
+    
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *table_schema = nullptr;
     if (OB_FAIL(
-          ObTableLoadSchema::get_table_schema(tenant_id, table_id, schema_guard, table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
+          ObTableLoadSchema::get_table_schema( table_id, schema_guard, table_schema))) {
+      LOG_WARN("fail to get table schema", KR(ret), K(table_id));
     } else {
       ret = check_support_direct_load(schema_guard, table_schema, method, insert_mode, load_mode, load_level, column_ids);
     }
@@ -353,10 +355,10 @@ int ObTableLoadService::check_support_direct_load(ObSchemaGetterGuard &schema_gu
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(table_id));
   } else {
-    const uint64_t tenant_id = MTL_ID();
+    
     const ObTableSchema *table_schema = nullptr;
-    if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
+    if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
+      LOG_WARN("fail to get table schema", KR(ret), K(table_id));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("table schema is null", KR(ret));
@@ -668,7 +670,7 @@ int ObTableLoadService::alloc_ctx(ObTableLoadTableCtx *&table_ctx)
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else if (OB_UNLIKELY(service->is_stop_)) {
@@ -684,7 +686,7 @@ int ObTableLoadService::add_ctx(ObTableLoadTableCtx *table_ctx)
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else if (OB_UNLIKELY(service->is_stop_)) {
@@ -701,13 +703,13 @@ int ObTableLoadService::remove_ctx(ObTableLoadTableCtx *table_ctx)
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else {
     int tmp_ret = OB_SUCCESS;
     ObDirectLoadResourceReleaseArg release_arg;
-    release_arg.tenant_id_ = MTL_ID();
+    
     release_arg.task_key_ = ObTableLoadUniqueKey(table_ctx->param_.table_id_, table_ctx->ddl_param_.task_id_);
     if (OB_FAIL(service->get_manager().remove_table_ctx(release_arg.task_key_, table_ctx))) {
       LOG_WARN("fail to remove_table_ctx", KR(ret), K(release_arg.task_key_));
@@ -733,7 +735,7 @@ int ObTableLoadService::get_ctx(const ObTableLoadUniqueKey &key, ObTableLoadTabl
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else {
@@ -746,7 +748,7 @@ void ObTableLoadService::put_ctx(ObTableLoadTableCtx *table_ctx)
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else {
@@ -754,9 +756,8 @@ void ObTableLoadService::put_ctx(ObTableLoadTableCtx *table_ctx)
   }
 }
 
-ObTableLoadService::ObTableLoadService(const uint64_t tenant_id)
-  : tenant_id_(tenant_id),
-    manager_(tenant_id),
+ObTableLoadService::ObTableLoadService()
+  : manager_{},
     gc_task_(*this),
     release_task_(*this),
     client_task_auto_abort_task_(*this),
@@ -793,7 +794,7 @@ int ObTableLoadService::start()
   } else {
     if (OB_FAIL(timer_.set_run_wrapper_with_ret(MTL_CTX()))) {
       LOG_WARN("fail to set gc timer's run wrapper", KR(ret));
-    } else if (OB_FAIL(timer_.init("TLD_Timer", ObMemAttr(MTL_ID(), "TLD_TIMER")))) {
+    } else if (OB_FAIL(timer_.init("TLD_Timer", ObMemAttr("TLD_TIMER")))) {
       LOG_WARN("fail to init gc timer", KR(ret));
     } else if (OB_FAIL(timer_.schedule(gc_task_, GC_INTERVAL, true))) {
       LOG_WARN("fail to schedule gc task", KR(ret));
@@ -834,7 +835,7 @@ void ObTableLoadService::abort_all_client_task(int error_code)
 {
   int ret = OB_SUCCESS;
   ObArray<ObTableLoadClientTask *> client_task_array;
-  client_task_array.set_tenant_id(MTL_ID());
+  
   if (OB_FAIL(manager_.get_all_client_task(client_task_array))) {
     LOG_WARN("fail to get all client task", KR(ret));
   } else {
@@ -851,7 +852,7 @@ void ObTableLoadService::fail_all_ctx(int error_code)
   int ret = OB_SUCCESS;
   ObArray<ObTableLoadTableCtx *> table_ctx_array;
   bool is_stopped = false;
-  table_ctx_array.set_tenant_id(MTL_ID());
+  
   if (OB_FAIL(manager_.get_all_table_ctx(table_ctx_array))) {
     LOG_WARN("fail to get all table ctx list", KR(ret));
   } else {
@@ -911,16 +912,16 @@ int ObTableLoadService::get_memory_limit(int64_t &memory_limit)
   const int64_t LIMIT_SYS_VAR_OB_SQL_WORK_AREA_PERCENTAGE = 50;
   ObObj value;
   int64_t pctg = 0;
-  int64_t tenant_id = MTL_ID();
+  
   ObSchemaGetterGuard schema_guard;
   const ObSysVarSchema *var_schema = NULL;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null");
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("get schema guard failed", K(ret));
-  } else if (OB_FAIL(schema_guard.get_tenant_system_variable(tenant_id, SYS_VAR_OB_SQL_WORK_AREA_PERCENTAGE, var_schema))) {
-    LOG_WARN("get tenant system variable failed", K(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_guard.get_tenant_system_variable(SYS_VAR_OB_SQL_WORK_AREA_PERCENTAGE, var_schema))) {
+    LOG_WARN("get tenant system variable failed", K(ret));
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("var_schema is null");
@@ -929,7 +930,7 @@ int ObTableLoadService::get_memory_limit(int64_t &memory_limit)
   } else if (OB_FAIL(value.get_int(pctg))) {
     LOG_WARN("get int from value failed", K(ret), K(value));
   } else {
-    memory_limit = lib::get_tenant_memory_limit(tenant_id) * MIN(pctg, LIMIT_SYS_VAR_OB_SQL_WORK_AREA_PERCENTAGE) / 100;
+    memory_limit = lib::get_tenant_memory_limit() * MIN(pctg, LIMIT_SYS_VAR_OB_SQL_WORK_AREA_PERCENTAGE) / 100;
   }
   return ret;
 }
@@ -938,7 +939,7 @@ int ObTableLoadService::add_assigned_task(ObDirectLoadResourceApplyArg &arg)
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else {
@@ -951,7 +952,7 @@ int ObTableLoadService::delete_assigned_task(ObDirectLoadResourceReleaseArg &arg
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else {
@@ -970,7 +971,7 @@ int ObTableLoadService::assign_memory(bool is_sort, int64_t assign_memory)
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else {
@@ -983,7 +984,7 @@ int ObTableLoadService::recycle_memory(bool is_sort, int64_t assign_memory)
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else {
@@ -997,7 +998,7 @@ int ObTableLoadService::get_sort_memory(int64_t &sort_memory)
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else {
@@ -1010,7 +1011,7 @@ int ObTableLoadService::refresh_and_check_resource(ObDirectLoadResourceCheckArg 
 {
   int ret = OB_SUCCESS;
   ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = MTL(ObTableLoadService *))) {
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("null table load service", KR(ret));
   } else {

@@ -42,7 +42,7 @@ int ObDiagnoseTabletMgr::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDiagnoseTabletMgr has already been initiated", K(ret));
-  } else if (OB_FAIL(diagnose_tablet_map_.create(MAX_DIAGNOSE_TABLET_BUCKET_NUM, "DiaTabletMap", "DiaTabletNode", MTL_ID()))) {
+  } else if (OB_FAIL(diagnose_tablet_map_.create(MAX_DIAGNOSE_TABLET_BUCKET_NUM, "DiaTabletMap", "DiaTabletNode"))) {
     LOG_WARN("Fail to create diagnose tablet map", K(ret));
   } 
   

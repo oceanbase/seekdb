@@ -89,7 +89,7 @@ public:
 public:
   ObDASCacheLookupIter(const ObDASIterType type = ObDASIterType::DAS_ITER_LOCAL_LOOKUP)
     : ObDASLocalLookupIter(type),
-      store_allocator_("SqlCacheLookup", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID(), ObCtxIds::DEFAULT_CTX_ID),
+      store_allocator_("SqlCacheLookup", OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::DEFAULT_CTX_ID),
       index_proj_rows_()
   {}
   virtual ~ObDASCacheLookupIter() {}

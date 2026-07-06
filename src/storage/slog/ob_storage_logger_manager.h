@@ -53,7 +53,7 @@ public:
   int free_item(ObStorageLogItem *log_item);
 
   int get_server_slogger(ObStorageLogger *&slogger);
-  int get_tenant_slog_dir(const uint64_t tenant_id, char (&tenant_clog_dir)[common::MAX_PATH_SIZE]);
+  int get_tenant_slog_dir(char (&tenant_clog_dir)[common::MAX_PATH_SIZE]);
   const char *get_root_dir() { return log_dir_; }
   int get_reserved_size(int64_t &reserved_size) const;
 

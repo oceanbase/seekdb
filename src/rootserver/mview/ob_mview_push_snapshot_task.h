@@ -43,7 +43,6 @@ private:
   bool is_inited_;
   bool in_sched_;
   bool is_stop_;
-  uint64_t tenant_id_;
 };
 
 } // namespace rootserver

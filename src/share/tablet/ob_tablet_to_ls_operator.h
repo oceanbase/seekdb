@@ -44,7 +44,7 @@ public:
   // Get tablets sequentially by range
   //
   // @param [in] sql_proxy, ObMySQLProxy or ObMySQLTransaction
-  // @param [in] tenant_id, tenant for query
+  // @param [in] tenant, tenant for query
   // @param [in] start_tablet_id, starting point of the range (not included in output!)
   //             Usually start from 0.
   // @param [in] range_size, range size of the query
@@ -52,7 +52,6 @@ public:
   // @return OB_SUCCESS if success
   static int range_get_tablet(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const ObTabletID &start_tablet_id,
       const int64_t range_size,
       common::ObIArray<ObTabletLSPair> &tablet_ls_pairs);
@@ -66,7 +65,6 @@ public:
   // @param [in] ls_white_list  LS whitelist, empty means ALL LS in white list
   static int range_get_tablet_info(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const common::ObIArray<ObLSID> &ls_white_list,
       const ObTabletID &start_tablet_id,
       const int64_t range_size,
@@ -75,7 +73,7 @@ public:
   // Gets ObLSIDs according to ObTableIDs
   //
   // @param [in] sql_proxy, ObMySQLProxy or ObMySQLTransaction
-  // @param [in] tenant_id, tenant for query
+  // @param [in] tenant, tenant for query
   // @param [in] tablet_ids, ObTabletIDs for query
   //             (should exist in __all_tablet_to_ls and have no duplicate values)
   // @param [out] ls_ids, ObLSIDs corresponding to tablet_ids (same order)
@@ -85,38 +83,34 @@ public:
   //         Other error according to unexpected situation
   static int batch_get_ls(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const ObIArray<common::ObTabletID> &tablet_ids,
       ObIArray<ObLSID> &ls_ids);
   // Updates ObTabletToLSInfos to __all_tablet_to_ls
   //
   // @param [in] sql_proxy, ObMySQLProxy or ObMySQLTransaction
-  // @param [in] tenant_id, tenant for updating
+  // @param [in] tenant, tenant for updating
   // @param [in] infos, ObTabletToLSInfos for updating
   // @return OB_SUCCESS if success
   static int batch_update(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const ObIArray<ObTabletToLSInfo> &infos);
   // Removes tablet_id from __all_tablet_to_ls
   //
   // @param [in] sql_proxy, ObMySQLProxy or ObMySQLTransaction
-  // @param [in] tenant_id, tenant for removing
+  // @param [in] tenant, tenant for removing
   // @param [in] tablet_ids, ObTabletIDs for removing
   // @return OB_SUCCESS if success
   static int batch_remove(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const ObIArray<common::ObTabletID> &tablet_ids);
   static int update_table_to_tablet_id_mapping(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const uint64_t table_id,
       const common::ObTabletID &tablet_id);
   // Get rows from __all_tablet_to_ls according to ObTableIDs
   //
   // @param [in] sql_proxy, ObMySQLProxy or ObMySQLTransaction
-  // @param [in] tenant_id, tenant for query
+  // @param [in] tenant, tenant for query
   // @param [in] tablet_ids, ObTabletIDs for query
   //             (should exist in __all_tablet_to_ls and have no duplicate values)
   // @param [out] infos, ObTabletToLSInfo corresponding to tablet_ids (not same order)
@@ -126,13 +120,12 @@ public:
   //         Other error according to unexpected situation
   static int batch_get(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const ObIArray<common::ObTabletID> &tablet_ids,
       ObIArray<ObTabletToLSInfo> &infos);
   // Get ls_id by tablet_id
   //
   // @param [in] sql_proxy, ObMySQLProxy or ObMySQLTransaction
-  // @param [in] tenant_id, tenant for query
+  // @param [in] tenant, tenant for query
   // @param [in] tablet_id, target tablet_id
   // @param [out] ls_id,    ls_id which the tablet belongs to
   // @return OB_SUCCESS if success;
@@ -140,26 +133,24 @@ public:
   //         Other error according to unexpected situation
   static int get_ls_by_tablet(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const common::ObTabletID &tablet_id,
       ObLSID &ls_id);
   // Batch get ObTabletLSCache for location_service
   //
   // @param [in] sql_proxy, ObMySQLProxy or ObMySQLTransaction
-  // @param [in] tenant_id, tenant for query
+  // @param [in] tenant, tenant for query
   // @param [in] tablet_id, target tablet_id
   // @param [out] tablet_ls_cache, ObTabletLSCache array
   // @return OB_SUCCESS if success
   static int batch_get_tablet_ls_cache(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const common::ObIArray<common::ObTabletID> &tablet_ids,
       common::ObIArray<ObTabletLSCache> &tablet_ls_caches);
   
   // Gets ObTabletLSPair according to ObTableIDs
   //
   // @param [in] sql_proxy, ObMySQLProxy or ObMySQLTransaction
-  // @param [in] tenant_id, tenant for query
+  // @param [in] tenant, tenant for query
   // @param [in] tablet_ids, ObTabletIDs for query (no duplicate values)
   // @param [out] tablet_ls_pairs, array of <TabletID, LSID>
   // @return OB_SUCCESS if success;
@@ -168,39 +159,33 @@ public:
   //         Other error according to unexpected situation
   static int batch_get_tablet_ls_pairs(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const ObIArray<common::ObTabletID> &tablet_ids,
       ObIArray<ObTabletLSPair> &tablet_ls_pairs);
   static int get_tablet_ls_pairs_cnt(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       int64_t &input_cnt);
   const static int64_t MAX_BATCH_COUNT = 200;
 private:
   static int inner_batch_get_(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const ObIArray<common::ObTabletID> &tablet_ids,
       const int64_t start_idx,
       const int64_t end_idx,
       ObIArray<ObLSID> &ls_ids);
   static int inner_batch_get_(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const ObIArray<common::ObTabletID> &tablet_ids,
       const int64_t start_idx,
       const int64_t end_idx,
       ObIArray<ObTabletToLSInfo> &infos);
   static int inner_batch_get_(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const ObIArray<common::ObTabletID> &tablet_ids,
       const int64_t start_idx,
       const int64_t end_idx,
       common::ObIArray<ObTabletLSCache> &tablet_ls_caches);
   static int inner_batch_get_(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const ObIArray<common::ObTabletID> &tablet_ids,
       const int64_t start_idx,
       const int64_t end_idx,
@@ -208,32 +193,26 @@ private:
 
   static int inner_batch_update_by_sql_(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const ObIArray<ObTabletToLSInfo> &infos,
       const int64_t start_idx,
       const int64_t end_idx);
   static int inner_batch_remove_by_sql_(
       common::ObISQLClient &sql_proxy,
-      const uint64_t tenant_id,
       const ObIArray<common::ObTabletID> &tablet_ids,
       const int64_t start_idx,
       const int64_t end_idx);
 
   static int construct_results_(
       common::sqlclient::ObMySQLResult &res,
-      const uint64_t tenant_id,
       ObIArray<ObLSID> &ls_ids);
   static int construct_results_(
       common::sqlclient::ObMySQLResult &res,
-      const uint64_t tenant_id,
       ObIArray<ObTabletToLSInfo> &infos);
   static int construct_results_(
       common::sqlclient::ObMySQLResult &res,
-      const uint64_t tenant_id,
       ObIArray<ObTabletLSPair> &pairs);
   static int construct_results_(
       common::sqlclient::ObMySQLResult &res,
-      const uint64_t tenant_id,
       common::ObIArray<ObTabletLSCache> &tablet_ls_caches);
   static int construct_ls_white_list_where_sql_(
       const ObIArray<ObLSID> &ls_white_list,

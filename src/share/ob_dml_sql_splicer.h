@@ -279,8 +279,8 @@ private:
 class ObDMLExecHelper
 {
 public:
-  ObDMLExecHelper(common::ObISQLClient &sql_client, const uint64_t tenant_id)
-      : tenant_id_(tenant_id), sql_client_(sql_client) {}
+  ObDMLExecHelper(common::ObISQLClient &sql_client)
+      : sql_client_(sql_client) {}
   virtual ~ObDMLExecHelper() {}
 
   int exec_insert(const char *table_name, const ObDMLSqlSplicer &splicer,
@@ -298,7 +298,6 @@ public:
 private:
   int check_row_exist(const char *table_name, const ObDMLSqlSplicer &splicer,
                       bool &exist);
-  uint64_t tenant_id_;
   common::ObISQLClient &sql_client_;
 };
 

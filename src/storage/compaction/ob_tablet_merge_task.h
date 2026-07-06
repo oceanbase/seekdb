@@ -18,7 +18,7 @@
 #define STORAGE_COMPACTION_OB_TABLET_MERGE_TASK_H_
 
 #include "share/ob_occam_time_guard.h"
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/ob_i_table.h"
 #include "storage/blocksstable/ob_datum_range.h"
 #include "storage/tx_storage/ob_ls_handle.h"
@@ -218,7 +218,6 @@ public:
   static bool can_not_retry_warning(const int dag_ret) {
     return OB_NO_NEED_MERGE == dag_ret
         || OB_TABLE_IS_DELETED == dag_ret
-        || OB_TENANT_HAS_BEEN_DROPPED == dag_ret
         || OB_LS_NOT_EXIST == dag_ret
         || OB_TABLET_NOT_EXIST == dag_ret
         || OB_CANCELED == dag_ret

@@ -15,7 +15,7 @@
  */
 #ifndef OB_VIRTUAL_FLT_CONF_H_
 #define OB_VIRTUAL_FLT_CONF_H_
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/monitor/flt/ob_flt_control_info_mgr.h"
 using namespace oceanbase::sql;
 namespace oceanbase
@@ -32,7 +32,7 @@ namespace observer
       int inner_get_next_row() { return get_row_from_tenants(); }
       int get_row_from_tenants();
       int fill_cells(ObFLTConfRec &record);
-      int get_row_from_specified_tenant(uint64_t tenant_id, bool &is_end);
+      int get_row_from_specified_tenant(bool &is_end);
       int inner_get_next_row(common::ObNewRow *&row);
     private:
       enum SYS_COLUMN
@@ -51,8 +51,7 @@ namespace observer
       DISALLOW_COPY_AND_ASSIGN(ObVirtualFLTConfig);
       ObSEArray<ObFLTConfRec, 16> rec_list_;
       int64_t rec_array_idx_; 
-      common::ObSEArray<uint64_t, 16> tenant_id_array_;
-      int64_t tenant_id_array_idx_; 
+      bool iter_end_;
   };
 } /* namespace observer */
 } /* namespace oceanbase */

@@ -92,8 +92,8 @@ struct ObDTLMemProfileKey {
 class ObDTLMemProfileInfo : public ObSqlMemoryCallback
 {
 public:
-  ObDTLMemProfileInfo(const uint64_t tenant_id)
-    : allocator_(tenant_id),
+  ObDTLMemProfileInfo()
+    : allocator_{},
       profile_(ObSqlWorkAreaType::HASH_WORK_AREA),
       sql_mem_processor_(profile_),
       ref_count_(0), row_count_(0),
@@ -192,7 +192,7 @@ struct ObDTLIntermResultInfo
   void reset() { datum_store_ = NULL; block_store_ = NULL; is_read_ = false; ret_ = common::OB_SUCCESS; }
   void set_eof(bool flag) { is_eof_ = flag; }
   int64_t get_ref_count() { return ATOMIC_LOAD(&ref_count_); }
-  uint64_t get_tenant_id() const { return is_rich_format() ? block_store_->get_tenant_id() : datum_store_->get_tenant_id(); }
+  
   sql::ObTempRowStore *get_row_store() { return static_cast<sql::ObTempRowStore *>(block_store_); }
   sql::ObTempColumnStore *get_column_store() { return static_cast<sql::ObTempColumnStore *>(block_store_); }
   bool is_rich_format() const { return store_type_ != ObDTLIntermResultInfo::StoreType::INVALID &&

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/tx_storage/ob_ls_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_block_stat_iter.h"
 
 namespace oceanbase
@@ -167,8 +168,8 @@ int ObBlockStatIterator::ObBlockStatKeyCmp::cmp(const ObBlockStatIterator::ObBlo
 
 ObBlockStatIterator::ObBlockStatIterator()
   : scan_param_(nullptr),
-    allocator_(ObMemAttr(MTL_ID(), "BlkStatIter")),
-    merged_endkey_allocator_(ObMemAttr(MTL_ID(), "BlkStatKeyIter")),
+    allocator_(ObMemAttr("BlkStatIter")),
+    merged_endkey_allocator_(ObMemAttr("BlkStatKeyIter")),
     stat_collector_(),
     scan_range_(),
     get_table_param_(),
@@ -419,7 +420,7 @@ int ObBlockStatIterator::refresh_tablet_iter()
     if (OB_UNLIKELY(remain_timeout <= 0)) {
       ret = OB_TIMEOUT;
       LOG_WARN("timeout", K(ret), K(ls_id), K(tablet_id), K(remain_timeout));
-    } else if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+    } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
       LOG_WARN("failed to get ls", K(ret), K(ls_id));
     } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
       ret = OB_ERR_UNEXPECTED;

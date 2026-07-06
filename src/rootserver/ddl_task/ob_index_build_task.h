@@ -30,7 +30,6 @@ class ObIndexSSTableBuildTask : public share::ObAsyncTask
 public:
   ObIndexSSTableBuildTask(
       const int64_t task_id,
-      const uint64_t tenant_id,
       const int64_t data_table_id,
       const int64_t dest_table_id,
       const int64_t schema_version,
@@ -43,7 +42,7 @@ public:
       ObRootService *root_service,
       const common::ObAddr &inner_sql_exec_addr,
       const bool is_retryable_ddl)
-      : task_id_(task_id), tenant_id_(tenant_id), data_table_id_(data_table_id), dest_table_id_(dest_table_id),
+      : task_id_(task_id), data_table_id_(data_table_id), dest_table_id_(dest_table_id),
         schema_version_(schema_version), snapshot_version_(snapshot_version), execution_id_(execution_id),
         consumer_group_id_(consumer_group_id), trace_id_(trace_id), parallelism_(parallelism), is_partitioned_local_index_task_(is_partitioned_local_index_task),
         allocator_("IdxSSTBuildTask"), root_service_(root_service), inner_sql_exec_addr_(inner_sql_exec_addr), is_retryable_ddl_(is_retryable_ddl)
@@ -56,7 +55,7 @@ public:
                      const ObString &nls_timestamp_format,
                      const ObString &nls_timestamp_tz_format);
   int set_addition_info(const share::ObLSID &ls_id, const common::ObAddr &ls_leader_addr, const ObIArray<ObTabletID> &index_partition_ids);
-  ObDDLTaskID get_ddl_task_id() { return ObDDLTaskID(tenant_id_, task_id_); }
+  ObDDLTaskID get_ddl_task_id() { return ObDDLTaskID(task_id_); }
   virtual int process() override;
   virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
   virtual ObAsyncTask *deep_copy(char *buf, const int64_t buf_size) const override;
@@ -68,7 +67,6 @@ private:
   inline bool is_partitioned_local_index_task() const { return is_partitioned_local_index_task_ == true; }
 private:
   int64_t task_id_;
-  int64_t tenant_id_;
   int64_t data_table_id_;
   int64_t dest_table_id_;
   int64_t schema_version_;
@@ -96,7 +94,6 @@ public:
   ObIndexBuildTask();
   virtual ~ObIndexBuildTask();
   int init(
-      const uint64_t tenant_id,
       const int64_t task_id,
       const share::ObDDLType &ddl_type,
       const share::schema::ObTableSchema *data_table_schema,
@@ -127,7 +124,7 @@ public:
   virtual bool is_valid() const override;
   virtual int collect_longops_stat(share::ObLongopsValue &value) override;
   virtual int serialize_params_to_message(char *buf, const int64_t buf_size, int64_t &pos) const override;
-  virtual int deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t buf_size, int64_t &pos) override;
+  virtual int deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos) override;
   virtual int64_t get_serialize_param_size() const override;
   virtual bool support_longops_monitoring() const override { return true; }
   virtual bool task_can_retry() const 
@@ -176,7 +173,6 @@ private:
   static const int64_t OB_INDEX_BUILD_TASK_VERSION = 1;
   using ObDDLTask::is_inited_;
   using ObDDLTask::task_status_;
-  using ObDDLTask::tenant_id_;
   using ObDDLTask::object_id_;
   using ObDDLTask::schema_version_;
   using ObDDLTask::snapshot_version_;

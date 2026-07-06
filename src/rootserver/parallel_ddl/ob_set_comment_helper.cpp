@@ -32,10 +32,9 @@ using namespace oceanbase::rootserver;
 
 ObSetCommentHelper::ObSetCommentHelper(
   share::schema::ObMultiVersionSchemaService *schema_service,
-  const uint64_t tenant_id,
   const obcall::ObSetCommentArg &arg,
   obcall::ObParallelDDLRes &res)
-  : ObDDLHelper(schema_service, tenant_id, "[paralle set comment]"),
+  : ObDDLHelper(schema_service, "[paralle set comment]"),
   arg_(arg),
   res_(res),
   database_id_(OB_INVALID_ID),
@@ -70,13 +69,13 @@ int ObSetCommentHelper::lock_objects_()
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(lock_databases_by_obj_name_())) { // lock database name
-    LOG_WARN("fail to lock databases by obj name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock databases by obj name", KR(ret));
   } else if (OB_FAIL(check_database_legitimacy_())) { // check database legitimacy
-    LOG_WARN("fail to check database legitimacy", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to check database legitimacy", KR(ret));
   } else if (OB_FAIL(lock_objects_by_name_())) { // lock object name
-    LOG_WARN("fail to lock objects by name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock objects by name", KR(ret));
   } else if (OB_FAIL(lock_objects_by_id_())) { // lock objects by id
-    LOG_WARN("fail to lock objects by id" , KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock objects by id" , KR(ret));
   }
   DEBUG_SYNC(AFTER_PARALLEL_DDL_LOCK);
   RS_TRACE(lock_objects);
@@ -90,7 +89,7 @@ int ObSetCommentHelper::lock_objects_()
     LOG_WARN("database_id_ is not equal to table schema's databse_id",
              KR(ret), K_(database_id), K(orig_table_schema_->get_database_id()));
   } else if (OB_FAIL(schema_guard_wrapper_.get_database_schema(database_id_, database_schema))) {
-    LOG_WARN("fail to get database schema", KR(ret), K_(tenant_id), K_(database_id));
+    LOG_WARN("fail to get database schema", KR(ret), K_(database_id));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("databse_schema is null", KR(ret));
@@ -113,9 +112,9 @@ int ObSetCommentHelper::lock_databases_by_obj_name_()
   } else {
     const ObString &database_name = arg_.database_name_;
     if (OB_FAIL(add_lock_object_by_database_name_(database_name, transaction::tablelock::SHARE))) {
-      LOG_WARN("fail to add lock database by name", KR(ret), K_(tenant_id), K(database_name));
+      LOG_WARN("fail to add lock database by name", KR(ret), K(database_name));
     } else if (OB_FAIL(lock_databases_by_name_())) {
-      LOG_WARN("fail to lock databases by name", KR(ret), K_(tenant_id));
+      LOG_WARN("fail to lock databases by name", KR(ret));
     }
   }
   return ret;
@@ -142,9 +141,9 @@ int ObSetCommentHelper::lock_objects_by_name_()
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(add_lock_object_by_name_(database_name, table_name,
       share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-    LOG_WARN("fail to lock object by table name", KR(ret), K_(tenant_id), K(database_name), K(table_name));
+    LOG_WARN("fail to lock object by table name", KR(ret), K(database_name), K(table_name));
   } else if (OB_FAIL(lock_existed_objects_by_name_())) {
-    LOG_WARN("fail to lock objects by name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock objects by name", KR(ret));
   }
   return ret;
 }
@@ -159,7 +158,7 @@ int ObSetCommentHelper::lock_objects_by_id_()
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("database is not exist", KR(ret), K_(tenant_id), K_(arg_.database_name));
+    LOG_WARN("database is not exist", KR(ret), K_(arg_.database_name));
   } else if (OB_FAIL(add_lock_object_by_id_(database_id_,
     share::schema::DATABASE_SCHEMA, transaction::tablelock::SHARE))) {
     LOG_WARN("fail to lock database id", KR(ret), K_(database_id));
@@ -170,7 +169,7 @@ int ObSetCommentHelper::lock_objects_by_id_()
     LOG_WARN("table not exist", KR(ret), K_(database_id), K_(arg_.session_id), K_(arg_.table_name));
   } else if (OB_FAIL(add_lock_object_by_id_(table_id_,
     share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-    LOG_WARN("fail to lock table id", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock table id", KR(ret));
   } else if (OB_FAIL(lock_existed_objects_by_id_())) {
     LOG_WARN("fail to lock objects by id", KR(ret));
   }
@@ -198,8 +197,7 @@ int ObSetCommentHelper::check_table_legitimacy_()
     helper.convert(arg_.database_name_), helper.convert(arg_.table_name_), "BASE TABLE");
   } else if (OB_UNLIKELY((!orig_table_schema_->is_user_table()
                           && !orig_table_schema_->is_tmp_table()
-                          && !orig_table_schema_->is_view_table()
-                          && !orig_table_schema_->is_external_table()))) {
+                          && !orig_table_schema_->is_view_table()))) {
     ret = OB_ERR_WRONG_OBJECT;
     ObCStringHelper helper2;
     LOG_USER_ERROR(OB_ERR_WRONG_OBJECT,
@@ -230,7 +228,7 @@ int ObSetCommentHelper::lock_for_common_ddl_()
   int64_t schema_version = OB_INVALID_VERSION;
   if (OB_UNLIKELY(OB_INVALID_ID == database_id_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("database is not exist", KR(ret), K_(tenant_id), K_(arg_.database_name));
+    LOG_WARN("database is not exist", KR(ret), K_(arg_.database_name));
   } else if (OB_UNLIKELY(OB_INVALID_ID == table_id_)) {
     ret = OB_ERR_OBJECT_NOT_EXIST;
     LOG_WARN("table not exist", KR(ret), K_(database_id), K_(arg_.session_id), K_(arg_.table_name));
@@ -323,8 +321,8 @@ int ObSetCommentHelper::operate_schemas_()
   } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service impl is null", KR(ret));
-  } else if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id_, new_schema_version))) {
-    LOG_WARN("fail to gen new schema version", KR(ret), K_(tenant_id));
+  } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
+    LOG_WARN("fail to gen new schema version", KR(ret));
   } else {
     const bool need_del_stat = false;
     for (uint64_t column_idx = 0; OB_SUCC(ret) && column_idx < arg_.column_name_list_.size(); column_idx++) {

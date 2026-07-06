@@ -15,11 +15,12 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "rootserver/ob_root_service.h"
 #include "sql/resolver/cmd/ob_kill_stmt.h"
 #include "sql/engine/cmd/ob_kill_session_arg.h"
 #include "sql/engine/cmd/ob_kill_executor.h"
 #include "observer/ob_server.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 namespace oceanbase
 {
 using namespace common;
@@ -171,7 +172,7 @@ int ObKillExecutor::kill_client_session(const ObKillSessionArg &arg, ObSQLSessio
   } else if (OB_ISNULL(sess_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info is NULL", K(ret), K(client_sess_id));
-  } else if (OB_FAIL(arg.check_auth_for_kill(sess_info->get_priv_tenant_id(), sess_info->get_user_id()))) {
+  } else if (OB_FAIL(arg.check_auth_for_kill(1UL, sess_info->get_user_id()))) {
     ret = OB_ERR_KILL_DENIED;
     LOG_WARN("no permissions for kill", K(ret), K(arg.sess_id_));
   } else {
@@ -216,7 +217,6 @@ int ObKillExecutor::kill_client_session(const ObKillSessionArg &arg, ObSQLSessio
       common::ObZone zone;
       bool is_kill_succ = true;
       // Determine the broadcast range based on whether it is a system tenant
-      // bool is_sys_kill = curr_sess_info->get_effective_tenant_id() == OB_SYS_TENANT_ID;
       // Currently, there is no interface for querying node addresses at tenant granularity,
       // which can be optimized later.
       LOG_DEBUG("Begin to send kill session rpc", K(arg.sess_id_),K(create_time));
@@ -280,7 +280,6 @@ int ObKillExecutor::get_client_session_create_time_and_auth(const ObKillSessionA
   common::ObZone zone;
 
   if (FALSE_IT(cs_arg.set_client_sess_id(arg.sess_id_))) {
-  } else if (FALSE_IT(cs_arg.set_tenant_id(arg.tenant_id_))) {
   } else if (FALSE_IT(cs_arg.set_has_user_super_privilege(arg.has_user_super_privilege_))) {
   } else if (FALSE_IT(cs_arg.set_user_id(arg.user_id_))) {
   } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
@@ -295,9 +294,7 @@ int ObKillExecutor::get_client_session_create_time_and_auth(const ObKillSessionA
         ret = OB_ERR_UNEXPECTED;
       } else {
         cs_result.set_client_create_time(session->get_client_create_time());
-        cs_result.set_have_kill_auth((OB_SYS_TENANT_ID == cs_arg.get_tenant_id())
-            || ((cs_arg.get_tenant_id() == session->get_priv_tenant_id())
-                && (cs_arg.is_has_user_super_privilege() || cs_arg.get_user_id() == session->get_user_id())));
+        cs_result.set_have_kill_auth(true);
       }
       if (NULL != session) { GCTX.session_mgr_->revert_session(session); }
       return ret;
@@ -335,7 +332,7 @@ int ObKillSession::kill_session(const ObKillSessionArg &arg, ObSQLSessionMgr &se
   } else if (sess_info->is_real_inner_session()) {
     ret = OB_ERR_KILL_DENIED;
     LOG_WARN("It is not allowed to close the inner session", K(ret), K(arg));
-  } else if (OB_FAIL(arg.check_auth_for_kill(sess_info->get_priv_tenant_id(), sess_info->get_user_id()))) {
+  } else if (OB_FAIL(arg.check_auth_for_kill(1UL, sess_info->get_user_id()))) {
     ret = OB_ERR_KILL_DENIED;
     LOG_WARN("no permissions for kill", K(ret), K(arg.sess_id_));
   } else {
@@ -453,12 +450,11 @@ int ObKillExecutor::kill_remote_session(ObExecContext &ctx, const ObAddr &addr, 
     LOG_WARN("some params are NULL", K(ret), K(session), K(plan_ctx));
   } else {
     int64_t timeout = plan_ctx->get_timeout_timestamp() - ObTimeUtility::current_time();
-    uint64_t tenant_id = THIS_WORKER.get_rpc_tenant() > 0 ?
-        THIS_WORKER.get_rpc_tenant() : session->get_rpc_tenant_id();
+    
     if (OB_UNLIKELY(timeout <= 0)) {
       ret = OB_TIMEOUT;
       LOG_WARN("task_execute timeout before rpc", K(ret), K(addr), K(timeout), K(arg),
-               K(tenant_id), "timeout_ts", plan_ctx->get_timeout_timestamp());
+               K(1UL), "timeout_ts", plan_ctx->get_timeout_timestamp());
     } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
       int ret = OB_SUCCESS;
       if (OB_ISNULL(GCTX.session_mgr_)) {
@@ -468,7 +464,7 @@ int ObKillExecutor::kill_remote_session(ObExecContext &ctx, const ObAddr &addr, 
       }
       return ret;
     }))) {
-      LOG_WARN("fail to kill remote session", K(ret), K(addr), K(tenant_id), K(timeout), K(arg));
+      LOG_WARN("fail to kill remote session", K(ret), K(addr), K(timeout), K(arg));
     } else {/*do nothing*/}
   }
   return ret;

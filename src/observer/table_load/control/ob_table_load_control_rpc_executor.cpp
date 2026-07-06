@@ -57,7 +57,7 @@ int ObDirectLoadControlPreBeginExecutor::process()
   if (OB_SUCC(ret)) {
     ObTableLoadTableCtx *table_ctx = nullptr;
     ObTableLoadParam param;
-    param.tenant_id_ = MTL_ID();
+    
     param.table_id_ = arg_.table_id_;
     param.batch_size_ = arg_.config_.batch_size_;
     param.parallel_ = arg_.config_.parallel_;
@@ -660,7 +660,7 @@ int ObDirectLoadControlInsertTransExecutor::process()
     int64_t data_len = arg_.payload_.length();
     char *buf = nullptr;
     if (OB_FAIL(ObTableLoadSharedAllocatorHandle::make_handle(
-          allocator_handle, "TLD_share_alloc", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()))) {
+          allocator_handle, "TLD_share_alloc", OB_MALLOC_NORMAL_BLOCK_SIZE))) {
       LOG_WARN("failed to make allocator handle", KR(ret));
     } else if (OB_FAIL(ObTableLoadService::get_ctx(key, table_ctx))) {
       LOG_WARN("fail to get table ctx", KR(ret), K(key));

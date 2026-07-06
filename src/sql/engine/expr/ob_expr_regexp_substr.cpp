@@ -90,6 +90,8 @@ int ObExprRegexpSubstr::calc_result_typeN(ObExprResType &type,
       }
       if (OB_SUCC(ret)) {
         bool need_utf8 = false;
+        const ObCollationType regexp_calc_coll =
+            ObExprRegexContext::get_regexp_calc_collation(type.get_collation_type(), is_case_sensitive);
         switch (param_num) {
           case 6/*subexpr*/:
             types[5].set_calc_type(ObIntType);
@@ -119,19 +121,15 @@ int ObExprRegexpSubstr::calc_result_typeN(ObExprResType &type,
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(1), need_utf8))) {
               LOG_WARN("fail to check need utf8", K(ret));
-            } else if (need_utf8) {
-              types[1].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_UTF8MB4_GENERAL_CI);
             } else {
-              types[1].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF16_BIN : CS_TYPE_UTF16_GENERAL_CI);
+              types[1].set_calc_collation_type(regexp_calc_coll);
             }
             need_utf8 = false;
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(0), need_utf8))) {
               LOG_WARN("fail to check need utf8", K(ret));
-            } else if (need_utf8) {
-              types[0].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_UTF8MB4_GENERAL_CI);
             } else {
-              types[0].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF16_BIN : CS_TYPE_UTF16_GENERAL_CI);
+              types[0].set_calc_collation_type(regexp_calc_coll);
             }
           default:
             // already check before
@@ -199,14 +197,8 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
       LOG_WARN("evaluate parameters failed", K(ret));
     }
   } else if (OB_UNLIKELY(expr.arg_cnt_ < 2 ||
-                         (expr.args_[0]->datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_GENERAL_CI &&
-                           expr.args_[0]->datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN &&
-                           expr.args_[0]->datum_meta_.cs_type_ != CS_TYPE_UTF16_GENERAL_CI &&
-                           expr.args_[0]->datum_meta_.cs_type_ != CS_TYPE_UTF16_BIN) ||
-                         (expr.args_[1]->datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_GENERAL_CI &&
-                          expr.args_[1]->datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN &&
-                          expr.args_[1]->datum_meta_.cs_type_ != CS_TYPE_UTF16_GENERAL_CI &&
-                          expr.args_[1]->datum_meta_.cs_type_ != CS_TYPE_UTF16_BIN))) {
+                         !ObExprRegexContext::is_regexp_calc_collation(expr.args_[0]->datum_meta_.cs_type_) ||
+                         !ObExprRegexContext::is_regexp_calc_collation(expr.args_[1]->datum_meta_.cs_type_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(expr));
   } else if (!pattern->is_null() && pattern->get_string().empty()) {
@@ -295,8 +287,10 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
           res_coll_type = ObCharset::is_bin_sort(expr.args_[0]->datum_meta_.cs_type_) ?
                             expected_bin_coll :
                             expected_ci_coll;
-          if (OB_FAIL(ObExprUtil::convert_string_collation(text_str, expr.args_[0]->datum_meta_.cs_type_, text_utf,
-                                                      res_coll_type, tmp_alloc))) {
+          if (OB_FAIL(ObExprRegexContext::convert_to_regexp_utf16(tmp_alloc,
+                                                                  text_str,
+                                                                  expr.args_[0]->datum_meta_.cs_type_,
+                                                                  text_utf))) {
             LOG_WARN("convert charset failed", K(ret));
           }
         } else {
@@ -314,8 +308,10 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
         ObExprStrResAlloc out_alloc(expr, ctx);
         ObString out;
         if (!ob_is_text_tc(expr.datum_meta_.type_)) {
-          if (OB_FAIL(ObExprUtil::convert_string_collation(res_substr, res_coll_type,
-                                                           out, expr.datum_meta_.cs_type_, out_alloc))) {
+          if (OB_FAIL(ObExprRegexContext::convert_from_regexp_utf16(out_alloc,
+                                                                    res_substr,
+                                                                    expr.datum_meta_.cs_type_,
+                                                                    out))) {
             LOG_WARN("convert charset failed", K(ret));
           } else if (out.ptr() == res_substr.ptr()) {
             // res_substr is allocated in temporary allocator, deep copy here.
@@ -332,11 +328,10 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
           }
         } else { // output is text type
           ObTextStringDatumResult text_res(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
-          if (OB_FAIL(ObExprUtil::convert_string_collation_for_regexp(res_substr,
-                                                                      res_coll_type,
-                                                                      out,
-                                                                      expr.datum_meta_.cs_type_,
-                                                                      tmp_alloc))) {
+          if (OB_FAIL(ObExprRegexContext::convert_from_regexp_utf16(tmp_alloc,
+                                                                    res_substr,
+                                                                    expr.datum_meta_.cs_type_,
+                                                                    out))) {
             LOG_WARN("convert charset failed", K(ret));
           } else if (OB_FAIL(text_res.init(out.length()))) {
             LOG_WARN("init lob result failed", K(ret), K(out.length()));

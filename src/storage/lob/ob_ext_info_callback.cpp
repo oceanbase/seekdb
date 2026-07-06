@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_ext_info_callback.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/memtable/ob_memtable_mutator.h"
 #include "storage/blocksstable/ob_row_writer.h"
 #include "storage/lob/ob_lob_manager.h"
@@ -141,7 +142,7 @@ int ObExtInfoCallback::set(
     ObString &data)
 {
   int ret = OB_SUCCESS;
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
   blocksstable::ObDatumRow datum_row;
   char *buf = nullptr;
   int64_t len = 0;
@@ -244,7 +245,7 @@ int ObExtInfoCbRegister::register_cb(
   seq_no_st_ = seq_no_st;
   seq_no_cnt_ = seq_no_cnt;
   header_ = header;
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
   ObLobId lob_id;
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -299,7 +300,7 @@ int ObExtInfoCbRegister::register_cb(
 int ObExtInfoCbRegister::build_data_iter(ObObj &ext_info_data)
 {
   int ret = OB_SUCCESS;
-  ObLobManager *lob_mgr = MTL(ObLobManager*);
+  ObLobManager *lob_mgr = share::g_mp->lob_manager();
   ObString data = ext_info_data.get_string();
   ObLobLocatorV2 data_locator;
   char *data_buf = nullptr;

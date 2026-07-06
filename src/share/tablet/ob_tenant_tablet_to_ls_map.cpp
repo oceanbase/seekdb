@@ -25,26 +25,25 @@ namespace oceanbase
 namespace share
 {
 
-int ObTenantTabletToLSMap::build(const uint64_t tenant_id,
-    common::ObMySQLProxy &sql_proxy)
+int ObTenantTabletToLSMap::build(common::ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
 
   ObTenantTabletToLSIterator iter;
-  if (OB_FAIL(iter.init(sql_proxy, tenant_id))) {
-    LOG_WARN("init iter fail", KR(ret), K(tenant_id));
+  if (OB_FAIL(iter.init(sql_proxy))) {
+    LOG_WARN("init iter fail", KR(ret));
   } else {
     ObTabletLSPair tablet_ls_pair;
     while (OB_SUCC(ret)) {
       if (OB_FAIL(iter.next(tablet_ls_pair))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("iter next fail", KR(ret), K(tenant_id));
+          LOG_WARN("iter next fail", KR(ret));
         } else {
           ret = OB_SUCCESS;
           break;
         }
       } else if (OB_FAIL(map_.set_refactored(tablet_ls_pair.get_tablet_id(), tablet_ls_pair.get_ls_id()))) {
-        LOG_WARN("tablet_to_ls map set fail", KR(ret), K(tenant_id), K(tablet_ls_pair));
+        LOG_WARN("tablet_to_ls map set fail", KR(ret), K(tablet_ls_pair));
       }
     }
   }

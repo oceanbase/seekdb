@@ -18,7 +18,7 @@
 #define OCEANBASE_LOGSERVICE_PALF_HANDLE_
 #include "common/ob_member_list.h"
 #include "common/ob_role.h"
-#include "election/interface/election_priority.h"
+#include "election_self.h"
 #include "lsn.h"
 #include "palf_handle_impl.h"
 #include "palf_handle_impl_guard.h"
@@ -466,8 +466,6 @@ public:
   int reset_location_cache_cb();
   int set_election_priority(election::ElectionPriority *priority);
   int reset_election_priority();
-  int set_locality_cb(palf::PalfLocalityInfoCb *locality_cb);
-  int reset_locality_cb();
   int stat(PalfStat &palf_stat) const;
 
   //---------config change lock related--------//

@@ -49,25 +49,20 @@ public:
 protected:
   virtual int log_operation(ObSchemaOperation &ddl_operation,
                             common::ObISQLClient &sql_client,
-                            int64_t sql_exec_tenant_id = OB_INVALID_TENANT_ID,
                             common::ObSqlString *public_sql_string = NULL);
   int log_operation_dml(
       const ObSchemaOperation &ddl_operation,
       share::ObDMLSqlSplicer &ddl_operation_dml,
-      share::ObDMLSqlSplicer &ddl_id_dml,
-      const int64_t sql_tenant_id = OB_SYS_TENANT_ID);
+      share::ObDMLSqlSplicer &ddl_id_dml);
   int gen_ddl_operation_dml(
       const ObSchemaOperation &ddl_operation,
-      const uint64_t exec_tenant_id,
-      const uint64_t sql_tenant_id,
       share::ObDMLSqlSplicer &ddl_operation_dml);
   int gen_ddl_id_dml(
       const ObSchemaOperation &ddl_operation,
-      const uint64_t exec_tenant_id,
       const ObString *ddl_id_str,
       share::ObDMLSqlSplicer &ddl_id_dml);
 private:
-  uint64_t fill_schema_id(const uint64_t exec_tenant_id, const uint64_t schema_id);
+  uint64_t fill_schema_id(const uint64_t schema_id);
 
 protected:
   ObSchemaService &schema_service_;
@@ -77,26 +72,24 @@ private:
 
 struct TSIDDLVar
 {
-  //  In bootstrap or other internal requests, exec_tenant_id_ will be the OB_SYS_TENANT_ID identity, 
+  //  In bootstrap or other internal requests, exec_tenant_ will be the sys tenant identity, 
   //  so the default value is changed to the system tenant
   //  ddl_id_str_ default value is null
-  //  Before processing the rpc request, exec_tenant_id_/ddl_id_str_ will be set, 
+  //  Before processing the rpc request, exec_tenant_/ddl_id_str_ will be set, 
   //  and the value is obtained from the arg of the resolver
   //  In log operation, write to __all_ddl_operation
-  uint64_t exec_tenant_id_;
+  
   common::ObString *ddl_id_str_;
   TSIDDLVar() :
-      exec_tenant_id_(common::OB_SYS_TENANT_ID),
       ddl_id_str_(NULL)
   {}
 };
 
 struct TSILastOper {
   uint64_t last_operation_schema_version_;
-  uint64_t last_operation_tenant_id_;
+  
   TSILastOper():
-      last_operation_schema_version_(OB_INVALID_VERSION),
-      last_operation_tenant_id_(OB_INVALID_TENANT_ID)
+      last_operation_schema_version_(OB_INVALID_VERSION)
   {}
 };
 

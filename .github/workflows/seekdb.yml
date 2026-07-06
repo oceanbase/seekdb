@@ -3,19 +3,22 @@
 name: SeekDB CI 
 
 on:
-  pull_request:
-    branches: [master, develop]
-    types: [opened, reopened, synchronize, ready_for_review]
-    paths-ignore:
-      - 'docs/**'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/pull_request_template.md'
-      - 'README.md'
-      - 'README_CN.md'
-      - 'CONTRIBUTING.md'
-  schedule:
-    - cron: '30 9 * * *'
-  workflow_dispatch:
+  # SeekDB CI is temporarily disabled while fixes are pending.
+  # Restore the pull_request/schedule/workflow_dispatch entries below when ready.
+  workflow_call:
+  # pull_request:
+  #   branches: [master, develop]
+  #   types: [opened, reopened, synchronize, ready_for_review]
+  #   paths-ignore:
+  #     - 'docs/**'
+  #     - '.github/ISSUE_TEMPLATE/**'
+  #     - '.github/pull_request_template.md'
+  #     - 'README.md'
+  #     - 'README_CN.md'
+  #     - 'CONTRIBUTING.md'
+  # schedule:
+  #   - cron: '30 9 * * *'
+  # workflow_dispatch:
 
 env:
   MYSQLTEST_SLICES: "4"

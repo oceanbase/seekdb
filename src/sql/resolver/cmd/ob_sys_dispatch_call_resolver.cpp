@@ -86,13 +86,12 @@ int ObSysDispatchCallResolver::resolve(const ParseNode &parse_tree)
   const ParseNode *designated_tenant_node = nullptr;
   ObString call_stmt;
   ObString tenant_name;
-  uint64_t tenant_id = OB_INVALID_TENANT_ID;
   const ObTenantSchema *tenant_schema = nullptr;
 
   if (OB_UNLIKELY(OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("argument is nullptr", K(schema_checker_), K(session_info_));
-  } else if (OB_SYS_TENANT_ID != session_info_->get_effective_tenant_id()) {
+  } else if (false) {
     // check tenant privilege for dispatch call, should be sys tenant
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("SYS_DISPATCH_CALL is only supported in sys tenant");
@@ -116,15 +115,13 @@ int ObSysDispatchCallResolver::resolve(const ParseNode &parse_tree)
     // this call statement would be dispatched to another tenant
   } else if (FALSE_IT(tenant_name.assign_ptr(designated_tenant_node->str_value_,
                                              designated_tenant_node->str_len_))) {
-  } else if (OB_FAIL(schema_checker_->get_tenant_id(tenant_name, tenant_id))) {
-    LOG_WARN("get tenant id failed", K(tenant_name));
-  } else if (OB_FAIL(schema_checker_->get_tenant_info(tenant_id, tenant_schema))) {
-    LOG_WARN("get tenant schema failed", K(tenant_id));
+  } else if (OB_FAIL(schema_checker_->get_tenant_info(tenant_schema))) {
+    LOG_WARN("get tenant schema failed");
   } else if (OB_ISNULL(tenant_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant schema is nullptr", K(tenant_id));
+    LOG_WARN("tenant schema is nullptr");
     // fill the tenant id and oracle tenant flag into stmt afterward
-  } else if (FALSE_IT(stmt->set_designated_tenant_id(tenant_id))) {
+  } else if (FALSE_IT((void)0)) {
   } else if (FALSE_IT(stmt->set_designated_tenant_name(tenant_name))) {
   } else if (FALSE_IT(stmt->set_tenant_compat_mode(ObCompatibilityMode::MYSQL_MODE))) {
   }

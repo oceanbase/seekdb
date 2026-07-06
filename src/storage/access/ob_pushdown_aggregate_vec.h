@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_PUSHDOWN_AGGREGATE_VEC_H_
 #define OCEANBASE_STORAGE_OB_PUSHDOWN_AGGREGATE_VEC_H_
 
-#include "share/aggregate/agg_ctx.h"
+#include "sql/engine/aggregate/agg_ctx.h"
 #include "ob_aggregate_base.h"
 
 namespace oceanbase

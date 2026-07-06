@@ -155,13 +155,12 @@ int ObDtlBcastService::send_message(ObDtlLinkedBuffer *&bcast_buf, bool drain)
 int ObDtlChanAgent::init(dtl::ObDtlFlowControl &dfc,
                          ObPxTaskChSet &task_ch_set,
                          ObIArray<ObDtlChannel *> &channels,
-                         int64_t tenant_id,
                          int64_t time_ts)
 {
   int ret = OB_SUCCESS;
-  dtl_buf_allocator_.set_tenant_id(tenant_id);
+  
   dtl_buf_allocator_.set_timeout_ts(time_ts);
-  dtl_buf_encoder_.set_tenant_id(tenant_id);
+  
   sys_dtl_buf_size_ = GCONF.dtl_buffer_size;
   dfo_key_ = dfc.get_dfo_key();
 

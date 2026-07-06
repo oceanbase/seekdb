@@ -334,25 +334,6 @@ uint64_t OMPKHandshakeResponse::get_connect_attrs_len() const
   return all_attr_len;
 }
 
-bool OMPKHandshakeResponse::is_obproxy_client_mode() const
-{
-  bool obproxy_mod = false;
-  ObStringKV mod_kv;
-  mod_kv.key_.assign_ptr(OB_MYSQL_CLIENT_MODE, static_cast<int32_t>(strlen(OB_MYSQL_CLIENT_MODE)));
-  mod_kv.value_.assign_ptr(OB_MYSQL_CLIENT_OBPROXY_MODE_NAME,
-      static_cast<int32_t>(strlen(OB_MYSQL_CLIENT_OBPROXY_MODE_NAME)));
-
-  ObStringKV kv;
-  for (int64_t i = 0; !obproxy_mod && i < connect_attrs_.count(); ++i) {
-    kv = connect_attrs_.at(i);
-    if (mod_kv.key_ == kv.key_ && mod_kv.value_ == kv.value_) {
-      obproxy_mod = true;
-      //break;
-    }
-  }
-  return obproxy_mod;
-}
-
 bool OMPKHandshakeResponse::is_java_client_mode() const
 {
   bool java_client_mod = false;
@@ -408,36 +389,6 @@ bool OMPKHandshakeResponse::is_ob_client_oci() const
     }
   }
   return is_oci;
-}
-
-int64_t OMPKHandshakeResponse::get_sql_request_level() const
-{
-  int64_t sql_req_level = 0; // share::OBCG_DEFAULT
-  ObString sql_req_level_key;
-  ObString sql_req_l0;
-  ObString sql_req_l1;
-  ObString sql_req_l2;
-  ObString sql_req_l3;
-  sql_req_level_key.assign_ptr(OB_SQL_REQUEST_LEVEL, static_cast<int32_t>(strlen(OB_SQL_REQUEST_LEVEL)));
-  sql_req_l0.assign_ptr(OB_SQL_REQUEST_LEVEL0, static_cast<int32_t>(strlen(OB_SQL_REQUEST_LEVEL0)));
-  sql_req_l1.assign_ptr(OB_SQL_REQUEST_LEVEL1, static_cast<int32_t>(strlen(OB_SQL_REQUEST_LEVEL1)));
-  sql_req_l2.assign_ptr(OB_SQL_REQUEST_LEVEL2, static_cast<int32_t>(strlen(OB_SQL_REQUEST_LEVEL2)));
-  sql_req_l3.assign_ptr(OB_SQL_REQUEST_LEVEL3, static_cast<int32_t>(strlen(OB_SQL_REQUEST_LEVEL3)));
-  ObStringKV kv;
-  for (int64_t i = 0; i < connect_attrs_.count(); ++i) {
-    kv = connect_attrs_.at(i);
-    if (sql_req_level_key == kv.key_) {
-      if (sql_req_l1 == kv.value_) {
-        sql_req_level = 1;
-      } else if (sql_req_l2 == kv.value_) {
-        sql_req_level = 2;
-      } else if (sql_req_l3 == kv.value_) {
-        sql_req_level = 3;
-      }
-      break;
-    }
-  }
-  return sql_req_level;
 }
 
 bool OMPKHandshakeResponse::is_oci_client_mode() const

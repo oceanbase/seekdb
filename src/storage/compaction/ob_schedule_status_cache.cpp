@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_schedule_status_cache.h"
+#include "share/rc/ob_module_provider.h"
 #include "src/storage/compaction/ob_basic_schedule_tablet_func.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
@@ -262,7 +263,7 @@ int ObTabletStatusCache::inner_init_state(
   } else if (is_skip_merge_tenant) {
     // temp solution(load storage schema to decide whether tablet is MV)
     // TODO replace with new func on tablet later @lana
-    ObArenaAllocator temp_allocator("GetSSchema", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator temp_allocator("GetSSchema", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObStorageSchema *storage_schema = nullptr;
     if (OB_FAIL(tablet.load_storage_schema(temp_allocator, storage_schema))) {
       LOG_WARN("failed to load storage schema", K(ret), K(tablet));
@@ -353,7 +354,7 @@ int ObTabletStatusCache::check_medium_list(
     new_round_state_ = NEED_CHECK_LAST_MEDIUM_CKM;
     if (normal_schedule) {
       int tmp_ret = OB_SUCCESS;
-      if (OB_TMP_FAIL(MTL(ObTenantMediumChecker *)->add_tablet_ls(
+      if (OB_TMP_FAIL(share::g_mp->tenant_medium_checker()->add_tablet_ls(
           tablet_id, ls_id, medium_list_->get_wait_check_medium_scn()))) {
         LOG_WARN("failed to add tablet", K(tmp_ret), K(ls_id), K(tablet_id));
       } else {
@@ -400,10 +401,10 @@ int ObTabletStatusCache::update_tablet_report_status(
     const ObLSID &ls_id = ls.get_ls_id();
     const ObTabletID &tablet_id = tablet.get_tablet_id();
     if (tablet.get_tablet_meta().report_status_.need_report()) {
-      if (OB_TMP_FAIL(MTL(observer::ObTabletTableUpdater *)->submit_tablet_update_task(ls_id, tablet_id, true/*need_diagnose*/))) {
+      if (OB_TMP_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(ls_id, tablet_id, true/*need_diagnose*/))) {
         LOG_WARN("failed to submit tablet update task to report", K(tmp_ret), K(tablet_id), K(ls_id));
       } else if (OB_TMP_FAIL(ls.get_tablet_svr()->update_tablet_report_status(tablet_id))) {
-        LOG_WARN("failed to update tablet report status", K(tmp_ret), K(MTL_ID()), K(tablet_id));
+        LOG_WARN("failed to update tablet report status", K(tmp_ret), K(tablet_id));
       }
     }
   }

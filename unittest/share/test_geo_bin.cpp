@@ -20,20 +20,20 @@
 #define USING_LOG_PREFIX LIB
 #include <boost/geometry.hpp>
 #define private public
-#include "lib/geo/ob_geo_bin_traits.h"
-#include "lib/geo/ob_geo_tree_traits.h"
-#include "lib/geo/ob_geo_wkb_visitor.h"
-#include "lib/geo/ob_geo_wkb_size_visitor.h"
-#include "lib/geo/ob_geo_longtitude_correct_visitor.h"
-#include "lib/geo/ob_geo_reverse_coordinate_visitor.h"
-#include "lib/geo/ob_geo_segment_collect_visitor.h"
-#include "lib/geo/ob_geo_vertex_collect_visitor.h"
-#include "lib/geo/ob_geo_3d.h"
+#include "share/geo/ob_geo_bin_traits.h"
+#include "share/geo/ob_geo_tree_traits.h"
+#include "share/geo/ob_geo_wkb_visitor.h"
+#include "share/geo/ob_geo_wkb_size_visitor.h"
+#include "share/geo/ob_geo_longtitude_correct_visitor.h"
+#include "share/geo/ob_geo_reverse_coordinate_visitor.h"
+#include "share/geo/ob_geo_segment_collect_visitor.h"
+#include "share/geo/ob_geo_vertex_collect_visitor.h"
+#include "share/geo/ob_geo_3d.h"
 #include "src/share/schema/ob_server_schema_service.h"
-#include "lib/geo/ob_wkb_to_json_visitor.h"
-#include "lib/geo/ob_wkb_byte_order_visitor.h"
-#include "lib/geo/ob_geo_interior_point_visitor.h"
-#include "lib/geo/ob_geo_mvt_encode_visitor.h"
+#include "share/geo/ob_wkb_to_json_visitor.h"
+#include "share/geo/ob_wkb_byte_order_visitor.h"
+#include "share/geo/ob_geo_interior_point_visitor.h"
+#include "share/geo/ob_geo_mvt_encode_visitor.h"
 #undef private
 
  
@@ -2546,9 +2546,8 @@ TEST_F(TestGeoBin, wkb_size_visitor_geom_collection)
     ASSERT_EQ(data.length(), visitor.geo_size());
 }
 
-int mock_get_tenant_srs_item(ObIAllocator &allocator, uint64_t tenant_id, uint64_t srs_id, const ObSrsItem *&srs_item)
+int mock_get_tenant_srs_item(ObIAllocator &allocator, uint64_t srs_id, const ObSrsItem *&srs_item)
 {
-    UNUSEDx( tenant_id);
     int ret = OB_SUCCESS;
     ObGeographicRs rs;
     rs.rs_name.assign_ptr("ED50", static_cast<int64_t>(strlen("ED50")));
@@ -2585,7 +2584,7 @@ int mock_get_tenant_srs_item(ObIAllocator &allocator, uint64_t tenant_id, uint64
 
 void get_srs_item(ObIAllocator &allocator, uint64_t srs_id, const ObSrsItem *&srs_item)
 {
-  ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, OB_SYS_TENANT_ID, srs_id, srs_item));
+  ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, srs_id, srs_item));
 }
 
 TEST_F(TestGeoBin, coordinate_range_visitor_point)
@@ -5016,10 +5015,9 @@ TEST_F(TestGeoBin, mbr_polygon_2)
     iwkb_geogl4.set_data(datal4.string());
 
     ObGeometry *geol4 = NULL;
-    ObGeoTypeUtil::get_mbr_polygon(allocator, &srsbound_max, iwkb_geogl4, geol4);
-    ASSERT_EQ(ObGeoType::POLYGON, geol4->type());
-    ObWkbGeomPolygon *mbr_polygonl4 = reinterpret_cast<ObWkbGeomPolygon *>(const_cast<char *>(geol4->val()));
-    std::cout << "ob::linestring5(poly)" << boost::geometry::dsv(*mbr_polygonl4) << std::endl;
+    int ret_l4 = ObGeoTypeUtil::get_mbr_polygon(allocator, &srsbound_max, iwkb_geogl4, geol4);
+    ASSERT_EQ(OB_EMPTY_RESULT, ret_l4);   // intersection collapses onto the y=1 boundary edge -> empty
+    ASSERT_TRUE(geol4 == NULL);
 
 
     srsbound_max.minX_ = (double)0;
@@ -5072,7 +5070,7 @@ TEST_F(TestGeoBin, interior_point_vistor_point)
     ASSERT_EQ(ObWktParser::parse_wkt(allocator, "POINT(10 0)", geo, true, false), OB_SUCCESS);
     lib::MemoryContext mem_context;
     ASSERT_EQ(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context, 
-        lib::ContextParam().set_mem_attr(MTL_ID(), "GIS_UT", ObCtxIds::DEFAULT_CTX_ID)), OB_SUCCESS);
+        lib::ContextParam().set_mem_attr("GIS_UT", ObCtxIds::DEFAULT_CTX_ID)), OB_SUCCESS);
     ObGeoInteriorPointVisitor visitor(mem_context);
     ASSERT_EQ(geo->do_visit(visitor), OB_SUCCESS);
     ASSERT_EQ(visitor.get_interior_point(interior_point) , OB_SUCCESS);
@@ -5090,7 +5088,7 @@ TEST_F(TestGeoBin, interior_point_vistor_line)
     ASSERT_EQ(ObWktParser::parse_wkt(allocator, "LINESTRING(0 0, 5 0, 10 0)", geo, true, false), OB_SUCCESS);
     lib::MemoryContext mem_context;
     ASSERT_EQ(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context, 
-        lib::ContextParam().set_mem_attr(MTL_ID(), "GIS_UT", ObCtxIds::DEFAULT_CTX_ID)), OB_SUCCESS);
+        lib::ContextParam().set_mem_attr("GIS_UT", ObCtxIds::DEFAULT_CTX_ID)), OB_SUCCESS);
     ObGeoInteriorPointVisitor visitor(mem_context);
     ASSERT_EQ(geo->do_visit(visitor), OB_SUCCESS);
     ASSERT_EQ(visitor.get_interior_point(interior_point) , OB_SUCCESS);
@@ -5114,7 +5112,7 @@ TEST_F(TestGeoBin, interior_point_vistor_poly)
                              "182635.760119718 141846.477712277))", geo, true, false), OB_SUCCESS);
     lib::MemoryContext mem_context;
     ASSERT_EQ(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context, 
-        lib::ContextParam().set_mem_attr(MTL_ID(), "GIS_UT", ObCtxIds::DEFAULT_CTX_ID)), OB_SUCCESS);
+        lib::ContextParam().set_mem_attr("GIS_UT", ObCtxIds::DEFAULT_CTX_ID)), OB_SUCCESS);
     ObGeoInteriorPointVisitor visitor(mem_context);
     ASSERT_EQ(geo->do_visit(visitor), OB_SUCCESS);
     ASSERT_EQ(visitor.get_interior_point(interior_point) , OB_SUCCESS);
@@ -5132,7 +5130,7 @@ TEST_F(TestGeoBin, interior_point_vistor_empty)
     ASSERT_EQ(ObWktParser::parse_wkt(allocator, "GEOMETRYCOLLECTION EMPTY", geo, true, false), OB_SUCCESS);
     lib::MemoryContext mem_context;
     ASSERT_EQ(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context, 
-        lib::ContextParam().set_mem_attr(MTL_ID(), "GIS_UT", ObCtxIds::DEFAULT_CTX_ID)), OB_SUCCESS);
+        lib::ContextParam().set_mem_attr("GIS_UT", ObCtxIds::DEFAULT_CTX_ID)), OB_SUCCESS);
     ObGeoInteriorPointVisitor visitor(mem_context);
     ASSERT_EQ(geo->do_visit(visitor), OB_SUCCESS);
     ASSERT_EQ(visitor.get_interior_point(interior_point) , OB_SUCCESS);
@@ -5155,7 +5153,7 @@ void elevation_visitor_checker(ObIAllocator &allocator, const ObString &wkt1, co
     
     lib::MemoryContext mem_context;
     ASSERT_EQ(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context, 
-      lib::ContextParam().set_mem_attr(MTL_ID(), "GIS_UT", ObCtxIds::DEFAULT_CTX_ID)), OB_SUCCESS);
+      lib::ContextParam().set_mem_attr("GIS_UT", ObCtxIds::DEFAULT_CTX_ID)), OB_SUCCESS);
     ObGeoElevationVisitor visitor(mem_context, nullptr);
     ObGeometry *res_geo = nullptr;
     ASSERT_EQ(visitor.init(*geo1, *geo2), OB_SUCCESS);

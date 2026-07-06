@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX SQL_ENG
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "sql/engine/cmd/ob_database_executor.h"
 #include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_root_service.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "sql/resolver/ddl/ob_create_database_stmt.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 #include "sql/resolver/ddl/ob_use_database_stmt.h"
 #include "sql/resolver/ddl/ob_alter_database_stmt.h"
 #include "sql/resolver/ddl/ob_drop_database_stmt.h"
@@ -92,9 +94,7 @@ int ObUseDatabaseExecutor::execute(ObExecContext &ctx, ObUseDatabaseStmt &stmt)
     const bool is_oceanbase_db = is_oceanbase_sys_database_id(stmt.get_db_id());
     if (session->is_tenant_changed() && !is_oceanbase_db) {
       ret = OB_OP_NOT_ALLOW;
-      SQL_ENG_LOG(WARN, "tenant changed, access non oceanbase database not allowed", K(ret), K(stmt),
-                  "login_tenant_id", session->get_login_tenant_id(),
-                  "effective_tenant_id", session->get_effective_tenant_id());
+      SQL_ENG_LOG(WARN, "tenant changed, access non oceanbase database not allowed", K(ret), K(stmt));
       LOG_USER_ERROR(OB_OP_NOT_ALLOW, "tenant changed, access non oceanbase database");
     } else {
       ObCollationType db_coll_type = ObCharset::collation_type(stmt.get_db_collation());
@@ -160,7 +160,6 @@ int ObAlterDatabaseExecutor::execute(ObExecContext &ctx, ObAlterDatabaseStmt &st
     }
   }
   SERVER_EVENT_ADD("ddl", "alter database execute finish",
-    "tenant_id", MTL_ID(),
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "rpc_dst", GCTX.self_addr(),
@@ -235,7 +234,6 @@ int ObDropDatabaseExecutor::execute(ObExecContext &ctx, ObDropDatabaseStmt &stmt
     }
   }
   SERVER_EVENT_ADD("ddl", "drop database execute finish",
-    "tenant_id", MTL_ID(),
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "rpc_dst", GCTX.self_addr(),
@@ -266,7 +264,6 @@ int ObFlashBackDatabaseExecutor::execute(ObExecContext &ctx, ObFlashBackDatabase
   }
 
   SERVER_EVENT_ADD("ddl", "flashback database execute finish",
-      "tenant_id", MTL_ID(),
       "ret", ret,
       "trace_id", *ObCurTraceId::get_trace_id(),
       "rpc_dst", GCTX.self_addr(),
@@ -298,7 +295,6 @@ int ObPurgeDatabaseExecutor::execute(ObExecContext &ctx, ObPurgeDatabaseStmt &st
   }
 
   SERVER_EVENT_ADD("ddl", "purge database execute finish",
-    "tenant_id", MTL_ID(),
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "rpc_dst", GCTX.self_addr(),

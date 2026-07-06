@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/iter/ob_das_merge_iter.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_data_access_service.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -249,7 +250,7 @@ int ObDASMergeIter::rescan_das_task(ObDASScanOp *scan_op)
   if (OB_ISNULL(das_ref_) || OB_ISNULL(scan_op)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(das_ref_), K(scan_op), K(ret));
-  } else if (OB_FAIL(MTL(ObDataAccessService*)->rescan_das_task(*das_ref_, *scan_op))) {
+  } else if (OB_FAIL(share::g_mp->data_access_service()->rescan_das_task(*das_ref_, *scan_op))) {
     LOG_WARN("failed to rescan das task", K(ret));
   }
   return ret;
@@ -301,9 +302,9 @@ int ObDASMergeIter::inner_init(ObDASIterParam &param)
     should_scan_index_ = merge_param.should_scan_index_;
     is_vectorized_ = merge_param.is_vectorized_;
     iter_alloc_ = new (iter_alloc_buf_) common::ObArenaAllocator();
-    iter_alloc_->set_attr(ObMemAttr(MTL_ID(), "ScanDASCtx"));
+    iter_alloc_->set_attr(ObMemAttr("ScanDASCtx"));
     das_ref_ = new (das_ref_buf_) ObDASRef(*eval_ctx_, *exec_ctx_);
-    das_ref_->set_mem_attr(ObMemAttr(MTL_ID(), "ScanDASCtx"));
+    das_ref_->set_mem_attr(ObMemAttr("ScanDASCtx"));
     das_ref_->set_expr_frame_info(merge_param.frame_info_);
     das_ref_->set_execute_directly(merge_param.execute_das_directly_);
     das_ref_->set_enable_rich_format(merge_param.enable_rich_format_);
@@ -330,13 +331,12 @@ int ObDASMergeIter::inner_init(ObDASIterParam &param)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected status: sql ctx or schema guard is null", K(ret));
       } else if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema(
-                  MTL_ID(),
                   merge_param.ref_table_id_, table_schema))) {
         LOG_WARN("get table schema failed", K(merge_param.ref_table_id_), K(ret));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_SCHEMA_ERROR;
-        LOG_WARN("table schema is null", K(MTL_ID()),
-            K(merge_param.ref_table_id_), K(sql_ctx->schema_guard_->get_tenant_id()), K(ret));
+        LOG_WARN("table schema is null",
+            K(merge_param.ref_table_id_), K(ret));
       } else {
         table_schema_ = table_schema;
         part_level_ = table_schema_->get_part_level();

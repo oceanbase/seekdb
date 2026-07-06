@@ -17,11 +17,13 @@
 #ifndef OCEANBASE_STORAGE_OB_TABLET_SPLIT_MDS_HELPER
 #define OCEANBASE_STORAGE_OB_TABLET_SPLIT_MDS_HELPER
 
+#include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include "common/ob_tablet_id.h"
+#include "storage/ob_storage_rpc_arg.h"
 #include "common/rowkey/ob_rowkey.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_array_serialization.h"
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_ls_id.h"
 #include "share/ob_rpc_struct.h"
 #include "src/share/ob_tablet_autoincrement_param.h"
@@ -64,7 +66,7 @@ public:
   OB_UNIS_VERSION_V(1);
 
 public:
-  ObTabletSplitMdsArg() : tenant_id_(OB_INVALID_TENANT_ID), ls_id_(), split_data_tablet_ids_(), split_datas_(), tablet_status_tablet_ids_(), tablet_status_(ObTabletStatus::NONE), tablet_status_data_type_(ObTabletMdsUserDataType::NONE), set_freeze_flag_tablet_ids_(), autoinc_seq_arg_() {}
+  ObTabletSplitMdsArg() : ls_id_(), split_data_tablet_ids_(), split_datas_(), tablet_status_tablet_ids_(), tablet_status_(ObTabletStatus::NONE), tablet_status_data_type_(ObTabletMdsUserDataType::NONE), set_freeze_flag_tablet_ids_(), autoinc_seq_arg_() {}
   ~ObTabletSplitMdsArg() {}
   bool is_valid() const;
   void reset();
@@ -77,44 +79,34 @@ public:
     ObIArray<ObRowkey> &dst_high_bound_vals);
 
   int init_split_start_src(
-    const uint64_t tenant_id,
     const share::ObLSID &ls_id,
     const ObIArray<share::schema::ObTableSchema *> &new_table_schemas,
     const ObIArray<share::schema::ObTableSchema *> &upd_table_schemas,
     const ObIArray<ObTabletID> &src_tablet_ids,
     const ObIArray<ObArray<ObTabletID>> &dst_tablet_ids);
-  int init_set_freeze_flag(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id,
+  int init_set_freeze_flag(const share::ObLSID &ls_id,
     const ObIArray<ObTabletID> &tablet_ids);
-  int init_split_start_dst(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id,
+  int init_split_start_dst(const share::ObLSID &ls_id,
     const ObIArray<const share::schema::ObTableSchema *> &inc_table_schemas,
     const ObIArray<ObTabletID> &src_tablet_ids,
     const ObIArray<ObArray<ObTabletID>> &dst_tablet_ids,
     const ObIArray<ObRowkey> &dst_high_bound_vals);
   int set_autoinc_seq_arg(const obcall::ObBatchSetTabletAutoincSeqArg &arg);
-  int init_split_end_src(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id,
+  int init_split_end_src(const share::ObLSID &ls_id,
     const ObTabletID &src_data_tablet_id, // or global index tablets
     const ObIArray<ObTabletID> &src_local_index_tablet_ids,
     const ObIArray<ObTabletID> &src_lob_tablet_ids);
-  int init_split_end_dst(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id,
+  int init_split_end_dst(const share::ObLSID &ls_id,
     const int64_t auto_part_size,
     const ObIArray<ObTabletID> &dst_data_tablet_ids, // or global index tablets
     const ObIArray<ObSArray<ObTabletID>> &dst_local_index_tablet_ids,
     const ObIArray<ObSArray<ObTabletID>> &dst_lob_tablet_ids);
   int init(
-    const uint64_t tenant_id,
     const share::ObLSID &ls_id,
     const ObIArray<ObTabletID> &tablet_ids,
     const ObIArray<ObTabletSplitMdsUserData> &split_datas);
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(split_data_tablet_ids), K_(split_datas), K_(tablet_status_tablet_ids), K_(tablet_status), K_(tablet_status_data_type), K_(set_freeze_flag_tablet_ids), K_(autoinc_seq_arg));
+  TO_STRING_KV(K_(ls_id), K_(split_data_tablet_ids), K_(split_datas), K_(tablet_status_tablet_ids), K_(tablet_status), K_(tablet_status_data_type), K_(set_freeze_flag_tablet_ids), K_(autoinc_seq_arg));
 
 private:
   static bool is_split_data_table(const share::schema::ObTableSchema &table_schema);
@@ -126,7 +118,6 @@ private:
     ObIArray<uint64_t> &partkey_projector);
 
 public:
-  uint64_t tenant_id_;
   share::ObLSID ls_id_;
   ObSArray<ObTabletID> split_data_tablet_ids_;
   ObSArray<ObTabletSplitMdsUserData> split_datas_;
@@ -183,14 +174,11 @@ public:
   static int on_replay(const char* buf, const int64_t len, const share::SCN &scn, mds::BufferCtx &ctx);
   static int register_mds(const ObTabletSplitMdsArg &arg, const bool need_flush_redo, ObMySQLTransaction &trans);
 
-  static int set_auto_part_size_for_create(
-    const uint64_t tenant_id,
-    const obcall::ObBatchCreateTabletArg &create_arg,
+  static int set_auto_part_size_for_create(const obcall::ObBatchCreateTabletArg &create_arg,
     const ObIArray<int64_t> &auto_part_size_arr,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans);
   static int modify_auto_part_size(
-    const uint64_t tenant_id,
     const ObIArray<ObTabletID> &tablet_ids,
     const int64_t auto_part_size,
     const int64_t abs_timeout_us,
@@ -200,9 +188,7 @@ public:
     const int64_t abs_timeout_us,
     const obcall::ObBatchGetTabletSplitArg &arg,
     obcall::ObBatchGetTabletSplitRes &res);
-  static int get_tablet_split_mds_by_rpc(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id,
+  static int get_tablet_split_mds_by_rpc(const share::ObLSID &ls_id,
     const ObIArray<ObTabletID> &tablet_ids,
     const int64_t abs_timeout_us,
     ObIArray<ObTabletSplitMdsUserData> &datas);
@@ -218,9 +204,7 @@ public:
 private:
   static int get_split_info(const ObTablet &tablet, common::ObIAllocator &allocator, ObTabletSplitTscInfo &split_info);
   template<typename F>
-  static int modify_tablet_split_(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletID> &tablet_ids,
+  static int modify_tablet_split_(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t abs_timeout_us,
     F &&op,
     ObMySQLTransaction &trans);

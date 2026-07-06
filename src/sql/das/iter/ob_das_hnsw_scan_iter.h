@@ -19,10 +19,10 @@
 
 #include "sql/das/iter/ob_das_iter.h"
 #include "sql/das/iter/ob_das_scan_iter.h"
-#include "src/share/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "sql/engine/expr/ob_expr_vector.h"
 #include "sql/das/iter/ob_das_vec_scan_utils.h"
-#include "src/share/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase
 {
@@ -239,8 +239,8 @@ public:
     ObDASHNSWScanIter()
     : ObDASIter(ObDASIterType::DAS_ITER_HNSW_SCAN),
       mem_context_(nullptr),
-      vec_op_alloc_("HNSW", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-      hnsw_iter_alloc_("HNSWITER", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+      vec_op_alloc_("HNSW", OB_MALLOC_NORMAL_BLOCK_SIZE),
+      hnsw_iter_alloc_("HNSWITER", OB_MALLOC_NORMAL_BLOCK_SIZE),
       ls_id_(),
       tx_desc_(nullptr),
       snapshot_(nullptr),
@@ -314,7 +314,7 @@ public:
       is_hybrid_(false),
       distance_threshold_(FLT_MAX),
       skip_delta_buffer_(false) {
-        extra_in_rowkey_idxs_.set_attr(ObMemAttr(MTL_ID(), "ExtraIdx"));
+        extra_in_rowkey_idxs_.set_attr(ObMemAttr("ExtraIdx"));
       }
   
   virtual ~ObDASHNSWScanIter() {}

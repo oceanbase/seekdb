@@ -41,7 +41,7 @@ public:
   TO_STRING_KV(K_(drop_tablegroup_arg));
   inline obcall::ObDropTablegroupArg &get_drop_tablegroup_arg();
   inline void set_tablegroup_name(const common::ObString &tablegroup_name);
-  void set_tenant_id(const uint64_t tenant_id) { drop_tablegroup_arg_.tenant_id_ = tenant_id; }
+  
   virtual obcall::ObDDLArg &get_ddl_arg() { return drop_tablegroup_arg_; }
 
   const common::ObString &get_tablegroup_name() const

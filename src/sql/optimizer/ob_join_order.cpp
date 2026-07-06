@@ -20,14 +20,13 @@
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
-#include "share/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/rewrite/ob_predicate_deduce.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 #include "sql/rewrite/ob_query_range_define.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/das/iter/ob_das_text_retrieval_eval_node.h"
-#include "share/external_table/ob_external_table_utils.h"
 using namespace oceanbase;
 using namespace sql;
 using namespace oceanbase::common;
@@ -407,19 +406,6 @@ int ObJoinOrder::set_sharding_info_for_base_path(ObIArray<AccessPath *> &access_
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (table_schema->is_external_table()) {
-    ObString file_location;
-    CK (OB_NOT_NULL(schema_guard->get_schema_guard()));
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (OB_FAIL(ObExternalTableUtils::get_external_file_location(*table_schema, *schema_guard->get_schema_guard(), *allocator_, file_location))) {
-      LOG_WARN("failed to get file_location", K(ret));
-    } else if (path->parallel_ > 1
-        || ObSQLUtils::is_external_files_on_local_disk(file_location)) {
-      sharding_info = opt_ctx->get_distributed_sharding();
-    } else {
-      sharding_info = opt_ctx->get_local_sharding();
-    }
   } else if (OB_FAIL(table_partition_info->get_location_type(opt_ctx->get_local_server_addr(),
                                                                     location_type))) {
     LOG_WARN("failed to get location type", K(ret));
@@ -1030,11 +1016,9 @@ int ObJoinOrder::get_query_range_info(const uint64_t table_id,
       OB_ISNULL(exec_ctx = opt_ctx->get_exec_ctx())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get unexpected null", K(get_plan()), K(opt_ctx), K(schema_guard), K(exec_ctx), K(ret));
-  } else if (OB_FAIL(schema_guard->get_table_schema(index_id, index_schema,
-                                    ObSqlSchemaGuard::is_link_table(get_plan()->get_stmt(), table_id)))) {
+  } else if (OB_FAIL(schema_guard->get_table_schema(index_id, index_schema))) {
     LOG_WARN("fail to get table schema", K(index_id), K(ret));
-  } else if (OB_FAIL(schema_guard->get_table_schema(base_table_id, table_schema,
-                                    ObSqlSchemaGuard::is_link_table(get_plan()->get_stmt(), table_id)))) {
+  } else if (OB_FAIL(schema_guard->get_table_schema(base_table_id, table_schema))) {
     LOG_WARN("fail to get table schema", K(index_id), K(ret));
   } else if (OB_ISNULL(index_schema) || OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1435,7 +1419,6 @@ int ObJoinOrder::check_exec_force_use_das(const uint64_t table_id,
     // Ensure that the following scenarios will not combined with virtual table
     bool force_das_tsc = opt_ctx.in_nested_sql() || //contain nested sql(pl udf or in nested sql), trigger or foreign key in the top sql not force to use DAS TSC
                          opt_ctx.has_pl_udf() ||
-                         opt_ctx.has_dblink() ||
                          opt_ctx.has_subquery_in_function_table() ||  //has function table
                          opt_ctx.has_cursor_expression() ||
                          (opt_ctx.has_var_assign() && session_info->is_var_assign_use_das_enabled()) ||
@@ -1447,8 +1430,7 @@ int ObJoinOrder::check_exec_force_use_das(const uint64_t table_id,
                                     || (opt_ctx.is_online_ddl() && opt_ctx.get_root_stmt()->is_insert_stmt()) // online ddl plan use sample table scan, create index not support DAS TSC
                                    );
 
-    if (EXTERNAL_TABLE == table_item->table_type_
-        || is_select_sample_scan
+    if (is_select_sample_scan
         || is_virtual_table(table_item->ref_id_)) {
       create_das_path = false;
       create_basic_path = true;
@@ -1900,7 +1882,7 @@ int ObJoinOrder::create_one_access_path(const uint64_t table_id,
                                ap->est_cost_info_,
                                ap->domain_idx_info_,
                                is_nl_with_extended_range,
-                               ObSqlSchemaGuard::is_link_table(get_plan()->get_stmt(), table_id),
+                               false,
                                OptSkipScanState::SS_DISABLE != use_skip_scan,
                                ap->index_prefix_))) {
         LOG_WARN("failed to fill filters for cost table info", K(ret));
@@ -2250,7 +2232,7 @@ int ObJoinOrder::get_access_path_ordering(const uint64_t table_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("NULL pointer error",
              K(get_plan()), K(stmt), K(opt_ctx),  K(schema_guard), K(ret));
-  } else if (OB_FAIL(schema_guard->get_table_schema(index_id, index_schema, ObSqlSchemaGuard::is_link_table(stmt, table_id)))) {
+  } else if (OB_FAIL(schema_guard->get_table_schema(index_id, index_schema, false))) {
     LOG_WARN("fail to get table schema", K(ref_table_id), K(index_schema), K(ret));
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2821,7 +2803,7 @@ int ObJoinOrder::fill_index_info_entry(const uint64_t table_id,
   }
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (OB_FAIL(schema_guard->get_table_schema(index_id, index_schema, ObSqlSchemaGuard::is_link_table(stmt, table_id)))) {
+  } else if (OB_FAIL(schema_guard->get_table_schema(index_id, index_schema, false))) {
     LOG_WARN("failed to get index schema", K(ret));
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -3277,11 +3259,10 @@ int ObJoinOrder::get_candi_index_merge_trees(const uint64_t table_id,
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, 4> valid_index_ids; // all valid indexes
   ObSEArray<ObSEArray<uint64_t, 4>, 4> valid_index_cols; // column ids in the valid indexes
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
   is_match_hint = false;
-  if (OB_ISNULL(get_plan()) || OB_UNLIKELY(!tenant_config.is_valid())) {
+  if (OB_ISNULL(get_plan()) || OB_UNLIKELY(!true)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid plan or tenant config", K(ret), K(get_plan()), K(tenant_config.is_valid()));
+    LOG_WARN("get invalid plan or tenant config", K(ret), K(get_plan()), K(true));
   } else if (OB_FAIL(get_valid_index_merge_indexes(table_id,
                                                    ref_table_id,
                                                    valid_index_ids,
@@ -3302,7 +3283,7 @@ int ObJoinOrder::get_candi_index_merge_trees(const uint64_t table_id,
     OPT_TRACE("generate", candi_index_trees.count(), "candi index merge trees using hint");
     LOG_TRACE("generate candi index merge trees using hint", K(table_id), K(candi_index_trees));
   } else if (get_plan()->get_log_plan_hint().is_outline_data_
-             || (!tenant_config->_enable_index_merge && OB_LIKELY(!EN_FORCE_INDEX_MERGE_PLAN))) {
+             || (!GCONF._enable_index_merge && OB_LIKELY(!EN_FORCE_INDEX_MERGE_PLAN))) {
     OPT_TRACE("can not create index merge paths due to outline or tenant config");
   } else if (OB_FAIL(get_valid_index_merge_indexes(table_id,
                                                    ref_table_id,
@@ -4543,7 +4524,7 @@ int ObJoinOrder::get_valid_index_ids(const uint64_t table_id,
   } else if (NULL != log_table_hint && log_table_hint->is_use_index_hint()) {
     // for use index hint, get index ids from hint.
     ObSEArray<uint64_t, 4> valid_hint_index_list;
-    const bool is_link = ObSqlSchemaGuard::is_link_table(stmt, table_id);
+    const bool is_link = false;
     if (OB_FAIL(get_valid_hint_index_list(*stmt, log_table_hint->index_list_, is_link,
                                           table_id, ref_table_id, has_aggr, schema_guard, helper, valid_hint_index_list))) {
       LOG_WARN("failed to get valid hint index list", K(ret));
@@ -4643,7 +4624,7 @@ int ObJoinOrder::get_valid_index_ids(const uint64_t table_id,
 
   if (OB_SUCC(ret)) {
     const ObTableSchema *schema = NULL;
-    bool is_link = ObSqlSchemaGuard::is_link_table(stmt, table_id);
+    bool is_link = false;
     OPT_TRACE("valid index:");
     for (int64_t i = 0; i < valid_index_ids.count(); ++i) {
       schema_guard->get_table_schema(valid_index_ids.at(i), schema, is_link);
@@ -7607,8 +7588,6 @@ int AccessPath::get_dop_limit_by_pushdown_limit(int64_t &dop_limit) const
              || stmt->is_calc_found_rows()
              || !stmt->is_single_table_stmt()
              || is_virtual_table(ref_table_id_)
-             || EXTERNAL_TABLE == table_item->table_type_
-             || table_item->is_link_table()
              || (NULL != table_item->sample_info_ && !table_item->sample_info_->is_no_sample())
              || !est_cost_info_.postfix_filters_.empty()
              || !est_cost_info_.table_filters_.empty()) {
@@ -8069,9 +8048,7 @@ int AccessPath::compute_access_path_batch_rescan()
              || domain_idx_info_.has_func_lookup()
              || for_update_
              || !subquery_exprs_.empty()
-             || table_item->is_link_table()
              || match_filters.count() > 0
-             || EXTERNAL_TABLE == table_item->table_type_
              || is_index_merge_path()) {
     can_batch_rescan = false;
   } else if (order_direction_ != default_asc_direction() && order_direction_ != ObOrderDirection::UNORDERED) {
@@ -14910,7 +14887,7 @@ int ObJoinOrder::extract_used_columns(const uint64_t table_id,
              OB_UNLIKELY(OB_INVALID_ID == ref_table_id)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid table id", K(table_id), K(ref_table_id), K(ret));
-  } else if (OB_FAIL(schema_guard->get_table_schema(ref_table_id, table_schema, ObSqlSchemaGuard::is_link_table(stmt, table_id)))) {
+  } else if (OB_FAIL(schema_guard->get_table_schema(ref_table_id, table_schema, false))) {
     LOG_WARN("failed to get table schema", K(ref_table_id), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -15682,13 +15659,13 @@ int ObJoinOrder::fill_path_index_meta_info_for_one_ap(AccessPath *access_path)
       const ObTableSchema* table_schema = NULL;
       bool has_opt_stat = false;
       if (OB_FAIL(schema_guard->get_table_schema(index_id, index_schema,
-                                  ObSqlSchemaGuard::is_link_table(get_plan()->get_stmt(), table_id)))) {
+                                  false))) {
         LOG_WARN("failed to get table schema", K(index_id), K(ret));
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("index schema should not be null", K(ret), K(index_id));
       } else if (OB_FAIL(schema_guard->get_table_schema(ref_table_id, table_schema,
-                                  ObSqlSchemaGuard::is_link_table(get_plan()->get_stmt(), table_id)))) {
+                                  false))) {
         LOG_WARN("failed to get table schema", K(index_id), K(ret));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -15936,7 +15913,6 @@ int ObJoinOrder::get_used_stat_partitions(const uint64_t ref_table_id,
                  partition_limit < stat_parts[i]->count()) {
         // partitions are too many to use hist, do nothing
       } else if (OB_FAIL(opt_stat_manager->check_opt_stat_validity(*(OPT_CTX.get_exec_ctx()),
-                                                                  session_info->get_effective_tenant_id(),
                                                                   ref_table_id,
                                                                   *stat_parts[i],
                                                                   is_opt_stat_valid))) {
@@ -16076,8 +16052,7 @@ int ObJoinOrder::init_est_sel_info_for_access_path(const uint64_t table_id,
       // TODO, consider move the following codes into access_path_estimation
       if (OB_SUCC(ret) && has_opt_stat) {
         ObGlobalTableStat stat;
-        if (OB_FAIL(OPT_CTX.get_opt_stat_manager()->get_table_stat(session_info->get_effective_tenant_id(),
-                                                                   ref_table_id,
+        if (OB_FAIL(OPT_CTX.get_opt_stat_manager()->get_table_stat(ref_table_id,
                                                                    table_stat_part_ids,
                                                                    scale_ratio,
                                                                    stat))) {
@@ -16100,7 +16075,7 @@ int ObJoinOrder::init_est_sel_info_for_access_path(const uint64_t table_id,
       }
 
       //2. if the table row count is 0 and not to force use default stat, we try refine it.
-      if (OB_SUCC(ret) && !table_schema.is_external_table() &&
+      if (OB_SUCC(ret) &&
           table_meta_info_.table_row_count_ <= 0 &&
           !OPT_CTX.use_default_stat()) {
         if (OB_FAIL(ObAccessPathEstimation::estimate_full_table_rowcount(OPT_CTX,
@@ -16114,8 +16089,7 @@ int ObJoinOrder::init_est_sel_info_for_access_path(const uint64_t table_id,
 
       //3. fallback with default stats temporary
       if (OB_SUCC(ret) && table_meta_info_.table_row_count_ <= 0) {
-        table_meta_info_.table_row_count_ =
-              table_schema.is_external_table() ? 100000.0 : ObOptStatManager::get_default_table_row_count();
+        table_meta_info_.table_row_count_ = ObOptStatManager::get_default_table_row_count();
         table_meta_info_.average_row_size_ = ObOptStatManager::get_default_avg_row_size();
         table_meta_info_.part_size_ = ObOptStatManager::get_default_data_size();
         LOG_TRACE("total rowcount, empty table", K(table_meta_info_.table_row_count_));
@@ -16257,8 +16231,7 @@ int ObJoinOrder::init_est_info_for_index(const uint64_t table_id,
       }
       if (OB_SUCC(ret) && has_opt_stat) {
         ObGlobalTableStat stat;
-        if (OB_FAIL(OPT_CTX.get_opt_stat_manager()->get_table_stat(session_info->get_effective_tenant_id(),
-                                                                  index_id,
+        if (OB_FAIL(OPT_CTX.get_opt_stat_manager()->get_table_stat(index_id,
                                                                   table_stat_part_ids,
                                                                   scale_ratio,
                                                                   stat))) {
@@ -16318,9 +16291,7 @@ int ObJoinOrder::init_est_info_for_index(const uint64_t table_id,
           }
 
           if (OB_SUCC(ret) && !refetch_col_ids.empty()) {
-            if (OB_FAIL(OPT_CTX.get_opt_stat_manager()->batch_get_column_stats(
-                                    OPT_CTX.get_session_info()->get_effective_tenant_id(),
-                                    index_id,
+            if (OB_FAIL(OPT_CTX.get_opt_stat_manager()->batch_get_column_stats(index_id,
                                     table_stat_part_ids,
                                     refetch_col_ids,
                                     index_rows,
@@ -19609,7 +19580,7 @@ int ObJoinOrder::get_query_tokens_by_boolean_mode(ObMatchFunRawExpr *match_expr,
       const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
       ObArray<ObString> query_token;
       bool dummy_has_duplicate_boolean_tokens = false;
-      if (OB_FAIL(tokens_map.create(ft_word_bkt_cnt, common::ObMemAttr(MTL_ID(), "FTWordMap")))) {
+      if (OB_FAIL(tokens_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
         LOG_WARN("failed to create token map", K(ret));
       } else if (OB_FAIL(ObFtsEvalNode::fts_boolean_node_create(parant_node, node, cs_type, *allocator_, query_token, tokens_map, dummy_has_duplicate_boolean_tokens))) {
         LOG_WARN("failed to get query tokens", K(ret));
@@ -19678,7 +19649,7 @@ int ObJoinOrder::get_query_tokens(ObMatchFunRawExpr *match_expr,
       // do nothing
     } else if (OB_FAIL(tokenize_helper.init(allocator_, parser_name, parser_properties))) {
       LOG_WARN("failed to init tokenize helper", K(ret));
-    } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr(MTL_ID(), "FTWordMap")))) {
+    } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
       LOG_WARN("failed to create token map", K(ret));
     } else if (OB_FAIL(tokenize_helper.segment(
                            key_meta,

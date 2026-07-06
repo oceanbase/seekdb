@@ -29,8 +29,6 @@
 #include "ob_expr_date_diff.h"
 #include "ob_expr_day_of_func.h"
 #include "ob_expr_div.h"
-#include "ob_expr_effective_tenant.h"
-#include "ob_expr_effective_tenant_id.h"
 #include "ob_expr_exists.h"
 #include "ob_expr_extract.h"
 #include "ob_expr_export_set.h"
@@ -75,7 +73,6 @@
 #include "ob_expr_func_dump.h"
 #include "ob_expr_func_part_hash.h"
 #include "ob_expr_autoinc_nextval.h"
-#include "ob_expr_is_serving_tenant.h"
 #include "ob_expr_sys_privilege_check.h"
 #include "ob_expr_field.h"
 #include "ob_expr_elt.h"
@@ -545,8 +542,8 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprDiv::div_number,                                              /* 67 */
   NULL,                                                               /* 68 */
   NULL,                                                               /* 69 */
-  ObExprEffectiveTenant::eval_effective_tenant,                       /* 70 */
-  ObExprEffectiveTenantId::eval_effective_tenant_id,                  /* 71 */
+  NULL,                       /* 70 */
+  NULL,                  /* 71 */
   ObExprExists::exists_eval,                                          /* 72 */
   calc_exp_expr_double,                                               /* 73 */
   calc_exp_expr_number,                                               /* 74 */
@@ -680,7 +677,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   NULL,//ObExprFuncAddrToPartId::eval_addr_to_part_id is deleted      /* 202 */
   ObExprAutoincNextval::eval_nextval,                                 /* 203 */
   ObExprFuncLnnvl::eval_lnnvl,                                        /* 204 */
-  ObExprIsServingTenant::eval_is_serving_tenant,                      /* 205 */
+  NULL,                      /* 205 */
   ObExprSysPrivilegeCheck::eval_sys_privilege_check,                  /* 206 */
   ObExprField::eval_field,                                            /* 207 */
   ObExprElt::eval_elt,                                                /* 208 */
@@ -1772,18 +1769,6 @@ static ObExpr::EvalVectorFunc g_expr_eval_vector_functions[] = {
   NULL, // ObExprAIRerank::eval_ai_rerank_vector,                        /* 229 */
 };
 
-REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_EVAL,
-                   g_expr_eval_functions,
-                   ARRAYSIZEOF(g_expr_eval_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_EVAL_BATCH,
-                   g_expr_eval_batch_functions,
-                   ARRAYSIZEOF(g_expr_eval_batch_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_EVAL_VECTOR,
-                   g_expr_eval_vector_functions,
-                   ARRAYSIZEOF(g_expr_eval_vector_functions));
-
 static ObExpr::EvalFunc g_decimal_int_eval_functions[] = {
   ObExprAdd::add_decimalint32,
   ObExprAdd::add_decimalint64,
@@ -2003,14 +1988,6 @@ static ObExpr::EvalBatchFunc g_decimal_int_eval_batch_functions[] = {
   ObExprDiv::decint_div_mysql_batch_fn<int512_t, int512_t>,
 };
 
-REG_SER_FUNC_ARRAY(OB_SFA_DECIMAL_INT_EXPR_EVAL,
-                   g_decimal_int_eval_functions,
-                   ARRAYSIZEOF(g_decimal_int_eval_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_DECIMAL_INT_EXPR_EVAL_BATCH,
-                   g_decimal_int_eval_batch_functions,
-                   ARRAYSIZEOF(g_decimal_int_eval_batch_functions));
-
 static ObExpr::EvalFunc g_collection_eval_functions[] = {
   ObExprAdd::add_collection_collection_int8_t,
   ObExprAdd::add_collection_collection_int16_t,
@@ -2061,18 +2038,6 @@ static ObExpr::EvalVectorFunc g_collection_expr_eval_vector_functions[] = {
   ObExprAdd::add_collection_collection_uint64_t_vector,
   ObExprMinus::minus_collection_collection_uint64_t_vector,
 };
-
-REG_SER_FUNC_ARRAY(OB_SFA_COLLECTION_EXPR_EVAL,
-                   g_collection_eval_functions,
-                   ARRAYSIZEOF(g_collection_eval_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_COLLECTION_EXPR_EVAL_BATCH,
-                   g_collection_eval_batch_functions,
-                   ARRAYSIZEOF(g_collection_eval_batch_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_COLLECTION_EXPR_EVAL_VEC,
-                   g_collection_expr_eval_vector_functions,
-                   ARRAYSIZEOF(g_collection_expr_eval_vector_functions));
 
 } // end namespace sql
 } // end namespace oceanbase

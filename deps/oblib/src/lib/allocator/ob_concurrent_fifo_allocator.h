@@ -33,7 +33,6 @@ public:
            const int64_t page_size);
   int init(const int64_t page_size,
            const lib::ObLabel &label,
-           const uint64_t tenant_id,
            const int64_t total_limit);
   int init(const int64_t page_size,
            const lib::ObMemAttr &attr,

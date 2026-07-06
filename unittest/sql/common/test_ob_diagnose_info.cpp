@@ -15,7 +15,7 @@
  */
 
 #include <gtest/gtest.h>
-#include "deps/oblib/src/lib/ob_errno.h"
+#include "lib/ob_errno.h"
 
 using namespace oceanbase;
 using namespace common;

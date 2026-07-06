@@ -15,7 +15,9 @@
  */
 
 #define USING_LOG_PREFIX PALF
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_log_handler.h"
+#include "share/rc/ob_module_provider.h"
 #ifdef OB_BUILD_LOG_STORAGE_COMPRESS
 #include "logservice/ob_log_compression.h"
 #endif
@@ -1627,7 +1629,7 @@ int __get_log_handler(const ObLSID &ls_id,
                       ObLSHandle &ls_handle)
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = MTL(ObLSService*);
+  ObLSService *ls_service = share::g_mp->ls_service();
   ObLS *ls = NULL;
   if (OB_ISNULL(ls_service)) {
     ret = OB_ERR_UNEXPECTED;

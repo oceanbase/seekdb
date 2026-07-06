@@ -23,10 +23,9 @@
 #include "sql/das/ob_group_scan_iter.h"
 #include "sql/das/iter/ob_das_iter.h"
 #include "sql/rewrite/ob_query_range_define.h"
-#include "share/domain_id/ob_domain_id.h"
-#include "share/external_table/ob_external_table_part_info.h"
-#include "share/external_table/ob_external_object_ctx.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "sql/das/ob_domain_id.h"
+#include "share/catalog/ob_external_object_ctx.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase
 {
@@ -101,13 +100,7 @@ public:
       group_id_expr_(nullptr),
       result_output_(alloc),
       is_get_(false),
-      is_external_table_(false),
-      external_file_access_info_(alloc),
-      external_file_location_(alloc),
-      external_file_pattern_(alloc),
-      external_files_(alloc),
-      external_file_format_str_(alloc),
-      partition_infos_(alloc),
+
       external_object_ctx_(alloc),
       trans_info_expr_(nullptr),
       ir_scan_type_(ObTSCIRScanType::OB_NOT_A_SPEC_SCAN),
@@ -157,11 +150,6 @@ public:
                        KPC_(group_id_expr),
                        K_(result_output),
                        K_(is_get),
-                       K_(is_external_table),
-                       K_(external_files),
-                       K_(external_file_format_str),
-                       K_(external_file_location),
-                       K_(external_file_pattern),
                        KPC_(trans_info_expr),
                        K_(ir_scan_type),
                        K_(rowkey_exprs),
@@ -184,13 +172,6 @@ public:
   //result_output_ indicate exprs that the storage layer will fill in the value
   sql::ExprFixedArray result_output_;
   bool is_get_;
-  bool is_external_table_;
-  ObExternalFileFormat::StringData external_file_access_info_;
-  ObExternalFileFormat::StringData external_file_location_;
-  ObExternalFileFormat::StringData external_file_pattern_;
-  ExternalFileNameArray external_files_; //for external table scan TODO jim.wjh remove
-  ObExternalFileFormat::StringData external_file_format_str_;
-  share::ObExternalTablePartInfoArray partition_infos_; // FARM COMPAT WHITELIST
   share::ObExternalObjectCtx external_object_ctx_;
   ObExpr *trans_info_expr_; // transaction information pseudo-column
   ObTSCIRScanType ir_scan_type_; // specify retrieval scan type
@@ -422,7 +403,7 @@ protected:
   {
     if (nullptr == retry_alloc_) {
       ObMemAttr attr;
-      attr.tenant_id_ = MTL_ID();
+      
       attr.label_ = "RetryDASCtx";
       retry_alloc_ = new(&retry_alloc_buf_) common::ObArenaAllocator();
       retry_alloc_->set_attr(attr);
@@ -607,7 +588,6 @@ private:
   int64_t cur_group_idx_;
   int64_t group_size_;
 };
-
 
 }  // namespace sql
 }  // namespace oceanbase

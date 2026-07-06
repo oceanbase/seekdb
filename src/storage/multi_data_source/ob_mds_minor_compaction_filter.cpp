@@ -32,7 +32,7 @@ ObMdsMinorFilter::ObMdsMinorFilter()
   : ObICompactionFilter(),
     is_inited_(false),
     last_major_snapshot_(0),
-    allocator_(ObMemAttr(MTL_ID(), "MdsMinorFilter"))
+    allocator_(ObMemAttr("MdsMinorFilter"))
 {
 }
 

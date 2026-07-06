@@ -344,7 +344,6 @@ public:
   static int ob_add_ddl_dependency(const uint64_t schema_id,
                                    const ObSchemaType schema_type,
                                    const int64_t schema_version,
-                                   const uint64_t schema_tenant_id,
                                    obcall::ObDDLArg &ddl_arg);
   static int ob_add_ddl_dependency(const pl::ObPLDependencyTable & dependency_table,
                                    obcall::ObDDLArg &ddl_arg);
@@ -380,17 +379,15 @@ public:
       const share::schema::ObColumnSchemaV2 &column,
       common::ObObjCastParams &params, common::ObObj &def_val);
   int check_partition_name_duplicate(ParseNode *node);
-  static int check_hbase_tbl_auto_partkey(const ObIArray<ObString> &part_keys);
-  static int check_hbase_tbl_auto_partkey(const ObTableSchema &table_schema);
   static int check_text_column_length_and_promote(share::schema::ObColumnSchemaV2 &column,
                                                   int64_t table_id,
                                                   const bool is_byte_length = false);
-  static int get_enable_split_partition(const int64_t tenant_id, bool &enable_split_partition);
+  static int get_enable_split_partition(bool &enable_split_partition);
 
   // this func is for compatibility, the row_store_type of OB_STORE_FORMAT_COMPRESSED_MYSQL
   // has been changed from ENCODING_ROW_STORE to CS_ENCODING_ROW_STORE and the
   // OB_STORE_FORMAT_ARCHIVE_HIGH_ORACLE is newly added since 4.2.0.0
-  static int get_row_store_type(const uint64_t tenant_id, const ObStoreFormatType store_format, ObRowStoreType &row_store_type);
+  static int get_row_store_type(const ObStoreFormatType store_format, ObRowStoreType &row_store_type);
 
   typedef common::hash::ObPlacementHashSet<share::schema::ObIndexNameHashWrapper, common::OB_MAX_COLUMN_NUMBER> IndexNameSet;
   int generate_index_name(ObString &index_name, IndexNameSet &current_index_name_set, const common::ObString &first_col_name);
@@ -449,34 +446,6 @@ public:
                               ObIArray<ObConstraint> &csts,
                               ParseNode *cst_check_expr_node);
 
-  static int resolve_file_prefix(ObString &url,
-                                 ObSqlString &prefix_str,
-                                 common::ObStorageType &device_type,
-                                 ObResolverParams &params);
-  static int resolve_external_file_format(const ParseNode *format_node,
-                                          ObResolverParams &params,
-                                          ObExternalFileFormat& format,
-                                          ObString &format_str);
-  static int resolve_external_file_pattern(const ParseNode *option_node,
-                                          bool is_external_table,
-                                          common::ObIAllocator &allocator,
-                                          const ObSQLSessionInfo *session_info,
-                                          ObString &pattern);
-
-  static int resolve_external_file_location(ObResolverParams &params,
-                                            ObTableSchema &table_schema,
-                                            common::ObString table_location);
-  static int resolve_external_file_location_object(ObResolverParams &params,
-                                                  ObTableSchema &table_schema,
-                                                  common::ObString location_obj,
-                                                  common::ObString sub_path);
-                                            
-  static int mask_properties_sensitive_info(const ParseNode *node,
-                                            ObString &ddl_sql,
-                                            ObIAllocator *allocator,
-                                            ObString &masked_sql);
-
-  static int check_format_valid(const ObExternalFileFormat &format, bool &is_valid);
   int check_column_in_check_constraint(
       const share::schema::ObTableSchema &table_schema,
       const ObReducedVisibleColSet &drop_column_names_set,
@@ -694,7 +663,6 @@ protected:
     return common::OB_SUCCESS;
   };
   int fill_column_collation_info(
-      const int64_t tenant_id,
       const int64_t database_id,
       const common::ObString &table_name);
   int check_column_name_duplicate(
@@ -1001,8 +969,7 @@ protected:
   // while create table can garentee some table info is behind the index arg, which will not be
   // reset
   void reset_index();
-  int get_mv_container_table(uint64_t tenant_id,
-                             const uint64_t mv_container_table_id,
+  int get_mv_container_table(const uint64_t mv_container_table_id,
                              const share::schema::ObTableSchema *&mv_container_table_schema,
                              common::ObString &mv_container_table_name);
   static int trim_space_for_default_value(
@@ -1010,9 +977,7 @@ protected:
       const bool is_char_type,
       const ObCollationType &collation_type,
       ObObj &default_value, ObString &str);
-  int get_suggest_index_scope(
-      const uint64_t tenant_id,
-      const uint64_t data_table_id,
+  int get_suggest_index_scope(const uint64_t data_table_id,
       const ObCreateIndexArg &index_arg,
       const INDEX_KEYNAME key,
       bool &global);
@@ -1079,7 +1044,6 @@ protected:
   int64_t hash_subpart_num_;
   bool is_external_table_;
   common::ObString ttl_definition_;
-  common::ObString kv_attributes_;
   common::ObString storage_cache_policy_;
   ObNameGeneratedType name_generated_type_;
   bool have_generate_fts_arg_;

@@ -19,7 +19,7 @@
 #include "ob_anonymous_block_resolver.h"
 #include "ob_anonymous_block_stmt.h"
 #include "pl/ob_pl_package.h"
-#include "pl/ob_pl_compile.h"
+#include "pl/ob_pl_build.h"
 
 namespace oceanbase
 {
@@ -104,7 +104,7 @@ int ObAnonymousBlockResolver::resolve_anonymous_block(
     ParamStore param_list( ObWrapperAllocator(*(params_.allocator_)) );
     const ParamStore *p_param_list = (params_.param_list_ != NULL && params_.param_list_->count() > 0)
         ? (params_.param_list_) : &param_list;
-    pl::ObPLPackageGuard package_guard(params_.session_info_->get_effective_tenant_id());
+    pl::ObPLPackageGuard package_guard{};
     pl::ObPLResolver resolver(*(params_.allocator_),
                               *(params_.session_info_),
                               *(params_.schema_checker_->get_schema_guard()),
@@ -138,7 +138,7 @@ int ObAnonymousBlockResolver::resolve_anonymous_block(
     }
     OZ (package_guard.init());
     OX (func_ast.set_db_name(params_.session_info_->get_database_name()));
-    OZ (pl::ObPLCompiler::init_anonymous_ast(
+    OZ (pl::ObPLBuilder::init_anonymous_ast(
           func_ast,
           *(params_.allocator_),
           *(params_.session_info_),

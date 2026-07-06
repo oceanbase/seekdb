@@ -66,7 +66,7 @@ public:
 
 public:
   ObPersistLobReaderCache(int32_t cap = DEFAULT_CAP):
-    allocator_(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE/*8KB*/, MTL_ID()),
+    allocator_(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE),
     cap_(cap) 
   {}
   ~ObPersistLobReaderCache();

@@ -228,11 +228,11 @@ class ObPieceCache {
   public:
     ObPieceCache() : mem_context_(nullptr), piece_map_() {}
     virtual ~ObPieceCache() { NULL != mem_context_ ? DESTROY_CONTEXT(mem_context_) : (void)(NULL); }
-    int init(uint64_t tenant_id)
+    int init()
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context_,
-          lib::ContextParam().set_mem_attr(tenant_id, ObModIds::OB_PL_TEMP)))) {
+          lib::ContextParam().set_mem_attr(ObModIds::OB_PL_TEMP)))) {
         SQL_ENG_LOG(WARN, "create memory entity failed");
       } else if (OB_ISNULL(mem_context_)) {
         ret = OB_ERR_UNEXPECTED;

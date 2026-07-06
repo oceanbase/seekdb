@@ -36,9 +36,8 @@ public:
   void set_name_pool(common::ObIAllocator *name_pool);
   void set_index_name(const common::ObString &index_name);
   void set_table_name(const common::ObString &table_name);
-  void set_tenant_id(const uint64_t tenant_id);
   void set_database_name(const common::ObString &db_name);
-  uint64_t get_tenant_id() const { return drop_index_arg_.tenant_id_; };
+  
   uint64_t get_table_id() const { return table_id_; };
   void set_table_id(const uint64_t table_id);
 
@@ -110,10 +109,7 @@ inline const common::ObString &ObDropIndexStmt::get_index_name() const
   return drop_index_arg_.index_name_;
 }
 
-inline void ObDropIndexStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  drop_index_arg_.tenant_id_ = tenant_id;
-}
+
 inline void ObDropIndexStmt::set_table_id(const uint64_t table_id)
 {
   table_id_ = table_id;

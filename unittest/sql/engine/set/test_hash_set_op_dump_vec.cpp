@@ -29,13 +29,13 @@
 #include "sql/engine/set/ob_merge_except_op.h"
 #include "sql/engine/aggregate/ob_hash_distinct_op.h"
 #include "sql/engine/aggregate/ob_merge_distinct_op.h"
-#include "share/system_variable/ob_system_variable.h"
+#include "sql/session/ob_system_variable.h"
 #include "storage/blocksstable/ob_data_file_prepare.h"
 #include "sql/engine/table/ob_fake_table.h"
 #include "set_data_op_generator.h"
 #include "sql/ob_sql_init.h"
 #include "share/ob_cluster_version.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
+#include "share/config/ob_tenant_config_mgr.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "share/ob_simple_mem_limit_getter.h"
 
@@ -751,7 +751,7 @@ int ObHashSetDumpTest::SetPlan::setup_plan(ObOperator *set_op)
   // setup context
   ObString tenant_name("test");
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(session_.test_init(0, 0, 0, NULL))) {
+  } else if (OB_FAIL(session_.test_init(0, 0, NULL))) {
   } else if (OB_FAIL(ObPreProcessSysVars::init_sys_var())) {
   } else if (OB_FAIL(session_.load_default_sys_variable(false, true))) {
   } else if (OB_FAIL(session_.init_tenant(tenant_name, OB_SYS_TENANT_ID))) {

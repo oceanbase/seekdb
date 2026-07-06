@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX PALF
 #include "log_engine.h"
-#include "share/allocator/ob_tenant_mutil_allocator.h"  // ObILogAllocator
+#include "logservice/ob_tenant_mutil_allocator.h"  // ObILogAllocator
 #include "log_io_worker.h"                              // LogIOWorker
 #include "log_shared_task.h"                            // LogSharedTask
 
@@ -691,7 +691,7 @@ int LogEngine::read_group_entry_header(const LSN &lsn, LogGroupEntryHeader &log_
   ReadBuf &read_buf = read_buf_guard.read_buf_;
   int64_t out_read_size = 0;
   int64_t pos = 0;
-  LogIOContext io_ctx(MTL_ID(), palf_id_, LogIOUser::META_INFO);
+  LogIOContext io_ctx(palf_id_, LogIOUser::META_INFO);
   CONSUMER_GROUP_FUNC_GUARD(io_ctx.get_function_type());
 
   if (IS_NOT_INIT) {
@@ -1425,7 +1425,7 @@ int LogEngine::construct_log_meta_(const LSN &lsn, block_id_t &expected_next_blo
   ReadBufGuard guard("LogEngine", buf_len);
   ReadBuf &read_buf = guard.read_buf_;
   LogMetaEntry meta_entry;
-  LogIOContext io_ctx(MTL_ID(), palf_id_, LogIOUser::RESTART);
+  LogIOContext io_ctx(palf_id_, LogIOUser::RESTART);
   CONSUMER_GROUP_FUNC_GUARD(io_ctx.get_function_type());
 
   if (false == lsn.is_valid()) {

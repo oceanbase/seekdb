@@ -40,14 +40,14 @@ int ObWinbufPieceMsgListener::on_message(
     /*do nothing*/
   } else if (pkt.is_datum_) {
     if (!ctx.whole_msg_.datum_store_.is_inited() && OB_FAIL(ctx.whole_msg_.datum_store_.init(
-        UNLIMITED_MEM, ctx.tenant_id_, common::ObCtxIds::WORK_AREA, "PXDhWinbuf", false))) {
+        UNLIMITED_MEM, common::ObCtxIds::WORK_AREA, "PXDhWinbuf", false))) {
       LOG_WARN("fail to init row store", K(ret));
     } else if (OB_FAIL(ctx.whole_msg_.datum_store_.add_row(*pkt.datum_row_))) {
       LOG_WARN("fail to add row", K(ret));
     }
   } else {
     if (!ctx.whole_msg_.row_store_.is_inited() && OB_FAIL(ctx.whole_msg_.row_store_.init(
-         UNLIMITED_MEM, ctx.tenant_id_, common::ObCtxIds::WORK_AREA, "PXDhWinbuf", false))) {
+         UNLIMITED_MEM, common::ObCtxIds::WORK_AREA, "PXDhWinbuf", false))) {
       LOG_WARN("fail to init row store", K(ret));
     } else if (OB_FAIL(ctx.whole_msg_.row_store_.add_row(pkt.row_))) {
       LOG_WARN("fail to add row", K(ret));
@@ -85,8 +85,7 @@ int ObWinbufPieceMsgCtx::alloc_piece_msg_ctx(const ObWinbufPieceMsg &pkt,
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       msg_ctx = new (buf) ObWinbufPieceMsgCtx(pkt.op_id_, task_cnt,
-          ctx.get_physical_plan_ctx()->get_timeout_timestamp(),
-          ctx.get_my_session()->get_effective_tenant_id());
+          ctx.get_physical_plan_ctx()->get_timeout_timestamp());
     }
   }
   return ret;
@@ -319,10 +318,10 @@ int ObWinbufWholeMsg::assign(const ObWinbufWholeMsg &other, common::ObIAllocator
     if (is_datum_) {
       datum_store_.reset();
       int64_t mem_limit = other.datum_store_.get_mem_limit();
-      uint64_t tenant_id = other.datum_store_.get_tenant_id();
+      
       int64_t ctx_id = other.datum_store_.get_mem_ctx_id();
       const char *label = other.datum_store_.get_label();
-      if (OB_FAIL(datum_store_.init(mem_limit, tenant_id, ctx_id, label, false))) {
+      if (OB_FAIL(datum_store_.init(mem_limit, ctx_id, label, false))) {
         LOG_WARN("init datum store failed", K(ret));
       } else if (OB_FAIL(datum_store_.append_datum_store(other.datum_store_))) {
         LOG_WARN("append store failed", K(ret));
@@ -359,17 +358,17 @@ int SPWinFuncPXPieceMsgCtx::alloc_piece_msg_ctx(const SPWinFuncPXPieceMsg &pkt,
     LOG_WARN("session or physical plan ctx is null", K(ret), K(ctx.get_my_session()),
              K(ctx.get_physical_plan_ctx()), K(ctx.get_physical_plan_ctx()->get_phy_plan()));
   } else {
-    uint64_t tenant_id = ctx.get_my_session()->get_effective_tenant_id();
-    common::ObMemAttr mem_attr(tenant_id, ObModIds::OB_SQL_WINDOW_LOCAL, ObCtxIds::WORK_AREA);
+    
+    common::ObMemAttr mem_attr(ObModIds::OB_SQL_WINDOW_LOCAL, ObCtxIds::WORK_AREA);
     void *buf = ctx.get_allocator().alloc(sizeof(SPWinFuncPXPieceMsgCtx));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret));
     } else {
       msg_ctx = new (buf) SPWinFuncPXPieceMsgCtx(
-        pkt.op_id_, task_cnt, ctx.get_physical_plan_ctx()->get_timeout_timestamp(), tenant_id,
+        pkt.op_id_, task_cnt, ctx.get_physical_plan_ctx()->get_timeout_timestamp(),
         ctx.get_physical_plan_ctx()->get_phy_plan()->get_batch_size(), mem_attr);
-      LOG_DEBUG("init msg ctx", K(pkt.op_id_), K(task_cnt), K(tenant_id),
+      LOG_DEBUG("init msg ctx", K(pkt.op_id_), K(task_cnt),
                 K(ctx.get_physical_plan_ctx()->get_phy_plan()->get_batch_size()));
     }
   }
@@ -422,7 +421,7 @@ int SPWinFuncPXPieceMsgListener::on_message(SPWinFuncPXPieceMsgCtx &ctx,
   } else {
     if (!ctx.whole_msg_.row_store_.is_inited()) {
       // init row_store
-      common::ObMemAttr attr(ctx.tenant_id_, ObModIds::OB_SQL_WINDOW_LOCAL, ObCtxIds::WORK_AREA);
+      common::ObMemAttr attr(ObModIds::OB_SQL_WINDOW_LOCAL, ObCtxIds::WORK_AREA);
       if (OB_FAIL(
             ctx.whole_msg_.row_meta_.deep_copy(pkt.row_meta_, &ctx.whole_msg_.assign_allocator_))) {
         LOG_WARN("deep copy row meta failed", K(ret));

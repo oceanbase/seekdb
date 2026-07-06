@@ -38,7 +38,7 @@ int64_t ObKeepAliveLogBody::get_max_serialize_size()
   return max_log_body.get_serialize_size();
 }
 
-int ObKeepAliveLSHandler::init(const int64_t tenant_id, const ObLSID &ls_id,
+int ObKeepAliveLSHandler::init(const ObLSID &ls_id,
                                logservice::ObLogHandler *log_handler_ptr)
 {
   int ret = OB_SUCCESS;
@@ -52,7 +52,7 @@ int ObKeepAliveLSHandler::init(const int64_t tenant_id, const ObLSID &ls_id,
   } else if (OB_NOT_NULL(log_handler_ptr_)) {
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(submit_buf_ =
-                       static_cast<char *>(ob_malloc(submit_buf_len_, ObMemAttr(tenant_id, "KeepAliveBuf"))))) {
+                       static_cast<char *>(ob_malloc(submit_buf_len_, ObMemAttr("KeepAliveBuf"))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "[Keep Alive] submit_buf alloc failed", K(ret), KP(submit_buf_),
               K(base_header));
@@ -212,7 +212,7 @@ void ObKeepAliveLSHandler::print_stat_info()
 {
   SpinRLockGuard guard(lock_);
   ObCStringHelper helper;
-  TRANS_LOG(INFO, "[Keep Alive Stat] LS Keep Alive Info", "tenant_id",          MTL_ID(),
+  TRANS_LOG(INFO, "[Keep Alive Stat] LS Keep Alive Info", 
                                                           "LS_ID",              ls_id_,
                                                           "Not_Master_Cnt",     stat_info_.not_master_cnt,
                                                           "Near_To_GTS_Cnt",    stat_info_.near_to_gts_cnt,
@@ -249,7 +249,7 @@ bool ObKeepAliveLSHandler::check_gts_()
   if (OB_ISNULL(log_handler_ptr_)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid arguments", K(ret), KP(log_handler_ptr_));
-  } else if (OB_FAIL(OB_TS_MGR.get_gts(MTL_ID(), nullptr, gts))) {
+  } else if (OB_FAIL(OB_TS_MGR.get_gts(nullptr, gts))) {
     TRANS_LOG(WARN, "get gts error", K(ret));
   } else if (OB_FAIL(log_handler_ptr_->get_max_scn(max_scn))) {
     TRANS_LOG(WARN, "get max log_ts failed", K(ret));

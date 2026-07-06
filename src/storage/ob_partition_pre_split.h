@@ -46,7 +46,6 @@ public:
   ~ObPartitionPreSplit() = default;
 
   int get_global_index_pre_split_schema_if_need(
-      const int64_t tenant_id, 
       const int64_t session_id,
       const ObString &database_name,
       const ObString &table_name,
@@ -81,7 +80,6 @@ private:
   int check_table_can_do_pre_split(const ObTableSchema &data_table_schema, const ObTableSchema &index_table_schema);
 
   int build_tablet_pre_split_ranges(
-      const int64_t tenant_id,
       const int64_t tablet_phycical_size,
       const int64_t split_num,
       const ObTabletID &tablet_id,
@@ -90,7 +88,6 @@ private:
       const ObTableSchema &new_table_schema);
 
   int build_global_index_pre_split_ranges(
-      const int64_t tenant_id,
       const int64_t data_table_phycical_size,
       const int64_t split_num,
       const ObString &db_name,
@@ -98,13 +95,11 @@ private:
       const ObTableSchema &table_schema);
   
   int build_split_tablet_partition_schema(
-      const int64_t tenant_id,
       const ObTabletID &source_tablet_id,
       const bool need_generate_part_name,
       ObPartitionSchema &new_partition_schema);
 
   int build_table_pre_split_schema(
-      const int64_t tenant_id,
       const int64_t split_size,
       const ObString &db_name,
       const ObTableSchema &ori_table_schema,

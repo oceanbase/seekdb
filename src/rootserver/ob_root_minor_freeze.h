@@ -63,7 +63,6 @@ private:
     const common::ObIArray<MinorFreezeParam> &get_params() const { return params_; }
 
     int push_back_param(const common::ObAddr &server,
-                        const uint64_t tenant_id = 0,
                         share::ObLSID ls_id = share::INVALID_LS,
                         const common::ObTabletID &tablet_id = ObTabletID(ObTabletID::INVALID_TABLET_ID));
 
@@ -79,14 +78,10 @@ private:
                                 const common::ObZone &zone,
                                 bool &server_in_zone) const;
 
-  int init_params_by_ls_or_tablet(const uint64_t tenant_id,
-                                  share::ObLSID ls_id,
+  int init_params_by_ls_or_tablet(share::ObLSID ls_id,
                                   const common::ObTabletID &tablet_id,
                                   ParamsContainer &params) const;
-  int init_params_by_tenant(const common::ObIArray<uint64_t> &tenant_ids,
-                            const common::ObZone &zone,
-                            const common::ObIArray<common::ObAddr> &server_list,
-                            ParamsContainer &params) const;
+  int init_params_by_tenant(ParamsContainer &params) const;
 
   int init_params_by_zone(const common::ObZone &zone,
                           ParamsContainer &params) const;

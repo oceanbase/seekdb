@@ -17,12 +17,12 @@
 #ifndef OCEANBASE_COMMON_OB_OBJ_FUNCS_
 #define OCEANBASE_COMMON_OB_OBJ_FUNCS_
 
-#include "lib/timezone/ob_timezone_info.h"
-#include "lib/timezone/ob_time_convert.h"
-#include "lib/json_type/ob_json_parse.h"
-#include "lib/json_type/ob_json_base.h"
-#include "lib/json_type/ob_json_bin.h"
-#include "lib/udt/ob_array_type.h"
+#include "common/timezone/ob_timezone_info.h"
+#include "common/timezone/ob_time_convert.h"
+#include "common/json_type/ob_json_parse.h"
+#include "common/json_type/ob_json_base.h"
+#include "common/json_type/ob_json_bin.h"
+#include "common/udt/ob_array_type.h"
 #include "common/object/ob_object.h"
 #include "lib/encode/ob_base64_encode.h"
 
@@ -1564,8 +1564,7 @@ DEF_ENUMSET_INNER_FUNCS(ObSetInnerType, set_inner, ObString);
   }  
 
 // ToDo: @gehao
-// 1. SERIALIZE/DESERIALIZE will drop has_lob_header flag. However, only table api use these functions,
-//    and lob locators are removed in table apis. Error may occur if used in other scenes.
+// 1. SERIALIZE/DESERIALIZE will drop has_lob_header flag. Error may occur if used in other scenes.
 // 2. CS_FUNCS: lob with same content and different lobids will have different crc & hash, 
 //    but error occur in farm, not used?
 

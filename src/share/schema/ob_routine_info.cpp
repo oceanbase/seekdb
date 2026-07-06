@@ -50,7 +50,7 @@ ObRoutineParam &ObRoutineParam::operator =(const ObRoutineParam &src_schema)
   if (this != &src_schema) {
     reset();
     int &ret = error_ret_;
-    OX (tenant_id_ = src_schema.get_tenant_id());
+    OX ();
     OX (routine_id_ = src_schema.get_routine_id());
     OX (sequence_ = src_schema.get_sequence());
     OX (subprogram_id_ = src_schema.get_subprogram_id());
@@ -113,8 +113,7 @@ bool ObRoutineParam::is_valid() const
   bool bret = false;
   if (ObSchema::is_valid()) {
     if (is_user_field_valid()) {
-      bret = (OB_INVALID_ID != tenant_id_)
-          && (OB_INVALID_ID != routine_id_)
+      bret = (OB_INVALID_ID != routine_id_)
           && (OB_INVALID_INDEX != sequence_)
           && (OB_INVALID_INDEX != subprogram_id_)
           && (OB_INVALID_VERSION != schema_version_);
@@ -126,7 +125,6 @@ bool ObRoutineParam::is_valid() const
 
 void ObRoutineParam::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   routine_id_ = OB_INVALID_ID;
   sequence_ = OB_INVALID_INDEX;
   subprogram_id_ = OB_INVALID_INDEX;
@@ -163,7 +161,6 @@ OB_DEF_SERIALIZE(ObRoutineParam)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-              tenant_id_,
               routine_id_,
               sequence_,
               subprogram_id_,
@@ -187,7 +184,6 @@ OB_DEF_DESERIALIZE(ObRoutineParam)
   int ret = OB_SUCCESS;
   reset();
   LST_DO_CODE(OB_UNIS_DECODE,
-              tenant_id_,
               routine_id_,
               sequence_,
               subprogram_id_,
@@ -210,7 +206,6 @@ OB_DEF_SERIALIZE_SIZE(ObRoutineParam)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              tenant_id_,
               routine_id_,
               sequence_,
               subprogram_id_,
@@ -255,7 +250,6 @@ ObRoutineInfo &ObRoutineInfo::operator =(const ObRoutineInfo &src_schema)
   if (this != &src_schema) {
     reset();
     int &ret = error_ret_;
-    tenant_id_ = src_schema.tenant_id_;
     database_id_ = src_schema.database_id_;
     package_id_ =  src_schema.package_id_;
     owner_id_ = src_schema.owner_id_;
@@ -268,7 +262,6 @@ ObRoutineInfo &ObRoutineInfo::operator =(const ObRoutineInfo &src_schema)
     comp_flag_ = src_schema.comp_flag_;
     type_id_ = src_schema.type_id_;
     tg_timing_event_ = src_schema.tg_timing_event_;
-    dblink_id_ = src_schema.dblink_id_;
     if (OB_FAIL(deep_copy_str(src_schema.routine_name_, routine_name_))) {
       LOG_WARN("deep copy name failed", K(ret), K_(src_schema.routine_name));
     } else if (OB_FAIL(deep_copy_str(src_schema.priv_user_, priv_user_))) {
@@ -283,10 +276,6 @@ ObRoutineInfo &ObRoutineInfo::operator =(const ObRoutineInfo &src_schema)
       LOG_WARN("deep copy route sql failed", K(ret), K_(src_schema.route_sql));
     } else if (OB_FAIL(routine_params_.reserve(src_schema.routine_params_.count()))) {
       LOG_WARN("failed to reserve routine params size", K(ret), K(src_schema));
-    } else if (OB_FAIL(deep_copy_str(src_schema.dblink_db_name_, dblink_db_name_))) {
-      LOG_WARN("deep copy dblink database name failed", K(ret), K(src_schema.dblink_db_name_));
-    } else if (OB_FAIL(deep_copy_str(src_schema.dblink_pkg_name_, dblink_pkg_name_))) {
-      LOG_WARN("deep copy dblink pkg name failed", K(ret), K(src_schema.dblink_pkg_name_));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < src_schema.routine_params_.count(); ++i) {
       if (OB_ISNULL(src_schema.routine_params_.at(i))) {
@@ -313,7 +302,7 @@ bool ObRoutineInfo::is_user_field_valid() const
 {
   bool bret = false;
   if (ObSchema::is_valid()) {
-    bret = (OB_INVALID_ID != tenant_id_)
+    bret = true
    //   && (OB_INVALID_ID != owner_id_)
         && (!routine_name_.empty())
         && (OB_INVALID_INDEX != overload_)
@@ -338,7 +327,6 @@ bool ObRoutineInfo::is_valid() const
 
 void ObRoutineInfo::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   database_id_ = OB_INVALID_ID;
   package_id_ = OB_INVALID_ID;
   owner_id_ = OB_INVALID_ID;
@@ -359,9 +347,6 @@ void ObRoutineInfo::reset()
   routine_params_.reset();
   ObSchema::reset();
   tg_timing_event_ = TgTimingEvent::TG_TIMING_EVENT_INVALID;
-  dblink_id_ = OB_INVALID_ID;
-  reset_string(dblink_db_name_);
-  reset_string(dblink_pkg_name_);
   // routine_params_.set_allocator(get_allocator());
   // routine_params_.set_capacity(OB_MAX_PROC_PARAM_COUNT+1); //one more ret type param for function
 }
@@ -378,8 +363,6 @@ int64_t ObRoutineInfo::get_convert_size() const
   len += route_sql_.length() + 1;
   len += (routine_params_.count()+1) * sizeof(ObRoutineParam *);
   len += routine_params_.get_data_size();
-  len += dblink_db_name_.length() + 1;
-  len += dblink_pkg_name_.length() + 1;
   ARRAY_FOREACH_NORET(routine_params_, i) {
     if (routine_params_.at(i) != NULL) {
       len += routine_params_.at(i)->get_convert_size();
@@ -512,7 +495,6 @@ OB_DEF_SERIALIZE(ObRoutineInfo)
   int ret = OB_SUCCESS;
   int64_t param_cnt = routine_params_.count();
   LST_DO_CODE(OB_UNIS_ENCODE,
-              tenant_id_,
               database_id_,
               package_id_,
               owner_id_,
@@ -530,9 +512,7 @@ OB_DEF_SERIALIZE(ObRoutineInfo)
               route_sql_,
               type_id_,
               param_cnt,
-              tg_timing_event_,
-              dblink_db_name_,
-              dblink_pkg_name_);
+              tg_timing_event_);
   for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
     if (OB_ISNULL(routine_params_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
@@ -551,7 +531,6 @@ OB_DEF_DESERIALIZE(ObRoutineInfo)
   ObRoutineParam routine_param;
   reset();
   LST_DO_CODE(OB_UNIS_DECODE,
-              tenant_id_,
               database_id_,
               package_id_,
               owner_id_,
@@ -569,9 +548,7 @@ OB_DEF_DESERIALIZE(ObRoutineInfo)
               route_sql_,
               type_id_,
               param_cnt,
-              tg_timing_event_,
-              dblink_db_name_,
-              dblink_pkg_name_);
+              tg_timing_event_);
   for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
     routine_param.reset();
     if (OB_FAIL(routine_param.deserialize(buf, data_len, pos))) {
@@ -588,7 +565,6 @@ OB_DEF_SERIALIZE_SIZE(ObRoutineInfo)
   int64_t len = 0;
   int64_t param_cnt = routine_params_.count();
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              tenant_id_,
               database_id_,
               package_id_,
               owner_id_,
@@ -606,9 +582,7 @@ OB_DEF_SERIALIZE_SIZE(ObRoutineInfo)
               route_sql_,
               type_id_,
               param_cnt,
-              tg_timing_event_,
-              dblink_db_name_,
-              dblink_pkg_name_);
+              tg_timing_event_);
   for (int64_t i = 0; i < param_cnt; ++i) {
     if (routine_params_.at(i) != NULL) {
       len += routine_params_.at(i)->get_serialize_size();

@@ -1889,7 +1889,6 @@ int ObExecParamRawExpr::assign(const ObRawExpr &other)
       const ObExecParamRawExpr &tmp = static_cast<const ObExecParamRawExpr &>(other);
       outer_expr_ = tmp.outer_expr_;
       is_onetime_ = tmp.is_onetime_;
-      ref_same_dblink_ = tmp.ref_same_dblink_;
       exec_param_idx_ = tmp.exec_param_idx_;
       eval_by_storage_ = tmp.eval_by_storage_;
     }
@@ -2160,7 +2159,7 @@ int ObColumnRefRawExpr::get_name_internal(char *buf, const int64_t buf_len, int6
                                           ExplainType type) const
 {
   int ret = OB_SUCCESS;
-  if (EXPLAIN_DBLINK_STMT == type || EXPLAIN_HINT_FORMAT == type) {
+  if (EXPLAIN_HINT_FORMAT == type) {
     if (!table_name_.empty() &&
         OB_FAIL(BUF_PRINTF("%.*s.", table_name_.length(), table_name_.ptr()))) {
       LOG_WARN("fail to BUF_PRINTF", K(ret));
@@ -2783,7 +2782,7 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
       symbol = "/";
       break;
     case T_OP_MOD:
-      symbol = (EXPLAIN_DBLINK_STMT == type) ? "MOD" : "%";
+      symbol = "%";
       break;
     case T_OP_INT_DIV:
       symbol = "DIV";
@@ -2860,24 +2859,8 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
     } else if (OB_ISNULL(get_param_expr(1))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("second param expr is NULL", K(ret));
-    } else if (EXPLAIN_DBLINK_STMT == type && T_OP_MOD == get_expr_type()) {
-      if (OB_FAIL(BUF_PRINTF("%.*s", symbol.length(), symbol.ptr()))) {
-        LOG_WARN("fail to BUF_PRINTF", K(ret));
-      } else if (OB_FAIL(BUF_PRINTF("("))) {
-        LOG_WARN("fail to BUF_PRINTF", K(ret));
-      } else if (OB_FAIL(get_param_expr(0)->get_name(buf, buf_len, pos, type))) {
-        LOG_WARN("fail to get_name", K(ret));
-      } else if (OB_FAIL(BUF_PRINTF(", "))) {
-        LOG_WARN("fail to BUF_PRINTF", K(ret));
-      } else if (OB_FAIL(get_param_expr(1)->get_name(buf, buf_len, pos, type))) {
-        LOG_WARN("fail to BUF_PRINTF", K(ret));
-      } else if (OB_FAIL(BUF_PRINTF(")"))) {
-        LOG_WARN("fail to BUF_PRINTF", K(ret));
-      }
     } else {
-      if (EXPLAIN_DBLINK_STMT == type && OB_FAIL(BUF_PRINTF("("))) {
-        LOG_WARN("fail to BUF_PRINTF", K(ret));
-      } else if (OB_FAIL(get_param_expr(0)->get_name(buf, buf_len, pos, type))) {
+      if (OB_FAIL(get_param_expr(0)->get_name(buf, buf_len, pos, type))) {
         LOG_WARN("fail to get_name", K(ret));
       } else if (OB_FAIL(BUF_PRINTF(" "))) {
         LOG_WARN("fail to BUF_PRINTF", K(ret));
@@ -2886,8 +2869,6 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
       } else if (OB_FAIL(BUF_PRINTF(" "))) {
         LOG_WARN("fail to BUF_PRINTF", K(ret));
       } else if (OB_FAIL(get_param_expr(1)->get_name(buf, buf_len, pos, type))) {
-        LOG_WARN("fail to BUF_PRINTF", K(ret));
-      } else if (EXPLAIN_DBLINK_STMT == type && OB_FAIL(BUF_PRINTF(")"))) {
         LOG_WARN("fail to BUF_PRINTF", K(ret));
       }
     }
@@ -4077,10 +4058,6 @@ int ObAggFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
                             static_cast<ObUDFRawExpr*>(pl_agg_udf_expr_)->get_func_name().ptr()))) {
       LOG_WARN("fail to BUF_PRINTF", K(ret));
     } else {/*do nothing*/}
-  } else if (EXPLAIN_DBLINK_STMT == type) {
-    if (OB_FAIL(BUF_PRINTF("%s(", get_name_dblink(get_expr_type())))) {
-      LOG_WARN("fail to BUF_PRINTF", K(ret));
-    }
   } else {
     if (OB_FAIL(BUF_PRINTF("%s(", get_type_name(get_expr_type())))) {
       LOG_WARN("fail to BUF_PRINTF", K(ret));
@@ -4188,36 +4165,10 @@ int ObAggFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t
   return ret;
 }
 
-const char *ObAggFunRawExpr::get_name_dblink(ObItemType expr_type) const
-{
-  const char *name = NULL;
-  switch(expr_type){
-  case T_FUN_MAX :
-    name = "max";
-    break;
-  case T_FUN_MIN :
-    name = "min";
-    break;
-  case T_FUN_SUM :
-    name = "sum";
-    break;
-  case T_FUN_COUNT :
-    name = "count";
-    break;
-  case T_FUN_AVG :
-    name = "avg";
-    break;
-  default:
-    name = "UNKNOWN";
-    break;
-  }
-  return name;
-}
-
 int ObAggFunRawExpr::set_udf_meta(const share::schema::ObUDF &udf)
 {
   int ret = OB_SUCCESS;
-  udf_meta_.tenant_id_ = udf.get_tenant_id();
+  
   udf_meta_.ret_ = udf.get_ret();
   udf_meta_.type_ = udf.get_type();
 
@@ -4887,8 +4838,6 @@ int ObSequenceRawExpr::inner_deep_copy(ObIRawExprCopier &copier)
       LOG_WARN("fail to write string", K(name_), K(ret));
     } else if (OB_FAIL(ob_write_string(*inner_alloc_, action_, action_))) {
       LOG_WARN("fail to write string", K(action_), K(ret));
-    } else if (OB_FAIL(ob_write_string(*inner_alloc_, dblink_name_, dblink_name_))) {
-      LOG_WARN("fail to write string", K(dblink_name_), K(ret));
     }
   }
   return ret;
@@ -4949,7 +4898,7 @@ int ObSequenceRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64
 int ObNormalDllUdfRawExpr::set_udf_meta(const share::schema::ObUDF &udf)
 {
   int ret = OB_SUCCESS;
-  udf_meta_.tenant_id_ = udf.get_tenant_id();
+  
   udf_meta_.ret_ = udf.get_ret();
   udf_meta_.type_ = udf.get_type();
 
@@ -5303,8 +5252,6 @@ int ObUDFRawExpr::assign(const ObRawExpr &other)
       is_udt_cons_ = tmp.is_udt_cons_;
       params_name_ = tmp.params_name_;
       params_desc_v2_ = tmp.params_desc_v2_;
-      dblink_name_ = tmp.dblink_name_;
-      dblink_id_ = tmp.dblink_id_;
     }
   }
   return ret;
@@ -5323,7 +5270,6 @@ int ObUDFRawExpr::inner_deep_copy(ObIRawExprCopier &copier)
       CK (OB_NOT_NULL(inner_alloc_));
       OZ (ob_write_string(*inner_alloc_, params_name_.at(i), params_name_.at(i)));
     }
-    OZ (ob_write_string(*inner_alloc_, dblink_name_, dblink_name_));
   }
   return ret;
 }

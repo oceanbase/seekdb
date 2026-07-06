@@ -70,11 +70,11 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObPLPackageBase);
 };
 
-class ObPLPackageAST : public ObPLPackageBase, public ObPLCompileUnitAST
+class ObPLPackageAST : public ObPLPackageBase, public ObPLAstUnit
 {
 public:
   ObPLPackageAST(common::ObIAllocator &allocator) :
-    ObPLCompileUnitAST(allocator, PACKAGE_TYPE),
+    ObPLAstUnit(allocator, PACKAGE_TYPE),
     inited_(false) {}
   virtual ~ObPLPackageAST() {};
 
@@ -98,11 +98,11 @@ private:
 
 class ObPLVar;
 class ObUserDefinedType;
-class ObPLPackage : public ObPLPackageBase, public ObPLCompileUnit
+class ObPLPackage : public ObPLPackageBase, public ObPLExecutableUnit
 {
 public:
   ObPLPackage(lib::MemoryContext &mem_context)
-    : ObPLCompileUnit(sql::ObLibCacheNameSpace::NS_PKG, mem_context),
+    : ObPLExecutableUnit(sql::ObLibCacheNameSpace::NS_PKG, mem_context),
       inited_(false),
       var_table_(),
       condition_table_(),

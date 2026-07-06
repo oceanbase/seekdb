@@ -16,7 +16,9 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_storage_info.h"
-#include "share/object_storage/ob_object_storage_struct.h"
+#include "lib/restore/ob_storage.h"
+#include "lib/restore/ob_i_storage.h"
+#include "lib/restore/ob_object_storage_base.h"
 #include "lib/json/ob_json.h"
 #include "lib/restore/hmac_signature.h"
 #include "lib/string/ob_string.h"
@@ -901,7 +903,7 @@ int ObObjectStorageInfo::get_access_key_(char *key_buf, const int64_t key_buf_le
 
 //***********************ObStsCredential***************************
 ObStsCredential::ObStsCredential()
-    : tenant_id_(OB_SERVER_TENANT_ID), is_inited_(false)
+    : is_inited_(false)
 {
   sts_ak_[0] = '\0';
   sts_sk_[0] = '\0';
@@ -913,19 +915,16 @@ ObStsCredential::~ObStsCredential()
   reset();
 }
 
-int ObStsCredential::init(const uint64_t tenant_id)
+int ObStsCredential::init()
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("sts credential init twice", K(ret));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
   } else if (OB_FAIL(get_sts_credential())) {
-    LOG_WARN("failed to get sts credential", K(ret), K(tenant_id_));
+    LOG_WARN("failed to get sts credential", K(ret));
   } else {
-    tenant_id_ = tenant_id;
+    
     is_inited_ = true;
   }
   return ret;
@@ -955,7 +954,7 @@ int ObStsCredential::get_sts_credential()
 void ObStsCredential::reset()
 {
   is_inited_ = false;
-  tenant_id_ = OB_SERVER_TENANT_ID;
+  
   sts_ak_[0] = '\0';
   sts_sk_[0] = '\0';
   sts_url_[0] = '\0';
@@ -964,7 +963,7 @@ void ObStsCredential::reset()
 //***********************ObDeviceCredentialKey***************************
 
 ObDeviceCredentialKey::ObDeviceCredentialKey()
-    : tenant_id_(OB_SERVER_TENANT_ID), is_inited_(false)
+    : is_inited_(false)
 {
   role_arn_[0] = '\0';
   external_id_[0] = '\0';
@@ -1016,17 +1015,12 @@ int ObDeviceCredentialKey::init_(const char *role_arn, const char *external_id)
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid external id", K(ret), KP(external_id), K(external_id_len), K(EXTERNAL_ID));
     } else {
-        tenant_id_ = ObObjectStorageTenantGuard::get_tenant_id();
-        if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id_))) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid tenant_id", K(ret), K_(tenant_id));
-        } else {
-          MEMCPY(role_arn_, role_arn, role_arn_len);
-          role_arn_[role_arn_len] = '\0';
-          MEMCPY(external_id_, external_id, external_id_len);
-          external_id_[external_id_len] = '\0';
-          is_inited_ = true;
-        }
+        
+        MEMCPY(role_arn_, role_arn, role_arn_len);
+        role_arn_[role_arn_len] = '\0';
+        MEMCPY(external_id_, external_id, external_id_len);
+        external_id_[external_id_len] = '\0';
+        is_inited_ = true;
         if (OB_FAIL(ret)) {
           reset();
         }
@@ -1039,7 +1033,7 @@ void ObDeviceCredentialKey::reset()
 {
   role_arn_[0] = '\0';
   external_id_[0] = '\0';
-  tenant_id_ = OB_SERVER_TENANT_ID;
+  
   is_inited_ = false;
 }
 
@@ -1048,7 +1042,6 @@ uint64_t ObDeviceCredentialKey::hash() const
   uint64_t hash_value = 0;
   hash_value = murmurhash(role_arn_, static_cast<int32_t>(strlen(role_arn_)), hash_value);
   hash_value = murmurhash(external_id_, static_cast<int32_t>(strlen(external_id_)), hash_value);
-  hash_value = murmurhash(&tenant_id_, sizeof(tenant_id_), hash_value);
   hash_value = murmurhash(&is_inited_, static_cast<int32_t>(sizeof(is_inited_)), hash_value);
   return hash_value;
 }
@@ -1063,7 +1056,7 @@ int ObDeviceCredentialKey::assign(const ObDeviceCredentialKey &other)
   } else {
     MEMCPY(role_arn_, other.role_arn_, sizeof(role_arn_));
     MEMCPY(external_id_, other.external_id_, sizeof(external_id_));
-    tenant_id_ = other.tenant_id_;
+    
     is_inited_ = other.is_inited_;
   }
   return ret;
@@ -1074,7 +1067,7 @@ bool ObDeviceCredentialKey::operator==(const ObDeviceCredentialKey &other) const
   return (is_inited_ == other.is_inited_)
          && (0 == STRCMP(role_arn_, other.role_arn_))
          && (0 == STRCMP(external_id_, other.external_id_))
-         && (tenant_id_ == other.tenant_id_);
+         && (true);
 }
 
 
@@ -1146,8 +1139,8 @@ int ObDeviceCredentialKey::construct_signed_url(char *url_buf, const int64_t url
         K(ret), K(signature_nonce), K(sizeof(signature_nonce)));
   } else if (OB_FAIL(generate_request_id(request_id, sizeof(request_id)))) {
     LOG_WARN("failed to generate request id", K(ret), K(request_id), K(sizeof(request_id)));
-  } else if (OB_FAIL(sts_credential.init(tenant_id_))) {
-    LOG_WARN("failed to init sts credential", K(ret), K(tenant_id_));
+  } else if (OB_FAIL(sts_credential.init())) {
+    LOG_WARN("failed to init sts credential", K(ret));
   } else {
     if (OB_FAIL(params.push_back(ParamType("Action", STS_ACTION)))) {
       OB_LOG(WARN, "fail to push back", K(ret), K(params.count()), K(params));

@@ -19,7 +19,7 @@
 #include <regex>
 #include "ob_ai_func.h"
 #include "lib/utility/utility.h"
-#include "lib/json_type/ob_json_common.h"
+#include "common/json_type/ob_json_common.h"
 
 
 using namespace oceanbase::common;
@@ -90,9 +90,9 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   ObJsonArray *args_array = NULL;
   ObJsonObject *prompt_object = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, N_AI_PROMPT));
+  
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_PROMPT));
 
   if (OB_FAIL(tmp_allocator.eval_arg(arg0, ctx, template_datum))) {
     LOG_WARN("fail to eval template arg", K(ret), K(arg0->datum_meta_));

@@ -36,7 +36,7 @@ public:
 protected:
   int get_row_from_tenants();
   int fill_cells(const sql::ObILibCacheObject *cache_obj, const sql::ObPlanCache &plan_cache);
-  int get_row_from_specified_tenant(uint64_t tenant_id, bool &is_end);
+  int get_row_from_specified_tenant(bool &is_end);
 private:
   common::ObSEArray<uint64_t, 1024> plan_id_array_;
   int64_t plan_id_array_idx_;

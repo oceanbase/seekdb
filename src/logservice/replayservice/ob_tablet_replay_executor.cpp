@@ -15,6 +15,7 @@
  */
 
 #include "logservice/replayservice/ob_tablet_replay_executor.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -76,7 +77,7 @@ int ObTabletReplayExecutor::execute(const share::SCN &scn, const share::ObLSID &
   } else if (!scn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "replay executor get invalid argument", KR(ret), K(scn), K(ls_id));
-  } else if (OB_ISNULL(ls_service = MTL(ObLSService *))) {
+  } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "ls service should not be null", K(ret), KP(ls_service));
   } else if (CLICK_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::TABLET_MOD))) {
@@ -267,7 +268,7 @@ int ObTabletReplayExecutor::replay_to_mds_table_(
     ret = OB_NOT_SUPPORTED;
     CLOG_LOG(WARN, "inner tablets have no mds table", KR(ret));
   } else {
-    ObLSService *ls_svr = MTL(ObLSService*);
+    ObLSService *ls_svr = share::g_mp->ls_service();
     ObLSHandle ls_handle;
     ObLS *ls = nullptr;
     const share::ObLSID &ls_id = tablet->get_tablet_meta().ls_id_;
@@ -309,7 +310,7 @@ int ObTabletReplayExecutor::replay_to_mds_table_(
     ret = OB_NOT_SUPPORTED;
     CLOG_LOG(WARN, "inner tablets have no mds table", KR(ret));
   } else {
-    ObLSService *ls_svr = MTL(ObLSService*);
+    ObLSService *ls_svr = share::g_mp->ls_service();
     ObLSHandle ls_handle;
     ObLS *ls = nullptr;
     const share::ObLSID &ls_id = tablet->get_tablet_meta().ls_id_;
@@ -354,7 +355,7 @@ int ObTabletReplayExecutor::replay_to_mds_table_(
     ret = OB_NOT_SUPPORTED;
     CLOG_LOG(WARN, "inner tablets have no mds table", KR(ret));
   } else {
-    ObLSService *ls_svr = MTL(ObLSService*);
+    ObLSService *ls_svr = share::g_mp->ls_service();
     ObLSHandle ls_handle;
     ObLS *ls = nullptr;
     const share::ObLSID &ls_id = tablet->get_tablet_meta().ls_id_;

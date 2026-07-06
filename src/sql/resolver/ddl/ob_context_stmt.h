@@ -62,10 +62,7 @@ public:
   {
     arg_.set_schema_name(db_name);
   }
-  void set_tenant_id(uint64_t tenant_id)
-  {
-    arg_.set_tenant_id(tenant_id);
-  }
+  
   void set_context_type(ObContextType type)
   {
     arg_.set_context_type(type);

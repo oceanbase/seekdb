@@ -122,7 +122,7 @@ int ObDirectLoadDataBlockEncoder<Header, align>::realloc_bufs(const int64_t size
   int ret = OB_SUCCESS;
   const int64_t buf_size = align ? ALIGN_UP(size, DIO_ALIGN_SIZE) : size;
   if (buf_size_ != buf_size) {
-    char *tmp_buf = (char *)ob_malloc(buf_size, ObMemAttr(MTL_ID(), "TLD_DBEncoder"));
+    char *tmp_buf = (char *)ob_malloc(buf_size, ObMemAttr("TLD_DBEncoder"));
     if (tmp_buf == nullptr) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "fail to alloc buf", K(buf_size), KR(ret));
@@ -160,7 +160,7 @@ int ObDirectLoadDataBlockEncoder<Header, align>::realloc_bufs(const int64_t size
         ob_free(compress_buf_);
         compress_buf_ = nullptr;
       }
-      compress_buf_ = (char *)ob_malloc(compress_buf_size, ObMemAttr(MTL_ID(), "TLD_DBEncoder"));
+      compress_buf_ = (char *)ob_malloc(compress_buf_size, ObMemAttr("TLD_DBEncoder"));
       if (compress_buf_ == nullptr) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         STORAGE_LOG(WARN, "fail to alloc compress buf", K(compress_buf_size), KR(ret));

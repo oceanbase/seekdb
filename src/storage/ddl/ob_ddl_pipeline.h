@@ -21,9 +21,9 @@
 #include "storage/ddl/ob_ddl_independent_dag.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "common/ob_tablet_id.h"
-#include "share/vector_index/ob_vector_index_util.h"
-#include "share/vector_index/ob_vector_kmeans_ctx.h"
-#include "share/vector_index/ob_vector_embedding_handler.h"
+#include "observer/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_vector_kmeans_ctx.h"
+#include "observer/vector_index/ob_vector_embedding_handler.h"
 #include "storage/ddl/ob_hnsw_embedmgr.h"
 #include "lib/lock/ob_spin_lock.h"
 
@@ -128,7 +128,7 @@ public:
 
   int build_extra_column_idxs(const int32_t chunk_col_idx, common::ObSEArray<int32_t, 4> &extra_column_idxs) const;
 
-TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(tablet_id), K_(snapshot_version), K_(index_type));
+TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(snapshot_version), K_(index_type));
 
 private:
   int init_hnsw_index(const ObDDLTableSchema &ddl_table_schema);
@@ -143,7 +143,7 @@ private:
 public:
   int64_t row_cnt_;
   int64_t vec_dim_;
-  int64_t tenant_id_;
+  
   share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   common::ObString vec_idx_param_;
@@ -175,8 +175,8 @@ class ObVectorIndexRowIterator
 {
 public:
   ObVectorIndexRowIterator()
-    : is_inited_(false), cur_row_pos_(0), current_row_(), iter_allocator_("VectoIndeIter", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-      row_allocator_("VectoRow", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    : is_inited_(false), cur_row_pos_(0), current_row_(), iter_allocator_("VectoIndeIter", OB_MALLOC_NORMAL_BLOCK_SIZE),
+      row_allocator_("VectoRow", OB_MALLOC_NORMAL_BLOCK_SIZE),
       tablet_id_(), vec_dim_(0)
   {}
   ~ObVectorIndexRowIterator() = default;

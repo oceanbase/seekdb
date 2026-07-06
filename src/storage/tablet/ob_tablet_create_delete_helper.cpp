@@ -15,6 +15,7 @@
  */
 
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -55,6 +56,7 @@ int ObTabletCreateDeleteHelper::replay_mds_get_tablet(
   return ret;
 }
 
+
 int ObTabletCreateDeleteHelper::get_tablet(
     const ObTabletMapKey &key,
     ObTabletHandle &handle,
@@ -65,7 +67,7 @@ int ObTabletCreateDeleteHelper::get_tablet(
 #endif
   int ret = OB_SUCCESS;
   static const int64_t SLEEP_TIME_US = 10;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   const int64_t begin_time = ObClockGenerator::getClock();
   int64_t current_time = 0;
 
@@ -326,40 +328,11 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_create_tx(
       ret = OB_SNAPSHOT_DISCARDED;
       LOG_WARN("read snapshot is smaller than prepare version",
           K(ret), K(ls_id), K(tablet_id), K(trans_state), K(read_snapshot), K(trans_version));
-    } else if (MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID()) {
+    } else {
       // primary tenant
       ret = OB_SNAPSHOT_DISCARDED;
       LOG_WARN("tablet creation transaction has not committed",
           K(ret), K(ls_id), K(tablet_id), K(trans_state), K(read_snapshot), K(trans_version));
-    } else {
-      // standby tenant(including restore/invalid role): call interface from @zk250686, get "potential" commit version, then decide
-      // whether allow to read
-      const ObTransID tx_id(writer.writer_id_);
-      ObTxCommitData::TxDataState tx_data_state;
-      share::SCN commit_version;
-      if (OB_FAIL(check_for_standby(ls_id, tx_id, read_snapshot, tx_data_state, commit_version))) {
-        LOG_WARN("failed to check for standby", K(ret), K(ls_id), K(tablet_id), K(tx_id), K(read_snapshot));
-      } else {
-        switch (tx_data_state) {
-          case ObTxCommitData::TxDataState::COMMIT:
-            {
-              if (read_snapshot < commit_version) {
-                ret = OB_SNAPSHOT_DISCARDED;
-                LOG_WARN("read snapshot is smaller than trans version",
-                    K(ret), K(ls_id), K(tablet_id), K(tx_id), K(trans_state), K(read_snapshot), K(trans_version));
-              }
-            }
-            break;
-          case ObTxCommitData::TxDataState::RUNNING:
-          case ObTxCommitData::TxDataState::ABORT:
-            ret = OB_SNAPSHOT_DISCARDED;
-            LOG_WARN("transaction has not been committed", K(ret), K(ls_id), K(tx_id), K(tx_data_state), K(read_snapshot));
-            break;
-          default:
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected tx data state", K(ret), K(ls_id), K(tablet_id), K(tx_id), K(tx_data_state), K(read_snapshot));
-        }
-      }
     }
   } else if (mds::TwoPhaseCommitState::ON_COMMIT == trans_state) {
     if (snapshot_version < user_data.create_commit_version_) {
@@ -404,41 +377,11 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_transfer_in(
       ret = OB_TABLET_NOT_EXIST;
       LOG_WARN("read snapshot is smaller than prepare version, should retry",
           K(ret), K(ls_id), K(tablet_id), K(trans_state), K(read_snapshot), K(trans_version));
-    } else if (MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID()) {
+    } else {
       // primary tenant: not allowed to read, retry
       ret = OB_TABLET_NOT_EXIST;
       LOG_WARN("read snapshot is no smaller than prepare version, primary tenant should retry",
           K(ret), K(ls_id), K(tablet_id), K(trans_state), K(read_snapshot), K(trans_version));
-    } else {
-      // standby tenant(including restore/invalid role): call interface from @zk250686, get "potential" commit version, then decide
-      // whether allow to read
-      const ObTransID tx_id(writer.writer_id_);
-      ObTxCommitData::TxDataState tx_data_state;
-      share::SCN commit_version;
-      if (OB_FAIL(check_for_standby(ls_id, tx_id, read_snapshot, tx_data_state, commit_version))) {
-        LOG_WARN("failed to check for standby", K(ret), K(ls_id), K(tablet_id), K(tx_id), K(read_snapshot));
-      } else {
-        switch (tx_data_state) {
-          case ObTxCommitData::TxDataState::COMMIT:
-            {
-              if (read_snapshot < commit_version) {
-                ret = OB_TABLET_NOT_EXIST;
-                LOG_WARN("read snapshot is smaller than commit version, should retry",
-                    K(ret), K(ls_id), K(tablet_id), K(tx_id), K(trans_state), K(read_snapshot), K(trans_version));
-              }
-            }
-            break;
-          case ObTxCommitData::TxDataState::RUNNING:
-          case ObTxCommitData::TxDataState::ABORT:
-            ret = OB_TABLET_NOT_EXIST;
-            LOG_WARN("transaction has not been committed", K(ret), K(ls_id), K(tx_id), K(tx_data_state), K(read_snapshot));
-            break;
-          default:
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected tx data state", K(ret), K(ls_id), K(tablet_id), K(tx_id), K(tx_data_state), K(read_snapshot));
-            break;
-        }
-      }
     }
   } else if (mds::TwoPhaseCommitState::ON_COMMIT == trans_state) {
     // check start transfer commit version
@@ -486,42 +429,11 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_deleted_or_transfer_out(
   } else if (trans_state >= mds::TwoPhaseCommitState::ON_PREPARE && trans_state < mds::TwoPhaseCommitState::ON_COMMIT) {
     if (read_snapshot < trans_version) {
       // allow to read
-    } else if (MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID()) {
+    } else {
       // primary tenant: retry
       ret = OB_TABLET_NOT_EXIST;
       LOG_INFO("read snapshot is no smaller than prepare version on primary tenant, should retry on target ls",
           K(ret), K(ls_id), K(tablet_id), K(trans_state), K(read_snapshot), K(trans_version));
-    } else {
-      // standby tenant(including restore/invalid role): call interface from @zk250686, get "potential" commit version, then decide
-      // whether allow to read
-      const ObTransID tx_id(writer.writer_id_);
-      ObTxCommitData::TxDataState tx_data_state;
-      share::SCN commit_version;
-      if (OB_FAIL(check_for_standby(ls_id, tx_id, read_snapshot, tx_data_state, commit_version))) {
-        LOG_WARN("failed to check for standby", K(ret), K(ls_id), K(tablet_id), K(tx_id), K(read_snapshot));
-      } else {
-        switch (tx_data_state) {
-          case ObTxCommitData::TxDataState::COMMIT:
-            {
-              if (read_snapshot < commit_version) {
-                // allow to read
-              } else {
-                ret = OB_TABLET_NOT_EXIST;
-                LOG_WARN("read snapshot is no smaller than trans version, should retry on target ls",
-                    K(ret), K(ls_id), K(tablet_id), K(tx_id), K(read_snapshot), K(trans_version));
-              }
-            }
-            break;
-          case ObTxCommitData::TxDataState::RUNNING:
-          case ObTxCommitData::TxDataState::ABORT:
-            // allow to read
-            break;
-          default:
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected tx data state", K(ret), K(ls_id), K(tablet_id), K(tx_id), K(tx_data_state), K(read_snapshot));
-            break;
-        }
-      }
     }
   } else if (mds::TwoPhaseCommitState::ON_COMMIT == trans_state) {
     // check start transfer commit version
@@ -559,28 +471,6 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_transfer_out_deleted(
     ret = OB_TABLET_NOT_EXIST;
     LOG_WARN("read snapshot is no smaller than start transfer commit version, should retry on dst ls",
         K(ret), K(ls_id), K(tablet_id), K(snapshot_version), K(user_data));
-  }
-
-  return ret;
-}
-
-int ObTabletCreateDeleteHelper::check_for_standby(
-    const share::ObLSID &ls_id,
-    const transaction::ObTransID &tx_id,
-    const share::SCN &snapshot,
-    ObTxCommitData::TxDataState &tx_data_state,
-    share::SCN &commit_version)
-{
-  int ret = OB_SUCCESS;
-  ObTransService *trans_service = MTL(ObTransService*);
-  ObPartTransCtx *tx_ctx = nullptr;
-
-  if (OB_UNLIKELY(snapshot.is_max())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args, snapshot is MAX", K(ret), K(snapshot));
-  } else if (OB_FAIL(trans_service->mds_infer_standby_trx_state(nullptr/*ls_ptr*/,
-      ls_id, tx_id, snapshot, tx_data_state, commit_version))) {
-    LOG_WARN("failed to do mds infer standby trx state", K(ret), K(ls_id), K(tx_id), K(snapshot));
   }
 
   return ret;
@@ -642,8 +532,8 @@ int ObTabletCreateDeleteHelper::create_tmp_tablet(
 {
   int ret = OB_SUCCESS;
   ObLSHandle ls_handle;
-  ObLSService *ls_service = MTL(ObLSService*);
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObLSService *ls_service = share::g_mp->ls_service();
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key));
@@ -661,7 +551,7 @@ int ObTabletCreateDeleteHelper::create_tmp_tablet(
 int ObTabletCreateDeleteHelper::prepare_create_msd_tablet()
 {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   if (OB_FAIL(t3m->get_mstx_tablet_creator().throttle_tablet_creation())) {
     LOG_WARN("fail to prepare full tablet", K(ret));
   }
@@ -674,8 +564,8 @@ int ObTabletCreateDeleteHelper::create_msd_tablet(
 {
   int ret = OB_SUCCESS;
   ObLSHandle ls_handle;
-  ObLSService *ls_service = MTL(ObLSService*);
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObLSService *ls_service = share::g_mp->ls_service();
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key));
@@ -697,7 +587,7 @@ int ObTabletCreateDeleteHelper::acquire_tmp_tablet(
 {
   TIMEGUARD_INIT(STORAGE, 10_ms);
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key));
@@ -716,7 +606,7 @@ int ObTabletCreateDeleteHelper::acquire_tablet_from_pool(
     ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key));

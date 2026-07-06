@@ -337,7 +337,6 @@ private:
       bool &need_recover);
   int get_or_create_op_list(
       const ObTableLockMode mode,
-      const uint64_t tenant_id,
       ObMalloc &allocator,
       ObTableLockOpList *&op_list);
   int get_op_list(
@@ -466,7 +465,7 @@ private:
 class ObOBJLockFactory
 {
 public:
-  static ObOBJLock *alloc(const uint64_t tenant_id, const ObLockID &lock_id);
+  static ObOBJLock *alloc(const ObLockID &lock_id);
   static void release(ObOBJLock *e);
   static int64_t alloc_count_;
   static int64_t release_count_;

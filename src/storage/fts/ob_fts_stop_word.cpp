@@ -39,14 +39,12 @@ ObStopWordChecker::~ObStopWordChecker()
 int ObStopWordChecker::init()
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    tenant_id = OB_SERVER_TENANT_ID;
-  }
+  
+  
 
   if (inited_) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(stopword_set_.create(DEFAULT_STOPWORD_BUCKET_NUM, "StopWordSet", "StopWordSet", tenant_id))) {
+  } else if (OB_FAIL(stopword_set_.create(DEFAULT_STOPWORD_BUCKET_NUM, "StopWordSet", "StopWordSet"))) {
     LOG_WARN("fail to create stop word set", K(ret));
   } else {
     ObObjMeta stop_meta;
@@ -80,11 +78,9 @@ void ObStopWordChecker::destroy()
 int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    tenant_id = OB_SERVER_TENANT_ID;
-  }
-  common::ObArenaAllocator allocator(lib::ObMemAttr(tenant_id, "ChkStopWord"));
+  
+  
+  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObStopWordChecker hasn't been initialized", K(ret), K(inited_));

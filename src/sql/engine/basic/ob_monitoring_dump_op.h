@@ -18,7 +18,7 @@
 #define SRC_SQL_ENGINE_BASIC_OB_MONITORING_DUMP_OP_H_
 
 #include "sql/engine/ob_operator.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 
 namespace oceanbase
 {

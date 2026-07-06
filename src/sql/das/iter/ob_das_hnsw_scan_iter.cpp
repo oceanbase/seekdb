@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/iter/ob_das_hnsw_scan_iter.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_das_scan_op.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "src/storage/access/ob_table_scan_iterator.h"
@@ -23,7 +24,7 @@
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_expr_vector.h"
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "share/vector_index/ob_plugin_vector_index_utils.h"
+#include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "sql/das/iter/ob_das_functional_lookup_iter.h"
 #include "sql/das/ob_das_utils.h"
 #include "sql/das/ob_das_ir_define.h"
@@ -213,7 +214,7 @@ int ObDASHNSWScanIter::inner_init(ObDASIterParam &param)
 
     if (OB_ISNULL(mem_context_)) {
       lib::ContextParam param;
-      param.set_mem_attr(MTL_ID(), "HNSW", ObCtxIds::DEFAULT_CTX_ID);
+      param.set_mem_attr("HNSW", ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
         LOG_WARN("failed to create vector hnsw memory context", K(ret));
       }
@@ -956,9 +957,9 @@ int ObDASHNSWScanIter::process_adaptor_state_hnsw(ObIAllocator &allocator, bool 
 {
   int ret = OB_SUCCESS;
 
-  ObPluginVectorIndexService *vec_index_service = MTL(ObPluginVectorIndexService *);
+  ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
   ObPluginVectorIndexAdapterGuard adaptor_guard;
-  ObVectorQueryAdaptorResultContext ada_ctx(MTL_ID(), extra_column_count_, &vec_op_alloc_, &allocator);
+  ObVectorQueryAdaptorResultContext ada_ctx(extra_column_count_, &vec_op_alloc_, &allocator);
   share::ObVectorIndexAcquireCtx index_ctx;
   index_ctx.inc_tablet_id_ = delta_buf_tablet_id_;
   index_ctx.vbitmap_tablet_id_ = index_id_tablet_id_;
@@ -1685,7 +1686,7 @@ int ObDASHNSWScanIter::process_adaptor_state_pre_filter_with_rowkey(
               // do not choose brue force, just add vids to bitmap
               if (go_brute_force_) {
                 go_brute_force_ = false;
-                lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(adaptor->get_tenant_id(), "VIBitmapADPI"));
+                lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIBitmapADPI"));
                 for (int j = 0; OB_SUCC(ret) && j < brute_cnt; ++j) {
                   if (OB_FAIL(adaptor->add_extra_valid_vid_without_malloc_guard(ada_ctx, vids[j]))) {
                     LOG_WARN("failed to add valid vid", K(ret));
@@ -1728,7 +1729,7 @@ int ObDASHNSWScanIter::process_adaptor_state_pre_filter_with_rowkey(
               is_pre_filter_end = true;
               go_brute_force_ = false;
             } else {
-              lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(adaptor->get_tenant_id(), "VIBitmapADPI"));
+              lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIBitmapADPI"));
 
               // first, add vids into bitmap
               if (go_brute_force_) {
@@ -2077,7 +2078,7 @@ int ObDASHNSWScanIter::get_vid_from_idx_filter(
           // do not choose brue force, just add vids to bitmap
           if (go_brute_force_) {
             go_brute_force_ = false;
-            lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(adaptor->get_tenant_id(), "VIBitmapADPI"));
+            lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIBitmapADPI"));
             for (int j = 0; OB_SUCC(ret) && j < brute_cnt; ++j) {
               if (OB_FAIL(adaptor->add_extra_valid_vid_without_malloc_guard(ada_ctx, vids[j]))) {
                 LOG_WARN("failed to add valid vid", K(ret));
@@ -2127,7 +2128,7 @@ int ObDASHNSWScanIter::get_vid_from_idx_filter(
             }
           }
         } else {
-          lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(adaptor->get_tenant_id(), "VIBitmapADPI"));
+          lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIBitmapADPI"));
           // first, add vids into bitmap
           if (go_brute_force_) {
             go_brute_force_ = false;
@@ -2232,7 +2233,7 @@ int ObDASHNSWScanIter::get_pk_increment_from_idx_filter(
           // do not choose brue force, just add vids to bitmap
           if (go_brute_force_) {
             go_brute_force_ = false;
-            lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(adaptor->get_tenant_id(), "VIBitmapADPI"));
+            lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIBitmapADPI"));
             for (int j = 0; OB_SUCC(ret) && j < brute_cnt; ++j) {
               if (OB_FAIL(adaptor->add_extra_valid_vid_without_malloc_guard(ada_ctx, vids[j]))) {
                 LOG_WARN("failed to add valid vid", K(ret));
@@ -2289,7 +2290,7 @@ int ObDASHNSWScanIter::get_pk_increment_from_idx_filter(
             // do not choose brue force, just add vids to bitmap
             if (go_brute_force_) {
               go_brute_force_ = false;
-              lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(adaptor->get_tenant_id(), "VIBitmapADPI"));
+              lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIBitmapADPI"));
               for (int j = 0; OB_SUCC(ret) && j < brute_cnt; ++j) {
                 if (OB_FAIL(adaptor->add_extra_valid_vid_without_malloc_guard(ada_ctx, vids[j]))) {
                   LOG_WARN("failed to add valid vid", K(ret));
@@ -2321,8 +2322,8 @@ int ObDASHNSWScanIter::init_rel_map(ObPluginVectorIndexAdaptor* adaptor)
   if (rel_map_.created()) {
     rel_map_.reuse();
   } else {
-    ObMemAttr bucket_attr(adaptor->get_tenant_id(), "HnswRelMap");
-    ObMemAttr node_attr(adaptor->get_tenant_id(), "HnswRelMap");
+    ObMemAttr bucket_attr("HnswRelMap");
+    ObMemAttr node_attr("HnswRelMap");
     if (OB_FAIL(rel_map_.create(MAX_HNSW_BRUTE_FORCE_SIZE, bucket_attr, node_attr))) {
       LOG_WARN("failed to create json bucket num", K(ret));
     }
@@ -2463,8 +2464,7 @@ int ObDASHNSWScanIter::process_adaptor_state_post_filter(
   }
   LOG_TRACE("vector index show post-filter query info", K(vec_index_type_), K(vec_idx_try_path_), K(simple_cmp_info_.inited_), KPC(simple_cmp_info_.filter_expr_),
   K(extra_column_count_), K(query_cond_.query_limit_), K(query_cond_.ef_search_));
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
-  int64_t hnsw_max_iter_scan_nums = tenant_config->_hnsw_max_scan_vectors;
+  int64_t hnsw_max_iter_scan_nums = GCONF._hnsw_max_scan_vectors;
   while (OB_SUCC(ret) && !end_search) {
     ++adaptive_ctx_.iter_times_;
     if (first_search && OB_FAIL(process_adaptor_state_post_filter_once(ada_ctx, adaptor))) {

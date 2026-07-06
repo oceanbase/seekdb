@@ -48,7 +48,6 @@ public:
   // The sql proxy of schema_service is used by default
   // If you want to get the schema of the current transaction, you can pass in a transaction
   ObLatestSchemaGuard(share::schema::ObMultiVersionSchemaService *schema_service,
-                      const uint64_t tenant_id,
                       common::ObISQLClient *sql_client = nullptr);
   ~ObLatestSchemaGuard();
 public:
@@ -343,11 +342,10 @@ int get_table_id_and_table_name_in_tablegroup(
 
   // 1. will cache tenant schema in guard
   // @param[in]:
-  // - tenant_id
+  // - tenant
   // @param[out]:
   // - tenant_schema: return NULL if tenant not exist
   int get_tenant_schema(
-      const uint64_t tenant_id,
       const ObTenantSchema *&tenant_schema);
 
   // 1. will cache udt schema in guard
@@ -383,31 +381,28 @@ private:
       const uint64_t tablegroup_id,
       const ObTablegroupSchema *&tablegroup_schema);
 
-  // For TENANT_SCHEMA, tenant_id should be OB_SYS_TENANT_ID;
-  // For SYS_VARIABLE_SCHEMA, tenant_id should be equal with schema_id;
+  // For TENANT_SCHEMA, tenant should be sys tenant;
+  // For SYS_VARIABLE_SCHEMA, tenant should be equal with schema_id;
   template<typename T>
   int get_schema_(
       const ObSchemaType schema_type,
-      const uint64_t tenant_id,
       const uint64_t schema_id,
       const T *&schema);
 
   template<typename T>
   int get_from_local_cache_(
       const ObSchemaType schema_type,
-      const uint64_t tenant_id,
       const uint64_t schema_id,
       const T *&schema);
 
   template<typename T>
   int put_to_local_cache_(
       const ObSchemaType schema_type,
-      const uint64_t tenant_id,
       const uint64_t schema_id,
       const T *&schema);
 private:
   ObMultiVersionSchemaService *schema_service_;
-  uint64_t tenant_id_;
+  
   common::ObArenaAllocator local_allocator_;
   SchemaObjs schema_objs_;
   common::ObISQLClient *sql_client_;

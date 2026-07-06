@@ -66,13 +66,10 @@ int ObLockUserResolver::resolve(const ParseNode &parse_tree)
         ret = OB_INVALID_ARGUMENT;
         SQL_RESV_LOG(ERROR, "params_.session_info_ is null", K(ret));
       } else {
-        uint64_t tenant_id = params_.session_info_->get_effective_tenant_id();
-        if (OB_INVALID_ID == tenant_id) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(ERROR, "tenant_id invalid", K(ret));
-        } else {
+        
+        {
           bool locked = node->children_[1]->value_ == 1 ? true : false;
-          lock_user_stmt->set_tenant_id(tenant_id);
+          
           lock_user_stmt->set_locked(locked);
           stmt_ = lock_user_stmt;
           ObString user_name;

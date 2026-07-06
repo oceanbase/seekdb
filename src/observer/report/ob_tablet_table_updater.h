@@ -146,7 +146,6 @@ public:
   ObTabletTableUpdater()
       : is_inited_(false),
         is_stop_(true),
-        tenant_id_(OB_INVALID_TENANT_ID),
         update_queue_() {}
   virtual ~ObTabletTableUpdater() { destroy(); }
   static int mtl_init(ObTabletTableUpdater *&tablet_table_updater);
@@ -249,10 +248,7 @@ private:
   int reput_to_queue_(
     const common::ObIArray<ObTabletTableUpdateTask> &tasks);
 
-  int check_tenant_status_(
-      const uint64_t tenant_id,
-      bool &tenant_dropped,
-      bool &schema_not_ready);
+  int check_tenant_status_(bool &schema_not_ready);
 
   // push_task_info_ - add update / remove task to array
   int push_task_info_(
@@ -270,7 +266,6 @@ private:
   const int64_t DIAGNOSE_MAX_BATCH_COUNT = 3;
   bool is_inited_;
   bool is_stop_;
-  uint64_t tenant_id_;
   ObTabletTableUpdateTaskQueue update_queue_;
   DISALLOW_COPY_AND_ASSIGN(ObTabletTableUpdater);
 };

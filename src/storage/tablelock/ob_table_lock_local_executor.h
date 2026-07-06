@@ -66,13 +66,11 @@ public:
   int call(const common::ObAddr &dest,
            const int64_t timeout_us,
            const int64_t cluster_id,
-           const uint64_t tenant_id,
            const int32_t group_id,
            const Request &request)
   {
     UNUSED(timeout_us);
     UNUSED(cluster_id);
-    UNUSED(tenant_id);
     UNUSED(group_id);
     int ret = common::OB_SUCCESS;
     void *buf = allocator_.alloc(sizeof(Result));

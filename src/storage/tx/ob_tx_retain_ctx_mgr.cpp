@@ -15,6 +15,7 @@
  */
 
 #include "ob_tx_retain_ctx_mgr.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -46,13 +47,13 @@ int ObAdvanceLSCkptTask::try_advance_ls_ckpt_ts()
 
   storage::ObLSHandle ls_handle;
 
-  if (OB_ISNULL(MTL(ObLSService *))
-      || OB_FAIL(MTL(ObLSService *)->get_ls(ls_id_, ls_handle, storage::ObLSGetMod::TRANS_MOD))
+  if (OB_ISNULL(share::g_mp->ls_service())
+      || OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, storage::ObLSGetMod::TRANS_MOD))
       || !ls_handle.is_valid()) {
     if (OB_SUCCESS == ret) {
       ret = OB_INVALID_ARGUMENT;
     }
-    TRANS_LOG(WARN, "get ls faild", K(ret), K(MTL(ObLSService *)));
+    TRANS_LOG(WARN, "get ls faild", K(ret), K(share::g_mp->ls_service()));
   } else if (OB_FAIL(ls_handle.get_ls()->advance_checkpoint_by_flush(
                        target_ckpt_ts_,
                        INT64_MAX, /*timeout*/
@@ -281,14 +282,14 @@ void ObTxRetainCtxMgr::try_advance_retain_ctx_gc(share::ObLSID ls_id)
 {
   int ret = OB_SUCCESS;
 
-  const int64_t tenant_id = MTL_ID();
-  int64_t CUR_LS_CNT = MTL(ObLSService *)->get_ls_map()->get_ls_count();
+  
+  int64_t CUR_LS_CNT = share::g_mp->ls_service()->get_ls_map()->get_ls_count();
   if (CUR_LS_CNT == 0) {
     CUR_LS_CNT = 1;
   }
   const int64_t IDLE_GC_INTERVAL = 30 * 60 * 1000 * 1000; // 30 min
   // const int64_t MIN_RETAIN_CTX_GC_THRESHOLD = 1000;
-  const int64_t MIN_RETAIN_CTX_GC_THRESHOLD = ::oceanbase::lib::get_tenant_memory_limit(tenant_id)
+  const int64_t MIN_RETAIN_CTX_GC_THRESHOLD = ::oceanbase::lib::get_tenant_memory_limit()
                                               / sizeof(ObPartTransCtx) / CUR_LS_CNT / 100;
 
   ObTimeGuard tg(__func__, 1 * 1000 * 1000);
@@ -311,7 +312,7 @@ void ObTxRetainCtxMgr::try_advance_retain_ctx_gc(share::ObLSID ls_id)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc ObAdvanceLSCkptTask failed", K(ret));
   } else if (OB_FALSE_IT(new (task) ObAdvanceLSCkptTask(ls_id, max_wait_ckpt_ts_))) {
-  } else if (MTL(ObTransService *)->push(task)) {
+  } else if (share::g_mp->trans_service()->push(task)) {
     TRANS_LOG(INFO, "[RetainCtxMgr] push ObAdvanceLSCkptTask failed", K(ret),
               K(retain_ctx_list_.get_size()), K(last_push_gc_task_ts_), K(ls_id),
               K(MIN_RETAIN_CTX_GC_THRESHOLD), KPC(this));

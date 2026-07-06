@@ -37,7 +37,6 @@ public:
   friend class ObLSIterator;
   ObLSMap()
    : is_inited_(false),
-    tenant_id_(OB_INVALID_ID),
     ls_allocator_(nullptr),
     ls_cnt_(0),
     ls_buckets_(nullptr),
@@ -47,7 +46,7 @@ public:
   }
   ~ObLSMap() { destroy(); }
   void reset();
-  int init(const int64_t tenant_id, common::ObIAllocator *ls_allocator);
+  int init(common::ObIAllocator *ls_allocator);
   void destroy();
   // allow_multi_true is used during replay
   int add_ls(ObLS &ls);
@@ -74,7 +73,7 @@ private:
 private:
   static const bool ENABLE_RECOVER_ALL_ZONE = false;
   bool is_inited_;
-  int64_t tenant_id_;
+  
   common::ObIAllocator *ls_allocator_;
   // total ls in current server of current tenant
   int64_t ls_cnt_;

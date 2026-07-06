@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 
 #include "share/schema/ob_mview_refresh_stats_params.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_dml_sql_splicer.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -87,7 +88,7 @@ int64_t ObMViewRefreshStatsParams::get_convert_size() const
 
 OB_SERIALIZE_MEMBER(ObMViewRefreshStatsParams, collection_level_, retention_period_);
 
-int ObMViewRefreshStatsParams::read_stats_params(ObISQLClient &sql_client, uint64_t exec_tenant_id,
+int ObMViewRefreshStatsParams::read_stats_params(ObISQLClient &sql_client,
                                                  ObSqlString &sql,
                                                  ObMViewRefreshStatsParams &params)
 {
@@ -95,7 +96,7 @@ int ObMViewRefreshStatsParams::read_stats_params(ObISQLClient &sql_client, uint6
   SMART_VAR(ObMySQLProxy::MySQLResult, res)
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
-    if (OB_FAIL(sql_client.read(res, exec_tenant_id, sql.ptr()))) {
+    if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
       LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -115,14 +116,14 @@ int ObMViewRefreshStatsParams::read_stats_params(ObISQLClient &sql_client, uint6
   return ret;
 }
 
-int ObMViewRefreshStatsParams::gen_sys_defaults_dml(uint64_t tenant_id, ObDMLSqlSplicer &dml) const
+int ObMViewRefreshStatsParams::gen_sys_defaults_dml(ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || !is_valid())) {
+  if (OB_UNLIKELY(false || !is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tenant_id), KPC(this));
+    LOG_WARN("invalid args", KR(ret), KPC(this));
   } else {
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     if (OB_FAIL(dml.add_column("collection_level", collection_level_)) ||
         OB_FAIL(dml.add_column("retention_period", retention_period_))) {
       LOG_WARN("add column failed", KR(ret));
@@ -131,22 +132,24 @@ int ObMViewRefreshStatsParams::gen_sys_defaults_dml(uint64_t tenant_id, ObDMLSql
   return ret;
 }
 
-int ObMViewRefreshStatsParams::set_sys_defaults(ObISQLClient &sql_client, uint64_t tenant_id,
+int ObMViewRefreshStatsParams::set_sys_defaults(ObISQLClient &sql_client,
                                                 const ObMViewRefreshStatsParams &params)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || !params.is_valid())) {
+  if (OB_UNLIKELY(false || !params.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tenant_id), K(params));
+    LOG_WARN("invalid args", KR(ret), K(params));
   } else {
     ObDMLSqlSplicer dml;
-    if (OB_FAIL(params.gen_sys_defaults_dml(tenant_id, dml))) {
+    if (OB_FAIL(params.gen_sys_defaults_dml(dml))) {
       LOG_WARN("fail to gen sys defaults dml", KR(ret), K(params));
     } else {
-      const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-      ObDMLExecHelper exec(sql_client, exec_tenant_id);
+      
+      ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
-      if (OB_FAIL(dml.add_pk_column("id", ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))) {
+      // singleton sys-defaults row: id is a fixed singleton key, not a tenant id
+      static const int64_t SINGLETON_ID = 1;
+      if (OB_FAIL(dml.add_pk_column("id", SINGLETON_ID))) {
         LOG_WARN("fail to add primary key", KR(ret));
       } else if (OB_FAIL(exec.exec_insert_update(OB_ALL_MVIEW_REFRESH_STATS_SYS_DEFAULTS_TNAME, dml,
                                           affected_rows))) {
@@ -161,25 +164,25 @@ int ObMViewRefreshStatsParams::set_sys_defaults(ObISQLClient &sql_client, uint64
   return ret;
 }
 
-int ObMViewRefreshStatsParams::fetch_sys_defaults(ObISQLClient &sql_client, uint64_t tenant_id,
+int ObMViewRefreshStatsParams::fetch_sys_defaults(ObISQLClient &sql_client,
                                                   ObMViewRefreshStatsParams &params,
                                                   bool for_update)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
+  if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tenant_id));
+    LOG_WARN("invalid args", KR(ret));
   } else {
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     ObSqlString sql;
     if (OB_FAIL(sql.assign_fmt("SELECT collection_level, retention_period FROM %s ",
                                OB_ALL_MVIEW_REFRESH_STATS_SYS_DEFAULTS_TNAME))) {
       LOG_WARN("fail to assign sql", KR(ret));
     } else if (for_update && OB_FAIL(sql.append(" for update"))) {
       LOG_WARN("fail to append sql", KR(ret));
-    } else if (OB_FAIL(read_stats_params(sql_client, exec_tenant_id, sql, params))) {
+    } else if (OB_FAIL(read_stats_params(sql_client, sql, params))) {
       if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
-        LOG_WARN("fail to read stats params", KR(ret), K(exec_tenant_id), K(sql));
+        LOG_WARN("fail to read stats params", KR(ret), K(sql));
       } else {
         ret = OB_SUCCESS;
         params = get_default();
@@ -189,16 +192,15 @@ int ObMViewRefreshStatsParams::fetch_sys_defaults(ObISQLClient &sql_client, uint
   return ret;
 }
 
-int ObMViewRefreshStatsParams::gen_mview_refresh_stats_params_dml(uint64_t tenant_id,
-                                                                  uint64_t mview_id,
+int ObMViewRefreshStatsParams::gen_mview_refresh_stats_params_dml(uint64_t mview_id,
                                                                   ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == mview_id || !is_valid())) {
+  if (OB_UNLIKELY(false || OB_INVALID_ID == mview_id || !is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tenant_id), K(mview_id), KPC(this));
+    LOG_WARN("invalid args", KR(ret), K(mview_id), KPC(this));
   } else {
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     if (OB_FAIL(dml.add_pk_column("mview_id", mview_id)) ||
         OB_FAIL(dml.add_column("collection_level", collection_level_)) ||
         OB_FAIL(dml.add_column("retention_period", retention_period_))) {
@@ -209,21 +211,21 @@ int ObMViewRefreshStatsParams::gen_mview_refresh_stats_params_dml(uint64_t tenan
 }
 
 int ObMViewRefreshStatsParams::set_mview_refresh_stats_params(
-  ObISQLClient &sql_client, uint64_t tenant_id, uint64_t mview_id,
+  ObISQLClient &sql_client, uint64_t mview_id,
   const ObMViewRefreshStatsParams &params)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == mview_id ||
+  if (OB_UNLIKELY(false || OB_INVALID_ID == mview_id ||
                          !params.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tenant_id), K(mview_id), K(params));
+    LOG_WARN("invalid args", KR(ret), K(mview_id), K(params));
   } else {
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     ObDMLSqlSplicer dml;
-    if (OB_FAIL(params.gen_mview_refresh_stats_params_dml(tenant_id, mview_id, dml))) {
+    if (OB_FAIL(params.gen_mview_refresh_stats_params_dml(mview_id, dml))) {
       LOG_WARN("fail to gen mview refresh stats params dml", KR(ret), K(params));
     } else {
-      ObDMLExecHelper exec(sql_client, exec_tenant_id);
+      ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (OB_FAIL(
             exec.exec_insert_update(OB_ALL_MVIEW_REFRESH_STATS_PARAMS_TNAME, dml, affected_rows))) {
@@ -239,20 +241,19 @@ int ObMViewRefreshStatsParams::set_mview_refresh_stats_params(
 }
 
 int ObMViewRefreshStatsParams::drop_mview_refresh_stats_params(ObISQLClient &sql_client,
-                                                               uint64_t tenant_id,
                                                                uint64_t mview_id, bool if_exists)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == mview_id)) {
+  if (OB_UNLIKELY(false || OB_INVALID_ID == mview_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tenant_id), K(mview_id));
+    LOG_WARN("invalid args", KR(ret), K(mview_id));
   } else {
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     ObDMLSqlSplicer dml;
     if (OB_FAIL(dml.add_pk_column("mview_id", mview_id))) {
       LOG_WARN("add column failed", KR(ret));
     } else {
-      ObDMLExecHelper exec(sql_client, exec_tenant_id);
+      ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (OB_FAIL(exec.exec_delete(OB_ALL_MVIEW_REFRESH_STATS_PARAMS_TNAME, dml, affected_rows))) {
         LOG_WARN("execute update failed", KR(ret));
@@ -266,41 +267,39 @@ int ObMViewRefreshStatsParams::drop_mview_refresh_stats_params(ObISQLClient &sql
 }
 
 int ObMViewRefreshStatsParams::drop_all_mview_refresh_stats_params(ObISQLClient &sql_client,
-                                                                   uint64_t tenant_id,
                                                                    int64_t &affected_rows,
                                                                    int64_t limit)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
+  if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tenant_id));
+    LOG_WARN("invalid args", KR(ret));
   } else {
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     ObSqlString sql;
     if (OB_FAIL(sql.assign_fmt("delete from %s",
                                OB_ALL_MVIEW_REFRESH_STATS_PARAMS_TNAME))) {
       LOG_WARN("fail to assign sql", KR(ret));
     } else if (limit > 0 && OB_FAIL(sql.append_fmt(" limit %ld", limit))) {
       LOG_WARN("fail to append sql", KR(ret));
-    } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(exec_tenant_id), K(sql));
+    } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
+      LOG_WARN("fail to execute sql", KR(ret), K(1UL), K(sql));
     }
   }
   return ret;
 }
 
 int ObMViewRefreshStatsParams::fetch_mview_refresh_stats_params(ObISQLClient &sql_client,
-                                                                uint64_t tenant_id,
                                                                 uint64_t mview_id,
                                                                 ObMViewRefreshStatsParams &params,
                                                                 bool with_sys_defaults)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == mview_id)) {
+  if (OB_UNLIKELY(false || OB_INVALID_ID == mview_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tenant_id), K(mview_id));
+    LOG_WARN("invalid args", KR(ret), K(mview_id));
   } else {
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     ObSqlString sql;
     if (with_sys_defaults) {
       if (OB_FAIL(sql.assign_fmt(
@@ -328,16 +327,16 @@ int ObMViewRefreshStatsParams::fetch_mview_refresh_stats_params(ObISQLClient &sq
             OB_ALL_MVIEW_REFRESH_STATS_SYS_DEFAULTS_TNAME, OB_ALL_MVIEW_REFRESH_STATS_PARAMS_TNAME,
             OB_ALL_MVIEW_TNAME, mview_id))) {
         LOG_WARN("fail to assign sql with sys defaults", KR(ret));
-      } else if (OB_FAIL(read_stats_params(sql_client, exec_tenant_id, sql, params))) {
-        LOG_WARN("fail to read stats params", KR(ret), K(exec_tenant_id), K(sql));
+      } else if (OB_FAIL(read_stats_params(sql_client, sql, params))) {
+        LOG_WARN("fail to read stats params", KR(ret), K(sql));
       }
     } else {
       if (OB_FAIL(sql.assign_fmt("select collection_level, retention_period from %s"
                                  " where mview_id = %ld",
                                  OB_ALL_MVIEW_REFRESH_STATS_PARAMS_TNAME, mview_id))) {
         LOG_WARN("fail to assign sql without sys defaults", KR(ret));
-      } else if (OB_FAIL(read_stats_params(sql_client, exec_tenant_id, sql, params))) {
-        LOG_WARN("fail to read stats params", KR(ret), K(exec_tenant_id), K(sql));
+      } else if (OB_FAIL(read_stats_params(sql_client, sql, params))) {
+        LOG_WARN("fail to read stats params", KR(ret), K(sql));
       }
     }
   }

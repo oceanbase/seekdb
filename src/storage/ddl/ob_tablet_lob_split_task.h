@@ -17,7 +17,8 @@
 #ifndef STORAGE_AUTO_SPLIT_OB_TABLET_LOB_SPLIT_TASK_H_
 #define STORAGE_AUTO_SPLIT_OB_TABLET_LOB_SPLIT_TASK_H_
 
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "storage/ob_storage_rpc_arg.h"
 #include "storage/ob_i_table.h"
 #include "storage/ob_parallel_external_sort.h"
 #include "storage/ddl/ob_complement_data_task.h"
@@ -89,8 +90,7 @@ struct ObLobSplitParam : public share::ObIDagInitParam
 {
 public:
   ObLobSplitParam() :
-    rowkey_allocator_("LobSplitRowkey", OB_MALLOC_NORMAL_BLOCK_SIZE /*8KB*/, MTL_ID()), 
-    tenant_id_(common::OB_INVALID_TENANT_ID), ls_id_(share::ObLSID::INVALID_LS_ID),
+    rowkey_allocator_("LobSplitRowkey", OB_MALLOC_NORMAL_BLOCK_SIZE), ls_id_(share::ObLSID::INVALID_LS_ID),
     ori_lob_meta_tablet_id_(ObTabletID::INVALID_TABLET_ID),
     new_lob_tablet_ids_(), schema_version_(0),
     data_format_version_(0), parallelism_(0), compaction_scn_(),
@@ -104,7 +104,7 @@ public:
   int init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
   int init(const obcall::ObTabletSplitArg &arg);
   bool is_valid() const {
-    return OB_INVALID_ID != tenant_id_ && ls_id_.is_valid() && ori_lob_meta_tablet_id_.is_valid()
+    return ls_id_.is_valid() && ori_lob_meta_tablet_id_.is_valid()
            && new_lob_tablet_ids_.count() > 0 && schema_version_ > 0
            && data_format_version_ > 0 && parallelism_ > 0 && compaction_scn_ > 0
            && compat_mode_ != lib::Worker::CompatMode::INVALID
@@ -112,7 +112,7 @@ public:
            && consumer_group_id_ >= 0 && lob_col_idxs_.count() > 0 && parallel_datum_rowkey_list_.count() > 0;
   }
   int assign(const ObLobSplitParam &other);
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(ori_lob_meta_tablet_id),
+  TO_STRING_KV(K_(ls_id), K_(ori_lob_meta_tablet_id),
     K_(new_lob_tablet_ids), K_(schema_version), K_(data_format_version),
     K_(parallelism), K_(compaction_scn), K_(compat_mode), K_(task_id), 
     K_(source_table_id), K_(dest_schema_id), K_(lob_col_idxs), K_(consumer_group_id),
@@ -121,7 +121,6 @@ public:
 private:
   common::ObArenaAllocator rowkey_allocator_; // for DatumRowkey.
 public:
-  uint64_t tenant_id_;
   share::ObLSID ls_id_;
   ObTabletID ori_lob_meta_tablet_id_;
   ObArray<ObTabletID> new_lob_tablet_ids_;
@@ -144,10 +143,10 @@ struct ObLobSplitContext final
 {
 public:
   ObLobSplitContext() :
-    range_allocator_("LobSplitRange", OB_MALLOC_NORMAL_BLOCK_SIZE /*8KB*/, MTL_ID()), 
+    range_allocator_("LobSplitRange", OB_MALLOC_NORMAL_BLOCK_SIZE), 
     is_inited_(false), data_ret_(0), is_lob_piece_(false),
     ls_handle_(), main_tablet_id_(ObTabletID::INVALID_TABLET_ID),
-    allocator_(common::ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    allocator_(common::ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE),
     main_tablet_handle_(), lob_meta_tablet_handle_(),
     m_allocator_(allocator_), new_main_tablet_ids_(OB_MALLOC_NORMAL_BLOCK_SIZE, m_allocator_),
     new_lob_tablet_ids_(OB_MALLOC_NORMAL_BLOCK_SIZE, m_allocator_),

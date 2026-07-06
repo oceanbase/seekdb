@@ -16,8 +16,8 @@
 
 #pragma once
 
-#include "lib/mysqlclient/ob_isql_client.h"
-#include "lib/number/ob_number_v2.h"
+#include "common/mysqlclient/ob_isql_client.h"
+#include "common/number/ob_number_v2.h"
 #include "lib/ob_define.h"
 #include "share/ob_table_range.h"
 #include "share/schema/ob_schema_getter_guard.h"
@@ -49,45 +49,40 @@ class ObMViewRefreshHelper
 public:
   static int get_current_scn(share::SCN &current_scn);
 
-  static int lock_mview(ObMViewTransaction &trans, const uint64_t tenant_id,
+  static int lock_mview(ObMViewTransaction &trans,
                         const uint64_t mview_id, const bool try_lock = false);
 
-  static int generate_purge_mlog_sql(share::schema::ObSchemaGetterGuard &schema_guard,
-                                     const uint64_t tenant_id, const uint64_t mlog_id,
+  static int generate_purge_mlog_sql(share::schema::ObSchemaGetterGuard &schema_guard, const uint64_t mlog_id,
                                      const share::SCN &purge_scn, const int64_t purge_log_parallel,
                                      ObSqlString &sql_string);
 
-  static int get_table_row_num(ObMViewTransaction &trans, const uint64_t tenant_id,
+  static int get_table_row_num(ObMViewTransaction &trans,
                                const uint64_t table_id, const share::SCN &scn, int64_t &num_rows);
 
-  static int get_mlog_dml_row_num(ObMViewTransaction &trans, const uint64_t tenant_id,
+  static int get_mlog_dml_row_num(ObMViewTransaction &trans,
                                   const uint64_t table_id, const share::ObScnRange &scn_range,
                                   int64_t &num_rows_ins, int64_t &num_rows_upd,
                                   int64_t &num_rows_del);
   static int sync_post_nested_mview_rpc(obcall::ObCheckNestedMViewMdsArg &arg,
                                         obcall::ObCheckNestedMViewMdsRes &res);
-  static int check_dep_mviews_satisfy_target_scn(const uint64_t tenant_id,
-                                                 const share::SCN &target_data_sync_scn,
+  static int check_dep_mviews_satisfy_target_scn(const share::SCN &target_data_sync_scn,
                                                  const share::SCN &read_snapshot,
                                                  const ObIArray<uint64_t> &dep_mview_ids,
                                                  common::ObISQLClient &sql_proxy,
                                                  bool &satisfy);
-  static int get_dep_mviews_from_dep_info(const uint64_t tenant_id,
-                                          const ObIArray<share::schema::ObDependencyInfo> &dependency_infos,
-                                          ObSchemaGetterGuard &schema_guard,
+  static int get_dep_mviews_from_dep_info(const ObIArray<share::schema::ObDependencyInfo> &dependency_infos,
+                                          share::schema::ObSchemaGetterGuard &schema_guard,
                                           ObIArray<uint64_t> &dep_mview_ids);
-  static int collect_deps_and_check_satisfy(const uint64_t tenant_id,
-                                            const uint64_t mview_id,
+  static int collect_deps_and_check_satisfy(const uint64_t mview_id,
                                             const uint64_t target_data_sync_ts,
                                             const uint64_t snapshot_version,
                                             common::ObISQLClient &sql_proxy,
-                                            ObSchemaGetterGuard &schema_guard);
+                                            share::schema::ObSchemaGetterGuard &schema_guard);
   
   static int replace_all_snapshot_zero(const std::string &input,
                                        const uint64_t snapshot_version,
                                        std::string &output);
-  static int sync_get_min_target_data_sync_scn(const uint64_t tenant_id,
-                                               const uint64_t mview_id,
+  static int sync_get_min_target_data_sync_scn(const uint64_t mview_id,
                                                share::SCN &min_target_scn);
 };
 

@@ -21,7 +21,7 @@
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_se_array.h" 
-#include "common/storage/ob_device_common.h"
+#include "lib/restore/ob_device_common.h"
 #include "ob_storage_info.h"
 #include "ob_object_storage_base.h"
 

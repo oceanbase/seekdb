@@ -230,7 +230,7 @@ int ObMergeGroupByVecOp::init_mem_context()
   if (mem_context_ == nullptr) {
     void *buf = nullptr;
     lib::ContextParam param;
-    param.set_mem_attr(ctx_.get_my_session()->get_effective_tenant_id(), ObModIds::OB_SQL_AGGR_FUNC,
+    param.set_mem_attr(ObModIds::OB_SQL_AGGR_FUNC,
                        ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
       LOG_WARN("memory entity create failed", K(ret));
@@ -326,7 +326,7 @@ int ObMergeGroupByVecOp::init_rollup_distributor()
       }
       int64_t row_count = child_->get_spec().rows_;
       ObSortVecOpContext context;
-      context.tenant_id_ = ctx_.get_my_session()->get_effective_tenant_id();
+      
       context.sk_exprs_ = &inner_sort_exprs_;
       context.sk_collations_ = &MY_SPEC.sort_collations_;
       context.enable_encode_sortkey_ = MY_SPEC.enable_encode_sort_;
@@ -512,9 +512,9 @@ int ObMergeGroupByVecOp::gby_init()
 int ObMergeGroupByVecOp::init()
 {
   int ret = OB_SUCCESS;
-  group_rows_.set_tenant_id(MTL_ID());
+  
   group_rows_.set_ctx_id(ObCtxIds::DEFAULT_CTX_ID);
-  if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(ctx_.get_my_session()->get_effective_tenant_id(), dir_id_))) {
+  if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(dir_id_))) {
     LOG_WARN("failed to alloc dir id", K(ret));
   } else if (FALSE_IT(aggr_processor_.set_dir_id(dir_id_))) {
   } else if (FALSE_IT(aggr_processor_.set_io_event_observer(&io_event_observer_))) {
@@ -1814,18 +1814,18 @@ int ObMergeGroupByVecOp::get_n_shuffle_keys_for_exchange(int64_t &shuffle_n_keys
 int ObMergeGroupByVecOp::init_hp_infras_group_mgr()
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+  
   if (aggr_processor_.has_distinct()) {
     int64_t est_rows = MY_SPEC.est_rows_per_group_;
     aggr_processor_.set_io_event_observer(&io_event_observer_);
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(&ctx_, MY_SPEC.px_est_size_factor_, est_rows,
                                                   est_rows))) {
       LOG_WARN("failed to get px size", K(ret));
-    } else if (OB_FAIL(sql_mem_processor_.init(&ctx_.get_allocator(), tenant_id,
+    } else if (OB_FAIL(sql_mem_processor_.init(&ctx_.get_allocator(),
                                                est_rows * MY_SPEC.width_, MY_SPEC.type_,
                                                MY_SPEC.id_, &ctx_))) {
       LOG_WARN("failed to init sql mem processor", K(ret));
-    } else if (OB_FAIL(hp_infras_mgr_.init(tenant_id, GCONF.is_sql_operator_dump_enabled(),
+    } else if (OB_FAIL(hp_infras_mgr_.init(GCONF.is_sql_operator_dump_enabled(),
                                            est_rows, MY_SPEC.width_, true /*unique*/, 1 /*ways*/,
                                            &eval_ctx_, &sql_mem_processor_, &io_event_observer_,
                                            MY_SPEC.compress_type_))) {

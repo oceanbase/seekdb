@@ -21,10 +21,10 @@ namespace oceanbase
 namespace share
 {
 
-OB_SERIALIZE_MEMBER(AutoincKey, tenant_id_, table_id_, column_id_);
+OB_SERIALIZE_MEMBER(AutoincKey, table_id_, column_id_);
 
 OB_SERIALIZE_MEMBER(AutoincParam,
-                    tenant_id_,
+                    
                     autoinc_table_id_,
                     autoinc_table_part_num_,
                     autoinc_col_id_,

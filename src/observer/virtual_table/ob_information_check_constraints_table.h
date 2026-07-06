@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_CHECK_CONSTRAINTS_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_CHECK_CONSTRAINTS_
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 
 namespace oceanbase {
 namespace observer {
@@ -27,10 +27,7 @@ public:
   virtual int inner_get_next_row(common::ObNewRow*& row);
   virtual void reset();
 
-  inline void set_tenant_id(uint64_t tenant_id)
-  {
-    tenant_id_ = tenant_id;
-  }
+  
 
 private:
   int add_check_constraints(
@@ -38,7 +35,6 @@ private:
   int add_check_constraints(const share::schema::ObTableSchema& table_schema, const common::ObString& database_name,
       common::ObObj* cells, const int64_t col_count);
 
-  uint64_t tenant_id_;
 
 private:
   enum TABLE_CONSTRAINTS_COLUMN {

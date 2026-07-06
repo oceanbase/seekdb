@@ -270,8 +270,7 @@ public:
                         const transaction::tablelock::ObTableLockMode lock_mode,
                         const int64_t wait_lock_seconds);
   static void clear_xa_branch(const transaction::ObXATransID &xid, transaction::ObTxDesc *&tx_desc);
-  static int check_ls_readable(const uint64_t tenant_id,
-                               const share::ObLSID &ls_id,
+  static int check_ls_readable(const share::ObLSID &ls_id,
                                const common::ObAddr &addr,
                                const int64_t max_stale_time_us,
                                bool &can_read);

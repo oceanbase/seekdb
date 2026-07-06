@@ -86,8 +86,8 @@ class ObDirectLoadRowkeyIteratorGuard
 public:
   ObDirectLoadRowkeyIteratorGuard()
   {
-    all_iters_.set_tenant_id(MTL_ID());
-    iters_.set_tenant_id(MTL_ID());
+    
+    
   }
   ~ObDirectLoadRowkeyIteratorGuard() { reset(); }
   void reset()

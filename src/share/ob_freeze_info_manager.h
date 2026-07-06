@@ -85,7 +85,6 @@ public:
   };
 public:
   static int fetch_new_freeze_info(
-      const int64_t tenant_id,
       const share::SCN &min_frozen_scn,
       common::ObMySQLProxy &sql_proxy,
       common::ObIArray<ObFreezeInfo> &freeze_infos,
@@ -93,7 +92,6 @@ public:
 
   ObFreezeInfoManager()
     : is_inited_(false),
-      tenant_id_(common::OB_INVALID_ID),
       sql_proxy_(nullptr),
       freeze_info_()
   {}
@@ -102,7 +100,7 @@ public:
   int64_t get_freeze_info_count() const { return freeze_info_.frozen_statuses_.count(); }
   share::SCN get_snapshot_gc_scn() const { return freeze_info_.latest_snapshot_gc_scn_; }
   void reset_freeze_info() { freeze_info_.set_invalid(); }
-  int init(uint64_t tenant_id, common::ObMySQLProxy &proxy);
+  int init(common::ObMySQLProxy &proxy);
   int reload(const share::SCN &min_frozen_scn);
   int update_freeze_info(
       const common::ObIArray<ObFreezeInfo> &freeze_infos,
@@ -137,10 +135,10 @@ public:
       const share::SCN &frozen_scn,
       share::ObFreezeInfo &frozen_status);
 
-  TO_STRING_KV(K_(is_inited), K_(tenant_id), K_(freeze_info));
+  TO_STRING_KV(K_(is_inited), K_(freeze_info));
 private:
   bool is_inited_;
-  int64_t tenant_id_;
+  
   common::ObMySQLProxy *sql_proxy_;
   ObFreezeInfoList freeze_info_;
 

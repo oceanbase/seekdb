@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
-#include "share/ob_fts_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "observer/virtual_table/ob_table_index.h"
 
 using namespace oceanbase::common;
@@ -28,7 +28,6 @@ namespace observer
 
 ObTableIndex::ObTableIndex()
     : ObVirtualTableScannerIterator(),
-      tenant_id_(OB_INVALID_ID),
       show_table_id_(OB_INVALID_ID),
       database_schemas_(),
       database_schema_idx_(OB_INVALID_ID),
@@ -75,7 +74,6 @@ void ObTableIndex::reset()
 {
   ObVirtualTableScannerIterator::reset();
   key_ranges_.reset();
-  tenant_id_ = OB_INVALID_ID;
   show_table_id_ = OB_INVALID_ID;
   database_schemas_.reset();
   database_schema_idx_ = OB_INVALID_ID;
@@ -92,11 +90,10 @@ void ObTableIndex::reset()
   vec_dep_col_idx_ = OB_INVALID_ID;
 }
 
-int ObTableIndex::init(uint64_t tenant_id) {
+int ObTableIndex::init() {
   int ret = OB_SUCCESS;
-  tenant_id_ = tenant_id;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id_, min_data_version_))) {
-    LOG_WARN("fail to get min data version", K(ret), K(tenant_id_));
+  if (OB_FAIL(GET_MIN_DATA_VERSION(min_data_version_))) {
+    LOG_WARN("fail to get min data version", K(ret));
   }
   return ret;
 }
@@ -113,13 +110,12 @@ int ObTableIndex::inner_get_next_row(common::ObNewRow *&row)
     const int64_t col_count = output_column_ids_.count();
     bool is_end = false;
     if (OB_INVALID_ID == show_table_id_) {
-      if (tenant_id_ == OB_INVALID_ID){
+      if (false){
         ret = OB_ITER_END;
       } else {
         if (OB_INVALID_ID == static_cast<uint64_t>(database_schema_idx_)) {//first get next row
-          if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(tenant_id_,
-                                                                    database_schemas_))) {
-            SERVER_LOG(WARN, "failed to get database schema of tenant", K_(tenant_id));
+          if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(database_schemas_))) {
+            SERVER_LOG(WARN, "failed to get database schema of tenant");
           } else {
             database_schema_idx_ = 0;
           }
@@ -163,14 +159,14 @@ int ObTableIndex::inner_get_next_row(common::ObNewRow *&row)
     } else {
       const ObTableSchema *table_schema = NULL;
       const ObDatabaseSchema *database_schema = NULL;
-      if (OB_FAIL(schema_guard_->get_table_schema(tenant_id_, show_table_id_, table_schema))) {
-        SERVER_LOG(WARN, "fail to get table schema", K(ret), K(tenant_id_));
+      if (OB_FAIL(schema_guard_->get_table_schema( show_table_id_, table_schema))) {
+        SERVER_LOG(WARN, "fail to get table schema", K(ret));
       } else if (OB_UNLIKELY(NULL == table_schema)) {
               ret = OB_TABLE_NOT_EXIST;
         SERVER_LOG(WARN, "fail to get table schema", K(ret), K(show_table_id_));
-      } else if (OB_FAIL(schema_guard_->get_database_schema(tenant_id_,
+      } else if (OB_FAIL(schema_guard_->get_database_schema(
                  table_schema->get_database_id(), database_schema))) {
-        SERVER_LOG(WARN, "fail to get database schema", K(ret), K_(tenant_id),
+        SERVER_LOG(WARN, "fail to get database schema", K(ret),
                    "database_id", table_schema->get_database_id());
       } else if (OB_UNLIKELY(NULL == database_schema)) {
         ret = OB_ERR_BAD_DATABASE;
@@ -206,8 +202,7 @@ int ObTableIndex::add_database_indexes(const ObDatabaseSchema &database_schema,
     if (OB_ISNULL(schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "data member is not init", K(ret), K(schema_guard_));
-    } else if (OB_FAIL(schema_guard_->get_table_schemas_in_database(tenant_id_,
-                                                                    database_schema.get_database_id(),
+    } else if (OB_FAIL(schema_guard_->get_table_schemas_in_database(database_schema.get_database_id(),
                                                                     table_schemas_))) {
       SERVER_LOG(WARN, "failed to get table schema in database", K(ret));
     } else {
@@ -356,7 +351,7 @@ int ObTableIndex::add_rowkey_indexes(const ObTableSchema &table_schema,
     if (table_schema.is_materialized_view()) {
       // a mview's indexes are built upon its container table
       const ObTableSchema *container_table_schema = nullptr;
-      if (OB_FAIL(schema_guard_->get_table_schema(table_schema.get_tenant_id(),
+      if (OB_FAIL(schema_guard_->get_table_schema(
           table_schema.get_data_table_id(), container_table_schema))) {
         SERVER_LOG(WARN, "failed to get table schema", KR(ret), K(table_schema));
       } else if (OB_ISNULL(container_table_schema)) {
@@ -538,7 +533,7 @@ int ObTableIndex::add_normal_indexes(const ObTableSchema &table_schema,
     } else if (table_schema.is_materialized_view()) {
       // a mview's indexes are built upon its container table
       const ObTableSchema *container_table_schema = nullptr;
-      if (OB_FAIL(schema_guard_->get_table_schema(table_schema.get_tenant_id(),
+      if (OB_FAIL(schema_guard_->get_table_schema(
           table_schema.get_data_table_id(), container_table_schema))) {
         SERVER_LOG(WARN, "failed to get table schema", KR(ret), K(table_schema));
       } else if (OB_ISNULL(container_table_schema)) {
@@ -570,7 +565,6 @@ int ObTableIndex::add_normal_indexes(const ObTableSchema &table_schema,
         is_end = false;
         const ObTableSchema *index_schema = NULL;
         if (OB_FAIL(schema_guard_->get_table_schema(
-                  table_schema.get_tenant_id(),
                   simple_index_infos_.at(index_tid_array_idx_).table_id_,
                   index_schema))) {
           SERVER_LOG(WARN, "fail to get index table", K(ret),
@@ -787,7 +781,7 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
     if (table_schema.is_materialized_view()) {
       // a mview's indexes are built upon its container table
       const ObTableSchema *container_table_schema = nullptr;
-      if (OB_FAIL(schema_guard_->get_table_schema(table_schema.get_tenant_id(),
+      if (OB_FAIL(schema_guard_->get_table_schema(
           table_schema.get_data_table_id(), container_table_schema))) {
         SERVER_LOG(WARN, "failed to get table schema", KR(ret), K(table_schema));
       } else if (OB_ISNULL(container_table_schema)) {

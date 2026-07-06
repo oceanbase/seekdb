@@ -25,7 +25,7 @@ namespace oceanbase
 namespace storage
 {
 
-int ObLobLocationUtil::get_ls_leader(ObLobAccessParam& param, const uint64_t tenant_id,
+int ObLobLocationUtil::get_ls_leader(ObLobAccessParam& param,
     const share::ObLSID &ls_id, common::ObAddr &leader)
 {
   int ret = OB_SUCCESS;
@@ -34,24 +34,24 @@ int ObLobLocationUtil::get_ls_leader(ObLobAccessParam& param, const uint64_t ten
   if (OB_ISNULL(GCTX.location_service_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("location cache is NULL", K(ret));
-  } else if (OB_INVALID_ID == tenant_id || !ls_id.is_valid()) {
+  } else if (!ls_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid args", K(ret), K(tenant_id), K(ls_id));
+    LOG_WARN("get invalid args", K(ret), K(ls_id));
   } else {
     uint32_t renew_count = 0;
     const uint32_t max_renew_count = 10;
     const int64_t retry_us = 200 * 1000;
     do {
-      if (OB_FAIL(GCTX.location_service_->nonblock_get_leader(cluster_id, tenant_id, ls_id, leader))) {
-        LOG_WARN("failed to get location", K(ret), K(tenant_id), K(ls_id), K(cluster_id));
+      if (OB_FAIL(GCTX.location_service_->nonblock_get_leader(cluster_id, ls_id, leader))) {
+        LOG_WARN("failed to get location", K(ret), K(ls_id), K(cluster_id));
       } else {
-        LOG_DEBUG("get ls leader", K(tenant_id), K(ls_id), K(leader), K(cluster_id));
+        LOG_DEBUG("get ls leader", K(ls_id), K(leader), K(cluster_id));
       }
     } while (OB_LS_LOCATION_NOT_EXIST == ret && renew_count < max_renew_count);
 
     if (OB_SUCC(ret) && !leader.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("leader addr is invalid", K(ret), K(tenant_id), K(ls_id), K(leader), K(cluster_id));
+      LOG_WARN("leader addr is invalid", K(ret), K(ls_id), K(leader), K(cluster_id));
     }
   }
   return ret;
@@ -61,7 +61,7 @@ int ObLobLocationUtil::is_remote(ObLobAccessParam& param, bool& is_remote, commo
 {
   int ret = OB_SUCCESS;
   ObLobLocatorV2 *lob_locator = param.lob_locator_;
-  uint64_t tenant_id = param.tenant_id_;
+  
   const ObAddr &self_addr = MYADDR;
   if (lob_locator == nullptr) {
     is_remote = false;
@@ -83,16 +83,16 @@ int ObLobLocationUtil::is_remote(ObLobAccessParam& param, bool& is_remote, commo
         dst_addr = retry_info->addr_;
       }
     } else {
-      if (OB_FAIL(get_ls_leader(param, tenant_id, param.ls_id_, dst_addr))) {
-        LOG_WARN("failed to get ls leader", K(ret), K(tenant_id), K(param.ls_id_));
+      if (OB_FAIL(get_ls_leader(param, param.ls_id_, dst_addr))) {
+        LOG_WARN("failed to get ls leader", K(ret), K(param.ls_id_));
       }
     }
     if (OB_SUCC(ret)) {
       // lob from other tenant also should read by rpc
-      is_remote = (dst_addr != self_addr) || (tenant_id != MTL_ID());
+      is_remote = (dst_addr != self_addr) || (false);
       if (param.from_rpc_ == true && is_remote) {
         ret = OB_NOT_MASTER;
-        LOG_WARN("call from rpc, but remote again", K(ret), K(dst_addr), K(self_addr), K(tenant_id), K(MTL_ID()));
+        LOG_WARN("call from rpc, but remote again", K(ret), K(dst_addr), K(self_addr));
       }
     }
   }
@@ -109,10 +109,10 @@ int ObLobLocationUtil::lob_check_tablet_not_exist(ObLobAccessParam &param, uint6
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid schema service", KR(ret), K(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(param.tenant_id_, schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     // tenant could be deleted
-    LOG_WARN("get tenant schema guard fail", KR(ret), K(param.tenant_id_));
-  } else if (OB_FAIL(schema_guard.get_table_schema(param.tenant_id_, table_id, table_schema))) {
+    LOG_WARN("get tenant schema guard fail", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     LOG_WARN("failed to get table schema", KR(ret));
   } else if (OB_ISNULL(table_schema)) {
     //table could be dropped
@@ -138,9 +138,7 @@ int ObLobLocationUtil::lob_refresh_location(ObLobAccessParam &param, int last_er
     has_retry_info = extern_header->flags_.has_retry_info_;
   }
 
-  if (param.tenant_id_ != MTL_ID()) { // query over tenant id
-    has_retry_info = false;
-  }
+  
 
   if (!has_retry_info) {
     // do check remote
@@ -151,7 +149,7 @@ int ObLobLocationUtil::lob_refresh_location(ObLobAccessParam &param, int last_er
     LOG_WARN("wait das retry failed", K(ret), K(last_err), K(retry_cnt));
   } else {
     // do location refresh
-    ObArenaAllocator tmp_allocator("LobRefLoc", OB_MALLOC_NORMAL_BLOCK_SIZE, param.tenant_id_);
+    ObArenaAllocator tmp_allocator("LobRefLoc", OB_MALLOC_NORMAL_BLOCK_SIZE);
     sql::ObDASLocationRouter router(tmp_allocator);
     router.set_last_errno(last_err);
     sql::ObDASTableLocMeta loc_meta(tmp_allocator);
@@ -191,7 +189,7 @@ int ObLobLocationUtil::get_ls_leader(ObLobAccessParam& param)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  const uint64_t tenant_id = param.tenant_id_;
+  
   const int64_t cluster_id = GCONF.cluster_id;
   const share::ObLSID &ls_id = param.ls_id_;
   ObAddr leader_addr;
@@ -199,18 +197,18 @@ int ObLobLocationUtil::get_ls_leader(ObLobAccessParam& param)
   if (OB_ISNULL(GCTX.location_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("location service is null", K(ret), K(param));
-  } else if (OB_INVALID_ID == tenant_id || !ls_id.is_valid()) {
+  } else if (!ls_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(tenant_id), K(ls_id), K(param));
+    LOG_WARN("invalid args", K(ret), K(ls_id), K(param));
   } else {
     uint32_t renew_count = 0;
     const uint32_t max_renew_count = 10;
     const int64_t retry_us = 200 * 1000;
     do {
-      if (OB_FAIL(GCTX.location_service_->nonblock_get_leader(cluster_id, tenant_id, ls_id, leader_addr))) {
-        LOG_WARN("failed to get location", K(ret), K(tenant_id), K(ls_id), K(cluster_id), K(renew_count));
+      if (OB_FAIL(GCTX.location_service_->nonblock_get_leader(cluster_id, ls_id, leader_addr))) {
+        LOG_WARN("failed to get location", K(ret), K(ls_id), K(cluster_id), K(renew_count));
       } else {
-        LOG_TRACE("[LOB] get ls leader", K(tenant_id), K(ls_id), K(leader_addr), K(cluster_id), K(renew_count));
+        LOG_TRACE("[LOB] get ls leader", K(ls_id), K(leader_addr), K(cluster_id), K(renew_count));
       }
     } while (OB_LS_LOCATION_NOT_EXIST == ret && renew_count < max_renew_count);
 
@@ -218,7 +216,7 @@ int ObLobLocationUtil::get_ls_leader(ObLobAccessParam& param)
     if (OB_FAIL(ret)) {
     } else if (!leader_addr.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("leader addr is invalid", K(ret), K(tenant_id), K(ls_id), K(leader_addr), K(cluster_id));
+      LOG_WARN("leader addr is invalid", K(ret), K(ls_id), K(leader_addr), K(cluster_id));
     } else {
       param.addr_ = leader_addr;
     }

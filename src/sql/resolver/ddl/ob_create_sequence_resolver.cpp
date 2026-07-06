@@ -91,7 +91,7 @@ int ObCreateSequenceResolver::resolve(const ParseNode &parse_tree)
     } else {
       mystmt->set_sequence_name(sequence_name);
       mystmt->set_database_name(db_name);
-      mystmt->set_tenant_id(session_info_->get_effective_tenant_id());
+      
       mystmt->set_ignore_exists_error(if_not_exists);
     }
   }
@@ -104,8 +104,7 @@ int ObCreateSequenceResolver::resolve(const ParseNode &parse_tree)
                 K(parse_tree.children_[1]->type_), K(ret));
     } else {
       ObSequenceResolver<ObCreateSequenceStmt> resolver;
-      if (OB_FAIL(resolver.resolve_sequence_options(session_info_->get_effective_tenant_id(),
-                                                    mystmt, parse_tree.children_[1]))) {
+      if (OB_FAIL(resolver.resolve_sequence_options(mystmt, parse_tree.children_[1]))) {
         LOG_WARN("resolve sequence options failed", K(ret));
       }
     }

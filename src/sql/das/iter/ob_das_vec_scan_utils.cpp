@@ -368,7 +368,7 @@ int ObDasVecScanUtils::init_scan_param(const share::ObLSID &ls_id,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(ctdef), K(rtdef));
   } else {
-    scan_param.tenant_id_ = MTL_ID();
+    
     scan_param.tx_lock_timeout_ = rtdef->tx_lock_timeout_;
     scan_param.index_id_ = ctdef->ref_table_id_;
     scan_param.is_get_ = is_get;
@@ -382,8 +382,6 @@ int ObDasVecScanUtils::init_scan_param(const share::ObLSID &ls_id,
     scan_param.frozen_version_ = rtdef->frozen_version_;
     scan_param.force_refresh_lc_ = rtdef->force_refresh_lc_;
     scan_param.output_exprs_ = &(ctdef->pd_expr_spec_.access_exprs_);
-    scan_param.ext_file_column_exprs_ = &(ctdef->pd_expr_spec_.ext_file_column_exprs_);
-    scan_param.ext_column_convert_exprs_ = &(ctdef->pd_expr_spec_.ext_column_convert_exprs_);
     scan_param.calc_exprs_ = &(ctdef->pd_expr_spec_.calc_exprs_);
     scan_param.aggregate_exprs_ = &(ctdef->pd_expr_spec_.pd_storage_aggregate_output_);
     scan_param.table_param_ = &(ctdef->table_param_);
@@ -424,21 +422,6 @@ int ObDasVecScanUtils::init_scan_param(const share::ObLSID &ls_id,
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(scan_param.column_ids_.assign(ctdef->access_column_ids_))) {
       LOG_WARN("init column ids failed", K(ret));
-    }
-    // external table scan params
-    if (OB_SUCC(ret) && ctdef->is_external_table_) {
-      scan_param.external_file_access_info_ = ctdef->external_file_access_info_.str_;
-      scan_param.external_file_location_ = ctdef->external_file_location_.str_;
-      if (OB_FAIL(scan_param.external_file_format_.load_from_string(ctdef->external_file_format_str_.str_,
-                                                                    *scan_param.allocator_))) {
-        LOG_WARN("fail to load from string", K(ret));
-      } else {
-        uint64_t max_idx = 0;
-        for (int i = 0; i < scan_param.ext_file_column_exprs_->count(); i++) {
-          max_idx = std::max(max_idx, scan_param.ext_file_column_exprs_->at(i)->extra_);
-        }
-        scan_param.external_file_format_.csv_format_.file_column_nums_ = static_cast<int64_t>(max_idx);
-      }
     }
   }
   return ret;

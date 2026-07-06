@@ -66,11 +66,11 @@ int64_t ObStorageObjectOpt::to_string(char *buf, const int64_t buf_len) const
   case ObStorageObjectType::TENANT_DISK_SPACE_META:
   case ObStorageObjectType::TENANT_SUPER_BLOCK:
   case ObStorageObjectType::TENANT_UNIT_META: {
-    if(OB_FAIL(databuff_printf(buf, buf_len, pos, "object_type=%s (tenant_id=%lu,tenant_epoch_id=%lu)",
+    if(OB_FAIL(databuff_printf(buf, buf_len, pos, "object_type=%s (tenant_epoch_id=%lu)",
                get_storage_objet_type_str(object_type_),
-               ss_tenant_level_opt_.tenant_id_, ss_tenant_level_opt_.tenant_epoch_id_))) {
+               ss_tenant_level_opt_.tenant_epoch_id_))) {
       LOG_WARN("failed to print data into buf", K(ret), K(buf_len), K(pos), K(get_storage_objet_type_str(object_type_)),
-                                                K(ss_tenant_level_opt_.tenant_id_), K(ss_tenant_level_opt_.tenant_epoch_id_));
+                                                K(ss_tenant_level_opt_.tenant_epoch_id_));
     }
     break;
   }
@@ -129,10 +129,8 @@ int64_t ObStorageObjectOpt::to_string(char *buf, const int64_t buf_len) const
   }
   case ObStorageObjectType::IS_SHARED_TENANT_DELETED: {
     if(OB_FAIL(databuff_printf(buf, buf_len, pos,
-               "object_type=%s (tenant_id=%lu)", get_storage_objet_type_str(object_type_),
-               ss_shared_tenant_id_opt_.tenant_id_))) {
-      LOG_WARN("failed to print data into buf", K(ret), K(buf_len), K(pos), K(get_storage_objet_type_str(object_type_)),
-                                                K(ss_shared_tenant_id_opt_.tenant_id_));
+               "object_type=%s", get_storage_objet_type_str(object_type_)))) {
+      LOG_WARN("failed to print data into buf", K(ret), K(buf_len), K(pos), K(get_storage_objet_type_str(object_type_)));
     }
     break;
   }
@@ -479,6 +477,8 @@ int  ObObjectManager::read_or_format_super_block_(const bool need_format)
   }
   return ret;
 }
+
+
 
 int64_t ObObjectManager::get_max_macro_block_count(int64_t reserved_size) const
 {

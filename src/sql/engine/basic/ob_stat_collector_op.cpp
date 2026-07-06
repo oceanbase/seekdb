@@ -67,7 +67,6 @@ int ObStatCollectorOp::inner_open()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected sort expr", K(ret));
     } else if (OB_FAIL(sort_impl_.init(
-        ctx_.get_my_session()->get_effective_tenant_id(),
         &MY_SPEC.sort_collations_,
         &MY_SPEC.sort_cmp_funs_,
         &eval_ctx_,

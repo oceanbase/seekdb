@@ -70,7 +70,7 @@ int ObTableCreator::execute()
   if (OB_FAIL(tablet_creator_.execute())) {
     LOG_WARN("fail to execute tablet creator", KR(ret));
   } else if (tablet_infos_.count() > 0
-             && OB_FAIL(share::ObTabletToLSTableOperator::batch_update(trans_, tenant_id_, tablet_infos_))) {
+             && OB_FAIL(share::ObTabletToLSTableOperator::batch_update(trans_, tablet_infos_))) {
     LOG_WARN("fail to batch update tablet info", KR(ret));
   }
   return ret;
@@ -294,7 +294,7 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
 
     // try init, but ignore ret. not blocking create tablet if query inner_table failed or other error
     if (ignore_cs_replica) {
-    } else if (OB_TMP_FAIL(cs_replica_mgr.try_init(tenant_id_, ls_id_array_))) {
+    } else if (OB_TMP_FAIL(cs_replica_mgr.try_init(ls_id_array_))) {
       LOG_WARN("fail to init cs_replica_mgr", KR(tmp_ret));
     }
     
@@ -393,12 +393,12 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
       int64_t start_time = ObTimeUtility::current_time();
       int64_t schema_version = table_schema.get_schema_version();
       if (OB_FAIL(share::ObTabletToTableHistoryOperator::create_tablet_to_table_history(
-                         trans_, tenant_id_, schema_version, pairs))) {
+                         trans_, schema_version, pairs))) {
         LOG_WARN("fail to create tablet to table history",
-                 KR(ret), K_(tenant_id), K(schema_version));
+                 KR(ret), K(schema_version));
       } 
       int64_t end_time = ObTimeUtility::current_time();
-      LOG_INFO("finish create_tablet_to_table_history", KR(ret), K(table_schema.get_tenant_id()), K(ignore_cs_replica),
+      LOG_INFO("finish create_tablet_to_table_history", KR(ret), K(ignore_cs_replica),
                                                         K(table_schema.get_table_id()), "cost_ts", end_time - start_time);
     }
   }

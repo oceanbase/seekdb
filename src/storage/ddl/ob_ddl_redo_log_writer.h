@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_DDL_REDO_LOG_WRITER_H
 #define OCEANBASE_STORAGE_OB_DDL_REDO_LOG_WRITER_H
 #include "common/ob_tablet_id.h"
+#include "storage/ob_storage_rpc_arg.h"
 #include "share/scn.h"
 #include "share/ob_ls_id.h"
 #include "storage/ddl/ob_ddl_clog.h"
@@ -89,7 +90,6 @@ public:
   int init(const share::ObLSID &ls_id);
   int refresh();
   int limit_and_sleep(const int64_t bytes,
-                      const uint64_t tenant_id,
                       const int64_t task_id,
                       ObDDLNeedStopWriteChecker &checker,
                       int64_t &real_sleep_us);
@@ -106,7 +106,6 @@ private:
   int check_cur_node_is_leader(bool &is_leader);
   int cal_limit(const int64_t bytes, int64_t &next_available_ts);
   int do_sleep(const int64_t next_available_ts,
-               const uint64_t tenant_id,
                const int64_t task_id,
                ObDDLNeedStopWriteChecker &checker,
                int64_t &real_sleep_us);
@@ -128,8 +127,7 @@ class ObDDLCtrlSpeedHandle final
 public:
   int init();
   static ObDDLCtrlSpeedHandle &get_instance();
-  int limit_and_sleep(const uint64_t tenant_id,
-                      const share::ObLSID &ls_id,
+  int limit_and_sleep(const share::ObLSID &ls_id,
                       const int64_t bytes,
                       const int64_t task_id,
                       ObDDLNeedStopWriteChecker &checker,
@@ -158,7 +156,6 @@ private:
 
 private:
   bool is_inited_;
-  uint64_t tenant_id_;
   ObDDLCtrlSpeedItem speed_handle_item_;
   RefreshSpeedHandleTask refreshTimerTask_;
 };

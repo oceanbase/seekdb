@@ -39,8 +39,6 @@ public:
   TestMicroBlockDecoder(): tenant_ctx_(500)
   {
     share::ObTenantEnv::set_tenant(&tenant_ctx_);
-    encoder_.data_buffer_.allocator_.set_tenant_id(500);
-    encoder_.row_buf_holder_.allocator_.set_tenant_id(500);
   }
   static const int64_t ROWKEY_CNT = 1;
   static const int64_t COLUMN_CNT = ObExtendType - 1;
@@ -86,7 +84,6 @@ void TestMicroBlockDecoder::SetUp()
   ObTableSchema table;
   ObColumnSchemaV2 col;
   table.reset();
-  table.set_tenant_id(1);
   table.set_tablegroup_id(1);
   table.set_database_id(1);
   table.set_table_id(tid);

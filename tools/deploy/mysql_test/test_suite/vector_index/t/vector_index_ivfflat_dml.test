@@ -250,7 +250,7 @@ insert into t2 values(50, 50, 50, 'row99', '[21, 2, 10]', '[5,6,7]');
 insert into t2 values(99, 99, 99, 'row99', '[21, 2, 10]', '[5,6,7]');
 insert into t2 values(100, 100, 100, 'row100', '[20, 20, 20]', null);
 # 这里没有走旁路导入
-let $before_fallback = query_get_value(select value from oceanbase.__all_virtual_tenant_parameter_stat where name = 'direct_load_allow_fallback', value, 1);
+let $before_fallback = query_get_value(select value from oceanbase.__all_virtual_parameter_stat where name = 'direct_load_allow_fallback', value, 1);
 alter system set direct_load_allow_fallback=TRUE;
 insert /*+ direct(true, 0) enable_parallel_dml parallel(2) */ into t1 select * from t2;
 

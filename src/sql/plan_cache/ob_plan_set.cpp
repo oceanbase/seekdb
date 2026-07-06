@@ -611,7 +611,7 @@ int ObPlanSet::init_new_set(const ObPlanCacheCtx &pc_ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid null plan cache or session info", K(ret), K(pc), K(session_info));
   } else {
-    alloc_.set_tenant_id(pc->get_tenant_id());
+    
     alloc_.set_ctx_id(ObCtxIds::PLAN_CACHE_CTX_ID);
   }
   if (OB_SUCC(ret)) {
@@ -1002,7 +1002,7 @@ int ObPlanSet::init_pre_calc_exprs(const ObPlanCacheObject &phy_plan,
     LOG_WARN("failed to allocate memory.", K(ret));
   } else {
     pre_cal_expr_handler_ = new(buf)PreCalcExprHandler();
-    pre_cal_expr_handler_->init(phy_plan.get_tenant_id(), pc_alloc_);
+    pre_cal_expr_handler_->init(pc_alloc_);
     buf = NULL;
     common::ObIAllocator& pre_expr_alloc = (pre_cal_expr_handler_->alloc_);
 

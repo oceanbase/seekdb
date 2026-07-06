@@ -49,14 +49,9 @@ public:
   virtual void TearDown() override;
   static void SetUpTestCase();
   static void TearDownTestCase();
-private:
-  uint64_t tenant_id_;
-  ObTenantBase tenant_base_;
 };
 
 ObGlobalIteratorPoolTest::ObGlobalIteratorPoolTest()
-  : tenant_id_(1),
-    tenant_base_(tenant_id_)
 {
 }
 
@@ -88,7 +83,6 @@ TEST_F(ObGlobalIteratorPoolTest, init)
   ASSERT_EQ(ret, OB_SUCCESS);
   const int64_t mem_limit = iter_pool.tenant_mem_user_limit_ * ObGlobalIteratorPool::ITER_POOL_MAX_MEM_PERCENT;
   const int64_t bucket_cnt = mem_limit / (ObGlobalIteratorPool::ITER_POOL_ITER_MEM_LIMIT * (1 + ObGlobalIteratorPool::ITER_POOL_MAX_CACHED_ITER_TYPE));
-  ASSERT_EQ(1, iter_pool.tenant_id_);
   ASSERT_EQ(bucket_cnt, iter_pool.bucket_cnt_);
   for (int64_t i = 0; i <= ObGlobalIteratorPool::ITER_POOL_MAX_CACHED_ITER_TYPE; ++i) {
     CachedIteratorNode *nodes = iter_pool.cached_node_array_[i];
@@ -272,7 +266,6 @@ TEST_F(ObGlobalIteratorPoolTest, destroy)
   iter_pool.release(cached_node);
 
   iter_pool.destroy();
-  ASSERT_EQ(OB_INVALID_TENANT_ID, iter_pool.tenant_id_);
   ASSERT_EQ(0, iter_pool.bucket_cnt_);
   for (int64_t i = 0; i <= ObGlobalIteratorPool::ITER_POOL_MAX_CACHED_ITER_TYPE; ++i) {
     CachedIteratorNode *nodes = iter_pool.cached_node_array_[i];
@@ -283,8 +276,8 @@ TEST_F(ObGlobalIteratorPoolTest, destroy)
 TEST_F(ObGlobalIteratorPoolTest, wash)
 {
   int ret = 0;
-  const int64_t tenant_mem_limit = lib::get_tenant_memory_limit(tenant_id_);
-  const int64_t tenant_mem_hold = lib::get_tenant_memory_hold(tenant_id_);
+  const int64_t tenant_mem_limit = lib::get_tenant_memory_limit();
+  const int64_t tenant_mem_hold = lib::get_tenant_memory_hold();
   ObGlobalIteratorPool iter_pool;
   iter_pool.tenant_mem_user_limit_ = tenant_mem_limit;
   ret = iter_pool.init();
@@ -311,7 +304,7 @@ TEST_F(ObGlobalIteratorPoolTest, wash)
                                                   << "tenant_mem_hold=" << tenant_mem_hold;
   const int64_t test_tenant_mem_limit_low = tenant_mem_hold * 100 / ObGlobalIteratorPool::ITER_POOL_WASH_HIGH_THRESHOLD;
 
-  set_tenant_memory_limit(tenant_id_, test_tenant_mem_limit_low - 10);
+  set_tenant_memory_limit(test_tenant_mem_limit_low - 10);
   iter_pool.wash();
   STORAGE_LOG(INFO, "after wash", K(iter_pool), K(test_tenant_mem_limit_low));
   ASSERT_FALSE(iter_pool.is_washing_);
@@ -323,20 +316,20 @@ TEST_F(ObGlobalIteratorPoolTest, wash)
   ASSERT_TRUE(nullptr == cached_node);
   STORAGE_LOG(INFO, "after release", K(iter_pool));
 
-  set_tenant_memory_limit(tenant_id_, tenant_mem_limit);
+  set_tenant_memory_limit(tenant_mem_limit);
   iter_pool.wash();
   STORAGE_LOG(INFO, "after wash", K(iter_pool), K(test_tenant_mem_limit_low));
   ASSERT_FALSE(iter_pool.is_washing_);
   ASSERT_FALSE(iter_pool.is_disabled_);
 
-  set_tenant_memory_limit(tenant_id_, tenant_mem_hold + 10);
+  set_tenant_memory_limit(tenant_mem_hold + 10);
   iter_pool.wash();
   STORAGE_LOG(INFO, "after wash", K(iter_pool), K(test_tenant_mem_limit_low));
   ASSERT_FALSE(iter_pool.is_washing_);
   ASSERT_TRUE(iter_pool.is_disabled_);
   ASSERT_EQ(tenant_mem_hold + 10, iter_pool.tenant_mem_user_limit_);
 
-  set_tenant_memory_limit(tenant_id_, tenant_mem_limit);
+  set_tenant_memory_limit(tenant_mem_limit);
   iter_pool.wash();
   STORAGE_LOG(INFO, "after wash", K(iter_pool), K(test_tenant_mem_limit_low));
   ASSERT_FALSE(iter_pool.is_washing_);

@@ -15,6 +15,8 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_timestamp_service.h"
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -30,14 +32,14 @@ namespace observer
 void ObAllVirtualTimestampService::reset()
 {
   init_ = false;
-  tenant_ids_index_ = 0;
-  cur_tenant_id_ = 0;
+  
+  
   ts_value_ = 0;
   service_role_ = ObTimestampAccess::ServiceType::FOLLOWER;
   is_primary_ = false;
   role_ = common::ObRole::FOLLOWER;
   service_epoch_ = 0;
-  all_tenants_.reset();
+  done_ = false;
   ObVirtualTableScannerIterator::reset();
 }
 
@@ -45,7 +47,7 @@ int ObAllVirtualTimestampService::prepare_start_to_read_()
 {
   int ret = OB_SUCCESS;
   const int64_t execute_timeout = 10 * 1000 * 1000; // 10s
-  if (OB_FAIL(fill_tenant_ids_())) {
+  if (OB_FAIL(fill_ids_())) {
     SERVER_LOG(WARN, "fail to fill tenant ids", K(ret));
   } else {
     start_to_read_ = true;
@@ -53,58 +55,41 @@ int ObAllVirtualTimestampService::prepare_start_to_read_()
   return ret;
 }
 
-int ObAllVirtualTimestampService::get_next_tenant_id_info_()
+int ObAllVirtualTimestampService::get_next_info_()
 {
   int ret = OB_SUCCESS;
-  if (tenant_ids_index_ >= all_tenants_.count()) {
+  if (done_) {
     ret = OB_ITER_END;
   }
   if (OB_SUCC(ret)) {
-    cur_tenant_id_ = all_tenants_.at(tenant_ids_index_);
-    MTL_SWITCH(cur_tenant_id_) {
+    
+    MOD_SCOPE {
       bool exist = false;
-      if (OB_FAIL(MTL(ObLSService*)->check_ls_exist(IDS_LS, exist))) {
-        SERVER_LOG(WARN, "check ls exist fail", K(ret), K_(cur_tenant_id));
+      if (OB_FAIL(share::g_mp->ls_service()->check_ls_exist(IDS_LS, exist))) {
+        SERVER_LOG(WARN, "check ls exist fail", K(ret));
       } else if (!exist) {
         ret = OB_LS_NOT_EXIST;
-        tenant_ids_index_++;
+        done_ = true;
       } else {
-        MTL(ObTimestampAccess *)->get_virtual_info(ts_value_, service_role_, role_, service_epoch_);
-        is_primary_ = MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID();
-        tenant_ids_index_++;
+        share::g_mp->timestamp_access()->get_virtual_info(ts_value_, service_role_, role_, service_epoch_);
+        is_primary_ = true;
+        done_ = true;
       }
     } else {
-      tenant_ids_index_++;
+      done_ = true;
     }
   }
 
   return ret;
 }
 
-int ObAllVirtualTimestampService::fill_tenant_ids_()
+int ObAllVirtualTimestampService::fill_ids_()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_INVALID_TENANT_ID == effective_tenant_id_) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(ERROR, "invalid tenant_id", KR(ret), K_(effective_tenant_id));
-  } else if (OB_ISNULL(GCTX.omt_)) {
+  if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "failed to get multi tenant from GCTX", K(ret));
-  } else {
-    omt::TenantIdList tmp_all_tenants;
-    tmp_all_tenants.set_label(ObModIds::OB_TENANT_ID_LIST);
-    GCTX.omt_->get_tenant_ids(tmp_all_tenants);
-    for (int64_t i = 0; OB_SUCC(ret) && i < tmp_all_tenants.size(); ++i) {
-      uint64_t tenant_id = tmp_all_tenants[i];
-      if (!is_virtual_tenant_id(tenant_id) && // skip virtual tenant
-          (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
-        if (OB_FAIL(all_tenants_.push_back(tenant_id))) {
-          SERVER_LOG(WARN, "fail to push back effective_tenant_id", KR(ret), K(tenant_id));
-        }
-      }
-    }
-    SERVER_LOG(INFO, "succeed to get tenant ids", K(all_tenants_));
   }
 
   return ret;
@@ -118,7 +103,7 @@ int ObAllVirtualTimestampService::inner_get_next_row(ObNewRow *&row)
     SERVER_LOG(WARN, "prepare start to read error", K(ret), K(start_to_read_));
   } else {
     do {
-      if (OB_FAIL(get_next_tenant_id_info_())) {
+      if (OB_FAIL(get_next_info_())) {
         if (OB_ITER_END != ret && OB_LS_NOT_EXIST != ret) {
           SERVER_LOG(WARN, "ObAllVirtualTimestampService iter error", K(ret));
         }

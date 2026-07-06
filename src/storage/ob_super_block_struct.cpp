@@ -30,8 +30,6 @@ using namespace oceanbase::share;
 
 const MacroBlockId ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK(0, MacroBlockId::EMPTY_ENTRY_BLOCK_INDEX, 0);
 
-OB_SERIALIZE_MEMBER(ObTenantItem, tenant_id_, epoch_, status_);
-
 // ========================== ObServerSuperBlock ==============================
 
 ObServerSuperBlockHeader::ObServerSuperBlockHeader()
@@ -116,8 +114,6 @@ void ServerSuperBlockBody::reset()
   total_file_size_ = 0;
   replay_start_point_.reset();
   tenant_meta_entry_.reset();
-  auto_inc_tenant_epoch_ = 0;
-  tenant_cnt_ = 0;
 }
 
 OB_UNIS_SERIALIZE(ServerSuperBlockBody);                                         
@@ -128,8 +124,7 @@ int ServerSuperBlockBody::serialize_(char *buf, const int64_t buf_len, int64_t &
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE, create_timestamp_,
       modify_timestamp_, macro_block_size_, total_macro_block_count_, total_file_size_,
-      replay_start_point_, tenant_meta_entry_, auto_inc_tenant_epoch_);
-  OB_UNIS_ENCODE_ARRAY(tenant_item_arr_, tenant_cnt_);
+      replay_start_point_, tenant_meta_entry_);
   return ret;
 }
 int ServerSuperBlockBody::deserialize_(const char *buf, const int64_t data_len, int64_t &pos)
@@ -137,8 +132,7 @@ int ServerSuperBlockBody::deserialize_(const char *buf, const int64_t data_len, 
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, create_timestamp_,
       modify_timestamp_, macro_block_size_, total_macro_block_count_, total_file_size_,
-      replay_start_point_, tenant_meta_entry_, auto_inc_tenant_epoch_, tenant_cnt_);
-  OB_UNIS_DECODE_ARRAY(tenant_item_arr_, tenant_cnt_);
+      replay_start_point_, tenant_meta_entry_);
   return ret;
 }
 int64_t ServerSuperBlockBody::get_serialize_size_(void) const
@@ -146,8 +140,7 @@ int64_t ServerSuperBlockBody::get_serialize_size_(void) const
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN, create_timestamp_,
       modify_timestamp_, macro_block_size_, total_macro_block_count_, total_file_size_,
-      replay_start_point_, tenant_meta_entry_, auto_inc_tenant_epoch_);
-  OB_UNIS_ADD_LEN_ARRAY(tenant_item_arr_, tenant_cnt_);
+      replay_start_point_, tenant_meta_entry_);
   return len;
 }
 
@@ -314,8 +307,8 @@ ObTenantSuperBlock::ObTenantSuperBlock()
   reset();
 }
 
-ObTenantSuperBlock::ObTenantSuperBlock(const uint64_t tenant_id, const bool is_hidden)
-  : tenant_id_(tenant_id), is_hidden_(is_hidden), version_(TENANT_SUPER_BLOCK_VERSION),
+ObTenantSuperBlock::ObTenantSuperBlock(const bool is_hidden)
+  : is_hidden_(is_hidden), version_(TENANT_SUPER_BLOCK_VERSION),
     snapshot_cnt_(0), auto_inc_ls_epoch_(0), ls_cnt_(0)
 {
   SET_FIRST_VALID_SLOG_CURSOR(replay_start_point_);
@@ -334,7 +327,7 @@ ObTenantSuperBlock::ObTenantSuperBlock(const ObTenantSuperBlock &other)
 
 void ObTenantSuperBlock::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   replay_start_point_.reset();
   ls_meta_entry_.reset();
   tablet_meta_entry_.reset();
@@ -356,7 +349,7 @@ void ObTenantSuperBlock::copy_snapshots_from(const ObTenantSuperBlock &other)
 
 bool ObTenantSuperBlock::is_valid() const
 {
-  bool is_valid = OB_INVALID_TENANT_ID != tenant_id_
+  bool is_valid = true
                   && replay_start_point_.is_valid()
                   && ls_meta_entry_.is_valid()
                   && tablet_meta_entry_.is_valid()
@@ -468,7 +461,6 @@ int ObTenantSuperBlock::serialize_(char *buf, const int64_t buf_len, int64_t &po
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-      tenant_id_,
       replay_start_point_,
       ls_meta_entry_,
       tablet_meta_entry_,
@@ -514,7 +506,7 @@ int ObTenantSuperBlock::deserialize_(const char *buf, const int64_t data_len, in
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE,
-      tenant_id_,
+      
       replay_start_point_,
       ls_meta_entry_,
       tablet_meta_entry_,
@@ -539,7 +531,6 @@ int64_t ObTenantSuperBlock::get_serialize_size_(void) const
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-      tenant_id_,
       replay_start_point_,
       ls_meta_entry_,
       tablet_meta_entry_,

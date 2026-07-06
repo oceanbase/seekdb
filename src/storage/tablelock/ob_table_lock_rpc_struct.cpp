@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX TABLELOCK
 #include "ob_table_lock_rpc_struct.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_service.h"
 
 namespace oceanbase
@@ -297,7 +298,7 @@ OB_DEF_DESERIALIZE(ObReplaceAllLocksRequest)
 int TxDescHelper::deserialize_tx_desc(DESERIAL_PARAMS, ObTxDesc *&tx_desc)
 {
   int ret = OB_SUCCESS;
-  ObTransService *txs = MTL(transaction::ObTransService *);
+  ObTransService *txs = share::g_mp->trans_service();
   if (OB_ISNULL(txs)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ObTransService is null");
@@ -310,7 +311,7 @@ int TxDescHelper::deserialize_tx_desc(DESERIAL_PARAMS, ObTxDesc *&tx_desc)
 int TxDescHelper::release_tx_desc(ObTxDesc &tx_desc)
 {
   int ret = OB_SUCCESS;
-  ObTransService *txs = MTL(transaction::ObTransService *);
+  ObTransService *txs = share::g_mp->trans_service();
   if (OB_ISNULL(txs)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ObTransService is null");
@@ -850,20 +851,18 @@ int ObInTransLockTableRequest::assign(const ObInTransLockTableRequest &arg)
 OB_SERIALIZE_MEMBER_INHERIT(ObInTransLockTabletRequest, ObInTransLockTableRequest, tablet_id_);
 
 
-OB_SERIALIZE_MEMBER(ObAdminRemoveLockOpArg, tenant_id_, ls_id_, lock_op_);
+OB_SERIALIZE_MEMBER(ObAdminRemoveLockOpArg, ls_id_, lock_op_);
 
-int ObAdminRemoveLockOpArg::set(const uint64_t tenant_id,
-                                const share::ObLSID &ls_id,
+int ObAdminRemoveLockOpArg::set(const share::ObLSID &ls_id,
                                 const ObTableLockOp &lock_op)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id ||
+  if (OB_UNLIKELY(false ||
                   !ls_id.is_valid() ||
                   !lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(ls_id), K(lock_op));
+    LOG_WARN("invalid argument", KR(ret), K(ls_id), K(lock_op));
   } else {
-    tenant_id_ = tenant_id;
     ls_id_ = ls_id;
     lock_op_ = lock_op;
   }
@@ -872,26 +871,24 @@ int ObAdminRemoveLockOpArg::set(const uint64_t tenant_id,
 
 
 
-OB_SERIALIZE_MEMBER(ObAdminUpdateLockOpArg, tenant_id_, ls_id_, lock_op_,
+OB_SERIALIZE_MEMBER(ObAdminUpdateLockOpArg, ls_id_, lock_op_,
                     commit_version_, commit_scn_);
 
-int ObAdminUpdateLockOpArg::set(const uint64_t tenant_id,
-                                const share::ObLSID &ls_id,
+int ObAdminUpdateLockOpArg::set(const share::ObLSID &ls_id,
                                 const ObTableLockOp &lock_op,
                                 const share::SCN &commit_version,
                                 const share::SCN &commit_scn)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id ||
+  if (OB_UNLIKELY(false ||
                   !ls_id.is_valid() ||
                   !lock_op.is_valid() ||
                   !commit_version.is_valid() ||
                   !commit_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(ls_id), K(lock_op),
+    LOG_WARN("invalid argument", KR(ret), K(ls_id), K(lock_op),
              K(commit_version), K(commit_scn));
   } else {
-    tenant_id_ = tenant_id;
     ls_id_ = ls_id;
     lock_op_ = lock_op;
     commit_version_ = commit_version;

@@ -66,7 +66,6 @@ private:
   int drop_mview(uint64_t mview_id);
 
 private:
-  uint64_t tenant_id_;
   int64_t round_;
   StatusType status_;
   int error_code_;

@@ -237,7 +237,7 @@ int ObSRTaaTIterImpl::init_chunk_stores()
         LOG_WARN("failed to allocate memory for hash map", K(ret));
       } else {
         ObSRTaaTHashMap *hash_map = new (buf) ObSRTaaTHashMap();
-        if (OB_FAIL(hash_map->create(10, common::ObMemAttr(MTL_ID(), "FTTaatMap")))) {
+        if (OB_FAIL(hash_map->create(10, common::ObMemAttr("FTTaatMap")))) {
           LOG_WARN("failed to create token map", K(ret));
         } else {
           hash_maps_[i] = hash_map;
@@ -250,8 +250,7 @@ int ObSRTaaTIterImpl::init_chunk_stores()
       } else {
         sql::ObChunkDatumStore *store = new (buf) sql::ObChunkDatumStore(common::ObModIds::OB_SQL_CHUNK_ROW_STORE);
         if (OB_FAIL(store->init(
-            1024 * 8 /* mem limit */,
-            MTL_ID(), common::ObCtxIds::DEFAULT_CTX_ID, common::ObModIds::OB_SQL_CHUNK_ROW_STORE,
+            1024 * 8, common::ObCtxIds::DEFAULT_CTX_ID, common::ObModIds::OB_SQL_CHUNK_ROW_STORE,
             true /* enable dump */,
             0, /* row_extra_size */
             ObChunkDatumStore::BLOCK_SIZE))) {

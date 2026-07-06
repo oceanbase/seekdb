@@ -18,7 +18,7 @@
 #define OCEANBASE_ENCODING_OB_DICT_ENCODER_H_
 
 #include "ob_icolumn_encoder.h"
-#include "lib/allocator/ob_pooled_allocator.h"
+#include "lib/objectpool/ob_pooled_allocator.h"
 #include "lib/container/ob_array_iterator.h"
 #include "ob_encoding_util.h"
 #include "ob_bit_stream.h"

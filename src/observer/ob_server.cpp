@@ -25,18 +25,24 @@
 #endif
 #include <thread>
 #include "observer/ob_server.h"
+#include "storage/lob/ob_lob_manager.h"
+#include "storage/compaction/ob_tenant_freeze_info_mgr.h"
+#include "share/ob_freeze_info_proxy.h"
+namespace oceanbase { namespace observer { common::ObILobReadService * ObServer::lob_read_service() { return mods_lob_manager_; }
+int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info) { return OB_ISNULL(mods_tenant_freeze_info_mgr_) ? common::OB_NOT_INIT : mods_tenant_freeze_info_mgr_->get_lower_bound_freeze_info_before_snapshot_version(snapshot_version, freeze_info); } } }
 #include "rootserver/ob_rs_serial_call.h"
 #include "lib/alloc/memory_dump.h"
 #include "lib/oblog/ob_log_compressor.h"
 #include "lib/resource/ob_affinity_ctrl.h"
+#include "lib/ob_running_mode.h"
 #include "lib/task/ob_timer_monitor.h"
 #include "lib/task/ob_timer_service.h" // ObTimerService
 #include "observer/ob_server_utils.h"
 #include "observer/ob_server_options.h"
-#include "observer/omt/ob_tenant.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
-#include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
+#include "share/ob_tenant_timezone_mgr.h"
+#include "logservice/ob_tenant_mutil_allocator_mgr.h"
 #include "share/object_storage/ob_device_connectivity.h"
+#include "observer/omt/ob_tenant.h"
 #include "share/resource_manager/ob_resource_manager.h"
 #include "share/sequence/ob_sequence_cache.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
@@ -45,34 +51,32 @@
 #include "storage/tx_table/ob_tx_data_cache.h"
 #include "storage/ob_file_system_router.h"
 #include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
-#include "sql/engine/px/ob_px_target_mgr.h"
+#include "sql/engine/px/ob_px_target_monitor.h"
 #include "share/ob_device_manager.h"
-#include "share/ob_tablet_autoincrement_service.h"
-#include "share/ob_tenant_mem_limit_getter.h"
+#include "storage/ob_tablet_autoincrement_service.h"
+#include "storage/tx_storage/ob_tenant_mem_limit_getter.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
+#include "observer/schema/ob_schema_service_sql_impl.h"
 #include "storage/ob_file_system_router.h"
 #include "storage/tablelock/ob_table_lock_rpc_client.h"
 #include "share/catalog/ob_cached_catalog_meta_getter.h"
-#include "share/ob_server_blacklist.h"
-#include "share/stat/ob_opt_stat_manager.h" // for ObOptStatManager
-#include "share/scheduler/ob_partition_auto_split_helper.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h" // for ObOptStatManager
+#include "observer/scheduler/ob_partition_auto_split_helper.h"
 #include "share/longops_mgr/ob_longops_mgr.h"
 #include "share/ob_ddl_sim_point.h"
 #include "storage/ddl/ob_ddl_redo_log_writer.h"
 #include "observer/ob_server_utils.h"
-#include "share/ob_device_credential_task.h"
-#include "lib/xml/ob_libxml2_sax_handler.h"
-#include "share/vector_index/ob_plugin_vector_index_utils.h"
-#include "lib/roaringbitmap/ob_rb_memory_mgr.h"
+#include "common/xml/ob_libxml2_sax_handler.h"
+#include "observer/vector_index/ob_plugin_vector_index_utils.h"
+#include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "storage/fts/dict/ob_ft_cache.h"
-#include "common/ob_target_specific.h"
+#include "lib/utility/ob_target_specific.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "plugin/sys/ob_plugin_mgr.h"
 #include "rpc/frame/ob_net_consts.h"
 #include "rpc/ob_req_operator.h"   // rpc::g_rpc_self_addr
 #include "storage/blocksstable/ob_block_sstable_struct.h"
-#include "rootserver/standby/ob_standby_service.h" // ObStandbyService
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -96,6 +100,11 @@ uint64_t __attribute__((used)) lib_get_cpu_khz()
   return OBSERVER.get_cpu_frequency_khz();
 }
 } // namespace common
+
+// Definition of the low-layer module-access facade global, declared in
+// share/rc/ob_module_provider.h. Set to &OBSERVER early in ObServer::init(),
+// before any module is constructed; read by low-layer code via g_mp->xxx().
+namespace share { ObIModuleProvider *g_mp = nullptr; }
 
 }
 
@@ -140,13 +149,12 @@ ObServer::ObServer()
     gctx_(GCTX),
     prepare_stop_(true), stop_(true), has_stopped_(true), has_destroy_(false),
     net_frame_(gctx_), sql_conn_pool_(), ddl_conn_pool_(),
-    res_inner_conn_pool_(), restore_ctx_(),
+    res_inner_conn_pool_(),
     storage_rpc_proxy_(), sql_proxy_(),
     executor_rpc_(),
     config_(ObServerConfig::get_instance()),
     reload_config_(config_, gctx_), config_mgr_(config_, reload_config_),
     tenant_timezone_mgr_(omt::ObTenantTimezoneMgr::get_instance()),
-    device_config_mgr_(share::ObDeviceConfigMgr::get_instance()),
     schema_service_(share::schema::ObMultiVersionSchemaService::get_instance()),
     tablet_operator_(),
     location_service_(),
@@ -158,8 +166,6 @@ ObServer::ObServer()
     root_service_monitor_(root_service_),
     ob_service_(gctx_),
     multi_tenant_(), vt_data_service_(root_service_, self_addr_, &config_),
-    weak_read_service_(),
-    bl_service_(ObBLService::get_instance()),
     cgroup_ctrl_(),
     start_time_(ObTimeUtility::current_time()),
     warm_up_start_time_(0),
@@ -189,6 +195,10 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
   FLOG_INFO("[OBSERVER_NOTICE] start to init observer");
   DBA_STEP_RESET(server_start);
   int ret = OB_SUCCESS;
+  // Publish ObServer as the module provider before any module access (boot).
+  // Accessors delegate to the live tenant module set, so g_mp is valid throughout
+  // bring-up incl. re-entrant module init (e.g. ObLogService::mtl_init -> ls_service()).
+  share::g_mp = this;
   init_arches();
   scramble_rand_.init(static_cast<uint64_t>(start_time_), static_cast<uint64_t>(start_time_ / 2));
   embedded_ = opts.embedded_;
@@ -311,8 +321,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("should never reach here!", KR(ret));
     } else if (FALSE_IT(cgroup_ctrl_.init())) {
       LOG_ERROR("should never reach here!", KR(ret));
-    } else if (OB_FAIL(init_restore_ctx())) {
-      LOG_ERROR("init restore context failed", KR(ret));
     }
     #ifndef OB_USE_ASAN
     if (OB_SUCC(ret)) {
@@ -329,11 +337,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     if (OB_SUCC(ret)) {
     if (OB_FAIL(schema_status_proxy_.init())) {
       LOG_ERROR("fail to init schema status proxy", KR(ret));
-    }
-    }
-    if (OB_SUCC(ret)) {
-    if (OB_FAIL(device_credential_task_.init(CREDENTIAL_TASK_SCHEDULE_INTERVAL_US))) {
-      LOG_ERROR("fail to init device_credential_task", KR(ret), K(CREDENTIAL_TASK_SCHEDULE_INTERVAL_US));
     }
     }
     if (OB_SUCC(ret)) {
@@ -410,18 +413,10 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init log kv cache failed", KR(ret));
     } else if (OB_FAIL(init_ts_mgr())) {
       LOG_ERROR("init ts mgr failed", KR(ret));
-    } else if (OB_FAIL(weak_read_service_.init())) {
-      LOG_ERROR("init weak_read_service failed", KR(ret));
-    } else if (OB_FAIL(bl_service_.init())) {
-      LOG_ERROR("init bl_service_ failed", KR(ret));
     } else if (OB_FAIL(ObTenantMutilAllocatorMgr::get_instance().init())) {
       LOG_ERROR("init ObTenantMutilAllocatorMgr failed", KR(ret));
-    } else if (OB_FAIL(ObExternalTableFileManager::get_instance().init())) {
-      LOG_ERROR("init external table file manager failed", KR(ret));
     } else if (OB_FAIL(ObCachedCatalogSchemaMgr::get_instance().init())) {
       LOG_ERROR("init ObCachedCatalogSchemaMgr failed", KR(ret));
-    } else if (OB_FAIL(ObVirtualTenantManager::get_instance().init())) {
-      LOG_ERROR("init tenant manager failed", KR(ret));
     } else if (OB_FAIL(startup_accel_handler_.init(SERVER_ACCEL))) {
       LOG_ERROR("init server startup task handler failed", KR(ret));
     } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init())) {
@@ -468,8 +463,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_WARN("init longops mgr fail", KR(ret));
     } else if (OB_FAIL(ObGenDicLoader::get_instance().init())) {
       LOG_WARN("init dictionary loader failed", K(ret));
-    } else if (OB_FAIL(OB_STANDBY_SERVICE.init(&sql_proxy_, &schema_service_))) {
-      LOG_ERROR("init OB_STANDBY_SERVICE failed", KR(ret));
     } else if (OB_FAIL(ObDDLRedoLock::get_instance().init())) {
       LOG_WARN("init ddl redo lock failed", K(ret));
 #ifdef ERRSIM
@@ -642,14 +635,6 @@ void ObServer::destroy()
     OB_TS_MGR.destroy();
     FLOG_INFO("ts mgr destroyed");
 
-    FLOG_INFO("begin to destroy weak read service");
-    weak_read_service_.destroy();
-    FLOG_INFO("weak read service destroyed");
-
-    FLOG_INFO("begin to destroy blacklist service");
-    bl_service_.destroy();
-    FLOG_INFO("blacklist service destroyed");
-
     FLOG_INFO("begin to destroy net frame");
     net_frame_.destroy();
     FLOG_INFO("net frame destroyed");
@@ -669,10 +654,6 @@ void ObServer::destroy()
     FLOG_INFO("begin to destroy tenant timezone manager");
     tenant_timezone_mgr_.destroy();
     FLOG_INFO("tenant timezone manager destroyed");
-
-    FLOG_INFO("begin to destroy device config mgr");
-    device_config_mgr_.destroy();
-    FLOG_INFO("device config mgr destroyed");
 
     FLOG_INFO("begin to destroy ObMdsEventBuffer");
     ObMdsEventBuffer::destroy();
@@ -702,16 +683,6 @@ void ObServer::destroy()
     log_block_mgr_.destroy();
     FLOG_INFO("log block mgr destroy");
 
-#ifndef OB_BUILD_LITE
-    FLOG_INFO("begin to destroy server blacklist");
-    ObServerBlacklist::get_instance().destroy();
-    FLOG_INFO("server blacklist destroy");
-#endif
-
-
-    FLOG_INFO("begin to destroy virtual tenant manager");
-    ObVirtualTenantManager::get_instance().destroy();
-    FLOG_INFO("virtual tenant manager destroyed");
 
     FLOG_INFO("begin to destroy rootservice event history");
     ROOTSERVICE_EVENT_INSTANCE.destroy();
@@ -793,10 +764,6 @@ int ObServer::start(bool embed_mode)
     }
 
     // Services are registered once; start() is triggered by reload_config().
-    grpc_server_.register_service(&storage_grpc_service_impl_);
-    grpc_server_.register_service(&log_service_grpc_impl_);
-    grpc_server_.register_service(&service_grpc_service_impl_);
-    gctx_.grpc_server_ = &grpc_server_;
 
     if (FAILEDx(ObMdsSchemaHelper::get_instance().init())) {
       LOG_ERROR("fail to init mds schema helper", K(ret));
@@ -844,16 +811,6 @@ int ObServer::start(bool embed_mode)
     } else {
       FLOG_INFO("success to update hidden sys tenant");
     }
-    if (FAILEDx(weak_read_service_.start())) {
-      LOG_ERROR("fail to start weak read service", KR(ret));
-    } else {
-      FLOG_INFO("success to start weak read service");
-    }
-    if (FAILEDx(bl_service_.start())) {
-      LOG_ERROR("fail to start blacklist service", KR(ret));
-    } else {
-      FLOG_INFO("success to start blacklist service");
-    }
     // do not wait clog replay over, avoid blocking other module
     if (FAILEDx(root_service_monitor_.start())) {
       LOG_ERROR("fail to start root service monitor", KR(ret));
@@ -892,11 +849,6 @@ int ObServer::start(bool embed_mode)
       FLOG_INFO("success to start unix domain listener");
     }
 
-    if (FAILEDx(OB_PX_TARGET_MGR.start())) {
-      LOG_ERROR("fail to start ObPxTargetMgr", KR(ret));
-    } else {
-      FLOG_INFO("success to start ObPxTargetMgr");
-    }
 
 
     if (FAILEDx(location_service_.start())) {
@@ -957,27 +909,27 @@ int ObServer::start(bool embed_mode)
         ret = OB_SERVER_IS_STOPPING;
         FLOG_WARN("server is in stopping status", KR(ret));
       } else {
-        ObSEArray<uint64_t, 16> tenant_ids;
+        ObSEArray<uint64_t, 16> batch_ids;
         const int64_t MAX_CHECK_TIME = 15 * 60 * 1000 * 1000L; // 15min
         const int64_t start_ts = ObTimeUtility::current_time();
         int64_t schema_refreshed_ts = 0;
         const int64_t expire_time = start_ts + MAX_CHECK_TIME;
-        tenant_ids.set_max_print_count(512);
+        batch_ids.set_max_print_count(512);
 
-        if (OB_FAIL(multi_tenant_.get_mtl_tenant_ids(tenant_ids))) {
+        if (OB_FAIL(batch_ids.push_back(1UL))) {
           FLOG_ERROR("get mtl tenant ids fail", KR(ret));
-        } else if (tenant_ids.count() <= 0) {
+        } else if (batch_ids.count() <= 0) {
           // do nothing
         } else {
           // check user tenant schema refresh
-          check_user_tenant_schema_refreshed(tenant_ids, expire_time);
+          check_user_tenant_schema_refreshed(batch_ids, expire_time);
           schema_refreshed_ts = ObTimeUtility::current_time();
           // check log replay status
-          check_log_replay_over(tenant_ids, expire_time);
+          check_log_replay_over(batch_ids, expire_time);
         }
         FLOG_INFO("[OBSERVER_NOTICE] check log replay and user tenant schema finished",
             KR(ret),
-            K(tenant_ids),
+            K(batch_ids),
             "refresh_schema_cost_us", schema_refreshed_ts - start_ts,
             "replay_log_cost_us", ObTimeUtility::current_time() - schema_refreshed_ts);
       }
@@ -1018,12 +970,13 @@ int ObServer::start(bool embed_mode)
   return ret;
 }
 
+
 int ObServer::try_update_hidden_sys()
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = OB_SYS_TENANT_ID;
+  
   omt::ObTenant *tenant = nullptr;
-  if (OB_FAIL(multi_tenant_.get_tenant(tenant_id, tenant))) {
+  if (OB_FAIL(multi_tenant_.get_tenant(tenant))) {
     if (OB_TENANT_NOT_IN_SERVER == ret) { // only when adding a new server
       ret = OB_SUCCESS;
       if (OB_FAIL(multi_tenant_.create_hidden_sys_tenant())) {
@@ -1038,14 +991,20 @@ int ObServer::try_update_hidden_sys()
   }
   tenant = nullptr;
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(multi_tenant_.get_tenant(tenant_id, tenant))) {
-    LOG_WARN("failed to get sys tenant for default run wrapper", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(multi_tenant_.get_tenant(tenant))) {
+    LOG_WARN("failed to get sys tenant for default run wrapper", KR(ret));
   } else if (OB_ISNULL(tenant)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sys tenant is null when setting default run wrapper", K(tenant_id));
+    LOG_WARN("sys tenant is null when setting default run wrapper");
   } else {
     lib::Threads::set_default_run_wrapper(tenant);
-    LOG_INFO("set default run wrapper to sys tenant", K(tenant_id), KP(tenant));
+    LOG_INFO("set default run wrapper to sys tenant", KP(tenant));
+  }
+  // Flip the (hidden) sys tenant to real, apply the GCONF-sourced unit, and mark
+  // synced — synchronously at boot, before check_if_multi_tenant_synced() waits.
+  // (Was driven asynchronously by the OMT timer + bootstrap notify_create_tenant.)
+  if (OB_SUCC(ret) && OB_FAIL(multi_tenant_.bring_up_sys_tenant())) {
+    LOG_ERROR("fail to bring up sys tenant", KR(ret));
   }
   return ret;
 }
@@ -1089,11 +1048,11 @@ int ObServer::check_if_schema_ready()
                   "wait schema ready begin.");
   while (!stop_ && !schema_ready) {
     ret = OB_SUCCESS;
-    if (OB_FAIL(schema_service_.get_baseline_schema_version(OB_SYS_TENANT_ID, true/*auto_update*/, baseline_schema_version))) {
+    if (OB_FAIL(schema_service_.get_baseline_schema_version(true/*auto_update*/, baseline_schema_version))) {
       LOG_WARN("fail to get baseline schema version", KR(ret));
     } else if (OB_INVALID_VERSION == baseline_schema_version || baseline_schema_version < 0) {
       LOG_WARN("invalid baseline schema version", K(baseline_schema_version));
-    } else if (OB_FAIL(schema_service_.get_tenant_refreshed_schema_version(OB_SYS_TENANT_ID, current_schema_version))) {
+    } else if (OB_FAIL(schema_service_.get_tenant_refreshed_schema_version(current_schema_version))) {
       LOG_WARN("fail to get tenant refreshed schema version", KR(ret));
     } else {
       schema_ready = (current_schema_version >= baseline_schema_version);
@@ -1277,21 +1236,9 @@ int ObServer::stop()
       FLOG_INFO("root service stopped");
     }
 
-    FLOG_INFO("begin to stop weak read service");
-    weak_read_service_.stop();
-    FLOG_INFO("weak read service stopped");
-
     FLOG_INFO("begin to stop ts mgr");
     OB_TS_MGR.stop();
     FLOG_INFO("ts mgr stopped");
-
-    FLOG_INFO("begin to stop px target mgr");
-    OB_PX_TARGET_MGR.stop();
-    FLOG_INFO("px target mgr stopped");
-
-    FLOG_INFO("begin to stop blacklist service");
-    bl_service_.stop();
-    FLOG_INFO("blacklist service stopped");
 
     FLOG_INFO("begin to stop memory dump");
     ObMemoryDump::get_instance().stop();
@@ -1339,8 +1286,7 @@ int ObServer::stop()
       FLOG_INFO("net frame stopped");
     }
 
-    grpc_server_.stop();
-
+  
     FLOG_INFO("begin to stop rootservice event history");
     ROOTSERVICE_EVENT_INSTANCE.stop();
     FLOG_INFO("rootservice event history stopped");
@@ -1422,7 +1368,7 @@ int ObServer::init_tz_info_mgr()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(tenant_timezone_mgr_.init(sql_proxy_, self_addr_, schema_service_))) {
+  if (OB_FAIL(tenant_timezone_mgr_.init(sql_proxy_))) {
     LOG_ERROR("tenant_timezone_mgr_ init failed", K_(self_addr), KR(ret));
   }
   return ret;
@@ -1769,7 +1715,7 @@ int ObServer::init_pre_setting()
     const int64_t default_stack_size = 1L << 18; // 256KB
     const int64_t stack_size = std::max(static_cast<int64_t>(default_stack_size), static_cast<int64_t>(GCONF.stack_size));
     LOG_INFO("set stack_size", K(stack_size));
-    global_thread_stack_size = stack_size - SIG_STACK_SIZE - ACHUNK_PRESERVE_SIZE;
+    global_thread_stack_size = stack_size - THREAD_STACK_RESERVED_SIZE - ACHUNK_PRESERVE_SIZE;
 #ifdef __APPLE__
     const int ps = getpagesize();
     global_thread_stack_size = (global_thread_stack_size + ps - 1) & ~(ps - 1);
@@ -1900,17 +1846,6 @@ int ObServer::init_io()
   return ret;
 }
 
-int ObServer::init_restore_ctx()
-{
-  int ret = OB_SUCCESS;
-  restore_ctx_.schema_service_ = &schema_service_;
-  restore_ctx_.sql_client_ = &sql_proxy_;
-  restore_ctx_.ob_sql_ = &sql_engine_;
-  restore_ctx_.vt_iter_creator_ = &vt_data_service_.get_vt_iter_factory().get_vt_iter_creator();
-  restore_ctx_.server_config_ = &config_;
-  return ret;
-}
-
 int ObServer::init_interrupt()
 {
   int ret = OB_SUCCESS;
@@ -2015,12 +1950,28 @@ int ObServer::init_multi_tenant()
   return ret;
 }
 
+namespace
+{
+// ObSchemaService factory injection: implementation ObSchemaServiceSQLImpl lives in the observer layer(can legally call sql)。
+share::schema::ObSchemaService *create_schema_service_sql_impl()
+{
+  return OB_NEW(share::schema::ObSchemaServiceSQLImpl, ObModIds::OB_SCHEMA_SERVICE);
+}
+void destroy_schema_service_sql_impl(share::schema::ObSchemaService *schema_service)
+{
+  share::schema::ObSchemaServiceSQLImpl *tmp =
+      static_cast<share::schema::ObSchemaServiceSQLImpl *>(schema_service);
+  OB_DELETE(ObSchemaServiceSQLImpl, ObModIds::OB_SCHEMA_SERVICE, tmp);
+}
+} // anonymous namespace
+
 int ObServer::init_schema()
 {
   int ret = OB_SUCCESS;
+  share::schema::ObSchemaServiceFactory::register_creator(
+      create_schema_service_sql_impl, destroy_schema_service_sql_impl);
   if (OB_FAIL(schema_service_.init(&sql_proxy_, &config_,
-                                   OB_MAX_VERSION_COUNT,
-                                   OB_MAX_VERSION_COUNT_FOR_MERGE))) {
+                                   OB_MAX_VERSION_COUNT))) {
     LOG_WARN("init schema_service_ fail", KR(ret));
   }
 
@@ -2093,7 +2044,7 @@ int ObServer::init_root_service()
   if (OB_FAIL(root_service_.init(
                  config_, config_mgr_,
                  self_addr_, sql_proxy_,
-                 restore_ctx_, &schema_service_))) {
+                 &schema_service_))) {
     LOG_ERROR("init root service failed", K(ret));
   }
 
@@ -2221,7 +2172,6 @@ int ObServer::init_global_context()
   gctx_.self_addr_seq_.set_addr(self_addr_);
   gctx_.bandwidth_throttle_ = &bandwidth_throttle_;
   gctx_.vt_par_ser_ = &vt_data_service_;
-  gctx_.et_access_service_ = &et_access_service_;
   gctx_.session_mgr_ = &session_mgr_;
   gctx_.sql_engine_ = &sql_engine_;
   gctx_.pl_engine_ = &pl_engine_;
@@ -2238,7 +2188,6 @@ int ObServer::init_global_context()
   gctx_.diag_ = &diag_;
   gctx_.scramble_rand_ = &scramble_rand_;
   gctx_.init();
-  gctx_.weak_read_service_ = &weak_read_service_;
   gctx_.cgroup_ctrl_ = &cgroup_ctrl_;
   gctx_.schema_status_proxy_ = &schema_status_proxy_;
   gctx_.net_frame_ = &net_frame_;
@@ -2311,7 +2260,7 @@ int ObServer::init_ts_mgr()
 int ObServer::init_px_target_mgr()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(OB_PX_TARGET_MGR.init(self_addr_))) {
+  if (OB_FAIL(OB_PX_TARGET_MONITOR.init(self_addr_))) {
     LOG_ERROR("px target mgr init failed", K(self_addr_), KR(ret));
   } else {
     LOG_INFO("px target mgr init success");
@@ -2565,60 +2514,43 @@ int ObServer::reload_config()
   }
 
   // Start the gRPC server when enable_rpc_service is first set to True.
-  if (GCONF.enable_rpc_service && !grpc_server_.is_running()) {
-    int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(grpc_server_.start(config_.rpc_port))) {
-      LOG_WARN("failed to start gRPC server on config reload", K(tmp_ret));
-    } else {
-      LOG_INFO("gRPC server started via config reload");
-    }
-  }
 
   return ret;
 }
 
-void ObServer::check_user_tenant_schema_refreshed(const ObIArray<uint64_t> &tenant_ids, const int64_t expire_time)
+void ObServer::check_user_tenant_schema_refreshed(const ObIArray<uint64_t> &batch_ids, const int64_t expire_time)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = OB_INVALID_TENANT_ID;
   LOG_DBA_INFO_V2(OB_SERVER_CHECK_USER_TENANT_SCHEMA_REFRESHED_BEGIN,
                   DBA_STEP_INC_INFO(server_start),
                   "observer check user tenant schema refreshed begin.");
 
-  for (int64_t i = 0; i < tenant_ids.count()
+  for (int64_t i = 0; i < batch_ids.count()
                       && ObTimeUtility::current_time() < expire_time; ++i) {
-    tenant_id = tenant_ids.at(i);
     if (OB_ISNULL(gctx_.schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema service is NULL", KR(ret));
     } else {
-      bool is_dropped = false;
       bool tenant_schema_refreshed = false;
       while (!tenant_schema_refreshed
           && !stop_
-          && !is_dropped
           && ObTimeUtility::current_time() < expire_time) {
 
-        tenant_schema_refreshed = is_user_tenant(tenant_id) ?
-                                  gctx_.schema_service_->is_tenant_refreshed(tenant_id) : true;
-        if (OB_FAIL(gctx_.schema_service_->check_if_tenant_has_been_dropped(tenant_id, is_dropped))) {
-          LOG_WARN("fail to check tenant has been dropped at observer startup", KR(ret), K(tenant_id));
-        } else if (is_dropped) {
-          // ignore
-        } else if (!tenant_schema_refreshed) {
+        tenant_schema_refreshed = true;
+        if (!tenant_schema_refreshed) {
           // check wait and retry
           ob_usleep(1000 * 1000);
           if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
-            FLOG_INFO("[OBSERVER_NOTICE] Refreshing user tenant schema, need to wait ", K(tenant_id));
+            FLOG_INFO("[OBSERVER_NOTICE] Refreshing user tenant schema, need to wait ");
           }
           // check success
-        } else if (i == tenant_ids.count() - 1) {
-          FLOG_INFO("[OBSERVER_NOTICE] Refresh all user tenant schema successfully ", K(tenant_ids));
+        } else if (i == batch_ids.count() - 1) {
+          FLOG_INFO("[OBSERVER_NOTICE] Refresh all user tenant schema successfully ", K(batch_ids));
           // check timeout
         } else if (ObTimeUtility::current_time() > expire_time) {
-          FLOG_INFO("[OBSERVER_NOTICE] Refresh user tenant schema timeout ", K(tenant_id));
+          FLOG_INFO("[OBSERVER_NOTICE] Refresh user tenant schema timeout ");
         } else {
-          FLOG_INFO("[OBSERVER_NOTICE] Refresh user tenant schema successfully ", K(tenant_id));
+          FLOG_INFO("[OBSERVER_NOTICE] Refresh user tenant schema successfully ");
         }
       }
     }
@@ -2628,29 +2560,33 @@ void ObServer::check_user_tenant_schema_refreshed(const ObIArray<uint64_t> &tena
                   "observer check user tenant schema refreshed finish.");
 }
 
-void ObServer::check_log_replay_over(const ObIArray<uint64_t> &tenant_ids, const int64_t expire_time)
+void ObServer::check_log_replay_over(const ObIArray<uint64_t> &batch_ids, const int64_t expire_time)
 {
   LOG_DBA_INFO_V2(OB_SERVER_CHECK_LOG_REPLAY_OVER_BEGIN,
                   DBA_STEP_INC_INFO(server_start),
                   "observer check log replay over begin.");
-  for (int64_t i = 0; i < tenant_ids.count()
+  for (int64_t i = 0; i < batch_ids.count()
                       && ObTimeUtility::current_time() < expire_time; ++i) {
     SCN min_version;
-    uint64_t tenant_id = tenant_ids.at(i);
+    
     bool can_start_service = false;
     while (!can_start_service
           && !stop_
           && ObTimeUtility::current_time() < expire_time) {
-      weak_read_service_.check_tenant_can_start_service(tenant_id, can_start_service, min_version);
+      // Single-node lite: no cluster WRS service to gate on; log replay
+      // completion is the only readiness condition and is handled by the log
+      // service. Mark service startable directly.
+      UNUSED(min_version);
+      can_start_service = true;
         // check wait and retry
       if (!can_start_service) {
         ob_usleep(10 * 1000);
         // check success
-      } else if (i == tenant_ids.count() -1) {
-        FLOG_INFO("[OBSERVER_NOTICE] all tenant replay log finished, start to service ", K(tenant_ids));
+      } else if (i == batch_ids.count() -1) {
+        FLOG_INFO("[OBSERVER_NOTICE] all tenant replay log finished, start to service ", K(batch_ids));
         // check timeout
       } else if (ObTimeUtility::current_time() > expire_time) {
-        FLOG_INFO("[OBSERVER_NOTICE] replay log timeout and force to start service ", K(tenant_id));
+        FLOG_INFO("[OBSERVER_NOTICE] replay log timeout and force to start service ");
       } else {
         // do nothing
       }
@@ -2717,8 +2653,7 @@ bool ObServer::ObCTASCleanUp::operator()(sql::ObSQLSessionMgr::Key key,
   } else if (OB_ISNULL(sess_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info is NULL", KR(ret));
-  } else if (static_cast<uint64_t>(key.sessid_) == get_session_id()
-             || key.proxy_sessid_ == get_session_id()) {
+  } else if (static_cast<uint64_t>(key.sessid_) == get_session_id()) {
     if (OB_FAIL(sess_info->try_lock_query())) {
       if (OB_UNLIKELY(OB_EAGAIN != ret)) {
         LOG_WARN("fail to try lock query", KR(ret));
@@ -2959,23 +2894,17 @@ int ObServer::init_refresh_cpu_frequency()
 int ObServer::clean_up_invalid_tables()
 {
   int ret = OB_SUCCESS;
-  ObArray<uint64_t> tenant_ids;
-  if (OB_FAIL(schema_service_.get_tenant_ids(tenant_ids))) {
-    LOG_WARN("fail to get tenant_ids", KR(ret));
-  } else {
+  {
     int tmp_ret = OB_SUCCESS;
-    FOREACH(tenant_id, tenant_ids) {
-      if (OB_SUCCESS != (tmp_ret = clean_up_invalid_tables_by_tenant(*tenant_id))) {
-        LOG_WARN("fail to clean up invalid tables by tenant", KR(tmp_ret), "tenant_id", *tenant_id);
-      }
-      ret = OB_FAIL(ret) ? ret : tmp_ret;
+    if (OB_SUCCESS != (tmp_ret = clean_up_invalid_tables_by_tenant())) {
+      LOG_WARN("fail to clean up invalid tables by tenant", KR(tmp_ret));
     }
+    ret = OB_FAIL(ret) ? ret : tmp_ret;
   }
   return ret;
 }
 
-int ObServer::clean_up_invalid_tables_by_tenant(
-    const uint64_t tenant_id)
+int ObServer::clean_up_invalid_tables_by_tenant()
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -2984,10 +2913,10 @@ int ObServer::clean_up_invalid_tables_by_tenant(
   ObArray<uint64_t> table_ids;
   obcall::ObDropTableArg drop_table_arg;
   obcall::ObTableItem table_item;
-  if (OB_FAIL(schema_service_.get_tenant_schema_guard(tenant_id, schema_guard))) {
+  if (OB_FAIL(schema_service_.get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", K(ret));
-  } else if (OB_FAIL(schema_guard.get_table_ids_in_tenant(tenant_id, table_ids))) {
-    LOG_WARN("fail to get table schema", K(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_guard.get_table_ids_in_tenant(table_ids))) {
+    LOG_WARN("fail to get table schema", K(ret));
   } else {
     ObCTASCleanUp ctas_cleanup(this, true);
     drop_table_arg.if_exist_ = true;
@@ -2998,9 +2927,9 @@ int ObServer::clean_up_invalid_tables_by_tenant(
       const uint64_t table_id = table_ids.at(i);
       // schema guard cannot be used repeatedly in iterative logic,
       // otherwise it will cause a memory hike in schema cache
-      if (OB_FAIL(schema_service_.get_tenant_schema_guard(tenant_id, schema_guard))) {
-        LOG_WARN("get schema guard failed", K(ret), K(tenant_id));
-      } else if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id, table_id, table_schema))) {
+      if (OB_FAIL(schema_service_.get_tenant_schema_guard(schema_guard))) {
+        LOG_WARN("get schema guard failed", K(ret));
+      } else if (OB_FAIL(schema_guard.get_simple_table_schema( table_id, table_schema))) {
         LOG_WARN("get simple table schema failed", K(ret), KT(table_id));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
@@ -3032,16 +2961,17 @@ int ObServer::clean_up_invalid_tables_by_tenant(
           database_schema = NULL;
           drop_table_arg.tables_.reset();
           drop_table_arg.if_exist_ = true;
-          drop_table_arg.tenant_id_ = table_schema->get_tenant_id();
-          drop_table_arg.exec_tenant_id_ = table_schema->get_tenant_id();
+          
+          
+          
           drop_table_arg.table_type_ = table_schema->get_table_type();
           drop_table_arg.session_id_ = table_schema->get_session_id();
           drop_table_arg.to_recyclebin_ = false;
           drop_table_arg.compat_mode_ = lib::Worker::CompatMode::MYSQL;
           table_item.table_name_ = table_schema->get_table_name_str();
           table_item.mode_ = table_schema->get_name_case_mode();
-          if (OB_FAIL(schema_guard.get_database_schema(tenant_id, table_schema->get_database_id(), database_schema))) {
-            LOG_WARN("failed to get database schema", K(ret), K(tenant_id));
+          if (OB_FAIL(schema_guard.get_database_schema( table_schema->get_database_id(), database_schema))) {
+            LOG_WARN("failed to get database schema", K(ret));
           } else if (OB_ISNULL(database_schema)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("database schema is null", KR(ret));

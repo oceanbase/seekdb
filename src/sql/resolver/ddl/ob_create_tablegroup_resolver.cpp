@@ -77,7 +77,7 @@ int ObCreateTablegroupResolver::resolve(const ParseNode &parse_tree)
           if (OB_FAIL(create_tablegroup_stmt->set_tablegroup_name(tablegroup_name))) {
             SQL_RESV_LOG(WARN, "set tablegroup name failed", K(ret));
           } else {
-            create_tablegroup_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+            
           }
         }
       }

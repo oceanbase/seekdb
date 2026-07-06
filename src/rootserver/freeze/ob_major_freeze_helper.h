@@ -52,7 +52,7 @@ public:
     return true;
   }
 
-  int add_freeze_info(const uint64_t tenant_id);
+  int add_freeze_info();
 
   TO_STRING_KV(K_(freeze_info_array), K_(freeze_all), 
                K_(freeze_all_user), K_(freeze_all_meta),
@@ -69,13 +69,13 @@ struct ObTenantAdminMergeParam
 {
 public:
   ObTenantAdminMergeParam()
-    : tenant_array_(), need_all_(false), 
+    : specified_(false), need_all_(false), 
       need_all_user_(false), need_all_meta_(false)
   {}
 
   void reset()
   {
-    tenant_array_.reset();
+    specified_ = false;
     need_all_ = false;
     need_all_user_ = false;
     need_all_meta_ = false;
@@ -83,13 +83,13 @@ public:
 
   bool is_valid() const
   {
-    return (!tenant_array_.empty() || 
+    return (specified_ || 
             (need_all_ || need_all_user_ || need_all_meta_));
   }
 
-  TO_STRING_KV(K_(tenant_array), K_(need_all), K_(need_all_user), K_(need_all_meta));
+  TO_STRING_KV(K_(specified), K_(need_all), K_(need_all_user), K_(need_all_meta));
 
-  common::ObArray<uint64_t> tenant_array_;
+  bool specified_;
   bool need_all_;
   bool need_all_user_;
   bool need_all_meta_;
@@ -99,17 +99,15 @@ struct ObTabletMajorFreezeParam
 {
 public:
   ObTabletMajorFreezeParam()
-    : tenant_id_(0),
-      tablet_id_(),
+    : tablet_id_(),
       is_rebuild_column_group_(false)
     {}
   ~ObTabletMajorFreezeParam() = default;
   bool is_valid() const
   {
-    return is_valid_tenant_id(tenant_id_) && tablet_id_.is_valid();
+    return true && tablet_id_.is_valid();
   }
-  TO_STRING_KV(K_(tenant_id), K_(tablet_id), K_(is_rebuild_column_group));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(tablet_id), K_(is_rebuild_column_group));
   common::ObTabletID tablet_id_;
   bool is_rebuild_column_group_;
 };
@@ -120,7 +118,7 @@ public:
   ObMajorFreezeHelper() {}
   ~ObMajorFreezeHelper() {}
 
-  // @param, contains some tenant_ids which need to launch major freeze
+  // @param, contains some tenants which need to launch major freeze
   // @merge_results, save each tenant's major_freeze result
   static int major_freeze(const ObMajorFreezeParam &param,
                           common::ObIArray<int> &merge_results);
@@ -135,15 +133,13 @@ public:
 
   static int clear_merge_error(const ObTenantAdminMergeParam &param);
 
-  static int get_frozen_status(const int64_t tenant_id, 
-                               const share::SCN &frozen_scn, 
+  static int get_frozen_status(const share::SCN &frozen_scn, 
                                share::ObFreezeInfo &frozen_status);
-  static int get_frozen_status(const int64_t tenant_id, 
-                               const share::SCN &frozen_scn, 
+  static int get_frozen_status(const share::SCN &frozen_scn, 
                                share::ObFreezeInfo &frozen_status,
                                ObISQLClient *proxy);
-  static int get_frozen_scn(const int64_t tenant_id, share::SCN &frozen_scn);
-  static int get_frozen_scn(const int64_t tenant_id, share::SCN &frozen_scn, ObISQLClient *proxy);
+  static int get_frozen_scn(share::SCN &frozen_scn);
+  static int get_frozen_scn(share::SCN &frozen_scn, ObISQLClient *proxy);
 
 private:
   static int get_freeze_info(
@@ -156,7 +152,7 @@ private:
       bool freeze_all_user, 
       bool freeze_all_meta, 
       common::ObIArray<obcall::ObSimpleFreezeInfo> &freeze_info_array);
-  static int check_tenant_is_restore(const uint64_t tenant_id, bool &is_restore);
+  static int check_tenant_is_restore(bool &is_restore);
 
   static int do_major_freeze(
       const ObMajorFreezeReason freeze_reason,
@@ -169,12 +165,8 @@ private:
   static int do_tenant_admin_merge(
       const ObTenantAdminMergeParam &param,
       const obcall::ObTenantAdminMergeType &admin_type);
-  static int do_one_tenant_admin_merge(
-      const uint64_t tenant_id,
-      const obcall::ObTenantAdminMergeType &admin_type);
-  static int add_user_warning(
-      const uint64_t tenant_id,
-      const char *buf);
+  static int do_one_tenant_admin_merge(const obcall::ObTenantAdminMergeType &admin_type);
+  static int add_user_warning(const char *buf);
 
 private:
   static const int64_t MAX_PROCESS_TIME_US = 10 * 1000 * 1000L;

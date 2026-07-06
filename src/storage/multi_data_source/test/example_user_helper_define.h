@@ -21,7 +21,7 @@
 #include "lib/utility/serialization.h"
 #include "share/scn.h"
 #include "storage/multi_data_source/runtime_utility/common_define.h"
-#include "deps/oblib/src/common/meta_programming/ob_type_traits.h"
+#include "common/meta_programming/ob_type_traits.h"
 
 namespace oceanbase {
 namespace unittest {

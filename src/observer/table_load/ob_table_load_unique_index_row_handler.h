@@ -18,6 +18,7 @@
 
 #include "sql/engine/cmd/ob_load_data_utils.h"
 #include "storage/direct_load/ob_direct_load_dml_row_handler.h"
+#include "share/table/ob_table_load_define.h"
 
 namespace oceanbase
 {

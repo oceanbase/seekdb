@@ -20,12 +20,12 @@
 #include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
-#include "lib/xml/ob_xml_parser.h"
-#include "lib/xml/ob_xpath.h"
-#include "lib/xml/ob_xml_tree.h"
-#include "lib/xml/ob_xml_util.h"
+#include "common/xml/ob_xml_parser.h"
+#include "common/xml/ob_xpath.h"
+#include "common/xml/ob_xml_tree.h"
+#include "common/xml/ob_xml_util.h"
 #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
-#include "lib/xml/ob_binary_aggregate.h"
+#include "common/xml/ob_binary_aggregate.h"
 
 using namespace oceanbase::common;
 
@@ -127,7 +127,6 @@ public:
                                      bool is_ps_protocol,
                                      const ColumnsFieldIArray *fields = NULL,
                                      share::schema::ObSchemaGetterGuard *schema_guard = NULL);
-  static uint64_t get_tenant_id(ObSQLSessionInfo *session);
   static int cast_to_res(ObIAllocator &allocator, ObString &xml_content, const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   static int cast_to_res(ObIAllocator &allocator, ObObj &src_obj, const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, bool xt_need_acc_check = false);
 

@@ -18,7 +18,7 @@
 #define OCEANBASE_ROOTSERVER_OB_DROP_TABLE_HELPER_H_
 
 #include "rootserver/parallel_ddl/ob_ddl_helper.h"
-#include "share/ob_tablet_autoincrement_service.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 
 namespace oceanbase {
 namespace share {
@@ -34,7 +34,6 @@ namespace rootserver {
 class ObDropTableHelper : public ObDDLHelper {
 public:
   ObDropTableHelper(share::schema::ObMultiVersionSchemaService *schema_service,
-                    const uint64_t tenant_id,
                     const obcall::ObDropTableArg &arg,
                     obcall::ObDropTableRes &res,
                     ObDDLSQLTransaction *external_trans = nullptr);

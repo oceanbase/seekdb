@@ -15,7 +15,7 @@
  */
 
 #include "ob_information_partitions_table.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
+#include "share/ob_tenant_timezone_mgr.h"
 #include "share/schema/ob_part_mgr_util.h" // ObPartitionSchemaIter
 
 using namespace oceanbase::common;
@@ -27,8 +27,7 @@ namespace observer
 {
 
 ObInfoSchemaPartitionsTable::ObInfoSchemaPartitionsTable()
-    : ObVirtualTableScannerIterator(),
-      tenant_id_(OB_INVALID_ID)
+    : ObVirtualTableScannerIterator()
 {
 }
 
@@ -39,7 +38,6 @@ ObInfoSchemaPartitionsTable::~ObInfoSchemaPartitionsTable()
 
 void ObInfoSchemaPartitionsTable::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   ObVirtualTableScannerIterator::reset();
 }
 
@@ -52,16 +50,12 @@ int ObInfoSchemaPartitionsTable::inner_get_next_row(common::ObNewRow *&row)
   } else if (OB_UNLIKELY(NULL == schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema manager is NULL", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id_)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "tenant_id is invalid", K(ret), K_(tenant_id));
   }
 
   if (OB_SUCCESS == ret && !start_to_read_) {
     ObSArray<const ObDatabaseSchema *> database_schemas;
-    if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(tenant_id_,
-                                                                database_schemas))) {
-      SERVER_LOG(WARN, "failed to get database schema of tenant", K_(tenant_id));
+    if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(database_schemas))) {
+      SERVER_LOG(WARN, "failed to get database schema of tenant");
     } else {
       const int64_t col_count = output_column_ids_.count();
       ObObj *cells = NULL;
@@ -119,8 +113,7 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObDatabaseSchema &database
   if (OB_ISNULL(schema_guard_) || OB_ISNULL(cells)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "schema manager or cells should not be null", K(ret));
-  } else if (OB_FAIL(schema_guard_->get_table_schemas_in_database(tenant_id_,
-                                                                    database_schema.get_database_id(),
+  } else if (OB_FAIL(schema_guard_->get_table_schemas_in_database(database_schema.get_database_id(),
                                                                     table_schemas))) {
     SERVER_LOG(WARN, "failed to get table schema in database", K(ret));
   } else {
@@ -136,7 +129,6 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObDatabaseSchema &database
       } else if (OB_FAIL(check_priv("table_acc",
                                  database_schema.get_database_name_str(),
                                  table_schema->get_table_name_str(),
-                                 tenant_id_,
                                  priv_passed))) {
         SERVER_LOG(WARN, "failed to check priv", K(ret), K(database_schema.get_database_name_str()),
         K(table_schema->get_table_name_str()));
@@ -462,8 +454,8 @@ int ObInfoSchemaPartitionsTable::gen_high_bound_val_str(
       MEMSET(high_bound_val, 0, OB_MAX_B_HIGH_BOUND_VAL_LENGTH);
       ObTimeZoneInfo tz_info;
       tz_info.set_offset(0);
-      if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id_, tz_info.get_tz_map_wrap()))) {
-        SERVER_LOG(WARN, "get tenant timezone map failed", K(ret), K(tenant_id_));
+      if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap()))) {
+        SERVER_LOG(WARN, "get tenant timezone map failed", K(ret));
       } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
           part->get_high_bound_val(), high_bound_val,
           OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos, false, &tz_info))) {
@@ -493,8 +485,8 @@ int ObInfoSchemaPartitionsTable::gen_list_bound_val_str(
       MEMSET(list_val, 0, OB_MAX_B_PARTITION_EXPR_LENGTH);
       ObTimeZoneInfo tz_info;
       tz_info.set_offset(0);
-      if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id_, tz_info.get_tz_map_wrap()))) {
-        SERVER_LOG(WARN, "get tenant timezone map failed", K(ret), K(tenant_id_));
+      if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap()))) {
+        SERVER_LOG(WARN, "get tenant timezone map failed", K(ret));
       } else if (OB_FAIL(ObPartitionUtils::convert_rows_to_sql_literal(
           part->get_list_row_values(), list_val,
           OB_MAX_B_PARTITION_EXPR_LENGTH, pos, false, &tz_info))) {

@@ -84,6 +84,6 @@ add_custom_target(deb
   COMMAND +make package
   DEPENDS
   observer
-  ob_admin ob_error
+  ob_error
   ${BITCODE_TO_ELF_LIST}
   )

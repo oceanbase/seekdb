@@ -489,7 +489,7 @@ int ObUpdateLogPlan::prepare_table_dml_info_special(const ObDmlTableInfo& table_
   } else if (OB_FAIL(table_dml_info->init_assignment_info(update_info.assignments_,
                                                           optimizer_context_.get_expr_factory()))) {
     LOG_WARN("failed to init assignemt info", K(ret));
-  } else if (OB_FAIL(schema_guard->get_table_schema(session_info->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_guard->get_table_schema(
                                                     table_info.ref_table_id_, index_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(index_schema)) {
@@ -498,8 +498,7 @@ int ObUpdateLogPlan::prepare_table_dml_info_special(const ObDmlTableInfo& table_
   } else if (!update_stmt->has_instead_of_trigger() && 
              OB_FAIL(check_update_primary_key(*schema_guard, index_schema, table_dml_info))) {
     LOG_WARN("failed to check update unique key", K(ret));
-  } else if (!table_info.is_link_table_ &&
-             OB_FAIL(check_update_part_key(index_schema, table_dml_info))) {
+  } else if (OB_FAIL(check_update_part_key(index_schema, table_dml_info))) {
     LOG_WARN("failed to check update part key", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < table_dml_info->ck_cst_exprs_.count(); ++i) {
@@ -528,7 +527,7 @@ int ObUpdateLogPlan::prepare_table_dml_info_special(const ObDmlTableInfo& table_
       if (OB_ISNULL(index_dml_info)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(i), K(ret));
-      } else if (OB_FAIL(schema_guard->get_table_schema(session_info->get_effective_tenant_id(),
+      } else if (OB_FAIL(schema_guard->get_table_schema(
                                                         index_dml_info->ref_table_id_,
                                                         index_schema))) {
         LOG_WARN("failed to get table schema", K(ret));
@@ -553,8 +552,7 @@ int ObUpdateLogPlan::prepare_table_dml_info_special(const ObDmlTableInfo& table_
         LOG_WARN("failed to check update unique key", K(ret));
       } else if (OB_FAIL(check_update_primary_key(*schema_guard, index_schema, index_dml_info))) {
         LOG_WARN("failed to check update primary key", K(ret));
-      } else if (!table_info.is_link_table_ &&
-                 OB_FAIL(check_update_part_key(index_schema, index_dml_info))) {
+      } else if (OB_FAIL(check_update_part_key(index_schema, index_dml_info))) {
         LOG_WARN("failed to check update part key", K(ret));
       } else if (OB_FAIL(index_dml_infos.push_back(index_dml_info))) {
         LOG_WARN("failed to push back index dml info", K(ret));

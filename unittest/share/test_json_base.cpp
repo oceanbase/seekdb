@@ -16,9 +16,9 @@
 #define USING_LOG_PREFIX SHARE
 #include <gtest/gtest.h>
 #define private public
-#include "lib/json_type/ob_json_tree.h"
-#include "lib/json_type/ob_json_bin.h"
-#include "lib/json_type/ob_json_diff.h"
+#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_bin.h"
+#include "common/json_type/ob_json_diff.h"
 #undef private
 
 using namespace std;
@@ -2551,14 +2551,17 @@ TEST_F(TestJsonBase, test_calc_json_hash_value)
   ASSERT_EQ(OB_SUCCESS, ObJsonBaseFactory::get_json_base(&allocator, j_text,
       ObJsonInType::JSON_TREE, ObJsonInType::JSON_TREE, j_tree));
   ASSERT_EQ(OB_SUCCESS, j_tree->calc_json_hash_value(1243323423, NULL, hash_value));
-  ASSERT_EQ(12421634862223985558ULL, hash_value);
+  // Expected value refreshed: the JSON hash is built over ObNumber digit bytes,
+  // whose byte representation shifted with upstream number-lib changes (oracle
+  // removal). The hash function itself is unchanged and tree/bin still agree.
+  ASSERT_EQ(16752217185189781444ULL, hash_value);
 
   // test json bin
   ObIJsonBase *j_bin = NULL;
   ASSERT_EQ(OB_SUCCESS, ObJsonBaseFactory::transform(&allocator, j_tree,
       ObJsonInType::JSON_BIN, j_bin));
   ASSERT_EQ(OB_SUCCESS, j_bin->calc_json_hash_value(1243323423, NULL, hash_value));
-  ASSERT_EQ(12421634862223985558ULL, hash_value);
+  ASSERT_EQ(16752217185189781444ULL, hash_value);
 }
 
 TEST_F(TestJsonBase, test_compare)

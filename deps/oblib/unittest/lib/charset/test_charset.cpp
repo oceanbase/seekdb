@@ -16,12 +16,11 @@
 
 #include <codecvt>
 #include "gtest/gtest.h"
-#include "lib/charset/ob_tis620ci_sort_scanner.h"
 #define protected public
 #define private public
 
 #include "lib/allocator/page_arena.h"
-#include "common/data_buffer.h"
+#include "lib/utility/data_buffer.h"
 #include "lib/charset/ob_charset_string_helper.h"
 #define USING_LOG_PREFIX SQL
 
@@ -175,72 +174,34 @@ TEST_F(TestCharset, sortkey)
   ASSERT_EQ(size1, 2);
   ASSERT_FALSE(is_valid_unicode);
   
-  //std::map<int, int> charset{
-    //{8,0},{28,1},{45,2}};
-  std::map<int, int> charset{
-    {8,0},{28,1},{45,2},{46,3},{47,4},{54,5},{55,6},{63,7},{87,8},{101,9},{216,10},{224,11},
-    {248,12},{249,13},{251,14}};
-  // init test_string, the order should be same as charset's second param
-  // test_string.first is a valid unicode for correspond charset while the second is invalid
-  // but for some charset it is all valid, like latin1, utf8
-  std::vector<std::pair<std::string, std::string >> test_string;
-
   const char ascii_string[] = {'\x7f','\0'};
   const char non_ascii_string[] = {'\xff','\0'};
-  const char gbk_string[] = { '\xc4', '\xe3', '\xba', '\xc3','\0' };//meaning is '你好'
-  const char gb18030_string[] = { '\xc4', '\xe3', '\xba', '\xc3','\0' };//meaning is '你好'
   const char utf8_string[] = { '\xe4', '\xbd', '\xa0', '\xe5', '\xa5', '\xbd','\0'};//meaning is '你好'
-  const char utf16_string[] = { '\x4f', '\x60', '\x59', '\x7d','\0'};//meaning is '你好'
-  test_string.push_back(std::make_pair(std::string(ascii_string),std::string((non_ascii_string)))); //CS_TYPE_LATIN1_SWEDISH_CI
-  test_string.push_back(std::make_pair(std::string(gbk_string),std::string((non_ascii_string)))); //CS_TYPE_GBK_CHINESE_CI
-  test_string.push_back(std::make_pair(std::string(utf8_string),std::string((non_ascii_string)))); //CS_TYPE_UTF8MB4_GENERAL_CI
-  test_string.push_back(std::make_pair(std::string(utf8_string),std::string((non_ascii_string)))); //CS_TYPE_UTF8MB4_BIN
-  test_string.push_back(std::make_pair(std::string(ascii_string),std::string((non_ascii_string)))); //CS_TYPE_LATIN1_BIN
-  test_string.push_back(std::make_pair(std::string(utf16_string),std::string((non_ascii_string)))); //CS_TYPE_UTF16_GENERAL_CI
-  test_string.push_back(std::make_pair(std::string(utf16_string),std::string((non_ascii_string)))); //CS_TYPE_UTF16_BIN
-  test_string.push_back(std::make_pair(std::string(ascii_string),std::string((non_ascii_string)))); //CS_TYPE_BINARY
-  test_string.push_back(std::make_pair(std::string(gbk_string),std::string((non_ascii_string)))); //CS_TYPE_GBK_BIN
-  test_string.push_back(std::make_pair(std::string(utf16_string),std::string((non_ascii_string)))); //CS_TYPE_UTF16_UNICODE_CI
-  test_string.push_back(std::make_pair(std::string(gb18030_string),std::string((non_ascii_string)))); //CS_TYPE_GB18030_2022_BIN
-  test_string.push_back(std::make_pair(std::string(utf8_string),std::string((non_ascii_string))));//CS_TYPE_UTF8MB4_UNICODE_CI
-  test_string.push_back(std::make_pair(std::string(gb18030_string),std::string((non_ascii_string)))); //CS_TYPE_GB18030_CHINESE_CI
-  test_string.push_back(std::make_pair(std::string(gb18030_string),std::string((non_ascii_string)))); //CS_TYPE_GB18030_BIN
-  test_string.push_back(std::make_pair(std::string(gb18030_string),std::string((non_ascii_string)))); //CS_TYPE_GB18030_CHINESE_CS
-
-  //result[0]: charset index
-  //result[1],result[2]: the size and validility of the first string
-  //result[3],result[4]: the size and validility of the second string
-  std::vector<std::vector<int>>result{
-    {0,1,1,1,1},
-    {1,4,1,1,0},
-    {2,4,1,0,0},
-    {3,6,1,0,0},
-    {4,1,1,1,1},
-    {5,4,1,0,0},
-    {6,6,1,0,0},
-    {7,1,1,1,1},
-    {8,4,1,1,1},
-    {9,10,1,10,1},
-    {10,4,1,1,1},
-    {11,10,1,10,1},
-    {12,8,1,1,0},
-    {13,4,1,1,1},
-    {14,8,1,1,0}
+  struct SortkeyCase {
+    ObCollationType type;
+    const char *valid_str;
+    const char *invalid_str;
+    int64_t valid_size;
+    bool valid_unicode;
+    int64_t invalid_size;
+    bool invalid_unicode;
   };
-  for (auto it : charset) {
-    bool is_valid_collation = ObCharset::is_valid_collation(it.first);
-    ASSERT_TRUE(is_valid_collation);
-    const char* p1 = test_string[it.second].first.data();
-    int p1_len = test_string[it.second].first.length();
-    const char* p2 = test_string[it.second].second.data();
-    int p2_len = test_string[it.second].second.length();
-    size1 = ObCharset::sortkey((ObCollationType)it.first, p1, p1_len, aa1, 10, is_valid_unicode);
-    ASSERT_TRUE(size1 == result[it.second][1]);
-    ASSERT_TRUE(is_valid_unicode == result[it.second][2]);
+  const SortkeyCase cases[] = {
+    {CS_TYPE_UTF8MB4_GENERAL_CI, utf8_string, non_ascii_string, 4, true, 0, false},
+    {CS_TYPE_UTF8MB4_BIN, utf8_string, non_ascii_string, 6, true, 0, false},
+    {CS_TYPE_BINARY, ascii_string, non_ascii_string, 1, true, 1, true},
+  };
+  for (const auto &test_case : cases) {
+    ASSERT_TRUE(ObCharset::is_valid_collation(test_case.type));
+    size1 = ObCharset::sortkey(test_case.type, test_case.valid_str, strlen(test_case.valid_str),
+                               aa1, 10, is_valid_unicode);
+    ASSERT_EQ(test_case.valid_size, size1);
+    ASSERT_EQ(test_case.valid_unicode, is_valid_unicode);
 
-    size1 = ObCharset::sortkey((ObCollationType)it.first, p2, p2_len, aa1, 10, is_valid_unicode);
-    ASSERT_TRUE(size1 == result[it.second][3]);
-    ASSERT_TRUE(is_valid_unicode == result[it.second][4]);
+    size1 = ObCharset::sortkey(test_case.type, test_case.invalid_str, strlen(test_case.invalid_str),
+                               aa1, 10, is_valid_unicode);
+    ASSERT_EQ(test_case.invalid_size, size1);
+    ASSERT_EQ(test_case.invalid_unicode, is_valid_unicode);
   }
   // The parameter of sortkey cannot be NULL
   //char *p = NULL;
@@ -284,13 +245,6 @@ TEST_F(TestCharset, case_insensitive_equal)
   yy = ObCharset::case_insensitive_equal(y2, y3, CS_TYPE_UTF8MB4_GENERAL_CI);
   ASSERT_FALSE(yy);
   yy = ObCharset::case_insensitive_equal(y3, y4, CS_TYPE_UTF8MB4_GENERAL_CI);
-  ASSERT_TRUE(yy);
-  
-  yy = ObCharset::case_insensitive_equal(y1, y2, CS_TYPE_GB18030_2022_PINYIN_CI);
-  ASSERT_TRUE(yy);
-  yy = ObCharset::case_insensitive_equal(y2, y3, CS_TYPE_GB18030_2022_PINYIN_CI);
-  ASSERT_FALSE(yy);
-  yy = ObCharset::case_insensitive_equal(y3, y4, CS_TYPE_GB18030_2022_PINYIN_CI);
   ASSERT_TRUE(yy);
 }
 
@@ -434,118 +388,6 @@ TEST_F(TestCharset, test_ascii_list_for_all_charset)
 
 }
 
-TEST_F(TestCharset, test_find_gb18030_case_prob)
-{
-  const int buf_len = 20;
-  char buf1[buf_len];
-  char buf2[buf_len];
-  char hex_buf1[buf_len];
-  char hex_buf2[buf_len];
-  int length1 = 0, length2 = 0;
-  ObCollationType cs_type = CS_TYPE_GB18030_BIN;
-  for (int i = 0; i < 256; i++) {
-    const ObUnicaseInfoChar *info = ObCharset::get_charset(cs_type)->caseinfo->page[i];
-    if (NULL != info) {
-      for (int j = 0; j < 256; j++) {
-        ASSERT_TRUE(OB_SUCCESS == ObCharset::wc_mb(cs_type, info[j].tolower, buf1, buf_len, length1));
-        ASSERT_TRUE(OB_SUCCESS == ObCharset::wc_mb(cs_type, info[j].toupper, buf2, buf_len, length2));
-        buf1[length1] = '\0';
-        buf2[length2] = '\0';
-        if (length1 != length2) {
-          ASSERT_TRUE(OB_SUCCESS == to_hex_cstr(buf1, length1, hex_buf1, buf_len));
-          ASSERT_TRUE(OB_SUCCESS == to_hex_cstr(buf2, length2, hex_buf2, buf_len));
-          std::cout<< info[j].tolower <<"," << info[j].toupper << "," << hex_buf1 << "," << hex_buf2 << std::endl;
-        }
-      }
-    }
-  }
-  cs_type = CS_TYPE_GB18030_2022_BIN;
-  for (int i = 0; i < 256; i++) {
-    const ObUnicaseInfoChar *info = ObCharset::get_charset(cs_type)->caseinfo->page[i];
-    if (NULL != info) {
-      for (int j = 0; j < 256; j++) {
-        ASSERT_TRUE(OB_SUCCESS == ObCharset::wc_mb(cs_type, info[j].tolower, buf1, buf_len, length1));
-        ASSERT_TRUE(OB_SUCCESS == ObCharset::wc_mb(cs_type, info[j].toupper, buf2, buf_len, length2));
-        buf1[length1] = '\0';
-        buf2[length2] = '\0';
-        if (length1 != length2) {
-          ASSERT_TRUE(OB_SUCCESS == to_hex_cstr(buf1, length1, hex_buf1, buf_len));
-          ASSERT_TRUE(OB_SUCCESS == to_hex_cstr(buf2, length2, hex_buf2, buf_len));
-          std::cout<< info[j].tolower <<"," << info[j].toupper << "," << hex_buf1 << "," << hex_buf2 << std::endl;
-        }
-      }
-    }
-  }
-}
-
-/*
-TEST_F(TestCharset, test_gbk_pua)
-{
-  
-  int64_t size = sizeof(gbk_uni_map) / sizeof(UniCodeMap);
-  ASSERT_EQ(size, 23940);
-  for (int i = 0; i < size; i++) {
-    ASSERT_TRUE(func_gbk_uni_onechar(gbk_uni_map[i].encoding) == gbk_uni_map[i].unicode) << "i=" << i;
-    ASSERT_TRUE(func_uni_gbk_onechar(gbk_uni_map[i].unicode) == gbk_uni_map[i].encoding) << "i=" << i;
-  }
-}
-*/
-
-TEST_F(TestCharset, test_zh_0900_as_cs)
-{
-
-
-  ObString str;
-  char sort_key[2048];
-  bool is_valid = false;
-
-  auto print_sort_key = [&](ObCollationType coll_type) -> void {
-      auto size = ObCharset::sortkey(coll_type, str.ptr(), str.length(), sort_key,
-                                     sizeof(sort_key), is_valid);
-      fprintf(stdout, "src=");
-      for (int i = 0; i < str.length(); i++) {
-        fprintf(stdout, "%02X", (unsigned char)str[i]);
-      }
-      fprintf(stdout, "\n");
-      fprintf(stdout, "sort_key=");
-      for (int i = 0; i < size; i++) {
-        fprintf(stdout, "%02X", (unsigned char)sort_key[i]);
-      }
-      fprintf(stdout, "\n");
-  };
-
-  char buffer[2048];
-  ObDataBuffer data_buffer(buffer, sizeof(buffer));
-
-  auto convert_string = [&data_buffer](const char* input, ObCollationType dest_type) -> ObString {
-    ObString output;
-    ObCharset::charset_convert(data_buffer, ObString(input), CS_TYPE_UTF8MB4_BIN, dest_type, output);
-    return output;
-  };
-
-  ObCollationType coll_types[] = {CS_TYPE_UTF8MB4_ZH_0900_AS_CS};
-
-  for (int i = 0; i < array_elements(coll_types); i++) {
-    ObCollationType coll_type = coll_types[i];
-    fprintf(stdout, "## TEST_COLL=%d\n", coll_type);
-
-    ASSERT_TRUE(ObCharset::strcmp(coll_type, convert_string("坝", coll_type), convert_string("弝", coll_type)) < 0);
-    ASSERT_TRUE(ObCharset::strcmp(coll_type, convert_string("弝", coll_type), convert_string("爸", coll_type)) < 0);
-    ASSERT_TRUE(ObCharset::strcmp(coll_type, convert_string("爸", coll_type), convert_string("跁", coll_type)) < 0);
-    ASSERT_TRUE(ObCharset::strcmp(coll_type, convert_string("韩", coll_type), convert_string("美", coll_type)) < 0);
-    ASSERT_TRUE(ObCharset::strcmp(coll_type, convert_string("美", coll_type), convert_string("日", coll_type)) < 0);
-
-    str = convert_string("我们今天", coll_type);
-    print_sort_key(coll_types[i]);
-    str = "\xFF\xFF";
-    print_sort_key(coll_types[i]);
-    str = "\xef\xbf\xbd\xef\xbf\xbd";
-    print_sort_key(coll_types[i]);
-    str = convert_string("中", coll_type);
-    print_sort_key(coll_types[i]);
-  }
-}
-
 TEST_F(TestCharset, tolower)
 {
   ObArenaAllocator allocator;
@@ -617,170 +459,6 @@ TEST_F(TestCharset, toupper)
   }
 }
 
-static uint get_magic_gb18030_2022_uni(uint code)
-{
-  switch (code) {
-    case 0xFE59 : return 0x9FB4;
-    case 0xFE61 : return 0x9FB5;
-    case 0xFE66 : return 0x9FB6;
-    case 0xFE67 : return 0x9FB7;
-    case 0xFE6D : return 0x9FB8;
-    case 0xFE7E : return 0x9FB9;
-    case 0xFE90 : return 0x9FBA;
-    case 0xFEA0 : return 0x9FBB;
-    case 0xA6D9 : return 0xFE10;
-    case 0xA6DA : return 0xFE12;
-    case 0xA6DB : return 0xFE11;
-    case 0xA6DC : return 0xFE13;
-    case 0xA6DD : return 0xFE14;
-    case 0xA6DE : return 0xFE15;
-    case 0xA6DF : return 0xFE16;
-    case 0xA6EC : return 0xFE17;
-    case 0xA6ED : return 0xFE18;
-    case 0xA6F3 : return 0xFE19;
-    case 0x82359037 : return 0xE81E;
-    case 0x82359038 : return 0xE826;
-    case 0x82359039 : return 0xE82B;
-    case 0x82359130 : return 0xE82C;
-    case 0x82359131 : return 0xE832;
-    case 0x82359132 : return 0xE843;
-    case 0x82359133 : return 0xE854;
-    case 0x82359134 : return 0xE864;
-    case 0x84318236 : return 0xE78D;
-    case 0x84318238 : return 0xE78E;
-    case 0x84318237 : return 0xE78F;
-    case 0x84318239 : return 0xE790;
-    case 0x84318330 : return 0xE791;
-    case 0x84318331 : return 0xE792;
-    case 0x84318332 : return 0xE793;
-    case 0x84318333 : return 0xE794;
-    case 0x84318334 : return 0xE795;
-    case 0x84318335 : return 0xE796;
-    default: return 0;
-  }
-}
-
-static uint get_magic_uni_gb18030_2022(uint code)
-{
-  switch (code) {
-    case 0x9FB4 : return 0xFE59;
-    case 0x9FB5 : return 0xFE61;
-    case 0x9FB6 : return 0xFE66;
-    case 0x9FB7 : return 0xFE67;
-    case 0x9FB8 : return 0xFE6D;
-    case 0x9FB9 : return 0xFE7E;
-    case 0x9FBA : return 0xFE90;
-    case 0x9FBB : return 0xFEA0;
-    case 0xFE10 : return 0xA6D9;
-    case 0xFE12 : return 0xA6DA;
-    case 0xFE11 : return 0xA6DB;
-    case 0xFE13 : return 0xA6DC;
-    case 0xFE14 : return 0xA6DD;
-    case 0xFE15 : return 0xA6DE;
-    case 0xFE16 : return 0xA6DF;
-    case 0xFE17 : return 0xA6EC;
-    case 0xFE18 : return 0xA6ED;
-    case 0xFE19 : return 0xA6F3;
-    case 0xE81E : return 0x82359037;
-    case 0xE826 : return 0x82359038;
-    case 0xE82B : return 0x82359039;
-    case 0xE82C : return 0x82359130;
-    case 0xE832 : return 0x82359131;
-    case 0xE843 : return 0x82359132;
-    case 0xE854 : return 0x82359133;
-    case 0xE864 : return 0x82359134;
-    case 0xE78D : return 0x84318236;
-    case 0xE78E : return 0x84318238;
-    case 0xE78F : return 0x84318237;
-    case 0xE790 : return 0x84318239;
-    case 0xE791 : return 0x84318330;
-    case 0xE792 : return 0x84318331;
-    case 0xE793 : return 0x84318332;
-    case 0xE794 : return 0x84318333;
-    case 0xE795 : return 0x84318334;
-    case 0xE796 : return 0x84318335;
-    default: return 0;
-  }
-}
-
-static inline uint gb18030_chs_to_code(const uchar *src, size_t srclen) {
-  uint r = 0;
-
-  ob_charset_assert(srclen == 1 || srclen == 2 || srclen == 4);
-
-  switch (srclen) {
-    case 1:
-      r = src[0];
-      break;
-    case 2:
-      r = (src[0] << 8) + src[1];
-      break;
-    case 4:
-      r = (src[0] << 24) + (src[1] << 16) + (src[2] << 8) + src[3];
-      break;
-    default:
-      ob_charset_assert(0);
-  }
-
-  return r;
-}
-
-TEST_F(TestCharset, check_gb18030_2022)
-{
-  int ret = 0;
-  uchar s[4];
-
-  ob_charset_conv_mb_wc ob_mb_wc_gb18030_2022 = ob_charset_gb18030_2022_pinyin_ci.cset->mb_wc;
-  ob_charset_conv_mb_wc ob_mb_wc_gb18030 = ob_charset_gb18030_chinese_ci.cset->mb_wc;
-  ob_charset_conv_wc_mb ob_wc_mb_gb18030_2022 = ob_charset_gb18030_2022_pinyin_ci.cset->wc_mb;
-  ob_charset_conv_wc_mb ob_wc_mb_gb18030 = ob_charset_gb18030_chinese_ci.cset->wc_mb;
-
-  for (s[0] = 0x81; s[0] <= 0xFE; s[0]++) {
-    for (s[1] = 0x40; s[1] <= 0xFE; s[1]++) {
-      if (s[1] == 0x7F) {
-        continue;
-      }
-      uint gb_code = gb18030_chs_to_code(s, 2);
-      ob_wc_t uni_gb18030_2022;
-      ob_mb_wc_gb18030_2022(NULL, &uni_gb18030_2022, s, s + 4);
-      ulong target = get_magic_gb18030_2022_uni(gb_code);  
-      if (target == 0) {
-        ob_mb_wc_gb18030(NULL, &target, s, s + 4);
-      }
-      ASSERT_TRUE(target = uni_gb18030_2022);
-    }
-  }
-  for (s[0] = 0x81; s[0] <= 0xFE; s[0]++) {
-    for (s[1] = 0x30; s[1] <= 0x39; s[1]++) {
-      for (s[2] = 0x81; s[2] <= 0xFE; s[2]++) {
-        for (s[3] = 0x30; s[3] <= 0x39; s[3]++) {
-          uint gb_code = gb18030_chs_to_code(s, 4);
-          ob_wc_t uni_gb18030_2022;
-          ob_mb_wc_gb18030_2022(NULL, &uni_gb18030_2022, s, s + 4);
-          ulong target = get_magic_gb18030_2022_uni(gb_code);
-          if (target == 0) {
-            ob_mb_wc_gb18030(NULL, &target, s, s + 4);
-          }
-          ASSERT_TRUE(target = uni_gb18030_2022);
-        }
-      }
-    }
-  }
-
-  for (uint i=0; i <= 0x10FFFF; i ++) {
-    uchar s_gb18030[4];
-    uchar s_gb18030_2022[4];
-    uint target = get_magic_uni_gb18030_2022(i);
-    if (target == 0) {
-      int len_gb18030 = ob_wc_mb_gb18030(NULL, i, s_gb18030, s_gb18030 + 4);
-      target = (len_gb18030 == 0) ? 0 : gb18030_chs_to_code(s_gb18030, len_gb18030);
-    }
-    int len_gb18030_2022 = ob_wc_mb_gb18030_2022(NULL, i, s_gb18030_2022, s_gb18030_2022 + 4);
-    uint code_gb18030_2022 = (len_gb18030_2022 == 0) ? 0 : gb18030_chs_to_code(s_gb18030_2022, len_gb18030_2022);
-    ASSERT_TRUE(target == code_gb18030_2022);
-  }
-}
-
 TEST_F(TestCharset, check_mbmaxlenlen)
 {
   for (int64_t type = ObCollationType::CS_TYPE_INVALID; type < ObCollationType::CS_TYPE_MAX; ++type) {
@@ -788,20 +466,7 @@ TEST_F(TestCharset, check_mbmaxlenlen)
       const uint mbmaxlenlen = ob_mbmaxlenlen(ObCharset::charset_arr[type]);
       const char *cs_name = ObCharset::charset_name(static_cast<ObCollationType>(type));
       std::cout << "charset=" << cs_name << ", mbmaxlenlen=" << mbmaxlenlen << ", type=" << type << std::endl;
-      if (ObCharset::is_gb18030_2022(type)
-          || CS_TYPE_GB18030_CHINESE_CI == type
-          || CS_TYPE_GB18030_CHINESE_CS == type
-          || CS_TYPE_GB18030_BIN == type
-          || CS_TYPE_GB18030_ZH_0900_AS_CS == type
-          || CS_TYPE_GB18030_ZH2_0900_AS_CS == type
-          || CS_TYPE_GB18030_ZH3_0900_AS_CS == type
-          || CS_TYPE_GB18030_2022_ZH_0900_AS_CS == type
-          || CS_TYPE_GB18030_2022_ZH2_0900_AS_CS == type
-          || CS_TYPE_GB18030_2022_ZH3_0900_AS_CS == type) {
-        ASSERT_EQ(2, mbmaxlenlen);
-      } else {
-        ASSERT_EQ(1, mbmaxlenlen);
-      }
+      ASSERT_EQ(1, mbmaxlenlen);
     }
   }
 }
@@ -814,7 +479,7 @@ TEST_F(TestCharset, basic_collation_handler_test)
   ObArenaAllocator alloc;
   for (int i = CS_TYPE_INVALID; i < CS_TYPE_MAX; i++) {
     ObCollationType coll = static_cast<ObCollationType>(i);
-    if (!ObCharset::is_valid_charset(coll)) {
+    if (!ObCharset::is_valid_collation(coll)) {
       continue;
     }
     const ObCharsetInfo * cs = ObCharset::get_charset(coll);
@@ -966,6 +631,9 @@ TEST_F(TestCharset, foreach_char) {
 
   for (int i = CHARSET_BINARY + 1; i <= CHARSET_GB18030; i++) {
     ObCharsetType test_cs_type = static_cast<ObCharsetType>(i);
+    if (!ObCharset::is_valid_charset(test_cs_type)) {
+      continue;
+    }
     ObCollationType test_collation_type = ObCharset::get_default_collation(test_cs_type);
     ObString data_out;
     char *buf = NULL;
@@ -1005,6 +673,9 @@ TEST_F(TestCharset, foreach_char) {
 
   for (int i = CHARSET_INVALID + 1; i < CHARSET_MAX; i++) {
     ObCharsetType test_cs_type = static_cast<ObCharsetType>(i);
+    if (!ObCharset::is_valid_charset(test_cs_type)) {
+      continue;
+    }
     ObCollationType test_collation_type = ObCharset::get_default_collation(test_cs_type);
     ObString data_out;
     ASSERT_TRUE(ObCharset::is_valid_collation(test_collation_type));
@@ -1070,6 +741,9 @@ TEST_F(TestCharset, foreach_char) {
   
   for (int i = CHARSET_BINARY + 1; i < CHARSET_MAX; i++) {
     ObCharsetType test_cs_type = static_cast<ObCharsetType>(i);
+    if (!ObCharset::is_valid_charset(test_cs_type)) {
+      continue;
+    }
     ObCollationType test_collation_type = ObCharset::get_default_collation(test_cs_type);
     test_cs_type_ = test_collation_type;
     ObString data_out;
@@ -1101,117 +775,6 @@ TEST_F(TestCharset, foreach_char) {
 
 
 
-
-void debug_print_hex(const char* str,const char* sort_str )
-{
-  // Print each character in hexadecimal format
-  fprintf(stdout, "origin str = \"%s\"\n", str);
-  for (int i = 0; str[i] != '\0'; i++) {
-      fprintf(stdout, "%02X ",(unsigned char)str[i]);
-  }
-  fprintf(stdout, "\n");
-  for (int i = 0; sort_str[i] != '\0'; i++) {
-      fprintf(stdout, "%02X ",(unsigned char)sort_str[i]);
-  }
-  fprintf(stdout, "\n");
-}
-TEST_F(TestCharset, tis620_sortkey_test)
-{
-  ObArenaAllocator alloc;
-  ObCollationType coll = CS_TYPE_TIS620_THAI_CI;
-  const ObCharsetInfo * cs = ObCharset::get_charset(coll);
-  if (OB_NOT_NULL(cs)) {
-//test move state
-    const char tis620_str1[] = {'\x41','\xE7','\x42','\xE7','\x43','\xE9','\x44','\0'};//0x41E742E743E944
-    int len1 = 7;
-    char sort_dst1[] = {'\0','\0','\0','\0','\0','\0','\0','\0'};//0x41E742E743E944
-    const char tis620_str2[] = {'\x41','\xE7','\x42','\xE8','\x43','\xE9','\x44','\0'};//0x41E742E843E944
-    char sort_dst2[] = {'\0','\0','\0','\0','\0','\0','\0','\0'};//0x41E742E743E944
-    int len2 = 7;
-    const char tis620_str3[] = {'\x41','\xE7','\xE8','\xE9','\x42','\x43','\x44','\0'};
-    int len3 = 7;
-    char sort_dst3[] = {'\0','\0','\0','\0','\0','\0','\0','\0'};//0x41E742E743E944
-    const char tis620_str4[] = {'\xE7','\xE7','\xE8','\xE9','\xE9','\xE8','\xE7','\0'};
-    int len4 = 7;
-    char sort_dst4[] = {'\0','\0','\0','\0','\0','\0','\0','\0'};//0x41E742E743E944
-
-    ObString dst1;
-    ObString dst2;
-    if (cs->mbmaxlen <= 1) {
-      dst1 = ObString(tis620_str1);
-      dst2 = ObString(tis620_str2);
-    } else {
-      ASSERT_EQ(0, ObCharset::charset_convert(alloc, ObString(tis620_str1), CS_TYPE_UTF8MB4_BIN, coll, dst1));
-      ASSERT_EQ(0, ObCharset::charset_convert(alloc, ObString(tis620_str2), CS_TYPE_UTF8MB4_BIN, coll, dst2));
-    }
-    char*str1 = dst1.ptr();
-    char*end1 = dst1.ptr() + dst1.length();
-    char*str2 = dst2.ptr();
-    char*end2 = dst2.ptr() + dst2.length();
-
-    fprintf(stdout, "Test for mysql 5x: \n");
-    debug_tis620_sortkey(pointer_cast<const uchar*>(tis620_str1), len1,pointer_cast<uchar*>(sort_dst1), len1);
-    debug_tis620_sortkey(pointer_cast<const uchar*>(tis620_str2), len2,pointer_cast<uchar*>(sort_dst2), len2);
-    debug_tis620_sortkey(pointer_cast<const uchar*>(tis620_str3), len3, pointer_cast<uchar*>(sort_dst3), len3);
-    debug_tis620_sortkey(pointer_cast<const uchar*>(tis620_str4), len4, pointer_cast<uchar*>(sort_dst4), len4);
-    debug_print_hex(tis620_str1, sort_dst1);
-    debug_print_hex(tis620_str2, sort_dst2);
-    debug_print_hex(tis620_str3, sort_dst3);
-    debug_print_hex(tis620_str4, sort_dst4);
-
-    fprintf(stdout, "Test for mysql 4x: \n");
-    debug_tis620_sortkey(pointer_cast<const uchar*>(tis620_str1), len1, pointer_cast<uchar*>(sort_dst1), len1, 2);
-    debug_tis620_sortkey(pointer_cast<const uchar*>(tis620_str2), len2, pointer_cast<uchar*>(sort_dst2), len2, 2);
-    debug_tis620_sortkey(pointer_cast<const uchar*>(tis620_str3), len3, pointer_cast<uchar*>(sort_dst3), len3, 2);
-    debug_tis620_sortkey(pointer_cast<const uchar*>(tis620_str4), len4, pointer_cast<uchar*>(sort_dst4), len4,2);
-    debug_print_hex(tis620_str1, sort_dst1);
-    debug_print_hex(tis620_str2, sort_dst2);
-    debug_print_hex(tis620_str3, sort_dst3);
-    debug_print_hex(tis620_str4, sort_dst4);
-
-
-//test swap
-    const char tis620_str5[] = {'\xE0','\xAA','\xE0','\xAA','\xE0','\xAA','\xE7','\0'};
-    int len5 = 7;
-    char sort_dst5[] = {'\0','\0','\0','\0','\0','\0','\0','\0'};
-    debug_tis620_sortkey(pointer_cast<const uchar*>(tis620_str5), len5, pointer_cast<uchar*>(sort_dst5), len5);
-    debug_print_hex(tis620_str5, sort_dst5);
-
-    const char tis620_str6[] = {'\xE0','\xAA','\x41','\xE7','\x42','\xE7','\xE0','\xAA','\xE7','\0'};
-    int len6 = 9;
-    char sort_dst6[] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0','\0'};
-    debug_tis620_sortkey(pointer_cast<const uchar*>(tis620_str6), len6, pointer_cast<uchar*>(sort_dst6), len6);
-    debug_print_hex(tis620_str6, sort_dst6);
-
-
-//test strnncoll/strnncollsp
-    const char c1[] = "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh";
-    int llen1 = 41;
-    const char c2[] = "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH";
-    int llen2 = 41;
-    if (OB_NOT_NULL(cs->coll->strnncoll)) {
-      fprintf(stdout, ">> strnncoll = %d for text1 = \"%s\" vs text2 = \"%s\"\n",
-                cs->coll->strnncoll(cs, pointer_cast<const uchar*>(c1), llen1, pointer_cast<const uchar*>(c2), llen2, true),c1,c2);
-    }
-    const char c3[] = "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh!";
-    int llen3 = 41;
-    const char c4[] = "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH";
-    int llen4 = 40;
-    if (OB_NOT_NULL(cs->coll->strnncollsp)) {
-      fprintf(stdout, ">> strnncoll = %d for text1 = \"%s\" vs text2 = \"%s\"\n",
-                cs->coll->strnncollsp(cs, pointer_cast<const uchar*>(c3), llen3, pointer_cast<const uchar*>(c4), llen4, true),c3,c4);
-    }
-
-    const char c5[] = "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH ";
-    int llen5 = 41;
-    const char c6[] = "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh";
-    int llen6 = 40;
-    if (OB_NOT_NULL(cs->coll->strnncollsp)) {
-      fprintf(stdout, ">> strnncoll = %d for text1 = \"%s\" vs text2 = \"%s\"\n",
-                cs->coll->strnncollsp(cs, pointer_cast<const uchar*>(c5), llen5, pointer_cast<const uchar*>(c6), llen6, true),c5,c6);
-    }
-  }
-}
 
 TEST_F(TestCharset, basic_charset_handler_test)
 {

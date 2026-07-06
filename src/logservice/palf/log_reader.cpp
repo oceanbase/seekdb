@@ -117,7 +117,7 @@ int LogReader::pread(const block_id_t block_id,
     if (OB_SUCC(ret)) {
       const int64_t cost_ts = ObTimeUtility::fast_current_time() - start_ts;
       io_ctx.inc_read_disk_cost_ts(cost_ts);
-      EVENT_TENANT_INC(ObStatEventIds::PALF_READ_IO_COUNT_FROM_DISK, MTL_ID());
+      EVENT_TENANT_INC(ObStatEventIds::PALF_READ_IO_COUNT_FROM_DISK);
       EVENT_ADD(ObStatEventIds::PALF_READ_SIZE_FROM_DISK, out_read_size);
       EVENT_ADD(ObStatEventIds::PALF_READ_TIME_FROM_DISK, cost_ts);
       const int64_t accum_read_io_count = ATOMIC_AAF(&accum_read_io_count_, 1);

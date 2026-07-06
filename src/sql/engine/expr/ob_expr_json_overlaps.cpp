@@ -69,8 +69,8 @@ int ObExprJsonOverlaps::eval_json_overlaps(const ObExpr &expr, ObEvalCtx &ctx, O
   ObIJsonBase *json_b = NULL;
   bool is_null_result = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
 
   if (!ObJsonExprHelper::is_convertible_to_json(expr.args_[0]->datum_meta_.type_)) {
     ret = OB_ERR_INVALID_TYPE_FOR_JSON;

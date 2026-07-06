@@ -28,7 +28,7 @@ DEFINE_ENUM_FUNC(ObP2PDatahubMsgBase::ObP2PDatahubMsgType, p2p_datahub_msg_type,
 
 OB_SERIALIZE_MEMBER(ObP2PDatahubMsgBase,
     trace_id_, p2p_datahub_id_, px_sequence_id_,
-    task_id_, tenant_id_, timeout_ts_, msg_type_,
+    task_id_, timeout_ts_, msg_type_,
     msg_receive_cur_cnt_, msg_receive_expect_cnt_,
     is_active_, is_empty_);
 
@@ -47,20 +47,19 @@ int ObP2PDatahubMsgBase::broadcast(
 }
 
 int ObP2PDatahubMsgBase::init(int64_t p2p_dh_id,
-    int64_t px_sequence_id, int64_t task_id,
-    int64_t tenant_id, int64_t timeout_ts)
+    int64_t px_sequence_id, int64_t task_id, int64_t timeout_ts)
 {
   int ret = OB_SUCCESS;
   trace_id_ = *ObCurTraceId::get_trace_id();
   p2p_datahub_id_ = p2p_dh_id;
   px_sequence_id_ = px_sequence_id;
   task_id_ = task_id;
-  tenant_id_ = tenant_id;
+  
   timeout_ts_ = timeout_ts;
   is_active_ = true;
   is_ready_ = false;
   is_empty_ = true;
-  allocator_.set_tenant_id(tenant_id);
+  
   allocator_.set_label("ObP2PDHMsg");
   return ret;
 }
@@ -72,7 +71,7 @@ int ObP2PDatahubMsgBase::assign(const ObP2PDatahubMsgBase &msg)
   p2p_datahub_id_ = msg.get_p2p_datahub_id();
   px_sequence_id_ = msg.get_px_seq_id();
   task_id_ = msg.get_task_id();
-  tenant_id_ = msg.get_tenant_id();
+  
   timeout_ts_ = msg.get_timeout_ts();
   msg_type_ = msg.get_msg_type();
   is_active_ = msg.is_active();
@@ -80,7 +79,7 @@ int ObP2PDatahubMsgBase::assign(const ObP2PDatahubMsgBase &msg)
   is_empty_ = msg.is_empty();
   msg_receive_cur_cnt_ = msg.get_msg_receive_cur_cnt();
   msg_receive_expect_cnt_ = msg.get_msg_receive_expect_cnt();
-  allocator_.set_tenant_id(tenant_id_);
+  
   allocator_.set_label("ObP2PDHMsg");
   return ret;
 }

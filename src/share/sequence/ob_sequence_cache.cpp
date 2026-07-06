@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_sequence_cache.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"  // ACTIVE_SESSION_FLAG_SETTER_GUARD(previously hidden behind a transitive include)
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/ob_rpc_struct.h"
@@ -307,8 +308,7 @@ int ObSequenceCache::refill_sequence_cache(const ObSequenceSchema &schema,
   do {
     times++;
     need_refetch = false;
-    if (OB_FAIL(dml_proxy_.next_batch(schema.get_tenant_id(),
-                                      schema.get_sequence_id(),
+    if (OB_FAIL(dml_proxy_.next_batch(schema.get_sequence_id(),
                                       schema.get_schema_version(),
                                       schema.get_sequence_option(),
                                       next_range,
@@ -360,7 +360,7 @@ int ObSequenceCache::refill_sequence_cache(const ObSequenceSchema &schema,
         } else if (OB_FAIL(cache.curr_node_.set_end(next_range.end()))) {
           LOG_WARN("fail set end", K(next_range), K(ret));
         } else {
-          LOG_INFO("update sequence curr_node cache success", K(cache), K(schema.get_tenant_id()),
+          LOG_INFO("update sequence curr_node cache success", K(cache),
                                                               K(schema.get_sequence_id()));
         }
         cache.last_refresh_ts_ = ObTimeUtility::current_time();
@@ -379,8 +379,7 @@ int ObSequenceCache::prefetch_sequence_cache(const ObSequenceSchema &schema,
                                              ObSequenceCacheItem &old_cache)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(dml_proxy_.prefetch_next_batch(schema.get_tenant_id(),
-                                             schema.get_sequence_id(),
+  if (OB_FAIL(dml_proxy_.prefetch_next_batch(schema.get_sequence_id(),
                                              schema.get_schema_version(),
                                              schema.get_sequence_option(),
                                              cache.prefetch_node_,
@@ -416,7 +415,7 @@ int ObSequenceCache::get_item(CacheItemKey &key, ObSequenceCacheItem *&item)
   return ret;
 }
 
-int ObSequenceCache::del_item(uint64_t tenant_id, CacheItemKey &key, obcall::ObSeqCleanCacheRes &cache_res)
+int ObSequenceCache::del_item(CacheItemKey &key, obcall::ObSeqCleanCacheRes &cache_res)
 {
   int ret = OB_SUCCESS;
 
@@ -467,7 +466,7 @@ int ObSequenceCache::nextval(const ObSequenceSchema &schema,
    * 5. cleanup: unlock cache item
    */
   bool need_prefetch = false;
-  CacheItemKey key(schema.get_tenant_id(), schema.get_sequence_id());
+  CacheItemKey key(schema.get_sequence_id());
   ObSequenceCacheItem *item = nullptr;
   if (OB_FAIL(get_item(key, item))) {
     LOG_WARN("fail get item", K(key), K(ret));
@@ -567,8 +566,8 @@ int ObSequenceCache::nextval(const ObSequenceSchema &schema,
   return ret;
 }
 
-int ObSequenceCache::remove(uint64_t tenant_id, uint64_t sequence_id, obcall::ObSeqCleanCacheRes &cache_res)
+int ObSequenceCache::remove(uint64_t sequence_id, obcall::ObSeqCleanCacheRes &cache_res)
 {
-  CacheItemKey key(tenant_id, sequence_id);
-  return del_item(tenant_id, key, cache_res);
+  CacheItemKey key(sequence_id);
+  return del_item(key, cache_res);
 }

@@ -26,8 +26,8 @@ namespace oceanbase
 using namespace common;
 namespace lib
 {
-ObTenantMemoryMgr::ObTenantMemoryMgr(const uint64_t tenant_id)
-  : cache_washer_(NULL), tenant_id_(tenant_id),
+ObTenantMemoryMgr::ObTenantMemoryMgr()
+  : cache_washer_(NULL),
     limit_(INT64_MAX), hard_limit_(INT64_MAX), sum_hold_(0),
     cache_hold_(0), cache_item_count_(0)
 {
@@ -46,10 +46,7 @@ AChunk *ObTenantMemoryMgr::alloc_chunk(const int64_t size, const ObMemAttr &attr
 {
   AChunk *chunk = NULL;
   int ret = OB_SUCCESS;
-  if (tenant_id_ != attr.tenant_id_) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_ERROR("tenant_id not match", K(ret), K_(tenant_id), K(attr));
-  } else if (size <= 0) {
+  if (size <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid size", K(ret), K(size));
   } else {
@@ -67,12 +64,12 @@ AChunk *ObTenantMemoryMgr::alloc_chunk(const int64_t size, const ObMemAttr &attr
       ObICacheWasher::ObCacheMemBlock *washed_blocks = NULL;
       int64_t wash_size = hold_size + LARGE_REQUEST_EXTRA_MB_COUNT * INTACT_ACHUNK_SIZE;
       while (!reach_ctx_limit && OB_SUCC(ret) && NULL == chunk && wash_size < cache_hold_) {
-        if (OB_FAIL(cache_washer_->sync_wash_mbs(tenant_id_, wash_size, washed_blocks))) {
-          LOG_WARN("sync_wash_mbs failed", K(ret), K_(tenant_id), K(wash_size));
+        if (OB_FAIL(cache_washer_->sync_wash_mbs(wash_size, washed_blocks))) {
+          LOG_WARN("sync_wash_mbs failed", K(ret), K(wash_size));
         } else {
           // should return back to os, then realloc again
           ObMemAttr cache_attr;
-          cache_attr.tenant_id_ = tenant_id_;
+          
           cache_attr.label_ = ObNewModIds::OB_KVSTORE_CACHE_MB;
           ObICacheWasher::ObCacheMemBlock *next = NULL;
           while (NULL != washed_blocks) {
@@ -105,9 +102,7 @@ AChunk *ObTenantMemoryMgr::alloc_chunk(const int64_t size, const ObMemAttr &attr
 
 void ObTenantMemoryMgr::free_chunk(AChunk *chunk, const ObMemAttr &attr)
 {
-  if (tenant_id_ != attr.tenant_id_) {
-    LOG_ERROR_RET(OB_ERR_UNEXPECTED, "tenant_id not match", K_(tenant_id), K(attr));
-  } else if (NULL != chunk) {
+  if (NULL != chunk) {
     bool reach_ctx_limit = false;
     const int64_t hold_size = static_cast<int64_t>(chunk->hold());
     update_hold(-hold_size, attr.ctx_id_, attr.label_, reach_ctx_limit);
@@ -120,7 +115,7 @@ void *ObTenantMemoryMgr::alloc_cache_mb(const int64_t size)
   void *ptr = NULL;
   AChunk *chunk = NULL;
   ObMemAttr attr;
-  attr.tenant_id_ = tenant_id_;
+  
   attr.prio_ = OB_NORMAL_ALLOC;
   attr.label_ = ObNewModIds::OB_KVSTORE_CACHE_MB;
   if (NULL != (chunk = alloc_chunk(size, attr))) {
@@ -135,7 +130,7 @@ void ObTenantMemoryMgr::free_cache_mb(void *ptr)
 {
   if (NULL != ptr) {
     ObMemAttr attr;
-    attr.tenant_id_ = tenant_id_;
+    
     attr.prio_ = OB_NORMAL_ALLOC;
     attr.label_ = ObNewModIds::OB_KVSTORE_CACHE_MB;
     AChunk *chunk = ptr2chunk(ptr);
@@ -217,7 +212,7 @@ bool ObTenantMemoryMgr::update_hold(const int64_t size, const uint64_t ctx_id,
     auto &afc = g_alloc_failed_ctx();
     afc.reason_ = TENANT_HOLD_REACH_LIMIT;
     afc.alloc_size_ = size;
-    afc.tenant_id_ = tenant_id_;
+    
     afc.tenant_hold_ = get_sum_hold();
     afc.tenant_limit_ = hard_limit_;
   } else if (label != ObNewModIds::OB_KVSTORE_CACHE_MB) {
@@ -295,18 +290,14 @@ void ObTenantMemoryMgr::free_chunk_(AChunk *chunk, const ObMemAttr &attr)
 }
 
 ObTenantResourceMgr::ObTenantResourceMgr()
-  : tenant_id_(OB_INVALID_ID), memory_mgr_(), ref_cnt_(0)
+  : memory_mgr_(), ref_cnt_(0)
 {
 }
 
-ObTenantResourceMgr::ObTenantResourceMgr(const uint64_t tenant_id)
-  : tenant_id_(tenant_id), memory_mgr_(tenant_id), ref_cnt_(0)
-{
-}
 
 ObTenantResourceMgr::~ObTenantResourceMgr()
 {
-  tenant_id_ = OB_INVALID_ID;
+  
   ref_cnt_ = 0;
 }
 
@@ -374,12 +365,10 @@ const ObTenantMemoryMgr *ObTenantResourceMgrHandle::get_memory_mgr() const
 }
 
 ObResourceMgr::ObResourceMgr()
-  : inited_(false), cache_washer_(NULL), locks_(), tenant_resource_mgrs_()
+  : inited_(false), cache_washer_(NULL), lock_(), tenant_resource_mgr_(NULL)
 {
-  for (int64_t i = 0; i < MAX_TENANT_COUNT; ++i) {
-    locks_[i].enable_record_stat(false);
-    locks_[i].set_latch_id(common::ObLatchIds::TENANT_RES_MGR_LIST_LOCK);
-  }
+  lock_.enable_record_stat(false);
+  lock_.set_latch_id(common::ObLatchIds::TENANT_RES_MGR_LIST_LOCK);
 }
 
 ObResourceMgr::~ObResourceMgr()
@@ -402,7 +391,7 @@ void ObResourceMgr::destroy()
 {
   if (inited_) {
     cache_washer_ = NULL;
-    memset(tenant_resource_mgrs_, 0, sizeof(ObTenantResourceMgr *) * MAX_TENANT_COUNT);
+    tenant_resource_mgr_ = NULL;
     inited_ = false;
   }
 }
@@ -411,9 +400,9 @@ ObResourceMgr &ObResourceMgr::get_instance()
 {
   static ObResourceMgr resource_mgr;
   if (!resource_mgr.inited_) {
-    // use first lock to avoid concurrent init of resource mgr
+    // use the lock to avoid concurrent init of resource mgr
     ObDisableDiagnoseGuard disable_diagnose_guard;
-    SpinWLockGuard guard(resource_mgr.locks_[0]);
+    SpinWLockGuard guard(resource_mgr.lock_);
     if (!resource_mgr.inited_) {
       int ret = OB_SUCCESS;
       if (OB_FAIL(resource_mgr.init())) {
@@ -432,39 +421,30 @@ int ObResourceMgr::set_cache_washer(ObICacheWasher &cache_washer)
     LOG_WARN("not init", K(ret));
   } else {
     cache_washer_ = &cache_washer;
-    for (int64_t pos = 0; pos < MAX_TENANT_COUNT; ++pos) {
-      ObDisableDiagnoseGuard disable_diagnose_guard;
-      SpinWLockGuard guard(locks_[pos]);
-      ObTenantResourceMgr *tenant_resource_mgr = tenant_resource_mgrs_[pos];
-      while (NULL != tenant_resource_mgr) {
-        tenant_resource_mgr->memory_mgr_.set_cache_washer(cache_washer);
-        tenant_resource_mgr = static_cast<ObTenantResourceMgr *>(tenant_resource_mgr->next_);
-      }
+    ObDisableDiagnoseGuard disable_diagnose_guard;
+    SpinWLockGuard guard(lock_);
+    if (NULL != tenant_resource_mgr_) {
+      tenant_resource_mgr_->memory_mgr_.set_cache_washer(cache_washer);
     }
   }
   return ret;
 }
 
-int ObResourceMgr::get_tenant_resource_mgr(const uint64_t tenant_id,
-                                           ObTenantResourceMgrHandle &handle)
+int ObResourceMgr::get_tenant_resource_mgr(ObTenantResourceMgrHandle &handle)
 {
   int ret = OB_SUCCESS;
   handle.reset();
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
   } else {
-    const int64_t pos = tenant_id % MAX_TENANT_COUNT;
     ObDisableDiagnoseGuard disable_diagnose_guard;
     ObTenantResourceMgr *tenant_resource_mgr = NULL;
     {
-      SpinRLockGuard guard(locks_[pos]);
-      if (OB_FAIL(get_tenant_resource_mgr_unsafe(tenant_id, tenant_resource_mgr))) {
+      SpinRLockGuard guard(lock_);
+      if (OB_FAIL(get_tenant_resource_mgr_unsafe(tenant_resource_mgr))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("get_tenant_resource_mgr_unsafe failed", K(ret), K(tenant_id));
+          LOG_WARN("get_tenant_resource_mgr_unsafe failed", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
@@ -474,15 +454,15 @@ int ObResourceMgr::get_tenant_resource_mgr(const uint64_t tenant_id,
     }
 
     if (OB_SUCC(ret) && !handle.is_valid()) {
-      SpinWLockGuard guard(locks_[pos]);
+      SpinWLockGuard guard(lock_);
       // maybe other thread create, so retry get here
-      if (OB_FAIL(get_tenant_resource_mgr_unsafe(tenant_id, tenant_resource_mgr))) {
+      if (OB_FAIL(get_tenant_resource_mgr_unsafe(tenant_resource_mgr))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("get_tenant_resource_mgr_unsafe failed", K(ret), K(tenant_id));
+          LOG_WARN("get_tenant_resource_mgr_unsafe failed", K(ret));
         } else {
           ret = OB_SUCCESS;
-          if (OB_FAIL(create_tenant_resource_mgr_unsafe(tenant_id, tenant_resource_mgr))) {
-            LOG_WARN("create_tenant_resource_mgr_unsafe failed", K(ret), K(tenant_id));
+          if (OB_FAIL(create_tenant_resource_mgr_unsafe(tenant_resource_mgr))) {
+            LOG_WARN("create_tenant_resource_mgr_unsafe failed", K(ret));
           }
         }
       }
@@ -508,14 +488,12 @@ void ObResourceMgr::dec_ref(ObTenantResourceMgr *tenant_resource_mgr)
   if (NULL != tenant_resource_mgr) {
     int64_t ref_cnt = 0;
     if (0 == (ref_cnt = ATOMIC_SAF(&tenant_resource_mgr->ref_cnt_, 1))) {
-      const int64_t pos = tenant_resource_mgr->tenant_id_ % MAX_TENANT_COUNT;
       ObDisableDiagnoseGuard disable_diagnose_guard;
-      SpinWLockGuard guard(locks_[pos]);
+      SpinWLockGuard guard(lock_);
       if (0 == ATOMIC_LOAD(&tenant_resource_mgr->ref_cnt_)) {
         int ret = OB_SUCCESS;
-        if (OB_FAIL(remove_tenant_resource_mgr_unsafe(tenant_resource_mgr->tenant_id_))) {
-          LOG_WARN("remove_tenant_resource_mgr_unsafe failed", K(ret),
-              "tenant_id", tenant_resource_mgr->tenant_id_);
+        if (OB_FAIL(remove_tenant_resource_mgr_unsafe())) {
+          LOG_WARN("remove_tenant_resource_mgr_unsafe failed", K(ret));
         }
       }
     } else if (ref_cnt < 0) {
@@ -524,27 +502,15 @@ void ObResourceMgr::dec_ref(ObTenantResourceMgr *tenant_resource_mgr)
   }
 }
 
-int ObResourceMgr::get_tenant_resource_mgr_unsafe(const uint64_t tenant_id,
-                                                  ObTenantResourceMgr *&tenant_resource_mgr)
+int ObResourceMgr::get_tenant_resource_mgr_unsafe(ObTenantResourceMgr *&tenant_resource_mgr)
 {
   int ret = OB_SUCCESS;
   tenant_resource_mgr = NULL;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
   } else {
-    const int64_t pos = tenant_id % MAX_TENANT_COUNT;
-    ObTenantResourceMgr *iter = tenant_resource_mgrs_[pos];
-    while (NULL != iter && NULL == tenant_resource_mgr) {
-      if (iter->tenant_id_ == tenant_id) {
-        tenant_resource_mgr = iter;
-      } else {
-        iter = static_cast<ObTenantResourceMgr *>(iter->next_);
-      }
-    }
+    tenant_resource_mgr = tenant_resource_mgr_;
     if (NULL == tenant_resource_mgr) {
       ret = OB_ENTRY_NOT_EXIST;
     }
@@ -552,8 +518,7 @@ int ObResourceMgr::get_tenant_resource_mgr_unsafe(const uint64_t tenant_id,
   return ret;
 }
 
-int ObResourceMgr::create_tenant_resource_mgr_unsafe(const uint64_t tenant_id,
-                                                     ObTenantResourceMgr *&tenant_resource_mgr)
+int ObResourceMgr::create_tenant_resource_mgr_unsafe(ObTenantResourceMgr *&tenant_resource_mgr)
 {
   int ret = OB_SUCCESS;
 
@@ -562,14 +527,11 @@ int ObResourceMgr::create_tenant_resource_mgr_unsafe(const uint64_t tenant_id,
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else if (OB_UNLIKELY(OB_SYS_TENANT_ID == tenant_id)) {
+  } else if (OB_UNLIKELY(true)) {
     static char buf[sizeof(ObTenantResourceMgr)] __attribute__((__aligned__(16)));
     ptr = buf;
   } else {
-    ObMemAttr attr(OB_SERVER_TENANT_ID, "TntResourceMgr");
+    ObMemAttr attr("TntResourceMgr");
     SET_USE_500(attr);
     if (OB_ISNULL(ptr = ob_malloc(sizeof(ObTenantResourceMgr), attr))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -577,55 +539,30 @@ int ObResourceMgr::create_tenant_resource_mgr_unsafe(const uint64_t tenant_id,
     }
   }
   if (OB_SUCC(ret)) {
-    tenant_resource_mgr = new (ptr) ObTenantResourceMgr(tenant_id);
-    const int64_t pos = tenant_id % MAX_TENANT_COUNT;
+    tenant_resource_mgr = new (ptr) ObTenantResourceMgr();
     if (NULL != cache_washer_) {
       tenant_resource_mgr->memory_mgr_.set_cache_washer(*cache_washer_);
     }
-    tenant_resource_mgr->next_ = tenant_resource_mgrs_[pos];
-    tenant_resource_mgrs_[pos] = tenant_resource_mgr;
+    tenant_resource_mgr_ = tenant_resource_mgr;
   }
   return ret;
 }
 
-int ObResourceMgr::remove_tenant_resource_mgr_unsafe(const uint64_t tenant_id)
+int ObResourceMgr::remove_tenant_resource_mgr_unsafe()
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
   } else {
-    const int64_t pos = tenant_id % MAX_TENANT_COUNT;
-    ObTenantResourceMgr *head = tenant_resource_mgrs_[pos];
-    ObTenantResourceMgr *tenant_resource_mgr = NULL;
-    if (NULL == head) {
-    } else if (head->tenant_id_ == tenant_id) {
-      tenant_resource_mgr = head;
-      tenant_resource_mgrs_[pos] = static_cast<ObTenantResourceMgr *>(head->next_);
-    } else {
-      ObTenantResourceMgr *prev = head;
-      ObTenantResourceMgr *cur = static_cast<ObTenantResourceMgr *>(head->next_);
-      while (NULL != cur && NULL == tenant_resource_mgr) {
-        if (cur->tenant_id_ == tenant_id) {
-          prev->next_ = cur->next_;
-          tenant_resource_mgr = cur;
-        } else {
-          prev = cur;
-          cur = static_cast<ObTenantResourceMgr *>(cur->next_);
-        }
-      }
-    }
+    ObTenantResourceMgr *tenant_resource_mgr = tenant_resource_mgr_;
+    tenant_resource_mgr_ = NULL;
     if (NULL == tenant_resource_mgr) {
       ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("tenant memory mgr not exist", K(ret), K(tenant_id));
+      LOG_WARN("tenant memory mgr not exist", K(ret));
     } else {
       tenant_resource_mgr->~ObTenantResourceMgr();
-      if (tenant_id != OB_SYS_TENANT_ID) {
-        ob_free(tenant_resource_mgr);
-      }
+      
       tenant_resource_mgr = NULL;
     }
   }

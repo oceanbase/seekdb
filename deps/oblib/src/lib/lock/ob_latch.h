@@ -41,7 +41,6 @@ extern bool USE_CO_LATCH;
   // do {                                                                                    \
   //   if (record_stat_ && lib::is_diagnose_info_enabled() &&                                \
   //       OB_NOT_NULL(ObLocalDiagnosticInfo::get())) {                                      \
-  //     ObTenantDiagnosticInfoSummaryGuard g(ObLocalDiagnosticInfo::get()->get_tenant_id(), \
   //         ObLocalDiagnosticInfo::get()->get_group_id(), true);                            \
   //     ObLatchStat *latch_stat = ObLocalDiagnosticInfo::get_latch_stat(latch_id);          \
   //     if (NULL != latch_stat) {                                                           \
@@ -59,7 +58,6 @@ extern bool USE_CO_LATCH;
   // do {                                                                                        \
   //   if (record_stat_ && lib::is_diagnose_info_enabled() &&                                    \
   //    OB_NOT_NULL(ObLocalDiagnosticInfo::get())) {                                             \
-  //     ObTenantDiagnosticInfoSummaryGuard g(ObLocalDiagnosticInfo::get()->get_tenant_id(),     \
   //         ObLocalDiagnosticInfo::get()->get_group_id(), true);                                \
   //     ObLatchStat *latch_stat = ObLocalDiagnosticInfo::get_latch_stat(latch_id);              \
   //     if (NULL != latch_stat) {                                                               \

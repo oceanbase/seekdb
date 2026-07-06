@@ -50,8 +50,7 @@ int ObAllVirtualTenantSchedulerRunningJob::inner_get_next_row(ObNewRow *&row)
     SERVER_LOG(WARN, "sessionMgr is NULL", K(ret));
   } else {
     if (!start_to_read_) {
-      if (OB_FAIL(fill_scanner_.init(effective_tenant_id_,
-                                     &scanner_,
+      if (OB_FAIL(fill_scanner_.init(&scanner_,
                                      &cur_row_,
                                      output_column_ids_))) {
         SERVER_LOG(WARN, "init fill_scanner fail", K(ret));
@@ -82,7 +81,7 @@ int ObAllVirtualTenantSchedulerRunningJob::FillScanner::operator()(
   ObSQLSessionInfo *sess_info = entry.second;
   ObSQLSessionInfo::LockGuard lock_guard(sess_info->get_thread_data_lock());
   if (OB_UNLIKELY(0 == port_
-                  || OB_INVALID_TENANT_ID == effective_tenant_id_
+                  || false
                   || NULL == scanner_
                   || NULL == cur_row_
                   || NULL == cur_row_->cells_
@@ -92,12 +91,11 @@ int ObAllVirtualTenantSchedulerRunningJob::FillScanner::operator()(
                "parameter or data member is NULL",
                K(ret),
                K(port_),
-               K(effective_tenant_id_),
                K(scanner_),
                K(cur_row_),
                K(sess_info));
-  } else if (!is_sys_tenant(effective_tenant_id_)
-            && sess_info->get_effective_tenant_id() != effective_tenant_id_) {
+  } else if (!true
+            && false) {
     // skip other tenant
   } else if (OB_ISNULL(sess_info->get_job_info())) {
     // skip session without dbms scheduler job
@@ -223,14 +221,13 @@ void ObAllVirtualTenantSchedulerRunningJob::FillScanner::reset()
 {
   ip_buf_[0] = '\0';
   port_ = 0;
-  effective_tenant_id_ = OB_INVALID_TENANT_ID;
+  
   scanner_ = NULL;
   cur_row_ = NULL;
   output_column_ids_.reset();
 }
 
-int ObAllVirtualTenantSchedulerRunningJob::FillScanner::init(uint64_t effective_tenant_id,
-                                               common::ObScanner *scanner,
+int ObAllVirtualTenantSchedulerRunningJob::FillScanner::init(common::ObScanner *scanner,
                                                common::ObNewRow *cur_row,
                                                const ObIArray<uint64_t> &column_ids)
 {
@@ -247,7 +244,7 @@ int ObAllVirtualTenantSchedulerRunningJob::FillScanner::init(uint64_t effective_
     SERVER_LOG(WARN, "ip_to_string failed", K(ret));
   } else {
     port_ = ObServer::get_instance().get_self().get_port();
-    effective_tenant_id_ = effective_tenant_id;
+    
     scanner_ = scanner;
     cur_row_ = cur_row;
   }

@@ -248,10 +248,9 @@ int ObUpdateResolver::try_add_remove_const_expr_for_assignments()
       if (OB_ISNULL(tables_info.at(i))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret));
-      } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+      } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                            tables_info.at(i)->ref_table_id_,
-                                                           table_schema,
-                                                           tables_info.at(i)->is_link_table_))) {
+                                                           table_schema))) {
         LOG_WARN("failed to get table schema", K(ret));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -455,16 +454,14 @@ int ObUpdateResolver::generate_update_table_info(ObTableAssignment &table_assign
   } else if (OB_ISNULL(table_item = update_stmt->get_table_item_by_id(table_assign.table_id_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(table_item), K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(params_.session_info_->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        table_item->get_base_table_item().ref_id_,
-                                                       table_schema,
-                                                       table_item->get_base_table_item().is_link_table()))) {
+                                                       table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_can_write_index_array(params_.session_info_->get_effective_tenant_id(),
-                                                                table_item->get_base_table_item().ref_id_,
+  } else if (OB_FAIL(schema_checker_->get_can_write_index_array(table_item->get_base_table_item().ref_id_,
                                                                 index_tid, gindex_cnt, true))) {
     LOG_WARN("failed to get global index", K(ret));
   } else if (OB_FAIL(params_.session_info_->get_binlog_row_image(binlog_row_image))) {
@@ -502,7 +499,6 @@ int ObUpdateResolver::generate_update_table_info(ObTableAssignment &table_assign
         table_info->loc_table_id_ = table_item->get_base_table_item().table_id_;
         table_info->ref_table_id_ = table_item->get_base_table_item().ref_id_;
         table_info->table_name_ = table_schema->get_table_name_str();
-        table_info->is_link_table_ = table_item->get_base_table_item().is_link_table();
       }
     } else {
       // view has `instead of trigger`

@@ -464,7 +464,7 @@ int TriggerHandle::calc_trigger_routine(
   ObArray<int64_t> nocopy_params;
   trigger_id = ObTriggerInfo::get_trigger_spec_package_id(trigger_id);
   bool old_flag = false;
-  common::ObArenaAllocator tmp_allocator(common::ObMemAttr(MTL_ID(), "TriggerExec"));
+  common::ObArenaAllocator tmp_allocator(common::ObMemAttr("TriggerExec"));
   CK (OB_NOT_NULL(exec_ctx.get_my_session()));
   OX (old_flag = exec_ctx.get_my_session()->is_for_trigger_package());
   OX (exec_ctx.get_my_session()->set_for_trigger_package(true));
@@ -513,7 +513,7 @@ int TriggerHandle::check_and_update_new_row(
         } else {
           bool is_strict_equal = false;
           if (new_obj.is_lob_storage()) {
-            common::ObArenaAllocator lob_allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+            common::ObArenaAllocator lob_allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
             ObObj cmp_obj;
             ObObj other_obj;
             if (new_obj.is_delta_tmp_lob() || new_cells[i].is_delta_tmp_lob()) {
@@ -850,7 +850,7 @@ int TriggerHandle::destroy_compound_trigger_state(ObExecContext &exec_ctx, const
   for (int64_t i = 0; OB_SUCC(ret) && i < trig_ctdef.tg_args_.count(); i++) {
     uint64_t trg_id = trig_ctdef.tg_args_.at(i).get_trigger_id();
     const ObTriggerInfo *trg_info = NULL;
-    OZ (schema_guard->get_trigger_info(session_info->get_effective_tenant_id(), trg_id, trg_info), trg_id);
+    OZ (schema_guard->get_trigger_info( trg_id, trg_info), trg_id);
     OV (OB_NOT_NULL(trg_info));
     if (OB_SUCC(ret) && trg_info->is_compound_dml_type()) {
       OZ (pl::ObPLPackageManager::destory_package_state(*session_info,

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_cast.h"
-#include "lib/geo/ob_geometry_cast.h"
+#include "share/geo/ob_geometry_cast.h"
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
 #include "pl/ob_pl_resolver.h"
@@ -298,7 +298,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid row_dimension_", K(row_dimension_), K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session, enable_decimalint))) {
-    LOG_WARN("fail to check_enable_decimalint", K(ret), K(session->get_effective_tenant_id()));
+    LOG_WARN("fail to check_enable_decimalint", K(ret));
   } else if (OB_FAIL(get_cast_type(enable_decimalint,
                                    type2, cast_raw_expr->get_cast_mode(), type_ctx, dst_type))) {
     LOG_WARN("get cast dest type failed", K(ret));

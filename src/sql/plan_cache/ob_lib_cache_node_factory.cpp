@@ -30,13 +30,12 @@ namespace sql
 
 int ObLCNodeFactory::create_cache_node(ObLibCacheNameSpace ns,
                                        ObILibCacheNode*& node,
-                                       uint64_t tenant_id,
                                        MemoryContext &parent_context)
 {
   int ret = OB_SUCCESS;
   lib::MemoryContext entity = NULL;
   ObMemAttr mem_attr;
-  mem_attr.tenant_id_ = tenant_id;
+  
   mem_attr.ctx_id_ = ObCtxIds::PLAN_CACHE_CTX_ID;
   if (OB_ISNULL(lib_cache_)) {
     ret = OB_ERR_UNEXPECTED;

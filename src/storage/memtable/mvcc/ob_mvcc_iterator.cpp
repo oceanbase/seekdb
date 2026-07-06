@@ -271,13 +271,6 @@ int ObMvccValueIterator::lock_for_read_inner_(const ObQueryFlag &flag,
         // with the dest's tx_table. In the case, when reading from the standby,
         // the tx_data may have already been updated while the data cannot be
         // cleanout. Thus, it is necessary to detect and avoid such situations.
-        if (1 == counter % 10000
-            && !MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID()) {
-          ctx_->is_standby_read_ = true;
-          TRANS_LOG(WARN, "encounter standyby read with uncleanout data", K(ret),
-                    KPC(iter), K(lock_for_read_arg), KPC(value_), KPC(ctx_));
-
-        }
 
         usleep(10); // 10us
       }

@@ -33,7 +33,7 @@ int ObAdaptiveAutoDop::calculate_table_auto_dop(const ObPhysicalPlan &plan, Auto
   int ret = OB_SUCCESS;
   is_single_part = false;
   int64_t table_dop = -1;
-  ObMemAttr attr(MTL_ID(), "AutoDopMap");
+  ObMemAttr attr("AutoDopMap");
   const ObOpSpec *root_spec = plan.get_root_op_spec();
   if (OB_ISNULL(root_spec)) {
     ret = OB_ERR_UNEXPECTED;
@@ -187,8 +187,8 @@ int ObAdaptiveAutoDop::build_storage_estimation_tasks(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("is null", K(ret), K(sql_ctx), K(match_table_loc));
   } else if (OB_FAIL(
-               sql_ctx->schema_guard_->get_simple_table_schema(MTL_ID(), index_id, table_schema))) {
-    LOG_WARN("failed to get simple table schema", K(ret), K(MTL_ID()), K(index_id));
+               sql_ctx->schema_guard_->get_simple_table_schema( index_id, table_schema))) {
+    LOG_WARN("failed to get simple table schema", K(ret), K(index_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null schema", K(ret));
@@ -275,7 +275,8 @@ int ObAdaptiveAutoDop::add_estimation_tasks(const ObTableScanSpec &tsc_spec,
     index_est_arg->range_columns_count_ = cost_tsc_info.get_range_columns_count();
     index_est_arg->tablet_id_ = tablet_loc->tablet_id_;
     index_est_arg->ls_id_ = tablet_loc->ls_id_;
-    index_est_arg->tenant_id_ = MTL_ID();
+    
+    
     index_est_arg->tx_id_ = sql_ctx->session_info_->get_tx_id();
     if (OB_FAIL(construct_scan_range_batch(allocator, ranges, index_est_arg->batch_))) {
       LOG_WARN("failed to construct scan range batch", K(ret));
@@ -406,10 +407,8 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> 
       LOG_WARN("unexpected null", K(ret));
     } else if (sql_ctx->session_info_->is_user_session()
                && OB_FAIL(ObSchemaUtils::get_tenant_int_variable(
-                    sql_ctx->session_info_->get_effective_tenant_id(),
                     SYS_VAR_PARALLEL_SERVERS_TARGET, parallel_servers_target))) {
-      LOG_WARN("fail read tenant variable", K(ret),
-               K(sql_ctx->session_info_->get_effective_tenant_id()));
+      LOG_WARN("fail read tenant variable", K(ret));
     } else {
       unit_min_cpu = std::max(tenant->unit_min_cpu(), 0.0);
       parallel_servers_target = std::max(parallel_servers_target, static_cast<int64_t>(0));

@@ -233,7 +233,7 @@ private:
         backup_rows_cnt_(0), backup_rows_used_(0), brs_holder_(),
         equal_param_idx_(allocator)
     {}
-    int init(const uint64_t tenant_id, bool is_left, ObOperator *child,
+    int init(bool is_left, ObOperator *child,
              const ObIArray<ObMergeJoinSpec::EqualConditionInfo> &equal_cond_infos,
              const ExprFixedArray *all_exprs);
     template<bool need_store_unmatch, bool is_left>

@@ -40,7 +40,6 @@ private:
   static int check_show_priv(bool &allow_show,
                              ObExecContext &exec_ctx,
                              const common::ObString &level,
-                             const uint64_t tenant_id,
                              const common::ObString &db_name,
                              const common::ObString &obj_name,
                              const int64_t routine_type = 0);

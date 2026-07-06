@@ -17,8 +17,8 @@
 #ifndef OCEANBASE_UNIT_TEST_XML_UTILS_H_
 #define OCEANBASE_UNIT_TEST_XML_UTILS_H_
 
-#include "lib/xml/ob_xml_parser.h"
-#include "lib/xml/ob_xml_util.h"
+#include "common/xml/ob_xml_parser.h"
+#include "common/xml/ob_xml_util.h"
 #include "lib/oblog/ob_log.h"
 namespace oceanbase {
 namespace common {

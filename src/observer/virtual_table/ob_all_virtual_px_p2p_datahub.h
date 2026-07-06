@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_PX_P2P_DATAHUB_TABLE_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_PX_P2P_DATAHUB_TABLE_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "lib/net/ob_addr.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 namespace oceanbase
@@ -34,23 +34,23 @@ public:
   struct P2PDatahubNode {
     common::ObCurTraceId::TraceId trace_id_;
     int64_t p2p_datahub_id_;
-    int64_t tenant_id_;
+    
     int64_t msg_type_;
     int64_t hold_size_;
     int64_t timeout_ts_;
     int64_t start_time_;
-    TO_STRING_KV(K(trace_id_), K(p2p_datahub_id_), K(tenant_id_),
+    TO_STRING_KV(K(trace_id_), K(p2p_datahub_id_),
                  K(msg_type_), K(hold_size_), K(timeout_ts_), K(start_time_));
   };
 public:
   struct P2PMsgTraverseCall
   {
-    P2PMsgTraverseCall(common::ObArray<P2PDatahubNode> &node_array, int64_t tenant_id) :
-        node_array_(node_array), tenant_id_(tenant_id) {};
+    P2PMsgTraverseCall(common::ObArray<P2PDatahubNode> &node_array) :
+        node_array_(node_array) {};
     ~P2PMsgTraverseCall() = default;
     int operator() (common::hash::HashMapPair<sql::ObP2PDhKey, sql::ObP2PDatahubMsgBase *> &entry);
     common::ObArray<P2PDatahubNode> &node_array_;
-    int64_t tenant_id_;
+    
   };
 public:
   ObAllPxP2PDatahubTable();

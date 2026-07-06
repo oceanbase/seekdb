@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/table_load/ob_table_load_coordinator.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
 #include "observer/table_load/ob_table_load_coordinator_ctx.h"
 #include "observer/table_load/ob_table_load_coordinator_trans.h"
@@ -26,8 +27,8 @@
 #include "observer/table_load/ob_table_load_task.h"
 #include "observer/table_load/ob_table_load_task_scheduler.h"
 #include "observer/table_load/ob_table_load_trans_bucket_writer.h"
-#include "share/stat/ob_dbms_stats_executor.h"
-#include "share/stat/ob_dbms_stats_utils.h"
+#include "sql/optimizer/stat/ob_dbms_stats_executor.h"
+#include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "observer/table_load/ob_table_load_index_long_wait.h"
 #include "observer/omt/ob_tenant.h"
 #include "storage/direct_load/ob_direct_load_mem_define.h"
@@ -55,7 +56,7 @@ using namespace omt;
       LOG_WARN("fail to set default timeout ctx", KR(ret));                       \
     } else if (OB_FAIL(proxy.to(addr)                                             \
                          .timeout(ctx.get_timeout())                              \
-                         .by(MTL_ID())                                            \
+                         .by()                                            \
                          .name(arg, ##__VA_ARGS__))) {                            \
       LOG_WARN("fail to rpc call " #name, KR(ret), K(addr), K(arg));              \
     }                                                                             \
@@ -116,7 +117,7 @@ int ObTableLoadCoordinator::abort_active_trans(ObTableLoadTableCtx *ctx)
 {
   int ret = OB_SUCCESS;
   ObArray<ObTableLoadTransId> trans_id_array;
-  trans_id_array.set_tenant_id(MTL_ID());
+  
   if (OB_FAIL(ctx->coordinator_ctx_->get_active_trans_ids(trans_id_array))) {
     LOG_WARN("fail to get active trans ids", KR(ret));
   }
@@ -155,8 +156,8 @@ int ObTableLoadCoordinator::abort_peers_ctx(ObTableLoadTableCtx *ctx)
     int64_t tries = 0;
     ObDirectLoadControlAbortArg arg;
     ObDirectLoadControlAbortRes res;
-    addr_array1.set_tenant_id(MTL_ID());
-    addr_array2.set_tenant_id(MTL_ID());
+    
+    
     arg.table_id_ = ctx->param_.table_id_;
     arg.task_id_ = ctx->ddl_param_.task_id_;
     arg.error_code_ = ctx->coordinator_ctx_->get_error_code();
@@ -251,9 +252,9 @@ int ObTableLoadCoordinator::check_need_sort_for_lob_or_index(bool &need_sort) co
     if (!need_sort) {
       ObSchemaGetterGuard schema_guard;
       const share::schema::ObTableSchema *data_table_schema = nullptr;
-      if (OB_FAIL(ObTableLoadSchema::get_schema_guard(ctx_->param_.tenant_id_, schema_guard))) {
+      if (OB_FAIL(ObTableLoadSchema::get_schema_guard(schema_guard))) {
         LOG_WARN("fail to get schema guard", KR(ret));
-      } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, ctx_->param_.tenant_id_, ctx_->param_.table_id_, data_table_schema))) {
+      } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, ctx_->param_.table_id_, data_table_schema))) {
         LOG_WARN("fail to get table shema of main table", KR(ret));
       } else if (OB_ISNULL(data_table_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -456,11 +457,11 @@ int ObTableLoadCoordinator::gen_apply_arg(ObDirectLoadResourceApplyArg &apply_ar
 {
   int ret = OB_SUCCESS;
   ObTenant *tenant = nullptr;
-  int64_t tenant_id = MTL_ID();
-  if (OB_FAIL(GCTX.omt_->get_tenant(tenant_id, tenant))) {
-    LOG_INFO("fail to get tenant", KR(ret), K(tenant_id));
+  
+  if (OB_FAIL(GCTX.omt_->get_tenant(tenant))) {
+    LOG_INFO("fail to get tenant", KR(ret));
   } else {
-    apply_arg.tenant_id_ = tenant_id;
+    
     apply_arg.task_key_ = ObTableLoadUniqueKey(ctx_->param_.table_id_, ctx_->ddl_param_.task_id_);
     int64_t retry_count = 0;
     ObAddr coordinator_addr = ObServer::get_instance().get_self();
@@ -514,15 +515,15 @@ int ObTableLoadCoordinator::gen_apply_arg(ObDirectLoadResourceApplyArg &apply_ar
         LOG_WARN("fail to get all leader info", KR(ret));
       } else if (OB_FAIL(ObTableLoadService::get_memory_limit(memory_limit))) {
         LOG_WARN("fail to get memory_limit", K(ret));
-      } else if (OB_FAIL(ObSchemaUtils::get_tenant_int_variable(tenant_id, SYS_VAR_PARALLEL_SERVERS_TARGET, parallel_servers_target))) {
-        LOG_WARN("fail read tenant variable", KR(ret), K(tenant_id));
+      } else if (OB_FAIL(ObSchemaUtils::get_tenant_int_variable(SYS_VAR_PARALLEL_SERVERS_TARGET, parallel_servers_target))) {
+        LOG_WARN("fail read tenant variable", KR(ret));
       } else {
         bool include_cur_addr = false;
         bool task_need_sort = false;  // Indicates whether the entire import task will go through the sorting process
         bool main_need_sort = false;  // Indicates whether the main table will go through sorting
         int64_t total_partitions = 0;
         ObArray<int64_t> partitions;
-        partitions.set_tenant_id(MTL_ID());
+        
         int64_t store_server_count = all_leader_info_array.count();
         int64_t coord_session_count = 0;
         int64_t write_session_count = 0;
@@ -1013,7 +1014,7 @@ int ObTableLoadCoordinator::pre_merge_peers()
     LOG_INFO("route_pre_merge_peer_request begin", K(coordinator_ctx_->store_infos_));
     ObArenaAllocator allocator("TLD_Coord");
     ObDirectLoadControlPreMergeArg arg;
-    allocator.set_tenant_id(MTL_ID());
+    
     arg.table_id_ = param_.table_id_;
     arg.task_id_ = ctx_->ddl_param_.task_id_;
     if (!ctx_->param_.px_mode_) {
@@ -1276,7 +1277,7 @@ int ObTableLoadCoordinator::commit_peers(ObTableLoadSqlStatistics &sql_statistic
 {
   int ret = OB_SUCCESS;
   ObTransService *txs = nullptr;
-  if (OB_ISNULL(MTL(ObTransService *))) {
+  if (OB_ISNULL(share::g_mp->trans_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("trans service is null", KR(ret));
   } else {
@@ -1323,7 +1324,7 @@ int ObTableLoadCoordinator::commit_peers(ObTableLoadSqlStatistics &sql_statistic
       if (ctx_->is_assigned_resource()) {
         int tmp_ret = OB_SUCCESS;
         ObDirectLoadResourceReleaseArg release_arg;
-        release_arg.tenant_id_ = MTL_ID();
+        
         release_arg.task_key_ = ObTableLoadUniqueKey(ctx_->param_.table_id_, ctx_->ddl_param_.task_id_);
         if (OB_TMP_FAIL(ObTableLoadService::delete_assigned_task(release_arg))) {
           LOG_WARN("fail to delete assigned task", KR(tmp_ret), K(release_arg));
@@ -1338,9 +1339,9 @@ int ObTableLoadCoordinator::commit_peers(ObTableLoadSqlStatistics &sql_statistic
 int ObTableLoadCoordinator::build_table_stat_param(ObTableStatParam &param, ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   const uint64_t table_id = ctx_->ddl_param_.dest_table_id_;
-  param.tenant_id_ = tenant_id;
+  
   param.table_id_ = table_id;
   param.part_level_ = ctx_->schema_.part_level_;
   param.allocator_ = &allocator;
@@ -1369,16 +1370,16 @@ int ObTableLoadCoordinator::write_sql_stat(ObTableLoadSqlStatistics &sql_statist
                                            ObTableLoadDmlStat &dml_stats)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   const uint64_t table_id = ctx_->ddl_param_.dest_table_id_;
   ObSchemaGetterGuard schema_guard;
-  if (OB_FAIL(ObTableLoadSchema::get_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id));
+  if (OB_FAIL(ObTableLoadSchema::get_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
   } else if (ObDirectLoadMethod::is_full(ctx_->param_.method_)) { // full direct load
     ObArray<ObOptColumnStat *> global_column_stats;
     ObArray<ObOptTableStat *> global_table_stats;
-    global_column_stats.set_tenant_id(MTL_ID());
-    global_table_stats.set_tenant_id(MTL_ID());
+    
+    
     if (OB_UNLIKELY(sql_statistics.is_empty())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid args", KR(ret), K(sql_statistics));
@@ -1389,8 +1390,7 @@ int ObTableLoadCoordinator::write_sql_stat(ObTableLoadSqlStatistics &sql_statist
     } else if (OB_UNLIKELY(global_table_stats.empty() || global_column_stats.empty())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected empty sql stats", KR(ret), K(global_table_stats), K(global_column_stats));
-    } else if (OB_FAIL(ObDbmsStatsUtils::scale_col_stats(tenant_id,
-                                                         global_table_stats,
+    } else if (OB_FAIL(ObDbmsStatsUtils::scale_col_stats(global_table_stats,
                                                          global_column_stats))) {
       LOG_WARN("failed to scale col stats", KR(ret));
     } else if (OB_FAIL(ObDbmsStatsUtils::split_batch_write(&schema_guard,
@@ -1406,7 +1406,7 @@ int ObTableLoadCoordinator::write_sql_stat(ObTableLoadSqlStatistics &sql_statist
     ObTableStatParam param;
     TabStatIndMap inc_table_stats;
     ColStatIndMap inc_column_stats;
-    allocator.set_tenant_id(MTL_ID());
+    
     if (OB_UNLIKELY(sql_statistics.is_empty() || dml_stats.is_empty())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid args", KR(ret), K(sql_statistics), K(dml_stats));
@@ -1415,13 +1415,11 @@ int ObTableLoadCoordinator::write_sql_stat(ObTableLoadSqlStatistics &sql_statist
       LOG_WARN("unexpected exec ctx is null", KR(ret));
     } else if (OB_FAIL(inc_table_stats.create(1,
                                               "TLD_TabStatBkt",
-                                              "TLD_TabStatNode",
-                                              tenant_id))) {
+                                              "TLD_TabStatNode"))) {
       LOG_WARN("fail to create table stats map", KR(ret));
     } else if (OB_FAIL(inc_column_stats.create(ctx_->schema_.store_column_count_,
                                                "TLD_ColStatBkt",
-                                               "TLD_ColStatNode",
-                                               tenant_id))) {
+                                               "TLD_ColStatNode"))) {
       LOG_WARN("fail to create column stats map", KR(ret));
     } else if (OB_FAIL(sql_statistics.get_table_stats(inc_table_stats))) {
       LOG_WARN("fail to get table stat array", KR(ret));
@@ -2175,7 +2173,7 @@ int ObTableLoadCoordinator::write_peer_leader(const ObTableLoadTransId &trans_id
       }
     } else { // remote, send rpc
       common::ObArenaAllocator allocator("TLD_Coord");
-      allocator.set_tenant_id(MTL_ID());
+      
       int64_t pos = 0;
       int64_t buf_len = tablet_obj_rows.get_serialize_size();
       char *buf = static_cast<char *>(allocator.alloc(buf_len));

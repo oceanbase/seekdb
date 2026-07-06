@@ -38,7 +38,7 @@ using namespace oceanbase::sql;
 ObCgMacroBlockWriteTask::ObCgMacroBlockWriteTask(const ObITaskType type) :
     ObITask(type),
     is_inited_(false),
-    allocator_(ObMemAttr(MTL_ID(), "CGMBWriteTask")),
+    allocator_(ObMemAttr("CGMBWriteTask")),
     storage_schema_(nullptr),
     row_iter_(nullptr)
 {

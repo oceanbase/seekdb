@@ -17,10 +17,11 @@
 #define OCEANBASE_SHARE_OB_INDEX_USAGE_INFO_MGR_H_
 
 #include "lib/allocator/ob_fifo_allocator.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/function/ob_function.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/list/ob_list.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "lib/task/ob_timer.h"
 #include "lib/time/ob_time_utility.h"
 #include "share/schema/ob_schema_getter_guard.h"
@@ -194,10 +195,9 @@ private:
   struct GetIndexUsageItemsFn final
   {
   public:
-    GetIndexUsageItemsFn(IndexUsageDeletedMap &deleted_map, const uint64_t tenant_id, common::ObIAllocator &allocator) :
+    GetIndexUsageItemsFn(IndexUsageDeletedMap &deleted_map, common::ObIAllocator &allocator) :
       deleted_map_(deleted_map),
       schema_guard_(nullptr),
-      tenant_id_(tenant_id),
       dump_items_(allocator),
       remove_items_(),
       total_dump_count_(0)
@@ -209,7 +209,6 @@ private:
   public:
     IndexUsageDeletedMap &deleted_map_;
     schema::ObSchemaGetterGuard *schema_guard_;
-    uint64_t tenant_id_;
     ObIndexUsagePairList dump_items_;
     ObArray<ObIndexUsageKey> remove_items_;
     uint64_t total_dump_count_;
@@ -259,7 +258,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObIndexUsageOp);
 };
 
-#define INDEX_USAGE_INFO_MGR (MTL(ObIndexUsageInfoMgr*))
+#define INDEX_USAGE_INFO_MGR (share::g_mp->index_usage_info_mgr())
 
 class ObIndexUsageInfoMgr final 
 {
@@ -281,11 +280,11 @@ public:
 
 public:
   int start(); // start timer task
-  int init(const uint64_t tenant_id);
+  int init();
   void stop();
   void wait();
   void destroy();
-  void update(const uint64_t tenant_id, const uint64_t index_table_id);
+  void update(const uint64_t index_table_id);
 
   void refresh_config();
   void set_is_enabled(const bool is_enable) { is_enabled_ = is_enable; }
@@ -300,8 +299,8 @@ public:
   uint64_t get_max_entries() { return max_entries_; }
   uint64_t get_current_time() { return current_time_; }
   uint64_t get_min_tenant_data_version() { return min_tenant_data_version_; }
-  uint64_t get_tenant_id() { return tenant_id_; }
-  uint64_t calc_hashmap_count(const uint64_t tenant_id);
+  
+  uint64_t calc_hashmap_count();
   uint64_t get_hashmap_count() { return hashmap_count_; }
 
   ObIndexUsageHashMap *get_index_usage_map() { return index_usage_map_; }
@@ -310,7 +309,7 @@ public:
 private:
   bool sample_filterd(const uint64_t random_num);
   void destroy_hash_map();
-  int create_hash_map(const uint64_t tenant_id);
+  int create_hash_map();
 
 private:
   bool is_inited_;
@@ -319,7 +318,6 @@ private:
   uint64_t max_entries_;
   uint64_t current_time_;
   uint64_t min_tenant_data_version_;
-  uint64_t tenant_id_;
   uint64_t hashmap_count_;
   ObIndexUsageHashMap *index_usage_map_;
   ObIndexUsageReportTask report_task_;

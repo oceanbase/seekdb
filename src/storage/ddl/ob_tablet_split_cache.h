@@ -31,19 +31,18 @@ public:
   //only used in deep copy
   ObTabletSplitCacheKey();
   //read / put should always use this constructor
-  ObTabletSplitCacheKey(const uint64_t tenant_id,
-                const ObTabletID &table_id,
+  ObTabletSplitCacheKey(const ObTabletID &table_id,
                 const uint8_t bucket_id);
   virtual ~ObTabletSplitCacheKey() = default;
   virtual int equal(const ObIKVCacheKey &other, bool &equal) const override;
   virtual int hash(uint64_t &hash_value) const override;
-  virtual uint64_t get_tenant_id() const override { return tenant_id_; }
+  
   virtual int64_t size() const override { return sizeof(*this); }
   virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const;
   bool is_valid() const;
-  TO_STRING_KV(K_(tenant_id), K_(tablet_id), K_(bucket_id));
+  TO_STRING_KV(K_(tablet_id), K_(bucket_id));
 private:
-  int64_t tenant_id_;
+  
   ObTabletID tablet_id_;
   uint8_t bucket_id_;
 private:

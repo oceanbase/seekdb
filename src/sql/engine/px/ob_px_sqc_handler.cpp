@@ -160,13 +160,12 @@ void ObPxSqcHandler::check_rf_leak()
 int ObPxSqcHandler::init()
 {
   int ret = OB_SUCCESS;
-  tenant_id_ = MTL_ID();
   reserved_px_thread_count_ = 0;
   rpc_level_ = THIS_WORKER.get_curr_request_level();
   void *buf = nullptr;
   observer::ObGlobalContext &gctx = GCTX;
   lib::ContextParam param;
-  param.set_mem_attr(MTL_ID(), "SqcHandlerParam")
+  param.set_mem_attr("SqcHandlerParam")
     .set_parallel(4)
     .set_properties(lib::ALLOC_THREAD_SAFE);
   ObIAllocator *allocator = nullptr;
@@ -218,7 +217,6 @@ int ObPxSqcHandler::init()
 // The factory will invoke this function.
 void ObPxSqcHandler::reset()
 {
-  tenant_id_ = UINT64_MAX;
   reserved_px_thread_count_ = 0;
   process_flags_ = 0;
   end_ret_ = OB_SUCCESS;
@@ -286,7 +284,7 @@ int ObPxSqcHandler::init_env()
     // ObPxSqcHandler::destroy_sqc()
     ret = OB_ERR_SESSION_INTERRUPTED;
     LOG_WARN("session has been killed", K(session->get_session_state()), K(session->get_server_sid()),
-             "proxy_sessid", session->get_proxy_sessid(), K(ret));
+             K(ret));
   }
   return ret;
 }

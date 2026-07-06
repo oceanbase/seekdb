@@ -17,8 +17,6 @@
 #ifndef  OCEANBASE_COMMON_KV_STORE_CACHE_H_
 #define  OCEANBASE_COMMON_KV_STORE_CACHE_H_
 
-#include "storage/ob_storage_checked_object_base.h"
-#include "storage/ob_storage_leak_checker.h"
 #include "lib/lock/ob_mutex.h"
 #include "lib/task/ob_timer.h"
 #include "lib/utility/ob_macro_utils.h"
@@ -54,7 +52,7 @@ public:
       ObKVCacheHandle &handle, bool overwrite = true) = 0;
   virtual int get(const Key &key, const Value *&pvalue, ObKVCacheHandle &handle) = 0;
   virtual int erase(const Key &key) = 0;
-  virtual int alloc(const uint64_t tenant_id, const int64_t key_size, const int64_t value_size,
+  virtual int alloc(const int64_t key_size, const int64_t value_size,
       ObKVCachePair *&kvpair, ObKVCacheHandle &handle, ObKVCacheInstHandle &inst_handle) = 0;
   virtual int put_kvpair(ObKVCacheInstHandle &inst_handle, ObKVCachePair *kvpair, ObKVCacheHandle &handle, bool overwrite = true);
 };
@@ -79,18 +77,17 @@ public:
   int get_iterator(ObKVCacheIterator &iter);
   virtual int erase(const Key &key);
   virtual int alloc(
-      const uint64_t tenant_id,
       const int64_t key_size,
       const int64_t value_size,
       ObKVCachePair *&kvpair,
       ObKVCacheHandle &handle,
       ObKVCacheInstHandle &inst_handle) override;
-  int64_t size(const uint64_t tenant_id = OB_SYS_TENANT_ID) const;
-  int64_t count(const uint64_t tenant_id = OB_SYS_TENANT_ID) const;
-  int64_t get_hit_cnt(const uint64_t tenant_id = OB_SYS_TENANT_ID) const;
-  int64_t get_miss_cnt(const uint64_t tenant_id = OB_SYS_TENANT_ID) const;
-  double get_hit_rate(const uint64_t tenant_id = OB_SYS_TENANT_ID) const;
-  int64_t store_size(const uint64_t tenant_id = OB_SYS_TENANT_ID) const;
+  int64_t size() const;
+  int64_t count() const;
+  int64_t get_hit_cnt() const;
+  int64_t get_miss_cnt() const;
+  double get_hit_rate() const;
+  int64_t store_size() const;
   int64_t get_cache_id() const { return cache_id_; }
 private:
   bool inited_;
@@ -115,20 +112,17 @@ public:
   int reload_wash_interval();
   int get_suitable_bucket_num(int64_t& bucket_num);
   int get_cache_inst_info(ObIArray<ObKVCacheInstHandle> &inst_handles);
-  int get_memblock_info(const uint64_t tenant_id, ObIArray<ObKVCacheStoreMemblockInfo> &memblock_infos);
+  int get_memblock_info(ObIArray<ObKVCacheStoreMemblockInfo> &memblock_infos);
   void print_all_cache_info();
-  int erase_cache();
-  virtual int erase_cache(const uint64_t tenant_id) override;
-  int sync_flush_tenant(const uint64_t tenant_id);
-  int erase_cache(const uint64_t tenant_id, const char *cache_name);
+  virtual int erase_cache() override;
+  int sync_flush_tenant();
   int erase_cache(const char *cache_name);
 
-  int get_washable_size(const uint64_t tenant_id, int64_t &washable_size);
+  int get_washable_size(int64_t &washable_size);
 
   // wash memblock from cache synchronously
-  virtual int sync_wash_mbs(const uint64_t tenant_id, const int64_t wash_size,
+  virtual int sync_wash_mbs(const int64_t wash_size,
                             lib::ObICacheWasher::ObCacheMemBlock *&wash_blocks);
-  int set_storage_leak_check_mod(const char *check_mod);
   int get_cache_name(const int64_t cache_id, char *cache_name);
   int get_batch_data_block_cache_key(ObIArray<blocksstable::ObMicroBlockCacheKey> &keys) {
     return map_.get_batch_data_block_cache_key(DEFAULT_ONCE_BATCH_GET_BUCKET_NUM, keys);
@@ -162,7 +156,6 @@ private:
     bool overwrite = true);
   int alloc(
       const int64_t cache_id,
-      const uint64_t tenant_id,
       const int64_t key_size,
       const int64_t value_size,
       ObKVCachePair *&kvpair,
@@ -172,7 +165,6 @@ private:
   int alloc(
       ObIKVCacheStore &store,
       const int64_t cache_id,
-      const uint64_t tenant_id,
       const int64_t key_size,
       const int64_t value_size,
       ObKVCachePair *&kvpair,
@@ -266,7 +258,7 @@ private:
 };
 
 
-class ObKVCacheHandle : storage::ObStorageCheckedObjectBase
+class ObKVCacheHandle
 {
 public:
   ObKVCacheHandle();
@@ -278,15 +270,12 @@ public:
   int assign(const ObKVCacheHandle& other);
   inline ObKVMemBlockHandle* get_mb_handle() const { return hazptr_holder_.get_mb_handle(); }
   inline void set_hazptr_holder(HazptrHolder& hazptr_holder) { this->hazptr_holder_.move_from(hazptr_holder); }
-  bool need_trace() const;
-  storage::ObStorageCheckID get_check_id() const { return static_cast<storage::ObStorageCheckID>(0); }
   TO_STRING_KV(K_(hazptr_holder));
 
 private:
   template<class Key, class Value> friend class ObIKVCache;
   template<class Key, class Value> friend class ObKVCache;
   friend class ObKVCacheIterator;
-  friend class storage::ObStorageLeakChecker;
   friend class ObPointerSwizzleNode;
 
   HazptrHolder hazptr_holder_;
@@ -339,7 +328,6 @@ int ObIKVCache<Key, Value>::put_kvpair(ObKVCacheInstHandle &inst_handle, ObKVCac
         COMMON_LOG(WARN, "Fail to put kvpair to map, ", K(ret));
       }
     } else {
-      storage::ObStorageLeakChecker::get_instance().handle_hold(&handle);
     }
   }
   return ret;
@@ -391,7 +379,7 @@ void ObKVCache<Key, Value>::destroy()
 }
 
 template <class Key, class Value>
-int64_t ObKVCache<Key, Value>::size(const uint64_t tenant_id) const
+int64_t ObKVCache<Key, Value>::size() const
 {
   int64_t size = 0;
   if (OB_LIKELY(inited_)) {
@@ -408,7 +396,7 @@ int64_t ObKVCache<Key, Value>::size(const uint64_t tenant_id) const
 }
 
 template <class Key, class Value>
-int64_t ObKVCache<Key, Value>::count(const uint64_t tenant_id) const
+int64_t ObKVCache<Key, Value>::count() const
 {
   int64_t count = 0;
   if (OB_LIKELY(inited_)) {
@@ -425,7 +413,7 @@ int64_t ObKVCache<Key, Value>::count(const uint64_t tenant_id) const
 }
 
 template <class Key, class Value>
-int64_t ObKVCache<Key, Value>::get_hit_cnt(const uint64_t tenant_id) const
+int64_t ObKVCache<Key, Value>::get_hit_cnt() const
 {
   int64_t hit_cnt = 0;
   if (OB_LIKELY(inited_)) {
@@ -442,7 +430,7 @@ int64_t ObKVCache<Key, Value>::get_hit_cnt(const uint64_t tenant_id) const
 }
 
 template <class Key, class Value>
-int64_t ObKVCache<Key, Value>::get_miss_cnt(const uint64_t tenant_id) const
+int64_t ObKVCache<Key, Value>::get_miss_cnt() const
 {
   int64_t miss_cnt = 0;
   if (OB_LIKELY(inited_)) {
@@ -459,9 +447,8 @@ int64_t ObKVCache<Key, Value>::get_miss_cnt(const uint64_t tenant_id) const
 }
 
 template <class Key, class Value>
-double ObKVCache<Key, Value>::get_hit_rate(const uint64_t tenant_id) const
+double ObKVCache<Key, Value>::get_hit_rate() const
 {
-  UNUSED(tenant_id);
   return DEFAULT_CACHE_HIT_RATE;
 }
 
@@ -516,7 +503,6 @@ int ObKVCache<Key, Value>::put_and_fetch(
       COMMON_LOG(WARN, "Fail to put kv to ObKVGlobalCache, ", K_(cache_id), K(ret));
     }
   } else {
-    storage::ObStorageLeakChecker::get_instance().handle_hold(&handle);
   }
   return ret;
 }
@@ -537,7 +523,6 @@ int ObKVCache<Key, Value>::get(const Key &key, const Value *&pvalue, ObKVCacheHa
       }
     } else {
       pvalue = reinterpret_cast<const Value*> (value);
-      storage::ObStorageLeakChecker::get_instance().handle_hold(&handle);
     }
   }
   return ret;
@@ -557,7 +542,7 @@ int ObKVCache<Key, Value>::erase(const Key &key)
 }
 
 template <class Key, class Value>
-int ObKVCache<Key, Value>::alloc(const uint64_t tenant_id, const int64_t key_size, const int64_t value_size,
+int ObKVCache<Key, Value>::alloc(const int64_t key_size, const int64_t value_size,
     ObKVCachePair *&kvpair, ObKVCacheHandle &handle, ObKVCacheInstHandle &inst_handle)
 {
   int ret = OB_SUCCESS;
@@ -567,7 +552,6 @@ int ObKVCache<Key, Value>::alloc(const uint64_t tenant_id, const int64_t key_siz
     COMMON_LOG(WARN, "The ObKVCache has not been inited, ", K(ret));
   } else if (OB_FAIL(ObKVGlobalCache::get_instance().alloc(
           cache_id_,
-          tenant_id,
           key_size,
           value_size,
           kvpair,
@@ -575,7 +559,6 @@ int ObKVCache<Key, Value>::alloc(const uint64_t tenant_id, const int64_t key_siz
           inst_handle))) {
     COMMON_LOG(WARN, "failed to alloc", K(ret));
   } else {
-    storage::ObStorageLeakChecker::get_instance().handle_hold(&handle);
   }
 
   return ret;
@@ -583,7 +566,7 @@ int ObKVCache<Key, Value>::alloc(const uint64_t tenant_id, const int64_t key_siz
 
 
 template <class Key, class Value>
-int64_t ObKVCache<Key, Value>::store_size(const uint64_t tenant_id) const
+int64_t ObKVCache<Key, Value>::store_size() const
 {
   int64_t store_size = 0;
   if (OB_LIKELY(inited_)) {
@@ -642,7 +625,6 @@ int ObKVCacheIterator::get_next_kvpair(
   if (OB_SUCC(ret)) {
     key = reinterpret_cast<const Key*>(node.key_);
     value = reinterpret_cast<const Value*>(node.value_);
-    storage::ObStorageLeakChecker::get_instance().handle_hold(&handle);
   }
   return ret;
 }

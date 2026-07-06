@@ -21,7 +21,7 @@
 #include "sql/resolver/cmd/ob_cmd_stmt.h"
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
 #include "sql/resolver/dml/ob_hint.h"
-#include "share/backup/ob_backup_struct.h"
+#include "sql/resolver/cmd/ob_load_dup_action_type.h"
 
 namespace oceanbase
 {
@@ -29,12 +29,6 @@ namespace sql
 {
 class ObDirectLoadOptimizerCtx;
 
-enum class ObLoadDupActionType {
-  LOAD_STOP_ON_DUP = 0, //stop when going to insert duplicated key
-  LOAD_REPLACE, //replace into table when the rowkey is already existed
-  LOAD_IGNORE, //skip this line, when the rowkey is already existed
-  LOAD_INVALID_MODE
-};
 
 enum class ObLoadFileLocation {
   SERVER_DISK = 0,
@@ -65,7 +59,6 @@ struct ObLoadArgument
                     ignore_rows_(0),
                     dupl_action_(ObLoadDupActionType::LOAD_STOP_ON_DUP),
                     file_cs_type_(common::CS_TYPE_UTF8MB4_BIN),
-                    tenant_id_(OB_INVALID_INDEX_INT64),
                     database_id_(OB_INVALID_INDEX_INT64),
                     table_id_(OB_INVALID_INDEX_INT64),
                     is_csv_format_(false),
@@ -87,7 +80,6 @@ struct ObLoadArgument
                K_(database_name),
                K_(table_name),
                K_(combined_name),
-               K_(tenant_id),
                K_(database_id),
                K_(table_id),
                K_(is_csv_format),
@@ -110,7 +102,6 @@ struct ObLoadArgument
     database_name_ = other.database_name_;
     table_name_ = other.table_name_;
     combined_name_ = other.combined_name_;
-    tenant_id_ = other.tenant_id_;
     database_id_ = other.database_id_;
     table_id_ = other.table_id_;
     is_csv_format_ = other.is_csv_format_;
@@ -134,7 +125,6 @@ struct ObLoadArgument
   common::ObString database_name_;
   common::ObString table_name_;
   common::ObString combined_name_;
-  uint64_t tenant_id_;
   uint64_t database_id_;
   uint64_t table_id_; // physical table id
   bool is_csv_format_;

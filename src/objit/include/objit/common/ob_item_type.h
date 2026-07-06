@@ -286,7 +286,6 @@ typedef enum ObItemType
   T_FUN_SYS_INSTR = 556,
   T_FUN_SYS_LNNVL = 557,
   T_FUN_SYS_LOCATE = 558,
-  T_FUN_SYS_EFFECTIVE_TENANT = 559,
   T_FUN_SYS_CURRENT_USER = 560,
   T_FUN_SYS_USER = 561,
   T_FUN_SYS_VERSION = 562,
@@ -296,7 +295,6 @@ typedef enum ObItemType
   T_FUN_SYS_COERCIBILITY = 566,
   T_FUN_SYS_REVERSE = 567,
   T_FUN_SYS_RIGHT = 568,
-  T_FUN_SYS_EFFECTIVE_TENANT_ID = 569,
   T_FUN_SYS_VALUES = 570,
   T_FUN_SYS_OCT = 571,
   T_FUN_SYS_RPAD = 572,
@@ -320,7 +318,6 @@ typedef enum ObItemType
   T_FUN_SYS_IF = 591,
   T_FUN_SYS_ISNULL = 592,
   T_FUN_SYS_TIMESTAMP_NVL = 593,
-  T_FUN_IS_SERVING_TENANT = 594,
   T_FUN_SYS_POSITION = 595,
   T_FUN_SYS_ORA_DECODE = 596,
   T_FUN_SYS_ELT = 597,
@@ -1407,7 +1404,7 @@ typedef enum ObItemType
   T_SHOW_COLLATION = 3549,
   T_SHOW_TABLEGROUPS = 3550,
   T_SHOW_STATUS = 3551,
-  T_SHOW_TENANT = 3552,
+  // 3552: T_SHOW_TENANT abandoned, id reserved
   T_SHOW_CREATE_TENANT = 3553,
   T_SHOW_TRACE = 3554,
   T_SHOW_ENGINES = 3555,
@@ -1478,7 +1475,6 @@ typedef enum ObItemType
   T_CLIENT_VERSION = 3617,
   T_MYSQL_DRIVER = 3618,
   T_QUERY_TIMEOUT = 3619,
-  T_DBLINK_INFO = 3620,
   T_LOG_LEVEL = 3621,
   T_LEADING = 3622,
   T_ORDERED = 3623,
@@ -1690,7 +1686,6 @@ typedef enum ObItemType
   T_CHANGE_LIST = 3852,
   T_REPLICA_TYPE = 3853,
   T_PCTFREE = 3854,
-  T_SET_DISK_VALID = 3855,
 
   T_SQL_STATE = 3856,
   T_SQL_EXCEPTION = 3857,
@@ -1795,7 +1790,6 @@ typedef enum ObItemType
   T_SP_FORALL = 3954,
   T_SP_TYPE = 3955,
   T_SP_ROWTYPE = 3956,
-  T_SP_DBLINK_TYPE = 3957,
   T_SP_DECL_USER_SUBTYPE = 3958,
   T_SP_USER_SUBTYPE_RANGE = 3959,
   T_SP_USER_SUBTYPE_BASETYPE = 3960,
@@ -2175,14 +2169,12 @@ typedef enum ObItemType
   T_AUDIT_ALTER_SYSTEM = 4302,
   T_AUDIT_CLUSTER = 4303,
   T_AUDIT_CONTEXT = 4304,
-  T_AUDIT_DBLINK = 4305,
   T_AUDIT_INDEX = 4306,
   T_AUDIT_MATERIALIZED_VIEW = 4307,
   T_AUDIT_NOT_EXIST = 4308,
   T_AUDIT_OUTLINE = 4309,
   T_AUDIT_PROCEDURE = 4310,
   T_AUDIT_PROFILE = 4311,
-  T_AUDIT_PUBLIC_DBLINK = 4312,
   T_AUDIT_PUBLIC_SYNONYM = 4313,
   T_AUDIT_ROLE = 4314,
   T_AUDIT_SEQUENCE = 4315,
@@ -2310,11 +2302,6 @@ typedef enum ObItemType
   T_SP_OBJ_ELEMENT_SPEC_LIST = 4425,
   T_FETCH_CLAUSE = 4426, //use to support fetch next rows only
   T_FETCH_TIES_CLAUSE = 4427, //use to support fetch next rows with tie
-  T_DBLINK_NAME = 4428,
-  T_CREATE_DBLINK = 4429,
-  T_REVERSE_DBLINK = 4430,
-  T_DROP_DBLINK = 4431,
-  T_ALTER_DBLINK = 4432,
   T_LABEL_LIST = 4433,
   T_PRIMARY_ROOTSERVICE_LIST = 4434,
   T_ALTER_USER = 4435,
@@ -2485,7 +2472,6 @@ typedef enum ObItemType
   T_MYSQL_ANALYZE = 4578,
   T_DECORRELATE = 4579,
   T_NO_DECORRELATE = 4580,
-  T_DBLINK_UDF = 4581,
   T_COLUMN_ADD_WITH_LOB_PARAMS = 4582,
 
   //for materialized view
@@ -3039,8 +3025,7 @@ typedef enum ObOutlineType
                            || (op) == T_SHOW_PLUGINS || (op) == T_SHOW_CHECK_TABLE \
                            || (op) == T_SHOW_OLAP_ASYNC_JOB_STATUS                \
                            || (op) == T_SHOW_CREATE_LOCATION \
-                           || (op) == T_SHOW_LOCATIONS       \
-                           || (op) == T_LOCATION_UTILS_LIST)
+                           || (op) == T_SHOW_LOCATIONS)
 
 #define EXPR_OP_NUM (T_MAX_OP-T_MIN_OP-1)
 extern const char *get_type_name(int type);

@@ -35,10 +35,10 @@ using namespace storage;
 ObTableLoadPXBatchRows::ObTableLoadPXBatchRows()
   : reshape_allocator_("TLD_Reshape"), need_reshape_(false), is_inited_(false)
 {
-  col_types_.set_tenant_id(MTL_ID());
-  col_accuracys_.set_tenant_id(MTL_ID());
-  vectors_.set_tenant_id(MTL_ID());
-  reshape_allocator_.set_tenant_id(MTL_ID());
+  
+  
+  
+  
 }
 
 ObTableLoadPXBatchRows::~ObTableLoadPXBatchRows() { reset(); }

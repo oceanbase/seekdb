@@ -15,9 +15,10 @@
  */
 
 #include "ob_gti_rpc.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_trans_id_service.h"
 #include "ob_trans_service.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 
 namespace oceanbase
 {
@@ -26,16 +27,15 @@ using namespace obcall;
 namespace transaction
 {
 
-OB_SERIALIZE_MEMBER(ObGtiRequest, tenant_id_, range_);
+OB_SERIALIZE_MEMBER(ObGtiRequest, range_);
 
-int ObGtiRequest::init(const uint64_t tenant_id, const int64_t range)
+int ObGtiRequest::init(const int64_t range)
 {
   int ret = OB_SUCCESS;
-  if (!is_valid_tenant_id(tenant_id) || 0 >= range) {
+  if (!true || 0 >= range) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id), K(range));
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(range));
   } else {
-    tenant_id_ = tenant_id;
     range_ = range;
   }
   return ret;
@@ -43,7 +43,7 @@ int ObGtiRequest::init(const uint64_t tenant_id, const int64_t range)
 
 bool ObGtiRequest::is_valid() const
 {
-  return is_valid_tenant_id(tenant_id_) && range_ > 0;
+  return true && range_ > 0;
 }
 
 int ObGtiRequestRpc::init(const ObAddr &self, ObGtiSource *gti_source)
@@ -141,7 +141,7 @@ int ObGtiRequestRpc::post(const ObGtiRequest &msg)
   } else if (!msg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(msg));
-  } else if (OB_FAIL(MTL(transaction::ObTransService*)->get_location_adapter()->nonblock_get_leader(GCONF.cluster_id, msg.get_tenant_id(), GTI_LS, server))) {
+  } else if (OB_FAIL(share::g_mp->trans_service()->get_location_adapter()->nonblock_get_leader(GCONF.cluster_id, GTI_LS, server))) {
     TRANS_LOG(WARN, "get leader failed", KR(ret), K(msg), K(GTI_LS));
   } else {
    // single-replica: target is always local; dispatch async in-process (ex-RPC),
@@ -152,9 +152,9 @@ int ObGtiRequestRpc::post(const ObGtiRequest &msg)
    (void)ex_rpc::async_call<void>(msg,
        [cb = gti_request_cb_, server](const ObGtiRequest &m) mutable {
      int ret = OB_SUCCESS;
-     MTL_SWITCH(m.get_tenant_id()) {
+     MOD_SCOPE {
        ObGtiRpcResult gti_rpc_result;
-       if (OB_FAIL(MTL(ObTransIDService*)->handle_request(m, gti_rpc_result))) {
+       if (OB_FAIL(share::g_mp->trans_id_service()->handle_request(m, gti_rpc_result))) {
          TRANS_LOG(WARN, "post local gti request failed", KR(ret), K(server), K(m));
        } else if (!gti_rpc_result.is_valid()) {
          ret = OB_ERR_UNEXPECTED;
@@ -163,7 +163,7 @@ int ObGtiRequestRpc::post(const ObGtiRequest &msg)
        } else {
          rpc::frame::ObResultCode rcode;
          rcode.rcode_ = OB_SUCCESS;
-         cb.set_tenant_id(m.get_tenant_id());
+         
          if (OB_FAIL(cb.process(gti_rpc_result, server, rcode))) {
            TRANS_LOG(WARN, "post local gti request failed", KR(ret), K(server), K(m));
          } else {
@@ -181,23 +181,22 @@ int ObGtiRequestRpc::post(const ObGtiRequest &msg)
 namespace obcall
 {
 
-OB_SERIALIZE_MEMBER(ObGtiRpcResult, tenant_id_, status_, start_id_, end_id_);
+OB_SERIALIZE_MEMBER(ObGtiRpcResult, status_, start_id_, end_id_);
 
-int ObGtiRpcResult::init(const uint64_t tenant_id, const int status, const int64_t start_id,
+int ObGtiRpcResult::init(const int status, const int64_t start_id,
     const int64_t end_id)
 {
   int ret = OB_SUCCESS;
-  if (!is_valid_tenant_id(tenant_id) ||
+  if (!true ||
       (OB_SUCCESS == status && (0 >= start_id || 0 >= end_id))) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id),
+    TRANS_LOG(WARN, "invalid argument", KR(ret),
         K(status), K(start_id), K(end_id));
   } else {
-    tenant_id_ = tenant_id;
     status_ = status;
     start_id_ = start_id;
     end_id_ = end_id;
-    TRANS_LOG(INFO, "ObGtiRpcResult init", KR(ret), K(tenant_id),
+    TRANS_LOG(INFO, "ObGtiRpcResult init", KR(ret),
         K(status), K(start_id), K(end_id));
   }
   return ret;
@@ -205,7 +204,6 @@ int ObGtiRpcResult::init(const uint64_t tenant_id, const int status, const int64
 
 void ObGtiRpcResult::reset()
 {
-  tenant_id_ = 0;
   status_ = OB_SUCCESS;
   start_id_ = 0;
   end_id_ = 0;
@@ -213,7 +211,7 @@ void ObGtiRpcResult::reset()
 
 bool ObGtiRpcResult::is_valid() const
 {
-  return is_valid_tenant_id(tenant_id_) &&
+  return true &&
     (OB_SUCCESS != status_ || (start_id_ > 0 && end_id_ > 0));
 }
 

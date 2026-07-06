@@ -20,8 +20,8 @@
 #include "sql/das/iter/ob_das_iter_define.h"
 #include "sql/das/ob_das_attach_define.h"
 #include "sql/das/ob_das_scan_op.h"
-#include "share/domain_id/ob_domain_id.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "sql/das/ob_domain_id.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 
 using namespace oceanbase::common;
 
@@ -171,7 +171,7 @@ int ObDASDomainIdMergeIter::inner_init(ObDASIterParam &param)
   } else {
     ObDASDomainIdMergeIterParam &merge_param = static_cast<ObDASDomainIdMergeIterParam &>(param);
     lib::ContextParam param;
-    param.set_mem_attr(MTL_ID(), "DomainIdMerge", ObCtxIds::DEFAULT_CTX_ID).set_properties(lib::USE_TL_PAGE_OPTIONAL);
+    param.set_mem_attr("DomainIdMerge", ObCtxIds::DEFAULT_CTX_ID).set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(merge_memctx_, param))) {
       LOG_WARN("failed to create merge memctx", K(ret));
     } else {
@@ -494,10 +494,10 @@ int ObDASDomainIdMergeIter::init_rowkey_domain_scan_param(
     storage::ObTableScanParam &scan_param)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
-  scan_param.tenant_id_ = tenant_id;
-  scan_param.key_ranges_.set_attr(ObMemAttr(tenant_id, "SParamKR"));
-  scan_param.ss_key_ranges_.set_attr(ObMemAttr(tenant_id, "SParamSSKR"));
+  
+  
+  scan_param.key_ranges_.set_attr(ObMemAttr("SParamKR"));
+  scan_param.ss_key_ranges_.set_attr(ObMemAttr("SParamSSKR"));
   if (OB_UNLIKELY(!tablet_id.is_valid() || !ls_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(tablet_id), K(ls_id));
@@ -521,8 +521,6 @@ int ObDASDomainIdMergeIter::init_rowkey_domain_scan_param(
     scan_param.force_refresh_lc_ = rtdef->force_refresh_lc_;
     scan_param.output_exprs_ = &(ctdef->pd_expr_spec_.access_exprs_);
     scan_param.aggregate_exprs_ = &(ctdef->pd_expr_spec_.pd_storage_aggregate_output_);
-    scan_param.ext_file_column_exprs_ = &(ctdef->pd_expr_spec_.ext_file_column_exprs_);
-    scan_param.ext_column_convert_exprs_ = &(ctdef->pd_expr_spec_.ext_column_convert_exprs_);
     scan_param.calc_exprs_ = &(ctdef->pd_expr_spec_.calc_exprs_);
     scan_param.table_param_ = &(ctdef->table_param_);
     scan_param.op_ = rtdef->p_pd_expr_op_;
@@ -570,7 +568,7 @@ int ObDASDomainIdMergeIter::init_rowkey_domain_scan_param(
 int ObDASDomainIdMergeIter::concat_row()
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DomainIDCR"));
+  ObArenaAllocator allocator(ObMemAttr("DomainIDCR"));
   if (OB_FAIL(data_table_iter_->get_next_row())) {
     if (OB_ITER_END == ret && is_no_sample_) {
       int tmp_ret = ret;
@@ -632,7 +630,7 @@ int ObDASDomainIdMergeIter::concat_row()
 int ObDASDomainIdMergeIter::concat_rows(int64_t &count, int64_t capacity)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DomainIDCRS"));
+  ObArenaAllocator allocator(ObMemAttr("DomainIDCRS"));
   int64_t data_row_cnt = 0;
   int64_t rowkey_domain_row_cnt = 0;
   ObArray<share::ObDomainIdUtils::DomainIds> domain_ids;
@@ -725,7 +723,7 @@ int ObDASDomainIdMergeIter::concat_rows(int64_t &count, int64_t capacity)
 int ObDASDomainIdMergeIter::sorted_merge_join_row()
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DomainIDMR"));
+  ObArenaAllocator allocator(ObMemAttr("DomainIDMR"));
   common::ObRowkey data_table_rowkey;
   if (OB_FAIL(data_table_iter_->get_next_row()) && OB_ITER_END != ret) {
     LOG_WARN("fail to get next data table row", K(ret));
@@ -771,7 +769,7 @@ int ObDASDomainIdMergeIter::sorted_merge_join_row()
 int ObDASDomainIdMergeIter::sorted_merge_join_rows(int64_t &count, int64_t capacity)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DomainIdMRs"));
+  ObArenaAllocator allocator(ObMemAttr("DomainIdMRs"));
   common::ObArray<common::ObRowkey> rowkeys_in_data_table;
   common::ObArray<share::ObDomainIdUtils::DomainIds> domain_ids;
   bool is_iter_end = false;
@@ -1162,7 +1160,7 @@ int ObDASDomainIdMergeIter::get_rowkeys_and_domain_ids(
 int ObDASDomainIdMergeIter::multi_get_row()
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DomainIDMGR"));
+  ObArenaAllocator allocator(ObMemAttr("DomainIDMGR"));
   common::ObRowkey data_table_rowkey;
   if (OB_FAIL(data_table_iter_->get_next_row())) {
     if (OB_ITER_END != ret) {
@@ -1250,7 +1248,7 @@ int ObDASDomainIdMergeIter::multi_get_row()
 int ObDASDomainIdMergeIter::multi_get_rows(int64_t &count, int64_t capacity)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DomainIDMGRS"));
+  ObArenaAllocator allocator(ObMemAttr("DomainIDMGRS"));
   int64_t data_row_cnt = 0;
   ObArray<share::ObDomainIdUtils::DomainIds> domain_ids;
 

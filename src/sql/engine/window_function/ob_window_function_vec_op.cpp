@@ -302,7 +302,7 @@ int ObWindowFunctionVecOp::inner_open()
     LOG_WARN("invalid null session ptr", K(ret));
   } else if (OB_FAIL(init())) {
     LOG_WARN("init window function failed", K(ret));
-  } else if (OB_FAIL(reset_for_scan(ctx_.get_my_session()->get_effective_tenant_id()))) {
+  } else if (OB_FAIL(reset_for_scan())) {
     LOG_WARN("reset for scan failed", K(ret));
   }
   LOG_TRACE("window function inner open", K(MY_SPEC), K(MY_SPEC.single_part_parallel_), K(MY_SPEC.range_dist_parallel_));
@@ -353,7 +353,7 @@ int ObWindowFunctionVecOp::inner_rescan()
   } else if (OB_ISNULL(ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null session", K(ret));
-  } else if (OB_FAIL(reset_for_scan(ctx_.get_my_session()->get_effective_tenant_id()))) {
+  } else if (OB_FAIL(reset_for_scan())) {
     LOG_WARN("reset for scan failed", K(ret));
   } else {
     FOREACH_WINCOL(END_WF) {
@@ -465,7 +465,7 @@ void ObWindowFunctionVecOp::destroy()
   ObOperator::destroy();
 }
 
-int ObWindowFunctionVecOp::reset_for_scan(const int64_t tenant_id)
+int ObWindowFunctionVecOp::reset_for_scan()
 {
   int ret = OB_SUCCESS;
   last_output_row_idx_ = OB_INVALID_INDEX;
@@ -485,22 +485,22 @@ int ObWindowFunctionVecOp::reset_for_scan(const int64_t tenant_id)
   return ret;
 }
 
-int ObWindowFunctionVecOp::create_stores(const int64_t tenant_id)
+int ObWindowFunctionVecOp::create_stores()
 {
   int ret = OB_SUCCESS;
   ObIAllocator *store_alloc = &mem_context_->get_malloc_allocator();
-  input_stores_.processed_ = OB_NEWx(winfunc::RowStore, local_allocator_, tenant_id, store_alloc,
+  input_stores_.processed_ = OB_NEWx(winfunc::RowStore, local_allocator_, store_alloc,
                                      local_allocator_, input_stores_);
-  input_stores_.cur_ = OB_NEWx(winfunc::RowStore, local_allocator_, tenant_id, store_alloc,
+  input_stores_.cur_ = OB_NEWx(winfunc::RowStore, local_allocator_, store_alloc,
                                local_allocator_, input_stores_);
   input_stores_.set_operator(this);
   if (OB_ISNULL(input_stores_.processed_) || OB_ISNULL(input_stores_.cur_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret));
   } else if (MY_SPEC.range_dist_parallel_) {
-    input_stores_.first_ = OB_NEWx(winfunc::RowStore, local_allocator_, tenant_id, store_alloc,
+    input_stores_.first_ = OB_NEWx(winfunc::RowStore, local_allocator_, store_alloc,
                                    local_allocator_, input_stores_);
-    input_stores_.last_ = OB_NEWx(winfunc::RowStore, local_allocator_, tenant_id, store_alloc,
+    input_stores_.last_ = OB_NEWx(winfunc::RowStore, local_allocator_, store_alloc,
                                   local_allocator_, input_stores_);
     if (OB_ISNULL(input_stores_.first_) || OB_ISNULL(input_stores_.last_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -508,7 +508,7 @@ int ObWindowFunctionVecOp::create_stores(const int64_t tenant_id)
     }
   }
   ObIArray<ObExpr *> &all_exprs = get_all_expr();
-  lib::ObMemAttr stored_mem_attr(tenant_id, ObModIds::OB_SQL_WINDOW_ROW_STORE, ObCtxIds::WORK_AREA);
+  lib::ObMemAttr stored_mem_attr(ObModIds::OB_SQL_WINDOW_ROW_STORE, ObCtxIds::WORK_AREA);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(input_stores_.init(MY_SPEC.max_batch_size_, input_row_meta_, stored_mem_attr,
                                         INT64_MAX, true))) {
@@ -521,17 +521,17 @@ int ObWindowFunctionVecOp::create_stores(const int64_t tenant_id)
       LOG_WARN("allocate memory failed", K(ret));
     } else {
       it->res_->set_operator(this);
-      it->res_->processed_ = OB_NEWx(winfunc::RowStore, local_allocator_, tenant_id, store_alloc,
+      it->res_->processed_ = OB_NEWx(winfunc::RowStore, local_allocator_, store_alloc,
                                      local_allocator_, *it->res_);
-      it->res_->cur_ = OB_NEWx(winfunc::RowStore, local_allocator_, tenant_id, store_alloc,
+      it->res_->cur_ = OB_NEWx(winfunc::RowStore, local_allocator_, store_alloc,
                                local_allocator_, *it->res_);
       if (OB_ISNULL(it->res_->processed_) || OB_ISNULL(it->res_->cur_)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(ret));
       } else if (MY_SPEC.range_dist_parallel_) {
-        it->res_->first_ = OB_NEWx(winfunc::RowStore, local_allocator_, tenant_id, store_alloc,
+        it->res_->first_ = OB_NEWx(winfunc::RowStore, local_allocator_, store_alloc,
                                    local_allocator_, *it->res_);
-        it->res_->last_ = OB_NEWx(winfunc::RowStore, local_allocator_, tenant_id, store_alloc,
+        it->res_->last_ = OB_NEWx(winfunc::RowStore, local_allocator_, store_alloc,
                                   local_allocator_, *it->res_);
         if (OB_ISNULL(it->res_->first_) || OB_ISNULL(it->res_->last_)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -670,7 +670,6 @@ int ObWindowFunctionVecOp::init()
       LOG_WARN("failed to get px size", K(ret));
     } else if (OB_FAIL(sql_mem_processor_.init(
                          &mem_context_->get_malloc_allocator(),
-                         ctx_.get_my_session()->get_effective_tenant_id(),
                          (est_rows * MY_SPEC.width_ / MY_SPEC.estimated_part_cnt_),
                          MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
       LOG_WARN("init sql mem processor failed", K(ret));
@@ -687,13 +686,13 @@ int ObWindowFunctionVecOp::init()
 
   if (OB_FAIL(ret)) {
   } else {
-    const int64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+    
     local_allocator_ = &(mem_context_->get_arena_allocator());
-    rescan_alloc_.set_tenant_id(tenant_id);
+    
     rescan_alloc_.set_label("WfRescanAlloc");
-    patch_alloc_.set_tenant_id(tenant_id);
+    
     patch_alloc_.set_label("WfPatchAlloc");
-    ObMemAttr attr(tenant_id, "WfArray");
+    ObMemAttr attr("WfArray");
     participator_whole_msg_array_.set_attr(attr);
     pby_hash_values_.set_attr(attr);
     pby_hash_values_sets_.set_attr(attr);
@@ -701,7 +700,7 @@ int ObWindowFunctionVecOp::init()
     all_part_exprs_.set_attr(attr);
     int prev_pushdown_pby_col_count = -1;
     WFInfoFixedArray &wf_infos = const_cast<WFInfoFixedArray &>(MY_SPEC.wf_infos_);
-    if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(tenant_id, dir_id_))) {
+    if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(dir_id_))) {
       LOG_WARN("failed to alloc dir id", K(ret));
     } else if (MY_SPEC.max_batch_size_ > 0) {
       if (OB_FAIL(all_expr_vector_copy_.init(child_->get_spec().output_, eval_ctx_))) {
@@ -884,10 +883,10 @@ int ObWindowFunctionVecOp::init()
         }
         if (OB_FAIL(ret)) {
           // do nothing
-        } else if (OB_FAIL(win_col->init_res_rows(tenant_id))) {
+        } else if (OB_FAIL(win_col->init_res_rows())) {
           LOG_WARN("init result compact rows failed", K(ret));
         } else if (win_col->wf_expr_->is_aggregate_expr()
-                   && OB_FAIL(win_col->init_aggregate_ctx(tenant_id))) {
+                   && OB_FAIL(win_col->init_aggregate_ctx())) {
           LOG_WARN("init aggr ctx and rows failed", K(ret));
         } else if (!win_col->wf_expr_->is_aggregate_expr()
                    && OB_FAIL(win_col->init_non_aggregate_ctx())) {
@@ -1038,7 +1037,7 @@ int ObWindowFunctionVecOp::init()
     }
     // create stores
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(create_stores(tenant_id))) {
+    } else if (OB_FAIL(create_stores())) {
       LOG_WARN("create stores failed", K(ret));
     }
   }
@@ -1338,7 +1337,6 @@ int ObWindowFunctionVecOp::mapping_pby_row_to_idx_arr(const ObBatchRows &child_b
   int ret = OB_SUCCESS;
   ObIArray<ObExpr *> &part_exprs = all_part_exprs_;
   ObArenaAllocator tmp_mem_alloc(ObModIds::OB_SQL_WINDOW_LOCAL, OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                 ctx_.get_my_session()->get_effective_tenant_id(),
                                  ObCtxIds::WORK_AREA);
   ObSEArray<cell_info, 8> part_cell_infos;
   // calculate last part expr of previous batch first
@@ -1444,7 +1442,7 @@ int ObWindowFunctionVecOp::do_partial_next_batch(const int64_t max_row_cnt, bool
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid null session", K(ret));
   } else {
-    const int64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+    
     if (input_stores_.processed_->to_output_rows() == 0 && input_stores_.processed_->count() > 0) {
       // all processed rows are outputed, reset processed
       input_stores_.processed_->reset();
@@ -2197,8 +2195,7 @@ int ObWindowFunctionVecOp::compute_wf_values(WinFuncColExpr *end, int64_t &check
       }
     }
     int64_t total_size = input_stores_.cur_->count() - it->part_first_row_idx_;
-    winfunc::WinExprEvalCtx win_expr_ctx(*input_stores_.cur_, *it,
-                                         ctx_.get_my_session()->get_effective_tenant_id());
+    winfunc::WinExprEvalCtx win_expr_ctx(*input_stores_.cur_, *it);
     int64_t start_idx = it->part_first_row_idx_;
     if (it->wf_expr_->is_aggregate_expr()) {
       // if aggregate expr, reset last_valid_frame & last_valid_row before process partition
@@ -2359,8 +2356,7 @@ int ObWindowFunctionVecOp::collect_sp_partial_results()
 {
   int ret = OB_SUCCESS;
   WinFuncColExpr &wf_col = *wf_list_.get_last();
-  common::ObMemAttr attr(ctx_.get_my_session()->get_effective_tenant_id(),
-                         ObModIds::OB_SQL_WINDOW_LOCAL, ObCtxIds::WORK_AREA);
+  common::ObMemAttr attr(ObModIds::OB_SQL_WINDOW_LOCAL, ObCtxIds::WORK_AREA);
   SPWinFuncPXWholeMsg whole_msg(attr);
   ObVectorsResultHolder tmp_holder;
   if (wf_col.res_->cur_->count() <= 0) {
@@ -2429,8 +2425,7 @@ int ObWindowFunctionVecOp::sp_get_whole_msg(bool is_empty, SPWinFuncPXWholeMsg &
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "parallel winbuf in non-px mode");
   } else {
     ObPxSQCProxy &proxy = handler->get_sqc_proxy();
-    common::ObMemAttr attr(ctx_.get_my_session()->get_effective_tenant_id(),
-                           ObModIds::OB_SQL_WINDOW_LOCAL, ObCtxIds::WORK_AREA);
+    common::ObMemAttr attr(ObModIds::OB_SQL_WINDOW_LOCAL, ObCtxIds::WORK_AREA);
     SPWinFuncPXPieceMsg piece(attr);
     piece.op_id_ = MY_SPEC.get_id();
     piece.thread_id_ = GETTID();
@@ -2922,8 +2917,7 @@ int ObWindowFunctionVecOp::rd_fetch_patch()
     LOG_WARN("unexpected null arguments", K(ret), K(handler), K(rd_coord_row_meta_),
              K(ctx_.get_my_session()));
   } else {
-    common::ObMemAttr attr(ctx_.get_my_session()->get_effective_tenant_id(),
-                           ObModIds::OB_SQL_WINDOW_FUNC, ObCtxIds::WORK_AREA);
+    common::ObMemAttr attr(ObModIds::OB_SQL_WINDOW_FUNC, ObCtxIds::WORK_AREA);
     RDWinFuncPXPieceMsg piece_msg(attr);
     piece_msg.op_id_ = MY_SPEC.get_id();
     piece_msg.thread_id_ = GETTID();
@@ -3377,9 +3371,9 @@ int ObWindowFunctionVecOp::init_mem_context()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(mem_context_)) {
     ObSQLSessionInfo *sess = ctx_.get_my_session();
-    uint64_t tenant_id = sess->get_effective_tenant_id();
+    
     lib::ContextParam param;
-    param.set_mem_attr(tenant_id, ObModIds::OB_SQL_WINDOW_ROW_STORE, ObCtxIds::WORK_AREA)
+    param.set_mem_attr(ObModIds::OB_SQL_WINDOW_ROW_STORE, ObCtxIds::WORK_AREA)
       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
       LOG_WARN("create entity failed", K(ret));
@@ -3452,7 +3446,7 @@ int ObWindowFunctionVecOp::update_mem_limit_version_periodically()
 }
 
 // ================ WinFuncColExpr
-int WinFuncColExpr::init_aggregate_ctx(const int64_t tenant_id)
+int WinFuncColExpr::init_aggregate_ctx()
 {
   // only aggr expr need agg_ctx_
   using info_array = ObFixedArray<ObAggrInfo, ObIAllocator>;
@@ -3471,7 +3465,7 @@ int WinFuncColExpr::init_aggregate_ctx(const int64_t tenant_id)
     agg_expr->aggr_processor_ = OB_NEWx(aggregate::Processor, &local_allocator,
                                         op_.eval_ctx_, *aggr_infos,
                                         ObModIds::OB_SQL_WINDOW_LOCAL,
-                                        op_.op_monitor_info_, tenant_id);
+                                        op_.op_monitor_info_);
     if (OB_ISNULL(agg_expr->aggr_processor_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret));
@@ -3545,7 +3539,7 @@ int WinFuncColExpr::init_non_aggregate_ctx()
   return ret;
 }
 
-int WinFuncColExpr::init_res_rows(const int64_t tenant_id)
+int WinFuncColExpr::init_res_rows()
 {
   int ret = OB_SUCCESS;
   ObIAllocator &local_allocator = *op_.local_allocator_;
@@ -4110,8 +4104,8 @@ int ObWindowFunctionVecOp::init_hp_infras_group_mgr()
   int ret = OB_SUCCESS;
   if (!hp_infras_mgr_.is_inited()) {
     int64_t est_rows = MY_SPEC.rows_ / MY_SPEC.estimated_part_cnt_;
-    uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
-    if (OB_FAIL(hp_infras_mgr_.init(tenant_id, GCONF.is_sql_operator_dump_enabled(), est_rows,
+    
+    if (OB_FAIL(hp_infras_mgr_.init(GCONF.is_sql_operator_dump_enabled(), est_rows,
                                     MY_SPEC.width_, true, 1, &eval_ctx_, &sql_mem_processor_,
                                     &io_event_observer_, NONE_COMPRESSOR))) {
       LOG_WARN("init hp mgr failed", K(ret));

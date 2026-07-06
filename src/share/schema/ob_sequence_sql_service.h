@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_SCHEMA_OB_SEQUENCE_SQL_SERVICE_H_
 
 #include "ob_ddl_sql_service.h"
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 #include "share/ob_rpc_struct.h"
 
 using namespace oceanbase::common::number;
@@ -54,8 +54,7 @@ public:
                                bool need_clean_cache,
                                bool need_write_back,
                                const common::ObString *ddl_stmt_str = NULL);
-  virtual int delete_sequence(const uint64_t tenant_id,
-                              const uint64_t database_id,
+  virtual int delete_sequence(const uint64_t database_id,
                               const uint64_t sequence_id,
                               const int64_t new_schema_version,
                               common::ObISQLClient *sql_client,
@@ -66,8 +65,7 @@ public:
                             const common::ObString *ddl_stmt_str = NULL);
   int alter_sequence_start_with(const ObSequenceSchema &sequence_schema,
                                 common::ObISQLClient &sql_client);
-  int get_sequence_sync_value(const uint64_t tenant_id,
-                              const uint64_t sequence_id,
+  int get_sequence_sync_value(const uint64_t sequence_id,
                               const bool is_for_update,
                               common::ObISQLClient &sql_client,
                               ObIAllocator &allocator,
@@ -78,13 +76,11 @@ private:
                                  ObIAllocator &allocator);
   int add_sequence(common::ObISQLClient &sql_client, const ObSequenceSchema &sequence_schema,
                    const bool only_history, const uint64_t *old_sequence_id);
-  int add_sequence_to_value_table(const uint64_t tenant_id,
-                                  const uint64_t exec_tenant_id,
-                                  const uint64_t old_sequence_id,
+  int add_sequence_to_value_table(const uint64_t old_sequence_id,
                                   const uint64_t new_sequence_id,
                                   common::ObISQLClient &sql_client,
                                   ObIAllocator &allocator);
-  int clean_sequence_cache(uint64_t tenant_id, uint64_t sequence_id, ObNumber &inner_next_value,
+  int clean_sequence_cache(uint64_t sequence_id, ObNumber &inner_next_value,
                            obcall::ObSeqCleanCacheRes &cache_res, ObIAllocator &allocator);
 
   int get_lastest_local_cache(ObFixedArray<SequenceCacheNode, common::ObIAllocator> &prefetch_nodes,

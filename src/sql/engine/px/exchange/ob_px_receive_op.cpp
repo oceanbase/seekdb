@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_px_receive_op.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/dtl/ob_dtl_channel_group.h"
 #include "sql/engine/px/exchange/ob_px_ms_receive_op.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
@@ -156,8 +157,7 @@ int ObPxReceiveOp::init_dfc(ObDtlDfoKey &key)
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
-  if (OB_FAIL(dfc_.init(ctx_.get_my_session()->get_effective_tenant_id(),
-                        task_ch_set_.count()))) {
+  if (OB_FAIL(dfc_.init(task_ch_set_.count()))) {
     LOG_WARN("Fail to init dfc", K(ret));
   } else {
     dfc_.set_timeout_ts(plan_ctx->get_timeout_timestamp());
@@ -212,7 +212,7 @@ int ObPxReceiveOp::init_channel(
     bool enable_audit = true;
     metric_.init(enable_audit);
     common::ObIArray<dtl::ObDtlChannel*> &channels = task_channels;
-    loop.set_tenant_id(ctx_.get_my_session()->get_effective_tenant_id());
+    
     loop.register_processor(px_row_msg_proc)
         .register_interrupt_processor(interrupt_proc);
     loop.set_process_query_time(ctx_.get_my_session()->get_process_query_time());
@@ -266,7 +266,7 @@ int ObPxReceiveOp::link_ch_sets(ObPxTaskChSet &ch_set,
   } else if (OB_FAIL(dfc->reserve(ch_set.count()))) {
     LOG_WARN("fail reserve dfc channels", K(ret), K(ch_set.count()));
   } else if (ch_set.count() > 0) {
-    ObMemAttr attr(ctx_.get_my_session()->get_effective_tenant_id(), "SqlDtlRecvChan");
+    ObMemAttr attr("SqlDtlRecvChan");
     void *buf = oceanbase::common::ob_malloc(DTL_CHANNEL_SIZE * ch_set.count(), attr);
     if (nullptr == buf) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -299,12 +299,12 @@ int ObPxReceiveOp::link_ch_sets(ObPxTaskChSet &ch_set,
           LOG_WARN("only local dtl channel is supported", K(ret), K(ci.type_));
         } else {
           // single-replica: only local (in-process) channels are supported.
-          ch = new((char*)buf + offset) ObDtlLocalChannel(ci.tenant_id_, ci.chid_, ci.peer_, hash_val, dtl::ObDtlChannel::DtlChannelType::LOCAL_CHANNEL);
+          ch = new((char*)buf + offset) ObDtlLocalChannel(ci.chid_, ci.peer_, hash_val, dtl::ObDtlChannel::DtlChannelType::LOCAL_CHANNEL);
         }
         if (OB_FAIL(ret)) {
         } else if (nullptr == ch) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("create channel fail", K(ret), K(ci.tenant_id_), K(ci.chid_));
+          LOG_WARN("create channel fail", K(ret), K(ci.chid_));
         } else if (OB_FAIL(dtl::ObDtlChannelGroup::link_channel(ci, ch, dfc))) {
           LOG_WARN("fail link channel", K(ci), K(ret));
         } else if (OB_ISNULL(ch)) {
@@ -352,7 +352,7 @@ int ObPxReceiveOp::inner_rescan()
       channel->reset_state();
       channel->set_batch_id(ctx_.get_px_batch_id());
       channel->reset_px_row_iterator();
-      release_channel_ret = MTL(ObDTLIntermResultManager*)->erase_interm_result_info(key);
+      release_channel_ret = share::g_mp->dtl_interm_result_manager()->erase_interm_result_info(key);
       if (release_channel_ret != common::OB_SUCCESS) {
         LOG_WARN("fail to release receive internal result", KR(release_channel_ret), K(ret));
       }
@@ -488,7 +488,7 @@ int ObPxReceiveOp::erase_dtl_interm_result()
       for (int64_t batch_id = ctx_.get_px_batch_id();
            batch_id < PX_RESCAN_BATCH_ROW_COUNT && OB_SUCC(ret); batch_id++) {
         key.batch_id_ = batch_id;
-        if (OB_FAIL(MTL(ObDTLIntermResultManager*)->erase_interm_result_info(key))) {
+        if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->erase_interm_result_info(key))) {
           if (OB_HASH_NOT_EXIST == ret) {
             ret = OB_SUCCESS;
             break;

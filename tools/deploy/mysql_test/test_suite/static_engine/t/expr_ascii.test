@@ -52,8 +52,8 @@ insert into t1 values(-1, 2,
     '2019-12-01 12:00:00', '2019-12-03 06:00:00', 
     '-9.5', '10.5', null);
 create table t2(col_int int, col_utf8 varchar(100) charset utf8, 
-                col_utf16 varchar(100) charset utf16,
-                col_gbk varchar(100) charset gbk);
+                col_utf16 varchar(100) charset utf8mb4,
+                col_gbk varchar(100) charset utf8mb4);
 insert into t2 values(1, 'a', 'a', 'a');
 insert into t2 values(-1, '中国', '中文', '中文');
 insert into t2 values(256, ' 中国', ' 中文', '中文');
@@ -76,5 +76,4 @@ select col_int, ascii(col_int), ord(col_int) from t2;
 select col_utf8, ascii(col_utf8), ord(col_utf8) from t2;
 select col_utf16, ascii(col_utf16), ord(col_utf16) from t2;
 select col_gbk, ascii(col_gbk), ord(col_gbk) from t2;
-
 --sleep 2

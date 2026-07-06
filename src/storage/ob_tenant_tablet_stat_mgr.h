@@ -171,7 +171,7 @@ public:
   ~ObTenantSysStat() = default;
   void reset();
   bool is_small_tenant() const;
-  int refresh(const uint64_t tenant_id, const bool force_refresh = false);
+  int refresh(const bool force_refresh = false);
   TO_STRING_KV(K_(min_cpu_cnt), K_(max_cpu_cnt), K_(memory_hold), K_(memory_limit));
 
 public:
@@ -386,7 +386,7 @@ public:
   static int mtl_init(ObTenantTabletStatMgr* &tablet_stat_mgr);
   ObTenantTabletStatMgr();
   virtual ~ObTenantTabletStatMgr();
-  int init(const int64_t tenant_id);
+  int init();
   bool is_inited() const { return is_inited_; }
   // int start();
   void wait();

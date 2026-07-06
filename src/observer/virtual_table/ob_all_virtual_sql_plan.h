@@ -17,7 +17,7 @@
 #ifndef SRC_OBSERVER_VIRTUAL_SQL_PLAN_H_
 #define SRC_OBSERVER_VIRTUAL_SQL_PLAN_H_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 #include "lib/container/ob_se_array.h"
 #include "common/ob_range.h"
@@ -55,7 +55,7 @@ private:
   int fill_cells(sql::ObSqlPlanItem *plan_item);
   int extract_tenant_and_plan_id(const common::ObIArray<common::ObNewRange> &ranges);
   int dump_all_tenant_plans();
-  int dump_tenant_plans(int64_t tenant_id);
+  int dump_tenant_plans();
   int prepare_next_plan();
 
 private:
@@ -116,10 +116,9 @@ private:
     virtual ~PlanInfo();
     void reset();
     int64_t plan_id_;
-    int64_t tenant_id_;
+    
     TO_STRING_KV(
-      K_(plan_id),
-      K_(tenant_id)
+      K_(plan_id)
     );
   };
 
@@ -130,7 +129,7 @@ private:
     void reset();
     int operator()(common::hash::HashMapPair<sql::ObCacheObjID, sql::ObILibCacheObject *> &entry);
     ObSEArray<PlanInfo, 8> *plan_ids_;
-    int64_t tenant_id_;
+    
   };
 
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualSqlPlan);
@@ -143,7 +142,7 @@ private:
   uint64_t db_id_;
   uint64_t plan_hash_;
   int64_t  gmt_create_;
-  int64_t tenant_id_;
+  
   int64_t plan_id_;
 };
 }

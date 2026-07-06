@@ -149,7 +149,7 @@ inline int ObITabletMdsInterface::get_mds_data_from_tablet(
 {
   MDS_TG(10_ms);
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "mds_reader", ObCtxIds::DEFAULT_CTX_ID));
+  ObArenaAllocator allocator(ObMemAttr("mds_reader", ObCtxIds::DEFAULT_CTX_ID));
 
   if (!mds::get_multi_version_flag<K, V>() &&
       !std::is_same<V, ObTabletCreateDeleteMdsUserData>::value &&
@@ -797,7 +797,7 @@ inline int ObITabletMdsInterface::fill_virtual_info(ObIArray<mds::MdsNodeInfoFor
   MDS_TG(10_ms);
   int ret = OB_SUCCESS;
 
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "mds_reader", ObCtxIds::DEFAULT_CTX_ID));
+  ObArenaAllocator allocator(ObMemAttr("mds_reader", ObCtxIds::DEFAULT_CTX_ID));
   share::ObTabletAutoincSeq seq_on_tablet;
   if (CLICK_FAIL(fill_virtual_info_by_obj_(get_tablet_meta_().last_persisted_committed_tablet_status_,
                                            mds::NodePosition::TABLET,

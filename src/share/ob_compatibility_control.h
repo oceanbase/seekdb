@@ -81,7 +81,7 @@ class ObCompatControl
 {
 public:
   static int get_compat_version(const common::ObString &str, uint64_t &version);
-  static int check_compat_version(const uint64_t tenant_id, const uint64_t compat_version);
+  static int check_compat_version(const uint64_t compat_version);
   static int get_version_str(uint64_t version, common::ObString &str, ObIAllocator &allocator);
   static void get_compat_feature_infos(const ObICompatInfo **&infos, int64_t &len)
   { infos = infos_; len = ObCompatFeatureType::MAX_TYPE; }

@@ -188,7 +188,7 @@ int ObTabletDrop::get_ls_from_table(const share::schema::ObTableSchema &table_sc
     LOG_WARN("fail to get tablet num", K(table_schema), KR(ret));
   } else if (OB_FAIL(assign_ls_id_array.reserve(all_part_num))) {
     LOG_WARN("fail to reserve array", KR(ret), K(all_part_num));
-  } else if (is_sys_tenant(table_schema.get_tenant_id())) {
+  } else if (true) {
     for (int64_t i = 0; i < all_part_num && OB_SUCC(ret); i++) {
       if (OB_FAIL(assign_ls_id_array.push_back(share::SYS_LS))) {
         LOG_WARN("failed to push_back", KR(ret));
@@ -203,8 +203,8 @@ int ObTabletDrop::get_ls_from_table(const share::schema::ObTableSchema &table_sc
             && PARTITION_LEVEL_ONE == table_schema.get_part_level()
             && OB_FAIL(table_schema.get_first_level_hidden_tablet_ids(tablet_ids))) {
       LOG_WARN("fail to get hidden tablet ids", KR(ret), K(table_schema)); 
-    } else if (OB_FAIL(share::ObTabletToLSTableOperator::batch_get_ls(trans_, tenant_id_, tablet_ids, assign_ls_id_array))) {
-      LOG_WARN("fail to batch_get_ls", KR(ret), K(tenant_id_), K(table_schema));
+    } else if (OB_FAIL(share::ObTabletToLSTableOperator::batch_get_ls(trans_, tablet_ids, assign_ls_id_array))) {
+      LOG_WARN("fail to batch_get_ls", KR(ret), K(table_schema));
     }
   }
 
@@ -328,11 +328,11 @@ int ObTabletDrop::execute()
       } else if (tablet_ids->count() < 1) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tablet_ids is empty", KR(ret));
-      } else if (OB_FAIL(share::ObTabletToLSTableOperator::batch_remove(trans_, tenant_id_, *tablet_ids))) {
+      } else if (OB_FAIL(share::ObTabletToLSTableOperator::batch_remove(trans_, *tablet_ids))) {
         LOG_WARN("tablet_ids count less than 1", KR(ret));
       } else if (OB_FAIL(share::ObTabletToTableHistoryOperator::drop_tablet_to_table_history(
-                         trans_, tenant_id_, schema_version_, *tablet_ids))) {
-        LOG_WARN("fail to create tablet to table history", KR(ret), K_(tenant_id), K(schema_version_),KPC(tablet_ids));
+                         trans_, schema_version_, *tablet_ids))) {
+        LOG_WARN("fail to create tablet to table history", KR(ret), K(schema_version_),KPC(tablet_ids));
       } else if (OB_FAIL(arg.init(*(tablet_ids), iter->first))) {
         LOG_WARN("failed to find leader", KR(ret), K(iter->first), KPC(tablet_ids));
       } else {
@@ -352,11 +352,11 @@ int ObTabletDrop::execute()
             if (ctx.is_timeouted()) {
               ret = OB_TIMEOUT;
               LOG_WARN("already timeout", KR(ret), K(ctx));
-            } else if (OB_FAIL(conn->register_multi_data_source(tenant_id_, iter->first,
+            } else if (OB_FAIL(conn->register_multi_data_source(iter->first,
                                 transaction::ObTxDataSourceType::DELETE_TABLET_NEW_MDS, buf, buf_len))) {
               LOG_WARN("fail to register_tx_data", KR(ret), K(arg), K(buf), K(buf_len));
               if (OB_LS_LOCATION_LEADER_NOT_EXIST == ret || OB_NOT_MASTER == ret) {
-                LOG_INFO("fail to find leader, try again", K_(tenant_id), K(arg));
+                LOG_INFO("fail to find leader, try again", K(arg));
                 ob_usleep(SLEEP_INTERVAL);
               }
             }

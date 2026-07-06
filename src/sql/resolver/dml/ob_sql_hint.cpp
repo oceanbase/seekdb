@@ -1089,13 +1089,10 @@ int ObStmtHint::print_stmt_hint(PlanText &plan_text) const
   int ret = OB_SUCCESS;
   const ObHint *hint = NULL;
   const int64_t N = get_hint_count();
-  const bool ignore_parallel = EXPLAIN_DBLINK_STMT == plan_text.type_;
   for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
     if (OB_ISNULL(hint = get_hint_by_idx(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected NULL", K(ret), K(hint));
-    } else if (ignore_parallel && hint->is_table_parallel_hint()) {
-      // do nothing
     } else if (OB_FAIL(hint->print_hint(plan_text))) {
       LOG_WARN("failed to print hint", K(ret));
     }

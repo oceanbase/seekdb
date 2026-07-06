@@ -25,7 +25,7 @@ namespace sql
 
  using inline_ht = ObExtendHashTableVec<ObGroupRowBucketInline>;
  using outline_ht = ObExtendHashTableVec<ObGroupRowBucket>;
- int ObAggrHashTableWapper::prepare_hash_table(const int64_t item_size, const uint64_t tenant_id,
+ int ObAggrHashTableWapper::prepare_hash_table(const int64_t item_size,
                                                common::ObIAllocator &alloc)
  {
    int ret = OB_SUCCESS;
@@ -37,7 +37,7 @@ namespace sql
        ret = OB_ALLOCATE_MEMORY_FAILED;
        LOG_WARN("failed to alloc hash table", K(ret));
      } else {
-       new (hash_table) inline_ht(tenant_id);
+       new (hash_table) inline_ht();
        hash_table_ptr_ = hash_table;
        inline_ptr_ = hash_table;
        real_ptr_ = (void *)hash_table;
@@ -50,7 +50,7 @@ namespace sql
        ret = OB_ALLOCATE_MEMORY_FAILED;
        LOG_WARN("failed to alloc hash table", K(ret));
      } else {
-       new (hash_table) outline_ht(tenant_id);
+       new (hash_table) outline_ht();
        hash_table_ptr_ = hash_table;
        outline_ptr_ = hash_table;
        real_ptr_ = (void *)hash_table;

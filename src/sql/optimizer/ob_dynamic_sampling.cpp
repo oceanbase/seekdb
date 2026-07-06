@@ -16,10 +16,11 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_dynamic_sampling.h"
-#include "share/stat/ob_dbms_stats_utils.h"
-#include "share/stat/ob_basic_stats_estimator.h"
+#include "share/rc/ob_module_provider.h"
+#include "sql/optimizer/stat/ob_dbms_stats_utils.h"
+#include "sql/optimizer/stat/ob_basic_stats_estimator.h"
 #include "observer/ob_inner_sql_connection_pool.h"
-#include "share/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -120,7 +121,7 @@ int ObDynamicSampling::add_ds_result_cache(ObIArray<ObDSResultItem> &ds_result_i
                  ds_result_items.at(i).type_ != ObDSResultItemType::OB_DS_BASIC_STAT) {
         if (!query_ctx->filter_ds_stat_cache_.created() &&
             OB_FAIL(query_ctx->filter_ds_stat_cache_.create(
-                20, "OptDSCache", ObModIds::OB_HASH_NODE, ctx_->get_session_info()->get_effective_tenant_id()))) {
+                20, "OptDSCache", ObModIds::OB_HASH_NODE))) {
           LOG_WARN("failed to create ds cache map", K(ret));
         } else if (OB_FAIL(query_ctx->filter_ds_stat_cache_.set_refactored(ds_result_items.at(i).stat_key_,
                                                                            *ds_result_items.at(i).stat_,
@@ -202,7 +203,7 @@ int ObDynamicSampling::get_ds_stat_items(const ObDSTableParam &param,
         int64_t cur_modified_dml_cnt = 0;
         double stale_percent_threshold = OPT_DEFAULT_STALE_PERCENT;
         if (need_dml_info &&
-            OB_FAIL(get_table_dml_info(param.tenant_id_, param.table_id_,
+            OB_FAIL(get_table_dml_info( param.table_id_,
                                        cur_modified_dml_cnt, stale_percent_threshold))) {
           LOG_WARN("failed to get table dml info", K(ret));
         } else if (OB_FAIL(add_ds_stat_items_by_dml_info(param,
@@ -444,8 +445,7 @@ int ObDynamicSampling::add_ds_col_stat_item(const ObDSTableParam &param,
   return ret;
 }
 
-int ObDynamicSampling::get_table_dml_info(const uint64_t tenant_id,
-                                          const uint64_t table_id,
+int ObDynamicSampling::get_table_dml_info(const uint64_t table_id,
                                           int64_t &cur_modified_dml_cnt,
                                           double &stale_percent_threshold)
 {
@@ -454,18 +454,16 @@ int ObDynamicSampling::get_table_dml_info(const uint64_t tenant_id,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(ctx_->get_exec_ctx()));
   } else if (OB_FAIL(ObBasicStatsEstimator::estimate_modified_count(*ctx_->get_exec_ctx(),
-                                                                    tenant_id,
                                                                     table_id,
                                                                     cur_modified_dml_cnt,
                                                                     false))) {
     LOG_WARN("failed to estimate modified count", K(ret));
   } else if (OB_FAIL(pl::ObDbmsStats::get_table_stale_percent_threshold(ctx_->get_exec_ctx()->get_sql_proxy(),
-                                                                        tenant_id,
                                                                         table_id,
                                                                         stale_percent_threshold))) {
     LOG_WARN("failed to get table stale percent threshold", K(ret));
   } else {
-    LOG_TRACE("succeed to get table dml info", K(tenant_id), K(table_id), K(cur_modified_dml_cnt),
+    LOG_TRACE("succeed to get table dml info", K(table_id), K(cur_modified_dml_cnt),
                                                K(stale_percent_threshold));
   }
   return ret;
@@ -498,7 +496,7 @@ int ObDynamicSampling::construct_ds_stat_key(const ObDSTableParam &param,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(param));
   } else {
-    key.tenant_id_ = param.tenant_id_;
+    
     key.table_id_ = param.table_id_;
     key.partition_hash_ = murmurhash64A(partition_str.ptr(), partition_str.length(), 0);
     key.ds_level_ = param.ds_level_;
@@ -939,7 +937,6 @@ int ObDynamicSampling::estimate_table_block_count_and_row_count(const ObDSTableP
   } else if (OB_FAIL(get_all_tablet_id_and_object_id(param, tablet_ids, partition_ids))) {
     LOG_WARN("failed to get all tablet id and object id", K(ret));
   } else if (OB_FAIL(ObBasicStatsEstimator::do_estimate_block_count_and_row_count(*ctx_->get_exec_ctx(),
-                                                                                  ctx_->get_session_info()->get_effective_tenant_id(),
                                                                                   param.table_id_,
                                                                                   false,
                                                                                   tablet_ids,
@@ -951,7 +948,6 @@ int ObDynamicSampling::estimate_table_block_count_and_row_count(const ObDSTableP
       // do nothing
     } else if (OB_FALSE_IT(ret = OB_SUCCESS)) {
     } else if (OB_FAIL(ObBasicStatsEstimator::do_estimate_block_count_and_row_count(*ctx_->get_exec_ctx(),
-                                                                                    ctx_->get_session_info()->get_effective_tenant_id(),
                                                                                     param.table_id_,
                                                                                     true,
                                                                                     tablet_ids,
@@ -1063,8 +1059,7 @@ int ObDynamicSampling::do_estimate_rowcount(ObSQLSessionInfo *session_info,
       } else if (OB_ISNULL(conn)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("conn is null", K(ret));
-      } else if (OB_FAIL(conn->execute_read(session_info->get_effective_tenant_id(),
-                                            raw_sql.ptr(),
+      } else if (OB_FAIL(conn->execute_read(raw_sql.ptr(),
                                             proxy_result))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
@@ -1184,7 +1179,7 @@ int ObDynamicSampling::restore_session(ObSQLSessionInfo *session,
     if (tx_desc != NULL) {//reset origin tx desc.
       // release curr
       if (OB_NOT_NULL(session->get_tx_desc())) {
-        auto txs = MTL(transaction::ObTransService*);
+        auto txs = share::g_mp->trans_service();
         if (OB_ISNULL(txs)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("can not acquire MTL TransService", KR(ret));
@@ -1471,7 +1466,7 @@ int ObDynamicSamplingUtils::get_ds_table_param(ObOptimizerContext &ctx,
                                            ds_table_param.degree_))) {
       LOG_WARN("failed to get ds table degree", K(ret));
     } else if ((ds_table_param.max_ds_timeout_ = get_dynamic_sampling_max_timeout(ctx)) > 0) {
-      ds_table_param.tenant_id_ = ctx.get_session_info()->get_effective_tenant_id();
+      
       ds_table_param.table_id_ = table_meta->get_ref_table_id();
       ds_table_param.ds_level_ = ds_level;
       ds_table_param.sample_block_cnt_ = sample_block_cnt;
@@ -1691,13 +1686,12 @@ int64_t ObDynamicSamplingUtils::get_dynamic_sampling_max_timeout(ObOptimizerCont
   int64_t max_ds_timeout = 0;
   if (THIS_WORKER.get_timeout_remain() / 10 >= OB_DS_MIN_QUERY_TIMEOUT) {
     max_ds_timeout = THIS_WORKER.get_timeout_remain() / 10;//default ds time can't exceed 10% of current sql remain timeout
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(ctx.get_session_info()->get_effective_tenant_id()));
-    if (tenant_config.is_valid()) {
-      int64_t ds_maximum_time = tenant_config->_optimizer_ads_time_limit * 1000000;
-      if (max_ds_timeout > ds_maximum_time) {//can't exceed the max ds timeout for single table
-        max_ds_timeout = ds_maximum_time;
-      }
+
+    int64_t ds_maximum_time = GCONF._optimizer_ads_time_limit * 1000000;
+    if (max_ds_timeout > ds_maximum_time) {//can't exceed the max ds timeout for single table
+      max_ds_timeout = ds_maximum_time;
     }
+
   }
   return max_ds_timeout;
 }
@@ -1750,7 +1744,7 @@ bool ObDynamicSamplingUtils::is_ds_virtual_table(const int64_t table_id)
           table_id == share::OB_ALL_VIRTUAL_CORE_COLUMN_TABLE_TID ||
           table_id == share::OB_ALL_VIRTUAL_DML_STATS_TID ||
           table_id == share::OB_ALL_VIRTUAL_DATA_TYPE_TID ||
-          table_id == share::OB_TENANT_VIRTUAL_COLLATION_TID);
+          table_id == share::OB_ALL_VIRTUAL_COLLATION_TID);
 }
 
 bool ObDynamicSamplingUtils::is_valid_ds_col_type(const ObObjType type)
@@ -1959,7 +1953,7 @@ bool ObDynamicSamplingUtils::is_valid_ds_col_type(const ObObjType type)
 //     ret = OB_ERR_UNEXPECTED;
 //     LOG_WARN("get unexpected null", K(ret), K(ctx_->get_opt_stat_manager()),
 //                                     K(ctx_->get_session_info()));
-//   } else if (OB_FAIL(get_ds_join_stat_info(ctx_->get_session_info()->get_effective_tenant_id(),
+//   } else if (OB_FAIL(get_ds_join_stat_info(
 //                                            param, key))) {
 //     LOG_WARN("failed to gen ds stat key", K(ret), K(param));
 //   } else if (OB_FAIL(ctx_->get_opt_stat_manager()->get_ds_stat(key, ds_stat_handle))) {
@@ -1977,27 +1971,23 @@ bool ObDynamicSamplingUtils::is_valid_ds_col_type(const ObObjType type)
 //     join_output_cnt = ds_stat_handle.stat_->get_output_rowcount();
 //     OPT_TRACE("succeed to get ds join result from cache");
 //   } else if (OB_FAIL(ObBasicStatsEstimator::estimate_modified_count(*ctx_->get_exec_ctx(),
-//                                                                     ctx_->get_session_info()->get_effective_tenant_id(),
 //                                                                     is_left_sample_ ? param.left_table_param_.table_id_ :
 //                                                                                       param.right_table_param_.table_id_,
 //                                                                     sample_tab_modified_count,
 //                                                                     false))) {
 //     LOG_WARN("failed to estimate modified count", K(ret));
 //   } else if (OB_FAIL(ObBasicStatsEstimator::estimate_modified_count(*ctx_->get_exec_ctx(),
-//                                                                     ctx_->get_session_info()->get_effective_tenant_id(),
 //                                                                     !is_left_sample_ ? param.left_table_param_.table_id_ :
 //                                                                                        param.right_table_param_.table_id_,
 //                                                                     other_tab_modified_count,
 //                                                                     false))) {
 //     LOG_WARN("failed to estimate modified count", K(ret));
 //   } else if (OB_FAIL(pl::ObDbmsStats::get_table_stale_percent_threshold(*ctx_->get_exec_ctx(),
-//                                                                         ctx_->get_session_info()->get_effective_tenant_id(),
 //                                                                         is_left_sample_ ? param.left_table_param_.table_id_ :
 //                                                                                           param.right_table_param_.table_id_,
 //                                                                         sample_stale_percent_threshold))) {
 //     LOG_WARN("failed to get table stale percent threshold", K(ret));
 //   } else if (OB_FAIL(pl::ObDbmsStats::get_table_stale_percent_threshold(*ctx_->get_exec_ctx(),
-//                                                                         ctx_->get_session_info()->get_effective_tenant_id(),
 //                                                                         !is_left_sample_ ? param.left_table_param_.table_id_ :
 //                                                                                            param.right_table_param_.table_id_,
 //                                                                         other_stale_percent_threshold))) {
@@ -2025,8 +2015,7 @@ bool ObDynamicSamplingUtils::is_valid_ds_col_type(const ObObjType type)
 //   return ret;
 // }
 
-// int ObDynamicSampling::get_ds_join_stat_info(const uint64_t tenant_id,
-//                                                 const ObOptDSJoinParam &param,
+// int ObDynamicSampling::get_ds_join_stat_info(//                                                 const ObOptDSJoinParam &param,
 //                                                 ObOptDSStat::Key &key)
 // {
 //   int ret = OB_SUCCESS;
@@ -2057,7 +2046,7 @@ bool ObDynamicSamplingUtils::is_valid_ds_col_type(const ObObjType type)
 //         OB_FAIL(gen_partition_str(other_ds_param, other_partition_str))) {
 //        LOG_WARN("failed to print filter exprs", K(ret));
 //     } else {
-//       key.tenant_id_ = tenant_id;
+//       key.tenant_ = sys tenant;
 //       key.sample_tab_id_ = sample_ds_param.table_id_;
 //       key.sample_index_id_ = sample_ds_param.index_id_;
 //       key.sample_partition_hash_ = murmurhash64A(sample_partition_str.ptr(), sample_partition_str.length(), 0);

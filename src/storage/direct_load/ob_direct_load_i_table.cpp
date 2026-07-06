@@ -78,7 +78,7 @@ int ObDirectLoadTableHandle::set_table(ObDirectLoadITable *table,
   return ret;
 }
 
-ObDirectLoadTableHandleArray::ObDirectLoadTableHandleArray() { tables_.set_tenant_id(MTL_ID()); }
+ObDirectLoadTableHandleArray::ObDirectLoadTableHandleArray() {  }
 
 ObDirectLoadTableHandleArray::~ObDirectLoadTableHandleArray() { reset(); }
 
@@ -142,7 +142,7 @@ int ObDirectLoadTableManager::init()
   } else {
 #define INIT_TABLE_ALLOCATOR(type, classType, name, shortName)                                   \
   if (OB_SUCC(ret)) {                                                                            \
-    if (OB_FAIL(allocators_[type].init(sizeof(classType), "TLD_" shortName "Pool", MTL_ID()))) { \
+    if (OB_FAIL(allocators_[type].init(sizeof(classType), "TLD_" shortName "Pool"))) { \
       LOG_WARN("fail to init allocator", KR(ret));                                               \
     }                                                                                            \
   }

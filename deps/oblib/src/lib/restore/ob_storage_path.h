@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "lib/alloc/alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
@@ -27,9 +27,7 @@ namespace oceanbase
 namespace common
 {
 
-static const char *const BACKUP_INFO_TENANT_ID = "tenant_id";
 static const char *const BACKUP_BASE_DATA = "base_data";
-static const char *const BACKUP_ALL_TENANT_ID_LIST = "all_tenant_id_list";
 
 class ObStoragePath
 {

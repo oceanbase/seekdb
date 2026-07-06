@@ -81,7 +81,7 @@ int ObExprGetSysVar::calc_result_type2(ObExprResType &type,
             int64_t sys_var_val_length = OB_MAX_SYS_VAR_VAL_LENGTH;
             if (0 == var_name.compare(OB_SV_TCP_INVITED_NODES)) {
               uint64_t data_version = 0;
-              if (OB_FAIL(GET_MIN_DATA_VERSION(session->get_effective_tenant_id(), data_version))) {
+              if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
                 LOG_WARN("fail to get tenant data version", KR(ret));
               } else {
                sys_var_val_length = OB_MAX_TCP_INVITED_NODES_LENGTH;
@@ -233,7 +233,7 @@ int ObExprGetSysVar::get_sys_var_disp_obj(common::ObIAllocator &allocator,
   SMART_VAR(ObSysVarFactory, sysvar_fac) {
     if (OB_FAIL(ObBasicSessionInfo::get_global_sys_variable(&session, allocator, var_name, value))) {
       LOG_WARN("get sys var disp obj failed", K(ret));
-    } else if (SYS_VAR_INVALID == (sys_var_id = ObSysVarFactory::find_sys_var_id_by_name(var_name, false))) {
+    } else if (SYS_VAR_INVALID == (sys_var_id = share::ObSysVarMeta::find_sys_var_id_by_name(var_name, false))) {
       ret = OB_ERR_SYS_VARIABLE_UNKNOWN;
       LOG_WARN("unknown system variable", K(var_name));
     } else if (OB_FAIL(sysvar_fac.create_sys_var(sys_var_id, sys_var))) {

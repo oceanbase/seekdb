@@ -36,8 +36,8 @@ public:
       need_index_map_(need_map)
   {}
   ~ObArrayWithMap() {}
-  int init(const int64_t tenant_id, const int64_t expect_val_cnt);
-  int init(const int64_t tenant_id, const ObArrayWithMap &other);
+  int init(const int64_t expect_val_cnt);
+  int init(const ObArrayWithMap &other);
   int reserve(const int64_t cnt) { return array_.reserve(cnt); }
   int push_back(const ITEM &item);
   int get(const common::ObTabletID &tablet_id, const ITEM *&item_ptr) const;
@@ -65,15 +65,14 @@ private:
 
 template <typename ITEM>
 int ObArrayWithMap<ITEM>::init(
-  const int64_t tenant_id,
   const int64_t expect_val_cnt)
 {
   int ret = OB_SUCCESS;
-  array_.set_attr(ObMemAttr(tenant_id, "ArrayIdxArr"));
+  array_.set_attr(ObMemAttr("ArrayIdxArr"));
   if (OB_FAIL(array_.reserve(expect_val_cnt))) {
     STORAGE_LOG(WARN, "failed to reserve array", K(ret), K(expect_val_cnt));
   } else if (need_index_map_ && expect_val_cnt > BUILD_HASH_MAP_THRESHOLD && !map_.created()) {
-    if (OB_FAIL(map_.create(expect_val_cnt, "ArrayIdxMap", "ArrayIdxMap", tenant_id))) {
+    if (OB_FAIL(map_.create(expect_val_cnt, "ArrayIdxMap", "ArrayIdxMap"))) {
       STORAGE_LOG(WARN, "failed to build map", K(ret), K(expect_val_cnt));
     }
   }
@@ -82,12 +81,11 @@ int ObArrayWithMap<ITEM>::init(
 
 template <typename ITEM>
 int ObArrayWithMap<ITEM>::init(
-  const int64_t tenant_id,
   const ObArrayWithMap &other)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(init(tenant_id, other.array_.count()))) {
-    STORAGE_LOG(WARN, "failed to init", K(ret), K(tenant_id), K(other));
+  if (OB_FAIL(init(other.array_.count()))) {
+    STORAGE_LOG(WARN, "failed to init", K(ret), K(other));
   } else if (map_.created()) {
     for (int64_t idx = 0; OB_SUCC(ret) && idx < other.array_.count(); ++idx) {
       if (OB_FAIL(push_back(other.at(idx)))) {

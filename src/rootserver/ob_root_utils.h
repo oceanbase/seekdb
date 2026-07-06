@@ -93,9 +93,6 @@ public:
 class ObTenantUtils
 {
 public:
-  static int get_tenant_ids(
-      share::schema::ObMultiVersionSchemaService *schema_service,
-      common::ObIArray<uint64_t> &tenant_ids);
 private:
 
 };
@@ -112,8 +109,6 @@ class ObRootUtils
 public:
   ObRootUtils() {}
   virtual ~ObRootUtils() {}
-
-  static int get_rs_default_timeout_ctx(ObTimeoutCtx &ctx);
 
   template<class T>
       static bool is_subset(const common::ObIArray<T> &superset_array,

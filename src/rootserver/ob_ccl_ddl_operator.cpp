@@ -27,19 +27,18 @@ int ObCclDDLOperator::create_ccl_rule(ObCCLRuleSchema &ccl_rule_schema,
                                    const ObString *ddl_stmt_str /*=NULL*/) {
   int ret = OB_SUCCESS;
   uint64_t new_ccl_rule_id = OB_INVALID_ID;
-  const uint64_t tenant_id = ccl_rule_schema.get_tenant_id();
+  
   int64_t new_schema_version = OB_INVALID_VERSION;
   ObSchemaService *schema_service = schema_service_.get_schema_service();
 
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_SYS;
     LOG_ERROR("schema_service must not null", K(ret));
-  } else if (OB_FAIL(schema_service->fetch_new_ccl_rule_id(tenant_id,
-                                                           new_ccl_rule_id))) {
-    LOG_WARN("failed to fetch new_outline_id", K(tenant_id), K(ret));
+  } else if (OB_FAIL(schema_service->fetch_new_ccl_rule_id(new_ccl_rule_id))) {
+    LOG_WARN("failed to fetch new_outline_id", K(ret));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(
-                 tenant_id, new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret), K(tenant_id));
+                 new_schema_version))) {
+    LOG_WARN("fail to gen new schema_version", K(ret));
   } else {
     ccl_rule_schema.set_ccl_rule_id(new_ccl_rule_id);
     ccl_rule_schema.set_schema_version(new_schema_version);
@@ -51,23 +50,21 @@ int ObCclDDLOperator::create_ccl_rule(ObCCLRuleSchema &ccl_rule_schema,
   return ret;
 }
 
-int ObCclDDLOperator::drop_ccl_rule(uint64_t tenant_id,
-                                 const ObCCLRuleSchema &ccl_rule_schema,
+int ObCclDDLOperator::drop_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
                                  ObMySQLTransaction &trans,
                                  const ObString *ddl_stmt_str /*=NULL*/) {
   int ret = OB_SUCCESS;
   int64_t new_schema_version = OB_INVALID_VERSION;
   ObSchemaService *schema_service = schema_service_.get_schema_service();
-  if (OB_UNLIKELY(OB_INVALID_ID == ccl_rule_schema.get_tenant_id() ||
-                  OB_INVALID_ID == ccl_rule_schema.get_ccl_rule_id())) {
+  if (OB_UNLIKELY(OB_INVALID_ID == ccl_rule_schema.get_ccl_rule_id())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ccl_rule_schema), K(ret));
   } else if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_SYS;
     LOG_ERROR("schema_service must not null", K(ret));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(
-                 tenant_id, new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret), K(tenant_id));
+                 new_schema_version))) {
+    LOG_WARN("fail to gen new schema_version", K(ret));
   } else if (OB_FAIL(schema_service->get_ccl_rule_sql_service().delete_ccl_rule(
                  ccl_rule_schema, new_schema_version, trans, ddl_stmt_str))) {
     LOG_WARN("drop ccl rule failed", K(ccl_rule_schema), K(ret));

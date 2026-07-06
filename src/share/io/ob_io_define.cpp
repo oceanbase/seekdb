@@ -15,11 +15,16 @@
  */
 
 #define USING_LOG_PREFIX COMMON
+#include "lib/stat/ob_diagnostic_info_guard.h"
+#include "share/unit/ob_unit_config.h"
+#include "share/ob_force_print_log.h"
+#include "lib/ob_define.h"
+#include "share/config/ob_server_config.h"
+#include "share/resource_manager/ob_resource_plan_info.h"
 #include "ob_io_define.h"
 #include "share/io/ob_io_manager.h"
 #include "lib/restore/ob_object_device.h"
-#include "src/storage/ob_file_system_router.h"
-#include "src/observer/ob_server.h"
+using namespace oceanbase::share;
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 /******************             IOMode              **********************/
@@ -85,51 +90,6 @@ ObIOMode oceanbase::common::get_io_mode_enum(const char *mode_string)
   return mode;
 }
 
-class DiskChecker
-{
-private:
-  DiskChecker() : is_clog_data_in_same_disk_(false)
-  {}
-  ~DiskChecker()
-  {}
-  int get_major_device(const char *path) const
-  {
-    struct stat fileStat;
-    if (stat(path, &fileStat) != 0) {
-      LOG_ERROR_RET(OB_IO_ERROR, "read file stat failed", K(path));
-    }
-    return (fileStat.st_dev >> 8) & 0xFF;
-  }
-  bool is_same_disk(const char *path1, const char *path2)
-  {
-    bool is_same_disk = false;
-    if (OB_ISNULL(path1) || OB_ISNULL(path2)) {
-      LOG_ERROR_RET(OB_INVALID_ARGUMENT, "clog or data path is nullptr", K(path1), K(path2));
-    } else {
-      const int dev1 = get_major_device(path1);
-      const int dev2 = get_major_device(path1);
-      is_same_disk = (dev1 == dev2);
-    }
-    return is_same_disk;
-  }
-public:
-  static DiskChecker &get_instance()
-  {
-    static DiskChecker instance_;
-    return instance_;
-  }
-  bool is_clog_data_in_same_disk()
-  {
-    int ret = OB_SUCCESS;
-    if (REACH_TIME_INTERVAL(60 * 1000L * 1000L)) {
-      is_clog_data_in_same_disk_ = is_same_disk(oceanbase::ObFileSystemRouter::get_instance().get_data_dir(),
-          oceanbase::ObFileSystemRouter::get_instance().get_clog_dir());
-    }
-    return is_clog_data_in_same_disk_;
-  }
-private:
-  bool is_clog_data_in_same_disk_;
-};
 const char *oceanbase::common::get_io_sys_group_name(ObIOModule module)
 {
   const char *ret_name = "UNKNOWN";
@@ -457,8 +417,7 @@ int ObIOCallback::alloc_and_copy_data(const char *io_data_buffer, const int64_t 
 
 /******************             SNIOInfo              **********************/
 ObSNIOInfo::ObSNIOInfo()
-  : tenant_id_(OB_INVALID_TENANT_ID),
-    fd_(),
+  : fd_(),
     offset_(0),
     size_(0),
     timeout_us_(DEFAULT_IO_WAIT_TIME_US),
@@ -483,7 +442,7 @@ ObSNIOInfo::~ObSNIOInfo()
 
 void ObSNIOInfo::reset()
 {
-  tenant_id_ = 0;
+  
   fd_.reset();
   offset_ = 0;
   size_ = 0;
@@ -497,8 +456,7 @@ void ObSNIOInfo::reset()
 
 bool ObSNIOInfo::is_valid() const
 {
-  return tenant_id_ > 0
-    && fd_.is_valid()
+  return fd_.is_valid()
     && offset_ >= 0
     // in order to address concurrent write issues, archive checkpoint module would write
     // multiple non-content objects (it stores content in object name) whose size = 0
@@ -512,7 +470,7 @@ ObSNIOInfo &ObSNIOInfo::operator=(const ObSNIOInfo &other)
 {
   if (&other != this) {
     reset();
-    tenant_id_ = other.tenant_id_;
+    
     fd_ = other.fd_;
     offset_ = other.offset_;
     size_ = other.size_;
@@ -671,7 +629,7 @@ int ObIOResult::init(const ObIOInfo &info)
   }
   if (OB_SUCC(ret)) {
     //init info and check valid
-    tenant_id_ = info.tenant_id_;
+    
     offset_ = info.offset_;
     size_ = info.size_;
     flag_ = info.flag_;
@@ -983,7 +941,6 @@ ObIORequest::ObIORequest()
     ref_cnt_(0),
     raw_buf_(nullptr),
     control_block_(nullptr),
-    tenant_id_(OB_INVALID_TENANT_ID),
     tenant_io_mgr_(),
     storage_accesser_(),
     fd_(),
@@ -1002,7 +959,6 @@ bool ObIORequest::is_valid() const
 {
   return nullptr != io_result_
       && io_result_->is_valid()
-      && tenant_id_ > 0
       && fd_.is_valid();
 }
 
@@ -1025,7 +981,7 @@ int ObIORequest::init(const ObIOInfo &info, ObIOResult *result)
     io_result_->inc_ref("request");
     trace_id_ = *ObCurTraceId::get_trace_id();
     //init info and check valid
-    tenant_id_ = info.tenant_id_;
+    
     fd_ = info.fd_;
     part_id_ = info.part_id_;
     char *io_buf = nullptr;
@@ -1092,12 +1048,14 @@ void ObIORequest::reset() //only for test, not dec resut_ref
 {
   int ret = OB_SUCCESS;
   retry_count_ = 0;
+  // only read need destroy here
+  // TODO(yanfeng): works now, need refactor
   if (nullptr != control_block_ && nullptr != fd_.device_handle_) {
     fd_.device_handle_->free_iocb(control_block_);
     control_block_ = nullptr;
   }
   
-  tenant_id_ = 0;
+  
   free_io_buffer();
   ref_cnt_ = 0;
   trace_id_.reset();
@@ -1119,7 +1077,7 @@ void ObIORequest::destroy()
   }
 
   fd_.reset();
-  tenant_id_ = 0;
+  
   free_io_buffer();
   ref_cnt_ = 0;
   trace_id_.reset();
@@ -1168,33 +1126,6 @@ oceanbase::share::ObFunctionType ObIORequest::get_func_type() const
     func_type = static_cast<oceanbase::share::ObFunctionType>(get_flag().get_func_type());
   }
   return func_type;
-}
-
-bool ObIORequest::is_local_clog_not_isolated()
-{
-  bool clog_not_isolated = false;
-  const int64_t clog_io_isolation_mode = GCONF.clog_io_isolation_mode;
-  const ObIOGroupKey group_key = get_group_key();
-  const oceanbase::share::ObFunctionType func_type = get_func_type();
-  if (group_key.mode_ != ObIOMode::MAX_MODE) {
-  } else if (clog_io_isolation_mode == 0 || clog_io_isolation_mode > 2) {
-    if ((func_type == ObFunctionType::PRIO_CLOG_HIGH ||
-         func_type == ObFunctionType::PRIO_CLOG_MID ||
-         func_type == ObFunctionType::PRIO_CLOG_LOW)) {
-      clog_not_isolated = !DiskChecker::get_instance().is_clog_data_in_same_disk();
-    }
-  } else if (clog_io_isolation_mode == 1) {
-    if ((func_type == ObFunctionType::PRIO_CLOG_HIGH ||
-         func_type == ObFunctionType::PRIO_CLOG_MID ||
-         func_type == ObFunctionType::PRIO_CLOG_LOW)) {
-      clog_not_isolated = true;
-    }
-  } else if (clog_io_isolation_mode == 2) {
-  }
-  if (REACH_TIME_INTERVAL(60 * 1000L * 1000L)) { // 60s
-    LOG_INFO("clog_not_isolated", K(clog_not_isolated), K(clog_io_isolation_mode), K(group_key), K(func_type));
-  }
-  return clog_not_isolated;
 }
 
 bool ObIORequest::is_sys_module() const
@@ -1382,7 +1313,7 @@ int ObIORequest::prepare(char *next_buffer, int64_t next_size, int64_t next_offs
     LOG_WARN("device handle is null", K(ret), K(*this));
   } else if (fd_.device_handle_->is_object_device()) {
     // do nothing
-  } else if (OB_ISNULL(control_block_) && OB_ISNULL(control_block_ = fd_.device_handle_->alloc_iocb(tenant_id_))) {
+  } else if (OB_ISNULL(control_block_) && OB_ISNULL(control_block_ = fd_.device_handle_->alloc_iocb())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc io control block failed", K(ret), K(*this));
   } else if (FALSE_IT(tg.click("alloc_iocb"))) {
@@ -1623,8 +1554,6 @@ void ObPhyQueue::destroy()
 
 /******************             IOHandle              **********************/
 
-ERRSIM_POINT_DEF(ERRSIM_IO_HANDLE_TRACE);
-
 ObIOHandle::ObIOHandle()
   : result_(nullptr)
 {
@@ -1661,7 +1590,6 @@ int ObIOHandle::set_result(ObIOResult &result)
   result.inc_ref("handle_inc"); // ref for handle
   result.inc_out_ref();
   result_ = &result;
-  storage::ObStorageLeakChecker::get_instance().handle_hold(this);
   return ret;
 }
 
@@ -1849,7 +1777,6 @@ int64_t ObIOHandle::get_rt() const
 void ObIOHandle::reset()
 {
   if (OB_NOT_NULL(result_)) {
-    storage::ObStorageLeakChecker::get_instance().handle_reset(this);
     result_->dec_out_ref();
     result_->dec_ref("handle_dec"); // ref for handle
     result_ = nullptr;
@@ -1871,11 +1798,6 @@ ObIOCallback *ObIOHandle::get_io_callback()
     callback = result_->io_callback_;
   }
   return callback;
-}
-
-bool ObIOHandle::need_trace() const
-{
-  return is_valid() && OB_SUCCESS != ERRSIM_IO_HANDLE_TRACE;
 }
 
 /******************             TenantIOConfig              **********************/
@@ -2100,21 +2022,20 @@ int ObTenantIOConfig::parse_group_config(const char *config_str)
   return ret;
 }
 
-int ObTenantIOConfig::add_single_group_config(const uint64_t tenant_id,
-                                              const ObIOGroupKey &key,
+int ObTenantIOConfig::add_single_group_config(const ObIOGroupKey &key,
                                               const char *group_name,
                                               int64_t min_percent,
                                               int64_t max_percent,
                                               int64_t weight_percent)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_resource_manager_group(key.group_id_)) || !is_valid_tenant_id(tenant_id) ||
+  if (OB_UNLIKELY(!is_resource_manager_group(key.group_id_)) || !true ||
       min_percent < 0 || min_percent > 100 ||
       max_percent < 0 || max_percent > 100 ||
       weight_percent < 0 || weight_percent > 100 || 
       min_percent > max_percent) {
     ret = OB_INVALID_CONFIG;
-    LOG_WARN("invalid group config", K(ret), K(tenant_id), K(key.group_id_), K(min_percent), K(max_percent), K(weight_percent));
+    LOG_WARN("invalid group config", K(ret), K(key.group_id_), K(min_percent), K(max_percent), K(weight_percent));
   } else {
     ObTenantIOConfig::GroupConfig tmp_group_config;
     strncpy(tmp_group_config.group_name_, group_name, common::OB_MAX_RESOURCE_PLAN_NAME_LENGTH);
@@ -2199,7 +2120,3 @@ int64_t ObTenantIOConfig::to_string(char* buf, const int64_t buf_len) const
   J_OBJ_END();
   return pos;
 }
-
-
-
-

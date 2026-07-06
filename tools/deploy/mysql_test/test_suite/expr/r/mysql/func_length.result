@@ -62,7 +62,7 @@ length(10000.10)
 create database if not exists db1;
 use db1;
 drop table if exists utf,tx,gbk;
-create table utf(c1 int primary key, c2 char(10)) collate 'utf8mb4_bin';
+create table utf(c1 int primary key, c2 char(10)) collate utf8mb4_bin;
 insert into utf values(1, '好');
 select length(c2) from utf;
 length(c2)

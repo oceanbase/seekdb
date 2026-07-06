@@ -70,7 +70,7 @@ public:
   virtual void SetUp() override
   {
     oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
-    ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(1001);
+    ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
     ObAddr ip_port(ObAddr::VER::IPV4, "119.119.0.1",2023);
     ObCurTraceId::init(ip_port);
     GCONF._ob_trans_rpc_timeout = 500;
@@ -96,7 +96,7 @@ public:
     auto test_name = test_info->name();
     _TRANS_LOG(INFO, ">>>> tearDown test : %s", test_name);
     ObClockGenerator::destroy();
-    ObMallocAllocator::get_instance()->recycle_tenant_allocator(1001);
+    ObMallocAllocator::get_instance()->recycle_tenant_allocator();
   }
   MockImpl mdo_;
   ObPartTransCtx tx_ctx;
@@ -676,6 +676,7 @@ TEST_F(ObTestRedoSubmitter, submit_ROW_SIZE_TOO_LARGE)
 } // transaction
 } // oceanbase
 
+using namespace oceanbase;
 int main(int argc, char **argv)
 {
   const char *log_name = "test_redo_submitter.log";

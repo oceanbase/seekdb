@@ -227,7 +227,7 @@ int ObBlockStatCollector::init(
   } else if (OB_FAIL(init_collectors(stat_cols, stat_projectors, col_descs, allocator))) {
     LOG_WARN("failed to init collector", K(ret), K(stat_cols));
   } else {
-    result_tmp_allocator_.set_attr(ObMemAttr(MTL_ID(), "BlkStatTmpRes"));
+    result_tmp_allocator_.set_attr(ObMemAttr("BlkStatTmpRes"));
     projector_ = &stat_cols;
     is_inited_ = true;
   }

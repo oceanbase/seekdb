@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE_BLKMGR
 
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -120,13 +121,13 @@ int ObSharedMacroBlockMgr::init()
   } else if (OB_FAIL(common_header.set_attr(ObMacroBlockCommonHeader::MacroBlockType::SharedSSTableData))) {
     LOG_WARN("fail to set type for common header", K(ret), K(common_header));
   } else if (OB_ISNULL(common_header_buf_ = reinterpret_cast<char*>(ob_malloc(header_size_,
-      ObMemAttr(MTL_ID(), ObModIds::OB_MACRO_FILE))))) {
+      ObMemAttr(ObModIds::OB_MACRO_FILE))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory for buffer that holds common header", K(ret), K(common_header));
   } else if (FALSE_IT(MEMSET(common_header_buf_, 9, header_size_))) {
   } else if (OB_FAIL(common_header.build_serialized_header(common_header_buf_, common_header.get_serialize_size()))) {
     LOG_WARN("fail to serialize common header", K(ret), K(common_header));
-  } else if (OB_FAIL(block_used_size_.init("ShareBlksMap", MTL_ID()))) {
+  } else if (OB_FAIL(block_used_size_.init("ShareBlksMap"))) {
     LOG_WARN("fail to init block used size array", K(ret));
   } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::SSTableDefragment, tg_id_))) {
     LOG_WARN("fail to create thread for sstable defragmentation", K(ret));
@@ -276,7 +277,7 @@ int ObSharedMacroBlockMgr::write_block(
   read_info.io_desc_.set_sys_module_id(ObIOModule::SHARED_MACRO_BLOCK_MGR_IO);
   ObMacroBlockHandle read_handle;
   ObSSTableMacroBlockChecker macro_block_checker;
-  ObArenaAllocator io_allocator("SMBM_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator io_allocator("SMBM_IOUB", OB_MALLOC_NORMAL_BLOCK_SIZE);
 
   if (OB_ISNULL(read_info.buf_ = reinterpret_cast<char*>(io_allocator.alloc(read_info.size_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -434,11 +435,11 @@ int ObSharedMacroBlockMgr::get_recyclable_blocks(ObIAllocator &allocator, ObIArr
 int ObSharedMacroBlockMgr::defragment()
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator task_allocator("SSTDefragTask", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
-  ObArenaAllocator iter_allocator("SSTDefragIter", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator task_allocator("SSTDefragTask", OB_MALLOC_NORMAL_BLOCK_SIZE);
+  ObArenaAllocator iter_allocator("SSTDefragIter", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObFixedArray<MacroBlockId, ObIAllocator> macro_ids(task_allocator);
   ObHasNestedTableFilterOp op;
-  ObTenantTabletIterator tablet_iter(*(MTL(ObTenantMetaMemMgr*)), iter_allocator, &op);
+  ObTenantTabletIterator tablet_iter(*(share::g_mp->tenant_meta_mem_mgr()), iter_allocator, &op);
   ObSSTableIndexBuilder *sstable_index_builder = nullptr;
   ObIndexBlockRebuilder *index_block_rebuilder = nullptr;
   int64_t rewrite_cnt = 0;
@@ -540,7 +541,7 @@ int ObSharedMacroBlockMgr::update_tablet(
   //ATTENTION!!! get_all_sstables should unpack cosstable, and make cosstable again finally
   if (OB_FAIL(tablet_handle.get_obj()->get_all_sstables(table_store_iter))) {
     LOG_WARN("fail to get sstables of this tablet", K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), data_version))) {
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_EAGAIN;
     } else {
@@ -623,7 +624,7 @@ int ObSharedMacroBlockMgr::update_tablet(
   }
 
   if (OB_SUCC(ret) && !new_sstables.empty()) {
-    ObLSService *ls_svr = MTL(ObLSService*);
+    ObLSService *ls_svr = share::g_mp->ls_service();
     ObLSHandle ls_handle;
 
     if (OB_FAIL(ls_svr->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {

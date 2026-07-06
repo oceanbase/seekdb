@@ -67,7 +67,7 @@ int64_t ObDirectLoadDatumSerialization::get_serialize_size(const ObStorageDatum 
 ObDirectLoadDatumArray::ObDirectLoadDatumArray()
   : allocator_("TLD_DatumArray"), capacity_(0), count_(0), datums_(nullptr)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadDatumArray::~ObDirectLoadDatumArray()

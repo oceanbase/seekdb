@@ -76,208 +76,40 @@ public:
   virtual int gts_elapse_callback(const MonotonicTs srr, const share::SCN &gts) = 0;
   virtual MonotonicTs get_stc() const = 0;
   virtual uint64_t hash() const = 0;
-  virtual uint64_t get_tenant_id() const = 0;
+  
   VIRTUAL_TO_STRING_KV("", "");
 };
 
 class ObITsMgr
 {
 public:
-  virtual int update_gts(const uint64_t tenant_id, const int64_t gts, bool &update) = 0;
-  virtual int get_gts(const uint64_t tenant_id,
-                      const MonotonicTs stc,
+  virtual int update_gts(const int64_t gts, bool &update) = 0;
+  virtual int get_gts(const MonotonicTs stc,
                       ObTsCbTask *task,
                       share::SCN &scn,
                       MonotonicTs &receive_gts_ts) = 0;
-  virtual int get_gts_sync(const uint64_t tenant_id,
-                           const MonotonicTs stc,
+  virtual int get_gts_sync(const MonotonicTs stc,
                            const int64_t timeout_us,
                            share::SCN &scn,
                            MonotonicTs &receive_gts_ts) = 0;
 
-  virtual int get_gts(const uint64_t tenant_id, ObTsCbTask *task, share::SCN &scn) = 0;
-  virtual int get_ts_sync(const uint64_t tenant_id, const int64_t timeout_ts,
+  virtual int get_gts(ObTsCbTask *task, share::SCN &scn) = 0;
+  virtual int get_ts_sync(const int64_t timeout_ts,
       share::SCN &scn, bool &is_external_consistent) = 0;
-  virtual int get_ts_sync(const uint64_t tenant_id, const int64_t timeout_ts, share::SCN &scn) = 0;
-  virtual int wait_gts_elapse(const uint64_t tenant_id, const share::SCN &scn, ObTsCbTask *task,
+  virtual int get_ts_sync(const int64_t timeout_ts, share::SCN &scn) = 0;
+  virtual int wait_gts_elapse(const share::SCN &scn, ObTsCbTask *task,
                               bool &need_wait) = 0;
-  virtual int wait_gts_elapse(const uint64_t tenant_id, const share::SCN &scn) = 0;
-  virtual bool is_external_consistent(const uint64_t tenant_id) = 0;
-  virtual int remove_dropped_tenant(const uint64_t tenant_id) = 0;
-  virtual int interrupt_gts_callback_for_ls_offline(const uint64_t tenant_id, const share::ObLSID ls_id) = 0;
+  virtual int wait_gts_elapse(const share::SCN &scn) = 0;
+  virtual bool is_external_consistent() = 0;
+  virtual int interrupt_gts_callbacks() = 0;
+  virtual int interrupt_gts_callback_for_ls_offline(const share::ObLSID ls_id) = 0;
 public:
   VIRTUAL_TO_STRING_KV("", "");
 };
 
-typedef common::LinkHashNode<ObTsTenantInfo> ObTsTenantInfoNode;
-typedef common::LinkHashValue<ObTsTenantInfo> ObTsTenantInfoValue;
-class ObTsSourceInfo : public ObTsTenantInfoValue
-{
-public:
-  ObTsSourceInfo();
-  ~ObTsSourceInfo() { destroy(); }
-  int init(const uint64_t tenant_id);
-  void destroy();
-public:
-  uint64_t get_tenant_id() const { return tenant_id_; }
-  ObGtsSource *get_gts_source() { return &gts_source_; }
-  void update_last_access_ts() { last_access_ts_ = common::ObClockGenerator::getClock(); }
-  int64_t get_last_access_ts() const { return last_access_ts_; }
-  int check_if_tenant_has_been_dropped(const uint64_t tenant_id, bool &has_dropped);
-  int gts_callback_interrupted(const int errcode, const share::ObLSID ls_id);
-private:
-  bool is_inited_;
-  uint64_t tenant_id_;
-  int64_t last_access_ts_;
-  ObGtsSource gts_source_;
-};
-
-class ObTsSourceInfoAlloc
-{
-public:
-  static ObTsSourceInfo *alloc_value() { return NULL; }
-  static void free_value(ObTsSourceInfo *info)
-  {
-    if (NULL != info) {
-      info->~ObTsSourceInfo();
-      ob_free(info);
-      info = NULL;
-    }
-  }
-  static ObTsTenantInfoNode *alloc_node(ObTsSourceInfo *p)
-  {
-    UNUSED(p);
-    return op_alloc(ObTsTenantInfoNode);
-  }
-  static void free_node(ObTsTenantInfoNode *node)
-  {
-    if (NULL != node) {
-      op_free(node);
-      node = NULL;
-    }
-  }
-};
-
-class ObGtsRefreshFunctor
-{
-public:
-  ObGtsRefreshFunctor() {}
-  ~ObGtsRefreshFunctor() {}
-  bool operator()(const ObTsTenantInfo &gts_tenant_info, ObTsSourceInfo *ts_source_info)
-  {
-    int ret = common::OB_SUCCESS;
-    ObGtsSource *gts_source = NULL;
-    if (OB_ISNULL(ts_source_info)) {
-      ret = common::OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "ts source info is null", KR(ret));
-    } else if (NULL == (gts_source = (ts_source_info->get_gts_source()))) {
-      ret = common::OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "gts cache queue is null", KR(ret), K(gts_tenant_info));
-    } else {
-      if (OB_FAIL(gts_source->refresh_gts(false))) {
-        if (EXECUTE_COUNT_PER_SEC(1)) {
-          TRANS_LOG(WARN, "refresh gts failed", KR(ret), K(gts_tenant_info));
-        }
-      }
-      if (EXECUTE_COUNT_PER_SEC(1)) {
-        TRANS_LOG(INFO, "refresh gts functor", KR(ret), K(gts_tenant_info));
-      }
-      // rewrite ret
-      ret = common::OB_SUCCESS;
-    }
-    return true;
-  }
-};
-
-class GetObsoleteTenantFunctor
-{
-public:
-  GetObsoleteTenantFunctor(const int64_t obsolete_time, common::ObIArray<uint64_t> &array)
-      : obsolete_time_(obsolete_time), array_(array)
-  {
-    array_.reset();
-  }
-  ~GetObsoleteTenantFunctor() {}
-  bool operator()(const ObTsTenantInfo &gts_tenant_info, ObTsSourceInfo *ts_source_info)
-  {
-    int ret = common::OB_SUCCESS;
-    const int64_t now = common::ObClockGenerator::getClock();
-    if (OB_ISNULL(ts_source_info)) {
-      ret = common::OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "ts source info is null", KR(ret));
-    } else if (now - ts_source_info->get_last_access_ts() < obsolete_time_) {
-      // do nothing
-    } else if (OB_FAIL(array_.push_back(gts_tenant_info.get_value()))) {
-      TRANS_LOG(WARN, "push back tenant failed", K(ret), K(gts_tenant_info));
-    } else {
-      // do nothing
-    }
-    // Outside needs to traverse all tenants, here cannot return false
-    return true;
-  }
-private:
-  const int64_t obsolete_time_;
-  common::ObIArray<uint64_t> &array_;
-};
-
-class CheckTenantFunctor
-{
-public:
-  CheckTenantFunctor(common::ObIArray<uint64_t> &array)
-      : array_(array)
-  {
-    array_.reset();
-  }
-  ~CheckTenantFunctor() {}
-  bool operator()(const ObTsTenantInfo &gts_tenant_info, ObTsSourceInfo *ts_source_info)
-  {
-    int ret = common::OB_SUCCESS;
-    ObGtsSource *gts_source = NULL;
-    bool has_dropped = false;
-    if (OB_ISNULL(ts_source_info)) {
-      ret = common::OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "ts source info is null", KR(ret));
-    } else if (OB_FAIL(ts_source_info->check_if_tenant_has_been_dropped(gts_tenant_info.get_value(), has_dropped))) {
-      TRANS_LOG(WARN, "check and switch ts source failed", KR(ret), K(gts_tenant_info));
-    } else if (has_dropped) {
-      if (OB_FAIL(array_.push_back(gts_tenant_info.get_value()))) {
-        TRANS_LOG(WARN, "push back tenant failed", K(ret), K(gts_tenant_info));
-      }
-    }
-    return true;
-  }
-private:
-  common::ObIArray<uint64_t> &array_;
-};
-
-class GetALLTenantFunctor
-{
-public:
-  GetALLTenantFunctor(common::ObIArray<uint64_t> &array)
-      : array_(array)
-  {
-    array_.reset();
-  }
-  ~GetALLTenantFunctor() {}
-  bool operator()(const ObTsTenantInfo &gts_tenant_info, ObTsSourceInfo *ts_source_info)
-  {
-    int ret = common::OB_SUCCESS;
-    if (OB_FAIL(array_.push_back(gts_tenant_info.get_value()))) {
-      TRANS_LOG(WARN, "push back tenant failed", K(ret), K(gts_tenant_info));
-    } else {
-      // do nothing
-    }
-    return true;
-  }
-private:
-  common::ObIArray<uint64_t> &array_;
-};
-
 class ObTsMgr;
-typedef common::ObLinkHashMap<ObTsTenantInfo, ObTsSourceInfo, ObTsSourceInfoAlloc> ObTsSourceInfoMap;
 class ObTsMgr : public share::ObThreadPool, public ObITsMgr
 {
-  friend class ObTsSourceInfoGuard;
 public:
   ObTsMgr() { reset(); }
   ~ObTsMgr() { destroy(); }
@@ -292,54 +124,50 @@ public:
   void run1();
 
   int handle_gts_err_response(const ObGtsErrResponse &msg);
-  int handle_gts_result(const uint64_t tenant_id, const int64_t queue_index, const int ts_type);
-  int update_gts(const uint64_t tenant_id, const MonotonicTs srr, const int64_t gts, const int ts_type, bool &update);
-  int interrupt_gts_callback_for_ls_offline(const uint64_t tenant_id, const share::ObLSID ls_id);
+  int handle_gts_result(const int64_t queue_index, const int ts_type);
+  int update_gts(const MonotonicTs srr, const int64_t gts, const int ts_type, bool &update);
+  int interrupt_gts_callback_for_ls_offline(const share::ObLSID ls_id);
 public:
-  int update_gts(const uint64_t tenant_id, const int64_t gts, bool &update);
+  int update_gts(const int64_t gts, bool &update);
   // According to stc get the appropriate gts value, if the conditions are not met, need to register gts task, wait for asynchronous callback
-  int get_gts(const uint64_t tenant_id,
-              const MonotonicTs stc,
+  int get_gts(const MonotonicTs stc,
               ObTsCbTask *task,
               share::SCN &scn,
               MonotonicTs &receive_gts_ts);
   /** 
    * The synchronous interface corresponding to `get_gts`, used for synchronously obtaining an appropriate GTS timestamp, with a timeout parameter to avoid long waits.
    * Compared to the original synchronous interface `get_ts_sync`, this interface has better performance.
-   * @param[in] tenant_id
    * @param[in] stc: The point in time to obtain the GTS, generally current time
    * @param[in] timeout_us: Timeout duration, unit us
    * @param[out] scn: The result of the obtained GTS timestamp
    * @param[out] receive_gts_ts: The point in time when the GTS response was received
    */
-  int get_gts_sync(const uint64_t tenant_id,
-                   const MonotonicTs stc,
+  int get_gts_sync(const MonotonicTs stc,
                    const int64_t timeout_us,
                    share::SCN &scn,
                    MonotonicTs &receive_gts_ts);
   //Only get the latest value from local gts cache, but it may fail, failure handling logic as follows:
   //1. If task == NULL, it means the caller does not need asynchronous callbacks, directly return the error, and let the caller handle it
   //2. If task != NULL, need to register asynchronous callback task
-  int get_gts(const uint64_t tenant_id, ObTsCbTask *task, share::SCN &scn);
-  int get_ts_sync(const uint64_t tenant_id, const int64_t timeout_us,
+  int get_gts(ObTsCbTask *task, share::SCN &scn);
+  int get_ts_sync(const int64_t timeout_us,
       share::SCN &scn, bool &is_external_consistent);
-  int get_ts_sync(const uint64_t tenant_id, const int64_t timeout_us, share::SCN &scn);
-  int wait_gts_elapse(const uint64_t tenant_id, const share::SCN &scn, ObTsCbTask *task,
+  int get_ts_sync(const int64_t timeout_us, share::SCN &scn);
+  int wait_gts_elapse(const share::SCN &scn, ObTsCbTask *task,
       bool &need_wait);
-  int wait_gts_elapse(const uint64_t tenant_id, const share::SCN &scn);
-  bool is_external_consistent(const uint64_t tenant_id) { UNUSED(tenant_id); return true; }
-  int refresh_gts_location(const uint64_t tenant_id);
-  int remove_dropped_tenant(const uint64_t tenant_id);
+  int wait_gts_elapse(const share::SCN &scn);
+  bool is_external_consistent() { return true; }
+  int refresh_gts_location();
+  int interrupt_gts_callbacks();
 public:
   TO_STRING_KV("ts_source", "GTS");
 public:
+  // get current tenant GTS as archive start snapshot (retry up to 10s).
+  // relocated from share::ObBackupUtils::get_backup_scn (module-boundary: share must not depend on storage/tx)
+  static int get_backup_scn(const uint64_t &tenant_id, share::SCN &scn);
   static ObTsMgr &get_instance();
 private:
-  static const int64_t TS_SOURCE_INFO_OBSOLETE_TIME = 120 * 1000 * 1000;
-  static const int64_t TS_SOURCE_INFO_CACHE_NUM = 4096;
 private:
-  int add_tenant_(const uint64_t tenant_id);
-  int delete_tenant_(const uint64_t tenant_id);
   static ObTsMgr* &get_instance_inner();
 private:
   bool is_inited_;
@@ -349,7 +177,6 @@ private:
   ObLocationAdapter *location_adapter_;
   ObLocationAdapter location_adapter_def_;
   ObTsWorker ts_worker_;
-  common::ObQSyncLock lock_;
   ObGtsSource ts_source_;
 };
 
@@ -357,5 +184,14 @@ private:
 
 }
 }//end of namespace oceanbase
+
+namespace oceanbase
+{
+namespace transaction
+{
+// demoted from share::ObShareUtil(GTS query convenience wrapper, uses OB_TS_MGR.get_gts plus waiting internally)
+int get_tenant_gts(share::SCN &gts_scn);
+}
+}
 
 #endif //OCEANBASE_TRANSACTION_OB_TS_MGR_

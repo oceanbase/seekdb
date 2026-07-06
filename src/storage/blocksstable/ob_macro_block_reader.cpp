@@ -30,11 +30,11 @@ namespace blocksstable
 
 class ObIndexBlockRowParser;
 
-ObMacroBlockReader::ObMacroBlockReader(const uint64_t tenant_id)
+ObMacroBlockReader::ObMacroBlockReader()
     :compressor_(NULL),
      uncomp_buf_(NULL),
      uncomp_buf_size_(0),
-     allocator_(ObModIds::OB_CS_SSTABLE_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id)
+     allocator_(ObModIds::OB_CS_SSTABLE_READER, OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   if (share::is_reserve_mode()) {
     allocator_.set_ctx_id(ObCtxIds::MERGE_RESERVE_CTX_ID);

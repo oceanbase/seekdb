@@ -23,7 +23,7 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_small_spin_lock.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "share/ob_define.h"
 #include "storage/ob_memtable_ctx_obj_pool.h"
 #include "storage/memtable/ob_memtable_interface.h"
@@ -162,10 +162,10 @@ public:
     }
     ATOMIC_STORE(&is_inited_, false);
   }
-  int init(const uint64_t tenant_id)
+  int init()
   {
     int ret = OB_SUCCESS;
-    ObMemAttr attr(tenant_id, ObModIds::OB_QUERY_ALLOCATOR);
+    ObMemAttr attr(ObModIds::OB_QUERY_ALLOCATOR);
     if (OB_UNLIKELY(free_count_ != alloc_count_)) {
       TRANS_LOG(ERROR, "query allocator leak found", K(alloc_count_), K(free_count_), K(alloc_size_));
     }
@@ -173,7 +173,7 @@ public:
       if (OB_FAIL(allocator_.init(NULL, //use default allocator in fifo_allocator
                                   common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                   attr))) {
-        TRANS_LOG(ERROR, "query allocator init failed", K(ret), K(lbt()), K(tenant_id));
+        TRANS_LOG(ERROR, "query allocator init failed", K(ret), K(lbt()));
       } else {
         ATOMIC_STORE(&is_inited_, true);
       }
@@ -252,10 +252,10 @@ public:
     ATOMIC_STORE(&is_inited_, false);
   }
   // FIFOAllocator doesn't support double init, even after reset, so is_inited_ is handled specially here.
-  int init(const uint64_t tenant_id)
+  int init()
   {
     int ret = OB_SUCCESS;
-    ObMemAttr attr(tenant_id, ObModIds::OB_MEMTABLE_CALLBACK, ObCtxIds::TX_CALLBACK_CTX_ID);
+    ObMemAttr attr(ObModIds::OB_MEMTABLE_CALLBACK, ObCtxIds::TX_CALLBACK_CTX_ID);
     if (OB_UNLIKELY(free_count_ != alloc_count_)) {
       TRANS_LOG(ERROR, "callback memory leak found", K(alloc_count_), K(free_count_), K(alloc_size_));
     }
@@ -263,7 +263,7 @@ public:
       if (OB_FAIL(allocator_.init(NULL,
                                   common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                   attr))) {
-        TRANS_LOG(ERROR, "callback allocator init failed", K(ret), K(lbt()), K(tenant_id));
+        TRANS_LOG(ERROR, "callback allocator init failed", K(ret), K(lbt()));
       } else {
         ATOMIC_STORE(&is_inited_, true);
       }
@@ -340,7 +340,7 @@ public:
   virtual ~ObMemtableCtx();
   virtual void reset();
 public:
-  int init(const uint64_t tenant_id);
+  int init();
   virtual void *old_row_alloc(const int64_t size) override;
   virtual void old_row_free(void *row) override;
   virtual common::ObIAllocator &get_query_allocator();
@@ -414,7 +414,7 @@ public:
   uint64_t get_lock_for_read_retry_count() const { return lock_for_read_retry_count_; }
   virtual void add_trans_mem_total_size(const int64_t size);
   int64_t get_ref() const { return ATOMIC_LOAD(&ref_); }
-  uint64_t get_tenant_id() const;
+  
   inline bool has_row_updated() const { return has_row_updated_; }
   inline void set_row_updated() { has_row_updated_ = true; }
   int remove_callbacks_for_fast_commit(const ObCallbackScopeArray &callbacks);

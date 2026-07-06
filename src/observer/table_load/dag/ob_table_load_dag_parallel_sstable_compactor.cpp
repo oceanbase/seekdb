@@ -44,10 +44,10 @@ ObTableLoadDagParallelCompactTabletCtx::ObTableLoadDagParallelCompactTabletCtx()
     range_sstable_count_(0),
     range_allocator_("TLD_ParalMerge")
 {
-  range_allocator_.set_tenant_id(MTL_ID());
-  ranges_.set_tenant_id(MTL_ID());
-  range_sstables_.set_tenant_id(MTL_ID());
-  old_sstables_.set_tenant_id(MTL_ID());
+  
+  
+  
+  
 }
 
 ObTableLoadDagParallelCompactTabletCtx::~ObTableLoadDagParallelCompactTabletCtx()
@@ -119,7 +119,7 @@ ObTableLoadDagParallelSSTableCompactor::ObTableLoadDagParallelSSTableCompactor()
     allocator_("TLD_ParalSSTC"),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObTableLoadDagParallelSSTableCompactor::~ObTableLoadDagParallelSSTableCompactor()
@@ -146,7 +146,7 @@ int ObTableLoadDagParallelSSTableCompactor::init(ObTableLoadStoreCtx *store_ctx,
   } else {
     store_ctx_ = store_ctx;
     op_ctx_ = op_ctx;
-    if (OB_FAIL(tablet_ctx_map_.create(1024, "TLD_CptCtxMap", "TLD_CptCtxMap", MTL_ID()))) {
+    if (OB_FAIL(tablet_ctx_map_.create(1024, "TLD_CptCtxMap", "TLD_CptCtxMap"))) {
       LOG_WARN("fail to create ctx map", KR(ret));
     } else {
       is_inited_ = true;

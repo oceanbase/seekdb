@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_simple_op.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
@@ -58,7 +59,7 @@ ObDASSplitRangesOp::ObDASSplitRangesOp(ObIAllocator &op_alloc)
 int ObDASSplitRangesOp::open_op()
 {
   int ret = OB_SUCCESS;
-  ObAccessService *access_service = MTL(ObAccessService *);
+  ObAccessService *access_service = share::g_mp->access_service();
   if (OB_FAIL(access_service->split_multi_ranges(ls_id_,
                                                  tablet_id_,
                                                  timeout_us_,
@@ -208,7 +209,7 @@ ObDASRangesCostOp::ObDASRangesCostOp(common::ObIAllocator &op_alloc)
 int ObDASRangesCostOp::open_op()
 {
   int ret = OB_SUCCESS;
-  ObAccessService *access_service = MTL(ObAccessService *);
+  ObAccessService *access_service = share::g_mp->access_service();
   if (OB_FAIL(access_service->get_multi_ranges_cost(ls_id_,
                                                     tablet_id_,
                                                     timeout_us_,
@@ -295,7 +296,7 @@ int ObDASSimpleUtils::split_multi_ranges(ObExecContext &exec_ctx,
   ObDASSplitRangesOp *split_ranges_op = nullptr;
   ObEvalCtx eval_ctx(exec_ctx);
   ObDASRef das_ref(eval_ctx, exec_ctx);
-  das_ref.set_mem_attr(ObMemAttr(MTL_ID(), "DASSplitRanges"));
+  das_ref.set_mem_attr(ObMemAttr("DASSplitRanges"));
   if (OB_FAIL(das_ref.create_das_task(tablet_loc, DAS_OP_SPLIT_MULTI_RANGES, task_op))) {
     LOG_WARN("prepare das split_multi_ranges task failed", K(ret));
   } else {
@@ -351,7 +352,7 @@ int ObDASSimpleUtils::get_multi_ranges_cost(ObExecContext &exec_ctx,
   ObDASRangesCostOp *ranges_cost_op = nullptr;
   ObEvalCtx eval_ctx(exec_ctx);
   ObDASRef das_ref(eval_ctx, exec_ctx);
-  das_ref.set_mem_attr(ObMemAttr(MTL_ID(), "DASGetRangeCost"));
+  das_ref.set_mem_attr(ObMemAttr("DASGetRangeCost"));
   if (OB_FAIL(das_ref.create_das_task(tablet_loc, DAS_OP_GET_RANGES_COST, task_op))) {
     LOG_WARN("prepare das get_multi_ranges_cost task failed", K(ret));
   } else {

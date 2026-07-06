@@ -106,7 +106,7 @@ int ObP2PDatahubManager::alloc_msg(
 #define ALLOC_MSG_HELPER(msg_type, detail_class, label)                                            \
   case ObP2PDatahubMsgBase::msg_type: {                                                            \
     detail_class *new_msg = nullptr;                                                               \
-    ObMemAttr attr(ob_get_tenant_id(), label);                                                     \
+    ObMemAttr attr(label);                                                     \
     if (OB_FAIL(alloc_msg<detail_class>(allocator, new_msg, attr))) {                              \
       LOG_WARN("fail to alloc msg", K(ret));                                                       \
     } else {                                                                                       \

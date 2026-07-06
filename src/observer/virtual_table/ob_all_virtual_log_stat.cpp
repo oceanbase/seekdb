@@ -15,6 +15,7 @@
  */
 
 #include "ob_all_virtual_log_stat.h"
+#include "share/rc/ob_module_provider.h"
 #include "logservice/ob_log_service.h"
 
 namespace oceanbase
@@ -53,21 +54,16 @@ int ObAllVirtualPalfStat::inner_get_next_row(common::ObNewRow *&row)
       }
       return ret;
     };
-    auto func_iterate_tenant = [&func_iterate_palf]() -> int
-    {
-      int ret = OB_SUCCESS;
-      logservice::ObLogService *log_service = MTL(logservice::ObLogService*);
-      if (NULL == log_service) {
-        SERVER_LOG(INFO, "tenant has no ObLogService", K(MTL_ID()));
-      } else if (OB_FAIL(log_service->iterate_palf(func_iterate_palf))) {
-        SERVER_LOG(WARN, "ObLogService iterate_palf failed", K(ret));
-      } else {
-        SERVER_LOG(TRACE, "itearte this tenant success", K(MTL_ID()));
-      }
-      return ret;
-    };
-    if (OB_FAIL(omt_->operate_each_tenant_for_sys_or_self(func_iterate_tenant))) {
-      SERVER_LOG(WARN, "ObMultiTenant operate_each_tenant_for_sys_or_self failed", K(ret));
+    logservice::ObLogService *log_service = share::g_mp->log_service();
+    if (NULL == log_service) {
+      SERVER_LOG(INFO, "tenant has no ObLogService");
+    } else if (OB_FAIL(log_service->iterate_palf(func_iterate_palf))) {
+      SERVER_LOG(WARN, "ObLogService iterate_palf failed", K(ret));
+    } else {
+      SERVER_LOG(TRACE, "itearte this tenant success");
+    }
+    if (OB_FAIL(ret)) {
+      SERVER_LOG(WARN, "iterate log stat failed", K(ret));
     } else {
       scanner_it_ = scanner_.begin();
       start_to_read_ = true;

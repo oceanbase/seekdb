@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_tenant_compaction_progress.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -28,7 +29,7 @@ namespace compaction
 bool ObCompactionProgress::is_valid() const
 {
   bool bret = true;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id_ || merge_type_ <= INVALID_MERGE_TYPE || merge_type_ >= MERGE_TYPE_MAX
+  if (OB_UNLIKELY(false || merge_type_ <= INVALID_MERGE_TYPE || merge_type_ >= MERGE_TYPE_MAX
       || status_ >= ObIDag::DAG_STATUS_MAX || status_ < ObIDag::DAG_STATUS_INITING
       || data_size_ < 0 || unfinished_data_size_ < 0)) {
     bret = false;
@@ -38,7 +39,7 @@ bool ObCompactionProgress::is_valid() const
 
 void ObCompactionProgress::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   merge_type_ = INVALID_MERGE_TYPE;
   merge_version_ = 0;
   status_ = ObIDag::DAG_STATUS_MAX;
@@ -56,7 +57,7 @@ void ObCompactionProgress::reset()
 ObTenantCompactionProgress & ObTenantCompactionProgress::operator=(const ObTenantCompactionProgress &other)
 {
   is_inited_ = other.is_inited_;
-  tenant_id_ = other.tenant_id_;
+  
   merge_type_ = other.merge_type_;
   merge_version_ = other.merge_version_;
   status_ = other.status_;
@@ -118,7 +119,7 @@ int ObTenantCompactionProgressMgr::loop_major_sstable_(
   common::ObTimeGuard timeguard("loop_major_sstable_to_calc_progress_size", 30 * 1000 * 1000); // 30s
   ObSharedGuard<ObLSIterator> ls_iter_guard;
   ObLS *ls = nullptr;
-  if (OB_FAIL(MTL(ObLSService *)->get_ls_iter(ls_iter_guard, ObLSGetMod::COMPACT_MODE))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard, ObLSGetMod::COMPACT_MODE))) {
     LOG_WARN("failed to get ls iterator", K(ret));
   }
 
@@ -194,7 +195,7 @@ int ObTenantCompactionProgressMgr::init_progress(const int64_t major_snapshot_ve
 
       ObTenantCompactionProgress progress;
       progress.merge_version_ = major_snapshot_version;
-      progress.tenant_id_ = MTL_ID();
+      
       progress.merge_type_ = MAJOR_MERGE;
       progress.start_time_ = ObTimeUtility::fast_current_time();
       progress.status_ = share::ObIDag::DAG_STATUS_INITING;
@@ -418,31 +419,25 @@ int ObTenantCompactionProgressMgr::update_compression_ratio(
  * ObTenantCompactionProgressIterator implement
  * */
 
-int ObTenantCompactionProgressIterator::open(const int64_t tenant_id)
+int ObTenantCompactionProgressIterator::open()
 {
   int ret = OB_SUCCESS;
-  omt::TenantIdList all_tenants;
-  all_tenants.set_label(ObModIds::OB_TENANT_ID_LIST);
   if (is_opened_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("The ObTabletCompactionProgressIterator has been opened", K(ret));
-  } else if (!::is_valid_tenant_id(tenant_id)) {
+  } else if (!true) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(ret), K(tenant_id));
-  } else if (OB_SYS_TENANT_ID == tenant_id) { // sys tenant can get all tenants' info
-    GCTX.omt_->get_tenant_ids(all_tenants);
-  } else if (OB_FAIL(all_tenants.push_back(tenant_id))) {
-    LOG_WARN("failed to push back tenant_id", K(ret), K(tenant_id));
+    STORAGE_LOG(WARN, "invalid argument", K(ret));
   }
-  for (int i = 0; OB_SUCC(ret) && i < all_tenants.size(); ++i) {
-    if (!is_virtual_tenant_id(all_tenants[i])) { // skip virtual tenant
-      MTL_SWITCH(all_tenants[i]) {
-        if (OB_FAIL(MTL(ObTenantCompactionProgressMgr *)->get_list(progress_array_))) {
+  if (OB_SUCC(ret)) {
+    { // skip virtual tenant
+      MOD_SCOPE {
+        if (OB_FAIL(share::g_mp->tenant_compaction_progress_mgr()->get_list(progress_array_))) {
           LOG_WARN("failed to get compaction info", K(ret));
         }
       } else {
         if (OB_TENANT_NOT_IN_SERVER != ret) {
-          STORAGE_LOG(WARN, "switch tenant failed", K(ret), K(all_tenants[i]));
+          STORAGE_LOG(WARN, "switch tenant failed", K(ret));
         } else {
           ret = OB_SUCCESS;
           continue;
@@ -483,32 +478,25 @@ int ObTenantCompactionProgressIterator::get_next_info(ObTenantCompactionProgress
  * ObTabletCompactionProgressIterator implement
  * */
 
-int ObTabletCompactionProgressIterator::open(const int64_t tenant_id)
+int ObTabletCompactionProgressIterator::open()
 {
   int ret = OB_SUCCESS;
-  omt::TenantIdList all_tenants;
-  all_tenants.set_label(ObModIds::OB_TENANT_ID_LIST);
   if (is_opened_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("The ObTabletCompactionProgressIterator has been opened", K(ret));
-  } else if (!::is_valid_tenant_id(tenant_id)) {
+  } else if (!true) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(ret), K(tenant_id));
-  } else if (OB_SYS_TENANT_ID == tenant_id) { // sys tenant can get all tenants' info
-    GCTX.omt_->get_tenant_ids(all_tenants);
-  } else if (OB_FAIL(all_tenants.push_back(tenant_id))) {
-    LOG_WARN("failed to push back tenant_id", K(ret), K(tenant_id));
+    STORAGE_LOG(WARN, "invalid argument", K(ret));
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < all_tenants.size(); ++i) {
-    uint64_t tenant_id = all_tenants[i];
-    if (!is_virtual_tenant_id(tenant_id)) { // skip virtual tenant
-      MTL_SWITCH(tenant_id) {
-        if (OB_FAIL(MTL(ObTenantDagScheduler *)->get_all_compaction_dag_info(allocator_, progress_array_))) {
+  if (OB_SUCC(ret)) {
+    { // skip virtual tenant
+      MOD_SCOPE {
+        if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->get_all_compaction_dag_info(allocator_, progress_array_))) {
           LOG_WARN("failed to get compaction info", K(ret));
         }
       } else {
         if (OB_TENANT_NOT_IN_SERVER != ret) {
-          STORAGE_LOG(WARN, "switch tenant failed", K(ret), K(tenant_id));
+          STORAGE_LOG(WARN, "switch tenant failed", K(ret));
         } else {
           ret = OB_SUCCESS;
           continue;

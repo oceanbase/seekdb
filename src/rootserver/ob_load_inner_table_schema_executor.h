@@ -32,15 +32,15 @@ class ObLoadInnerTableSchemaExecutor
 {
 public:
   static int load_inner_table_schema(const obcall::ObLoadTenantTableSchemaArg &arg);
-  static int load_schema_version(const uint64_t tenant_id, common::ObISQLClient &client, const int64_t core_schema_version, const int64_t sys_schema_version);
+  static int load_schema_version(common::ObISQLClient &client, const int64_t core_schema_version, const int64_t sys_schema_version);
 private:
   static int load_inner_table_schema(const obcall::ObLoadTenantTableSchemaArg &arg,
       const share::ObLoadInnerTableSchemaInfo &info);
 
 public:
-  ObLoadInnerTableSchemaExecutor() : tenant_id_(OB_INVALID_TENANT_ID), inited_(false),
+  ObLoadInnerTableSchemaExecutor() : inited_(false),
     args_(), next_arg_index_(0), load_rpc_timeout_(0), parallel_count_(0) {}
-  int init(ObIArray<ObTableSchema> &table_schemas, const uint64_t tenant_id,
+  int init(ObIArray<ObTableSchema> &table_schemas,
       const int64_t max_cpu);
   int execute();
 private:
@@ -53,7 +53,7 @@ private:
   static const int64_t WAIT_THREAD_FREE_TIME = 10_ms;
   static const int64_t THREAD_PER_CPU = 1; // should equal to the default value of parameter cpu_quota_concurrency
 private:
-  uint64_t tenant_id_;
+  
 private:
   bool inited_;
   ObArray<obcall::ObLoadTenantTableSchemaArg> args_;

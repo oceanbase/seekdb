@@ -292,7 +292,7 @@ int ObMysqlPktContext::save_fragment_mysql_packet(const char *start, const int64
         ObMemAttr attr;
         attr.label_ = "LibMultiPackets";
         attr.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
-        attr.tenant_id_ = tenant_id_;
+        
         alloc_size += payload_buffered_total_len_;
         char *tmp_buffer = reinterpret_cast<char *>(ob_malloc(alloc_size, attr));
         if (OB_ISNULL(tmp_buffer)) {

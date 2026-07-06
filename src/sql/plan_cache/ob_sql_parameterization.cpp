@@ -338,8 +338,6 @@ bool ObSqlParameterization::is_tree_not_param(const ParseNode *tree)
     ret_bool = true;
   } else if (T_INTO_FILE_LIST == tree->type_) {
     ret_bool = true;
-  } else if (T_EXTERNAL_TABLE_PARTITION == tree->type_) {
-    ret_bool = true;
   } else if (T_EXTERNAL_FILE_FORMAT == tree->type_) {
     ret_bool = true;
   } else if (T_CHAR_CHARSET == tree->type_) {
@@ -488,23 +486,6 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
                        enable_mysql_compatible_dates))) {
     LOG_WARN("fail to check enable mysql compatible dates", K(ret));
   } else {
-    ParseNode *func_name_node = NULL;
-    if (T_WHERE_SCOPE == ctx.expr_scope_ && T_FUN_SYS == ctx.tree_->type_) {
-      if (OB_ISNULL(ctx.tree_->children_)) {
-        ret = OB_INVALID_ARGUMENT;
-        SQL_PC_LOG(WARN, "invalid argument", K(ctx.tree_->children_), K(ret));
-      } else if (NULL == (func_name_node = ctx.tree_->children_[0])) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_PC_LOG(ERROR, "function name node is NULL", K(ret));
-      } else {
-        ObString func_name(func_name_node->str_len_, func_name_node->str_value_);
-        ObString func_name_is_serving_tenant(N_IS_SERVING_TENANT);
-        if (func_name == func_name_is_serving_tenant) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("is_serving_tenant is not supported", K(ret));
-        }
-      }
-    }
     bool enable_decimal_int = false;
     if (OB_FAIL(ret)) {
     } else if (T_PROJECT_STRING == ctx.tree_->type_

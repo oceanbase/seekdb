@@ -50,7 +50,6 @@ struct ObTruncatePartKeyInfo final
   ~ObTruncatePartKeyInfo();
   int init(
     ObIAllocator &allocator,
-    const uint64_t tenant_id,
     const ObTableSchema &data_table_schema);
   bool is_valid() const
   {
@@ -70,7 +69,6 @@ struct ObTruncatePartKeyInfo final
   TO_STRING_KV(KPC_(part_expr), KPC_(subpart_expr), K_(ref_column_ids));
 private:
   int create_tmp_session(
-      const uint64_t tenant_id,
       share::schema::ObSchemaGetterGuard &schema_guard,
       sql::ObFreeSessionCtx &free_session_ctx,
       sql::ObSQLSessionInfo *&session);
@@ -124,7 +122,7 @@ public:
     ObDDLOperator &ddl_operator,
     share::schema::ObTableSchema &index_table_schema);
 private:
-  uint64_t get_tenant_id() const;
+  
   static int gen_new_schema_version_for_index_(
     ObMySQLTransaction &trans,
     ObDDLOperator &ddl_operator,

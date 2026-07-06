@@ -18,7 +18,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/container/ob_vector.h"
 #include "observer/table_load/ob_table_load_stat.h"
-#include "share/ob_order_perserving_encoder.h"
+#include "storage/ob_order_perserving_encoder.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/engine/sort/ob_sort_op_impl.h"
 #include "storage/direct_load/ob_direct_load_external_scanner.h"
@@ -58,7 +58,7 @@ public:
   static const constexpr int64_t ADS_ENCODE_BUFFER_LIMIT = 1 * 1024LL * 1024LL; //buffer for encode
 
   ObDirectLoadMemChunk();
-  int init(uint64_t tenant_id, int64_t mem_limit);
+  int init(int64_t mem_limit);
   int add_item(const T &item);
   int64_t get_size() const {
     return item_list_.size();
@@ -124,9 +124,9 @@ int ObDirectLoadMemChunk<T, Compare>::sort(Compare &compare, const ObArray<share
       }
     } else {
       common::ObArenaAllocator sort_allocator("TLD_Sort"); // sort memory
-      sort_allocator.set_tenant_id(MTL_ID());
+      
       common::ObArenaAllocator encode_buffer_allocator("TLD_Encode"); // encode tmp buffer
-      encode_buffer_allocator.set_tenant_id(MTL_ID());
+      
       ObArray<share::ObEncParam> enc_params_copy;
       common::ObArray<sql::ObChunkDatumStore::StoredRow *> sort_item_list;
       for (int i = 0; OB_SUCC(ret) && i < enc_params.count(); i++) {
@@ -190,12 +190,12 @@ ObDirectLoadMemChunk<T, Compare>::ObDirectLoadMemChunk()
     allocator_("TLD_MemChunk"),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  item_list_.set_attr(ObMemAttr(MTL_ID(), "TLD_MemChunk"));
+  
+  item_list_.set_attr(ObMemAttr("TLD_MemChunk"));
 }
 
 template <typename T, typename Compare>
-int ObDirectLoadMemChunk<T, Compare>::init(uint64_t tenant_id, int64_t mem_limit)
+int ObDirectLoadMemChunk<T, Compare>::init(int64_t mem_limit)
 {
   int ret = common::OB_SUCCESS;
   if (IS_INIT) {

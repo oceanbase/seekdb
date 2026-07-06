@@ -49,7 +49,7 @@ public:
     return ret;
   }
   int init_one_hp_infras(
-    HashPartInfras *&hp_infras, uint64_t tenant_id, bool enable_sql_dumped,
+    HashPartInfras *&hp_infras, bool enable_sql_dumped,
     bool unique, int64_t ways, int64_t batch_size, int64_t est_rows, int64_t width,
     ObSqlMemMgrProcessor *sql_mem_processor, bool need_rewind);
   int free_one_hp_infras(HashPartInfras *&hp_infras);
@@ -131,9 +131,8 @@ class ObHashPartInfrastructureMgr
 public:
   static const int64_t MIN_BUCKET_COUNT = 1L << 1;  //2;
   static const int64_t MAX_BUCKET_COUNT = 1L << 19; //524288;
-  ObHashPartInfrastructureMgr(const uint64_t tenant_id)
-    : arena_alloc_("HPInfrasGroup", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id), inited_(false),
-      tenant_id_(tenant_id), enable_sql_dumped_(false), est_rows_(0), width_(0),
+  ObHashPartInfrastructureMgr()
+    : arena_alloc_("HPInfrasGroup", OB_MALLOC_NORMAL_BLOCK_SIZE), inited_(false), enable_sql_dumped_(false), est_rows_(0), width_(0),
       unique_(false), ways_(1), eval_ctx_(nullptr), sql_mem_processor_(nullptr),
       io_event_observer_(nullptr), hp_infras_group_(arena_alloc_)
   {
@@ -142,7 +141,7 @@ public:
   {
     destroy();
   }
-  int init(uint64_t tenant_id, bool enable_sql_dumped, const int64_t est_rows, const int64_t width,
+  int init(bool enable_sql_dumped, const int64_t est_rows, const int64_t width,
     const bool unique, const int64_t ways, ObEvalCtx *eval_ctx,
     ObSqlMemMgrProcessor *sql_mem_processor, ObIOEventObserver *io_event_observer);
   int reserve_hp_infras(const int64_t capacity)
@@ -155,7 +154,6 @@ public:
   void destroy()
   {
     inited_ = false;
-    tenant_id_ = UINT64_MAX;
     enable_sql_dumped_ = false;
     est_rows_ = 0;
     width_ = 0;
@@ -168,8 +166,7 @@ public:
     arena_alloc_.reset();
   }
 
-  OB_INLINE uint64_t get_tenant_id()
-  { return tenant_id_; }
+  
   OB_INLINE ObSqlMemMgrProcessor *get_sql_mem_mgr_processor()
   { return sql_mem_processor_; }
   OB_INLINE void set_io_event_observer(ObIOEventObserver *io_event_observer)
@@ -188,7 +185,6 @@ private:
 private:
   common::ObArenaAllocator arena_alloc_;
   bool inited_;
-  uint64_t tenant_id_;
   bool enable_sql_dumped_;
   int64_t est_rows_;
   int64_t width_;

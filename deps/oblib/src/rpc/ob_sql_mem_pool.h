@@ -30,19 +30,19 @@ public:
     RPC_CACHE_SIZE = 3968
   };
   struct Page;
-  explicit ObSqlMemPool(): last_(NULL), tenant_id_(OB_INVALID_TENANT_ID), mem_label_("RpcDefault") {}
-  explicit ObSqlMemPool(int64_t tenant_id, const char* label): last_(NULL), tenant_id_(tenant_id), mem_label_(label) {}
+  explicit ObSqlMemPool(): last_(NULL), mem_label_("RpcDefault") {}
+  explicit ObSqlMemPool(const char* label): last_(NULL), mem_label_(label) {}
   ~ObSqlMemPool() { destroy(); }
-  static ObSqlMemPool* create(int64_t tenant_id, const char* label, int64_t req_sz, int64_t cache_sz = ObSqlMemPool::RPC_POOL_PAGE_SIZE);
+  static ObSqlMemPool* create(const char* label, int64_t req_sz, int64_t cache_sz = ObSqlMemPool::RPC_POOL_PAGE_SIZE);
   void* alloc(int64_t sz);
-  void set_tenant_id(int64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   void reuse();
   void destroy();
 private:
   void add_page(Page* page);
 private:
   Page* last_;
-  int64_t tenant_id_;
+  
   const char* mem_label_;
 };
 

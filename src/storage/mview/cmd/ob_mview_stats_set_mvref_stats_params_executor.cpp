@@ -28,7 +28,7 @@ using namespace share;
 using namespace sql;
 
 ObMViewStatsSetMVRefStatsParamsExecutor::ObMViewStatsSetMVRefStatsParamsExecutor()
-  : ctx_(nullptr), session_info_(nullptr), tenant_id_(OB_INVALID_TENANT_ID), op_type_(OpType::MAX)
+  : ctx_(nullptr), session_info_(nullptr), op_type_(OpType::MAX)
 {
 }
 
@@ -43,19 +43,19 @@ int ObMViewStatsSetMVRefStatsParamsExecutor::execute(ObExecContext &ctx,
   CK(OB_NOT_NULL(ctx.get_sql_proxy()));
   OV(OB_LIKELY(arg.is_valid()), OB_INVALID_ARGUMENT, arg);
   OZ(schema_checker_.init(*ctx.get_sql_ctx()->schema_guard_, session_info_->get_server_sid()));
-  OX(tenant_id_ = session_info_->get_effective_tenant_id());
+  OX();
   OZ(resolve_arg(arg));
 
   if (OB_SUCC(ret)) {
     ObMySQLTransaction trans;
-    if (OB_FAIL(trans.start(ctx.get_sql_proxy(), tenant_id_))) {
+    if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
       LOG_WARN("fail to start trans", KR(ret));
     } else if (OpType::SET_ALL_MVREF_STATS == op_type_) {
       int64_t affected_rows = 0;
-      if (OB_FAIL(ObMViewRefreshStatsParams::set_sys_defaults(trans, tenant_id_, stats_params_))) {
-        LOG_WARN("fail to set sys defaults", KR(ret), K(tenant_id_), K(stats_params_));
+      if (OB_FAIL(ObMViewRefreshStatsParams::set_sys_defaults(trans, stats_params_))) {
+        LOG_WARN("fail to set sys defaults", KR(ret), K(stats_params_));
       } else if (OB_FAIL(ObMViewRefreshStatsParams::drop_all_mview_refresh_stats_params(
-                   trans, tenant_id_, affected_rows))) {
+                   trans, affected_rows))) {
         LOG_WARN("fail to drop all mview refresh stats params", KR(ret));
       }
     } else if (OpType::SET_SPECIFY_MVREF_STATS == op_type_) {
@@ -67,8 +67,8 @@ int ObMViewStatsSetMVRefStatsParamsExecutor::execute(ObExecContext &ctx,
       for (int64_t i = 0; OB_SUCC(ret) && i < mview_ids_.count(); ++i) {
         const uint64_t mview_id = mview_ids_.at(i);
         if (OB_FAIL(ObMViewRefreshStatsParams::set_mview_refresh_stats_params(
-              trans, tenant_id_, mview_id, stats_params_))) {
-          LOG_WARN("fail to set mview refresh stats params", KR(ret), K(tenant_id_), K(mview_id),
+              trans, mview_id, stats_params_))) {
+          LOG_WARN("fail to set mview refresh stats params", KR(ret), K(mview_id),
                    K(stats_params_));
         }
       }
@@ -120,8 +120,7 @@ int ObMViewStatsSetMVRefStatsParamsExecutor::resolve_arg(
       } else if (OB_UNLIKELY(database_name.empty())) {
         ret = OB_ERR_NO_DB_SELECTED;
         LOG_WARN("No database selected", KR(ret));
-      } else if (OB_FAIL(schema_checker_.get_table_schema_with_synonym(
-                   tenant_id_, database_name, table_name, false /*is_index_table*/, has_synonym,
+      } else if (OB_FAIL(schema_checker_.get_table_schema_with_synonym(database_name, table_name, false /*is_index_table*/, has_synonym,
                    new_db_name, new_tbl_name, table_schema))) {
         LOG_WARN("fail to get table schema with synonym", KR(ret), K(database_name), K(table_name));
       } else if (OB_ISNULL(table_schema) || OB_UNLIKELY(!table_schema->is_materialized_view())) {

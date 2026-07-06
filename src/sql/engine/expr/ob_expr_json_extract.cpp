@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_json_extract.h"
 #include "ob_expr_json_func_helper.h"
-#include "lib/xml/ob_binary_aggregate.h"
+#include "common/xml/ob_binary_aggregate.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -107,8 +107,8 @@ int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, ObD
   bool is_null_result = false;
   bool may_match_many = (expr.arg_cnt_ > 2);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
+  
+  MultimodeAlloctor allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
   if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
     LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));

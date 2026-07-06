@@ -23,7 +23,7 @@
 #include "lib/oblog/ob_log_module.h"        // LIB_LOG
 #include "lib/atomic/ob_atomic.h"           // ATOMIC_*
 #include "lib/thread/thread_pool.h"         // lib::ThreadPool
-#include "common/ob_queue_thread.h"         // ObCond
+#include "lib/thread/ob_queue_thread.h"         // ObCond
 
 namespace oceanbase
 {
@@ -76,7 +76,7 @@ protected:
   /// Execute cond timedwait on a specific thread's queue
 
 public:
-  int init(const uint64_t tenant_id, const int64_t thread_num, const char *label);
+  int init(const int64_t thread_num, const char *label);
   void destroy();
   int start();
   void stop();

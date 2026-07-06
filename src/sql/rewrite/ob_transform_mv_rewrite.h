@@ -21,7 +21,7 @@
 #include "sql/rewrite/ob_stmt_comparer.h"
 #include "sql/optimizer/ob_conflict_detector.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
-#include "objit/common/ob_item_type.h"
+#include "sql/parser/ob_item_type.h"
 
 
 namespace oceanbase

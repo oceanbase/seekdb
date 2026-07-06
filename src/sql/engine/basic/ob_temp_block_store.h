@@ -369,7 +369,6 @@ public:
   virtual ~ObTempBlockStore() { reset(); }
   int init(int64_t mem_limit,
            bool enable_dump,
-           uint64_t tenant_id,
            int64_t mem_ctx_id,
            const char *label,
            common::ObCompressorType compressor_type,
@@ -380,7 +379,7 @@ public:
   void reset_block_cnt();
   bool is_inited() const { return inited_; }
   bool is_file_open() const { return io_.fd_ >= 0; }
-  void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   void set_mem_ctx_id(const int64_t ctx_id) { ctx_id_ = ctx_id; }
   void set_mem_limit(const int64_t limit) { mem_limit_ = limit; }
   int64_t get_mem_limit() const { return mem_limit_; }
@@ -399,7 +398,7 @@ public:
   void set_iteration_age(IterationAge *age) { inner_reader_.set_iteration_age(age); }
   inline void set_mem_used(const int64_t mem_used) { mem_used_ = mem_used; }
   inline void inc_mem_used(const int64_t mem_used) { mem_used_ += mem_used; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline const char* get_label() { return label_; }
   inline int64_t get_mem_ctx_id() const { return ctx_id_; }
   inline int64_t get_block_id_cnt() const { return block_id_cnt_; }
@@ -447,7 +446,7 @@ public:
   inline bool is_empty_save_block_cnt() const { return saved_block_id_cnt_ == 0; }
   // include index blocks and data blocks
 
-  TO_STRING_KV(K_(inited), K_(enable_dump), K_(tenant_id), K_(label), K_(ctx_id),  K_(mem_limit),
+  TO_STRING_KV(K_(inited), K_(enable_dump), K_(label), K_(ctx_id),  K_(mem_limit),
     K_(mem_hold), K_(mem_used), K_(io_.fd), K_(io_.dir_id), K_(file_size), K_(block_cnt),
     K_(index_block_cnt), K_(block_cnt_on_disk), K_(block_id_cnt), K_(dumped_block_id_cnt),
     K_(alloced_mem_size), K_(enable_trunc), K_(last_trunc_offset), K_(cur_file_offset));
@@ -596,7 +595,7 @@ protected:
   int64_t last_trunc_offset_;
 
 private:
-  uint64_t tenant_id_;
+  
   char label_[lib::AOBJECT_LABEL_SIZE + 1];
   int64_t ctx_id_;
 

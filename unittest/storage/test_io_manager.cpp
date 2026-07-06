@@ -88,19 +88,17 @@ static void SetUpTestCase()
   system("mkdir -p " TEST_SSTABLE_DIR);
 
   ASSERT_SUCC(oceanbase::MockTenantModuleEnv::get_instance().init());
-  ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(OB_SERVER_TENANT_ID, 0)->set_limit(IO_MEMORY_LIMIT);
+  ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(0)->set_limit(IO_MEMORY_LIMIT);
 }
 
 static void TearDownTestCase()
 {
-  ObMallocAllocator::get_instance()->recycle_tenant_allocator(1001);
-  ObMallocAllocator::get_instance()->recycle_tenant_allocator(1002);
+  ObMallocAllocator::get_instance()->recycle_tenant_allocator();
   oceanbase::MockTenantModuleEnv::get_instance().destroy();
 }
 
 static void get_random_io_info(ObIOInfo &io_info)
 {
-  io_info.tenant_id_ = OB_SERVER_TENANT_ID;
   io_info.fd_.first_id_ = ObRandom::rand(0, 10000);
   io_info.fd_.second_id_ = ObRandom::rand(0, 10000);
   io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
@@ -200,7 +198,6 @@ TEST_F(TestIOStruct, IOInfo)
   fd.first_id_ = 0;
   fd.second_id_ = 0;
   fd.device_handle_ = &LOCAL_DEVICE_INSTANCE;
-  info.tenant_id_ = OB_SERVER_TENANT_ID;
   info.fd_ = fd;
   info.flag_.set_mode(ObIOMode::READ);
   info.flag_.set_wait_event(1);
@@ -268,7 +265,7 @@ TEST_F(TestIOStruct, IOAllocator)
 
   // init
   const int64_t memory_limit = 1LL * 1024 * 1024 * 1024; // 1GB
-  ASSERT_SUCC(allocator.init(TEST_TENANT_ID, memory_limit));
+  ASSERT_SUCC(allocator.init(memory_limit));
   ASSERT_TRUE(allocator.is_inited_);
 
   // alloc and free memory
@@ -290,7 +287,7 @@ TEST_F(TestIOStruct, IOAllocator)
 TEST_F(TestIOStruct, IORequest)
 {
   ObRefHolder<ObTenantIOManager> holder;
-  OB_IO_MANAGER.get_tenant_io_manager(OB_SERVER_TENANT_ID, holder);
+  OB_IO_MANAGER.get_tenant_io_manager(holder);
   ObTenantIOManager &tenant_io_mgr = *(holder.get_ptr());
   ObIOFd fd;
   fd.first_id_ = 0;
@@ -314,7 +311,6 @@ TEST_F(TestIOStruct, IORequest)
   req.inc_ref();
 
   ObIOInfo read_info;
-  read_info.tenant_id_ = OB_SERVER_TENANT_ID;
   read_info.fd_ = fd;
   read_info.flag_.set_mode(ObIOMode::READ);
   read_info.flag_.set_wait_event(1);
@@ -590,7 +586,7 @@ TEST_F(TestIOStruct, Test_Size)
 TEST_F(TestIOStruct, IOResult)
 {
   ObRefHolder<ObTenantIOManager> holder;
-  ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(TEST_TENANT_ID, holder));
+  ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(holder));
   ObIOFd fd;
   fd.first_id_ = 0;
   fd.second_id_ = 1;
@@ -617,7 +613,6 @@ TEST_F(TestIOStruct, IOResult)
   req->inc_ref();
 
   ObIOInfo read_info;
-  read_info.tenant_id_ = OB_SERVER_TENANT_ID;
   read_info.fd_ = fd;
   read_info.flag_.set_mode(ObIOMode::READ);
   SET_GROUP_ID();
@@ -664,8 +659,8 @@ TEST_F(TestIOStruct, IOCallbackManager)
   // test init
   ObIOCallbackManager callback_mgr;
   ASSERT_FALSE(callback_mgr.is_inited_);
-  ASSERT_FAIL(callback_mgr.init(TEST_TENANT_ID, 0, 1000));
-  ASSERT_SUCC(callback_mgr.init(TEST_TENANT_ID, 2, 1000));
+  ASSERT_FAIL(callback_mgr.init(0, 1000));
+  ASSERT_SUCC(callback_mgr.init(2, 1000));
   ASSERT_TRUE(callback_mgr.is_inited_);
 
   // test enqueue and dequeue
@@ -714,26 +709,22 @@ TEST_F(TestIOStruct, IOFaultDetector)
   ASSERT_SUCC(result.basic_init());
   ASSERT_SUCC(result.init(io_info));
   ASSERT_SUCC(req.init(io_info, &result));
-  detector.reset_device_health();
+  detector.is_device_warning_ = false;
+  detector.last_device_warning_ts_ = 0;
   ASSERT_SUCC(detector.get_device_health_status(dhs, disk_abnormal_time));
   ASSERT_TRUE(DEVICE_HEALTH_NORMAL == dhs);
   ASSERT_TRUE(0 == disk_abnormal_time);
   result.flag_.set_mode(ObIOMode::READ);
   io_config.data_storage_warning_tolerance_time_ = 1000L * 1000L;
-  io_config.data_storage_error_tolerance_time_ = 3000L * 1000L;
   // io manager not init, skip this test
 //  detector.record_io_err_failure(req);
 //  usleep(2000L * 1000L);
-//  ASSERT_SUCC(detector.get_device_health(is_device_warning, is_device_error));
+//  ASSERT_SUCC(detector.get_device_health(is_device_warning));
 //  ASSERT_TRUE(is_device_warning);
-//  ASSERT_FALSE(is_device_error);
-//  usleep(2000L * 1000L);
-//  ASSERT_SUCC(detector.get_device_health(is_device_warning, is_device_error));
-//  ASSERT_TRUE(is_device_warning);
-//  ASSERT_TRUE(is_device_error);
 
-  // test auto clean device warning, but not clean device error
-  detector.reset_device_health();
+  // test auto clean device warning
+  detector.is_device_warning_ = false;
+  detector.last_device_warning_ts_ = 0;
   ASSERT_SUCC(detector.get_device_health_status(dhs, disk_abnormal_time));
   ASSERT_TRUE(DEVICE_HEALTH_NORMAL == dhs);
   ASSERT_TRUE(0 == disk_abnormal_time);
@@ -743,15 +734,6 @@ TEST_F(TestIOStruct, IOFaultDetector)
   ASSERT_TRUE(DEVICE_HEALTH_WARNING == dhs);
   ASSERT_TRUE(disk_abnormal_time > 0);
   usleep(io_config.read_failure_black_list_interval_ * 2);
-  ASSERT_SUCC(detector.get_device_health_status(dhs, disk_abnormal_time));
-  ASSERT_TRUE(DEVICE_HEALTH_NORMAL == dhs);
-  ASSERT_TRUE(0 == disk_abnormal_time);
-  detector.set_device_error();
-  usleep(io_config.read_failure_black_list_interval_ * 2);
-  ASSERT_SUCC(detector.get_device_health_status(dhs, disk_abnormal_time));
-  ASSERT_TRUE(DEVICE_HEALTH_ERROR == dhs);
-  ASSERT_TRUE(disk_abnormal_time > 0);
-  detector.reset_device_health();
   ASSERT_SUCC(detector.get_device_health_status(dhs, disk_abnormal_time));
   ASSERT_TRUE(DEVICE_HEALTH_NORMAL == dhs);
   ASSERT_TRUE(0 == disk_abnormal_time);
@@ -861,7 +843,6 @@ TEST_F(TestIOStruct, simple)
   const int64_t io_timeout_ms = 1000L * 5L;
   const int64_t write_io_size = DIO_READ_ALIGN_SIZE * 2;
   ObIOInfo io_info;
-  io_info.tenant_id_ = OB_SERVER_TENANT_ID;
   io_info.fd_ = fd;
   io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
   io_info.flag_.set_write();
@@ -1280,7 +1261,7 @@ TEST_F(TestIOStruct, perf)
     IOPerfTenant &curr_config = perf_tenants.at(i);
     LOG_INFO("wenqu: tenant config", K(curr_config), K(i));
     ObRefHolder<ObTenantIOManager> tenant_holder;
-    ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(curr_config.tenant_id_, tenant_holder));
+    ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder));
     ASSERT_SUCC(tenant_holder.get_ptr()->refresh_group_io_config());
   }
   // prepare perf runners
@@ -1350,7 +1331,7 @@ TEST_F(TestIOStruct, alloc_memory)
     IOPerfTenant &curr_config = perf_tenants.at(i);
     curr_config.config_.param_config_.memory_limit_ = 16LL * 1024 * 1024; //16MB
     ObRefHolder<ObTenantIOManager> tenant_holder;
-    ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(curr_config.tenant_id_, tenant_holder));
+    ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder));
     ASSERT_SUCC(tenant_holder.get_ptr()->refresh_group_io_config());
   }
   // prepare perf runners
@@ -1409,7 +1390,7 @@ TEST_F(TestIOStruct, IOTracer)
     IOPerfTenant &curr_config = perf_tenants.at(i);
     LOG_INFO("wenqu: tenant config", K(curr_config), K(i));
     ObRefHolder<ObTenantIOManager> tenant_holder;
-    ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(curr_config.tenant_id_, tenant_holder));
+    ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder));
     ASSERT_SUCC(tenant_holder.get_ptr()->refresh_group_io_config());
   }
   // prepare perf runners
@@ -1484,7 +1465,7 @@ TEST_F(TestIOStruct, ModifyIOPS)
     IOPerfTenant &curr_config = perf_tenants.at(i);
     LOG_INFO("wenqu: tenant config", K(curr_config), K(i));
     ObRefHolder<ObTenantIOManager> tenant_holder;
-    ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(curr_config.tenant_id_, tenant_holder));
+    ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder));
     ASSERT_SUCC(tenant_holder.get_ptr()->refresh_group_io_config());
   }
   // prepare perf runners
@@ -1558,7 +1539,7 @@ TEST_F(TestIOStruct, ModifyCallbackThread)
     IOPerfTenant &curr_config = perf_tenants.at(i);
     LOG_INFO("wenqu: tenant config", K(curr_config), K(i));
     ObRefHolder<ObTenantIOManager> tenant_holder;
-    ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(curr_config.tenant_id_, tenant_holder));
+    ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder));
     ASSERT_SUCC(tenant_holder.get_ptr()->refresh_group_io_config());
   }
   // prepare perf runners
@@ -1630,7 +1611,7 @@ TEST_F(TestIOStruct, ModifyGroupIO)
     if (curr_config.tenant_id_ == 1002) {
       LOG_INFO("qilu: tenant config", K(curr_config), K(i));
       ObRefHolder<ObTenantIOManager> tenant_holder;
-      ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(curr_config.tenant_id_, tenant_holder));
+      ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder));
       ASSERT_SUCC(tenant_holder.get_ptr()->refresh_group_io_config());
     }
   }
@@ -1941,7 +1922,7 @@ int IOPerfRunner::init(const int64_t absolute_ts, const IOPerfLoad &load)
   if (OB_UNLIKELY(!load.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(load));
-  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "perf runner", OB_SERVER_TENANT_ID, 1024LL * 1024 * 1024 * 1024 * 10))) {
+  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "perf runner", 1024LL * 1024 * 1024 * 1024 * 10))) {
     LOG_WARN("init allocator failed", K(ret));
   } else if (OB_FAIL(handle_queue_.init(1000L * 10000L, &allocator_))) {
     LOG_WARN("init handle queue failed", K(ret));
@@ -2072,7 +2053,6 @@ int IOPerfRunner::do_perf_rolling()
 {
   int ret = OB_SUCCESS;
   ObIOInfo info;
-  info.tenant_id_ = load_.tenant_id_;
   info.flag_.set_resource_group_id(load_.group_id_);
   info.flag_.set_mode(load_.mode_);
   info.flag_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
@@ -2168,7 +2148,6 @@ int IOPerfRunner::do_batch_io()
 {
   int ret = OB_SUCCESS;
   ObIOInfo info;
-  info.tenant_id_ = load_.tenant_id_;
   info.flag_.set_resource_group_id(load_.group_id_);
   info.flag_.set_mode(load_.mode_);
   info.flag_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
@@ -2270,7 +2249,7 @@ int IOConfModify::init(int64_t modify_init_ts, int64_t modify_delay_ts, const IO
   if (OB_UNLIKELY(!curr_tenant.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(curr_tenant));
-  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "Modifier runner", OB_SERVER_TENANT_ID, 1024LL * 1024 * 1024 * 1024 * 10))) {
+  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "Modifier runner", 1024LL * 1024 * 1024 * 1024 * 10))) {
     LOG_WARN("init allocator failed", K(ret));
   } else {
     curr_tenant_ = curr_tenant;
@@ -2324,7 +2303,7 @@ int IOConfModify::modify_tenant_io( const int64_t min_iops,
   curr_tenant.config_.unit_config_.max_iops_ = max_iops;
   curr_tenant.config_.unit_config_.weight_ = weight;
 
-  if (OB_FAIL(OB_IO_MANAGER.refresh_tenant_io_unit_config(curr_tenant.tenant_id_, curr_tenant.config_.unit_config_))) {
+  if (OB_FAIL(OB_IO_MANAGER.refresh_tenant_io_unit_config(curr_tenant.config_.unit_config_))) {
     LOG_WARN("refresh tenant io config failed", K(ret), K(curr_tenant.tenant_id_), K(curr_tenant.config_));
   }
   return ret;
@@ -2336,7 +2315,7 @@ int IOGroupModify::init(int64_t modify_init_ts, int64_t modify_delay_ts, const I
   if (OB_UNLIKELY(!curr_tenant.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(curr_tenant));
-  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "group modifier", OB_SERVER_TENANT_ID, 1024LL * 1024 * 1024 * 1024 * 10))) {
+  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "group modifier", 1024LL * 1024 * 1024 * 1024 * 10))) {
     LOG_WARN("init allocator failed", K(ret));
   } else {
     curr_tenant_ = curr_tenant;
@@ -2374,17 +2353,17 @@ void IOGroupModify::run1()
   if (modify_init_ts_ + modify_delay_ts_ > current_ts) {
     usleep(modify_init_ts_ + modify_delay_ts_ - current_ts);
   }
-  if (OB_FAIL(OB_IO_MANAGER.modify_group_io_config(curr_tenant_.tenant_id_, 0, 100, 100, 100))) {
+  if (OB_FAIL(OB_IO_MANAGER.modify_group_io_config(0, 100, 100, 100))) {
     LOG_WARN("fail to modify group config", K(ret));
-  } else if (OB_FAIL(OB_IO_MANAGER.modify_group_io_config(curr_tenant_.tenant_id_, (uint64_t)ObStorageUsedMod::STORAGE_USED_MAX + 1, 0, 0, 0))) {
+  } else if (OB_FAIL(OB_IO_MANAGER.modify_group_io_config((uint64_t)ObStorageUsedMod::STORAGE_USED_MAX + 1, 0, 0, 0))) {
     LOG_WARN("fail to modify group config", K(ret));
   }
 
   //change 2
   usleep(3000L * 1000L); // sleep 3s
-  if (OB_FAIL(OB_IO_MANAGER.modify_group_io_config(curr_tenant_.tenant_id_, 0, 40, 40, 40))) {
+  if (OB_FAIL(OB_IO_MANAGER.modify_group_io_config(0, 40, 40, 40))) {
     LOG_WARN("fail to modify group config", K(ret));
-  } else if (OB_FAIL(OB_IO_MANAGER.modify_group_io_config(curr_tenant_.tenant_id_, (uint64_t)ObStorageUsedMod::STORAGE_USED_MAX + 1, 60, 60, 60))) {
+  } else if (OB_FAIL(OB_IO_MANAGER.modify_group_io_config((uint64_t)ObStorageUsedMod::STORAGE_USED_MAX + 1, 60, 60, 60))) {
     LOG_WARN("fail to modify group config", K(ret));
   }
 }
@@ -2395,7 +2374,7 @@ int IOTracerSwitch::init(int64_t switch_init_ts, int64_t switch_delay_ts, const 
   if (OB_UNLIKELY(!curr_tenant.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(curr_tenant));
-  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "Switch runner", OB_SERVER_TENANT_ID, 1024LL * 1024 * 1024 * 1024 * 10))) {
+  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "Switch runner", 1024LL * 1024 * 1024 * 1024 * 10))) {
     LOG_WARN("init allocator failed", K(ret));
   } else {
     curr_tenant_ = curr_tenant;
@@ -2439,7 +2418,7 @@ void IOTracerSwitch::run1()
 int IOTracerSwitch::modify_tenant_io(IOPerfTenant &curr_tenant)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(OB_IO_MANAGER.refresh_tenant_io_param_config(curr_tenant.tenant_id_, curr_tenant.config_.param_config_))) {
+  if (OB_FAIL(OB_IO_MANAGER.refresh_tenant_io_param_config(curr_tenant.config_.param_config_))) {
     LOG_WARN("refresh tenant io config failed", K(ret), K(curr_tenant.tenant_id_), K(curr_tenant.config_));
   }
   return ret;
@@ -2451,7 +2430,7 @@ int IOCallbackModifier::init(int64_t modify_init_ts, int64_t modify_delay_ts, co
   if (OB_UNLIKELY(!curr_tenant.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(curr_tenant));
-  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "Modifier runner", OB_SERVER_TENANT_ID, 1024LL * 1024 * 1024 * 1024 * 10))) {
+  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "Modifier runner", 1024LL * 1024 * 1024 * 1024 * 10))) {
     LOG_WARN("init allocator failed", K(ret));
   } else {
     curr_tenant_ = curr_tenant;
@@ -2500,7 +2479,7 @@ int IOCallbackModifier::modify_callback_num(const int64_t thread_num,
   int ret = OB_SUCCESS;
   curr_tenant.config_.param_config_.callback_thread_count_ = thread_num;
 
-  if (OB_FAIL(OB_IO_MANAGER.refresh_tenant_io_param_config(curr_tenant.tenant_id_, curr_tenant.config_.param_config_))) {
+  if (OB_FAIL(OB_IO_MANAGER.refresh_tenant_io_param_config(curr_tenant.config_.param_config_))) {
     LOG_WARN("refresh tenant io config failed", K(ret), K(curr_tenant.tenant_id_), K(curr_tenant.config_));
   }
   return ret;

@@ -522,8 +522,7 @@ int RDWinFuncPXPieceMsgCtx::alloc_piece_msg_ctx(const RDWinFuncPXPieceMsg &pkt,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null arguments", K(ret), K(ctx.get_my_session()), K(ctx.get_physical_plan_ctx()));
   } else {
-    common::ObMemAttr attr(ctx.get_my_session()->get_effective_tenant_id(),
-                           ObModIds::OB_SQL_WINDOW_FUNC, ObCtxIds::WORK_AREA);
+    common::ObMemAttr attr(ObModIds::OB_SQL_WINDOW_FUNC, ObCtxIds::WORK_AREA);
     msg_ctx = OB_NEWx(RDWinFuncPXPieceMsgCtx, &(ctx.get_allocator()), pkt.op_id_, task_cnt,
                       ctx.get_physical_plan_ctx()->get_timeout_timestamp(), ctx, attr);
     if (OB_ISNULL(msg_ctx)) {
@@ -572,8 +571,7 @@ int RDWinFuncPXPieceMsgCtx::send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(ret));
       } else {
-        common::ObMemAttr attr(exec_ctx_.get_my_session()->get_effective_tenant_id(),
-                               arena_alloc_.get_label(), ObCtxIds::WORK_AREA);
+        common::ObMemAttr attr(arena_alloc_.get_label(), ObCtxIds::WORK_AREA);
         for (int i = 0; i < sqcs.count(); i++) {
           new (&responses[i]) RDWinFuncPXWholeMsg(attr);
         }

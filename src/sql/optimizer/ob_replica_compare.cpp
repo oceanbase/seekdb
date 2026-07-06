@@ -25,11 +25,11 @@ namespace sql
 ObReplicaCompare::ObReplicaCompare(ObRoutePolicyType policy_type)
     :ret_(OB_SUCCESS),
      policy_type_(policy_type),
-     readonly_zone_first_{IS_OTHER_REGION, ZONE_TYPE, MERGE_STATUS, POS_TYPE},
-     only_readonly_zone_{ZONE_TYPE, IS_OTHER_REGION, MERGE_STATUS, POS_TYPE,},
-     unmerge_zone_first_{IS_OTHER_REGION, MERGE_STATUS, ZONE_TYPE, POS_TYPE},
-     column_store_only_{ZONE_TYPE, IS_OTHER_REGION, MERGE_STATUS, POS_TYPE},
-     force_readonly_zone_{ZONE_TYPE, IS_OTHER_REGION, MERGE_STATUS, POS_TYPE}
+     readonly_zone_first_{ZONE_TYPE, MERGE_STATUS, POS_TYPE},
+     only_readonly_zone_{ZONE_TYPE, MERGE_STATUS, POS_TYPE,},
+     unmerge_zone_first_{MERGE_STATUS, ZONE_TYPE, POS_TYPE},
+     column_store_only_{ZONE_TYPE, MERGE_STATUS, POS_TYPE},
+     force_readonly_zone_{ZONE_TYPE, MERGE_STATUS, POS_TYPE}
       {
         static_assert(sizeof(readonly_zone_first_) == sizeof(only_readonly_zone_), "invalid array size");
         static_assert(sizeof(readonly_zone_first_) == sizeof(unmerge_zone_first_), "invalid array size");
@@ -37,7 +37,6 @@ ObReplicaCompare::ObReplicaCompare(ObRoutePolicyType policy_type)
         static_assert((sizeof(readonly_zone_first_)/sizeof(CompareType)) == (sizeof(cmp_func_array_)/sizeof(CmpFuncPtr)), "invalid array size");
         static_assert(sizeof(readonly_zone_first_) == sizeof(column_store_only_), "invalid array size");
 
-        cmp_func_array_[IS_OTHER_REGION] = &ObReplicaCompare::compare_other_region;
         cmp_func_array_[ZONE_TYPE] = &ObReplicaCompare::compare_zone_type;
         cmp_func_array_[MERGE_STATUS] = &ObReplicaCompare::compare_merge_status;
         cmp_func_array_[POS_TYPE] = &ObReplicaCompare::compare_pos_type;

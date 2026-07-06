@@ -18,7 +18,7 @@
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/ob_spi.h"
-#include "lib/xml/ob_binary_aggregate.h"
+#include "common/xml/ob_binary_aggregate.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -27,17 +27,6 @@ namespace oceanbase
 {
 namespace sql
 {
-uint64_t ObXMLExprHelper::get_tenant_id(ObSQLSessionInfo *session)
-{
-  uint64_t tenant_id = 0;
-  if (OB_ISNULL(session)) {
-  } else if (session->get_ddl_info().is_ddl_check_default_value()) {
-    tenant_id = OB_SERVER_TENANT_ID;
-  } else {
-    tenant_id = session->get_effective_tenant_id();
-  }
-  return tenant_id;
-}
 
 int ObXMLExprHelper::add_binary_to_element(ObMulModeMemCtx* mem_ctx, ObString binary_value, ObXmlElement &element)
 {
@@ -751,7 +740,7 @@ int ObXMLExprHelper::binary_agg_xpath_result(ObPathExprIter &xpath_iter,
   xpath_iter.set_add_ns(add_ns);
   ObBinAggSerializer bin_agg(mem_ctx->allocator_, ObBinAggType::AGG_XML, static_cast<uint8_t>(M_CONTENT));
   bin_agg.close_merge_text();
-  if (add_ns && OB_FAIL(ns_map.create(10, lib::ObMemAttr(MTL_ID(), "XMLModule")))) {
+  if (add_ns && OB_FAIL(ns_map.create(10, lib::ObMemAttr("XMLModule")))) {
     LOG_WARN("ns map create failed", K(ret));
   }
   while (OB_SUCC(ret)) {

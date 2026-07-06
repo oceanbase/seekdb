@@ -81,7 +81,6 @@ public:
       bool &need_process_cs_replica);
   static int get_cs_replica_ls_set(
       const ObIArray<share::ObLSID> &ls_id_array,
-      int64_t tenant_id,
       hash::ObHashSet<share::ObLSID> &contain_cs_replica_ls_id_set);
   static int check_need_process_cs_replica_for_offline_ddl(
       const ObTableSchema &orig_table_schema,
@@ -142,7 +141,7 @@ class ObGlobalCSReplicaMgr final
 public:
   ObGlobalCSReplicaMgr();
   ~ObGlobalCSReplicaMgr();
-  int try_init(const int64_t tenant_id, const ObIArray<share::ObLSID> &ls_id_array);
+  int try_init(const ObIArray<share::ObLSID> &ls_id_array);
   int check_cs_replica_global_visible(const share::ObLSID &ls_id, bool &is_global_visible) const;
   TO_STRING_KV(K_(is_inited));
 public:

@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_ddl_kv.h"
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
@@ -32,9 +34,9 @@ using namespace oceanbase::transaction;
 
 /******************             ObBlockMetaTree              **********************/
 ObBlockMetaTree::ObBlockMetaTree()
-  : is_inited_(false), macro_blocks_(), arena_("DDL_Btree", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()), tree_allocator_(arena_), block_tree_(tree_allocator_), datum_utils_(nullptr)
+  : is_inited_(false), macro_blocks_(), arena_("DDL_Btree", OB_MALLOC_NORMAL_BLOCK_SIZE), tree_allocator_(arena_), block_tree_(tree_allocator_), datum_utils_(nullptr)
 {
-  macro_blocks_.set_attr(ObMemAttr(MTL_ID(), "DDL_Btree"));
+  macro_blocks_.set_attr(ObMemAttr("DDL_Btree"));
 }
 
 ObBlockMetaTree::~ObBlockMetaTree()
@@ -50,7 +52,7 @@ int ObBlockMetaTree::init(const ObTablet &tablet,
                           const ObSSTable *first_ddl_sstable)
 {
   int ret = OB_SUCCESS;
-  const ObMemAttr mem_attr(MTL_ID(), "BlockMetaTree");
+  const ObMemAttr mem_attr("BlockMetaTree");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
@@ -75,7 +77,7 @@ int ObBlockMetaTree::init(const ObTablet &tablet,
       int_col_desc.col_order_ = ObOrderType::ASC;
       int_col_desc.col_type_.set_int();
       ObSEArray<schema::ObColDesc, 1> col_descs;
-      col_descs.set_attr(ObMemAttr(MTL_ID(), "DDL_Btree_descs"));
+      col_descs.set_attr(ObMemAttr("DDL_Btree_descs"));
       const bool is_column_store = true;
       if (OB_FAIL(col_descs.push_back(int_col_desc))) {
         LOG_WARN("push back col desc failed", K(ret));
@@ -785,7 +787,7 @@ int ObDDLMemtable::init_ddl_index_iterator(const blocksstable::ObStorageDatumUti
 
 ObDDLKV::ObDDLKV()
   : is_inited_(false), is_closed_(false), is_independent_freezed_(false), lock_(), 
-    arena_allocator_("DDL_CONTAINER", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    arena_allocator_("DDL_CONTAINER", OB_MALLOC_NORMAL_BLOCK_SIZE),
     ddl_memtable_allocator_(),
     tablet_id_(), ddl_start_scn_(SCN::min_scn()), ddl_snapshot_version_(0), data_format_version_(0), trans_id_(), seq_no_(),
     data_schema_version_(0), column_count_(0),
@@ -813,7 +815,7 @@ int ObDDLKV::init(const ObLSID &ls_id,
 
 {
   int ret = OB_SUCCESS;
-  const lib::ObMemAttr attr(MTL_ID(), "DDLKVMemAlloc");
+  const lib::ObMemAttr attr("DDLKVMemAlloc");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), KP(this));
@@ -925,11 +927,11 @@ int ObDDLKV::create_ddl_memtable(ObTablet &tablet, const ObITable::TableKey &tab
   } else if (OB_ISNULL(arena_allocator_buf = ddl_memtable_allocator_.alloc(sizeof(ObArenaAllocator)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret));
-  } else if (OB_FALSE_IT(allocator_for_ddl_memtable = new (arena_allocator_buf) ObArenaAllocator("AllocForDdlMem", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()))) {
+  } else if (OB_FALSE_IT(allocator_for_ddl_memtable = new (arena_allocator_buf) ObArenaAllocator("AllocForDdlMem", OB_MALLOC_NORMAL_BLOCK_SIZE))) {
   } else {
     bool need_free_storage_schema = false;
     ObStorageSchema *storage_schema = nullptr;
-    ObArenaAllocator arena("init_ddl_memt", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator arena("init_ddl_memt", OB_MALLOC_NORMAL_BLOCK_SIZE);
     if (is_inc_major_ddl_kv()) {
       ret = OB_NOT_SUPPORTED;
     } else {
@@ -1032,16 +1034,16 @@ int ObDDLKV::set_macro_block(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(macro_block), K(data_format_version), K(snapshot_version));
   } else if (can_freeze) {
-    const uint64_t tenant_id = MTL_ID();
+    
     ObUnitInfoGetter::ObTenantConfig unit;
     int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(GCTX.omt_->get_tenant_unit(tenant_id, unit))) {
-      LOG_WARN("get tenant unit failed", K(tmp_ret), K(tenant_id));
+    if (OB_TMP_FAIL(GCTX.omt_->get_tenant_unit(unit))) {
+      LOG_WARN("get tenant unit failed", K(tmp_ret));
     } else {
       const int64_t log_allowed_block_count = unit.config_.log_disk_size() * 0.2 / OB_STORAGE_OBJECT_MGR.get_macro_block_size();
       if (log_allowed_block_count <= 0) {
         tmp_ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid macro block count by log disk size", K(tmp_ret), K(tenant_id), K(unit.config_));
+        LOG_WARN("invalid macro block count by log disk size", K(tmp_ret), K(unit.config_));
       } else {
         freeze_block_count = min(freeze_block_count, log_allowed_block_count);
       }
@@ -1327,7 +1329,7 @@ void ObDDLKV::dec_pending_cnt()
 int ObDDLKV::wait_pending()
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = MTL(ObLSService *);
+  ObLSService *ls_service = share::g_mp->ls_service();
   ObLSHandle ls_handle;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -1378,7 +1380,7 @@ int ObDDLKV::init(const ObITable::TableKey &table_key,
                   const uint32_t freeze_clock)
 {
   int ret = OB_SUCCESS;
-  const lib::ObMemAttr attr(MTL_ID(), "DDLKVMemAlloc");
+  const lib::ObMemAttr attr("DDLKVMemAlloc");
 
   if (is_inited_) {
     TRANS_LOG(WARN, "init twice", K(*this));
@@ -1612,8 +1614,7 @@ void ObDDLKV::print_ready_for_flush()
             KP(this), K(ls_id), K(tablet_id),
             K(ret), K(ready_for_flush),
             K(frozen_memtable_flag), K(write_ref),
-            K(max_decided_scn), K(end_scn),
-            K_(trace_id));
+            K(max_decided_scn), K(end_scn));
 }
 
 void ObDDLKV::set_allow_freeze(const bool allow_freeze)

@@ -17,10 +17,11 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_catalog_executor.h"
 #include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_root_service.h"
 #include "sql/resolver/ddl/ob_catalog_stmt.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/ob_rpc_struct.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase

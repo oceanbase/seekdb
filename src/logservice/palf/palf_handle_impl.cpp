@@ -81,7 +81,6 @@ PalfHandleImpl::PalfHandleImpl()
     chaning_config_warn_time_(OB_INVALID_TIMESTAMP),
     cached_is_in_sync_(false),
     has_higher_prio_config_change_(false),
-    last_update_region_time_us_(OB_INVALID_TIMESTAMP),
     is_inited_(false)
 {
   log_dir_[0] = '\0';
@@ -351,31 +350,6 @@ int PalfHandleImpl::get_base_info(const LSN &base_lsn, PalfBaseInfo &base_info)
   return ret;
 }
 
-int PalfHandleImpl::update_self_region_()
-{
-  int ret = OB_SUCCESS;
-  common::ObRegion new_region, curr_region;
-  do {
-    RLockGuard guard(lock_);
-    if (OB_FAIL(config_mgr_.get_region(curr_region))) {
-      PALF_LOG(WARN, "get_region failed", K(ret), KPC(this));
-    }
-  } while (0);
-  if (OB_FAIL(ret)) {
-    PALF_LOG(WARN, "get_region failed", K(ret), KPC(this));
-  } else if (OB_FAIL(plugins_.get_server_region(self_, new_region))) {
-    PALF_LOG(WARN, "get_server_region failed", K(ret), KPC(this));
-  } else if (curr_region != new_region) {
-    WLockGuard guard(lock_);
-    if (OB_FAIL(config_mgr_.set_region(new_region))) {
-      PALF_LOG(WARN, "get_server_region failed", K(ret), K(new_region), KPC(this));
-    } else {
-      PALF_LOG(INFO, "update_self_region_ success", K(ret), K(curr_region),
-          K(new_region), KPC(this));
-    }
-  }
-  return ret;
-}
 
 int PalfHandleImpl::submit_log(
     const PalfAppendOptions &opts,
@@ -621,7 +595,7 @@ int PalfHandleImpl::handle_config_change_pre_check(const ObAddr &server,
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(ERROR, "PalfHandleImpl has not inited", K(ret), K_(palf_id));
-  } else if (OB_TMP_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), tenant_data_version))) {
+  } else if (OB_TMP_FAIL(oceanbase::common::ObClusterVersion::get_instance().get_tenant_data_version(tenant_data_version))) {
     // Note: if the DATA_VERSION in the replica is empty, it is not allowed
     //       to be added in the Paxos group. Check PalfHandleImpl only
     resp.is_normal_replica_ = false;
@@ -2407,35 +2381,6 @@ int PalfHandleImpl::reset_monitor_cb()
   return ret;
 }
 
-int PalfHandleImpl::set_locality_cb(palf::PalfLocalityInfoCb *locality_cb)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    PALF_LOG(WARN, "not initted", KR(ret), KPC(this));
-  } else if (OB_ISNULL(locality_cb)) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "locality_cb is NULL, can't register", KR(ret), KPC(this));
-  } else if (OB_FAIL(plugins_.add_plugin(locality_cb))) {
-    PALF_LOG(WARN, "add_plugin failed", KR(ret), KPC(this), KP(locality_cb), K_(plugins));
-  } else {
-    PALF_LOG(INFO, "set_locality_cb success", KPC(this), K_(plugins), KP(locality_cb));
-  }
-  return ret;
-}
-
-int PalfHandleImpl::reset_locality_cb()
-{
-  int ret = OB_SUCCESS;
-  PalfLocalityInfoCb *locality_cb = NULL;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(plugins_.del_plugin(locality_cb))) {
-    PALF_LOG(WARN, "del_plugin failed", KR(ret), KPC(this), K_(plugins));
-  }
-  return ret;
-}
-
 int PalfHandleImpl::check_and_switch_freeze_mode()
 {
   int ret = OB_SUCCESS;
@@ -2520,11 +2465,6 @@ int PalfHandleImpl::check_and_switch_state()
         FLOG_INFO("[PALF_DUMP]", K_(palf_id), K_(self), K(ack_info_list));
       }
       (void) sw_.report_log_task_trace(sw_.get_start_id());
-    }
-    if (palf_reach_time_interval(PALF_UPDATE_REGION_INTERVAL_US, last_update_region_time_us_) &&
-        OB_FAIL(update_self_region_())) {
-      // overwrite ret
-      PALF_LOG(WARN, "update_region failed", K(ret), KPC(this));
     }
   }
   return OB_SUCCESS;
@@ -2696,31 +2636,6 @@ int PalfHandleImpl::ack_mode_meta(const common::ObAddr &server,
     PALF_LOG(TRACE, "ack_mode_meta success", KR(ret), KPC(this), K(server), K(msg_proposal_id));
   }
   return ret;
-}
-
-int PalfHandleImpl::handle_election_message(const election::ElectionPrepareRequestMsg &msg)
-{
-  return election_.handle_message(msg);
-}
-
-int PalfHandleImpl::handle_election_message(const election::ElectionPrepareResponseMsg &msg)
-{
-  return election_.handle_message(msg);
-}
-
-int PalfHandleImpl::handle_election_message(const election::ElectionAcceptRequestMsg &msg)
-{
-  return election_.handle_message(msg);
-}
-
-int PalfHandleImpl::handle_election_message(const election::ElectionAcceptResponseMsg &msg)
-{
-  return election_.handle_message(msg);
-}
-
-int PalfHandleImpl::handle_election_message(const election::ElectionChangeLeaderMsg &msg)
-{
-  return election_.handle_message(msg);
 }
 
 int PalfHandleImpl::do_init_mem_(
@@ -3475,7 +3390,7 @@ int PalfHandleImpl::fetch_log_from_storage_(const common::ObAddr &server,
   } else if (FALSE_IT(prev_log_proposal_id_each_round = prev_log_info.log_proposal_id_)) {
   } else if (OB_FAIL(iterator.init(fetch_start_lsn, get_file_end_lsn, log_engine_.get_log_storage()))) {
     PALF_LOG(ERROR, "init iterator failed", K(ret), K_(palf_id));
-  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(MTL_ID(), palf_id_, LogIOUser::FETCHLOG)))) {
+  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf_id_, LogIOUser::FETCHLOG)))) {
     PALF_LOG(ERROR, "iterator set_io_context failed", K(ret), K_(palf_id));
   } else if (FALSE_IT(iterator.set_need_print_error(false))) {
     // NB: Fetch log will be concurrent with truncate, the content on disk will not integrity, need igore
@@ -4216,7 +4131,7 @@ int PalfHandleImpl::get_prev_log_info_for_fetch_(const LSN &prev_lsn,
   };
   if (OB_FAIL(iterator.init(prev_lsn, get_file_end_lsn, get_mode_version, log_engine_.get_log_storage()))) {
     PALF_LOG(WARN, "LogGroupEntryIterator init failed", K(ret), K(iterator), K(prev_lsn), K(curr_lsn));
-  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(MTL_ID(), palf_id_, LogIOUser::FETCHLOG)))) {
+  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf_id_, LogIOUser::FETCHLOG)))) {
     PALF_LOG(WARN, "LogGroupEntryIterator set_io_context failed", K(ret), K(iterator), K(prev_lsn), K(curr_lsn));
   } else if (FALSE_IT(iterator.set_need_print_error(false))) {
   } else {
@@ -4264,7 +4179,7 @@ int PalfHandleImpl::get_prev_log_info_(const LSN &lsn,
     PALF_LOG(INFO, "lsn is same as base_lsn, and log_snapshot_meta is valid", K(lsn), K(log_snapshot_meta));
   } else if (OB_FAIL(iterator.init(start_lsn, get_file_end_lsn, log_engine_.get_log_storage()))) {
     PALF_LOG(WARN, "LogGroupEntryIterator init failed", K(ret), K(start_lsn), K(lsn));
-  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(MTL_ID(), palf_id_, LogIOUser::FETCHLOG)))) {
+  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf_id_, LogIOUser::FETCHLOG)))) {
     PALF_LOG(WARN, "LogGroupEntryIterator set_io_context failed", K(ret), K(start_lsn), K(lsn));
   } else {
     LSN curr_lsn;
@@ -4758,7 +4673,7 @@ int PalfHandleImpl::read_and_append_log_group_entry_before_ts_(
     PALF_LOG(WARN, "allocate memory failed", KPC(this));
   } else if (OB_FAIL(iterator.init(start_lsn, get_file_end_lsn, log_engine_.get_log_storage()))) {
     PALF_LOG(WARN, "iterator init failed", K(ret), KPC(this), K(start_lsn), K(flashback_scn));
-  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(MTL_ID(), palf_id_, LogIOUser::RESTART)))) {
+  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf_id_, LogIOUser::RESTART)))) {
     PALF_LOG(WARN, "set_io_context failed", K(ret), KPC(this), K(start_lsn), K(flashback_scn));
   } else {
     const int64_t read_buf_len = read_buf_guard.read_buf_.buf_len_;

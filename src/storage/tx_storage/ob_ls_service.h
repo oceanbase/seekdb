@@ -17,6 +17,7 @@
 #ifndef OCEABASE_STORAGE_LS_SERVICE_
 #define OCEABASE_STORAGE_LS_SERVICE_
 
+#include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include "lib/guard/ob_shared_guard.h"
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"          // ObConcurrentFIFOAllocator
 #include "storage/tx_storage/ob_ls_map.h"
@@ -24,6 +25,7 @@
 #include "storage/ls/ob_ls_meta_package.h"                      // ObLSMetaPackage
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"
 #include "storage/mview/ob_major_mv_merge_info.h"
+#include "storage/tx/ob_tx_result_struct.h"
 
 namespace oceanbase
 {
@@ -58,7 +60,7 @@ public:
   virtual ~ObLSService();
 
   static int mtl_init(ObLSService* &ls_service);
-  int init(const uint64_t tenant_id);
+  int init();
   int start();
   int stop();
   int wait();
@@ -155,7 +157,8 @@ public:
   int64_t get_ls_count() const { return ls_map_.get_ls_count(); }
   int dump_ls_info();
 
-  TO_STRING_KV(K_(tenant_id), K_(is_inited));
+
+  TO_STRING_KV(K_(is_inited));
 private:
   enum class ObLSCreateState {
       CREATE_STATE_INIT = 0, // begin
@@ -212,7 +215,6 @@ private:
   bool is_inited_;
   bool is_running_; // used by create/remove, only can be used after start and before stop.
   bool is_stopped_; // only for ls iter, get ls iter will cause OB_NOT_RUNNING after stop.
-  uint64_t tenant_id_;
   // a map from ls id to ls
   ObLSMap ls_map_;
 
@@ -270,4 +272,13 @@ int ObLSService::foreach_ls(FUNC &func)
 
 }
 }
+namespace oceanbase
+{
+namespace storage
+{
+// demoted from share::ObShareUtil(tenant-level query, gets the sys LS readable SCN through MTL ObLSService)
+int get_sys_ls_readable_scn(share::SCN &readable_scn);
+}
+}
+
 #endif

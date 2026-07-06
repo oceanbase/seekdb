@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tx_scheduler_stat.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
 
 using namespace oceanbase::common;
@@ -39,29 +40,12 @@ ObGVTxSchedulerStat::~ObGVTxSchedulerStat()
 
 void ObGVTxSchedulerStat::reset()
 {
-  // release tenant resources first
-  omt::ObMultiTenantOperator::reset();
+  tx_scheduler_stat_iter_.reset();
   parts_buffer_[0] = '\0';
   tx_desc_addr_buffer_[0] = '\0';
   savepoints_buffer_[0] = '\0';
   xid_.reset();
   ObVirtualTableScannerIterator::reset();
-}
-
-void ObGVTxSchedulerStat::release_last_tenant()
-{
-  // resources related with tenant must be released by this function
-  tx_scheduler_stat_iter_.reset();
-}
-
-bool ObGVTxSchedulerStat::is_need_process(uint64_t tenant_id)
-{
-  bool bool_ret = false;
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
-    bool_ret = true;
-  }
-
-  return bool_ret;
 }
 
 int ObGVTxSchedulerStat::get_next_tx_info_(ObTxSchedulerStat &tx_scheduler_stat)
@@ -78,7 +62,7 @@ int ObGVTxSchedulerStat::get_next_tx_info_(ObTxSchedulerStat &tx_scheduler_stat)
 
 }
 
-int ObGVTxSchedulerStat::process_curr_tenant(common::ObNewRow *&row)
+int ObGVTxSchedulerStat::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObTxSchedulerStat tx_scheduler_stat;
@@ -88,7 +72,7 @@ int ObGVTxSchedulerStat::process_curr_tenant(common::ObNewRow *&row)
     SERVER_LOG(WARN, "allocator_ shouldn't be nullptr", K(allocator_), KR(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
   } else if (!tx_scheduler_stat_iter_.is_ready()) {
-    if (OB_FAIL(MTL(ObTransService*)->iterate_tx_scheduler_stat(tx_scheduler_stat_iter_))) {
+    if (OB_FAIL(share::g_mp->trans_service()->iterate_tx_scheduler_stat(tx_scheduler_stat_iter_))) {
       SERVER_LOG(WARN, "iterate transaction scheduler error", KR(ret));
       if (OB_NOT_RUNNING == ret || OB_NOT_INIT == ret) {
         ret = OB_SUCCESS;

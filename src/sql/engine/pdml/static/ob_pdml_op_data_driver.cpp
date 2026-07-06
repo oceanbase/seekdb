@@ -70,7 +70,7 @@ int ObPDMLOpDataDriver::init(const ObTableModifySpec &spec,
     // 2. Need to perform dump in case of barrier
     // TODO: The actual number of partitions processed by the current operator is temporarily set to 1, determine the number of hashmap buckets
     //       Need CG to actually calculate and pass in
-    if (OB_FAIL(cache_.init(MTL_ID(), 1, with_barrier_, spec))) {
+    if (OB_FAIL(cache_.init(1, with_barrier_, spec))) {
       LOG_WARN("failed to init batch row cache", K(ret));
     } else {
       LOG_TRACE("init pdml data driver", KPC(dml_rtdef_));
@@ -411,11 +411,10 @@ int ObPDMLOpDataDriver::set_heap_table_hidden_pk(
   if (!is_direct_load) {
     uint64_t autoinc_seq = 0;
     ObSQLSessionInfo *my_session = eval_ctx_->exec_ctx_.get_my_session();
-    uint64_t tenant_id = my_session->get_effective_tenant_id();
-    if (OB_FAIL(ObDMLService::get_heap_table_hidden_pk(tenant_id,
-                                                       tablet_id,
+    
+    if (OB_FAIL(ObDMLService::get_heap_table_hidden_pk(tablet_id,
                                                        autoinc_seq))) {
-      LOG_WARN("fail to get hidden pk", KR(ret), K(tablet_id), K(tenant_id));
+      LOG_WARN("fail to get hidden pk", KR(ret), K(tablet_id), K(1UL));
     } else {
       pk_value = autoinc_seq;
     }

@@ -2,7 +2,7 @@ alter system set ob_vector_memory_limit_percentage = 20;
 set ob_query_timeout=1000000000;
 set ob_trx_timeout=1000000000;
 drop database if exists vector_test;
-create database vector_test default charset gbk;
+create database vector_test default charset utf8mb4;
 use vector_test;
 set ob_query_timeout=1000000000;
 set ob_trx_timeout=1000000000;

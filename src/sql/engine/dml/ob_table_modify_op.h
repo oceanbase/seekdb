@@ -303,7 +303,6 @@ protected:
 public:
   common::ObMySQLProxy *sql_proxy_;
   observer::ObInnerSQLConnection *inner_conn_;
-  uint64_t tenant_id_;
   observer::ObInnerSQLConnection::SavedValue saved_conn_;
   bool need_foreign_key_check_;
   bool need_close_conn_;

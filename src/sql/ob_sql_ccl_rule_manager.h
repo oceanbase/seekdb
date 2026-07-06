@@ -33,20 +33,17 @@ namespace sql
 class ObCCLDatabaseTableHashWrapper {
 public:
   ObCCLDatabaseTableHashWrapper()
-      : tenant_id_(common::OB_INVALID_ID),
-        name_case_mode_(common::OB_NAME_CASE_INVALID) {}
-  ObCCLDatabaseTableHashWrapper(uint64_t tenant_id,
-                                const common::ObNameCaseMode mode,
+      : name_case_mode_(common::OB_NAME_CASE_INVALID) {}
+  ObCCLDatabaseTableHashWrapper(const common::ObNameCaseMode mode,
                                 const common::ObString &name)
-      : tenant_id_(tenant_id), name_case_mode_(mode), name_(name) {}
+      : name_case_mode_(mode), name_(name) {}
   ~ObCCLDatabaseTableHashWrapper() {}
 
   inline uint64_t hash() const {
     uint64_t hash_ret = 0;
-    hash_ret = common::murmurhash(&tenant_id_, sizeof(uint64_t), 0);
     common::ObCollationType cs_type =
         ObSchema::get_cs_type_with_cmp_mode(name_case_mode_);
-    hash_ret = common::ObCharset::hash(cs_type, name_, hash_ret);
+    hash_ret = common::ObCharset::hash(cs_type, name_, 0);
     return hash_ret;
   }
   int hash(uint64_t &hash_val) const {
@@ -54,16 +51,15 @@ public:
     return OB_SUCCESS;
   }
   inline bool operator==(const ObCCLDatabaseTableHashWrapper &rv) const {
-    ObCompareNameWithTenantID name_cmp(tenant_id_, name_case_mode_);
-    return (tenant_id_ == rv.tenant_id_) &&
+    ObCompareNameWithTenantID name_cmp(name_case_mode_);
+    return (true) &&
            (name_case_mode_ == rv.name_case_mode_) &&
            (0 == name_cmp.compare(name_, rv.name_));
   }
 
-  TO_STRING_KV(K_(tenant_id), K_(name_case_mode), K_(name));
+  TO_STRING_KV(K_(name_case_mode), K_(name));
 
 private:
-  uint64_t tenant_id_;
   common::ObNameCaseMode name_case_mode_;
   common::ObString name_; // database name or table name
 };
@@ -218,7 +214,7 @@ public:
     {{nullptr}} // end tag
   };
 
-  int init(uint64_t tenant_id);
+  int init();
   inline bool is_inited() { return inited_; }
 
   static int mtl_new(ObSQLCCLRuleManager* &sql_ccl_rule_mgr);
@@ -280,7 +276,7 @@ private:
 
 private:
   bool inited_{false};
-  uint64_t tenant_id_{0};
+  
   ObSQLCCLRuleLevelConcurrencyMapWrapper rule_level_concurrency_map_wrapper_;
   ObSQLCCLRuleLevelConcurrencyMapWrapper format_sqlid_level_concurrency_map_wrapper_;
   ObSEArray<ObSEArray<ObString, 2>, 2> whitelist_keywords_array_;

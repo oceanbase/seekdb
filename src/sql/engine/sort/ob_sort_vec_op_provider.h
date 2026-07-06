@@ -78,7 +78,7 @@ public:
   common::ObIAllocator *get_malloc_allocator() { return alloc_; }
 
 private:
-  int init_mem_context(uint64_t tenant_id);
+  int init_mem_context();
   int init_sort_impl(ObSortVecOpContext &context, ObISortVecOpImpl *&sort_op_impl);
   int decide_sort_key_type(ObSortVecOpContext &context);
   bool is_basic_cmp_type(VecValueTypeClass vec_tc);

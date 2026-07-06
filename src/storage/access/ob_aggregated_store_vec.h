@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_AGGREGATED_STORE_VEC_H_
 #define OCEANBASE_STORAGE_OB_AGGREGATED_STORE_VEC_H_
 
-#include "share/aggregate/processor.h"
+#include "sql/engine/aggregate/processor.h"
 #include "ob_vector_store.h"
 #include "ob_pushdown_aggregate_vec.h"
 

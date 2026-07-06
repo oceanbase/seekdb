@@ -125,8 +125,7 @@ DEF_TO_STRING(ObTabletCreatorArg)
 /////////////////////////////////////////////////////////
 
 int ObBatchCreateTabletHelper::init(
-  const share::ObLSID &ls_key, 
-  const int64_t tenant_id,
+  const share::ObLSID &ls_key,
   const SCN &major_frozen_scn,
   const bool need_check_tablet_cnt)
 {
@@ -134,11 +133,11 @@ int ObBatchCreateTabletHelper::init(
   const int64_t bucket_count = hash::cal_next_prime(100);
   auto_part_size_arr_.reset();
   if (OB_UNLIKELY(!ls_key.is_valid()
-                  || OB_INVALID_TENANT_ID == tenant_id)) {
+                  || false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(ls_key));
+    LOG_WARN("invalid argument", KR(ret), K(ls_key));
   } else if (OB_FAIL(batch_arg_.init_create_tablet(ls_key, major_frozen_scn, need_check_tablet_cnt))) {
-    LOG_WARN("failed to init create tablet", KR(ret), K(tenant_id), K(ls_key), K(major_frozen_scn));
+    LOG_WARN("failed to init create tablet", KR(ret), K(ls_key), K(major_frozen_scn));
   } else if (OB_FAIL(table_schemas_map_.create(bucket_count, "CreateTablet", "CreateTablet"))) {
     LOG_WARN("failed to create hashmap", KR(ret));
   }
@@ -347,7 +346,7 @@ int ObTabletCreator::add_create_tablet_arg(const ObTabletCreatorArg &arg)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate new arg", KR(ret), KP(batch_arg));
     } else if (FALSE_IT(batch_arg = new (arg_buf)ObBatchCreateTabletHelper())) {
-    } else if (OB_FAIL(batch_arg->init(arg.ls_key_, tenant_id_, major_frozen_scn_, need_check_tablet_cnt_))) {
+    } else if (OB_FAIL(batch_arg->init(arg.ls_key_, major_frozen_scn_, need_check_tablet_cnt_))) {
       LOG_WARN("failed to init batch arg helper", KR(ret), K(arg));
     } else if (OB_FAIL(args_map_.set_refactored(arg.ls_key_, batch_arg, 0/*not overwrite*/))) {
       LOG_WARN("fail to set refactored", KR(ret), K(arg));
@@ -367,7 +366,7 @@ int ObTabletCreator::add_create_tablet_arg(const ObTabletCreatorArg &arg)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate new arg", KR(ret));
     } else if (FALSE_IT(new_arg = new (arg_buf)ObBatchCreateTabletHelper())) {
-    } else if (OB_FAIL(new_arg->init(arg.ls_key_, tenant_id_, major_frozen_scn_, need_check_tablet_cnt_))) {
+    } else if (OB_FAIL(new_arg->init(arg.ls_key_, major_frozen_scn_, need_check_tablet_cnt_))) {
       LOG_WARN("failed to init batch arg helper", KR(ret), K(arg));
     } else if (FALSE_IT(new_arg->next_ = batch_arg)) {
     } else if (OB_FAIL(args_map_.set_refactored(arg.ls_key_, new_arg, 1/*overwrite*/))) {
@@ -457,10 +456,10 @@ int ObTabletCreator::execute()
               if (ctx.is_timeouted()) {
                 ret = OB_TIMEOUT;
                 LOG_WARN("already timeout", KR(ret), K(ctx));
-              } else if (OB_FAIL(conn->register_multi_data_source(tenant_id_, iter->first,
+              } else if (OB_FAIL(conn->register_multi_data_source(iter->first,
                                  transaction::ObTxDataSourceType::CREATE_TABLET_NEW_MDS, buf, buf_len))) {
                 if (need_retry(ret)) {
-                  LOG_INFO("fail to register_tx_data, try again", KR(ret), K_(tenant_id), K(batch_arg->batch_arg_));
+                  LOG_INFO("fail to register_tx_data, try again", KR(ret), K(batch_arg->batch_arg_));
                   ob_usleep(SLEEP_INTERVAL);
                 } else {
                   LOG_WARN("fail to register_tx_data", KR(ret), K(batch_arg->batch_arg_), K(buf), K(buf_len));
@@ -472,8 +471,7 @@ int ObTabletCreator::execute()
             } while (need_retry(ret));
             if (OB_SUCC(ret) && batch_arg->batch_arg_.set_binding_info_outside_create()) {
               const int64_t start_time = ObTimeUtility::current_time();
-              if (OB_FAIL(ObTabletBindingMdsHelper::modify_tablet_binding_for_create(tenant_id_,
-                      batch_arg->batch_arg_, ctx.get_abs_timeout(), trans_))) {
+              if (OB_FAIL(ObTabletBindingMdsHelper::modify_tablet_binding_for_create(batch_arg->batch_arg_, ctx.get_abs_timeout(), trans_))) {
                 LOG_WARN("failed to modify tablet binding for create", K(ret));
               }
               const int64_t end_time = ObTimeUtility::current_time();
@@ -482,8 +480,7 @@ int ObTabletCreator::execute()
             }
             if (OB_SUCC(ret)) {
               const int64_t start_time = ObTimeUtility::current_time();
-              if (OB_FAIL(ObTabletSplitMdsHelper::set_auto_part_size_for_create(tenant_id_,
-                      batch_arg->batch_arg_, batch_arg->auto_part_size_arr_, ctx.get_abs_timeout(), trans_))) {
+              if (OB_FAIL(ObTabletSplitMdsHelper::set_auto_part_size_for_create(batch_arg->batch_arg_, batch_arg->auto_part_size_arr_, ctx.get_abs_timeout(), trans_))) {
                 LOG_WARN("failed to set auto part size for create", K(ret));
               }
               const int64_t end_time = ObTimeUtility::current_time();

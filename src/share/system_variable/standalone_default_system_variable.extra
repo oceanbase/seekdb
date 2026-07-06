@@ -25,7 +25,7 @@
   },
   {
     "scenario": "kv",
-    "comment": "for key-value workloads and hbase-like wide-column workloads, which commonly experience very high throughput and are sensitive to latency",
+    "comment": "for key-value workloads with very high throughput and latency sensitivity",
     "variables": {
       "tenant": [
       ]

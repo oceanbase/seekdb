@@ -91,15 +91,15 @@ int ObInfoSchemaEnableRolesTable::prepare_scan()
       const uint64_t role_user_id = session_->get_enable_role_array().at(i);
       const ObUserInfo *cur_user_info = NULL;
       const uint64_t cur_user_id = session_->get_priv_user_id();
-      const uint64_t tenant_id = session_->get_effective_tenant_id();
-      if (OB_FAIL(schema_guard->get_user_info(tenant_id, role_user_id, user_info))) {
-        LOG_WARN("fail to get user id", KR(ret), K(tenant_id), K(role_user_id));
-      } else if (OB_FAIL(schema_guard->get_user_info(tenant_id, cur_user_id, cur_user_info))) {
-        LOG_WARN("fail to get user id", KR(ret), K(tenant_id), K(role_user_id));
+      
+      if (OB_FAIL(schema_guard->get_user_info(role_user_id, user_info))) {
+        LOG_WARN("fail to get user id", KR(ret), K(role_user_id));
+      } else if (OB_FAIL(schema_guard->get_user_info(cur_user_id, cur_user_info))) {
+        LOG_WARN("fail to get user id", KR(ret), K(role_user_id));
       } else if (OB_ISNULL(user_info) || OB_ISNULL(cur_user_info)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("user info is null", K(ret), KP(user_info), KP(cur_user_info),
-                 K(tenant_id), K(cur_user_id), K(role_user_id));
+                 K(cur_user_id), K(role_user_id));
       }
 
       for (int j = 0; OB_SUCC(ret) && j < col_count; ++j) {

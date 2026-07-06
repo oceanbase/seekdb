@@ -251,11 +251,6 @@ int MdsRow<K, V>::construct_insert_record_user_mds_node_(MdsRowBase<K, V> *mds_r
       MDS_LOG_SET(WARN, "seq_no is not satisfied inc logic");
     }
   }
-#ifndef UNITTEST_DEBUG
-  set_mds_mem_check_thread_local_info(mds_row->p_mds_unit_->p_mds_table_->ls_id_,
-                                      mds_row->p_mds_unit_->p_mds_table_->tablet_id_,
-                                      typeid(new_node).name());
-#endif
   // if this is an insert action, check is same scn mds node exists
   if (OB_FAIL(ret)) {
   } else if (!scn.is_max() && last_inner_recycled_scn >= scn) {
@@ -303,7 +298,6 @@ int MdsRow<K, V>::construct_insert_record_user_mds_node_(MdsRowBase<K, V> *mds_r
       ret = OB_SUCCESS;
     }
   }
-  reset_mds_mem_check_thread_local_info();
   return ret;
   #undef PRINT_WRAPPER
 }
@@ -887,8 +881,7 @@ void MdsRow<K, V>::report_event_(const char (&event_str)[N],
   } else if (OB_FAIL(node.fill_event_(event, event_str, stack_buffer, buffer_size))) {
     MDS_LOG(WARN, "fail fill mds event", K(*this));
   } else {
-    observer::MdsEventKey key(MTL_ID(),
-                              MdsRowBase<K, V>::p_mds_unit_->p_mds_table_->ls_id_,
+    observer::MdsEventKey key(MdsRowBase<K, V>::p_mds_unit_->p_mds_table_->ls_id_,
                               MdsRowBase<K, V>::p_mds_unit_->p_mds_table_->tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, MdsRowBase<K, V>::p_mds_unit_->p_mds_table_, file, line, function_name);
   }

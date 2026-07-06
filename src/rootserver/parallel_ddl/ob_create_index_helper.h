@@ -39,7 +39,6 @@ class ObCreateIndexHelper : public ObDDLHelper
 public:
   ObCreateIndexHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
-    const uint64_t tenant_id,
     rootserver::ObDDLService &ddl_service,
     const obcall::ObCreateIndexArg &arg,
     obcall::ObAlterTableRes &res);

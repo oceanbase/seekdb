@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_PARSER
 #include "ob_parser.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 #include "lib/oblog/ob_log.h"
 #include "parse_malloc.h"
 #include "parse_node.h"

@@ -1385,8 +1385,8 @@ int ObStmtComparer::compare_basic_table_item(const TableItem *first_table,
   if (OB_ISNULL(first_table) || OB_ISNULL(second_table)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param has null", K(first_table), K(second_table));
-  } else if ((first_table->is_basic_table() || first_table->is_link_table())
-             && (second_table->is_basic_table() || second_table->is_link_table()) 
+  } else if ((first_table->is_basic_table())
+             && (second_table->is_basic_table()) 
              && first_table->ref_id_ == second_table->ref_id_
              && first_table->flashback_query_type_ == second_table->flashback_query_type_
              && (first_table->flashback_query_expr_ == second_table->flashback_query_expr_
@@ -1555,8 +1555,8 @@ int ObStmtComparer::compare_table_item(const ObDMLStmt *first,
     } else {
       relation = QueryRelation::QUERY_UNCOMPARABLE;
     }
-  } else if ((first_table->is_basic_table() || first_table->is_link_table()) && 
-            (second_table->is_basic_table() || second_table->is_link_table())) {
+  } else if ((first_table->is_basic_table()) && 
+            (second_table->is_basic_table())) {
     if (OB_FAIL(compare_basic_table_item(first_table, 
                                          second_table, 
                                          relation))) {

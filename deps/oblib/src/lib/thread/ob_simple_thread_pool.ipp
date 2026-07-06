@@ -47,20 +47,20 @@ ObSimpleThreadPoolBase<T>::~ObSimpleThreadPoolBase()
 template <class T>
 int ObSimpleThreadPoolBase<T>::init(
     const int64_t thread_num, const int64_t task_num_limit,
-    const char *name, const uint64_t tenant_id)
+    const char *name)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
   } else if (thread_num <= 0 || task_num_limit <= 0 || OB_ISNULL(name)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(queue_.init(task_num_limit, name, tenant_id))) {
+  } else if (OB_FAIL(queue_.init(task_num_limit, name))) {
     COMMON_LOG(WARN, "task queue init failed", K(ret), K(task_num_limit));
   } else {
     is_inited_ = true;
     stop_ = false;
     name_ = name;
-    tenant_id_ = tenant_id;
+    
     if (max_thread_cnt_ < 0) {
       max_thread_cnt_ = thread_num;
     }

@@ -168,7 +168,6 @@ PalfEnvImpl::PalfEnvImpl() : palf_meta_lock_(common::ObLatchIds::PALF_ENV_LOCK),
                              rebuild_replica_log_lag_threshold_(0),
                              enable_log_cache_(false),
                              diskspace_enough_(true),
-                             tenant_id_(0),
                              io_adapter_(),
                              is_inited_(false),
                              is_running_(false)
@@ -186,7 +185,6 @@ int PalfEnvImpl::init(
     const PalfOptions &options,
     const char *base_dir, const ObAddr &self,
     const int64_t cluster_id,
-    const int64_t tenant_id,
     common::ObILogAllocator *log_alloc_mgr,
     ILogBlockPool *log_block_pool,
     PalfMonitorCb *monitor,
@@ -207,17 +205,15 @@ int PalfEnvImpl::init(
     PALF_LOG(ERROR, "invalid arguments", K(ret), K(base_dir), K(self),
              KP(log_alloc_mgr), KP(log_block_pool), KP(monitor), KP(log_local_device), KP(resource_manager), KP(io_manager));
   } else if (OB_FAIL(init_log_io_worker_config_(options.disk_options_.log_writer_parallelism_,
-                                                tenant_id,
                                                 log_io_worker_config_))) {
     PALF_LOG(WARN, "init_log_io_worker_config_ failed", K(options));
   } else if (!lib::is_embed_mode() && OB_FAIL(fetch_log_engine_.init(this, log_alloc_mgr))) {
     PALF_LOG(ERROR, "FetchLogEngine init failed", K(ret));
-  } else if (OB_FAIL(log_rpc_.init(self, cluster_id, tenant_id))) {
+  } else if (OB_FAIL(log_rpc_.init(self, cluster_id))) {
     PALF_LOG(ERROR, "LogRpc init failed", K(ret));
   } else if (OB_FAIL(cb_thread_pool_.init(io_cb_num, this))) {
     PALF_LOG(ERROR, "LogIOTaskThreadPool init failed", K(ret));
   } else if (OB_FAIL(log_io_worker_wrapper_.init(log_io_worker_config_,
-                                                 tenant_id,
                                                  cb_thread_pool_.get_tg_id(),
                                                  log_alloc_mgr, this))) {
     PALF_LOG(ERROR, "LogIOWorker init failed", K(ret));
@@ -239,14 +235,14 @@ int PalfEnvImpl::init(
     PALF_LOG(ERROR, "disk_options_wrapper_ init failed", K(ret));
   } else if (OB_FAIL(log_updater_.init(this))) {
     PALF_LOG(ERROR, "LogUpdater init failed", K(ret));
-  } else if (OB_FAIL(io_adapter_.init(tenant_id, log_local_device, resource_manager, io_manager))) {
+  } else if (OB_FAIL(io_adapter_.init(log_local_device, resource_manager, io_manager))) {
     PALF_LOG(ERROR, "LogIOAdapter init failed", K(ret));
   } else {
     log_alloc_mgr_ = log_alloc_mgr;
     log_block_pool_ = log_block_pool;
     monitor_ = monitor;
     self_ = self;
-    tenant_id_ = tenant_id;
+    
     is_inited_ = true;
     is_running_ = true;
     enable_log_cache_ = options.enable_log_cache_;
@@ -1125,10 +1121,7 @@ int PalfEnvImpl::get_io_start_time(int64_t &last_working_time)
   return ret;
 }
 
-int64_t PalfEnvImpl::get_tenant_id()
-{
-  return tenant_id_;
-}
+
 int PalfEnvImpl::update_replayable_point(const SCN &replayable_scn)
 {
   int ret = OB_SUCCESS;
@@ -1203,13 +1196,12 @@ void PalfEnvImpl::period_calc_disk_usage()
 }
 
 int PalfEnvImpl::init_log_io_worker_config_(const int log_writer_parallelism,
-                                            const int64_t tenant_id,
                                             LogIOWorkerConfig &config)
 {
   int ret = OB_SUCCESS;
   // log_writer_parallelism only valid when it's user tenant.
   // to support writing throttling, sys log stream must has dependent LogIOWorker.
-  const int64_t real_log_writer_parallelism = is_user_tenant(tenant_id) ? (log_writer_parallelism  + 1) : 1;
+  const int64_t real_log_writer_parallelism = 1;
   auto tmp_upper_align_div = [](const int64_t num, const int64_t align) -> int64_t {
     return (num + align - 1) / align;
   };
@@ -1233,7 +1225,7 @@ int PalfEnvImpl::init_log_io_worker_config_(const int log_writer_parallelism,
   config.batch_width_ = MAX(default_min_batch_width,
                             tmp_upper_align_div(default_io_batch_width, real_log_writer_parallelism));
   config.batch_depth_ = PALF_SLIDING_WINDOW_SIZE;
-  PALF_LOG(INFO, "init_log_io_worker_config_ success", K(config), K(tenant_id), K(log_writer_parallelism));
+  PALF_LOG(INFO, "init_log_io_worker_config_ success", K(config), K(log_writer_parallelism));
   return ret;
 }
 

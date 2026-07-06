@@ -53,7 +53,7 @@ int ObCreateDirectoryResolver::resolve(const ParseNode &parse_tree)
     LOG_ERROR("failed to get create directory stmt", K(ret));
   } else {
     stmt_ = create_directory_stmt;
-    create_directory_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+    
     create_directory_stmt->set_user_id(session_info_->get_user_id());
   }
 

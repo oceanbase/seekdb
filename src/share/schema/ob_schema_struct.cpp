@@ -16,12 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_schema_struct.h"
-#include "observer/ob_server.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
-#include "sql/code_generator/ob_expr_generator_impl.h"
-#include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "sql/engine/cmd/ob_partition_executor_utils.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
+#include "share/system_variable/ob_system_variable_alias.h"  // OB_SV_READ_ONLY, previously hidden behind a removed sql include chain, make the dependency explicit
+#include "share/ob_tenant_timezone_mgr.h"
 #include "share/schema/ob_part_mgr_util.h"
 
 namespace oceanbase
@@ -238,20 +234,18 @@ int ObSysTableChecker::is_tenant_space_table_id(const uint64_t table_id, bool &i
 }
 
 int ObSysTableChecker::is_sys_table_name(
-    const uint64_t tenant_id,
     const uint64_t database_id,
     const ObString &table_name,
     bool &is_sys_table_name)
 {
-  return instance().check_sys_table_name(tenant_id, database_id, table_name, is_sys_table_name);
+  return instance().check_sys_table_name(database_id, table_name, is_sys_table_name);
 }
 
 int ObSysTableChecker::is_inner_table_exist(
-    const uint64_t tenant_id,
     const ObSimpleTableSchemaV2 &table,
     bool &exist)
 {
-  return instance().check_inner_table_exist(tenant_id, table, exist);
+  return instance().check_inner_table_exist(table, exist);
 }
 
 int ObSysTableChecker::init()
@@ -401,7 +395,6 @@ int ObSysTableChecker::check_tenant_space_table_id(const uint64_t table_id, bool
 }
 
 int ObSysTableChecker::check_sys_table_name(
-    const uint64_t tenant_id,
     const uint64_t database_id,
     const ObString &table_name,
     bool &is_system_table)
@@ -442,7 +435,6 @@ int ObSysTableChecker::check_sys_table_name(
 }
 
 int ObSysTableChecker::check_inner_table_exist(
-    const uint64_t tenant_id,
     const ObSimpleTableSchemaV2 &table,
     bool &exist)
 {
@@ -456,19 +448,19 @@ int ObSysTableChecker::check_inner_table_exist(
     ret = OB_NOT_INIT;
     LOG_WARN("not init yet", K(ret));
   } else if (!is_inner_table(table_id)
-             || table.get_tenant_id() != tenant_id
+             || false
              || !is_sys_database_id(database_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid table id", KR(ret), K(tenant_id), K(table_id), K(database_id));
+    LOG_WARN("invalid table id", KR(ret), K(table_id), K(database_id));
   } else if (OB_FAIL(ObSysTableChecker::is_tenant_space_table_id(table_id, is_tenant_table))) {
     LOG_WARN("fail to check if table_id in tenant space", KR(ret), K(table_id));
   } else if (!is_tenant_table) {
     // case 1: sys table in sys tenant only
-    exist = is_sys_tenant(tenant_id);
+    exist = true;
   } else {
     // case 2: sys table in tenant space
     if (is_oceanbase_sys_database_id(database_id)) {
-      if (is_sys_tenant(tenant_id) || is_meta_tenant(tenant_id)) {
+      if (true) {
         // case 2.1: sys/meta tenant has all inner tables in oceanbase.
         exist = true;
       } else {
@@ -570,7 +562,6 @@ int ObSysTableChecker::get_sys_table_index_tids(
 }
 
 int ObSysTableChecker::append_sys_table_index_schemas(
-    const uint64_t tenant_id,
     const uint64_t data_table_id,
     ObIArray<ObTableSchema> &tables)
 {
@@ -593,27 +584,25 @@ int ObSysTableChecker::append_sys_table_index_schemas(
 }
 
 int ObSysTableChecker::append_table_(
-    const uint64_t tenant_id,
     share::schema::ObTableSchema &index_schema,
     common::ObIArray<share::schema::ObTableSchema> &tables)
 {
   int ret = OB_SUCCESS;
-  if (!is_sys_tenant(tenant_id) && OB_FAIL(ObSchemaUtils::construct_tenant_space_full_table(tenant_id, index_schema))) {
-    LOG_WARN("fail to construct full table", KR(ret), K(tenant_id), "data_table_id", index_schema.get_data_table_id());
+  if (false && OB_FAIL(ObSchemaUtils::construct_tenant_space_full_table(index_schema))) {
+    LOG_WARN("fail to construct full table", KR(ret), "data_table_id", index_schema.get_data_table_id());
   } else if (OB_FAIL(tables.push_back(index_schema))) {
-    LOG_WARN("fail to push back index", KR(ret), K(tenant_id), "data_table_id", index_schema.get_data_table_id());
+    LOG_WARN("fail to push back index", KR(ret), "data_table_id", index_schema.get_data_table_id());
   }
   return ret;
 }
 
 int ObSysTableChecker::add_sys_table_index_ids(
-    const uint64_t tenant_id,
     ObIArray<uint64_t> &table_ids)
 {
   int ret = OB_SUCCESS;
-  if (OB_INVALID_TENANT_ID == tenant_id) {
+  if (false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", KR(ret), K(tenant_id));
+    LOG_WARN("invalid tenant id", KR(ret));
 #define ADD_SYS_INDEX_ID
 #include "share/inner_table/ob_inner_table_schema_misc.ipp"
 #undef ADD_SYS_INDEX_ID
@@ -786,7 +775,7 @@ int ObRefreshSchemaInfo::assign(const ObRefreshSchemaInfo &other)
   if (OB_FAIL(new_sequence_id_.assign(other.new_sequence_id_))) {
     LOG_WARN("fail to assign sequence_id", KR(ret));
   } else {
-    tenant_id_ = other.tenant_id_;
+    
     schema_version_ = other.schema_version_;
   }
   return ret;
@@ -794,7 +783,7 @@ int ObRefreshSchemaInfo::assign(const ObRefreshSchemaInfo &other)
 
 void ObRefreshSchemaInfo::reset()
 {
-  tenant_id_ = common::OB_INVALID_TENANT_ID;
+  
   schema_version_ = common::OB_INVALID_VERSION;
   new_sequence_id_.reset();
 }
@@ -802,7 +791,7 @@ void ObRefreshSchemaInfo::reset()
 // In schema split mode:
 // 1. The observer is started in the old mode, and RS pushes the sequence_id at the last stage of do_restart. At this time,
 //  the sequence_id of the heartbeat received by the observer may be an illegal value;
-// 2. After RS restarts, if DDL has not been done, the broadcast (tenant_id, schema_version) is an illegal value.
+// 2. After RS restarts, if DDL has not been done, the broadcast (tenant, schema_version) is an illegal value.
 bool ObRefreshSchemaInfo::is_valid() const
 {
   return true;
@@ -820,21 +809,9 @@ bool ObRefreshSchemaInfo::is_valid() const
 //   2. Observer with old version could parse seq_id_ before binary replaced,
 //      sed_id_ in new_sequence_id_ must be valid with old logic
 OB_SERIALIZE_MEMBER(ObRefreshSchemaInfo, // FARM COMPAT WHITELIST
-                    tenant_id_, schema_version_, new_sequence_id_.seq_id_, new_sequence_id_);
+                    schema_version_, new_sequence_id_.seq_id_, new_sequence_id_);
 
 OB_SERIALIZE_MEMBER(ObSchemaObjVersion, object_id_, version_, object_type_);
-
-void ObDropTenantInfo::reset()
-{
-  tenant_id_ = OB_INVALID_TENANT_ID;
-  schema_version_ = OB_INVALID_VERSION;
-}
-
-bool ObDropTenantInfo::is_valid() const
-{
-  return OB_INVALID_TENANT_ID != tenant_id_
-         && OB_INVALID_VERSION != schema_version_;
-}
 
 ObSysParam::ObSysParam()
 {
@@ -845,8 +822,7 @@ ObSysParam::~ObSysParam()
 {
 }
 
-int ObSysParam::init(const uint64_t tenant_id,
-                     const ObString &name,
+int ObSysParam::init(const ObString &name,
                      int64_t data_type,
                      const ObString &value,
                      const ObString &min_val,
@@ -855,11 +831,11 @@ int ObSysParam::init(const uint64_t tenant_id,
                      int64_t flags)
 {
   int ret = OB_SUCCESS;
-  tenant_id_ = tenant_id;
+  
   data_type_ = data_type;
   flags_ = flags;
   int64_t pos = 0;
-  if (OB_INVALID == tenant_id || OB_UNLIKELY(name.empty())) {
+  if (OB_UNLIKELY(name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tenant id is invalid or some variable is null", K(name), K(ret));
   } else if (OB_FAIL(databuff_printf(name_, OB_MAX_SYS_PARAM_NAME_LENGTH, pos, "%.*s", name.length(),
@@ -887,7 +863,7 @@ int ObSysParam::init(const uint64_t tenant_id,
 
 void ObSysParam::reset()
 {
-  tenant_id_ = common::OB_INVALID_ID;
+  
   MEMSET(name_, 0, sizeof(name_));
   data_type_ = 0;
   MEMSET(value_, 0, sizeof(value_));
@@ -900,7 +876,7 @@ void ObSysParam::reset()
 int64_t ObSysParam::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
-  J_KV(K_(tenant_id),
+  J_KV(
        K_(name),
        K_(data_type),
        K_(value),
@@ -931,7 +907,7 @@ int ObSysVariableSchema::assign(const ObSysVariableSchema &src_schema)
   if (this != &src_schema) {
     reset();
     error_ret_ = src_schema.error_ret_;
-    tenant_id_ = src_schema.tenant_id_;
+    
     schema_version_ = src_schema.schema_version_;
     read_only_ = src_schema.read_only_;
     name_case_mode_ = src_schema.name_case_mode_;
@@ -953,12 +929,12 @@ int ObSysVariableSchema::assign(const ObSysVariableSchema &src_schema)
 
 bool ObSysVariableSchema::is_valid() const
 {
-  return ObSchema::is_valid() && OB_INVALID_ID != tenant_id_ && schema_version_ > 0;
+  return ObSchema::is_valid() && schema_version_ > 0;
 }
 
 void ObSysVariableSchema::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
+  
   schema_version_ = OB_INVALID_VERSION;
   read_only_ = false;
   name_case_mode_ = OB_NAME_CASE_INVALID;
@@ -982,7 +958,7 @@ int64_t ObSysVariableSchema::get_convert_size() const
 OB_DEF_DESERIALIZE(ObSysVariableSchema)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, tenant_id_, schema_version_, read_only_, name_case_mode_);
+  LST_DO_CODE(OB_UNIS_DECODE, schema_version_, read_only_, name_case_mode_);
 
   if (OB_SUCC(ret)) {
     int64_t count = 0;
@@ -1012,9 +988,9 @@ OB_DEF_SERIALIZE_SIZE(ObSysVariableSchema)
 {
   int64_t len = 0;
 
-  LST_DO_CODE(OB_UNIS_ADD_LEN, tenant_id_, schema_version_, read_only_, name_case_mode_);
+  LST_DO_CODE(OB_UNIS_ADD_LEN, schema_version_, read_only_, name_case_mode_);
 
-  int64_t var_amount = ObSysVarFactory::ALL_SYS_VARS_COUNT;
+  int64_t var_amount = share::ObSysVarMeta::ALL_SYS_VARS_COUNT;
   len += serialization::encoded_length_vi64(var_amount);
 
   for (int64_t i = 0; i < var_amount; i++) {
@@ -1029,13 +1005,13 @@ OB_DEF_SERIALIZE(ObSysVariableSchema)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-              tenant_id_,
+              
               schema_version_,
               read_only_,
               name_case_mode_);
 
   if (OB_SUCC(ret)) {
-    int64_t var_amount = ObSysVarFactory::ALL_SYS_VARS_COUNT;
+    int64_t var_amount = share::ObSysVarMeta::ALL_SYS_VARS_COUNT;
     if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, var_amount))) {
       LOG_WARN("Fail to encode sys var count", K(ret));
     }
@@ -1056,12 +1032,12 @@ int ObSysVariableSchema::add_sysvar_schema(const ObSysVarSchema &sysvar_schema)
   int ret = OB_SUCCESS;
   void *ptr = NULL;
   ObSysVarSchema *tmp_sysvar_schema = NULL;
-  ObSysVarClassType var_id = ObSysVarFactory::find_sys_var_id_by_name(sysvar_schema.get_name(), true);
+  ObSysVarClassType var_id = share::ObSysVarMeta::find_sys_var_id_by_name(sysvar_schema.get_name(), true);
   int64_t var_idx = OB_INVALID_INDEX;
   if (OB_UNLIKELY(SYS_VAR_INVALID == var_id)) {
     ret = OB_ERR_SYS_VARIABLE_UNKNOWN;
     LOG_TRACE("system variable is unknown", K(sysvar_schema));
-  } else if (OB_FAIL(ObSysVarFactory::calc_sys_var_store_idx(var_id, var_idx))) {
+  } else if (OB_FAIL(share::ObSysVarMeta::calc_sys_var_store_idx(var_id, var_idx))) {
     if (ret != OB_SYS_VARS_MAYBE_DIFF_VERSION) { // If the error is caused by a different version, just ignore it
       LOG_WARN("calc system variable store index failed", K(ret));
     } else {
@@ -1101,19 +1077,19 @@ int ObSysVariableSchema::add_sysvar_schema(const ObSysVarSchema &sysvar_schema)
   return ret;
 }
 
-int ObSysVariableSchema::load_default_system_variable(bool is_sys_tenant)
+int ObSysVariableSchema::load_default_system_variable()
 {
   int ret = OB_SUCCESS;
   ObString value;
   ObSysVarSchema sysvar;
   for (int64_t i = 0; OB_SUCC(ret) && i < ObSysVariables::get_amount(); ++i) {
     sysvar.reset();
-    if (is_sys_tenant && ObCharset::case_insensitive_equal(ObSysVariables::get_name(i), OB_SV_LOWER_CASE_TABLE_NAMES)) {
+    if (ObCharset::case_insensitive_equal(ObSysVariables::get_name(i), OB_SV_LOWER_CASE_TABLE_NAMES)) {
       value = ObString::make_string("2");
     } else {
       value = ObSysVariables::get_value(i);
     }
-    sysvar.set_tenant_id(get_tenant_id());
+    
     sysvar.set_data_type(ObSysVariables::get_type(i));
     sysvar.set_flags(ObSysVariables::get_flags(i));
     sysvar.set_schema_version(get_schema_version());
@@ -1148,7 +1124,7 @@ int64_t ObSysVariableSchema::get_real_sysvar_count() const
 int ObSysVariableSchema::get_sysvar_schema(const ObString &name, const ObSysVarSchema *&sysvar_schema) const
 {
   int ret = OB_SUCCESS;
-  ObSysVarClassType var_id = ObSysVarFactory::find_sys_var_id_by_name(name, false);
+  ObSysVarClassType var_id = share::ObSysVarMeta::find_sys_var_id_by_name(name, false);
   if (SYS_VAR_INVALID == var_id) {
     ret = OB_ERR_SYS_VARIABLE_UNKNOWN;
   } else {
@@ -1161,7 +1137,7 @@ int ObSysVariableSchema::get_sysvar_schema(ObSysVarClassType var_id, const ObSys
 {
   int ret = OB_SUCCESS;
   int64_t var_idx = OB_INVALID_INDEX;
-  if (OB_FAIL(ObSysVarFactory::calc_sys_var_store_idx(var_id, var_idx))) {
+  if (OB_FAIL(share::ObSysVarMeta::calc_sys_var_store_idx(var_id, var_idx))) {
     LOG_WARN("calc system variable store index failed", K(ret));
   } else if (OB_UNLIKELY(var_idx < 0) || OB_UNLIKELY(var_idx >= get_sysvar_count())) {
     ret = OB_INVALID_ARGUMENT;
@@ -1752,7 +1728,7 @@ ObTenantSchema& ObTenantSchema::operator =(const ObTenantSchema &src_schema)
     reset();
     int ret = OB_SUCCESS;
     error_ret_ = src_schema.error_ret_;
-    set_tenant_id(src_schema.tenant_id_);
+    (void)0;
     set_schema_version(src_schema.schema_version_);
     set_locked(src_schema.locked_);
     set_read_only(src_schema.read_only_);
@@ -1788,12 +1764,12 @@ int ObTenantSchema::assign(const ObTenantSchema &src_schema)
 
 bool ObTenantSchema::is_valid() const
 {
-  return ObSchema::is_valid() && OB_INVALID_ID != tenant_id_ && schema_version_ > 0;
+  return ObSchema::is_valid() && schema_version_ > 0;
 }
 
 void ObTenantSchema::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
+  
   schema_version_ = OB_INVALID_VERSION;
   reset_string(tenant_name_);
   locked_ = false;
@@ -1881,7 +1857,7 @@ OB_DEF_SERIALIZE(ObTenantSchema)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-              tenant_id_, schema_version_, tenant_name_,
+              schema_version_, tenant_name_,
               locked_, comment_, charset_type_,
               collation_type_, name_case_mode_, read_only_);
   if (OB_FAIL(ret)) {
@@ -1896,7 +1872,7 @@ OB_DEF_SERIALIZE(ObTenantSchema)
               in_recyclebin_);
 
   LOG_INFO("serialize schema",
-           K_(tenant_id), K_(schema_version), K_(tenant_name),
+           K_(schema_version), K_(tenant_name),
            K_(locked), K_(comment),
            K_(charset_type), K_(collation_type), K_(name_case_mode),
            K_(default_tablegroup_id),
@@ -1908,7 +1884,7 @@ OB_DEF_SERIALIZE(ObTenantSchema)
 OB_DEF_DESERIALIZE(ObTenantSchema)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, tenant_id_, schema_version_, tenant_name_,
+  LST_DO_CODE(OB_UNIS_DECODE, schema_version_, tenant_name_,
               locked_, comment_, charset_type_, collation_type_, name_case_mode_,
               read_only_);
   if (OB_FAIL(ret)) {
@@ -1938,7 +1914,7 @@ OB_DEF_SERIALIZE_SIZE(ObTenantSchema)
 {
   int64_t len = 0;
 
-  LST_DO_CODE(OB_UNIS_ADD_LEN, tenant_id_, schema_version_, tenant_name_,
+  LST_DO_CODE(OB_UNIS_ADD_LEN, schema_version_, tenant_name_,
               locked_, comment_, charset_type_, collation_type_, name_case_mode_,
               read_only_,
               default_tablegroup_id_, default_tablegroup_name_,
@@ -1949,7 +1925,7 @@ OB_DEF_SERIALIZE_SIZE(ObTenantSchema)
 
 void ObSysVarSchema::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
+  
   name_.reset();
   data_type_ = ObNullType;
   value_.reset();
@@ -2000,7 +1976,7 @@ int ObSysVarSchema::assign(const ObSysVarSchema &src_schema)
       set_data_type(src_schema.get_data_type());
       set_schema_version(src_schema.get_schema_version());
       set_flags(src_schema.get_flags());
-      set_tenant_id(src_schema.get_tenant_id());
+      (void)0;
     }
     error_ret_ = ret;
   }
@@ -2013,7 +1989,7 @@ int ObSysVarSchema::get_value(ObIAllocator *allocator, const ObDataTypeCastParam
   if (ob_is_string_type(data_type_)) {
     value.set_string(data_type_, value_);
     value.set_collation_type(ObCharset::get_system_collation());
-  } else if (ObBasicSysVar::is_null_value(value_, flags_)) {
+  } else if (is_null_value()) {
     value.set_null();
   } else {
     ObObj var_value;
@@ -2036,7 +2012,7 @@ int ObSysVarSchema::get_value(ObIAllocator *allocator, const ObDataTypeCastParam
 }
 
 OB_SERIALIZE_MEMBER(ObSysVarSchema,
-                    tenant_id_,
+                    
                     name_,
                     data_type_,
                     value_,
@@ -2104,7 +2080,7 @@ ObDatabaseSchema &ObDatabaseSchema::operator =(const ObDatabaseSchema &src_schem
     reset();
     int ret = OB_SUCCESS;
     error_ret_ = src_schema.error_ret_;
-    set_tenant_id(src_schema.tenant_id_);
+    (void)0;
     set_catalog_id(src_schema.catalog_id_);
     set_database_id(src_schema.database_id_);
     set_schema_version(src_schema.schema_version_);
@@ -2147,13 +2123,13 @@ int64_t ObDatabaseSchema::get_convert_size() const
 
 bool ObDatabaseSchema::is_valid() const
 {
-  return ObSchema::is_valid() && common::OB_INVALID_ID != tenant_id_
+  return ObSchema::is_valid()
       && common::OB_INVALID_ID != database_id_ && schema_version_ > 0;
 }
 
 void ObDatabaseSchema::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
+  
   catalog_id_ = OB_INTERNAL_CATALOG_ID;
   database_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
@@ -2172,7 +2148,7 @@ void ObDatabaseSchema::reset()
 OB_DEF_SERIALIZE(ObDatabaseSchema)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, tenant_id_,
+  LST_DO_CODE(OB_UNIS_ENCODE,
               database_id_, schema_version_, database_name_,
               comment_, charset_type_, collation_type_, name_case_mode_, read_only_,
               default_tablegroup_id_, default_tablegroup_name_, in_recyclebin_);
@@ -2188,7 +2164,7 @@ OB_DEF_DESERIALIZE(ObDatabaseSchema)
   ObString database_name;
   ObString comment;
   ObString default_tablegroup_name;
-  LST_DO_CODE(OB_UNIS_DECODE, tenant_id_,
+  LST_DO_CODE(OB_UNIS_DECODE,
               database_id_, schema_version_, database_name,
               comment, charset_type_, collation_type_, name_case_mode_, read_only_,
               default_tablegroup_id_, default_tablegroup_name, in_recyclebin_);
@@ -2208,7 +2184,7 @@ OB_DEF_SERIALIZE_SIZE(ObDatabaseSchema)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              tenant_id_, database_id_, schema_version_,
+              database_id_, schema_version_,
               database_name_,
               comment_, charset_type_, collation_type_,
               name_case_mode_, read_only_, default_tablegroup_id_,
@@ -3541,7 +3517,7 @@ int ObPartitionSchema::mock_list_partition_array()
     const char* part_name_str  = MYSQL_NON_PARTITIONED_TABLE_PART_NAME;
     ObString part_name(strlen(part_name_str), part_name_str);
 
-    partition.set_tenant_id(get_tenant_id());
+    
     partition.set_table_id(table_id);
     partition.set_part_id(part_id);
     partition.set_schema_version(get_schema_version());
@@ -3814,7 +3790,6 @@ int ObPartitionSchema::check_partition_duplicate_with_name(const ObString &name)
 
 ObTablegroupSchema::ObTablegroupSchema()
     : ObPartitionSchema(),
-      tenant_id_(OB_INVALID_TENANT_ID),
       tablegroup_id_(OB_INVALID_ID),
       schema_version_(OB_INVALID_VERSION),
       tablegroup_name_(),
@@ -3831,7 +3806,6 @@ ObTablegroupSchema::ObTablegroupSchema()
 
 ObTablegroupSchema::ObTablegroupSchema(common::ObIAllocator *allocator)
     : ObPartitionSchema(allocator),
-      tenant_id_(OB_INVALID_TENANT_ID),
       tablegroup_id_(OB_INVALID_ID),
       schema_version_(OB_INVALID_VERSION),
       tablegroup_name_(),
@@ -3847,7 +3821,6 @@ ObTablegroupSchema::ObTablegroupSchema(common::ObIAllocator *allocator)
 
 ObTablegroupSchema::ObTablegroupSchema(const ObTablegroupSchema &other)
     : ObPartitionSchema(),
-      tenant_id_(OB_INVALID_TENANT_ID),
       tablegroup_id_(OB_INVALID_ID),
       schema_version_(OB_INVALID_VERSION),
       tablegroup_name_(),
@@ -3894,7 +3867,7 @@ ObTablegroupSchema &ObTablegroupSchema::operator =(const ObTablegroupSchema &src
     ObPartitionSchema::operator=(src_schema);
     if (OB_SUCCESS == error_ret_) {
       int ret = OB_SUCCESS;
-      tenant_id_ = src_schema.tenant_id_;
+      
       tablegroup_id_ = src_schema.tablegroup_id_;
       schema_version_ = src_schema.schema_version_;
       part_func_expr_num_ = src_schema.part_func_expr_num_;
@@ -3943,13 +3916,13 @@ int64_t ObTablegroupSchema::get_convert_size() const
 
 bool ObTablegroupSchema::is_valid() const
 {
-  return ObSchema::is_valid() && OB_INVALID_ID != tenant_id_
+  return ObSchema::is_valid()
       && OB_INVALID_ID != tablegroup_id_ && schema_version_ > 0;
 }
 
 void ObTablegroupSchema::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
+  
   tablegroup_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   tablegroup_name_.reset();
@@ -3967,7 +3940,7 @@ OB_DEF_SERIALIZE(ObTablegroupSchema)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-              tenant_id_,
+              
               tablegroup_id_,
               schema_version_,
               tablegroup_name_,
@@ -4025,7 +3998,7 @@ OB_DEF_SERIALIZE_SIZE(ObTablegroupSchema)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              tenant_id_,
+              
               tablegroup_id_,
               schema_version_,
               tablegroup_name_,
@@ -4066,7 +4039,7 @@ OB_DEF_DESERIALIZE(ObTablegroupSchema)
   ObString split_partition_name;
 
   LST_DO_CODE(OB_UNIS_DECODE,
-              tenant_id_,
+              
               tablegroup_id_,
               schema_version_,
               tablegroup_name,
@@ -4128,7 +4101,7 @@ int64_t ObTablegroupSchema::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
   J_OBJ_START();
-  J_KV(K_(tenant_id),
+  J_KV(
        K_(tablegroup_id),
        K_(schema_version),
        K_(tablegroup_name),
@@ -4161,11 +4134,11 @@ int ObTablegroupSchema::get_zone_list(
   int ret = OB_SUCCESS;
   const ObTenantSchema *tenant_schema = NULL;
   zone_list.reset();
-  if (OB_FAIL(schema_guard.get_tenant_info(get_tenant_id(), tenant_schema))) {
-    LOG_WARN("fail to get tenant schema", K(ret), K(tablegroup_id_), K(tenant_id_));
+  if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
+    LOG_WARN("fail to get tenant schema", K(ret), K(tablegroup_id_));
   } else if (OB_UNLIKELY(NULL == tenant_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant schema null", K(ret), K(tablegroup_id_), K(tenant_id_), KP(tenant_schema));
+    LOG_WARN("tenant schema null", K(ret), K(tablegroup_id_), KP(tenant_schema));
   } else if (OB_FAIL(tenant_schema->get_zone_list(zone_list))) {
     LOG_WARN("fail to get zone list", K(ret));
   } else {} // no more to do
@@ -4459,7 +4432,7 @@ OB_DEF_SERIALIZE_SIZE(ObSubPartitionOption)
 }
 
 ObBasePartition::ObBasePartition()
-  : tenant_id_(common::OB_INVALID_ID), table_id_(common::OB_INVALID_ID),
+  : table_id_(common::OB_INVALID_ID),
     part_id_(common::OB_INVALID_INDEX),
     schema_version_(OB_INVALID_VERSION), name_(),
     high_bound_val_(), status_(PARTITION_STATUS_ACTIVE),
@@ -4476,7 +4449,7 @@ ObBasePartition::ObBasePartition()
 { }
 
 ObBasePartition::ObBasePartition(common::ObIAllocator *allocator)
-  : ObSchema(allocator), tenant_id_(common::OB_INVALID_ID),
+  : ObSchema(allocator),
     table_id_(common::OB_INVALID_ID),
     part_id_(common::OB_INVALID_INDEX),
     schema_version_(OB_INVALID_VERSION), name_(),
@@ -4498,7 +4471,7 @@ ObBasePartition::ObBasePartition(common::ObIAllocator *allocator)
 
 void ObBasePartition::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
+  
   table_id_ = OB_INVALID_ID;
   part_id_ = -1;
   tablet_id_.reset();
@@ -4525,7 +4498,7 @@ int ObBasePartition::assign(const ObBasePartition & src_part)
   int ret = OB_SUCCESS;
   if (this != &src_part) {
     reset();
-    tenant_id_ = src_part.tenant_id_;
+    
     table_id_ = src_part.table_id_;
     tablet_id_ = src_part.tablet_id_;
     split_source_tablet_id_ = src_part.split_source_tablet_id_;
@@ -4774,7 +4747,7 @@ int ObBasePartition::convert_character_for_list_columns_part(
 OB_DEF_SERIALIZE(ObBasePartition)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, tenant_id_, table_id_, part_id_,
+  LST_DO_CODE(OB_UNIS_ENCODE, table_id_, part_id_,
               schema_version_, name_, high_bound_val_, status_,
               list_row_values_,
               part_idx_,
@@ -4813,7 +4786,7 @@ OB_DEF_DESERIALIZE(ObBasePartition)
     }
   }
 
-  LST_DO_CODE(OB_UNIS_DECODE, tenant_id_, table_id_, part_id_,
+  LST_DO_CODE(OB_UNIS_DECODE, table_id_, part_id_,
               schema_version_, name);
   if (FAILEDx(high_bound_val.deserialize(buf, data_len, pos, true))) {
     LOG_WARN("fail to deserialize high_bound_val", KR(ret));
@@ -4853,7 +4826,7 @@ OB_DEF_DESERIALIZE(ObBasePartition)
 OB_DEF_SERIALIZE_SIZE(ObBasePartition)
 {
   int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, tenant_id_, table_id_, part_id_,
+  LST_DO_CODE(OB_UNIS_ADD_LEN, table_id_, part_id_,
       schema_version_, name_, high_bound_val_, status_, list_row_values_,
       part_idx_, is_empty_partition_name_,
       partition_type_, low_bound_val_, tablet_id_,
@@ -5425,11 +5398,11 @@ int ObPartitionUtils::check_param_valid_(
     RelatedTableInfo *related_table)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = table_schema.get_tenant_id();
+  
   const uint64_t table_id = table_schema.get_table_id();
    if (!table_schema.is_external_table() && !table_schema.has_tablet()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("table schema has no tablet", KR(ret), K(tenant_id), K(table_id),
+    LOG_WARN("table schema has no tablet", KR(ret), K(table_id),
              "table_type", table_schema.get_table_type(),
              "index_type", table_schema.get_index_type());
   } else if (OB_ISNULL(related_table)) {
@@ -5446,7 +5419,7 @@ int ObPartitionUtils::check_param_valid_(
     if (table_schema.is_global_index_table()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("can't purning global index table with other tables",
-               KR(ret), K(tenant_id), K(table_id));
+               KR(ret), K(table_id));
     } else {
       // 1. get data table schema
       const ObTableSchema *data_schema = NULL;
@@ -5468,12 +5441,11 @@ int ObPartitionUtils::check_param_valid_(
                    ObArrayWrap<uint64_t>(related_table->related_tids_->get_data(),
                                          related_table->related_tids_->count()));
         }
-        if (FAILEDx(guard->get_table_schema(
-            tenant_id, data_table_id, data_schema))) {
-          LOG_WARN("fail to get data table schema", KR(ret), K(tenant_id), K(data_table_id));
+        if (FAILEDx(guard->get_table_schema( data_table_id, data_schema))) {
+          LOG_WARN("fail to get data table schema", KR(ret), K(data_table_id));
         } else if (OB_ISNULL(data_schema)) {
           ret = OB_TABLE_NOT_EXIST;
-          LOG_WARN("data table schema not exist", KR(ret), K(tenant_id), K(data_table_id));
+          LOG_WARN("data table schema not exist", KR(ret), K(data_table_id));
         }
       }
       // 2. check data table is correspond to related_table
@@ -5531,7 +5503,7 @@ int ObPartitionUtils::fill_tablet_and_object_ids_(
     common::ObIArray<common::ObObjectID> &object_ids)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = table_schema.get_tenant_id();
+  
   for (int64_t i = 0; OB_SUCC(ret) && i < partition_indexes.count(); i++) {
     const PartitionIndex &index =  partition_indexes.at(i);
     const uint64_t src_table_id = table_schema.get_table_id();
@@ -5558,11 +5530,11 @@ int ObPartitionUtils::fill_tablet_and_object_ids_(
         ObObjectID related_object_id;
         ObObjectID related_first_level_part_id;
         const ObSimpleTableSchemaV2 *related_schema = NULL;
-        if (OB_FAIL(guard->get_simple_table_schema(tenant_id, related_table_id, related_schema))) {
-          LOG_WARN("fail to get simple table schema", KR(ret), K(tenant_id), K(related_table_id));
+        if (OB_FAIL(guard->get_simple_table_schema( related_table_id, related_schema))) {
+          LOG_WARN("fail to get simple table schema", KR(ret), K(related_table_id));
         } else if (OB_ISNULL(related_schema)) {
           ret = OB_TABLE_NOT_EXIST;
-          LOG_WARN("table not exist", KR(ret), K(tenant_id), K(related_table_id));
+          LOG_WARN("table not exist", KR(ret), K(related_table_id));
         } else if (OB_FAIL(related_schema->get_tablet_and_object_id_by_index(
                    actual_part_idx, actual_subpart_idx,
                    related_tablet_id, related_object_id, related_first_level_part_id))) {
@@ -5592,7 +5564,7 @@ int ObPartitionUtils::get_tablet_and_object_id(
     LOG_WARN("fail to get tablet id and object id", KR(ret), K(table_schema));
   } else if (OB_NOT_NULL(related_table)) {
     ObSchemaGetterGuard *guard = related_table->guard_;
-    const uint64_t tenant_id = table_schema.get_tenant_id();
+    
     for (int64_t i = 0; OB_SUCC(ret) && i < related_table->related_tids_->count(); i++) {
       const uint64_t related_table_id =
           share::is_oracle_mapping_real_virtual_table(related_table->related_tids_->at(i)) ?
@@ -5601,12 +5573,12 @@ int ObPartitionUtils::get_tablet_and_object_id(
       const ObSimpleTableSchemaV2 *related_schema = NULL;
       ObTabletID related_tablet_id;
       ObObjectID related_object_id;
-      if (OB_FAIL(guard->get_simple_table_schema(tenant_id,
+      if (OB_FAIL(guard->get_simple_table_schema(
                   related_table_id, related_schema))) {
-        LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(related_table_id));
+        LOG_WARN("fail to get table schema", KR(ret), K(related_table_id));
       } else if (OB_ISNULL(related_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("table not exist", KR(ret), K(tenant_id), K(related_table_id));
+        LOG_WARN("table not exist", KR(ret), K(related_table_id));
       } else if (OB_FAIL(related_schema->get_tablet_and_object_id(
                  related_tablet_id, related_object_id))) {
         LOG_WARN("fail to get tablet id and object id", KR(ret), K(related_table_id));
@@ -6909,8 +6881,8 @@ int ObPartitionUtils::set_low_bound_val_by_interval_range_by_innersql(
     } else if (OB_ISNULL(high_bound_objs)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ptr NULL", KR(ret), K(p), K(interval_range_val));
-    } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(p.get_tenant_id(), tz_info.get_tz_map_wrap()))) {
-      LOG_WARN("get tenant timezone map failed", KR(ret), K(p.get_tenant_id()));
+    } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap()))) {
+      LOG_WARN("get tenant timezone map failed", KR(ret));
     } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
                p.get_high_bound_val(), high_bound_val_str,
                OB_MAX_B_HIGH_BOUND_VAL_LENGTH,
@@ -6943,12 +6915,12 @@ int ObPartitionUtils::set_low_bound_val_by_interval_range_by_innersql(
         obj_array[0].reset();
         ObObj &low_bound = obj_array[0];
         common::sqlclient::ObMySQLResult *result = NULL;
-        if (OB_FAIL(sql_proxy->read(res, p.get_tenant_id(), sql_string.ptr()))) {
+        if (OB_FAIL(sql_proxy->read(res, sql_string.ptr()))) {
           LOG_WARN("execute sql failed", KR(ret), K(sql_string.ptr()), K(p), K(interval_range_val),
                    K(high_bound_objs[0].get_type()));
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("execute sql failed", KR(ret), K(p.get_tenant_id()), K(sql_string));
+          LOG_WARN("execute sql failed", KR(ret), K(sql_string));
         } else if (OB_FAIL(result->next())) {
           LOG_WARN("iterate next result fail", KR(ret), K(sql_string));
         } else if (OB_FAIL(result->get_obj((int64_t)0, low_bound))) {
@@ -6967,54 +6939,7 @@ int ObPartitionUtils::set_low_bound_val_by_interval_range_by_innersql(
   return ret;
 }
 
-int ObPartitionUtils::check_interval_partition_table(
-    const ObRowkey &transition_point,
-    const ObRowkey &interval_range)
-{
-  int ret = OB_SUCCESS;
-
-  const stmt::StmtType stmt_type = stmt::T_NONE;
-  SMART_VARS_4((ObExprCtx, expr_ctx),
-               (ObArenaAllocator, local_allocator),
-               (ObExecContext, exec_ctx, local_allocator),
-               (ObSQLSessionInfo, session_info)) {
-
-    OZ (session_info.init(0, 0, &local_allocator, NULL));
-    OX (session_info.set_time_zone(ObString("+8:00"), true, true));
-    OZ (session_info.load_default_sys_variable(false, false));
-    OZ (session_info.load_default_configs_in_pc());
-    OX (exec_ctx.set_my_session(&session_info));
-
-    if (OB_SUCC(ret)) {
-      ObNewRow tmp_row;
-      RowDesc row_desc;
-      ObObj temp_obj;
-      ParamStore dummy_params;
-
-      OZ (ObSQLUtils::wrap_expr_ctx(stmt_type, exec_ctx, exec_ctx.get_allocator(), expr_ctx));
-      ObExprOperatorFactory expr_op_factory(exec_ctx.get_allocator());
-      ObRawExprFactory raw_expr_factory(exec_ctx.get_allocator());
-      ObExprGeneratorImpl expr_gen(expr_op_factory, 0, 0, NULL, row_desc);
-      ObSqlExpression sql_expr(exec_ctx.get_allocator());
-      expr_ctx.cast_mode_ = CM_WARN_ON_FAIL; //always set to WARN_ON_FAIL to allow calculate
-
-      ObConstRawExpr *transition_expr = NULL;
-      ObConstRawExpr *interval_expr = NULL;
-
-      OZ (ObRawExprUtils::build_const_obj_expr(raw_expr_factory, transition_point.get_obj_ptr()[0], transition_expr));
-      OZ (ObRawExprUtils::build_const_obj_expr(raw_expr_factory, interval_range.get_obj_ptr()[0], interval_expr));
-
-      OZ (interval_expr->formalize(exec_ctx.get_my_session()));
-      CK (interval_expr->is_const_expr());
-
-      OZ (sql::ObPartitionExecutorUtils::check_transition_interval_valid(stmt::StmtType::T_NONE,
-                                                          exec_ctx,
-                                                          transition_expr,
-                                                          interval_expr));
-    }
-  }
-  return ret;
-}
+// ObPartitionUtils::check_interval_partition_table moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in this class header, transitional state)
 
 OB_SERIALIZE_MEMBER(ObVectorIndexRefreshInfo,
                     exec_env_,
@@ -7231,12 +7156,12 @@ const char *ob_index_status_str(ObIndexStatus status)
 /*************************For managing Privileges****************************/
 //ObTenantUserId
 OB_SERIALIZE_MEMBER(ObTenantUserId,
-                    tenant_id_,
+                    
                     user_id_);
 
 //ObTenantUrObjId
 OB_SERIALIZE_MEMBER(ObTenantUrObjId,
-                    tenant_id_,
+                    
                     grantee_id_,
                     obj_id_,
                     obj_type_,
@@ -7439,7 +7364,7 @@ int ObPriv::assign(const ObPriv &other)
   int ret = OB_SUCCESS;
   if (this != &other) {
     reset();
-    tenant_id_ = other.tenant_id_;
+    
     user_id_ = other.user_id_;
     schema_version_ = other.schema_version_;
     priv_set_ = other.priv_set_;
@@ -7452,7 +7377,7 @@ int ObPriv::assign(const ObPriv &other)
 
 void ObPriv::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
+  
   user_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   priv_set_ = 0;
@@ -7467,7 +7392,7 @@ int64_t ObPriv::get_convert_size() const
 }
 
 OB_SERIALIZE_MEMBER(ObPriv,
-                    tenant_id_,
+                    
                     user_id_,
                     schema_version_,
                     priv_set_,
@@ -8123,7 +8048,7 @@ ObObjPriv& ObObjPriv::operator=(const ObObjPriv &other)
 bool ObObjPriv::is_valid() const
 {
   return ObSchema::is_valid()
-         && tenant_id_ != common::OB_INVALID_ID
+         && true
          && obj_id_ != common::OB_INVALID_ID
          && obj_type_ != common::OB_INVALID_ID
          && col_id_ != common::OB_INVALID_ID
@@ -8512,8 +8437,6 @@ const char *schema_type_str(const ObSchemaType schema_type)
     str = "udt_schema";
   } else if (SEQUENCE_SCHEMA == schema_type) {
     str = "sequence_schema";
-  } else if (DBLINK_SCHEMA == schema_type) {
-    str = "dblink_schema";
   } else if (FK_SCHEMA == schema_type) {
     str = "fk_schema";
   }
@@ -8536,7 +8459,6 @@ bool is_normal_schema(const ObSchemaType schema_type)
       schema_type == UDT_SCHEMA ||
       schema_type == SYS_VARIABLE_SCHEMA ||
       schema_type == TABLE_SIMPLE_SCHEMA ||
-      schema_type == DBLINK_SCHEMA ||
       schema_type == MOCK_FK_PARENT_TABLE_SCHEMA ||
       schema_type == CCL_RULE_SCHEMA ||
       false;
@@ -8546,7 +8468,6 @@ bool is_normal_schema(const ObSchemaType schema_type)
 //------Funcs of outlineinfo-----//
 ObTenantOutlineId &ObTenantOutlineId::operator =(const ObTenantOutlineId &tenant_outline_id)
 {
-  tenant_id_ = tenant_outline_id.tenant_id_;
   outline_id_ = tenant_outline_id.outline_id_;
   return *this;
 }
@@ -8943,126 +8864,11 @@ ObMaxConcurrentParam *ObOutlineParamsWrapper::get_outline_param(int64_t index) c
   return ret;
 }
 
-int ObOutlineInfo::replace_question_mark(const ObString &not_param_sql,
-                                         const ObMaxConcurrentParam &concurrent_param,
-                                         int64_t start_pos,
-                                         int64_t cur_pos,
-                                         int64_t &question_mark_offset,
-                                         ObSqlString &string_helper)
-{
-  int ret = OB_SUCCESS;
+// moved definition to sql/ob_sql_utils.cpp(parser vocabulary, outline=sql plan-management domain)
 
-  ObArenaAllocator local_allocator;
-  ObFixedParam fixed_param;
-  bool is_found = false;
-  char *buf = NULL;
-  const int64_t buf_len = OB_MAX_VARCHAR_LENGTH;
-  int64_t pos = 0;
+// moved definition to sql/ob_sql_utils.cpp(parser vocabulary, outline=sql plan-management domain)
 
-  if (OB_FAIL(concurrent_param.get_fixed_param_with_offset(question_mark_offset, fixed_param, is_found))) {
-    LOG_WARN("fail to get fixed_param with offset", K(ret), K(question_mark_offset));
-  } else {
-    ObString before_token(cur_pos - start_pos, not_param_sql.ptr() + start_pos);
-    if (is_found) {
-      if (OB_UNLIKELY(NULL == (buf = static_cast<char *>(local_allocator.alloc(buf_len))))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to alloc memory", K(ret), K(buf_len));
-      } else if (OB_FAIL(fixed_param.value_.print_sql_literal(buf, buf_len, pos))) {
-        LOG_WARN("fail print obj", K(fixed_param), K(ret), K(buf), K(buf_len), K(pos));
-      } else if (OB_FAIL(string_helper.append_fmt("%.*s%s", before_token.length(), before_token.ptr(), buf))) {
-        LOG_WARN("fail to append fmt", K(ret), K(before_token), K(buf));
-      } else {/*do nothing*/}
-    } else {
-      if (OB_FAIL(string_helper.append_fmt("%.*s%s", before_token.length(), before_token.ptr(), "?"))) {
-        LOG_WARN("fail to append fmt", K(ret), K(before_token));
-      }
-    }
-    ++question_mark_offset;
-  }
-
-  return ret;
-}
-
-int ObOutlineInfo::replace_not_param(const ObString &not_param_sql,
-                                     const ParseNode &node,
-                                     int64_t start_pos,
-                                     int64_t cur_pos,
-                                     ObSqlString &string_helper)
-{
-  int ret = OB_SUCCESS;
-  ObString before_token(cur_pos - start_pos, not_param_sql.ptr() + start_pos);
-  ObString param_value(node.text_len_, node.raw_text_);
-  if (OB_FAIL(string_helper.append_fmt("%.*s%.*s",
-                                       before_token.length(), before_token.ptr(),
-                                       param_value.length(), param_value.ptr()))) {
-    LOG_WARN("fail to append fmt", K(ret), K(before_token), K(param_value));
-  }
-
-  return ret;
-}
-
-int ObOutlineInfo::gen_limit_sql(const ObString &visible_signature,
-                                 const ObMaxConcurrentParam *concurrent_param,
-                                 const ObSQLSessionInfo &session,
-                                 ObIAllocator &allocator,
-                                 ObString &limit_sql)
-{
-  int ret = OB_SUCCESS;
-  ObString not_param_sql;
-  ObString last_token;
-  int64_t start_pos = 0;
-  int64_t cur_pos = 0;
-  int64_t question_mark_offset = 0;
-  ObSqlString string_helper;
-  ObParser parser(allocator, session.get_sql_mode());
-  ParseResult parse_result;
-  parse_result.param_node_num_ = 0;
-  ParamList *parser_param = NULL;
-  ParseNode *cur_node = NULL;
-
-  if (OB_ISNULL(concurrent_param)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(concurrent_param));
-  } else if (OB_FAIL(parser.parse(visible_signature, parse_result, FP_MODE))) {
-    LOG_WARN("fail to parser visible signature", K(ret), K(visible_signature));
-  } else {
-    parser_param = parse_result.param_nodes_;
-    not_param_sql.assign_ptr(parse_result.no_param_sql_, parse_result.no_param_sql_len_);
-  }
-
-  for(int64_t i = 0 ; OB_SUCC(ret) && i < parse_result.param_node_num_; ++i) {
-    if (OB_ISNULL(parser_param)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("parser param is NULL", K(ret));
-    } else if(OB_ISNULL(cur_node = parser_param->node_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("node is NULL", K(ret));
-    } else {
-      cur_pos = cur_node->pos_;
-      if (T_QUESTIONMARK == cur_node->type_) {
-        if (OB_FAIL(replace_question_mark(not_param_sql, *concurrent_param, start_pos, cur_pos, question_mark_offset, string_helper))) {
-          LOG_WARN("fail to replace question mark", K(ret), K(start_pos), K(cur_pos));
-        }
-      } else {
-        if (OB_FAIL(replace_not_param(not_param_sql, *cur_node, start_pos, cur_pos, string_helper))) {
-          LOG_WARN("fail to replace not param", K(ret), K(start_pos), K(cur_pos));
-        }
-      }
-      start_pos = cur_pos + 1;
-      parser_param = parser_param->next_;
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (FALSE_IT(last_token.assign_ptr(not_param_sql.ptr() + start_pos, static_cast<ObString::obstr_size_t>(not_param_sql.length() - start_pos)))) {
-  } else if (OB_FAIL(string_helper.append_fmt("%.*s", last_token.length(), last_token.ptr()))) {
-    LOG_WARN("fail to append fmt", K(ret), K(not_param_sql), K(last_token), K(start_pos));
-  } else if (OB_FAIL(ob_write_string(allocator, string_helper.string(), limit_sql))) {
-    LOG_WARN("fail to deep copy string", K(ret), K(string_helper), K(limit_sql));
-  } else {/*do nothing*/}
-
-  return ret;
-}
+// gen_limit_sql moved definition to sql/ob_sql_utils.cpp(parser vocabulary)
 
 int ObOutlineParamsWrapper::set_allocator(ObIAllocator *allocator, const common::ObMemAttr &attr)
 {
@@ -9279,7 +9085,7 @@ ObOutlineInfo &ObOutlineInfo::operator=(const ObOutlineInfo &src_info)
   if (this != &src_info) {
     reset();
     int ret = OB_SUCCESS;
-    tenant_id_ = src_info.tenant_id_;
+    
     database_id_ = src_info.database_id_;
     outline_id_ = src_info.outline_id_;
     owner_id_ = src_info.owner_id_;
@@ -9327,7 +9133,7 @@ ObOutlineInfo &ObOutlineInfo::operator=(const ObOutlineInfo &src_info)
 
 void ObOutlineInfo::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
+  
   database_id_ = OB_INVALID_ID;
   outline_id_ = OB_INVALID_ID;
   owner_id_ = OB_INVALID_ID;
@@ -9386,7 +9192,7 @@ bool ObOutlineInfo::is_valid() const
   } else if (is_format() && !(((format_sql_text_.empty() && is_sql_id_valid(format_sql_id_))
                   || (!format_sql_text_.empty() && format_sql_id_.empty())))) {
     valid_ret = false;
-  } else if (OB_INVALID_ID == tenant_id_ || OB_INVALID_ID == database_id_ || OB_INVALID_ID == outline_id_) {
+  } else if (OB_INVALID_ID == database_id_ || OB_INVALID_ID == outline_id_) {
     valid_ret = false;
   } else if (schema_version_ <= 0) {
     valid_ret = false;
@@ -9408,7 +9214,7 @@ bool ObOutlineInfo::is_valid_for_replace() const
   } else if (is_format() && !((!signature_.empty() && !format_sql_text_.empty() && sql_id_.empty()) ||
                              (signature_.empty() && format_sql_text_.empty() && is_sql_id_valid(format_sql_id_)))) {
     valid_ret = false;
-  } else if (OB_INVALID_ID == tenant_id_ || OB_INVALID_ID == database_id_
+  } else if (OB_INVALID_ID == database_id_
              || OB_INVALID_ID == outline_id_) {
     valid_ret = false;
   } else {/*do nothing*/}
@@ -9510,22 +9316,7 @@ int ObOutlineInfo::get_visible_signature(ObString &visiable_signature) const
   return ret;
 }
 
-int ObOutlineInfo::get_outline_sql(ObIAllocator &allocator,
-                                   const ObSQLSessionInfo &session,
-                                   ObString &outline_sql) const
-{
-  int ret = OB_SUCCESS;
-  bool is_need_filter_hint = true;
-  if (OB_FAIL(ObSQLUtils::construct_outline_sql(allocator,
-                                                session,
-                                                outline_content_,
-                                                sql_text_,
-                                                is_need_filter_hint,
-                                                outline_sql))) {
-    LOG_WARN("fail to construct outline sql", K(ret), K(outline_content_), K(sql_text_), K(outline_sql));
-  }
-  return ret;
-}
+// get_outline_sql moved definition to sql/ob_sql_utils.cpp(sql vocabulary)
 
 int ObOutlineInfo::has_concurrent_limit_param(bool &has_limit_param) const
 {
@@ -9535,7 +9326,7 @@ int ObOutlineInfo::has_concurrent_limit_param(bool &has_limit_param) const
 OB_DEF_SERIALIZE(ObOutlineInfo)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, tenant_id_, database_id_, outline_id_, schema_version_,
+  LST_DO_CODE(OB_UNIS_ENCODE, database_id_, outline_id_, schema_version_,
               name_, signature_, outline_content_, sql_text_, outline_target_, owner_,
               used_, version_, compatible_, enabled_, format_, outline_params_wrapper_,
               sql_id_, owner_id_, format_sql_text_, format_sql_id_, format_outline_);
@@ -9557,7 +9348,7 @@ OB_DEF_DESERIALIZE(ObOutlineInfo)
   ObString format_sql_id;
   ObString format_sql_text;
 
-  LST_DO_CODE(OB_UNIS_DECODE, tenant_id_, database_id_, outline_id_, schema_version_,
+  LST_DO_CODE(OB_UNIS_DECODE, database_id_, outline_id_, schema_version_,
               name, signature, outline_content, sql_text, outline_target, owner, used_,
               version, compatible_, enabled_, format_);
 
@@ -9611,7 +9402,7 @@ OB_DEF_DESERIALIZE(ObOutlineInfo)
 OB_DEF_SERIALIZE_SIZE(ObOutlineInfo)
 {
   int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, tenant_id_, database_id_, outline_id_, schema_version_,
+  LST_DO_CODE(OB_UNIS_ADD_LEN, database_id_, outline_id_, schema_version_,
               name_, signature_, sql_id_, outline_content_, sql_text_, outline_target_, owner_,
               used_, version_, compatible_, enabled_, format_, outline_params_wrapper_, owner_id_,
               format_sql_text_, format_sql_id_, format_outline_);
@@ -9619,9 +9410,9 @@ OB_DEF_SERIALIZE_SIZE(ObOutlineInfo)
 }
 
 
-OB_SERIALIZE_MEMBER(ObTenantSequenceId, tenant_id_, sequence_id_);
+OB_SERIALIZE_MEMBER(ObTenantSequenceId, sequence_id_);
 OB_SERIALIZE_MEMBER((ObAlterOutlineInfo, ObOutlineInfo), alter_option_bitset_);
-OB_SERIALIZE_MEMBER(ObTenantCommonSchemaId, tenant_id_, schema_id_);
+OB_SERIALIZE_MEMBER(ObTenantCommonSchemaId, schema_id_);
 
 ObRecycleObject::ObRecycleObject(ObIAllocator *allocator)
   : ObSchema(allocator)
@@ -9639,7 +9430,7 @@ ObRecycleObject::ObRecycleObject(const ObRecycleObject &src)
 
 void ObRecycleObject::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
+  
   database_id_ = OB_INVALID_ID;
   table_id_ = OB_INVALID_ID;
   tablegroup_id_ = OB_INVALID_ID;
@@ -9657,7 +9448,7 @@ ObRecycleObject &ObRecycleObject::operator=(const ObRecycleObject &src)
     int ret = OB_SUCCESS;
     reset();
     error_ret_ = src.error_ret_;
-    set_tenant_id(src.get_tenant_id());
+    (void)0;
     set_database_id(src.get_database_id());
     set_table_id(src.get_table_id());
     set_tablegroup_id(src.get_tablegroup_id());
@@ -9713,13 +9504,13 @@ int ObRecycleObject::set_type_by_table_schema(const ObSimpleTableSchemaV2 &table
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObRecycleObject, tenant_id_, database_id_, table_id_,
+OB_SERIALIZE_MEMBER(ObRecycleObject, database_id_, table_id_,
     tablegroup_id_, object_name_, original_name_, type_, tablegroup_name_, database_name_);
 
 //------end of funcs of outlineinfo-----//
 
 OB_SERIALIZE_MEMBER(ObSequenceSchema,
-                    tenant_id_,
+                    
                     database_id_,
                     sequence_id_,
                     schema_version_,
@@ -9757,7 +9548,6 @@ int ObSequenceSchema::assign(const ObSequenceSchema &src_schema)
     reset();
     int ret = OB_SUCCESS;
     error_ret_ = src_schema.error_ret_;
-    set_tenant_id(src_schema.tenant_id_);
     set_database_id(src_schema.database_id_);
     set_sequence_id(src_schema.sequence_id_);
     set_schema_version(src_schema.schema_version_);
@@ -9783,7 +9573,7 @@ ObSequenceSchema& ObSequenceSchema::operator =(const ObSequenceSchema &src_schem
 void ObSequenceSchema::reset()
 {
   error_ret_ = OB_SUCCESS;
-  tenant_id_ = OB_INVALID_ID;
+  
   database_id_ = OB_INVALID_ID;
   sequence_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
@@ -9991,8 +9781,7 @@ int ObForeignKeyInfo::assign(const ObForeignKeyInfo &other)
 OB_SERIALIZE_MEMBER(ObBasedSchemaObjectInfo,
                     schema_id_,
                     schema_type_,
-                    schema_version_,
-                    schema_tenant_id_);
+                    schema_version_);
 
 const char *ObForeignKeyInfo::reference_action_str_[ACTION_MAX + 1] =
 {
@@ -10039,14 +9828,14 @@ OB_SERIALIZE_MEMBER(ObForeignKeyInfo,
                     name_generated_type_);
 
 OB_SERIALIZE_MEMBER(ObSimpleForeignKeyInfo,
-                    tenant_id_,
+                    
                     database_id_,
                     table_id_,
                     foreign_key_name_,
                     foreign_key_id_);
 
 OB_SERIALIZE_MEMBER(ObSimpleConstraintInfo,
-                    tenant_id_,
+                    
                     database_id_,
                     table_id_,
                     constraint_name_,
@@ -10055,13 +9844,11 @@ OB_SERIALIZE_MEMBER(ObSimpleConstraintInfo,
 int ObCompareNameWithTenantID::compare(const common::ObString &str1, const common::ObString &str2)
 {
   common::ObCollationType cs_type = common::CS_TYPE_UTF8MB4_GENERAL_CI;
-  if (tenant_id_ != OB_INVALID_ID &&
+  if (true &&
       database_id_ != OB_INVALID_ID &&
       is_mysql_sys_database_id(database_id_)) {
     // If it is the oceanbase database, no matter what the tenant, I hope that it is not case sensitive
     cs_type = common::CS_TYPE_UTF8MB4_GENERAL_CI;
-  } else if (tenant_id_ == OB_INVALID_ID) {
-    // tenant_id unknown, keep default case-insensitive
   } else {
     if (name_case_mode_ != OB_NAME_CASE_INVALID) {
       cs_type = ObSchema::get_cs_type_with_cmp_mode(name_case_mode_);
@@ -10131,7 +9918,6 @@ ObDirectorySchema::ObDirectorySchema()
 
 ObDirectorySchema::ObDirectorySchema(common::ObIAllocator *allocator)
   : ObSchema(allocator),
-    tenant_id_(common::OB_INVALID_TENANT_ID),
     directory_id_(common::OB_INVALID_TENANT_ID),
     schema_version_(common::OB_INVALID_VERSION),
     directory_name_(),
@@ -10155,7 +9941,7 @@ ObDirectorySchema &ObDirectorySchema::operator=(const ObDirectorySchema &other)
     reset();
     int ret = OB_SUCCESS;
     error_ret_ = other.error_ret_;
-    tenant_id_ = other.tenant_id_;
+    
     directory_id_ = other.directory_id_;
     schema_version_ = other.schema_version_;
 
@@ -10184,7 +9970,7 @@ bool ObDirectorySchema::is_valid() const
 {
   bool ret = true;
   if (!ObSchema::is_valid()
-      || !is_valid_tenant_id(tenant_id_)
+      || !true
       || !is_valid_id(directory_id_)
       || schema_version_ < 0
       || directory_name_.empty()
@@ -10196,7 +9982,7 @@ bool ObDirectorySchema::is_valid() const
 
 void ObDirectorySchema::reset()
 {
-  tenant_id_ = common::OB_INVALID_TENANT_ID;
+  
   directory_id_ = OB_INVALID_ID;
   schema_version_ = common::OB_INVALID_VERSION;
   directory_name_.reset();
@@ -10211,7 +9997,7 @@ int64_t ObDirectorySchema::get_convert_size() const
 }
 
 OB_SERIALIZE_MEMBER(ObDirectorySchema,
-                    tenant_id_,
+                    
                     directory_id_,
                     schema_version_,
                     directory_name_,
@@ -10256,10 +10042,7 @@ const char *ob_object_type_str(const ObObjectType object_type)
 IObErrorInfo::~IObErrorInfo()
 {}
 
-uint64_t IObErrorInfo::get_tenant_id() const
-{
-  return OB_INVALID_ID;
-}
+
 uint64_t IObErrorInfo::get_database_id() const
 {
   return OB_INVALID_ID;
@@ -10277,20 +10060,18 @@ ObObjectType IObErrorInfo::get_object_type() const
   return ObObjectType::INVALID;
 }
 
-int ObZoneRegion::assign(const ObZoneRegion &that)
+int ObZonePrimaryEntry::assign(const ObZonePrimaryEntry &that)
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(zone_.assign(that.zone_.ptr()))) {
     SHARE_LOG(WARN, "fail to assign zone", K(ret));
-  } else if (OB_FAIL(region_.assign(that.region_.ptr()))) {
-    SHARE_LOG(WARN, "fail to assign region", K(ret));
   } else {
     check_zone_type_ = that.check_zone_type_;
   }
   return ret;
 }
 
-int ObZoneRegion::set_check_zone_type(const int64_t zone_type)
+int ObZonePrimaryEntry::set_check_zone_type(const int64_t zone_type)
 {
   int ret = OB_SUCCESS;
   ObZoneType my_zone_type = static_cast<ObZoneType>(zone_type);
@@ -10309,7 +10090,7 @@ int ObZoneRegion::set_check_zone_type(const int64_t zone_type)
 }
 
 OB_SERIALIZE_MEMBER(ObContextSchema,
-                    tenant_id_,
+                    
                     context_id_,
                     schema_version_,
                     namespace_,
@@ -10348,7 +10129,6 @@ int ObContextSchema::assign(const ObContextSchema &src_schema)
   if (this != &src_schema) {
     reset();
     error_ret_ = src_schema.error_ret_;
-    set_tenant_id(src_schema.tenant_id_);
     set_context_id(src_schema.context_id_);
     set_schema_version(src_schema.schema_version_);
     set_origin_con_id(src_schema.origin_con_id_);
@@ -10378,7 +10158,7 @@ ObContextSchema& ObContextSchema::operator =(const ObContextSchema &src_schema)
 void ObContextSchema::reset()
 {
   error_ret_ = OB_SUCCESS;
-  tenant_id_ = OB_INVALID_ID;
+  
   context_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   origin_con_id_ = OB_INVALID_ID;
@@ -10432,7 +10212,7 @@ int ObSimpleMockFKParentTableSchema::assign(const ObSimpleMockFKParentTableSchem
   if (this != &src_schema) {
     reset();
     error_ret_ = src_schema.error_ret_;
-    set_tenant_id(src_schema.tenant_id_);
+    (void)0;
     set_database_id(src_schema.database_id_);
     set_mock_fk_parent_table_id(src_schema.mock_fk_parent_table_id_);
     set_schema_version(src_schema.schema_version_);
@@ -10445,7 +10225,7 @@ int ObSimpleMockFKParentTableSchema::assign(const ObSimpleMockFKParentTableSchem
 
 void ObSimpleMockFKParentTableSchema::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
+  
   database_id_ = OB_INVALID_ID;
   mock_fk_parent_table_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
@@ -11077,14 +10857,12 @@ ObIndexSchemaHashWrapper GetIndexNameKey<ObIndexSchemaHashWrapper, ObIndexNameIn
   if (OB_NOT_NULL(index_name_info)) {
     if (is_recyclebin_database_id(index_name_info->get_database_id())) {
       ObIndexSchemaHashWrapper index_schema_hash_wrapper(
-          index_name_info->get_tenant_id(),
           index_name_info->get_database_id(),
           common::OB_INVALID_ID,
           index_name_info->get_index_name());
       return index_schema_hash_wrapper;
     } else {
       ObIndexSchemaHashWrapper index_schema_hash_wrapper(
-          index_name_info->get_tenant_id(),
           index_name_info->get_database_id(),
           index_name_info->get_data_table_id(),
           index_name_info->get_original_index_name());
@@ -11097,8 +10875,7 @@ ObIndexSchemaHashWrapper GetIndexNameKey<ObIndexSchemaHashWrapper, ObIndexNameIn
 }
 
 ObIndexNameInfo::ObIndexNameInfo()
-  : tenant_id_(OB_INVALID_TENANT_ID),
-    database_id_(OB_INVALID_ID),
+  : database_id_(OB_INVALID_ID),
     data_table_id_(OB_INVALID_ID),
     index_id_(OB_INVALID_ID),
     index_name_(),
@@ -11108,7 +10885,7 @@ ObIndexNameInfo::ObIndexNameInfo()
 
 void ObIndexNameInfo::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   database_id_ = OB_INVALID_ID;
   data_table_id_ = OB_INVALID_ID;
   index_id_ = OB_INVALID_ID;
@@ -11127,7 +10904,7 @@ int ObIndexNameInfo::init(
       index_schema.get_table_name_str(), index_name_, c_style))) {
     LOG_WARN("fail to write string", KR(ret), K(index_schema));
   } else {
-    tenant_id_ = index_schema.get_tenant_id();
+    
     database_id_ = index_schema.get_database_id();
     data_table_id_ = index_schema.get_data_table_id();
     index_id_ = index_schema.get_table_id();
@@ -11143,13 +10920,12 @@ int ObIndexNameInfo::init(
   return ret;
 }
 
-bool check_can_drop_column_instant(const uint64_t tenant_id)
+bool check_can_drop_column_instant()
 {
   int ret = OB_SUCCESS;
   bool can_drop_column_instant = true;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
-  if (can_drop_column_instant && tenant_config.is_valid()) {
-    can_drop_column_instant = tenant_config->_enable_drop_column_instant;
+  if (can_drop_column_instant && true) {
+    can_drop_column_instant = GCONF._enable_drop_column_instant;
   }
   return can_drop_column_instant;
 }

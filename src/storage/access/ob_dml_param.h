@@ -21,7 +21,7 @@
 #include "lib/container/ob_iarray.h"
 #include "common/ob_common_types.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "sql/engine/basic/ob_pushdown_filter.h"
 #include "storage/tx/ob_trans_define_v4.h"
 
@@ -128,7 +128,7 @@ private:
 class ScanResumePoint
 {
 public:
-  int init(bool *is_paused, int64_t tenant_id);
+  int init(bool *is_paused);
 
   void destroy()
   {
@@ -259,7 +259,7 @@ struct ObDMLBaseParam
         write_flag_(),
         check_schema_version_(true),
         ddl_task_id_(0),
-        lob_allocator_(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+        lob_allocator_(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE),
         data_row_for_lob_(nullptr),
         is_main_table_in_fts_ddl_(false),
         has_async_index_(false)

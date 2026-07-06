@@ -22,5 +22,13 @@ namespace oceanbase
 namespace blocksstable
 {
 
+int ObStorageObjectWriteInfo::fill_io_info_for_backup(const blocksstable::MacroBlockId &macro_id, ObIOInfo &io_info) const
+{
+  // Backup removed, backup-mode macro blocks cannot exist
+  UNUSED(macro_id);
+  UNUSED(io_info);
+  return OB_SUCCESS;
+}
+
 }
 }

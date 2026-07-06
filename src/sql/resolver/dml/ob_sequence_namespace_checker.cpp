@@ -64,29 +64,25 @@ int ObSequenceNamespaceChecker::check_sequence_namespace(const ObQualifiedName &
   } else if (0 != sequence_expr.case_compare("NEXTVAL") &&
              0 != sequence_expr.case_compare("CURRVAL")) {
     ret = OB_ERR_BAD_FIELD_ERROR;
-  } else if (q_name.dblink_name_.empty()) {
+  } else {
     const ObString &database_name = q_name.database_name_.empty() ?
         session_info->get_database_name() : q_name.database_name_;
-    uint64_t tenant_id = session_info->get_effective_tenant_id();
+    
     uint64_t database_id = OB_INVALID_ID;
     bool exist = false;
-    if (OB_FAIL(schema_checker->get_database_id(tenant_id, database_name, database_id))) {
-      LOG_WARN("failed to get database id", K(ret), K(tenant_id), K(database_name));
-    } else if (OB_FAIL(check_sequence_with_synonym_recursively(tenant_id, database_id, sequence_name,
+    if (OB_FAIL(schema_checker->get_database_id(database_name, database_id))) {
+      LOG_WARN("failed to get database id", K(ret), K(database_name));
+    } else if (OB_FAIL(check_sequence_with_synonym_recursively( database_id, sequence_name,
                                                                schema_checker, exist, sequence_id))) {
       LOG_WARN("fail recursively check sequence with name", K(q_name), K(database_name), K(ret));
     } else if (!exist) {
       ret = OB_ERR_BAD_FIELD_ERROR;
     }
-  } else {
-    // has dblink_name_, not support
-    ret = OB_NOT_IMPLEMENT;
   }
   return ret;
 }
 
-int ObSequenceNamespaceChecker::check_sequence_with_synonym_recursively(const uint64_t tenant_id,
-                                                                        const uint64_t database_id,
+int ObSequenceNamespaceChecker::check_sequence_with_synonym_recursively(const uint64_t database_id,
                                                                         const common::ObString &sequence_name,
                                                                         const ObSchemaChecker *schema_checker,
                                                                         bool &exists,
@@ -97,8 +93,7 @@ int ObSequenceNamespaceChecker::check_sequence_with_synonym_recursively(const ui
   ObString object_seq_name;
   uint64_t object_db_id;
   uint64_t synonym_id;
-  if (OB_FAIL(schema_checker->check_sequence_exist_with_name(tenant_id,
-                                                                      database_id,
+  if (OB_FAIL(schema_checker->check_sequence_exist_with_name(database_id,
                                                                       sequence_name,
                                                                       exists,
                                                                       sequence_id))) {

@@ -129,7 +129,7 @@ ObFixedSizeBlockAllocator<SIZE>::ObFixedSizeBlockAllocator() :
     lock_(common::ObLatchIds::FIXED_SIZE_ALLOCATOR_LOCK),
     total_block_num_(0),
     max_block_num_(0),
-    allocator_(SET_USE_UNEXPECTED_500(ObMemAttr(OB_SERVER_TENANT_ID, ObModIds::OB_FIXED_SIZE_BLOCK_ALLOCATOR))),
+    allocator_(SET_USE_UNEXPECTED_500(ObMemAttr(ObModIds::OB_FIXED_SIZE_BLOCK_ALLOCATOR))),
     free_blocks_(),
     block_buf_list_(allocator_)
 {
@@ -148,7 +148,7 @@ int ObFixedSizeBlockAllocator<SIZE>::init(const int64_t block_num, const lib::Ob
   } else if (OB_FAIL(init_max_block_num())) {
     COMMON_LOG(WARN, "init max block number fail", K(ret));
   } else {
-    ObMemAttr attr(OB_SERVER_TENANT_ID, label);
+    ObMemAttr attr(label);
     SET_USE_UNEXPECTED_500(attr);
     ObSpinLockGuard guard(lock_);
     if (IS_NOT_INIT) {

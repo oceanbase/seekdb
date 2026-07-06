@@ -17,8 +17,8 @@
 #ifndef OCEANBASE_ENCODING_OB_SEMISTRUCT_JSON_H_
 #define OCEANBASE_ENCODING_OB_SEMISTRUCT_JSON_H_
 
-#include "lib/json_type/ob_json_bin.h"
-#include "lib/json_type/ob_json_path.h"
+#include "common/json_type/ob_json_bin.h"
+#include "common/json_type/ob_json_path.h"
 #include "share/semistruct/ob_sub_column_path.h"
 #include "storage/blocksstable/cs_encoding/ob_dict_encoding_hash_table.h"
 #include "storage/blocksstable/cs_encoding/ob_cs_encoding_allocator.h"
@@ -242,7 +242,7 @@ public:
     is_inited_(false),
     version_(SCHEMA_VERSION),
     flags_(0),
-    allocator_("SemiSchema", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    allocator_("SemiSchema", OB_MALLOC_NORMAL_BLOCK_SIZE)
   {}
   ~ObSemiStructSubSchema() {}
   void reset();
@@ -408,7 +408,7 @@ public:
     sub_schema_(nullptr),
     sub_col_datums_(nullptr),
     col_cnt_(0),
-    spare_data_allocator_("SemiEncTmp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    spare_data_allocator_("SemiEncTmp", OB_MALLOC_NORMAL_BLOCK_SIZE),
     spare_col_(nullptr)
   {}
 
@@ -600,8 +600,8 @@ class ObJsonReassembler
 {
 public:
   ObJsonReassembler(ObSemiStructSubSchema *sub_schema, ObIAllocator* decode_allocator):
-    allocator_("SemiJson", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-    tmp_allocator_("SemiJsonTmp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    allocator_("SemiJson", OB_MALLOC_NORMAL_BLOCK_SIZE),
+    tmp_allocator_("SemiJsonTmp", OB_MALLOC_NORMAL_BLOCK_SIZE),
     decode_allocator_(decode_allocator),
     sub_schema_(sub_schema),
     json_(nullptr)

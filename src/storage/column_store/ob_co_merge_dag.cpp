@@ -16,11 +16,12 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_co_merge_dag.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/column_store/ob_column_oriented_merger.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/compaction/ob_tenant_compaction_progress.h"
-#include "share/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/compaction/ob_compaction_dag_ranker.h"
 #include "observer/ob_server_event_history_table_operator.h"
 
@@ -185,7 +186,7 @@ int ObCOMergePrepareTask::create_schedule_dag(ObCOTabletMergeCtx &ctx)
 
   if (is_convert_co_major_merge(ctx.get_merge_type())) {
     // convert co major merge only rely on major sstable
-  } else if (!MTL(ObTenantTabletScheduler *)->enable_adaptive_merge_schedule()) {
+  } else if (!share::g_mp->tenant_tablet_scheduler()->enable_adaptive_merge_schedule()) {
     // don't schedule minor dag if enable_adaptive_merge_schedule=false
   } else if (OB_FAIL(ctx.check_need_schedule_minor(schedule_minor))) {
     LOG_WARN("failed to check need chedule minor", K(ret), K(schedule_minor));
@@ -252,7 +253,7 @@ int ObCOMergePrepareTask::schedule_minor_exec_dag(
   result.version_range_.snapshot_version_ = ctx.get_tablet()->get_snapshot_version();
   result.transfer_seq_ = ctx.get_tablet()->get_transfer_seq();
   ObTabletMergeDagParam dag_param(MINOR_MERGE, ctx.get_ls_id(), ctx.get_tablet_id());
-  if (OB_FAIL(MTL(share::ObTenantDagScheduler *)->alloc_dag(minor_exe_dag))) {
+  if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->alloc_dag(minor_exe_dag))) {
     LOG_WARN("failed to alloc dag", K(ret));
   } else if (OB_FAIL(ctx.get_tablet()->get_recycle_version(result.version_range_.multi_version_start_, result.version_range_.base_version_))) {
     LOG_WARN("Fail to get table store recycle version", K(ret), K(result.version_range_), KPC(ctx.get_tablet()));
@@ -273,7 +274,7 @@ int ObCOMergePrepareTask::schedule_minor_exec_dag(
     FLOG_INFO("ERRSIM EN_COMPACTION_SCHEDULE_MINOR_FAIL", KR(ret), K(ctx));
     SERVER_EVENT_SYNC_ADD("merge_errsim", "schedule_minor_failure", "tablet_id", ctx.get_tablet_id().id());
 #endif
-  } else if (OB_FAIL(MTL(share::ObTenantDagScheduler *)->add_dag(minor_exe_dag, true/*is_emergency*/))) {
+  } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->add_dag(minor_exe_dag, true/*is_emergency*/))) {
     if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
       LOG_WARN("failed to add dag", K(ret), KPC(minor_exe_dag));
     }
@@ -284,11 +285,11 @@ int ObCOMergePrepareTask::schedule_minor_exec_dag(
 
   if (OB_FAIL(ret)) {
     if (OB_NOT_NULL(schedule_dag)) {
-      MTL(share::ObTenantDagScheduler *)->cancel_dag(schedule_dag);
+      share::g_mp->tenant_dag_scheduler()->cancel_dag(schedule_dag);
       schedule_dag = nullptr;
     }
     if (OB_NOT_NULL(minor_exe_dag)) {
-      MTL(share::ObTenantDagScheduler *)->free_dag(*minor_exe_dag);
+      share::g_mp->tenant_dag_scheduler()->free_dag(*minor_exe_dag);
       minor_exe_dag = nullptr;
     }
   }
@@ -636,7 +637,7 @@ int ObCOMergeBatchExeDag::decide_retry_strategy(const int error_code, ObDagRetry
     retry_status = DAG_AND_DAG_NET_SKIP_RETRY;
   } else if (OB_ALLOCATE_MEMORY_FAILED == error_code) {
     ObTenantSysStat sys_stat;
-    if (OB_FAIL(sys_stat.refresh(MTL_ID(), true /*force_refresh*/))) {
+    if (OB_FAIL(sys_stat.refresh(true /*force_refresh*/))) {
       LOG_WARN("failed to refresh sys stat", K(ret));
     } else if (sys_stat.is_small_tenant()) {
       retry_status = DAG_SKIP_RETRY;
@@ -1087,7 +1088,7 @@ int ObCOMergeFinishTask::process()
   } else if (OB_FAIL(ctx_->update_tablet_after_merge())) {
     LOG_WARN("failed to create sstable and update tablet", K(ret));
   } else {
-    if (OB_TMP_FAIL(MTL(ObTenantCompactionProgressMgr*)->update_unfinish_tablet(ctx_->get_merge_version()))) {
+    if (OB_TMP_FAIL(share::g_mp->tenant_compaction_progress_mgr()->update_unfinish_tablet(ctx_->get_merge_version()))) {
       LOG_WARN("failed to update unfinish tablet", K(tmp_ret), K(ctx_->get_merge_version()));
     }
     // ATTENTION! Critical diagnostic log, DO NOT CHANGE!!!
@@ -1123,7 +1124,7 @@ ObCOMergeDagNet::ObCOMergeDagNet()
     batch_dag_cnt_(0),
     merge_status_(COMergeStatus::NOT_INIT),
     basic_param_(),
-    tmp_allocator_("CoDagNet", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID(), ObCtxIds::MERGE_NORMAL_CTX_ID),
+    tmp_allocator_("CoDagNet", OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::MERGE_NORMAL_CTX_ID),
     co_merge_ctx_(nullptr),
     finish_dag_(nullptr),
     time_guard_(),
@@ -1319,7 +1320,7 @@ int ObCOMergeDagNet::inner_schedule_finish_dag(ObIDag *parent_dag)
   int ret = OB_SUCCESS;
   if (!ATOMIC_LOAD(&finish_added_)) { // avoid to add finish_dag which has finished and been freed
     if (OB_NOT_NULL(finish_dag_)) {
-      if (OB_FAIL(MTL(share::ObTenantDagScheduler*)->add_dag(finish_dag_))) {
+      if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->add_dag(finish_dag_))) {
         LOG_WARN("failed to add finish dag", K(ret), KPC(finish_dag_));
       } else {
         ATOMIC_SET(&finish_added_, true);
@@ -1347,12 +1348,12 @@ void ObCOMergeDagNet::try_update_merge_batch_size(const int64_t column_group_cnt
 {
   int tmp_ret = OB_SUCCESS;
   int64_t merge_thread = 0; // default value
-  if (OB_TMP_FAIL(MTL(ObTenantDagScheduler *)->get_limit(ObDagPrio::DAG_PRIO_COMPACTION_LOW, merge_thread))) {
+  if (OB_TMP_FAIL(share::g_mp->tenant_dag_scheduler()->get_limit(ObDagPrio::DAG_PRIO_COMPACTION_LOW, merge_thread))) {
     LOG_WARN_RET(tmp_ret, "failed to get major thread limit, use default value");
   }
   merge_thread = (0 >= merge_thread) ? ObCompactionEstimator::DEFAULT_MERGE_THREAD_CNT : merge_thread;
 
-  const int64_t mem_allow_used = lib::get_tenant_memory_remain(MTL_ID()) * ADAPTIVE_PERCENT; // allow use 40% memory for co merge
+  const int64_t mem_allow_used = lib::get_tenant_memory_remain() * ADAPTIVE_PERCENT; // allow use 40% memory for co merge
   int64_t batch_mem_allow_per_thread = MAX(mem_allow_used / merge_thread - ObCompactionEstimator::MAJOR_MEM_PER_THREAD, 0);
   int64_t mem_allow_batch_size = MAX(batch_mem_allow_per_thread / ObCompactionEstimator::CO_MAJOR_CG_BASE_MEM, 1);
 
@@ -1421,7 +1422,7 @@ int ObCOMergeDagNet::inner_create_and_schedule_dags(ObIDag *parent_dag)
   }
 
   int64_t allowed_schedule_dag_count =
-      MTL(share::ObTenantDagScheduler*)->allowed_schedule_dag_count(ObDagType::DAG_TYPE_CO_MERGE_BATCH_EXECUTE);
+      share::g_mp->tenant_dag_scheduler()->allowed_schedule_dag_count(ObDagType::DAG_TYPE_CO_MERGE_BATCH_EXECUTE);
   if (OB_SUCC(ret) && allowed_schedule_dag_count > 0) {
     ObMutexGuard guard(ctx_lock_);
     batch_reduced_ = false;
@@ -1586,7 +1587,7 @@ int ObCOMergeDagNet::inner_add_exe_dags_into_scheduler(
     // finish_dag will have READY_STATUS after added into scheduler, do not check dag status here
     if (OB_NOT_NULL(finish_dag_) && OB_FAIL(dag->add_child(*finish_dag_, false/*check_child_dag_status*/))) {
       LOG_WARN("failed to add finish_dag as child", KR(ret), KPC(dag), KPC(finish_dag_));
-    } else if (OB_FAIL(MTL(share::ObTenantDagScheduler*)->add_dag(dag))) {
+    } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->add_dag(dag))) {
       LOG_WARN("failed to add dag into scheduler", K(ret), KP(dag));
     } else {
       unscheduled_dag_idx = idx + 1;
@@ -1626,7 +1627,7 @@ void ObCOMergeDagNet::inner_free_exe_dag(ObCOMergeBatchExeDag *&dag)
     int64_t start_cg_idx = dag->get_start_cg_idx();
     int64_t end_cg_idx = dag->get_end_cg_idx();
     MARK_CG_SCHEDULE_STATUS(start_cg_idx, end_cg_idx, ObCOTabletMergeCtx::CG_SCHE_STATUS_FAILED);
-    (void)MTL(share::ObTenantDagScheduler*)->free_dag(*dag);
+    (void)share::g_mp->tenant_dag_scheduler()->free_dag(*dag);
     dag = nullptr;
     if (OB_NOT_NULL(co_merge_ctx_)) {
       (void) co_merge_ctx_->destroy_merge_info_array(start_cg_idx, end_cg_idx, true/*release_mem_flag*/);
@@ -1684,7 +1685,7 @@ int ObCOMergeDagNet::dag_report_result(
       }
     }
   }
-  MTL(share::ObTenantDagScheduler *)->set_fast_schedule_dag_net();
+  share::g_mp->tenant_dag_scheduler()->set_fast_schedule_dag_net();
   return ret;
 }
 
@@ -1700,7 +1701,7 @@ int ObCOMergeDagNet::get_compat_mode()
   } else if (OB_UNLIKELY(merge_batch_size_ <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("merge batch size is not valid", K(ret), K(merge_batch_size_));
-  } else if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id_, tmp_ls_handle, ObLSGetMod::COMPACT_MODE))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, tmp_ls_handle, ObLSGetMod::COMPACT_MODE))) {
     LOG_WARN("failed to get log stream", K(ret), K(ls_id_), K(tablet_id_));
   } else if (OB_FAIL(tmp_ls_handle.get_ls()->get_tablet_svr()->get_tablet(
           tablet_id_,

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_temp_table_insert_vec_op.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 namespace oceanbase
 {
@@ -67,8 +68,8 @@ int ObTempTableInsertVecOp::inner_open()
     LOG_WARN("ctx session is null");
   } else if (OB_ISNULL(mem_context_)) {
     lib::ContextParam param;
-    int64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
-    param.set_mem_attr(tenant_id, "TempTableInsert", ObCtxIds::WORK_AREA)
+    
+    param.set_mem_attr("TempTableInsert", ObCtxIds::WORK_AREA)
       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
       LOG_WARN("create entity failed", K(ret));
@@ -77,7 +78,6 @@ int ObTempTableInsertVecOp::inner_open()
       LOG_WARN("null memory entity returned", K(ret));
     } else if (OB_FAIL(sql_mem_processor_.init(
         &mem_context_->get_malloc_allocator(),
-        tenant_id,
         TEMP_TABLE_VEC_PAGE_SIZE * MY_SPEC.width_,
         MY_SPEC.type_,
         MY_SPEC.id_,
@@ -196,10 +196,10 @@ int ObTempTableInsertVecOp::create_interm_result_info(ObDTLIntermResultInfo *&in
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get my session.", K(ret));
   } else {
-    uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
-    ObMemAttr mem_attr(tenant_id, "TempTableInsert", ObCtxIds::WORK_AREA);
+    
+    ObMemAttr mem_attr("TempTableInsert", ObCtxIds::WORK_AREA);
     dtl::ObDTLIntermResultInfoGuard result_info_guard;
-    if (OB_FAIL(MTL(dtl::ObDTLIntermResultManager *)->create_interm_result_info(mem_attr,
+    if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->create_interm_result_info(mem_attr,
                                           result_info_guard,
                                           dtl::ObDTLIntermResultMonitorInfo(
                                             MY_INPUT.qc_id_,
@@ -272,12 +272,12 @@ int ObTempTableInsertVecOp::insert_interm_result_info()
       cur_interm_res_info->set_eof(true);
       // The chunk row store does not require managing the dump logic.
       cur_interm_res_info->is_read_ = true;
-      if (OB_FAIL(MTL(dtl::ObDTLIntermResultManager *)->insert_interm_result_info(
+      if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->insert_interm_result_info(
                                         dtl_int_key, cur_interm_res_info))) {
         LOG_WARN("failed to insert row store.", K(ret), K(dtl_int_key.channel_id_));
       } else if (OB_FAIL(keys_insert.push_back(dtl_int_key))) {
         LOG_WARN("failed to push back key", K(ret));
-        MTL(dtl::ObDTLIntermResultManager *)->erase_interm_result_info(dtl_int_key);
+        share::g_mp->dtl_interm_result_manager()->erase_interm_result_info(dtl_int_key);
       } else {
         cur_interm_res_info->get_column_store()->reset_callback();
       }
@@ -286,7 +286,7 @@ int ObTempTableInsertVecOp::insert_interm_result_info()
   if (OB_FAIL(ret)) {
     // Exception handling
     for (int64_t i = 0; i < keys_insert.count(); ++i) {
-      MTL(dtl::ObDTLIntermResultManager *)->erase_interm_result_info(keys_insert.at(i));
+      share::g_mp->dtl_interm_result_manager()->erase_interm_result_info(keys_insert.at(i));
     }
   } else {
     clear_all_interm_res_info();
@@ -301,7 +301,7 @@ int ObTempTableInsertVecOp::clear_all_interm_res_info()
   for (int64_t i = 0; OB_SUCC(ret) && i < all_interm_res_info_.count(); ++i) {
     ObDTLIntermResultInfo *col_store = all_interm_res_info_.at(i);
     if (NULL != col_store) {
-      MTL(dtl::ObDTLIntermResultManager*)->dec_interm_result_ref_count(col_store);
+      share::g_mp->dtl_interm_result_manager()->dec_interm_result_ref_count(col_store);
     }
   }
   all_interm_res_info_.reset();

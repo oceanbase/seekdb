@@ -102,13 +102,12 @@ public:
   }
 
 
- static int get_tenant_schema(const uint64_t tenant_id,
+ static int get_tenant_schema(
                               share::schema::ObTenantSchema &tenant_schema);
 protected:
- int wait_tenant_schema_ready_(
-     const uint64_t tenant_id);
- int wait_tenant_schema_and_version_ready_(const uint64_t tenant_id);
- int check_can_do_recovery_(const uint64_t tenant_id);
+ int wait_tenant_schema_ready_();
+ int wait_tenant_schema_and_version_ready_();
+ int check_can_do_recovery_();
  int tg_id_;
 private:
   common::ObThreadCond thread_cond_;

@@ -17,9 +17,13 @@
 #ifndef OCEANBASE_SHARE_TABLE_OB_TABLE_TTL_UTIL_
 #define OCEANBASE_SHARE_TABLE_OB_TABLE_TTL_UTIL_
 
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "rpc/frame/ob_req_transport.h"
 #include "share/ob_rpc_struct.h"
+#include "share/table/ob_redis_data_model.h"
+#include "share/schema/ob_table_schema.h"
+
+#include "lib/json/ob_json.h"
 
 namespace oceanbase
 {
@@ -81,7 +85,6 @@ typedef struct ObTTLStatus {
   int64_t gmt_create_;
   int64_t gmt_modified_;
 
-  uint64_t tenant_id_;
   uint64_t table_id_;
   uint64_t tablet_id_;
   int64_t task_id_;
@@ -100,7 +103,6 @@ typedef struct ObTTLStatus {
   ObTTLStatus()
   : gmt_create_(0),
     gmt_modified_(0),
-    tenant_id_(OB_INVALID_ID),
     table_id_(OB_INVALID_ID),
     tablet_id_(OB_INVALID_ID),
     task_id_(0),
@@ -117,7 +119,6 @@ typedef struct ObTTLStatus {
 
  TO_STRING_KV(K_(gmt_create),
               K_(gmt_modified),
-              K_(tenant_id),
               K_(table_id),
               K_(tablet_id),
               K_(task_id),
@@ -137,24 +138,20 @@ typedef common::ObArray<ObTTLStatus> ObTTLStatusArray;
 
 typedef struct ObTTLStatusKey
 {
-  uint64_t tenant_id_;
   uint64_t table_id_;
   uint64_t tablet_id_;
   uint64_t task_id_;
   uint64_t partition_cnt_;
-  explicit ObTTLStatusKey(uint64_t tenant_id,
-                          uint64_t table_id,
+  explicit ObTTLStatusKey(uint64_t table_id,
                           uint64_t tablet_id,
                           uint64_t task_id) 
-  : tenant_id_(tenant_id),
-    table_id_(table_id),
+  : table_id_(table_id),
     tablet_id_(tablet_id),
     task_id_(task_id),
     partition_cnt_(OB_INVALID_ID)
   {}
 
-  TO_STRING_KV(K_(tenant_id),
-              K_(table_id),
+  TO_STRING_KV(K_(table_id),
               K_(tablet_id),
               K_(task_id));
 } ObTTLStatusKey;
@@ -222,18 +219,13 @@ public:
 struct ObSimpleTTLInfo
 {
 public:
-  uint64_t tenant_id_;
 
   ObSimpleTTLInfo()
-    : tenant_id_(OB_INVALID_TENANT_ID)
-  {}
+    {}
 
-  ObSimpleTTLInfo(const uint64_t tenant_id)
-    : tenant_id_(tenant_id)
-  {}
 
-  bool is_valid() const { return (OB_INVALID_TENANT_ID != tenant_id_); }
-  TO_STRING_KV(K_(tenant_id));
+  bool is_valid() const { return (true); }
+  TO_STRING_EMPTY();
   OB_UNIS_VERSION(1);
 };
 
@@ -255,7 +247,7 @@ public:
     return true;
   }
 
-  int add_ttl_info(const uint64_t tenant_id);
+  int add_ttl_info();
 
   TO_STRING_KV(K_(ttl_info_array), K_(ttl_all));
 
@@ -303,58 +295,49 @@ public:
 
 class ObTTLUtil
 {
-private:
-  static const char* HBASE_KV_ATTR_FORMAT_STR;
 public:
   static int parse(const char* str, ObTTLDutyDuration& duration);
   static bool current_in_duration(ObTTLDutyDuration& duration);
 
   static int transform_tenant_state(const common::ObTTLTaskStatus& tenant_status, common::ObTTLTaskStatus& status);
-  static int check_tenant_state(uint64_t tenant_id,
-                                uint64_t table_id,
+  static int check_tenant_state(uint64_t table_id,
                                 common::ObISQLClient& proxy,
                                 const ObTTLTaskStatus local_state,
                                 const int64_t local_task_id,
                                 bool &tenant_state_changed);
-  static int insert_ttl_task(uint64_t tenant_id,
-                             const char* tname,
+  static int insert_ttl_task(const char* tname,
                              common::ObISQLClient& proxy, 
                              ObTTLStatus& task);
 
 
-  static int update_ttl_task(uint64_t tenant_id,
-                             const char* tname,
+  static int update_ttl_task(const char* tname,
                              common::ObISQLClient& proxy, 
                              ObTTLStatusKey& key,
                              ObTTLStatusFieldArray& update_fields);
 
-  static int update_ttl_task_all_fields(uint64_t tenant_id,
-                                        const char* tname,
+  static int update_ttl_task_all_fields(const char* tname,
                                         common::ObISQLClient& proxy, 
                                         ObTTLStatus& update_task);
 
-  static int delete_ttl_task(uint64_t tenant_id,
-                             const char* tname,
+  static int delete_ttl_task(const char* tname,
                              common::ObISQLClient& proxy, 
                              ObTTLStatusKey& key,
                              int64_t &affect_rows);
 
-  static int read_ttl_tasks(uint64_t tenant_id,
-                            const char* tname,
+  static int read_ttl_tasks(const char* tname,
                             common::ObISQLClient& proxy,
                             ObTTLStatusFieldArray& filters, 
                             ObTTLStatusArray& result_arr,
                             bool for_update = false,
                             common::ObIAllocator *allocator = NULL);
 
-  static int read_tenant_ttl_task(uint64_t tenant_id,
-                                  uint64_t table_id,
+  static int read_tenant_ttl_task(uint64_t table_id,
                                   common::ObISQLClient& proxy,
                                   ObTTLStatus &ttl_record,
                                   const bool for_update = false,
                                   common::ObIAllocator *allocator = NULL);
 
-  static int move_task_to_history_table(uint64_t tenant_id, uint64_t task_id,
+  static int move_task_to_history_table(uint64_t task_id,
                                         common::ObMySQLTransaction& proxy,
                                         int64_t batch_size, int64_t &move_rows);
 
@@ -363,35 +346,38 @@ public:
 
 
   static bool check_can_do_work();
-  static bool check_can_process_tenant_tasks(uint64_t tenant_id);
+  static bool check_can_process_tenant_tasks();
 
   static int parse_kv_attributes(const ObString &kv_attributes, ObKVAttr &kv_attr);
-  static int format_kv_attributes_to_json_str(ObIAllocator &allocator, const ObKVAttr &kv_attr, ObString &json_str);
   static int dispatch_ttl_cmd(const ObTTLParam &param);
   static int get_ttl_info(const ObTTLParam &param, ObIArray<ObSimpleTTLInfo> &ttl_info_array);
 
-  static int check_is_normal_ttl_table(const ObTableSchema &table_schema, bool &is_ttl_table);
-  static int check_is_rowkey_ttl_table(const ObTableSchema &table_schema, bool &is_ttl_table);
-  static int get_tenant_table_ids(const uint64_t tenant_id, common::ObIArray<uint64_t> &table_id_array);
-  static int check_task_status_from_sys_table(uint64_t tenant_id, common::ObISQLClient& proxy,
+  static int check_is_normal_ttl_table(const share::schema::ObTableSchema &table_schema, bool &is_ttl_table);
+  static int check_is_rowkey_ttl_table(const share::schema::ObTableSchema &table_schema, bool &is_ttl_table);
+  static int get_tenant_table_ids(common::ObIArray<uint64_t> &table_id_array);
+  static int check_task_status_from_sys_table(common::ObISQLClient& proxy,
                                               const uint64_t& task_id, const uint64_t& table_id,
                                               ObTabletID& tablet_id, bool &is_exists, bool &is_end_state);
   static inline bool is_ttl_task_status_end_state(ObTTLTaskStatus status) {
     return status == ObTTLTaskStatus::OB_TTL_TASK_CANCEL || status == ObTTLTaskStatus::OB_TTL_TASK_FINISH;
   }
-  static bool is_enable_ttl(uint64_t tenant_id);
+  static bool is_enable_ttl();
   static const char *get_ttl_tenant_status_cstr(const ObTTLTaskStatus &status);
 
   static int get_ttl_columns(const ObString &ttl_definition, ObIArray<ObString> &ttl_columns);
   static bool is_ttl_column(const ObString &orig_column_name, const ObIArray<ObString> &ttl_columns);
-
+  static int check_kv_attributes(const share::schema::ObTableSchema &table_schema, bool by_admin = false);
+  static int check_kv_attributes(const ObString &kv_attributes,
+                                 const share::schema::ObTableSchema &table_schema,
+                                 share::schema::ObPartitionLevel part_level,
+                                 bool by_admin = false);
   const static uint64_t TTL_TENNAT_TASK_TABLET_ID = -1;
   const static uint64_t TTL_TENNAT_TASK_TABLE_ID = -1;
   const static uint64_t TTL_ROWKEY_TASK_TABLET_ID = -2;
   const static uint64_t TTL_ROWKEY_TASK_TABLE_ID = -2;
   const static uint64_t TTL_THREAD_MAX_SCORE = 100;
  private:
-  static int check_htable_ddl_supported_(const ObKVAttr &attr, bool by_admin);
+  static int check_is_htable_ttl_(const share::schema::ObTableSchema &table_schema, bool allow_timeseries_table, bool &is_ttl_table);
 private:
   static bool extract_val(const char* ptr, uint64_t len, int& val);
   static bool valid_digit(const char* ptr, uint64_t len);
@@ -400,8 +386,6 @@ private:
                                      const ObSimpleTTLInfo &ttl_info);
   static int get_all_user_tenant_ttl(common::ObIArray<ObSimpleTTLInfo> &ttl_info_array);
   static int parse_kv_attributes_table(json::Value *ast);
-  static int parse_kv_attributes_hbase(json::Value *ast, ObKVAttr &kv_attr);
-  static int parse_kv_attributes_redis(json::Value *ast, ObKVAttr &kv_attr);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTTLUtil);
 };
@@ -438,11 +422,10 @@ class ObTableTTLChecker
 public:
   ObTableTTLChecker()
   : ttl_definition_(),
-    row_cell_ids_(),
-    tenant_id_(common::OB_INVALID_TENANT_ID)
+    row_cell_ids_()
   {
-    ttl_definition_.set_attr(ObMemAttr(MTL_ID(), "TTLCheckerDef"));
-    row_cell_ids_.set_attr(ObMemAttr(MTL_ID(), "TTLCheckerCells"));
+    ttl_definition_.set_attr(ObMemAttr("TTLCheckerDef"));
+    row_cell_ids_.set_attr(ObMemAttr("TTLCheckerCells"));
   }
   ~ObTableTTLChecker() {}
   // init ttl checker with table schema, if in_full_column_order is true, the checked row
@@ -455,7 +438,7 @@ public:
 private:
   common::ObSEArray<ObTableTTLExpr, 8> ttl_definition_;
   common::ObSEArray<int64_t, 8> row_cell_ids_; // cell idx scaned row for each ttl expr
-  int64_t tenant_id_;
+  
   ObTimeZoneInfoWrap tz_info_wrap_;
 };
 

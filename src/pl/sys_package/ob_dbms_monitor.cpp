@@ -139,7 +139,7 @@ int ObDBMSMonitor::session_trace_disable(sql::ObExecContext &ctx, sql::ParamStor
   sql::ObSQLSessionInfo *sess = NULL;
   sql::ObSQLSessionMgr *session_mgr = GCTX.session_mgr_;
   ObString sess_id_str(sess_id.format());
-  ObFLTControlInfoManager mgr(GET_MY_SESSION(ctx)->get_effective_tenant_id());
+  ObFLTControlInfoManager mgr;
   FLTControlInfo con;
 
   if (OB_FAIL(ret)) {
@@ -192,7 +192,7 @@ int ObDBMSMonitor::client_id_trace_enable(sql::ObExecContext &ctx, sql::ParamSto
   OZ (params.at(3).get_string(record_policy));
   ObIdentifierConInfo i_co;
   i_co.identifier_name_ = client_id;
-  ObFLTControlInfoManager mgr(GET_MY_SESSION(ctx)->get_effective_tenant_id());
+  ObFLTControlInfoManager mgr;
   int64_t idx = -1;
   if (OB_FAIL(ret)) {
     // do nothing
@@ -219,7 +219,7 @@ int ObDBMSMonitor::client_id_trace_disable(sql::ObExecContext &ctx, sql::ParamSt
   CK (OB_LIKELY(1 == params.count()));
   OV (params.at(0).is_varchar(), OB_INVALID_ARGUMENT);
   OZ (params.at(0).get_string(client_id));
-  ObFLTControlInfoManager mgr(GET_MY_SESSION(ctx)->get_effective_tenant_id());
+  ObFLTControlInfoManager mgr;
   int64_t idx = -1;
   if (OB_FAIL(ret)) {
     // do nothing
@@ -260,7 +260,7 @@ int ObDBMSMonitor::mod_act_trace_enable(sql::ObExecContext &ctx, sql::ParamStore
   ObModActConInfo m_co;
   m_co.mod_name_ = mod_name;
   m_co.act_name_ = act_name;
-  ObFLTControlInfoManager mgr(GET_MY_SESSION(ctx)->get_effective_tenant_id());
+  ObFLTControlInfoManager mgr;
   int64_t idx = -1;
   if (OB_FAIL(ret)) {
     // do nothing
@@ -290,7 +290,7 @@ int ObDBMSMonitor::mod_act_trace_disable(sql::ObExecContext &ctx, sql::ParamStor
   OZ (params.at(0).get_string(mod_name));
   OV (params.at(1).is_varchar(), OB_INVALID_ARGUMENT);
   OZ (params.at(1).get_string(act_name));
-  ObFLTControlInfoManager mgr(GET_MY_SESSION(ctx)->get_effective_tenant_id());
+  ObFLTControlInfoManager mgr;
   int64_t idx = -1;
   if (OB_FAIL(ret)) {
     // do nothing
@@ -323,7 +323,7 @@ int ObDBMSMonitor::tenant_trace_enable(sql::ObExecContext &ctx, sql::ParamStore 
   OV (params.at(2).is_varchar(), OB_INVALID_ARGUMENT);
   OZ (params.at(2).get_string(record_policy));
   FLTControlInfo con;
-  ObFLTControlInfoManager mgr(GET_MY_SESSION(ctx)->get_effective_tenant_id());
+  ObFLTControlInfoManager mgr;
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(mgr.init())) {
@@ -364,7 +364,7 @@ int ObDBMSMonitor::tenant_trace_disable(sql::ObExecContext &ctx, sql::ParamStore
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "tenant name");
   }
 
-  ObFLTControlInfoManager mgr(GET_MY_SESSION(ctx)->get_effective_tenant_id());
+  ObFLTControlInfoManager mgr;
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(mgr.init())) {

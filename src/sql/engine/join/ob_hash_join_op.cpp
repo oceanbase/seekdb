@@ -174,7 +174,6 @@ ObHashJoinOp::ObHashJoinOp(ObExecContext &ctx_, const ObOpSpec &spec, ObOpInput 
   part_count_(0),
   force_hash_join_spill_(false),
   hash_join_processor_(7),
-  tenant_id_(-1),
   input_size_(0),
   total_extra_size_(0),
   predict_row_cnt_(1024),
@@ -390,27 +389,21 @@ int ObHashJoinOp::inner_open()
   } else if (OB_ISNULL(session = ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get my session", K(ret));
-  } else if (OB_FAIL(init_mem_context(session->get_effective_tenant_id()))) {
+  } else if (OB_FAIL(init_mem_context())) {
     LOG_WARN("fail to init base join ctx", K(ret));
   } else if (OB_FAIL(hash_table_.init(*alloc_))) {
     LOG_WARN("fail to init hash table", K(ret));
   } else {
     init_system_parameters();
-    tenant_id_ = session->get_effective_tenant_id();
+    
     first_get_row_ = true;
-    ObTenantConfigGuard tenant_config(TENANT_CONF(session->get_effective_tenant_id()));
-    if (tenant_config.is_valid()) {
-      force_hash_join_spill_ = tenant_config->_force_hash_join_spill;
-      hash_join_processor_ = tenant_config->_enable_hash_join_processor;
-      if (0 == (hash_join_processor_ & HJ_PROCESSOR_MASK)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect hash join processor", K(ret), K(hash_join_processor_));
-      } else if (OB_FAIL(set_hash_function())) {
-        LOG_WARN("unexpect hash join function", K(ret));
-      }
-    } else {
+    force_hash_join_spill_ = GCONF._force_hash_join_spill;
+    hash_join_processor_ = GCONF._enable_hash_join_processor;
+    if (0 == (hash_join_processor_ & HJ_PROCESSOR_MASK)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid tenant config", K(ret));
+      LOG_WARN("unexpect hash join processor", K(ret), K(hash_join_processor_));
+    } else if (OB_FAIL(set_hash_function())) {
+      LOG_WARN("unexpect hash join function", K(ret));
     }
     if (is_vectorized()) {
       if (INNER_JOIN == MY_SPEC.join_type_) {
@@ -483,7 +476,7 @@ int ObHashJoinOp::inner_open()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc mem");
     } else {
-      batch_mgr_ = new (buf) ObHashJoinBatchMgr(*alloc_, buf_mgr_, tenant_id_);
+      batch_mgr_ = new (buf) ObHashJoinBatchMgr(*alloc_, buf_mgr_);
     }
   }
   if (OB_SUCC(ret)) {
@@ -1369,17 +1362,17 @@ int ObHashJoinOp::get_max_memory_size(int64_t input_size)
 {
   int ret = OB_SUCCESS;
   int64_t hash_area_size = 0;
-  const int64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+  
   // default data memory size: 80%
   int64_t extra_memory_size = get_extra_memory_size();
   int64_t memory_size = (extra_memory_size + input_size) < 0 ? input_size : (extra_memory_size + input_size);
   if (OB_FAIL(ObSqlWorkareaUtil::get_workarea_size(
-      ObSqlWorkAreaType::HASH_WORK_AREA, tenant_id, &ctx_, hash_area_size))) {
-    LOG_WARN("failed to get workarea size", K(ret), K(tenant_id));
+      ObSqlWorkAreaType::HASH_WORK_AREA, &ctx_, hash_area_size))) {
+    LOG_WARN("failed to get workarea size", K(ret));
   } else if (FALSE_IT(remain_data_memory_size_ = hash_area_size * 80 / 100)) {
     // default data memory size: 80%
   } else if (OB_FAIL(sql_mem_processor_.init(
-      alloc_, tenant_id, memory_size, MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
+      alloc_, memory_size, MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
     LOG_WARN("failed to init sql mem mgr", K(ret));
   } else if (sql_mem_processor_.is_auto_mgr()) {
     remain_data_memory_size_ = calc_max_data_size(extra_memory_size);
@@ -1635,8 +1628,7 @@ int ObHashJoinOp::get_processor_type()
       // force remain more memory
       int64_t hash_area_size = 0;
       if (OB_FAIL(ObSqlWorkareaUtil::get_workarea_size(
-          ObSqlWorkAreaType::HASH_WORK_AREA,
-          ctx_.get_my_session()->get_effective_tenant_id(), &ctx_, hash_area_size))) {
+          ObSqlWorkAreaType::HASH_WORK_AREA, &ctx_, hash_area_size))) {
         LOG_WARN("failed to get workarea size", K(ret));
       }
       remain_data_memory_size_ = hash_area_size * 10;

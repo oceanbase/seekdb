@@ -20,7 +20,7 @@
 #include "sql/optimizer/ob_join_order.h"
 #include "ob_opt_est_parameter_normal.h"
 #include "ob_opt_est_parameter_vector.h"
-#include "share/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "ob_opt_est_cost_model_vector.h"
 #include "ob_opt_est_parameter_normal.h"
 #include "ob_opt_est_parameter_vector.h"

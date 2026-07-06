@@ -16,7 +16,7 @@ oceanbase-ce:
     log_disk_percentage: '10'
     system_memory: '10G'
     cpu_count: '24'
-    stack_size: '512K'
+    stack_size: '256K'
     cache_wash_threshold: '1G'
     __min_full_resource_pool_memory: "1073741824"
     workers_per_cpu_quota: '10'

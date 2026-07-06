@@ -11,7 +11,7 @@ while($__i__ > 0)
   dec $__j__;
 
   if ($TENANT == 'mysql') {
-    let $__memstore_cnt__ = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_memstore_info where tablet_id >= 200000, cnt, 1);
+    let $__memstore_cnt__ = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_tablet_memstore_info where tablet_id >= 200000, cnt, 1);
   }
   if ($TENANT == 'oracle') {
     select count(*) into @cnt from SYS.gv$ob_memstore_info where tablet_id >= 200000;

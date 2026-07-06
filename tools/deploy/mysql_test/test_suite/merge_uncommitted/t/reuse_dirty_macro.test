@@ -24,8 +24,8 @@ drop table if exists test_uncommitted_trx_minor_merge;
 create table test_uncommitted_trx_minor_merge(c1 int primary key, c2 int, c3 varchar(2048)) compression "none";
 
 connection conn0;
-let $__tenant_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ tenant_id from oceanbase.__all_virtual_table where table_name= 'test_uncommitted_trx_minor_merge', tenant_id, 1);
-let $__table_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_virtual_table where table_name= 'test_uncommitted_trx_minor_merge', table_id, 1);
+let $__tenant_id__=1;
+let $__table_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_table where table_name= 'test_uncommitted_trx_minor_merge', table_id, 1);
 
 # prepare data, insert rows more than one macro
 --disable_query_log
@@ -72,7 +72,7 @@ connection conn1;
 select count(1) from test_uncommitted_trx_minor_merge;
 
 connection conn0;
-let $use_old=query_get_value(select multiplexed_macro_block_count from oceanbase.__all_virtual_tablet_compaction_history where tablet_id in (select tablet_id from __all_virtual_tablet_to_ls where table_id = $__table_id__ and tenant_id=$__tenant_id__) order by finish_time desc limit 1, multiplexed_macro_block_count, 1);
+let $use_old=query_get_value(select multiplexed_macro_block_count from oceanbase.__all_virtual_tablet_compaction_history where tablet_id in (select tablet_id from __all_tablet_to_ls where table_id = $__table_id__) order by finish_time desc limit 1, multiplexed_macro_block_count, 1);
 if ($use_old > 0)
 {
   --echo should not reuse macro

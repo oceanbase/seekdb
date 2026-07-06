@@ -15,12 +15,13 @@
  */
 
 #define USING_LOG_PREFIX SERVER_OMT
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_tenant_srs.h"
-#include "observer/ob_sql_client_decorator.h"
+#include "share/ob_sql_client_decorator.h"
 #include "src/share/ob_server_struct.h"
-#include "share/ob_srs_importer.h"
+#include "sql/engine/cmd/ob_srs_importer.h"
 #include "share/ob_internal_table_change_notifier.h"
-#include "lib/geo/ob_geo_utils.h"
+#include "share/geo/ob_geo_utils.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -61,11 +62,10 @@ int ObTenantSrs::init()
 {
   int ret = OB_SUCCESS;
   sql_proxy_ = GCTX.sql_proxy_;
-  lib::ObMemAttr mem_attr(MTL_ID(), "TenantSrs");
+  lib::ObMemAttr mem_attr("TenantSrs");
   if (inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTenantSrs init twice.", K(ret));
-  } else if (FALSE_IT(alloc_.set_tenant_id(MTL_ID()))) {
   } else if (OB_FAIL(allocator_.init(&alloc_, OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
     LOG_WARN("ObTenantSrs allocator init failed.", K(ret));
   } else {
@@ -81,7 +81,7 @@ int ObTenantSrs::init()
     infinite_plane_.maxY_ = INT32_MAX;
     share::ObInternalTableChangeNotifier::get_instance().register_module(
         table::ObModuleDataArg::GIS,
-        [](uint64_t /*tenant_id*/) -> int {
+        []() -> int {
           OTSRS_MGR->mark_stale();
           LOG_INFO("[SRS] marked stale by notifier");
           return OB_SUCCESS;
@@ -133,7 +133,7 @@ int ObTenantSrs::get_tenant_srs_guard(ObSrsCacheGuard &srs_guard)
   } else if (OB_FAIL(refresh_sys_srs())) {
     ATOMIC_STORE(&srs_stale_, false);
     ret = OB_ERR_SRS_EMPTY;
-    LOG_WARN("srs data not available", K(ret), K(MTL_ID()));
+    LOG_WARN("srs data not available", K(ret));
     LOG_USER_ERROR(OB_ERR_SRS_EMPTY);
   } else {
     ATOMIC_STORE(&srs_stale_, false);
@@ -168,7 +168,7 @@ int ObTenantSrs::refresh_sys_srs()
 {
   int ret = OB_SUCCESS;
   ObSrsCacheSnapShot *srs = NULL;
-  const uint64_t tenant_id = MTL_ID();
+  
   if (OB_FAIL(fetch_all_srs(srs))) {
     if (ret == OB_ERR_EMPTY_QUERY) {
       LOG_DEBUG("srs table is empty");
@@ -201,7 +201,7 @@ int ObTenantSrs::refresh_sys_srs()
         }
       }
       LOG_INFO("[SRS] refresh succeeded", K(srs->get_srs_count()),
-               K(srs_old_snapshots_.size()), K(tenant_id));
+               K(srs_old_snapshots_.size()));
     }
   }
   return ret;
@@ -234,28 +234,28 @@ int ObTenantSrs::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot)
   int ret = OB_SUCCESS;
   ObSrsCacheSnapShot *snapshot = NULL;
   uint32_t res_count = 0;
-  const uint64_t tenant_id = MTL_ID();
+  
   int64_t srs_cnt = 0;
   const int TOTAL_SRS_CNT = 5152;
 
-  if (OB_FAIL(table::ObSRSImporter::get_srs_cnt(sql_proxy_, tenant_id, srs_cnt))) {
+  if (OB_FAIL(table::ObSRSImporter::get_srs_cnt(sql_proxy_, srs_cnt))) {
     LOG_WARN("get srs cnt failed", K(ret));
   } else if (srs_cnt < TOTAL_SRS_CNT) {
     if (srs_cnt > 1) {
-      LOG_INFO("srs is importing, retry fetch later", K(srs_cnt), K(tenant_id));
+      LOG_INFO("srs is importing, retry fetch later", K(srs_cnt));
     }
     ret = OB_ERR_EMPTY_QUERY;
   } else {
     ObSqlString sql;
-    ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy_, tenant_id, OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TID);
+    ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy_, true, OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TID);
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::OMT_FETCH_ALL_SRS);
       ObMySQLResult *result = NULL;
       if (OB_FAIL(sql.append_fmt("SELECT * FROM %s WHERE (SRS_ID < %d AND SRS_ID != 0) OR SRS_ID > %d",
           OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TNAME, USER_SRID_MIN, USER_SRID_MAX))) {
         LOG_WARN("append sql failed", K(ret));
-      } else if (OB_FAIL(sql_client_retry_weak.read(res, tenant_id, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(sql), K(ret), K(tenant_id));
+      } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
+        LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
@@ -356,7 +356,7 @@ int ObSrsCacheSnapShot::parse_srs_item(ObMySQLResult *result, const ObSrsItem *&
   double max_x = NAN;
   double max_y = NAN;
   ObSpatialReferenceSystemBase *srs_info = NULL;
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(common::OB_SERVER_TENANT_ID, "SRSWKTParser"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("SRSWKTParser"));
 
   EXTRACT_UINT_FIELD_MYSQL(*result, "srs_id", srs_id, uint64_t);
   EXTRACT_VARCHAR_FIELD_MYSQL(*result, "srs_name", srs_name);
@@ -399,7 +399,7 @@ int ObSrsCacheSnapShot::add_pg_reserved_srs_item(const ObString &pg_wkt, const u
   int ret = OB_SUCCESS;
   ObString proj4text;
   ObSpatialReferenceSystemBase *srs_info = NULL;
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(common::OB_SERVER_TENANT_ID, "SRSWKTParser"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("SRSWKTParser"));
 
   if (OB_FAIL(ObSrsWktParser::parse_srs_wkt(allocator_, srs_id, pg_wkt, srs_info))) {
     LOG_WARN("failed to parse pg reserved srs wkt", K(ret), K(srs_id), K(pg_wkt));
@@ -490,3 +490,30 @@ int ObTenantSrs::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
 
 }  // omt
 }  // oceanbase
+
+
+// ── share/object obj_cast SRS hook registration(see share/object/ob_obj_cast_hooks.h)──
+#include "share/object/ob_obj_cast_hooks.h"
+namespace oceanbase {
+namespace omt {
+static int obj_cast_get_srs_item_impl(uint64_t srid, const common::ObSrsItem *&srs,
+                                      common::ObSrsGuardErased &guard)
+{
+  int ret = common::OB_SUCCESS;
+  ObSrsCacheGuard *g = new (std::nothrow) ObSrsCacheGuard();
+  if (nullptr == g) {
+    ret = common::OB_ALLOCATE_MEMORY_FAILED;
+  } else if (common::OB_SUCCESS != (ret = OTSRS_MGR->get_tenant_srs_guard(*g))) {
+    delete g;
+  } else if (common::OB_SUCCESS != (ret = g->get_srs_item(srid, srs))) {
+    delete g;
+  } else {
+    guard.impl_ = g;
+    guard.release_ = [](void *p) { delete static_cast<ObSrsCacheGuard *>(p); };
+  }
+  return ret;
+}
+static const bool g_reg_obj_cast_srs_hook =
+    (common::g_obj_cast_get_srs_item = obj_cast_get_srs_item_impl, true);
+}  // namespace omt
+}  // namespace oceanbase

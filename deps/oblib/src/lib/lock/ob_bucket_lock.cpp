@@ -40,11 +40,10 @@ ObBucketLock::~ObBucketLock()
 int ObBucketLock::init(
   const uint64_t bucket_cnt,
   const uint32_t latch_id,
-  const lib::ObLabel &label,
-  const uint64_t tenant_id)
+  const lib::ObLabel &label)
 {
   attr_.label_ = label;
-  attr_.tenant_id_ = tenant_id;
+  
   return init(bucket_cnt, latch_id, attr_);
 }
 
@@ -58,8 +57,7 @@ int ObBucketLock::init(
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "The ObBucketLock has been inited, ", K(ret));
   } else if (OB_UNLIKELY(0 == bucket_cnt)
-    || OB_UNLIKELY(latch_id >= ObLatchIds::LATCH_END)
-    || OB_UNLIKELY(OB_INVALID_ID == attr.tenant_id_)) {
+    || OB_UNLIKELY(latch_id >= ObLatchIds::LATCH_END)) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Invalid argument, ", K(bucket_cnt), K(latch_id), K(ret));
   } else {

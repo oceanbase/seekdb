@@ -424,11 +424,9 @@ TEST(TestObHashMap, buckect_iterator)
 class MockObMalloc: public ObIAllocator
 {
 public:
-  MockObMalloc(const oceanbase::lib::ObLabel &label = ObModIds::TEST,
-      int64_t tenant_id = OB_SERVER_TENANT_ID) : alloc_count_(0)
+  MockObMalloc(const oceanbase::lib::ObLabel &label = ObModIds::TEST) : alloc_count_(0)
   {
     UNUSED(label);
-    UNUSED(tenant_id);
   }
   MockObMalloc(ObIAllocator &allocator)
   {

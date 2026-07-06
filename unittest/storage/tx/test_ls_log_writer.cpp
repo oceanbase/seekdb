@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "lib/ob_name_id_def.h"
+#include "lib/json/ob_yson.h"
 #include "ob_mock_tx_log_adapter.h"
 #include "storage/tx/ob_trans_ctx_mgr.h"
 #include <gtest/gtest.h>
@@ -31,7 +33,7 @@ int ObTxLSLogCb::alloc_log_buf_()
 {
   int ret = OB_SUCCESS;
 
-  ObMemAttr attr(OB_SERVER_TENANT_ID, "TxLSLogBuf");
+  ObMemAttr attr("TxLSLogBuf");
   SET_USE_500(attr);
   if (0 == ObTxLSLogLimit::LOG_BUF_SIZE || nullptr != log_buf_) {
     ret = OB_INVALID_ARGUMENT;
@@ -75,7 +77,6 @@ const ObLSID TEST_LS_ID(735);
 
 TEST_F(TestLSLogWriter, submit_start_working_log)
 {
-  int64_t tmp_tenant_id = 1;
   ObLSTxCtxMgr tmp_mgr;
   common::ObConcurrentFIFOAllocator tmp_allocator;
 
@@ -88,7 +89,7 @@ TEST_F(TestLSLogWriter, submit_start_working_log)
   ObTxStartWorkingLog sw_log(tmp_ref);
   int64_t test_leader_epoch = 1308;
 
-  ASSERT_EQ(OB_SUCCESS, ls_log_writer.init(tmp_tenant_id, TEST_LS_ID, &tx_log_adapter,
+  ASSERT_EQ(OB_SUCCESS, ls_log_writer.init(TEST_LS_ID, &tx_log_adapter,
                                            (ObLSTxCtxMgr *)&tmp_mgr));
   ASSERT_EQ(OB_SUCCESS, ls_log_writer.submit_start_working_log(test_leader_epoch, log_ts));
 

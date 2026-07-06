@@ -17,22 +17,24 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/catalog/ob_catalog_meta_getter.h"
-#include "src/share/catalog/ob_catalog_properties.h"
+#include "share/schema/ob_column_schema.h"  // ObColumnSchemaV2 complete type
+#include "share/catalog/ob_catalog_properties.h"
 
 namespace oceanbase
 {
 namespace share
 {
 
-int ObCatalogMetaGetter::list_namespace_names(const uint64_t tenant_id, const uint64_t catalog_id, ObIArray<ObString> &ns_names)
+using namespace oceanbase::share::schema;  // make the transitive using declaration explicit
+int ObCatalogMetaGetter::list_namespace_names(const uint64_t catalog_id, ObIArray<ObString> &ns_names)
 {
   int ret = OB_SUCCESS;
   ObIExternalCatalog *catalog = nullptr;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || !is_external_catalog_id(catalog_id))) {
+  if (OB_UNLIKELY(!true || !is_external_catalog_id(catalog_id))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(catalog_id));
-  } else if (OB_FAIL(get_catalog_(tenant_id, catalog_id, catalog))) {
-    LOG_WARN("failed to get catalog", K(ret), K(tenant_id), K(catalog_id));
+    LOG_WARN("invalid argument", K(ret), K(catalog_id));
+  } else if (OB_FAIL(get_catalog_( catalog_id, catalog))) {
+    LOG_WARN("failed to get catalog", K(ret), K(catalog_id));
   } else if (OB_ISNULL(catalog)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("catalog is nullptr", K(ret));
@@ -42,20 +44,19 @@ int ObCatalogMetaGetter::list_namespace_names(const uint64_t tenant_id, const ui
   return ret;
 }
 
-int ObCatalogMetaGetter::list_table_names(const uint64_t tenant_id,
-                                          const uint64_t catalog_id,
+int ObCatalogMetaGetter::list_table_names(const uint64_t catalog_id,
                                           const common::ObString &ns_name,
                                           const ObNameCaseMode case_mode,
                                           common::ObIArray<common::ObString> &tbl_names)
 {
   int ret = OB_SUCCESS;
   ObIExternalCatalog *catalog = nullptr;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || !is_external_catalog_id(catalog_id) || ns_name.empty()
+  if (OB_UNLIKELY(!true || !is_external_catalog_id(catalog_id) || ns_name.empty()
                   || OB_NAME_CASE_INVALID == case_mode)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid case mode", K(ret), K(tenant_id), K(catalog_id), K(ns_name), K(case_mode));
-  } else if (OB_FAIL(get_catalog_(tenant_id, catalog_id, catalog))) {
-    LOG_WARN("failed to get catalog", K(ret), K(tenant_id), K(catalog_id));
+    LOG_WARN("invalid case mode", K(ret), K(catalog_id), K(ns_name), K(case_mode));
+  } else if (OB_FAIL(get_catalog_( catalog_id, catalog))) {
+    LOG_WARN("failed to get catalog", K(ret), K(catalog_id));
   } else if (OB_ISNULL(catalog)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("catalog is nullptr", K(ret));
@@ -66,21 +67,19 @@ int ObCatalogMetaGetter::list_table_names(const uint64_t tenant_id,
 }
 
 // database_schema's database_id should assign correct before call this function
-int ObCatalogMetaGetter::fetch_namespace_schema(const uint64_t tenant_id,
-                                                const uint64_t catalog_id,
+int ObCatalogMetaGetter::fetch_namespace_schema(const uint64_t catalog_id,
                                                 const common::ObString &ns_name,
                                                 const ObNameCaseMode case_mode,
                                                 share::schema::ObDatabaseSchema &database_schema)
 {
   int ret = OB_SUCCESS;
   ObIExternalCatalog *catalog = nullptr;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || !is_external_catalog_id(catalog_id) || ns_name.empty()
+  if (OB_UNLIKELY(!true || !is_external_catalog_id(catalog_id) || ns_name.empty()
                   || !is_external_object_id(database_schema.get_database_id()) || OB_NAME_CASE_INVALID == case_mode)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(catalog_id), K(ns_name), K(case_mode), K(database_schema.get_database_id()));
-  } else if (OB_FALSE_IT(database_schema.set_tenant_id(tenant_id))) {
+    LOG_WARN("invalid argument", K(ret), K(catalog_id), K(ns_name), K(case_mode), K(database_schema.get_database_id()));
   } else if (OB_FALSE_IT(database_schema.set_catalog_id(catalog_id))) {
-  } else if (OB_FAIL(get_catalog_(tenant_id, catalog_id, catalog))) {
+  } else if (OB_FAIL(get_catalog_( catalog_id, catalog))) {
     LOG_WARN("failed to get catalog", K(ret));
   } else if (OB_ISNULL(catalog)) {
     ret = OB_ERR_UNEXPECTED;
@@ -95,8 +94,7 @@ int ObCatalogMetaGetter::fetch_namespace_schema(const uint64_t tenant_id,
 }
 
 // table_schema's table_id/database_id should assign correct before call this function
-int ObCatalogMetaGetter::fetch_table_schema(const uint64_t tenant_id,
-                                            const uint64_t catalog_id,
+int ObCatalogMetaGetter::fetch_table_schema(const uint64_t catalog_id,
                                             const common::ObString &ns_name,
                                             const common::ObString &tbl_name,
                                             const ObNameCaseMode case_mode,
@@ -104,22 +102,21 @@ int ObCatalogMetaGetter::fetch_table_schema(const uint64_t tenant_id,
 {
   int ret = OB_SUCCESS;
   ObIExternalCatalog *catalog = nullptr;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || !is_external_catalog_id(catalog_id)
+  if (OB_UNLIKELY(!true || !is_external_catalog_id(catalog_id)
                   || !is_external_object_id(table_schema.get_database_id()) || !is_external_object_id(table_schema.get_table_id())
                   || ns_name.empty() || tbl_name.empty() || OB_NAME_CASE_INVALID == case_mode)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument",
              K(ret),
-             K(tenant_id),
+             
              K(catalog_id),
              K(ns_name),
              K(tbl_name),
              K(case_mode),
              K(table_schema.get_database_id()),
              K(table_schema.get_table_id()));
-  } else if (OB_FALSE_IT(table_schema.set_tenant_id(tenant_id))) {
   } else if (OB_FALSE_IT(table_schema.set_catalog_id(catalog_id))) {
-  } else if (OB_FAIL(get_catalog_(tenant_id, catalog_id, catalog))) {
+  } else if (OB_FAIL(get_catalog_( catalog_id, catalog))) {
     LOG_WARN("failed to get catalog", K(ret));
   } else if (OB_ISNULL(catalog)) {
     ret = OB_ERR_UNEXPECTED;
@@ -131,7 +128,7 @@ int ObCatalogMetaGetter::fetch_table_schema(const uint64_t tenant_id,
     uint64_t COL_IDS[2] = {OB_HIDDEN_FILE_ID_COLUMN_ID, OB_HIDDEN_LINE_NUMBER_COLUMN_ID};
     const char *COL_NAMES[2] = {OB_HIDDEN_FILE_ID_COLUMN_NAME, OB_HIDDEN_LINE_NUMBER_COLUMN_NAME};
     for (int i = 0; OB_SUCC(ret) && i < array_elements(COL_IDS); i++) {
-      ObColumnSchemaV2 hidden_pk;
+      schema::ObColumnSchemaV2 hidden_pk;
       hidden_pk.reset();
       hidden_pk.set_column_id(COL_IDS[i]);
       hidden_pk.set_data_type(ObIntType);
@@ -148,13 +145,12 @@ int ObCatalogMetaGetter::fetch_table_schema(const uint64_t tenant_id,
         }
       }
     }
-    table_schema.set_table_pk_exists_mode(ObTablePrimaryKeyExistsMode::TOM_TABLE_WITHOUT_PK);
+    table_schema.set_table_pk_exists_mode(schema::ObTablePrimaryKeyExistsMode::TOM_TABLE_WITHOUT_PK);
   }
   return ret;
 }
 
-int ObCatalogMetaGetter::fetch_basic_table_info(const uint64_t tenant_id,
-                                                const uint64_t catalog_id,
+int ObCatalogMetaGetter::fetch_basic_table_info(const uint64_t catalog_id,
                                                 const common::ObString &ns_name,
                                                 const common::ObString &tbl_name,
                                                 const ObNameCaseMode case_mode,
@@ -162,11 +158,11 @@ int ObCatalogMetaGetter::fetch_basic_table_info(const uint64_t tenant_id,
 {
   int ret = OB_SUCCESS;
   ObIExternalCatalog *catalog = nullptr;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || !is_external_catalog_id(catalog_id) || ns_name.empty() || tbl_name.empty()
+  if (OB_UNLIKELY(!true || !is_external_catalog_id(catalog_id) || ns_name.empty() || tbl_name.empty()
                   || OB_NAME_CASE_INVALID == case_mode)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(catalog_id), K(ns_name), K(tbl_name), K(case_mode));
-  } else if (OB_FAIL(get_catalog_(tenant_id, catalog_id, catalog))) {
+    LOG_WARN("invalid argument", K(ret), K(catalog_id), K(ns_name), K(tbl_name), K(case_mode));
+  } else if (OB_FAIL(get_catalog_( catalog_id, catalog))) {
     LOG_WARN("failed to get catalog", K(ret));
   } else if (OB_ISNULL(catalog)) {
     ret = OB_ERR_UNEXPECTED;
@@ -177,14 +173,14 @@ int ObCatalogMetaGetter::fetch_basic_table_info(const uint64_t tenant_id,
   return ret;
 }
 
-int ObCatalogMetaGetter::get_catalog_(const uint64_t tenant_id, const uint64_t catalog_id, ObIExternalCatalog *&catalog)
+int ObCatalogMetaGetter::get_catalog_(const uint64_t catalog_id, ObIExternalCatalog *&catalog)
 {
   int ret = OB_SUCCESS;
   catalog = nullptr;
-  const ObCatalogSchema *schema = nullptr;
+  const schema::ObCatalogSchema *schema = nullptr;
   ObCatalogProperties::CatalogType catalog_type = ObCatalogProperties::CatalogType::INVALID_TYPE;
-  if (OB_FAIL(schema_getter_guard_.get_catalog_schema_by_id(tenant_id, catalog_id, schema))) {
-    LOG_WARN("failed to get catalog schema", K(ret), K(tenant_id), K(catalog_id));
+  if (OB_FAIL(schema_getter_guard_.get_catalog_schema_by_id( catalog_id, schema))) {
+    LOG_WARN("failed to get catalog schema", K(ret), K(catalog_id));
   } else if (OB_ISNULL(schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema is nullptr", K(ret));

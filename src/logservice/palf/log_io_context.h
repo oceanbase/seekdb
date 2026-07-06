@@ -87,7 +87,7 @@ public:
   LogIOContext();
   // do not get group_id
   LogIOContext(const LogIOUser &user);
-  LogIOContext(const uint64_t tenant_id, const int64_t palf_id, const LogIOUser &user);
+  LogIOContext(const int64_t palf_id, const LogIOUser &user);
   ~LogIOContext() { destroy(); }
   bool is_valid() const
   {

@@ -19,7 +19,7 @@
 
 #include "common/object/ob_object.h"
 #include "common/ob_field.h"
-#include "rpc/obmysql/ob_mysql_global.h"
+#include "common/mysqlclient/ob_mysql_global.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/container/ob_fixed_array.h"
@@ -27,7 +27,7 @@
 #include "lib/utility/utility.h"
 #include "common/ob_accuracy.h"
 #include "common/object/ob_obj_type.h"
-#include "lib/enumset/ob_enum_set_meta.h"
+#include "common/enumset/ob_enum_set_meta.h"
 #include "share/object/ob_obj_cast.h"
 
 namespace oceanbase

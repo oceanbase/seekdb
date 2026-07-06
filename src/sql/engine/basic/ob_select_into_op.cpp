@@ -24,7 +24,7 @@
 #include "lib/charset/ob_charset_string_helper.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
-#include "lib/udt/ob_collection_type.h"
+#include "common/udt/ob_collection_type.h"
 #include "share/config/ob_server_config.h"
 
 #ifndef OB_BUILD_EMBED_MODE
@@ -83,17 +83,6 @@ int ObSelectIntoOp::inner_open()
       {
         if (OB_FAIL(init_csv_env())) {
           LOG_WARN("failed to init csv env", K(ret));
-        }
-        break;
-      }
-      case ObExternalFileFormat::FormatType::ODPS_FORMAT:
-      {
-        if (!GCONF._use_odps_jni_connector) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not support odps format", K(ret));
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not support odps format", K(ret));
         }
         break;
       }
@@ -221,7 +210,7 @@ int ObSelectIntoOp::init_env_common()
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "select array/map into variables");
   } else if (do_partition_
-             && OB_FAIL(partition_map_.create(128, ObLabel("SelectInto"), ObLabel("SelectInto"), MTL_ID()))) {
+             && OB_FAIL(partition_map_.create(128, ObLabel("SelectInto"), ObLabel("SelectInto")))) {
     LOG_WARN("failed to create hashmap", K(ret));
   } else if (MY_SPEC.select_exprs_.count() != MY_SPEC.alias_names_.strs_.count()) {
     ret = OB_ERR_UNEXPECTED;
@@ -289,7 +278,7 @@ int ObSelectIntoOp::calc_url_and_set_access_info()
   }
   return ret;
 }
-// csv, odps supports batch and non-batch interfaces; parquet, orc only supports batch interface; non-batch interface will be discontinued later
+// csv supports batch and non-batch interfaces; parquet, orc only supports batch interface; non-batch interface will be discontinued later
 int ObSelectIntoOp::inner_get_next_row()
 {
   int ret = 0 == top_limit_cnt_ ? OB_ITER_END : OB_SUCCESS;
@@ -297,8 +286,7 @@ int ObSelectIntoOp::inner_get_next_row()
   const ObItemType into_type = MY_SPEC.into_type_;
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
   ObExternalFileWriter *data_writer = NULL;
-  if (ObExternalFileFormat::FormatType::CSV_FORMAT != format_type_
-      && ObExternalFileFormat::FormatType::ODPS_FORMAT != format_type_) {
+  if (ObExternalFileFormat::FormatType::CSV_FORMAT != format_type_) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("this type not supported in not batch interface", K(ret), K(format_type_));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "this upload type");
@@ -321,21 +309,7 @@ int ObSelectIntoOp::inner_get_next_row()
       }
     } else {
       ++row_count;
-      if (ObExternalFileFormat::FormatType::ODPS_FORMAT == format_type_) {
-        if (is_odps_cpp_table_ == is_odps_java_table_) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid table mode for odps table", K(ret),
-                   K(is_odps_cpp_table_), K(is_odps_java_table_));
-        } else if (is_odps_cpp_table_) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "external odps cpp table");
-          LOG_WARN("use supported version", K(ret));
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "external odps table");
-          LOG_WARN("not support jni odps single write", K(ret));
-        }
-      } else if (T_INTO_VARIABLES == into_type) {
+      if (T_INTO_VARIABLES == into_type) {
         if (OB_FAIL(into_varlist())) {
           LOG_WARN("into varlist failed", K(ret));
         }
@@ -411,15 +385,7 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
       if (brs_.size_ > 0) {
         brs_.skip_->deep_copy(*(child_brs->skip_), brs_.size_);
         row_count += brs_.size_ - brs_.skip_->accumulate_bit_cnt(brs_.size_);
-        if (ObExternalFileFormat::FormatType::ODPS_FORMAT == format_type_) {
-          if (!GCONF._use_odps_jni_connector) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("odps cpp connector is not supported", K(ret));
-          } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("odps jni connector is not supported", K(ret));
-          }
-        } else if (T_INTO_OUTFILE == into_type) {
+        if (T_INTO_OUTFILE == into_type) {
           if (ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_) {
             if (OB_FAIL(into_outfile_batch_csv(brs_, data_writer))) {
               LOG_WARN("csv into outfile batch failed", K(ret));
@@ -490,15 +456,7 @@ int ObSelectIntoOp::inner_close()
   int ret = OB_SUCCESS;
   ObExternalFileWriter *data_writer = NULL;
   int64_t estimated_bytes = 0;
-  if (ObExternalFileFormat::FormatType::ODPS_FORMAT == format_type_) {
-    if (!GCONF._use_odps_jni_connector) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("odps jni connector is not supported", K(ret));
-    } else {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("odps jni connector is not supported", K(ret));
-    }
-  } else if (do_partition_) {
+  if (do_partition_) {
     for (ObPartitionWriterMap::iterator iter = partition_map_.begin();
          OB_SUCC(ret) && iter != partition_map_.end(); iter++) {
       if (OB_ISNULL(data_writer = iter->second)) {
@@ -1511,7 +1469,7 @@ int ObSelectIntoOp::calc_byte_array(const common::ObIVector* expr_vector,
 int ObSelectIntoOp::init_parquet_env()
 {
   int ret = OB_SUCCESS;
-  arrow_alloc_.init(MTL_ID());
+  arrow_alloc_.init();
   if (OB_FAIL(setup_parquet_schema())) {
     LOG_WARN("failed to set up parquet schema", K(ret));
   } else if (OB_FAIL(init_env_common())) {
@@ -1613,7 +1571,7 @@ int ObSelectIntoOp::calc_parquet_decimal_length(int precision)
 int ObSelectIntoOp::setup_parquet_schema()
 {
   int ret = OB_SUCCESS;
-  ObMallocHookAttrGuard guard(ObMemAttr(MTL_ID(), "IntoParquet"));
+  ObMallocHookAttrGuard guard(ObMemAttr("IntoParquet"));
   parquet::schema::NodeVector fields;
   const ObIArray<ObExpr*> &select_exprs = MY_SPEC.select_exprs_;
   std::shared_ptr<const parquet::LogicalType> logical_type;
@@ -2084,7 +2042,7 @@ int ObSelectIntoOp::into_varlist()
   const ObIArray<ObExpr*> &select_exprs = (MY_SPEC.select_exprs_.empty()) ?
                                            MY_SPEC.output_ : MY_SPEC.select_exprs_;
   const ObIArray<ObString> &user_vars = MY_SPEC.user_vars_;
-  ObArenaAllocator lob_tmp_allocator("LobTmp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator lob_tmp_allocator("LobTmp", OB_MALLOC_NORMAL_BLOCK_SIZE);
   if (select_exprs.count() != user_vars.count()) {
     ret = OB_ERR_COLUMN_SIZE;
     LOG_WARN("user vars count should be equal to select exprs count" , K(ret),
@@ -2224,7 +2182,7 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
   char *actual_path = nullptr;
   ObSqlString sql_str;
   ObString secure_file_priv;
-  int64_t tenant_id = MTL_ID();
+  
   if (OB_FAIL(sql_str.append(file_path.empty() ? "." : file_path))) {
     LOG_WARN("failed to append string", K(ret));
 #ifdef _WIN32
@@ -2234,11 +2192,10 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
 #endif
     ret = OB_FILE_NOT_EXIST;
     LOG_WARN("file not exist", K(ret), K(sql_str));
-  } else if (OB_FAIL(ObSchemaUtils::get_tenant_varchar_variable(tenant_id,
-                                                                SYS_VAR_SECURE_FILE_PRIV,
+  } else if (OB_FAIL(ObSchemaUtils::get_tenant_varchar_variable(SYS_VAR_SECURE_FILE_PRIV,
                                                                 ctx_.get_allocator(),
                                                                 secure_file_priv))) {
-    LOG_WARN("fail get tenant variable", K(tenant_id), K(secure_file_priv), K(ret));
+    LOG_WARN("fail get tenant variable", K(1UL), K(secure_file_priv), K(ret));
   } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, actual_path))) {
     LOG_WARN("failed to check secure path", K(ret), K(secure_file_priv));
     if (OB_ERR_NO_PRIVILEGE == ret) {
@@ -2393,7 +2350,7 @@ void ObSelectIntoOp::destroy()
   }
 #ifndef OB_BUILD_EMBED_MODE
   {
-    ObMallocHookAttrGuard guard(ObMemAttr(MTL_ID(), "IntoParquet"));
+    ObMallocHookAttrGuard guard(ObMemAttr("IntoParquet"));
     parquet_writer_schema_.reset();
   }
 #endif

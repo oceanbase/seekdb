@@ -6,15 +6,10 @@ add_library(mock_access_service SHARED
   mock_access_service.cpp)
 target_link_libraries(mock_access_service PUBLIC oceanbase)
 
-# Same as ob_unittest: compile must wait for grpc proto headers (see unittest/CMakeLists.txt).
-add_dependencies(mock_ls_tablet_service oblib_grpc)
-add_dependencies(mock_access_service oblib_grpc)
-
 add_library(truncate_info_helper ob_truncate_info_helper.cpp)
 target_include_directories(truncate_info_helper PUBLIC
   ${CMAKE_SOURCE_DIR}/unittest)
 target_link_libraries(truncate_info_helper PUBLIC ob_base mockcontainer)
-add_dependencies(truncate_info_helper oblib_grpc)
 
 # add_library(mock_ft_parser SHARED
 #   mock_ft_parser.cpp)
@@ -64,7 +59,6 @@ storage_unittest(test_sample_filter)
 storage_unittest(test_tenant_tablet_stat_mgr)
 storage_unittest(test_truncate_info)
 target_link_libraries(test_truncate_info PRIVATE truncate_info_helper)
-storage_unittest(test_tenant_compaction_mem_pool)
 storage_unittest(test_compaction_memory_context)
 #storage_unittest(test_dag_size)
 storage_unittest(test_handle_cache)
@@ -103,10 +97,6 @@ storage_unittest(test_storage_log_read_write slog/test_storage_log_read_write.cp
 storage_unittest(test_storage_log_replay slog/test_storage_log_replay.cpp)
 storage_unittest(test_linked_macro_block slog_ckpt/test_linked_macro_block.cpp)
 storage_unittest(test_tablet_dumped_medium_info test_tablet_dumped_medium_info.cpp)
-storage_unittest(test_backup_data_path backup/test_backup_data_path.cpp)
-storage_unittest(test_backup_tablet_reorganize_helper backup/test_backup_tablet_reorganize_helper.cpp)
-storage_unittest(test_backup_clean_path backup/test_backup_clean_path.cpp)
-
 #storage_unittest(test_create_tablet_clog tx_storage/test_create_tablet_clog.cpp)
 storage_unittest(test_safe_destroy_handler tx_storage/test_safe_destroy_handler.cpp)
 storage_unittest(test_simple_rows_merger)

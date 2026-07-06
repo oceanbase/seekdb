@@ -356,9 +356,6 @@ public:
                                       const common::GlobalLearnerList &learner_list,
                                       const int64_t proposal_id,
                                       LogConfigVersion &config_version);
-  // set region for self
-  int get_region(common::ObRegion &region) const;
-  int set_region(const common::ObRegion &region);
   // following get ops need caller holds RLock in PalfHandleImpl
   virtual int64_t get_accept_proposal_id() const;
   int get_global_learner_list(common::GlobalLearnerList &learner_list) const;
@@ -512,7 +509,7 @@ public:
       K_(log_ms_meta), K_(running_args), K_(state), K_(checking_barrier), K_(reconfig_barrier),       \
       K_(persistent_config_version), K_(ms_ack_list), K_(resend_config_version), K_(resend_log_list), \
       K_(last_submit_config_log_time_us), K_(need_change_config_bkgd), K_(bkgd_config_version),       \
-      K_(region), K_(register_time_us), K_(parent), K_(parent_keepalive_time_us),                     \
+      K_(register_time_us), K_(parent), K_(parent_keepalive_time_us),                                 \
       K_(last_submit_register_req_time_us), K_(children), K_(last_submit_keepalive_time_us), KP(this));
     J_OBJ_END();
     return pos;
@@ -610,7 +607,6 @@ enum class RegisterParentReason
   INVALID = 0,
   FIRST_REGISTER = 1,
   PARENT_NOT_ALIVE = 2,
-  SELF_REGION_CHANGED = 3,
   RETIRED_BY_PARENT = 4,
 };
 
@@ -621,7 +617,6 @@ inline const char *register_parent_reason_2_str_(const RegisterParentReason &rea
   {
     CHECK_REASON_STR(FIRST_REGISTER);
     CHECK_REASON_STR(PARENT_NOT_ALIVE);
-    CHECK_REASON_STR(SELF_REGION_CHANGED);
     CHECK_REASON_STR(RETIRED_BY_PARENT);
     default:
       return "Invalid";
@@ -633,7 +628,6 @@ enum class RetireParentReason
 {
   INVALID = 0,
   IS_FULL_MEMBER = 1,
-  SELF_REGION_CHANGED = 2,
   PARENT_CHILD_LOOP = 3,
 };
 
@@ -643,7 +637,6 @@ inline const char *retire_parent_reason_2_str_(const RetireParentReason &reason)
   switch(reason)
   {
     CHECK_REASON_STR(IS_FULL_MEMBER);
-    CHECK_REASON_STR(SELF_REGION_CHANGED);
     CHECK_REASON_STR(PARENT_CHILD_LOOP);
     default:
       return "Invalid";
@@ -657,8 +650,6 @@ enum class RetireChildReason
   CHILDREN_LIST_FULL = 1,
   CHILD_NOT_IN_LEARNER_LIST = 2,
   CHILD_NOT_ALIVE = 3,
-  DIFFERENT_REGION_WITH_PARENT = 4,
-  DUPLICATE_REGION_IN_LEADER = 5,
   PARENT_DISABLE_SYNC = 6,
 };
 
@@ -670,8 +661,6 @@ inline const char *retire_child_reason_2_str_(const RetireChildReason reason) co
     CHECK_REASON_STR(CHILDREN_LIST_FULL);
     CHECK_REASON_STR(CHILD_NOT_IN_LEARNER_LIST);
     CHECK_REASON_STR(CHILD_NOT_ALIVE);
-    CHECK_REASON_STR(DIFFERENT_REGION_WITH_PARENT);
-    CHECK_REASON_STR(DUPLICATE_REGION_IN_LEADER);
     CHECK_REASON_STR(PARENT_DISABLE_SYNC);
     default:
       return "Invalid";
@@ -689,7 +678,6 @@ private:
   int register_parent_(const RegisterParentReason &reason);
   int after_register_parent_done_(const LogLearner &parent, const RegisterParentReason &reason) const;
   int after_retire_parent_done_(const LogLearner &parent, const RetireParentReason &reason) const;
-  int after_region_changed_(const common::ObRegion &old_region, const common::ObRegion &new_region);
   int get_register_leader_(common::ObAddr &leader) const;
   int retire_parent_(const RetireParentReason &reason);
   void reset_parent_info_();
@@ -699,18 +687,15 @@ private:
   int generate_candidate_list_from_member_(const LogLearner &child, LogCandidateList &candidate_list);
   int generate_candidate_list_from_children_(const LogLearner &child, LogCandidateList &candidate_list);
   int remove_timeout_child_(LogLearnerList &dead_children);
-  int remove_diff_region_child_(LogLearnerList &diff_region_children);
-  int remove_duplicate_region_child_(LogLearnerList &dup_region_children);
   int remove_child_is_not_learner_(LogLearnerList &removed_children);
   int remove_children_(LogLearnerList &this_children, const LogLearnerList &removed_children);
-  int get_member_regions_(common::hash::ObHashMap<ObRegion, int> &region_map) const;
   int submit_retire_children_req_(const LogLearnerList &retired_children, const RetireChildReason &reason);
   int children_if_cond_then_action_(const LogLearnerCond &cond, const LogLearnerAction &action);
   int after_register_child_done_(const LogLearner &child) const;
   int after_retire_child_done_(const LogLearner &child, const RetireChildReason &reason) const;
   // ==================== Parent ========================
 private:
-  // inner_config_meta_ and region_ is protected by RWLock in PalfHandleImpl,
+  // inner_config_meta_ is protected by RWLock in PalfHandleImpl,
   // any read/write ops should acquire RLock/WLock in PalfHandleImpl.
   // inner_config_meta_, inner_alive_paxos_memberlist_, inner_alive_paxos_replica_num_,
   // and inner_all_learnerlist_ take effect as long as they are accepted by the replica,
@@ -723,7 +708,6 @@ private:
   // list of all learners, including learners which has been degraded from acceptors
   GlobalLearnerList all_learnerlist_;
   LogConfigChangeArgs running_args_;
-  common::ObRegion region_;
   // this lock protects all states related to config change, except for inner_config_meta_
   mutable common::ObSpinLock lock_;
   int64_t palf_id_;
@@ -772,7 +756,6 @@ private:
   int64_t register_time_us_;
   RegisterParentReason register_parent_reason_;
   common::ObAddr parent_;
-  ObRegion parent_region_;
   int64_t parent_keepalive_time_us_;
   // registering state
   int64_t last_submit_register_req_time_us_;

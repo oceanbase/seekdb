@@ -18,6 +18,7 @@
 
 #include "ob_worker_processor.h"
 #include "lib/oblog/ob_warning_buffer.h"
+#include "sql/ob_sql_context.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
 #include "rpc/frame/ob_req_translator.h"
 #include "rpc/frame/ob_req_processor.h"
@@ -28,6 +29,7 @@ using namespace oceanbase::omt;
 using namespace oceanbase::rpc;
 using namespace oceanbase::rpc::frame;
 using namespace oceanbase::obcall;
+using oceanbase::sql::ObQueryRetryAshGuard;
 
 ObWorkerProcessor::ObWorkerProcessor(
     ObReqTranslator &xlator,

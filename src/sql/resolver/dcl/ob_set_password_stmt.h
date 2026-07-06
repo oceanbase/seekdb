@@ -37,8 +37,8 @@ public:
   void set_masked_sql(const common::ObString &masked_sql) { masked_sql_ = masked_sql; }
   const common::ObStrings *get_user_password() const { return &user_pwd_; }
   const common::ObString &get_masked_sql() const { return masked_sql_; }
-  uint64_t get_tenant_id() const { return tenant_id_; }
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
+  
   bool get_need_enc() const { return need_enc_; }
   void set_need_enc(bool need_enc) { need_enc_ = need_enc; }
   bool get_for_current_user() const { return for_current_user_; }
@@ -58,10 +58,9 @@ private:
                               //username2, hostname2, passwd2...
                               //ssl_type, ssl_cipher, x509_issuer, x509_subject
   common::ObString masked_sql_;
-  uint64_t tenant_id_;
   bool need_enc_;
   bool for_current_user_;
-  obcall::ObSetPasswdArg set_password_arg_; // used to return exec_tenant_id_
+  obcall::ObSetPasswdArg set_password_arg_; // used to return exec_tid_
   bool modify_max_connections_;
   uint64_t max_connections_per_hour_;
   uint64_t max_user_connections_;

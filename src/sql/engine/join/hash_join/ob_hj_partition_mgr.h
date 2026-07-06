@@ -35,11 +35,10 @@ struct ObHJPartitionPair
 
 class ObHJPartitionMgr {
 public:
-  ObHJPartitionMgr(common::ObIAllocator &alloc, uint64_t tenant_id) :
+  ObHJPartitionMgr(common::ObIAllocator &alloc) :
     total_dump_count_(0),
     total_dump_size_(0),
     part_count_(0),
-    tenant_id_(tenant_id),
     alloc_(alloc),
     part_pair_list_(alloc)
   {}
@@ -87,7 +86,6 @@ public:
 
 private:
   static const int64_t PARTITION_IDX_MASK = 0x00000000FFFFFFFF;
-  uint64_t tenant_id_;
   common::ObIAllocator &alloc_;
   ObHJPartitionPairList part_pair_list_;
 };

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "ob_transform_rule.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 #include "sql/optimizer/ob_optimizer.h"
 #include "sql/optimizer/ob_optimizer_context.h"
 #include "sql/rewrite/ob_transformer_impl.h"
@@ -140,7 +140,6 @@ const char* ObTransformerCtx::get_trans_type_string(uint64_t trans_type)
     TRANS_TYPE_TO_STR(SIMPLIFY_ORDERBY)
     TRANS_TYPE_TO_STR(SIMPLIFY_WINFUNC)
     TRANS_TYPE_TO_STR(SELECT_EXPR_PULLUP)
-    TRANS_TYPE_TO_STR(PROCESS_DBLINK)
     TRANS_TYPE_TO_STR(DECORRELATE)
     TRANS_TYPE_TO_STR(CONDITIONAL_AGGR_COALESCE)
     TRANS_TYPE_TO_STR(MV_REWRITE)
@@ -416,8 +415,7 @@ int ObTransformRule::evaluate_cost(common::ObIArray<ObParentDMLStmt> &parent_stm
     lib::ContextParam param;
     ObTransformerImpl trans(ctx_);
     int64_t start_time_us = ObTimeUtil::current_time();
-    param.set_mem_attr(ctx_->session_info_->get_effective_tenant_id(),
-                       "CostBasedRewrit",
+    param.set_mem_attr("CostBasedRewrit",
                        ObCtxIds::DEFAULT_CTX_ID)
        .set_properties(lib::USE_TL_PAGE_OPTIONAL)
        .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE);

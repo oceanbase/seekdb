@@ -80,13 +80,13 @@
 
 | class | sizeof(class) |
 | --- | --- |
-| ObAggFunRawExpr | 568 |
+| ObAggFunRawExpr | 544 |
 | ObRawExpr | 176 |
-| expr.real_param_exprs_ | 152 |
+| expr.real_param_exprs_ | 144 |
 | expr.distinct_ | 1 |
-| expr.order_items_ | 144 |
+| expr.order_items_ | 136 |
 | expr.separator_param_expr_ | 8 |
-| expr.udf_meta_ | 64 |
+| expr.udf_meta_ | 56 |
 | expr.expr_in_inner_stmt_ | 1 |
 | expr.is_need_deserialize_row_ | 1 |
 | expr.pl_agg_udf_expr_ | 8 |
@@ -99,7 +99,7 @@
 
 | class | sizeof(class) |
 | --- | --- |
-| ObQueryRefRawExpr | 1552 |
+| ObQueryRefRawExpr | 1536 |
 | ObRawExpr | 176 |
 | expr.ref_id_ | 8 |
 | expr.ref_stmt_ | 8 |
@@ -108,18 +108,18 @@
 | expr.is_cursor_ | 1 |
 | expr.has_nl_param_ | 1 |
 | expr.is_multiset_ | 1 |
-| expr.column_types_ | 1168 |
-| expr.exec_params_ | 176 |
+| expr.column_types_ | 1160 |
+| expr.exec_params_ | 168 |
 
 | class | sizeof(class) |
 | --- | --- |
-| ObObjAccessRawExpr | 3936 |
+| ObObjAccessRawExpr | 3848 |
 | ObOpRawExpr | 232 |
 | expr.get_attr_func_ | 8 |
 | expr.func_name_ | 16 |
-| expr.access_indexs_ | 1744 |
-| expr.var_indexs_ | 176 |
+| expr.access_indexs_ | 1704 |
+| expr.var_indexs_ | 168 |
 | expr.for_write_ | 1 |
 | expr.property_type_ | 4 |
-| expr.orig_access_indexs_ | 1744 |
+| expr.orig_access_indexs_ | 1704 |
 

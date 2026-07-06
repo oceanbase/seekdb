@@ -50,7 +50,9 @@ while($count < 500)
 --enable_query_log
 
 connection default;
+--disable_warnings
 alter system major freeze;
+--enable_warnings
 --source mysql_test/include/wait_daily_merge.inc
 
 connection conn1;

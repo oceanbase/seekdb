@@ -994,8 +994,6 @@ int generate_window_functions_plan(WinFuncOpHelper &win_func_helper,
                                     bool &ignore_plan,
                                     bool can_ignore_merge = false);
 
-  int check_external_table_scan(ObSelectStmt *stmt, bool &has_external_table);
-
   int contain_enum_set_rowkeys(const ObLogTableScan &table_scan, bool &contain);
   int candi_allocate_order_by_if_losted(ObIArray<OrderItem> &order_items);
   int check_aggr_with_keep(const ObIArray<ObAggFunRawExpr*>& aggr_items, bool &has_keep_aggr);

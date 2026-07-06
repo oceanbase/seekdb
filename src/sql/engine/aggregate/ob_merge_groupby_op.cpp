@@ -145,8 +145,7 @@ int ObMergeGroupByOp::init_rollup_distributor()
       }
       int64_t row_count = child_->get_spec().rows_;
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(inner_sort_.init(ctx_.get_my_session()->get_effective_tenant_id(),
-          &MY_SPEC.sort_collations_, &MY_SPEC.sort_cmp_funcs_,
+      } else if (OB_FAIL(inner_sort_.init(&MY_SPEC.sort_collations_, &MY_SPEC.sort_cmp_funcs_,
           &eval_ctx_, &ctx_,
           MY_SPEC.enable_encode_sort_, false, false /* need_rewind */))) {
         LOG_WARN("failed to init sort", K(ret));
@@ -243,7 +242,7 @@ int ObMergeGroupByOp::init_group_rows()
 int ObMergeGroupByOp::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(ctx_.get_my_session()->get_effective_tenant_id(), dir_id_))) {
+  if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(dir_id_))) {
     LOG_WARN("failed to alloc dir id", K(ret));
   } else if (FALSE_IT(aggr_processor_.set_dir_id(dir_id_))) {
   } else if (FALSE_IT(aggr_processor_.set_io_event_observer(&io_event_observer_))) {
@@ -1950,7 +1949,6 @@ inline int ObMergeGroupByOp::create_groupby_store_row(
 int ObMergeGroupByOp::init_hp_infras_group_mgr()
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
   if (aggr_processor_.has_distinct() &&
       !(MY_SPEC.has_rollup_ && aggr_processor_.has_listagg_non_const_separator())) {
     int64_t est_rows = MY_SPEC.est_rows_per_group_;
@@ -1960,13 +1958,12 @@ int ObMergeGroupByOp::init_hp_infras_group_mgr()
       LOG_WARN("failed to get px size", K(ret));
     } else if (OB_FAIL(sql_mem_processor_.init(
                     &ctx_.get_allocator(),
-                    tenant_id,
                     est_rows * MY_SPEC.width_,
                     MY_SPEC.type_,
                     MY_SPEC.id_,
                     &ctx_))) {
       LOG_WARN("failed to init sql mem processor", K(ret));
-    } else if (OB_FAIL(hp_infras_mgr_.init(tenant_id,
+    } else if (OB_FAIL(hp_infras_mgr_.init(
       GCONF.is_sql_operator_dump_enabled(), est_rows, MY_SPEC.width_, true/*unique*/, 1/*ways*/,
       &eval_ctx_, &sql_mem_processor_, &io_event_observer_))) {
       LOG_WARN("failed to init hash infras group", K(ret));

@@ -15,11 +15,12 @@
  */
 
 #include "lib/container/ob_se_array.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/ob_errno.h"
 #define USING_LOG_PREFIX SQL_DAS
 
 #include "ob_das_domain_utils.h"
-#include "lib/geo/ob_geo_utils.h"
+#include "share/geo/ob_geo_utils.h"
 #include "sql/das/ob_das_utils.h"
 #include "sql/das/ob_das_dml_vec_iter.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
@@ -61,7 +62,7 @@ int ObFTIndexRowCache::init(
 {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
-  param.set_mem_attr(MTL_ID(), "DocIdMerge", ObCtxIds::DEFAULT_CTX_ID).set_properties(lib::USE_TL_PAGE_OPTIONAL);
+  param.set_mem_attr("DocIdMerge", ObCtxIds::DEFAULT_CTX_ID).set_properties(lib::USE_TL_PAGE_OPTIONAL);
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init fulltext dml iterator twice", K(ret), K(is_inited_));
@@ -156,16 +157,16 @@ int ObDASDomainUtils::generate_spatial_index_rows(
   const ObSrsBoundsItem *srs_bound = NULL;
   uint32_t srid = UINT32_MAX;
   uint64_t rowkey_num = das_ctdef.table_param_.get_data_table().get_rowkey_column_num();
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(MTL_ID(), "S2Adapter"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("S2Adapter"));
 
   if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb_str, srid))) {
     LOG_WARN("failed to get srid", K(ret), K(wkb_str));
   } else if (srid != 0 &&
       OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
-    LOG_WARN("failed to get srs guard", K(ret), K(MTL_ID()), K(srid));
+    LOG_WARN("failed to get srs guard", K(ret), K(srid));
   } else if (srid != 0 &&
       OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
-    LOG_WARN("failed to get srs item", K(ret), K(MTL_ID()), K(srid));
+    LOG_WARN("failed to get srs item", K(ret), K(srid));
   } else if (((srid == 0) || !(srs_item->is_geographical_srs())) &&
               OB_FAIL(OTSRS_MGR->get_srs_bounds(srid, srs_item, srs_bound))) {
     LOG_WARN("failed to get srs bound", K(ret), K(srid));
@@ -325,7 +326,7 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
     LOG_WARN("invalid arguments", K(ret), KPC(helper), K(ft_obj_meta), K(doc_id_datum));
   } else if (0 == fulltext.length()) {
     ret = OB_ITER_END;
-  } else if (OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr(MTL_ID(), "FTWordMap")))) {
+  } else if (OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
     LOG_WARN("fail to create ft word map", K(ret), K(ft_word_bkt_cnt));
   } else if (OB_FAIL(segment_and_calc_word_count(allocator,
                                                  helper,
@@ -1209,7 +1210,7 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
     }
   }
   if (OB_SUCC(ret) && GCONF.enable_strict_defensive_check()) {
-    common::ObArenaAllocator allocator(lib::ObMemAttr(MTL_ID(), "FTIterDEF"));
+    common::ObArenaAllocator allocator(lib::ObMemAttr("FTIterDEF"));
     const common::ObString &parser_str = das_ctdef_->table_param_.get_data_table().get_fts_parser_name();
     const common::ObString &parser_property_str = das_ctdef_->table_param_.get_data_table().get_fts_parser_property();
     storage::ObFTParseHelper ft_parse_helper;
@@ -1251,7 +1252,7 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
         bool need_check_tx_active = true;
         if (OB_NOT_NULL(doc_word_info_) && doc_word_info_->snapshot_.tx_id().is_valid()) {
           const transaction::ObTransID &tx_id = doc_word_info_->snapshot_.tx_id();
-          //transaction::ObTransService *txs = MTL(transaction::ObTransService *);
+          //transaction::ObTransService *txs = share::g_mp->trans_service();
           //bool is_tx_active = true;
           //if (OB_NOT_NULL(txs)) {
           //  if (OB_FAIL(txs->is_tx_active(tx_id, is_tx_active))) {

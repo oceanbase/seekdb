@@ -28,7 +28,7 @@ class ObDirectLoadBatchDatumRows
 public:
   ObDirectLoadBatchDatumRows() : allocator_("TLD_BDatumRows") 
   {
-    allocator_.set_tenant_id(MTL_ID());
+    
   }
   ~ObDirectLoadBatchDatumRows() {}
 public:

@@ -18,16 +18,11 @@
 #include "ob_tsc_cg_service.h"
 #include "sql/code_generator/ob_static_engine_cg.h"
 #include "sql/engine/table/ob_table_scan_op.h"
-#include "src/share/vector_index/ob_vector_index_util.h"
-#include "share/domain_id/ob_domain_id.h"
-#include "share/external_table/ob_external_table_utils.h"
+#include "observer/vector_index/ob_vector_index_util.h"
+#include "sql/das/ob_domain_id.h"
 namespace oceanbase
 {
 
-namespace share
-{
-  struct ObExternalTablePartInfo;
-}
 using namespace common;
 using namespace share;
 using namespace share::schema;
@@ -69,7 +64,7 @@ int ObTscCgService::generate_tsc_ctdef(ObLogTableScan &op, ObTableScanCtDef &tsc
         if (OB_ISNULL(db_schema)) {
           // ignore ret
         } else if (is_external_object_id(db_schema->get_database_id())) {
-          OZ(scan_ctdef.external_object_ctx_.add_database_schema(db_schema->get_tenant_id(),
+          OZ(scan_ctdef.external_object_ctx_.add_database_schema(
                                                                  db_schema->get_catalog_id(),
                                                                  db_schema->get_database_id(),
                                                                  db_schema->get_database_name_str()));
@@ -80,8 +75,7 @@ int ObTscCgService::generate_tsc_ctdef(ObLogTableScan &op, ObTableScanCtDef &tsc
         if (OB_ISNULL(tbl_schema)) {
           // ignore ret
         } else if (is_external_object_id(tbl_schema->get_table_id())) {
-          OZ(scan_ctdef.external_object_ctx_.add_table_schema(tbl_schema->get_tenant_id(),
-                                                              tbl_schema->get_catalog_id(),
+          OZ(scan_ctdef.external_object_ctx_.add_table_schema(tbl_schema->get_catalog_id(),
                                                               tbl_schema->get_database_id(),
                                                               tbl_schema->get_table_id(),
                                                               tbl_schema->get_table_name_str()));
@@ -89,108 +83,6 @@ int ObTscCgService::generate_tsc_ctdef(ObLogTableScan &op, ObTableScanCtDef &tsc
       }
     }
   }
-  if (OB_SUCC(ret) && op.get_table_type() == share::schema::EXTERNAL_TABLE) {
-    const ObTableSchema *table_schema = nullptr;
-    ObSqlSchemaGuard *schema_guard = cg_.opt_ctx_->get_sql_schema_guard();
-    ObBasicSessionInfo *session_info = cg_.opt_ctx_->get_session_info();
-    ObString file_location;
-    ObString access_info;
-    if (OB_ISNULL(schema_guard) || OB_ISNULL(session_info) || OB_ISNULL(schema_guard->get_schema_guard())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema guard is null", K(ret));
-    } else if (OB_FAIL(schema_guard->get_table_schema(op.get_table_id(),
-                                                      op.get_ref_table_id(),
-                                                      op.get_stmt(),
-                                                      table_schema))) {
-      LOG_WARN("get table schema failed", K(ret), K(op.get_ref_table_id()));
-    } else if (OB_ISNULL(table_schema)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null table scahem ptr", K(ret));
-    } else if (OB_FAIL(ObExternalTableUtils::get_external_file_location(*table_schema, *schema_guard->get_schema_guard(), cg_.phy_plan_->get_allocator(), file_location))) {
-      LOG_WARN("fail to get file location", K(ret));
-    } else if (OB_FAIL(ObExternalTableUtils::get_external_file_location_access_info(*table_schema, *schema_guard->get_schema_guard(), access_info))) {
-      LOG_WARN("fail to get access info", K(ret));
-    } else if (OB_FAIL(ObSQLUtils::check_location_access_priv(file_location,
-                                                              cg_.opt_ctx_->get_session_info()))) {
-      LOG_WARN("fail to check location access priv", K(ret));
-    } else {
-      scan_ctdef.is_external_table_ = true;
-      const ObString &table_format_or_properties = table_schema->get_external_file_format().empty() ?
-                                            table_schema->get_external_properties() :
-                                            table_schema->get_external_file_format();
-
-      int64_t partition_num = table_schema->get_partition_num();
-      if (is_external_object_id(table_schema->get_table_id())
-          && table_schema->is_partitioned_table()
-          && partition_num > 0) {
-        if (OB_FAIL(scan_ctdef.partition_infos_.reserve(partition_num))) {
-          LOG_WARN("failed to reserve partition infos array", K(ret), K(partition_num));
-        } else {
-          for (int64_t i = 0; OB_SUCC(ret) && i < table_schema->get_partition_num(); ++i) {
-            share::ObExternalTablePartInfo part_info;
-            ObBasePartition *part = NULL;
-            if (OB_FAIL(table_schema->get_part_by_idx(i, -1, part))) {
-              LOG_WARN("failed to get part by idx", K(ret));
-            } else if (OB_ISNULL(part)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("invalid partition", K(ret), K(i));
-            } else {
-              part_info.part_id_ = part->get_part_id();
-              ObIAllocator &ctdef_alloc = cg_.phy_plan_->get_allocator();
-
-              const ObIArray<ObNewRow> &list_row_values = part->get_list_row_values();
-              if (!list_row_values.empty()) {
-                int64_t pos = 0;
-                int64_t size = list_row_values.at(0).get_deep_copy_size();
-                char *buf = (char *)ctdef_alloc.alloc(size);
-                if (OB_ISNULL(buf)) {
-                  ret = OB_ALLOCATE_MEMORY_FAILED;
-                  LOG_WARN("allocate memory failed", K(ret), K(size));
-                } else if (OB_FAIL(part_info.list_row_value_.deep_copy(list_row_values.at(0),
-                                                                      buf,
-                                                                      size,
-                                                                      pos))) {
-                  LOG_WARN("failed to deep copy list row value", K(ret), K(i));
-                }
-              }
-
-              if (OB_SUCC(ret)) {
-                if (!part->get_external_location().empty()) {
-                  if (OB_FAIL(ob_write_string(ctdef_alloc,
-                                              part->get_external_location(),
-                                              part_info.partition_spec_))) {
-                    LOG_WARN("fail to write file url", K(ret));
-                  }
-                }
-              }
-
-              if (OB_SUCC(ret)) {
-                if (OB_FAIL(scan_ctdef.partition_infos_.set_part_pair_by_idx(i, part_info))) {
-                  LOG_WARN("failed to push back partition info", K(ret), K(i));
-                }
-              }
-            }
-          }
-        }
-      }
-
-      if (OB_SUCC(ret)) {
-        if (table_format_or_properties.empty()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("table_format_or_properties is empty", K(ret));
-        } else if (OB_FAIL(scan_ctdef.external_file_format_str_.store_str(table_format_or_properties))) {
-          LOG_WARN("fail to set string", K(ret));
-        } else if (OB_FAIL(scan_ctdef.external_file_location_.store_str(file_location))) {
-          LOG_WARN("fail to set string", K(ret));
-        } else if (OB_FAIL(scan_ctdef.external_file_access_info_.store_str(access_info))) {
-          LOG_WARN("fail to set access info", K(ret));
-        } else if (OB_FAIL(scan_ctdef.external_file_pattern_.store_str(table_schema->get_external_file_pattern()))) {
-          LOG_WARN("fail to set pattern", K(ret));
-        }
-      }
-    }
-  }
-
   if (OB_SUCC(ret) && (OB_NOT_NULL(op.get_flashback_query_expr()))) {
     if (OB_FAIL(cg_.generate_rt_expr(*op.get_flashback_query_expr(),
                                      tsc_ctdef.flashback_item_.flashback_query_expr_))) {
@@ -273,17 +165,6 @@ int ObTscCgService::generate_tsc_ctdef(ObLogTableScan &op, ObTableScanCtDef &tsc
     ObArray<int64_t> bnlj_params;
     OZ(op.extract_bnlj_param_idxs(bnlj_params));
     OZ(tsc_ctdef.bnlj_param_idxs_.assign(bnlj_params));
-  }
-
-  OZ (cg_.generate_rt_exprs(op.get_ext_file_column_exprs(),
-                            tsc_ctdef.scan_ctdef_.pd_expr_spec_.ext_file_column_exprs_));
-  OZ (cg_.generate_rt_exprs(op.get_ext_column_convert_exprs(),
-                            tsc_ctdef.scan_ctdef_.pd_expr_spec_.ext_column_convert_exprs_));
-  if (OB_SUCC(ret)) {
-    for (int i = 0; i < op.get_ext_file_column_exprs().count(); i++) {
-      tsc_ctdef.scan_ctdef_.pd_expr_spec_.ext_file_column_exprs_.at(i)->extra_
-          = op.get_ext_file_column_exprs().at(i)->get_column_idx();
-    }
   }
 
   bool need_attach = false;
@@ -413,8 +294,7 @@ int ObTscCgService::generate_tsc_ctdef(ObLogTableScan &op, ObTableScanCtDef &tsc
     tsc_ctdef.attach_spec_.attach_ctdef_ = root_ctdef;
   }
 
-  LOG_DEBUG("generate tsc ctdef finish", K(ret), K(op), K(tsc_ctdef),
-                                                    K(tsc_ctdef.scan_ctdef_.pd_expr_spec_.ext_file_column_exprs_));
+  LOG_DEBUG("generate tsc ctdef finish", K(ret), K(op), K(tsc_ctdef));
   return ret;
 }
 
@@ -854,7 +734,7 @@ int ObTscCgService::generate_pd_storage_flag(const ObLogPlan *log_plan,
       pd_filter = false;
     } else {
       FOREACH_CNT_X(e, access_exprs, pd_blockscan || pd_filter) {
-        if ((use_column_store && T_ORA_ROWSCN == (*e)->get_expr_type()) || T_PSEUDO_EXTERNAL_FILE_URL == (*e)->get_expr_type()
+        if ((use_column_store && T_ORA_ROWSCN == (*e)->get_expr_type())
             || T_PSEUDO_OLD_NEW_COL == (*e)->get_expr_type()) {
           pd_blockscan = false;
           pd_filter = false;
@@ -872,68 +752,6 @@ int ObTscCgService::generate_pd_storage_flag(const ObLogPlan *log_plan,
   return ret;
 }
 
-int ObTscCgService::generate_ext_tbl_filter_pd_level(const ObLogTableScan &op,
-                                                     const ObDASScanCtDef &scan_ctdef,
-                                                     ObPushdownExprSpec &pd_spec)
-{
-  int ret = OB_SUCCESS;
-  ObExternalFileFormat::FormatType format_type = ObExternalFileFormat::INVALID_FORMAT;
-  const ObLogPlan *log_plan = op.get_plan();
-  bool need_pd_level = false;
-  if (OB_NOT_NULL(log_plan) && log_op_def::LOG_TABLE_SCAN == op.get_type() &&
-      op.get_table_type() == share::schema::EXTERNAL_TABLE) {
-    if (OB_FAIL(ObSQLUtils::get_external_table_type(scan_ctdef.external_file_format_str_.str_,
-                                                    format_type))) {
-      LOG_WARN("fail to get external table format", K(ret));
-    } else if (ObExternalFileFormat::PARQUET_FORMAT == format_type) {
-      need_pd_level = true;
-    }
-  }
-  if (OB_SUCC(ret) && need_pd_level) {
-    int64_t pd_level = 0; // disable
-    const int64_t tenant_id =
-      log_plan->get_optimizer_context().get_session_info()->get_effective_tenant_id();
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
-    if (tenant_config.is_valid()) {
-      if (ObExternalFileFormat::PARQUET_FORMAT == format_type) {
-        pd_level = tenant_config->_parquet_filter_pushdown_level;
-      } else if (ObExternalFileFormat::ORC_FORMAT == format_type) {
-        ret = OB_NOT_SUPPORTED;
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(log_plan->get_stmt()) || OB_ISNULL(log_plan->get_stmt()->get_query_ctx())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("stmt or query ctx is null", K(ret));
-    } else {
-      const ObOptParamHint *opt_params =
-        &(log_plan->get_stmt()->get_query_ctx()->get_global_hint().opt_params_);
-      ObObj pd_level_val;
-      ObOptParamHint::OptParamType param_type = ObOptParamHint::OptParamType::INVALID_OPT_PARAM_TYPE;
-      if (ObExternalFileFormat::PARQUET_FORMAT == format_type) {
-        param_type = ObOptParamHint::OptParamType::PARQUET_FILTER_PUSHDOWN_LEVEL;
-      } else if (ObExternalFileFormat::ORC_FORMAT == format_type) {
-        ret = OB_NOT_SUPPORTED;
-      }
-      if (OB_FAIL(ret)) {
-      } else if (ObOptParamHint::OptParamType::INVALID_OPT_PARAM_TYPE == param_type) {
-      } else if (OB_FAIL(opt_params->get_opt_param(param_type, pd_level_val))) {
-        LOG_WARN("fail to get pushdown filter level opt param from hint", K(ret));
-      } else if (pd_level_val.is_int()) { // valid
-        pd_level = pd_level_val.get_int();
-      }
-    }
-    if (OB_SUCC(ret)) {
-      pd_spec.ext_tbl_filter_pd_level_ = pd_level;
-    }
-  }
-  return ret;
-}
-
-//extract the columns that required by DAS scan:
-//1. all columns required by TSC operator outputs
-//2. all columns required by TSC operator filters
-//3. all columns required by pushdown aggr expr
 int ObTscCgService::extract_fts_das_access_exprs(const ObLogTableScan &op,
                                                  const DASScanCGCtx &cg_ctx,
                                                  ObDASScanCtDef &scan_ctdef,
@@ -1147,7 +965,7 @@ int ObTscCgService::extract_das_access_exprs(const ObLogTableScan &op,
         if (OB_ISNULL(schema_guard)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get null schema guard", K(ret));
-        } else if (OB_FAIL(schema_guard->get_table_schema(MTL_ID(), op.get_ref_table_id(), table_schema))) {
+        } else if (OB_FAIL(schema_guard->get_table_schema( op.get_ref_table_id(), table_schema))) {
           LOG_WARN("failed to get table schema", K(ret));
         } else if (OB_ISNULL(table_schema)) {
           ret = OB_ERR_UNEXPECTED;
@@ -1317,9 +1135,6 @@ int ObTscCgService::generate_access_ctdef(const ObLogTableScan &op,
       OZ(access_column_ids.push_back(OB_MAJOR_REFRESH_MVIEW_OLD_NEW_COLUMN_ID));
     } else if (T_PSEUDO_GROUP_ID == expr->get_expr_type()) {
       OZ(access_column_ids.push_back(common::OB_HIDDEN_GROUP_IDX_COLUMN_ID));
-    } else if (T_PSEUDO_EXTERNAL_FILE_COL == expr->get_expr_type()) {
-      //TODO EXTERNAL-TABLE
-    } else if (T_PSEUDO_EXTERNAL_FILE_URL == expr->get_expr_type()) {
     } else if (T_PSEUDO_PARTITION_LIST_COL == expr->get_expr_type()) {
     } else {
       ObColumnRefRawExpr* col_expr = static_cast<ObColumnRefRawExpr *>(expr);
@@ -1654,7 +1469,7 @@ int ObTscCgService::extract_das_output_column_ids(const ObLogTableScan &op,
     //this situation is index lookup, and the index table scan is being processed
     //the output column id of index lookup is the rowkey of the data table
     const ObTableSchema *table_schema = nullptr;
-    if (OB_FAIL(cg_.opt_ctx_->get_schema_guard()->get_table_schema(MTL_ID(), op.get_real_ref_table_id(), table_schema))) {
+    if (OB_FAIL(cg_.opt_ctx_->get_schema_guard()->get_table_schema( op.get_real_ref_table_id(), table_schema))) {
       LOG_WARN("get table schema failed", K(ret), K(op.get_ref_table_id()));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1722,7 +1537,7 @@ int ObTscCgService::extract_das_output_column_ids(const ObLogTableScan &op,
     // main scan in pre-filter vec index scan, need to output extra rowkey exprs for further lookup on rowkey-vid table
     ObArray<uint64_t> rowkey_column_ids;
     const ObTableSchema *table_schema = nullptr;
-    if (OB_FAIL(cg_.opt_ctx_->get_schema_guard()->get_table_schema(MTL_ID(), op.get_real_ref_table_id(), table_schema))) {
+    if (OB_FAIL(cg_.opt_ctx_->get_schema_guard()->get_table_schema( op.get_real_ref_table_id(), table_schema))) {
       LOG_WARN("get table schema failed", K(ret), K(op.get_ref_table_id()));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1839,11 +1654,6 @@ int ObTscCgService::generate_table_loc_meta(uint64_t table_loc_id,
   ObTableID real_table_id = table_schema.get_table_id();
   loc_meta.ref_table_id_ = real_table_id;
   loc_meta.is_dup_table_ = table_schema.is_duplicate_table();
-  loc_meta.is_external_table_ = table_schema.is_external_table();
-  ObString file_location;
-  CK (OB_NOT_NULL(schema_guard->get_schema_guard()));
-  OZ (ObExternalTableUtils::get_external_file_location(table_schema, *schema_guard->get_schema_guard(), cg_.phy_plan_->get_allocator(), file_location));
-  loc_meta.is_external_files_on_disk_ = ObSQLUtils::is_external_files_on_local_disk(file_location);
   int64_t route_policy = 0;
   bool is_weak_read = false;
   // broadcast table (insert into select) read local for materialized view create,here three conditions:
@@ -1918,7 +1728,7 @@ int ObTscCgService::generate_multivalue_ir_ctdef(const ObLogTableScan &op,
   const ObTableSchema *table_schema = nullptr;
   ObDASScanCtDef *scan_ctdef = &tsc_ctdef.scan_ctdef_;
   ObDASSortCtDef *sort_ctdef = nullptr;
-  if (OB_FAIL(cg_.opt_ctx_->get_schema_guard()->get_table_schema(MTL_ID(), op.get_real_ref_table_id(), table_schema))) {
+  if (OB_FAIL(cg_.opt_ctx_->get_schema_guard()->get_table_schema( op.get_real_ref_table_id(), table_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(op.get_ref_table_id()));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -5026,7 +4836,7 @@ int ObTscCgService::extract_doc_id_index_back_output_column_ids(
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = nullptr;
   ObArray<uint64_t> rowkey_cids;
-  if (OB_FAIL(cg_.opt_ctx_->get_schema_guard()->get_table_schema(MTL_ID(), op.get_real_ref_table_id(), table_schema))) {
+  if (OB_FAIL(cg_.opt_ctx_->get_schema_guard()->get_table_schema( op.get_real_ref_table_id(), table_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(op.get_ref_table_id()));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;

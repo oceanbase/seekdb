@@ -20,12 +20,34 @@
 #include "sql/resolver/ddl/ob_create_location_stmt.h"
 #include "lib/restore/ob_storage_info.h"
 #include "sql/resolver/dcl/ob_dcl_resolver.h"
-#include "share/external_table/ob_external_table_utils.h"
  
 namespace oceanbase
 {
 namespace sql
 {
+namespace {
+// map credential option id to its field name in storage info string
+int get_credential_field_name(ObSqlString &str, int64_t opt)
+{
+  int ret = OB_SUCCESS;
+  if (opt == 1) {
+    OZ (str.append(common::ACCESS_ID));
+  } else if (opt == 2) {
+    OZ (str.append(common::ACCESS_KEY));
+  } else if (opt == 3) {
+    OZ (str.append(common::HOST));
+  } else if (opt == 4) {
+    OZ (str.append(common::APPID));
+  } else if (opt == 5) {
+    OZ (str.append(common::REGION));
+  } else {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid opt", K(ret), K(opt));
+  }
+  return ret;
+}
+} // namespace
+
 ObCreateLocationResolver::ObCreateLocationResolver(ObResolverParams &params)
   : ObDDLResolver(params)
 {
@@ -56,7 +78,7 @@ int ObCreateLocationResolver::resolve(const ParseNode &parse_tree)
     LOG_ERROR("failed to get create location stmt", K(ret));
   } else {
     stmt_ = create_location_stmt;
-    create_location_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+    
     create_location_stmt->set_user_id(session_info_->get_user_id());   
   }
  
@@ -128,8 +150,7 @@ int ObCreateLocationResolver::resolve(const ParseNode &parse_tree)
         if (OB_ISNULL(option_node)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid argument.", K(ret));
-        } else if (OB_FAIL(ObExternalTableUtils::get_credential_field_name(
-                            credential_params, option_node->value_))) {
+        } else if (OB_FAIL(get_credential_field_name(credential_params, option_node->value_))) {
           LOG_WARN("failed to get field name", K(ret), K(option_node->value_));
         } else {
           ObString tmp;

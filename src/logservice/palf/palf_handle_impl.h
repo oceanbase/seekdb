@@ -23,10 +23,7 @@
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/ob_define.h"
-#include "election/interface/election_priority.h"
-#include "election/interface/election_msg_handler.h"
-#include "election/message/election_message.h"
-#include "election/algorithm/election_impl.h"
+#include "election_self.h"
 #include "share/scn.h"
 #include "palf_callback_wrapper.h"
 #include "log_engine.h"                      // LogEngine
@@ -584,11 +581,6 @@ public:
                                       const LSN &last_lsn,
                                       const LSN &committed_end_lsn,
                                       const LogModeMeta &log_mode_meta) = 0;
-  virtual int handle_election_message(const election::ElectionPrepareRequestMsg &msg) = 0;
-  virtual int handle_election_message(const election::ElectionPrepareResponseMsg &msg) = 0;
-  virtual int handle_election_message(const election::ElectionAcceptRequestMsg &msg) = 0;
-  virtual int handle_election_message(const election::ElectionAcceptResponseMsg &msg) = 0;
-  virtual int handle_election_message(const election::ElectionChangeLeaderMsg &msg) = 0;
   virtual int receive_log(const common::ObAddr &server,
                           const PushLogType push_log_type,
                           const int64_t &proposal_id,
@@ -714,8 +706,6 @@ public:
   virtual int reset_location_cache_cb() = 0;
   virtual int set_election_priority(election::ElectionPriority *priority) = 0;
   virtual int reset_election_priority() = 0;
-  virtual int set_locality_cb(palf::PalfLocalityInfoCb *locality_cb) = 0;
-  virtual int reset_locality_cb() = 0;
   // ==================== Callback end ========================
   virtual int advance_election_epoch_and_downgrade_priority(const int64_t proposal_id, 
                                                             const int64_t downgrade_priority_time_us,
@@ -910,8 +900,6 @@ public:
   int reset_monitor_cb();
   int set_election_priority(election::ElectionPriority *priority) override final;
   int reset_election_priority() override final;
-  int set_locality_cb(palf::PalfLocalityInfoCb *locality_cb) override final;
-  int reset_locality_cb() override final;
   // ==================== Callback end ========================
 public:
   int get_begin_lsn(LSN &lsn) const override final;
@@ -995,11 +983,6 @@ public:
                               const LSN &last_lsn,
                               const LSN &committed_end_lsn,
                               const LogModeMeta &log_mode_meta) override final;
-  int handle_election_message(const election::ElectionPrepareRequestMsg &msg) override final;
-  int handle_election_message(const election::ElectionPrepareResponseMsg &msg) override final;
-  int handle_election_message(const election::ElectionAcceptRequestMsg &msg) override final;
-  int handle_election_message(const election::ElectionAcceptResponseMsg &msg) override final;
-  int handle_election_message(const election::ElectionChangeLeaderMsg &msg) override final;
   int receive_log(const common::ObAddr &server,
                   const PushLogType push_log_type,
                   const int64_t &msg_proposal_id,
@@ -1205,7 +1188,6 @@ private:
                                     const LogInfo &base_prev_log_info,
                                     const bool is_rebuild);
   int get_election_leader_without_lock_(ObAddr &addr) const;
-  int update_self_region_();
   int force_set_member_list_(const common::ObMemberList &new_member_list, const int64_t new_replica_num);
   // ========================= flashback ==============================
   int can_do_flashback_(const int64_t mode_version,
@@ -1252,85 +1234,6 @@ private:
   template<typename LogEntryType>
   int alloc_iterator_from_scn_(const SCN &scn,
                                PalfIterator<LogEntryType> &iterator);
-private:
-  class ElectionMsgSender : public election::ElectionMsgSender
-  {
-  public:
-    ElectionMsgSender(LogNetService &net_service) : net_service_(net_service), is_in_silent_(false), palf_id_(INVALID_PALF_ID) {};
-    ~ElectionMsgSender() {
-      is_in_silent_ = false;
-      palf_id_ = INVALID_PALF_ID;
-    }
-    virtual int broadcast(const election::ElectionPrepareRequestMsg &msg,
-                          const ObIArray<ObAddr> &list) const override final
-    {
-      if (false == is_allowed_broadcast_()) {
-      } else {
-        int tmp_ret = common::OB_SUCCESS;
-        for (int64_t idx = 0; idx < list.count(); ++idx) {
-          const_cast<election::ElectionPrepareRequestMsg *>(&msg)->set_receiver(list.at(idx));
-          if (OB_SUCCESS != (tmp_ret = net_service_.post_request_to_server_(list.at(idx), msg))) {
-            PALF_LOG(INFO, "post prepare request msg failed", K(tmp_ret), "server", list.at(idx),
-                K(msg));
-          }
-        }
-      }
-      return common::OB_SUCCESS;
-    }
-    virtual int broadcast(const election::ElectionAcceptRequestMsg &msg,
-                          const ObIArray<ObAddr> &list) const override final
-    {
-      if (false == is_allowed_broadcast_()) {
-      } else {
-        int tmp_ret = common::OB_SUCCESS;
-        for (int64_t idx = 0; idx < list.count(); ++idx) {
-          const_cast<election::ElectionAcceptRequestMsg *>(&msg)->set_receiver(list.at(idx));
-          if (OB_SUCCESS != (tmp_ret = net_service_.post_request_to_server_(list.at(idx), msg))) {
-            PALF_LOG(INFO, "post accept request msg failed", K(tmp_ret), "server", list.at(idx),
-                K(msg));
-          }
-        }
-      }
-      return common::OB_SUCCESS;
-    }
-    virtual int send(const election::ElectionPrepareResponseMsg &msg) const override final
-    {
-      return net_service_.post_request_to_server_(msg.get_receiver(), msg);
-    }
-    virtual int send(const election::ElectionAcceptResponseMsg &msg) const override final
-    {
-      return net_service_.post_request_to_server_(msg.get_receiver(), msg);
-    }
-    virtual int send(const election::ElectionChangeLeaderMsg &msg) const override final
-    {
-      return net_service_.post_request_to_server_(msg.get_receiver(), msg);
-    }
-    void set_silent_flag(const bool &silent_flag)
-    {
-      is_in_silent_ = silent_flag;
-    }
-    bool get_silent_flag() const
-    {
-      return is_in_silent_;
-    }
-    void set_palf_id(const int64_t palf_id) {
-      palf_id_ = palf_id;
-    }
-  private:
-    bool is_allowed_broadcast_() const
-    {
-      bool bool_ret = (true == is_in_silent_) ? false : true;
-      if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
-        PALF_LOG(INFO, "keep in silent because of disconnected with RS, do not solicit votes.",
-                 K_(is_in_silent), K_(palf_id), "is_allowed_broadcast", bool_ret);
-      }
-      return bool_ret;
-    }
-  private:
-    LogNetService &net_service_;
-    bool is_in_silent_;  // false by default. True means that this replica is not allowed to solicit votes
-    int64_t palf_id_;
-  };
 private:
   typedef common::RWLock RWLock;
   typedef RWLock::RLockGuard RLockGuard;
@@ -1408,7 +1311,6 @@ private:
   int64_t chaning_config_warn_time_;
   bool cached_is_in_sync_;
   bool has_higher_prio_config_change_;
-  int64_t last_update_region_time_us_;
   bool is_inited_;
 };
 } // end namespace palf

@@ -78,7 +78,7 @@ ObMviewIncrMerge::ObMviewIncrMerge()
     scan_old_row_(false),
     col_descs_(nullptr),
     base_rowkey_(),
-    rowkey_allocator_("ObMview", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    rowkey_allocator_("ObMview", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
 }
 

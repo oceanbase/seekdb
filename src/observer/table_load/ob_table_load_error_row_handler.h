@@ -17,18 +17,15 @@
 #pragma once
 
 #include "sql/engine/cmd/ob_load_data_utils.h"
+#include "share/table/ob_table_load_define.h"
+#include "observer/table_load/ob_table_load_struct.h"
 
 namespace oceanbase
 {
-namespace table
-{
-class ObTableLoadResultInfo;
-} // namespace table
 namespace observer
 {
 class ObTableLoadStoreCtx;
 class ObTableLoadCoordinatorCtx;
-class ObTableLoadParam;
 
 class ObTableLoadErrorRowHandler
 {

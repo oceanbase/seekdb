@@ -19,7 +19,7 @@
 #include "lib/string/ob_string.h"
 #include "lib/ob_date_unit_type.h"
 #include "lib/container/ob_iarray.h"
-#include "lib/timezone/ob_timezone_info.h"
+#include "common/timezone/ob_timezone_info.h"
 #include "share/config/ob_server_config.h"  
 namespace oceanbase
 {

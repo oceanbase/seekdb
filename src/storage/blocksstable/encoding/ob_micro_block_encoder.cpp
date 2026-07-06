@@ -78,20 +78,20 @@ int ObMicroBlockEncoder::try_encoder(ObIColumnEncoder *&encoder, const int64_t c
   return ret;
 }
 
-#define MICRO_BLOCK_PAGE_ALLOCATOR ModulePageAllocator(common::ObModIds::OB_ENCODER_ALLOCATOR, MTL_ID())
+#define MICRO_BLOCK_PAGE_ALLOCATOR ModulePageAllocator(common::ObModIds::OB_ENCODER_ALLOCATOR)
 ObMicroBlockEncoder::ObMicroBlockEncoder() : ctx_(), header_(NULL),
     encoding_meta_allocator_(),
     data_buffer_(),
     datum_rows_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
     all_col_datums_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
-    pivot_allocator_(lib::ObMemAttr(MTL_ID(), blocksstable::OB_ENCODING_LABEL_PIVOT), OB_MALLOC_MIDDLE_BLOCK_SIZE),
+    pivot_allocator_(lib::ObMemAttr(blocksstable::OB_ENCODING_LABEL_PIVOT), OB_MALLOC_MIDDLE_BLOCK_SIZE),
     estimate_size_(0), estimate_size_limit_(0),
     header_size_(0), expand_pct_(DEFAULT_ESTIMATE_REAL_SIZE_PCT),
     row_buf_holder_(),
     encoders_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
     fix_data_encoders_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
     var_data_encoders_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
-    encoder_allocator_(encoder_sizes, ObMemAttr(MTL_ID(), common::ObModIds::OB_ENCODER_ALLOCATOR)),
+    encoder_allocator_(encoder_sizes, ObMemAttr(common::ObModIds::OB_ENCODER_ALLOCATOR)),
     row_indexs_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
     hashtables_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
     multi_prefix_trees_(OB_MALLOC_NORMAL_BLOCK_SIZE, MICRO_BLOCK_PAGE_ALLOCATOR),
@@ -103,17 +103,17 @@ ObMicroBlockEncoder::ObMicroBlockEncoder() : ctx_(), header_(NULL),
     is_inited_(false),
     block_generated_(false)
 {
-  encoding_meta_allocator_.set_attr(ObMemAttr(MTL_ID(), "MicroBlkEncoder"));
-  datum_rows_.set_attr(ObMemAttr(MTL_ID(), "MicroBlkEncoder"));
-  all_col_datums_.set_attr(ObMemAttr(MTL_ID(), "MicroBlkEncoder"));
-  encoders_.set_attr(ObMemAttr(MTL_ID(), "MicroBlkEncoder"));
-  fix_data_encoders_.set_attr(ObMemAttr(MTL_ID(), "MicroBlkEncoder"));
-  var_data_encoders_.set_attr(ObMemAttr(MTL_ID(), "MicroBlkEncoder"));
-  row_indexs_.set_attr(ObMemAttr(MTL_ID(), "MicroBlkEncoder"));
-  hashtables_.set_attr(ObMemAttr(MTL_ID(), "MicroBlkEncoder"));
-  multi_prefix_trees_.set_attr(ObMemAttr(MTL_ID(), "MicroBlkEncoder"));
-  deep_copy_indexes_.set_attr(ObMemAttr(MTL_ID(), "MicroBlkEncoder"));
-  col_ctxs_.set_attr(ObMemAttr(MTL_ID(), "MicroBlkEncoder"));
+  encoding_meta_allocator_.set_attr(ObMemAttr("MicroBlkEncoder"));
+  datum_rows_.set_attr(ObMemAttr("MicroBlkEncoder"));
+  all_col_datums_.set_attr(ObMemAttr("MicroBlkEncoder"));
+  encoders_.set_attr(ObMemAttr("MicroBlkEncoder"));
+  fix_data_encoders_.set_attr(ObMemAttr("MicroBlkEncoder"));
+  var_data_encoders_.set_attr(ObMemAttr("MicroBlkEncoder"));
+  row_indexs_.set_attr(ObMemAttr("MicroBlkEncoder"));
+  hashtables_.set_attr(ObMemAttr("MicroBlkEncoder"));
+  multi_prefix_trees_.set_attr(ObMemAttr("MicroBlkEncoder"));
+  deep_copy_indexes_.set_attr(ObMemAttr("MicroBlkEncoder"));
+  col_ctxs_.set_attr(ObMemAttr("MicroBlkEncoder"));
 }
 #undef MICRO_BLOCK_PAGE_ALLOCATOR
 
@@ -822,7 +822,7 @@ int ObMicroBlockEncoder::fill_row_data(const int64_t fix_data_size)
 {
   int ret = OB_SUCCESS;
   ObArray<int64_t> var_lengths;
-  var_lengths.set_attr(ObMemAttr(MTL_ID(), "MicroBlkEncoder"));
+  var_lengths.set_attr(ObMemAttr("MicroBlkEncoder"));
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));

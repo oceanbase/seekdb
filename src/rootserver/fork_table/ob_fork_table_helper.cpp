@@ -17,14 +17,15 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/fork_table/ob_fork_table_helper.h"
-#include "lib/mysqlclient/ob_isql_connection.h"
+#include "common/mysqlclient/ob_isql_connection.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_inner_sql_connection.h"
 #include "rootserver/ob_ddl_operator.h"
 #include "rootserver/truncate_info/ob_truncate_info_service.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_autoincrement_service.h"
-#include "share/ob_fork_table_util.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "rootserver/fork_table/ob_fork_table_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 #include "share/schema/ob_schema_utils.h"
 #include "share/tablet/ob_tablet_to_ls_operator.h"
 #include "storage/tablet/ob_tablet_fork_mds_helper.h"
@@ -56,7 +57,7 @@ static int check_table_index_features(const ObTableSchema &table_schema,
   if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
     LOG_WARN("fail to get simple index infos", K(ret));
   } else {
-    const uint64_t tenant_id = table_schema.get_tenant_id();
+    
     const bool is_heap_table = table_schema.is_heap_organized_table();
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count() &&
                         (!has_semantic_index || !has_ivf_index ||
@@ -65,9 +66,9 @@ static int check_table_index_features(const ObTableSchema &table_schema,
          ++i) {
       const ObTableSchema *index_schema = nullptr;
       const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
-      if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_table_id,
+      if (OB_FAIL(schema_guard.get_table_schema( index_table_id,
                                                 index_schema))) {
-        LOG_WARN("fail to get index table schema", K(ret), K(tenant_id),
+        LOG_WARN("fail to get index table schema", K(ret),
                  K(index_table_id));
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -224,7 +225,7 @@ int ObForkTableHelper::init(const common::ObIArray<share::schema::ObTableSchema>
 
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("fork table helper init twice", KR(ret), K(tenant_id_), K(fork_table_info_));
+    LOG_WARN("fork table helper init twice", KR(ret), K(fork_table_info_));
   } else if (!fork_table_info_.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fork table info is invalid", KR(ret), K(fork_table_info_));
@@ -232,9 +233,9 @@ int ObForkTableHelper::init(const common::ObIArray<share::schema::ObTableSchema>
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("table schemas is empty", KR(ret));
   } else if (FALSE_IT(src_table_id_ = fork_table_info_.get_fork_src_table_id())) {
-  } else if (OB_FAIL(schema_guard_.get_table_schema(tenant_id_, src_table_id_,
+  } else if (OB_FAIL(schema_guard_.get_table_schema( src_table_id_,
 src_table_schema_))) {
-    LOG_WARN("failed to get source table schema", KR(ret), K(tenant_id_),
+    LOG_WARN("failed to get source table schema", KR(ret),
              K(fork_table_info_.get_fork_src_table_id()));
   } else if (OB_ISNULL(src_table_schema_)) {
     ret = OB_TABLE_NOT_EXIST;
@@ -245,7 +246,7 @@ K(fork_table_info_.get_fork_src_table_id()));
     LOG_WARN("dst table schema is null", KR(ret));
   } else if (FALSE_IT(dst_table_id_ = dst_table_schema_->get_table_id())) {
   } else if (OB_FAIL(share::ObForkTableUtil::collect_tablet_ids_from_table(
-                 schema_guard_, tenant_id_, *src_table_schema_,
+                 schema_guard_, *src_table_schema_,
                  src_tablet_ids_))) {
     LOG_WARN("failed to collect src tablet ids", KR(ret),
              K(*src_table_schema_));
@@ -297,7 +298,7 @@ int ObForkTableHelper::execute()
     ret = OB_NOT_INIT;
     LOG_WARN("fork table helper not init", KR(ret));
   } else {
-    MTL_SWITCH(tenant_id_) {
+    MOD_SCOPE {
       if (OB_FAIL(copy_tablet_autoinc_seq_info_())) {
         LOG_WARN("failed to copy tablet autoinc seq", KR(ret), K(src_table_id_),
                  K(dst_table_id_));
@@ -309,7 +310,7 @@ int ObForkTableHelper::execute()
                  K(dst_table_id_));
       } else {
         LOG_INFO("fork table: successfully executed fork table helper",
-                 K(tenant_id_), K(fork_table_info_), K(src_table_id_),
+                 K(fork_table_info_), K(src_table_id_),
                  K(dst_table_id_), "tablet_cnt", src_tablet_ids_.count());
       }
     }
@@ -329,7 +330,8 @@ int ObForkTableHelper::copy_tablet_autoinc_seq_info_()
   } else {
     ObArenaAllocator allocator("ForkAutoinc");
     obcall::ObBatchSetTabletAutoincSeqArg arg;
-    arg.tenant_id_ = tenant_id_;
+    
+    
     arg.ls_id_ = SYS_LS;
     arg.is_tablet_creating_ = true;
 
@@ -362,7 +364,7 @@ int ObForkTableHelper::copy_tablet_autoinc_seq_info_()
 
     if (OB_SUCC(ret)) {
       storage::ObTabletForkMdsArg fork_mds_arg;
-      fork_mds_arg.tenant_id_ = tenant_id_;
+      
       fork_mds_arg.ls_id_ = SYS_LS;
       if (OB_FAIL(fork_mds_arg.set_autoinc_seq_arg(arg))) {
         LOG_WARN("failed to set autoinc seq arg", K(ret), K(arg));
@@ -394,9 +396,9 @@ int ObForkTableHelper::copy_tablet_truncate_info_()
     int64_t empty_cnt = 0;
     int64_t registered_cnt = 0;
 
-    if (OB_FAIL(OB_TS_MGR.get_ts_sync(tenant_id_, GCONF.rpc_timeout,
+    if (OB_FAIL(OB_TS_MGR.get_ts_sync(GCONF.rpc_timeout,
                                       max_readable_scn))) {
-      LOG_WARN("failed to get gts", K(ret), K(tenant_id_));
+      LOG_WARN("failed to get gts", K(ret));
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < src_tablet_ids_.count(); ++i) {
@@ -430,7 +432,7 @@ int ObForkTableHelper::copy_tablet_truncate_info_()
                  K(src_tablet_id));
       } else {
         storage::ObTabletForkMdsArg fork_mds_arg;
-        fork_mds_arg.tenant_id_ = tenant_id_;
+        
         fork_mds_arg.ls_id_ = SYS_LS;
         rootserver::ObTruncateTabletArg truncate_arg;
         truncate_arg.ls_id_ = SYS_LS;
@@ -496,7 +498,7 @@ int ObForkTableHelper::copy_table_autoinc_seq_info_()
         share::ObAutoincrementService::get_instance();
 
     if (OB_FAIL(autoinc_service.get_sequence_value(
-            tenant_id_, src_table_id_, src_autoinc_column_id, is_order_mode,
+            src_table_id_, src_autoinc_column_id, is_order_mode,
             autoinc_version, src_sequence_value))) {
       if (OB_ENTRY_NOT_EXIST == ret || OB_SCHEMA_ERROR == ret) {
         ret = OB_SUCCESS;
@@ -517,8 +519,7 @@ int ObForkTableHelper::copy_table_autoinc_seq_info_()
 
     if (OB_SUCC(ret) && src_sequence_value > 0) {
       const uint64_t sync_value = src_sequence_value - 1;
-      if (OB_FAIL(ddl_operator.set_target_auto_inc_sync_value(
-              tenant_id_, dst_table_schema_->get_table_id(),
+      if (OB_FAIL(ddl_operator.set_target_auto_inc_sync_value( dst_table_schema_->get_table_id(),
               dst_autoinc_column_id, src_sequence_value, sync_value, trans_))) {
         LOG_WARN(
             "failed to set auto increment sequence value to destination table",
@@ -626,7 +627,7 @@ int ObForkTableHelper::copy_stat_info_(const char *table_name,
     LOG_WARN("failed to assign sql string", K(ret), K(table_name),
              K(src_table_id), K(src_part_id), K(dst_table_id), K(dst_part_id));
   } else if (OB_FAIL(
-                 trans_.write(tenant_id_, sql_string.ptr(), affected_rows))) {
+                 trans_.write(sql_string.ptr(), affected_rows))) {
     LOG_WARN("failed to copy statistics", K(ret), K(sql_string));
   } else if (OB_UNLIKELY(affected_rows < 0)) {
     ret = OB_ERR_UNEXPECTED;
@@ -643,7 +644,7 @@ const char *ObForkTableHelper::get_table_schema_(const char *table_name)
   if (OB_NOT_NULL(table_name) &&
       0 == STRCMP(table_name, OB_ALL_TABLE_STAT_TNAME)) {
     ret_schema =
-        "gmt_create, gmt_modified, tenant_id, object_type, last_analyzed, "
+        "gmt_create, gmt_modified, object_type, last_analyzed, "
         "sstable_row_cnt, sstable_avg_row_len, macro_blk_cnt, micro_blk_cnt, "
         "memtable_row_cnt, memtable_avg_row_len, row_cnt, avg_row_len, "
         "global_stats, "
@@ -653,7 +654,7 @@ const char *ObForkTableHelper::get_table_schema_(const char *table_name)
   } else if (OB_NOT_NULL(table_name) &&
              0 == STRCMP(table_name, OB_ALL_COLUMN_STAT_TNAME)) {
     ret_schema =
-        "gmt_create, gmt_modified, tenant_id, column_id, object_type, "
+        "gmt_create, gmt_modified, column_id, object_type, "
         "last_analyzed, distinct_cnt, null_cnt, max_value, b_max_value, "
         "min_value, "
         "b_min_value, avg_len, distinct_cnt_synopsis, "
@@ -665,7 +666,7 @@ const char *ObForkTableHelper::get_table_schema_(const char *table_name)
   } else if (OB_NOT_NULL(table_name) &&
              0 == STRCMP(table_name, OB_ALL_HISTOGRAM_STAT_TNAME)) {
     ret_schema =
-        "gmt_create, gmt_modified, tenant_id, column_id, endpoint_num, "
+        "gmt_create, gmt_modified, column_id, endpoint_num, "
         "object_type, endpoint_normalized_value, endpoint_value, "
         "b_endpoint_value, "
         "endpoint_repeat_cnt";
@@ -682,10 +683,10 @@ int ObForkTableHelper::get_tablet_handle_(
   ObLS *ls = nullptr;
   ObLSHandle ls_handle;
 
-  MTL_SWITCH(tenant_id_) {
-    if (OB_ISNULL(ls_service = MTL(ObLSService *))) {
+  MOD_SCOPE {
+    if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ls service is null", K(ret), K(tenant_id_));
+      LOG_WARN("ls service is null", K(ret));
     } else if (OB_FAIL(ls_service->get_ls(SYS_LS, ls_handle,
                                           ObLSGetMod::DDL_MOD))) {
       LOG_WARN("get ls failed", K(ret), K(SYS_LS));

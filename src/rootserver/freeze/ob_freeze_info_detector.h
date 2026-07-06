@@ -34,7 +34,7 @@ class ObThreadIdling;
 class ObMajorMergeInfoDetector : public common::ObTimerTask
 {
 public:
-  ObMajorMergeInfoDetector(const uint64_t tenant_id);
+  ObMajorMergeInfoDetector();
   virtual ~ObMajorMergeInfoDetector();
   int init(const bool is_primary_service,
            common::ObMySQLProxy &sql_proxy,
@@ -63,7 +63,7 @@ private:
 
   int can_start_work(bool &can_work);
   bool is_primary_service() { return is_primary_service_; }
-  int check_tenant_is_restore(const uint64_t tenant_id, bool &is_restore);
+  int check_tenant_is_restore(bool &is_restore);
   int try_reload_freeze_info();
   // adjust global_merge_info in memory to avoid useless major freezes on restore major_freeze_service
   int try_adjust_global_merge_info();
@@ -87,7 +87,6 @@ private:
   bool is_primary_service_;  // identify ObMajorFreezeServiceType::SERVICE_TYPE_PRIMARY
   bool is_global_merge_info_adjusted_;
   bool is_gc_scn_inited_;
-  uint64_t tenant_id_;
   common::ObMySQLProxy *sql_proxy_;
   int64_t last_gc_timestamp_;
   int64_t last_run_timestamp_;

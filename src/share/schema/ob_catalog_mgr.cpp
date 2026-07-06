@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 
 #include "share/schema/ob_catalog_mgr.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/oblog/ob_log_module.h"
 #include "share/schema/ob_schema_utils.h"
@@ -153,8 +153,7 @@ int ObCatalogMgr::add_catalog(const ObCatalogSchema &schema,
     LOG_WARN("failed to add catalog schema", K(ret));
   } else {
     int overwrite = 1;
-    ObCatalogNameHashKey catalog_name_hash_key(new_schema->get_tenant_id(),
-                                               new_schema->get_name_case_mode(),
+    ObCatalogNameHashKey catalog_name_hash_key(new_schema->get_name_case_mode(),
                                                new_schema->get_catalog_name_str());
     if (OB_FAIL(name_map_.set_refactored(catalog_name_hash_key, new_schema, overwrite))) {
       LOG_WARN("build catalog hash map failed", K(ret));
@@ -176,8 +175,7 @@ int ObCatalogMgr::add_catalog(const ObCatalogSchema &schema,
   return ret;
 }
 
-int ObCatalogMgr::get_schema_by_name(const uint64_t tenant_id,
-                                     const ObNameCaseMode mode,
+int ObCatalogMgr::get_schema_by_name(const ObNameCaseMode mode,
                                      const ObString &name,
                                      const ObCatalogSchema *&schema) const
 {
@@ -186,45 +184,20 @@ int ObCatalogMgr::get_schema_by_name(const uint64_t tenant_id,
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id || name.empty()) {
+  } else if (name.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(name));
+    LOG_WARN("invalid argument", K(ret), K(name));
   } else {
     ObCatalogSchema *tmp_schema = NULL;
-    ObCatalogNameHashKey hash_wrap(tenant_id, mode, name);
+    ObCatalogNameHashKey hash_wrap(mode, name);
     if (OB_FAIL(name_map_.get_refactored(hash_wrap, tmp_schema))) {
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
-        LOG_INFO("schema is not exist", K(tenant_id), K(name),
+        LOG_INFO("schema is not exist", K(name),
                  "map_cnt", name_map_.item_count());
       }
     } else {
       schema = tmp_schema;
-    }
-  }
-  return ret;
-}
-
-int ObCatalogMgr::del_schemas_in_tenant(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else {
-    ObArray<const ObCatalogSchema *> schemas;
-    if (OB_FAIL(get_schemas_in_tenant(tenant_id, schemas))) {
-      LOG_WARN("get catalog schemas failed", K(ret), K(tenant_id));
-    } else {
-      FOREACH_CNT_X(schema, schemas, OB_SUCC(ret)) {
-        ObTenantCatalogId id(tenant_id, (*schema)->get_catalog_id());
-        if (OB_FAIL(del_catalog(id))) {
-          LOG_WARN("del catalog failed",
-                   "tenant_id", id.tenant_id_,
-                   "catalog_id", id.schema_id_,
-                   K(ret));
-        }
-      }
     }
   }
   return ret;
@@ -245,8 +218,6 @@ int ObCatalogMgr::del_catalog(const ObTenantCatalogId &id)
   } else if (OB_ISNULL(schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed catalog schema return NULL, ",
-             "tenant_id",
-             id.tenant_id_,
              "catalog_id",
              id.schema_id_,
              K(ret));
@@ -257,8 +228,7 @@ int ObCatalogMgr::del_catalog(const ObTenantCatalogId &id)
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(name_map_.erase_refactored(ObCatalogNameHashKey(schema->get_tenant_id(),
-                                                                schema->get_name_case_mode(),
+    if (OB_FAIL(name_map_.erase_refactored(ObCatalogNameHashKey(schema->get_name_case_mode(),
                                                                 schema->get_catalog_name_str())))) {
       LOG_WARN("failed delete catalog from hashmap", K(ret));
     }
@@ -285,12 +255,11 @@ bool ObCatalogMgr::equal_to_tenant_catalog_id(const ObCatalogSchema *lhs,
   return NULL != lhs ? (lhs->get_tenant_catalog_id() == id) : false;
 }
 
-int ObCatalogMgr::get_schemas_in_tenant(const uint64_t tenant_id,
-    ObIArray<const ObCatalogSchema *> &schemas) const
+int ObCatalogMgr::get_schemas_in_tenant(ObIArray<const ObCatalogSchema *> &schemas) const
 {
   int ret = OB_SUCCESS;
   schemas.reset();
-  ObTenantCatalogId id(tenant_id, OB_MIN_ID);
+  ObTenantCatalogId id(OB_MIN_ID);
   ConstCatalogIter iter_begin =
       schema_infos_.lower_bound(id, compare_with_tenant_catalog_id);
   bool is_stop = false;
@@ -300,7 +269,7 @@ int ObCatalogMgr::get_schemas_in_tenant(const uint64_t tenant_id,
     if (OB_ISNULL(schema = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(schema));
-    } else if (tenant_id != schema->get_tenant_id()) {
+    } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(schemas.push_back(schema))) {
       LOG_WARN("push back catalog failed", K(ret));

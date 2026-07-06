@@ -133,16 +133,16 @@ void ObLSMap::reset()
     buckets_lock_ = nullptr;
   }
   ls_cnt_ = 0;
-  tenant_id_ = OB_INVALID_ID;
+  
   ls_allocator_ = nullptr;
   is_inited_ = false;
 }
 
-int ObLSMap::init(const int64_t tenant_id, ObIAllocator *ls_allocator)
+int ObLSMap::init(ObIAllocator *ls_allocator)
 {
   int ret = OB_SUCCESS;
   const char *OB_LS_MAP = "LSMap";
-  ObMemAttr mem_attr(tenant_id, OB_LS_MAP);
+  ObMemAttr mem_attr(OB_LS_MAP);
   void *buf = NULL;
 
   if (OB_UNLIKELY(is_inited_)) {
@@ -160,7 +160,7 @@ int ObLSMap::init(const int64_t tenant_id, ObIAllocator *ls_allocator)
     for (int64_t i = 0 ; i < BUCKETS_CNT; ++i) {
       new(buckets_lock_ + i) common::ObQSyncLock();
       if (OB_FAIL((buckets_lock_ + i)->init(mem_attr))) {
-        LOG_WARN("buckets_lock_ init fail", K(ret), K(tenant_id));
+        LOG_WARN("buckets_lock_ init fail", K(ret));
         for (int64_t j = 0 ; j <= i; ++j) {
           (buckets_lock_ + j)->destroy();
         }
@@ -174,7 +174,7 @@ int ObLSMap::init(const int64_t tenant_id, ObIAllocator *ls_allocator)
     if (OB_LIKELY(ret == common::OB_SUCCESS)) {
       MEMSET(buf, 0, sizeof(ObLS*) * BUCKETS_CNT);
       ls_buckets_ = new (buf) ObLS*[BUCKETS_CNT];
-      tenant_id_ = tenant_id;
+      
       ls_allocator_ = ls_allocator;
       is_inited_ = true;
     }

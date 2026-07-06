@@ -1,4 +1,5 @@
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
+#include "share/rc/ob_module_provider.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -21,7 +22,6 @@
 #include "ob_system_admin_util.h"
 #include "observer/ob_srv_network_frame.h"
 #include "ob_root_service.h"
-#include "logservice/leader_coordinator/table_accessor.h"
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "share/ob_cluster_event_history_table_operator.h"//CLUSTER_EVENT_INSTANCE
 #include "sql/plan_cache/ob_plan_cache.h"
@@ -31,6 +31,7 @@
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "share/cache/ob_cache_name_define.h"
 #include "observer/omt/ob_multi_tenant.h"
+#include "observer/ob_service.h"
 namespace oceanbase
 {
 using namespace common;
@@ -105,8 +106,8 @@ int ObAdminClearMergeError::execute(const obcall::ObAdminMergeArg &arg)
           param.need_all_meta_ = true;
         }
       }
-    } else if (OB_FAIL(param.tenant_array_.assign(arg.tenant_ids_))) {
-      LOG_WARN("fail to assign tenant_ids", KR(ret), K(arg));
+    } else {
+      param.specified_ = true;
     }
     if (FAILEDx(ObMajorFreezeHelper::clear_merge_error(param))) {
       LOG_WARN("fail to clear merge error", KR(ret), K(param));
@@ -152,8 +153,8 @@ int ObAdminMerge::execute(const obcall::ObAdminMergeArg &arg)
               param.need_all_meta_ = true;
             }
           }
-        } else if (OB_FAIL(param.tenant_array_.assign(arg.tenant_ids_))) {
-          LOG_WARN("fail to assign tenant_ids", KR(ret), K(arg));
+        } else {
+          param.specified_ = true;
         }
         if (FAILEDx(ObMajorFreezeHelper::suspend_merge(param))) {
           LOG_WARN("fail to suspend merge", KR(ret), K(param));
@@ -179,8 +180,8 @@ int ObAdminMerge::execute(const obcall::ObAdminMergeArg &arg)
               param.need_all_meta_ = true;
             }
           }
-        } else if (OB_FAIL(param.tenant_array_.assign(arg.tenant_ids_))) {
-          LOG_WARN("fail to assign tenant_ids", KR(ret), K(arg));
+        } else {
+          param.specified_ = true;
         }
         if (FAILEDx(ObMajorFreezeHelper::resume_merge(param))) {
           LOG_WARN("fail to resume merge", KR(ret), K(param));
@@ -214,10 +215,10 @@ int ObAdminRefreshSchema::execute(const obcall::ObAdminRefreshSchemaArg &arg)
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), KR(ret));
-  } else if (OB_FAIL(ctx_.ddl_service_->refresh_schema(OB_SYS_TENANT_ID))) {
+  } else if (OB_FAIL(ctx_.ddl_service_->refresh_schema())) {
     LOG_WARN("refresh schema failed", KR(ret));
   } else {
-    if (OB_FAIL(ctx_.schema_service_->get_tenant_schema_version(OB_SYS_TENANT_ID, schema_version_))) {
+    if (OB_FAIL(ctx_.schema_service_->get_tenant_schema_version(schema_version_))) {
       LOG_WARN("fail to get schema version", KR(ret));
      } else if (OB_FAIL(ctx_.schema_service_->get_refresh_schema_info(schema_info_))) {
        LOG_WARN("fail to get refresh schema info", KR(ret), K(schema_info_));
@@ -343,7 +344,7 @@ int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
     } else {
       ObConfigItem *ci = nullptr;
       ObString config_name(item->name_.size(), item->name_.ptr());
-      if (OB_SYS_TENANT_ID != item->exec_tenant_id_ || item->tenant_name_.size() > 0) {
+      if (false || item->tenant_name_.size() > 0) {
         // tenants(user or sys tenants) modify tenant level configuration
         item->want_to_set_tenant_config_ = true;
 
@@ -362,68 +363,30 @@ int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
             if (OB_ISNULL(GCTX.schema_service_)) {
               ret = OB_INVALID_ARGUMENT;
               LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
-            } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
+            } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
               LOG_WARN("fail to get sys tenant schema guard", KR(ret));
-            } else if (OB_SYS_TENANT_ID == item->exec_tenant_id_ &&
+            } else if (true &&
                       (0 == item->tenant_name_.str().case_compare(NAME_ALL) ||
                        0 == item->tenant_name_.str().case_compare(NAME_ALL_USER) ||
                        0 == item->tenant_name_.str().case_compare(NAME_ALL_META))) {
-              common::ObArray<uint64_t> tenant_ids;
-              if (OB_FAIL(schema_guard.get_tenant_ids(tenant_ids))) {
-                LOG_WARN("get_tenant_ids failed", KR(ret));
-              } else {
-                using FUNC_TYPE = bool (*) (const uint64_t);
-                FUNC_TYPE condition_func = nullptr;
-                if (0 == item->tenant_name_.str().case_compare(NAME_ALL) ||
-                    0 == item->tenant_name_.str().case_compare(NAME_ALL_USER)) {
-                    condition_func = is_user_tenant;
-                } else {
-                  condition_func = is_meta_tenant;
-                }
-                if (OB_SUCC(ret) && (nullptr != condition_func)) {
-                  const ObTenantSchema *tenant_schema = nullptr;
-                  for (const uint64_t tenant_id: tenant_ids) {
-                    if (OB_FAIL(schema_guard.get_tenant_info(tenant_id, tenant_schema))) {
-                      LOG_WARN("fail to get tenant info", KR(ret), K(tenant_id));
-                    } else if (OB_ISNULL(tenant_schema)) {
-                      ret = OB_ERR_UNEXPECTED;
-                      LOG_WARN("tenant_schema is null", KR(ret), K(tenant_id));
-                    } else if (condition_func(tenant_id) &&
-                              OB_FAIL(item->tenant_ids_.push_back(tenant_id))) {
-                      LOG_WARN("add tenant_id failed", K(tenant_id), KR(ret));
-                      break;
-                    }
-                  } // for
-                }
-              }
-            } else if (OB_SYS_TENANT_ID == item->exec_tenant_id_
+              // lite: no user/meta tenants -> ALL/ALL_USER/ALL_META applies to nothing
+            } else if (true
                        && item->tenant_name_ == ObFixedLengthString<common::OB_MAX_TENANT_NAME_LENGTH + 1>("seed")) {
-              uint64_t tenant_id = OB_PARAMETER_SEED_ID;
-              if (OB_FAIL(item->tenant_ids_.push_back(tenant_id))) {
-                LOG_WARN("add seed tenant_id failed", KR(ret));
+              
+              if (OB_FAIL(item->batch_ids_.push_back(1UL))) {
+                LOG_WARN("add seed id failed", KR(ret));
                 break;
               }
             } else {
-              uint64_t tenant_id = OB_INVALID_TENANT_ID;
               const ObTenantSchema *tenant_schema = nullptr;
-              if (OB_SYS_TENANT_ID != item->exec_tenant_id_) {
-                tenant_id = item->exec_tenant_id_;
-              } else {
-                if (OB_FAIL(schema_guard.get_tenant_id(
-                                   ObString(item->tenant_name_.ptr()), tenant_id))
-                                   || OB_INVALID_ID == tenant_id) {
-                  ret = OB_ERR_INVALID_TENANT_NAME;
-                  LOG_WARN("get_tenant_id failed", KR(ret), "tenant", item->tenant_name_);
-                }
-              }
               if (OB_FAIL(ret)) {
-              } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_id, tenant_schema))) {
-                LOG_WARN("fail to get tenant info", KR(ret), K(tenant_id));
+              } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
+                LOG_WARN("fail to get tenant info", KR(ret));
               } else if (OB_ISNULL(tenant_schema)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("tenant_schema is null", KR(ret), K(tenant_id));
-              } else if (OB_FAIL(item->tenant_ids_.push_back(tenant_id))) {
-                LOG_WARN("add tenant_id failed", K(tenant_id), KR(ret));
+                LOG_WARN("tenant_schema is null", KR(ret));
+              } else if (OB_FAIL(item->batch_ids_.push_back(1UL))) {
+                LOG_WARN("add id failed", KR(ret));
               }
             } // else
           } // else
@@ -559,127 +522,6 @@ int ObAdminSetConfig::execute(obcall::ObAdminSetConfigArg &arg)
   return ret;
 }
 
-int ObAdminUpgradeCmd::execute(const Bool &upgrade)
-{
-  int ret = OB_SUCCESS;
-  // set enable_upgrade_mode
-  HEAP_VAR(ObAdminSetConfigItem, item) {
-    obcall::ObAdminSetConfigArg set_config_arg;
-    set_config_arg.is_inner_ = true;
-    const char *enable_upgrade_name = "enable_upgrade_mode";
-    ObAdminSetConfig admin_set_config(ctx_);
-    char min_server_version[OB_SERVER_VERSION_LENGTH] = {'\0'};
-    uint64_t cluster_version = GET_MIN_CLUSTER_VERSION();
-
-    if (OB_INVALID_INDEX == ObClusterVersion::print_version_str(
-        min_server_version, OB_SERVER_VERSION_LENGTH, cluster_version)) {
-       ret = OB_INVALID_ARGUMENT;
-       LOG_WARN("fail to print version str", KR(ret), K(cluster_version));
-    } else if (OB_FAIL(item.name_.assign(enable_upgrade_name))) {
-      LOG_WARN("assign enable_upgrade_mode config name failed", KR(ret));
-    } else if (OB_FAIL(item.value_.assign((upgrade ? "true" : "false")))) {
-      LOG_WARN("assign enable_upgrade_mode config value failed", KR(ret));
-    } else if (OB_FAIL(set_config_arg.items_.push_back(item))) {
-      LOG_WARN("add enable_upgrade_mode config item failed", KR(ret));
-    } else {
-      const char *upgrade_stage_name = "_upgrade_stage";
-      obcall::ObUpgradeStage stage = upgrade ?
-                                    obcall::OB_UPGRADE_STAGE_PREUPGRADE :
-                                    obcall::OB_UPGRADE_STAGE_NONE;
-      if (OB_FAIL(item.name_.assign(upgrade_stage_name))) {
-        LOG_WARN("assign _upgrade_stage config name failed", KR(ret), K(upgrade));
-      } else if (OB_FAIL(item.value_.assign(obcall::get_upgrade_stage_str(stage)))) {
-        LOG_WARN("assign _upgrade_stage config value failed", KR(ret), K(stage), K(upgrade));
-      } else if (OB_FAIL(set_config_arg.items_.push_back(item))) {
-        LOG_WARN("add _upgrade_stage config item failed", KR(ret), K(stage), K(upgrade));
-      }
-    }
-    share::ObBuildVersion build_version;
-    if (FAILEDx(admin_set_config.execute(set_config_arg))) {
-      LOG_WARN("execute set config failed", KR(ret));
-    } else if (OB_FAIL(observer::ObService::get_build_version(build_version))) {
-      LOG_WARN("fail to get build version", KR(ret));
-    } else {
-      CLUSTER_EVENT_SYNC_ADD("UPGRADE",
-                             upgrade ? "BEGIN_UPGRADE" : "END_UPGRADE",
-                             "cluster_version", min_server_version,
-                             "build_version", build_version.ptr());
-      LOG_INFO("change upgrade parameters",
-               "enable_upgrade_mode", upgrade,
-               "in_major_version_upgrade_mode", GCONF.in_major_version_upgrade_mode());
-
-    }
-  }
-  return ret;
-}
-
-int ObAdminRollingUpgradeCmd::execute(const obcall::ObAdminRollingUpgradeArg &arg)
-{
-  int ret = OB_SUCCESS;
-  uint64_t max_server_id = 0;
-  HEAP_VAR(ObAdminSetConfigItem, item) {
-    obcall::ObAdminSetConfigArg set_config_arg;
-    set_config_arg.is_inner_ = true;
-    const char *upgrade_stage_name = "_upgrade_stage";
-    ObAdminSetConfig admin_set_config(ctx_);
-    char ori_min_server_version[OB_SERVER_VERSION_LENGTH] = {'\0'};
-    char min_server_version[OB_SERVER_VERSION_LENGTH] = {'\0'};
-    uint64_t ori_cluster_version = GET_MIN_CLUSTER_VERSION();
-
-    if (!arg.is_valid()) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arg", KR(ret), K(arg));
-    } else if (OB_INVALID_INDEX == ObClusterVersion::print_version_str(
-               ori_min_server_version, OB_SERVER_VERSION_LENGTH, ori_cluster_version)) {
-       ret = OB_INVALID_ARGUMENT;
-       LOG_WARN("fail to print version str", KR(ret), K(ori_cluster_version));
-    } else if (OB_FAIL(item.name_.assign(upgrade_stage_name))) {
-      LOG_WARN("assign _upgrade_stage config name failed", KR(ret), K(arg));
-    } else if (OB_FAIL(item.value_.assign(obcall::get_upgrade_stage_str(arg.stage_)))) {
-      LOG_WARN("assign _upgrade_stage config value failed", KR(ret), K(arg));
-    } else if (OB_FAIL(set_config_arg.items_.push_back(item))) {
-      LOG_WARN("add _upgrade_stage config item failed", KR(ret), K(arg));
-    } else if (obcall::OB_UPGRADE_STAGE_POSTUPGRADE == arg.stage_) {
-      // wait min_observer_version to report to inner table
-      ObTimeoutCtx ctx;
-      if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
-        LOG_WARN("fail to set default timeout", KR(ret));
-      }
-
-      // end rolling upgrade, should raise min_observer_version
-      const char *min_obs_version_name = "min_observer_version";
-      if (FAILEDx(item.name_.assign(min_obs_version_name))) {
-        LOG_WARN("assign min_observer_version config name failed",
-                 KR(ret), K(min_obs_version_name));
-      } else if (OB_FAIL(item.value_.assign(min_server_version))) {
-        LOG_WARN("assign min_observer_version config value failed",
-                 KR(ret), K(min_server_version));
-      } else if (OB_FAIL(set_config_arg.items_.push_back(item))) {
-        LOG_WARN("add min_observer_version config item failed", KR(ret), K(item));
-      }
-    }
-    if (FAILEDx(admin_set_config.execute(set_config_arg))) {
-      LOG_WARN("execute set config failed", KR(ret));
-    } else {
-      share::ObBuildVersion build_version;
-      if (OB_FAIL(observer::ObService::get_build_version(build_version))) {
-        LOG_WARN("fail to get build version", KR(ret));
-      } else if (obcall::OB_UPGRADE_STAGE_POSTUPGRADE != arg.stage_) {
-        CLUSTER_EVENT_SYNC_ADD("UPGRADE", "BEGIN_ROLLING_UPGRADE",
-                               "cluster_version", ori_min_server_version,
-                               "build_version", build_version.ptr());
-      } else {
-        CLUSTER_EVENT_SYNC_ADD("UPGRADE", "END_ROLLING_UPGRADE",
-                               "cluster_version", min_server_version,
-                               "ori_cluster_version", ori_min_server_version,
-                               "build_version", build_version.ptr());
-      }
-      LOG_INFO("change upgrade parameters", KR(ret), "_upgrade_stage", arg.stage_);
-    }
-  }
-  return ret;
-}
-
 DEFINE_ENUM_FUNC(ObInnerJob, inner_job, OB_INNER_JOB_DEF);
 
 int ObAdminRefreshIOCalibration::execute(const obcall::ObAdminRefreshIOCalibrationArg &arg)
@@ -748,7 +590,7 @@ int ObAdminRefreshIOCalibration::call_server(const common::ObAddr &server)
 int ObAdminFlushCache::execute(const obcall::ObAdminFlushCacheArg &arg)
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_num = arg.tenant_ids_.count();
+  int64_t tenant_num = arg.batch_ids_.count();
   ObSEArray<ObAddr, 8> server_list;
   ObFlushCacheArg fc_arg;
   // fine-grained plan evict only will pass this way.
@@ -757,8 +599,8 @@ int ObAdminFlushCache::execute(const obcall::ObAdminFlushCacheArg &arg)
   if (tenant_num != 0) { //flush appointed tenant
     for (int64_t i = 0; OB_SUCC(ret) && i < tenant_num; ++i) {
       //get tenant server list;
-      if (OB_FAIL(get_tenant_servers(arg.tenant_ids_.at(i), server_list))) {
-        LOG_WARN("fail to get tenant servers", "tenant_id", arg.tenant_ids_.at(i));
+      if (OB_FAIL(get_tenant_servers(server_list))) {
+        LOG_WARN("fail to get tenant servers", K(i));
       } else {
         //call tenant servers;
         fc_arg.is_all_tenant_ = false;
@@ -776,11 +618,11 @@ int ObAdminFlushCache::execute(const obcall::ObAdminFlushCacheArg &arg)
           }
         }
         for (int64_t j = 0; OB_SUCC(ret) && j < server_list.count(); ++j) {
-          fc_arg.tenant_id_ = arg.tenant_ids_.at(i);
+        
+          
           LOG_INFO("flush server cache", K(fc_arg), K(server_list.at(j)));
           if (OB_FAIL(call_server(server_list.at(j), fc_arg))) {
             LOG_WARN("fail to call tenant server",
-                     "tenant_id", arg.tenant_ids_.at(i),
                      "server addr", server_list.at(j));
           }
         }
@@ -793,7 +635,8 @@ int ObAdminFlushCache::execute(const obcall::ObAdminFlushCacheArg &arg)
       LOG_WARN("fail to get all servers", KR(ret));
     } else {
       fc_arg.is_all_tenant_ = true;
-      fc_arg.tenant_id_ = common::OB_INVALID_TENANT_ID;
+      
+      
       fc_arg.cache_type_ = arg.cache_type_;
       fc_arg.ns_type_ = arg.ns_type_;
       for (int64_t j = 0; OB_SUCC(ret) && j < server_list.count(); ++j) {
@@ -808,13 +651,13 @@ int ObAdminFlushCache::execute(const obcall::ObAdminFlushCacheArg &arg)
   return ret;
 }
 
-int ObTenantServerAdminUtil::get_tenant_servers(const uint64_t tenant_id, common::ObIArray<ObAddr> &servers)
+int ObTenantServerAdminUtil::get_tenant_servers(common::ObIArray<ObAddr> &servers)
 {
   int ret = OB_SUCCESS;
   servers.reset();
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
+  if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id));
+    LOG_WARN("invalid argument", KR(ret));
   } else if (OB_FAIL(servers.push_back(GCTX.self_addr()))) {
     LOG_WARN("fail to push back self addr to array", KR(ret));
   }
@@ -840,49 +683,39 @@ int do_flush_cache_local(obcall::ObFlushCacheArg arg)
       if (arg.ns_type_ != ObLibCacheNameSpace::NS_INVALID) {
         ObLibCacheNameSpace ns = arg.ns_type_;
         if (arg.is_all_tenant_) { //flush all tenant cache
-          common::ObArray<uint64_t> tenant_ids;
           if (OB_ISNULL(GCTX.omt_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected null of GCTX.omt_", K(ret));
-          } else if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_ids))) {
-            LOG_WARN("fail to get_mtl_tenant_ids", K(ret));
           } else {
-            for (int64_t i = 0; i < tenant_ids.size(); i++) {
-              MTL_SWITCH(tenant_ids.at(i)) {
-                ObPlanCache* plan_cache = MTL(ObPlanCache*);
-                ret = plan_cache->flush_lib_cache_by_ns(ns);
-              }
-              // ignore errors at switching tenant
-              ret = OB_SUCCESS;
+            MOD_SCOPE {
+              ObPlanCache* plan_cache = share::g_mp->plan_cache();
+              ret = plan_cache->flush_lib_cache_by_ns(ns);
             }
+            // ignore errors at switching tenant
+            ret = OB_SUCCESS;
           }
         } else {  // flush appointed tenant cache
-          MTL_SWITCH(arg.tenant_id_) {
-            ObPlanCache* plan_cache = MTL(ObPlanCache*);
+          MOD_SCOPE {
+            ObPlanCache* plan_cache = share::g_mp->plan_cache();
             ret = plan_cache->flush_lib_cache_by_ns(ns);
           }
         }
       } else {
         if (arg.is_all_tenant_) { //flush all tenant cache
-          common::ObArray<uint64_t> tenant_ids;
           if (OB_ISNULL(GCTX.omt_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected null of GCTX.omt_", K(ret));
-          } else if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_ids))) {
-            LOG_WARN("fail to get_mtl_tenant_ids", K(ret));
           } else {
-            for (int64_t i = 0; i < tenant_ids.size(); i++) {
-              MTL_SWITCH(tenant_ids.at(i)) {
-                ObPlanCache* plan_cache = MTL(ObPlanCache*);
-                ret = plan_cache->flush_lib_cache();
-              }
-              // ignore errors at switching tenant
-              ret = OB_SUCCESS;
+            MOD_SCOPE {
+              ObPlanCache* plan_cache = share::g_mp->plan_cache();
+              ret = plan_cache->flush_lib_cache();
             }
+            // ignore errors at switching tenant
+            ret = OB_SUCCESS;
           }
         } else {  // flush appointed tenant cache
-          MTL_SWITCH(arg.tenant_id_) {
-            ObPlanCache* plan_cache = MTL(ObPlanCache*);
+          MOD_SCOPE {
+            ObPlanCache* plan_cache = share::g_mp->plan_cache();
             ret = plan_cache->flush_lib_cache();
           }
         }
@@ -891,8 +724,8 @@ int do_flush_cache_local(obcall::ObFlushCacheArg arg)
     }
     case CACHE_TYPE_PLAN: {
       if (arg.is_fine_grained_) { // fine-grained plan cache evict
-        MTL_SWITCH(arg.tenant_id_) {
-          ObPlanCache* plan_cache = MTL(ObPlanCache*);
+        MOD_SCOPE {
+          ObPlanCache* plan_cache = share::g_mp->plan_cache();
           if (arg.db_ids_.count() == 0) {
             ret = plan_cache->flush_plan_cache_by_sql_id(OB_INVALID_ID, arg.sql_id_);
           } else {
@@ -902,25 +735,20 @@ int do_flush_cache_local(obcall::ObFlushCacheArg arg)
           }
         }
       } else if (arg.is_all_tenant_) { //flush all tenant cache
-        common::ObArray<uint64_t> tenant_ids;
         if (OB_ISNULL(GCTX.omt_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null of GCTX.omt_", K(ret));
-        } else if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_ids))) {
-          LOG_WARN("fail to get_mtl_tenant_ids", K(ret));
         } else {
-          for (int64_t i = 0; i < tenant_ids.size(); i++) {
-            MTL_SWITCH(tenant_ids.at(i)) {
-              ObPlanCache* plan_cache = MTL(ObPlanCache*);
-              ret = plan_cache->flush_plan_cache();
-            }
-            // ignore errors at switching tenant
-            ret = OB_SUCCESS;
+          MOD_SCOPE {
+            ObPlanCache* plan_cache = share::g_mp->plan_cache();
+            ret = plan_cache->flush_plan_cache();
           }
+          // ignore errors at switching tenant
+          ret = OB_SUCCESS;
         }
       } else {  // flush appointed tenant cache
-        MTL_SWITCH(arg.tenant_id_) {
-          ObPlanCache* plan_cache = MTL(ObPlanCache*);
+        MOD_SCOPE {
+          ObPlanCache* plan_cache = share::g_mp->plan_cache();
           ret = plan_cache->flush_plan_cache();
         }
       }
@@ -929,8 +757,8 @@ int do_flush_cache_local(obcall::ObFlushCacheArg arg)
     case CACHE_TYPE_PL_OBJ: {
       if (arg.is_fine_grained_) { // fine-grained plan cache evict
         bool is_evict_by_schema_id = common::OB_INVALID_ID != arg.schema_id_;
-        MTL_SWITCH(arg.tenant_id_) {
-          ObPlanCache* plan_cache = MTL(ObPlanCache*);
+        MOD_SCOPE {
+          ObPlanCache* plan_cache = share::g_mp->plan_cache();
           if (arg.db_ids_.count() == 0) {
             if (is_evict_by_schema_id) {
               ret = plan_cache->flush_pl_cache_single_cache_obj<pl::ObGetPLKVEntryBySchemaIdOp, uint64_t>(OB_INVALID_ID, arg.schema_id_);
@@ -950,25 +778,20 @@ int do_flush_cache_local(obcall::ObFlushCacheArg arg)
           }
         }
       } else if (arg.is_all_tenant_) {
-        common::ObArray<uint64_t> tenant_ids;
         if (OB_ISNULL(GCTX.omt_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null of GCTX.omt_", K(ret));
-        } else if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_ids))) {
-          LOG_WARN("fail to get_mtl_tenant_ids", K(ret));
         } else {
-          for (int64_t i = 0; i < tenant_ids.size(); i++) {
-            MTL_SWITCH(tenant_ids.at(i)) {
-              ObPlanCache* plan_cache = MTL(ObPlanCache*);
-              ret = plan_cache->flush_pl_cache();
-            }
-            // ignore errors at switching tenant
-            ret = OB_SUCCESS;
+          MOD_SCOPE {
+            ObPlanCache* plan_cache = share::g_mp->plan_cache();
+            ret = plan_cache->flush_pl_cache();
           }
+          // ignore errors at switching tenant
+          ret = OB_SUCCESS;
         }
       } else {
-        MTL_SWITCH(arg.tenant_id_) {
-          ObPlanCache* plan_cache = MTL(ObPlanCache*);
+        MOD_SCOPE {
+          ObPlanCache* plan_cache = share::g_mp->plan_cache();
           ret = plan_cache->flush_pl_cache();
         }
       }
@@ -976,27 +799,22 @@ int do_flush_cache_local(obcall::ObFlushCacheArg arg)
     }
     case CACHE_TYPE_PS_OBJ: {
       if (arg.is_all_tenant_) {
-        common::ObArray<uint64_t> tenant_ids;
         if (OB_ISNULL(GCTX.omt_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null of GCTX.omt_", K(ret));
-        } else if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_ids))) {
-          LOG_WARN("fail to get_mtl_tenant_ids", K(ret));
         } else {
-          for (int64_t i = 0; i < tenant_ids.size(); i++) {
-            MTL_SWITCH(tenant_ids.at(i)) {
-              ObPsCache* ps_cache = MTL(ObPsCache*);
-              if (ps_cache->is_inited()) {
-                ret = ps_cache->cache_evict_all_ps();
-              }
+          MOD_SCOPE {
+            ObPsCache* ps_cache = share::g_mp->ps_cache();
+            if (ps_cache->is_inited()) {
+              ret = ps_cache->cache_evict_all_ps();
             }
-            // ignore errors at switching tenant
-            ret = OB_SUCCESS;
           }
+          // ignore errors at switching tenant
+          ret = OB_SUCCESS;
         }
       } else {
-        MTL_SWITCH(arg.tenant_id_) {
-          ObPsCache* ps_cache = MTL(ObPsCache*);
+        MOD_SCOPE {
+          ObPsCache* ps_cache = share::g_mp->ps_cache();
           if (ps_cache->is_inited()) {
             ret = ps_cache->cache_evict_all_ps();
           }
@@ -1006,19 +824,10 @@ int do_flush_cache_local(obcall::ObFlushCacheArg arg)
     }
     case CACHE_TYPE_SCHEMA: {
       // this option is only used for upgrade now
-      if (arg.is_all_tenant_) {
-        if (OB_FAIL(common::ObKVGlobalCache::get_instance().erase_cache(OB_SCHEMA_CACHE_NAME))) {
-          LOG_WARN("clear kv cache  failed", K(ret));
-        } else {
-          LOG_INFO("success erase kvcache", K(ret), K(OB_SCHEMA_CACHE_NAME));
-        }
+      if (OB_FAIL(common::ObKVGlobalCache::get_instance().erase_cache(OB_SCHEMA_CACHE_NAME))) {
+        LOG_WARN("clear kv cache failed", K(ret));
       } else {
-        if (OB_FAIL(common::ObKVGlobalCache::get_instance().erase_cache(arg.tenant_id_,
-                                                                        OB_SCHEMA_CACHE_NAME))) {
-          LOG_WARN("clear kv cache failed", K(ret));
-        } else {
-          LOG_INFO("success erase kvcache", K(ret), K(arg.tenant_id_), K(OB_SCHEMA_CACHE_NAME));
-        }
+        LOG_INFO("success erase kvcache", K(ret), K(OB_SCHEMA_CACHE_NAME));
       }
       break;
     }

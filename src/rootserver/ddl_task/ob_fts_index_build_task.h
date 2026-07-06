@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_ROOTSERVER_OB_FTS_INDEX_BUILD_TASK_H_
 #define OCEANBASE_ROOTSERVER_OB_FTS_INDEX_BUILD_TASK_H_
 
-#include "share/ob_domain_index_builder_util.h"
+#include "rootserver/ob_domain_index_builder_util.h"
 #include "src/share/ob_ddl_checksum.h"
 
 namespace oceanbase
@@ -31,7 +31,6 @@ public:
   ObFtsIndexBuildTask();
   virtual ~ObFtsIndexBuildTask();
   int init(
-      const uint64_t tenant_id,
       const int64_t task_id,
       const ObTableSchema *data_table_schema,
       const ObTableSchema *index_schema,
@@ -55,7 +54,6 @@ public:
       const int64_t buf_size,
       int64_t &pos) const override;
   virtual int deserialize_params_from_message(
-      const uint64_t tenant_id,
       const char *buf,
       const int64_t buf_size,
       int64_t &pos) override;
@@ -192,7 +190,6 @@ private:
 
 private:
   static const int64_t OB_FTS_INDEX_BUILD_TASK_VERSION = 1;
-  using ObDDLTask::tenant_id_;
   using ObDDLTask::task_id_;
   using ObDDLTask::schema_version_;
   using ObDDLTask::parallelism_;

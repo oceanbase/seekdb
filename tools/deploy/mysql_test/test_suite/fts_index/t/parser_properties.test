@@ -13,7 +13,7 @@ create database fts_parser_properies;
 
 use fts_parser_properies;
 
-let $database_id = query_get_value(SELECT database_id FROM oceanbase.__all_virtual_database WHERE database_name = 'fts_parser_properies' AND tenant_id = 1, database_id, 1);
+let $database_id = query_get_value(SELECT database_id FROM oceanbase.__all_database WHERE database_name = 'fts_parser_properies', database_id, 1);
 
 --result_format 3
 

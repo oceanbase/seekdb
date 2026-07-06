@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_multiple_merge.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_aggregated_store.h"
 #include "ob_aggregated_store_vec.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
@@ -24,7 +26,7 @@
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/concurrency_control/ob_data_validation_service.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
-#include "share/ob_partition_split_query.h"
+#include "storage/ob_partition_split_query.h"
 #include "sql/engine/px/ob_granule_iterator_op.h"
 
 namespace oceanbase
@@ -1146,7 +1148,7 @@ void ObMultipleMerge::report_tablet_stat()
     tablet_stat.pushdown_micro_block_cnt_ = access_ctx_->table_store_stat_.pushdown_micro_access_cnt_;
     if (!tablet_stat.is_valid()) {
       // do nothing
-    } else if (OB_TMP_FAIL(MTL(storage::ObTenantTabletStatMgr *)->report_stat(tablet_stat, report_succ))) {
+    } else if (OB_TMP_FAIL(share::g_mp->tenant_tablet_stat_mgr()->report_stat(tablet_stat, report_succ))) {
       STORAGE_LOG_RET(WARN, tmp_ret, "failed to report tablet stat", K(tmp_ret), K(tablet_stat));
     }
   }
@@ -2005,7 +2007,7 @@ int ObMultipleMerge::refresh_tablet_iter()
     if (OB_UNLIKELY(remain_timeout <= 0)) {
       ret = OB_TIMEOUT;
       LOG_WARN("timeout reached", K(ret), K(ls_id), K(tablet_id), K(remain_timeout));
-    } else if (OB_FAIL(MTL(ObLSService*)->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+    } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
       LOG_WARN("failed to get ls", K(ret), K(ls_id));
     } else if (OB_ISNULL(ls_handle.get_ls())) {
       ret = OB_ERR_UNEXPECTED;

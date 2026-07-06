@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_tablet_merge_task.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_partition_merger.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "ob_tenant_compaction_progress.h"
@@ -296,7 +297,7 @@ ObTabletMergeDag::ObTabletMergeDag(
     compat_mode_(lib::Worker::CompatMode::INVALID),
     ctx_(nullptr),
     param_(),
-    allocator_("MergeDag", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID(), ObCtxIds::MERGE_NORMAL_CTX_ID),
+    allocator_("MergeDag", OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::MERGE_NORMAL_CTX_ID),
     min_sstable_end_scn_(-1)
 {
 }
@@ -322,7 +323,7 @@ int ObTabletMergeDag::get_tablet_and_compat_mode()
   // the last compaction dag is not finished yet, tablet is in old version
   ObLSHandle tmp_ls_handle;
   ObTabletHandle tmp_tablet_handle;
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id_, tmp_ls_handle, ObLSGetMod::COMPACT_MODE))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, tmp_ls_handle, ObLSGetMod::COMPACT_MODE))) {
     LOG_WARN("failed to get log stream", K(ret), K(ls_id_));
   } else if (OB_FAIL(tmp_ls_handle.get_ls()->get_tablet_svr()->get_tablet(
       tablet_id_, tmp_tablet_handle, 0/*timeout_us*/, storage::ObMDSGetTabletMode::READ_ALL_COMMITED))) {
@@ -335,7 +336,7 @@ int ObTabletMergeDag::get_tablet_and_compat_mode()
   } else if (is_mini_merge(merge_type_)) {
     int64_t inc_sstable_cnt = 0;
     bool is_exist = false;
-    if (OB_FAIL(MTL(ObTenantDagScheduler *)->check_dag_exist(this, is_exist))) {
+    if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->check_dag_exist(this, is_exist))) {
       LOG_WARN("failed to check dag exist", K(ret), K_(param));
     } else if (FALSE_IT(inc_sstable_cnt = tmp_tablet_handle.get_obj()->get_minor_table_count() + (is_exist ? 1 : 0))) {
     } else if (ObPartitionMergePolicy::is_sstable_count_not_safe(inc_sstable_cnt)) {
@@ -535,7 +536,7 @@ void ObTabletMergeDag::fill_compaction_progress(
     int64_t start_cg_idx, int64_t end_cg_idx)
 {
   int tmp_ret = OB_SUCCESS;
-  progress.tenant_id_ = MTL_ID();
+  
   progress.merge_type_ = ctx.get_inner_table_merge_type();
   progress.merge_version_ = ctx.get_merge_version();
   progress.status_ = get_dag_status();
@@ -581,7 +582,7 @@ void ObTabletMergeDag::fill_diagnose_compaction_progress(
     compaction::ObPartitionMergeProgress *input_progress,
     int64_t start_cg_idx, int64_t end_cg_idx)
 {
-  progress.tenant_id_ = MTL_ID();
+  
   progress.merge_type_ = merge_type_;
   progress.status_ = get_dag_status();
   progress.dag_id_ = get_dag_id();
@@ -694,7 +695,7 @@ int ObTabletMergeExecuteDag::prepare_init(
     if (OB_FAIL(result_.assign(result))) {
       LOG_WARN("failed to assgin result", K(ret), K(result));
     } else {
-      table_key_array_.set_attr(ObMemAttr(MTL_ID(), "TableKeyArr", ObCtxIds::MERGE_NORMAL_CTX_ID));
+      table_key_array_.set_attr(ObMemAttr("TableKeyArr", ObCtxIds::MERGE_NORMAL_CTX_ID));
       for (int64_t i = 0; OB_SUCC(ret) && i < result.handle_.get_count(); ++i) {
         if (OB_FAIL(table_key_array_.push_back(result.handle_.get_table(i)->get_key()))) {
           LOG_WARN("failed to push back key", K(ret));
@@ -1239,7 +1240,7 @@ void prepare_allocator(
                        ? ObCtxIds::MERGE_RESERVE_CTX_ID
                        : ObCtxIds::MERGE_NORMAL_CTX_ID;
 
-  allocator.set_attr(lib::ObMemAttr(MTL_ID(), label, ctx_id));
+  allocator.set_attr(lib::ObMemAttr(label, ctx_id));
 }
 
 } // namespace compaction

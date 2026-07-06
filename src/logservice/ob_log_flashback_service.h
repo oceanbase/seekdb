@@ -48,37 +48,34 @@ public:
   int init(const common::ObAddr &self,
            logservice::ObLocationAdapter *location_adapter,
            common::ObMySQLProxy *sql_proxy);
-  // @desc: flashback all log_stream's redo log of tenant 'tenant_id'
-  // @params [in] const uint64_t tenant_id: id of tenant which should be flashbacked
+  // @desc: flashback all log_stream's redo log of tenant 'tenant'
+  // @params [in] const uint64_t tenant: id of tenant which should be flashbacked
   // @params [in] const share::SCN &flashback_scn: flashback point
   // @params [in] const int64_t timeout_us: timeout time (us)
   // @return
   //   - OB_SUCCESS
-  //   - OB_INVALID_ARGUEMENT: invalid tenant_id or flashback_scn
+  //   - OB_INVALID_ARGUEMENT: invalid tenant or flashback_scn
   //   - OB_NOT_SUPPORTED: meta tenant or sys tenant can't be flashbacked
   //   - OB_EAGAIN: another flashback operation is doing
   //   - OB_TIMEOUT: timeout
-  int flashback(const uint64_t tenant_id, const share::SCN &flashback_scn, const int64_t timeout_us);
+  int flashback(const share::SCN &flashback_scn, const int64_t timeout_us);
   int handle_flashback_resp(const LogFlashbackMsg &resp);
 private:
   class BaseLSOperator
   {
   public:
     BaseLSOperator()
-        : tenant_id_(OB_INVALID_TENANT_ID),
-          ls_id_(),
+        : ls_id_(),
           self_(),
           leader_(),
           flashback_scn_(),
           location_adapter_(NULL),
           ret_(OB_NOT_INIT) { }
-    BaseLSOperator(const uint64_t tenant_id,
-                   const share::ObLSID &ls_id,
+    BaseLSOperator(const share::ObLSID &ls_id,
                    const common::ObAddr &self,
                    const share::SCN &flashback_scn,
                    logservice::ObLocationAdapter *location_adapter)
-        : tenant_id_(tenant_id),
-          ls_id_(ls_id),
+        : ls_id_(ls_id),
           self_(self),
           leader_(),
           flashback_scn_(flashback_scn),
@@ -86,7 +83,7 @@ private:
     virtual ~BaseLSOperator() { reset(); }
     void reset()
     {
-      tenant_id_ = OB_INVALID_TENANT_ID;
+      
       ls_id_.reset();
       self_.reset();
       leader_.reset();
@@ -96,14 +93,14 @@ private:
     }
     bool is_valid() const {
       // leader may be invalid
-      return is_valid_tenant_id(tenant_id_) &&
+      return true &&
              ls_id_.is_valid() &&
              self_.is_valid() &&
              flashback_scn_.is_valid() &&
              OB_NOT_NULL(location_adapter_);
     }
     virtual int switch_state() = 0;
-    TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(leader), K_(flashback_scn), "inner_ret", ret_);
+    TO_STRING_KV(K_(ls_id), K_(leader), K_(flashback_scn), "inner_ret", ret_);
   protected:
     int update_leader_();
     int get_leader_palf_stat_(palf::PalfStat &palf_stat);
@@ -114,7 +111,7 @@ private:
     int change_access_mode_in_process_(const LogChangeAccessModeCmd &cmd);
     int send_flashback_msg_in_process_(const LogFlashbackMsg &msg);
   public:
-    uint64_t tenant_id_;
+    
     share::ObLSID ls_id_;
     common::ObAddr self_;
     common::ObAddr leader_;
@@ -134,12 +131,11 @@ private:
           learner_list_(),
           log_sync_learnerlist_() { }
     CheckLSLogSyncOperator(
-        const uint64_t tenant_id,
         const share::ObLSID &ls_id,
         const common::ObAddr &self,
         const share::SCN &flashback_scn,
         logservice::ObLocationAdapter *location_adapter)
-        : BaseLSOperator(tenant_id, ls_id, self, flashback_scn,
+        : BaseLSOperator(ls_id, self, flashback_scn,
           location_adapter),
           has_get_member_list_(false),
           member_list_(),
@@ -155,7 +151,7 @@ private:
       log_sync_learnerlist_.reset();
     }
     int switch_state() override final;
-    TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(leader), K_(flashback_scn),
+    TO_STRING_KV(K_(ls_id), K_(leader), K_(flashback_scn),
         K_(has_get_member_list), K_(member_list), K_(log_sync_memberlist),
         K_(learner_list), K_(log_sync_learnerlist));
   public:
@@ -209,12 +205,11 @@ private:
         mode_version_(palf::INVALID_PROPOSAL_ID),
         dst_mode_(palf::AccessMode::INVALID_ACCESS_MODE) { }
     ChangeAccessModeOperator(
-        const uint64_t tenant_id,
         const share::ObLSID &ls_id,
         const common::ObAddr &self,
         const share::SCN &flashback_scn,
         logservice::ObLocationAdapter *location_adapter)
-      : BaseLSOperator(tenant_id, ls_id, self, flashback_scn,
+      : BaseLSOperator(ls_id, self, flashback_scn,
         location_adapter),
         mode_version_(palf::INVALID_PROPOSAL_ID),
         dst_mode_(palf::AccessMode::INVALID_ACCESS_MODE) { }
@@ -224,7 +219,7 @@ private:
       dst_mode_ = palf::AccessMode::INVALID_ACCESS_MODE;
     }
     int switch_state() override final;
-    TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(leader), K_(flashback_scn),
+    TO_STRING_KV(K_(ls_id), K_(leader), K_(flashback_scn),
         K_(mode_version), K_(dst_mode));
   public:
     int64_t mode_version_;
@@ -243,7 +238,7 @@ private:
           learner_list_(),
           flashbacked_learnerlist_() { }
     ExecuteFlashbackOperator(const ChangeAccessModeOperator &op)
-      : BaseLSOperator(op.tenant_id_, op.ls_id_, op.self_, op.flashback_scn_,
+      : BaseLSOperator(op.ls_id_, op.self_, op.flashback_scn_,
         op.location_adapter_),
         mode_version_(op.mode_version_),
         has_get_member_list_(false),
@@ -253,7 +248,7 @@ private:
         flashbacked_learnerlist_() { }
     ExecuteFlashbackOperator &operator=(const ExecuteFlashbackOperator &op)
     {
-      tenant_id_ = op.tenant_id_;
+      
       ls_id_ = op.ls_id_;
       self_ = op.self_;
       leader_ = op.leader_;
@@ -281,7 +276,7 @@ private:
       flashbacked_learnerlist_.reset();
     }
     int switch_state() override final;
-    TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(leader), K_(flashback_scn), K_(mode_version),
+    TO_STRING_KV(K_(ls_id), K_(leader), K_(flashback_scn), K_(mode_version),
         K_(has_get_member_list), K_(member_list), K_(flashbacked_memberlist),
         K_(learner_list), K_(flashbacked_learnerlist));
     int handle_flashback_resp(const LogFlashbackMsg &resp);
@@ -299,7 +294,7 @@ private:
     {
       int ret = OB_SUCCESS;
       const bool is_flashback_req = true;
-      LogFlashbackMsg flashback_msg(MTL_ID(), self_, ls_id_.id(), mode_version_,
+      LogFlashbackMsg flashback_msg(self_, ls_id_.id(), mode_version_,
           flashback_scn_, is_flashback_req);
       for (int i = 0; i < list.get_member_number(); i++) {
         common::ObAddr server;
@@ -326,24 +321,19 @@ private:
 private:
   // @returns:
   //   - OB_TIMEOUT
-  int wait_all_ls_replicas_log_sync_(const uint64_t tenant_id,
-                                     const share::SCN &flashback_scn,
+  int wait_all_ls_replicas_log_sync_(const share::SCN &flashback_scn,
                                      const int64_t timeout_us) const;
-  int get_and_change_access_mode_(const uint64_t tenant_id,
-                                  const share::SCN &flashback_scn,
+  int get_and_change_access_mode_(const share::SCN &flashback_scn,
                                   const palf::AccessMode &dst_mode,
                                   const int64_t timeout_us,
                                   ChangeModeOpArray &ls_operator_array);
-  int do_flashback_(const uint64_t tenant_id,
-                    const share::SCN &flashback_scn,
+  int do_flashback_(const share::SCN &flashback_scn,
                     const ChangeModeOpArray &mode_op_array,
                     const int64_t timeout_us);
   
   // util functions
   template<typename T>
-  int construct_ls_operator_list_(
-      const uint64_t tenant_id,
-      const share::SCN &flashback_scn,
+  int construct_ls_operator_list_(const share::SCN &flashback_scn,
       common::ObArray<T> &ls_operator_array) const;
 
   template<typename SRC_T, typename DST_T>

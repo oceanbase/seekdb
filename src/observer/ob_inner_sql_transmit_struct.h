@@ -18,7 +18,7 @@
 #define OBDEV_SRC_OBSERVER_OB_INNER_SQL_TRANSMIT_STRUCT_H_
 #include "lib/container/ob_array.h"
 #include "share/ob_define.h"
-#include "share/ob_scanner.h"
+#include "sql/ob_scanner.h"
 #include "rpc/frame/ob_result_code.h"
 #include "observer/ob_server_struct.h"
 #include "sql/resolver/ob_stmt_type.h"
@@ -61,7 +61,7 @@ public:
     OPERATION_TYPE_MAX = 100
   };
 
-  ObInnerSQLTransmitArg() : ctrl_svr_(), runner_svr_(), tenant_id_(OB_INVALID_ID),
+  ObInnerSQLTransmitArg() : ctrl_svr_(), runner_svr_(),
       conn_id_(OB_INVALID_ID), inner_sql_(NULL), operation_type_(OPERATION_TYPE_INVALID),
       source_cluster_id_(OB_INVALID_CLUSTER_ID),
       worker_timeout_(OB_DEFAULT_SESSION_TIMEOUT),
@@ -69,14 +69,14 @@ public:
       sql_mode_(0), tz_info_wrap_(), ddl_info_(), is_load_data_exec_(false), nls_formats_{},
       use_external_session_(false), consumer_group_id_(0) {};
   ObInnerSQLTransmitArg(common::ObAddr ctrl_svr, common::ObAddr runner_svr,
-                        uint64_t tenant_id, uint64_t conn_id, common::ObString inner_sql,
+                        uint64_t conn_id, common::ObString inner_sql,
                         InnerSQLOperationType operation_type,
                         const int64_t source_cluster_id, const int64_t worker_timeout,
                         const int64_t query_timeout, const int64_t trx_timeout,
                         ObSQLMode sql_mode, ObSessionDDLInfo ddl_info, const bool is_load_data_exec,
                         const bool use_external_session, const int64_t consumer_group_id = 0)
         : ctrl_svr_(ctrl_svr), runner_svr_(runner_svr),
-          tenant_id_(tenant_id), conn_id_(conn_id), inner_sql_(inner_sql),
+          conn_id_(conn_id), inner_sql_(inner_sql),
           operation_type_(operation_type),
           source_cluster_id_(source_cluster_id), worker_timeout_(worker_timeout),
           query_timeout_(query_timeout), trx_timeout_(trx_timeout), sql_mode_(sql_mode),
@@ -90,8 +90,8 @@ public:
   const common::ObAddr &get_runner_svr() const { return runner_svr_; }
   void set_runner_svr(const common::ObAddr &runner_svr) { runner_svr_ = runner_svr; }
 
-  uint64_t get_tenant_id() const { return tenant_id_; }
-  void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
+  
 
   uint64_t get_conn_id() const { return conn_id_; }
   void set_conn_id(const uint64_t conn_id) { conn_id_ = conn_id; }
@@ -153,7 +153,7 @@ public:
 
   TO_STRING_KV(K_(ctrl_svr),
                K_(runner_svr),
-               K_(tenant_id),
+               
                K_(conn_id),
                K_(inner_sql),
                K_(operation_type),
@@ -172,7 +172,7 @@ public:
 private:
   common::ObAddr ctrl_svr_;
   common::ObAddr runner_svr_;
-  uint64_t tenant_id_;
+  
   uint64_t conn_id_;
   common::ObString inner_sql_;
   InnerSQLOperationType operation_type_;
@@ -193,10 +193,10 @@ class ObInnerSQLTransmitResult
 {
   OB_UNIS_VERSION(1);
 public:
-  ObInnerSQLTransmitResult(const char *label, uint64_t tenant_id)
+  ObInnerSQLTransmitResult(const char *label)
       : res_code_(), conn_id_(OB_INVALID_ID), affected_rows_(-1),
-        stmt_type_(sql::stmt::T_NONE), scanner_(label, NULL, INNER_SQL_DEFAULT_SERIALIZE_SIZE, tenant_id),
-        field_columns_(), allocator_("InnerSQL", tenant_id) {}
+        stmt_type_(sql::stmt::T_NONE), scanner_(label, NULL, INNER_SQL_DEFAULT_SERIALIZE_SIZE),
+        field_columns_(), allocator_("InnerSQL") {}
   ObInnerSQLTransmitResult() :
     res_code_(), conn_id_(OB_INVALID_ID), affected_rows_(-1),
     stmt_type_(sql::stmt::T_NONE), scanner_(), field_columns_(), allocator_("InnerSQL") {};
@@ -225,11 +225,7 @@ public:
   int copy_field_columns(const common::ObIArray<common::ObField> &field_columns);
   void reset_field_columns() { field_columns_.reset(); } ;
   const common::ObSArray<common::ObField> &get_field_columns() { return field_columns_; };
-  void set_tenant_id(uint64_t tenant_id)
-  {
-    scanner_.set_tenant_id(tenant_id);
-    allocator_.set_tenant_id(tenant_id);
-  }
+  
 
   void reset()
   {

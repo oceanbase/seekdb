@@ -26,16 +26,15 @@ using namespace share;
 namespace sql
 {
 
-OB_SERIALIZE_MEMBER(ObDASIDRequest, tenant_id_, range_);
+OB_SERIALIZE_MEMBER(ObDASIDRequest, range_);
 
-int ObDASIDRequest::init(const uint64_t tenant_id, const int64_t range)
+int ObDASIDRequest::init(const int64_t range)
 {
   int ret = OB_SUCCESS;
-  if (!is_valid_tenant_id(tenant_id) || 0 >= range) {
+  if (!true || 0 >= range) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(range));
+    LOG_WARN("invalid argument", KR(ret), K(range));
   } else {
-    tenant_id_ = tenant_id;
     range_ = range;
   }
   return ret;
@@ -43,7 +42,7 @@ int ObDASIDRequest::init(const uint64_t tenant_id, const int64_t range)
 
 bool ObDASIDRequest::is_valid() const
 {
-  return is_valid_tenant_id(tenant_id_) && range_ > 0;
+  return true && range_ > 0;
 }
 
 ObDASIDRequestRpc::ObDASIDRequestRpc()
@@ -98,10 +97,10 @@ int ObDASIDRequestRpc::fetch_new_range(const ObDASIDRequest &msg,
     const int64_t range = msg.get_range();
     const int64_t start_id = ATOMIC_FAA(&local_id_counter_, range);
     const int64_t end_id = start_id + range;
-    const uint64_t tenant_id = msg.get_tenant_id();
     
-    if (OB_FAIL(res.init(tenant_id, OB_SUCCESS, start_id, end_id))) {
-      LOG_WARN("init das id result failed", KR(ret), K(tenant_id), K(start_id), K(end_id));
+    
+    if (OB_FAIL(res.init(OB_SUCCESS, start_id, end_id))) {
+      LOG_WARN("init das id result failed", KR(ret), K(start_id), K(end_id));
     } else {
       LOG_TRACE("fetch new DAS ID range from local counter", K(msg), K(res));
     }
@@ -113,21 +112,19 @@ int ObDASIDRequestRpc::fetch_new_range(const ObDASIDRequest &msg,
 namespace obcall
 {
 
-OB_SERIALIZE_MEMBER(ObDASIDRpcResult, tenant_id_, status_, start_id_, end_id_);
+OB_SERIALIZE_MEMBER(ObDASIDRpcResult, status_, start_id_, end_id_);
 
-int ObDASIDRpcResult::init(const uint64_t tenant_id,
-                           const int status,
+int ObDASIDRpcResult::init(const int status,
                            const int64_t start_id,
                            const int64_t end_id)
 {
   int ret = OB_SUCCESS;
-  if (!is_valid_tenant_id(tenant_id) ||
+  if (!true ||
       (OB_SUCCESS == status && (0 >= start_id || 0 >= end_id))) {
     // when status is OB_SUCCESS, RPC should have succeeded with valid start id and end id
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(start_id), K(end_id));
+    LOG_WARN("invalid argument", KR(ret), K(start_id), K(end_id));
   } else {
-    tenant_id_ = tenant_id;
     status_ = status;
     start_id_ = start_id;
     end_id_ = end_id;
@@ -140,7 +137,7 @@ bool ObDASIDRpcResult::is_valid() const
   // when status is not OB_SUCCESS,
   // RPC has failed due to some error on the server side, e.g. NOT_MASTER
   // otherwise, RPC should have succeeded with valid start id and end id
-  return is_valid_tenant_id(tenant_id_) &&
+  return true &&
          (OB_SUCCESS != status_ || (start_id_ > 0 && end_id_ > 0));
 }
 

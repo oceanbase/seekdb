@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/compaction/ob_schedule_tablet_func.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 namespace oceanbase
 {
@@ -34,7 +35,7 @@ ObScheduleTabletFunc::ObScheduleTabletFunc(
     clear_stat_tablets_(),
     merge_reason_(merge_reason)
 {
-  clear_stat_tablets_.set_attr(ObMemAttr(MTL_ID(), "BatchClearTblts"));
+  clear_stat_tablets_.set_attr(ObMemAttr("BatchClearTblts"));
 }
 
 // when call schedule_tablet, ls status have been checked
@@ -87,7 +88,7 @@ int ObScheduleTabletFunc::schedule_tablet(
     }
   }
   if (need_diagnose
-      && OB_TMP_FAIL(MTL(compaction::ObDiagnoseTabletMgr *)->add_diagnose_tablet(ls_id, tablet_id,
+      && OB_TMP_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(ls_id, tablet_id,
                           share::ObDiagnoseTabletType::TYPE_MEDIUM_MERGE))) {
     LOG_WARN("failed to add diagnose tablet", K(tmp_ret), K_(ls_status), K(tablet_id));
   }
@@ -245,13 +246,11 @@ int ObScheduleTabletFunc::get_schedule_execute_info(
   const ObTabletID &tablet_id = tablet.get_tablet_id();
 
   bool schedule_flag = false;
-  const bool is_standy_tenant = !MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID();
-  const int64_t frozen_version = ObBasicMergeScheduler::get_merge_scheduler()->get_frozen_version();
   const int64_t last_major_snapshot = tablet.get_last_major_snapshot_version();
   ObMediumCompactionInfo::ObCompactionType compaction_type = ObMediumCompactionInfo::COMPACTION_TYPE_MAX;
   schedule_scn = 0; // medium_snapshot in medium info
   bool is_mv_major_refresh_tablet = false;
-  ObArenaAllocator temp_allocator("GetMediumInfo", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()); // for load medium info
+  ObArenaAllocator temp_allocator("GetMediumInfo", OB_MALLOC_NORMAL_BLOCK_SIZE); // for load medium info
   const ObMediumCompactionInfoList *medium_list = nullptr;
   ObStorageSchema *storage_schema = nullptr;
 
@@ -279,12 +278,6 @@ int ObScheduleTabletFunc::get_schedule_execute_info(
     if (OB_NO_NEED_MERGE != ret) {
       LOG_WARN("failed to get next schedule info", KR(ret), K(last_major_snapshot), K_(merge_version));
     }
-  } else if (is_standy_tenant && !is_mv_major_refresh_tablet) { // for STANDBY/RESTORE TENANT
-    if (OB_FAIL(ObMediumCompactionScheduleFunc::decide_standy_tenant_schedule(
-        ls_id, tablet_id, compaction_type, schedule_scn, frozen_version, *tablet_status_.medium_list(), schedule_flag))) {
-      LOG_WARN("failed to decide whehter to schedule standy schedule", K(ret), K_(ls_status), K(tablet_id),
-        K(compaction_type), K(schedule_scn), K(frozen_version), K(tablet_status_));
-    }
   } else {
     schedule_flag = true;
   }
@@ -300,7 +293,7 @@ void ObScheduleTabletFunc::schedule_freeze_dag(const bool force)
   int tmp_ret = OB_SUCCESS;
   IGNORE_RETURN ObBasicScheduleTabletFunc::schedule_freeze_dag(force);
   if (force || clear_stat_tablets_.count() > SCHEDULE_DAG_THREHOLD) {
-    if (OB_TMP_FAIL(MTL(ObTenantTabletStatMgr *)->batch_clear_tablet_stat(ls_status_.ls_id_, clear_stat_tablets_))) {
+    if (OB_TMP_FAIL(share::g_mp->tenant_tablet_stat_mgr()->batch_clear_tablet_stat(ls_status_.ls_id_, clear_stat_tablets_))) {
       LOG_WARN_RET(tmp_ret, "failed to batch clear tablet stats", K(ls_status_.ls_id_));
     }
     clear_stat_tablets_.reset();

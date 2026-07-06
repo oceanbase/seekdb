@@ -37,8 +37,7 @@ namespace rootserver {
 ObMViewPushRefreshScnTask::ObMViewPushRefreshScnTask()
   : is_inited_(false),
     in_sched_(false),
-    is_stop_(true),
-    tenant_id_(OB_INVALID_TENANT_ID)
+    is_stop_(true)
 {
 }
 
@@ -51,7 +50,6 @@ int ObMViewPushRefreshScnTask::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObMViewPushRefreshScnTask init twice", KR(ret), KP(this));
   } else {
-    tenant_id_ = MTL_ID();
     is_inited_ = true;
   }
   return ret;
@@ -90,7 +88,6 @@ void ObMViewPushRefreshScnTask::destroy()
   in_sched_ = false;
   cancel_task();
   wait_task();
-  tenant_id_ = OB_INVALID_TENANT_ID;
 }
 
 void ObMViewPushRefreshScnTask::wait() { wait_task(); }
@@ -108,30 +105,29 @@ void ObMViewPushRefreshScnTask::runTimerTask()
     LOG_WARN("ObMViewPushRefreshScnTask not init", KR(ret), KP(this));
   } else if (OB_UNLIKELY(is_stop_)) {
     // do nothing
-  } else if (OB_FAIL(need_schedule_major_refresh_mv_task(tenant_id_, need_schedule))) {
-    LOG_WARN("fail to check need schedule major refresh mv task", KR(ret), K(tenant_id_));
+  } else if (OB_FAIL(need_schedule_major_refresh_mv_task( need_schedule))) {
+    LOG_WARN("fail to check need schedule major refresh mv task", KR(ret));
   } else if (!need_schedule) {
-  } else if (REACH_TIME_INTERVAL(300 * 1000 * 1000) && FALSE_IT(void(check_major_mv_refresh_scn_safety(tenant_id_)))) {
+  } else if (REACH_TIME_INTERVAL(300 * 1000 * 1000) && FALSE_IT(void(check_major_mv_refresh_scn_safety()))) {
   } else if (OB_UNLIKELY(OB_ISNULL(sql_proxy))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", KR(ret));
-  } else if (OB_FAIL(trans.start(sql_proxy, tenant_id_))) {
-    LOG_WARN("fail to start trans", KR(ret), K(tenant_id_));
+  } else if (OB_FAIL(trans.start(sql_proxy))) {
+    LOG_WARN("fail to start trans", KR(ret));
   } else {
-    share::ObGlobalStatProxy stat_proxy(trans, tenant_id_);
+    share::ObGlobalStatProxy stat_proxy(trans);
     share::SCN major_refresh_mv_merge_scn;
-    ObArray<share::ObBackupJobAttr> backup_jobs;
     if (OB_FAIL(stat_proxy.get_major_refresh_mv_merge_scn(true /*select for update*/,
                                                           major_refresh_mv_merge_scn))) {
-      LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret), K(tenant_id_));
+      LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret));
     } else if (OB_UNLIKELY(!major_refresh_mv_merge_scn.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("major_refresh_mv_merge_scn is invalid", KR(ret), K(tenant_id_),
+      LOG_WARN("major_refresh_mv_merge_scn is invalid", KR(ret),
                 K(major_refresh_mv_merge_scn));
-    } else if (OB_FAIL(update_major_refresh_mview_scn_(tenant_id_, major_refresh_mv_merge_scn, trans))) {
-      LOG_WARN("fail to update major_refresh_mview_scn", KR(ret), K(tenant_id_), K(major_refresh_mv_merge_scn));
+    } else if (OB_FAIL(update_major_refresh_mview_scn_(major_refresh_mv_merge_scn, trans))) {
+      LOG_WARN("fail to update major_refresh_mview_scn", KR(ret), K(major_refresh_mv_merge_scn));
     } else {
-      LOG_INFO("[MAJ_REF_MV] successfully push major refresh mview refresh scn", K(tenant_id_),
+      LOG_INFO("[MAJ_REF_MV] successfully push major refresh mview refresh scn",
                 K(major_refresh_mv_merge_scn));
     }
   }
@@ -144,22 +140,22 @@ void ObMViewPushRefreshScnTask::runTimerTask()
   }
 }
 
-int ObMViewPushRefreshScnTask::check_major_mv_refresh_scn_safety(const uint64_t tenant_id)
+int ObMViewPushRefreshScnTask::check_major_mv_refresh_scn_safety()
 {
   int ret = OB_SUCCESS;
   ObMySQLTransaction trans;
   common::ObISQLClient *sql_proxy = GCTX.sql_proxy_;
   ObArray<ObMajorMVMergeInfo> merge_info_array;
-  if (OB_FAIL(trans.start(sql_proxy, tenant_id))) {
-    LOG_WARN("fail to start trans", KR(ret), K(tenant_id));
+  if (OB_FAIL(trans.start(sql_proxy))) {
+    LOG_WARN("fail to start trans", KR(ret));
   } else {
-    share::ObGlobalStatProxy stat_proxy(trans, tenant_id);
+    share::ObGlobalStatProxy stat_proxy(trans);
     share::SCN major_refresh_mv_merge_scn;
     const bool select_for_update = true;
     if (OB_FAIL(stat_proxy.get_major_refresh_mv_merge_scn(select_for_update,
                                                           major_refresh_mv_merge_scn))) {
-      LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(get_major_mv_merge_info_(tenant_id, trans, merge_info_array))) {
+      LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret));
+    } else if (OB_FAIL(get_major_mv_merge_info_( trans, merge_info_array))) {
       LOG_WARN("fail to get major_mv merge_info", KR(ret));
     }
   }
@@ -205,20 +201,18 @@ int ObMViewPushRefreshScnTask::check_major_mv_refresh_scn_safety(const uint64_t 
   return ret;
 }
 
-int ObMViewPushRefreshScnTask::update_major_refresh_mview_scn_(
-    const uint64_t tenant_id,
-    const share::SCN &major_refresh_mview_scn,
+int ObMViewPushRefreshScnTask::update_major_refresh_mview_scn_(const share::SCN &major_refresh_mview_scn,
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
   share::SCN min_major_refresh_mview_scn;
-  if (OB_FAIL(OB_FAIL(ObMViewInfo::get_min_major_refresh_mview_scn(trans, tenant_id, INT64_MAX, min_major_refresh_mview_scn)))) {
-    LOG_WARN("fail to get_min_major_refresh_mview_scn", KR(ret), K(tenant_id), K(major_refresh_mview_scn));
+  if (OB_FAIL(OB_FAIL(ObMViewInfo::get_min_major_refresh_mview_scn(trans, INT64_MAX, min_major_refresh_mview_scn)))) {
+    LOG_WARN("fail to get_min_major_refresh_mview_scn", KR(ret), K(major_refresh_mview_scn));
   } else if (!min_major_refresh_mview_scn.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to min_major_refresh_mview_scn is invalid", KR(ret), K(tenant_id), K(major_refresh_mview_scn));
+    LOG_WARN("fail to min_major_refresh_mview_scn is invalid", KR(ret), K(major_refresh_mview_scn));
   } else if (major_refresh_mview_scn <= min_major_refresh_mview_scn) {
-    LOG_INFO("skip update_major_refresh_mview_scn", KR(ret), K(tenant_id), K(major_refresh_mview_scn), K(min_major_refresh_mview_scn));
+    LOG_INFO("skip update_major_refresh_mview_scn", KR(ret), K(major_refresh_mview_scn), K(min_major_refresh_mview_scn));
   } else {
     ObMajorRefreshMViewScnArg arg;
     arg.major_refresh_mview_scn_ = major_refresh_mview_scn;
@@ -233,18 +227,17 @@ int ObMViewPushRefreshScnTask::update_major_refresh_mview_scn_(
       LOG_WARN("conn is NULL", KR(ret));
     } else if (OB_FAIL(arg.serialize(buf, buf_len, pos))) {
       LOG_WARN("fail to serialize", KR(ret), K(arg));
-    } else if (OB_FAIL(conn->register_multi_data_source(MTL_ID(), share::SYS_LS,
+    } else if (OB_FAIL(conn->register_multi_data_source(share::SYS_LS,
             transaction::ObTxDataSourceType::MV_UPDATE_SCN, buf, buf_len))) {
       LOG_WARN("fail to register_tx_data", KR(ret), K(arg), K(buf_len));
-    } else if (OB_FAIL(ObMViewInfo::update_major_refresh_mview_scn(trans, tenant_id, major_refresh_mview_scn))) {
-      LOG_WARN("fail to update major_refresh_mview_scn", KR(ret), K(tenant_id), K(major_refresh_mview_scn), K(min_major_refresh_mview_scn));
+    } else if (OB_FAIL(ObMViewInfo::update_major_refresh_mview_scn(trans, major_refresh_mview_scn))) {
+      LOG_WARN("fail to update major_refresh_mview_scn", KR(ret), K(major_refresh_mview_scn), K(min_major_refresh_mview_scn));
     }
   }
   return ret;
 }
 
-int ObMViewPushRefreshScnTask::get_major_mv_merge_info_(const uint64_t tenant_id,
-                                                        ObISQLClient &sql_client,
+int ObMViewPushRefreshScnTask::get_major_mv_merge_info_(ObISQLClient &sql_client,
                                                         ObIArray<ObMajorMVMergeInfo> &merge_info_array)
 {
   int ret = OB_SUCCESS;
@@ -262,7 +255,7 @@ int ObMViewPushRefreshScnTask::get_major_mv_merge_info_(const uint64_t tenant_id
     SMART_VAR(ObMySQLProxy::MySQLResult, res)
     {
       common::sqlclient::ObMySQLResult *result = nullptr;
-      if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {
+      if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
         LOG_WARN("execute sql failed", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;

@@ -58,8 +58,7 @@ public:
   ObMViewSchedJobUtils() {}
   virtual ~ObMViewSchedJobUtils() {}
 
-  static int generate_job_id(const uint64_t tenant_id,
-                             int64_t &job_id);
+  static int generate_job_id(int64_t &job_id);
   static int generate_job_name(common::ObIAllocator &allocator,
                                const int64_t job_id,
                                const common::ObString &name_prefix,
@@ -70,7 +69,6 @@ public:
                                  const common::ObString &table_name,
                                  common::ObString &job_action);
   static int add_scheduler_job(common::ObISQLClient &sql_client,
-                               const uint64_t tenant_id,
                                const int64_t job_id,
                                const common::ObString &job_name,
                                const common::ObString &job_action,
@@ -78,7 +76,6 @@ public:
                                const common::ObString &repeat_interval,
                                const common::ObString &exec_env);
   static int create_mview_scheduler_job(common::ObISQLClient &sql_client,
-                                        const uint64_t tenant_id,
                                         const uint64_t mview_id,
                                         const common::ObString &db_name,
                                         const common::ObString &table_name,
@@ -89,7 +86,6 @@ public:
                                         ObArenaAllocator &allocator,
                                         common::ObString &job_name);
   static int create_mlog_scheduler_job(common::ObISQLClient &sql_client,
-                                       const uint64_t tenant_id,
                                        const uint64_t mlog_id,
                                        const common::ObString &db_name,
                                        const common::ObString &table_name,
@@ -100,7 +96,6 @@ public:
                                        common::ObString &job_name);
 
   static int add_mview_info_and_refresh_job(common::ObISQLClient &sql_client,
-                                            const uint64_t tenant_id,
                                             const uint64_t mview_id,
                                             const common::ObString &db_name,
                                             const common::ObString &table_name,
@@ -109,16 +104,13 @@ public:
                                             share::schema::ObMViewInfo &mview_info);
 
   static int remove_mview_refresh_job(common::ObISQLClient &sql_client,
-                                       const uint64_t tenant_id,
                                        const uint64_t table_id);
 
   static int remove_mlog_purge_job(common::ObISQLClient &sql_client,
-                                    const uint64_t tenant_id,
                                     const uint64_t table_id);
 
   static int calc_date_expr_from_str(sql::ObSQLSessionInfo &session,
                                            common::ObIAllocator &allocator,
-                                           const uint64_t tenant_id,
                                            const ObString &date_str,
                                            int64_t &timestamp);
   static int calc_date_expression(dbms_scheduler::ObDBMSSchedJobInfo &job_info,
@@ -140,12 +132,10 @@ public:
                                     const common::ObString &table_name,
                                     const common::ObString &exec_env);
   
-  static int disable_and_stop_job(const uint64_t tenant_id,
-                                  const uint64_t mview_id);
+  static int disable_and_stop_job(const uint64_t mview_id);
 
 private:
-  static int acquire_major_refresh_mv_merge_scn_(common::ObISQLClient &trans,
-                                                 const uint64_t tenant_id);
+  static int acquire_major_refresh_mv_merge_scn_(common::ObISQLClient &trans);
 };
 } // namespace storage
 } // namespace oceanbase

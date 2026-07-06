@@ -26,8 +26,7 @@ namespace observer
 {
 
 ObShowDatabaseStatus::ObShowDatabaseStatus()
-    : ObVirtualTableScannerIterator(),
-      tenant_id_(OB_INVALID_ID)
+    : ObVirtualTableScannerIterator()
 {
 }
 
@@ -38,7 +37,6 @@ ObShowDatabaseStatus::~ObShowDatabaseStatus()
 
 void ObShowDatabaseStatus::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   ObVirtualTableScannerIterator::reset();
 }
 
@@ -105,9 +103,8 @@ int ObShowDatabaseStatus::add_all_database_status()
     if (OB_ISNULL(schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "schema manager should not be null", K(ret));
-    } else if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(tenant_id_,
-                                                                     database_schemas))) {
-      SERVER_LOG(WARN, "failed to get database schema of tenant", K_(tenant_id));
+    } else if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(database_schemas))) {
+      SERVER_LOG(WARN, "failed to get database schema of tenant");
     } else {
       ObServer &server = ObServer::get_instance();
       const ObAddr server_ip = server.get_self();
@@ -137,9 +134,6 @@ int ObShowDatabaseStatus::inner_get_next_row(ObNewRow *&row)
   } else if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema manager is NULL", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id_)) {
-    ret = OB_INVALID_ARGUMENT;
-    SERVER_LOG(WARN, "invalid argument", K_(tenant_id), K(ret));
   } else {
     if (!start_to_read_) {
       if (OB_FAIL(add_all_database_status())) {

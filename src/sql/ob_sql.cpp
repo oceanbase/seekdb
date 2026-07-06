@@ -34,7 +34,7 @@
 #include "sql/plan_cache/ob_values_table_compression.h"
 #include "pl/ob_pl_resolver.h"
 #include "sql/ob_sql_ccl_rule_manager.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 
 namespace oceanbase
 {
@@ -115,8 +115,6 @@ int ObSql::stmt_query(const common::ObString &stmt, ObSqlCtx &context, ObResultS
 #ifndef NDEBUG
   LOG_INFO("Begin to handle text statement",
            "sess_id", result.get_session().get_server_sid(),
-           "proxy_sess_id", result.get_session().get_proxy_sessid(),
-           "tenant_id", result.get_session().get_effective_tenant_id(),
            "execution_id", result.get_session().get_current_execution_id(),
            K(trunc_stmt));
 #endif
@@ -984,7 +982,7 @@ int ObSql::check_contain_temporary_table(share::schema::ObSchemaGetterGuard &sch
       // do nothing
     } else if (is_external_object_id(obj_version.object_id_)) {
       // do nothing
-    } else if (OB_FAIL(schema_guard.get_table_schema(MTL_ID(),
+    } else if (OB_FAIL(schema_guard.get_table_schema(
                                               obj_version.object_id_,
                                               table_schema))) {
       LOG_WARN("failed to get table schema", K(ret), K(obj_version), K(table_schema));
@@ -1024,8 +1022,7 @@ int ObSql::do_real_prepare(const ObString &sql,
 
   bool is_from_pl = (NULL != context.secondary_namespace_ || result.is_simple_ps_protocol());
   ObPsPrepareStatusGuard ps_status_guard(session);
-  ObPlanCacheCtx pc_ctx(sql, PC_PS_MODE, allocator, context, ectx,
-                        session.get_effective_tenant_id());
+  ObPlanCacheCtx pc_ctx(sql, PC_PS_MODE, allocator, context, ectx);
   ParamStore param_store( (ObWrapperAllocator(&allocator)) );
   pc_ctx.set_is_inner_sql(is_inner_sql);
 
@@ -1311,9 +1308,7 @@ int ObSql::handle_pl_prepare(const ObString &sql,
     context.is_cursor_ = pl_prepare_ctx.is_cursor_;
     context.secondary_namespace_ = pl_prepare_ctx.secondary_ns_;
     context.session_info_ = &sess;
-    context.disable_privilege_check_ = OB_SYS_TENANT_ID == sess.get_priv_tenant_id()
-                                        ? PRIV_CHECK_FLAG_DISABLE
-                                        : PRIV_CHECK_FLAG_IN_PL;
+    context.disable_privilege_check_ = PRIV_CHECK_FLAG_DISABLE;
     context.exec_type_ = PLSql;
     context.is_prepare_protocol_ = true;
     context.is_prepare_stage_ = true;
@@ -1333,7 +1328,7 @@ int ObSql::handle_pl_prepare(const ObString &sql,
           } else if (OB_FAIL(set_timeout_for_pl(sess, cur_timeout_us))) {
             LOG_WARN("failed to set timeout for pl", K(ret));
           } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-                                  sess.get_effective_tenant_id(), schema_guard))) {
+                                  schema_guard))) {
             LOG_WARN("failed to get tenant schema guard", K(ret));
           } else if (FALSE_IT(context.schema_guard_ = &schema_guard)) {
           } else if (OB_FAIL(init_result_set(context, result))) {
@@ -1465,7 +1460,7 @@ int ObSql::handle_sql_execute(const ObString &sql,
     use_plan_cache = session->get_local_ob_enable_plan_cache();
   }
 
-  ObPlanCacheCtx pc_ctx(sql, mode, allocator, context, ectx, session->get_effective_tenant_id());
+  ObPlanCacheCtx pc_ctx(sql, mode, allocator, context, ectx);
 
   if (OB_FAIL(ret)) {
     // do nothing
@@ -1567,10 +1562,10 @@ int ObSql::handle_pl_execute(const ObString &sql,
     if (OB_ISNULL(context.schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema guard is null");
-    } else if (OB_FAIL(context.schema_guard_->get_schema_version(session.get_effective_tenant_id(), local_tenant_schema_version))) {
-      LOG_WARN("get tenant schema version failed", K(ret), K(session.get_effective_tenant_id()));
-    } else if (OB_FAIL(context.schema_guard_->get_schema_version(OB_SYS_TENANT_ID, local_sys_schema_version))) {
-      LOG_WARN("get sys tenant schema version failed", K(ret), K(OB_SYS_TENANT_ID));
+    } else if (OB_FAIL(context.schema_guard_->get_schema_version(local_tenant_schema_version))) {
+      LOG_WARN("get tenant schema version failed", K(ret));
+    } else if (OB_FAIL(context.schema_guard_->get_schema_version(local_sys_schema_version))) {
+      LOG_WARN("get sys tenant schema version failed", K(ret));
     } else {
       result.get_exec_context().get_task_exec_ctx().set_query_tenant_begin_schema_version(local_tenant_schema_version);
       result.get_exec_context().get_task_exec_ctx().set_query_sys_begin_schema_version(local_sys_schema_version);
@@ -1664,8 +1659,7 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
     ectx.set_is_ps_prepare_stage(true);
 
 #ifndef NDEBUG
-    LOG_INFO("Begin to handle prepare statement", "sess_id", session.get_server_sid(),
-             "proxy_sess_id", session.get_proxy_sessid(), K(stmt));
+    LOG_INFO("Begin to handle prepare statement", "sess_id", session.get_server_sid(), K(stmt));
 #endif
 
     if (OB_ISNULL(ps_cache) || OB_ISNULL(pctx) || OB_ISNULL(schema_guard)) {
@@ -1692,11 +1686,10 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
       bool is_expired = false;
       int64_t open_cursors_limit = 0;
       int64_t cur_ps_handle_size = session.get_ps_session_info_size();
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(session.get_effective_tenant_id()));
-      if (!tenant_config.is_valid()) {
+      if (!true) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tenant config is invalid", K(ret));
-      } else if (FALSE_IT(open_cursors_limit = tenant_config->open_cursors)) {
+      } else if (FALSE_IT(open_cursors_limit = GCONF.open_cursors)) {
       } else if (!is_inner_sql
                 && NEED_CHECK_SESS_MAX_PS_HANDLE_LIMIT(open_cursors_limit)
                 && cur_ps_handle_size >= open_cursors_limit) {
@@ -2107,8 +2100,8 @@ int ObSql::check_read_only_privilege(ParseResult &parse_result,
   if (OB_ISNULL(pctx) || OB_ISNULL(session)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
-  } else if (OB_FAIL(schema_guard.get_tenant_read_only(MTL_ID(), read_only))) {
-    LOG_WARN("fail to get tenant read only attribute", K(ret), K(MTL_ID()));
+  } else if (OB_FAIL(schema_guard.get_tenant_read_only(read_only))) {
+    LOG_WARN("fail to get tenant read only attribute", K(ret));
   } else if (OB_FAIL(session->check_read_only_privilege(read_only,
                                                         sql_traits))) {
     LOG_WARN("failed to check read_only privilege", K(ret));
@@ -2208,8 +2201,7 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
       context.cur_sql_ = sql;
       context.raw_sql_ = ps_info->get_ps_sql();
 #ifndef NDEBUG
-      LOG_INFO("Begin to handle execute statement", "sess_id", session.get_server_sid(),
-               "proxy_sess_id", session.get_proxy_sessid(), K(sql));
+      LOG_INFO("Begin to handle execute statement", "sess_id", session.get_server_sid(), K(sql));
 #endif
 
       if (!ps_info->get_fixed_raw_params().empty()) {
@@ -2220,8 +2212,7 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
       } else if (FALSE_IT(generate_ps_sql_id(sql, context))) {
       } else if (OB_LIKELY(ObStmt::is_dml_stmt(stmt_type))) {
         //if plan not exist, generate plan
-        ObPlanCacheCtx pc_ctx(sql, PC_PS_MODE, allocator, context, ectx,
-                              session.get_effective_tenant_id());
+        ObPlanCacheCtx pc_ctx(sql, PC_PS_MODE, allocator, context, ectx);
         pc_ctx.fp_result_.pc_key_.key_id_ = inner_stmt_id;
         pc_ctx.normal_parse_const_cnt_ = ps_params.count();
         context.bl_key_.db_id_ = session.get_database_id();
@@ -2349,7 +2340,6 @@ int ObSql::handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
 #ifndef NDEBUG
   LOG_INFO("Begin to handle remote statement",
            K(remote_sql_info), "sess_id", session->get_server_sid(),
-           "proxy_sess_id", session->get_proxy_sessid(),
            "execution_id", session->get_current_execution_id());
 #endif
     if (exec_ctx.get_min_cluster_version() != session->get_exec_min_cluster_version()) {
@@ -2359,7 +2349,7 @@ int ObSql::handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
                                                       K(session->get_exec_min_cluster_version()));
       exec_ctx.get_task_exec_ctx().set_min_cluster_version(session->get_exec_min_cluster_version());
     }
-    const uint64_t tenant_id = session->get_effective_tenant_id();
+    
     bool use_plan_cache = session->get_local_ob_enable_plan_cache();
     context.self_add_plan_ = false;
     PlanCacheMode mode = remote_sql_info.use_ps_ ? PC_PS_MODE : PC_TEXT_MODE;
@@ -2369,8 +2359,7 @@ int ObSql::handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
                                          mode,
                                          allocator,
                                          context,
-                                         exec_ctx,
-                                         tenant_id);
+                                         exec_ctx);
     pc_ctx->is_remote_executor_ = true;
     if (remote_sql_info.use_ps_) {
       // Since the execution plan for ps mode and the ordinary text protocol cannot be reused, it is necessary to distinguish between them here to avoid some issues when querying the plan
@@ -2516,7 +2505,7 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
 
   ObIAllocator &allocator = THIS_WORKER.get_sql_arena_allocator();
   ObSQLSessionInfo &session = result.get_session();
-  const uint64_t tenant_id = session.get_effective_tenant_id();
+  
   ObExecContext& ectx = result.get_exec_context();
   int get_plan_err = OB_SUCCESS; //used for judge whether add plan to plan cache
   bool use_plan_cache = session.get_local_ob_enable_plan_cache();
@@ -2549,8 +2538,7 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
                                          PC_TEXT_MODE,
                                          allocator,
                                          context,
-                                         ectx,
-                                         tenant_id);
+                                         ectx);
     if (trimed_stmt.length() == 6) {
       // Whether it is a COMMIT statement
       is_begin_commit_stmt = (0 == STRNCASECMP(trimed_stmt.ptr(), "commit", 6)
@@ -3051,14 +3039,13 @@ int ObSql::generate_physical_plan(ParseResult &parse_result,
         bool all_above = true;
         share::schema::ObCCLRuleMgr::CCLRuleInfos *rules = nullptr;
         if (OB_SUCCESS == sql_ctx.schema_guard_->get_ccl_rule_infos(
-                MTL_ID(), share::schema::CclRuleContainsInfo::DATABASE_AND_TABLE, rules)
+                share::schema::CclRuleContainsInfo::DATABASE_AND_TABLE, rules)
             && OB_NOT_NULL(rules)) {
           for (int64_t i = 0; all_above && i < rules->size(); ++i) {
             const share::schema::ObSimpleCCLRuleSchema *s = rules->at(i);
             const share::schema::ObCCLRuleSchema *fs = nullptr;
             if (OB_ISNULL(s)
-                || OB_SUCCESS != sql_ctx.schema_guard_->get_ccl_rule_with_ccl_rule_id(
-                       MTL_ID(), s->get_ccl_rule_id(), fs)
+                || OB_SUCCESS != sql_ctx.schema_guard_->get_ccl_rule_with_ccl_rule_id(s->get_ccl_rule_id(), fs)
                 || OB_ISNULL(fs)
                 || static_cast<int64_t>(fs->get_max_concurrency()) <= outline_max) {
               all_above = false;
@@ -3154,20 +3141,7 @@ int ObSql::generate_plan(ParseResult &parse_result,
     pctx->set_field_array(result.get_field_columns());
     pctx->set_is_ps_protocol(result.is_ps_protocol());
     bool is_restore = false;
-    uint64_t effective_tid = result.get_session().get_effective_tenant_id();
     ObOptimizer optimizer(optctx);
-    bool use_jit = false;
-    bool turn_on_jit = sql_ctx.need_late_compile_;
-    // if (OB_FAIL(ret)) {
-    // } else if (OB_FAIL(need_use_jit(turn_on_jit,
-    //                                 query_hint.use_jit_policy_,
-    //                                 *sql_ctx.session_info_,
-    //                                 use_jit))) {
-    //   use_jit = false;
-    //   LOG_WARN("failed to check for needing jitted expr", K(ret));
-    // } else {
-    //   // do nothing
-    // }
 
     ObLogPlan *logical_plan = NULL;
     ObPhysicalPlan *phy_plan = NULL;
@@ -3176,16 +3150,11 @@ int ObSql::generate_plan(ParseResult &parse_result,
     // But the plan was hung under the sys tenant's plan cache, leading to abnormal data statistics in the plan_cache_stat table,
     // Occurs when there appears to be a memory leak but there actually isn't. Here we handle it by directly fetching from plan cache
     // Get tenant id, so that the resources allocated by the plan are counted under the corresponding tenant of the plan cache
-    if (OB_NOT_NULL(result.get_session().get_plan_cache())) {
-      effective_tid = result.get_session().get_plan_cache()->get_tenant_id();
-    }
-
     ObCacheObjGuard& guard = result.get_cache_obj_guard();
     guard.init(PLAN_GEN_HANDLE);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObCacheObjectFactory::alloc(guard,
-                                                    ObLibCacheNameSpace::NS_CRSR,
-                                                    effective_tid))) {
+                                                    ObLibCacheNameSpace::NS_CRSR))) {
       LOG_WARN("fail to alloc phy_plan", K(ret));
     } else if (FALSE_IT(phy_plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj()))) {
       // do nothing
@@ -3193,15 +3162,13 @@ int ObSql::generate_plan(ParseResult &parse_result,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("Failed to alloc physical plan from tc factory", K(ret));
     } else {
-      // update is_use_jit flag
       phy_plan->set_use_rich_format(sql_ctx.session_info_->use_rich_format());
-      phy_plan->stat_.is_use_jit_ = use_jit;
       phy_plan->stat_.enable_early_lock_release_ = sql_ctx.session_info_->get_early_lock_release();
       // if phy_plan's tenant id, which refers the tenant who create this plan,
       // not equal to current effective_tid, plan cache must be invalid
       // and we shouldn't add this plan to plan cache.
       if (NULL != pc_ctx) {
-        pc_ctx->should_add_plan_ = (effective_tid==phy_plan->get_tenant_id());
+        pc_ctx->should_add_plan_ = true;
       }
     }
 
@@ -3318,7 +3285,7 @@ int ObSql::generate_plan(ParseResult &parse_result,
     } else if (stmt::T_SELECT == stmt->get_stmt_type() &&
                 stmt::T_SHOW_PARAMETERS == stmt->get_query_ctx()->get_literal_stmt_type()) {
       ObSelectStmt *select_stmt = static_cast<ObSelectStmt*>(stmt);
-      pctx->set_tenant_id(select_stmt->get_tenant_id());
+      
       pctx->set_show_seed(select_stmt->get_show_seed());
       result.get_exec_context().reference_my_plan(phy_plan);
     } else {
@@ -3338,7 +3305,6 @@ int ObSql::generate_stmt_with_reconstruct_sql(ObDMLStmt* &stmt,
   int ret = OB_SUCCESS;
   ObString sql;
   ObObjPrintParams print_param;
-  print_param.for_dblink_ = 1;
   ObSQLSessionInfo *session = sql_ctx.session_info_;
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
   if (OB_ISNULL(session) || OB_ISNULL(pc_ctx) ||
@@ -3640,21 +3606,14 @@ int ObSql::code_generate(
   int64_t last_mem_usage = 0;
   int64_t codegen_mem_usage = 0;
   ObPhysicalPlanCtx *pctx = result.get_exec_context().get_physical_plan_ctx();
-  bool use_jit = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(logical_plan) || OB_ISNULL(stmt->get_query_ctx())
         || OB_ISNULL(phy_plan) || OB_ISNULL(sql_ctx.session_info_)
         || OB_ISNULL(pctx)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Logical_plan or phy_plan is NULL", K(ret), K(stmt), K(logical_plan), K(phy_plan),
                "session", sql_ctx.session_info_);
-  //} else if (OB_FAIL(need_use_jit(sql_ctx.need_late_compile_,
-  //                                (stmt->get_stmt_hint().get_query_hint()).use_jit_policy_,
-  //                                *sql_ctx.session_info_,
-  //                                use_jit))) {
-  //  LOG_WARN("failed to check for needing jitted expr", K(ret));
   } else {
-    ObCodeGenerator code_generator(use_jit,
-                                   result.get_exec_context().get_min_cluster_version(),
+    ObCodeGenerator code_generator(result.get_exec_context().get_min_cluster_version(),
                                    &(pctx->get_datum_param_store()));
     phy_plan->set_is_packed(logical_plan->get_optimizer_context().is_packed());
     if (OB_FAIL(code_generator.generate(*logical_plan, *phy_plan))) {
@@ -3663,9 +3622,7 @@ int ObSql::code_generate(
       // session's ignore_stmt status for CG use, needs to be cleared after CG ends
       sql_ctx.session_info_->set_ignore_stmt(false);
       LOG_DEBUG("phy plan", K(*phy_plan));
-      phy_plan->stat_.is_use_jit_ = use_jit;
       phy_plan->set_returning(stmt->is_returning());
-      phy_plan->set_has_link_table(phy_plan->has_link_udf());
       last_mem_usage = phy_plan->get_mem_size();
     }
   }
@@ -3994,8 +3951,7 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
             const uint64_t db_id = pc_ctx.sql_ctx_.bl_key_.db_id_;
             const ObString &sql_id = pc_ctx.sql_ctx_.bl_key_.sql_id_;
             if (OB_INVALID_ID != db_id && !sql_id.empty()
-                && OB_SUCCESS == sg->get_outline_info_with_sql_id(
-                       session->get_effective_tenant_id(), db_id, sql_id, false /*normal*/, outline_info)
+                && OB_SUCCESS == sg->get_outline_info_with_sql_id(db_id, sql_id, false /*normal*/, outline_info)
                 && OB_NOT_NULL(outline_info) && outline_info->has_outline_params()) {
               const share::schema::ObOutlineParamsWrapper &pw = outline_info->get_outline_params_wrapper();
               for (int64_t i = 0; i < pw.get_outline_params().count(); ++i) {
@@ -4011,14 +3967,13 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
             bool all_above = true;
             share::schema::ObCCLRuleMgr::CCLRuleInfos *rules = nullptr;
             if (OB_SUCCESS == sg->get_ccl_rule_infos(
-                    MTL_ID(), share::schema::CclRuleContainsInfo::DATABASE_AND_TABLE, rules)
+                    share::schema::CclRuleContainsInfo::DATABASE_AND_TABLE, rules)
                 && OB_NOT_NULL(rules)) {
               for (int64_t i = 0; all_above && i < rules->size(); ++i) {
                 const share::schema::ObSimpleCCLRuleSchema *s = rules->at(i);
                 const share::schema::ObCCLRuleSchema *fs = nullptr;
                 if (OB_ISNULL(s)
-                    || OB_SUCCESS != sg->get_ccl_rule_with_ccl_rule_id(
-                           MTL_ID(), s->get_ccl_rule_id(), fs)
+                    || OB_SUCCESS != sg->get_ccl_rule_with_ccl_rule_id(s->get_ccl_rule_id(), fs)
                     || OB_ISNULL(fs)
                     || static_cast<int64_t>(fs->get_max_concurrency()) <= outline_max) {
                   all_above = false;
@@ -4112,8 +4067,8 @@ int ObSql::get_outline_data(ObPlanCacheCtx &pc_ctx,
   if (OB_ISNULL(session) || OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session), K(schema_guard));
-  } else if (OB_FAIL(schema_guard->get_schema_version(session->get_effective_tenant_id(), schema_version))) {
-    LOG_WARN("fail to get schema version", K(ret), K(session->get_effective_tenant_id()));
+  } else if (OB_FAIL(schema_guard->get_schema_version(schema_version))) {
+    LOG_WARN("fail to get schema version", K(ret));
   } else if (OB_CORE_SCHEMA_VERSION >= schema_version) {
     // local schema is fall behind, do not use outline
   } else {
@@ -4140,42 +4095,38 @@ int ObSql::get_outline_data(ObPlanCacheCtx &pc_ctx,
         && FALSE_IT(format_outline_key.assign_ptr(buf + pos,
             static_cast<ObString::obstr_size_t>(format_pos)))) {
       // try normal outline
-    } else if (OB_FAIL(schema_guard->get_outline_info_with_signature(session->get_effective_tenant_id(),
-                                                                     database_id,
+    } else if (OB_FAIL(schema_guard->get_outline_info_with_signature(database_id,
                                                                      outline_key,
                                                                      false, /*normal outline*/
                                                                      outline_info))) {
-      LOG_WARN("failed to get outline info", K(session->get_effective_tenant_id()),
+      LOG_WARN("failed to get outline info",
                                               K(signature_sql), K(ret));
       ret = OB_SUCCESS;
     // try normal outline
     } else if (NULL == outline_info &&
-               OB_FAIL(schema_guard->get_outline_info_with_sql_id(session->get_effective_tenant_id(),
-                                                                database_id,
+               OB_FAIL(schema_guard->get_outline_info_with_sql_id(database_id,
                                                                 sql_id,
                                                                 false, /*normal outline*/
                                                                 outline_info))) {
-      LOG_WARN("failed to get outline info", K(session->get_effective_tenant_id()), K(ret));
+      LOG_WARN("failed to get outline info", K(ret));
       ret = OB_SUCCESS;
     // try format outline
     } else if (NULL == outline_info && !format_outline_key.empty() &&
-              OB_FAIL(schema_guard->get_outline_info_with_signature(session->get_effective_tenant_id(),
-                                                                     database_id,
+              OB_FAIL(schema_guard->get_outline_info_with_signature(database_id,
                                                                      format_outline_key,
                                                                      true, /*format outline*/
                                                                      outline_info))) {
-      LOG_WARN("failed to get outline info", K(session->get_effective_tenant_id()),
+      LOG_WARN("failed to get outline info",
                                               K(signature_sql), K(ret));
       ret = OB_SUCCESS;
 
     // try format outline
     } else if (NULL == outline_info && !format_sql_id.empty() &&
-               OB_FAIL(schema_guard->get_outline_info_with_sql_id(session->get_effective_tenant_id(),
-                                                                database_id,
+               OB_FAIL(schema_guard->get_outline_info_with_sql_id(database_id,
                                                                 format_sql_id,
                                                                 true, /*format outline*/
                                                                 outline_info))) {
-      LOG_WARN("failed to get outline info", K(session->get_effective_tenant_id()), K(ret));
+      LOG_WARN("failed to get outline info", K(ret));
       ret = OB_SUCCESS;
     }
   }
@@ -4627,12 +4578,6 @@ int ObSql::after_get_plan(ObPlanCacheCtx &pc_ctx,
 
       if (OB_SUCC(ret)) {
         DAS_CTX(pc_ctx.exec_ctx_).unmark_need_check_server();
-        bool need_reroute = false;
-        if (OB_FAIL(check_need_reroute(pc_ctx, session, phy_plan, need_reroute))) {
-          LOG_WARN("fail to check need reroute", K(ret));
-        } else if (need_reroute) {
-          ret = OB_ERR_PROXY_REROUTE;
-        }
       }
 
       // the purpose of adding condition (!session.get_is_in_retry()) is
@@ -4692,10 +4637,6 @@ int ObSql::after_get_plan(ObPlanCacheCtx &pc_ctx,
           pctx->get_remote_sql_info().remote_sql_ = pc_ctx.sql_ctx_.cur_sql_;
           pctx->get_remote_sql_info().ps_params_ = &param_store;
         }
-        if (GET_MIN_CLUSTER_VERSION() != min_cluster_version) {
-          LOG_INFO("remote plan src diff cluster version",
-                   K(GET_MIN_CLUSTER_VERSION()), K(min_cluster_version));
-        }
         LOG_DEBUG("generate remote sql info", K(pctx->get_remote_sql_info()),
                   K(session.get_local_ob_enable_plan_cache()),
                   K(pc_ctx.fp_result_.raw_params_), K(pc_ctx.not_param_info_),
@@ -4729,24 +4670,6 @@ int ObSql::after_get_plan(ObPlanCacheCtx &pc_ctx,
         LOG_WARN("fail to set all local session vars", K(ret));
       }
     }
-    if (OB_SUCC(ret) && NULL != phy_plan) {
-      bool has_partition_changed = false;
-      CK (pc_ctx.exec_ctx_.get_sql_ctx()->schema_guard_ != NULL);
-      for (int64_t i = 0; OB_SUCC(ret) && i < phy_plan->get_immediate_refresh_external_table_ids().count(); i++) {
-        int64_t object_id = phy_plan->get_immediate_refresh_external_table_ids().at(i);
-        bool has_partition_changed_temp = false;
-        OZ (ObExternalTableFileManager::get_instance().refresh_external_table(session.get_effective_tenant_id(),
-                                                                              object_id,
-                                                                              *pc_ctx.exec_ctx_.get_sql_ctx()->schema_guard_,
-                                                                              pc_ctx.exec_ctx_,
-                                                                              has_partition_changed_temp));
-        has_partition_changed |= has_partition_changed_temp;
-      }
-      if (OB_SUCC(ret) && has_partition_changed) {
-        ret = OB_SCHEMA_EAGAIN;
-        LOG_TRACE("has external table partition change");
-      }
-    }
   } else {
     // not phy_plan, ignore
   }
@@ -4769,8 +4692,6 @@ int ObSql::need_add_plan(const ObPlanCacheCtx &pc_ctx,
              || OB_ISNULL(result.get_exec_context().get_stmt_factory()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null ptr", K(ret), KP(result.get_exec_context().get_stmt_factory()));
-  } else if (result.get_exec_context().get_stmt_factory()->get_query_ctx()->has_dblink()) {
-    need_add_plan = false;
   } else if (ObPlanCache::is_contains_external_object(
                                             result.get_physical_plan()->get_dependency_table())) {
     need_add_plan = false;
@@ -5426,127 +5347,6 @@ int ObSql::handle_text_execute(const ObStmt *basic_stmt,
       }
     }
     LOG_DEBUG("handle text execute done", K(ret), KPC(exec_stmt), K(param_store));
-  }
-  return ret;
-}
-
-int ObSql::check_need_reroute(ObPlanCacheCtx &pc_ctx, ObSQLSessionInfo &session, ObPhysicalPlan *plan, bool &need_reroute)
-{
-  int ret = OB_SUCCESS;
-  need_reroute = false;
-  ObDASCtx &das_ctx = pc_ctx.exec_ctx_.get_das_ctx();
-  bool should_reroute = false;
-  if (OB_NOT_NULL(plan)) {
-    should_reroute = pc_ctx.sql_ctx_.can_reroute_sql_
-      && (OB_PHY_PLAN_REMOTE == plan->get_plan_type()
-          || (!das_ctx.is_partition_hit() && !das_ctx.get_table_loc_list().empty()));
-    // check inject reroute for test
-    if (!should_reroute) {
-      const uint32_t sessid = session.get_server_sid();
-      const int reroute_retry_cnt = OB_E(EventTable::EN_LOCK_CONFLICT_RETRY_THEN_REROUTE, sessid) OB_SUCCESS;
-      if (OB_UNLIKELY(reroute_retry_cnt)) {
-        int last_query_retry_err = session.get_retry_info().get_last_query_retry_err();
-        int64_t retry_cnt = session.get_retry_info().get_retry_cnt();
-        should_reroute = last_query_retry_err == OB_TRY_LOCK_ROW_CONFLICT
-          && retry_cnt >= -reroute_retry_cnt;
-        LOG_INFO("inject force reroute sql",
-                 K(last_query_retry_err),
-                 K(retry_cnt),
-                 K(reroute_retry_cnt),
-                 K(should_reroute));
-      }
-    }
-  }
-  if (should_reroute) {
-    // reroute request,
-    // physical table location is already calculated and stored in task_exec_ctx.table_locations_
-    const DependenyTableStore &dep_tables = plan->get_dependency_table();
-    for (int64_t i = 0;
-         should_reroute && i < dep_tables.count();
-         i++) {
-      const ObSchemaObjVersion &schema_obj = dep_tables.at(i);
-      if (TABLE_SCHEMA == schema_obj.get_schema_type()
-          && is_virtual_table(schema_obj.object_id_)) {
-        should_reroute = false;
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(pc_ctx.sql_ctx_.schema_guard_)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid null schema guard", K(ret));
-    } else if (should_reroute) {
-      if (DAS_CTX(pc_ctx.exec_ctx_).get_table_loc_list().empty()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null phy table location", K(ret));
-      } else {
-        const ObTableSchema *table_schema = NULL;
-        ObDASTableLoc *first_table_loc = DAS_CTX(pc_ctx.exec_ctx_).get_table_loc_list().get_first();
-        ObDASTabletLoc *first_tablet_loc = first_table_loc->get_first_tablet_loc();
-        ObLSReplicaLocation ls_replica_loc;
-        ObDASLocationRouter &loc_router = DAS_CTX(pc_ctx.exec_ctx_).get_location_router();
-        if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_table_schema(
-            MTL_ID(),
-            first_table_loc->loc_meta_->ref_table_id_, table_schema))) {
-          LOG_WARN("failed to get table schema", K(ret));
-        } else if (OB_ISNULL(table_schema)) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid null table schema", K(ret));
-        } else if (table_schema->is_storage_local_index_table()) {
-          // Local index table has the same location as the primary table.
-          // But the schema of local index table is incompleted, causing error when it is rerouted.
-          // Therefore, returns the primary table to proxy for rerouting.
-          const uint64_t data_table_id = table_schema->get_data_table_id();
-          const ObTableSchema *data_table_schema = NULL;
-          if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_table_schema(
-              MTL_ID(),
-              data_table_id,
-              data_table_schema))) {
-            LOG_WARN("failed to get table schema", KR(ret), "tenant_id", MTL_ID(), K(data_table_id));
-          } else if (OB_ISNULL(data_table_schema)) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid null table schema", KR(ret), "tenant_id", MTL_ID(), K(data_table_id));
-          } else {
-            table_schema = data_table_schema;
-          }
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_ISNULL(pc_ctx.sql_ctx_.get_or_create_reroute_info())) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("get reroute info failed", K(ret));
-        } else if (OB_FAIL(loc_router.get_full_ls_replica_loc(table_schema->get_tenant_id(),
-                                                              *first_tablet_loc,
-                                                              ls_replica_loc))) {
-          LOG_WARN("get full ls replica location failed", K(ret), KPC(first_tablet_loc));
-        } else {
-          bool is_weak = false;
-          if (plan->is_select_plan()) {
-            if (pc_ctx.sql_ctx_.is_protocol_weak_read_) {
-              is_weak = true;
-            } else if (OB_UNLIKELY(INVALID_CONSISTENCY != plan->get_phy_plan_hint().read_consistency_)) {
-              is_weak = (WEAK == plan->get_phy_plan_hint().read_consistency_);
-            } else {
-              is_weak = (WEAK == pc_ctx.sql_ctx_.session_info_->get_consistency_level());
-            }
-          }
-          // if weak delay read, no need to return reroute_info.
-          if (pc_ctx.sql_ctx_.session_info_->
-              get_proxy_cap_flags().is_weak_stale_feedback() && is_weak) {
-            pc_ctx.sql_ctx_.reset_reroute_info();
-          } else {
-            pc_ctx.sql_ctx_.get_reroute_info()->server_ = ls_replica_loc.get_server();
-            pc_ctx.sql_ctx_.get_reroute_info()->server_.set_port(static_cast<int32_t>(ls_replica_loc.get_sql_port()));
-            pc_ctx.sql_ctx_.get_reroute_info()->role_ = ls_replica_loc.get_role();
-            pc_ctx.sql_ctx_.get_reroute_info()->replica_type_ = ls_replica_loc.get_replica_type();
-            pc_ctx.sql_ctx_.get_reroute_info()->set_tbl_name(table_schema->get_table_name());
-            pc_ctx.sql_ctx_.get_reroute_info()->tbl_schema_version_ = table_schema->get_schema_version();
-          }
-          LOG_DEBUG("reroute sql", KPC(pc_ctx.sql_ctx_.get_reroute_info()));
-          need_reroute = true;
-          session.partition_hit().try_set_bool(false);
-        }
-      }
-    }
   }
   return ret;
 }
