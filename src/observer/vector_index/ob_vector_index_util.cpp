@@ -106,8 +106,8 @@ static int validate_vsag_create_index_param(const VsagCreateIndexValidateParam &
                                                     param.use_reorder_,
                                                     param.doc_prune_ratio_,
                                                     static_cast<int>(param.window_size_),
-                                                    nullptr,
                                                     static_cast<int>(param.extra_info_size_),
+                                                    nullptr,
                                                     vsag_error_msg,
                                                     OB_MAX_ERROR_MSG_LEN))) {
       LOG_WARN("invalid sparse vector index params rejected by vsag",
@@ -121,11 +121,11 @@ static int validate_vsag_create_index_param(const VsagCreateIndexValidateParam &
                                                          static_cast<int>(param.max_degree_),
                                                          static_cast<int>(param.ef_construction_),
                                                          static_cast<int>(param.ef_search_),
-                                                         nullptr,
                                                          static_cast<int>(param.extra_info_size_),
                                                          param.refine_type_,
                                                          param.bq_bits_query_,
                                                          param.bq_use_fht_,
+                                                         nullptr,
                                                          vsag_error_msg,
                                                          OB_MAX_ERROR_MSG_LEN))) {
     LOG_WARN("invalid vector index params rejected by vsag",

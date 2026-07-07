@@ -907,11 +907,11 @@ int validate_create_index(IndexType index_type,
                           int max_degree,
                           int ef_construction,
                           int ef_search,
-                          void *allocator,
                           int extra_info_size,
                           int16_t refine_type,
                           int16_t bq_bits_query,
                           bool bq_use_fht,
+                          void *allocator,
                           char *err_msg,
                           int64_t err_msg_len)
 {
@@ -962,8 +962,8 @@ int validate_create_index(IndexType index_type,
                           bool use_reorder,
                           float doc_prune_ratio,
                           int window_size,
-                          void *allocator,
                           int extra_info_size,
+                          void *allocator,
                           char *err_msg,
                           int64_t err_msg_len)
 {
