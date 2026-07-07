@@ -3173,8 +3173,8 @@ int ObSPIService::spi_dynamic_open(ObPLExecCtx *ctx,
     MAKE_EXPR_BUFFER(alloc, sql_param_exprs_idx, sql_param_count, sql_param_exprs);
 
     OZ (spi_cursor_open(ctx,
-                        sql_param_count > 0 ? NULL : sql_str.ptr(),
-                        ps_sql.ptr(),//trans to c-stype
+                        sql_param_count > 0 ? ObString() : sql_str.string(),
+                        ps_sql,
                         stmt_type,
                         for_update,
                         hidden_rowid,
@@ -3276,8 +3276,8 @@ int ObSPIService::prepare_cursor_parameters(ObPLExecCtx *ctx,
 }
 
 int ObSPIService::spi_cursor_open_with_param_idx(ObPLExecCtx *ctx,
-                                  const char *sql,
-                                  const char *ps_sql,
+                                  const ObString &sql,
+                                  const ObString &ps_sql,
                                   int64_t type,
                                   bool for_update,
                                   bool has_hidden_rowid,
@@ -3465,7 +3465,7 @@ int ObSPIService::unstreaming_cursor_open(ObPLExecCtx *ctx,
     ObSPICursor* spi_cursor = NULL;
     OZ (spi_result.init(session_info));
     OZ (spi_result.start_nested_stmt_if_need(ctx, sql, static_cast<stmt::StmtType>(type), for_update));
-    OZ (save_unstreaming_cursor_sql(cursor, (sql != NULL ? sql : ps_sql)));
+    OZ (save_unstreaming_cursor_sql(cursor, sql.empty() ? ps_sql : sql));
 
     if (OB_SUCC(ret)) {
 
@@ -3551,8 +3551,8 @@ int ObSPIService::unstreaming_cursor_open(ObPLExecCtx *ctx,
 }
 
 int ObSPIService::spi_cursor_open(ObPLExecCtx *ctx,
-                                  const char *sql,
-                                  const char *ps_sql,
+                                  const ObString &sql,
+                                  const ObString &ps_sql,
                                   int64_t type,
                                   bool for_update,
                                   bool has_hidden_rowid,
@@ -3581,8 +3581,8 @@ int ObSPIService::spi_cursor_open(ObPLExecCtx *ctx,
      || OB_ISNULL(ctx->exec_ctx_)
      || OB_ISNULL(session_info = ctx->exec_ctx_->get_my_session())
      || (sql_param_count > 0 && NULL == sql_param_exprs)
-     || (NULL != sql && sql_param_count > 0)
-     || (NULL == sql && 0 == sql_param_count)) {
+     || (!sql.empty() && sql_param_count > 0)
+     || (sql.empty() && 0 == sql_param_count)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Argument passed in is NULL", K(ctx), K(sql), K(ps_sql), K(type), K(sql_param_exprs), K(sql_param_count), K(ret));
   } else if (OB_FAIL(spi_get_cursor_info(ctx, package_id, routine_id, cursor_index, cursor, cursor_var, loc))) {
