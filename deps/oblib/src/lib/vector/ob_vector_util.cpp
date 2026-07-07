@@ -119,100 +119,23 @@ int create_index(obvsag::VectorIndexPtr& index_handler, int index_type,
 #endif
 }
 
-int validate_create_index(int index_type,
-                          const char *dtype,
-                          const char *metric,
-                          int dim,
-                          int max_degree,
-                          int ef_construction,
-                          int ef_search,
-                          int extra_info_size,
-                          int16_t refine_type,
-                          int16_t bq_bits_query,
-                          bool bq_use_fht,
-                          void *allocator,
-                          char *err_msg,
-                          int64_t err_msg_len)
+int validate_create_index(const CreateIndexParam &param, char *err_msg, int64_t err_msg_len)
 {
 #ifdef OB_BUILD_CDC_DISABLE_VSAG
   INIT_SUCC(ret);
-  UNUSED(index_type);
-  UNUSED(dtype);
-  UNUSED(metric);
-  UNUSED(dim);
-  UNUSED(max_degree);
-  UNUSED(ef_construction);
-  UNUSED(ef_search);
-  UNUSED(allocator);
-  UNUSED(extra_info_size);
-  UNUSED(refine_type);
-  UNUSED(bq_bits_query);
-  UNUSED(bq_use_fht);
+  UNUSED(param);
   if (nullptr != err_msg && err_msg_len > 0) {
     err_msg[0] = '\0';
   }
   return ret;
 #else
   obvsag::set_block_size_limit(2*1024*1024);
-  LOG_INFO("vector index validate params: ", K(index_type), K(dim), KCSTRING(dtype), KCSTRING(metric),
-      K(max_degree), K(ef_construction), K(ef_search), KP(allocator), K(extra_info_size),
-      K(refine_type), K(bq_bits_query), K(bq_use_fht));
-  return obvsag::validate_create_index(static_cast<obvsag::IndexType>(index_type),
-                                       dtype,
-                                       metric,
-                                       dim,
-                                       max_degree,
-                                       ef_construction,
-                                       ef_search,
-                                       extra_info_size,
-                                       refine_type,
-                                       bq_bits_query,
-                                       bq_use_fht,
-                                       allocator,
-                                       err_msg,
-                                       err_msg_len);
-#endif
-}
-
-int validate_create_index(int index_type,
-                          const char *dtype,
-                          const char *metric,
-                          bool use_reorder,
-                          float doc_prune_ratio,
-                          int window_size,
-                          int extra_info_size,
-                          void *allocator,
-                          char *err_msg,
-                          int64_t err_msg_len)
-{
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
-  INIT_SUCC(ret);
-  UNUSED(index_type);
-  UNUSED(dtype);
-  UNUSED(metric);
-  UNUSED(use_reorder);
-  UNUSED(doc_prune_ratio);
-  UNUSED(window_size);
-  UNUSED(allocator);
-  UNUSED(extra_info_size);
-  if (nullptr != err_msg && err_msg_len > 0) {
-    err_msg[0] = '\0';
-  }
-  return ret;
-#else
-  obvsag::set_block_size_limit(2*1024*1024);
-  LOG_INFO("vector index validate params: ", K(index_type), KCSTRING(dtype), KCSTRING(metric),
-      K(use_reorder), K(doc_prune_ratio), K(window_size), KP(allocator), K(extra_info_size));
-  return obvsag::validate_create_index(static_cast<obvsag::IndexType>(index_type),
-                                       dtype,
-                                       metric,
-                                       use_reorder,
-                                       doc_prune_ratio,
-                                       window_size,
-                                       extra_info_size,
-                                       allocator,
-                                       err_msg,
-                                       err_msg_len);
+  LOG_INFO("vector index validate params: ", K(param.index_type_), KCSTRING(param.dtype_),
+      KCSTRING(param.metric_), K(param.is_sparse_), K(param.dim_), K(param.max_degree_),
+      K(param.ef_construction_), K(param.ef_search_), K(param.extra_info_size_),
+      K(param.refine_type_), K(param.bq_bits_query_), K(param.bq_use_fht_),
+      K(param.use_reorder_), K(param.doc_prune_ratio_), K(param.window_size_), KP(param.allocator_));
+  return obvsag::validate_create_index(param, err_msg, err_msg_len);
 #endif
 }
 

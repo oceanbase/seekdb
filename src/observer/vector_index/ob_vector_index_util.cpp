@@ -56,81 +56,22 @@ static int get_vsag_metric_from_distance(const ObString &distance_name, const ch
   return ret;
 }
 
-struct VsagCreateIndexValidateParam
-{
-  VsagCreateIndexValidateParam()
-      : index_type_(VIAT_MAX),
-        dtype_(nullptr),
-        metric_(nullptr),
-        dim_(0),
-        max_degree_(0),
-        ef_construction_(0),
-        ef_search_(0),
-        extra_info_size_(0),
-        refine_type_(0),
-        bq_bits_query_(ObVectorIndexParam::DEFAULT_BQ_BITS_QUERY),
-        bq_use_fht_(false),
-        use_reorder_(false),
-        doc_prune_ratio_(0),
-        window_size_(ObVectorIndexParam::DEFAULT_WINDOW_SIZE),
-        is_sparse_(false),
-        validate_type_(nullptr)
-  {}
-
-  ObVectorIndexAlgorithmType index_type_;
-  const char *dtype_;
-  const char *metric_;
-  int64_t dim_;
-  int64_t max_degree_;
-  int64_t ef_construction_;
-  int64_t ef_search_;
-  int64_t extra_info_size_;
-  int16_t refine_type_;
-  int16_t bq_bits_query_;
-  bool bq_use_fht_;
-  bool use_reorder_;
-  float doc_prune_ratio_;
-  int64_t window_size_;
-  bool is_sparse_;
-  const char *validate_type_;
-};
-
-static int validate_vsag_create_index_param(const VsagCreateIndexValidateParam &param)
+static int validate_vsag_create_index_param(
+    const obvectorutil::CreateIndexParam &param,
+    const char *validate_type)
 {
   int ret = OB_SUCCESS;
   char vsag_error_msg[OB_MAX_ERROR_MSG_LEN] = {0};
-  if (param.is_sparse_) {
-    if (OB_FAIL(obvectorutil::validate_create_index(static_cast<int>(param.index_type_),
-                                                    param.dtype_,
-                                                    param.metric_,
-                                                    param.use_reorder_,
-                                                    param.doc_prune_ratio_,
-                                                    static_cast<int>(param.window_size_),
-                                                    static_cast<int>(param.extra_info_size_),
-                                                    nullptr,
-                                                    vsag_error_msg,
-                                                    OB_MAX_ERROR_MSG_LEN))) {
+  if (OB_FAIL(obvectorutil::validate_create_index(param, vsag_error_msg, OB_MAX_ERROR_MSG_LEN))) {
+    if (param.is_sparse_) {
       LOG_WARN("invalid sparse vector index params rejected by vsag",
-          K(ret), K(param.index_type_), KCSTRING(param.validate_type_), KCSTRING(param.metric_),
+          K(ret), K(param.index_type_), KCSTRING(validate_type), KCSTRING(param.metric_),
           K(param.use_reorder_), K(param.doc_prune_ratio_), K(param.window_size_), KCSTRING(vsag_error_msg));
+    } else {
+      LOG_WARN("invalid vector index params rejected by vsag",
+          K(ret), K(param.index_type_), KCSTRING(validate_type), K(param.dim_), K(param.max_degree_),
+          K(param.ef_construction_), K(param.ef_search_), K(param.extra_info_size_), KCSTRING(vsag_error_msg));
     }
-  } else if (OB_FAIL(obvectorutil::validate_create_index(static_cast<int>(param.index_type_),
-                                                         param.dtype_,
-                                                         param.metric_,
-                                                         static_cast<int>(param.dim_),
-                                                         static_cast<int>(param.max_degree_),
-                                                         static_cast<int>(param.ef_construction_),
-                                                         static_cast<int>(param.ef_search_),
-                                                         static_cast<int>(param.extra_info_size_),
-                                                         param.refine_type_,
-                                                         param.bq_bits_query_,
-                                                         param.bq_use_fht_,
-                                                         nullptr,
-                                                         vsag_error_msg,
-                                                         OB_MAX_ERROR_MSG_LEN))) {
-    LOG_WARN("invalid vector index params rejected by vsag",
-        K(ret), K(param.index_type_), KCSTRING(param.validate_type_), K(param.dim_), K(param.max_degree_),
-        K(param.ef_construction_), K(param.ef_search_), K(param.extra_info_size_), KCSTRING(vsag_error_msg));
   }
   if (OB_FAIL(ret) && (OB_INVALID_ARGUMENT == ret || OB_NOT_SUPPORTED == ret)) {
     const char *user_error_msg = ('\0' != vsag_error_msg[0])
@@ -165,66 +106,60 @@ static int validate_vector_index_vsag_create_index_param(
   if (OB_FAIL(get_vsag_metric_from_distance(distance_name, metric))) {
     LOG_WARN("failed to get vsag metric from distance", K(ret), K(distance_name));
   } else if (type_hnsw_is_set) {
-    VsagCreateIndexValidateParam param;
+    obvectorutil::CreateIndexParam param;
     param.dtype_ = "float32";
     param.metric_ = metric;
-    param.dim_ = dim;
-    param.ef_construction_ = ef_construction_value;
-    param.ef_search_ = ef_search_value;
-    param.extra_info_size_ = extra_info_actual_size;
+    param.dim_ = static_cast<int>(dim);
+    param.ef_construction_ = static_cast<int>(ef_construction_value);
+    param.ef_search_ = static_cast<int>(ef_search_value);
+    param.extra_info_size_ = static_cast<int>(extra_info_actual_size);
     param.refine_type_ = refine_type;
     param.bq_bits_query_ = bq_bits_query;
     param.bq_use_fht_ = bq_use_fht;
-    param.validate_type_ = "hnsw";
     const int64_t hnsw_sq_metric = ObVectorIndexUtil::get_hnswsq_type_metric(m_value);
     if (type_hnsw_sq_is_set) {
-      param.index_type_ = VIAT_HNSW_SQ;
-      param.max_degree_ = hnsw_sq_metric;
+      param.index_type_ = obvsag::HNSW_SQ_TYPE;
+      param.max_degree_ = static_cast<int>(hnsw_sq_metric);
       param.refine_type_ = 0;
       param.bq_bits_query_ = ObVectorIndexParam::DEFAULT_BQ_BITS_QUERY;
       param.bq_use_fht_ = false;
-      param.validate_type_ = "hnsw_sq_snapshot";
-      if (OB_FAIL(validate_vsag_create_index_param(param))) {
+      if (OB_FAIL(validate_vsag_create_index_param(param, "hnsw_sq_snapshot"))) {
         LOG_WARN("failed to validate hnsw_sq snapshot create index params", K(ret));
       } else {
-        param.index_type_ = VIAT_HGRAPH;
-        param.max_degree_ = m_value;
-        param.validate_type_ = "hnsw_sq_incr";
-        if (OB_FAIL(validate_vsag_create_index_param(param))) {
+        param.index_type_ = obvsag::HGRAPH_TYPE;
+        param.max_degree_ = static_cast<int>(m_value);
+        if (OB_FAIL(validate_vsag_create_index_param(param, "hnsw_sq_incr"))) {
           LOG_WARN("failed to validate hnsw_sq incremental create index params", K(ret));
         }
       }
     } else if (type_hnsw_bq_is_set) {
-      param.index_type_ = VIAT_HNSW_BQ;
-      param.max_degree_ = m_value;
-      param.validate_type_ = "hnsw_bq_snapshot";
-      if (OB_FAIL(validate_vsag_create_index_param(param))) {
+      param.index_type_ = obvsag::HNSW_BQ_TYPE;
+      param.max_degree_ = static_cast<int>(m_value);
+      if (OB_FAIL(validate_vsag_create_index_param(param, "hnsw_bq_snapshot"))) {
         LOG_WARN("failed to validate hnsw_bq snapshot create index params", K(ret));
       } else {
-        param.index_type_ = VIAT_HGRAPH;
-        param.validate_type_ = "hnsw_bq_incr";
-        if (OB_FAIL(validate_vsag_create_index_param(param))) {
+        param.index_type_ = obvsag::HGRAPH_TYPE;
+        if (OB_FAIL(validate_vsag_create_index_param(param, "hnsw_bq_incr"))) {
           LOG_WARN("failed to validate hnsw_bq incremental create index params", K(ret));
         }
       }
     } else {
-      param.index_type_ = extra_info_actual_size > 0 ? VIAT_HGRAPH : VIAT_HNSW;
-      param.max_degree_ = m_value;
-      if (OB_FAIL(validate_vsag_create_index_param(param))) {
+      param.index_type_ = extra_info_actual_size > 0 ? obvsag::HGRAPH_TYPE : obvsag::HNSW_TYPE;
+      param.max_degree_ = static_cast<int>(m_value);
+      if (OB_FAIL(validate_vsag_create_index_param(param, "hnsw"))) {
         LOG_WARN("failed to validate hnsw create index params", K(ret), K(param.index_type_));
       }
     }
   } else if (type_sindi_is_set) {
-    VsagCreateIndexValidateParam param;
-    param.index_type_ = VIAT_IPIVF;
+    obvectorutil::CreateIndexParam param;
+    param.index_type_ = obvsag::IPIVF_TYPE;
     param.dtype_ = "sparse";
     param.metric_ = metric;
     param.use_reorder_ = refine_value;
     param.doc_prune_ratio_ = static_cast<float>(drop_ratio_build);
-    param.window_size_ = window_size;
+    param.window_size_ = static_cast<int>(window_size);
     param.is_sparse_ = true;
-    param.validate_type_ = "sindi";
-    if (OB_FAIL(validate_vsag_create_index_param(param))) {
+    if (OB_FAIL(validate_vsag_create_index_param(param, "sindi"))) {
       LOG_WARN("failed to validate sindi create index params", K(ret));
     }
   }

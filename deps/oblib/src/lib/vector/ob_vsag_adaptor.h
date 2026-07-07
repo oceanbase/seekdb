@@ -48,6 +48,45 @@ enum QuantizationType {
   MAX_TYPE
 };
 
+struct CreateIndexParam
+{
+  CreateIndexParam()
+      : index_type_(INVALID_INDEX_TYPE),
+        dtype_(nullptr),
+        metric_(nullptr),
+        dim_(0),
+        max_degree_(0),
+        ef_construction_(0),
+        ef_search_(0),
+        extra_info_size_(0),
+        refine_type_(0),
+        bq_bits_query_(32),
+        bq_use_fht_(false),
+        use_reorder_(false),
+        doc_prune_ratio_(0.0f),
+        window_size_(0),
+        allocator_(nullptr),
+        is_sparse_(false)
+  {}
+
+  IndexType index_type_;
+  const char *dtype_;
+  const char *metric_;
+  int dim_;
+  int max_degree_;
+  int ef_construction_;
+  int ef_search_;
+  int extra_info_size_;
+  int16_t refine_type_;
+  int16_t bq_bits_query_;
+  bool bq_use_fht_;
+  bool use_reorder_;
+  float doc_prune_ratio_;
+  int window_size_;
+  void *allocator_;
+  bool is_sparse_;
+};
+
 class FilterInterface {
 public:
   virtual bool test(int64_t id) = 0;
@@ -96,30 +135,7 @@ int create_index(VectorIndexPtr& index_handler, IndexType index_type,
                  int max_degree, int ef_construction, int ef_search, void* allocator = nullptr,
                  int extra_info_size = 0, int16_t refine_type = 0,
                  int16_t bq_bits_query = 32, bool bq_use_fht = false);
-int validate_create_index(IndexType index_type,
-                          const char *dtype,
-                          const char *metric,
-                          int dim,
-                          int max_degree,
-                          int ef_construction,
-                          int ef_search,
-                          int extra_info_size,
-                          int16_t refine_type,
-                          int16_t bq_bits_query,
-                          bool bq_use_fht,
-                          void *allocator,
-                          char *err_msg,
-                          int64_t err_msg_len);
-int validate_create_index(IndexType index_type,
-                          const char *dtype,
-                          const char *metric,
-                          bool use_reorder,
-                          float doc_prune_ratio,
-                          int window_size,
-                          int extra_info_size,
-                          void *allocator,
-                          char *err_msg,
-                          int64_t err_msg_len);
+int validate_create_index(const CreateIndexParam &param, char *err_msg, int64_t err_msg_len);
 int create_index(VectorIndexPtr &index_handler, IndexType index_type, const char *dtype, const char *metric,
     bool use_reorder, float doc_prune_ratio, int window_size, void *allocator, int extra_info_size = 0);
 int build_index(VectorIndexPtr& index_handler, float* vector_list, int64_t* ids, int dim, int size, char *extra_infos = nullptr);
