@@ -33,21 +33,33 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.VLDB_PR_COMMENT_TOKEN || github.token }}
           GH_REPO: ${{ github.repository }}
+          PR_NUMBER_FROM_EVENT: ${{ github.event.workflow_run.pull_requests[0].number }}
+          WORKFLOW_HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          WORKFLOW_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           RUN_URL: ${{ github.event.workflow_run.html_url }}
           ARTIFACT_DIR: ${{ runner.temp }}/vldb-fts-large-benchmark
         run: |
           set -euo pipefail
 
           REPORT_PATH="$ARTIFACT_DIR/report.txt"
-          PR_NUMBER_PATH="$ARTIFACT_DIR/pr_number"
-          if [[ ! -f "$REPORT_PATH" || ! -f "$PR_NUMBER_PATH" ]]; then
+          SCORE_PATH="$ARTIFACT_DIR/score.txt"
+          if [[ ! -f "$REPORT_PATH" ]]; then
             echo "benchmark comment artifact not found, skip PR comment"
             exit 0
           fi
 
-          PR_NUMBER="$(tr -d '[:space:]' < "$PR_NUMBER_PATH")"
+          PR_NUMBER="$PR_NUMBER_FROM_EVENT"
           if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
-            echo "invalid PR number in artifact: $PR_NUMBER"
+            PR_NUMBER_PATH="$ARTIFACT_DIR/pr_number"
+            if [[ ! -f "$PR_NUMBER_PATH" ]]; then
+              echo "::warning::PR number missing from workflow_run event and artifact, skip PR comment"
+              exit 0
+            fi
+            PR_NUMBER="$(tr -d '[:space:]' < "$PR_NUMBER_PATH")"
+            echo "workflow_run event did not include PR number, using artifact PR number: $PR_NUMBER"
+          fi
+          if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "invalid PR number: $PR_NUMBER"
             exit 1
           fi
 
@@ -56,18 +68,65 @@ jobs:
           COMMENT_BODY="$RUNNER_TEMP/vldb_fts_benchmark_comment.json"
           COMMENTS_JSON="$RUNNER_TEMP/vldb_fts_benchmark_comments.json"
           RESPONSE_JSON="$RUNNER_TEMP/vldb_fts_benchmark_response.json"
+          PR_JSON="$RUNNER_TEMP/vldb_fts_benchmark_pr.json"
 
-          python3 - "$REPORT_PATH" "$RUN_URL" "$MARKER" > "$COMMENT_BODY" <<'PY'
-          import html
+          http_code="$(curl -sS -L -w '%{http_code}' -o "$PR_JSON" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GH_REPO}/pulls/${PR_NUMBER}" || true)"
+          if [[ "$http_code" == "401" || "$http_code" == "403" ]]; then
+            echo "::warning::skip PR comment: token cannot read pull request"
+            cat "$PR_JSON" 2>/dev/null || true
+            exit 0
+          fi
+          if [[ ! "$http_code" =~ ^2 ]]; then
+            echo "::warning::skip PR comment: failed to read pull request, HTTP $http_code"
+            cat "$PR_JSON" 2>/dev/null || true
+            exit 0
+          fi
+
+          python3 - "$PR_JSON" "$WORKFLOW_HEAD_REPO" "$WORKFLOW_HEAD_SHA" <<'PY'
           import json
           import sys
 
-          report_path, run_url, marker = sys.argv[1:4]
-          with open(report_path, encoding="utf-8") as f:
-              report = f.read().strip()
+          pr_path, workflow_head_repo, workflow_head_sha = sys.argv[1:4]
+          with open(pr_path, encoding="utf-8") as f:
+              pr = json.load(f)
 
-          body = "\n".join([
+          pr_head_repo = (pr.get("head", {}).get("repo") or {}).get("full_name") or ""
+          pr_head_sha = pr.get("head", {}).get("sha") or ""
+          if workflow_head_repo and pr_head_repo and workflow_head_repo != pr_head_repo:
+              raise SystemExit(
+                  f"PR head repo mismatch: workflow_run={workflow_head_repo}, pr={pr_head_repo}"
+              )
+          if workflow_head_sha and pr_head_sha and workflow_head_sha != pr_head_sha:
+              print(
+                  f"::warning::PR head sha differs from workflow_run head_sha: "
+                  f"workflow_run={workflow_head_sha}, pr={pr_head_sha}"
+              )
+          PY
+
+          python3 - "$REPORT_PATH" "$SCORE_PATH" "$RUN_URL" "$MARKER" > "$COMMENT_BODY" <<'PY'
+          import html
+          import json
+          from pathlib import Path
+          import sys
+
+          report_path, score_path, run_url, marker = sys.argv[1:5]
+          report = Path(report_path).read_text(encoding="utf-8").strip()
+          score = ""
+          if score_path and Path(score_path).is_file():
+              score = Path(score_path).read_text(encoding="utf-8").strip()
+
+          parts = [
               marker,
+              "### FTS Large Benchmark Score",
+              "",
+              "<pre>",
+              html.escape(score or "score output not found"),
+              "</pre>",
+              "",
               "### FTS Large Benchmark Report",
               "",
               "<pre>",
@@ -75,7 +134,8 @@ jobs:
               "</pre>",
               "",
               f"[Workflow run]({run_url})",
-          ])
+          ]
+          body = "\n".join(parts)
           print(json.dumps({"body": body}, ensure_ascii=False))
           PY
 
