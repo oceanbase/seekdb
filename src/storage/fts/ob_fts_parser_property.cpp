@@ -25,6 +25,7 @@
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
+#include "lib/utility/utility.h"
 #include "storage/fts/ob_fts_literal.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 
@@ -1148,7 +1149,9 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
 
 #undef __FT_PARSER_PROPERTY_SHOW_COMMA
 
-int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str)
+int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser,
+                                                const ObString &json_str,
+                                                common::ObIAllocator &alloc)
 {
   int ret = OB_SUCCESS;
   ObFTParserJsonProps props;
@@ -1158,8 +1161,21 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      // set dict tables and copy dict name
-      dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
+      // seekdb: read the configured custom dict table name from JSON and deep-copy it,
+      // because the local `props` arena is freed when this function returns.
+      ObString dict_tb;
+      if (OB_FAIL(props.config_get_dict_table(dict_tb))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+          dict_table_.reset();
+        } else {
+          LOG_WARN("fail to get dict table", K(ret));
+        }
+      } else if (dict_tb.empty()) {
+        dict_table_.reset();
+      } else if (OB_FAIL(ob_write_string(alloc, dict_tb, dict_table_))) {
+        LOG_WARN("fail to deep copy dict table name", K(ret), K(dict_tb));
+      }
       stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
       quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
       ObString ik_smart;

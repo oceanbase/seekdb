@@ -1259,4 +1259,6 @@
 #define N_AI_RERANK                         "ai_rerank"
 #define N_AI_PROMPT                         "ai_prompt"
 #define N_CHECK_LOCATION_ACCESS "check_location_access"
+#define N_LOAD_FILE "load_file"
+#define N_AI_PARSE_DOC "ai_parse_doc"
 #endif //OCEANBASE_LIB_OB_NAME_DEF_H_

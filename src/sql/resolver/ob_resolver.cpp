@@ -389,6 +389,10 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(ClearMergeError);
         break;
       }
+      case T_REFRESH_FULLTEXT_DICT: {
+        REGISTER_STMT_RESOLVER(RefreshFulltextDict);
+        break;
+      }
       case T_CREATE_CATALOG:
       case T_ALTER_CATALOG:
       case T_DROP_CATALOG:

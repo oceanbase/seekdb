@@ -137,7 +137,9 @@ struct ObFTParserProperty final
 public:
   ObFTParserProperty();
   ~ObFTParserProperty() = default;
-  int parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str);
+  int parse_for_parser_helper(const ObFTParser &parser,
+                              const ObString &json_str,
+                              common::ObIAllocator &alloc);
 
   bool is_equal(const ObFTParserProperty &other) const
   {

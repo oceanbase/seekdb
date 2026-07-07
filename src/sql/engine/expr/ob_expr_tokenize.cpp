@@ -237,7 +237,10 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse parser params.", K(ret));
   } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
     LOG_WARN("Fail to parse parser params.", K(ret));
-  } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
+  } else if (OB_FAIL(param.reform_parser_properties(param.properties_,
+                 OB_ISNULL(ctx.exec_ctx_.get_my_session())
+                     ? ObString()
+                     : ctx.exec_ctx_.get_my_session()->get_database_name()))) {
     LOG_WARN("Fail to reform parser params.", K(ret));
   } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
     LOG_WARN("fail to try load dictionary for ik", K(ret));
@@ -415,7 +418,54 @@ int ObExprTokenize::parse_parser_properties(const ObExpr &expr,
   return ret;
 }
 
-int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &properties)
+// seekdb: TOKENIZE's dict_table config may be unqualified (e.g. 'my_dict'). The custom-dict loader
+// runs on an inner SQL connection whose default schema is 'oceanbase', so an unqualified name fails
+// to resolve (ERROR 1146). Qualify it against the session's current database while it is available.
+static int qualify_tokenize_dict_table(storage::ObFTParserJsonProps &props,
+                                       const ObString &cur_database,
+                                       common::ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  ObString dict_table;
+  if (cur_database.empty()) {
+    // no current database to qualify against; leave the configured value as-is
+  } else if (OB_FAIL(props.config_get_dict_table(dict_table))) {
+    if (OB_SEARCH_NOT_FOUND == ret) {
+      ret = OB_SUCCESS; // no dict_table configured; nothing to qualify
+    } else {
+      LOG_WARN("fail to get dict_table from tokenize props", K(ret));
+    }
+  } else if (dict_table.empty()) {
+    // nothing to qualify
+  } else {
+    bool has_dot = false;
+    for (int64_t i = 0; !has_dot && i < dict_table.length(); ++i) {
+      if ('.' == dict_table.ptr()[i]) {
+        has_dot = true;
+      }
+    }
+    if (!has_dot) {
+      const int64_t len = cur_database.length() + 1 + dict_table.length();
+      char *buf = static_cast<char *>(allocator.alloc(len));
+      if (OB_ISNULL(buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to alloc qualified dict_table buffer", K(ret), K(len));
+      } else {
+        MEMCPY(buf, cur_database.ptr(), cur_database.length());
+        buf[cur_database.length()] = '.';
+        MEMCPY(buf + cur_database.length() + 1, dict_table.ptr(), dict_table.length());
+        ObString qualified(static_cast<int32_t>(len), buf);
+        if (OB_FAIL(props.config_set_dict_table(qualified))) {
+          LOG_WARN("fail to set qualified dict_table", K(ret), K(qualified));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &properties,
+                                                            const ObString &cur_database)
 {
   int ret = OB_SUCCESS;
   storage::ObFTParserJsonProps parser_properties;
@@ -425,6 +475,8 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
   } else if (OB_FAIL(parser_properties.parse_from_valid_str(properties))) {
     LOG_WARN("fail to parse properties", K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "parser properties invalid.");
+  } else if (OB_FAIL(qualify_tokenize_dict_table(parser_properties, cur_database, allocator_))) {
+    LOG_WARN("fail to qualify unqualified dict_table with current db", K(ret), K(cur_database));
   } else if (OB_FAIL(parser_properties.rebuild_props_for_ddl(parser_name_,
                                                              ObCollationType::CS_TYPE_UTF8MB4_BIN,
                                                              true))) {

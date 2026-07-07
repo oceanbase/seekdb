@@ -16,6 +16,24 @@ ob_define(DEP_3RD_DIR "${CMAKE_SOURCE_DIR}/deps/3rd")
 ob_define(DEVTOOLS_DIR "${CMAKE_SOURCE_DIR}/deps/3rd/usr/local/oceanbase/devtools")
 ob_define(DEP_DIR "${CMAKE_SOURCE_DIR}/deps/3rd/usr/local/oceanbase/deps/devel")
 
+# pdfium (no-V8) is not published as an OceanBase mirror RPM, so it is vendored
+# in-repo under deps/pdfium/ and installed into DEP_DIR here at configure time.
+# The oblib CMake links ${DEP_DIR}/lib/libpdfium.so and includes
+# ${DEP_DIR}/include/pdfium, so a fresh build picks it up with no manual step.
+# This runs before project(), so CMAKE_SYSTEM_PROCESSOR is not set yet; use
+# `uname -m` for the arch and the host flags to skip macOS/Windows -- the
+# vendored library is x86_64 Linux only.
+set(OB_VENDORED_PDFIUM_DIR "${CMAKE_SOURCE_DIR}/deps/pdfium")
+if(NOT CMAKE_HOST_APPLE AND NOT CMAKE_HOST_WIN32
+   AND EXISTS "${OB_VENDORED_PDFIUM_DIR}/lib/libpdfium.so")
+  execute_process(COMMAND uname -m OUTPUT_VARIABLE _ob_host_arch OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(_ob_host_arch MATCHES "x86_64|amd64")
+    file(COPY "${OB_VENDORED_PDFIUM_DIR}/lib/libpdfium.so" DESTINATION "${DEP_DIR}/lib")
+    file(COPY "${OB_VENDORED_PDFIUM_DIR}/include/pdfium" DESTINATION "${DEP_DIR}/include")
+    message(STATUS "Provisioned vendored pdfium into ${DEP_DIR}")
+  endif()
+endif()
+
 ob_define(BUILD_CDC_ONLY OFF)
 ob_define(BUILD_EMBED_MODE OFF)
 ob_define(OB_USE_CLANG ON)

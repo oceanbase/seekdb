@@ -29,6 +29,11 @@
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_dict_hub.h"
 #include "storage/fts/dict/ob_ft_range_dict.h"
+#include "storage/fts/dict/ob_ft_trie.h"
+#include "storage/fts/dict/ob_ft_dat_dict.h"
+#include "storage/fts/dict/ob_ft_cache_dict.h"
+#include "storage/fts/dict/ob_ft_dict_table_iter.h"
+#include "ob_smart_var.h"
 #include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_cjk_processor.h"
 #include "storage/fts/ik/ob_ik_letter_processor.h"
@@ -36,6 +41,8 @@
 #include "storage/fts/ik/ob_ik_quantifier_processor.h"
 #include "storage/fts/ik/ob_ik_surrogate_processor.h"
 #include "plugin/sys/ob_plugin_mgr.h"
+#include "share/rc/ob_tenant_base.h"
+#include "lib/mysqlclient/ob_isql_client.h"
 
 using namespace oceanbase::plugin;
 
@@ -315,6 +322,15 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
     LOG_WARN("Failed to build dict stopword", K(ret));
   }
 
+  // seekdb: if this index configured a custom dict table (WITH PARSER ik
+  // PARSER_PROPERTIES=(dict_table='db.tbl')), load its words into a custom dictionary that the
+  // CJK tokenizer consults alongside the built-in IK main dict.
+  if (OB_SUCC(ret) && !param.ik_param_.main_dict_.empty()) {
+    if (OB_FAIL(build_custom_dict(param.ik_param_.main_dict_))) {
+      LOG_WARN("Failed to build custom dict", K(ret), K(param.ik_param_.main_dict_));
+    }
+  }
+
   return ret;
 }
 
@@ -378,7 +394,7 @@ int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
   } else if (OB_ISNULL(dict_main_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Dict main is null.", K(ret));
-  } else if (OB_ISNULL(cjksg = OB_NEWx(ObIKCJKProcessor, &allocator_, *dict_main_, allocator_))) {
+  } else if (OB_ISNULL(cjksg = OB_NEWx(ObIKCJKProcessor, &allocator_, *dict_main_, dict_custom_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc cjk segmenter", K(ret));
   } else if (OB_ISNULL(surrogate_seg = OB_NEWx(ObIKSurrogateProcessor, &allocator_))) {
@@ -439,6 +455,12 @@ void ObIKFTParser::reset()
     dict_stop_->~ObIFTDict();
     allocator_.free(dict_stop_);
   }
+  // seekdb: custom dict and its DAT live in custom_alloc_; destruct then free the arena.
+  if (!OB_ISNULL(dict_custom_)) {
+    dict_custom_->~ObIFTDict();
+    dict_custom_ = nullptr;
+  }
+  custom_alloc_.reset();
 
   is_inited_ = false;
 }
@@ -461,6 +483,93 @@ int ObIKFTParser::build_dict_from_cache(const ObFTDictDesc &desc,
   if (OB_FAIL(ret)) {
     OB_DELETEx(ObIFTDict, &allocator_, dict);
   }
+  return ret;
+}
+
+int ObIKFTParser::build_custom_dict(const ObString &dict_table_full_name)
+{
+  int ret = OB_SUCCESS;
+  // Parse "db.table" (the configured dict_table value). If unqualified, db is empty and the
+  // current tenant default database is used by the SQL layer.
+  ObString full = dict_table_full_name;
+  ObString db_name;
+  ObString table_name = full;
+  int64_t dot_pos = -1;
+  for (int64_t i = 0; i < full.length(); ++i) {
+    if ('.' == full.ptr()[i]) {
+      dot_pos = i;
+      break;
+    }
+  }
+  if (dot_pos >= 0) {
+    db_name = ObString(static_cast<int32_t>(dot_pos), full.ptr());
+    table_name = ObString(static_cast<int32_t>(full.length() - dot_pos - 1), full.ptr() + dot_pos + 1);
+  }
+
+  ObArenaAllocator trie_alloc(lib::ObMemAttr(MTL_ID(), "IKCustTrie"));
+  ObFTTrie<void> trie(trie_alloc, ObCollationType::CS_TYPE_UTF8MB4_BIN);
+  int64_t word_count = 0;
+
+  SMART_VAR(ObISQLClient::ReadResult, result)
+  {
+    ObFTDictTableIter iter(result);
+    if (OB_FAIL(iter.init(db_name, table_name))) {
+      if (OB_ITER_END == ret) {
+        ret = OB_SUCCESS; // empty dict table; fall back to built-in dict only
+      } else {
+        LOG_WARN("Failed to init custom dict table iterator", K(ret), K(db_name), K(table_name));
+      }
+    } else {
+      while (OB_SUCC(ret)) {
+        ObString key;
+        if (OB_FAIL(iter.get_key(key))) {
+          LOG_WARN("Failed to get custom dict word", K(ret));
+        } else if (!key.empty() && OB_FAIL(trie.insert(key, {}))) {
+          LOG_WARN("Failed to insert custom dict word", K(ret), K(key));
+        } else {
+          if (!key.empty()) {
+            ++word_count;
+          }
+          if (OB_FAIL(iter.next()) && OB_ITER_END != ret) {
+            LOG_WARN("Failed to step custom dict iterator", K(ret));
+          }
+        }
+      }
+      if (OB_ITER_END == ret) {
+        ret = OB_SUCCESS;
+      }
+    }
+  }
+
+  if (OB_SUCC(ret) && word_count > 0 && trie.node_num() > 0) {
+    ObFTDATBuilder<void> builder(custom_alloc_);
+    ObFTDAT *dat_buff = nullptr;
+    size_t buf_size = 0;
+    ObFTCacheDict *cdict = nullptr;
+    if (OB_FAIL(builder.init(trie))) {
+      LOG_WARN("Failed to init custom DAT builder", K(ret));
+    } else if (OB_FAIL(builder.build_from_trie(trie))) {
+      LOG_WARN("Failed to build custom DAT from trie", K(ret));
+    } else if (OB_FAIL(builder.get_mem_block(dat_buff, buf_size)) || OB_ISNULL(dat_buff)) {
+      ret = (OB_SUCCESS == ret) ? OB_ERR_UNEXPECTED : ret;
+      LOG_WARN("Failed to get custom DAT mem block", K(ret), KP(dat_buff));
+    } else if (OB_ISNULL(cdict = OB_NEWx(ObFTCacheDict,
+                                         &custom_alloc_,
+                                         ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                                         dat_buff))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("Failed to alloc custom cache dict", K(ret));
+    } else if (OB_FAIL(cdict->init())) {
+      LOG_WARN("Failed to init custom cache dict", K(ret));
+    } else {
+      dict_custom_ = cdict;
+      LOG_INFO("seekdb: loaded custom fulltext dict", K(db_name), K(table_name), K(word_count));
+    }
+  } else {
+    LOG_INFO("seekdb: custom fulltext dict has no usable words; using built-in dict only",
+             K(ret), K(db_name), K(table_name), K(word_count));
+  }
+
   return ret;
 }
 

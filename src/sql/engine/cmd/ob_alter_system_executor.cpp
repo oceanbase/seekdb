@@ -552,6 +552,56 @@ int ObClearMergeErrorExecutor::execute(ObExecContext &ctx, ObClearMergeErrorStmt
   return ret;
 }
 
+// seekdb: ALTER SYSTEM REFRESH FULLTEXT DICT db.table
+// Validates that db.table exists and is a custom fulltext dictionary table. In this single-node
+// MVP the IK tokenizer reloads the custom dict synchronously at each parser init (no persistent
+// dict cache, no cross-server broadcast), so a successful validation is sufficient: subsequent
+// index builds / MATCH queries observe the latest dict rows.
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx, ObRefreshFulltextDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session = ctx.get_my_session();
+  if (OB_ISNULL(session)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret));
+  } else {
+    const uint64_t tenant_id = session->get_effective_tenant_id();
+    share::schema::ObSchemaGetterGuard schema_guard;
+    const share::schema::ObTableSchema *table_schema = nullptr;
+    const share::schema::ObDatabaseSchema *database_schema = nullptr;
+    const ObString &database_name = stmt.get_database_name();
+    const ObString &table_name = stmt.get_table_name();
+    if (OB_ISNULL(GCTX.schema_service_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("schema service is null", K(ret));
+    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+      LOG_WARN("get schema guard failed", K(ret), K(tenant_id));
+    } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id, database_name, database_schema))) {
+      LOG_WARN("get database schema failed", K(ret), K(tenant_id), K(database_name));
+    } else if (OB_ISNULL(database_schema)) {
+      ret = OB_ERR_BAD_DATABASE;
+      LOG_WARN("database not exist", K(ret), K(tenant_id), K(database_name));
+    } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id,
+                                                     database_schema->get_database_id(),
+                                                     table_name,
+                                                     false, /*is_index*/
+                                                     table_schema))) {
+      LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(table_name));
+    } else if (OB_ISNULL(table_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("table not exist", K(ret), K(database_name), K(table_name));
+    } else if (!table_schema->is_fulltext_dict()) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("table is not a fulltext dictionary table", K(ret), K(database_name), K(table_name));
+      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "table is not a fulltext dictionary table");
+    } else {
+      LOG_INFO("seekdb: refresh fulltext dict validated", K(tenant_id), K(database_name),
+               K(table_name), "table_id", table_schema->get_table_id());
+    }
+  }
+  return ret;
+}
+
 int ObUpgradeVirtualSchemaExecutor ::execute(
 		ObExecContext &ctx, ObUpgradeVirtualSchemaStmt &stmt)
 {
