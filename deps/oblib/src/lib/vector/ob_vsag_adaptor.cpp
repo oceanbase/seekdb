@@ -80,6 +80,30 @@ static int vsag_errcode2ob(vsag::ErrorType vsag_errcode)
   return ret;
 }
 
+static void fill_vsag_error_message(const vsag::Error &error, char *err_msg, const int64_t err_msg_len)
+{
+  if (nullptr != err_msg && err_msg_len > 0) {
+    int64_t copy_len = static_cast<int64_t>(error.message.length());
+    err_msg[0] = '\0';
+    if (copy_len >= err_msg_len) {
+      copy_len = err_msg_len - 1;
+    }
+    if (copy_len > 0) {
+      MEMCPY(err_msg, error.message.c_str(), copy_len);
+      err_msg[copy_len] = '\0';
+    }
+  }
+}
+
+static void adjust_create_index_max_degree(const IndexType index_type, int &max_degree)
+{
+  // hgraph of vsag needs to be multiplied by 2 so as to align recall with hnsw
+  if (HNSW_SQ_TYPE == index_type || HNSW_BQ_TYPE == index_type || HGRAPH_TYPE == index_type) {
+    max_degree *= 2;
+    LOG_INFO("change max_degree for hgraph", K(index_type), K(max_degree), K(lbt()));
+  }
+}
+
 class ObVasgFilter final : public vsag::Filter {
 public:
   ObVasgFilter(float valid_ratio,
@@ -841,11 +865,7 @@ int create_index(VectorIndexPtr &index_handler,
       LOG_INFO("[OBVSAG] use caller allocator ", K(index_type), K(lbt()));
     }
   
-    // hgraph of vsag needs to be multiplied by 2 so as to align recall with hnsw
-    if (HNSW_SQ_TYPE == index_type || HNSW_BQ_TYPE == index_type || HGRAPH_TYPE == index_type) {
-      max_degree *= 2;
-      LOG_INFO("change max_degree for hgraph", K(index_type), K(max_degree), K(lbt()));
-    }
+    adjust_create_index_max_degree(index_type, max_degree);
 
     const char* index_type_str = get_index_type_str(index_type);
     char result_param_str[1024] = {0};
@@ -872,7 +892,64 @@ int create_index(VectorIndexPtr &index_handler,
         }
       } else {
         ret = vsag_errcode2ob(index.error().type);
-        LOG_WARN("[OBVSAG] create index error happend", K(ret), KCSTRING(result_param_str), K(index.error().type));
+        LOG_WARN("[OBVSAG] create index error happend",
+            K(ret), KCSTRING(result_param_str), K(index.error().type), KCSTRING(index.error().message.c_str()));
+      }
+    }
+  }
+  return ret;
+}
+
+int validate_create_index(IndexType index_type,
+                          const char *dtype,
+                          const char *metric,
+                          int dim,
+                          int max_degree,
+                          int ef_construction,
+                          int ef_search,
+                          char *err_msg,
+                          int64_t err_msg_len,
+                          void *allocator,
+                          int extra_info_size /* = 0*/,
+                          int16_t refine_type /*= 0*/,
+                          int16_t bq_bits_query /*= 32*/,
+                          bool bq_use_fht /*= false*/)
+{
+  int ret = OB_SUCCESS;
+  if (nullptr != err_msg && err_msg_len > 0) {
+    err_msg[0] = '\0';
+  }
+  if (dtype == nullptr || metric == nullptr) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("[OBVSAG] null pointer", KP(dtype), KP(metric));
+  } else {
+    vsag::Allocator *vsag_allocator = nullptr;
+    if (allocator == nullptr) {
+      vsag_allocator = nullptr;
+      LOG_INFO("[OBVSAG] allocator is null , use default_allocator", K(index_type), K(lbt()));
+    } else {
+      vsag_allocator = static_cast<vsag::Allocator *>(allocator);
+      LOG_INFO("[OBVSAG] use caller allocator ", K(index_type), K(lbt()));
+    }
+
+    adjust_create_index_max_degree(index_type, max_degree);
+
+    const char* index_type_str = get_index_type_str(index_type);
+    char result_param_str[1024] = {0};
+    if (OB_FAIL(construct_vsag_create_param(
+        uint8_t(index_type), dtype, metric, dim, max_degree,
+        ef_construction, ef_search, allocator, extra_info_size,
+        refine_type, bq_bits_query, bq_use_fht, result_param_str))) {
+      LOG_WARN("construct_vsag_create_param fail", K(ret), K(index_type));
+    } else {
+      const std::string input_json_str(result_param_str);
+      tl::expected<std::shared_ptr<Index>, Error> index =
+          vsag::Factory::CreateIndex(index_type_str, input_json_str, vsag_allocator);
+      if (!index.has_value()) {
+        ret = vsag_errcode2ob(index.error().type);
+        fill_vsag_error_message(index.error(), err_msg, err_msg_len);
+        LOG_WARN("[OBVSAG] validate create index error",
+            K(ret), KCSTRING(result_param_str), K(index.error().type), KCSTRING(index.error().message.c_str()));
       }
     }
   }
