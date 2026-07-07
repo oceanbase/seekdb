@@ -243,17 +243,27 @@ jobs:
           fi
           echo "mysql-compatible client: $CLIENT"
 
-          chmod +x "$WORKSPACE/tools/benchmark/fts_large_bench.sh" "$WORKSPACE/tools/benchmark/fts_large_bench_gen.py"
+          chmod +x \
+            "$WORKSPACE/tools/benchmark/fts_large_bench.sh" \
+            "$WORKSPACE/tools/benchmark/fts_large_bench_gen.py" \
+            "$WORKSPACE/tools/benchmark/fts_large_bench_score.py"
           BENCH_OUTPUT="$VLDB_WORK_DIR/fts_large_bench_report.txt"
+          SCORE_OUTPUT="$VLDB_WORK_DIR/fts_large_bench_score.txt"
           export MYSQL="$CLIENT -h127.0.0.1 -P2881 -uroot -N -s -A --default-character-set=utf8mb4"
           export MYSQL_VERBOSE="$CLIENT -h127.0.0.1 -P2881 -uroot -A --default-character-set=utf8mb4"
           export LABEL="vldb-ci-${{ github.run_id }}-${{ github.run_attempt }}"
           export OUTPUT="$BENCH_OUTPUT"
 
           "$WORKSPACE/tools/benchmark/fts_large_bench.sh" | tee "$VLDB_WORK_DIR/fts_large_bench.log"
+          "$WORKSPACE/tools/benchmark/fts_large_bench_score.py" "$BENCH_OUTPUT" | tee "$SCORE_OUTPUT"
 
           if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
             {
+              echo "### FTS Large Benchmark Score"
+              echo '```'
+              cat "$SCORE_OUTPUT"
+              echo '```'
+              echo
               echo "### FTS Large Benchmark Report"
               echo '```'
               cat "$BENCH_OUTPUT"
@@ -267,6 +277,7 @@ jobs:
         run: |
           set -euo pipefail
           BENCH_OUTPUT="$VLDB_WORK_DIR/fts_large_bench_report.txt"
+          SCORE_OUTPUT="$VLDB_WORK_DIR/fts_large_bench_score.txt"
           ARTIFACT_DIR="$VLDB_WORK_DIR/fts_large_bench_comment"
           if [[ ! -f "$BENCH_OUTPUT" ]]; then
             echo "benchmark report not found, skip comment artifact: $BENCH_OUTPUT"
@@ -274,6 +285,9 @@ jobs:
           fi
           mkdir -p "$ARTIFACT_DIR"
           cp -f "$BENCH_OUTPUT" "$ARTIFACT_DIR/report.txt"
+          if [[ -f "$SCORE_OUTPUT" ]]; then
+            cp -f "$SCORE_OUTPUT" "$ARTIFACT_DIR/score.txt"
+          fi
           echo "${{ github.event.pull_request.number }}" > "$ARTIFACT_DIR/pr_number"
           echo "${{ github.run_id }}" > "$ARTIFACT_DIR/source_run_id"
           echo "${{ github.run_attempt }}" > "$ARTIFACT_DIR/source_run_attempt"
