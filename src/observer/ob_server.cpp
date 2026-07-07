@@ -967,7 +967,8 @@ int ObServer::start(bool embed_mode)
     } else {
       FLOG_INFO("success to start root service monitor");
     }
-    if (FAILEDx(ob_service_.start(embed_mode))) {
+    // Treat --embedded as the embed telemetry reporter; ObService reports bootstrap telemetry synchronously.
+    if (FAILEDx(ob_service_.start(embed_mode || embedded_))) {
       LOG_ERROR("fail to start oceanbase service", KR(ret));
     } else {
       FLOG_INFO("success to start oceanbase service");
