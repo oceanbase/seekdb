@@ -304,7 +304,10 @@ int ObMultiVersionSchemaService::get_latest_schema(
     const ObSchema *&schema)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(SYS_VARIABLE_SCHEMA == schema_type && 1UL != schema_id)) {
+  if (OB_UNLIKELY(TENANT_SCHEMA == schema_type && false)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument for TENANT_SCHEMA", KR(ret), K(schema_id));
+  } else if (OB_UNLIKELY(SYS_VARIABLE_SCHEMA == schema_type && 1UL != schema_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("schema_id not match for TENANT_SCHEMA",
              KR(ret), K(schema_id));
@@ -377,7 +380,10 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
   
   bool update_history_cache = false;
   schema = NULL;
-  if (SYS_VARIABLE_SCHEMA == schema_type && 1UL != schema_id) {
+  if (TENANT_SCHEMA == schema_type && false) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument for TENANT_SCHEMA", KR(ret), K(schema_id));
+  } else if (SYS_VARIABLE_SCHEMA == schema_type && 1UL != schema_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("schema_id not match for TENANT_SCHEMA",
              KR(ret), K(schema_id));
@@ -880,6 +886,7 @@ int ObMultiVersionSchemaService::get_tenant_schema_guard_with_version_in_inner_t
 {
   int ret = OB_SUCCESS;
   bool is_restore = false;
+  bool use_local = false;
   int64_t version_in_inner_table = OB_INVALID_VERSION;
   ObRefreshSchemaStatus schema_status;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
@@ -887,8 +894,25 @@ int ObMultiVersionSchemaService::get_tenant_schema_guard_with_version_in_inner_t
     LOG_WARN("sql_proxy is null", K(ret));
   } else if (OB_FAIL(check_tenant_is_restore(NULL, is_restore))) {
     LOG_WARN("fail to check tenant is restore", KR(ret));
+  } else if (is_restore && false) {
+    ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
+    if (OB_ISNULL(schema_status_proxy)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("schema_status_proxy is null", KR(ret));
+    } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(schema_status))) {
+      LOG_WARN("failed to get tenant refresh schema status", KR(ret));
+    } else if (OB_INVALID_VERSION == schema_status.readable_schema_version_) {
+      use_local = false;
+    } else {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("tenant is still restoring, not supported", KR(ret), K(schema_status));
+    }
   }
   if (OB_FAIL(ret)) {
+  } else if (use_local) {
+    if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("fail to get schema guard", K(ret));
+    }
   } else {
     
     if (OB_FAIL(get_schema_version_in_inner_table(*GCTX.sql_proxy_, schema_status, version_in_inner_table))) {
@@ -1013,11 +1037,15 @@ int ObMultiVersionSchemaService::add_schema_mgr_info(
   int ret = OB_SUCCESS;
   const ObSchemaMgr *schema_mgr = NULL;
   ObSchemaMgrInfo* new_schema_mgr_info = NULL;
-  if (snapshot_version <= 0
+  if (false
+      || snapshot_version <= 0
       || latest_local_version <= 0
       || NULL == schema_store) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument or snapshot_version", K(ret), K(snapshot_version), KP(schema_store));
+  } else if (false) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid schema_status or argument", K(ret), K(snapshot_version), K(schema_status));
   } else {
     ObSchemaMgrHandle handle(schema_guard.mod_);
     ObSchemaMgrInfo schema_mgr_info(snapshot_version,
@@ -1650,6 +1678,9 @@ int ObMultiVersionSchemaService::check_if_tenant_schema_has_been_refreshed(bool 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
+  } else if (false) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret));
   } else if (OB_UNLIKELY(!refresh_full_schema_present_)) {
     ret = OB_HASH_NOT_EXIST;
   } else if (FALSE_IT(sys_schema_not_full = refresh_full_schema_)) {
@@ -1699,6 +1730,9 @@ int ObMultiVersionSchemaService::add_schema(
   if (!force_add && !check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", K(ret));
+  } else if (false) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret));
   } else if (FALSE_IT(schema_store = &schema_store_)) {
   } else if (FALSE_IT(schema_mgr_for_cache = ATOMIC_LOAD(&schema_mgr_for_cache_))) {
   } else if (OB_ISNULL(schema_mgr_for_cache)) {
@@ -1947,7 +1981,7 @@ int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_versi
             if (OB_EAGAIN == ret || OB_SIZE_OVERFLOW == ret) {
               ret = OB_SUCCESS;
             } else {
-              LOG_ERROR("fail to submit async refresh schema task",
+              LOG_WARN("fail to submit async refresh schema task",
                        KR(ret), K(schema_version));
             }
           }
@@ -2055,7 +2089,7 @@ int ObMultiVersionSchemaService::get_schema_version_by_timestamp(
     int64_t &schema_version)
 {
   int ret = OB_SUCCESS;
-  if (timestamp <= 0) {
+  if (false || timestamp <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(timestamp));
   } else if (OB_ISNULL(sql_proxy_) || OB_ISNULL(schema_service_)) {
@@ -2105,6 +2139,9 @@ int ObMultiVersionSchemaService::refresh_tenant_schema(common::ObIArray<share::s
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
+  } else if (false) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret));
   } else if (OB_ISNULL(sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("proxy is null", KR(ret));
@@ -2116,12 +2153,31 @@ int ObMultiVersionSchemaService::refresh_tenant_schema(common::ObIArray<share::s
     ObISQLClient &sql_client = *sql_proxy_;
 
     // read refresh_schema_status from inner table
-    // 1. System tenants strengthen the consistency of reading and refresh schema
-    // 2. user tenants of the primary cluster strengthened to read and refresh schema consistently
-    refresh_schema_status.reset();
-
-    refresh_schema_status.snapshot_timestamp_ = OB_INVALID_TIMESTAMP;
-    refresh_schema_status.readable_schema_version_ = OB_INVALID_VERSION;
+    if (!is_restore
+         || true) {
+      // 1. System tenants strengthen the consistency of reading and refresh schema
+      // 2. user tenants of the primary cluster strengthened to read and refresh schema consistently
+      refresh_schema_status.reset();
+      
+      refresh_schema_status.snapshot_timestamp_ = OB_INVALID_TIMESTAMP;
+      refresh_schema_status.readable_schema_version_ = OB_INVALID_VERSION;
+    } else {
+      // 3. user tenants of the standalone cluster weaken the consistent read and refresh schema
+      // 4. primary cluster restore tenants are weak, consistent read and refresh schema
+      ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
+      if (OB_ISNULL(schema_status_proxy)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("schema_status_proxy is null", KR(ret));
+      } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(refresh_schema_status))) {
+        LOG_WARN("fail to get refresh schema status", KR(ret));
+      } else if (refresh_schema_status.snapshot_timestamp_ == 0) {
+        // The standalone cluster RS has not yet pushed the tenant's schema version (the standalone cluster RS
+        // needs to change the internal table first, and then change the memory value),
+        // and skip the tenant schema refresh at this time
+        ret = OB_SCHEMA_EAGAIN;
+        LOG_INFO("[REFRESH_SCHEMA] tenant schema is not ready, just skip", KR(ret), K(refresh_schema_status));
+      }
+    }
 
     if (OB_SUCC(ret)) {
       bool need_refresh = true;
@@ -2481,9 +2537,27 @@ int ObMultiVersionSchemaService::try_gc_tenant_schema_mgr_for_refresh(
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", K(ret));
-  } else {
+  } else if (false
+             || true) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
+  } else {
+    lib::ObMutexGuard guard(schema_refresh_mutex_);
+    ObSchemaMemMgr *mem_mgr = NULL;
+    ObSchemaMgrCache *schema_mgr_cache = NULL;
+    ObSchemaStore* schema_store = NULL;
+
+    schema_store = &schema_store_;
+    mem_mgr = mem_mgr_;
+    schema_store->reset_version();
+    schema_mgr_cache = &schema_store->schema_mgr_cache_;
+
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(try_gc_tenant_schema_mgr(mem_mgr, schema_mgr_cache))) {
+      LOG_WARN("fail to eliminate schema mgr", K(ret));
+    } else if (OB_FAIL(destroy_schema_struct())) {
+      LOG_WARN("fail to destroy schema struct", K(ret));
+    }
   }
   LOG_INFO("try gc schema mgr for refresh", K(ret));
   return ret;
@@ -2575,6 +2649,9 @@ int ObMultiVersionSchemaService::try_gc_another_allocator(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("mem_mgr or schema_mgr_cahe is null",
              K(ret), KP(mem_mgr), KP(schema_mgr_cache));
+  } else if (false) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("argument not match", K(ret));
   } else {
     lib::ObMutexGuard guard(schema_refresh_mutex_);
     ObArray<void *> another_ptrs;
@@ -2604,7 +2681,13 @@ int ObMultiVersionSchemaService::try_gc_another_allocator(
           LOG_WARN("ptrs is null", K(ret), K(i));
         } else if (FALSE_IT(eli_schema_mgr = static_cast<ObSchemaMgr *>(another_ptrs.at(i)))) {
         } else if (OB_FAIL(schema_mgr_cache->try_eliminate_schema_mgr(eli_schema_mgr))) {
-          LOG_WARN("fail to eliminate schema_mgr", K(ret), K(eli_schema_mgr));
+          if (OB_ENTRY_NOT_EXIST == ret) {
+            ret = OB_SCHEMA_EAGAIN;
+            LOG_INFO("schema mgr is not in cache, try reset another allocator next round",
+                     KR(ret), "schema_mgr", another_ptrs.at(i));
+          } else {
+            LOG_WARN("fail to eliminate schema_mgr", K(ret), K(eli_schema_mgr));
+          }
         } else if (OB_FAIL(mem_mgr->free_schema_mgr(eli_schema_mgr))) {
           LOG_ERROR("free eli schema mgr falied", KR(ret));
         }
@@ -2633,6 +2716,9 @@ int ObMultiVersionSchemaService::try_gc_current_allocator(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("mem_mgr or schema_mgr_cahe is null",
              KR(ret), KP(mem_mgr), KP(schema_mgr_cache));
+  } else if (false) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("argument not match", KR(ret));
   } else if (0 == recycle_interval) {
     // 0 means turn off gc current allocator
     LOG_TRACE("_schema_memory_recycle_interval is zero, turn off gc current allocator");
@@ -2681,8 +2767,8 @@ int ObMultiVersionSchemaService::try_gc_current_allocator(
                      K(refreshed_schema_version), K(latest_schema_version),
                      K(eli_timestamp), K(recycle_interval));
             if (OB_FAIL(schema_mgr_cache->try_eliminate_schema_mgr(eli_schema_mgr))) {
-              if (OB_EAGAIN == ret) {
-                // schema mgr in use, just ignore
+              if (OB_EAGAIN == ret || OB_ENTRY_NOT_EXIST == ret) {
+                // schema mgr in use or not in cache, just ignore
                 ret = OB_SUCCESS;
               } else {
                 LOG_WARN("fail to eliminate schema_mgr", KR(ret),
@@ -2800,8 +2886,8 @@ int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
                    K(eli_schema_version), K(local_version), K(refreshed_schema_version),
                    K(latest_schema_version), K(reserve_version));
           if (OB_FAIL(schema_mgr_cache->try_eliminate_schema_mgr(eli_schema_mgr))) {
-            if (OB_EAGAIN == ret) {
-              // schema mgr in use, just ignore
+            if (OB_EAGAIN == ret || OB_ENTRY_NOT_EXIST == ret) {
+              // schema mgr in use or not in cache, just ignore
               ret = OB_SUCCESS;
             } else {
               LOG_WARN("fail to eliminate schema_mgr", KR(ret), K(eli_schema_version));
@@ -3053,7 +3139,8 @@ int ObMultiVersionSchemaService::gen_batch_new_schema_versions(const int64_t ver
   int ret = OB_SUCCESS;
   int64_t refreshed_schema_version = OB_INVALID_VERSION;
   schema_version = OB_INVALID_VERSION;
-  if (OB_UNLIKELY(version_cnt < 1)) {
+  if (OB_UNLIKELY(false
+                 || version_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret));
   } else if (OB_FAIL(get_tenant_refreshed_schema_version(refreshed_schema_version))) {
@@ -3271,6 +3358,9 @@ int ObMultiVersionSchemaService::update_baseline_schema_version(
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
+  } else if (false) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret));
   } else {
     bl_schema_version = schema_store_.get_baseline_schema_version();
     if (baseline_schema_version < bl_schema_version) {
@@ -3331,7 +3421,8 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(const ObIArray<ObTa
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (OB_UNLIKELY(tablet_ids_cnt <= 0)) {
+  } else if (OB_UNLIKELY(false
+             || tablet_ids_cnt <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(tablet_ids_cnt));
   } else if (OB_FAIL(table_ids.reserve(tablet_ids_cnt))) {
@@ -3697,7 +3788,8 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(const ObIA
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (OB_UNLIKELY(start_idx < 0
+  } else if (OB_UNLIKELY(false
+             || start_idx < 0
              || end_idx - start_idx <= 0
              || end_idx > tablet_idxs.count()
              || tablet_ids.count() <= 0
