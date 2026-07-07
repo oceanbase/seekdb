@@ -16,6 +16,7 @@
 
 #include "object/ob_object.h"
 #include "storage/fts/ob_fts_struct.h"  // ObFTWordMap typedef(previously hidden behind a transitive include)
+#include "lib/utility/utility.h"
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "storage/fts/ob_fts_plugin_helper.h"
@@ -255,6 +256,17 @@ int ObFTParseHelper::segment(
     param.ngram_token_size_ = property.ngram_token_size_;
     param.ik_param_.mode_
         = (property.ik_mode_smart_ ? ObFTIKParam::Mode::SMART : ObFTIKParam::Mode::MAX_WORD);
+    // seekdb: pass the configured custom dict table name (db.table) to the IK parser so it can
+    // load the custom words. Deep-copy into param's allocator -- property.dict_table_ lives in the
+    // parse helper's allocator, which can be released before the parser's init_dict reads it.
+    if (!property.dict_table_.empty() && OB_NOT_NULL(param.allocator_)) {
+      if (OB_FAIL(ob_write_string(*param.allocator_, property.dict_table_, param.ik_param_.main_dict_))) {
+        LOG_WARN("fail to deep copy main dict name; falling back to built-in dict", K(ret),
+                 K(property.dict_table_));
+        param.ik_param_.main_dict_.reset();
+        ret = OB_SUCCESS;
+      }
+    }
     param.min_ngram_size_ = property.min_ngram_token_size_;
     param.max_ngram_size_ = property.max_ngram_token_size_;
 
@@ -319,7 +331,7 @@ int ObFTParseHelper::init(
     LOG_WARN("invalid argument", K(ret), KP(allocator), K(plugin_name));
   } else if (OB_FAIL(parser_name_.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
     LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
-  } else if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, plugin_properties))) {
+  } else if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, plugin_properties, *allocator))) {
     LOG_WARN("fail to parse parser property from cstring", K(ret), K(plugin_properties), K(parser_name_));
   } else if (OB_FAIL(ObPluginHelper::find_ftparser(parser_name_.get_parser_name().str(),
                                                    parser_desc_, plugin_param_))) {
@@ -409,12 +421,13 @@ int ObFTParseHelper::check_is_the_same(
   if (is_inited_) {
     storage::ObFTParser parser_name;
     ObFTParserProperty parser_property;
+    common::ObArenaAllocator tmp_alloc("FTPropCmp");
     if (OB_UNLIKELY(plugin_name.empty())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(plugin_name));
     } else if (OB_FAIL(parser_name.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
       LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
-    } else if (OB_FAIL(parser_property.parse_for_parser_helper(parser_name, plugin_properties))) {
+    } else if (OB_FAIL(parser_property.parse_for_parser_helper(parser_name, plugin_properties, tmp_alloc))) {
       LOG_WARN("fail to parse parser property from cstring", K(ret), K(plugin_properties), K(parser_name_));
     } else if (parser_name == parser_name_ && parser_property.is_equal(parser_property_)) {
       is_same = true;

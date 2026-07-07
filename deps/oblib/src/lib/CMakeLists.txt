@@ -50,6 +50,15 @@ ob_set_subtarget(oblib_lib geo
 )
 
 
+ob_set_subtarget(oblib_lib ai_split_document
+  ai_split_document/ob_ai_split_document.cpp
+  ai_split_document/ob_ai_split_document_util.cpp
+)
+
+ob_set_subtarget(oblib_lib ai_parse_doc
+  ai_parse_doc/ob_pdf_render.cpp
+)
+
 ob_set_subtarget(oblib_lib encode
   encode/ob_base64_encode.cpp
   encode/ob_quoted_printable_encode.cpp
@@ -301,6 +310,7 @@ else()
     PUBLIC ob_malloc compress restore
     ${DEP_DIR}/lib/libxml2.a
     ${DEP_DIR}/lib/liblzma.a
+    ${DEP_DIR}/lib/libpdfium.so
   )
 endif()
 

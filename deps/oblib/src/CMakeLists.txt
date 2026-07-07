@@ -47,6 +47,7 @@ target_include_directories(
   ${DEP_DIR}/include/apr-1/
   ${DEP_DIR}/include/icu
   ${DEP_DIR}/include/icu/common
+  ${DEP_DIR}/include/pdfium
   $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${DEP_DIR}/include/apache-arrow>
   ${DEP_DIR}/include/fast_float
   ${USSL_INCLUDE_DIRS}
@@ -342,7 +343,7 @@ else()
     ${DEP_DIR}/lib/sqlite/libsqlite3.a
     ${DEP_DIR}/lib/libz.a
     ${DEP_DIR}/lib/libicui18n.a
-    ${DEP_DIR}/lib/libicustubdata.a
+    ${DEP_DIR}/lib/libicudata.a
     ${DEP_DIR}/lib/libicuuc.a
     ${DEP_DIR}/lib/libprotobuf-c.a
     $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${_LIB_PATH}/libarrow.a>

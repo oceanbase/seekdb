@@ -38,6 +38,8 @@ public:
 
 public:
   int init(const ObString &table_name);
+  // seekdb: read words from a user-specified custom dict table `db_name`.`table_name`.
+  int init(const ObString &db_name, const ObString &table_name);
 
 private:
   void reset();

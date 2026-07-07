@@ -386,6 +386,8 @@
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_embed.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_rerank.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_prompt.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_load_file.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_ai_parse_doc.h"
 #include "ob_expr_vector_similarity.h"
 #include "ob_expr_check_location_access.h"
 
@@ -1341,6 +1343,8 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprVectorCosineSimilarity::calc_cosine_similarity,                /* 872 */
   ObExprVectorIPSimilarity::calc_ip_similarity,                        /* 873 */
   ObExprVectorSimilarity::calc_similarity,                             /* 874 */
+  ObExprLoadFile::eval_load_file,                                      /* 875 */
+  ObExprAIParseDoc::eval_ai_parse_doc,                                 /* 876 */
 };
 
 static ObExpr::EvalBatchFunc g_expr_eval_batch_functions[] = {
@@ -1767,6 +1771,7 @@ static ObExpr::EvalVectorFunc g_expr_eval_vector_functions[] = {
   ObExprAIComplete::eval_ai_complete_vector,                             /* 227 */
   ObExprAIEmbed::eval_ai_embed_vector,                                   /* 228 */
   NULL, // ObExprAIRerank::eval_ai_rerank_vector,                        /* 229 */
+  ObExprLoadFile::eval_load_file_vector,                                /* 230 */
 };
 
 static ObExpr::EvalFunc g_decimal_int_eval_functions[] = {

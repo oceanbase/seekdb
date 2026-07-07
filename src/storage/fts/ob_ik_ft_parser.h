@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_OB_IK_FT_PARSER_H_
 
 #include "lib/allocator/ob_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
@@ -46,7 +47,8 @@ public:
         cache_stop_(allocator),
         dict_main_(nullptr),
         dict_quan_(nullptr),
-        dict_stop_(nullptr)
+        dict_stop_(nullptr),
+        dict_custom_(nullptr)
   {
   }
 
@@ -88,6 +90,11 @@ private:
                             ObFTCacheRangeContainer &container,
                             ObIFTDict *&dict);
 
+  // seekdb: build the custom dictionary (ObFTCacheDict over a single DAT) from the words of the
+  // user-specified dict table `dict_table_full_name` (formatted as "db.table"). Result is stored
+  // in dict_custom_, backed by custom_alloc_. Synchronous; reloaded on each parser init (MVP).
+  int build_custom_dict(const common::ObString &dict_table_full_name);
+
 private:
   static constexpr int SEGMENT_LIMIT = 1000;
   ObIAllocator &allocator_;
@@ -106,6 +113,10 @@ private:
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
+
+  // seekdb: optional custom dictionary (built from a user dict table) and its backing allocator.
+  ObIFTDict *dict_custom_;
+  common::ObArenaAllocator custom_alloc_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };

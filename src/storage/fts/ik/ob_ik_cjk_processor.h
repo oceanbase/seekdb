@@ -29,11 +29,17 @@ class ObFTDictHub;
 class ObIKCJKProcessor : public ObIIKProcessor
 {
 public:
-  ObIKCJKProcessor(const ObIFTDict &dict_main, ObIAllocator &alloc)
-      : hits_(alloc), dict_main_(dict_main), cjk_start_(-1), cjk_end_(-1)
+  // seekdb: dict_custom may be nullptr (no custom dict configured for this index).
+  ObIKCJKProcessor(const ObIFTDict &dict_main, const ObIFTDict *dict_custom, ObIAllocator &alloc)
+      : hits_(alloc), custom_hits_(alloc), dict_main_(dict_main), dict_custom_(dict_custom),
+        cjk_start_(-1), cjk_end_(-1)
   {
   }
-  ~ObIKCJKProcessor() override { hits_.reset(); }
+  ~ObIKCJKProcessor() override
+  {
+    hits_.reset();
+    custom_hits_.reset();
+  }
 
 public:
   int do_process(TokenizeContext &ctx,
@@ -42,8 +48,19 @@ public:
                  const ObFTCharUtil::CharType type) override;
 
 private:
+  // seekdb: run the IK CJK matching for one dictionary against its own in-progress hit list,
+  // emitting matched lexemes into ctx. Used for both the built-in main dict and the custom dict.
+  int do_match(TokenizeContext &ctx,
+               const char *ch,
+               const uint8_t char_len,
+               const ObIFTDict &dict,
+               ObList<ObDATrieHit, ObIAllocator> &hits);
+
+private:
   ObList<ObDATrieHit, ObIAllocator> hits_;
+  ObList<ObDATrieHit, ObIAllocator> custom_hits_;
   const ObIFTDict &dict_main_;
+  const ObIFTDict *dict_custom_;
   int64_t cjk_start_;
   int64_t cjk_end_;
 
