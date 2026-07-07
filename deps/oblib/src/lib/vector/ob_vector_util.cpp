@@ -126,13 +126,13 @@ int validate_create_index(int index_type,
                           int max_degree,
                           int ef_construction,
                           int ef_search,
-                          char *err_msg,
-                          int64_t err_msg_len,
                           void *allocator,
-                          int extra_info_size /*= 0*/,
-                          int16_t refine_type /*= 0*/,
-                          int16_t bq_bits_query /*= 32*/,
-                          bool bq_use_fht /*= false*/)
+                          int extra_info_size,
+                          int16_t refine_type,
+                          int16_t bq_bits_query,
+                          bool bq_use_fht,
+                          char *err_msg,
+                          int64_t err_msg_len)
 {
 #ifdef OB_BUILD_CDC_DISABLE_VSAG
   INIT_SUCC(ret);
@@ -164,13 +164,55 @@ int validate_create_index(int index_type,
                                        max_degree,
                                        ef_construction,
                                        ef_search,
-                                       err_msg,
-                                       err_msg_len,
                                        allocator,
                                        extra_info_size,
                                        refine_type,
                                        bq_bits_query,
-                                       bq_use_fht);
+                                       bq_use_fht,
+                                       err_msg,
+                                       err_msg_len);
+#endif
+}
+
+int validate_create_index(int index_type,
+                          const char *dtype,
+                          const char *metric,
+                          bool use_reorder,
+                          float doc_prune_ratio,
+                          int window_size,
+                          void *allocator,
+                          int extra_info_size,
+                          char *err_msg,
+                          int64_t err_msg_len)
+{
+#ifdef OB_BUILD_CDC_DISABLE_VSAG
+  INIT_SUCC(ret);
+  UNUSED(index_type);
+  UNUSED(dtype);
+  UNUSED(metric);
+  UNUSED(use_reorder);
+  UNUSED(doc_prune_ratio);
+  UNUSED(window_size);
+  UNUSED(allocator);
+  UNUSED(extra_info_size);
+  if (nullptr != err_msg && err_msg_len > 0) {
+    err_msg[0] = '\0';
+  }
+  return ret;
+#else
+  obvsag::set_block_size_limit(2*1024*1024);
+  LOG_INFO("vector index validate params: ", K(index_type), KCSTRING(dtype), KCSTRING(metric),
+      K(use_reorder), K(doc_prune_ratio), K(window_size), KP(allocator), K(extra_info_size));
+  return obvsag::validate_create_index(static_cast<obvsag::IndexType>(index_type),
+                                       dtype,
+                                       metric,
+                                       use_reorder,
+                                       doc_prune_ratio,
+                                       window_size,
+                                       allocator,
+                                       extra_info_size,
+                                       err_msg,
+                                       err_msg_len);
 #endif
 }
 

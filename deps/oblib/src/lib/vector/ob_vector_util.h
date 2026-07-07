@@ -69,13 +69,24 @@ int validate_create_index(int index_type,
                           int max_degree,
                           int ef_construction,
                           int ef_search,
+                          void *allocator,
+                          int extra_info_size,
+                          int16_t refine_type,
+                          int16_t bq_bits_query,
+                          bool bq_use_fht,
                           char *err_msg,
-                          int64_t err_msg_len,
-                          void *allocator = NULL,
-                          int extra_info_size = 0,
-                          int16_t refine_type = 0,
-                          int16_t bq_bits_query = 32,
-                          bool bq_use_fht = false);
+                          int64_t err_msg_len);
+
+int validate_create_index(int index_type,
+                          const char *dtype,
+                          const char *metric,
+                          bool use_reorder,
+                          float doc_prune_ratio,
+                          int window_size,
+                          void *allocator,
+                          int extra_info_size,
+                          char *err_msg,
+                          int64_t err_msg_len);
 
 int create_index(obvsag::VectorIndexPtr &index_handler, int index_type, const char *dtype, const char *metric,
     bool use_reorder, float doc_prune_ratio, int window_size, void *allocator = NULL, int extra_info_size = 0);

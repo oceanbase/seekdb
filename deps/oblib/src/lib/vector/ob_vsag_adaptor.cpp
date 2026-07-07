@@ -907,13 +907,13 @@ int validate_create_index(IndexType index_type,
                           int max_degree,
                           int ef_construction,
                           int ef_search,
-                          char *err_msg,
-                          int64_t err_msg_len,
                           void *allocator,
-                          int extra_info_size /* = 0*/,
-                          int16_t refine_type /*= 0*/,
-                          int16_t bq_bits_query /*= 32*/,
-                          bool bq_use_fht /*= false*/)
+                          int extra_info_size,
+                          int16_t refine_type,
+                          int16_t bq_bits_query,
+                          bool bq_use_fht,
+                          char *err_msg,
+                          int64_t err_msg_len)
 {
   int ret = OB_SUCCESS;
   if (nullptr != err_msg && err_msg_len > 0) {
@@ -940,6 +940,61 @@ int validate_create_index(IndexType index_type,
         uint8_t(index_type), dtype, metric, dim, max_degree,
         ef_construction, ef_search, allocator, extra_info_size,
         refine_type, bq_bits_query, bq_use_fht, result_param_str))) {
+      LOG_WARN("construct_vsag_create_param fail", K(ret), K(index_type));
+    } else {
+      const std::string input_json_str(result_param_str);
+      tl::expected<std::shared_ptr<Index>, Error> index =
+          vsag::Factory::CreateIndex(index_type_str, input_json_str, vsag_allocator);
+      if (!index.has_value()) {
+        ret = vsag_errcode2ob(index.error().type);
+        fill_vsag_error_message(index.error(), err_msg, err_msg_len);
+        LOG_WARN("[OBVSAG] validate create index error",
+            K(ret), KCSTRING(result_param_str), K(index.error().type), KCSTRING(index.error().message.c_str()));
+      }
+    }
+  }
+  return ret;
+}
+
+int validate_create_index(IndexType index_type,
+                          const char *dtype,
+                          const char *metric,
+                          bool use_reorder,
+                          float doc_prune_ratio,
+                          int window_size,
+                          void *allocator,
+                          int extra_info_size,
+                          char *err_msg,
+                          int64_t err_msg_len)
+{
+  int ret = OB_SUCCESS;
+  if (nullptr != err_msg && err_msg_len > 0) {
+    err_msg[0] = '\0';
+  }
+  if (dtype == nullptr || metric == nullptr) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("[OBVSAG] null pointer", KP(dtype), KP(metric));
+  } else {
+    vsag::Allocator *vsag_allocator = nullptr;
+    if (allocator == nullptr) {
+      vsag_allocator = nullptr;
+      LOG_INFO("[OBVSAG] allocator is null , use default_allocator", K(index_type), K(lbt()));
+    } else {
+      vsag_allocator = static_cast<vsag::Allocator *>(allocator);
+      LOG_INFO("[OBVSAG] use caller allocator ", K(index_type), K(lbt()));
+    }
+
+    const char *index_type_str = get_index_type_str(index_type);
+    char result_param_str[1024] = {0};
+    if (OB_FAIL(construct_vsag_sindi_create_param(uint8_t(index_type),
+                                                  dtype,
+                                                  metric,
+                                                  allocator,
+                                                  extra_info_size,
+                                                  use_reorder,
+                                                  doc_prune_ratio,
+                                                  window_size,
+                                                  result_param_str))) {
       LOG_WARN("construct_vsag_create_param fail", K(ret), K(index_type));
     } else {
       const std::string input_json_str(result_param_str);
