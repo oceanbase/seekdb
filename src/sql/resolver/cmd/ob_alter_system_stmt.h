@@ -414,19 +414,6 @@ private:
   common::ObString task_id_;
 };
 
-class ObSetDiskValidStmt : public ObSystemCmdStmt
-{
-public:
-  ObSetDiskValidStmt():
-    ObSystemCmdStmt(stmt::T_SET_DISK_VALID),
-    server_()
-  {}
-  virtual ~ObSetDiskValidStmt() {}
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(server));
-
-  common::ObAddr server_;
-};
-
 class ObAddDiskStmt : public ObSystemCmdStmt
 {
 public:

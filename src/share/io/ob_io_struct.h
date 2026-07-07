@@ -82,7 +82,6 @@ public:
       K(write_failure_detect_interval_),
       K(read_failure_black_list_interval_),
       K(data_storage_warning_tolerance_time_),
-      K(data_storage_error_tolerance_time_),
       K(disk_io_thread_count_),
       K(sync_io_thread_count_),
       K(data_storage_io_timeout_ms_));
@@ -97,7 +96,6 @@ public:
   int64_t write_failure_detect_interval_; // const literal
   int64_t read_failure_black_list_interval_; // const literal
   int64_t data_storage_warning_tolerance_time_;
-  int64_t data_storage_error_tolerance_time_;
   // resource related
   int64_t disk_io_thread_count_;
   int64_t sync_io_thread_count_;
@@ -551,8 +549,7 @@ public:
 enum ObDeviceHealthStatus
 {
   DEVICE_HEALTH_NORMAL = 0,
-  DEVICE_HEALTH_WARNING,
-  DEVICE_HEALTH_ERROR
+  DEVICE_HEALTH_WARNING
 };
 
 const char *device_health_status_to_str(const ObDeviceHealthStatus dhs);
@@ -567,7 +564,6 @@ public:
   int start();
   virtual void handle(void *task) override;
   int get_device_health_status(ObDeviceHealthStatus &dhs, int64_t &device_abnormal_time);
-  void reset_device_health();
   void record_io_error(const ObIOResult &result, const ObIORequest &req);
   void record_io_timeout(const ObIOResult &result, const ObIORequest &req);
   int record_timing_task(const int64_t first_id, const int64_t second_id);
@@ -576,7 +572,6 @@ private:
   int record_read_failure_(const ObIOResult &result, const ObIORequest &req);
   int record_write_failure();
   void set_device_warning();
-  void set_device_error();
   int set_detect_task_io_info_(ObIOInfo &io_info, const ObIOResult &result, const ObIORequest &req);
   // If executes the detect task in SS mode, checking if it's a read operation on the micro cache file.
   // In SN mode, always returns true.
@@ -590,9 +585,6 @@ private:
   const ObIOConfig &io_config_;
   bool is_device_warning_;
   int64_t last_device_warning_ts_;
-  bool is_device_error_;
-  int64_t begin_device_error_ts_;
-  int64_t last_device_error_ts_;
 };
 
 class ObIOTracer final

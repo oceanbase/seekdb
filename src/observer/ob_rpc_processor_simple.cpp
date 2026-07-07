@@ -1098,15 +1098,6 @@ int ObCancelSysTaskP::process()
   return ret;
 }
 
-int ObSetDiskValidP::process()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIOManager::get_instance().reset_device_health())) {
-    LOG_WARN("reset_disk_error failed", K(ret));
-  }
-  return ret;
-}
-
 int ObAddDiskP::process()
 {
   // not support.

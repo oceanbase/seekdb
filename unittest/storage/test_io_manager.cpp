@@ -714,26 +714,22 @@ TEST_F(TestIOStruct, IOFaultDetector)
   ASSERT_SUCC(result.basic_init());
   ASSERT_SUCC(result.init(io_info));
   ASSERT_SUCC(req.init(io_info, &result));
-  detector.reset_device_health();
+  detector.is_device_warning_ = false;
+  detector.last_device_warning_ts_ = 0;
   ASSERT_SUCC(detector.get_device_health_status(dhs, disk_abnormal_time));
   ASSERT_TRUE(DEVICE_HEALTH_NORMAL == dhs);
   ASSERT_TRUE(0 == disk_abnormal_time);
   result.flag_.set_mode(ObIOMode::READ);
   io_config.data_storage_warning_tolerance_time_ = 1000L * 1000L;
-  io_config.data_storage_error_tolerance_time_ = 3000L * 1000L;
   // io manager not init, skip this test
 //  detector.record_io_err_failure(req);
 //  usleep(2000L * 1000L);
-//  ASSERT_SUCC(detector.get_device_health(is_device_warning, is_device_error));
+//  ASSERT_SUCC(detector.get_device_health(is_device_warning));
 //  ASSERT_TRUE(is_device_warning);
-//  ASSERT_FALSE(is_device_error);
-//  usleep(2000L * 1000L);
-//  ASSERT_SUCC(detector.get_device_health(is_device_warning, is_device_error));
-//  ASSERT_TRUE(is_device_warning);
-//  ASSERT_TRUE(is_device_error);
 
-  // test auto clean device warning, but not clean device error
-  detector.reset_device_health();
+  // test auto clean device warning
+  detector.is_device_warning_ = false;
+  detector.last_device_warning_ts_ = 0;
   ASSERT_SUCC(detector.get_device_health_status(dhs, disk_abnormal_time));
   ASSERT_TRUE(DEVICE_HEALTH_NORMAL == dhs);
   ASSERT_TRUE(0 == disk_abnormal_time);
@@ -743,15 +739,6 @@ TEST_F(TestIOStruct, IOFaultDetector)
   ASSERT_TRUE(DEVICE_HEALTH_WARNING == dhs);
   ASSERT_TRUE(disk_abnormal_time > 0);
   usleep(io_config.read_failure_black_list_interval_ * 2);
-  ASSERT_SUCC(detector.get_device_health_status(dhs, disk_abnormal_time));
-  ASSERT_TRUE(DEVICE_HEALTH_NORMAL == dhs);
-  ASSERT_TRUE(0 == disk_abnormal_time);
-  detector.set_device_error();
-  usleep(io_config.read_failure_black_list_interval_ * 2);
-  ASSERT_SUCC(detector.get_device_health_status(dhs, disk_abnormal_time));
-  ASSERT_TRUE(DEVICE_HEALTH_ERROR == dhs);
-  ASSERT_TRUE(disk_abnormal_time > 0);
-  detector.reset_device_health();
   ASSERT_SUCC(detector.get_device_health_status(dhs, disk_abnormal_time));
   ASSERT_TRUE(DEVICE_HEALTH_NORMAL == dhs);
   ASSERT_TRUE(0 == disk_abnormal_time);

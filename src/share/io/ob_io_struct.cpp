@@ -105,7 +105,6 @@ void ObIOConfig::set_default_value()
   write_failure_detect_interval_ = 60 * 1000 * 1000; // 1 min
   read_failure_black_list_interval_ = 60 * 1000 * 1000; // Cooperate with the adjustment of tolerance_time to 1min
   data_storage_warning_tolerance_time_ = 5L * 1000L * 1000L; // 5s, same as parameter seed
-  data_storage_error_tolerance_time_ = 300L * 1000L * 1000L; // 300s
   disk_io_thread_count_ = 8;
   sync_io_thread_count_ = 0;
   data_storage_io_timeout_ms_ = 120L * 1000L; // 120s
@@ -116,7 +115,6 @@ bool ObIOConfig::is_valid() const
   return write_failure_detect_interval_ > 0
       && read_failure_black_list_interval_ > 0
       && data_storage_warning_tolerance_time_ > 0
-      && data_storage_error_tolerance_time_ >= data_storage_warning_tolerance_time_
       && disk_io_thread_count_ > 0 && disk_io_thread_count_ <= MAX_IO_THREAD_COUNT
       && sync_io_thread_count_ >= 0 && sync_io_thread_count_ <= MAX_SYNC_IO_THREAD_COUNT
       && data_storage_io_timeout_ms_ > 0;
@@ -1990,9 +1988,6 @@ const char *oceanbase::common::device_health_status_to_str(const ObDeviceHealthS
     case DEVICE_HEALTH_WARNING:
       hstr = "WARNING";
       break;
-    case DEVICE_HEALTH_ERROR:
-      hstr = "ERROR";
-      break;
     default:
       hstr = "UNKNOWN";
       break;
@@ -2011,10 +2006,7 @@ ObIOFaultDetector::ObIOFaultDetector(const ObIOConfig &io_config)
     lock_(ObLatchIds::IO_FAULT_DETECTOR_LOCK),
     io_config_(io_config),
     is_device_warning_(false),
-    last_device_warning_ts_(0),
-    is_device_error_(false),
-    begin_device_error_ts_(0),
-    last_device_error_ts_(0)
+    last_device_warning_ts_(0)
 {
 
 }
@@ -2044,9 +2036,7 @@ void ObIOFaultDetector::destroy()
   TG_STOP(TGDefIDs::IO_HEALTH);
   TG_WAIT(TGDefIDs::IO_HEALTH);
   is_device_warning_ = false;
-  is_device_error_ = false;
-  begin_device_error_ts_ = 0;
-  last_device_error_ts_ = 0;
+  last_device_warning_ts_ = 0;
   is_inited_ = false;
 }
 
@@ -2079,11 +2069,10 @@ void ObIOFaultDetector::handle(void *task)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(task));
   } else {
-    const int64_t LONG_AIO_TIMEOUT_MS = 30000; // 30s
     RetryTask *retry_task = reinterpret_cast<RetryTask *>(task);
     retry_task->io_info_.flag_.set_unlimited();
     retry_task->io_info_.flag_.set_detect();
-    if ((is_device_warning_ || is_device_error_) && retry_task->io_info_.flag_.is_time_detect()) {
+    if (is_device_warning_ && retry_task->io_info_.flag_.is_time_detect()) {
       //ignore
     } else if (!is_supported_detect_read_(retry_task->io_info_.tenant_id_, retry_task->io_info_.fd_)) {
       //ignore
@@ -2097,13 +2086,11 @@ void ObIOFaultDetector::handle(void *task)
       const int64_t diagnose_begin_ts = ObTimeUtility::fast_current_time();
       bool is_retry_succ = false;
       int64_t fs_error_times = 0;
-      while (OB_SUCC(ret) && !OB_IO_MANAGER.is_stopped() && !is_retry_succ && !is_device_error_) {
+      while (OB_SUCC(ret) && !OB_IO_MANAGER.is_stopped() && !is_retry_succ && !is_device_warning_) {
         ObIOHandle handle;
         const int64_t current_retry_ts = ObTimeUtility::fast_current_time();
         const int64_t warn_ts = diagnose_begin_ts + io_config_.data_storage_warning_tolerance_time_;
-        const int64_t error_ts = diagnose_begin_ts + io_config_.data_storage_error_tolerance_time_;
-        const int64_t left_timeout_ms = !is_device_warning_ ?
-          (warn_ts - current_retry_ts) / 1000 : (error_ts - current_retry_ts) / 1000;
+        const int64_t left_timeout_ms = (warn_ts - current_retry_ts) / 1000;
         // timeout of retry io increase exponentially
         timeout_ms = min(left_timeout_ms, min(MAX_IO_RETRY_TIMEOUT_MS, max(timeout_ms * 2, MIN_IO_RETRY_TIMEOUT_MS)));
         int sys_io_errno = 0;
@@ -2133,10 +2120,7 @@ void ObIOFaultDetector::handle(void *task)
         }
         if (OB_SUCC(ret) && !is_retry_succ) {
           const int64_t current_ts = ObTimeUtility::fast_current_time();
-          if (current_ts >= error_ts || (sys_io_errno != 0 && fs_error_times >= MAX_DETECT_READ_ERROR_TIMES)) {
-            set_device_error();
-            LOG_WARN("ObIOManager::detect IO retry timeout, device error", K(ret), K(current_ts), K(error_ts), K(retry_task->io_info_));
-          } else if (current_ts >= warn_ts || (sys_io_errno != 0 && fs_error_times >= MAX_DETECT_READ_WARN_TIMES)) {
+          if (current_ts >= warn_ts || (sys_io_errno != 0 && fs_error_times >= MAX_DETECT_READ_WARN_TIMES)) {
             set_device_warning();
             LOG_WARN("ObIOManager::detect IO retry reach limit, device warning", K(ret), K(sys_io_errno), K(current_ts), K(current_ts), K(fs_error_times), K(retry_task->io_info_));
           }
@@ -2155,7 +2139,7 @@ int ObIOFaultDetector::get_device_health_status(ObDeviceHealthStatus &dhs,
   dhs = DEVICE_HEALTH_NORMAL;
   device_abnormal_time = 0;
 
-  if (is_device_warning_ && last_device_warning_ts_ > 0 && !is_device_error_) {
+  if (is_device_warning_ && last_device_warning_ts_ > 0) {
     const int64_t period = ObTimeUtility::fast_current_time() - last_device_warning_ts_;
     if (period > io_config_.read_failure_black_list_interval_) {
       last_device_warning_ts_ = 0;
@@ -2163,10 +2147,7 @@ int ObIOFaultDetector::get_device_health_status(ObDeviceHealthStatus &dhs,
     }
   }
 
-  if (is_device_error_) {
-    dhs = DEVICE_HEALTH_ERROR;
-    device_abnormal_time = begin_device_error_ts_;
-  } else if (is_device_warning_) {
+  if (is_device_warning_) {
     dhs = DEVICE_HEALTH_WARNING;
     device_abnormal_time = last_device_warning_ts_;
   } else {
@@ -2175,15 +2156,6 @@ int ObIOFaultDetector::get_device_health_status(ObDeviceHealthStatus &dhs,
   }
 
   return ret;
-}
-
-void ObIOFaultDetector::reset_device_health()
-{
-  is_device_warning_ = false;
-  last_device_warning_ts_ = 0;
-  is_device_error_ = false;
-  begin_device_error_ts_ = 0;
-  last_device_error_ts_ = 0;
 }
 
 int ObIOFaultDetector::record_timing_task(const int64_t first_id, const int64_t second_id)
@@ -2354,31 +2326,11 @@ int ObIOFaultDetector::record_read_failure_(const ObIOResult &result, const ObIO
 }
 
 // set disk warning and record warn_ts
-// until warn_ts + io_config.read_failure_black_list_interval, this server is not allowed to be partition leader
 void ObIOFaultDetector::set_device_warning()
 {
   last_device_warning_ts_ = ObTimeUtility::fast_current_time();
   is_device_warning_ = true;
   LOG_WARN_RET(OB_IO_ERROR, "disk maybe corrupted");
-}
-
-// set disk error and record error_ts
-// if the disk is confirmed normal, the administrator can reset disk status by:
-// alter system set disk valid server [=] 'ip:port'
-void ObIOFaultDetector::set_device_error()
-{
-  if (!is_device_warning_) {
-    set_device_warning();
-  }
-  if (!is_device_error_) {
-    begin_device_error_ts_ = ObTimeUtility::fast_current_time();
-  }
-  last_device_error_ts_ = ObTimeUtility::fast_current_time();
-  is_device_error_ = true;
-  LOG_ERROR_RET(OB_IO_ERROR, "set_disk_error: attention!!!");
-  LOG_DBA_ERROR_V2(OB_COMMON_DISK_INVALID, OB_DISK_ERROR,
-                    "The disk may be corrupted. ",
-                    "[suggestion] check disk.");
 }
 
 ObIOTracer::ObIOTracer()
