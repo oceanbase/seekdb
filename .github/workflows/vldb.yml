@@ -270,6 +270,7 @@ jobs:
         env:
           BENCH_OUTPUT: ${{ env.VLDB_WORK_DIR }}/fts_large_bench_report.txt
         with:
+          github-token: ${{ secrets.VLDB_PR_COMMENT_TOKEN }}
           script: |
             const fs = require('fs');
             const marker = '<!-- seekdb-vldb-fts-large-benchmark -->';
@@ -294,30 +295,38 @@ jobs:
 
             const { owner, repo } = context.repo;
             const issue_number = context.payload.pull_request.number;
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner,
-              repo,
-              issue_number,
-              per_page: 100,
-            });
-            const previous = comments.find((comment) =>
-              comment.user.type === 'Bot' && comment.body && comment.body.includes(marker)
-            );
-
-            if (previous) {
-              await github.rest.issues.updateComment({
-                owner,
-                repo,
-                comment_id: previous.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
+            try {
+              const comments = await github.paginate(github.rest.issues.listComments, {
                 owner,
                 repo,
                 issue_number,
-                body,
+                per_page: 100,
               });
+              const previous = comments.find((comment) =>
+                comment.body && comment.body.includes(marker)
+              );
+
+              if (previous) {
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: previous.id,
+                  body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number,
+                  body,
+                });
+              }
+            } catch (error) {
+              if (error.status === 401 || error.status === 403) {
+                core.warning('skip PR comment: VLDB_PR_COMMENT_TOKEN cannot write comments for this pull_request run');
+                return;
+              }
+              throw error;
             }
 
       - name: Stop observer
