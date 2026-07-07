@@ -692,6 +692,30 @@ static int exec_return(ObPLExecCtx *ctx, const ObPLReturnStmt *s, CtrlState &ctr
   return ret;
 }
 
+// Make a null-terminated C string copy of `src` for cursor APIs that persist C-string SQL.
+static int dup_cstr(ObIAllocator &allocator, const ObString &src, const char *&out)
+{
+  int ret = OB_SUCCESS;
+  char *buf = static_cast<char *>(allocator.alloc(src.length() + 1));
+  if (OB_ISNULL(buf)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("[pl-interp] failed to allocate sql buffer", K(ret), K(src.length()));
+  } else {
+    MEMCPY(buf, src.ptr(), src.length());
+    buf[src.length()] = '\0';
+    out = buf;
+  }
+  return ret;
+}
+
+static int dup_cstr(ObPLExecCtx *ctx, const ObString &src, const char *&out)
+{
+  int ret = OB_SUCCESS;
+  CK (OB_NOT_NULL(ctx), OB_NOT_NULL(ctx->allocator_));
+  OZ (dup_cstr(*ctx->allocator_, src, out));
+  return ret;
+}
+
 // Embedded SQL (SELECT..INTO / INSERT / UPDATE / DELETE). Mirrors codegen's
 // generate_sql: spi_query_into_expr_idx when there are no PL params, else
 // spi_execute_with_expr_idx with the prepared (ps) statement. All param/into
@@ -888,12 +912,13 @@ static int exec_open(ObPLExecCtx *ctx, const ObPLOpenStmt *s)
     const ObIArray<int64_t> &sql_params = cursor->get_sql_params();
     const int64_t sql_pcount = sql_params.count();
     const int64_t *sql_pidx = sql_pcount > 0 ? &sql_params.at(0) : NULL;
-    // spi_cursor_open requires: with params -> sql must be empty (run via ps_sql);
-    // without params -> sql must be non-empty (the raw text).
-    ObString sql;
-    const ObString &ps_sql = cursor->get_ps_sql();
-    if (0 == sql_pcount) {
-      sql = cursor->get_sql();
+    // spi_cursor_open requires: with params -> sql must be NULL (run via ps_sql);
+    // without params -> sql must be non-NULL (the raw text).
+    const char *sql = NULL;
+    const char *ps_sql = NULL;
+    OZ (dup_cstr(ctx, cursor->get_ps_sql(), ps_sql));
+    if (OB_SUCC(ret) && 0 == sql_pcount) {
+      OZ (dup_cstr(ctx, cursor->get_sql(), sql));
     }
     const ObIArray<int64_t> &actual = s->get_params();
     const int64_t cur_pcount = actual.count();

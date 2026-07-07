@@ -3992,7 +3992,7 @@ int ObPL::simple_execute(ObPLExecCtx *ctx, int64_t argc, int64_t *argv)
       if (OB_FAIL(ret)) {
       } else if (sql_info.params_.empty()) {
         OZ (ObSPIService::spi_query(
-          ctx, sql_infos.at(i).sql_.ptr(), sql_infos.at(i).stmt_type_,
+          ctx, sql_infos.at(i).sql_, sql_infos.at(i).stmt_type_,
           sql_info.into_.get_data(), sql_info.into_.count(),
           sql_info.data_type_.get_data(), sql_info.data_type_.count(),
           sql_info.not_null_flags_.get_data(),
@@ -4000,7 +4000,7 @@ int ObPL::simple_execute(ObPLExecCtx *ctx, int64_t argc, int64_t *argv)
           sql_info.bulk_));
       } else {
         OZ (ObSPIService::spi_execute(
-          ctx, sql_info.ps_sql_.ptr(), sql_info.stmt_type_,
+          ctx, sql_info.ps_sql_, sql_info.stmt_type_,
           sql_info.forall_sql_ ? sql_info.array_binding_params_.get_data() : sql_info.params_.get_data(),
           sql_info.forall_sql_ ? sql_info.array_binding_params_.count() : sql_info.params_.count(),
           sql_info.into_.get_data(), sql_info.into_.count(),

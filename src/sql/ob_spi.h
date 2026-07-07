@@ -649,8 +649,8 @@ public:
                                    common::ObObjParam &obj,
                                    ObCusorDeclareLoc loc);
   static int spi_cursor_open_with_param_idx(pl::ObPLExecCtx *ctx,
-                                  const ObString &sql,
-                                  const ObString &ps_sql,
+                                  const char *sql,
+                                  const char *ps_sql,
                                   int64_t type,
                                   bool for_update,
                                   bool has_hidden_rowid,
@@ -664,8 +664,8 @@ public:
                                   int64_t cursor_param_count,
                                   bool skip_locked);
   static int spi_cursor_open(pl::ObPLExecCtx *ctx,
-                             const ObString &sql,
-                             const ObString &ps_sql,
+                             const char *sql,
+                             const char *ps_sql,
                              int64_t type,
                              bool for_update,
                              bool has_hidden_rowid,
