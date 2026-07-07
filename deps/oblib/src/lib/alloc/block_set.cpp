@@ -397,15 +397,16 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
       continue;
     }
     ABlock *head = block_list_[cls];
-    if (nullptr == head) {
-    } else {
+    if (OB_NOT_NULL(head)) {
       ABlock *block = head;
+      ABlock *tail = head->prev_;
       int64_t scan_cnt = 0;
       while (OB_NOT_NULL(block) &&
              washed_size < wash_size && scanned_blks < max_blocks_per_round &&
              scan_cnt++ < BLOCKS_PER_CHUNK) {
-        ABlock *next = block->next_ != block ? block->next_ : nullptr;
-        const bool has_more = OB_NOT_NULL(next) && next != head;
+        // Capture the successor before unlinking this block; nullptr means
+        // this pass has reached the original free-list tail.
+        ABlock *next = block == tail ? nullptr : block->next_;
         scanned_blks++;
         AChunk *chunk = block->chunk();
         if (chunk->is_hugetlb_) {
@@ -427,9 +428,6 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
             if (-1 == result) {
               _OB_LOG_RET(WARN, OB_ERR_SYS, "page wash failed, error_code: %d", error_code);
             } else {
-              if (head == block) {
-                head = next;
-              }
               take_off_free_block(block, cls, chunk);
               block->is_washed_ = true;
               // Washed spans stay in chunk metadata only; BlockSet never
@@ -445,7 +443,7 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
             }
           }
         }
-        block = has_more ? next : nullptr;
+        block = next;
       }
     }
     cls--;
