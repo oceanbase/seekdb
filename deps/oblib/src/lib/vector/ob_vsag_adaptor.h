@@ -50,41 +50,22 @@ enum QuantizationType {
 
 struct CreateIndexParam
 {
-  CreateIndexParam()
-      : index_type_(INVALID_INDEX_TYPE),
-        dtype_(nullptr),
-        metric_(nullptr),
-        dim_(0),
-        max_degree_(0),
-        ef_construction_(0),
-        ef_search_(0),
-        extra_info_size_(0),
-        refine_type_(0),
-        bq_bits_query_(32),
-        bq_use_fht_(false),
-        use_reorder_(false),
-        doc_prune_ratio_(0.0f),
-        window_size_(0),
-        allocator_(nullptr),
-        is_sparse_(false)
-  {}
-
-  IndexType index_type_;
-  const char *dtype_;
-  const char *metric_;
-  int dim_;
-  int max_degree_;
-  int ef_construction_;
-  int ef_search_;
-  int extra_info_size_;
-  int16_t refine_type_;
-  int16_t bq_bits_query_;
-  bool bq_use_fht_;
-  bool use_reorder_;
-  float doc_prune_ratio_;
-  int window_size_;
-  void *allocator_;
-  bool is_sparse_;
+  IndexType index_type_ = INVALID_INDEX_TYPE;
+  const char *dtype_ = nullptr;
+  const char *metric_ = nullptr;
+  int dim_ = 0;
+  int max_degree_ = 0;
+  int ef_construction_ = 0;
+  int ef_search_ = 0;
+  int extra_info_size_ = 0;
+  int16_t refine_type_ = 0;
+  int16_t bq_bits_query_ = 32;
+  bool bq_use_fht_ = false;
+  bool use_reorder_ = false;
+  float doc_prune_ratio_ = 0.0f;
+  int window_size_ = 0;
+  void *allocator_ = nullptr;
+  bool is_sparse_ = false;
 };
 
 class FilterInterface {
