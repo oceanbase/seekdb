@@ -182,6 +182,82 @@ jobs:
           tail -n 200 "$VLDB_WORK_DIR/log/seekdb.log" 2>/dev/null || true
           exit 1
 
+      - name: Run FTS large benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          WS="${{ github.workspace }}"
+          if [[ ! -f "$WS/build.sh" ]] && [[ -f "$(pwd)/build.sh" ]]; then
+            WORKSPACE="$(pwd)"
+          else
+            WORKSPACE="$WS"
+          fi
+          if grep -q 'dep_create.sh' "$WORKSPACE/build.sh" 2>/dev/null; then
+            DEP_PATH="$WORKSPACE/deps/3rd"
+          else
+            DEP_PATH="$WORKSPACE/rpm/.dep_create/var"
+          fi
+          export LD_LIBRARY_PATH="$DEP_PATH/u01/obclient/lib:${LD_LIBRARY_PATH:-}"
+
+          CLIENT=""
+          for cand in \
+            "$DEP_PATH/u01/obclient/bin/obclient" \
+            "$WORKSPACE/deps/3rd/u01/obclient/bin/obclient" \
+            "$WORKSPACE/rpm/.dep_create/var/u01/obclient/bin/obclient" \
+            "$WORKSPACE/tools/deploy/obclient"; do
+            if [[ -x "$cand" ]]; then
+              CLIENT="$cand"
+              break
+            fi
+          done
+          if [[ -z "$CLIENT" ]]; then
+            for root in "$WORKSPACE/deps/3rd" "$WORKSPACE/rpm/.dep_create/var"; do
+              [[ -d "$root" ]] || continue
+              cand="$(find "$root" -maxdepth 8 -path '*/bin/obclient' -type f -print -quit 2>/dev/null || true)"
+              if [[ -n "$cand" ]]; then
+                chmod +x "$cand" 2>/dev/null || true
+                if [[ -x "$cand" ]]; then
+                  CLIENT="$cand"
+                  break
+                fi
+              fi
+            done
+          fi
+          if [[ -z "$CLIENT" ]] && command -v obclient >/dev/null 2>&1; then
+            CLIENT="$(command -v obclient)"
+          elif [[ -z "$CLIENT" ]] && command -v mysql >/dev/null 2>&1; then
+            CLIENT="$(command -v mysql)"
+          fi
+          if [[ -z "$CLIENT" ]]; then
+            echo "no mysql-compatible client found"
+            echo "WORKSPACE=$WORKSPACE"
+            echo "DEP_PATH=$DEP_PATH"
+            for root in "$WORKSPACE/deps/3rd" "$WORKSPACE/rpm/.dep_create/var"; do
+              [[ -d "$root" ]] || continue
+              find "$root" -maxdepth 6 -path '*/bin/obclient' -type f -print 2>/dev/null || true
+            done
+            exit 1
+          fi
+          echo "mysql-compatible client: $CLIENT"
+
+          chmod +x "$WORKSPACE/tools/benchmark/fts_large_bench.sh" "$WORKSPACE/tools/benchmark/fts_large_bench_gen.py"
+          BENCH_OUTPUT="$VLDB_WORK_DIR/fts_large_bench_report.txt"
+          export MYSQL="$CLIENT -h127.0.0.1 -P2881 -uroot -N -s -A --default-character-set=utf8mb4"
+          export MYSQL_VERBOSE="$CLIENT -h127.0.0.1 -P2881 -uroot -A --default-character-set=utf8mb4"
+          export LABEL="vldb-ci-${{ github.run_id }}-${{ github.run_attempt }}"
+          export OUTPUT="$BENCH_OUTPUT"
+
+          "$WORKSPACE/tools/benchmark/fts_large_bench.sh" | tee "$VLDB_WORK_DIR/fts_large_bench.log"
+
+          if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+            {
+              echo "### FTS Large Benchmark Report"
+              echo '```'
+              cat "$BENCH_OUTPUT"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Stop observer
         if: always()
         shell: bash
