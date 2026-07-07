@@ -1,0 +1,138 @@
+name: VLDB Benchmark Comment
+
+on:
+  workflow_run:
+    workflows: [VLDB CI]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  comment:
+    name: comment-fts-benchmark
+    if: ${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download FTS benchmark artifact
+        id: download
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: vldb-fts-large-benchmark
+          path: ${{ runner.temp }}/vldb-fts-large-benchmark
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment FTS benchmark report on PR
+        if: ${{ always() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.VLDB_PR_COMMENT_TOKEN || github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          ARTIFACT_DIR: ${{ runner.temp }}/vldb-fts-large-benchmark
+        run: |
+          set -euo pipefail
+
+          REPORT_PATH="$ARTIFACT_DIR/report.txt"
+          PR_NUMBER_PATH="$ARTIFACT_DIR/pr_number"
+          if [[ ! -f "$REPORT_PATH" || ! -f "$PR_NUMBER_PATH" ]]; then
+            echo "benchmark comment artifact not found, skip PR comment"
+            exit 0
+          fi
+
+          PR_NUMBER="$(tr -d '[:space:]' < "$PR_NUMBER_PATH")"
+          if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "invalid PR number in artifact: $PR_NUMBER"
+            exit 1
+          fi
+
+          MARKER="<!-- seekdb-vldb-fts-large-benchmark -->"
+          COMMENTS_API="https://api.github.com/repos/${GH_REPO}/issues/${PR_NUMBER}/comments"
+          COMMENT_BODY="$RUNNER_TEMP/vldb_fts_benchmark_comment.json"
+          COMMENTS_JSON="$RUNNER_TEMP/vldb_fts_benchmark_comments.json"
+          RESPONSE_JSON="$RUNNER_TEMP/vldb_fts_benchmark_response.json"
+
+          python3 - "$REPORT_PATH" "$RUN_URL" "$MARKER" > "$COMMENT_BODY" <<'PY'
+          import html
+          import json
+          import sys
+
+          report_path, run_url, marker = sys.argv[1:4]
+          with open(report_path, encoding="utf-8") as f:
+              report = f.read().strip()
+
+          body = "\n".join([
+              marker,
+              "### FTS Large Benchmark Report",
+              "",
+              "<pre>",
+              html.escape(report),
+              "</pre>",
+              "",
+              f"[Workflow run]({run_url})",
+          ])
+          print(json.dumps({"body": body}, ensure_ascii=False))
+          PY
+
+          http_code="$(curl -sS -L -w '%{http_code}' -o "$COMMENTS_JSON" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$COMMENTS_API" || true)"
+          if [[ "$http_code" == "401" || "$http_code" == "403" ]]; then
+            echo "::warning::skip PR comment: token cannot read comments"
+            cat "$COMMENTS_JSON" 2>/dev/null || true
+            exit 0
+          fi
+          if [[ ! "$http_code" =~ ^2 ]]; then
+            echo "::warning::skip PR comment: failed to list comments, HTTP $http_code"
+            cat "$COMMENTS_JSON" 2>/dev/null || true
+            exit 0
+          fi
+
+          comment_id="$(python3 - "$COMMENTS_JSON" "$MARKER" <<'PY'
+          import json
+          import sys
+
+          comments_path, marker = sys.argv[1:3]
+          with open(comments_path, encoding="utf-8") as f:
+              comments = json.load(f)
+          for comment in comments:
+              if marker in (comment.get("body") or ""):
+                  print(comment["id"])
+                  break
+          PY
+          )"
+
+          if [[ -n "$comment_id" ]]; then
+            METHOD="PATCH"
+            COMMENT_API="https://api.github.com/repos/${GH_REPO}/issues/comments/${comment_id}"
+          else
+            METHOD="POST"
+            COMMENT_API="$COMMENTS_API"
+          fi
+
+          http_code="$(curl -sS -L -w '%{http_code}' -o "$RESPONSE_JSON" \
+            -X "$METHOD" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            --data-binary @"$COMMENT_BODY" \
+            "$COMMENT_API" || true)"
+          if [[ "$http_code" == "401" || "$http_code" == "403" ]]; then
+            echo "::warning::skip PR comment: token cannot write comments"
+            cat "$RESPONSE_JSON" 2>/dev/null || true
+            exit 0
+          fi
+          if [[ ! "$http_code" =~ ^2 ]]; then
+            echo "::warning::skip PR comment: failed to write comment, HTTP $http_code"
+            cat "$RESPONSE_JSON" 2>/dev/null || true
+            exit 0
+          fi
+
+          echo "FTS benchmark PR comment posted"
