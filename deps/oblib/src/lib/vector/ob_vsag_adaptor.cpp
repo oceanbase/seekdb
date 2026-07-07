@@ -80,19 +80,9 @@ static int vsag_errcode2ob(vsag::ErrorType vsag_errcode)
   return ret;
 }
 
-static void fill_vsag_error_message(const vsag::Error &error, char *err_msg, const int64_t err_msg_len)
+static void fill_vsag_error_message(const vsag::Error &error, std::string &err_msg)
 {
-  if (nullptr != err_msg && err_msg_len > 0) {
-    int64_t copy_len = static_cast<int64_t>(error.message.length());
-    err_msg[0] = '\0';
-    if (copy_len >= err_msg_len) {
-      copy_len = err_msg_len - 1;
-    }
-    if (copy_len > 0) {
-      MEMCPY(err_msg, error.message.c_str(), copy_len);
-      err_msg[copy_len] = '\0';
-    }
-  }
+  err_msg = error.message;
 }
 
 static void adjust_create_index_max_degree(const IndexType index_type, int &max_degree)
@@ -900,12 +890,10 @@ int create_index(VectorIndexPtr &index_handler,
   return ret;
 }
 
-int validate_create_index(const CreateIndexParam &param, char *err_msg, int64_t err_msg_len)
+int validate_create_index(const CreateIndexParam &param, std::string &err_msg)
 {
   int ret = OB_SUCCESS;
-  if (nullptr != err_msg && err_msg_len > 0) {
-    err_msg[0] = '\0';
-  }
+  err_msg.clear();
   if (param.dtype_ == nullptr || param.metric_ == nullptr) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[OBVSAG] null pointer", KP(param.dtype_), KP(param.metric_));
@@ -949,7 +937,7 @@ int validate_create_index(const CreateIndexParam &param, char *err_msg, int64_t 
           vsag::Factory::CreateIndex(index_type_str, input_json_str, vsag_allocator);
       if (!index.has_value()) {
         ret = vsag_errcode2ob(index.error().type);
-        fill_vsag_error_message(index.error(), err_msg, err_msg_len);
+        fill_vsag_error_message(index.error(), err_msg);
         LOG_WARN("[OBVSAG] validate create index error",
             K(ret), KCSTRING(result_param_str), K(index.error().type), KCSTRING(index.error().message.c_str()));
       }

@@ -135,7 +135,7 @@ int create_index(VectorIndexPtr& index_handler, IndexType index_type,
                  int max_degree, int ef_construction, int ef_search, void* allocator = nullptr,
                  int extra_info_size = 0, int16_t refine_type = 0,
                  int16_t bq_bits_query = 32, bool bq_use_fht = false);
-int validate_create_index(const CreateIndexParam &param, char *err_msg, int64_t err_msg_len);
+int validate_create_index(const CreateIndexParam &param, std::string &err_msg);
 int create_index(VectorIndexPtr &index_handler, IndexType index_type, const char *dtype, const char *metric,
     bool use_reorder, float doc_prune_ratio, int window_size, void *allocator, int extra_info_size = 0);
 int build_index(VectorIndexPtr& index_handler, float* vector_list, int64_t* ids, int dim, int size, char *extra_infos = nullptr);

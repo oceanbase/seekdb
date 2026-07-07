@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include <string>
+
 #include "ob_vector_index_util.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/vector_index/ob_vector_index_sched_job_utils.h"
@@ -61,21 +63,21 @@ static int validate_vsag_create_index_param(
     const char *validate_type)
 {
   int ret = OB_SUCCESS;
-  char vsag_error_msg[OB_MAX_ERROR_MSG_LEN] = {0};
-  if (OB_FAIL(obvectorutil::validate_create_index(param, vsag_error_msg, OB_MAX_ERROR_MSG_LEN))) {
+  std::string vsag_error_msg;
+  if (OB_FAIL(obvectorutil::validate_create_index(param, vsag_error_msg))) {
     if (param.is_sparse_) {
       LOG_WARN("invalid sparse vector index params rejected by vsag",
           K(ret), K(param.index_type_), KCSTRING(validate_type), KCSTRING(param.metric_),
-          K(param.use_reorder_), K(param.doc_prune_ratio_), K(param.window_size_), KCSTRING(vsag_error_msg));
+          K(param.use_reorder_), K(param.doc_prune_ratio_), K(param.window_size_), K(vsag_error_msg));
     } else {
       LOG_WARN("invalid vector index params rejected by vsag",
           K(ret), K(param.index_type_), KCSTRING(validate_type), K(param.dim_), K(param.max_degree_),
-          K(param.ef_construction_), K(param.ef_search_), K(param.extra_info_size_), KCSTRING(vsag_error_msg));
+          K(param.ef_construction_), K(param.ef_search_), K(param.extra_info_size_), K(vsag_error_msg));
     }
   }
   if (OB_FAIL(ret) && (OB_INVALID_ARGUMENT == ret || OB_NOT_SUPPORTED == ret)) {
-    const char *user_error_msg = ('\0' != vsag_error_msg[0])
-        ? vsag_error_msg
+    const char *user_error_msg = !vsag_error_msg.empty()
+        ? vsag_error_msg.c_str()
         : "invalid vector index params rejected by vsag is";
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, user_error_msg);
