@@ -68,11 +68,11 @@ static int validate_vsag_create_index_param(
     if (param.is_sparse_) {
       LOG_WARN("invalid sparse vector index params rejected by vsag",
           K(ret), K(param.index_type_), KCSTRING(validate_type), KCSTRING(param.metric_),
-          K(param.use_reorder_), K(param.doc_prune_ratio_), K(param.window_size_), K(vsag_error_msg));
+          K(param.use_reorder_), K(param.doc_prune_ratio_), K(param.window_size_), KCSTRING(vsag_error_msg.c_str()));
     } else {
       LOG_WARN("invalid vector index params rejected by vsag",
           K(ret), K(param.index_type_), KCSTRING(validate_type), K(param.dim_), K(param.max_degree_),
-          K(param.ef_construction_), K(param.ef_search_), K(param.extra_info_size_), K(vsag_error_msg));
+          K(param.ef_construction_), K(param.ef_search_), K(param.extra_info_size_), KCSTRING(vsag_error_msg.c_str()));
     }
   }
   if (OB_FAIL(ret) && (OB_INVALID_ARGUMENT == ret || OB_NOT_SUPPORTED == ret)) {
