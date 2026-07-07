@@ -2662,7 +2662,6 @@ int PalfHandleImpl::do_init_mem_(
     election_inner_priority_seed |= static_cast<uint64_t>(PRIORITY_SEED_BIT::SEED_IN_REBUILD_PHASE_BIT);
   }
   palf::PalfRoleChangeCbWrapper &role_change_cb_wrpper = role_change_cb_wrpper_;
-  EnableFillCacheFunctor enable_fill_cache_functor(palf_env_impl, &state_mgr_);
   if ((pret = snprintf(log_dir_, MAX_PATH_SIZE, "%s", log_dir)) && false) {
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(ERROR, "error unexpected", K(ret), K(palf_id));
@@ -2678,7 +2677,7 @@ int PalfHandleImpl::do_init_mem_(
     return role_change_cb_wrpper.on_need_change_leader(id, dest_addr);
   }))) {
     PALF_LOG(WARN, "election_ init failed", K(ret), K(palf_id));
-  } else if (OB_FAIL(log_cache_.init(palf_id, this, palf_env_impl, log_engine_.get_log_storage()))) {
+  } else if (OB_FAIL(log_cache_.init(palf_id, this))) {
     PALF_LOG(WARN, "log_cache_ init failed", K(ret), K(palf_id));
   } else if (OB_FAIL(state_mgr_.init(palf_id, self, log_meta.get_log_prepare_meta(), log_meta.get_log_replica_property_meta(),
           &election_, &sw_, &reconfirm_, &log_engine_, &config_mgr_, &mode_mgr_, &role_change_cb_wrpper_, &plugins_))) {
@@ -2690,7 +2689,6 @@ int PalfHandleImpl::do_init_mem_(
     PALF_LOG(WARN, "reconfirm_ init failed", K(ret), K(palf_id));
   } else if (OB_FAIL(mode_mgr_.init(palf_id, self, log_meta.get_log_mode_meta(), &state_mgr_, &log_engine_, &config_mgr_, &sw_))) {
     PALF_LOG(WARN, "mode_mgr_ init failed", K(ret), K(palf_id));
-  } else if (FALSE_IT(log_engine_.set_enable_fill_cache_functor(enable_fill_cache_functor))) {
   } else {  
     palf_id_ = palf_id;
     fetch_log_engine_ = fetch_log_engine;
@@ -3369,7 +3367,6 @@ int PalfHandleImpl::fetch_log_from_storage_(const common::ObAddr &server,
   // Rpc delay increases enormously when it's size exceeds 2M.
   const int64_t MAX_BATCH_LOG_SIZE_EACH_ROUND = 2 * 1024 * 1024 - 1024;
   char *batch_log_buf = NULL;
-  bool enable_fill_cache = false;
   if (no_need_fetch_log) {
     PALF_LOG(INFO, "no need fetch_log_from_storage", K(ret), KPC(this), K(server), K(fetch_start_lsn), K(prev_lsn),
         K(max_flushed_end_lsn), K(access_mode));
@@ -5446,19 +5443,6 @@ int PalfHandleImpl::alloc_iterator_from_scn_(const SCN &scn,
       PALF_LOG(WARN, "locate_by_scn failed", KR(ret), KPC(this), K(scn), K(result_lsn));
     }
   }
-  return ret;
-}
-
-int PalfHandleImpl::fill_cache_when_slide(const LSN &read_begin_lsn, const int64_t in_read_size)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    PALF_LOG(WARN, "PalfHandleImpl is not inited", K(ret));
-  } else if (OB_FAIL(log_engine_.fill_cache_when_slide(read_begin_lsn, in_read_size))) {
-    PALF_LOG(WARN, "fill_cache_when_slide failed", K(ret), K(read_begin_lsn), K(in_read_size));
-  }
-
   return ret;
 }
 

@@ -2284,11 +2284,10 @@ int LogSlidingWindow::sliding_cb(const int64_t sn, const FixedSlidingWindowSlot 
           }
         }   
 
-        // update last_slide_lsn_ and submit fill cache task
+        // update last_slide_lsn_
         if (OB_SUCC(ret)) {
           (void) try_update_last_slide_log_info_(log_id, log_max_scn, log_begin_lsn, log_end_lsn, \
               log_proposal_id, log_accum_checksum);
-          (void) log_engine_->submit_fill_cache_task(log_begin_lsn, log_size);
         }
 
         MEM_BARRIER();  // ensure last_slide_log_info_ has been updated before fetch log streamingly

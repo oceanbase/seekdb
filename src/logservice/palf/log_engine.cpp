@@ -594,40 +594,6 @@ int LogEngine::submit_purge_throttling_task(const PurgeThrottlingType purge_type
   return ret;
 }
 
-int LogEngine::submit_fill_cache_task(const LSN &lsn, const int64_t size)
-{
-  int ret = OB_SUCCESS;
-  LogFillCacheTask *fill_cache_task = NULL;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    PALF_LOG(ERROR, "LogEngine is not inited!!!", K(ret), KPC(this));
-  } else if (OB_ISNULL(log_shared_queue_th_)) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "log_shared_queue_th_ is NULL", K(ret), KPC(this));
-  } else if (false == enable_fill_cache_functor_.is_valid() || false == enable_fill_cache_functor_()) {
-    // not allowed to fill cache
-  } else if (OB_FAIL(generate_fill_cache_task_(lsn, size, fill_cache_task))) {
-    PALF_LOG(WARN, "generate fill cache task failed", K(ret), K(lsn), K(size));
-  } else if (OB_FAIL(log_shared_queue_th_->push_task(fill_cache_task))) {
-    if (OB_IN_STOP_STATE == ret) {
-      if (REACH_TIME_INTERVAL(100 * 1000)) {
-        PALF_LOG(WARN, "push task failed", K(ret), KPC(this), KPC(fill_cache_task));
-      }
-    } else {
-      PALF_LOG(WARN, "push task failed", K(ret), KPC(this), KPC(fill_cache_task));
-    }
-  } else {
-    PALF_LOG(TRACE, "log_shared_queue_th_->push_task success", K(ret), KPC(this));
-  }
-
-  if (OB_FAIL(ret) && OB_NOT_NULL(fill_cache_task)) {
-    alloc_mgr_->free_log_fill_cache_task(fill_cache_task);
-    fill_cache_task = NULL;
-  }
-
-  return ret;
-}
-
 // ====================== LogStorage start =====================
 int LogEngine::append_log(const LSN &lsn, const LogWriteBuf &write_buf, const SCN &scn)
 {
@@ -977,19 +943,6 @@ int LogEngine::get_total_used_disk_space(int64_t &total_used_size_byte,
     unrecyclable_disk_space = log_storage_.get_end_lsn() - get_base_lsn_used_for_block_gc() + unrecyclable_meta_size;
     PALF_LOG(TRACE, "get_total_used_disk_space", K(meta_storage_used), K(log_storage_used), K(total_used_size_byte));
   }
-  return ret;
-}
-
-int LogEngine::fill_cache_when_slide(const LSN &begin_lsn, const int64_t size)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    PALF_LOG(WARN, "LogEngine is not inited", K(ret), KPC(this));
-  } else if (OB_FAIL(log_storage_.fill_cache_when_slide(begin_lsn, size))) {
-    PALF_LOG(WARN, "fill_cache_when_slide failed", K(ret), K(begin_lsn), K(size));
-  } 
-
   return ret;
 }
 
@@ -1619,31 +1572,6 @@ int LogEngine::generate_purge_throttling_task_(const PurgeThrottlingCbCtx &purge
   return ret;
 }
 
-int LogEngine::generate_fill_cache_task_(const LSN &lsn, 
-                                         const int64_t size,
-                                         LogFillCacheTask *&fill_cache_task)
-{
-  int ret = OB_SUCCESS;
-  fill_cache_task = NULL;
-
-  if (!lsn.is_valid() || 0 >= size) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(ret), K(lsn), K(size));
-  } else if (NULL == (fill_cache_task = alloc_mgr_->alloc_log_fill_cache_task(palf_id_, palf_epoch_))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    PALF_LOG(WARN, "alloc LogFillCacheTask failed", K(ret), K(palf_id_), K(palf_epoch_), K(lsn), K(size));
-  } else if (OB_FAIL(fill_cache_task->init(lsn, size))) {
-    PALF_LOG(WARN, "LogFillCacheTask init failed", K(ret), K(lsn), K(size));
-  }
-
-  if (OB_FAIL(ret) && OB_NOT_NULL(fill_cache_task)) {
-    alloc_mgr_->free_log_fill_cache_task(fill_cache_task);
-    fill_cache_task = NULL;
-  }
-  return ret;
-
-}
-
 int LogEngine::serialize_log_meta_(const LogMeta& log_meta, char *buf, int64_t buf_len)
 {
   int ret = OB_SUCCESS;
@@ -1859,17 +1787,6 @@ void LogEngine::reset_min_block_info_()
   min_block_min_scn_.reset();
   min_block_max_scn_.reset();
   min_block_info_cache_version_++;
-}
-
-void LogEngine::set_enable_fill_cache_functor(const EnableFillCacheFunctor &functor)
-{
-  int ret = OB_SUCCESS;
-  if (!functor.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "EnableFillCacheFunctor is not valid", K(ret), K(functor));
-  } else {
-    enable_fill_cache_functor_ = functor;
-  }
 }
 
 LogNetService& LogEngine::get_net_service()

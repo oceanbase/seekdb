@@ -733,7 +733,6 @@ public:
                        int64_t &read_size,
                        LogIOContext &io_ctx) = 0;
   virtual int try_handle_next_submit_log() = 0;
-  virtual int fill_cache_when_slide(const LSN &read_begin_lsn, const int64_t in_read_size) = 0;
   DECLARE_PURE_VIRTUAL_TO_STRING;
 };
 
@@ -866,7 +865,6 @@ public:
                int64_t &read_size,
                LogIOContext &io_ctx) override;
   int try_handle_next_submit_log();
-  int fill_cache_when_slide(const LSN &read_begin_lsn, const int64_t in_read_size) override;
 public:
   int delete_block(const block_id_t &block_id) override final;
   int set_scan_disk_log_finished() override;

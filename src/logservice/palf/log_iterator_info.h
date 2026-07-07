@@ -26,10 +26,7 @@ class LogIteratorInfo
 {
 public:
   LogIteratorInfo()
-      : allow_filling_cache_(true), hot_cache_stat_(), cold_cache_stat_(),
-        read_io_cnt_(0), read_io_size_(0), read_disk_cost_ts_(0) {}
-  LogIteratorInfo(bool allow_filling_cache)
-      : allow_filling_cache_(allow_filling_cache), hot_cache_stat_(), cold_cache_stat_(),
+      : hot_cache_stat_(),
         read_io_cnt_(0), read_io_size_(0), read_disk_cost_ts_(0) {}
   ~LogIteratorInfo() {
     reset();
@@ -37,9 +34,7 @@ public:
   LogIteratorInfo &operator=(const LogIteratorInfo &iterator_info)
   {
     if (&iterator_info != this) {
-      this->allow_filling_cache_ = iterator_info.allow_filling_cache_;
       this->hot_cache_stat_ = iterator_info.hot_cache_stat_;
-      this->cold_cache_stat_ = iterator_info.cold_cache_stat_;
       this->read_io_cnt_ = iterator_info.read_io_cnt_;
       this->read_io_size_ = iterator_info.read_io_size_;
       this->read_disk_cost_ts_ = iterator_info.read_disk_cost_ts_;
@@ -47,45 +42,19 @@ public:
     return *this;
   }
   void reset() {
-    allow_filling_cache_ = false;
     hot_cache_stat_.reset();
-    cold_cache_stat_.reset();
     read_io_cnt_ = 0;
     read_io_size_ = 0;
     read_disk_cost_ts_ = 0;
   }
-  bool get_allow_filling_cache() const {
-    return allow_filling_cache_;
-  }
-  void set_allow_filling_cache(const bool allow_filling_cache) {
-    allow_filling_cache_ = allow_filling_cache;
-  }
-  void inc_hit_cnt(const bool is_cold_cache = true) { 
-    if (is_cold_cache) {
-      cold_cache_stat_.inc_hit_cnt();
-    } else {
-      hot_cache_stat_.inc_hit_cnt();
-    }
-  }
-  void inc_miss_cnt(const bool is_cold_cache = true) { 
-    if (is_cold_cache) {
-      cold_cache_stat_.inc_miss_cnt();
-    } else {
-      hot_cache_stat_.inc_miss_cnt();
-    }
-  }
-  void inc_cache_read_size(int64_t cache_read_size, const bool is_cold_cache = true) { 
-    if (is_cold_cache) {
-      cold_cache_stat_.inc_cache_read_size(cache_read_size);
-    } else {
-      hot_cache_stat_.inc_cache_read_size(cache_read_size);
-    }
-  }
+  void inc_cache_hit_cnt() { hot_cache_stat_.inc_hit_cnt(); }
+  void inc_cache_miss_cnt() { hot_cache_stat_.inc_miss_cnt(); }
+  void inc_cache_read_size(int64_t cache_read_size) { hot_cache_stat_.inc_cache_read_size(cache_read_size); }
   void inc_read_io_cnt() { read_io_cnt_++; }
   void inc_read_io_size(int64_t read_io_size) { read_io_size_ += read_io_size; }
   void inc_read_disk_cost_ts(int64_t read_disk_cost_ts) { read_disk_cost_ts_ += read_disk_cost_ts; }
   void set_start_lsn(const LSN &start_lsn) { start_lsn_ = start_lsn; }
-  TO_STRING_KV(K_(allow_filling_cache), K_(hot_cache_stat), K_(cold_cache_stat),
+  TO_STRING_KV(K_(hot_cache_stat),
                K_(read_io_cnt), K_(read_io_size), K_(read_disk_cost_ts), K_(start_lsn));
 
 private:
@@ -123,10 +92,8 @@ private:
     int64_t cache_read_size_;
   };
 private:
-  bool allow_filling_cache_;
   // fields below are just for minotor.
   IteratorCacheStat hot_cache_stat_;
-  IteratorCacheStat cold_cache_stat_;
   int64_t read_io_cnt_;
   int64_t read_io_size_;
   int64_t read_disk_cost_ts_;

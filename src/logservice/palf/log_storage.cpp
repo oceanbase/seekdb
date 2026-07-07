@@ -963,24 +963,34 @@ int LogStorage::inner_pread_(const LSN &read_lsn,
   } else if (read_lsn < begin_lsn) {
     ret = OB_ERR_OUT_OF_LOWER_BOUND;
   } else {
-    if (is_log_cache_inited_()) {
+    bool need_read_disk = true;
+    if (is_log_cache_inited_() && false == need_read_log_block_header) {
       if (OB_FAIL(log_cache_->read(flashback_version, read_lsn, real_in_read_size, 
                                    read_buf, out_read_size, io_ctx))) {
-        PALF_LOG(WARN, "read log cache failed", K(flashback_version), K(read_lsn), 
-                 K(real_in_read_size), K(read_buf), K(out_read_size), KPC(this));
+        if (OB_ENTRY_NOT_EXIST == ret) {
+          ret = OB_SUCCESS;
+          PALF_LOG(TRACE, "miss log cache, read disk", K(flashback_version), K(read_lsn),
+                   K(real_in_read_size), K(read_buf), K(out_read_size), KPC(this));
+        } else {
+          PALF_LOG(WARN, "read log cache failed", K(flashback_version), K(read_lsn),
+                   K(real_in_read_size), K(read_buf), K(out_read_size), KPC(this));
+        }
       } else {
+        need_read_disk = false;
         PALF_LOG(TRACE, "read log cache successfully", K(read_lsn), K(in_read_size), 
                  K(need_read_log_block_header), K(read_buf), K(out_read_size));
       }
-    } else if (OB_FAIL(log_reader_.pread(read_block_id,
-                                         real_read_offset,
-                                         real_in_read_size,
-                                         read_buf,
-                                         out_read_size,
-                                         io_ctx))) {
+    }
+    if (OB_SUCC(ret) && need_read_disk
+        && OB_FAIL(log_reader_.pread(read_block_id,
+                                     real_read_offset,
+                                     real_in_read_size,
+                                     read_buf,
+                                     out_read_size,
+                                     io_ctx))) {
       PALF_LOG(WARN, "LogReader pread failed", K(ret), K(read_lsn),
                K(log_tail_), K(real_in_read_size), KPC(this));
-    } else {
+    } else if (OB_SUCC(ret)) {
       PALF_LOG(TRACE,
                "inner_pread success",
                K(ret),
@@ -1039,29 +1049,9 @@ int LogStorage::get_logical_block_size(int64_t &logical_block_size) const
   return ret;
 }
 
-LogReader *LogStorage::get_log_reader()
-{
-  return &log_reader_;
-}
-
 bool LogStorage::is_log_cache_inited_()
 {
   return OB_NOT_NULL(log_cache_) && log_cache_->is_inited();
-}
-
-int LogStorage::fill_cache_when_slide(const LSN &begin_lsn, const int64_t size)
-{
-  int ret = OB_SUCCESS;
-  int64_t flashback_version = OB_INVALID_TIMESTAMP;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    PALF_LOG(WARN, "LogStorage has not been inited!", K(ret), K(palf_id_));
-  } else if (FALSE_IT(get_flashback_version_guarded_by_lock_(flashback_version))) {
-  } else if (OB_FAIL(log_cache_->fill_cache_when_slide(begin_lsn, size, flashback_version))) {
-   PALF_LOG(WARN, "failed to fill committed log into cold cache", K(ret), K(begin_lsn), K(size), K(flashback_version));
-  } 
-
-  return ret;
 }
 
 } // end namespace palf

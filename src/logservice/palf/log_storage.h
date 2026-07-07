@@ -128,9 +128,6 @@ public:
 
   int get_logical_block_size(int64_t &logical_block_size) const;
 
-  LogReader *get_log_reader();
-  int fill_cache_when_slide(const LSN &begin_lsn, const int64_t size);
-
   TO_STRING_KV(K_(log_tail),
                K_(readable_log_tail),
                K_(log_block_header),

@@ -255,8 +255,6 @@ STAT_EVENT_ADD_DEF(SCHEMA_HISTORY_CACHE_MISS, "schema history cache miss", ObSta
 STAT_EVENT_ADD_DEF(OPT_SYSTEM_STAT_CACHE_HIT, "opt system stat cache hit", ObStatClassIds::CACHE, 50063, false, true, true)
 STAT_EVENT_ADD_DEF(OPT_SYSTEM_STAT_CACHE_MISS, "opt system stat cache miss", ObStatClassIds::CACHE, 50064, false, true, true)
 
-STAT_EVENT_ADD_DEF(LOG_KV_CACHE_HIT, "log kv cache hit", ObStatClassIds::CACHE, 50065, false, true, true)
-STAT_EVENT_ADD_DEF(LOG_KV_CACHE_MISS, "log kv cache miss", ObStatClassIds::CACHE, 50066, false, true, true)
 STAT_EVENT_ADD_DEF(DATA_BLOCK_CACHE_MISS, "data block cache miss", ObStatClassIds::CACHE, 50067, true, true, true)
 STAT_EVENT_ADD_DEF(INDEX_BLOCK_CACHE_MISS, "index block cache miss", ObStatClassIds::CACHE, 50068, true, true, true)
 STAT_EVENT_ADD_DEF(MULTI_VERSION_FUSE_ROW_CACHE_HIT, "multi version fuse row cache hit", ObStatClassIds::CACHE, 50069, true, true, true)
@@ -516,7 +514,6 @@ STAT_EVENT_SET_DEF(INDEX_BLOCK_CACHE_SIZE, "index block cache size", ObStatClass
 STAT_EVENT_SET_DEF(USER_BLOCK_CACHE_SIZE, "user block cache size", ObStatClassIds::CACHE, 120006, false, true, true)
 STAT_EVENT_SET_DEF(USER_ROW_CACHE_SIZE, "user row cache size", ObStatClassIds::CACHE, 120008, false, true, true)
 STAT_EVENT_SET_DEF(BLOOM_FILTER_CACHE_SIZE, "bloom filter cache size", ObStatClassIds::CACHE, 120009, false, true, true)
-STAT_EVENT_SET_DEF(LOG_KV_CACHE_SIZE, "log kv cache size", ObStatClassIds::CACHE, 120010, false, true, true)
 
 // STORAGE
 STAT_EVENT_SET_DEF(ACTIVE_MEMSTORE_USED, "active memstore used", ObStatClassIds::STORAGE, 130000, false, true, true)

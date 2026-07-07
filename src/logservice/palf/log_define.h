@@ -182,7 +182,6 @@ constexpr int64_t LOG_BATCH_PUSH_LOG_RESP = 2;
 
 // ========== LogCache start =================
 constexpr offset_t LOG_CACHE_ALIGN_SIZE = 64 * 1024;
-constexpr int64_t LOG_CACHE_MEMORY_LIMIT = 20;      // memory limit ratio with tenant memory
 // ========== LogCache end =================
 
 const int64_t OB_INVALID_CONFIG_CHANGE_LOCK_OWNER = -1;

@@ -31,17 +31,12 @@ LogIOContext::LogIOContext(const LogIOUser &user)
     : palf_id_(0),
       user_(user)
 {
-  const bool allow_filling_cache = is_enable_fill_cache_user_();
-  iterator_info_.set_allow_filling_cache(allow_filling_cache);
 }
 
 LogIOContext::LogIOContext(const int64_t palf_id, const LogIOUser &user)
     : palf_id_(palf_id),
       user_(user)
 {
-  // it's not allowed to fill cache when reading for FETCHLOG, RESTART, META_INFO
-  const bool allow_filling_cache = is_enable_fill_cache_user_();
-  iterator_info_.set_allow_filling_cache(allow_filling_cache);
 }
 
 } // namespace palf

@@ -28,7 +28,6 @@ namespace palf
 class IPalfEnvImpl;
 class LogSharedTask;
 class LogHandleSubmitTask;
-class LogFillCacheTask;
 
 class LogSharedQueueTh : public lib::TGTaskHandler
 {

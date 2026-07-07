@@ -37,7 +37,6 @@ ObTenantMutilAllocator::ObTenantMutilAllocator()
     PALF_FETCH_LOG_TASK_SIZE(sizeof(palf::FetchLogTask)),
     LOG_IO_FLASHBACK_TASK_SIZE(sizeof(palf::LogIOFlashbackTask)),
     LOG_IO_PURGE_THROTTLING_TASK_SIZE(sizeof(palf::LogIOPurgeThrottlingTask)),
-    LOG_FILL_CACHE_TASK_SIZE(sizeof(palf::LogFillCacheTask)),
     clog_blk_alloc_(),
     replay_log_task_blk_alloc_(REPLAY_MEM_LIMIT_THRESHOLD),
     clog_compressing_blk_alloc_(CLOG_COMPRESSION_MEM_LIMIT_THRESHOLD),
@@ -51,7 +50,6 @@ ObTenantMutilAllocator::ObTenantMutilAllocator()
     replay_log_task_alloc_(ObMemAttr(ObModIds::OB_LOG_REPLAY_TASK), common::OB_MALLOC_BIG_BLOCK_SIZE, replay_log_task_blk_alloc_),
     log_io_flashback_task_alloc_(LOG_IO_FLASHBACK_TASK_SIZE, ObMemAttr("Flashback"), choose_blk_size(LOG_IO_FLASHBACK_TASK_SIZE), clog_blk_alloc_, this),
     log_io_purge_throttling_task_alloc_(LOG_IO_PURGE_THROTTLING_TASK_SIZE, ObMemAttr("PurgeThrottle"), choose_blk_size(LOG_IO_PURGE_THROTTLING_TASK_SIZE), clog_blk_alloc_, this),
-    log_fill_cache_task_alloc_(LOG_FILL_CACHE_TASK_SIZE, ObMemAttr("FillCache"), choose_blk_size(LOG_FILL_CACHE_TASK_SIZE), clog_blk_alloc_, this),
     clog_compression_buf_alloc_(ObMemAttr("LogComBuf"), common::OB_MALLOC_BIG_BLOCK_SIZE, clog_compressing_blk_alloc_)
 {
   // set_nway according to tenant's max_cpu
@@ -85,7 +83,6 @@ void ObTenantMutilAllocator::destroy()
   log_io_purge_throttling_task_alloc_.destroy();
   palf_fetch_log_task_alloc_.destroy();
   replay_log_task_alloc_.destroy();
-  log_fill_cache_task_alloc_.destroy();
   clog_compression_buf_alloc_.destroy();
 }
 
@@ -315,25 +312,6 @@ void ObTenantMutilAllocator::free_log_io_purge_throttling_task(palf::LogIOPurgeT
   }
 }
 
-
-LogFillCacheTask *ObTenantMutilAllocator::alloc_log_fill_cache_task(const int64_t palf_id, const int64_t palf_epoch)
-{
-  LogFillCacheTask *ret_ptr = NULL;
-  void *ptr = log_fill_cache_task_alloc_.alloc();
-  if (NULL != ptr) {
-    ret_ptr = new (ptr) LogFillCacheTask(palf_id, palf_epoch);
-  }
-  return ret_ptr;
-}
-
-
-void ObTenantMutilAllocator::free_log_fill_cache_task(palf::LogFillCacheTask *ptr)
-{
-  if (OB_LIKELY(NULL != ptr)) {
-    ptr->~LogFillCacheTask();
-    log_fill_cache_task_alloc_.free(ptr);
-  }
-}
 
 void ObTenantMutilAllocator::set_nway(const int32_t nway)
 {

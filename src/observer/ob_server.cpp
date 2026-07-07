@@ -409,8 +409,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init tmp block cache failed", KR(ret));
     } else if (OB_FAIL(tmp_file::ObTmpPageCache::get_instance().init("tmp_page_cache"))) {
       LOG_ERROR("init tmp page cache failed", KR(ret));
-    } else if (OB_FAIL(init_log_kv_cache())) {
-      LOG_ERROR("init log kv cache failed", KR(ret));
     } else if (OB_FAIL(init_ts_mgr())) {
       LOG_ERROR("init ts mgr failed", KR(ret));
     } else if (OB_FAIL(ObTenantMutilAllocatorMgr::get_instance().init())) {
@@ -622,10 +620,6 @@ void ObServer::destroy()
     FLOG_INFO("begin to destroy tmp page cache");
     tmp_file::ObTmpPageCache::get_instance().destroy();
     FLOG_INFO("tmp page cache destroyed");
-
-    FLOG_INFO("begin to destroy log kv cache");
-    OB_LOG_KV_CACHE.destroy();
-    FLOG_INFO("log kv cache destroyed");
 
     FLOG_INFO("begin to destroy location service");
     location_service_.destroy();
@@ -2333,15 +2327,6 @@ int ObServer::init_tx_data_cache()
   int ret = OB_SUCCESS;
   if (OB_FAIL(OB_TX_DATA_KV_CACHE.init("tx_data_kv_cache"))) {
     LOG_WARN("init OB_TX_DATA_KV_CACHE failed", KR(ret));
-  }
-  return ret;
-}
-
-int ObServer::init_log_kv_cache()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(OB_LOG_KV_CACHE.init(palf::OB_LOG_KV_CACHE_NAME, palf::LOG_CACHE_MEMORY_LIMIT))) {
-    LOG_WARN("init OB_LOG_KV_CACHE failed", KR(ret));
   }
   return ret;
 }

@@ -91,14 +91,7 @@ public:
   ~LogIOContext() { destroy(); }
   bool is_valid() const
   {
-    bool bool_ret = false;
-    if (false == is_enable_fill_cache_user_() && true == iterator_info_.get_allow_filling_cache()) {
-      int ret = OB_INVALID_ARGUMENT;
-      PALF_LOG(WARN, "LogIOContext is invalid!", K(ret), K_(palf_id), K_(user), K_(iterator_info));
-    } else {
-      bool_ret = true;
-    }
-    return bool_ret;
+    return true;
   }
   void destroy()
   {
@@ -130,26 +123,19 @@ public:
   {
     iterator_info_.inc_read_disk_cost_ts(cost_ts);
   }
-  void inc_hit_cnt(const bool is_cold_cache)
+  void inc_cache_hit_cnt()
   {
-    iterator_info_.inc_hit_cnt(is_cold_cache);
+    iterator_info_.inc_cache_hit_cnt();
   }
-  void inc_miss_cnt(const bool is_cold_cache)
+  void inc_cache_miss_cnt()
   {
-    iterator_info_.inc_miss_cnt(is_cold_cache);
+    iterator_info_.inc_cache_miss_cnt();
   }
-  void inc_cache_read_size(const int64_t read_size, const bool is_cold_cache)
+  void inc_cache_read_size(const int64_t read_size)
   {
-    iterator_info_.inc_cache_read_size(read_size, is_cold_cache);
+    iterator_info_.inc_cache_read_size(read_size);
   }
   TO_STRING_KV("user", log_io_user_str(user_), K_(palf_id), K_(iterator_info));
-private:
-  bool is_enable_fill_cache_user_() const {
-    return (LogIOUser::RESTART == user_ || 
-            LogIOUser::FETCHLOG == user_ || 
-            LogIOUser::META_INFO == user_ ||
-            LogIOUser::REPLAY == user_) ? false : true;
-  }
 private:
   int64_t palf_id_;
   LogIOUser user_;
