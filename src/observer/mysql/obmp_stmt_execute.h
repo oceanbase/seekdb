@@ -140,7 +140,7 @@ public:
                                  bool is_complex_element = false,
                                  ObPSAnalysisChecker *checker = nullptr,
                                  bool is_unsigned = false);
-  static int parse_oracle_timestamp_value(const obmysql::EMySQLFieldType field_type, const char *&data,
+  static int parse_ob_timestamp_value(const obmysql::EMySQLFieldType field_type, const char *&data,
                                     const ObTimeConvertCtx &cvrt_ctx, ObObj &param,
                                     ObPSAnalysisChecker *checker = nullptr);
   static int parse_mysql_time_value(const char *&data, ObObj &param, ObPSAnalysisChecker *checker = nullptr);
@@ -315,8 +315,8 @@ private:
   // %cs_type: collation for char/varchar type
   // %ncs_type: collation for nchar/nvarcahr type
   //
-  // in mysql: %charset is charset of %cs_type, %ncs_type is not used
-  // in oracle: %cs_type is server collation whose charset may differ with %charset
+  // In MySQL mode, %charset is the charset of %cs_type and %ncs_type is not used.
+  // Some callers may still pass a destination collation whose charset differs from %charset.
   int parse_param_value(ObIAllocator& allocator,
                         const uint32_t type,
                         const ObCharsetType charset,

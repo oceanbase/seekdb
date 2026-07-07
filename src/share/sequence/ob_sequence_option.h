@@ -76,8 +76,7 @@ struct ObSequenceMaxMinInitializer
 public:
   ObSequenceMaxMinInitializer();
 
-  // Oracle defaults to 28 integers of 9s and 27 negatives of 9s
-  // https://docs.oracle.com/database/121/SQLRF/statements_6017.htm
+  // Default range uses 28 positive 9s and 27 negative 9s.
   // If the SQL exceeds this range, it will be automatically truncated
   //
   // MIN_VALUE = -999999999999999999999999999
@@ -288,7 +287,6 @@ private:
 }
 #endif /* __OB_SHARE_SEQUENCE_OB_SEQUENCE_OPTION_H__ */
 //// end of header file
-
 
 
 

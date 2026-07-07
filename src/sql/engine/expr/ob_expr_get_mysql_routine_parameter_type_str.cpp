@@ -86,7 +86,7 @@ int ObExprGetMySQLRoutineParameterTypeStr::get_mysql_routine_parameter_type_str(
           memset(type_str, 0, OB_MAX_SYS_PARAM_NAME_LENGTH);
           OZ (ob_sql_type_str(param->get_param_type().get_meta_type(),
                               param->get_param_type().get_accuracy(),
-                              param->get_extended_type_info(), ctx.exec_ctx_.get_my_session()->get_local_nls_length_semantics(),
+                              param->get_extended_type_info(), ctx.exec_ctx_.get_my_session()->get_default_length_semantics(),
                               type_str, OB_MAX_SYS_PARAM_NAME_LENGTH, type_pos));
           OX (res_datum.set_string(type_str, type_pos));
         }

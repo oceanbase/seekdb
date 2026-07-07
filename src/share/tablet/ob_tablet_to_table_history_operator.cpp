@@ -36,8 +36,7 @@ int ObTabletToTableHistoryOperator::create_tablet_to_table_history(
     const common::ObIArray<ObTabletTablePair> &pairs)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false
-      || pairs.count() <= 0
+  if (OB_UNLIKELY(pairs.count() <= 0
       || schema_version <= 0
       || !ObSchemaService::is_formal_version(schema_version))) {
     ret = OB_INVALID_ARGUMENT;
@@ -94,8 +93,7 @@ int ObTabletToTableHistoryOperator::drop_tablet_to_table_history(
     const common::ObIArray<ObTabletID> &tablet_ids)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false
-      || tablet_ids.count() <= 0
+  if (OB_UNLIKELY(tablet_ids.count() <= 0
       || schema_version <= 0
       || !ObSchemaService::is_formal_version(schema_version))) {
     ret = OB_INVALID_ARGUMENT;

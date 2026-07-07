@@ -47,7 +47,7 @@ public:
   }
   bool operator ==(const ObTenantPackageId &rhs) const
   {
-    return (true) && (package_id_ == rhs.package_id_);
+    return (package_id_ == rhs.package_id_);
   }
   bool operator !=(const ObTenantPackageId &rhs) const
   {
@@ -66,7 +66,7 @@ public:
 
   bool is_valid() const
   {
-    return (true) && (package_id_ != common::OB_INVALID_ID);
+    return (package_id_ != common::OB_INVALID_ID);
   }
 
   
@@ -99,7 +99,7 @@ public:
     reset_string(package_name_);
     schema_version_ = common::OB_INVALID_VERSION;
     type_ = INVALID_PACKAGE_TYPE;
-    comp_flag_ = 0;
+    comp_flag_ = COMPATIBLE_MYSQL_MODE;
     ObSchema::reset();
   }
   int64_t get_convert_size() const;
@@ -151,7 +151,7 @@ public:
       : database_id_(common::OB_INVALID_ID),
         package_name_(),
         type_(INVALID_PACKAGE_TYPE),
-        comp_mode_(0) {}
+        comp_mode_(COMPATIBLE_MYSQL_MODE) {}
   ObPackageNameHashWrapper(uint64_t database_id,
                              const common::ObString &package_name,
                              ObPackageType type, int64_t comp_mode)
@@ -183,8 +183,7 @@ private:
 inline bool ObPackageNameHashWrapper::operator ==(const ObPackageNameHashWrapper &rv) const
 {
   ObCompareNameWithTenantID name_cmp;
-  return (true)
-      && (database_id_ == rv.get_database_id())
+  return (database_id_ == rv.get_database_id())
       && (0 == name_cmp.compare(package_name_, rv.get_package_name()))
       && (type_ == rv.get_type())
       && (comp_mode_ == rv.get_comp_mode());

@@ -795,7 +795,7 @@ int ObSchemaGetterGuard::check_single_table_priv(const ObSessionPrivInfo &sessio
               }
             }
 
-            if (OB_ERR_NO_COLUMN_PRIVILEGE == ret && true) {
+            if (OB_ERR_NO_COLUMN_PRIVILEGE == ret) {
               ret = OB_SUCCESS;
               ObNeedPriv collected_privs(table_need_priv.db_, table_need_priv.table_,
                                          OB_PRIV_TABLE_LEVEL, OB_PRIV_SET_EMPTY, false);
@@ -849,7 +849,7 @@ int ObSchemaGetterGuard::check_single_table_priv(const ObSessionPrivInfo &sessio
               }
             }
 
-            if (OB_ERR_NO_COLUMN_PRIVILEGE == ret && true) {
+            if (OB_ERR_NO_COLUMN_PRIVILEGE == ret) {
               ret = OB_SUCCESS;
               ObNeedPriv collected_privs(table_need_priv.db_, table_need_priv.table_,
                                          OB_PRIV_TABLE_LEVEL, OB_PRIV_SET_EMPTY, false);

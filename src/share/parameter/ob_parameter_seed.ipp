@@ -167,11 +167,6 @@ DEF_PARAM(default_row_format, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "dynamic",
                      ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
                      "REDUNDANT, COMPACT, DYNAMIC, COMPRESSED, CONDENSED");
 
-DEF_PARAM(default_compress, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "archive", common::ObConfigCompressOptionChecker,
-                     "default compress strategy for create new table within oracle mode",
-                     ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
-                     "NOCOMPRESS, BASIC, OLTP, QUERY, ARCHIVE, QUERY LOW, ARCHIVE HIGH");
-
 DEF_PARAM(default_table_store_format, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "row", common::ObConfigTableStoreFormatChecker,
                      "Specify the default storage format of creating table: row, column, compound format of row and column"
                      "values: row, column, compound",
@@ -1252,9 +1247,6 @@ DEF_PARAM(schema_history_recycle_interval, TIME, OB_CLUSTER_PARAMETER, "10m", "[
          "Range: [0s, +∞)",
          ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-DEF_PARAM(_enable_oracle_priv_check, BOOL, OB_CLUSTER_PARAMETER, "True",
-         "whether turn on oracle privilege check ",
-         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(plsql_code_type, STR, OB_CLUSTER_PARAMETER, "native",
         "specifies the compilation mode for PL/SQL library units",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -1408,7 +1400,7 @@ DEF_PARAM(ob_proxy_readonly_transaction_routing_policy, BOOL, OB_CLUSTER_PARAMET
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(job_queue_processes, INT, OB_CLUSTER_PARAMETER, "1000", "[0,16384]",
         "specifies the maximum number of job slaves per instance that can be created "
-        "for the execution of DBMS_JOB jobs and Oracle Scheduler (DBMS_SCHEDULER) jobs.",
+        "for the execution of DBMS_JOB and DBMS_SCHEDULER jobs.",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_enable_resource_limit_spec, BOOL, OB_CLUSTER_PARAMETER, "False",
          "specify whether resource limit check is turned on",
@@ -1426,7 +1418,7 @@ DEF_PARAM(_px_bloom_filter_group_size, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(enable_sql_extension, BOOL, OB_CLUSTER_PARAMETER, "False",
-         "specifies whether to allow use some oracle mode features in mysql mode",
+         "specifies whether SQL extension features are enabled in mysql mode",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(_enable_block_file_punch_hole, BOOL, OB_CLUSTER_PARAMETER, "False",
@@ -1950,10 +1942,13 @@ DEF_PARAM(_enable_tree_based_io_scheduler, BOOL, OB_CLUSTER_PARAMETER, "True",
          "A switch that allows enabling the tree-based IO scheduler."
          "Value: True: allowed; False: disabled",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(enable_ob_error_msg_style, BOOL, OB_CLUSTER_PARAMETER, "True",
-         "A switch that determines whether to use the ORA-xx or OBE-xx error code format for ORA error codes, with a default value of True to use the OBE-xx format."
-         "The default value is True. Value: False means we use the ORA-xx format, True means we use the OBE-xx format.",
-         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE));
+DEF_PARAM(clog_io_isolation_mode, INT, OB_CLUSTER_PARAMETER, "1", "[1,2]",
+         "Specifies the I/O isolation mode for Commit Log (clog). "
+         "Values: "
+         "1 - Non-isolation mode (disable I/O isolation), "
+         "2 - Full isolation mode (enable I/O isolation). "
+         "Example: 1=Off, 2=On",
+         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_enable_memleak_light_backtrace, BOOL, OB_CLUSTER_PARAMETER, "True",
         "specifies whether allow memleak to get the backtrace of malloc by light_backtrace",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -2028,7 +2023,7 @@ DEF_PARAM(_enable_ddl_worker_isolation, BOOL, OB_CLUSTER_PARAMETER, "False",
          ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(_enable_check_trigger_const_variables_assign, BOOL, OB_CLUSTER_PARAMETER, "True",
-        "Used to control whether an error is reported when assigning a value to a const variable in a trigger under an Oracle tenant",
+        "Used to control whether an error is reported when assigning a value to a const variable in a trigger",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 
@@ -2165,7 +2160,7 @@ DEF_PARAM(_enable_malloc_v2, BOOL, OB_CLUSTER_PARAMETER, "False",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(utl_file_open_max, INT, OB_CLUSTER_PARAMETER, "50", "[50, 600]",
-         "the maximum number of utl files that can be opened simultaneously in a single node under the Oracle model.",
+         "the maximum number of utl files that can be opened simultaneously in a single node.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(_enable_topn_runtime_filter, BOOL, OB_CLUSTER_PARAMETER, "True",

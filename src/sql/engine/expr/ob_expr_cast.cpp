@@ -396,7 +396,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
         int16_t length_semantics = ((dst_type.is_string_or_lob_locator_type() || dst_type.is_json())
             ? dst_type.get_length_semantics()
             : (OB_NOT_NULL(type_ctx.get_session())
-                ? type_ctx.get_session()->get_actual_nls_length_semantics()
+                ? type_ctx.get_session()->get_actual_length_semantics()
                 : LS_BYTE));
         if (len > 0) { // cast(1 as char(10))
           type.set_full_length(len, length_semantics);
@@ -422,7 +422,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
         if ((ObNumberTC == dst_type.get_type_class() || ObDecimalIntTC == dst_type.get_type_class())
             && 0 == dst_type.get_precision()) {
           // MySql:cast (1 as decimal(0)) = cast(1 as decimal)
-          // Oracle: cast(1.4 as number) = cast(1.4 as number(-1, -1))
+          // Use the compatibility-mode default precision for number casts.
           type.set_precision(ObAccuracy::DDL_DEFAULT_ACCURACY2[compatibility_mode][ObNumberType].get_precision());
         } else if ((ObIntTC == dst_type.get_type_class() || ObUIntTC == dst_type.get_type_class())
                    && dst_type.get_precision() <= 0) {
@@ -818,4 +818,3 @@ OB_DEF_SERIALIZE_SIZE(ObExprCast)
 
 }
 }
-

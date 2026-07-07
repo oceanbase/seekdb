@@ -1282,7 +1282,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
           } else if (OB_INVALID_ID == db_id
                      || (OB_ISNULL(package_info)
                          && (OB_INVALID_INDEX == parent_id
-                             || is_oracle_sys_database_id(parent_id)
+                             || is_extended_sys_database_id(parent_id)
                              || is_oceanbase_sys_database_id(parent_id)))) {
             if (OB_FAIL(schema_guard.get_package_info(
                                                       OB_SYS_DATABASE_ID,
@@ -1636,11 +1636,11 @@ int ObPLExternalNS::resolve_external_type_by_name(const ObString &db_name, const
          LOG_WARN("get package id failed", K(ret));
       }
     }
-    // Determine whether the package_name is the 'SYS' user in oracle mode
-    bool is_oracle_sys_user = false;
+    // Determine whether package_name belongs to the internal SYS user.
+    bool is_internal_sys_user = false;
     if (OB_FAIL(ret)) {
       // do nothing
-    } else if (!is_oracle_sys_user && !package_name.empty()) {
+    } else if (!is_internal_sys_user && !package_name.empty()) {
       // search for package type
       if (OB_ISNULL(package_info)) {
         // try system package
@@ -1871,7 +1871,7 @@ int ObPLBlockNS::find_sub_attr_by_name(const ObUserDefinedType &user_type,
     } else {
       ret = OB_ERR_SP_UNDECLARED_VAR;
       LOG_USER_ERROR(OB_ERR_SP_UNDECLARED_VAR, attr_name.length(), attr_name.ptr());
-      LOG_WARN("PLS-00302: component 'A' must be declared", K(ret), K(access_ident), K(user_type));
+      LOG_WARN("component 'A' must be declared", K(ret), K(access_ident), K(user_type));
     }
   } else {
     ret = OB_ERR_COMPONENT_UNDECLARED;
@@ -3263,7 +3263,7 @@ int ObPLInto::check_into(ObPLFunctionAST &func, ObPLBlockNS &ns, bool is_bulk)
     } else if (is_bulk //Bulk variables: variable must be a collection!
                && !func.get_expr(get_into(i))->is_obj_access_expr()) {
       ret = OB_ERR_MIX_SINGLE_MULTI;
-      LOG_WARN("PLS-00497: cannot mix between single row and multi-row (BULK) in INTO list",
+      LOG_WARN("cannot mix between single row and multi-row (BULK) in INTO list",
                K(ret), K(i));
     } else if (func.get_expr(get_into(i))->is_obj_access_expr()) {
       const ObObjAccessRawExpr *access_expr
@@ -3274,7 +3274,7 @@ int ObPLInto::check_into(ObPLFunctionAST &func, ObPLBlockNS &ns, bool is_bulk)
       if (OB_FAIL(ret)) {
       } else if (is_bulk && !type.is_collection_type()) {
         ret = OB_ERR_MIX_SINGLE_MULTI;
-        LOG_WARN("PLS-00497: cannot mix between single row and multi-row (BULK) in INTO list",
+        LOG_WARN("cannot mix between single row and multi-row (BULK) in INTO list",
                  K(ret), K(i));
       }
     }
@@ -3423,7 +3423,7 @@ int ObPLFetchStmt::replace_questionmark_variable_type(ObPLFunctionAST &func,
   } else if (question_mark_type.get_data_type()->get_obj_type() != ObNullType) {
     if (question_mark_type.get_data_type()->get_obj_type() != ObExtendType) {
       ret = OB_ERR_MIX_SINGLE_MULTI;
-      LOG_WARN("PLS-00497: cannot mix between single row and multi-row (BULK) in INTO list",
+      LOG_WARN("cannot mix between single row and multi-row (BULK) in INTO list",
                 K(ret), K(question_mark_type));
     } else if (return_type->get_record_member_count() == into_nums || need_build_record) {
       // orig type must be valid collection
@@ -3640,8 +3640,8 @@ int ObPLFunctionAST::add_argument(const common::ObString &name,
 {
   int ret = OB_SUCCESS;
   ObPLDataType copy = type;
-  // is_read_only setting : oracle mode set according to the actual situation
-  // mysql mode if it is record type, it means it is used in a trigger, also set according to the actual situation, otherwise false
+  // Record type arguments are used in triggers, so keep their read_only setting;
+  // other argument types are not read-only by default.
   bool is_read_only = (PL_RECORD_TYPE == type.get_type() ? read_only : false);
   if (copy.is_obj_type()) {
     ObDataType *type = copy.get_data_type();

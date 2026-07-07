@@ -244,6 +244,8 @@ struct ObXAStmtInfo
 typedef common::ObSEArray<ObXABranchInfo, 4> ObXABranchInfoArray;
 typedef common::ObSEArray<ObXAStmtInfo, 1> ObXAStmtInfoArray;
 
+// format id of dblink trans
+static const int32_t DBLINK_FORMAT_ID = 830487;
 class ObXADefault
 {
 public:

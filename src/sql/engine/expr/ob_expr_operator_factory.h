@@ -56,7 +56,6 @@ private:
       static int alloc(common::ObIAllocator &alloc, ObExprOperator *&phy_op);
 private:
   static NameType NAME_TYPES[EXPR_OP_NUM];
-  static NameType NAME_TYPES_ORCL[EXPR_OP_NUM];
   common::ObIAllocator &alloc_;
   uint32_t *next_expr_id_;
 };

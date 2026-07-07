@@ -1330,7 +1330,7 @@ ObAggregateProcessor::ObAggregateProcessor(ObEvalCtx &eval_ctx,
       aggr_infos_(aggr_infos),
       aggr_func_ctxs_(eval_ctx.exec_ctx_.get_allocator()),
       group_rows_(),
-      concat_str_max_len_(OB_DEFAULT_GROUP_CONCAT_MAX_LEN_FOR_ORACLE),
+      concat_str_max_len_(OB_DEFAULT_EXTENDED_GROUP_CONCAT_MAX_LEN),
       cur_concat_buf_len_(0),
       concat_str_buf_(NULL),
       skip_(nullptr),
@@ -7777,7 +7777,7 @@ int ObAggregateProcessor::get_ora_json_arrayagg_result(const ObAggrInfo &aggr_in
         ObJsonBin *jb_node = nullptr;
         ObString key;
 
-        if (OB_FAIL(ObJsonExprHelper::oracle_datum2_json_val(&datum, data_meta, &tmp_alloc,
+        if (OB_FAIL(ObJsonExprHelper::datum_to_json_val(&datum, data_meta, &tmp_alloc,
             eval_ctx_.exec_ctx_.get_my_session(), json_val, false, is_format_json, is_strict, true))) {
           LOG_WARN("failed to eval json val node.", K(ret), K(is_format_json), K(is_strict), K(data_meta));
         } else if (is_absent_on_null 
@@ -8108,7 +8108,7 @@ int ObAggregateProcessor::get_ora_json_objectagg_result(const ObAggrInfo &aggr_i
             LOG_WARN("convert key string collation failed", K(ret), K(cs_type_key), K(key_string.length()));
           } else if (!need_key_string_convert && OB_FAIL(deep_copy_ob_string(tmp_alloc, key_string, key_string))) {
             LOG_WARN("fail to deep copy string.", K(ret), K(key_string));
-          } else if (OB_FAIL(ObJsonExprHelper::oracle_datum2_json_val(&datum_value, meta_value, &tmp_alloc,
+          } else if (OB_FAIL(ObJsonExprHelper::datum_to_json_val(&datum_value, meta_value, &tmp_alloc,
               eval_ctx_.exec_ctx_.get_my_session(), json_val, false, is_format_json, is_strict, true))) {
             LOG_WARN("failed to eval json val node.", K(ret), K(is_format_json), K(is_strict), K(meta_value));
           } else if (is_absent_on_null && json_val->json_type() == ObJsonNodeType::J_NULL) {

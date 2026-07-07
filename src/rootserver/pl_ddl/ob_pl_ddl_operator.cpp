@@ -57,11 +57,7 @@ int ObPLDDLOperator::create_routine(share::schema::ObRoutineInfo &routine_info,
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_SYS;
     LOG_ERROR("schema_service must not null", K(ret));
-  } else if (true
-          && OB_FAIL(schema_service->fetch_new_sys_pl_object_id(new_routine_id))) {
-    LOG_WARN("failed to fetch new_routine_id", K(ret));
-  } else if (false
-          && OB_FAIL(schema_service->fetch_new_routine_id(new_routine_id))) {
+  } else if (OB_FAIL(schema_service->fetch_new_sys_pl_object_id(new_routine_id))) {
     LOG_WARN("failed to fetch new_routine_id", K(ret));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
     LOG_WARN("fail to gen new schema_version", K(ret));
@@ -900,12 +896,7 @@ int ObPLDDLOperator::update_routine_info(share::schema::ObRoutineInfo &routine_i
     ret = OB_ERR_SYS;
     LOG_ERROR("schema_service must not null", K(ret));
   } else if (OB_INVALID_ID == new_routine_id
-        && true
         && OB_FAIL(schema_service->fetch_new_sys_pl_object_id(new_routine_id))) {
-    LOG_WARN("failed to fetch new_routine_id", K(ret));
-  } else if (OB_INVALID_ID == new_routine_id
-        && false
-        && OB_FAIL(schema_service->fetch_new_routine_id(new_routine_id))) {
     LOG_WARN("failed to fetch new_routine_id", K(ret));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
     LOG_WARN("fail to gen new schema_version", K(ret));

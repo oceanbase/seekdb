@@ -188,8 +188,8 @@ public:
   static const int32_t OB_MULT_BUFFER_SIZE = OB_CALC_BUFFER_SIZE * 2 + 1;
   static const int32_t OB_REM_BUFFER_SIZE = 32; // REM need to change both operands to integer, maximum length = 15 + 15
   static const uint64_t CARRY_BOUND = 5000000000000000000;
-  static const int64_t MAX_SCI_SIZE = 126;    /* compatible with Oracle */
-  static const int64_t MIN_SCI_SIZE = -130;    /* compatible with Oracle */
+  static const int64_t MAX_SCI_SIZE = 126;    /* scientific exponent upper boundary */
+  static const int64_t MIN_SCI_SIZE = -130;    /* scientific exponent lower boundary */
   static const int64_t SCI_NUMBER_LENGTH = 40;
   static const int64_t MAX_FAST_SUM_AGG_NUMBER_LENGTH = 25 + MAX_APPEND_LEN;
   static const int POSITIVE_EXP_BOUNDARY = 0xc0;
@@ -272,10 +272,10 @@ public:
   inline int decode(const char *buf, const int64_t buf_size, int64_t &pos);
 
   OB_INLINE void assign(const uint32_t desc, uint32_t *digits);
-  inline int round_v2(const int64_t scale, const bool for_oracle_to_char = false);
-  inline int round(const int64_t scale, const bool for_oracle_to_char = false)
+  inline int round_v2(const int64_t scale, const bool for_to_char = false);
+  inline int round(const int64_t scale, const bool for_to_char = false)
   {
-    return round_v3(scale, for_oracle_to_char);
+    return round_v3(scale, for_to_char);
   }
 
   template <class T>
@@ -283,9 +283,9 @@ public:
                    int16_t *precision = NULL, int16_t *scale = NULL,
                    const bool do_rounding = true,
                    const bool catch_trunc_err = false);
-  inline int round_v3(const int64_t scale, const bool for_oracle_to_char = false);
-  // used when cast number to string in oracle mode
-  inline int round_for_sci(const int64_t scale, const bool for_oracle_to_char = false);
+  inline int round_v3(const int64_t scale, const bool for_to_char = false);
+  // Used when casting number to scientific string format.
+  inline int round_for_sci(const int64_t scale, const bool for_to_char = false);
   int round_precision(const int64_t precision);
   int floor(const int64_t scale);
   int ceil(const int64_t scale);
@@ -489,7 +489,6 @@ public:
 //      return format_v1(buf, buf_len, pos, scale);
     return format_v2(buf, buf_len, pos, scale);
   }
-  int format_with_oracle_limit(char *buf, const int64_t buf_len, int64_t &pos, int16_t scale) const;
   const char *format() const;
 
   OB_INLINE uint32_t get_desc_value() const;
@@ -641,15 +640,13 @@ protected:
   int check_precision_(const int64_t precision, const int64_t scale);
   int round_scale_(const int64_t scale, const bool using_floating_scale);
   int round_scale_v2_(const int64_t scale, const bool using_floating_scale,
-      const bool for_oracle_to_char,
+      const bool for_to_char,
       int16_t *res_precision = NULL, int16_t *res_scale = NULL);
   int round_scale_v3_(const int64_t scale, const bool using_floating_scale,
-      const bool for_oracle_to_char,
+      const bool for_to_char,
       int16_t *res_precision = NULL, int16_t *res_scale = NULL);
   inline bool need_round_after_arithmetic() const
   { return d_.len_ >= MIN_ROUND_DIGIT_COUNT[0]; }
-  int round_scale_oracle_(const int64_t scale, const bool using_floating_scale,
-      int16_t *res_precision = NULL, int16_t *res_scale = NULL);
   int round_integer_(
       const int64_t scale,
       uint32_t *integer_digits,
@@ -2303,7 +2300,7 @@ inline int ObNumber::decode(const char *buf, const int64_t buf_size, int64_t &po
   return ret;
 }
 
-inline int ObNumber::round_v2(const int64_t scale, const bool for_oracle_to_char/*false*/)
+inline int ObNumber::round_v2(const int64_t scale, const bool for_to_char/*false*/)
 {
   int ret = OB_SUCCESS;
   if (is_zero()) {
@@ -2313,13 +2310,13 @@ inline int ObNumber::round_v2(const int64_t scale, const bool for_oracle_to_char
   } else if (OB_UNLIKELY(scale < MIN_SCALE) || OB_UNLIKELY(scale > MAX_SCALE)) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid param", K(scale), K(ret));
-  } else if (OB_FAIL(round_scale_v2_(scale, false, for_oracle_to_char))) {
-    LIB_LOG(WARN, "fail to round_scale_oracle_", KPC(this), K(ret));
+  } else if (OB_FAIL(round_scale_v2_(scale, false, for_to_char))) {
+    LIB_LOG(WARN, "fail to round_scale_v2_", KPC(this), K(ret));
   }
   return ret;
 }
 
-inline int ObNumber::round_v3(const int64_t scale, const bool for_oracle_to_char/*false*/)
+inline int ObNumber::round_v3(const int64_t scale, const bool for_to_char/*false*/)
 {
   int ret = OB_SUCCESS;
   if (is_zero()) {
@@ -2329,18 +2326,18 @@ inline int ObNumber::round_v3(const int64_t scale, const bool for_oracle_to_char
   } else if (OB_UNLIKELY(scale < MIN_SCALE) || OB_UNLIKELY(scale > MAX_SCALE)) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid param", K(scale), K(ret));
-  } else if (OB_FAIL(round_scale_v3_(scale, false, for_oracle_to_char))) {
-    LIB_LOG(WARN, "fail to round_scale_oracle_", KPC(this), K(ret));
+  } else if (OB_FAIL(round_scale_v3_(scale, false, for_to_char))) {
+    LIB_LOG(WARN, "fail to round_scale_v3_", KPC(this), K(ret));
   }
   return ret;
 }
 
-inline int ObNumber::round_for_sci(const int64_t scale, const bool for_oracle_to_char/*false*/)
+inline int ObNumber::round_for_sci(const int64_t scale, const bool for_to_char/*false*/)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(true)) {
     ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(WARN, "only for oracle mode", K(ret));
+    LIB_LOG(WARN, "unsupported scientific rounding path", K(ret));
   }
   return ret;
 }

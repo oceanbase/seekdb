@@ -358,15 +358,12 @@ int ObCCLRuleMgr::get_schemas_in_tenant(common::ObIArray<const ObSimpleCCLRuleSc
   schemas.reset();
   ObTenantCCLRuleId id(OB_MIN_ID);
   ConstCCLRuleIter iter_begin = ccl_rule_infos.lower_bound(id, compare_with_tenant_ccl_rule_id);
-  bool is_stop = false;
-  for (ConstCCLRuleIter iter = iter_begin; OB_SUCC(ret) && iter != ccl_rule_infos.end() && !is_stop;
+  for (ConstCCLRuleIter iter = iter_begin; OB_SUCC(ret) && iter != ccl_rule_infos.end();
        ++iter) {
     const ObSimpleCCLRuleSchema *schema = NULL;
     if (OB_ISNULL(schema = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(schema));
-    } else if (false) {
-      is_stop = true;
     } else if (OB_FAIL(schemas.push_back(schema))) {
       LOG_WARN("push back ccl_rule failed", K(ret));
     }

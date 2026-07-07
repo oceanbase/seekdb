@@ -27,7 +27,7 @@ namespace sql
 {
 ObExprInnerDecodeLike::ObExprInnerDecodeLike(ObIAllocator &alloc)
     : ObStringExprOperator(alloc, T_FUN_SYS_INNER_DECODE_LIKE, N_INNER_DECODE_LIKE, 6, NOT_VALID_FOR_GENERATED_COL,
-                           INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                           INTERNAL_IN_MYSQL_MODE)
 {
 }
 

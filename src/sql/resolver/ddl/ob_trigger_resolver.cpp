@@ -280,7 +280,7 @@ int ObTriggerResolver::resolve_alter_trigger_stmt(const ParseNode &parse_node,
                                         trigger_name, old_tg_info));
   if (OB_SUCC(ret) && OB_ISNULL(old_tg_info)) {
     ret = OB_ERR_TRIGGER_NOT_EXIST;
-    LOG_ORACLE_USER_ERROR(OB_ERR_TRIGGER_NOT_EXIST, trigger_name.length(), trigger_name.ptr());
+    LOG_USER_ERROR(OB_ERR_TRIGGER_NOT_EXIST);
   }
   OZ (ObDDLResolver::ob_add_ddl_dependency(old_tg_info->get_trigger_id(),
                                            TRIGGER_SCHEMA,
@@ -341,7 +341,7 @@ int ObTriggerResolver::resolve_instead_dml_trigger(const ParseNode &parse_node,
   OV (parse_node.num_child_ == 5, OB_ERR_UNEXPECTED, parse_node.num_child_);
   OV (OB_NOT_NULL(parse_node.children_));
   OV (OB_NOT_NULL(parse_node.children_[0]));    // dml event.
-  // when-clause not supported in oracle
+  // WHEN clause is not supported for INSTEAD OF trigger.
   OV (OB_ISNULL(parse_node.children_[3]), OB_ERR_WHEN_CLAUSE_IN_TRI);
   OV (OB_NOT_NULL(parse_node.children_[4]));    // trigger body.
   OX (trigger_arg.trigger_info_.add_before_row()); // instead of trigger is always before row.
@@ -1148,7 +1148,7 @@ const ObString ObTriggerResolver::REF_PARENT = "PARENT";
 #define EMPTY_BODY \
   "NULL;\n"
 
-/************************* oracle compound trigger *************************/
+/************************* compound trigger *************************/
 #define BODY_DECLARE_COMPOUND \
 "%.*s\n"
 #define BODY_BEFORE_STMT_COMPOUND \
@@ -1178,9 +1178,9 @@ const ObString ObTriggerResolver::REF_PARENT = "PARENT";
   BODY_AFTER_ROW_COMPOUND \
   BODY_AFTER_STMT_COMPOUND \
   BODY_END
-/************************* oracle compound trigger *************************/
+/************************* compound trigger *************************/
 
-/************************* oracle system trigger *************************/
+/************************* system trigger *************************/
 #define SPEC_CALC_WHEN_SYS \
   "FUNCTION calc_when RETURN BOOL;\n"
 
@@ -1219,7 +1219,7 @@ const ObString ObTriggerResolver::REF_PARENT = "PARENT";
   BODY_CALC_WHEN_SYS  \
   BODY_TRG_BODY_SYS \
   BODY_END
-/************************* oracle system trigger *************************/
+/************************* system trigger *************************/
 
 #define MODE_DELIMITER  ('`')
 

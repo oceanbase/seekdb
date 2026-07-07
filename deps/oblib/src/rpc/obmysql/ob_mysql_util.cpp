@@ -764,31 +764,22 @@ int ObMySQLUtil::year_cell_str(
   return ret;
 }
 
-int ObMySQLUtil::varchar_cell_str(char *buf, const int64_t len, const ObString &val,
-    const bool is_oracle_raw, int64_t &pos)
+int ObMySQLUtil::varchar_cell_str(char *buf, const int64_t len, const ObString &val, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid input args", K(ret), KP(buf));
   } else {
-    int64_t length = is_oracle_raw ? val.length() * 2 : val.length();
+    int64_t length = val.length();
 
     if (OB_LIKELY(length < len - pos)) {
       int64_t pos_bk = pos;
       if (OB_FAIL(ObMySQLUtil::store_length(buf, len, length, pos))) {
       } else {
         if (OB_LIKELY(length <= len - pos)) {
-          //TODO::@xiaofeng, delete it latter after obclient/obj support RAW
-          if (is_oracle_raw) {
-            if (OB_FAIL(hex_print(val.ptr(), val.length(), buf, len, pos))) {
-              pos = pos_bk;
-              LOG_WARN("fail to hex_print", K(ret), K(val));
-            }
-          } else {
-            MEMCPY(buf + pos, val.ptr(), length);
-            pos += length;
-          }
+          MEMCPY(buf + pos, val.ptr(), length);
+          pos += length;
         } else {
           pos = pos_bk;
           ret = OB_SIZE_OVERFLOW;

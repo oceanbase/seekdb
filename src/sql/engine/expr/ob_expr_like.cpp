@@ -357,12 +357,12 @@ int ObExprLike::assign(const ObExprOperator &other)
   return ret;
 }
 
-// Oracle mode, the following character of escape character only support _ and % and self, or report error
+// The character following the escape character must be _, %, or the escape character itself.
 // check valid must be process first, even parttern or text is null, it will report error
 // eg: select 1 from dual where null like 'a' escape '';
 // like: select 1 from t1 where '_%a' like 'a_a%aa' escape 'a';  --ok
 //       select 1 from t1 where '_%' like 'aba%' escape 'a';  --error, ab is invalid
-// ORA-01424: missing or illegal character following the escape character
+// Error: missing or illegal character following the escape character.
 template <bool is_static_engine, typename T>
 int ObExprLike::check_pattern_valid(const T &pattern,
                               const T &escape,

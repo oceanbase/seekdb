@@ -28,7 +28,7 @@ namespace sql
 
 ObExprInnerTableOptionPrinter::ObExprInnerTableOptionPrinter(ObIAllocator &alloc)
     : ObStringExprOperator(alloc, T_FUN_SYS_INNER_TABLE_OPTION_PRINTER, N_INNER_TABLE_OPTION_PRINTER, 2,
-                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE)
 {
   need_charset_convert_ = false;
 }
@@ -119,7 +119,7 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprInnerTableOptionPrinter, raw_expr) {
 
 ObExprInnerTableSequenceGetter::ObExprInnerTableSequenceGetter(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_FUN_SYS_INNER_TABLE_SEQUENCE_GETTER, N_INNER_TABLE_SEQUENCE_GETTER, 2,
-                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, true)
 {
 }
 

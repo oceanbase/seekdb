@@ -922,7 +922,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
         && expr->get_result_type().get_extend_type() != ObPLType::PL_REF_CURSOR_TYPE
         && expr->get_expr_type() != T_REF_QUERY) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("PLS-00382: expression is of wrong type",
+      LOG_WARN("expression is of wrong type",
                K(ret), K(src_type_id), K(dst_pl_type), K(src_type),
                K(expr->get_result_type().get_extend_type()),
                KPC(expr));
@@ -940,7 +940,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
       } else {
         // BLOB and CLOB cannot be implicitly converted, if LOB types are different, directly discard
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("PLS-00382: expression is of wrong type",
+        LOG_WARN("expression is of wrong type",
                  K(ret), K(src_type_id), K(dst_pl_type), K(src_type));
       }
     } else if (((ObLongTextType == src_type)\
@@ -949,7 +949,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
                   && CS_TYPE_BINARY == dst_pl_type.get_meta_type()->get_collation_type())) {
       // BLOB cannot be converted to other types, other types cannot be converted to Blob, therefore Blob is directly eliminated
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("PLS-00382: expression is of wrong type",
+      LOG_WARN("expression is of wrong type",
                 K(ret), K(src_type_id), K(dst_pl_type), K(src_type));
     } else {
       OZ (check_type_match(
@@ -1073,7 +1073,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
         OX (match_info = ObRoutineMatchInfo::MatchInfo(true, src_type, dst_type));
       } else {
         ret = OB_ERR_EXPRESSION_WRONG_TYPE;
-        LOG_WARN("PLS-00382: expression is of wrong type",K(ret), K(src_type_id), K(dst_pl_type));
+        LOG_WARN("expression is of wrong type",K(ret), K(src_type_id), K(dst_pl_type));
       }
     }
   // Case2: Handle the scenario where TypeClass is different
@@ -1360,7 +1360,7 @@ int ObResolverUtils::pick_routine(ObIArray<ObRoutineMatchInfo> &match_infos,
             ret = OB_ERR_FUNC_DUP;
             LOG_USER_ERROR(OB_ERR_FUNC_DUP, match_infos.at(0).routine_info_->get_routine_name().length(),
                            match_infos.at(0).routine_info_->get_routine_name().ptr());
-            LOG_WARN("PLS-00307: too many declarations of 'string' match this call",
+            LOG_WARN("too many declarations of 'string' match this call",
                      K(ret), K(match_infos));
           } else {
             routine_info = match_infos.at(i).routine_info_;
@@ -1406,7 +1406,7 @@ int ObResolverUtils::pick_routine(ObIArray<ObRoutineMatchInfo> &match_infos,
           ret = OB_ERR_FUNC_DUP;
           LOG_USER_ERROR(OB_ERR_FUNC_DUP, match_infos.at(0).routine_info_->get_routine_name().length(),
                          match_infos.at(0).routine_info_->get_routine_name().ptr());
-          LOG_WARN("PLS-00307: too many declarations of 'string' match this call",
+          LOG_WARN("too many declarations of 'string' match this call",
                    K(ret), K(tmp_match_infos));
         } else {
           OZ (numric_args.push_back(i));
@@ -1430,7 +1430,7 @@ int ObResolverUtils::pick_routine(ObIArray<ObRoutineMatchInfo> &match_infos,
         ret = OB_ERR_FUNC_DUP;
         LOG_USER_ERROR(OB_ERR_FUNC_DUP, match_infos.at(0).routine_info_->get_routine_name().length(),
                        match_infos.at(0).routine_info_->get_routine_name().ptr());
-        LOG_WARN("PLS-00307: too many declarations of 'string' match this call",
+        LOG_WARN("too many declarations of 'string' match this call",
                   K(ret), K(tmp_match_infos), K(numric_args));
       }
     }
@@ -1446,7 +1446,7 @@ int ObResolverUtils::pick_routine(ObIArray<ObRoutineMatchInfo> &match_infos,
     ret = OB_ERR_FUNC_DUP;
     LOG_USER_ERROR(OB_ERR_FUNC_DUP, match_infos.at(0).routine_info_->get_routine_name().length(),
                   match_infos.at(0).routine_info_->get_routine_name().ptr());
-    LOG_WARN("PLS-00307: too many declarations of 'string' match this call",
+    LOG_WARN("too many declarations of 'string' match this call",
               K(ret), K(match_infos));
   }
   return ret;
@@ -1477,7 +1477,7 @@ int ObResolverUtils::pick_routine(const pl::ObPLResolveCtx &resolve_ctx,
   } else if (0 == match_infos.count()) { // No matching routine, directly report an error
     ret = OB_ERR_SP_WRONG_ARG_NUM;
     // ret = OB_ERR_CALL_WRONG_ARG;
-    LOG_WARN("PLS-00306: wrong number or types of arguments in call to 'string'",
+    LOG_WARN("wrong number or types of arguments in call to 'string'",
              K(ret), KPC(routine_info), K(expr_params), K(routine_infos));
   } else if (1 == match_infos.count()) { // exactly one, directly return
     CK (OB_NOT_NULL(match_infos.at(0).routine_info_));
@@ -1817,8 +1817,6 @@ int ObResolverUtils::resolve_obj_access_ref_node(ObRawExprFactory &expr_factory,
     ObExprResolveContext ctx(expr_factory, &tz_info, case_mode);
     ctx.session_info_ = &session_info;
     //not set query_ctx, this function will only be called by PL Resolver, there is no query ctx in PL Resolver
-    // ??
-    //ctx.is_oracle_compatible_ = (T_OBJ_ACCESS_REF == node->type_);
 
     ObRawExprResolverImpl expr_resolver(ctx);
     ObRawExpr *expr = NULL;
@@ -2271,10 +2269,12 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
         val.set_length(length);
         val.set_length_semantics(LS_CHAR);
       }
-      // For characters, the character set used here is the one set in the connection, in Oracle mode, it needs
-      // Convert to character set used by server, MySQL does not need
-      // To be consistent with MySQL error reporting, we check if the string is valid here, just a check, if invalid then report an error, no other operations are performed
-      // check_well_formed_str's ret_error parameter is true, the is_strict_mode parameter is invalid, therefore is_strict_mode is directly passed as true here
+      // Validate characters with the resolved collation; literals without an
+      // explicit charset introducer use the connection collation.
+      // To be consistent with error reporting, check whether the string is valid
+      // here; if invalid, report an error and do not perform other operations.
+      // check_well_formed_str's ret_error parameter is true, so the is_strict_mode
+      // parameter is ignored and passed as true here.
       val.set_param_meta(val.get_meta());
       LOG_DEBUG("resolve const char", K(val));
       break;
@@ -2377,9 +2377,8 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
         ret = wide::from_string(node->str_value_, node->str_len_, allocator, scale, precision,
                                 val_len, decint);
         len = static_cast<int16_t>(val_len);
-        // in oracle mode
-        // +.12e-3 will parse as decimal, with scale = 5, precision = 2
-        // in this case, ObNumber is used.
+        // Scientific decimal literals such as +.12e-3 have scale = 5 and
+        // precision = 2, so ObNumber is used.
         use_decimalint_as_result = (precision <= OB_MAX_DECIMAL_POSSIBLE_PRECISION
                                     && scale <= OB_MAX_DECIMAL_POSSIBLE_PRECISION
                                     && scale >= 0
@@ -2503,8 +2502,8 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
       ObString time_str(static_cast<int32_t>(node->str_len_), node->str_value_);
       int64_t time_val = 0;
       ObTimeConvertCtx cvrt_ctx(tz_info, false);
-      if (OB_FAIL(ObTimeConverter::literal_date_validate_oracle(time_str, cvrt_ctx, time_val))) {
-        LOG_WARN("fail to convert str to oracle date", K(time_str), K(ret));
+      if (OB_FAIL(ObTimeConverter::validate_literal_date(time_str, cvrt_ctx, time_val))) {
+        LOG_WARN("fail to convert str to literal date", K(time_str), K(ret));
       } else {
         val.set_datetime(time_val);
         val.set_scale(OB_MAX_DATE_PRECISION);
@@ -2551,7 +2550,7 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
       ObTimeConvertCtx cvrt_ctx(tz_info, true);
       ObString time_str(static_cast<int32_t>(node->str_len_), node->str_value_);
       //if (OB_FAIL(ObTimeConverter::str_to_otimestamp(time_str, cvrt_ctx, tmp_type, ot_data))) {
-      if (OB_FAIL(ObTimeConverter::literal_timestamp_validate_oracle(time_str, cvrt_ctx, value_type, tz_value))) {
+      if (OB_FAIL(ObTimeConverter::validate_literal_timestamp(time_str, cvrt_ctx, value_type, tz_value))) {
         LOG_WARN("fail to str_to_otimestamp", K(time_str), K(ret));
       } else {
         /* use max scale bug:#18093350 */
@@ -2758,12 +2757,12 @@ int ObResolverUtils::resolve_const_expr(ObResolverParams &params,
       LOG_ERROR("fulltext search expr should not found be here", K(ret));
     }
 
-    //process oracle compatible implicit conversion
+    // Process implicit conversion for comparison operators.
     if (OB_SUCC(ret) && op_exprs.count() > 0) {
-      LOG_WARN("impicit cast for oracle", K(ret));
-      if (OB_FAIL(ObRawExprUtils::resolve_op_exprs_for_oracle_implicit_cast(ctx.expr_factory_,
+      LOG_WARN("process implicit cast for comparison operators", K(ret));
+      if (OB_FAIL(ObRawExprUtils::resolve_op_exprs_for_comparison_implicit_cast(ctx.expr_factory_,
                                                                   ctx.session_info_, op_exprs))) {
-        LOG_WARN("impicit cast faild", K(ret));
+        LOG_WARN("implicit cast failed", K(ret));
       }
     }
 
@@ -2836,7 +2835,7 @@ int ObResolverUtils::name_case_cmp(const ObSQLSessionInfo *session_info,
   return ret;
 }
 
-bool ObResolverUtils::is_valid_oracle_interval_data_type(
+bool ObResolverUtils::is_valid_interval_data_type(
     const ObObjType data_type,
     ObItemType &item_type)
 {
@@ -3301,7 +3300,8 @@ int ObResolverUtils::check_partition_value_expr_for_range(const ObString &part_n
   }
   return ret;
 }
-// Used for validity check of hash partition in oracle mode: 1), can be multi-key; 2), data type restriction; 3), character set restriction for char/varchar
+// Used for hash partition validity checks: multi-key support, data type
+// restrictions, and character set restrictions for char/varchar.
 
 int ObResolverUtils::check_expr_valid_for_partition(ObRawExpr &expr,
                                                     ObSQLSessionInfo &session_info,
@@ -4775,7 +4775,6 @@ int ObResolverUtils::unique_idx_covered_partition_columns(
 int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
                                        const ObString &ident_name,
                                        ObDataType &data_type,
-                                       const int is_oracle_mode /*always 0 (MySQL)*/,
                                        const bool is_for_pl_type,
                                        const ObSessionNLSParams &nls_session_param,
                                        const bool enable_decimal_int_type,
@@ -4976,8 +4975,8 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
         LOG_WARN("column data length is invalid", K(ret), K(length), K(data_type));
         LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, ident_name.ptr(),
             static_cast<int>((ObVarcharType == data_type.get_obj_type())
-                ? OB_MAX_ORACLE_VARCHAR_LENGTH :
-                (is_for_pl_type ? OB_MAX_ORACLE_PL_CHAR_LENGTH_BYTE : OB_MAX_ORACLE_CHAR_LENGTH_BYTE)));
+                ? OB_MAX_EXTENDED_VARCHAR_LENGTH :
+                (is_for_pl_type ? OB_MAX_EXTENDED_PL_CHAR_LENGTH_BYTE : OB_MAX_EXTENDED_CHAR_LENGTH_BYTE)));
       } else if (ObVarcharType != data_type.get_obj_type()
           && ObCharType != data_type.get_obj_type()) {
         ret = OB_ERR_UNEXPECTED;
@@ -5027,7 +5026,7 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
         data_type.set_length(length);
         data_type.set_scale(default_accuracy.get_scale());
         data_type.set_charset_type(CHARSET_UTF8MB4);
-        data_type.set_collation_type(CS_TYPE_UTF8MB4_BIN); // ToDo: oracle, allow utf16
+        data_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
       }
       break;
     case ObGeometryTC: {
@@ -5058,7 +5057,7 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
       }
       break;
     case ObExtendTC:
-      // Oracle mode extend type handling removed (MySQL-only project)
+      // Extended type requires no additional datatype attributes here.
       break;
     case ObCollectionSQLTC: {
       length = 0;
@@ -5251,9 +5250,7 @@ int ObResolverUtils::resolve_udf_name_by_parse_node(
   return ret;
 }
 
-// for create table with fk in oracle mode
-
-// for alter table add fk in oracle mode
+// Check duplicate foreign keys for CREATE TABLE and ALTER TABLE ADD FOREIGN KEY.
 int ObResolverUtils::check_dup_foreign_keys_exist(
     const common::ObIArray<share::schema::ObForeignKeyInfo> &fk_infos,
     const common::ObIArray<uint64_t> &child_column_ids,
@@ -5347,7 +5344,7 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
       // When a self-dependency occurs, the index information of the parent table needs to be obtained from the CreateTableArg of the child table,
       // Because the parent table and child table are the same table, so the parent table information has not been published to the table schema at this time
       // Now take all the indexes from the sub-table one by one and compare them with the foreign key column of the parent table to check if self-reference is satisfied
-      // *mysql allows matching non-unique index, oracle does not allow
+      // Non-unique indexes are accepted for foreign key matching.
       for (int64_t i = 0; OB_SUCC(ret) && !is_pk_uk_match && i < index_arg_list.count(); ++i) {
         SMART_VAR(ObCreateIndexArg, index_arg) {
           if (OB_FAIL(index_arg.assign(index_arg_list.at(i)))) {
@@ -5465,8 +5462,7 @@ int ObResolverUtils::check_foreign_key_set_null_satisfy(
 {
   int ret = OB_SUCCESS;
   if (arg.delete_action_ == ACTION_SET_NULL || arg.update_action_ == ACTION_SET_NULL) {
-    // To compatible with oracle and mysql, check if set null ref action is valid
-    // More detail can be found in:
+    // Check if SET NULL referential action is valid.
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.child_columns_.count(); ++i) {
       const ObString &fk_col_name = arg.child_columns_.at(i);
       const ObColumnSchemaV2 *fk_col_schema = child_table_schema.get_column_schema(fk_col_name);
@@ -5495,17 +5491,19 @@ int ObResolverUtils::check_foreign_key_set_null_satisfy(
   }
   return ret;
 }
-// description: oracle mode check whether the foreign key columns in two foreign key sub-tables match the associated columns in the parent table
-// oracle mode (c1, c2) references t1(c1, c2) and (c2, c1) references t1(c2, c1) are considered the same foreign key
+// description: check whether the foreign key columns in two child tables match
+// the associated columns in the parent table.
+// (c1, c2) references t1(c1, c2) and (c2, c1) references t1(c2, c1)
+// are considered the same foreign key.
 //
-// eg: in oracle mode
+// eg:
 // create table t1(c1 int, c2 int, primary key(c1, c2));
 //
 //
 // create table t2(c1 int, c2 int,
 //                 constraint fk foreign key (c1, c2) references t1(c1, c2),
 //                 constraint fk2 foreign key (c2, c1) references t1(c2, c1));
-// ORA-02274: duplicate referential constraint specifications
+// duplicate referential constraint specifications
 //
 // @return oceanbase error code defined in lib/ob_errno.def
 bool ObResolverUtils::is_match_columns_with_order(
@@ -5663,9 +5661,11 @@ int ObResolverUtils::check_partial_match_columns(const ObIArray<ObString> &paren
   }
   return ret;
 }
-// description: used to check if the primary key columns and unique constraint columns in the same table are completely matched in oracle mode, the order of each column must be consistent to be considered a complete match
-//              eg: index(c1, c2) and index(c2, c1) are considered a match
-//                  index(c1, c2) and index(c1, c2) are considered mismatched
+// description: used to check if the primary key columns and unique constraint
+// columns in the same table are completely matched; the order of each column
+// must be consistent to be considered a complete match.
+//              eg: index(c1, c2) and index(c2, c1) are considered mismatched
+//                  index(c1, c2) and index(c1, c2) are considered a match
 //
 // @return oceanbase error code defined in lib/ob_errno.def
 int ObResolverUtils::check_match_columns_strict(const ObIArray<ObString> &columns_array_1,
@@ -5687,11 +5687,13 @@ int ObResolverUtils::check_match_columns_strict(const ObIArray<ObString> &column
   }
   return ret;
 }
-// description: used to check if two indexes in the same table are completely matched under oracle mode, with columns in the same order and each column's order sequence consistent to be considered a complete match
+// description: used to check if two indexes in the same table are completely
+// matched, with columns in the same order and each column's order sequence
+// consistent to be considered a complete match.
 //              eg: index(c1, c2) and index(c2, c1) are considered two different indices
 //                  index(c1, c2 asc) and index(c1, c2 desc) are considered two different indexes
 //                  index(c1 desc, c2) and index(c1 desc, c2) are considered two identical indexes
-//                  index(c1) and index(C1) oracle considers as two different indexes
+//                  index(c1) and index(C1) are considered two different indexes
 //
 // @return oceanbase error code defined in lib/ob_errno.def
 int ObResolverUtils::check_match_columns_strict_with_order(const ObTableSchema *index_table_schema,
@@ -6316,14 +6318,14 @@ int ObResolverUtils::resolve_external_param_info(ExternalParams &param_infos,
       sql::ObRawExprResType result_type = expr->get_result_type();  \
       if (result_type.get_length() == -1) {   \
         if (result_type.is_varchar()) {  \
-          result_type.set_length(OB_MAX_ORACLE_VARCHAR_LENGTH);   \
+          result_type.set_length(OB_MAX_EXTENDED_VARCHAR_LENGTH);   \
         } else if (result_type.is_char()) {  \
-          result_type.set_length(OB_MAX_ORACLE_CHAR_LENGTH_BYTE);   \
+          result_type.set_length(OB_MAX_EXTENDED_CHAR_LENGTH_BYTE);   \
         }  \
       }  \
       if (LS_INVALIED == result_type.get_length_semantics() && ob_is_string_tc(result_type.get_type())) {  \
-        const ObLengthSemantics default_length_semantics =  LS_INVALIED != session_info.get_actual_nls_length_semantics() \
-                                                             ? session_info.get_actual_nls_length_semantics()  \
+        const ObLengthSemantics default_length_semantics =  LS_INVALIED != session_info.get_actual_length_semantics() \
+                                                             ? session_info.get_actual_length_semantics()  \
                                                              : LS_BYTE;  \
         result_type.set_length_semantics(default_length_semantics);  \
       }  \
@@ -6868,9 +6870,12 @@ int ObResolverUtils::check_duplicated_column(ObSelectStmt &select_stmt,
                                              bool can_skip/*default false*/)
 {
   int ret = OB_SUCCESS;
-   /*Oracle mode allows the generated table in sel/upd/del stmt to contain duplicate columns, as long as the outer layer does not reference the duplicate columns, and whether the referenced columns by the outer layer are duplicate columns will be detected during column checking, eg: select 1 from (select c1,c1 from t1);
-  * Therefore, when detecting sel/upd/del stmt under Oracle mode, if duplicate columns are detected, just skip, but still need to add relevant plan cache constraints
-  *
+  /*
+   * Generated tables in sel/upd/del statements may contain duplicate columns
+   * when the outer query does not reference those duplicate columns. Column
+   * checking detects whether outer references are duplicate; when duplicate
+   * columns are skipped here, relevant plan cache constraints still need to be
+   * added.
    */
   if (!can_skip) {
     for (int64_t i = 1; OB_SUCC(ret) && i < select_stmt.get_select_item_size(); i++) {
@@ -8075,7 +8080,7 @@ int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
                        static_cast<ObCollationType>(session.get_local_collation_connection()),
                        session.get_nls_collation_nation(), session.get_timezone_info(),
                        obj_param, is_paramlize, literal_prefix,
-                       session.get_actual_nls_length_semantics(),
+                       session.get_actual_length_semantics(),
                        static_cast<ObCollationType>(server_collation), NULL,
                        session.get_sql_mode(),
                        enable_decimal_int,

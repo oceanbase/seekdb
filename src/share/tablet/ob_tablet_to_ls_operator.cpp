@@ -127,7 +127,7 @@ namespace share
     do { \
       results.reset(); \
       if (OB_FAIL(ret)) { \
-      } else if (OB_UNLIKELY(false || tablet_ids.empty())) { \
+      } else if (OB_UNLIKELY(tablet_ids.empty())) { \
         ret = OB_INVALID_ARGUMENT; \
         LOG_WARN("invalid argument", KR(ret), K(tablet_ids)); \
       } else { \
@@ -240,7 +240,7 @@ int ObTabletToLSTableOperator::batch_update(
     const ObIArray<ObTabletToLSInfo> &infos)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || infos.empty())) {
+  if (OB_UNLIKELY(infos.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(infos));
   } else {
@@ -266,7 +266,7 @@ int ObTabletToLSTableOperator::update_table_to_tablet_id_mapping(common::ObISQLC
                                                                  const common::ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || OB_INVALID_ID == table_id || !tablet_id.is_valid())) {
+  if (OB_UNLIKELY(OB_INVALID_ID == table_id || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id), K(tablet_id));
   } else {
@@ -297,8 +297,7 @@ int ObTabletToLSTableOperator::inner_batch_update_by_sql_(
     const int64_t end_idx)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false
-      || infos.empty()
+  if (OB_UNLIKELY(infos.empty()
       || start_idx < 0
       || start_idx >= end_idx
       || end_idx > infos.count())) {
@@ -339,7 +338,7 @@ int ObTabletToLSTableOperator::batch_remove(
     const ObIArray<common::ObTabletID> &tablet_ids)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || tablet_ids.empty())) {
+  if (OB_UNLIKELY(tablet_ids.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(tablet_ids));
   } else {
@@ -637,10 +636,7 @@ int ObTabletToLSTableOperator::get_tablet_ls_pairs_cnt(
   int ret = OB_SUCCESS;
   ObSqlString sql;
   input_cnt = 0;
-  if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_FAIL(sql.append_fmt(
+  if (OB_FAIL(sql.append_fmt(
       "select count(*) as cnt from %s",
       OB_ALL_TABLET_TO_LS_TNAME))) {
     LOG_WARN("failed to append fmt", K(ret));

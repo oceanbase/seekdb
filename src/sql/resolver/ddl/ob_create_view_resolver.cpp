@@ -139,7 +139,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
       // do nothing
     } else if (OB_FAIL(resolve_table_relation_node(parse_tree.children_[VIEW_NODE],
                                                 view_name, db_name,
-                                                false, false))) {
+                                                false))) {
       LOG_WARN("failed to resolve table relation node!", K(ret));
     } else if (OB_FAIL(set_database_name(db_name))) {
       SQL_RESV_LOG(WARN, "set database name failes", KR(ret));
@@ -322,10 +322,8 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
           bool with_check_option = VIEW_CHECK_OPTION_NONE != check_option;
           view_schema.set_character_set_client(cs_client_type);
           view_schema.set_collation_connection(coll_connection_type);
-          // check whether view is allowed to be with check option.
-          // In mysql mode, only support create view as ... with check option in syntax.
-          // In oracle mode, support create view v as (select * from (select * from t with check option))
-          // so we have to check in oracle mode even if check_option of view_schema is NONE.
+          // Check whether the view is allowed to be created with check option.
+          // MySQL syntax supports create view as ... with check option.
           if (with_check_option && !(select_stmt == NULL && !resolve_succ)
               && OB_FAIL(ObResolverUtils::view_with_check_option_allowed(select_stmt,
                                                                           with_check_option))) {
@@ -415,7 +413,7 @@ int ObCreateViewResolver::try_add_error_info(const uint64_t error_number,
   if (ERROR_STATUS_HAS_ERROR == error_info.get_error_status()) {
     /* do nothing */
   } else {
-    ObString err_txt(common::ob_oracle_strerror(error_number));
+    ObString err_txt(common::ob_errpkt_strerror(static_cast<int>(error_number)));
     error_info.set_error_number(error_number);
     error_info.set_error_status(ERROR_STATUS_HAS_ERROR);
     if (err_txt.empty()) {
@@ -520,11 +518,11 @@ int ObCreateViewResolver::check_view_columns(ObSelectStmt &select_stmt,
                                              bool &add_undefined_columns)
 {
   int ret = OB_SUCCESS;
-  // oracle mode, create view requires every select expr to have an explicit alias
+  // Create view requires every select expr to have an explicit alias:
   // 1. expr itself is a column
   // 2. expr is the calculation expression, but there is a user-specified alias
   // 3. create view (c1,c2,c3) as select, view definition specifies column names
-  // And Oracle specifies that column names in a view cannot be duplicated
+  // Column names in a view cannot be duplicated.
   bool is_col_dup = false;
   ObString dup_col_name;
   hash::ObHashSet<ObString> view_col_names;

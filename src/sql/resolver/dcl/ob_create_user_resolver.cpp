@@ -40,7 +40,7 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
   if (OB_UNLIKELY(4 != parse_tree.num_child_)
       || OB_UNLIKELY(T_CREATE_USER != parse_tree.type_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("expect 4 child in mysql mode and 5 child in oracle mode, create user type",
+    LOG_WARN("expect 4 children in create user parse tree",
              "actual_num", parse_tree.num_child_,
              "type", parse_tree.type_,
              K(ret));

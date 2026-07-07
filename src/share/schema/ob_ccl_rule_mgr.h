@@ -60,8 +60,7 @@ public:
   bool operator == (const ObCCLRuleNameHashKey &other) const
   {
     ObCompareNameWithTenantID name_cmp(name_case_mode_);
-    return (true) &&
-           (name_case_mode_ == other.name_case_mode_) &&
+    return (name_case_mode_ == other.name_case_mode_) &&
            (0 == name_cmp.compare(ccl_rule_name_, other.ccl_rule_name_));
   }
   

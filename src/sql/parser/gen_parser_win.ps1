@@ -1,5 +1,5 @@
 # gen_parser_win.ps1
-# PowerShell version: generates SQL parser on Windows only (FTS + MySQL mode), Oracle modules excluded.
+# PowerShell version: generates SQL parser on Windows only (FTS + MySQL mode).
 # Requires: WinFlexBison (win_bison, win_flex must be in PATH or devtools/bin)
 
 $ErrorActionPreference = "Stop"

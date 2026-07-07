@@ -30,7 +30,7 @@ int ObJsonBin::get_obtime(ObTime &t) const
 
   switch (json_type()) {
     case ObJsonNodeType::J_DATE:
-    case ObJsonNodeType::J_ORACLEDATE: {
+    case ObJsonNodeType::J_JSON_DATE_EXT: {
       ret = ObTimeConverter::date_to_ob_time(int_val_, t);
       break;
     }
@@ -714,7 +714,7 @@ int ObJsonBinSerializer::serialize_json_value(ObJsonNode *json_tree, ObJsonBuffe
       break;
     }
 
-    case ObJsonNodeType::J_ORACLEDATE:
+    case ObJsonNodeType::J_JSON_DATE_EXT:
     case ObJsonNodeType::J_DATE: {
       const ObJsonDatetime *sub_obj = static_cast<const ObJsonDatetime*>(json_tree);
       ObTime ob_time = sub_obj->value();
@@ -1317,7 +1317,7 @@ int ObJsonBin::deserialize_json_value(ObJsonNode *&json_tree)
       break;
     }
     case ObJsonNodeType::J_DATETIME:
-    case ObJsonNodeType::J_ORACLEDATE: {
+    case ObJsonNodeType::J_JSON_DATE_EXT: {
       int64_t value = 0;
       void *buf = allocator_->alloc(sizeof(ObJsonDatetime));
       if (buf == NULL) {
@@ -1616,7 +1616,7 @@ int ObJsonBin::get_area_size(uint64_t& size) const
       }
       case ObJsonNodeType::J_DATE:
       case ObJsonNodeType::J_MYSQL_DATE:
-      case ObJsonNodeType::J_ORACLEDATE: {
+      case ObJsonNodeType::J_JSON_DATE_EXT: {
         size = sizeof(int32_t);
         break;
       }
@@ -2285,7 +2285,7 @@ int ObJsonBin::init_bin_data()
       }
       case ObJsonNodeType::J_DATE:
       case ObJsonNodeType::J_MYSQL_DATE:
-      case ObJsonNodeType::J_ORACLEDATE: {
+      case ObJsonNodeType::J_JSON_DATE_EXT: {
         int32_t val = 0;
         if (OB_FAIL(cursor_->read_i32(pos_, &val))) {
           LOG_WARN("read_id32 fail", K(ret), K(pos_));
@@ -3603,7 +3603,7 @@ int ObJsonBin::rebuild_json_value(ObJsonBuffer &result) const
     }
     case ObJsonNodeType::J_DATE:
     case ObJsonNodeType::J_MYSQL_DATE:
-    case ObJsonNodeType::J_ORACLEDATE: {
+    case ObJsonNodeType::J_JSON_DATE_EXT: {
       if (OB_FAIL(cursor_->get(pos_, sizeof(int32_t), data))) {
         LOG_WARN("get data fail", K(ret), K(pos_));
       } else if (OB_FAIL(result.append(data))) {
@@ -4023,8 +4023,8 @@ ObJBVerType ObJsonVerType::get_json_vertype(ObJsonNodeType in_type)
       ret_type = ObJsonBin::get_orawid_vertype();
       break;
     }
-    case ObJsonNodeType::J_ORACLEDATE: {
-      ret_type = ObJsonBin::get_oracledate_vertype();
+    case ObJsonNodeType::J_JSON_DATE_EXT: {
+      ret_type = ObJsonBin::get_json_date_ext_vertype();
       break;
     }
     case ObJsonNodeType::J_ODATE: {
@@ -4161,8 +4161,8 @@ ObJsonNodeType ObJsonVerType::get_json_type(ObJBVerType type)
       ret_type = ObJsonNodeType::J_ORAWID;
       break;
     }
-    case ObJBVerType::J_ORACLEDATE_V0: {
-      ret_type = ObJsonNodeType::J_ORACLEDATE;
+    case ObJBVerType::J_JSON_DATE_EXT_V0: {
+      ret_type = ObJsonNodeType::J_JSON_DATE_EXT;
       break;
     }
     case ObJBVerType::J_ODATE_V0: {
@@ -4254,7 +4254,7 @@ bool ObJsonVerType::is_scalar(ObJBVerType type)
     case ObJsonNodeType::J_OINT :
     case ObJsonNodeType::J_OLONG :
     case ObJsonNodeType::J_OOID :
-    case ObJsonNodeType::J_ORACLEDATE :
+    case ObJsonNodeType::J_JSON_DATE_EXT :
     case ObJsonNodeType::J_ODATE :
     case ObJsonNodeType::J_OTIMESTAMP :
     case ObJsonNodeType::J_OTIMESTAMPTZ :

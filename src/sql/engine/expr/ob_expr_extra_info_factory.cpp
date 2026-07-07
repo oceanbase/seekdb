@@ -108,8 +108,8 @@ void ObExprExtraInfoFactory::register_expr_extra_infos()
   REG_EXTRA_INFO(T_FUN_SYS_NULLIF, ObExprOperator::DatumCastExtraInfo);
   REG_EXTRA_INFO(T_FUN_SYS_CAST, ObExprCast::CastMultisetExtraInfo);
   REG_EXTRA_INFO(T_FUN_SYS_PRIV_SQL_UDT_CONSTRUCT, ObExprUdtConstructInfo);
-  REG_EXTRA_INFO(T_FUN_SYS_LPAD, ObExprOracleLRpadInfo);
-  REG_EXTRA_INFO(T_FUN_SYS_RPAD, ObExprOracleLRpadInfo);
+  REG_EXTRA_INFO(T_FUN_SYS_LPAD, ObExprLRpadInfo);
+  REG_EXTRA_INFO(T_FUN_SYS_RPAD, ObExprLRpadInfo);
   REG_EXTRA_INFO(T_FUN_SYS_LAST_REFRESH_SCN, ObExprLastRefreshScn::LastRefreshScnExtraInfo);
   REG_EXTRA_INFO(T_FUN_SYS_JSON_SCHEMA_VALID, ObExprJsonSchemaValidInfo);
   REG_EXTRA_INFO(T_FUN_SYS_JSON_SCHEMA_VALIDATION_REPORT, ObExprJsonSchemaValidInfo);

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX  LIB_TIME
 
-#include "common/timezone/ob_oracle_format_models.h"
+#include "common/timezone/ob_datetime_format_models.h"
 
 namespace oceanbase
 {
@@ -94,19 +94,19 @@ constexpr int ObDFMFlag::CONFLICT_GROUP_ERR[ObDFMFlag::MAX_CONFLICT_GROUP_NUMBER
 constexpr int64_t ObDFMFlag::EXPECTED_MATCHING_LENGTH[ObDFMFlag::MAX_FLAG_NUMBER];
 constexpr int64_t ObDFMFlag::ELEMENTFLAG_MAX_LEN[MAX_FLAG_NUMBER];
 
-const ObOracleTimeLimiter ObDFMLimit::YEAR                       = {1, 9999,   OB_ERR_INVALID_YEAR_VALUE};
-const ObOracleTimeLimiter ObDFMLimit::MONTH                      = {1, 12,     OB_ERR_INVALID_MONTH};
-const ObOracleTimeLimiter ObDFMLimit::MONTH_DAY                  = {1, 31,     OB_ERR_DAY_OF_MONTH_RANGE};
-const ObOracleTimeLimiter ObDFMLimit::WEEK_DAY                   = {1, 7,      OB_ERR_INVALID_DAY_OF_THE_WEEK};
-const ObOracleTimeLimiter ObDFMLimit::YEAR_DAY                   = {1, 366,    OB_ERR_INVALID_DAY_OF_YEAR_VALUE};
-const ObOracleTimeLimiter ObDFMLimit::HOUR12                     = {1, 12,     OB_ERR_INVALID_HOUR12_VALUE};
-const ObOracleTimeLimiter ObDFMLimit::HOUR24                     = {0, 23,     OB_ERR_INVALID_HOUR24_VALUE};
-const ObOracleTimeLimiter ObDFMLimit::MINUTE                     = {0, 59,     OB_ERR_INVALID_MINUTES_VALUE};
-const ObOracleTimeLimiter ObDFMLimit::SECOND                     = {0, 59,     OB_ERR_INVALID_SECONDS_VALUE};
-const ObOracleTimeLimiter ObDFMLimit::SECS_PAST_MIDNIGHT         = {0, 86399,  OB_ERR_INVALID_SECONDS_IN_DAY_VALUE};
-const ObOracleTimeLimiter ObDFMLimit::TIMEZONE_HOUR_ABS          = {0, 15,     OB_INVALID_DATE_VALUE}; //OBE-01874: time zone hour must be between -15 and 15
-const ObOracleTimeLimiter ObDFMLimit::TIMEZONE_MIN_ABS           = {0, 59,     OB_INVALID_DATE_VALUE}; //OBE-01875: time zone minute must be between -59 and 59
-const ObOracleTimeLimiter ObDFMLimit::JULIAN_DATE                = {1, 5373484,OB_ERR_INVALID_JULIAN_DATE_VALUE}; // -4712-01-01 ~ 9999-12-31
+const ObDFMTimeLimiter ObDFMLimit::YEAR                       = {1, 9999,   OB_ERR_INVALID_YEAR_VALUE};
+const ObDFMTimeLimiter ObDFMLimit::MONTH                      = {1, 12,     OB_ERR_INVALID_MONTH};
+const ObDFMTimeLimiter ObDFMLimit::MONTH_DAY                  = {1, 31,     OB_ERR_DAY_OF_MONTH_RANGE};
+const ObDFMTimeLimiter ObDFMLimit::WEEK_DAY                   = {1, 7,      OB_ERR_INVALID_DAY_OF_THE_WEEK};
+const ObDFMTimeLimiter ObDFMLimit::YEAR_DAY                   = {1, 366,    OB_ERR_INVALID_DAY_OF_YEAR_VALUE};
+const ObDFMTimeLimiter ObDFMLimit::HOUR12                     = {1, 12,     OB_ERR_INVALID_HOUR12_VALUE};
+const ObDFMTimeLimiter ObDFMLimit::HOUR24                     = {0, 23,     OB_ERR_INVALID_HOUR24_VALUE};
+const ObDFMTimeLimiter ObDFMLimit::MINUTE                     = {0, 59,     OB_ERR_INVALID_MINUTES_VALUE};
+const ObDFMTimeLimiter ObDFMLimit::SECOND                     = {0, 59,     OB_ERR_INVALID_SECONDS_VALUE};
+const ObDFMTimeLimiter ObDFMLimit::SECS_PAST_MIDNIGHT         = {0, 86399,  OB_ERR_INVALID_SECONDS_IN_DAY_VALUE};
+const ObDFMTimeLimiter ObDFMLimit::TIMEZONE_HOUR_ABS          = {0, 15,     OB_INVALID_DATE_VALUE}; // time zone hour must be between -15 and 15
+const ObDFMTimeLimiter ObDFMLimit::TIMEZONE_MIN_ABS           = {0, 59,     OB_INVALID_DATE_VALUE}; // time zone minute must be between -59 and 59
+const ObDFMTimeLimiter ObDFMLimit::JULIAN_DATE                = {1, 5373484,OB_ERR_INVALID_JULIAN_DATE_VALUE}; // -4712-01-01 ~ 9999-12-31
 
 
 int ObDFMUtil::match_int_value_with_comma(ObDFMParseCtx &ctx,
@@ -142,7 +142,7 @@ int ObDFMUtil::match_int_value_with_comma(ObDFMParseCtx &ctx,
         stop_flag = true;
       } else {
         if (OB_UNLIKELY(!isdigit(cur_char))) {
-          ret = OB_ERR_NON_NUMERIC_CHARACTER_VALUE; //OBE-01858: a non-numeric character was found where a numeric was expected
+          ret = OB_ERR_NON_NUMERIC_CHARACTER_VALUE; // a non-numeric character was found where a numeric was expected
           LOG_WARN("failed to match int value", K(ret));
         } else {
           temp_value *= 10;
@@ -210,7 +210,7 @@ int ObDFMUtil::check_int_value_length(const ObDFMParseCtx &ctx,
    * in this situation, the numeric value are matched in fixed length mode.
    * which means real_data_len should be equal to element expected length, or will return with an error
    */
-  if (OB_SUCC(ret) && ctx.is_matching_by_expected_len_) {  //is true only in only in str_to_ob_time_oracle_dfm
+  if (OB_SUCC(ret) && ctx.is_matching_by_expected_len_) {  //is true only in only in str_to_ob_time_by_format_model
     bool legal = true;
     if (ObDFMFlag::RR == ctx.expected_elem_flag_ || ObDFMFlag::RRRR == ctx.expected_elem_flag_) { //one special case
       legal = (2 == real_data_len || 4 == real_data_len);
@@ -241,7 +241,7 @@ int ObDFMUtil::match_int_value(ObDFMParseCtx &ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ctx), K(expected_len), K(value_sign));
   } else if (!isdigit(ctx.cur_ch_[0])) {  //check the first char
-    ret = OB_ERR_NON_NUMERIC_CHARACTER_VALUE; //OBE-01858: a non-numeric character was found where a numeric was expected
+    ret = OB_ERR_NON_NUMERIC_CHARACTER_VALUE; // a non-numeric character was found where a numeric was expected
   }
 
   int64_t date_max_len = std::min(ctx.remain_len_, expected_len);
@@ -469,14 +469,14 @@ int ObDFMUtil::check_semantic(const ObDFMElemArr &elements, ObFixedBitSet<OB_DEF
     //but not in the original DATE format model: FF, TZD, TZH, TZM, and TZR
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(flag >= ObDFMFlag::FF1 && flag <= ObDFMFlag::FF
-                      && !HAS_TYPE_ORACLE(mode))) {
+                      && !HAS_TYPE_NANOSECOND(mode))) {
         ret = OB_INVALID_DATE_FORMAT;
-        LOG_WARN("oracle date type can not have fractional seconds", K(ret), K(mode), K(ObDFMFlag::PATTERN[flag]));
+        LOG_WARN("date format model can not have fractional seconds", K(ret), K(mode), K(ObDFMFlag::PATTERN[flag]));
       } else if (OB_UNLIKELY(!HAS_TYPE_TIMEZONE(mode) &&
                              (ObDFMFlag::TZD == flag || ObDFMFlag::TZR ==flag
                               || ObDFMFlag::TZH == flag || ObDFMFlag::TZM == flag))) {
         ret = OB_INVALID_DATE_FORMAT;
-        LOG_WARN("oracle timestamp or timestamp with local timezone can not has timezone",
+        LOG_WARN("timestamp without explicit timezone can not have timezone fields",
                  K(ret), K(mode), K(ObDFMFlag::PATTERN[flag]));
       }
     }
@@ -484,7 +484,7 @@ int ObDFMUtil::check_semantic(const ObDFMElemArr &elements, ObFixedBitSet<OB_DEF
     //check no duplicate elem first
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(flag_bitmap.has_member(flag))) {
-        ret = OB_ERR_FORMAT_CODE_APPEARS_TWICE; //OBE-01810: format code appears twice
+        ret = OB_ERR_FORMAT_CODE_APPEARS_TWICE; // format code appears twice
         LOG_WARN("datetime format model check failed", K(ret), "flag", ObString(ObDFMFlag::PATTERN[flag].ptr_));
       } else if (OB_FAIL(flag_bitmap.add_member(flag))) {
         LOG_WARN("failed to add bitmap", K(ret), "flag", ObString(ObDFMFlag::PATTERN[flag].ptr_));

@@ -46,7 +46,7 @@ namespace common {
 
 // iternal recyclebin object prefix
 const char *const OB_MYSQL_RECYCLE_PREFIX = "__recycle_$_";
-const char *const OB_ORACLE_RECYCLE_PREFIX = "RECYCLE_$_";
+const char *const OB_RECYCLE_PREFIX = "RECYCLE_$_";
 
 OB_INLINE bool is_valid_log_compressor_type(common::ObCompressorType compressor_type)
 {

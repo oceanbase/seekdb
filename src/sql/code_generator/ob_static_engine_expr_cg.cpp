@@ -545,7 +545,7 @@ int ObStaticEngineExprCG::cg_expr_by_operator(const ObIArray<ObRawExpr *> &raw_e
       ObIExprExtraInfo *extra_info = nullptr;
       ObPseudoColumnRawExpr *column_expr = static_cast<ObPseudoColumnRawExpr*>(raw_expr);
       if (OB_FAIL(ObExprExtraInfoFactory::alloc(*op_cg_ctx_.allocator_, rt_expr->type_, extra_info))) {
-        LOG_WARN("Failed to allocate memory for ObExprOracleLRpadInfo", K(ret));
+        LOG_WARN("Failed to allocate memory for ObDataAccessPathExtraInfo", K(ret));
       } else if (OB_ISNULL(extra_info)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("extra_info should not be nullptr", K(ret));
@@ -2092,7 +2092,7 @@ int ObStaticEngineExprCG::compute_max_batch_size(const ObRawExpr *raw_expr)
 }
 
 // this is used for dynamic evaluated questionmark exprs
-// consider following query in oracle mode:
+// consider the following query:
 // ```SQL
 // create table t (a int);
 // select * from t where a in (1, 2); # item count in row maybe very large!

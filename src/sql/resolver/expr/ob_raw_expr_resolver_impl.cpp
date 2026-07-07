@@ -90,10 +90,10 @@ static int change_json_expr_res_type_if_need(common::ObIAllocator &allocator, Ob
           case JPN_LENGTH :
           case JPN_SIZE :
           case JPN_NUM_ONLY :
-          case JPN_NUMBER : 
+          case JPN_NUMBER :
           case JPN_FLOOR :
           case JPN_CEILING : {
-            if (ret_node.type_ == T_NULL 
+            if (ret_node.type_ == T_NULL
             || (json_expr_flag == OPT_JSON_QUERY && ret_node.int16_values_[OB_NODE_CAST_TYPE_IDX] == T_JSON)) {
               ret_node.value_ = 0;
               ret_node.int16_values_[OB_NODE_CAST_TYPE_IDX] = T_VARCHAR;
@@ -577,12 +577,6 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
         }
         break;
       }
-      case T_OP_ORACLE_OUTER_JOIN_SYMBOL: {
-        if (OB_FAIL(process_outer_join_symbol_node(node, expr))) {
-          LOG_WARN("fail to process outer join column ref node", K(ret), K(node));
-        }
-        break;
-      }
       case T_COLUMN_REF: {
         // star has been expand before, @see ObSelectResolver::resolve_star()
         if (OB_FAIL(process_column_ref_node(node, expr))) {
@@ -727,8 +721,7 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
       }
       case T_OP_BTW:
       case T_OP_NOT_BTW: {
-        // We will transform between to >= and <= all the time in oracle mode
-        // or while expr2 and expr3 have the same res types in mysql mode
+        // Transform BETWEEN to >= and <= when supported by current result metadata.
         //
         // expr1 NOT BETWEEN expr2 AND expr3 ==>  NOT (expr1 BETWEEN expr2 AND expr3)
         // expr1 BETWEEN expr2 AND expr3 ==> expr1 >= expr2 AND expr1 <= expr3
@@ -779,7 +772,7 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
       }
       case T_FUN_GROUP_ID: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("group_id is only allowed in oracle mode");
+        LOG_WARN("group_id is not supported");
         break;
       }
       case T_FUN_GROUPING:
@@ -1166,11 +1159,11 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
         break;
       }
       case T_FUN_SYS_SYSTIMESTAMP: {
-        if (OB_FAIL(process_oracle_timestamp_node(node,
-                                                  expr,
-                                                  MIN_SCALE_FOR_TEMPORAL,
-                                                  OB_MAX_TIMESTAMP_TZ_PRECISION,
-                                                  DEFAULT_SCALE_FOR_ORACLE_FRACTIONAL_SECONDS))) {
+        if (OB_FAIL(process_systimestamp_node(node,
+                                              expr,
+                                              MIN_SCALE_FOR_TEMPORAL,
+                                              OB_MAX_TIMESTAMP_TZ_PRECISION,
+                                              DEFAULT_SCALE_FOR_FRACTIONAL_SECONDS))) {
           LOG_WARN("fail to process timestamp node", K(ret), K(node));
         } else {
           static_cast<ObSysFunRawExpr*>(expr)->set_func_name(ObString::make_string(N_SYSTIMESTAMP));
@@ -1793,7 +1786,7 @@ int ObRawExprResolverImpl::process_obj_access_node(const ParseNode &node, ObRawE
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K_(ctx_.columns));
   } else if (IS_AGGR_FUN(node.children_[0]->type_)) {
-    //in oracle ,we could not define standalone or package function with the same name as agg function
+    // Object-access syntax resolves aggregate names as aggregate functions.
     if (IS_KEEP_AGGR_FUN(node.children_[0]->type_)) {
       if (OB_FAIL(process_keep_aggr_node(node.children_[0], expr))) {
         LOG_WARN("process keep agg node failed", K(ret));
@@ -2026,7 +2019,7 @@ int ObRawExprResolverImpl::resolve_func_node_of_obj_access_idents(const ParseNod
     // first bit in value_ of T_FUN_SYS node is used to mark NEW keyword,
     // value_ & 0x1 == 1: not used,
     // value_ & 0x1 == 0: used,
-    // refer to sql_parser_oracle_mode.y
+    // refer to the parser grammar for the value layout
     bool is_new_key_word_used = !(func_node.value_ & 0x1);
 
     OZ (q_name.access_idents_.push_back(ObObjAccessIdent(ident_name, OB_INVALID_INDEX)), K(ident_name));
@@ -2146,7 +2139,7 @@ int ObRawExprResolverImpl::resolve_func_node_of_obj_access_idents(const ParseNod
               ret = OB_ERR_NO_FUNCTION_EXIST;
               LOG_USER_ERROR(OB_ERR_NO_FUNCTION_EXIST,
                              ident_name.length(), ident_name.ptr());
-              LOG_WARN("PLS-00222: no function with name 'string' exists in this scope",
+              LOG_WARN("no function with name 'string' exists in this scope",
                        K(ret), K(func_node.num_child_), K(access_ident));
             }
           } else if (T_EXPR_LIST != func_node.children_[1]->type_) {
@@ -2154,7 +2147,7 @@ int ObRawExprResolverImpl::resolve_func_node_of_obj_access_idents(const ParseNod
             LOG_WARN("not expr list node!", K(func_node.children_[1]->type_), K(func_node.children_[1]->num_child_), K(ret));
           } else if (func_node.children_[1]->num_child_ != 1) {
             ret = OB_ERR_TABLE_SINGLE_INDEX;
-            LOG_WARN("PLS-00316: PL/SQL TABLEs must use a single index", K(ret), K(func_node.children_[1]->num_child_));
+            LOG_WARN("PL/SQL TABLEs must use a single index", K(ret), K(func_node.children_[1]->num_child_));
           } else {
             const ParseNode *expr_node = func_node.children_[1]->children_[0];
             ObRawExpr *index_expr = NULL;
@@ -2330,7 +2323,7 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
   ObConstRawExpr *c_expr = NULL;
   ObString literal_prefix;
   bool is_paramlize = false;
-  const ObLengthSemantics default_length_semantics = (OB_NOT_NULL(ctx_.session_info_) ? ctx_.session_info_->get_actual_nls_length_semantics() : LS_BYTE);
+  const ObLengthSemantics default_length_semantics = (OB_NOT_NULL(ctx_.session_info_) ? ctx_.session_info_->get_actual_length_semantics() : LS_BYTE);
   const ObSQLSessionInfo *session_info = ctx_.session_info_;
   int64_t server_collation = CS_TYPE_INVALID;
   ObCollationType nation_collation = OB_NOT_NULL(ctx_.session_info_) ? ctx_.session_info_->get_nls_collation_nation() : CS_TYPE_INVALID;
@@ -2482,15 +2475,15 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
             sql::ObRawExprResType result_type = c_expr->get_result_type();
             if (result_type.get_length() == -1) {
               if (result_type.is_varchar()) {
-                result_type.set_length(OB_MAX_ORACLE_VARCHAR_LENGTH);
+                result_type.set_length(OB_MAX_EXTENDED_VARCHAR_LENGTH);
               } else if (result_type.is_char()) {
-                result_type.set_length(OB_MAX_ORACLE_CHAR_LENGTH_BYTE);
+                result_type.set_length(OB_MAX_EXTENDED_CHAR_LENGTH_BYTE);
               }
             }
             if (-1 == result_type.get_length_semantics() &&
               ObNullType == param.get_type() &&
               ob_is_string_tc(param.get_param_meta().get_type())) {
-              result_type.set_length_semantics(session_info->get_actual_nls_length_semantics());
+              result_type.set_length_semantics(session_info->get_actual_length_semantics());
             }
             c_expr->set_result_type(result_type);
             if (ob_is_enumset_inner_tc(c_expr->get_result_type().get_type())) { // only in PL execute, enum or set paramters generate enumset_inner type param value
@@ -3144,24 +3137,6 @@ int ObRawExprResolverImpl::process_left_value_node(const ParseNode *node, ObRawE
   return ret;
 }
 
-int ObRawExprResolverImpl::process_outer_join_symbol_node(
-    const ParseNode *node, ObRawExpr *&expr)
-{
-  int ret = OB_SUCCESS;
-  ObOpRawExpr *b_expr = NULL;
-  ObRawExpr *col_expr = NULL;;
-
-  CK(OB_NOT_NULL(node), 1 == node->num_child_);
-  OZ((ctx_.expr_factory_.create_raw_expr)(T_OP_ORACLE_OUTER_JOIN_SYMBOL, b_expr));
-  OZ(process_column_ref_node(node->children_[0], col_expr));
-  CK(OB_NOT_NULL(b_expr));
-  OZ(b_expr->set_param_expr(col_expr));
-  if (OB_SUCC(ret)) {
-    expr = b_expr;
-  }
-  return ret;
-}
-
 int ObRawExprResolverImpl::process_column_ref_node(
     const ParseNode *node, ObRawExpr *&expr)
 {
@@ -3490,7 +3465,7 @@ int ObRawExprResolverImpl::convert_any_or_all_expr(ObRawExpr *&expr,
       } else if ((T_OP_EQ != expr->get_expr_type() && T_OP_NE != expr->get_expr_type()) &&
                  (T_OP_ROW == sub_expr2_child->get_param_expr(i)->get_expr_type() ||
                  T_OP_ROW == sub_expr1->get_expr_type())) {
-        // Since Oracle does not support vector list comparison like (2,3) < ((2,3)(2,4)), it needs to be disabled, similarly for '<=', '>', '>='
+        // Vector list comparison is only supported for equality and inequality operators.
         ret = OB_ERR_OPERATOR_CANNOT_BE_USED_WITH_LIST;
         LOG_WARN("this operator cannot be used with lists", K(ret));
       } else if (T_OP_EQ == expr->get_expr_type() &&
@@ -3719,8 +3694,7 @@ int ObRawExprResolverImpl::process_between_node(const ParseNode *node, ObRawExpr
   return ret;
 }
 
-// We will transform between to >= and <= all the time in oracle mode
-// or while the result meta type of second param and the third param are same in mysql mode
+// Transform BETWEEN to >= and <= when supported by current result metadata.
 // expr1 NOT BETWEEN expr2 AND expr3 ==>  NOT (expr1 >= expr2 AND expr1 <= expr3)
 // expr1 BETWEEN expr2 AND expr3 ==> expr1 >= expr2 AND expr1 <= expr3
 int ObRawExprResolverImpl::transform_between_expr(
@@ -3802,7 +3776,7 @@ int ObRawExprResolverImpl::process_like_node(const ParseNode *node, ObRawExpr *&
     LOG_WARN("invalid argument", K(ret), K(node));
   } else if ((T_OP_NOT_LIKE == node->type_ || T_OP_LIKE == node->type_)
       && (node->num_child_ == 3)) {
-    // If escape sign is explicitly specified as '', Oracle mode should report an error
+    // Validate explicitly specified ESCAPE clause.
     ParseNode* &escape_node = node->children_[2];
     if (OB_ISNULL(escape_node)) {
       ret = OB_ERR_UNEXPECTED;
@@ -3830,7 +3804,7 @@ int ObRawExprResolverImpl::process_like_node(const ParseNode *node, ObRawExpr *&
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("index is out of range", K(escape_node->value_), K(ctx_.param_list_->count()));
         }
-        // c1 like '123' escape null is illegal in oracle mode, but legal in mysql mode
+        // NULL ESCAPE is accepted.
       } else if (ctx_.param_list_->at(escape_node->value_).is_null()) {
         // escape null is legal in mysql
       } else {
@@ -3892,8 +3866,8 @@ int ObRawExprResolverImpl::process_like_node(const ParseNode *node, ObRawExpr *&
       } else if (OB_FAIL(t_expr->add_param_expr(escape_expr))) {
         LOG_WARN("fail to set param expr");
       } else if (no_escapes) {
-        // Oracle mode, if not specify escape, then no escape, but the implementation of like must contain escape
-        // so we rewrite like without escape
+        // The LIKE implementation must contain an escape expression, so rewrite
+        // LIKE without escape.
         // c1 like '%x\x%' --> c1 like replace('%x\x%', '\','\\') escape '\' -> c1 like '%x\\x%' escape '\'
         ObRawExpr *replace_expr1 = NULL;
         ObRawExpr *replace_expr2 = NULL;
@@ -4294,7 +4268,6 @@ int ObRawExprResolverImpl::process_agg_node(const ParseNode *node, ObRawExpr *&e
       || OB_ISNULL(expr_list_node->children_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid children for APPROX_COUNT_DISTINCT(_SYNOPSIS) function", K(node), K(expr_list_node));
-      //oracle mode allow only 1 argument
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < expr_list_node->num_child_; ++i) {
         sub_expr = NULL;
@@ -4957,7 +4930,7 @@ int ObRawExprResolverImpl::process_sort_list_node(const ParseNode *node, ObAggFu
         if (OB_UNLIKELY(sort_node->children_[0]->type_ == T_INT && sort_node->children_[0]->value_ >= 0)) {
           // The order-by item is specified using column position
           // ie. ORDER BY 1 DESC
-          // oracle mode: order by 1 where 1 is interpreted as a constant expression rather than the position of a column, at this time it needs to be ignored
+          // The order-by item is specified using a column position here.
           int32_t pos = static_cast<int32_t>(sort_node->children_[0]->value_);
           if (pos <= 0 || pos > agg_real_param_exprs.count()) {
             // for SELECT statement, we need to make sure the column positions are valid
@@ -5080,11 +5053,11 @@ int ObRawExprResolverImpl::process_xmlparse_node(const ParseNode *node, ObRawExp
   return ret;
 }
 
-int ObRawExprResolverImpl::process_oracle_timestamp_node(const ParseNode *node,
-                                                         ObRawExpr *&expr,
-                                                         int16_t min_precision,
-                                                         int16_t max_precision,
-                                                         int16_t default_precision)
+int ObRawExprResolverImpl::process_systimestamp_node(const ParseNode *node,
+                                                     ObRawExpr *&expr,
+                                                     int16_t min_precision,
+                                                     int16_t max_precision,
+                                                     int16_t default_precision)
 {
   int ret = OB_SUCCESS;
   ObSysFunRawExpr *c_expr = NULL;
@@ -5369,7 +5342,7 @@ int ObRawExprResolverImpl::process_call_param_node(const ParseNode *node, ObRawE
       name_node = node->children_[0]->children_[2];
     } else {
       ret = OB_ERR_CALL_WRONG_ARG;
-      LOG_WARN("PLS-00306: wrong number or types of arguments in call", K(ret));
+      LOG_WARN("wrong number or types of arguments in call", K(ret));
     }
     OZ (ctx_.expr_factory_.create_raw_expr(T_SP_CPARAM, call_param_expr));
     CK (OB_NOT_NULL(call_param_expr));
@@ -6213,7 +6186,7 @@ int ObRawExprResolverImpl::process_json_value_node(const ParseNode *node, ObRawE
             OZ(func_expr->add_param_expr(para_expr));
           }
         } //end for
-        // ([on_mismatch][opt_mismatch_types] on oracle)
+        // Optional mismatch clauses are appended after positional arguments.
         int8_t mis_check = 0;
         for (int32_t i = 0; OB_SUCC(ret) && i < mismatch_arr.size(); i++) {
           ObRawExpr *para_expr = NULL;
@@ -6535,7 +6508,7 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
         if (ctx_.session_info_->is_inner()
             || ctx_.is_in_system_view_
             || ctx_.is_from_show_resolver_) {
-          func_expr->set_cast_mode(CM_ORA_SYS_VIEW_CAST);
+          func_expr->set_cast_mode(CM_INTERNAL_CAST_IGNORE);
         } else {
           ret = OB_ERR_PARSER_SYNTAX;
           LOG_WARN("cast ignore only allowed in inner path", K(ret));
@@ -7147,7 +7120,7 @@ int ObRawExprResolverImpl::process_window_function_node(const ParseNode *node, O
                                                           T_OBJ_ACCESS_REF, 2))) {
           LOG_WARN("failed to new parse node", K(ret), K(obj_access_node));
         } else {
-          // structure of T_FUN_PL_AGG_UDF: refer to sql_parser_oracle_mode.y
+          // structure of T_FUN_PL_AGG_UDF: refer to the parser grammar
           CK (OB_NOT_NULL(func_node->children_[0])
               && T_EXPR_LIST == func_node->children_[0]->type_
               && 2 == func_node->children_[0]->num_child_);
@@ -7731,7 +7704,6 @@ int ObRawExprResolverImpl::process_interval_node(const ParseNode *node,
  */
 bool ObRawExprResolverImpl::should_not_contain_window_clause(const ObItemType func_type)
 {
-  //https://docs.oracle.com/cd/E11882_01/server.112/e41084/functions004.htm#SQLRF06174
   /**
    * Some analytic functions allow the windowing_clause.
    */
@@ -7748,8 +7720,8 @@ bool ObRawExprResolverImpl::should_not_contain_window_clause(const ObItemType fu
 /**
  * window function which should contain order_by clause
  */
-// Same as oracle, when first_value, last_value specifies a window there must be an order by;
-// Before parsing it would be converted to nth_value
+// When first_value or last_value specifies a window, there must be an ORDER BY.
+// Before parsing it would be converted to nth_value.
 
 int ObRawExprResolverImpl::check_and_canonicalize_window_expr(ObRawExpr *expr)
 {
@@ -7850,7 +7822,7 @@ int ObRawExprResolverImpl::check_and_canonicalize_window_expr(ObRawExpr *expr)
         lower.is_preceding_ = false;
       }
     }
-    // oracle compatible, parsing phase directly throws an error for invalid windows that can be recognized
+    // The parsing phase directly throws an error for recognizable invalid windows.
     if (OB_SUCC(ret)) {
       if ((BOUND_CURRENT_ROW == upper.type_ && BOUND_INTERVAL == lower.type_ && lower.is_preceding_)
           || (BOUND_CURRENT_ROW == lower.type_ && BOUND_INTERVAL == upper.type_ && !upper.is_preceding_)
@@ -7860,7 +7832,7 @@ int ObRawExprResolverImpl::check_and_canonicalize_window_expr(ObRawExpr *expr)
         LOG_WARN("invalid window specification", K(ret), K(upper), K(lower));
       }
     }
-    // oracle compatible, sort column is a vector when, range window cannot be an expression, it can only be unbounded or current row
+    // When the sort column is a vector, range windows can only be unbounded or current row.
     if (OB_SUCC(ret)) {
       if (order_items.count() > 1 &&
           WINDOW_RANGE == win_type &&

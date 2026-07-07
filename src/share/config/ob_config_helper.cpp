@@ -363,18 +363,6 @@ bool ObConfigRowFormatChecker::check(const ObConfigItem &t) const
   return is_valid;
 }
 
-bool ObConfigCompressOptionChecker::check(const ObConfigItem &t) const
-{
-  bool is_valid = false;
-  ObStoreFormatType type = OB_STORE_FORMAT_INVALID;
-  if (OB_ISNULL(t.str()) || strlen(t.str()) == 0) {
-  } else if (OB_SUCCESS != ObStoreFormat::find_store_format_type_oracle(ObString::make_string(t.str()), type)) {
-  } else if (ObStoreFormat::is_store_format_oracle(type)) {
-    is_valid = true;
-  }
-  return is_valid;
-}
-
 bool ObConfigMaxSyslogFileCountChecker::check(const ObConfigItem &t) const
 {
   bool is_valid = false;
@@ -761,7 +749,6 @@ bool ObConfigAuditModeChecker::check(const ObConfigItem &t) const
 {
   ObString v_str(t.str());
   return 0 == v_str.case_compare("NONE") ||
-         0 == v_str.case_compare("ORACLE") ||
          0 == v_str.case_compare("MYSQL");
 }
 

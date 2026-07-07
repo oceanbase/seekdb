@@ -549,10 +549,6 @@ int ObPartitionExchange::check_table_conditions_in_common_(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("offline ddl is being executed, other ddl operations are not allowed", K(ret), K(base_table_schema.check_can_do_ddl()), K(inc_table_schema.check_can_do_ddl()), K(base_table_schema), K(inc_table_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "execute ddl while other ddl operations are executing long running ddl");
-  } else if (OB_UNLIKELY(false)) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("tenant id of exchanging partition tables are not equal", K(ret));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "exchange partition tables belong to different tenants is");
   } else if (base_table_schema.is_in_splitting() || inc_table_schema.is_in_splitting()) {
     //TODO ddl must not execute on splitting table due to split not unstable
     ret = OB_OP_NOT_ALLOW;
@@ -769,10 +765,6 @@ int ObPartitionExchange::check_column_conditions_in_common_(const ObColumnSchema
   if (OB_ISNULL(base_table_col_schema) || OB_ISNULL(inc_table_col_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("column schema is null", K(ret), KPC(base_table_col_schema), KPC(inc_table_col_schema));
-  } else if (OB_UNLIKELY(false)) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("column tenant id of exchanging partition tables are not equal", K(ret));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "exchange partition tables belong to different tenants is");
   } else if (OB_UNLIKELY(base_table_col_schema->get_rowkey_position() != inc_table_col_schema->get_rowkey_position())) {
     LOG_WARN("column rowkey position of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_rowkey_position()), K(inc_table_col_schema->get_rowkey_position()));
   } else if (OB_UNLIKELY(base_table_col_schema->get_index_position() != inc_table_col_schema->get_index_position())) {
@@ -1261,33 +1253,28 @@ int ObPartitionExchange::set_global_storage_index_unusable_(const ObTableSchema 
                                                             ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < unused_pt_index_id_.count(); i++) {
-      uint64_t pt_index_id = unused_pt_index_id_.at(i);
-      if (OB_FAIL(update_index_status_(
-                                       pt_index_id,
-                                       INDEX_STATUS_UNUSABLE,
-                                       partitioned_data_table_schema.get_in_offline_ddl_white_list(),
-                                       ddl_operator,
-                                       trans,
-                                       schema_guard))) {
-        LOG_WARN("fail to update partitioned data table index status", K(ret), K(pt_index_id), K(partitioned_data_table_schema.get_in_offline_ddl_white_list()));                      
-      }
+  for (int64_t i = 0; OB_SUCC(ret) && i < unused_pt_index_id_.count(); i++) {
+    uint64_t pt_index_id = unused_pt_index_id_.at(i);
+    if (OB_FAIL(update_index_status_(
+                                     pt_index_id,
+                                     INDEX_STATUS_UNUSABLE,
+                                     partitioned_data_table_schema.get_in_offline_ddl_white_list(),
+                                     ddl_operator,
+                                     trans,
+                                     schema_guard))) {
+      LOG_WARN("fail to update partitioned data table index status", K(ret), K(pt_index_id), K(partitioned_data_table_schema.get_in_offline_ddl_white_list()));
     }
-    for (int64_t i = 0; OB_SUCC(ret) && i < unused_nt_index_id_.count(); i++) {
-      uint64_t nt_index_id = unused_nt_index_id_.at(i);
-      if (OB_FAIL(update_index_status_(
-                                       nt_index_id,
-                                       INDEX_STATUS_UNUSABLE,
-                                       non_partitioned_data_table_schema.get_in_offline_ddl_white_list(),
-                                       ddl_operator,
-                                       trans,
-                                       schema_guard))) {
-        LOG_WARN("fail to update non partitioned data table index status", K(ret), K(nt_index_id), K(non_partitioned_data_table_schema.get_in_offline_ddl_white_list()));                      
-      }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < unused_nt_index_id_.count(); i++) {
+    uint64_t nt_index_id = unused_nt_index_id_.at(i);
+    if (OB_FAIL(update_index_status_(
+                                     nt_index_id,
+                                     INDEX_STATUS_UNUSABLE,
+                                     non_partitioned_data_table_schema.get_in_offline_ddl_white_list(),
+                                     ddl_operator,
+                                     trans,
+                                     schema_guard))) {
+      LOG_WARN("fail to update non partitioned data table index status", K(ret), K(nt_index_id), K(non_partitioned_data_table_schema.get_in_offline_ddl_white_list()));
     }
   }
   return ret;
@@ -1369,7 +1356,7 @@ int ObPartitionExchange::exchange_data_table_partitions(const ObTableSchema &bas
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObPartitionExchange not init", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(false || !base_table_schema.is_valid() || !inc_table_schema.is_valid() || base_tablet_ids.count() != inc_tablet_ids.count())) {
+  } else if (OB_UNLIKELY(!base_table_schema.is_valid() || !inc_table_schema.is_valid() || base_tablet_ids.count() != inc_tablet_ids.count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(base_table_schema.is_valid()), K(inc_table_schema.is_valid()), K(base_tablet_ids.count()), K(inc_tablet_ids.count()));
   } else if (OB_FAIL(add_table_to_tablet_ids_map(base_table_schema.get_table_id(), base_tablet_ids))) {
@@ -1405,7 +1392,7 @@ int ObPartitionExchange::exchange_auxiliary_table_partitions(const ObTableSchema
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObPartitionExchange not init", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(false || data_tablet_ids.count() != inc_data_tablet_ids.count())) {
+  } else if (OB_UNLIKELY(data_tablet_ids.count() != inc_data_tablet_ids.count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(data_tablet_ids.count()), K(inc_data_tablet_ids.count()));
   } else {
@@ -1487,7 +1474,7 @@ int ObPartitionExchange::exchange_partition_map_relationship_(const ObTableSchem
     ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || base_tablet_ids.count() != inc_tablet_ids.count() || !base_table_schema.is_valid() || !inc_table_schema.is_valid())) {
+  if (OB_UNLIKELY(base_tablet_ids.count() != inc_tablet_ids.count() || !base_table_schema.is_valid() || !inc_table_schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(base_tablet_ids.count()), K(inc_tablet_ids.count()), K(base_table_schema.is_valid()), K(inc_table_schema.is_valid()));
   } else {
@@ -1902,7 +1889,7 @@ int ObPartitionExchange::update_exchange_table_non_schema_attributes_(const ObTa
                                                                       ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || old_partition_ids.count() != new_partition_ids.count())) {
+  if (OB_UNLIKELY(old_partition_ids.count() != new_partition_ids.count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(old_partition_ids), K(new_partition_ids), K(old_table_schema), K(new_table_id), K(old_tablet_ids));
   } else {
@@ -1951,7 +1938,7 @@ int ObPartitionExchange::update_exchange_table_level_attributes_(const ObIArray<
                                                                  ObDDLSQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || base_tablet_ids.count() != inc_tablet_ids.count() || !partitioned_table_schema.is_valid() || !non_partitioned_table_schema.is_valid())) {
+  if (OB_UNLIKELY(base_tablet_ids.count() != inc_tablet_ids.count() || !partitioned_table_schema.is_valid() || !non_partitioned_table_schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(base_tablet_ids.count()), K(inc_tablet_ids.count()), K(partitioned_table_schema.is_valid()), K(non_partitioned_table_schema.is_valid()));
   } else {
@@ -2005,7 +1992,7 @@ int ObPartitionExchange::update_table_to_tablet_ids_mapping_(const uint64_t tabl
                                                             ObDDLSQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false) || tablet_ids.empty()) {
+  if (OB_UNLIKELY(tablet_ids.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(table_id), K(tablet_ids.count()));
   } else {
@@ -2023,10 +2010,7 @@ int ObPartitionExchange::refresh_table_schema_version_(ObTableSchema &table_sche
   int ret = OB_SUCCESS;
   int64_t new_schema_version = OB_INVALID_VERSION;
   ObMultiVersionSchemaService &multi_schema_service = ddl_service_.get_schema_service();
-  if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
-  } else if (OB_FAIL(multi_schema_service.gen_new_schema_version(new_schema_version))) {
+  if (OB_FAIL(multi_schema_service.gen_new_schema_version(new_schema_version))) {
     LOG_WARN("fail to gen new schema_version", K(ret));
   } else {
     table_schema.set_schema_version(new_schema_version);
@@ -2069,7 +2053,7 @@ int ObPartitionExchange::push_data_table_schema_version_(const ObTableSchema &ta
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObPartitionExchange not init", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(false || OB_INVALID_ID == exchange_data_table_id)) {
+  } else if (OB_UNLIKELY(OB_INVALID_ID == exchange_data_table_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(exchange_data_table_id));
   } else if (OB_FAIL(used_table_to_tablet_ids_map_.get_refactored(exchange_data_table_id, tablet_ids))) {
@@ -2342,7 +2326,7 @@ int ObPartitionExchange::update_index_status_(const uint64_t table_id,
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *index_schema = NULL;
-  if (OB_UNLIKELY(false || OB_INVALID_ID == table_id || status <= INDEX_STATUS_NOT_FOUND || status >= INDEX_STATUS_MAX)) {
+  if (OB_UNLIKELY(OB_INVALID_ID == table_id || status <= INDEX_STATUS_NOT_FOUND || status >= INDEX_STATUS_MAX)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(table_id), K(status), K(in_offline_ddl_white_list));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, index_schema))) {
@@ -2370,7 +2354,7 @@ int ObPartitionExchange::build_single_table_rw_defensive_(const ObIArray<common:
                                                           ObDDLSQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || tablet_ids.empty() || schema_version <= 0)) {
+  if (OB_UNLIKELY(tablet_ids.empty() || schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(tablet_ids), K(schema_version));
   } else if (OB_UNLIKELY(!ddl_service_.is_inited())) {
@@ -2437,7 +2421,7 @@ int ObPartitionExchange::get_tablets_(const ObIArray<common::ObTabletID> &tablet
   int ret = OB_SUCCESS;
   ObArray<ObLSID> ls_ids;
   tablets.reset();
-  if (OB_UNLIKELY(false || tablet_ids.count() < 1)) {
+  if (OB_UNLIKELY(tablet_ids.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_ids));
   } else if (OB_FAIL(ObTabletToLSTableOperator::batch_get_ls(trans, tablet_ids, ls_ids))) {
@@ -2462,7 +2446,7 @@ int ObPartitionExchange::adapting_cdc_changes_in_exchange_partition_(const uint6
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObPartitionExchange not init", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(false || OB_INVALID_ID == partitioned_table_id || OB_INVALID_ID == non_partitioned_table_id)) {
+  } else if (OB_UNLIKELY(OB_INVALID_ID == partitioned_table_id || OB_INVALID_ID == non_partitioned_table_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(partitioned_table_id), K(non_partitioned_table_id));
   } else if (OB_FAIL(used_pt_nt_id_map_.set_refactored(partitioned_table_id, non_partitioned_table_id))) {
@@ -2540,7 +2524,7 @@ int ObPartitionExchange::sync_exchange_partition_stats_info_(const uint64_t new_
   int64_t affected_rows = 0;
   ObSqlString sql_string;
   
-  if (OB_UNLIKELY(false || OB_INVALID_ID == new_table_id || StatLevel::INVALID_LEVEL == new_stat_level || OB_INVALID_ID == old_partition_id || 
+  if (OB_UNLIKELY(OB_INVALID_ID == new_table_id || StatLevel::INVALID_LEVEL == new_stat_level || OB_INVALID_ID == old_partition_id ||
                   OB_INVALID_ID == new_partition_id || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(new_table_id), K(new_stat_level), K(old_partition_id), K(new_partition_id), K(tablet_id));
@@ -2593,7 +2577,7 @@ int ObPartitionExchange::update_table_all_monitor_modified_(const uint64_t new_t
   ObSqlString monitor_modified_insert_sql_string;
   ObSqlString monitor_modified_delete_sql_string;
   
-  if (OB_UNLIKELY(false || OB_INVALID_ID == new_table_id || !tablet_id.is_valid())) {
+  if (OB_UNLIKELY(OB_INVALID_ID == new_table_id || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(new_table_id), K(tablet_id));
   } else if (OB_FAIL(monitor_modified_read_sql_string.assign_fmt("SELECT last_inserts, last_updates, last_deletes, inserts, updates, deletes FROM %s WHERE table_id = %ld and tablet_id = %ld", 

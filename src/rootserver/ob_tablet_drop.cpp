@@ -188,23 +188,11 @@ int ObTabletDrop::get_ls_from_table(const share::schema::ObTableSchema &table_sc
     LOG_WARN("fail to get tablet num", K(table_schema), KR(ret));
   } else if (OB_FAIL(assign_ls_id_array.reserve(all_part_num))) {
     LOG_WARN("fail to reserve array", KR(ret), K(all_part_num));
-  } else if (true) {
+  } else {
     for (int64_t i = 0; i < all_part_num && OB_SUCC(ret); i++) {
       if (OB_FAIL(assign_ls_id_array.push_back(share::SYS_LS))) {
         LOG_WARN("failed to push_back", KR(ret));
       }
-    }
-  } else {
-    ObArray<ObTabletID> tablet_ids;
-    if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
-      LOG_WARN("fail to get tablet ids", KR(ret), K(table_schema));
-    } else if (is_include_hidden 
-            && 0 < table_schema.get_hidden_partition_num()
-            && PARTITION_LEVEL_ONE == table_schema.get_part_level()
-            && OB_FAIL(table_schema.get_first_level_hidden_tablet_ids(tablet_ids))) {
-      LOG_WARN("fail to get hidden tablet ids", KR(ret), K(table_schema)); 
-    } else if (OB_FAIL(share::ObTabletToLSTableOperator::batch_get_ls(trans_, tablet_ids, assign_ls_id_array))) {
-      LOG_WARN("fail to batch_get_ls", KR(ret), K(table_schema));
     }
   }
 
@@ -370,4 +358,3 @@ int ObTabletDrop::execute()
 
 } // rootserver
 } // oceanbase
-

@@ -150,15 +150,15 @@ char *parse_strdup(const char *str, void *malloc_pool, int64_t *out_len)
   return out_str;
 }
 
-char *replace_invalid_character(const struct ObCharsetInfo* src_cs, const struct ObCharsetInfo* oracle_db_cs,
+char *replace_invalid_character(const struct ObCharsetInfo* src_cs, const struct ObCharsetInfo* nls_db_cs,
                                 const char *str, int64_t *out_len, void *malloc_pool, int *extra_errno)
 {
   char *out_str = NULL;
   if (OB_ISNULL(str) || OB_ISNULL(extra_errno) || OB_ISNULL(out_len)) {
-  } else if (NULL == src_cs || NULL == oracle_db_cs) {
+  } else if (NULL == src_cs || NULL == nls_db_cs) {
     out_str = const_cast<char *>(str);
   } else {
-    ob_wc_t replace_char = (!!(oracle_db_cs->state & OB_CS_UNICODE)) &&
+    ob_wc_t replace_char = (!!(nls_db_cs->state & OB_CS_UNICODE)) &&
                            (!!(src_cs->state & OB_CS_UNICODE))
                            ? 0xFFFD : '?';
     uint errors = 0;
@@ -168,12 +168,12 @@ char *replace_invalid_character(const struct ObCharsetInfo* src_cs, const struct
     if (OB_ISNULL(temp_str = static_cast<char *>(parse_malloc(temp_len + 1, malloc_pool)))) {
     } else {
       int64_t temp_res_len = static_cast<int64_t>(
-        ob_convert(temp_str, temp_len, oracle_db_cs, str, str_len, src_cs, false, replace_char, &errors));
+        ob_convert(temp_str, temp_len, nls_db_cs, str, str_len, src_cs, false, replace_char, &errors));
       size_t dst_len = temp_res_len * 4;
       if (OB_ISNULL(out_str = static_cast<char *>(parse_malloc(dst_len + 1, malloc_pool)))) {
       } else {
         *out_len = static_cast<int64_t>(
-          ob_convert(out_str, dst_len, src_cs, temp_str, temp_res_len, oracle_db_cs, false, replace_char, &errors));
+          ob_convert(out_str, dst_len, src_cs, temp_str, temp_res_len, nls_db_cs, false, replace_char, &errors));
         out_str[*out_len] = '\0';
       }
     }

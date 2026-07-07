@@ -469,7 +469,7 @@ int ObDropIndexTask::deserialize_params_from_message(const char *buf, const int6
 {
   int ret = OB_SUCCESS;
   obcall::ObDropIndexArg tmp_drop_index_arg;
-  if (OB_UNLIKELY(!true || nullptr == buf || buf_size <= 0)) {
+  if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, buf_size, pos))) {

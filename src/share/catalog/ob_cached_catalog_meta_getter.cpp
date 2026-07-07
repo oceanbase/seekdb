@@ -28,7 +28,7 @@ using namespace oceanbase::share::schema;  // make the transitive using declarat
 bool ObCatalogSchemaCacheKey::operator==(const ObIKVCacheKey &other) const
 {
   const ObCatalogSchemaCacheKey &other_key = reinterpret_cast<const ObCatalogSchemaCacheKey &>(other);
-  return true && this->catalog_id_ == other_key.catalog_id_
+  return this->catalog_id_ == other_key.catalog_id_
          && this->namespace_name_ == other_key.namespace_name_ && this->table_name_ == other_key.table_name_;
 }
 
@@ -204,7 +204,7 @@ int ObCachedCatalogMetaGetter::fetch_table_schema(const uint64_t catalog_id,
   int ret = OB_SUCCESS;
   const uint64_t original_db_id = table_schema.get_database_id();
   const uint64_t original_tbl_id = table_schema.get_table_id();
-  if (OB_UNLIKELY(!true || !is_external_catalog_id(catalog_id) || !is_external_object_id(original_db_id)
+  if (OB_UNLIKELY(!is_external_catalog_id(catalog_id) || !is_external_object_id(original_db_id)
                   || !is_external_object_id(original_tbl_id) || ns_name.empty() || tbl_name.empty()
                   || OB_NAME_CASE_INVALID == case_mode)) {
     ret = OB_INVALID_ARGUMENT;

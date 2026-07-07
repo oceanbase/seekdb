@@ -1750,8 +1750,6 @@ int ObServer::init_sql_proxy()
     LOG_WARN("init res inner connection pool failed", KR(ret));
   } else if (OB_FAIL(ddl_sql_proxy_.init(&ddl_conn_pool_))) {
     LOG_ERROR("init ddl sql proxy failed", KR(ret));
-  } else if (OB_FAIL(ddl_oracle_sql_proxy_.init(&ddl_conn_pool_))) {
-    LOG_ERROR("init ddl oracle sql proxy failed", KR(ret));
   }
   return ret;
 }
@@ -2166,7 +2164,6 @@ int ObServer::init_global_context()
   gctx_.storage_rpc_proxy_ = &storage_rpc_proxy_;
   gctx_.sql_proxy_ = &sql_proxy_;
   gctx_.ddl_sql_proxy_ = &ddl_sql_proxy_;
-  gctx_.ddl_oracle_sql_proxy_ = &ddl_oracle_sql_proxy_;
   gctx_.res_inner_conn_pool_ = &res_inner_conn_pool_;
   gctx_.executor_rpc_ =  &executor_rpc_;
   gctx_.self_addr_seq_.set_addr(self_addr_);
@@ -2890,7 +2887,8 @@ int ObServer::init_refresh_cpu_frequency()
 //                 b), when a# is not met, all sessions need to be traversed to determine whether there is a session with the same id s1, s1->sess creation time> T creation time (same as rule 2.1#),
 //                     When s1 exists, it is considered that session id reuse has occurred, and T still needs to be DROP;
 //It has been optimized before calling this interface, only need_ctas_cleanup_=true will be here
-//The cleanup of the oracle temporary table is performed in the dml resolve phase of the temporary table for the first time after the session is created for performance reasons, to avoid frequent delete operations in the background
+// Temporary table cleanup is performed in the DML resolve phase for the first
+// temporary table access after session creation to avoid frequent background deletes.
 int ObServer::clean_up_invalid_tables()
 {
   int ret = OB_SUCCESS;

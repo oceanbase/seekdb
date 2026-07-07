@@ -1754,7 +1754,7 @@ int ObPluginVectorIndexService::get_ivf_aux_info(
                                                                         true,
                                                                         blob_data))) {
             LOG_WARN("fail to get real data.", K(ret), K(blob_data));
-          } else if (OB_FALSE_IT(cid_prefix = ObVectorClusterHelper::get_center_prefix(cid_obj.get_string(), is_pq_type))) {
+          } else if (OB_FALSE_IT(cid_prefix = ObVectorKmeansClusterHelper::get_center_prefix(cid_obj.get_string(), is_pq_type))) {
           } else if (center_prefix == 0 && OB_FALSE_IT(center_prefix = cid_prefix)) {
           } else if (center_prefix != cid_prefix) {
             ret = OB_ERR_UNEXPECTED;

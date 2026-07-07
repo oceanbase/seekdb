@@ -45,15 +45,7 @@ enum ObStoreFormatType
   OB_STORE_FORMAT_COMPRESSED_MYSQL = 4,
   OB_STORE_FORMAT_CONDENSED_MYSQL = 5,
   OB_STORE_FORMAT_MAX_MYSQL,
-  // 5- 10 reserved for mysql store mode furture
-  OB_STORE_FORMAT_NOCOMPRESS_ORACLE = 11,
-  OB_STORE_FORMAT_BASIC_ORACLE = 12,
-  OB_STORE_FORMAT_OLTP_ORACLE = 13,
-  OB_STORE_FORMAT_QUERY_ORACLE = 14,
-  OB_STORE_FORMAT_ARCHIVE_ORACLE = 15,
-  OB_STORE_FORMAT_QUERY_LOW_ORACLE = 16,
-  OB_STORE_FORMAT_ARCHIVE_HIGH_ORACLE = 17,
-  OB_STORE_FORMAT_MAX
+  OB_STORE_FORMAT_MAX = OB_STORE_FORMAT_MAX_MYSQL
 };
 
 enum ObTableStoreType : uint8_t
@@ -84,8 +76,6 @@ class ObStoreFormat{
 public:
   static const ObStoreFormatType STORE_FORMAT_MYSQL_START = OB_STORE_FORMAT_REDUNDANT_MYSQL;
   static const ObStoreFormatType STORE_FORMAT_MYSQL_DEFAULT = OB_STORE_FORMAT_DYNAMIC_MYSQL;
-  static const ObStoreFormatType STORE_FORMAT_ORACLE_START = OB_STORE_FORMAT_NOCOMPRESS_ORACLE;
-  static const ObStoreFormatType STORE_FORMAT_ORACLE_DEFAULT = OB_STORE_FORMAT_ARCHIVE_ORACLE;
 private:
   ObStoreFormat() {};
   virtual ~ObStoreFormat() {};
@@ -107,13 +97,9 @@ public:
   {
     return store_format >= STORE_FORMAT_MYSQL_START && store_format < OB_STORE_FORMAT_MAX_MYSQL;
   }
-  static inline bool is_store_format_oracle(const ObStoreFormatType store_format)
-  {
-    return store_format >= STORE_FORMAT_ORACLE_START && store_format < OB_STORE_FORMAT_MAX;
-  }
   static inline bool is_store_format_valid(const ObStoreFormatType store_format)
   {
-    return is_store_format_mysql(store_format) || is_store_format_oracle(store_format);
+    return is_store_format_mysql(store_format);
   }
   static inline const char* get_store_format_name(const ObStoreFormatType store_format)
   {
@@ -149,7 +135,6 @@ public:
                                     const ObStoreFormatType end,
                                     ObStoreFormatType &store_format_type);
   static int find_store_format_type_mysql(const ObString &store_format, ObStoreFormatType &store_format_type);
-  static int find_store_format_type_oracle(const ObString &store_format, ObStoreFormatType &store_format_type);
   static int find_store_format_type(const ObString &store_format, ObStoreFormatType &store_format_type);
 private:
   static const ObStoreFormatItem store_format_items[OB_STORE_FORMAT_MAX];

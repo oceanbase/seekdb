@@ -526,7 +526,6 @@ int ObDDLUtil::convert_to_storage_row(
         const ObColumnSchemaItem &column_item = ddl_table_schema.column_items_.at(idx);
         if (need_reshape && OB_FAIL(ObDASUtils::reshape_datum_value(column_item.col_type_,
                                                                     column_item.col_accuracy_,
-                                                                    false, //enable_oracle_empty_char_reshape_to_null,
                                                                     row_arena,
                                                                     datum))) {
           LOG_WARN("reshape storage datum failed", K(ret), K(column_item), K(datum));

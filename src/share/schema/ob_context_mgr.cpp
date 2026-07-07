@@ -326,8 +326,7 @@ int ObContextMgr::get_context_schema(uint64_t context_id,
       LOG_WARN("NULL ptr", K(ret), K(context));
     } else if ((context->get_context_id() > context_id) ) {
       is_stop = true;
-    } else if (true
-               && context_id == context->get_context_id()) {
+    } else if (context_id == context->get_context_id()) {
       context_schema = context;
     }
   }
@@ -365,8 +364,7 @@ bool ObContextMgr::compare_context(const ObContextSchema *lhs,
 bool ObContextMgr::equal_context(const ObContextSchema *lhs,
                                    const ObContextSchema *rhs)
 {
-  return true
-         && lhs->get_context_id() == rhs->get_context_id();
+  return lhs->get_context_id() == rhs->get_context_id();
 }
 
 bool ObContextMgr::compare_with_context_key(const ObContextSchema *lhs,
@@ -389,15 +387,12 @@ int ObContextMgr::get_context_schemas_in_tenant(ObIArray<const ObContextSchema *
   ObContextKey context_key_lower(OB_MIN_ID);
   ConstContextIter tenant_context_begin =
       context_infos_.lower_bound(context_key_lower, compare_with_context_key);
-  bool is_stop = false;
   for (ConstContextIter iter = tenant_context_begin;
-      OB_SUCC(ret) && iter != context_infos_.end() && !is_stop; ++iter) {
+      OB_SUCC(ret) && iter != context_infos_.end(); ++iter) {
     const ObContextSchema *context = NULL;
     if (OB_ISNULL(context = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(context));
-    } else if (false) {
-      is_stop = true;
     } else if (OB_FAIL(context_schemas.push_back(context))) {
       LOG_WARN("push back context failed", K(ret));
     }

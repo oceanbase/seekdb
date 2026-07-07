@@ -381,18 +381,7 @@ int ObSchemaServiceSQLImpl::get_new_schema_version(int64_t &schema_version)
   schema_version = OB_INVALID_VERSION;
   SpinRLockGuard guard(rw_lock_);
 
-  if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret));
-  } else if (true) {
-    schema_version = gen_schema_version_;
-  } else {
-    schema_version = gen_schema_version_member_;
-    if (OB_INVALID_VERSION == schema_version) {
-      ret = OB_HASH_NOT_EXIST;
-      LOG_WARN("fail to get new schema_version", K(ret));
-    }
-  }
+  schema_version = gen_schema_version_;
   return ret;
 }
 
@@ -408,11 +397,8 @@ int ObSchemaServiceSQLImpl::gen_new_schema_version(
   int ret = OB_SUCCESS;
   schema_version = OB_INVALID_VERSION;
   const int64_t version_cnt = 1;
-  if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret));
   // create tenant now need in_parallel_ddl_thread_()
-  } else if (ob_batch_generate_schema_version() || in_parallel_ddl_thread_()) {
+  if (ob_batch_generate_schema_version() || in_parallel_ddl_thread_()) {
     auto *tsi_generator = GET_TSI(TSISchemaVersionGenerator);
     if (OB_ISNULL(tsi_generator)) {
       ret = OB_ERR_UNEXPECTED;
@@ -437,8 +423,7 @@ int ObSchemaServiceSQLImpl::gen_batch_new_schema_versions(const int64_t refreshe
 {
   int ret = OB_SUCCESS;
   schema_version = OB_INVALID_VERSION;
-  if (OB_UNLIKELY(false
-      || version_cnt < 1)) {
+  if (OB_UNLIKELY(version_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(version_cnt));
   } else if (OB_UNLIKELY(!ob_batch_generate_schema_version() && !in_parallel_ddl_thread_())) {
@@ -480,11 +465,10 @@ int ObSchemaServiceSQLImpl::gen_tenant_new_schema_version_(const int64_t refresh
   int ret = OB_SUCCESS;
   schema_version = OB_INVALID_VERSION;
   SpinWLockGuard guard(rw_lock_);
-  if (OB_UNLIKELY(false
-      || version_cnt < 1)) {
+  if (OB_UNLIKELY(version_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(version_cnt));
-  } else if (true) {
+  } else {
     int64_t tmp_refreshed_schem_version = std::max(refreshed_schema_version_, refreshed_schema_version);
     if (OB_FAIL(gen_new_schema_version_(tmp_refreshed_schem_version,
                 gen_schema_version_, version_cnt, schema_version))) {
@@ -492,21 +476,6 @@ int ObSchemaServiceSQLImpl::gen_tenant_new_schema_version_(const int64_t refresh
                K(refreshed_schema_version_), K(gen_schema_version_), K(version_cnt));
     }
     gen_schema_version_ = schema_version;
-  } else {
-    int64_t gen_schema_version = gen_schema_version_member_;
-    if (OB_INVALID_VERSION == gen_schema_version) {
-      // not set yet; mirrors previous OB_HASH_NOT_EXIST -> reset to invalid handling
-      gen_schema_version = OB_INVALID_VERSION;
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(gen_new_schema_version_(refreshed_schema_version,
-                  gen_schema_version, version_cnt, schema_version))) {
-        LOG_WARN("fail to gen schema version", KR(ret),
-                 K(refreshed_schema_version), K(gen_schema_version), K(version_cnt));
-      } else {
-        gen_schema_version_member_ = schema_version;
-      }
-    }
   }
   return ret;
 }
@@ -1477,10 +1446,7 @@ int ObSchemaServiceSQLImpl::fetch_all_column_info(
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
     
-    if (false) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arg", KR(ret));
-    } else if (INT64_MAX == schema_version) {
+    if (INT64_MAX == schema_version) {
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_COLUMN_SQL, OB_ALL_COLUMN_TNAME,
                                  fill_extract_compat_id(schema_status)))) {
         LOG_WARN("append sql failed", KR(ret));
@@ -1764,9 +1730,6 @@ int ObSchemaServiceSQLImpl::fetch_all_constraint_info_ignore_inner_table(
   if (OB_ISNULL(table_ids)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Table ids is NULL", K(ret));
-  } else if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret));
   } else {
     ObSEArray<uint64_t, 16> non_inner_tables;
     ObTableSchema *table_schema = NULL;
@@ -1883,10 +1846,7 @@ int ObSchemaServiceSQLImpl::fetch_all_constraint_info(
 
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      if (false) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid arg", KR(ret));
-      } else if (INT64_MAX == schema_version) {
+      if (INT64_MAX == schema_version) {
         if (OB_FAIL(sql.append_fmt(FETCH_ALL_CONSTRAINT_SQL, OB_ALL_CONSTRAINT_TNAME))) {
           LOG_WARN("append sql failed", KR(ret));
         } else {
@@ -1977,10 +1937,7 @@ int ObSchemaServiceSQLImpl::fetch_all_part_info(
   int ret = OB_SUCCESS;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
   
-  if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret));
-  } else if (NULL != table_ids && table_ids_size > 0) {
+  if (NULL != table_ids && table_ids_size > 0) {
     ObSqlString sql;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
@@ -2052,10 +2009,7 @@ int ObSchemaServiceSQLImpl::fetch_all_def_subpart_info(
   int ret = OB_SUCCESS;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
   
-  if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret));
-  } else if (range_subpart_tables.count() > 0) {
+  if (range_subpart_tables.count() > 0) {
     ObSqlString sql;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
@@ -2129,10 +2083,7 @@ int ObSchemaServiceSQLImpl::fetch_all_subpart_info(
   int ret = OB_SUCCESS;
   const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
   
-  if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret));
-  } else if (range_subpart_tables.count() > 0) {
+  if (range_subpart_tables.count() > 0) {
     ObSqlString sql;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
@@ -2332,9 +2283,6 @@ int ObSchemaServiceSQLImpl::fetch_all_partition_info(
   if (OB_ISNULL(table_ids)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Table ids is NULL", K(ret));
-  } else if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret));
   } else {
     ObSEArray<TableTrunc, 10> part_tables;
     ObSEArray<TableTrunc, 10> subpart_tables;
@@ -2835,9 +2783,6 @@ int ObSchemaServiceSQLImpl::fetch_all_table_info(const ObRefreshSchemaStatus &sc
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", K(ret));
-  } else if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret));
   } else if (INT64_MAX == schema_version) {
     const char *table_name = NULL;
     if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name,
@@ -7345,8 +7290,7 @@ int ObSchemaServiceSQLImpl::retrieve_schema_id_with_name_(
   if (OB_ISNULL(id_col_name)
       || OB_ISNULL(name_col_name)
       || OB_UNLIKELY(schema_name.empty()
-      || sql.empty()
-      || false)) {
+      || sql.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret),
              KP(id_col_name), KP(name_col_name), K(schema_name), K(sql));
@@ -7421,15 +7365,13 @@ int ObSchemaServiceSQLImpl::get_tablegroup_id(
   const bool case_compare = false;
   const bool compare_with_collation = false;
   const bool skip_escape = false;
-  const bool use_oracle_mode = false;
   tablegroup_id = OB_INVALID_ID;
   ObCStringHelper helper;
-  const char *tg_name = helper.convert(ObHexEscapeSqlStr(tablegroup_name, skip_escape, use_oracle_mode));
+  const char *tg_name = helper.convert(ObHexEscapeSqlStr(tablegroup_name, skip_escape, false));
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret));
-  } else if (OB_UNLIKELY(false
-             || tablegroup_name.empty())) {
+  } else if (OB_UNLIKELY(tablegroup_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tablegroup_name",
              KR(ret), K(tablegroup_name));
@@ -7466,14 +7408,12 @@ int ObSchemaServiceSQLImpl::get_database_id(
   // It's a readonly system variable, so we can use name_case_mode from local schema guard.
   ObNameCaseMode name_case_mode = OB_NAME_CASE_INVALID;
   const bool skip_escape = false;
-  const bool use_oracle_mode = false;
   ObCStringHelper helper;
-  const char* db_name = helper.convert(ObHexEscapeSqlStr(database_name, skip_escape, use_oracle_mode));
+  const char* db_name = helper.convert(ObHexEscapeSqlStr(database_name, skip_escape, false));
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret));
-  } else if (OB_UNLIKELY(false
-             || database_name.empty())) {
+  } else if (OB_UNLIKELY(database_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid database_name",
              KR(ret), K(database_name));
@@ -7533,17 +7473,15 @@ int ObSchemaServiceSQLImpl::get_table_id(
   ObNameCaseMode name_case_mode = OB_NAME_CASE_INVALID;
   bool is_system_table = false;
   const bool skip_escape = false;
-  const bool use_oracle_mode = false;
   table_id = OB_INVALID_ID;
   table_type = ObTableType::MAX_TABLE_TYPE;
   schema_version = OB_INVALID_VERSION;
   ObCStringHelper helper;
-  const char* tb_name = helper.convert(ObHexEscapeSqlStr(table_name, skip_escape, use_oracle_mode));
+  const char* tb_name = helper.convert(ObHexEscapeSqlStr(table_name, skip_escape, false));
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret));
-  } else if (OB_UNLIKELY(false
-             || OB_INVALID_ID == database_id
+  } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
              || table_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument",
@@ -7680,9 +7618,8 @@ int ObSchemaServiceSQLImpl::get_index_id(
   int ret = OB_SUCCESS;
   ObSqlString sql;
   const bool skip_escape = false;
-  const bool use_oracle_mode = false;
   ObCStringHelper helper;
-  const char* idx_name = helper.convert(ObHexEscapeSqlStr(index_name, skip_escape, use_oracle_mode));
+  const char* idx_name = helper.convert(ObHexEscapeSqlStr(index_name, skip_escape, false));
   bool case_compare = false;
   const bool compare_with_collation = true;
   index_id = OB_INVALID_ID;
@@ -7692,16 +7629,14 @@ int ObSchemaServiceSQLImpl::get_index_id(
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret));
-  } else if (OB_UNLIKELY(false
-             || OB_INVALID_ID == database_id
+  } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
              || index_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(database_id), K(index_name));
   } else if (OB_ISNULL(idx_name)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc idx_name failed", KR(ret), K(index_name));
-  } else if (FALSE_IT(case_compare = (true
-             || is_mysql_sys_database_id(database_id)))) {
+  } else if (FALSE_IT(case_compare = true)) {
   } else if (is_oceanbase_sys_database_id(database_id)) {
     if (OB_FAIL(sql.assign_fmt(
                 "SELECT * FROM "
@@ -7753,15 +7688,13 @@ int ObSchemaServiceSQLImpl::get_mock_fk_parent_table_id(
   const bool case_compare = false;
   const bool compare_with_collation = false;
   const bool skip_escape = false;
-  const bool use_oracle_mode = false;
   mock_fk_parent_table_id = OB_INVALID_ID;
   ObCStringHelper helper;
-  const char* tb_name = helper.convert(ObHexEscapeSqlStr(table_name, skip_escape, use_oracle_mode));
+  const char* tb_name = helper.convert(ObHexEscapeSqlStr(table_name, skip_escape, false));
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret));
-  } else if (OB_UNLIKELY(false
-             || OB_INVALID_ID == database_id
+  } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
              || table_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument",
@@ -7797,15 +7730,13 @@ int ObSchemaServiceSQLImpl::get_constraint_id(
 {
   int ret = OB_SUCCESS;
   const bool skip_escape = false;
-  const bool use_oracle_mode = false;
   constraint_id = OB_INVALID_ID;
   ObCStringHelper helper;
-  const char* cst_name = helper.convert(ObHexEscapeSqlStr(constraint_name, skip_escape, use_oracle_mode));
+  const char* cst_name = helper.convert(ObHexEscapeSqlStr(constraint_name, skip_escape, false));
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret));
-  } else if (OB_UNLIKELY(false
-             || constraint_name.empty())) {
+  } else if (OB_UNLIKELY(constraint_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid constraint_name",
              KR(ret), K(constraint_name));
@@ -7833,8 +7764,7 @@ int ObSchemaServiceSQLImpl::get_constraint_id(
     ObString tmp_constraint_name;
     ObTableType tmp_table_type = MAX_TABLE_TYPE;
     ObTableMode tmp_table_mode;
-    // 1. mysql tenant: case insensitive
-    // 2. oracle tenant: case sensitive
+    // Constraint name comparison is case insensitive.
     const bool case_compare = true;
     const bool compare_with_collation = true;
     while (OB_SUCC(ret)) {
@@ -7885,15 +7815,13 @@ int ObSchemaServiceSQLImpl::get_foreign_key_id(
 {
   int ret = OB_SUCCESS;
   const bool skip_escape = false;
-  const bool use_oracle_mode = false;
   foreign_key_id = OB_INVALID_ID;
   ObCStringHelper helper;
-  const char* fk_name = helper.convert(ObHexEscapeSqlStr(foreign_key_name, skip_escape, use_oracle_mode));
+  const char* fk_name = helper.convert(ObHexEscapeSqlStr(foreign_key_name, skip_escape, false));
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret));
-  } else if (OB_UNLIKELY(false
-             || foreign_key_name.empty())) {
+  } else if (OB_UNLIKELY(foreign_key_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid foreign_key_name",
              KR(ret), K(foreign_key_name));
@@ -7921,8 +7849,7 @@ int ObSchemaServiceSQLImpl::get_foreign_key_id(
     ObString tmp_foreign_key_name;
     ObTableType tmp_table_type = MAX_TABLE_TYPE;
     ObTableMode tmp_table_mode;
-    // 1. mysql tenant: case insensitive
-    // 2. oracle tenant: case sensitive
+    // Foreign key name comparison is case insensitive.
     const bool case_compare = true;
     const bool compare_with_collation = true;
     while (OB_SUCC(ret)) {
@@ -7971,16 +7898,14 @@ int ObSchemaServiceSQLImpl::get_sequence_id(
 {
   int ret = OB_SUCCESS;
   const bool skip_escape = false;
-  const bool use_oracle_mode = false;
   sequence_id = OB_INVALID_ID;
   is_system_generated = false;
   ObCStringHelper helper;
-  const char* seq_name = helper.convert(ObHexEscapeSqlStr(sequence_name, skip_escape, use_oracle_mode));
+  const char* seq_name = helper.convert(ObHexEscapeSqlStr(sequence_name, skip_escape, false));
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret));
-  } else if (OB_UNLIKELY(false
-             || sequence_name.empty())) {
+  } else if (OB_UNLIKELY(sequence_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid sequence_name",
              KR(ret), K(sequence_name));
@@ -8053,15 +7978,13 @@ int ObSchemaServiceSQLImpl::get_package_id(
   bool case_compare = false;
   const bool compare_with_collation = true;
   const bool skip_escape = false;
-  const bool use_oracle_mode = false;
   package_id = OB_INVALID_ID;
   ObCStringHelper helper;
-  const char* pkg_name = helper.convert(ObHexEscapeSqlStr(package_name, skip_escape, use_oracle_mode));
+  const char* pkg_name = helper.convert(ObHexEscapeSqlStr(package_name, skip_escape, false));
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret));
-  } else if (OB_UNLIKELY(false
-             || OB_INVALID_ID == database_id
+  } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
              || package_name.empty()
              || INVALID_PACKAGE_TYPE == package_type
              || compatible_mode < 0)) {
@@ -8107,15 +8030,13 @@ int ObSchemaServiceSQLImpl::get_routine_id(
 {
   int ret = OB_SUCCESS;
   const bool skip_escape = false;
-  const bool use_oracle_mode = false;
   ObCStringHelper helper;
-  const char* rt_name = helper.convert(ObHexEscapeSqlStr(routine_name, skip_escape, use_oracle_mode));
+  const char* rt_name = helper.convert(ObHexEscapeSqlStr(routine_name, skip_escape, false));
   routine_pairs.reset();
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret));
-  } else if (OB_UNLIKELY(false
-             || OB_INVALID_ID == database_id
+  } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
              || routine_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(database_id), K(routine_name));
@@ -8361,8 +8282,7 @@ int ObSchemaServiceSQLImpl::get_table_index_infos(
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret));
-  } else if (OB_UNLIKELY(false
-             || OB_INVALID_ID == database_id
+  } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
              || OB_INVALID_ID == data_table_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), KR(ret), K(database_id), K(data_table_id));

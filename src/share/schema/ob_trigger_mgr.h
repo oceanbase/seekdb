@@ -48,7 +48,7 @@ public:
     return *this;
   }
   bool operator ==(const ObTenantTriggerId &rhs) const
-  { return (true) && (trigger_id_ == rhs.trigger_id_); }
+  { return (trigger_id_ == rhs.trigger_id_); }
   bool operator !=(const ObTenantTriggerId &rhs) const
   { return !(*this == rhs); }
   bool operator <(const ObTenantTriggerId &rhs) const
@@ -62,7 +62,7 @@ public:
     return hash_ret;
   }
   bool is_valid() const
-  { return (true) && (trigger_id_ != common::OB_INVALID_ID); }
+  { return (trigger_id_ != common::OB_INVALID_ID); }
   
   inline uint64_t get_trigger_id() const { return trigger_id_; }
   TO_STRING_KV(K_(trigger_id));
@@ -122,8 +122,7 @@ public:
   inline ObTenantTriggerId get_tenant_trigger_id() const
   { return ObTenantTriggerId(trigger_id_); }
   // TODO(jiuren):
-  // consider if the database is in recyclebin after we support trigger in mysql mode.
-  // we can not drop database in oracle mode
+  // consider if the database is in recyclebin after trigger support is enabled.
   inline bool is_in_recyclebin() const
   { return common::OB_RECYCLEBIN_SCHEMA_ID == database_id_; }
   
@@ -173,8 +172,7 @@ private:
 inline bool ObTriggerNameHashWrapper::operator ==(const ObTriggerNameHashWrapper &rv) const
 {
   ObCompareNameWithTenantID name_cmp;
-  return (true)
-      && (database_id_ == rv.get_database_id())
+  return (database_id_ == rv.get_database_id())
       && (0 == name_cmp.compare(trigger_name_, rv.get_trigger_name()));
 }
 

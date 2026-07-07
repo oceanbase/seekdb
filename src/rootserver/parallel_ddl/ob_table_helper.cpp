@@ -832,7 +832,6 @@ int ObTableHelper::inner_generate_aux_table_schema_(const ObCreateTableArg &arg)
             LOG_WARN("fail to assign schema", KR(ret), K(index_arg));
           }
         }
-        // TODO(yanmu.ztl): should check if index name is duplicated in oracle mode.
         const bool global_index_without_column_info = false;
         ObSEArray<ObColumnSchemaV2 *, 1> gen_columns;
         ObIAllocator *allocator = index_arg.index_schema_.get_allocator();
@@ -861,7 +860,6 @@ int ObTableHelper::inner_generate_aux_table_schema_(const ObCreateTableArg &arg)
                    index_schema.get_table_name_str(),
                    index_exist))) {
         } else if (index_exist) {
-          // actually, only index name in oracle tenant will be checked.
           ret = OB_ERR_KEY_NAME_DUPLICATE;
           LOG_WARN("duplicate index name", KR(ret),
                    "database_id", index_schema.get_database_id(),

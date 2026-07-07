@@ -367,9 +367,9 @@ struct NumberRangeChecker
     Vector *res_vec_;
     const int64_t number_precision_;
   };
-  class NumberOracleCheck {
+  class NumberScaleCheck {
   public:
-    NumberOracleCheck(Vector* res_vec, ObScale scale)
+    NumberScaleCheck(Vector* res_vec, ObScale scale)
         : res_vec_(res_vec), scale_(scale) {}
 
     OB_INLINE int operator() (const ObExpr &expr, int idx)

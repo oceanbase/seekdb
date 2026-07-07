@@ -45,10 +45,8 @@ namespace dbms_scheduler
 class ObDBMSSchedJobKey : public common::ObLink
 {
 public:
-  ObDBMSSchedJobKey(
-    bool is_oracle_tenant, uint64_t job_id, const common::ObString &job_name)
-  : is_oracle_tenant_(is_oracle_tenant),
-    job_id_(job_id),
+  ObDBMSSchedJobKey(uint64_t job_id, const common::ObString &job_name)
+  : job_id_(job_id),
     job_name_() {
       job_name_.assign_buffer(job_name_buf_, JOB_NAME_MAX_SIZE);
       job_name_.write(job_name.ptr(), job_name.length());
@@ -76,16 +74,12 @@ public:
     return job_id_ != OB_INVALID_ID && true;
   }
 
-  bool is_oracle_tenant() { return is_oracle_tenant_; }
-
   TO_STRING_KV(
-    K_(is_oracle_tenant),
     K_(job_id),
     K_(job_name),
     K_(execute_at));
 
 private:
-  bool is_oracle_tenant_;
   int64_t job_id_;
   char job_name_buf_[JOB_NAME_MAX_SIZE];
   common::ObString job_name_;
@@ -122,15 +116,15 @@ public:
   void wakeup();
   bool idle(int64_t deadline_us);
   int alloc_job_key(
-    ObDBMSSchedJobKey *&job_key, bool is_oracle_tenant, uint64_t job_id, const common::ObString &job_name);
+    ObDBMSSchedJobKey *&job_key, uint64_t job_id, const common::ObString &job_name);
   void free_job_key(ObDBMSSchedJobKey *&job_key);
 
   int get_execute_addr(ObDBMSSchedJobInfo &job_info, common::ObAddr &execute_addr);
   void switch_to_leader();
   void switch_to_follower();
   int check_tenant();
-  int check_new_jobs(bool is_oracle_tenant);
-  int register_new_jobs(bool is_oracle_tenant, ObIArray<ObDBMSSchedJobInfo> &job_infos);
+  int check_new_jobs();
+  int register_new_jobs(ObIArray<ObDBMSSchedJobInfo> &job_infos);
   int register_job(ObDBMSSchedJobKey *job_key, int64_t next_date);
   int scheduler_job(ObDBMSSchedJobKey *job_key);
   int schedule_due_jobs();

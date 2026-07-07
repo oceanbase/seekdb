@@ -172,7 +172,7 @@ struct ObCentersBuffer
   T *vectors_; // Continuous memory stores all vectors: capacity_ * dim_
 };
 
-class ObVectorClusterHelper
+class ObVectorKmeansClusterHelper
 {
 public:
   enum IvfParseCentIdFlag: uint8_t  {
@@ -183,7 +183,7 @@ public:
     IVF_PARSE_PQ_CENTER = IVF_PARSE_TABLET_ID | IVF_PARSE_CENTER_ID | IVF_PARSE_M_ID,
   };
 
-  ObVectorClusterHelper()
+  ObVectorKmeansClusterHelper()
   : max_heap_(max_compare_)
   {}
   // get nearest nprobe center

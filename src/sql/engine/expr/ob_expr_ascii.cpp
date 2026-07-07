@@ -240,7 +240,7 @@ static int calc_ord_expr_inner(const ObCollationType &cs_type,
   return ret;
 }
 
-// Oracle mode ascii expression also use this
+// ORD evaluation helper shared by ASCII-compatible paths.
 int ObExprOrd::calc_ord_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
 {
   int ret = OB_SUCCESS;

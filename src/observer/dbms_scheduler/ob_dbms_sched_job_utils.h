@@ -142,7 +142,6 @@ public:
     credential_name_(),
     destination_name_(),
     interval_ts_(),
-    is_oracle_tenant_(true),
     max_failures_(0),
     func_type_(ObDBMSSchedFuncType::FUNCTION_TYPE_MAXNUM),
     this_exec_date_(0),
@@ -231,7 +230,6 @@ public:
   common::ObString &get_this_exec_addr() { return this_exec_addr_; }
   common::ObString &get_this_exec_trace_id() { return this_exec_trace_id_; }
 
-  bool is_oracle_tenant() { return is_oracle_tenant_; }
   bool is_default_job_class() const { return (0 == job_class_.case_compare("DEFAULT_JOB_CLASS")); }
   bool is_mview_job() const { return ObDBMSSchedFuncType::MVIEW_JOB == get_func_type(); }
   bool is_mysql_event_job() const { return ObDBMSSchedFuncType::MYSQL_EVENT_JOB == get_func_type(); }
@@ -285,7 +283,6 @@ public:
   common::ObString credential_name_;
   common::ObString destination_name_;
   int64_t interval_ts_;
-  bool is_oracle_tenant_;
   int64_t max_failures_;
   ObDBMSSchedFuncType func_type_;
   int64_t this_exec_date_;
@@ -305,8 +302,7 @@ public:
     resource_consumer_group_(),
     logging_level_(),
     log_history_(),
-    comments_(),
-    is_oracle_tenant_(true) {}
+    comments_() {}
 
   TO_STRING_KV(K(job_class_name_),
               K(service_),
@@ -326,7 +322,6 @@ public:
   common::ObString &get_resource_consumer_group() { return resource_consumer_group_; }
   common::ObString &get_logging_level() { return logging_level_; }
   common::ObString &get_comments() { return comments_; }
-  bool is_oracle_tenant() { return is_oracle_tenant_; }
   int deep_copy(common::ObIAllocator &allocator, const ObDBMSSchedJobClassInfo &other);
 public:
   common::ObString job_class_name_;
@@ -335,7 +330,6 @@ public:
   common::ObString logging_level_;
   common::number::ObNumber log_history_;
   common::ObString comments_;
-  bool is_oracle_tenant_;
 };
 
 class ObDBMSSchedJobUtils
@@ -462,7 +456,6 @@ public:
                                         const bool from_pl_set_attr = false);
   /**
    * @brief  Get JOB information
-   * @param [in] is_oracle_tenant  - whether it is an oracle tenant, internal table does not have this value, determined by the caller
    * @param [in] job_name  - job name
    * @param [in] allocator  - reasonable allocator, to prevent job_info from becoming invalid
    * @param [in] job_info  - job information
@@ -471,7 +464,6 @@ public:
    * @retval OB_ENTRY_NOT_EXIST JOB does not exist
    */
   static int get_dbms_sched_job_info(common::ObISQLClient &sql_client,
-                                     const bool is_oracle_tenant,
                                      const ObString &job_name,
                                      common::ObIAllocator &allocator,
                                      ObDBMSSchedJobInfo &job_info);

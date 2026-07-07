@@ -144,7 +144,7 @@ int ObTableLoadPXBatchRows::append_selective(const IVectorPtrs &vectors, const u
         ObIVector *vector = vectors.at(i);
         ObBatchSelector batch_selector(selector, size);
         if (need_reshape_ &&
-            OB_FAIL(ObDASUtils::reshape_vector_value(col_types_.at(i), col_accuracys_.at(i), false,
+            OB_FAIL(ObDASUtils::reshape_vector_value(col_types_.at(i), col_accuracys_.at(i),
                                                      reshape_allocator_, vector, batch_selector))) {
           LOG_WARN("fail to reshape vector value", KR(ret));
         } else if (OB_FAIL(vectors_.at(i)->append_selective(batch_idx, vector, selector, size))) {
@@ -219,8 +219,7 @@ int ObTableLoadPXBatchRows::append_row(const ObDirectLoadDatumRow &datum_row)
         ObStorageDatum &datum = datum_row.storage_datums_[i];
         if (need_reshape_ &&
             OB_FAIL(ObDASUtils::reshape_datum_value(
-              col_types_.at(i), col_accuracys_.at(i),
-              false /*enable_oracle_empty_char_reshape_to_null*/, reshape_allocator_, datum))) {
+              col_types_.at(i), col_accuracys_.at(i), reshape_allocator_, datum))) {
           LOG_WARN("fail to reshape datum value", KR(ret));
         } else if (OB_FAIL(vectors_.at(i)->append_datum(batch_idx, datum))) {
           LOG_WARN("fail to append datum", KR(ret), K(i), K(datum));
@@ -252,7 +251,7 @@ int ObTableLoadPXBatchRows::shallow_copy(const IVectorPtrs &vectors, const int64
         ObIVector *vector = vectors.at(i);
         ObBatchSelector batch_selector(static_cast<int64_t>(0L), batch_size);
         if (need_reshape_ &&
-            OB_FAIL(ObDASUtils::reshape_vector_value(col_types_.at(i), col_accuracys_.at(i), false,
+            OB_FAIL(ObDASUtils::reshape_vector_value(col_types_.at(i), col_accuracys_.at(i),
                                                      reshape_allocator_, vector, batch_selector))) {
           LOG_WARN("fail to reshape vector value", KR(ret));
         } else if (OB_FAIL(vectors_.at(i)->shallow_copy(vector, batch_size))) {

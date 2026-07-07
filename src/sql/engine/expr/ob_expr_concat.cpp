@@ -299,8 +299,7 @@ int ObExprConcat::eval_concat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
       // Seem to be a bug: 
       max_len = OB_MAX_PACKET_LENGTH;
     }
-    // mysql mode: all param calc types are varchar;
-    // oracle mode: if result type is longtext, param calc types must be longtext 
+    // For longtext results, param calc types must also be longtext.
     if (OB_FAIL(ret)) {
     } else if (res_len > max_len) {
       expr_datum.set_null();

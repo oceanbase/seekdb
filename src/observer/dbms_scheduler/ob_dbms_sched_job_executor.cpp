@@ -90,12 +90,6 @@ int ObDBMSSchedJobExecutor::init_session(
   OZ (session.load_all_sys_vars(schema_guard));
   OZ (session.update_sys_variable(share::SYS_VAR_SQL_MODE, sql_mode));
   OZ (session.update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, compatibility_mode));
-  OZ (session.update_sys_variable(share::SYS_VAR_NLS_DATE_FORMAT,
-                                  ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT));
-  OZ (session.update_sys_variable(share::SYS_VAR_NLS_TIMESTAMP_FORMAT,
-                                  ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_FORMAT));
-  OZ (session.update_sys_variable(share::SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT,
-                                  ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT));
   OZ (session.set_default_database(database_name));
   OZ (session.get_pc_mem_conf(pc_mem_conf));
   CK (OB_NOT_NULL(GCTX.sql_engine_));
@@ -161,11 +155,7 @@ int ObDBMSSchedJobExecutor::init_env(ObDBMSSchedJobInfo &job_info, ObSQLSessionI
   OZ (schema_guard.get_tenant_info(tenant_info));
   OZ (schema_guard.get_database_schema( job_info.get_cowner(), database_schema));
   if (OB_SUCC(ret)) {
-    if (job_info.is_oracle_tenant()) {
-      OZ (schema_guard.get_user_info(job_info.get_powner(), user_infos));
-      OV (1 == user_infos.count(), OB_ERR_UNEXPECTED, K(job_info), K(user_infos));
-      CK (OB_NOT_NULL(user_info = user_infos.at(0)));
-    } else if (job_info.get_user_id() != OB_INVALID_ID) {
+    if (job_info.get_user_id() != OB_INVALID_ID) {
       OZ (schema_guard.get_user_info(job_info.get_user_id(), user_info));      
     } else {
       ObString user = job_info.get_powner();
@@ -267,10 +257,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
     LOG_WARN("failed to create session", KR(ret));
   } else {
     if (job_info.get_what().length() != 0) { // action
-      if (job_info.is_oracle_tenant_) {
-        OZ (what.append_fmt("BEGIN %.*s; END;",
-            job_info.get_what().length(), job_info.get_what().ptr()));
-      } else if (job_info.is_olap_async_job()){
+      if (job_info.is_olap_async_job()){
         OZ (what.append_fmt("%.*s",
             job_info.get_what().length(), job_info.get_what().ptr()));        
       } else if (job_info.is_mysql_event_job()) { //mysql event
@@ -382,7 +369,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
       OZ (table_operator_.update_for_start_execute(job_info));
       rootserver::ObDBMSSchedService::wakeup_scheduler();
       OZ (pool->acquire_spi_conn(session_info, conn));
-      if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_ora_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
+      if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_extended_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
         conn->set_check_priv(true);
       }
       if (OB_SUCC(ret) && job_info.is_mysql_event_job()) {
@@ -403,7 +390,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
       } else {
         OZ (conn->execute_write(what.string().ptr(), affected_rows));
       }
-      if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_ora_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
+      if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_extended_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
         conn->set_check_priv(false);
       }
       if (OB_NOT_NULL(conn)) {
@@ -427,7 +414,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
   return ret;
 }
 
-int ObDBMSSchedJobExecutor::run_dbms_sched_job(bool is_oracle_tenant, uint64_t job_id, const ObString &job_name)
+int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &job_name)
 {
   int ret = OB_SUCCESS;
   ObDBMSSchedJobInfo job_info;
@@ -435,7 +422,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(bool is_oracle_tenant, uint64_t j
 
   THIS_WORKER.set_timeout_ts(INT64_MAX);
 
-  OZ (table_operator_.get_dbms_sched_job_info(is_oracle_tenant, job_id, job_name, allocator, job_info));
+  OZ (table_operator_.get_dbms_sched_job_info(job_id, job_name, allocator, job_info));
 
   if (OB_SUCC(ret)) {
     if (job_info.is_killed()) { //Intercept user cancellation requests before the actual execution of the job

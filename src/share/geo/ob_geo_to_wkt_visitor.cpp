@@ -698,30 +698,11 @@ int ObGeoToWktVisitor::appendCommaWithMode() {
 template<typename T_IBIN>
 int ObGeoToWktVisitor::appendTypeNameWithMode(T_IBIN *geo) {
   int ret = OB_SUCCESS;
-  // oracle [typename][ ]
   // mysql [typename]
   const char *type_name = ObGeoTypeUtil::get_geo_name_by_type(geo->type());
 
   if (OB_FAIL(buffer_.append(type_name))) {
     LOG_WARN("fail to append buffer_", K(ret), K(type_name));
-  }
-  return ret;
-}
-
-int ObGeoToWktVisitor::append_double_oracle(char *buff, 
-                                            const int32_t buff_size,
-                                            uint64_t &out_len,
-                                            double value)
-{
-  int ret = OB_SUCCESS;
-  char number_buf[256] = {0};
-  double abs_value = fabs(value);
-  out_len = snprintf(number_buf, 256, "%.15g", value);
-  if (out_len < 0 || out_len > buff_size) {
-    ret = OB_BUF_NOT_ENOUGH;
-    LOG_WARN("fail to val to string", K(ret), K(value));
-  } else {
-    MEMCPY(buff, number_buf, out_len);
   }
   return ret;
 }

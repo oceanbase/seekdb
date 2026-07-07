@@ -35,8 +35,7 @@ int ObSchemaGetterGuard::get_location_schema_by_name(const common::ObString &nam
   schema = nullptr;
   const ObSchemaMgr *mgr = NULL;
   ObNameCaseMode mode = OB_NAME_CASE_INVALID;
-  if (OB_UNLIKELY(!true)
-             || OB_UNLIKELY(name.empty())) {
+  if (OB_UNLIKELY(name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(name), KR(ret));
   } else if (OB_FAIL(get_tenant_name_case_mode(mode))) {
@@ -63,8 +62,7 @@ int ObSchemaGetterGuard::get_location_schema_by_id(const uint64_t location_id,
   int ret = OB_SUCCESS;
   schema = nullptr;
   const ObSchemaMgr *mgr = NULL;
-  if (OB_UNLIKELY(!true)
-             || OB_UNLIKELY(!is_valid_id(location_id))) {
+  if (OB_UNLIKELY(!is_valid_id(location_id))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(location_id), KR(ret));
   } else if (OB_FAIL(check_tenant_schema_guard())) {
@@ -83,4 +81,3 @@ int ObSchemaGetterGuard::get_location_schema_by_id(const uint64_t location_id,
 }
 }
 }
-

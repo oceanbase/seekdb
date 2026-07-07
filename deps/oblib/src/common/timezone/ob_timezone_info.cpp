@@ -39557,7 +39557,7 @@ int ObTimeZoneInfoPos::get_timezone_sub_offset(int64_t value, const ObString &tz
           ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
           LOG_WARN("fail to get offset, value may be in overlap range", K(value), K(type_idx), K(revt_type_info), K(ret));
         } else {//if error_on_overlap_time_ == false,
-        // oracle mode : use standard offset, mysql mode: use daylight saving time
+        // Use standard offset here; the abbreviation path selects offset by abbreviation.
           offset_sec = revt_type_info.info_.offset_sec_;
           tran_type_id = revt_type_info.info_.tran_type_id_;
         }

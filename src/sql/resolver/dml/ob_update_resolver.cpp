@@ -501,8 +501,7 @@ int ObUpdateResolver::generate_update_table_info(ObTableAssignment &table_assign
         table_info->table_name_ = table_schema->get_table_name_str();
       }
     } else {
-      // view has `instead of trigger`
-      // `update (select * from t1) t set t.c1 = 1` is legal in Oracle
+      // view has an enabled INSTEAD OF trigger
       uint64_t view_id = OB_INVALID_ID;
       if (OB_FAIL(add_all_columns_to_stmt_for_trigger(*table_item, table_info->column_exprs_))) {
         LOG_WARN("failed to add all columns to stmt", K(ret));

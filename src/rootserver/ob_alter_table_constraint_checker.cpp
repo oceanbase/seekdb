@@ -172,7 +172,7 @@ int ObAlterTableConstraintChecker::check_alter_table_constraint(
     case obcall::ObAlterTableArg::DROP_CONSTRAINT: {
       bool is_drop_col_only = false;
       if (share::ObDDLType::DDL_DROP_COLUMN == ddl_type) {
-        // In oracle mode, we support to drop constraint implicitly caused by drop column.
+        // Drop column handles the related constraint update.
       } else if (OB_FAIL(ObCODDLUtil::need_column_group_store(orig_table_schema, is_column_group_store))) {
         LOG_WARN("fail to check schema is column group store", K(ret));
       } else if (OB_FAIL(ObSchemaUtils::is_drop_column_only(alter_table_arg.alter_table_schema_, is_drop_col_only))) {

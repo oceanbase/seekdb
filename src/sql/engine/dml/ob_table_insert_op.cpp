@@ -160,9 +160,9 @@ OB_INLINE int ObTableInsertOp::open_table_for_each()
                                                             ObDmlEventType::DE_INSERTING))) {
         LOG_WARN("process before stmt trigger failed", K(ret));
       } else {
-        //this table is being accessed by dml operator, mark its table location as writing
-        //but single value insert in oracle allow the nested sql modify its insert table
-        //clear the writing flag in table location before the trigger execution
+        // This table is being accessed by DML operator, mark its table location as writing.
+        // For single value insert, nested SQL may modify its insert table, so
+        // clear the writing flag in table location before the trigger execution.
         //see it:
         primary_ins_rtdef.das_rtdef_.table_loc_->is_writing_ = !(primary_ins_ctdef.is_single_value_);
       }

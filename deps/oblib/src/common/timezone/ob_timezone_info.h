@@ -92,7 +92,7 @@ public:
             uint16_t tail_nsec_           : 10; //append nanosecond to the tailer, [0, 999]
             uint16_t version_             : 2;  //default 0
             uint16_t store_tz_id_         : 1;  //true mean store tz_id
-            uint16_t is_null_             : 1;  //oracle null timestamp
+            uint16_t is_null_             : 1;  //null nanosecond timestamp marker
             uint16_t time_reserved_       : 2;  //reserved
           };
         };

@@ -51,7 +51,7 @@ public:
            const int64_t &autoinc_version);
   bool is_valid() const
   {
-    return true && offset_ > 0 && increment_ > 0 &&
+    return offset_ > 0 && increment_ > 0 &&
              max_value_ > 0 && desired_cnt_ > 0 && cache_size_ > 0 && sender_.is_valid()
              && autoinc_version_ >= OB_INVALID_VERSION;
   }
@@ -79,7 +79,7 @@ public:
   int init(const AutoincKey &autoinc_key, const common::ObAddr &sender, const int64_t autoinc_version);
   bool is_valid() const
   {
-    return true && sender_.is_valid() && autoinc_version_ >= OB_INVALID_VERSION;
+    return sender_.is_valid() && autoinc_version_ >= OB_INVALID_VERSION;
   }
   TO_STRING_KV(K_(autoinc_key), K_(sender), K_(autoinc_version));
 
@@ -104,7 +104,7 @@ public:
            const int64_t cache_size);
   bool is_valid() const
   {
-    return true && max_value_ > 0 && base_value_ <= max_value_ 
+    return max_value_ > 0 && base_value_ <= max_value_
             && sender_.is_valid() && autoinc_version_ >= OB_INVALID_VERSION && cache_size_ >= 0;
   }
   TO_STRING_KV(K_(autoinc_key), K_(base_value), K_(max_value), K_(sender), K_(autoinc_version),
@@ -135,7 +135,7 @@ public:
 
   bool is_valid() const
   {
-    return true && NULL != buf_ && buf_size_ > 0;
+    return NULL != buf_ && buf_size_ > 0;
   }
 
   TO_STRING_KV(KP_(buf), K_(buf_size));
@@ -155,7 +155,7 @@ public:
   int init(const schema::ObSequenceSchema &schema, const common::ObAddr &sender);
   bool is_valid() const
   {
-    return true && schema_.get_sequence_id() != OB_INVALID_ID
+    return schema_.get_sequence_id() != OB_INVALID_ID
            && schema_.get_cache_size() > static_cast<int64_t>(0) && sender_.is_valid();
   }
   TO_STRING_KV(K_(schema), K_(sender));

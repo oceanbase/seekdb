@@ -292,7 +292,7 @@ int ObAlterMviewUtils::check_action_node_for_mlog_master(const ObTableSchema &ta
   if (table_schema.required_by_mview_refresh()) {
     if (T_TABLE_OPTION_LIST == type
         || T_ALTER_COLUMN_OPTION == type
-        || T_ALTER_INDEX_OPTION_ORACLE == type
+        || T_ALTER_INDEX_OPTION_EXTENDED == type
         || T_ALTER_CHECK_CONSTRAINT_OPTION == type
         || T_DROP_CONSTRAINT == type
         || T_ALTER_FOREIGN_KEY_OPTION == type

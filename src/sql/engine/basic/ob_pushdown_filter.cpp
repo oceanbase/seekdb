@@ -1981,9 +1981,9 @@ int ObWhiteFilterExecutor::init_evaluated_datums(bool &is_valid)
   return ret;
 }
 
-// In oracle mode, when the values in one column are all null,
-// the result should be empty set even though the expr.eval() is not valid (e.g., c1 < 1/0).
-// We do not pushdown filter to the storage layer in this situation.
+// When the values in one column are all NULL, the result should be empty even
+// though expr.eval() is not valid (e.g. c1 < 1/0). Do not push down the filter
+// to the storage layer in this situation.
 int ObWhiteFilterExecutor::init_compare_eval_datums(bool &is_valid)
 {
   int ret = OB_SUCCESS;

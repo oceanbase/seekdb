@@ -258,7 +258,7 @@ int ObTenantSqlMemoryManager::ObSqlWorkAreaCalcInfo::calculate_global_bound_size
   int64_t error_sim = std::abs(OB_E(EventTable::EN_SQL_MEMORY_MRG_OPTION) 0);
   int64_t max_wa_size = wa_max_memory_size;
   // int64_t max_wa_size = wa_max_memory_size;
-  // Maximum proportion 6.25% (oracle 5%)
+  // Historical maximum proportion baseline was 6.25%.
   // Here changed to set according to 8 concurrent requests
   int64_t max_bound_size = (0 == error_sim) ? (max_wa_size >> 3) : error_sim;
   profile_cnt_ = profile_cnt;

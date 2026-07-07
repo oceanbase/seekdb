@@ -1372,7 +1372,7 @@ Timestamp{whitespace}?\"[^\"]*\" {
     yylval->node->raw_text_ = parse_strndup(tmp_literal, yylval->node->str_len_ + 1, p->malloc_pool_);
     check_malloc(yylval->node->raw_text_);
     char *dup_value = NULL;
-    char *well_formed_str = replace_invalid_character(p->charset_info_, p->charset_info_oracle_db_, tmp_literal, &(yylval->node->str_len_), p->malloc_pool_, &(p->extra_errno_));
+    char *well_formed_str = replace_invalid_character(p->charset_info_, p->charset_info_nls_db_, tmp_literal, &(yylval->node->str_len_), p->malloc_pool_, &(p->extra_errno_));
     check_identifier_convert_result(p->extra_errno_);
     if (p->is_not_utf8_connection_) {
       dup_value = parse_str_convert_utf8(p->charset_info_, well_formed_str, p->malloc_pool_, &(yylval->node->str_len_), &(p->extra_errno_));

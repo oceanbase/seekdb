@@ -156,9 +156,6 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (OB_UNLIKELY(!true)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant config is not valid", KR(ret));
   } else if (GCONF.major_freeze_duty_time.disable()) {
     LOG_INFO("major_freeze_duty_time is disabled, can not launch major freeze by duty");
   } else {

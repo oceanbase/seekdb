@@ -537,10 +537,6 @@ int ObTenantDDLService::init_system_variables(
           tenant_schema, sys_variable_schema, sys_params, params_capacity))) {
         LOG_WARN("failed to update_mysql_tenant_sys_var",
                  KR(ret), K(tenant_schema), K(sys_variable_schema));
-      } else if (OB_FAIL(update_oracle_tenant_sys_var(
-          tenant_schema, sys_variable_schema, sys_params, params_capacity))) {
-        LOG_WARN("failed to update_oracle_tenant_sys_var",
-                 KR(ret), K(tenant_schema), K(sys_variable_schema));
       } else if (OB_FAIL(update_special_tenant_sys_var(
                  sys_variable_schema, sys_params, params_capacity))) {
         LOG_WARN("failed to update_special_tenant_sys_var", K(ret), K(sys_variable_schema));
@@ -585,20 +581,6 @@ int ObTenantDDLService::update_mysql_tenant_sys_var(
     } // end HEAP_VAR
   }
   return ret;
-}
-
-int ObTenantDDLService::update_oracle_tenant_sys_var(
-    const ObTenantSchema &tenant_schema,
-    const ObSysVariableSchema &sys_variable_schema,
-    ObSysParam *sys_params,
-    int64_t params_capacity)
-{
-  // seekdb is MySQL-only: Oracle tenant sys var updates are never needed.
-  UNUSED(tenant_schema);
-  UNUSED(sys_variable_schema);
-  UNUSED(sys_params);
-  UNUSED(params_capacity);
-  return OB_SUCCESS;
 }
 
 // The value of certain system variables of the system/meta tenant

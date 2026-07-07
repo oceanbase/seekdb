@@ -58,7 +58,7 @@ public:
                              ObReducedVisibleColSet &drop_column_names_set,
                              bool &has_add_column,
                              bool &has_drop_column);
-  int resolve_index_options_oracle(const ParseNode &node);
+  int resolve_extended_index_options(const ParseNode &node);
   int resolve_index_options(const ParseNode &action_node_list, const ParseNode &node,
                             bool &is_add_index);
   int resolve_partition_options(const ParseNode &node);
@@ -124,7 +124,7 @@ private:
   int resolve_alter_index(const ParseNode &node);
   int resolve_alter_index_storage_cache_policy(const ParseNode &node);
   int resolve_rename_index(const ParseNode &node);
-  int resolve_alter_index_parallel_oracle(const ParseNode &node);
+  int resolve_alter_index_parallel_extended(const ParseNode &node);
   int resolve_alter_index_parallel_mysql(const ParseNode &node);
   int check_is_drop_primary_key(const ParseNode &node, bool &is_drop_primary_key);
   int resolve_drop_primary(const ParseNode &action_node_list);

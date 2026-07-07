@@ -127,7 +127,6 @@ int ObSMUtils::cell_str(
   ObPrecision precision = 0;
   bool zerofill = false;
   int32_t zflength = 0;
-  bool is_oracle_raw = false;
   if (NULL == field) {
     if (OB_UNLIKELY(obj.is_invalid_type())) {
       ret = OB_INVALID_ARGUMENT;
@@ -183,7 +182,7 @@ int ObSMUtils::cell_str(
       // Also transmit the lob locator as varchar, first encode the LobLocator length, then encode the entire lob Locator
       case ObLobTC:
       case ObRoaringBitmapTC: {
-        ret = ObMySQLUtil::varchar_cell_str(buf, len, obj.get_string(), is_oracle_raw, pos);
+        ret = ObMySQLUtil::varchar_cell_str(buf, len, obj.get_string(), pos);
         break;
       }
       case ObJsonTC:{
@@ -211,7 +210,7 @@ int ObSMUtils::cell_str(
         if (obj.get_udt_subschema_id() == 0) { // xml
           ret = ObMySQLUtil::sql_utd_cell_str(buf, len, obj.get_string(), pos);
         } else if (type == MYSQL_PROTOCOL_TYPE::TEXT) { // common sql udt text protocal
-          ret = ObMySQLUtil::varchar_cell_str(buf, len, obj.get_string(), is_oracle_raw, pos);
+          ret = ObMySQLUtil::varchar_cell_str(buf, len, obj.get_string(), pos);
         } else {
           // ToDo: sql udt binary protocal (result should be the same as extend type)
           ret = OB_NOT_IMPLEMENT;
@@ -220,7 +219,7 @@ int ObSMUtils::cell_str(
         break;
       }
       case ObCollectionSQLTC: {
-        ret = ObMySQLUtil::varchar_cell_str(buf, len, obj.get_string(), is_oracle_raw, pos);
+        ret = ObMySQLUtil::varchar_cell_str(buf, len, obj.get_string(), pos);
         break;
       }
       case ObDecimalIntTC: {

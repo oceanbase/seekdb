@@ -906,7 +906,7 @@ public:
     }else {
       cursor_flag_ = CURSOR_FLAG_UNDEF;
     }
-    // ref_count_ = 0; // This should not be reset to zero, because Oracle retains its ref count after close.
+    // ref_count_ = 0; // Keep ref count after close.
     is_scrollable_ = false;
     last_execute_time_ = 0;
     trans_id_.reset();
@@ -1132,7 +1132,7 @@ protected:
   transaction::ObTransID trans_id_; // used to check txn liveness when cursor is a 'for update cursor'
   common::ObArray<int64_t> bulk_rowcount_;
   common::ObArray<ObCursorBulkException> bulk_exceptions_;
-  void *spi_cursor_; //Handler for reading results in Mysql mode is sql::ObSPICursor (data cache), in Oracle mode it is ObMySQLProxy::MySQLResult (streaming read)
+  void *spi_cursor_; // Handler for reading cached SQL result data.
   ObIAllocator *allocator_;
   ObPLCursorFlag cursor_flag_; // OBPLCURSORFLAG;
   int64_t ref_count_; // a ref cursor may referenced by many ref cursor

@@ -856,7 +856,7 @@ int ObLobManager::check_need_out_row(
           LOG_DEBUG("no_char_len to has_char_len", K(param));
         }
       } else {
-        // partial update aloways store char_len beacaure is only support in oracle mode
+        // Partial update always stores char_len in MySQL-only mode.
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unsupport situation", K(ret), K(param), K(has_char_len));
       }

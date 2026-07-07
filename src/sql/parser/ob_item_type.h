@@ -195,15 +195,12 @@ typedef enum ObItemType
   T_OBJ_ACCESS_REF = 167,
   T_OP_CONNECT_BY_ROOT = 168,
 
-  /*regexp_substr this function registration has been replaced by T_FUN_SYS_REGEXP_SUBSTR, because registering it here would cause Oracle to fail to recognize this function,
-  therefore it is also uncertain whether deletion would affect others, so the decision was made to retain it
-  T_OP_REGEXP_SUBSTR = 169,*/
+  /* regexp_substr operator id 169 is reserved after replacement by T_FUN_SYS_REGEXP_SUBSTR. */
   T_OP_GET_PACKAGE_VAR = 170,
   T_OP_SHADOW_UK_PROJECT = 171,
 
   T_OP_XOR = 172,
-  /* oracle outer join symbol as a dummy op*/
-  T_OP_ORACLE_OUTER_JOIN_SYMBOL = 173,
+  /* operator id 173 is reserved after removing legacy outer join marker support. */
   T_OP_RANGE_PARAM = 174,
   T_OP_GET_SUBPROGRAM_VAR = 175,
   T_OP_MULTISET = 176,
@@ -319,13 +316,11 @@ typedef enum ObItemType
   T_FUN_SYS_ISNULL = 592,
   T_FUN_SYS_TIMESTAMP_NVL = 593,
   T_FUN_SYS_POSITION = 595,
-  T_FUN_SYS_ORA_DECODE = 596,
   T_FUN_SYS_ELT = 597,
   T_FUN_SYS_STRCMP = 598,
   T_FUN_SYS_PART_KEY = 599,
   T_FUN_INNER_TRIM = 600,
   T_FUN_SYS_PART_ID = 601,
-  T_FUN_SYS_ORA_TRUNC = 602,
   T_FUN_SYS_TO_TYPE = 603,
   T_FUN_SYS_SLEEP = 604,
   T_FUN_GET_LAST_EXEC_ID = 605,
@@ -427,7 +422,7 @@ typedef enum ObItemType
   T_FUN_SYS_SQL_MODE_CONVERT = 698,
   T_FUN_SYS_PREFIX_PATTERN = 699,
 
-  ///< @note add new mysql/oracle function type before this line
+  ///< @note add new common function type before this line
   T_COMMON_FUN_SYS_END = 700,
 
   // system function for mysql only
@@ -521,7 +516,7 @@ typedef enum ObItemType
   ///< @note add new mysql only function type before this line
   T_MYSQL_ONLY_SYS_MAX_OP = 800,
 
-  // system function for oracle only
+  // Legacy compatibility function id range.
   T_FUN_SYS_CONNECT_BY_PATH = 1401,
   T_FUN_SYS_SYSTIMESTAMP = 1402,
   T_FUN_SYS_TO_DATE = 1403,
@@ -562,7 +557,7 @@ typedef enum ObItemType
   T_FUN_SYS_DBMS_LOB_CONVERTTOBLOB = 1438,
   T_FUN_SYS_DBMS_LOB_CAST_CLOB_TO_BLOB = 1439,
   T_FUN_SYS_DBMS_LOB_CONVERT_CLOB_CHARSET = 1440,
-  //Lable Security, only used in oracle PL
+  // Label Security function ids.
   T_FUN_LABEL_SE_POLICY_CREATE = 1441,
   T_FUN_LABEL_SE_POLICY_ALTER = 1442,
   T_FUN_LABEL_SE_POLICY_DISABLE = 1443,
@@ -757,7 +752,7 @@ typedef enum ObItemType
   T_FUN_JSON_OBJECTAGG = 1631,
 // please modify need_calc_json_as_text if other json functions are added
   T_FUN_SYS_INNER_AGGR_CODE = 1632,
-  //T_FUN_SYS_TIMESTAMP_TO_SCN and T_FUN_SYS_SCN_TO_TIMESTAMP are supported both in mysql and oracle
+  // Timestamp/SCN conversion functions.
   T_FUN_SYS_TIMESTAMP_TO_SCN = 1633,
   T_FUN_SYS_SCN_TO_TIMESTAMP = 1634,
 
@@ -922,7 +917,7 @@ typedef enum ObItemType
   T_FUN_SYS_VECTOR_L2_SIMILARITY = 1790,
   T_FUN_SYS_VECTOR_IP_SIMILARITY = 1791,
   T_FUN_SYS_VECTOR_COS_SIMILARITY = 1792,
-  ///< @note add new oracle only function type before this line
+  ///< @note add new legacy compatibility function type before this line
 
   T_FUN_SYS_TABLET_AUTOINC_NEXTVAL = 1801, // add only for heap table
   T_FUN_SYS_GENERATOR = 1802,
@@ -1475,7 +1470,6 @@ typedef enum ObItemType
   T_CLIENT_VERSION = 3617,
   T_MYSQL_DRIVER = 3618,
   T_QUERY_TIMEOUT = 3619,
-  T_DBLINK_INFO = 3620,
   T_LOG_LEVEL = 3621,
   T_LEADING = 3622,
   T_ORDERED = 3623,
@@ -1573,7 +1567,7 @@ typedef enum ObItemType
   T_CLEAR_ROOT_TABLE = 3716,
   T_REFRESH_SCHEMA = 3717,
   T_REFRESH_MEMORY_STAT = 3718,
-  /* 3719: T_WASH_MEMORY_FRAGMENTATION abandoned */
+  T_WASH_MEMORY_FRAGMENTATION = 3719,
   T_NAME_LIST = 3720,
   T_CREATE_DATABASE = 3721,
   T_DROP_DATABASE = 3722,
@@ -1701,7 +1695,6 @@ typedef enum ObItemType
   T_SP_ACCESS_NAME = 3864,
   T_SP_CREATE = 3865,
   T_SP_ALTER = 3866,
-  T_SP_COMPILE_CLAUSE = 3867,
   T_SP_EDITIONABLE_CLAUSE = 3868,
   T_SP_DROP = 3869,
   T_SP_SOURCE = 3870,
@@ -1791,7 +1784,6 @@ typedef enum ObItemType
   T_SP_FORALL = 3954,
   T_SP_TYPE = 3955,
   T_SP_ROWTYPE = 3956,
-  T_SP_DBLINK_TYPE = 3957,
   T_SP_DECL_USER_SUBTYPE = 3958,
   T_SP_USER_SUBTYPE_RANGE = 3959,
   T_SP_USER_SUBTYPE_BASETYPE = 3960,
@@ -2171,14 +2163,12 @@ typedef enum ObItemType
   T_AUDIT_ALTER_SYSTEM = 4302,
   T_AUDIT_CLUSTER = 4303,
   T_AUDIT_CONTEXT = 4304,
-  T_AUDIT_DBLINK = 4305,
   T_AUDIT_INDEX = 4306,
   T_AUDIT_MATERIALIZED_VIEW = 4307,
   T_AUDIT_NOT_EXIST = 4308,
   T_AUDIT_OUTLINE = 4309,
   T_AUDIT_PROCEDURE = 4310,
   T_AUDIT_PROFILE = 4311,
-  T_AUDIT_PUBLIC_DBLINK = 4312,
   T_AUDIT_PUBLIC_SYNONYM = 4313,
   T_AUDIT_ROLE = 4314,
   T_AUDIT_SEQUENCE = 4315,
@@ -2225,8 +2215,8 @@ typedef enum ObItemType
   T_CLUSTER_INFO = 4353,
   T_CONVERT_TO_STANDBY = 4354,
   T_MEMSTORE_PERCENT = 4355,
-  T_GRANT_SYS_PRIV_ORACLE = 4356,
-  T_ORACLE_SYS_PRIV_TYPE = 4357,
+  T_GRANT_SYS_PRIV = 4356,
+  T_SYS_PRIV_TYPE = 4357,
   T_DISCONNECT_CLUSTER = 4358,
   T_VERIFY = 4359,
   T_OBCONFIG_URL = 4360,
@@ -2240,7 +2230,7 @@ typedef enum ObItemType
   // 4368: T_BACKUP_CLEAN abandoned, id reserved
   // 4369: T_DELETE_POLICY abandoned, id reserved
   // 4370: T_BACKUP_KEY abandoned, id reserved
-  T_RESTORE_TENANT_2 = 4371,
+  // 4371: T_RESTORE_TENANT_2 abandoned, id reserved
   // 4372: T_CANCEL_RESTORE abandoned, id reserved
   // 4373: T_CANCEL_RECOVER_TABLE abandoned, id reserved
   T_GEN_ROWS = 4374,
@@ -2248,7 +2238,7 @@ typedef enum ObItemType
   T_DIRECT = 4376, // direct load data
   T_REMOTE_OSS = 4377,
   T_RECOVER_TABLE_REMAP = 4379,
-  T_PHYSICAL_RESTORE_UNTIL = 4380,
+  // 4380: T_PHYSICAL_RESTORE_UNTIL abandoned, id reserved
   T_REVOKE_SYSAUTH = 4381,
 
   // hint, for slave mapping
@@ -2284,7 +2274,7 @@ typedef enum ObItemType
   T_FORCE_REFRESH_LOCATION_CACHE = 4405,
   T_PROFILE_VERIFY_FUNCTION_NAME = 4406,
   T_ADMIN_ROLLING_UPGRADE_CMD = 4407,
-  T_ALTER_INDEX_OPTION_ORACLE = 4408,
+  T_ALTER_INDEX_OPTION_EXTENDED = 4408,
 
   T_PIVOT = 4409,//check
   T_UNPIVOT = 4410,
@@ -2306,11 +2296,6 @@ typedef enum ObItemType
   T_SP_OBJ_ELEMENT_SPEC_LIST = 4425,
   T_FETCH_CLAUSE = 4426, //use to support fetch next rows only
   T_FETCH_TIES_CLAUSE = 4427, //use to support fetch next rows with tie
-  T_DBLINK_NAME = 4428,
-  T_CREATE_DBLINK = 4429,
-  T_REVERSE_DBLINK = 4430,
-  T_DROP_DBLINK = 4431,
-  T_ALTER_DBLINK = 4432,
   T_LABEL_LIST = 4433,
   T_PRIMARY_ROOTSERVICE_LIST = 4434,
   T_ALTER_USER = 4435,
@@ -2458,7 +2443,7 @@ typedef enum ObItemType
   T_CONSTR_LOB_CHUNK_SIZE = 4558,
   T_LOB_CHUNK_SIZE = 4559,
 
-  T_ALTER_SYSTEM_KILL = 4560, // used to support kill session in oracle
+  T_ALTER_SYSTEM_KILL = 4560, // used to support kill session
 
   T_ACTIVATE_STANDBY = 4561, // ALTER SYSTEM ACTIVATE STANDBY (failover)
   T_SWITCHOVER_TO_STANDBY = 4571, // ALTER SYSTEM SWITCHOVER TO STANDBY
@@ -2481,7 +2466,6 @@ typedef enum ObItemType
   T_MYSQL_ANALYZE = 4578,
   T_DECORRELATE = 4579,
   T_NO_DECORRELATE = 4580,
-  T_DBLINK_UDF = 4581,
   T_COLUMN_ADD_WITH_LOB_PARAMS = 4582,
 
   //for materialized view
@@ -2962,7 +2946,7 @@ typedef enum ObOutlineType
     || ((op) == T_FUN_SYS_ST_CROSSES) \
     || ((op) == T_FUN_SYS_ST_OVERLAPS)) \
 
-//in oracle mode, only lists exprs can accept bool(tinyint) param
+// Only selected operators and list expressions can accept bool(tinyint) params.
 #define ALLOW_BOOL_INPUT(op) \
   ((IS_BOOL_OP((op))) \
     || ((op) == T_FUN_COLUMN_CONV) \

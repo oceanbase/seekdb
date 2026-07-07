@@ -39,7 +39,7 @@ ObMySQLConnection::ObMySQLConnection() :
     closed_(true),
     timeout_(-1),
     last_trace_id_(0),
-    mode_(OCEANBASE_MODE),
+    mode_(MYSQL_MODE),
     db_name_(NULL),
     read_consistency_(-1)
 {
@@ -282,23 +282,6 @@ int ObMySQLConnection::set_timeout_variable(const int64_t query_timeout, const i
   if (DEBUG_MODE == mode_) {
     // Here in order to pass the single test, ignore the error of setting system variables
     ret = OB_SUCCESS;
-  }
-  return ret;
-}
-
-int ObMySQLConnection::init_oceanbase_connection()
-{
-  int ret = OB_SUCCESS;
-  if (OCEANBASE_MODE == mode_) {
-    ObMySQLStatement stmt;
-    const char *sql = "set @@session.autocommit = ON;";
-    if (OB_FAIL(rollback())) {
-      LOG_WARN("fail to rollback", K(ret));
-    } else if (OB_FAIL(stmt.init(*this, sql))) {
-      LOG_WARN("create statement failed", K(ret));
-    } else if (OB_FAIL(stmt.execute_update())) {
-      LOG_WARN("execute sql failed", K(sql), K(ret));
-    }
   }
   return ret;
 }

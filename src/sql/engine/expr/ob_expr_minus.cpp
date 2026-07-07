@@ -109,8 +109,8 @@ int ObExprMinus::calc_result_type2(ObExprResType &type,
     type.set_precision(PRECISION_UNKNOWN_YET);
   } else if (type1.get_type_class() == ObIntervalTC
              || type2.get_type_class() == ObIntervalTC) {
-    type.set_scale(ObAccuracy::MAX_ACCURACY2[ORACLE_MODE][type.get_type()].get_scale());
-    type.set_precision(ObAccuracy::MAX_ACCURACY2[ORACLE_MODE][type.get_type()].get_precision());
+    type.set_scale(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][type.get_type()].get_scale());
+    type.set_precision(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][type.get_type()].get_precision());
   } else {
     ObScale scale1 = static_cast<ObScale>(MAX(type1.get_scale(), 0));
     ObScale scale2 = static_cast<ObScale>(MAX(type2.get_scale(), 0));
@@ -395,7 +395,7 @@ int ObExprMinus::minus_datetime(ObObj &res, const ObObj &left, const ObObj &righ
     res.set_scale(OB_MAX_DATE_PRECISION);
     if (OB_UNLIKELY(res.get_datetime() > DATETIME_MAX_VAL || res.get_datetime() < DATETIME_MIN_VAL)
         || (OB_FAIL(ObTimeConverter::datetime_to_ob_time(res.get_datetime(), NULL, ob_time)))
-        || (OB_FAIL(ObTimeConverter::validate_oracle_date(ob_time)))) {
+        || (OB_FAIL(ObTimeConverter::validate_datetime_parts(ob_time)))) {
       char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
       int64_t pos = 0;
       ret = OB_OPERATE_OVERFLOW;
@@ -476,20 +476,20 @@ int ObExprMinus::cg_expr(ObExprCGCtx &op_cg_ctx,
       case ObUNumberType:
       case ObNumberType:
         if (ObDateTimeType == left_type) {
-          SET_MINUS_FUNC_PTR(minus_datetime_datetime_oracle);
+          SET_MINUS_FUNC_PTR(minus_datetime_datetime_number_result);
         } else if (ob_is_decimal_int(left_type) && ob_is_decimal_int(right_type)) {
           switch (get_decimalint_type(rt_expr.args_[0]->datum_meta_.precision_)) {
             case DECIMAL_INT_32:
-              SET_MINUS_FUNC_PTR(minus_decimalint32_oracle);
-              rt_expr.eval_vector_func_ = minus_decimalint32_oracle_vector;
+              SET_MINUS_FUNC_PTR(minus_decimalint32_number_result);
+              rt_expr.eval_vector_func_ = minus_decimalint32_number_result_vector;
               break;
             case DECIMAL_INT_64:
-              SET_MINUS_FUNC_PTR(minus_decimalint64_oracle);
-              rt_expr.eval_vector_func_ = minus_decimalint64_oracle_vector;
+              SET_MINUS_FUNC_PTR(minus_decimalint64_number_result);
+              rt_expr.eval_vector_func_ = minus_decimalint64_number_result_vector;
               break;
             case DECIMAL_INT_128:
-              SET_MINUS_FUNC_PTR(minus_decimalint128_oracle);
-              rt_expr.eval_vector_func_ = minus_decimalint128_oracle_vector;
+              SET_MINUS_FUNC_PTR(minus_decimalint128_number_result);
+              rt_expr.eval_vector_func_ = minus_decimalint128_number_result_vector;
               break;
             default:
               ret = OB_ERR_UNEXPECTED;
@@ -774,7 +774,7 @@ struct ObFloatBatchMinusRawWithCheck: public ObFloatBatchMinusRawNoCheck
   }
 };
 
-//calc type is floatTC, left and right has same TC, only oracle mode
+// calc type is floatTC, left and right have the same TC
 int ObExprMinus::minus_float_float(EVAL_FUNC_ARG_DECL)
 {
   return def_arith_eval_func<ObArithOpWrap<ObFloatBatchMinusRawWithCheck>>(EVAL_FUNC_ARG_LIST);
@@ -978,7 +978,7 @@ struct ObDatetimeNumberMinusFunc
       if (OB_UNLIKELY(res.get_datetime() > DATETIME_MAX_VAL
                       || res.get_datetime() < DATETIME_MIN_VAL)
           || (OB_FAIL(ObTimeConverter::datetime_to_ob_time(res.get_datetime(), NULL, ob_time)))
-          || (OB_FAIL(ObTimeConverter::validate_oracle_date(ob_time)))) {
+          || (OB_FAIL(ObTimeConverter::validate_datetime_parts(ob_time)))) {
         char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
         int64_t pos = 0;
         ret = OB_OPERATE_OVERFLOW;
@@ -1005,7 +1005,7 @@ int ObExprMinus::minus_datetime_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
       BATCH_EVAL_FUNC_ARG_LIST);
 }
 
-struct ObDatetimeDatetimeOralceMinusFunc
+struct ObDatetimeDatetimeNumberMinusFunc
 {
   int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
   {
@@ -1035,15 +1035,15 @@ struct ObDatetimeDatetimeOralceMinusFunc
   }
 };
 
-//left and right are both ObDateTimeTC. calc_type is ObNumberType. only oracle mode.
-int ObExprMinus::minus_datetime_datetime_oracle(EVAL_FUNC_ARG_DECL)
+// left and right are both ObDateTimeTC. calc_type is ObNumberType.
+int ObExprMinus::minus_datetime_datetime_number_result(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObDatetimeDatetimeOralceMinusFunc>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObDatetimeDatetimeNumberMinusFunc>(EVAL_FUNC_ARG_LIST);
 }
 
-int ObExprMinus::minus_datetime_datetime_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL)
+int ObExprMinus::minus_datetime_datetime_number_result_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op_by_datum_func<ObDatetimeDatetimeOralceMinusFunc>(
+  return def_batch_arith_op_by_datum_func<ObDatetimeDatetimeNumberMinusFunc>(
       BATCH_EVAL_FUNC_ARG_LIST);
 }
 
@@ -1061,7 +1061,7 @@ struct ObDatetimeDatetimeMinusFunc
     if (OB_UNLIKELY(res.get_datetime() > DATETIME_MAX_VAL
         || res.get_datetime() < DATETIME_MIN_VAL)
         || (OB_FAIL(ObTimeConverter::datetime_to_ob_time(res.get_datetime(), NULL, ob_time)))
-        || (OB_FAIL(ObTimeConverter::validate_oracle_date(ob_time)))) {
+        || (OB_FAIL(ObTimeConverter::validate_datetime_parts(ob_time)))) {
       char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
       int64_t pos = 0;
       ret = OB_OPERATE_OVERFLOW;
@@ -1160,7 +1160,7 @@ int ObExprMinus::minus_decimalint512_with_check_vector(VECTOR_EVAL_FUNC_ARG_DECL
 #undef DECINC_MINUS_EVAL_FUNC_DECL
 
 template<typename T>
-struct ObDecimalOracleMinusFunc
+struct ObDecimalNumberMinusFunc
 {
   int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const int64_t scale,
                  ObNumStackOnceAlloc &alloc) const
@@ -1179,7 +1179,7 @@ struct ObDecimalOracleMinusFunc
 };
 
 template<typename T>
-struct ObDecimalOracleVectorMinusFunc
+struct ObDecimalNumberVectorMinusFunc
 {
   template <typename ResVector, typename LeftVector, typename RightVector>
   int operator()(ResVector &res_vec, const LeftVector &l_vec, const RightVector &r_vec,
@@ -1199,33 +1199,33 @@ struct ObDecimalOracleVectorMinusFunc
   }
 };
 
-#define DECINC_MINUS_EVAL_FUNC_ORA_DECL(TYPE) \
-int ObExprMinus::minus_decimal##TYPE##_oracle(EVAL_FUNC_ARG_DECL)      \
+#define DECINC_MINUS_EVAL_FUNC_NUMBER_DECL(TYPE) \
+int ObExprMinus::minus_decimal##TYPE##_number_result(EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
-  return def_arith_eval_func<ObDecimalOracleMinusFunc<TYPE##_t>>(EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
+  return def_arith_eval_func<ObDecimalNumberMinusFunc<TYPE##_t>>(EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
 }                                            \
-int ObExprMinus::minus_decimal##TYPE##_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
+int ObExprMinus::minus_decimal##TYPE##_number_result_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
-  return def_batch_arith_op_by_datum_func<ObDecimalOracleMinusFunc<TYPE##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
+  return def_batch_arith_op_by_datum_func<ObDecimalNumberMinusFunc<TYPE##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
 }                                            \
-int ObExprMinus::minus_decimal##TYPE##_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL)      \
+int ObExprMinus::minus_decimal##TYPE##_number_result_vector(VECTOR_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
-  return def_fixed_len_vector_arith_op_func<ObDecimalOracleVectorMinusFunc<TYPE##_t>,\
+  return def_fixed_len_vector_arith_op_func<ObDecimalNumberVectorMinusFunc<TYPE##_t>,\
                                             ObArithTypedBase<TYPE##_t, TYPE##_t, TYPE##_t>>(VECTOR_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
 }
 
-DECINC_MINUS_EVAL_FUNC_ORA_DECL(int32)
-DECINC_MINUS_EVAL_FUNC_ORA_DECL(int64)
-DECINC_MINUS_EVAL_FUNC_ORA_DECL(int128)
+DECINC_MINUS_EVAL_FUNC_NUMBER_DECL(int32)
+DECINC_MINUS_EVAL_FUNC_NUMBER_DECL(int64)
+DECINC_MINUS_EVAL_FUNC_NUMBER_DECL(int128)
 
 
-#undef DECINC_MINUS_EVAL_FUNC_ORA_DECL
+#undef DECINC_MINUS_EVAL_FUNC_NUMBER_DECL
 
 template<typename T>
 struct ObArrayMinusFunc : public ObNestedArithOpBaseFunc

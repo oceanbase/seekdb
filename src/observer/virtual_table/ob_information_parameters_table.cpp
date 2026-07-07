@@ -47,7 +47,7 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
     SERVER_LOG(WARN, "null parameter", K(routine_info), K(param_info), K(cells), K(session_), K(ret));
   } else {
     const common::ObDataType &param_type = param_info->get_param_type();
-    const ObLengthSemantics default_length_semantics = session_->get_local_nls_length_semantics();
+    const ObLengthSemantics default_length_semantics = session_->get_default_length_semantics();
 
     for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < output_column_ids_.count(); ++col_idx) {
       const uint64_t col_id = output_column_ids_.at(col_idx);

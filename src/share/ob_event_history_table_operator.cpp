@@ -95,7 +95,7 @@ int ObEventHistoryTableOperator::ObEventTableUpdateTask::init(const char *ptr,
     const int64_t buf_size)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(ptr) || OB_UNLIKELY(buf_size <= 0 || !true)) {
+  if (OB_ISNULL(ptr) || OB_UNLIKELY(buf_size <= 0)) {
     LOG_WARN("invalid argument", KP(ptr), K(buf_size));
     ret = OB_INVALID_ARGUMENT;
   } else {
@@ -109,7 +109,7 @@ int ObEventHistoryTableOperator::ObEventTableUpdateTask::init(const char *ptr,
 
 bool ObEventHistoryTableOperator::ObEventTableUpdateTask::is_valid() const
 {
-  return table_operator_.is_inited() && !sql_.empty() && true;
+  return table_operator_.is_inited() && !sql_.empty();
 }
 
 int64_t ObEventHistoryTableOperator::ObEventTableUpdateTask::hash() const
@@ -139,8 +139,7 @@ bool ObEventHistoryTableOperator::ObEventTableUpdateTask::operator==(
       is_equal = true;
     } else {
       is_equal = (&(this->table_operator_) == &(o.table_operator_))
-          && this->sql_ == o.sql_ && this->is_delete_ == o.is_delete_
-          && true;
+          && this->sql_ == o.sql_ && this->is_delete_ == o.is_delete_;
           //no need take care of create_time
     }
   }
@@ -301,7 +300,7 @@ int ObEventHistoryTableOperator::add_task(const ObSqlString &sql, const bool is_
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not iget_deep_copy_sizenit", K(ret));
-  } else if (OB_UNLIKELY(sql.empty() || !true)) {
+  } else if (OB_UNLIKELY(sql.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("sql is empty", K(sql), K(ret));
   } else if (stopped_) {
@@ -337,7 +336,7 @@ int ObEventHistoryTableOperator::process_task(const ObString &sql, const bool is
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(sql.empty() || !true)) {
+  } else if (OB_UNLIKELY(sql.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("sql is empty", K(sql), K(ret));
   } else {

@@ -39,7 +39,6 @@ typedef common::ObBitSet<common::OB_DEFAULT_BITSET_SIZE_FOR_BASE_COLUMN> ObExprV
 class ObLoadEscapeSM {
 public:
   static const int64_t ESCAPE_CHAR_MYSQL = static_cast<int64_t>('\\');
-  static const int64_t ESCAPE_CHAR_ORACLE = static_cast<int64_t>('\'');
   ObLoadEscapeSM()
     : is_escaped_flag_(false), escape_char_(INT64_MAX), escaped_char_count(0) {}
   OB_INLINE void shift_by_input(char c)

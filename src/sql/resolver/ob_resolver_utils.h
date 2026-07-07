@@ -380,7 +380,6 @@ public:
   static int resolve_data_type(const ParseNode &type_node,
                                const common::ObString &ident_name,
                                common::ObDataType &data_type,
-                               const int is_oracle_mode /*always 0 (MySQL mode)*/,
                                const bool is_for_pl_type,
                                const ObSessionNLSParams &nls_session_param,
                                const bool enable_decimal_int_type,
@@ -573,7 +572,7 @@ public:
                                              const bool is_check_value,
                                              const bool is_string_lob = false);
   static bool is_partition_range_column_type(const common::ObObjType type);
-  static bool is_valid_oracle_interval_data_type(
+  static bool is_valid_interval_data_type(
       const common::ObObjType type,
       ObItemType &item_type);
   // WARNING: is_sync_ddl_user=true means outside program won't wait ddl, which is so misleading
@@ -583,21 +582,20 @@ public:
   static int set_sync_ddl_id_str(ObSQLSessionInfo *session_info, common::ObString &ddl_id_str);
   static int resolve_udf_name_by_parse_node(
     const ParseNode *node, const common::ObNameCaseMode case_mode, ObUDFInfo& udf_info);
-  // for create table with fk in oracle mode
-  // for alter table add fk in oracle mode
+  // Check duplicate foreign keys for CREATE TABLE and ALTER TABLE ADD FOREIGN KEY.
   static int check_dup_foreign_keys_exist(
              const common::ObIArray<share::schema::ObForeignKeyInfo> &fk_infos,
              const common::ObIArray<uint64_t> &child_column_ids,
              const common::ObIArray<uint64_t> &parent_column_ids,
              const uint64_t parent_table_id,
              const uint64_t child_table_id);
-  // for create table with fk in oracle mode
+  // Compare named foreign key columns while preserving child-to-parent mapping.
   static bool is_match_columns_with_order(
               const common::ObIArray<ObString> &child_columns_1,
               const common::ObIArray<ObString> &parent_columns_1,
               const common::ObIArray<ObString> &child_columns_2,
               const common::ObIArray<ObString> &parent_columns_2);
-  // for alter table add fk in oracle mode
+  // Compare foreign key column ids while preserving child-to-parent mapping.
   static bool is_match_columns_with_order(
               const common::ObIArray<uint64_t> &child_column_ids_1,
               const common::ObIArray<uint64_t> &parent_column_ids_1,
@@ -655,15 +653,12 @@ public:
   static int resolve_opt_join_or_resume(const ParseNode *node, int64_t & flag);
   static int resolve_opt_suspend(const ParseNode *node, int64_t & flag);
   static int resolve_opt_one_phase(const ParseNode *node, int64_t & flag);
-  // check some kind of the non-updatable view, which is forbidden for all dml statement:
-  // mysql:
+  // Check non-updatable view shapes which are forbidden for DML statements:
   //    aggregate
   //    distinct
   //    set
   //    limit
-  // oracle:
-  //   window func
-  //   set
+  //    window func
   //
   // return OB_SUCCESS, OB_ERR_NON_INSERTABLE_TABLE, OB_ERR_NON_UPDATABLE_TABLE, OB_ERR_ILLEGAL_VIEW_UPDATE
   static int uv_check_basic(ObSelectStmt &stmt, const bool is_insert);
@@ -699,8 +694,7 @@ public:
 
   static int uv_mysql_insertable_join(const TableItem &table_item, const uint64_t base_tid, bool &insertable);
 
-  // statement has unremovable distinct is not updatable in oracle.
-  // check whether view is allowed to be WITH CHECK OPTION
+  // Check whether view is allowed to be WITH CHECK OPTION.
   static int view_with_check_option_allowed(const ObSelectStmt *stmt, bool &with_check_option);
   static void set_stmt_type(const ObItemType item_type) { ObResolverUtils::item_type_ = item_type; }
 

@@ -224,7 +224,7 @@ int ObResultSet::open_result()
         set_affected_rows(get_exec_context().get_physical_plan_ctx()->get_affected_rows());
     }
     if (OB_SUCC(ret) && get_stmt_type() == stmt::T_ANONYMOUS_BLOCK) {
-      // Compatible with oracle anonymous block affect rows setting
+      // Anonymous block execution reports one affected row.
       set_affected_rows(1);
     }
   }
@@ -923,7 +923,7 @@ int ObResultSet::do_close(int *client_ret)
   if (OB_TRANS_XA_BRANCH_FAIL == ret) {
     if (my_session_.associated_xa()) {
       // ignore ret
-      // Compatible with oracle, here we need to reset session state
+      // Reset session state after the XA branch failure.
       LOG_WARN("branch fail in global transaction", KPC(my_session_.get_tx_desc()));
       ObSqlTransControl::clear_xa_branch(my_session_.get_xid(), my_session_.get_tx_desc());
       my_session_.reset_tx_variable();
@@ -1530,16 +1530,16 @@ int ObResultSet::construct_display_field_name(common::ObField &field,
         // If there is a constant node obtained from lexical analysis with the is_copy_raw_text_ flag, then it is a constant with a prefix, for example
         // select date'2012-12-12' from dual, column displays as date'2012-12-12',
         // The raw_text of the constant node obtained from lexical analysis is date'2012-12-12',
-        // So directly copy raw_text, in oracle mode it also needs to remove spaces and convert case
+        // So directly copy raw_text after the required normalization.
         // 2.
         // If esc_str_flag_ is marked, then the projection column is a constant string, its internal string needs to be escaped,
         // The str_value of constant nodes is an escaped string, ready to use,
-        // But in mysql mode, some escape characters at the beginning of the string will not be displayed, ObResultSet::make_final_field_name will handle
-        // oracle mode, need to add single quotes
-        // For example MySQL mode: select '\'hello' from dual, column name displays 'hello'
+        // ObResultSet::make_final_field_name handles display trimming for leading escape characters.
+        // Quoted string field names keep their quotes.
+        // For example: select '\'hello' from dual, column name displays 'hello'
         //                select '\thello' from dual, column name displays hello (removed the leading escape character)
-        // Oracle mode: select 'hello' from dual, column name displays 'hello', (with quotes)
-        //             select '''hello' from dual, column name displays ''hello''
+        //              select 'hello' from dual, column name displays 'hello' (with quotes)
+        //              select '''hello' from dual, column name displays ''hello''
         // 3.
         // mysql mode, the following for the following sql:
         // select 'a' 'abc' from dual

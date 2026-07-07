@@ -286,7 +286,7 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
       } else {
         center_size_per_m = pq_centers.count() / pq_m;
       }
-      ObVectorClusterHelper helper;
+      ObVectorKmeansClusterHelper helper;
       int64_t pq_center_idx = 0;
       // version
       *(int32_t*)vb_buf = ObVecIVFPQCenterIDS::CUR_VERSION;

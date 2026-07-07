@@ -103,7 +103,7 @@ int ObSetPasswordResolver::resolve(const ParseNode &parse_tree)
           LOG_WARN("failed to check role as user", K(ret));
         } else if (!is_valid) {
           ret = OB_USER_NOT_EXIST;
-          LOG_ORACLE_USER_ERROR(OB_USER_NOT_EXIST, int(user_hostname_node->str_len_), user_hostname_node->str_value_);
+          LOG_USER_ERROR(OB_USER_NOT_EXIST, int(user_hostname_node->str_len_), user_hostname_node->str_value_);
         } else if (OB_ISNULL(user_hostname_node->children_[0])) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("username should not be NULL", K(ret));

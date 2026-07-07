@@ -56,9 +56,7 @@ int ObIndexNameCache::check_index_name_exist(
   int ret = OB_SUCCESS;
   is_exist = false;
   if (OB_UNLIKELY(
-      false
-      || false
-      || OB_INVALID_ID == database_id
+      OB_INVALID_ID == database_id
       || index_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(database_id), K(index_name));
@@ -144,9 +142,7 @@ int ObIndexNameCache::add_index_name(
   const ObTableType table_type = index_schema.get_table_type();
   uint64_t data_table_id = index_schema.get_data_table_id();
   if (OB_UNLIKELY(
-      false
-      || false
-      || OB_INVALID_ID == database_id
+      OB_INVALID_ID == database_id
       || index_name.empty()
       || !is_index_table(table_type))) {
     ret = OB_INVALID_ARGUMENT;
@@ -341,8 +337,7 @@ int ObIndexNameChecker::check_index_name_exist(
     LOG_WARN("fail to check tenant", KR(ret));
   } else if (can_skip) {
     // do nothing
-  } else if (OB_UNLIKELY(false
-             || OB_INVALID_ID == database_id
+  } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
              || index_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(database_id), K(index_name));
@@ -376,9 +371,6 @@ int ObIndexNameChecker::add_index_name(
     LOG_WARN("fail to check tenant", KR(ret));
   } else if (can_skip) {
     // do nothing
-  } else if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret));
   } else if (OB_FAIL(try_init_index_name_cache_map_())) {
     LOG_WARN("fail to init index name cache", KR(ret));
   } else {
@@ -394,16 +386,11 @@ int ObIndexNameChecker::add_index_name(
   return ret;
 }
 
-// only cache oracle tenant's index name map
+// MySQL mode does not need a tenant-level index name cache.
 int ObIndexNameChecker::check_tenant_can_be_skipped_(bool &can_skip)
 {
   int ret = OB_SUCCESS;
-  can_skip = false;
-  if (true) {
-    can_skip = true;
-  } else {
-    can_skip = true; // always MySQL mode
-  }
+  can_skip = true;
   return ret;
 }
 

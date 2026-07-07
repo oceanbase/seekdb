@@ -174,8 +174,7 @@ bool ObMockFKParentTableMgr::equal_mock_fk_parent_table(
     const ObSimpleMockFKParentTableSchema *lhs,
     const ObSimpleMockFKParentTableSchema *rhs)
 {
-  return true
-         && lhs->get_mock_fk_parent_table_id() == rhs->get_mock_fk_parent_table_id();
+  return lhs->get_mock_fk_parent_table_id() == rhs->get_mock_fk_parent_table_id();
 }
 
 bool ObMockFKParentTableMgr::compare_with_mock_fk_parent_table_key(
@@ -417,11 +416,9 @@ int ObMockFKParentTableMgr::get_mock_fk_parent_table_schema(
     if (OB_ISNULL(mock_fk_parent_table = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(mock_fk_parent_table));
-    } else if (true
-                  && mock_fk_parent_table->get_mock_fk_parent_table_id() > mock_fk_parent_table_id) {
+    } else if (mock_fk_parent_table->get_mock_fk_parent_table_id() > mock_fk_parent_table_id) {
       is_stop = true;
-    } else if (true
-               && mock_fk_parent_table_id == mock_fk_parent_table->get_mock_fk_parent_table_id()) {
+    } else if (mock_fk_parent_table_id == mock_fk_parent_table->get_mock_fk_parent_table_id()) {
       schema = mock_fk_parent_table;
     }
   }
@@ -437,16 +434,13 @@ int ObMockFKParentTableMgr::get_mock_fk_parent_table_schemas_in_tenant(
   ObMockFKParentTableKey key_lower(OB_MIN_ID);
   ConstMockFKParentTableIter iter_begin =mock_fk_parent_table_infos_.lower_bound(
                                   key_lower, compare_with_mock_fk_parent_table_key);
-  bool is_stop = false;
   for (ConstMockFKParentTableIter iter = iter_begin;
-       OB_SUCC(ret) && iter != mock_fk_parent_table_infos_.end() && !is_stop;
+       OB_SUCC(ret) && iter != mock_fk_parent_table_infos_.end();
        ++iter) {
     const ObSimpleMockFKParentTableSchema *mock_fk_parent_table = NULL;
     if (OB_ISNULL(mock_fk_parent_table = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret));
-    } else if (false) {
-      is_stop = true;
     } else if (OB_FAIL(schemas.push_back(mock_fk_parent_table))) {
       LOG_WARN("push back mock_fk_parent_table failed", K(ret));
     }
@@ -465,16 +459,13 @@ int ObMockFKParentTableMgr::get_mock_fk_parent_table_schemas_in_database(
   ObMockFKParentTableKey key_lower(OB_MIN_ID);
   ConstMockFKParentTableIter iter_begin = mock_fk_parent_table_infos_.lower_bound(
                                   key_lower, compare_with_mock_fk_parent_table_key);
-  bool is_stop = false;
   for (ConstMockFKParentTableIter iter = iter_begin;
-       OB_SUCC(ret) && iter != mock_fk_parent_table_infos_.end() && !is_stop;
+       OB_SUCC(ret) && iter != mock_fk_parent_table_infos_.end();
        ++iter) {
     const ObSimpleMockFKParentTableSchema *mock_fk_parent_table = NULL;
     if (OB_ISNULL(mock_fk_parent_table = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret));
-    } else if (false) {
-      is_stop = true;
     } else if (database_id != mock_fk_parent_table->get_database_id()) {
       // do nothing
     } else if (OB_FAIL(schemas.push_back(mock_fk_parent_table))) {

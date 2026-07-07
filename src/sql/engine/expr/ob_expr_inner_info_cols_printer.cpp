@@ -35,7 +35,7 @@ namespace sql
 
 ObExprInnerInfoColsColumnDefPrinter::ObExprInnerInfoColsColumnDefPrinter(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_FUN_SYS_INNER_INFO_COLS_COLUMN_DEF_PRINTER, N_INNER_INFO_COLS_COLUMN_DEF_PRINTER, 2,
-                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, true)
 {
 }
 
@@ -55,7 +55,7 @@ inline int ObExprInnerInfoColsColumnDefPrinter::calc_result_type2(ObExprResType 
   type.set_varchar();
   type.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
   type.set_collation_level(ObCollationLevel::CS_LEVEL_IMPLICIT);
-  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_nls_length_semantics();
+  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_length_semantics();
   type.set_length_semantics(def_ls);
   type.set_length(OB_MAX_DEFAULT_VALUE_LENGTH);
   return ret;
@@ -159,7 +159,7 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsColumnDefPrinter, raw_expr) {
 
 ObExprInnerInfoColsCharLenPrinter::ObExprInnerInfoColsCharLenPrinter(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_FUN_SYS_INNER_INFO_COLS_CHAR_LEN_PRINTER, N_INNER_INFO_COLS_CHAR_LEN_PRINTER, 3,
-                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, true)
 {
 }
 
@@ -229,7 +229,7 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsCharLenPrinter, raw_expr) {
 
 ObExprInnerInfoColsCharNamePrinter::ObExprInnerInfoColsCharNamePrinter(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_FUN_SYS_INNER_INFO_COLS_CHAR_NAME_PRINTER, N_INNER_INFO_COLS_CHAR_NAME_PRINTER, 2,
-                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, true)
 {
 }
 
@@ -249,7 +249,7 @@ inline int ObExprInnerInfoColsCharNamePrinter::calc_result_type2(ObExprResType &
   type.set_varchar();
   type.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
   type.set_collation_level(ObCollationLevel::CS_LEVEL_IMPLICIT);
-  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_nls_length_semantics();
+  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_length_semantics();
   type.set_length_semantics(def_ls);
   type.set_length(MAX_CHARSET_LENGTH);
   return ret;
@@ -302,7 +302,7 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsCharNamePrinter, raw_expr) {
 
 ObExprInnerInfoColsCollNamePrinter::ObExprInnerInfoColsCollNamePrinter(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_FUN_SYS_INNER_INFO_COLS_COLL_NAME_PRINTER, N_INNER_INFO_COLS_COLL_NAME_PRINTER, 2,
-                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, true)
 {
 }
 
@@ -322,7 +322,7 @@ inline int ObExprInnerInfoColsCollNamePrinter::calc_result_type2(ObExprResType &
   type.set_varchar();
   type.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
   type.set_collation_level(ObCollationLevel::CS_LEVEL_IMPLICIT);
-  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_nls_length_semantics();
+  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_length_semantics();
   type.set_length_semantics(def_ls);
   type.set_length(MAX_COLLATION_LENGTH);
   return ret;
@@ -375,7 +375,7 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsCollNamePrinter, raw_expr) {
 
 ObExprInnerInfoColsPrivPrinter::ObExprInnerInfoColsPrivPrinter(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_FUN_SYS_INNER_INFO_COLS_PRIV_PRINTER, N_INNER_INFO_COLS_PRIV_PRINTER, 2,
-                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, true)
 {
 }
 
@@ -395,7 +395,7 @@ inline int ObExprInnerInfoColsPrivPrinter::calc_result_type2(ObExprResType &type
   type.set_varchar();
   type.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
   type.set_collation_level(ObCollationLevel::CS_LEVEL_IMPLICIT);
-  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_nls_length_semantics();
+  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_length_semantics();
   type.set_length_semantics(def_ls);
   type.set_length(MAX_COLUMN_PRIVILEGE_LENGTH);
   return ret;
@@ -500,7 +500,7 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsPrivPrinter, raw_expr) {
 
 ObExprInnerInfoColsExtraPrinter::ObExprInnerInfoColsExtraPrinter(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_FUN_SYS_INNER_INFO_COLS_EXTRA_PRINTER, N_INNER_INFO_COLS_EXTRA_PRINTER, 4,
-                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, true)
 {
 }
 
@@ -520,7 +520,7 @@ int ObExprInnerInfoColsExtraPrinter::calc_result_typeN(ObExprResType &type,
   type.set_varchar();
   type.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
   type.set_collation_level(ObCollationLevel::CS_LEVEL_IMPLICIT);
-  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_nls_length_semantics();
+  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_length_semantics();
   type.set_length_semantics(def_ls);
   type.set_length(COLUMN_EXTRA_LENGTH);
   return ret;
@@ -616,7 +616,7 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsExtraPrinter, raw_expr) {
 
 ObExprInnerInfoColsDataTypePrinter::ObExprInnerInfoColsDataTypePrinter(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_FUN_SYS_INNER_INFO_COLS_DATA_TYPE_PRINTER, N_INNER_INFO_COLS_DATA_TYPE_PRINTER, 4,
-                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, true)
 {
 }
 
@@ -637,7 +637,7 @@ int ObExprInnerInfoColsDataTypePrinter::calc_result_typeN(ObExprResType &type,
   type.set_varchar();
   type.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
   type.set_collation_level(ObCollationLevel::CS_LEVEL_IMPLICIT);
-  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_nls_length_semantics();
+  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_length_semantics();
   type.set_length_semantics(def_ls);
   type.set_length(OB_MAX_EXTENDED_TYPE_INFO_LENGTH);
   return ret;
@@ -706,7 +706,7 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsDataTypePrinter, raw_expr) {
 
 ObExprInnerInfoColsColumnTypePrinter::ObExprInnerInfoColsColumnTypePrinter(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_FUN_SYS_INNER_INFO_COLS_COLUMN_TYPE_PRINTER, N_INNER_INFO_COLS_COLUMN_TYPE_PRINTER, 10,
-                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, true)
 {
 }
 
@@ -728,7 +728,7 @@ int ObExprInnerInfoColsColumnTypePrinter::calc_result_typeN(ObExprResType &type,
   type.set_varchar();
   type.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
   type.set_collation_level(ObCollationLevel::CS_LEVEL_IMPLICIT);
-  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_nls_length_semantics();
+  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_length_semantics();
   type.set_length_semantics(def_ls);
   type.set_length(OB_MAX_EXTENDED_TYPE_INFO_LENGTH);
   return ret;
@@ -792,7 +792,7 @@ int ObExprInnerInfoColsColumnTypePrinter::eval_column_column_type(const ObExpr &
       LOG_WARN("failed to get extended infos", K(ret));
     } else {
       int64_t pos = 0;
-      const ObLengthSemantics default_length_semantics = ctx.exec_ctx_.get_my_session()->get_local_nls_length_semantics();
+      const ObLengthSemantics default_length_semantics = ctx.exec_ctx_.get_my_session()->get_default_length_semantics();
       const uint64_t sub_type = ObExtendType == static_cast<ObObjType> (data_type->get_int()) ?
                                 sub_data_type->get_int() : static_cast<uint64_t>(srs_id->get_int() & SRS_ID_MASK);
       ObObjType column_type = ObMaxType;
@@ -852,7 +852,7 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsColumnTypePrinter, raw_expr) {
 
 ObExprInnerInfoColsColumnKeyPrinter::ObExprInnerInfoColsColumnKeyPrinter(ObIAllocator &alloc)
     : ObExprOperator(alloc, T_FUN_SYS_INNER_INFO_COLS_COLUMN_KEY_PRINTER, N_INNER_INFO_COLS_COLUMN_KEY_PRINTER, 2,
-                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                           VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, true)
 {
 }
 
@@ -872,7 +872,7 @@ inline int ObExprInnerInfoColsColumnKeyPrinter::calc_result_type2(ObExprResType 
   type.set_varchar();
   type.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
   type.set_collation_level(ObCollationLevel::CS_LEVEL_IMPLICIT);
-  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_nls_length_semantics();
+  const ObLengthSemantics def_ls = type_ctx.get_session()->get_actual_length_semantics();
   type.set_length_semantics(def_ls);
   type.set_length(MAX_COLUMN_KEY_LENGTH);
   return ret;

@@ -340,7 +340,7 @@ private:
   TypeBitset func2_set_;
 };
 
-extern ObArithResultTypeMap ARITH_RESULT_TYPE_ORACLE;
+extern ObArithResultTypeMap MOD_RESULT_TYPE_MAP;
 
 }
 }

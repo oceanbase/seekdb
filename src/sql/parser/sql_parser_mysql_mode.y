@@ -40,8 +40,6 @@
 #include "../../../src/sql/parser/sql_parser_mysql_mode_lex.h"
 #include "../../../src/sql/parser/sql_parser_base.h"
 
-extern void obsql_oracle_parse_fatal_error(int32_t errcode, yyscan_t yyscanner, yyconst char *msg, ...);
-
 #define GEN_EXPLAN_STMT(no_use, explain_stmt, explain_type, display_type, stmt, into_table, set_statement_id) \
   (void)(no_use); \
   ParseNode *type_node = NULL; \
@@ -220,7 +218,7 @@ DYNAMIC_SAMPLING
 NEG_SIGN
 
 %token /*can not be relation name*/
-_BINARY _UTF8 _UTF8MB4 _UTF8MB3 _GBK _UTF16 _GB18030 _GB18030_2022 _LATIN1 _GB2312 _ASCII _TIS620 _UJIS _EUCKR _EUCJPMS _CP932 _UTF16LE _SJIS _BIG5 _DEC8 _CP850 _HP8 _MACROMAN _SWE7 _HKSCS _HKSCS31 CNNOP
+_BINARY _UTF8 _UTF8MB4 _UTF8MB3 CNNOP
 SELECT_HINT_BEGIN UPDATE_HINT_BEGIN DELETE_HINT_BEGIN INSERT_HINT_BEGIN REPLACE_HINT_BEGIN HINT_HINT_BEGIN HINT_END
 LOAD_DATA_HINT_BEGIN CREATE_HINT_BEGIN ALTER_HINT_BEGIN
 END_P SET_VAR DELIMITER
@@ -315,7 +313,7 @@ END_P SET_VAR DELIMITER
 
         JOB JSON JSON_ARRAYAGG JSON_OBJECTAGG JSON_QUERY JSON_VALUE JSON_TABLE
 
-        KEYWORD KEY_BLOCK_SIZE KEY_VERSION KEYTAB KRB5CONF KVCACHE KV_ATTRIBUTES
+        KEYWORD KEY_BLOCK_SIZE KEY_VERSION KEYTAB KRB5CONF KVCACHE
 
         LAG LANGUAGE LAST LAST_REFRESH_SCN LAST_VALUE LATERAL LEAD LEADER LEAVES LESS LEAK LEAK_MOD LEAK_RATE LIB LINESTRING LIST_
         LISTAGG LOB_INROW_THRESHOLD LOCAL LOCALITY LOCATION LOCKED LOCKS LOGFILE LOGONLY_REPLICA_NUM LOGS LOCK_ LOGICAL_READS
@@ -1139,204 +1137,6 @@ _UTF8
   $$->str_value_ = parse_strdup("binary", result->malloc_pool_, &($$->str_len_));
   if (OB_UNLIKELY(NULL == $$->str_value_)) {
     yyerror(NULL, result, "No more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _GBK
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("gbk", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _LATIN1
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("latin1", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _GB2312
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("gb2312", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _ASCII
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("ascii", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _TIS620
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("tis620", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _UJIS
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("ujis", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _EUCKR
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("euckr", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _EUCJPMS
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("eucjpms", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _CP932
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("cp932", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _GB18030
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("gb18030", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _GB18030_2022
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("gb18030_2022", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "No more space for mallocing string");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _UTF16
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("utf16", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _UTF16LE
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("utf16le", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _SJIS
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("sjis", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _BIG5
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("big5", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _HKSCS
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("hkscs", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _HKSCS31
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("hkscs31", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _DEC8
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("dec8", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _CP850
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("cp850", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _HP8
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("hp8", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _MACROMAN
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("macroman", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
-    YYABORT_NO_MEMORY;
-  }
-}
-| _SWE7
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_CHARSET);
-  $$->str_value_ = parse_strdup("swe7", result->malloc_pool_, &($$->str_len_));
-  if (OB_UNLIKELY(NULL == $$->str_value_)) {
-    yyerror(NULL, result, "no more space for mallocing string\n");
     YYABORT_NO_MEMORY;
   }
 }
@@ -4898,7 +4698,7 @@ opt_table_option_list opt_partition_option
                            table_options,        /* table option(s) */
                            $10,                  /* partition optition */
                            NULL,                 /* column group */
-                           NULL);                /* oracle兼容模式下存放临时表的 on commit 选项 */
+                           NULL);                /* temporary table on commit option */
   $$->reserved_ = 0;
 }
 | create_with_opt_hint special_table_type TABLE opt_if_not_exists relation_factor '(' table_element_list ')'
@@ -4917,7 +4717,7 @@ opt_table_option_list opt_partition_option with_column_group
                            table_options,        /* table option(s) */
                            $10,                 /* partition optition */
                            $11,                 /* column group */
-                           NULL);               /* oracle兼容模式下存放临时表的 on commit 选项 */
+                           NULL);               /* temporary table on commit option */
   $$->reserved_ = 0;
 }
 | create_with_opt_hint special_table_type TABLE opt_if_not_exists relation_factor '(' table_element_list ')'
@@ -4936,7 +4736,7 @@ opt_table_option_list opt_partition_option with_column_group
                            table_options,        /* table option(s) */
                            $10,                  /* partition optition */
                            NULL,                 /* column group */
-                           NULL,                 /* oracle兼容模式下存放临时表的 on commit 选项 */
+                           NULL,                 /* temporary table on commit option */
                            $13,                  /* select_stmt */
                            $1,                   /* hints */
                            $11);                 /* opt_ignore_or_replace */
@@ -4958,7 +4758,7 @@ opt_table_option_list opt_partition_option with_column_group
                            table_options,        /* table option(s) */
                            $10,                  /* partition optition */
                            $11,                  /* column group */
-                           NULL,                 /* oracle兼容模式下存放临时表的 on commit 选项 */
+                           NULL,                 /* temporary table on commit option */
                            $13,                  /* select_stmt */
                            $1,                   /* hints */
                            NULL);                /* opt_ignore_or_replace */
@@ -4977,7 +4777,7 @@ opt_table_option_list opt_partition_option with_column_group
                            table_options,        /* table option(s) */
                            $7,                   /* partition optition */
                            NULL,                 /* column group */
-                           NULL,                 /* oracle兼容模式下存放临时表的 on commit 选项 */
+                           NULL,                 /* temporary table on commit option */
                            $10,                  /* select_stmt */
                            $1,                   /* hints */
                            $8);                  /* opt_ignore_or_replace */
@@ -4996,7 +4796,7 @@ opt_table_option_list opt_partition_option with_column_group
                            table_options,        /* table option(s) */
                            $7,                   /* partition optition */
                            $8,                   /* column group */
-                           NULL,                 /* oracle兼容模式下存放临时表的 on commit 选项 */
+                           NULL,                 /* temporary table on commit option */
                            $10,                  /* select_stmt */
                            $1,                   /* hints */
                            NULL);                /* opt_ignore_or_replace */
@@ -5013,7 +4813,7 @@ opt_table_option_list opt_partition_option with_column_group
                            NULL,                 /* table option(s) */
                            $6,                   /* partition optition */
                            NULL,                 /* column group */
-                           NULL,                 /* oracle兼容模式下存放临时表的 on commit 选项 */
+                           NULL,                 /* temporary table on commit option */
                            $9,                   /* select_stmt */
                            $1,                   /* hints */
                            $7);                  /* opt_ignore_or_replace */
@@ -5030,7 +4830,7 @@ opt_table_option_list opt_partition_option with_column_group
                            NULL,                 /* table option(s) */
                            $6,                   /* partition optition */
                            $7,                   /* column group */
-                           NULL,                 /* oracle兼容模式下存放临时表的 on commit 选项 */
+                           NULL,                 /* temporary table on commit option */
                            $9,                   /* select_stmt */
                            $1,                   /* hints */
                            NULL);                /* opt_ignore_or_replace */
@@ -5046,7 +4846,7 @@ opt_table_option_list opt_partition_option with_column_group
                            NULL,                 /* table option(s) */
                            NULL,                 /* partition optition */
                            NULL,                 /* column group */
-                           NULL,                 /* oracle兼容模式下存放临时表的 on commit 选项 */
+                           NULL,                 /* temporary table on commit option */
                            $6,                   /* select_stmt */
                            $1,                   /* hints */
                            NULL);                /* opt_ignore_or_replace */
@@ -5062,7 +4862,7 @@ opt_table_option_list opt_partition_option with_column_group
                            NULL,                 /* table option(s) */
                            NULL,                 /* partition optition */
                            NULL,                 /* column group */
-                           NULL,                 /* oracle兼容模式下存放临时表的 on commit 选项 */
+                           NULL,                 /* temporary table on commit option */
                            $7,                   /* select_stmt */
                            $1,                   /* hints */
                            $6);                  /* opt_ignore_or_replace */
@@ -5078,7 +4878,7 @@ opt_table_option_list opt_partition_option with_column_group
                            NULL,                 /* table option(s) */
                            NULL,                 /* partition optition */
                            $6,                   /* column group */
-                           NULL,                 /* oracle兼容模式下存放临时表的 on commit 选项 */
+                           NULL,                 /* temporary table on commit option */
                            $7,                   /* select_stmt */
                            $1,                   /* hints */
                            NULL);                /* opt_ignore_or_replace */
@@ -5094,7 +4894,7 @@ opt_table_option_list opt_partition_option with_column_group
                            NULL,                 /* table option(s) */
                            NULL,                 /* partition optition */
                            NULL,                 /* column group */
-                           NULL,                 /* oracle兼容模式下存放临时表的 on commit 选项 */
+                           NULL,                 /* temporary table on commit option */
                            $8,                   /* select_stmt */
                            $1,                   /* hints */
                            $6);                /* opt_ignore_or_replace */
@@ -5110,7 +4910,7 @@ opt_table_option_list opt_partition_option with_column_group
                            NULL,                 /* table option(s) */
                            NULL,                 /* partition optition */
                            $6,                   /* column group */
-                           NULL,                 /* oracle兼容模式下存放临时表的 on commit 选项 */
+                           NULL,                 /* temporary table on commit option */
                            $8,                   /* select_stmt */
                            $1,                   /* hints */
                            NULL);                /* opt_ignore_or_replace */
@@ -7230,11 +7030,6 @@ TABLE_MODE opt_equal_mark STRING_VALUE
   (void)($2) ; /* make bison mute */
   merge_nodes($$, result, T_TTL_DEFINITION, $4);
   dup_expr_string($$, result, @4.first_column, @4.last_column);
-}
-| KV_ATTRIBUTES opt_equal_mark STRING_VALUE
-{
-  (void)($2); /*  make bison mute*/
-  malloc_non_terminal_node($$, result->malloc_pool_, T_KV_ATTRIBUTES, 1, $3);
 }
 | DEFAULT_LOB_INROW_THRESHOLD opt_equal_mark INTNUM
 {
@@ -14560,7 +14355,7 @@ ANALYZE TABLE relation_factor UPDATE HISTOGRAM ON column_name_list WITH INTNUM B
 
 /*****************************************************************************
  *
- *	analyze clause (oracle syntax)
+ *	analyze statistics clause
  *  added by link.zt
  *
 *****************************************************************************/
@@ -18648,6 +18443,12 @@ alter_with_opt_hint SYSTEM REFRESH MEMORY STAT
   malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_MEMORY_STAT, 1, NULL);
 }
 |
+alter_with_opt_hint SYSTEM WASH MEMORY FRAGMENTATION
+{
+  (void)($1);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_WASH_MEMORY_FRAGMENTATION, 1, NULL);
+}
+|
 alter_with_opt_hint SYSTEM REFRESH IO CALIBRATION opt_storage_name opt_calibration_list
 {
   (void)($1);
@@ -20481,12 +20282,11 @@ size_clause is defined as size_clause := SIZE {integer | REPEAT | AUTO | SKEWONL
 column is defined as column := column_name | extension name | extension
 - integer : Number of histogram buckets. Must be in the range [1,2048].
 - REPEAT : Collects histograms only on the columns that already have histograms
-- AUTO : Oracle determines the columns to collect histograms based on data distribution and the workload of the columns
-- SKEWONLY : Oracle determines the columns to collect histograms based on the data distribution of the columns
+- AUTO : The optimizer determines the columns to collect histograms based on data distribution and workload
+- SKEWONLY : The optimizer determines the columns to collect histograms based on column data distribution
 - column_name : name of a column
 - extension : can be either a column group in the format of (column_name, column_name [, ...]) or an expression
 The default is FOR ALL COLUMNS SIZE AUTO.
-https://blogs.oracle.com/optimizer/how-does-the-methodopt-parameter-work
 ******************************************************************************/
 
 method_opt:
@@ -23060,7 +22860,6 @@ ACCESS_INFO
 |       MY_NAME
 |       CONNECT
 |       STATEMENT_ID
-|       KV_ATTRIBUTES
 |       OBJECT_ID
 |       TRANSFER
 |       SUM_OPNSIZE

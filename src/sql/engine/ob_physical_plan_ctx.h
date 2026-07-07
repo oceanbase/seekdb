@@ -564,9 +564,10 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObPhysicalPlanCtx);
 private:
   static const int64_t ESTIMATE_TRANS_RESERVE_TIME = 70 * 1000;
-  //oracle calc time during running, not before running.
-  //oracle datetime func has two categories: sysdate/systimestamp, current_date/current_timestamp/localtimestamp
-  //so we use `cur_time_` for first used-category, `cur_time_ + DELTA_TARDY_TIME_US` for second used-category.
+  // Some datetime functions are evaluated during execution, not before execution.
+  // sysdate/systimestamp and current_date/current_timestamp/localtimestamp use
+  // different timestamps, so we use `cur_time_` for the first category and
+  // `cur_time_ + DELTA_TARDY_TIME_US` for the second category.
   static const int64_t DELTA_TARDY_TIME_US = 5;
   common::ObIAllocator &allocator_;
 private:

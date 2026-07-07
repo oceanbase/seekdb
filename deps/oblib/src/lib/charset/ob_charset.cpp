@@ -733,7 +733,7 @@ uint64_t ObCharset::hash(ObCollationType collation_type,
   return ret;
 }
 
-/* only called by unit test for now, is_oracle_mode will always return false in unit test
+/* Only called by unit tests for now; use MySQL-compatible hash behavior.
  *  if you want to use this hash fun in other places, please contact @maoli */
 uint64_t ObCharset::hash(ObCollationType collation_type,
                          const char *str,
@@ -1300,16 +1300,6 @@ ObCharsetType ObCharset::charset_type(const ObString &cs_name)
   return charset_type;
 }
 
-ObCharsetType ObCharset::charset_type_by_name_oracle(const ObString &cs_name)
-{
-  ObCharsetType charset_type = CHARSET_INVALID;
-  if (0 == cs_name.case_compare("AL32UTF8")
-      || 0 == cs_name.case_compare("UTF8")) {
-    charset_type = CHARSET_UTF8MB4;
-  }
-  return charset_type;
-}
-
 ObCharsetType ObCharset::charset_type(const char *cs_name)
 {
   ObCharsetType ct = CHARSET_INVALID;
@@ -1781,25 +1771,6 @@ ObCollationType ObCharset::get_default_collation_by_mode(ObCharsetType charset_t
   return get_default_collation(charset_type);
 }
 
-ObCollationType ObCharset::get_default_collation_oracle(ObCharsetType charset_type)
-{
-  ObCollationType collation_type = CS_TYPE_INVALID;
-  switch (charset_type) {
-    case CHARSET_UTF8MB4: {
-      collation_type = CS_TYPE_UTF8MB4_BIN;
-      break;
-    }
-    case CHARSET_BINARY: {
-      collation_type = CS_TYPE_BINARY;
-      break;
-    }
-    default: {
-      break;
-    }
-  }
-  return collation_type;
-}
-
 int ObCharset::get_default_collation(ObCharsetType charset_type, ObCollationType &collation_type)
 {
   int ret = OB_SUCCESS;
@@ -2096,13 +2067,12 @@ bool ObCharset::case_sensitive_equal(const ObString &one, const ObString &anothe
 {
   return 0 == strcmp(CS_TYPE_UTF8MB4_BIN, one, another);
 }
-// When tenant mode is mysql, case insensitive match, tenant mode is oracle, case sensitive match
+// seekdb is MySQL-only, so compatible name matching is case insensitive.
 bool ObCharset::case_compat_mode_equal(const ObString &one, const ObString &another)
 {
   return case_insensitive_equal(one, another);
 }
-/* for db objects' name use, like column names, table names; on oracle mode, trailing spaces are always part of the hash calc
- * although trailing spaces are not allowed in db object's name, "a" and "a " are two different names in Oracle
+/* For db object names, such as column names and table names.
  * if you want to use this hash fun in other places, please contact @maoli */
 uint64_t ObCharset::hash(const ObCollationType collation_type, const ObString &str,
                          uint64_t seed, hash_algo hash_algo)
@@ -2115,8 +2085,7 @@ uint64_t ObCharset::hash(const ObCollationType collation_type, const ObString &s
   return ret;
 }
 
-/* for db objects' name use, like column names, table names; on oracle mode, trailing spaces are always part of the hash calc
- * although trailing spaces are not allowed in db object's name, "a" and "a " are two different names in Oracle
+/* For db object names, such as column names and table names.
  * if you want to use this hash fun in other places, please contact @xiaofeng.lby */
 uint64_t ObCharset::hash(
     const ObCollationType collation_type, const ObString &str,
@@ -2641,21 +2610,6 @@ bool ObCharset::is_valid_connection_collation(ObCollationType collation_type)
 {
   return is_valid_collation(collation_type);
 }
-
-const char *ObCharset::get_oracle_charset_name_by_charset_type(ObCharsetType charset_type)
-{
-  const char* ret = NULL;
-  switch (charset_type) {
-  case CHARSET_UTF8MB4:
-    ret = "AL32UTF8";
-    break;
-  default:
-    break;
-  }
-  return ret;
-}
-
-
 
 static void ob_charset_error_reporter(enum loglevel level, unsigned int ecode, ...) {
   //UNUSED(level);

@@ -188,7 +188,7 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
     dst_len = default_accuracy.get_length();
     // dst_type = expr.args_[0]->datum_meta_.type_;
     // const ObAccuracy &default_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY[dst_type];
-    // dst_len = dst_type == ObVarcharType ? OB_MAX_ORACLE_VARCHAR_LENGTH : default_accuracy.get_length();
+    // dst_len = dst_type == ObVarcharType ? OB_MAX_EXTENDED_VARCHAR_LENGTH : default_accuracy.get_length();
   } else if (OB_FAIL(ObJsonExprHelper::eval_and_check_res_type(return_type, dst_type, dst_len))) {
     LOG_WARN("fail to check returning type", K(ret));
   } else if ((expr.datum_meta_.cs_type_ == CS_TYPE_BINARY || dst_type == ObJsonType) && (opt_array[OPT_PRETTY_ID] > 0 || opt_array[OPT_ASCII_ID] > 0)) {
@@ -314,7 +314,7 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
                                                           tmp_val.length(), dst_len, char_len);
 
               tmp_val.assign_ptr(tmp_val.ptr(), real_dst_len);
-              // compact with oracle: 
+              // Keep truncation at a valid character boundary.
               if (real_dst_len != dst_len && real_dst_len > 0) {
                 // get last char
                 // must be utf8

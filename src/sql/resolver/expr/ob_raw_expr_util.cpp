@@ -37,7 +37,7 @@ using namespace share;
 using namespace share::schema;
 namespace sql
 {
-#define RESOLVE_ORALCE_IMLICIT_CAST_WARN_OR_ERR(warn_code, err_code) \
+#define RESOLVE_EXTENDED_IMPLICIT_CAST_WARN_OR_ERR(warn_code, err_code) \
 if ((session_info->get_sql_mode() & SMO_ERROR_ON_RESOLVE_CAST) > 0) {\
   ret = err_code;\
 } else {\
@@ -108,25 +108,25 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
       if (OB_FAIL(sub_expr1->formalize(session_info))) {
         LOG_WARN("expr fail to formalize");
       } else if (!ob_is_valid_obj_o_type(r_type1 = sub_expr1->get_result_type().get_type())) {
-        RESOLVE_ORALCE_IMLICIT_CAST_WARN_OR_ERR(OB_OBJ_TYPE_ERROR, OB_OBJ_TYPE_ERROR);
-        LOG_WARN("invalid oracle type after formalize type1", K(r_type1), K(*sub_expr1));
+        RESOLVE_EXTENDED_IMPLICIT_CAST_WARN_OR_ERR(OB_OBJ_TYPE_ERROR, OB_OBJ_TYPE_ERROR);
+        LOG_WARN("invalid extended type after formalize", K(r_type1), K(*sub_expr1));
       }
     }
     if (OB_SUCC(ret) && !ob_is_valid_obj_o_type(r_type2)) {
       if (OB_FAIL(sub_expr2->formalize(session_info))) {
         LOG_WARN("expr fail to formalize");
       } else if (!ob_is_valid_obj_o_type(r_type2 = sub_expr2->get_result_type().get_type())) {
-        RESOLVE_ORALCE_IMLICIT_CAST_WARN_OR_ERR(OB_OBJ_TYPE_ERROR, OB_OBJ_TYPE_ERROR);
-        LOG_WARN("invalid oracle type after formalize type1", K(r_type2), K(*sub_expr2));
+        RESOLVE_EXTENDED_IMPLICIT_CAST_WARN_OR_ERR(OB_OBJ_TYPE_ERROR, OB_OBJ_TYPE_ERROR);
+        LOG_WARN("invalid extended type after formalize", K(r_type2), K(*sub_expr2));
       }
     }
     if (OB_SUCC(ret)) {
-      ObObjOType type1 = ob_obj_type_to_oracle_type(r_type1);
-      ObObjOType type2 = ob_obj_type_to_oracle_type(r_type2);
+      ObObjOType type1 = ob_obj_type_to_extended_type(r_type1);
+      ObObjOType type2 = ob_obj_type_to_extended_type(r_type2);
 
       if (type1 >= ObOMaxType || type2 >= ObOMaxType) {
-        LOG_WARN("INVALID ORACLE TYPE", K(type1), K(type2), K(*sub_expr1), K(*sub_expr2));
-        RESOLVE_ORALCE_IMLICIT_CAST_WARN_OR_ERR(OB_OBJ_TYPE_ERROR, OB_ERR_INVALID_TYPE_FOR_OP);
+        LOG_WARN("INVALID EXTENDED TYPE", K(type1), K(type2), K(*sub_expr1), K(*sub_expr2));
+        RESOLVE_EXTENDED_IMPLICIT_CAST_WARN_OR_ERR(OB_OBJ_TYPE_ERROR, OB_ERR_INVALID_TYPE_FOR_OP);
       } else if (ObONullType == type1 || ObONullType == type2) {
         LOG_DEBUG("No need to cast with null", K(type1), K(type2));
       } else {
@@ -162,14 +162,14 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
           }
         case T_OP_ADD: {
           is_arith_op = true;
-          if (ob_is_oracle_datetime_tc(r_type1)) {
+          if (ob_is_extended_datetime_tc(r_type1)) {
             if (ob_is_numeric_type(r_type2)) {
               dir = ImplicitCastDirection::IC_NO_CAST;
             } else if (ob_is_string_tc(r_type2)) {
               r_type3 = ObNumberType;
               dir = ImplicitCastDirection::IC_B_TO_C;
             }
-          } else if (ob_is_oracle_datetime_tc(r_type2)) {
+          } else if (ob_is_extended_datetime_tc(r_type2)) {
             if (ob_is_numeric_type(r_type1)) {
               dir = ImplicitCastDirection::IC_NO_CAST;
             } else if (ob_is_string_tc(r_type1)) {
@@ -192,16 +192,16 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
           }
         case T_OP_MINUS: {
           is_arith_op = true;
-          if (ob_is_oracle_datetime_tc(r_type1)) {
+          if (ob_is_extended_datetime_tc(r_type1)) {
             if (ob_is_numeric_type(r_type2)) {
               dir = ImplicitCastDirection::IC_NO_CAST;
             } else if (ob_is_string_tc(r_type2)) {
               r_type3 = ObNumberType;
               dir = ImplicitCastDirection::IC_B_TO_C;
-            } else if (ob_is_oracle_datetime_tc(r_type2)) {
+            } else if (ob_is_extended_datetime_tc(r_type2)) {
               dir = ImplicitCastDirection::IC_NO_CAST;
             }
-            } else if (ob_is_oracle_datetime_tc(r_type2)) {
+            } else if (ob_is_extended_datetime_tc(r_type2)) {
               dir = ImplicitCastDirection::IC_NO_CAST;
             }
           if (ob_is_raw_tc(r_type1)) {
@@ -242,7 +242,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
             /* lob type return warning */
           } else {
             middle_type = ObNumberType;
-            dir = OB_OBJ_IMPLICIT_CAST_DIRECTION_FOR_ORACLE[type1][type2];
+            dir = OB_OBJ_IMPLICIT_CAST_DIRECTION_EXTENDED[type1][type2];
           }
         break;
         }
@@ -250,15 +250,15 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
         if (ob_is_interval_tc(r_type1) || ob_is_interval_tc(r_type2)) {
           dir = ImplicitCastDirection::IC_NO_CAST;
         }
-        LOG_DEBUG("Molly ORACLE IMPLICIT CAST DIR",
+        LOG_DEBUG("EXTENDED IMPLICIT CAST DIR",
             K(dir), K(type1), K(type2), K(r_type3), K(*sub_expr1), K(*sub_expr2), K(op_type));
         ObExprResType dest_type;
         switch (dir) {
         case ImplicitCastDirection::IC_NO_CAST: {
-          //int is number(38) in oracle, when number div number, the result can be decimal.
-          //So we add cast int as number b4 do div
+          // Integer division can produce a decimal result, so cast integers to
+          // number before division.
           if (tc1 == ObIntTC && tc2 == ObIntTC && op_type == T_OP_DIV) {
-            ObAccuracy    acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[1][ObNumberType];
+            ObAccuracy    acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][ObNumberType];
             dest_type.set_precision(acc.get_precision());
             dest_type.set_scale(acc.get_scale());
             dest_type.set_collation_level(CS_LEVEL_NUMERIC);
@@ -308,8 +308,8 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
               cast_mode |= ObRelationalExprOperator::get_const_cast_mode(op_type, false);
             }
           } else {
-            acc = (ObNumberType == dst_type ? ObAccuracy::DDL_DEFAULT_ACCURACY2[1][dst_type] :
-                                             ObAccuracy::MAX_ACCURACY2[1][dst_type]);
+            acc = (ObNumberType == dst_type ? ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][dst_type] :
+                                             ObAccuracy::MAX_ACCURACY2[0/*MySQL*/][dst_type]);
           }
           dest_type.set_precision(acc.get_precision());
           dest_type.set_scale(acc.get_scale());
@@ -355,8 +355,8 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
               cast_mode |= ObRelationalExprOperator::get_const_cast_mode(op_type, true);
             }
           } else {
-            acc = (ObNumberType == dst_type ? ObAccuracy::DDL_DEFAULT_ACCURACY2[1][dst_type] :
-                                             ObAccuracy::MAX_ACCURACY2[1][dst_type]);
+            acc = (ObNumberType == dst_type ? ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][dst_type] :
+                                             ObAccuracy::MAX_ACCURACY2[0/*MySQL*/][dst_type]);
           }
           dest_type.set_precision(acc.get_precision());
           dest_type.set_scale(acc.get_scale());
@@ -382,7 +382,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
           break;
         }
         case ImplicitCastDirection::IC_A_TO_C: {
-          ObAccuracy acc = (ObNumberType == r_type3 ? ObAccuracy::DDL_DEFAULT_ACCURACY2[1][r_type3] : ObAccuracy::MAX_ACCURACY2[1][r_type3]);
+          ObAccuracy acc = (ObNumberType == r_type3 ? ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][r_type3] : ObAccuracy::MAX_ACCURACY2[0/*MySQL*/][r_type3]);
           dest_type.set_precision(acc.get_precision());
           dest_type.set_scale(acc.get_scale());
           dest_type.set_type(r_type3);
@@ -403,7 +403,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
           break;
         }
         case ImplicitCastDirection::IC_B_TO_C: {
-          ObAccuracy acc = (ObNumberType == r_type3 ? ObAccuracy::DDL_DEFAULT_ACCURACY2[1][r_type3] : ObAccuracy::MAX_ACCURACY2[1][r_type3]);
+          ObAccuracy acc = (ObNumberType == r_type3 ? ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][r_type3] : ObAccuracy::MAX_ACCURACY2[0/*MySQL*/][r_type3]);
           dest_type.set_precision(acc.get_precision());
           dest_type.set_scale(acc.get_scale());
           dest_type.set_type(r_type3);
@@ -424,7 +424,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
           break;
         }
         case ImplicitCastDirection::IC_TO_MIDDLE_TYPE: {
-          ObAccuracy acc = (ObNumberType == middle_type ? ObAccuracy::DDL_DEFAULT_ACCURACY2[1][middle_type] : ObAccuracy::MAX_ACCURACY2[1][middle_type]);
+          ObAccuracy acc = (ObNumberType == middle_type ? ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][middle_type] : ObAccuracy::MAX_ACCURACY2[0/*MySQL*/][middle_type]);
           dest_type.set_precision(acc.get_precision());
           dest_type.set_scale(acc.get_scale());
           dest_type.set_collation_level(CS_LEVEL_NUMERIC);
@@ -520,7 +520,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
               LOG_USER_WARN(OB_ERR_INVALID_TYPE_FOR_OP, ob_obj_type_str(r_type1), ob_obj_type_str(r_type2));
             }
           }
-          LOG_WARN("expr get oracle implicit cast direction failed", K(is_error));
+          LOG_WARN("expr get implicit cast direction failed", K(is_error));
           break;
         }
         }
@@ -530,9 +530,9 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
   return ret;
 }
 
-int ObRawExprUtils::resolve_op_expr_for_oracle_implicit_cast(ObRawExprFactory &expr_factory,
-                                                             const ObSQLSessionInfo *session_info,
-                                                             ObOpRawExpr* &b_expr)
+int ObRawExprUtils::resolve_op_expr_for_comparison_implicit_cast(ObRawExprFactory &expr_factory,
+                                                                 const ObSQLSessionInfo *session_info,
+                                                                 ObOpRawExpr* &b_expr)
 {
   int ret = OB_SUCCESS;
   ObRawExpr   *sub_expr1 = NULL;
@@ -645,9 +645,9 @@ int ObRawExprUtils::resolve_op_expr_for_oracle_implicit_cast(ObRawExprFactory &e
   return ret;
 }
 
-int ObRawExprUtils::resolve_op_exprs_for_oracle_implicit_cast(ObRawExprFactory &expr_factory,
-                                                              const ObSQLSessionInfo *session_info,
-                                                              ObIArray<ObOpRawExpr*> &op_exprs)
+int ObRawExprUtils::resolve_op_exprs_for_comparison_implicit_cast(ObRawExprFactory &expr_factory,
+                                                                  const ObSQLSessionInfo *session_info,
+                                                                  ObIArray<ObOpRawExpr*> &op_exprs)
 {
   int ret = OB_SUCCESS;
   if (session_info == NULL){
@@ -662,7 +662,7 @@ int ObRawExprUtils::resolve_op_exprs_for_oracle_implicit_cast(ObRawExprFactory &
       } else if (b_expr->get_param_count() != 2) {
         //TODO Molly case when
         LOG_WARN("IMPLICIT UNEXPECTED BEXPR", K(*b_expr));
-      } else if (OB_FAIL(resolve_op_expr_for_oracle_implicit_cast(expr_factory, session_info,
+      } else if (OB_FAIL(resolve_op_expr_for_comparison_implicit_cast(expr_factory, session_info,
           b_expr))){
         LOG_WARN("IMPLICIT UNEXPECTED BEXPR", K(*b_expr));
       }
@@ -1346,7 +1346,7 @@ int ObRawExprUtils::parse_default_expr_from_str(const ObString &expr_str,
   parse_result.pl_parse_info_.is_pl_parse_expr_ = true;
   parse_result.sql_mode_ = sql_mode;
   parse_result.charset_info_ = ObCharset::get_charset(expr_str_cs_type.string_collation_);
-  parse_result.charset_info_oracle_db_ = ObCharset::is_valid_collation(expr_str_cs_type.nls_collation_) ?
+  parse_result.charset_info_nls_db_ = ObCharset::is_valid_collation(expr_str_cs_type.nls_collation_) ?
         ObCharset::get_charset(expr_str_cs_type.nls_collation_) : NULL;
   parse_result.is_not_utf8_connection_ = ObCharset::is_valid_collation(expr_str_cs_type.string_collation_) ?
         (ObCharset::charset_type_by_coll(expr_str_cs_type.string_collation_) != CHARSET_UTF8MB4) : false;
@@ -1661,7 +1661,7 @@ int ObRawExprUtils::build_seq_nextval_expr(ObRawExpr *&expr,
   return ret;
 }
 
-// build oracle sequence_object.currval, sequence_object.nextval expr
+// build sequence_object.currval and sequence_object.nextval expr
 int ObRawExprUtils::build_seq_nextval_expr(ObRawExpr *&expr,
                                           const ObSQLSessionInfo *session_info,
                                           ObRawExprFactory *expr_factory,
@@ -1788,11 +1788,11 @@ int ObRawExprUtils::resolve_sequence_object(const ObQualifiedName &q_name,
   return ret;
 }
 /**
- * @brief [Oracle compatible] Used to determine whether a function or pseudocolumn is a "pure" function, according to the Oracle official documentation:
- * Any function you specify in column_expression must return a repeatable value. For example,
- * you cannot specify the SYSDATE or USER function or the pseudocolumn.
- * Currently, only checks for system functions in Oracle mode are supported
- * Considering that the expression may be nested, therefore traverse each child individually, finding any function or pseudocolumn that might be non-pure
+ * @brief Used to determine whether a function or pseudocolumn is deterministic.
+ * Any function specified in a generated column, function-based index, or CHECK
+ * constraint must return a repeatable value. Considering that the expression
+ * may be nested, traverse each child individually to find any function or
+ * pseudocolumn that might be non-deterministic.
  * @param expr expression
  * @param allocator used to allocate memory for ObList
  * @return
@@ -2198,8 +2198,8 @@ int ObRawExprUtils::try_modify_expr_for_gen_col_recursively(const ObSQLSessionIn
 }
 
 /**
- * @brief In oracle, when expr is to_date/timestamp/timestamptz, wrap its first parameter with to_char, to store
- * the nls_xx_format information of the current session
+ * @brief When expr is to_date/timestamp/timestamptz, wrap its first parameter
+ * with to_char to store the nls_xx_format information of the current session.
  * to_date(c1, 'yyyy-mm-dd') => to_date(to_char(c1, nls_date_format), 'yyyy-mm-dd')
  * @param session session
  * @param arg arg is allowed to be empty, when empty, use nls_xx_format from the session
@@ -2324,7 +2324,7 @@ int ObRawExprUtils::actual_add_to_char_on_expr(const ObSQLSessionInfo& session,
 
 
 /**
- * @brief In Oracle, when to_char has only one parameter, and the first parameter is a date type, it will add nls_xx_format as the second parameter
+ * @brief Preserve NLS format in expression-index rewrites by adding nls_xx_format for one-argument to_char on date/time types
  * to_char(date) => to_char(date, nls_xx_format)
  * @param session session
  * @param arg arg is allowed to be empty, when empty, use nls_xx_format from session
@@ -4491,7 +4491,7 @@ int ObRawExprUtils::build_column_conv_expr(const ObSQLSessionInfo *session_info,
     ObObjTypeClass expect_tc = ob_obj_type_class(dest_type);
     if ((ObNumberTC == ori_tc || ObDecimalIntTC == ori_tc)
         && ObLobTC == expect_tc) {
-      // oracle mode can not cast number to text, but mysql mode can
+      // Number-to-text casts are not allowed for this path.
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
       LOG_WARN("cast to lob type not allowed", K(ret), K(expect_tc), K(ori_tc));
     } else if (ObIntTC == ori_tc && ObLongTextType == dest_type) {
@@ -4933,6 +4933,7 @@ int ObRawExprUtils::build_high_bound_raw_expr(
   ObOpRawExpr *trunc_expr = NULL;
   ObOpRawExpr *result_expr = NULL;
   ObConstRawExpr *interval_expr = NULL;
+  ObConstRawExpr *zero_expr = NULL;
   ObRawExpr *diff_1 = NULL;
   ObRawExpr *diff_2 = NULL;
   ObConstRawExpr *int_expr = NULL;
@@ -4951,9 +4952,11 @@ int ObRawExprUtils::build_high_bound_raw_expr(
   /* build v1 / v2 */
   OZ (build_div_expr(raw_expr_factory, diff_1, diff_2, div_expr));
 
-  /* build trunc(v) */
-  OZ (raw_expr_factory.create_raw_expr(T_FUN_SYS_ORA_TRUNC, trunc_expr));
+  /* build truncate(v, 0) */
+  OZ (raw_expr_factory.create_raw_expr(T_FUN_SYS_TRUNCATE, trunc_expr));
   OZ (trunc_expr->set_param_expr(div_expr));
+  OZ (build_const_int_expr(raw_expr_factory, ObIntType, 0, zero_expr));
+  OZ (trunc_expr->set_param_expr(zero_expr));
 
   /* build v1 + 1*/
   OZ (build_const_int_expr(raw_expr_factory,
@@ -4988,7 +4991,7 @@ int ObRawExprUtils::build_const_obj_expr(ObRawExprFactory &expr_factory,
   } else {
     c_expr->set_value(obj);
     expr = c_expr;
-    if (ob_is_oracle_temporal_type(objtype) ||
+    if (ob_is_extended_temporal_type(objtype) ||
         ob_is_interval_tc(objtype)) {
       expr->set_scale(obj.get_scale());
     }
@@ -6518,7 +6521,7 @@ bool ObRawExprUtils::has_prefix_str_expr(const ObRawExpr &expr,
         if (param_expr2 != NULL && param_expr2->is_const_raw_expr()) {
           const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(param_expr2);
           if ((const_expr->get_value().is_int() && const_expr->get_value().get_int() == 1)
-              || (const_expr->get_value().is_oracle_decimal()
+              || (const_expr->get_value().is_decimal_or_float()
                   && OB_SUCCESS == ora_cmp_integer(*const_expr, one, cmp_ret) && cmp_ret == 0))
             {
               param2_valid = true;
@@ -6527,7 +6530,7 @@ bool ObRawExprUtils::has_prefix_str_expr(const ObRawExpr &expr,
         if (param_expr3 != NULL && param_expr3->is_const_raw_expr()) {
           const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(param_expr3);
           if ((const_expr->get_value().is_int() && const_expr->get_value().get_int() >= 1)
-              || (const_expr->get_value().is_oracle_decimal()
+              || (const_expr->get_value().is_decimal_or_float()
                   && OB_SUCCESS == ora_cmp_integer(*const_expr, one, cmp_ret) && cmp_ret >= 0))
             {
               param3_valid = true;
@@ -6601,35 +6604,6 @@ int ObRawExprUtils::build_const_bool_expr(ObRawExprFactory *expr_factory, ObRawE
     val.set_bool(b_value);
     bool_expr->set_value(val);
     expr = bool_expr;
-  }
-  return ret;
-}
-
-int ObRawExprUtils::build_ora_decode_expr(ObRawExprFactory *expr_factory,
-                                          const ObSQLSessionInfo &session_info,
-                                          ObRawExpr *&expr,
-                                          ObIArray<ObRawExpr *> &params_exprs)
-{
-  int ret = OB_SUCCESS;
-  expr = NULL;
-  ObSysFunRawExpr *ora_decode = NULL;
-  if (OB_ISNULL(expr_factory) || params_exprs.count() < 3) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected params", K(ret), KP(expr_factory), K(params_exprs.count()));
-  } else if (OB_FAIL(expr_factory->create_raw_expr(T_FUN_SYS_ORA_DECODE, ora_decode))) {
-    LOG_WARN("failed to create raw expr", K(ret));
-  } else if (OB_ISNULL(ora_decode)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("new expr is NULL", K(ret), KP(ora_decode));
-  } else if (OB_FAIL(ora_decode->set_param_exprs(params_exprs))) {
-    LOG_WARN("failed to append into ora_decode param exprs", K(ret));
-  } else {
-    ora_decode->set_func_name(ObString::make_string(N_ORA_DECODE));
-    if (OB_FAIL(ora_decode->formalize(&session_info))) {
-      LOG_WARN("failed to formalize ora_decode", K(ret));
-    } else {
-      expr = ora_decode;
-    }
   }
   return ret;
 }

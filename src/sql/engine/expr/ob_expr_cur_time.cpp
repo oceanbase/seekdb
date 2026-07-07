@@ -351,7 +351,7 @@ int ObExprSysdate::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
 
 ObExprCurDate::ObExprCurDate(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_CUR_DATE, N_CUR_DATE, 0, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                         INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                         INTERNAL_IN_MYSQL_MODE)
 {
 }
 ObExprCurDate::~ObExprCurDate()

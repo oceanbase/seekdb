@@ -125,7 +125,7 @@ union ObServerStatusFlags
   {
     uint16_t OB_SERVER_STATUS_IN_TRANS:             1;  // a transaction is active
     uint16_t OB_SERVER_STATUS_AUTOCOMMIT:           1;  // auto-commit is enabled
-    uint16_t OB_SERVER_STATUS_RESERVED_OR_ORACLE_MODE: 1;  // used for oracle_mode for login, reserved for other case
+    uint16_t OB_SERVER_STATUS_RESERVED:         1;
     uint16_t OB_SERVER_MORE_RESULTS_EXISTS:         1;
     uint16_t OB_SERVER_STATUS_NO_GOOD_INDEX_USED:   1;
     uint16_t OB_SERVER_STATUS_NO_INDEX_USED:        1;
@@ -233,7 +233,7 @@ union ObMySQLCapabilityFlags
     uint32_t OB_CLIENT_SESSION_TRACK:                   1;
     uint32_t OB_CLIENT_DEPRECATE_EOF:                   1;
     uint32_t OB_CLIENT_RESERVED_NOT_USE:                2;
-    uint32_t OB_CLIENT_SUPPORT_ORACLE_MODE:             1;
+    uint32_t OB_CLIENT_RESERVED_27:                     1;
     uint32_t OB_CLIENT_RETURN_HIDDEN_ROWID:             1;
     uint32_t OB_CLIENT_USE_LOB_LOCATOR:                 1;
     uint32_t OB_CLIENT_SSL_VERIFY_SERVER_CERT:          1;
@@ -269,7 +269,7 @@ enum ObClientCapabilityPos
   OB_CLIENT_SESSION_TRACK_POS,
   OB_CLIENT_DEPRECATE_EOF_POS,
   //RESERVED 2
-  OB_CLIENT_SUPPORT_ORACLE_MODE_POS = 27,
+  OB_CLIENT_RESERVED_27_POS = 27,
   OB_CLIENT_RETURN_ROWID_POS = 28,
   OB_CLIENT_USE_LOB_LOCATOR_POS = 29,
   OB_CLIENT_SSL_VERIFY_SERVER_CERT_POS = 30,
@@ -280,7 +280,7 @@ enum ObServerStatusFlagsPos
 {
   OB_SERVER_STATUS_IN_TRANS_POS = 0,
   OB_SERVER_STATUS_AUTOCOMMIT_POS,
-  OB_SERVER_STATUS_RESERVED_OR_ORACLE_MODE_POS,
+  OB_SERVER_STATUS_RESERVED_POS,
   OB_SERVER_MORE_RESULTS_EXISTS_POS,
   OB_SERVER_STATUS_NO_GOOD_INDEX_USED_POS,
   OB_SERVER_STATUS_NO_INDEX_USED_POS,

@@ -262,15 +262,12 @@ int ObCatalogMgr::get_schemas_in_tenant(ObIArray<const ObCatalogSchema *> &schem
   ObTenantCatalogId id(OB_MIN_ID);
   ConstCatalogIter iter_begin =
       schema_infos_.lower_bound(id, compare_with_tenant_catalog_id);
-  bool is_stop = false;
   for (ConstCatalogIter iter = iter_begin;
-      OB_SUCC(ret) && iter != schema_infos_.end() && !is_stop; ++iter) {
+      OB_SUCC(ret) && iter != schema_infos_.end(); ++iter) {
     const ObCatalogSchema *schema = NULL;
     if (OB_ISNULL(schema = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(schema));
-    } else if (false) {
-      is_stop = true;
     } else if (OB_FAIL(schemas.push_back(schema))) {
       LOG_WARN("push back catalog failed", K(ret));
     }

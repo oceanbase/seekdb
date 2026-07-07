@@ -44,8 +44,8 @@ namespace sql
     5. Cast the lx to decimal value with Steele & White's algorithm,
        which only generates the digits for rounding correctly.
 
-  Process for oracle mode:
-    1. - 3. are the same as mysql mode.
+  Precision-bounded process:
+    1. - 3. are the same as the general process.
     4. Generate max digits of type_precision and then fix them up.
  */
 int ObFloatToDecimal::float2decimal(double x, ob_gcvt_arg_type arg_type,

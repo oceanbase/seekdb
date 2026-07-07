@@ -184,7 +184,7 @@ bool ObXAFlag::is_valid(const int64_t flag, const int64_t xa_req_type)
       break;
     }
     case ObXAReqType::XA_PREPARE: {
-      // oracle would not carry flag in a xa prepare req
+      // xa prepare requests do not carry flags
       ret_bool = true;
       TRANS_LOG(INFO, "no need to check flag for xa prepare", K(xa_req_type), K(flag));
       break;
@@ -199,7 +199,7 @@ bool ObXAFlag::is_valid(const int64_t flag, const int64_t xa_req_type)
       break;
     }
     case ObXAReqType::XA_ROLLBACK: {
-      // oracle would not carry flag in a xa rollback req
+      // xa rollback requests do not carry flags
       ret_bool = true;
       TRANS_LOG(INFO, "no need to check flag for xa rollback", K(xa_req_type), K(flag));
       break;

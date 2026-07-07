@@ -371,15 +371,12 @@ int ObTriggerMgr::get_trigger_schemas_in_tenant(ObIArray<const ObSimpleTriggerSc
   ObTenantTriggerId tenant_trigger_id_lower(OB_MIN_ID);
   ConstTriggerIter tenant_trigger_begin =
       trigger_infos_.lower_bound(tenant_trigger_id_lower, compare_with_tenant_trigger_id);
-  bool is_stop = false;
   trigger_schemas.reset();
-  for (ConstTriggerIter iter = tenant_trigger_begin; OB_SUCC(ret) && iter != trigger_infos_.end() && !is_stop; ++iter) {
+  for (ConstTriggerIter iter = tenant_trigger_begin; OB_SUCC(ret) && iter != trigger_infos_.end(); ++iter) {
     const ObSimpleTriggerSchema *trigger = NULL;
     if (OB_ISNULL(trigger = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(trigger));
-    } else if (false) {
-      is_stop = true;
     } else if (OB_FAIL(trigger_schemas.push_back(trigger))) {
       LOG_WARN("push back trigger failed", K(ret));
     }
@@ -394,15 +391,12 @@ int ObTriggerMgr::get_trigger_schemas_in_database(uint64_t database_id,
   ObTenantTriggerId tenant_trigger_id_lower(OB_MIN_ID);
   ConstTriggerIter tenant_trigger_begin =
       trigger_infos_.lower_bound(tenant_trigger_id_lower, compare_with_tenant_trigger_id);
-  bool is_stop = false;
   trigger_schemas.reset();
-  for (ConstTriggerIter iter = tenant_trigger_begin; OB_SUCC(ret) && iter != trigger_infos_.end() && !is_stop; ++iter) {
+  for (ConstTriggerIter iter = tenant_trigger_begin; OB_SUCC(ret) && iter != trigger_infos_.end(); ++iter) {
     const ObSimpleTriggerSchema *trigger = NULL;
     if (OB_ISNULL(trigger = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(trigger));
-    } else if (false) {
-      is_stop = true;
     } else if (trigger->get_database_id() != database_id) {
       // do-nothing
     } else if (OB_FAIL(trigger_schemas.push_back(trigger))) {

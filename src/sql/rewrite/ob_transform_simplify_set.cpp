@@ -361,8 +361,8 @@ int ObTransformSimplifySet::check_exprs_constant_false(common::ObIArray<ObRawExp
  * BACKGROUND:
  * There are three kind of limit.
  *  1. mysql's limit. (only positive number allowed)
- *  2. oracle's fetch. (fetch can't coexist with set query, 
- *                      oracle's set query only support simple select)
+ *  2. fetch syntax. (fetch can't coexist with set query,
+ *                    set query only support simple select)
  * 
  * PRINCIPLES: 
  * There are three situations that the stmt returns empty:

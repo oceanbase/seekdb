@@ -864,7 +864,7 @@ int ObJsonSchemaTree::get_dep_schema_if_defined(ObJsonObject* json_schema,
       if (OB_FAIL(json_schema->get_value_by_idx(i, key, value))) {
         LOG_WARN("fail to get key-value.",  K(i), K(json_schema->element_count()), K(ret));
       } else if (key_words.dep_schema_ == 0 && value->json_type() == ObJsonNodeType::J_OBJECT && value->element_count() > 0) {
-        // value is not subschema, ignore in mysql, raise error in oracle
+        // value is not subschema, ignore in MySQL mode
         key_words.dep_schema_ = 1;
       } else if (value->json_type() == ObJsonNodeType::J_ARRAY && value->element_count() > 0) {
         if (OB_ISNULL(deps_require_node) 
@@ -1009,9 +1009,7 @@ int ObJsonSchemaTree::check_keywords_of_object(ObJsonObject* origin_schema,
   } else if (OB_FAIL(get_dep_schema_if_defined(origin_schema, schema_vec_stk, key_words, 
                                                is_composition, comp_array))) { 
     LOG_WARN("fail to get schema dependencies.", K(ret));
-  // in mysql mode, required could be anytype, but ignore the values if not string
-  // but in oracle mode, it must be string, or else is illegal, should raise error
-  // todo: oracle mode adaptation
+  // In MySQL mode, required could be any type, but values are ignored if not string.
   } else if (OB_FAIL(handle_keywords_with_specific_type(ObJsonSchemaItem::REQUIRED, 
                                                         ObJsonNodeType::J_ARRAY, 
                                                         origin_schema, schema_vec_stk, 
@@ -1097,7 +1095,7 @@ int ObJsonSchemaTree::add_required_key(ObJsonNode* pro, ObJsonNode* required, Ob
 
 /*
   mysql adaptation, bugfix: 53161405
-  in oracle mode and standard json schema, the keyword additionalProperties is relative properties and patternProperties.
+  In standard JSON schema, the keyword additionalProperties is relative to properties and patternProperties.
   other properties are both additionalProperties, when additionalProperties is false, these definition are illegal.
   but in mysql mode, properties (string type) defined in the required keyword are also considered legal definition.
 */
@@ -1207,7 +1205,7 @@ int ObJsonSchemaTree::check_keywords_of_array(ObJsonObject* origin_schema,
         key_words.tuple_items_ = 1;
         tuple_items_size = node->element_count();
       }
-    } // not object or array, ignore in mysql, raise error in oracle
+    } // not object or array, ignore in MySQL mode
   } // check keyword: items
 
   if (OB_FAIL(ret)) {
@@ -1352,7 +1350,7 @@ int ObJsonSchemaTree::handle_unnested_dependencies(ObJsonObject* json_schema)
       if (OB_FAIL(json_schema->get_value_by_idx(i, key, value))) {
         LOG_WARN("fail to get key-value.", K(i), K(ret));
       } else if (value->json_type() != ObJsonNodeType::J_OBJECT) {
-        // value is not subschema, ignore in mysql, raise error in oracle
+        // value is not subschema, ignore in MySQL mode
       } else if (OB_FALSE_IT(origin_schema = static_cast<ObJsonObject*>(value))) { 
       } else if (OB_ISNULL(comp_array = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1396,7 +1394,7 @@ int ObJsonSchemaTree::handle_nested_dependencies(ObJsonObject* json_schema, ObJs
       if (OB_FAIL(json_schema->get_value_by_idx(i, key, value))) {
         LOG_WARN("fail to get key-value.", K(i), K(key), K(ret));
       } else if (value->json_type() != ObJsonNodeType::J_OBJECT) {
-        // value is not subschema, ignore in mysql, raise error in oracle
+        // value is not subschema, ignore in MySQL mode
       } else if (OB_FALSE_IT(origin_schema = static_cast<ObJsonObject*>(value))) { 
       } else if (OB_ISNULL(sub_dep_array = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1433,7 +1431,7 @@ int ObJsonSchemaTree::handle_properties(ObJsonObject*& json_schema, bool is_comp
       if (OB_FAIL(json_schema->get_value_by_idx(i, key, value))) {
         LOG_WARN("fail to get key-value.", K(i), K(ret));
       } else if (value->json_type() != ObJsonNodeType::J_OBJECT) {
-        // value is not subschema, ignore in mysql, raise error in oracle
+        // value is not subschema, ignore in MySQL mode
       } else if (OB_FALSE_IT(origin_schema = static_cast<ObJsonObject*>(value))) { 
       } else if (OB_FAIL(json_schema_move_to_key(key))) {
         LOG_WARN("json schema stk move to key failed.", K(i), K(key), K(ret));
@@ -1469,7 +1467,7 @@ int ObJsonSchemaTree::handle_pattern_properties(ObJsonObject* json_schema, ObJso
       if (OB_FAIL(json_schema->get_value_by_idx(i, key, value))) {
         LOG_WARN("fail to get key-value.", K(i), K(ret));
       } else if (value->json_type() != ObJsonNodeType::J_OBJECT) {
-        // value is not subschema, ignore in mysql, raise error in oracle
+        // value is not subschema, ignore in MySQL mode
       } else if (OB_FAIL(ObJsonSchemaUtils::is_valid_pattern(key, str_buf_, valid_pattern))) { 
       } else if (!valid_pattern) {
         if (OB_FAIL(json_schema->remove(key))) {
@@ -3785,7 +3783,7 @@ int ObJsonSchemaUtils::set_valid_number_type_by_mode(ObIJsonBase *json_doc, ObJs
     case ObJsonNodeType::J_INT:
     case ObJsonNodeType::J_UINT: 
     case ObJsonNodeType::J_OINT: {
-      // both oracle mode and mysql mode will be valid for integer and number type
+      // Both integer and number types are valid here.
       valid_type.integer_ = 1;
       valid_type.number_ = 1;
     }
@@ -4145,8 +4143,7 @@ int ObJsonSchemaCache::find_and_add_cache(ObIJsonBase*& out_schema, ObString& in
   INIT_SUCC(ret);
   if (!is_match(in_str, arg_idx)) {
     ObIJsonBase* in_json = nullptr;
-    // whether it is Oracle or MySQL, only lowercase true/false is considered a Boolean value
-    // so, use strict mode
+    // Only lowercase true/false is considered a Boolean value, so use strict mode.
     uint32_t parse_flag = ObJsonParser::JSN_STRICT_FLAG;
     parse_flag |= ObJsonParser::JSN_SCHEMA_FLAG;
 
@@ -4279,7 +4276,7 @@ int ObJsonSchemaUtils::check_composition_by_name(const ObString& key_word, ObJso
     } else {
       is_legal = true;
     }
-  } // not array, ignore in mysql, raise error in oracle
+  } // not array, ignore in MySQL mode
   return ret;
 }
 

@@ -105,7 +105,7 @@ public:
   ~ObTabletMajorFreezeParam() = default;
   bool is_valid() const
   {
-    return true && tablet_id_.is_valid();
+    return tablet_id_.is_valid();
   }
   TO_STRING_KV(K_(tablet_id), K_(is_rebuild_column_group));
   common::ObTabletID tablet_id_;

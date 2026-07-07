@@ -448,7 +448,6 @@ int ObSysTableChecker::check_inner_table_exist(
     ret = OB_NOT_INIT;
     LOG_WARN("not init yet", K(ret));
   } else if (!is_inner_table(table_id)
-             || false
              || !is_sys_database_id(database_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid table id", KR(ret), K(table_id), K(database_id));
@@ -460,16 +459,11 @@ int ObSysTableChecker::check_inner_table_exist(
   } else {
     // case 2: sys table in tenant space
     if (is_oceanbase_sys_database_id(database_id)) {
-      if (true) {
-        // case 2.1: sys/meta tenant has all inner tables in oceanbase.
-        exist = true;
-      } else {
-        // case 2.3: mysql tenant has non cluster private inner tables in oceanbase.
-        exist = !is_cluster_private_tenant_table(table_id);
-      }
+      // case 2.1: sys/meta tenant has all inner tables in oceanbase.
+      exist = true;
     } else {
-      // information_schema、mysql、sys
-      // case 2.5: In the MySQL tenant mode, there is no need to add Oracle related internal tables,
+      // information_schema, mysql, sys
+      // case 2.5: MySQL-only tenants use the MySQL system database list.
       exist = is_mysql_sys_database_id(database_id);
     }
   }
@@ -588,9 +582,7 @@ int ObSysTableChecker::append_table_(
     common::ObIArray<share::schema::ObTableSchema> &tables)
 {
   int ret = OB_SUCCESS;
-  if (false && OB_FAIL(ObSchemaUtils::construct_tenant_space_full_table(index_schema))) {
-    LOG_WARN("fail to construct full table", KR(ret), "data_table_id", index_schema.get_data_table_id());
-  } else if (OB_FAIL(tables.push_back(index_schema))) {
+  if (OB_FAIL(tables.push_back(index_schema))) {
     LOG_WARN("fail to push back index", KR(ret), "data_table_id", index_schema.get_data_table_id());
   }
   return ret;
@@ -600,9 +592,11 @@ int ObSysTableChecker::add_sys_table_index_ids(
     ObIArray<uint64_t> &table_ids)
 {
   int ret = OB_SUCCESS;
-  if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", KR(ret));
+  // The ADD_SYS_INDEX_ID fragment starts with "} else if (...)" and appends to
+  // this guard chain. Keep the guard explicit so the generated control flow is
+  // not mistaken for dead code.
+  if (OB_FAIL(ret)) {
+    LOG_WARN("unexpected failed ret before adding sys index ids", KR(ret));
 #define ADD_SYS_INDEX_ID
 #include "share/inner_table/ob_inner_table_schema_misc.ipp"
 #undef ADD_SYS_INDEX_ID
@@ -5456,7 +5450,7 @@ int ObPartitionUtils::check_param_valid_(
         bool index_exist = !is_index;
         for (int64_t i = 0; OB_SUCC(ret) && i < related_table->related_tids_->count(); i++) {
           const uint64_t related_tid =
-            share::is_oracle_mapping_real_virtual_table(related_table->related_tids_->at(i)) ?
+            share::is_real_table_mapping_virtual_table(related_table->related_tids_->at(i)) ?
                   ObSchemaUtils::get_real_table_mappings_tid(related_table->related_tids_->at(i))
                   : related_table->related_tids_->at(i);
           bool finded = false;
@@ -5567,7 +5561,7 @@ int ObPartitionUtils::get_tablet_and_object_id(
     
     for (int64_t i = 0; OB_SUCC(ret) && i < related_table->related_tids_->count(); i++) {
       const uint64_t related_table_id =
-          share::is_oracle_mapping_real_virtual_table(related_table->related_tids_->at(i)) ?
+          share::is_real_table_mapping_virtual_table(related_table->related_tids_->at(i)) ?
                 ObSchemaUtils::get_real_table_mappings_tid(related_table->related_tids_->at(i))
                 : related_table->related_tids_->at(i);
       const ObSimpleTableSchemaV2 *related_schema = NULL;
@@ -6674,7 +6668,7 @@ bool ObPartitionUtils::is_default_list_part(const ObPartition &part)
   return is_default;
 }
 
-///special case: char and varchar && oracle mode int and numberic
+/// special case: char and varchar
 bool ObPartitionUtils::is_types_equal_for_partition_check(
      const common::ObObjType &type1,
      const common::ObObjType &type2)
@@ -6864,7 +6858,7 @@ int ObPartitionUtils::set_low_bound_val_by_interval_range_by_innersql(
   char *interval_range_str = static_cast<char *>(allocator.alloc(OB_MAX_B_HIGH_BOUND_VAL_LENGTH));
   int64_t high_bound_val_len = 0;
   int64_t interval_range_len = 0;
-  ObCommonSqlProxy *sql_proxy = GCTX.ddl_oracle_sql_proxy_;
+  ObMySQLProxy *sql_proxy = GCTX.ddl_sql_proxy_;
   ObSqlString sql_string;
   if (OB_ISNULL(high_bound_val_str) || OB_ISNULL(interval_range_str)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -8048,7 +8042,6 @@ ObObjPriv& ObObjPriv::operator=(const ObObjPriv &other)
 bool ObObjPriv::is_valid() const
 {
   return ObSchema::is_valid()
-         && true
          && obj_id_ != common::OB_INVALID_ID
          && obj_type_ != common::OB_INVALID_ID
          && col_id_ != common::OB_INVALID_ID
@@ -9844,8 +9837,7 @@ OB_SERIALIZE_MEMBER(ObSimpleConstraintInfo,
 int ObCompareNameWithTenantID::compare(const common::ObString &str1, const common::ObString &str2)
 {
   common::ObCollationType cs_type = common::CS_TYPE_UTF8MB4_GENERAL_CI;
-  if (true &&
-      database_id_ != OB_INVALID_ID &&
+  if (database_id_ != OB_INVALID_ID &&
       is_mysql_sys_database_id(database_id_)) {
     // If it is the oceanbase database, no matter what the tenant, I hope that it is not case sensitive
     cs_type = common::CS_TYPE_UTF8MB4_GENERAL_CI;
@@ -9970,7 +9962,6 @@ bool ObDirectorySchema::is_valid() const
 {
   bool ret = true;
   if (!ObSchema::is_valid()
-      || !true
       || !is_valid_id(directory_id_)
       || schema_version_ < 0
       || directory_name_.empty()
@@ -10924,7 +10915,7 @@ bool check_can_drop_column_instant()
 {
   int ret = OB_SUCCESS;
   bool can_drop_column_instant = true;
-  if (can_drop_column_instant && true) {
+  if (can_drop_column_instant) {
     can_drop_column_instant = GCONF._enable_drop_column_instant;
   }
   return can_drop_column_instant;

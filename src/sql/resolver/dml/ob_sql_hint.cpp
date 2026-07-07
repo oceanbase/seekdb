@@ -1560,7 +1560,7 @@ int ObLogPlanHint::add_table_dynamic_sampling_hint(const ObDMLStmt &stmt,
     log_table_hint->dynamic_sampling_hint_ = &table_ds_hint;
   } else if (log_table_hint->dynamic_sampling_hint_->get_dynamic_sampling() != table_ds_hint.get_dynamic_sampling() ||
              log_table_hint->dynamic_sampling_hint_->get_sample_block_cnt() != table_ds_hint.get_sample_block_cnt()) {
-    //conflict will cause reset origin state compatible Oracle.
+    //conflict will reset the original state.
     log_table_hint->dynamic_sampling_hint_ = NULL;
     log_table_hint->is_ds_hint_conflict_ = true;
   }

@@ -30,17 +30,17 @@ enum ObJsonPathNodeType {
   JPN_ROOT = 1,
 
   JPN_BEGIN_BASIC_FLAG,
-  JPN_MEMBER,              // member, example：.key                 -> mysql & oracle
-  JPN_MEMBER_WILDCARD,     // member wildcard, example：.*          -> mysql & oracle
+  JPN_MEMBER,              // member, example：.key                 -> mysql & SQL/JSON
+  JPN_MEMBER_WILDCARD,     // member wildcard, example：.*          -> mysql & SQL/JSON
   JPN_ARRAY_CELL,          // single array ele, example：[index]    -> mysql
   JPN_ARRAY_RANGE,         // array range, example：[8 to 16]       -> mysql
-  JPN_ARRAY_CELL_WILDCARD, // array ele wildcatd, example：[*]      -> mysql & oracle
+  JPN_ARRAY_CELL_WILDCARD, // array ele wildcatd, example：[*]      -> mysql & SQL/JSON
   JPN_WILDCARD_ELLIPSIS,   // ellipsis for mysql, example：**       -> mysql
-  JPN_MULTIPLE_ARRAY,      // array for oracle, example:[3, 4 to 6] -> oracle
-  JPN_DOT_ELLIPSIS,        // ellipsis, example：..                 -> oracle
+  JPN_MULTIPLE_ARRAY,      // SQL/JSON array list, example:[3, 4 to 6]
+  JPN_DOT_ELLIPSIS,        // SQL/JSON ellipsis, example：..
   JPN_END_BASIC_FLAG,
 
-  // item method - oracle
+  // SQL/JSON item methods
   JPN_BEGIN_FUNC_FLAG,
   JPN_ABS, // abs()
   JPN_BOOLEAN, // boolean()
@@ -207,8 +207,8 @@ private:
 };
 
 // Basic class for JsonNode
-// Here will be same class for oracle/mysql
-// According to filters or function of oracle, it may has more class to produce.
+// The same node class is used for MySQL and SQL/JSON path variants.
+// Filters and functions may introduce additional node classes later.
 class ObJsonPathNode 
 {
 public:
@@ -248,7 +248,7 @@ public:
   int add_multi_array(ObPathArrayRange* o_array);
   int node_to_string(ObJsonBuffer& str,  bool is_mysql, bool is_next_array);
   int mysql_to_string(ObJsonBuffer& str);
-  int oracle_to_string(ObJsonBuffer& str, bool is_next_array);
+  int sql_json_to_string(ObJsonBuffer& str, bool is_next_array);
 };
 
 class ObJsonPathFuncNode : public ObJsonPathNode
@@ -338,9 +338,9 @@ private:
   uint64_t index_;
   int64_t bad_index_;
   int parse_mysql_path();
-  int parse_oracle_path();
+  int parse_sql_json_path();
   int parse_mysql_path_node();
-  int parse_oracle_path_node();
+  int parse_sql_json_path_node();
   int parse_member_wildcard_node();
   int parse_array_wildcard_node();
   int parse_single_array_node();
@@ -348,7 +348,7 @@ private:
   int parse_wildcard_ellipsis_node();
   int parse_dot_ellipsis_node();
   int parse_dot_node();
-  int parse_oracle_member_node();
+  int parse_sql_json_member_node();
   int init_multi_array(ObPathArrayRange* o_array, uint64_t index1, uint64_t index2,
       bool from_end1, bool from_end2);
   int parse_multiple_array_node();
@@ -449,7 +449,7 @@ class ObJsonPathUtil
 public:
   static bool is_whitespace(char ch);
   static bool is_ecmascript_identifier(const char* name, uint64_t length);
-  static bool is_oracle_keyname(const char* name, uint64_t length);
+  static bool is_sql_json_keyname(const char* name, uint64_t length);
   // add quote and 
   static int  double_quote(ObString &name, ObJsonBuffer* tmp_name);
   static bool is_key_name_terminator(char ch);

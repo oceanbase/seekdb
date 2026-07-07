@@ -23,7 +23,6 @@
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
 #include "observer/ob_server.h"
 #include "observer/mysql/ob_query_response_time.h"
-#include "share/table/ob_table_config_util.h"
 
 namespace oceanbase
 {
@@ -316,7 +315,7 @@ int ObAlterSystemResolverUtil::resolve_tenant(
     LOG_WARN("get_schema_guard failed", KR(ret));
   } else {
     ObString tenant_name;
-    
+
     affect_all = false;
     affect_all_user = false;
     affect_all_meta = false;
@@ -362,13 +361,13 @@ int ObAlterSystemResolverUtil::resolve_tenant(
     if (OB_SUCC(ret) && (affect_all || affect_all_user || affect_all_meta)) {
       if (tenants_node.num_child_ > 1) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("all/all_user/all_meta must be used separately", 
+        LOG_WARN("all/all_user/all_meta must be used separately",
                  KR(ret), "tenant list count", tenants_node.num_child_);
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, 
+        LOG_USER_ERROR(OB_NOT_SUPPORTED,
                        "all/all_user/all_meta in combination with other names is");
       }
     }
-    FLOG_INFO("resolve tenants", K(affect_all), K(affect_all_user), 
+    FLOG_INFO("resolve tenants", K(affect_all), K(affect_all_user),
               K(affect_all_meta));
   }
   return ret;
@@ -433,7 +432,7 @@ int ObFreezeResolver::resolve(const ParseNode &parse_tree)
 int ObFreezeResolver::resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode *opt_tenant_list_or_tablet_id, const ParseNode *opt_rebuild_column_group)
 {
   int ret = OB_SUCCESS;
-  
+
 
   if (NULL == opt_tenant_list_or_tablet_id) {
     // if opt_tenant_list_or_tablet_id == NULL, add owned tenant
@@ -486,7 +485,7 @@ int ObFreezeResolver::resolve_minor_freeze_(ObFreezeStmt *freeze_stmt,
                                             ParseNode *opt_tenant_list_or_ls_or_tablet_id)
 {
   int ret = OB_SUCCESS;
-  
+
 
   if (OB_NOT_NULL(opt_tenant_list_or_ls_or_tablet_id)) {
     if (OB_FAIL(resolve_tenant_ls_tablet_(freeze_stmt, opt_tenant_list_or_ls_or_tablet_id))) {
@@ -506,7 +505,7 @@ int ObFreezeResolver::resolve_tenant_ls_tablet_(ObFreezeStmt *freeze_stmt,
                                                 ParseNode *opt_tenant_list_or_ls_or_tablet_id)
 {
   int ret = OB_SUCCESS;
-  
+
 
   if (OB_ISNULL(opt_tenant_list_or_ls_or_tablet_id->children_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -570,8 +569,8 @@ int ObFreezeResolver::resolve_tenant_ls_tablet_(ObFreezeStmt *freeze_stmt,
 
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_NULL(tenant_list_tuple) &&
-               OB_FAIL(Util::resolve_tenant(*tenant_list_tuple, 
-                                            freeze_stmt->tenant_count_ref(), 
+               OB_FAIL(Util::resolve_tenant(*tenant_list_tuple,
+                                            freeze_stmt->tenant_count_ref(),
                                             affect_all, affect_all_user, affect_all_meta))) {
       LOG_WARN("fail to resolve tenant", KR(ret));
     } else if (OB_NOT_NULL(ls_id) && OB_FAIL(Util::resolve_ls_id(ls_id, freeze_stmt->get_ls_id()))) {
@@ -584,9 +583,9 @@ int ObFreezeResolver::resolve_tenant_ls_tablet_(ObFreezeStmt *freeze_stmt,
           (true == affect_all && true == affect_all_meta) ||
           (true == affect_all_user && true == affect_all_meta)) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("only one of affect_all,affect_all_user,affect_all_meta can be true", 
+        LOG_WARN("only one of affect_all,affect_all_user,affect_all_meta can be true",
                 KR(ret), K(affect_all), K(affect_all_user), K(affect_all_meta));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, 
+        LOG_USER_ERROR(OB_NOT_SUPPORTED,
                        "all/all_user/all_meta in combination with other names is");
       } else {
         if (affect_all) {
@@ -1074,7 +1073,7 @@ int ObAdminMergeResolver::resolve(const ParseNode &parse_tree)
       }
 
       if (OB_SUCC(ret)) {
-        
+
         ParseNode *tenants_node = parse_tree.children_[1];
         if (NULL != tenants_node) {
           if (T_TENANT_LIST != tenants_node->type_) {
@@ -1090,8 +1089,8 @@ int ObAdminMergeResolver::resolve(const ParseNode &parse_tree)
                 || OB_UNLIKELY(0 == child_num)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("children of tenant should not be null", KR(ret), K(child_num));
-            } else if (OB_FAIL(Util::resolve_tenant(*tenants_node, 
-                                                    ignored_count, affect_all, 
+            } else if (OB_FAIL(Util::resolve_tenant(*tenants_node,
+                                                    ignored_count, affect_all,
                                                     affect_all_user, affect_all_meta))) {
               LOG_WARN("fail to resolve tenant", KR(ret));
             } else if (affect_all || affect_all_user || affect_all_meta) {
@@ -1099,9 +1098,9 @@ int ObAdminMergeResolver::resolve(const ParseNode &parse_tree)
                   (true == affect_all && true == affect_all_meta) ||
                   (true == affect_all_user && true == affect_all_meta)) {
                 ret = OB_NOT_SUPPORTED;
-                LOG_WARN("only one of affect_all,affect_all_user,affect_all_meta can be true", 
+                LOG_WARN("only one of affect_all,affect_all_user,affect_all_meta can be true",
                         KR(ret), K(affect_all), K(affect_all_user), K(affect_all_meta));
-                LOG_USER_ERROR(OB_NOT_SUPPORTED, 
+                LOG_USER_ERROR(OB_NOT_SUPPORTED,
                                "all/all_user/all_meta in combination with other names is");
               } else {
                 if (affect_all) {
@@ -1135,6 +1134,28 @@ int ObRefreshMemStatResolver::resolve(const ParseNode &parse_tree)
     if (NULL == stmt) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("create ObRefreshMemStatStmt failed");
+    } else {
+      stmt_ = stmt;
+      if (OB_UNLIKELY(NULL == parse_tree.children_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("children should not be null");
+      }
+    }
+  }
+  return ret;
+}
+
+int ObWashMemFragmentationResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(T_WASH_MEMORY_FRAGMENTATION != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_WASH_MEMORY_FRAGMENTATION", "type", get_type_name(parse_tree.type_));
+  } else {
+    ObWashMemFragmentationStmt *stmt = create_stmt<ObWashMemFragmentationStmt>();
+    if (NULL == stmt) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("create ObWashMemFragmentationStmt failed");
     } else {
       stmt_ = stmt;
       if (OB_UNLIKELY(NULL == parse_tree.children_)) {
@@ -1233,7 +1254,8 @@ static int alter_system_set_reset_constraint_check_and_add_item_mysql_mode(obcal
   return ret;
 }
 
-static int alter_system_set_reset_constraint_check_and_add_item_oracle_mode(obcall::ObAdminSetConfigArg &rpc_arg, ObAdminSetConfigItem &item, ObSchemaChecker *& schema_checker)
+static int alter_system_set_reset_add_config_item(obcall::ObAdminSetConfigArg &rpc_arg,
+                                                  ObAdminSetConfigItem &item)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(rpc_arg.items_.push_back(item))) {
@@ -1280,10 +1302,10 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
               // config name
               HEAP_VAR(ObAdminSetConfigItem, item) {
                 if (OB_LIKELY(session_info_ != NULL)) {
-                  
+
                 } else {
                   LOG_WARN("session is null");
-                  
+
                 }
 
                 if (OB_UNLIKELY(NULL == action_node->children_)) {
@@ -1371,7 +1393,7 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                 if (OB_SUCC(ret) && NULL != action_node->children_[4]) {
                   const ParseNode *n = action_node->children_[4];
                   if (T_TENANT_NAME == n->type_) {
-                    
+
                     {
                       uint64_t tenant_node_id = OB_INVALID_ID;
                       ObString tenant_name(n->children_[0]->str_len_,
@@ -1380,39 +1402,6 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                       if (OB_FAIL(item.tenant_name_.assign(tenant_name))) {
                         LOG_WARN("assign tenant name failed", K(tenant_name), K(ret));
                         break;
-                      } else if (0 == config_name.case_compare(ARCHIVE_LAG_TARGET)) {
-                        int64_t cfg_count = 0;
-                        bool affect_all;
-                        bool affect_all_user;
-                        bool affect_all_meta;
-                        if (OB_FAIL(ObAlterSystemResolverUtil::resolve_tenant(*n,
-                                                                              cfg_count,
-                                                                              affect_all,
-                                                                              affect_all_user,
-                                                                              affect_all_meta))) {
-                          LOG_WARN("fail to get reslove tenant", K(ret), "exec_tid", 1UL);
-                        } else if (affect_all || affect_all_meta) {
-                          ret = OB_NOT_SUPPORTED;
-                          LOG_WARN("all/all_meta is not supported by ALTER SYSTEM SET ARCHIVE_LAG_TARGET",
-                                  KR(ret), K(affect_all), K(affect_all_user), K(affect_all_meta));
-                          LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                                        "use all/all_meta in 'ALTER SYSTEM SET ARCHIVE_LAG_TARGET' syntax is");
-                        } else if (affect_all_user) {
-                          // lite: no user tenant -> tenants stays empty, nothing to check
-                        } else if ((0 == cfg_count)) {
-                          cfg_count++;
-                        }
-                        if (OB_SUCC(ret) && !(0 == cfg_count)) {
-                          bool valid = true;
-                          for (int i = 0; i < cfg_count && valid; i++) {
-
-                            valid = valid && ObConfigArchiveLagTargetChecker::check(item);
-                            if (!valid) {
-                              ret = OB_OP_NOT_ALLOW; //log_user_error is handled in checker
-                              LOG_WARN("can not set archive_lag_target", "item", item, K(ret), K(i));
-                            }
-                          }
-                        }
                       } else if (0 == config_name.case_compare(DEFAULT_TABLE_ORGANIZATION)) {
                         int64_t cfg_count = 0;
                         bool affect_all = false;
@@ -1426,9 +1415,9 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                           LOG_WARN("fail to get reslove tenant", K(ret), "exec_tid", 1UL);
                         } else if (affect_all_meta) {
                           ret = OB_NOT_SUPPORTED;
-                          LOG_WARN("all_meta is not supported by ALTER SYSTEM SET DEFAULT_TABLE_ORGANIZATION", 
+                          LOG_WARN("all_meta is not supported by ALTER SYSTEM SET DEFAULT_TABLE_ORGANIZATION",
                                   KR(ret), K(affect_all), K(affect_all_user), K(affect_all_meta));
-                          LOG_USER_ERROR(OB_NOT_SUPPORTED, 
+                          LOG_USER_ERROR(OB_NOT_SUPPORTED,
                                         "use all_meta in 'ALTER SYSTEM SET DEFAULT_TABLE_ORGANIZATION' syntax is");
                         } else if ((0 == cfg_count)) {
                           if (!affect_all && !affect_all_user) {
@@ -1443,7 +1432,7 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                             LOG_WARN("get_schema_guard failed", K(ret));
                           }
                           for (int64_t i = 0; OB_SUCC(ret) && i < cfg_count && valid; i++) {
-                            
+
                             lib::Worker::CompatMode compat_mode;
                             valid = valid && ObConfigDefaultTableOrganizationChecker::check(item);
                             if (OB_FAIL(schema_guard.get_tenant_compat_mode(compat_mode))) {
@@ -1460,12 +1449,6 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                     ret = OB_ERR_UNEXPECTED;
                     LOG_WARN("resolve tenant name failed", K(ret));
                     break;
-                  }
-                } else if (OB_SUCC(ret) && (0 == STRCASECMP(item.name_.ptr(), ARCHIVE_LAG_TARGET))) {
-                  bool valid = ObConfigArchiveLagTargetChecker::check(item);
-                  if (!valid) {
-                    ret = OB_OP_NOT_ALLOW;
-                    LOG_WARN("can not set archive_lag_target", "item", item, K(ret));
                   }
                 } else if (OB_SUCC(ret) && (0 == STRCASECMP(item.name_.ptr(), DEFAULT_TABLE_ORGANIZATION))) {
                   bool valid = ObConfigDefaultTableOrganizationChecker::check(item);
@@ -1499,7 +1482,7 @@ int ObSetConfigResolver::convert_param_value(ObAdminSetConfigItem &item)
     if (item.value_.str().empty()) {
       // do nothing
     } else if (OB_FAIL(dest.set(item.value_.str()))) {
-      LOG_WARN("failed to set backup dest", K(ret));
+      LOG_ERROR("failed to set backup dest", K(ret));
       if (OB_INVALID_BACKUP_DEST == ret) {
         // let config checker return the actual error info
         ret = OB_SUCCESS;
@@ -1644,7 +1627,7 @@ int ObClearMergeErrorResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("children should not be null");
       } else {
-        
+
         ParseNode *tenants_node = parse_tree.children_[0];
         if (NULL != tenants_node) {
           if (T_TENANT_LIST != tenants_node->type_) {
@@ -1660,8 +1643,8 @@ int ObClearMergeErrorResolver::resolve(const ParseNode &parse_tree)
                 || OB_UNLIKELY(0 == child_num)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("children of tenant should not be null", KR(ret), K(child_num));
-            } else if (OB_FAIL(Util::resolve_tenant(*tenants_node, 
-                                                    ignored_count, affect_all, 
+            } else if (OB_FAIL(Util::resolve_tenant(*tenants_node,
+                                                    ignored_count, affect_all,
                                                     affect_all_user, affect_all_meta))) {
               LOG_WARN("fail to resolve tenant", KR(ret));
             } else if (affect_all || affect_all_user || affect_all_meta) {
@@ -1669,9 +1652,9 @@ int ObClearMergeErrorResolver::resolve(const ParseNode &parse_tree)
                   (true == affect_all && true == affect_all_meta) ||
                   (true == affect_all_user && true == affect_all_meta)) {
                 ret = OB_NOT_SUPPORTED;
-                LOG_WARN("only one of affect_all,affect_all_user,affect_all_meta can be true", 
+                LOG_WARN("only one of affect_all,affect_all_user,affect_all_meta can be true",
                         KR(ret), K(affect_all), K(affect_all_user), K(affect_all_meta));
-                LOG_USER_ERROR(OB_NOT_SUPPORTED, 
+                LOG_USER_ERROR(OB_NOT_SUPPORTED,
                                "all/all_user/all_meta in combination with other names is");
               } else {
                 if (affect_all) {
@@ -1981,12 +1964,12 @@ int ObAlterDiskgroupDropDiskResolver::resolve(const ParseNode &parse_tree)
 
 
 
-// for oracle mode grammer: alter system set sys_var = val
+// Resolve ALTER SYSTEM SET sys_var = val.
 int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   bool set_parameters = false;
-  
+
   if (OB_UNLIKELY(T_ALTER_SYSTEM_SET != parse_tree.type_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("parse_tree.type_ must be T_ALTER_SYSTEM_SET", K(ret), K(parse_tree.type_));
@@ -2060,7 +2043,7 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
             } else {
               ParseNode *name_node = nullptr, *value_node = nullptr;
               HEAP_VAR(ObAdminSetConfigItem, item) {
-                
+
                 /* name */
                 if (OB_ISNULL(name_node = set_param_node->children_[0])) {
                   ret = OB_ERR_UNEXPECTED;
@@ -2119,18 +2102,12 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
                   }
                 }
                 if (OB_SUCC(ret)) {
-                  if (OB_FAIL(alter_system_set_reset_constraint_check_and_add_item_oracle_mode(
-                      setconfig_stmt->get_rpc_arg(), item, schema_checker_))) {
-                    LOG_WARN("constraint check failed", K(ret));
-                  } else if (OB_SUCC(ret) && (0 == STRCASECMP(item.name_.ptr(), ARCHIVE_LAG_TARGET))) {
-                    bool valid = ObConfigArchiveLagTargetChecker::check(item);
-                    if (!valid) {
-                      ret = OB_OP_NOT_ALLOW;
-                      LOG_WARN("can not set archive_lag_target", "item", item, K(ret));
-                    }
+                  if (OB_FAIL(alter_system_set_reset_add_config_item(
+                      setconfig_stmt->get_rpc_arg(), item))) {
+                    LOG_WARN("add config item failed", K(ret));
                   } else if (OB_SUCC(ret) && (0 == STRCASECMP(item.name_.ptr(), DEFAULT_TABLE_ORGANIZATION))) {
                     LOG_WARN("can not set default_table_organization", "item", item);
-                    LOG_USER_NOTE(OB_NOT_SUPPORTED, "'ALTER SYSTEM SET DEFAULT_TABLE_ORGANIZATION' syntax in the oracle tenant is");
+                    LOG_USER_NOTE(OB_NOT_SUPPORTED, "'ALTER SYSTEM SET DEFAULT_TABLE_ORGANIZATION' syntax is");
                   }
                 }
               }
@@ -2247,10 +2224,10 @@ int ObResetConfigResolver::resolve(const ParseNode &parse_tree)
             } else {
               HEAP_VAR(ObAdminSetConfigItem, item) {
                 if (OB_LIKELY(NULL != session_info_)) {
-                  
+
                 } else {
                   LOG_WARN("session is null");
-                  
+
                 }
                 if (OB_UNLIKELY(NULL == action_node->children_)) {
                   ret = OB_ERR_UNEXPECTED;
@@ -2297,7 +2274,7 @@ int ObResetConfigResolver::resolve(const ParseNode &parse_tree)
                           if (NULL != action_node->children_[1]) {
                             const ParseNode *n = action_node->children_[1];
                             if (T_TENANT_NAME == n->type_) {
-                              
+
                               {
                                 ObString tenant_name(n->children_[0]->str_len_,
                                                       n->children_[0]->str_value_);
@@ -2337,7 +2314,7 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   bool set_parameters = false;
-  
+
   if (OB_UNLIKELY(T_ALTER_SYSTEM_RESET != parse_tree.type_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("parse_tree.type_ must be T_ALTER_SYSTEM_RESET", K(ret), K(parse_tree.type_));
@@ -2409,7 +2386,7 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
           } else {
             ParseNode *name_node = nullptr, *value_node = nullptr;
             HEAP_VAR(ObAdminSetConfigItem, item) {
-              
+
               /* name */
               if (OB_ISNULL(name_node = set_param_node->children_[0])) {
                 ret = OB_ERR_UNEXPECTED;
@@ -2456,9 +2433,9 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
                 }
               }
               if (OB_SUCC(ret)) {
-                if (OB_FAIL(alter_system_set_reset_constraint_check_and_add_item_oracle_mode(
-                    setconfig_stmt->get_rpc_arg(), item, schema_checker_))) {
-                  LOG_WARN("constraint check failed", KR(ret));
+                if (OB_FAIL(alter_system_set_reset_add_config_item(
+                    setconfig_stmt->get_rpc_arg(), item))) {
+                  LOG_WARN("add config item failed", KR(ret));
                 }
               }
             }

@@ -436,14 +436,11 @@ int ObRoutineMgr::get_routine_schemas_in_tenant(ObIArray<const ObSimpleRoutineSc
   ObTenantRoutineId tenant_routine_id_lower(OB_MIN_ID);
   ConstRoutineIter tenant_routine_begin =
       routine_infos_.lower_bound(tenant_routine_id_lower, compare_with_tenant_routine_id);
-  bool is_stop = false;
-  for (ConstRoutineIter iter = tenant_routine_begin; OB_SUCC(ret) && iter != routine_infos_.end() && !is_stop; ++iter) {
+  for (ConstRoutineIter iter = tenant_routine_begin; OB_SUCC(ret) && iter != routine_infos_.end(); ++iter) {
     const ObSimpleRoutineSchema *routine = NULL;
     if (OB_ISNULL(routine = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(routine));
-    } else if (false) {
-      is_stop = true;
     } else if (OB_FAIL(routine_schemas.push_back(routine))) {
       LOG_WARN("push back routine failed", K(ret));
     }
@@ -461,15 +458,12 @@ int ObRoutineMgr::get_routine_schemas_in_database(uint64_t database_id,
   ObTenantRoutineId tenant_outine_id_lower(OB_MIN_ID);
   ConstRoutineIter tenant_routine_begin =
       routine_infos_.lower_bound(tenant_outine_id_lower, compare_with_tenant_routine_id);
-  bool is_stop = false;
   for (ConstRoutineIter iter = tenant_routine_begin;
-      OB_SUCC(ret) && iter != routine_infos_.end() && !is_stop; ++iter) {
+      OB_SUCC(ret) && iter != routine_infos_.end(); ++iter) {
     const ObSimpleRoutineSchema *routine = NULL;
     if (OB_ISNULL(routine = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(routine));
-    } else if (false) {
-      is_stop = true;
     } else if (routine->get_database_id() != database_id) {
       // do-nothing
     } else if (OB_FAIL(routine_schemas.push_back(routine))) {
@@ -490,15 +484,12 @@ int ObRoutineMgr::get_routine_schemas_in_udt(
   ObTenantRoutineId tenant_outine_id_lower(OB_MIN_ID);
   ConstRoutineIter tenant_routine_begin =
       routine_infos_.lower_bound(tenant_outine_id_lower, compare_with_tenant_routine_id);
-  bool is_stop = false;
   for (ConstRoutineIter iter = tenant_routine_begin;
-      OB_SUCC(ret) && iter != routine_infos_.end() && !is_stop; ++iter) {
+      OB_SUCC(ret) && iter != routine_infos_.end(); ++iter) {
     const ObSimpleRoutineSchema *routine = NULL;
     if (OB_ISNULL(routine = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(routine));
-    } else if (false) {
-      is_stop = true;
     } else if (routine->get_package_id() != udt_id
                || routine->get_routine_type() != ROUTINE_UDT_TYPE) {
       // do nothing
@@ -519,15 +510,12 @@ int ObRoutineMgr::get_routine_schemas_in_package(uint64_t package_id,
   ObTenantRoutineId tenant_outine_id_lower(OB_MIN_ID);
   ConstRoutineIter tenant_routine_begin =
       routine_infos_.lower_bound(tenant_outine_id_lower, compare_with_tenant_routine_id);
-  bool is_stop = false;
   for (ConstRoutineIter iter = tenant_routine_begin;
-      OB_SUCC(ret) && iter != routine_infos_.end() && !is_stop; ++iter) {
+      OB_SUCC(ret) && iter != routine_infos_.end(); ++iter) {
     const ObSimpleRoutineSchema *routine = NULL;
     if (OB_ISNULL(routine = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(routine));
-    } else if (false) {
-      is_stop = true;
     } else if (routine->get_package_id() != package_id
                || routine->get_routine_type() != ROUTINE_PACKAGE_TYPE) {
       // do nothing

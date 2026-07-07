@@ -754,7 +754,7 @@ int ObTransformPreProcess::calc_group_type_aggr_func(const ObIArray<ObRawExpr*> 
   return ret;
 }
 
-/*@brief, ObTransformPreProcess::convert_select_having_in_groupby_stmt, according to oracle action:
+/*@brief, ObTransformPreProcess::convert_select_having_in_groupby_stmt:
  * if the expr not in group by expr except in aggr, the expr will replaced with NULL; eg:
  *  select c1, c2, max(c1), max(c2) from t1 group by grouping sets(c1,c2) having c1 > 1 or c2 > 1 or sum(c1) > 2 or sum(c2) > 2;
  * <==>

@@ -46,7 +46,7 @@ public:
   ObTenantCCLRuleId(const uint64_t ccl_rule_id)
       : ccl_rule_id_(ccl_rule_id) {}
   bool operator==(const ObTenantCCLRuleId &rhs) const {
-    return (true) && (ccl_rule_id_ == rhs.ccl_rule_id_);
+    return (ccl_rule_id_ == rhs.ccl_rule_id_);
   }
   bool operator!=(const ObTenantCCLRuleId &rhs) const {
     return !(*this == rhs);
@@ -61,8 +61,7 @@ public:
     return hash_ret;
   }
   bool is_valid() const {
-    return (true) &&
-           (ccl_rule_id_ != common::OB_INVALID_ID);
+    return (ccl_rule_id_ != common::OB_INVALID_ID);
   }
   TO_STRING_KV(K_(ccl_rule_id));
   uint64_t ccl_rule_id_;

@@ -55,7 +55,6 @@ bool ObSchemaCacheKey::operator ==(const ObIKVCacheKey &other) const
 {
   const ObSchemaCacheKey &other_key = reinterpret_cast<const ObSchemaCacheKey &>(other);
   return schema_type_ == other_key.schema_type_
-         && true
          && schema_id_ == other_key.schema_id_
          && schema_version_ == other_key.schema_version_;
 }
@@ -468,7 +467,6 @@ bool ObSchemaCache::is_valid_key(
      const int64_t schema_version) const
 {
   return OB_MAX_SCHEMA != schema_type
-         && true
          && OB_INVALID_ID != schema_id
          && schema_version >= 0;
 }
@@ -478,14 +476,11 @@ bool ObSchemaCache::need_use_sys_cache(const ObSchemaCacheKey &cache_key) const
   bool is_need = false;
   if (is_necessary_schema(cache_key)) {
     is_need = true;
-  } else if (TENANT_SCHEMA == cache_key.schema_type_
-      && true) {
+  } else if (TENANT_SCHEMA == cache_key.schema_type_) {
     is_need = true;
-  } else if (USER_SCHEMA == cache_key.schema_type_
-             && true) {
+  } else if (USER_SCHEMA == cache_key.schema_type_) {
     is_need = true;
-  } else if (SYS_VARIABLE_SCHEMA == cache_key.schema_type_
-             && true) {
+  } else if (SYS_VARIABLE_SCHEMA == cache_key.schema_type_) {
     is_need = true;
   }
   return is_need;
@@ -569,11 +564,9 @@ bool ObSchemaCache::is_necessary_table(const uint64_t table_id) const
 bool ObSchemaCache::is_necessary_schema(const ObSchemaCacheKey &cache_key) const
 {
   bool is_need = false;
-  if (SYS_VARIABLE_SCHEMA == cache_key.schema_type_
-         && true) {
+  if (SYS_VARIABLE_SCHEMA == cache_key.schema_type_) {
     is_need = true;
-  } else if (TENANT_SCHEMA == cache_key.schema_type_
-             && true) {
+  } else if (TENANT_SCHEMA == cache_key.schema_type_) {
     is_need = true;
   } else if (TABLE_SCHEMA == cache_key.schema_type_
              && is_necessary_table(cache_key.schema_id_)) {

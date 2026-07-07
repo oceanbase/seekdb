@@ -156,7 +156,7 @@ int ObBasicStatsEstimator::estimate_block_count(ObExecContext &ctx,
   ObSEArray<EstimateBlockRes, 4> estimate_result;
   hash::ObHashMap<int64_t, int64_t> first_part_idx_map;
   ObArray<uint64_t> column_group_ids;
-  uint64_t table_id = share::is_oracle_mapping_real_virtual_table(param.table_id_)
+  uint64_t table_id = share::is_real_table_mapping_virtual_table(param.table_id_)
                           ? share::get_real_table_mappings_tid(param.table_id_)
                           : param.table_id_;
   use_column_store = false;
@@ -790,7 +790,7 @@ int ObBasicStatsEstimator::update_last_modified_count(sqlclient::ObISQLConnectio
 
 
   //if this is virtual table real agent, we need update the real table id modifed count
-  uint64_t table_id = share::is_oracle_mapping_real_virtual_table(param.table_id_) ?
+  uint64_t table_id = share::is_real_table_mapping_virtual_table(param.table_id_) ?
                               share::get_real_table_mappings_tid(param.table_id_) : param.table_id_;
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1490,7 +1490,7 @@ int ObBasicStatsEstimator::estimate_skip_rate(ObExecContext &ctx,
   hash::ObHashMap<int64_t, int64_t> first_part_idx_map;
   ObSEArray<uint64_t, 4> column_ids;
   ObSEArray<uint64_t, 4> sample_counts;
-  uint64_t table_id = share::is_oracle_mapping_real_virtual_table(param.table_id_) ?
+  uint64_t table_id = share::is_real_table_mapping_virtual_table(param.table_id_) ?
                       share::get_real_table_mappings_tid(param.table_id_) : param.table_id_;
   if (is_virtual_table(table_id)) {//virtual table no need skip rate
     //do nothing

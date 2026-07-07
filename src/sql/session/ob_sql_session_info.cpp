@@ -718,10 +718,11 @@ int ObSQLSessionInfo::close_all_ps_stmt()
   }
   return ret;
 }
-//mysql tenant: If session created temporary tables, direct connection mode: drop temp table when session disconnects;
-//oracle tenant, when commit clears data will also call this interface, but only clears transaction-level temporary tables;
-//            session disconnects then clean up transaction-level and session-level temporary tables;
-// Since Oracle temporary tables only clean up data for this session, to avoid RS congestion, do not send to RS and execute by SQL proxy
+// If the session created temporary tables in direct connection mode, drop them when
+// the session disconnects. Commit-time cleanup only clears transaction-level
+// temporary tables; disconnect cleanup handles both transaction-level and
+// session-level temporary tables. To avoid RS congestion, cleanup is executed by
+// SQL proxy for this session's temporary table data.
 // For distributed planning, unless ac=1 otherwise hand over to master session for cleanup, deserialized session does nothing
 int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
                                        const bool is_xa_trans,
@@ -739,7 +740,7 @@ int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
                  || is_xa_trans)
              && (!get_is_deserialized() || ac)) {
     bool need_drop_temp_table = false;
-    //mysql: 1. direct connection & session disconnect  2. reset connection
+    // Cleanup is needed on direct connection disconnect or reset connection.
     if (OB_SUCC(ret)) {
       if (is_sess_disconn || is_reset_connection) {
         need_drop_temp_table = true;
@@ -775,7 +776,8 @@ int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
 //proxy mode session creation, disconnection and background scheduled task check:
 // If the time since the last update of this session->last_refresh_temp_table_time_ exceeds 1hr
 // Then update the last active time of the temporary table created for the session SESSION_ACTIVE_TIME
-//oracle temporary table dependency additional __sess_create_time judgment reuse and cleanup, no need to update
+// Temporary table cleanup already uses __sess_create_time dependency checks, so
+// no extra active-time update is needed here.
 void ObSQLSessionInfo::refresh_temp_tables_sess_active_time()
 {
   int ret = OB_SUCCESS;
@@ -3841,9 +3843,6 @@ int ObControlInfoEncoder::display_sess_info(ObSQLSessionInfo &sess, const char* 
   }
   return ret;
 }
-
-// in oracle mode, if the user variable is valid, we use it first
-
 
 int ObSQLSessionInfo::sql_sess_record_sql_stat_start_value(ObExecutingSqlStatRecord& executing_sqlstat)
 {

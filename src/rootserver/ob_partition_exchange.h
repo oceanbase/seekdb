@@ -124,10 +124,10 @@ protected:
                                                       const ObTableSchema &inc_table_schema,
                                                       const ObIArray<ObTabletID> &base_tablet_ids,
                                                       const ObIArray<ObTabletID> &inc_tablet_ids);
-  // table level conditions that need to be checked for partition exchange in mysql mode and oracle mode
+  // table level conditions that need to be checked for partition exchange
   virtual int check_table_conditions_in_common_(const ObTableSchema &base_table_schema,
                                                 const ObTableSchema &inc_table_schema);
-  // table level conditions that need to be checked for partition exchange in mysql mode
+  // mysql table level conditions that need to be checked for partition exchange
   int check_table_conditions_in_mysql_mode_(const ObTableSchema &base_table_schema, const ObTableSchema &inc_table_schema);
   int check_tablespace_(const ObTableSchema &base_table_schema,
                               const ObTableSchema &inc_table_schema);

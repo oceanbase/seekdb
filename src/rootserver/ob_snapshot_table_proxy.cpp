@@ -249,8 +249,7 @@ int ObSnapshotTableProxy::remove_snapshot(
   ObDMLExecHelper exec(proxy);
 
   if ((MAX_SNAPSHOT_TYPE <= info.snapshot_type_) ||
-      (SNAPSHOT_FOR_MAJOR > info.snapshot_type_) ||
-      (!true)) {
+      (SNAPSHOT_FOR_MAJOR > info.snapshot_type_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(info));
   } else if (OB_FAIL(dml.add_pk_column("snapshot_type", info.snapshot_type_))
@@ -278,8 +277,7 @@ int ObSnapshotTableProxy::batch_remove_snapshots(
   const int64_t BATCH_CNT = 256;
 
   if ((MAX_SNAPSHOT_TYPE <= snapshot_type) ||
-      (SNAPSHOT_FOR_MAJOR > snapshot_type) ||
-      (!true)) {
+      (SNAPSHOT_FOR_MAJOR > snapshot_type)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(snapshot_type));
   } else {
@@ -506,7 +504,7 @@ int ObSnapshotTableProxy::get_snapshot(
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  if ((!true) || (SNAPSHOT_FOR_RESTORE_POINT != snapshot_type) ||
+  if ((SNAPSHOT_FOR_RESTORE_POINT != snapshot_type) ||
       (NULL == extra_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(snapshot_type));
@@ -556,7 +554,7 @@ int ObSnapshotTableProxy::get_snapshot(
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  if ((!true) || (snapshot_type < SNAPSHOT_FOR_MAJOR) ||
+  if ((snapshot_type < SNAPSHOT_FOR_MAJOR) ||
       (snapshot_type >= MAX_SNAPSHOT_TYPE) || (!snapshot_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(snapshot_type), K(snapshot_scn));
@@ -719,7 +717,7 @@ int ObSnapshotTableProxy::get_snapshot_count(
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  if ((!true) || (snapshot_type != SNAPSHOT_FOR_RESTORE_POINT)) {
+  if (snapshot_type != SNAPSHOT_FOR_RESTORE_POINT) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(snapshot_type));
   } else {

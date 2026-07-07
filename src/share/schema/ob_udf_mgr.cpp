@@ -371,8 +371,6 @@ int ObUDFMgr::get_udf_schemas_in_tenant(ObIArray<const ObSimpleUDFSchema *> &udf
     if (OB_ISNULL(udf = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(udf));
-    } else if (false) {
-      //do nothing
     } else if (OB_FAIL(udf_schemas.push_back(udf))) {
       LOG_WARN("push back udf failed", K(ret));
     }

@@ -299,7 +299,7 @@ int ObForkTableTask::deserialize_params_from_message(const char *buf, const int6
 {
   int ret = OB_SUCCESS;
   SMART_VAR(obcall::ObForkTableArg, tmp_arg) {
-    if (OB_UNLIKELY(!true || nullptr == buf || buf_size <= 0)) {
+    if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_size));
     } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, buf_size, pos))) {
@@ -725,6 +725,5 @@ int ObForkTableTask::build_fork_info(
 
 }  // namespace rootserver
 }  // namespace oceanbase
-
 
 

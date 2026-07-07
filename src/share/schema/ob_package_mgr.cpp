@@ -365,14 +365,11 @@ int ObPackageMgr::get_package_schemas_in_tenant(ObIArray<const ObSimplePackageSc
   ObTenantPackageId tenant_package_id_lower(OB_MIN_ID);
   ConstPackageIter tenant_package_begin =
       package_infos_.lower_bound(tenant_package_id_lower, compare_with_tenant_package_id);
-  bool is_stop = false;
-  for (ConstPackageIter iter = tenant_package_begin; OB_SUCC(ret) && iter != package_infos_.end() && !is_stop; ++iter) {
+  for (ConstPackageIter iter = tenant_package_begin; OB_SUCC(ret) && iter != package_infos_.end(); ++iter) {
     const ObSimplePackageSchema *package = NULL;
     if (OB_ISNULL(package = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(package));
-    } else if (false) {
-      is_stop = true;
     } else if (OB_FAIL(package_schemas.push_back(package))) {
       LOG_WARN("push back package failed", K(ret));
     }
@@ -390,14 +387,11 @@ int ObPackageMgr::get_package_schemas_in_database(uint64_t database_id,
   ObTenantPackageId tenant_package_id_lower(OB_MIN_ID);
   ConstPackageIter tenant_package_begin =
       package_infos_.lower_bound(tenant_package_id_lower, compare_with_tenant_package_id);
-  bool is_stop = false;
-  for (ConstPackageIter iter = tenant_package_begin; OB_SUCC(ret) && iter != package_infos_.end() && !is_stop; ++iter) {
+  for (ConstPackageIter iter = tenant_package_begin; OB_SUCC(ret) && iter != package_infos_.end(); ++iter) {
     const ObSimplePackageSchema *package = NULL;
     if (OB_ISNULL(package = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(package));
-    } else if (false) {
-      is_stop = true;
     } else if (package->get_database_id() != database_id) {
       // do-nothing
     } else if (OB_FAIL(package_schemas.push_back(package))) {
@@ -445,7 +439,6 @@ int ObPackageMgr::get_schema_statistics(ObSchemaStatisticsInfo &schema_info) con
 }  // namespace schema
 }  // namespace share
 }  // namespace oceanbase
-
 
 
 

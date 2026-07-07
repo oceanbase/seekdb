@@ -78,7 +78,7 @@ bool ObMLogInfo::is_valid() const
 {
   bool bret = false;
   if (OB_LIKELY(ObSchema::is_valid())) {
-    bret = (true && OB_INVALID_ID != mlog_id_ &&
+    bret = (OB_INVALID_ID != mlog_id_ &&
             ObMLogPurgeMode::MAX != purge_mode_ && OB_INVALID_VERSION != schema_version_);
   }
   return bret;
@@ -279,7 +279,7 @@ int ObMLogInfo::drop_mlog_info(ObISQLClient &sql_client,
                                const uint64_t mlog_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || OB_INVALID_ID == mlog_id)) {
+  if (OB_UNLIKELY(OB_INVALID_ID == mlog_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mlog_id));
   } else {

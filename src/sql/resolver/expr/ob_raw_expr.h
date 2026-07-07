@@ -1939,9 +1939,6 @@ public:
                                                 || is_query_ref_expr()
                                                 || is_column_ref_expr()
                                                 || is_alias_ref_expr(); }
-  inline bool is_oracle_to_time_expr() const { return T_FUN_SYS_TO_DATE == type_
-                                                      || T_FUN_SYS_TO_TIMESTAMP == type_
-                                                      || T_FUN_SYS_TO_TIMESTAMP_TZ == type_; }
   inline bool is_calc_part_expr() const { return T_FUN_SYS_CALC_PARTITION_ID == type_
                                                  || T_FUN_SYS_CALC_TABLET_ID == type_
                                                  || T_FUN_SYS_CALC_PARTITION_TABLET_ID == type_; }
@@ -4696,7 +4693,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObPLSQLVariableRawExpr);
 private:
   int64_t plsql_line_; // for $$PLSQL_LINE
-  ObString plsql_variable_; // for $$PLSQL_UNIT, $$PLSQL_CCFLAGS etc...
+  ObString plsql_variable_; // for PL unit pseudo variables.
 };
 
 class ObCallParamRawExpr : public ObOpRawExpr

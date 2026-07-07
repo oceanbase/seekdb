@@ -926,9 +926,7 @@ int ObTableLockService::process_lock_task_(ObTableLockCtx &ctx)
     ret = (OB_SUCCESS == ret) ? tmp_ret : ret;
   }
   if (ctx.is_in_trans_ && ctx.tx_is_killed_) {
-    // kill the in trans lock trans.
-    // kill the whole trans if it is mysql mode.
-    // kill the current stmt if it is oracle mode.
+    // Kill the in-transaction lock transaction.
     if (OB_SUCCESS != (tmp_ret = deal_with_deadlock_(ctx))) {
       LOG_WARN("deal with deadlock failed.", K(tmp_ret), K(ctx));
     }
@@ -1038,8 +1036,7 @@ int ObTableLockService::get_table_lock_mode_(const ObTableLockTaskType task_type
                ROW_SHARE == part_lock_mode) {
       table_lock_mode = ROW_SHARE;
     } else if (SHARE_ROW_EXCLUSIVE == part_lock_mode) {
-      // TODO: cxf lock all the tablet of this table.
-      // our srx is not the same as oracle now.
+      // TODO: cxf lock all the tablets of this table.
       table_lock_mode = SHARE_ROW_EXCLUSIVE;
     } else {
       ret = OB_ERR_UNEXPECTED;

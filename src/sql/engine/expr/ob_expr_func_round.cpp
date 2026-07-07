@@ -262,13 +262,12 @@ static int do_round_by_type(
       break;
     }
     case ObFloatType: {
-      // if in Oracle mode, param_num must be 1(scale is 0)
-      // MySQL mode cannot be here. because if param type is float, calc type will be double.
+      // Float inputs are rounded with the supplied scale.
       res_datum.set_float(ObExprUtil::round_double(x_datum.get_float(), round_scale));
       break;
     }
     case ObDoubleType: {
-      // if in Oracle mode, param_num must be 1(scale is 0)
+      // Double inputs are rounded with the supplied scale.
       res_datum.set_double(ObExprUtil::round_double(x_datum.get_double(), round_scale));
       break;
     }
@@ -403,8 +402,7 @@ static int do_round_by_type_batch_with_check(const int64_t scale, const ObExpr &
         if (x_datum.is_null()) {
           results[i].set_null();
         } else{
-          // if in Oracle mode, param_num must be 1(scale is 0)
-          // MySQL mode cannot be here. because if param type is float, calc type will be double.
+          // Float inputs are rounded with the supplied scale.
           results[i].set_float(ObExprUtil::round_double(x_datum.get_float(), scale));
         }
       }
@@ -420,7 +418,7 @@ static int do_round_by_type_batch_with_check(const int64_t scale, const ObExpr &
         if (x_datum.is_null()) {
           results[i].set_null();
         } else{
-          // if in Oracle mode, param_num must be 1(scale is 0)
+          // Double inputs are rounded with the supplied scale.
           results[i].set_double(ObExprUtil::round_double(x_datum.get_double(), scale));
         }
       }
@@ -910,15 +908,14 @@ static int do_round_by_type_batch_without_check(const int64_t scale, const ObExp
     }
     case ObFloatType: {
       for (int64_t i = 0; i < batch_size; ++i) {
-        // if in Oracle mode, param_num must be 1(scale is 0)
-        // MySQL mode cannot be here. because if param type is float, calc type will be double.
+        // Float inputs are rounded with the supplied scale.
         results[i].set_float(ObExprUtil::round_double(x_datums[i].get_float(), scale));
       }
       break;
     }
     case ObDoubleType: {
       for (int64_t i = 0; i < batch_size; ++i) {
-        // if in Oracle mode, param_num must be 1(scale is 0)
+        // Double inputs are rounded with the supplied scale.
         results[i].set_double(ObExprUtil::round_double(x_datums[i].get_double(), scale));
       }
       break;

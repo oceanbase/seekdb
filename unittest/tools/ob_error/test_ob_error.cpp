@@ -40,11 +40,6 @@ TEST_F(TestObError, test_mgr)
   EXPECT_FALSE(mgr.insert_mysql_error("abc", "abc", 1, nullptr, "abc", "abc", 1));
   EXPECT_FALSE(mgr.insert_mysql_error("abc", "abc", 1, "abc", nullptr, "abc", 1));
   EXPECT_FALSE(mgr.insert_mysql_error("abc", "abc", 1, "abc", "abc", nullptr, 1));
-  EXPECT_FALSE(mgr.insert_oracle_error(nullptr, "abc", "abc", "abc", ORA, 1, 1));
-  EXPECT_FALSE(mgr.insert_oracle_error("abc", nullptr, "abc", "abc", ORA, 1, 1));
-  EXPECT_FALSE(mgr.insert_oracle_error("abc", "abc", nullptr, "abc", ORA, 1, 1));
-  EXPECT_FALSE(mgr.insert_oracle_error("abc", "abc", "abc", nullptr, ORA, 1, 1));
-  EXPECT_FALSE(mgr.insert_oracle_error("abc", "abc", "abc", "abc", NONE, 1, 1));
   EXPECT_FALSE(mgr.insert_ob_error(nullptr, "abc", "abc", "abc", 1));
   EXPECT_FALSE(mgr.insert_ob_error("abc", nullptr, "abc", "abc", 1));
   EXPECT_FALSE(mgr.insert_ob_error("abc", "abc", nullptr, "abc", 1));
@@ -67,21 +62,6 @@ TEST_F(TestObError, test_adder)
   EXPECT_TRUE(add_os_info(1, nullptr));
   EXPECT_TRUE(add_os_info(100, &mgr));
   EXPECT_TRUE(add_os_info(0, &mgr));
-
-  // test_add_oracle_info
-  EXPECT_FALSE(add_oracle_info(NONE, -1, -1, &mgr));
-  EXPECT_FALSE(add_oracle_info(ORA, 100, -1, &mgr));
-  EXPECT_FALSE(add_oracle_info(PLS, 100, -1, &mgr));
-  EXPECT_FALSE(add_oracle_info(ORA, 600, 3000, &mgr));
-  EXPECT_FALSE(add_oracle_info(MY, 600, 3000, &mgr));
-  EXPECT_FALSE(add_oracle_info(NONE, 100, -1, &mgr));
-
-  EXPECT_FALSE(add_oracle_info(ORA, 600, -1, nullptr));
-  EXPECT_FALSE(add_oracle_info(ORA, 600, -1, &mgr));
-  EXPECT_FALSE(add_oracle_info(ORA, 600, 4000, &mgr));
-  EXPECT_FALSE(add_oracle_info(ORA, 100, 4000, &mgr));
-  EXPECT_FALSE(add_oracle_info(PLS, 100, 4000, &mgr));
-  EXPECT_FALSE(add_oracle_info(NONE, 600, 3000, &mgr));
 
   // test_add_mysql_info
   EXPECT_FALSE(add_mysql_info(-1, &mgr));
@@ -120,7 +100,7 @@ TEST_F(TestObError, test_parser)
 
   facility = NONE;
   parse_facility("OBE", facility);
-  EXPECT_EQ(ORA, facility);
+  EXPECT_EQ(NONE, facility);
 
   facility = NONE;
   parse_facility("mY", facility);
@@ -131,7 +111,6 @@ TEST_F(TestObError, test_parser)
 
 int main(int argc, char** argv)
 {
-  g_enable_ob_error_msg_style = 1;
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

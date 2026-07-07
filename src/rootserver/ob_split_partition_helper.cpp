@@ -312,7 +312,7 @@ int ObSplitPartitionHelper::prepare_start_args_(const ObIArray<ObTableSchema *> 
   ObSEArray<ObTabletID, 1> src_data_tablet_id;
   ObRootService *root_service = GCTX.root_service_;
   ObTableLockOwnerID owner_id;
-  if (OB_UNLIKELY(false || upd_table_schemas.empty())) {
+  if (OB_UNLIKELY(upd_table_schemas.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(upd_table_schemas.count()));
   } else if (OB_ISNULL(root_service)) {
@@ -706,7 +706,7 @@ int ObSplitPartitionHelper::start_src_(const ObLSID &ls_id,
   int64_t start_time = finish_time;
   data_end_scn.reset();
   end_autoinc_seqs.reset();
-  if (OB_UNLIKELY(false || !ls_id.is_valid() || !leader_addr.is_valid()
+  if (OB_UNLIKELY(!ls_id.is_valid() || !leader_addr.is_valid()
         || src_tablet_ids.empty() || !start_src_arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid ls id", KR(ret), K(ls_id), K(leader_addr), K(src_tablet_ids), K(start_src_arg));
@@ -824,7 +824,7 @@ int ObSplitPartitionHelper::start_dst_(const uint64_t tenant_data_version,
   int ret = OB_SUCCESS;
   int64_t finish_time = ObTimeUtility::current_time();
   int64_t start_time = finish_time;
-  if (OB_UNLIKELY(false || !ls_id.is_valid() || !leader_addr.is_valid()
+  if (OB_UNLIKELY(!ls_id.is_valid() || !leader_addr.is_valid()
         || !start_dst_arg.is_valid() || !data_end_scn.is_valid() || inc_table_schemas.empty() || OB_ISNULL(tablet_creator))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(ls_id), K(leader_addr), K(start_dst_arg), K(data_end_scn), K(inc_table_schemas.count()), KP(tablet_creator));

@@ -132,8 +132,7 @@ int ObBatchCreateTabletHelper::init(
   int ret = OB_SUCCESS;
   const int64_t bucket_count = hash::cal_next_prime(100);
   auto_part_size_arr_.reset();
-  if (OB_UNLIKELY(!ls_key.is_valid()
-                  || false)) {
+  if (OB_UNLIKELY(!ls_key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(ls_key));
   } else if (OB_FAIL(batch_arg_.init_create_tablet(ls_key, major_frozen_scn, need_check_tablet_cnt))) {
@@ -213,7 +212,6 @@ int ObBatchCreateTabletHelper::add_table_schema_(
      * 
      * testcases:
      * - tools/deploy/mysql_test/test_suite/column_store_replica/t/drop_heap_table_primary_key.test
-     * - tools/deploy/mysql_test/test_suite/column_store_replica/t/drop_heap_table_primary_key_oracle.test
      * - tools/obtest/t/errsim_storage_compaction/column_store_replica/test_rebuild_heap_table_migrate_major.test
      */
     if (OB_FAIL(table_schema.sort_column_array_by_column_id())) {

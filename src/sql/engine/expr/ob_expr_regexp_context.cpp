@@ -679,7 +679,7 @@ int ObExprRegexContext::check_icu_regexp_status(UErrorCode u_error_code,
   return ret;
 }
 
-//Oracle allow more, we consider optimizer following function
+// Pattern normalization hook retained for optimizer-side regexp handling.
 int ObExprRegexContext::preprocess_pattern(ObExprStringBuf &string_buf,
                                            const ObString &origin_pattern,
                                            ObString &pattern)
@@ -688,7 +688,7 @@ int ObExprRegexContext::preprocess_pattern(ObExprStringBuf &string_buf,
   if (true) {
     pattern = origin_pattern;
   } else if (origin_pattern.length() / sizeof(UChar) > strlen("[^][:]")) {
-    /*oracle mode allow:
+    /* normalize equivalent character-class syntax:
     * regexp_substr('xxxx','[^][:]') <==> regexp_substr('xxxx','[^:]')
     */
     ObString const_str1(strlen("[^][:]"), "[^][:]");
@@ -861,7 +861,7 @@ int ObExprRegexContext::get_valid_replace_string(ObIAllocator &alloc,
     u_replace_len = 0;
     LOG_TRACE("succeed to get valid replace string", K(u_replace_len));
   } else {
-    //oracle mode replace string '\1' <==> '$1' in mysql mode, we need extra convert.
+    // Convert backslash group references to ICU replacement group references.
     UErrorCode m_error_code = U_ZERO_ERROR;
     int32_t group_count = uregex_groupCount(regexp_engine_, &m_error_code);
     MEMSET(u_replace, 0, buf_len);
@@ -891,7 +891,7 @@ int ObExprRegexContext::get_valid_replace_string(ObIAllocator &alloc,
                 static_cast<uint16_t>(u_replace[u_replace_len - 1]) <= 0x39) {//'\1'=>'$1'
               if (group_count > 0) {
                 if (static_cast<uint16_t>(u_replace[u_replace_len - 1]) - 0x30 > group_count) {
-                  //if the specify group num bigger than the total count, just skip, compatible Oracle.
+                  // If the specified group number is bigger than the total count, skip it.
                   u_replace_len = u_replace_len - 2;
                 } else {
                   u_replace[u_replace_len - 2] = 0x24;

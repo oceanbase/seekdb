@@ -988,7 +988,7 @@ int ObJsonPathBasicNode::node_to_string(ObJsonBuffer& str, bool is_mysql, bool i
       LOG_WARN("fail to append JPN_WILDCARD_ELLIPSIS", K(ret));
     }
   } else {
-    if (OB_FAIL(oracle_to_string(str, is_next_array))) {
+    if (OB_FAIL(sql_json_to_string(str, is_next_array))) {
       LOG_WARN("fail to append JPN_WILDCARD_ELLIPSIS", K(ret));
     }
   }
@@ -1094,7 +1094,7 @@ int ObJsonPathBasicNode::mysql_to_string(ObJsonBuffer& str)
   return ret;
 }
 
-int ObJsonPathBasicNode::oracle_to_string(ObJsonBuffer& str, bool is_next_array)
+int ObJsonPathBasicNode::sql_json_to_string(ObJsonBuffer& str, bool is_next_array)
 {
   INIT_SUCC(ret);
   switch (node_type_) {
@@ -1140,7 +1140,7 @@ int ObJsonPathBasicNode::oracle_to_string(ObJsonBuffer& str, bool is_next_array)
         } else {
           ObString object_name(node_content_.member_.len_, node_content_.member_.object_name_);
           ObJsonBuffer tmp_object_name(str.get_allocator());
-          if (!ObJsonPathUtil::is_oracle_keyname(object_name.ptr(), object_name.length())) {
+          if (!ObJsonPathUtil::is_sql_json_keyname(object_name.ptr(), object_name.length())) {
             if (OB_FAIL(ObJsonPathUtil::double_quote(object_name, &tmp_object_name))) {
               LOG_WARN("fail to add ObJsonPathUtil::double_quote", K(ret));
             } else {
@@ -1513,7 +1513,7 @@ int ObJsonPath::to_string(ObJsonBuffer& str)
       }// end of filter path
       is_next_array = false;
     }
-  } // end of oracle to string
+  } // end of SQL/JSON to string
 
   return ret;
 }
@@ -1529,8 +1529,8 @@ int ObJsonPath::parse_path()
       LOG_WARN("fail to parse mysql JSON Path Expression!", K(ret), K(index_));
     }
   } else {
-    if (OB_FAIL(parse_oracle_path())) {
-      LOG_WARN("fail to parse oracle JSON Path Expression!", K(ret), K(index_));
+    if (OB_FAIL(parse_sql_json_path())) {
+      LOG_WARN("fail to parse SQL/JSON Path Expression!", K(ret), K(index_));
     }
   }
   return ret;
@@ -2559,14 +2559,14 @@ int ObJsonPathUtil::double_quote(ObString &name, ObJsonBuffer* tmp_name)
 }
 
 
-// parse oracle path to path Node
-int ObJsonPath::parse_oracle_path()
+// parse SQL/JSON path to path Node
+int ObJsonPath::parse_sql_json_path()
 {
   INIT_SUCC(ret);
 
   if (is_mysql_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Should be oracle JSON Path Expression!");
+    LOG_WARN("Should be SQL/JSON Path Expression!");
   } else {  
 
     // the first non-whitespace character must be $
@@ -2574,8 +2574,8 @@ int ObJsonPath::parse_oracle_path()
     bool first = true;
     ObJsonPathUtil::skip_whitespace(expression_, index_);
 
-    // we found that "lax $[*].z" is leagl, while "strict $[*].z" is illegal 
-    // but the oracle default lax model, so there is no way to set strict mode
+    // We found that "lax $[*].z" is legal, while "strict $[*].z" is illegal.
+    // Keep lax as the default mode here.
     if(index_ < len && (expression_[index_] == 'l' || expression_[index_] == 's')) {
       int mode_len = 0;
       ObString mode_str;
@@ -2613,7 +2613,7 @@ int ObJsonPath::parse_oracle_path()
         ObJsonPathUtil::skip_whitespace(expression_, index_);
 
         while (index_ < len && OB_SUCC(ret)) {
-          if (OB_FAIL(parse_oracle_path_node())) {
+          if (OB_FAIL(parse_sql_json_path_node())) {
             bad_index_ =  index_; 
             ret = OB_INVALID_ARGUMENT;
             LOG_WARN("fail to parse JSON Path Expression!", K(ret), K(index_));
@@ -2658,8 +2658,8 @@ int ObJsonPath::parse_oracle_path()
   return ret;
 }
 
-// parse oracle_path to path json node
-int ObJsonPath::parse_oracle_path_node()
+// parse SQL/JSON path to path json node
+int ObJsonPath::parse_sql_json_path_node()
 {
   int ret =  OB_SUCCESS;
   ObJsonPathUtil::skip_whitespace(expression_, index_);
@@ -2767,14 +2767,14 @@ int ObJsonPath::parse_dot_node()
         // skip the second '.' and whitespace
         ++index_;
         ObJsonPathUtil::skip_whitespace(expression_, index_);
-        // parse ORACLE_ELLIPSIS
+        // parse dot ellipsis
         if (OB_FAIL(parse_dot_ellipsis_node())) {
           LOG_WARN("fail to parse dot ellipsis node!", K(ret), K(index_), K(expression_));
         } else {
           // can only be member
           if (index_ < expression_.length() 
               && ObJsonPathUtil::is_begin_field_name(expression_[index_])) {
-            if (OB_FAIL(parse_oracle_member_node())) {
+            if (OB_FAIL(parse_sql_json_member_node())) {
               LOG_WARN("fail to parse member node!", K(ret), K(index_), K(expression_));
             }
           } else {
@@ -2786,8 +2786,8 @@ int ObJsonPath::parse_dot_node()
     } else { 
       // only one '.' could be .member or .fun()
       // without '"' then must be fun()
-      if (OB_FAIL(parse_oracle_member_node())) {
-        LOG_WARN("fail to parse oracle member node!", K(ret), K(index_), K(expression_));
+      if (OB_FAIL(parse_sql_json_member_node())) {
+        LOG_WARN("fail to parse SQL/JSON member node!", K(ret), K(index_), K(expression_));
       }
     }
   } else {
@@ -2799,14 +2799,14 @@ int ObJsonPath::parse_dot_node()
   return ret;
 }
 
-bool ObJsonPathUtil::is_oracle_keyname(const char* name, uint64_t length)
+bool ObJsonPathUtil::is_sql_json_keyname(const char* name, uint64_t length)
 {
   bool ret_bool = true;
   // An empty string is not a valid identifier.
   if (OB_ISNULL(name)) {
     ret_bool = false;
   } else {
-    // Oracle keyname is can only start whit letter or _
+    // Keyname can only start with a letter or underscore.
     if ((letter_or_not(*name)) || (*(name) == '_')) {
       uint64_t idx = 1;
       while (idx < length && ret_bool) {
@@ -2992,9 +2992,9 @@ int ObJsonPath::deal_with_escape(char* &str, uint64_t& len)
   return ret;
 }
 
-// parse JPN_ORACLE_MEMBER
+// parse SQL/JSON member
 // @return  the error code.
-int ObJsonPath::parse_oracle_member_node()
+int ObJsonPath::parse_sql_json_member_node()
 {
   INIT_SUCC(ret);
   ObJsonPathUtil::skip_whitespace(expression_, index_);
@@ -3180,7 +3180,7 @@ int ObJsonPath::parse_multiple_array_node()
             if (OB_ISNULL(o_array)) {
             // error
               ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("allocate row buffer failed at oracle_array",K(ret), K(index_), K(expression_));
+              LOG_WARN("allocate row buffer failed at multi_array", K(ret), K(index_), K(expression_));
             } else {
               // init array
               init_multi_array(o_array, index1, index2, from_end1, from_end2);

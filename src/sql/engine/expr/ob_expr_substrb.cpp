@@ -43,7 +43,7 @@ int ObExprSubstrb::calc_result_typeN(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   ret = OB_ERR_FUNCTION_UNKNOWN;
-  LOG_WARN("substrb is only for oracle mode", K(ret));
+  LOG_WARN("substrb is not supported", K(ret));
   return ret;
 }
 
@@ -76,7 +76,7 @@ int ObExprSubstrb::calc(ObString &res_str, const ObString &text,
       } else {
         MEMCPY(buf, text.ptr(), text_len);
         res_len = min(length, text_len - start);
-        // Standard Oracle will set illegal byte to space
+        // Replace illegal bytes in the selected range with spaces.
         if (OB_FAIL(handle_invalid_byte(buf, text_len, start, res_len, ' ', cs_type, false))) {
           LOG_WARN("handle invalid byte failed", K(start), K(res_len), K(cs_type));
         } else {

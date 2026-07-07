@@ -43,7 +43,6 @@ int ObOLAPAsyncCancelJobExecutor::execute(ObExecContext &ctx, ObOLAPAsyncCancelJ
     LOG_WARN("user not exist", KR(ret), K(user_id));
   } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::get_dbms_sched_job_info(
         *GCTX.sql_proxy_,
-        false, // is_oracle_tenant
         stmt.get_job_name(),
         allocator,
         job_info))) {

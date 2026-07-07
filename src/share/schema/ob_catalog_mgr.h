@@ -53,8 +53,7 @@ public:
   inline bool operator == (const ObCatalogNameHashKey &rv) const
   {
     ObCompareNameWithTenantID name_cmp(name_case_mode_);
-    return (true)
-           && (name_case_mode_ == rv.name_case_mode_)
+    return (name_case_mode_ == rv.name_case_mode_)
            && (0 == name_cmp.compare(name_ ,rv.name_));
   }
 private:

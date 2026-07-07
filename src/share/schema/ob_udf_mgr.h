@@ -112,8 +112,7 @@ public:
     return hash_ret;
   }
   inline bool operator==(const ObUDFHashWrapper &rv) const{
-    return (true)
-        && (udf_name_ == rv.get_udf_name());
+    return (udf_name_ == rv.get_udf_name());
   }
   
   inline void set_udf_name(const common::ObString &udf_name) { udf_name_ = udf_name; }

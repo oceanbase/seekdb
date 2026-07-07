@@ -2431,7 +2431,7 @@ int ObDDLRedefinitionTask::generate_rebuild_index_arg_list(
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = nullptr;
   ObRootService *root_service = GCTX.root_service_;
-  if (false || table_id == OB_INVALID_ID) {
+  if (table_id == OB_INVALID_ID) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(table_id));
   } else if (OB_ISNULL(root_service)) {

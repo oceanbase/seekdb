@@ -81,9 +81,7 @@ int ObVritualCoreInnerTable::inner_open()
     {
       
       const ObSimpleTenantSchema *tenant = NULL;
-      if (!true && false) {
-        // user tenant can see its own data
-      } else if (OB_FAIL(schema_guard_->get_tenant_info(tenant))) {
+      if (OB_FAIL(schema_guard_->get_tenant_info(tenant))) {
         LOG_WARN("fail to get tenant info", KR(ret));
       } else if (OB_ISNULL(tenant) || !tenant->is_normal()) {
         // skip

@@ -324,9 +324,8 @@ int ObNumber::from_sci_(const char *str, const int64_t length, IAllocator &alloc
         }
         break;
       }
-      /* Oracle max valid length of string is 255(exponent of the value is [-253, 255])
-       * exponent of number's legal range is [-130, 125]
-       * so e_value's valid range can't larger than 3 digits */
+      /* The legal number exponent range is [-130, 125],
+       * so e_value's valid range cannot be larger than 3 digits. */
       int e_cnt = 0;
       while (i < length && cur <= '9' && cur >= '0') {
         if (e_cnt < 4) {
@@ -1429,7 +1428,7 @@ int ObNumber::round_scale_(const int64_t scale, const bool using_floating_scale)
 }
 
 int ObNumber::round_scale_v2_(const int64_t scale, const bool using_floating_scale,
-    const bool for_oracle_to_char,
+    const bool for_to_char,
     int16_t *res_precision/*NULL*/, int16_t *res_scale/*NULL*/)
 {
   static const uint64_t ROUND_POWS_DESC[] = {
@@ -1568,7 +1567,7 @@ int ObNumber::round_scale_v2_(const int64_t scale, const bool using_floating_sca
 
 
 int ObNumber::round_scale_v3_(const int64_t scale, const bool using_floating_scale,
-    const bool for_oracle_to_char,
+    const bool for_to_char,
     int16_t *res_precision/*NULL*/, int16_t *res_scale/*NULL*/)
 {
   static const uint64_t ROUND_POWS[] = {
@@ -1588,7 +1587,7 @@ int ObNumber::round_scale_v3_(const int64_t scale, const bool using_floating_sca
   if (is_zero()) {
     //do nothing
   } else {
-    LOG_DEBUG("before round_scale_v3_", KPC(this), K(scale), K(using_floating_scale), K(for_oracle_to_char));
+    LOG_DEBUG("before round_scale_v3_", KPC(this), K(scale), K(using_floating_scale), K(for_to_char));
     const int64_t digit_0_len = get_digit_len_v2(digits_[0]);
     const int64_t expr_value = get_decode_exp(d_);
     //xxx_length means xx digit array length
@@ -1717,7 +1716,7 @@ int ObNumber::round_scale_v3_(const int64_t scale, const bool using_floating_sca
       }
     }
   }
-  LOG_DEBUG("finish round_scale_v3_", KPC(this), K(scale), K(using_floating_scale), K(for_oracle_to_char));
+  LOG_DEBUG("finish round_scale_v3_", KPC(this), K(scale), K(using_floating_scale), K(for_to_char));
   return ret;
 }
 
@@ -1891,168 +1890,6 @@ int ObNumber::round_precision(const int64_t precision)
 }
 
 
-
-int ObNumber::round_scale_oracle_(const int64_t scale, const bool using_floating_scale,
-                                  int16_t *res_precision, int16_t *res_scale)
-{
-  int ret = OB_SUCCESS;
-  ObDigitIterator di;
-  di.assign(d_.desc_, digits_);
-
-  uint32_t digit = 0;
-  bool from_integer = false;
-  bool last_decimal = false;
-  uint32_t integer_digits[MAX_CALC_LEN];
-  int64_t integer_length = 0;
-  int64_t integer_counter = 0;
-  bool integer_is_zero = true;
-  uint32_t decimal_digits[MAX_CALC_LEN];
-  int64_t decimal_length = 0;
-  int64_t decimal_not_zero_length = 0;
-  int64_t last_decimal_counter = 0;
-  int64_t valid_precision = OB_MAX_NUMBER_PRECISION_INNER;
-  int64_t r_precision = 0;
-  int64_t r_scale = 0;
-  int64_t decimal_prefix_zero = 0;
-  while (OB_SUCC(di.get_next_digit(digit, from_integer, last_decimal))) {
-    if (OB_UNLIKELY(MAX_CALC_LEN <= integer_length
-        || MAX_CALC_LEN <= decimal_length)) {
-      LOG_WARN("buffer size overflow",
-                K(integer_length), K(decimal_length));
-      ret = OB_NUMERIC_OVERFLOW;
-      break;
-    }
-    if (from_integer) {
-      if (0 == integer_length) {
-        integer_counter += get_digit_len(digit);
-      } else {
-        integer_counter += DIGIT_LEN;
-      }
-      if (integer_is_zero && digit != 0) {
-        integer_is_zero = false;
-      }
-      integer_digits[integer_length++] = digit;
-    } else if (0 <= scale) {
-      if (0 == digit
-          && 0 == integer_length
-          && 0 == decimal_not_zero_length) {
-        decimal_prefix_zero += DIGIT_LEN;
-        if (using_floating_scale) {
-          continue;
-        }
-      } else {
-        if (0 == decimal_not_zero_length && !last_decimal) {
-          decimal_prefix_zero += DIGIT_LEN - get_digit_len(digit);
-          decimal_not_zero_length += get_digit_len(digit);
-        } else if (last_decimal) {
-          remove_back_zero(digit, last_decimal_counter);
-          decimal_not_zero_length += DIGIT_LEN - last_decimal_counter;
-        } else {
-          decimal_not_zero_length += DIGIT_LEN;
-        }
-      }
-      decimal_digits[decimal_length++] = digit;
-      if ((decimal_length * DIGIT_LEN) > (using_floating_scale ? (scale - integer_counter) : scale)) {
-//        LOG_DEBUG("Number need trunc decimal on oralce mode", K(decimal_length),
-//            K(scale), K(integer_counter), K(decimal_not_zero_length), K(using_floating_scale),
-//            K(decimal_prefix_zero));
-        break;
-      }
-    } else {
-      break;
-    }
-  }
-  ret = (OB_ITER_END == ret) ? OB_SUCCESS : ret;
-  valid_precision -= (0 == integer_counter ? decimal_prefix_zero : integer_counter) % 2;
-  int64_t decimal_cnt = decimal_length * DIGIT_LEN - last_decimal_counter;
-  LOG_DEBUG("Number process on oracle mode", K(ret), K(using_floating_scale), K(scale),
-      K(integer_counter), K(decimal_length), K(decimal_not_zero_length), K(valid_precision),
-      K(decimal_cnt), K(last_decimal_counter));
-  int64_t floating_scale = scale;
-  if (OB_SUCC(ret)) {
-    if (using_floating_scale) {
-      if (integer_counter > 0) {
-        floating_scale = valid_precision - integer_counter;
-      } else if (decimal_not_zero_length > valid_precision) {
-        /* decimal_cnt - non-zero decimal digit + valid decimal number */
-        floating_scale = MIN(scale,
-            (decimal_cnt - decimal_not_zero_length + valid_precision));
-      }
-      r_precision = PRECISION_UNKNOWN_YET;
-      r_scale = ORA_NUMBER_SCALE_UNKNOWN_YET;
-    } else {
-      if (integer_counter > 0) {
-        if (scale > 0) {
-          /* 1..30th.123  scale = 30 floating_scale = 0  res_p = 30 res_s = 0
-           * 1..20th.123  scale = 10 floating_scale = 10 res_p = 20
-           * 1...42th.123 scale = 10 floating_scale = -2 res_s = 10 res_p = 40, res_s = -2
-           * 1.000..20th0123  scale = 22 floating_scale = 22 res_s = 22 res_p = 22*/
-          floating_scale = MIN(valid_precision - integer_counter, scale);
-          r_precision = MIN(valid_precision, integer_counter + decimal_cnt);
-          r_scale = floating_scale < 0 ? floating_scale : MIN(floating_scale, decimal_cnt);
-        } else {
-          /* 1234.345 scale = -2, res_p = 2 res_s = -2
-           * 1234.324 scale = -10 res_p = 0 res_s = -10
-           * 1...42th.123 scale = -1 res_p = 40, res_s = -2*/
-          r_precision = MIN(valid_precision, MAX(integer_counter + scale, 0));
-          r_scale = MIN(integer_counter - valid_precision, scale);
-        }
-      } else if (decimal_not_zero_length > valid_precision) {
-        /* total_length - non-zero decimal digit + valid decimal number */
-        floating_scale = MIN(scale, (decimal_cnt - decimal_not_zero_length + valid_precision));
-        /* 0.345 scale = -2, res_p = 2 res_s = -2
-         * 1234.324 scale = -10 res_p = 0 res_s = -10
-         * 1...42th.123 scale = -1 res_p = 40, res_s = -2*/
-        if (scale > 0) {
-          r_precision = MIN(valid_precision, decimal_not_zero_length - (scale - decimal_cnt));
-        } else {
-          r_precision = 0;
-        }
-        r_scale = floating_scale;
-      }
-    }
-    if (NULL != res_precision && NULL != res_scale) {
-      if (using_floating_scale
-          || (r_precision <= valid_precision
-              && r_precision >= 0
-              && r_scale <= OB_MAX_NUMBER_SCALE
-              && r_scale >= OB_MIN_NUMBER_SCALE)) {
-        *res_precision = static_cast<int16_t>(r_precision);
-        *res_scale = static_cast<int16_t>(r_scale);
-      } else {
-        LOG_WARN("got invalid precision or scale on oracle mode, use builded",
-            K(r_precision), K(r_scale));
-      }
-    }
-//    LOG_DEBUG("Number round with:", K(using_floating_scale), K(floating_scale), K(decimal_length),
-//        K(r_precision), K(r_scale));
-    if (0 < floating_scale) {
-      if (OB_FAIL(round_decimal_(floating_scale, decimal_digits, decimal_length))) {
-        LOG_ERROR("fail to get round_decimal");
-      } else {
-        ret = rebuild_digits_(integer_digits, integer_length, decimal_digits, decimal_length);
-      }
-    } else if (0 > floating_scale) {
-      if (OB_FAIL(round_integer_(-floating_scale, integer_digits, integer_length))) {
-        LOG_ERROR("fail to get round_integer");
-      } else {
-        ret = rebuild_digits_(integer_digits, integer_length, NULL, 0);
-      }
-    } else if (0 == floating_scale) {
-      if (0 < decimal_length) {
-        if ((5 * BASE / 10) <= decimal_digits[0]) {
-          decimal_digits[0] = BASE;
-        } else {
-          decimal_digits[0] = 0;
-        }
-        ret = rebuild_digits_(integer_digits, integer_length, decimal_digits, 1);
-      } else {
-        ret = rebuild_digits_(integer_digits, integer_length, NULL, 0);
-      }
-    }
-  }
-  return ret;
-}
 
 //if number=x.5  number.round_even_number() = nearest even number
 
@@ -2761,7 +2598,7 @@ int ObNumber::format_v2(
       if (is_negative()) {
         buf[pos++] = '-';
       }
-      // In oracle mode, the integer part of a decimal is not padded with 0, 0.2345 is represented as .2345, -0.2345 is represented as -.2345
+      // Keep a leading zero for decimal output in MySQL-only mode.
       if (nmb->is_decimal()) {
         buf[pos++] = '0';
       }
@@ -3024,29 +2861,10 @@ int ObNumber::to_sci_str_(ObString &num_str, char *buf,
       if (str_len > SCI_NUMBER_LENGTH && pos - origin != SCI_NUMBER_LENGTH) {
         ret = OB_INVALID_ARGUMENT;
         buf[pos] = '\0';
-        LOG_WARN("the value of pos is invalid after number to char in oracle mode",
+        LOG_WARN("the value of pos is invalid after number to char",
                  KCSTRING(buf), K(pos), K(origin), K(ret));
       }
     }
-  }
-  return ret;
-}
-
-//oracle max store 20 bytes number(39~40 number). when using to_char, only store 40 number at most
-int ObNumber::format_with_oracle_limit(char *buf, const int64_t buf_len, int64_t &pos, int16_t scale) const
-{
-  int ret = common::OB_SUCCESS;
-  bool need_to_sci = true;
-  number::ObNumber tmp_number;
-  char buf_alloc[ObNumber::MAX_BYTE_LEN];
-  ObDataBuffer allocator(buf_alloc, ObNumber::MAX_BYTE_LEN);
-  //need deep copy before round
-  if (OB_FAIL(tmp_number.from(*this, allocator))) {
-    LOG_WARN("fail to deep_copy", K(ret), K(tmp_number));
-  } else if (OB_FAIL(tmp_number.round_for_sci((-MIN_SCI_SIZE), true))) {
-    LOG_WARN("fail to round", K(ret), K(tmp_number));
-  } else if (OB_FAIL(tmp_number.format_v2(buf, buf_len, pos, scale, need_to_sci))) {
-    LOG_WARN("fail to format", K(ret), K(tmp_number));
   }
   return ret;
 }
@@ -4069,7 +3887,6 @@ int ObNumber::add_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 {
   int ret = OB_SUCCESS;
   ObNumber res;
-  // use_oracle_mode removed (always MySQL)
   LOG_DEBUG("add_v3", K(ret), KPC(this), K(other));
   if (OB_UNLIKELY(is_zero())) {
     ret = res.deep_copy_v3(other, allocator);
@@ -4325,7 +4142,6 @@ int ObNumber::sub_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 {
   int ret = OB_SUCCESS;
   ObNumber res;
-  // use_oracle_mode removed (always MySQL)
   LOG_DEBUG("sub_v3", K(ret), KPC(this), K(other));
   if (OB_UNLIKELY(is_zero())) {
     ret = other.negate_v3_(res, allocator);
@@ -4724,7 +4540,6 @@ int ObNumber::mul_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 {
   int ret = OB_SUCCESS;
   ObNumber res;
-  // use_oracle_mode removed (always MySQL)
   LOG_DEBUG("mul_v3_", K(ret), KPC(this), K(other));
   if (is_zero() || other.is_zero()) {
     res.set_zero();
@@ -4991,7 +4806,6 @@ int ObNumber::div_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 {
   int ret = OB_SUCCESS;
   ObNumber res;
-  // use_oracle_mode removed (always MySQL)
   LOG_DEBUG("div_v3_", K(ret), KPC(this), K(other));
   if (OB_UNLIKELY(other.is_zero())) {
     ObCStringHelper helper;
@@ -6771,7 +6585,7 @@ int ObNumberBuilder::build_hex_integer_(const char *str, const int64_t integer_s
   if (OB_ISNULL(fmt)) {
     ret = build_integer_(str, integer_start, integer_end, reduce_zero);
   } else {
-    // the maximum length of Oracle to_number(123, 'xxx') format is 63
+    // the maximum length of to_number(123, 'xxx') format is 63
     const int32_t MAX_FORMAT_LEN = 64;
     int64_t c_p = fmt->fmt_len_ - 1;
     ib_.reset();

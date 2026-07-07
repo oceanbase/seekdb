@@ -592,7 +592,7 @@ int ObMViewSchedJobUtils::replace_mview_refresh_job(common::ObISQLClient &sql_cl
     } else if (OB_FAIL(ObDBMSSchedJobUtils::remove_dbms_sched_job(sql_client, job_name, true /*if_exists*/))) {
       LOG_WARN("failed to remove dbms sched job", KR(ret), K(1UL),
              K(mview_info.get_refresh_job()));
-    } else if (OB_FAIL(ObDBMSSchedJobUtils::get_dbms_sched_job_info(*GCTX.sql_proxy_, false, job_name, allocator, job_info))) {
+    } else if (OB_FAIL(ObDBMSSchedJobUtils::get_dbms_sched_job_info(*GCTX.sql_proxy_, job_name, allocator, job_info))) {
       LOG_WARN("fail to get job info", K(tmp_ret));
     } else if (OB_TMP_FAIL(ObDBMSSchedJobUtils::stop_dbms_sched_job(
                            *GCTX.sql_proxy_, job_info, false))) {
@@ -670,7 +670,7 @@ int ObMViewSchedJobUtils::disable_and_stop_job(const uint64_t mview_id)
     ObString job_name = mview_info.get_refresh_job();
     ObObj obj;
     obj.set_bool(false);
-    if (OB_FAIL(ObDBMSSchedJobUtils::get_dbms_sched_job_info(*GCTX.sql_proxy_, false, job_name, allocator, job_info))) {
+    if (OB_FAIL(ObDBMSSchedJobUtils::get_dbms_sched_job_info(*GCTX.sql_proxy_, job_name, allocator, job_info))) {
       LOG_WARN("fail to get job info", K(ret));
     } else if (OB_FAIL(ObDBMSSchedJobUtils::update_dbms_sched_job_info(
                        *GCTX.sql_proxy_, job_info,  ObString("enabled"), obj))) {

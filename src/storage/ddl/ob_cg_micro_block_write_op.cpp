@@ -329,7 +329,7 @@ int ObCGMicroBlockWriteOp::append_cg_row_file_to_writer(ObCGRowFile *&cg_row_fil
         LOG_USER_ERROR(OB_ERR_PRIMARY_KEY_DUPLICATE, "", static_cast<int>(sizeof("UNIQUE IDX") - 1), "UNIQUE IDX");
         (void) ObDirectLoadSliceWriter::report_unique_key_dumplicated(ret, unique_index_id_, *cg_bdrs_ptr, tablet_id_, report_ret_code); // ignore ret
         if (OB_ERR_DUPLICATED_UNIQUE_KEY == report_ret_code) {
-          //error message of OB_ERR_PRIMARY_KEY_DUPLICATE is not compatiable with oracle, so use a new error code
+          // Report direct-load unique index conflicts with the dedicated duplicate-key code.
           ret = OB_ERR_DUPLICATED_UNIQUE_KEY;
         }
       } else {
@@ -374,4 +374,3 @@ int ObCGMicroBlockWriteOp::try_generate_output_chunk(
 
 } //end storage
 } // end oceanbase
-

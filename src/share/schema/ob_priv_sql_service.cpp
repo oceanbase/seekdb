@@ -292,7 +292,7 @@ int ObPrivSqlService::grant_table(
         LOG_WARN("Failed to log operation", K(ret));
       }
     }
-    // log oracle objauth opertion
+    // log object privilege operation
     if (OB_SUCC(ret) && obj_priv_array.count() > 0) {
       OZ (log_obj_priv_operation(obj_priv_key,
                                 new_schema_version_ora,
@@ -605,7 +605,7 @@ int ObPrivSqlService::revoke_routine(
 
 
 /*
- * This function should by called when grant only oracle related privs.
+ * This function handles grant/revoke operations for object privileges only.
  * Only deal with Authorization operations of single object.
  * obj_priv_key : priv key of obj
  * obj_priv_array + option: new privs of obj
@@ -642,7 +642,7 @@ int ObPrivSqlService::grant_table_ora_only(
                        dml),
         1UL, obj_priv_array);
 
-    // log oracle objauth opertion
+    // log object privilege operation
     if (OB_SUCC(ret) && obj_priv_array.count() > 0) {
       OZ (log_obj_priv_operation(obj_priv_key,
                                  new_schema_version_ora,
@@ -1161,8 +1161,7 @@ int ObPrivSqlService::alter_user_default_role(
   const uint64_t user_id = user_info.get_user_id();
   uint64_t role_id = OB_INVALID_ID;
 
-  if (!true
-      || !is_valid_id(user_id)) {
+  if (!is_valid_id(user_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid arguments", K(user_id), K(ret));
   } else {

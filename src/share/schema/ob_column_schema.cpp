@@ -113,7 +113,7 @@ int ObColumnSchemaV2::assign(const ObColumnSchemaV2 &src_schema)
 
 bool ObColumnSchemaV2::operator==(const ObColumnSchemaV2 &r) const
 {
-  return (true && table_id_ == r.table_id_ && column_id_ == r.column_id_
+  return (table_id_ == r.table_id_ && column_id_ == r.column_id_
       && schema_version_ == r.schema_version_);
 }
 

@@ -294,7 +294,7 @@ int ObSPIResultSet::is_set_global_var(ObSQLSessionInfo &session,
       } else if (set_node->num_child_ > 0 && OB_NOT_NULL(set_node->children_[0])) {
         ParseNode *var = set_node->children_[0];
         ObString name;
-        if (T_OBJ_ACCESS_REF == var->type_) { //Oracle mode
+        if (T_OBJ_ACCESS_REF == var->type_) { // object access reference
           const ParseNode *name_node = NULL;
           if (OB_ISNULL(name_node = var->children_[0])) {
             ret = OB_ERR_UNEXPECTED;
@@ -353,15 +353,15 @@ int ObSPIResultSet::check_nested_stmt_legal(ObExecContext &exec_ctx, const ObStr
        * END
        *
        * select func() from dual;
-       * this function is allowed in mysql, but not allowed in oracle
+       * this function is allowed in mysql
        */
       // select func() from dual is allowed in mysql mode
     } else if (ObStmt::is_ddl_stmt(stmt_type, has_global_variable) || ObStmt::is_tcl_stmt(stmt_type)) {
       ret = OB_ER_COMMIT_NOT_ALLOWED_IN_SF_OR_TRG;
-      LOG_ERROR("OBE-14552: Cannot Perform a DDL Commit or Rollback Inside a Query or DML tips",
+      LOG_ERROR("Cannot Perform a DDL Commit or Rollback Inside a Query or DML tips",
                K(ret), K(stmt_type), K(lbt()));
       if (OB_NOT_SUPPORTED == ret) {
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "OBE-14552: Cannot Perform a DDL Commit or Rollback Inside a Query or DML tips");
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cannot Perform a DDL Commit or Rollback Inside a Query or DML tips");
       }
     } else if (exec_ctx.get_my_session()->is_in_user_scope() && ObStmt::is_dml_write_stmt(stmt_type)) {
       ret = OB_ERR_CANT_UPDATE_TABLE_IN_CREATE_TABLE_SELECT;
@@ -2170,7 +2170,7 @@ int ObSPIService::spi_build_record_type(common::ObIAllocator &allocator,
         data_type.set_charset_type(charset_type);
         data_type.set_collation_type(collation_type);
         data_type.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
-        data_type.set_length(OB_MAX_ORACLE_PL_CHAR_LENGTH_BYTE);
+        data_type.set_length(OB_MAX_EXTENDED_PL_CHAR_LENGTH_BYTE);
         data_type.set_length_semantics(LS_BYTE);
         pl_type.set_data_type(data_type);
       }else {
@@ -2229,10 +2229,10 @@ int ObSPIService::calc_dynamic_sqlstr(
   CK (OB_NOT_NULL(sql));
   OZ (spi_calc_expr(ctx, sql, OB_INVALID_INDEX, &result));
   if (OB_FAIL(ret)) {
-  } else if (result.is_null_oracle()) {
+  } else if (result.is_null_or_empty_string()) {
     ret = OB_ERR_STATEMENT_STRING_IN_EXECUTE_IMMEDIATE_IS_NULL_OR_ZERO_LENGTH;
     LOG_WARN(
-      "OBE-06535: statement string in EXECUTE IMMEDIATE is NULL or 0 length", K(ret), K(result));
+      "statement string in EXECUTE IMMEDIATE is NULL or 0 length", K(ret), K(result));
   } else if (!result.is_string_type()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Dynamic sql is not a string", K(ret), K(result), K(sql_str));
@@ -2351,7 +2351,7 @@ int ObSPIService::prepare_dynamic(ObPLExecCtx *ctx,
         }
         if (pl_prepare_result.result_set_->is_returning() && 0 == into_cnt) {
             ret = OB_ERR_MISSING_INTO_KEYWORD;
-            LOG_WARN("OBE-00925: missing INTO keyword", K(ret),
+            LOG_WARN("missing INTO keyword", K(ret),
                     K(pl_prepare_result.result_set_->is_returning()), K(into_cnt));
         } else {
           /*!
@@ -2377,13 +2377,13 @@ int ObSPIService::prepare_dynamic(ObPLExecCtx *ctx,
                 && stmt_type != stmt::T_DELETE
                 && stmt_type != stmt::T_UPDATE) {
               ret = OB_ERR_CLAUSE_RETURN_ILLEGAL;
-              LOG_WARN("OBE-06547: RETURNING clause must be used with "
+              LOG_WARN("RETURNING clause must be used with "
                       "INSERT, UPDATE, or DELETE statements", K(ret), K(stmt_type));
               LOG_USER_ERROR(OB_NOT_SUPPORTED, "RETURNING clause used with not "
                       "INSERT, UPDATE, or DELETE statements");
           } else if (pl_prepare_result.result_set_->get_into_exprs().empty()) {
             ret = OB_ERR_MISSING_INTO_KEYWORD;
-            LOG_WARN("OBE-00925: missing INTO keyword", K(ret));
+            LOG_WARN("missing INTO keyword", K(ret));
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "missing INTO keyword");
           } else {
             remove_into = true;
@@ -2404,8 +2404,8 @@ int ObSPIService::prepare_dynamic(ObPLExecCtx *ctx,
             * DECLARE
             * *
             * ERROR at line 1:
-            * OBE-01006: bind variable does not exist
-            * OBE-06512: at line 6
+            * bind variable does not exist
+            * at line 6
             * */
           remove_into = into_cnt != 0;
         } else { /*do nothing*/ }
@@ -2489,7 +2489,7 @@ int ObSPIService::check_dynamic_sql_legal(ObPLExecCtx *ctx,
           OZ (out_using_params.push_back(params[i]));
         } else {
           ret = OB_ERR_INOUT_PARAM_PLACEMENT_NOT_PROPERLY;
-          LOG_WARN("OBE-06536: IN bind variable bound to an OUT position", K(ret));
+          LOG_WARN("IN bind variable bound to an OUT position", K(ret));
         }
       }
     } else if (ObStmt::is_dml_write_stmt(stmt_type) && inner_into_cnt > 0 && into_count > 0 && !is_returning) {
@@ -2498,7 +2498,7 @@ int ObSPIService::check_dynamic_sql_legal(ObPLExecCtx *ctx,
         ObPLRoutineParamMode pm = static_cast<ObPLRoutineParamMode>(params_mode[i]);
         if (PL_PARAM_IN == pm) {
           ret = OB_ERR_INOUT_PARAM_PLACEMENT_NOT_PROPERLY;
-          LOG_WARN("OBE-06536: IN bind variable bound to an OUT position", K(ret));
+          LOG_WARN("IN bind variable bound to an OUT position", K(ret));
         }
       }
     } else { /*do nothing*/ }
@@ -3760,7 +3760,7 @@ int ObSPIService::do_cursor_fetch(ObPLExecCtx *ctx,
     LOG_WARN("Limit must be used with Bulk Collect Into Clause", K(is_bulk), K(limit), K(ret));
   } else if (limit != INT64_MAX && limit <= 0) {
     ret = OB_ERR_NUMERIC_OR_VALUE_ERROR;
-    LOG_WARN("OBE-06502: PL/SQL: numeric or value error", K(ret), K(limit));
+    LOG_WARN("PL/SQL: numeric or value error", K(ret), K(limit));
   } else if (!cursor->isopen()) {
     ret = OB_ER_SP_CURSOR_NOT_OPEN;
     LOG_USER_ERROR(OB_ER_SP_CURSOR_NOT_OPEN);
@@ -3874,7 +3874,8 @@ int ObSPIService::do_cursor_fetch(ObPLExecCtx *ctx,
       spi_result->end_cursor_stmt(ctx, ret);
       cursor->set_last_execute_time(ObTimeUtility::current_time());
     }
-    // Oracle mode's Cursor will swallow READ_NOTHING errors, to avoid too many invalid logs, only print WARN in Mysql mode
+    // Streaming cursors swallow READ_NOTHING errors; print WARN only when needed
+    // to avoid excessive invalid logs.
     if (OB_SUCC(ret)) {
       cursor->set_fetched();
       cursor->set_fetched_with_row(ret != OB_READ_NOTHING);
@@ -4097,7 +4098,7 @@ int ObSPIService::spi_set_pl_exception_code(
   if (OB_SUCC(ret) && code != sqlcode_info->get_sqlcode()) {
     OX (sqlcode_info->set_sqlcode(code));
     if (code >= OB_MIN_RAISE_APPLICATION_ERROR && code <= OB_MAX_RAISE_APPLICATION_ERROR) {
-      LOG_ORACLE_USER_ERROR(OB_SP_RAISE_APPLICATION_ERROR, code, 0, "");
+      LOG_MYSQL_USER_ERROR(OB_SP_RAISE_APPLICATION_ERROR, 0, "");
     }
   }
   if (is_pop_warning_buf && sqlcode_info->get_stack_warning_buf().count() > 0) {
@@ -4484,7 +4485,7 @@ int ObSPIService::spi_reset_composite(ObPLComposite *composite,
       OZ (ObUserDefinedType::destruct_objparam(*pl_allocator, obj, nullptr));
     } else {
       /*
-      * Oracle support assign NULL to a Collection, it means making collection uninitialized.
+      * Assigning NULL to a Collection makes the collection uninitialized.
       *
       * Example:
       * CREATE OR REPLACE TYPE ARRYTYPE is table of Varchar2(10);
@@ -4502,8 +4503,8 @@ int ObSPIService::spi_reset_composite(ObPLComposite *composite,
       *
       * declare TYPE ARRYTYPE is table of Varchar2(10);
       * ERROR at line 1:
-      * ORA-06531: Reference to uninitialized collection
-      * ORA-06512: at line 6
+      * Reference to uninitialized collection
+      * at line 6
       * */
       ObPLCollection *coll = static_cast<ObPLCollection *>(composite);
       if (OB_NOT_NULL(coll->get_allocator())) {
@@ -4892,7 +4893,7 @@ int ObSPIService::adjust_out_params(
     out_params.set_has_out_param(has_out_param);
     LOG_DEBUG("debug for adjust_out_params", K(ret), K(out_params), K(ref_objects));
   }*/
-  // In Oracle: function with out parameter can not use in sql.
+  // Functions with OUT parameters cannot be used in SQL.
   UNUSED(result_set);
   out_params.set_has_out_param(false);
   return ret;
@@ -5688,7 +5689,8 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
                K(type_count), K(for_cursor), K(is_bulk), K(limit), K(out_using_params), K(ret));
     } else if (!is_streaming
                && 0 == static_cast<ObSPICursor*>(result_set)->row_store_.get_row_cnt()) {
-      //In Oracle, if data is not found, BULK does not report an error, Returning does not report an error, Cursor(Fetch) does not report an error; only SELECT INTO reports an error
+      // If data is not found, BULK/RETURNING/Cursor(Fetch) do not report an error;
+      // only SELECT INTO reports an error.
       if (is_bulk) { // BULK mode needs to initialize the array even if there is no data
         const ObSqlExpression *result_expr = NULL;
         ObPlCompiteWrite *composite_write = nullptr;
@@ -5814,7 +5816,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
       OX (package_vars_info.set_attr(attr));
       if (OB_SUCC(ret) && !is_bulk) { // [FETCH] INTO x, y, z OR [FETCH] INTO record
         /*
-         * If not multiple variables, then it is a single record. It cannot be multiple records or a mix of records and variables (see Oracle syntax).
+         * If not multiple variables, then it is a single record. It cannot be multiple records or a mix of records and variables.
          * 1、If there are multiple into clauses, the number of into clauses must match the number of select items (this is definitely the case of multiple variables);
          * 2、If the number of into clauses is less than the number of select items, then the number of into clauses must be 1 (this is definitely the case of a single record);
          * 3、If the number of into clauses matches the number of select items and both are 1, then it is uncertain whether it is a single record or a single variable, but it is still valid;
@@ -6165,7 +6167,7 @@ int ObSPIService::collect_cells(pl::ObPLExecCtx &ctx,
           && (row_desc.at(i).get_accuracy() == result_types[i].get_accuracy()
               || (result_types[i].get_meta_type().is_number() // NUMBER target type precision unknown directly do assignment
                   && PRECISION_UNKNOWN_YET == result_types[i].get_accuracy().get_precision()
-                  && ORA_NUMBER_SCALE_UNKNOWN_YET == result_types[i].get_accuracy().get_scale())
+                  && FLOATING_NUMBER_SCALE_UNKNOWN_YET == result_types[i].get_accuracy().get_scale())
               || (result_types[i].get_meta_type().is_character_type() // CHAR/VARCHAR length unknown directly assign
                   && (-1) == result_types[i].get_accuracy().get_length()))) {
         if (OB_FAIL(deep_copy_obj(*cast_ctxs.at(i).allocator_v2_, obj, tmp_obj))) {
@@ -6236,7 +6238,7 @@ int ObSPIService::convert_obj(ObPLExecCtx *ctx,
         && (current_type.at(i).get_accuracy() == result_types[i].get_accuracy()
             || (result_types[i].get_meta_type().is_number() // NUMBER target type precision unknown directly do assignment
                 && PRECISION_UNKNOWN_YET == result_types[i].get_accuracy().get_precision()
-                && ORA_NUMBER_SCALE_UNKNOWN_YET == result_types[i].get_accuracy().get_scale())
+                && FLOATING_NUMBER_SCALE_UNKNOWN_YET == result_types[i].get_accuracy().get_scale())
             || (result_types[i].get_meta_type().is_character_type() // CHAR/VARCHAR length unknown, directly assign
                 && -1 == result_types[i].get_accuracy().get_length()))) {
       ObObj tmp_obj;
@@ -6264,10 +6266,10 @@ int ObSPIService::convert_obj(ObPLExecCtx *ctx,
                && !obj.is_geometry()
                && !obj.is_null()
                && result_types[i].get_meta_type().is_ext()) {
-      // sql udt or oracle gis can cast to pl extend, null from sql udt type can cast to pl extend(xmltype)
+      // sql udt or geometry can cast to pl extend, null from sql udt type can cast to pl extend(xmltype)
       // support: select extract(xmlparse(document '<a>a</a>'), '/b') into xml_data from dual;
       ret = OB_ERR_INTO_EXPR_ILLEGAL;
-      LOG_WARN("PLS-00597: expression 'string' in the INTO list is of wrong type", K(ret), K(obj), K(i), K(current_type.at(i)), K(result_types[i]));
+      LOG_WARN("expression 'string' in the INTO list is of wrong type", K(ret), K(obj), K(i), K(current_type.at(i)), K(result_types[i]));
     } else {
       LOG_DEBUG("column convert", K(i), K(obj.get_meta()), K(result_types[i].get_meta_type()),
                                   K(current_type.at(i)), K(result_types[i].get_accuracy()));
@@ -6356,7 +6358,7 @@ bool ObSPIService::is_sql_type_into_pl(ObObj &dest_addr, ObIArray<ObObj> &obj_ar
 {
   bool bret = false;
   if (1 == obj_array.count()) {
-    // query result is oracle gis, will convert to pl extend type
+    // query result is geometry, will convert to pl extend type
     if (dest_addr.is_pl_extend() && obj_array.at(0).is_pl_extend()) {
       ObPLComposite *left = reinterpret_cast<ObPLComposite*>(dest_addr.get_ext());
       ObPLComposite *right = reinterpret_cast<ObPLComposite*>(obj_array.at(0).get_ext());
@@ -6915,7 +6917,7 @@ int ObSPIService::store_datums(ObObj &dest_addr, ObIArray<ObObj> &obj_array,
           // but it is not allowed to be written into varray. 
           // Inserting user_defined_sql_type into the PL_VARRAY_TYPE type will take this part of the logic.
           ret = OB_ERR_INTO_EXPR_ILLEGAL;
-          LOG_WARN("PLS-00597: expression 'string' in the INTO list is of wrong type", K(ret));
+          LOG_WARN("expression 'string' in the INTO list is of wrong type", K(ret));
         } else if (OB_ISNULL(record = static_cast<ObPLRecord*>(composite))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected record to store datum", KPC(record), KPC(composite), K(ret));

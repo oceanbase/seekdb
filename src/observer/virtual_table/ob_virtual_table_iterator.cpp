@@ -139,9 +139,7 @@ int ObVirtualTableIterator::convert_key(const ObRowkey &src, ObRowkey &dst, comm
   return ret;
 }
 
-// get origin type of keys in mysql mode
-// first find the column name that is same as origin virtual table in mysql mode
-// then find column type by column name
+// Get key types from the mapped origin virtual table by matching column names.
 int ObVirtualTableIterator::get_key_cols(common::ObIArray<const ObColumnSchemaV2*> &key_cols)
 {
   int ret = OB_SUCCESS;
@@ -169,16 +167,10 @@ int ObVirtualTableIterator::get_key_cols(common::ObIArray<const ObColumnSchemaV2
       }
       // get origin key type by column name
       if (OB_SUCC(ret)) {
-        const ObTableSchema *org_table_schema = NULL;
-        uint64_t org_table_id = get_origin_tid_by_oracle_mapping_tid(table_schema_->get_table_id());
-        if (OB_INVALID_ID == org_table_id) {
+        const ObTableSchema *org_table_schema = table_schema_;
+        if (OB_ISNULL(org_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("failed to get origin table id", K(ret), K(table_schema_->get_table_id()));
-        } else if (OB_FAIL(schema_guard_->get_table_schema( org_table_id, org_table_schema))) {
-          LOG_WARN("get table schema failed", K(org_table_id), K(ret));
-        } else if (NULL == org_table_schema) {
-          ret = OB_TABLE_NOT_EXIST;
-          LOG_WARN("get table schema failed", K(ret));
+          LOG_WARN("table schema is null", K(ret));
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < column_names.count(); ++i) {
             const ObString *column_name = column_names.at(i);
@@ -200,9 +192,8 @@ int ObVirtualTableIterator::get_key_cols(common::ObIArray<const ObColumnSchemaV2
   return ret;
 }
 
-// If key objects are in oracle mode, then need to convert to obj in mysql mode
-// and it's find the origin type in mysql mode
-// every virtual table in oracle mode must be match with one virtual table in mysql mode
+// Extended virtual table keys are converted using the matching MySQL virtual table
+// column types. Every extended virtual table must map to one MySQL virtual table.
 int ObVirtualTableIterator::convert_key_ranges()
 {
   int ret = OB_SUCCESS;
@@ -353,7 +344,7 @@ int ObVirtualTableIterator::convert_output_row(ObNewRow *&cur_row)
                                               cast_ctx_,
                                               cur_row->get_cell(i),
                                               convert_row_.cells_[i]))) {
-        LOG_WARN("failed to cast obj in oracle mode", K(ret), K(column_id));
+        LOG_WARN("failed to cast extended virtual table object", K(ret), K(column_id));
       }
     }
     cur_row = &convert_row_;

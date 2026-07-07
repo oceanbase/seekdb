@@ -888,7 +888,6 @@ NAMESPACE	bigint(20)	NO
 EDITION_NAME	varchar(128)	NO			
 SHARING	varchar(18)	NO			
 EDITIONABLE	varchar(1)	NO			
-ORACLE_MAINTAINED	varchar(1)	NO			
 APPLICATION	varchar(1)	NO			
 DEFAULT_COLLATION	varchar(1)	NO			
 DUPLICATED	varchar(1)	NO			

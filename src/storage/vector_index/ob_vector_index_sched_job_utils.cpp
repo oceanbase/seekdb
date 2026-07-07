@@ -192,7 +192,6 @@ int ObVectorIndexSchedJobUtils::get_vector_index_job_info(common::ObISQLClient &
   } else if (OB_FAIL(refresh_job_name.assign_fmt("%lu_refresh", vidx_table_id))) {
     LOG_WARN("failed to generate refresh job name", K(ret));
   } else if (OB_FAIL(ObDBMSSchedJobUtils::get_dbms_sched_job_info(sql_client,
-                                                                  false /*is_oracle_tenant*/,
                                                                   refresh_job_name.string(), 
                                                                   allocator,
                                                                   job_info))) {

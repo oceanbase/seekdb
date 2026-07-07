@@ -37,7 +37,6 @@ DEF_EXPR_INFO_FLAG(IS_LAST_INSERT_ID)
 DEF_EXPR_INFO_FLAG(IS_WINDOW_FUNC)
 DEF_EXPR_INFO_FLAG(IS_RAND_FUNC)         // rand(const) or rand() is a random function , rand(some column) is not a random function
 DEF_EXPR_INFO_FLAG(IS_PSEUDO_COLUMN)
-DEF_EXPR_INFO_FLAG(IS_OUTER_JOIN_SYMBOL)
 DEF_EXPR_INFO_FLAG(IS_SO_UDF_EXPR)   // expression contains user defined function(dll) expression. add prefix 'SO', means different with PL UDF.
 DEF_EXPR_INFO_FLAG(IS_PL_UDF)
 DEF_EXPR_INFO_FLAG(IS_SEQ_EXPR)
@@ -77,7 +76,6 @@ DEF_EXPR_INFO_FLAG(CNT_LAST_INSERT_ID)
 DEF_EXPR_INFO_FLAG(CNT_WINDOW_FUNC)
 DEF_EXPR_INFO_FLAG(CNT_RAND_FUNC)
 DEF_EXPR_INFO_FLAG(CNT_PSEUDO_COLUMN)
-DEF_EXPR_INFO_FLAG(CNT_OUTER_JOIN_SYMBOL)
 DEF_EXPR_INFO_FLAG(CNT_SO_UDF)      // expression contains user defined function(dll) expression. add prefix 'SO', means different with PL UDF.
 DEF_EXPR_INFO_FLAG(CNT_PL_UDF)
 DEF_EXPR_INFO_FLAG(CNT_SEQ_EXPR)

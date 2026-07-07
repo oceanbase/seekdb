@@ -451,7 +451,7 @@ int ObTscCgService::generate_table_param(const ObLogTableScan &op,
                                                      scan_ctdef.access_column_ids_,
                                                      scan_ctdef.pd_expr_spec_.pd_storage_flag_,
                                                      &tsc_out_cols,
-                                                     is_oracle_mapping_real_virtual_table(op.get_ref_table_id()), /* for real agent table , use mysql mode compulsory*/
+                                                     is_real_table_mapping_virtual_table(op.get_ref_table_id()), /* for real agent table , use mysql mode compulsory*/
                                                      is_cs_replica_query))) {
     LOG_WARN("convert schema failed", K(ret), K(*table_schema),
              K(scan_ctdef.access_column_ids_), K(op.get_index_back()));

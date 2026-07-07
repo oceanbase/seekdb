@@ -74,7 +74,7 @@ namespace common
 #define CM_BY_TRANSFORMER                (1ULL << 20)
 #define CM_CONST_TO_DECIMAL_INT_UP       (1ULL << 21)
 #define CM_FAST_COLUMN_CONV              (1ULL << 22)
-#define CM_ORA_SYS_VIEW_CAST             (1ULL << 23)
+#define CM_INTERNAL_CAST_IGNORE          (1ULL << 23)
 #define CM_DEMOTE_CAST                   (1ULL << 24)
 // string->integer(int/uint) when default rounding (round to nearest) is performed,
 // If this flag is set, truncation (round to zero) will be performed
@@ -83,7 +83,7 @@ namespace common
 #define CM_COLUMN_CONVERT                (1ULL << 58)
 #define CM_ENABLE_BLOB_CAST              (1ULL << 59)
 #define CM_EXPLICIT_CAST                 (1ULL << 60)
-#define CM_ORACLE_MODE                   (1ULL << 61)
+// bit 61 is retired and left unused
 #define CM_INSERT_UPDATE_SCOPE           (1ULL << 62)
 #define CM_INTERNAL_CALL                 (1ULL << 63)
 
@@ -103,8 +103,6 @@ typedef uint64_t ObCastMode;
 #define CM_IS_BLOB_CAST_ENABLED(mode)         ((CM_ENABLE_BLOB_CAST & (mode)) != 0)
 #define CM_IS_EXPLICIT_CAST(mode)             ((CM_EXPLICIT_CAST & (mode)) != 0)
 #define CM_IS_IMPLICIT_CAST(mode)             (!CM_IS_EXPLICIT_CAST(mode))
-#define CM_IS_ORACLE_MODE(mode)               ((CM_ORACLE_MODE & (mode)) != 0)
-#define CM_SET_ORACLE_MODE(mode)              (CM_ORACLE_MODE | (mode))
 #define CM_IS_INTERNAL_CALL(mode)             ((CM_INTERNAL_CALL & (mode)) != 0)
 #define CM_IS_EXTERNAL_CALL(mode)             (!CM_IS_INTERNAL_CALL(mode))
 #define CM_IS_STRICT_MODE(mode)               ((CM_STRICT_MODE & (mode)) != 0)
@@ -162,7 +160,7 @@ typedef uint64_t ObCastMode;
    || (((mode)&CM_CONST_TO_DECIMAL_INT_EQ) != 0))
 #define CM_IS_BY_TRANSFORMER(mode) ((CM_BY_TRANSFORMER & (mode)) != 0)
 #define CM_SET_BY_TRANSFORMERN(mode)  (CM_BY_TRANSFORMER | (mode))
-#define CM_IS_ORA_SYS_VIEW_CAST(mode)            ((CM_ORA_SYS_VIEW_CAST & (mode)) != 0)
+#define CM_IS_INTERNAL_CAST_IGNORE(mode)         ((CM_INTERNAL_CAST_IGNORE & (mode)) != 0)
 
 struct ObObjCastParams
 {
@@ -258,7 +256,6 @@ struct ObObjCastParams
 
   void set_compatible_cast_mode()
   {
-    cast_mode_ &= ~CM_ORACLE_MODE;
     return;
   }
 
@@ -497,15 +494,15 @@ public:
   static int init(ObIAllocator &allocator);
 
 public:
-  static const ObScale MAX_ORACLE_SCALE_DELTA = 0 - number::ObNumber::MIN_SCALE;
-  static const ObScale MAX_ORACLE_SCALE_SIZE = number::ObNumber::MAX_SCALE - number::ObNumber::MIN_SCALE;
+  static const ObScale SCALE_DELTA = 0 - number::ObNumber::MIN_SCALE;
+  static const ObScale SCALE_RANGE_SIZE = number::ObNumber::MAX_SCALE - number::ObNumber::MIN_SCALE;
 
   static number::ObNumber MYSQL_MIN[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
   static number::ObNumber MYSQL_MAX[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
   static number::ObNumber MYSQL_CHECK_MIN[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
   static number::ObNumber MYSQL_CHECK_MAX[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
-  static number::ObNumber ORACLE_CHECK_MIN[OB_MAX_NUMBER_PRECISION + 1][MAX_ORACLE_SCALE_SIZE + 1];
-  static number::ObNumber ORACLE_CHECK_MAX[OB_MAX_NUMBER_PRECISION + 1][MAX_ORACLE_SCALE_SIZE + 1];
+  static number::ObNumber NUMBER_CHECK_MIN[OB_MAX_NUMBER_PRECISION + 1][SCALE_RANGE_SIZE + 1];
+  static number::ObNumber NUMBER_CHECK_MAX[OB_MAX_NUMBER_PRECISION + 1][SCALE_RANGE_SIZE + 1];
 };
 
 class ObGeoCastUtils

@@ -621,12 +621,12 @@ int ObXMLExprHelper::check_xpath_valid(ObPathExprIter &xpath_iter, bool is_root)
     switch (first_axis) {
       case ObPathNodeAxis::ANCESTOR: {
         if (is_root) {
-          ret = OB_ERR_XPATH_INVALID_NODE; // ORA-19276: XPST0005 - XPath step specifies an invalid element/attribute name:
+          ret = OB_ERR_XPATH_INVALID_NODE; // XPST0005 - XPath step specifies an invalid element/attribute name:
           LOG_USER_ERROR(OB_ERR_TOO_MANY_PREFIX_DECLARE, xpath_iter.get_path_str().length(), xpath_iter.get_path_str().ptr());
         } else if (xpath_iter.get_path_str()[0] == '/') {
           break;  // '/' in first will not report error
         } else {
-          ret = OB_ERR_XQUERY_UNSUPPORTED; // ORA-19110: unsupported XQuery expression
+          ret = OB_ERR_XQUERY_UNSUPPORTED; // unsupported XQuery expression
           LOG_WARN("xquery unsupported", K(ret));
         }
         break;
@@ -634,30 +634,30 @@ int ObXMLExprHelper::check_xpath_valid(ObPathExprIter &xpath_iter, bool is_root)
       case ObPathNodeAxis::SELF:
       case ObPathNodeAxis::ANCESTOR_OR_SELF: {
         if (is_root && first_type != ObSeekType::TEXT && first_type != ObSeekType::NODES) {
-          ret = OB_ERR_XPATH_INVALID_NODE; // ORA-19276: XPST0005 - XPath step specifies an invalid element/attribute name:
+          ret = OB_ERR_XPATH_INVALID_NODE; // XPST0005 - XPath step specifies an invalid element/attribute name:
           LOG_USER_ERROR(OB_ERR_TOO_MANY_PREFIX_DECLARE, xpath_iter.get_path_str().length(), xpath_iter.get_path_str().ptr());
         } else if (is_root) {
         } else if (xpath_iter.get_path_str()[0] == '.' || xpath_iter.get_path_str()[0] == '/') {
              // '.' or '/' in first will not report error
         } else {
-          ret = OB_ERR_XQUERY_UNSUPPORTED; // ORA-19110: unsupported XQuery expression
+          ret = OB_ERR_XQUERY_UNSUPPORTED; // unsupported XQuery expression
           LOG_WARN("xquery unsupported", K(ret));
         }
         break;
       }
       case ObPathNodeAxis::PARENT: {
         if (is_root) {
-          ret = OB_ERR_XPATH_NO_NODE; // ORA-19277: XPST0005 - XPath step specifies an item type matching no node:
+          ret = OB_ERR_XPATH_NO_NODE; // XPST0005 - XPath step specifies an item type matching no node:
           LOG_USER_ERROR(OB_ERR_TOO_MANY_PREFIX_DECLARE, xpath_iter.get_path_str().length(), xpath_iter.get_path_str().ptr());
         } else {
-          ret = OB_ERR_XQUERY_UNSUPPORTED; // ORA-19110: unsupported XQuery expression
+          ret = OB_ERR_XQUERY_UNSUPPORTED; // unsupported XQuery expression
           LOG_WARN("xquery unsupported", K(ret));
         }
         break;
       }
       case ObPathNodeAxis::ATTRIBUTE: {
         if (is_root) {
-          ret = OB_ERR_XPATH_INVALID_NODE; // ORA-19276: XPST0005 - XPath step specifies an invalid element/attribute name:
+          ret = OB_ERR_XPATH_INVALID_NODE; // XPST0005 - XPath step specifies an invalid element/attribute name:
           LOG_USER_ERROR(OB_ERR_TOO_MANY_PREFIX_DECLARE, xpath_iter.get_path_str().length(), xpath_iter.get_path_str().ptr());
         }
         break;
@@ -671,7 +671,7 @@ int ObXMLExprHelper::check_xpath_valid(ObPathExprIter &xpath_iter, bool is_root)
     switch (first_type) {
       case ObSeekType::TEXT: {
         if (is_root && first_axis == ObPathNodeAxis::CHILD) {
-          ret = OB_ERR_XPATH_NO_NODE; // ORA-19277: XPST0005 - XPath step specifies an item type matching no node:
+          ret = OB_ERR_XPATH_NO_NODE; // XPST0005 - XPath step specifies an item type matching no node:
           LOG_USER_ERROR(OB_ERR_TOO_MANY_PREFIX_DECLARE, xpath_iter.get_path_str().length(), xpath_iter.get_path_str().ptr());
         }
         break;

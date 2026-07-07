@@ -25,7 +25,7 @@ namespace sql
 
 ObExprSubQueryNSEqual::ObExprSubQueryNSEqual(ObIAllocator &alloc)
   : ObSubQueryRelationalExpr(alloc, T_OP_SQ_NSEQ, N_SQ_NS_EQUAL, 2, NOT_ROW_DIMENSION,
-                             INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                             INTERNAL_IN_MYSQL_MODE)
 {
 }
 

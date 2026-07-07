@@ -1251,9 +1251,8 @@ static int _check_betweenn_value(const ObExpr *expr, ObEvalCtx &ctx, const ObBit
   }
   return ret;
 }
-// if border is_nmb_literal == true, check value of between_expr is_valid
-// in mysql mode, null value is invalid with error reporting
-// in oracle mode, null value is invalid without error, just set invalid frame
+// if border is_nmb_literal == true, check value of between_expr is_valid.
+// Null value is invalid with error reporting.
 #define CHECK_BTW_FIXED_VAL(vec_tc)                                                                \
   case (vec_tc): {                                                                                 \
     ret = _check_betweenn_value<ObFixedLengthFormat<RTCType<vec_tc>>, vec_tc>(                     \

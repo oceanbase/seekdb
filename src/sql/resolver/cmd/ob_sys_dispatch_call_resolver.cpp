@@ -120,7 +120,7 @@ int ObSysDispatchCallResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(tenant_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tenant schema is nullptr");
-    // fill the tenant id and oracle tenant flag into stmt afterward
+    // fill designated tenant name and compatibility mode into stmt afterward
   } else if (FALSE_IT((void)0)) {
   } else if (FALSE_IT(stmt->set_designated_tenant_name(tenant_name))) {
   } else if (FALSE_IT(stmt->set_tenant_compat_mode(ObCompatibilityMode::MYSQL_MODE))) {

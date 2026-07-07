@@ -65,7 +65,7 @@ int ObLobLocatorHelper::init(const ObTableScanParam &scan_param,
     STORAGE_LOG(WARN, "Invalid argument to init ObLobLocatorHelper", K(ret), K(table_param), K(snapshot_version));
   } else {
     if (OB_UNLIKELY(!table_param.enable_lob_locator_v2())) {
-      // only oracle mode user table support lob locator if lob locator v2 not enabled
+      // LOB locator v2 is required in MySQL-only mode.
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected tenant mode to init ObLobLocatorHelper", K(ret), K(table_param));
     } else {
@@ -140,7 +140,7 @@ int ObLobLocatorHelper::fill_lob_locator(ObDatumRow &row,
     STORAGE_LOG(WARN, "Unexpected null col_descs", K(ret), K(access_param.iter_param_));
   } else if (true) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "Only oracle mode need build lob locator", K(ret));
+    STORAGE_LOG(WARN, "LOB locator build is unavailable without locator v2", K(ret));
   } else if (OB_ISNULL(access_param.output_exprs_) || OB_ISNULL(access_param.get_op())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "output expr or op is null", K(ret), K(access_param));
@@ -187,10 +187,8 @@ int ObLobLocatorHelper::fill_lob_locator_v2(ObDatumRow &row,
       ObLobLocatorV2 locator;
       if (datum_meta.is_lob_storage()) {
         if (datum.is_null() || datum.is_nop()) {
-        // read sys table is changed to mysql mode for normal oracle tenant
-        // and that may return disk lob lob locator to jdbc
-        // and cause jdbc error because jdbc can not handle disk lob locator
-        // so sys table can not skip build mem lob locator
+        // Reading sys tables may return disk LOB locators to JDBC, which JDBC
+        // cannot handle, so sys tables cannot skip building memory LOB locators.
         } else if (! is_sys_table(access_param.iter_param_.table_id_) && can_skip_build_mem_lob_locator(datum.get_string())) {
         } else if (OB_FAIL(build_lob_locatorv2(locator,
                                                 datum.get_string(), 
@@ -357,7 +355,7 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
       // let lob obj force inrow for hash/cmp cannot handle error
       is_dst_inrow = true;
     }
-    // oracle user table lobs and mysql user table outrow lobs need extern.
+    // User table outrow LOBs need extern metadata.
     bool has_extern = (!is_simple) && (!is_dst_inrow);
     ObMemLobExternFlags extern_flags(has_extern);
 

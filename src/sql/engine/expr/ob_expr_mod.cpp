@@ -316,7 +316,7 @@ int ObExprMod::mod_float(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
 {
   int ret = OB_SUCCESS;
   ret = OB_ERR_UNEXPECTED;
-  LOG_WARN("only oracle mode arrive here", K(ret));
+  LOG_WARN("unexpected float mod evaluation path", K(ret));
   return ret;
 }
 

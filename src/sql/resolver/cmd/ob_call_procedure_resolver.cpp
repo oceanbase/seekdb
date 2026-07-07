@@ -37,10 +37,10 @@ int ObCallProcedureResolver::check_param_expr_legal(ObRawExpr *param)
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "subqueries or stored function calls here");
     } else if (T_FUN_SYS_PL_SEQ_NEXT_VALUE == param->get_expr_type()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "OBE-06576 : not a valid function or procedure name");
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "not a valid function or procedure name");
     } /* else if (T_OP_GET_PACKAGE_VAR == param->get_expr_type()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "PLS-221: not procedure or not defined!");
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "not procedure or not defined!");
     } */
     for (int64_t i = 0; OB_SUCC(ret) && i < param->get_param_count(); ++i) {
       OZ (check_param_expr_legal(param->get_param_expr(i)));
@@ -188,7 +188,7 @@ int ObCallProcedureResolver::resolve_cparam_with_assign(const ParseNode *param_n
       name_node = param_node->children_[0]->children_[2];
     } else {
       ret = OB_ERR_CALL_WRONG_ARG;
-      LOG_WARN("PLS-00306: wrong number or types of arguments in call", K(ret));
+      LOG_WARN("wrong number or types of arguments in call", K(ret));
       LOG_USER_ERROR(OB_ERR_CALL_WRONG_ARG, routine_info->get_routine_name().length(),
                     routine_info->get_routine_name().ptr());
     }
@@ -405,7 +405,7 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
         LOG_WARN("proc info is null", K(ret), K(db_name), K(package_name), K(sp_name), K(proc_info));
       } else if (proc_info->has_accessible_by_clause()) {
         ret = OB_ERR_MISMATCH_SUBPROGRAM;
-        LOG_WARN("PLS-00263: mismatch between string on a subprogram specification and body",
+        LOG_WARN("mismatch between string on a subprogram specification and body",
                 K(ret), KPC(proc_info));
       }
       if (OB_SUCC(ret) && proc_info->is_udt_routine() && !proc_info->is_udt_static_routine()) {

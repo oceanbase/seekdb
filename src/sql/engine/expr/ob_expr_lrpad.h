@@ -49,7 +49,7 @@ public:
                      const int64_t &pad_size,
                      const int64_t &prefix_size,
                      const int64_t &repeat_count,
-                     const bool &pad_space, // for oracle
+                     const bool &pad_space,
                      common::ObIAllocator *allocator,
                      char* &result,
                      int64_t &size,
@@ -82,14 +82,6 @@ public:
                                     const ObExprTypeCtx &type_ctx,
                                     int64_t &result_size);
 
-  static int get_padding_info_oracle(const common::ObCollationType cs,
-                                     const common::ObString &str_text,
-                                     const int64_t &width,
-                                     const common::ObString &str_padtext,
-                                     const int64_t max_result_size,
-                                     int64_t &repeat_count,
-                                     int64_t &prefix_size,
-                                     bool &pad_space);
   // for engine 3.0
   static int calc_mysql_pad_expr(const ObExpr &expr, ObEvalCtx &ctx, LRpadType pad_type,
                                  ObDatum &res);
@@ -106,9 +98,6 @@ public:
                               const ObString &str_pad,
                               ObIAllocator &res_alloc,
                               ObDatum &res);
-  static int calc_oracle(LRpadType pad_type, const ObExpr &expr, const common::ObDatum &text,
-                         const common::ObDatum &len, const common::ObDatum &pad_text,
-                         common::ObIAllocator &res_alloc, ObDatum &res, bool &is_unchanged_clob);
   int get_origin_len_obj(ObObj &len_obj) const;
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
@@ -160,11 +149,11 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObExprRpad);
 };
 
-struct ObExprOracleLRpadInfo : public ObIExprExtraInfo
+struct ObExprLRpadInfo : public ObIExprExtraInfo
 {
   OB_UNIS_VERSION(1);
 public:
-  ObExprOracleLRpadInfo(common::ObIAllocator &alloc, ObExprOperatorType type)
+  ObExprLRpadInfo(common::ObIAllocator &alloc, ObExprOperatorType type)
       : ObIExprExtraInfo(alloc, type),
         is_called_in_sql_(true)
   {

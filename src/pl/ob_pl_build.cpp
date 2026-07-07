@@ -719,7 +719,7 @@ int ObPLBuilder::check_package_body_legal(const ObPLBlockNS *parent_ns,
       ret = OB_ERR_ITEM_NOT_IN_BODY;
       LOG_USER_ERROR(OB_ERR_ITEM_NOT_IN_BODY,
                      spec_routine_info->get_name().length(), spec_routine_info->get_name().ptr());
-      LOG_WARN("PLS-00323: subprogram or cursor is declared in a package specification and must be defined in the package body",
+      LOG_WARN("subprogram or cursor is declared in a package specification and must be defined in the package body",
                K(ret), K(i), K(spec_routine_info->get_decl_str()));
       ObPL::insert_error_msg(ret);
       ObPLResolver::record_error_line(session_info_, 
@@ -738,7 +738,7 @@ int ObPLBuilder::check_package_body_legal(const ObPLBlockNS *parent_ns,
       CK (OB_NOT_NULL(var));
       if (OB_SUCC(ret)) {
         ret = OB_ERR_ITEM_NOT_IN_BODY;
-        LOG_WARN("PLS-00323: subprogram or cursor is declared in a package specification and must be defined in the package body",
+        LOG_WARN("subprogram or cursor is declared in a package specification and must be defined in the package body",
                K(ret), K(i));
         LOG_USER_ERROR(OB_ERR_ITEM_NOT_IN_BODY, var->get_name().length(), var->get_name().ptr());
       }
@@ -1490,8 +1490,7 @@ void ObPLBuilderEnvGuard::init(const Info &info,
       // alway set db in compile phase when version greater or equal than 4.3.5.2
       need_set_db = true;
     } else if (true) {
-      // in mysql mode, only system packages with invoker's right do not need set db
-      // in oracle mode, set db by if the routine is invoker's right
+      // Definer-right routines need the database set during compile.
       need_set_db = !is_invoker_right;
     }
   }

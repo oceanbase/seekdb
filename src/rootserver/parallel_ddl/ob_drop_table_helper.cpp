@@ -339,8 +339,7 @@ int ObDropTableHelper::generate_schemas_()
 
         // 2. gen mock fk parent table schema when dropped table is parent table
         // if dropped table is parent table, and it is not totally self referenced:
-        //   if mysql mode && foreign_key_checks == off, gen mock fk parent table
-        //   if oracle mode && cascade_constraints, just delete fk later
+        //   if foreign_key_checks == off, gen mock fk parent table
         //   otherwise return OB_ERR_TABLE_IS_REFERENCED
         if (OB_SUCC(ret) && table_schema->is_parent_table()) {
           int64_t violated_fk_index = -1;
@@ -356,9 +355,6 @@ int ObDropTableHelper::generate_schemas_()
               LOG_WARN("dropped table is referenced by foreign key", KR(ret));
             }
           }
-
-          // oracle cascade constraints use if_exist_ flag
-          bool is_cascade_constraints = arg_.if_exist_;
 
           if (OB_ERR_TABLE_IS_REFERENCED == ret) {
             if (OB_UNLIKELY(violated_fk_index < 0 || violated_fk_index >= fk_infos.count())) {
@@ -385,7 +381,6 @@ int ObDropTableHelper::generate_schemas_()
                   LOG_WARN("child table schema is null", KR(ret));
                 } else {
                   ret = OB_ERR_TABLE_IS_REFERENCED;
-                  // in oracle mode we do not log user error
                   if (lib::Worker::CompatMode::MYSQL == compat_mode) {
                     LOG_USER_ERROR(OB_ERR_TABLE_IS_REFERENCED,
                                    table_schema->get_table_name_str().length(), table_schema->get_table_name_str().ptr(),
@@ -1688,7 +1683,7 @@ int ObDropTableHelper::drop_sequence_(const ObColumnSchemaV2 &column_schema)
       LOG_WARN("get sequence schema fail", KR(ret), K(column_schema));
       if (ret == OB_ERR_UNEXPECTED) {
         // sequence has been deleted externally.
-        // Oracle does not allow sequences internally created to be deleted externally.
+        // Internally created identity sequences should not be deleted externally.
         // In the future, it will be solved by adding columns to the internal table,
         // and then the error code conversion can be removed.
         ret = OB_SUCCESS;

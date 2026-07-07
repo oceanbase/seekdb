@@ -101,8 +101,8 @@ int ObDBMSAppInfo::set_client_info(sql::ObExecContext &ctx, sql::ParamStore &par
     LOG_USER_ERROR(OB_OP_NOT_ALLOW, "oceanbase 2.0 protocol is not ready, and dbms_application_info not support");
   } else {
     CK (OB_LIKELY(1 == params.count()));
-    OV (params.at(0).is_varchar() || params.at(0).is_null_oracle(), OB_INVALID_ARGUMENT);
-    if (params.at(0).is_null_oracle()) {
+    OV (params.at(0).is_varchar() || params.at(0).is_null_or_empty_string(), OB_INVALID_ARGUMENT);
+    if (params.at(0).is_null_or_empty_string()) {
       client_info.reset();
     } else {
       OZ (params.at(0).get_string(client_info));
@@ -139,14 +139,14 @@ int ObDBMSAppInfo::set_module(sql::ObExecContext &ctx, sql::ParamStore &params, 
     LOG_USER_ERROR(OB_OP_NOT_ALLOW, "oceanbase 2.0 protocol is not ready, and dbms_application_info not support");
   } else {
     CK (OB_LIKELY(2 == params.count()));
-    OV (params.at(0).is_varchar() || params.at(0).is_null_oracle(), OB_INVALID_ARGUMENT);
-    if (params.at(0).is_null_oracle()) {
+    OV (params.at(0).is_varchar() || params.at(0).is_null_or_empty_string(), OB_INVALID_ARGUMENT);
+    if (params.at(0).is_null_or_empty_string()) {
       module_name.reset();
     } else {
       OZ (params.at(0).get_string(module_name));
     }
-    OV (params.at(1).is_varchar() || params.at(1).is_null_oracle(), OB_INVALID_ARGUMENT);
-    if (params.at(1).is_null_oracle()) {
+    OV (params.at(1).is_varchar() || params.at(1).is_null_or_empty_string(), OB_INVALID_ARGUMENT);
+    if (params.at(1).is_null_or_empty_string()) {
       action_name.reset();
     } else {   
       OZ (params.at(1).get_string(action_name));

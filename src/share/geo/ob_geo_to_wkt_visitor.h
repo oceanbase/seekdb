@@ -108,7 +108,6 @@ private:
 public:
   static int convert_double_to_str(char* buff, uint64_t buff_size, double val, bool has_scale,
                                 int16_t scale, uint64_t &out_len);
-  static int append_double_oracle(char *buff, const int32_t buff_size, uint64_t &out_len, double value);
   static int append_double_with_prec(char *buff, const int32_t buff_size, uint64_t &out_len, double value, int16_t scale);
 
   ObGeoStringBuffer buffer_;

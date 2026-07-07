@@ -148,11 +148,6 @@ private:
       const share::schema::ObSysVariableSchema &sys_variable,
       share::schema::ObSysParam *sys_params,
       int64_t params_capacity);
-  int update_oracle_tenant_sys_var(
-      const share::schema::ObTenantSchema &tenant_schema,
-      const share::schema::ObSysVariableSchema &sys_variable,
-      share::schema::ObSysParam *sys_params,
-      int64_t params_capacity);
   int update_special_tenant_sys_var(
       const share::schema::ObSysVariableSchema &sys_variable,
       share::schema::ObSysParam *sys_params,

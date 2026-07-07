@@ -6,23 +6,19 @@
 
 2.域定义
 
-将所有错误分为四个基本域和一个特殊域：
+将所有错误分为三个基本域：
 
 a.OS域：操作系统错误
 
 b.MySQL域：MySQL兼容的错误（MySQL本身存在的错误）
 
-a.Oracle域：Oracle兼容的错误（Oracle本身存在的错误）
-
-b.OceanBase域：不兼容的OceanBase错误
-
-a.Oracle特殊域：Oracle不兼容的错误（特殊域，ORA-00600并且带有arguments的错误）
+c.OceanBase域：不兼容的OceanBase错误
 
 2.用法
 
 > $ ob_error [option1]
 >
-> $ ob_error [facility] errorcode [option2]
+> $ ob_error [facility] errorcode
 
 ob_error支持option1：
 
@@ -33,37 +29,20 @@ ob_error支持option1：
 
 
 
-ob_error支持option2:
-
-- `--argument ARG`, `-a ARG`
-
-表示额外输入argument，用法举例：`$ob_error ora 600 -a 5542 `
-
-
-
-facility用于区分MySQL模式和ORACLE模式:
+facility用于指定MySQL模式:
 
 - `my,[Mm][Yy]` 
 
   MySQL模式
-
-- `ora,[Oo][Rr][Aa]`
-
-  ORACLE模式，错误源于数据库。
-
-- `pls`, `[Pp][Ll][Ss]`
-
-  ORACLE模式，错误源于存储过程。
-
 
 
 errorcode可以有前缀0输入，如00600。
 
 
 
-在不输入facility的情况下，从四个基本域中分别搜索对应错误，输出任何存在的错误；
+在不输入facility的情况下，从三个基本域中分别搜索对应错误，输出任何存在的错误；
 
-在输入facility的情况下，如果facility为`my`，首先从MySql域搜索错误，如果找到则直接输出MySQL模式错误信息，否则再从OceanBase域搜索；如果facility为`ora`/`pls`，并且没有`-a`参数的输入，则只从Oracle域搜索错误；而如果facility为`ora`，并且有`-a`参数的输入，将从Oracle特殊域以及OceanBase域进行搜索。
+在输入facility的情况下，如果facility为`my`，首先从MySql域搜索错误，如果找到则直接输出MySQL模式错误信息，否则再从OceanBase域搜索。
 
 
 
@@ -98,47 +77,11 @@ Operating System:
 ```shell
 $ ob_error 600
 
-Oracle:
-	Oracle Error Code: ORA-00600
-	Message: auto increment service busy
-	Message: rowid type mismatch
-	Related OceanBase Error Code:
-		OB_AUTOINC_SERVICE_BUSY(-5794)
-		OB_ROWID_TYPE_MISMATCH(-5870)
-		OB_ROWID_NUM_MISMATCH(-5871)
+OceanBase:
+	Error Code 600 not found.
 ```
 
 2.用例4
-
-```shell
-$ ob_error ora 00051
-
-Oracle:
-	Oracle Error Code: ORA-00051
-	Message: timeout occurred while waiting for a resource
-	Related OceanBase Error Code:
-		OB_ERR_TIMEOUT_ON_RESOURCE(-5848)
-```
-
-1.用例5
-
-```shell
-$ ob_error ora 600 -a 5858
-
-OceanBase:
-	OceanBase Error Code: OB_ERR_CONFLICTING_DECLARATIONS(-5858)
-	Message: Conflicting declarations
-	Cause: Internal Error
-	Solution: Contact OceanBase Support
-
-Oracle:
-	Oracle Error Code: ORA-00600
-	Message: internal error code, arguments: -5858, Conflicting declarations
-	Related OceanBase Error Code:
-		OB_ERR_CONFLICTING_DECLARATIONS(-5858)
-```
-
-2.用例6
 
 ```shell
 $ ob_error 5858
@@ -156,7 +99,7 @@ OceanBase:
 
 2.具体错误原因暂时用通用字段“Internal Error”代替，具体解决方法暂时用通用字段“Contact OceanBase Support”代替，由研发同学更新，更新方法可参考ob_errno.def文件的注解，更新后需重新执行gen_ob_errno.pl
 
-1.增加oracle模式错误码到ob错误码，以及mysql模式错误码到ob错误码的映射关系
+1.增加mysql模式错误码到ob错误码的映射关系
 
 2.根据最终映射得到的ob错误码，获取错误信息（含义/原因/解决方法等）
 

@@ -42,7 +42,7 @@ struct ObObjCastParams;
 namespace sql
 {
 typedef common::hash::ObPlacementHashSet<share::schema::ObColumnNameHashWrapper, common::OB_MAX_COLUMN_NUMBER> ObReducedVisibleColSet;
-typedef common::hash::ObPlacementHashSet<share::schema::ObPartitionNameHashWrapper, common::OB_MAX_PARTITION_NUM_ORACLE> ObPartitionNameSet;
+typedef common::hash::ObPlacementHashSet<share::schema::ObPartitionNameHashWrapper, common::OB_MAX_EXTENDED_PARTITION_NUM> ObPartitionNameSet;
 struct ObExternalFileFormat;
 struct PartitionInfo
 {
@@ -385,8 +385,7 @@ public:
   static int get_enable_split_partition(bool &enable_split_partition);
 
   // this func is for compatibility, the row_store_type of OB_STORE_FORMAT_COMPRESSED_MYSQL
-  // has been changed from ENCODING_ROW_STORE to CS_ENCODING_ROW_STORE and the
-  // OB_STORE_FORMAT_ARCHIVE_HIGH_ORACLE is newly added since 4.2.0.0
+  // has been changed from ENCODING_ROW_STORE to CS_ENCODING_ROW_STORE since 4.2.0.0
   static int get_row_store_type(const ObStoreFormatType store_format, ObRowStoreType &row_store_type);
 
   typedef common::hash::ObPlacementHashSet<share::schema::ObIndexNameHashWrapper, common::OB_MAX_COLUMN_NUMBER> IndexNameSet;

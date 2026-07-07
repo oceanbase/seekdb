@@ -132,7 +132,7 @@ int ObDBMSSchedTableOperator::_build_job_finished_dml(int64_t now, ObDBMSSchedJo
   OZ (dml.add_pk_column("job", job_info.job_));
   OZ (dml.add_pk_column("job_name", job_info.job_name_));
   OZ (dml.add_column("state", job_info.state_));
-  if (job_info.is_completed() || job_info.is_broken()) { // broken job should set disabled refer to oracle
+  if (job_info.is_completed() || job_info.is_broken()) { // broken job should be disabled
     OZ (dml.add_column("enabled", false));
   }
   OZ (dml.add_column(true, "this_date"));
@@ -209,7 +209,7 @@ int ObDBMSSchedTableOperator::_check_need_record(ObDBMSSchedJobInfo &job_info, b
     if (job_info.is_default_job_class()) { // DEFAULT_JOB_CLASS need record unconditionally
       need_record = true;
     } else {
-      OZ (get_dbms_sched_job_class_info(job_info.is_oracle_tenant(), job_info.get_job_class(), allocator, job_class_info));
+      OZ (get_dbms_sched_job_class_info(job_info.get_job_class(), allocator, job_class_info));
       if (OB_SUCC(ret)) {
         ObString logging_level = job_class_info.get_logging_level();
         if (logging_level.empty()) {
@@ -526,14 +526,13 @@ int ObDBMSSchedTableOperator::check_job_can_running(int64_t alive_job_count, boo
 }
 
 int ObDBMSSchedTableOperator::extract_info(
-  sqlclient::ObMySQLResult &result, bool is_oracle_tenant,
+  sqlclient::ObMySQLResult &result,
   ObIAllocator &allocator, ObDBMSSchedJobInfo &job_info)
 {
   int ret = OB_SUCCESS;
   ObDBMSSchedJobInfo job_info_local;
 
   
-  job_info_local.is_oracle_tenant_ = is_oracle_tenant;
   EXTRACT_INT_FIELD_MYSQL(result, "job", job_info_local.job_, uint64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "user_id", job_info_local.user_id_, uint64_t);
   if (OB_ERR_NULL_VALUE == ret || OB_ERR_COLUMN_NOT_FOUND == ret) {
@@ -640,7 +639,7 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_is_killed(const ObDBMSSchedJobI
   is_killed = false;
   ObArenaAllocator allocator("SchedStateTmp");
   ObDBMSSchedJobInfo update_job_info;
-  OZ(get_dbms_sched_job_info(job_info.is_oracle_tenant_, job_info.job_, job_info.job_name_, allocator, update_job_info));
+  OZ(get_dbms_sched_job_info(job_info.job_, job_info.job_name_, allocator, update_job_info));
   if (OB_SUCC(ret) && update_job_info.is_killed()) {
     is_killed = true;
   }
@@ -648,7 +647,7 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_is_killed(const ObDBMSSchedJobI
 }
 
 int ObDBMSSchedTableOperator::get_dbms_sched_job_info(
-  bool is_oracle_tenant, uint64_t job_id, const common::ObString &job_name,
+  uint64_t job_id, const common::ObString &job_name,
   ObIAllocator &allocator, ObDBMSSchedJobInfo &job_info)
 {
   int ret = OB_SUCCESS;
@@ -681,7 +680,7 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_info(
         LOG_WARN("failed to get result", K(ret), K(job_id));
       } else {
         if (OB_SUCCESS == (ret = result.get_result()->next())) {
-          OZ (extract_info(*(result.get_result()), is_oracle_tenant, allocator, job_info));
+          OZ (extract_info(*(result.get_result()), allocator, job_info));
           if (OB_SUCC(ret)) {
             int tmp_ret = result.get_result()->next();
             if (OB_SUCCESS == tmp_ret) {
@@ -704,7 +703,7 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_info(
 }
 
 int ObDBMSSchedTableOperator::get_dbms_sched_job_infos_in_tenant(
-  bool is_oracle_tenant, ObIAllocator &allocator, ObIArray<ObDBMSSchedJobInfo> &job_infos)
+  ObIAllocator &allocator, ObIArray<ObDBMSSchedJobInfo> &job_infos)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
@@ -731,7 +730,7 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_infos_in_tenant(
             LOG_INFO("failed to get result", K(ret));
           } else {
             ObDBMSSchedJobInfo job_info;
-            OZ (extract_info(*(result.get_result()), is_oracle_tenant, allocator, job_info));
+            OZ (extract_info(*(result.get_result()), allocator, job_info));
             OZ (job_infos.push_back(job_info));
           }
         } while (OB_SUCC(ret));
@@ -744,14 +743,13 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_infos_in_tenant(
 }
 
 int ObDBMSSchedTableOperator::extract_job_class_info(
-  sqlclient::ObMySQLResult &result, bool is_oracle_tenant,
+  sqlclient::ObMySQLResult &result,
   ObIAllocator &allocator, ObDBMSSchedJobClassInfo &job_class_info)
 {
   int ret = OB_SUCCESS;
   ObDBMSSchedJobClassInfo job_class_info_local;
 
   
-  job_class_info_local.is_oracle_tenant_ = is_oracle_tenant;
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "job_class_name", job_class_info_local.job_class_name_);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "resource_consumer_group", job_class_info_local.resource_consumer_group_);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "service", job_class_info_local.service_);
@@ -767,7 +765,7 @@ int ObDBMSSchedTableOperator::extract_job_class_info(
 }
 
 int ObDBMSSchedTableOperator::get_dbms_sched_job_class_info(
-  bool is_oracle_tenant, const common::ObString job_class_name,
+  const common::ObString job_class_name,
   common::ObIAllocator &allocator, ObDBMSSchedJobClassInfo &job_class_info) {
   int ret = OB_SUCCESS;
   ObSqlString sql;
@@ -787,7 +785,7 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_class_info(
         LOG_WARN("get result failed", K(ret), K(sql), K(job_class_name));
       } else {
         if (OB_SUCCESS == (ret = result.get_result()->next())) {
-          OZ (extract_job_class_info(*(result.get_result()), is_oracle_tenant, allocator, job_class_info));
+          OZ (extract_job_class_info(*(result.get_result()), allocator, job_class_info));
           if (OB_SUCC(ret)) {
             int tmp_ret = result.get_result()->next();
             if (OB_SUCCESS == tmp_ret) {
@@ -811,7 +809,7 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_class_info(
 }
 
 int ObDBMSSchedTableOperator::get_dbms_sched_job_class_infos_in_tenant(
-  bool is_oracle_tenant, ObIAllocator &allocator, ObIArray<ObDBMSSchedJobClassInfo> &job_class_infos)
+  ObIAllocator &allocator, ObIArray<ObDBMSSchedJobClassInfo> &job_class_infos)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
@@ -835,7 +833,7 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_class_infos_in_tenant(
             LOG_INFO("failed to get result", K(ret));
           } else {
             ObDBMSSchedJobClassInfo job_class_info;
-            OZ (extract_job_class_info(*(result.get_result()), is_oracle_tenant, allocator, job_class_info));
+            OZ (extract_job_class_info(*(result.get_result()), allocator, job_class_info));
             OZ (job_class_infos.push_back(job_class_info));
           }
         } while (OB_SUCC(ret));
@@ -924,7 +922,7 @@ int ObDBMSSchedTableOperator::purge_run_detail()
     ObSEArray<ObDBMSSchedJobClassInfo, 16> job_class_infos;
     ObArenaAllocator allocator("DBMSSchedTmp");
     int64_t log_history = DEFAULT_LOG_HISTORY;
-    if (OB_TMP_FAIL(get_dbms_sched_job_class_infos_in_tenant(false/*is_oracle_tenant has no effect,so set false*/, allocator, job_class_infos))) {
+    if (OB_TMP_FAIL(get_dbms_sched_job_class_infos_in_tenant(allocator, job_class_infos))) {
       LOG_WARN("get job class infos failed", K(tmp_ret));
     } else {
       ObDBMSSchedJobClassInfo job_class_info;

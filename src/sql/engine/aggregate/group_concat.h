@@ -159,13 +159,7 @@ protected:
     If the combined length is less than or equal to the buffer size, we append add_string.
     Otherwise, we attempt to expand the buffer to the next power of two that can accommodate the
     combined length. If the expansion is successful, add_string is appended. If the buffer extension
-    fails due to the concat_str_max_len limit, the behavior varies depending on the mode (MySQL or
-    Oracle).
-
-    In Oracle mode, the function sets the error code OB_ERR_TOO_LONG_STRING_IN_CONCAT and returns
-    the error.
-
-    In MySQL mode, the handling is a bit more complex. If the buffer is full, add_string will be
+    fails due to the concat_str_max_len limit, add_string will be
     trimmed to fill the remaining space up to str_max_len. Additionally, the current count of
     concatenated rows is outputed. To improve efficiency, set buf_is_full to true to avoid concat on subsequent batch.
   */

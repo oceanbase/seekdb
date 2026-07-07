@@ -849,7 +849,7 @@ int ObDbmsStatsHistoryManager::purge_stats(ObExecContext &ctx, const int64_t spe
       policy used by automatic purge. The automatic purge deletes all history older than the older
       of (current time - statistics history retention) and (time of recent analyze in the system - 1
       ). The statistics history retention value can be changed using ALTER_STATS_HISTORY_RETENTION
-      Procedure.The default is 31 days. ---> Oracle rule, we compatible it*/
+      procedure. The default is 31 days.*/
     int64_t retention_val = 0;
     if (OB_FAIL(get_stats_history_retention(ctx, retention_val))) {
       LOG_WARN("failed to get stats history retention", K(ret));
@@ -968,7 +968,7 @@ int ObDbmsStatsHistoryManager::alter_stats_history_retention(ObExecContext &ctx,
   ObMySQLProxy *mysql_proxy = ctx.get_sql_proxy();
   ObSQLSessionInfo *session = ctx.get_my_session();
   
-  int64_t tmp_new_retention = (new_retention == -1 ? MAX_HISTORY_RETENTION : new_retention);//compatible oracle
+  int64_t tmp_new_retention = (new_retention == -1 ? MAX_HISTORY_RETENTION : new_retention);
   if (OB_ISNULL(mysql_proxy) || OB_ISNULL(session) ||
       OB_UNLIKELY(tmp_new_retention < 0 || tmp_new_retention > MAX_HISTORY_RETENTION)) {
     ret = OB_ERR_UNEXPECTED;

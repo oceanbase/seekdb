@@ -41,7 +41,7 @@ enum MethodOptColConf
 
 struct MethodOptSizeConf
 {
-  //oracle default value is: val = 75 and mode = 1, compatible oracle
+  // Default method option size: val = 75 and mode = 1.
   MethodOptSizeConf(int32_t mode = 1, int32_t val = 75)
     : mode_(mode), val_(val)
   {}

@@ -671,7 +671,7 @@ public:
   {
     uint64_t size = 0;
     if (json_type() == ObJsonNodeType::J_DATE || json_type() == ObJsonNodeType::J_MYSQL_DATE
-        || json_type() == ObJsonNodeType::J_ORACLEDATE) {
+        || json_type() == ObJsonNodeType::J_JSON_DATE_EXT) {
       size = sizeof(int32_t);
     } else {
       size = sizeof(int64_t);

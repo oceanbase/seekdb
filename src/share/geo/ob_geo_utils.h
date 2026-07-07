@@ -177,7 +177,6 @@ public:
                                 ObString &res_wkb);
   static ObGeoType get_geo_type_by_name(ObString &name);
   static const char *get_geo_name_by_type(ObGeoType type);
-  static const char *get_geo_name_by_type_oracle(ObGeoType type);
   static int get_header_info_from_wkb(const ObString &wkb,
                                       ObGeoWkbHeader &header);
   static int get_type_srid_from_wkb(const ObString &wkb,

@@ -71,7 +71,7 @@ enum ObObjTypeStoreClass
   ObStringSC, // varchar, char, binary, raw, nvarchar2, nchar, udt_bitmap
   ObTextSC, // text
   ObOTimestampSC, // timestamptz, timestamp ltz, timestamp nano
-  ObIntervalSC, //oracle interval year to month interval day to second
+  ObIntervalSC, // interval year to month, interval day to second
   ObLobSC,  //lob
   ObJsonSC, // json
   ObGeometrySC, // geometry

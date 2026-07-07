@@ -246,7 +246,7 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
                          KR(ret), K(show_table_id));
             }
           } else {
-            const ObLengthSemantics default_length_semantics = session_->get_local_nls_length_semantics();
+            const ObLengthSemantics default_length_semantics = session_->get_default_length_semantics();
             // get auto_increment from auto_increment service, not from table option
             ObCharsetType charset_type = CHARSET_INVALID;
             if (OB_FAIL(session_->get_character_set_results(charset_type))) {

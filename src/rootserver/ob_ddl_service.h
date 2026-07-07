@@ -1031,7 +1031,7 @@ private:
     CREATE_TENANT_TRANS_TWO_DONE,
     CREATE_TENANT_TRANS_THREE_DONE,
   };
-  enum RenameOracleObjectType
+  enum RenameObjectType
   {
     RENAME_TYPE_INVALID = 0,
     RENAME_TYPE_TABLE_OR_VIEW = 1,
@@ -1043,7 +1043,7 @@ private:
 
   enum UpdateGlobalIndexOpType
   {
-    USE_OLD_UPDATE_FUNC = 0, // oracle mode OR old data version
+    USE_OLD_UPDATE_FUNC = 0, // old data version
     WRITE_TRUNCATE_INFO = 1, // new feature after 4.3.5 bp2
     DROP_AND_CREATE_INDEX = 2, // mysql mode with update global indexes
     MARK_INDEX_UNUSABLE = 3, // mysql mode without update global indexes
@@ -1177,7 +1177,7 @@ int check_will_be_having_domain_index_operation(
       const ObString &object_name,
       const share::schema::ObTableSchema *&table_schema,
       const share::schema::ObSequenceSchema *&sequence_schema,
-      RenameOracleObjectType &obj_type);
+      RenameObjectType &obj_type);
   int check_inner_stat() const;
   int get_valid_index_schema_by_id_for_drop_index_(
       const uint64_t data_table_id,
@@ -1285,10 +1285,6 @@ int check_will_be_having_domain_index_operation(
   int check_is_offline_ddl(obcall::ObAlterTableArg &alter_table_arg,
                            share::ObDDLType &ddl_type,
                            bool &ddl_need_retry_at_executor);
-  int check_is_oracle_mode_add_column_not_null_ddl(const obcall::ObAlterTableArg &alter_table_arg,
-                                                   ObSchemaGetterGuard &schema_guard,
-                                                   bool &is_oracle_mode_add_column_not_null_ddl,
-                                                   bool &is_default_value_null);
   int check_can_bind_tablets(const share::ObDDLType ddl_type,
                              bool &bind_tablets);
   int check_ddl_with_primary_key_operation(const obcall::ObAlterTableArg &alter_table_arg,
@@ -1312,10 +1308,6 @@ int check_will_be_having_domain_index_operation(
       ObSchemaGetterGuard &schema_guard,
       ObDDLOperator &ddl_operator,
       ObDDLSQLTransaction &trans);
-  int do_oracle_add_column_not_null_in_trans(obcall::ObAlterTableArg &alter_table_arg,
-                                             ObSchemaGetterGuard &schema_guard,
-                                             const uint64_t tenant_data_version,
-                                             const bool is_default_value_null);
   int gen_new_index_table_name(
       const common::ObString &orig_index_table_name,
       const uint64_t orig_table_id,
@@ -2445,7 +2437,7 @@ private:
   ObTenantDDLService *tenant_ddl_service_;
   ObLatch ddl_lock_; // for ddl concurrent control
 
-  // for paralled ddl to cache oracle's index name map
+  // for parallel ddl to cache index name map
   share::schema::ObIndexNameChecker index_name_checker_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDDLService);
@@ -2569,8 +2561,7 @@ int ObDDLService::fill_part_name(const SCHEMA &orig_schema,
   } else if (OB_FAIL(orig_schema.get_max_part_idx(max_part_id, orig_schema.is_external_table()))) {
     RS_LOG(WARN, "fail to get max part id", KR(ret), K(max_part_id));
   }
-  // Supplement the default partition name p+OB_MAX_PARTITION_NUM_MYSQL, accumulate after judging duplicates
-  // Only Oracle mode will go to this logic
+  // Supplement the default partition name p+OB_MAX_PARTITION_NUM_MYSQL, accumulate after judging duplicates.
   //FIXME: partition_name may still conflict in one table since we can specify partition_name.
   max_part_id += OB_MAX_PARTITION_NUM_MYSQL;
   ObString part_name_str;

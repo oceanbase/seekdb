@@ -1078,7 +1078,6 @@ int ObTableLoadTransStoreWriter::cast_column(
     } else if (datum.is_null()) {
     } else if (OB_FAIL(ObDASUtils::reshape_datum_value(column_schema->get_meta_type(),
                                                        column_schema->get_accuracy(),
-                                                       false /*enable_oracle_empty_char_reshape_to_null*/,
                                                        cast_allocator,
                                                        datum))) {
       LOG_WARN("fail to reshape datum value", KR(ret));

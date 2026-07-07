@@ -59,11 +59,11 @@ private:
 /*
  * design doc: ob/rootservice/ffa2062ce3n1tvi0#SLpFs
  *
- * usage: for parallel ddl to check if index name is duplicated in oracle mode
+ * usage: for parallel ddl to check if index name is duplicated
  *
  * notice:
  * 1. ObIndexNameChecker should be used in ObDDLSQLTransaction only.
- * 2. nothing will be done for mysql tenant.
+ * 2. nothing will be done when the tenant can be skipped.
  */
 class ObIndexNameChecker
 {

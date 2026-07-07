@@ -90,8 +90,8 @@ int ObCreateTableResolver::add_primary_key_part(const ObString &column_name,
   } else if (OB_FAIL(primary_keys_.push_back(col->get_column_id()))) {
     SQL_RESV_LOG(WARN, "push primary key to array failed", K(ret));
   } else {
-    // In mysql mode, when creating a table, if the primary key column is set null or set default value = null, an error should be reported
-    // oracle mode, when creating a table, if the primary key column is set null or set default value = null, no error will be reported, so skip the following check
+    // Primary key columns cannot be set null or default null; the following
+    // check enforces that rule during create table.
     ObColumnResolveStat *stat = NULL;
     for (int64_t i = 0; NULL == stat && OB_SUCC(ret) && i < stats.count(); ++i) {
       if (stats.at(i).column_id_ == col->get_column_id()) {
@@ -156,7 +156,7 @@ int ObCreateTableResolver::set_temp_table_info(ObTableSchema &table_schema, Pars
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "obproxy version is too old, create temporary table");
   } else {
     table_schema.set_table_type(TMP_TABLE);
-    table_schema.set_session_id(session_info_->get_sessid_for_table()); ////Set session_id and session creation time, used for judgment during cleanup, Oracle function is different and does not need to be set
+    table_schema.set_session_id(session_info_->get_sessid_for_table()); // Set session_id for cleanup judgment.
 
     table_schema.set_sess_active_time(ObTimeUtility::current_time());
   }
@@ -268,7 +268,7 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
         ret = OB_NOT_INIT;
         SQL_RESV_LOG(WARN, "session_info is null.", K(ret));
       } else if (OB_FAIL(resolve_table_relation_node(create_table_node->children_[2], table_name, database_name,
-                                                     false, false))) {
+                                                     false))) {
         SQL_RESV_LOG(WARN, "failed to resolve table relation node!", K(ret));
       } else if ((ObString(OB_RECYCLEBIN_SCHEMA_NAME) == database_name
                   && ObSQLSessionInfo::USER_SESSION == session_info_->get_session_type())
@@ -1195,12 +1195,8 @@ int ObCreateTableResolver::set_nullable_for_cta_column(ObSelectStmt *select_stmt
   }
   if (OB_SUCC(ret) && is_not_null) {
     // deduce pre-condition: already not null
-    // oracle:
-    // 1. only deduce column not null, not for composed exprs(e.g, c1+c2) and const expr
-    // 2. column not null depends on HAS_NOT_NULL_VALIDATE_CONSTRAINT_FLAG, e.g, ctas from pk (NULL: YES)
-    // mysql:
-    // 1. supports composed expr not null deduce
-    // 2. column not null depends on NOT_NULL_FLAG, e.g, ctas from pk (NULL: NO)
+    // MySQL supports composed expression not-null deduction, and column
+    // not-null depends on NOT_NULL_FLAG, e.g. ctas from pk (NULL: NO).
     ObNotNullContext ctx(NULL, NULL, select_stmt, false);
     if (OB_FAIL(ctx.generate_stmt_context(NULLABLE_SCOPE::NS_TOP))) {
       LOG_WARN("failed to generate stmt context", K(ret));
@@ -1570,10 +1566,9 @@ int ObCreateTableResolver::generate_index_arg(const bool process_heap_table_prim
     SQL_RESV_LOG(WARN, "set storing column failed", K(ret));
   } else {
     ObIndexType type = INDEX_TYPE_IS_NOT;
-    //index default is global, if not specified, but oracle temporary table is internally converted, can only be local
+    // Index scope defaults to local when it is not specified.
     if (NOT_SPECIFIED == index_scope_) {
-      // MySQL default index mode is local,
-      // and Oracle default index mode is global
+      // MySQL default index mode is local.
       global_ = false;
     } else {
       global_ = (GLOBAL_INDEX == index_scope_);

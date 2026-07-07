@@ -46,7 +46,7 @@ int ObExprJsonInsert::calc_result_typeN(ObExprResType& type,
                                         int64_t param_num,
                                         ObExprTypeCtx& type_ctx) const
 {
-  UNUSED(type_ctx); // type_ctx session, collation, raw expr, Oracle mode may need to determine the character set from type_ctx
+  UNUSED(type_ctx); // type_ctx is currently unused.
   INIT_SUCC(ret);
   const ObString name("json_insert");
 

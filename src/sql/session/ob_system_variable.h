@@ -78,10 +78,9 @@ public:
      *    all exist sessions unchanged.
      * 2. SESSION scope
      *    with 'SET [SESSION] xxx=xxx' in mysql mode, SESSION is optional.
-     *      or 'ALTER SESSION SET xxx=xxx' in oracle mode,
      *    set with session scope will affect all following operations in current session.
      * 3. NONE scope
-     *    with 'SET xxx=xxx' in both mysql and oracle mode.
+     *    with 'SET xxx=xxx' in mysql mode.
      *    besides GLOBAL and SESSION scopes, a few variables can be set with NONE scope,
      *    which only affect the NEXT ONE transaction in current session, like tx_isolation.
      *    so I think 'SET_SCOPE_NEXT_TRANS' is better than 'SET_SCOPE_NONE'.
@@ -246,7 +245,6 @@ public:
   inline bool is_session_scope() const { return 0 != (flags_ & share::ObSysVarFlag::SESSION_SCOPE); }
   inline bool is_influence_plan() const { return 0 != (flags_ & share::ObSysVarFlag::INFLUENCE_PLAN); }
   inline bool is_influence_pl() const { return 0 != (flags_ & share::ObSysVarFlag::INFLUENCE_PL); }
-  inline bool is_oracle_only() const { return 0 != (flags_ & share::ObSysVarFlag::ORACLE_ONLY); }
   inline bool is_enum_type() const { return is_enum_type_; }
   inline bool is_mysql_only() const { return 0 != (flags_ & share::ObSysVarFlag::MYSQL_ONLY); }
   inline bool is_with_upgrade() const { return 0 != (flags_ & share::ObSysVarFlag::WITH_UPGRADE); }
@@ -677,7 +675,7 @@ private:
                                    const ObSetVar &set_var,
                                    const common::ObObj &in_val,
                                    common::ObObj &out_val);
-  int find_pos_time_zone(sql::ObExecContext &ctx, const common::ObString &str_val, const bool is_oracle_compatible);
+  int find_pos_time_zone(sql::ObExecContext &ctx, const common::ObString &str_val);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTimeZoneSysVar);
 };
@@ -881,36 +879,11 @@ public:
                                                  const ObBasicSysVar &sys_var,
                                                  const common::ObObj &in_val,
                                                  common::ObObj &out_val);
-  static int check_and_convert_plsql_warnings(sql::ObExecContext &ctx,
-                                                 const ObSetVar &set_var,
-                                                 const ObBasicSysVar &sys_var,
-                                                 const common::ObObj &in_val,
-                                                 common::ObObj &out_val);
-  static int check_and_convert_plsql_ccflags(sql::ObExecContext &ctx,
-                                             const ObSetVar &set_var,
-                                             const ObBasicSysVar &sys_var,
-                                             const common::ObObj &in_val,
-                                             common::ObObj &out_val);
   static int check_and_convert_sql_throttle_queue_time(sql::ObExecContext &ctx,
                                                        const ObSetVar &set_var,
                                                        const ObBasicSysVar &sys_var,
                                                        const common::ObObj &in_val,
                                                        common::ObObj &out_val);
-  static int check_and_convert_nls_currency_too_long(sql::ObExecContext &ctx,
-                                                     const ObSetVar &set_var,
-                                                     const ObBasicSysVar &sys_var,
-                                                     const common::ObObj &in_val,
-                                                     common::ObObj &out_val);
-  static int check_and_convert_nls_iso_currency_is_valid(sql::ObExecContext &ctx,
-                                                         const ObSetVar &set_var,
-                                                         const ObBasicSysVar &sys_var,
-                                                         const common::ObObj &in_val,
-                                                         common::ObObj &out_val);
-  static int check_and_convert_nls_length_semantics_is_valid(sql::ObExecContext &ctx,
-                                                             const ObSetVar &set_var,
-                                                             const ObBasicSysVar &sys_var,
-                                                             const common::ObObj &in_val,
-                                                             common::ObObj &out_val);
   static int check_update_resource_manager_plan(sql::ObExecContext &ctx,
                                                 const ObSetVar &set_var,
                                                 const ObBasicSysVar &sys_var,

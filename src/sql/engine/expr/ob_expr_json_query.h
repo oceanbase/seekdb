@@ -88,7 +88,7 @@ private:
                             uint8_t &type,
                             uint8_t size_para);
   /*
-  oracle mode get json path to JsonBase in static_typing_engine
+  Get json path to JsonBase in static_typing_engine.
   @param[in]  expr       the input arguments
   @param[in]  ctx        the eval context
   @param[in]  allocator  the Allocator in context
@@ -104,7 +104,7 @@ private:
                           ObDatum*& json_datum);
 
     /*
-  oracle mode get json doc to JsonBase in static_typing_engine
+  Get json doc to JsonBase in static_typing_engine.
   @param[in]  expr       the input arguments
   @param[in]  ctx        the eval context
   @param[in]  allocator  the Allocator in context

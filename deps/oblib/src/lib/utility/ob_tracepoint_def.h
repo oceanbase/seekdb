@@ -400,7 +400,7 @@ GLOBAL_ERRSIM_POINT_DEF(558, EN_CHECK_REWRITE_ITER_CONVERGE, "Reporting error wh
 GLOBAL_ERRSIM_POINT_DEF(559, EN_PRINT_CONSTRAINTS_INFO, "show constraints info when explain query plan");
 GLOBAL_ERRSIM_POINT_DEF(560, EN_CBQT_IGNORE_COST, "Whether ignore the cost when do cost based transformation");
 GLOBAL_ERRSIM_POINT_DEF(561, EN_PX_RANDOM_SHUFFLE_WITHOUT_STATISTIC_INFORMATION, "Use px random shuffle even statistical information do not exist.");
-GLOBAL_ERRSIM_POINT_DEF(562, EN_EXTERNAL_TABLE_ORACLE, "Whether enable external table read and write in oracle mode");
+GLOBAL_ERRSIM_POINT_DEF(562, EN_EXTERNAL_TABLE_RW, "Whether enable external table read and write");
 GLOBAL_ERRSIM_POINT_DEF(563, EN_FORCE_SLAVE_MAPPING, "Whether force use slave mapping plan");
 GLOBAL_ERRSIM_POINT_DEF(564, EN_SQL_HUNG_DETECT, "Whether enable sql hung detect");
 GLOBAL_ERRSIM_POINT_DEF(565, EN_CHECK_EXPR_FORMALIZE, "Reporting error when expr not formalized after transform");

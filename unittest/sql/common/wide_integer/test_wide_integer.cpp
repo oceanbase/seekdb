@@ -1185,24 +1185,24 @@ public:
       }
     }
 
-    // oracle
-    out << "======== ORACLE ========\n";
+    // number range
+    out << "======== NUMBER ========\n";
     for (int16_t precision = OB_MIN_NUMBER_PRECISION; precision <= OB_MAX_NUMBER_PRECISION; precision++) {
       for (int16_t scale = number::ObNumber::MIN_SCALE; scale <= number::ObNumber::MAX_SCALE; scale++) {
-        int16_t delta_scale = ObDecimalIntConstValue::oracle_delta_scale(scale);
+        int16_t delta_scale = ObDecimalIntConstValue::scale_offset(scale);
         const ObDecimalInt *decint = ObDecimalIntConstValue::get_min_value(precision);
         int32_t int_bytes = ObDecimalIntConstValue::get_int_bytes_by_precision(precision);
-        // oracle_min
+        // number_min
         ret = wide::to_string(decint, int_bytes, scale, buf, sizeof(buf), length);
         ASSERT_EQ(ret, 0);
-        out << "ORACLE_MIN (" << precision << ", " << scale << "): " << std::string(buf, length) << '\n';
+        out << "NUMBER_MIN (" << precision << ", " << scale << "): " << std::string(buf, length) << '\n';
         length = 0;
 
-        // oracle_max
+        // number_max
         decint = ObDecimalIntConstValue::get_max_value(precision);
         ret = wide::to_string(decint, int_bytes, scale, buf, sizeof(buf), length);
         ASSERT_EQ(ret, 0);
-        out << "ORACLE_MAX (" << precision << ", " << scale << "): " << std::string(buf, length) << '\n';
+        out << "NUMBER_MAX (" << precision << ", " << scale << "): " << std::string(buf, length) << '\n';
         length = 0;
       } // for end
     } // for end

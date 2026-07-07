@@ -634,7 +634,7 @@ private:
   ObSEArray<ObRawExpr *, 8> cur_op_exprs_;
   // all self_produced exprs of current operator
   ObSEArray<ObRawExpr *, 8> cur_op_self_produced_exprs_;
-  //For recursive CTE use only, because Oracle's CTE does not allow nesting, this approach can be used
+  // Used by recursive CTE planning when nested CTE specs need to be lifted.
   common::ObSEArray<ObOpSpec *, 10> fake_cte_specs_;
   ObDmlCgService dml_cg_service_;
   ObTscCgService tsc_cg_service_;
@@ -648,4 +648,3 @@ private:
 } // end namespace oceanbase
 
 #endif // OCEANBASE_SRC_OB_STATIC_ENGINE_CG_H_
-

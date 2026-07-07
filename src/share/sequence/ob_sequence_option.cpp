@@ -58,7 +58,7 @@ ObSequenceMaxMinInitializer::ObSequenceMaxMinInitializer()
   }
 }
 
-// for Oracle Mode
+// Sequence boundary values.
 ObSequenceValue ObSequenceMaxMinInitializer::NO_MAX_VALUE;
 ObSequenceValue ObSequenceMaxMinInitializer::NO_MIN_VALUE;
 ObSequenceValue ObSequenceMaxMinInitializer::MAX_VALUE;

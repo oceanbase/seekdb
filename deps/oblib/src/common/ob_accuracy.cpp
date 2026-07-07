@@ -72,7 +72,7 @@ const ObAccuracy ObAccuracy::DDL_DEFAULT_ACCURACY[ObMaxType] = {
   ObAccuracy(OB_MAX_LONGTEXT_LENGTH),     // roaringbitmap, roaringbitmap serialized size is possibly to exceed 512M.
 };
 
-const ObAccuracy ObAccuracy::DDL_DEFAULT_ACCURACY2[ORACLE_MODE + 1][ObMaxType] = {
+const ObAccuracy ObAccuracy::DDL_DEFAULT_ACCURACY2[MYSQL_MODE + 1][ObMaxType] = {
   {
     ObAccuracy(),         // null.
     ObAccuracy(4, 0),     // int8.
@@ -115,52 +115,6 @@ const ObAccuracy ObAccuracy::DDL_DEFAULT_ACCURACY2[ORACLE_MODE + 1][ObMaxType] =
     ObAccuracy(),              // user defined type in sql
     ObAccuracy(10, 0),         // decimal int
     ObAccuracy(OB_MAX_LONGTEXT_LENGTH),        // collection type in sql
-    ObAccuracy(10, 0),         // mysql date.
-    ObAccuracy(19, 6),         // mysql datetime.
-    ObAccuracy(OB_MAX_LONGTEXT_LENGTH),         // roaringbitmap
-  },
-  {
-    ObAccuracy(),         // null.
-    ObAccuracy(4, 0),     // int8.
-    ObAccuracy(6, 0),     // int16.
-    ObAccuracy(9, 0),     // int24.
-    ObAccuracy(11, 0),    // int32.
-    ObAccuracy(20, 0),    // int64.
-    ObAccuracy(3, 0),     // uint8.
-    ObAccuracy(5, 0),     // uint16.
-    ObAccuracy(8, 0),     // uint24.
-    ObAccuracy(10, 0),    // uint32.
-    ObAccuracy(20, 0),    // uint64.
-    ObAccuracy(PRECISION_UNKNOWN_YET, ORA_NUMBER_SCALE_UNKNOWN_YET),         // float.
-    ObAccuracy(PRECISION_UNKNOWN_YET, ORA_NUMBER_SCALE_UNKNOWN_YET),         // double.
-    ObAccuracy(),         // ufloat.
-    ObAccuracy(),         // udouble.
-    ObAccuracy(PRECISION_UNKNOWN_YET, ORA_NUMBER_SCALE_UNKNOWN_YET),    // number.
-    ObAccuracy(10, 0),    // unumber.
-    ObAccuracy(19, 6),    // datetime.
-    ObAccuracy(19, 6),    // timestamp.
-    ObAccuracy(10, 0),    // date.
-    ObAccuracy(10, 6),    // time. -838:59:59' to '838:59:59
-    ObAccuracy(4, 0),     // year.
-    ObAccuracy(),         // varchar.
-    ObAccuracy(1),        // char.
-    ObAccuracy(),         // hex_string.
-    ObAccuracy(),         // extend.
-    ObAccuracy(),         // unknown.
-    ObAccuracy(OB_MAX_TINYTEXT_LENGTH),         // tiny_text, todo
-    ObAccuracy(OB_MAX_TEXT_LENGTH),         // text, todo
-    ObAccuracy(OB_MAX_MEDIUMTEXT_LENGTH),         // medium_text, todo
-    ObAccuracy(OB_MAX_LONGTEXT_LENGTH),         // long_text, todo
-    ObAccuracy(1, 0),      // bit
-    ObAccuracy(),         // enum
-    ObAccuracy(),         // set
-    ObAccuracy(),         // enuminner
-    ObAccuracy(),         // setinner
-    ObAccuracy(OB_MAX_LONGTEXT_LENGTH),         // json
-    ObAccuracy(OB_MAX_LONGTEXT_LENGTH),         // geometry
-    ObAccuracy(),              // user defined type in sql
-    ObAccuracy(10, 0),         // decimal int
-    ObAccuracy(OB_MAX_LONGTEXT_LENGTH),         // collection type in sql
     ObAccuracy(10, 0),         // mysql date.
     ObAccuracy(19, 6),         // mysql datetime.
     ObAccuracy(OB_MAX_LONGTEXT_LENGTH),         // roaringbitmap
@@ -214,7 +168,7 @@ const ObAccuracy ObAccuracy::MAX_ACCURACY[ObMaxType] = {
   ObAccuracy(OB_MAX_LONGTEXT_LENGTH),        // roaringbitmap
 };
 
-const ObAccuracy ObAccuracy::MAX_ACCURACY2[ORACLE_MODE + 1][ObMaxType] = {
+const ObAccuracy ObAccuracy::MAX_ACCURACY2[MYSQL_MODE + 1][ObMaxType] = {
   { /* MySql */
     ObAccuracy(),         // null.
     ObAccuracy(4, 0),     // int8.
@@ -257,52 +211,6 @@ const ObAccuracy ObAccuracy::MAX_ACCURACY2[ORACLE_MODE + 1][ObMaxType] = {
     ObAccuracy(),              // user defined type in sql
     ObAccuracy(OB_MAX_DECIMAL_PRECISION, OB_MAX_DECIMAL_SCALE), // decimal int
     ObAccuracy(OB_MAX_LONGTEXT_LENGTH),  // collection type in sql
-    ObAccuracy(10, 0),         // mysql date.
-    ObAccuracy(19, 6),         // mysql datetime.
-    ObAccuracy(OB_MAX_LONGTEXT_LENGTH),        // roaringbitmap
-  },
-  { /* Oracle */
-    ObAccuracy(),         // null.
-    ObAccuracy(4, 0),     // int8.
-    ObAccuracy(6, 0),     // int16.
-    ObAccuracy(9, 0),     // int24.
-    ObAccuracy(11, 0),    // int32.
-    ObAccuracy(20, 0),    // int64.
-    ObAccuracy(3, 0),     // uint8.
-    ObAccuracy(5, 0),     // uint16.
-    ObAccuracy(8, 0),     // uint24.
-    ObAccuracy(10, 0),    // uint32.
-    ObAccuracy(20, 0),    // uint64.
-    ObAccuracy(PRECISION_UNKNOWN_YET, ORA_NUMBER_SCALE_UNKNOWN_YET),         // float.
-    ObAccuracy(PRECISION_UNKNOWN_YET, ORA_NUMBER_SCALE_UNKNOWN_YET),         // double.
-    ObAccuracy(),  // ufloat.
-    ObAccuracy(),  // udouble.
-    ObAccuracy(OB_MAX_NUMBER_PRECISION, OB_MAX_NUMBER_SCALE),    // number.
-    ObAccuracy(OB_MAX_NUMBER_PRECISION, OB_MAX_NUMBER_SCALE),    // unumber.
-    ObAccuracy(19, 0),    // datetime.//!!!!!!TODO
-    ObAccuracy(19, 6),    // timestamp.//!!!!!!TODO
-    ObAccuracy(10, 0),    // date.//!!!!!!TODO
-    ObAccuracy(10, 6),    // time. -838:59:59' to '838:59:59 //!!!!!! TODO
-    ObAccuracy(4, 0),     // year.//!!!!!!TODO
-    ObAccuracy(),         // varchar.
-    ObAccuracy(1),        // char.
-    ObAccuracy(),         // hex_string.
-    ObAccuracy(),         // extend.
-    ObAccuracy(),          // unknown.
-    ObAccuracy(OB_MAX_TINYTEXT_LENGTH),         // tiny_text, todo
-    ObAccuracy(OB_MAX_TEXT_LENGTH),         // text, todo
-    ObAccuracy(OB_MAX_MEDIUMTEXT_LENGTH),         // medium_text, todo
-    ObAccuracy(OB_MAX_LONGTEXT_LENGTH),         // long_text, todo
-    ObAccuracy(64, 0),      // bit
-    ObAccuracy(),         // enum
-    ObAccuracy(),         // set
-    ObAccuracy(),         // enuminner
-    ObAccuracy(),         // setinner
-    ObAccuracy(OB_MAX_LONGTEXT_LENGTH),         // json
-    ObAccuracy(OB_MAX_LONGTEXT_LENGTH),         // geometry
-    ObAccuracy(),              // user defined type in sql
-    ObAccuracy(OB_MAX_DECIMAL_PRECISION, OB_MAX_DECIMAL_SCALE), // decimal int
-    ObAccuracy(OB_MAX_LONGTEXT_LENGTH),         // collection type in sql
     ObAccuracy(10, 0),         // mysql date.
     ObAccuracy(19, 6),         // mysql datetime.
     ObAccuracy(OB_MAX_LONGTEXT_LENGTH),        // roaringbitmap

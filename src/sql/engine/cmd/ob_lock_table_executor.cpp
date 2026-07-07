@@ -32,17 +32,8 @@ int ObLockTableExecutor::execute(ObExecContext &ctx,
                                  ObLockTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  LOG_DEBUG("mysql mode do nothing");
+  LOG_DEBUG("execute mysql lock table");
   ret = execute_mysql_(ctx, stmt);
-  return ret;
-}
-
-int ObLockTableExecutor::execute_oracle_(ObExecContext &ctx,
-                                         ObLockTableStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ret = OB_ERR_UNEXPECTED;
-  LOG_WARN("should be oracle mode", K(ret));
   return ret;
 }
 

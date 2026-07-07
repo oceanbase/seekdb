@@ -369,7 +369,7 @@ struct ObOperatorStat
   //int64_t last_input_rows_; //last input rows
   //int64_t last_rescan_times_; //rescan times
   //int64_t last_output_rows_; //output rows in last execution
-  // Temporarily not supporting the following statistics items compatible with oracle
+  // Temporarily not supporting the following statistics items.
   //int64_t last_cr_buffer_gets_; //last logical read execution count
   //int64_t cr_buffer_gets_; //cumulative logical read count
   //int64_t last_disk_reads_; //last physical read count

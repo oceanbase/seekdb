@@ -94,10 +94,6 @@ private:
                             common::ObObj &obj);
   static int to_type(const common::ObObjType &expect_type, const share::schema::ObColumnSchemaV2 *column_schema, ObTableLoadCastObjCtx &cast_obj_ctx,
                      const common::ObAccuracy &accuracy, const common::ObObj &src, common::ObObj &dst);
-  static int string_datetime_oracle(const common::ObObjType expect_type,
-                                    common::ObObjCastParams &params, const common::ObObj &in,
-                                    common::ObObj &out, const common::ObCastMode cast_mode,
-                                    const ObTableLoadTimeConverter &time_cvrt);
 
   // fast path for numbertype cast
   inline static int number_fast_from(const char *str, const int64_t length,

@@ -114,11 +114,7 @@ private:
   int get_resolve_stats_from_table_schema(const share::schema::ObTableSchema &table_schema,
                                           ObArray<ObColumnResolveStat> &stats);
   virtual int get_table_schema_for_check(const share::schema::ObTableSchema *&table_schema) override;
-  int add_new_column_for_oracle_temp_table(share::schema::ObTableSchema &table_schema, ObArray<ObColumnResolveStat> &stats);
-  int add_new_indexkey_for_oracle_temp_table(const int32_t org_key_len);
-  int add_pk_key_for_oracle_temp_table(ObArray<ObColumnResolveStat> &stats, int64_t &pk_data_length);
-  int set_partition_info_for_oracle_temp_table(share::schema::ObTableSchema &table_schema);
-  // following four functions should be used only in oracle mode
+  // Temporary table helper functions.
 
   typedef common::hash::ObPlacementHashSet<uint64_t, common::OB_MAX_USER_DEFINED_COLUMNS_COUNT> VPColumnIdHashSet;
   uint64_t gen_column_group_id();

@@ -393,14 +393,14 @@ public:
   static const int512_t MYSQL_DEC_INT_MIN;
   static const int512_t MYSQL_DEC_INT_MAX;
   static const int512_t MYSQL_DEC_INT_MAX_AVAILABLE;
-  static const int16_t MAX_ORACLE_SCALE_DELTA = 0 - number::ObNumber::MIN_SCALE;
-  static const int16_t MAX_ORACLE_SCALE_SIZE =
+  static const int16_t SCALE_DELTA = 0 - number::ObNumber::MIN_SCALE;
+  static const int16_t SCALE_RANGE_SIZE =
     number::ObNumber::MAX_SCALE - number::ObNumber::MIN_SCALE;
 
   static int init_const_values(ObIAllocator &allocator);
-  inline static int16_t oracle_delta_scale(const int16_t in_scale)
+  inline static int16_t scale_offset(const int16_t in_scale)
   {
-    return in_scale + MAX_ORACLE_SCALE_DELTA;
+    return in_scale + SCALE_DELTA;
   }
   inline static int get_int_bytes_by_precision(int16_t precision)
   {

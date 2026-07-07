@@ -735,7 +735,7 @@ int ObExprAbs::calc_result_type1(ObExprResType &type, ObExprResType &type1,
 
 //others. (datetime time varchar, etc)
 
-//others for oracle. (datetime time varchar, etc)
+//extended types. (datetime time varchar, etc)
 
 
 

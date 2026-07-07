@@ -47,9 +47,6 @@ int ObLocationDDLService::create_location(const obcall::ObCreateLocationArg &arg
   if (OB_ISNULL(ddl_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input schema", K(ret));
   } else if (OB_FAIL(ddl_service_->get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
     LOG_WARN("failed to get schema guard with version in inner table", K(ret));
   } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
@@ -120,9 +117,6 @@ int ObLocationDDLService::drop_location(const obcall::ObDropLocationArg &arg,
   if (OB_ISNULL(ddl_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input schema", K(ret));
   } else if (OB_FAIL(ddl_service_->get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
     LOG_WARN("failed to get schema guard with version in inner table", K(ret));
   } else if (OB_FAIL(schema_guard.get_location_schema_by_name(location_name, schema_ptr))) {
@@ -172,4 +166,3 @@ int ObLocationDDLService::drop_location(const obcall::ObDropLocationArg &arg,
 
 } // end namespace rootserver
 } // end namespace oceanbase
-

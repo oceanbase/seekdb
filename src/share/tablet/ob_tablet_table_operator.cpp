@@ -192,7 +192,7 @@ int ObTabletTableOperator::batch_get(
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (OB_UNLIKELY(pairs_cnt < 1 || false)) {
+  } else if (OB_UNLIKELY(pairs_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(pairs_cnt));
   }
@@ -408,9 +408,7 @@ int ObTabletTableOperator::range_get(const common::ObTabletID &start_tablet_id,
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (OB_UNLIKELY(
-      !true
-      || range_size <= 0)) {
+  } else if (OB_UNLIKELY(range_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(start_tablet_id), K(range_size));
   } else {
@@ -471,10 +469,7 @@ int ObTabletTableOperator::remove_residual_tablet(
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (OB_UNLIKELY(
-      !true
-      || false
-      || !server.is_valid())) {
+  } else if (OB_UNLIKELY(!server.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(server));
   } else {

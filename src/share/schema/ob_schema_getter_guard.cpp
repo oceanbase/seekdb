@@ -455,10 +455,9 @@ int ObSchemaGetterGuard::get_user_id(const ObString &user_name,
     LOG_WARN("fail to check lazy guard", KR(ret));
   } else {
     const ObSimpleUserSchema *simple_user = NULL;
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
     if (0 == user_name.case_compare(OB_SYS_USER_NAME)
                && 0 == host_name.case_compare(OB_SYS_HOST_NAME)) {
-      // root is not an inner user in oracle mode.
+      // root maps to the system user id.
       user_id = OB_SYS_USER_ID;
     } else if (OB_FAIL(mgr->get_user_schema(
                                              user_name,
@@ -763,8 +762,7 @@ int ObSchemaGetterGuard::get_directory_schema_by_name(const common::ObString &na
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (OB_UNLIKELY(!true)
-             || OB_UNLIKELY(name.empty())) {
+  } else if (OB_UNLIKELY(name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(name), KR(ret));
   } else if (OB_FAIL(check_tenant_schema_guard())) {
@@ -789,11 +787,10 @@ int ObSchemaGetterGuard::get_catalog_schema_by_name(const common::ObString &name
   schema = nullptr;
   const ObSchemaMgr *mgr = NULL;
   ObNameCaseMode mode = OB_NAME_CASE_INVALID;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (!true || name.empty()) {
+  } else if (name.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(name), KR(ret));
   } else if (OB_FAIL(check_tenant_schema_guard())) {
@@ -805,12 +802,8 @@ int ObSchemaGetterGuard::get_catalog_schema_by_name(const common::ObString &name
   } else if (OB_NAME_CASE_INVALID == mode) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid case mode", K(ret), K(mode));
-  } else if (OB_FAIL(get_tenant_compat_mode(compat_mode))) {
-    LOG_WARN("fail to get compat mode", K(ret));
   } else if (ObCatalogUtils::is_internal_catalog_name(name, mode)) {
-    schema = lib::Worker::CompatMode::MYSQL == compat_mode
-              ? ObCatalogSchema::get_internal_catalog_schema_mysql()
-              : ObCatalogSchema::get_internal_catalog_schema_oracle();
+    schema = ObCatalogSchema::get_internal_catalog_schema_mysql();
   } else if (OB_FAIL(mgr->catalog_mgr_.get_schema_by_name(mode, name, schema))) {
     LOG_WARN("get schema failed", K(name), KR(ret));
   }
@@ -823,24 +816,18 @@ int ObSchemaGetterGuard::get_catalog_schema_by_id(const uint64_t catalog_id,
   int ret = OB_SUCCESS;
   schema = nullptr;
   const ObSchemaMgr *mgr = NULL;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (!true
-             || !is_valid_id(catalog_id)) {
+  } else if (!is_valid_id(catalog_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(catalog_id), KR(ret));
   } else if (OB_FAIL(check_tenant_schema_guard())) {
     LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
-  } else if (OB_FAIL(get_tenant_compat_mode(compat_mode))) {
-    LOG_WARN("fail to get compat mode", K(ret));
   } else if (catalog_id == OB_INTERNAL_CATALOG_ID) {
-    schema = lib::Worker::CompatMode::MYSQL == compat_mode
-              ? ObCatalogSchema::get_internal_catalog_schema_mysql()
-              : ObCatalogSchema::get_internal_catalog_schema_oracle();
+    schema = ObCatalogSchema::get_internal_catalog_schema_mysql();
   } else if (OB_FAIL(mgr->catalog_mgr_.get_schema_by_id(catalog_id, schema))) {
     LOG_WARN("get schema failed", K(catalog_id), KR(ret));
   }
@@ -2162,39 +2149,34 @@ int ObSchemaGetterGuard::check_ssl_invited_cn(SSL *ssl_st)
   } else {
     X509 *cert = NULL;
     X509_name_st *x509Name = NULL;
-    if (OB_UNLIKELY(!true)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail get tenant_config", KR(ret));
+    ObString ob_ssl_invited_common_names(GCONF.ob_ssl_invited_common_names.str());
+    if (ob_ssl_invited_common_names.empty()) {
+      ret = OB_PASSWORD_WRONG;
+      LOG_WARN("ob_ssl_invited_common_names not match", "expect", ob_ssl_invited_common_names, KR(ret));
+    } else if (NULL == (cert = SSL_get_peer_certificate(ssl_st))) {
+      LOG_TRACE("use ssl, but without peer_certificate");
+    } else if (OB_ISNULL(x509Name = X509_get_subject_name(cert))) {
+      ret = OB_PASSWORD_WRONG;
+      LOG_WARN("X509 check failed", KR(ret));
     } else {
-      ObString ob_ssl_invited_common_names(GCONF.ob_ssl_invited_common_names.str());
-      if (ob_ssl_invited_common_names.empty()) {
+      unsigned int count = X509_NAME_entry_count(x509Name);
+      char name[1024] = {0};
+      char *cn_used = NULL;
+      for (unsigned int i = 0; i < count && NULL == cn_used; i++) {
+        X509_NAME_ENTRY *entry = X509_NAME_get_entry(x509Name, i);
+        OBJ_obj2txt(name, sizeof(name), X509_NAME_ENTRY_get_object(entry), 0);
+        if (strcmp(name, "commonName") == 0) {
+          ASN1_STRING_to_UTF8((unsigned char **)&cn_used, X509_NAME_ENTRY_get_data(entry));
+        }
+      }
+      if (OB_ISNULL(cn_used)) {
         ret = OB_PASSWORD_WRONG;
-        LOG_WARN("ob_ssl_invited_common_names not match", "expect", ob_ssl_invited_common_names, KR(ret));
-      } else if (NULL == (cert = SSL_get_peer_certificate(ssl_st))) {
-        LOG_TRACE("use ssl, but without peer_certificate");
-      } else if (OB_ISNULL(x509Name = X509_get_subject_name(cert))) {
+        LOG_WARN("failed to found cn", KR(ret));
+      } else if (NULL == strstr(ob_ssl_invited_common_names.ptr(), cn_used)) {
         ret = OB_PASSWORD_WRONG;
-        LOG_WARN("X509 check failed", KR(ret));
+        LOG_WARN("ob_ssl_invited_common_names not match", "expect",ob_ssl_invited_common_names, "curr", cn_used,  KR(ret));
       } else {
-        unsigned int count = X509_NAME_entry_count(x509Name);
-        char name[1024] = {0};
-        char *cn_used = NULL;
-        for (unsigned int i = 0; i < count && NULL == cn_used; i++) {
-          X509_NAME_ENTRY *entry = X509_NAME_get_entry(x509Name, i);
-          OBJ_obj2txt(name, sizeof(name), X509_NAME_ENTRY_get_object(entry), 0);
-          if (strcmp(name, "commonName") == 0) {
-            ASN1_STRING_to_UTF8((unsigned char **)&cn_used, X509_NAME_ENTRY_get_data(entry));
-          }
-        }
-        if (OB_ISNULL(cn_used)) {
-          ret = OB_PASSWORD_WRONG;
-          LOG_WARN("failed to found cn", KR(ret));
-        } else if (NULL == strstr(ob_ssl_invited_common_names.ptr(), cn_used)) {
-          ret = OB_PASSWORD_WRONG;
-          LOG_WARN("ob_ssl_invited_common_names not match", "expect",ob_ssl_invited_common_names, "curr", cn_used,  KR(ret));
-        } else {
-          LOG_TRACE("ob_ssl_invited_common_names match", "expect",ob_ssl_invited_common_names, "curr", cn_used,  KR(ret));
-        }
+        LOG_TRACE("ob_ssl_invited_common_names match", "expect",ob_ssl_invited_common_names, "curr", cn_used,  KR(ret));
       }
     }
 
@@ -2383,7 +2365,7 @@ int ObSchemaGetterGuard::check_db_access(
                 // append db level privilege
                 total_db_priv_set_role |= db_priv_set_role;
               }
-              if (OB_SUCC(ret) && true) {
+              if (OB_SUCC(ret)) {
                 column_privs.reuse();
                 if (!is_grant_role && OB_FAIL(priv_mgr.get_column_priv_in_db(
                                                                             db_priv_key_role.user_id_,
@@ -2987,11 +2969,7 @@ int ObSchemaGetterGuard::get_schema_version(
     case TENANT_SCHEMA : {
         const ObSimpleTenantSchema *schema = NULL;
         const ObSchemaMgr *mgr = NULL;
-        if (false) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("id is not match with schema_id",
-                   KR(ret), K(schema_id));
-        } else if (OB_FAIL(check_lazy_guard( mgr))) {
+        if (OB_FAIL(check_lazy_guard( mgr))) {
           LOG_WARN("fail to check lazy guard", KR(ret), K(schema_id));
         } else if (OB_FAIL(mgr->get_tenant_schema(schema))) {
           LOG_WARN("get tenant schema failed", KR(ret), K(schema_id));
@@ -4922,49 +4900,6 @@ int ObSchemaGetterGuard::check_tablegroup_exist(const uint64_t tablegroup_id,
   return ret;
 }
 
-/* https://docs.oracle.com/cd/E18283_01/server.112/e17118/sql_elements008.htm
- * Within a namespace, no two objects can have the same name.
-   In oracle mode, the following schema objects share one namespace:
-   Tables(create, rename, flashback)
-   Views(create, create or replace, rename, flashback)
-   Sequences(create, rename)
-   Private synonyms(create, create or replace, rename)
-   Stand-alone procedures(create, create or replace)
-   Stand-alone stored functions(create, create or replace)
-   Packages(create, create or replace)
-   Materialized views (OB oracle mode is not supported now)
-   User-defined types(create, create or replace)
-*/
-// This function is used to check object name is duplicate in other different schemas in oracle mode.
-// This function should be as a supplement to the original oracle detection logic of duplicate object name.
-// @param [in] tenant
-// @param [in] db_id
-// @param [in] object_name
-// @param [in] schema_type : schema type of object to be checked
-// @param [in] routine_type : If schema_type is ROUTINE_SCHEMA, routine_type is used to
-//                            distinguish whether object is procedure or function.
-// @param [in] is_or_replace : distinguish whether create schema with create_or_replace option
-//
-// @param [out] conflict_schema_types  return other conficted objects' schema types
-//
-// @return oceanbase error code defined in lib/ob_errno.def
-int ObSchemaGetterGuard::check_oracle_object_exist(const uint64_t db_id,
-    const ObString &object_name, const ObSchemaType &schema_type, const ObRoutineType &routine_type,
-    const bool is_or_replace, common::ObIArray<ObSchemaType> &conflict_schema_types)
-{
-  int ret = OB_SUCCESS;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
-  conflict_schema_types.reset();
-  bool is_exist = false;
-
-  if (OB_FAIL(get_tenant_compat_mode(compat_mode))) {
-    LOG_WARN("fail to get tenant compat mode", KR(ret), K(compat_mode));
-  }
-
-  return ret;
-}
-
-
 int ObSchemaGetterGuard::check_table_exist(const uint64_t database_id,
                                            const common::ObString &table_name,
                                            const bool is_index,
@@ -5478,7 +5413,6 @@ int ObSchemaGetterGuard::get_mock_fk_parent_table_schema_with_id(const uint64_t 
 
 
 
-// only use in oracle mode
 int ObSchemaGetterGuard::get_idx_schema_by_origin_idx_name(uint64_t database_id,
                                                            const common::ObString &index_name,
                                                            const ObTableSchema *&table_schema)

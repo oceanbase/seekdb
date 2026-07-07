@@ -120,12 +120,12 @@ int ObAnonymousBlockResolver::resolve_anonymous_block(
       if (params_.param_list_->count() != params_.query_ctx_->question_marks_count_) {
         if (params_.param_list_->count() < params_.query_ctx_->question_marks_count_) {
           ret = OB_ERR_NOT_ALL_VARIABLE_BIND;
-          LOG_WARN("ORA-01008: not all variables bound",
+          LOG_WARN("not all variables bound",
                     K(ret), K(params_.param_list_->count()),
                     K(params_.query_ctx_->question_marks_count_));
         } else {
           ret = OB_ERR_BIND_VARIABLE_NOT_EXIST;
-          LOG_WARN("ORA-01006: bind variable does not exist",
+          LOG_WARN("bind variable does not exist",
                     K(ret), K(params_.param_list_->count()),
                     K(params_.query_ctx_->question_marks_count_));
         }

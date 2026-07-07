@@ -51,7 +51,7 @@ public:
   }
   bool operator == (const ObDirectoryNameHashKey &rv) const
   {
-    return true && directory_name_ == rv.directory_name_;
+    return directory_name_ == rv.directory_name_;
   }
   
   void set_directory_name(const common::ObString &directory_name) { directory_name_ = directory_name;}

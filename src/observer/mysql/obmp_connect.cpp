@@ -468,8 +468,6 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
       ret = OB_ERR_INVALID_TENANT_NAME;
       LOG_WARN("invalid tenant name. “$” is not allowed in tenant name.", K(ret), K_(tenant_name));
     }
-    //Under the oracle tenant, db_name and user_name need to be converted, handling double quotes and case sensitivity
-    //Under the mysql tenant, no processing will be done, only a simple copy will be made~
     if (OB_SUCC(ret)) {
       if (db_name_.length() > OB_MAX_DATABASE_NAME_LENGTH ||
           user_name_.length() > OB_MAX_USER_NAME_LENGTH) {
@@ -488,10 +486,6 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
     EnableRoleIdArray enable_role_id_array;
     const ObSysVariableSchema *sys_variable_schema = NULL;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(convert_oracle_object_name( user_name_))) {
-      LOG_WARN("fail to convert oracle user name", K(ret));
-    } else if (OB_FAIL(convert_oracle_object_name( db_name_))) {
-      LOG_WARN("fail to convert oracle db name", K(ret));
     } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
       LOG_WARN("get sys variable schema failed", K(ret));
     } else if (OB_ISNULL(sys_variable_schema)) {
@@ -508,7 +502,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
       login_info.client_ip_ = client_ip_;
       SSL *ssl_st = SQL_REQ_OP.get_sql_ssl_st(req_);
       const ObUserInfo *user_info = NULL;
-      // Oracle mode login default schema removed (dead code)
+      // Normalize the requested database name before session privilege checks.
       if (!db_name_.empty()) {
         ObString db_name = db_name_;
         ObNameCaseMode mode = OB_NAME_CASE_INVALID;
@@ -1698,16 +1692,6 @@ int ObMPConnect::verify_ip_white_list() const
       ret = OB_ERR_NO_PRIVILEGE;
       LOG_WARN("client is not invited into this tenant", K(ret));
     }
-  }
-  return ret;
-}
-
-int ObMPConnect::convert_oracle_object_name(ObString &object_name)
-{
-  int ret = OB_SUCCESS;
-  if (object_name.empty()) {
-    //Here the obj_name passed in may be empty, so no error code is assigned
-    LOG_DEBUG("object name is null when try to convert it");
   }
   return ret;
 }

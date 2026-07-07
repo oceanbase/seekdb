@@ -493,7 +493,7 @@ int ObSchemaUtils::construct_inner_table_schemas(ObSArray<ObTableSchema> &tables
         bool exist = false;
         if (OB_FAIL((*creator_ptr)(table_schema))) {
           LOG_WARN("fail to gen sys table schema", KR(ret));
-        } else if (!construct_all && true
+        } else if (!construct_all
             && table_schema.get_table_id() == OB_ALL_CORE_TABLE_TID) {
           // sys tenant's __all_core_table's schema is built separately in bootstrap
         } else if (OB_FAIL(ObSchemaUtils::construct_tenant_space_full_table(
@@ -628,8 +628,7 @@ int ObSchemaUtils::build_column_group(
   int ret = OB_SUCCESS;
   lib::Worker::CompatMode mode = lib::Worker::CompatMode::INVALID;
   column_group.reset();
-  if (!true || /*table_schema may be not valid*/
-      cg_name.empty() || (cg_type >= ObColumnGroupType::MAX_COLUMN_GROUP)) {
+  if (cg_name.empty() || (cg_type >= ObColumnGroupType::MAX_COLUMN_GROUP)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument",K(table_schema), KR(ret), K(cg_name), K(cg_type), "column_id_cnt", column_ids.count());
   } else {
@@ -699,7 +698,7 @@ int ObSchemaUtils::batch_get_table_schemas_by_version(
   ObArray<ObTableLatestSchemaVersion> table_schema_versions;
   ObArray<SchemaKey> need_refresh_table_schema_keys;
   ObArray<ObSimpleTableSchemaV2 *> table_schemas_from_inner_table;
-  if (OB_UNLIKELY(!true || table_ids.empty() || schema_version < 0)) {
+  if (OB_UNLIKELY(table_ids.empty() || schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(table_ids), K(schema_version));
   } else if (OB_ISNULL(GCTX.schema_service_)
@@ -820,8 +819,7 @@ int ObSchemaUtils::check_sys_table_exist_by_sql(
 {
   int ret = OB_SUCCESS;
   exist = false;
-  if (OB_UNLIKELY(!true
-      || OB_INVALID_ID == table_id
+  if (OB_UNLIKELY(OB_INVALID_ID == table_id
       || !is_sys_table(table_id)
       || is_core_table(table_id))) {
     ret = OB_INVALID_ARGUMENT;
@@ -1105,7 +1103,7 @@ int ObSchemaUtils::get_latest_table_schema(
   table_schema = NULL;
   ObSEArray<ObObjectID, 1> table_ids;
   ObSEArray<ObSimpleTableSchemaV2 *, 1> table_schemas;
-  if (OB_UNLIKELY(!true || OB_INVALID_ID == table_id)) {
+  if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(table_id));
   } else if (OB_FAIL(table_ids.push_back(table_id))) {
@@ -1139,7 +1137,7 @@ int ObSchemaUtils::batch_get_table_schemas_from_cache_(
   need_refresh_table_schema_keys.reset();
   table_schemas.reset();
   ObSchemaGetterGuard schema_guard;
-  if (OB_UNLIKELY(!true || specified_schema_version < 0)) {
+  if (OB_UNLIKELY(specified_schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(specified_schema_version));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
@@ -1192,7 +1190,7 @@ int ObSchemaUtils::batch_get_table_schemas_from_inner_table_(
   ObSchemaService *schema_service = NULL;
   ObRefreshSchemaStatus schema_status;
   
-  if (OB_UNLIKELY(!true || schema_version < 0)) {
+  if (OB_UNLIKELY(schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(schema_version));
   } else if (OB_ISNULL(GCTX.schema_service_)
@@ -1223,8 +1221,7 @@ int ObSchemaUtils::check_whether_column_exist(const ObObjectID &table_id,
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("GCTX.sql_proxy_ is null", KR(ret));
-  } else if (OB_UNLIKELY(!true
-      || OB_INVALID_ID == table_id
+  } else if (OB_UNLIKELY(OB_INVALID_ID == table_id
       || column_name.empty()
       || !is_sys_table(table_id)
       || is_core_table(table_id))) {
@@ -1387,10 +1384,7 @@ int ObParallelDDLControlMode::is_parallel_ddl_enable(const ObParallelDDLType ddl
   int ret = OB_SUCCESS;
   is_parallel = true;
   ObParallelDDLControlMode cfg;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_ERR_UNEXPECTED;
-    OB_LOG(WARN, "invalid tenant config", KR(ret));
-  } else if (OB_FAIL(GCONF._parallel_ddl_control.init_mode(cfg))) {
+  if (OB_FAIL(GCONF._parallel_ddl_control.init_mode(cfg))) {
     LOG_WARN("init mode failed", KR(ret));
   } else if (OB_FAIL(cfg.is_parallel_ddl(ddl_type, is_parallel))) {
     LOG_WARN("fail to check is parallel ddl", KR(ret), K(ddl_type));

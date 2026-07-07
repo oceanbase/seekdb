@@ -39,11 +39,6 @@ public:
   int end(const bool commit);
   bool is_started() const { return in_trans_; }
   sql::ObSQLSessionInfo *get_session_info() const { return session_info_; }
-  ObCompatibilityMode get_compatibility_mode() const
-  {
-    return nullptr != session_info_ ? session_info_->get_compatibility_mode()
-                                    : ObCompatibilityMode::OCEANBASE_MODE;
-  }
   bool is_inner_session() const { return session_param_saved_.is_inner_session(); }
   sql::ObSQLSessionInfo *get_session_info() { return session_info_; }
 
@@ -54,7 +49,7 @@ protected:
 
   int save_session_for_inner();
   int restore_session_for_inner();
-  int set_compact_mode(ObCompatibilityMode compact_mode);
+  int set_mysql_mode();
 
 protected:
   class ObSessionParamSaved
@@ -118,7 +113,6 @@ public:
 
 private:
   ObMViewTransaction &trans_;
-  ObCompatibilityMode old_compact_mode_;
   int error_ret_;
   bool need_reset_;
   bool first_loop_;

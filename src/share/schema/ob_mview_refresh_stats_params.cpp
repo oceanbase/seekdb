@@ -119,7 +119,7 @@ int ObMViewRefreshStatsParams::read_stats_params(ObISQLClient &sql_client,
 int ObMViewRefreshStatsParams::gen_sys_defaults_dml(ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || !is_valid())) {
+  if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KPC(this));
   } else {
@@ -136,7 +136,7 @@ int ObMViewRefreshStatsParams::set_sys_defaults(ObISQLClient &sql_client,
                                                 const ObMViewRefreshStatsParams &params)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || !params.is_valid())) {
+  if (OB_UNLIKELY(!params.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(params));
   } else {
@@ -169,24 +169,18 @@ int ObMViewRefreshStatsParams::fetch_sys_defaults(ObISQLClient &sql_client,
                                                   bool for_update)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret));
-  } else {
-    
-    ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("SELECT collection_level, retention_period FROM %s ",
-                               OB_ALL_MVIEW_REFRESH_STATS_SYS_DEFAULTS_TNAME))) {
-      LOG_WARN("fail to assign sql", KR(ret));
-    } else if (for_update && OB_FAIL(sql.append(" for update"))) {
-      LOG_WARN("fail to append sql", KR(ret));
-    } else if (OB_FAIL(read_stats_params(sql_client, sql, params))) {
-      if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
-        LOG_WARN("fail to read stats params", KR(ret), K(sql));
-      } else {
-        ret = OB_SUCCESS;
-        params = get_default();
-      }
+  ObSqlString sql;
+  if (OB_FAIL(sql.assign_fmt("SELECT collection_level, retention_period FROM %s ",
+                             OB_ALL_MVIEW_REFRESH_STATS_SYS_DEFAULTS_TNAME))) {
+    LOG_WARN("fail to assign sql", KR(ret));
+  } else if (for_update && OB_FAIL(sql.append(" for update"))) {
+    LOG_WARN("fail to append sql", KR(ret));
+  } else if (OB_FAIL(read_stats_params(sql_client, sql, params))) {
+    if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
+      LOG_WARN("fail to read stats params", KR(ret), K(sql));
+    } else {
+      ret = OB_SUCCESS;
+      params = get_default();
     }
   }
   return ret;
@@ -196,7 +190,7 @@ int ObMViewRefreshStatsParams::gen_mview_refresh_stats_params_dml(uint64_t mview
                                                                   ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || OB_INVALID_ID == mview_id || !is_valid())) {
+  if (OB_UNLIKELY(OB_INVALID_ID == mview_id || !is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mview_id), KPC(this));
   } else {
@@ -215,7 +209,7 @@ int ObMViewRefreshStatsParams::set_mview_refresh_stats_params(
   const ObMViewRefreshStatsParams &params)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || OB_INVALID_ID == mview_id ||
+  if (OB_UNLIKELY(OB_INVALID_ID == mview_id ||
                          !params.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mview_id), K(params));
@@ -244,7 +238,7 @@ int ObMViewRefreshStatsParams::drop_mview_refresh_stats_params(ObISQLClient &sql
                                                                uint64_t mview_id, bool if_exists)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || OB_INVALID_ID == mview_id)) {
+  if (OB_UNLIKELY(OB_INVALID_ID == mview_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mview_id));
   } else {
@@ -271,20 +265,14 @@ int ObMViewRefreshStatsParams::drop_all_mview_refresh_stats_params(ObISQLClient 
                                                                    int64_t limit)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret));
-  } else {
-    
-    ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("delete from %s",
-                               OB_ALL_MVIEW_REFRESH_STATS_PARAMS_TNAME))) {
-      LOG_WARN("fail to assign sql", KR(ret));
-    } else if (limit > 0 && OB_FAIL(sql.append_fmt(" limit %ld", limit))) {
-      LOG_WARN("fail to append sql", KR(ret));
-    } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(1UL), K(sql));
-    }
+  ObSqlString sql;
+  if (OB_FAIL(sql.assign_fmt("delete from %s",
+                             OB_ALL_MVIEW_REFRESH_STATS_PARAMS_TNAME))) {
+    LOG_WARN("fail to assign sql", KR(ret));
+  } else if (limit > 0 && OB_FAIL(sql.append_fmt(" limit %ld", limit))) {
+    LOG_WARN("fail to append sql", KR(ret));
+  } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
+    LOG_WARN("fail to execute sql", KR(ret), K(1UL), K(sql));
   }
   return ret;
 }
@@ -295,7 +283,7 @@ int ObMViewRefreshStatsParams::fetch_mview_refresh_stats_params(ObISQLClient &sq
                                                                 bool with_sys_defaults)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || OB_INVALID_ID == mview_id)) {
+  if (OB_UNLIKELY(OB_INVALID_ID == mview_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mview_id));
   } else {

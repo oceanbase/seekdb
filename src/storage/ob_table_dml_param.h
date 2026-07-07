@@ -161,7 +161,7 @@ private:
   //generated storage param from columns_ids_ in ObTableModify, for performance improvement
   Columns columns_;
   ColumnMap col_map_;
-  common::ObString pk_name_; // use for printing error msg in oracle mode
+  common::ObString pk_name_; // used for printing primary-key error messages
   // version of the mixture read info
   int16_t read_param_version_;
   storage::ObTableReadInfo read_info_;

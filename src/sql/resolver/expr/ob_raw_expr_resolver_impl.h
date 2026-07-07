@@ -72,7 +72,6 @@ private:
   int process_char_charset_node(const ParseNode *node, ObRawExpr *&expr);
 
   int process_left_value_node(const ParseNode *node, ObRawExpr *&expr);
-  int process_outer_join_symbol_node(const ParseNode *node, ObRawExpr *&expr);
   int process_column_ref_node(const ParseNode *node, ObRawExpr *&expr);
   template<class T>
   int process_node_with_children(const ParseNode *node, int64_t children_num, T *&raw_expr, bool is_root_expr = false);
@@ -95,11 +94,11 @@ private:
   int process_keep_aggr_node(const ParseNode *node, ObRawExpr *&expr);
   int process_sort_list_node(const ParseNode *node, ObAggFunRawExpr *parent_agg_expr);
   int process_timestamp_node(const ParseNode *node, common::ObString &err_info, ObRawExpr *&expr);
-  int process_oracle_timestamp_node(const ParseNode *node,
-                                    ObRawExpr *&expr,
-                                    int16_t min_precision,
-                                    int16_t max_precision,
-                                    int16_t default_precision);
+  int process_systimestamp_node(const ParseNode *node,
+                                ObRawExpr *&expr,
+                                int16_t min_precision,
+                                int16_t max_precision,
+                                int16_t default_precision);
   int process_collation_node(const ParseNode *node, ObRawExpr *&expr);
   int process_if_node(const ParseNode *node, ObRawExpr *&expr);
   int process_fun_interval_node(const ParseNode *node, ObRawExpr *&expr);

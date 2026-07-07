@@ -506,7 +506,7 @@ int ObDMLStmtPrinter::print_json_return_type(int64_t value, ObDataType data_type
         break;
       }
       case T_DATETIME: {
-        //oracle mode treats date as datetime
+        // Print datetime casts with the DATE keyword in this syntax.
         DATA_PRINTF("date");
         break;
       }
@@ -616,7 +616,7 @@ int ObDMLStmtPrinter::print_json_return_type(int64_t value, ObDataType data_type
         break;
       }
     } // end switch
-  } // oracle mode
+  } // end switch
   return ret;
 }
 
@@ -1687,7 +1687,7 @@ int ObDMLStmtPrinter::print_limit()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else if (stmt_->has_fetch()) {
-    /*There is fetch, indicating that it is the limit filled by fetch in oracle mode, this should not be printed */
+    /* Fetch already owns the row limiting syntax, so do not print LIMIT here. */
   } else {
     ObRawExpr *offset_expr = stmt_->get_offset_expr();
     ObRawExpr *limit_expr = stmt_->get_limit_expr();
@@ -2001,7 +2001,7 @@ int ObDMLStmtPrinter::print_with()
   }
   return ret;
 }
-// 0. oracle mode does not concatenate, because oracle does not support catalog.db.table syntax
+// 0. Keep catalog printing disabled unless the cases below explicitly require it.
 // 1. external catalog must be reversed, when external catalog is parsed it means the upgrade is complete
 // 2. internal catalog does not necessarily need to be reversed
 // 2.1 Reverse concatenate view definition without concatenating internal (otherwise refresh case will be triggered and perceived by the user)
@@ -2020,6 +2020,5 @@ bool ObDMLStmtPrinter::need_print_catalog_name(const ObString& catalog_name)
 
 } //end of namespace sql
 } //end of namespace oceanbase
-
 
 

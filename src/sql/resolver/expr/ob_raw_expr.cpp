@@ -1043,7 +1043,7 @@ bool ObRawExpr::check_is_deterministic_expr() const
 }
 
 /**
- * @brief Determine if Oracle's system functions are pure, used for checking when creating generated columns or function-based indexes
+ * @brief Determine if system functions are pure, used for checking when creating generated columns or function-based indexes
  * @return
  */
 int ObRawExpr::is_non_pure_sys_func_expr(bool &is_non_pure) const
@@ -2891,16 +2891,6 @@ int ObOpRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &po
       if (OB_SUCCESS == ret && OB_FAIL(BUF_PRINTF(")"))) {
         LOG_WARN("fail to BUF_PRINTF", K(ret));
       }
-    }
-  } else if (T_OP_ORACLE_OUTER_JOIN_SYMBOL == get_expr_type()) {
-    if (OB_UNLIKELY(1 != get_param_count())
-        || OB_ISNULL(get_param_expr(0))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("first param expr is NULL", K(ret), K(get_param_count()));
-    } else if (OB_FAIL(get_param_expr(0)->get_name(buf, buf_len, pos, type))) {
-      LOG_WARN("fail to get_name", K(ret));
-    } else if (OB_FAIL(BUF_PRINTF("(+)"))) {
-      LOG_WARN("fail to BUF_PRINTF", K(ret));
     }
   } else if (has_flag(IS_INNER_ADDED_EXPR)
              && (EXPLAIN_EXTENDED != type && EXPLAIN_EXTENDED_NOADDR != type)
@@ -6006,8 +5996,8 @@ bool ObWinFunRawExpr::inner_same_as(const ObRawExpr &expr,
         other_ma.get_window_type() != get_window_type() ||
         other_ma.is_between() != is_between()) {
       bret = false;
-    // Since name window constructs a count(1) over window function, here we need to compare the names of name Windows
-    // If it is in mysql mode, the name is case-sensitive, when generating count(1) over, deduplication is not needed. oracle mode is true.
+    // Since named window constructs a count(1) over window function, compare
+    // named window identifiers with case_compare to avoid deduplication.
     } else if (0 != other_ma.win_name_.case_compare(win_name_)) {
       bret = false;
     // If it is nth_value, it might be converted from first_value or last_value, so we need to check the is_from_first_ field
@@ -7243,7 +7233,7 @@ int ObMatchFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64
       }
     }
   } else {
-    // jinmao TODO: serialize oracle contains()
+    // TODO: serialize contains()
   }
   return ret;
 }

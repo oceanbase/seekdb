@@ -122,7 +122,7 @@ int ObTabletSliceWriter::append_row(const blocksstable::ObDatumRow &row)
             LOG_USER_ERROR(OB_ERR_PRIMARY_KEY_DUPLICATE, "", static_cast<int>(sizeof("UNIQUE IDX") - 1), "UNIQUE IDX");
             (void) ObDirectLoadSliceWriter::report_unique_key_dumplicated(ret, unique_index_id_, row, tablet_id_, report_ret_code); // ignore ret
             if (OB_ERR_DUPLICATED_UNIQUE_KEY == report_ret_code) {
-              //error message of OB_ERR_PRIMARY_KEY_DUPLICATE is not compatiable with oracle, so use a new error code
+              // Report direct-load unique index conflicts with the dedicated duplicate-key code.
               ret = OB_ERR_DUPLICATED_UNIQUE_KEY;
             }
           } else {
@@ -179,7 +179,7 @@ int ObTabletSliceWriter::append_batch(const blocksstable::ObBatchDatumRows &batc
               LOG_USER_ERROR(OB_ERR_PRIMARY_KEY_DUPLICATE, "", static_cast<int>(sizeof("UNIQUE IDX") - 1), "UNIQUE IDX");
               (void) ObDirectLoadSliceWriter::report_unique_key_dumplicated(ret, unique_index_id_, batch_rows, tablet_id_, report_ret_code); // ignore ret
               if (OB_ERR_DUPLICATED_UNIQUE_KEY == report_ret_code) {
-                //error message of OB_ERR_PRIMARY_KEY_DUPLICATE is not compatiable with oracle, so use a new error code
+                // Report direct-load unique index conflicts with the dedicated duplicate-key code.
                 ret = OB_ERR_DUPLICATED_UNIQUE_KEY;
               }
             } else {
@@ -991,7 +991,6 @@ int ObCsSliceWriter::convert_to_storage_vector(ObIArray<ObIVector *> &vectors, O
       selector.rescan();
       if (OB_FAIL(ObDASUtils::reshape_vector_value(column_schema_item.col_type_,
                                                    column_schema_item.col_accuracy_,
-                                                   false,
                                                    row_arena_,
                                                    cur_vector,
                                                    selector))) {
@@ -1141,7 +1140,7 @@ int ObCsSliceWriter::check_order(const blocksstable::ObBatchDatumRows &batch_row
           LOG_USER_ERROR(OB_ERR_PRIMARY_KEY_DUPLICATE, "", static_cast<int>(sizeof("UNIQUE IDX") - 1), "UNIQUE IDX");
           (void) ObDirectLoadSliceWriter::report_unique_key_dumplicated(ret, unique_index_id, batch_rows, tablet_id_, report_ret_code); // ignore ret
           if (OB_ERR_DUPLICATED_UNIQUE_KEY == report_ret_code) {
-            //error message of OB_ERR_PRIMARY_KEY_DUPLICATE is not compatiable with oracle, so use a new error code
+            // Report direct-load unique index conflicts with the dedicated duplicate-key code.
             ret = OB_ERR_DUPLICATED_UNIQUE_KEY;
           }
         }

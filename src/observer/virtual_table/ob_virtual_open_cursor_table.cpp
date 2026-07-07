@@ -246,7 +246,7 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cursor_cell(ObSQLSessionInfo &se
         addr.append_fmt("%lx", reinterpret_cast<uint64_t>(&sess_info));
         OZ (ob_write_string(*allocator_, addr.string(), tmp_saddr));
         if (OB_SUCC(ret)) {
-          // get last 8 char, for oracle compatiable
+          // Get the last 8 characters for compatible SADDR formatting.
           int64_t offset = tmp_saddr.length() > 8 ? tmp_saddr.length() - 8 : 0;
           // if tmp_saddr.length() - offset > 8, offset is 0
           // the length make sure (tmp_saddr.ptr() + offset) do not have out-of-bounds access
@@ -358,7 +358,7 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cur_plan_cell(ObSQLSessionInfo &
         ObString tmp_saddr;
         addr.append_fmt("%lx", reinterpret_cast<uint64_t>(&sess_info));
         OZ (ob_write_string(*allocator_, addr.string(), tmp_saddr));
-        // get last 8 char, for oracle compatiable
+        // Get the last 8 characters for compatible SADDR formatting.
         int64_t offset = tmp_saddr.length() > 8 ? tmp_saddr.length() - 8 : 0;
         // if tmp_saddr.length() - offset > 8, offset is 0
         // the length make sure (tmp_saddr.ptr() + offset) do not have out-of-bounds access

@@ -731,9 +731,8 @@ int ObPLObjectValue::match_dep_schema(const ObPLCacheCtx &pc_ctx,
   } else if (schema_array.count() != stored_schema_objs_.count()) {
     is_same = false;
   } else {
-    // oracle mode temporary table is actually a real table, just need to compare schema information;
-    // MySQL mode temporary tables cannot be used in triggers, and table dependency information for SQL statements will not be added to the stored procedure dependency list
-    // Therefore, remove the logic related to comparing sessid in the temporary table
+    // MySQL temporary tables cannot be used in triggers, and table dependency information for SQL statements
+    // will not be added to the stored procedure dependency list. Therefore, only compare schema information.
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < schema_array.count(); i++) {
       if (OB_ISNULL(stored_schema_objs_.at(i))) {
         ret = OB_INVALID_ARGUMENT;
@@ -837,15 +836,15 @@ int ObPLObjectValue::set_stored_schema_objs(const DependenyTableStore &dep_table
       } else if (OB_FAIL(stored_schema_objs_.push_back(pcv_schema_obj))) {
         LOG_WARN("failed to push back array", K(ret));
       } else if(!contain_sys_name_table_) {
-        /* Ordinary tables in oracle mode can have the same name as tables in sys,
-           and need to be distinguished when matching plans to match different plans
+        /* Ordinary tables can have the same name as tables in sys,
+           and need to be distinguished when matching plans to match different plans.
            The table under sys contains system tables and views, so call is_sys_table_name
            to check whether the table is under sys.
            In addition, if SQL contains internal tables, the schema version changes of the
            internal tables will not be reflected in the tenant schema version of ordinary tenants.
            In order to be able to update the plan in time, you need to check the schema version number
-           of the corresponding internal table. The internal table of the oracle tenant is under sys,
-           and the mysql tenant Under oceanbase. */
+           of the corresponding internal table. In MySQL-only mode, tenant-visible internal tables
+           are under oceanbase. */
         if (OB_FAIL(share::schema::ObSysTableChecker::is_sys_table_name(OB_SYS_DATABASE_ID,
                                                                                table_schema->get_table_name(),
                                                                                contain_sys_name_table_))) {
@@ -976,10 +975,10 @@ int ObPLObjectValue::match_param_info(const ObPlParamInfo &param_info,
         LOG_WARN("fail to match complex type info", K(ret), K(param), K(param_info));
       }
       LOG_DEBUG("ext match param info", K(data_type), K(param_info), K(is_same), K(ret));
-    } else if (param_info.is_oracle_null_value_ && !param.is_null()) {
+    } else if (param_info.is_typed_null_value_ && !param.is_null()) {
       is_same = false;
-    } else if (ObSQLUtils::is_oracle_null_with_normal_type(param)
-               &&!param_info.is_oracle_null_value_) { //Typed nulls can only match plans with the same type of nulls.
+    } else if (ObSQLUtils::is_typed_null_with_normal_type(param)
+               && !param_info.is_typed_null_value_) { // Typed nulls can only match plans with the same type of nulls.
       is_same = false;
     } else if (param_info.flag_.is_boolean_ != param.is_boolean()) { //bool type not match int type
       is_same = false;

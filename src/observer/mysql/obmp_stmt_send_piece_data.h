@@ -275,12 +275,6 @@ class ObPieceCache {
                     uint64_t &length, 
                     common::ObFixedArray<ObSqlString, ObIAllocator> &str_buf,
                     char *is_null_map);
-    int get_oracle_buffer(int32_t stmt_id, 
-                    uint16_t param_id, 
-                    uint64_t count,
-                    uint64_t &length, 
-                    common::ObFixedArray<ObSqlString, ObIAllocator> &str_buf,
-                    char *is_null_map);
     int get_mysql_buffer(int32_t stmt_id, 
                     uint16_t param_id, 
                     uint64_t &length, 

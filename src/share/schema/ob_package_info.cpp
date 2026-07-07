@@ -80,7 +80,7 @@ void ObPackageInfo::reset()
   schema_version_ = common::OB_INVALID_VERSION;
   type_ = INVALID_PACKAGE_TYPE;
   flag_ = 0;
-  comp_flag_ = 0;
+  comp_flag_ = COMPATIBLE_MYSQL_MODE;
   reset_string(exec_env_);
   reset_string(source_);
   reset_string(comment_);
@@ -163,7 +163,6 @@ OB_DEF_SERIALIZE_SIZE(ObPackageInfo)
 }  // namespace schema
 }  // namespace share
 }  // namespace oceanbase
-
 
 
 

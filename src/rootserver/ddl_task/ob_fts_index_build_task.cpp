@@ -100,8 +100,7 @@ int ObFtsIndexBuildTask::init(
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl service not started", KR(ret));
-  } else if (OB_UNLIKELY(false ||
-                         task_id <= 0 ||
+  } else if (OB_UNLIKELY(task_id <= 0 ||
                          OB_ISNULL(data_table_schema) ||
                          OB_ISNULL(index_schema) ||
                          schema_version <= 0 ||
@@ -1236,8 +1235,7 @@ int ObFtsIndexBuildTask::deserialize_params_from_message(
   int8_t use_doc_id = true;
   int64_t charset_type = 0;
   SMART_VAR(obcall::ObCreateIndexArg, tmp_arg) {
-    if (OB_UNLIKELY(!true ||
-                    nullptr == buf ||
+    if (OB_UNLIKELY(nullptr == buf ||
                     data_len <= 0)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid arguments", K(ret), KP(buf), K(data_len));

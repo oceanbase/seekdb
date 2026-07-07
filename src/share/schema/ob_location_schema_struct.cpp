@@ -89,7 +89,6 @@ bool ObLocationSchema::is_valid() const
 {
   bool ret = true;
   if (!ObSchema::is_valid()
-      || !true
       || !is_valid_id(location_id_)
       || schema_version_ < 0
       || location_name_.empty()
@@ -128,4 +127,3 @@ OB_SERIALIZE_MEMBER(ObLocationSchema,
 }
 }
 }
-

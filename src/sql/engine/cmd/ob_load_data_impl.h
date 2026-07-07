@@ -371,9 +371,8 @@ struct ObCSVFormats {
   int64_t line_term_char_;
   int64_t enclose_char_;
   int64_t escape_char_;
-  /* for empty column, oracle mode do insert '';
-   * mysql mode do insert '0' for nonstring-type column, '' for string-type column
-   * */
+  /* For empty columns, nonstring-type columns may be filled with '0',
+   * while string-type columns are filled with ''. */
   bool null_column_fill_zero_string_;
   bool is_simple_format_;
   bool is_line_term_by_counting_field_;

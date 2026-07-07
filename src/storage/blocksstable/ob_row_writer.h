@@ -108,7 +108,6 @@ private:
       const int64_t rowkey_column_count,
       const ObDatumRow &row,
       const ObIArray<int64_t> *update_idx);
-  OB_INLINE int write_oracle_timestamp(const common::ObOTimestampData &ot_data, const common::ObOTimestampMetaAttrType otmat);
   int append_column(const common::ObObj &obj);
   int append_column(const ObStorageDatum &datum);
   int append_8_bytes_column(const ObStorageDatum &datum);

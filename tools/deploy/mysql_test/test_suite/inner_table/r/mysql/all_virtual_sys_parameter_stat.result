@@ -32,6 +32,7 @@ bf_cache_miss_count_threshold
 bf_cache_priority
 builtin_db_data_verify_cycle
 cache_wash_threshold
+clog_io_isolation_mode
 clog_sync_time_warn_threshold
 cluster
 cluster_id
@@ -58,7 +59,6 @@ ddl_thread_score
 dead_socket_detection_timeout
 debug_sync_timeout
 default_auto_increment_mode
-default_compress
 default_compress_func
 default_enable_extended_rowid
 default_load_mode
@@ -86,7 +86,6 @@ enable_lock_priority
 enable_major_freeze
 enable_manual_storage_cache_policy
 enable_monotonic_weak_read
-enable_ob_error_msg_style
 enable_ob_ratelimit
 enable_perf_event
 enable_record_trace_id
@@ -359,7 +358,6 @@ _enable_nlj_spf_use_rich_format
 _enable_numa_aware
 _enable_obdal
 _enable_optimizer_qualify_filter
-_enable_oracle_priv_check
 _enable_parallel_das_dml
 _enable_parallel_minor_merge
 _enable_parallel_redo_logging

@@ -1281,7 +1281,7 @@ int ObConstraintTask::set_check_constraint_validated()
         if (is_table_hidden_) {
           {
             // no need to refresh_alter_table_arg because MODIFY_NOT_NULL_COLUMN_STATE_TASK use constraint id instead of name
-            // only mysql mode support modify not null column during offline ddl, support oracle later.
+            // MySQL mode supports modifying not null columns during offline DDL.
             ObSArray<uint64_t> unused_ids;
             alter_table_arg.ddl_task_type_ = share::MODIFY_NOT_NULL_COLUMN_STATE_TASK;
             alter_table_arg.hidden_table_id_ = object_id_;
@@ -1968,7 +1968,7 @@ int ObConstraintTask::deserialize_params_from_message(const char *buf, const int
 {
   int ret = OB_SUCCESS;
   ObAlterTableArg tmp_arg;
-  if (OB_UNLIKELY(!true || nullptr == buf || data_len <= 0)) {
+  if (OB_UNLIKELY(nullptr == buf || data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, data_len, pos))) {

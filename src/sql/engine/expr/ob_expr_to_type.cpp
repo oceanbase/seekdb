@@ -31,8 +31,7 @@ ObExprToType::ObExprToType(ObIAllocator &alloc)
                                              1,
                                              VALID_FOR_GENERATED_COL,
                                              NOT_ROW_DIMENSION,
-                                             INTERNAL_IN_MYSQL_MODE,
-                                             INTERNAL_IN_ORACLE_MODE),
+                                             INTERNAL_IN_MYSQL_MODE),
       expect_type_(ObMaxType),
       cast_mode_(CM_NONE)
 {
@@ -151,12 +150,6 @@ int ObExprToType::calc_result_type_for_column(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   type.set_type(expect_type_);
-  //deduce collation now.
-  //get_compatibility_mode will not return OCEANBASE_MODE forever, so remove it.
-//if (OCEANBASE_MODE == get_compatibility_mode()) {
-//  ret = OB_INVALID_ARGUMENT;
-//  LOG_WARN("compatibility mode should not be oceanbase", K(ret));
-//} else {
   if (OB_ISNULL(type_ctx.get_session())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument.", K(ret), K(type_ctx.get_session()));

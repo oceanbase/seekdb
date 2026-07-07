@@ -251,7 +251,7 @@ public:
   // for example: select group_id() from t1 groupby c1, rollup(c1,c2);  the idx of c1 is in group_idxs_;
   ObFixedArray<int64_t, common::ObIAllocator> group_idxs_;
 
-  //used for json aggregate function in oracle mode
+  // Used for JSON aggregate functions.
   bool format_json_;
   bool strict_json_;
   bool absent_on_null_;
@@ -1193,7 +1193,7 @@ public:
  *           d. int256_t [39 - 76] => result P range [61, 98], which can be int256_t or int512_t.
  *           e. int512_t [77 - 154] => decimal int result type only can be int512_t.
  *       So we reserve 3 spaces for each input type, the result type of the first two spaces is
- *       decimal_int, and the last one is number in oracle mode:
+ *       decimal_int, and the last one is number for overflow fallback:
  *           a. int32_t => [int128_t, null, number]
  *           b. int64_t => [int128_t, int256_t, number]
  *           c. int128_t => [int256_t, null, number]

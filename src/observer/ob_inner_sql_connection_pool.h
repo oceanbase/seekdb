@@ -89,9 +89,9 @@ public:
   virtual common::sqlclient::ObSQLConnPoolType get_type() override { return common::sqlclient::INNER_POOL; }
   void dump_used_conn_list();
 
-  // Dozens of connections may acquired by one worker in oracle mode, because all sys tables
-  // implemented by agent virtual table which need inner connection. Too many connections
-  // warning may be triggered by parallel execution complicate sys table queries.
+  // Dozens of connections may be acquired by one worker because agent virtual
+  // tables need inner connections. Too many connections warning may be
+  // triggered by parallel execution of complicated sys table queries.
   //
   // 100000 = 50 connections * 2000 workers.
   const static int64_t WARNNING_CONNECTION_CNT = 100000;

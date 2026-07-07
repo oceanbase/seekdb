@@ -87,7 +87,7 @@ bool ObMViewInfo::is_valid() const
 {
   bool bret = false;
   if (OB_LIKELY(ObSchema::is_valid())) {
-    bret = (true && OB_INVALID_ID != mview_id_ &&
+    bret = (OB_INVALID_ID != mview_id_ &&
             ObMViewBuildMode::MAX != build_mode_ && ObMVRefreshMode::MAX != refresh_mode_ &&
             ObMVRefreshMethod::MAX != refresh_method_ && OB_INVALID_VERSION != schema_version_ && 
             0 <= refresh_dop_);
@@ -338,7 +338,7 @@ int ObMViewInfo::drop_mview_info(ObISQLClient &sql_client,
                                  const uint64_t mview_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || OB_INVALID_ID == mview_id)) {
+  if (OB_UNLIKELY(OB_INVALID_ID == mview_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mview_id));
   } else {
@@ -624,7 +624,7 @@ int ObMViewInfo::bacth_fetch_mview_infos(ObISQLClient &sql_client,
                                          ObIArray<ObMViewInfo> &mview_infos)
 {
   int ret = OB_SUCCESS;
-  if (mview_ids.empty() || false) {
+  if (mview_ids.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else {

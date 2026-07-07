@@ -22,7 +22,6 @@
 #include "share/rc/ob_module_provider.h"
 #include "sql/plan_cache/ob_prepare_stmt_struct.h"
 #include "share/ob_tenant_timezone_mgr.h"
-#include "share/system_variable/ob_nls_system_variable.h"
 #include "pl/ob_pl_package_state.h"
 #include "rpc/obmysql/ob_sql_sock_session.h"
 #include "sql/engine/expr/ob_expr_regexp_context.h"
@@ -208,7 +207,7 @@ int ObBasicSessionInfo::test_init(uint32_t sessid,
     LOG_WARN("fail to init debug sync actions", K(ret));
   } else if (OB_FAIL(set_session_state(SESSION_INIT))) {
     LOG_WARN("fail to set session stat", K(ret));
-  } else if (OB_FAIL(set_time_zone(ObString("+8:00"), false/*is_oracle_mode*/,
+  } else if (OB_FAIL(set_time_zone(ObString("+8:00"), false/*trim_timezone_name*/,
                                    true/* check_timezone_valid */))) {
     LOG_WARN("fail to set time zone", K(ret));
   } else {
@@ -353,13 +352,6 @@ int ObBasicSessionInfo::reset_sys_vars()
   if (OB_FAIL(ret) && is_schema_error(ret)) {
     ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH;
   }
-  // Special variable processing
-  OZ (update_sys_variable(share::SYS_VAR_NLS_DATE_FORMAT,
-                          ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT));
-  OZ (update_sys_variable(share::SYS_VAR_NLS_TIMESTAMP_FORMAT,
-                          ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_FORMAT));
-  OZ (update_sys_variable(share::SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT,
-                          ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT));
   return ret;
 }
 
@@ -2499,12 +2491,6 @@ OB_INLINE int ObBasicSessionInfo::process_session_variable(ObSysVarClassType var
       OX (sys_vars_cache_.set_sql_select_limit(int_val));
       break;
     }
-    case SYS_VAR__ORACLE_SQL_SELECT_LIMIT: {
-      int64_t int_val = 0;
-      OZ (val.get_int(int_val), val);
-      OX (sys_vars_cache_.set_oracle_sql_select_limit(int_val));
-      break;
-    }
     case SYS_VAR_AUTO_INCREMENT_OFFSET: {
       uint64_t uint_val = 0;
       OZ (val.get_uint64(uint_val), val);
@@ -2649,15 +2635,6 @@ OB_INLINE int ObBasicSessionInfo::process_session_variable(ObSysVarClassType var
       OX (sys_vars_cache_.set_cursor_sharing_mode(static_cast<ObCursorSharingMode>(int_val)));
       break;
     }
-    case SYS_VAR_NLS_LENGTH_SEMANTICS: {
-      ObString str_val;
-      ObLengthSemantics nls_length_semantics = LS_BYTE;
-      OZ (val.get_string(str_val));
-      OX (nls_length_semantics = get_length_semantics(str_val));
-      OV (nls_length_semantics != LS_INVALIED, OB_ERR_UNEXPECTED, nls_length_semantics);
-      OX (sys_vars_cache_.set_nls_length_semantics(nls_length_semantics));
-      break;
-    }
     case SYS_VAR_AUTOCOMMIT: {
       int64_t int_val = 0;
       OZ (val.get_int(int_val), val);
@@ -2686,12 +2663,6 @@ OB_INLINE int ObBasicSessionInfo::process_session_variable(ObSysVarClassType var
       int64_t int_val = 0;
       OZ (val.get_int(int_val), val);
       OX (sys_vars_cache_.set_ob_pl_block_timeout(int_val));
-      break;
-    }
-    case SYS_VAR_PLSQL_CCFLAGS: {
-      ObString plsql_ccflags;
-      OZ (val.get_string(plsql_ccflags));
-      OX (sys_vars_cache_.set_plsql_ccflags(plsql_ccflags));
       break;
     }
     case SYS_VAR_OB_TRX_TIMEOUT: {
@@ -2762,87 +2733,6 @@ OB_INLINE int ObBasicSessionInfo::process_session_variable(ObSysVarClassType var
             LOG_WARN("failed to convert the number to int", K(ret));
           }
         }
-      }
-      break;
-    }
-    case SYS_VAR_NLS_ISO_CURRENCY: {
-      ObString country_str;
-      ObString currency_str;
-      if (OB_FAIL(val.get_string(country_str))) {
-        LOG_WARN("fail to get iso_nls_currency str value", K(ret), K(var));
-      } else if (OB_FAIL(IsoCurrencyUtils::get_currency_by_country_name(country_str,
-                 currency_str))) {
-        ret = OB_ERR_WRONG_VALUE_FOR_VAR;
-        LOG_WARN("failed to get currency by country name", K(ret));
-      } else {
-        sys_vars_cache_.set_iso_nls_currency(currency_str);
-      }
-      break;
-    }
-    case SYS_VAR_NLS_DATE_FORMAT:
-    case SYS_VAR_NLS_TIMESTAMP_FORMAT:
-    case SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT: {
-      ObString format;
-      if (OB_FAIL(val.get_string(format))) {
-        LOG_WARN("fail to get nls_date_format str value", K(ret), K(var));
-      } else {
-        int64_t nls_enum = ObNLSFormatEnum::NLS_DATE;
-        ObDTMode mode = DT_TYPE_DATETIME;
-        if (SYS_VAR_NLS_TIMESTAMP_FORMAT == var) {
-          mode |= DT_TYPE_ORACLE;
-          nls_enum = ObNLSFormatEnum::NLS_TIMESTAMP;
-        } else if (SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT == var) {
-          mode |= DT_TYPE_ORACLE;
-          mode |= DT_TYPE_TIMEZONE;
-          nls_enum = ObNLSFormatEnum::NLS_TIMESTAMP_TZ;
-        }
-        ObSEArray<ObDFMElem, ObDFMUtil::COMMON_ELEMENT_NUMBER> dfm_elems;
-        ObFixedBitSet<OB_DEFAULT_BITSET_SIZE_FOR_DFM> elem_flags;
-        //1. parse and check semantic of format string
-        if (!is_load_default &&
-            !(SYS_VAR_NLS_DATE_FORMAT == var && format == ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT) &&
-            !(SYS_VAR_NLS_TIMESTAMP_FORMAT == var && format == ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_FORMAT) &&
-            !(SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT == var && format == ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT)) {
-          if (OB_FAIL(ObDFMUtil::parse_datetime_format_string(format, dfm_elems,
-                                                              false/* support double-quotes */))) {
-            LOG_WARN("fail to parse oracle datetime format string", K(ret), K(format));
-          } else if (OB_FAIL(ObDFMUtil::check_semantic(dfm_elems, elem_flags, mode))) {
-            LOG_WARN("check semantic of format string failed", K(ret), K(format));
-          } 
-        }
-        if (OB_SUCC(ret)) {
-          switch (nls_enum) {
-          case ObNLSFormatEnum::NLS_DATE:
-            sys_vars_cache_.set_nls_date_format(format);
-            break;
-          case ObNLSFormatEnum::NLS_TIMESTAMP:
-            sys_vars_cache_.set_nls_timestamp_format(format);
-            break;
-          case ObNLSFormatEnum::NLS_TIMESTAMP_TZ:
-            sys_vars_cache_.set_nls_timestamp_tz_format(format);
-            break;
-          default:
-            break;
-          }
-        }
-        LOG_DEBUG("succ to set SYS_VAR_NLS_FORMAT", K(ret), K(var), K(nls_enum), K(format));
-      }
-      break;
-    }
-    case SYS_VAR_NLS_NCHAR_CHARACTERSET:
-    case SYS_VAR_NLS_CHARACTERSET: {
-      ObString str_val;
-      ObCharsetType charset = CHARSET_INVALID;
-      ObCollationType collation = CS_TYPE_INVALID;
-      OZ (val.get_string(str_val), val);
-      OX (charset = ObCharset::charset_type_by_name_oracle(str_val));
-      OX (collation = ObCharset::get_default_collation_oracle(charset));
-      OV (ObCharset::is_valid_charset(charset) && ObCharset::is_valid_collation(collation),
-          OB_ERR_INVALID_CHARACTER_STRING, str_val, charset, collation);
-      if (var == SYS_VAR_NLS_CHARACTERSET) {
-        OX (sys_vars_cache_.set_nls_collation(collation));
-      } else {
-        OX (sys_vars_cache_.set_nls_nation_collation(collation));
       }
       break;
     }
@@ -3091,12 +2981,6 @@ int ObBasicSessionInfo::fill_sys_vars_cache_base_value(
       OX (sys_vars_cache.set_base_sql_select_limit(int_val));
       break;
     }
-    case SYS_VAR__ORACLE_SQL_SELECT_LIMIT: {
-      int64_t int_val = 0;
-      OZ (val.get_int(int_val), val);
-      OX (sys_vars_cache.set_base_oracle_sql_select_limit(int_val));
-      break;
-    }
     case SYS_VAR_AUTO_INCREMENT_OFFSET: {
       uint64_t uint_val = 0;
       OZ (val.get_uint64(uint_val), val);
@@ -3242,15 +3126,6 @@ int ObBasicSessionInfo::fill_sys_vars_cache_base_value(
       OX (sys_vars_cache.set_base_cursor_sharing_mode(static_cast<ObCursorSharingMode>(int_val)));
       break;
     }
-    case SYS_VAR_NLS_LENGTH_SEMANTICS: {
-      ObString str_val;
-      ObLengthSemantics nls_length_semantics = LS_BYTE;
-      OZ (val.get_string(str_val));
-      OX (nls_length_semantics = get_length_semantics(str_val));
-      OV (nls_length_semantics != LS_INVALIED, OB_ERR_UNEXPECTED, nls_length_semantics);
-      OX (sys_vars_cache.set_base_nls_length_semantics(nls_length_semantics));
-      break;
-    }
     case SYS_VAR_AUTOCOMMIT: {
       int64_t int_val = 0;
       OZ (val.get_int(int_val), val);
@@ -3279,12 +3154,6 @@ int ObBasicSessionInfo::fill_sys_vars_cache_base_value(
       int64_t int_val = 0;
       OZ (val.get_int(int_val), val);
       OX (sys_vars_cache.set_base_ob_pl_block_timeout(int_val));
-      break;
-    }
-    case SYS_VAR_PLSQL_CCFLAGS: {
-      ObString plsql_ccflags;
-      OZ (val.get_string(plsql_ccflags));
-      OX (sys_vars_cache.set_base_plsql_ccflags(plsql_ccflags));
       break;
     }
     case SYS_VAR_OB_TRX_TIMEOUT: {
@@ -3321,81 +3190,6 @@ int ObBasicSessionInfo::fill_sys_vars_cache_base_value(
       } else {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected default timestamp value. must be zero", K(ret), K(val));
-      }
-      break;
-    }
-    case SYS_VAR_NLS_ISO_CURRENCY: {
-      ObString country_str;
-      ObString currency_str;
-      if (OB_FAIL(val.get_string(country_str))) {
-        LOG_WARN("fail to get iso_nls_currency str value", K(ret), K(var));
-      } else if (OB_FAIL(IsoCurrencyUtils::get_currency_by_country_name(country_str,
-                 currency_str))) {
-        ret = OB_ERR_WRONG_VALUE_FOR_VAR;
-        LOG_WARN("failed to get currency by country name", K(ret));
-      } else {
-        sys_vars_cache.set_base_iso_nls_currency(currency_str);
-      }
-      break;
-    }
-    case SYS_VAR_NLS_DATE_FORMAT:
-    case SYS_VAR_NLS_TIMESTAMP_FORMAT:
-    case SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT: {
-      ObString format;
-      if (OB_FAIL(val.get_string(format))) {
-        LOG_WARN("fail to get nls_date_format str value", K(ret), K(var));
-      } else {
-        int64_t nls_enum = ObNLSFormatEnum::NLS_DATE;
-        ObDTMode mode = DT_TYPE_DATETIME;
-        if (SYS_VAR_NLS_TIMESTAMP_FORMAT == var) {
-          mode |= DT_TYPE_ORACLE;
-          nls_enum = ObNLSFormatEnum::NLS_TIMESTAMP;
-        } else if (SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT == var) {
-          mode |= DT_TYPE_ORACLE;
-          mode |= DT_TYPE_TIMEZONE;
-          nls_enum = ObNLSFormatEnum::NLS_TIMESTAMP_TZ;
-        }
-        ObSEArray<ObDFMElem, ObDFMUtil::COMMON_ELEMENT_NUMBER> dfm_elems;
-        ObFixedBitSet<OB_DEFAULT_BITSET_SIZE_FOR_DFM> elem_flags;
-        //1. parse and check semantic of format string
-        if (OB_FAIL(ObDFMUtil::parse_datetime_format_string(format, dfm_elems,
-                                                            false/* support double-quotes */))) {
-          LOG_WARN("fail to parse oracle datetime format string", K(ret), K(format));
-        } else if (OB_FAIL(ObDFMUtil::check_semantic(dfm_elems, elem_flags, mode))) {
-          LOG_WARN("check semantic of format string failed", K(ret), K(format));
-        } else {
-          switch (nls_enum) {
-          case ObNLSFormatEnum::NLS_DATE:
-            sys_vars_cache.set_base_nls_date_format(format);
-            break;
-          case ObNLSFormatEnum::NLS_TIMESTAMP:
-            sys_vars_cache.set_base_nls_timestamp_format(format);
-            break;
-          case ObNLSFormatEnum::NLS_TIMESTAMP_TZ:
-            sys_vars_cache.set_base_nls_timestamp_tz_format(format);
-            break;
-          default:
-            break;
-          }
-        }
-        LOG_DEBUG("succ to set SYS_VAR_NLS_FORMAT", K(ret), K(var), K(nls_enum), K(format));
-      }
-      break;
-    }
-    case SYS_VAR_NLS_NCHAR_CHARACTERSET:
-    case SYS_VAR_NLS_CHARACTERSET: {
-      ObString str_val;
-      ObCharsetType charset = CHARSET_INVALID;
-      ObCollationType collation = CS_TYPE_INVALID;
-      OZ (val.get_string(str_val), val);
-      OX (charset = ObCharset::charset_type_by_name_oracle(str_val));
-      OX (collation = ObCharset::get_default_collation_oracle(charset));
-      OV (ObCharset::is_valid_charset(charset) && ObCharset::is_valid_collation(collation),
-          OB_ERR_INVALID_CHARACTER_STRING, str_val, charset, collation);
-      if (var == SYS_VAR_NLS_CHARACTERSET) {
-        OX (sys_vars_cache.set_base_nls_collation(collation));
-      } else {
-        OX (sys_vars_cache.set_base_nls_nation_collation(collation));
       }
       break;
     }
@@ -3576,12 +3370,12 @@ int ObBasicSessionInfo::process_session_sql_mode_value(const ObObj &value)
   }
   return ret;
 }
-// Check if is_oracle_mode is consistent with compatibility_mode, if not, it indicates that is_oracle_mode cannot be directly used here as a replacement
+// Validate and apply the requested compatibility mode value.
 
 int ObBasicSessionInfo::process_session_compatibility_mode_value(const ObObj &value)
 {
   int ret = OB_SUCCESS;
-  // seekdb is MySQL-only; Oracle mode is not supported.
+  // Compatibility mode is fixed to MYSQL.
   ObCompatibilityMode comp_mode = ObCompatibilityMode::MYSQL_MODE;
   if (value.is_string_type()) {
     const ObString &comp_mode_str = value.get_string();
@@ -3593,9 +3387,21 @@ int ObBasicSessionInfo::process_session_compatibility_mode_value(const ObObj &va
       LOG_WARN("not supported compatibility mode", K(ret), K(value), K(comp_mode_str));
     }
   } else if (ObUInt64Type == value.get_type()) {
-    comp_mode = static_cast<ObCompatibilityMode>(value.get_uint64());
+    if (MYSQL_MODE == value.get_uint64()) {
+      comp_mode = ObCompatibilityMode::MYSQL_MODE;
+    } else {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "compatibility mode");
+      LOG_WARN("not supported compatibility mode", K(ret), K(value));
+    }
   } else if (ObIntType == value.get_type()) {
-    comp_mode = static_cast<ObCompatibilityMode>(value.get_int());
+    if (MYSQL_MODE == value.get_int()) {
+      comp_mode = ObCompatibilityMode::MYSQL_MODE;
+    } else {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "compatibility mode");
+      LOG_WARN("not supported compatibility mode", K(ret), K(value));
+    }
   } else {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid compatibility mode val type", K(value.get_type()), K(value), K(ret));
@@ -4556,13 +4362,8 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo::SysVarsCacheData)
               ob_trx_idle_timeout_,
               nls_collation_,
               nls_nation_collation_,
-              nls_length_semantics_,
-              nls_formats_[NLS_DATE],
-              nls_formats_[NLS_TIMESTAMP],
-              nls_formats_[NLS_TIMESTAMP_TZ],
               ob_trx_lock_timeout_,
               ob_trace_info_,
-              ob_plsql_ccflags_,
               ob_max_read_stale_time_,
               runtime_filter_type_,
               runtime_filter_wait_time_ms_,
@@ -4588,13 +4389,8 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo::SysVarsCacheData)
               ob_trx_idle_timeout_,
               nls_collation_,
               nls_nation_collation_,
-              nls_length_semantics_,
-              nls_formats_[NLS_DATE],
-              nls_formats_[NLS_TIMESTAMP],
-              nls_formats_[NLS_TIMESTAMP_TZ],
               ob_trx_lock_timeout_,
               ob_trace_info_,
-              ob_plsql_ccflags_,
               ob_max_read_stale_time_,
               runtime_filter_type_,
               runtime_filter_wait_time_ms_,
@@ -4603,11 +4399,7 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo::SysVarsCacheData)
               enable_rich_vector_format_,
               enable_sql_plan_monitor_,
               current_default_catalog_);
-  set_nls_date_format(nls_formats_[NLS_DATE]);
-  set_nls_timestamp_format(nls_formats_[NLS_TIMESTAMP]);
-  set_nls_timestamp_tz_format(nls_formats_[NLS_TIMESTAMP_TZ]);
   set_ob_trace_info(ob_trace_info_);
-  set_plsql_ccflags(ob_plsql_ccflags_);
   return ret;
 }
 
@@ -4625,13 +4417,8 @@ OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo::SysVarsCacheData)
               ob_trx_idle_timeout_,
               nls_collation_,
               nls_nation_collation_,
-              nls_length_semantics_,
-              nls_formats_[NLS_DATE],
-              nls_formats_[NLS_TIMESTAMP],
-              nls_formats_[NLS_TIMESTAMP_TZ],
               ob_trx_lock_timeout_,
               ob_trace_info_,
-              ob_plsql_ccflags_,
               ob_max_read_stale_time_,
               runtime_filter_type_,
               runtime_filter_wait_time_ms_,
@@ -4647,11 +4434,7 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo)
 {
   int ret = OB_SUCCESS;
   ObTimeZoneInfo tmp_tz_info;//For compatibility with old versions, create a temporary time zone info placeholder
-  // To be compatible with old version which store sql_mode and compatibility mode in ObSQLModeManager;
   int64_t compatibility_mode_index = 0;
-  if (OB_FAIL(compatibility_mode2index(get_compatibility_mode(), compatibility_mode_index))) {
-    LOG_WARN("convert compatibility mode to index failed", K(ret));
-  }
   bool has_tx_desc = tx_desc_ != NULL;
   OB_UNIS_ENCODE(has_tx_desc);
   if (has_tx_desc) {
@@ -5216,11 +4999,7 @@ OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo)
   int64_t len = 0;
   ObTimeZoneInfo tmp_tz_info;//For compatibility with old versions, create a temporary time zone info placeholder
   int ret = OB_SUCCESS;
-  // To be compatible with old version which store sql_mode and compatibility mode in ObSQLModeManager;
   int64_t compatibility_mode_index = 0;
-  if (OB_FAIL(compatibility_mode2index(get_compatibility_mode(), compatibility_mode_index))) {
-    LOG_WARN("convert compatibility mode to index failed", K(ret));
-  }
   char has_tx_desc = tx_desc_ != NULL ? 1 : 0;
   OB_UNIS_ADD_LEN(has_tx_desc);
   if (has_tx_desc) {
@@ -6644,12 +6423,10 @@ constexpr ObSysVarClassType ObExecEnv::ExecEnvMap[MAX_ENV + 1];
 
 void ObExecEnv::reset()
 {
-  sql_mode_ = DEFAULT_OCEANBASE_MODE;
+  sql_mode_ = DEFAULT_MYSQL_MODE;
   charset_client_ = CS_TYPE_INVALID;
   collation_connection_ = CS_TYPE_INVALID;
   collation_database_ = CS_TYPE_INVALID;
-  plsql_ccflags_.reset();
-  
   // default PLSQL_OPTIMIZE_LEVEL = 2
   plsql_optimize_level_ = 2;
 }
@@ -6660,7 +6437,6 @@ bool ObExecEnv::operator==(const ObExecEnv &other) const
       && charset_client_ == other.charset_client_
       && collation_connection_ == other.collation_connection_
       && collation_database_ == other.collation_database_
-      && plsql_ccflags_ == other.plsql_ccflags_
       && plsql_optimize_level_ == other.plsql_optimize_level_;
 }
 
@@ -6675,8 +6451,6 @@ int ObExecEnv::gen_exec_env(const ObBasicSessionInfo &session, char* buf, int64_
   ObObj val;
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_ENV; ++i) {
     switch (i) {
-      case PLSQL_CCFLAGS: 
-        break;
       case SQL_MODE:
       case CHARSET_CLIENT:
       case COLLATION_CONNECTION:
@@ -6710,9 +6484,6 @@ int ObExecEnv::gen_exec_env(const share::schema::ObSysVariableSchema &sys_variab
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_ENV; ++i) {
     const ObSysVarSchema *sysvar_schema = nullptr;
     switch (i) {
-      case PLSQL_CCFLAGS: {
-        // plsql_ccflags is Oracle-only; nothing to do in MySQL mode.
-      } break;
       case SQL_MODE:
       case CHARSET_CLIENT:
       case COLLATION_CONNECTION:
@@ -6775,11 +6546,6 @@ int ObExecEnv::init(const ObString &exec_env)
   ObString start = exec_env;
 
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_ENV; ++i) {
-    // mysql mode do not have plsql_ccflags_length
-    if (PLSQL_CCFLAGS == i) {
-      continue;
-    }
-
     GET_ENV_VALUE(start, value_str);
     if (OB_SUCC(ret)) {
       switch (i) {
@@ -6797,21 +6563,6 @@ int ObExecEnv::init(const ObString &exec_env)
       break;
       case COLLATION_DATABASE: {
         SET_ENV_VALUE(collation_database_, ObCollationType);
-      }
-      break;
-      case PLSQL_CCFLAGS: {
-        if (start.empty()) {
-          // do nothing, old routine object version do not have plsql_ccflags.
-        } else {
-          int32_t plsql_ccflags_length = 0;
-          SET_ENV_VALUE(plsql_ccflags_length, int32_t);
-          CK (plsql_ccflags_length >= 0);
-          if (OB_FAIL(ret)) {
-          } else if (plsql_ccflags_length > 0) {
-            plsql_ccflags_.assign(start.ptr(), plsql_ccflags_length);
-          }
-          OX (start += plsql_ccflags_length + 1);// 1 for ','
-        }
       }
       break;
       case PLSQL_OPTIMIZE_LEVEL: {
@@ -6840,11 +6591,10 @@ int ObExecEnv::load(ObBasicSessionInfo &session, ObIAllocator *alloc)
 {
   int ret = OB_SUCCESS;
   ObObj val;
+  UNUSED(alloc);
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_ENV; ++i) {
     val.reset();
-    if (PLSQL_CCFLAGS == i) {
-      // do nothing ...
-    } else if (OB_FAIL(session.get_sys_variable(ExecEnvMap[i], val))) {
+    if (OB_FAIL(session.get_sys_variable(ExecEnvMap[i], val))) {
       LOG_WARN("failed to get sys_variable", K(ExecEnvMap[i]), K(ret));
     } else {
       switch (i) {
@@ -6862,14 +6612,6 @@ int ObExecEnv::load(ObBasicSessionInfo &session, ObIAllocator *alloc)
       break;
       case COLLATION_DATABASE: {
         collation_database_ = static_cast<ObCollationType>(val.get_int());
-      }
-      break;
-      case PLSQL_CCFLAGS: {
-        if (OB_NOT_NULL(alloc)) {
-          OZ (ob_write_string(*alloc, val.get_varchar(), plsql_ccflags_));
-        } else {
-          plsql_ccflags_ = val.get_varchar();
-        }
       }
       break;
       case PLSQL_OPTIMIZE_LEVEL: {
@@ -6910,11 +6652,6 @@ int ObExecEnv::store(ObBasicSessionInfo &session)
       val.set_int(collation_database_);
     }
     break;
-    case PLSQL_CCFLAGS: {
-      val.set_varchar(plsql_ccflags_);
-      val.set_collation_type(ObCharset::get_system_collation());
-    }
-    break;
     case PLSQL_OPTIMIZE_LEVEL: {
       val.set_int(plsql_optimize_level_);
     }
@@ -6926,8 +6663,6 @@ int ObExecEnv::store(ObBasicSessionInfo &session)
     break;
     }
     if (OB_FAIL(ret)) {
-    } else if (PLSQL_CCFLAGS == i) {
-      // do nothing ...
     } else if (OB_FAIL(session.update_sys_variable(ExecEnvMap[i], val))) {
       LOG_WARN("failed to get sys_variable", K(ExecEnvMap[i]), K(ret));
     }

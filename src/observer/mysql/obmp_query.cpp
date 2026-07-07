@@ -1458,7 +1458,8 @@ OB_INLINE int ObMPQuery::response_result(ObMySQLResultSet &result,
 {
   int ret = OB_SUCCESS;
   FLTSpanGuard(sql_execute);
-  // When ac = 1, starting a new transaction in the thread to clean up data in the Oracle temporary table will form a deadlock with the clog callback, so it is changed to a synchronous method here
+  // When ac = 1, starting a new transaction in the thread to clean up temporary
+  // table data can deadlock with the clog callback, so use a synchronous method.
   ObSQLSessionInfo &session = result.get_session();
   CHECK_COMPATIBILITY_MODE(&session);
 

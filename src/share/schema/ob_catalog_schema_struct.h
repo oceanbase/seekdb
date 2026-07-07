@@ -89,10 +89,6 @@ public:
     static ObCatalogSchema internal_catalog_schema_mysql(true);
     return &internal_catalog_schema_mysql;
   }
-  inline static const ObCatalogSchema* get_internal_catalog_schema_oracle() {
-    static ObCatalogSchema internal_catalog_schema_oracle(false);
-    return &internal_catalog_schema_oracle;
-  }
   //other methods
   int64_t get_convert_size() const;
   virtual bool is_valid() const;
@@ -119,7 +115,7 @@ struct ObCatalogPrivSortKey
   {}
   bool operator==(const ObCatalogPrivSortKey &rhs) const
   {
-    return (true) && (user_id_ == rhs.user_id_)
+    return (user_id_ == rhs.user_id_)
            && (catalog_ == rhs.catalog_);
   }
   bool operator!=(const ObCatalogPrivSortKey &rhs) const
@@ -129,7 +125,7 @@ struct ObCatalogPrivSortKey
   bool operator<(const ObCatalogPrivSortKey &rhs) const
   {
     bool bret = false;
-    if (false == bret && true) {
+    if (false == bret) {
       bret = user_id_ < rhs.user_id_;
       if (false == bret && user_id_ == rhs.user_id_) {
         bret = catalog_ < rhs.catalog_;
@@ -146,7 +142,7 @@ struct ObCatalogPrivSortKey
   }
   bool is_valid() const
   {
-    return (true) && (user_id_ != common::OB_INVALID_ID);
+    return user_id_ != common::OB_INVALID_ID;
   }
   int deep_copy(const ObCatalogPrivSortKey &src, common::ObIAllocator &allocator)
   {

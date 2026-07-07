@@ -74,7 +74,7 @@ enum ObJBVerType:uint8_t {
   J_OOID_V0 = 21,
   J_ORAWHEX_V0 = 22,
   J_ORAWID_V0 = 23,
-  J_ORACLEDATE_V0 = 24,
+  J_JSON_DATE_EXT_V0 = 24,
   J_ODATE_V0 = 25, 
   J_OTIMESTAMP_V0 = 26,
   J_OTIMESTAMPTZ_V0 = 27,
@@ -647,7 +647,7 @@ public:
   static OB_INLINE ObJBVerType get_ooid_vertype() { return J_OOID_V0; }
   static OB_INLINE ObJBVerType get_orawhex_vertype() { return J_ORAWHEX_V0; }
   static OB_INLINE ObJBVerType get_orawid_vertype() { return J_ORAWID_V0; }
-  static OB_INLINE ObJBVerType get_oracledate_vertype() { return J_ORACLEDATE_V0; }
+  static OB_INLINE ObJBVerType get_json_date_ext_vertype() { return J_JSON_DATE_EXT_V0; }
   static OB_INLINE ObJBVerType get_odate_vertype() { return J_ODATE_V0; }
   static OB_INLINE ObJBVerType get_otimestamp_vertype() { return J_OTIMESTAMP_V0; }
   static OB_INLINE ObJBVerType get_otimestamptz_vertype() { return J_OTIMESTAMPTZ_V0; }

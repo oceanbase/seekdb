@@ -87,7 +87,7 @@ ObMySQLConnectionPool::ObMySQLConnectionPool()
   : is_updated_(false),
     is_stop_(false),
     is_use_ssl_(true),
-    mode_(ObMySQLConnection::OCEANBASE_MODE),
+    mode_(ObMySQLConnection::MYSQL_MODE),
     pool_type_(MySQLConnectionPoolType::SERVER_POOL),
     tg_id_(-1),
     server_provider_(NULL),
@@ -525,12 +525,6 @@ int ObMySQLConnectionPool::try_connect(ObMySQLConnection *connection)
       //if (OB_SUCCESS != (ret = execute_init_sql(connection))) {
       //  LOG_WARN("failed to execute_init_sql, ret=%d", ret);
       //}
-    }
-    if (OB_SUCC(ret) && ObMySQLConnection::OCEANBASE_MODE == mode_) {
-      // bugfix: 
-      if (OB_FAIL(connection->init_oceanbase_connection())) {
-        LOG_WARN("fail to init oceanabse connection", K(ret));
-      }
     }
     if (OB_SUCC(ret)) {
       if (!check_read_consistency_) {

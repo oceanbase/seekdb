@@ -276,8 +276,8 @@ int ForeignKeyHandle::check_exist_inner_sql(ObTableModifyOp &op,
             if (is_zero != expect_zero) {
               // If it is a self-referencing foreign key new row references new row
               bool is_self_ref = false;
-              // oracle for update does not support aggregate functions, so when is_zero is false
-              // judge whether only one row is affected by whether the second record can be obtained
+              // The FOR UPDATE check query does not use aggregate functions, so when is_zero is false
+              // judge whether only one row is affected by whether the second record can be obtained.
               bool is_affect_only_one = false;
               if (!is_zero && OB_FAIL(res.get_result()->next())) {
                 if (OB_ITER_END == ret) {

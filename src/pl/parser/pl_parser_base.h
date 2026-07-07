@@ -125,7 +125,7 @@ ParseNode *param_node = NULL; \
 do { \
   parse_ctx->global_errno_ = check_cursor_node(&param_node, parse_ctx->mem_pool_, node, can_has_paramlist); \
   if (parse_ctx->global_errno_ != OB_PARSER_SUCCESS) { \
-    (obpl_oracle_parse_fatal_error(parse_ctx->global_errno_, YYLEX_PARAM, "check cursor source tree '%s' failed\n", #node)); \
+    (obpl_mysql_parse_fatal_error(parse_ctx->global_errno_, YYLEX_PARAM, "check cursor source tree '%s' failed\n", #node)); \
   } \
 } while (0)
 
@@ -224,7 +224,7 @@ extern const NonReservedKeyword *mysql_pl_non_reserved_keyword_lookup(const char
 // Notice: we use the (int64_t) double == double here, this kind of comparison
 // only supports up to 15 decimal place precision:
 // e.g., (int64_t)3.00000000000000001 == 3.00000000000000001 is true;
-// oracle supports up to 40 decimal place precision.
+// The decimal grammar supports up to 40 decimal place precision.
 
 #define ESCAPE_PERCENT_CHARACTER(result, src, dst)\
 do {\

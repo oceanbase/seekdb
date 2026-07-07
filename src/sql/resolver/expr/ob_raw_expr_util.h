@@ -344,7 +344,7 @@ public:
                                     const ObQualifiedName &q_name,
                                     uint64_t seq_id,
                                     ObDMLStmt *stmt);
-  // build oracle sequence_object.currval, sequence_object.nextval expr
+  // build sequence_object.currval and sequence_object.nextval expr
   static int build_seq_nextval_expr(ObRawExpr *&expr,
                                     const ObSQLSessionInfo *session_info,
                                     ObRawExprFactory *expr_factory,
@@ -834,10 +834,6 @@ public:
                                ObItemType type,
                                ObRawExpr *param_expr,
                                ObRawExpr *&exists_expr);
-  static int build_ora_decode_expr(ObRawExprFactory *expr_factory,
-                                   const ObSQLSessionInfo &session_info,
-                                   ObRawExpr *&expr,
-                                   ObIArray<ObRawExpr *> &param_exprs);
   template <typename T>
   static bool find_expr(const common::ObIArray<T> &exprs, const ObRawExpr* expr);
   static int find_expr(ObRawExpr *root, const ObRawExpr *expected, bool &found);
@@ -957,9 +953,9 @@ public:
                              ObRawExpr *pattern_expr,
                              ObRawExpr *escape_expr,
                              ObOpRawExpr *&like_expr);
-  static int resolve_op_expr_for_oracle_implicit_cast(ObRawExprFactory &expr_factory,
-                                                      const ObSQLSessionInfo *session_info,
-                                                      ObOpRawExpr* &b_expr);
+  static int resolve_op_expr_for_comparison_implicit_cast(ObRawExprFactory &expr_factory,
+                                                          const ObSQLSessionInfo *session_info,
+                                                          ObOpRawExpr* &b_expr);
   static int resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory,
                                           const ObSQLSessionInfo *session_info,
                                           ObItemType op_type,
@@ -970,9 +966,9 @@ public:
                                                       ObRawExpr *src_expr,
                                                       const ObExprResType &dst_type,
                                                       ObSysFunRawExpr *&func_expr);
-  static int resolve_op_exprs_for_oracle_implicit_cast(ObRawExprFactory &expr_factory,
-                                                       const ObSQLSessionInfo *session_info,
-                                                       common::ObIArray<ObOpRawExpr*> &op_exprs);
+  static int resolve_op_exprs_for_comparison_implicit_cast(ObRawExprFactory &expr_factory,
+                                                           const ObSQLSessionInfo *session_info,
+                                                           common::ObIArray<ObOpRawExpr*> &op_exprs);
   static int check_composite_cast(ObRawExpr *&expr, ObSchemaChecker &schema_checker, bool is_prepare, bool &skip_check);
   static int add_cast_to_multiset(ObRawExpr *&expr);
   // Call try_create_bool_expr on all child nodes of parent, add bool expr to each preceding child node as needed
@@ -1219,8 +1215,8 @@ public:
                                            ObColumnSchemaV2 &gen_col);
   static int check_contain_op_row_expr(const ObRawExpr *raw_expr, bool &contain);
   /*
-    in mysql mode: ret left_expr <=> right_expr
-    in oracle mode: ret (left_expr = right_expr) or (left_expr is null and right_expr is null)
+    is_mysql_mode: ret left_expr <=> right_expr
+    otherwise: ret (left_expr = right_expr) or (left_expr is null and right_expr is null)
   */
   static int create_null_safe_equal_expr(ObRawExprFactory &expr_factory,
                                          const ObSQLSessionInfo *session_info,

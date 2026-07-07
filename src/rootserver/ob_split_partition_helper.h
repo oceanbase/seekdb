@@ -133,7 +133,6 @@ private:
   uint64_t tenant_data_version_;
   share::ObDDLType split_type_;
   const static int64_t MYSQL_MAX_NUM_TABLETS_IN_TABLE = 8L * 1024L;
-  const static int64_t ORACLE_MAX_NUM_TABLETS_IN_TABLE = 1024L * 1024L - 1L;
   const static int64_t OB_MAX_SPLIT_PER_ROUND = 8L * 1024L;
   const static int64_t MEMORY_USAGE_SPLIT_PER_DST = 8L * 1024L * 1024L;
   const common::ObIArray<share::schema::ObTableSchema *> &new_table_schemas_;

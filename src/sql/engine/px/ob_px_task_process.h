@@ -123,7 +123,6 @@ private:
   int64_t exec_start_timestamp_;
   int64_t exec_end_timestamp_;
 
-  /* record oracle mode */
   DISALLOW_COPY_AND_ASSIGN(ObPxTaskProcess);
 };
 }

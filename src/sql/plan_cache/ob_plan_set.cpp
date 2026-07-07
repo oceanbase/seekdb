@@ -250,7 +250,7 @@ int ObPlanSet::match_param_info(const ObParamInfo &param_info,
     } else if (ob_is_enumset_inner_tc(param.get_param_meta().get_type())) { // since enunset_inner type param will mock expr use current param, can not resue plan
       is_same = false;
     } else if (param.is_collection_sql_type()) {
-      if (param_info.is_oracle_null_value_) {
+      if (param_info.is_typed_null_value_) {
         is_same = false;
       } else {
         uint64_t udt_id_param = param.get_accuracy().get_accuracy();
@@ -286,10 +286,10 @@ int ObPlanSet::match_param_info(const ObParamInfo &param_info,
         is_same = (udt_id_info == udt_id_param) ? true : false;
       }
       LOG_DEBUG("ext match param info", K(param.get_accuracy()), K(param_info), K(is_same), K(ret));
-    } else if (param_info.is_oracle_null_value_ && !param.is_null()) {
+    } else if (param_info.is_typed_null_value_ && !param.is_null()) {
       is_same = false;
-    } else if (ObSQLUtils::is_oracle_null_with_normal_type(param)
-               &&!param_info.is_oracle_null_value_) { //Typed nulls can only match plans with the same type of nulls.
+    } else if (ObSQLUtils::is_typed_null_with_normal_type(param)
+               && !param_info.is_typed_null_value_) { // Typed nulls can only match plans with the same type of nulls.
       is_same = false;
     } else if (param_info.flag_.is_boolean_ != param.is_boolean()) { //bool type not match int type
       is_same = false;

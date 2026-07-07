@@ -31,9 +31,8 @@ select @@is_result_accurate;
 select /*+topk(20 6)*/ avg(c1), avg(c2), avg(c3) from t1  where c2 <10 order by avg(c1) limit 5;
 select @@is_result_accurate;
 #is select  for update
-## currently MySQL mode for update temporarily uses Oracle plan,
-## this syntax is prohibited under Oracle,
-## and it needs to be opened for mysql mode later
+## SELECT ... FOR UPDATE NOWAIT in this topk path still needs to be enabled
+## for MySQL mode later.
 select /*+topk(20 6)*/ avg(c1), avg(c2), avg(c3) from t1  where c2 <10 group by c2 order by avg(c1) limit 5 for update nowait;
 select @@is_result_accurate;
 #without topk hint

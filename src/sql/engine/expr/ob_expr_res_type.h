@@ -202,8 +202,6 @@ public:
   OB_INLINE bool is_null() const { return common::ObNullType == get_type(); }
   OB_INLINE bool is_mysql_question_mark_type() const
   { return is_varbinary() && 0 == get_length(); }
-  OB_INLINE bool is_oracle_question_mark_type() const
-  { return is_char() && common::ObAccuracy::PS_QUESTION_MARK_DEDUCE_LEN == get_length(); }
 
   OB_INLINE bool is_not_null_for_read() const { return has_result_flag(NOT_NULL_FLAG); }
   OB_INLINE bool is_not_null_for_write() const { return has_result_flag(NOT_NULL_WRITE_FLAG); }

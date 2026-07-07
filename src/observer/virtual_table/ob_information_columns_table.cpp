@@ -212,7 +212,7 @@ int ObInfoSchemaColumnsTable::iterate_table_schema_array(const bool is_filter_ta
       if (table_schema->is_aux_table()
          || table_schema->is_tmp_table()
          || table_schema->is_in_recyclebin()
-         || is_ora_sys_view_table(table_schema->get_table_id())) {
+         || is_extended_sys_view_table(table_schema->get_table_id())) {
         continue;
       } else if (is_filter_table_schema && OB_FAIL(schema_guard_->get_database_schema(
           table_schema->get_database_id(), database_schema))) {
@@ -742,7 +742,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
           }
         case COLUMN_TYPE: {
             int64_t pos = 0;
-            const ObLengthSemantics default_length_semantics = session_->get_local_nls_length_semantics();
+            const ObLengthSemantics default_length_semantics = session_->get_default_length_semantics();
             const uint64_t sub_type = column_schema->is_extend() ?
                                       column_schema->get_sub_data_type() : static_cast<uint64_t>(column_schema->get_geo_type());
             ObObjType column_type = ObMaxType;
@@ -1114,7 +1114,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
                 }
               } else {
                 ObArray<common::ObString> extended_type_info;
-                const ObLengthSemantics default_length_semantics = session_->get_local_nls_length_semantics();
+                const ObLengthSemantics default_length_semantics = session_->get_default_length_semantics();
                 if (OB_FAIL(ObRawExprUtils::extract_extended_type_info(select_item.expr_,
                                                                        session_,
                                                                        extended_type_info))) {

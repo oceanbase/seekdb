@@ -30,8 +30,7 @@ OB_SERIALIZE_MEMBER((ObExprPLAssocIndex, ObExprOperator),
                     info_.is_index_by_varchar_);
 
 ObExprPLAssocIndex::ObExprPLAssocIndex(ObIAllocator &alloc)
-  : ObExprOperator(alloc, T_FUN_PL_ASSOCIATIVE_INDEX, N_PL_ASSOCIATIVE_INDEX, 2, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                  false, INTERNAL_IN_ORACLE_MODE),
+  : ObExprOperator(alloc, T_FUN_PL_ASSOCIATIVE_INDEX, N_PL_ASSOCIATIVE_INDEX, 2, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false),
     info_()
 {
 }

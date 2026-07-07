@@ -137,8 +137,7 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
     } else if (arg.object_type_ == ObObjectType::TABLE
                 && arg.column_names_priv_.count() > 0) {
       if (arg.object_id_ == OB_INVALID) {
-        //do nothing
-        //todo: oracle every object will use id, and should also record the schema version in future.
+        // No schema dependency can be recorded without an object id.
       } else if (stmt.get_table_schema_version() != 0 
                   && OB_FAIL(arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(arg.object_id_,
                                                                             TABLE_SCHEMA,
@@ -337,8 +336,7 @@ int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
     } else if (stmt.get_object_type() == ObObjectType::TABLE
             && (arg.column_names_priv_.count() > 0)) {
       if (arg.obj_id_ == OB_INVALID) {
-        //do nothing
-        //todo: oracle every object will use id, and should also record the schema version in future.
+        // No schema dependency can be recorded without an object id.
       } else if (stmt.get_table_schema_version()!= 0 &&
                 OB_FAIL(arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(arg.obj_id_,
                                                                             TABLE_SCHEMA,

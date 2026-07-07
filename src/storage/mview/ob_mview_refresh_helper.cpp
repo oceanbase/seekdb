@@ -530,7 +530,7 @@ int ObMViewRefreshHelper::replace_all_snapshot_zero(
 {
   int ret = OB_SUCCESS;
   output = input;
-  // Oracle mode removed - always use MySQL "as of snapshot" syntax
+  // MySQL-only syntax uses "as of snapshot".
   std::string search = "as of snapshot ";
   std::string new_value_str = std::to_string(snapshot_version);
 

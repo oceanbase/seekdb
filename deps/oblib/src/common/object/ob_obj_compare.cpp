@@ -2114,7 +2114,7 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNCS(ObBitTC, bit);
 
 // float/double comparison using "==" or "!=" matches MySQL
-// and Oracle doesn't support raw float/double
+// raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_INT_UINT() \
   DEFINE_CMP_OP_FUNC_INT_UINT(CO_EQ, ==); \
   DEFINE_CMP_OP_FUNC_INT_UINT(CO_LE, <=); \
@@ -2125,7 +2125,7 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNC_INT_UINT()
 
 // float/double comparison using "==" or "!=" matches MySQL
-// and Oracle doesn't support raw float/double
+// raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_INT_FLOAT() \
   DEFINE_CMP_FUNCS_XXX_REAL(ObIntTC, int, ObFloatTC, float);
 
@@ -2154,12 +2154,12 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNC_UINT_INT()
 
 // float/double comparison using "==" or "!=" matches MySQL
-// and Oracle doesn't support raw float/double
+// raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_UINT_UINT() \
   DEFINE_CMP_FUNCS(ObUIntTC, uint64);
 
 // float/double comparison using "==" or "!=" matches MySQL
-// and Oracle doesn't support raw float/double
+// raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_UINT_FLOAT() \
   DEFINE_CMP_FUNCS_XXX_REAL(ObUIntTC, uint64, ObFloatTC, float);
 
@@ -2179,7 +2179,7 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNC_UINT_ENUMSET()
 
 // float/double comparison using "==" or "!=" matches MySQL
-// and Oracle doesn't support raw float/double
+// raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_ENUMSET_FLOAT();\
   DEFINE_CMP_FUNCS_XXX_REAL(ObEnumSetTC, uint64, ObFloatTC, float);
 
@@ -2196,12 +2196,12 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNCS_REAL_XXX(ObFloatTC, float, ObIntTC, int);
 
 // float/double comparison using "==" or "!=" matches MySQL
-// and Oracle doesn't support raw float/double
+// raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_FLOAT_UINT() \
   DEFINE_CMP_FUNCS_REAL_XXX(ObFloatTC, float, ObUIntTC, uint64);
 
 // float/double comparison using "==" or "!=" matches MySQL
-// and Oracle doesn't support raw float/double
+// raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_FLOAT_FLOAT() \
   DEFINE_CMP_FUNCS_REAL_REAL(ObFloatTC, float, ObFloatTC, float);
 
@@ -2218,7 +2218,7 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNCS_REAL_XXX(ObDoubleTC, double, ObUIntTC, uint64);
 
 // float/double comparison using "==" or "!=" matches MySQL
-// and Oracle doesn't support raw float/double
+// raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_DOUBLE_FLOAT() \
   DEFINE_CMP_FUNCS_REAL_XXX(ObDoubleTC, double, ObFloatTC, float);
 
@@ -2329,7 +2329,7 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNC_ENUMSET_INT();
 
 // float/double comparison using "==" or "!=" matches MySQL
-// and Oracle doesn't support raw float/double
+// raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_ENUMSET_UINT();\
   DEFINE_CMP_OP_FUNC_ENUMSET_UINT(CO_EQ, CO_EQ); \
   DEFINE_CMP_OP_FUNC_ENUMSET_UINT(CO_LE, CO_GE); \
@@ -2350,7 +2350,7 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNC_ENUMSETINNER_INT();
 
 // float/double comparison using "==" or "!=" matches MySQL
-// and Oracle doesn't support raw float/double
+// raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_ENUMSETINNER_UINT() \
   DEFINE_CMP_OP_FUNC_ENUMSETINNER_UINT(CO_EQ, ==); \
   DEFINE_CMP_OP_FUNC_ENUMSETINNER_UINT(CO_LE, <=); \
@@ -2361,7 +2361,7 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetInnerTC, real_tc>(const ObObj &obj1, \
   DEFINE_CMP_FUNC_ENUMSETINNER_UINT();
 
 // float/double comparison using "==" or "!=" matches MySQL
-// and Oracle doesn't support raw float/double
+// raw float/double follows direct comparison semantics
 #define DEFINE_CMP_FUNCS_ENUMSETINNER_FLOAT()\
   DEFINE_CMP_FUNCS_ENUMSETINNER_REAL(ObFloatTC, float);
 

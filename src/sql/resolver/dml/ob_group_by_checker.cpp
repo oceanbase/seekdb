@@ -24,7 +24,8 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
-//oracle mode, some analytic function parameters require partition by expression such as ntile(c1) (partition by c2) need to report an error
+// Some analytic function parameters require partition-by expressions, such as
+// ntile(c1) (partition by c2), and must report an error otherwise.
 int ObGroupByChecker::check_analytic_function(const ParamStore *param_store,
                                               ObSelectStmt *ref_stmt,
                                               common::ObIArray<ObRawExpr *> &exp1_arr, // equivalent to expressions in the query items
@@ -144,7 +145,7 @@ int ObGroupByChecker::check_group_by(const ParamStore *param_store,
 int ObGroupByChecker::add_pc_const_param_info(ObExprEqualCheckContext &check_ctx)
 {
   int ret = OB_SUCCESS;
-  // If it is oracle mode, group by expression constants will be parameterized
+  // Group-by expression constants will be parameterized:
   // select a + 1 from t group by a + 1 => select a + ? from t group by a + ?
   // Originally it was to extract a constraint, the constants corresponding to the two question marks must both be 1, used for subsequent plan matching
   // But now it has been changed to extract the constraint of two question marks being equal
@@ -203,7 +204,7 @@ bool ObGroupByChecker::find_in_rollup(ObRawExpr &expr)
     }
     if (OB_SUCCESS == check_ctx.err_code_ && !found && is_top_select_stmt()) {
       for (int64_t nth_rollup = 0; !found_same_structure && nth_rollup < rollup_cnt; ++nth_rollup) {
-        //in oracle mode, only non static const expr will be replaced later in replace_group_by_exprs
+        // Only non-static const exprs are replaced later in replace_group_by_exprs.
         {
           check_ctx.reset();
           check_ctx.ignore_param_ = true;

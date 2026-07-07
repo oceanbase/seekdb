@@ -69,7 +69,7 @@ int ObSimpleCCLRuleSchema::assign(const ObSimpleCCLRuleSchema &other) {
 
 bool ObSimpleCCLRuleSchema::is_valid() const {
   bool ret = true;
-  if (!ObSchema::is_valid() || !true ||
+  if (!ObSchema::is_valid() ||
       ccl_rule_name_.empty()) {
     ret = false;
   }

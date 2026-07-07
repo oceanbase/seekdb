@@ -105,7 +105,7 @@ public:
   {
     NO_PS = 0, //not PS
     SIMPLE_PS, // only go through parser, not resolver, simple PS for use by PL in MySQL mode
-    STD_PS, // use the standard PS of resolver, for Oracle mode, and for the ps protocol of MySQL mode
+    STD_PS, // use the standard PS of resolver and the ps protocol of MySQL mode
   };
 
   typedef common::ObFastArray<ObPhysicalPlan*, 8> CandidatePlanArray;

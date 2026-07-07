@@ -2137,7 +2137,7 @@ int ObDbmsStats::lock_partition_stats(sql::ObExecContext &ctx,
                                            params.at(2),
                                            stat_param))) {
     LOG_WARN("failed to parse owner", K(ret));
-  //specify subpart name, do nothing, compatible oracle.
+  // Specify subpart name: do nothing.
   } else if (!stat_param.part_name_.empty() && stat_param.is_subpart_name_) {
     /*do nothing*/
   } else {
@@ -2353,7 +2353,7 @@ int ObDbmsStats::unlock_partition_stats(sql::ObExecContext &ctx,
                                            params.at(2),
                                            stat_param))) {
     LOG_WARN("failed to parse owner", K(ret));
-  //specify subpart name, do nothing, compatible oracle.
+  // Specify subpart name: do nothing.
   } else if (!stat_param.part_name_.empty() && stat_param.is_subpart_name_) {
     /*do nothing*/
   } else {
@@ -2529,7 +2529,7 @@ int ObDbmsStats::restore_table_stats(sql::ObExecContext &ctx,
   } else if (!params.at(5).is_null() && OB_FAIL(params.at(5).get_bool(stat_param.no_invalidate_))) {
     LOG_WARN("failed to get no_invalidate", K(ret));
   } else if (stat_param.is_temp_table_) {//do nothing
-  // oracle don't do this, compatible oracle temporarily
+  // Keep lock checking disabled for now.
   // } else if (stat_param.force_ &&
   //            OB_FAIL(ObDbmsStatsLockUnlock::fill_stat_locked(ctx, stat_param))) {
   //   LOG_WARN("failed fill stat locked", K(ret));
@@ -3574,8 +3574,7 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
     if (OB_ISNULL(col)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("column is null", K(ret), K(col));
-    //here add extra column id condition, because func index in oracle mode, the column will mark is
-    //hidden, that's will cause the fewer columns.
+    // Add the extra column id condition because hidden generated columns reduce the visible column count.
     } else if (!check_column_validity(table_schema, *col)){
       continue;
     } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
@@ -3616,7 +3615,7 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
       //        now in OB, these columns is hidden which make column unselectable.
       //        These column should be invisible intead of hidden. Right now ignore hidden column
       // col_param.set_is_hidden_column();
-      if (col->is_hidden()) {//now func index in oracle mode, the column will mark is hidden.
+      if (col->is_hidden()) {
         col_param.set_is_hidden_column();
       }
       if (!col->is_nullable()) {
@@ -4132,9 +4131,8 @@ int ObDbmsStats::parse_gather_stat_options(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(param.allocator_));
   } else if (est_percent.is_null() ||
-            (is_virtual_table(param.table_id_) && !is_oracle_mapping_real_virtual_table(param.table_id_))) {
+            (is_virtual_table(param.table_id_) && !is_real_table_mapping_virtual_table(param.table_id_))) {
     //if specify estimate percent null meanings 100% percent sample
-    //https://community.oracle.com/tech/developers/discussion/2205871/null-for-estimate-percent-of-dbms-stats?spm=a2o8d.corp_prod_issue_detail_v2.0.0.316db27cDq1yD6
     param.sample_info_.set_percent(100.0);
   } else if (OB_FAIL(est_percent.get_number(num_est_percent))) {
     LOG_WARN("failed to get number", K(ret));
@@ -4442,7 +4440,7 @@ int ObDbmsStats::parse_granularity_and_method_opt(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   //virtual table(not include real agent table) doesn't gather histogram.
   bool is_vt = is_virtual_table(param.table_id_) &&
-               !share::is_oracle_mapping_real_virtual_table(param.table_id_);
+               !share::is_real_table_mapping_virtual_table(param.table_id_);
   bool use_size_auto = false;
   if (0 == param.method_opt_.case_compare("Z") && !is_vt) {
     if (OB_FAIL(set_default_column_params(param.column_params_))) {
@@ -4628,8 +4626,8 @@ int ObDbmsStats::parse_set_column_stats_options(ObExecContext &ctx,
       column is defined as column := column_name | extension name | extension
      - integer : Number of histogram buckets. Must be in the range [1,254].
      - REPEAT : Collects histograms only on the columns that already have histograms
-     - AUTO : Oracle determines the columns to collect histograms based on data distribution and the workload of the columns
-     - SKEWONLY : Oracle determines the columns to collect histograms based on the data distribution of the columns
+     - AUTO : Determine the columns to collect histograms based on data distribution and workload
+     - SKEWONLY : Determine the columns to collect histograms based on data distribution
      - column_name : name of a column
      - extension : can be either a column group in the format of (column_name, column_name [, ...]) or an expressionThe default is FOR ALL COLUMNS SIZE AUTO.
  * @return
@@ -5454,7 +5452,7 @@ int ObDbmsStats::parse_column_info(sql::ObExecContext &ctx,
   return ret;
 }
 
-/*this option just compatible oracle syntax*/
+/* Parse supported stat category syntax. */
 int ObDbmsStats::parse_stat_category(const ObString &stat_category)
 {
   int ret = OB_SUCCESS;
@@ -5593,7 +5591,7 @@ int ObDbmsStats::get_all_table_ids_in_database(ObExecContext &ctx,
             // 1. user table
             // 2. valid sys table
             // 3. valid virtual table
-          } else if (share::is_oracle_mapping_real_virtual_table(table_schemas.at(i)->get_table_id())
+          } else if (share::is_real_table_mapping_virtual_table(table_schemas.at(i)->get_table_id())
                      && table_schemas.at(i)->is_index_table()) {
             // skip
           } else if (OB_FAIL(table_ids.push_back(table_schemas.at(i)->get_table_id()))) {
@@ -5896,7 +5894,7 @@ int ObDbmsStats::get_non_partitioned_table_stale_percent(sql::ObExecContext &ctx
 {
   int ret = OB_SUCCESS;
   //if this is virtual table real agent, we need see the real table id modifed count
-  uint64_t table_id = share::is_oracle_mapping_real_virtual_table(table_schema.get_table_id()) ?
+  uint64_t table_id = share::is_real_table_mapping_virtual_table(table_schema.get_table_id()) ?
                                    share::get_real_table_mappings_tid(table_schema.get_table_id()) :
                                    table_schema.get_table_id();
   const int64_t part_id = PARTITION_LEVEL_ZERO == table_schema.get_part_level() ? table_schema.get_table_id() : -1;
@@ -6097,7 +6095,6 @@ int ObDbmsStats::gather_table_stats_with_default_param(ObExecContext &ctx,
  *     JOB_OVERHEAD_PERC, PREFERENCE_OVERRIDES_PARAMETER, SCAN_RATE, STAT_CATEGORY, SYS_FLAGS,
  *     TRACE, WAIT_TIME_TO_UPDATE_STATS
  *  add new prefs for OceanBase: ESTIMATE_BLOCK
-   https://docs.oracle.com/database/121/ARPLS/d_stats.htm#ARPLS68674
 */
 int ObDbmsStats::get_new_stat_pref(ObExecContext &ctx,
                                    common::ObIAllocator &allocator,
@@ -6325,7 +6322,7 @@ int ObDbmsStats::convert_vaild_ident_name(common::ObIAllocator &allocator,
                                                                    ident_name))) {
       LOG_WARN("fail to convert charset", K(ret));
     } else if (need_extra_conv) {
-      //oracle support lowercase name to gather and manager stats, eg:
+      // Support quoted lowercase names, for example:
       //  create table "t1"(c1 int);
       //  call dbms_stats.gather_table_stats(NULL, '"t1"');
       if (ident_name.length() > 1 &&
@@ -6495,8 +6492,7 @@ bool ObDbmsStats::need_gather_index_stats(const ObTableStatParam &param)
  * @param granularity
  * possible values are:
  *  ALL: Gather all (subpartition, partition, and global)
- *  AUTO: Oracle recommends setting granularity to the default value of AUTO to gather subpartition,
- *        partition, or global statistics, depending on partition type. 
+ *  AUTO: Gather subpartition, partition, or global statistics depending on partition type.
  *  DEFAULT: Gathers global and partition-level
  *  GLOBAL: Gather global only
  *  GLOBAL AND PARTITION: Gather global and partition-level
@@ -6504,7 +6500,7 @@ bool ObDbmsStats::need_gather_index_stats(const ObTableStatParam &param)
                                  statistics are aggregated from partition level statistics.
  *  PARTITION: Gather partition-level
  *  SUBPARTITION: Gather subpartition-level
- *  Oracle granularity actual behavior survey:
+ *  Granularity behavior survey:
  *    
  * @return
  */

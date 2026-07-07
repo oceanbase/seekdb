@@ -40,7 +40,7 @@ ERROR HY000: cannot fast refresh materialized view mv7_1: query with assignment 
 create sequence seq increment by 1 start with 1;
 create materialized view mv8_1 refresh fast on demand as select seq.NEXTVAL from t1;
 ERROR HY000: sequence number not allowed here
-# 9. query with rownum/rowid/ora_rowscn pseudocolumns is not supported 
+# 9. query with ora_rowscn pseudocolumn is not supported
 create materialized view mv9_1 refresh fast on demand as select c1, ora_rowscn from t1;
 ERROR HY000: cannot fast refresh materialized view mv9_1: query with ora_rowscn pseudo columns is not supported
 # 10. non-deterministic query is not supported 

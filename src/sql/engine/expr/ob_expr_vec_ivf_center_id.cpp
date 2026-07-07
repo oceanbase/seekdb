@@ -87,7 +87,7 @@ int ObExprVecIVFCenterID::calc_center_id(
     char *buf = expr.get_str_res_mem(eval_ctx, buf_len);
     ObString str(buf_len, 0, buf);
     ObCenterId center_id(1, 0);
-    if (OB_FAIL(ObVectorClusterHelper::set_center_id_to_string(center_id, str))) {
+    if (OB_FAIL(ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, str))) {
       LOG_WARN("failed to set center_id to string", K(ret), K(center_id), K(str));
     } else {
       expr_datum.set_string(str);
@@ -111,7 +111,7 @@ int ObExprVecIVFCenterID::calc_center_id(
     } else if (contain_null) {
       // do nothing
     } else {
-      ObVectorClusterHelper helper;
+      ObVectorKmeansClusterHelper helper;
       ObVectorNormalizeInfo norm_info;
       if (OB_FAIL(helper.get_nearest_probe_centers(
           reinterpret_cast<float*>(arr->get_data()),
@@ -130,7 +130,7 @@ int ObExprVecIVFCenterID::calc_center_id(
       char *buf = expr.get_str_res_mem(eval_ctx, buf_len);
       ObString str(buf_len, 0, buf);
       ObCenterId center_id(center_prefix, center_idx);
-      if (OB_FAIL(ObVectorClusterHelper::set_center_id_to_string(center_id, str))) {
+      if (OB_FAIL(ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, str))) {
         LOG_WARN("failed to set center_id to string", K(ret), K(center_id), K(str));
       } else {
         expr_datum.set_string(str);

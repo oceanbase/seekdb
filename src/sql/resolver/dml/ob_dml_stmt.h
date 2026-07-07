@@ -235,17 +235,17 @@ struct TableItem
 
   bool is_lateral_table() const { return LATERAL_TABLE == type_; }
   bool is_synonym() const { return !synonym_name_.empty(); }
-  bool is_oracle_all_or_user_sys_view() const
+  bool is_extended_all_or_user_sys_view() const
   {
-    return (is_ora_sys_view_table(ref_id_) && (table_name_.prefix_match("USER_") || table_name_.prefix_match("ALL_")));
+    return (is_extended_sys_view_table(ref_id_) && (table_name_.prefix_match("USER_") || table_name_.prefix_match("ALL_")));
   }
-  bool is_oracle_dba_sys_view() const
+  bool is_extended_dba_sys_view() const
   {
-    return (is_ora_sys_view_table(ref_id_) && table_name_.prefix_match("DBA_"));
+    return (is_extended_sys_view_table(ref_id_) && table_name_.prefix_match("DBA_"));
   }
-  bool is_oracle_all_or_user_sys_view_for_alias() const
+  bool is_extended_all_or_user_sys_view_for_alias() const
   {
-    return ((database_name_ == OB_ORA_SYS_SCHEMA_NAME) && (table_name_.prefix_match("USER_") || table_name_.prefix_match("ALL_")));
+    return ((database_name_ == OB_EXTENDED_SYS_SCHEMA_NAME) && (table_name_.prefix_match("USER_") || table_name_.prefix_match("ALL_")));
   }
   bool access_all_part() const { return part_ids_.empty(); }
   int deep_copy(ObIRawExprCopier &expr_copier,

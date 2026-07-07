@@ -441,41 +441,5 @@ int ObTableLoadObjCaster::cast_obj_check(ObTableLoadCastObjCtx &cast_obj_ctx,
   return ret;
 }
 
-int ObTableLoadObjCaster::string_datetime_oracle(const ObObjType expect_type,
-                                                 ObObjCastParams &params, const ObObj &in,
-                                                 ObObj &out, const ObCastMode cast_mode,
-                                                 const ObTableLoadTimeConverter &time_cvrt)
-{
-  int ret = OB_SUCCESS;
-  ObString utf8_string;
-
-  if (OB_UNLIKELY((ObStringTC != in.get_type_class() && ObTextTC != in.get_type_class()) ||
-                  ObDateTimeTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid input type", KR(ret), K(in), K(expect_type));
-  } else if (in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("invalid use of blob type", KR(ret), K(in), K(expect_type));
-  } else if (OB_FAIL(ObExprUtil::convert_string_collation(
-               in.get_string(), in.get_collation_type(), utf8_string,
-               ObCharset::get_system_collation(), *params.allocator_v2_))) {
-    LOG_WARN("fail to convert string collation", K(ret));
-  } else {
-    int64_t value = 0;
-    ObTimeConvertCtx cvrt_ctx(params.dtc_params_.tz_info_, ObTimestampType == expect_type);
-    cvrt_ctx.oracle_nls_format_ = params.dtc_params_.get_nls_format(ObDateTimeType);
-    if (OB_FAIL(time_cvrt.str_to_datetime_oracle(utf8_string, cvrt_ctx, value))) {
-      LOG_WARN("fail to convert str to date in oracle mode", KR(ret), K(utf8_string), K(value));
-    } else if (CM_IS_ERROR_ON_SCALE_OVER(cast_mode) &&
-               (value == ObTimeConverter::ZERO_DATE || value == ObTimeConverter::ZERO_DATETIME)) {
-      ret = OB_INVALID_DATE_VALUE;
-      LOG_WARN("invalid date value", KR(ret), K(utf8_string));
-    } else {
-      out.set_datetime(value);
-    }
-  }
-  return ret;
-}
-
 } // namespace observer
 } // namespace oceanbase

@@ -6838,7 +6838,7 @@ int ObStaticEngineCG::fill_aggr_infos(ObLogGroupBy &op,
   }
 
   // 2.init non aggr expr
-  // oracle mode has the non aggregation expr problem too:
+  // Non-aggregation expressions need runtime expression initialization too:
   //
   // explain extended select abs(c1), sum(c2) from t1 group by abs(c1);
   // | ========================================

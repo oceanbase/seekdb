@@ -270,7 +270,7 @@ int ObRawExprPrinter::print(ObConstRawExpr *expr)
       }
     }
   } else if (expr->get_literal_prefix().empty()) {
-    //for empty string in Oracle mode , we should use char/nchar-type obj to print
+    // Preserve char/nchar metadata when printing an empty string literal.
     if (expr->get_value().is_null() && ObCharType == expr->get_expr_obj_meta().get_type()) {
       ObObj empty_string = expr->get_value();
       empty_string.set_meta_type(expr->get_expr_obj_meta());
@@ -298,7 +298,7 @@ int ObRawExprPrinter::print(ObConstRawExpr *expr)
     } else if (OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, "'"))) {
       LOG_WARN("fail to print single quote", K(ret));
     }
-  } else if (expr->get_value().is_oracle_decimal()) {
+  } else if (expr->get_value().is_decimal_or_float()) {
     if (OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, "%.*s",
                                 expr->get_literal_prefix().length(), expr->get_literal_prefix().ptr()))) {
       LOG_WARN("fail to print literal suffix", K(ret));
@@ -406,7 +406,7 @@ int ObRawExprPrinter::print(ObColumnRefRawExpr *expr)
           DATA_PRINTF(".");
           PRINT_IDENT_WITH_QUOT(col_name);
         } else {
-          // oracle allow derived table without alias name, table_name is empty here.
+          // A derived table without an alias leaves table_name empty here.
           // e.g.:  select * from (select 1 from dual)
           PRINT_IDENT_WITH_QUOT(col_name);
         }
@@ -1131,7 +1131,7 @@ int ObRawExprPrinter::print(ObAggFunRawExpr *expr)
     }
     case T_FUN_ORA_JSON_ARRAYAGG: {
       if (OB_FAIL(print_ora_json_arrayagg(expr))) {
-        LOG_WARN("fail to print oracle json_arrayagg.", K(ret));
+        LOG_WARN("fail to print json_arrayagg", K(ret));
       }
       break;
     }
@@ -3194,14 +3194,6 @@ int ObRawExprPrinter::print(ObSysFunRawExpr *expr)
         }
         break;
       }
-      case T_FUN_SYS_ORA_DECODE: {
-        // The same function named decode in Oracle, named ora_decode in MySQL
-        // for 
-        // Ensure that SQL reverse parsing does not result in an error
-        DATA_PRINTF("ora_decode");
-        OZ(inner_print_fun_params(*expr));
-        break;
-      }
       case T_FUN_UDF: {
         ObUDFRawExpr *udf_expr = static_cast<ObUDFRawExpr*>(expr);
         CK (OB_NOT_NULL(udf_expr));
@@ -4182,7 +4174,7 @@ int ObRawExprPrinter::print_cast_type(ObRawExpr *expr)
         break;
       }
       case T_DATETIME: {
-        //oracle mode treate date as datetime
+        // The datetime cast keeps the optional fractional scale.
         int16_t scale = parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX];
         if (scale >= 0) {
           DATA_PRINTF("datetime(%d)", scale);

@@ -118,9 +118,6 @@ void ObMviewUpdateCacheTask::runTimerTask()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null or ObMViewMaintenanceService is null",
              KR(ret), KP(sql_proxy), KP(mview_maintenance_service));
-  } else if (!true) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant id is invalid", KR(ret));
   } else {
     const int64_t refresh_mode = (int64_t)ObMVRefreshMode::MAJOR_COMPACTION;
     ObSEArray<uint64_t, 2> mview_ids;

@@ -2257,7 +2257,7 @@ int ObIndexBuilder::check_has_none_shared_index_tables_for_fts_or_multivalue_ind
   int ret = OB_SUCCESS;
   ObSEArray<const ObSimpleTableSchemaV2 *, OB_MAX_AUX_TABLE_PER_MAIN_TABLE> indexs;
   has_fts_or_multivalue_index = false;
-  if (OB_UNLIKELY(false || OB_INVALID_ID == data_table_id)) {
+  if (OB_UNLIKELY(OB_INVALID_ID == data_table_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tenant id or data table id", K(ret), K(data_table_id));
   } else if (OB_FAIL(schema_guard.get_index_schemas_with_data_table_id(data_table_id, indexs))) {
@@ -2293,7 +2293,7 @@ int ObIndexBuilder::check_has_none_shared_index_tables_for_vector_index_(const u
   int ret = OB_SUCCESS;
   ObSEArray<const ObSimpleTableSchemaV2 *, OB_MAX_AUX_TABLE_PER_MAIN_TABLE> indexs;
   has_none_share_vector_index = false;
-  if (OB_UNLIKELY(false || OB_INVALID_ID == data_table_id)) {
+  if (OB_UNLIKELY(OB_INVALID_ID == data_table_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tenant id or data table id", K(ret), K(data_table_id));
   } else if (OB_FAIL(schema_guard.get_index_schemas_with_data_table_id(data_table_id, indexs))) {

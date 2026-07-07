@@ -25,7 +25,7 @@ namespace sql {
 
 ObExprSubQueryLessThan::ObExprSubQueryLessThan(ObIAllocator &alloc) :
   ObSubQueryRelationalExpr(alloc, T_OP_SQ_LT, N_SQ_LESS_THAN, 2, NOT_ROW_DIMENSION,
-                           INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                           INTERNAL_IN_MYSQL_MODE)
 {
 }
 

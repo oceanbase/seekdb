@@ -164,14 +164,14 @@ int ObExpandVecOp::do_dup_partial()
   int ret = OB_SUCCESS;
   // if following condition matches, copy current batch of result
   //
-  // in oracle, group by rollup(c1, 1, c2)
+  // For group by rollup(c1, 1, c2),
   // `1` is a remove const expr, and rollup result just as group by (c1, 1, NULL)
   //
-  // if rollup expr is a const expr, just cp current batch (both mysql & oracle)
+  // if rollup expr is a const expr, just cp current batch.
   //
   // `group by c1, c2, rollup (c1, c2)`, result of rollup(c1) is same as group by (c1, NULL)
   //
-  // in oracle group by roll(c1, c1, c2), rollup result of last c1 is same as group by (c1, c1, NULL)
+  // For group by roll(c1, c1, c2), rollup result of last c1 is same as group by (c1, c1, NULL)
   // rollup result of first c1 is same as group by (NULL, NULL, NULL)
   bool is_real_static_const =
     MY_SPEC.expand_exprs_.at(expr_iter_idx_)->type_ == T_FUN_SYS_REMOVE_CONST

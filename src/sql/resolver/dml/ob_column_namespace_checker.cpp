@@ -67,9 +67,9 @@ int ObColumnNamespaceChecker::remove_reference_table(int64_t tid)
 }
 
 /*
- * if database name or table name is not specified, we must check the uniqueness of column in the table with the same name
- * for oracle mode, if table name is specified, we need to make sure that this column does not appear in the using columns in the joined table
- * for example, select t1.a from t1 inner join t2 using (a), this is not allowed in oracle mode
+ * If database name or table name is not specified, check column uniqueness in
+ * tables with the same name. If table name is specified, make sure the column
+ * does not appear in the using columns in the joined table.
  */
 int ObColumnNamespaceChecker::check_table_column_namespace(const ObQualifiedName &q_name,
                                                            const TableItem *&table_item)
@@ -302,19 +302,20 @@ int ObColumnNamespaceChecker::check_column_exists(const TableItem &table_item, c
         if (ObCharset::case_compat_mode_equal(col_name, tmp_select_item.alias_name_)) {
           unduplicable_count += (tmp_select_item.expr_->is_column_ref_expr() 
                   && !(static_cast<ObColumnRefRawExpr *>(tmp_select_item.expr_)->is_joined_dup_column())) ? 1 : 0;
-          // In oracle mode, const expr does not raise ambiguously error. More than one aggr funcs in PIVOT should
-          // raise ambiguously error.
+          // Const expr does not raise ambiguous error. More than one aggregate
+          // function in PIVOT should raise ambiguous error.
           if (!is_exist) {
             // set the is_exist = true, is there is a column with the same column name.
             // no matter the column is a duplicable column, we should set the exists to true.
             is_exist = true;
             break;
           } else if (!skip_join_dup) {
-            // 1. in oracle mode and resolve_star cases: only if we meet more than 2 unduplicable column we raise Column Ambiguous error.
-            // duplicable column means the column is a duplicated column in joined table, but not in using.
+            // 1. In resolve_star cases, only more than two unduplicable columns
+            // raise Column Ambiguous error. Duplicable column means the column
+            // is duplicated in a joined table, but not in using.
             // 2. in other cases, we raise error whenever there are columns with same name.
             ret = OB_NON_UNIQ_ERROR;
-            LOG_WARN("column duplicated, should happen in ORACLE mode only", K(col_name), K(ret));
+            LOG_WARN("column duplicated", K(col_name), K(ret));
             ObString scope_name = ObString::make_string(get_scope_name(T_FIELD_LIST_SCOPE));
             LOG_USER_ERROR(OB_NON_UNIQ_ERROR,
                           col_name.length(),

@@ -37,11 +37,7 @@ typedef struct trie_node
 } t_node;
 
 extern const NonReservedKeyword *mysql_non_reserved_keyword_lookup(const char *word);
-extern const NonReservedKeyword *oracle_non_reserved_keyword_lookup(const char *word);
 extern int mysql_sql_reserved_keyword_lookup(const char *word);
-extern int oracle_sql_reserved_keyword_lookup(const char *word);
-extern const ReservedKeyword *oracle_pl_reserved_keyword_lookup(const char *word);
-extern const ReservedKeyword *oracle_reserved_keyword_lookup(const char *word);
 extern int window_function_name_compare(const char *dup_value, int *window_fun_idx);
 #ifdef __cplusplus
 extern "C" {

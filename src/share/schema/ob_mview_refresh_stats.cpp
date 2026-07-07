@@ -91,7 +91,7 @@ bool ObMViewRefreshRunStats::is_valid() const
 {
   bool bret = false;
   if (OB_LIKELY(ObSchema::is_valid())) {
-    bret = true && OB_INVALID_ID != refresh_id_ &&
+    bret = OB_INVALID_ID != refresh_id_ &&
            OB_INVALID_ID != run_user_id_ && !mviews_.empty();
   }
   return bret;
@@ -166,9 +166,9 @@ OB_SERIALIZE_MEMBER(ObMViewRefreshRunStats,
 int ObMViewRefreshRunStats::gen_insert_run_stats_dml(ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == 1UL || !is_valid())) {
+  if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(1UL), KPC(this));
+    LOG_WARN("invalid args", KR(ret), KPC(this));
   } else {
     if (OB_FAIL(dml.add_pk_column("refresh_id", refresh_id_)) ||
         OB_FAIL(dml.add_column("run_user_id", run_user_id_)) ||
@@ -232,7 +232,7 @@ int ObMViewRefreshRunStats::dec_num_mvs_current(ObISQLClient &sql_client,
                                                 int64_t refresh_id, int64_t dec_val)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || refresh_id <= 0 || dec_val <= 0)) {
+  if (OB_UNLIKELY(refresh_id <= 0 || dec_val <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(refresh_id), K(dec_val));
   } else {
@@ -258,20 +258,14 @@ int ObMViewRefreshRunStats::drop_empty_run_stats(ObISQLClient &sql_client,
                                                  int64_t &affected_rows, int64_t limit)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret));
-  } else {
-    
-    ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("delete from %s where num_mvs_current <= 0",
-                               OB_ALL_MVIEW_REFRESH_RUN_STATS_TNAME))) {
-      LOG_WARN("fail to assign sql", KR(ret));
-    } else if (limit > 0 && OB_FAIL(sql.append_fmt(" limit %ld", limit))) {
-      LOG_WARN("fail to append sql", KR(ret));
-    } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(sql));
-    }
+  ObSqlString sql;
+  if (OB_FAIL(sql.assign_fmt("delete from %s where num_mvs_current <= 0",
+                             OB_ALL_MVIEW_REFRESH_RUN_STATS_TNAME))) {
+    LOG_WARN("fail to assign sql", KR(ret));
+  } else if (limit > 0 && OB_FAIL(sql.append_fmt(" limit %ld", limit))) {
+    LOG_WARN("fail to append sql", KR(ret));
+  } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
+    LOG_WARN("fail to execute sql", KR(ret), K(sql));
   }
   return ret;
 }
@@ -320,7 +314,7 @@ bool ObMViewRefreshStats::is_valid() const
 {
   bool bret = false;
   if (OB_LIKELY(ObSchema::is_valid())) {
-    bret = true && OB_INVALID_ID != refresh_id_ &&
+    bret = OB_INVALID_ID != refresh_id_ &&
            OB_INVALID_ID != mview_id_ && OB_INVALID_ID != retry_id_;
   }
   return bret;
@@ -369,7 +363,7 @@ OB_SERIALIZE_MEMBER(ObMViewRefreshStats,
 int ObMViewRefreshStats::gen_insert_refresh_stats_dml(ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || !is_valid())) {
+  if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KPC(this));
   } else {
@@ -450,7 +444,7 @@ int ObMViewRefreshStats::drop_refresh_stats_record(ObISQLClient &sql_client,
                                                    const ObMViewRefreshStatsRecordId &record_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || !record_id.is_valid())) {
+  if (OB_UNLIKELY(!record_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(record_id));
   } else {
@@ -478,7 +472,7 @@ int ObMViewRefreshStats::collect_record_ids(ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
   record_ids.reset();
-  if (OB_UNLIKELY(false || !filter_param.is_valid())) {
+  if (OB_UNLIKELY(!filter_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(filter_param));
   } else {
@@ -576,7 +570,7 @@ bool ObMViewRefreshChangeStats::is_valid() const
 {
   bool bret = false;
   if (OB_LIKELY(ObSchema::is_valid())) {
-    bret = true && OB_INVALID_ID != refresh_id_ &&
+    bret = OB_INVALID_ID != refresh_id_ &&
            OB_INVALID_ID != mview_id_ && OB_INVALID_ID != retry_id_ &&
            OB_INVALID_ID != detail_table_id_;
   }
@@ -617,9 +611,9 @@ OB_SERIALIZE_MEMBER(ObMViewRefreshChangeStats,
 int ObMViewRefreshChangeStats::gen_insert_change_stats_dml(ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == 1UL || !is_valid())) {
+  if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(1UL), KPC(this));
+    LOG_WARN("invalid args", KR(ret), KPC(this));
   } else {
     if (OB_FAIL(dml.add_pk_column("refresh_id", refresh_id_)) ||
         OB_FAIL(dml.add_pk_column("mview_id", mview_id_)) ||
@@ -666,7 +660,7 @@ int ObMViewRefreshChangeStats::drop_change_stats_record(
   ObISQLClient &sql_client, const ObMViewRefreshStatsRecordId &record_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || !record_id.is_valid())) {
+  if (OB_UNLIKELY(!record_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(record_id));
   } else {
@@ -742,7 +736,7 @@ bool ObMViewRefreshStmtStats::is_valid() const
 {
   bool bret = false;
   if (OB_LIKELY(ObSchema::is_valid())) {
-    bret = true && OB_INVALID_ID != refresh_id_ &&
+    bret = OB_INVALID_ID != refresh_id_ &&
            OB_INVALID_ID != mview_id_ && OB_INVALID_ID != retry_id_ && step_ > 0 && !stmt_.empty();
   }
   return bret;
@@ -787,9 +781,9 @@ OB_SERIALIZE_MEMBER(ObMViewRefreshStmtStats,
 int ObMViewRefreshStmtStats::gen_insert_stmt_stats_dml(ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == 1UL || !is_valid())) {
+  if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(1UL), KPC(this));
+    LOG_WARN("invalid args", KR(ret), KPC(this));
   } else {
     if (OB_FAIL(dml.add_pk_column("refresh_id", refresh_id_)) ||
         OB_FAIL(dml.add_pk_column("mview_id", mview_id_)) ||
@@ -839,7 +833,7 @@ int ObMViewRefreshStmtStats::drop_stmt_stats_record(ObISQLClient &sql_client,
                                                     const ObMViewRefreshStatsRecordId &record_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || !record_id.is_valid())) {
+  if (OB_UNLIKELY(!record_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(record_id));
   } else {

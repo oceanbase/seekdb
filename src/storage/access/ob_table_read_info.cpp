@@ -558,7 +558,6 @@ int ObTableReadInfo::serialize(
 {
   int ret = OB_SUCCESS;
 
-  const bool is_oracle_mode_compat = false; // kept for serialization compatibility
   LST_DO_CODE(OB_UNIS_ENCODE,
               info_,
               schema_rowkey_cnt_,
@@ -566,7 +565,6 @@ int ObTableReadInfo::serialize(
               trans_col_index_,
               group_idx_col_index_,
               seq_read_column_count_,
-              is_oracle_mode_compat,
               cols_desc_,
               cols_index_.array_,
               memtable_cols_index_.array_);
@@ -608,15 +606,13 @@ int ObTableReadInfo::deserialize(
 {
   int ret = OB_SUCCESS;
   reset();
-  bool is_oracle_mode_compat = false; // kept for deserialization compatibility
   LST_DO_CODE(OB_UNIS_DECODE,
               info_,
               schema_rowkey_cnt_,
               rowkey_cnt_,
               trans_col_index_,
               group_idx_col_index_,
-              seq_read_column_count_,
-              is_oracle_mode_compat);
+              seq_read_column_count_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(cols_desc_.deserialize(buf, data_len, pos, allocator))) {
     LOG_WARN("Fail to deserialize cols_desc", K(ret), K(data_len), K(pos));
@@ -710,7 +706,6 @@ int64_t ObTableReadInfo::get_serialize_size() const
   int ret = OB_SUCCESS;
   int64_t len = 0;
 
-  const bool is_oracle_mode_compat = false; // kept for serialization compatibility
   LST_DO_CODE(OB_UNIS_ADD_LEN,
               info_,
               schema_rowkey_cnt_,
@@ -718,7 +713,6 @@ int64_t ObTableReadInfo::get_serialize_size() const
               trans_col_index_,
               group_idx_col_index_,
               seq_read_column_count_,
-              is_oracle_mode_compat,
               cols_desc_,
               cols_index_.array_,
               memtable_cols_index_.array_);
@@ -886,12 +880,10 @@ int ObRowkeyReadInfo::serialize(
 {
   int ret = OB_SUCCESS;
 
-  const bool is_oracle_mode_compat = false; // kept for serialization compatibility
   LST_DO_CODE(OB_UNIS_ENCODE,
               info_,
               schema_rowkey_cnt_,
               rowkey_cnt_,
-              is_oracle_mode_compat,
               cols_desc_,
               cols_index_,
               memtable_cols_index_);
@@ -906,12 +898,10 @@ int ObRowkeyReadInfo::deserialize(
 {
   int ret = OB_SUCCESS;
   reset();
-  bool is_oracle_mode_compat = false; // kept for deserialization compatibility
   LST_DO_CODE(OB_UNIS_DECODE,
               info_,
               schema_rowkey_cnt_,
-              rowkey_cnt_,
-              is_oracle_mode_compat);
+              rowkey_cnt_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(cols_desc_.deserialize(buf, data_len, pos, allocator))) {
     LOG_WARN("Fail to deserialize cols_desc", K(ret), K(data_len), K(pos));
@@ -940,12 +930,10 @@ int64_t ObRowkeyReadInfo::get_serialize_size() const
   int ret = OB_SUCCESS;
   int64_t len = 0;
 
-  const bool is_oracle_mode_compat = false; // kept for serialization compatibility
   LST_DO_CODE(OB_UNIS_ADD_LEN,
               info_,
               schema_rowkey_cnt_,
               rowkey_cnt_,
-              is_oracle_mode_compat,
               cols_desc_,
               cols_index_,
               memtable_cols_index_);

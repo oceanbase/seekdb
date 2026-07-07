@@ -854,16 +854,9 @@ int ObSolidifiedVarsGetter::get_sql_mode(ObSQLMode &sql_mode)
 int ObSolidifiedVarsGetter::get_local_nls_date_format(ObString &format)
 {
   int ret = OB_SUCCESS;
-  ObSessionSysVar *sys_var = NULL;
   if (OB_ISNULL(session_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
-  } else if (OB_FAIL(get_local_var(SYS_VAR_NLS_DATE_FORMAT, sys_var))) {
-    LOG_WARN("fail to get local var", K(ret));
-  } else if (NULL != sys_var) {
-    if (OB_FAIL(sys_var->val_.get_string(format))) {
-      LOG_WARN("fail to get nls_timestamp_tz_format str value", K(ret), KPC(sys_var));
-    }
   } else {
     format = session_->get_local_nls_date_format();
   }

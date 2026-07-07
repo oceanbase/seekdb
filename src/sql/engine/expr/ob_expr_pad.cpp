@@ -55,7 +55,7 @@ int ObExprPad::calc_result_type3(ObExprResType &type,
 
   if (OB_SUCC(ret)) {
     const common::ObLengthSemantics default_length_semantics = (OB_NOT_NULL(type_ctx.get_session())
-            ? type_ctx.get_session()->get_actual_nls_length_semantics()
+            ? type_ctx.get_session()->get_actual_length_semantics()
             : common::LS_BYTE);
     type.set_type(text_type);
     type.set_length(static_cast<ObLength>(max_len));

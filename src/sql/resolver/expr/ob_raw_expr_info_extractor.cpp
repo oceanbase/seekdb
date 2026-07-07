@@ -234,9 +234,6 @@ int ObRawExprInfoExtractor::visit(ObOpRawExpr &expr)
     LOG_WARN("fail to clear info", K(ret));
   } else if (is_inner_added && OB_FAIL(expr.add_flag(IS_INNER_ADDED_EXPR))) {
     LOG_WARN("add flag failed", K(ret));
-  } else if (T_OP_ORACLE_OUTER_JOIN_SYMBOL == expr.get_expr_type() &&
-             OB_FAIL(expr.add_flag(IS_OUTER_JOIN_SYMBOL))) {
-    LOG_WARN("failed to add flag IS_CONST_EXPR", K(ret));
   } else if (OB_FAIL(add_const(expr))) {
     LOG_WARN("fail to add const", K(ret));
   } else if (1 == expr.get_param_count()) {
@@ -663,7 +660,6 @@ int ObRawExprInfoExtractor::visit(ObMatchFunRawExpr &expr)
 
 /*
 The definition of IS_EXPR_DETERMINISTIC: 
-https://docs.oracle.com/en/database/oracle/oracle-database/23/lnpls/DETERMINISTIC-clause.html#GUID-6AECC957-27CC-4334-9F43-0FBE88F92654
 1. A deterministic must return the same value on two distinct invocations if the arguments provided to the two invocations are the same.
 2. A DETERMINISTIC may not have side effects.
 3. A DETERMINISTIC may not raise an unhandled exception.

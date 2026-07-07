@@ -144,9 +144,6 @@ ObCreateViewHelper::~ObCreateViewHelper()
      view name could exist or not
      if view name exist, it must be a view
 
--- oracle mode
-   check oracle object exist with name
-   get table id with name
 -- mysql mode
    get mock table id with name
    get table id with name

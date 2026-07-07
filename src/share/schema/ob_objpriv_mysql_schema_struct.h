@@ -34,7 +34,7 @@ struct ObObjMysqlPrivSortKey
   {}
   bool operator==(const ObObjMysqlPrivSortKey &rhs) const
   {
-    return (true) && (user_id_ == rhs.user_id_)
+    return (user_id_ == rhs.user_id_)
            && (object_name_ == rhs.object_name_) && (object_type_ == rhs.object_type_);
   }
   bool operator!=(const ObObjMysqlPrivSortKey &rhs) const
@@ -45,7 +45,7 @@ struct ObObjMysqlPrivSortKey
   {
     ObCompareNameWithTenantID name_cmp;
     bool bret = false;
-    if (false == bret && true) {
+    if (false == bret) {
       bret = user_id_ < rhs.user_id_;
       if (false == bret && user_id_ == rhs.user_id_) {
         bret = object_type_ < rhs.object_type_;
@@ -72,7 +72,7 @@ struct ObObjMysqlPrivSortKey
   }
   bool is_valid() const
   {
-    return (true) && (user_id_ != common::OB_INVALID_ID);
+    return user_id_ != common::OB_INVALID_ID;
   }
 
   int deep_copy(const ObObjMysqlPrivSortKey &src, common::ObIAllocator &allocator)

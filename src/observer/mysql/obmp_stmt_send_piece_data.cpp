@@ -607,43 +607,9 @@ int ObPieceCache::get_buffer(int32_t stmt_id,
   return ret;
 }
 
-int ObPieceCache::get_oracle_buffer(int32_t stmt_id, 
-                                    uint16_t param_id, 
-                                    uint64_t count,
-                                    uint64_t &length, 
-                                    common::ObFixedArray<ObSqlString, ObIAllocator> &str_buf,
-                                    char *is_null_map)
-{
-  int ret = OB_SUCCESS;
-  ObPiece *piece = NULL;
-  if (OB_FAIL(get_piece(stmt_id, param_id, piece))) {
-    LOG_WARN("get piece fail", K(stmt_id), K(param_id), K(ret) );
-  } else if (NULL == piece) {
-    ret = OB_ERR_PARAM_INVALID;
-    LOG_WARN("piece is null", K(stmt_id), K(ret));
-  } else {
-    // maybe because the retry mechanism repeatedly executes this piece of code, 
-    // position should be set 0 
-    piece->set_position(0);
-    for (int64_t i=0; OB_SUCC(ret) && i < count; i++) {
-      if (OB_FAIL(merge_piece_buffer(piece, str_buf.at(i)))) {
-        LOG_WARN("merge piece buffer fail.", K(ret), K(stmt_id));
-      } else {
-        length = length + get_length_length(str_buf.at(i).length());
-        length = length + str_buf.at(i).length();
-      }
-    }
-    if (OB_SUCC(ret) && NULL != is_null_map) {
-      piece->get_is_null_map(is_null_map, count);
-    }
-  }
-  LOG_DEBUG("get buffer.", K(ret), K(stmt_id), K(param_id), K(length));
-  return ret;
-}
-
-int ObPieceCache::get_mysql_buffer(int32_t stmt_id, 
-                                  uint16_t param_id, 
-                                  uint64_t &length, 
+int ObPieceCache::get_mysql_buffer(int32_t stmt_id,
+                                   uint16_t param_id,
+                                   uint64_t &length,
                                   ObSqlString &str_buf)
 {
   int ret = OB_SUCCESS;

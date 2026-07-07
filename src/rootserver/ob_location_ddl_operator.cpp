@@ -63,7 +63,7 @@ int ObLocationDDLOperator::create_location(const ObString &ddl_str,
     obj_priv_key.obj_id_ = new_location_id;
     obj_priv_key.obj_type_ = static_cast<uint64_t>(ObObjectType::LOCATION);
     obj_priv_key.col_id_ = OB_COMPACT_COLUMN_INVALID_ID;
-    obj_priv_key.grantor_id_ = OB_ORA_SYS_USER_ID;
+    obj_priv_key.grantor_id_ = OB_EXTENDED_SYS_USER_ID;
     obj_priv_key.grantee_id_ = user_id;
 
     share::ObRawObjPrivArray priv_array;

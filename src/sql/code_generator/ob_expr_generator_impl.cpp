@@ -23,7 +23,6 @@
 #include "sql/engine/expr/ob_expr_strcmp.h"
 #include "sql/engine/expr/ob_expr_abs.h"
 #include "sql/engine/expr/ob_expr_arg_case.h"
-// ob_expr_oracle_decode.h removed (Oracle cleanup)
 #include "sql/engine/expr/ob_expr_to_type.h"
 #include "sql/engine/expr/ob_expr_rand.h"
 #include "sql/engine/expr/ob_expr_random.h"
@@ -806,7 +805,7 @@ inline int ObExprGeneratorImpl::visit_in_expr(ObOpRawExpr &expr, ObExprInOrNotIn
       in_op->set_param_all_const(param_all_const);
       in_op->set_param_all_same_type(param_all_same_type);
       in_op->set_param_all_same_cs_type(param_all_same_cs_type &= param_all_same_cs_level);
-      in_op->set_param_is_ext_type_oracle(param_all_is_ext);
+      in_op->set_param_all_ext_type(param_all_is_ext);
     }
   } else {
     // like a in (1, 2, 3)
@@ -857,7 +856,7 @@ inline int ObExprGeneratorImpl::visit_in_expr(ObOpRawExpr &expr, ObExprInOrNotIn
       in_op->set_param_all_const(param_all_const);
       in_op->set_param_all_same_type(param_all_same_type);
       in_op->set_param_all_same_cs_type(param_all_same_cs_type &= param_all_same_cs_level);
-      in_op->set_param_is_ext_type_oracle(param_all_is_ext);
+      in_op->set_param_all_ext_type(param_all_is_ext);
       //now only support c1 in (1,2,3,4,5...) to vectorized
       if (param_all_can_vectorize && expr.get_param_expr(0)->is_vectorize_result()) {
         in_op->set_param_can_vectorized();

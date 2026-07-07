@@ -320,7 +320,6 @@ private:
   obcall::ObStorageRpcProxy storage_rpc_proxy_;
   common::ObMySQLProxy sql_proxy_;
   common::ObMySQLProxy ddl_sql_proxy_;
-  common::ObCommonSqlProxy ddl_oracle_sql_proxy_;
   sql::ObExecutorRpcImpl executor_rpc_;
 
   // The OceanBase configuration relating to.

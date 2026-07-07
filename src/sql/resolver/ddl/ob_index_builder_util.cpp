@@ -998,7 +998,7 @@ int ObIndexBuilderUtil::generate_ordinary_generated_column(
         if (OB_FAIL(ret)) {
           //do nothing
         } else if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH, pos,
-                                           "SYS_NC%ld$", /*naming rules are compatible with oracle*/
+                                           "SYS_NC%ld$", /*internal generated column name*/
                                            tmp_gen_col.get_column_id()))) {
           LOG_WARN("print generate column prefix name failed", K(ret));
         } else if (OB_FAIL(tmp_gen_col.set_column_name(col_name_buf))) {

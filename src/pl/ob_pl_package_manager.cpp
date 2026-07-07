@@ -308,9 +308,7 @@ int ObPLPackageManager::read_and_exec_package_sql(ObMySQLProxy &sql_proxy,
     if (OB_FAIL(stream.open())) {
       LOG_WARN("failed to open package file data stream", K(ret), K(stream));
     } else {
-      // system tenant will run with mysql compatibility mode
-      // but we need to create system packages with oralce compatibility
-      // here hack to oracle mode
+      // Load system packages without caching compilation results into the PL cache.
       bool eof = false;
       ObSessionParam param;
       // do not cache the compilation results of system packages into the PL cache when loading system packages.
@@ -343,13 +341,9 @@ int ObPLPackageManager::read_and_exec_package_sql(ObMySQLProxy &sql_proxy,
 extern int64_t syspack_source_count;
 extern std::pair<const char * const, const char* const> syspack_source_contents[];
 
-extern int oracle_syspack_file_list_length;
 extern int mysql_syspack_file_list_length;
-extern ObSysPackageFile oracle_syspack_file_list[];
 extern ObSysPackageFile mysql_syspack_file_list[];
-extern int oracle_special_syspack_file_list_length;
 extern int mysql_special_syspack_file_list_length;
-extern ObSysPackageFile oracle_special_syspack_file_list[];
 extern ObSysPackageFile mysql_special_syspack_file_list[];
 
 #define SIZE_OF_SYSPACK_LST(lst) (lst##_length)
@@ -485,17 +479,11 @@ int ObPLPackageManager::load_sys_package_list(ObMySQLProxy &sql_proxy,
 int ObPLPackageManager::load_all_common_sys_package(
     ObMySQLProxy &sql_proxy, ObCompatibilityMode compa_mode, bool from_file) {
   int ret = OB_SUCCESS;
-  if (compa_mode == ObCompatibilityMode::OCEANBASE_MODE) {
-    OZ (load_sys_package_list(sql_proxy, mysql_syspack_file_list,
-                              SIZE_OF_SYSPACK_LST(mysql_syspack_file_list),
-                              ObCompatibilityMode::MYSQL_MODE,
-                              from_file));
-  } else if (compa_mode == ObCompatibilityMode::MYSQL_MODE) {
-    OZ (load_sys_package_list(sql_proxy, mysql_syspack_file_list,
-                              SIZE_OF_SYSPACK_LST(mysql_syspack_file_list),
-                              ObCompatibilityMode::MYSQL_MODE,
-                              from_file));
-  }
+  UNUSED(compa_mode);
+  OZ (load_sys_package_list(sql_proxy, mysql_syspack_file_list,
+                            SIZE_OF_SYSPACK_LST(mysql_syspack_file_list),
+                            ObCompatibilityMode::MYSQL_MODE,
+                            from_file));
 
   if (OB_SUCC(ret)) {
     LOG_INFO("load all common sys package success!", K(ret), K(from_file));

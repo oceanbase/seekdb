@@ -70,19 +70,10 @@ int ObSequenceDDLProxy::create_sequence(
 {
   int ret = OB_SUCCESS;
   ObSequenceOptionBuilder opt_builder;
-  ObArray<ObSchemaType> conflict_schema_types;
   uint64_t sequence_id = OB_INVALID_ID;
   bool is_system_generated = false;
   bool exists = false;
-  if (OB_FAIL(schema_guard.check_oracle_object_exist(
-      seq_schema.get_database_id(), seq_schema.get_sequence_name(),
-      SEQUENCE_SCHEMA, INVALID_ROUTINE_TYPE, false, conflict_schema_types))) {
-    LOG_WARN("fail to check oracle_object exist", K(ret), K(seq_schema));
-  } else if (conflict_schema_types.count() > 0) {
-    ret = OB_ERR_EXIST_OBJECT;
-    LOG_WARN("Name is already used by an existing object", K(ret), K(seq_schema),
-        K(conflict_schema_types));
-  } else if (OB_FAIL(schema_guard.check_sequence_exist_with_name(seq_schema.get_database_id(),
+  if (OB_FAIL(schema_guard.check_sequence_exist_with_name(seq_schema.get_database_id(),
               seq_schema.get_sequence_name(),
               exists,
               sequence_id,

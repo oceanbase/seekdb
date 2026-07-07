@@ -87,17 +87,6 @@ int ObCreateMaterializedViewHelper::generate_container_table_schema_()
         }
       }
 
-      if (OB_SUCC(ret)) {
-        ObArray<ObSchemaType> conflict_schema_types;
-        if (!arg_.is_alter_view_
-            && OB_FAIL(schema_guard_wrapper_.check_oracle_object_exist(
-                       container_table_schema.get_database_id(),
-                       arg_.schema_.get_session_id(),
-                       container_table_schema.get_table_name_str(), TABLE_SCHEMA,
-                       INVALID_ROUTINE_TYPE, arg_.if_not_exist_))) {
-          LOG_WARN("fail to check oracle_object exist", KR(ret), K(container_table_schema));
-        }
-      }
       if (OB_SUCC(ret)) { // check same table_name
         uint64_t table_id = OB_INVALID_ID;
         ObTableType table_type = MAX_TABLE_TYPE;

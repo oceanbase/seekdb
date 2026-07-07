@@ -393,7 +393,7 @@ int ObTabletMetaTableStorage::batch_update(
 
       while (OB_SUCC(ret) && current_index < replicas.count()) {
         const ObTabletReplica &replica = replicas.at(current_index++);
-        if (replica.is_valid() && true) {
+        if (replica.is_valid()) {
           auto binder = [&](share::ObSQLiteBinder &b) -> int {
             b.bind_int64(current_time); // gmt_create
             b.bind_int64(current_time); // gmt_modified

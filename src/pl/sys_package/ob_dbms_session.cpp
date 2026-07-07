@@ -181,8 +181,8 @@ int ObDBMSSession::check_privileges(pl::ObPLContext *pl_ctx,
   int ret = OB_SUCCESS;
   ObPLExecState *frame = NULL;
   bool trusted = false;
-  // ob store sys package in oceanbase schema, to compat with oracle
-  // we rewrite SYS to OCEANBASE
+  // System packages are stored in the OCEANBASE schema.
+  // Rewrite SYS to OCEANBASE for this package.
   ObString real_schema_name = (0 == schema_name.case_compare("SYS") 
                                && 0 == package_name.case_compare("DBMS_SESSION"))
                                ? "OCEANBASE" : schema_name;

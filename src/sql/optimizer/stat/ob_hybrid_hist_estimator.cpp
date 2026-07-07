@@ -337,7 +337,7 @@ int ObHybridHistEstimator::try_build_hybrid_hist(const ObColumnStatParam &param,
 }
 
 /*@brief ObHybridHistEstimator::compute_estimate_percent, compute estimate percent.
- * Base on Oracle 12c relation guide and test to set:
+ * Estimate percent rules:
  * 1.not specify estimate percent:
  *  a. if total_row_count < MAGIC_MAX_AUTO_SAMPLE_SIZE then choosing full table scan;
  *  b. if total_row_count >= MAGIC_MAX_AUTO_SAMPLE_SIZE then:
@@ -736,4 +736,3 @@ OB_DEF_DESERIALIZE(ObHybridHistograms)
 
 } // end of common
 } // end of oceanbase
-

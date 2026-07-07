@@ -219,7 +219,7 @@ int ObRawExprDeduceType::try_add_cast_expr(RawExprType &parent,
       if (T_FUN_UDF == parent.get_expr_type()
           && ObNumberTC == ori_tc
           && ObLobTC == expect_tc) {
-        // oracle mode can not cast number to text, but mysql mode can
+        // Number-to-text casts are not allowed for this path.
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
         SQL_RESV_LOG(WARN, "cast to lob type not allowed", K(ret));
       }

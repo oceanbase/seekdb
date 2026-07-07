@@ -517,14 +517,6 @@ int ObDbmsXplan::set_display_result(sql::ObExecContext &ctx,
   return ret;
 }
 
-int ObDbmsXplan::set_display_result_for_oracle(sql::ObExecContext &exec_ctx,
-                                              PlanText &plan_text,
-                                              common::ObObj &result)
-{
-  int ret = OB_SUCCESS;
-  return ret;
-}
-
 int ObDbmsXplan::set_display_result_for_mysql(sql::ObExecContext &ctx,
                                               PlanText &plan_text,
                                               common::ObObj &result)

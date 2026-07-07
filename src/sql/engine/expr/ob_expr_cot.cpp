@@ -49,7 +49,7 @@ int ObExprCot::calc_cot_expr(const ObExpr &expr, ObEvalCtx &ctx,
   if (OB_FAIL(expr.args_[0]->eval(ctx, radian))) {
     LOG_WARN("eval radian arg failed", K(ret), K(expr));
   } else if (radian->is_null()) {
-    /* radian is already be cast to number type, no need to is_null_oracle */
+    /* radian is already cast to number type, no extra null-type handling needed */
     res_datum.set_null();
   } else if (ObDoubleType == expr.args_[0]->datum_meta_.type_) {
     const double arg = radian->get_double();

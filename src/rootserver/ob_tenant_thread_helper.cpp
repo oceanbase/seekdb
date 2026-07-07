@@ -159,28 +159,23 @@ int ObTenantThreadHelper::wait_tenant_schema_ready_()
   int ret = OB_SUCCESS;
   bool is_ready = false;
   share::schema::ObTenantSchema tenant_schema;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
-  } else {
-    while (!is_ready && !has_set_stop()) {
-      ret = OB_SUCCESS;
-      if (OB_FAIL(get_tenant_schema( tenant_schema))) {
-        LOG_WARN("failed to get tenant schema", KR(ret));
-      } else if (tenant_schema.is_creating()) {
-        ret = OB_NEED_WAIT;
-        LOG_WARN("tenant schema not ready, no need tenant balance", KR(ret), K(tenant_schema));
-      } else {
-        is_ready = true;
-      }
-      if (!is_ready) {
-        idle(10 * 1000 * 1000);
-      }
+  while (!is_ready && !has_set_stop()) {
+    ret = OB_SUCCESS;
+    if (OB_FAIL(get_tenant_schema( tenant_schema))) {
+      LOG_WARN("failed to get tenant schema", KR(ret));
+    } else if (tenant_schema.is_creating()) {
+      ret = OB_NEED_WAIT;
+      LOG_WARN("tenant schema not ready, no need tenant balance", KR(ret), K(tenant_schema));
+    } else {
+      is_ready = true;
     }
-    if (has_set_stop()) {
-      LOG_WARN("thread has been stopped", K(is_ready));
-      ret = OB_IN_STOP_STATE;
+    if (!is_ready) {
+      idle(10 * 1000 * 1000);
     }
+  }
+  if (has_set_stop()) {
+    LOG_WARN("thread has been stopped", K(is_ready));
+    ret = OB_IN_STOP_STATE;
   }
   return ret;
 }
@@ -188,10 +183,7 @@ int ObTenantThreadHelper::wait_tenant_schema_ready_()
 int ObTenantThreadHelper::wait_tenant_schema_and_version_ready_()
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_FAIL(wait_tenant_schema_ready_())) {
+  if (OB_FAIL(wait_tenant_schema_ready_())) {
     LOG_WARN("failed to wait tenant schema ready", KR(ret));
   }
   return ret;
@@ -261,4 +253,3 @@ void ObTenantThreadHelper::wakeup()
 
 }//end of rootserver
 }
-

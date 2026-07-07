@@ -54,9 +54,7 @@ public:
   {}
   ~ObDDLReplicaBuildExecutorParam () = default;
   bool is_valid() const {
-    bool is_valid =  true &&
-                     true &&
-                     ddl_type_ != share::DDL_INVALID &&
+    bool is_valid = ddl_type_ != share::DDL_INVALID &&
                      source_tablet_ids_.count() > 0 &&
                      dest_tablet_ids_.count() == source_tablet_ids_.count() &&
                      source_table_ids_.count() == source_tablet_ids_.count() &&

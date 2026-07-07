@@ -73,7 +73,7 @@ ObUDF &ObUDF::operator = (const ObUDF &src_schema)
 
 bool ObUDF::operator==(const ObUDF &r) const
 {
-  return (true && name_ == r.name_);
+  return (name_ == r.name_);
 }
 
 

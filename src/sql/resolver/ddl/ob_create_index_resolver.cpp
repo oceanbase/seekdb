@@ -306,7 +306,7 @@ int ObCreateIndexResolver::resolve_index_column_node(
       }
     }
 
-    // In oracle mode, we need to check if the new index is on the same cols with old indexes.
+    // Check whether the new index is on the same columns as old indexes.
     CHECK_COMPATIBILITY_MODE(session_info_);
   }
   return ret;
@@ -715,9 +715,7 @@ int ObCreateIndexResolver::set_table_option_to_stmt(
     
     index_arg.index_option_.index_status_= INDEX_STATUS_UNAVAILABLE;
     if (NOT_SPECIFIED == index_scope_) {
-      // partitioned index must be global,
-      // MySQL default index mode is local,
-      // and Oracle default index mode is global
+      // Partitioned index must be global; otherwise the default index mode is local.
       global_ = is_partitioned;
       if (!global_) {
         if (OB_FAIL(get_suggest_index_scope(data_table_id, index_arg, index_keyname_, global_))) {

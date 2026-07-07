@@ -65,19 +65,6 @@ int ObPLDDLService::create_routine(const obcall::ObCreateRoutineArg &arg,
     } else {
       routine_info.set_database_id(db_schema->get_database_id());
     }
-    if (OB_SUCC(ret)) {
-      ObArray<ObSchemaType> conflict_schema_types;
-      if (OB_FAIL(schema_guard.check_oracle_object_exist(db_schema->get_database_id(), routine_info.get_routine_name(), ROUTINE_SCHEMA,
-          routine_info.get_routine_type(), is_or_replace, conflict_schema_types))) {
-        LOG_WARN("fail to check oracle_object exist", K(ret), K(routine_info.get_routine_name()));
-      } else if (conflict_schema_types.count() > 0) {
-        // Here we check if the name of the new object in oracle mode is already occupied by another object
-        ret = OB_ERR_EXIST_OBJECT;
-        LOG_WARN("Name is already used by an existing object in oralce mode",
-                  K(ret), K(routine_info.get_routine_name()),
-                  K(conflict_schema_types));
-      }
-    }
     bool exist = false;
     if (OB_SUCC(ret)) {
       if (routine_info.get_routine_type() == ROUTINE_PROCEDURE_TYPE) {
@@ -551,21 +538,6 @@ int ObPLDDLService::create_package(const obcall::ObCreatePackageArg &arg,
       new_package_info.set_database_id(db_schema->get_database_id());
     }
     if (OB_SUCC(ret)) {
-      ObArray<ObSchemaType> conflict_schema_types;
-      // package body duplicate check only compares for duplicate package bodies, package duplicate check needs to compare objects other than package body
-      if (ObPackageType::PACKAGE_TYPE == new_package_info.get_type()
-          && OB_FAIL(schema_guard.check_oracle_object_exist(db_schema->get_database_id(), new_package_info.get_package_name(), PACKAGE_SCHEMA,
-             INVALID_ROUTINE_TYPE, arg.is_replace_, conflict_schema_types))) {
-        LOG_WARN("fail to check object exist", K(ret), K(new_package_info.get_package_name()));
-      } else if (conflict_schema_types.count() > 0) {
-        // Here we check if the name of the new object in oracle mode is already occupied by another object
-        ret = OB_ERR_EXIST_OBJECT;
-        LOG_WARN("Name is already used by an existing object in oralce mode",
-                 K(ret), K(new_package_info.get_package_name()),
-                 K(conflict_schema_types));
-      }
-    }
-    if (OB_SUCC(ret)) {
       if (OB_FAIL(schema_guard.get_package_info( db_schema->get_database_id(), new_package_info.get_package_name(),
                                                 new_package_info.get_type(), new_package_info.get_compatibility_mode(),
                                                 old_package_info))) {
@@ -573,7 +545,7 @@ int ObPLDDLService::create_package(const obcall::ObCreatePackageArg &arg,
       } else if (OB_ISNULL(old_package_info) || arg.is_replace_) {
         bool need_create = true;
         // For system packages, to avoid multiple rebuilds, compare the new system package with the existing system package to see if they are the same
-        if (OB_NOT_NULL(old_package_info) && true) {
+        if (OB_NOT_NULL(old_package_info)) {
           if (old_package_info->get_source().length() == new_package_info.get_source().length()
               && (0 == MEMCMP(old_package_info->get_source().ptr(),
                               new_package_info.get_source().ptr(),
@@ -857,7 +829,6 @@ int ObPLDDLService::drop_trigger(const obcall::ObDropTriggerArg &arg,
   const ObString &trigger_database = arg.trigger_database_;
   const ObString &trigger_name = arg.trigger_name_;
   const ObTriggerInfo *trigger_info = NULL;
-  bool is_ora_mode = false;
   if (OB_FAIL(check_env_before_ddl(schema_guard, arg, ddl_service))) {
     LOG_WARN("check env failed", K(ret));
   } else if (OB_FAIL(ddl_service.get_database_id(schema_guard, trigger_database, trigger_database_id))) {
@@ -866,9 +837,6 @@ int ObPLDDLService::drop_trigger(const obcall::ObDropTriggerArg &arg,
     LOG_WARN("get trigger info failed", K(ret), K(trigger_database), K(trigger_name));
   } else if (OB_ISNULL(trigger_info)) {
     ret = OB_ERR_TRIGGER_NOT_EXIST;
-    if (is_ora_mode) {
-      LOG_ORACLE_USER_ERROR(OB_ERR_TRIGGER_NOT_EXIST, trigger_name.length(), trigger_name.ptr());
-    }
   } else if (trigger_info->is_in_recyclebin()) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
     LOG_WARN("trigger is in recyclebin", K(ret),
@@ -876,7 +844,7 @@ int ObPLDDLService::drop_trigger(const obcall::ObDropTriggerArg &arg,
   } else if (OB_FAIL(drop_trigger_in_trans(*trigger_info, &arg.ddl_stmt_str_, schema_guard, ddl_service))) {
     LOG_WARN("drop trigger in trans failed", K(ret), K(trigger_database), K(trigger_name));
   }
-  if (!is_ora_mode && (OB_ERR_TRIGGER_NOT_EXIST == ret || OB_ERR_BAD_DATABASE == ret)) {
+  if (OB_ERR_TRIGGER_NOT_EXIST == ret || OB_ERR_BAD_DATABASE == ret) {
     ret = OB_ERR_TRIGGER_NOT_EXIST;
     if (arg.if_exist_) {
       ret = OB_SUCCESS;
@@ -1297,7 +1265,7 @@ int ObPLDDLService::recursive_check_trigger_ref_cyclic(share::schema::ObSchemaGe
         if (0 == trg_info->get_ref_trg_name().case_compare(ref_trigger_info.get_trigger_name())) {
           if (0 == trg_info->get_trigger_name().case_compare(generate_cyclic_name)) {
             ret = OB_ERR_REF_CYCLIC_IN_TRG;
-            LOG_WARN("ORA-25023: cyclic trigger dependency is not allowed", K(ret),
+            LOG_WARN("cyclic trigger dependency is not allowed", K(ret),
                      K(generate_cyclic_name), KPC(trg_info));
           }
           OZ (SMART_CALL(recursive_check_trigger_ref_cyclic(schema_guard,
@@ -1329,7 +1297,7 @@ int ObPLDDLService::drop_trigger_in_drop_table(ObMySQLTransaction &trans,
     OV (OB_NOT_NULL(trigger_info), OB_ERR_UNEXPECTED, trigger_id);
     OV (!trigger_info->is_in_recyclebin(), OB_ERR_UNEXPECTED, trigger_id);
     if (to_recyclebin && !table_schema.is_view_table()) {
-      // Compatible with Oracle, trigger does not go to the recycle bin when dropping a view
+      // Only non-view table triggers are moved to the recycle bin.
       OZ (pl_operator.drop_trigger_to_recyclebin(*trigger_info, schema_guard, trans));
     } else {
       OZ (pl_operator.drop_trigger(*trigger_info,
@@ -1437,8 +1405,7 @@ int ObPLDDLService::rebuild_triggers_on_hidden_table(
     OZ (new_trigger_info.assign(*trigger_info));
     OX (new_trigger_info.set_base_object_id(hidden_table_schema.get_table_id()));
     OX (new_trigger_info.set_trigger_id(OB_INVALID_ID));
-    // ATTENTION!
-    // Oracle supports one table has multiple triggers based on different users/databases.
+    // Preserve the original trigger database id when rebuilding on the hidden table.
     OX (new_trigger_info.set_database_id(trigger_info->get_database_id()));
     if (OB_SUCC(ret)) {
       if (is_recover_restore_table) {
@@ -1508,82 +1475,8 @@ int ObPLDDLService::check_and_construct_restore_trigger_info(
 {
   int ret = OB_SUCCESS;
   need_rebuild = true;
-  const ObDatabaseSchema *src_db_schema = nullptr;
-  const ObDatabaseSchema *dst_db_schema = nullptr;
-  
-  
-  if (OB_UNLIKELY(true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant is same", K(ret));
-  } else if (OB_FAIL(src_tenant_schema_guard.get_database_schema(
-      orig_table_schema.get_database_id(), src_db_schema))) {
-    LOG_WARN("get db schema failed", K(ret), "db_id", orig_table_schema.get_database_id());
-  } else if (OB_ISNULL(src_db_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null db", K(ret), "db_id", orig_table_schema.get_database_id());
-  } else if (OB_FAIL(dst_tenant_schema_guard.get_database_schema(
-      hidden_table_schema.get_database_id(), dst_db_schema))) {
-    LOG_WARN("get db schema failed", K(ret), "db_id", hidden_table_schema.get_database_id());
-  } else if (OB_ISNULL(dst_db_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null db", K(ret), "db_id", hidden_table_schema.get_database_id());
-  } else {
-    // To check if the database name, base_table name changed.
-    const ObString &target_table_name = alter_table_arg.alter_table_schema_.get_table_name_str();
-    ObCompareNameWithTenantID name_cmp;
-    if (0 != name_cmp.compare(src_db_schema->get_database_name_str(), dst_db_schema->get_database_name_str())) {
-      need_rebuild = false;
-      FLOG_INFO("ignore to rebuild the trigger whose db name has changed", 
-          "src_db_name", src_db_schema->get_database_name_str(), "dst_db_name", dst_db_schema->get_database_name_str(),
-          K(src_trigger_info));
-    } else if (0 != name_cmp.compare(orig_table_schema.get_table_name_str(), target_table_name)) {
-      need_rebuild = false;
-      FLOG_INFO("ignore to rebuild the trigger whose base_table name has changed", 
-          "src_table_name", orig_table_schema.get_table_name_str(), K(target_table_name), K(src_trigger_info));
-    }
-  }
-
-  if (OB_SUCC(ret) && need_rebuild) {
-    // To prepare new trigger info.
-    if (src_db_schema->get_database_id() == src_trigger_info.get_database_id()) {
-      // Base table and trigger have the same database.
-      new_trigger_info.set_database_id(dst_db_schema->get_database_id());
-    } else {
-      // Base table and trigger have the different database.
-      // To find the target database by the database name.
-      const ObDatabaseSchema *src_trigger_db_schema = nullptr;
-      if (OB_FAIL(src_tenant_schema_guard.get_database_schema( 
-          src_trigger_info.get_database_id(), src_trigger_db_schema))) {
-        LOG_WARN("get db schema failed", K(ret), "db_id", src_trigger_info.get_database_id());
-      } else if (OB_ISNULL(src_trigger_db_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null db", K(ret), "db_id", src_trigger_info.get_database_id());
-      } else {
-        const ObDatabaseSchema *dst_trigger_db_schema = nullptr;
-        const ObString &src_trigger_db_name = src_trigger_db_schema->get_database_name_str();
-        // 2. check if the trigger's db existed in the dst tenant space.
-        if (OB_FAIL(dst_tenant_schema_guard.get_database_schema( src_trigger_db_name, dst_trigger_db_schema))) {
-          LOG_WARN("get db schema failed", K(ret), K(src_trigger_db_name));
-        } else if (nullptr == dst_trigger_db_schema) {
-          need_rebuild = false;
-          FLOG_INFO("ignore to rebuild the trigger whose db does not exist", K(src_trigger_db_name), K(src_trigger_info));
-        } else {
-          new_trigger_info.set_database_id(dst_trigger_db_schema->get_database_id());
-        }
-      }
-    }
-  }
-
-  if (OB_SUCC(ret) && need_rebuild) {
-    const ObTriggerInfo *check_dup_trigger_info = nullptr;
-    if (OB_FAIL(dst_tenant_schema_guard.get_trigger_info( new_trigger_info.get_database_id(),
-        new_trigger_info.get_trigger_name(), check_dup_trigger_info))) {
-      LOG_WARN("check duplicated trigger failed", K(ret), K(new_trigger_info));
-    } else if (OB_UNLIKELY(nullptr != check_dup_trigger_info)) {
-      need_rebuild = false;
-      FLOG_INFO("ignore to rebuild the trigger that has already exist", K(src_trigger_info), K(new_trigger_info));
-    }
-  }
+  ret = OB_INVALID_ARGUMENT;
+  LOG_WARN("tenant is same", K(ret));
   return ret;
 }
 //----End of functions for restore table ddl----

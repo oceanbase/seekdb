@@ -36,7 +36,7 @@ public:
   sql::ObSQLSessionInfo *get_session_info() const { return session_info_; }
   ObCompatibilityMode get_compatibility_mode() const {
     return nullptr != session_info_ ? session_info_->get_compatibility_mode()
-                                    : ObCompatibilityMode::OCEANBASE_MODE;
+                                    : ObCompatibilityMode::MYSQL_MODE;
   }
 
 protected:

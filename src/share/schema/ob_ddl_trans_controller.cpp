@@ -77,8 +77,6 @@ ObDDLTransController::~ObDDLTransController()
   destroy();
 }
 
-
-
 int ObDDLTransController::reserve_schema_version(const uint64_t schema_version_count)
 {
   int ret = OB_SUCCESS;
@@ -90,7 +88,7 @@ int ObDDLTransController::reserve_schema_version(const uint64_t schema_version_c
   } else if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ObDDLTransController", KR(ret));
-  } else if (false || schema_version_count == 0) {
+  } else if (schema_version_count == 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("register_task_and_assign_schema_version", KR(ret), K(schema_version_count));
   } else if (OB_FAIL(schema_service_->gen_batch_new_schema_versions(schema_version_count, end_schema_version))) {
@@ -110,7 +108,7 @@ int ObDDLTransController::create_task_and_assign_schema_version(const uint64_t s
   } else if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ObDDLTransController", KR(ret));
-  } else if (false || schema_version_count == 0 || schema_version_res.count() != 0) {
+  } else if (schema_version_count == 0 || schema_version_res.count() != 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("register_task_and_assign_schema_version", KR(ret), K(schema_version_count), K(schema_version_res));
   } else {

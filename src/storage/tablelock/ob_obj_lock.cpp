@@ -1347,8 +1347,7 @@ int ObOBJLock::check_allow_lock_(
                            lock_op.lock_mode_,
                            conflict_modes)
              && exist_others_(lock_op, conflict_modes)) {
-    // TODO:
-    // return OB_ERR_EXCLUSIVE_LOCK_CONFLICT_NOWAIT for ORA-00054 in oracle mode
+    // TODO: return OB_ERR_EXCLUSIVE_LOCK_CONFLICT_NOWAIT for NOWAIT lock conflicts.
     ret = OB_TRY_LOCK_ROW_CONFLICT;
   }
   if (OB_TRY_LOCK_ROW_CONFLICT == ret && conflict_modes != 0) {

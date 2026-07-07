@@ -1174,7 +1174,6 @@ ObJsonDatetime::ObJsonDatetime(const ObTime &time, ObObjType field_type)
 ObJsonDatetime::ObJsonDatetime(ObJsonNodeType type, const ObTime &time)
     : ObJsonScalar()
 {
-  // how about oracle if we use mysql type in JsonScalar?
   // ToDo: mapping for types instead switch
   json_type_ = type;
   field_type_ = ObJsonBaseUtil::get_time_type(type);

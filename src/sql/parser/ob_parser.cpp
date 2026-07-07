@@ -996,7 +996,7 @@ int ObParser::parse_(const ObString &query,
   parse_result.minus_ctx_.pos_ = -1;
   parse_result.minus_ctx_.raw_sql_offset_ = -1;
   parse_result.charset_info_ = ObCharset::get_charset(charsets4parser_.string_collation_);
-  parse_result.charset_info_oracle_db_ = ObCharset::is_valid_collation(charsets4parser_.nls_collation_) ?
+  parse_result.charset_info_nls_db_ = ObCharset::is_valid_collation(charsets4parser_.nls_collation_) ?
         ObCharset::get_charset(charsets4parser_.nls_collation_) : NULL;
   parse_result.connection_collation_ = charsets4parser_.string_collation_;
   parse_result.mysql_compatible_comment_ = false;

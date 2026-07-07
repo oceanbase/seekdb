@@ -358,7 +358,7 @@ int ObDbmsStatsCopyTableStats::check_parts_valid(sql::ObExecContext &ctx,
   if (table_stat_param.part_infos_.empty()) {
     ret = OB_WRONG_PARTITION_NAME;
     LOG_WARN("The table is not partitioned, so the partition name is invalid", K(ret));
-    LOG_ORACLE_USER_ERROR(OB_WRONG_PARTITION_NAME, srcpart_name.length(), srcpart_name.ptr());
+    LOG_USER_ERROR(OB_WRONG_PARTITION_NAME, srcpart_name.length(), srcpart_name.ptr());
   } else {
     bool is_src_onepart = ObDbmsStatsUtils::find_part(table_stat_param.all_part_infos_,
                                                       srcpart_name,
@@ -382,9 +382,9 @@ int ObDbmsStatsCopyTableStats::check_parts_valid(sql::ObExecContext &ctx,
       LOG_WARN("invalid src/dst part name", K(ret), K(is_src_onepart), K(is_src_twopart),
                K(is_dst_onepart), K(is_dst_twopart), K(srcpart_name), K(dstpart_name));
       if (!is_dst_onepart && !is_dst_twopart) {
-        LOG_ORACLE_USER_ERROR(OB_WRONG_PARTITION_NAME, dstpart_name.length(), dstpart_name.ptr());
+        LOG_USER_ERROR(OB_WRONG_PARTITION_NAME, dstpart_name.length(), dstpart_name.ptr());
       } else {
-        LOG_ORACLE_USER_ERROR(OB_WRONG_PARTITION_NAME, srcpart_name.length(), srcpart_name.ptr());
+        LOG_USER_ERROR(OB_WRONG_PARTITION_NAME, srcpart_name.length(), srcpart_name.ptr());
       }
     } else if ((is_src_twopart && is_dst_onepart)
                || (is_src_onepart && is_dst_twopart)) {

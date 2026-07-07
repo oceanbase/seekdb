@@ -785,7 +785,7 @@ int ObRebuildIndexTask::check_ddl_task_finish(int64_t &child_task_id, bool &is_f
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (OB_UNLIKELY(child_task_id == OB_INVALID_ID || false)) {
+  } else if (OB_UNLIKELY(child_task_id == OB_INVALID_ID)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_INFO("invalid argument", K(ret), K(child_task_id));
   } else {
@@ -1016,7 +1016,7 @@ int ObRebuildIndexTask::deserialize_params_from_message(const char *buf, const i
 {
   int ret = OB_SUCCESS;
   obcall::ObRebuildIndexArg tmp_rebuild_index_arg;
-  if (OB_UNLIKELY(!true || nullptr == buf || data_len <= 0)) {
+  if (OB_UNLIKELY(nullptr == buf || data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, data_len, pos))) {

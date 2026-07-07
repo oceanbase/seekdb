@@ -429,10 +429,10 @@ int get_dml_stmt_need_privs(
             }
             if (OB_SUCC(ret)) {
               if (table_item->is_view_table_ && !table_item->alias_name_.empty()) {
-                if (table_item->is_oracle_all_or_user_sys_view_for_alias()) {
+                if (table_item->is_extended_all_or_user_sys_view_for_alias()) {
                   need_priv.priv_set_ &= ~OB_PRIV_SELECT;
                 }
-              } else if (table_item->is_oracle_all_or_user_sys_view()) {
+              } else if (table_item->is_extended_all_or_user_sys_view()) {
                 need_priv.priv_set_ &= ~OB_PRIV_SELECT;
               }
             }
@@ -2327,9 +2327,7 @@ int ObPrivilegeCheck::check_read_only(const ObSqlCtx &ctx,
   return ret;
 }
 
-/* New entry point for permission checking.
-  mysql mode, or oracle mode _enable_priv_check = false, use the old permission check logic,
-  oracle mode and _enable_priv_check = true, use the new permission check logic */
+/* New entry point for permission checking. */
 int ObPrivilegeCheck::check_privilege_new(
     const ObSqlCtx &ctx,
     const ObStmt *basic_stmt,

@@ -357,7 +357,7 @@ public:
                K_(user_type_id),
                K_(record_members));
 private:
-  static const int64_t MAX_RECORD_COUNT = 65536; // Compatible with Oracle
+  static const int64_t MAX_RECORD_COUNT = 65536;
 private:
   common::ObFixedArray<ObRecordMember, common::ObIAllocator> record_members_;
 };

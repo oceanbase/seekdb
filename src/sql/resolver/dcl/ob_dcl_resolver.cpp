@@ -257,12 +257,12 @@ int ObDCLResolver::check_dcl_on_inner_user(const ObItemType &type,
       }
       if (OB_SUCC(ret)) {
         if (OB_SYS_USER_ID == user_id ||
-            OB_ORA_SYS_USER_ID == user_id ||
-            OB_ORA_AUDITOR_USER_ID == user_id ||
-            OB_ORA_LBACSYS_USER_ID == user_id) {
+            OB_EXTENDED_SYS_USER_ID == user_id ||
+            OB_AUDITOR_USER_ID == user_id ||
+            OB_LBACSYS_USER_ID == user_id) {
           if (session_user_id != user_id &&
               OB_SYS_USER_ID != session_user_id &&
-              OB_ORA_SYS_USER_ID != session_user_id) {
+              OB_EXTENDED_SYS_USER_ID != session_user_id) {
             is_valid = false;
           }
         }
@@ -298,12 +298,12 @@ int ObDCLResolver::check_dcl_on_inner_user(const ObItemType &type,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed.invalid session user id/user id", K(ret), K(user_id), K(session_user_id));
       } else if (OB_SYS_USER_ID == user_id ||
-                 OB_ORA_SYS_USER_ID == user_id ||
-                 OB_ORA_AUDITOR_USER_ID == user_id ||
-                 OB_ORA_LBACSYS_USER_ID == user_id) {
+                 OB_EXTENDED_SYS_USER_ID == user_id ||
+                 OB_AUDITOR_USER_ID == user_id ||
+                 OB_LBACSYS_USER_ID == user_id) {
         if (session_user_id != user_id &&
             OB_SYS_USER_ID != session_user_id &&
-            OB_ORA_SYS_USER_ID != session_user_id) {
+            OB_EXTENDED_SYS_USER_ID != session_user_id) {
           is_valid = false;
         }
       }

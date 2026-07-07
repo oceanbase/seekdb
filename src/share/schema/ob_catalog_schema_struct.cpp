@@ -96,7 +96,6 @@ bool ObCatalogSchema::is_valid() const
 {
   bool ret = true;
   if (!ObSchema::is_valid()
-      || !true
       || !is_valid_id(catalog_id_)
       || schema_version_ < 0
       || catalog_name_.empty()) {

@@ -247,51 +247,6 @@ do {                                                                            
     node->sql_str_off_ = off;                                                          \
     setup_token_pos_info(node, off,  node->str_len_);                                  \
   } while (0)
-//oracle under generate non-reserved keyword node please use this macro, distinguish from mysql is done uppercase conversion
-#define get_oracle_non_reserved_node(node, malloc_pool, expr_start, expr_end) \
-  do {                                                                 \
-    malloc_terminal_node(node, malloc_pool, T_IDENT);                   \
-    if (OB_UNLIKELY(NULL == node || NULL == result || NULL == result->input_sql_)) {\
-      yyerror(NULL, result, "invalid argument, node:%p, result:%p or input_sql is NULL", node, result);\
-      YYABORT_UNEXPECTED;                                                  \
-    } else if (OB_UNLIKELY(expr_start < 0 || expr_end < 0 || expr_start > expr_end)) {               \
-      yyerror(NULL, result, "invalid argument, expr_start:%d, expr_end:%d", (int32_t)expr_start, (int32_t)expr_end);\
-      YYABORT_UNEXPECTED;                                                  \
-    } else {                                                               \
-      int start = expr_start;                                              \
-      char * upper_value = NULL;                                           \
-      char * raw_str = NULL;                                              \
-      node->str_value_ = NULL;                                             \
-      node->str_len_ = 0;                                                  \
-      node->raw_text_ = NULL;                                             \
-      node->text_len_ = 0;                                                 \
-      while (start <= expr_end && ISSPACE(result->input_sql_[start - 1])) {\
-        start++;                                                           \
-      }                                                                    \
-      if ('"' == result->input_sql_[start - 1]) {                          \
-        start++;                                                           \
-        expr_end--;                                                        \
-      }                                                                    \
-      if (start >= expr_start                                              \
-          && (OB_UNLIKELY((NULL == (upper_value = copy_expr_string(result, start, expr_end)))))) { \
-        yyerror(NULL, result, "No more space for copying expression string"); \
-        YYABORT_NO_MEMORY;                                                 \
-      } else {                                                             \
-        if (start >= expr_start                                              \
-            && (OB_UNLIKELY((NULL == (raw_str = copy_expr_string(result, start, expr_end)))))) { \
-          yyerror(NULL, result, "No more space for copying expression string"); \
-          YYABORT_NO_MEMORY;                                                 \
-        } else {                                                            \
-          node->raw_text_ = raw_str;                                    \
-          node->text_len_ = expr_end - start + 1;                            \
-          node->str_value_ = str_toupper(upper_value, expr_end - start + 1); \
-          node->str_len_ = expr_end - start + 1;                             \
-          setup_token_pos_info(node, expr_start - 1, expr_end - expr_start + 1);  \
-        }                                                                   \
-      }                                                                    \
-    }                                                                      \
-  } while(0)
-
 #define make_name_node(node, malloc_pool, name)                         \
   do {                                                                  \
     malloc_terminal_node(node, malloc_pool, T_IDENT);                   \
@@ -384,8 +339,8 @@ do {                                                                            
 /*
  * copy current sql statement to the current QUESTIONMARK position, and replace that QUESTIONMARK with :idx QUESTIONMARK form
  * When parsing the entire PL, when parsing one of the sql statements, it will go through here, so need to judge is_pl_parse_ and NULL == pl_ns_
- * It may also go through here when preparing dynamic sql for Oracle mode
- * The ? appearing in the sql of anonymous blocks in Oracle mode needs to be numbered as a whole in the PL, so this action is required, mysql does not need it
+ * It may also go through here when preparing dynamic SQL.
+ * The ? appearing in anonymous-block SQL needs to be numbered as a whole in the PL.
  * During the replacement process, there may be insufficient Buffer space, if space is insufficient then expand the Buffer
  */
 #define copy_and_replace_questionmark(result, start, end, idx) \
@@ -912,31 +867,6 @@ for (int32_t _i = 0; _i < _yyleng; ++_i) {                                      
     }                                                                                                     \
   } while (0);
 
-#define PARSE_INT_STR_ORACLE(param_node, malloc_pool, errno)             \
-  do {                                                                   \
-    if ('-' == param_node->str_value_[0]) {                              \
-      char *copied_str = parse_strndup(param_node->str_value_, param_node->str_len_, malloc_pool);   \
-      if (OB_ISNULL(copied_str)) {                                       \
-        YY_FATAL_ERROR("No more space for mallocing");                   \
-      } else {                                                           \
-        int pos = 1;                                                     \
-        for (; pos < param_node->str_len_ && ISSPACE(copied_str[pos]); pos++) ;                           \
-        copied_str[--pos] = '-';                                                                          \
-        param_node->value_ = ob_strntoll(copied_str + pos, param_node->str_len_ - pos, 10, NULL, &errno); \
-        if (ERANGE == errno) {                                                                            \
-          param_node->type_ = T_NUMBER;                                                                   \
-          token_ret = DECIMAL_VAL;                                                                        \
-        }                                                                                                 \
-      }                                                                                                   \
-    } else {                                                                                              \
-      param_node->value_ = ob_strntoll(param_node->str_value_, param_node->str_len_, 10, NULL, &errno);   \
-      if (ERANGE == errno) {                                                                              \
-        param_node->type_ = T_NUMBER;                                                                     \
-        token_ret = DECIMAL_VAL;                                                                          \
-      }                                                                                                   \
-    }                                                                                                     \
-  } while (0);
-
 #define RM_MULTI_STMT_END_P(p)                                \
   do                                                          \
   {                                                           \
@@ -1007,7 +937,6 @@ int STORE_PARAM_NODE_NEED_PARAMETERIZE(ParamList *param,
 // Notice: we use the (int64_t) double == double here, this kind of comparison
 // only supports up to 15 decimal place precision:
 // e.g., (int64_t)3.00000000000000001 == 3.00000000000000001 is true;
-// oracle supports up to 40 decimal place precision.
 #define CHECK_ASSIGN_ZERO_SUFFIX_INT(decimal_str, result, int_flag)         \
   do                                                                        \
   {                                                                         \
@@ -1123,22 +1052,6 @@ do {\
       }\
     }\
   } while(0);\
-
-// bugfix:
-// avoid '"' in the middle of a str in oracle mode
-#define CHECK_ORACLE_IDENTIFIER_VALID(src_str, str_len)                         \
-  do {                                                                          \
-    if (OB_UNLIKELY(src_str == NULL || str_len <= 0)) {                         \
-    } else {                                                                    \
-      for (int64_t i = 0; i < str_len; i++) {                                   \
-        if (OB_UNLIKELY(src_str[i] == '\"')) {                                  \
-          ((ParseResult *)yyextra)->extra_errno_ = OB_PARSER_ERR_UNSUPPORTED;   \
-          yyerror(yylloc, yyextra, "identifier not support to have double quote");\
-          return ERROR;                                                         \
-        }                                                                       \
-      }                                                                         \
-    }                                                                           \
-  } while(0);                                                                   \
 
 #define malloc_select_values_stmt(node, result, values_node, order_by_node, approx_node, limit_node, vector_index_params)\
   do {\

@@ -85,7 +85,7 @@ int ObGAISNextAutoIncValReq::init(const AutoincKey &autoinc_key,
                                   const int64_t &autoinc_version)
 {
   int ret = OB_SUCCESS;
-  if (!true || max_value <= 0 ||
+  if (max_value <= 0 ||
         cache_size <= 0 || offset < 1 || increment < 1 || base_value > max_value ||
         desired_cnt <= 0 || !sender.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -108,7 +108,7 @@ int ObGAISNextAutoIncValReq::init(const AutoincKey &autoinc_key,
 int ObGAISAutoIncKeyArg::init(const AutoincKey &autoinc_key, const common::ObAddr &sender, const int64_t autoinc_version)
 {
   int ret = OB_SUCCESS;
-  if (!true || !sender.is_valid()) {
+  if (!sender.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(autoinc_key), K(sender));
   } else {
@@ -127,8 +127,7 @@ int ObGAISPushAutoIncValReq::init(const AutoincKey &autoinc_key,
                                   const int64_t cache_size)
 {
   int ret = OB_SUCCESS;
-  if (!true ||
-       max_value <= 0 || base_value > max_value || !sender.is_valid()) {
+  if (max_value <= 0 || base_value > max_value || !sender.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(autoinc_key), K(base_value), K(max_value), K(sender));
   } else {
@@ -146,7 +145,7 @@ int ObGAISNextSequenceValReq::init(const schema::ObSequenceSchema &schema,
                                    const common::ObAddr &sender)
 {
   int ret = OB_SUCCESS;
-  if (!true || !sender.is_valid()) {
+  if (!sender.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(schema), K(sender));
   } else if (OB_FAIL(schema_.assign(schema))){

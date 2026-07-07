@@ -529,10 +529,6 @@ public:
                              uint64_t *tablegroup_id = NULL);
   int check_tablegroup_exist(const uint64_t tablegroup_id,
                              bool &is_exist);
-  int check_oracle_object_exist(const uint64_t db_id,
-      const common::ObString &object_name, const ObSchemaType &schema_type,
-      const ObRoutineType &routine_type, const bool is_or_replace,
-      common::ObIArray<ObSchemaType> &conflict_schema_types);
   int check_table_exist(const uint64_t database_id,
                         const common::ObString &table_name,
                         const bool is_index,

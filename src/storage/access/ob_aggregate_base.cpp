@@ -327,9 +327,8 @@ OB_INLINE void ObPushdownAggContext::setup_agg_row(share::aggregate::AggrRowPtr 
       char *cell = nullptr;
       int32_t cell_len = 0;
       agg_ctx_.row_meta().locate_cell_payload(col_id, row, cell, cell_len);
-      // oracle mode use ObNumber as result type for count aggregation
-      // we use int64_t as result type for count aggregation in aggregate row
-      // and cast int64_t to ObNumber during `collect_group_result`
+      // Count aggregation stores int64_t in the aggregate row and casts it
+      // to ObNumber during `collect_group_result` when needed.
       if (res_tc == VEC_TC_NUMBER) {
         ObNumberDesc &d = *reinterpret_cast<ObNumberDesc *>(cell);
         // set zero number

@@ -226,8 +226,7 @@ int ObTabletInfo::add_replica(const ObTabletReplica &replica)
   if (OB_UNLIKELY(!is_valid() || !replica.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KPC(this), K(replica));
-  } else if (OB_UNLIKELY(false
-      || tablet_id_ != replica.get_tablet_id())
+  } else if (OB_UNLIKELY(tablet_id_ != replica.get_tablet_id())
       || ls_id_ != replica.get_ls_id()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("replica not belong to this tablet",

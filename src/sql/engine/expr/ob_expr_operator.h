@@ -24,7 +24,7 @@
 #include "lib/objectpool/ob_tc_factory.h"
 #include "lib/utility/ob_print_utils.h"
 #include "common/timezone/ob_timezone_info.h"
-#include "common/timezone/ob_oracle_format_models.h"
+#include "common/timezone/ob_datetime_format_models.h"
 #include "lib/container/ob_iarray.h"
 #include "share/ob_i_sql_expression.h"
 #include "share/config/ob_server_config.h"
@@ -343,15 +343,13 @@ public:
 
   static const int32_t NOT_ROW_DIMENSION = -1;
   static const bool INTERNAL_IN_MYSQL_MODE = true;
-  static const bool INTERNAL_IN_ORACLE_MODE = true;
   ObExprOperator(common::ObIAllocator &alloc,
                  ObExprOperatorType type,
                  const char *name,
                  int32_t param_num,
                  ObValidForGeneratedColFlag valid_for_generated_col,
                  int32_t row_dimension = NOT_ROW_DIMENSION,
-                 bool is_internal_for_mysql = false,
-                 bool is_internal_for_oracle = false);
+                 bool is_internal_for_mysql = false);
 
   virtual ~ObExprOperator() {}
   virtual int assign(const ObExprOperator &other);
@@ -382,7 +380,6 @@ public:
   inline uint64_t get_id() const {return id_;};
   inline void set_id(uint64_t id) {id_ = id;};
   inline bool is_internal_for_mysql() const { return is_internal_for_mysql_; }
-  inline bool is_internal_for_oracle() const { return is_internal_for_oracle_; }
 
   inline const ObExprResType &get_result_type() const {return result_type_;}
   inline ObExprResType &get_result_type() { return result_type_; }
@@ -586,19 +583,18 @@ public:
     bool is_called_in_sql = TRUE);
 
 /*
- * oracle string type inference
+ * string type inference
  */
 
   enum DEDUCE_STRING_TYPE_FLAG : int64_t {
     PREFER_VAR_LEN_CHAR = 1<<0,
-    PREFER_NLS_LENGTH_SEMANTICS = 1<<1,
   };
-  static int aggregate_string_type_and_charset_oracle(
+  static int aggregate_string_type_and_charset_extended(
       const ObBasicSessionInfo &session,
       const common::ObIArray<ObExprResType *> &params,
       ObExprResType &result,
       int64_t deduce_flag = 0);
-  static int aggregate_length_semantics_oracle(
+  static int aggregate_length_semantics_extended(
       const ObBasicSessionInfo &session,
       const common::ObIArray<ObExprResType *> &params,
       ObExprResType &result,
@@ -781,7 +777,6 @@ protected:
   int64_t extra_serialize_;
   bool is_valid_for_generated_col_;
   bool is_internal_for_mysql_;
-  bool is_internal_for_oracle_;
 };
 
 class ObSQLSessionInfo;
@@ -797,8 +792,7 @@ inline ObExprOperator::ObExprOperator(common::ObIAllocator &alloc,
                                       int32_t param_num,
                                       ObValidForGeneratedColFlag valid_for_generated_col,
                                       int32_t row_dimension,
-                                      bool is_internal_for_mysql,
-                                      bool is_internal_for_oracle)
+                                      bool is_internal_for_mysql)
     : magic_(0),
       id_(common::OB_INVALID_ID),
       type_(type),
@@ -815,8 +809,7 @@ inline ObExprOperator::ObExprOperator(common::ObIAllocator &alloc,
       is_called_in_sql_(true),
       extra_serialize_(0),
       is_valid_for_generated_col_(valid_for_generated_col == 1),
-      is_internal_for_mysql_(is_internal_for_mysql),
-      is_internal_for_oracle_(is_internal_for_oracle)
+      is_internal_for_mysql_(is_internal_for_mysql)
 {
 }
 
@@ -1084,8 +1077,8 @@ class ObFuncExprOperator : public ObExprOperator
 {
 public:
     ObFuncExprOperator(common::ObIAllocator &alloc, ObExprOperatorType type, const char *name, int32_t param_num, ObValidForGeneratedColFlag valid_for_generated_col, int32_t dimension,
-                       bool is_internal_for_mysql = false, bool is_internal_for_oracle = false)
-      : ObExprOperator(alloc, type, name, param_num, valid_for_generated_col, dimension, is_internal_for_mysql, is_internal_for_oracle)
+                       bool is_internal_for_mysql = false)
+      : ObExprOperator(alloc, type, name, param_num, valid_for_generated_col, dimension, is_internal_for_mysql)
   {};
 
   virtual ~ObFuncExprOperator() {};
@@ -1115,9 +1108,8 @@ public:
                            const char *name,
                            int32_t param_num,
                            int32_t dimension = NOT_ROW_DIMENSION,
-                           bool is_internal_for_mysql = false,
-                           bool is_internal_for_oracle = false)
-      : ObExprOperator(alloc, type, name, param_num, VALID_FOR_GENERATED_COL, dimension, is_internal_for_mysql, is_internal_for_oracle),
+                           bool is_internal_for_mysql = false)
+      : ObExprOperator(alloc, type, name, param_num, VALID_FOR_GENERATED_COL, dimension, is_internal_for_mysql),
         cmp_op_func2_(NULL)
   {
   }
@@ -1495,9 +1487,8 @@ public:
                            const char *name,
                            int32_t param_num,
                            int32_t dimension = NOT_ROW_DIMENSION,
-                           bool is_internal_for_mysql = false,
-                           bool is_internal_for_oracle = false)
-      : ObExprOperator(alloc, type, name, param_num, VALID_FOR_GENERATED_COL, dimension, is_internal_for_mysql, is_internal_for_oracle),
+                           bool is_internal_for_mysql = false)
+      : ObExprOperator(alloc, type, name, param_num, VALID_FOR_GENERATED_COL, dimension, is_internal_for_mysql),
       subquery_key_(T_WITH_NONE),
       left_is_iter_(false),
       right_is_iter_(false)
@@ -1876,10 +1867,9 @@ public:
                        const char *name,
                        int32_t param_num,
                        ObValidForGeneratedColFlag valid_for_generated_col,
-                       bool is_internal_for_mysql = false,
-                       bool is_internal_for_oracle = false)
+                       bool is_internal_for_mysql = false)
       :ObExprOperator(alloc, type, name, param_num, valid_for_generated_col, NOT_ROW_DIMENSION,
-                      is_internal_for_mysql, is_internal_for_oracle)
+                      is_internal_for_mysql)
   {}
   virtual ~ObStringExprOperator() {}
   void calc_temporal_format_result_length(ObExprResType &type, const ObExprResType &format) const;
@@ -1936,14 +1926,12 @@ public:
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
   // for static_typing_engine
-  // Get int64/uint64 from parameter datum, then perform actual bit operations based on extra_ field
-  // mysql/oracle difference lies in mysql mode needing get_uint64(), oracle mode needing get_int64
-  // And oracle mode will still calculate the value of the second parameter when the first parameter is null
+  // Get int64/uint64 from parameter datum, then perform actual bit operations
+  // based on extra_ field.
   static int calc_result2_mysql(const ObExpr &expr, ObEvalCtx &ctx,
                                 ObDatum &res_datum);
 
   static int calc_bitwise_result2_mysql_vector(VECTOR_EVAL_FUNC_ARG_DECL);
-  static int calc_bitwise_result2_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
   DECLARE_SET_LOCAL_SESSION_VARS;
 
 private:
@@ -2007,9 +1995,8 @@ public:
                         const char *name,
                         int32_t param_num,
                         int32_t dimension,
-                        bool is_internal_for_mysql = false,
-                        bool is_internal_for_oracle = false)
-      : ObExprOperator(alloc, type, name, param_num, VALID_FOR_GENERATED_COL, dimension, is_internal_for_mysql, is_internal_for_oracle), need_cast_(true)
+                        bool is_internal_for_mysql = false)
+      : ObExprOperator(alloc, type, name, param_num, VALID_FOR_GENERATED_COL, dimension, is_internal_for_mysql), need_cast_(true)
   {
   }
 
@@ -2083,9 +2070,8 @@ public:
                          const char *name,
                          int32_t param_num,
                          int32_t dimension,
-                         bool is_internal_for_mysql = false,
-                         bool is_internal_for_oracle = false)
-      : ObFuncExprOperator(alloc, type, name, param_num, VALID_FOR_GENERATED_COL, dimension, is_internal_for_mysql, is_internal_for_oracle)
+                         bool is_internal_for_mysql = false)
+      : ObFuncExprOperator(alloc, type, name, param_num, VALID_FOR_GENERATED_COL, dimension, is_internal_for_mysql)
   {
   };
 
@@ -2167,8 +2153,6 @@ private:
 class ObExprTRDateFormat
 {
 public:
-  //http://docs.oracle.com/cd/B19306_01/server.102/b14200/functions230.htm#i1002084
-  //http://www.techonthenet.com/oracle/functions/trunc_date.php
   enum FORMAT_ID
   {
     SYYYY = 0,

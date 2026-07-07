@@ -21,7 +21,6 @@
 #include "sql/engine/ob_exec_context.h"
 #include "share/ob_version.h"
 #include "share/ob_tenant_timezone_mgr.h"
-#include "share/system_variable/ob_nls_system_variable.h"
 #include "sql/engine/expr/ob_expr_plsql_variable.h"
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "lib/locale/ob_locale_type.h"
@@ -144,7 +143,7 @@ const char *ObBoolSysVar::BOOL_TYPE_NAMES[] = {"OFF", "ON", 0};
 const char *ObSqlModeVar::SQL_MODE_NAMES[] = {
   "REAL_AS_FLOAT", "PIPES_AS_CONCAT", "ANSI_QUOTES", "IGNORE_SPACE", ",",
   "ONLY_FULL_GROUP_BY", "NO_UNSIGNED_SUBTRACTION", "NO_DIR_IN_CREATE",
-  "POSTGRESQL", "ORACLE", "MSSQL", "DB2", "MAXDB", "NO_KEY_OPTIONS",
+  "POSTGRESQL", ",", "MSSQL", "DB2", "MAXDB", "NO_KEY_OPTIONS",
   "NO_TABLE_OPTIONS", "NO_FIELD_OPTIONS", "MYSQL323", "MYSQL40", "ANSI",
   "NO_AUTO_VALUE_ON_ZERO", "NO_BACKSLASH_ESCAPES", "STRICT_TRANS_TABLES",
   "STRICT_ALL_TABLES", "NO_ZERO_IN_DATE", "NO_ZERO_DATE",
@@ -348,13 +347,6 @@ int ObBasicSysVar::session_update(ObExecContext &ctx,
       should_update_extra_var = true;
       extra_val_obj.set_int(static_cast<int64_t>(extra_coll_type));
     }
-  } else if (set_var.var_name_ == OB_SV_NLS_DATE_FORMAT
-             || set_var.var_name_ == OB_SV_NLS_TIMESTAMP_FORMAT
-             || set_var.var_name_ == OB_SV_NLS_TIMESTAMP_TZ_FORMAT) {
-    if (OB_UNLIKELY(val.is_null_oracle())) {
-      ret = OB_INVALID_DATE_FORMAT;
-      LOG_WARN("date format not recognized", K(ret), K(set_var.var_name_), K(val));
-    }
   }
   // Change the charset-related system variables at the same time as the corresponding collation system variables
   else if (set_var.var_name_ == OB_SV_CHARACTER_SET_SERVER ||
@@ -394,8 +386,8 @@ int ObBasicSysVar::session_update(ObExecContext &ctx,
     }
   } else if (set_var.var_name_ == OB_SV__ENABLE_PARALLEL_QUERY) {
       should_update_extra_var = true;
-    // 
-    // Implement Oracle compatible behavior as follows: there are variables enable and parallel
+    //
+    // Parallel query behavior is controlled by enable and parallel variables.
     //  alter session enable parallel query  when enable = true, parallel = 1   => follow manual table dop rule
     //  alter session disable parallel query when enable = false, parallel = 1  => follow no parallel rule
     //  alter session force parallel query parallel 1 when enable = false, parallel = 1  =>  follow no parallel rule
@@ -1382,15 +1374,8 @@ int ObVarcharSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val
       || (0 != (flags_ & share::ObSysVarFlag::NULLABLE) && ObNullType == val.get_type())) {
     // do nothing
   } else if (false == ob_is_string_type(val.get_type())) {
-    if (set_var.var_name_ == OB_SV_NLS_DATE_FORMAT
-             || set_var.var_name_ == OB_SV_NLS_TIMESTAMP_FORMAT
-             || set_var.var_name_ == OB_SV_NLS_TIMESTAMP_TZ_FORMAT) {
-      ret = OB_INVALID_DATE_FORMAT;
-      LOG_WARN("date format not recognized", K(ret), K(set_var.var_name_), K(val));
-    } else {
-      ret = OB_ERR_WRONG_TYPE_FOR_VAR;
-      LOG_WARN("wrong type for var", K(ret), K(val));
-    }
+    ret = OB_ERR_WRONG_TYPE_FOR_VAR;
+    LOG_WARN("wrong type for var", K(ret), K(val));
   }
   return ret;
 }
@@ -1422,7 +1407,7 @@ int ObTimeZoneSysVar::check_update_type(const ObSetVar &set_var, const ObObj &va
   return ret;
 }
 
-int ObTimeZoneSysVar::find_pos_time_zone(ObExecContext &ctx, const ObString &str_val, const bool is_oracle_compatible)
+int ObTimeZoneSysVar::find_pos_time_zone(ObExecContext &ctx, const ObString &str_val)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = ctx.get_my_session();
@@ -1439,9 +1424,6 @@ int ObTimeZoneSysVar::find_pos_time_zone(ObExecContext &ctx, const ObString &str
                                                                           str_val.ptr(),
                                                                           str_val.length()));
     ObString val_no_sp(no_sp_len, str_val.ptr());
-    if (is_oracle_compatible) {
-      val_no_sp = val_no_sp.trim();
-    }
   	ObTZMapWrap tz_map_wrap;
     ObTimeZoneInfoManager *tz_info_mgr = NULL;
     if (OB_FAIL(OTTZ_MGR.get_tenant_timezone(tz_map_wrap, tz_info_mgr))) {
@@ -1482,18 +1464,13 @@ int ObTimeZoneSysVar::do_check_and_convert(ObExecContext &ctx,
       LOG_ERROR("unexpected type", K(ret), K(in_val));
     }
 
-    const bool is_oracle_compatible = false;
-    CHECK_COMPATIBILITY_MODE(ctx.get_my_session());
     int ret_more = OB_SUCCESS;
     if (OB_SUCC(ret) && OB_FAIL(ObTimeConverter::str_to_offset(str_val, offset,
                                                           ret_more, true))) {
       if (OB_ERR_UNKNOWN_TIME_ZONE != ret) {
-        LOG_WARN("fail to conver time zone", K(ret), K(str_val), K(is_oracle_compatible));
-      } else if (OB_FAIL(find_pos_time_zone(ctx, str_val, is_oracle_compatible))) {
+        LOG_WARN("fail to conver time zone", K(ret), K(str_val));
+      } else if (OB_FAIL(find_pos_time_zone(ctx, str_val))) {
         LOG_WARN("fail to convert time zone", K(ret), K(ret_more), K(str_val));
-        if (OB_SUCCESS != ret_more && is_oracle_compatible) {
-          ret = ret_more;
-        }
       }
     }
 
@@ -2218,88 +2195,6 @@ int ObSysVarOnCheckFuncs::check_and_convert_sql_throttle_queue_time(ObExecContex
   return ret;
 }
 
-int ObSysVarOnCheckFuncs::check_and_convert_nls_currency_too_long(sql::ObExecContext &ctx,
-                                                                  const ObSetVar &set_var,
-                                                                  const ObBasicSysVar &sys_var,
-                                                                  const common::ObObj &in_val,
-                                                                  common::ObObj &out_val)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_session_readonly(ctx, set_var, sys_var, in_val, out_val))) {
-    LOG_WARN("fail to check session readonly", K(ret), K(set_var), K(in_val));
-  } else if (set_var.is_set_default_) {
-    // do nothing
-  } else {
-    const int32_t MAX_NLS_CURRENCY_LEN = 10;
-    ObString in_nls_currency_str = in_val.get_string();
-    if (in_nls_currency_str.length() <= MAX_NLS_CURRENCY_LEN) {
-      out_val = in_val;
-    } else {
-      ObString out_nls_currency_str;
-      ObIAllocator &allocator = ctx.get_allocator();
-      if (OB_FAIL(ob_write_string(allocator, in_nls_currency_str, out_nls_currency_str))) {
-        LOG_WARN("failed to write stirng", K(ret));
-      } else {
-        out_nls_currency_str.assign_ptr(out_nls_currency_str.ptr(), MAX_NLS_CURRENCY_LEN);
-        out_val.set_varchar(out_nls_currency_str);
-      }
-    }
-  }
-  return ret;
-}
-
-int ObSysVarOnCheckFuncs::check_and_convert_nls_iso_currency_is_valid(sql::ObExecContext &ctx,
-                                                                      const ObSetVar &set_var,
-                                                                      const ObBasicSysVar &sys_var,
-                                                                      const common::ObObj &in_val,
-                                                                      common::ObObj &out_val)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_session_readonly(ctx, set_var, sys_var, in_val, out_val))) {
-    LOG_WARN("fail to check session readonly", K(ret), K(set_var), K(in_val));
-  } else if (set_var.is_set_default_) {
-    // do nothing
-  } else {
-    ObString in_country_str = in_val.get_string();
-    ObString out_country_str;
-    ObIAllocator &allocator = ctx.get_allocator();
-    if (OB_FAIL(ob_simple_low_to_up(allocator, in_country_str, out_country_str))) {
-      LOG_WARN("failed to write stirng", K(ret));
-    } else {
-      if (!IsoCurrencyUtils::is_country_valid(out_country_str)) {
-        ret = OB_ERR_WRONG_VALUE_FOR_VAR;
-        LOG_WARN("failed to get currency by country name", K(ret));
-      } else {
-        out_val.set_varchar(out_country_str);
-      }
-    }
-  }
-  return ret;
-}
-
-int ObSysVarOnCheckFuncs::check_and_convert_nls_length_semantics_is_valid(ObExecContext &ctx,
-                                                                          const ObSetVar &set_var,
-                                                                          const ObBasicSysVar &sys_var,
-                                                                          const common::ObObj &in_val,
-                                                                          ObObj &out_val)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_session_readonly(ctx, set_var, sys_var, in_val, out_val))) {
-    LOG_WARN("fail to check session readonly", K(ret), K(set_var), K(in_val));
-  } else if (set_var.is_set_default_) {
-    // do nothing
-  } else {
-    ObString str_val;
-    ObLengthSemantics nls_length_semantics = LS_INVALIED;
-    OZ (in_val.get_string(str_val));
-    OX (nls_length_semantics = get_length_semantics(str_val));
-    OV (nls_length_semantics != LS_INVALIED,
-        OB_ERR_CANNOT_ACCESS_NLS_DATA_FILES_OR_INVALID_ENVIRONMENT_SPECIFIED, nls_length_semantics);
-    OX (out_val = in_val);
-  }
-  return ret;
-}
-
 int ObSysVarOnCheckFuncs::check_session_readonly(ObExecContext &ctx,
                                                  const ObSetVar &set_var,
                                                  const ObBasicSysVar &sys_var,
@@ -2318,30 +2213,6 @@ int ObSysVarOnCheckFuncs::check_session_readonly(ObExecContext &ctx,
   }
   return ret;
 }
-
-int ObSysVarOnCheckFuncs::check_and_convert_plsql_warnings(sql::ObExecContext &ctx,
-                                                 const ObSetVar &set_var,
-                                                 const ObBasicSysVar &sys_var,
-                                                 const common::ObObj &in_val,
-                                                 common::ObObj &out_val)
-{
-  int ret = OB_SUCCESS;
-  UNUSEDx(ctx, set_var, sys_var, in_val, out_val);
-  return ret;
-}
-
-int ObSysVarOnCheckFuncs::check_and_convert_plsql_ccflags(sql::ObExecContext &ctx,
-                                                          const ObSetVar &set_var,
-                                                          const ObBasicSysVar &sys_var,
-                                                          const common::ObObj &in_val,
-                                                          common::ObObj &out_val)
-{
-  int ret = OB_SUCCESS;
-  UNUSEDx(ctx, set_var, sys_var, out_val);
-  OZ (ObExprPLSQLVariable::check_plsql_ccflags(in_val.get_string()));
-  return ret;
-}
-
 
 int ObSysVarOnCheckFuncs::check_runtime_filter_type_is_valid(
     sql::ObExecContext &ctx,
@@ -2597,7 +2468,7 @@ int ObSysVarOnUpdateFuncs::start_trans_by_set_trans_char_(
       // rollback tx fail, need report to user, because session is corrupt
       ret = COVER_SUCC(save_ret);
     } else {
-      LOG_TRACE("succeed get snapshot for oracle set trans charactor stmt",
+      LOG_TRACE("succeed get snapshot for set transaction isolation stmt",
                 KPC(session.get_tx_desc()), K(isolation), K(snapshot));
     }
   } else {

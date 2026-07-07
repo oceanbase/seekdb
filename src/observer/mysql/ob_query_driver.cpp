@@ -253,10 +253,10 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
       if (OB_SUCC(ret) && !is_packed) {
         // cluster version < 4.1
         //    use only locator and response routine
-        // >= 4.1 for oracle modle
-        //    1. user full lob locator v2 with extern header if client supports locator
+        // >= 4.1 with full lob locator v2
+        //    1. use extern header if client supports locator
         //    2. remove locator if client does not support locator
-        // >= 4.1 for mysql modle
+        // >= 4.1 for mysql mode
         //    remove locator
         if (ob_is_string_tc(value.get_type())
             && CS_TYPE_INVALID != value.get_collation_type()) {

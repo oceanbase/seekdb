@@ -27,7 +27,7 @@ namespace sql
 
 ObExprGetUserVar::ObExprGetUserVar(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_OP_GET_USER_VAR, N_GET_USER_VAR, 1, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                         INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                         INTERNAL_IN_MYSQL_MODE)
 {
 }
 
@@ -89,7 +89,7 @@ int ObExprGetUserVar::calc_result_type1(ObExprResType &type,
       SQL_RESV_LOG(WARN, "fail to get mbmaxlen", K(ret), K(type.get_collation_type()));
     } else {
       type.set_length(static_cast<ObLength>(OB_MAX_VARCHAR_LENGTH / mbmaxlen));
-      type.set_length_semantics(type_ctx.get_session()->get_actual_nls_length_semantics());
+      type.set_length_semantics(type_ctx.get_session()->get_actual_length_semantics());
     }
   }
   LOG_DEBUG("get_user_var calc_result_type", K(type1), K(type1), K(type));

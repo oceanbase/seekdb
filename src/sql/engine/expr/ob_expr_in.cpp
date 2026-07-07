@@ -604,11 +604,8 @@ int ObExprInOrNotIn::calc_result_typeN(ObExprResType &type,
 }
 
 /* Comparison rules:
- * Oracle document:
- * Two nested table variables are equal if and only if they have the same set of elements (in any order).
-
- * the problem is how to define "the same set of elements", which is not documented by Oracle.
- * the rules we follow here are:
+ * Two nested table variables are equal if and only if they have the same set
+ * of elements in any order. The rules we follow here are:
  * 1. if the elements are of an uncomparable type, such as Record, return an error
  * 2. when NULL (NULL can be a nested table itself or its element) is compared with any other element, return NULL
  * 3. nt in (nt1, nt2, ...) returns:

@@ -37,14 +37,14 @@ enum class ObJsonInType
 
 enum class ObJsonNodeType
 {
-  J_NULL, // 0 oracle & mysql
+  J_NULL, // 0
   J_DECIMAL,
   J_INT,
   J_UINT,
   J_DOUBLE,
-  J_STRING, // 5 oracle & mysql
-  J_OBJECT, // oracle & mysql
-  J_ARRAY, // oracle & mysql
+  J_STRING, // 5
+  J_OBJECT,
+  J_ARRAY,
   J_BOOLEAN,
   J_DATE,
   J_TIME, // 10
@@ -52,7 +52,7 @@ enum class ObJsonNodeType
   J_TIMESTAMP,
   J_OPAQUE,
 
-  /* oracle json extended types: type(), scalar type */
+  /* SQL/JSON extended types: type(), scalar type */
   J_OFLOAT = 15, //  number float  
   J_ODOUBLE = 16,  //  number double 
   J_ODECIMAL = 17, // number number
@@ -62,7 +62,7 @@ enum class ObJsonNodeType
   J_OOID = 21, // binary string
   J_ORAWHEX = 22, // binary string
   J_ORAWID = 23, // binary string
-  J_ORACLEDATE = 24, // date 
+  J_JSON_DATE_EXT = 24, // date
   J_ODATE = 25,  // timestamp string
   J_OTIMESTAMP = 26, // timestamp string
   J_OTIMESTAMPTZ = 27, // timestamptz string
@@ -102,7 +102,7 @@ OB_INLINE ObObjType json_type_to_obj_type(const  ObJsonNodeType json_type)
     ObVarcharType,                       // ObJsonNodeType::J_OOID = 21,
     ObVarcharType,                       // ObJsonNodeType::J_ORAWHEX = 21,
     ObVarcharType,                       // ObJsonNodeType::J_ORAWID = 22,
-    ObMaxType,                           // ObJsonNodeType::J_ORACLEDATE = 24,
+    ObMaxType,                           // ObJsonNodeType::J_JSON_DATE_EXT = 24,
     ObDateType,                          // ObJsonNodeType::J_ODATE = 25,
     ObTimestampType,                     // ObJsonNodeType::J_OTIMESTAMP = 26,
     ObMaxType,                           // ObJsonNodeType::J_OTIMESTAMPTZ = 27,
@@ -638,7 +638,7 @@ private:
                   const ObJsonPathBasicNode *path_node, bool is_auto_wrap, bool only_need_one,
                   ObJsonSortedResult &dup, ObJsonSeekResult &res) const;
   
-  // find in oracle wildcard: ..  (allocator can not be null)
+  // find in SQL/JSON wildcard: ..  (allocator can not be null)
   //
   // @param [in] allocator     The json allocator.
   // @param [in] path          The json path.
@@ -652,7 +652,7 @@ private:
                     const ObJsonPathBasicNode *path_node, bool is_auto_wrap, 
                     bool only_need_one, bool is_lax, ObJsonSortedResult &dup,
                     ObJsonSeekResult &res, PassingMap* sql_var) const;
-  // find in oracle array wildcard:[*] (allocator can not be null)
+  // find in SQL/JSON array wildcard:[*] (allocator can not be null)
   //
   // @param [in] allocator     The json allocator.
   // @param [in] path          The json path.
@@ -666,7 +666,7 @@ private:
                           const ObJsonPathBasicNode *path_node, bool is_auto_wrap, 
                           bool only_need_one, bool is_lax, ObJsonSortedResult &dup, 
                           ObJsonSeekResult &res, PassingMap* sql_var = NULL) const;
-  // find in oracle array_range:[index, index1 to index2, last-index3,...]
+  // find in SQL/JSON array_range:[index, index1 to index2, last-index3,...]
   //
   // @param [in] allocator     The json allocator.
   // @param [in] path          The json path.

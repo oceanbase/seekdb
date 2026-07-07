@@ -117,7 +117,7 @@ bool ObIJsonBase::is_json_date(ObJsonNodeType json_type) const
     case ObJsonNodeType::J_MYSQL_DATE:
     case ObJsonNodeType::J_MYSQL_DATETIME:
     case ObJsonNodeType::J_TIMESTAMP:
-    case ObJsonNodeType::J_ORACLEDATE:
+    case ObJsonNodeType::J_JSON_DATE_EXT:
     case ObJsonNodeType::J_OTIMESTAMP:
     case ObJsonNodeType::J_ODATE: {
       ret_bool = true;
@@ -314,7 +314,7 @@ int ObIJsonBase::seek(ObIAllocator* allocator, const ObJsonPath &path,
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("supposed to be oracle/LAX mode.", K(ret), K(is_lax));
+    LOG_WARN("supposed to be SQL/JSON lax mode.", K(ret), K(is_lax));
   }
 
   return ret;
@@ -590,7 +590,7 @@ int ObIJsonBase::find_basic_child(ObIAllocator* allocator, ObSeekParentInfo &par
     }
     default:{
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("supposed to be oracle basic node type.", K(ret), K(path_node->get_node_type()));
+      LOG_WARN("supposed to be SQL/JSON basic node type.", K(ret), K(path_node->get_node_type()));
     }
   }
   return ret;
@@ -629,7 +629,7 @@ int ObIJsonBase::find_array_child(ObIAllocator* allocator, ObSeekParentInfo &par
     case JPN_MULTIPLE_ARRAY: {
       if (!is_lax) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("should be oracle mode!", K(ret), K(only_need_one));
+        LOG_WARN("multiple array path requires lax mode", K(ret), K(only_need_one));
       } else if (cur_json_type == ObJsonNodeType::J_ARRAY) {
         if (OB_FAIL(find_multi_array_ranges(allocator, parent_info, cur_node, last_node, path_node,
                                             is_auto_wrap, only_need_one, is_lax, dup, res, sql_var))) {
@@ -1044,7 +1044,7 @@ int ObIJsonBase::find_type_method(ObIAllocator* allocator, ObSeekParentInfo &par
     case ObJsonNodeType::J_OOID:  // binary string
     case ObJsonNodeType::J_ORAWHEX:  // binary string
     case ObJsonNodeType::J_ORAWID:  // binary string
-    case ObJsonNodeType::J_ORACLEDATE:  // date 
+    case ObJsonNodeType::J_JSON_DATE_EXT:  // date
     case ObJsonNodeType::J_ODATE:   // timestamp string
     case ObJsonNodeType::J_OTIMESTAMP:  // timestamp string
     case ObJsonNodeType::J_OTIMESTAMPTZ:  // timestamptz string
@@ -1215,7 +1215,7 @@ int ObIJsonBase::find_boolean_method(ObIAllocator* allocator, ObSeekParentInfo &
     case ObJsonNodeType::J_OOID:  // binary string
     case ObJsonNodeType::J_ORAWHEX:  // binary string
     case ObJsonNodeType::J_ORAWID:  // binary string
-    case ObJsonNodeType::J_ORACLEDATE:  // date 
+    case ObJsonNodeType::J_JSON_DATE_EXT:  // date
     case ObJsonNodeType::J_ODATE:   // timestamp string
     case ObJsonNodeType::J_OTIMESTAMP:  // timestamp string
     case ObJsonNodeType::J_OTIMESTAMPTZ:  // timestamptz string
@@ -1442,7 +1442,7 @@ int ObIJsonBase::find_timestamp_method(ObIAllocator* allocator, ObSeekParentInfo
     common::ObOTimestampData date;
     ObTimeZoneInfo tz_info;
     ObTimeConvertCtx cvrt_ctx(&tz_info, false);
-    cvrt_ctx.oracle_nls_format_ = ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT;
+    cvrt_ctx.nls_format_ = ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT;
     ObOTimestampData ot_data;
     int16_t scale = 0;
 
@@ -1974,7 +1974,7 @@ int ObIJsonBase::find_func_child(ObIAllocator* allocator, ObSeekParentInfo &pare
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("supposed to be oracle function node type.", 
+        LOG_WARN("supposed to be SQL/JSON function node type.",
                   K(ret), K(path_node->get_node_type()));
       }
     }
@@ -2029,7 +2029,7 @@ int ObIJsonBase::cmp_based_on_node_type(ObJsonPathNodeType node_type, int res, b
   return ret;
 }
 // String to number type, two cases are used:
-// 1. When the type of sub_path is number, oracle will automatically convert the string to a number for processing (with double quotes)
+// 1. When the type of sub_path is number, SQL/JSON path converts the string to a number for processing (with double quotes)
 // 2. scalars in path are first stored as strings, then converted to the corresponding numbers (without quotes)
 // PS: For case 1, you first need to remove the double quotes.
 //     At the same time, if the content of the found json_base_node is 123, comparison can only be made when the string is "123", " 123" and "123 " are not allowed
@@ -2101,7 +2101,7 @@ int ObIJsonBase::trans_to_date_timestamp(ObIAllocator* allocator,
     common::ObOTimestampData date;
     ObTimeZoneInfo tz_info;
     ObTimeConvertCtx cvrt_ctx(&tz_info, false);
-    cvrt_ctx.oracle_nls_format_ = ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT;
+    cvrt_ctx.nls_format_ = ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT;
     ObOTimestampData ot_data;
     int16_t scale = 0;
     if (true) {
@@ -2252,7 +2252,7 @@ int ObIJsonBase::trans_json_node(ObIAllocator* allocator, ObIJsonBase* &scalar, 
     } else if (right_type == ObJsonNodeType::J_DATE 
             || right_type == ObJsonNodeType::J_DATETIME 
             || right_type == ObJsonNodeType::J_TIME
-            || right_type == ObJsonNodeType::J_ORACLEDATE) {
+            || right_type == ObJsonNodeType::J_JSON_DATE_EXT) {
       ret = trans_to_date_timestamp(allocator, str, scalar, true);
     } else if (right_type == ObJsonNodeType::J_TIMESTAMP 
             || right_type == ObJsonNodeType::J_OTIMESTAMP
@@ -2283,7 +2283,7 @@ int ObIJsonBase::trans_json_node(ObIAllocator* allocator, ObIJsonBase* &scalar, 
     } else if (left_type == ObJsonNodeType::J_DATE
             || left_type == ObJsonNodeType::J_DATETIME 
             || left_type == ObJsonNodeType::J_TIME
-            || left_type == ObJsonNodeType::J_ORACLEDATE) {
+            || left_type == ObJsonNodeType::J_JSON_DATE_EXT) {
       ret = trans_to_date_timestamp(allocator, str, path_res, true);
     } else if (left_type == ObJsonNodeType::J_TIMESTAMP 
             || left_type == ObJsonNodeType::J_OTIMESTAMP
@@ -2348,7 +2348,7 @@ int ObIJsonBase::cmp_to_right_recursively(ObIAllocator* allocator, ObJsonSeekRes
               cmp_based_on_node_type(node_type, cmp_res, cmp_result);
             }
           } else {
-          // Different types, oracle will convert the string type to the corresponding type before comparison
+          // Different types: convert the string type to the corresponding type before comparison.
           // Conversion or comparison failure is also normal, and no error is reported
           // For example: [*].a == 123
           // There may be multiple elements that cannot be converted to a number or cannot be compared with a number or even cannot be found.a
@@ -2437,7 +2437,7 @@ int ObIJsonBase::cmp_to_left_recursively(ObIAllocator* allocator, ObJsonSeekResu
               cmp_based_on_node_type(node_type, cmp_res, cmp_result);
             }
           } else {
-          // Different types, oracle will convert the string type to the corresponding type before comparison
+          // Different types: convert the string type to the corresponding type before comparison.
           // Conversion or comparison failure is also normal, and no error is reported
           // For example: [*].a == 123
           // There may be multiple elements that cannot be converted to a number or cannot be compared with a number or even cannot be found.a
@@ -2497,7 +2497,7 @@ int ObIJsonBase::cmp_to_left_recursively(ObIAllocator* allocator, ObJsonSeekResu
 // Cannot directly compare json_type() whether they are equal:
 //  1. Because the return type of item_function is not unique, but the types that can be compared are more strictly limited
 //     e.g.: length() may return J_NULL or json_number
-//         but the type it is compared to can only be json_number, otherwise oracle will report an error
+//         but the type it is compared to can only be json_number, otherwise the comparison reports an error
 //  2. The result of the left call to item_function can be invalid:
 //     e.g.: '$?(@[0].date() == "2020-02-02")'
 //         @[0] content can be numbers, arrays, objects or strings that cannot be converted to dates, no error will be reported
@@ -3363,8 +3363,8 @@ int ObIJsonBase::find_comp_result(ObIAllocator* allocator, ObSeekParentInfo &par
                   '["a", 2, 3, 4, 5, {"resolution" : {"x": 1920, "y": 1080}}, 7, 8, 9]',
                   '$[5]?(1 == 1).resolution.x');                                 // output 1
           */
-          // So I guess oracle will determine whether to continue executing based on the result of the filter expression during the seek() process (false if not found or does not match).
-          // And according to case 5 & 6, Oracle does not insert the result (true/false) into res after searching the filter expression node, otherwise the result of 5 would not be empty
+          // Continue execution based on the result of the filter expression during the seek() process (false if not found or does not match).
+          // Do not insert the result (true/false) into res after searching the filter expression node, otherwise the result of case 5 would not be empty.
           // but decide whether to continue querying based on the result of the filter expression
           filter_result = (hit.size() > 0);
         }
@@ -3905,7 +3905,7 @@ int ObIJsonBase::print(ObJsonBuffer &j_buf, bool is_quoted, uint64_t reserve_len
       case ObJsonNodeType::J_TIMESTAMP:
       case ObJsonNodeType::J_MYSQL_DATETIME:
       case ObJsonNodeType::J_MYSQL_DATE:
-      case ObJsonNodeType::J_ORACLEDATE:
+      case ObJsonNodeType::J_JSON_DATE_EXT:
       case ObJsonNodeType::J_ODATE:
       case ObJsonNodeType::J_OTIMESTAMP:
       case ObJsonNodeType::J_OTIMESTAMPTZ: {
@@ -4158,7 +4158,7 @@ int ObIJsonBase::calc_json_hash_value(uint64_t val, hash_algo hash_func, uint64_
 
     case ObJsonNodeType::J_DATETIME:
     case ObJsonNodeType::J_MYSQL_DATETIME:
-    case ObJsonNodeType::J_ORACLEDATE: {
+    case ObJsonNodeType::J_JSON_DATE_EXT: {
       if (OB_FAIL(hash_value.calc_time(DT_TYPE_DATETIME, this))) {
         LOG_WARN("fail to calc json datetime hash", K(ret));
       }
@@ -4684,7 +4684,7 @@ static constexpr int type_comparison[JSON_TYPE_NUM][JSON_TYPE_NUM] = {
   /* 12  TIMESTAMP */   {1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  0,  0, -1,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  0,  2,  2,  2,   1,   0,  2},
   /* 13  OPAQUE */      {1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  0,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,   1,   1,  2},
   /* 14  empty */       {2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,   2,   2,  2},
-  /*  ORACLE MODE */
+  /* Extended types */
   /* 15  OFLOAT */      {2,  2,  2,  2,  0,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  0,  0,  0,  0,  0,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,   2,   2,  2},
   /* 16  ODOUBLE */     {2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  0,  0,  0,  0,  0,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,   2,   2,  2},
   /* 17  ODECIMAL */    {2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  0,  0,  0,  0,  0,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,   2,   2,  2},
@@ -4694,7 +4694,7 @@ static constexpr int type_comparison[JSON_TYPE_NUM][JSON_TYPE_NUM] = {
   /* 21  OOID */        {2,  2,  2,  2,  2,  0,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  0,  0,  0,  0,  2,  2,  2,  2,  2,  2,   2,   2,  2},
   /* 22  ORAWHEX */     {2,  2,  2,  2,  2,  0,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  0,  0,  0,  0,  2,  2,  2,  2,  2,  2,   2,   2,  2},
   /* 23  ORAWID */      {2,  2,  2,  2,  2,  0,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  0,  0,  0,  0,  2,  2,  2,  2,  2,  2,   2,   2,  2},
-  /* 24  ORACLEDATE*/   {2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  0,  0,  0,  0,  2,  2,   2,   2,  2},
+  /* 24  JSON_DATE_EXT */  {2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  0,  0,  0,  0,  2,  2,   2,   2,  2},
   /* 25  ODATE */       {2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  0,  0,  0,  0,  2,  2,   2,   2,  2},
   /* 26  OTIMESTAMP */  {2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  0,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  0,  0,  0,  0,  2,  2,   2,   2,  2},
   /* 27  TIMESTAMPTZ*/  {2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  0,  0,  0,  0,  2,  2,   2,   2,  2},
@@ -4833,7 +4833,7 @@ int ObIJsonBase::compare(const ObIJsonBase &other, int &res, bool is_path) const
         
         case ObJsonNodeType::J_DATE:
         case ObJsonNodeType::J_MYSQL_DATE:
-        case ObJsonNodeType::J_ORACLEDATE: {
+        case ObJsonNodeType::J_JSON_DATE_EXT: {
           if (OB_FAIL(compare_datetime(DT_TYPE_DATE, other, res))) {
             LOG_WARN("fail to compare json date", K(ret));
           }
@@ -5488,7 +5488,7 @@ int ObIJsonBase::to_number(ObIAllocator *allocator, number::ObNumber &number) co
       case ObJsonNodeType::J_TIME:
       case ObJsonNodeType::J_DATETIME:
       case ObJsonNodeType::J_TIMESTAMP:
-      case ObJsonNodeType::J_ORACLEDATE:
+      case ObJsonNodeType::J_JSON_DATE_EXT:
       case ObJsonNodeType::J_ODATE:
       case ObJsonNodeType::J_OTIMESTAMP:
       case ObJsonNodeType::J_OTIMESTAMPTZ: {
@@ -5562,7 +5562,7 @@ int ObIJsonBase::to_datetime(int64_t &value, ObTimeConvertCtx *cvrt_ctx_t) const
   ObTimeConvertCtx cvrt_ctx(NULL, false);
   if (OB_NOT_NULL(cvrt_ctx_t) && cvrt_ctx_t->is_timestamp_) {
     cvrt_ctx.tz_info_ = cvrt_ctx_t->tz_info_;
-    cvrt_ctx.oracle_nls_format_ = cvrt_ctx_t->oracle_nls_format_;
+    cvrt_ctx.nls_format_ = cvrt_ctx_t->nls_format_;
     cvrt_ctx.is_timestamp_ = cvrt_ctx_t->is_timestamp_;
   }
   switch (json_type()) {
@@ -5597,7 +5597,7 @@ int ObIJsonBase::to_datetime(int64_t &value, ObTimeConvertCtx *cvrt_ctx_t) const
     case ObJsonNodeType::J_DATETIME:
     case ObJsonNodeType::J_TIMESTAMP:
     case ObJsonNodeType::J_DATE:
-    case ObJsonNodeType::J_ORACLEDATE:
+    case ObJsonNodeType::J_JSON_DATE_EXT:
     case ObJsonNodeType::J_ODATE:
     case ObJsonNodeType::J_OTIMESTAMP:
     case ObJsonNodeType::J_OTIMESTAMPTZ: {
@@ -5688,7 +5688,7 @@ int ObIJsonBase::to_mdatetime(ObMySQLDateTime &value, ObTimeConvertCtx *cvrt_ctx
   switch (json_type()) {
     case ObJsonNodeType::J_INT:
     case ObJsonNodeType::J_OINT: {
-      // for oracle json json_element_t::to_Date()
+      // for JSON date conversion from integer input
       int64_t datetime = (1000 * 1000) *  get_int();
       if (OB_FAIL(ObTimeConverter::datetime_to_mdatetime(datetime, mdatetime))) {
         LOG_WARN("fail to cast datetime to mdatetime", K(ret), K(datetime));
@@ -5997,7 +5997,7 @@ int ObIJsonBase::to_bit(uint64_t &value) const
     }
 
     case ObJsonNodeType::J_DATE:
-    case ObJsonNodeType::J_ORACLEDATE: {
+    case ObJsonNodeType::J_JSON_DATE_EXT: {
       if (dt_mode == 0) {
         dt_mode = DT_TYPE_DATE; // set dt_node and pass through
       }
@@ -6386,7 +6386,7 @@ int ObJsonBaseFactory::alloc_node(ObIAllocator &allocator, const ObJsonNodeType 
     case ObJsonNodeType::J_TIME:
     case ObJsonNodeType::J_DATETIME:
     case ObJsonNodeType::J_TIMESTAMP:
-    case ObJsonNodeType::J_ORACLEDATE:
+    case ObJsonNodeType::J_JSON_DATE_EXT:
     case ObJsonNodeType::J_ODATE:
     case ObJsonNodeType::J_OTIMESTAMP:
     case ObJsonNodeType::J_OTIMESTAMPTZ:
@@ -6433,7 +6433,7 @@ bool ObJsonBaseUtil::is_time_type(ObJsonNodeType j_type)
                   || j_type == ObJsonNodeType::J_MYSQL_DATETIME
                   || j_type == ObJsonNodeType::J_TIME 
                   || j_type == ObJsonNodeType::J_TIMESTAMP
-                  || j_type == ObJsonNodeType::J_ORACLEDATE
+                  || j_type == ObJsonNodeType::J_JSON_DATE_EXT
                   || j_type == ObJsonNodeType::J_ODATE
                   || j_type == ObJsonNodeType::J_OTIMESTAMP
                   || j_type == ObJsonNodeType::J_OTIMESTAMPTZ);
@@ -6468,7 +6468,7 @@ ObObjType ObJsonBaseUtil::get_time_type(ObJsonNodeType json_type)
       type = ObTimestampType;
       break;
     }
-    case ObJsonNodeType::J_ORACLEDATE: {
+    case ObJsonNodeType::J_JSON_DATE_EXT: {
       type = ObDateType;
       break;
     }
@@ -6520,7 +6520,7 @@ int ObJsonBaseUtil::get_dt_mode_by_json_type(ObJsonNodeType j_type, ObDTMode &dt
       break;
     }
     
-    case ObJsonNodeType::J_ORACLEDATE: {
+    case ObJsonNodeType::J_JSON_DATE_EXT: {
       dt_mode = DT_TYPE_DATE;
       break;
     }
@@ -6530,11 +6530,11 @@ int ObJsonBaseUtil::get_dt_mode_by_json_type(ObJsonNodeType j_type, ObDTMode &dt
       break;
     }
     case ObJsonNodeType::J_OTIMESTAMP: {
-      dt_mode = (DT_TYPE_DATETIME | DT_TYPE_ORACLE);
+      dt_mode = (DT_TYPE_DATETIME | DT_TYPE_NANOSECOND);
       break;
     }
     case ObJsonNodeType::J_OTIMESTAMPTZ: {
-      dt_mode = (DT_TYPE_DATETIME | DT_TYPE_ORACLE | DT_TYPE_TIMEZONE);
+      dt_mode = (DT_TYPE_DATETIME | DT_TYPE_NANOSECOND | DT_TYPE_TIMEZONE);
       break;
     }
     default: {

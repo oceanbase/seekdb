@@ -219,66 +219,19 @@ int ObMPUtils::add_cap_flag(OMPKOK &okp, sql::ObSQLSessionInfo &session)
 int ObMPUtils::add_nls_format(OMPKOK &okp, sql::ObSQLSessionInfo &session, const bool only_changed/*false*/)
 {
   int ret = OB_SUCCESS;
-  if (only_changed) {
-    if (session.is_sys_var_changed()) {
-      const ObIArray<sql::ObBasicSessionInfo::ChangedVar> &sys_var = session.get_changed_sys_var();
-      LOG_DEBUG("sys var changed", K(session.get_tenant_name()), K(sys_var.count()));
-      int64_t max_add_count = ObNLSFormatEnum::NLS_MAX;
-      for (int64_t i = 0; OB_SUCC(ret) && i < sys_var.count() && max_add_count > 0; ++i) {
-        const sql::ObBasicSessionInfo::ChangedVar change_var = sys_var.at(i);
-        ObObj new_val;
-        bool changed = true;
-        ObNLSFormatEnum nls_enum = ObNLSFormatEnum::NLS_MAX;
-        if (change_var.id_ == SYS_VAR_NLS_DATE_FORMAT) {
-          nls_enum = ObNLSFormatEnum::NLS_DATE;
-        } else if (change_var.id_ == SYS_VAR_NLS_TIMESTAMP_FORMAT) {
-          nls_enum = ObNLSFormatEnum::NLS_TIMESTAMP;
-        } else if (change_var.id_ == SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT) {
-          nls_enum = ObNLSFormatEnum::NLS_TIMESTAMP_TZ;
-        }
-        if (nls_enum != ObNLSFormatEnum::NLS_MAX) {
-          --max_add_count;
-          if (OB_FAIL(session.is_sys_var_actully_changed(change_var.id_,
-                                                         change_var.old_val_,
-                                                         new_val,
-                                                         changed))) {
-            LOG_WARN("failed to check actully changed", K(ret), K(change_var), K(changed));
-          } else if (changed) {
-            ObStringKV str_kv;
-            str_kv.key_ = share::ObSysVarMeta::get_sys_var_name_by_id(change_var.id_); // shadow copy
-            if (ObNLSFormatEnum::NLS_DATE == nls_enum) {
-              str_kv.value_ = session.get_local_nls_date_format();
-            } else if (ObNLSFormatEnum::NLS_TIMESTAMP == nls_enum) {
-              str_kv.value_ = session.get_local_nls_timestamp_format();
-            } else if (ObNLSFormatEnum::NLS_TIMESTAMP_TZ == nls_enum) {
-              str_kv.value_ = session.get_local_nls_timestamp_tz_format();
-            }
-
-            if (OB_FAIL(okp.add_system_var(str_kv))) {
-              LOG_WARN("failed to add system variable", K(str_kv), K(ret));
-            } else {
-              //AS ob pkt encoding is different from mysql, we should not set_state_changed true
-              okp.set_state_changed(false);
-              LOG_DEBUG("success add system var to ok pack", K(str_kv), K(change_var), K(new_val), K(okp));
-            }
-          }
-        }
-      }
-    }
-  } else {
-    //AS ob pkt encoding is different from mysql, we should not set_state_changed true
+  if (!only_changed) {
     okp.set_state_changed(false);
 
     ObStringKV nls_date_str_kv;
-    nls_date_str_kv.key_ = share::ObSysVarMeta::get_sys_var_name_by_id(SYS_VAR_NLS_DATE_FORMAT); // shadow copy
-    nls_date_str_kv.value_ = session.get_local_nls_date_format();
-
     ObStringKV nls_timestamp_str_kv;
-    nls_timestamp_str_kv.key_ = share::ObSysVarMeta::get_sys_var_name_by_id(SYS_VAR_NLS_TIMESTAMP_FORMAT); // shadow copy
-    nls_timestamp_str_kv.value_ = session.get_local_nls_timestamp_format();
-
     ObStringKV nls_timestamp_tz_str_kv;
-    nls_timestamp_tz_str_kv.key_ = share::ObSysVarMeta::get_sys_var_name_by_id(SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT); // shadow copy
+    nls_date_str_kv.key_.assign_ptr("nls_date_format", static_cast<int32_t>(strlen("nls_date_format")));
+    nls_date_str_kv.value_ = session.get_local_nls_date_format();
+    nls_timestamp_str_kv.key_.assign_ptr("nls_timestamp_format",
+                                         static_cast<int32_t>(strlen("nls_timestamp_format")));
+    nls_timestamp_str_kv.value_ = session.get_local_nls_timestamp_format();
+    nls_timestamp_tz_str_kv.key_.assign_ptr("nls_timestamp_tz_format",
+                                            static_cast<int32_t>(strlen("nls_timestamp_tz_format")));
     nls_timestamp_tz_str_kv.value_ = session.get_local_nls_timestamp_tz_format();
 
     if (OB_FAIL(okp.add_system_var(nls_date_str_kv))) {
@@ -287,9 +240,10 @@ int ObMPUtils::add_nls_format(OMPKOK &okp, sql::ObSQLSessionInfo &session, const
       LOG_WARN("fail to add system var", K(nls_timestamp_str_kv), K(ret));
     } else if (OB_FAIL(okp.add_system_var(nls_timestamp_tz_str_kv))) {
       LOG_WARN("fail to add system var", K(nls_timestamp_tz_str_kv), K(ret));
-    } else {
-      LOG_DEBUG("succ to add system var", K(okp), K(ret));
     }
+  } else {
+    // NLS system variables are fixed in MySQL-only mode, so there is no changed
+    // variable payload to append after login.
   }
   return ret;
 }

@@ -123,11 +123,11 @@ int calc_to_temporal_expr(const ObExpr &expr,
                                                          ob_time,
                                                          scale));
       } else {
-        OZ (ObTimeConverter::str_to_ob_time_oracle_dfm(input_char->get_string(),
-                                                       time_cvrt_ctx,
-                                                       target_type,
-                                                       ob_time,
-                                                       scale));
+        OZ (ObTimeConverter::str_to_ob_time_by_format_model(input_char->get_string(),
+                                                            time_cvrt_ctx,
+                                                            target_type,
+                                                            ob_time,
+                                                            scale));
       }
     }
     if (OB_SUCC(ret)) {
@@ -157,7 +157,7 @@ int ObExprToTemporalBase::calc_result_typeN(ObExprResType &type,
                                              int64_t param_num,
                                              ObExprTypeCtx &type_ctx) const
 {
-  //https://docs.oracle.com/cd/B19306_01/server.102/b14200/functions193.htm
+  // Validate temporal conversion arguments.
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(param_num < 1) || OB_UNLIKELY(param_num > 3)) {
     ret = OB_INVALID_ARGUMENT_NUM;
@@ -214,7 +214,7 @@ int ObExprToTemporalBase::calc_result_typeN(ObExprResType &type,
     //result scale
     if (OB_SUCC(ret)) {
       ObScale max_scale =
-          ObAccuracy::MAX_ACCURACY2[ORACLE_MODE][get_my_target_obj_type()].get_scale();
+          ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][get_my_target_obj_type()].get_scale();
       ObScale result_scale = 0;
       if (input_char.is_null()) {
         //do nothing

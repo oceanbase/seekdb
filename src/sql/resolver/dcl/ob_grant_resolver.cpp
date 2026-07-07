@@ -436,7 +436,7 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
 
         //resolve users
         if (OB_SUCC(ret)) {
-          // In oracle mode during grant, if user does not exist, do not allow creating this user; fix #17900015
+          // Resolve whether GRANT should auto-create missing users; fix #17900015.
           bool need_create_user = false;
           CHECK_COMPATIBILITY_MODE(session_info_);
           need_create_user = !is_no_auto_create_user(params_.session_info_->get_sql_mode());

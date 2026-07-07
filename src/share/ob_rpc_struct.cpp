@@ -1115,8 +1115,8 @@ bool ObAlterTableArg::is_allow_when_upgrade() const
           LOG_WARN_RET(OB_ERR_UNEXPECTED, "*it_begin is NULL", K(bret));
         } else {
           alter_column_schema = static_cast<AlterColumnSchema *>(*it_begin);
-          // mysql mode, OB_ALL_MODIFY_COLUMN function is a subset of OB_ALL_CHANGE_COLUMN;
-          // Oracle mode, only OB_ALL_MODIFY_COLUMN. In the case of only supporting extended column length, for simplicity of implementation, only OB_ALL_MODIFY_COLUMN is left here.
+          // In the case of only supporting extended column length, keep only
+          // OB_ALL_MODIFY_COLUMN for simplicity.
           if (OB_DDL_MODIFY_COLUMN != alter_column_schema->alter_type_
               && OB_DDL_ADD_COLUMN != alter_column_schema->alter_type_) {
             bret = false;
@@ -3189,13 +3189,7 @@ OB_SERIALIZE_MEMBER((ObAlterUserProfileArg, ObDDLArg),
 
 bool ObGrantArg::is_valid() const
 {
-  return true
-         /* Oracle mode different permission system
-          * && priv_level_ > OB_PRIV_INVALID_LEVEL
-         && priv_level_ < OB_PRIV_MAX_LEVEL
-         && users_passwd_.count() > 0
-         && users_passwd_.count() == hosts_.count() * 2
-         */;
+  return true;
 }
 
 bool ObGrantArg::is_allow_when_disable_ddl() const

@@ -28,6 +28,7 @@
 #include "lib/objectpool/ob_pool.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "lib/string/ob_sql_string.h"
+#include "common/timezone/ob_time_convert.h"
 #include "common/timezone/ob_timezone_info.h"
 #include "rpc/ob_sql_request_operator.h"
 #include "share/ob_compatibility_control.h"
@@ -41,7 +42,6 @@
 #include "share/system_variable/ob_system_variable_alias.h"
 #include "share/system_variable/ob_system_variable_init.h"
 #include "sql/session/ob_session_val_map.h"
-#include "sql/ob_sql_mode_manager.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/ob_sql_context.h"
 #include "sql/ob_sql_trans_util.h"
@@ -100,13 +100,13 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObSwitchCatalogHelper);
 };
 
-struct ObSessionNLSParams //oracle nls parameters
+struct ObSessionNLSParams
 {
-  ObLengthSemantics nls_length_semantics_;
-  ObCollationType nls_collation_; //for oracle char and varchar2
-  ObCollationType nls_nation_collation_; //for oracle nchar and nvarchar2
+  ObLengthSemantics default_length_semantics_;
+  ObCollationType nls_collation_; // for char and varchar types
+  ObCollationType nls_nation_collation_; // for national character types
 
-  TO_STRING_KV(K(nls_length_semantics_), K(nls_collation_), K(nls_nation_collation_));
+  TO_STRING_KV(K(default_length_semantics_), K(nls_collation_), K(nls_nation_collation_));
 };
 
 
@@ -492,8 +492,6 @@ public:
   inline ObCollationType get_nls_collation() const;
   inline ObCollationType get_nls_collation_nation() const;
   inline const ObString &get_ob_trace_info() const;
-  inline const ObString &get_plsql_ccflags() const;
-  inline const ObString &get_iso_nls_currency() const;
   inline const ObString &get_log_row_value_option() const;
   int64_t get_default_lob_inrow_threshold() const;
   bool get_local_autocommit() const;
@@ -507,8 +505,8 @@ public:
   bool get_local_ob_enable_parameter_anonymous_block() const;
   bool get_local_ob_enable_ps_parameter_anonymous_block() const;
   bool get_local_cursor_sharing_mode() const;
-  ObLengthSemantics get_local_nls_length_semantics() const;
-  ObLengthSemantics get_actual_nls_length_semantics() const;
+  ObLengthSemantics get_default_length_semantics() const;
+  ObLengthSemantics get_actual_length_semantics() const;
   int64_t get_local_ob_org_cluster_id() const;
   int64_t get_local_timestamp() const;
   const common::ObString get_local_nls_date_format() const;
@@ -590,9 +588,8 @@ public:
   bool is_query_killed() const;
   bool is_valid() const { return is_valid_; };
   uint64_t get_user_id() const { return user_id_; }
-  bool is_auditor_user() const { return is_ora_auditor_user(user_id_); };
-  bool is_lbacsys_user() const { return is_ora_lbacsys_user(user_id_); };
-  bool is_oracle_sys_user() const { return is_ora_sys_user(user_id_); };
+  bool is_auditor_user() const { return is_inner_auditor_user(user_id_); };
+  bool is_lbacsys_user() const { return is_inner_lbacsys_user(user_id_); };
   bool is_mysql_root_user() const { return is_root_user(user_id_); };
   bool is_restore_user() const { return  0 == thread_data_.user_name_.case_compare(common::OB_RESTORE_USER_NAME); };
   bool is_proxy_sys_user() const
@@ -663,14 +660,10 @@ public:
     sql_select_limit = sys_vars_cache_.get_sql_select_limit();
     return common::OB_SUCCESS;
   }
-  int get_oracle_sql_select_limit(int64_t &oracle_sql_select_limit) const
-  {
-    oracle_sql_select_limit = sys_vars_cache_.get_oracle_sql_select_limit();
-    return common::OB_SUCCESS;
-  }
   // session retains compatible mode, mainly used for passing mode, convenient for subsequent guard switch, such as inner sql connection etc
-  // Other places where mode is needed please use is_oracle|mysql_mode on the thread
-  // At the same time, you can use check_compatibility_mode to check if the mode on the thread is consistent with the mode on the session
+  // Other places where mode is needed should use the thread-local
+  // compatibility checks. You can use check_compatibility_mode to check if the
+  // mode on the thread is consistent with the mode on the session.
   ObCompatibilityMode get_compatibility_mode() const
   {
     return ob_sql_mode_to_compatibility_mode(get_sql_mode());
@@ -728,9 +721,7 @@ public:
   inline int set_tz_info_wrap(const common::ObTimeZoneInfoWrap &other) { return tz_info_wrap_.deep_copy(other); }
   inline void set_nls_formats(const common::ObString *nls_formats)
   {
-    sys_vars_cache_.set_nls_date_format(nls_formats[ObNLSFormatEnum::NLS_DATE]);
-    sys_vars_cache_.set_nls_timestamp_format(nls_formats[ObNLSFormatEnum::NLS_TIMESTAMP]);
-    sys_vars_cache_.set_nls_timestamp_tz_format(nls_formats[ObNLSFormatEnum::NLS_TIMESTAMP_TZ]);
+    UNUSED(nls_formats);
   }
   int get_influence_plan_sys_var(ObSysVarInPC &sys_vars) const;
   int get_sys_var_in_pc_str(common::ObString &str) {
@@ -1146,7 +1137,7 @@ public:
   inline ObSessionNLSParams get_session_nls_params() const
   {
     ObSessionNLSParams session_nls_params;
-    session_nls_params.nls_length_semantics_ = get_actual_nls_length_semantics();
+    session_nls_params.default_length_semantics_ = get_actual_length_semantics();
     session_nls_params.nls_collation_ = get_nls_collation();
     session_nls_params.nls_nation_collation_ = get_nls_collation_nation();
     return session_nls_params;
@@ -1243,7 +1234,7 @@ public:
     return capability_.cap_flags_.OB_CLIENT_USE_LOB_LOCATOR;
   }
 
-  // NOTICE: Don't use this function, this is only used in pl clob/blob for oracle tenant
+  // NOTICE: Don't use this function outside PL CLOB/BLOB handling.
   inline void set_client_use_lob_locator(bool flag)
   {
     capability_.cap_flags_.OB_CLIENT_USE_LOB_LOCATOR = (flag ? 1 : 0);
@@ -1254,7 +1245,7 @@ public:
     return client_attribute_capability_.cap_flags_.OB_CLIENT_CAP_OB_LOB_LOCATOR_V2;
   }
 
-  // NOTICE: Don't use this function, this is only used in pl clob/blob for oracle tenant
+  // NOTICE: Don't use this function outside PL CLOB/BLOB handling.
   inline void set_client_support_lob_locatorv2(bool flag)
   {
     client_attribute_capability_.cap_flags_.OB_CLIENT_CAP_OB_LOB_LOCATOR_V2 = (flag ? 1 : 0);
@@ -1717,7 +1708,6 @@ public:
         sql_throttle_current_priority_(100),
         ob_last_schema_version_(0),
         sql_select_limit_(0),
-        oracle_sql_select_limit_(0),
         auto_increment_offset_(0),
         last_insert_id_(0),
         binlog_row_image_(2),
@@ -1735,25 +1725,21 @@ public:
         cursor_sharing_mode_(ObCursorSharingMode::FORCE_MODE),
         timestamp_(0),
         tx_isolation_(transaction::ObTxIsolationLevel::INVALID),
-        iso_nls_currency_(),
         ob_pl_block_timeout_(0),
         log_row_value_option_(),
         default_lob_inrow_threshold_(OB_DEFAULT_LOB_INROW_THRESHOLD),
         autocommit_(false),
         ob_enable_trace_log_(false),
-        nls_length_semantics_(LS_BYTE),
         ob_org_cluster_id_(0),
         ob_query_timeout_(0),
         ob_trx_timeout_(0),
         collation_connection_(0),
-        sql_mode_(DEFAULT_OCEANBASE_MODE),
-        nls_formats_{},
+        sql_mode_(DEFAULT_MYSQL_MODE),
         ob_trx_idle_timeout_(0),
         ob_trx_lock_timeout_(-1),
-        nls_collation_(CS_TYPE_INVALID),
-        nls_nation_collation_(CS_TYPE_INVALID),
+        nls_collation_(CS_TYPE_UTF8MB4_BIN),
+        nls_nation_collation_(CS_TYPE_UTF16_BIN),
         ob_trace_info_(),
-        ob_plsql_ccflags_(),
         ob_max_read_stale_time_(0),
         runtime_filter_type_(0),
         runtime_filter_wait_time_ms_(0),
@@ -1768,11 +1754,7 @@ public:
         current_default_catalog_(0),
         security_version_(0),
         ob_enable_ps_parameter_anonymous_block_(false)
-    {
-      for (int64_t i = 0; i < ObNLSFormatEnum::NLS_MAX; ++i) {
-        MEMSET(nls_formats_buf_[i], 0, MAX_NLS_FORMAT_STR_LEN);
-      }
-    }
+    {}
     ~SysVarsCacheData() {}
 
     void reset()
@@ -1781,7 +1763,6 @@ public:
       sql_throttle_current_priority_ = 100;
       ob_last_schema_version_ = 0;
       sql_select_limit_ = 0;
-      oracle_sql_select_limit_ = 0;
       auto_increment_offset_ = 0;
       last_insert_id_ = 0;
       binlog_row_image_ = 2;
@@ -1800,26 +1781,18 @@ public:
       timestamp_ = 0;
       tx_isolation_ = transaction::ObTxIsolationLevel::INVALID;
       ob_pl_block_timeout_ = 0;
-      ob_plsql_ccflags_.reset();
       autocommit_ = false;
       ob_enable_trace_log_ = false;
       ob_org_cluster_id_ = 0;
       ob_query_timeout_ = 0;
       ob_trx_timeout_ = 0;
       collation_connection_ = 0;
-      nls_length_semantics_ = LS_BYTE;
-      sql_mode_ = DEFAULT_OCEANBASE_MODE;
-      for (int64_t i = 0; i < ObNLSFormatEnum::NLS_MAX; ++i) {
-        nls_formats_[i].reset();
-        MEMSET(nls_formats_buf_[i], 0, MAX_NLS_FORMAT_STR_LEN);
-      }
+      sql_mode_ = DEFAULT_MYSQL_MODE;
       ob_trx_idle_timeout_ = 0;
       ob_trx_lock_timeout_ = -1;
-      nls_collation_ = CS_TYPE_INVALID;
-      nls_nation_collation_ = CS_TYPE_INVALID;
+      nls_collation_ = CS_TYPE_UTF8MB4_BIN;
+      nls_nation_collation_ = CS_TYPE_UTF16_BIN;
       ob_trace_info_.reset();
-      iso_nls_currency_.reset();
-      ob_plsql_ccflags_.reset();
       log_row_value_option_.reset();
       ob_max_read_stale_time_ = 0;
       runtime_filter_type_ = 0;
@@ -1843,7 +1816,6 @@ public:
             sql_throttle_current_priority_ == other.sql_throttle_current_priority_ &&
             ob_last_schema_version_ == other.ob_last_schema_version_ &&
             sql_select_limit_ == other.sql_select_limit_ &&
-            oracle_sql_select_limit_ == other.oracle_sql_select_limit_ &&
             auto_increment_offset_ == other.auto_increment_offset_ &&
             last_insert_id_ == other.last_insert_id_ &&
             binlog_row_image_ == other.binlog_row_image_ &&
@@ -1862,21 +1834,17 @@ public:
             timestamp_ == other.timestamp_ &&
             tx_isolation_ == other.tx_isolation_ &&
             ob_pl_block_timeout_ == other.ob_pl_block_timeout_ &&
-            ob_plsql_ccflags_ == other.ob_plsql_ccflags_ &&
             autocommit_ == other.autocommit_ &&
             ob_org_cluster_id_ == other.ob_org_cluster_id_ &&
             ob_query_timeout_ == other.ob_query_timeout_ &&
             ob_trx_timeout_ == other.ob_trx_timeout_ &&
             collation_connection_ == other.collation_connection_ &&
-            nls_length_semantics_ == other.nls_length_semantics_ &&
             sql_mode_ == other.sql_mode_ &&
             ob_trx_idle_timeout_ == other.ob_trx_idle_timeout_ &&
             ob_trx_lock_timeout_ == other.ob_trx_lock_timeout_ &&
             nls_collation_ == other.nls_collation_ &&
             nls_nation_collation_ == other.nls_nation_collation_ &&
             ob_trace_info_ == other.ob_trace_info_ &&
-            iso_nls_currency_ == other.iso_nls_currency_ &&
-            ob_plsql_ccflags_ == other.ob_plsql_ccflags_ &&
             log_row_value_option_ == other.log_row_value_option_ &&
             ob_max_read_stale_time_ == other.ob_max_read_stale_time_ &&
             ob_max_read_stale_time_ == other.ob_max_read_stale_time_  &&
@@ -1889,58 +1857,7 @@ public:
             security_version_ == other.security_version_ &&
             ob_enable_ps_parameter_anonymous_block_ == other.ob_enable_ps_parameter_anonymous_block_ &&
             current_default_catalog_ == other.current_default_catalog_;
-      bool equal2 = true;
-      for (int64_t i = 0; i < ObNLSFormatEnum::NLS_MAX; ++i) {
-        if (nls_formats_[i] != other.nls_formats_[i]) {
-          equal2 = false;
-        }
-      }
-      return equal1 && equal2;
-    }
-    void set_nls_date_format(const common::ObString &format)
-    {
-      set_nls_format(NLS_DATE, format);
-    }
-    void set_nls_timestamp_format(const common::ObString &format)
-    {
-      set_nls_format(NLS_TIMESTAMP, format);
-    }
-    void set_nls_timestamp_tz_format(const common::ObString &format)
-    {
-      set_nls_format(NLS_TIMESTAMP_TZ, format);
-    }
-    void set_nls_format(const int64_t enum_value, const common::ObString &format)
-    {
-      if (0 <= enum_value && enum_value < ObNLSFormatEnum::NLS_MAX) {
-        if (format.empty()) {
-          nls_formats_[enum_value].reset();
-          MEMSET(nls_formats_buf_[enum_value], 0, MAX_NLS_FORMAT_STR_LEN);
-        } else {
-          MEMCPY(nls_formats_buf_[enum_value], format.ptr(), format.length());
-          nls_formats_[enum_value].assign_ptr(nls_formats_buf_[enum_value], format.length());
-        }
-      }
-    }
-    void set_iso_nls_currency(const common::ObString &format)
-    {
-      if (format.empty()) {
-        iso_nls_currency_.reset();
-      } else {
-        MEMCPY(iso_nls_currency_buf_, format.ptr(), format.length());
-        iso_nls_currency_.assign_ptr(iso_nls_currency_buf_, format.length());
-      }
-    }
-    const common::ObString &get_nls_date_format() const
-    {
-      return nls_formats_[NLS_DATE];
-    }
-    const common::ObString &get_nls_timestamp_format() const
-    {
-      return nls_formats_[NLS_TIMESTAMP];
-    }
-    const common::ObString &get_nls_timestamp_tz_format() const
-    {
-      return nls_formats_[NLS_TIMESTAMP_TZ];
+      return equal1;
     }
     void set_ob_trace_info(const common::ObString &trace_info)
     {
@@ -1955,25 +1872,6 @@ public:
     const common::ObString &get_ob_trace_info() const
     {
       return ob_trace_info_;
-    }
-    const common::ObString &get_iso_nls_currency() const
-    {
-      return iso_nls_currency_;
-    }
-    void set_plsql_ccflags(const common::ObString &plsql_ccflags)
-    {
-      if (plsql_ccflags.empty()) {
-        ob_plsql_ccflags_.reset();
-      } else {
-        const int32_t ccflags_len
-          = std::min(plsql_ccflags.length(), OB_TMP_BUF_SIZE_256);
-        MEMCPY(plsql_ccflags_, plsql_ccflags.ptr(), ccflags_len);
-        ob_plsql_ccflags_.assign_ptr(plsql_ccflags_, ccflags_len);
-      }
-    }
-    const common::ObString &get_plsql_ccflags() const
-    {
-      return ob_plsql_ccflags_;
     }
     void set_log_row_value_option(const common::ObString &option)
     {
@@ -1997,23 +1895,21 @@ public:
       return default_lob_inrow_threshold_;
     }
 
-    TO_STRING_KV(K(autocommit_), K(ob_enable_trace_log_), K(nls_length_semantics_),
+    TO_STRING_KV(K(autocommit_), K(ob_enable_trace_log_),
                  K(ob_org_cluster_id_), K(ob_query_timeout_), K(ob_trx_timeout_), K(collation_connection_),
-                 K(sql_mode_), K(nls_formats_[0]), K(nls_formats_[1]), K(nls_formats_[2]),
-                 K(ob_trx_idle_timeout_), K(ob_trx_lock_timeout_), K(nls_collation_), K(nls_nation_collation_),
-                 K_(sql_throttle_current_priority), K_(ob_last_schema_version), K_(sql_select_limit), K_(oracle_sql_select_limit),
+                 K(sql_mode_), K(ob_trx_idle_timeout_), K(ob_trx_lock_timeout_),
+                 K(nls_collation_), K(nls_nation_collation_),
+                 K_(sql_throttle_current_priority), K_(ob_last_schema_version), K_(sql_select_limit),
                  K_(optimizer_use_sql_plan_baselines), K_(optimizer_capture_sql_plan_baselines),
                  K_(is_result_accurate), K_(character_set_results),
-                 K_(character_set_connection), K_(ob_pl_block_timeout), K_(ob_plsql_ccflags),
-                 K_(iso_nls_currency), K_(log_row_value_option), K_(ob_max_read_stale_time), K_(default_lob_inrow_threshold));
+                 K_(character_set_connection), K_(ob_pl_block_timeout),
+                 K_(log_row_value_option), K_(ob_max_read_stale_time), K_(default_lob_inrow_threshold));
   public:
-    static const int64_t MAX_NLS_FORMAT_STR_LEN = 256;
     //==========  No need to serialize  ============
     uint64_t auto_increment_increment_;
     int64_t sql_throttle_current_priority_;
     int64_t ob_last_schema_version_;
     int64_t sql_select_limit_;
-    int64_t oracle_sql_select_limit_;
     uint64_t auto_increment_offset_;
     uint64_t last_insert_id_;
     int64_t binlog_row_image_;
@@ -2033,8 +1929,6 @@ public:
     int64_t timestamp_;
     transaction::ObTxIsolationLevel tx_isolation_;
 
-    common::ObString iso_nls_currency_;
-    char iso_nls_currency_buf_[MAX_NLS_FORMAT_STR_LEN];
     int64_t ob_pl_block_timeout_;
 
     common::ObString log_row_value_option_;
@@ -2043,21 +1937,17 @@ public:
     //==========  need serialization  ============
     bool autocommit_;
     bool ob_enable_trace_log_;
-    ObLengthSemantics nls_length_semantics_;
     int64_t ob_org_cluster_id_;
     int64_t ob_query_timeout_;
     int64_t ob_trx_timeout_;
     int64_t collation_connection_;
     ObSQLMode sql_mode_;
-    common::ObString nls_formats_[ObNLSFormatEnum::NLS_MAX];
     int64_t ob_trx_idle_timeout_;
     int64_t ob_trx_lock_timeout_;
-    ObCollationType nls_collation_; //for oracle char and varchar2
-    ObCollationType nls_nation_collation_; //for oracle nchar and nvarchar2
+    ObCollationType nls_collation_; // for char and varchar types
+    ObCollationType nls_nation_collation_; // for national character types
     ObString ob_trace_info_; // identifier from user app, pass through system including app & db
     char trace_info_buf_[OB_TRACE_BUFFER_SIZE];
-    ObString ob_plsql_ccflags_;
-    char plsql_ccflags_[OB_TMP_BUF_SIZE_256];
     int64_t ob_max_read_stale_time_;
     int64_t runtime_filter_type_;
     int64_t runtime_filter_wait_time_ms_;
@@ -2073,8 +1963,6 @@ public:
     uint64_t current_default_catalog_;
     uint64_t security_version_;
     bool ob_enable_ps_parameter_anonymous_block_;
-  private:
-    char nls_formats_buf_[ObNLSFormatEnum::NLS_MAX][MAX_NLS_FORMAT_STR_LEN];
   };
 private:
 #define DEF_SYS_VAR_CACHE_FUNCS(SYS_VAR_TYPE, SYS_VAR_NAME)                           \
@@ -2141,7 +2029,6 @@ private:
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, sql_throttle_current_priority);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, ob_last_schema_version);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, sql_select_limit);
-    DEF_SYS_VAR_CACHE_FUNCS(int64_t, oracle_sql_select_limit);
     DEF_SYS_VAR_CACHE_FUNCS(uint64_t, auto_increment_offset);
     DEF_SYS_VAR_CACHE_FUNCS(uint64_t, last_insert_id);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, binlog_row_image);
@@ -2161,23 +2048,17 @@ private:
     DEF_SYS_VAR_CACHE_FUNCS(transaction::ObTxIsolationLevel, tx_isolation);
     DEF_SYS_VAR_CACHE_FUNCS(bool, autocommit);
     DEF_SYS_VAR_CACHE_FUNCS(bool, ob_enable_trace_log);
-    DEF_SYS_VAR_CACHE_FUNCS(ObLengthSemantics, nls_length_semantics);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, ob_org_cluster_id);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, ob_query_timeout);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, ob_trx_timeout);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, collation_connection);
     DEF_SYS_VAR_CACHE_FUNCS(ObSQLMode, sql_mode);
-    DEF_SYS_VAR_CACHE_FUNCS_STR(nls_date_format);
-    DEF_SYS_VAR_CACHE_FUNCS_STR(nls_timestamp_format);
-    DEF_SYS_VAR_CACHE_FUNCS_STR(nls_timestamp_tz_format);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, ob_trx_idle_timeout);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, ob_trx_lock_timeout);
     DEF_SYS_VAR_CACHE_FUNCS(ObCollationType, nls_collation);
     DEF_SYS_VAR_CACHE_FUNCS(ObCollationType, nls_nation_collation);
     DEF_SYS_VAR_CACHE_FUNCS_STR(ob_trace_info);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, ob_pl_block_timeout);
-    DEF_SYS_VAR_CACHE_FUNCS_STR(plsql_ccflags);
-    DEF_SYS_VAR_CACHE_FUNCS_STR(iso_nls_currency);
     DEF_SYS_VAR_CACHE_FUNCS_STR(log_row_value_option);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, ob_max_read_stale_time);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, runtime_filter_type);
@@ -2218,7 +2099,6 @@ private:
         bool inc_sql_throttle_current_priority_:1;
         bool inc_ob_last_schema_version_:1;
         bool inc_sql_select_limit_:1;
-        bool inc_oracle_sql_select_limit_:1;
         bool inc_auto_increment_offset_:1;
         bool inc_last_insert_id_:1;
         bool inc_binlog_row_image_:1;
@@ -2238,23 +2118,17 @@ private:
         bool inc_tx_isolation_:1;
         bool inc_autocommit_:1;
         bool inc_ob_enable_trace_log_:1;
-        bool inc_nls_length_semantics_:1;
         bool inc_ob_org_cluster_id_:1;
         bool inc_ob_query_timeout_:1;
         bool inc_ob_trx_timeout_:1;
         bool inc_collation_connection_:1;
         bool inc_sql_mode_:1;
-        bool inc_nls_date_format_:1;
-        bool inc_nls_timestamp_format_:1;
-        bool inc_nls_timestamp_tz_format_:1;
         bool inc_ob_trx_idle_timeout_:1;
         bool inc_ob_trx_lock_timeout_:1;
         bool inc_nls_collation_:1;
         bool inc_nls_nation_collation_:1;
         bool inc_ob_trace_info_:1;
         bool inc_ob_pl_block_timeout_:1;
-        bool inc_plsql_ccflags_:1;
-        bool inc_iso_nls_currency_:1;
         bool inc_log_row_value_option_:1;
         bool inc_ob_max_read_stale_time_:1;
         bool inc_runtime_filter_type_:1;
@@ -2462,35 +2336,8 @@ private:
   stmt::StmtType first_need_txn_stmt_type_;
   // some Cmd like DDL will commit current transaction, and need recheck tx read only settings before run
   bool need_recheck_txn_readonly_;
-  //min_cluster_version_: record the minimum server version number of the cluster before sql execution
-  // Solve the problem of compatibility:
-  //   versions before 2.2.3 would serialize all system variables that need serialization,
-  //   2.2.3 and later versions do not serialize ORACLE_ONLY system variables,
-  //   The following scenario will report an error (issue 1):
-  //     During the period when 222 and 223 are running together, the client executed a px query and reported -4016 when serializing a system variable in the session,
-  //     The server where the main thread resides is 223, and the server where the sqc end resides is 222. This query's entire lifecycle will involve two sessions of serialization and deserialization.
-  //      The first time is init_sqc rpc(executed on 223, only serializing non-ORACLE_ONLY variables)
-  //      The second time is on 222, sqc starting worker will copy all exec_ctx to other workers, and the copying method is serialization + deserialization.
-  //      During the first serialization of init_sqc rpc, if it is a mysql tenant, only the 《System Variables to be Serialized》 will be serialized as well as
-  //      <The system variables that are NOT ORACLE_ONLY>, therefore the observer of 222 has only these variables after deserialization.
-  //      but when the second deserialization of session occurs during the start worker phase, version 222 does not have this filter for <non ORACLE_ONLY system variables>,
-  //      Therefore serialization filters based on hardcoded system variables will only do <needs serialization> filtering, it will detect more system variables than those in the current session,
-  //      These variables detect that they are empty in the current session and will then report an unexpected condition with error code 4016.
-  //
-  //  To solve the above scenario, version control will be added. If during the upgrade process, the current minimum version number (using GET_MIN_CLUSTER_VERSION()) is not version 2.2.3 or higher,
-  //  Then use the old way, serialize the ORACLE_ONLY system variable to the remote machine as well, which can resolve the above error scenario, but another scenario will still have issues:
-  //
-  //  Issue 2: When version 2.2.3 sends a remote request to version 2.2.2, it calculates the size for serialization once, including the system variables that need to be serialized. Due to the minimum version number
-  //  is 2.2.2, will include the ORACLE_ONLY system variable in the serialized variables; when actually performing the serialization action, it will also calculate once the system variables that need to be serialized,
-  // If at this point all have upgraded to 2.2.3, then the ORACLE_ONLY variable will not be serialized, at this time it will appear that the actual serialized size is inconsistent with the previously calculated required serialized size, resulting in unexpected behavior;
-  //
-  //  To solve problem 2, there are two approaches (approach 2 is available):
-  //     Approach 1: Push the system variables that need to be serialized into a session member sys_var_ids_ when calculating the serialization size, next time during actual serialization do not recalculate the system variables that need to be serialized
-  //            Directly utilize sys_var_ids_ serialization corresponding system variables, this approach will have one problem, which is that we sqc start work for session serialization when, is concurrent, initialization sys_var_ids_
-  //            There will be concurrency issues, therefore this approach is not feasible;
-  //     Approach 2: Record min_cluster_version_ on the session, initialize before execution, use the same minimum version number to determine which system variables need to be serialized when calculating the serialization size of the session and during actual serialization;
-  //            Ensure session serialization size and actual serialized size are consistent;
-  //
+  // Record the cluster version before SQL execution so session serialization
+  // length calculation and actual serialization use the same version context.
   uint64_t exec_min_cluster_version_;
   stmt::StmtType stmt_type_;
 private:
@@ -2563,16 +2410,6 @@ inline const ObString &ObBasicSessionInfo::get_ob_trace_info() const
   return sys_vars_cache_.get_ob_trace_info();
 }
 
-inline const ObString &ObBasicSessionInfo::get_plsql_ccflags() const
-{
-  return sys_vars_cache_.get_plsql_ccflags();
-}
-
-inline const ObString &ObBasicSessionInfo::get_iso_nls_currency() const
-{
-  return sys_vars_cache_.get_iso_nls_currency();
-}
-
 inline const ObString &ObBasicSessionInfo::get_log_row_value_option() const
 {
   return sys_vars_cache_.get_log_row_value_option();
@@ -2623,16 +2460,14 @@ inline bool ObBasicSessionInfo::get_local_ob_enable_ps_parameter_anonymous_block
   return sys_vars_cache_.get_ob_enable_ps_parameter_anonymous_block();
 }
 
-inline ObLengthSemantics ObBasicSessionInfo::get_local_nls_length_semantics() const
+inline ObLengthSemantics ObBasicSessionInfo::get_default_length_semantics() const
 {
-  return sys_vars_cache_.get_nls_length_semantics();
+  return LS_BYTE;
 }
 
-//oracle SYS user actual nls_length_semantics is always BYTE
-inline ObLengthSemantics ObBasicSessionInfo::get_actual_nls_length_semantics() const
+inline ObLengthSemantics ObBasicSessionInfo::get_actual_length_semantics() const
 {
-  return is_oracle_sys_database_id(get_database_id()) ?
-         LS_BYTE : sys_vars_cache_.get_nls_length_semantics();
+  return LS_BYTE;
 }
 
 inline int64_t ObBasicSessionInfo::get_local_ob_org_cluster_id() const
@@ -2646,15 +2481,15 @@ inline int64_t ObBasicSessionInfo::get_local_timestamp() const
 }
 inline const common::ObString ObBasicSessionInfo::get_local_nls_date_format() const
 {
-  return sys_vars_cache_.get_nls_date_format();
+  return ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT;
 }
 inline const common::ObString ObBasicSessionInfo::get_local_nls_timestamp_format() const
 {
-  return sys_vars_cache_.get_nls_timestamp_format();
+  return ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_FORMAT;
 }
 inline const common::ObString ObBasicSessionInfo::get_local_nls_timestamp_tz_format() const
 {
-  return sys_vars_cache_.get_nls_timestamp_tz_format();
+  return ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT;
 }
 
 inline int ObBasicSessionInfo::get_local_nls_format(const ObObjType type, ObString &format_str) const
@@ -2662,7 +2497,7 @@ inline int ObBasicSessionInfo::get_local_nls_format(const ObObjType type, ObStri
   int ret = common::OB_SUCCESS;
   switch (type) {
     case ObDateTimeType:
-      format_str = sys_vars_cache_.get_nls_date_format();
+      format_str = ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT;
       break;
     default:
       ret = OB_INVALID_DATE_VALUE;
@@ -2683,7 +2518,6 @@ public:
     CHARSET_CLIENT,
     COLLATION_CONNECTION,
     COLLATION_DATABASE,
-    PLSQL_CCFLAGS,
     PLSQL_OPTIMIZE_LEVEL,
     MAX_ENV,
   };
@@ -2693,17 +2527,15 @@ public:
     share::SYS_VAR_CHARACTER_SET_CLIENT,
     share::SYS_VAR_COLLATION_CONNECTION,
     share::SYS_VAR_COLLATION_DATABASE,
-    share::SYS_VAR_PLSQL_CCFLAGS,
     share::SYS_VAR_PLSQL_OPTIMIZE_LEVEL,
     share::SYS_VAR_INVALID
   };
 
   ObExecEnv() :
-    sql_mode_(DEFAULT_OCEANBASE_MODE),
+    sql_mode_(DEFAULT_MYSQL_MODE),
     charset_client_(CS_TYPE_INVALID),
     collation_connection_(CS_TYPE_INVALID),
     collation_database_(CS_TYPE_INVALID),
-    plsql_ccflags_(),
     plsql_optimize_level_(2)  // default PLSQL_OPTIMIZE_LEVEL = 2
   { }
 
@@ -2713,7 +2545,6 @@ public:
                K_(charset_client),
                K_(collation_connection),
                K_(collation_database),
-               K_(plsql_ccflags),
                K_(plsql_optimize_level));
 
   void reset();
@@ -2735,9 +2566,6 @@ public:
   ObCharsetType get_charset_client() { return ObCharset::charset_type_by_coll(charset_client_); }
   ObCollationType get_collation_connection() { return collation_connection_; }
   ObCollationType get_collation_database() { return collation_database_; }
-  ObString& get_plsql_ccflags() { return plsql_ccflags_; }
-
-  void set_plsql_ccflags(ObString &plsql_ccflags) { plsql_ccflags_ = plsql_ccflags; }
 
   int64_t get_plsql_optimize_level() { return plsql_optimize_level_; }
   void set_plsql_optimize_level(int64_t level) { plsql_optimize_level_ = plsql_optimize_level_; }
@@ -2747,7 +2575,6 @@ private:
   ObCollationType charset_client_;
   ObCollationType collation_connection_;
   ObCollationType collation_database_;
-  ObString plsql_ccflags_;
   int64_t plsql_optimize_level_;
 };
 

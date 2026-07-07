@@ -242,9 +242,8 @@ static int32_t reserved_agg_col_size(RuntimeContext &agg_ctx, int64_t agg_col_id
   if (aggr_info.is_implicit_first_aggr()) {
     ret_size += string_reserved_size; // <char *, len>;
   } else if (aggr_info.get_expr_type() == T_FUN_COUNT || aggr_info.get_expr_type() == T_FUN_GROUPING) {
-    // count returns ObNumberType in oracle mode,
-    // we use int64_t as row counts recording type, and cast int64_t to ObNumberType in
-    // `collect_group_result`
+    // Count/grouping row counters are stored as int64_t in aggregate rows and
+    // converted to the expression result type in `collect_group_result`.
     ret_size += sizeof(int64_t);
   } else if (is_var_len_agg_cell(res_tc)) {
     ret_size += string_reserved_size;

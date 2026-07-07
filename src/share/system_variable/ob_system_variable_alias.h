@@ -169,22 +169,8 @@ namespace share
   static const char* const OB_SV_EARLY_LOCK_RELEASE = "ob_early_lock_release";
   static const char* const OB_SV_TRX_IDLE_TIMEOUT = "ob_trx_idle_timeout";
   static const char* const OB_SV_BLOCK_ENCRYPTION_MODE = "block_encryption_mode";
-  static const char* const OB_SV_NLS_DATE_FORMAT = "nls_date_format";
-  static const char* const OB_SV_NLS_TIMESTAMP_FORMAT = "nls_timestamp_format";
-  static const char* const OB_SV_NLS_TIMESTAMP_TZ_FORMAT = "nls_timestamp_tz_format";
   static const char* const OB_SV_RESERVED_META_MEMORY_PERCENTAGE = "ob_reserved_meta_memory_percentage";
   static const char* const OB_SV_CHECK_SYS_VARIABLE = "ob_check_sys_variable";
-  static const char* const OB_SV_NLS_LANGUAGE = "nls_language";
-  static const char* const OB_SV_NLS_TERRITORY = "nls_territory";
-  static const char* const OB_SV_NLS_SORT = "nls_sort";
-  static const char* const OB_SV_NLS_COMP = "nls_comp";
-  static const char* const OB_SV_NLS_CHARACTERSET = "nls_characterset";
-  static const char* const OB_SV_NLS_NCHAR_CHARACTERSET = "nls_nchar_characterset";
-  static const char* const OB_SV_NLS_DATE_LANGUAGE = "nls_date_language";
-  static const char* const OB_SV_NLS_LENGTH_SEMANTICS = "nls_length_semantics";
-  static const char* const OB_SV_NLS_NCHAR_CONV_EXCP = "nls_nchar_conv_excp";
-  static const char* const OB_SV_NLS_CALENDAR = "nls_calendar";
-  static const char* const OB_SV_NLS_NUMERIC_CHARACTERS = "nls_numeric_characters";
   static const char* const OB_SV__NLJ_BATCHING_ENABLED = "_nlj_batching_enabled";
   static const char* const OB_SV_TRACEFILE_IDENTIFIER = "tracefile_identifier";
   static const char* const OB_SV__GROUPBY_NOPUSHDOWN_CUT_RATIO = "_groupby_nopushdown_cut_ratio";
@@ -206,7 +192,6 @@ namespace share
   static const char* const OB_SV__ENABLE_PARALLEL_DML = "_enable_parallel_dml";
   static const char* const OB_SV__PX_MIN_GRANULES_PER_SLAVE = "_px_min_granules_per_slave";
   static const char* const OB_SV_SECURE_FILE_PRIV = "secure_file_priv";
-  static const char* const OB_SV_PLSQL_WARNINGS = "plsql_warnings";
   static const char* const OB_SV__ENABLE_PARALLEL_QUERY = "_enable_parallel_query";
   static const char* const OB_SV__FORCE_PARALLEL_QUERY_DOP = "_force_parallel_query_dop";
   static const char* const OB_SV__FORCE_PARALLEL_DML_DOP = "_force_parallel_dml_dop";
@@ -214,10 +199,6 @@ namespace share
   static const char* const OB_SV_TRANSACTION_READ_ONLY = "transaction_read_only";
   static const char* const OB_SV_RESOURCE_MANAGER_PLAN = "resource_manager_plan";
   static const char* const OB_SV_PERFORMANCE_SCHEMA = "performance_schema";
-  static const char* const OB_SV_NLS_CURRENCY = "nls_currency";
-  static const char* const OB_SV_NLS_ISO_CURRENCY = "nls_iso_currency";
-  static const char* const OB_SV_NLS_DUAL_CURRENCY = "nls_dual_currency";
-  static const char* const OB_SV_PLSQL_CCFLAGS = "plsql_ccflags";
   static const char* const OB_SV__OB_PROXY_SESSION_TEMPORARY_TABLE_USED = "_ob_proxy_session_temporary_table_used";
   static const char* const OB_SV__ENABLE_PARALLEL_DDL = "_enable_parallel_ddl";
   static const char* const OB_SV__FORCE_PARALLEL_DDL_DOP = "_force_parallel_ddl_dop";
@@ -240,7 +221,6 @@ namespace share
   static const char* const OB_SV_LOG_ROW_VALUE_OPTIONS = "log_row_value_options";
   static const char* const OB_SV_MAX_READ_STALE_TIME = "ob_max_read_stale_time";
   static const char* const OB_SV__OPTIMIZER_GATHER_STATS_ON_LOAD = "_optimizer_gather_stats_on_load";
-  static const char* const OB_SV__FORCE_ORDER_PRESERVE_SET = "_force_order_preserve_set";
   static const char* const OB_SV__SHOW_DDL_IN_COMPAT_MODE = "_show_ddl_in_compat_mode";
   static const char* const OB_SV_PARALLEL_DEGREE_POLICY = "parallel_degree_policy";
   static const char* const OB_SV_PARALLEL_DEGREE_LIMIT = "parallel_degree_limit";
@@ -353,7 +333,6 @@ namespace share
   static const char* const OB_SV_TRANSACTION_PREALLOC_SIZE = "transaction_prealloc_size";
   static const char* const OB_SV_TRANSACTION_WRITE_SET_EXTRACTION = "transaction_write_set_extraction";
   static const char* const OB_SV_INFORMATION_SCHEMA_STATS_EXPIRY = "information_schema_stats_expiry";
-  static const char* const OB_SV__ORACLE_SQL_SELECT_LIMIT = "_oracle_sql_select_limit";
   static const char* const OB_SV_GROUP_REPLICATION_ALLOW_LOCAL_DISJOINT_GTIDS_JOIN = "group_replication_allow_local_disjoint_gtids_join";
   static const char* const OB_SV_GROUP_REPLICATION_ALLOW_LOCAL_LOWER_VERSION_JOIN = "group_replication_allow_local_lower_version_join";
   static const char* const OB_SV_GROUP_REPLICATION_AUTO_INCREMENT_INCREMENT = "group_replication_auto_increment_increment";

@@ -123,12 +123,6 @@ int ObSysDispatchCallExecutor::init_session(sql::ObSQLSessionInfo &session,
   OZ (session.load_all_sys_vars(schema_guard));
   OZ (session.update_sys_variable(share::SYS_VAR_SQL_MODE, sql_mode));
   OZ (session.update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, compatibility_mode));
-  OZ (session.update_sys_variable(share::SYS_VAR_NLS_DATE_FORMAT,
-                                  ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT));
-  OZ (session.update_sys_variable(share::SYS_VAR_NLS_TIMESTAMP_FORMAT,
-                                  ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_FORMAT));
-  OZ (session.update_sys_variable(share::SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT,
-                                  ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT));
   OZ (session.get_pc_mem_conf(pc_mem_conf));
   CK (OB_NOT_NULL(GCTX.sql_engine_));
 

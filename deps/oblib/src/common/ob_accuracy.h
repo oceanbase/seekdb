@@ -30,16 +30,14 @@ typedef int32_t ObLength;
 typedef int16_t ObPrecision;
 typedef int16_t ObScale;
 
-//ObLengthSemantics: used for oracle char/varchar length semantics: byte length, or char length
+//ObLengthSemantics: used for char/varchar length semantics: byte length, or char length
 //In the byte length semantics, size is the maximum number of bytes that can be stored in the column.
 //In the character length semantics, size is the maximum number of code points in the database
 //character set that can be stored in the column. A code point may have from 1 to 4 bytes depending on
 //the database character set and the particular character encoded by the code point.
 typedef int16_t ObLengthSemantics;
 
-//If you do not specify a qualifier, the value of the NLS_LENGTH_SEMANTICS parameter of the session
-//creating the column defines the length semantics, unless the table belongs to the schema SYS,
-//in which case the default semantics is BYTE.
+//If you do not specify a qualifier, the default length semantics is BYTE.
 const static int16_t LS_DEFAULT   = 0;//only used for print column type
 const static int16_t LS_CHAR      = 1;//char length semantics
 const static int16_t LS_BYTE      = 2;//byte length semantics
@@ -141,7 +139,7 @@ public:
   OB_INLINE bool operator ==(const ObAccuracy &other) const { return accuracy_ == other.accuracy_; }
   OB_INLINE bool operator !=(const ObAccuracy &other) const { return accuracy_ != other.accuracy_; }
 public:
-  static const int64_t PS_QUESTION_MARK_DEDUCE_LEN = 2000; // used for ps prepare in oracle mode
+  static const int64_t PS_QUESTION_MARK_DEDUCE_LEN = 2000; // used for ps prepare
   // why we expose this 3 arrays directly?
   // imagine that we add 'if ... else' statements in ddl_default_accuracy() first,
   // and 'int ret = OB_SUCCESS' and 'return ret' statements too.
@@ -149,9 +147,9 @@ public:
   // at last we get much more codes which are very, very, very ugly.
   // so I think this is a better way: expose this 3 static const arrays directly.
   static const ObAccuracy DDL_DEFAULT_ACCURACY[ObMaxType];
-  static const ObAccuracy DDL_DEFAULT_ACCURACY2[ORACLE_MODE + 1][ObMaxType];
+  static const ObAccuracy DDL_DEFAULT_ACCURACY2[MYSQL_MODE + 1][ObMaxType];
   static const ObAccuracy MAX_ACCURACY[ObMaxType];
-  static const ObAccuracy MAX_ACCURACY2[ORACLE_MODE + 1][ObMaxType];
+  static const ObAccuracy MAX_ACCURACY2[MYSQL_MODE + 1][ObMaxType];
   static const ObAccuracy DML_DEFAULT_ACCURACY[ObMaxType];
   static const ObAccuracy MAX_ACCURACY_OLD[ObMaxType];
 public:

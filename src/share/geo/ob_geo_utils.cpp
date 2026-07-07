@@ -234,53 +234,6 @@ const char *ObGeoTypeUtil::get_geo_name_by_type(ObGeoType type)
   return type_name;
 }
 
-const char *ObGeoTypeUtil::get_geo_name_by_type_oracle(ObGeoType type)
-{
-  const char *type_name = "UNKNOWN";
-  switch (type) {
-    case ObGeoType::POINT:
-    case ObGeoType::POINTZ:{
-      type_name =  "POINT";
-      break;
-    }
-    case ObGeoType::LINESTRING:
-    case ObGeoType::LINESTRINGZ:{
-      type_name =  "LINESTRING";
-      break;
-    }
-    case ObGeoType::POLYGON:
-    case ObGeoType::POLYGONZ:{
-      type_name = "POLYGON";
-      break;
-    }
-    case ObGeoType::MULTIPOINT:
-    case ObGeoType::MULTIPOINTZ:{
-      type_name = "MULTIPOINT";
-      break;
-    }
-    case ObGeoType::MULTILINESTRING:
-    case ObGeoType::MULTILINESTRINGZ:{
-      type_name = "MULTILINESTRING";
-      break;
-    }
-    case ObGeoType::MULTIPOLYGON:
-    case ObGeoType::MULTIPOLYGONZ:{
-      type_name = "MULTIPOLYGON";
-      break;
-    }
-    case ObGeoType::GEOMETRYCOLLECTION:
-    case ObGeoType::GEOMETRYCOLLECTIONZ:{
-      type_name = "GEOMETRYCOLLECTION";
-      break;
-    }
-    default:{
-      LOG_WARN_RET(OB_INVALID_ARGUMENT, "unknown geometry type", K(type));
-      break;
-    }
-  }
-  return type_name;
-}
-
 int ObGeoTypeUtil::get_st_geo_name_by_type(ObGeoType type, ObString &res)
 {
   int ret = OB_SUCCESS;

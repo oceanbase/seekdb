@@ -60,9 +60,6 @@ int ObMViewMaintenanceService::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObMViewMaintenanceService init twice", KR(ret), KP(this));
-  } else if (!true) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", KR(ret));
   } else {
     if (OB_FAIL(mlog_maintenance_task_.init())) {
       LOG_WARN("fail to init mlog maintenance task", KR(ret));
@@ -335,7 +332,7 @@ int ObMViewMaintenanceService::
   last_refresh_scns.reuse();
   mview_refresh_modes.reuse();
   uint64_t data_version = 0;
-  if (OB_ISNULL(sql_proxy) || false) {
+  if (OB_ISNULL(sql_proxy)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else {
@@ -407,7 +404,7 @@ int ObMViewMaintenanceService::get_mview_last_refresh_info_sql_(
 {
   int ret = OB_SUCCESS;
   ObSqlString mview_id_array;
-  if (OB_UNLIKELY(mview_ids.empty() || false)) {
+  if (OB_UNLIKELY(mview_ids.empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect error", K(ret), K(mview_ids));
   } else if (OB_UNLIKELY(mview_ids.count() > 100)) {
@@ -463,9 +460,6 @@ int ObMViewMaintenanceService::get_mview_refresh_info(const ObIArray<uint64_t> &
   } else if (OB_ISNULL(sql_proxy)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(sql_proxy));
-  } else if (!true) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", KR(ret));
   } else if (src_mview_ids.empty()) {
     // do nothing
   } else if (OB_FAIL(fetch_mv_refresh_scns(src_mview_ids, read_snapshot,
@@ -544,9 +538,9 @@ int ObMViewMaintenanceService::get_all_mview_deps()
   hash::ObHashSet<uint64_t> update_set;
   uint64_t start_ts = ObTimeUtility::current_time();
   ObSchemaGetterGuard schema_guard;
-  if (!true || OB_ISNULL(GCTX.sql_proxy_)) {
+  if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected tenant id or sql porxy", KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("unexpected sql proxy", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(update_set.create(10))) {
     LOG_WARN("fail to create update set", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
@@ -658,9 +652,9 @@ int ObMViewMaintenanceService::get_target_nested_mview_deps(
   
   bool check_res = false;
   uint64_t curr_ts = ObTimeUtility::current_time();
-  if (!true || OB_ISNULL(GCTX.sql_proxy_)) {
+  if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected tenant id or sql porxy", KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("unexpected sql proxy", KR(ret), KP(GCTX.sql_proxy_));
   } else if (curr_ts - mview_deps_timestamp_ > CacheValidInterval ||
              OB_ISNULL(mview_deps_.get(mview_id))) {
     LOG_INFO("no cached mview deps or cache expired", K(mview_id));

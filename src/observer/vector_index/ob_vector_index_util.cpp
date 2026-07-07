@@ -5445,7 +5445,7 @@ int ObVectorIndexUtil::calc_residual_vector(
     float *&residual)
 {
   int ret = OB_SUCCESS;
-  ObVectorClusterHelper helper;
+  ObVectorKmeansClusterHelper helper;
   int64_t center_idx = 1;
   float *center_vec = nullptr;
 

@@ -40,9 +40,6 @@ int ObObjPrivMysqlDDLService::grant_object(
   if (OB_ISNULL(ddl_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input schema", K(ret));
   } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
     LOG_WARN("failed to get tenant schema version", KR(ret));
   } else if (!object_key.is_valid()) {
@@ -95,9 +92,6 @@ int ObObjPrivMysqlDDLService::revoke_object(
   if (OB_ISNULL(ddl_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input schema", K(ret));
   } else if (!object_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("object_key is invalid", K(object_key), K(ret));
@@ -135,4 +129,3 @@ int ObObjPrivMysqlDDLService::revoke_object(
 
 }
 }
-

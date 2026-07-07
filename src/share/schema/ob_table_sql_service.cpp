@@ -125,7 +125,7 @@ int ObTableSqlService::exec_dml(common::ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  if (!true || OB_ISNULL(table_name)) {
+  if (OB_ISNULL(table_name)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(table_name));
   } else if (dml.empty()) {
@@ -910,7 +910,7 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
   }
 
   if (OB_SUCC(ret)) {
-    // For oracle compatibility, foreign key should be dropped while drop table.
+    // Foreign keys should be dropped while dropping the table.
     if (OB_FAIL(delete_foreign_key(sql_client, table_schema, new_schema_version, is_truncate_table))) {
       LOG_WARN("failed to delete foreign key", K(ret));
     }
@@ -2102,8 +2102,7 @@ int ObTableSqlService::check_table_history_matched_(
     const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false
-      || OB_INVALID_ID == table_id
+  if (OB_UNLIKELY(OB_INVALID_ID == table_id
       || schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid table_id/schema_version",
@@ -2199,8 +2198,8 @@ int ObTableSqlService::update_table_options(ObISQLClient &sql_client,
   if (OB_SUCC(ret)) {
     if ((OB_DDL_DROP_TABLE_TO_RECYCLEBIN == operation_type)
         || (OB_DDL_TRUNCATE_DROP_TABLE_TO_RECYCLEBIN == operation_type)) {
-      // 1. For oracle compatibility, drop foreign key while drop table.
-      // 2. Foreign key will be rebuilded while truncate table.
+      // 1. Drop foreign keys while dropping the table to recyclebin.
+      // 2. Foreign keys will be rebuilt while truncating the table.
       if (OB_FAIL(delete_foreign_key(sql_client, new_table_schema, new_table_schema.get_schema_version(), OB_DDL_TRUNCATE_DROP_TABLE_TO_RECYCLEBIN == operation_type))) {
         LOG_WARN("failed to delete foreign key", K(ret));
       }
@@ -2530,9 +2529,6 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
       int64_t tmp = 0;
       if (OB_FAIL(table.check_valid(true/*count by byte*/))) {
         LOG_WARN("invalid create table argument, ", KR(ret), K(table));
-      } else if (false) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tenant id not equal", KR(ret), K(table));
       } else if (OB_FAIL(check_ddl_allowed(table))) {
         LOG_WARN("check ddl allowd failed", KR(ret), K(table));
       } else if (table.is_view_table() && !table.is_sys_view()
@@ -4427,9 +4423,6 @@ int ObTableSqlService::batch_add_table_part_info(ObISQLClient &sql_client,
       //do nothing
     } else if (is_inner_table(table.get_table_id())) {
       //do nothing
-    } else if (!true) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid tenant id", KR(ret), K(table));
     } else if (OB_FAIL(partitions.push_back(&table))) {
       LOG_WARN("failed to push_back table", KR(ret), K(table));
     } else {
@@ -5985,8 +5978,7 @@ int ObTableSqlService::update_origin_column_group_with_new_schema(ObISQLClient &
   
   if (OB_UNLIKELY(!sql_client.is_active()
                   || !origin_table_schema.is_valid()
-                  || !new_table_schema.is_valid()
-                  || false)) {
+                  || !new_table_schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(origin_table_schema), K(new_table_schema));
   } else if (OB_FAIL(delete_column_group(sql_client, origin_table_schema, delete_schema_version))) {

@@ -63,21 +63,18 @@ public:
                                      common::ObString &db_name,
                                      common::ObString &catalog_name,
                                      bool &is_db_explicit,
-                                     bool org = false,
-                                     bool is_oracle_sys_view = false);
+                                     bool org = false);
 
   int resolve_table_relation_node(const ParseNode *node,
                                 common::ObString &table_name,
                                 common::ObString &db_name,
                                 common::ObString &catalog_name,
-                                bool org = false,
-                                bool is_oracle_sys_view = false);
+                                bool org = false);
 
   int resolve_table_relation_node(const ParseNode *node,
                                   common::ObString &table_name,
                                   common::ObString &db_name,
-                                  bool org = false,
-                                  bool is_oracle_sys_view = false);
+                                  bool org = false);
   /**
    * @brief  Parse a T_REF_FACTOR node to get database name and table name
    * @param [in] node  - syntax node

@@ -38,7 +38,6 @@ ObSqlModeMap SQL_MODE_MAP[] = {
   {SMO_NO_UNSIGNED_SUBTRACTION,     STR_NO_UNSIGNED_SUBTRACTION},
   {SMO_NO_DIR_IN_CREATE,            STR_NO_DIR_IN_CREATE},
   {SMO_POSTGRESQL,                  STR_POSTGRESQL},
-  {SMO_ORACLE,                      STR_ORACLE},
   {SMO_MSSQL,                       STR_MSSQL},
   {SMO_DB2,                         STR_DB2},
   {MODE_MAXDB,                      STR_MAXDB},
@@ -76,7 +75,6 @@ ObSqlModeMap STR_TO_SQL_MODE_MAP[] = {
   {SMO_NO_UNSIGNED_SUBTRACTION,     STR_NO_UNSIGNED_SUBTRACTION},
   {SMO_NO_DIR_IN_CREATE,            STR_NO_DIR_IN_CREATE},
   {COMBINE_SMO_POSTGRESQL,          STR_POSTGRESQL},
-  {COMBINE_SMO_ORACLE,              STR_ORACLE},
   {COMBINE_SMO_MSSQL,               STR_MSSQL},
   {COMBINE_SMO_DB2,                 STR_DB2},
   {COMBINE_SMO_MAXDB,               STR_MAXDB},
@@ -217,8 +215,10 @@ int ob_sql_mode_to_str(const ObObj &int_val, ObObj &str_val, ObIAllocator *alloc
     if (OB_FAIL(ret)) {
     } else {
       char *end_ptr = buf;
+      uint64_t remaining_mode = uint64_val;
       for (int64_t i = 0; NULL != SQL_MODE_MAP[i].str_val && OB_SUCC(ret); ++i) {
         if ((uint64_val & SQL_MODE_MAP[i].int_val) != 0) {
+          remaining_mode &= ~SQL_MODE_MAP[i].int_val;
           if (!is_sql_mode_supported(SQL_MODE_MAP[i].int_val)) {
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("invalid sql_mode, not supported", K(SQL_MODE_MAP[i].int_val));
@@ -232,6 +232,9 @@ int ob_sql_mode_to_str(const ObObj &int_val, ObObj &str_val, ObIAllocator *alloc
         }
       } //end for
       if (OB_FAIL(ret)) {
+      } else if (OB_UNLIKELY(0 != remaining_mode)) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_WARN("invalid sql_mode contains unknown bits", K(ret), K(uint64_val), K(remaining_mode));
       } else if (OB_UNLIKELY(end_ptr - buf > MAX_MODE_STR_BUF_LEN)) {
         ret = OB_BUF_NOT_ENOUGH;
         LOG_WARN("sql mode string is too long", K(ret));

@@ -166,27 +166,6 @@ int ObSQLUtils::md5(const ObString &stmt, char *sql_id, int32_t len)
   return ret;
 }
 
-
-
-int ObSQLUtils::has_outer_join_symbol(const ParseNode *node, bool &has)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(node)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null pointer", K(node), K(ret));
-  } else if (node->type_ == T_OP_ORACLE_OUTER_JOIN_SYMBOL) {
-    has = true;
-  }
-  for (int64_t i = 0 ; OB_SUCC(ret) && !has && i < node->num_child_; i++) {
-    if (NULL == node->children_[i]) {
-      //do nothing
-    } else if (OB_FAIL(SMART_CALL(has_outer_join_symbol(node->children_[i], has)))) {
-      LOG_WARN("check has_outer_join_symbol fail", K(ret));
-    }
-  }
-  return ret;
-}
-
 int ObSQLUtils::replace_questionmarks(ParseNode *tree,
                                       const ParamStore &params)
 {
@@ -851,16 +830,10 @@ int ObSQLUtils::check_and_convert_table_name(const ObCollationType cs_type,
                                              const bool is_index_table)
 {
   /**
-   * MYSQL mode
-   *  If the byte number of table name is greater than 192, report OB_WRONG_TABLE_NAME;
-   *  If the byte number of table name is greater than 64 and less than or equal to 192, report OB_ERR_TOO_LONG_IDENT;
-   *  If the last character of table name is a space, report OB_WRONG_TABLE_NAME;
-   *  If it is a direct query on the index table, special handling for table name length
-   * ORACLE mode
-   *  If the byte number of table name is greater than 384, report OB_WRONG_TABLE_NAME;
-   *  If the byte number of table name is greater than 128 and less than or equal to 384, report OB_ERR_TOO_LONG_IDENT;
-   *  If the last character of table name is a space, report OB_WRONG_TABLE_NAME;
-   *  If it is a direct query on the index table, special handling for table name length
+   * If the byte number of table name is greater than 192, report OB_WRONG_TABLE_NAME.
+   * If the table name is greater than 64 characters, report OB_ERR_TOO_LONG_IDENT.
+   * If the last character of table name is a space, report OB_WRONG_TABLE_NAME.
+   * If it is a direct query on the index table, special handling for table name length.
    */
   UNUSED(cs_type);
   int ret = OB_SUCCESS;
@@ -876,7 +849,7 @@ int ObSQLUtils::check_and_convert_table_name(const ObCollationType cs_type,
     LOG_USER_ERROR(OB_WRONG_TABLE_NAME, static_cast<int32_t>(name_len), name_str);
     LOG_WARN("incorrect table name", K(name), K(ret));
   } else {
-    char origin_name[OB_MAX_USER_TABLE_NAME_LENGTH_ORACLE * OB_MAX_CHAR_LEN + 1] = {'\0'};
+    char origin_name[OB_MAX_EXTENDED_USER_TABLE_NAME_LENGTH * OB_MAX_CHAR_LEN + 1] = {'\0'};
     MEMCPY(origin_name, name_str, name_len);
     if (!preserve_lettercase) {
       size_t sz = ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, name);
@@ -920,13 +893,9 @@ int ObSQLUtils::check_and_convert_context_namespace(const common::ObCollationTyp
 
 int ObSQLUtils::check_index_name(const ObCollationType cs_type, ObString &name)
 {
-  /* MYSQL mode
-   *  If the byte number of table name is greater than 64, report error OB_ERR_TOO_LONG_IDENT;
-   *  If the last character of table name is a space, report error OB_WRONG_NAME_FOR_INDEX
-   * ORACLE mode
-   *  If the byte number of table name is greater than 128, report error OB_ERR_TOO_LONG_IDENT;
-   *  If the last character of table name is a space, report error OB_WRONG_TABLE_NAME;
-   *  */
+  /* If the index name is greater than 64 characters, report OB_ERR_TOO_LONG_IDENT.
+   * If the last character of index name is a space, report OB_WRONG_NAME_FOR_INDEX.
+   */
   UNUSED(cs_type);
   int ret = OB_SUCCESS;
   int64_t name_len = name.length();
@@ -965,7 +934,7 @@ int ObSQLUtils::check_column_name(const ObCollationType cs_type, ObString &name,
   bool last_char_is_space = false;
   const char *end = name.ptr() + name.length();
   const char *name_str = name.ptr();
-  size_t name_len = 0; // char semantics for MySQL mode, and byte semantics for Oracle mode
+  size_t name_len = 0; // identifier length is counted in characters
   size_t byte_length = 0;
   int is_mb_char = 0;
   while (OB_SUCCESS == ret && name_str != end) {
@@ -1037,7 +1006,7 @@ int ObSQLUtils::check_ident_name(const ObCollationType cs_type, ObString &name,
   bool last_char_is_space = false;
   const char *end = name.ptr() + name.length();
   const char *name_str = name.ptr();
-  size_t name_len = 0; // char semantics for MySQL mode, and byte semantics for Oracle mode
+  size_t name_len = 0; // identifier length is counted in characters
   size_t byte_length = 0;
   int is_mb_char = 0;
   while (OB_SUCCESS == ret && NULL != name_str && name_str != end) {
@@ -1288,7 +1257,7 @@ int ObSQLUtils::set_compatible_cast_mode(const ObSQLSessionInfo *session, ObCast
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument in set_compatible_cast_mode ", K(session), K(ret), K(cast_mode), K(lbt()));
   } else {
-    cast_mode &= ~CM_ORACLE_MODE; // seekdb is MySQL-only; ensure oracle cast mode is off
+    UNUSED(cast_mode);
   }
   return ret;
 }
@@ -2260,7 +2229,7 @@ bool ObSQLUtils::part_expr_has_virtual_column(const ObExpr *part_expr)
   if (part_expr == NULL) {
     // do nothing.
   } else if (part_expr->type_ == T_REF_COLUMN || part_expr->type_ == T_FUN_SYS_PART_HASH) {
-    // do nothing. column or oracle mode hash.
+    // do nothing for column or hash partition expression.
   } else if (part_expr->type_ == T_OP_ROW) {
     for (int64_t i = 0; i < part_expr->arg_cnt_ && !has_virtual_column; i++) {
       if (part_expr->args_[i]->type_ != T_REF_COLUMN) {
@@ -2386,7 +2355,7 @@ int ObSQLUtils::get_range_for_scalar(ObObj *start_row_key,
         }
       }
     }
-  // one column or hash columns oracle mode.
+  // one column or hash columns.
   } else {
     count = 1;
     if (OB_ISNULL(tmp_start_row_key = static_cast<ObObj*>(allocator.alloc(
@@ -2443,7 +2412,6 @@ int ObSQLUtils::get_partition_range_common(
                                     ObEvalCtx &eval_ctx)
 {
   int ret = OB_SUCCESS;
-  ObNewRow dummy_row;
   ObDatum *datum = NULL;
   if (OB_FAIL(part_expr->eval(eval_ctx, datum))) {
     LOG_WARN("failed to calc expr", K(ret));
@@ -2451,20 +2419,15 @@ int ObSQLUtils::get_partition_range_common(
                                   part_expr->obj_meta_,
                                   part_expr->obj_datum_map_))) {
     LOG_WARN("convert datum to obj failed", K(ret));
-  } else if (FALSE_IT(dummy_row.cells_ = function_obj)) {
-  } else if (FALSE_IT(dummy_row.count_ = 1)) {
   } else if (part_type == share::schema::ObPartitionFuncType::PARTITION_FUNC_TYPE_HASH &&
-      OB_FAIL(ObSQLUtils::revise_hash_part_object(*function_obj, dummy_row, false, part_type))) {
+      OB_FAIL(ObSQLUtils::revise_hash_part_object(*function_obj))) {
     LOG_WARN("failed to revise hash partition object", K(ret));
   }
   LOG_DEBUG("get_partition_range_common", K(ret), KPC(part_expr));
   return ret;
 }
 
-int ObSQLUtils::revise_hash_part_object(common::ObObj &obj,
-                                        const ObNewRow &row,
-                                        const bool calc_oracle_hash,
-                                        const share::schema::ObPartitionFuncType part_type)
+int ObSQLUtils::revise_hash_part_object(common::ObObj &obj)
 {
   int ret = OB_SUCCESS;
   ObObj result;
@@ -2686,33 +2649,10 @@ int ObSQLUtils::merge_solidified_var_into_dtc_params(const ObLocalSessionVar *lo
                                                 ObDataTypeCastParams &dtc_param)
 {
   int ret = OB_SUCCESS;
-  ObSessionSysVar *local_var = NULL;
   //dtc_param = ObBasicSessionInfo::create_dtc_params(session);
   //time zone
   if (NULL != local_timezone) {
     dtc_param.tz_info_ = local_timezone;
-  }
-  //nls format
-  if (NULL != local_vars) {
-    if (OB_FAIL(local_vars->get_local_var(SYS_VAR_NLS_DATE_FORMAT, local_var))) {
-      LOG_WARN("get local session var failed", K(ret));
-    } else if (NULL != local_var) {
-      dtc_param.session_nls_formats_[0] = local_var->val_.get_string();
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(local_vars->get_local_var(SYS_VAR_NLS_TIMESTAMP_FORMAT, local_var))) {
-        LOG_WARN("get local session var failed", K(ret));
-      } else if (NULL != local_var) {
-        dtc_param.session_nls_formats_[1] = local_var->val_.get_string();
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(local_vars->get_local_var(SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT, local_var))) {
-        LOG_WARN("get local session var failed", K(ret));
-      } else if (NULL != local_var) {
-        dtc_param.session_nls_formats_[2] = local_var->val_.get_string();
-      }
-    }
   }
   return ret;
 }
@@ -2784,9 +2724,8 @@ void ObSQLUtils::init_type_ctx(const ObSQLSessionInfo *session, ObExprTypeCtx &t
     ObCollationType coll_type = CS_TYPE_INVALID;
     int64_t div_precision_increment = OB_INVALID_COUNT;
     int64_t ob_max_allowed_packet;
-    // For type_ctx's collation_type, I understand that a default value needs to be initialized here,
-    // For MySQL mode, we use collation_connection in our code, this is also the default collation of the constant,
-    // But in Oracle mode, all constants are converted to nls_collation, so setting it to nls_collation is more reasonable in Oracle mode
+    // For type_ctx's collation_type, initialize a default value from
+    // collation_connection, which is also the default collation of constants.
     if (OB_SUCCESS == (session->get_collation_connection(coll_type))) {
       type_ctx.set_coll_type(coll_type);
     }
@@ -2814,28 +2753,6 @@ void ObSQLUtils::init_type_ctx(const ObSQLSessionInfo *session, ObExprTypeCtx &t
     LOG_WARN_RET(OB_ERR_UNEXPECTED, "Molly couldn't get compatibility mode from session, use default", K(lbt()));
   }
   type_ctx.set_session(session);
-}
-
-bool ObSQLUtils::is_oracle_sys_view(const ObString &table_name)
-{
-  // Current support for views in SYS with prefixes ALL_, USER_, DBA_, GV$, V$
-  // If there are any that do not start with these, other patterns can be defined, such as a fixed string array whitelist
-  return table_name.prefix_match("ALL_")
-        || table_name.prefix_match("USER_")
-        || table_name.prefix_match("DBA_")
-        || table_name.prefix_match("GV$")
-        || table_name.prefix_match("V$")
-        || 0 == table_name.compare("AUDIT_ACTIONS")
-        || 0 == table_name.compare("STMT_AUDIT_OPTION_MAP")
-        || 0 == table_name.compare("NLS_SESSION_PARAMETERS")
-        || 0 == table_name.compare("NLS_INSTANCE_PARAMETERS")
-        || 0 == table_name.compare("NLS_DATABASE_PARAMETERS")
-        || 0 == table_name.compare("DICTIONARY")
-        || 0 == table_name.compare("DICT")
-        || 0 == table_name.compare("ROLE_TAB_PRIVS")
-        || 0 == table_name.compare("ROLE_SYS_PRIVS")
-        || 0 == table_name.compare("ROLE_ROLE_PRIVS")
-        || 0 == table_name.compare("STMT_AUDIT_OPTION_MAP");
 }
 
 int ObSQLUtils::make_whole_range(ObIAllocator &allocator,
@@ -3206,23 +3123,17 @@ int ObVirtualTableResultConverter::convert_key(const ObRowkey &src, ObRowkey &ds
         /**
          * explain extended select * from t1 where c1<1;
           mysql: range(NULL,MAX,MAX ; 1,MIN,MIN)
-          oracle:range(MIN,MIN,MIN ; 1,MIN,MIN)
-
           explain extended select * from t1 where c1<=1;
           mysql:range(NULL,MAX,MAX ; 1,MAX,MAX)
-          oracle:range(MIN,MIN,MIN ; 1,MAX,MAX)
 
           explain extended select * from t1 where c1>1;
           mysql:range(1,MAX,MAX ; MAX,MAX,MAX)
-          oracle:range(1,MAX,MAX ; NULL,MIN,MIN)
 
           explain extended select * from t1 where c1>=1;
           mysql:range(1,MIN,MIN ; MAX,MAX,MAX)
-          oracle:range(1,MIN,MIN ; NULL,MIN,MIN)
 
           explain extended select * from t1 where c1=1 and c2<1;
           mysql:range(1,NULL,MAX ; 1,1,MIN)
-          oracle:range(1,MIN,MIN ; 1,1,MIN)
          **/
         if (is_start_key) {
           if (src_obj.is_min_value()) {
@@ -3370,10 +3281,10 @@ int ObSQLUtils::convert_sql_text_to_schema_for_storing(ObIAllocator &allocator,
                                                        ObString &sql_text,
                                                        int64_t convert_flag,
                                                        int64_t *action_flag,
-                                                       ObString *oracle_nls_string)
+                                                       ObString *nls_collation_string)
 {
   int ret = OB_SUCCESS;
-  ObString oracle_nls_result = sql_text;
+  ObString nls_collation_result = sql_text;
   OZ (ObCharset::charset_convert(allocator,
                                  sql_text,
                                  dtc_params.connection_collation_,
@@ -3382,12 +3293,10 @@ int ObSQLUtils::convert_sql_text_to_schema_for_storing(ObIAllocator &allocator,
                                  convert_flag,
                                  action_flag));
 
-  //validation for oracle mode:
-  //  since the meta table is always utf8 in OB
-  //  we need test if sql_text can convert to the database charset in oracle mode
-  //  if not, replace the invalid character to '?'
-  if (OB_SUCC(ret) && OB_NOT_NULL(oracle_nls_string)) {
-    *oracle_nls_string = oracle_nls_result;
+  // Since the meta table is always utf8 in OB, verify that sql_text can be
+  // converted to the database charset. If not, replace invalid characters with '?'.
+  if (OB_SUCC(ret) && OB_NOT_NULL(nls_collation_string)) {
+    *nls_collation_string = nls_collation_result;
   }
   return ret;
 }
@@ -3529,12 +3438,12 @@ void ObSQLUtils::record_execute_time(const ObPhyPlanType type,
 
 
 
-bool ObSQLUtils::is_oracle_empty_string(const ObObjParam &param)
+bool ObSQLUtils::is_empty_string_typed_null(const ObObjParam &param)
 {
   return (param.is_null() && ObCharType == param.get_param_meta().get_type());
 }
 
-bool ObSQLUtils::is_oracle_null_with_normal_type(const ObObjParam &param)
+bool ObSQLUtils::is_typed_null_with_normal_type(const ObObjParam &param)
 {
   return (param.is_null() && param.get_param_meta().get_type() != ObNullType);
 }
@@ -3901,9 +3810,8 @@ void LinkExecCtxGuard::link_current_context()
     session_.set_cur_exec_ctx(&exec_ctx_);
     is_linked_ = true;
     if (ObSQLUtils::is_nested_sql(&exec_ctx_)) {
-      //to be compatible with MySQL and Oracle's nested sql behavior
+      //force nested sql to commit as a whole
       //force to set session.autocommit=false
-      //make the nested sql commit as a whole
       session_.get_autocommit(is_autocommit_);
       session_.set_autocommit(false);
     }

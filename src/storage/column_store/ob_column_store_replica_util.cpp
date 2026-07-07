@@ -315,7 +315,7 @@ void ObCSReplicaUtil::diagnose_trim_default_value_checksum_error(
      const ObStorageSchema &storage_schema)
 {
   int ret = OB_SUCCESS;
-  // Oracle mode only - dead code removed
+  // MySQL-only build has no default-value checksum trim diagnostics.
 }
 
 /*---------------------------------- ObCSReplicaStorageSchemaGuard -------------------------------- */

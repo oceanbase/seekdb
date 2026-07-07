@@ -471,8 +471,8 @@ static int exec_assign(ObPLExecCtx *ctx, const ObPLAssignStmt *s)
     } else if (OB_NOT_NULL(into) && into->is_obj_access_expr()) {
       // Obj-access write target (a trigger's SET NEW.col = expr, a record field, a
       // collection element). Mirrors codegen visit(ObPLAssignStmt)'s is_obj_access_expr()
-      // branch for the scalar (obj-type) case -- the only obj-access write reachable in
-      // MySQL mode (records via %ROWTYPE and collections are Oracle-only / unparseable here).
+      // branch for the scalar (obj-type) case -- composite records and collections are not
+      // reachable in MySQL-only parsing here.
       //
       // Evaluating the for-write obj-access expr yields an objparam whose extend points to a
       // ObPlCompiteWrite { allocator_, value_addr_ }: value_addr_ is the destination ObObj*,
@@ -488,8 +488,8 @@ static int exec_assign(ObPLExecCtx *ctx, const ObPLAssignStmt *s)
       OZ (static_cast<const ObObjAccessRawExpr *>(into)->get_final_type(final_type));
       if (OB_FAIL(ret)) {
       } else if (!final_type.is_obj_type()) {
-        // Composite (record / collection) write targets are Oracle-only and not reachable in
-        // MySQL mode; leave them unsupported rather than ship an untested deep-copy path.
+        // Composite (record / collection) write targets are not reachable in MySQL-only parsing;
+        // leave them unsupported rather than ship an untested deep-copy path.
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("[pl-interp] composite obj-access assignment not supported yet", K(ret), K(i));
       } else if (OB_UNLIKELY(!into_addr.is_ext() || 0 == into_addr.get_ext())) {
@@ -653,8 +653,8 @@ static int exec_repeat(ObPLExecCtx *ctx, const ObPLRepeatStmt *s, CtrlState &ctr
   return ret;
 }
 
-// LEAVE / ITERATE <label>. ObPLLoopControl may carry a guard cond (Oracle EXIT
-// WHEN); in MySQL it is unconditional. Sets the control state for loops to act on.
+// LEAVE / ITERATE <label>. ObPLLoopControl may carry a guard cond; in MySQL it
+// is unconditional. Sets the control state for loops to act on.
 static int exec_loop_control(ObPLExecCtx *ctx, const ObPLLoopControl *s, CtrlState &ctrl)
 {
   int ret = OB_SUCCESS;
@@ -1033,7 +1033,7 @@ static int exec_signal(ObPLExecCtx *ctx, const ObPLSignalStmt *s)
     LOG_WARN("[pl-interp] SIGNAL processed", K(ret), K(error_code),
              "sql_state", ObString(s->get_sql_state()));
   } else if (OB_SUCC(ret)) {
-    // Oracle-mode / error-code SIGNAL: raise the resolved OB error code directly.
+    // Error-code SIGNAL: raise the resolved OB error code directly.
     ret = s->get_ob_error_code();
     if (OB_SUCCESS == ret) {
       ret = OB_ERROR;  // a SIGNAL must raise something the handler search can see

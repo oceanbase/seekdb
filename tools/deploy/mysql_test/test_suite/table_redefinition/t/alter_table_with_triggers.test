@@ -20,12 +20,12 @@ CREATE TRIGGER `ddl_test_trigger_name` BEFORE INSERT ON ddl_yiren.ddl_test_trigg
 
 use test;
 --error 1435
-CREATE TRIGGER `DDL_TEST_TRIGGER_NAME` BEFORE INSERT ON ddl_yiren.ddl_test_trigger_table FOR EACH ROW INSERT INTO ddl_yiren.ddl_trigger_action_table VALUES(3, 3, 'oracle');
+CREATE TRIGGER `DDL_TEST_TRIGGER_NAME` BEFORE INSERT ON ddl_yiren.ddl_test_trigger_table FOR EACH ROW INSERT INTO ddl_yiren.ddl_trigger_action_table VALUES(3, 3, 'sqlite');
 
 
 use ddl_yiren;
 alter table ddl_test_trigger_table modify c3 varchar(20);
-insert into ddl_test_trigger_table VALUES (3, 3, 'oracle');
+insert into ddl_test_trigger_table VALUES (3, 3, 'sqlite');
 select * from ddl_yiren.ddl_trigger_action_table order by c1, c2, c3;
 drop table ddl_yiren.ddl_trigger_action_table;
 drop table ddl_test_trigger_table;

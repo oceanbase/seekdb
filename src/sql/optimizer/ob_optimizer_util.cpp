@@ -5444,7 +5444,7 @@ int ObOptimizerUtil::is_lossless_column_cast(const ObRawExpr *expr,
     LOG_WARN("get unexpected null", K(ret));
   } else if (T_FUN_SYS_CAST != expr->get_expr_type()) {
     // do nothing
-  } else if (CM_IS_ORA_SYS_VIEW_CAST(expr->get_cast_mode())) {
+  } else if (CM_IS_INTERNAL_CAST_IGNORE(expr->get_cast_mode())) {
     is_lossless = true;
   } else if (expr->is_const_expr() && CM_IS_CONST_TO_DECIMAL_INT(expr->get_cast_mode())) {
     // do nothing
@@ -5885,7 +5885,7 @@ int ObOptimizerUtil::try_add_cast_to_set_child_list(ObIAllocator *allocator,
   } else if (OB_FAIL(session_info->get_collation_connection(coll_type))) {
     LOG_WARN("failed to get collation connection", K(ret));
   } else {
-    const ObLengthSemantics length_semantics = session_info->get_actual_nls_length_semantics();
+    const ObLengthSemantics length_semantics = session_info->get_actual_length_semantics();
     const bool is_ps_prepare_stage = session_info->is_varparams_sql_prepare();
     const int64_t num = left_types.count();
     ObExprTypeCtx type_ctx;
@@ -6116,7 +6116,7 @@ int ObOptimizerUtil::try_add_cast_to_select_list(ObIAllocator *allocator,
     if (NULL != res_types) {
       res_types->reuse();
     }
-    const ObLengthSemantics length_semantics = session_info->get_actual_nls_length_semantics();
+    const ObLengthSemantics length_semantics = session_info->get_actual_length_semantics();
     const bool is_ps_prepare_stage = session_info->is_varparams_sql_prepare();
     const int64_t row_cnt = select_exprs.count() / column_cnt;
     ObExprTypeCtx type_ctx;

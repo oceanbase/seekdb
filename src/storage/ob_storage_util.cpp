@@ -173,7 +173,6 @@ int pad_on_datums(const common::ObAccuracy accuracy,
   int ret = OB_SUCCESS;
   ObLength length = accuracy.get_length(); // byte or char length
   const ObString space_pattern = get_padding_str(cs_type);
-  bool is_oracle_byte = false;
   char *buf = nullptr;
   if (1 == length) {
     int32_t buf_len = space_pattern.length();
@@ -206,7 +205,7 @@ int pad_on_datums(const common::ObAccuracy accuracy,
         if (datum.is_null()) {
           // do nothing
         } else {
-          if (is_oracle_byte || is_ascii_str(datum.ptr_, datum.pack_)) {
+          if (is_ascii_str(datum.ptr_, datum.pack_)) {
             if (datum.pack_ < length) {
               MEMCPY(ptr, datum.ptr_, datum.pack_);
               datum.ptr_ = ptr;
@@ -229,12 +228,7 @@ int pad_on_datums(const common::ObAccuracy accuracy,
       if (datum.is_null()) {
         // do nothing
       } else {
-        int32_t cur_len = 0; // byte or char length
-        if (is_oracle_byte) {
-          cur_len = datum.pack_;
-        } else {
-          cur_len = static_cast<int32_t>(ObCharset::strlen_char(cs_type, datum.ptr_, datum.pack_));
-        }
+        int32_t cur_len = static_cast<int32_t>(ObCharset::strlen_char(cs_type, datum.ptr_, datum.pack_));
         if (cur_len < length &&
             OB_FAIL(pad_on_local_buf(space_pattern, length - cur_len, padding_alloc, datum.ptr_, datum.pack_))) {
           STORAGE_LOG(WARN, "fail to pad on padding allocator", K(ret), K(length), K(cur_len), K(datum));
@@ -264,7 +258,6 @@ int pad_on_rich_format_columns(const common::ObAccuracy accuracy,
     sql::ObBitVector *nulls = discrete_format->get_nulls();
     ObLength length = accuracy.get_length(); // byte or char length
     const ObString space_pattern = get_padding_str(cs_type);
-    bool is_oracle_byte = false;
     char *buf = nullptr;
     if (1 == length) {
       int32_t buf_len = space_pattern.length();
@@ -295,7 +288,7 @@ int pad_on_rich_format_columns(const common::ObAccuracy accuracy,
           if (nulls->at(i)) {
             // do nothing
           } else {
-            if (is_oracle_byte || is_ascii_str(ptrs[i], lens[i])) {
+            if (is_ascii_str(ptrs[i], lens[i])) {
               if (lens[i] < length) {
                 MEMCPY(ptr, ptrs[i], lens[i]);
                 ptrs[i] = ptr;
@@ -317,12 +310,7 @@ int pad_on_rich_format_columns(const common::ObAccuracy accuracy,
         if (nulls->at(i)) {
           // do nothing
         } else {
-          int32_t cur_len = 0; // byte or char length
-          if (is_oracle_byte) {
-            cur_len = lens[i];
-          } else {
-            cur_len = static_cast<int32_t>(ObCharset::strlen_char(cs_type, ptrs[i], lens[i]));
-          }
+          int32_t cur_len = static_cast<int32_t>(ObCharset::strlen_char(cs_type, ptrs[i], lens[i]));
           if (cur_len < length &&
               OB_FAIL(pad_on_local_buf(space_pattern, length - cur_len, padding_alloc, (const char *&)ptrs[i], (uint32_t &)lens[i]))) {
             STORAGE_LOG(WARN, "fail to pad on padding allocator", K(ret), K(length), K(cur_len));
@@ -705,4 +693,3 @@ void release_mview_scan_info(common::ObIAllocator *alloc, ObMviewScanInfo *&mvie
 
 }
 }
-

@@ -39,7 +39,6 @@ class ObMySQLResult;
 namespace rootserver
 {
 // @note modify ObRsJobTableOperator::job_type_str if you modify ObRsJobType
-
 enum ObRsJobStatus
 {
   JOB_STATUS_INVALID = 0,

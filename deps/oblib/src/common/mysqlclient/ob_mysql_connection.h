@@ -50,8 +50,7 @@ public:
   enum Mode
   {
     DEBUG_MODE = 0,
-    MYSQL_MODE = 1,
-    OCEANBASE_MODE = 2
+    MYSQL_MODE = 1
   };
 public:
   ObMySQLConnection();
@@ -112,7 +111,6 @@ public:
   virtual void set_timestamp(const int64_t timestamp) { timestamp_ = timestamp; }
   int64_t get_timestamp() const { return timestamp_; }
   void set_mode(const Mode mode) { mode_ = mode; }
-  int init_oceanbase_connection();
   void set_read_consistency(const int64_t read_consistency) { read_consistency_ = read_consistency; }
   void set_read_consistency_strong() { set_read_consistency(READ_CONSISTENCY_STRONG); }
 

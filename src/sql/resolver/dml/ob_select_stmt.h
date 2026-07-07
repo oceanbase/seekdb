@@ -296,15 +296,6 @@ public:
       "recursive",
       "unknown",
     };
-    static const char *set_operator_name_oracle[SET_OP_NUM + 1] =
-    {
-      "none",
-      "union",
-      "intersect",
-      "minus",
-      "unknown",
-      "unknown",
-    };
     return set_operator_name[op];
   }
 
@@ -566,9 +557,6 @@ public:
   inline void set_implicit_distinct(bool v) { is_implicit_distinct_ = v; }
   inline void reset_implicit_distinct() { is_implicit_distinct_ = false; }
   int is_query_deterministic(bool &is_deterministic) const;
-  inline bool is_oracle_compat_groupby() const {return is_oracle_compat_groupby_; }
-  inline void set_is_oracle_compat_groupby(bool v) { is_oracle_compat_groupby_ = v; }
-
 private:
   SetOperator set_op_;
   /* these var is only used for recursive union */
@@ -588,7 +576,7 @@ private:
   //select a,b,sum(d) from t group by a desc, b asc with rollup.
   common::ObSEArray<ObOrderDirection, 8, common::ModulePageAllocator, true> rollup_directions_;
 
-  // for oracle mode only, for stmt print only
+  // Used for statement printing.
   common::ObSEArray<ObColumnRefRawExpr*, 4, common::ModulePageAllocator, true> for_update_columns_;
 
   /* These fields are only used by set select */
@@ -615,7 +603,6 @@ private:
   // denote if the duplicate value of this stmt will not change the query result
   // optimizer can assign or remove DISTINCT for this stmt 
   bool is_implicit_distinct_;
-  bool is_oracle_compat_groupby_; // true if has rollup/cube/grouping sets in mysql mode
 };
 }
 }

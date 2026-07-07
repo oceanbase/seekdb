@@ -51,13 +51,6 @@ public:
                                   uint64_t &mock_fk_parent_table_id);
   int get_mock_fk_parent_table_schema(const uint64_t mock_fk_parent_table_id,
                                       const ObMockFKParentTableSchema *&mock_fk_parent_table_schema);
-  int check_oracle_object_exist(const uint64_t database_id,
-                                const uint64_t session_id,
-                                const ObString &object_name,
-                                const ObSchemaType &schema_type,
-                                const ObRoutineType &routine_type,
-                                const bool is_or_replace);
-
   int get_table_schema(const uint64_t table_id,
                        const ObTableSchema *&table_schema);
   int get_database_id(const common::ObString &database_name,

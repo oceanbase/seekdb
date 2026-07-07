@@ -62,10 +62,10 @@ int ObMySQLDBTable::inner_get_next_row(common::ObNewRow *&row)
           const ObUserInfo *user_info = NULL;
           for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < db_array.count(); ++row_idx) {
             const ObDBPriv *&db_priv = db_array.at(row_idx);
-            if ((ObString(ObString(OB_ORA_SYS_SCHEMA_NAME)) == db_priv->get_database_name_str())
-                || (ObString(ObString(OB_ORA_LBACSYS_NAME)) == db_priv->get_database_name_str())
-                || (ObString(ObString(OB_ORA_AUDITOR_NAME)) == db_priv->get_database_name_str())) {
-              // oracle db does not need to be displayed
+            if ((ObString(ObString(OB_EXTENDED_SYS_SCHEMA_NAME)) == db_priv->get_database_name_str())
+                || (ObString(ObString(OB_LBACSYS_SCHEMA_NAME)) == db_priv->get_database_name_str())
+                || (ObString(ObString(OB_AUDITOR_SCHEMA_NAME)) == db_priv->get_database_name_str())) {
+              // internal schemas do not need to be displayed
               continue;
             }
             if (OB_FAIL(get_user_info(db_priv->get_user_id(), user_info))) {

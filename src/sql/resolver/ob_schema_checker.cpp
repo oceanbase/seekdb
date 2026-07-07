@@ -751,9 +751,10 @@ int ObSchemaChecker::get_table_schema(
   }
 
   if (OB_SUCC(ret)) {
-    // It is also possible that the temporary CTE recursive table schema conflicts with an existing table,
-    // At this point, the cte recursive table schema must take precedence (same with oracle)
-    // If found in fake schema, then override the previously found base table
+    // It is also possible that the temporary CTE recursive table schema
+    // conflicts with an existing table. The CTE recursive table schema must
+    // take precedence; if found in fake schema, override the previously found
+    // base table.
     if (cte_table_fisrt) {
       ObNameCaseMode mode = OB_NAME_CASE_INVALID;
       if (OB_FAIL(schema_mgr_->get_tenant_name_case_mode(mode))) {
@@ -1394,7 +1395,6 @@ int ObSchemaChecker::get_sequence_id(const common::ObString &database_name,
   return ret;
 }
 
-// only use in oracle mode
 // If the function execution ends with table_schema being empty, then it indicates that there is no index corresponding to index_name under the current db
 int ObSchemaChecker::get_idx_schema_by_origin_idx_name(const uint64_t database_id,
                                                        const ObString &index_name,
@@ -1449,12 +1449,12 @@ int ObSchemaChecker::get_directory_id(const common::ObString &directory_name,
   } else if (OB_FAIL(schema_mgr_->get_directory_schema_by_name(directory_name, schema))) {
     LOG_WARN("get directory schema failed", K(ret));
   } else if (OB_ISNULL(schema)) {
-    /* comp oracle err code
+    /* match directory privilege error reporting
     SQL> GRANT READ ON DD TO U2;
     GRANT READ ON DD TO U2
                   *
     ERROR at line 1:
-    ORA-00942: table or view does not exist
+    table or view does not exist
     */
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("directory is not exists", K(directory_name));
@@ -1719,7 +1719,7 @@ int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
 {
   int ret = OB_SUCCESS;
   const ObStmtNeedPrivs::NeedPrivs &need_privs = stmt_need_privs.need_privs_;
-  
+
   if (OB_FAIL(check_tenant_schema_guard())) {
     LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (session_priv.is_valid()) {
@@ -1731,7 +1731,7 @@ int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
                                       enable_role_id_array,
                                       need_priv.priv_set_,
                                       OB_PRIV_CHECK_ALL == need_priv.priv_check_type_))) {
-            LOG_WARN("No privilege", 
+            LOG_WARN("No privilege",
                      "user_id", session_priv.user_id_,
                      "need_priv", need_priv.priv_set_,
                      "user_priv", session_priv.user_priv_set_,
@@ -1741,7 +1741,7 @@ int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
         }
         case OB_PRIV_CATALOG_LEVEL: {
           if (OB_FAIL(check_catalog_priv(session_priv, enable_role_id_array, need_priv))) {
-            LOG_WARN("No privilege", 
+            LOG_WARN("No privilege",
                      "user_id", session_priv.user_id_,
                      "need_priv", need_priv.priv_set_,
                      "user_priv", session_priv.user_priv_set_,
@@ -1751,7 +1751,7 @@ int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
         }
         case OB_PRIV_DB_LEVEL: {
           if (OB_FAIL(check_db_priv(session_priv, enable_role_id_array, need_priv.db_, need_priv.priv_set_))) {
-            LOG_WARN("No privilege", 
+            LOG_WARN("No privilege",
                 "user_id", session_priv.user_id_,
                 "need_priv", need_priv.priv_set_,
                 "user_priv", session_priv.user_priv_set_,
@@ -1762,7 +1762,7 @@ int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
         case OB_PRIV_TABLE_LEVEL: {
           if (OB_PRIV_CHECK_ALL == need_priv.priv_check_type_) {
             if (OB_FAIL(check_single_table_priv(session_priv, enable_role_id_array, need_priv))) {
-              LOG_WARN("No privilege", 
+              LOG_WARN("No privilege",
                   "user_id", session_priv.user_id_,
                   "need_priv", need_priv.priv_set_,
                   "table", need_priv.table_,
@@ -1772,7 +1772,7 @@ int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
             }
           } else if (OB_PRIV_CHECK_ANY == need_priv.priv_check_type_) {
             if (OB_FAIL(check_single_table_priv_or(session_priv, enable_role_id_array, need_priv))) {
-              LOG_WARN("No privilege", 
+              LOG_WARN("No privilege",
                        "user_id", session_priv.user_id_,
                        "need_priv", need_priv.priv_set_,
                        "table", need_priv.table_,
@@ -1793,7 +1793,7 @@ int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
           } else if (!sql::ObSchemaChecker::enable_mysql_pl_priv_check(*this)) {
             //do nothing
           } else if (OB_FAIL(check_routine_priv(session_priv, enable_role_id_array, need_priv))) {
-            LOG_WARN("No privilege", 
+            LOG_WARN("No privilege",
                 "user_id", session_priv.user_id_,
                 "need_priv", need_priv.priv_set_,
                 "table", need_priv.table_,
@@ -1815,7 +1815,7 @@ int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
           } else if (!sql::ObSchemaChecker::enable_mysql_pl_priv_check(*this)) {
             //do nothing
           } else if (OB_FAIL(check_obj_mysql_priv(session_priv, enable_role_id_array, need_priv))) {
-            LOG_WARN("No privilege", 
+            LOG_WARN("No privilege",
                 "user_id", session_priv.user_id_,
                 "need_priv", need_priv.priv_set_,
                 "table", need_priv.table_,

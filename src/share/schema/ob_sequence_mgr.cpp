@@ -497,15 +497,12 @@ int ObSequenceMgr::get_sequence_schemas_in_tenant(ObIArray<const ObSequenceSchem
   ObTenantSequenceId tenant_outine_id_lower(OB_MIN_ID);
   ConstSequenceIter tenant_sequence_begin =
       sequence_infos_.lower_bound(tenant_outine_id_lower, compare_with_tenant_sequence_id);
-  bool is_stop = false;
   for (ConstSequenceIter iter = tenant_sequence_begin;
-      OB_SUCC(ret) && iter != sequence_infos_.end() && !is_stop; ++iter) {
+      OB_SUCC(ret) && iter != sequence_infos_.end(); ++iter) {
     const ObSequenceSchema *sequence = NULL;
     if (OB_ISNULL(sequence = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(sequence));
-    } else if (false) {
-      is_stop = true;
     } else if (OB_FAIL(sequence_schemas.push_back(sequence))) {
       LOG_WARN("push back sequence failed", K(ret));
     }

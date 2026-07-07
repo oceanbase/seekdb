@@ -734,8 +734,8 @@ int ObPLDataType::add_package_routine_schema_param(const ObPLResolveCtx &resolve
     OZ (param_info.set_type_name(user_type->get_name()));
     OX (param_info.set_param_type(ObExtendType));
     OZ (routine_info.add_routine_param(param_info));
-    // TODO: Oracle's implementation will expand complex types in the Routine system table, while recording a copy in the Type system table, the purpose of which is not yet clear,
-    // The information recorded in Type is sufficient for use, therefore here we do not expand complex types, only retaining the interface
+    // The information recorded in Type is sufficient for use, therefore here we do not expand
+    // complex types, only retaining the interface.
     // OZ (user_type->add_package_routine_schema_param(resolve_ctx, block_ns, package_name,
     //              param_name, mode, position, level, sequence, routine_info));
   }

@@ -2355,7 +2355,7 @@ int ObTransformUtils::is_general_expr_not_null(ObNotNullContext &ctx,
     const ObRawExprResType &res_type = expr->get_result_type();
     if (res_type.is_numeric_type()
         || res_type.is_string_or_lob_locator_type()
-        || res_type.is_oracle_temporal_type()) {
+        || res_type.is_extended_temporal_type()) {
       if (OB_FAIL(check_list.push_back(expr->get_param_expr(0)))) {
         LOG_WARN("failed to append check list", K(ret));
       }

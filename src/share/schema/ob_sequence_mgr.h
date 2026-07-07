@@ -61,8 +61,7 @@ private:
 
 inline bool ObSequenceHashWrapper::operator == (const ObSequenceHashWrapper &rv) const
 {
-  return (true)
-      && (database_id_ == rv.get_database_id())
+  return (database_id_ == rv.get_database_id())
       && (sequence_name_ == rv.get_sequence_name());
 }
 

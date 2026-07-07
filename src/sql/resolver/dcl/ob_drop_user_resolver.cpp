@@ -62,7 +62,7 @@ int ObDropUserResolver::resolve(const ParseNode &parse_tree)
     }
   }
   if (OB_SUCC(ret)) {
-    // mysql mode and oracle mode in common
+    // Resolve the drop user statement after validating the parse tree.
     if (OB_ISNULL(drop_user_stmt = create_stmt<ObDropUserStmt>())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SQL_RESV_LOG(ERROR, "Failed to create ObDropUserStmt", K(ret));

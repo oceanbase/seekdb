@@ -70,7 +70,7 @@ typedef struct _ObParseCtx
   int comp_mode_;
   bool is_not_utf8_connection_;
   const struct ObCharsetInfo *charset_info_;
-  const struct ObCharsetInfo *charset_info_oracle_db_;
+  const struct ObCharsetInfo *charset_info_nls_db_; // NLS collation charset for identifier validation
   int64_t last_escape_check_pos_;  // A temporary variable used during quoted string parsing to handle escape characters encountered when connecting with the gbk character set
   int connection_collation_;
   bool mysql_compatible_comment_; //whether the parser is parsing "/*! xxxx */"

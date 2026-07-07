@@ -323,10 +323,10 @@ private:
                                  const ObDatumMeta &datum_meta,
                                  int parquet_decimal_length,
                                  uint8_t* parquet_flba_ptr);
-  int oracle_timestamp_to_int96(const common::ObIVector* expr_vector,
-                                int64_t row_idx,
-                                const ObDatumMeta &datum_meta,
-                                parquet::Int96 &res);
+  int timestamp_to_int96(const common::ObIVector* expr_vector,
+                         int64_t row_idx,
+                         const ObDatumMeta &datum_meta,
+                         parquet::Int96 &res);
 #endif // OB_BUILD_EMBED_MODE
   int calc_byte_array(const common::ObIVector* expr_vector,
                       int row_idx,
@@ -342,7 +342,6 @@ private:
                                 const bool is_strict_mode,
                                 const ObDateSqlMode date_sql_mode);
   bool file_need_split(int64_t file_size);
-  int check_oracle_number(ObObjType obj_type, int16_t &precision, int8_t scale);
   static bool day_number_checker(int32_t days);
 
 private:

@@ -65,8 +65,6 @@ int ObConfigManager::reload_config()
     LOG_WARN("Check configuration failed, can't reload", K(ret));
   } else if (OB_FAIL(reload_config_func_())) {
     LOG_WARN("Reload configuration failed.", K(ret));
-  } else {
-    g_enable_ob_error_msg_style = GCONF.enable_ob_error_msg_style;
   }
   return ret;
 }

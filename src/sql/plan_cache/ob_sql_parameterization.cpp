@@ -159,7 +159,7 @@ int ObSqlParameterization::transform_syntax_tree(ObIAllocator &allocator,
     ctx.collation_type_ = collation_connection;
     ctx.national_collation_type_ = session.get_nls_collation_nation();
     ctx.tz_info_ = session.get_timezone_info();
-    ctx.default_length_semantics_ = session.get_actual_nls_length_semantics();
+    ctx.default_length_semantics_ = session.get_actual_length_semantics();
     ctx.allocator_ = &allocator;
     ctx.tree_ = tree;
     ctx.top_node_ = tree;
@@ -735,7 +735,7 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
     bool enable_contain_param = ctx.enable_contain_param_;
     ParseNode *root = ctx.tree_;
     // When type is T_QUESTIONMARK there is no need to consider parameterization of child nodes,
-    // For select '1' the T_VARCHAR and T_CHAR (oracle mode) node has the same T_VARCHAR child node,
+    // For select '1', T_VARCHAR and T_CHAR nodes can share the same T_VARCHAR child node.
     // Since the projection columns in select do not need to be parameterized, it will lead to the normal parse recognizing two constants,
     // And fast parse only recognizes one constant, so add a T_VARCHAR check here, making both parses recognize only one constant.
     bool not_param = ctx.not_param_;
@@ -2572,7 +2572,7 @@ int ObSqlParameterization::transform_minus_op(ObIAllocator &alloc, ParseNode *tr
     /*  so, we need to find the leftest leave node and change its value and str */
     /*  same for '%','*', mod */
     /*  */
-    /*  In oracle mode there is only the mod function, for example select 1 - mod(mod(3, 4), 2) from dual; */
+    /*  For mod(), for example select 1 - mod(mod(3, 4), 2) from dual; */
     /*  Syntax tree is: */
     /*       - */
     /*     /  \ */
@@ -2581,8 +2581,8 @@ int ObSqlParameterization::transform_minus_op(ObIAllocator &alloc, ParseNode *tr
     /*     mod    2 */
     /*    /  \ */
     /*   3    4 */
-    /*   This syntax tree is the same as the select 1 - 3%4%2 from dual in mysql mode, but - and 3 cannot be combined together in oracle mode */
-    /*   Otherwise quick parameterization and hard parsing get different constants (3 and -3), so T_OP_MOD cannot be converted to minus sign in Oracle mode */
+    /*   This syntax tree is the same as select 1 - 3%4%2 from dual, but - and 3 cannot be combined together here. */
+    /*   Otherwise quick parameterization and hard parsing get different constants (3 and -3), so T_OP_MOD cannot be converted to minus sign. */
     ParseNode *const_node = NULL;
     ParseNode *op_node = tree->children_[1];
     if (OB_FAIL(find_leftest_const_node(*op_node, const_node))) {

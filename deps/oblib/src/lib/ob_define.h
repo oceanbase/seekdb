@@ -340,7 +340,7 @@ const int64_t OB_MAX_ROW_KEY_SPLIT = 32;
 const int64_t OB_USER_MAX_ROWKEY_COLUMN_NUMBER = 64;
 const int64_t OB_MAX_ROWKEY_COLUMN_NUMBER = 2 * OB_USER_MAX_ROWKEY_COLUMN_NUMBER;
 const int64_t OB_MAX_VIEW_COLUMN_NAME_LENGTH_MYSQL  = 64;
-const int64_t OB_MAX_COLUMN_NAME_LENGTH = 128; // Compatible with oracle, OB code logic is greater than Times TODO:xiyu
+const int64_t OB_MAX_COLUMN_NAME_LENGTH = 128;
 const int64_t OB_MAX_COLUMN_NAME_BINARY_LENGTH = 512; //OB_MAX_COLUMN_NAME_LENGTH * 4 (max character bytes)
 const int64_t OB_MAX_COLUMN_NAME_BUF_LENGTH = OB_MAX_COLUMN_NAME_LENGTH + 1;
 const int64_t OB_MAX_COLUMN_NAMES_LENGTH = 2 * 1024;
@@ -366,12 +366,13 @@ const int64_t OB_MAX_SUBQUERY_LAYER_NUM = 64;
 const int64_t OB_MAX_SET_STMT_SIZE = 256;
 const int64_t OB_MAX_NAMED_WINDOW_FUNCTION_NUM = 127;
 const uint64_t OB_DEFAULT_GROUP_CONCAT_MAX_LEN = 1024;
-const uint64_t OB_DEFAULT_GROUP_CONCAT_MAX_LEN_FOR_ORACLE = 32767; //Same as OB_MAX_ORACLE_VARCHAR_LENGTH, expanded to 32767
+const uint64_t OB_DEFAULT_EXTENDED_GROUP_CONCAT_MAX_LEN = 32767;
 const int64_t OB_DEFAULT_OB_INTERM_RESULT_MEM_LIMIT = 2LL * 1024LL * 1024LL * 1024LL;
 // The maximum table name length that the user can specify
 const int64_t OB_MAX_USER_TABLE_NAME_LENGTH_MYSQL = 64;  // Compatible with mysql, the OB code logic is greater than the time error
-const int64_t OB_MAX_USER_TABLE_NAME_LENGTH_ORACLE = 128; // Compatible with Oracle, error is reported when the logic is greater than
-// The actual maximum table name length of table_schema (the index table will have an additional prefix, so the actual length is greater than OB_MAX_USER_TABLE_NAME_LENGTH)
+const int64_t OB_MAX_EXTENDED_USER_TABLE_NAME_LENGTH = 128; // Error is reported when the logic is greater than
+// The actual maximum table name length of table_schema. Index table names include an additional prefix,
+// so this is greater than OB_MAX_USER_TABLE_NAME_LENGTH_MYSQL.
 const int64_t OB_MAX_TABLE_NAME_LENGTH = 256;
 const int64_t OB_MAX_TABLE_NAME_BINARY_LENGTH = 2048; // See OB_MAX_DATABASE_NAME_BINARY_LENGTH explaination
 const int64_t OB_MAX_SCHEMA_REF_INFO = 4096;
@@ -407,13 +408,14 @@ const int64_t OB_MAX_ORIGINAL_NANE_LENGTH = 256; //max length of tenant_name, ta
 
 const int64_t OB_MAX_CHAR_LEN = 3;
 const int64_t OB_MAX_POINTER_ADDR_LEN = 32;
-const int64_t OB_MAX_TRIGGER_NAME_LENGTH = 128;  // Compatible with Oracle
-const int64_t OB_MAX_WHEN_CONDITION_LENGTH = 4000;  // Compatible with Oracle
-const int64_t OB_MAX_UPDATE_COLUMNS_LENGTH = 4000;  // Compatible with Oracle
-const int64_t OB_MAX_TRIGGER_BODY_LENGTH = 64 * 1024;  // In Oracle, it is the LONG type, but there is a problem with the large object type used in the OB internal table.
-const int64_t OB_MAX_DOMIN_NAME_LENGTH = 240;   // max length of domin name, refer to max domin name of oracle
-const int64_t OB_MAX_QB_NAME_LENGTH = 20;  // Compatible with Oracle, hint specifies the length of the maximum qb_name.
-const int64_t OB_MAX_SEQUENCE_NAME_LENGTH = 128; // Compatible with Oracle, error is reported when the logic is greater than
+const int64_t OB_MAX_TRIGGER_NAME_LENGTH = 128;
+const int64_t OB_MAX_WHEN_CONDITION_LENGTH = 4000;
+const int64_t OB_MAX_UPDATE_COLUMNS_LENGTH = 4000;
+const int64_t OB_MAX_TRIGGER_BODY_LENGTH = 64 * 1024;
+const int64_t OB_MAX_DBLINK_NAME_LENGTH = 128;
+const int64_t OB_MAX_DOMIN_NAME_LENGTH = 240;
+const int64_t OB_MAX_QB_NAME_LENGTH = 20;
+const int64_t OB_MAX_SEQUENCE_NAME_LENGTH = 128;
 const int64_t OB_MAX_KEYSTORE_NAME_LENGTH = 128;
 const int64_t OB_MAX_DATABASE_NAME_LENGTH = 128; // Not compatible with mysql (mysql is 64), the logic is greater than when an error is reported
 const int64_t OB_MAX_DATABASE_NAME_BINARY_LENGTH = 2048; // Should be OB_MAX_DATABASE_NAME_LENGTH * 4(max char bytes),
@@ -424,14 +426,14 @@ const int64_t OB_MAX_CATALOG_NAME_LENGTH = 128;
 const int64_t OB_MAX_CATALOG_NAME_BINARY_LENGTH = 2048;
 const int64_t OB_MAX_TABLEGROUP_NAME_LENGTH = 128; // OB code logic is greater than or equal to an error, so modify it to 65
 const int64_t OB_MAX_ALIAS_NAME_LENGTH = 255;// Compatible with mysql, 255 visible characters. Plus 256 bytes at the end of 0
-const int64_t OB_MAX_CONSTRAINT_NAME_LENGTH_ORACLE = 128;  // Compatible with Oracle, error is reported when the logic is greater than
+const int64_t OB_MAX_EXTENDED_CONSTRAINT_NAME_LENGTH = 128;  // Error is reported when the logic is greater than
 const int64_t OB_MAX_CONSTRAINT_NAME_LENGTH_MYSQL = 64; // Compatible with mysql, error is reported when the logic is greater than
 const int64_t OB_MAX_CONSTRAINT_EXPR_LENGTH = 2048;
 const int64_t OB_MAX_TABLESPACE_NAME_LENGTH = 128;
 const int64_t OB_MAX_UDF_NAME_LENGTH = 64;
 const int64_t OB_MAX_ASH_PL_NAME_LENGTH = 32;
 const int64_t OB_MAX_DL_NAME_LENGTH = 128;
-const int64_t OB_MAX_USER_NAME_LENGTH = 64; // Not compatible with Oracle (Oracle is 128), the logic is greater than when an error is reported
+const int64_t OB_MAX_USER_NAME_LENGTH = 64;
 const int64_t OB_MAX_USER_NAME_BUF_LENGTH = OB_MAX_USER_NAME_LENGTH + 1;
 const int64_t OB_MAX_USER_NAME_LENGTH_STORE = 128;
 const int64_t OB_MAX_INFOSCHEMA_GRANTEE_LEN = 81;
@@ -523,8 +525,8 @@ const int32_t OB_TMP_BUF_SIZE_256 = 256;
 const int64_t OB_SCHEMA_MGR_MAX_USED_TID_MAP_BUCKET_NUM = 64;
 const int64_t OB_MAX_SLAVE_READ_DELAY_TS = 5 * 1000 * 1000;
 
-const int64_t OB_MAX_DIRECTORY_NAME_LENGTH = 128; // Compatible with Oracle
-const int64_t OB_MAX_DIRECTORY_PATH_LENGTH = 4000; // Compatible with Oracle
+const int64_t OB_MAX_DIRECTORY_NAME_LENGTH = 128;
+const int64_t OB_MAX_DIRECTORY_PATH_LENGTH = 4000;
 const uint64_t OB_MAX_INTERVAL_PARTITIONS = 1048575; // interval parted table max partitions
 const int64_t OB_MAX_BALANCE_GROUP_NAME_LENGTH = 512;
 const int64_t OB_SERVICE_NAME_LENGTH = 64;
@@ -788,8 +790,6 @@ const char *const OB_VALUES = "__values";
 // hidden primary key name
 const char *const OB_HIDDEN_PK_INCREMENT_COLUMN_NAME = "__pk_increment"; //hidden
 const char *const OB_MOCK_LINK_TABLE_PK_COLUMN_NAME = "__link_table_pkey"; //hidden
-const char *const OB_HIDDEN_SESSION_ID_COLUMN_NAME = "SYS_SESSION_ID"; //oracle temporary table
-const char *const OB_HIDDEN_SESS_CREATE_TIME_COLUMN_NAME = "SYS_SESS_CREATE_TIME"; //oracle temporary table
 const char *const OB_HIDDEN_FILE_ID_COLUMN_NAME = "__file_id"; // used for external table
 const char *const OB_HIDDEN_LINE_NUMBER_COLUMN_NAME = "__line_number"; // used for external table
 
@@ -797,9 +797,7 @@ const char *const OB_HIDDEN_LINE_NUMBER_COLUMN_NAME = "__line_number"; // used f
 const char *const OB_INDEX_PREFIX = "__idx_";
 // internal materialized view log prefix
 const char *const OB_MLOG_PREFIX_MYSQL = "mlog$_";
-const char *const OB_MLOG_PREFIX_ORACLE = "MLOG$_";
 const char *const OB_TMP_MLOG_PREFIX_MYSQL = "tmlog$_";
-const char *const OB_TMP_MLOG_PREFIX_ORACLE = "TMLOG$_";
 
 // internal user
 const char *const OB_INTERNAL_USER = "__ob_server";
@@ -1022,18 +1020,10 @@ const int64_t MAX_AUDIT_FILTER_NAME_LENGTH_BYTE = 4 * MAX_AUDIT_FILTER_NAME_LENG
 const int64_t MAX_AUDIT_USER_NAME_LENGTH_BYTE = 4 * OB_MAX_USER_NAME_LENGTH_STORE;
 const int64_t MAX_AUDIT_HOST_NAME_LENGTH_BYTE = 4 * OB_MAX_HOST_NAME_LENGTH;
 
-//Oracle
-const int64_t MAX_ORACLE_COMMENT_LENGTH = 4000;
+const int64_t MAX_COMMENT_TEXT_LENGTH = 4000;
 
-//Oracle MAX_ENABLED_ROLES The maximum number of effective roles granted to users
+// The maximum number of effective roles granted to users.
 const int64_t MAX_ENABLED_ROLES = 148;
-const int64_t MAX_ORACLE_NAME_LENGTH = 30;
-
-//Oracle SA
-const int64_t MAX_ORACLE_SA_COMPONENTS_SHORT_NAME_LENGTH = 30;
-const int64_t MAX_ORACLE_SA_COMPONENTS_LONG_NAME_LENGTH = 80;
-const int64_t MAX_ORACLE_SA_COMPONENTS_PARENT_NAME_LENGTH = 30;
-const int64_t MAX_ORACLE_SA_LABEL_TYPE_LENGTH = 15;
 
 ////////////////////////////////////////////////////////////
 //             table id range definition                  //
@@ -1046,14 +1036,9 @@ const uint64_t OB_MAX_SYS_POOL_ID = 100;
 // ddl related
 const char *const OB_SYS_USER_NAME = "root";
 // todo yyj
-const char *const OB_ORA_SYS_USER_NAME = "SYS";
-const char *const OB_ORA_LBACSYS_NAME = "LBACSYS";
-const char *const OB_ORA_AUDITOR_NAME = "ORAAUDITOR";
-const char *const OB_ORA_CONNECT_ROLE_NAME = "CONNECT";
-const char *const OB_ORA_RESOURCE_ROLE_NAME = "RESOURCE";
-const char *const OB_ORA_DBA_ROLE_NAME = "DBA";
-const char *const OB_ORA_PUBLIC_ROLE_NAME = "PUBLIC";
-const char *const OB_ORA_STANDBY_REPLICATION_ROLE_NAME = "STANDBY_REPLICATION";
+const char *const OB_EXTENDED_SYS_USER_NAME = "SYS";
+const char *const OB_LBACSYS_SCHEMA_NAME = "LBACSYS";
+const char *const OB_AUDITOR_SCHEMA_NAME = "ORAAUDITOR";
 const char *const OB_RESTORE_USER_NAME = "__oceanbase_inner_restore_user";
 const char *const OB_DRC_USER_NAME = "__oceanbase_inner_drc_user";
 const char *const OB_SYS_TENANT_NAME = "sys";
@@ -1147,9 +1132,9 @@ OB_INLINE bool is_inner_object_id(const uint64_t object_id)
  * (0, 100)         : Core Table
  * (0, 10000)       : System Table
  * (10000, 15000)   : MySQL Virtual Table
- * (15000, 20000)   : Oracle Virtual Table
+ * (15000, 20000)   : Extended Virtual Table
  * (20000, 25000)   : MySQL System View
- * (25000, 30000)   : Oracle System View
+ * (25000, 30000)   : Extended System View
  * (30000, 49400)   : Reserved
  * (49400, 49500)   : Inner tablet for LS
  * (49500, 50000)   : CTE Table
@@ -1169,11 +1154,11 @@ const uint64_t OB_MAX_CORE_TABLE_ID           = 100;
 const uint64_t OB_MAX_SYS_TABLE_ID            = 10000;
 // (10000, 15000) for mysql virtual table
 const uint64_t OB_MAX_MYSQL_VIRTUAL_TABLE_ID  = 15000;
-// (15000, 20000) for oracle virtual table
+// (15000, 20000) for extended virtual table
 const uint64_t OB_MAX_VIRTUAL_TABLE_ID        = 20000;
 // (20000, 25000) for mysql sys view
 const uint64_t OB_MAX_MYSQL_SYS_VIEW_ID       = 25000;
-// (25000, 30000) for oracle sys view
+// (25000, 30000) for extended system view
 const uint64_t OB_MAX_SYS_VIEW_ID             = 30000;
 // (30000, 49400) is reserved
 // (49400, 49500) for LS inner table / tablet
@@ -1208,7 +1193,7 @@ OB_INLINE bool is_mysql_virtual_table(const uint64_t tid)
 }
 
 // includes virtual table's index
-OB_INLINE bool is_ora_virtual_table(const uint64_t tid)
+OB_INLINE bool is_extended_virtual_table(const uint64_t tid)
 {
   return (tid > OB_MAX_MYSQL_VIRTUAL_TABLE_ID && tid < OB_MAX_VIRTUAL_TABLE_ID);
 }
@@ -1224,7 +1209,7 @@ OB_INLINE bool is_mysql_sys_view_table(const uint64_t tid)
   return (tid > OB_MAX_VIRTUAL_TABLE_ID && tid < OB_MAX_MYSQL_SYS_VIEW_ID);
 }
 
-OB_INLINE bool is_ora_sys_view_table(const uint64_t tid)
+OB_INLINE bool is_extended_sys_view_table(const uint64_t tid)
 {
   return (tid > OB_MAX_MYSQL_SYS_VIEW_ID && tid < OB_MAX_SYS_VIEW_ID);
 }
@@ -1319,15 +1304,10 @@ OB_INLINE bool is_inner_table(const uint64_t tid)
 const uint64_t OB_MIN_INNER_USER_ID    = 200000;
 const uint64_t OB_SYS_USER_ID          = OB_MIN_INNER_USER_ID + 1;
 const uint64_t OB_EMPTY_USER_ID        = OB_MIN_INNER_USER_ID + 2;
-const uint64_t OB_ORA_SYS_USER_ID      = OB_MIN_INNER_USER_ID + 3;
-const uint64_t OB_ORA_LBACSYS_USER_ID  = OB_MIN_INNER_USER_ID + 4;
-const uint64_t OB_ORA_AUDITOR_USER_ID  = OB_MIN_INNER_USER_ID + 5;
-const uint64_t OB_ORA_CONNECT_ROLE_ID  = OB_MIN_INNER_USER_ID + 6;
-const uint64_t OB_ORA_RESOURCE_ROLE_ID = OB_MIN_INNER_USER_ID + 7;
-const uint64_t OB_ORA_DBA_ROLE_ID      = OB_MIN_INNER_USER_ID + 8;
-const uint64_t OB_ORA_PUBLIC_ROLE_ID   = OB_MIN_INNER_USER_ID + 9;
+const uint64_t OB_EXTENDED_SYS_USER_ID = OB_MIN_INNER_USER_ID + 3;
+const uint64_t OB_LBACSYS_USER_ID      = OB_MIN_INNER_USER_ID + 4;
+const uint64_t OB_AUDITOR_USER_ID      = OB_MIN_INNER_USER_ID + 5;
 const uint64_t OB_AUDIT_MOCK_USER_ID   = OB_MIN_INNER_USER_ID + 10;
-const uint64_t OB_ORA_STANDBY_REPLICATION_ROLE_ID = OB_MIN_INNER_USER_ID + 11;
 const char * const OB_PROXYRO_USERNAME = "proxyro";
 const uint64_t OB_MAX_INNER_USER_ID    = 201000;
 
@@ -1346,44 +1326,19 @@ OB_INLINE bool is_empty_user(const uint64_t uid)
   return (uid == OB_EMPTY_USER_ID);
 }
 
-OB_INLINE bool is_ora_sys_user(const uint64_t uid)
+OB_INLINE bool is_extended_sys_user(const uint64_t uid)
 {
-  return (uid == OB_ORA_SYS_USER_ID);
+  return (uid == OB_EXTENDED_SYS_USER_ID);
 }
 
-OB_INLINE bool is_ora_lbacsys_user(const uint64_t uid)
+OB_INLINE bool is_inner_lbacsys_user(const uint64_t uid)
 {
-  return (uid == OB_ORA_LBACSYS_USER_ID);
+  return (uid == OB_LBACSYS_USER_ID);
 }
 
-OB_INLINE bool is_ora_auditor_user(const uint64_t uid)
+OB_INLINE bool is_inner_auditor_user(const uint64_t uid)
 {
-  return (uid == OB_ORA_AUDITOR_USER_ID);
-}
-
-OB_INLINE bool is_ora_connect_role(const uint64_t uid)
-{
-  return (uid == OB_ORA_CONNECT_ROLE_ID);
-}
-
-OB_INLINE bool is_ora_resource_role(const uint64_t uid)
-{
-  return (uid == OB_ORA_RESOURCE_ROLE_ID);
-}
-
-OB_INLINE bool is_ora_dba_role(const uint64_t uid)
-{
-  return (uid == OB_ORA_DBA_ROLE_ID);
-}
-
-OB_INLINE bool is_ora_public_role(const uint64_t uid)
-{
-  return (uid == OB_ORA_PUBLIC_ROLE_ID);
-}
-
-OB_INLINE bool is_ora_standby_replication_role(const uint64_t uid)
-{
-  return (uid == OB_ORA_STANDBY_REPLICATION_ROLE_ID);
+  return (uid == OB_AUDITOR_USER_ID);
 }
 
 /*
@@ -1397,9 +1352,9 @@ const uint64_t OB_INFORMATION_SCHEMA_ID       = OB_MIN_INNER_DATABASE_ID + 2;
 const uint64_t OB_MYSQL_SCHEMA_ID             = OB_MIN_INNER_DATABASE_ID + 3;
 const uint64_t OB_RECYCLEBIN_SCHEMA_ID        = OB_MIN_INNER_DATABASE_ID + 4;
 const uint64_t OB_PUBLIC_SCHEMA_ID            = OB_MIN_INNER_DATABASE_ID + 5;
-const uint64_t OB_ORA_SYS_DATABASE_ID         = OB_MIN_INNER_DATABASE_ID + 6;
-const uint64_t OB_ORA_LBACSYS_DATABASE_ID     = OB_MIN_INNER_DATABASE_ID + 7;
-const uint64_t OB_ORA_AUDITOR_DATABASE_ID     = OB_MIN_INNER_DATABASE_ID + 8;
+const uint64_t OB_EXTENDED_SYS_DATABASE_ID = OB_MIN_INNER_DATABASE_ID + 6;
+const uint64_t OB_LBACSYS_DATABASE_ID      = OB_MIN_INNER_DATABASE_ID + 7;
+const uint64_t OB_AUDITOR_DATABASE_ID      = OB_MIN_INNER_DATABASE_ID + 8;
 // use only if the 'use database' command is not executed.
 const uint64_t OB_MOCK_DEFAULT_DATABASE_ID = OB_MIN_INNER_DATABASE_ID + 9;
 const uint64_t OB_CTE_DATABASE_ID             = OB_MIN_INNER_DATABASE_ID + 10;
@@ -1410,7 +1365,7 @@ const char* const OB_INFORMATION_SCHEMA_NAME       = "information_schema";
 const char* const OB_MYSQL_SCHEMA_NAME             = "mysql";
 const char* const OB_RECYCLEBIN_SCHEMA_NAME        = "__recyclebin"; //hidden
 const char* const OB_PUBLIC_SCHEMA_NAME            = "__public";     //hidden
-const char* const OB_ORA_SYS_SCHEMA_NAME           = "SYS";
+const char* const OB_EXTENDED_SYS_SCHEMA_NAME           = "SYS";
 const char* const OB_MOCK_DEFAULT_DATABASE_NAME = "__outline_default_db";
 const char* const OB_TEST_SCHEMA_NAME              = "test";
 
@@ -1429,9 +1384,9 @@ OB_INLINE bool is_mysql_database_id(const uint64_t database_id)
   return OB_MYSQL_SCHEMA_ID == database_id;
 }
 
-OB_INLINE bool is_oracle_sys_database_id(const int64_t database_id)
+OB_INLINE bool is_extended_sys_database_id(const int64_t database_id)
 {
-  return OB_ORA_SYS_DATABASE_ID == database_id;
+  return OB_EXTENDED_SYS_DATABASE_ID == database_id;
 }
 
 OB_INLINE bool is_recyclebin_database_id(const uint64_t database_id)
@@ -1464,7 +1419,7 @@ OB_INLINE bool is_mysql_sys_database_id(const uint64_t database_id)
 OB_INLINE bool is_sys_database_id(const uint64_t database_id)
 {
   return is_mysql_sys_database_id(database_id)
-         || is_oracle_sys_database_id(database_id);
+         || is_extended_sys_database_id(database_id);
 }
 
 /*
@@ -1509,13 +1464,7 @@ OB_INLINE bool is_inner_keystore_id(const uint64_t keystore_id)
  * ################################################################################
  */
 const uint64_t OB_MIN_INNER_PROFILE_ID           = 202200;
-const uint64_t OB_ORACLE_TENANT_INNER_PROFILE_ID = OB_MIN_INNER_PROFILE_ID + 1;
 const uint64_t OB_MAX_INNER_PROFILE_ID           = 202300;
-
-OB_INLINE bool is_oracle_inner_profile_id(const uint64_t profile_id)
-{
-  return OB_ORACLE_TENANT_INNER_PROFILE_ID == profile_id;
-}
 
 OB_INLINE bool is_inner_profile_id(const uint64_t profile_id)
 {
@@ -1824,19 +1773,17 @@ const int64_t OB_MAX_ROW_LENGTH_IN_MEMTABLE = 60L * 1024 * 1024; //60M
 const int64_t OB_MAX_MONITOR_INFO_LENGTH = 65535;
 const int64_t OB_MAX_CHAR_LENGTH = 256; // Compatible with mysql, unit character mysql is 256
 const int64_t OB_MAX_MYSQL_VARCHAR_LENGTH = 65535; // Compatible with mysql, unit character mysql is 256
-const int64_t OB_MAX_ORACLE_CHAR_LENGTH_BYTE = 2000; // Compatible with oracle, unit byte oracle is 2000
-const int64_t OB_MAX_ORACLE_PL_CHAR_LENGTH_BYTE = 32767; // Compatible with oracle pl/sql, unit byte oracle is 32767
-const int64_t OB_MAX_ORACLE_VARCHAR_LENGTH = 32767; // Compatible with oracle, VARCHAR's max length is 4k, PL and SQL unified extended to 32767
-// Compatible with oracle, the maximum length of RAW type column in SQL layer is 2000 byte
-const int64_t OB_MAX_ORACLE_RAW_SQL_COL_LENGTH = 2000;
-// Compatible with oracle, the maximum length of PL layer RAW type variable is 32767 byte
-const int64_t OB_MAX_ORACLE_RAW_PL_VAR_LENGTH = 32767;
+const int64_t OB_MAX_EXTENDED_CHAR_LENGTH_BYTE = 2000;
+const int64_t OB_MAX_EXTENDED_PL_CHAR_LENGTH_BYTE = 32767;
+const int64_t OB_MAX_EXTENDED_VARCHAR_LENGTH = 32767;
+// The maximum length of internal dependency binary payload columns is 2000 bytes.
+const int64_t OB_MAX_RAW_SQL_COL_LENGTH = 2000;
 const int64_t OB_MAX_VARCHAR_LENGTH = 1024L * 1024L; // Unit byte
 const int64_t OB_MAX_BIT_LENGTH = 64; // Compatible with mysql, 64 bit
 const int64_t OB_MAX_SET_ELEMENT_NUM = 64; // Compatible with mysql8.0, the number of values
 const int64_t OB_MAX_INTERVAL_VALUE_LENGTH = 255; // Compatible with mysql, unit character
 const int64_t OB_MAX_ENUM_ELEMENT_NUM = 65535; // Compatible with mysql8.0, the number of enum values
-const int64_t OB_MAX_QUALIFIED_COLUMN_NAME_LENGTH = 4096; // Compatible with oracle
+const int64_t OB_MAX_QUALIFIED_COLUMN_NAME_LENGTH = 4096;
 const int64_t OB_MAX_VARCHAR_LENGTH_KEY = 16 * 1024L;  //KEY key varchar maximum length limit
 const int64_t OB_OLD_MAX_VARCHAR_LENGTH = 64 * 1024; // for compatible purpose
 // For compatibility we set max default value as 256K bytes/64K chars.
@@ -1851,11 +1798,11 @@ const int64_t OB_MAX_DECIMAL_PRECISION = 65;
 const int64_t OB_MAX_DECIMAL_POSSIBLE_PRECISION = 81;
 const int64_t OB_MIN_DECIMAL_PRECISION = 1;
 const int64_t OB_MAX_DECIMAL_SCALE = 30;
-const int64_t OB_MIN_NUMBER_PRECISION = 1;          //Number in Oracle: p:[1, 38]
-const int64_t OB_MAX_NUMBER_PRECISION = 38;          //Number in Oracle: p:[1, 38]
-const int64_t OB_MAX_NUMBER_PRECISION_INNER = 40;    //Number in Oracle: p can reach 40 if not define by user
-const int64_t OB_MIN_NUMBER_SCALE = -84;             //Number in Oracle: s:[-84, 127]
-const int64_t OB_MAX_NUMBER_SCALE = 127;             //Number in Oracle: s:[-84, 127]
+const int64_t OB_MIN_NUMBER_PRECISION = 1;
+const int64_t OB_MAX_NUMBER_PRECISION = 38;
+const int64_t OB_MAX_NUMBER_PRECISION_INNER = 40;  // Internal precision may reach 40 when user precision is unspecified.
+const int64_t OB_MIN_NUMBER_SCALE = -84;
+const int64_t OB_MAX_NUMBER_SCALE = 127;
 
 // len_ = 2, se_ = 192: 2 digits(e.g: 111.111)
 const uint32_t NUM_DESC_2DIGITS_POSITIVE_DECIMAL = 0xc0000002;
@@ -1872,7 +1819,7 @@ const uint32_t NUM_DESC_1DIGIT_NEGATIVE_INTEGER = 0x40000001;
 
 
 const int64_t OB_DECIMAL_NOT_SPECIFIED = -1;
-const int64_t OB_MIN_NUMBER_FLOAT_PRECISION = 1;     //Float in Oracle: p[1, 126]
+const int64_t OB_MIN_NUMBER_FLOAT_PRECISION = 1;
 const int64_t OB_MAX_NUMBER_FLOAT_PRECISION = 126;
 const double OB_PRECISION_BINARY_TO_DECIMAL_FACTOR = 0.30103;
 const double OB_PRECISION_DECIMAL_TO_BINARY_FACTOR = 3.32193;
@@ -2033,7 +1980,7 @@ const int64_t MAX_UNDO_LIST_CHAR_LENGTH = 4096;
 const int64_t MAX_TX_OP_CHAR_LENGTH = 4096;
 const int64_t MAX_TABLE_CNT_IN_STORAGE = MAX_SSTABLE_CNT_IN_STORAGE + MAX_MEMSTORE_CNT;
 const int64_t OB_MAX_PARTITION_NUM_MYSQL = 8192;
-const int64_t OB_MAX_PARTITION_NUM_ORACLE = 65536;
+const int64_t OB_MAX_EXTENDED_PARTITION_NUM = 65536;
 
 //Used to indicate the visible range of configuration items and whether to restart after modification to take effect
 const char *const OB_CONFIG_SECTION_DEFAULT = "DEFAULT";
@@ -2045,7 +1992,7 @@ const char *const OB_CONFIG_VISIBLE_LEVEL_MEMORY = "MEMORY";
 //Precision in user data type
 const int16_t MAX_SCALE_FOR_TEMPORAL = 6;
 const int16_t MIN_SCALE_FOR_TEMPORAL = 0;
-const int16_t MAX_SCALE_FOR_ORACLE_TEMPORAL = 9;
+const int16_t MAX_SCALE_FOR_EXTENDED_TEMPORAL = 9;
 const int16_t DEFAULT_SCALE_FOR_INTEGER = 0;
 const int16_t DEFAULT_NUMBER_PRECISION_FOR_INTEGER = 38;
 const int16_t DEFAULT_NUMBER_SCALE_FOR_INTEGER = 0;
@@ -2054,7 +2001,7 @@ const int16_t DEFAULT_LENGTH_FOR_NUMERIC = -1;
 const int16_t DEFAULT_SCALE_FOR_DATE = 0;
 const int16_t DEFAULT_SCALE_FOR_YEAR = 0;
 const int16_t SCALE_UNKNOWN_YET = -1;
-const int16_t ORA_NUMBER_SCALE_UNKNOWN_YET = OB_MIN_NUMBER_SCALE - 1;
+const int16_t FLOATING_NUMBER_SCALE_UNKNOWN_YET = OB_MIN_NUMBER_SCALE - 1;
 const int16_t PRECISION_UNKNOWN_YET = -1;
 const int16_t LENGTH_UNKNOWN_YET = -1;
 const int16_t DEFAULT_PRECISION_FOR_BOOL = 1;
@@ -2063,10 +2010,8 @@ const int16_t DEFAULT_LENGTH_FOR_TEMPORAL = -1;
 const int16_t DEFAULT_PRECISION_FOR_STRING = -1;
 const int16_t DEFAULT_SCALE_FOR_STRING = -1;
 const int16_t DEFAULT_SCALE_FOR_TEXT = 0;
-const int16_t DEFAULT_SCALE_FOR_ORACLE_FRACTIONAL_SECONDS = 6;  //SEE : https://docs.oracle.com/cd/B19306_01/server.102/b14225/ch4datetime.htm
+const int16_t DEFAULT_SCALE_FOR_FRACTIONAL_SECONDS = 6;
 const int16_t DEFUALT_PRECISION_FOR_INTERVAL = 2;
-
-const int64_t OB_ORACLE_SCALE_FOR_NUMBER = -127;
 
 // load inner table schema
 const int64_t HARD_CODE_SCHEMA_VERSION_BEGIN = 1 << 17;
@@ -2404,9 +2349,7 @@ enum ObConsistencyLevel
 
 enum ObCompatibilityMode
 {
-  OCEANBASE_MODE = -1,
   MYSQL_MODE = 0,
-  ORACLE_MODE,
 };
 
 enum ObOrderType

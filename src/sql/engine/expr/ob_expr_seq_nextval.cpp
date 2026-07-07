@@ -27,7 +27,7 @@ namespace sql
 {
 ObExprSeqNextval::ObExprSeqNextval(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_SEQ_NEXTVAL, N_SEQ_NEXTVAL, 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                         INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
+                         INTERNAL_IN_MYSQL_MODE)
 {
 }
 

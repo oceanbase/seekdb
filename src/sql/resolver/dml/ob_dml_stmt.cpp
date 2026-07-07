@@ -1375,7 +1375,7 @@ int ObDMLStmt::adjust_duplicated_table_name(ObIAllocator &allocator,
   if (OB_SUCC(ret) && find_dup) {    
     int64_t pos = 0;
     // just to generate an unique alias name, use a minimal max name length value: OB_MAX_USER_TABLE_NAME_LENGTH_MYSQL = 64
-    // ignore oracle mode max name length OB_MAX_USER_TABLE_NAME_LENGTH_ORACLE = 128
+    // ignore extended max name length OB_MAX_EXTENDED_USER_TABLE_NAME_LENGTH = 128
     char buf[OB_MAX_USER_TABLE_NAME_LENGTH_MYSQL + 1];
     const int64_t MAX_TIMES_FOR_GET_NO_DUP_ALIAS_NAME = 20;
     int64_t buf_len = OB_MAX_USER_TABLE_NAME_LENGTH_MYSQL;
@@ -2100,7 +2100,7 @@ int ObDMLStmt::set_sharable_expr_reference(ObRawExpr &expr, ExplicitedRefType re
       // now check ora_rowscn pseudo column only,
       //  some preudo column like T_PSEUDO_GROUP_PARAM and T_CTE_SEARCH_COLUMN can not get
       //  from pseudo_column_like_exprs_, after adjust them run case:
-      //  with_clause.recursive_oracle_search_oracle
+      //  with_clause recursive search cases
       //  update.multi_stmt_explain_update_base
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to find pseudo column", K(ret), K(expr));

@@ -1708,11 +1708,12 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
       } else if (OB_FAIL(stored_schema_objs_.push_back(pcv_schema_obj))) {
         LOG_WARN("failed to push back array", K(ret));
       } else if(!contain_sys_name_table_) {
-        // oracle mode allows regular tables to have the same name as tables under sys, plan matching needs to distinguish to match different plans
-        // The tables under sys include system tables and views, so call is_sys_table_name to check if the table is under sys
-        // In addition, if the sql contains internal tables, changes in the schema version of internal tables will not be reflected in the tenant schema version of normal tenants
-        // In order to update the plan in a timely manner, it is necessary to check the schema version number of the corresponding internal table. The internal tables of Oracle tenants are under sys, mysql tenants
-        // Under oceanbase.
+        // Plan matching needs to distinguish regular tables from system tables
+        // with the same name. Tables under sys include system tables and views,
+        // so call is_sys_table_name to check whether the table is under sys.
+        // If SQL contains internal tables, internal-table schema changes are
+        // not reflected in the normal tenant schema version, so check the
+        // corresponding internal table schema version directly.
         if (OB_FAIL(share::schema::ObSysTableChecker::is_sys_table_name(OB_SYS_DATABASE_ID,
                                                                                table_schema->get_table_name(),
                                                                                contain_sys_name_table_))) {
@@ -1739,22 +1740,13 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
 
 /* used to get plan
 
-   For the case where the query is for Table Schema, the database id needs to be passed in, with different strategies for different modes
-   MySQL mode:
-     When getting the plan, directly retrieve the database id from the cache PCVSchemaObj
-
-   Oracle mode:
-     In Oracle mode, if the schema is not specified in the SQL, use the db id from the session, e.g., select xx from test;
-     Otherwise, directly use the table id from PCVSchemaObj to query the schema, e.g., select xx from user.test;
-
-     The reason for doing this is to solve the following scenario: user1 and user2 both have a table named test,
-     when connecting with user1 and executing select * from user2.test,
-     if the db id from the session connected with user1 is used directly, since the table_name is used to query the schema,
-     it will query the schema under user1 and use it for match logic, which will definitely fail to match. In this scenario, if the db id is specified, the db id is fixed, directly using the table_id
-     to query the schema can query the schema of the test table under user2
-
-   Oracle system tables and regular tables solution:
-     Use the database id from the current session to query the table_name, if it exists then use this table schema as the matching condition; otherwise go to SYS DB to query the schema
+   For the case where the query is for table schema, schema matching must
+   distinguish three cases:
+   1. Unqualified table names use the session database id passed by the caller.
+   2. Explicitly qualified table names use the cached database id in PCVSchemaObj,
+      so same-name tables under different schemas do not match accidentally.
+   3. System-table names may collide with regular table names; first check the
+      session database, and fall back to SYS DB only when the name is not found.
  */
 int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
                                          const uint64_t database_id,
@@ -1904,9 +1896,9 @@ int ObPlanCacheValue::match_dep_schema(const ObPlanCacheCtx &pc_ctx,
         // If it contains a temporary table
         // Temporary table is also a special case of a table with the same name, but here sessid_ is used to distinguish whether this pcv contains a temporary plan,
         // sessid_is not 0, then it is a pocv containing temporary tables, otherwise it is a pcv of an ordinary table
-        // oracle mode, temporary tables are actually regular tables, server internally rewrites them by adding a sessid field to distinguish temporary tables on different sessions
-        // sessid may be reused, so different temporary tables need to match the sessid and sess_create_time_ fields
-        // In mysql mode, temporary tables are only created in the corresponding session, different sessid can distinguish them, sess_create_time must be the same
+        // Temporary tables are only created in the corresponding session.
+        // Different sessid values can distinguish them, and sess_create_time
+        // must also be the same because sessid may be reused.
         // plan cache matching temporary tables should always use the user-created session to ensure the correctness of semantics
         // When executed remotely, a temporary session object will be created, and its session_id is also temporary,
         // So here the get_sessid_for_table() rule must be used to determine

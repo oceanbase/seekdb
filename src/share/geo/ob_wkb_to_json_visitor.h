@@ -96,20 +96,18 @@ private:
   int appendPolygon(T_IBIN *geo);
   // for multi
   int appendMultiPrefix(ObGeoType geo_type, const char *type_name, ObGeometry *geo);
-  int appendMultiSuffix(ObGeoType type);
+  int appendMultiSuffix();
   template<typename T_IBIN>
   int appendCollectionSuffix(T_IBIN *geo);
   // common
   int appendJsonFields(ObGeoType type, const char *type_name, ObGeometry *geo);
   bool in_colloction_visit() { return colloction_level_ > 0; }
-  bool in_oracle_colloction_visit() { return (colloction_level_ > 0) && !is_mysql_mode_; }
   int appendMySQLFlagInfo(ObGeometry *geo);
   int appendBox(ObGeogBox &box);
 
   ObGeoStringBuffer buffer_;
   bool in_multi_visit_;
   int colloction_level_;
-  bool is_mysql_mode_;
   uint8_t flag_;
   uint32_t max_dec_digits_;
   ObGeoSrid srid_;

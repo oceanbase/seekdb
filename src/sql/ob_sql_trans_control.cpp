@@ -737,7 +737,8 @@ int ObSqlTransControl::stmt_refresh_snapshot(ObExecContext &exec_ctx) {
   const ObPhysicalPlan *plan = plan_ctx->get_phy_plan();
   ObTransService *txs = NULL;
   if (sql::stmt::T_INSERT == plan->get_stmt_type()) {
-    //NOTE: oracle insert and insert all stmt can't see the evaluated results of before stmt trigger, no need to refresh snapshot
+    // INSERT statements do not see the evaluated results of before statement triggers,
+    // so there is no need to refresh the snapshot.
   } else if (OB_FAIL(get_tx_service(session, txs))) {
     LOG_WARN("failed to get transaction service", K(ret));
   } else if (OB_FAIL(stmt_setup_snapshot_(session, das_ctx, plan, plan_ctx, txs, exec_ctx))) {

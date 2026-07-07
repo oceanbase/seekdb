@@ -1283,11 +1283,6 @@ int ObDDLTask::refresh_schema_version()
     if (OB_SCHEMA_EAGAIN != ret) {
       LOG_WARN("check schema version refreshed failed", K(ret), K_(schema_version));
     }
-  } else if (true) {
-  } else if (OB_FAIL(ObDDLUtil::check_schema_version_refreshed(dst_schema_version_))) {
-    if (OB_SCHEMA_EAGAIN != ret) {
-      LOG_WARN("check schema version refreshed failed", K(ret), K_(dst_schema_version));
-    }
   }
   return ret;
 }
@@ -3136,7 +3131,7 @@ int ObDDLTaskRecordOperator::update_consensus_schema_version(
   ObSqlString sql_string;
   int64_t affected_rows = 0;
   if (OB_ISNULL(sql_client.get_pool())
-      || OB_UNLIKELY(task_id <= 0 || false
+      || OB_UNLIKELY(task_id <= 0
                      || consensus_schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(task_id));
@@ -3166,7 +3161,7 @@ int ObDDLTaskRecordOperator::get_schedule_info(
   int ret = OB_SUCCESS;
   ddl_slice_info.reset();
   is_idempotence_mode = false;
-  if (OB_UNLIKELY(!true || task_id <= 0)) {
+  if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_id));
   } else {
@@ -3235,7 +3230,7 @@ int ObDDLTaskRecordOperator::update_schedule_info(
     const ObDDLSliceInfo &ddl_slice_info)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!true || task_id <= 0 || !ddl_slice_info.is_valid())) {
+  if (OB_UNLIKELY(task_id <= 0 || !ddl_slice_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_id), K(ddl_slice_info));
   } else {
@@ -3279,7 +3274,7 @@ int ObDDLTaskRecordOperator::get_or_insert_schedule_info(const int64_t task_id,
   ObMySQLTransaction trans;
   is_idempotent_mode = false;
 
-  if (OB_UNLIKELY(!true || task_id <= 0 || !ddl_slice_info.is_valid())) {
+  if (OB_UNLIKELY(task_id <= 0 || !ddl_slice_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_id), K(ddl_slice_info));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
@@ -3475,7 +3470,7 @@ int ObDDLTaskRecordOperator::get_or_insert_tablet_schedule_info(const int64_t ta
   ObDDLSliceInfo persistent_slice_info;
   bool is_found = false;
   bool is_idempotent_mode = false;
-  if (OB_UNLIKELY(!true || task_id <= 0 || !tablet_id.is_valid() || store_ranges.empty())) {
+  if (OB_UNLIKELY(task_id <= 0 || !tablet_id.is_valid() || store_ranges.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_id), K(tablet_id), K(store_ranges.count()));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
@@ -3959,7 +3954,7 @@ int ObDDLTaskRecordOperator::get_ddl_task_record_by_table_id(const uint64_t tabl
   if (OB_UNLIKELY(!proxy.is_inited())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(proxy.is_inited()));
-  } else if (OB_UNLIKELY(false || table_id <= 0)) {
+  } else if (OB_UNLIKELY(table_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(table_id));
   } else if (OB_FAIL(sql_string.assign_fmt(" SELECT time_to_usec(gmt_create) AS create_time, task_id, object_id, target_object_id, ddl_type, "

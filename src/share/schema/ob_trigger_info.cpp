@@ -108,7 +108,6 @@ void ObTriggerInfo::reset()
 bool ObTriggerInfo::is_valid_for_create() const
 {
   return ObSchema::is_valid() &&
-         true &&
          trigger_type_ != TT_INVALID &&
          trigger_events_.get_value() != 0 &&
          timing_points_.get_value() != 0 &&
@@ -121,7 +120,6 @@ bool ObTriggerInfo::is_valid_for_create() const
 bool ObTriggerInfo::is_valid() const
 {
   return ObSimpleTriggerSchema::is_valid() &&
-//       true &&
          trigger_type_ != TT_INVALID &&
          trigger_events_.get_value() != 0 &&
          timing_points_.get_value() != 0 &&

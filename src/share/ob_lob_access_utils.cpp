@@ -525,13 +525,13 @@ int ObTextStringResult::calc_buffer_len(int64_t res_len)
       buff_len_ = res_len;
     } else if (res_len < OB_MAX_LONGTEXT_LENGTH - MAX_TMP_LOB_HEADER_LEN) {
       // inrow lob with lob header
-      bool has_extern = false; // even oracle may not need extern for temp data
+      bool has_extern = false; // temp data does not need extern flags
       ObMemLobExternFlags extern_flags(has_extern);
       res_len += sizeof(ObLobCommon);
       if (has_extern) {
         buff_len_ = ObLobLocatorV2::calc_locator_full_len(extern_flags, 0, static_cast<uint32_t>(res_len), 0, false);
       } else {
-        buff_len_ = res_len; // for mysql mode temp lob, we can mock it as disk inrow lob
+        buff_len_ = res_len; // temp lob can be mocked as disk inrow lob
       }
     } else {
       ret = OB_NOT_SUPPORTED;
@@ -555,7 +555,7 @@ int ObTextStringResult::fill_temp_lob_header(const int64_t res_len)
   } else if (!(is_lob_storage(type_))) { // do nothing
   } else if (res_len <= OB_MAX_LONGTEXT_LENGTH - MAX_TMP_LOB_HEADER_LEN) {
     ObLobCommon lob_common;
-    // for mysql mode temp lob, we can mock it as disk inrow lob
+    // temp lob can be mocked as disk inrow lob
     MEMCPY(buffer_, &lob_common, sizeof(ObLobCommon));
     pos_ = buff_len_ - res_len; // only res_len could be used later
   } else { // outrow

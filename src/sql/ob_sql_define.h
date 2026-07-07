@@ -48,7 +48,7 @@ const int64_t OB_GET_MACROS_COUNT_BY_QUERY_RANGE = 1;
 const int64_t OB_GET_BLOCK_RANGE = 2;
 const int64_t OB_BROADCAST_THRESHOLD = 100;
 const int64_t OB_PARTITION_COUNT_PRE_SQL = 16; // used for the bucket size of hash table or default size of SEAarry, assuming that general SQL will not exceed 16 partitions
-const int64_t OB_MAX_RECURSIVE_SQL_LEVELS = 50; //compatible with oracle
+const int64_t OB_MAX_RECURSIVE_SQL_LEVELS = 50;
 
 typedef common::ObFixedArray<share::schema::ObSchemaObjVersion, common::ObIAllocator> DependenyTableStore;
 typedef common::ParamStore ParamStore;
@@ -538,8 +538,7 @@ enum DominateRelation
   OBJ_UNCOMPARABLE
 };
 
-// for parallel precedence, refer to
-// https://docs.oracle.com/cd/E11882_01/server.112/e41573/hintsref.htm#PFGRF94937
+// Parallel precedence from low to high.
 enum PXParallelRule
 {
   USE_PX_DEFAULT = 0, // default disable parallel

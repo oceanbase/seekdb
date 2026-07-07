@@ -461,7 +461,7 @@ int ObDynamicPartitionManager::build_high_bound_val_(const int64_t timestamp, Ob
         case ObObjType::ObMySQLDateTimeType:
         case ObObjType::ObTimestampType: {
           int64_t datetime = 0;
-          // ObTimestampType can not cast to oracle time type, so first cast to ObDateTimeType
+          // ObTimestampType can not cast directly to the target time type, so first cast to ObDateTimeType.
           if (OB_FAIL(ObTimeConverter::timestamp_to_datetime(timestamp, time_zone_info_wrap.get_time_zone_info(), datetime))) {
             LOG_WARN("fail to convert timestamp to datetime", KR(ret), K(timestamp));
           } else {
@@ -916,8 +916,7 @@ int ObDynamicPartitionManager::check_expire_time_is_valid_(const ObTableSchema &
 // - option values:
 //   - default: use tenant time zone
 //   - time zone str like +8:00
-// - for mysql TIMESTAMP and BIGINT, oracle TIMESTAMP WITH LOCAL TIME ZONE and NUMBER,
-//   can not specify time_zone
+// - TIMESTAMP, BIGINT, and NUMBER partition keys are stored in UTC and can not specify time_zone
 int ObDynamicPartitionManager::check_time_zone_is_valid_(const ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
@@ -939,7 +938,7 @@ int ObDynamicPartitionManager::check_time_zone_is_valid_(const ObTableSchema &ta
 
 // dynamic partition bigint_precision:
 // - option values: s / ms / us / none
-// - only mysql BIGINT and oracle NUMBER can specify bigint_precision, and it must be specified
+// - only BIGINT and NUMBER partition keys can specify bigint_precision, and it must be specified
 int ObDynamicPartitionManager::check_bigint_precision_is_valid_(const ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
@@ -1275,21 +1274,21 @@ bool ObDynamicPartitionManager::is_int_as_timestamp_(ObObjType type)
 
 bool ObDynamicPartitionManager::is_stored_in_utc_(ObObjType type)
 {
-  return ObObjType::ObTimestampType == type // mysql timestamp
-         || ObObjType::ObIntType == type // mysql bigint
-         || ObObjType::ObNumberType == type; // oracle number
+  return ObObjType::ObTimestampType == type
+         || ObObjType::ObIntType == type
+         || ObObjType::ObNumberType == type;
 }
 
 bool ObDynamicPartitionManager::support_part_key_type_(ObObjType type)
 {
-  return ObObjType::ObDateType == type // mysql date
-         || ObObjType::ObMySQLDateType == type // mysql date
-         || ObObjType::ObDateTimeType == type // oracle date
-         || ObObjType::ObMySQLDateTimeType == type // mysql datetime
-         || ObObjType::ObTimestampType == type // mysql timestamp
-         || ObObjType::ObYearType == type // mysql year
-         || ObObjType::ObIntType == type // mysql bigint
-         || ObObjType::ObNumberType == type; // oracle number
+  return ObObjType::ObDateType == type
+         || ObObjType::ObMySQLDateType == type
+         || ObObjType::ObDateTimeType == type
+         || ObObjType::ObMySQLDateTimeType == type
+         || ObObjType::ObTimestampType == type
+         || ObObjType::ObYearType == type
+         || ObObjType::ObIntType == type
+         || ObObjType::ObNumberType == type;
 }
 
 bool ObDynamicPartitionManager::is_valid_time_unit_(ObObjType type, ObDateUnitType time_unit)

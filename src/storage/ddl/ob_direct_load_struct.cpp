@@ -2897,7 +2897,7 @@ int ObDirectLoadSliceWriter::fill_sstable_slice(
           } else if (OB_UNLIKELY(i >= column_items.count()) || OB_UNLIKELY(!column_items.at(i).is_valid_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("column schema is wrong", K(ret), K(i), K(column_items));
-          } else if (OB_FAIL(ObDASUtils::reshape_datum_value(column_items.at(i).col_type_, column_items.at(i).col_accuracy_, false/*enable_oracle_empty_char_reshape_to_null*/, arena, datum_cell))) {
+          } else if (OB_FAIL(ObDASUtils::reshape_datum_value(column_items.at(i).col_type_, column_items.at(i).col_accuracy_, arena, datum_cell))) {
             LOG_WARN("reshape storage datum failed", K(ret));
           }
         }
@@ -2922,7 +2922,7 @@ int ObDirectLoadSliceWriter::fill_sstable_slice(
           LOG_USER_ERROR(OB_ERR_PRIMARY_KEY_DUPLICATE, "", static_cast<int>(sizeof("UNIQUE IDX") - 1), "UNIQUE IDX");
           (void) report_unique_key_dumplicated(ret, table_id, *cur_row, tablet_direct_load_mgr_->get_tablet_id(), report_ret_code); // ignore ret
           if (OB_ERR_DUPLICATED_UNIQUE_KEY == report_ret_code) {
-            //error message of OB_ERR_PRIMARY_KEY_DUPLICATE is not compatiable with oracle, so use a new error code
+            // Report direct-load unique index conflicts with the dedicated duplicate-key code.
             ret = OB_ERR_DUPLICATED_UNIQUE_KEY;
           }
         } else {
@@ -2991,7 +2991,6 @@ int ObDirectLoadSliceWriter::fill_sstable_slice(
           LOG_WARN("column schema is wrong", K(ret), K(i), K(column_items));
         } else if (OB_FAIL(ObDASUtils::reshape_vector_value(column_items.at(i).col_type_,
                                                             column_items.at(i).col_accuracy_,
-                                                            false,
                                                             arena,
                                                             vector,
                                                             selector))) {
@@ -3021,7 +3020,7 @@ int ObDirectLoadSliceWriter::fill_sstable_slice(
         LOG_USER_ERROR(OB_ERR_PRIMARY_KEY_DUPLICATE, "", static_cast<int>(sizeof("UNIQUE IDX") - 1), "UNIQUE IDX");
         (void) report_unique_key_dumplicated(ret, table_id, datum_rows, tablet_direct_load_mgr_->get_tablet_id(), report_ret_code); // ignore ret
         if (OB_ERR_DUPLICATED_UNIQUE_KEY == report_ret_code) {
-          //error message of OB_ERR_PRIMARY_KEY_DUPLICATE is not compatiable with oracle, so use a new error code
+          // Report direct-load unique index conflicts with the dedicated duplicate-key code.
           ret = OB_ERR_DUPLICATED_UNIQUE_KEY;
         }
       } else {
@@ -4518,7 +4517,7 @@ int ObIvfCenterSliceStore::get_next_vector_data_row(
       } else {
         ObString cid_str(buf_len, 0, buf);
         ObCenterId center_id(tablet_id_.id(), cur_row_pos_ + 1);
-        if (OB_FAIL(ObVectorClusterHelper::set_center_id_to_string(center_id, cid_str))) {
+        if (OB_FAIL(ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, cid_str))) {
           LOG_WARN("failed to set center_id to string", K(ret), K(center_id), K(cid_str));
         } else if (vec_res.length() > lob_inrow_threshold_ || cid_str.length() > lob_inrow_threshold_) {
           ret = OB_ERR_UNEXPECTED;
@@ -4725,7 +4724,7 @@ int ObIvfSq8MetaSliceStore::get_next_vector_data_row(
         ObString cid_str(buf_len, 0, buf);
         // reuse center_id encode, min: 1, max: 2, step: 3
         ObCenterId center_id(tablet_id_.id(), cur_row_pos_ + 1);
-        if (OB_FAIL(ObVectorClusterHelper::set_center_id_to_string(center_id, cid_str))) {
+        if (OB_FAIL(ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, cid_str))) {
           LOG_WARN("failed to set center_id to string", K(ret), K(center_id), K(cid_str));
         } else if (vec_res.length() > lob_inrow_threshold_ || cid_str.length() > lob_inrow_threshold_) {
           ret = OB_ERR_UNEXPECTED;
@@ -4934,7 +4933,7 @@ int ObIvfPqSliceStore::get_next_vector_data_row(
         ObString pq_cid_str(buf_len, 0, buf);
         // row_i = pq_centers[m_id - 1][center_id - 1] since m_id and center_id start from 1
         ObPqCenterId pq_center_id(tablet_id_.id(), cur_row_pos_ / center_count_per_kmeans + 1, cur_row_pos_ % center_count_per_kmeans + 1);
-        if (OB_FAIL(ObVectorClusterHelper::set_pq_center_id_to_string(pq_center_id, pq_cid_str))) {
+        if (OB_FAIL(ObVectorKmeansClusterHelper::set_pq_center_id_to_string(pq_center_id, pq_cid_str))) {
           LOG_WARN("failed to set center_id to string", K(ret), K(pq_center_id), K(pq_cid_str));
         } else if (vec_res.length() > lob_inrow_threshold_ || pq_cid_str.length() > lob_inrow_threshold_) {
           ret = OB_ERR_UNEXPECTED;

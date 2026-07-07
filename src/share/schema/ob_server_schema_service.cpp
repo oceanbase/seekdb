@@ -95,7 +95,7 @@ int ObServerSchemaService::init_tenant_basic_schema()
       LOG_WARN("add sys variable failed", KR(ret));
     } else if (OB_FAIL(fill_all_core_table_schema(*schema_mgr_for_cache))) {
       LOG_WARN("init add core table schema failed", KR(ret));
-    } else if (true) {
+    } else {
       // only sys tenant rely on root user schema
       ObSimpleUserSchema user;
       
@@ -3492,8 +3492,7 @@ int ObServerSchemaService::get_increment_schemas_for_data_dict(
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret), K(start_version));
-  } else if (OB_UNLIKELY(false
-             || start_version <= 0)) {
+  } else if (OB_UNLIKELY(start_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(start_version));
   } else if (OB_FAIL(schema_service_->get_increment_schema_operations(
@@ -3856,9 +3855,6 @@ int ObServerSchemaService::refresh_schema(
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", K(ret));
-  } else if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid schema status", K(ret), K(schema_status));
   } else if (FALSE_IT(schema_mgr_for_cache = ATOMIC_LOAD(&schema_mgr_for_cache_))) {
     LOG_WARN("fail to get schema mgr for cache", K(ret));
   } else if (OB_ISNULL(schema_mgr_for_cache)) {
@@ -4667,23 +4663,11 @@ int ObServerSchemaService::refresh_tenant_full_normal_schema(
           // add sys tenant schema to cache
           if (OB_FAIL(schema_mgr_for_cache->add_tenant(*simple_tenant))) {
             LOG_WARN("add tenant failed", K(ret), K(*simple_tenant));
-          } else if (true) {
+          } else {
             if (OB_FAIL(add_tenant_schema_to_cache(sql_client, schema_version))) {
               LOG_WARN("add tenant schema to cache failed", K(ret), K(schema_version));
             } else if (OB_FAIL(add_sys_variable_schema_to_cache(sql_client, schema_status, schema_version))) {
               LOG_WARN("add sys variable schema to cache failed", K(ret), K(schema_version));
-            }
-          } else {
-            // When the system tenant flashes the DDL of the newly created tenant,
-            // try to initialize the relevant data structure
-            if (OB_FAIL(init_schema_struct())) {
-              LOG_WARN("fail to init schema struct", K(ret), K(schema_status));
-            } else if (OB_FAIL(init_tenant_basic_schema())) {
-              LOG_WARN("fail to init basic schema struct", K(ret), K(schema_status));
-            } else if (OB_FAIL(init_multi_version_schema_struct())) {
-              LOG_WARN("fail to init multi version schema struct", K(ret));
-            } else if (OB_FAIL(publish_schema())) {
-              LOG_WARN("publish_schema failed", KR(ret));
             }
           }
         }

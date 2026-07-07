@@ -311,15 +311,12 @@ int ObDirectoryMgr::get_directory_schemas_in_tenant(common::ObIArray<const ObDir
   ObTenantDirectoryId id(OB_MIN_ID);
   ConstDirectoryIter iter_begin =
       directory_infos_.lower_bound(id, compare_with_tenant_directory_id);
-  bool is_stop = false;
   for (ConstDirectoryIter iter = iter_begin;
-      OB_SUCC(ret) && iter != directory_infos_.end() && !is_stop; ++iter) {
+      OB_SUCC(ret) && iter != directory_infos_.end(); ++iter) {
     const ObDirectorySchema *schema = NULL;
     if (OB_ISNULL(schema = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(schema));
-    } else if (false) {
-      is_stop = true;
     } else if (OB_FAIL(schemas.push_back(schema))) {
       LOG_WARN("push back directory failed", K(ret));
     }

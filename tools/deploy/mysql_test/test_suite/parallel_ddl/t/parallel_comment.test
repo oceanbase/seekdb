@@ -2,7 +2,7 @@
 # owner group: RS
 # tags: rs
 # description:
-# test that the parallel comment is not affect comment in oracle
+# test that the parallel comment does not affect MySQL comments
 
 connect (mysql,$OBMYSQL_MS0,root,,test,$OBMYSQL_PORT);
 

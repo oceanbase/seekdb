@@ -64,7 +64,7 @@ enum StatTableColumnName {
   CH1,       //NULL
   CL1,       //NULL
   BL1 = 30,  //NULL
-  /*!!!!!!!!!above col is compatible oracle 12c and following col is unique to ob!!!!!!!!!!!*/
+  /* columns above are the common stats table layout; following columns are OB-specific */
   OB_SPEC1,  //ob macro block cnt('T') or ob llc bitmap size('C')==> ndv synopsis size
   OB_SPEC2,  //ob micro block cnt('T')
   OB_SPEC3,  //ob llc bitmap('C') ==> ndv synopsis
@@ -150,8 +150,6 @@ private:
   static int do_execute_sql(ObExecContext &ctx,
                             const ObSqlString &delete_sql,
                             const ObSqlString &insert_sql);
-
-  static int create_oracle_stat_table(ObExecContext &ctx, const ObTableStatParam &param);
 
   static int create_mysql_stat_table(ObExecContext &ctx, const ObTableStatParam &param);
 

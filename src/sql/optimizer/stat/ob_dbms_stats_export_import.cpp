@@ -25,15 +25,6 @@ namespace oceanbase {
 using namespace sql;
 namespace common {
 
-#define CREATE_ORACLE_STAT_TABLE "(STATID VARCHAR2(128), TYPE CHAR(1), VERSION NUMBER, FLAGS NUMBER,\
-                            C1 VARCHAR2(128), C2 VARCHAR2(128), C3 VARCHAR2(128), C4 VARCHAR2(128),\
-                            C5 VARCHAR2(128), C6 VARCHAR2(128), N1 NUMBER, N2 NUMBER, N3 NUMBER, \
-                            N4 NUMBER, N5 NUMBER, N6 NUMBER, N7 NUMBER, N8 NUMBER, N9 NUMBER, \
-                            N10 NUMBER, N11	NUMBER, N12	NUMBER, N13	NUMBER, D1 DATE,\
-                            T1 TIMESTAMP(6) WITH TIME ZONE, R1 RAW(1000), R2 RAW(1000),\
-                            R3 RAW(1000), CH1 VARCHAR2(1000), CL1 CLOB, BL1 BLOB, OB_SPEC1 NUMBER,\
-                            OB_SPEC2 NUMBER, OB_SPEC3 VARCHAR(4096))"
-
 #define CREATE_MYSQL_STAT_TABLE "(STATID VARCHAR(128), TYPE CHAR(1), VERSION DECIMAL,FLAGS DECIMAL,\
                                   C1 VARCHAR(128),C2 VARCHAR(128), C3 VARCHAR(128),C4 VARCHAR(128),\
                                   C5 VARCHAR(128), C6 VARCHAR(128), N1 DECIMAL, N2 DOUBLE,\
@@ -90,29 +81,6 @@ int ObDbmsStatsExportImport::create_stat_table(ObExecContext &ctx,
   if (OB_FAIL(create_mysql_stat_table(ctx, param))) {
     LOG_WARN("failed to create mysql stat table", K(ret));
   }
-  return ret;
-}
-
-int ObDbmsStatsExportImport::create_oracle_stat_table(ObExecContext &ctx,
-                                                      const ObTableStatParam &param)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString raw_sql;
-  if (OB_FAIL(raw_sql.append_fmt("CREATE TABLE \"%.*s\".\"%.*s\"",
-                                  param.db_name_.length(), param.db_name_.ptr(),
-                                  param.tab_name_.length(), param.tab_name_.ptr()))) {
-    LOG_WARN("failed to append format", K(ret));
-  } else if (OB_FAIL(raw_sql.append(CREATE_ORACLE_STAT_TABLE))) {
-    LOG_WARN("failed to append format", K(ret));
-  } else if (param.tab_group_.empty() && OB_FAIL(raw_sql.append(";"))) {
-    LOG_WARN("failed to append format", K(ret));
-  } else if (!param.tab_group_.empty() &&
-             OB_FAIL(raw_sql.append_fmt(" tablegroup = '%.*s';",
-                                        param.tab_group_.length(), param.tab_group_.ptr()))) {
-    LOG_WARN("failed to append format", K(ret));
-  } else if (OB_FAIL(do_execute_sql(ctx, raw_sql))) {
-    LOG_WARN("failed to do execute sql", K(ret));
-  } else {/*do nothing*/}
   return ret;
 }
 

@@ -107,7 +107,7 @@ public:
   ObExecContext *exec_ctx_;
   ObIAllocator *allocator_;
   
-  // for CTAS in oracle mode
+  // for CTAS
   bool is_for_ctas_;
   
   // relation context
@@ -719,8 +719,8 @@ public:
 
   /**
    * @brief is_foreign_key_rely
-   * Determine if the foreign key is reliable, check the global variable foreign_key_check in MYSQL mode
-   * Check the enable_flag in foreign key info in ORACLE mode
+   * Determine whether the foreign key is reliable according to
+   * foreign_key_checks, except for mock parent-table foreign keys.
    */
   static int is_foreign_key_rely (ObSQLSessionInfo* session_info,
                                   const share::schema::ObForeignKeyInfo *foreign_key_info,

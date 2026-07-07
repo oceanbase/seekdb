@@ -268,7 +268,7 @@ int ObMajorMergeInfoDetector::can_start_work(bool &can_work)
   } else if ((nullptr == tenant_schema) || !tenant_schema->is_normal()) {
     LOG_INFO("tenant is in abnormal status, no need detect now", KPC(tenant_schema));
     can_work = false;
-  } else if (true) {
+  } else {
     // 3. sys tenant init global stat(snpshot_gc_ts) in ObBootstrap(ObBootstrap::init_global_stat()),
     //    after tenant_state set to normal;
     //    in order to avoid racing, detector will wait, until global_stat init complete;
@@ -336,10 +336,7 @@ int ObMajorMergeInfoDetector::check_tenant_is_restore(
 {
   int ret = OB_SUCCESS;
   is_restore = false;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().check_tenant_is_restore(
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().check_tenant_is_restore(
                      NULL, is_restore))) {
     LOG_WARN("fail to check tenant restore", KR(ret));
   }

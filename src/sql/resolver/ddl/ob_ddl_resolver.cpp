@@ -509,7 +509,7 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
         ObTimeConvertCtx cvrt_ctx(TZ_INFO(session_info_), false);
         ObString time_str(static_cast<int32_t>(def_val->str_len_), def_val->str_value_);
         //if (OB_FAIL(ObTimeConverter::str_to_otimestamp(time_str, cvrt_ctx, tmp_type, ot_data))) {
-        if (OB_FAIL(ObTimeConverter::literal_timestamp_validate_oracle(time_str, cvrt_ctx, value_type, tz_value))) {
+        if (OB_FAIL(ObTimeConverter::validate_literal_timestamp(time_str, cvrt_ctx, value_type, tz_value))) {
           ret = OB_INVALID_DATE_VALUE;
           ObCStringHelper helper;
           LOG_USER_ERROR(OB_INVALID_DATE_VALUE, 9, "TIMESTAMP", helper.convert(time_str));
@@ -525,7 +525,7 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
         ObString time_str(static_cast<int32_t>(def_val->str_len_), def_val->str_value_);
         int64_t time_val = 0;
         ObTimeConvertCtx cvrt_ctx(TZ_INFO(session_info_), false);
-        if (OB_FAIL(ObTimeConverter::literal_date_validate_oracle(time_str, cvrt_ctx, time_val))) {
+        if (OB_FAIL(ObTimeConverter::validate_literal_date(time_str, cvrt_ctx, time_val))) {
           ret = OB_ERR_WRONG_VALUE;
           ObCStringHelper helper;
           LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "DATE", helper.convert(time_str));
@@ -2699,7 +2699,6 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
                                                    column.get_column_name_str(),
                                                    data_type,
                                                    false,
-                                                   false,
                                                    session_info_->get_session_nls_params(),
                                                    enable_decimalint_type,
                                                    enable_mysql_compatible_dates,
@@ -2911,8 +2910,6 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
   }
   return ret;
 }
-
-// only use in oracle mode
 
 int ObDDLResolver::resolve_normal_column_attribute_constr_not_null(ObColumnSchemaV2 &column,
                                                    ParseNode *attr_node,
@@ -4329,8 +4326,6 @@ int ObDDLResolver::check_string_column_length(const ObColumnSchemaV2 &column, co
    * In mysql, char and binary have a maximum length of 255 characters, varchar and varbinary have a maximum length of 65536 bytes
    * varchar(N)&varbinary(N): N represents the number of characters, the upper limit of N depends on the specific character set
    * char(N)&binary(N): N represents the number of characters, the upper limit is 255 characters
-   * oracle
-   * char(N)&raw(N): N represents the number of bytes, the upper limit is 2000 bytes
    */
     const int64_t max_char_length = OB_MAX_CHAR_LENGTH;
     const int64_t data_len = column.get_data_length();
@@ -5121,7 +5116,7 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
           ObAccuracy varchar_accuracy(0);
           column.set_data_type(ObVarcharType);
           column.set_collation_type(session_info->get_local_collation_connection());
-          varchar_accuracy.length_semantics_ = session_info->get_actual_nls_length_semantics();
+          varchar_accuracy.length_semantics_ = session_info->get_actual_length_semantics();
           column.set_accuracy(varchar_accuracy);
         } else {
           column.set_data_type(expr->get_data_type());
@@ -5146,7 +5141,7 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     common::ObObj tmp_dest_obj;
     const ObObj *tmp_res_obj = NULL;
     common::ObObj tmp_dest_obj_null;
-    const bool is_strict = true;//oracle mode
+    const bool is_strict = true;
 
     ObObjType data_type = column.get_data_type();
     const ObAccuracy &accuracy = column.get_accuracy();
@@ -5577,7 +5572,7 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
     common::ObObj tmp_dest_obj;
     const ObObj *tmp_res_obj = NULL;
     common::ObObj tmp_dest_obj_null;
-    const bool is_strict = true;//oracle mode
+    const bool is_strict = true;
 
     ObObjType data_type = column.get_data_type();
     const ObAccuracy &accuracy = column.get_accuracy();
@@ -6482,11 +6477,7 @@ int ObDDLResolver::check_column_in_check_constraint(
         }
         if (OB_SUCC(ret) && !is_dropped) {
           // check whether the constraint should be dropped caused by drop column.
-          // 1. If not null constraint and check constraint rely on one column only,
-          // drop the constraint internally when dropping the related column.
-          // 2. If check constraint rely on more than one column,
-          // drop the constraint internally when dropping all related columns under oracle mode.
-          // can not drop the constraint even all related columns are dropped under mysql mode.
+          // Drop not-null and check constraints that rely on the dropped column only.
           bool need_drop_cst = true;
           if ((*iter)->get_column_cnt() >= 2) {
             need_drop_cst = false;
@@ -6518,7 +6509,7 @@ int ObDDLResolver::check_column_in_check_constraint(
 
   return ret;
 }
-// When the foreign key consists of only one column, Oracle mode allows the foreign key column in the child table to be deleted through alter table
+// Check whether index column lists match.
 
 /* Function: Check if src_list and dest_list are completely matched
    Parameters:
@@ -6660,10 +6651,6 @@ int ObDDLResolver::check_indexes_on_same_cols(const ObTableSchema &table_schema,
   }
   return ret;
 }
-
-// for oracle mode
-// oracle mode considers indexes in the same table to be identical only if the order of columns and the order of each column are consistent
-
 
 // child 5 of root node, resolve index partition node,
 // 1 this index is global, we need to first generate index schema,
@@ -7073,8 +7060,7 @@ int ObDDLResolver::resolve_check_cst_state_node_mysql(
   return ret;
 }
 
-// only use in oracle mode
-// This function will only be used in oracle mode, used for parsing primary key constraints in oracle mode
+// Resolve primary key constraints.
 int ObDDLResolver::resolve_pk_constraint_node(const ParseNode &pk_cst_node,
                                               common::ObString pk_name,
                                               ObSEArray<ObConstraint, 4> &csts)
@@ -7119,7 +7105,7 @@ int ObDDLResolver::resolve_pk_constraint_node(const ParseNode &pk_cst_node,
   }
   if (OB_SUCC(ret)) {
     ObConstraint cst;
-    if (cst_name.length() > OB_MAX_CONSTRAINT_NAME_LENGTH_ORACLE) {
+    if (cst_name.length() > OB_MAX_EXTENDED_CONSTRAINT_NAME_LENGTH) {
       ret = OB_ERR_TOO_LONG_IDENT;
       LOG_WARN("constraint_name length overflow", K(ret), K(cst_name.length()));
     } else {
@@ -7188,8 +7174,8 @@ int ObDDLResolver::resolve_split_partition_range_element(const ParseNode *node,
                "function num", part_func_exprs.count());
     }
   }
-  // This place has no special meaning, it just allows not defining a partition name in Oracle,
-  // But below function's parsing requires the part_name variable, so I arbitrarily added a value
+  // This fallback name is only used because lower-level parsing requires part_name
+  // even when the partition name is omitted.
   ObString part_name;
   for (int i = 0 ; OB_SUCC(ret) && i < node->num_child_; ++i) {
     if (OB_ISNULL(node->children_[i])) {
@@ -7653,7 +7639,6 @@ int ObDDLResolver::resolve_foreign_key_options(const ParseNode *node,
   return ret;
 }
 
-// for oracle mode
 // description: parsing the explicitly declared foreign_key_name when creating a foreign key
 //              When the user does not explicitly create a foreign key constraint name, the system automatically creates a foreign key constraint name for the user
 //
@@ -7929,8 +7914,8 @@ int ObDDLResolver::create_fk_cons_name_automatically(ObString &foreign_key_name)
   bool is_exist = false;
   ObString tmp_table_name;
 
-  if (table_name_.length() > OB_ORACLE_CONS_OR_IDX_CUTTED_NAME_LEN) {
-    if (OB_FAIL(ob_sub_str(*allocator_, table_name_, 0, OB_ORACLE_CONS_OR_IDX_CUTTED_NAME_LEN - 1, tmp_table_name))) {
+  if (table_name_.length() > OB_CONS_OR_IDX_CUTTED_NAME_LEN) {
+    if (OB_FAIL(ob_sub_str(*allocator_, table_name_, 0, OB_CONS_OR_IDX_CUTTED_NAME_LEN - 1, tmp_table_name))) {
       SQL_RESV_LOG(WARN, "failed to cut table to 60 byte", K(ret), K(table_name_));
     }
   } else {
@@ -8132,7 +8117,7 @@ int ObDDLResolver::add_not_null_constraint(ObColumnSchemaV2 &column,
     }
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_UNLIKELY(cst_name.empty() || cst_name.length() > OB_MAX_CONSTRAINT_NAME_LENGTH_ORACLE)) {
+  } else if (OB_UNLIKELY(cst_name.empty() || cst_name.length() > OB_MAX_EXTENDED_CONSTRAINT_NAME_LENGTH)) {
     ret = OB_ERR_TOO_LONG_IDENT;
     LOG_WARN("constraint_name length overflow", K(ret), K(cst_name.length()));
   } else if (OB_FAIL(cst.assign_not_null_cst_column_id(column.get_column_id()))) {
@@ -8737,14 +8722,14 @@ int ObDDLResolver::resolve_partition_hash_or_key(
      * 2. Only defined partition names (explicitly defined)
      *    Generate the corresponding number of partitions according to the defined partition names
      * 3. Used both implicit and explicit definitions simultaneously
-     *    mysql:
-     *      First-level partition: Generate each partition according to the explicitly defined partition names, need to check that the number of explicitly defined partitions equals the number of implicitly defined partitions
-     *      Second-level partition: 1. When second-level partitions are explicitly defined in a template form, simultaneous definition is not allowed
-     *                             2. When second-level partitions are explicitly defined in a non-template form, simultaneous definition is allowed, need to check that the number of explicitly defined partitions equals the number of implicitly defined partitions
-     *    oracle:
-     *      First-level partition: Simultaneous definition is not allowed
-     *      Second-level partition: 1. When second-level partitions are explicitly defined in a template form, simultaneous definition is not allowed
-     *                             2. When second-level partitions are explicitly defined in a non-template form, simultaneous definition is allowed, with the number of explicitly defined partitions as the standard
+     *    First-level partition: Generate each partition according to the explicitly defined partition names,
+     *                           and check that the number of explicitly defined partitions equals the number
+     *                           of implicitly defined partitions.
+     *    Second-level partition: 1. When second-level partitions are explicitly defined in a template form,
+     *                               simultaneous definition is not allowed.
+     *                            2. When second-level partitions are explicitly defined in a non-template form,
+     *                               simultaneous definition is allowed, and the implicitly and explicitly
+     *                               defined partition counts must match.
      * 4. Neither explicitly defined nor implicitly defined
      *    Considered as implicitly defining one partition, i.e., `partitions 1`
      */
@@ -8829,7 +8814,7 @@ int ObDDLResolver::resolve_partition_hash_or_key(
 
 /*
   4.1 Check if interval_expr is an immediate number or not, 1+1 does not count
-  4.2 Whether the type of expr matches col, otherwise ORA-14752
+  4.2 Whether the type of expr matches col
 */
 int ObDDLResolver::resolve_interval_node(ObResolverParams &params,
                                          ParseNode *interval_node,
@@ -8922,7 +8907,7 @@ int ObDDLResolver::resolve_interval_expr_low(ObResolverParams &params,
   int ret = OB_SUCCESS;
   const ObColumnSchemaV2 *col_schema = NULL;
   common::ColumnType col_dt = ObNullType;
-  /* 1. interval partition only supports one partition key otherwise ORA-14750*/
+  /* 1. interval partition only supports one partition key */
   if (OB_SUCC(ret)) {
     if (table_schema.get_partition_key_column_num() > 1) {
       ret = OB_ERR_INTERVAL_CLAUSE_HAS_MORE_THAN_ONE_COLUMN;
@@ -8930,7 +8915,7 @@ int ObDDLResolver::resolve_interval_expr_low(ObResolverParams &params,
     }
   }
 
-  /* 2. interval partition column only supports data types: number, date, float, timestamp. Otherwise ORA-14751 */
+  /* 2. interval partition column only supports data types: number, date, float, timestamp. */
   if (OB_SUCC(ret)) {
     uint64_t col_id = OB_INVALID_ID;
     ObItemType item_type;
@@ -8944,13 +8929,13 @@ int ObDDLResolver::resolve_interval_expr_low(ObResolverParams &params,
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("not support float or double as interval partition column", K(ret), K(col_dt));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "interval partition with float or double type partition column");
-      } else if (false == ObResolverUtils::is_valid_oracle_interval_data_type(col_dt, item_type)) {
+      } else if (false == ObResolverUtils::is_valid_interval_data_type(col_dt, item_type)) {
         ret = OB_ERR_INVALID_DATA_TYPE_INTERVAL_TABLE;
         SQL_RESV_LOG(WARN, "invalid interval column data type", K(ret), K(col_dt));
       }
     }
   }
-  /* 3. The maximum partition cannot be maxvalue. Otherwise ORA-14761 */
+  /* 3. The maximum partition cannot be maxvalue. */
   if (OB_SUCC(ret)) {
     if (OB_SUCC(ret) && transition_expr->get_data_type() == ObMaxType) {
       ret = OB_ERR_MAXVALUE_PARTITION_WITH_INTERVAL;
@@ -8959,7 +8944,7 @@ int ObDDLResolver::resolve_interval_expr_low(ObResolverParams &params,
   }
   /* 4. Check the expression of inteval
     4.1 Check if it is an immediate number, 1+1 does not count
-    4.2 Whether the type of expr matches col, otherwise ORA-14752
+    4.2 Whether the type of expr matches col
   */
   CK (OB_NOT_NULL(col_schema));
   OZ (resolve_interval_node(params, interval_node, col_dt, col_schema->get_accuracy().get_precision(),
@@ -11695,11 +11680,11 @@ int ObTableSchema::check_alter_column_in_index(const ObColumnSchemaV2 &src_colum
   int ret = OB_SUCCESS;
   ObArray<ObColDesc> column_ids;
   const uint64_t column_id = src_column.get_column_id();
-  
+
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
 
   // Vector index dependency validation: （start）
-  // The logical rule is that if a vector index exists on a column, no modifications to the column are allowed. 
+  // The logical rule is that if a vector index exists on a column, no modifications to the column are allowed.
   // To accommodate potential user operations where the data type remains consistent before and after the change,
   // an additional conditional check has been implemented.
   bool is_column_has_vector_index = false;
@@ -11723,7 +11708,7 @@ int ObTableSchema::check_alter_column_in_index(const ObColumnSchemaV2 &src_colum
     if (OB_SUCC(ret) && !is_same_type) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "For columns with vector indexes, altering the column type is");
-      LOG_WARN("column type modification is not supported because it is depended by vector index", 
+      LOG_WARN("column type modification is not supported because it is depended by vector index",
                K(column_id), K(ret), K(src_column.get_data_type()), K(dst_column.get_data_type()));
     }
   }

@@ -325,8 +325,8 @@ int ObDependencyInfo::collect_dep_infos(const ObIArray<ObSchemaObjVersion> &sche
     dep.set_dep_timestamp(-1);
     dep.set_ref_timestamp(s_objs.get_version());
     dep.set_property(property);
-    if (dep_attrs.length() >= OB_MAX_ORACLE_RAW_SQL_COL_LENGTH
-        || dep_reason.length() >= OB_MAX_ORACLE_RAW_SQL_COL_LENGTH) {
+    if (dep_attrs.length() >= OB_MAX_RAW_SQL_COL_LENGTH
+        || dep_reason.length() >= OB_MAX_RAW_SQL_COL_LENGTH) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("dep attrs or dep reason is too long", K(ret),
                K(dep_attrs.length()), K(dep_reason.length()));

@@ -438,7 +438,7 @@ int ObDDLErrorMessageTableOperator::build_ddl_error_message(
     LOG_WARN("invalid arguments", K(ret), K(table_id), K(index_id), K(tmp_ret_code));
   } else {
     if (OB_ERR_PRIMARY_KEY_DUPLICATE == tmp_ret_code) {
-      tmp_ret_code = OB_ERR_DUPLICATED_UNIQUE_KEY;    //error message of OB_ERR_PRIMARY_KEY_DUPLICATE is not compatiable with oracle, so use a new error code
+      tmp_ret_code = OB_ERR_DUPLICATED_UNIQUE_KEY;    // use the dedicated duplicate-key code for unique index build failures
       report_ret_code = tmp_ret_code;
     }
     error_message.ret_code_ = tmp_ret_code;

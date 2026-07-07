@@ -177,7 +177,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
           } else if (OB_FAIL(package_info.set_source(package_block))) {
             LOG_WARN("set package source failed", K(ret));
           } else if (true) {
-            // System tenant is creating system package, environment variables use Oracle tenant's default environment variables
+            // Built-in package exec environment defaults.
             // sql_mode = "PIPES_AS_CONCAT,STRICT_ALL_TABLES,PAD_CHAR_TO_FULL_LENGTH"
             {
               OZ (package_info.set_exec_env(ObString("4194304,45,45,45,")));
@@ -316,7 +316,7 @@ int ObCreatePackageResolver::resolve_invoke_accessible(const ParseNode *package_
           if (has_sp_invoker_clause) {
             ret = OB_ERR_DECL_MORE_THAN_ONCE;
             LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, static_cast<int>(strlen("AUTHID")), "AUTHID");
-            LOG_WARN("PLS-00371: at most one declaration for 'AUTHID' is permitted",
+            LOG_WARN("at most one declaration for 'AUTHID' is permitted",
                       K(ret), K(node->type_), K(has_sp_invoker_clause));
           } else {
             has_sp_invoker_clause = true;
@@ -328,7 +328,7 @@ int ObCreatePackageResolver::resolve_invoke_accessible(const ParseNode *package_
           if (has_accessible_by_clause) {
             ret = OB_ERR_DECL_MORE_THAN_ONCE;
             LOG_USER_ERROR(OB_ERR_DECL_MORE_THAN_ONCE, static_cast<int>(strlen("ACCESSIBLE BY")), "ACCESSIBLE BY");
-            LOG_WARN("PLS-00371: at most one declaration for 'ACCESSIBLE BY' is permitted",
+            LOG_WARN("at most one declaration for 'ACCESSIBLE BY' is permitted",
                       K(ret), K(node->type_), K(has_accessible_by_clause));
           } else {
             has_accessible_by_clause = true;
@@ -620,7 +620,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
             if (package_body_ast.get_serially_reusable()
                 != package_spec_ast.get_serially_reusable()) {
               ret = OB_NOT_SUPPORTED;
-              LOG_WARN("PLS-00709: pragma string must be declared in package specification and body",
+              LOG_WARN("pragma string must be declared in package specification and body",
                        K(ret),
                        K(package_body_ast.get_serially_reusable()),
                        K(package_spec_ast.get_serially_reusable()));
@@ -709,7 +709,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
 
       if (OB_SUCC(ret)) {
         if (OB_UNLIKELY(true)) {
-          // System tenant is creating system package, environment variables use Oracle tenant's default environment variables
+          // Built-in package exec environment defaults.
           // sql_mode = "PIPES_AS_CONCAT,STRICT_ALL_TABLES,PAD_CHAR_TO_FULL_LENGTH"
           {
             OZ (package_info.set_exec_env(ObString("4194304,45,45,45,")));

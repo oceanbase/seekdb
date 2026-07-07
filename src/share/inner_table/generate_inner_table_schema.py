@@ -53,11 +53,11 @@ def is_mysql_virtual_table(table_id):
   table_id = int(table_id)
   return table_id > max_sys_table_id and table_id < max_ob_virtual_table_id
 
-def is_ora_virtual_table(table_id):
+def is_extended_virtual_table(table_id):
   table_id = int(table_id)
   return table_id > max_ob_virtual_table_id and table_id < max_ora_virtual_table_id
 
-def is_ora_sys_view(table_id):
+def is_extended_sys_view(table_id):
   table_id = int(table_id)
   return table_id > max_mysql_sys_view_id and table_id < max_sys_view_id
 
@@ -104,8 +104,6 @@ all_iterate_virtual_tables = []
 all_iterate_private_virtual_tables = []
 all_sqlite_tables = []
 all_sqlite_virtual_tables = []
-all_ora_mapping_virtual_table_org_tables = []
-all_ora_mapping_virtual_tables = []
 real_table_virtual_table_names = []
 cluster_private_tables = []
 core_related_tables = []
@@ -114,7 +112,7 @@ mysql_compat_agent_tables = {}
 column_collation = 'CS_TYPE_INVALID'
 # virtual tables only accessible by sys tenant or sys views.
 restrict_access_virtual_tables = []
-is_oracle_sys_table = False
+is_extended_sys_table = False
 sys_index_tables = []
 copyright = """/*
  * Copyright (c) 2025 OceanBase.
@@ -676,7 +674,7 @@ def add_gm_columns(columns):
 
 def add_column(column, rowkey_id, index_id, part_key_pos, column_id=0, is_hidden='false', is_storing_column='false'):
   global column_collation
-  global is_oracle_sys_table
+  global is_extended_sys_table
   column_name = None
   column_type = None
   column_collation_type = 'CS_TYPE_INVALID';
@@ -731,7 +729,7 @@ def add_column(column, rowkey_id, index_id, part_key_pos, column_id=0, is_hidden
       s = column_type.split(':')
       column_type = 'ObVarcharType'
       column_length = s[1]
-      if True == is_oracle_sys_table:
+      if True == is_extended_sys_table:
         column_precision = 2
       column_collation_type = column_collation;
     elif column_type[:9]  == 'varbinary':
@@ -1172,7 +1170,7 @@ def replace_agent_table_columns_def(columns):
     column[1] = t
     columns[i] = column[0:3] # ignore default value
 
-def __gen_oracle_vt_base_on_mysql(table_id, keywords, table_name_suffix):
+def __gen_agent_vt_base_on_mysql(table_id, keywords, table_name_suffix):
   in_tenant_space = 'in_tenant_space' in keywords and keywords['in_tenant_space']
   is_cluster_private = 'is_cluster_private' in keywords and keywords['is_cluster_private']
   if in_tenant_space and is_cluster_private:
@@ -1182,7 +1180,7 @@ def __gen_oracle_vt_base_on_mysql(table_id, keywords, table_name_suffix):
   new_keywords["table_type"] = 'VIRTUAL_TABLE'
   new_keywords["in_tenant_space"] = True
   new_keywords["table_id"] = table_id
-  new_keywords["database_id"] = "OB_ORA_SYS_DATABASE_ID"
+  new_keywords["database_id"] = "OB_EXTENDED_SYS_DATABASE_ID"
   new_keywords["collation_type"] = "ObCollationType::CS_TYPE_UTF8MB4_BIN"
   name = keywords["table_name"]
   if name.startswith("__all_virtual_") or name.startswith("__all_tenant_virtual"):
@@ -1210,7 +1208,7 @@ def __gen_oracle_vt_base_on_mysql(table_id, keywords, table_name_suffix):
 
 def gen_sys_agent_virtual_table_def(table_id, keywords):
   global all_agent_virtual_tables
-  new_keywords = __gen_oracle_vt_base_on_mysql(table_id, keywords, "_SYS_AGENT")
+  new_keywords = __gen_agent_vt_base_on_mysql(table_id, keywords, "_SYS_AGENT")
   new_keywords["partition_expr"] = []
   new_keywords["partition_columns"] = []
   new_keywords["vtable_route_policy"] = "local"
@@ -1242,48 +1240,12 @@ def __gen_mysql_vt(table_id, keywords, table_name_suffix):
 
 def gen_agent_virtual_table_def(table_id, keywords):
   global all_agent_virtual_tables
-  new_keywords = __gen_oracle_vt_base_on_mysql(table_id, keywords, "_AGENT")
+  new_keywords = __gen_agent_vt_base_on_mysql(table_id, keywords, "_AGENT")
   new_keywords["partition_expr"] = []
   new_keywords["partition_columns"] = []
   if 'vtable_route_policy' in new_keywords:
     del(new_keywords["vtable_route_policy"])
   all_agent_virtual_tables.append(new_keywords)
-  return new_keywords
-
-def gen_oracle_mapping_virtual_table_base_def(table_id, keywords, real_table):
-  if True == real_table:
-    new_keywords = __gen_oracle_vt_base_on_mysql(table_id, keywords, "_REAL_AGENT")
-    new_keywords["is_real_virtual_table"] = True
-  else :
-    new_keywords = __gen_oracle_vt_base_on_mysql(table_id, keywords, "")
-
-  new_keywords["name_postfix"] = "_ORA"
-  new_keywords["partition_expr"] = []
-  if "partition_columns" in new_keywords:
-    new_keywords["partition_columns"] = [ c.upper() for c in new_keywords["partition_columns"] ]
-
-  if True == real_table :
-    new_keywords["mapping_tid"] = table_name2tid(keywords['table_name'])
-    new_keywords["self_tid"] = table_name2tid(new_keywords['table_name'] + new_keywords['name_postfix'])
-    new_keywords["real_vt"] = True
-    real_table_virtual_table_names.append(new_keywords)
-  else :
-    all_ora_mapping_virtual_table_org_tables.append(table_name2tid(keywords['table_name']))
-    all_ora_mapping_virtual_tables.append(table_name2tid(new_keywords['table_name'] + new_keywords['name_postfix']))
-  return new_keywords
-
-def gen_oracle_mapping_virtual_table_def(table_id, keywords):
-  return gen_oracle_mapping_virtual_table_base_def(table_id, keywords, False)
-
-def gen_oracle_mapping_real_virtual_table_def(table_id, keywords):
-  in_tenant_space = 'in_tenant_space' in keywords and keywords['in_tenant_space']
-  if False == in_tenant_space:
-    raise Exception("real table must be tenant space", keywords['rowkey_columns'])
-  is_cluster_private = 'is_cluster_private' in keywords and keywords['is_cluster_private']
-  if True == is_cluster_private:
-    raise Exception("real table must be not cluster_private")
-  new_keywords = gen_oracle_mapping_virtual_table_base_def(table_id, keywords, True)
-
   return new_keywords
 
 def gen_cluster_config_def(table_id, table_name, keywords):
@@ -2361,12 +2323,12 @@ def def_agent_index_table(index_name, index_table_id, index_columns, index_using
   if 'index' in kw:
     raise Exception("should not have index", kw['table_name'])
   if not kw['real_vt']:
-    raise Exception("only support oracle mapping table", kw['table_name'])
+    raise Exception("only support extended mapping table", kw['table_name'])
   if not index_name.endswith('_real_agent'):
     raise Exception("wrong index name", index_name)
   if not index_name.startswith(real_index_name):
     raise Exception("wrong index name", index_name, real_index_name)
-  if not is_ora_virtual_table(index_table_id):
+  if not is_extended_virtual_table(index_table_id):
     raise Exception("index table id is invalid", index_table_id)
   if not kw['base_def_keywords']['table_name'] == real_table_name:
     raise Exception("table name mismatch", kw['base_def_keywords']['table_name'], real_table_name)
@@ -2398,7 +2360,7 @@ def def_agent_index_table(index_name, index_table_id, index_columns, index_using
   real_table_virtual_table_names.append(kw)
 
   #In order to upgrade compatibility, 
-  #the oracle inner table index cannot be added to the schema of the main table following the path of the main table. 
+  #the agent inner table index cannot be added to the schema of the main table following the path of the main table.
   #Only the schema refresh triggered by the creation of the index table can add simple index info, 
   #so the agent table index is not added to the sys index here
 
@@ -2591,7 +2553,7 @@ struct %s {
 
 def kw2schema_version(kw):
   tid = kw['table_id']
-  name_postfix = "_ORACLE" if (is_ora_sys_view(tid) or is_ora_virtual_table(tid)) else ""
+  name_postfix = "_EXTENDED" if (is_extended_sys_view(tid) or is_extended_virtual_table(tid)) else ""
   if 'index_columns' in kw:
     return "OB_IDX_" + str(kw['table_id']) + '_' + kw['index_name'].upper() + name_postfix + "_SCHEMA_VERSION"
   else:
@@ -2654,8 +2616,6 @@ def def_table_schema(**keywords):
   global table_name_postfix_table_names
   global index_name_ids
   global tenant_space_tables
-  global all_ora_mapping_virtual_table_org_tables
-  global all_ora_mapping_virtual_tables
   global tenant_space_table_names
   global only_rs_vtables
   global cluster_distributed_vtables
@@ -2669,7 +2629,7 @@ def def_table_schema(**keywords):
   global cpp_f_tmp
   global all_def_keywords
   global column_collation
-  global is_oracle_sys_table
+  global is_extended_sys_table
   global cluster_private_tables
   global core_related_tables
   global lob_aux_data_def
@@ -2690,7 +2650,7 @@ def def_table_schema(**keywords):
   index_defs = []
   index_def = ''
   calculate_rowkey_column_num(keywords)
-  is_oracle_sys_table = False
+  is_extended_sys_table = False
   column_collation = 'CS_TYPE_INVALID'
 
   ##virtual table will set index_using_type to USING_HASH by default
@@ -2698,13 +2658,13 @@ def def_table_schema(**keywords):
     if 'index_using_type' not in keywords:
       keywords['index_using_type'] = 'USING_HASH'
 
-  if not is_mysql_virtual_table(tid) and not is_ora_virtual_table(tid):
+  if not is_mysql_virtual_table(tid) and not is_extended_virtual_table(tid):
     if 'partition_expr' in keywords and 0 != len(keywords['partition_expr']):
       raise Exception("partition_expr only works for virtual table after 4.0", tid)
     elif 'partition_columns' in keywords and 0 != len(keywords['partition_columns']):
       raise Exception("partition_columns only works for virtual table after 4.0", tid)
 
-  if not is_mysql_virtual_table(tid) and not is_ora_virtual_table(tid):
+  if not is_mysql_virtual_table(tid) and not is_extended_virtual_table(tid):
     if 'partition_expr' in keywords and 0 != len(keywords['partition_expr']):
       raise Exception("partition_expr only works for virtual table after 4.0", tid)
     elif 'partition_columns' in keywords and 0 != len(keywords['partition_columns']):
@@ -2722,7 +2682,7 @@ def def_table_schema(**keywords):
 
   if 'index_name' in keywords:
     print_method_start(keywords['table_name'] + keywords['name_postfix'] + '_' + keywords['index_name'])
-    if True == is_ora_virtual_table(int(keywords['table_id'])):
+    if True == is_extended_virtual_table(int(keywords['table_id'])):
       if 'real_vt' in keywords and True == keywords['real_vt']:
         index_name_ids.append([keywords['index_name'], int(keywords['index_table_id']), keywords['table_name'] + keywords['name_postfix'], keywords['table_id'], keywords['base_table_name'], keywords['base_table_name1']])
       else:
@@ -2748,9 +2708,9 @@ def def_table_schema(**keywords):
   log_debug("\table_id=",  keywords['table_id'], ", table_name=" + keywords['table_name'], ", base_table_name=", keywords['base_table_name'], ", base_table_name1=" + keywords['base_table_name1'], ", base_table_name2=" + keywords['base_table_name2'])
 
   log_debug("\nSTART TO GENERATE: " + keywords['table_name']+ keywords['name_postfix'])
-  if True == is_ora_virtual_table(int(keywords['table_id'])):
+  if True == is_extended_virtual_table(int(keywords['table_id'])):
     column_collation = 'CS_TYPE_UTF8MB4_BIN'
-    is_oracle_sys_table = True
+    is_extended_sys_table = True
   if 'index_name' in keywords:
     local_fields = fields + index_only_fields
   elif is_lob_table(keywords['table_id']):
@@ -2759,10 +2719,10 @@ def def_table_schema(**keywords):
     local_fields = fields
 
   # Generate partition expr for virtual table.
-  # We only support 'partition by hash(addr_to_partition_id(ip, port)) partitions 65536' in mysql mode,
-  # and 'partition by hash(ip, port) partitions 65536' in oracle mode for virtual table.
+  # We support addr_to_partition_id(ip, port) for MySQL virtual tables,
+  # and hash(ip, port) for extended virtual tables.
   table_id = int(keywords['table_id']);
-  if keywords['partition_columns'] and (is_mysql_virtual_table(table_id) or is_ora_virtual_table(table_id)) and False == keywords['is_real_virtual_table']:
+  if keywords['partition_columns'] and (is_mysql_virtual_table(table_id) or is_extended_virtual_table(table_id)) and False == keywords['is_real_virtual_table']:
     cols = keywords['partition_columns']
 
     # vtable with definition of partition_colums must be distributed
@@ -2800,7 +2760,7 @@ def def_table_schema(**keywords):
 
     if 'local' != route_policy and 'distributed' != route_policy and 'only_rs' != route_policy:
       raise Exception("vtable route policy is invalid", route_policy)
-    elif not is_mysql_virtual_table(tid) and not is_ora_virtual_table(tid) and 'local' != route_policy:
+    elif not is_mysql_virtual_table(tid) and not is_extended_virtual_table(tid) and 'local' != route_policy:
       raise Exception("vtabl route policy is only work for virtual table", tid)
     else:
       if 'local' == route_policy or 'only_rs' == route_policy:
@@ -3215,11 +3175,11 @@ private:
       h_f.write(method_name.format(index_l[2].replace('$', '_').strip('_').lower()+'_'+index_l[0].lower(), index_l[2]))
       virtual_table_count = virtual_table_count + 1
   for (table_name, table_id) in new_table_name_postfix_ids:
-    if is_ora_virtual_table(table_id):
+    if is_extended_virtual_table(table_id):
       h_f.write(method_name.format(table_name.replace('$', '_').lower().strip('_'), table_name))
       virtual_table_count = virtual_table_count + 1
   for index_l in new_index_name_ids:
-    if is_ora_virtual_table(index_l[1]):
+    if is_extended_virtual_table(index_l[1]):
       h_f.write(method_name.format(index_l[2].replace('$', '_').strip('_').lower()+'_'+index_l[0].lower(), index_l[2]))
       virtual_table_count = virtual_table_count + 1
   h_f.write("  NULL,};\n\n")
@@ -3255,18 +3215,7 @@ private:
     h_f.write("\n  {0},".format(name))
   h_f.write("  };\n\n")
 
-  # define oracle virtual table mapping oceanbase virtual table, the schema must be same
-  h_f.write("const uint64_t all_ora_mapping_virtual_table_org_tables [] = {")
-  for name in all_ora_mapping_virtual_table_org_tables:
-    h_f.write("\n  {0},".format(name))
-  h_f.write("  };\n\n")
-
-  h_f.write("const uint64_t all_ora_mapping_virtual_tables [] = {")
-  for name in all_ora_mapping_virtual_tables:
-    h_f.write("  {0}\n,".format(name))
-  h_f.write("  };\n\n")
-
-  # define oracle virtual table mapping oceanbase real table, the schema must be same
+  # define extended virtual table mapping oceanbase real table, the schema must be same
   h_f.write("/* start/end_pos is start/end postition for column with tenant id */\n")
   h_f.write("struct VTMapping\n")
   h_f.write("{\n")
@@ -3356,37 +3305,9 @@ static inline bool is_restrict_access_virtual_table(const uint64_t tid)
   h_f.write("  return common::is_virtual_table(tid) && is_tenant_table(tid);\n");
   h_f.write("}\n\n");
 
-  # oracle virtual table get origin table id in oceanbase database
-  h_f.write("static inline uint64_t get_origin_tid_by_oracle_mapping_tid(const uint64_t tid)\n");
-  h_f.write("{\n")
-  h_f.write("  uint64_t org_tid = common::OB_INVALID_ID;\n")
-  h_f.write("  uint64_t idx = common::OB_INVALID_ID;\n")
-  h_f.write("  for (uint64_t i = 0; common::OB_INVALID_ID == idx && i < ARRAYSIZEOF(all_ora_mapping_virtual_tables); ++i) {\n")
-  h_f.write("    if (tid == all_ora_mapping_virtual_tables[i]) {\n")
-  h_f.write("      idx = i;\n")
-  h_f.write("    }\n")
-  h_f.write("  }\n")
-  h_f.write("  if (common::OB_INVALID_ID != idx) {\n")
-  h_f.write("     org_tid = all_ora_mapping_virtual_table_org_tables[idx];\n")
-  h_f.write("  }\n")
-  h_f.write("  return org_tid;\n")
-  h_f.write("}\n\n")
-
-  ## it's oracle virtual table, it's not agent table!!!
-  h_f.write("static inline bool is_oracle_mapping_virtual_table(const uint64_t tid)\n")
-  h_f.write("{\n")
-  h_f.write("  bool is_ora_vt = false;\n")
-  h_f.write("  for (uint64_t i = 0; i < ARRAYSIZEOF(all_ora_mapping_virtual_tables); ++i) {\n")
-  h_f.write("    if (tid == all_ora_mapping_virtual_tables[i]) {\n")
-  h_f.write("      is_ora_vt = true;\n")
-  h_f.write("    }\n")
-  h_f.write("  }\n")
-  h_f.write("  return is_ora_vt;\n")
-  h_f.write("}\n\n")
-
-  ## Mappping oceanbase real table to virtual table in Oracle mode
-  # oracle virtual table get origin table id in oceanbase database
-  ## it's oracle virtual table, it's not agent table!!!
+  ## Mapping oceanbase real table to extended virtual table
+  # extended virtual table get origin table id in oceanbase database
+  ## it's extended virtual table, it's not agent table!!!
   h_f.write("static inline uint64_t get_real_table_mappings_tid(const uint64_t tid)\n");
   h_f.write("{\n")
   h_f.write("  uint64_t org_tid = common::OB_INVALID_ID;\n")
@@ -3401,11 +3322,11 @@ static inline bool is_restrict_access_virtual_table(const uint64_t tid)
   h_f.write("  return org_tid;\n")
   h_f.write("}\n\n")
 
-  h_f.write("static inline bool is_oracle_mapping_real_virtual_table(const uint64_t tid)\n")
+  h_f.write("static inline bool is_real_table_mapping_virtual_table(const uint64_t tid)\n")
   h_f.write("{\n")
   h_f.write("  return common::OB_INVALID_ID != get_real_table_mappings_tid(tid);\n")
   h_f.write("}\n\n")
-  ## end Mapping oceanbase real table to virtual table in Oracle mode
+  ## end mapping oceanbase real table to extended virtual table
 
   h_f.write("static inline void get_real_table_vt_mapping(const uint64_t tid, VTMapping *&vt_mapping)\n");
   h_f.write("{\n")

@@ -184,7 +184,7 @@ void ObGlobalHint::merge_dynamic_sampling_hint(int64_t dynamic_sampling)
   if (dynamic_sampling != UNSET_DYNAMIC_SAMPLING) {
     if (UNSET_DYNAMIC_SAMPLING == dynamic_sampling_ || dynamic_sampling == dynamic_sampling_) {
       dynamic_sampling_ = dynamic_sampling;
-    } else {//conflict will cause reset origin state compatible Oracle.
+    } else {//conflict will reset the original state.
       dynamic_sampling_ = UNSET_DYNAMIC_SAMPLING;
     }
   }

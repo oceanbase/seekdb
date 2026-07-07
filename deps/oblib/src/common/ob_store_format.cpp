@@ -40,19 +40,6 @@ const ObStoreFormatItem ObStoreFormat::store_format_items[OB_STORE_FORMAT_MAX] =
   {"DYNAMIC", "ROW_FORMAT = DYNAMIC", "", ENCODING_ROW_STORE},
   {"COMPRESSED", "ROW_FORMAT = COMPRESSED", "", CS_ENCODING_ROW_STORE},
   {"CONDENSED", "ROW_FORMAT = CONDENSED", "", SELECTIVE_ENCODING_ROW_STORE},
-  {"", "", "", MAX_ROW_STORE},   //reserved for mysql furture
-  {"", "", "", MAX_ROW_STORE},   //reserved for mysql furture
-  {"", "", "", MAX_ROW_STORE},   //reserved for mysql furture
-  {"", "", "", MAX_ROW_STORE},   //reserved for mysql furture
-  {"", "", "", MAX_ROW_STORE},   //reserved for mysql furture
-  //oracle mode
-  {"NOCOMPRESS", "NOCOMPRESS", "none", FLAT_ROW_STORE},
-  {"BASIC", "COMPRESS BASIC", "zstd_1.3.8", FLAT_ROW_STORE},
-  {"OLTP", "COMPRESS FOR OLTP", "zstd_1.3.8", FLAT_ROW_STORE},
-  {"QUERY", "COMPRESS FOR QUERY", "zstd_1.3.8", ENCODING_ROW_STORE}, // default query is high in oracle mode
-  {"ARCHIVE", "COMPRESS FOR ARCHIVE", "zstd_1.3.8", ENCODING_ROW_STORE}, // default archive is low in oracle mode
-  {"QUERY LOW", "COMPRESS FOR QUERY LOW", "zstd_1.3.8", SELECTIVE_ENCODING_ROW_STORE},
-  {"ARCHIVE HIGH", "COMPRESS FOR ARCHIVE HIGH", "zstd_1.3.8", CS_ENCODING_ROW_STORE},
 };
 
 int ObStoreFormat::find_row_store_type(const ObString &row_store, ObRowStoreType &row_store_type)
@@ -108,15 +95,11 @@ int ObStoreFormat::find_store_format_type(const ObString &store_format,
 }
 int ObStoreFormat::find_store_format_type(const ObString &store_format, ObStoreFormatType &store_format_type)
 {
-  return find_store_format_type(store_format, STORE_FORMAT_MYSQL_START, OB_STORE_FORMAT_MAX, store_format_type);
+  return find_store_format_type_mysql(store_format, store_format_type);
 }
 int ObStoreFormat::find_store_format_type_mysql(const ObString &store_format, ObStoreFormatType &store_format_type)
 {
   return find_store_format_type(store_format, STORE_FORMAT_MYSQL_START, OB_STORE_FORMAT_MAX_MYSQL, store_format_type);
-}
-int ObStoreFormat::find_store_format_type_oracle(const ObString &store_format, ObStoreFormatType &store_format_type)
-{
-  return find_store_format_type(store_format, STORE_FORMAT_ORACLE_START, OB_STORE_FORMAT_MAX, store_format_type);
 }
 
 int ObTableStoreFormat::find_table_store_type(const ObString &table_store_format, ObTableStoreType &table_store_type)
@@ -177,4 +160,3 @@ const char *ObLSStoreFormat::to_str() const
 
 }//end namespace common
 }//end namespace oceanbase
-

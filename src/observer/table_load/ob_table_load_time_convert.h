@@ -19,7 +19,7 @@
 #include "common/object/ob_object.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/ob_define.h"
-#include "common/timezone/ob_oracle_format_models.h"
+#include "common/timezone/ob_datetime_format_models.h"
 #include "common/timezone/ob_time_convert.h"
 #include "share/object/ob_obj_cast.h"
 
@@ -33,13 +33,6 @@ public:
   ObTableLoadTimeConverter();
   ~ObTableLoadTimeConverter();
   int init(const ObString &format);
-  int str_to_datetime_oracle(const common::ObString &str, const common::ObTimeConvertCtx &cvrt_ctx,
-                             common::ObDateTime &value) const;
-
-private:
-  int str_to_ob_time(const common::ObString &str, const common::ObTimeConvertCtx &cvrt_ctx,
-                     const common::ObObjType target_type, common::ObTime &ob_time,
-                     common::ObScale &scale) const;
 
 private:
   common::ObSEArray<common::ObDFMElem, common::ObDFMUtil::COMMON_ELEMENT_NUMBER> dfm_elems_;

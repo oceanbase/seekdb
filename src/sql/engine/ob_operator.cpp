@@ -835,7 +835,7 @@ int ObOperator::open()
     /*
         for non-vectorized operator, need set batch size 1;
 
-        case: vectorize.select_basic_vec_oracle
+        case: vectorize.select_basic_vec_mysql
         OceanBase(TEST@TEST)>explain insert into dlt6 select * from dlt4\G
         *************************** 1. row ***************************
         Query Plan: =======================================

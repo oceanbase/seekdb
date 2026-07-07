@@ -52,7 +52,7 @@ struct ObPlParamInfo : public sql::ObParamInfo
                K_(scale),
                K_(type),
                K_(ext_real_type),
-               K_(is_oracle_null_value),
+               K_(is_typed_null_value),
                K_(col_type),
                K_(pl_type),
                K_(udt_id));

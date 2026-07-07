@@ -43,14 +43,14 @@ enum ObMulModeBinType {
 };
 
 static ObMulModeBinType g_mul_mode_tc[] = {
-  MulModeNull, //  M_NULL, // 0 oracle & mysql
+  MulModeNull, //  M_NULL, // 0
   MulModeDecimal, //  M_DECIMAL,
   MulModeInt, //  M_INT,
   MulModeInt, //  M_UINT,
   MulModeDouble, //  M_DOUBLE,
-  MulModeString, //  M_STRING, // 5 oracle & mysql
-  MulModeContainer, //  M_OBJECT, // oracle & mysql
-  MulModeContainer, //  M_ARRAY, // oracle & mysql
+  MulModeString, //  M_STRING, // 5
+  MulModeContainer, //  M_OBJECT
+  MulModeContainer, //  M_ARRAY
   MulModeBoolean, //  M_BOOLEAN,
   MulModeTime, //  M_DATE,
   MulModeTime, //  M_TIME, // 10

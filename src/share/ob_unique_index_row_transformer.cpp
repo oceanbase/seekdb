@@ -30,48 +30,12 @@ int ObUniqueIndexRowTransformer::check_need_shadow_columns(
 {
   int ret = OB_SUCCESS;
   need_shadow_columns = false;
-  if (OB_UNLIKELY(!row.is_valid() || sql_mode > ORACLE_MODE
+  if (OB_UNLIKELY(!row.is_valid() || !is_mysql_compatible(sql_mode)
       || unique_key_cnt <= 0 || unique_key_cnt > row.count_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(row), K(sql_mode), K(unique_key_cnt));
-  } else {
-    if (is_mysql_compatible(sql_mode)) {
-      if (OB_FAIL(check_mysql_need_shadow_columns(row, unique_key_cnt, projector, need_shadow_columns))) {
-        LOG_WARN("fail to check mysql need shadow columns", K(ret));
-      }
-    } else {
-      if (OB_FAIL(check_oracle_need_shadow_columns(row, unique_key_cnt, projector, need_shadow_columns))) {
-        LOG_WARN("fail to check oracle need shadow columns", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObUniqueIndexRowTransformer::check_oracle_need_shadow_columns(
-    const common::ObNewRow &row,
-    const int64_t unique_key_cnt,
-    const common::ObIArray<int64_t> *projector,
-    bool &need_shadow_columns)
-{
-  int ret = OB_SUCCESS;
-  need_shadow_columns = false;
-  if (OB_UNLIKELY(!row.is_valid() || unique_key_cnt <= 0 || unique_key_cnt > row.count_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(row), K(unique_key_cnt));
-  } else {
-    bool is_rowkey_all_null = true;
-    // oracle compatible: when all columns of unique key is null, fill the shadow columns
-    for (int64_t i = 0; OB_SUCC(ret) && i < unique_key_cnt && is_rowkey_all_null; ++i) {
-      const int64_t idx = nullptr == projector ? i : projector->at(i);
-      if (idx >= row.count_) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, idx exceed the row cells count", K(ret), K(idx), K(row));
-      } else {
-        is_rowkey_all_null = row.cells_[idx].is_null();
-      }
-    }
-    need_shadow_columns = is_rowkey_all_null;
+  } else if (OB_FAIL(check_mysql_need_shadow_columns(row, unique_key_cnt, projector, need_shadow_columns))) {
+    LOG_WARN("fail to check mysql need shadow columns", K(ret));
   }
   return ret;
 }
@@ -116,7 +80,7 @@ int ObUniqueIndexRowTransformer::convert_to_unique_index_row(
 {
   int ret = OB_SUCCESS;
   need_shadow_columns = false;
-  if (OB_UNLIKELY(!row.is_valid() || sql_mode > ORACLE_MODE || unique_key_cnt <= 0
+  if (OB_UNLIKELY(!row.is_valid() || !is_mysql_compatible(sql_mode) || unique_key_cnt <= 0
         || shadow_column_cnt <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(row), K(sql_mode), K(unique_key_cnt), K(shadow_column_cnt));
@@ -164,4 +128,3 @@ int ObUniqueIndexRowTransformer::convert_to_unique_index_row(
   }
   return ret;
 }
-

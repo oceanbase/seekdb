@@ -17,8 +17,8 @@ cursor.execute('''create table doc_table(c1 int,
 sql = '''insert into doc_table values
 						(1, '[1,2,3]', "hello world", "oceanbase Elasticsearch database"),
 						(2, '[1,2,1]', "hello world, what is your name", "oceanbase mysql database"),
-						(3, '[1,1,1]', "hello world, how are you", "oceanbase oracle database"),
-						(4, '[1,3,1]', "real world, where are you from", "postgres oracle database"),
+						(3, '[1,1,1]', "hello world, how are you", "oceanbase analytics database"),
+						(4, '[1,3,1]', "real world, where are you from", "postgres analytics database"),
 						(5, '[1,3,2]', "real world, how old are you", "vector search database"),
 						(6, '[2,1,1]', "hello world, where are you from", "starrocks oceanbase database")'''
 cursor.execute(sql)

@@ -98,12 +98,12 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObOpSpec &spec, int64_t &tab
   common::ObIAllocator &allocator = ctx_.get_allocator();
   const ObTableScanSpec &tsc_spec = static_cast<const ObTableScanSpec &>(spec);
   const ObCostTableScanSimpleInfo &cost_tsc_info = tsc_spec.get_est_cost_simple_info();
-  bool is_oracle_agent_table =
-    share::is_oracle_mapping_real_virtual_table(tsc_spec.get_ref_table_id());
+  bool is_real_agent_table =
+    share::is_real_table_mapping_virtual_table(tsc_spec.get_ref_table_id());
   ObQueryRangeArray key_ranges;
   const ObQueryRangeProvider &query_range_provider = tsc_spec.get_query_range_provider();
 
-  if (is_oracle_agent_table || cost_tsc_info.get_is_spatial_index()) {
+  if (is_real_agent_table || cost_tsc_info.get_is_spatial_index()) {
     // step1: calculate query range.
   } else if (query_range_provider.has_range()
              && OB_FAIL(ObSQLUtils::extract_pre_query_range(

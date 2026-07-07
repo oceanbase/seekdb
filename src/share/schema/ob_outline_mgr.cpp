@@ -632,15 +632,12 @@ int ObOutlineMgr::get_outline_schemas_in_tenant(ObIArray<const ObSimpleOutlineSc
   ObTenantOutlineId tenant_outine_id_lower(OB_MIN_ID);
   ConstOutlineIter tenant_outline_begin =
       outline_infos_.lower_bound(tenant_outine_id_lower, compare_with_tenant_outline_id);
-  bool is_stop = false;
   for (ConstOutlineIter iter = tenant_outline_begin;
-      OB_SUCC(ret) && iter != outline_infos_.end() && !is_stop; ++iter) {
+      OB_SUCC(ret) && iter != outline_infos_.end(); ++iter) {
     const ObSimpleOutlineSchema *outline = NULL;
     if (OB_ISNULL(outline = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(outline));
-    } else if (false) {
-      is_stop = true;
     } else if (OB_FAIL(outline_schemas.push_back(outline))) {
       LOG_WARN("push back outline failed", K(ret));
     }
@@ -657,15 +654,12 @@ int ObOutlineMgr::get_outline_schemas_in_database(const uint64_t database_id, Ob
   ObTenantOutlineId tenant_outine_id_lower(OB_MIN_ID);
   ConstOutlineIter tenant_outline_begin =
       outline_infos_.lower_bound(tenant_outine_id_lower, compare_with_tenant_outline_id);
-  bool is_stop = false;
   for (ConstOutlineIter iter = tenant_outline_begin;
-      OB_SUCC(ret) && iter != outline_infos_.end() && !is_stop; ++iter) {
+      OB_SUCC(ret) && iter != outline_infos_.end(); ++iter) {
     const ObSimpleOutlineSchema *outline = NULL;
     if (OB_ISNULL(outline = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(outline));
-    } else if (false) {
-      is_stop = true;
     } else if (outline->get_database_id() != database_id) {
       // do-nothing
     } else if (OB_FAIL(outline_schemas.push_back(outline))) {

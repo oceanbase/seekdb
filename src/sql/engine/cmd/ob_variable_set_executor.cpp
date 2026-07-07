@@ -213,8 +213,6 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
             } else if (OB_ISNULL(sys_var)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("sys_var is NULL", K(ret), K(node.variable_name_));
-            } else if (sys_var->is_oracle_only()) {
-              //ignore set oracle only variables in mysql mode
             } else {
               if (OB_FAIL(check_and_convert_sys_var(
                           ctx, set_var, *sys_var, value_obj, out_obj, is_set_stmt))) {
@@ -622,37 +620,6 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
         extra_var_value.assign(extra_var_value_buf, pos);
         should_update_extra_var = true;
       }
-    } else if (set_var.var_name_ == OB_SV_NLS_DATE_FORMAT
-               || set_var.var_name_ == OB_SV_NLS_TIMESTAMP_FORMAT
-               || set_var.var_name_ == OB_SV_NLS_TIMESTAMP_TZ_FORMAT) {
-      ObString format;
-      if (OB_UNLIKELY(val.is_null_oracle())) {
-        ret = OB_INVALID_DATE_FORMAT;
-        LOG_WARN("date format not recognized", K(ret), K(set_var.var_name_), K(val));
-      } else if (OB_FAIL(val.get_varchar(format))) {
-        LOG_WARN("fail get varchar", K(val), K(ret));
-      } else {
-        int64_t nls_enum = ObNLSFormatEnum::NLS_DATE;
-        ObDTMode mode = DT_TYPE_DATETIME;
-        if (set_var.var_name_ == OB_SV_NLS_TIMESTAMP_FORMAT) {
-          mode |= DT_TYPE_ORACLE;
-          nls_enum = ObNLSFormatEnum::NLS_TIMESTAMP;
-        } else if (set_var.var_name_ == OB_SV_NLS_TIMESTAMP_TZ_FORMAT) {
-          mode |= DT_TYPE_ORACLE;
-          mode |= DT_TYPE_TIMEZONE;
-          nls_enum = ObNLSFormatEnum::NLS_TIMESTAMP_TZ;
-        }
-        ObSEArray<ObDFMElem, ObDFMUtil::COMMON_ELEMENT_NUMBER> dfm_elems;
-        ObFixedBitSet<OB_DEFAULT_BITSET_SIZE_FOR_DFM> elem_flags;
-        //1. parse and check semantic of format string
-        // TODO: support double-quotes in system variable when ob-client support.
-        if (OB_FAIL(ObDFMUtil::parse_datetime_format_string(format, dfm_elems,
-                                                            false /* support double-quotes */))) {
-          LOG_WARN("fail to parse oracle datetime format string", K(ret), K(format));
-        } else if (OB_FAIL(ObDFMUtil::check_semantic(dfm_elems, elem_flags, mode))) {
-          LOG_WARN("check semantic of format string failed", K(ret), K(format));
-        }
-      }
     } else if (set_var.var_name_ == OB_SV_LOG_LEVEL) {
       ObString log_level;
       if (OB_FAIL(val.get_varchar(log_level))) {
@@ -861,39 +828,6 @@ int ObVariableSetExecutor::check_and_convert_sys_var(ObExecContext &ctx,
       LOG_USER_ERROR(OB_ERR_WRONG_TYPE_FOR_VAR, set_var.var_name_.length(), set_var.var_name_.ptr());
     } else {
       LOG_WARN("fail to check value", K(ret));
-    }
-  }
-
-  //do not support modify now
-  if (OB_FAIL(ret)) {
-  } else if (set_var.var_name_.prefix_match("nls_")) {
-    static const common::ObString DEFAULT_VALUE_LANGUAGE("AMERICAN");
-    static const common::ObString DEFAULT_VALUE_TERRITORY("AMERICA");
-    static const common::ObString DEFAULT_VALUE_SORT("BINARY");
-    static const common::ObString DEFAULT_VALUE_COMP("BINARY");
-    static const common::ObString DEFAULT_VALUE_NCHAR_CHARACTERSET("AL32UTF8");
-    static const common::ObString DEFAULT_VALUE_DATE_LANGUAGE("AMERICAN");
-    static const common::ObString DEFAULT_VALUE_NCHAR_CONV_EXCP("FALSE");
-    static const common::ObString DEFAULT_VALUE_CALENDAR("GREGORIAN");
-    static const common::ObString DEFAULT_VALUE_NUMERIC_CHARACTERS(".,");
-
-    const ObString new_value = out_val.get_string();
-    if ((set_var.var_name_ == OB_SV_NLS_LANGUAGE && new_value.case_compare(DEFAULT_VALUE_LANGUAGE) != 0)
-        || (set_var.var_name_ == OB_SV_NLS_TERRITORY && new_value.case_compare(DEFAULT_VALUE_TERRITORY) != 0)
-        || (set_var.var_name_ == OB_SV_NLS_SORT && new_value.case_compare(DEFAULT_VALUE_SORT) != 0)
-        || (set_var.var_name_ == OB_SV_NLS_COMP && new_value.case_compare(DEFAULT_VALUE_COMP) != 0)
-        || (set_var.var_name_ == OB_SV_NLS_CHARACTERSET) // do not allow modification of charset
-        || (set_var.var_name_ == OB_SV_NLS_NCHAR_CHARACTERSET && new_value.case_compare(DEFAULT_VALUE_NCHAR_CHARACTERSET) != 0)
-        || (set_var.var_name_ == OB_SV_NLS_DATE_LANGUAGE && new_value.case_compare(DEFAULT_VALUE_DATE_LANGUAGE) != 0)
-        || (set_var.var_name_ == OB_SV_NLS_NCHAR_CONV_EXCP && new_value.case_compare(DEFAULT_VALUE_NCHAR_CONV_EXCP) != 0)
-        || (set_var.var_name_ == OB_SV_NLS_CALENDAR && new_value.case_compare(DEFAULT_VALUE_CALENDAR) != 0)
-        || (set_var.var_name_ == OB_SV_NLS_NUMERIC_CHARACTERS && new_value.case_compare(DEFAULT_VALUE_NUMERIC_CHARACTERS) != 0)) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support modify this variables now", K(set_var), K(new_value), K(ret));
-      char buf[128];
-      databuff_printf(buf, sizeof(buf), "modify NLS data %.*s",
-          set_var.var_name_.length(), set_var.var_name_.ptr());
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, buf);
     }
   }
 

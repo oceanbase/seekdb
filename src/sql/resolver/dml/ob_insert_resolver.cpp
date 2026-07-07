@@ -65,7 +65,7 @@ int ObInsertResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(parse_tree.children_[REPLACE_NODE])) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid node for is_replacement", K(parse_tree.children_[1]));
-  } else { // TODO:@webber.wb replace how oracle handles trigger
+  } else {
     insert_stmt->set_replace(parse_tree.children_[REPLACE_NODE]->type_ == T_REPLACE);
     session_info_->set_ignore_stmt(NULL != parse_tree.children_[IGNORE_NODE] ? true : false);
     insert_stmt->set_ignore(NULL != parse_tree.children_[IGNORE_NODE] ? true : false);
@@ -448,8 +448,8 @@ int ObInsertResolver::resolve_insert_field(const ParseNode &insert_into, TableIt
   ObSelectStmt *ref_stmt = NULL;
   CK(OB_NOT_NULL(insert_stmt));
   CK(OB_NOT_NULL(table_node = insert_into.children_[0]));
-  //resolve insert table
-  //oracle mode allow to use insert subquery... => eg:insert into (select * from t1)v values(1,2,3);
+  // Resolve insert table. The grammar may provide an insert subquery target,
+  // e.g. insert into (select * from t1) v values(1,2,3).
   const bool old_flag = session_info_->is_table_name_hidden();
   session_info_->set_table_name_hidden(session_info_->get_ddl_info().is_ddl()
                                         && session_info_->get_ddl_info().is_dest_table_hidden());

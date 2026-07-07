@@ -1147,7 +1147,7 @@ TEST_F(TestJsonBase, test_seek)
   ASSERT_EQ(0, strncmp("true", j_buf.ptr(), j_buf.length()));
 }
 
-TEST_F(TestJsonBase, test_oracle_seek)
+TEST_F(TestJsonBase, test_sql_json_seek)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
   ObIJsonBase *j_tree = NULL;
@@ -2552,8 +2552,8 @@ TEST_F(TestJsonBase, test_calc_json_hash_value)
       ObJsonInType::JSON_TREE, ObJsonInType::JSON_TREE, j_tree));
   ASSERT_EQ(OB_SUCCESS, j_tree->calc_json_hash_value(1243323423, NULL, hash_value));
   // Expected value refreshed: the JSON hash is built over ObNumber digit bytes,
-  // whose byte representation shifted with upstream number-lib changes (oracle
-  // removal). The hash function itself is unchanged and tree/bin still agree.
+  // whose byte representation shifted with upstream number-lib changes during
+  // compatibility-mode cleanup. The hash function itself is unchanged and tree/bin still agree.
   ASSERT_EQ(16752217185189781444ULL, hash_value);
 
   // test json bin

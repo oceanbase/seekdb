@@ -180,10 +180,7 @@ int ObMajorFreezeHelper::check_tenant_is_restore(
   int ret = OB_SUCCESS;
   is_restore = false;
 
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().check_tenant_is_restore(NULL, is_restore))) {
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().check_tenant_is_restore(NULL, is_restore))) {
     LOG_WARN("fail to check tenant restore", KR(ret));
   }
   return ret;
@@ -415,61 +412,56 @@ int ObMajorFreezeHelper::do_tenant_admin_merge(
 int ObMajorFreezeHelper::do_one_tenant_admin_merge(const obcall::ObTenantAdminMergeType &admin_type)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(admin_type));
-  } else {
-    // RPC removed: leader is self on single replica; dispatch in-process.
-    // Mirrors ObTenantAdminMergeP::process local logic.
-    ret = ex_rpc::sync_call([&]() -> int {
-      int ret = OB_SUCCESS;
-      MOD_SCOPE {
-        ObPrimaryMajorFreezeService *primary_service = nullptr;
-        ObRestoreMajorFreezeService *restore_service = nullptr;
-        ObMajorFreezeService *major_freeze_service = nullptr;
-        bool is_primary_service = true;
-        if (OB_ISNULL(primary_service = share::g_mp->primary_major_freeze_service())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("major_freeze_service is nullptr", K(ret));
-        } else if (OB_ISNULL(restore_service = share::g_mp->restore_major_freeze_service())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("restore_major_freeze_service is nullptr", KR(ret));
-        } else if (OB_FAIL(ObMajorFreezeUtil::get_major_freeze_service(primary_service,
-            restore_service, major_freeze_service, is_primary_service))) {
-          LOG_WARN("fail to get major freeze service", KR(ret));
-        } else if (OB_ISNULL(major_freeze_service)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("major_freeze_service is null", KR(ret));
-        } else {
-          switch (admin_type) {
-            case obcall::ObTenantAdminMergeType::SUSPEND_MERGE:
-              if (OB_FAIL(major_freeze_service->suspend_merge())) {
-                LOG_WARN("fail to suspend merge", KR(ret), K(is_primary_service));
-              }
-              break;
-            case obcall::ObTenantAdminMergeType::RESUME_MERGE:
-              if (OB_FAIL(major_freeze_service->resume_merge())) {
-                LOG_WARN("fail to resume merge", KR(ret), K(is_primary_service));
-              }
-              break;
-            case obcall::ObTenantAdminMergeType::CLEAR_MERGE_ERROR:
-              if (OB_FAIL(major_freeze_service->clear_merge_error())) {
-                LOG_WARN("fail to clear merge error", KR(ret), K(is_primary_service));
-              }
-              break;
-            default:
-              break;
-          }
-          if (OB_SUCC(ret)) {
-            LOG_INFO("succ to execute tenant admin merge", K(admin_type), K(is_primary_service));
-          }
+  // RPC removed: leader is self on single replica; dispatch in-process.
+  // Mirrors ObTenantAdminMergeP::process local logic.
+  ret = ex_rpc::sync_call([&]() -> int {
+    int ret = OB_SUCCESS;
+    MOD_SCOPE {
+      ObPrimaryMajorFreezeService *primary_service = nullptr;
+      ObRestoreMajorFreezeService *restore_service = nullptr;
+      ObMajorFreezeService *major_freeze_service = nullptr;
+      bool is_primary_service = true;
+      if (OB_ISNULL(primary_service = share::g_mp->primary_major_freeze_service())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("major_freeze_service is nullptr", K(ret));
+      } else if (OB_ISNULL(restore_service = share::g_mp->restore_major_freeze_service())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("restore_major_freeze_service is nullptr", KR(ret));
+      } else if (OB_FAIL(ObMajorFreezeUtil::get_major_freeze_service(primary_service,
+          restore_service, major_freeze_service, is_primary_service))) {
+        LOG_WARN("fail to get major freeze service", KR(ret));
+      } else if (OB_ISNULL(major_freeze_service)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("major_freeze_service is null", KR(ret));
+      } else {
+        switch (admin_type) {
+          case obcall::ObTenantAdminMergeType::SUSPEND_MERGE:
+            if (OB_FAIL(major_freeze_service->suspend_merge())) {
+              LOG_WARN("fail to suspend merge", KR(ret), K(is_primary_service));
+            }
+            break;
+          case obcall::ObTenantAdminMergeType::RESUME_MERGE:
+            if (OB_FAIL(major_freeze_service->resume_merge())) {
+              LOG_WARN("fail to resume merge", KR(ret), K(is_primary_service));
+            }
+            break;
+          case obcall::ObTenantAdminMergeType::CLEAR_MERGE_ERROR:
+            if (OB_FAIL(major_freeze_service->clear_merge_error())) {
+              LOG_WARN("fail to clear merge error", KR(ret), K(is_primary_service));
+            }
+            break;
+          default:
+            break;
+        }
+        if (OB_SUCC(ret)) {
+          LOG_INFO("succ to execute tenant admin merge", K(admin_type), K(is_primary_service));
         }
       }
-      return ret;
-    });
+    }
+    return ret;
+  });
 
-    LOG_INFO("finish to do tenant admin mrege", K(admin_type), KR(ret));
-  }
+  LOG_INFO("finish to do tenant admin mrege", K(admin_type), KR(ret));
   return ret;
 }
 
@@ -488,7 +480,7 @@ int ObMajorFreezeHelper::get_frozen_status(
   int ret = OB_SUCCESS;
   share::ObFreezeInfoProxy freeze_info_proxy{};
 
-  if (OB_ISNULL(proxy) || !true) {
+  if (OB_ISNULL(proxy)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid GCTX", KR(ret));
   } else if (OB_FAIL(freeze_info_proxy.get_freeze_info(*proxy, frozen_scn, frozen_status))) {
@@ -540,7 +532,7 @@ int ObMajorFreezeHelper::add_user_warning(const char *buf)
   int ret = OB_SUCCESS;
   const int64_t MAX_WARNING_LEN = 1000;
   char warn_buf[1024] = { 0 };
-  if (OB_UNLIKELY(!true) || OB_ISNULL(buf)) {
+  if (OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(buf));
   } else if (STRLEN(buf) > MAX_WARNING_LEN) {

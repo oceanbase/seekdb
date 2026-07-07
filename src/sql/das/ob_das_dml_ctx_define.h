@@ -147,7 +147,7 @@ protected:
   ObDASDMLBaseRtDef(ObDASOpType op_type)
     : ObDASBaseRtDef(op_type),
       timeout_ts_(-1),
-      sql_mode_(DEFAULT_OCEANBASE_MODE),
+      sql_mode_(DEFAULT_MYSQL_MODE),
       prelock_(false),
       tenant_schema_version_(0),
       is_for_foreign_key_check_(false),

@@ -1220,7 +1220,7 @@ int ObSkipRateSamplePrefs::check_pref_value_validity(ObTableStatParam *param/*de
 
 #define ISSPACE(c) ((c) == ' ' || (c) == '\n' || (c) == '\r' || (c) == '\t' || (c) == '\f' || (c) == '\v')
 
-//compatible oracle, global prefs/schema prefs just only can set "for all columns...."
+// Global and schema method_opt preferences can only use "for all columns..." values.
 int ObMethodOptPrefs::check_global_method_opt_prefs_value_validity(ObString &method_opt_val)
 {
   int ret = OB_SUCCESS;

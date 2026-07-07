@@ -36,7 +36,7 @@ class ObTimeZoneInfo;
 class ObOTimestampData;
 struct ObTimeConstStr;
 class ObDataTypeCastParams;
-struct ObOracleTimeLimiter;
+struct ObDFMTimeLimiter;
 class ObObj;
 class ObDFMElem;
 class ObDFMFlag;
@@ -55,16 +55,16 @@ class ObFixedBitSet;
 #define DT_WEEK_GE_4_BEGIN  (1UL << 7)  // week which has 4 or more days is week 1, otherwise has
                                         // the first sunday of monday.
 
-#define DT_TYPE_ORACLE      (1UL << 8)  //oracle timestamp to nanosecond (nano, tz, ltz)
+#define DT_TYPE_NANOSECOND      (1UL << 8)  // nanosecond timestamp precision (nano, tz, ltz)
 #define DT_TYPE_STORE_UTC   (1UL << 9)  //store utc  (tz, ltz)
-#define DT_TYPE_TIMEZONE    (1UL << 10) //oracle timestamp with time zone (tz)
+#define DT_TYPE_TIMEZONE    (1UL << 10) // timestamp with time zone (tz)
 #define DT_MODE_MYSQL_DATES (1UL << 11) // mysql compatible dates
 
 typedef uint64_t ObDTMode;
 
 #define DT_TYPE_DATETIME          (DT_TYPE_DATE | DT_TYPE_TIME)
-#define DT_TYPE_ORACLE_TIMESTAMP  (DT_TYPE_DATETIME | DT_TYPE_ORACLE)
-#define DT_TYPE_ORACLE_TTZ        (DT_TYPE_DATETIME | DT_TYPE_ORACLE | DT_TYPE_TIMEZONE)
+#define DT_TYPE_NANO_TIMESTAMP  (DT_TYPE_DATETIME | DT_TYPE_NANOSECOND)
+#define DT_TYPE_NANO_TTZ        (DT_TYPE_DATETIME | DT_TYPE_NANOSECOND | DT_TYPE_TIMEZONE)
 #define DT_TYPE_MYSQL_DATE        (DT_TYPE_DATE | DT_MODE_MYSQL_DATES)
 #define DT_TYPE_MYSQL_DATETIME    (DT_TYPE_DATETIME | DT_MODE_MYSQL_DATES)
 #define DT_TYPE_CNT               (5)
@@ -77,7 +77,7 @@ typedef uint64_t ObDTMode;
 #define IS_SUN_BEGIN(mode)      ((DT_WEEK_SUN_BEGIN & (mode)) ? 1 : 0)
 #define IS_ZERO_BEGIN(mode)     ((DT_WEEK_ZERO_BEGIN & (mode)) ? 1 : 0)
 #define IS_GE_4_BEGIN(mode)     ((DT_WEEK_GE_4_BEGIN & (mode)) ? 1 : 0)
-#define HAS_TYPE_ORACLE(mode)   ((DT_TYPE_ORACLE & (mode)) ? 1 : 0)
+#define HAS_TYPE_NANOSECOND(mode)   ((DT_TYPE_NANOSECOND & (mode)) ? 1 : 0)
 #define HAS_TYPE_TIMEZONE(mode) ((DT_TYPE_TIMEZONE & (mode)) ? 1 : 0)
 #define HAS_TYPE_STORE_UTC(mode) ((DT_TYPE_STORE_UTC & (mode)) ? 1 : 0)
 #define IS_MYSQL_COMPAT_DATES(mode) ((DT_MODE_MYSQL_DATES & (mode)) ? 1 : 0)
@@ -86,7 +86,7 @@ typedef uint64_t ObDTMode;
 #define TIME_PART_CNT   4
 #define OTHER_PART_CNT  4
 #define DATETIME_PART_CNT     (DATE_PART_CNT + TIME_PART_CNT)
-#define ORACLE_DATE_PART_CNT  (DATE_PART_CNT + TIME_PART_CNT - 1)
+#define DATETIME_NO_FRACTION_PART_CNT  (DATE_PART_CNT + TIME_PART_CNT - 1)
 #define TOTAL_PART_CNT        (DATETIME_PART_CNT + OTHER_PART_CNT)
 #define DT_YEAR   0
 #define DT_MON    1
@@ -163,7 +163,6 @@ extern const int64_t USECS_PER_MIN;
 #define MYSQL_DATETIME_MIN_VAL  0 // '0000-00-00 00:00:00.000000'
 #define MYSQL_TIMESTAMP_MAX_VAL 253402214399999999
 #define MYSQL_TIMESTAMP_MIN_VAL -62167046400000000
-#define ORACLE_DATETIME_MIN_VAL -62135596800000000 //start from '0001-1-1 00:00:00'
 #define TIME_MAX_HOUR 838
 #define TIME_MAX_VAL (3020399 * 1000000LL)    // 838:59:59.
 
@@ -279,7 +278,7 @@ public:
   // minute:  [0, 59].
   // second:  [0, 59].
   // usecond: [0, 1000000], 1000000 can only valid after str_to_ob_time, for round.
-    // nanosecond: [0, 1000000000], when HAS_TYPE_ORACLE(mode_)
+  // nanosecond: [0, 1000000000], when HAS_TYPE_NANOSECOND(mode_)
   // date: date value, day count since 1970-1-1.
   // year day: [1, 366].
   // week day: [1, 7], 1 means monday, 7 means sunday.
@@ -311,17 +310,17 @@ struct ObTimeConvertCtx
 {
   ObTimeConvertCtx(const ObTimeZoneInfo *tz_info, const bool is_timestamp, const bool &need_truncate = false)
      :tz_info_(tz_info),
-      oracle_nls_format_(),
+      nls_format_(),
       is_timestamp_(is_timestamp),
       need_truncate_(need_truncate),
       date_sql_mode_(0) {}
-  ObTimeConvertCtx(const ObTimeZoneInfo *tz_info, const ObString &oracle_nls_format, const bool is_timestamp)
+  ObTimeConvertCtx(const ObTimeZoneInfo *tz_info, const ObString &nls_format, const bool is_timestamp)
      :tz_info_(tz_info),
-      oracle_nls_format_(oracle_nls_format),
+      nls_format_(nls_format),
       is_timestamp_(is_timestamp),
       date_sql_mode_(0) {}
   const ObTimeZoneInfo *tz_info_;
-  ObString oracle_nls_format_;
+  ObString nls_format_;
   bool is_timestamp_; //means mysql timestamp?
   bool need_truncate_;
   ObDateSqlMode date_sql_mode_;
@@ -390,15 +389,15 @@ public:
   static int int_to_mdate(int64_t int64, ObMySQLDate &value, const ObDateSqlMode date_sql_mode);
   static int int_to_time(int64_t int64, int64_t &value);
   static int int_to_year(int64_t int64, uint8_t &value);
-  static int literal_date_validate_oracle(const ObString &str, const ObTimeConvertCtx &cvrt_ctx, ObDateTime &value);
-  static int literal_timestamp_validate_oracle(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
-                                               ObObjType &obj_type, ObOTimestampData &value);
+  static int validate_literal_date(const ObString &str, const ObTimeConvertCtx &cvrt_ctx, ObDateTime &value);
+  static int validate_literal_timestamp(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
+                                        ObObjType &obj_type, ObOTimestampData &value);
   static int str_to_datetime(const ObString &str, const ObTimeConvertCtx &cvrt_ctx, int64_t &value,
                              int16_t *scale = NULL, const ObDateSqlMode date_sql_mode = 0);
   static int str_to_mdatetime(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
                              ObMySQLDateTime &value, int16_t *scale = NULL,
                              const ObDateSqlMode date_sql_mode = 0);
-  static int str_to_date_oracle(const ObString &str, const ObTimeConvertCtx &cvrt_ctx, ObDateTime &value);
+  static int str_to_date_by_format_model(const ObString &str, const ObTimeConvertCtx &cvrt_ctx, ObDateTime &value);
   static int str_to_datetime_format(const ObString &str, const ObString &fmt,
                                     const ObTimeConvertCtx &cvrt_ctx, int64_t &value,
                                     int16_t *scale, const ObDateSqlMode date_sql_mode);
@@ -537,15 +536,15 @@ public:
   static int str_to_ob_time_without_date(const ObString &str, ObTime &ob_time, int16_t *scale = NULL, const bool &need_truncate = false);
   static int str_to_ob_time_format(const ObString &str, const ObString &fmt, ObTime &ob_time,
                                    int16_t *scale, const ObDateSqlMode date_sql_mode);
-  static int str_to_ob_time_oracle_dfm(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
-                                       const ObObjType target_type, ObTime &ob_time, ObScale &scale);
+  static int str_to_ob_time_by_format_model(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
+                                            const ObObjType target_type, ObTime &ob_time, ObScale &scale);
   static int str_to_ob_time_by_dfm_elems(const ObString &str,
                                          const ObIArray<ObDFMElem> &format_elems,
                                          const ObFixedBitSet<OB_DEFAULT_BITSET_SIZE_FOR_DFM> &elem_flags,
                                          const ObTimeConvertCtx &cvrt_ctx,
                                          const ObObjType target_type, ObTime &ob_time, ObScale &scale);
 
-  static int str_to_ob_time_oracle_strict(const ObString &str, const ObTimeConvertCtx &cvrt_ctx, const bool is_timestamp_literal, ObTime &ob_time, ObScale &scale);
+  static int str_to_ob_time_by_literal_format(const ObString &str, const ObTimeConvertCtx &cvrt_ctx, const bool is_timestamp_literal, ObTime &ob_time, ObScale &scale);
   static int calc_date_with_year_week_wday(const ObYearWeekWdayElems &elements, ObTime &ot);
   static int handle_year_week_wday(const ObYearWeekWdayElems &elements, ObTime &ot);
   static int str_to_ob_interval(const ObString &str, ObDateUnitType unit_type, ObInterval &ob_interval);
@@ -565,15 +564,15 @@ public:
   static int64_t ob_time_to_int_extract(const ObTime &ob_time, ObDateUnitType unit_type);
   static int ob_time_to_str(const ObTime &ob_time, ObDTMode mode, int16_t scale,
                             char *buf, int64_t buf_len, int64_t &pos, const bool with_delim);
-  static bool valid_oracle_year(const ObTime &ob_time);
-  static int ob_time_to_str_oracle_dfm(const ObTime &ob_time, ObScale scale, const ObString &format,
-                                       char *buf, int64_t buf_len, int64_t &pos);
+  static bool valid_timestamp_year_range(const ObTime &ob_time);
+  static int ob_time_to_str_by_format_model(const ObTime &ob_time, ObScale scale, const ObString &format,
+                                            char *buf, int64_t buf_len, int64_t &pos);
   static int ob_time_to_str_by_dfm_elems(const ObTime &ob_time, ObScale scale,
                                          const ObIArray<ObDFMElem> &format_elems,
                                          const ObString &format,
                                          char *buf, int64_t buf_len, int64_t &pos);
-  static int deduce_max_len_from_oracle_dfm(const ObString &format,
-                                            int64_t &max_char_len);
+  static int deduce_max_len_from_datetime_format(const ObString &format,
+                                                 int64_t &max_char_len);
   static int ob_time_to_str_format(const ObTime &ob_time, const ObString &format,
                                    char *buf, int64_t buf_len, int64_t &pos, bool &res_null,
                                    const ObString &locale_name);
@@ -611,9 +610,9 @@ public:
                                const ObTimeZoneInfo *tz_info,
                                const ObOTimestampData &ot_data,
                                const int8_t &scale);
-  static int validate_oracle_date(const ObTime &ob_time);
+  static int validate_datetime_parts(const ObTime &ob_time);
 
-  //oracle interval functions
+  // interval functions
   static int data_fmt_nd(char *buffer, int64_t buf_len, int64_t &pos, const int64_t n, int64_t target, bool has_fm_flag = false);
   static int data_fmt_d(char *buffer, int64_t buf_len, int64_t &pos, int64_t target);
   static int data_fmt_s(char *buffer, int64_t buf_len, int64_t &pos, const char *ptr);
@@ -629,7 +628,7 @@ public:
                       WeekType &week, int8_t &delta);
 public:
   template <typename T>
-  static int parse_date_usec(T value, int64_t tz_offset, bool is_oracle, DateType &date, UsecType &usec) {
+  static int parse_date_usec(T value, int64_t tz_offset, bool preserve_zero_datetime, DateType &date, UsecType &usec) {
     date = usec = 0;
     return OB_ERR_DATETIME_INTERVAL_INTERNAL_ERROR;
   }
@@ -653,8 +652,8 @@ public:
   {
     return (ZERO_DATE == value) || (ZERO_DATETIME == value);
   }
-  static int get_oracle_err_when_datetime_out_of_range(int64_t part_idx);
-  static int get_oracle_err_when_datetime_parts_conflict(int64_t part_idx);
+  static int get_datetime_part_out_of_range_error(int64_t part_idx);
+  static int get_datetime_part_conflict_error(int64_t part_idx);
   static int validate_time(ObTime &ob_time);
   static int32_t get_days_of_month(int32_t year, int32_t month);
   struct ObTimeDigits {
@@ -711,8 +710,8 @@ private:
                                  const ObDateSqlMode date_sql_mode);
   // other utility functions.
   static int validate_year(int64_t year);
-  static int validate_oracle_timestamp(const ObTime &ob_time);
-  static int validate_basic_part_of_ob_time_oracle(const ObTime &ob_time);
+  static int validate_nanosecond_timestamp(const ObTime &ob_time);
+  static int validate_basic_datetime_parts_with_error(const ObTime &ob_time);
   static int check_leading_precision(const ObTimeDigits &digits);
   static int get_datetime_digits(const char *&str, const char *end, int32_t max_len, ObTimeDigits &digits);
   static int get_datetime_delims(const char *&str, const char *end, ObTimeDelims &delims);
@@ -765,7 +764,6 @@ enum ObNLSFormatEnum {
 /**
  * @brief The ObDataTypeCastParams struct
  * pass the session environment variables used for SQL parsing,
- * especially for oracle mode
  * including timezone/time format/character set etc. information
  */
 
@@ -996,7 +994,7 @@ OB_INLINE void ObTimeConverter::to_week(
 template<>
 OB_INLINE int ObTimeConverter::parse_date_usec(
     DateType value /* int32 */,
-    int64_t tz_offset, bool is_oracle,
+    int64_t tz_offset, bool preserve_zero_datetime,
     DateType &date, UsecType &usec)
 {
   int ret = OB_SUCCESS;
@@ -1007,12 +1005,12 @@ OB_INLINE int ObTimeConverter::parse_date_usec(
 template<>
 OB_INLINE int ObTimeConverter::parse_date_usec(
     DateTimeType value /* int64 */,
-    int64_t tz_offset, bool is_oracle,
+    int64_t tz_offset, bool preserve_zero_datetime,
     DateType &date, UsecType &usec)
 { // get tz_offset from get_tz_offset() first.
   int ret = OB_SUCCESS;
   usec = value;
-  if (OB_UNLIKELY(ObTimeConverter::ZERO_DATETIME == usec) && !is_oracle) {
+  if (OB_UNLIKELY(ObTimeConverter::ZERO_DATETIME == usec) && !preserve_zero_datetime) {
     date = ObTimeConverter::ZERO_DATE;  // just a tag for later use
     usec = 0;
   } else {
@@ -1030,7 +1028,7 @@ OB_INLINE int ObTimeConverter::parse_date_usec(
 template<>
 OB_INLINE int ObTimeConverter::parse_date_usec(
     ObMySQLDate value,
-    int64_t tz_offset, bool is_oracle,
+    int64_t tz_offset, bool preserve_zero_datetime,
     DateType &date, UsecType &usec)
 {
   int ret = OB_SUCCESS;
@@ -1042,7 +1040,7 @@ OB_INLINE int ObTimeConverter::parse_date_usec(
 template<>
 OB_INLINE int ObTimeConverter::parse_date_usec(
     ObMySQLDateTime value,
-    int64_t tz_offset, bool is_oracle,
+    int64_t tz_offset, bool preserve_zero_datetime,
     DateType &date, UsecType &usec)
 {
   int ret = OB_SUCCESS;

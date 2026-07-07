@@ -357,8 +357,8 @@ int ObMPStmtExecute::construct_execute_param_for_arraybinding(int64_t pos)
   return ret;
 }
 
-// Convert int to number before passing params to Oracle SQL, because Oracle SQL does not support
-// int type. The reason for doing the conversion here is that `parse_integer_value()` cannot
+// Convert int to number before passing params to the SQL layer when the target anonymous-array
+// element uses number semantics. The conversion lives here because `parse_integer_value()` cannot
 // distinguish whether the current anonymous array is of arraybinding structure when deserializing
 // an integer in the anonymous array.
 int ObMPStmtExecute::param_assign_after_convert_int2number(ObObj& dst, const ObObj& src)
@@ -776,7 +776,7 @@ int ObMPStmtExecute::parse_request_type(const char* &pos,
               case MYSQL_TYPE_STRING:
               case MYSQL_TYPE_VAR_STRING: {
                 type_name_info.elem_type_.set_collation_type(cs_type);
-                ObLengthSemantics ls = ctx_.session_info_->get_actual_nls_length_semantics();
+                ObLengthSemantics ls = ctx_.session_info_->get_actual_length_semantics();
                 if (LS_INVALIED == ls) {
                   type_name_info.elem_type_.set_length_semantics(LS_CHAR);
                 } else {
@@ -2206,7 +2206,7 @@ int ObMPStmtExecute::parse_basic_param_value(ObIAllocator &allocator,
     case MYSQL_TYPE_OB_TIMESTAMP_WITH_LOCAL_TIME_ZONE:
     case MYSQL_TYPE_OB_TIMESTAMP_NANO: {
       ObTimeConvertCtx cvrt_ctx(tz_info, true);
-      if (OB_FAIL(parse_oracle_timestamp_value(
+      if (OB_FAIL(parse_ob_timestamp_value(
                             static_cast<EMySQLFieldType>(type), data, cvrt_ctx, param, checker))) {
         LOG_WARN("parse timestamp value from client failed", K(ret));
       }
@@ -2307,10 +2307,8 @@ int ObMPStmtExecute::parse_basic_param_value(ObIAllocator &allocator,
                     || MYSQL_TYPE_JSON == type
                     || MYSQL_TYPE_GEOMETRY == type) {
             // in ps protocol:
-            //    Oracle mode: client driver will call hextoraw()
             //    MySQL mode: no need to call hextoraw
             // in text protocol:
-            //    Oracle mode: server will call hextoraw()
             //    MySQL mode: no need to call hextoraw
             // Notice: text tc without lob header here, should not set has_lob_header flag here
             param.set_collation_type(cs_type);
@@ -2603,7 +2601,7 @@ int ObMPStmtExecute::parse_integer_value(const uint32_t type,
                                          ObIAllocator &allocator,
                                          bool is_complex_element,
                                          ObPSAnalysisChecker *checker,
-                                         bool is_unsigned) // oracle unsigned need 
+                                         bool is_unsigned)
 {
   int ret = OB_SUCCESS;
   switch(type) {
@@ -2751,7 +2749,7 @@ int ObMPStmtExecute::parse_mysql_timestamp_value(const EMySQLFieldType field_typ
   return ret;
 }
 
-int ObMPStmtExecute::parse_oracle_timestamp_value(const obmysql::EMySQLFieldType field_type,
+int ObMPStmtExecute::parse_ob_timestamp_value(const obmysql::EMySQLFieldType field_type,
     const char *&data, const ObTimeConvertCtx &cvrt_ctx, ObObj &param, ObPSAnalysisChecker *checker)
 {
   int ret = OB_SUCCESS;

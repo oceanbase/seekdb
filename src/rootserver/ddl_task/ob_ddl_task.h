@@ -48,7 +48,7 @@ public:
   uint64_t hash() const;
   int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
   bool operator==(const ObDDLTaskKey &other) const;
-  bool is_valid() const { return true && OB_INVALID_ID != object_id_ && schema_version_ > 0;}
+  bool is_valid() const { return OB_INVALID_ID != object_id_ && schema_version_ > 0;}
   int assign(const ObDDLTaskKey &other);
   TO_STRING_KV(K_(object_id), K_(schema_version));
 public:
@@ -66,7 +66,7 @@ public:
   uint64_t hash() const;
   int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
   bool operator==(const ObDDLTaskID &other) const;
-  bool is_valid() const { return true && task_id_ > 0; }
+  bool is_valid() const { return task_id_ > 0; }
   int assign(const ObDDLTaskID &other);
   TO_STRING_KV(K_(task_id));
 public:

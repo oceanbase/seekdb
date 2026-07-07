@@ -56,8 +56,7 @@ public:
   bool operator == (const ObLocationNameHashKey &rv) const
   {
     ObCompareNameWithTenantID name_cmp(name_case_mode_);
-    return (true) 
-           && (name_case_mode_ == rv.name_case_mode_) 
+    return (name_case_mode_ == rv.name_case_mode_)
            && (0 == name_cmp.compare(location_name_ ,rv.location_name_));
   }
   

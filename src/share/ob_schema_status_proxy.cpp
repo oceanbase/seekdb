@@ -87,9 +87,6 @@ int ObSchemaStatusProxy::get_refresh_schema_status(
   refresh_schema_status.reset();
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check inner stat failed", K(ret));
-  } else if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     common::SpinRLockGuard guard(schema_status_cache_lock_);
     refresh_schema_status = schema_status_cache_;

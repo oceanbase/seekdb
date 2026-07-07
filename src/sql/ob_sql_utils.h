@@ -192,7 +192,6 @@ public:
    *  duplicates.
    */
 
-  static int has_outer_join_symbol(const ParseNode *node, bool &has);
   static int replace_questionmarks(ParseNode *tree,
                                    const ParamStore &params);
 
@@ -466,10 +465,7 @@ public:
                                  common::ObNewRange &partition_range,
                                  ObArenaAllocator &allocator);
 
-  static int revise_hash_part_object(common::ObObj &obj,
-                                     const ObNewRow &row,
-                                     const bool calc_oracle_hash,
-                                     const share::schema::ObPartitionFuncType part_type);
+  static int revise_hash_part_object(common::ObObj &obj);
 
   static int choose_best_replica_for_estimation(
                               const ObCandiTabletLoc &phy_part_loc_info,
@@ -507,8 +503,6 @@ public:
                                                           int64_t &max_allowed_packet);
   static int merge_solidified_var_into_compat_version(const ObLocalSessionVar *local_vars,
                                                       uint64_t &compat_version);
-
-  static bool is_oracle_sys_view(const ObString &table_name);
 
   static int make_whole_range(ObIAllocator &allocator,
                               const uint64_t ref_table_id,
@@ -559,9 +553,9 @@ public:
   static int convert_escape_char(common::ObIAllocator &allocator,
                                  const ObString &in,
                                  ObString &out);
-  // Check if the parameter is '' in Oracle mode
-  static bool is_oracle_empty_string(const common::ObObjParam &param);
-  static bool is_oracle_null_with_normal_type(const common::ObObjParam &param);
+  // Check if the parameter is an empty-string typed null.
+  static bool is_empty_string_typed_null(const common::ObObjParam &param);
+  static bool is_typed_null_with_normal_type(const common::ObObjParam &param);
   static int convert_sql_text_from_schema_for_resolve(common::ObIAllocator &allocator,
                                                     const common::ObDataTypeCastParams &dtc_params,
                                                     ObString &sql_text,
@@ -573,7 +567,7 @@ public:
    * @param sql_text, source sql string from client
    * @param convert_flag, options to control convert behavior
    * @param action_flag, affected options
-   * @param oracle_nls_string, convert to nls_collation result
+   * @param nls_collation_string, convert to nls_collation result
    * @return 
    */                                        
   static int convert_sql_text_to_schema_for_storing(common::ObIAllocator &allocator,
@@ -581,7 +575,7 @@ public:
                                                     common::ObString &sql_text,
                                                     int64_t convert_flag = 0,
                                                     int64_t *action_flag = NULL,
-                                                    common::ObString *oracle_nls_string = NULL);
+                                                    common::ObString *nls_collation_string = NULL);
 
   static int print_identifier(char *buf, const int64_t buf_len, int64_t &pos,
                               common::ObCollationType connection_collation,

@@ -445,7 +445,7 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
       }
     case TYPE: {
       ObString type_val;
-      const ObLengthSemantics default_length_semantics = session_->get_local_nls_length_semantics();
+      const ObLengthSemantics default_length_semantics = session_->get_default_length_semantics();
       if (OB_FAIL(get_type_str(column_schema,
                                default_length_semantics,
                                type_val))) {
@@ -975,16 +975,11 @@ int ObTableColumns::deduce_column_attributes(
     //TODO(yts): should get types_info from expr, wait for yyy
     const ObRawExprResType &result_type = select_item.expr_->get_result_type();
     ObLength char_len = result_type.get_length();
-    const ObLengthSemantics default_length_semantics = session->get_local_nls_length_semantics();
+    const ObLengthSemantics default_length_semantics = session->get_default_length_semantics();
     int16_t precision_or_length_semantics = result_type.get_precision();
     uint64_t sub_type = static_cast<uint64_t>(ObGeoType::GEOTYPEMAX);
     ObArray<ObString> extend_type_info;
 
-    if (false /* Oracle mode: adjust precision for varchar/char with default length semantics */
-        && ((result_type.is_varchar_or_char()
-             && precision_or_length_semantics == default_length_semantics))) {
-      precision_or_length_semantics = LS_DEFAULT;
-    }
     if (ob_is_geometry(result_type.get_type())) {
       if (select_item.expr_->is_column_ref_expr()) {
         const ObColumnRefRawExpr *col_expr = static_cast<const ObColumnRefRawExpr *>(select_item.expr_);

@@ -54,8 +54,7 @@ public:
   {}
   bool is_valid() const
   {
-    return true &&
-      ls_id_.is_valid() &&
+    return ls_id_.is_valid() &&
       src_tablet_id_.is_valid() &&
       dest_tablet_id_.is_valid() &&
       type_ > INVALID_REORGANIZE_TYPE &&

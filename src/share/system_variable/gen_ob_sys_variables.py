@@ -27,7 +27,6 @@ flag_dict["NULLABLE"] = "NULLABLE"
 flag_dict["INFLUENCE_PLAN"] = "INFLUENCE_PLAN"
 flag_dict["NEED_SERIALIZE"] = "NEED_SERIALIZE"
 flag_dict["QUERY_SENSITIVE"] = "QUERY_SENSITIVE"
-flag_dict["ORACLE_ONLY"] = "ORACLE_ONLY"
 flag_dict["WITH_CREATE"] = "WITH_CREATE"
 flag_dict["WITH_UPGRADE"] = "WITH_UPGRADE"
 flag_dict["MYSQL_ONLY"] = "MYSQL_ONLY"
@@ -44,7 +43,6 @@ flag_value_dict["NULLABLE"] = (1L << 5)
 flag_value_dict["INFLUENCE_PLAN"] = (1L << 6)
 flag_value_dict["NEED_SERIALIZE"] = (1L << 7)
 flag_value_dict["QUERY_SENSITIVE"] = (1L << 8)
-flag_value_dict["ORACLE_ONLY"] = (1L << 9)
 flag_value_dict["WITH_CREATE"] = (1L << 10)
 flag_value_dict["WITH_UPGRADE"] = (1L << 11)
 flag_value_dict["MYSQL_ONLY"] = (1L << 12)
@@ -156,7 +154,6 @@ def make_head_file(pdir, head_file_name, sorted_list):
   head_file.write("  const static int64_t INFLUENCE_PLAN = (1LL << 6);\n");
   head_file.write("  const static int64_t NEED_SERIALIZE = (1LL << 7);\n");
   head_file.write("  const static int64_t QUERY_SENSITIVE = (1LL << 8);\n");
-  head_file.write("  const static int64_t ORACLE_ONLY = (1LL << 9);\n");
   head_file.write("  const static int64_t WITH_CREATE = (1LL << 10);\n");
   head_file.write("  const static int64_t WITH_UPGRADE = (1LL << 11);\n");
   head_file.write("  const static int64_t MYSQL_ONLY = (1LL << 12);\n");
@@ -199,7 +196,6 @@ def make_head_file(pdir, head_file_name, sorted_list):
   head_file.write("  static common::ObString get_info(int64_t i);\n");
   head_file.write("  static int64_t get_flags(int64_t i);\n");
   head_file.write("  static bool need_serialize(int64_t i);\n");
-  head_file.write("  static bool is_oracle_only(int64_t i);\n");
   head_file.write("  static bool is_mysql_only(int64_t i);\n");
   head_file.write("  static common::ObString get_alias(int64_t i);\n");
   head_file.write("  static const common::ObObj &get_default_value(int64_t i);\n")
@@ -334,7 +330,6 @@ def make_cpp_file(pdir, cpp_file_name, sorted_list):
   cpp_file.write("ObString ObSysVariables::get_info(int64_t i){ return ObSysVars[i].info_;}\n")
   cpp_file.write("int64_t ObSysVariables::get_flags(int64_t i){ return ObSysVars[i].flags_;}\n")
   cpp_file.write("bool ObSysVariables::need_serialize(int64_t i){ return ObSysVars[i].flags_ & ObSysVarFlag::NEED_SERIALIZE;}\n")
-  cpp_file.write("bool ObSysVariables::is_oracle_only(int64_t i){ return ObSysVars[i].flags_ & ObSysVarFlag::ORACLE_ONLY;}\n")
   cpp_file.write("bool ObSysVariables::is_mysql_only(int64_t i){ return ObSysVars[i].flags_ & ObSysVarFlag::MYSQL_ONLY;}\n")
   cpp_file.write("ObString ObSysVariables::get_alias(int64_t i){ return ObSysVars[i].alias_;}\n")
   cpp_file.write("const ObObj &ObSysVariables::get_default_value(int64_t i){ return ObSysVarDefaultValues[i];}\n")

@@ -104,7 +104,7 @@ int ObDbmsStatsUtils::assign_col_param(const ObIArray<ObColumnStatParam> *src_co
 }
 
 /* @brief ObDbmsStatsUtils::check_range_skew, check data is skewed or not
- * Based on Oracle 12c:
+ * Histogram skew check rules:
  * 1.for frequency histogram:
  *  if the number of value in all buckets is the same, then it's even distributed, Otherwise, it's
  *  skewed.
@@ -1998,8 +1998,8 @@ int ObDbmsStatsUtils::get_table_index_infos(share::schema::ObSchemaGetterGuard *
   if (OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(schema_guard));
-  } else if (share::is_oracle_mapping_real_virtual_table(table_id)) {
-    // do not gather stat for oracle inner table index
+  } else if (share::is_real_table_mapping_virtual_table(table_id)) {
+    // do not gather stats for mapped inner table indexes
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(table_id,
                                                             index_tid_arr,
                                                             index_count,

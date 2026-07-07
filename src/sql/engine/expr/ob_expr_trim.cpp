@@ -404,7 +404,7 @@ inline int ObExprTrim::deduce_result_type(ObExprResType &type,
   } else {
     const common::ObLengthSemantics default_length_semantics =
                   (OB_NOT_NULL(type_ctx.get_session())
-                  ? type_ctx.get_session()->get_actual_nls_length_semantics()
+                  ? type_ctx.get_session()->get_actual_length_semantics()
                   : common::LS_BYTE);
     type.set_varchar();
     type.set_length_semantics(types[0].is_varchar_or_char()
@@ -955,7 +955,7 @@ int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
 }
 
 template <typename ArgPatternVec, typename ArgStrVec, typename ResVec>
-static int eval_trim_vector_inner_for_oracle_two_args(
+static int eval_trim_vector_inner_for_two_args(
     VECTOR_EVAL_FUNC_ARG_DECL, const int64_t trim_type)
 {
   int ret = OB_SUCCESS;
@@ -1225,7 +1225,7 @@ static int eval_trim_vector_inner(VECTOR_EVAL_FUNC_ARG_DECL)
   }
 
   if (2 == expr.arg_cnt_ && (T_FUN_SYS_LTRIM == expr.type_ || T_FUN_SYS_RTRIM == expr.type_)) {
-    ret = eval_trim_vector_inner_for_oracle_two_args<ArgPatternVec, ArgStrVec, ResVec>(
+    ret = eval_trim_vector_inner_for_two_args<ArgPatternVec, ArgStrVec, ResVec>(
         VECTOR_EVAL_FUNC_ARG_LIST, trim_type);
   } else {
     ret = eval_trim_vector_inner_for_others_args<ArgPatternVec, ArgStrVec, ResVec>(
@@ -1492,7 +1492,7 @@ inline int ObExprLtrim::deduce_result_type(ObExprResType &type,
     }
   } else {
     const common::ObLengthSemantics default_length_semantics = (OB_NOT_NULL(type_ctx.get_session())
-                                                                ? type_ctx.get_session()->get_actual_nls_length_semantics()
+                                                                ? type_ctx.get_session()->get_actual_length_semantics()
                                                                 : common::LS_BYTE);
     type.set_varchar();
     type.set_length_semantics(types[0].is_varchar_or_char()

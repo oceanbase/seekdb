@@ -108,7 +108,7 @@ struct ObParamInfo
   : scale_(0),
     type_(common::ObNullType),
     ext_real_type_(common::ObNullType),
-    is_oracle_null_value_(false),
+    is_typed_null_value_(false),
     col_type_(common::CS_TYPE_INVALID),
     precision_(PRECISION_UNKNOWN_YET)
   {}
@@ -119,7 +119,7 @@ struct ObParamInfo
                K_(scale),
                K_(type),
                K_(ext_real_type),
-               K_(is_oracle_null_value),
+               K_(is_typed_null_value),
                K_(col_type),
                K_(precision));
 
@@ -129,8 +129,8 @@ struct ObParamInfo
   common::ObScale scale_;
   common::ObObjType type_;
   common::ObObjType ext_real_type_; // use as high 4 bytes of udt id if type is sql udt
-  // Process Oracle mode type null value matching in plan_cache
-  bool is_oracle_null_value_;
+  // Process typed null value matching in plan cache.
+  bool is_typed_null_value_;
   common::ObCollationType col_type_;
   common::ObPrecision precision_;
 

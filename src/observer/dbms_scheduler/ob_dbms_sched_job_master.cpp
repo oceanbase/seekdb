@@ -135,14 +135,13 @@ int64_t ObDBMSSchedJobMaster::run_job(ObDBMSSchedJobInfo &job_info, ObDBMSSchedJ
     // RPC removed: dispatch run async (fire-and-forget), matching original async-RPC
     // semantics (do not block the scheduler thread on the full job execution).
     // job_name (ObString) is deep-copied via async_call's serialize-arg overload.
-    const bool run_is_oracle = job_key->is_oracle_tenant();
     const uint64_t run_job_id = job_key->get_job_id();
     ex_rpc::async_call<void>(job_key->get_job_name(),
-      [run_is_oracle, run_job_id](const ObString &run_job_name) {
+      [run_job_id](const ObString &run_job_name) {
         ObDBMSSchedJobExecutor executor;
         if (OB_NOT_NULL(GCTX.sql_proxy_) && OB_NOT_NULL(GCTX.schema_service_)
             && OB_SUCCESS == executor.init(GCTX.sql_proxy_, GCTX.schema_service_)) {
-          (void)executor.run_dbms_sched_job(run_is_oracle, run_job_id, run_job_name);
+          (void)executor.run_dbms_sched_job(run_job_id, run_job_name);
         }
       });
   }
@@ -265,7 +264,7 @@ int ObDBMSSchedJobMaster::scheduler_job(ObDBMSSchedJobKey *job_key)
   } else {
     ObArenaAllocator allocator("DBMSSchedTmp");
     OZ (table_operator_.get_dbms_sched_job_info(
-      job_key->is_oracle_tenant(), job_key->get_job_id(), job_key->get_job_name(), allocator, job_info));
+      job_key->get_job_id(), job_key->get_job_name(), allocator, job_info));
     ObDIActionGuard ag(job_info.get_job_class());
     const int64_t now = ObTimeUtility::current_time();
     int64_t next_check_date = now + MIN_SCHEDULER_INTERVAL;
@@ -356,7 +355,7 @@ int ObDBMSSchedJobMaster::destroy()
 }
 
 int ObDBMSSchedJobMaster::alloc_job_key(
-  ObDBMSSchedJobKey *&job_key, bool is_oracle_tenant, uint64_t job_id, const ObString &job_name)
+  ObDBMSSchedJobKey *&job_key, uint64_t job_id, const ObString &job_name)
 {
   int ret = OB_SUCCESS;
   void *ptr = NULL;
@@ -365,7 +364,7 @@ int ObDBMSSchedJobMaster::alloc_job_key(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", K(ret), K(ptr));
   } else if (OB_ISNULL(job_key =
-    new(ptr)ObDBMSSchedJobKey(is_oracle_tenant, job_id, job_name))) {
+    new(ptr)ObDBMSSchedJobKey(job_id, job_name))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to init scheduler job id", K(ret));
   } else {
@@ -420,25 +419,25 @@ int ObDBMSSchedJobMaster::check_tenant()
       alive_jobs_.clear();
       LOG_INFO("tenant is standby, not check new jobs, and remove exist jobs");
     } else {
-      OZ (check_new_jobs(false /*is_oracle_tenant*/));
+      OZ (check_new_jobs());
     }
   }
   LOG_INFO("check all tenants", K(ret));
   return ret;
 }
 
-int ObDBMSSchedJobMaster::check_new_jobs(bool is_oracle_tenant)
+int ObDBMSSchedJobMaster::check_new_jobs()
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObDBMSSchedJobInfo, 12> job_infos;
   ObArenaAllocator allocator("DBMSSchedTmp");
-  OZ (table_operator_.get_dbms_sched_job_infos_in_tenant(is_oracle_tenant, allocator, job_infos));
-  OZ (register_new_jobs(is_oracle_tenant, job_infos));
-  LOG_INFO("check new jobs", K(ret), K(is_oracle_tenant), K(job_infos));
+  OZ (table_operator_.get_dbms_sched_job_infos_in_tenant(allocator, job_infos));
+  OZ (register_new_jobs(job_infos));
+  LOG_INFO("check new jobs", K(ret), K(job_infos));
   return ret;
 }
 
-int ObDBMSSchedJobMaster::register_new_jobs(bool is_oracle_tenant, ObIArray<ObDBMSSchedJobInfo> &job_infos)
+int ObDBMSSchedJobMaster::register_new_jobs(ObIArray<ObDBMSSchedJobInfo> &job_infos)
 {
   int ret = OB_SUCCESS;
   ObDBMSSchedJobInfo job_info;
@@ -467,7 +466,6 @@ int ObDBMSSchedJobMaster::register_new_jobs(bool is_oracle_tenant, ObIArray<ObDB
         ObDBMSSchedJobKey *job_key = NULL;
         if (OB_FAIL(alloc_job_key(
           job_key,
-          job_info.is_oracle_tenant(),
           job_info.get_job_id(),
           job_info.get_job_name()))) {
           LOG_WARN("failed to alloc job key", K(ret), K(job_info));

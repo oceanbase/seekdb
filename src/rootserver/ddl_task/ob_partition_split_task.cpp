@@ -1949,7 +1949,7 @@ int ObPartitionSplitTask::deserialize_params_from_message(
   int ret = OB_SUCCESS;
   ObPartitionSplitArg tmp_arg;
   int64_t split_index_tablets_cnt = 0;
-  if (OB_UNLIKELY(!true || nullptr == buf || data_len <= 0)) {
+  if (OB_UNLIKELY(nullptr == buf || data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(
@@ -2429,7 +2429,7 @@ int ObPartitionSplitTask::check_can_reuse_macro_block(
 {
   int ret = OB_SUCCESS;
   can_reuse_macro_blocks.reset();
-  if (OB_UNLIKELY(false || table_ids.empty())) {
+  if (OB_UNLIKELY(table_ids.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("init twice", K(ret), K(table_ids));
   } else {

@@ -29,7 +29,7 @@ int ObSequenceOptionBuilder::build_create_sequence_option(
     share::ObSequenceOption &opt_new)
 {
   int ret = OB_SUCCESS;
-  // fill missing default value, to compatible with Oracle behavior
+  // Fill missing default sequence values.
   ObSequenceOption &option = opt_new;
 
   if (OB_FAIL(pre_check_sequence_option(opt_new))) {
@@ -103,9 +103,8 @@ int ObSequenceOptionBuilder::build_alter_sequence_option(
   return ret;
 }
 
-// Oracle's behavior is not rigorous, here is just to be consistent with Oracle's behavior:
-// Oracle allows: create sequence s1; alter sequence s1 cycle;
-// Oracle prohibits: create sequence s1 cycle; (Report ascending sequences that CYCLE must specify MAXVALUE)
+// The create path requires CYCLE with an explicit boundary, while alter can enable CYCLE
+// on an existing sequence that already has schema bounds.
 int ObSequenceOptionBuilder::pre_check_sequence_option(const ObSequenceOption &option)
 {
   int ret = OB_SUCCESS;

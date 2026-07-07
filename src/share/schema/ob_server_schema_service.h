@@ -300,7 +300,6 @@ struct VersionHisKey
   inline bool is_valid() const
   {
     return OB_MAX_SCHEMA != schema_type_
-           && true
            && common::OB_INVALID_ID != schema_id_;
   }
   ObSchemaType schema_type_;
@@ -450,8 +449,7 @@ public:
   {
     bool operator()(const SchemaKey &a, const SchemaKey &b) const
     {
-      return true &&
-          a.user_id_ == b.user_id_ &&
+      return a.user_id_ == b.user_id_ &&
           a.catalog_name_ == b.catalog_name_;
     }
   };
@@ -474,8 +472,7 @@ public:
   {
     bool operator()(const SchemaKey &a, const SchemaKey &b) const
     {
-      return true &&
-          a.user_id_ == b.user_id_ &&
+      return a.user_id_ == b.user_id_ &&
           a.database_name_ == b.database_name_;
     }
   };
@@ -500,8 +497,7 @@ public:
   {
     bool operator()(const SchemaKey &a, const SchemaKey &b) const
     {
-      return true &&
-          a.user_id_ == b.user_id_ &&
+      return a.user_id_ == b.user_id_ &&
           a.database_name_ == b.database_name_ &&
           a.table_name_ == b.table_name_;
     }
@@ -534,8 +530,7 @@ public:
     bool operator()(const SchemaKey &a, const SchemaKey &b) const
     {
       ObCompareNameWithTenantID name_cmp;
-      return true &&
-          a.user_id_ == b.user_id_ &&
+      return a.user_id_ == b.user_id_ &&
           a.database_name_ == b.database_name_ &&
           0 == name_cmp.compare(a.routine_name_, b.routine_name_) &&
           a.obj_type_ == b.obj_type_;
@@ -558,8 +553,7 @@ public:
   {
     bool operator()(const SchemaKey &a, const SchemaKey &b) const
     {
-      return true &&
-             a.column_priv_id_ == b.column_priv_id_;
+      return a.column_priv_id_ == b.column_priv_id_;
     }
   };
 
@@ -620,8 +614,7 @@ public:
   {
     bool operator()(const SchemaKey &a, const SchemaKey &b) const
     {
-      return true &&
-          a.user_id_ == b.user_id_ &&
+      return a.user_id_ == b.user_id_ &&
           a.obj_name_ == b.obj_name_&&
           a.obj_type_ == b.obj_type_;
     }
@@ -653,8 +646,7 @@ public:
   {
     bool operator()(const SchemaKey &a, const SchemaKey &b) const
     {
-      return true &&
-          a.grantee_id_ == b.grantee_id_ ;
+      return a.grantee_id_ == b.grantee_id_ ;
     }
   };
   struct context_key_hash_func
@@ -672,8 +664,7 @@ public:
   {
     bool operator()(const SchemaKey &a, const SchemaKey &b) const
     {
-      return true &&
-          a.context_id_ == b.context_id_ ;
+      return a.context_id_ == b.context_id_ ;
     }
   };
   struct mock_fk_parent_table_key_hash_func

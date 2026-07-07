@@ -222,7 +222,7 @@ int ObMPStmtFetch::response_query_header(ObSQLSessionInfo &session,
 }
 
 /* fetch protocol sends result set to the reverse client
- * Protocol notes: Oracle protocol needs to send a head packet before returning each result set, MySQL does not require special handling
+ * Protocol notes: MySQL does not require a head packet before returning each result set
  * Memory usage notes: When obtaining rows to be returned by fetch, note that you need to switch to the allocator where the cursor is located
  * Cursor fetch is completed through methods in dbms_cursor
  * Offset functionality implementation: achieved by manipulating the current offset
@@ -375,9 +375,9 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
                   }
                 }
                 if (OB_SUCC(ret) && (cur >= max_count || cur < 0 || max_count <= 0)) {
-                  // during the fetch process, except for the OB_ITER_END error indicating the end of the result set which is suppressed, all other errors will disconnect the connection
-                  // in oracle, if the scan exceeds the range, the connection will not be broken, and an OCI_NO_DATA error will be reported
-                  // To be compatible with this behavior, set the OB_ITER_END error code when out of range, do not report an error and do not return data, let the driver generate the OCI_NO_DATA error code
+                  // During fetch, all errors except OB_ITER_END disconnect the connection.
+                  // If the scan exceeds the range, set OB_ITER_END, report no error,
+                  // and return no data.
                   need_fetch = false;
                   ret = OB_ITER_END;
                 }
@@ -822,4 +822,3 @@ int ObMPStmtFetch::response_row(ObSQLSessionInfo &session,
 
 } //end of namespace observer
 } //end of namespace oceanbase
-

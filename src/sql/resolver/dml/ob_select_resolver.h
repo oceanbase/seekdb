@@ -152,10 +152,10 @@ protected:
                                  bool &has_explicit_dir);
   int resolve_for_update_clause(const ParseNode *node);
   int set_for_update_mysql(ObSelectStmt &stmt, const int64_t wait_us, bool skip_locked);
-  int set_for_update_oracle(ObSelectStmt &stmt,
-                            const int64_t wait_us,
-                            bool skip_locked,
-                            ObColumnRefRawExpr *col = NULL);
+  int set_for_update_recursive(ObSelectStmt &stmt,
+                               const int64_t wait_us,
+                               bool skip_locked,
+                               ObColumnRefRawExpr *col = NULL);
   int resolve_for_update_clause_mysql(const ParseNode &node);
   int resolve_all_fake_cte_table_columns(const TableItem &table_item, common::ObIArray<ColumnItem> *column_items);
 
@@ -173,7 +173,7 @@ protected:
   int resolve_into_outfile_without_format(const ParseNode *node, ObSelectIntoItem &into_item);
   int resolve_into_outfile_with_format(const ParseNode *node, ObSelectIntoItem &into_item);
   // resolve_star related functions
-  int resolve_star_for_table_groups(ObStarExpansionInfo &star_expansion_info);
+  int resolve_star_for_table_groups();
   int find_joined_table_group_for_table(const uint64_t table_id, int64_t &jt_idx);
   int find_select_columns_for_join_group(const int64_t jt_idx, common::ObArray<SelectItem> *sorted_select_items);
   int find_select_columns_for_joined_table_recursive(const JoinedTable *jt,

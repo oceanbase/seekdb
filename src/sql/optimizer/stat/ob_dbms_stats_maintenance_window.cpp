@@ -204,7 +204,7 @@ int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_info(
   return ret;
 }
 
-/* like Oracle, we set 7 windows:
+/* Default statistics maintenance windows:
    *  WINDOW_NAME                   REPEAT_INTERVAL                       DURATION
    * MONDAY_WINDOW                freq=daily;byday=MON;byhour=22;          4 hours
    * TUESDAY_WINDOW               freq=daily;byday=TUE;byhour=22;          4 hours

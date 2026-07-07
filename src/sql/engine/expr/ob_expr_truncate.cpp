@@ -22,11 +22,7 @@
 #define GET_SCALE_FOR_CALC(scale) (scale < 0 ? max((-1) * OB_MAX_DECIMAL_PRECISION, scale) : \
                                    min(OB_MAX_DECIMAL_SCALE, scale))
 
-#define GET_SCALE_FOR_CALC_ORACLE(scale) (scale < 0 ? max((-1) * OB_MAX_NUMBER_PRECISION, scale) : \
-                                   min(OB_MAX_NUMBER_SCALE, scale))
-
 #define GET_SCALE_FOR_DEDUCE(scale) (scale < 0 ? 0 : min(OB_MAX_DECIMAL_SCALE, scale))
-#define GET_SCALE_FOR_DEDUCE_ORACLE(scale) (scale < 0 ? 0 : min(OB_MAX_NUMBER_SCALE, scale))
 
 namespace oceanbase
 {
@@ -396,6 +392,4 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprTruncate, raw_expr) {
 } // namespace oceanbase
 
 #undef GET_SCALE_FOR_CALC
-#undef GET_SCALE_FOR_CALC_ORACLE
 #undef GET_SCALE_FOR_DEDUCE
-#undef GET_SCALE_FOR_DEDUCE_ORACLE

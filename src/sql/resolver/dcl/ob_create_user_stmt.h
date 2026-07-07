@@ -70,7 +70,7 @@ private:
                             //  ssl_type, ssl_cipher, x509_issuer, x509_subject)
   common::ObString masked_sql_;
   bool if_not_exist_;
-  uint64_t profile_id_; //only used in oracle mode
+  uint64_t profile_id_; // Legacy profile id kept for follow-up cleanup.
   obcall::ObCreateUserArg create_user_arg_; // used to return exec_tid_
   uint64_t max_connections_per_hour_;
   uint64_t max_user_connections_;

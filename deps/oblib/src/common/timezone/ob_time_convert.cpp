@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX  LIB_TIME
 
 #include "ob_time_convert.h"
-#include "common/timezone/ob_oracle_format_models.h"
+#include "common/timezone/ob_datetime_format_models.h"
 #include "lib/utility/ob_fast_convert.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 #include "lib/locale/ob_locale_type.h"
@@ -48,18 +48,18 @@ const int64_t DT_PART_BASE[DATETIME_PART_CNT] = { 100, 12, -1, 24, 60, 60, 10000
 const int64_t DT_PART_MIN[DATETIME_PART_CNT]  = {   0,  1,  1,  0,  0,  0, 0};
 const int64_t DT_PART_MAX[DATETIME_PART_CNT]  = {9999, 12, 31, 23, 59, 59, 1000000};
 
-//the following is for oracle
+// Timestamp and nanosecond datetime validation bounds.
 const int64_t TZ_PART_BASE[DATETIME_PART_CNT] = { 100, 12, -1, 24, 60, 60, 1000000000};
 const int64_t TZ_PART_MIN[DATETIME_PART_CNT]  = {   1,  1,  1,  0,  0,  0, 0};
 const int64_t TZ_PART_MAX[DATETIME_PART_CNT]  = {9999, 12, 31, 23, 59, 59, 1000000000};
 const int     TZ_PART_ERR[DATETIME_PART_CNT] = {
-  /*DT_YEAR*/   OB_ERR_INVALID_YEAR_VALUE,      //OBE-01841: (full) year must be between -4713 and +9999, and not be 0
-  /*DT_MON*/    OB_ERR_INVALID_MONTH,           //OBE-01843: not a valid month
-  /*DT_MDAY*/   OB_ERR_DAY_OF_MONTH_RANGE,      //OBE-01847: day of month must be between 1 and last day of month
-  /*DT_HOUR*/   OB_ERR_INVALID_HOUR24_VALUE,    //OBE-01850: hour must be between 0 and 23
-  /*DT_MIN*/    OB_ERR_INVALID_MINUTES_VALUE,   //OBE-01851: minutes must be between 0 and 59
-  /*DT_SEC*/    OB_ERR_INVALID_SECONDS_VALUE,   //OBE-01852: seconds must be between 0 and 59
-  /*DT_USEC*/   OB_ERR_THE_LEADING_PRECISION_OF_THE_INTERVAL_IS_TOO_SMALL,           //OBE-01873: the leading precision of the interval is too small
+  /*DT_YEAR*/   OB_ERR_INVALID_YEAR_VALUE,      // (full) year must be between -4713 and +9999, and not be 0
+  /*DT_MON*/    OB_ERR_INVALID_MONTH,           // not a valid month
+  /*DT_MDAY*/   OB_ERR_DAY_OF_MONTH_RANGE,      // day of month must be between 1 and last day of month
+  /*DT_HOUR*/   OB_ERR_INVALID_HOUR24_VALUE,    // hour must be between 0 and 23
+  /*DT_MIN*/    OB_ERR_INVALID_MINUTES_VALUE,   // minutes must be between 0 and 59
+  /*DT_SEC*/    OB_ERR_INVALID_SECONDS_VALUE,   // seconds must be between 0 and 59
+  /*DT_USEC*/   OB_ERR_THE_LEADING_PRECISION_OF_THE_INTERVAL_IS_TOO_SMALL,           // the leading precision of the interval is too small
 };
 
 static const int8_t DAYS_PER_MON[2][12 + 1] = {
@@ -483,36 +483,36 @@ int ObTimeConverter::str_to_mdatetime(const ObString &str, const ObTimeConvertCt
 }
 
 /**
- * @brief validate oracle literal DATE'' and cast to ObDateTime
+ * @brief validate literal DATE'' and cast to ObDateTime
  * @param in:   str       input string
  * @param in:   cvrt_ctx
- * @param out:  value     oracle date result value
+ * @param out:  value     date result value
  */
-int ObTimeConverter::literal_date_validate_oracle(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
+int ObTimeConverter::validate_literal_date(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
     ObDateTime &value)
 {
   int ret = OB_SUCCESS;
   ObTime ob_time;
   ObScale scale = 0;  //not used
 
-  if (OB_FAIL(str_to_ob_time_oracle_strict(str, cvrt_ctx, false, ob_time, scale))) {
-    LOG_WARN("failed to convert string to date oracle", K(ret));
+  if (OB_FAIL(str_to_ob_time_by_literal_format(str, cvrt_ctx, false, ob_time, scale))) {
+    LOG_WARN("failed to convert string to date", K(ret));
   } else if (OB_FAIL(ob_time_to_datetime(ob_time, cvrt_ctx, value))) {
-    LOG_WARN("failed to convert ob time to date oracle", K(ret));
+    LOG_WARN("failed to convert ob time to date", K(ret));
   } else {
-    LOG_DEBUG("succ to validate oracle literal date", K(str), K(ob_time), K(value), K(scale), KCSTRING(lbt()));
+    LOG_DEBUG("succ to validate literal date", K(str), K(ob_time), K(value), K(scale), KCSTRING(lbt()));
   }
   return ret;
 }
 
 /**
- * @brief validate oracle literal TIMESTAMP'' and cast to ObOTimestampData
+ * @brief validate literal TIMESTAMP'' and cast to ObOTimestampData
  * @param in:     str       input string
  * @param in:     cvrt_ctx
  * @param in:     obj_type  input ytpe, includes ObTimestampNanoType ObTimestampLTZType
  * @param out:    value     ObOTimestampData result value
  */
-int ObTimeConverter::literal_timestamp_validate_oracle(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
+int ObTimeConverter::validate_literal_timestamp(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
                                                        ObObjType &obj_type, ObOTimestampData &value)
 {
   int ret = OB_SUCCESS;
@@ -520,7 +520,7 @@ int ObTimeConverter::literal_timestamp_validate_oracle(const ObString &str, cons
   ObTime ob_time;
   ObScale scale = 0;  //not used
 
-  if (OB_FAIL(str_to_ob_time_oracle_strict(str, cvrt_ctx, true, ob_time, scale))) {
+  if (OB_FAIL(str_to_ob_time_by_literal_format(str, cvrt_ctx, true, ob_time, scale))) {
     LOG_WARN("failed to convert string to datetime", K(ret));
   } else {
     ob_time.mode_ |= DT_TYPE_STORE_UTC;
@@ -529,20 +529,20 @@ int ObTimeConverter::literal_timestamp_validate_oracle(const ObString &str, cons
     } else if (OB_FAIL(ob_time_to_otimestamp(ob_time, value))) {
       LOG_WARN("failed to convert obtime to timestamp_tz", K(ret));
     } else {
-      LOG_DEBUG("succ to validate oracle literal timestamp", K(obj_type), K(str), K(ob_time), K(value), KCSTRING(lbt()));
+      LOG_DEBUG("succ to validate literal timestamp", K(obj_type), K(str), K(ob_time), K(value), KCSTRING(lbt()));
     }
   }
   return ret;
 }
 
 /**
- * @brief cast str to oracle date
+ * @brief cast str to date by format model
  * @param in:     str       input string
  * @param in:     cvrt_ctx
- * @param out:    value     oracle DATE result
+ * @param out:    value     date result
  * @return
  */
-int ObTimeConverter::str_to_date_oracle(const ObString &str,
+int ObTimeConverter::str_to_date_by_format_model(const ObString &str,
                                         const ObTimeConvertCtx &cvrt_ctx,
                                         ObDateTime &value)
 {
@@ -550,8 +550,8 @@ int ObTimeConverter::str_to_date_oracle(const ObString &str,
   ObTime ob_time;
   ObDateTime result_value = 0;
   ObScale scale = 0; //not used
-  if (OB_FAIL(str_to_ob_time_oracle_dfm(str, cvrt_ctx, ObDateTimeType, ob_time, scale))) {
-    LOG_WARN("failed to convert str to ob_time", K(str), K(cvrt_ctx.oracle_nls_format_));
+  if (OB_FAIL(str_to_ob_time_by_format_model(str, cvrt_ctx, ObDateTimeType, ob_time, scale))) {
+    LOG_WARN("failed to convert str to ob_time", K(str), K(cvrt_ctx.nls_format_));
   } else if (OB_FAIL(ob_time_to_datetime(ob_time, cvrt_ctx, result_value))) {
     LOG_WARN("convert ob_time to datetime failed", K(ret), K(ob_time));
   } else {
@@ -561,7 +561,7 @@ int ObTimeConverter::str_to_date_oracle(const ObString &str,
 }
 
 /**
- * @brief cast str to oracle timestamp(3 possible types)
+ * @brief cast str to nanosecond timestamp types
  * @param in:     str           input string
  * @param in:     cvrt_ctx
  * @param in:     target_type   target types, includes ObTimestampNanoType ObTimestampLTZType
@@ -576,7 +576,7 @@ int ObTimeConverter::str_to_otimestamp(const ObString &str, const ObTimeConvertC
   value.reset();
 
   //NOTE::current format is fixed like "2012-12-02 12:00:00.123456".
-  //      it is not enough for oracle when format variables supported. @yanhua
+  //      it is not enough when format variables are supported. @yanhua
   //UPDATE: complex format has supported. @jim.wjh
   if (OB_UNLIKELY(!ob_is_otimestamp_type(target_type))) {
     ret = OB_ERR_UNEXPECTED;
@@ -587,15 +587,15 @@ int ObTimeConverter::str_to_otimestamp(const ObString &str, const ObTimeConvertC
     LOG_DEBUG("succ to convert null str to otimestamp", K(target_type), K(str), K(value), K(scale), KCSTRING(lbt()));
   } else {
     ObTime ob_time;
-    if (OB_FAIL(str_to_ob_time_oracle_dfm(str, cvrt_ctx, target_type, ob_time, scale))) {
-      LOG_WARN("failed to convert to ob_time by dfm", "format_str", cvrt_ctx.oracle_nls_format_, K(ret));
+    if (OB_FAIL(str_to_ob_time_by_format_model(str, cvrt_ctx, target_type, ob_time, scale))) {
+      LOG_WARN("failed to convert to ob_time by dfm", "format_str", cvrt_ctx.nls_format_, K(ret));
     } else if (OB_FAIL(ob_time_to_utc(target_type, cvrt_ctx, ob_time))) {
       LOG_WARN("failed to convert ob_time to utc", K(ret));
     } else if (OB_FAIL(ob_time_to_otimestamp(ob_time, value))) {
       LOG_WARN("failed to convert obtime to timestamp_tz", K(ret));
     } else {
       LOG_DEBUG("succ to convert str to otimestamp", K(target_type), K(str), K(ob_time),
-      					K(value), K(scale), "format_str", cvrt_ctx.oracle_nls_format_, KCSTRING(lbt()));
+                K(value), K(scale), "format_str", cvrt_ctx.nls_format_, KCSTRING(lbt()));
     }
   }
 
@@ -724,7 +724,7 @@ int ObTimeConverter::calc_tz_offset_by_tz_name(const ObTimeConvertCtx &cvrt_ctx,
   return ret;
 }
 
-int ObTimeConverter::get_oracle_err_when_datetime_out_of_range(int64_t part_idx)
+int ObTimeConverter::get_datetime_part_out_of_range_error(int64_t part_idx)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(part_idx >= DATETIME_PART_CNT || part_idx < 0)) {
@@ -736,7 +736,7 @@ int ObTimeConverter::get_oracle_err_when_datetime_out_of_range(int64_t part_idx)
   return ret;
 }
 
-int ObTimeConverter::get_oracle_err_when_datetime_parts_conflict(int64_t part_idx)
+int ObTimeConverter::get_datetime_part_conflict_error(int64_t part_idx)
 {
   int ret = OB_SUCCESS;
   switch (part_idx){
@@ -744,19 +744,19 @@ int ObTimeConverter::get_oracle_err_when_datetime_parts_conflict(int64_t part_id
       ret = OB_ERR_UNEXPECTED;//never goes here for now
       break;
     case DT_MON:
-      ret = OB_ERR_MONTH_CONFLICTS_WITH_JULIAN_DATE;//OBE-01833: month conflicts with Julian date
+      ret = OB_ERR_MONTH_CONFLICTS_WITH_JULIAN_DATE;// month conflicts with Julian date
       break;
     case DT_MDAY:
-      ret = OB_ERR_DAY_OF_MONTH_CONFLICTS_WITH_JULIAN_DATE;//OBE-01834: day of month conflicts with Julian date
+      ret = OB_ERR_DAY_OF_MONTH_CONFLICTS_WITH_JULIAN_DATE;// day of month conflicts with Julian date
       break;
     case DT_HOUR:
-      ret = OB_ERR_HOUR_CONFLICTS_WITH_SECONDS_IN_DAY;//OBE-01836: hour conflicts with seconds in day
+      ret = OB_ERR_HOUR_CONFLICTS_WITH_SECONDS_IN_DAY;// hour conflicts with seconds in day
       break;
     case DT_MIN:
-      ret = OB_ERR_MINUTES_OF_HOUR_CONFLICTS_WITH_SECONDS_IN_DAY;//OBE-01837: minutes of hour conflicts with seconds in day
+      ret = OB_ERR_MINUTES_OF_HOUR_CONFLICTS_WITH_SECONDS_IN_DAY;// minutes of hour conflicts with seconds in day
       break;
     case DT_SEC:
-      ret = OB_ERR_SECONDS_OF_MINUTE_CONFLICTS_WITH_SECONDS_IN_DAY;//OBE-01838: seconds of minute conflicts with seconds in day
+      ret = OB_ERR_SECONDS_OF_MINUTE_CONFLICTS_WITH_SECONDS_IN_DAY;// seconds of minute conflicts with seconds in day
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
@@ -1004,7 +1004,7 @@ int ObTimeConverter::datetime_to_str(int64_t value, const ObTimeZoneInfo *tz_inf
       }
     }
   } else {
-    if (OB_FAIL(ob_time_to_str_oracle_dfm(ob_time, scale, nls_format, buf, buf_len, pos))) {
+    if (OB_FAIL(ob_time_to_str_by_format_model(ob_time, scale, nls_format, buf, buf_len, pos))) {
       LOG_WARN("failed to convert ob time to string", K(ob_time), K(nls_format), K(buf_len), K(pos), K(ret), KCSTRING(lbt()));
     } else {
       LOG_DEBUG("succ to datetime_to_str", K(value), K(scale), K(ob_time), K(nls_format), KCSTRING(lbt()));
@@ -1031,7 +1031,7 @@ int ObTimeConverter::mdatetime_to_str(ObMySQLDateTime value, const ObTimeZoneInf
       }
     }
   } else {
-    if (OB_FAIL(ob_time_to_str_oracle_dfm(ob_time, scale, nls_format, buf, buf_len, pos))) {
+    if (OB_FAIL(ob_time_to_str_by_format_model(ob_time, scale, nls_format, buf, buf_len, pos))) {
       LOG_WARN("failed to convert ob time to string", K(ob_time), K(nls_format), K(buf_len), K(pos), K(ret), KCSTRING(lbt()));
     } else {
       LOG_DEBUG("succ to datetime_to_str", K(value), K(scale), K(ob_time), K(nls_format), KCSTRING(lbt()));
@@ -1050,15 +1050,15 @@ int ObTimeConverter::otimestamp_to_str(const ObOTimestampData &ot_data, const Ob
   } else {
     const ObOTimestampData &tmp_ot_data = round_otimestamp(scale, ot_data);
     const bool store_utc_time = false;
-    ObTime ob_time(DT_TYPE_ORACLE_TIMESTAMP);
+    ObTime ob_time(DT_TYPE_NANO_TIMESTAMP);
     const int64_t old_pos = pos;
     const ObString format_str = dtc_params.get_nls_format(type);
     if (OB_FAIL(otimestamp_to_ob_time(type, tmp_ot_data, dtc_params.tz_info_, ob_time, store_utc_time))) {
       LOG_WARN("failed to convert otimestamp to ob time", K(ret), KCSTRING(lbt()));
     } else if (OB_FAIL(dtc_params.force_use_standard_format_ ?
                        ob_time_to_str(ob_time, DT_TYPE_DATETIME, scale, buf, buf_len, pos, true)
-                     : ob_time_to_str_oracle_dfm(ob_time, scale, format_str,
-                                                 buf, buf_len, pos))) {
+                     : ob_time_to_str_by_format_model(ob_time, scale, format_str,
+                                                      buf, buf_len, pos))) {
       LOG_WARN("failed to convert ob time to string", K(format_str), K(ob_time), K(ret));
     } else {
       ObString tmp(pos - old_pos, buf + old_pos);
@@ -1668,13 +1668,13 @@ int ObTimeConverter::mdate_to_year(ObMySQLDate md_value, uint8_t &y_value)
 int ObTimeConverter::check_leading_precision(const ObTimeDigits &digits)
 {
   int ret = OB_SUCCESS;
-  const int64_t oracle_max_leading_precision = 9;
-  if (digits.value_ != 0 && digits.len_ > oracle_max_leading_precision) {
+  const int64_t max_leading_precision = 9;
+  if (digits.value_ != 0 && digits.len_ > max_leading_precision) {
     int64_t leading_zero_count = 0;
     for (int64_t i = 0; i < digits.len_ && '0' == digits.ptr_[i]; i++) {
       leading_zero_count++;
     }
-    if (leading_zero_count >= oracle_max_leading_precision) {
+    if (leading_zero_count >= max_leading_precision) {
       ret = OB_ERR_THE_LEADING_PRECISION_OF_THE_INTERVAL_IS_TOO_SMALL;
     }
   }
@@ -1686,14 +1686,11 @@ int ObTimeConverter::check_leading_precision(const ObTimeDigits &digits)
 
 #define OFFSET_MIN        static_cast<int32_t>(-(12 * MINS_PER_HOUR + 59) * SECS_PER_MIN)   // -12:59 .
 #define OFFSET_MAX        static_cast<int32_t>(13 * SECS_PER_HOUR)                          // +13:00 .
-#define ORACLE_OFFSET_MIN static_cast<int32_t>(-(15 * MINS_PER_HOUR + 59) * SECS_PER_MIN)   // -15:59 .
-#define ORACLE_OFFSET_MAX static_cast<int32_t>(15 * SECS_PER_HOUR)                          // +15:00 .
-#define ORACLE_OFFSET_MAX_HOUR 15
 // str_to_offset fails to return the error code OB_ERR_UNKNOWN_TIME_ZONE, upper-level calling places see this error code after,
 // will treat str as a time zone name, look it up in time_zone_map, for example 'Asia/Shanghai'
-// The role of ret_more is, when the upper layer fails to find it as well, the error code thrown by mysql is OB_ERR_UNKNOWN_TIME_ZONE, but oracle is not
-// Oracle may throw multiple error codes, for example, OB_ERR_INVALID_TIME_ZONE_HOUR when hour is greater than 15, minute greater than 59 when
-// Throw OB_ERR_INVALID_TIME_ZONE_MINUTE.
+// The role of ret_more is, when the upper layer fails to find it as well, the default error code is OB_ERR_UNKNOWN_TIME_ZONE.
+// ret_more records more specific errors, for example, OB_ERR_INVALID_TIME_ZONE_HOUR when hour is greater than 15, minute greater than 59 when
+// it records OB_ERR_INVALID_TIME_ZONE_MINUTE.
 // ret_more records this error code and returns it, the upper layer determines whether to use ret_more to override ret after failing to find time_zone_map based on the mode
 int ObTimeConverter::str_to_offset(const ObString &str, int32_t &value, int &ret_more,
                                   const bool need_check_valid/* false */)
@@ -1738,7 +1735,7 @@ int ObTimeConverter::str_to_offset(const ObString &str, int32_t &value, int &ret
       LOG_WARN("failed to get offset", K(ret), K(str));
     } else if (!('+' == sign || '-' == sign)
         || 0 == hour.len_ || 0 == minute.len_
-        // oracle handles the fractional part and trailing illegal characters by ignoring them directly, therefore a pattern check is added here, oracle mode accepts none.len_ > 0
+        // The compatibility parser ignores fractional parts and trailing illegal characters, while strict format rejects them.
         || !is_single_colon(colon) || (none.len_ > 0 && use_strict_format)) {
       ret = OB_ERR_UNKNOWN_TIME_ZONE;
     } else if (! need_check_valid) {
@@ -2167,7 +2164,7 @@ int ObTimeConverter::get_time_zone(const ObTimeDelims *delims, ObTime &ob_time, 
       pos = delims[DT_USEC].ptr_;
       end = pos + delims[DT_USEC].len_;
     }
-    //oracle support offset and position
+    // The parser may provide both offset and position.
     if (NULL != end_ptr) {
       end = end_ptr;
     }
@@ -2216,7 +2213,7 @@ int ObTimeConverter::str_to_digit_with_date(const ObString &str, ObTimeDigits *d
       for (; pos < end && isdigit(*pos); ++pos) {}
       const char *first_delim = pos;
        // year is separated by delimiter, or 4 digits, or 2?
-      /*if (HAS_TYPE_ORACLE(ob_time.mode_)) {
+      /*if (HAS_TYPE_NANOSECOND(ob_time.mode_)) {
         if ('.' != *first_delim && first_delim < end) {
           expect_lens = TIMESTAMPTZ_PART_LENS_MAX;
         } else {
@@ -2247,7 +2244,7 @@ int ObTimeConverter::str_to_digit_with_date(const ObString &str, ObTimeDigits *d
 
 
       if (OB_SUCC(ret)) {
-        const char *end_ptr = HAS_TYPE_ORACLE(ob_time.mode_) ? end : NULL;
+        const char *end_ptr = HAS_TYPE_NANOSECOND(ob_time.mode_) ? end : NULL;
         if (OB_FAIL(get_time_zone(delims, ob_time, end_ptr))) {
           LOG_WARN("fail to get time zone", "delims", ObArrayWrap<ObTimeDelims>(delims, DATETIME_PART_CNT), K(ret));
         }
@@ -2265,9 +2262,9 @@ int ObTimeConverter::str_to_digit_with_date(const ObString &str, ObTimeDigits *d
           apply_date_year2_rule(digits[DT_YEAR]);
         }
 
-        //if HAS_TYPE_ORACLE, digits[DT_USEC] store nanosecond in fact
-        const int64_t max_precision = (HAS_TYPE_ORACLE(ob_time.mode_) ? OB_MAX_TIMESTAMP_TZ_PRECISION: OB_MAX_DATETIME_PRECISION);
-        const bool use_strict_check = HAS_TYPE_ORACLE(ob_time.mode_);
+        //if HAS_TYPE_NANOSECOND, digits[DT_USEC] store nanosecond in fact
+        const int64_t max_precision = (HAS_TYPE_NANOSECOND(ob_time.mode_) ? OB_MAX_TIMESTAMP_TZ_PRECISION: OB_MAX_DATETIME_PRECISION);
+        const bool use_strict_check = HAS_TYPE_NANOSECOND(ob_time.mode_);
         if (OB_FAIL(apply_usecond_delim_rule(delims[DT_SEC], digits[DT_USEC], max_precision, use_strict_check, need_truncate))) {
           LOG_WARN("failed to apply rule", K(use_strict_check), K(ret));
         } else if (!(DT_TYPE_DATE & ob_time.mode_) && (DT_TYPE_TIME & ob_time.mode_)) {
@@ -2309,8 +2306,8 @@ int ObTimeConverter::str_to_ob_time_with_date(const ObString &str, ObTime &ob_ti
       ob_time.parts_[DT_DATE] = ob_time_to_date(ob_time);
     }
     if (NULL != scale) {
-      //if HAS_TYPE_ORACLE, digits[DT_USEC] store nanosecond
-      if (HAS_TYPE_ORACLE(ob_time.mode_)) {
+      //if HAS_TYPE_NANOSECOND, digits[DT_USEC] store nanosecond
+      if (HAS_TYPE_NANOSECOND(ob_time.mode_)) {
         *scale = static_cast<int16_t>(MIN(digits[DT_USEC].len_, OB_MAX_TIMESTAMP_TZ_PRECISION));
       } else {
         *scale = static_cast<int16_t>(MIN(digits[DT_USEC].len_, OB_MAX_DATETIME_PRECISION));
@@ -2747,7 +2744,7 @@ int ObTimeConverter::str_to_ob_time_format(const ObString &str, const ObString &
         LOG_WARN("handle %u %x %v and %w value failed", K(ret));
       } else if (0 == ob_time.parts_[DT_MON] && 0 == ob_time.parts_[DT_MDAY]
                  && 0 == ob_time.parts_[DT_YEAR]) {
-        if (!HAS_TYPE_ORACLE(ob_time.mode_) && date_sql_mode.no_zero_date_
+        if (!HAS_TYPE_NANOSECOND(ob_time.mode_) && date_sql_mode.no_zero_date_
             && 0 == ob_time.parts_[DT_HOUR] && 0 == ob_time.parts_[DT_MIN]
             && 0 == ob_time.parts_[DT_SEC] && 0 == ob_time.parts_[DT_USEC]) {
           ret = OB_INVALID_DATE_VALUE;
@@ -2966,7 +2963,7 @@ int ObTimeConverter::otimestamp_to_ob_time(const ObObjType type, const ObOTimest
       LOG_WARN("nsec is overflow", K(nsec), K(ret));
     } else {
       ob_time.parts_[DT_USEC] = static_cast<int32_t>(nsec);
-      ob_time.mode_ |= DT_TYPE_ORACLE;
+      ob_time.mode_ |= DT_TYPE_NANOSECOND;
       if (!store_utc_time) {
         ob_time.mode_ &= ~(DT_TYPE_STORE_UTC);
       } else {
@@ -2986,7 +2983,7 @@ int ObTimeConverter::date_to_ob_time(int32_t value, ObTime &ob_time)
 {
   int ret = OB_SUCCESS;
   int32_t *parts = ob_time.parts_;
-  if (!HAS_TYPE_ORACLE(ob_time.mode_) && OB_UNLIKELY(ZERO_DATE == value)) {
+  if (!HAS_TYPE_NANOSECOND(ob_time.mode_) && OB_UNLIKELY(ZERO_DATE == value)) {
     memset(parts, 0, sizeof(*parts) * DATETIME_PART_CNT);
     parts[DT_DATE] = ZERO_DATE;
   } else {
@@ -3109,7 +3106,7 @@ int ObTimeConverter::ob_time_to_str(const ObTime &ob_time, ObDTMode mode, int16_
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(mode <= 0)
-      || OB_UNLIKELY(scale > (HAS_TYPE_ORACLE(ob_time.mode_) ? 9 : 6))
+      || OB_UNLIKELY(scale > (HAS_TYPE_NANOSECOND(ob_time.mode_) ? 9 : 6))
       || OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -3187,17 +3184,17 @@ int ObTimeConverter::ob_time_to_str(const ObTime &ob_time, ObDTMode mode, int16_
         ret = OB_SIZE_OVERFLOW;
       }
 
-      const bool is_oracle_timestamp = HAS_TYPE_ORACLE(ob_time.mode_);
+      const bool is_nanosecond_timestamp = HAS_TYPE_NANOSECOND(ob_time.mode_);
       if (scale < 0 ) {
         scale = (parts[DT_USEC] > 0 ? 6 : 0);
       }
 
       if (OB_SUCC(ret) && scale >= 0) {
-        const int32_t max_value = is_oracle_timestamp ? 1000000000L : 1000000L;
-        const int32_t max_sacle = is_oracle_timestamp ? 9 : 6;
+        const int32_t max_value = is_nanosecond_timestamp ? 1000000000L : 1000000L;
+        const int32_t max_sacle = is_nanosecond_timestamp ? 9 : 6;
         int32_t usec = parts[DT_USEC];
         if (0 == scale) {
-          if (is_oracle_timestamp) {
+          if (is_nanosecond_timestamp) {
             if (OB_LIKELY((buf_len - pos) > (scale + 1))) {
               *(buf + pos++) = '.';
             } else {
@@ -3285,7 +3282,7 @@ int ObTimeConverter::ob_time_to_str(const ObTime &ob_time, ObDTMode mode, int16_
           }
 
         }
-      }//end of is_oracle_timestamp
+      }//end of is_nanosecond_timestamp
     }
   }
   return ret;
@@ -3431,9 +3428,8 @@ int ObTimeConverter::adjust_ob_time(ObTime &ob_time, const bool has_date)
 }
 
 /**
- * @brief ObTimeConverter::str_to_ob_time_oracle_strict
- *        convert str to ob_time according to oracle literal format of DATE or TIMESTAMP
- *        doc: https://docs.oracle.com/en/database/oracle/oracle-database/18/sqlrf/Literals.html#GUID-8F4B3F82-8821-4071-84D6-FBBA21C05AC1
+ * @brief ObTimeConverter::str_to_ob_time_by_literal_format
+ *        convert str to ob_time according to literal format of DATE or TIMESTAMP
  * @param in:   str                   intput string
  * @param in:   cvrt_ctx
  * @param in:   is_timestamp_literal is timestamp literal or date literal
@@ -3441,7 +3437,7 @@ int ObTimeConverter::adjust_ob_time(ObTime &ob_time, const bool has_date)
  * @param out:  scale                scale of fractional seconds
  * @return OER
  */
-int ObTimeConverter::str_to_ob_time_oracle_strict(const ObString &str,
+int ObTimeConverter::str_to_ob_time_by_literal_format(const ObString &str,
                                                   const ObTimeConvertCtx &cvrt_ctx,
                                                   const bool is_timestamp_literal,
                                                   ObTime &ob_time,
@@ -3455,11 +3451,11 @@ int ObTimeConverter::str_to_ob_time_oracle_strict(const ObString &str,
   scale = 0;
 
   int64_t part_id_max = DATE_PART_CNT;
-  static constexpr char part_seps[ORACLE_DATE_PART_CNT] = {'\0', '-', '-', '\0', ':', ':'};
+  static constexpr char part_seps[DATETIME_NO_FRACTION_PART_CNT] = {'\0', '-', '-', '\0', ':', ':'};
   ob_time.mode_ |= DT_TYPE_DATETIME;
   if (is_timestamp_literal) {
-    ob_time.mode_ |= DT_TYPE_ORACLE;
-    part_id_max = ORACLE_DATE_PART_CNT;
+    ob_time.mode_ |= DT_TYPE_NANOSECOND;
+    part_id_max = DATETIME_NO_FRACTION_PART_CNT;
   }
 
   ObDFMUtil::skip_blank_chars(ctx);
@@ -3482,12 +3478,12 @@ int ObTimeConverter::str_to_ob_time_oracle_strict(const ObString &str,
       if (OB_FAIL(ret)) {
         //do nothing
       } else if (OB_UNLIKELY(ctx.is_parse_finish())) {
-        ret = get_oracle_err_when_datetime_out_of_range(part_idx);
+        ret = get_datetime_part_out_of_range_error(part_idx);
         LOG_WARN("input finished unexpected", K(ret));
       } else if (OB_FAIL(ObDFMUtil::match_int_value(ctx, value_len_max, value_len, value))) {
         LOG_WARN("failed to match int value", K(ret));
       } else if (OB_UNLIKELY(DT_YEAR == part_idx ? (value_len > 5) : (value_len > 2))) {
-        ret = get_oracle_err_when_datetime_out_of_range(part_idx);
+        ret = get_datetime_part_out_of_range_error(part_idx);
         LOG_WARN("input finished unexpected", K(ret), K(part_idx), K(value_len));
       } else {
         ob_time.parts_[part_idx] = value;
@@ -3609,7 +3605,7 @@ int ObTimeConverter::str_to_ob_time_oracle_strict(const ObString &str,
 
   //5. validate raw value in ob_time
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(validate_basic_part_of_ob_time_oracle(ob_time))) {
+    if (OB_FAIL(validate_basic_datetime_parts_with_error(ob_time))) {
       LOG_WARN("failed to validate basic part of obtime", K(ret));
     } else {
       ob_time.parts_[DT_DATE] = ob_time_to_date(ob_time);
@@ -3630,16 +3626,16 @@ int ObTimeConverter::str_to_ob_time_oracle_strict(const ObString &str,
     }
   }
   if (OB_SUCC(ret)) {
-    LOG_DEBUG("convert to oracle timestamp succ", K(ret), K(ob_time));
+    LOG_DEBUG("convert to timestamp succ", K(ret), K(ob_time));
   } else {
-    LOG_WARN("convert to oracle timestamp failed", K(ret), K(ob_time));
+    LOG_WARN("convert to timestamp failed", K(ret), K(ob_time));
   }
   return ret;
 }
 
 
 /**
- * @brief convert string to ob_time struct according to oracle datetime format model
+ * @brief convert string to ob_time struct according to datetime format model
  * @param in:   str         input string
  * @param in:   format      format string
  * @param in:   cvrt_ctx
@@ -3647,14 +3643,14 @@ int ObTimeConverter::str_to_ob_time_oracle_strict(const ObString &str,
  * @param out:  ob_time     memory struct of datetime
  * @param out:  scale       scale of fractional seconds
  */
-int ObTimeConverter::str_to_ob_time_oracle_dfm(const ObString &str,
-                                               const ObTimeConvertCtx &cvrt_ctx,
-                                               const ObObjType target_type,
-                                               ObTime &ob_time,
-                                               ObScale &scale)
+int ObTimeConverter::str_to_ob_time_by_format_model(const ObString &str,
+                                                    const ObTimeConvertCtx &cvrt_ctx,
+                                                    const ObObjType target_type,
+                                                    ObTime &ob_time,
+                                                    ObScale &scale)
 {
   int ret = OB_SUCCESS;
-  const ObString &format = cvrt_ctx.oracle_nls_format_;
+  const ObString &format = cvrt_ctx.nls_format_;
   ObSEArray<ObDFMElem, ObDFMUtil::COMMON_ELEMENT_NUMBER> dfm_elems;
   ObFixedBitSet<OB_DEFAULT_BITSET_SIZE_FOR_DFM> elem_flags;
 
@@ -3665,12 +3661,12 @@ int ObTimeConverter::str_to_ob_time_oracle_dfm(const ObString &str,
   } else {
     ob_time.mode_ |= DT_TYPE_DATETIME;
     if (ob_is_otimestamp_type(target_type)) {
-      ob_time.mode_ |= DT_TYPE_ORACLE;
+      ob_time.mode_ |= DT_TYPE_NANOSECOND;
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObDFMUtil::parse_datetime_format_string(format, dfm_elems))) {
-      LOG_WARN("fail to parse oracle datetime format string", K(ret), K(format));
+      LOG_WARN("fail to parse datetime format string", K(ret), K(format));
     } else if (OB_FAIL(ObDFMUtil::check_semantic(dfm_elems, elem_flags, ob_time.mode_))) {
       LOG_WARN("check semantic of format string failed", K(ret), K(format));
     } else if (OB_FAIL(str_to_ob_time_by_dfm_elems(str, dfm_elems, elem_flags, cvrt_ctx, target_type, ob_time, scale))) {
@@ -3689,7 +3685,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
                                                  ObScale &scale)
 {
   int ret = OB_SUCCESS;
-  const ObString &format = cvrt_ctx.oracle_nls_format_;
+  const ObString &format = cvrt_ctx.nls_format_;
   if (OB_UNLIKELY(str.empty() || format.empty()
                   || (!ob_is_otimestamp_type(target_type) && !ob_is_datetime_tc(target_type)))) {
     ret = OB_INVALID_ARGUMENT;
@@ -3697,7 +3693,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
   } else {
     ob_time.mode_ |= DT_TYPE_DATETIME;
     if (ob_is_otimestamp_type(target_type)) {
-      ob_time.mode_ |= DT_TYPE_ORACLE;
+      ob_time.mode_ |= DT_TYPE_NANOSECOND;
     }
   }
 
@@ -3736,7 +3732,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
       } else if (OB_FAIL(date_to_ob_time(cur_date, ob_time))) {
         LOG_WARN("date to ob_time failed", K(ret), K(cur_date));
       } else {
-        ob_time.parts_[DT_MDAY] = 1; //oracle default value is the first day of current month
+        ob_time.parts_[DT_MDAY] = 1; // format-model default value is the first day of current month
         ob_time.parts_[DT_DATE] = 0; //will be recalculated
         ob_time.parts_[DT_YDAY] = 0; //doesn't matter
         ob_time.parts_[DT_WDAY] = 0; //doesn't matter
@@ -3839,7 +3835,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
               } else if (OB_FAIL(ObDFMLimit::WEEK_DAY.validate(wday))) {
                 LOG_WARN("not a valid day of the week", K(ret), K(wday));
               } else {
-                //oracle numbered sunday as 1 in territory of CHINA
+                // DFM weekday numbering uses Sunday as 1 in territory of CHINA
                 //TODO wjh: hard code for now, need look up NLS_TERRITORIES
                 wday_temp_value = (wday + 5) % 7 + 1;
               }
@@ -3916,7 +3912,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
                 LOG_WARN("failed to match usecs", K(ret), K(ctx));
               } else {
                 scale = static_cast<ObScale>(parsed_elem_len);
-                usec = static_cast<int32_t>(usec * power_of_10[MAX_SCALE_FOR_ORACLE_TEMPORAL - parsed_elem_len]);
+                usec = static_cast<int32_t>(usec * power_of_10[MAX_SCALE_FOR_EXTENDED_TEMPORAL - parsed_elem_len]);
                 ob_time.parts_[DT_USEC] = usec;
               }
               break;
@@ -4101,7 +4097,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
                                                             tmp_ob_time.parts_[DT_YEAR],
                                                             true /* overwrite */))) {
                 // Here to be covered, to_date('2', 'YY') sets DT_YEAR to 2002, here the Julian day conversion does not conflict with it
-                // Year is 0002, according to Oracle behavior, the year of the result is 0002
+                // Year is 0002; format-model behavior keeps the result year as 0002.
                 LOG_WARN("set ob_time_year conflict", K(ret));
               } else {
                 yday_temp_value = tmp_ob_time.parts_[DT_YDAY];
@@ -4372,7 +4368,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
         }//end if
 
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to convert string to ob time by oracle dfm", K(ret), K(elem), K(ctx));
+          LOG_WARN("failed to convert string to ob time by dfm", K(ret), K(elem), K(ctx));
         } else {
           LOG_DEBUG("DFM DEBUG: finish element", K(elem), K(ctx));
         }
@@ -4442,7 +4438,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
 
       //calc and validate: YDAY WDAY vs YEAR MON DAY
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(validate_oracle_date(ob_time))) {
+        if (OB_FAIL(validate_datetime_parts(ob_time))) {
           LOG_WARN("date is invalid or out of range", K(ret), K(str));
         } else {
           //ob_time_to_date func is to calc YDAY and WDAY and return DATE
@@ -4469,8 +4465,8 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
 
   return ret;
 }
-// oracle mode print timestamp before, check obtime parts
-bool ObTimeConverter::valid_oracle_year(const ObTime &ob_time)
+// Timestamp encoding checks ob_time year range first.
+bool ObTimeConverter::valid_timestamp_year_range(const ObTime &ob_time)
 {
   int ret = true;
   if (ob_time.parts_[DT_YEAR] < 0 || ob_time.parts_[DT_YEAR] > 9999) {
@@ -4479,19 +4475,19 @@ bool ObTimeConverter::valid_oracle_year(const ObTime &ob_time)
   return ret;
 }
 
-int ObTimeConverter::ob_time_to_str_oracle_dfm(const ObTime &ob_time,
-                                               ObScale scale,
-                                               const ObString &format,
-                                               char *buf,
-                                               int64_t buf_len,
-                                               int64_t &pos)
+int ObTimeConverter::ob_time_to_str_by_format_model(const ObTime &ob_time,
+                                                    ObScale scale,
+                                                    const ObString &format,
+                                                    char *buf,
+                                                    int64_t buf_len,
+                                                    int64_t &pos)
 {
   int ret = OB_SUCCESS;
 
   ObSEArray<ObDFMElem, ObDFMUtil::COMMON_ELEMENT_NUMBER> dfm_elems;
 
   if (OB_FAIL(ObDFMUtil::parse_datetime_format_string(format, dfm_elems))) {
-    LOG_WARN("fail to parse oracle datetime format string", K(ret), K(format));
+    LOG_WARN("fail to parse datetime format string", K(ret), K(format));
   } else if (OB_FAIL(ob_time_to_str_by_dfm_elems(ob_time, scale, dfm_elems, format, buf, buf_len, pos))) {
     LOG_WARN("fail to print ob time to str by dfm elems", K(ret));
   }
@@ -4522,12 +4518,12 @@ int ObTimeConverter::ob_time_to_str_by_dfm_elems(const ObTime &ob_time,
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)
-      || OB_UNLIKELY(scale > MAX_SCALE_FOR_ORACLE_TEMPORAL)) {
+      || OB_UNLIKELY(scale > MAX_SCALE_FOR_EXTENDED_TEMPORAL)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len), K(ob_time), K(scale));
   } else {
     if (scale < 0 ) {
-      scale = DEFAULT_SCALE_FOR_ORACLE_FRACTIONAL_SECONDS;
+      scale = DEFAULT_SCALE_FOR_FRACTIONAL_SECONDS;
     }
  
     int32_t iso_week = 0;
@@ -4640,9 +4636,9 @@ int ObTimeConverter::ob_time_to_str_by_dfm_elems(const ObTime &ob_time,
             if (0 == scale) {
               // print nothing
             } else {
-              //  scn_to_str will use ob_time with TYPE_ORACLE in mysql mode
-              int adjusted_scale_factor = (HAS_TYPE_ORACLE(ob_time.mode_)
-                       ? MAX_SCALE_FOR_ORACLE_TEMPORAL : MAX_SCALE_FOR_TEMPORAL) - scale;
+              // scn_to_str uses nanosecond timestamp mode.
+              int adjusted_scale_factor = (HAS_TYPE_NANOSECOND(ob_time.mode_)
+                       ? MAX_SCALE_FOR_EXTENDED_TEMPORAL : MAX_SCALE_FOR_TEMPORAL) - scale;
               ret = data_fmt_nd(buf, buf_len, pos, scale,
                                 ob_time.parts_[DT_USEC] /
                                     power_of_10[adjusted_scale_factor],
@@ -4660,14 +4656,14 @@ int ObTimeConverter::ob_time_to_str_by_dfm_elems(const ObTime &ob_time,
           case ObDFMFlag::FF8:
           case ObDFMFlag::FF9: {
             int64_t scale = elem.elem_flag_ - ObDFMFlag::FF1 + 1;
-            if (!(HAS_TYPE_ORACLE(ob_time.mode_)) &&
+            if (!(HAS_TYPE_NANOSECOND(ob_time.mode_)) &&
                 elem.elem_flag_ > ObDFMFlag::FF6) {
               ret = OB_INVALID_DATE_FORMAT;
               LOG_WARN("max scale of timestamp in mysql mode is 6", K(elem.elem_flag_));
             } else {
               int adjust_max_scale =
-                  HAS_TYPE_ORACLE(ob_time.mode_)
-                      ? MAX_SCALE_FOR_ORACLE_TEMPORAL
+                  HAS_TYPE_NANOSECOND(ob_time.mode_)
+                      ? MAX_SCALE_FOR_EXTENDED_TEMPORAL
                       : MAX_SCALE_FOR_TEMPORAL;
               ret = data_fmt_nd(buf, buf_len, pos, scale,
                                 ob_time.parts_[DT_USEC] /
@@ -4829,7 +4825,7 @@ int ObTimeConverter::ob_time_to_str_by_dfm_elems(const ObTime &ob_time,
             break;
           }
           case ObDFMFlag::TZD: {
-            if (OB_UNLIKELY(!HAS_TYPE_ORACLE(ob_time.mode_))) {
+            if (OB_UNLIKELY(!HAS_TYPE_NANOSECOND(ob_time.mode_))) {
               ret = OB_INVALID_DATE_FORMAT;
             } else if (OB_LIKELY(ob_time.time_zone_id_ != OB_INVALID_INDEX)) {
               const ObString &tzd_str = ob_time.get_tzd_abbr_str();
@@ -4840,7 +4836,7 @@ int ObTimeConverter::ob_time_to_str_by_dfm_elems(const ObTime &ob_time,
             break;
           }
           case ObDFMFlag::TZR: {
-            if (OB_UNLIKELY(!HAS_TYPE_ORACLE(ob_time.mode_))) {
+            if (OB_UNLIKELY(!HAS_TYPE_NANOSECOND(ob_time.mode_))) {
               ret = OB_INVALID_DATE_FORMAT;
             } else if (OB_LIKELY(ob_time.time_zone_id_ != OB_INVALID_INDEX)) {
               const ObString &tzr_str = ob_time.get_tz_name_str();
@@ -4917,8 +4913,8 @@ int ObTimeConverter::ob_time_to_str_by_dfm_elems(const ObTime &ob_time,
   return ret;
 }
 
-int ObTimeConverter::deduce_max_len_from_oracle_dfm(const ObString &format,
-                                                    int64_t &max_char_len)
+int ObTimeConverter::deduce_max_len_from_datetime_format(const ObString &format,
+                                                         int64_t &max_char_len)
 {
   int ret = OB_SUCCESS;
   max_char_len = 0;
@@ -4970,7 +4966,7 @@ int ObTimeConverter::deduce_max_len_from_oracle_dfm(const ObString &format,
       LOG_WARN("data format is to long for internal buffer", K(ret), K(ori_ret));
     }
   }
-  LOG_DEBUG("deduce max len from oracle dfm", K(format), K(max_char_len));
+  LOG_DEBUG("deduce max len from datetime format", K(format), K(max_char_len));
   return ret;
 }
 
@@ -5227,7 +5223,7 @@ int check_and_get_tz_info(ObTime &ob_time,
   if (OB_UNLIKELY(ob_time.is_tz_name_valid_)) {//use string literal tz_inifo
     //In principle, tz_info_ should all be correctly assigned, but there are some conversions to datetime in the current code that directly pass NULL values for tz_info_
     if (NULL == cvrt_ctx.tz_info_) {
-      if (HAS_TYPE_ORACLE(ob_time.mode_)) {
+      if (HAS_TYPE_NANOSECOND(ob_time.mode_)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("tz_info_ is NULL", K(ret));
       }
@@ -5295,11 +5291,11 @@ int ObTimeConverter::ob_time_to_mdatetime(ObTime &ob_time, ObMySQLDateTime &valu
 int ObTimeConverter::ob_time_to_otimestamp(ObTime &ob_time, ObOTimestampData &value)
 {
   int ret = OB_SUCCESS;
-  if (!HAS_TYPE_ORACLE(ob_time.mode_)) {
+  if (!HAS_TYPE_NANOSECOND(ob_time.mode_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("it is not oracle type", K(ob_time), K(ret));
-  } else if (OB_FAIL(validate_oracle_timestamp(ob_time))) {
-    LOG_WARN("fail to validate_oracle_timestamp", K(ob_time), K(ret));
+    LOG_WARN("it is not nanosecond timestamp type", K(ob_time), K(ret));
+  } else if (OB_FAIL(validate_nanosecond_timestamp(ob_time))) {
+    LOG_WARN("fail to validate_nanosecond_timestamp", K(ob_time), K(ret));
   } else {
     int64_t usec = ob_time.parts_[DT_DATE] * USECS_PER_DAY + ob_time_to_time(ob_time);
     value.time_us_ = usec;
@@ -5332,7 +5328,7 @@ int32_t ObTimeConverter::ob_time_to_date(ObTime &ob_time)
 {
   int32_t value = 0;
   int32_t *parts = ob_time.parts_;
-  if (ZERO_DATE == ob_time.parts_[DT_DATE] && !HAS_TYPE_ORACLE(ob_time.mode_)) {
+  if (ZERO_DATE == ob_time.parts_[DT_DATE] && !HAS_TYPE_NANOSECOND(ob_time.mode_)) {
     value = ZERO_DATE;
   } else {
     if (OB_UNLIKELY(parts[DT_MON] <= 0 || parts[DT_MON] > 13)) {
@@ -5380,7 +5376,7 @@ int32_t ObTimeConverter::calc_date(int64_t year, int64_t month, int64_t day)
 int64_t ObTimeConverter::ob_time_to_time(const ObTime &ob_time)
 {
   return ((ob_time.parts_[DT_HOUR] * MINS_PER_HOUR + ob_time.parts_[DT_MIN]) * SECS_PER_MIN + ob_time.parts_[DT_SEC]) * USECS_PER_SEC
-         + (HAS_TYPE_ORACLE(ob_time.mode_) ? ob_time.parts_[DT_USEC] / NSECS_PER_USEC : ob_time.parts_[DT_USEC]);
+         + (HAS_TYPE_NANOSECOND(ob_time.mode_) ? ob_time.parts_[DT_USEC] / NSECS_PER_USEC : ob_time.parts_[DT_USEC]);
 }
 
 int ObTimeConverter::ob_interval_to_interval(const ObInterval &ob_interval, int64_t &value)
@@ -5450,11 +5446,11 @@ int ObTimeConverter::validate_datetime(ObTime &ob_time, const ObDateSqlMode date
 {
   const int32_t *parts = ob_time.parts_;
   int ret = OB_SUCCESS;
-  if (!HAS_TYPE_ORACLE(ob_time.mode_) && date_sql_mode.no_zero_date_
+  if (!HAS_TYPE_NANOSECOND(ob_time.mode_) && date_sql_mode.no_zero_date_
       && 0 == parts[DT_YEAR] && 0 == parts[DT_MON] && 0 == parts[DT_MDAY] && 0 == parts[DT_HOUR]
       && 0 == parts[DT_MIN] && 0 == parts[DT_SEC] && 0 == parts[DT_USEC]) {
     ret = OB_INVALID_DATE_VALUE;
-  } else if (!HAS_TYPE_ORACLE(ob_time.mode_)
+  } else if (!HAS_TYPE_NANOSECOND(ob_time.mode_)
       && !date_sql_mode.allow_zero_in_date(IS_MYSQL_COMPAT_DATES(ob_time.mode_))
       && OB_UNLIKELY(0 == parts[DT_MON] && 0 == parts[DT_MDAY])) {
     if (!(0 == parts[DT_YEAR] && 0 == parts[DT_HOUR] && 0 == parts[DT_MIN]
@@ -5464,8 +5460,8 @@ int ObTimeConverter::validate_datetime(ObTime &ob_time, const ObDateSqlMode date
       ob_time.parts_[DT_DATE] = ZERO_DATE;
     }
   } else {
-    const int64_t *part_min = (HAS_TYPE_ORACLE(ob_time.mode_) ? TZ_PART_MIN : DT_PART_MIN);
-    const int64_t *part_max = (HAS_TYPE_ORACLE(ob_time.mode_) ? TZ_PART_MAX : DT_PART_MAX);
+    const int64_t *part_min = (HAS_TYPE_NANOSECOND(ob_time.mode_) ? TZ_PART_MIN : DT_PART_MIN);
+    const int64_t *part_max = (HAS_TYPE_NANOSECOND(ob_time.mode_) ? TZ_PART_MAX : DT_PART_MAX);
     for (int i = 0; OB_SUCC(ret) && i < DATETIME_PART_CNT; ++i) {
       if (date_sql_mode.allow_zero_in_date(IS_MYSQL_COMPAT_DATES(ob_time.mode_)) &&
             (DT_MON == i || DT_MDAY == i) && 0 == parts[i]) {
@@ -5489,7 +5485,7 @@ int ObTimeConverter::validate_datetime(ObTime &ob_time, const ObDateSqlMode date
   return ret;
 }
 
-int ObTimeConverter::validate_oracle_timestamp(const ObTime &ob_time)
+int ObTimeConverter::validate_nanosecond_timestamp(const ObTime &ob_time)
 {
   const int32_t *parts = ob_time.parts_;
   int ret = OB_SUCCESS;
@@ -5518,11 +5514,11 @@ int ObTimeConverter::validate_oracle_timestamp(const ObTime &ob_time)
   return ret;
 }
 
-int ObTimeConverter::validate_oracle_date(const ObTime &ob_time)
+int ObTimeConverter::validate_datetime_parts(const ObTime &ob_time)
 {
   const int32_t *parts = ob_time.parts_;
   int ret = OB_SUCCESS;
-  for (int i = 0; OB_SUCC(ret) && i < ORACLE_DATE_PART_CNT; ++i) {
+  for (int i = 0; OB_SUCC(ret) && i < DATETIME_NO_FRACTION_PART_CNT; ++i) {
     if (parts[i] < TZ_PART_MIN[i] || parts[i] > TZ_PART_MAX[i]) {
       ret = OB_INVALID_DATE_VALUE;
     }
@@ -5536,12 +5532,12 @@ int ObTimeConverter::validate_oracle_date(const ObTime &ob_time)
   return ret;
 }
 
-int ObTimeConverter::validate_basic_part_of_ob_time_oracle(const ObTime &ob_time)
+int ObTimeConverter::validate_basic_datetime_parts_with_error(const ObTime &ob_time)
 {
   int ret = OB_SUCCESS;
   for (int i = 0; OB_SUCC(ret) && i < DATETIME_PART_CNT; ++i) {
     if (ob_time.parts_[i] < TZ_PART_MIN[i] || ob_time.parts_[i] > TZ_PART_MAX[i]) {
-      ret = get_oracle_err_when_datetime_out_of_range(i);
+      ret = get_datetime_part_out_of_range_error(i);
     }
   }
 
@@ -5636,7 +5632,7 @@ int ObTimeConverter::set_ob_time_part_may_conflict(ObTime &ob_time, int64_t &con
     if (0 != (conflict_bitset & (1 << part_offset))) {
       //already has data in ob_time.part_[part_name], validate it
       if (OB_UNLIKELY(part_value != ob_time.parts_[part_offset])) {
-        ret = get_oracle_err_when_datetime_parts_conflict(part_offset);
+        ret = get_datetime_part_conflict_error(part_offset);
         LOG_WARN("set time conflict", K(ret), K(part_offset), K(part_value), K(ob_time));
       }
     } else {
@@ -6178,7 +6174,7 @@ int ObTimeConverter::date_add_nmonth(const int64_t ori_date_value, const int64_t
         }
       }
     }
-    if (OB_FAIL(validate_basic_part_of_ob_time_oracle(ob_time))) {
+    if (OB_FAIL(validate_basic_datetime_parts_with_error(ob_time))) {
       LOG_WARN("failed to validate ob_time", K(ret), K(ob_time));
     } else {
       ob_time.parts_[DT_DATE] = ob_time_to_date(ob_time);
@@ -6295,7 +6291,7 @@ int ObTimeConverter::decode_otimestamp(const ObObjType obj_type,
   int8_t tz_name_length = 0;
   int8_t tz_abbr_length = 0;
   scale = -1;
-  ObTime ob_time(DT_TYPE_ORACLE_TIMESTAMP);
+  ObTime ob_time(DT_TYPE_NANO_TIMESTAMP);
   ObString tz_name;
   ObString tz_abbr;
 
@@ -6346,15 +6342,15 @@ int ObTimeConverter::encode_otimestamp(const ObObjType obj_type,
 {
   int ret = OB_SUCCESS;
   const bool store_utc_time = false;
-  ObTime ob_time(DT_TYPE_ORACLE_TIMESTAMP);
+  ObTime ob_time(DT_TYPE_NANO_TIMESTAMP);
   int64_t orig_pos = pos;
   const ObOTimestampData &tmp_ot_data = round_otimestamp(scale, ot_data);
-  const int8_t tmp_scale = static_cast<int8_t>(scale < 0 ? DEFAULT_SCALE_FOR_ORACLE_FRACTIONAL_SECONDS : scale);
+  const int8_t tmp_scale = static_cast<int8_t>(scale < 0 ? DEFAULT_SCALE_FOR_FRACTIONAL_SECONDS : scale);
   if (OB_FAIL(otimestamp_to_ob_time(obj_type, tmp_ot_data, tz_info, ob_time, store_utc_time))) {
     LOG_WARN("failed to convert timestamp_tz to ob time", K(ret));
-  } else if (! valid_oracle_year(ob_time)) {
+  } else if (! valid_timestamp_year_range(ob_time)) {
     ret = OB_ERR_DATETIME_INTERVAL_INTERNAL_ERROR;
-    LOG_WARN("invalid oracle timestamp", K(ret), K(ob_time));
+    LOG_WARN("invalid timestamp year range", K(ret), K(ob_time));
   } else {
     const int32_t unsigned_year = ob_time.parts_[DT_YEAR] >= 0 ? ob_time.parts_[DT_YEAR] : (0 - ob_time.parts_[DT_YEAR]);
     int32_t century = static_cast<int32_t>(unsigned_year / YEARS_PER_CENTURY * (ob_time.parts_[DT_YEAR] >= 0 ? 1 : -1));

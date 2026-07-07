@@ -156,10 +156,7 @@ int ObTabletMetaTableCompactionOperator::get_min_compaction_scn(SCN &min_compact
 {
   int ret = OB_SUCCESS;
   const int64_t start_time_us = ObTimeUtil::current_time();
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
+  if (OB_ISNULL(GCTX.meta_db_pool_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
@@ -274,10 +271,7 @@ int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
   int ret = OB_SUCCESS;
   const int64_t start_time_us = ObTimeUtil::current_time();
   const int64_t BATCH_UPDATE_CNT = 1000;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
+  if (OB_ISNULL(GCTX.meta_db_pool_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
@@ -320,10 +314,7 @@ int ObTabletMetaTableCompactionOperator::batch_update_status()
   int ret = OB_SUCCESS;
   const int64_t start_time_us = ObTimeUtil::current_time();
   const int64_t BATCH_UPDATE_CNT = 1000;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
+  if (OB_ISNULL(GCTX.meta_db_pool_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
@@ -364,10 +355,7 @@ int ObTabletMetaTableCompactionOperator::batch_get_tablet_ids(const ObSqlString 
   // This method is kept for backward compatibility but should not be used for new code
   // The SQL string is parsed and executed directly using SQLite
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
+  if (OB_ISNULL(GCTX.meta_db_pool_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
@@ -406,10 +394,7 @@ int ObTabletMetaTableCompactionOperator::get_estimated_timeout_us(
 {
   int ret = OB_SUCCESS;
   int64_t tablet_replica_cnt = 0;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_FAIL(ObTabletMetaTableCompactionOperator::get_tablet_replica_cnt(tablet_replica_cnt))) {
+  if (OB_FAIL(ObTabletMetaTableCompactionOperator::get_tablet_replica_cnt(tablet_replica_cnt))) {
     LOG_WARN("fail to get tablet replica cnt", KR(ret));
   } else {
     estimated_timeout_us = tablet_replica_cnt * 1000L; // 1ms for each tablet replica
@@ -423,10 +408,7 @@ int ObTabletMetaTableCompactionOperator::get_estimated_timeout_us(
 int ObTabletMetaTableCompactionOperator::get_tablet_replica_cnt(int64_t &tablet_replica_cnt)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
+  if (OB_ISNULL(GCTX.meta_db_pool_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
@@ -448,8 +430,7 @@ int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
   const int64_t all_pair_cnt = tablet_pairs.count();
-  if (OB_UNLIKELY((all_pair_cnt < 1)
-      || !true)) {
+  if (OB_UNLIKELY(all_pair_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(all_pair_cnt));
   } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
@@ -493,7 +474,7 @@ int ObTabletMetaTableCompactionOperator::get_next_batch_tablet_ids(const int64_t
     ObIArray<ObTabletID> &tablet_ids)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!true || batch_update_cnt < 1)) {
+  if (OB_UNLIKELY(batch_update_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(batch_update_cnt));
   } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
@@ -524,7 +505,7 @@ int ObTabletMetaTableCompactionOperator::range_scan_for_compaction(const int64_t
 {
   int ret = OB_SUCCESS;
   tablet_infos.reset();
-  if (OB_UNLIKELY(!true || batch_size <= 0)) {
+  if (OB_UNLIKELY(batch_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(start_tablet_id), K(batch_size));
   } else if (start_tablet_id.id() == INT64_MAX) {

@@ -1421,12 +1421,6 @@ bool ObSelectIntoOp::file_need_split(int64_t file_size)
                 || (MY_SPEC.is_single_ && file_size > MAX_OSS_FILE_SIZE)));
 }
 
-int ObSelectIntoOp::check_oracle_number(ObObjType obj_type, int16_t &precision, int8_t scale)
-{
-  int ret = OB_SUCCESS;
-  return ret;
-}
-
 int ObSelectIntoOp::calc_byte_array(const common::ObIVector* expr_vector,
                                     int row_idx,
                                     const ObDatumMeta &datum_meta,
@@ -1584,14 +1578,10 @@ int ObSelectIntoOp::setup_parquet_schema()
       ObString alias_name = MY_SPEC.alias_names_.strs_.at(i);
       std::string column_name(alias_name.ptr(), alias_name.length());
       int primitive_length = -1;
-      if (OB_FAIL(check_oracle_number(obj_type,
-                                      select_exprs.at(i)->datum_meta_.precision_,
-                                      select_exprs.at(i)->datum_meta_.scale_))) {
-        LOG_WARN("not support number type", K(ret));
-      } else if (OB_FAIL(get_parquet_logical_type(logical_type,
-                                                  obj_type,
-                                                  select_exprs.at(i)->datum_meta_.precision_,
-                                                  select_exprs.at(i)->datum_meta_.scale_))) {
+      if (OB_FAIL(get_parquet_logical_type(logical_type,
+                                           obj_type,
+                                           select_exprs.at(i)->datum_meta_.precision_,
+                                           select_exprs.at(i)->datum_meta_.scale_))) {
         LOG_WARN("failed to get related logical type", K(ret));
       } else if (OB_FAIL(get_parquet_physical_type(physical_type, obj_type))) {
         LOG_WARN("failed to get related physical type", K(ret));
@@ -1728,17 +1718,17 @@ int ObSelectIntoOp::into_outfile_batch_parquet(const ObBatchRows &brs, ObExterna
   return ret;
 }
 
-int ObSelectIntoOp::oracle_timestamp_to_int96(const common::ObIVector* expr_vector,
-                                              int64_t row_idx,
-                                              const ObDatumMeta &datum_meta,
-                                              parquet::Int96 &res)
+int ObSelectIntoOp::timestamp_to_int96(const common::ObIVector* expr_vector,
+                                       int64_t row_idx,
+                                       const ObDatumMeta &datum_meta,
+                                       parquet::Int96 &res)
 {
   int ret = OB_SUCCESS;
   int64_t out_usec = 0;
   int32_t tmp_offset = 0;
-  ObOTimestampData oracle_timestamp;
+  ObOTimestampData timestamp;
   uint32_t julian_date_value = (out_usec / 86400000000LL) + 2440588;
-  uint64_t nsec_time_value = oracle_timestamp.time_ctx_.tail_nsec_ + std::abs(out_usec % 86400000000LL) * 1000;
+  uint64_t nsec_time_value = timestamp.time_ctx_.tail_nsec_ + std::abs(out_usec % 86400000000LL) * 1000;
   res.value[2] = julian_date_value;
   res.value[1] = nsec_time_value >> 32;
   res.value[0] = nsec_time_value & UINT32_MAX;
@@ -1917,7 +1907,7 @@ int ObSelectIntoOp::build_parquet_cell(parquet::RowGroupWriter* rg_writer,
         value += value_offset;
         if (expr_vector->is_null(row_idx)) {
           definition_levels[row_offset] = null_definition_level;
-        } else if (OB_FAIL(oracle_timestamp_to_int96(expr_vector, row_idx, datum_meta, *value))) {
+        } else if (OB_FAIL(timestamp_to_int96(expr_vector, row_idx, datum_meta, *value))) {
           LOG_WARN("failed to convert timestamp to int96", K(ret));
         } else {
           value_offset++;
@@ -2222,7 +2212,7 @@ int ObSelectIntoOp::get_data_writer_for_partition(const ObString &partition_str,
     }
   } else if (OB_UNLIKELY(OB_HASH_NOT_EXIST != ret)) {
     LOG_WARN("get unexpected error", K(ret));
-  } else if (curr_partition_num_ >= OB_MAX_PARTITION_NUM_ORACLE) {
+  } else if (curr_partition_num_ >= OB_MAX_EXTENDED_PARTITION_NUM) {
     ret = OB_TOO_MANY_PARTITIONS_ERROR;
     LOG_WARN("too many partitions", K(ret));
   } else {

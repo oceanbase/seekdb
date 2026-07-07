@@ -212,7 +212,7 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
                                                  var->is_default_construct(),
                                                  value))) {
       LOG_WARN("init sesssion var failed", K(ret));
-    } else if (value.is_null_oracle() && var_type.is_not_null()) {
+    } else if (value.is_null_or_empty_string() && var_type.is_not_null()) {
       ret = OB_ERR_NUMERIC_OR_VALUE_ERROR;
       LOG_WARN("cannot assign null to var with not null attribution", K(ret));
     }

@@ -1210,28 +1210,12 @@ LOG_MOD_END(PL)
     CHECK_LOG_USER_CONST_FMT(errcode)                                   \
     _LOG_USER_MSG(level, errcode, LOG_MACRO_JOIN(errcode, __USER_ERROR_MSG), ##args); \
   } while(0)
-#define LOG_USER_ORACLE(level, errcode, args...)                                \
-  do                                                                    \
-  {                                                                     \
-    CHECK_LOG_USER_CONST_FMT(errcode)                                   \
-    if (!g_enable_ob_error_msg_style) {                                 \
-      _LOG_USER_MSG(level, errcode, LOG_MACRO_JOIN(errcode, __ORA_USER_ERROR_MSG), ##args); \
-    } else {                                                            \
-      _LOG_USER_MSG(level, errcode, LOG_MACRO_JOIN(errcode, __OBE_USER_ERROR_MSG), ##args); \
-    }                                                                   \
-  } while(0)
 #define LOG_MYSQL_USER_ERROR(errcode, args...)                                \
   LOG_USER_MYSQL(::oceanbase::common::ObLogger::USER_ERROR, errcode, ##args)
 #define LOG_MYSQL_USER_WARN(errcode, args...)                                 \
   LOG_USER_MYSQL(::oceanbase::common::ObLogger::USER_WARN, errcode, ##args)
 #define LOG_MYSQL_USER_NOTE(errcode, args...)                                 \
   LOG_USER_MYSQL(::oceanbase::common::ObLogger::USER_NOTE, errcode, ##args)
-#define LOG_ORACLE_USER_ERROR(errcode, args...)                                \
-  LOG_USER_ORACLE(::oceanbase::common::ObLogger::USER_ERROR, errcode, ##args)
-#define LOG_ORACLE_USER_WARN(errcode, args...)                                 \
-  LOG_USER_ORACLE(::oceanbase::common::ObLogger::USER_WARN, errcode, ##args)
-#define LOG_ORACLE_USER_NOTE(errcode, args...)                                 \
-  LOG_USER_ORACLE(::oceanbase::common::ObLogger::USER_NOTE, errcode, ##args)
 #define LOG_USER_ERROR(errcode, args...)                                \
   LOG_USER(::oceanbase::common::ObLogger::USER_ERROR, errcode, ##args)
 #define LOG_USER_WARN(errcode, args...)                                 \

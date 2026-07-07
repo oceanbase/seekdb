@@ -104,8 +104,8 @@ public:
   static int minus_datetime_number(EVAL_FUNC_ARG_DECL);
   static int minus_datetime_number_batch(BATCH_EVAL_FUNC_ARG_DECL);
 
-  static int minus_datetime_datetime_oracle(EVAL_FUNC_ARG_DECL);
-  static int minus_datetime_datetime_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_datetime_datetime_number_result(EVAL_FUNC_ARG_DECL);
+  static int minus_datetime_datetime_number_result_batch(BATCH_EVAL_FUNC_ARG_DECL);
 
   static int minus_datetime_datetime(EVAL_FUNC_ARG_DECL);
   static int minus_datetime_datetime_batch(BATCH_EVAL_FUNC_ARG_DECL);
@@ -127,15 +127,15 @@ public:
   static int minus_decimalint512_with_check(EVAL_FUNC_ARG_DECL);
   static int minus_decimalint512_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL);
   static int minus_decimalint512_with_check_vector(VECTOR_EVAL_FUNC_ARG_DECL);
-  static int minus_decimalint32_oracle(EVAL_FUNC_ARG_DECL);
-  static int minus_decimalint32_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
-  static int minus_decimalint32_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
-  static int minus_decimalint64_oracle(EVAL_FUNC_ARG_DECL);
-  static int minus_decimalint64_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
-  static int minus_decimalint64_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
-  static int minus_decimalint128_oracle(EVAL_FUNC_ARG_DECL);
-  static int minus_decimalint128_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
-  static int minus_decimalint128_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint32_number_result(EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint32_number_result_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint32_number_result_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint64_number_result(EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint64_number_result_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint64_number_result_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint128_number_result(EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint128_number_result_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint128_number_result_vector(VECTOR_EVAL_FUNC_ARG_DECL);
   static int minus_collection_collection_int8_t(EVAL_FUNC_ARG_DECL);
   static int minus_collection_collection_int8_t_batch(BATCH_EVAL_FUNC_ARG_DECL);
   static int minus_collection_collection_int8_t_vector(VECTOR_EVAL_FUNC_ARG_DECL);

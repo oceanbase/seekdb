@@ -36,8 +36,8 @@ enum ObSorEncMode {
   OB_INVALID_MODE = 0,
   OB_NF = 1,        // compare nulls first
   OB_NL = 2,        // compare nulls last
-  OB_FT_ORC = 3,    // need field termination in oracle mode
-  OB_FT_MYSQL = 4,  // need field termnination in mysql mode
+  OB_FT_EXT = 3,    // need field termination for extended format
+  OB_FT_MYSQL = 4,  // need field termination in mysql mode
   OB_DESC = 5,      // descrease, Notes: asc by default
   OB_NONE = 6,      // do nothing
   OB_CMP_CB = 7,    // combine bytes to compare

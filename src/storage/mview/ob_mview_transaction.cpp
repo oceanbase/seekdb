@@ -455,21 +455,16 @@ int ObMViewTransaction::restore_session_for_inner()
   return ret;
 }
 
-int ObMViewTransaction::set_compact_mode(ObCompatibilityMode compact_mode)
+int ObMViewTransaction::set_mysql_mode()
 {
   int ret = OB_SUCCESS;
   ObISQLConnection *conn = nullptr;
   if (OB_ISNULL(conn = get_connection())) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("conn_ is NULL", KR(ret));
-  } else if (OB_UNLIKELY(ObCompatibilityMode::OCEANBASE_MODE == compact_mode)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(compact_mode));
-  } else {
-    if (OB_FAIL(conn->set_session_variable(OB_SV_COMPATIBILITY_MODE,
-                                           static_cast<int64_t>(compact_mode)))) {
-      LOG_WARN("fail to set inner connection compact mode", KR(ret), K(compact_mode));
-    }
+  } else if (OB_FAIL(conn->set_session_variable(OB_SV_COMPATIBILITY_MODE,
+                                                static_cast<int64_t>(ObCompatibilityMode::MYSQL_MODE)))) {
+    LOG_WARN("fail to set inner connection to mysql mode", KR(ret));
   }
   return ret;
 }
@@ -480,7 +475,6 @@ int ObMViewTransaction::set_compact_mode(ObCompatibilityMode compact_mode)
 
 ObMViewTransactionInnerMySQLGuard::ObMViewTransactionInnerMySQLGuard(ObMViewTransaction &trans)
   : trans_(trans),
-    old_compact_mode_(ObCompatibilityMode::OCEANBASE_MODE),
     error_ret_(OB_SUCCESS),
     need_reset_(false),
     first_loop_(true)
@@ -492,10 +486,9 @@ ObMViewTransactionInnerMySQLGuard::ObMViewTransactionInnerMySQLGuard(ObMViewTran
     LOG_WARN("trans is not started", KR(ret));
   } else {
     need_reset_ = true;
-    old_compact_mode_ = trans_.get_compatibility_mode();
     if (OB_FAIL(trans_.save_session_for_inner())) {
       LOG_WARN("fail to save session for inner", KR(ret));
-    } else if (OB_FAIL(trans_.set_compact_mode(ObCompatibilityMode::MYSQL_MODE))) {
+    } else if (OB_FAIL(trans_.set_mysql_mode())) {
       LOG_WARN("fail to set mysql compact mode", KR(ret));
     }
   }
@@ -512,8 +505,8 @@ ObMViewTransactionInnerMySQLGuard::~ObMViewTransactionInnerMySQLGuard()
       LOG_ERROR("fail to restore session for inner", KR(tmp_ret));
       ret = COVER_SUCC(tmp_ret);
     }
-    if (OB_TMP_FAIL(trans_.set_compact_mode(old_compact_mode_))) {
-      LOG_WARN("fail to set compact mode", KR(tmp_ret), K(old_compact_mode_));
+    if (OB_TMP_FAIL(trans_.set_mysql_mode())) {
+      LOG_WARN("fail to restore inner connection mysql mode", KR(tmp_ret));
       ret = COVER_SUCC(tmp_ret);
     }
   }

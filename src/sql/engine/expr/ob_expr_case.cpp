@@ -205,7 +205,7 @@ int ObExprCase::calc_case_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_
   }
   return ret;
 }
-// Oracle mode, during the deduce type stage, the when/then expr types need to be consistent
+// During type deduction, the when/then expression types need to stay consistent.
 
 int ObExprCase::eval_case_batch(const ObExpr &expr,
                                 ObEvalCtx &ctx,

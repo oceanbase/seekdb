@@ -273,17 +273,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigRowFormatChecker);
 };
 
-class ObConfigCompressOptionChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigCompressOptionChecker() {}
-  virtual ~ObConfigCompressOptionChecker() {}
-  bool check(const ObConfigItem &t) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigCompressOptionChecker);
-};
-
 class ObConfigMaxSyslogFileCountChecker
   : public ObConfigChecker
 {

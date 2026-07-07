@@ -14,16 +14,15 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_ORACLE_FORMAT_MODELS_H_
-#define OCEANBASE_ORACLE_FORMAT_MODELS_H_
+#ifndef OCEANBASE_DATETIME_FORMAT_MODELS_H_
+#define OCEANBASE_DATETIME_FORMAT_MODELS_H_
 
 #include "lib/ob_define.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_bit_set.h"
 #include "common/timezone/ob_time_convert.h"
 
-//Note: DFM is abbr of datetime format models
-//see oracle doc Format Models: https://docs.oracle.com/cd/B19306_01/server.102/b14200/sql_elements004.htm#i34924
+// Note: DFM is abbr of datetime format models.
 
 namespace oceanbase
 {
@@ -31,7 +30,7 @@ namespace common
 {
 struct ObTimeConstStr;
 
-struct ObOracleTimeLimiter
+struct ObDFMTimeLimiter
 {
 int32_t MIN;
 int32_t MAX;
@@ -48,26 +47,25 @@ inline int validate(int32_t value) const
 
 struct ObDFMLimit
 {
-static const ObOracleTimeLimiter YEAR;
-static const ObOracleTimeLimiter MONTH;
-static const ObOracleTimeLimiter MONTH_DAY;
-static const ObOracleTimeLimiter WEEK_DAY;
-static const ObOracleTimeLimiter YEAR_DAY;
-static const ObOracleTimeLimiter HOUR12;
-static const ObOracleTimeLimiter HOUR24;
-static const ObOracleTimeLimiter MINUTE;
-static const ObOracleTimeLimiter SECOND;
-static const ObOracleTimeLimiter SECS_PAST_MIDNIGHT;
-static const ObOracleTimeLimiter TIMEZONE_HOUR_ABS;
-static const ObOracleTimeLimiter TIMEZONE_MIN_ABS;
-static const ObOracleTimeLimiter JULIAN_DATE;
+static const ObDFMTimeLimiter YEAR;
+static const ObDFMTimeLimiter MONTH;
+static const ObDFMTimeLimiter MONTH_DAY;
+static const ObDFMTimeLimiter WEEK_DAY;
+static const ObDFMTimeLimiter YEAR_DAY;
+static const ObDFMTimeLimiter HOUR12;
+static const ObDFMTimeLimiter HOUR24;
+static const ObDFMTimeLimiter MINUTE;
+static const ObDFMTimeLimiter SECOND;
+static const ObDFMTimeLimiter SECS_PAST_MIDNIGHT;
+static const ObDFMTimeLimiter TIMEZONE_HOUR_ABS;
+static const ObDFMTimeLimiter TIMEZONE_MIN_ABS;
+static const ObDFMTimeLimiter JULIAN_DATE;
 };
 
 class ObDFMFlag {
 public:
-//ElementFlag are defined according to oracle doc
-//see Format Models: https://docs.oracle.com/cd/B19306_01/server.102/b14200/sql_elements004.htm#i34924
-//Note: FF1-FF9 and FF should be together
+// ElementFlag values are defined for datetime format models.
+// Note: FF1-FF9 and FF should be together.
 enum ElementFlag : int64_t
 {
   INVALID_FLAG = -1,
@@ -225,33 +223,33 @@ enum ElementFlag : int64_t
     /**LITERAL*/    NON_CONFLICT_GROUP,
   };
 
-  static const int32_t MAX_WDAY_NAME_LENGTH_ORACLE = 36;
-  static const int32_t MAX_WDAY_ABBR_NAME_LENGTH_ORACLE = 12;
-  static const int32_t MAX_MON_NAME_LENGTH_ORACLE = 36;
-  static const int32_t MAX_MON_ABBR_NAME_LENGTH_ORACLE = 12;
+  static const int32_t MAX_WDAY_NAME_LENGTH_DFM = 36;
+  static const int32_t MAX_WDAY_ABBR_NAME_LENGTH_DFM = 12;
+  static const int32_t MAX_MON_NAME_LENGTH_DFM = 36;
+  static const int32_t MAX_MON_ABBR_NAME_LENGTH_DFM = 12;
   static constexpr int64_t ELEMENTFLAG_MAX_LEN[MAX_FLAG_NUMBER] = {
     /*AD*/2, /*AD2*/4, /*BC*/2, /*BC2*/4, /*CC*/2, /*SCC*/3,
-    /*D*/1, /*Day*/MAX_WDAY_NAME_LENGTH_ORACLE, /*DD*/2, /*DDD*/3, /*DY*/MAX_WDAY_ABBR_NAME_LENGTH_ORACLE, /*FF1*/9,
+    /*D*/1, /*Day*/MAX_WDAY_NAME_LENGTH_DFM, /*DD*/2, /*DDD*/3, /*DY*/MAX_WDAY_ABBR_NAME_LENGTH_DFM, /*FF1*/9,
     /*FF2*/9, /*FF3*/9, /*FF4*/9, /*FF5*/9, /*FF6*/9, /*FF7*/9,
     /*FF8*/9, /*FF9*/9, /*FF*/9, /*HH*/2, /*HH24*/2, /*HH12*/2,
     /*IW*/2, /*I*/1, /*IY*/2, /*IYY*/3, /*IYYY*/4, /*MI*/2,
-    /*MM*/2, /*MONTH*/MAX_MON_NAME_LENGTH_ORACLE, /*MON*/MAX_MON_ABBR_NAME_LENGTH_ORACLE, /*AM*/2, /*AM2*/3, /*PM*/2,
+    /*MM*/2, /*MONTH*/MAX_MON_NAME_LENGTH_DFM, /*MON*/MAX_MON_ABBR_NAME_LENGTH_DFM, /*AM*/2, /*AM2*/3, /*PM*/2,
     /*PM2*/4, /*Q*/1, /*RR*/2, /*RRRR*/4, /*SS*/2, /*SSSSS*/5,
     /*WW*/2, /*W*/1, /*YGYYY*/5, /*YEAR*/0, /*SYEAR*/0, /*YYYY*/4,
-    /*SYYYY*/5, /*YYY*/3, /*YY*/2, /*Y*/1, /*DS*/10, /*DL*/MAX_WDAY_NAME_LENGTH_ORACLE + 2 + MAX_MON_NAME_LENGTH_ORACLE + 1 + 2 + 3,
+    /*SYYYY*/5, /*YYY*/3, /*YY*/2, /*Y*/1, /*DS*/10, /*DL*/MAX_WDAY_NAME_LENGTH_DFM + 2 + MAX_MON_NAME_LENGTH_DFM + 1 + 2 + 3,
     /*TZH*/3, /*TZM*/2, /*TZD*/OB_MAX_TZ_ABBR_LEN, /*TZR*/MIN(OB_MAX_TZ_NAME_LEN, 6), /*X*/1, /*J*/7, /*LITERAL*/46
   };
   //Define the error to report when conflicts occur within the group
   static constexpr int            CONFLICT_GROUP_ERR[MAX_CONFLICT_GROUP_NUMBER] =
   {
-    /*NEVER_APPEAR_GROUP*/            OB_ERR_FORMAT_CODE_CANNOT_APPEAR,                 //OBE-01820: format code cannot appear in date input format
-    /*YEAR_GROUP*/                    OB_ERR_YEAR_MAY_ONLY_BE_SPECIFIED_ONCE,           //OBE-01812: year may only be specified once
-    /*MERIDIAN_INDICATOR_GROUP*/      OB_ERR_AM_PM_CONFLICTS_WITH_USE_OF_AM_DOT_PM_DOT, //OBE-01810: format code appears twice
-    /*WEEK_OF_DAY_GROUP*/             OB_ERR_DAY_OF_WEEK_SPECIFIED_MORE_THAN_ONCE,      //OBE-01817: day of week may only be specified once
-    /*ERA_GROUP*/                     OB_ERR_BC_AD_CONFLICT_WITH_USE_OF_BC_DOT_AD_DOT,  //OBE-01810: format code appears twice
-    /*HOUR_GROUP*/                    OB_ERR_HOUR_MAY_ONLY_BE_SPECIFIED_ONCE,           //OBE-01813: hour may only be specified once
-    /*MONTH_GROUP*/                   OB_ERR_MONTH_MAY_ONLY_BE_SPECIFIED_ONCE,          //OBE-01816: month may only be specified once
-    /*DAY_OF_YEAR_GROUP*/             OB_ERR_JULIAN_DATE_PRECLUDES_USE_OF_DAY_OF_YEAR   //OBE-1811: Julian date precludes use of day of year
+    /*NEVER_APPEAR_GROUP*/            OB_ERR_FORMAT_CODE_CANNOT_APPEAR,                 // format code cannot appear in date input format
+    /*YEAR_GROUP*/                    OB_ERR_YEAR_MAY_ONLY_BE_SPECIFIED_ONCE,           // year may only be specified once
+    /*MERIDIAN_INDICATOR_GROUP*/      OB_ERR_AM_PM_CONFLICTS_WITH_USE_OF_AM_DOT_PM_DOT, // format code appears twice
+    /*WEEK_OF_DAY_GROUP*/             OB_ERR_DAY_OF_WEEK_SPECIFIED_MORE_THAN_ONCE,      // day of week may only be specified once
+    /*ERA_GROUP*/                     OB_ERR_BC_AD_CONFLICT_WITH_USE_OF_BC_DOT_AD_DOT,  // format code appears twice
+    /*HOUR_GROUP*/                    OB_ERR_HOUR_MAY_ONLY_BE_SPECIFIED_ONCE,           // hour may only be specified once
+    /*MONTH_GROUP*/                   OB_ERR_MONTH_MAY_ONLY_BE_SPECIFIED_ONCE,          // month may only be specified once
+    /*DAY_OF_YEAR_GROUP*/             OB_ERR_JULIAN_DATE_PRECLUDES_USE_OF_DAY_OF_YEAR   // Julian date precludes use of day of year
   };
   // Define the expected match length for each element (numeric type), which can be less than this length but cannot exceed
   static constexpr int64_t        EXPECTED_MATCHING_LENGTH[MAX_FLAG_NUMBER] =
@@ -380,7 +378,7 @@ struct ObDFMParseCtx
   const char* cur_ch_;
   int64_t remain_len_;
 
-  //the following values are only used in function str_to_ob_time_oracle_dfm
+  //the following values are only used in function str_to_ob_time_by_format_model
   int64_t expected_elem_flag_;
   bool is_matching_by_expected_len_;  //only used for match_int_value
 
@@ -440,7 +438,7 @@ public:
                                             const int64_t stop_char = INT64_MAX);
   static inline int64_t skip_blank_chars(ObDFMParseCtx &ctx);
   static inline bool is_element_can_omit(const ObDFMElem &elem);
-  //Explain padding: day or month name is padded with blanks to display in the same wide, please see oracle doc
+  // Explain padding: day or month name is padded with blanks to display at the same width.
   static int special_mode_sprintf(char *buf, const int64_t buf_len, int64_t &pos,
                                   const ObTimeConstStr &str, const ObDFMElem::UpperCaseMode mode, int64_t padding = -1);
   static int match_chars_until_space(ObDFMParseCtx &ctx, ObString &result, int64_t &value_len);
@@ -566,4 +564,4 @@ inline bool ObDFMUtil::is_element_can_omit(const ObDFMElem &elem)
 }
 }
 
-#endif // OCEANBASE_ORACLE_FORMAT_MODELS_H_
+#endif // OCEANBASE_DATETIME_FORMAT_MODELS_H_

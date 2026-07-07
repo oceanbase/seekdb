@@ -62,8 +62,6 @@ ObDelUpdResolver::ObDelUpdResolver(ObResolverParams &params)
   : ObDMLResolver(params),
     insert_column_ids_(),
     is_column_specify_(false),
-    is_oracle_tmp_table_(false),
-    oracle_tmp_table_type_(0),
     is_resolve_insert_update_(false)
 {
   // TODO Auto-generated constructor stub
@@ -231,7 +229,7 @@ int ObDelUpdResolver::resolve_column_and_values(const ParseNode &assign_list,
               ObString row = ObString::make_string("row");
               ObString table_name = table_item->get_table_name().length() > 0 ?
                                         table_item->get_table_name() : ObString::make_string(" ");
-              ret = OB_ERR_BAD_FIELD_ERROR; //oracle will report an ORA-00936 error, ob does not have the error code.
+              ret = OB_ERR_BAD_FIELD_ERROR; // use bad field error for ROW pseudo column in this path.
               LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, row.length(), row.ptr(), table_name.length(), table_name.ptr());
               LOG_WARN("column does not existed", K(ret));
             }
@@ -458,7 +456,7 @@ int ObDelUpdResolver::resolve_assign_columns(const ParseNode &assign_target,
       ObColumnRefRawExpr *base_col_expr = static_cast<ObColumnRefRawExpr *>(col_expr);
       if (!get_stmt()->has_instead_of_trigger()) {
         if (OB_FAIL(ObTransformUtils::get_base_column(get_stmt(), base_col_expr))) {
-          // this is not allow, but to compatible with oracle, the error will report at last
+          // This is not allowed, but report the error at the final validation step.
           ret = OB_SUCCESS;
           LOG_WARN("get base column failed", K(ret), KPC(base_col_expr));
         } else if (OB_ISNULL(base_col_expr)) {
@@ -756,8 +754,7 @@ int ObDelUpdResolver::add_assignment(common::ObIArray<ObTableAssignment> &assign
     //The result is that col1 and col2 have the same value.
     //This behavior differs from standard SQL.
     //UPDATE t1 SET col1 = col1 + 1, col2 = col1;
-    //But in Oracle, its behavior is same with standard SQL
-    //set original col1 to col1 and col2
+    // Keep the original col1 value for col1 and col2 in this path.
     //For generated column, when cascaded column is updated, the generated column will be updated with new column
     ObRawExprCopier copier(*params_.expr_factory_);
     for (int64_t i = 0; OB_SUCC(ret) && i < table_assign->assignments_.count(); ++i) {
@@ -812,7 +809,7 @@ int ObDelUpdResolver::check_need_assignment(const common::ObIArray<ObAssignment>
     ret = OB_NOT_INIT;
     LOG_WARN("stmt is NULL", K(ret));
   } else if (stmt->has_instead_of_trigger()) {
-    // Compatible with oracle, here the columns are not cascaded updated
+    // INSTEAD OF trigger columns are not cascade-updated here.
     // do nothing
   } else if (column.is_generated_column()) {
     if (OB_FAIL(ObResolverUtils::check_whether_assigned(stmt, assigns, table_id, column.get_column_id(), exist))) {
@@ -992,7 +989,7 @@ int ObDelUpdResolver::set_base_table_for_view(TableItem &table_item, const bool 
       ret = OB_ERR_NON_UPDATABLE_TABLE;
       LOG_WARN("no table item in select stmt", K(ret));
     } else {
-      // get the first table item for oracle mode
+      // Get the first table item.
       TableItem *base = stmt->get_table_items().at(0);
       if (stmt->get_table_items().count() > 1) {
         // mysql delete join view not supported.
@@ -1307,7 +1304,7 @@ int ObDelUpdResolver::check_err_log_table(ObString &table_name, ObString &databa
           ret = OB_ERR_MISS_ERR_LOG_MANDATORY_COLUMN;
           LOG_USER_ERROR(OB_ERR_MISS_ERR_LOG_MANDATORY_COLUMN, static_cast<int>(strlen(err_log_default_columns_[index])), err_log_default_columns_[index]);
         } else {
-          // TODO oracle default 5 column types cannot be LONG Due to temporary lack of support for LONG type, no check is currently performed
+          // TODO: The default error logging columns cannot be LONG, but LONG type checks are not implemented yet.
           // Temporarily do not implement ORA_ERR_TAG$ column
         }
         index++;
@@ -1350,7 +1347,7 @@ int ObDelUpdResolver::check_err_log_table(ObString &table_name, ObString &databa
 int ObDelUpdResolver::check_err_log_support_type(ObObjType column_type)
 {
   int ret = OB_SUCCESS;
-  ObObjOType column_o_type = ob_obj_type_to_oracle_type(column_type);
+  ObObjOType column_o_type = ob_obj_type_to_extended_type(column_type);
   switch (column_o_type) {
   case ObONotSupport:
   case ObONullType:

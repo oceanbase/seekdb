@@ -62,10 +62,7 @@ ObDMLResolver::ObDMLResolver(ObResolverParams &params)
       column_namespace_checker_(params),
       sequence_namespace_checker_(params),
       gen_col_exprs_(),
-      from_items_order_(),
       query_ref_exec_params_(NULL),
-      has_ansi_join_(false),
-      has_oracle_join_(false),
       with_clause_without_record_(false),
       is_prepare_stage_(params.is_prepare_stage_),
       in_pl_(params.secondary_namespace_ || params.is_dynamic_sql_ || params.is_dbms_sql_),
@@ -1182,12 +1179,12 @@ int ObDMLResolver::resolve_sql_expr(const ParseNode &node, ObRawExpr *&expr,
       }
     }
 
-    //process oracle compatible implimental cast
-    LOG_DEBUG("is oracle mode", K(op_exprs));
+    // Process implicit casts for operator expressions.
+    LOG_DEBUG("resolve operator expression implicit casts", K(op_exprs));
     if (OB_SUCC(ret) && op_exprs.count() > 0) {
       if (OB_FAIL(expr->extract_info())) {
         LOG_WARN("failed to extract info", K(ret), K(*expr));
-      } else if (OB_FAIL(ObRawExprUtils::resolve_op_exprs_for_oracle_implicit_cast(
+      } else if (OB_FAIL(ObRawExprUtils::resolve_op_exprs_for_comparison_implicit_cast(
                                                                                   ctx.expr_factory_,
                                                                                   ctx.session_info_,
                                                                                   op_exprs))) {
@@ -1210,8 +1207,6 @@ int ObDMLResolver::resolve_sql_expr(const ParseNode &node, ObRawExpr *&expr,
       // update flag info
       if (OB_FAIL(expr->extract_info())) {
         LOG_WARN("failed to extract info", K(ret), K(*expr));
-      } else if (OB_FAIL(resolve_outer_join_symbol(current_scope_, expr))) {
-        LOG_WARN("Failed to check and remove outer join symbol", K(ret));
       } else if (OB_FAIL(resolve_special_expr(expr, current_scope_))) {
         LOG_WARN("resolve special expression failed", K(ret));
       } else if (OB_FAIL(expr->calc_hash())) {
@@ -1221,8 +1216,7 @@ int ObDMLResolver::resolve_sql_expr(const ParseNode &node, ObRawExpr *&expr,
     if (OB_SUCC(ret) &&
         current_scope_ != T_INSERT_SCOPE &&
         !is_multi_stmt &&
-        !params_.is_resolve_table_function_expr_ &&
-        !expr->has_flag(CNT_OUTER_JOIN_SYMBOL)) {
+        !params_.is_resolve_table_function_expr_) {
       bool is_new = false;
       bool dummp_bool = false;
       if (OB_FAIL(expr_resv_ctx_.get_shared_instance(expr, expr, is_new, dummp_bool))) {
@@ -1479,10 +1473,10 @@ int ObDMLResolver::resolve_into_variables(const ParseNode *node,
       ch_node = into_node->children_[i];
       expr = NULL;
       CK (OB_NOT_NULL(ch_node));
-      CK (OB_LIKELY(T_USER_VARIABLE_IDENTIFIER == ch_node->type_ /*MySQL Mode for user_var*/
-                    || T_IDENT == ch_node->type_ /*MySQL Mode for pl_var*/
-                    || T_OBJ_ACCESS_REF == ch_node->type_ /*Oracle Mode for pl_var*/
-                    || T_QUESTIONMARK == ch_node->type_));/*Oracle Mode for dynamic sql*/
+      CK (OB_LIKELY(T_USER_VARIABLE_IDENTIFIER == ch_node->type_ /* user_var */
+                    || T_IDENT == ch_node->type_ /* pl_var */
+                    || T_OBJ_ACCESS_REF == ch_node->type_ /* object access ref */
+                    || T_QUESTIONMARK == ch_node->type_)); /* dynamic sql */
       if (OB_SUCC(ret)) {
         if (T_USER_VARIABLE_IDENTIFIER == ch_node->type_) {
           ObString var_name(ch_node->str_len_, ch_node->str_value_);
@@ -1876,7 +1870,7 @@ int ObDMLResolver::resolve_into_variables(const ParseNode *node,
                                                   into_pl_type.get_data_type()->get_collation_type()));
               } else if ((value_expr->get_data_type() == ObUserDefinedSQLType && into_pl_type.is_opaque_type()) ||
                          (value_expr->get_data_type() == ObGeometryType && into_pl_type.is_record_type())) {
-                // oracle xml/gis to pl extend, dest collation type is not used
+                // xml/gis to pl extend, dest collation type is not used
                 OX (is_compatible = cast_supported(value_expr->get_data_type(),
                                                    value_expr->get_collation_type(),
                                                    ObExtendType, CS_TYPE_BINARY));
@@ -2217,9 +2211,8 @@ int ObDMLResolver::replace_col_ref_prefix(ObQualifiedName &col_ref, uint64_t idx
              && !(static_cast<ObColumnRefRawExpr *>(col_ref_expr))->is_from_alias_table()
              && OB_NOT_NULL(params_.query_ctx_)
              && params_.query_ctx_->available_tb_id_ > (static_cast<ObColumnRefRawExpr *>(col_ref_expr))->get_table_id()) {
-    // Oracle Compatible :
-    // To reference an attribute or method of a table element,
-    // you must give the table an alias and use the alias to qualify the reference to the attribute or method.
+    // To reference an attribute or method of a table element, the table must
+    // have an alias and the alias must qualify the reference.
     ret = OB_ERR_BAD_FIELD_ERROR;
     LOG_WARN("column access with table name has not alias", K(ret), K(col_ref), KPC(col_ref_expr));
   } else if (col_ref_expr->get_result_type().is_ext()
@@ -2488,17 +2481,17 @@ int ObDMLResolver::resolve_qualified_identifier(ObQualifiedName &q_name,
   }
 
   if (OB_ERR_BAD_FIELD_ERROR == ret) {
-    // To be compatible with Oracle's error reporting method:
+    // Preserve sequence-specific error reporting:
     //
     // SQL> select nextval from dual;
     // select nextval from dual
     // ERROR at line 1:
-    // OBE-00904: "NEXTVAL": invalid identifier
+    // "NEXTVAL": invalid identifier
     //
     // SQL> select s.nextval from dual;
     // select s.nextval from dual
     // ERROR at line 1:
-    // OBE-02289: sequence does not exist
+    // sequence does not exist
     ret = update_errno_if_sequence_object(q_name, ret);
   }
   return ret;
@@ -2614,7 +2607,7 @@ int ObDMLResolver::inner_resolve_sys_view(const ParseNode *table_node,
   return ret;
 }
 
-// oracle sys view will resolve again
+// extended sys views are resolved again here
 int ObDMLResolver::inner_resolve_sys_view(const ParseNode *table_node,
                                           uint64_t &database_id,
                                           ObString &tbl_name,
@@ -2869,7 +2862,7 @@ int ObDMLResolver::resolve_basic_table_without_cte(const ParseNode &parse_tree, 
       }
       if (OB_SUCCESS == ret && sample_node != NULL && T_SAMPLE_SCAN == sample_node->type_) {
         if (is_virtual_table(table_item->ref_id_) &&
-            !is_oracle_mapping_real_virtual_table(table_item->ref_id_)) {
+            !is_real_table_mapping_virtual_table(table_item->ref_id_)) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "sampling virtual table");
         } else if (OB_FAIL(resolve_sample_clause(sample_node, *table_item))) {
@@ -3067,7 +3060,7 @@ int ObDMLResolver::resolve_flashback_query_node(const ParseNode *time_node, Tabl
                  && ObUInt64Type != expr->get_result_type().get_type()) {
         ObRawExprResType res_type;
         res_type.set_uint64();
-        res_type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY2[ORACLE_MODE][ObUInt64Type]);
+        res_type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY2[MYSQL_MODE][ObUInt64Type]);
         OZ(ObRawExprUtils::create_cast_expr(*params_.expr_factory_, expr, res_type, dst_expr,
                                             session_info_, use_default_cm, cm));
         if (OB_SUCC(ret)) {
@@ -3081,9 +3074,9 @@ int ObDMLResolver::resolve_flashback_query_node(const ParseNode *time_node, Tabl
   }
   return ret;
 }
-// According to Oracle's setup principles for subquery or view, retain the existing flashback attributes if the table already has them, and when there are no relevant flashback attributes,
-// Set to the flashback attribute for the outer view or subquery, for example:
-// select * from ((select * from t1 as of timestamp time1, t2) as of timestamp time1;
+// For subquery or view flashback resolution, retain existing flashback attributes if the table already has them.
+// When there are no relevant flashback attributes, set the table to the outer view or subquery flashback attribute, for example:
+// select * from ((select * from t1 as of timestamp time1, t2) as of timestamp time2);
 // At this point, table t1 still retains the original flashback timestamp time1, while table t2 is set to the outer flashback timestamp time2
 int ObDMLResolver::set_flashback_info_for_view(ObSelectStmt *select_stmt, TableItem *table_item)
 {
@@ -3151,7 +3144,7 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
       LOG_WARN("fetch clause can't occur in table attributes", K(ret));
     }
   }
-  // Compatible with Oracle behavior, flashback query does not support delete/update/insert stmt
+  // Flashback query does not support delete/update/insert statements.
   if (OB_SUCC(ret)) {
     if (!stmt->is_select_stmt() && OB_NOT_NULL(time_node)) {
       ret = OB_ERR_FLASHBACK_QUERY_WITH_UPDATE;
@@ -3210,8 +3203,6 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
       }
       case T_JOINED_TABLE: {
         JoinedTable *root = NULL;
-        set_has_ansi_join(true);
-        ansi_join_outer_table_id_.reset();
         if (OB_FAIL(resolve_joined_table(parse_tree, root))) {
           LOG_WARN("resolve joined table failed", K(ret));
         } else if (OB_FAIL(stmt->add_joined_table(root))) {
@@ -3834,11 +3825,9 @@ int ObDMLResolver::resolve_joined_table_item(const ParseNode &parse_node, Joined
       break;
     case T_JOIN_LEFT:
       cur_table->joined_type_ = LEFT_OUTER_JOIN;
-      OZ(ansi_join_outer_table_id_.push_back(cur_table->right_table_->table_id_));
       break;
     case T_JOIN_RIGHT:
       cur_table->joined_type_ = RIGHT_OUTER_JOIN;
-      OZ(ansi_join_outer_table_id_.push_back(cur_table->left_table_->table_id_));
       break;
     case T_JOIN_INNER:
       cur_table->joined_type_ = INNER_JOIN;
@@ -3999,9 +3988,11 @@ int ObDMLResolver::do_resolve_generate_table(const ParseNode &table_node,
   ObSelectStmt *ref_stmt = NULL;
   ObString alias_name;
   const ParseNode *column_alias_node = NULL;
-   /*Oracle mode allows the generated table in sel/upd/del stmt to contain duplicate columns, as long as the outer layer does not reference the duplicate columns, and whether the referenced columns by the outer layer are duplicate columns will be detected during column checking, eg: select 1 from (select c1,c1 from t1);
-  * Therefore, when detecting sel/upd/del stmt under Oracle mode, if duplicate columns are detected, just skip, but still need to add relevant plan cache constraints
-  *
+  /*
+   * Generated tables in sel/upd/del statements may contain duplicate columns as
+   * long as the outer layer does not reference them. Column checking detects
+   * whether referenced columns are duplicated, so duplicate-column detection
+   * can be skipped here while still adding the relevant plan cache constraints.
    */
   bool can_skip = false;
   if (OB_FAIL(child_resolver.resolve_child_stmt(table_node))) {
@@ -4118,7 +4109,7 @@ int ObDMLResolver::resolve_str_const(const ParseNode &parse_tree, ObString& path
   ObString literal_prefix;
   bool is_paramlize = false;
   ObExprInfo parents_expr_info;
-  const ObLengthSemantics default_length_semantics = (OB_NOT_NULL(session_info_) ? session_info_->get_actual_nls_length_semantics() : LS_BYTE);
+  const ObLengthSemantics default_length_semantics = (OB_NOT_NULL(session_info_) ? session_info_->get_actual_length_semantics() : LS_BYTE);
   const ObSQLSessionInfo *session_info = session_info_;
   int64_t server_collation = CS_TYPE_INVALID;
   ObCollationType nation_collation = OB_NOT_NULL(session_info_) ? session_info_->get_nls_collation_nation() : CS_TYPE_INVALID;
@@ -4141,7 +4132,7 @@ int ObDMLResolver::resolve_str_const(const ParseNode &parse_tree, ObString& path
   } else if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session_info, false,
                                                                      enable_mysql_compatible_dates))) {
   } else if (OB_FAIL(ObResolverUtils::resolve_const(&parse_tree,
-                                             // stmt_type is only used in oracle mode
+                                             // stmt_type is unused in MySQL-only mode.
                                              stmt::T_NONE,
                                              params_.expr_factory_->get_allocator(),
                                              collation_connection, nation_collation, TZ_INFO(params_.session_info_),
@@ -4920,7 +4911,7 @@ int ObDMLResolver::resolve_function_table_item(const ParseNode &parse_tree,
           LOG_USER_ERROR(OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE, 14, "TABLE FUNCTION");
         } else if (!user_type->is_collection_type()) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("OBE-22905: cannot access rows from a non-nested table item",
+          LOG_WARN("cannot access rows from a non-nested table item",
                    K(ret), K(function_table_expr->get_result_type()));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "access rows from a non-nested table item");
         } else if (OB_FAIL(add_udt_dependency(*user_type))) {
@@ -5539,7 +5530,7 @@ int ObDMLResolver::resolve_fk_table_partition_expr(const TableItem &table_item, 
                 create table t17(a int, b int, c int, d int, primary key (a)) partition by hash(a) partitions 3;
                 create table tf17(a int, b int, c int, d int, primary key (a), foreign key (a) references t17 (a)) partition by hash(a) partitions 3;
                 update tf17 partition(p0) as C, tf17 as P set C.d = C.d + 100 where C.a = P.a;
-                In follwing cases, the partition key of t17 will be resolved twice, but it needs return success for compatibility with oracle
+                In following cases, the partition key of t17 will be resolved twice, but duplicate part expr setup can be ignored
               */
               if (ret == OB_ERR_TABLE_EXIST) {
                 ret = OB_SUCCESS;
@@ -6265,7 +6256,7 @@ int ObDMLResolver::resolve_current_of(const ParseNode &node,
   if (OB_ISNULL(params_.secondary_namespace_)) {
     // secondary_namespace_ is empty, indicating not in PL
     ret = OB_UNIMPLEMENTED_FEATURE;
-    LOG_WARN("OBE-03001: unimplemented feature");
+    LOG_WARN("unimplemented feature");
   }
   CK(T_SP_EXPLICIT_CURSOR_ATTR == node.type_,
      OB_NOT_NULL(params_.expr_factory_),
@@ -6285,9 +6276,6 @@ int ObDMLResolver::resolve_where_clause(const ParseNode *node)
   if (node) {
     current_scope_ = T_WHERE_SCOPE;
     ObDMLStmt *stmt = get_stmt();
-
-    set_has_oracle_join(false);
-
     CK(OB_NOT_NULL(stmt), OB_NOT_NULL(node->children_[0]), node->type_ == T_WHERE_CLAUSE);
     if (T_SP_EXPLICIT_CURSOR_ATTR == node->children_[0]->type_) {
       OZ (resolve_current_of(*node->children_[0], *stmt, stmt->get_condition_exprs()));
@@ -6295,7 +6283,6 @@ int ObDMLResolver::resolve_where_clause(const ParseNode *node)
       OZ(resolve_and_split_sql_expr_with_bool_expr(*node->children_[0],
                                                    stmt->get_condition_exprs()));
     }
-    OZ(generate_outer_join_tables());
   }
   return ret;
 }
@@ -6337,7 +6324,7 @@ int ObDMLResolver::resolve_order_clause(const ParseNode *order_by_node, bool is_
       }
     } // end of for
   } else if (!params_.is_from_create_view_ && stmt->is_select_stmt() &&is_for_set_query)  {
-    //is_for_set_query = true when _force_order_preserve_set is enable
+    // is_for_set_query means set query order should be preserved.
     //union/minus/intersect add select exprs as order by expers if stmt has no order items
     //not for union-all/recursive
       ObSEArray<ObRawExpr *, 4> select_exprs;
@@ -8496,7 +8483,6 @@ int ObDMLResolver::resolve_json_table_column_type(const ParseNode &parse_tree,
                                                           col_def->col_base_info_.col_name_,
                                                           data_type,
                                                           false,
-                                                          false,
                                                           session_info_->get_session_nls_params(),
                                                           convert_real_to_decimal,  /*todo @weiyouchao.wyc, check_enable_decimalint*/
                                                           enable_mysql_compatible_dates,
@@ -9304,10 +9290,9 @@ bool ObDMLResolver::check_generated_column_has_json_constraint(const ObSelectStm
     the argument select_item_offset is used to tell the function to traverse select_items from the select_item_offset-th select item.
   @param skip_check:
     bugfix:
-    if the all the three conditions are true, we can skip the check and directly copy the select_item to column_item:
+    if both conditions are true, we can skip the check and directly copy the select_item to column_item:
     1. the function is called directly or indirectly from reslove_star. (e.g., in select * from xxxx)
-    2. is oracle mode
-    3. the column to be checked is a duplicable column in joined table (excepet the using).
+    2. the column to be checked is a duplicable column in joined table (excepet the using).
       for example:  t1 (c1, c2, c3), t2 (c2, c3, c4)
       in 'select * from t1 left join t2 using (c3)', c2 is the duplicable column, c3 is not duplicable since c3 is in using condition.
 */
@@ -9649,7 +9634,7 @@ int ObDMLResolver::resolve_sample_clause(const ParseNode *sample_node,
         ret = OB_ERR_INVALID_SAMPLING_RANGE;
       } else if (sample_info.seed_ != -1 && (sample_info.seed_ > (4294967295))) {
         // Official documentation limit [0, 4294967295(2^32 - 1)]
-        // Actually testing, ORACLE except for limiting greater than or equal to 0, does not impose restrictions on the seed value
+        // Current behavior only requires the seed value to be non-negative.
         // Here log the record once
         LOG_WARN("seed value out of range");
       }
@@ -9733,8 +9718,8 @@ int ObDMLResolver::add_sequence_id_to_stmt(uint64_t sequence_id, bool is_currval
       // If it is a CURRVAL expression, then indicate stmt to generate a SEQUENCE operator, but do nothing specific
       //
       // If it is a NEXTVAL expression, then add it to STMT, indicating that the SEQUENCE operator should calculate its NEXTVALUE
-      //  note: according to Oracle semantics, even if the same object's nextval appears multiple times in a statement
-      //        Also calculate only once. So here we only need to save the unique sequence_idis sufficient
+      //  note: even if the same object's nextval appears multiple times in a statement,
+      //        calculate it only once. So here saving the unique sequence_id is sufficient.
       const ObSequenceSchema *seq_schema = nullptr;
       if (OB_ISNULL(params_.schema_checker_->get_schema_guard()) ||
           OB_ISNULL(session_info_)) {
@@ -10033,691 +10018,6 @@ int ObDMLResolver::add_cte_table_to_children(ObChildStmtResolver& child_resolver
   return ret;
 }
 
-/**
- * @bref Check the legality of the join condition for oracle outer join.
- * 1. Check scope
- * 2. Check predicate constraints: number of in, or.
- */
-int ObDMLResolver::check_oracle_outer_join_condition(const ObRawExpr *expr)
-{
-  int ret = OB_SUCCESS;;
-  CK(OB_NOT_NULL(expr));
-  if (OB_SUCC(ret) && (expr->has_flag(CNT_OUTER_JOIN_SYMBOL))) {
-    if (expr->has_flag(CNT_SUB_QUERY)) {
-      /**
-       * OBE-01799: Column cannot be outer-joined to a subquery
-       * 01799. 00000 -  "a column may not be outer-joined to a subquery"
-       * *Cause:    <expression>(+) <relop> (<subquery>) is not allowed.
-       * *Action:   Either remove the (+) or make a view out of the subquery.
-       *            In V6 and before, the (+) was just ignored in this case.
-       * ----
-       * error: a(+) = (select * from t1);
-       */
-      ret = OB_ERR_OUTER_JOIN_WITH_SUBQUERY;
-      LOG_WARN("column may not be outer-joined to a subquery");
-    } else if (OB_UNLIKELY(expr->has_flag(CNT_IN) || expr->has_flag(CNT_OR))) {
-      /**
-       * OBE-01719: OR or IN operands do not allow the use of the outer join operator (+)
-       * 01719. 00000 -  "outer join operator (+) not allowed in operand of OR or IN"
-       * *Cause:    An outer join appears in an or clause.
-       * *Action:   If A and B are predicates, to get the effect of (A(+) or B),
-       *            try (select where (A(+) and not B)) union all (select where (B)).
-       * ----
-       * error: a(+) = b or c = d
-       * OK: a(+) in (1) [IN is T_OP_EQ in here]
-       */
-      OZ(check_oracle_outer_join_in_or_validity(expr, ansi_join_outer_table_id_));
-    } else if (has_ansi_join()) {
-      if (has_oracle_join()) {
-        if (expr->has_flag(CNT_OR)){
-          ret = OB_ERR_OUTER_JOIN_AMBIGUOUS;
-          LOG_WARN("outer join operator (+) not allowed in operand of OR or IN", K(ret));
-        } else {
-          ret = OB_ERR_OUTER_JOIN_WITH_ANSI_JOIN;
-          LOG_WARN("old style outer join (+) cannot be used with ANSI joins");
-        }
-      } else if (OB_FAIL(check_oracle_outer_join_expr_validity(expr, ansi_join_outer_table_id_, expr->get_expr_type()))){
-        LOG_WARN("fail to check_oracle_outer_join_expr_validity", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-// in some cases, oracle_outer_join is allowed in IN/OR
-int ObDMLResolver::check_oracle_outer_join_in_or_validity(const ObRawExpr *expr,
-                                                          ObIArray<uint64_t> &right_tables)
-{
-  int ret = OB_SUCCESS;;
-  CK(OB_NOT_NULL(expr));
-  if(OB_SUCC(ret)){
-    switch (expr->get_expr_type()) {
-      case T_OP_IN: {
-        // OBE-1719  t1.c1(+) in (t2.c1, xxxx);  OB_ERR_OUTER_JOIN_AMBIGUOUS
-        // OBE-1468  t1.c1(+) in (t2.c1(+), xxxx);  OB_ERR_MULTI_OUTER_JOIN_TABLE;
-        // OBE-1416  t1.c1(+) in (t1.c1, xxxx);  OB_ERR_OUTER_JOIN_NESTED
-        //@OK: t1.c1(+) in (1, 1);
-        if(expr->get_param_count() == 2 && expr->has_flag(CNT_OUTER_JOIN_SYMBOL)) {
-          const ObRawExpr * left_expr = expr->get_param_expr(0);
-          const ObRawExpr * right_exprs = expr->get_param_expr(1);
-          CK(OB_NOT_NULL(left_expr));
-          CK(OB_NOT_NULL(right_exprs));
-          if (OB_SUCC(ret)) {
-            //ObArray<uint64_t> right_tables; // table with (+)
-            ObArray<uint64_t> left_tables;  // table without (+)
-            ObArray<uint64_t> le_left_tables;  // left tables of left expr;
-            ObArray<uint64_t> le_right_tables; // right tables of left expr;
-            OZ(extract_column_with_outer_join_symbol(left_expr, le_left_tables, le_right_tables));
-            const int64_t param_cnt = right_exprs->get_param_count();
-            /* check each expr separately from right to left.
-            * select * from t1,t2 where t1.c1(+) in (t1.c1, t2.c1(+)); will raise OBE-1468
-            * select * from t1,t2 where t1.c1(+) in (t2.c1(+), t1.c1); will raise OBE-1416
-            */
-            for (int64_t i = param_cnt - 1; OB_SUCC(ret) && i >= 0; i--) {
-              const ObRawExpr * right_expr = right_exprs->get_param_expr(i);
-              CK(OB_NOT_NULL(right_expr));
-              if (OB_SUCC(ret)) {
-                ret = check_single_oracle_outer_join_expr_validity(right_expr,
-                                                                   le_left_tables,
-                                                                   le_right_tables,
-                                                                   left_tables,
-                                                                   right_tables);
-              }
-            }
-            if (OB_SUCC(ret)) {
-              // check right_tables and left_tables
-              // size of left table should be 0, size of right table should be 1.
-              for (int64_t i = 0; i < le_right_tables.count(); i++) {
-                OZ((common::add_var_to_array_no_dup)(right_tables, le_right_tables.at(i)));
-              }
-              // if there is conflict between two exprs in IN, the error is OBE-1719
-              if (right_tables.count() != 1 || left_tables.count() != 0) {
-                ret = OB_ERR_OUTER_JOIN_AMBIGUOUS;
-                LOG_WARN("outer join operator (+) not allowed in operand of OR or IN", K(ret));
-              }
-            }
-          }
-        }
-        break;
-      }
-      case T_OP_OR: {
-        // oracle_outer_join should appear in both side of OR-expr.
-        /* the check order is from left to right.
-        * select * from t1,t2 where t1.c1(+) = t1.c1 or t1.c1(+) = t2.c1(+); will raise OBE-1416
-        * select * from t1,t2 where t1.c1(+) = t2.c1(+) or t1.c1(+) = t1.c1; will raise OBE-1468
-        * @OK: select * from t1, t2 where t1.c1(+) = 1 or t1.c2(+) = 2;
-        */
-        for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); i++) {
-          const ObRawExpr *e = expr->get_param_expr(i);
-          CK(OB_NOT_NULL(e));
-          if (OB_SUCC(ret)) {
-            if (e->has_flag(IS_OR)) {
-              ret = SMART_CALL(check_oracle_outer_join_in_or_validity(e, right_tables));
-            } else if (OB_FAIL(check_oracle_outer_join_expr_validity(e, right_tables, T_OP_OR))){
-              LOG_WARN("fail to check_oracle_outer_join_expr_validity", K(ret));
-            }
-          }
-        }
-        break;
-      }
-      default: {
-        const int64_t cnt = expr->get_param_count();
-        for (int64_t i = 0; OB_SUCC(ret) && i < cnt; i++) {
-          const ObRawExpr *e = expr->get_param_expr(i);
-          if (NULL == e) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("null param expr returned", K(ret), K(i), K(cnt));
-          } else if (e->has_flag(CNT_OR) || e->has_flag(CNT_IN)) {
-            OZ(SMART_CALL(check_oracle_outer_join_in_or_validity(e, right_tables)));
-          } else if (OB_FAIL(check_oracle_outer_join_expr_validity(e, right_tables, T_OP_AND))){
-            LOG_WARN("fail to check_oracle_outer_join_expr_validity", K(ret));
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObDMLResolver::check_oracle_outer_join_expr_validity(const ObRawExpr *expr,
-                                                         ObIArray<uint64_t> &right_tables,
-                                                         ObItemType parent_type)
-{
-  /* the tmp_left_tables and tmp_right_tables contain the table_id of the tables appear
-  * in e. Conflict between tmp_left_tables and tmp_right_tables will raise OBE-1416 or OBE-1468.
-  * e,g,. t1.c1(+) = t2.c1(+) will raise OBE-1468.
-  *       t1.c1(+) = t1.c1 will raise OBE-1416
-  *       t1.c1(+) + t2.c1 + t1.c1 = 1 or t1.c1(+) + t1.c1 + t2.c1 will raise OBE-1416
-  */
-  int ret = OB_SUCCESS;
-  ObArray<uint64_t> tmp_left_tables;
-  ObArray<uint64_t> tmp_right_tables;
-  if (OB_ISNULL(expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null pointer", K(ret));
-  } else if (OB_FAIL(extract_column_with_outer_join_symbol(expr, tmp_left_tables, tmp_right_tables))) {
-    LOG_WARN("fail to extract_column_with_outer_join_symbol", K(ret));
-  } else if (tmp_right_tables.empty()) {
-    //do nothing
-  } else if (tmp_right_tables.count() > 1 ||
-              (right_tables.count() != 0 && !has_exist_in_array(right_tables, tmp_right_tables.at(0)))) {
-    //check right table
-    ret = OB_ERR_MULTI_OUTER_JOIN_TABLE;
-    LOG_WARN("a predicate may reference only one outer-joined table", K(tmp_right_tables.count()), K(ret));
-  } else {
-    OZ((common::add_var_to_array_no_dup)(right_tables, tmp_right_tables.at(0)));
-  }
-  //check left table
-  if (OB_SUCC(ret) && tmp_left_tables.count() != 0) {
-    bool exist_flag = false;
-    for (int64_t i = 0; OB_SUCC(ret) && !exist_flag && i < tmp_left_tables.count(); i++) {
-      if (has_exist_in_array(tmp_right_tables, tmp_left_tables.at(i)) ||
-        (right_tables.count() != 0 && has_exist_in_array(right_tables, tmp_left_tables.at(i)))) {
-        exist_flag = true;
-      }
-    }
-    if (exist_flag) {
-      ret = OB_ERR_OUTER_JOIN_NESTED;
-      LOG_WARN("two tables cannot be outer-joined to each other", K(ret));
-    }
-  }
-  if (T_OP_OR == parent_type && ret != OB_SUCCESS) {
-    ret = OB_ERR_OUTER_JOIN_AMBIGUOUS;
-    LOG_WARN("outer join operator (+) not allowed in operand of OR or IN", K(ret));
-  } else if (has_ansi_join() && ret != OB_SUCCESS) {
-    ret = OB_ERR_OUTER_JOIN_WITH_ANSI_JOIN;
-    LOG_WARN("old style outer join (+) cannot be used with ANSI joins", K(ret));
-  }
-  return ret;
-}
-
-int ObDMLResolver::check_single_oracle_outer_join_expr_validity(const ObRawExpr *right_expr,
-                                                                ObIArray<uint64_t> &le_left_tables, //left tables of the left expr
-                                                                ObIArray<uint64_t> &le_right_tables, //right tables of the left expr
-                                                                ObIArray<uint64_t> &left_tables,
-                                                                ObIArray<uint64_t> &right_tables)
-{
-  UNUSED(left_tables);
-  int ret = OB_SUCCESS;;
-  CK(OB_NOT_NULL(right_expr));
-  if (OB_SUCC(ret)) {
-    ObArray<uint64_t> re_left_tables;  // left tables of right expr;
-    ObArray<uint64_t> re_right_tables; // right tables of right expr;
-    OZ(extract_column_with_outer_join_symbol(right_expr, re_left_tables, re_right_tables));
-    if (OB_SUCC(ret)) {
-      if (le_left_tables.count() != 0 || re_left_tables.count() != 0) {
-        if (le_right_tables.count() == 0 &&
-            re_right_tables.count() == 0 &&
-            right_tables.count() == 0) {
-        } else {
-          bool exist_flag = true;
-          for (int64_t i = 0; exist_flag && i < le_left_tables.count(); i++) {
-            if (!has_exist_in_array(re_right_tables,le_left_tables.at(i))) {
-              exist_flag = false;
-            }
-          }
-          for (int64_t i = 0; exist_flag && i < re_left_tables.count(); i++) {
-            if (!has_exist_in_array(le_right_tables,re_left_tables.at(i))) {
-              exist_flag = false;
-            }
-          }
-          if (exist_flag) {
-            ret = OB_ERR_OUTER_JOIN_NESTED;
-            LOG_WARN("two tables cannot be outer-joined to each other", K(ret));
-          } else {
-            ret = OB_ERR_OUTER_JOIN_AMBIGUOUS;
-            LOG_WARN("outer join operator (+) not allowed in operand of OR or IN", K(ret));
-          }
-        }
-      } else if (le_right_tables.count() == 0 && re_right_tables.count() == 0) {
-        // both left expr and right expr are exprs without table;
-        ret = OB_ERR_OUTER_JOIN_AMBIGUOUS;
-        LOG_WARN("outer join operator (+) not allowed in operand of OR or IN", K(ret));
-      } else {
-        bool exist_flag = true;
-        // check le_right_tables.count() to avoid left expr being a const.
-        // e,g,. select * from t1, t2 where 1 in (t1.c1(+), t2.c1(+)) should raise OBE-1719
-        // instead of OBE-1468
-        for (int64_t i = 0; le_right_tables.count() > 0 && i<re_right_tables.count(); i++) {
-          if (!has_exist_in_array(le_right_tables, re_right_tables.at(i))) {
-            exist_flag = false;
-          }
-        }
-        if (!exist_flag) {
-          ret = OB_ERR_MULTI_OUTER_JOIN_TABLE;
-          LOG_WARN("a predicate may reference only one outer-joined table", K(ret));
-        }
-      }
-      if (OB_SUCC(ret)) {
-        //merge the right expr's right table to right_tables
-        for (int64_t i = 0; i < re_right_tables.count(); i++) {
-          OZ((common::add_var_to_array_no_dup)(right_tables, re_right_tables.at(i)));
-        }
-        // no need to merge the left tables, since any left table will raise error.
-      }
-    }
-  }
-  return ret;
-}
-
-/**
- * @bref Remove T_OP_ORACLE_OUTER_JOIN_SYMBOL from expr.
- * The removal method is to remove nodes with IS_OUTER_JOIN_SYMBOL.
- * 1. If the outer join symbol appears in a scope we cannot handle, it needs to be removed.
- * 2. All processed exprs need to be removed.
- */
-int ObDMLResolver::remove_outer_join_symbol(ObRawExpr* &expr)
-{
-  int ret = OB_SUCCESS;
-  CK(OB_NOT_NULL(expr));
-
-  if (OB_FAIL(ret)) {
-    // do nothing
-  } else if (!expr->has_flag(CNT_OUTER_JOIN_SYMBOL)) {
-    // do nothing
-  } else if (expr->has_flag(IS_OUTER_JOIN_SYMBOL)) {
-    CK(expr->get_param_count() == 1,
-       OB_NOT_NULL(expr->get_param_expr(0)));
-    if (OB_SUCC(ret)) {
-      expr = expr->get_param_expr(0);
-      OZ(SMART_CALL(remove_outer_join_symbol(expr)));
-    }
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); i++) {
-      OZ(SMART_CALL(remove_outer_join_symbol(expr->get_param_expr(i))));
-    }
-  }
-  return ret;
-}
-
-/**
- * @bref Check scope, if T_OUTER_JOIN_SYMBOL exists in WHERE,
- * set has_oracle_join flag; otherwise eliminate or error (depending on scope).
- */
-int ObDMLResolver::resolve_outer_join_symbol(const ObStmtScope scope,
-                                             ObRawExpr* &expr)
-{
-  int ret = OB_SUCCESS;
-  CK(OB_NOT_NULL(expr));
-  CK(OB_NOT_NULL(get_stmt()));
-  if (OB_SUCC(ret) && (expr->has_flag(CNT_OUTER_JOIN_SYMBOL))) {
-    if (OB_UNLIKELY(T_FIELD_LIST_SCOPE == scope
-                    || T_ORDER_SCOPE == scope)) {
-      /*
-       * OBE-30563: The outer join operator (+) is not allowed here
-       * 30563. 00000 -  "outer join operator (+) is not allowed here"
-       * *Cause:    An attempt was made to reference (+) in either the select-list,
-       *            CONNECT BY clause, START WITH clause, or ORDER BY clause.
-       * *Action:   Do not use the operator in the select-list, CONNECT
-       *            BY clause, START WITH clause, or ORDER BY clause.
-       */
-      ret = OB_ERR_OUTER_JOIN_NOT_ALLOWED;
-      LOG_WARN("outer join operator (+) is not allowed here", K(ret));
-    } else if (T_WHERE_SCOPE != current_scope_) {
-      if (T_ON_SCOPE  == current_scope_) {
-        OZ(check_oracle_outer_join_condition(expr));
-      }
-      OZ(remove_outer_join_symbol(expr));
-    } else {
-      set_has_oracle_join(true);
-    }
-  }
-  return ret;
-}
-
-int ObDMLResolver::generate_outer_join_tables()
-{
-  int ret = OB_SUCCESS;
-  if (has_oracle_join()) {
-    ObDMLStmt *stmt = get_stmt();
-    CK(OB_NOT_NULL(stmt));
-
-    if (OB_SUCC(ret)) {
-      ObArray<ObBitSet<> > table_dependencies;
-      OZ(generate_outer_join_dependency(stmt->get_table_items(),
-                                          stmt->get_condition_exprs(),
-                                          table_dependencies));
-      OZ(build_outer_join_table_by_dependency(table_dependencies, *stmt));
-      // remove predicate
-      ObArray<JoinedTable*> joined_tables;
-      for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_from_item_size(); i++) {
-        const FromItem &from_item = stmt->get_from_item(i);
-        if (from_item.is_joined_) {
-          OZ((joined_tables.push_back)(stmt->get_joined_table(from_item.table_id_)));
-        }
-      }
-
-      OZ(deliver_outer_join_conditions(stmt->get_condition_exprs(), joined_tables));
-    }
-  }
-  return ret;
-}
-
-int ObDMLResolver::generate_outer_join_dependency(
-    const ObIArray<TableItem*> &table_items,
-    const ObIArray<ObRawExpr*> &exprs,
-    ObIArray<ObBitSet<> > &table_dependencies)
-{
-  int ret = OB_SUCCESS;
-  table_dependencies.reset();
-  ObArray<uint64_t> all_table_ids;
-  // init param
-  for (int64_t i = 0; OB_SUCC(ret) && i < table_items.count(); i++) {
-    OZ((table_dependencies.push_back)(ObBitSet<>()));
-    CK(OB_NOT_NULL(table_items.at(i)));
-    OZ((all_table_ids.push_back)(table_items.at(i)->table_id_));
-  }
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
-    const ObRawExpr* expr = exprs.at(i);
-    ObArray<uint64_t> left_tables;
-    ObArray<uint64_t> right_tables;
-    CK(OB_NOT_NULL(expr));
-    OZ(check_oracle_outer_join_condition(expr));
-    OZ(extract_column_with_outer_join_symbol(expr, left_tables, right_tables));
-
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (OB_UNLIKELY(right_tables.count() > 1)) {
-      /**
-       * OBE-01468: A predicate may reference only one outer-joined table
-       * 01468. 00000 -  "a predicate may reference only one outer-joined table"
-       * *Cause:
-       * *Action:
-       */
-      ret = OB_ERR_MULTI_OUTER_JOIN_TABLE;
-      LOG_WARN("a predicate may reference only one outer-joined table", K(ret));
-    } else if (1 == right_tables.count() && 0 != left_tables.count()) {
-      OZ(add_oracle_outer_join_dependency(all_table_ids,
-                                          left_tables,
-                                          right_tables.at(0),
-                                          table_dependencies));
-    }
-  }
-  return ret;
-}
-int ObDMLResolver::do_extract_column(const ObRawExpr *expr,
-                                     ObIArray<uint64_t> &left_tables,
-                                     ObIArray<uint64_t> &right_tables)
-{
-  int ret = OB_SUCCESS;
-  bool is_right = false;
-  if (OB_ISNULL(expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null pointer", K(expr), K(ret));
-  } else if (expr->has_flag(IS_OUTER_JOIN_SYMBOL)) {
-    CK(1 == expr->get_param_count(), OB_NOT_NULL(expr->get_param_expr(0)));
-    if (OB_SUCC(ret)) {
-      expr = expr->get_param_expr(0);
-      is_right = true;
-    }
-  }
-  if (OB_FAIL(ret)) {
-    //do nothing
-  } else if (expr->has_flag(IS_COLUMN)) {
-    const ObColumnRefRawExpr *col_expr = static_cast<const ObColumnRefRawExpr*>(expr);
-    if (!is_right) {
-      OZ((common::add_var_to_array_no_dup)(left_tables, col_expr->get_table_id()));
-    } else {
-      OZ((common::add_var_to_array_no_dup)(right_tables, col_expr->get_table_id()));
-    }
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); i++) {
-      CK(OB_NOT_NULL(expr->get_param_expr(i)));
-      OZ(SMART_CALL(do_extract_column(expr->get_param_expr(i),
-                                      left_tables,
-                                      right_tables)));
-    }
-  }
-  return ret;
-}
-
-int ObDMLResolver::extract_column_with_outer_join_symbol(
-    const ObRawExpr *expr, ObIArray<uint64_t> &left_tables, ObIArray<uint64_t> &right_tables)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null pointer", K(expr), K(ret));
-  } else if (current_scope_ == T_WHERE_SCOPE &&
-             !expr->has_flag(CNT_OUTER_JOIN_SYMBOL) &&
-             IS_COMPARISON_OP(expr->get_expr_type()) &&
-             expr->has_flag(CNT_CONST)) {
-    //do nothing
-  } else if (T_OP_AND == expr->get_expr_type() || T_OP_OR == expr->get_expr_type()) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); i++) {
-      const ObRawExpr* child = NULL;
-      if (OB_ISNULL(child = expr->get_param_expr(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null pointer", K(i), K(ret));
-      } else {
-        OZ(SMART_CALL(extract_column_with_outer_join_symbol(expr->get_param_expr(i),
-                                                            left_tables,
-                                                            right_tables)));
-      }
-    }
-  } else if (OB_FAIL(do_extract_column(expr, left_tables, right_tables))) {
-    LOG_WARN("fail to do extract column", K(ret));
-  }
-  return ret;
-}
-
-int ObDMLResolver::add_oracle_outer_join_dependency(
-    const ObIArray<uint64_t> &all_tables,
-    const ObIArray<uint64_t> &left_tables,
-    uint64_t right_table_id,
-    ObIArray<ObBitSet<> > &table_dependencies)
-{
-  int ret = OB_SUCCESS;
-  int64_t right_idx = OB_INVALID_INDEX_INT64;
-  CK(table_dependencies.count() == all_tables.count());
-
-  if (OB_SUCC(ret) && OB_UNLIKELY(!has_exist_in_array(all_tables, right_table_id, &right_idx))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Cannot find right table", K(ret), K(all_tables), K(right_table_id));
-  }
-  CK(0 <= right_idx, right_idx < all_tables.count());
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < left_tables.count(); i++) {
-    int64_t left_idx = OB_INVALID_INDEX_INT64;
-    // bool type return value
-    if (OB_UNLIKELY(!has_exist_in_array(all_tables, left_tables.at(i), &left_idx))) {
-      //zhenling.zzg If the referenced table is not the current stmt's table, then degrade to a normal expr
-    } else {
-      CK(0 <= left_idx, left_idx < all_tables.count());
-      table_dependencies.at(right_idx).add_member(left_idx);
-    }
-  }
-  return ret;
-}
-
-int ObDMLResolver::build_outer_join_table_by_dependency(
-    const ObIArray<ObBitSet<> > &table_dependencies, ObDMLStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  // TODO(@linsheng): Here generated sequence may not be optimal, need JO support
-
-  ObBitSet<> built_tables;
-  TableItem *last_table_item = NULL;
-  bool is_found = true;
-
-  CK(table_dependencies.count() == stmt.get_table_items().count());
-
-  // strategy: smallest-numbered available vertex first
-  for (int64_t cnt = 0; OB_SUCC(ret) && is_found && cnt < table_dependencies.count(); cnt++) {
-    is_found = false;
-    for (int64_t i = 0; OB_SUCC(ret) && !is_found && i < table_dependencies.count(); i++) {
-      if (!built_tables.has_member(i) && built_tables.is_superset(table_dependencies.at(i))) {
-        is_found = true;
-        if (NULL == last_table_item) {
-          last_table_item = stmt.get_table_item(i);
-        } else {
-          JoinedTable *new_joined_table = NULL;
-          ObJoinType joined_type = table_dependencies.at(i).is_empty()?
-              ObJoinType::INNER_JOIN: ObJoinType::LEFT_OUTER_JOIN;
-
-          OZ(create_joined_table_item(joined_type, last_table_item,
-                                        stmt.get_table_item(i), new_joined_table));
-
-          last_table_item = static_cast<TableItem*>(new_joined_table);
-        }
-        // table is built
-        OZ((built_tables.add_member)(i));
-      }
-    }
-    if (OB_SUCC(ret) && OB_UNLIKELY(!is_found)) {
-      ret = OB_ERR_OUTER_JOIN_NESTED;
-      LOG_WARN("two tables cannot be outer-joined to each other", K(ret));
-    }
-  }
-
-  // clean info
-  ARRAY_FOREACH(stmt.get_from_items(), i) {
-    OZ((column_namespace_checker_.remove_reference_table)(stmt.get_from_item(i).table_id_));
-  }
-
-  OX((stmt.get_joined_tables().reset()));
-  OX((stmt.clear_from_item()));
-
-  // add info to stmt
-  OZ((stmt.add_from_item)(last_table_item->table_id_,
-                          last_table_item->is_joined_table()));
-
-  if (OB_SUCC(ret) && last_table_item->is_joined_table()) {
-    OZ((stmt.add_joined_table)(static_cast<JoinedTable*>(last_table_item)));
-    OZ(join_infos_.push_back(ResolverJoinInfo(last_table_item->table_id_)));
-  }
-
-  OZ((column_namespace_checker_.add_reference_table)(last_table_item));
-
-  return ret;
-}
-
-int ObDMLResolver::deliver_outer_join_conditions(ObIArray<ObRawExpr*> &exprs,
-                                                  ObIArray<JoinedTable*> &joined_tables)
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<ObRawExpr*, 4> where_conditions;
-  for (int64_t i = exprs.count() - 1; OB_SUCC(ret) && i >=0; i--) {
-    ObArray<uint64_t> left_tables;
-    ObArray<uint64_t> right_tables;
-    ObRawExpr *expr = exprs.at(i);
-
-    CK(OB_NOT_NULL(expr));
-    OZ(extract_column_with_outer_join_symbol(expr, left_tables, right_tables));
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (OB_UNLIKELY(right_tables.count() > 1)) {
-      /**
-       * OBE-01468: A predicate may reference only one outer-joined table
-       * 01468. 00000 -  "a predicate may reference only one outer-joined table"
-       * *Cause:
-       * *Action:
-       * ----
-       * Previously checked, defensive code.
-       */
-      ret = OB_ERR_MULTI_OUTER_JOIN_TABLE;
-      LOG_WARN("a predicate may reference only one outer-joined table", K(ret));
-    } else if (1 == right_tables.count()) {
-      ObArray<uint64_t> table_ids;
-      OZ((append)(table_ids, left_tables));
-      OZ((append)(table_ids, right_tables));
-      bool is_delivered = false;
-      for (int64_t j = 0; OB_SUCC(ret) && !is_delivered && j < joined_tables.count(); j++) {
-        // Should only happen once
-        OZ(deliver_expr_to_outer_join_table(expr, table_ids, joined_tables.at(j), is_delivered));
-      }
-
-      if (OB_SUCC(ret) && is_delivered) {
-        //do nothing
-      } else if (OB_FAIL(where_conditions.push_back(exprs.at(i)))) {
-        LOG_WARN("fail to push back exprs", K(ret));
-      }
-    } else if (OB_FAIL(where_conditions.push_back(exprs.at(i)))) {
-      LOG_WARN("fail to push back exprs", K(ret));
-    }
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
-    if (OB_ISNULL(exprs.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error", K(i), K(ret));
-    } else if (OB_FAIL(remove_outer_join_symbol(exprs.at(i)))) {
-      LOG_WARN("fail to remove outer join symbol", K(i), K(ret));
-    } else if (OB_FAIL(exprs.at(i)->extract_info())) {
-      LOG_WARN("fail to extract expr info", K(i), K(ret));
-    }
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(exprs.assign(where_conditions))) {
-      LOG_WARN("fail to assign exprs", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObDMLResolver::deliver_expr_to_outer_join_table(const ObRawExpr *expr,
-                                                    const ObIArray<uint64_t> &table_ids,
-                                                    JoinedTable *joined_table,
-                                                    bool &is_delivered)
-{
-  int ret = OB_SUCCESS;
-
-  CK(OB_NOT_NULL(joined_table));
-  is_delivered = false;
-  if (OB_SUCC(ret)) {
-    bool in_left = false;
-    bool in_right = false;
-    bool force_deliver = false;
-
-    // check left
-    CK(OB_NOT_NULL(joined_table->left_table_));
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (joined_table->left_table_->is_joined_table()) {
-      JoinedTable *cur_joined = static_cast<JoinedTable*>(joined_table->left_table_);
-      for (int64_t i = 0; OB_SUCC(ret) && !in_left && i < cur_joined->single_table_ids_.count(); i++) {
-        in_left = has_exist_in_array(table_ids, cur_joined->single_table_ids_.at(i));
-      }
-    } else {
-      in_left = has_exist_in_array(table_ids, joined_table->left_table_->table_id_);
-      // Currently impossible, defensive handling.
-      if (in_left && joined_table->joined_type_ == ObJoinType::RIGHT_OUTER_JOIN) {
-        force_deliver = true;
-      }
-    }
-
-    // check right
-    CK(OB_NOT_NULL(joined_table->right_table_));
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (joined_table->right_table_->is_joined_table()) {
-      JoinedTable *cur_joined = static_cast<JoinedTable*>(joined_table->right_table_);
-      for (int64_t i = 0; OB_SUCC(ret) && !in_right && i < cur_joined->single_table_ids_.count(); i++) {
-        in_right = has_exist_in_array(table_ids, cur_joined->single_table_ids_.at(i));
-      }
-    } else {
-      in_right = has_exist_in_array(table_ids, joined_table->right_table_->table_id_);
-      if (in_right && joined_table->joined_type_ == ObJoinType::LEFT_OUTER_JOIN) {
-        force_deliver = true;
-      }
-    }
-
-    // analyze result, recursive if not found
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (force_deliver || (in_left && in_right)) {
-      is_delivered = true;
-      OZ((joined_table->join_conditions_.push_back)(const_cast<ObRawExpr*>(expr)));
-    } else if (in_left && joined_table->left_table_->is_joined_table()) {
-      JoinedTable *cur_joined = static_cast<JoinedTable*>(joined_table->left_table_);
-      OZ(SMART_CALL(deliver_expr_to_outer_join_table(expr, table_ids, cur_joined, is_delivered)));
-    } else if (in_right && joined_table->right_table_->is_joined_table()) {
-      JoinedTable *cur_joined = static_cast<JoinedTable*>(joined_table->right_table_);
-      OZ(SMART_CALL(deliver_expr_to_outer_join_table(expr, table_ids, cur_joined, is_delivered)));
-    }
-  }
-  return ret;
-}
 // For natural join, put all columns that are the same on both sides of a joined table into the using_columns_ array.
 int ObDMLResolver::fill_same_column_to_using(JoinedTable* &joined_table)
 {
@@ -13296,8 +12596,7 @@ int ObDMLResolver::resolve_table_relation_in_hint(const ParseNode &table_node,
                                                     table_in_hint.db_name_,
                                                     catalog_name,
                                                     is_db_explicit,
-                                                    true,
-                                                    false))) {
+                                                    true))) {
     LOG_WARN("fail to resolve table relation node", K(ret));
   }
   return ret;
@@ -13737,9 +13036,7 @@ int ObDMLResolver::init_cte_resolver(ObSelectResolver &select_resolver,
   select_resolver.set_current_view_level(current_view_level_);
   select_resolver.set_parent_namespace_resolver(parent_namespace_resolver_);
   select_resolver.cte_ctx_.opt_col_alias_parse_node_ = opt_col_node;
-  /**
-   * Oracle does not support nesting a with clause within another with clause definition, so writing it this way is OK.
-   */
+  // Mark nested WITH-clause scopes as non-recorded in this resolver context.
   select_resolver.set_non_record(with_clause_without_record_
                                  || T_WITH_CLAUSE_SCOPE == current_scope_);
   if (OB_FAIL(select_resolver.set_cte_ctx(cte_ctx_))) {
@@ -14108,7 +13405,7 @@ int ObDMLResolver::resolve_with_clause_opt_alias_colnames(const ParseNode *parse
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("the str len must be larger than 0", K(ret));
       } else if (OB_UNLIKELY(parse_tree->children_[i]->str_len_
-                             > OB_MAX_USER_TABLE_NAME_LENGTH_ORACLE)) {
+                             > OB_MAX_EXTENDED_USER_TABLE_NAME_LENGTH)) {
         ret = OB_ERR_TOO_LONG_IDENT;
         LOG_WARN("cte column alias name too long", K(ret), KPC(table_item));
       } else {
@@ -14240,7 +13537,7 @@ int ObDMLResolver::resolve_with_clause_subquery(const ParseNode &parse_tree, Tab
 
 /**
  * @muhang.zb
- * Used to support with clause + select syntax, refer to Oracle 11.2
+ * Used to support with clause + select syntax.
  * Used to support that the with clause itself will generate subquery tables, and even specify the names of the columns in the subquery tables.
  * Originally, the parsing of tables was handled in the from clause; originally, the parsing of columns (select items) was handled in the select clause.
  * To ensure that the from parsing code remains unchanged, the with clause does not prematurely insert the generated tables into the from parsing result, but stores the result in the CTE_table member variable of stmt.

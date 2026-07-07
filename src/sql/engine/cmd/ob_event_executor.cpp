@@ -108,8 +108,7 @@ int ObAlterEventExecutor::execute(ObExecContext &ctx, ObAlterEventStmt &stmt)
   ObMySQLTransaction trans;
   if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
     LOG_WARN("failed to start trans", KR(ret));
-  } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::get_dbms_sched_job_info(*GCTX.sql_proxy_, 
-                                                                              false, // is_oracle_tenant
+  } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::get_dbms_sched_job_info(*GCTX.sql_proxy_,
                                                                               stmt.get_event_info().get_event_name(),
                                                                               allocator,
                                                                               job_info))) {

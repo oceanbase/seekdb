@@ -627,12 +627,7 @@ int ObMajorMergeProgressChecker::prepare_check_progress(
     progress_.clear_before_each_loop();
     reset_uncompacted_tablets();
     if (is_extra_check_round()) {
-      if (OB_UNLIKELY(!true)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tenant config is not valid", KR(ret));
-      } else {
-        batch_size_mgr_.set_tablet_batch_size(GCONF.compaction_schedule_tablet_batch_cnt);
-      }
+      batch_size_mgr_.set_tablet_batch_size(GCONF.compaction_schedule_tablet_batch_cnt);
     }
   }
   return ret;

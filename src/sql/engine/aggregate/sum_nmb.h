@@ -72,11 +72,11 @@ public:
   static const constexpr VecValueTypeClass OUT_TC = VEC_TC_NUMBER;
 
 public:
-  SumNumberAggregate(): is_ora_count_sum_(false) {}
+  SumNumberAggregate(): is_count_sum_(false) {}
   int init(RuntimeContext &agg_ctx, const int64_t agg_col_id, ObIAllocator &allocator) override
   {
     int ret = OB_SUCCESS;
-    is_ora_count_sum_ = agg_ctx.aggr_infos_.at(agg_col_id).get_expr_type() == T_FUN_COUNT_SUM;
+    is_count_sum_ = agg_ctx.aggr_infos_.at(agg_col_id).get_expr_type() == T_FUN_COUNT_SUM;
     return ret;
   }
   inline int add_one_row(RuntimeContext &agg_ctx, int64_t batch_idx, int64_t batch_size,
@@ -220,7 +220,7 @@ public:
     ObIVector *output_vec = agg_expr.get_vector(agg_ctx.eval_ctx_);
     if (OB_LIKELY(not_nulls.at(agg_col_id))) {
       static_cast<ColumnFmt *>(output_vec)->set_number(output_idx, *reinterpret_cast<const number::ObCompactNumber *>(agg_cell));
-    } else if (is_ora_count_sum_){
+    } else if (is_count_sum_){
       number::ObNumber zero;
       zero.set_zero();
       static_cast<ColumnFmt *>(output_vec)->set_payload(output_idx, &zero, sizeof(ObNumberDesc));
@@ -308,7 +308,7 @@ public:
     return ret;
   }
 
-  TO_STRING_KV("aggregate", "sum_nmb", K_(is_ora_count_sum));
+  TO_STRING_KV("aggregate", "sum_nmb", K_(is_count_sum));
 private:
 template<typename ColumnFmt, bool has_null>
 struct input_wrapper
@@ -395,7 +395,7 @@ struct bound_wrapper
 };
 
 private:
-  bool is_ora_count_sum_;
+  bool is_count_sum_;
 };
 } // end aggregate
 } // end share

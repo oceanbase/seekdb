@@ -57,7 +57,6 @@ const char *ObSysVarObReadConsistency::OB_READ_CONSISTENCY_NAMES[] = {
 };
 const char *ObSysVarObCompatibilityMode::OB_COMPATIBILITY_MODE_NAMES[] = {
   "MYSQL",
-  "ORACLE",
   0
 };
 const char *ObSysVarObRoutePolicy::OB_ROUTE_POLICY_NAMES[] = {
@@ -795,22 +794,8 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarObEarlyLockRelease)
         + sizeof(ObSysVarObTrxIdleTimeout)
         + sizeof(ObSysVarBlockEncryptionMode)
-        + sizeof(ObSysVarNlsDateFormat)
-        + sizeof(ObSysVarNlsTimestampFormat)
-        + sizeof(ObSysVarNlsTimestampTzFormat)
         + sizeof(ObSysVarObReservedMetaMemoryPercentage)
         + sizeof(ObSysVarObCheckSysVariable)
-        + sizeof(ObSysVarNlsLanguage)
-        + sizeof(ObSysVarNlsTerritory)
-        + sizeof(ObSysVarNlsSort)
-        + sizeof(ObSysVarNlsComp)
-        + sizeof(ObSysVarNlsCharacterset)
-        + sizeof(ObSysVarNlsNcharCharacterset)
-        + sizeof(ObSysVarNlsDateLanguage)
-        + sizeof(ObSysVarNlsLengthSemantics)
-        + sizeof(ObSysVarNlsNcharConvExcp)
-        + sizeof(ObSysVarNlsCalendar)
-        + sizeof(ObSysVarNlsNumericCharacters)
         + sizeof(ObSysVarNljBatchingEnabled)
         + sizeof(ObSysVarTracefileIdentifier)
         + sizeof(ObSysVarGroupbyNopushdownCutRatio)
@@ -832,7 +817,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarEnableParallelDml)
         + sizeof(ObSysVarPxMinGranulesPerSlave)
         + sizeof(ObSysVarSecureFilePriv)
-        + sizeof(ObSysVarPlsqlWarnings)
         + sizeof(ObSysVarEnableParallelQuery)
         + sizeof(ObSysVarForceParallelQueryDop)
         + sizeof(ObSysVarForceParallelDmlDop)
@@ -840,10 +824,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarTransactionReadOnly)
         + sizeof(ObSysVarResourceManagerPlan)
         + sizeof(ObSysVarPerformanceSchema)
-        + sizeof(ObSysVarNlsCurrency)
-        + sizeof(ObSysVarNlsIsoCurrency)
-        + sizeof(ObSysVarNlsDualCurrency)
-        + sizeof(ObSysVarPlsqlCcflags)
         + sizeof(ObSysVarObProxySessionTemporaryTableUsed)
         + sizeof(ObSysVarEnableParallelDdl)
         + sizeof(ObSysVarForceParallelDdlDop)
@@ -866,7 +846,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarLogRowValueOptions)
         + sizeof(ObSysVarObMaxReadStaleTime)
         + sizeof(ObSysVarOptimizerGatherStatsOnLoad)
-        + sizeof(ObSysVarForceOrderPreserveSet)
         + sizeof(ObSysVarShowDdlInCompatMode)
         + sizeof(ObSysVarParallelDegreePolicy)
         + sizeof(ObSysVarParallelDegreeLimit)
@@ -979,7 +958,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarTransactionPreallocSize)
         + sizeof(ObSysVarTransactionWriteSetExtraction)
         + sizeof(ObSysVarInformationSchemaStatsExpiry)
-        + sizeof(ObSysVarOracleSqlSelectLimit)
         + sizeof(ObSysVarGroupReplicationAllowLocalDisjointGtidsJoin)
         + sizeof(ObSysVarGroupReplicationAllowLocalLowerVersionJoin)
         + sizeof(ObSysVarGroupReplicationAutoIncrementIncrement)
@@ -2829,33 +2807,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsDateFormat())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsDateFormat", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_DATE_FORMAT))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsDateFormat));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsTimestampFormat())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsTimestampFormat", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_TIMESTAMP_FORMAT))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsTimestampFormat));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsTimestampTzFormat())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsTimestampTzFormat", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsTimestampTzFormat));
-      }
-    }
-    if (OB_SUCC(ret)) {
       if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarObReservedMetaMemoryPercentage())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("fail to new ObSysVarObReservedMetaMemoryPercentage", K(ret));
@@ -2871,105 +2822,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_OB_CHECK_SYS_VARIABLE))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarObCheckSysVariable));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsLanguage())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsLanguage", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_LANGUAGE))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsLanguage));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsTerritory())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsTerritory", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_TERRITORY))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsTerritory));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsSort())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsSort", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_SORT))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsSort));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsComp())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsComp", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_COMP))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsComp));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsCharacterset())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsCharacterset", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_CHARACTERSET))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsCharacterset));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsNcharCharacterset())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsNcharCharacterset", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_NCHAR_CHARACTERSET))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsNcharCharacterset));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsDateLanguage())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsDateLanguage", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_DATE_LANGUAGE))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsDateLanguage));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsLengthSemantics())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsLengthSemantics", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_LENGTH_SEMANTICS))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsLengthSemantics));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsNcharConvExcp())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsNcharConvExcp", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_NCHAR_CONV_EXCP))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsNcharConvExcp));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsCalendar())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsCalendar", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_CALENDAR))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsCalendar));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsNumericCharacters())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsNumericCharacters", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_NUMERIC_CHARACTERS))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsNumericCharacters));
       }
     }
     if (OB_SUCC(ret)) {
@@ -3162,15 +3014,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarPlsqlWarnings())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarPlsqlWarnings", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_PLSQL_WARNINGS))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarPlsqlWarnings));
-      }
-    }
-    if (OB_SUCC(ret)) {
       if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarEnableParallelQuery())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("fail to new ObSysVarEnableParallelQuery", K(ret));
@@ -3231,42 +3074,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_PERFORMANCE_SCHEMA))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarPerformanceSchema));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsCurrency())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsCurrency", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_CURRENCY))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsCurrency));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsIsoCurrency())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsIsoCurrency", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_ISO_CURRENCY))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsIsoCurrency));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarNlsDualCurrency())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarNlsDualCurrency", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_NLS_DUAL_CURRENCY))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarNlsDualCurrency));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarPlsqlCcflags())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarPlsqlCcflags", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_PLSQL_CCFLAGS))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarPlsqlCcflags));
       }
     }
     if (OB_SUCC(ret)) {
@@ -3465,15 +3272,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR__OPTIMIZER_GATHER_STATS_ON_LOAD))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarOptimizerGatherStatsOnLoad));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarForceOrderPreserveSet())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarForceOrderPreserveSet", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR__FORCE_ORDER_PRESERVE_SET))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarForceOrderPreserveSet));
       }
     }
     if (OB_SUCC(ret)) {
@@ -4482,15 +4280,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_INFORMATION_SCHEMA_STATS_EXPIRY))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarInformationSchemaStatsExpiry));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarOracleSqlSelectLimit())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarOracleSqlSelectLimit", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR__ORACLE_SQL_SELECT_LIMIT))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarOracleSqlSelectLimit));
       }
     }
     if (OB_SUCC(ret)) {
@@ -9605,68 +9394,12 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
       ret = create_one_sys_var<ObSysVarBlockEncryptionMode>(allocator_, sys_var_ptr, "ObSysVarBlockEncryptionMode");
       break;
     }
-    case share::SYS_VAR_NLS_DATE_FORMAT: {
-      ret = create_one_sys_var<ObSysVarNlsDateFormat>(allocator_, sys_var_ptr, "ObSysVarNlsDateFormat");
-      break;
-    }
-    case share::SYS_VAR_NLS_TIMESTAMP_FORMAT: {
-      ret = create_one_sys_var<ObSysVarNlsTimestampFormat>(allocator_, sys_var_ptr, "ObSysVarNlsTimestampFormat");
-      break;
-    }
-    case share::SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT: {
-      ret = create_one_sys_var<ObSysVarNlsTimestampTzFormat>(allocator_, sys_var_ptr, "ObSysVarNlsTimestampTzFormat");
-      break;
-    }
     case share::SYS_VAR_OB_RESERVED_META_MEMORY_PERCENTAGE: {
       ret = create_one_sys_var<ObSysVarObReservedMetaMemoryPercentage>(allocator_, sys_var_ptr, "ObSysVarObReservedMetaMemoryPercentage");
       break;
     }
     case share::SYS_VAR_OB_CHECK_SYS_VARIABLE: {
       ret = create_one_sys_var<ObSysVarObCheckSysVariable>(allocator_, sys_var_ptr, "ObSysVarObCheckSysVariable");
-      break;
-    }
-    case share::SYS_VAR_NLS_LANGUAGE: {
-      ret = create_one_sys_var<ObSysVarNlsLanguage>(allocator_, sys_var_ptr, "ObSysVarNlsLanguage");
-      break;
-    }
-    case share::SYS_VAR_NLS_TERRITORY: {
-      ret = create_one_sys_var<ObSysVarNlsTerritory>(allocator_, sys_var_ptr, "ObSysVarNlsTerritory");
-      break;
-    }
-    case share::SYS_VAR_NLS_SORT: {
-      ret = create_one_sys_var<ObSysVarNlsSort>(allocator_, sys_var_ptr, "ObSysVarNlsSort");
-      break;
-    }
-    case share::SYS_VAR_NLS_COMP: {
-      ret = create_one_sys_var<ObSysVarNlsComp>(allocator_, sys_var_ptr, "ObSysVarNlsComp");
-      break;
-    }
-    case share::SYS_VAR_NLS_CHARACTERSET: {
-      ret = create_one_sys_var<ObSysVarNlsCharacterset>(allocator_, sys_var_ptr, "ObSysVarNlsCharacterset");
-      break;
-    }
-    case share::SYS_VAR_NLS_NCHAR_CHARACTERSET: {
-      ret = create_one_sys_var<ObSysVarNlsNcharCharacterset>(allocator_, sys_var_ptr, "ObSysVarNlsNcharCharacterset");
-      break;
-    }
-    case share::SYS_VAR_NLS_DATE_LANGUAGE: {
-      ret = create_one_sys_var<ObSysVarNlsDateLanguage>(allocator_, sys_var_ptr, "ObSysVarNlsDateLanguage");
-      break;
-    }
-    case share::SYS_VAR_NLS_LENGTH_SEMANTICS: {
-      ret = create_one_sys_var<ObSysVarNlsLengthSemantics>(allocator_, sys_var_ptr, "ObSysVarNlsLengthSemantics");
-      break;
-    }
-    case share::SYS_VAR_NLS_NCHAR_CONV_EXCP: {
-      ret = create_one_sys_var<ObSysVarNlsNcharConvExcp>(allocator_, sys_var_ptr, "ObSysVarNlsNcharConvExcp");
-      break;
-    }
-    case share::SYS_VAR_NLS_CALENDAR: {
-      ret = create_one_sys_var<ObSysVarNlsCalendar>(allocator_, sys_var_ptr, "ObSysVarNlsCalendar");
-      break;
-    }
-    case share::SYS_VAR_NLS_NUMERIC_CHARACTERS: {
-      ret = create_one_sys_var<ObSysVarNlsNumericCharacters>(allocator_, sys_var_ptr, "ObSysVarNlsNumericCharacters");
       break;
     }
     case share::SYS_VAR__NLJ_BATCHING_ENABLED: {
@@ -9753,10 +9486,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
       ret = create_one_sys_var<ObSysVarSecureFilePriv>(allocator_, sys_var_ptr, "ObSysVarSecureFilePriv");
       break;
     }
-    case share::SYS_VAR_PLSQL_WARNINGS: {
-      ret = create_one_sys_var<ObSysVarPlsqlWarnings>(allocator_, sys_var_ptr, "ObSysVarPlsqlWarnings");
-      break;
-    }
     case share::SYS_VAR__ENABLE_PARALLEL_QUERY: {
       ret = create_one_sys_var<ObSysVarEnableParallelQuery>(allocator_, sys_var_ptr, "ObSysVarEnableParallelQuery");
       break;
@@ -9783,22 +9512,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR_PERFORMANCE_SCHEMA: {
       ret = create_one_sys_var<ObSysVarPerformanceSchema>(allocator_, sys_var_ptr, "ObSysVarPerformanceSchema");
-      break;
-    }
-    case share::SYS_VAR_NLS_CURRENCY: {
-      ret = create_one_sys_var<ObSysVarNlsCurrency>(allocator_, sys_var_ptr, "ObSysVarNlsCurrency");
-      break;
-    }
-    case share::SYS_VAR_NLS_ISO_CURRENCY: {
-      ret = create_one_sys_var<ObSysVarNlsIsoCurrency>(allocator_, sys_var_ptr, "ObSysVarNlsIsoCurrency");
-      break;
-    }
-    case share::SYS_VAR_NLS_DUAL_CURRENCY: {
-      ret = create_one_sys_var<ObSysVarNlsDualCurrency>(allocator_, sys_var_ptr, "ObSysVarNlsDualCurrency");
-      break;
-    }
-    case share::SYS_VAR_PLSQL_CCFLAGS: {
-      ret = create_one_sys_var<ObSysVarPlsqlCcflags>(allocator_, sys_var_ptr, "ObSysVarPlsqlCcflags");
       break;
     }
     case share::SYS_VAR__OB_PROXY_SESSION_TEMPORARY_TABLE_USED: {
@@ -9887,10 +9600,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR__OPTIMIZER_GATHER_STATS_ON_LOAD: {
       ret = create_one_sys_var<ObSysVarOptimizerGatherStatsOnLoad>(allocator_, sys_var_ptr, "ObSysVarOptimizerGatherStatsOnLoad");
-      break;
-    }
-    case share::SYS_VAR__FORCE_ORDER_PRESERVE_SET: {
-      ret = create_one_sys_var<ObSysVarForceOrderPreserveSet>(allocator_, sys_var_ptr, "ObSysVarForceOrderPreserveSet");
       break;
     }
     case share::SYS_VAR__SHOW_DDL_IN_COMPAT_MODE: {
@@ -10339,10 +10048,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR_INFORMATION_SCHEMA_STATS_EXPIRY: {
       ret = create_one_sys_var<ObSysVarInformationSchemaStatsExpiry>(allocator_, sys_var_ptr, "ObSysVarInformationSchemaStatsExpiry");
-      break;
-    }
-    case share::SYS_VAR__ORACLE_SQL_SELECT_LIMIT: {
-      ret = create_one_sys_var<ObSysVarOracleSqlSelectLimit>(allocator_, sys_var_ptr, "ObSysVarOracleSqlSelectLimit");
       break;
     }
     case share::SYS_VAR_GROUP_REPLICATION_ALLOW_LOCAL_DISJOINT_GTIDS_JOIN: {

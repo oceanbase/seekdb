@@ -2279,7 +2279,7 @@ int ObJsonBinVisitor::deserialize()
     }
     case ObJsonNodeType::J_DATE:
     case ObJsonNodeType::J_MYSQL_DATE:
-    case ObJsonNodeType::J_ORACLEDATE: {
+    case ObJsonNodeType::J_JSON_DATE_EXT: {
       if (pos_ + sizeof(int32_t) > len_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("data length is not enough for date.", K(ret), KP(ptr_), K(len_), K(pos_));

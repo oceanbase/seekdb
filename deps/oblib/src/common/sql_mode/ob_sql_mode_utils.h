@@ -31,7 +31,7 @@ int ob_str_to_sql_mode(const ObString &str, ObSQLMode &mode);
 int ob_sql_mode_to_str(const ObObj &int_val, ObObj &str_val, ObIAllocator *allocator);
 inline ObSQLMode ob_compatibility_mode_to_sql_mode(ObCompatibilityMode comp_mode)
 {
-  // seekdb is MySQL-only; Oracle mode bit is never set.
+  // seekdb is MySQL-only; retired compatibility bits are never set.
   UNUSED(comp_mode);
   return 0;
 }
@@ -88,22 +88,12 @@ inline bool is_error_for_division_by_zero(ObSQLMode mode)
 }
 inline bool is_mysql_compatible(ObCompatibilityMode mode)
 {
-  return OCEANBASE_MODE == mode || MYSQL_MODE == mode;
-}
-inline bool is_oracle_compatible(ObCompatibilityMode mode)
-{
-  UNUSED(mode);
-  return false; // seekdb is MySQL-only
+  return MYSQL_MODE == mode;
 }
 inline bool is_mysql_compatible(ObSQLMode mode)
 {
   UNUSED(mode);
   return true; // seekdb is MySQL-only
-}
-inline bool is_oracle_compatible(ObSQLMode mode)
-{
-  UNUSED(mode);
-  return false; // seekdb is MySQL-only
 }
 inline ObCompatibilityMode get_compatibility_mode()
 {

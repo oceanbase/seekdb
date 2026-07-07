@@ -32,8 +32,7 @@ namespace sql
 OB_SERIALIZE_MEMBER((ObExprUdtConstruct, ObFuncExprOperator), udt_id_, root_udt_id_, attr_pos_);
 
 ObExprUdtConstruct::ObExprUdtConstruct(common::ObIAllocator &alloc)
-    : ObFuncExprOperator(alloc, T_FUN_SYS_PRIV_SQL_UDT_CONSTRUCT, N_PRIV_SQL_UDT_CONSTRUCT, PARAM_NUM_UNKNOWN, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-                         false, INTERNAL_IN_ORACLE_MODE),
+    : ObFuncExprOperator(alloc, T_FUN_SYS_PRIV_SQL_UDT_CONSTRUCT, N_PRIV_SQL_UDT_CONSTRUCT, PARAM_NUM_UNKNOWN, NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false),
       udt_id_(OB_INVALID_ID),
       root_udt_id_(OB_INVALID_ID),
       attr_pos_(0) {}

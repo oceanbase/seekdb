@@ -73,7 +73,7 @@ public:
     return hash_ret;
   }
   inline bool operator==(const ObSysVariableHashWrapper &rv) const{
-    return (true);
+    return true;
   }
   
   

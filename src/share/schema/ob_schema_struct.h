@@ -111,7 +111,7 @@ class ObColumnSchemaV2;
 #define IS_DEFAULT_NOW_OBJ(def_obj) \
   (ObExtendType == def_obj.get_type() && ObActionFlag::OP_DEFAULT_NOW_FLAG == def_obj.get_ext())
 
-#define OB_ORACLE_CONS_OR_IDX_CUTTED_NAME_LEN 60
+#define OB_CONS_OR_IDX_CUTTED_NAME_LEN 60
 
 //the lower 32-bit flag need be store in __all_column
 static const uint64_t OB_MIN_ID  = 0;//used for lower_bound
@@ -1899,7 +1899,6 @@ public:
   bool is_invisible() const { return 0 != (flags_ & ObSysVarFlag::INVISIBLE); }
   bool is_global() const { return 0 != (flags_ & ObSysVarFlag::GLOBAL_SCOPE); }
   bool is_query_sensitive() const { return 0 != (flags_ & ObSysVarFlag::QUERY_SENSITIVE); }
-  bool is_oracle_only() const { return 0 != (flags_ & ObSysVarFlag::ORACLE_ONLY); }
   bool is_mysql_only() const { return 0 != (flags_ & ObSysVarFlag::MYSQL_ONLY); }
   bool is_read_only() const { return 0 != (flags_ & ObSysVarFlag::READONLY); }
   bool is_null_value() const { return 0 != (flags_ & ObSysVarFlag::NULLABLE) && value_.empty(); } // decoupled from ObBasicSysVar::is_null_value(share/schema no longer depends on the sysvar behavior class)
@@ -2519,9 +2518,9 @@ protected:
   int64_t part_idx_;
   // The partition management operation of tablegroup, because after adding pg,
   // the operation of tablegroup needs to be processed first
-  // Under Oracle tenants, partition_name is allowed to be empty. There may be a partition name conflict
-  // when filling the tablegroup first and directly copying it to the table. Therefore, add a variable
-  // when copying to mark this as an empty partition name and do not copy the partition name.
+  // partition_name may be empty. There may be a partition name conflict when filling the tablegroup
+  // first and directly copying it to the table. Therefore, add a variable when copying to mark this
+  // as an empty partition name and do not copy the partition name.
   bool is_empty_partition_name_;
   PartitionType partition_type_;
   common::ObRowkey low_bound_val_;
@@ -3126,7 +3125,7 @@ class ObPartitionUtils
 {
 public:
   // According to the given hash value val and partition number part_num,
-  // distinguish between oracle and mysql modes to calculate which partition this fold falls on
+  // Calculate which partition this hash value falls on.
   // This interface is called at get_hash_part_idxs, get_hash_subpart_ids, etc.
   static int calc_hash_part_idx(const uint64_t val,
                                 const int64_t part_num,
@@ -3916,11 +3915,8 @@ inline uint64_t ObColumnSchemaHashWrapper::hash() const
 // 1. table is in recyclebin:
 //    - pure_data_table_id is invalid
 //    - index_name is table_name
-// 2. table is in mysql mode(include sys table):
+// 2. normal table:
 //    - pure_data_table_id is valid
-//    - index_name is original_index_name
-// 3. table is in oracle mode(include some inner table):
-//    - pure_data_table_id is invalid
 //    - index_name is original_index_name
 class ObIndexSchemaHashWrapper
 {
@@ -3948,7 +3944,7 @@ public :
 private :
   
   uint64_t database_id_;
-  uint64_t pure_data_table_id_; // only for mysql mode
+  uint64_t pure_data_table_id_;
   common::ObString index_name_;
 };
 
@@ -3967,11 +3963,9 @@ inline uint64_t ObIndexSchemaHashWrapper::hash() const
 
 inline bool ObIndexSchemaHashWrapper::operator ==(const ObIndexSchemaHashWrapper &rv) const
 {
-  //mysql case insensitive
-  //oracle case sensitive
+  //case insensitive
   ObCompareNameWithTenantID name_cmp;
-  return (true)
-         && (database_id_ == rv.database_id_)
+  return (database_id_ == rv.database_id_)
          && (pure_data_table_id_ == rv.pure_data_table_id_)
          && (0 == name_cmp.compare(index_name_, rv.index_name_));
 }
@@ -4021,7 +4015,7 @@ inline uint64_t ObTableSchemaHashWrapper::hash() const
 inline bool ObTableSchemaHashWrapper::operator ==(const ObTableSchemaHashWrapper &rv) const
 {
   ObCompareNameWithTenantID name_cmp(name_case_mode_, database_id_);
-  return (true) && (database_id_ == rv.database_id_)
+  return (database_id_ == rv.database_id_)
       && (name_case_mode_ == rv.name_case_mode_)
       && (session_id_ == rv.session_id_ || common::OB_INVALID_ID == rv.session_id_)
       && (0 == name_cmp.compare(table_name_ ,rv.table_name_));
@@ -4065,10 +4059,9 @@ inline uint64_t ObAuxVPSchemaHashWrapper::hash() const
 
 inline bool ObAuxVPSchemaHashWrapper::operator ==(const ObAuxVPSchemaHashWrapper &rv) const
 {
-  //mysql case insensitive
-  //oracle case sensitive
+  //case insensitive
   ObCompareNameWithTenantID name_cmp;
-  return (true) && (database_id_ == rv.database_id_)
+  return (database_id_ == rv.database_id_)
          && (0 == name_cmp.compare(aux_vp_name_, rv.aux_vp_name_));
 }
 
@@ -4109,8 +4102,7 @@ inline uint64_t ObDatabaseSchemaHashWrapper::hash() const
 inline bool ObDatabaseSchemaHashWrapper::operator ==(const ObDatabaseSchemaHashWrapper &rv) const
 {
   ObCompareNameWithTenantID name_cmp(name_case_mode_);
-  return (true)
-      && (name_case_mode_ == rv.name_case_mode_)
+  return (name_case_mode_ == rv.name_case_mode_)
       && (0 == name_cmp.compare(database_name_ ,rv.database_name_));
 }
 
@@ -4174,10 +4166,9 @@ inline uint64_t ObForeignKeyInfoHashWrapper::hash() const
 
 inline bool ObForeignKeyInfoHashWrapper::operator ==(const ObForeignKeyInfoHashWrapper &rv) const
 {
-  //mysql case insensitive
-  //oracle case sensitive
+  //case insensitive
   ObCompareNameWithTenantID name_cmp;
-  return (true) && (database_id_ == rv.database_id_)
+  return (database_id_ == rv.database_id_)
          && (0 == name_cmp.compare(foreign_key_name_, rv.foreign_key_name_));
 }
 
@@ -4220,10 +4211,9 @@ inline uint64_t ObConstraintInfoHashWrapper::hash() const
 
 inline bool ObConstraintInfoHashWrapper::operator ==(const ObConstraintInfoHashWrapper &rv) const
 {
-  //mysql case insensitive
-  //oracle case sensitive
+  //case insensitive
   ObCompareNameWithTenantID name_cmp;
-  return (true) && (database_id_ == rv.database_id_)
+  return (database_id_ == rv.database_id_)
          && (0 == name_cmp.compare(constraint_name_, rv.constraint_name_));
 }
 
@@ -4239,7 +4229,7 @@ inline uint64_t ObTablegroupSchemaHashWrapper::hash() const
 inline bool ObTablegroupSchemaHashWrapper::operator ==(const ObTablegroupSchemaHashWrapper &rv)
 const
 {
-  return (true) && (tablegroup_name_ == rv.tablegroup_name_);
+  return (tablegroup_name_ == rv.tablegroup_name_);
 }
 
 struct ObTenantOutlineId
@@ -4255,7 +4245,7 @@ public:
   {}
   bool operator==(const ObTenantOutlineId &rhs) const
   {
-    return (true) && (outline_id_ == rhs.outline_id_);
+    return (outline_id_ == rhs.outline_id_);
   }
   bool operator!=(const ObTenantOutlineId &rhs) const
   {
@@ -4297,7 +4287,7 @@ public:
   {}
   bool operator==(const ObTenantUserId &rhs) const
   {
-    return (true) && (user_id_ == rhs.user_id_);
+    return (user_id_ == rhs.user_id_);
   }
   bool operator!=(const ObTenantUserId &rhs) const
   {
@@ -4385,8 +4375,7 @@ public:
   }
   bool is_valid() const
   {
-    return (true)
-            && (grantee_id_ != common::OB_INVALID_ID)
+    return (grantee_id_ != common::OB_INVALID_ID)
             && (obj_id_ != common::OB_INVALID_ID)
             && (obj_type_ != common::OB_INVALID_ID)
             && (col_id_ != common::OB_INVALID_ID);
@@ -4519,7 +4508,7 @@ inline uint64_t ObUserInfoHashWrapper::hash() const
 
 inline bool ObUserInfoHashWrapper::operator ==(const ObUserInfoHashWrapper &other) const
 {
-  return (true) && (user_name_ == other.user_name_);
+  return (user_name_ == other.user_name_);
 }
 
 enum class ObSSLType : int
@@ -4683,7 +4672,7 @@ struct ObDBPrivSortKey
   {}
   bool operator==(const ObDBPrivSortKey &rhs) const
   {
-    return (true) && (user_id_ == rhs.user_id_)
+    return (user_id_ == rhs.user_id_)
            && (sort_ == rhs.sort_);
   }
   bool operator!=(const ObDBPrivSortKey &rhs) const
@@ -4691,7 +4680,7 @@ struct ObDBPrivSortKey
   bool operator<(const ObDBPrivSortKey &rhs) const
   {
     bool bret = false;
-    if (false == bret && true) {
+    if (false == bret) {
       bret = user_id_ < rhs.user_id_;
       if (false == bret && user_id_ == rhs.user_id_) {
         bret = sort_ > rhs.sort_;//sort values of 'sort_' from big to small
@@ -4715,7 +4704,7 @@ struct ObOriginalDBKey
   {}
   bool operator==(const ObOriginalDBKey &rhs) const
   {
-    return (true) && (user_id_ == rhs.user_id_)
+    return (user_id_ == rhs.user_id_)
            && (db_ == rhs.db_);
   }
   bool operator!=(const ObOriginalDBKey &rhs) const
@@ -4725,7 +4714,7 @@ struct ObOriginalDBKey
   bool operator<(const ObOriginalDBKey &rhs) const
   {
     bool bret = false;
-    if (false == bret && true) {
+    if (false == bret) {
       bret = user_id_ < rhs.user_id_;
     }
     return bret;
@@ -4779,7 +4768,7 @@ struct ObSysPrivKey
   bool operator<(const ObSysPrivKey &rhs) const
   {
     bool bret = false;
-    if (false == bret && true) {
+    if (false == bret) {
       bret = grantee_id_ < rhs.grantee_id_;
     }
     return bret;
@@ -4866,7 +4855,7 @@ struct ObTablePrivDBKey
   {}
   bool operator==(const ObTablePrivDBKey &rhs) const
   {
-    return (true) && (user_id_ == rhs.user_id_)
+    return (user_id_ == rhs.user_id_)
            && (db_ == rhs.db_);
   }
   bool operator!=(const ObTablePrivDBKey &rhs) const
@@ -4876,7 +4865,7 @@ struct ObTablePrivDBKey
   bool operator<(const ObTablePrivDBKey &rhs) const
   {
     bool bret = false;
-    if (false == bret && true) {
+    if (false == bret) {
       bret = user_id_ < rhs.user_id_;
       if (false == bret && user_id_ == rhs.user_id_) {
         bret = db_ < rhs.db_;
@@ -4899,7 +4888,7 @@ struct ObTablePrivSortKey
   {}
   bool operator==(const ObTablePrivSortKey &rhs) const
   {
-    return (true) && (user_id_ == rhs.user_id_)
+    return (user_id_ == rhs.user_id_)
            && (db_ == rhs.db_) && (table_ == rhs.table_);
   }
   bool operator!=(const ObTablePrivSortKey &rhs) const
@@ -4909,7 +4898,7 @@ struct ObTablePrivSortKey
   bool operator<(const ObTablePrivSortKey &rhs) const
   {
     bool bret = false;
-    if (false == bret && true) {
+    if (false == bret) {
       bret = user_id_ < rhs.user_id_;
       if (false == bret && user_id_ == rhs.user_id_) {
         bret = db_ < rhs.db_;
@@ -4933,7 +4922,7 @@ struct ObTablePrivSortKey
   }
   bool is_valid() const
   {
-    return (true) && (user_id_ != common::OB_INVALID_ID);
+    return (user_id_ != common::OB_INVALID_ID);
   }
 
   int deep_copy(const ObTablePrivSortKey &src, common::ObIAllocator &allocator)
@@ -4965,7 +4954,7 @@ struct ObRoutinePrivDBKey
   {}
   bool operator==(const ObRoutinePrivDBKey &rhs) const
   {
-    return (true) && (user_id_ == rhs.user_id_)
+    return (user_id_ == rhs.user_id_)
            && (db_ == rhs.db_);
   }
   bool operator!=(const ObRoutinePrivDBKey &rhs) const
@@ -4975,7 +4964,7 @@ struct ObRoutinePrivDBKey
   bool operator<(const ObRoutinePrivDBKey &rhs) const
   {
     bool bret = false;
-    if (false == bret && true) {
+    if (false == bret) {
       bret = user_id_ < rhs.user_id_;
       if (false == bret && user_id_ == rhs.user_id_) {
         bret = db_ < rhs.db_;
@@ -4999,7 +4988,7 @@ struct ObRoutinePrivSortKey
   bool operator==(const ObRoutinePrivSortKey &rhs) const
   {
     ObCompareNameWithTenantID name_cmp;
-    return (true) && (user_id_ == rhs.user_id_)
+    return (user_id_ == rhs.user_id_)
            && (db_ == rhs.db_) && (0 == name_cmp.compare(routine_, rhs.routine_)) && (routine_type_ == rhs.routine_type_);
   }
   bool operator!=(const ObRoutinePrivSortKey &rhs) const
@@ -5010,7 +4999,7 @@ struct ObRoutinePrivSortKey
   {
     ObCompareNameWithTenantID name_cmp;
     bool bret = false;
-    if (false == bret && true) {
+    if (false == bret) {
       bret = user_id_ < rhs.user_id_;
       if (false == bret && user_id_ == rhs.user_id_) {
         bret = db_ < rhs.db_;
@@ -5044,7 +5033,7 @@ struct ObRoutinePrivSortKey
   }
   bool is_valid() const
   {
-    return (true) && (user_id_ != common::OB_INVALID_ID) && routine_type_ != 0;
+    return (user_id_ != common::OB_INVALID_ID) && routine_type_ != 0;
   }
 
   int deep_copy(const ObRoutinePrivSortKey &src, common::ObIAllocator &allocator)
@@ -5080,7 +5069,7 @@ struct ObColumnPrivIdKey
 
   bool operator==(const ObColumnPrivIdKey &rhs) const
   {
-    return (true) && (priv_id_ == rhs.priv_id_);
+    return (priv_id_ == rhs.priv_id_);
   }
   uint64_t priv_id_;
 };
@@ -5099,10 +5088,9 @@ struct ObColumnPrivSortKey
   //So in the schema stage, db and table name can directly binary compare with each other without considering the collation.
   bool operator==(const ObColumnPrivSortKey &rhs) const
   {
-    // Only mysql will reach here, and column name character collation is general ci under mysql mode.
-    // If Oracle mode reach here, the result may be wrong!
+    // Column name character collation is general ci.
     common::ObCollationType cs_type = common::CS_TYPE_UTF8MB4_GENERAL_CI;
-    return (true) && (user_id_ == rhs.user_id_)
+    return (user_id_ == rhs.user_id_)
            && (db_ == rhs.db_) && (table_ == rhs.table_) &&
            (0 == common::ObCharset::strcmp(cs_type, column_, rhs.column_));
   }
@@ -5113,7 +5101,7 @@ struct ObColumnPrivSortKey
   bool operator<(const ObColumnPrivSortKey &rhs) const
   {
     bool bret = false;
-    if (false == bret && true) {
+    if (false == bret) {
       bret = user_id_ < rhs.user_id_;
       if (false == bret && user_id_ == rhs.user_id_) {
         bret = db_ < rhs.db_;
@@ -5146,7 +5134,7 @@ struct ObColumnPrivSortKey
   }
   bool is_valid() const
   {
-    return (true) && (user_id_ != common::OB_INVALID_ID);
+    return (user_id_ != common::OB_INVALID_ID);
   }
 
   int deep_copy(const ObColumnPrivSortKey &src, common::ObIAllocator &allocator)
@@ -5199,7 +5187,7 @@ struct ObObjPrivSortKey
   bool operator<(const ObObjPrivSortKey &rhs) const
   {
     bool bret = false;
-    if (false == bret && true) {
+    if (false == bret) {
       bret = grantee_id_ < rhs.grantee_id_;
       if (false == bret && grantee_id_ == rhs.grantee_id_) {
         bret = obj_id_ < rhs.obj_id_;
@@ -5230,8 +5218,7 @@ struct ObObjPrivSortKey
   }
   bool is_valid() const
   {
-    return (true)
-           && (obj_id_ != common::OB_INVALID_ID) && (obj_type_ != common::OB_INVALID_ID)
+    return (obj_id_ != common::OB_INVALID_ID) && (obj_type_ != common::OB_INVALID_ID)
            && (grantor_id_ != common::OB_INVALID_ID) && (grantee_id_ != common::OB_INVALID_ID);
   }
   TO_STRING_KV(K_(obj_id), K_(obj_type),
@@ -5411,7 +5398,7 @@ public:
   { return NULL != lhs ? lhs->get_sort_key() == sort_key : false; }
 
   static bool equal_by_id_key(const ObColumnPriv *lhs, const ObColumnPrivIdKey &sort_key)
-  { return NULL != lhs ? true && lhs->get_priv_id() == sort_key.priv_id_ : false; }
+  { return NULL != lhs ? lhs->get_priv_id() == sort_key.priv_id_ : false; }
 
   ObTablePrivSortKey get_table_key() const
   { return ObTablePrivSortKey(user_id_, db_, table_); }
@@ -5549,8 +5536,6 @@ enum ObPrivLevel
   OB_PRIV_DB_LEVEL,
   OB_PRIV_TABLE_LEVEL,
   OB_PRIV_DB_ACCESS_LEVEL,
-  OB_PRIV_SYS_ORACLE_LEVEL,   /* oracle-mode system privilege */
-  OB_PRIV_OBJ_ORACLE_LEVEL,   /* oracle-mode object privilege */
   OB_PRIV_ROUTINE_LEVEL,
   OB_PRIV_CATALOG_LEVEL,
   OB_PRIV_OBJECT_LEVEL,
@@ -5672,7 +5657,7 @@ struct ObSessionPrivInfo
 
   bool is_valid() const
   {
-    return (true) && (user_id_ != common::OB_INVALID_ID);
+    return (user_id_ != common::OB_INVALID_ID);
   }
 
   bool is_tenant_changed() const { return false; }
@@ -5737,7 +5722,7 @@ struct ObUserLoginInfo
   common::ObString scramble_str_;
 };
 
-// oracle compatible: define u/r system permissions
+// Define u/r system permissions.
 class ObSysPriv : public ObSchema, public ObPriv
 {
   OB_UNIS_VERSION(1);
@@ -6022,7 +6007,7 @@ public:
   {}
   bool operator==(const ObTenantUDFId &rhs) const
   {
-    return (true) && (udf_name_ == rhs.udf_name_);
+    return (udf_name_ == rhs.udf_name_);
   }
   bool operator!=(const ObTenantUDFId &rhs) const
   {
@@ -6062,7 +6047,7 @@ public:
   {}
   bool operator==(const ObTenantSequenceId &rhs) const
   {
-    return (true) && (sequence_id_ == rhs.sequence_id_);
+    return (sequence_id_ == rhs.sequence_id_);
   }
   bool operator!=(const ObTenantSequenceId &rhs) const
   {
@@ -6149,7 +6134,7 @@ inline uint64_t ObOutlineNameHashWrapper::hash() const
 
 inline bool ObOutlineNameHashWrapper::operator ==(const ObOutlineNameHashWrapper &rv) const
 {
-  return (true) && (database_id_ == rv.database_id_)
+  return (database_id_ == rv.database_id_)
             && (name_ == rv.name_) && (is_format_ == rv.is_format_);
 }
 
@@ -6224,7 +6209,7 @@ inline uint64_t ObOutlineSqlIdHashWrapper::hash() const
 
 inline bool ObOutlineSqlIdHashWrapper::operator ==(const ObOutlineSqlIdHashWrapper &rv) const
 {
-  return (true) && (database_id_ == rv.database_id_)
+  return (database_id_ == rv.database_id_)
       && (sql_id_ == rv.sql_id_) && (is_format_ == rv.is_format_);
 }
 
@@ -6241,7 +6226,7 @@ inline uint64_t ObOutlineSignatureHashWrapper::hash() const
 
 inline bool ObOutlineSignatureHashWrapper::operator ==(const ObOutlineSignatureHashWrapper &rv) const
 {
-  return (true) && (database_id_ == rv.database_id_)
+  return (database_id_ == rv.database_id_)
       && (signature_ == rv.signature_) && (is_format_ == rv.is_format_);
 }
 
@@ -7008,7 +6993,7 @@ public:
   {}
   bool operator==(const ObTenantCommonSchemaId &rhs) const
   {
-    return (true) && (schema_id_ == rhs.schema_id_);
+    return (schema_id_ == rhs.schema_id_);
   }
   bool operator!=(const ObTenantCommonSchemaId &rhs) const
   {
@@ -7139,7 +7124,7 @@ struct ObContextKey
   {}
   bool operator==(const ObContextKey &rhs) const
   {
-    return (true) && (context_id_ == rhs.context_id_);
+    return (context_id_ == rhs.context_id_);
   }
   bool operator!=(const ObContextKey &rhs) const
   {
@@ -7148,7 +7133,7 @@ struct ObContextKey
   bool operator<(const ObContextKey &rhs) const
   {
     bool bret = false;
-    if (false == bret && true) {
+    if (false == bret) {
       bret = context_id_ < rhs.context_id_;
     }
     return bret;
@@ -7162,7 +7147,7 @@ struct ObContextKey
   }
   bool is_valid() const
   {
-    return (true) && (context_id_ != common::OB_INVALID_ID);
+    return (context_id_ != common::OB_INVALID_ID);
   }
   TO_STRING_KV(K_(context_id));
   uint64_t context_id_;
@@ -7236,7 +7221,7 @@ struct ObMockFKParentTableKey
       : mock_fk_parent_table_id_(mock_fk_parent_table_id) {}
   bool operator==(const ObMockFKParentTableKey &rhs) const
   {
-    return (true) && (mock_fk_parent_table_id_ == rhs.mock_fk_parent_table_id_);
+    return (mock_fk_parent_table_id_ == rhs.mock_fk_parent_table_id_);
   }
   bool operator!=(const ObMockFKParentTableKey &rhs) const
   {
@@ -7245,7 +7230,7 @@ struct ObMockFKParentTableKey
   bool operator<(const ObMockFKParentTableKey &rhs) const
   {
     bool bret = false;
-    if (false == bret && true) {
+    if (false == bret) {
       bret = mock_fk_parent_table_id_ < rhs.mock_fk_parent_table_id_;
     }
     return bret;

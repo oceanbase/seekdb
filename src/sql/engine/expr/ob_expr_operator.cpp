@@ -413,7 +413,7 @@ int OB_INLINE ObExprOperator::cast_operand_type(common::ObObj &res_obj,
           if (CS_TYPE_INVALID != calc_collation_type) {
             cast_ctx.dest_collation_ = calc_collation_type;
           } else {
-            cast_ctx.dest_collation_ = ObCharset::get_default_collation_oracle(CHARSET_UTF8MB4);
+            cast_ctx.dest_collation_ = ObCharset::get_bin_collation(CHARSET_UTF8MB4);
           }
         }
       } else if (ob_is_json(calc_type)) {
@@ -687,43 +687,11 @@ bool ObExprOperator::is_valid_nls_param(const common::ObString &nls_param_str)
 {
   bool bret = false;
   if (!nls_param_str.empty() && NULL != nls_param_str.find('=')) {
-    static const common::ObString DEFAULT_VALUE_CALENDAR("GREGORIAN");
-    static const common::ObString DEFAULT_VALUE_DATE_LANGUAGE("AMERICAN");
-    static const common::ObString DEFAULT_VALUE_LANGUAGE("AMERICAN");
-    static const common::ObString DEFAULT_VALUE_NUMERIC_CHARACTERS(".,");
-    static const common::ObString DEFAULT_VALUE_SORT("BINARY");
-    static const common::ObString DEFAULT_VALUE_COMP("BINARY");
-    static const common::ObString DEFAULT_VALUE_CURRENCY("$");
-    static const common::ObString DEFAULT_VALUE_ISO_CURRENCY("AMERICA");
-    static const common::ObString DEFAULT_VALUE_DUAL_CURRENCY("$");
-
-    static const common::ObString DEFAULT_NAME_CALENDAR(share::OB_SV_NLS_CALENDAR);
-    static const common::ObString DEFAULT_NAME_DATE_LANGUAGE(share::OB_SV_NLS_DATE_LANGUAGE);
-    static const common::ObString DEFAULT_NAME_LANGUAGE(share::OB_SV_NLS_LANGUAGE);
-    static const common::ObString DEFAULT_NAME_NUMERIC_CHARACTERS(share::OB_SV_NLS_NUMERIC_CHARACTERS);
-    static const common::ObString DEFAULT_NAME_SORT(share::OB_SV_NLS_SORT);
-    static const common::ObString DEFAULT_NAME_COMP(share::OB_SV_NLS_COMP);
-    static const common::ObString DEFAULT_NAME_CURRENCY(share::OB_SV_NLS_CURRENCY);
-    static const common::ObString DEFAULT_NAME_ISO_CURRENCY(share::OB_SV_NLS_ISO_CURRENCY);
-    static const common::ObString DEFAULT_NAME_DUAL_CURRENCY(share::OB_SV_NLS_DUAL_CURRENCY);
-
     ObString value_str = const_cast<common::ObString &>(nls_param_str).trim();
     ObString name_str = value_str.split_on('=');
     name_str = name_str.trim();
     value_str = value_str.trim();
-    if (!name_str.empty() && !value_str.empty()) {
-      if ((0 == name_str.case_compare(DEFAULT_NAME_CALENDAR) && 0 == value_str.case_compare(DEFAULT_VALUE_CALENDAR))
-          || (0 == name_str.case_compare(DEFAULT_NAME_DATE_LANGUAGE) && 0 == value_str.case_compare(DEFAULT_VALUE_DATE_LANGUAGE))
-          || (0 == name_str.case_compare(DEFAULT_NAME_LANGUAGE) && 0 == value_str.case_compare(DEFAULT_VALUE_LANGUAGE))
-          || (0 == name_str.case_compare(DEFAULT_NAME_NUMERIC_CHARACTERS) && 0 == value_str.case_compare(DEFAULT_VALUE_NUMERIC_CHARACTERS))
-          || (0 == name_str.case_compare(DEFAULT_NAME_SORT) && 0 == value_str.case_compare(DEFAULT_VALUE_SORT))
-          || (0 == name_str.case_compare(DEFAULT_NAME_COMP) && 0 == value_str.case_compare(DEFAULT_VALUE_COMP))
-          || (0 == name_str.case_compare(DEFAULT_NAME_CURRENCY) && 0 == value_str.case_compare(DEFAULT_VALUE_CURRENCY))
-          || (0 == name_str.case_compare(DEFAULT_NAME_ISO_CURRENCY) && 0 == value_str.case_compare(DEFAULT_VALUE_ISO_CURRENCY))
-          || (0 == name_str.case_compare(DEFAULT_NAME_DUAL_CURRENCY) && 0 == value_str.case_compare(DEFAULT_VALUE_DUAL_CURRENCY))) {
-        bret = true;
-      }
-    }
+    UNUSEDx(name_str, value_str);
   }
   return bret;
 }
@@ -1038,7 +1006,7 @@ int ObExprOperator::aggregate_charsets(
  * @param deduce_flag Some expressions have special configurations for derivation
  * @return
  */
-int ObExprOperator::aggregate_string_type_and_charset_oracle(
+int ObExprOperator::aggregate_string_type_and_charset_extended(
     const ObBasicSessionInfo &session,
     const ObIArray<ObExprResType *> &params,
     ObExprResType &result,
@@ -1100,14 +1068,14 @@ int ObExprOperator::aggregate_string_type_and_charset_oracle(
 
   /* 2. deduce length semantics
    * */
-  OZ (aggregate_length_semantics_oracle(session, params, result, deduce_flag));
+  OZ (aggregate_length_semantics_extended(session, params, result, deduce_flag));
 
   LOG_DEBUG("aggregate string charset", K(result), K(params));
 
   return ret;
 }
 
-int ObExprOperator::aggregate_length_semantics_oracle(
+int ObExprOperator::aggregate_length_semantics_extended(
     const ObBasicSessionInfo &session,
     const ObIArray<ObExprResType *> &params,
     ObExprResType &result,
@@ -1143,7 +1111,7 @@ int ObExprOperator::deduce_string_param_calc_type_and_charset(
     CK (OB_NOT_NULL(param_meta));
     OX (param_meta->set_calc_meta(result));
     OX (param_meta->set_calc_length_semantics(length_semantic));
-    OZ(ObExprResultTypeUtil::deduce_max_string_length_oracle( session.get_dtc_params(),
+    OZ(ObExprResultTypeUtil::deduce_max_string_length_extended( session.get_dtc_params(),
         *param_meta, result, length, calc_ls));
     OX (param_meta->set_calc_length(length));
   }
@@ -1232,7 +1200,7 @@ int ObExprOperator::aggregate_result_type_for_merge(
   } else {
     ObObjType res_type = types[0].get_type();
     const ObLengthSemantics default_length_semantics = ((OB_NOT_NULL(type_ctx.get_session())) ?
-                                                       type_ctx.get_session()->get_actual_nls_length_semantics() : LS_BYTE);
+                                                       type_ctx.get_session()->get_actual_length_semantics() : LS_BYTE);
 
     bool has_new_enum_set_type = types[0].is_enum_set_with_subschema();
     for (int64_t i = 1; OB_SUCC(ret) && i < param_num; ++i) {
@@ -1342,7 +1310,7 @@ int ObExprOperator::aggregate_max_length_for_string_result(ObExprResType &type,
             LOG_WARN("get length failed", K(ret), K(types[i]));
           }
         }
-        /* Oracle compatible： if prejudged result type is char and args' length are different， change result type to varchar */
+        /* If prejudged result type is char and args' length are different, change result type to varchar. */
         LOG_DEBUG("cur len", K(length), K(max_length), K(types[i]));
         /*no need to if(OB_SUCCE(ret)) here*/
         if (length > max_length) {
@@ -1372,7 +1340,7 @@ int ObExprOperator::aggregate_max_length_for_string_result(ObExprResType &type,
             }
           }
         }
-        /* Oracle compatible： if prejudged result type is char and args' length are different， change result type to varchar */
+        /* If prejudged result type is char and args' length are different, change result type to varchar. */
         LOG_DEBUG("cur len", K(length), K(max_length), K(max_length_char), K(length_semantics), K(types[i]), K(type));
         if (length > max_length) {
           if (types[i].is_null() && skip_null) {
@@ -1623,7 +1591,7 @@ int ObExprDFMConvertCtx::parse_format(const ObString &format_str,
   //parse format
   ObDTMode mode = DT_TYPE_DATETIME;
   if (ob_is_otimestamp_type(target_type)) {
-    mode |= DT_TYPE_ORACLE;
+    mode |= DT_TYPE_NANOSECOND;
   }
   OZ (ObDFMUtil::parse_datetime_format_string(format_str, dfm_elems));
   if (check_format_semantic) {
@@ -2304,7 +2272,7 @@ int ObExprOperator::calc_trig_function_result_type1(ObExprResType &type,
     type.set_double();
   } 
   type1.set_calc_type(type.get_type());
-  //mysql/oracle have not added NOT_NULL constraint to the return values of trigonometric functions, exp, ln functions.
+  // Do not add NOT_NULL constraint to return values of trigonometric, exp, and ln functions.
   return ret;
 }
 
@@ -3707,7 +3675,7 @@ int ObSubQueryRelationalExpr::calc_result_with_all(ObObj &result,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("subquery result iterator is null");
   } else {
-    // mysql and oracle behavior is if ALL collection is empty, then comparison result is true, so initialize to true
+    // If ALL collection is empty, the comparison result is true, so initialize to true.
     tmp_result.set_bool(true);
     while (OB_SUCC(ret) && OB_SUCC(row_iter->get_next_row(row))) {
       if (OB_ISNULL(row)) {
@@ -3771,7 +3739,7 @@ int ObSubQueryRelationalExpr::calc_result_with_any(ObObj &result,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("subquery result iterator is null");
   } else {
-    // mysql and oracle behavior is if ANY collection is empty, then the comparison result is false, so initialize to false
+    // If ANY collection is empty, the comparison result is false, so initialize to false.
     tmp_result.set_bool(false);
     while (OB_SUCC(ret) && OB_SUCC(row_iter->get_next_row(row))) {
       if (OB_UNLIKELY(left_row.get_count() != row->get_count())) {
@@ -4197,7 +4165,7 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_any(
     LOG_WARN("iter should not be null", K(ret));
   } else {
     bool cnt_null = false;
-    // mysql and oracle behavior is if ANY collection is empty, then the comparison result is false, so initialize to false
+    // If ANY collection is empty, the comparison result is false, so initialize to false.
     res.set_false();
     while (OB_SUCC(ret) && OB_SUCC(r_iter->get_next_row())) {
       // use subquery's eval ctx for right row to avoid ObEvalCtx::alloc_ expanding.
@@ -4236,7 +4204,7 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_all(
     LOG_WARN("iter should not be null", K(ret));
   } else {
     bool cnt_null = false;
-    // mysql and oracle behavior is if ALL collection is empty, then comparison result is true, so initialize to true
+    // If ALL collection is empty, the comparison result is true, so initialize to true.
     res.set_true();
     while (OB_SUCC(ret) && OB_SUCC(r_iter->get_next_row())) {
       // use subquery's eval ctx for right row to avoid ObEvalCtx::alloc_ expanding.
@@ -4966,9 +4934,7 @@ int ObBitwiseExprOperator::cg_bitwise_expr(ObExprCGCtx &expr_cg_ctx, const ObRaw
     if (2 == rt_expr.arg_cnt_) {
       rt_expr.eval_func_ = ObBitwiseExprOperator::calc_result2_mysql;
 
-      // Since the oracle supports the bitwise AND operation only, and the representation of
-      // oracle is ObNumber, where mysql is uint_64. Therefore, we implements this function in two
-      // parts.
+      // The vector path chooses integer extraction by runtime datum metadata.
       rt_expr.eval_vector_func_ = calc_bitwise_result2_mysql_vector;
     } else {
       // must be set in its cg_expr method
@@ -5210,7 +5176,6 @@ int ObBitwiseExprOperator::inner_calc_vector(VECTOR_EVAL_FUNC_ARG_DECL, ObCastMo
   void *get_int_func0 = NULL;
   void *get_int_func1 = NULL;
 
-  // Different LOG_WARN message for oracle and mysql
   if (OB_FAIL(choose_get_int_func(left_meta, get_int_func0))) {
     LOG_WARN("choose_get_int_func failed", K(ret), K(left_meta));
   } else if (OB_FAIL(choose_get_int_func(right_meta, get_int_func1))) {
@@ -5220,9 +5185,8 @@ int ObBitwiseExprOperator::inner_calc_vector(VECTOR_EVAL_FUNC_ARG_DECL, ObCastMo
     R_VEC *r_vec = static_cast<R_VEC *>(expr.args_[1]->get_vector(ctx));
     RES_VEC *res_vec = static_cast<RES_VEC *>(expr.get_vector(ctx));
 
-    // Divide the Oracle and Mysql version in this point for calculation.
-    // Oracle process ObNumber and using int64_t as a meta variable.
-    // Mysql using uint64_t.
+    // The selected getter converts each supported input type to the integer
+    // representation used by bitwise calculation.
     const ObBitwiseExprOperator::BitOperator op =
       static_cast<const ObBitwiseExprOperator::BitOperator>(expr.extra_);
     for (int i = bound.start(); OB_SUCC(ret) && i < bound.end(); i += 1) {

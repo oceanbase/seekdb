@@ -151,7 +151,7 @@ int ObCatalogDDLOperator::grant_or_revoke_after_ddl(ObCatalogSchema &schema,
       ObObjPrivSortKey obj_priv_key(schema.get_catalog_id(),
                                     static_cast<uint64_t>(ObObjectType::CATALOG),
                                     OBJ_LEVEL_FOR_TAB_PRIV,
-                                    OB_ORA_SYS_USER_ID,
+                                    OB_EXTENDED_SYS_USER_ID,
                                     user_id);
       share::ObRawObjPrivArray new_obj_priv_array;
       share::ObRawObjPrivArray obj_priv_array;

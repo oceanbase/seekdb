@@ -240,8 +240,7 @@ ObExprSetCollation::ObExprSetCollation(ObIAllocator &alloc)
                     2,
                     VALID_FOR_GENERATED_COL,
                     NOT_ROW_DIMENSION,
-                    INTERNAL_IN_MYSQL_MODE,
-                    INTERNAL_IN_ORACLE_MODE)
+                    INTERNAL_IN_MYSQL_MODE)
 {}
 
 ObExprSetCollation::~ObExprSetCollation()
@@ -255,7 +254,7 @@ int ObExprSetCollation::calc_result_type2(ObExprResType &type,
   UNUSED(type_ctx);
   UNUSED(type1);
   const common::ObLengthSemantics default_length_semantics = (OB_NOT_NULL(type_ctx.get_session())
-          ? type_ctx.get_session()->get_actual_nls_length_semantics()
+          ? type_ctx.get_session()->get_actual_length_semantics()
           : common::LS_BYTE);
   int ret = OB_SUCCESS;
   type.set_varchar();

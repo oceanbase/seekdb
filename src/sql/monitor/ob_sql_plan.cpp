@@ -567,8 +567,7 @@ int ObSqlPlan::escape_quotes(ObSqlPlanItem &plan_item)
 
 /**
  * escape quotes for string value
- * oracle: '  => ''
- * mysql:  '  => \'
+ * escape single quote with backslash for generated INSERT SQL
  */
 int ObSqlPlan::inner_escape_quotes(char* &ptr, int64_t &length)
 {

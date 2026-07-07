@@ -471,9 +471,8 @@ int Processor::setup_rt_info(AggrRowPtr row,
     char *cell = nullptr;
     int32_t cell_len = 0;
     agg_ctx.row_meta().locate_cell_payload(col_id, row, cell, cell_len);
-    // oracle mode use ObNumber as result type for count aggregation
-    // we use int64_t as result type for count aggregation in aggregate row
-    // and cast int64_t to ObNumber during `collect_group_result`
+    // Count aggregation rows store the counter as int64_t and convert it to the
+    // expression result type during `collect_group_result`.
     if (res_tc == VEC_TC_NUMBER && agg_ctx.aggr_infos_.at(col_id).get_expr_type() != T_FUN_COUNT &&
         agg_ctx.aggr_infos_.at(col_id).get_expr_type() != T_FUN_SUM_OPNSIZE) {
       ObNumberDesc &d = *reinterpret_cast<ObNumberDesc *>(cell);

@@ -460,15 +460,8 @@ int ObRoutineSqlService::gen_routine_dml(
     LOG_WARN("add column failed", K(ret));
   }
   if (OB_FAIL(ret)) {
-  } else if (true) {
-    if (OB_FAIL(dml.add_column("type_id", routine_info.get_type_id()))) {
-      LOG_WARN("add column failed", K(ret));
-    }
-  } else {
-    if (OB_FAIL(dml.add_column("type_id", ObSchemaUtils::get_extract_schema_id(
-                               routine_info.get_type_id())))) {
-      LOG_WARN("add column failed", K(ret));
-    }
+  } else if (OB_FAIL(dml.add_column("type_id", routine_info.get_type_id()))) {
+    LOG_WARN("add column failed", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if ((!is_replace && OB_FAIL(dml.add_gmt_create()))

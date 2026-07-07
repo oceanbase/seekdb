@@ -36,7 +36,7 @@ enum class LogReductionMode {NONE = 0, REFINED, COMPRESSED};
 class Worker
 {
 public:
-  enum class CompatMode {INVALID = -1, MYSQL, ORACLE };
+  enum class CompatMode {INVALID = -1, MYSQL };
   enum Status { WS_NOWAIT, WS_INVALID, WS_OUT_OF_THROTTLE };
 
   Worker();

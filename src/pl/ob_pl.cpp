@@ -675,8 +675,7 @@ void ObPLContext::destory(
       if (OB_SUCCESS != ret && session_info.is_in_transaction()) { // PL execution failed, need to rollback
         int tmp_ret = OB_SUCCESS;
         if (has_implicit_savepoint_) {
-          // ORACLE: alreay rollback to PL/SQL start.
-          // MYSQL : rollback only if OB_TRY_LOCK_ROW_CONFLICT==ret and PL/SQL can retry.
+          // Roll back if PL/SQL can retry after a row-lock conflict, or for function/trigger execution.
           if ((              ((OB_TRY_LOCK_ROW_CONFLICT == ret && session_info.get_pl_can_retry()) ||
               is_function_or_trigger_))) {
             if (OB_SUCCESS !=
@@ -690,8 +689,7 @@ void ObPLContext::destory(
         } else if (!in_nested_sql_ctrl() && session_info.get_in_transaction()) {
           // If there is no implicit checkpoint and not nested within a transaction, it means the current transaction contains only this PL, directly rollback the transaction
           // PL in nested statements will roll back with the top-level statement, no separate rollback is needed
-          // ORACLE: alreay rollback to PL/SQL start.
-          // MYSQL : rollback only if OB_TRY_LOCK_ROW_CONFLICT==ret and PL/SQL can retry.
+          // Roll back if PL/SQL can retry after a row-lock conflict, or for function/trigger execution.
           if ((             ((OB_TRY_LOCK_ROW_CONFLICT == ret && session_info.get_pl_can_retry()) ||
              is_function_or_trigger_))) {
             tmp_ret = implicit_end_trans(session_info, ctx, true);
@@ -1045,8 +1043,7 @@ int ObPLContext::set_default_database(ObPLFunction &routine,
   
   bool need_set_db = true;
 
-  // in mysql mode, only system packages with invoker's right do not need set db
-  // in oracle mode, set db id to definer if the routine is not invoker's right
+  // Only system packages with invoker's right do not need set db.
   if (is_inner_pl_object_id(routine.get_package_id())) {
     need_set_db = !routine.is_invoker_right();
   }
@@ -2593,7 +2590,7 @@ int ObPL::insert_error_msg(int errcode)
   if (err_txt.empty()) {
     ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
     if (OB_NOT_NULL(wb)) {
-      wb->set_error(common::ob_oracle_strerror(errcode), errcode);
+      wb->set_error(common::ob_errpkt_strerror(errcode), errcode);
     }
   }
   return ret;
@@ -3423,7 +3420,7 @@ do {                                                                  \
   const ObPLDataType &pl_type = func_.get_variables().at(i);          \
   if (OB_FAIL(ret)) {                                                 \
   } else if (pl_type.is_not_null()) {                                 \
-      if (param.is_null() || param.is_null_oracle()) {                \
+      if (param.is_null() || param.is_null_or_empty_string()) {                \
       ret = OB_NULL_CHECK_ERROR;                                      \
       LOG_WARN("not null check violated!", K(ret), K(i), K(param));   \
     }                                                                 \
@@ -3731,7 +3728,6 @@ int ObPLExecRecursionCtx::init(sql::ObSQLSessionInfo &session_info)
       SYS_VAR_MAX_SP_RECURSION_DEPTH, max_recursion_value))) {
     LOG_WARN("fail to get system variable value", K(ret), K(SYS_VAR_MAX_SP_RECURSION_DEPTH));
   } else {
-    // Oracle compatible: no restriction on recursion depth
     max_recursion_depth_ = max_recursion_value.get_int();
     init_ = true;
   }

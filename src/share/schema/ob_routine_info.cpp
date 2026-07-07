@@ -339,7 +339,7 @@ void ObRoutineInfo::reset()
   routine_type_ = INVALID_ROUTINE_TYPE;
   flag_ = 0;
   reset_string(priv_user_);
-  comp_flag_ = 0;
+  comp_flag_ = COMPATIBLE_MYSQL_MODE;
   reset_string(exec_env_);
   reset_string(routine_body_);
   reset_string(comment_);

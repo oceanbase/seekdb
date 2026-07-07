@@ -40,7 +40,7 @@ const ObEndTransCbPacketParam &ObEndTransCbPacketParam::fill(ObResultSet &rs,
                                                              const ObCurTraceId::TraceId &trace_id)
 {
   MEMCPY(message_, rs.get_message(), MSG_SIZE); // TODO: optimize out
-  // oracle ANONYMOUS_BLOCK affect rows always return 1
+  // Anonymous block affected rows always return 1.
   affected_rows_ = stmt::T_ANONYMOUS_BLOCK == rs.get_stmt_type() 
                     ? 1 : rs.get_affected_rows();
   session.set_affected_rows(affected_rows_);
@@ -68,5 +68,4 @@ const ObEndTransCbPacketParam &ObEndTransCbPacketParam::fill(const char *message
 
 }/* ns sql*/
 }/* ns oceanbase */
-
 

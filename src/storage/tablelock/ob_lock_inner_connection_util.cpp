@@ -619,7 +619,7 @@ int ObInnerConnectionLockUtil::create_inner_conn(sql::ObSQLSessionInfo *session_
     LOG_WARN("can not get the compat_mode", KPC(session_info));
   } else if (common::sqlclient::INNER_POOL != pool->get_type()) {
     LOG_WARN("connection pool type is not inner", K(ret), K(pool->get_type()));
-    // NOTICE: the pool acquire no longer takes is_oracle_mode, it's always false internally
+    // NOTICE: the pool acquire no longer needs a compatibility-mode flag.
   } else if (OB_FAIL(pool->acquire(session_info, conn))) {
     LOG_WARN("acquire connection from inner sql connection pool failed", KR(ret), KPC(session_info));
   } else if (OB_ISNULL(conn)) {
@@ -643,8 +643,8 @@ int ObInnerConnectionLockUtil::execute_write_sql(observer::ObInnerSQLConnection 
   bool need_reset_sess_mode = false;
   bool need_reset_conn_mode = false;
 
-  // NOTICE: This will be overwritten by the oracle_made_ field on connection,
-  // but for safety reason, we still set up a compat_guard here.
+  // NOTICE: The connection may overwrite compatibility mode internally, so keep
+  // a guard here for safety.
 
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
@@ -672,8 +672,8 @@ int ObInnerConnectionLockUtil::execute_read_sql(observer::ObInnerSQLConnection *
   bool need_reset_sess_mode = false;
   bool need_reset_conn_mode = false;
 
-  // NOTICE: This will be overwritten by the oracle_made_ field on connection,
-  // but for safety reason, we still set up a compat_guard here.
+  // NOTICE: The connection may overwrite compatibility mode internally, so keep
+  // a guard here for safety.
 
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;

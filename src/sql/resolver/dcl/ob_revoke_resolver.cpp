@@ -201,7 +201,7 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
       ParseNode *privs_node = NULL;
       ObPrivLevel grant_level = OB_PRIV_INVALID_LEVEL;
       if (T_SYSTEM_REVOKE == node->type_ && REVOKE_ROLE_NUM_CHILD == node->num_child_) {
-        // resolve oracle revoke
+        // resolve role revoke
         // 0: role_list; 1: grantee
         ParseNode *revoke_role = node->children_[0];
         if (NULL == revoke_role) {

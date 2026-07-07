@@ -6,13 +6,13 @@
 # - (0, 100)         : Core Table
 # - (0, 10000)       : System Table
 # - (10000, 15000)   : MySQL Virtual Table
-# - (15000, 20000)   : Oracle Virtual Table
+# - (15000, 20000)   : Extended Virtual Table
 # - (20000, 25000)   : MySQL System View
-# - (25000, 30000)   : Oracle System View
+# - (25000, 30000)   : Extended System View
 # - (50000, 60000)   : Lob meta table
 # - (60000, 70000)   : Lob piece table
 # - (100000, 200000) : System table Index
-# - (15305, <20000)  : Oracle Real Agent table Index
+# - (15305, <20000)  : Real Agent table Index
 # - (500000, ~)      : User Table
 #
 # Here are some table_name definition principles.
@@ -22,8 +22,8 @@
 # 4. Virtual table's table_name should be started with '__all_virtual' or '__tenant_virtual'.
 #    Virtual table started with '__all_virtual' can be directly queried by SQL.
 #    Virtual table started with '__tenant_virtual' is used for special cmd(such as show cmd), which can't be queried by SQL.
-# 5. System view's table_name should be referred from MySQL/Oracle.
-# 6. Definition of Oracle Virtual Table/Oracle System View can be referred from document:
+# 5. System view's table_name should follow system view naming conventions.
+# 6. Definitions in extended virtual table/system view ranges can be referred from document:
 #
 # 7. Difference between REAL_AGENT and SYS_AGENT:
 #     sys_agent access tables belong to sys tenant only
@@ -69,7 +69,6 @@
 #    - Example 1: def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
 #      * Base table name placeholder: # 12393: __all_virtual_long_ops_status
 #      * Real table name placeholder: # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
-#    - Example 2: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
 #      * Base table name placeholder: # 15009: __all_virtual_sql_audit
 #      * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
 #    - Example 3: def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
@@ -1306,7 +1305,7 @@ all_foreign_key_def = dict(
   in_tenant_space = True,
 
   normal_columns = [
-    ('foreign_key_name', 'varchar:OB_MAX_CONSTRAINT_NAME_LENGTH_ORACLE', 'false', ''),
+    ('foreign_key_name', 'varchar:OB_MAX_EXTENDED_CONSTRAINT_NAME_LENGTH', 'false', ''),
     ('child_table_id', 'int'),
     ('parent_table_id', 'int'),
     ('update_action', 'int'),
@@ -1528,7 +1527,7 @@ all_constraint_def = dict(
     in_tenant_space = True,
 
     normal_columns = [
-      ('constraint_name', 'varchar:OB_MAX_CONSTRAINT_NAME_LENGTH_ORACLE', 'false'),
+      ('constraint_name', 'varchar:OB_MAX_EXTENDED_CONSTRAINT_NAME_LENGTH', 'false'),
       ('check_expr', 'varchar:OB_MAX_CONSTRAINT_EXPR_LENGTH', 'false'),
       ('schema_version', 'int'),
       ('constraint_type', 'int'),
@@ -1857,7 +1856,7 @@ all_tenant_error_def = dict(
       ('line', 'int', 'false'),
       ('position', 'int', 'false'),
       ('text_length', 'int', 'false'),
-      ('text', 'varchar:MAX_ORACLE_COMMENT_LENGTH'),
+      ('text', 'varchar:MAX_COMMENT_TEXT_LENGTH'),
       ('property', 'int', 'true'),
       ('error_number', 'int', 'true'),
       ('schema_version', 'int', 'false')
@@ -2001,8 +2000,8 @@ all_tenant_dependency_def = dict(
     ('ref_timestamp', 'int'),
     ('dep_obj_owner_id', 'int', 'true'),
     ('property', 'int'),
-    ('dep_attrs', 'varbinary:OB_MAX_ORACLE_RAW_SQL_COL_LENGTH', 'true'),
-    ('dep_reason', 'varbinary:OB_MAX_ORACLE_RAW_SQL_COL_LENGTH', 'true'),
+    ('dep_attrs', 'varbinary:OB_MAX_RAW_SQL_COL_LENGTH', 'true'),
+    ('dep_reason', 'varbinary:OB_MAX_RAW_SQL_COL_LENGTH', 'true'),
     ('ref_obj_name', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'true')
   ]
   )
@@ -4101,7 +4100,6 @@ def_table_schema(**gen_history_table_def(556, all_objauth_mysql_def))
 #    - Example 1: def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
 #      * Base table name placeholder: # 12393: __all_virtual_long_ops_status
 #      * Real table name placeholder: # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
-#    - Example 2: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
 #      * Base table name placeholder: # 15009: __all_virtual_sql_audit
 #      * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
 #    - Example 3: def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
@@ -8931,7 +8929,6 @@ def_table_schema(
 #    - Example 1: def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
 #      * Base table name placeholder: # 12393: __all_virtual_long_ops_status
 #      * Real table name placeholder: # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
-#    - Example 2: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
 #      * Base table name placeholder: # 15009: __all_virtual_sql_audit
 #      * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
 #    - Example 3: def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
@@ -8946,16 +8943,15 @@ def_table_schema(
 
 
 ################################################################################
-# Oracle Virtual Table(15000,20000]
+# Extended Virtual Table(15000,20000]
 ################################################################################
 
 # Reserved position (placeholder before this line)
-# This section defines Oracle table names which are relatively complex, generally defined using the gen_xxx_table_def() method, placeholder suggestion is to use the base table name as a placeholder
-# - Example: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
+# This section defines mapped table names which are relatively complex, generally defined using the gen_xxx_table_def() method, placeholder suggestion is to use the base table name as a placeholder
 #   * Base table name placeholder: # 15009: __all_virtual_sql_audit
 #   * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
 ################################################################################
-# End of Oracle Virtual Table(15000,20000]
+# End of Extended Virtual Table(15000,20000]
 ################################################################################
 ################################### Placeholder Notice ###################################
 # Placeholder example: Write the comment at the beginning of the line, indicating which TABLE_ID to occupy and the corresponding name
@@ -8972,7 +8968,6 @@ def_table_schema(
 #    - Example 1: def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
 #      * Base table name placeholder: # 12393: __all_virtual_long_ops_status
 #      * Real table name placeholder: # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
-#    - Example 2: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
 #      * Base table name placeholder: # 15009: __all_virtual_sql_audit
 #      * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
 #    - Example 3: def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
@@ -8988,7 +8983,7 @@ def_table_schema(
 ################################################################################
 # System View (20000,30000]
 # MySQL System View (20000, 25000]
-# Oracle System View (25000, 30000]
+# Extended System View (25000, 30000]
 ################################################################################
 
 # 20001: GV$OB_PLAN_CACHE_STAT # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plan_cache_stat)
@@ -11330,7 +11325,7 @@ def_table_schema(
 # TODO:(yanmu.ztl)
 # 1. sys package is not visible in user tenant.
 # 2. tablespace/constraint are not supported yet.
-# 3. sequence_object/synonym/context is only exist in oracle tenant.
+# 3. sequence_object/synonym/context objects are not exposed.
 def_table_schema(
   owner           = 'yanmu.ztl',
   table_name      = 'DBA_OBJECTS',
@@ -11360,7 +11355,6 @@ def_table_schema(
       CAST(A.EDITION_NAME AS CHAR(128)) AS EDITION_NAME,
       CAST(NULL AS CHAR(18)) AS SHARING,
       CAST(NULL AS CHAR(1)) AS EDITIONABLE,
-      CAST(NULL AS CHAR(1)) AS ORACLE_MAINTAINED,
       CAST(NULL AS CHAR(1)) AS APPLICATION,
       CAST(NULL AS CHAR(1)) AS DEFAULT_COLLATION,
       CAST(NULL AS CHAR(1)) AS DUPLICATED,
@@ -18936,7 +18930,6 @@ def_table_schema(
 #    - Example 1: def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
 #      * Base table name placeholder: # 12393: __all_virtual_long_ops_status
 #      * Real table name placeholder: # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
-#    - Example 2: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
 #      * Base table name placeholder: # 15009: __all_virtual_sql_audit
 #      * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
 #    - Example 3: def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
@@ -18950,7 +18943,7 @@ def_table_schema(
 ################################################################################
 
 ################################################################################
-# Oracle System View (25000, 30000]
+# Extended System View (25000, 30000]
 # Data Dictionary View (25000, 28000]
 # Performance View (28000, 30000]
 ################################################################################
@@ -18960,7 +18953,7 @@ def_table_schema(
 # Reserved position (placeholder before this line)
 # Placeholder suggestion for this section: Use the actual view name for placeholder
 ################################################################################
-#### End of Oracle Performance View (28000, 30000]
+#### End of Performance View (28000, 30000]
 ################################################################################
 ################################### Placeholder Notice ###################################
 # Placeholder example: Write comments at the beginning of the line to indicate which TABLE_ID is to be occupied and what the corresponding name is
@@ -18977,7 +18970,6 @@ def_table_schema(
 #    - Example 1: def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
 #      * Base table name placeholder: # 12393: __all_virtual_long_ops_status
 #      * Real table name placeholder: # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
-#    - Example 2: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
 #      * Base table name placeholder: # 15009: __all_virtual_sql_audit
 #      * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
 #    - Example 3: def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
@@ -19675,7 +19667,6 @@ def_sys_index_table(
 #    - Example 1: def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
 #      * Base table name placeholder: # 12393: __all_virtual_long_ops_status
 #      * Real table name placeholder: # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
-#    - Example 2: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
 #      * Base table name placeholder: # 15009: __all_virtual_sql_audit
 #      * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
 #    - Example 3: def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
@@ -19697,6 +19688,6 @@ def_sys_index_table(
   keywords = all_def_keywords['__all_tablet_reorganize_history'])
 
 ################################################################################
-# Oracle Agent table Index
-# End Oracle Agent table Index
+# Agent table Index
+# End Agent table Index
 ################################################################################

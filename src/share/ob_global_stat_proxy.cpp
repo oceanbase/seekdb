@@ -527,7 +527,7 @@ int ObGlobalStatProxy::advance_change_stream_refresh_scn(
 {
   int ret = OB_SUCCESS;
   affected_rows = 0;
-  if (!true || !refresh_scn.is_valid()) {
+  if (!refresh_scn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(refresh_scn));
   } else {
@@ -612,7 +612,7 @@ int ObGlobalStatProxy::advance_change_stream_min_dep_lsn(
 {
   int ret = OB_SUCCESS;
   affected_rows = 0;
-  if (!true || min_dep_lsn < 0) {
+  if (min_dep_lsn < 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(min_dep_lsn));
   } else {

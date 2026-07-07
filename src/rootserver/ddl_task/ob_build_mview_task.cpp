@@ -577,7 +577,7 @@ int ObBuildMViewTask::deserialize_params_from_message(
 {
   int ret = OB_SUCCESS;
   obcall::ObMViewCompleteRefreshArg tmp_arg;
-  if (OB_UNLIKELY(!true || nullptr == buf || data_len <= 0)) {
+  if (OB_UNLIKELY(nullptr == buf || data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, data_len, pos))) {

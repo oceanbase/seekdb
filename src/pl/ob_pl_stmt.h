@@ -36,7 +36,7 @@ static const int64_t FUNC_MAX_CURSORS = 128;
 static const int64_t LABEL_MAX_SIZE = 128;
 // static const int64_t PACKAGE_MAX_ROUTINES = 64;
 static const int64_t PL_CONSTRUCT_COLLECTION = INT_MAX64;
-static const int64_t OB_MAX_PL_IDENT_LENGTH = 128; // latest oracle ident max length is 128, before is 30
+static const int64_t OB_MAX_PL_IDENT_LENGTH = 128; // PL identifier max length
 static const int64_t OB_MAX_MYSQL_PL_IDENT_LENGTH = 64;
 
 static const ObString PL_IMPLICIT_SAVEPOINT = "PL/SQL@IMPLICIT_SAVEPOINT";
@@ -2613,7 +2613,7 @@ private:
   ObPLConditionValue value_;
   hash::ObHashMap<int64_t, int64_t> item_to_expr_idx_;
   int ob_error_code_;
-  bool is_signal_null_; // In Oracle mode, RAISE; statement without specifying an exception name, in this case, the current exception needs to be thrown
+  bool is_signal_null_; // RAISE without specifying an exception name throws the current exception.
   bool is_resignal_stmt_;
 };
 

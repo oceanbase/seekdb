@@ -35,7 +35,7 @@ int ObSchemaGetterGuard::get_ccl_rule_with_name(const common::ObString &name,
   ccl_rule_schema = NULL;
   ObNameCaseMode mode = OB_NAME_CASE_INVALID;
   const ObSimpleCCLRuleSchema *simple_ccl_rule_schema = nullptr;
-  if (OB_UNLIKELY(!true || name.empty())) {
+  if (OB_UNLIKELY(name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(name));
   } else if (OB_FAIL(check_tenant_schema_guard())) {
@@ -73,8 +73,7 @@ int ObSchemaGetterGuard::get_ccl_rule_with_ccl_rule_id(const uint64_t ccl_rule_i
   const ObSchemaMgr *mgr = NULL;
   ccl_rule_schema = NULL;
   const ObSimpleCCLRuleSchema *simple_ccl_rule_schema = nullptr;
-  if (OB_UNLIKELY(!true ||
-                         ccl_rule_id == common::OB_INVALID_ID)) {
+  if (OB_UNLIKELY(ccl_rule_id == common::OB_INVALID_ID)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(ccl_rule_id));
   } else if (OB_FAIL(check_tenant_schema_guard())) {
@@ -108,10 +107,7 @@ int ObSchemaGetterGuard::get_ccl_rule_infos(
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
   ccl_rule_infos = NULL;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_FAIL(check_tenant_schema_guard())) {
+  if (OB_FAIL(check_tenant_schema_guard())) {
     LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));
@@ -126,10 +122,7 @@ int ObSchemaGetterGuard::get_ccl_rule_infos(
 int ObSchemaGetterGuard::get_ccl_rule_count(uint64_t &count) {
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_FAIL(check_tenant_schema_guard())) {
+  if (OB_FAIL(check_tenant_schema_guard())) {
     LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret));

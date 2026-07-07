@@ -77,10 +77,6 @@ private:
                                 PlanText &plan_text,
                                 common::ObObj &result);
 
-  static int set_display_result_for_oracle(sql::ObExecContext &ctx,
-                                           PlanText &plan_text,
-                                           common::ObObj &result);
-
   static int set_display_result_for_mysql(sql::ObExecContext &ctx,
                                           PlanText &plan_text,
                                           common::ObObj &result);

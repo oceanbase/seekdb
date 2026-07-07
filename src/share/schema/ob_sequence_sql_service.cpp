@@ -315,9 +315,6 @@ int ObSequenceSqlService::clean_and_write_back_cache(common::ObISQLClient *sql_c
       LOG_WARN("format update sql fail", K(ret));
     } else if (OB_FAIL(ObShareUtil::table_check_if_tenant_role_is_standby( is_standby))) {
       LOG_WARN("fail to execute table_check_if_tenant_role_is_standby", KR(ret));
-    } else if (is_standby && false) {
-      ret = OB_OP_NOT_ALLOW;
-      LOG_WARN("can't write sys table now", K(ret));
     } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
       LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else if (!is_single_row(affected_rows)) {

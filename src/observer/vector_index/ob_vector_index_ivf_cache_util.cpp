@@ -30,7 +30,7 @@ namespace share
 int ObIvfCacheUtil::ObIvfWriteCacheFunc::operator()(const common::ObString &center_id, int64_t dim, float *data)
 {
   int ret = OB_SUCCESS;
-  uint64_t center_prefix = ObVectorClusterHelper::get_center_prefix(center_id, is_pq_centroid_);
+  uint64_t center_prefix = ObVectorKmeansClusterHelper::get_center_prefix(center_id, is_pq_centroid_);
   if (OB_UNLIKELY(center_prefix == 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid center id", K(ret), K(center_id), K(is_pq_centroid_));

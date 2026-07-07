@@ -317,9 +317,7 @@ int ObSelectStmtPrinter::print_select()
             } else {
               alias_string = select_item.expr_name_;
             }
-            /* In Oracle mode, due to some function aliases possibly appearing with double quotes "", which will cause errors during secondary parsing, it is necessary to remove these double quotes
-            *  
-            */
+            /* Function aliases may carry double quotes, which can break secondary parsing. */
             ObArenaAllocator arena_alloc;
             DATA_PRINTF(" AS ");
             PRINT_IDENT_WITH_QUOT(alias_string);
@@ -550,7 +548,7 @@ int ObSelectStmtPrinter::print_with_check_option()
        * otherwise it may cause a syntax error when ViewResolver resolve definition of a view.
        * case: create view v as select * from t with check option.
        * if we print 'with check option' of a view here, definition of the view is
-       * 'select * from t with check option', which will cause a syntax error in both mysql and oracle mode.
+       * 'select * from t with check option', which will cause a syntax error during view resolving.
       */
     } else {
       ViewCheckOption view_check_option = select_stmt->get_check_option();

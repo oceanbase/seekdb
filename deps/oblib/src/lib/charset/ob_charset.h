@@ -323,8 +323,7 @@ enum ObCollationType
   CS_TYPE_SWE7_ZH3_0900_AS_CS, // invalid
   CS_TYPE_MAX
 };
-// oracle mode character set name corresponding ID value
-// https://docs.oracle.com/cd/B19306_01/server.102/b14200/functions095.htm
+// NLS character set name corresponding ID value.
 enum ObNlsCharsetId
 {
   CHARSET_INVALID_ID = 0,
@@ -333,7 +332,7 @@ enum ObNlsCharsetId
   CHARSET_TH8TISASCII_ID = 41,
   CHARSET_ZHS16GBK_ID = 852,
   CHARSET_ZHS32GB18030_ID = 854,
-  CHARSET_ZHS32GB18030_2022_ID = 859, // not used in oracle
+  CHARSET_ZHS32GB18030_2022_ID = 859,
   CHARSET_ZHT16HKSCS_ID = 868,
   CHARSET_UTF8_ID = 871,
   CHARSET_AL32UTF8_ID = 873,
@@ -425,7 +424,7 @@ public:
   static const int64_t VALID_COLLATION_TYPES = 3;
   static int init_charset();
   // strntodv2 is an enhanced version of strntod,
-  // which handles nan/infinity values in oracle mode.
+  // which handles nan/infinity values.
   // We still keep strntod to keep it compatible with mysql implementation
   static double strntodv2(const char *str,
                         size_t str_len,
@@ -586,7 +585,6 @@ public:
   static ObCharsetType charset_type(const char *cs_name);
   static ObCollationType collation_type(const char *cs_name);
   static ObCharsetType charset_type(const ObString &cs_name);
-  static ObCharsetType charset_type_by_name_oracle(const ObString &cs_name);
   static ObCollationType collation_type(const ObString &cs_name);
   static bool is_valid_collation(ObCharsetType charset_type, ObCollationType coll_type);
   static bool is_valid_collation(int64_t coll_type_int);
@@ -645,7 +643,6 @@ public:
 
   static ObCharsetType get_default_charset();
   static ObCollationType get_default_collation(ObCharsetType charset_type);
-  static ObCollationType get_default_collation_oracle(ObCharsetType charset_type);
   static ObCollationType get_default_collation_by_mode(ObCharsetType charset_type);
   static int get_default_collation(ObCharsetType charset_type, ObCollationType &coll_type);
   static int get_default_collation(const ObCollationType &in, ObCollationType &out);
@@ -742,7 +739,6 @@ public:
   static int get_replace_character(ObCollationType collation_type, int32_t &replaced_char_unicode);
   static bool is_cjk_charset(ObCollationType collation_type);
   static bool is_valid_connection_collation(ObCollationType collation_type);
-  static const char* get_oracle_charset_name_by_charset_type(ObCharsetType charset_type);
   static int trim_end_of_str(const char *buf, int length, char *&trim_end, ObCharsetType ctype);
   static bool is_valid_nls_collation(ObNLSCollation nls_collation);
   static ObCollationType ora_charset_type_to_coll_type(ObNlsCharsetId charset_id);

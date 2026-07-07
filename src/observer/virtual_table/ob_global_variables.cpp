@@ -89,8 +89,6 @@ int ObGlobalVariables::inner_get_next_row(ObNewRow *&row)
             //is invisible, skip it
           } else if (!sysvar->is_global_scope()) {
             //is global, skip it
-          } else if (sysvar->is_oracle_only()) {
-            //is oracle only, skip it in MySQL-only mode
           } else {
             uint64_t cell_idx = 0;
             for (int64_t j = 0; OB_SUCC(ret) && j < col_count; ++j) {

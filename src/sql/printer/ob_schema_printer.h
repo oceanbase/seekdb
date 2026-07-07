@@ -363,12 +363,6 @@ public:
                                 const int64_t& buf_len,
                                 int64_t& pos,
                                 const common::ObTimeZoneInfo *tz_info) const;
-  int print_routine_definition_v2_oracle(const ObRoutineInfo &routine_info,
-                                const ObStmtNodeTree *parse_tree,
-                                char* buf,
-                                const int64_t& buf_len,
-                                int64_t& pos,
-                                const common::ObTimeZoneInfo *tz_info) const;
   int print_routine_param_type(const ObRoutineParam *param,
                                const ObStmtNodeTree *param_type,
                                char *buf,
@@ -420,7 +414,7 @@ public:
                                   char *buf,
                                   const int64_t &buf_len,
                                   int64_t &pos);
-  // print unique constraint definition for dbms_metadata.get_ddl in oracle mode
+  // Print unique constraint definition for dbms_metadata.get_ddl.
   int print_unique_cst_definition(const ObDatabaseSchema &db_schema,
                                   const ObTableSchema &data_table_schema,
                                   const ObTableSchema &unique_index_schema,

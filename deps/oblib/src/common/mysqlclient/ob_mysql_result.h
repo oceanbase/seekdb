@@ -581,6 +581,7 @@
     }\
   }
 
+// For dblink resultsets, object_id may be number(38), but table_id_ in table_schema
 // column_name's type inside obj schema is int64_t type, and the return value in resultset is number
 #define EXTRACT_INT_FIELD_FROM_NUMBER_TO_CLASS_MYSQL(result, column_name, obj, type) \
   if (OB_SUCC(ret)) \

@@ -155,17 +155,9 @@ ObObjectPrivMysqlRecycleSchemaExecutor::~ObObjectPrivMysqlRecycleSchemaExecutor(
 
 bool ObObjectPrivMysqlRecycleSchemaExecutor::is_valid() const
 {
-  bool bret = true;
-  if (false
-      || true
-      || !ObSchemaService::is_formal_version(schema_version_)
-      || OB_ISNULL(table_name_)
-      || OB_ISNULL(sql_proxy_)
-      || OB_ISNULL(recycler_)) {
-    bret = false;
-    LOG_WARN_RET(OB_INVALID_ARGUMENT, "invalid argument", K(bret), K_(schema_version),
-             KP_(table_name), KP_(sql_proxy), KP_(recycler));
-  }
+  bool bret = false;
+  LOG_WARN_RET(OB_INVALID_ARGUMENT, "invalid argument", K(bret), K_(schema_version),
+           KP_(table_name), KP_(sql_proxy), KP_(recycler));
   return bret;
 }
 

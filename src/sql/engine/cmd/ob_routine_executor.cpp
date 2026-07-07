@@ -471,7 +471,7 @@ int ObAnonymousBlockExecutor::execute(ObExecContext &ctx, ObAnonymousBlockStmt &
                 || ObCharType == value.get_type()) {
               if (-1 == field.accuracy_.get_length()) {
                 field.length_ = ObCharType == value.get_type()
-                  ? OB_MAX_ORACLE_CHAR_LENGTH_BYTE : OB_MAX_ORACLE_VARCHAR_LENGTH;
+                  ? OB_MAX_EXTENDED_CHAR_LENGTH_BYTE : OB_MAX_EXTENDED_VARCHAR_LENGTH;
               } else {
                 field.length_ = field.accuracy_.get_length();
               }

@@ -39,7 +39,6 @@
 #include "sql/engine/expr/ob_expr_bit_right_shift.h"
 #include "sql/engine/expr/ob_expr_bm25.h"
 #include "sql/engine/expr/ob_expr_case.h"
-// ob_expr_oracle_decode.h removed (Oracle cleanup)
 #include "sql/engine/expr/ob_expr_fun_values.h"
 #include "sql/engine/expr/ob_expr_fun_default.h"
 #include "sql/engine/expr/ob_expr_cast.h"
@@ -434,7 +433,6 @@
 #include "sql/engine/expr/ob_expr_map_keys.h"
 #include "sql/engine/expr/ob_expr_current_catalog.h"
 #include "sql/engine/expr/ob_expr_check_catalog_access.h"
-// ob_expr_oracle_to_char.h removed (Oracle cleanup)
 #include "sql/engine/expr/ob_expr_semantic_distance.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_complete.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_embed.h"
@@ -452,7 +450,6 @@ namespace oceanbase
 namespace sql
 {
 static AllocFunc OP_ALLOC[T_MAX_OP];
-static AllocFunc                                                                           OP_ALLOC_ORCL[T_MAX_OP];
 
 #define REG_OP(OpClass)                             \
   do {                                              \
@@ -488,40 +485,7 @@ static AllocFunc                                                                
     }();                                                               \
   } while(0)
 
-#define REG_OP_ORCL(OpClass)                        \
-  do {                                              \
-    [&]() {                                         \
-      OpClass op(alloc);                            \
-      if (OB_UNLIKELY(j >= EXPR_OP_NUM)) {          \
-        LOG_ERROR_RET(common::OB_ERR_UNEXPECTED, "out of the max expr");           \
-      } else {                                      \
-        NAME_TYPES_ORCL[j].name_ = op.get_name();   \
-        NAME_TYPES_ORCL[j].type_ = op.get_type();   \
-        NAME_TYPES_ORCL[j].is_internal_ = op.is_internal_for_oracle();\
-        OP_ALLOC_ORCL[op.get_type()] = ObExprOperatorFactory::alloc<OpClass>; \
-        j++;                                        \
-      }                                             \
-    }();                                            \
-  } while(0)
-// Used for registering the same function expression in Oracle mode
-#define REG_SAME_OP_ORCL(OriOpType, NewOpType, NewOpName, idx_oracle)      \
-  do {                                                                     \
-    [&]() {                                                                \
-      if (OB_UNLIKELY((idx_oracle) >= EXPR_OP_NUM)) {                      \
-        LOG_ERROR_RET(common::OB_ERR_UNEXPECTED, "out of the max expr");                                  \
-      } else if (OB_ISNULL(OP_ALLOC_ORCL[OriOpType])) {                    \
-        LOG_ERROR_RET(common::OB_ERR_UNEXPECTED, "OriOp is not registered yet", K(OriOpType), K(NewOpType)); \
-      } else {                                                             \
-        NAME_TYPES_ORCL[(idx_oracle)].name_ = NewOpName;                   \
-        NAME_TYPES_ORCL[(idx_oracle)].type_ = NewOpType;                   \
-        OP_ALLOC_ORCL[NewOpType] = OP_ALLOC_ORCL[OriOpType];               \
-        (idx_oracle)++;                                                    \
-      }                                                                    \
-    }();                                                                   \
-  } while(0)
-
 ObExprOperatorFactory::NameType ObExprOperatorFactory::NAME_TYPES[EXPR_OP_NUM] = { };
-ObExprOperatorFactory::NameType ObExprOperatorFactory::NAME_TYPES_ORCL[EXPR_OP_NUM] = { };
 
 
 ObExprOperatorType ObExprOperatorFactory::get_type_by_name(const ObString &name)
@@ -570,16 +534,8 @@ void ObExprOperatorFactory::get_internal_info_by_name(const ObString &name, bool
 void ObExprOperatorFactory::register_expr_operators()
 {
   memset(NAME_TYPES, 0, sizeof(NAME_TYPES));
-  memset(NAME_TYPES_ORCL, 0, sizeof(NAME_TYPES_ORCL));
   ObArenaAllocator alloc;
   int64_t i = 0;
-  int64_t j = 0;
-  /*
-  --REG_OP is used for mysql tenant registration, REG_OP_ORCL is used for oracle tenant system function registration
-  --If the same function needs to be used under both mysql tenant and oracle, and compatibility has been implemented
-  --Please use REG_OP() and REG_OP_ORCL() respectively for registration
-  For formatting, please register in the oracle system function section at the end of the function
-  */
   [&]() {
     REG_OP(ObExprAdd);
     REG_OP(ObExprAggAdd);
@@ -1257,8 +1213,7 @@ void ObExprOperatorFactory::get_function_alias_name(const ObString &origin_name,
       // ucase is synonym for upper
       alias_name = ObString::make_string(N_UPPER);
     } else if (0 == origin_name.case_compare("power")) {
-      // don't alias "power" to "pow" in oracle mode, because oracle has no
-      // "pow" function.
+      // power is a synonym for pow
       alias_name = ObString::make_string(N_POW);
     } else if (0 == origin_name.case_compare("VEC_IVF_CENTER_ID")) {
       alias_name = ObString::make_string(N_VEC_IVF_CENTER_ID);
@@ -1332,4 +1287,3 @@ void ObExprOperatorFactory::get_function_alias_name(const ObString &origin_name,
 
 } //end sql
 } //end oceanbase
-

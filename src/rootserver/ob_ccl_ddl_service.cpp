@@ -141,10 +141,7 @@ int ObCclDDLService::check_drop_ccl_valid(
   int ret = OB_SUCCESS;
   
   ObString ccl_rule_name = arg.ccl_rule_name_;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input schema", K(ret));
-  } else if (OB_FAIL(schema_guard.get_ccl_rule_with_name(arg.ccl_rule_name_, ccl_rule_schema))) {
+  if (OB_FAIL(schema_guard.get_ccl_rule_with_name(arg.ccl_rule_name_, ccl_rule_schema))) {
     LOG_WARN("failed to get ccl rule from shcema_guard", K(ret));
   } else if (OB_ISNULL(ccl_rule_schema)) {
     if (arg.if_exist_) {

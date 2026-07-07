@@ -474,15 +474,6 @@ int ObInnerSQLConnection::init_session_info(
         } else if (OB_FAIL(session->update_sys_variable(
             SYS_VAR_OB_COMPATIBILITY_MODE, mysql_mode))) {
           LOG_WARN("update sys variables failed", K(ret));
-        } else if (OB_FAIL(session->update_sys_variable(
-            SYS_VAR_NLS_DATE_FORMAT, ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT))) {
-          LOG_WARN("update sys variables failed", K(ret));
-        } else if (OB_FAIL(session->update_sys_variable(
-            SYS_VAR_NLS_TIMESTAMP_FORMAT, ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_FORMAT))) {
-          LOG_WARN("update sys variables failed", K(ret));
-        } else if (OB_FAIL(session->update_sys_variable(
-            SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT, ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT))) {
-          LOG_WARN("update sys variables failed", K(ret));
         } else {
           ObString database_name(OB_SYS_DATABASE_NAME);
           if (OB_FAIL(session->set_default_database(database_name))) {

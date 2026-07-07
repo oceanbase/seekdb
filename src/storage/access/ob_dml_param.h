@@ -242,7 +242,7 @@ struct ObDMLBaseParam
   ObDMLBaseParam()
       : timeout_(-1),
         schema_version_(-1),
-        sql_mode_(DEFAULT_OCEANBASE_MODE),
+        sql_mode_(DEFAULT_MYSQL_MODE),
         tz_info_(NULL),
         table_param_(NULL),
         tenant_schema_version_(OB_INVALID_VERSION),

@@ -343,9 +343,6 @@ int ObDDLHelper::check_inner_stat_()
     ret = OB_NOT_INIT;
     LOG_WARN("ptr is null", KR(ret), KP_(ddl_service), KP_(schema_service),
              KP_(sql_proxy), K_(ddl_trans_controller));
-  } else if (OB_UNLIKELY(false)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("invalid arg", KR(ret));
   }
   return ret;
 }
@@ -712,8 +709,7 @@ int ObDDLHelper::lock_existed_objects_by_id_()
   return lock_objects_in_map_(ObLockOBJType::OBJ_TYPE_COMMON_OBJ, lock_object_id_map_);
 }
 
-// 1. constraint name and foreign key name are in the same namespace in oracle tenant.
-// 2. constraint name and foreign key name are in different namespace in mysql tenant.
+// Constraint name and foreign key name are in different namespaces in MySQL mode.
 int ObDDLHelper::check_constraint_name_exist_(
     const share::schema::ObTableSchema &table_schema,
     const common::ObString &constraint_name,
@@ -758,8 +754,7 @@ int ObDDLHelper::gen_object_ids_(
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_UNLIKELY(false
-             || object_cnt < 0)) {
+  } else if (OB_UNLIKELY(object_cnt < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid object_cnt", KR(ret), K(object_cnt));
   } else if (0 == object_cnt) {

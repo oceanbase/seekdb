@@ -142,8 +142,8 @@ int ObDumpInnerTableSchemaUtils::table_name2schema_version(const ObTableSchema &
   OZ (strip(tmp, '_'));
   OZ (schema_version.append("OB_"));
   OZ (schema_version.append(tmp.string()));
-  if ((is_ora_virtual_table(table.get_table_id()) || is_ora_sys_view_table(table.get_table_id()))) {
-    OZ (schema_version.append("_ORACLE"));
+  if ((is_extended_virtual_table(table.get_table_id()) || is_extended_sys_view_table(table.get_table_id()))) {
+    OZ (schema_version.append("_EXTENDED"));
   }
   OZ (schema_version.append("_SCHEMA_VERSION"));
   return ret;

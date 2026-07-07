@@ -42,7 +42,7 @@ int ObExprJsonPretty::calc_result_type1(ObExprResType &type,
                                         ObExprResType &type1,
                                         common::ObExprTypeCtx &type_ctx) const
 {
-  UNUSED(type_ctx); // type_ctx session, collation, raw expr, Oracle mode may need to determine the character set from type_ctx
+  UNUSED(type_ctx); // type_ctx is currently unused.
   INIT_SUCC(ret);
 
   type.set_type(ObLongTextType);

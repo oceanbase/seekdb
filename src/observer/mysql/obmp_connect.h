@@ -92,7 +92,6 @@ private:
   int verify_connection() const;
   int verify_identify(ObSMConnection &conn, sql::ObSQLSessionInfo &session);
   int verify_ip_white_list() const;
-  int convert_oracle_object_name(ObString &object_name);
 
   int switch_lock_status_for_current_login_user(bool do_lock);
   int switch_lock_status_for_user(const ObString &host_name,

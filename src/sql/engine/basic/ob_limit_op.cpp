@@ -148,7 +148,7 @@ int ObLimitOp::inner_get_next_row()
     }
   } // end while
 
-  /*Due to the support of the fetch feature in oracle 12c, the execution flow below is relatively complex, here is a simple explanation:
+  /*Due to FETCH support, the execution flow below is relatively complex, here is a simple explanation:
   * 1.is_percent_first_: indicates whether the fetch specifies the percentage of rows to be taken, for example: select * from t1 fetch next 50 percent rows only;
   *   takes out 50% of the total number of rows, at this time, is_percent_first_ needs to indicate whether the percentage is used, and our lower-level block operators (sort, hash group by, etc.)
   *   are set at get_next_row, so the corresponding limit quantity needs to be set for the first time, and after setting, is_percent_first_ needs to be reset to false;
@@ -327,7 +327,7 @@ int ObLimitOp::inner_get_next_batch(const int64_t max_row_cnt)
             }
           }
         } else if (OB_UNLIKELY(
-                       limit_ != -1 /*limit=-1 means no limit in oracle mode*/ &&
+                       limit_ != -1 /* -1 means no limit */ &&
                        output_cnt_ > limit_)) {
           // Notice: here is the error hanlding branch
           // Child branch should NOT return rows more than batch_cnt.
@@ -510,7 +510,7 @@ int ObLimitOp::convert_limit_percent()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get invalid child op row count", K(tot_count), K(ret));
     } else if (percent < 100) {
-      // Compatible with oracle, round up
+      // Round up fractional percentage results.
       int64_t percent_int64 = static_cast<int64_t>(percent);
       int64_t offset = (tot_count * percent / 100 - tot_count * percent_int64 / 100) > 0 ? 1 : 0;
       limit_ = tot_count * percent_int64 / 100 +  offset;

@@ -1471,35 +1471,6 @@ int ObRegCol::eval_regular_col(void *in, JtScanCtx* ctx, bool& is_null_value)
   return ret;
 }
 
-int RegularCol::check_default_value_inner_oracle(JtScanCtx* ctx,
-                                                 ObJtColInfo &col_info,
-                                                 ObExpr* col_expr,
-                                                 ObExpr* default_expr)
-{
-  INIT_SUCC(ret);
-  ObString in_str;
-  ObDatum *emp_datum = nullptr;
-
-  if (OB_FAIL(default_expr->eval(*ctx->eval_ctx_, emp_datum))) {
-    LOG_WARN("failed do cast to returning type.", K(ret));
-  } else {
-    in_str.assign_ptr(emp_datum->ptr_, emp_datum->len_);
-  }
-  if (OB_FAIL(ret)) {
-  } else if (default_expr->datum_meta_.type_ == ObNullType && ob_is_string_type(col_info.data_type_.get_obj_type())) {
-    ret = OB_ERR_DEFAULT_VALUE_NOT_LITERAL;
-    LOG_WARN("default value not match returing type", K(ret));
-  } else if (OB_FAIL(ObJsonExprHelper::pre_default_value_check(col_expr->datum_meta_.type_, in_str, default_expr->datum_meta_.type_, col_info.data_type_.get_accuracy().get_length()))) {
-    LOG_WARN("default value pre check fail", K(ret), K(in_str));
-  } else {
-    if (ob_obj_type_class(col_expr->datum_meta_.type_) == ob_obj_type_class(default_expr->datum_meta_.type_)
-             && OB_FAIL(ObExprJsonValue::check_default_val_accuracy<ObDatum>(col_info.data_type_.get_accuracy(), default_expr->datum_meta_.type_, emp_datum))) {
-      LOG_WARN("fail to check accuracy", K(ret));
-    }
-  }
-  return ret;
-}
-
 int ScanNode::get_next_iter(void* in, JtScanCtx* ctx, bool& is_null_value)
 {
   INIT_SUCC(ret);
@@ -1850,26 +1821,6 @@ int RegularCol::check_default_value_inner_mysql(JtScanCtx* ctx,
   return ret;
 }                                                
 
-int RegularCol::check_default_value_oracle(JtScanCtx* ctx, ObJtColInfo &col_info, ObExpr* expr)
-{
-  INIT_SUCC(ret);
-  if (static_cast<JtColType>(col_info.col_type_) == COL_TYPE_VALUE) {
-    if (col_info.on_empty_ == JSN_VALUE_DEFAULT) {
-      ObExpr* default_expr = ctx->spec_ptr_->emp_default_exprs_.at(col_info.empty_expr_id_);
-      if (OB_FAIL(RegularCol::check_default_value_inner_oracle(ctx, col_info, expr, default_expr))) {
-        LOG_WARN("fail to check empty default value in oracle", K(ret));
-      }
-    }
-    if (OB_SUCC(ret) && col_info.on_error_ == JSN_VALUE_DEFAULT) {
-      ObExpr* default_expr = ctx->spec_ptr_->err_default_exprs_.at(col_info.error_expr_id_);
-      if (OB_FAIL(RegularCol::check_default_value_inner_oracle(ctx, col_info, expr, default_expr))) {
-        LOG_WARN("fail to check error default value in oracle", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
 int JsonTableFunc::set_expr_exec_param(ObRegCol& col_node, JtScanCtx* ctx)
 {
   INIT_SUCC(ret);
@@ -1910,7 +1861,8 @@ int JsonTableFunc::get_empty_option(int8_t option_on_empty, bool& res_val)
     // It turns out that error/false/true on empty behaves exactly the same in three cases:
     // a. The query result or json data is empty, and all three on empty clauses return false
     // b. The path expression is empty, and the three on empty clauses all return the error code when the path is empty
-    // Therefore, when implementing, follow the behavior of oracle, without distinguishing the three clauses, as long as there is no true result, it will return false
+    // Therefore, the implementation does not distinguish the three clauses:
+    // as long as there is no true result, it returns false.
     case OB_JSON_ERROR_ON_EMPTY:
     case OB_JSON_FALSE_ON_EMPTY: 
     case OB_JSON_TRUE_ON_EMPTY:

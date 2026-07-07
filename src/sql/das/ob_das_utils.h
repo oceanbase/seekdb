@@ -64,7 +64,6 @@ public:
                                    common::ObObj &value);
   static int reshape_datum_value(const ObObjMeta &col_type,
                                  const ObAccuracy &col_accuracy,
-                                 const bool enable_oracle_empty_char_reshape_to_null,
                                  ObIAllocator &allocator,
                                  blocksstable::ObStorageDatum &datum_value);
   static int reshape_datum_vector_value(const ObObjMeta &col_type,
@@ -74,7 +73,6 @@ public:
                                         share::ObBatchSelector &selector);
   static int reshape_vector_value(const ObObjMeta &col_type,
                                   const ObAccuracy &col_accuracy,
-                                  const bool enable_oracle_empty_char_reshape_to_null,
                                   ObIAllocator &allocator,
                                   common::ObIVector *&vector,
                                   share::ObBatchSelector &selector);

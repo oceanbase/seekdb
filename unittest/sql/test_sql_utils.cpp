@@ -130,8 +130,8 @@ void parse_cmd_line_param(int argc, char *argv[], CmdLineParam &clp)
         break;
       }
       case 's': {
-        if (casesame_cstr(optarg, "oracle")) {
-          clp.sql_mode = DEFAULT_ORACLE_MODE | SMO_ORACLE;
+        if (casesame_cstr(optarg, "mysql")) {
+          clp.sql_mode = DEFAULT_MYSQL_MODE;
         }
         break;
       }

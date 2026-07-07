@@ -521,11 +521,6 @@ public:
                                 const ObObjType expect_type,
                                 const ObCollationType expect_cs_type,
                                 const bool is_explicit_cast);
-  static int check_default_value_oracle(JtScanCtx* ctx, ObJtColInfo &col_info, ObExpr* expr);
-  static int check_default_value_inner_oracle(JtScanCtx* ctx,
-                                              ObJtColInfo &col_info,
-                                              ObExpr* col_expr,
-                                              ObExpr* default_expr);
   static int check_item_method_json(ObRegCol &col_node, JtScanCtx* ctx);
   static int check_default_value_inner_mysql(JtScanCtx* ctx,
                                              ObRegCol &col_node,

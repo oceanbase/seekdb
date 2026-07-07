@@ -282,7 +282,7 @@ int ObGetObjectDefinition::get_table_definition(ObString &ddl_str, const uint64_
         }
       } else {
         const ObLengthSemantics default_length_semantics = 
-          session_->get_local_nls_length_semantics();
+          session_->get_default_length_semantics();
         // get auto_increment from auto_increment service, not from table option
         if (OB_FAIL(schema_printer.print_table_definition(table_def_buf,
                                                           OB_MAX_VARCHAR_LENGTH,
@@ -342,7 +342,7 @@ int ObGetObjectDefinition::get_constraint_definition(ObString &ddl_str,
     } else if (OB_NOT_NULL(unique_index_table_schema)
                && unique_index_table_schema->is_unique_index()
                && !unique_index_table_schema->is_partitioned_table()) {
-      // In oracle mode, the unique constraint can only be mocked the non-partitioned unique index.
+      // The unique constraint can only be mocked by a non-partitioned unique index.
       is_unique_cst = true;
     } else {
       ret = print_error_log(object_type, db_name, constraint_name);
@@ -631,10 +631,10 @@ int ObGetObjectDefinition::get_user_definition(ObString &ddl_str,
     ret = print_error_log(object_type, db_name, user_name);
     LOG_WARN("user not found", K(ret));
   } else if (users_info.count() > 1) {
-    //Username cannot be used as the unique identifier for a user, username+hostname is required.
-    //However, since Oracle mode creates a database with the same name as the user when creating a user, it will not allow the creation of users with the same username, even if their hostnames are different.
+    // Username alone cannot uniquely identify a user, username + hostname is required.
+    // The object definition path expects a single matching user name.
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("users with same name is not allowed in oracle mode", K(ret));
+    LOG_WARN("users with same name are not allowed in object definition lookup", K(ret));
   } else if (OB_ISNULL(user_info = users_info.at(0))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("user info is null", K(ret));
@@ -782,7 +782,7 @@ int ObGetObjectDefinition::get_package_definition(ObString &ddl_str,
                                                       compatible_mode,
                                                       package_info))){
     LOG_WARN("get package info failed", K(ret), K(database_id), K(package_name));
-  } else if (OB_ISNULL(package_info) && 0 == db_name.case_compare(OB_ORA_SYS_SCHEMA_NAME) &&
+  } else if (OB_ISNULL(package_info) && 0 == db_name.case_compare(OB_EXTENDED_SYS_SCHEMA_NAME) &&
              OB_FAIL(schema_guard_->get_package_info(
                                                      OB_SYS_DATABASE_ID,
                                                      package_name,

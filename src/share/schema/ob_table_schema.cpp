@@ -2474,21 +2474,21 @@ int ObTableSchema::add_aux_vp_tid(const uint64_t aux_vp_tid)
   return ret;
 }
 
-// description: oracle mode, When the user creates an index, without explicitly declaring the index name,
-//  the system will automatically generate a constraint name for it
+// description: Legacy generated-name convention for creating an index without explicitly declaring the index name.
+//  the system will automatically generate a name for it
 //              Generation rules: index_name_sys_auto = tblname_OBIDX_timestamp
 //              If the length of tblname exceeds 60 bytes, the first 60 bytes will be truncated as the tblname in the concatenated name
-int ObTableSchema::create_idx_name_automatically_oracle(common::ObString &idx_name,
-                                                        const common::ObString &table_name,
-                                                        common::ObIAllocator &allocator)
+int ObTableSchema::create_idx_name_automatically(common::ObString &idx_name,
+                                                 const common::ObString &table_name,
+                                                 common::ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   char temp_str_buf[number::ObNumber::MAX_PRINTABLE_SIZE];
   ObString idx_name_str;
   ObString tmp_table_name;
 
-  if (table_name.length() > OB_ORACLE_CONS_OR_IDX_CUTTED_NAME_LEN) {
-    if (OB_FAIL(ob_sub_str(allocator, table_name, 0, OB_ORACLE_CONS_OR_IDX_CUTTED_NAME_LEN - 1, tmp_table_name))) {
+  if (table_name.length() > OB_CONS_OR_IDX_CUTTED_NAME_LEN) {
+    if (OB_FAIL(ob_sub_str(allocator, table_name, 0, OB_CONS_OR_IDX_CUTTED_NAME_LEN - 1, tmp_table_name))) {
       SQL_RESV_LOG(WARN, "failed to cut table to 60 byte", K(ret), K(table_name));
     }
   } else {
@@ -2511,7 +2511,7 @@ int ObTableSchema::create_idx_name_automatically_oracle(common::ObString &idx_na
   return ret;
 }
 
-// description: oracle when the user creates a constraint, without explicitly declaring the constraint name,
+// description: Legacy generated-name convention for creating a constraint without explicitly declaring the constraint name.
 //  the system will automatically generate a constraint name for it
 //              Generation rules: pk_name_sys_auto = tblname_OBPK_timestamp
 //                                check_name_sys_auto = tblname_OBCHECK_timestamp
@@ -2634,7 +2634,7 @@ bool ObTableSchema::is_sys_generated_name(bool check_unknown) const
   return bret;
 }
 
-// description: oracle mode, When the user flashbacks an indexed table, the system will automatically generate a new index name
+// description: Legacy generated-name convention for flashback of an indexed table.
 //  for the index on the table
 //              Generation rules: idx_name_flashback_auto = RECYCLE_OBIDX_timestamp
 int ObTableSchema::create_new_idx_name_after_flashback(
@@ -2650,7 +2650,7 @@ int ObTableSchema::create_new_idx_name_after_flashback(
   const ObSimpleTableSchemaV2* simple_table_schema = NULL;
 
   while (OB_SUCC(ret) && is_dup_idx_name_exist) {
-    if (OB_FAIL(create_idx_name_automatically_oracle(temp_idx_name, tmp_str, allocator))) {
+    if (OB_FAIL(create_idx_name_automatically(temp_idx_name, tmp_str, allocator))) {
       LOG_WARN("create index name automatically failed", K(ret));
     } else if (OB_FAIL(build_index_table_name(allocator,
                                               new_table_schema.get_data_table_id(),
@@ -4628,11 +4628,7 @@ int ObTableSchema::check_column_can_be_altered_online(
       }
     }
 
-    if (false
-              && ob_is_number_tc(src_schema->get_data_type())
-              && ob_is_number_tc(dst_schema->get_data_type())) {
-      // support number to float in oracle mode
-    } else if ((src_schema->get_data_type() == dst_schema->get_data_type()
+    if ((src_schema->get_data_type() == dst_schema->get_data_type()
       && src_schema->get_collation_type() == dst_schema->get_collation_type())
       || common::is_match_alter_integer_column_online_ddl_rules(src_schema->get_meta_type(), dst_schema->get_meta_type()) // has to check the changing is valid
       || (src_schema->is_string_type() && dst_schema->is_string_type()
@@ -4726,8 +4722,7 @@ int ObTableSchema::check_column_can_be_altered_online(
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "Alter charset or collation type");
     } else {
-      //oracle support DATE column <-> TIMESTAMP or TIMESTAMP WITH LOCAL TIME ZONE column. BUT, ob NOT support now @yanhua
-      //https://docs.oracle.com/en/database/oracle/oracle-database/18/sqlrf/ALTER-TABLE.html#GUID-552E7373-BF93-477D-9DA3-B2C9386F2877
+      // DATE column <-> TIMESTAMP or TIMESTAMP WITH LOCAL TIME ZONE is not supported here.
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "Alter non string type");
       LOG_WARN("The data type of column schema is non string type can not be altered", K(ret),
@@ -5612,8 +5607,8 @@ int ObTableSchema::has_not_null_unique_key(ObSchemaGetterGuard &schema_guard, bo
             LOG_WARN("unexpected err", K(ret), KPC(column));
           } else if (!column->is_index_column()) {
             // this column is not index column, skip
-          } else if (false == column->is_nullable() ||             // mysql mode
-                     true == column->has_not_null_constraint()) {  // oracle mode
+          } else if (false == column->is_nullable()
+                     || true == column->has_not_null_constraint()) {
             // this index column is not nullable, continue
           } else {
             // this index column is nullable, end loop

@@ -1997,7 +1997,7 @@ TEST_F(TestJsonTree, test_clone_node_datetime)
 
 }
 
-TEST_F(TestJsonTree, oracle_sub_type)
+TEST_F(TestJsonTree, json_ext_sub_type)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
 
@@ -2026,11 +2026,11 @@ TEST_F(TestJsonTree, oracle_sub_type)
   memcpy(buf3, binary, strlen(binary));
   ObJsonORawString o_binary(buf3, strlen(binary), ObJsonNodeType::J_OBINARY);
 
-  // odate, oracledate, otimestamp, otimestamptz
+  // odate, json_date_ext, otimestamp, otimestamptz
   ObTime ob_time;
   ASSERT_EQ(OB_SUCCESS, ObTimeConverter::datetime_to_ob_time(1429089727 * USECS_PER_SEC, NULL, ob_time));
   ObJsonDatetime j_odate(ObJsonNodeType::J_ODATE, ob_time);
-  ObJsonDatetime j_oracledate(ObJsonNodeType::J_ORACLEDATE, ob_time);
+  ObJsonDatetime j_json_date_ext(ObJsonNodeType::J_JSON_DATE_EXT, ob_time);
   ObJsonDatetime j_otimestamp(ObJsonNodeType::J_OTIMESTAMP, ob_time);
   ObJsonDatetime j_otimestamptz(ObJsonNodeType::J_OTIMESTAMPTZ, ob_time);
 
@@ -2069,9 +2069,9 @@ TEST_F(TestJsonTree, oracle_sub_type)
   cout << "odate = " << j_buf.ptr() << endl;
 
   j_buf.reuse();
-  j_base = (ObIJsonBase*)&j_oracledate;
+  j_base = (ObIJsonBase*)&j_json_date_ext;
   ASSERT_EQ(OB_SUCCESS, j_base->print(j_buf, false));
-  cout << "oracledate = " << j_buf.ptr() << endl;
+  cout << "json_date_ext = " << j_buf.ptr() << endl;
 
   j_buf.reuse();
   j_base = (ObIJsonBase*)&j_otimestamp;
@@ -2102,8 +2102,8 @@ TEST_F(TestJsonTree, oracle_sub_type)
   ObJsonNode *p_odate = j_odate.clone(&allocator);
   ASSERT_NE(nullptr, p_odate);
 
-  ObJsonNode *p_oracledate = j_oracledate.clone(&allocator);
-  ASSERT_NE(nullptr, p_oracledate);
+  ObJsonNode *p_json_date_ext = j_json_date_ext.clone(&allocator);
+  ASSERT_NE(nullptr, p_json_date_ext);
 
   ObJsonNode *p_otimestamp = j_otimestamp.clone(&allocator);
   ASSERT_NE(nullptr, p_otimestamp);

@@ -55,11 +55,6 @@ public:
       const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
   static int calc_extract_mysql_vector(
       const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound);
-
-private:
-  int set_result_type_oracle(common::ObExprTypeCtx &type_ctx,
-                             const ObExprResType &date_unit, 
-                             ObExprResType &res_type) const;
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprExtract);
 

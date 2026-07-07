@@ -273,7 +273,7 @@ public:
             || stmt_type == stmt::T_SET_COLUMN_COMMENT
             // audit and noaudit
             || stmt_type == stmt::T_AUDIT
-            // analyze, this in oracle belongs to ddl, but ob determines it as ddl there will be some issues
+            // analyze needs special handling before it can be treated as DDL here
             // TODO: wait for Xi Feng to finish handling the analyze issue then uncomment
             //|| stmt_type == stmt::T_ANALYZE
             // optimize
@@ -394,7 +394,7 @@ public:
         // || stmt_type == stmt::T_SET_COLUMN_COMMENT
         // audit and noaudit
         stmt_type == stmt::T_AUDIT
-        // analyze, this in oracle belongs to ddl, but ob determines it as ddl there will be some issues
+        // analyze needs special handling before it can be treated as DDL here
         // TODO: wait for Xi Feng to finish the analyze issue before releasing
         //|| stmt_type == stmt::T_ANALYZE
         // optimize

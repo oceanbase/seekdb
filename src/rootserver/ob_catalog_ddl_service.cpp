@@ -37,9 +37,6 @@ int ObCatalogDDLService::handle_catalog_ddl(const ObCatalogDDLArg &arg)
   if (OB_ISNULL(ddl_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input schema", K(ret));
   } else if (OB_FAIL(ddl_service_->get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
     LOG_WARN("fail to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
@@ -86,24 +83,15 @@ int ObCatalogDDLService::grant_revoke_catalog(const ObCatalogPrivSortKey &catalo
                                               share::schema::ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
-  uint64_t data_version = 0;
-  bool is_ora_mode = false;
   int64_t refreshed_schema_version = 0;
   
   uint64_t user_id = catalog_priv_key.user_id_;
   ObSqlString ddl_stmt_sql_str;
   ObString ddl_stmt_str;
   const ObPrivSet priv_set = need_priv.priv_set_;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Tenant id is invalid", K(ret));
-  } else if (OB_ISNULL(ddl_service_)) {
+  if (OB_ISNULL(ddl_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (is_ora_mode) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not support grant revoke catalog level privilege in oracle mode", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "grant revoke catalog level privilege in oracle mode");
   } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
     LOG_WARN("failed to get tenant schema version", K(ret));
   } else if (OB_FAIL(ObDDLSqlGenerator::gen_catalog_priv_sql(ObAccountArg(user_name, host_name),

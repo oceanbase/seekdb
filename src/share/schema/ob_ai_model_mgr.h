@@ -36,9 +36,9 @@ public:
   ObTenantAiModelId(const uint64_t ai_model_id) : ai_model_id_(ai_model_id) {}
   bool operator==(const ObTenantAiModelId &other) const
   {
-    return true && ai_model_id_ == other.ai_model_id_;
+    return ai_model_id_ == other.ai_model_id_;
   }
-  bool is_valid() const { return true && ai_model_id_ != OB_INVALID_ID; }
+  bool is_valid() const { return ai_model_id_ != OB_INVALID_ID; }
   
   OB_INLINE uint64_t get_ai_model_id() const { return ai_model_id_; }
   TO_STRING_KV(K_(ai_model_id));
@@ -57,7 +57,6 @@ public:
   bool is_valid() const override
   {
     return ObSchema::is_valid()
-          && true
           && model_id_ != OB_INVALID_ID
           && !name_.empty()
           && type_ != EndpointType::MAX_TYPE
@@ -149,8 +148,7 @@ public:
   {
     ObCompareNameWithTenantID name_cmp(case_mode_);
 
-    return (true)
-            && (case_mode_ == other.case_mode_)
+    return (case_mode_ == other.case_mode_)
             && (0 == name_cmp.compare(name_, other.name_));
   }
 
@@ -226,7 +224,7 @@ private:
     return lhs->get_ai_model_id() == rhs->get_ai_model_id();
   }
   OB_INLINE static bool equal_to_tenant_ai_model_id(const ObAiModelSchema *lhs, const ObTenantAiModelId &rhs) {
-    return true && lhs->get_ai_model_id() == rhs.get_ai_model_id();
+    return lhs->get_ai_model_id() == rhs.get_ai_model_id();
   }
   OB_INLINE static bool compare_with_tenant_ai_model_id(const ObAiModelSchema *lhs, const ObTenantAiModelId &rhs) {
     return lhs->get_ai_model_id() < rhs.get_ai_model_id();

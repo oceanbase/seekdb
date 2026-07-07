@@ -113,7 +113,7 @@ int ObLockTableResolver::resolve_mysql_lock_node_(const ParseNode &lock_node)
       LOG_WARN("table node is null");
     } else if (OB_FAIL(ObDMLResolver::resolve_table(*table_node, table_item))) {
       LOG_WARN("failed to resolve table", K(ret));
-    } else if (table_item->is_function_table() || table_item->is_json_table()) {//compatible with oracle behavior
+    } else if (table_item->is_function_table() || table_item->is_json_table()) { // invalid lock target
       ret = OB_WRONG_TABLE_NAME;
       LOG_WARN("invalid table name", K(ret));
     } else {
@@ -126,108 +126,6 @@ int ObLockTableResolver::resolve_mysql_lock_node_(const ParseNode &lock_node)
         LOG_DEBUG("succ to add lock table item", K(node));
       }
     }
-  }
-  return ret;
-}
-
-int ObLockTableResolver::resolve_oracle_mode_(const ParseNode &parse_tree)
-{
-  int ret = OB_SUCCESS;
-
-  ObLockTableStmt *lock_stmt = static_cast<ObLockTableStmt *>(stmt_);
-  ParseNode *table_node = NULL;
-  // 1. resolve table item
-  // 2. resolve lock mode
-  // 3. resolve wait
-  // 4. set stmt type
-  if (3 != parse_tree.num_child_) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("wrong node number", K(ret), K(parse_tree.num_child_));
-  } else if (OB_ISNULL(parse_tree.children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node child should not be null", K(ret), K(parse_tree.children_));
-  } else if (OB_ISNULL(table_node = parse_tree.children_[TABLE_LIST])) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse tree", K(ret));
-  } else if (OB_FAIL(resolve_oracle_table_list_(*table_node))) {
-    LOG_WARN("resolve table failed", K(ret));
-  } else if (OB_FAIL(resolve_oracle_lock_mode_(*parse_tree.children_[LOCK_MODE]))) {
-    LOG_WARN("resolve lock mode failed", K(ret));
-  } else if (OB_NOT_NULL(parse_tree.children_[WAIT])
-             && OB_FAIL(resolve_oracle_wait_lock_(*parse_tree.children_[WAIT]))) {
-    // this node maybe null if user didn't input opt about wait
-    LOG_WARN("resolve wait opt for table lock failed", K(ret));
-  } else {
-    lock_stmt->set_lock_stmt_type(ObLockTableStmt::ORACLE_LOCK_TABLE_STMT);
-  }
-
-  return ret;
-}
-
-int ObLockTableResolver::resolve_oracle_table_list_(const ParseNode &table_list)
-{
-  int ret = OB_SUCCESS;
-  ObLockTableStmt *lock_stmt = get_lock_table_stmt();
-  TableItem *table_item = nullptr;
-
-  if (OB_UNLIKELY(T_TABLE_REFERENCES != table_list.type_ &&
-                  T_RELATION_FACTOR != table_list.type_) ||
-      OB_UNLIKELY(OB_ISNULL(table_list.children_)) ||
-      OB_UNLIKELY(table_list.num_child_ < 1)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(table_list.type_), K(table_list.num_child_));
-  } else if (OB_ISNULL(lock_stmt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid lock table stmt", K(lock_stmt));
-  } else if (OB_ISNULL(session_info_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null ptr", K(ret));
-  }
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < table_list.num_child_; ++i) {
-    const ParseNode *table_node = table_list.children_[i];
-    const ObTableSchema *table_schema = nullptr;
-    if (OB_ISNULL(table_node)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table node is null");
-    } else if (OB_FAIL(ObDMLResolver::resolve_table(*table_node, table_item))) {
-      LOG_WARN("failed to resolve table", K(ret));
-    } else if (table_item->is_function_table() || table_item->is_json_table()) {//compatible with oracle behavior
-      ret = OB_WRONG_TABLE_NAME;
-      LOG_WARN("invalid table name", K(ret));
-    } else {
-      LOG_DEBUG("succ to add lock table item", KPC(table_item));
-    }
-  }
-  return ret;
-}
-
-int ObLockTableResolver::resolve_oracle_lock_mode_(const ParseNode &parse_tree)
-{
-  int ret = OB_SUCCESS;
-  ObLockTableStmt *lock_stmt = get_lock_table_stmt();
-  if (OB_ISNULL(lock_stmt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lock stmt should not be null");
-  } else {
-    lock_stmt->set_lock_mode(parse_tree.value_);
-  }
-  return ret;
-}
-
-int ObLockTableResolver::resolve_oracle_wait_lock_(const ParseNode &parse_tree)
-{
-  int ret = OB_SUCCESS;
-  ObLockTableStmt *lock_stmt = get_lock_table_stmt();
-  int64_t wait_lock_seconds = parse_tree.value_;
-  if (OB_ISNULL(lock_stmt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lock stmt should not be null");
-  } else if (wait_lock_seconds < 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("lock wait time should not be negative", K(wait_lock_seconds));
-  } else {
-    lock_stmt->set_wait_lock_seconds(parse_tree.value_);
   }
   return ret;
 }

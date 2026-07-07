@@ -55,8 +55,7 @@ private:
 
 inline bool ObContextHashWrapper::operator == (const ObContextHashWrapper &rv) const
 {
-  return (true)
-      && (ctx_namespace_ == rv.get_context_namespace());
+  return (ctx_namespace_ == rv.get_context_namespace());
 }
 
 inline uint64_t ObContextHashWrapper::hash() const

@@ -56,13 +56,13 @@ int ObAnalyzeStmtResolver::resolve(const ParseNode &parse_tree)
   } else if (T_ANALYZE == parse_tree.type_) {
     if (!session_info_->is_enable_sql_extension()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "The Oracle-mode analyze syntax is used in the disable sql extension MySQL-mode");
-    } else if (OB_FAIL(resolve_oracle_analyze(parse_tree, *analyze_stmt))) {
-      LOG_WARN("failed to resolve oracle analyze stmt", K(ret));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "The extended analyze syntax is used while sql extension is disabled");
+    } else if (OB_FAIL(resolve_analyze_table(parse_tree, *analyze_stmt))) {
+      LOG_WARN("failed to resolve analyze stmt", K(ret));
     } else { /*do nothing*/ }
   } else if (T_MYSQL_ANALYZE == parse_tree.type_) {
-    if (OB_FAIL(resolve_oracle_analyze(parse_tree, *analyze_stmt))) {
-      LOG_WARN("failed to resolve oracle analyze stmt", K(ret));
+    if (OB_FAIL(resolve_analyze_table(parse_tree, *analyze_stmt))) {
+      LOG_WARN("failed to resolve analyze stmt", K(ret));
     } else { /*do nothing*/ }
   } else if (T_MYSQL_UPDATE_HISTOGRAM == parse_tree.type_) {
     if (OB_FAIL(resolve_mysql_update_histogram(parse_tree, *analyze_stmt))) {
@@ -103,8 +103,8 @@ int ObAnalyzeStmtResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
-int ObAnalyzeStmtResolver::resolve_oracle_analyze(const ParseNode &parse_node,
-                                                  ObAnalyzeStmt &analyze_stmt)
+int ObAnalyzeStmtResolver::resolve_analyze_table(const ParseNode &parse_node,
+                                                 ObAnalyzeStmt &analyze_stmt)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(3 != parse_node.num_child_)) {

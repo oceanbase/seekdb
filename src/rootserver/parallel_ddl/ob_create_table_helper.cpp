@@ -161,7 +161,6 @@ int ObCreateTableHelper::lock_database_by_obj_name_()
 // Lock related objects' name for create table (`X` for EXCLUSIVE, `S` for SHARE):
 // 1. table               (X)
 // 2. index               (X)
-// - in oracle mode
 // 3. constraint          (X)
 // 4. foreign key         (X)
 // 5. tablegroup          (S)
@@ -1111,7 +1110,7 @@ int ObCreateTableHelper::generate_sequence_object_()
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   }
-  // seekdb is MySQL-only; Oracle identity column / sequence object generation is not applicable
+  // Identity column sequence object generation is not applicable.
   return ret;
 }
 

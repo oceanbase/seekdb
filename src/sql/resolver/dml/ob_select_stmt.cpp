@@ -445,7 +445,6 @@ ObSelectStmt::ObSelectStmt()
   is_expanded_mview_ = false;
   is_select_straight_join_ = false;
   is_implicit_distinct_ = false;
-  is_oracle_compat_groupby_ = false;
 }
 
 ObSelectStmt::~ObSelectStmt()

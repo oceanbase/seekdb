@@ -259,16 +259,16 @@ int ObField::get_field_mb_length(const ObObjType type,
       break;
     case ObNumberTC:
     case ObDecimalIntTC:
-      //already checked the validity of precision and scale for both oracle/mysql mode several times
+      // Precision and scale validity has already been checked several times.
       //here only do the length calculation
       if (accuracy.get_precision() >= 0 && accuracy.get_scale() >= 0) {
         if (OB_UNLIKELY(accuracy.get_precision() < accuracy.get_scale())) {
-          //oracle:select cast(0.0002 as number(1, 4)) from dual; => 0.0002
+          // Example: select cast(0.0002 as number(1, 4)) from dual; => 0.0002
           length = accuracy.get_scale() + 2;
          // ret = OB_ERR_UNEXPECTED;
          // LOG_WARN("invalid accuracy. precision is smaller than scale", K(ret), K(accuracy));
         } else {
-          //for both Oracle & MySql
+          // Common decimal display length calculation.
           length = my_decimal_precision_to_length_no_truncation(accuracy.get_precision(),
                                                                 accuracy.get_scale(),
                                                                 type == ObUNumberType);

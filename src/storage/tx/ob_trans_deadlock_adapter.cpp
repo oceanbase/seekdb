@@ -163,7 +163,7 @@ int ObTransDeadlockDetectorAdapter::kill_stmt(const uint32_t sess_id)
     TRANS_LOG(WARN, "set query dealocked failed", K(ret), K(sess_id), K(*session_info));
   } else {
     mgr->notify_deadlocked_session(sess_id);
-    TRANS_LOG(INFO, "set query dealocked success in oracle mode", K(ret), K(sess_id), K(*session_info));
+    TRANS_LOG(INFO, "set query dealocked success", K(ret), K(sess_id), K(*session_info));
   }
   return ret;
 }

@@ -468,7 +468,7 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
               ret = OB_ERR_TYPE_DECL_ILLEGAL;
               LOG_USER_ERROR(OB_ERR_TYPE_DECL_ILLEGAL,
                             access_idxs.at(access_idxs.count() - 1).var_name_.length(), access_idxs.at(access_idxs.count() - 1).var_name_.ptr());
-              LOG_WARN("PLS-00206: %TYPE must be applied to a variable, column, field or attribute",
+              LOG_WARN("%TYPE must be applied to a variable, column, field or attribute",
                       K(ret), K(access_idxs));
             }
           } else if (ObObjAccessIdx::is_table(access_idxs) ||
@@ -478,7 +478,7 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
             ret = OB_ERR_WRONG_ROWTYPE;
             LOG_USER_ERROR(OB_ERR_WRONG_ROWTYPE,
                            access_idxs.at(access_idxs.count() - 1).var_name_.length(), access_idxs.at(access_idxs.count() - 1).var_name_.ptr());
-            LOG_WARN("PLS-00310: with %ROWTYPE attribute, ident must name a table, cursor or cursor-variable",
+            LOG_WARN("with %ROWTYPE attribute, ident must name a table, cursor or cursor-variable",
                      K(ret), K(access_idxs));
           }
         }
@@ -687,7 +687,7 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
       }
       // set default value expr str
       if (OB_SUCC(ret)
-          && 3 == param_node->num_child_ // oracle mode has default node
+          && 3 == param_node->num_child_ // default node
           && OB_NOT_NULL(param_node->children_[2])) {
         if (true) {
           ret = OB_NOT_SUPPORTED;
@@ -701,7 +701,7 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
             LOG_WARN("wrong default value node", K(ret));
           } else if (!routine_param.is_in_sp_param()) {
             ret = OB_ERR_OUT_PARAM_HAS_DEFAULT;
-            LOG_WARN("PLS-00230: out or in out parameter can not has default value", K(ret));
+            LOG_WARN("out or in out parameter can not has default value", K(ret));
           } else {
             ObString default_value(static_cast<int32_t>(default_node->str_len_),
                                   default_node->str_value_);
@@ -896,8 +896,8 @@ int ObCreateRoutineResolver::resolve(const ParseNode &parse_tree,
                  T_SP_CREATE == parse_tree.type_ ? ROUTINE_PROCEDURE_TYPE : INVALID_ROUTINE_TYPE;
     if (session_info_->is_inner()
                && FALSE_IT(crt_routine_arg->is_or_replace_ = true)) {
-      // MySQL mode this field is reused to indicate whether the request is sent by InnerSQL. Used to restore Routine placed in the recycle bin under MySQL.
-      // Oracle mode does not process, because PL objects do not enter the recycle bin in Oracle mode.
+      // This field is reused to indicate whether the request is sent by
+      // InnerSQL, and is used to restore routines placed in the recycle bin.
     } else if (OB_FAIL(resolve_impl(type,
                                     sp_definer_node,
                                     name_node,

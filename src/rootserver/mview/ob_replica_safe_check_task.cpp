@@ -380,8 +380,7 @@ int ObReplicaSafeCheckTask::create_ls_with_tenant_mv_merge_scn(const share::ObLS
   int ret = OB_SUCCESS;
   share::SCN merge_scn(share::SCN::min_scn());
 
-  if (false ||
-      !ls_id.is_valid()) {
+  if (!ls_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(ls_id));
   } else if (ls_id.is_sys_ls()) {

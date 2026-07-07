@@ -196,7 +196,7 @@ int ObDASUtils::project_storage_row(const ObDASDMLBaseCtDef &dml_ctdef,
     } else if (FALSE_IT(storage_row.storage_datums_[i].shallow_copy_from_datum(dml_row.cells()[projector_idx]))) {
     } else if (storage_row.storage_datums_[i].is_null()) {
       //nothing to do
-    } else if (OB_FAIL(reshape_datum_value(col_type, col_accuracy, false, allocator, storage_row.storage_datums_[i]))) {
+    } else if (OB_FAIL(reshape_datum_value(col_type, col_accuracy, allocator, storage_row.storage_datums_[i]))) {
       LOG_WARN("reshape storage value failed", K(ret));
     } else if (col_type.is_lob_storage() && col_type.has_lob_header()) {
       storage_row.storage_datums_[i].set_has_lob_header();
@@ -271,7 +271,6 @@ int ObDASUtils::padding_fixed_string_value(int64_t max_len, ObIAllocator &alloca
 
 int ObDASUtils::reshape_datum_value(const ObObjMeta &col_type,
                                     const ObAccuracy &col_accuracy,
-                                    const bool enable_oracle_empty_char_reshape_to_null,
                                     ObIAllocator &allocator,
                                     blocksstable::ObStorageDatum &datum_value)
 {
@@ -454,7 +453,6 @@ static int new_discrete_vector(VecValueTypeClass value_tc,
 
 int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
                                      const ObAccuracy &col_accuracy,
-                                     const bool enable_oracle_empty_char_reshape_to_null,
                                      ObIAllocator &allocator,
                                      ObIVector *&vector,
                                      ObBatchSelector &selector)

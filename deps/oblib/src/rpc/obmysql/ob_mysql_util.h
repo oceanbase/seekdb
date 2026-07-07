@@ -404,8 +404,7 @@ public:
    *
    * @return Returns OB_SUCCESS on success, returns oceanbase error code on failure
    */
-  static int varchar_cell_str(char *buf, int64_t len, const ObString &val,
-                              const bool is_oracle_raw, int64_t &pos);
+  static int varchar_cell_str(char *buf, int64_t len, const ObString &val, int64_t &pos);
   /**
    * Serialize a floating-point type cell to the position of buf + pos.
    * (ObFloatType, ObDoubleType)

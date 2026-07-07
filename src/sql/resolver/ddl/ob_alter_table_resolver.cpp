@@ -97,7 +97,6 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
       } else if (OB_FAIL(resolve_table_relation_node(parse_tree.children_[TABLE],
                                                      table_name,
                                                      database_name,
-                                                     false,
                                                      false))) {
         SQL_RESV_LOG(WARN, "failed to resolve table name.",
                      K(table_name), K(database_name), K(ret));
@@ -430,7 +429,7 @@ int ObAlterTableResolver::resolve_set_interval(ObAlterTableStmt *stmt, const Par
         ObObj transition_value = rowkey_last->get_obj_ptr()[0];
         ObItemType item_type;
         ObConstRawExpr *transition_expr = NULL;
-        if (false == ObResolverUtils::is_valid_oracle_interval_data_type(
+        if (false == ObResolverUtils::is_valid_interval_data_type(
                                       transition_value.get_type(), item_type)) {
           ret = OB_ERR_INVALID_DATA_TYPE_INTERVAL_TABLE;
           SQL_RESV_LOG(WARN, "invalid interval column data type", K(ret));
@@ -560,7 +559,7 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
     HEAP_VARS_3((ObColumnNameSet, add_column_names_set),
                 (ObReducedVisibleColSet, reduced_visible_col_set),
                 (ObReducedVisibleColSet, drop_column_names_set)) {
-    // only use in oracle mode
+    // Column visibility bookkeeping for alter table.
     bool is_modify_column_visibility = false;
     int64_t alter_column_times = 0;
     int64_t alter_column_visibility_times = 0;
@@ -645,10 +644,10 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
             }
             break;
           }
-        case T_ALTER_INDEX_OPTION_ORACLE: {
+        case T_ALTER_INDEX_OPTION_EXTENDED: {
             alter_table_stmt->set_alter_table_index();
-            if (OB_FAIL(resolve_index_options_oracle(*action_node))) {
-              SQL_RESV_LOG(WARN, "Resolve index option oracle failed!", K(ret));
+            if (OB_FAIL(resolve_extended_index_options(*action_node))) {
+              SQL_RESV_LOG(WARN, "Resolve index option failed!", K(ret));
             }
             break;
           }
@@ -682,8 +681,7 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
             }
             break;
           }
-        // Only process alter table add check constraint in mysql mode
-        // oracle modeunderof alter table add check constraint in resolve_index_options handled inside
+        // Process alter table add check constraint in the MySQL syntax path.
         case T_ALTER_CHECK_CONSTRAINT_OPTION: {
             if (OB_FAIL(resolve_constraint_options(*action_node, node.num_child_ > 1))) {
               SQL_RESV_LOG(WARN, "Resolve check constraint option in mysql mode failed!", K(ret));
@@ -705,7 +703,7 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
             break;
           }
         case T_DROP_CONSTRAINT: {
-            // drop check constraint/foreign key/index in oracle mode, drop check constraint/foreign key in mysql mode
+            // Drop check constraint or foreign key.
             ObString constraint_name;
             uint64_t constraint_id = OB_INVALID_ID;
             bool is_constraint = false; // indicates other constraints except foreign keys and unique keys
@@ -1046,9 +1044,8 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
         LOG_WARN("stmt or table_schema_ should not be null", KR(ret));
       } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
         LOG_WARN("get data version failed", KR(ret), KPC(table_schema_));
-      // to keep the corrent of alter algorithm
-      // 1.mysql mode after 4352, can add or drop column in instant, but compound ddl is offline
-      // 2.oracle mode after 4351, can only drop column in instant
+      // Keep the alter algorithm correct: after 4352, add/drop column can be
+      // instant, but compound DDL is offline.
       } else if (has_add_column
                  && has_drop_column) {
         alter_table_stmt->get_alter_table_arg().alter_algorithm_ = obcall::ObAlterTableArg::AlterAlgorithm::INPLACE;
@@ -1112,7 +1109,7 @@ int ObAlterTableResolver::resolve_column_options(const ParseNode &node,
             }
             break;
           }
-        //rename column name in oracle mode
+        // Rename column name.
         case T_COLUMN_RENAME: {
             if (OB_FAIL(resolve_rename_column(*column_node))) {
               SQL_RESV_LOG(WARN, "Resolve rename column error!", K(ret));
@@ -2128,8 +2125,7 @@ int ObAlterTableResolver::generate_index_arg(obcall::ObCreateIndexArg &index_arg
     if (OB_SUCC(ret)) {
       ObIndexType type = INDEX_TYPE_IS_NOT;
       if (NOT_SPECIFIED == index_scope_) {
-        // MySQL default index mode is local,
-        // and Oracle default index mode is global
+        // Default index mode is local.
         global_ = false;
         if (!global_) {
           if (nullptr != table_schema_) {
@@ -2852,7 +2848,7 @@ int ObAlterTableResolver::resolve_alter_index(const ParseNode &node)
   return ret;
 }
 
-int ObAlterTableResolver::resolve_alter_index_parallel_oracle(const ParseNode &node)
+int ObAlterTableResolver::resolve_alter_index_parallel_extended(const ParseNode &node)
 {
   int ret = OB_SUCCESS;
   ObString tmp_index_name;
@@ -3326,10 +3322,10 @@ int ObAlterTableResolver::resolve_drop_primary(const ParseNode &action_node_list
   return ret;
 }
 
-int ObAlterTableResolver::resolve_index_options_oracle(const ParseNode &node)
+int ObAlterTableResolver::resolve_extended_index_options(const ParseNode &node)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(T_ALTER_INDEX_OPTION_ORACLE != node.type_ ||
+  if (OB_UNLIKELY(T_ALTER_INDEX_OPTION_EXTENDED != node.type_ ||
                   node.num_child_ <= 0 ||
                   OB_ISNULL(node.children_) ||
                   OB_ISNULL(node.children_[0]))) {
@@ -3345,9 +3341,9 @@ int ObAlterTableResolver::resolve_index_options_oracle(const ParseNode &node)
         break;
       }
     case T_PARALLEL: {
-      // alter index parallel for oracle
+      // Alter index parallel option.
       ParseNode *index_node = node.children_[0];
-      if (OB_FAIL(resolve_alter_index_parallel_oracle(*index_node))) {
+      if (OB_FAIL(resolve_alter_index_parallel_extended(*index_node))) {
           SQL_RESV_LOG(WARN, "resolve alter index parallel error!", K(ret));
       }
       break;
@@ -3363,7 +3359,7 @@ int ObAlterTableResolver::resolve_index_options_oracle(const ParseNode &node)
   }
   return ret;
 }
-// Here not only index is processed, but also constraints are appended when altering table in oracle mode
+// Process indexes and constraints appended during alter table.
 int ObAlterTableResolver::resolve_index_options(const ParseNode &action_node_list,
                                                 const ParseNode &node,
                                                 bool &is_add_index)
@@ -4153,8 +4149,8 @@ int ObAlterTableResolver::resolve_split_partition(const ParseNode *node,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid partition type", KR(ret), K(origin_table_schema));
     } else { // range part
-      // to be compatible with oracle, the last split partition could not defined with PARTITION_ELEMENT.
-      // the high bound value of the it should always be same with the origin partition
+      // The last split partition cannot be defined with PARTITION_ELEMENT; its
+      // high bound value should always be the same as the original partition.
       if (OB_UNLIKELY(expr_count == alter_table_schema.get_partition_num())) {
         ret = OB_ERR_SPLIT_LIST_LESS_VALUE;
         LOG_WARN("last partition contain bounds is not supported", KR(ret), K(expr_count),
@@ -5027,7 +5023,7 @@ int ObAlterTableResolver::resolve_change_column(const ParseNode &node)
       
       alter_column_schema.set_table_id(origin_col_schema->get_table_id());
       alter_column_schema.set_column_id(origin_col_schema->get_column_id());
-      // alter table change col is MySQL mode syntax, oracle mode will not reach here
+      // ALTER TABLE CHANGE COLUMN follows the MySQL syntax path.
       bool is_modify_column_visibility = false;
       alter_column_schema.alter_type_ = OB_DDL_CHANGE_COLUMN;
       ObSEArray<ObColumnSchemaV2 *, 8> resolved_cols;

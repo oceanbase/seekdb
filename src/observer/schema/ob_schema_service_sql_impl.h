@@ -570,10 +570,7 @@ public:
               ObTableType &table_type,
               int64_t &schema_version) override;
 
-  // index_name comparsion:
-  // 1. oracle & !is_mysql_sys_database : case sensitive
-  // 2. mysql || is_mysql_sys_database : case insensitive
-  //
+  // index_name comparison is case insensitive.
   // @param[int]:
   // - index_name : should be a "full" index name, can't be a original index name
   // @param[out]:

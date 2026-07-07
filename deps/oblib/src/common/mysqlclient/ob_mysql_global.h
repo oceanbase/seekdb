@@ -157,7 +157,6 @@
 
 #define SIZEOF_CHARP 8
 #define NOT_FIXED_DEC 31
-#define ORACLE_NOT_FIXED_DEC -1
 
 /*
   The longest string ob_fcvt can return is 311 + "precision" bytes.

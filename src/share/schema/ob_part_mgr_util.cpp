@@ -100,7 +100,7 @@ int ObPartGetter::get_subpart_ids(const common::ObString &part_name,
     ret = OB_ERR_NOT_PARTITIONED;
     LOG_WARN("table is not partitioned", K(ret));
   } else if (PARTITION_LEVEL_ONE == part_level) {
-    // Oracle uses subpartition() on the primary partition table to report Specified subpartition does not exist
+    // Use subpartition() on the primary partition table to report "specified subpartition does not exist".
     ret = OB_UNKNOWN_SUBPARTITION;
     LOG_WARN("subpartition no exists", K(ret));
   } else if (PARTITION_LEVEL_TWO == part_level) {

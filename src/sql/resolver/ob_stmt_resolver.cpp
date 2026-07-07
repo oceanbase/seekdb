@@ -41,8 +41,7 @@ int ObStmtResolver::resolve_table_relation_node(const ParseNode *node,
                                                 ObString &table_name,
                                                 ObString &db_name,
                                                 ObString &catalog_name,
-                                                bool is_org /*false*/,
-                                                bool is_oracle_sys_view)
+                                                bool is_org /*false*/)
 {
   int ret = OB_SUCCESS;
   bool is_db_explicit = false;
@@ -52,8 +51,7 @@ int ObStmtResolver::resolve_table_relation_node(const ParseNode *node,
                                              db_name,
                                              catalog_name,
                                              is_db_explicit,
-                                             is_org,
-                                             is_oracle_sys_view))) {
+                                             is_org))) {
     LOG_WARN("failed to resolve table name", K(ret));
   } else {
     // do nothing
@@ -64,8 +62,7 @@ int ObStmtResolver::resolve_table_relation_node(const ParseNode *node,
 int ObStmtResolver::resolve_table_relation_node(const ParseNode *node,
                                                 ObString &table_name,
                                                 ObString &db_name,
-                                                bool is_org/*false*/,
-                                                bool is_oracle_sys_view)
+                                                bool is_org/*false*/)
 {
   int ret = OB_SUCCESS;
   ObString catalog_name;
@@ -74,8 +71,7 @@ int ObStmtResolver::resolve_table_relation_node(const ParseNode *node,
                                              table_name,
                                              db_name,
                                              catalog_name,
-                                             is_org,
-                                             is_oracle_sys_view))) {
+                                             is_org))) {
     LOG_WARN("failed to resolve table name", K(ret));
   } else {
     // do nothing
@@ -94,8 +90,7 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
                                                    ObString &db_name,
                                                    common::ObString &catalog_name,
                                                    bool &is_db_explicit,
-                                                   bool is_org /*false*/,
-                                                   bool is_oracle_sys_view)
+                                                   bool is_org /*false*/)
 {
   int ret = OB_SUCCESS;
   is_db_explicit = false;
@@ -130,13 +125,7 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
         || ((session_info_->get_ddl_info().is_ddl() || session_info_->get_ddl_info().is_dummy_ddl_for_inner_visibility()) &&
             OB_WRONG_TABLE_NAME == tmp_ret)) {
       if (NULL == db_node) {
-        if (is_oracle_sys_view) {
-          // ObString tmp(OB_ORA_SYS_SCHEMA_NAME); // right code
-          ObString tmp("SYS");
-          if (OB_FAIL(ob_write_string(*allocator_, tmp, db_name))) {
-            LOG_WARN("fail to write db name", K(ret));
-          }
-        } else if (is_org || params_.is_resolve_fake_cte_table_) {
+        if (is_org || params_.is_resolve_fake_cte_table_) {
           db_name = ObString::make_empty_string();
         } else if (session_info_->get_database_name().empty()) {
           ret = OB_ERR_NO_DB_SELECTED;
@@ -384,7 +373,8 @@ int ObStmtResolver::get_column_schema(const uint64_t table_id,
   } else {
     const bool hidden = get_hidden || session_info_->is_inner();
 
-    // generated column added by function-based index is hidden in OB but can be selected in oracle
+    // Generated columns added by function-based indexes are hidden but may
+    // still be selected through this path.
     if (OB_FAIL(schema_checker_->get_column_schema( table_id, column_name, column_schema, true, is_link))) {
       LOG_WARN("fail to get column schema", K(table_id), K(column_name), K(ret));
     } else if (!hidden && column_schema->is_hidden() && !column_schema->is_generated_column()) {

@@ -201,7 +201,6 @@ ob_set_subtarget(ob_share common_mixed
   sequence/ob_sequence_dml_proxy.cpp
   sequence/ob_sequence_option.cpp
   sequence/ob_sequence_option_builder.cpp
-  system_variable/ob_nls_system_variable.cpp
   system_variable/ob_sys_var_meta.cpp
   system_variable/ob_system_variable_init.cpp
   ob_lob_access_utils.cpp

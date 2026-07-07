@@ -36,7 +36,6 @@ struct ObSysVarFlag
   const static int64_t INFLUENCE_PLAN = (1LL << 6);
   const static int64_t NEED_SERIALIZE = (1LL << 7);
   const static int64_t QUERY_SENSITIVE = (1LL << 8);
-  const static int64_t ORACLE_ONLY = (1LL << 9);
   const static int64_t WITH_CREATE = (1LL << 10);
   const static int64_t WITH_UPGRADE = (1LL << 11);
   const static int64_t MYSQL_ONLY = (1LL << 12);
@@ -79,7 +78,6 @@ public:
   static common::ObString get_info(int64_t i);
   static int64_t get_flags(int64_t i);
   static bool need_serialize(int64_t i);
-  static bool is_oracle_only(int64_t i);
   static bool is_mysql_only(int64_t i);
   static common::ObString get_alias(int64_t i);
   static const common::ObObj &get_default_value(int64_t i);

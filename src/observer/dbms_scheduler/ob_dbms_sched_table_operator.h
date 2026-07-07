@@ -74,25 +74,23 @@ public:
   int update_for_kill(ObDBMSSchedJobInfo &job_info);
   int get_dbms_sched_job_is_killed(const ObDBMSSchedJobInfo &job_info, bool &is_killed);
   int get_dbms_sched_job_info(
-    bool is_oracle_tenant, uint64_t job_id, const common::ObString &job_name,
+    uint64_t job_id, const common::ObString &job_name,
     common::ObIAllocator &allocator, ObDBMSSchedJobInfo &job_info);
   int get_dbms_sched_job_infos_in_tenant(
-    bool is_oracle_tenant,
     common::ObIAllocator &allocator, common::ObIArray<ObDBMSSchedJobInfo> &job_infos);
 
   int get_dbms_sched_job_class_info(
-    bool is_oracle_tenant, const common::ObString job_class_name,
+    const common::ObString job_class_name,
     common::ObIAllocator &allocator, ObDBMSSchedJobClassInfo &job_class_info);
 
   int get_dbms_sched_job_class_infos_in_tenant(
-    bool is_oracle_tenant,
     common::ObIAllocator &allocator, common::ObIArray<ObDBMSSchedJobClassInfo> &job_class_infos);
 
   int extract_info(
-    common::sqlclient::ObMySQLResult &result, bool is_oracle_tenant,
+    common::sqlclient::ObMySQLResult &result,
     common::ObIAllocator &allocator, ObDBMSSchedJobInfo &job_info);
   int extract_job_class_info(
-    sqlclient::ObMySQLResult &result, bool is_oracle_tenant,
+    sqlclient::ObMySQLResult &result,
     ObIAllocator &allocator, ObDBMSSchedJobClassInfo &job_class_info);
 
   int check_job_can_running(int64_t alive_job_count, bool &can_running);

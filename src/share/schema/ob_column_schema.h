@@ -187,9 +187,8 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline uint32_t get_srid() const { return srs_info_.srid_; }
   inline common::ObGeoType get_geo_type() const { return static_cast<common::ObGeoType>(srs_info_.geo_type_); }
   inline const ObSkipIndexColumnAttr &get_skip_index_attr() const { return skip_index_attr_; }
-  // Be careful with this interface, is_nullable_ is set only in Mysql mode and
-  // for primary key and identity column in Oracle mode.
-	// is_nullable() is usually used in Mysql mode, also used when schema interacts with inner table.
+  // Be careful with this interface, is_nullable_ is usually used in MySQL mode
+  // and when schema interacts with inner table.
   // Following function is_not_null_for_read and is_not_null_for_write is more practical.
 	// More info: 
   inline bool is_nullable() const { return is_nullable_; }

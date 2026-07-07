@@ -83,7 +83,7 @@ int calc_atan_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     if (OB_FAIL(arg0->eval(ctx, y)) || OB_FAIL(arg1->eval(ctx, x))) {
       LOG_WARN("eval arg failed", K(ret), K(expr), KP(y), KP(x));
     } else if (y->is_null() || x->is_null()) {
-      /* arg is already be cast to number type, no need to is_null_oracle */
+      /* arg is already cast to number type, no extra null-type handling needed */
       res_datum.set_null();
     } else if (ObDoubleType == arg0->datum_meta_.type_
               && ObDoubleType == arg1->datum_meta_.type_) {

@@ -28,7 +28,7 @@ int ObDataAccessPathExtraInfo::deep_copy(common::ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
-    LOG_WARN("Failed to allocate memory for ObExprOracleLRpadInfo", K(ret));
+    LOG_WARN("Failed to allocate memory for ObDataAccessPathExtraInfo", K(ret));
   } else if (OB_ISNULL(copied_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("extra_info should not be nullptr", K(ret));

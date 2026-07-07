@@ -314,15 +314,12 @@ int ObLocationMgr::get_location_schemas_in_tenant(common::ObIArray<const ObLocat
   ObTenantLocationId id(OB_MIN_ID);
   ConstLocationIter iter_begin =
       location_infos_.lower_bound(id, compare_with_tenant_location_id);
-  bool is_stop = false;
   for (ConstLocationIter iter = iter_begin;
-      OB_SUCC(ret) && iter != location_infos_.end() && !is_stop; ++iter) {
+      OB_SUCC(ret) && iter != location_infos_.end(); ++iter) {
     const ObLocationSchema *schema = NULL;
     if (OB_ISNULL(schema = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(schema));
-    } else if (false) {
-      is_stop = true;
     } else if (OB_FAIL(schemas.push_back(schema))) {
       LOG_WARN("push back location failed", K(ret));
     }
@@ -401,4 +398,3 @@ int ObLocationMgr::rebuild_location_hashmap()
 } // namespace schema
 } // namespace share
 } // namespace oceanbase
-

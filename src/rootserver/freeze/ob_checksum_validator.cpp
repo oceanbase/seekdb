@@ -40,9 +40,6 @@ int ObChecksumValidator::init(
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_UNLIKELY(false)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
   } else if (OB_FAIL(replica_ckm_items_.init(DEFAULT_TABLET_CNT))) {
     LOG_WARN("failed to init ckm array", KR(ret));
   } else {

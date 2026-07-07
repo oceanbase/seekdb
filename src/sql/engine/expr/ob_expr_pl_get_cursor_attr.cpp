@@ -79,8 +79,7 @@ OB_SERIALIZE_MEMBER((ObExprPLGetCursorAttr, ObFuncExprOperator));
 
 ObExprPLGetCursorAttr::ObExprPLGetCursorAttr(ObIAllocator &alloc)
   : ObFuncExprOperator(
-      alloc, T_FUN_PL_GET_CURSOR_ATTR, N_PL_GET_CURSOR_ATTR, ZERO_OR_ONE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION,
-      false, INTERNAL_IN_ORACLE_MODE),
+      alloc, T_FUN_PL_GET_CURSOR_ATTR, N_PL_GET_CURSOR_ATTR, ZERO_OR_ONE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION, false),
     pl_cursor_info_() {}
 
 ObExprPLGetCursorAttr::~ObExprPLGetCursorAttr() {}

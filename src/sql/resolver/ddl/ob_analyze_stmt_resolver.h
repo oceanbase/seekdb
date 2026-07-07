@@ -34,8 +34,8 @@ public:
   virtual ~ObAnalyzeStmtResolver();
   virtual int resolve(const ParseNode &parse_tree);
 private:
-  int resolve_oracle_analyze(const ParseNode &parse_node,
-                             ObAnalyzeStmt &analyze_stmt);
+  int resolve_analyze_table(const ParseNode &parse_node,
+                            ObAnalyzeStmt &analyze_stmt);
   int resolve_mysql_update_histogram(const ParseNode &parse_node,
                                      ObAnalyzeStmt &analyze_stmt);
   int resolve_mysql_delete_histogram(const ParseNode &parse_node,

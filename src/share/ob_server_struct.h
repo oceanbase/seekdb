@@ -135,7 +135,6 @@ struct ObGlobalContext
   sql::ObExecutorRpcImpl *executor_rpc_;
   common::ObMySQLProxy *sql_proxy_;
   common::ObMySQLProxy *ddl_sql_proxy_;
-  common::ObCommonSqlProxy *ddl_oracle_sql_proxy_;
   observer::ObResourceInnerSQLConnectionPool *res_inner_conn_pool_;
   common::ObInOutBandwidthThrottle *bandwidth_throttle_;
   common::ObITabletScan *vt_par_ser_;

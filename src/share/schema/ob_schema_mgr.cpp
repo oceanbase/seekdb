@@ -1131,8 +1131,7 @@ int ObSchemaMgr::get_user_schema(
     } else if (OB_ISNULL(tmp_schema = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(tmp_schema), K(ret));
-    } else if (false
-               || user_id != tmp_schema->get_user_id()) {
+    } else if (user_id != tmp_schema->get_user_id()) {
       // do-nothing
     } else {
       user_schema = tmp_schema;
@@ -1389,8 +1388,7 @@ int ObSchemaMgr::get_database_schema(
     } else if (OB_ISNULL(tmp_schema = *database_iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(tmp_schema), K(ret));
-    } else if (false
-               || database_id != tmp_schema->get_database_id()) {
+    } else if (database_id != tmp_schema->get_database_id()) {
       // do-nothing
     } else {
       database_schema = tmp_schema;
@@ -1623,8 +1621,7 @@ int ObSchemaMgr::get_tablegroup_schema(
     } else if (OB_ISNULL(tmp_schema = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(tmp_schema), K(ret));
-    } else if (false
-               || tablegroup_id != tmp_schema->get_tablegroup_id()) {
+    } else if (tablegroup_id != tmp_schema->get_tablegroup_id()) {
       // do-nothing
     } else {
       tablegroup_schema = tmp_schema;
@@ -2148,8 +2145,7 @@ int ObSchemaMgr::delete_given_fk_from_mgr(const ObSimpleForeignKeyInfo &fk_info)
 {
   int ret = OB_SUCCESS;
 
-  if (false
-      || fk_info.database_id_ == common::OB_INVALID_ID
+  if (fk_info.database_id_ == common::OB_INVALID_ID
       || fk_info.foreign_key_name_.empty()){
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fk_info should not be null", K(ret), K(fk_info));
@@ -2339,8 +2335,7 @@ int ObSchemaMgr::delete_given_cst_from_mgr(const ObSimpleConstraintInfo &cst_inf
 {
   int ret = OB_SUCCESS;
 
-  if (false
-      || cst_info.database_id_ == common::OB_INVALID_ID
+  if (cst_info.database_id_ == common::OB_INVALID_ID
       || cst_info.constraint_name_.empty()){
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cst_info should not be null", K(ret), K(cst_info));
@@ -3025,8 +3020,7 @@ int ObSchemaMgr::get_index_schema(
         }
       }
     } else { // not in recyclebin
-      // FIXME: oracle mode not support drop user/database to recyclebin yet, now
-      // can determine whether the index is in the recycle bin based on database_id
+      // The database id determines whether the index is in the recycle bin.
       ObString cutted_index_name;
       uint64_t data_table_id = ObSimpleTableSchemaV2::extract_data_table_id_from_index_name(table_name);
       if (OB_UNLIKELY(ERRSIM_INVALID_INDEX_NAME)) {
@@ -3042,7 +3036,6 @@ int ObSchemaMgr::get_index_schema(
         }
         LOG_WARN("fail to get index name", K(ret));
       } else {
-        // Notice that, operation on mysql_db table when compat_mode equals to lib::Worker::CompatMode::ORACLE is mysql mode.
         const ObIndexSchemaHashWrapper cutted_index_name_wrapper(database_id,
             data_table_id, cutted_index_name);
         int hash_ret = index_name_map.get_refactored(cutted_index_name_wrapper, tmp_schema);
@@ -3188,8 +3181,7 @@ int ObSchemaMgr::get_tenant_schemas(
       TENANT_SCHEMA_ID_TYPE tenant_schema_id_lower(OB_MIN_ID);        \
       SCHEMA_ITER iter = SCHEMA##_infos_.lower_bound(tenant_schema_id_lower,     \
           compare_with_tenant_##SCHEMA##_id);                                    \
-      bool is_stop = false;                                                      \
-      for (; OB_SUCC(ret) && iter != SCHEMA##_infos_.end() && !is_stop; iter++) { \
+      for (; OB_SUCC(ret) && iter != SCHEMA##_infos_.end(); iter++) {            \
         if (OB_ISNULL(schema = *iter)) {                                         \
           ret = OB_ERR_UNEXPECTED;                                               \
           LOG_WARN("NULL ptr", K(ret), KP(schema));                              \
@@ -3228,13 +3220,10 @@ GET_SCHEMAS_IN_TENANT_FUNC_DEFINE(tablegroup, ObSimpleTablegroupSchema, ObTenant
       ObTenantTableId tenant_table_id_lower(OB_MIN_ID);               \
       ConstTableIterator iter = table_infos_.lower_bound(tenant_table_id_lower,  \
           compare_with_tenant_table_id);                                         \
-      bool is_stop = false;                                                      \
-      for (; OB_SUCC(ret) && iter != table_infos_.end() && !is_stop; iter++) {   \
+      for (; OB_SUCC(ret) && iter != table_infos_.end(); iter++) {               \
         if (OB_ISNULL(schema = *iter)) {                                         \
           ret = OB_ERR_UNEXPECTED;                                               \
           LOG_WARN("NULL ptr", K(ret), KP(schema));                              \
-        } else if (false) {                \
-          is_stop = true;                                                        \
         } else if (dst_schema_id == schema->get_##DST_SCHEMA##_id()) {           \
           if (OB_FAIL(schema_array.push_back(schema))) {                         \
             LOG_WARN("failed to push back table schema", K(ret));                \
@@ -3271,8 +3260,6 @@ int ObSchemaMgr::get_primary_table_schema_in_tablegroup(const uint64_t tablegrou
         if (OB_ISNULL(schema = *iter)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("NULL ptr", KR(ret), KP(schema));
-        } else if (OB_UNLIKELY(false)) {
-          is_stop = true;
         } else if (tablegroup_id == schema->get_tablegroup_id()) {
           if (schema->is_user_table()
             || schema->is_mysql_tmp_table()
@@ -3304,13 +3291,10 @@ int ObSchemaMgr::get_table_schemas_in_tablegroup(
     ObTenantTableId tenant_table_id_lower(OB_MIN_ID);
     ConstTableIterator iter = table_infos_.lower_bound(tenant_table_id_lower,
         compare_with_tenant_table_id);
-    bool is_stop = false;
-    for (; OB_SUCC(ret) && iter != table_infos_.end() && !is_stop; iter++) {
+    for (; OB_SUCC(ret) && iter != table_infos_.end(); iter++) {
       if (OB_ISNULL(schema = *iter)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", K(ret), KP(schema));
-      } else if (false) {
-        is_stop = true;
       } else if (dst_schema_id == schema->get_tablegroup_id()) {
         if (schema->is_user_table()
           || schema->is_mysql_tmp_table()
@@ -3337,13 +3321,10 @@ int ObSchemaMgr::get_table_schemas_in_tenant(ObIArray<const ObSimpleTableSchemaV
     ObTenantTableId tenant_schema_id_lower(OB_MIN_ID);
     ConstTableIterator iter = table_infos_.lower_bound(tenant_schema_id_lower,
         compare_with_tenant_table_id);
-    bool is_stop = false;
-    for (; OB_SUCC(ret) && iter != table_infos_.end() && !is_stop; iter++) {
+    for (; OB_SUCC(ret) && iter != table_infos_.end(); iter++) {
       if (OB_ISNULL(schema = *iter)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr",  K(ret), KP(schema));
-      } else if (false) {
-        is_stop = true;
       } else if (OB_FAIL(schema_array.push_back(schema))) {
         LOG_WARN("failed to push back SCHEMA schema", K(ret));
       }
@@ -3365,13 +3346,10 @@ int ObSchemaMgr::get_vector_index_schemas_in_tenant(
     ObTenantTableId tenant_index_schema_id_lower(OB_MIN_ID);
     ConstTableIterator iter = index_infos_.lower_bound(tenant_index_schema_id_lower,
         compare_with_tenant_table_id);
-    bool is_stop = false;
-    for (; OB_SUCC(ret) && iter != index_infos_.end() && !is_stop; iter++) {
+    for (; OB_SUCC(ret) && iter != index_infos_.end(); iter++) {
       if (OB_ISNULL(schema = *iter)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr",  K(ret), KP(schema));
-      } else if (false) {
-        is_stop = true;
       } else if (schema->is_vec_index() && OB_FAIL(schema_array.push_back(schema))) {
         LOG_WARN("failed to push back SCHEMA schema", K(ret));
       }
@@ -3403,8 +3381,6 @@ int ObSchemaMgr::check_database_exists_in_tablegroup(
       if (OB_ISNULL(tmp_schema = *iter)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", K(tmp_schema), K(ret));
-      } else if (false) {
-        is_stop = true;
       } else if (tmp_schema->get_default_tablegroup_id() != tablegroup_id) {
         // do-nothing
       } else {
@@ -3489,8 +3465,7 @@ int ObSchemaMgr::get_non_sys_table_ids(ObIArray<uint64_t> &non_sys_table_ids) co
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", KR(ret), KP(schema));
       } else if (FALSE_IT(table_id = schema->get_table_id())) {
-      } else if (false
-                 || table_id >= OB_MAX_SYS_VIEW_ID) {
+      } else if (table_id >= OB_MAX_SYS_VIEW_ID) {
         is_stop = true;
       } else if (is_inner_table(table_id) && !is_sys_table(table_id)) {
         if (OB_FAIL(non_sys_table_ids.push_back(table_id))) {
@@ -3957,7 +3932,6 @@ int ObSchemaMgr::rebuild_table_hashmap(uint64_t &fk_cnt, uint64_t &cst_cnt)
                       "table_name", table_schema->get_table_name_str());
             const bool is_built_in_index = table_schema->is_built_in_index();
             IndexNameMap &index_name_map = get_index_name_map_(is_built_in_index);
-            // oracle mode and index is not in recyclebin
             if (table_schema->is_in_recyclebin()) {
               ObIndexSchemaHashWrapper index_name_wrapper(table_schema->get_database_id(),
                                                           common::OB_INVALID_ID,
@@ -4068,14 +4042,12 @@ int ObSchemaMgr::rebuild_table_hashmap(uint64_t &fk_cnt, uint64_t &cst_cnt)
   return ret;
 }
 
-// only use in oracle mode
 int ObSchemaMgr::get_idx_schema_by_origin_idx_name(const uint64_t database_id,
                                                    const common::ObString &ori_index_name,
                                                    const ObSimpleTableSchemaV2 *&table_schema) const
 {
   int ret = OB_SUCCESS;
   table_schema = NULL;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -4084,9 +4056,8 @@ int ObSchemaMgr::get_idx_schema_by_origin_idx_name(const uint64_t database_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(database_id), K(ori_index_name));
   } else {
-    // Oracle mode only - always returns error in MySQL-only mode
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("compat_mode is not oracle mode",
+    LOG_WARN("origin index name lookup is not supported",
              KR(ret), K(database_id));
   }
   return ret;

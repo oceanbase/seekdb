@@ -153,37 +153,6 @@ int ObSchemaGuardWrapper::get_mock_fk_parent_table_schema(
   return ret;
 }
 
-int ObSchemaGuardWrapper::check_oracle_object_exist(
-    const uint64_t database_id, const uint64_t session_id,
-    const ObString &object_name, const ObSchemaType &schema_type,
-    const ObRoutineType &routine_type, const bool is_or_replace)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("not init", KR(ret));
-  } else if (is_local_guard_) {
-    ObArray<ObSchemaType> conflict_schema_types;
-    local_schema_guard_.set_session_id(session_id);
-    if (OB_FAIL(local_schema_guard_.check_oracle_object_exist(
-                database_id, object_name, schema_type, routine_type,
-                is_or_replace, conflict_schema_types))) {
-      LOG_WARN("fail to check oracle object exist", KR(ret), K(database_id),
-               K(object_name), K(schema_type), K(routine_type),
-               K(is_or_replace));
-    } else if (conflict_schema_types.count() > 0) {
-      ret = OB_ERR_EXIST_OBJECT;
-      LOG_WARN("Name is already used by an existing object", KR(ret),
-               K(conflict_schema_types));
-    }
-  } else if (OB_FAIL(latest_schema_guard_.check_oracle_object_exist(
-                     database_id, session_id, object_name, schema_type,
-                     routine_type, is_or_replace))) {
-    LOG_WARN("fail to check oracle object exist", KR(ret), K(database_id),
-             K(object_name), K(schema_type), K(routine_type), K(is_or_replace));
-  }
-  return ret;
-}
-
 int ObSchemaGuardWrapper::get_table_schema(const uint64_t table_id,
                                            const ObTableSchema *&table_schema)
 {

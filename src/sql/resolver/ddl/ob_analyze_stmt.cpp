@@ -137,7 +137,7 @@ int ObAnalyzeTableInfo::fill_table_stat_param(ObExecContext &ctx, common::ObTabl
   OZ (param.all_subpart_infos_.assign(all_subpartition_infos_));
 
   if (OB_SUCC(ret)) {
-    //analyze stmt default use granularity is based partition type(oracle 12c),maybe refine it later
+    // Analyze stmt default granularity is based on partition type.
     param.global_stat_param_.need_modify_ = partition_name_.empty();
     param.part_stat_param_.need_modify_ = !partition_infos_.empty() && !is_sepcify_subpart_;
     param.subpart_stat_param_.need_modify_ = !subpartition_infos_.empty() && (partition_name_.empty() || is_sepcify_subpart_);

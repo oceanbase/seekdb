@@ -40,7 +40,7 @@ int ObMaxIdCacheItem::fetch_max_id(const ObMaxIdType max_id_type,
     uint64_t &id, const uint64_t size, ObMySQLProxy *sql_proxy)
 {
   int ret = OB_SUCCESS;
-  if (false || max_id_type != type_) {
+  if (max_id_type != type_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("argument not match", KR(ret), K(max_id_type), K(type_));
   } else if (!cached_id_valid_() || size_ < size) {

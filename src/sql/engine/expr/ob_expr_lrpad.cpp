@@ -101,7 +101,7 @@ int ObExprBaseLRpad::calc_type_length_mysql(const ObExprResType result_type,
   }
   return ret;
 }
-// Reference ObExprBaseLRpad::calc_oracle
+// Reference ObExprBaseLRpad padding calculation.
 
 int ObExprBaseLRpad::get_origin_len_obj(ObObj &len_obj) const
 {
@@ -268,7 +268,7 @@ int ObExprBaseLRpad::padding(LRpadType type,
                              const int64_t &pad_size,
                              const int64_t &prefix_size,
                              const int64_t &repeat_count,
-                             const bool &pad_space, // for oracle
+                             const bool &pad_space,
                              ObIAllocator *allocator,
                              char* &result,
                              int64_t &size,
@@ -529,159 +529,6 @@ int ObExprBaseLRpad::calc_mysql(const LRpadType pad_type, const ObExpr &expr, Ob
 }
 /* mysql util END }}} */
 
-int ObExprBaseLRpad::get_padding_info_oracle(const ObCollationType cs,
-                                             const ObString &str_text,
-                                             const int64_t &width,
-                                             const ObString &str_padtext,
-                                             const int64_t max_result_size,
-                                             int64_t &repeat_count,
-                                             int64_t &prefix_size,
-                                             bool &pad_space)
-{
-  // lpad: [sp] + padtext * t + padprefix + text
-  // rpad: text + padtext * t + padprefix + [sp]
-  int ret = OB_SUCCESS;
-  int64_t text_size = str_text.length();
-  int64_t pad_size = str_padtext.length();
-
-  int64_t text_width = 0;
-  int64_t pad_width = 0;
-  pad_space = false;
-
-  // GOAL: get repeat_count, prefix_size and pad space.
-  if (OB_FAIL(ObCharset::display_len(cs, str_text, text_width))) {
-    LOG_WARN("Failed to get displayed length", K(ret), K(str_text));
-  } else if (OB_FAIL(ObCharset::display_len(cs, str_padtext, pad_width))) {
-    LOG_WARN("Failed to get displayed length", K(ret), K(str_padtext));
-  } else if (OB_UNLIKELY(width <= text_width)
-             || OB_UNLIKELY(width <= 0)
-             || OB_UNLIKELY(pad_size <= 0)
-             || OB_UNLIKELY(pad_width <= 0)) {
-    // this should been resolve outside
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wrong width", K(ret), K(width), K(text_width), K(pad_size), K(pad_width));
-  } else {
-    repeat_count = std::min((width - text_width) / pad_width, (max_result_size - text_size) / pad_size);
-    int64_t remain_width = width - (text_width + repeat_count * pad_width);
-    int64_t remain_size = max_result_size - (text_size + repeat_count * pad_size);
-    int64_t total_width = 0;
-    LOG_DEBUG("calc pad", K(remain_width), K(width), K(text_width), K(pad_width),
-              K(max_result_size), K(text_size), K(pad_size), K(ret), K(remain_size));
-
-    if (remain_width > 0 && remain_size > 0) {
-      // has pad prefix or pad space
-      if (OB_FAIL(ObCharset::max_display_width_charpos(
-                  cs, str_padtext.ptr(), std::min(remain_size, pad_size),
-                  remain_width, prefix_size, &total_width))) {
-        LOG_WARN("Failed to get max display width", K(ret), K(str_text), K(remain_width));
-      } else if (remain_width != total_width && remain_size != prefix_size) {
-        // Not reached the specified width, add a space
-        pad_space = true;
-      }
-    }
-
-  }
-  return ret;
-}
-
-// for engine 3.0
-
-int ObExprBaseLRpad::calc_oracle(LRpadType pad_type, const ObExpr &expr,
-                                 const ObDatum &text, const ObDatum &len,
-                                 const ObDatum &pad_text, ObIAllocator &res_alloc,
-                                 ObDatum &res, bool &is_unchanged_clob)
-{
-  int ret = OB_SUCCESS;
-  ObObjType res_type = expr.datum_meta_.type_;
-  if (text.is_null() || len.is_null() || pad_text.is_null()) {
-    res.set_null();
-  } else {
-    int64_t width = 0;
-    int64_t repeat_count = 0;
-    int64_t prefix_size = 0;
-    bool pad_space = false;
-    int64_t text_width = 0;
-    const ObString &str_text = text.get_string();
-    const ObString &str_pad = pad_text.get_string();
-    const ObCollationType cs_type = expr.datum_meta_.cs_type_;
-
-    // Max VARCHAR2 size is 32767 in Oracle PL/SQL.
-    // However, Oracle SQL allow user to determine max VARCHAR2 size through `MAX_STRING_SIZE` parameter.
-    // The max VARCHAR2 size is 4000 when `MAX_STRING_SIZE` is set to `STANDARD`, and 32767 when set to `EXTENDED`.
-    // OB does not support `MAX_STRING_SIZE` parameter for now, but behaves compatibly with `EXTENDED` mode.
-    const ObExprOracleLRpadInfo *info = nullptr;
-    int64_t max_varchar2_size = OB_MAX_ORACLE_VARCHAR_LENGTH;
-    if (OB_NOT_NULL(info = static_cast<ObExprOracleLRpadInfo *>(expr.extra_info_)) &&
-        info->is_called_in_sql_) {
-      const int64_t ORACLE_EXTENDED_MAX_VARCHAR_LENGTH = 32767;
-      max_varchar2_size = ORACLE_EXTENDED_MAX_VARCHAR_LENGTH;
-    }
-    int64_t max_result_size = ob_is_text_tc(expr.datum_meta_.type_)
-        ? OB_MAX_LONGTEXT_LENGTH
-        : max_varchar2_size;
-
-    number::ObNumber len_num(len.get_number());
-    int64_t decimal_parts = -1;
-    if (len_num.is_negative()) {
-      width = -1;
-    } else if (!len_num.is_int_parts_valid_int64(width, decimal_parts)) {
-      // LOB max is 4G, here use UINT32_MAX.
-      // Negative numbers have already been filtered out.
-      width = UINT32_MAX;
-    }
-    if (width <= 0) {
-      res.set_null();
-    } else if (OB_FAIL(ObCharset::display_len(cs_type, str_text, text_width))) {
-      LOG_WARN("Failed to get displayed length", K(ret), K(str_text));
-    } else if ((3 == expr.arg_cnt_)
-               && expr.args_[0]->datum_meta_.is_clob()
-               && (0 == str_pad.length())
-               && (text_width <= width)) {
-      // pad_text is empty_clob, text is clob, if not going through truncation logic, the result is directly set to the original clob
-      res.set_datum(text);
-      is_unchanged_clob = ob_is_text_tc(res_type);
-    } else if (text_width == width) {
-      res.set_datum(text);
-      is_unchanged_clob = ob_is_text_tc(res_type);
-    } else {
-      char *result_ptr = NULL;
-      int64_t result_size = 0;
-      bool has_lob_header = expr.obj_meta_.has_lob_header();
-      if (text_width > width) {
-        // substr
-        int64_t total_width = 0;
-        if (OB_FAIL(ObCharset::max_display_width_charpos(cs_type, str_text.ptr(),
-                str_text.length(), width, prefix_size, &total_width))) {
-          LOG_WARN("Failed to get max display width", K(ret));
-        } else if (OB_FAIL(padding(pad_type, cs_type, "", 0, str_text.ptr(), str_text.length(),
-                                    prefix_size, 0, (total_width != width), &res_alloc,
-                                    result_ptr, result_size, res_type, has_lob_header))) {
-          LOG_WARN("Failed to pad", K(ret), K(str_text), K(str_pad), K(prefix_size),
-                                    K(repeat_count), K(pad_space));
-        }
-      } else if (OB_FAIL(get_padding_info_oracle(cs_type, str_text, width, str_pad,
-                  max_result_size, repeat_count, prefix_size, pad_space))) {
-        LOG_WARN("Failed to get padding info", K(ret), K(str_text), K(width),
-                                              K(str_pad), K(max_result_size));
-      } else if (OB_FAIL(padding(pad_type, cs_type, str_text.ptr(), str_text.length(), str_pad.ptr(),
-                                str_pad.length(), prefix_size, repeat_count, pad_space,
-                                &res_alloc, result_ptr, result_size, res_type, has_lob_header))) {
-        LOG_WARN("Failed to pad", K(ret), K(str_text), K(str_pad), K(prefix_size),
-                                  K(repeat_count), K(pad_space));
-      }
-
-      if (OB_SUCC(ret)) {
-        if (NULL == result_ptr || 0 == result_size) {
-          res.set_null();
-        } else {
-          res.set_string(result_ptr, result_size);
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 DEF_SET_LOCAL_SESSION_VARS(ObExprBaseLRpad, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(2);
@@ -690,7 +537,7 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprBaseLRpad, raw_expr) {
   return ret;
 }
 
-/* oracle util END }}} */
+/* padding util END }}} */
 /* ObExprBaseLRpad END }}} */
 
 /* ObExprLpad {{{1 */
@@ -772,39 +619,39 @@ int ObExprRpad::calc_mysql_rpad_expr(const ObExpr &expr, ObEvalCtx &ctx,
 }
 /* ObExprRpad END }}} */
 
-OB_DEF_SERIALIZE(ObExprOracleLRpadInfo)
+OB_DEF_SERIALIZE(ObExprLRpadInfo)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE, is_called_in_sql_);
   return ret;
 }
 
-OB_DEF_DESERIALIZE(ObExprOracleLRpadInfo)
+OB_DEF_DESERIALIZE(ObExprLRpadInfo)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, is_called_in_sql_);
   return ret;
 }
 
-OB_DEF_SERIALIZE_SIZE(ObExprOracleLRpadInfo)
+OB_DEF_SERIALIZE_SIZE(ObExprLRpadInfo)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN, is_called_in_sql_);
   return len;
 }
 
-int ObExprOracleLRpadInfo::deep_copy(common::ObIAllocator &allocator,
-                                     const ObExprOperatorType type,
-                                     ObIExprExtraInfo *&copied_info) const
+int ObExprLRpadInfo::deep_copy(common::ObIAllocator &allocator,
+                               const ObExprOperatorType type,
+                               ObIExprExtraInfo *&copied_info) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
-    LOG_WARN("Failed to allocate memory for ObExprOracleLRpadInfo", K(ret));
+    LOG_WARN("Failed to allocate memory for ObExprLRpadInfo", K(ret));
   } else if (OB_ISNULL(copied_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("extra_info should not be nullptr", K(ret));
   } else {
-    ObExprOracleLRpadInfo *other = static_cast<ObExprOracleLRpadInfo *>(copied_info);
+    ObExprLRpadInfo *other = static_cast<ObExprLRpadInfo *>(copied_info);
     other->is_called_in_sql_ = is_called_in_sql_;
   }
   return ret;

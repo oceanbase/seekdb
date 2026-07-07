@@ -294,9 +294,9 @@ public:
                           ObObjType val_type,
                           ObCollationType &cs_type,
                           ObIJsonBase*& j_base, bool to_bin = false);
-  static int oracle_datum2_json_val(const ObDatum *json_datum,  ObObjMeta& data_meta, common::ObIAllocator *allocator,
-                                    ObBasicSessionInfo *session, ObIJsonBase*& j_base, bool is_bool_data_type,
-                                    bool format_json = false, bool is_strict = false, bool is_bin = false);
+  static int datum_to_json_val(const ObDatum *json_datum,  ObObjMeta& data_meta, common::ObIAllocator *allocator,
+                               ObBasicSessionInfo *session, ObIJsonBase*& j_base, bool is_bool_data_type,
+                               bool format_json = false, bool is_strict = false, bool is_bin = false);
   
  
   /*

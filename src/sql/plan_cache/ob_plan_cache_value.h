@@ -392,7 +392,7 @@ private:
   uint64_t sessid_;
   // sess_create_time_ for temporary table
   uint64_t sess_create_time_;
-  // whether this pcv's plans contains sys table (oracle mode)
+  // Whether this pcv's plans contain sys tables.
   bool contain_sys_name_table_;
 
   bool need_param_;

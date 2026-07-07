@@ -61,9 +61,6 @@ function generate_parser {
   bison_parser ../../../src/pl/parser/pl_parser_mysql_mode.y ../../../src/pl/parser/pl_parser_mysql_mode_tab.c
   flex -o ../../../src/pl/parser/pl_parser_mysql_mode_lex.c ../../../src/pl/parser/pl_parser_mysql_mode.l ../../../src/pl/parser/pl_parser_mysql_mode_tab.h
 
-  # TODO  delete the following line at 9.30
-  rm -rf ../../../src/pl/parser/pl_parser_oracle_mode_lex.c ../../../src/pl/parser/pl_parser_oracle_mode_tab.c ../../../src/pl/parser/pl_parser_oracle_mode_tab.h
-
   #./gen_type_name.sh ob_item_type.h >type_name.c
   echo "$md5sum_value" > $CACHE_MD5_FILE
 }

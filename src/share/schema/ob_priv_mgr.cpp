@@ -411,8 +411,7 @@ int ObPrivMgr::get_db_priv_iter(const ObOriginalDBKey &db_priv_key,
     if (OB_ISNULL(db_priv = *db_priv_iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(db_priv), K(ret));
-    } else if (false
-               || db_priv_key.user_id_ != db_priv->get_user_id()) {
+    } else if (db_priv_key.user_id_ != db_priv->get_user_id()) {
       is_stop = true;
     } else if (db_priv_key != db_priv->get_original_key()) {
       // do-nothing
@@ -446,8 +445,7 @@ int ObPrivMgr::get_db_priv(const ObOriginalDBKey &db_priv_key,
     if (OB_ISNULL(tmp_db_priv = *db_priv_iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(tmp_db_priv), K(ret));
-    } else if (false
-               || user_id != tmp_db_priv->get_user_id()) {
+    } else if (user_id != tmp_db_priv->get_user_id()) {
       is_stop = true;
     } else if (0 != wild_compare(db, tmp_db_priv->get_database_name_str(),
                                  db_is_pattern)) {
@@ -1282,7 +1280,7 @@ int ObPrivMgr::get_column_priv_by_id(const uint64_t priv_id,
       if (OB_ISNULL(col_priv = *iter)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("Invalid user table priv pointer", K(ret));
-      } else if (false || priv_id != col_priv->get_priv_id()) {
+      } else if (priv_id != col_priv->get_priv_id()) {
         //do nothing
       } else {
         column_priv = col_priv;
@@ -1370,8 +1368,7 @@ int ObPrivMgr::get_column_privs_in_user(const uint64_t user_id,
     if (OB_ISNULL(column_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(column_priv));
-    } else if (false
-               || user_id != column_priv->get_user_id()) {
+    } else if (user_id != column_priv->get_user_id()) {
       is_stop = true;
     } else if (OB_FAIL(column_privs.push_back(column_priv))) {
       LOG_WARN("push back table priv failed", K(ret));
@@ -1388,15 +1385,12 @@ int ObPrivMgr::get_db_privs_in_tenant(ObIArray<const ObDBPriv *> &db_privs) cons
 
   ConstDBPrivIter tenant_db_priv_begin =
       db_privs_.begin();
-  bool is_stop = false;
   for (ConstDBPrivIter iter = tenant_db_priv_begin;
-      OB_SUCC(ret) && iter != db_privs_.end() && !is_stop; ++iter) {
+      OB_SUCC(ret) && iter != db_privs_.end(); ++iter) {
     const ObDBPriv *db_priv = NULL;
     if (OB_ISNULL(db_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(db_priv));
-    } else if (false) {
-      is_stop = true;
     } else if (OB_FAIL(db_privs.push_back(db_priv))) {
       LOG_WARN("push back db priv faield", K(ret));
     }
@@ -1421,8 +1415,7 @@ int ObPrivMgr::get_db_privs_in_user(const uint64_t user_id,
     if (OB_ISNULL(db_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(db_priv));
-    } else if (false
-               || user_id != db_priv->get_user_id()) {
+    } else if (user_id != db_priv->get_user_id()) {
       is_stop = true;
     } else if (OB_FAIL(db_privs.push_back(db_priv))) {
       LOG_WARN("push back db priv failed", K(ret));
@@ -1439,15 +1432,12 @@ int ObPrivMgr::get_table_privs_in_tenant(ObIArray<const ObTablePriv *> &table_pr
 
   ConstTablePrivIter tenant_table_priv_begin =
       table_privs_.begin();
-  bool is_stop = false;
   for (ConstTablePrivIter iter = tenant_table_priv_begin;
-      OB_SUCC(ret) && iter != table_privs_.end() && !is_stop; ++iter) {
+      OB_SUCC(ret) && iter != table_privs_.end(); ++iter) {
     const ObTablePriv *table_priv = NULL;
     if (OB_ISNULL(table_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Table priv pointer should not be null", K(ret));
-    } else if (false) {
-      is_stop = true;
     } else if (OB_FAIL(table_privs.push_back(table_priv))) {
       LOG_WARN("push back table priv failed", K(ret));
     }
@@ -1473,8 +1463,7 @@ int ObPrivMgr::get_table_privs_in_user(const uint64_t user_id,
     if (OB_ISNULL(table_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(table_priv));
-    } else if (false
-               || user_id != table_priv->get_user_id()) {
+    } else if (user_id != table_priv->get_user_id()) {
       is_stop = true;
     } else if (OB_FAIL(table_privs.push_back(table_priv))) {
       LOG_WARN("push back table priv failed", K(ret));
@@ -1500,8 +1489,7 @@ int ObPrivMgr::get_routine_privs_in_user(const uint64_t user_id,
     if (OB_ISNULL(routine_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(routine_priv));
-    } else if (false
-               || user_id != routine_priv->get_user_id()) {
+    } else if (user_id != routine_priv->get_user_id()) {
       is_stop = true;
     } else if (OB_FAIL(routine_privs.push_back(routine_priv))) {
       LOG_WARN("push back table priv failed", K(ret));
@@ -1527,8 +1515,7 @@ int ObPrivMgr::get_obj_privs_in_grantee(const uint64_t grantee_id,
     if (OB_ISNULL(obj_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_priv));
-    } else if (false
-               || grantee_id != obj_priv->get_grantee_id()) {
+    } else if (grantee_id != obj_priv->get_grantee_id()) {
       is_stop = true;
     } else if (OB_FAIL(obj_privs.push_back(obj_priv))) {
       LOG_WARN("push back obj priv failed", K(ret));
@@ -1553,8 +1540,7 @@ int ObPrivMgr::get_obj_privs_in_grantor(const uint64_t grantor_id,
     if (OB_ISNULL(obj_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_priv));
-    } else if (true
-               && grantor_id == obj_priv->get_grantor_id()) {
+    } else if (grantor_id == obj_priv->get_grantor_id()) {
       if (OB_FAIL(obj_privs.push_back(obj_priv))) {
         LOG_WARN("push back obj priv failed", K(ret));
       }
@@ -1579,8 +1565,7 @@ int ObPrivMgr::get_obj_privs_in_obj(const uint64_t obj_id,
     if (OB_ISNULL(obj_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_priv));
-    } else if (true
-               && obj_id == obj_priv->get_obj_id()
+    } else if (obj_id == obj_priv->get_obj_id()
                && obj_type == obj_priv->get_objtype()) {
       if (OB_FAIL(obj_privs.push_back(obj_priv))) {
         LOG_WARN("push back obj priv failed", K(ret));
@@ -1607,8 +1592,7 @@ int ObPrivMgr::get_obj_privs_in_grantor_obj_id(const ObObjPrivSortKey &obj_key,
     if (OB_ISNULL(obj_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_priv));
-    } else if (true
-               && grantor_id == obj_priv->get_grantor_id()
+    } else if (grantor_id == obj_priv->get_grantor_id()
                && obj_id == obj_priv->get_obj_id()
                && obj_type == obj_priv->get_objtype()
                && col_id == obj_priv->get_col_id()) {
@@ -1645,8 +1629,7 @@ int ObPrivMgr::get_obj_privs_in_grantor_ur_obj_id(const ObObjPrivSortKey &obj_ke
     if (OB_ISNULL(obj_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_priv));
-    } else if (false
-               || grantee_id != obj_priv->get_grantee_id()
+    } else if (grantee_id != obj_priv->get_grantee_id()
                || obj_id != obj_priv->get_obj_id()
                || obj_type != obj_priv->get_objtype()) {
       is_stop = true;
@@ -1680,8 +1663,7 @@ int ObPrivMgr::get_obj_privs_in_ur_and_obj(const ObObjPrivSortKey &obj_key,
     if (OB_ISNULL(obj_priv)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_priv));
-    } else if (false
-               || grantee_id != obj_priv->get_grantee_id()
+    } else if (grantee_id != obj_priv->get_grantee_id()
                || obj_id != obj_priv->get_obj_id()
                || obj_type != obj_priv->get_objtype()
                || col_id != obj_priv->get_col_id()) {
@@ -1700,15 +1682,12 @@ int ObPrivMgr::get_sys_privs_in_tenant(ObIArray<const ObSysPriv *> &sys_privs) c
 
   ConstSysPrivIter tenant_sys_priv_begin =
       sys_privs_.begin();
-  bool is_stop = false;
   for (ConstSysPrivIter iter = tenant_sys_priv_begin;
-      OB_SUCC(ret) && iter != sys_privs_.end() && !is_stop; ++iter) {
+      OB_SUCC(ret) && iter != sys_privs_.end(); ++iter) {
     const ObSysPriv *sys_priv = NULL;
     if (OB_ISNULL(sys_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(sys_priv));
-    } else if (false) {
-      is_stop = true;
     } else if (OB_FAIL(sys_privs.push_back(sys_priv))) {
       LOG_WARN("push back sys priv failed", K(ret));
     }
@@ -1882,8 +1861,7 @@ int ObPrivMgr::get_catalog_privs_in_user(const uint64_t user_id,
     if (OB_ISNULL(catalog_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null ptr", K(ret), K(catalog_priv));
-    } else if (false
-               || user_id != catalog_priv->get_user_id()) {
+    } else if (user_id != catalog_priv->get_user_id()) {
       is_stop = true;
     } else if (OB_FAIL(catalog_privs.push_back(catalog_priv))) {
       LOG_WARN("push back catalog priv failed", K(ret));
@@ -2123,8 +2101,7 @@ int ObPrivMgr::get_obj_mysql_privs_in_user(const uint64_t user_id,
     if (OB_ISNULL(obj_mysql_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_mysql_priv));
-    } else if (false
-                || user_id != obj_mysql_priv->get_user_id()) {
+    } else if (user_id != obj_mysql_priv->get_user_id()) {
       is_stop = true;
     } else if (OB_FAIL(obj_mysql_privs.push_back(obj_mysql_priv))) {
       LOG_WARN("push back obj mysql priv failed", K(ret));
@@ -2149,8 +2126,7 @@ int ObPrivMgr::get_obj_mysql_privs_in_obj(const ObString &obj_name,
     if (OB_ISNULL(obj_priv = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(obj_priv));
-    } else if (true
-              && obj_name == obj_priv->get_obj_name()
+    } else if (obj_name == obj_priv->get_obj_name()
               && obj_type == obj_priv->get_obj_type()) {
       if (OB_FAIL(obj_privs.push_back(obj_priv))) {
         LOG_WARN("push back obj priv failed", K(ret));

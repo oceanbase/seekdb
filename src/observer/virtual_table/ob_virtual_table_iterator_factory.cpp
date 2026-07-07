@@ -390,10 +390,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
 
     if (OB_SUCC(ret)) {
       uint64_t data_table_id = table_schema->get_table_id();
-      uint64_t org_pure_tid = data_table_id;
-      uint64_t pure_tid = is_oracle_mapping_virtual_table(org_pure_tid)
-                          ? get_origin_tid_by_oracle_mapping_tid(org_pure_tid)
-                          : org_pure_tid;
+      uint64_t pure_tid = data_table_id;
       int simulate_error = EVENT_CALL(EventTable::EN_DAS_SIMULATE_VT_CREATE_ERROR);
       if (OB_UNLIKELY(OB_SUCCESS != simulate_error)) {
         ret = simulate_error;
@@ -420,12 +417,12 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
                    KP(GCTX.sql_engine_),
                    KP(GCTX.schema_service_),
                    KP(GCTX.sql_proxy_));
-      } else if (is_ora_sys_view_table(pure_tid)
-                 || is_ora_virtual_table(pure_tid)) {
+      } else if (is_extended_sys_view_table(pure_tid)
+                 || is_extended_virtual_table(pure_tid)) {
         ret = OB_NOT_SUPPORTED;
-        SERVER_LOG(WARN, "access oracle's virtual table/sys view in mysql mode",
+        SERVER_LOG(WARN, "access extended virtual table/sys view through mysql virtual table iterator",
                    K(ret), K(pure_tid));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "access oracle's virtual table/sys view in mysql mode");
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "access extended virtual table/sys view through mysql virtual table iterator");
       } else {
         void *tmp_ptr = NULL;
         ObIAllocator &allocator = *params.scan_allocator_;

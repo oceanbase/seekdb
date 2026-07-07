@@ -536,7 +536,6 @@ public:
                                             common::ObIArray<uint64_t> &ref_obj_ids);
 
 protected:
-  bool is_oracle_sys_view(const ObString &table_name);
   int inner_resolve_sys_view(const ParseNode *table_node,
                              uint64_t &database_id,
                              ObString &tbl_name,
@@ -694,57 +693,6 @@ protected:
   int resolve_with_clause_subquery(const ParseNode &parse_tree, TableItem *&table_item, bool has_recursive_word);
   int resolve_with_clause(const ParseNode *node, bool same_level = false);
 
-  int check_oracle_outer_join_condition(const ObRawExpr *expr);
-  int check_oracle_outer_join_in_or_validity(const ObRawExpr * expr,
-                                    ObIArray<uint64_t> &right_tables);
-  int check_oracle_outer_join_expr_validity(const ObRawExpr *expr,
-                                            ObIArray<uint64_t> &right_tables,
-                                            ObItemType parent_type);
-  int check_single_oracle_outer_join_expr_validity(const ObRawExpr *right_expr,
-                                          ObIArray<uint64_t> &le_left_tables,
-                                          ObIArray<uint64_t> &le_right_tables,
-                                          ObIArray<uint64_t> &left_tables,
-                                          ObIArray<uint64_t> &right_tables);
-  int remove_outer_join_symbol(ObRawExpr* &expr);
-  int resolve_outer_join_symbol(const ObStmtScope scope, ObRawExpr* &expr);
-  int generate_outer_join_tables();
-
-  int generate_outer_join_dependency(const common::ObIArray<TableItem*> &table_items,
-                                     const common::ObIArray<ObRawExpr*> &exprs,
-                                     common::ObIArray<common::ObBitSet<> > &table_dependencies);
-
-  int extract_column_with_outer_join_symbol(const ObRawExpr *expr,
-                                            common::ObIArray<uint64_t> &left_tables,
-                                            common::ObIArray<uint64_t> &right_tables);
-  int do_extract_column(const ObRawExpr *expr,
-                        ObIArray<uint64_t> &left_tables,
-                        ObIArray<uint64_t> &right_tables);
-  int add_oracle_outer_join_dependency(const common::ObIArray<uint64_t> &all_tables,
-                                       const common::ObIArray<uint64_t> &left_tables,
-                                       uint64_t right_table_id,
-                                       common::ObIArray<common::ObBitSet<> > &table_dependencies) ;
-
-  int build_outer_join_table_by_dependency(
-      const common::ObIArray<common::ObBitSet<> > &table_dependencies, ObDMLStmt &stmt);
-
-  int deliver_outer_join_conditions(common::ObIArray<ObRawExpr*> &exprs,
-                                     common::ObIArray<JoinedTable*> &joined_tables);
-
-  int deliver_expr_to_outer_join_table(const ObRawExpr *expr,
-                                       const common::ObIArray<uint64_t> &table_ids,
-                                       JoinedTable *joined_table,
-                                       bool &is_delivered);
-
-
-  void set_has_ansi_join(bool has) { has_ansi_join_ = has; }
-  bool has_ansi_join() { return has_ansi_join_; }
-
-  void set_has_oracle_join(bool has) { has_oracle_join_ = has; }
-  bool has_oracle_join() { return has_oracle_join_; }
-
-  const TableItem *get_from_items_order(int64_t index) const { return from_items_order_.at(index); }
-  TableItem *get_from_items_order(int64_t index) { return from_items_order_.at(index); }
-  int add_from_items_order(TableItem *ti) { return from_items_order_.push_back(ti); }
   int add_check_constraint_to_stmt(const TableItem *table_item,
                                    const share::schema::ObTableSchema *table_schema,
                                    ObIArray<int64_t> *check_flags = NULL);
@@ -973,13 +921,9 @@ protected:
   //just some expr template in schema,
   //only the generated column expr referenced by query can be deposited to stmt
   common::ObArray<GenColumnExprInfo > gen_col_exprs_ ;
-  common::ObArray<TableItem*> from_items_order_;
 
   ObIArray<ObExecParamRawExpr *> *query_ref_exec_params_;
 
-  // for oracle style outer join
-  bool has_ansi_join_;
-  bool has_oracle_join_;
 
   /*
    * In the parsing of the with clause, we cannot add the parsed table to the global_dependency_table
@@ -1008,8 +952,6 @@ protected:
 
   //store json table column info
   common::ObSEArray<ObDmlJtColDef *, 1, common::ModulePageAllocator, true> json_table_infos_;
-  //for validity check for on-condition with (+)
-  common::ObSEArray<uint64_t, 4, common::ModulePageAllocator, true> ansi_join_outer_table_id_;
 
   //for values table used to insert stmt:insert into table values row()....
   ObInsertResolver *upper_insert_resolver_;

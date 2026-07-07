@@ -91,7 +91,6 @@ int ObPLRouter::check_error_in_resolve(int code)
         ret = code;
         break;
       }
-      // oracle mode go to default
     }
     default: {
       LOG_WARN("resolver error", K(ret), K(code));

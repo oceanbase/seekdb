@@ -30,7 +30,7 @@ int ObCatalogMetaGetter::list_namespace_names(const uint64_t catalog_id, ObIArra
 {
   int ret = OB_SUCCESS;
   ObIExternalCatalog *catalog = nullptr;
-  if (OB_UNLIKELY(!true || !is_external_catalog_id(catalog_id))) {
+  if (OB_UNLIKELY(!is_external_catalog_id(catalog_id))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(catalog_id));
   } else if (OB_FAIL(get_catalog_( catalog_id, catalog))) {
@@ -51,7 +51,7 @@ int ObCatalogMetaGetter::list_table_names(const uint64_t catalog_id,
 {
   int ret = OB_SUCCESS;
   ObIExternalCatalog *catalog = nullptr;
-  if (OB_UNLIKELY(!true || !is_external_catalog_id(catalog_id) || ns_name.empty()
+  if (OB_UNLIKELY(!is_external_catalog_id(catalog_id) || ns_name.empty()
                   || OB_NAME_CASE_INVALID == case_mode)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid case mode", K(ret), K(catalog_id), K(ns_name), K(case_mode));
@@ -74,7 +74,7 @@ int ObCatalogMetaGetter::fetch_namespace_schema(const uint64_t catalog_id,
 {
   int ret = OB_SUCCESS;
   ObIExternalCatalog *catalog = nullptr;
-  if (OB_UNLIKELY(!true || !is_external_catalog_id(catalog_id) || ns_name.empty()
+  if (OB_UNLIKELY(!is_external_catalog_id(catalog_id) || ns_name.empty()
                   || !is_external_object_id(database_schema.get_database_id()) || OB_NAME_CASE_INVALID == case_mode)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(catalog_id), K(ns_name), K(case_mode), K(database_schema.get_database_id()));
@@ -102,7 +102,7 @@ int ObCatalogMetaGetter::fetch_table_schema(const uint64_t catalog_id,
 {
   int ret = OB_SUCCESS;
   ObIExternalCatalog *catalog = nullptr;
-  if (OB_UNLIKELY(!true || !is_external_catalog_id(catalog_id)
+  if (OB_UNLIKELY(!is_external_catalog_id(catalog_id)
                   || !is_external_object_id(table_schema.get_database_id()) || !is_external_object_id(table_schema.get_table_id())
                   || ns_name.empty() || tbl_name.empty() || OB_NAME_CASE_INVALID == case_mode)) {
     ret = OB_INVALID_ARGUMENT;
@@ -158,7 +158,7 @@ int ObCatalogMetaGetter::fetch_basic_table_info(const uint64_t catalog_id,
 {
   int ret = OB_SUCCESS;
   ObIExternalCatalog *catalog = nullptr;
-  if (OB_UNLIKELY(!true || !is_external_catalog_id(catalog_id) || ns_name.empty() || tbl_name.empty()
+  if (OB_UNLIKELY(!is_external_catalog_id(catalog_id) || ns_name.empty() || tbl_name.empty()
                   || OB_NAME_CASE_INVALID == case_mode)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(catalog_id), K(ns_name), K(tbl_name), K(case_mode));

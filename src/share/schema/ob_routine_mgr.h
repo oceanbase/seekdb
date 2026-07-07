@@ -44,8 +44,7 @@ public:
   }
   bool operator ==(const ObTenantRoutineId &rhs) const
   {
-    return (true)
-           && (routine_id_ == rhs.routine_id_);
+    return (routine_id_ == rhs.routine_id_);
   }
   bool operator !=(const ObTenantRoutineId &rhs) const
   {
@@ -63,8 +62,7 @@ public:
   }
   bool is_valid() const
   {
-    return (true)
-        && (routine_id_ != common::OB_INVALID_ID);
+    return (routine_id_ != common::OB_INVALID_ID);
   }
   
   inline uint64_t get_routine_id() const { return routine_id_; }
@@ -189,8 +187,7 @@ private:
 inline bool ObRoutineNameHashWrapper::operator ==(const ObRoutineNameHashWrapper &rv) const
 {
   ObCompareNameWithTenantID name_cmp;
-  return (true)
-      && (database_id_ == rv.database_id_)
+  return (database_id_ == rv.database_id_)
       && (package_id_ == rv.package_id_)
       && (0 == name_cmp.compare(routine_name_, rv.routine_name_))
       && (overload_ == rv.overload_)

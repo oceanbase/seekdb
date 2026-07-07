@@ -78,7 +78,7 @@ public:
   int set_addr(const common::ObAddr &addr);
   
 private:
-  // https://docs.oracle.com/en/database/oracle/oracle-database/19/refrn/V-OPEN_CURSOR.html
+  // V$OPEN_CURSOR-compatible column layout.
   enum {
         SADDR = common::OB_APP_MIN_COLUMN_ID, // session point addr
     SID,                        // session id

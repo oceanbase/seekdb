@@ -715,7 +715,7 @@ int ObDASIvfBaseScanIter::try_write_centroid_cache(
                           has_lob_header,
                           cid_vec))) {
             LOG_WARN("failed to get real data.", K(ret));
-          } else if (OB_FAIL(ObVectorClusterHelper::get_center_id_from_string(cent_id, cid))) {
+          } else if (OB_FAIL(ObVectorKmeansClusterHelper::get_center_id_from_string(cent_id, cid))) {
             LOG_WARN("fail to get center idx from string", K(ret), KPHEX(cid.ptr(), cid.length()));
           } else if (cent_id.tablet_id_ == 0) {
             ret = OB_ERR_UNEXPECTED;
@@ -750,7 +750,7 @@ int ObDASIvfBaseScanIter::try_write_centroid_cache(
           if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator, ObLongTextType, CS_TYPE_BINARY,
                                                                 has_lob_header, cid_vec))) {
             LOG_WARN("failed to get real data.", K(ret));
-          } else if (OB_FAIL(ObVectorClusterHelper::get_center_id_from_string(cent_id, cid))) {
+          } else if (OB_FAIL(ObVectorKmeansClusterHelper::get_center_id_from_string(cent_id, cid))) {
             LOG_WARN("fail to get center idx from string", K(ret), KPHEX(cid.ptr(), cid.length()));
           } else if (cent_id.tablet_id_ == 0) {
             ret = OB_ERR_UNEXPECTED;
@@ -903,7 +903,7 @@ int ObDASIvfBaseScanIter::gen_near_cid_heap_from_table(
         ObString cid = cid_datum[i].get_string();
         ObString cid_vec = cid_vec_datum[i].get_string();
         
-        if (OB_FAIL(ObVectorClusterHelper::get_center_id_from_string(center_id, cid))) {
+        if (OB_FAIL(ObVectorKmeansClusterHelper::get_center_id_from_string(center_id, cid))) {
           LOG_WARN("failed to get center id from string", K(ret));
         } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                         &mem_context_->get_arena_allocator(),
@@ -940,7 +940,7 @@ int ObDASIvfBaseScanIter::gen_near_cid_heap_from_table(
           LOG_WARN("failed to get real data.", K(ret));
         } else if (cid_vec.empty()) {
           // ignoring null vector.
-        } else if (OB_FAIL(ObVectorClusterHelper::get_center_id_from_string(center_id, cid))) {
+        } else if (OB_FAIL(ObVectorKmeansClusterHelper::get_center_id_from_string(center_id, cid))) {
           LOG_WARN("failed to get center id from string", K(ret));
         } else if (OB_FAIL(nearest_cid_heap.push_center(center_id, reinterpret_cast<float *>(cid_vec.ptr()), dim_,
                                                         center_save_mode))) {
@@ -1433,7 +1433,7 @@ int ObDASIvfScanIter::get_nearest_limit_rowkeys_in_cids(bool is_vectorized, T *s
     for (int64_t i = 0; OB_SUCC(ret) && i < near_cid_.count(); ++i) {
       const ObCenterId &cur_cid = near_cid_.at(i);
       if (OB_FALSE_IT(cid_str.assign_buffer(buf, buf_len))) {
-      } else if (OB_FAIL(ObVectorClusterHelper::set_center_id_to_string(cur_cid, cid_str))) {
+      } else if (OB_FAIL(ObVectorKmeansClusterHelper::set_center_id_to_string(cur_cid, cid_str))) {
         LOG_WARN("failed to set center_id to string", K(ret), K(cur_cid), K(cid_str));
       } else if (OB_FAIL(get_rowkeys_to_heap(cid_str, cid_vec_pri_key_cnt, cid_vec_column_count, rowkey_cnt,
                                              is_vectorized, nearest_rowkey_heap))) {
@@ -1667,7 +1667,7 @@ int ObDASIvfScanIter::check_cid_exist(const ObString &src_cid, bool &src_cid_exi
   int ret = OB_SUCCESS;
   src_cid_exist = false;
   ObCenterId src_centor_id;
-  if (OB_FAIL(ObVectorClusterHelper::get_center_id_from_string(src_centor_id, src_cid))) {
+  if (OB_FAIL(ObVectorKmeansClusterHelper::get_center_id_from_string(src_centor_id, src_cid))) {
     LOG_WARN("failed to get center id from string", K(src_cid));
   } else if (OB_UNLIKELY(src_centor_id.center_id_ >= near_cid_dist_.count())) {
     ret = OB_ERR_UNEXPECTED;
@@ -1846,7 +1846,7 @@ int ObDASIvfPQScanIter::calc_distance_between_pq_ids_by_table(
       ObRowkey pq_cid_rowkey;
       ObString pq_center_id_str;
       ObPqCenterId pq_center_id(tablet_id, count + 1, decoder.decode() + 1);
-      if (OB_FAIL(ObVectorClusterHelper::set_pq_center_id_to_string(pq_center_id, pq_center_id_str,
+      if (OB_FAIL(ObVectorKmeansClusterHelper::set_pq_center_id_to_string(pq_center_id, pq_center_id_str,
                                                                     &mem_context_->get_arena_allocator()))) {
         LOG_WARN("fail to set pq center id to string", K(ret), K(pq_center_id));
       } else if (OB_FAIL(build_cid_vec_query_rowkey(pq_center_id_str, true /*is_min*/, CENTROID_PRI_KEY_CNT,
@@ -2223,7 +2223,7 @@ int ObDASIvfPQScanIter::calc_nearest_limit_rowkeys_in_cids(
       // 1.2 cid put the query in the ivf_pq_code table to find (rowkey, pq_center_ids)
       storage::ObTableScanIterator *cid_vec_scan_iter = nullptr;
       if (OB_FALSE_IT(cid_str.assign_buffer(buf, buf_len))) {
-      } else if (OB_FAIL(ObVectorClusterHelper::set_center_id_to_string(cur_cid, cid_str))) {
+      } else if (OB_FAIL(ObVectorKmeansClusterHelper::set_center_id_to_string(cur_cid, cid_str))) {
         LOG_WARN("failed to set center_id to string", K(ret), K(cur_cid), K(cid_str));
       } else if (OB_FAIL(scan_cid_range(cid_str, cid_vec_pri_key_cnt, cid_vec_ctdef, cid_vec_rtdef, cid_vec_scan_iter))) {
         LOG_WARN("fail to scan cid range", K(ret), K(cur_cid), K(cid_vec_pri_key_cnt));
@@ -2592,7 +2592,7 @@ int ObDASIvfPQScanIter::check_cid_exist(
   if (OB_UNLIKELY(near_cid_vec_ptrs_.empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("near_cid_vec_ptrs_ is empty", K(ret));
-  } else if (OB_FAIL(ObVectorClusterHelper::get_center_id_from_string(src_centor_id, src_cid))) {
+  } else if (OB_FAIL(ObVectorKmeansClusterHelper::get_center_id_from_string(src_centor_id, src_cid))) {
     LOG_WARN("failed to get center id from string", K(src_cid));
   } else if (OB_UNLIKELY(src_centor_id.center_id_ >= near_cid_vec_ptrs_.count())) {
     ret = OB_ERR_UNEXPECTED;
@@ -2865,7 +2865,7 @@ int ObDASIvfPQScanIter::try_write_pq_centroid_cache(
                           has_lob_header,
                           cid_vec))) {
             LOG_WARN("failed to get real data.", K(ret));
-          } else if (OB_FAIL(ObVectorClusterHelper::get_pq_center_id_from_string(pq_cent_id, cid))) {
+          } else if (OB_FAIL(ObVectorKmeansClusterHelper::get_pq_center_id_from_string(pq_cent_id, cid))) {
             LOG_WARN("fail to get center idx from string", K(ret), KPHEX(cid.ptr(), cid.length()));
           } else if (pq_cent_id.tablet_id_ == 0) {
             ret = OB_ERR_UNEXPECTED;
@@ -2903,7 +2903,7 @@ int ObDASIvfPQScanIter::try_write_pq_centroid_cache(
                           has_lob_header,
                           cid_vec))) {
             LOG_WARN("failed to get real data.", K(ret));
-          } else if (OB_FAIL(ObVectorClusterHelper::get_pq_center_id_from_string(pq_cent_id, cid))) {
+          } else if (OB_FAIL(ObVectorKmeansClusterHelper::get_pq_center_id_from_string(pq_cent_id, cid))) {
             LOG_WARN("fail to get center idx from string", K(ret), KPHEX(cid.ptr(), cid.length()));
           } else if (pq_cent_id.tablet_id_ == 0) {
             ret = OB_ERR_UNEXPECTED;

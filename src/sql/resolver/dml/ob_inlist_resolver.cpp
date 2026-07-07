@@ -501,7 +501,7 @@ int ObInListResolver::resolve_access_obj_values_table(const ParseNode &in_list,
                        enable_mysql_compatible_dates))) {
     LOG_WARN("fail to check enable mysql compatible dates", K(ret));
   } else {
-    length_semantics = session_info->get_actual_nls_length_semantics();
+    length_semantics = session_info->get_actual_length_semantics();
     timezone_info = session_info->get_timezone_info();
     stmt_type = stmt::T_NONE;
     nchar_collation = session_info->get_nls_collation_nation();

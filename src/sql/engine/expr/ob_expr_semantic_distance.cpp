@@ -55,7 +55,7 @@
    } else {
     type.set_double();
     type.set_precision(PRECISION_UNKNOWN_YET);
-    type.set_scale(ORA_NUMBER_SCALE_UNKNOWN_YET);
+    type.set_scale(FLOATING_NUMBER_SCALE_UNKNOWN_YET);
    }
    return ret;
  }

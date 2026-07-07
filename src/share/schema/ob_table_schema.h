@@ -1071,7 +1071,7 @@ public:
   { return MATERIALIZED_VIEW_LOG == table_type; }
   inline bool is_tmp_mlog_table() const { return is_tmp_mlog_table(table_type_, table_name_); }
   inline static bool is_tmp_mlog_table(share::schema::ObTableType table_type, ObString table_name)
-  { return is_mlog_table(table_type) && (table_name.prefix_match(OB_TMP_MLOG_PREFIX_MYSQL) || table_name.prefix_match(OB_TMP_MLOG_PREFIX_ORACLE)); }
+  { return is_mlog_table(table_type) && table_name.prefix_match(OB_TMP_MLOG_PREFIX_MYSQL); }
   inline static bool is_user_data_table(share::schema::ObTableType table_type)
   { return USER_TABLE == table_type; }
   inline bool is_in_recyclebin() const
@@ -1244,7 +1244,7 @@ protected:
   ObIndexType index_type_;
   common::ObArray<ObSimpleForeignKeyInfo> simple_foreign_key_info_array_;
   common::ObArray<ObSimpleConstraintInfo> simple_constraint_info_array_;
-  // Only the type of index is valid in oracle mode, which means the original index name without prefix (__idx__table_id_)
+  // Original index name without prefix (__idx_<table_id>_).
   common::ObString origin_index_name_;
   share::ObDuplicateScope duplicate_scope_;
   share::ObDuplicateReadConsistency duplicate_read_consistency_;
@@ -1296,9 +1296,9 @@ public:
   }
   static void construct_partition_key_column(const ObColumnSchemaV2 &column,
                                              common::ObPartitionKeyColumn &partition_key_column);
-  static int create_idx_name_automatically_oracle(common::ObString &idx_name,
-                                                  const common::ObString &table_name,
-                                                  common::ObIAllocator &allocator);
+  static int create_idx_name_automatically(common::ObString &idx_name,
+                                           const common::ObString &table_name,
+                                           common::ObIAllocator &allocator);
   static int create_cons_name_automatically(common::ObString &cst_name,
                                             const common::ObString &table_name,
                                             common::ObIAllocator &allocator,

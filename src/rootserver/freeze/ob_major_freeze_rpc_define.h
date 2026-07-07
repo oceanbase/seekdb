@@ -140,7 +140,7 @@ public:
   ~ObTabletMajorFreezeRequest() = default;
   bool is_valid() const
   {
-    return true && ls_id_.is_valid() && tablet_id_.is_valid();
+    return ls_id_.is_valid() && tablet_id_.is_valid();
   }
   TO_STRING_KV(K_(ls_id), K_(tablet_id));
   share::ObLSID ls_id_;
