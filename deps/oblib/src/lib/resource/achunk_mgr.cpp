@@ -326,18 +326,8 @@ void AChunkMgr::free_chunk(AChunk *chunk)
   if (OB_NOT_NULL(chunk)) {
     const int64_t hold_size = chunk->hold();
     const uint64_t all_size = chunk->aligned();
-    const double max_large_cache_ratio = 0.5;
-    int64_t max_large_cache_size = static_cast<int64_t>(min(limit_ - get_used(), max_chunk_cache_size_) * max_large_cache_ratio);
-    bool freed = true;
-    if (cache_hold_ + hold_size <= max_chunk_cache_size_
-        && (NORMAL_ACHUNK_SIZE == all_size || large_cache_hold_ <= max_large_cache_size)
-        && 0 == chunk->washed_size_) {
-      freed = !push_chunk(chunk, all_size, hold_size);
-    }
-    if (freed) {
-      direct_free(chunk, all_size);
-      dec_hold(hold_size);
-    }
+    direct_free(chunk, all_size);
+    dec_hold(hold_size);
   }
 }
 

@@ -239,8 +239,6 @@ AChunk *ObTenantCtxAllocator::alloc_chunk(const int64_t size, const ObMemAttr &a
     //if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
     //  LIB_LOG(WARN, "unusual chunk allocated", K(size), K(attr), K(lbt()));
     //}
-  } else if (0 != idle_size_) {
-    chunk = pop_chunk();
   }
   if (nullptr == chunk) {
     chunk = ctx_allocator_.alloc_chunk(size, attr);
@@ -259,11 +257,6 @@ void ObTenantCtxAllocator::free_chunk(AChunk *chunk, const ObMemAttr &attr)
   if (chunk != nullptr) {
     ObDisableDiagnoseGuard disable_diagnose_guard;
     using_list_.remove(chunk);
-  }
-  if (INTACT_ACHUNK_SIZE == chunk->hold() &&
-      get_hold() - INTACT_ACHUNK_SIZE < idle_size_) {
-    push_chunk(chunk);
-  } else {
     ctx_allocator_.free_chunk(chunk, attr);
   }
 }
@@ -288,6 +281,7 @@ void ObTenantCtxAllocatorV2::dec_hold(const int64_t size)
 int ObTenantCtxAllocator::set_idle(const int64_t set_size, const bool reserve/*=false*/)
 {
   int ret = OB_SUCCESS;
+  UNUSED(reserve);
   const int64_t limit = get_limit();
   const int64_t size = lower_align(set_size, INTACT_ACHUNK_SIZE);
   if (size > limit || size < 0) {
@@ -301,38 +295,12 @@ int ObTenantCtxAllocator::set_idle(const int64_t set_size, const bool reserve/*=
     ObMemAttr default_attr;
     
     default_attr.ctx_id_ = ctx_id_;
-    const int64_t hold = get_hold();
-    if (hold == size) {
-      // do-nothing
-    } else if (hold > size) {
-      AChunk *chunk = nullptr;
-      while (get_hold() - INTACT_ACHUNK_SIZE >= size && (chunk = pop_chunk()) != nullptr) {
-        ctx_allocator_.free_chunk(chunk, default_attr);
-      }
-    } else {
-      if (reserve) {
-        const int64_t ori_chunk_cnt = chunk_cnt_;
-        while (OB_SUCC(ret) && get_hold() < size) {
-          AChunk *chunk = ctx_allocator_.alloc_chunk(ACHUNK_SIZE, default_attr);
-          if (OB_ISNULL(chunk)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LIB_LOG(ERROR, "alloc chunk failed", K(ret), K_(ctx_id));
-          } else {
-            push_chunk(chunk);
-          }
-        }
-        // cleanup
-        if (OB_FAIL(ret)) {
-          AChunk *chunk = nullptr;
-          int64_t to_free_chunk_cnt = chunk_cnt_ - ori_chunk_cnt;
-          while ((to_free_chunk_cnt--) > 0 && (chunk = pop_chunk()) != nullptr) {
-            ctx_allocator_.free_chunk(chunk, default_attr);
-          }
-        }
-      }
+    AChunk *chunk = nullptr;
+    while ((chunk = pop_chunk()) != nullptr) {
+      ctx_allocator_.free_chunk(chunk, default_attr);
     }
     if (OB_SUCC(ret)) {
-      idle_size_ = size;
+      idle_size_ = 0;
     }
     LIB_LOG(INFO, "set idle finish", K(ret), K_(ctx_id), K_(idle_size),
             K_(chunk_cnt));

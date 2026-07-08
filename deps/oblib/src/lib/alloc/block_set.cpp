@@ -80,7 +80,6 @@ inline int ob_wash_memory(void *addr, size_t length, int &error_code)
 BlockSet::BlockSet()
     : tallocator_(NULL),
       locker_(NULL),
-      chunk_mgr_(NULL),
       clist_(NULL),
       avail_bm_(BLOCKS_PER_CHUNK+1, avail_bm_buf_),
       total_hold_(0), total_payload_(0), total_used_(0),
@@ -95,7 +94,7 @@ BlockSet::~BlockSet()
 
 bool BlockSet::check_has_unfree()
 {
-  return clist_ != NULL;
+  return 0 != ATOMIC_LOAD(&total_used_);
 }
 
 void BlockSet::reset()
@@ -205,6 +204,7 @@ void BlockSet::free_block(ABlock *const block)
       if (head != NULL) {
         head->in_use_ = false;
         if (0 == chunk->using_cnt_) {
+          const bool cache_whole_chunk = can_cache_whole_chunk(chunk);
           // The whole chunk is leaving BlockSet. Remove dirty free-list
           // references first. Washed spans are no longer reusable and are not
           // linked in BlockSet lists.
@@ -218,10 +218,20 @@ void BlockSet::free_block(ABlock *const block)
             if (!unused_block->is_washed_ && head != unused_block) {
               take_off_free_block(unused_block, chunk->blk_nblocks(unused_block), chunk);
             }
+            if (cache_whole_chunk) {
+              unused_block->clear_magic_code();
+              chunk->unmark_blk_offset_bit(offset);
+            }
             if (is_last) break;
             offset = next_offset;
           } while (true);
-          free_chunk(chunk);
+          if (cache_whole_chunk) {
+            ABlock *whole_block = new (chunk->data_) ABlock();
+            add_free_block(whole_block, BLOCKS_PER_CHUNK, chunk);
+            maybe_ordinary_wash();
+          } else {
+            free_chunk(chunk);
+          }
         } else {
           int head_nblocks = chunk->blk_nblocks(head);
           add_free_block(head, head_nblocks, chunk);
@@ -309,8 +319,7 @@ AChunk *BlockSet::alloc_chunk(const uint64_t size, const ObMemAttr &attr)
 {
   AChunk *chunk = NULL;
   if (OB_NOT_NULL(tallocator_)) {
-    const uint64_t all_size = AChunkMgr::aligned(size);
-    chunk = chunk_mgr_->alloc_chunk(static_cast<int64_t>(size), attr);
+    chunk = tallocator_->alloc_chunk(static_cast<int64_t>(size), attr);
     if (chunk != nullptr) {
       uint64_t payload = 0;
       UNUSED(ATOMIC_FAA(&total_hold_, chunk->hold(&payload)));
@@ -330,6 +339,15 @@ AChunk *BlockSet::alloc_chunk(const uint64_t size, const ObMemAttr &attr)
     }
   }
   return chunk;
+}
+
+bool BlockSet::can_cache_whole_chunk(AChunk *chunk)
+{
+  return OB_NOT_NULL(chunk)
+      && 0 == chunk->using_cnt_
+      && 0 == chunk->washed_size_
+      && !chunk->is_hugetlb_
+      && INTACT_ACHUNK_SIZE == chunk->hold();
 }
 
 bool BlockSet::add_chunk(const ObMemAttr &attr)
@@ -368,9 +386,7 @@ void BlockSet::free_chunk(AChunk *const chunk)
     if (chunk->washed_size_ != 0) {
       tallocator_->update_wash_stat(-1, -chunk->washed_blks_, -chunk->washed_size_);
     }
-    // The chunk manager only caches or frees whole chunks. Cached chunks are
-    // outside BlockSet, so they will not receive block-level wash later.
-    chunk_mgr_->free_chunk(chunk, attr_);
+    tallocator_->free_chunk(chunk, attr_);
   }
 }
 
@@ -379,6 +395,7 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
     const int64_t max_blocks_per_round)
 {
   const ssize_t ps = get_page_size();
+  int64_t reclaimed_size = 0;
   int64_t washed_size = 0;
   int64_t washed_blks = 0;
   int64_t scanned_blks = 0;
@@ -387,12 +404,12 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
   int cls = avail_bm_.nbits() - 1;
   // Walk the existing dirty free lists by size class. This avoids scanning
   // every 8K block in every chunk during ordinary allocation/free flows.
-  while (washed_size < wash_size && scanned_blks < max_blocks_per_round &&
+  while (reclaimed_size < wash_size && scanned_blks < max_blocks_per_round &&
          cls >= 1 && (cls = avail_bm_.find_first_most_significant(cls)) != -1) {
     const int64_t len = cls * ABLOCK_SIZE;
     if (len < ps) {
       break;
-    } else if (washed_size + len > wash_size) {
+    } else if (reclaimed_size + len > wash_size) {
       cls--;
       continue;
     }
@@ -402,14 +419,20 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
       ABlock *tail = head->prev_;
       int64_t scan_cnt = 0;
       while (OB_NOT_NULL(block) &&
-             washed_size < wash_size && scanned_blks < max_blocks_per_round &&
+             reclaimed_size < wash_size && scanned_blks < max_blocks_per_round &&
              scan_cnt++ < BLOCKS_PER_CHUNK) {
         // Capture the successor before unlinking this block; nullptr means
         // this pass has reached the original free-list tail.
         ABlock *next = block == tail ? nullptr : block->next_;
         scanned_blks++;
         AChunk *chunk = block->chunk();
-        if (chunk->is_hugetlb_) {
+        const bool expired = !(delay_us > 0 && now - block->free_time_us_ < delay_us);
+        if (BLOCKS_PER_CHUNK == cls && expired && can_cache_whole_chunk(chunk)) {
+          const int64_t hold_size = chunk->hold();
+          take_off_free_block(block, cls, chunk);
+          free_chunk(chunk);
+          reclaimed_size += hold_size;
+        } else if (chunk->is_hugetlb_) {
           _OB_LOG(DEBUG, "cannot be applied to Huge TLB pages");
         } else {
         #if MEMCHK_LEVEL >= 1
@@ -421,7 +444,7 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
           if ((reinterpret_cast<uint64_t>(data) & (ps - 1)) != 0 ||
               (len & (ps - 1)) != 0) {
             _OB_LOG(DEBUG, "cannot be applied to non-multiple of page-size, page_size: %zd", ps);
-          } else if (delay_us > 0 && now - block->free_time_us_ < delay_us) {
+          } else if (!expired) {
           } else {
             int error_code = 0;
             int result = ob_wash_memory(data, len, error_code);
@@ -440,6 +463,7 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
               chunk->washed_blks_++;
               washed_blks++;
               washed_size += len;
+              reclaimed_size += len;
             }
           }
         }
@@ -459,7 +483,7 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
     abort_unless(total_payload_ == total_used_);
   }
 #endif
-  return washed_size;
+  return reclaimed_size;
 }
 
 void BlockSet::maybe_ordinary_wash()
