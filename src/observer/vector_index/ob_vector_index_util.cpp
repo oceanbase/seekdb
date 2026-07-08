@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include <limits>
 #include <string>
 
 #include "ob_vector_index_util.h"
@@ -56,6 +57,16 @@ static int get_vsag_metric_from_distance(const ObString &distance_name, const ch
     LOG_WARN("unexpected vector index distance name", K(ret), K(distance_name));
   }
   return ret;
+}
+
+static bool is_valid_vsag_int_param(const int64_t value)
+{
+  return value >= std::numeric_limits<int>::min() && value <= std::numeric_limits<int>::max();
+}
+
+static bool is_valid_vsag_int16_param(const int64_t value)
+{
+  return value >= std::numeric_limits<int16_t>::min() && value <= std::numeric_limits<int16_t>::max();
 }
 
 static int validate_vsag_create_index_param(
@@ -104,6 +115,16 @@ static int validate_vector_index_vsag_create_index_param(
   const char *metric = nullptr;
   if (OB_FAIL(get_vsag_metric_from_distance(distance_name, metric))) {
     LOG_WARN("failed to get vsag metric from distance", K(ret), K(distance_name));
+  } else if (!is_valid_vsag_int_param(dim)
+             || !is_valid_vsag_int_param(m_value)
+             || !is_valid_vsag_int_param(ef_construction_value)
+             || !is_valid_vsag_int_param(ef_search_value)
+             || !is_valid_vsag_int_param(extra_info_actual_size)
+             || !is_valid_vsag_int_param(window_size)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("vsag create index param is out of int range", K(ret), K(index_type),
+        K(dim), K(m_value), K(ef_construction_value), K(ef_search_value),
+        K(extra_info_actual_size), K(window_size));
   } else if (ObVectorIndexAlgorithmType::VIAT_HNSW == index_type ||
              ObVectorIndexAlgorithmType::VIAT_HNSW_SQ == index_type ||
              ObVectorIndexAlgorithmType::VIAT_HNSW_BQ == index_type) {
@@ -256,11 +277,11 @@ int ObVectorIndexUtil::parser_params_from_string(
           if (OB_FAIL(ObSchemaUtils::str_to_int(new_param_value, int_value))) {
             LOG_WARN("fail to str_to_int", K(ret), K(new_param_value));
           } else if (ObVectorIndexType::VIT_HNSW_INDEX == index_type) {
-            if (int_value >= 5 && int_value <= 128) {
+            if (is_valid_vsag_int_param(int_value)) {
               param.m_ = int_value;
             } else {
               ret = OB_NOT_SUPPORTED;
-              LOG_WARN("not support vector index m value", K(ret), K(int_value), K(new_param_value));
+              LOG_WARN("vector index m value is out of int range", K(ret), K(int_value), K(new_param_value));
             }
           } else if (ObVectorIndexType::VIT_IVF_INDEX == index_type) {
             if (int_value >= 1 && int_value <= 65536) {
@@ -274,21 +295,21 @@ int ObVectorIndexUtil::parser_params_from_string(
           int64_t int_value = 0;
           if (OB_FAIL(ObSchemaUtils::str_to_int(new_param_value, int_value))) {
             LOG_WARN("fail to str_to_int", K(ret), K(new_param_value));
-          } else if (int_value >= 5 && int_value <= 1000) {
+          } else if (is_valid_vsag_int_param(int_value)) {
             param.ef_construction_ = int_value;
           } else {
             ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not support vector index ef_construction value", K(ret), K(int_value), K(new_param_value));
+            LOG_WARN("vector index ef_construction value is out of int range", K(ret), K(int_value), K(new_param_value));
           }
         } else if (new_param_name == "EF_SEARCH") {
           int64_t int_value = 0;
           if (OB_FAIL(ObSchemaUtils::str_to_int(new_param_value, int_value))) {
             LOG_WARN("fail to str_to_int", K(ret), K(new_param_value));
-          } else if (int_value >= 1 && int_value <= 160000) {
+          } else if (is_valid_vsag_int_param(int_value)) {
             param.ef_search_ = int_value;
           } else {
             ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not support vector index ef_search value", K(ret), K(int_value), K(new_param_value));
+            LOG_WARN("vector index ef_search value is out of int range", K(ret), K(int_value), K(new_param_value));
           }
         } else if (new_param_name == "NLIST") {
           int64_t int_value = 0;
@@ -351,9 +372,9 @@ int ObVectorIndexUtil::parser_params_from_string(
           int64_t int_value = 0;
           if (OB_FAIL(ObSchemaUtils::str_to_int(new_param_value, int_value))) {
             LOG_WARN("fail to str_to_int", K(ret), K(new_param_value));
-          } else if (int_value != 0 && int_value != 4 && int_value != 32) {
+          } else if (!is_valid_vsag_int16_param(int_value)) {
             ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not support vector index bq_bits_query value", K(ret), K(int_value), K(new_param_value));
+            LOG_WARN("vector index bq_bits_query value is out of int16 range", K(ret), K(int_value), K(new_param_value));
           } else {
             param.bq_bits_query_ = int_value;
           }
@@ -416,9 +437,6 @@ int ObVectorIndexUtil::parser_params_from_string(
           if (err != 0 || (new_param_value.ptr() + new_param_value.length()) != endptr) {
             ret = OB_DATA_OUT_OF_RANGE;
             LOG_WARN("fail to cast string to double", K(ret), K(new_param_value), K(err), KP(endptr));
-          } else if (out_val < 0.0 || out_val > 0.9) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not support vector index drop_ratio_build value", K(ret), K(out_val), K(new_param_value));
           } else {
             param.ob_sparse_drop_ratio_build_ = out_val;
           }
@@ -3357,21 +3375,21 @@ int ObVectorIndexUtil::check_index_param(
           m_is_set = true;
           m_value = parser_value;
         } else if (last_variable == "EF_CONSTRUCTION") {
-          if (parser_value >= 5 && parser_value <= 1000 ) {
+          if (is_valid_vsag_int_param(parser_value)) {
             ef_construction_is_set = true;
             ef_construction_value = parser_value;
           } else {
             ret = OB_NOT_SUPPORTED;
-            LOG_WARN("invalid vector index ef_construction value", K(ret), K(parser_value));
+            LOG_WARN("vector index ef_construction value is out of int range", K(ret), K(parser_value));
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index ef_construction is");
           }
         } else if (last_variable == "EF_SEARCH") {
-          if (parser_value >= 1 && parser_value <= 160000 ) {
+          if (is_valid_vsag_int_param(parser_value)) {
             ef_search_is_set = true;
             ef_search_value = parser_value;
           } else {
             ret = OB_NOT_SUPPORTED;
-            LOG_WARN("invalid vector index ef_search value", K(ret), K(parser_value));
+            LOG_WARN("vector index ef_search value is out of int range", K(ret), K(parser_value));
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index ef_search is");
           }
         } else if (last_variable == "NLIST") {
@@ -3411,9 +3429,9 @@ int ObVectorIndexUtil::check_index_param(
             refine_type_value = (new_parser_name == "SQ8") ? obvsag::SQ8 : obvsag::FP32;
           }
         } else if (last_variable == "BQ_BITS_QUERY") {
-          if (parser_value != 4 && parser_value != 32) {
+          if (!is_valid_vsag_int16_param(parser_value)) {
             ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not support vector index bq_bits_query value", K(ret), K(parser_value));
+            LOG_WARN("vector index bq_bits_query value is out of int16 range", K(ret), K(parser_value));
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index bq_bits_query is");
           } else {
             bq_bits_query_set = true;
@@ -3529,10 +3547,6 @@ int ObVectorIndexUtil::check_index_param(
           if (err != 0 || (new_parser_name.ptr() + new_parser_name.length()) != endptr) {
             ret = OB_DATA_OUT_OF_RANGE;
             LOG_WARN("fail to cast string to double", K(ret), K(new_parser_name), K(err), KP(endptr));
-          } else if (out_val < 0 || out_val > 0.9 ) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not support vector index drop_ratio_build value", K(ret), K(out_val));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index drop_ratio_build is");
           } else {
             drop_ratio_build_is_set = true;
             drop_ratio_build = out_val;
@@ -3659,24 +3673,10 @@ int ObVectorIndexUtil::check_index_param(
           refine_type_value = refine_type_is_set ? refine_type_value : obvsag::SQ8;
           bq_use_fht_value = bq_use_fht_is_set ? bq_use_fht_value : true;
         }
-        if (m_value >= 5 && m_value <= 128) {
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("invalid vector index m value", K(ret), K(parser_value));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index m is");
-        }
-        if (OB_FAIL(ret)) {
-        } else if (lib_is_set && lib_name != "VSAG") {
+        if (lib_is_set && lib_name != "VSAG") {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("hnsw vector index name should be 'VSAG'", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index lib name not equal to 'VSAG' is");
-        }
-        if (OB_FAIL(ret)) {
-        } else if (ef_construction_value <= m_value) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("unexpected setting of vector index param, ef_construction value must be larger than m value",
-            K(ret), K(ef_construction_value), K(m_value));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "the vector index params ef_construction less than or equal to m value is");
         }
         if (OB_FAIL(ret)) {
         } else if (nlist_is_set || sample_per_nlist_is_set || nbits_is_set) {
