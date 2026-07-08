@@ -75,9 +75,7 @@ int ObMPStmtClose::process()
     LOG_TRACE("close ps stmt or cursor", K_(stmt_id), K(session->get_server_sid()));
     if (OB_FAIL(session->check_tenant_status())) {
       LOG_INFO("unit has been migrated, need deny new request", K(ret));
-    } else if (OB_FAIL(sql::ObFLTUtils::init_flt_info(
-                 pkt.get_extra_info(), *session,
-                 get_conn()->proxy_cap_flags_.is_full_link_trace_support(),
+    } else if (OB_FAIL(sql::ObFLTUtils::init_flt_info(*session,
                  enable_flt))) {
       LOG_WARN("failed to init flt extra info", K(ret));
     }
@@ -102,13 +100,6 @@ int ObMPStmtClose::process()
       if (OB_SUCCESS != tmp_ret) {
         // close_cursor failure error code priority is higher than close_ps_stmt, here we override
         ret = tmp_ret;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (pkt.exist_trace_info()
-          && OB_FAIL(session->update_sys_variable(share::SYS_VAR_OB_TRACE_INFO,
-                                                  pkt.get_trace_info()))) {
-        LOG_WARN("fail to update trace info", K(ret));
       }
     }
   }

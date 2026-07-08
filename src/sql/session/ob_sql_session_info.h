@@ -956,9 +956,6 @@ public:
   inline void set_ps_protocol(bool is_ps_protocol) { pl_ps_protocol_ = is_ps_protocol; }
   inline bool is_ps_protocol() { return pl_ps_protocol_; }
 
-  inline void set_ob20_protocol(bool is_20protocol) { is_ob20_protocol_ = is_20protocol; }
-  inline bool is_ob20_protocol() { return is_ob20_protocol_; }
-
   int replace_user_variable(const common::ObString &name, const ObSessionVariable &value);
   int replace_user_variable(
     ObExecContext &ctx, const common::ObString &name, const ObSessionVariable &value);
@@ -1160,8 +1157,6 @@ public:
   ObContextsMap &get_contexts_map() { return contexts_map_; }
   ObSequenceCurrvalMap &get_sequence_currval_map() { return sequence_currval_map_; }
   ObSockFdMap &get_sock_fd_map() { return sock_fd_map_; }
-  void set_client_non_standard(bool client_non_standard) { client_non_standard_ = client_non_standard; }
-  bool client_non_standard() { return client_non_standard_; }
   const common::ObString &get_audit_filter_name() const { return audit_filter_name_; }
   int get_mem_ctx_alloc(common::ObIAllocator *&alloc);
   int update_sess_sync_info(const SessionSyncInfoType sess_sync_info_type,
@@ -1542,7 +1537,6 @@ private:
 
   observer::ObQueryDriver *pl_query_sender_; // send query result in mysql pl
   bool pl_ps_protocol_; // send query result use this protocol
-  bool is_ob20_protocol_; // mark as whether use oceanbase 2.0 protocol
 
   common::hash::ObHashSet<common::ObString> *pl_sync_pkg_vars_ = NULL;
 
@@ -1647,7 +1641,6 @@ private:
   int32_t vport_;
   int64_t in_bytes_;
   int64_t out_bytes_;
-  bool client_non_standard_;
   share::schema::ObUserLoginInfo login_info_;
   dbms_scheduler::ObDBMSSchedJobInfo *job_info_; // dbms_scheduler related.
   memtable::ObBtreeIterCache *btree_iter_cache_;

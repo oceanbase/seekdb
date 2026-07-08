@@ -43,7 +43,6 @@ public:
   };
   enum ExtendFlag {
     OB_OCI_INVALID = 0,
-    OB_OCI_NEED_EXTRA_OK_PACKET = 1,
     OB_OCI_GET_PIECE_INFO = 2
   };
   static const obmysql::ObMySQLCmd COM = obmysql::COM_STMT_FETCH;
@@ -57,7 +56,6 @@ public:
   {
     return ObMPBase::flush_buffer(is_last);
   }
-  inline bool has_ok_packet() { return extend_flag_ & OB_OCI_NEED_EXTRA_OK_PACKET; }
   inline bool has_long_data() { return extend_flag_ & OB_OCI_GET_PIECE_INFO; }
   int response_row(sql::ObSQLSessionInfo &session, 
                    common::ObNewRow &row,

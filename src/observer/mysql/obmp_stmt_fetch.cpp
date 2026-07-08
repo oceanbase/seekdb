@@ -209,13 +209,10 @@ int ObMPStmtFetch::response_query_header(ObSQLSessionInfo &session,
                            session,
                            retry_ctrl,
                            *this,
-                           false,
                            OB_INVALID_COUNT);
   if (NULL == fields) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(drv.response_query_header(*fields,
-                                               has_ok_packet(),
-                                               false))) {
+  } else if (OB_FAIL(drv.response_query_header(*fields, false, false))) {
     LOG_WARN("fail to get autocommit", K(ret));
   }
   return ret;
@@ -464,7 +461,7 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
         flags.status_flags_.OB_SERVER_STATUS_IN_TRANS
           = (session.is_server_status_in_transaction() ? 1 : 0);
         flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = (ac ? 1 : 0);
-        flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = has_ok_packet() ? true : false; /*no more result*/
+        flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = false; /*no more result*/
         flags.status_flags_.OB_SERVER_STATUS_CURSOR_EXISTS = !last_row ? 1 : 0;
         if ((!cursor.is_streaming()
              && max_count == cursor.get_current_position() + 1)
@@ -478,41 +475,14 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
           flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session.partition_hit().get_bool();
         }
         eofp.set_server_status(flags);
-        // for proxy
-        // in multi-stmt, send extra ok packet in the last stmt(has no more result)
         if (OB_SUCC(ret)) {
           if (OB_FAIL(packet_sender_.alloc_ezbuf())) {
             LOG_WARN("failed to alloc easy buf", K(ret));
-          } else if (!has_ok_packet() && OB_FAIL(update_last_pkt_pos())) {
-            LOG_WARN("failed to update last packet pos", K(ret));
           }
         }
-        // for obproxy
         if (OB_SUCC(ret)) {
-          // in multi-stmt, send extra ok packet in the last stmt(has no more result)
-          if (need_send_extra_ok_packet() || has_ok_packet()) {
-            ObOKPParam ok_param;
-            if (has_ok_packet()) {
-              ok_param.affected_rows_ = last_row ? max_count : cursor.get_current_position() + 1;
-            } else {
-              ok_param.affected_rows_ = 0;
-            }
-            if ((!cursor.is_streaming()
-                 && max_count == cursor.get_current_position() + 1)
-                || last_row) {
-              ok_param.send_last_row_ = true;
-            } else {
-              ok_param.send_last_row_ = false;
-            }
-            ok_param.is_partition_hit_ = session.partition_hit().get_bool();
-            ok_param.has_more_result_ = false;
-            if (OB_FAIL(send_ok_packet(session, ok_param, &eofp))) {
-              LOG_WARN("fail to send ok packt", K(ok_param), K(ret));
-            }
-          } else {
-            if (OB_FAIL(response_packet(eofp, &session))) {
-              LOG_WARN("response packet fail", K(ret));
-            }
+          if (OB_FAIL(response_packet(eofp, &session))) {
+            LOG_WARN("response packet fail", K(ret));
           }
         }
       }
@@ -634,8 +604,6 @@ int ObMPStmtFetch::process()
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                 sys_version))) {
       LOG_WARN("fail get tenant broadcast version", K(ret));
-    } else if (OB_FAIL(process_extra_info(session, pkt, need_response_error))) {
-      LOG_WARN("fail get process extra info", K(ret));
     } else if (OB_FAIL(session.check_tenant_status())) {
       need_disconnect = false;
       LOG_INFO("unit has been migrated, need deny new request", K(ret));

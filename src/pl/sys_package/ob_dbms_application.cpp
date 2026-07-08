@@ -63,9 +63,6 @@ int ObDBMSAppInfo::set_action(sql::ObExecContext &ctx, sql::ParamStore &params, 
   ObSQLSessionInfo* sess = const_cast<ObSQLSessionInfo*>(ctx.get_my_session());
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (sess->is_obproxy_mode() && !sess->is_ob20_protocol()) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "oceanbase 2.0 protocol is not ready, and dbms_application_info not support");
   } else {
     CK (OB_LIKELY(1 == params.count()));
     OV (params.at(0).is_varchar(), OB_INVALID_ARGUMENT);
@@ -96,9 +93,6 @@ int ObDBMSAppInfo::set_client_info(sql::ObExecContext &ctx, sql::ParamStore &par
   ObSQLSessionInfo* sess = const_cast<ObSQLSessionInfo*>(ctx.get_my_session());
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (sess->is_obproxy_mode() && !sess->is_ob20_protocol()) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "oceanbase 2.0 protocol is not ready, and dbms_application_info not support");
   } else {
     CK (OB_LIKELY(1 == params.count()));
     OV (params.at(0).is_varchar() || params.at(0).is_null_or_empty_string(), OB_INVALID_ARGUMENT);
@@ -134,9 +128,6 @@ int ObDBMSAppInfo::set_module(sql::ObExecContext &ctx, sql::ParamStore &params, 
   ObSQLSessionInfo* sess = const_cast<ObSQLSessionInfo*>(ctx.get_my_session());
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (sess->is_obproxy_mode() && !sess->is_ob20_protocol()) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "oceanbase 2.0 protocol is not ready, and dbms_application_info not support");
   } else {
     CK (OB_LIKELY(2 == params.count()));
     OV (params.at(0).is_varchar() || params.at(0).is_null_or_empty_string(), OB_INVALID_ARGUMENT);
@@ -170,4 +161,3 @@ int ObDBMSAppInfo::set_module(sql::ObExecContext &ctx, sql::ParamStore &params, 
 }
 } // end of pl
 } // end oceanbase
-

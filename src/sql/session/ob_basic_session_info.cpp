@@ -122,8 +122,6 @@ ObBasicSessionInfo::ObBasicSessionInfo()
       plan_hash_(0),
       flt_vars_(),
       capability_(),
-      proxy_capability_(),
-      client_mode_(OB_MIN_CLIENT_MODE),
       changed_sys_vars_(),
       changed_user_vars_(),
       changed_var_pool_(ObMemAttr(ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
@@ -442,9 +440,7 @@ void ObBasicSessionInfo::reset(bool skip_sys_var)
   last_plan_id_ = 0;
   plan_hash_ = 0;
   capability_.capability_ = 0;
-  proxy_capability_.capability_ = 0;
   client_attribute_capability_.capability_ = 0;
-  client_mode_ = OB_MIN_CLIENT_MODE;
   reset_session_changed_info();
   extra_info_allocator_.reset();
   trans_spec_status_ = TRANS_SPEC_NOT_SET;
@@ -4546,6 +4542,8 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo)
   int64_t unused_inner_safe_weak_read_snapshot = 0;
   int64_t unused_weak_read_snapshot_source = 0;
   int64_t unused_safe_weak_read_snapshot = 0;
+  uint64_t unused_capability_flag = 0;
+  int64_t unused_client_mode = 0;
 
   bool need_serial_exec = false;
   uint64_t sql_scope_flags = sql_scope_flags_.get_flags();
@@ -4559,8 +4557,8 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo)
               unused_literal_query,
               tz_info_wrap_,
               app_trace_id_,
-              proxy_capability_.capability_,
-              client_mode_,
+              unused_capability_flag,
+              unused_client_mode,
               nested_count_,
               thread_data_.user_name_,
               next_tx_isolation_,
@@ -4755,6 +4753,8 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
   bool unused_literal_query = false;
   bool need_serial_exec = false;
   uint64_t sql_scope_flags = 0;
+  uint64_t unused_capability_flag = 0;
+  int64_t unused_client_mode = 0;
 
   sys_var_in_pc_str_.reset(); // sys_var_in_pc_str_ may be contaminated during the deserialization of system variables, and needs to be reset
   config_in_pc_str_.reset();
@@ -4771,8 +4771,8 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
               unused_literal_query,
               tz_info_wrap_,
               app_trace_id_,
-              proxy_capability_.capability_,
-              client_mode_,
+              unused_capability_flag,
+              unused_client_mode,
               nested_count_,
               thread_data_.user_name_,
               next_tx_isolation_,
@@ -5070,6 +5070,8 @@ OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo)
   int64_t unused_inner_safe_weak_read_snapshot = 0;
   int64_t unused_weak_read_snapshot_source = 0;
   int64_t unused_safe_weak_read_snapshot = 0;
+  uint64_t unused_capability_flag = 0;
+  int64_t unused_client_mode = 0;
   bool need_serial_exec = false;
   uint64_t sql_scope_flags = sql_scope_flags_.get_flags();
   // No meaningful field for serialization compatibility
@@ -5082,8 +5084,8 @@ OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo)
               unused_literal_query,
               tz_info_wrap_,
               app_trace_id_,
-              proxy_capability_.capability_,
-              client_mode_,
+              unused_capability_flag,
+              unused_client_mode,
               nested_count_,
               thread_data_.user_name_,
               next_tx_isolation_,
@@ -5311,17 +5313,6 @@ int ObBasicSessionInfo::update_last_trace_id(const ObCurTraceId::TraceId &trace_
   obj.set_collation_type(ObCharset::get_system_collation());
   if (OB_FAIL(update_sys_variable(SYS_VAR_OB_STATEMENT_TRACE_ID , obj))) {
     LOG_WARN("fail to update_system_variable", K(SYS_VAR_OB_STATEMENT_TRACE_ID), K(trace_id_str), K(ret));
-  } else {}
-  return ret;
-}
-
-int ObBasicSessionInfo::set_proxy_capability(const uint64_t cap)
-{
-  int ret = OB_SUCCESS;
-  ObObj obj;
-  obj.set_int(cap);
-  if (OB_FAIL(update_sys_variable(SYS_VAR_OB_CAPABILITY_FLAG, obj))) {
-    LOG_WARN("fail to update_system_variable", K(SYS_VAR_OB_CAPABILITY_FLAG), K(cap), K(ret));
   } else {}
   return ret;
 }

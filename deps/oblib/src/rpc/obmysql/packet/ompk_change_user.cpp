@@ -29,14 +29,11 @@ OMPKChangeUser::OMPKChangeUser() : cmd_(COM_CHANGE_USER),
     auth_response_(),
     auth_plugin_name_(),
     database_(),
-    connect_attrs_(),
-    sys_vars_(),
-    user_vars_()
+    connect_attrs_()
 {
 }
 
 // see com_change_user packet
-// for proxy, add session vars as connect attrs
 int64_t OMPKChangeUser::get_serialize_size() const
 {
   int64_t len = 0;
@@ -119,17 +116,6 @@ int OMPKChangeUser::serialize(char *buffer, const int64_t length, int64_t &pos) 
           for (int64_t i = 0; OB_SUCC(ret) && i <  connect_attrs_.count(); ++i) {
             ret = ObMySQLPacket::store_string_kv(buffer, length, connect_attrs_.at(i), pos);
           }  // end store normal connect attrs
-
-          if (OB_SUCC(ret)) {
-            // store session vars
-            if (sys_vars_.empty() && user_vars_.empty()) {
-              // do nothing
-            } else if (OB_FAIL(ObMySQLUtil::store_obstr(buffer, length, ObString::make_string(OB_MYSQL_PROXY_SESSION_VARS), pos))) {
-              LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
-            } else if (OB_FAIL(serialize_session_vars(buffer, length, pos))) {
-              LOG_WARN("fail to store session vars", K(ret), KP(buffer), K(length), K(pos));
-            }
-          }  // end store session vars
         }
       }
     }
@@ -137,60 +123,13 @@ int OMPKChangeUser::serialize(char *buffer, const int64_t length, int64_t &pos) 
   return ret;
 }
 
-uint64_t OMPKChangeUser::get_session_vars_len() const
-{
-  uint64_t session_vars_len = 0;
-  for (int64_t i = 0; i< sys_vars_.count(); ++i) {
-    session_vars_len += ObMySQLPacket::get_kv_encode_len(sys_vars_.at(i));
-  }
-  if (!user_vars_.empty()) {
-    session_vars_len += ObMySQLPacket::get_kv_encode_len(ObMySQLPacket::get_separator_kv());
-    for (int64_t i = 0; i< user_vars_.count(); ++i) {
-      session_vars_len += ObMySQLPacket::get_kv_encode_len(user_vars_.at(i));
-    }
-  }
-  return session_vars_len;
-}
-
 uint64_t OMPKChangeUser::get_connect_attrs_len() const
 {
   uint64_t all_attr_len = 0;
-  ObStringKV string_kv;
   if (!!mysql_cap_.cap_flags_.OB_CLIENT_CONNECT_ATTRS) {
     for (int64_t i = 0; i < connect_attrs_.count(); i++) {
       all_attr_len += ObMySQLPacket::get_kv_encode_len(connect_attrs_.at(i));
     }
-    // store session vars as connect attrs
-    if (!sys_vars_.empty() || !user_vars_.empty()) {
-      int64_t len = STRLEN(OB_MYSQL_PROXY_SESSION_VARS);
-      all_attr_len += ObMySQLUtil::get_number_store_len(len);
-      all_attr_len += len;
-      all_attr_len += ObMySQLUtil::get_number_store_len(get_session_vars_len());
-      all_attr_len += get_session_vars_len();
-    }
   }
   return all_attr_len;
-}
-
-int OMPKChangeUser::serialize_session_vars(char *buffer,
-                                           const int64_t length,
-                                           int64_t &pos) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObMySQLUtil::store_length(buffer, length, get_session_vars_len(), pos))) {
-    LOG_WARN("fail to store session vars len", K(ret));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i< sys_vars_.count(); ++i) {
-      ret = ObMySQLPacket::store_string_kv(buffer, length, sys_vars_.at(i), pos);
-    }
-    if (OB_SUCC(ret)) {
-      if (!user_vars_.empty()) {
-        ret = ObMySQLPacket::store_string_kv(buffer, length, ObMySQLPacket::get_separator_kv(), pos);
-      }
-      for (int64_t i = 0; OB_SUCC(ret) && i < user_vars_.count(); ++i) {
-        ret = ObMySQLPacket::store_string_kv(buffer, length, user_vars_.at(i), pos);
-      }
-    }
-  }
-  return ret;
 }

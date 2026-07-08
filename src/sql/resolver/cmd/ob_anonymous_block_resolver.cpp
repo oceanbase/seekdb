@@ -54,14 +54,14 @@ int ObAnonymousBlockResolver::resolve(const ParseNode &parse_tree)
       stmt->set_stmt_id(params_.statement_id_);
       stmt->set_sql(params_.cur_sql_);
       if ((params_.is_prepare_stage_
-            || params_.is_pre_execute_)
+            || params_.is_mock_prepare_)
           && OB_ISNULL(session_info_->get_pl_context())) {
         CK (OB_LIKELY(T_SP_ANONYMOUS_BLOCK == parse_tree.type_));
         CK (OB_NOT_NULL(block_node = parse_tree.children_[0]));
         CK (OB_LIKELY(T_SP_BLOCK_CONTENT == block_node->type_
                       || T_SP_LABELED_BLOCK == block_node->type_));
         OZ (resolve_anonymous_block(*block_node, *stmt, true));
-        if (OB_SUCC(ret) && params_.is_pre_execute_) {
+        if (OB_SUCC(ret) && params_.is_mock_prepare_) {
           OZ (add_param());
         }
       } else {

@@ -123,7 +123,6 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       pl_attach_session_id_(0),
       pl_query_sender_(NULL),
       pl_ps_protocol_(false),
-      is_ob20_protocol_(false),
       pl_sync_pkg_vars_(NULL),
       inner_conn_(NULL),
       enable_role_array_(),
@@ -153,7 +152,6 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       vport_(0),
       in_bytes_(0),
       out_bytes_(0),
-      client_non_standard_(false),
       job_info_(nullptr),
       btree_iter_cache_(nullptr),
       failover_mode_(false),
@@ -311,7 +309,6 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     trace_enable_ = false;
     auto_flush_trace_ = false;
     coninfo_set_by_sess_ = false;
-    is_ob20_protocol_ = false;
     is_latest_sess_info_ = false;
     int temp_ret = OB_SUCCESS;
     optimizer_tracer_.reset();
@@ -320,7 +317,6 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     group_id_not_expected_ = false;
     //call at last time
     ObBasicSessionInfo::reset(skip_sys_var);
-    client_non_standard_ = false;
   }
   vid_ = OB_INVALID_ID;
   vport_ = 0;

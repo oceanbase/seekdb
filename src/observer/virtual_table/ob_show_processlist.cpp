@@ -195,8 +195,7 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
           case SQL_ID: {
             if (obmysql::COM_QUERY == sess_info->get_mysql_cmd() ||
                 obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
-                obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd() ||
-                obmysql::COM_STMT_PREXECUTE == sess_info->get_mysql_cmd()) {
+                obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd()) {
               sess_info->get_cur_sql_id(sql_id, OB_MAX_SQL_ID_LENGTH + 1);
             } else {
               sql_id[0] = '\0';
@@ -225,8 +224,7 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
           case INFO: {
             if (obmysql::COM_QUERY == sess_info->get_mysql_cmd() ||
                 obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
-                obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd() ||
-                obmysql::COM_STMT_PREXECUTE == sess_info->get_mysql_cmd()) {
+                obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd()) {
               cur_row_->cells_[cell_idx].set_varchar(sess_info->get_current_query_string());
               cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             } else {
@@ -283,7 +281,6 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
             if (obmysql::COM_QUERY == sess_info->get_mysql_cmd() ||
                 obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
                 obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd() ||
-                obmysql::COM_STMT_PREXECUTE == sess_info->get_mysql_cmd() ||
                 obmysql::COM_STMT_FETCH == sess_info->get_mysql_cmd()) {
               int len = sess_info->get_current_trace_id().to_string(trace_id_, sizeof(trace_id_));
               cur_row_->cells_[cell_idx].set_varchar(trace_id_, len);
@@ -443,8 +440,7 @@ bool ObShowProcesslist::FillScanner::operator()(sql::ObSQLSessionMgr::Key key, O
           case TOP_INFO: {
             if ((obmysql::COM_QUERY == sess_info->get_mysql_cmd() ||
                 obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
-                obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd() ||
-                obmysql::COM_STMT_PREXECUTE == sess_info->get_mysql_cmd()) &&
+                obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd()) &&
                 !sess_info->get_top_query_string().empty()) {
               cur_row_->cells_[cell_idx].set_varchar(sess_info->get_top_query_string());
               cur_row_->cells_[cell_idx].set_collation_type(default_collation);

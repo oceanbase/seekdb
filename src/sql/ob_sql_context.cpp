@@ -131,7 +131,7 @@ ObSqlCtx::ObSqlCtx()
     retry_times_(OB_INVALID_COUNT),
     exec_type_(InvalidType),
     is_prepare_protocol_(false),
-    is_pre_execute_(false),
+    is_mock_prepare_(false),
     is_prepare_stage_(false),
     is_dynamic_sql_(false),
     is_dbms_sql_(false),
@@ -188,7 +188,7 @@ void ObSqlCtx::reset()
   format_sql_id_[common::OB_MAX_SQL_ID_LENGTH] = '\0';
   exec_type_ = InvalidType;
   is_prepare_protocol_ = false;
-  is_pre_execute_ = false;
+  is_mock_prepare_ = false;
   is_prepare_stage_ = false;
   is_dynamic_sql_ = false;
   is_remote_sql_ = false;

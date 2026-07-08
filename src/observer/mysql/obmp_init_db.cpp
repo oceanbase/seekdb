@@ -100,8 +100,6 @@ int ObMPInitDB::process()
       LOG_WARN("fail to get name case mode", K(mode), K(ret));
     } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
       LOG_WARN("update transmisson checksum flag failed", K(ret));
-    } else if (OB_FAIL(process_extra_info(*session, pkt, need_response_error))) {
-      LOG_WARN("fail get process extra info", K(ret));
     } else {
       need_disconnect = false;
       bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);

@@ -148,20 +148,12 @@ int ObMPQuery::process()
       } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                   sys_version))) {
         LOG_WARN("fail get tenant broadcast version", K(ret));
-      } else if (pkt.exist_trace_info()
-                 && OB_FAIL(session.update_sys_variable(SYS_VAR_OB_TRACE_INFO,
-                                                        pkt.get_trace_info()))) {
-        LOG_WARN("fail to update trace info", K(ret));
-      } else if (OB_FAIL(process_extra_info(session, pkt, need_response_error))) {
-        LOG_WARN("fail get process extra info", K(ret));
       } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
         //packet size check with session variable max_allowd_packet or net_buffer_length
         need_disconnect = false;
         ret = OB_ERR_NET_PACKET_TOO_LARGE;
         LOG_WARN("packet too large than allowed for the session", K_(sql), K(ret));
-      } else if (OB_FAIL(sql::ObFLTUtils::init_flt_info(pkt.get_extra_info(),
-                              session,
-                              conn->proxy_cap_flags_.is_full_link_trace_support(),
+      } else if (OB_FAIL(sql::ObFLTUtils::init_flt_info(session,
                               enable_flt))) {
         LOG_WARN("failed to update flt extra info", K(ret));
       } else if (OB_FAIL(session.check_tenant_status())) {

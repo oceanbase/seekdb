@@ -32,9 +32,6 @@
 #include "observer/mysql/obmp_stmt_prepare.h"
 #include "observer/mysql/obmp_stmt_fetch.h"
 #include "observer/mysql/obmp_stmt_close.h"
-#include "observer/mysql/obmp_stmt_prexecute.h"
-#include "observer/mysql/obmp_stmt_send_piece_data.h"
-#include "observer/mysql/obmp_stmt_get_piece_data.h"
 #include "observer/mysql/obmp_stmt_send_long_data.h"
 #include "observer/mysql/obmp_stmt_reset.h"
 #include "observer/mysql/obmp_reset_connection.h"
@@ -199,9 +196,6 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
           MYSQL_PROCESSOR(ObMPStmtExecute, gctx_);
           MYSQL_PROCESSOR(ObMPStmtFetch, gctx_);
           MYSQL_PROCESSOR(ObMPStmtReset, gctx_);
-          MYSQL_PROCESSOR(ObMPStmtPrexecute, gctx_);
-          MYSQL_PROCESSOR(ObMPStmtSendPieceData, gctx_);
-          MYSQL_PROCESSOR(ObMPStmtGetPieceData, gctx_);
           MYSQL_PROCESSOR(ObMPStmtSendLongData, gctx_);
           MYSQL_PROCESSOR(ObMPResetConnection, gctx_);
           MYSQL_PROCESSOR(ObMPAuthResponse, gctx_);

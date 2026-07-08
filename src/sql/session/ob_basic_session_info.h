@@ -1150,10 +1150,6 @@ public:
     return res;
   }
 
-  // client mode related
-  void set_client_mode(const common::ObClientMode mode) { client_mode_ = mode; }
-  common::ObClientMode get_client_mode() const { return client_mode_; }
-  bool is_java_client_mode() const { return common::OB_JAVA_CLIENT_MODE == client_mode_; }
   bool is_obproxy_mode() const { return false; } // obproxy support removed: direct client connections only
 
   int64_t to_string(char *buffer, const int64_t length) const;
@@ -1266,11 +1262,6 @@ public:
     return client_attribute_capability_.cap_flags_.OB_CLIENT_SUPPORT_JDBC_BINARY_DOUBLE;
   }
 
-  void set_proxy_cap_flags(const obmysql::ObProxyCapabilityFlags &proxy_capability)
-  {
-    proxy_capability_ = proxy_capability;
-  }
-  obmysql::ObProxyCapabilityFlags get_proxy_cap_flags() const { return proxy_capability_; }
   //TODO::@yuming, as enable_transmission_checksum is global variables,
   //here we no need get_session for is_enable_transmission_checksum()
   inline bool is_enable_transmission_checksum() const { return true; }
@@ -1285,7 +1276,6 @@ public:
 
   int set_partition_hit(const bool is_hit);
   int set_proxy_user_privilege(const int64_t user_priv_set);
-  int set_proxy_capability(const uint64_t proxy_cap);
   int set_client_capability();
   int set_trans_specified(const bool is_spec);
   int save_trans_status();
@@ -2268,11 +2258,8 @@ private:
   uint64_t plan_hash_;
 
   ObFLTVars flt_vars_;
-  //=======================ObProxy && OCJ related============================
   obmysql::ObMySQLCapabilityFlags capability_;
-  obmysql::ObProxyCapabilityFlags proxy_capability_;
   obmysql::ObClientAttributeCapabilityFlags client_attribute_capability_;
-  common::ObClientMode client_mode_; // client mode, java client , obproxy or etc.
   // add by oushen, track changed session info
   common::ObSEArray<ChangedVar, 8> changed_sys_vars_;
   common::ObSEArray<common::ObString, 16> changed_user_vars_;

@@ -50,20 +50,12 @@ public:
   inline void set_character_set(const uint8_t charset) { character_set_ = charset; }
   inline void set_auth_plugin_name(const ObString &auth_plugin_name) { auth_plugin_name_ = auth_plugin_name; }
   inline const ObString& get_username() { return username_; }
-  inline const common::ObIArray<ObStringKV> &get_system_vars() const { return sys_vars_; }
-  inline const common::ObIArray<ObStringKV> &get_user_vars() const { return user_vars_; }
-  inline common::ObIArray<ObStringKV> &get_system_vars() { return sys_vars_; }
-  inline common::ObIArray<ObStringKV> &get_user_vars() { return user_vars_; }
   inline const common::ObIArray<ObStringKV> &get_connect_attrs() const { return connect_attrs_; }
   inline void set_capability_flag(const ObMySQLCapabilityFlags mysql_cap) { mysql_cap_ = mysql_cap; }
   virtual int64_t get_serialize_size() const;
 
 private:
-  uint64_t get_session_vars_len() const;
   uint64_t get_connect_attrs_len() const;
-  int serialize_session_vars(char *buffer,
-                             const int64_t length,
-                             int64_t &pos) const;
 
 private:
   uint8_t cmd_;
@@ -74,8 +66,6 @@ private:
   ObString auth_plugin_name_;
   ObString database_;
   common::ObSEArray<ObStringKV, 8> connect_attrs_;
-  common::ObSEArray<ObStringKV, 128> sys_vars_;
-  common::ObSEArray<ObStringKV, 16> user_vars_;
   DISALLOW_COPY_AND_ASSIGN(OMPKChangeUser);
 }; // end of class
 

@@ -68,8 +68,6 @@ int ObMPStmtReset::process()
     LOG_WARN("session is NULL or invalid", K(ret), K(session));
   } else if (OB_FAIL(process_kill_client_session(*session))) {
     LOG_WARN("client session has been killed", K(ret));
-  } else if (OB_FAIL(process_extra_info(*session, pkt, need_response_error))) {
-    LOG_WARN("fail get process extra info", K(ret));
   } else if (FALSE_IT(need_disconnect = false)) {
   } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
     LOG_WARN("update transmisson checksum flag failed", K(ret));
@@ -120,13 +118,6 @@ int ObMPStmtReset::process()
       }
     }
 
-    if (OB_SUCC(ret)) {
-      if (pkt.exist_trace_info()
-          && OB_FAIL(session->update_sys_variable(share::SYS_VAR_OB_TRACE_INFO,
-                                                  pkt.get_trace_info()))) {
-        LOG_WARN("fail to update trace info", K(ret));
-      }
-    }
   }
 
   if (OB_SUCC(ret)) {

@@ -92,9 +92,7 @@ const char *ObMySQLPacket::get_mysql_cmd_name(const ObMySQLCmd &cmd)
     PKT_TYPE_NAME(COM_DELETE_SESSION);
     PKT_TYPE_NAME(COM_HANDSHAKE);
     PKT_TYPE_NAME(COM_LOGIN);
-    PKT_TYPE_NAME(COM_STMT_PREXECUTE);
-    PKT_TYPE_NAME(COM_STMT_SEND_PIECE_DATA);
-    PKT_TYPE_NAME(COM_STMT_GET_PIECE_DATA);
+    PKT_TYPE_NAME(COM_AUTH_SWITCH_RESPONSE);
     default: {
     } break;
   }
@@ -234,40 +232,6 @@ int ObMySQLRawPacket::serialize(char *buf, const int64_t length, int64_t &pos) c
   return ret;
 }
 
-int Ob20ExtraInfo::assign(const Ob20ExtraInfo &other, char* buf, int64_t buf_len)
-{
-  int ret = OB_SUCCESS;
-  uint64_t total_len = other.get_total_len();
-  if (total_len > buf_len) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(ERROR, "invalid alloc size", K(total_len), K(ret));
-  } else {
-    uint64_t len = 0;
-    if (other.trace_info_.length() > 0) {
-      MEMCPY(buf+len, other.trace_info_.ptr(), other.trace_info_.length());
-      trace_info_.assign_ptr(buf+len, other.trace_info_.length());
-      len += other.trace_info_.length();
-    }
-    if (other.sync_sess_info_.length() > 0) {
-      MEMCPY(buf+len, other.sync_sess_info_.ptr(), other.sync_sess_info_.length());
-      sync_sess_info_.assign_ptr(buf+len, other.sync_sess_info_.length());
-      len += other.sync_sess_info_.length();
-    }
-    if (other.full_link_trace_.length() > 0) {
-      MEMCPY(buf+len, other.full_link_trace_.ptr(), other.full_link_trace_.length());
-      full_link_trace_.assign_ptr(buf+len, other.full_link_trace_.length());
-      len += other.full_link_trace_.length();
-    }
-    if (other.sess_info_veri_.length() > 0) {
-      MEMCPY(buf+len, other.sess_info_veri_.ptr(), other.sess_info_veri_.length());
-      sess_info_veri_.assign_ptr(buf+len, other.sess_info_veri_.length());
-      len += other.sess_info_veri_.length();
-    }
-  }
-  return ret;
-}
-
-
 char const *get_mysql_cmd_str(ObMySQLCmd mysql_cmd)
 {
   const char *str = "invalid";
@@ -317,18 +281,15 @@ char const *get_mysql_cmd_str(ObMySQLCmd mysql_cmd)
     "Delete session", // COM_DELETE_SESSION
     "Handshake",  // COM_HANDSHAKE,
     "Login",  // COM_LOGIN,
-
-    "Prexecute",  // COM_STMT_PREXECUTE,
-    "Stmt send piece data",  // COM_STMT_SEND_PIECE_DATA,
-    "Stmt get piece data" // COM_STMT_GET_PIECE_DATA,
+    "Auth switch response",  // COM_AUTH_SWITCH_RESPONSE,
   };
 
   if (mysql_cmd >= COM_SLEEP && mysql_cmd <= COM_END) {
     str = mysql_cmd_array[mysql_cmd];
-  } else if (mysql_cmd > COM_END && mysql_cmd <= COM_LOGIN) {
-    str = mysql_cmd_array[mysql_cmd + COM_END - OBPROXY_MYSQL_CMD_START + 1];
-  } else if (mysql_cmd >= COM_STMT_PREXECUTE && mysql_cmd <= COM_STMT_GET_PIECE_DATA) {
-    str = mysql_cmd_array[mysql_cmd + COM_END - PREXECUTE_CMD + 1];
+  } else if (mysql_cmd > COM_END && mysql_cmd <= COM_AUTH_SWITCH_RESPONSE) {
+    str = mysql_cmd_array[mysql_cmd + COM_END - INTERNAL_MYSQL_CMD_START + 1];
+  } else {
+    // do nothing
   }
   return str;
 

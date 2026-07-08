@@ -252,7 +252,6 @@ ObPsStmtInfo::ObPsStmtInfo(ObIAllocator *inner_allocator)
     ref_count_(1),
     question_mark_count_(0),
     can_direct_use_param_(false),
-    is_prexecute_(false),
     item_and_info_size_(0),
     last_closed_timestamp_(0),
     dep_objs_(NULL),
@@ -282,7 +281,6 @@ ObPsStmtInfo::ObPsStmtInfo(ObIAllocator *inner_allocator,
     ref_count_(1),
     question_mark_count_(0),
     can_direct_use_param_(false),
-    is_prexecute_(false),
     item_and_info_size_(0),
     last_closed_timestamp_(0),
     dep_objs_(NULL),
@@ -439,7 +437,6 @@ int ObPsStmtInfo::deep_copy(const ObPsStmtInfo &other)
     num_of_returning_into_ = other.num_of_returning_into_;
     is_sensitive_sql_ = other.is_sensitive_sql_;
     can_direct_use_param_ = other.can_direct_use_param();
-    is_prexecute_ = other.get_is_prexecute();
     item_and_info_size_ = other.item_and_info_size_;
     ps_item_ = other.ps_item_;
     tenant_version_ = other.tenant_version_;

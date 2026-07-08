@@ -45,7 +45,6 @@ public:
                    sql::ObSQLSessionInfo &session,
                    ObQueryRetryCtrl &retry_ctrl,
                    ObIMPPacketSender &sender,
-                   bool is_prexecute = false,
                    int32_t iteration_count = common::OB_INVALID_COUNT);
   virtual ~ObSyncPlanDriver();
 

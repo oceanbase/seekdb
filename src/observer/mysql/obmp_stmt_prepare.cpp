@@ -198,12 +198,6 @@ int ObMPStmtPrepare::process()
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                 sys_version))) {
       LOG_WARN("fail get tenant broadcast version", K(ret));
-    } else if (pkt.exist_trace_info()
-               && OB_FAIL(session.update_sys_variable(SYS_VAR_OB_TRACE_INFO,
-                                                      pkt.get_trace_info()))) {
-      LOG_WARN("fail to update trace info", K(ret));
-    } else if (OB_FAIL(process_extra_info(session, pkt, need_response_error))) {
-      LOG_WARN("fail get process extra info", K(ret));
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
       need_disconnect = false;
@@ -211,8 +205,7 @@ int ObMPStmtPrepare::process()
     } else if (OB_FAIL(session.check_tenant_status())) {
       need_disconnect = false;
       LOG_INFO("unit has been migrated, need deny new request", K(ret));
-    } else if (OB_FAIL(sql::ObFLTUtils::init_flt_info(pkt.get_extra_info(), session,
-                            conn->proxy_cap_flags_.is_full_link_trace_support(),
+    } else if (OB_FAIL(sql::ObFLTUtils::init_flt_info(session,
                             enable_flt))) {
       LOG_WARN("failed to init flt extra info", K(ret));
     } else {
@@ -595,12 +588,6 @@ int ObMPStmtPrepare::send_prepare_packet(const ObMySQLResultSet &result)
     LOG_WARN("response packet failed", K(ret));
   }
 
-  if (OB_SUCC(ret) && need_send_extra_ok_packet() && columns->count() == 0 && params->count() == 0) {
-    ObOKPParam ok_param;
-    if (OB_FAIL(send_ok_packet(*(const_cast<ObSQLSessionInfo *>(&result.get_session())), ok_param))) {
-      LOG_WARN("fail to send ok packet", K(ret));
-    }
-  }
   return ret;
 }
 
@@ -628,19 +615,8 @@ int ObMPStmtPrepare::send_column_packet(const ObSQLSessionInfo &session,
       ret = OB_SUCCESS;
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(packet_sender_.update_last_pkt_pos())) {
-        LOG_WARN("failed to update last packet pos", K(ret));
-      } else {
-        if (need_send_extra_ok_packet()) {
-          ObOKPParam ok_param;
-          if (OB_FAIL(send_eof_packet(session, result, &ok_param))) {
-            LOG_WARN("send eof field failed", K(ret));
-          }
-        } else {
-          if (OB_FAIL(send_eof_packet(session, result))) {
-            LOG_WARN("send eof field failed", K(ret));
-          }
-        }
+      if (OB_FAIL(send_eof_packet(session, result))) {
+        LOG_WARN("send eof field failed", K(ret));
       }
     }
   }
@@ -672,15 +648,8 @@ int ObMPStmtPrepare::send_param_packet(const ObSQLSessionInfo &session,
       ret = OB_SUCCESS;
     }
     if (OB_SUCC(ret)) {
-      if (need_send_extra_ok_packet() && columns->count() == 0) {
-        ObOKPParam ok_param;
-        if (OB_FAIL(send_eof_packet(session, result, &ok_param))) {
-          LOG_WARN("send eof field failed", K(ret));
-        }
-      } else {
-        if (OB_FAIL(send_eof_packet(session, result))) {
-          LOG_WARN("send eof field failed", K(ret));
-        }
+      if (OB_FAIL(send_eof_packet(session, result))) {
+        LOG_WARN("send eof field failed", K(ret));
       }
     }
   }

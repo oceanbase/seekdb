@@ -79,9 +79,7 @@ ob_set_subtarget(ob_server mysql
   mysql/obmp_stmt_close.cpp
   mysql/obmp_stmt_execute.cpp
   mysql/obmp_stmt_fetch.cpp
-  mysql/obmp_stmt_get_piece_data.cpp
   mysql/obmp_stmt_prepare.cpp
-  mysql/obmp_stmt_prexecute.cpp
   mysql/obmp_stmt_reset.cpp
   mysql/obmp_stmt_send_long_data.cpp
   mysql/obmp_stmt_send_piece_data.cpp

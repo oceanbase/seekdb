@@ -39,8 +39,6 @@ int ObMPAuthResponse::process()
 
   if (OB_FAIL(packet_sender_.alloc_ezbuf())) {
     LOG_WARN("failed to alloc easy buf", K(ret));
-  } else if (OB_FAIL(packet_sender_.update_last_pkt_pos())) {
-    LOG_WARN("failed to update last packet pos", K(ret));
   } else if (OB_ISNULL(conn = get_conn())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get connection fail", K(conn), K(ret));
@@ -52,8 +50,6 @@ int ObMPAuthResponse::process()
   } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
     LOG_WARN("fail to get query timeout", K(ret));
   } else if (FALSE_IT(THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout))) {
-  } else if (OB_FAIL(process_extra_info(*session, mysql_pkt, need_response_error))) {
-    LOG_WARN("fail get process extra info", K(ret));
   } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
     LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else if (OB_FAIL(session->set_login_auth_data(auth_data_))) {

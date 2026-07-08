@@ -37,9 +37,8 @@ ObSyncCmdDriver::ObSyncCmdDriver(const ObGlobalContext &gctx,
                                  const ObSqlCtx &ctx,
                                  sql::ObSQLSessionInfo &session,
                                  ObQueryRetryCtrl &retry_ctrl,
-                                 ObIMPPacketSender &sender,
-                                 bool is_prexecute)
-    : ObQueryDriver(gctx, ctx, session, retry_ctrl, sender, is_prexecute)
+                                 ObIMPPacketSender &sender)
+    : ObQueryDriver(gctx, ctx, session, retry_ctrl, sender)
 {
 }
 
@@ -83,12 +82,6 @@ int ObSyncCmdDriver::seal_eof_packet(bool has_more_result, OMPKEOF& eofp)
 
   eofp.set_server_status(flags);
 
-  // for proxy
-  // in multi-stmt, send extra ok packet in the last stmt(has no more result)
-  if (!is_prexecute_ && !has_more_result
-        && OB_FAIL(sender_.update_last_pkt_pos())) {
-    LOG_WARN("failed to update last packet pos", K(ret));
-  }
   return ret;
 }
 
@@ -163,16 +156,6 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
         need_send_eof = true;
       }
     }
-  } else if (is_prexecute_) { 
-    if (OB_FAIL(response_query_header(result, false, false , // in prexecute , has_more_result and has_ps out is no matter, it will be recalc
-                                      true))) {
-      // need close result set
-      int close_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (close_ret = result.close())) {
-        LOG_WARN("close result failed", K(close_ret));
-      }
-      LOG_WARN("prexecute response query head fail. ", K(ret));
-    } 
   }
 
   if (OB_SUCC(ret)) {
@@ -182,10 +165,7 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
     free_output_row(result);
     if (OB_FAIL(result.close())) {
       LOG_WARN("close result set fail", K(ret));
-    } else if (!result.is_with_rows()
-                || (sender_.need_send_extra_ok_packet() && !result.has_more_result())
-                || is_prexecute_
-                || session_.client_non_standard()) {
+    } else if (!result.is_with_rows()) {
       process_ok = true;
       ObOKPParam ok_param;
       ok_param.message_ = const_cast<char*>(result.get_message());
@@ -201,7 +181,6 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
       }
       ok_param.is_partition_hit_ = session_.partition_hit().get_bool();
       ok_param.has_more_result_ = result.has_more_result();
-      ok_param.has_pl_out_ = is_prexecute_ && result.is_with_rows() ? true : false;
       if (need_send_eof) {
         if (OB_FAIL(sender_.send_ok_packet(session_, ok_param, &eofp))) {
           LOG_WARN("send ok packet fail", K(ok_param), K(ret));

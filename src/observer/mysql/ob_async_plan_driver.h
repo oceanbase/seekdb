@@ -43,8 +43,7 @@ public:
                     const sql::ObSqlCtx &ctx,
                     sql::ObSQLSessionInfo &session,
                     ObQueryRetryCtrl &retry_ctrl,
-                    ObIMPPacketSender &sender,
-                    bool is_prexecute = false);
+                    ObIMPPacketSender &sender);
   virtual ~ObAsyncPlanDriver();
 
   virtual int response_result(ObMySQLResultSet &result);
@@ -61,4 +60,3 @@ private:
 }
 #endif /* OCEANBASE_OBSERVER_MYSQL_ASYNC_PLAN_DRIVER_ */
 //// end of header file
-

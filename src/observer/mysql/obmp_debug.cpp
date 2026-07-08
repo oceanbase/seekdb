@@ -53,8 +53,6 @@ int ObMPDebug::process()
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql session info is null", K(ret));
-  } else if (OB_FAIL(process_extra_info(*session, pkt, need_response_error))) {
-    LOG_WARN("fail get process extra info", K(ret));
   } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
     LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else if (FALSE_IT(session->update_last_active_time())) {

@@ -130,24 +130,6 @@ int ObMPConnect::deserialize()
     } else {
       conn->cap_flags_ = hsr_.get_capability_flags();
       conn->client_cs_type_ = hsr_.get_char_set();
-
-      if (hsr_.is_java_client_mode()) {
-        conn->is_java_client_ = true;
-      }
-      if (hsr_.is_oci_client_mode()) {
-        conn->is_oci_client_ = true;
-      }
-      if (hsr_.is_jdbc_client_mode()) {
-        conn->is_jdbc_client_ = true;
-      }
-
-      if (hsr_.is_ob_client_jdbc()) {
-        conn->client_type_ = common::OB_CLIENT_JDBC;
-      } else if (hsr_.is_ob_client_oci()) {
-        conn->client_type_ = common::OB_CLIENT_OCI;
-      } else {
-        conn->client_type_ = common::OB_CLIENT_NON_STANDARD;
-      }
       db_name_ = hsr_.get_database();
       LOG_DEBUG("database name", K(hsr_.get_database()));
     }
@@ -308,10 +290,6 @@ int ObMPConnect::process()
       LOG_WARN("fail to update charset sys vars", K(ret));
     } else {
       // set connection info to session
-      session->set_ob20_protocol(conn->proxy_cap_flags_.is_ob_protocol_v2_support());
-      // direct client connections only (obproxy support removed)
-      session->set_client_sessid_support(true);
-      session->get_control_info().support_show_trace_ = conn->proxy_cap_flags_.is_flt_show_trace_support();
       LOG_TRACE("setup user resource group OK",
                "user_id", session->get_user_id(),
                
@@ -337,14 +315,8 @@ int ObMPConnect::process()
     const ObString host_name(host_name_buf);
     const ObCSProtocolType protoType = conn->get_cs_protocol_type();
     const uint32_t sessid = conn->sessid_;
-    const uint32_t client_sessid = conn->client_sessid_;
-    const int64_t sess_create_time = conn->sess_create_time_;
     const uint32_t capability = conn->cap_flags_.capability_;
-    const bool from_java_client = conn->is_java_client_;
-    const bool from_oci_client = conn->is_oci_client_;
-    const bool from_jdbc_client = conn->is_jdbc_client_;
     const bool use_ssl = conn->cap_flags_.cap_flags_.OB_CLIENT_SSL;
-    const uint64_t proxy_capability = conn->proxy_cap_flags_.capability_;
 
     if (OB_SUCC(proc_ret)) {
       // send packet for client
@@ -404,11 +376,10 @@ int ObMPConnect::process()
 
     LOG_INFO("MySQL LOGIN", "direct_client_ip", client_ip_buf, K_(client_ip),
              K_(tenant_name), K_(user_name), K(host_name),
-             K(sessid), K(client_sessid),
-             K(from_java_client), K(from_oci_client), K(from_jdbc_client),
-             K(capability), K(proxy_capability), K(use_ssl),
+             K(sessid),
+             K(capability), K(use_ssl),
              "c/s protocol", get_cs_protocol_type_name(protoType),
-             K(autocommit), K(proc_ret), K(ret), K(conn->client_type_), K(conn->client_version_));
+             K(autocommit), K(proc_ret), K(ret), K(conn->client_version_));
   }
   return ret;
 }
@@ -417,9 +388,8 @@ int ObMPConnect::process()
 inline bool is_inner_proxyro_user(const ObSMConnection &conn, const ObString &user_name)
 {
   const static ObString PROXYRO_USERNAME(OB_PROXYRO_USERNAME);
-  const static ObString PROXYRO_HOSTNAME(OB_DEFAULT_HOST_NAME);
-  return (!conn.is_java_client_
-          && 0 == PROXYRO_USERNAME.compare(user_name));
+  UNUSED(conn);
+  return 0 == PROXYRO_USERNAME.compare(user_name);
 }
 
 inline void reset_inner_proxyro_scramble(
@@ -444,17 +414,6 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
   } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("get schema guard failed", K(ret));
   } else {
-    // set client mode
-    if (conn->is_java_client_) {
-      session.set_client_mode(OB_JAVA_CLIENT_MODE);
-    }
-    if (conn->is_oci_client_) {
-      session.set_client_mode(OB_OCI_CLIENT_MODE);
-    }
-    if (conn->is_jdbc_client_) {
-      session.set_client_mode(OB_JDBC_CLIENT_MODE);
-    }
-
     ObString host_name;
     uint64_t client_attr_cap_flags = 0;
 
@@ -522,7 +481,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
           login_info.db_ = db_name;
         }
       }
-      LOG_TRACE("some important information required for login verification, print it before doing login", K(ret), K(ObString(sizeof(conn->scramble_buf_), conn->scramble_buf_)), K(conn->client_type_), K(hsr_.get_auth_plugin_name()), K(hsr_.get_auth_response()));
+      LOG_TRACE("some important information required for login verification, print it before doing login", K(ret), K(ObString(sizeof(conn->scramble_buf_), conn->scramble_buf_)), K(hsr_.get_auth_plugin_name()), K(hsr_.get_auth_response()));
       if (OB_FAIL(ret)) {
         // Do nothing
       } else {
@@ -532,7 +491,6 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         if (OB_FAIL(schema_guard.is_user_empty_passwd(login_info, is_empty_passwd))) {
           LOG_WARN("failed to check is user account is empty && login_info.passwd_ is empty", K(ret), K(login_info.passwd_));
         } else if (!is_empty_passwd && // user account with empty password do not need auth switch, same as MySQL 5.7 and 8.x
-                  OB_CLIENT_NON_STANDARD == conn->client_type_ && // client is not OB's C/JAVA client 
                   !hsr_.get_auth_plugin_name().empty() && // client do not use mysql_native_method
                   hsr_.get_auth_plugin_name().compare(AUTH_PLUGIN_MYSQL_NATIVE_PASSWORD) &&
                   GCONF._enable_auth_switch) {
@@ -1195,118 +1153,6 @@ int ObMPConnect::get_conn_id(uint32_t &conn_id) const
   return ret;
 }
 
-int ObMPConnect::get_client_addr_port(int32_t &client_addr_port) const
-{
-  int ret = OB_SUCCESS;
-  bool is_found = false;
-  ObString key_str;
-  key_str.assign_ptr(OB_MYSQL_CLIENT_ADDR_PORT , static_cast<int32_t>(STRLEN(OB_MYSQL_CLIENT_ADDR_PORT)));
-  for (int64_t i = 0; i < hsr_.get_connect_attrs().count() && OB_SUCC(ret) && !is_found; ++i) {
-    const ObStringKV &kv =  hsr_.get_connect_attrs().at(i);
-    if (key_str == kv.key_) {
-      ObObj value;
-      value.set_varchar(kv.value_);
-      ObArenaAllocator allocator(ObModIds::OB_SQL_EXPR);
-      ObCastCtx cast_ctx(&allocator, NULL, CM_NONE, ObCharset::get_system_collation());
-      EXPR_GET_INT32_V2(value, client_addr_port);
-      if (OB_FAIL(ret)) {
-        LOG_WARN("fail to cast client connection id to int32", K(kv.value_), K(ret));
-      } else {
-        is_found = true;
-      }
-    }
-  }
-
-  if (OB_SUCC(ret) && !is_found) {
-    //if fail to find client addr port, ignore it, compatible with old obproxyro's connection
-    client_addr_port = 0;
-  }
-  return ret;
-}
-
-int ObMPConnect::get_client_conn_id(uint32_t &client_sessid) const
-{
-  int ret = OB_SUCCESS;
-  bool is_found = false;
-  ObString key_str;
-  key_str.assign_ptr(OB_MYSQL_CLIENT_SESSION_ID , static_cast<int32_t>(STRLEN(OB_MYSQL_CLIENT_SESSION_ID)));
-  for (int64_t i = 0; i < hsr_.get_connect_attrs().count() && OB_SUCC(ret) && !is_found; ++i) {
-    const ObStringKV &kv =  hsr_.get_connect_attrs().at(i);
-    if (key_str == kv.key_) {
-      ObObj value;
-      value.set_varchar(kv.value_);
-      ObArenaAllocator allocator(ObModIds::OB_SQL_EXPR);
-      ObCastCtx cast_ctx(&allocator, NULL, CM_NONE, ObCharset::get_system_collation());
-      EXPR_GET_UINT32_V2(value, client_sessid);
-      if (OB_FAIL(ret)) {
-        LOG_WARN("fail to cast client connection id to uint32", K(kv.value_), K(ret));
-      } else {
-        is_found = true;
-      }
-    }
-  }
-
-  if (OB_SUCC(ret) && !is_found) {
-    // if fail to find proxy_connection_id, ignore it, compatible with old obproxyro's connection
-    client_sessid = INVALID_SESSID;
-  }
-  return ret;
-}
-
-int ObMPConnect::get_client_create_time(int64_t &client_create_time) const
-{
-  int ret = OB_SUCCESS;
-  bool is_found = false;
-  ObString key_str;
-  key_str.assign_ptr(OB_MYSQL_CLIENT_CONNECT_TIME_US , static_cast<int32_t>(STRLEN(OB_MYSQL_CLIENT_CONNECT_TIME_US)));
-  for (int64_t i = 0; i < hsr_.get_connect_attrs().count() && OB_SUCC(ret) && !is_found; ++i) {
-    const ObStringKV &kv =  hsr_.get_connect_attrs().at(i);
-    if (key_str == kv.key_) {
-      ObObj value;
-      value.set_varchar(kv.value_);
-      ObArenaAllocator allocator(ObModIds::OB_SQL_EXPR);
-      ObCastCtx cast_ctx(&allocator, NULL, CM_NONE, ObCharset::get_system_collation());
-      EXPR_GET_INT64_V2(value, client_create_time);
-      if (OB_FAIL(ret)) {
-        LOG_WARN("fail to cast client create time", K(kv.value_), K(ret));
-      } else {
-        is_found = true;
-      }
-    }
-  }
-
-  if (OB_SUCC(ret) && !is_found) {
-    //if fail to find client_create_time, ignore it, compatible with old obproxyro's connection
-    client_create_time = 0;
-  }
-  return ret;
-}
-int ObMPConnect::get_proxy_capability(uint64_t &cap) const
-{
-  int ret = OB_SUCCESS;
-  cap = 0;
-  bool is_capability_flag_found = false;
-  ObStringKV kv;
-  for (int64_t i = 0; !is_capability_flag_found && i < hsr_.get_connect_attrs().count(); ++i) {
-    kv = hsr_.get_connect_attrs().at(i);
-    if (kv.key_ == OB_MYSQL_CAPABILITY_FLAG) {
-      is_capability_flag_found = true;
-    }
-  }
-
-  if (is_capability_flag_found) {
-    ObObj value;
-    value.set_varchar(kv.value_);
-    ObArenaAllocator allocator(ObModIds::OB_SQL_EXPR);
-    ObCastCtx cast_ctx(&allocator, NULL, CM_NONE, ObCharset::get_system_collation());
-    EXPR_GET_UINT64_V2(value, cap);
-    if (OB_FAIL(ret)) {
-      LOG_WARN("fail to cast capability flag to uint64", K_(kv.value), K(ret));
-    }
-  }
-  return ret;
-}
-
 int ObMPConnect::get_client_attribute_capability(uint64_t &cap) const
 {
   int ret = OB_SUCCESS;
@@ -1349,163 +1195,22 @@ int ObMPConnect::check_update_client_capability(uint64_t &cap) const
   return ret;
 }
 
-int ObMPConnect::check_update_proxy_capability(ObSMConnection &conn) const
-{
-  int ret = OB_SUCCESS;
-  uint64_t client_proxy_cap = 0;
-  bool is_monotonic_weak_read = transaction::ObWeakReadUtil::enable_monotonic_weak_read();
-  if (OB_FAIL(get_proxy_capability(client_proxy_cap))) {
-    LOG_WARN("get proxy capability fail", K(ret));
-  } else {
-    // set proxy_capability_ to tell the client driver which features observer supports
-    // (obproxy support removed: only direct-driver caps are advertised)
-    ObProxyCapabilityFlags server_proxy_cap_flag;
-    server_proxy_cap_flag.cap_flags_.OB_CAP_CHANGE_USER = 1;
-    server_proxy_cap_flag.cap_flags_.OB_CAP_CHECKSUM = 1;
-    server_proxy_cap_flag.cap_flags_.OB_CAP_EXTRA_OK_PACKET_FOR_OCJ = 1;
-    server_proxy_cap_flag.cap_flags_.OB_CAP_OB_PROTOCOL_V2 = 1;
-    server_proxy_cap_flag.cap_flags_.OB_CAP_EXTRA_OK_PACKET_FOR_STATISTICS = 1;
-    server_proxy_cap_flag.cap_flags_.OB_CAP_PROXY_FULL_LINK_TRACING = 1;
-    server_proxy_cap_flag.cap_flags_.OB_CAP_PROXY_NEW_EXTRA_INFO = 1;
-    server_proxy_cap_flag.cap_flags_.OB_CAP_PROXY_FULL_LINK_TRACING_EXT = 1;
-    server_proxy_cap_flag.cap_flags_.OB_CAP_LOCAL_FILES = 1;
-    server_proxy_cap_flag.cap_flags_.OB_CAP_PROXY_CLIENT_SESSION_ID = 1;
-    server_proxy_cap_flag.cap_flags_.OB_CAP_OB_PROTOCOL_V2_COMPRESS = 1;
-    conn.proxy_cap_flags_.capability_ = (server_proxy_cap_flag.capability_ & client_proxy_cap);  // if old java client, set it 0
-
-    LOG_DEBUG("Negotiated capability",
-              K(conn.proxy_cap_flags_.is_ob_protocol_v2_support()));
-  }
-  return ret;
-}
-
-int ObMPConnect::check_user_cluster(const ObString &server_cluster, const int64_t server_cluster_id) const
-{
-  int ret = OB_SUCCESS;
-  ObString cluster_kv(OB_MYSQL_CLUSTER_NAME);
-  ObString cluster_id_key(OB_MYSQL_CLUSTER_ID);
-
-  bool found_cluster = false;
-  bool found_cluster_id = false;
-  for (int64_t i = 0; OB_SUCC(ret) && (!found_cluster || !found_cluster_id) && i < hsr_.get_connect_attrs().count(); ++i) {
-    const ObStringKV &kv = hsr_.get_connect_attrs().at(i);
-    if (!found_cluster && cluster_kv == kv.key_) {
-      if (server_cluster != kv.value_) {
-        ret = OB_CLUSTER_NO_MATCH;
-        LOG_WARN("user cluster is not match to server cluster",
-                 "user cluster", kv.value_, "server cluster", server_cluster);
-      }
-      found_cluster = true;
-    } else if (!found_cluster_id && cluster_id_key == kv.key_) {
-      int64_t user_cluster_id = 0;
-      ObObj value;
-      value.set_varchar(kv.value_);
-      ObArenaAllocator allocator(ObModIds::OB_SQL_EXPR);
-      ObCastCtx cast_ctx(&allocator, NULL, CM_NONE, ObCharset::get_system_collation());
-      EXPR_GET_INT64_V2(value, user_cluster_id);
-      if (OB_FAIL(ret)) {
-        ret = OB_CLUSTER_NO_MATCH;
-        LOG_WARN("fail to cast user_cluster_id to int64", K(kv.value_), K(ret));
-      } else {
-        if (server_cluster_id != user_cluster_id) {
-          ret = OB_CLUSTER_NO_MATCH;
-          LOG_WARN("user cluster id is not match to server cluster id",
-                   "user cluster id", kv.value_, "server cluster id", server_cluster_id);
-        }
-      }
-      found_cluster_id = true;
-    } else {
-      //do nothing
-    }
-  }
-  return ret;
-}
-
-// check common property for obproxy or OCJ
-int ObMPConnect::check_common_property(ObSMConnection &conn, ObMySQLCapabilityFlags &client_cap) {
-  int ret = OB_SUCCESS;
-  uint32_t client_sessid = INVALID_SESSID;
-  int32_t client_addr_port = 0;
-  int64_t client_create_time = 0;
-  if (OB_FAIL(check_user_cluster(ObString::make_string(GCONF.cluster), GCONF.cluster_id))) {
-    LOG_WARN("fail to check user cluster", K(ret));
-  } else if (OB_FAIL(check_update_proxy_capability(conn))) {
-    LOG_WARN("fail to check_update_proxy_capability", K(ret));
-  } else if (OB_FAIL(get_client_conn_id(client_sessid))) {
-    LOG_WARN("get client connection id fail", K(ret), K(client_sessid));
-  } else if (OB_FAIL(get_client_addr_port(client_addr_port))) {
-    LOG_WARN("get client connection id fail", K(ret), K(client_addr_port));
-  } else if (OB_FAIL(get_client_create_time(client_create_time))) {
-    LOG_WARN("get client connection id fail", K(ret), K(client_addr_port));
-  } else {
-    conn.client_sessid_ = client_sessid;
-    conn.client_addr_port_ = client_addr_port;
-    conn.client_create_time_ = client_create_time;
-    int64_t code = 0;
-    LOG_INFO("construct session id", K(conn.client_sessid_), K(conn.sessid_),
-      K(conn.client_addr_port_), K(conn.client_create_time_));
-    if (conn.proxy_cap_flags_.is_ob_protocol_v2_support()) {
-      // when used 2.0 protocol, do not use mysql compress
-      client_cap.cap_flags_.OB_CLIENT_COMPRESS = 0;
-    } else {
-      if (conn.proxy_cap_flags_.is_checksum_support()) {
-        client_cap.cap_flags_.OB_CLIENT_COMPRESS = 1;
-      } else {
-        client_cap.cap_flags_.OB_CLIENT_COMPRESS = 0;
-      }
-    }
-  }
-  return ret;
-}
-
 int ObMPConnect::check_client_property(ObSMConnection &conn)
 {
   int ret = OB_SUCCESS;
   ObMySQLCapabilityFlags client_cap = hsr_.get_capability_flags();
-  ObString client_ip;
   if (OB_FAIL(set_client_version(conn))) {
     LOG_WARN("get proxy version fail", K(ret));
   }
 
-  if (OB_FAIL(ret)) {
-    // do nothing
-  } else if (conn.is_java_client_) {
-    // the connection is from oceanbase-connector-java(OCJ)
-    if (OB_FAIL(check_common_property(conn, client_cap))) {
-      LOG_WARN("fail to check common property", K(ret));
-    } else {
-      // if ocj enable extra_ok_packet, then track the system variables
-      if (conn.proxy_cap_flags_.is_extra_ok_packet_for_ocj_support()) {
-        client_cap.cap_flags_.OB_CLIENT_SESSION_TRACK = 1;
-      }
-    }
-  } else if (conn.is_jdbc_client_ || conn.is_oci_client_) {
-    if (OB_FAIL(check_common_property(conn, client_cap))) {
-      LOG_WARN("fail to check common property", K(ret));
-    } else {
-      // jdbc and oci will never use compressed mysql protocol
-      client_cap.cap_flags_.OB_CLIENT_COMPRESS = 0;
-    }
-  } else {
-    //login observer directly
-    // do nothing
-  }
-
-  if (client_ip.empty()) {
+  if (OB_SUCC(ret)) {
     get_peer().ip_to_string(client_ip_buf_, common::MAX_IP_ADDR_LENGTH);
     const char *peer_ip = client_ip_buf_;
     client_ip_.assign_ptr(peer_ip, static_cast<int32_t>(STRLEN(peer_ip)));
-  } else {
-    client_ip_ = client_ip;
-  }
-  // Distinguish client addr port between proxy mode and direct connection mode
-  if (conn.client_addr_port_ == 0) {
     client_port_ = get_peer().get_port();
-  } else {
-    client_port_ = conn.client_addr_port_;
+    hsr_.set_capability_flags(client_cap);
+    conn.cap_flags_ = client_cap;
   }
-  hsr_.set_capability_flags(client_cap);
-  conn.cap_flags_ = client_cap;
   return ret;
 }
 
@@ -1601,8 +1306,6 @@ int ObMPConnect::verify_identify(ObSMConnection &conn, ObSQLSessionInfo &session
     session.set_client_addr(get_peer());
     session.set_trans_type(transaction::ObTxClass::USER);
     session.set_tenant(tenant_name_);
-    session.set_proxy_cap_flags(conn.proxy_cap_flags_);
-    session.set_client_non_standard(common::OB_CLIENT_NON_STANDARD == conn.client_type_ ? true : false);
     // Check tenant after set tenant session is necessary!
     // Because if another client is deleting this tenant while the
     // session doesn't has been contructed completely, omt

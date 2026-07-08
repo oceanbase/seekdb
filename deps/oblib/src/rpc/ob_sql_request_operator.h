@@ -18,7 +18,7 @@
 #define OCEANBASE_RPC_OB_SQL_REQUEST_OPERATOR_H_
 
 #include <stdint.h>
-#include <openssl/ssl.h>
+#include "lib/ssl/ob_ssl_config.h"
 #include "lib/net/ob_addr.h"
 
 namespace oceanbase

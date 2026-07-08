@@ -24,7 +24,6 @@
 #include "sql/session/ob_sql_session_mgr.h"
 #include "rpc/obmysql/packet/ompk_ok.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
-#include "rpc/obmysql/ob_2_0_protocol_utils.h"
 #include "share/ob_rpc_struct.h"
 
 

@@ -23,7 +23,6 @@
 #include "rpc/obmysql/packet/ompk_resheader.h"
 #include "rpc/obmysql/packet/ompk_field.h"
 #include "rpc/obmysql/packet/ompk_eof.h"
-#include "observer/mysql/obmp_stmt_prexecute.h"
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
 
 namespace oceanbase
@@ -40,22 +39,15 @@ int ObQueryDriver::response_query_header(ObResultSet &result,
                                          bool need_flush_buffer)
 {
   int ret = OB_SUCCESS;
-  if (is_prexecute_) {
-    // Two-in-one protocol sends header package, does not send column separately
-    if (OB_FAIL(static_cast<ObMPStmtPrexecute&>(sender_).response_query_header(session_, result, need_flush_buffer))) {
-      LOG_WARN("prexecute response query head fail. ", K(ret));
-    } 
-  } else {
-    if (NULL == result.get_field_columns()) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("response field is null. ", K(ret));
-    } else if (OB_FAIL(response_query_header(*result.get_field_columns(),
-                                             has_more_result, 
-                                             need_set_ps_out_flag, 
-                                             false,
-                                             &result))) {
-      LOG_WARN("response query head fail. ", K(ret));
-    }
+  if (NULL == result.get_field_columns()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("response field is null. ", K(ret));
+  } else if (OB_FAIL(response_query_header(*result.get_field_columns(),
+                                           has_more_result,
+                                           need_set_ps_out_flag,
+                                           false,
+                                           &result))) {
+    LOG_WARN("response query head fail. ", K(ret));
   }
   if (OB_FAIL(ret)) {
     result.set_errcode(ret);
@@ -149,25 +141,8 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
     flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_.partition_hit().get_bool();
     eofp.set_server_status(flags);
 
-    if (ps_cursor_execute && sender_.need_send_extra_ok_packet()) {
-      // Old protocol ps cursor execute response, only returns field information, so for proxy, an additional OK packet needs to be returned
-      // However, since the 2.0 protocol needs to understand the EOF packet situation at the same time as sending an OK packet, this OK packet cannot be extracted to the execute protocol layer for processing
-      if (OB_FAIL(sender_.update_last_pkt_pos())) {
-        LOG_WARN("failed to update last packet pos", K(ret));
-      } else {
-        // in multi-stmt, send extra ok packet in the last stmt(has no more result)
-        ObOKPParam ok_param;
-        ok_param.affected_rows_ = 0;
-        ok_param.is_partition_hit_ = session_.partition_hit().get_bool();
-        ok_param.has_more_result_ = false;
-        if (OB_FAIL(sender_.send_ok_packet(session_, ok_param, &eofp))) {
-          LOG_WARN("fail to send ok packt", K(ok_param), K(ret));
-        }
-      }
-    } else {
-      if (OB_FAIL(sender_.response_packet(eofp, &session_))) {
-        LOG_WARN("response packet fail", K(ret));
-      }
+    if (OB_FAIL(sender_.response_packet(eofp, &session_))) {
+      LOG_WARN("response packet fail", K(ret));
     }
   }
   return ret;
@@ -223,10 +198,6 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
 
   while (OB_SUCC(ret) && row_num < limit_count && !OB_FAIL(result.get_next_row(result_row)) ) {
     ObNewRow *row = const_cast<ObNewRow*>(result_row);
-    if (is_prexecute_ && row_num == limit_count - 1) {
-      LOG_DEBUG("is_prexecute_ and row_num is equal with limit_count", K(limit_count));
-      break;
-    }
     // If it is the first line, then reply to the client with field information etc.
     if (is_first_row) {
       is_first_row = false;

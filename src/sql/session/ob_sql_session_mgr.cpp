@@ -387,19 +387,14 @@ int ObSQLSessionMgr::create_session(ObSMConnection *conn, ObSQLSessionInfo *&ses
 {
   int ret = OB_SUCCESS;
   sess_info = NULL;
-  // In order to be compatible with lower versions,
-  // the client session id of unsupported versions is INVALID_SESSID.
-  // direct mode (obproxy support removed): cs_id defaults to the server session id
-  // unless the client negotiated its own client session id.
-  conn->client_sessid_ = conn->client_sessid_ == INVALID_SESSID ? conn->sessid_ : conn->client_sessid_;
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn is NULL", K(ret));
   } else if (OB_FAIL(create_session(conn->sessid_,
                                     conn->sess_create_time_,
                                     sess_info,
-                                    conn->client_sessid_,
-                                    conn->client_create_time_))) {
+                                    conn->sessid_,
+                                    conn->sess_create_time_))) {
     LOG_WARN("create session failed", K(ret));
   } else if (OB_ISNULL(sess_info)) {
     ret = OB_ERR_UNEXPECTED;
@@ -809,8 +804,7 @@ bool ObSQLSessionMgr::CheckSessionFunctor::operator()(sql::ObSQLSessionMgr::Key 
     //do nothing
   } else if (obmysql::COM_QUERY == sess_info->get_mysql_cmd() ||
             obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
-            obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd() ||
-            obmysql::COM_STMT_PREXECUTE == sess_info->get_mysql_cmd()) {
+            obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd()) {
     int64_t cur_time = common::ObTimeUtility::current_time();
     int64_t query_timeout = 0;
     ObSQLSessionInfo::LockGuard lock_guard(sess_info->get_thread_data_lock());

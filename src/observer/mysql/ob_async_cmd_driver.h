@@ -42,8 +42,7 @@ public:
                   const sql::ObSqlCtx &ctx,
                   sql::ObSQLSessionInfo &session,
                   ObQueryRetryCtrl &retry_ctrl,
-                  ObIMPPacketSender &sender,
-                  bool is_prexecute = false);
+                  ObIMPPacketSender &sender);
   virtual ~ObAsyncCmdDriver();
 
   virtual int response_result(ObMySQLResultSet &result);
