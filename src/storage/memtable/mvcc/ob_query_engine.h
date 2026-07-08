@@ -20,7 +20,6 @@
 #include "lib/container/ob_iarray.h"
 #include "lib/function/ob_function.h"
 #include "lib/oblog/ob_log_module.h"
-#include "lib/objectpool/ob_concurrency_objpool.h"
 #include "storage/memtable/mvcc/ob_keybtree.h"
 #include "storage/memtable/ob_memtable_key.h"
 
@@ -225,9 +224,6 @@ private:
   BtreeNodeAllocator btree_allocator_;
   // The btree optimized for fast range scan
   KeyBtree keybtree_;
-  // Iterator allocator for read and estimation
-  IteratorAlloc<BtreeIterator> iter_alloc_;
-  IteratorAlloc<BtreeRawIterator> raw_iter_alloc_;
 };
 
 } // namespace memtable

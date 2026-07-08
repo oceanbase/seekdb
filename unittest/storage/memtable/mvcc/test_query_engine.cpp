@@ -30,6 +30,7 @@ using namespace oceanbase::common;
 using namespace oceanbase::keybtree;
 using namespace oceanbase::memtable;
 using ObQueryEngineIterator = ObQueryEngine::Iterator<BtreeIterator<ObStoreRowkeyWrapper, ObMvccRow *>>;
+using ObMvccRowCreator = ObQueryEngine::ObMvccRowCreator;
 
 TEST(TestObQueryEngine, smoke_test)
 {
@@ -47,18 +48,25 @@ TEST(TestObQueryEngine, smoke_test)
   };
   auto test_set_and_get = [&](ObMemtableKey *mtk, ObMvccRow &mtv) {
     int ret = OB_SUCCESS;
-    ret = qe.set(mtk, &mtv);
-    EXPECT_EQ(OB_SUCCESS, ret);
     ObMemtableKey t;
     ObMvccRow *v = nullptr;
     ret = qe.get(mtk, v, &t);
-    EXPECT_EQ(OB_SUCCESS, ret);
-    EXPECT_EQ(v, &mtv);
+    EXPECT_EQ(OB_ENTRY_NOT_EXIST, ret);
+    EXPECT_EQ(nullptr, v);
   };
   auto test_ensure = [&](ObMemtableKey *mtk, ObMvccRow &mtv) {
     int ret = OB_SUCCESS;
-    ret = qe.ensure(mtk, &mtv);
+    ObMvccRow *row = nullptr;
+    ObMvccRowCreator row_creator =
+        [&mtk, &mtv](const bool is_exist_key, memtable::ObStoreRowkeyWrapper &key, ObMvccRow *&row) -> int {
+      UNUSED(is_exist_key);
+      key = memtable::ObStoreRowkeyWrapper(mtk->get_rowkey());
+      row = &mtv;
+      return OB_SUCCESS;
+    };
+    ret = qe.create_btree_kv(mtk, row_creator, row);
     EXPECT_EQ(OB_SUCCESS, ret);
+    EXPECT_EQ(&mtv, row);
   };
   auto test_scan = [&](int64_t start, bool include_start, int64_t end, bool include_end) {
     ObIQueryEngineIterator *iter = nullptr;
