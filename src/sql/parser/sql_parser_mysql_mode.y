@@ -19273,6 +19273,7 @@ alter_with_opt_hint SYSTEM DISABLE SQL THROTTLE
   (void)($1);
   malloc_terminal_node($$, result->malloc_pool_, T_DISABLE_SQL_THROTTLE);
 }
+|
 alter_with_opt_hint SYSTEM ADD RESTORE SOURCE STRING_VALUE
 {
   (void)($1);
