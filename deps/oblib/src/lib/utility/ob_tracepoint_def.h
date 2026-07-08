@@ -628,7 +628,14 @@ GLOBAL_ERRSIM_POINT_DEF(2306, EN_DISABLE_VEC_MERGE_DISTINCT, "Used to control wh
 GLOBAL_ERRSIM_POINT_DEF(2400, EN_SQL_FORCE_DUMP, "For testing force dump once");
 GLOBAL_ERRSIM_POINT_DEF(2401, EN_TEST_FOR_HASH_UNION, "Used to control whether to turn off the vectorization 2.0 hash set operator. It is turned on by default.");
 
+// Protocol begin 2450 - 2500
+// pr-exec protocol
+GLOBAL_ERRSIM_POINT_DEF(2450, COM_STMT_PREXECUTE_PREPARE_ERROR, "inject error at prepare stage for pr-exec protocol");
+GLOBAL_ERRSIM_POINT_DEF(2451, COM_STMT_PREXECUTE_PS_CURSOR_OPEN_ERROR, "inject error at cursor open stage for pr-exec protocol");
+GLOBAL_ERRSIM_POINT_DEF(2452, COM_STMT_PREXECUTE_EXECUTE_ERROR, "inject error at execute stage for pr-exec protocol");
 GLOBAL_ERRSIM_POINT_DEF(2453, EN_ENABLE_NEW_RESULT_META_DATA, "For testing enable new result meta data, off by default");
+
+// Protocol end
 
 GLOBAL_ERRSIM_POINT_DEF(2501, EN_CHECK_SORT_CMP, "Used to check the legality of the compare method for std::sort");
 GLOBAL_ERRSIM_POINT_DEF(2502, EN_ENABLE_SHARED_STORAGE_COLUMN_GROUP, "whether to enable column group under shared storage mode");

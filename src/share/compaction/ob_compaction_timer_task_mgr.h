@@ -55,8 +55,7 @@ struct ObCompactionTimerTask
   static int restart_schedule_timer_task(
     const int64_t interval,
     const int64_t tg_id,
-    common::ObTimerTask &timer_task,
-    const bool immediate = false);
+    common::ObTimerTask &timer_task);
 };
 
 

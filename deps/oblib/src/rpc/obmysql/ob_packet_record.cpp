@@ -44,7 +44,7 @@ static const char* pkt_type_name[14] =
   "PKT_STR",       // 8 -> string packet;
   "PKT_PREPARE",   // 9 -> prepare packet; 
   "PKT_RESHEAD",   // 10 -> result header packet
-  "PKT_AUTH_SWITCH", // 11 -> auth switch request packet;
+  "PKT_PREXEC",    // 11 -> prepare execute packet;
   "PKT_FILENAME",  // 12 -> file name packet(load local infile)
   "PKT_END"        // 13 -> end of packet type
 };
@@ -76,6 +76,10 @@ int64_t ObPacketRecord::to_string(char *buf, const int64_t buf_len) const
       J_OBJ_END();
       J_COMMA();
     }
+    if (obp20_header_.is_valid()) {
+      J_KV(K(obp20_header_));
+      J_COMMA();
+    }
     databuff_printf(buf, buf_len, pos, "obp_mysql_header_");
     J_OBJ_START();
     if (obp_mysql_header_.type_ == static_cast<uint8_t>(ObMySQLPacketType::PKT_ROW)
@@ -94,6 +98,10 @@ int64_t ObPacketRecord::to_string(char *buf, const int64_t buf_len) const
       J_OBJ_START();
       J_KV("com_len", obp_mysql_header_.com_len_, "com_seq", obp_mysql_header_.com_seq_);
       J_OBJ_END();
+      J_COMMA();
+    }
+    if (obp20_header_.is_valid()) {
+      J_KV(K(obp20_header_));
       J_COMMA();
     }
     databuff_printf(buf, buf_len, pos, "obp_mysql_header_");

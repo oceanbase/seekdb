@@ -1321,6 +1321,7 @@ int ObInnerSQLConnection::forward_request_(const int64_t op_type,
 int ObInnerSQLConnection::rollback()
 {
   int ret = OB_SUCCESS;
+  FLTSpanGuard(inner_rollback);
   ObInnerSqlWaitGuard guard(is_inner_session(), nullptr, inner_session_);
   ObSqlQueryExecutor executor("ROLLBACK");
   bool has_tenant_resource = is_resource_conn() || OB_INVALID_ID == get_resource_conn_id();
@@ -1367,6 +1368,7 @@ int ObInnerSQLConnection::rollback()
 int ObInnerSQLConnection::commit()
 {
   int ret = OB_SUCCESS;
+  FLTSpanGuard(inner_commit);
   ObInnerSqlWaitGuard guard(is_inner_session(), nullptr, inner_session_);
   DEBUG_SYNC(BEFORE_INNER_SQL_COMMIT);
   ObSqlQueryExecutor executor("COMMIT");
@@ -1439,6 +1441,7 @@ int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
     int64_t &affected_rows, bool is_user_sql, const common::ObAddr *sql_exec_addr)
 {
   int ret = OB_SUCCESS;
+  FLTSpanGuard(inner_execute_write);
   ObSqlQueryExecutor executor(sql);
     const bool local_execute = is_local_execute(GCONF.cluster_id);
     SMART_VAR(ObInnerSQLResult, res, get_session(), is_inner_session(), nullptr) {
@@ -1593,6 +1596,7 @@ int ObInnerSQLConnection::execute_read_inner(const int64_t cluster_id,
                                              const common::ObAddr *sql_exec_addr)
 {
   int ret = OB_SUCCESS;
+  FLTSpanGuard(inner_execute_read);
   ObInnerSQLReadContext *read_ctx = NULL;
   const static int64_t ctx_size = sizeof(ObInnerSQLReadContext);
   static_assert(ctx_size <= ObISQLClient::ReadResult::BUF_SIZE, "buffer not enough");
@@ -1728,6 +1732,7 @@ int ObInnerSQLConnection::execute(
     sqlclient::ObIExecutor &executor)
 {
   int ret = OB_SUCCESS;
+  FLTSpanGuard(inner_execute);
   SMART_VAR(ObInnerSQLResult, res, get_session(), is_inner_session(), nullptr) {
     if (OB_FAIL(res.init())) {
       LOG_WARN("init result set", K(ret));

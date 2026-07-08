@@ -36,6 +36,7 @@
 #include "sql/optimizer/ob_phy_table_location_info.h"
 #include "sql/engine/expr/ob_expr_frame_info.h"
 #include "sql/session/ob_local_session_var.h"
+#include "sql/monitor/flt/ob_flt_span_mgr.h"
 #include "share/ob_compatibility_control.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 

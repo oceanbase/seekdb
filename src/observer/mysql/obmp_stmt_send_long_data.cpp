@@ -151,6 +151,13 @@ int ObMPStmtSendLongData::process()
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                 sys_version))) {
       LOG_WARN("fail get tenant broadcast version", K(ret));
+    } else if (pkt.exist_trace_info()
+               && OB_FAIL(session.update_sys_variable(SYS_VAR_OB_TRACE_INFO,
+                                                      pkt.get_trace_info()))) {
+      LOG_WARN("fail to update trace info", K(ret));
+    } else if (OB_FAIL(process_extra_info(session, pkt, need_response_error))) {
+      LOG_WARN("fail get process extra info, will disconnect", K(ret));
+      need_disconnect_ = true;
     } else if (OB_FAIL(session.check_tenant_status())) {
       need_disconnect_ = false;
       LOG_INFO("unit has been migrated, need deny new request", K(ret));
@@ -243,7 +250,7 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
     if (FALSE_IT(execution_id = gctx_.sql_engine_->get_execution_id())) {
       //nothing to do
     } else if (OB_FAIL(set_session_active(sql, session, ObTimeUtil::current_time(), 
-                                          obmysql::ObMySQLCmd::COM_STMT_SEND_LONG_DATA))) {
+                                          obmysql::ObMySQLCmd::COM_STMT_SEND_PIECE_DATA))) {
       LOG_WARN("fail to set session active", K(ret));
     } else if (OB_FAIL(store_piece(session))) {
       exec_start_timestamp_ = ObTimeUtility::current_time();

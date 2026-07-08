@@ -22,7 +22,6 @@
 #include "sql/engine/expr/ob_expr_between.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/parser/ob_parser.h"
-#include "rpc/obmysql/ob_mysql_util.h"
 
 namespace oceanbase
 {
@@ -1575,7 +1574,7 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
                   static_cast<ObPrecision>(result_type.get_precision() + scale_increment));
               } else {
                 result_type.set_precision(
-                  static_cast<ObPrecision>(obmysql::ObMySQLUtil::float_length(result_type.get_scale())));
+                  static_cast<ObPrecision>(ObMySQLUtil::float_length(result_type.get_scale())));
               }
             }
             // recheck precision and scale overflow

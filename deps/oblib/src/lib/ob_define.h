@@ -636,6 +636,14 @@ const int64_t INVALID_CLUSTER_ID = -1;
 const int64_t OB_MYSQL_COMPRESSED_HEADER_SIZE = OB_MYSQL_HEADER_LENGTH + 3;  /* compression header size */
 
 
+//-----------------------------------oceanbase 2.0 c/s protocol----------------------//
+const uint16_t OB20_PROTOCOL_MAGIC_NUM = 0x20AB;
+const int64_t OB20_PROTOCOL_HEADER_LENGTH = 24;
+const int64_t OB20_PROTOCOL_TAILER_LENGTH = 4;  // for CRC32
+const int64_t OB20_PROTOCOL_HEADER_TAILER_LENGTH = OB20_PROTOCOL_HEADER_LENGTH + OB20_PROTOCOL_TAILER_LENGTH;
+const int64_t OB20_PROTOCOL_EXTRA_INFO_LENGTH = 4;  // for the length of extra info
+const int16_t OB20_PROTOCOL_VERSION_VALUE = 20;
+
 const int OB_THREAD_NAME_BUF_LEN = 16;
 const int OB_EXTENED_THREAD_NAME_BUF_LEN = 32;
 
@@ -644,6 +652,15 @@ enum ObCSProtocolType
   OB_INVALID_CS_TYPE = 0,
   OB_MYSQL_CS_TYPE,           // mysql standard protocol
   OB_MYSQL_COMPRESS_CS_TYPE,  // mysql compress protocol
+  OB_2_0_CS_TYPE,             // oceanbase 2.0 protocol
+};
+
+enum ObClientType
+{
+  OB_CLIENT_INVALID_TYPE = 0,
+  OB_CLIENT_JDBC,             // JDBC client
+  OB_CLIENT_OCI,              // ob lib client
+  OB_CLIENT_NON_STANDARD      // non-standard client
 };
 
 inline const char *get_cs_protocol_type_name(const ObCSProtocolType type) {
@@ -654,6 +671,8 @@ inline const char *get_cs_protocol_type_name(const ObCSProtocolType type) {
       return "OB_MYSQL_CS_TYPE";
     case OB_MYSQL_COMPRESS_CS_TYPE:
       return "OB_MYSQL_COMPRESS_CS_TYPE";
+    case OB_2_0_CS_TYPE:
+      return "OB_2_0_CS_TYPE";
     default:
       return "OB_UNKNOWN_CS_TYPE";
   }
@@ -1587,19 +1606,48 @@ const int64_t OB_LOG_KEEP_SIZE = 512;
 const int64_t OB_ASYNC_LOG_KEEP_SIZE = 0;
 const char* const OB_LOG_ELLIPSIS = "...";
 
-const char *const DEFAULT_REGION_NAME = "default_region";
-
+// for obproxy
+const char *const OB_MYSQL_CLIENT_MODE = "__mysql_client_type";
 const char *const OB_MYSQL_CONNECTION_ID = "__connection_id";
+// add client_session_id, addr_port & client session create time us
+const char *const OB_MYSQL_CLIENT_SESSION_ID = "__client_session_id";
+const char *const OB_MYSQL_CLIENT_ADDR_PORT = "__client_addr_port";
+const char *const OB_MYSQL_CLIENT_CONNECT_TIME_US = "__client_connect_time";
+const char *const OB_MYSQL_CLUSTER_NAME = "__cluster_name";
+const char *const OB_MYSQL_CLUSTER_ID = "__cluster_id";
 const char *const OB_MYSQL_CLIENT_IP = "__client_ip";
+const char *const OB_MYSQL_CAPABILITY_FLAG = "__proxy_capability_flag";
+const char *const OB_MYSQL_PROXY_SESSION_VARS = "__proxy_session_vars";
 
 const char *const OB_MYSQL_CLIENT_VERSION = "__ob_client_version";
+const char *const OB_MYSQL_CLIENT_NAME = "__ob_client_name";
 
 const char *const OB_MYSQL_FAILOVER_MODE = "__proxy_failover_mode";
 const char *const OB_MYSQL_FAILOVER_MODE_OFF = "off";
 const char *const OB_MYSQL_FAILOVER_MODE_ON = "on";
 const char *const OB_MYSQL_SERVICE_NAME = "__proxy_service_name";
 
+const char *const OB_MYSQL_JDBC_CLIENT_NAME = "OceanBase Connector/J";
+const char *const OB_MYSQL_OCI_CLIENT_NAME = "OceanBase Connector/C";
+// for java client
+const char *const OB_MYSQL_JAVA_CLIENT_MODE_NAME = "__ob_java_client";
+const char *const OB_MYSQL_OCI_CLIENT_MODE_NAME = "__ob_libobclient";
+const char *const OB_MYSQL_JDBC_CLIENT_MODE_NAME = "__ob_jdbc_client";
+
 const char *const OB_MYSQL_CLIENT_ATTRIBUTE_CAPABILITY_FLAG = "__ob_client_attribute_capability_flag";
+
+enum ObClientMode
+{
+  OB_MIN_CLIENT_MODE = 0,
+
+  OB_JAVA_CLIENT_MODE,
+  OB_PROXY_CLIENT_MODE,
+  OB_OCI_CLIENT_MODE,
+  OB_JDBC_CLIENT_MODE,
+  // add others ...
+
+  OB_MAX_CLIENT_MODE,
+};
 
 // for obproxy debug
 #define OBPROXY_DEBUG 0

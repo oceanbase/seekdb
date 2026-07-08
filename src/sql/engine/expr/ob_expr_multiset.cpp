@@ -471,10 +471,10 @@ int ObExprMultiSet::eval_composite_relative_anonymous_block(ObExecContext &exec_
   if (OB_SUCC(ret)) {
     bool is_inner_mock_backup = false;
     bool is_ps_backup = exec_ctx.get_sql_ctx()->is_prepare_protocol_;
-    bool is_mock_prepare_backup = exec_ctx.get_sql_ctx()->is_mock_prepare_;
+    bool is_pre_exec_backup = exec_ctx.get_sql_ctx()->is_pre_execute_;
 
     exec_ctx.get_sql_ctx()->is_prepare_protocol_ = true;
-    exec_ctx.get_sql_ctx()->is_mock_prepare_ = true;
+    exec_ctx.get_sql_ctx()->is_pre_execute_ = true;
 
     if (OB_NOT_NULL(exec_ctx.get_pl_stack_ctx())) {
       is_inner_mock_backup = exec_ctx.get_pl_stack_ctx()->get_is_inner_mock();
@@ -482,7 +482,7 @@ int ObExprMultiSet::eval_composite_relative_anonymous_block(ObExecContext &exec_
     }
 
     DEFER(exec_ctx.get_sql_ctx()->is_prepare_protocol_ = is_ps_backup);
-    DEFER(exec_ctx.get_sql_ctx()->is_mock_prepare_ = is_mock_prepare_backup);
+    DEFER(exec_ctx.get_sql_ctx()->is_pre_execute_ = is_pre_exec_backup);
     DEFER(if (OB_NOT_NULL(exec_ctx.get_pl_stack_ctx())) { exec_ctx.get_pl_stack_ctx()->set_is_inner_mock(is_inner_mock_backup); });
 
     out_args.reuse();

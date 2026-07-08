@@ -169,6 +169,8 @@ int ObForkTableTask::init(const ObDDLTaskRecord &task_record)
       LOG_WARN("init ddl task monitor info failed", K(ret));
     } else {
       is_inited_ = true;
+      // set up span during recover task
+      ddl_tracing_.open_for_recovery();
     }
   }
   
@@ -723,4 +725,5 @@ int ObForkTableTask::build_fork_info(
 
 }  // namespace rootserver
 }  // namespace oceanbase
+
 

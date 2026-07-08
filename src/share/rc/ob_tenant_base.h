@@ -58,6 +58,7 @@ namespace sql {
   class ObPlanBaselineMgr;
   class ObDataAccessService;
   class ObDASIDService;
+  class ObFLTSpanMgr;
   class ObPlanCache;
   class ObPsCache;
   class ObSQLCCLRuleManager;
@@ -307,6 +308,7 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       observer::ObTableLoadService*,                 \
       observer::ObTableLoadResourceService*,         \
       concurrency_control::ObMultiVersionGarbageCollector*, \
+      sql::ObFLTSpanMgr*,                            \
       storage::ObTenantCGReadInfoMgr*,               \
       ObTestModule*,                                 \
       storage::ObEmptyReadBucket*,                  \

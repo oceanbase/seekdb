@@ -18,6 +18,7 @@
 #define OCEANBASE_OBSERVER_MYSQL_OBMP_BASE_H_
 
 #include "rpc/frame/ob_sql_processor.h"
+#include "rpc/obmysql/ob_2_0_protocol_utils.h"
 #include "sql/ob_sql_context.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "observer/ob_server_struct.h"
@@ -51,6 +52,9 @@ protected:
   void force_disconnect();
 
   bool is_conn_valid() const { return packet_sender_.is_conn_valid(); }
+
+  virtual int update_last_pkt_pos() { return packet_sender_.update_last_pkt_pos(); }
+  virtual bool need_send_extra_ok_packet() { return packet_sender_.need_send_extra_ok_packet(); }
 
   virtual int read_packet(obmysql::ObICSMemPool& mem_pool, obmysql::ObMySQLPacket*& pkt) override;
   virtual int release_packet(obmysql::ObMySQLPacket* pkt) override;
@@ -93,6 +97,7 @@ protected:
                        sql::ObSQLSessionInfo &session) const;
   int do_after_process(sql::ObSQLSessionInfo &session,
                        bool async_resp_used) const;
+  int record_flt_trace(sql::ObSQLSessionInfo &session) const;
   // reset warning buffer err msg, for inner retry
   void setup_wb(sql::ObSQLSessionInfo &session);
   void clear_wb_content(sql::ObSQLSessionInfo &session);
@@ -109,6 +114,8 @@ protected:
   int update_proxy_and_client_sys_vars(sql::ObSQLSessionInfo &session);
   int update_charset_sys_vars(ObSMConnection &conn, sql::ObSQLSessionInfo &sess_info);
 
+  int build_encode_param_(obmysql::ObProtoEncodeParam &param,
+                          obmysql::ObMySQLPacket *pkt, const bool is_last);
   void set_request_expect_group_id(sql::ObSQLSessionInfo *session);
   // Calculate and set the current user's cgroup for resource isolation. If not set, the default cgroup id is 0
   int response_row(sql::ObSQLSessionInfo &session,
@@ -118,6 +125,8 @@ protected:
                    sql::ObExecContext *exec_ctx = NULL,
                    bool is_ps_protocol = true,
                    ObSchemaGetterGuard *schema_guard = NULL);
+  int process_extra_info(sql::ObSQLSessionInfo &session, const obmysql::ObMySQLRawPacket &pkt,
+                                bool &need_response_error);
   int process_kill_client_session(sql::ObSQLSessionInfo &session, bool is_connect = false);
   int load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session);
 protected:

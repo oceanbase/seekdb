@@ -495,8 +495,11 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
               LOG_WARN("not supported other type as out parameter except udt", K(ret), K(pl_type.is_user_type()));
               LOG_USER_ERROR(OB_NOT_SUPPORTED, "other complex type as out parameter except user define type");
             } else {
-              const bool is_client_out_param =
-                  (param->get_expr_type() == T_QUESTIONMARK && params_.is_prepare_protocol_);
+              // no need to response parameters for client_non_standard when user/sys variable
+              bool is_client_out_param =
+                  !(params_.session_info_->client_non_standard()
+                    && (param->get_expr_type() == T_OP_GET_USER_VAR
+                        || param->get_expr_type() == T_OP_GET_SYS_VAR));
               OZ (call_proc_info->add_out_param(i,
                                                 param_info->get_mode(),
                                                 param_info->get_param_name(),

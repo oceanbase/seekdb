@@ -15,6 +15,8 @@
  */
 
 #include "storage/memtable/mvcc/ob_query_engine.h"
+#include "storage/memtable/mvcc/ob_btree_iter_cache.h"
+#include "lib/allocator/ob_malloc.h"
 #include "common/ob_store_range.h"
 #include "storage/blocksstable/ob_row_reader.h"
 
@@ -222,10 +224,16 @@ int ObQueryEngine::scan(const ObMemtableKey *start_key,
   if (IS_NOT_INIT) {
     TRANS_LOG(WARN, "not init", "this", this);
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(iter = iter_alloc_.alloc())) {
-    TRANS_LOG(WARN, "alloc iter fail");
-    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
+    void *buf = btree_iter_alloc(sizeof(Iterator<BtreeIterator>));
+    if (OB_ISNULL(buf)) {
+      TRANS_LOG(WARN, "alloc iter fail");
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      iter = new (buf) Iterator<BtreeIterator>();
+    }
+  }
+  if (OB_SUCC(ret)) {
     ObStoreRowkeyWrapper scan_start_key_wrapper(start_key->get_rowkey());
     ObStoreRowkeyWrapper scan_end_key_wrapper(end_key->get_rowkey());
     iter->reset();
@@ -255,8 +263,11 @@ int ObQueryEngine::scan(const ObMemtableKey *start_key,
 
 void ObQueryEngine::revert_iter(ObIQueryEngineIterator *iter)
 {
-  iter_alloc_.free((Iterator<BtreeIterator> *)iter);
-  iter = NULL;
+  if (OB_NOT_NULL(iter)) {
+    auto *typed = static_cast<Iterator<BtreeIterator> *>(iter);
+    typed->~Iterator();
+    btree_iter_free(typed);
+  }
 }
 
 int ObQueryEngine::sample_rows(Iterator<BtreeRawIterator> *iter,
@@ -348,10 +359,16 @@ int ObQueryEngine::init_raw_iter_for_estimate(Iterator<BtreeRawIterator>*& iter,
   if (IS_NOT_INIT) {
     TRANS_LOG(WARN, "not init", "this", this);
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(iter = raw_iter_alloc_.alloc())) {
-    TRANS_LOG(WARN, "alloc raw iter fail");
-    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
+    void *buf = ob_malloc(sizeof(Iterator<BtreeRawIterator>), ObMemAttr("BtreeRawIter"));
+    if (OB_ISNULL(buf)) {
+      TRANS_LOG(WARN, "alloc raw iter fail");
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      iter = new (buf) Iterator<BtreeRawIterator>();
+    }
+  }
+  if (OB_SUCC(ret)) {
     ObStoreRowkeyWrapper start_key_wrapper(start_key->get_rowkey());
     ObStoreRowkeyWrapper end_key_wrapper(end_key->get_rowkey());
     iter->reset();
@@ -445,8 +462,8 @@ int ObQueryEngine::split_range(const ObMemtableKey *start_key,
       }
 
       if (OB_NOT_NULL(iter)) {
-        iter->reset();
-        raw_iter_alloc_.free(iter);
+        iter->~Iterator();
+        ob_free(iter);
         iter = NULL;
       }
     } while (OB_SUCC(ret) && need_retry);
@@ -492,8 +509,8 @@ int ObQueryEngine::inner_loop_find_level_(const ObMemtableKey *start_key,
       }
     }
     if (OB_NOT_NULL(iter)) {
-      iter->reset();
-      raw_iter_alloc_.free(iter);
+      iter->~Iterator();
+      ob_free(iter);
       iter = NULL;
     }
   }
@@ -580,9 +597,16 @@ int ObQueryEngine::estimate_row_count(const transaction::ObTransID &tx_id,
   } else if (OB_ISNULL(start_key) || OB_ISNULL(end_key)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid param", KR(ret));
-  } else if (OB_ISNULL((iter = raw_iter_alloc_.alloc()))) {
-    TRANS_LOG(WARN, "alloc raw iter fail");
-    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    void *buf = ob_malloc(sizeof(Iterator<BtreeRawIterator>), ObMemAttr("BtreeRawIter"));
+    if (OB_ISNULL(buf)) {
+      TRANS_LOG(WARN, "alloc raw iter fail");
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      iter = new (buf) Iterator<BtreeRawIterator>();
+    }
+  }
+  if (OB_FAIL(ret)) {
   } else if (OB_FAIL(sample_rows(iter, end_key, end_exclude, start_key, start_exclude, tx_id,
       log_row_count1, phy_row_count1, ratio1))) {
     if (OB_ITER_END != ret) {
@@ -618,7 +642,8 @@ int ObQueryEngine::estimate_row_count(const transaction::ObTransID &tx_id,
     }
   }
   if (OB_NOT_NULL(iter)) {
-    raw_iter_alloc_.free(iter);
+    iter->~Iterator();
+    ob_free(iter);
     iter = NULL;
   }
   ret = OB_ITER_END == ret ? OB_SUCCESS : ret;

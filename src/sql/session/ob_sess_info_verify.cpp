@@ -18,7 +18,6 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "sql/session/ob_sess_info_verify.h"
-#include "rpc/obmysql/ob_proto_trans_util.h"
 #include "share/ob_sql_client_decorator.h"
 #include "share/ob_ex_rpc.h"
 
@@ -67,7 +66,7 @@ int ObSessInfoVerify::sync_sess_info_veri(sql::ObSQLSessionInfo &sess,
       char *sess_buf = NULL;
       LOG_DEBUG("sync field sess_inf", K(sess.get_server_sid()),
                 KP(data), K(pos), K(len), KPHEX(data+pos, len-pos));
-      if (OB_FAIL(common::ObProtoTransUtil::resolve_type_and_len(buf, len, pos, extra_id, info_len))) {
+      if (OB_FAIL(ObProtoTransUtil::resolve_type_and_len(buf, len, pos, extra_id, info_len))) {
         LOG_WARN("failed to resolve type and len", K(ret), K(len), K(pos));
       } else if (extra_id < 0 || info_len <= 0) {
         ret = OB_INVALID_ARGUMENT;
@@ -214,10 +213,10 @@ int ObSessInfoVerify::compare_verify_session_info(sql::ObSQLSessionInfo &sess,
       int32_t info_len2 = 0;
       int64_t temp_pos1 = 0;
       int64_t temp_pos2 = 0;
-      if (OB_FAIL(common::ObProtoTransUtil::resolve_type_and_len(
+      if (OB_FAIL(ObProtoTransUtil::resolve_type_and_len(
                   buf1, len1, pos1, info_type1, info_len1))) {
         LOG_WARN("failed to resolve type and len", K(ret), K(len1), K(pos1));
-      } else if (OB_FAIL(common::ObProtoTransUtil::resolve_type_and_len(
+      } else if (OB_FAIL(ObProtoTransUtil::resolve_type_and_len(
                         buf2, len2, pos2, info_type2, info_len2))) {
         LOG_WARN("failed to resolve type and len", K(ret), K(len1), K(pos1));
       } else if (info_type1 < 0 || info_len1 <= 0 || info_type2 < 0 || info_len2 <= 0) {
@@ -281,7 +280,7 @@ int ObSessInfoVerify::fetch_verify_session_info(sql::ObSQLSessionInfo &sess,
       LOG_WARN("fail to get fetch sess info size", K(ret));
     } else {
       LOG_TRACE("sess info size", K(sess_size[i]), K(info_type));
-      size += common::ObProtoTransUtil::get_serialize_size(sess_size[i]);
+      size += ObProtoTransUtil::get_serialize_size(sess_size[i]);
     }
   }
 
@@ -309,7 +308,7 @@ int ObSessInfoVerify::fetch_verify_session_info(sql::ObSQLSessionInfo &sess,
           LOG_WARN("invalid session info length", K(info_len), K(info_type), K(ret));
         } else if (info_len == 0) {
           // invalid info len do nothing and skip it.
-        } else if (OB_FAIL(common::ObProtoTransUtil::store_type_and_len(
+        } else if (OB_FAIL(ObProtoTransUtil::store_type_and_len(
                           buf, size, pos, info_type, info_len))) {
           LOG_WARN("failed to set type and len", K(info_type), K(info_len), K(ret));
         } else if (OB_FAIL(encoder->fetch_sess_info(sess, buf, size, pos))) {
@@ -356,6 +355,12 @@ void ObSessInfoVerify::veri_err_injection(sql::ObSQLSessionInfo &sess)
   if (code < 0) {
     sess.set_client_identifier("err_name");
   }
+  code = OB_E(EventTable::EN_SESS_INFO_VERI_CONTROL_INFO_ERROR) OB_SUCCESS;
+  if (code < 0) {
+    FLTControlInfo temp = sess.get_control_info();
+    temp.level_ = 100;
+    sess.set_flt_control_info_no_sync(temp);
+  }
 }
 
 // resolve session info verification from proxy.
@@ -372,7 +377,7 @@ int ObSessInfoVerify::deserialize_sess_info_veri_id(sql::ObSQLSessionInfo &sess,
       ObAddr addr;
       char ip_buf[MAX_IP_ADDR_LENGTH] = "";
       uint64_t length = v_len;
-      if (OB_FAIL(common::ObProtoTransUtil::get_str(buf, len, pos, v_len, ptr))) {
+      if (OB_FAIL(ObProtoTransUtil::get_str(buf, len, pos, v_len, ptr))) {
         OB_LOG(WARN,"failed to resolve veri level", K(ret));
       } else if (FALSE_IT(length = std::min(length, uint64_t(MAX_IP_ADDR_LENGTH - 1)))) {
       } else if (FALSE_IT(memcpy(ip_buf, ptr, length))) {
@@ -386,7 +391,7 @@ int ObSessInfoVerify::deserialize_sess_info_veri_id(sql::ObSQLSessionInfo &sess,
     }
     case SESS_INFO_VERI_SESS_ID: {
       int32_t v = 0;
-      if (OB_FAIL(common::ObProtoTransUtil::get_int4(buf, len, pos, v_len, v))) {
+      if (OB_FAIL(ObProtoTransUtil::get_int4(buf, len, pos, v_len, v))) {
         OB_LOG(WARN,"failed to resolve veri level", K(ret));
       } else if (OB_FAIL(sess_info_verification.set_verify_info_sess_id(static_cast<uint32_t>(v)))) {
         OB_LOG(WARN,"failed to set verify info session id", K(ret));
@@ -395,7 +400,7 @@ int ObSessInfoVerify::deserialize_sess_info_veri_id(sql::ObSQLSessionInfo &sess,
     }
     case SESS_INFO_VERI_PROXY_SESS_ID: {
       int64_t v = 0;
-      if (OB_FAIL(common::ObProtoTransUtil::get_int8(buf, len, pos, v_len, v))) {
+      if (OB_FAIL(ObProtoTransUtil::get_int8(buf, len, pos, v_len, v))) {
         OB_LOG(WARN,"failed to resolve veri level", K(ret));
       } else if(OB_FAIL(sess_info_verification.set_verify_info_proxy_sess_id(static_cast<uint64_t>(v)))) {
         OB_LOG(WARN,"failed to set verify info proxy session id", K(ret));

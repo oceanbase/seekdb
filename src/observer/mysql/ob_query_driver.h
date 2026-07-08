@@ -50,12 +50,14 @@ public:
                 const sql::ObSqlCtx &ctx,
                 sql::ObSQLSessionInfo &session,
                 ObQueryRetryCtrl &retry_ctrl,
-                ObIMPPacketSender &sender)
+                ObIMPPacketSender &sender,
+                bool is_prexecute = false)
     : gctx_(gctx),
       ctx_(ctx),
       session_(session),
       retry_ctrl_(retry_ctrl),
-      sender_(sender)
+      sender_(sender),
+      is_prexecute_(is_prexecute)
   {
   }
   virtual ~ObQueryDriver()
@@ -121,6 +123,7 @@ protected:
   sql::ObSQLSessionInfo &session_;
   ObQueryRetryCtrl &retry_ctrl_;
   ObIMPPacketSender &sender_;
+  bool is_prexecute_;
   /* const */
   /* disallow copy & assign */
   DISALLOW_COPY_AND_ASSIGN(ObQueryDriver);

@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_memstore_info.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -27,7 +28,6 @@ namespace observer
 
 ObAllVirtualMemstoreInfo::ObAllVirtualMemstoreInfo()
   : ObVirtualTableScannerIterator(),
-    ObMultiTenantOperator(),
     addr_(),
     ls_iter_guard_(),
     ls_tablet_iter_(ObMDSGetTabletMode::READ_ALL_COMMITED),
@@ -43,7 +43,6 @@ ObAllVirtualMemstoreInfo::~ObAllVirtualMemstoreInfo()
 
 void ObAllVirtualMemstoreInfo::reset()
 {
-  omt::ObMultiTenantOperator::reset();
   addr_.reset();
   ls_tablet_iter_.reset();
   ls_iter_guard_.reset();
@@ -52,33 +51,6 @@ void ObAllVirtualMemstoreInfo::reset()
   memset(freeze_time_dist_, 0, OB_MAX_CHAR_LENGTH);
   memset(compaction_info_buf_, 0, sizeof(compaction_info_buf_));
   ObVirtualTableScannerIterator::reset();
-}
-
-void ObAllVirtualMemstoreInfo::release_last_tenant()
-{
-  ls_iter_guard_.reset();
-  ls_tablet_iter_.reset();
-  tables_handle_.reset();
-  memtable_array_pos_ = 0;
-  memset(freeze_time_dist_, 0, OB_MAX_CHAR_LENGTH);
-}
-
-int ObAllVirtualMemstoreInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
-}
-
-bool ObAllVirtualMemstoreInfo::is_need_process(uint64_t tenant_id)
-{
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
-    return true;
-  }
-  return false;
 }
 
 int ObAllVirtualMemstoreInfo::get_next_ls(ObLS *&ls)
@@ -197,7 +169,7 @@ void ObAllVirtualMemstoreInfo::get_freeze_time_dist(const ObMtStat& mt_stat)
   }
 }
 
-int ObAllVirtualMemstoreInfo::process_curr_tenant(ObNewRow *&row)
+int ObAllVirtualMemstoreInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObITabletMemtable *mt = NULL;
@@ -205,7 +177,7 @@ int ObAllVirtualMemstoreInfo::process_curr_tenant(ObNewRow *&row)
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
-  } else if (ls_iter_guard_.get_ptr() == nullptr && OB_FAIL(MTL(ObLSService*)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+  } else if (ls_iter_guard_.get_ptr() == nullptr && OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
     SERVER_LOG(WARN, "get_ls_iter fail", K(ret));
   } else if (OB_FAIL(get_next_memtable(mt))) {
     if (OB_ITER_END != ret) {

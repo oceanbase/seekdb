@@ -619,12 +619,10 @@ int ObSchemaMgrCache::try_gc_tenant_schema_mgr(ObSchemaMgr *&eli_schema_mgr)
 int ObSchemaMgrCache::try_eliminate_schema_mgr(ObSchemaMgr *&eli_schema_mgr)
 {
   int ret = OB_SUCCESS;
-  ObSchemaMgr *target_schema_mgr = eli_schema_mgr;
-  eli_schema_mgr = NULL;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", K(ret));
-  } else if (OB_ISNULL(target_schema_mgr)) {
+  } else if (OB_ISNULL(eli_schema_mgr)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("eli_schema_mgr is null", K(ret));
   } else {
@@ -632,16 +630,15 @@ int ObSchemaMgrCache::try_eliminate_schema_mgr(ObSchemaMgr *&eli_schema_mgr)
     bool found = false;
     // max_cached_num_ only increases without decreasing, you can only look at max_cached_num_ when releasing,
     // instead of iterating MAX_SCHEMA_SLOT_NUM slots
-    for (int64_t i = 0; OB_SUCC(ret) && i < max_cached_num_ && !found; ++i) {
+    for (int64_t i = 0; i < max_cached_num_ && !found; ++i) {
       ObSchemaMgrItem &schema_mgr_item = schema_mgr_items_[i];
       ObSchemaMgr *tmp_schema_mgr = schema_mgr_item.schema_mgr_;
       if (NULL == tmp_schema_mgr) {
         // do-nothing
-      } else if (target_schema_mgr != tmp_schema_mgr) {
+      } else if (eli_schema_mgr != tmp_schema_mgr) {
       } else if (ATOMIC_LOAD(&schema_mgr_item.ref_cnt_) > 0) {
         ret = OB_EAGAIN;
-        found = true;
-
+        
         int64_t ref_cnt = ATOMIC_LOAD(&schema_mgr_item.ref_cnt_);
         int64_t timestamp = tmp_schema_mgr->get_timestamp_in_slot();
         int64_t schema_version = tmp_schema_mgr->get_schema_version();
@@ -656,10 +653,6 @@ int ObSchemaMgrCache::try_eliminate_schema_mgr(ObSchemaMgr *&eli_schema_mgr)
         }
         found = true;
       }
-    }
-    if (OB_SUCC(ret) && !found) {
-      ret = OB_ENTRY_NOT_EXIST;
-      LOG_TRACE("schema mgr is not in cache, skip eliminate", KR(ret), KP(target_schema_mgr));
     }
     if (OB_SUCC(ret) && OB_NOT_NULL(eli_schema_mgr)) {
       int tmp_ret = OB_SUCCESS;

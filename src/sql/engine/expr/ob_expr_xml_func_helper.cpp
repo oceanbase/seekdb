@@ -1016,7 +1016,7 @@ int ObXMLExprHelper::process_sql_udt_results(common::ObObj& value,
                || !exec_context->get_physical_plan_ctx()->is_subschema_ctx_inited()) {
       // condition 1: no physical plan, build new one
       // condition 2: tmp physical plan exists,
-      //  but subschema_ctx isn't initialized for ps protocol in jdbc.
+      //  but subschema_ctx isn't initialized(for ps protocal in jdbc, tmp physical plan created in ObMPStmtPrexecute::execute_response)
       //  
       if (OB_ISNULL(fields)) {
         ret = OB_ERR_UNEXPECTED;

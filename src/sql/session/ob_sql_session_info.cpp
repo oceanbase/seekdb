@@ -102,6 +102,7 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       trans_type_(transaction::ObTxClass::USER),
       version_provider_(NULL),
       config_provider_(NULL),
+      flt_span_mgr_(NULL),
       plan_cache_(NULL),
       ps_cache_(NULL),
       found_rows_(1),
@@ -122,6 +123,7 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       pl_attach_session_id_(0),
       pl_query_sender_(NULL),
       pl_ps_protocol_(false),
+      is_ob20_protocol_(false),
       pl_sync_pkg_vars_(NULL),
       inner_conn_(NULL),
       enable_role_array_(),
@@ -151,6 +153,7 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       vport_(0),
       in_bytes_(0),
       out_bytes_(0),
+      client_non_standard_(false),
       job_info_(nullptr),
       btree_iter_cache_(nullptr),
       failover_mode_(false),
@@ -248,6 +251,7 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     trans_type_ = transaction::ObTxClass::USER;
     version_provider_ = NULL;
     config_provider_ = NULL;
+    flt_span_mgr_ = NULL;
     MEMSET(tenant_buff_, 0, sizeof(share::ObTenantSpaceFetcher));
     ps_cache_ = NULL;
     found_rows_ = 1;
@@ -302,13 +306,21 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     plan_cache_ = NULL;
     client_app_info_.reset();
     has_query_executed_ = false;
+    flt_control_info_.reset();
+    is_send_control_info_ = false;
+    trace_enable_ = false;
+    auto_flush_trace_ = false;
+    coninfo_set_by_sess_ = false;
+    is_ob20_protocol_ = false;
     is_latest_sess_info_ = false;
     int temp_ret = OB_SUCCESS;
     optimizer_tracer_.reset();
     expect_group_id_ = OB_INVALID_ID;
+    flt_control_info_.reset();
     group_id_not_expected_ = false;
     //call at last time
     ObBasicSessionInfo::reset(skip_sys_var);
+    client_non_standard_ = false;
   }
   vid_ = OB_INVALID_ID;
   vport_ = 0;
@@ -2224,6 +2236,21 @@ int ObSQLSessionInfo::clear_context(const ObString &context_name,
   return ret;
 }
 
+void ObSQLSessionInfo::set_flt_control_info(const FLTControlInfo &con_info)
+{
+  bool support_show_trace = flt_control_info_.support_show_trace_;
+  flt_control_info_ = con_info;
+  flt_control_info_.support_show_trace_ = support_show_trace;
+  control_info_encoder_.is_changed_ = true;
+}
+
+void ObSQLSessionInfo::set_flt_control_info_no_sync(const FLTControlInfo &con_info)
+{
+  bool support_show_trace = flt_control_info_.support_show_trace_;
+  flt_control_info_ = con_info;
+  flt_control_info_.support_show_trace_ = support_show_trace;
+}
+
 int ObSQLSessionInfo::set_client_id(const common::ObString &client_identifier)
 {
   int ret = OB_SUCCESS;
@@ -3685,68 +3712,136 @@ OB_DEF_SERIALIZE_SIZE(ObContextUnit)
   return len;
 }
 
-int ObNoopSessInfoEncoder::serialize(ObSQLSessionInfo &sess, char *buf, const int64_t buf_len, int64_t &pos)
+int ObControlInfoEncoder::serialize(ObSQLSessionInfo &sess, char *buf, const int64_t buf_len, int64_t &pos)
 {
-  UNUSED(sess);
-  UNUSED(buf);
-  UNUSED(buf_len);
-  UNUSED(pos);
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(sess.get_control_info().serialize(buf, buf_len, pos))) {
+    LOG_WARN("failed to serialize control info", K(buf_len), K(pos));
+  } else if (OB_FAIL(ObProtoTransUtil::store_int1(buf, buf_len, pos, sess.is_coninfo_set_by_sess(), CONINFO_BY_SESS))) {
+    LOG_WARN("failed to store control info set by sess", K(sess.is_coninfo_set_by_sess()), K(pos));
+  } else {
+    LOG_TRACE("serialize control info", K(sess.get_server_sid()), K(sess.get_control_info()));
+  }
+  return ret;
 }
 
-int ObNoopSessInfoEncoder::deserialize(ObSQLSessionInfo &sess, const char *buf, const int64_t data_len, int64_t &pos)
+int ObControlInfoEncoder::deserialize(ObSQLSessionInfo &sess, const char *buf, const int64_t data_len, int64_t &pos)
 {
-  UNUSED(sess);
-  UNUSED(buf);
-  pos = data_len;
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  FLTControlInfo con;
+  FullLinkTraceExtraInfoType extra_type;
+  int32_t v_len = 0;
+  int16_t id = 0;
+  int8_t setby_sess = 0;
+  if (OB_FAIL(FLTExtraInfo::resolve_type_and_len(buf, data_len, pos, extra_type, v_len))) {
+    LOG_WARN("failed to resolve type and len", K(data_len), K(pos));
+  } else if (extra_type != FLT_TYPE_CONTROL_INFO) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid extra type", K(extra_type), K(ret));
+  } else if (OB_FAIL(con.deserialize(buf, pos+v_len, pos))) {
+    LOG_WARN("failed to resolve control info", K(v_len), K(pos));
+  } else if (OB_FAIL(ObProtoTransUtil::resolve_type_and_len(buf, data_len, pos, id, v_len))) {
+    LOG_WARN("failed to get extra_info", K(ret), KP(buf));
+  } else if (CONINFO_BY_SESS != id) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid id", K(id));
+  } else if (OB_FAIL(ObProtoTransUtil::get_int1(buf, *(const_cast<int64_t *>(&data_len)), pos, static_cast<int64_t>(v_len), setby_sess))) {
+    LOG_WARN("failed to resolve set by sess", K(ret));
+  } else {
+    sess.set_flt_control_info(con);
+    sess.set_coninfo_set_by_sess(static_cast<bool>(setby_sess));
+    // if control info not changed or control info not set, not need to feedback
+    if (con == sess.get_control_info() || !sess.get_control_info().is_valid()) {
+      // not need to feedback
+      sess.set_send_control_info(true);
+      sess.get_control_info_encoder().is_changed_ = false;
+    }
+
+    LOG_TRACE("deserialize control info", K(sess.get_server_sid()), K(sess.get_control_info()));
+  }
+  return ret;
 }
 
-int ObNoopSessInfoEncoder::get_serialize_size(ObSQLSessionInfo& sess, int64_t &len) const
+int ObControlInfoEncoder::get_serialize_size(ObSQLSessionInfo& sess, int64_t &len) const
 {
-  UNUSED(sess);
-  len = 0;
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  len = sess.get_control_info().get_serialize_size() + 6 + sizeof(bool);
+  return ret;
 }
 
-int ObNoopSessInfoEncoder::fetch_sess_info(ObSQLSessionInfo &sess, char *buf, const int64_t length, int64_t &pos)
+int ObControlInfoEncoder::fetch_sess_info(ObSQLSessionInfo &sess, char *buf, const int64_t length, int64_t &pos)
 {
-  UNUSED(sess);
-  UNUSED(buf);
-  UNUSED(length);
-  UNUSED(pos);
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(serialize(sess, buf, length, pos))) {
+    LOG_WARN("failed to fetch session info.", K(ret), K(pos), K(length));
+  }
+  return ret;
 }
 
-int ObNoopSessInfoEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess, int64_t &size)
+int ObControlInfoEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess, int64_t &size)
 {
-  UNUSED(sess);
+  int ret = OB_SUCCESS;
   size = 0;
-  return OB_SUCCESS;
+  if (OB_FAIL(get_serialize_size(sess, size))) {
+    LOG_WARN("fail to get serialize size", K(ret));
+  }
+  return ret;
 }
 
-int ObNoopSessInfoEncoder::compare_sess_info(ObSQLSessionInfo &sess, const char *current_sess_buf,
-                                             int64_t current_sess_length, const char *last_sess_buf,
-                                             int64_t last_sess_length)
+int ObControlInfoEncoder::compare_sess_info(ObSQLSessionInfo &sess, const char *current_sess_buf,
+                                            int64_t current_sess_length, const char *last_sess_buf,
+                                            int64_t last_sess_length)
 {
-  UNUSED(sess);
-  UNUSED(current_sess_buf);
-  UNUSED(current_sess_length);
-  UNUSED(last_sess_buf);
-  UNUSED(last_sess_length);
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  // todo The current control info does not meet the synchronization mechanism and cannot be verified
+  return ret;
 }
 
-int ObNoopSessInfoEncoder::display_sess_info(ObSQLSessionInfo &sess, const char* current_sess_buf,
-                                             int64_t current_sess_length, const char* last_sess_buf,
-                                             int64_t last_sess_length)
+int ObControlInfoEncoder::display_sess_info(ObSQLSessionInfo &sess, const char* current_sess_buf,
+            int64_t current_sess_length, const char* last_sess_buf, int64_t last_sess_length)
 {
-  UNUSED(sess);
+  int ret = OB_SUCCESS;
   UNUSED(current_sess_buf);
   UNUSED(current_sess_length);
-  UNUSED(last_sess_buf);
-  UNUSED(last_sess_length);
-  return OB_SUCCESS;
+  const char *buf = last_sess_buf;
+  int64_t pos = 0;
+  int64_t data_len = last_sess_length;
+  FLTControlInfo last_sess_con;
+  FullLinkTraceExtraInfoType extra_type;
+  int32_t v_len = 0;
+  int16_t id = 0;
+  int8_t last_sess_setby_sess = 0;
+  if (OB_FAIL(FLTExtraInfo::resolve_type_and_len(buf, data_len, pos, extra_type, v_len))) {
+    LOG_WARN("failed to resolve type and len", K(data_len), K(pos));
+  } else if (extra_type != FLT_TYPE_CONTROL_INFO) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid extra type", K(extra_type), K(ret));
+  } else if (OB_FAIL(last_sess_con.deserialize(buf, pos+v_len, pos))) {
+    LOG_WARN("failed to resolve control info", K(v_len), K(pos));
+  } else if (OB_FAIL(ObProtoTransUtil::resolve_type_and_len(buf, data_len, pos, id, v_len))) {
+    LOG_WARN("failed to get extra_info", K(ret), KP(buf));
+  } else if (CONINFO_BY_SESS != id) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid id", K(id));
+  } else if (OB_FAIL(ObProtoTransUtil::get_int1(buf, *(const_cast<int64_t *>(&data_len)),
+                                        pos, static_cast<int64_t>(v_len), last_sess_setby_sess))) {
+    LOG_WARN("failed to resolve set by sess", K(ret));
+  } else {
+    if (sess.is_coninfo_set_by_sess() != last_sess_setby_sess) {
+      LOG_WARN("failed to verify control info", K(ret),
+        "current_coninfo_set_by_sess", sess.is_coninfo_set_by_sess(),
+        "last_coninfo_set_by_sess", last_sess_setby_sess);
+    } else if (sess.get_control_info().is_equal(last_sess_con)) {
+      LOG_INFO("success to verify control info, no need to attention support_show_trace", K(ret),
+                "current_coninfo", sess.get_control_info(),
+                "last_coninfo", last_sess_con);
+    } else {
+      LOG_WARN("failed to verify control info, no need to attention support_show_trace", K(ret),
+        "current_coninfo", sess.get_control_info(),
+        "last_coninfo", last_sess_con);
+    }
+  }
+  return ret;
 }
 
 int ObSQLSessionInfo::sql_sess_record_sql_stat_start_value(ObExecutingSqlStatRecord& executing_sqlstat)

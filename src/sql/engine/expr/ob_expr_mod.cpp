@@ -19,7 +19,6 @@
 #include "sql/engine/expr/ob_expr_mod.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "rpc/obmysql/ob_mysql_util.h"
 
 namespace oceanbase
 {
@@ -56,7 +55,7 @@ int ObExprMod::calc_result_type2(ObExprResType &type,
       type.set_scale(MAX(scale1, scale2));
       type.set_precision(MAX(type1.get_precision(), type2.get_precision()));
       if (type.is_double()) {
-        type.set_precision(obmysql::ObMySQLUtil::float_length(type.get_scale()));
+        type.set_precision(ObMySQLUtil::float_length(type.get_scale()));
       } else if (type.is_decimal_int()) {
         // In mysql mode, precision of int(255) is 255, more than OB_MAX_DECIMAL_POSSIBLE_PRECISION
         // So precision deduced just now may be larger than 81 while res type is decimal_int

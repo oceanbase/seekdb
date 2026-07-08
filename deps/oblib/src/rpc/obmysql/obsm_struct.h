@@ -22,6 +22,7 @@
 #include "rpc/ob_packet.h"
 #include "lib/lock/ob_latch.h"
 #include "rpc/obmysql/ob_packet_record.h"
+#include "rpc/obmysql/ob_2_0_protocol_struct.h"
 
 namespace oceanbase
 {
@@ -45,6 +46,9 @@ public:
   ObSMConnection()
   {
     cap_flags_.capability_ = 0;
+    is_java_client_ = false;
+    is_oci_client_ = false;
+    is_jdbc_client_ = false;
     is_sess_alloc_ = false;
     is_sess_free_ = false;
     has_inc_active_num_ = false;
@@ -55,6 +59,7 @@ public:
     sess_create_time_ = 0;
     resource_group_id_ = 0;
     
+    proxy_cap_flags_.capability_ = 0,
     tenant_ = NULL;
     MEMSET(tenant_name_buf_, 0, sizeof(tenant_name_buf_));
     MEMSET(user_name_buf_, 0, sizeof(user_name_buf_));
@@ -67,7 +72,11 @@ public:
     group_id_ = 0;
     client_cs_type_ = 0;
     pkt_rec_wrapper_.init();
+    client_type_ = common::OB_CLIENT_INVALID_TYPE;
     client_version_ = 0;
+    client_sessid_ = INVALID_SESSID;
+    client_addr_port_ = 0;
+    client_create_time_ = 0;
     has_service_name_ = false;
     logined_ = false;
   }
@@ -77,10 +86,43 @@ public:
     //unauthed connection, treat it do not use compress
     //if during change user(is logined) and need compress, need return COMPRESS here
     if ((is_in_authed_phase() || (is_in_auth_switch_phase() && is_logined())) &&
-        (1 == cap_flags_.cap_flags_.OB_CLIENT_COMPRESS)) {
-      type_ret = obmysql::ObCompressType::DEFAULT_COMPRESS;
+        (1 == cap_flags_.cap_flags_.OB_CLIENT_COMPRESS
+        || proxy_cap_flags_.is_ob_protocol_v2_compress())) {
+      if (is_java_client_) {
+        if (1 == proxy_cap_flags_.cap_flags_.OB_CAP_CHECKSUM) {
+          type_ret = obmysql::ObCompressType::DEFAULT_CHECKSUM;
+        } else {
+          type_ret = obmysql::ObCompressType::DEFAULT_COMPRESS;
+        }
+      } else if (is_oci_client_) {
+        if (1 == proxy_cap_flags_.cap_flags_.OB_CAP_CHECKSUM) {
+          type_ret = obmysql::ObCompressType::DEFAULT_CHECKSUM;
+        } else {
+          type_ret = obmysql::ObCompressType::DEFAULT_COMPRESS;
+        }
+      } else if (is_jdbc_client_) {
+        if (1 == proxy_cap_flags_.cap_flags_.OB_CAP_CHECKSUM) {
+          type_ret = obmysql::ObCompressType::DEFAULT_CHECKSUM;
+        } else {
+          type_ret = obmysql::ObCompressType::DEFAULT_COMPRESS;
+        }
+      } else {
+        type_ret = obmysql::ObCompressType::DEFAULT_COMPRESS;
+      }
     }
     return type_ret;
+  }
+
+  bool need_send_extra_ok_packet() const {
+    return (is_java_client_ && proxy_cap_flags_.is_extra_ok_packet_for_ocj_support());
+  }
+
+  bool is_normal_client() const {
+    return (!is_java_client_ && !is_oci_client_ && !is_jdbc_client_);
+  }
+
+  bool is_driver_client() const {
+    return is_oci_client_ || is_jdbc_client_;
   }
 
   common::ObCSProtocolType get_cs_protocol_type() const
@@ -89,6 +131,8 @@ public:
     if (is_in_auth_switch_phase() && !is_logined()) {
       // if is change user, must is logined
       type = common::OB_MYSQL_CS_TYPE;
+    } else if (proxy_cap_flags_.is_ob_protocol_v2_support()) {
+      type = common::OB_2_0_CS_TYPE;
     } else if (1 == cap_flags_.cap_flags_.OB_CLIENT_COMPRESS) {
       type = common::OB_MYSQL_COMPRESS_CS_TYPE;
     } else {
@@ -113,6 +157,9 @@ public:
   inline void set_logined(bool logined) { logined_ = logined; }
 public:
   obmysql::ObMySQLCapabilityFlags cap_flags_;
+  bool is_java_client_;
+  bool is_oci_client_;
+  bool is_jdbc_client_;
   bool is_sess_alloc_;
   bool is_sess_free_;
   bool has_inc_active_num_;
@@ -125,6 +172,7 @@ public:
   int64_t sess_create_time_; // proxy connection mode, record the session connection time from client to proxy
   
   uint64_t resource_group_id_;
+  obmysql::ObProxyCapabilityFlags proxy_cap_flags_;
   // Errors may occur during the ObSMHandler::on_connect stage, and these error messages need to be returned to the client;
   // And in on_connect, accurate error information cannot be returned to the client, therefore it is recorded here, and processed in ObMPConnect::Process
   int ret_;
@@ -137,11 +185,17 @@ public:
   int64_t connect_in_bytes_;
   obmysql::ObMysqlPktContext mysql_pkt_context_;
   obmysql::ObCompressedPktContext compressed_pkt_context_;
+  obmysql::ObProto20PktContext proto20_pkt_context_;
   char scramble_buf_[SCRAMBLE_BUF_SIZE + 1];
   int32_t group_id_;
   int32_t client_cs_type_;
   obmysql::ObPacketRecordWrapper pkt_rec_wrapper_;
+  ObClientType client_type_;
   uint64_t client_version_;
+  // The client establishes a connection ID to ensure that the tenant is globally unique.
+  uint32_t client_sessid_;
+  int32_t client_addr_port_;
+  int64_t client_create_time_;
   bool has_service_name_;
 private:
   bool logined_;

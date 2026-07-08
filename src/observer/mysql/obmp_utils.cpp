@@ -15,13 +15,9 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "obmp_utils.h"
 #include "observer/mysql/obmp_utils.h"
-#include "common/object/ob_object.h"
-#include "lib/charset/ob_charset.h"
-#include "rpc/obmysql/packet/ompk_ok.h"
-#include "share/system_variable/ob_sys_var_meta.h"
-#include "sql/session/ob_sql_session_info.h"
-#include "sql/session/ob_system_variable.h"
+#include "sql/session/ob_sess_info_verify.h"
 namespace oceanbase
 {
 namespace observer
@@ -140,6 +136,86 @@ int ObMPUtils::add_changed_session_info(OMPKOK &ok_pkt, sql::ObSQLSessionInfo &s
   return ret;
 }
 
+
+int ObMPUtils::sync_session_info(sql::ObSQLSessionInfo &sess, const common::ObString &sess_infos)
+{
+  int ret = OB_SUCCESS;
+  const char *buf = sess_infos.ptr();
+  const char *data = sess_infos.ptr();
+  const int64_t len = sess_infos.length();
+  const char *end = buf + len;
+  int64_t pos = 0;
+
+  LOG_DEBUG("sync sess_inf", K(sess.get_is_in_retry()),
+            K(sess.get_server_sid()), KP(data), K(len), KPHEX(data, len));
+
+  // decode sess_info
+  if (NULL != sess_infos.ptr() && !sess.get_is_in_retry()) {
+    common::ObFixedBitSet<oceanbase::sql::SessionSyncInfoType::SESSION_SYNC_MAX_TYPE> succ_info_types;
+    while (OB_SUCC(ret) && pos < len) {
+      int16_t info_type = 0;
+      int32_t info_len = 0;
+      int64_t pos0 = 0;
+      char *sess_buf = NULL;
+      LOG_TRACE("sync field sess_inf", K(sess.get_server_sid()), KP(data), K(pos), K(len), KPHEX(data+pos, len-pos));
+      if (OB_FAIL(ObProtoTransUtil::resolve_type_and_len(buf, len, pos, info_type, info_len))) {
+        LOG_WARN("failed to resolve type and len", K(ret), K(len), K(pos));
+      } else if (info_type < 0 || info_len <= 0) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid session sync info encoder", K(ret), K(info_type));
+      // for old version compatible
+      // if new version has a val that old version doesn't has, just ignore.
+      } else if (info_type >= SESSION_SYNC_MAX_TYPE) {
+        pos += info_len;
+      } else if (FALSE_IT(pos0 = pos)) {
+      } else if (OB_FAIL(sess.update_sess_sync_info(
+                                  (oceanbase::sql::SessionSyncInfoType)(info_type),
+                                  buf, (int64_t)info_len + pos0, pos0))) {
+        LOG_WARN("failed to update session sync info",
+                 K(ret), K(info_type), K(sess.get_server_sid()), K(succ_info_types), K(pos), K(info_len), K(info_len+pos));
+      } else {
+        pos += info_len;
+        succ_info_types.add_member(info_type);
+      }
+      LOG_DEBUG("sync-session-info", K(info_type), K(info_len));
+    }
+  }
+
+  return ret;
+}
+
+int ObMPUtils::add_cap_flag(OMPKOK &okp, sql::ObSQLSessionInfo &session)
+{
+  int ret = OB_SUCCESS;
+  ObIAllocator &allocator = session.get_allocator();
+  for (int64_t i = 0; OB_SUCC(ret) && i < session.get_sys_var_count(); ++i) {
+    const ObBasicSysVar *sys_var = NULL;
+    if (NULL == (sys_var = session.get_sys_var(i))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("sys var is NULL", K(i), "total", session.get_sys_var_count(), K(ret));
+    } else if (sys_var->get_type() == SYS_VAR_OB_CAPABILITY_FLAG) {
+      ObStringKV str_kv;
+      str_kv.key_ = share::ObSysVarMeta::get_sys_var_name_by_id(sys_var->get_type()); // shadow copy
+      if (OB_FAIL(get_plain_str_literal(allocator, sys_var->get_value(), str_kv.value_))) {
+        LOG_WARN("fail to get sql literal", K(i), K(ret));
+      } else if (OB_FAIL(okp.add_system_var(str_kv))) {
+        LOG_WARN("fail to add system var", K(i), K(str_kv), K(ret));
+      }
+    } else if (sys_var->get_type() == SYS_VAR___OB_CLIENT_CAPABILITY_FLAG) {
+      ObStringKV str_kv;
+      str_kv.key_ = share::ObSysVarMeta::get_sys_var_name_by_id(sys_var->get_type()); // shadow copy
+      if (OB_FAIL(get_plain_str_literal(allocator, sys_var->get_value(), str_kv.value_))) {
+        LOG_WARN("fail to get sql literal", K(i), K(ret));
+      } else if (OB_FAIL(okp.add_system_var(str_kv))) {
+        LOG_WARN("fail to add system var", K(i), K(str_kv), K(ret));
+      }
+    } else {
+      // skip
+    }
+  }
+  return ret;
+}
+
 int ObMPUtils::add_nls_format(OMPKOK &okp, sql::ObSQLSessionInfo &session, const bool only_changed/*false*/)
 {
   int ret = OB_SUCCESS;
@@ -168,6 +244,124 @@ int ObMPUtils::add_nls_format(OMPKOK &okp, sql::ObSQLSessionInfo &session, const
   } else {
     // NLS system variables are fixed in MySQL-only mode, so there is no changed
     // variable payload to append after login.
+  }
+  return ret;
+}
+
+int ObMPUtils::add_session_info_on_connect(OMPKOK &okp, sql::ObSQLSessionInfo &session)
+{
+  int ret = OB_SUCCESS;
+  // treat it as state changed
+  okp.set_state_changed(true);
+
+  // add database name
+  if (session.is_database_changed()) {
+    ObString db_name = session.get_database_name();
+    okp.set_changed_schema(db_name);
+  }
+
+  // add all sys variables
+  ObIAllocator &allocator = session.get_allocator();
+  for (int64_t i = 0; OB_SUCC(ret) && i < session.get_sys_var_count(); ++i) {
+    const ObBasicSysVar *sys_var = NULL;
+    if (NULL == (sys_var = session.get_sys_var(i))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("sys var is NULL", K(i), "total", session.get_sys_var_count(), K(ret));
+    } else {
+      ObStringKV str_kv;
+      str_kv.key_ = share::ObSysVarMeta::get_sys_var_name_by_id(sys_var->get_type()); // shadow copy
+      if (OB_FAIL(sys_var->to_show_str(allocator, session, str_kv.value_))) {
+        LOG_WARN("fail to get sql literal", K(i), K(ret));
+      } else if (OB_FAIL(okp.add_system_var(str_kv))) {
+        LOG_WARN("fail to add system var", K(i), K(str_kv), K(ret));
+      }
+    }
+  }
+
+  // add changed user variables
+  if (session.is_user_var_changed()) {
+    const ObIArray<ObString> &user_var = session.get_changed_user_var();
+    ObSessionValMap &user_map = session.get_user_var_val_map();
+    for (int64_t i = 0; i < user_var.count() && OB_SUCCESS == ret; ++i) {
+      ObString name = user_var.at(i);
+      ObSessionVariable sess_var;
+      if (name.empty()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid variable name", K(name), K(ret));
+      } else if (OB_FAIL(user_map.get_refactored(name, sess_var))) {
+        LOG_WARN("unknown user variable", K(name), K(ret));
+      } else {
+        ObStringKV str_kv;
+        str_kv.key_ = name;
+        if (OB_FAIL(get_user_sql_literal(allocator, sess_var.value_, str_kv.value_, session.create_obj_print_params()))) {
+          LOG_WARN("fail to get user sql literal", K(sess_var.value_), K(ret));
+        } else if (OB_FAIL(okp.add_user_var(str_kv))) {
+          LOG_WARN("fail to add user var", K(str_kv), K(ret));
+        } else {
+          LOG_DEBUG("succ to add user var", K(str_kv), K(ret));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+// response _min_cluster_version on connect,
+// design doc: 
+int ObMPUtils::add_min_cluster_version(OMPKOK &okp, sql::ObSQLSessionInfo &session)
+{
+  int ret = OB_SUCCESS;
+  const char *MIN_CLUSTER_VERSION_KEY = "_min_cluster_version";
+  ObStringKV str_kv;
+  str_kv.key_ = ObString::make_string(MIN_CLUSTER_VERSION_KEY);
+  char version_buf[OB_CLUSTER_VERSION_LENGTH];
+  int64_t pos = 0;
+  ObObj version;
+  if (OB_INVALID_INDEX == (pos = ObClusterVersion::print_version_str(
+          version_buf, OB_CLUSTER_VERSION_LENGTH, GET_MIN_CLUSTER_VERSION()))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to get min cluster version", K(ret));
+  } else if (FALSE_IT(version.set_varchar(version_buf, pos))) {
+    // do nothing
+  } else if (OB_FAIL(get_user_sql_literal(session.get_allocator(),
+                                          version,
+                                          str_kv.value_,
+                                          session.create_obj_print_params()))) {
+    LOG_WARN("fail to get user sql literal", K(version), K(ret));
+  } else if (OB_FAIL(okp.add_user_var(str_kv))) {
+    LOG_WARN("fail to add user var", K(str_kv), K(ret));
+  } else {
+    LOG_TRACE("succ to add _min_cluster_version user var on connect", K(ret), K(str_kv),
+              "sessid", session.get_server_sid());
+  }
+
+  return ret;
+}
+
+int ObMPUtils::get_plain_str_literal(ObIAllocator &allocator, const ObObj &obj, ObString &value_str)
+{
+  int ret = OB_SUCCESS;
+  char *data = NULL;
+  int64_t pos = 0;
+  const bool is_plain = true;
+  int64_t plain_str_print_length = 0;
+  ObObjPrintParams default_print_params;
+  if (obj.is_null()) {
+    // if obj is null value , return ""; mysql have the same behavior
+    pos = 0;
+  } else if (OB_FAIL(get_literal_print_length(obj, is_plain, plain_str_print_length, default_print_params))) {
+    LOG_WARN("fail to get buffer length", K(ret), K(obj), K(plain_str_print_length));
+  } else if (OB_UNLIKELY(plain_str_print_length <= 0)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("Invalid buffer length", K(ret), K(obj), K(plain_str_print_length));
+  } else if (NULL == (data = static_cast<char *>(allocator.alloc(plain_str_print_length)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("fail to alloc mem", K(plain_str_print_length), K(ret));
+  } else {
+    ret = obj.print_plain_str_literal(data, plain_str_print_length, pos);
+  }
+  if (OB_SUCC(ret)) {
+    value_str.assign_ptr(data, static_cast<uint32_t>(pos));
   }
   return ret;
 }

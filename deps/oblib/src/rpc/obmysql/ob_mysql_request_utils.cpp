@@ -64,6 +64,10 @@ static int64_t get_max_comp_pkt_size(const int64_t uncomp_pkt_size)
  *
  *  the body is compressed packet(orig header + orig body)
  *
+ * NOTE: In standard mysql compress protocol, if src_pktlen < 50B, or compr_pktlen >= src_pktlen
+ *       mysql will do not compress it and set pktlen_before_compression = 0,
+ *       it can not ensure checksum.
+ * NOTE: In OB, we need always checksum ensured first!
  */
 static int build_compressed_packet(ObEasyBuffer &src_buf,
     const int64_t next_compress_size, ObCompressionContext &context)
@@ -80,6 +84,11 @@ static int build_compressed_packet(ObEasyBuffer &src_buf,
     const int64_t comp_buf_size = dst_buf.write_avail_size() - OB_MYSQL_COMPRESSED_HEADER_SIZE;
     ObZlibCompressor compressor;
     bool use_real_compress = true;
+    if (context.use_checksum()) {
+      int64_t com_level = context.conn_->proxy_cap_flags_.is_ob_protocol_v2_compress() ? 6 : 0;
+      compressor.set_compress_level(com_level);
+      use_real_compress = !context.is_checksum_off_;
+    }
     int64_t dst_data_size = 0;
     int64_t pos = 0;
     int64_t len_before_compress = 0;
@@ -144,8 +153,10 @@ static int build_compressed_buffer(ObEasyBuffer &orig_send_buf,
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(ERROR, "orig_send_buf or comp_send_buf is invalid", K(orig_send_buf), K(comp_send_buf), K(ret));
     } else {
-      const int64_t max_read_step = OB_MAX_COMPRESSED_PACKET_LENGTH;
-      int64_t next_read_size = std::min(orig_send_buf.read_avail_size(), max_read_step);
+      const int64_t max_read_step = context.get_max_read_step();
+      bool is_v2_compress = context.conn_->proxy_cap_flags_.is_ob_protocol_v2_compress();
+      char * proxy_pos = is_v2_compress ? NULL : context.last_pkt_pos_;
+      int64_t next_read_size = orig_send_buf.get_next_read_size(proxy_pos, max_read_step);
       int64_t last_read_size = 0;
       if (next_read_size > (comp_send_buf.write_avail_size() - OB_MYSQL_COMPRESSED_HEADER_SIZE)) {
         next_read_size = max_read_step;
@@ -154,12 +165,18 @@ static int build_compressed_buffer(ObEasyBuffer &orig_send_buf,
       while (OB_SUCC(ret)
              && next_read_size > 0
              && max_comp_pkt_size <= comp_send_buf.write_avail_size()) {
+        // v2 compress protocol not do this check
+        //error+ok/ok packet should use last seq
+        if (!is_v2_compress && context.last_pkt_pos_ == orig_send_buf.read_pos() && context.is_proxy_compress_based()) {
+          --context.seq_;
+        }
+
         if (OB_FAIL(build_compressed_packet(orig_send_buf, next_read_size, context))) {
           SERVER_LOG(WARN, "fail to build_compressed_packet", K(ret));
         } else {
           //optimize for multi packet
           last_read_size = next_read_size;
-          next_read_size = std::min(orig_send_buf.read_avail_size(), max_read_step);
+          next_read_size = orig_send_buf.get_next_read_size(proxy_pos, max_read_step);
           if (next_read_size > (comp_send_buf.write_avail_size() - OB_MYSQL_COMPRESSED_HEADER_SIZE)) {
             next_read_size = max_read_step;
           }
@@ -314,10 +331,19 @@ int ObMySQLRequestUtils::flush_compressed_buffer(bool pkt_has_completed, ObCompr
                                                               ObEasyBuffer &orig_send_buf, rpc::ObRequest &req)
 {
   int ret = OB_SUCCESS;
+  int64_t need_hold_size = 0;
+
 
   if (OB_ISNULL(comp_context.conn_)) {
     ret = OB_INVALID_ARGUMENT;
     SERVER_LOG(WARN, "conn_ is null", K(comp_context), K(ret));
+  } else if (comp_context.conn_->proxy_cap_flags_.is_ob_protocol_v2_compress()){
+    // do nothing
+  } else if (comp_context.need_hold_last_pkt(pkt_has_completed)) {
+    need_hold_size = orig_send_buf.proxy_read_avail_size(comp_context.last_pkt_pos_);
+    orig_send_buf.write(0 - need_hold_size);
+    SERVER_LOG(DEBUG, "need hold uncompleted proxy pkt", K(need_hold_size),
+            "orig_send_buf", orig_send_buf);
   }
 
   if (false == orig_send_buf.is_read_avail()) {
@@ -338,8 +364,25 @@ int ObMySQLRequestUtils::flush_compressed_buffer(bool pkt_has_completed, ObCompr
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (false == pkt_has_completed) {
+    bool need_reset_last_pkt_pos = (comp_context.last_pkt_pos_ == orig_send_buf.last());
     init_easy_buf(&orig_send_buf.buf_, reinterpret_cast<char *>(&orig_send_buf.buf_ + 1),
                   NULL, orig_send_buf.orig_buf_size());
+
+    // v2 compression not check
+    if (comp_context.conn_->proxy_cap_flags_.is_ob_protocol_v2_compress()) {
+      need_reset_last_pkt_pos = false;
+    }
+
+    if (need_reset_last_pkt_pos) {
+      if (need_hold_size > 0) {
+          MEMMOVE(orig_send_buf.last(), comp_context.last_pkt_pos_, need_hold_size);
+          orig_send_buf.write(need_hold_size);
+      }
+      comp_context.last_pkt_pos_ = orig_send_buf.begin();
+      SERVER_LOG(DEBUG, "need reset last_pkt_pos", K(need_hold_size),
+            "orig_send_buf_", orig_send_buf,
+            "comp_context", comp_context);
+    }
   }
   
   return ret;

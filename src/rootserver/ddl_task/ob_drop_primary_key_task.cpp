@@ -48,6 +48,7 @@ int ObDropPrimaryKeyTask::init(const ObTableSchema* src_table_schema, const ObTa
     consumer_group_id_ = consumer_group_id;
     sub_task_trace_id_ = sub_task_trace_id;
     task_version_ = OB_DROP_PRIMARY_KEY_TASK_VERSION;
+    ddl_tracing_.open();
   }
   return ret;
 }
@@ -61,6 +62,7 @@ int ObDropPrimaryKeyTask::process()
   } else if (OB_FAIL(check_health())) {
     LOG_WARN("check task health failed", K(ret));
   } else {
+    ddl_tracing_.restore_span_hierarchy();
     switch(task_status_) {
       case ObDDLTaskStatus::PREPARE:
         if (OB_FAIL(prepare(ObDDLTaskStatus::WAIT_TRANS_END))) {
@@ -112,6 +114,7 @@ int ObDropPrimaryKeyTask::process()
         LOG_WARN("unexpected drop primary key task state", K(task_status_));
         break;
     }
+    ddl_tracing_.release_span_hierarchy();
     if (OB_FAIL(ret)) {
       add_event_info("drop primary key task process fail");
       LOG_INFO("drop primary key task process fail", "ddl_event_info", ObDDLEventInfo());

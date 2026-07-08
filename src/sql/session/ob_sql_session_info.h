@@ -42,7 +42,9 @@
 #include "share/rc/ob_tenant_base.h"
 #include "share/rc/ob_context.h"
 #include "share/resource_manager/ob_cgroup_ctrl.h"
+#include "sql/monitor/flt/ob_flt_extra_info.h"
 #include "sql/ob_optimizer_trace_impl.h"
+#include "sql/monitor/flt/ob_flt_span_mgr.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
@@ -195,7 +197,7 @@ enum SessionSyncInfoType {
   SESSION_SYNC_APPLICATION_INFO = 0, // for application info
   SESSION_SYNC_APPLICATION_CONTEXT = 1, // for app ctx
   SESSION_SYNC_CLIENT_ID = 2, // for client identifier
-  SESSION_SYNC_CONTROL_INFO = 3, // reserved for compatibility
+  SESSION_SYNC_CONTROL_INFO = 3, // for full trace link control info
   SESSION_SYNC_SYS_VAR = 4,   // for system variables
   SESSION_SYNC_SEQUENCE_CURRVAL = 5, // for sequence currval
   SESSION_SYNC_ERROR_SYS_VAR = 6, // for error scene need sync sysvar info
@@ -322,10 +324,10 @@ public:
                                    int64_t last_sess_length, bool &found_mismatch);
 };
 
-class ObNoopSessInfoEncoder : public ObSessInfoEncoder {
+class ObControlInfoEncoder : public ObSessInfoEncoder {
 public:
-  ObNoopSessInfoEncoder() : ObSessInfoEncoder() {}
-  virtual ~ObNoopSessInfoEncoder() {}
+  ObControlInfoEncoder() : ObSessInfoEncoder() {}
+  virtual ~ObControlInfoEncoder() {}
   virtual int serialize(ObSQLSessionInfo &sess, char *buf, const int64_t length, int64_t &pos) override;
   virtual int deserialize(ObSQLSessionInfo &sess, const char *buf, const int64_t length, int64_t &pos) override;
   virtual int get_serialize_size(ObSQLSessionInfo &sess, int64_t &length) const override;
@@ -337,6 +339,7 @@ public:
                                 int64_t last_sess_length);
   virtual int display_sess_info(ObSQLSessionInfo &sess, const char* current_sess_buf,
           int64_t current_sess_length, const char* last_sess_buf, int64_t last_sess_length);
+  static const int16_t CONINFO_BY_SESS = 0xC078;
 };
 
 // The current system variable synchronization will not trigger synchronization in
@@ -953,6 +956,9 @@ public:
   inline void set_ps_protocol(bool is_ps_protocol) { pl_ps_protocol_ = is_ps_protocol; }
   inline bool is_ps_protocol() { return pl_ps_protocol_; }
 
+  inline void set_ob20_protocol(bool is_20protocol) { is_ob20_protocol_ = is_20protocol; }
+  inline bool is_ob20_protocol() { return is_ob20_protocol_; }
+
   int replace_user_variable(const common::ObString &name, const ObSessionVariable &value);
   int replace_user_variable(
     ObExecContext &ctx, const common::ObString &name, const ObSessionVariable &value);
@@ -1130,17 +1136,32 @@ public:
   const common::ObString& get_module_name() const { return client_app_info_.module_name_; }
   const common::ObString& get_action_name() const  { return client_app_info_.action_name_; }
   const common::ObString& get_client_info() const { return client_app_info_.client_info_; }
+  const FLTControlInfo& get_control_info() const { return flt_control_info_; }
+  FLTControlInfo& get_control_info() { return flt_control_info_; }
+  void set_flt_control_info(const FLTControlInfo &con_info);
+  void set_flt_control_info_no_sync(const FLTControlInfo &con_info);
+  bool is_send_control_info() { return is_send_control_info_; }
+  void set_send_control_info(bool is_send) { is_send_control_info_ = is_send; }
+  bool is_coninfo_set_by_sess() { return coninfo_set_by_sess_; }
+  void set_coninfo_set_by_sess(bool is_set_by_sess) { coninfo_set_by_sess_ = is_set_by_sess; }
+  bool is_trace_enable() { return trace_enable_; }
+  void set_trace_enable(bool trace_enable) { trace_enable_ = trace_enable; }
+  bool is_auto_flush_trace() {return auto_flush_trace_;}
+  void set_auto_flush_trace(bool auto_flush_trace) { auto_flush_trace_ = auto_flush_trace; }
   ObSysVarEncoder& get_sys_var_encoder() { return sys_var_encoder_; }
   //ObUserVarEncoder& get_usr_var_encoder() { return usr_var_encoder_; }
   ObAppInfoEncoder& get_app_info_encoder() { return app_info_encoder_; }
   ObAppCtxInfoEncoder &get_app_ctx_encoder() { return app_ctx_info_encoder_; }
   ObClientIdInfoEncoder &get_client_info_encoder() { return client_id_info_encoder_;}
+  ObControlInfoEncoder &get_control_info_encoder() { return control_info_encoder_;}
   ObErrorSyncSysVarEncoder &get_error_sync_sys_var_encoder() { return error_sync_sys_var_encoder_;}
   ObSequenceCurrvalEncoder &get_sequence_currval_encoder() { return sequence_currval_encoder_; }
   ObQueryInfoEncoder &get_query_info_encoder() { return query_info_encoder_; }
   ObContextsMap &get_contexts_map() { return contexts_map_; }
   ObSequenceCurrvalMap &get_sequence_currval_map() { return sequence_currval_map_; }
   ObSockFdMap &get_sock_fd_map() { return sock_fd_map_; }
+  void set_client_non_standard(bool client_non_standard) { client_non_standard_ = client_non_standard; }
+  bool client_non_standard() { return client_non_standard_; }
   const common::ObString &get_audit_filter_name() const { return audit_filter_name_; }
   int get_mem_ctx_alloc(common::ObIAllocator *&alloc);
   int update_sess_sync_info(const SessionSyncInfoType sess_sync_info_type,
@@ -1439,6 +1460,7 @@ private:
   const common::ObVersionProvider *version_provider_;
   const ObSQLConfigProvider *config_provider_;
   char tenant_buff_[sizeof(share::ObTenantSpaceFetcher)];
+  sql::ObFLTSpanMgr *flt_span_mgr_;
   ObPlanCache *plan_cache_;
   ObPsCache *ps_cache_;
   // Record the number of rows scanned in the select stmt result set for use with found_row() when setting sql_calc_found_row;
@@ -1520,6 +1542,7 @@ private:
 
   observer::ObQueryDriver *pl_query_sender_; // send query result in mysql pl
   bool pl_ps_protocol_; // send query result use this protocol
+  bool is_ob20_protocol_; // mark as whether use oceanbase 2.0 protocol
 
   common::hash::ObHashSet<common::ObString> *pl_sync_pkg_vars_ = NULL;
 
@@ -1565,6 +1588,11 @@ private:
   char module_buf_[common::OB_MAX_MOD_NAME_LENGTH];
   char action_buf_[common::OB_MAX_ACT_NAME_LENGTH];
   char client_info_buf_[common::OB_MAX_CLIENT_INFO_LENGTH];
+  FLTControlInfo flt_control_info_;
+  bool trace_enable_ = false;
+  bool is_send_control_info_ = false;  // whether send control info to client
+  bool auto_flush_trace_ = false;
+  bool coninfo_set_by_sess_ = false;
   bool is_lock_session_ = false;
 
   ObSessInfoEncoder* sess_encoders_[SESSION_SYNC_MAX_TYPE] = {
@@ -1572,7 +1600,7 @@ private:
                             &app_info_encoder_,
                             &app_ctx_info_encoder_,
                             &client_id_info_encoder_,
-                            &noop_sess_info_encoder_,
+                            &control_info_encoder_,
                             &sys_var_encoder_,
                             &sequence_currval_encoder_,
                             &error_sync_sys_var_encoder_,
@@ -1583,7 +1611,7 @@ private:
   ObAppInfoEncoder app_info_encoder_;
   ObAppCtxInfoEncoder app_ctx_info_encoder_;
   ObClientIdInfoEncoder client_id_info_encoder_;
-  ObNoopSessInfoEncoder noop_sess_info_encoder_;
+  ObControlInfoEncoder control_info_encoder_;
   ObSequenceCurrvalEncoder sequence_currval_encoder_;
   ObErrorSyncSysVarEncoder error_sync_sys_var_encoder_;
   ObQueryInfoEncoder query_info_encoder_;
@@ -1619,6 +1647,7 @@ private:
   int32_t vport_;
   int64_t in_bytes_;
   int64_t out_bytes_;
+  bool client_non_standard_;
   share::schema::ObUserLoginInfo login_info_;
   dbms_scheduler::ObDBMSSchedJobInfo *job_info_; // dbms_scheduler related.
   memtable::ObBtreeIterCache *btree_iter_cache_;

@@ -89,6 +89,9 @@ void ObSqlEndTransCb::callback(int cb_param)
     } else if (OB_SUCCESS != packet_sender_.alloc_ezbuf()) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc easy buf");
+    } else if (OB_SUCCESS != packet_sender_.update_last_pkt_pos()) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to update last packet pos");
     } else {
       session_info->set_show_warnings_buf(cb_param);
       if (OB_SUCCESS == cb_param) {

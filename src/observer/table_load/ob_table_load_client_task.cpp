@@ -582,7 +582,7 @@ int ObTableLoadClientTask::create_session_info()
     OX(session_info_->set_user_priv_set(OB_PRIV_ALL | OB_PRIV_GRANT));
     OX(session_info_->set_default_database(database_schema->get_database_name(),
                                            CS_TYPE_UTF8MB4_GENERAL_CI));
-    OX(session_info_->set_mysql_cmd(obmysql::COM_QUERY));
+    OX(session_info_->set_mysql_cmd(COM_QUERY));
     OX(session_info_->set_current_trace_id(ObCurTraceId::get_trace_id()));
     OX(session_info_->set_client_addr(param_.get_client_addr()));
     OX(session_info_->set_peer_addr(ObServer::get_instance().get_self()));

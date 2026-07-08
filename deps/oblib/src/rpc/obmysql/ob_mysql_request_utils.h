@@ -45,6 +45,7 @@ class ObMySQLPacket;
 class ObEasyBuffer;
 class ObCompressionContext;
 
+static const int64_t OB_PROXY_MAX_COMPRESSED_PACKET_LENGTH = (1L << 15); //32K
 static const int64_t OB_MAX_COMPRESSED_PACKET_LENGTH = (1L << 20); //1M
 static const int64_t MAX_COMPRESSED_BUF_SIZE = common::OB_MALLOC_BIG_BLOCK_SIZE;//2M-1k
 
@@ -168,6 +169,46 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObCompressedPktContext);
 };
 
+class ObProto20PktContext
+{
+public:
+  ObProto20PktContext() : arena_("LibMultiPackets"){ reset(); }
+  ~ObProto20PktContext() { }
+  void reset()
+  {
+    comp_last_pkt_seq_ = 0;
+    is_multi_pkt_ = false;
+    is_comp_packet_ = false;
+    proto20_last_request_id_ = 0;
+    proto20_last_pkt_seq_ = 0;
+    extra_info_.reset();
+    arena_.reset(); //fast free memory
+  }
+
+  TO_STRING_KV(K_(comp_last_pkt_seq),
+               K_(is_multi_pkt),
+               K_(proto20_last_request_id),
+               K_(proto20_last_pkt_seq),
+               K_(extra_info),
+               K_(is_comp_packet),
+               "used", arena_.used(),
+               "total", arena_.total());
+
+public:
+  uint8_t comp_last_pkt_seq_;
+  bool is_multi_pkt_;
+  uint32_t proto20_last_request_id_;
+  uint8_t proto20_last_pkt_seq_;
+  Ob20ExtraInfo extra_info_;
+  common::ObArenaAllocator arena_;
+  bool is_comp_packet_;
+
+  
+private:
+  
+  DISALLOW_COPY_AND_ASSIGN(ObProto20PktContext);
+};
+
 class ObEasyBuffer
 {
 public:
@@ -175,6 +216,7 @@ public:
   ~ObEasyBuffer() {}
   int64_t read_avail_size() const { return buf_.last - read_pos_; }
   int64_t write_avail_size() const { return buf_.end - buf_.last; }
+  int64_t proxy_read_avail_size(const char * const proxy_pos) const { return buf_.last - proxy_pos;}
   int64_t orig_data_size() const { return buf_.last - buf_.pos; }
   int64_t orig_buf_size() const { return buf_.end - buf_.pos; }
   bool is_valid() const { return (orig_buf_size() >= 0 && orig_data_size() >= 0); }
@@ -186,6 +228,25 @@ public:
   void read(const int64_t size) { read_pos_ += size;}
   void write(const int64_t size) { buf_.last += size;}
   void fall_back(const int64_t size) { buf_.last -= size; }
+
+  int64_t get_next_read_size(char *proxy_pos, const int64_t max_read_step)
+  {
+    int64_t ret = 0;
+    bool is_last_proxy_pkt = false;
+    if (NULL == proxy_pos) {
+      ret = read_avail_size();
+    } else if (proxy_pos <= read_pos()) {
+      ret = read_avail_size();
+      is_last_proxy_pkt = true;
+    } else {
+      ret = std::min(last(), proxy_pos) - read_pos();
+    }
+
+    if (!is_last_proxy_pkt && ret > max_read_step) {
+      ret = max_read_step;
+    }
+    return ret;
+  }
 
   TO_STRING_KV(KP_(read_pos), KP(buf_.pos), KP(buf_.last), KP(buf_.end),
                "orig_buf_size", orig_buf_size(),
@@ -205,6 +266,10 @@ enum ObCompressType
 {
   NO_COMPRESS = 0,
   DEFAULT_COMPRESS, //compress the whole buf every 1M
+  PROXY_COMPRESS,   //1. compress every 32K buf,
+                    //2. put error+ok/eof+ok/ok in one compressed packet, and seq=last seq
+  DEFAULT_CHECKSUM, //use level 0 compress based on DEFAULT_COMPRESS
+  PROXY_CHECKSUM,   //use level 0 compress based on PROXY_COMPRESS
 };
 
 class ObCompressionContext
@@ -216,13 +281,41 @@ public:
   void reset() { memset(this, 0, sizeof(ObCompressionContext)); }
   bool use_compress() const { return NO_COMPRESS != type_; }
   bool use_uncompress() const { return NO_COMPRESS == type_; }
+  bool is_proxy_compress() const { return PROXY_COMPRESS == type_; }
   bool is_default_compress() const { return DEFAULT_COMPRESS == type_; }
+  bool is_default_checksum() const { return DEFAULT_CHECKSUM == type_; }
+  bool is_proxy_checksum() const { return PROXY_CHECKSUM == type_; }
+  bool is_proxy_compress_based() const { return is_proxy_checksum() || is_proxy_compress(); }
+  bool use_checksum() const { return is_proxy_checksum() || is_default_checksum(); }
+  void update_last_pkt_pos(char *pkt_pos)
+  {
+    if (is_proxy_compress_based() && NULL == last_pkt_pos_) {
+      //if has updated, no need update again
+      last_pkt_pos_ = pkt_pos;
+    }
+  }
+
+
+  int64_t get_max_read_step() const
+  {
+    return (is_proxy_compress_based()
+        ? OB_PROXY_MAX_COMPRESSED_PACKET_LENGTH
+        : OB_MAX_COMPRESSED_PACKET_LENGTH);
+  }
+
+  bool need_hold_last_pkt(const bool is_last) const
+  {
+    //if error(eof) + ok can not in one buf, we need hold error(eof) packet for proxy
+    return (is_proxy_compress_based()
+            && NULL != last_pkt_pos_
+            && !is_last );
+  }
 
   int64_t to_string(char *buf, const int64_t buf_len) const
   {
     int64_t pos = 0;
     J_OBJ_START();
-    J_KV(K_(sessid), K_(type), K_(seq), K_(comp_level));
+    J_KV(K_(sessid), K_(type), K_(is_checksum_off), K_(seq), KP_(last_pkt_pos), K_(comp_level));
     J_COMMA();
     if (NULL != send_buf_) {
       J_KV("send_buf", ObEasyBuffer(*send_buf_));
@@ -235,8 +328,10 @@ public:
 
 public:
   ObCompressType type_;
+  bool is_checksum_off_;
   uint8_t seq_;//compressed pkt seq
   easy_buf_t *send_buf_;
+  char *last_pkt_pos_;//proxy last pkt(error+ok, eof+ok, ok)'s pos in orig_ezbuf, default is null
   uint32_t sessid_;
   observer::ObSMConnection *conn_;
   int64_t comp_level_;

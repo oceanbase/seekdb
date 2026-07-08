@@ -82,6 +82,7 @@ int ObDataAccessService::execute_das_task(
   int ret = OB_SUCCESS;
   if (OB_LIKELY(das_ref.is_execute_directly())) {
     common::ObSEArray<ObIDASTaskOp *, 2> task_wrapper;
+    FLTSpanGuard(do_local_das_task);
     while (OB_SUCC(ret) && OB_SUCC(task_ops.get_aggregated_tasks(task_wrapper)) &&
         task_wrapper.count() != 0) {
       for (int i = 0; OB_SUCC(ret) && i < task_wrapper.count(); i++) {
@@ -109,6 +110,7 @@ int ObDataAccessService::execute_das_task(
 int ObDataAccessService::get_das_task_id(int64_t &das_id)
 {
   int ret = OB_SUCCESS;
+  FLTSpanGuard(get_das_id);
   const int MAX_RETRY_TIMES = 50;
   int64_t tmp_das_id = 0;
   bool force_renew = false;
@@ -309,6 +311,7 @@ int ObDataAccessService::end_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op)
 int ObDataAccessService::rescan_das_task(ObDASRef &das_ref, ObDASScanOp &scan_op)
 {
   int ret = OB_SUCCESS;
+  FLTSpanGuard(rescan_das_task);
 
   ObArenaAllocator tmp_alloc;
   ObDasAggregatedTask das_task_wrapper(tmp_alloc);
@@ -334,6 +337,7 @@ int ObDataAccessService::rescan_das_task(ObDASRef &das_ref, ObDASScanOp &scan_op
 
 int ObDataAccessService::do_local_das_task(ObIArray<ObIDASTaskOp*> &task_list) {
   int ret = OB_SUCCESS;
+  FLTSpanGuard(do_local_das_task);
 
   LOG_DEBUG("begin to do local das task", K(task_list));
   for (int64_t i = 0; OB_SUCC(ret) && i < task_list.count(); i++) {

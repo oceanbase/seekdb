@@ -18,6 +18,7 @@
 
 #include "ob_sql_session_mgr.h"
 #include "share/rc/ob_module_provider.h"
+#include "sql/monitor/flt/ob_flt_control_info_mgr.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "sql/engine/dml/ob_trigger_handler.h"
 
@@ -386,14 +387,19 @@ int ObSQLSessionMgr::create_session(ObSMConnection *conn, ObSQLSessionInfo *&ses
 {
   int ret = OB_SUCCESS;
   sess_info = NULL;
+  // In order to be compatible with lower versions,
+  // the client session id of unsupported versions is INVALID_SESSID.
+  // direct mode (obproxy support removed): cs_id defaults to the server session id
+  // unless the client negotiated its own client session id.
+  conn->client_sessid_ = conn->client_sessid_ == INVALID_SESSID ? conn->sessid_ : conn->client_sessid_;
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn is NULL", K(ret));
   } else if (OB_FAIL(create_session(conn->sessid_,
                                     conn->sess_create_time_,
                                     sess_info,
-                                    conn->sessid_,
-                                    conn->sess_create_time_))) {
+                                    conn->client_sessid_,
+                                    conn->client_create_time_))) {
     LOG_WARN("create session failed", K(ret));
   } else if (OB_ISNULL(sess_info)) {
     ret = OB_ERR_UNEXPECTED;
@@ -484,8 +490,28 @@ int ObSQLSessionMgr::create_session(const uint32_t sessid,
           K(sessid), K(client_create_time));
     }
   } else {
-    tmp_sess->update_last_active_time();
-    session_info = tmp_sess;
+    // set tenant info to session, if has.
+    ObFLTControlInfoManager mgr;
+    if (OB_FAIL(mgr.init())) {
+      LOG_WARN("failed to init full link control info", K(ret));
+      if (FALSE_IT(revert_session(tmp_sess))) {
+        LOG_ERROR("fail to free session", K(err), K(sessid));
+      } else if (OB_SUCCESS != (err = sessinfo_map_.del(Key(sessid)))) {
+        LOG_ERROR("fail to free session", K(err), K(sessid));
+      } else {
+        LOG_DEBUG("free session successfully in create session", K(err),
+            K(sessid));
+      }
+    } else if (mgr.is_valid_tenant_config()) {
+      tmp_sess->set_flt_control_info(mgr.get_control_info());
+    }
+
+    if (OB_FAIL(ret)) {
+      // do nothing
+    } else {
+      tmp_sess->update_last_active_time();
+      session_info = tmp_sess;
+    }
   }
   return ret;
 }
@@ -783,7 +809,8 @@ bool ObSQLSessionMgr::CheckSessionFunctor::operator()(sql::ObSQLSessionMgr::Key 
     //do nothing
   } else if (obmysql::COM_QUERY == sess_info->get_mysql_cmd() ||
             obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
-            obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd()) {
+            obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd() ||
+            obmysql::COM_STMT_PREXECUTE == sess_info->get_mysql_cmd()) {
     int64_t cur_time = common::ObTimeUtility::current_time();
     int64_t query_timeout = 0;
     ObSQLSessionInfo::LockGuard lock_guard(sess_info->get_thread_data_lock());

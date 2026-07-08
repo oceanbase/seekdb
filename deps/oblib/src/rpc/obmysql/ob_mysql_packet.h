@@ -24,7 +24,8 @@ namespace oceanbase
 namespace obmysql
 {
 
-#define INTERNAL_MYSQL_CMD_START 64
+#define OBPROXY_MYSQL_CMD_START 64
+#define PREXECUTE_CMD 161
 
 static const int64_t OB_MYSQL_MAX_PACKET_LENGTH = (1L << 24); //3bytes , 16M
 static const int64_t OB_MYSQL_MAX_PAYLOAD_LENGTH = (OB_MYSQL_MAX_PACKET_LENGTH - 1);
@@ -77,17 +78,21 @@ enum ObMySQLCmd
   COM_END,
 
 
-  // Internal pseudo-commands used by the SQL connection lifecycle.
+  // for obproxy
   // COM_DELETE_SESSION is not a standard mysql package type. This is a package used to process delete session
   // When the connection is disconnected, the session needs to be deleted, but at this time it may not be obtained in the callback function disconnect
   // Session lock, at this time, an asynchronous task will be added to the obmysql queue
-  COM_DELETE_SESSION = INTERNAL_MYSQL_CMD_START,
-  // COM_HANDSHAKE and COM_LOGIN are not standard mysql package types.
+  COM_DELETE_SESSION = OBPROXY_MYSQL_CMD_START,
+  // COM_HANDSHAKE and COM_LOGIN are not standard mysql package types, they are used in ObProxy
   // COM_HANDSHAKE represents client---->on_connect && observer--->hand shake or error
   // COM_LOGIN represents client---->hand shake response && observer---> ok or error
   COM_HANDSHAKE,
   COM_LOGIN,
   COM_AUTH_SWITCH_RESPONSE,
+
+  COM_STMT_PREXECUTE = PREXECUTE_CMD,
+  COM_STMT_SEND_PIECE_DATA,
+  COM_STMT_GET_PIECE_DATA,
   COM_MAX_NUM
 };
 
@@ -104,9 +109,10 @@ enum class ObMySQLPacketType
   PKT_STR,       // 8 -> string packet;
   PKT_PREPARE,   // 9 -> prepare packet; 
   PKT_RESHEAD,   // 10 -> result header packet
-  PKT_AUTH_SWITCH,// 11 -> auth switch request packet;
-  PKT_FILENAME,  // 12 -> send file name to client(load local infile)
-  PKT_END        // 13 -> end of packet type
+  PKT_PREXEC,    // 11 -> prepare execute packet;
+  PKT_AUTH_SWITCH,// 12 -> auth switch request packet;
+  PKT_FILENAME,  // 13 -> send file name to client(load local infile)
+  PKT_END        // 14 -> end of packet type
 };
 
 union ObServerStatusFlags
@@ -135,6 +141,62 @@ union ObServerStatusFlags
     uint16_t OB_SERVER_STATUS_IN_TRANS_READONLY:    1;  // in a read-only transaction
     uint16_t OB_SERVER_SESSION_STATE_CHANGED:       1;  // connection state information has changed
   } status_flags_;
+};
+
+// used for proxy, OCJ and observer to negotiate new features
+union ObProxyCapabilityFlags
+{
+  ObProxyCapabilityFlags() : capability_(0) {}
+  explicit ObProxyCapabilityFlags(uint64_t cap) : capability_(cap) {}
+  bool is_checksum_support() const { return 1 == cap_flags_.OB_CAP_CHECKSUM; }
+  bool is_extra_ok_packet_for_statistics_support() const { return 1 == cap_flags_.OB_CAP_EXTRA_OK_PACKET_FOR_STATISTICS; }
+  bool is_cap_used() const { return 0 != capability_; }
+  bool is_extra_ok_packet_for_ocj_support() const { return 1 == cap_flags_.OB_CAP_EXTRA_OK_PACKET_FOR_OCJ; }
+  bool is_ob_protocol_v2_support() const { return 1 == cap_flags_.OB_CAP_OB_PROTOCOL_V2; }
+  bool is_full_link_trace_support() const { return 1 == cap_flags_.OB_CAP_PROXY_FULL_LINK_TRACING
+                                                        && is_ob_protocol_v2_support(); }
+  bool is_new_extra_info_support() const { return 1 == cap_flags_.OB_CAP_PROXY_NEW_EXTRA_INFO
+                                                        && is_ob_protocol_v2_support(); }
+  bool is_flt_show_trace_support() const { return 1 == cap_flags_.OB_CAP_PROXY_FULL_LINK_TRACING_EXT
+                                                        && is_ob_protocol_v2_support(); }
+  bool is_load_local_support() const { return 1 == cap_flags_.OB_CAP_LOCAL_FILES; }
+  bool is_client_sessid_support() const { return 1 == cap_flags_.OB_CAP_PROXY_CLIENT_SESSION_ID; }
+
+  bool is_ob_protocol_v2_compress() const { return 1 == cap_flags_.OB_CAP_OB_PROTOCOL_V2_COMPRESS
+                                                        && is_ob_protocol_v2_support(); }
+  uint64_t capability_;
+  struct CapabilityFlags
+  {
+    uint64_t OB_CAP_RESERVED_BIT_0:                    1;  // was OB_CAP_PARTITION_TABLE (obproxy-only, removed)
+    uint64_t OB_CAP_CHANGE_USER:                       1;
+    uint64_t OB_CAP_RESERVED_BIT_2:                    1;  // was OB_CAP_READ_WEAK (obproxy-only, removed)
+    uint64_t OB_CAP_CHECKSUM:                          1;
+    uint64_t OB_CAP_RESERVED_BIT_4:                    1;  // was OB_CAP_SAFE_WEAK_READ (obproxy-only, removed)
+    uint64_t OB_CAP_RESERVED_BIT_5:                    1;  // was OB_CAP_PRIORITY_HIT (obproxy-only, removed)
+    uint64_t OB_CAP_RESERVED_BIT_6:                    1;  // was OB_CAP_CHECKSUM_SWITCH (obproxy-only, removed)
+    uint64_t OB_CAP_EXTRA_OK_PACKET_FOR_OCJ:           1;
+    // used since oceanbase 2.0 and aimed to replace mysql compress protocol for its low performance
+    uint64_t OB_CAP_OB_PROTOCOL_V2:                    1;
+    // whether following an extra ok packet at the end of COM_STATISTICS response
+    uint64_t OB_CAP_EXTRA_OK_PACKET_FOR_STATISTICS:    1;
+    uint64_t OB_CAP_RESERVED_BIT_10:                   1;  // was OB_CAP_ABUNDANT_FEEDBACK (obproxy-only, removed)
+    uint64_t OB_CAP_RESERVED_BIT_11:                   1;  // was OB_CAP_PL_ROUTE (obproxy-only, removed)
+    uint64_t OB_CAP_RESERVED_BIT_12:                   1;  // was OB_CAP_PROXY_REROUTE (obproxy-only, removed)
+    uint64_t OB_CAP_RESERVED_BIT_13:                   1;  // was OB_CAP_PROXY_SESSIOIN_SYNC (obproxy-only, removed)
+    // for full trace_route
+    uint64_t OB_CAP_PROXY_FULL_LINK_TRACING:           1;
+    uint64_t OB_CAP_PROXY_NEW_EXTRA_INFO:              1;
+    uint64_t OB_CAP_RESERVED_BIT_16:                   1;  // was OB_CAP_PROXY_SESSION_VAR_SYNC (obproxy-only, removed)
+    uint64_t OB_CAP_RESERVED_BIT_17:                   1;  // was OB_CAP_PROXY_WEAK_STALE_FEEDBACK (obproxy-only, removed)
+    uint64_t OB_CAP_PROXY_FULL_LINK_TRACING_EXT:       1;
+    uint64_t OB_CAP_RESERVED_BIT_19:                   1;  // was OB_CAP_SERVER_DUP_SESS_INFO_SYNC (obproxy-only, removed)
+    uint64_t OB_CAP_LOCAL_FILES:                       1;
+    // client session id consultation
+    uint64_t OB_CAP_PROXY_CLIENT_SESSION_ID:           1;
+    uint64_t OB_CAP_OB_PROTOCOL_V2_COMPRESS:           1;
+    uint64_t OB_CAP_RESERVED_BIT_23:                   1;  // was OB_CAP_FEEDBACK_PROXY_SHIFT (obproxy-only, removed)
+    uint64_t OB_CAP_RESERVED_NOT_USE:                 41;
+  } cap_flags_;
 };
 
 union ObMySQLCapabilityFlags
@@ -273,6 +335,59 @@ public:
   TO_STRING_KV(K_(key), K_(value));
 };
 
+struct Ob20ExtraInfo
+{
+public:
+  uint32_t extra_len_;
+  bool exist_trace_info_;
+  ObString trace_info_;
+  // add key name
+  static constexpr const char SYNC_SESSION_INFO[] = "sess_inf";
+  static constexpr const char FULL_LINK_TRACE[] = "full_trc";
+  static constexpr const char OB_SESSION_INFO_VERI[] = "sess_ver";
+
+
+  // def value
+  ObString sync_sess_info_;
+  ObString full_link_trace_;
+  ObString sess_info_veri_;
+
+public:
+  Ob20ExtraInfo() : extra_len_(0), exist_trace_info_(false) {}
+  ~Ob20ExtraInfo() {}
+  void reset() {
+    extra_len_ = 0;
+    exist_trace_info_ = false;
+    trace_info_.reset();
+    sync_sess_info_.reset();
+    full_link_trace_.reset();
+    sess_info_veri_.reset();
+  }
+  bool exist_sync_sess_info() { return !sync_sess_info_.empty(); }
+  bool exist_full_link_trace() { return !full_link_trace_.empty(); }
+  bool exist_sess_info_veri() { return !sess_info_veri_.empty(); }
+  ObString& get_sync_sess_info() { return sync_sess_info_; }
+  ObString& get_full_link_trace() { return full_link_trace_; }
+  ObString& get_sess_info_veri() { return sess_info_veri_; }
+  bool exist_sync_sess_info() const { return !sync_sess_info_.empty(); }
+  bool exist_full_link_trace() const { return !full_link_trace_.empty(); }
+  bool exist_sess_info_veri() const { return !sess_info_veri_.empty(); }
+  const ObString& get_sync_sess_info() const { return sync_sess_info_; }
+  const ObString& get_full_link_trace() const { return full_link_trace_; }
+  const ObString& get_sess_info_veri() const { return sess_info_veri_; }
+  bool exist_extra_info() {return !sync_sess_info_.empty() || !full_link_trace_.empty()
+                            || !sess_info_veri_.empty() || exist_trace_info_;}
+  bool exist_extra_info() const {return !sync_sess_info_.empty() || !full_link_trace_.empty()
+                            || !sess_info_veri_.empty() || exist_trace_info_;}
+  int assign(const Ob20ExtraInfo &other, char* buf, int64_t len);
+  int64_t get_total_len() {return trace_info_.length() + sync_sess_info_.length() +
+                                full_link_trace_.length() + sess_info_veri_.length();}
+  int64_t get_total_len() const {return trace_info_.length() + sync_sess_info_.length() +
+                                full_link_trace_.length() + sess_info_veri_.length();}
+  TO_STRING_KV(K_(extra_len), K_(exist_trace_info), K_(trace_info),
+               K_(sync_sess_info), K_(full_link_trace), K_(sync_sess_info));
+};
+
 typedef ObCommonKV<common::ObString, common::ObString> ObStringKV;
 
 static const int64_t MAX_STORE_LENGTH = 9;
@@ -392,7 +507,8 @@ public:
   ObMySQLRawPacket() : ObMySQLPacket(), cmd_(COM_MAX_NUM),
                        is_weak_read_(false),
                        txn_free_route_(false),
-                       proxy_switch_route_(false)
+                       proxy_switch_route_(false),
+                       extra_info_()
   {}
 
   explicit ObMySQLRawPacket(obmysql::ObMySQLCmd cmd)
@@ -400,7 +516,8 @@ public:
       is_weak_read_(false),
       txn_free_route_(false),
       proxy_switch_route_(false),
-      consume_size_(0)
+      consume_size_(0),
+      extra_info_()
   {}
 
   virtual ~ObMySQLRawPacket() {}
@@ -420,6 +537,10 @@ public:
   inline void set_txn_free_route(const bool txn_free_route);
   inline bool txn_free_route() const;
 
+  inline const Ob20ExtraInfo &get_extra_info() const { return extra_info_; }
+  bool exist_trace_info() const { return extra_info_.exist_trace_info_; }
+  bool exist_extra_info() const { return extra_info_.exist_extra_info(); }
+  const common::ObString &get_trace_info() const { return extra_info_.trace_info_; }
   virtual int64_t get_serialize_size() const;
 
   void set_consume_size(int64_t consume_size) { consume_size_ = consume_size; }
@@ -431,6 +552,7 @@ public:
     is_weak_read_ = false;
     txn_free_route_ = false;
     proxy_switch_route_ = false;
+    extra_info_.reset();
     consume_size_ = 0;
   }
 
@@ -440,6 +562,7 @@ public:
     cmd_ = other.cmd_;
     is_weak_read_ = other.is_weak_read_;
     txn_free_route_ = other.txn_free_route_;
+    extra_info_ = other.extra_info_;
     proxy_switch_route_ = other.proxy_switch_route_;
     consume_size_ = other.consume_size_;
   }
@@ -460,9 +583,11 @@ private:
 
   // In load local scenario, we should tell the NIO to consume specific size data.
   // The size is a packet size in usually. But the mysql packet size if not equal
-  // to the packet that we received if we use compress protocol.
-  // NOTE: one compress packet has only one mysql packet in request message.
+  // to the packet that we received if we use ob20 or compress protocol.
+  // NOTE: one ob20 or compress packet has only one mysql packet in request message.
   int64_t consume_size_;
+public:
+  Ob20ExtraInfo extra_info_;
 };
 
 class ObMySQLCompressedPacket

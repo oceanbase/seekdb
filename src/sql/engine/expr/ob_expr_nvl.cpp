@@ -19,7 +19,6 @@
 #include "sql/engine/expr/ob_expr_promotion_util.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/expr/ob_expr_is.h"
-#include "rpc/obmysql/ob_mysql_util.h"
 
 namespace oceanbase
 {
@@ -116,7 +115,7 @@ int ObExprNvl::calc_result_type2(ObExprResType &type,
     }
     if (SCALE_UNKNOWN_YET != type.get_scale()) {
       if (ob_is_real_type(type.get_type())) {
-        type.set_precision(static_cast<ObPrecision>(obmysql::ObMySQLUtil::float_length(type.get_scale())));
+        type.set_precision(static_cast<ObPrecision>(ObMySQLUtil::float_length(type.get_scale())));
       } else if (ob_is_number_or_decimal_int_tc(type.get_type())) {
         const int16_t intd1 = type1.get_precision() - type1.get_scale();
         const int16_t intd2 = type2.get_precision() - type2.get_scale();

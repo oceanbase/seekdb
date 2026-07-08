@@ -667,7 +667,6 @@ int ObTenantTabletScheduler::schedule_build_bloomfilter(
 int ObTenantTabletScheduler::schedule_merge(const int64_t broadcast_version)
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -682,9 +681,6 @@ int ObTenantTabletScheduler::schedule_merge(const int64_t broadcast_version)
     share::g_mp->tenant_medium_checker()->clear_error_tablet_cnt();
 
     medium_loop_.start_merge(broadcast_version); // set all statistics
-    if (OB_TMP_FAIL(timer_task_mgr_.set_active_medium_loop(true/*active*/, true/*immediate*/))) {
-      LOG_WARN_RET(tmp_ret, "failed to wakeup medium loop", K(broadcast_version));
-    }
   }
   return ret;
 }
@@ -1335,15 +1331,6 @@ int ObTenantTabletScheduler::schedule_all_tablets_medium()
     }
   }
   return ret;
-}
-
-bool ObTenantTabletScheduler::need_fast_medium_loop() const
-{
-  const int64_t frozen_version = get_frozen_version();
-  return !is_stop_
-      && could_major_merge_start()
-      && frozen_version > ObBasicMergeScheduler::INIT_COMPACTION_SCN
-      && frozen_version > get_merged_version();
 }
 
 int ObTenantTabletScheduler::user_request_schedule_medium_merge(

@@ -4966,6 +4966,30 @@ def_table_schema(**gen_sqlite_virtual_table_def(
   keywords = all_def_keywords['__all_sys_parameter']))
 
 def_table_schema(
+  owner = 'guoyun.lgy',
+  table_name     = '__all_virtual_trace_span_info',
+  table_id       = '11042',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [
+    ('request_id', 'int')
+  ],
+  in_tenant_space = True,
+
+  normal_columns = [
+    ('trace_id', 'varchar:OB_MAX_SPAN_LENGTH'),
+    ('span_id', 'varchar:OB_MAX_SPAN_LENGTH'),
+    ('parent_span_id', 'varchar:OB_MAX_SPAN_LENGTH'),
+    ('span_name', 'varchar:OB_MAX_SPAN_LENGTH'),
+    ('ref_type', 'varchar:OB_MAX_REF_TYPE_LENGTH'),
+    ('start_ts', 'int'),
+    ('end_ts', 'int'),
+    ('tags', 'longtext'),
+    ('logs', 'longtext')
+  ],  vtable_route_policy = 'local'
+  )
+
+def_table_schema(
   owner = 'nijia.nj',
   table_name     = '__all_virtual_engine',
   table_id       = '11043',
@@ -8064,6 +8088,26 @@ def_table_schema(
     ('cgroup_path',         'varchar:256')
   ],  vtable_route_policy = 'local'
   )
+
+def_table_schema(
+  owner = 'guoyun.lgy',
+  table_name = '__all_virtual_flt_config',
+  table_id = '12420',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  in_tenant_space = True,
+  rowkey_columns = [
+  ],
+  normal_columns = [
+  ('type', 'varchar:16'),
+  ('module_name', 'varchar:MAX_VALUE_LENGTH'),
+  ('action_name', 'varchar:MAX_VALUE_LENGTH'),
+  ('client_identifier', 'varchar:OB_MAX_CONTEXT_CLIENT_IDENTIFIER_LENGTH'),
+  ('level', 'int'),
+  ('sample_percentage', 'int'),
+  ('record_policy', 'varchar:32')
+  ]
+)
 
 # 12421: __all_virtual_tenant_scheduler_job_class # removed (single-tenant: iterate VT mechanism deleted)
 
@@ -16301,6 +16345,9 @@ def_table_schema(
 )
 
 # 21448: CDB_OB_TENANT_EVENT_HISTORY (abandoned)
+# 21449: GV$OB_FLT_TRACE_CONFIG
+# 21449: GV$OB_FLT_TRACE_CONFIG # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_flt_config)
+
 # 21459: GV$OB_SESSION # removed (single-tenant GV/V collapse; folded into V$OB_SESSION)
 def_table_schema(
   owner = 'jingfeng.jf',

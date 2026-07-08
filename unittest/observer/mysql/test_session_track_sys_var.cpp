@@ -137,6 +137,13 @@ TEST(TestSessionTrackSysVar, charset_and_collation_show_string)
     assert_sys_var_show_str_eq(vars, SYS_VAR_CHARACTER_SET_RESULTS, expected_charset);
   }
 
+  {
+    OMPKOK ok_pkt;
+    ASSERT_EQ(OB_SUCCESS, ObMPUtils::add_session_info_on_connect(ok_pkt, session));
+    const ObIArray<ObStringKV> &vars = ok_pkt.get_system_vars();
+    assert_sys_var_show_str_eq(vars, SYS_VAR_COLLATION_CONNECTION, expected_collation);
+    assert_sys_var_show_str_eq(vars, SYS_VAR_CHARACTER_SET_RESULTS, expected_charset);
+  }
 }
 
 TEST(TestSessionTrackSysVar, sql_mode_show_string)
@@ -159,6 +166,12 @@ TEST(TestSessionTrackSysVar, sql_mode_show_string)
     assert_sys_var_show_str_eq(vars, SYS_VAR_SQL_MODE, expected_sql_mode);
   }
 
+  {
+    OMPKOK ok_pkt;
+    ASSERT_EQ(OB_SUCCESS, ObMPUtils::add_session_info_on_connect(ok_pkt, session));
+    const ObIArray<ObStringKV> &vars = ok_pkt.get_system_vars();
+    assert_sys_var_show_str_eq(vars, SYS_VAR_SQL_MODE, expected_sql_mode);
+  }
 }
 
 int main(int argc, char **argv)

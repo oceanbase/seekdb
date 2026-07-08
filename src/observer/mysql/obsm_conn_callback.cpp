@@ -208,6 +208,7 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
   share::ObTaskController::get().allow_next_syslog();
   LOG_INFO("connection close",
            "sessid", conn.sessid_,
+           "from_java_client", conn.is_java_client_,
            "c/s protocol", get_cs_protocol_type_name(conn.get_cs_protocol_type()),
            "is_need_clear_sessid_", conn.is_need_clear_sessid_,
            "is_sess_alloc_", conn.is_sess_alloc_,

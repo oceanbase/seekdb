@@ -65,6 +65,7 @@ public:
   // DBMS_MONITOR.OB_TENANT_TRACE_DISABLE(tenant_name  IN VARCHAR2 DEFAULT NULL);
   static int tenant_trace_disable(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
 
+  static int resolve_control_info(FLTControlInfo &coninfo, ObNumber level, ObNumber sample_pct, ObString record_policy);
 };
 
 } // end of pl

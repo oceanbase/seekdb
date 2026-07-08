@@ -25,7 +25,6 @@
 #include "src/rootserver/mview/ob_mview_maintenance_service.h"
 #include "src/sql/ob_sql_ccl_rule_manager.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
-#include "sql/monitor/show_trace/ob_show_trace.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -80,6 +79,7 @@ ObResultSet::~ObResultSet()
 int ObResultSet::open_cmd()
 {
   int ret = OB_SUCCESS;
+  FLTSpanGuard(cmd_open);
   if (OB_ISNULL(cmd_)) {
     LOG_ERROR("cmd and physical_plan both not init", K(stmt_type_));
     ret = common::OB_NOT_INIT;
@@ -143,7 +143,7 @@ int ObResultSet::open()
   int ret = OB_SUCCESS;
   my_session_.set_process_query_time(ObClockGenerator::getClock());
   LinkExecCtxGuard link_guard(my_session_, get_exec_context());
-  ObTraceSpanGuard open_span(&my_session_, TRACE_OPEN);
+  FLTSpanGuard(open);
   if (OB_FAIL(execute())) {
     LOG_WARN("execute plan failed", K(ret));
   } else if (OB_FAIL(open_result())) {
@@ -848,7 +848,7 @@ int ObResultSet::do_close(int *client_ret)
   int ret = OB_SUCCESS;
   LinkExecCtxGuard link_guard(my_session_, get_exec_context());
 
-  ObTraceSpanGuard close_span(&my_session_, TRACE_CLOSE);
+  FLTSpanGuard(close);
   const bool is_tx_active = my_session_.is_in_transaction();
   int do_close_plan_ret = OB_SUCCESS;
   ObPhysicalPlan* physical_plan_ = static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());

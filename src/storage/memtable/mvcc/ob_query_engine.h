@@ -130,18 +130,6 @@ public:
     ObMvccRow *value_;
   };
 
-  template <typename BtreeIterator>
-  class IteratorAlloc
-  {
-  public:
-    IteratorAlloc() {}
-    ~IteratorAlloc() {}
-    Iterator<BtreeIterator> *alloc() { return op_reclaim_alloc(Iterator<BtreeIterator>); }
-    void free(Iterator<BtreeIterator> *iter) { op_reclaim_free(iter); }
-  private:
-    DISALLOW_COPY_AND_ASSIGN(IteratorAlloc);
-  };
-
 public:
   enum {
     MAX_SAMPLE_ROW_COUNT = 500,

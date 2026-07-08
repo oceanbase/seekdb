@@ -390,7 +390,8 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cur_plan_cell(ObSQLSessionInfo &
       case SQL_ID: {
         if (obmysql::COM_QUERY == sess_info.get_mysql_cmd() ||
             obmysql::COM_STMT_EXECUTE == sess_info.get_mysql_cmd() ||
-            obmysql::COM_STMT_PREPARE == sess_info.get_mysql_cmd()) {
+            obmysql::COM_STMT_PREPARE == sess_info.get_mysql_cmd() ||
+            obmysql::COM_STMT_PREXECUTE == sess_info.get_mysql_cmd()) {
           sess_info.get_cur_sql_id(sql_id, OB_MAX_SQL_ID_LENGTH + 1);
         } else {
           sql_id[0] = '\0';

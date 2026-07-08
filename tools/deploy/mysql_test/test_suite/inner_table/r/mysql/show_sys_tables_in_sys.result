@@ -3397,6 +3397,19 @@ id	field	type	length	precision	nullable
 27	scope	22	256	-1	1
 28	source	22	256	-1	1
 29	edit_level	22	256	-1	1
+table oceanbase.__all_virtual_trace_span_info column_count 10 table_id 11042
+select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11042 order by column_id;
+id	field	type	length	precision	nullable
+16	request_id	5	0	20	0
+17	trace_id	22	1024	-1	0
+18	span_id	22	1024	-1	0
+19	parent_span_id	22	1024	-1	0
+20	span_name	22	1024	-1	0
+21	ref_type	22	10	-1	0
+22	start_ts	5	0	20	0
+23	end_ts	5	0	20	0
+24	tags	30	536870911	-1	0
+25	logs	30	536870911	-1	0
 table oceanbase.__all_virtual_engine column_count 6 table_id 11043
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11043 order by column_id;
 id	field	type	length	precision	nullable
@@ -5017,6 +5030,16 @@ id	field	type	length	precision	nullable
 17	cfs_period_us	5	0	20	0
 18	shares	5	0	20	0
 19	cgroup_path	22	256	-1	0
+table oceanbase.__all_virtual_flt_config column_count 7 table_id 12420
+select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12420 order by column_id;
+id	field	type	length	precision	nullable
+16	type	22	16	-1	0
+17	module_name	22	4096	-1	0
+18	action_name	22	4096	-1	0
+19	client_identifier	22	65	-1	0
+20	level	5	0	20	0
+21	sample_percentage	5	0	20	0
+22	record_policy	22	32	-1	0
 table oceanbase.__all_virtual_data_activity_metrics column_count 9 table_id 12429
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12429 order by column_id;
 id	field	type	length	precision	nullable

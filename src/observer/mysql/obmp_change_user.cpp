@@ -106,6 +106,15 @@ int ObMPChangeUser::deserialize()
           while(OB_SUCC(ret) && OB_LIKELY(pos < attrs_end)) {
             if (OB_FAIL(decode_string_kv(attrs_end, pos, str_kv))) {
               OB_LOG(WARN, "fail to decode string kv", K(ret));
+            } else {
+              if (str_kv.key_ == OB_MYSQL_PROXY_SESSION_VARS) {
+                const char *vars_start = str_kv.value_.ptr();
+                if (OB_FAIL(decode_session_vars(vars_start, str_kv.value_.length()))) {
+                  OB_LOG(WARN, "fail to decode session vars", K(ret));
+                }
+              } else {
+                //do not save it
+              }
             }
           }
         } // end connect attrs
@@ -144,6 +153,42 @@ int ObMPChangeUser::decode_string_kv(const char *attrs_end, const char *&pos, Ob
   return ret;
 }
 
+int ObMPChangeUser::decode_session_vars(const char *&pos, const int64_t session_vars_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(pos) || OB_UNLIKELY(session_vars_len < 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    OB_LOG(WARN, "invalie input value", K(pos), K(session_vars_len), K(ret));
+  } else{
+    const char *end = pos + session_vars_len;
+    bool found_separator = false;
+    ObStringKV tmp_kv;
+    while (OB_SUCC(ret) && OB_LIKELY(pos < end)) {
+      if (OB_FAIL(decode_string_kv(end, pos, tmp_kv))) {
+        OB_LOG(WARN, "fail to decode string kv", K(ret));
+      } else {
+        if (tmp_kv.key_ == ObMySQLPacket::get_separator_kv().key_
+            && tmp_kv.value_ == ObMySQLPacket::get_separator_kv().value_) {
+          found_separator = true;
+          // continue
+        } else {
+          if (found_separator) {
+            if (OB_FAIL(user_vars_.push_back(tmp_kv))) {
+              OB_LOG(WARN, "fail to push back user_vars", K(tmp_kv), K(ret));
+            }
+          } else {
+            if (OB_FAIL(sys_vars_.push_back(tmp_kv))) {
+              OB_LOG(WARN, "fail to push back sys_vars", K(tmp_kv), K(ret));
+            }
+          }
+        }
+      }
+    } // end while
+  }
+
+  return ret;
+}
+
 int ObMPChangeUser::process()
 {
   int ret = OB_SUCCESS;
@@ -154,6 +199,7 @@ int ObMPChangeUser::process()
   int64_t query_timeout = 0;
   bool need_send_auth_switch =
       get_conn()->is_support_plugin_auth() &&
+      get_conn()->client_type_ == common::OB_CLIENT_NON_STANDARD &&
       GCONF._enable_auth_switch;
   if (OB_FAIL(get_session(session))) {
     LOG_ERROR("get session  fail", K(ret));
@@ -165,6 +211,8 @@ int ObMPChangeUser::process()
   } else if (FALSE_IT(THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout))) {
   } else if (OB_FAIL(process_kill_client_session(*session))) {
     LOG_WARN("client session has been killed", K(ret));
+  } else if (OB_FAIL(process_extra_info(*session, pkt, need_response_error))) {
+    LOG_WARN("fail get process extra info", K(ret));
   } else {
     need_disconnect = false;
     get_conn()->client_cs_type_ = charset_;
@@ -274,6 +322,131 @@ int ObMPChangeUser::process()
   }
   return ret;
 }
+// Attention:in order to get the real type of each user var,
+// we should build a standard sql 'SET @var1 = val1,@var2 = val2,......;',
+// and then parse the sql
+int ObMPChangeUser::replace_user_variables(ObBasicSessionInfo &session) const
+{
+  int ret = OB_SUCCESS;
+  if (!user_vars_.empty()) {
+    // 1. build a standard sql
+    ObSqlString sql;
+    if (OB_FAIL(sql.append_fmt("SET"))) {
+      OB_LOG(WARN, "fail to append_fmt 'SET'", K(ret));
+    }
+    ObStringKV kv;
+    for (int64_t i = 0; OB_SUCC(ret) && i < user_vars_.count(); ++i) {
+      kv = user_vars_.at(i);
+      if (OB_FAIL(sql.append_fmt(" @%.*s = %.*s,",
+                                 kv.key_.length(), kv.key_.ptr(),
+                                 kv.value_.length(), kv.value_.ptr()))) {
+        OB_LOG(WARN, "fail to append fmt user var", K(ret), K(kv));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      // 2. user parser to parse sql
+      *(sql.ptr() + sql.length() - 1) = ';';
+      ObString stmt;
+      stmt.assign_ptr(sql.ptr(), static_cast<int32_t>(sql.length()));
+      ObArenaAllocator allocator(ObModIds::OB_SQL_PARSER);
+      ObParser parser(allocator, session.get_sql_mode());
+      SMART_VAR(ParseResult, result) {
+        if (OB_FAIL(parser.parse(stmt, result))) {
+          OB_LOG(WARN, "fail to parse stmt", K(ret), K(stmt));
+        } else {
+          // 3. parse result node and handle user session var
+          ParseNode *node = result.result_tree_;
+          ObArenaAllocator calc_buf(ObModIds::OB_SQL_SESSION);
+          ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
+          if (OB_FAIL(parse_var_node(node, cast_ctx, session))) {
+            OB_LOG(WARN, "fail to parse user var node", K(ret));
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObMPChangeUser::parse_var_node(const ParseNode *node, ObCastCtx &cast_ctx, ObBasicSessionInfo &session) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(node)) {
+    ret = OB_ERR_UNEXPECTED;
+    OB_LOG(WARN, "node is null", K(ret));
+  } else {
+    bool found = false;
+    ParseNode *tmp_node = NULL;
+    ParseNode *val_node = NULL;
+    ObString var;
+    ObString val;
+    ObObjType type;
+    for (int64_t i = 0; OB_SUCC(ret) && !found && i < node->num_child_; ++i) {
+      if (NULL != (tmp_node = node->children_[i])) {
+        if (0 == tmp_node->num_child_) {
+          if (T_USER_VARIABLE_IDENTIFIER == tmp_node->type_) {
+            found = true;
+            // handle user var
+            if (node->num_child_ != 2) {
+              ret = OB_ERR_UNEXPECTED;
+              OB_LOG(WARN, "node children num must be 2 if it is VAR SET", K(ret), K_(node->num_child));
+            } else if (OB_ISNULL(val_node = node->children_[1 - i])) {
+              ret = OB_ERR_UNEXPECTED;
+              OB_LOG(WARN, "val node is null", K(ret));
+            } else {
+              var.assign_ptr(tmp_node->str_value_, static_cast<int32_t>(tmp_node->str_len_));
+              val.assign_ptr(val_node->str_value_, static_cast<int32_t>(val_node->str_len_));
+              type = (static_cast<ObObjType>(val_node->type_));
+              if (OB_FAIL(handle_user_var(var, val, type, cast_ctx, session))) {
+                OB_LOG(WARN, "fail to handle user var", K(ret), K(var), K(val), K(type));
+              }
+            }
+          }
+        } else if (OB_FAIL(parse_var_node(tmp_node, cast_ctx, session))) {
+          OB_LOG(WARN, "fail to parse node", K(ret));
+        }
+      } // end NULL != tmp_node
+    } // end for
+  } // end else
+  return ret;
+}
+
+int ObMPChangeUser::handle_user_var(const ObString &var, const ObString &val,
+                                    const ObObjType type, ObCastCtx &cast_ctx,
+                                    ObBasicSessionInfo &session) const
+{
+  int ret = OB_SUCCESS;
+  ObObj in_obj;
+  ObObj buf_obj;
+  const ObObj *out_obj = NULL;
+  ObSessionVariable sess_var;
+  if (ObNullType == type) {
+    sess_var.value_.set_null();
+    sess_var.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+    sess_var.meta_.set_collation_type(CS_TYPE_BINARY);
+  } else {
+    // cast varchar obj to real type
+    in_obj.set_varchar(val);
+    in_obj.set_collation_type(ObCharset::get_system_collation());
+    if (OB_FAIL(ObObjCaster::to_type(type, cast_ctx, in_obj, buf_obj, out_obj))) {
+      OB_LOG(WARN, "fail to cast varchar to target type", K(ret), K(type), K(in_obj));
+    } else if (OB_ISNULL(out_obj)) {
+      ret = OB_ERR_UNEXPECTED;
+      OB_LOG(WARN, "out obj is null", K(ret));
+    } else {
+      sess_var.value_ = *out_obj;
+      sess_var.meta_.set_type(out_obj->get_type());
+      sess_var.meta_.set_scale(out_obj->get_scale());
+      sess_var.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+      sess_var.meta_.set_collation_type(out_obj->get_collation_type());
+    }
+    if (OB_SUCC(ret) && OB_FAIL(session.replace_user_variable(var, sess_var))) {
+      OB_LOG(WARN, "fail to replace user var", K(ret), K(var), K(sess_var));
+    }
+  }
+  return ret;
+}
+
 int ObMPChangeUser::load_login_info(ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;

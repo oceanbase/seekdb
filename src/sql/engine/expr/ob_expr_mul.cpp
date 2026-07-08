@@ -20,7 +20,6 @@
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_batch_eval_util.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "rpc/obmysql/ob_mysql_util.h"
 
 using namespace oceanbase::common;
 
@@ -87,7 +86,7 @@ int ObExprMul::calc_result_type2(ObExprResType &type,
     } else {
       // estimated precision
       if (type.is_double()) {
-        type.set_precision(obmysql::ObMySQLUtil::float_length(type.get_scale()));
+        type.set_precision(ObMySQLUtil::float_length(type.get_scale()));
       } else if (type.has_result_flag(DECIMAL_INT_ADJUST_FLAG)) {
         ObPrecision precision = MAX(precision1, precision2);
         type.set_precision(precision);

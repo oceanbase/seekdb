@@ -23,7 +23,6 @@
 #include "observer/ob_server.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
-#include "sql/monitor/show_trace/ob_show_trace.h"
 
 #ifdef CHECK_SESSION
 #error "redefine macro CHECK_SESSION"
@@ -229,7 +228,7 @@ int ObSqlTransControl::end_trans(ObSQLSessionInfo *session,
                         K(is_explicit),
                         KP(callback));
 #endif
-  ObTraceSpanGuard end_trans_span(session, TRACE_END_TRANSACTION);
+  FLTSpanGuard(end_transaction);
 
   if (OB_ISNULL(session)) {
     ret = OB_INVALID_ARGUMENT;
@@ -293,6 +292,7 @@ int ObSqlTransControl::end_trans(ObSQLSessionInfo *session,
              "trans_id", tx_id, "action", (is_rollback ? "ROLLBACK" : "COMMIT"),
              K(ret), K(hint), "session_id", session->get_server_sid());
   }
+  FLT_SET_TAG(trans_id, tx_id);
   return ret;
 }
 

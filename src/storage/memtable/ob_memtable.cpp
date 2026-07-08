@@ -16,8 +16,10 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_memtable.h"
-#include "share/stat/ob_opt_stat_monitor_manager.h"
+#include "share/rc/ob_module_provider.h"
+#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/memtable/ob_memtable_read_row_util.h"
 #include "storage/memtable/ob_row_conflict_handler.h"
@@ -31,7 +33,6 @@
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 #include "storage/ob_i_table.h"
 #include "storage/ob_i_store.h"
-#include "share/ob_fork_table_util.h"
 #include "lib/hash/ob_hashmap.h"
 
 #include "logservice/ob_log_service.h"
@@ -176,9 +177,9 @@ int ObMemtable::init(const ObITable::TableKey &table_key,
   } else if (OB_FAIL(set_freezer(freezer))) {
     TRANS_LOG(WARN, "fail to set freezer", K(ret), KP(freezer));
   } else if (OB_FAIL(local_allocator_.init())) {
-    TRANS_LOG(WARN, "fail to init memstore allocator", K(ret), "tenant id", MTL_ID());
+    TRANS_LOG(WARN, "fail to init memstore allocator", K(ret));
   } else if (OB_FAIL(query_engine_.init())) {
-    TRANS_LOG(WARN, "query_engine.init fail", K(ret), "tenant_id", MTL_ID());
+    TRANS_LOG(WARN, "query_engine.init fail", K(ret));
   } else if (OB_FAIL(mvcc_engine_.init(&local_allocator_,
                                        &kv_builder_,
                                        &query_engine_,
@@ -192,7 +193,7 @@ int ObMemtable::init(const ObITable::TableKey &table_key,
     if (table_key.get_tablet_id().is_sys_tablet()) {
       mode_ = lib::Worker::CompatMode::MYSQL;
     } else {
-      mode_ = MTL(lib::Worker::CompatMode);
+      mode_ = share::g_mp->compat_mode();
     }
     state_ = ObMemtableState::ACTIVE;
     init_timestamp_ = ObTimeUtility::current_time();
@@ -222,7 +223,7 @@ int ObMemtable::batch_remove_unused_callback_for_uncommited_txn(
   // NB: Do not use cache here, because the trans_service may be destroyed under
   // MTL_DESTROY() and the cache is pointing to a broken memory.
   transaction::ObTransService *txs_svr =
-    MTL_CTX()->get<transaction::ObTransService *>();
+    ::oceanbase::share::g_mp->trans_service();
 
   if (NULL != txs_svr
       && OB_FAIL(txs_svr->remove_callback_for_uncommited_txn(ls_id, memtable_set))) {
@@ -315,7 +316,7 @@ int ObMemtable::safe_to_destroy(bool &is_safe)
       ret = OB_SUCCESS;
       bool is_done = false;
       palf::LSN end_lsn;
-      if (OB_FAIL(MTL(logservice::ObLogService*)->get_log_apply_service()->
+      if (OB_FAIL(share::g_mp->log_service()->get_log_apply_service()->
                   is_apply_done(ls_handle_.get_ls()->get_ls_id(),
                                 is_done,
                                 end_lsn))) {
@@ -387,7 +388,6 @@ int ObMemtable::multi_set(
   } else if (OB_FAIL(guard.write_auth(*context.store_ctx_))) {
     TRANS_LOG(WARN, "not allow to write", K(*context.store_ctx_));
   } else {
-    lib::CompatModeGuard compat_guard(mode_);
 
     ret = multi_set_(param,
                      context,
@@ -560,7 +560,6 @@ int ObMemtable::set(
     } else if (OB_FAIL(memtable_key_generator.generate_memtable_key(*new_row))) {
       TRANS_LOG(WARN, "generate memtable key fail", K(ret), K(new_row));
     } else {
-      lib::CompatModeGuard compat_guard(mode_);
 
       ret = set_(param,
                  context,
@@ -1026,7 +1025,6 @@ int ObMemtable::replay_row(ObStoreCtx &ctx,
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "Unexpected not exist trans node", K(ret), K(dml_flag), K(rowkey));
   } else {
-    lib::CompatModeGuard compat_guard(mode_);
     ObMemtableData mtd(dml_flag, row.size_, row.data_);
     ObMemtableKey mtk;
     ObRowData empty_old_row;
@@ -1552,7 +1550,7 @@ void ObMemtable::set_allow_freeze(const bool allow_freeze)
     const common::ObTabletID tablet_id = key_.tablet_id_;
     const int64_t retire_clock = local_allocator_.get_retire_clock();
     ObTenantFreezer *freezer = nullptr;
-    freezer = MTL(ObTenantFreezer *);
+    freezer = share::g_mp->tenant_freezer();
 
     if (allow_freeze) {
       set_allow_freeze_();
@@ -1722,7 +1720,7 @@ void ObMemtable::print_ready_for_flush()
             K(ret), K(bool_ret),
             K(frozen_memtable_flag), K(write_ref),
             K(current_right_boundary), K(end_scn),
-            K(logstream_freeze_clock), K(memtable_freeze_clock), K_(trace_id));
+            K(logstream_freeze_clock), K(memtable_freeze_clock));
 }
 
 // The freeze_snapshot_version is needed for mini merge, which represents that
@@ -1842,8 +1840,6 @@ int ObMemtable::resolve_max_end_scn_()
   return ret;
 }
 
-
-DEF_REPORT_CHEKCPOINT_DIAGNOSE_INFO(UpdateScheduleDagTime, update_schedule_dag_time)
 int ObMemtable::flush(share::ObLSID ls_id)
 {
   int ret = OB_SUCCESS;
@@ -1862,11 +1858,10 @@ int ObMemtable::flush(share::ObLSID ls_id)
 
     if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tablet_merge_dag(param))) {
       if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
-        TRANS_LOG(WARN, "failed to schedule tablet merge dag", K(ret));
+        TRANS_LOG(ERROR, "failed to schedule tablet merge dag", K(ret));
       }
     } else {
       mt_stat_.create_flush_dag_time_ = cur_time;
-      report_memtable_diagnose_info(UpdateScheduleDagTime());
       TRANS_LOG(INFO, "schedule tablet merge dag successfully", K(ret), K(param), KPC(this));
     }
 
@@ -2313,7 +2308,7 @@ int ObMemtable::multi_set_(
     } else {
       ObMemtableKeyGenerator::ObMemtableKeyBuffer *memtable_key_buffer = memtable_key_generator.get_key_buffer();
       for (int64_t idx = 0; idx < memtable_key_buffer->count(); ++idx) {
-        MTL(ObLockWaitMgr*)->set_hash_holder(key_.get_tablet_id(),
+        share::g_mp->lock_wait_mgr()->set_hash_holder(key_.get_tablet_id(),
                                              memtable_key_buffer->at(idx),
                                              context.store_ctx_->mvcc_acc_ctx_.get_mem_ctx()->get_tx_id());
       }
@@ -2474,7 +2469,7 @@ int ObMemtable::set_(
     if (param.is_non_unique_local_index_) {
       // no need to detect deadlock for non-unique local index table
     } else {
-      MTL(ObLockWaitMgr*)->set_hash_holder(key_.get_tablet_id(),
+      share::g_mp->lock_wait_mgr()->set_hash_holder(key_.get_tablet_id(),
                                            mtk,
                                            context.store_ctx_->mvcc_acc_ctx_.get_mem_ctx()->get_tx_id());
     }
@@ -2489,15 +2484,16 @@ int ObMemtable::set_(
     set_max_data_schema_version(ctx.table_version_);
     set_max_column_cnt(new_row->count_);
 
+    ObCStringHelper helper;
     TRANS_LOG(TRACE, "set end, success",
               "ret", ret,
               "tablet_id_", key_.tablet_id_,
               "dml_flag", writer_dml_flag,
               "columns", strarray<ObColDesc>(*columns),
-              "old_row", to_cstring(old_row),
-              "new_row", to_cstring(new_row),
-              "update_idx", (update_idx == NULL ? "" : to_cstring(update_idx)),
-              "mtd", to_cstring(mtd),
+              "old_row", helper.convert(old_row),
+              "new_row", helper.convert(new_row),
+              "update_idx", (update_idx == NULL ? "" : helper.convert(update_idx)),
+              "mtd", helper.convert(mtd),
               KPC(this));
   } else {
     // Step5.1: undo the side effects of mvcc_write which ensure the interface
@@ -2509,12 +2505,13 @@ int ObMemtable::set_(
     (void)cleanup_old_row_(mem_ctx, tx_node_arg);
 
     if (!is_mvcc_write_related_error_(ret)) {
+      ObCStringHelper helper;
       TRANS_LOG(WARN, "set end, fail",
                 "ret", ret,
                 "tablet_id_", key_.tablet_id_,
                 "columns", strarray<ObColDesc>(*columns),
-                "new_row", to_cstring(new_row),
-                "mem_ctx", mem_ctx ? to_cstring(mem_ctx) : "nil",
+                "new_row", helper.convert(new_row),
+                "mem_ctx", mem_ctx ? helper.convert(mem_ctx) : "nil",
                 "store_ctx", ctx);
     } else {
       // Tip1: we need notice that txn cannot be serializable when TSC occurs in
@@ -2602,7 +2599,7 @@ int ObMemtable::lock_(
       if (param.is_non_unique_local_index_) {
         // no need to detect deadlock for non-unique local index table
       } else {
-        MTL(ObLockWaitMgr*)->set_hash_holder(key_.get_tablet_id(),
+        share::g_mp->lock_wait_mgr()->set_hash_holder(key_.get_tablet_id(),
                                              mtk,
                                              context.store_ctx_->mvcc_acc_ctx_.get_mem_ctx()->get_tx_id());
       }
@@ -2937,10 +2934,9 @@ int ObMemtable::post_row_write_conflict_(ObMvccAccessCtx &acc_ctx,
     ret = OB_ERR_EXCLUSIVE_LOCK_CONFLICT;
     TRANS_LOG(WARN, "exclusive lock conflict", K(ret), K(row_key),
               K(conflict_tx_id), K(acc_ctx), K(lock_wait_expire_ts));
-  } else if (OB_ISNULL(lock_wait_mgr = MTL_WITH_CHECK_TENANT(ObLockWaitMgr*,
-                                                  mem_ctx->get_tenant_id()))) {
+  } else if (OB_ISNULL(lock_wait_mgr = MTL_WITH_CHECK(ObLockWaitMgr*))) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "can not get tenant lock_wait_mgr MTL", K(mem_ctx->get_tenant_id()));
+    TRANS_LOG(WARN, "can not get tenant lock_wait_mgr MTL");
   } else {
     mem_ctx->add_conflict_trans_id(conflict_tx_id);
     mem_ctx->on_wlock_retry(row_key, conflict_tx_id);
@@ -3093,7 +3089,7 @@ int ObMemtable::try_report_dml_stat_(const int64_t table_id)
       // double check
       if (current_ts - reported_dml_stat_.last_report_time_ > ObReportedDmlStat::REPORT_INTERVAL) {
         ObOptDmlStat dml_stat;
-        dml_stat.tenant_id_ = MTL_ID();
+        
         dml_stat.table_id_ = table_id;
         dml_stat.tablet_id_ = get_tablet_id().id();
         const int64_t current_insert_row_cnt = mt_stat_.insert_row_count_;
@@ -3102,7 +3098,7 @@ int ObMemtable::try_report_dml_stat_(const int64_t table_id)
         dml_stat.insert_row_count_ = current_insert_row_cnt - reported_dml_stat_.insert_row_count_;
         dml_stat.update_row_count_ = current_update_row_cnt - reported_dml_stat_.update_row_count_;
         dml_stat.delete_row_count_ = current_delete_row_cnt - reported_dml_stat_.delete_row_count_;
-        if (OB_FAIL(MTL(ObOptStatMonitorManager*)->update_local_cache(dml_stat))) {
+        if (OB_FAIL(share::g_mp->opt_stat_monitor_manager()->update_local_cache(dml_stat))) {
           TRANS_LOG(WARN, "failed to update local cache", K(ret), K(dml_stat));
         } else {
           reported_dml_stat_.insert_row_count_ = current_insert_row_cnt;
@@ -3122,8 +3118,6 @@ int ObMemtable::finish_freeze()
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObFreezeCheckpoint::finish_freeze())) {
     TRANS_LOG(WARN, "fail to finish_freeze", KR(ret));
-  } else {
-    report_memtable_diagnose_info(TabletMemtableUpdateFreezeInfo(*this));
   }
   return ret;
 }
@@ -3159,13 +3153,13 @@ int ObMemtable::report_residual_dml_stat_()
         mt_stat_.update_row_count_ > reported_dml_stat_.update_row_count_ ||
         mt_stat_.delete_row_count_ > reported_dml_stat_.delete_row_count_) {
       ObOptDmlStat dml_stat;
-      dml_stat.tenant_id_ = MTL_ID();
+      
       dml_stat.table_id_ = reported_dml_stat_.table_id_;
       dml_stat.tablet_id_ = get_tablet_id().id();
       dml_stat.insert_row_count_ = mt_stat_.insert_row_count_ - reported_dml_stat_.insert_row_count_;
       dml_stat.update_row_count_ = mt_stat_.update_row_count_ - reported_dml_stat_.update_row_count_;
       dml_stat.delete_row_count_ = mt_stat_.delete_row_count_ - reported_dml_stat_.delete_row_count_;
-      if (OB_FAIL(MTL(ObOptStatMonitorManager*)->update_local_cache(dml_stat))) {
+      if (OB_FAIL(share::g_mp->opt_stat_monitor_manager()->update_local_cache(dml_stat))) {
         TRANS_LOG(WARN, "failed to update local cache", K(ret), K(dml_stat), K(reported_dml_stat_));
       } else {
         reported_dml_stat_.insert_row_count_ = mt_stat_.insert_row_count_;

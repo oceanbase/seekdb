@@ -33,8 +33,9 @@ ObSyncPlanDriver::ObSyncPlanDriver(const ObGlobalContext &gctx,
                                    sql::ObSQLSessionInfo &session,
                                    ObQueryRetryCtrl &retry_ctrl,
                                    ObIMPPacketSender &sender,
+                                   bool is_prexecute,
                                    int32_t iteration_count)
-    : ObQueryDriver(gctx, ctx, session, retry_ctrl, sender),
+    : ObQueryDriver(gctx, ctx, session, retry_ctrl, sender, is_prexecute),
     iteration_count_(iteration_count)
 {
 }
@@ -91,7 +92,8 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
                                       result.is_ps_protocol(),
                                       result.has_more_result(),
                                       can_retry,
-                                      OB_INVALID_COUNT))) {
+                                      is_prexecute_ && stmt::T_SELECT == result.get_stmt_type() ?
+                                          iteration_count_ + 1 : OB_INVALID_COUNT))) {
       LOG_WARN("response query result fail", K(ret));
       // move result.close() below, after test_and_save_retry_state().
       if (can_retry) {
@@ -137,17 +139,44 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
         = (session_.is_server_status_in_transaction() ? 1 : 0);
       flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = (ac ? 1 : 0);
       flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = result.has_more_result();
+      flags.status_flags_.OB_SERVER_STATUS_CURSOR_EXISTS = is_prexecute_ ? true : false;
+      flags.status_flags_.OB_SERVER_STATUS_LAST_ROW_SENT = is_prexecute_ ? true : false;
       // in java client or others, use slow query bit to indicate partition hit or not
       flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_.partition_hit().get_bool();
 
       eofp.set_server_status(flags);
 
+      // for proxy
+      // in multi-stmt, send extra ok packet in the last stmt(has no more result)
+      if (!is_prexecute_ && !result.has_more_result()
+            && OB_FAIL(sender_.update_last_pkt_pos())) {
+        LOG_WARN("failed to update last packet pos", K(ret));
+      }
       if (OB_SUCC(ret) && !result.get_is_com_filed_list()) {
         need_send_eof = true;
       }
 
       if (OB_FAIL(ret)) {
         // do nothing
+      } else if ((is_prexecute_ && stmt::T_SELECT != result.get_stmt_type()) 
+        || (!is_prexecute_ && sender_.need_send_extra_ok_packet() && !result.has_more_result())) {
+        // Two-in-one protocol select statement's OK packet is entirely sent at the protocol layer
+        // sync plan At this time, a separate OK packet needs to be sent for the combined protocol, for obproxy,
+        // in multi-stmt, send extra ok packet in the last stmt(has no more result)
+        ObOKPParam ok_param;
+        ok_param.affected_rows_ = result.get_affected_rows();
+        ok_param.is_partition_hit_ = session_.partition_hit().get_bool();
+        ok_param.has_more_result_ = result.has_more_result();
+        ok_param.send_last_row_ = is_prexecute_ ? true : false;
+        if (need_send_eof) {
+          if (OB_FAIL(sender_.send_ok_packet(session_, ok_param, &eofp))) {
+            LOG_WARN("fail to send ok packt", K(ok_param), K(ret));
+          }
+        } else {
+          if (OB_FAIL(sender_.send_ok_packet(session_, ok_param))) {
+            LOG_WARN("fail to send ok packt", K(ok_param), K(ret));
+          }
+        }
       } else {
         // Two-in-one protocol select statement result set EOF packets should be sent here
         // Not a combined protocol, the EOF packet without an additional OK packet needs to be sent here
@@ -157,7 +186,14 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
       }
     }
   } else {
-    if (OB_FAIL(result.close())) {
+    if (is_prexecute_ && OB_FAIL(response_query_header(result, false, false, true))) {
+      // need close result set
+      int close_ret = OB_SUCCESS;
+      if (OB_SUCCESS != (close_ret = result.close())) {
+        LOG_WARN("close result failed", K(close_ret));
+      }
+      LOG_WARN("prexecute response query head fail. ", K(ret));
+    } else if (OB_FAIL(result.close())) {
       LOG_WARN("close result set fail", K(ret));
     } else {
       if (!result.has_implicit_cursor()) {

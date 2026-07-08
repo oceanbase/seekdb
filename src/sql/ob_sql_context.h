@@ -640,7 +640,7 @@ public:
   char format_sql_id_[common::OB_MAX_SQL_ID_LENGTH + 1];
   ExecType exec_type_;
   bool is_prepare_protocol_;
-  bool is_mock_prepare_;
+  bool is_pre_execute_;
   bool is_prepare_stage_;
   bool is_dynamic_sql_;
   bool is_dbms_sql_;

@@ -24,7 +24,6 @@
 #include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/ob_exec_context.h"
-#include "rpc/obmysql/ob_mysql_util.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -165,7 +164,7 @@ int ObExprFuncRound::set_res_scale_prec(ObExprTypeCtx &type_ctx, ObExprResType *
       res_prec = tmp_res_prec >= 0 ? tmp_res_prec : res_prec;
     } else if (ob_is_real_type(res_type)) {
       res_prec = (SCALE_UNKNOWN_YET == res_scale) ?
-        PRECISION_UNKNOWN_YET : obmysql::ObMySQLUtil::float_length(res_scale);
+        PRECISION_UNKNOWN_YET : ObMySQLUtil::float_length(res_scale);
     } else if (ob_is_integer_type(res_type)) {
       if (PRECISION_UNKNOWN_YET == res_prec) {
         res_prec = ObAccuracy::DDL_DEFAULT_ACCURACY[res_type].precision_;

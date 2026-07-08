@@ -69,6 +69,7 @@ ObMPPacketSender::ObMPPacketSender()
       seq_(0),
       read_handle_(NULL),
       comp_context_(),
+      proto20_context_(),
       ez_buf_(NULL),
       conn_valid_(true),
       sessid_(0),
@@ -91,6 +92,7 @@ void ObMPPacketSender::reset()
   req_ = NULL;
   seq_ = 0;
   comp_context_.reset();
+  proto20_context_.reset();
   ez_buf_ = NULL;
   conn_valid_ = true;
   sessid_ = 0;
@@ -117,9 +119,12 @@ int ObMPPacketSender::init(rpc::ObRequest *req)
 int ObMPPacketSender::clone_from(ObMPPacketSender& that, int64_t com_offset)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(do_init(that.req_, that.seq_, that.comp_context_.seq_ + com_offset,
+  if (OB_FAIL(do_init(that.req_, that.seq_, that.comp_context_.seq_ + com_offset, 
                       that.conn_valid_, that.req_has_wokenup_, that.query_receive_ts_))) {
     SERVER_LOG(ERROR, "clone packet sender fail", K(ret));
+  } else {
+    comp_context_.is_checksum_off_ = that.comp_context_.is_checksum_off_;
+    proto20_context_.is_checksum_off_ = that.proto20_context_.is_checksum_off_;
   }
   return ret;
 }
@@ -154,6 +159,22 @@ int ObMPPacketSender::do_init(rpc::ObRequest *req,
     comp_context_.sessid_ = sessid_;
     comp_context_.conn_ = conn;
 
+    // init proto20 context
+    bool is_proto20_supported = (OB_2_0_CS_TYPE == conn->get_cs_protocol_type());
+    bool is_proto20_compress = conn->proxy_cap_flags_.is_ob_protocol_v2_compress();
+    if (is_proto20_supported) {
+      proto20_context_.reset();
+      proto20_context_.is_proto20_used_ = is_proto20_supported;
+      proto20_context_.comp_seq_ = comp_seq;
+      proto20_context_.request_id_ = conn->proto20_pkt_context_.proto20_last_request_id_;
+      proto20_context_.proto20_seq_ = static_cast<uint8_t>(conn->proto20_pkt_context_.proto20_last_pkt_seq_ + 1);
+      // if v2 compress protocol, not add compress head here
+      proto20_context_.header_len_ = OB20_PROTOCOL_HEADER_LENGTH + (is_proto20_compress ? 0 : OB_MYSQL_COMPRESSED_HEADER_SIZE);
+      proto20_context_.tailer_len_ = OB20_PROTOCOL_TAILER_LENGTH;
+      proto20_context_.next_step_ = START_TO_FILL_STEP;
+      proto20_context_.is_checksum_off_ = false;
+      proto20_context_.is_new_extra_info_ = conn->proxy_cap_flags_.is_new_extra_info_support();
+    }
     nio_protocol_ = req_->get_nio_protocol();
   }
   return ret;
@@ -201,6 +222,16 @@ int ObMPPacketSender::read_packet(obmysql::ObICSMemPool &mem_pool, obmysql::ObMy
       if (comp_context_.use_compress()) {
         comp_context_.seq_ = comp_context_.conn_->compressed_pkt_context_.last_pkt_seq_ + 1;
       }
+
+      if (proto20_context_.is_proto20_used_) {
+        ObSMConnection *conn = get_conn();
+        if (OB_NOT_NULL(conn)) {
+          proto20_context_.comp_seq_ = seq_;
+          proto20_context_.request_id_ = conn->proto20_pkt_context_.proto20_last_request_id_;
+          proto20_context_.proto20_seq_ = static_cast<uint8_t>(conn->proto20_pkt_context_.proto20_last_pkt_seq_ + 1);
+          proto20_context_.is_new_extra_info_ = conn->proxy_cap_flags_.is_new_extra_info_support();
+        }
+      }
     }
   }
   return ret;
@@ -217,13 +248,64 @@ int ObMPPacketSender::release_packet(obmysql::ObMySQLPacket* pkt)
   return ret;
 }
 
+int ObMPPacketSender::response_compose_packet(obmysql::ObMySQLPacket &pkt,
+                                              obmysql::ObMySQLPacket &okp,
+                                              sql::ObSQLSessionInfo* session,
+                                              bool update_comp_pos) {
+  int ret = OB_SUCCESS;
+  comp_context_.update_last_pkt_pos(ez_buf_->last);
+  if (OB_FAIL(response_packet(pkt, session))) {
+    LOG_WARN("failed to response packet", K(ret));
+  } else if (OB_FAIL(alloc_ezbuf())) {
+    LOG_ERROR("easy buffer alloc failed", K(ret));
+  } else {
+    int64_t seri_size = 0;
+    extra_info_kvs_.reset();
+    extra_info_ecds_.reset();
+
+    okp.set_seq(seq_);
+    if (update_comp_pos) {
+      comp_context_.update_last_pkt_pos(ez_buf_->last);
+    }
+
+    if (OB_FAIL(ret)) {
+       // do nothing
+    } else if (OB_FAIL(try_encode_with(okp,
+                                       ez_buf_->end - ez_buf_->pos,
+                                       seri_size,
+                                       0,
+                                       proto20_context_.is_proto20_used()))) {
+      LOG_WARN("failed to encode packet", K(ret));
+    } else {
+      LOG_DEBUG("succ encode packet", K(okp), K(seri_size));
+      seq_ = okp.get_seq(); // here will point next avail seq
+      EVENT_INC(MYSQL_PACKET_OUT);
+      EVENT_ADD(MYSQL_PACKET_OUT_BYTES, seri_size);
+    }
+  }
+  return ret;
+}
+
 int ObMPPacketSender::response_packet(obmysql::ObMySQLPacket &pkt, sql::ObSQLSessionInfo* session)
 {
-  LOG_DEBUG("response-packet", K(lbt()));
+  LOG_DEBUG("response-packet", K(proto20_context_.is_proto20_used_), K(lbt()));
   int ret = OB_SUCCESS;
+  extra_info_kvs_.reset();
+  extra_info_ecds_.reset();
   if (!conn_valid_) {
     ret = OB_CONNECT_ERROR;
     LOG_WARN("connection already disconnected", K(ret));
+  } else if (OB_ISNULL(session)) {
+    // do nothing
+  } else if (proto20_context_.is_proto20_used_
+             && OB_FALSE_IT(proto20_context_.is_dup_ls_modified_ = session->is_dup_ls_modified())) {
+    // do nothing
+  } else if (conn_->proxy_cap_flags_.is_full_link_trace_support() &&
+              proto20_context_.is_proto20_used_ &&
+              OB_FAIL(sql::ObFLTUtils::append_flt_extra_info(session->get_extra_info_alloc(),
+                                      &extra_info_kvs_, &extra_info_ecds_, *session,
+                                      conn_->proxy_cap_flags_.is_new_extra_info_support()))) {
+      LOG_WARN("failed to add flt extra info", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -442,17 +524,57 @@ int ObMPPacketSender::send_error_packet(int err,
   }
   // TODO: Should separate the logic below from send_error_packet because connect fails,
   // Also need to call send_error_packet, but there is no session at this time
+  //
+  // for obproxy or OCJ, followed by another OK packet
   if (conn_valid_) {
     if (OB_FAIL(ret)) {
       disconnect();
-    } else {
+    } else if (!conn_->need_send_extra_ok_packet()) {
+      LOG_TRACE("not need extra ok packet", K(ret), K(epacket.get_sql_state()), K(epacket.get_message()));
+      comp_context_.update_last_pkt_pos(ez_buf_->last);
       if (OB_FAIL(response_packet(epacket, session))) {
         RPC_LOG(WARN, "failed to send error packet", K(epacket), K(ret));
         disconnect();
       } else if (has_pl() && NULL != session && 0 < session->get_pl_exact_err_msg().length()) {
         session->get_pl_exact_err_msg().reset();
       }
+    } else if (conn_->need_send_extra_ok_packet()) {
+      if (conn_->is_in_authed_phase()) {
+        LOG_TRACE("need extra ok packet", K(ret), K(epacket.get_sql_state()), K(epacket.get_message()));
+        if (!has_pl() && NULL == session) {
+          if (OB_FAIL(get_session(session))) {
+            LOG_WARN("fail to get session", K(ret));
+          } else if (OB_ISNULL(session)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("sql session info is null", K(ret));
+          } else {
+            ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
+          }
+        }
+        if (OB_SUCC(ret) && NULL != session) {
+          ObOKPParam ok_param;
+          if (session->is_track_session_info()) {
+            ok_param.is_partition_hit_ = is_partition_hit;
+            ok_param.take_trace_id_to_client_ = true;
+          }
+          if (OB_FAIL(send_ok_packet(*session, ok_param, &epacket))) {
+            LOG_WARN("failed to send ok packet", K(ok_param), K(ret));
+          }
+        }
+      } else {  // just a basic ok packet contain nothing
+        OMPKOK okp;
+        okp.set_capability(conn_->cap_flags_);
+        if (OB_FAIL(response_compose_packet(epacket, okp, session, false))) {
+          LOG_WARN("response ok packet fail", K(ret));
+        }
+      }
+      if (OB_FAIL(ret)) {
+        LOG_WARN("failed to append ok pkt after error pkt, need disconnect", K(ret));
+        disconnect();
+      }
     }
+  } else {
+    // do nothing
   }
   if (OB_LIKELY(NULL != session)) {
     revert_session(session);
@@ -540,21 +662,67 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
       // in hand shake response's ok packet, return all session variable
       if (ok_param.is_on_connect_ || ok_param.is_on_change_user_) {
         need_track_session_info = true;
-        okp.set_use_standard_serialize(true);
-        if (OB_FAIL(ObMPUtils::add_nls_format(okp, session))) {
-          LOG_WARN("fail to add_nls_format", K(ret));
+        if (conn_->is_normal_client()) {
+          okp.set_use_standard_serialize(true);
+          if (OB_FAIL(ObMPUtils::add_nls_format(okp, session))) {
+            LOG_WARN("fail to add_nls_format", K(ret));
+          }
+        } else if (conn_->is_driver_client()) {
+          // return capability flag to indicate server's capablity
+          okp.set_use_standard_serialize(true);
+          if (OB_FAIL(ObMPUtils::add_nls_format(okp, session))) {
+            LOG_WARN("fail to add_nls_format", K(ret));
+          } else if (OB_FAIL(ObMPUtils::add_cap_flag(okp, session))) {
+            LOG_WARN("fail to add all session system variables", K(ret));
+          } else if (ok_param.is_on_connect_
+                     && OB_FAIL(ObMPUtils::add_min_cluster_version(okp, session))) {
+            LOG_WARN("fail to add all session system variables", K(ret));
+          }
+        } else {
+          if (OB_FAIL(ObMPUtils::add_session_info_on_connect(okp, session))) {
+            LOG_WARN("fail to add all session system variables", K(ret));
+          } else if (ok_param.is_on_connect_
+                     && OB_FAIL(ObMPUtils::add_min_cluster_version(okp, session))) {
+            LOG_WARN("fail to add all session system variables", K(ret));
+          }
         }
       } else {
+        // in proxy or OCJ mode will track session info in the last ok packet
         if (!ok_param.has_more_result_) {
           need_track_session_info = true;
+          // send changed session variables to obproxy
           if (OB_SUCC(ret)) {
-            okp.set_use_standard_serialize(true);
-            if (OB_FAIL(ObMPUtils::add_changed_session_info(okp, session))) {
-              SERVER_LOG(WARN, "fail to add changed session info", K(ret));
-            } else if (OB_FAIL(ObMPUtils::add_nls_format(okp, session, true))) {
-              LOG_WARN("fail to add_nls_format", K(ret));
+            if (conn_->is_normal_client()) {
+              okp.set_use_standard_serialize(true);
+              if (OB_FAIL(ObMPUtils::add_changed_session_info(okp, session))) {
+                SERVER_LOG(WARN, "fail to add changed session info", K(ret));
+              } else if (OB_FAIL(ObMPUtils::add_nls_format(okp, session, true))) {
+                LOG_WARN("fail to add_nls_format", K(ret));
+              }
+            } else if (conn_->is_driver_client()) {
+              // will not track session variables, do nothing
+              okp.set_use_standard_serialize(true);
+              if (OB_FAIL(ObMPUtils::add_changed_session_info(okp, session))) {
+                SERVER_LOG(WARN, "fail to add changed session info", K(ret));
+              } else if (OB_FAIL(ObMPUtils::add_nls_format(okp, session, true))) {
+                LOG_WARN("fail to add_nls_format", K(ret));
+              }
+            } else {
+              if (OB_FAIL(ObMPUtils::add_changed_session_info(okp, session))) {
+                SERVER_LOG(WARN, "fail to add changed session info", K(ret));
+              }
             }
           }
+        }
+      }
+    } else {
+      // use to compatible with older OCJ(< 2.0.9)
+      if (ok_param.is_on_connect_ && conn_->is_java_client_ && conn_->proxy_cap_flags_.is_cap_used()) {
+        okp.set_track_session_cap(true);
+        if (OB_FAIL(ObMPUtils::add_session_info_on_connect(okp, session))) {
+          LOG_WARN("fail to add all session system variables", K(ret));
+        } else {
+          need_track_session_info = true;
         }
       }
     }
@@ -594,11 +762,18 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
   if (OB_SUCC(ret)) {
     // for ok packet which has no status packet
     if (NULL == pkt) {
+      if (NULL != ez_buf_ && !ok_param.has_more_result_) {
+        comp_context_.update_last_pkt_pos(ez_buf_->last);
+      }
       if (OB_FAIL(response_packet(okp, &session))) {
         LOG_WARN("response ok packet fail", K(ret));
       }
+    // oceanbase proxy (aka. odp) need extra ok packet after retruns status packet.
+    // for this logic, we use response_compose_packet to send packet
     } else {
-      if (OB_FAIL(response_packet(*pkt, &session))) {
+      if (NULL != pkt && 
+            OB_FAIL(response_compose_packet(*pkt, okp, &session,
+                            NULL != ez_buf_ && !ok_param.has_more_result_))) {
         LOG_WARN("response ok packet fail", K(pkt), K(ret));
       }
     }
@@ -625,6 +800,18 @@ ObSMConnection* ObMPPacketSender::get_conn() const
     // do nothing
   }
   return conn;
+}
+
+int ObMPPacketSender::update_last_pkt_pos()
+{
+  int ret = OB_SUCCESS;
+  if (NULL == ez_buf_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ez buf is null and cannot update last pkt pos for compress protocol", K(ret));
+  } else {
+    comp_context_.update_last_pkt_pos(ez_buf_->last);
+  }
+  return ret;
 }
 
 void ObMPPacketSender::force_disconnect()
@@ -705,6 +892,8 @@ int ObMPPacketSender::try_encode_with(ObMySQLPacket &pkt,
                                       bool is_composed_ok_pkt)
 {
   int ret = OB_SUCCESS;
+  ObProtoEncodeParam param;
+  param.is_composed_ok_pkt_ = is_composed_ok_pkt;
   seri_size = 0;
   if (OB_ISNULL(ez_buf_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -716,6 +905,19 @@ int ObMPPacketSender::try_encode_with(ObMySQLPacket &pkt,
   }
   __builtin_prefetch(&conn_->pkt_rec_wrapper_.pkt_rec_[conn_->pkt_rec_wrapper_.cur_pkt_pos_
                                               % ObPacketRecordWrapper::REC_BUF_SIZE]);
+
+  if (OB_UNLIKELY(pkt.get_mysql_packet_type() == ObMySQLPacketType::PKT_FILENAME)) {
+    proto20_context_.is_filename_packet_ = true;
+
+    if (comp_context_.use_compress() && comp_context_.is_proxy_compress_based()) {
+      // The compression protocol between in observer and obproxy requires that the sequence id should use
+      // last packet's sequence id if there is the last response packet to obproxy. And PKT_FILENAME is
+      // the "last packet" reponse to obproxy this time.
+      // `seq_` means observer will not send more response and client can resolve the response packets now.
+      // NOTE: This action is not compatible with MySQL protocol
+      comp_context_.seq_--;
+    }
+  }
 
   if (OB_FAIL(ret)) {
     // do nothing
@@ -729,19 +931,16 @@ int ObMPPacketSender::try_encode_with(ObMySQLPacket &pkt,
   } else if (OB_ISNULL(req_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input", K(ret), KP(req_));
+  } else if (OB_FAIL(build_encode_param_(param, &pkt, false))) {
+    LOG_ERROR("fail to build encode param", K(ret));
+  } else if (OB_FAIL(ObProto20Utils::do_packet_encode(param))) {
+    LOG_ERROR(" fail to do packet encode", K(param), K(ret));
   } else {
-    ObEasyBuffer easy_buffer(*ez_buf_);
-    int encode_ret = pkt.encode(easy_buffer.last(), easy_buffer.write_avail_size(), seri_size);
-    if (conn_->pkt_rec_wrapper_.enable_proto_dia()) {
-      conn_->pkt_rec_wrapper_.record_send_mysql_pkt(pkt, seri_size);
-    }
-    if (OB_SUCC(encode_ret)) {
-      easy_buffer.write(seri_size);
-    } else {
-      // buffer too small - try flush or resize
-      int last_ret = encode_ret;
-      seri_size = 0;
-      if (need_flush_buffer() && !is_composed_ok_pkt) {
+    if (param.need_flush_) {
+      // if failed, try flush ---> alloc larger mem ----> continue encoding
+      int last_ret = param.encode_ret_;
+
+      if (need_flush_buffer() && !param.is_composed_ok_pkt_) {
         // try again with same buf size
         if (OB_FAIL(flush_buffer(false))) {
           LOG_WARN("failed to flush_buffer", K(ret), K(last_ret));
@@ -755,6 +954,7 @@ int ObMPPacketSender::try_encode_with(ObMySQLPacket &pkt,
         } else {
           // try again with larger buf size
           const int64_t new_alloc_size = TRY_EZ_BUF_SIZES[try_steps++];
+          // refer to doc: 
           if (OB_SIZE_OVERFLOW != last_ret && OB_BUF_NOT_ENOUGH != last_ret) {
             ret = last_ret;
             LOG_WARN("last_ret is not size overflow, need check code", K(last_ret));
@@ -767,6 +967,8 @@ int ObMPPacketSender::try_encode_with(ObMySQLPacket &pkt,
           }
         }
       }
+    } else {
+      // nothing, continue encoding next
     }
   }
   return ret;
@@ -777,7 +979,11 @@ bool ObMPPacketSender::need_flush_buffer() const
   bool bret = false;
   //there is data in buf
   if (NULL != ez_buf_ && ez_buf_->pos != ez_buf_->last) {
-    bret = true;
+    if (comp_context_.is_proxy_compress_based() && comp_context_.last_pkt_pos_ == ez_buf_->pos) {
+      //the whole buf is proxy last packet, no need flush part
+    } else {
+      bret = true;
+    }
   }
   return bret;
 }
@@ -797,6 +1003,20 @@ int ObMPPacketSender::flush_buffer(const bool is_last)
   } else if (OB_FAIL(alloc_ezbuf())) {
     LOG_ERROR("easy buffer alloc failed", KP_(ez_buf), K(ret));
   } else {
+    if (proto20_context_.is_proto20_used() && (FILL_PAYLOAD_STEP == proto20_context_.next_step_)) {
+      ObProtoEncodeParam param;
+      if (OB_FAIL(build_encode_param_(param, NULL, is_last))) {
+        LOG_ERROR("fail to build encode param", K(ret));
+      } else if (OB_FAIL(ObProto20Utils::fill_proto20_header_and_tailer(param))) {
+        LOG_ERROR("fail to fill ob20 protocol header and tailer", K(ret));
+      } else {
+      }
+
+      // `filename packet` is used in load local protocol.
+      // We use the field to indicate if we should set `is last packet flag`
+      proto20_context_.is_filename_packet_ = false;
+    }
+    
     //int64_t buf_sz = ez_buf_->last - ez_buf_->pos;
     if (OB_SUCCESS != ret) {
     } else if (ObRequest::TRANSPORT_PROTO_EASY == nio_protocol_) {
@@ -839,6 +1059,10 @@ int ObMPPacketSender::flush_buffer(const bool is_last)
     }
 
     if (OB_SUCC(ret)) {
+      if (proto20_context_.is_proto20_used()) {
+        // after flush, set pos to 0
+        proto20_context_.curr_proto20_packet_start_pos_ = 0;
+      }
       /*
       ObSQLSessionInfo *sess = nullptr;
       if (OB_FAIL(get_session(sess))) {
@@ -857,6 +1081,22 @@ int ObMPPacketSender::flush_buffer(const bool is_last)
     finish_sql_request();
   }
   return ret;
+}
+
+inline int ObMPPacketSender::build_encode_param_(ObProtoEncodeParam &param,
+                                                ObMySQLPacket *pkt,
+                                                const bool is_last)
+{
+  ObProtoEncodeParam::build_param(param,
+                                  pkt,
+                                  *ez_buf_,
+                                  conn_->sessid_,
+                                  is_last,
+                                  proto20_context_,
+                                  req_,
+                                  &extra_info_kvs_,
+                                  &extra_info_ecds_);
+  return OB_SUCCESS;
 }
 
 int ObMPPacketSender::get_conn_id(uint32_t &sessid) const
@@ -899,6 +1139,9 @@ int ObMPPacketSender::resize_ezbuf(const int64_t size)
         MEMCPY(tmp->last, ez_buf_->pos, remain_data_size);
         tmp->last = tmp->pos + remain_data_size;
         ez_buf_->last = ez_buf_->pos;
+      }
+      if (comp_context_.last_pkt_pos_ == ez_buf_->pos) {
+        comp_context_.last_pkt_pos_ = tmp->pos;
       }
       ez_buf_ = tmp;
     }
@@ -946,6 +1189,7 @@ bool ObMPPacketSender::has_pl()
   if (obmysql::COM_STMT_PREPARE == pkt.get_cmd()
         || obmysql::COM_STMT_EXECUTE == pkt.get_cmd()
         || obmysql::COM_QUERY == pkt.get_cmd()
+        || obmysql::COM_STMT_PREXECUTE == pkt.get_cmd()
         || obmysql::COM_STMT_FETCH == pkt.get_cmd()) {
     has_pl = true;
   }
