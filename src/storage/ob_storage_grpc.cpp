@@ -118,10 +118,6 @@ grpc::Status ObStorageGrpcServiceImpl::fetch_ls_view(
     LOG_INFO("start to fetch ls view", K(ls_id));
     if (OB_FAIL(ObIOManager::get_instance().get_device_health_status(dhs, disk_abnormal_time))) {
       STORAGE_LOG(WARN, "failed to check is disk error", KR(ret));
-    } else if (DEVICE_HEALTH_ERROR == dhs) {
-      ret = OB_DISK_ERROR;
-      STORAGE_LOG(ERROR, "observer has disk error, cannot be migrate src", KR(ret),
-          "disk_health_status", device_health_status_to_str(dhs), K(disk_abnormal_time));
     } else if (OB_ISNULL(ls_service = MTL(ObLSService *))) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "ls service should not be null", K(ret), KP(ls_service));
