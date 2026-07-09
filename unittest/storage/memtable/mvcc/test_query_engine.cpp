@@ -129,6 +129,8 @@ TEST(TestObQueryEngine, smoke_test)
   test_ensure(mtk[5], mtv[5]);
 
   EXPECT_EQ(R_COUNT, qe.btree_size());
+  test_ensure(mtk[0], mtv[0]);
+  EXPECT_EQ(R_COUNT, qe.btree_size());
 
   test_scan(0, true,  5, true);
   test_scan(0, false, 5, true);

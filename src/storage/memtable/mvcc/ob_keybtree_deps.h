@@ -563,7 +563,8 @@ public:
 public:
   int insert_and_split_upward(BtreeKey key, BtreeVal &val, BtreeNode *&new_root);
   typedef ObFunction<int(const bool is_exist_key, BtreeKey &key, BtreeVal &val)> BtreeKvCreator;
-  int insert_or_get_and_split_upward(BtreeKey key, const BtreeKvCreator &creator, BtreeVal &val, BtreeNode *&new_root);
+  int insert_or_get_and_split_upward(BtreeKey key, const BtreeKvCreator &creator,
+                                     BtreeVal &val, BtreeNode *&new_root, bool &inserted);
 private:
   int insert_into_node(BtreeNode *old_node, int pos, BtreeKey key, BtreeVal val, BtreeNode *&new_node_1, BtreeNode *&new_node_2);
   // judge whether it's wrlocked

@@ -457,25 +457,42 @@ int ObMvccEngine::create_btree_kv_(const ObMemtableKey *key,
                                    ObMvccRow *&value)
 {
   int ret = OB_SUCCESS;
-  ObQueryEngine::ObMvccRowCreator row_creator = [this, key, stored_key](const bool is_exist_key,
-                                                                        ObStoreRowkeyWrapper &new_or_exist_key,
-                                                                        ObMvccRow *&new_row) {
+  ObStoreRowkey *candidate_key = nullptr;
+  ObMvccRow *candidate_row = nullptr;
+  bool is_candidate_row_inited = false;
+  ObQueryEngine::ObMvccRowCreator row_creator = [this,
+                                                 key,
+                                                 stored_key,
+                                                 &candidate_key,
+                                                 &candidate_row,
+                                                 &is_candidate_row_inited](const bool is_exist_key,
+                                                                           ObStoreRowkeyWrapper &new_or_exist_key,
+                                                                           ObMvccRow *&new_row) {
     int ret = OB_SUCCESS;
     if (is_exist_key) {
-      stored_key->encode(new_or_exist_key.get_rowkey());
+      if (OB_FAIL(stored_key->encode(new_or_exist_key.get_rowkey()))) {
+        TRANS_LOG(WARN, "key encode fail", K(ret));
+      }
     } else {
-      ObStoreRowkey *tmp_key = nullptr;
-      if (OB_FAIL(kv_builder_->dup_key(tmp_key, *engine_allocator_, key->get_rowkey()))) {
+      // Memstore allocator has no per-object free, so reuse one candidate across btree EAGAIN retries.
+      if (OB_ISNULL(candidate_key) &&
+          OB_FAIL(kv_builder_->dup_key(candidate_key, *engine_allocator_, key->get_rowkey()))) {
         TRANS_LOG(WARN, "key dup fail", K(ret));
         ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_ISNULL(new_row = (ObMvccRow *)engine_allocator_->alloc(sizeof(*new_row)))) {
+      } else if (OB_ISNULL(candidate_row) &&
+                 OB_ISNULL(candidate_row = (ObMvccRow *)engine_allocator_->alloc(sizeof(*candidate_row)))) {
         TRANS_LOG(WARN, "alloc ObMvccRow fail", K(ret));
         ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else if (OB_FAIL(stored_key->encode(candidate_key))) {
+        TRANS_LOG(WARN, "key encode fail", K(ret));
       } else {
-        stored_key->encode(tmp_key);
-        new_or_exist_key = ObStoreRowkeyWrapper(tmp_key);
-        new_row = new(new_row) ObMvccRow();
-        new_row->set_btree_indexed();
+        new_or_exist_key = ObStoreRowkeyWrapper(candidate_key);
+        if (!is_candidate_row_inited) {
+          candidate_row = new(candidate_row) ObMvccRow();
+          candidate_row->set_btree_indexed();
+          is_candidate_row_inited = true;
+        }
+        new_row = candidate_row;
       }
     }
     return ret;

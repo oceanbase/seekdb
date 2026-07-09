@@ -608,16 +608,16 @@ int WriteHandle<BtreeKey, BtreeVal>::insert_and_split_upward(BtreeKey key, Btree
 
 template<typename BtreeKey, typename BtreeVal>
 int WriteHandle<BtreeKey, BtreeVal>::insert_or_get_and_split_upward(
-    BtreeKey key, const BtreeKvCreator &creator, BtreeVal &val, BtreeNode *&new_root)
+    BtreeKey key, const BtreeKvCreator &creator, BtreeVal &val, BtreeNode *&new_root, bool &inserted)
 {
   int ret = OB_SUCCESS;
   int pos = -1;
-  bool is_found = false;
   BtreeNode *old_node = nullptr;
   BtreeNode *new_node_1 = nullptr;
   BtreeNode *new_node_2 = nullptr;
   MultibitSet *index = &this->index_;
   BtreeKey new_insert_key;
+  inserted = false;
   UNUSED(this->path_.pop(old_node, pos)); // pop may failed, old_node is allowd to be NULL
 
   if (OB_ISNULL(old_node)) {
@@ -627,9 +627,9 @@ int WriteHandle<BtreeKey, BtreeVal>::insert_or_get_and_split_upward(
       OB_LOG(WARN, "fail to create value", K(key));
     } else {
       new_node_1->insert_into_node(0, new_insert_key, val);
+      inserted = true;
     }
   } else if (this->path_.get_is_found()) {
-    is_found = true;
     val = old_node->get_val(pos, index);
     BtreeKey &exist_key = old_node->get_key(pos, index);
     if (OB_FAIL(creator(true/*is_exist_key*/, exist_key, val))) {
@@ -638,8 +638,10 @@ int WriteHandle<BtreeKey, BtreeVal>::insert_or_get_and_split_upward(
   } else {
     if (OB_FAIL(creator(false/*is_exist_key*/, new_insert_key, val))) {
       OB_LOG(WARN, "fail to create value", K(key));
+    } else if (OB_FAIL(insert_into_node(old_node, pos, new_insert_key, val, new_node_1, new_node_2))) {
+      // do nothing
     } else {
-      ret = insert_into_node(old_node, pos, new_insert_key, val, new_node_1, new_node_2);
+      inserted = true;
     }
   }
   while (OB_SUCCESS == ret && OB_NOT_NULL(new_node_1)) {
@@ -1607,6 +1609,7 @@ int ObKeyBtree<BtreeKey, BtreeVal>::insert_or_get(const BtreeKey key,
   int ret = OB_SUCCESS;
   BtreeNode *old_root = nullptr;
   BtreeNode *new_root = nullptr;
+  bool inserted = false;
   WriteHandle handle(*this);
   handle.get_is_in_delete() = false;
   if (OB_FAIL(handle.acquire_ref())) {
@@ -1615,9 +1618,10 @@ int ObKeyBtree<BtreeKey, BtreeVal>::insert_or_get(const BtreeKey key,
     ret = OB_EAGAIN;
   }
   while (OB_EAGAIN == ret) {
+    inserted = false;
     if (OB_FAIL(handle.find_path(old_root = ATOMIC_LOAD(&root_), key))) {
       OB_LOG(ERROR, "path.search error", K(root_), K(ret));
-    } else if (OB_FAIL(handle.insert_or_get_and_split_upward(key, creator, val, new_root = old_root))) {
+    } else if (OB_FAIL(handle.insert_or_get_and_split_upward(key, creator, val, new_root = old_root, inserted))) {
       // do nothing
     } else if (old_root != new_root) {
       if (!ATOMIC_BCAS(&root_, old_root, new_root)) {
@@ -1625,12 +1629,13 @@ int ObKeyBtree<BtreeKey, BtreeVal>::insert_or_get(const BtreeKey key,
       }
     }
     if (OB_EAGAIN == ret) {
+      inserted = false;
       handle.free_list();
     }
   }
   handle.release_ref();
   handle.retire(ret);
-  if (OB_SUCC(ret)) {
+  if (OB_SUCC(ret) && inserted) {
     size_.inc(1);
   } else if (OB_ALLOCATE_MEMORY_FAILED == ret) {
     OB_LOG(WARN, "btree.insert_or_get(key) error", KR(ret), K(key), K(val));
