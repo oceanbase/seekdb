@@ -267,15 +267,6 @@ jobs:
             echo "ik_custom_dict: $IK_SCORE / 100"
           } | tee "$SCORE_OUTPUT"
 
-          if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-            {
-              echo "### ai_funcs Score"
-              echo '```'
-              cat "$SCORE_OUTPUT"
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-
           if [[ "$fail" -ne 0 ]]; then
             echo "----- observer log tail -----"
             tail -n 200 "$VLDB_WORK_DIR/log/seekdb.log" 2>/dev/null || true
