@@ -229,17 +229,53 @@ jobs:
           # load_file, ai_split_document (Document AI) + ik_custom_dict (custom IK parser).
           suite=mysql_test/test_suite/ai_funcs
           fail=0
+          # A passing case earns its full points; a failing one earns zero.
+          # Document AI Functions = load_file (50) + ai_split_document (50).
+          # IK Custom Dictionary  = ik_custom_dict (100).
+          LOAD_FILE_PTS=0
+          SPLIT_DOC_PTS=0
+          IK_SCORE=0
           for t in load_file ai_split_document ik_custom_dict; do
             tf="$suite/t/$t.test"
             echo "===================== ai_funcs/$t ====================="
             if "$MT" --host=127.0.0.1 --port=2881 --user=root --database=test \
                  --test-file="$tf" --result-file="$suite/r/$t.result"; then
               echo ">>> $t: PASS"
+              case "$t" in
+                load_file)         LOAD_FILE_PTS=50 ;;
+                ai_split_document) SPLIT_DOC_PTS=50 ;;
+                ik_custom_dict)    IK_SCORE=100 ;;
+              esac
             else
               echo ">>> $t: FAIL"
               fail=1
             fi
           done
+          DOC_AI_SCORE=$((LOAD_FILE_PTS + SPLIT_DOC_PTS))
+
+          SCORE_OUTPUT="$VLDB_WORK_DIR/ai_funcs_score.txt"
+          {
+            echo "Document AI Functions Score"
+            echo "==========================="
+            printf "score: %.2f / 100\n" "$DOC_AI_SCORE"
+            echo "load_file: $LOAD_FILE_PTS / 50"
+            echo "ai_split_document: $SPLIT_DOC_PTS / 50"
+            echo
+            echo "IK Custom Dictionary Score"
+            echo "=========================="
+            printf "score: %.2f / 100\n" "$IK_SCORE"
+            echo "ik_custom_dict: $IK_SCORE / 100"
+          } | tee "$SCORE_OUTPUT"
+
+          if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+            {
+              echo "### ai_funcs Score"
+              echo '```'
+              cat "$SCORE_OUTPUT"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           if [[ "$fail" -ne 0 ]]; then
             echo "----- observer log tail -----"
             tail -n 200 "$VLDB_WORK_DIR/log/seekdb.log" 2>/dev/null || true
