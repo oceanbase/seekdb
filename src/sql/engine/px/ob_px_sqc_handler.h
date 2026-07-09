@@ -106,7 +106,6 @@ public:
   ObPxSQCProxy &get_sqc_proxy() { return sub_coord_->get_sqc_proxy(); }
   ObSqcCtx &get_sqc_ctx() { return sub_coord_->get_sqc_ctx(); }
   const ObDDLCtrl &get_ddl_control() { return sub_coord_->get_ddl_control(); }
-  trace::FltTransCtx &get_flt_ctx() { return flt_ctx_; }
   ObPxWorkNotifier &get_notifier() { return *notifier_; }
   int worker_end_hook();
   int copy_sqc_init_arg(int64_t &pos, const char *data_buf, int64_t data_len);
@@ -138,7 +137,6 @@ public:
       K_(exec_ctx), K_(des_phy_plan), K_(sqc_init_args), KP_(sub_coord), K_(rpc_level));
 
 private:
-  void init_flt_content();
   int destroy_sqc(int &report_ret);
 private:
   lib::MemoryContext mem_context_;
@@ -152,7 +150,6 @@ private:
   ObPhysicalPlan *des_phy_plan_;
   ObPxRpcInitSqcArgs *sqc_init_args_;
   ObPxSubCoord *sub_coord_;
-  trace::FltTransCtx flt_ctx_;
   int64_t rpc_level_;
   uint64_t node_sequence_id_;
   /* At first， sqc must wait for all workers start, and then check whether it is interrupted. 

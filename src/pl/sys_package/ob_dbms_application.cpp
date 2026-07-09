@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX PL
 #include "pl/sys_package/ob_dbms_application.h"
-#include "sql/monitor/flt/ob_flt_control_info_mgr.h"
 namespace oceanbase
 {
 
@@ -68,18 +67,6 @@ int ObDBMSAppInfo::set_action(sql::ObExecContext &ctx, sql::ParamStore &params, 
     OV (params.at(0).is_varchar(), OB_INVALID_ARGUMENT);
     OZ (params.at(0).get_string(action_name));
     OZ (sess->get_app_info_encoder().set_action_name(sess, action_name));
-
-    FLTControlInfo con;
-    ObFLTControlInfoManager mgr;
-    if (OB_FAIL(ret)) {
-
-    } else if (OB_FAIL(mgr.init())) {
-      LOG_WARN("failed to init full link trace info manager", K(ret));
-    } else if (OB_FAIL(mgr.find_appropriate_con_info(*sess))) {
-      LOG_WARN("failed to get control info for client info", K(ret));
-    } else {
-      // do nothing
-    }
   }
   return ret;
 }
@@ -102,18 +89,6 @@ int ObDBMSAppInfo::set_client_info(sql::ObExecContext &ctx, sql::ParamStore &par
       OZ (params.at(0).get_string(client_info));
     }
     OZ (sess->get_app_info_encoder().set_client_info(sess, client_info));
-
-    FLTControlInfo con;
-    ObFLTControlInfoManager mgr;
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (OB_FAIL(mgr.init())) {
-      LOG_WARN("failed to init full link trace info manager", K(ret));
-    } else if (OB_FAIL(mgr.find_appropriate_con_info(*sess))) {
-      LOG_WARN("failed to get control info for client info", K(ret), K(client_info));
-    } else {
-      // do nothing
-    }
   }
   return ret;
 }
@@ -144,18 +119,6 @@ int ObDBMSAppInfo::set_module(sql::ObExecContext &ctx, sql::ParamStore &params, 
     }
     OZ (sess->get_app_info_encoder().set_module_name(sess, module_name));
     OZ (sess->get_app_info_encoder().set_action_name(sess, action_name));
-
-    FLTControlInfo con;
-    ObFLTControlInfoManager mgr;
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (OB_FAIL(mgr.init())) {
-      LOG_WARN("failed to init full link trace info manager", K(ret));
-    } else if (OB_FAIL(mgr.find_appropriate_con_info(*sess))) {
-      LOG_WARN("failed to get control info for client info", K(ret));
-    } else {
-      // do nothing
-    }
   }
   return ret;
 }

@@ -635,7 +635,7 @@ int ObMViewRefresher::fast_refresh()
   }
 
   if (OB_SUCC(ret) && trans.is_inner_session()) {
-    exec_session_info->set_mysql_cmd(COM_QUERY);
+    exec_session_info->set_mysql_cmd(obmysql::COM_QUERY);
   }
 
   // exec sqls

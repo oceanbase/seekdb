@@ -17,7 +17,6 @@
 #ifndef _OBMP_UTILS_H_
 #define _OBMP_UTILS_H_
 #include <stdint.h>
-#include "sql/monitor/flt/ob_flt_control_info_mgr.h"
 
 namespace oceanbase
 {
@@ -35,6 +34,7 @@ class ObTimeZoneInfo;
 class ObString;
 class ObIAllocator;
 class ObObj;
+struct ObObjPrintParams;
 }
 namespace observer
 {

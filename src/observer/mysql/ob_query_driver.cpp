@@ -24,6 +24,7 @@
 #include "rpc/obmysql/packet/ompk_field.h"
 #include "rpc/obmysql/packet/ompk_eof.h"
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
+#include "sql/monitor/show_trace/ob_show_trace.h"
 
 namespace oceanbase
 {
@@ -155,7 +156,7 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
                                          int64_t fetch_limit)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(response_result);
+  ObTraceSpanGuard response_span(&session_, TRACE_RESPONSE_RESULT);
   can_retry = true;
   bool is_first_row = true;
   const ObNewRow *result_row = NULL;

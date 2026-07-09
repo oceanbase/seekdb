@@ -13,33 +13,109 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #define USING_LOG_PREFIX SERVER
-#include "share/ob_sql_client_decorator.h"
+
 #include "observer/virtual_table/ob_virtual_show_trace.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "sql/monitor/show_trace/ob_show_trace.h"
+#include <stdio.h>
+#include <string.h>
 
 using namespace oceanbase::common;
-using namespace oceanbase::obmysql;
-using namespace oceanbase::omt;
 using namespace oceanbase::share;
-namespace oceanbase {
-namespace observer {
 
-ObVirtualShowTrace::ObVirtualShowTrace() :
-    ObVirtualTableScannerIterator(),
-    ref_(),
-    ipstr_(),
-    port_(0),
-    is_first_get_(true),
-    is_use_index_(false),
-    show_trace_rec_idx_(-1),
-    tag_buf_(NULL),
-    is_row_format_(true),
-    with_tenant_ctx_(nullptr)
+namespace oceanbase
+{
+namespace observer
+{
+
+namespace
+{
+
+int append_json_tag_prefix(char *buf, const int64_t buf_len, int64_t &pos, bool &has_tag)
+{
+  int ret = OB_SUCCESS;
+  const char *prefix = has_tag ? "," : "[{";
+  const int n = snprintf(buf + pos, buf_len - pos, "%s", prefix);
+  if (n <= 0 || n >= buf_len - pos) {
+    ret = OB_SIZE_OVERFLOW;
+    SERVER_LOG(WARN, "failed to append show trace tag prefix", K(ret), K(pos), K(buf_len));
+  } else {
+    pos += n;
+    has_tag = true;
+  }
+  return ret;
+}
+
+int append_json_int_tag(char *buf, const int64_t buf_len, int64_t &pos,
+                        bool &has_tag, const char *key, const int64_t value)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(append_json_tag_prefix(buf, buf_len, pos, has_tag))) {
+    // do nothing
+  } else {
+    const int n = snprintf(buf + pos, buf_len - pos, "\"%s\":%ld", key, value);
+    if (n <= 0 || n >= buf_len - pos) {
+      ret = OB_SIZE_OVERFLOW;
+      SERVER_LOG(WARN, "failed to append show trace int tag", K(ret), K(key), K(pos), K(buf_len));
+    } else {
+      pos += n;
+    }
+  }
+  return ret;
+}
+
+int append_json_bool_tag(char *buf, const int64_t buf_len, int64_t &pos,
+                         bool &has_tag, const char *key, const bool value)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(append_json_tag_prefix(buf, buf_len, pos, has_tag))) {
+    // do nothing
+  } else {
+    const int n = snprintf(buf + pos, buf_len - pos, "\"%s\":%s", key, value ? "true" : "false");
+    if (n <= 0 || n >= buf_len - pos) {
+      ret = OB_SIZE_OVERFLOW;
+      SERVER_LOG(WARN, "failed to append show trace bool tag", K(ret), K(key), K(pos), K(buf_len));
+    } else {
+      pos += n;
+    }
+  }
+  return ret;
+}
+
+int close_json_tags(char *buf, const int64_t buf_len, int64_t &pos, const bool has_tag)
+{
+  int ret = OB_SUCCESS;
+  if (!has_tag) {
+    buf[0] = '\0';
+    pos = 0;
+  } else {
+    const int n = snprintf(buf + pos, buf_len - pos, "}]");
+    if (n <= 0 || n >= buf_len - pos) {
+      ret = OB_SIZE_OVERFLOW;
+      SERVER_LOG(WARN, "failed to close show trace tags", K(ret), K(pos), K(buf_len));
+    } else {
+      pos += n;
+    }
+  }
+  return ret;
+}
+
+} // namespace
+
+ObVirtualShowTrace::ObVirtualShowTrace()
+    : ObVirtualTableScannerIterator(),
+      is_first_get_(true),
+      show_trace_rec_idx_(-1),
+      alloc_(),
+      show_trace_arr_(),
+      is_row_format_(true)
 {
 }
 
-ObVirtualShowTrace::~ObVirtualShowTrace() {
+ObVirtualShowTrace::~ObVirtualShowTrace()
+{
   reset();
 }
 
@@ -47,134 +123,30 @@ void ObVirtualShowTrace::reset()
 {
   ObVirtualTableScannerIterator::reset();
   is_first_get_ = true;
-  is_use_index_ = false;
-  port_ = 0;
-  ipstr_.reset();
+  show_trace_rec_idx_ = -1;
+  show_trace_arr_.reset();
   alloc_.reset();
+  is_row_format_ = true;
 }
 
 int ObVirtualShowTrace::inner_open()
 {
-  int ret = OB_SUCCESS;
-
-  // retrive span info from virtual span
-  return ret;
+  return OB_SUCCESS;
 }
 
-int ObVirtualShowTrace::retrive_all_span_info()
+int ObVirtualShowTrace::build_show_trace_rows_from_session()
 {
   int ret = OB_SUCCESS;
-  ObMySQLTransaction trans;
-  ObMySQLProxy *mysql_proxy = GCTX.sql_proxy_;
-  ObString trace_id;
-  if (OB_ISNULL(mysql_proxy)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "mysql proxy is null", K(ret));
-  } else if (OB_ISNULL(session_)) {
+  const sql::ObShowTraceSessionBuffer *trace_buf = NULL;
+  char ipstr_buf[common::MAX_IP_ADDR_LENGTH + 2];
+  int64_t ipstr_len = 0;
+  if (OB_ISNULL(session_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "session is null", K(ret));
+  } else if (OB_ISNULL(trace_buf = session_->get_show_trace_buffer()) || !trace_buf->has_trace()) {
+    // no lightweight show trace record
   } else {
-    int sql_len = 0;
     is_row_format_ = session_->is_row_traceformat();
-    SMART_VAR(char[OB_MAX_SQL_LENGTH], sql) {
-      
-      const char *table_name = OB_ALL_VIRTUAL_TRACE_SPAN_INFO_TNAME;
-      trace_id = session_->get_last_flt_trace_id();
-      sql_len = snprintf(sql, OB_MAX_SQL_LENGTH,
-                           "SELECT trace_id, request_id, span_id, "
-                           "parent_span_id, span_name, ref_type, start_ts, end_ts, tags, logs "
-                           "FROM %s WHERE trace_id = '%s'",
-                           table_name,
-                           trace_id.ptr());
-      LOG_TRACE("send inner sql to retrive records", KP(session_),
-                                                     K(session_->get_server_sid()), K(table_name),
-                                                     K(trace_id_), K(trace_id),
-                                                     K(ObString(sql_len, sql)));
-      if (sql_len >= OB_MAX_SQL_LENGTH || sql_len <= 0) {
-        ret = OB_SIZE_OVERFLOW;
-        SERVER_LOG(WARN, "failed to format sql. size not enough");
-      } else {
-
-        { // make sure %res destructed before execute other sql in the same transaction
-          SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-            common::sqlclient::ObMySQLResult *result = NULL;
-            ObISQLClient *sql_client = mysql_proxy;
-            uint64_t table_id = OB_ALL_VIRTUAL_TRACE_SPAN_INFO_TID;
-            ObSQLClientRetryWeak sql_client_retry_weak(sql_client,
-                                                     false,
-                                                     table_id);
-            // retrive data from client
-            if (OB_FAIL(sql_client_retry_weak.read(res, sql))) {
-              SERVER_LOG(WARN, "failed to read data", K(ret));
-            } else if (NULL == (result = res.get_result())) {
-              ret = OB_ERR_UNEXPECTED;
-              SERVER_LOG(WARN, "failed to get result", K(ret));
-            } else {
-              while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-                sql::ObFLTShowTraceRec* rec;
-                if (OB_FAIL(alloc_trace_rec(rec))) {
-                  SERVER_LOG(WARN, "failed to alloc record", K(ret));
-                } else if (OB_ISNULL(rec)) {
-                  ret = OB_ERR_UNEXPECTED;
-                  SERVER_LOG(WARN, "record ptr is null");
-                } else {
-                  OZ(read_show_trace_rec_from_result(*result, *rec));
-                  OZ(show_trace_arr_.push_back(rec));
-                }
-              }
-              if (OB_ITER_END == ret) {
-                ret = OB_SUCCESS;
-              }
-            }
-          }
-          // deep copy data
-
-        }
-      }
-    }
-    LOG_TRACE("after read dia log from span info", K(show_trace_arr_.count()), K(ret));
-  }
-
-  return ret;
-}
-
-int ObVirtualShowTrace::read_show_trace_rec_from_result(sqlclient::ObMySQLResult &mysql_result, sql::ObFLTShowTraceRec &rec)
-{
-  int ret = OB_SUCCESS;
-  char trace_id_buf[OB_MAX_SPAN_LENGTH];
-  char span_id_buf[OB_MAX_SPAN_LENGTH];
-  char parent_id_buf[OB_MAX_SPAN_LENGTH];
-  char span_name_buf[OB_MAX_SPAN_LENGTH];
-  char ipstr_buf[common::MAX_IP_ADDR_LENGTH + 2];
-
-  int64_t trace_id_len = 0;
-  int64_t span_id_len = 0;
-  int64_t parent_id_len = 0;
-  int64_t span_name_len = 0;
-  int64_t tag_len = 0;
-  int64_t log_len = 0;
-  int64_t ipstr_len = 0;
-  char *tag_buf = NULL;
-  if (OB_FAIL(get_tag_buf(tag_buf))) {
-    SERVER_LOG(WARN, "failed to get tag buf", K(ret));
-  } else {
-    // trace_id
-    EXTRACT_STRBUF_FIELD_MYSQL(mysql_result, "trace_id", trace_id_buf, OB_MAX_SPAN_LENGTH, trace_id_len);
-    // span_id
-    EXTRACT_STRBUF_FIELD_MYSQL(mysql_result, "span_id", span_id_buf, OB_MAX_SPAN_LENGTH, span_id_len);
-    // parent_span_id
-    EXTRACT_STRBUF_FIELD_MYSQL(mysql_result, "parent_span_id", parent_id_buf, OB_MAX_SPAN_LENGTH, parent_id_len);
-    // span_name
-    EXTRACT_STRBUF_FIELD_MYSQL(mysql_result, "span_name", span_name_buf, OB_MAX_SPAN_LENGTH, span_name_len);
-    // tenant
-    
-    // request_id
-    EXTRACT_INT_FIELD_MYSQL(mysql_result, "request_id", rec.data_.req_id_, int64_t);
-    // start_ts
-    EXTRACT_INT_FIELD_MYSQL(mysql_result, "start_ts", rec.data_.start_ts_, int64_t);
-    // end_ts
-    EXTRACT_INT_FIELD_MYSQL(mysql_result, "end_ts", rec.data_.end_ts_, int64_t);
-    // svr_ip/svr_port are no longer fetched from result set, fill from local address instead.
     const ObAddr &self_addr = GCTX.self_addr();
     if (!self_addr.ip_to_string(ipstr_buf, sizeof(ipstr_buf))) {
       ipstr_buf[0] = '\0';
@@ -182,494 +154,158 @@ int ObVirtualShowTrace::read_show_trace_rec_from_result(sqlclient::ObMySQLResult
     } else {
       ipstr_len = static_cast<int64_t>(strlen(ipstr_buf));
     }
-    rec.port_ = static_cast<int64_t>(self_addr.get_port());
 
-    // tags
-    if (OB_FAIL(ret)) {
-      // do nothing 
-    } else {
-      MEMSET(tag_buf, 0x00, OB_MAX_SPAN_TAG_LENGTH);
-      EXTRACT_STRBUF_FIELD_MYSQL(mysql_result, "tags", tag_buf, OB_MAX_SPAN_TAG_LENGTH, tag_len);
-      if (OB_FAIL(ob_write_string(alloc_, ObString(tag_len, tag_buf), rec.data_.tags_))) {
-        SERVER_LOG(WARN, "failed to deep copy tag", K(ret));
+    for (int64_t i = 0; OB_SUCC(ret) && i < trace_buf->get_span_count(); ++i) {
+      ObShowTraceRec *rec = NULL;
+      const sql::ObShowTraceSessionBuffer::Span &span = trace_buf->get_span(i);
+      const char *span_name = sql::get_show_trace_span_name(
+          static_cast<sql::ObTraceSpanType>(span.type_));
+      const char *trace_id = trace_buf->get_trace_id_str();
+      char span_id_buf[128];
+      char parent_id_buf[128];
+      char tags_buf[512];
+      const int64_t trace_id_len = static_cast<int64_t>(strlen(trace_id));
+      const int span_id_len = snprintf(span_id_buf, sizeof(span_id_buf), "%s-%ld", trace_id, i);
+      int parent_id_len = 0;
+      int64_t tag_len = 0;
+      bool has_tag = false;
+      tags_buf[0] = '\0';
+
+      if (span.parent_idx_ < 0) {
+        MEMCPY(parent_id_buf, "00000000-0000-0000-0000-000000000000", 36);
+        parent_id_buf[36] = '\0';
+        parent_id_len = 36;
+      } else {
+        parent_id_len = snprintf(parent_id_buf, sizeof(parent_id_buf),
+                                 "%s-%d", trace_id, span.parent_idx_);
       }
-    }
 
-    // logs
-    if (OB_FAIL(ret)) {
-     // do nothing
-    } else {
-      MEMSET(tag_buf, 0x00, OB_MAX_SPAN_TAG_LENGTH);
-      EXTRACT_STRBUF_FIELD_MYSQL(mysql_result, "logs", tag_buf, OB_MAX_SPAN_TAG_LENGTH, log_len);
-      if (OB_FAIL(ob_write_string(alloc_, ObString(log_len, tag_buf), rec.data_.logs_))) {
-        SERVER_LOG(WARN, "failed to deep copy log", K(ret));
-      }
-    }
-
-    // deep copy string
-    OZ (ob_write_string(alloc_, ObString(trace_id_len, trace_id_buf), rec.data_.trace_id_));
-    OZ (ob_write_string(alloc_, ObString(span_id_len, span_id_buf), rec.data_.span_id_));
-    OZ (ob_write_string(alloc_, ObString(parent_id_len, parent_id_buf), rec.data_.parent_span_id_));
-    OZ (ob_write_string(alloc_, ObString(span_name_len, span_name_buf), rec.data_.span_name_));
-    OZ (ob_write_string(alloc_, ObString(ipstr_len, ipstr_buf), rec.ipstr_));
-  }
-
-  return ret;
-}
-
-int ObVirtualShowTrace::get_tag_buf(char *&tag_buf)
-{
-  int ret = OB_SUCCESS;
-  char* buf = NULL;
-  if (NULL != tag_buf_) {
-    // not alloc, do nothing
-  } else if (NULL == (buf = (char*)alloc_.alloc(OB_MAX_SPAN_TAG_LENGTH))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    if (REACH_TIME_INTERVAL(100 * 1000)) {
-      SERVER_LOG(WARN, "alloc mem failed", K(OB_MAX_SPAN_TAG_LENGTH), K(ret));
-    }
-  } else {
-    tag_buf_ = buf;
-  }
-  tag_buf = tag_buf_;
-  return ret;
-}
-
-int ObVirtualShowTrace::generate_span_info_tree()
-{
-  int ret = OB_SUCCESS;
-  if (show_trace_arr_.empty()) {
-    // do nothing
-  } else {
-    ObSEArray<sql::ObFLTShowTraceRec*, 16> tmp_arr;
-    ObSEArray<sql::ObFLTShowTraceRec*, 16> root_arr;
-    // find root span
-    bool found_root = false;
-    int64_t depth = 0;
-    for (int64_t i = 0; OB_SUCC(ret) && i < show_trace_arr_.count(); ++i) {
-      if (OB_ISNULL(show_trace_arr_.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "record ptr is null", K(i));
-      } else if (session_->get_last_flt_span_id().empty() && 
-            show_trace_arr_.at(i)->data_.parent_span_id_ == "00000000-0000-0000-0000-000000000000") {
-        found_root = true;
-        show_trace_arr_.at(i)->formatter_.level_ = depth;
-        OZ(root_arr.push_back(show_trace_arr_.at(i)));
-      } else if (!session_->get_last_flt_span_id().empty() && 
-          show_trace_arr_.at(i)->data_.parent_span_id_.compare(session_->get_last_flt_span_id()) == 0) {
-        found_root = true;
-        show_trace_arr_.at(i)->formatter_.level_ = depth;
-        OZ(root_arr.push_back(show_trace_arr_.at(i)));
-      }
-    }
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (!found_root) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("not found root span reset show trace", K(session_->get_last_flt_span_id()), K(session_->get_last_flt_trace_id()));
-      show_trace_arr_.reset();
-    } else {
-      // recursively generate span tree
-      for (int64_t i = 0; OB_SUCC(ret) && i < root_arr.count(); ++i) {
-        if (OB_ISNULL(root_arr.at(i))) {
-          ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "record ptr is null", K(i));
-        } else if (OB_FAIL(tmp_arr.push_back(root_arr.at(i)))) {
-          LOG_WARN("failed to add root span to array", K(ret), K(i));
-        } else if (OB_FAIL(find_child_span_info(NULL, root_arr.at(i)->data_.span_id_, tmp_arr, depth+1))) {
-          LOG_WARN("failed to find child span info", K(ret));
-        } else {
-          // do nothing
+      for (int64_t tag_idx = 0; OB_SUCC(ret) && tag_idx < trace_buf->get_tag_count(); ++tag_idx) {
+        const sql::ObShowTraceSessionBuffer::Tag &tag = trace_buf->get_tag(tag_idx);
+        if (tag.span_idx_ == i) {
+          const char *key = sql::get_show_trace_tag_name(
+              static_cast<sql::ObTraceTagKey>(tag.key_));
+          OZ(append_json_int_tag(tags_buf, sizeof(tags_buf), tag_len, has_tag, key, tag.int_value_));
         }
       }
+      if (OB_SUCC(ret) && 0 == i && trace_buf->is_truncated()) {
+        OZ(append_json_bool_tag(tags_buf, sizeof(tags_buf), tag_len, has_tag,
+                                "truncated", true));
+        OZ(append_json_bool_tag(tags_buf, sizeof(tags_buf), tag_len, has_tag,
+                                "span_truncated", trace_buf->is_span_truncated()));
+        OZ(append_json_bool_tag(tags_buf, sizeof(tags_buf), tag_len, has_tag,
+                                "depth_truncated", trace_buf->is_depth_truncated()));
+        OZ(append_json_bool_tag(tags_buf, sizeof(tags_buf), tag_len, has_tag,
+                                "tag_truncated", trace_buf->is_tag_truncated()));
+      }
+      if (OB_SUCC(ret)) {
+        OZ(close_json_tags(tags_buf, sizeof(tags_buf), tag_len, has_tag));
+      }
+
       if (OB_FAIL(ret)) {
-        // do nothing
+        SERVER_LOG(WARN, "failed to format lightweight show trace tags", K(ret));
+      } else if (span_id_len <= 0 || span_id_len >= static_cast<int>(sizeof(span_id_buf))
+          || parent_id_len <= 0 || parent_id_len >= static_cast<int>(sizeof(parent_id_buf))) {
+        ret = OB_SIZE_OVERFLOW;
+        SERVER_LOG(WARN, "failed to format lightweight show trace id", K(ret),
+                   K(span_id_len), K(parent_id_len));
+      } else if (OB_FAIL(alloc_trace_rec(rec))) {
+        SERVER_LOG(WARN, "failed to alloc record", K(ret));
+      } else if (OB_ISNULL(rec)) {
+        ret = OB_ERR_UNEXPECTED;
+        SERVER_LOG(WARN, "record ptr is null", K(ret));
       } else {
-        show_trace_arr_.reset();
-        for (int64_t i = 0; OB_SUCC(ret) && i < tmp_arr.count(); ++i) {
-          if (OB_ISNULL(tmp_arr.at(i))) {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "record ptr is null", K(i));
+        rec->data_.req_id_ = i;
+        rec->data_.ref_type_ = 0;
+        rec->data_.start_ts_ = span.start_ts_;
+        rec->data_.end_ts_ = span.end_ts_;
+        rec->port_ = static_cast<int64_t>(self_addr.get_port());
+        OZ(ob_write_string(alloc_, ObString(trace_id_len, trace_id), rec->data_.trace_id_));
+        OZ(ob_write_string(alloc_, ObString(span_id_len, span_id_buf), rec->data_.span_id_));
+        OZ(ob_write_string(alloc_, ObString(parent_id_len, parent_id_buf), rec->data_.parent_span_id_));
+        OZ(ob_write_string(alloc_, ObString(static_cast<int64_t>(strlen(span_name)), span_name),
+                           rec->data_.span_name_));
+        OZ(ob_write_string(alloc_, ObString(tag_len, tags_buf), rec->data_.tags_));
+        OZ(ob_write_string(alloc_, ObString(0, ""), rec->data_.logs_));
+        OZ(ob_write_string(alloc_, ObString(ipstr_len, ipstr_buf), rec->ipstr_));
+        if (OB_SUCC(ret) && is_row_format_ && span.depth_ > 0) {
+          rec->formatter_.level_ = span.depth_;
+          rec->formatter_.tree_line_ =
+              static_cast<ObShowTraceRec::TraceFormatter::TreeLine *>(
+                  alloc_.alloc(sizeof(ObShowTraceRec::TraceFormatter::TreeLine) * span.depth_));
+          if (OB_ISNULL(rec->formatter_.tree_line_)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            SERVER_LOG(WARN, "allocate memory failed", K(ret), K(span.depth_));
           } else {
-            if (is_row_format_) {
-              OZ(format_flt_show_trace_record(*tmp_arr.at(i)));
-            } else {
-              // do nothing
+            for (int64_t j = 0; j < span.depth_; ++j) {
+              rec->formatter_.tree_line_[j].line_type_ =
+                  ObShowTraceRec::TraceFormatter::LineType::LT_SPACE;
             }
-            OZ(show_trace_arr_.push_back(tmp_arr.at(i)));
+            rec->formatter_.tree_line_[span.depth_ - 1].line_type_ =
+                ObShowTraceRec::TraceFormatter::LineType::LT_NODE;
+            OZ(format_show_trace_record(*rec));
           }
         }
+        OZ(show_trace_arr_.push_back(rec));
       }
     }
   }
-  LOG_TRACE("after push back show_trace record", K(show_trace_arr_.count()), K(ret));
   return ret;
 }
 
-// before generate tree, we should merge span info.
-// for spans, when buffer is full, it will flush.
-int ObVirtualShowTrace::merge_span_info() {
+int ObVirtualShowTrace::format_show_trace_record(ObShowTraceRec &rec)
+{
   int ret = OB_SUCCESS;
-  if (show_trace_arr_.count() < 1) {
-    // do nothing
-  } else {
-    ObSEArray<sql::ObFLTShowTraceRec*, 16> tmp_arr;
-    lib::ob_sort(&show_trace_arr_.at(0), &show_trace_arr_.at(0) + show_trace_arr_.count(),
-        [](const sql::ObFLTShowTraceRec* rec1, const sql::ObFLTShowTraceRec* rec2) {
-          if (NULL == rec1) {
-            return true;
-          } else if (NULL == rec2) {
-            return false;
-          } else {
-            return rec1->data_.span_id_ < rec2->data_.span_id_;
-          }
-        });
-    for (int64_t l=0; OB_SUCC(ret) && l < show_trace_arr_.count(); l++) {
-      int64_t r = l;
-      // if span id is same, just merge it.
-      if (OB_ISNULL(show_trace_arr_.at(l))) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "record ptr is null", K(l));
-      } else {
-        ObString l_span_id = show_trace_arr_.at(l)->data_.span_id_;
-        while (OB_SUCC(ret) && 
-                r+1 < show_trace_arr_.count() &&
-                OB_NOT_NULL(show_trace_arr_.at(r+1)) &&
-                l_span_id == show_trace_arr_.at(r+1)->data_.span_id_) {
-          r++;
+  const int64_t level = rec.formatter_.level_;
+  ObSqlString buff;
+  const ObShowTraceRec::TraceFormatter::NameLeftPadding &pad = rec.formatter_;
+  for (int64_t i = 0; OB_SUCC(ret) && i < level; ++i) {
+    if (OB_UNLIKELY(NULL == pad.tree_line_)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(WARN, "tree line ptr is null", K(ret), K(i));
+    } else {
+      const ObShowTraceRec::TraceFormatter::TreeLine &tl = pad.tree_line_[i];
+      switch(tl.line_type_) {
+        case ObShowTraceRec::TraceFormatter::LineType::LT_SPACE: {
+          OZ(buff.append("    "));
+          break;
         }
-
-        if (r+1 < show_trace_arr_.count()
-              && OB_ISNULL(show_trace_arr_.at(r+1))) {
+        case ObShowTraceRec::TraceFormatter::LineType::LT_LINE: {
+          OZ(buff.append("│   "));
+          break;
+        }
+        case ObShowTraceRec::TraceFormatter::LineType::LT_NODE: {
+          OZ(buff.append("├── "));
+          break;
+        }
+        case ObShowTraceRec::TraceFormatter::LineType::LT_LAST_NODE: {
+          OZ(buff.append("└── "));
+          break;
+        }
+        default: {
           ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "record ptr is null", K(r+1));
-        } else {
-          sql::ObFLTShowTraceRec* rec;
-          if (OB_FAIL(alloc_trace_rec(rec))) {
-            SERVER_LOG(WARN, "failed to alloc record", K(ret));
-          } else if (OB_ISNULL(rec)) {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "record ptr is null");
-          } else {
-            OZ(merge_range_span_info(l, r, *rec));
-            OZ(tmp_arr.push_back(rec));
-            l = r;
-          }
-        }
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-      // do nothong
-    } else {
-      show_trace_arr_.reset();
-      for (int i = 0; i < tmp_arr.count(); i++) {
-        OZ(show_trace_arr_.push_back(tmp_arr.at(i)));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObVirtualShowTrace::merge_range_span_info(int64_t l, int64_t r, sql::ObFLTShowTraceRec &rec)
-{
-  int ret = OB_SUCCESS;
-  char *tag_buf = NULL;
-  if (OB_ISNULL(show_trace_arr_.at(l))) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "record ptr is null");
-  } else if (FALSE_IT(rec = *show_trace_arr_.at(l))) {
-    // do nothing
-  } else if (OB_FAIL(get_tag_buf(tag_buf))) {
-    SERVER_LOG(WARN, "failed to get tag buf", K(ret));
-  } else {
-    // merge tags
-    int64_t pos = 0;
-    MEMSET(tag_buf, 0x00, OB_MAX_SPAN_TAG_LENGTH);
-    tag_buf[0] = '[';
-    pos++;
-    for (int64_t i = l; OB_SUCC(ret) && i < r+1; i++) {
-      if (OB_ISNULL(show_trace_arr_.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "record ptr is null");
-      } else {
-        rec.data_.end_ts_ = max(rec.data_.end_ts_, show_trace_arr_.at(i)->data_.end_ts_);
-        ObString str = show_trace_arr_.at(i)->data_.tags_.trim();
-        if (str.length() == 0) {
-         // skip
-        } else if (pos + str.length() + 1 > OB_MAX_SPAN_TAG_LENGTH) {
-          // skip
-        } else {
-          MEMCPY(tag_buf+pos, str.ptr(), str.length());
-          pos += str.length();
-          tag_buf[pos] = ',';
-          pos++;
-        }
-      }
-    }
-
-    if (pos == 1) {
-      rec.data_.tags_.reset();
-    } else {
-      tag_buf[pos-1] = ']';
-      if (OB_FAIL(ob_write_string(alloc_, ObString(pos, tag_buf), rec.data_.tags_))) {
-        SERVER_LOG(WARN, "failed to deep copy log", K(ret));
-      }
-    }
-
-    // merge logs
-    pos = 0;
-    MEMSET(tag_buf, 0x00, OB_MAX_SPAN_TAG_LENGTH);
-    tag_buf[0] = '[';
-    pos++;
-    for (int64_t i = l; OB_SUCC(ret) && i < r+1; i++) {
-      if (OB_ISNULL(show_trace_arr_.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "record ptr is null");
-      } else {
-        ObString str = show_trace_arr_.at(i)->data_.logs_.trim();
-        if (str.length() == 0) {
-         // skip
-        } else if (pos + str.length() + 1 > OB_MAX_SPAN_TAG_LENGTH) {
-          // skip
-        } else {
-          MEMCPY(tag_buf+pos, str.ptr(), str.length());
-          pos += str.length();
-          tag_buf[pos] = ',';
-          pos++;
-        }
-      }
-    }
-    if (pos == 1) {
-      rec.data_.logs_.reset();
-    } else {
-      tag_buf[pos-1] = ']';
-      if (OB_FAIL(ob_write_string(alloc_, ObString(pos, tag_buf), rec.data_.logs_))) {
-        SERVER_LOG(WARN, "failed to deep copy log", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObVirtualShowTrace::format_flt_show_trace_record(sql::ObFLTShowTraceRec &rec)
-{
-  int ret = OB_SUCCESS;
-  static const char *colors[] = {
-    "\033[32m", // GREEN
-    "\033[33m", // ORANGE
-    "\033[35m", // PURPLE
-    "\033[91m", // LIGHTRED
-    "\033[92m", // LIGHTGREEN
-    "\033[93m", // YELLOW
-    "\033[94m", // LIGHTBLUE
-    "\033[95m", // PINK
-    "\033[96m", // LIGHTCYAN
-    "\033[1;31m", // RED
-    "\033[1;34m" // BLUE
-  };
-  const char *color_end = "\033[0m";
-  char* name_buf = NULL;
-  const sql::ObFLTShowTraceRec::trace_formatter::NameLeftPadding &pad = rec.formatter_;
-  int pad_len = max(static_cast<int>(sizeof("└── ")), max(static_cast<int>(sizeof("├── ")), max(static_cast<int>(sizeof("│   ")), static_cast<int>(sizeof("    ")))));
-  int64_t len = pad.level_*pad_len + rec.data_.span_name_.length();
-  name_buf = static_cast<char *>(alloc_.alloc(len));
-  if (NULL == name_buf) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), K(len));
-  } else {
-    char *start_buf = name_buf;
-    for (int64_t i = 0; OB_SUCC(ret) && i < pad.level_; i++) {
-      const sql::ObFLTShowTraceRec::trace_formatter::TreeLine &tl = pad.tree_line_[i];
-      const char *txt = " ";
-      switch (tl.line_type_) {
-        case sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_SPACE: {
-          txt = "    ";
+          SERVER_LOG(WARN, "invalid tree line type", K(ret), K(tl.line_type_));
           break;
         }
-        case sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_LINE: {
-          txt = "│   ";
-          break;
-        }
-        case sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_NODE: {
-          txt = "├── ";
-          break;
-        }
-        case sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_LAST_NODE: {
-          txt = "└── ";
-          break;
-        };
-      }
-      MEMCPY(start_buf, txt, strlen(txt));
-      start_buf += strlen(txt);
-    }
-    int64_t former_len = start_buf - name_buf;
-    MEMCPY(start_buf, rec.data_.span_name_.ptr(), rec.data_.span_name_.length());
-    rec.data_.span_name_.assign(name_buf, former_len+rec.data_.span_name_.length());
-  }
-  return ret;
-}
-
-int ObVirtualShowTrace::find_child_span_info(sql::ObFLTShowTraceRec::trace_formatter::TreeLine *parent_type,
-                                              ObString parent_span_id,
-                                              ObIArray<sql::ObFLTShowTraceRec*> &arr,
-                                              int64_t depth) {
-  int ret = OB_SUCCESS;
-
-  ObSEArray<sql::ObFLTShowTraceRec*, 4> tmp_arr;
-  for (int64_t i = 0; OB_SUCC(ret) && i < show_trace_arr_.count(); ++i) {
-    if (OB_ISNULL(show_trace_arr_.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "record ptr is null", K(i));
-    } else if (show_trace_arr_.at(i)->data_.parent_span_id_ == parent_span_id) {
-       show_trace_arr_.at(i)->formatter_.level_ = depth;
-       show_trace_arr_.at(i)->formatter_.tree_line_ =
-         static_cast<sql::ObFLTShowTraceRec::trace_formatter::TreeLine *>(alloc_.alloc(sizeof(sql::ObFLTShowTraceRec::trace_formatter::TreeLine)*depth));
-       if (NULL == show_trace_arr_.at(i)->formatter_.tree_line_) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
-       } else {
-         MEMSET(show_trace_arr_.at(i)->formatter_.tree_line_, 0, depth);
-         /*
-         for (int j=0; OB_SUCC(ret) && j < depth; j++) {
-            show_trace_arr_.at(i).formatter_.tree_line_[j].color_idx_ = 0;
-            show_trace_arr_.at(i).formatter_.tree_line_[j].line_type_
-                                    = sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_SPACE;
-         }
-         */
-       }
-
-       if(OB_FAIL(ret)){
-       } else if (OB_FAIL(tmp_arr.push_back(show_trace_arr_.at(i)))) {
-         LOG_WARN("failed to push back show trace value", K(ret), K(i));
-       }
-     } else {
-       // do nothing
-     }
-  }
-
-  // do tmp_arr sort
-  if (tmp_arr.count() == 0) {
-    // skipp sort
-  } else {
-    lib::ob_sort(&tmp_arr.at(0), &tmp_arr.at(0) + tmp_arr.count(),
-        [](const sql::ObFLTShowTraceRec *rec1, const sql::ObFLTShowTraceRec *rec2) {
-          if (NULL == rec1) {
-            return true;
-          } else if (NULL == rec2) {
-            return false;
-          } else {
-            return rec1->data_.start_ts_ < rec2->data_.start_ts_;
-          }
-        });
-  }
-
-  // copy parent's node format
-  for (int64_t i = 0; OB_NOT_NULL(parent_type) && OB_SUCC(ret) && i < tmp_arr.count(); ++i) {
-    if (OB_ISNULL(tmp_arr.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "record ptr is null", K(i));
-    } else {
-      sql::ObFLTShowTraceRec& rec = *tmp_arr.at(i);
-      for (int64_t j = 0; OB_SUCC(ret) && j < depth-1; j++) {
-        rec.formatter_.tree_line_[j].line_type_ = parent_type[j].line_type_;
-      }
-      sql::ObFLTShowTraceRec::trace_formatter::LineType line_type 
-                                    = rec.formatter_.tree_line_[depth-2].line_type_;
-      if (line_type == sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_NODE) {
-        rec.formatter_.tree_line_[depth-2].line_type_
-                                      = sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_LINE;
-      } else if (line_type == sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_LAST_NODE) {
-        rec.formatter_.tree_line_[depth-2].line_type_
-                                      = sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_SPACE;
-      }
-      rec.formatter_.tree_line_[depth-1].line_type_
-                                      = sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_SPACE;
-    }
-  }
-
-  // process current
-  if (tmp_arr.count() < 1) {
-    // do nothing, remain space
-  } else if (tmp_arr.count() == 0) {
-    if (OB_ISNULL(tmp_arr.at(0))) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "record ptr is null");
-    } else {
-      tmp_arr.at(0)->formatter_.tree_line_[depth-1].line_type_
-                                    = sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_LAST_NODE;
-    }
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < tmp_arr.count()-1; ++i) {
-      if (OB_ISNULL(tmp_arr.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "record ptr is null", K(i));
-      } else {
-        tmp_arr.at(i)->formatter_.tree_line_[depth-1].line_type_
-                                    = sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_NODE;
       }
     }
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(tmp_arr.at(tmp_arr.count()-1))) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "record ptr is null");
-    } else {
-      tmp_arr.at(tmp_arr.count()-1)->formatter_.tree_line_[depth-1].line_type_
-                                    = sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_LAST_NODE;
-    }
   }
-
-  // invalid span check
-  for (int64_t i = 0; OB_SUCC(ret) && i < tmp_arr.count(); ++i) {
-    if (arr.count() > 0) {
-      if (OB_ISNULL(arr.at(arr.count() - 1))) {
-        // do nothing
-      } else if (OB_ISNULL(tmp_arr.at(i))) {
-         // do nothing
-      } else {
-        // There is a 2s clock error between machines
-        if (arr.at(arr.count() - 1)->data_.start_ts_ - tmp_arr.at(i)->data_.start_ts_ > 10000000 &&
-           arr.at(arr.count() - 1)->data_.span_id_ == tmp_arr.at(i)->data_.parent_span_id_) {
-          LOG_WARN("invalid trace span", K(arr.at(arr.count() - 1)->data_), K(tmp_arr.at(i)->data_));
-          LOG_USER_ERROR(OB_ERR_UNEXPECTED, "invalid trace span");
-        }
-      }
-    }
-    
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(tmp_arr.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "record ptr is null", K(i));
-    } else if (OB_FAIL(arr.push_back(tmp_arr.at(i)))) {
-      LOG_WARN("failed to push back show trace value", K(ret), K(i));
-    } else if (OB_FAIL(find_child_span_info(tmp_arr.at(i)->formatter_.tree_line_,
-                                            tmp_arr.at(i)->data_.span_id_,
-                                            arr,
-                                            depth+1))) {
-      LOG_WARN("failed to push back show trace value", K(ret), K(i));
-    } else {
-      // do nothing
-    }
+  if (OB_SUCC(ret)) {
+    OZ(buff.append(rec.data_.span_name_));
   }
-
+  if (OB_SUCC(ret)) {
+    OZ(ob_write_string(alloc_, buff.string(), rec.data_.span_name_));
+  }
   return ret;
 }
 
 int ObVirtualShowTrace::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-
-  // first get row
   if (is_first_get_) {
-    bool is_valid = true;
-    // init inner iterator varaibales
     show_trace_arr_.reset();
-    if (OB_FAIL(retrive_all_span_info())) {
-      SERVER_LOG(WARN, "failed to retrive all span info", K(ret));
-    } else if (OB_FAIL(merge_span_info())) {
-      SERVER_LOG(WARN, "failed to merge span info", K(ret));
-    } else if (OB_FAIL(generate_span_info_tree())) {
-      SERVER_LOG(WARN, "failed to generate span info tree", K(ret));
+    if (OB_FAIL(build_show_trace_rows_from_session())) {
+      SERVER_LOG(WARN, "failed to build show trace rows from session", K(ret));
     } else {
       is_first_get_ = false;
       show_trace_rec_idx_ = 0;
@@ -677,14 +313,12 @@ int ObVirtualShowTrace::inner_get_next_row(common::ObNewRow *&row)
     LOG_TRACE("after pre processed", K(show_trace_arr_.count()), K(ret));
   }
 
-  // display
   if (show_trace_arr_.empty()) {
-    // do nothing
     ret = OB_ITER_END;
   } else if (OB_SUCC(ret)) {
     if (show_trace_rec_idx_ < 0) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "invalid operator_stat array index", K(show_trace_rec_idx_));
+      SERVER_LOG(WARN, "invalid show trace array index", K(show_trace_rec_idx_));
     } else if (show_trace_rec_idx_ >= show_trace_arr_.count()) {
       ret = OB_ITER_END;
       show_trace_rec_idx_ = OB_INVALID_ID;
@@ -693,20 +327,19 @@ int ObVirtualShowTrace::inner_get_next_row(common::ObNewRow *&row)
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "record ptr is null", K(show_trace_rec_idx_));
     } else {
-      sql::ObFLTShowTraceRec rec = *show_trace_arr_.at(show_trace_rec_idx_);
+      ObShowTraceRec rec = *show_trace_arr_.at(show_trace_rec_idx_);
       ++show_trace_rec_idx_;
       if (OB_FAIL(fill_cells(rec))) {
-        SERVER_LOG(WARN, "fail to fill cells", K(rec));
+        SERVER_LOG(WARN, "fail to fill cells", K(ret), K(rec));
       } else {
         row = &cur_row_;
       }
     }
   }
-
   return ret;
 }
 
-int ObVirtualShowTrace::fill_cells(sql::ObFLTShowTraceRec &record)
+int ObVirtualShowTrace::fill_cells(ObShowTraceRec &record)
 {
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
@@ -719,8 +352,6 @@ int ObVirtualShowTrace::fill_cells(sql::ObFLTShowTraceRec &record)
     for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < col_count; cell_idx++) {
       uint64_t col_id = output_column_ids_.at(cell_idx);
       switch(col_id) {
-        //server ip
-        //server port
       case TRACE_ID: {
         cells[cell_idx].set_varchar(record.data_.trace_id_);
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
@@ -732,29 +363,27 @@ int ObVirtualShowTrace::fill_cells(sql::ObFLTShowTraceRec &record)
       case SPAN_ID: {
         cells[cell_idx].set_varchar(record.data_.span_id_);
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
-                                     ObCharset::get_default_charset()));
+                                             ObCharset::get_default_charset()));
       } break;
       case PARENT_SPAN_ID: {
         cells[cell_idx].set_varchar(record.data_.parent_span_id_);
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
-                                     ObCharset::get_default_charset()));
+                                             ObCharset::get_default_charset()));
       } break;
       case SPAN_NAME: {
         cells[cell_idx].set_varchar(record.data_.span_name_);
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
-                                     ObCharset::get_default_charset()));
+                                             ObCharset::get_default_charset()));
       } break;
       case REF_TYPE: {
         if (record.data_.ref_type_ == 0) {
           cells[cell_idx].set_varchar("CHILD");
           cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
-                                     ObCharset::get_default_charset()));
+                                               ObCharset::get_default_charset()));
         } else if (record.data_.ref_type_ == 1) {
           cells[cell_idx].set_varchar("FOLLOW");
           cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
-                                     ObCharset::get_default_charset()));
-        } else {
-          // do nothing
+                                               ObCharset::get_default_charset()));
         }
       } break;
       case START_TS: {
@@ -771,14 +400,14 @@ int ObVirtualShowTrace::fill_cells(sql::ObFLTShowTraceRec &record)
                                       record.data_.tags_.ptr(),
                                       record.data_.tags_.length());
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
-                                     ObCharset::get_default_charset()));
+                                             ObCharset::get_default_charset()));
       } break;
       case LOGS: {
         cells[cell_idx].set_lob_value(ObLongTextType,
                                       record.data_.logs_.ptr(),
                                       record.data_.logs_.length());
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
-                                     ObCharset::get_default_charset()));
+                                             ObCharset::get_default_charset()));
       } break;
       default: {
         ret = OB_ERR_UNEXPECTED;
@@ -790,20 +419,20 @@ int ObVirtualShowTrace::fill_cells(sql::ObFLTShowTraceRec &record)
   return ret;
 }
 
-int ObVirtualShowTrace::alloc_trace_rec(sql::ObFLTShowTraceRec *&rec)
+int ObVirtualShowTrace::alloc_trace_rec(ObShowTraceRec *&rec)
 {
   int ret = OB_SUCCESS;
-  char* buf = NULL;
-  if (NULL == (buf = (char*)alloc_.alloc(sizeof(sql::ObFLTShowTraceRec)))) {
+  char *buf = NULL;
+  if (NULL == (buf = static_cast<char *>(alloc_.alloc(sizeof(ObShowTraceRec))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     if (REACH_TIME_INTERVAL(100 * 1000)) {
-      SERVER_LOG(WARN, "alloc mem failed", K(OB_MAX_SPAN_TAG_LENGTH), K(ret));
+      SERVER_LOG(WARN, "alloc mem failed", K(sizeof(ObShowTraceRec)), K(ret));
     }
   } else {
-   rec = new(buf)sql::ObFLTShowTraceRec();
+    rec = new(buf) ObShowTraceRec();
   }
   return ret;
 }
 
-} //namespace observer
-} //namespace oceanbase
+} // namespace observer
+} // namespace oceanbase

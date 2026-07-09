@@ -499,7 +499,6 @@ int ObDASRef::close_all_task()
   int ret = OB_SUCCESS;
   int last_end_ret = OB_SUCCESS;
   if (has_task()) {
-    FLTSpanGuard(close_das_task);
     ObSQLSessionInfo *session = nullptr;
     int wait_ret = OB_SUCCESS;
     if (get_parallel_type() != DAS_SERIALIZATION) {

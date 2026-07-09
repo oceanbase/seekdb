@@ -35,6 +35,7 @@
 #include "pl/ob_pl_resolver.h"
 #include "sql/ob_sql_ccl_rule_manager.h"
 #include "lib/utility/ob_smart_call.h"
+#include "sql/monitor/show_trace/ob_show_trace.h"
 
 namespace oceanbase
 {
@@ -110,7 +111,7 @@ int ObSql::stmt_query(const common::ObString &stmt, ObSqlCtx &context, ObResultS
 {
   int ret = OB_SUCCESS;
   LinkExecCtxGuard link_guard(result.get_session(), result.get_exec_context());
-  FLTSpanGuard(sql_compile);
+  ObTraceSpanGuard compile_span(&result.get_session(), TRACE_SQL_COMPILE);
   ObTruncatedString trunc_stmt(stmt);
 #ifndef NDEBUG
   LOG_INFO("Begin to handle text statement",
@@ -138,10 +139,7 @@ int ObSql::stmt_query(const common::ObString &stmt, ObSqlCtx &context, ObResultS
   }
   if (OB_ISNULL(result.get_physical_plan())) {
   } else {
-    FLT_SET_TAG(plan_hash, result.get_physical_plan()->get_plan_hash_value());
   }
-  FLT_SET_TAG(database_id, result.get_session().get_database_id(),
-                sql_id, context.sql_id_);
   NG_TRACE_EXT(stmt_query_end, OB_ID(stmt),
                context.is_sensitive_ ? ObString(OB_MASKED_STR) : trunc_stmt.string(),
                OB_ID(stmt_len), stmt.length());
@@ -176,7 +174,6 @@ int ObSql::stmt_execute(const ObPsStmtId stmt_id,
   if (OB_FAIL(ret) && OB_SUCCESS == result.get_errcode()) {
     result.set_errcode(ret);
   }
-  FLT_SET_TAG(sql_id, context.sql_id_);
   if (OB_FAIL(ret)) {
     rollback_implicit_trans_when_fail(result, ret);
   }
@@ -1556,8 +1553,6 @@ int ObSql::handle_pl_execute(const ObString &sql,
   LOG_TRACE("arrive handle pl execute", K(ret),
             "sql", context.is_sensitive_ ? ObString(OB_MASKED_STR) : sql,
             K(is_prepare_protocol), K(is_dynamic_sql), K(lbt()));
-
-  FLT_SET_TAG(pl_handle_sql_execute_sql, sql);
   int64_t start_time = ObTimeUtility::current_time();
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(pctx)) {
@@ -1573,7 +1568,6 @@ int ObSql::handle_pl_execute(const ObString &sql,
     result.get_session().set_exec_min_cluster_version();
   }
   int64_t end_time = ObTimeUtility::current_time();
-  FLT_SET_TAG(pl_handle_sql_execute_time, end_time - start_time);
   if (OB_FAIL(ret) && OB_SUCCESS == result.get_errcode()) {
     result.set_errcode(ret);
   }
@@ -1598,7 +1592,6 @@ int ObSql::handle_pl_execute(const ObString &sql,
       session.set_has_exec_inner_dml(true);
     }
   }
-  FLT_SET_TAG(sql_id, context.sql_id_);
   return ret;
 }
 
@@ -2283,7 +2276,6 @@ int ObSql::handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
   int ret = OB_SUCCESS;
   //trim the sql first, let 'select c1 from t' and '  select c1 from t' and hit the same plan_cache
   const ObString &trimed_stmt = remote_sql_info.remote_sql_;
-  FLTSpanGuard(remote_compile);
 
   ObIAllocator &allocator = THIS_WORKER.get_sql_arena_allocator();
   ObSQLSessionInfo *session = exec_ctx.get_my_session();
@@ -2415,7 +2407,6 @@ int ObSql::handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
 
   if ((NULL != pc_ctx) && !(pc_ctx->sql_ctx_.is_sensitive_)) {
     // if sql context contains sensitive data, can not flush sql info to trace.log
-    FLT_SET_TAG(sql_text, trimed_stmt);
   }
 
 
@@ -2557,7 +2548,6 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
 
   if ((NULL != pc_ctx) && !(pc_ctx->sql_ctx_.is_sensitive_)) {
     // if sql context contains sensitive data, can not flush sql info to trace.log
-    FLT_SET_TAG(sql_text, trimed_stmt);
   }
 
   // set auto-increment related param into physical plan ctx
@@ -2647,7 +2637,6 @@ int ObSql::generate_stmt(ParseResult &parse_result,
                          ParseResult *outline_parse_result)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(resolve);
   uint64_t session_id = 0;
   ObResolverParams resolver_ctx;
   ObPhysicalPlanCtx *plan_ctx = NULL;
@@ -3437,7 +3426,6 @@ int ObSql::transform_stmt(ObSqlSchemaGuard *sql_schema_guard,
                           bool ignore_trace_event)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(rewrite);
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_rewrite);
   ObDMLStmt *transform_stmt = stmt;
   int64_t last_mem_usage = exec_ctx.get_allocator().total();
@@ -3533,7 +3521,6 @@ int ObSql::optimize_stmt(
     ObLogPlan *&logical_plan)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(optimize);
   logical_plan = NULL;
   LOG_TRACE("stmt to generate plan", K(stmt));
   OPT_TRACE_TITLE("START GENERATE PLAN");
@@ -3566,7 +3553,6 @@ int ObSql::code_generate(
     ObPhysicalPlan *&phy_plan)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(code_generate);
   int64_t last_mem_usage = 0;
   int64_t codegen_mem_usage = 0;
   ObPhysicalPlanCtx *pctx = result.get_exec_context().get_physical_plan_ctx();
@@ -3959,7 +3945,6 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
       }
     }
   }
-  FLT_SET_TAG(hit_plan, pc_ctx.sql_ctx_.plan_cache_hit_);
   if (OB_ERR_PROXY_REROUTE == ret || OB_REACH_MAX_CONCURRENT_NUM == ret || OB_REACH_MAX_CCL_CONCURRENT_NUM == ret
       || OB_NEED_SWITCH_CONSUMER_GROUP == ret) {
     // If sql needs secondary routing, the connection should not be closed
@@ -4722,7 +4707,6 @@ OB_NOINLINE int ObSql::handle_physical_plan(const ObString &trimed_stmt,
                                             const int get_plan_err)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(hard_parse);
   bool is_valid = true;
   PlanCacheMode mode = pc_ctx.mode_;
   ObString outlined_stmt = trimed_stmt;//use outline if available
@@ -4828,7 +4812,6 @@ int ObSql::handle_parser(const ObString &sql,
 
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(parse);
   int64_t last_mem_usage = pc_ctx.allocator_.total();
   int64_t parser_mem_usage = 0;
   ObPhysicalPlanCtx *pctx = exec_ctx.get_physical_plan_ctx();

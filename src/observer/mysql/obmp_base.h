@@ -93,7 +93,6 @@ protected:
                        sql::ObSQLSessionInfo &session) const;
   int do_after_process(sql::ObSQLSessionInfo &session,
                        bool async_resp_used) const;
-  int record_flt_trace(sql::ObSQLSessionInfo &session) const;
   // reset warning buffer err msg, for inner retry
   void setup_wb(sql::ObSQLSessionInfo &session);
   void clear_wb_content(sql::ObSQLSessionInfo &session);

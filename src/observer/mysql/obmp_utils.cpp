@@ -16,7 +16,12 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "observer/mysql/obmp_utils.h"
+#include "common/object/ob_object.h"
+#include "lib/charset/ob_charset.h"
 #include "rpc/obmysql/packet/ompk_ok.h"
+#include "share/system_variable/ob_sys_var_meta.h"
+#include "sql/session/ob_sql_session_info.h"
+#include "sql/session/ob_system_variable.h"
 namespace oceanbase
 {
 namespace observer

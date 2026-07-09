@@ -71,15 +71,10 @@ int ObMPStmtClose::process()
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
     session->init_use_rich_format();
-    const bool enable_flt = session->get_control_info().is_valid();
     LOG_TRACE("close ps stmt or cursor", K_(stmt_id), K(session->get_server_sid()));
     if (OB_FAIL(session->check_tenant_status())) {
       LOG_INFO("unit has been migrated, need deny new request", K(ret));
-    } else if (OB_FAIL(sql::ObFLTUtils::init_flt_info(*session,
-                 enable_flt))) {
-      LOG_WARN("failed to init flt extra info", K(ret));
     }
-    FLTSpanGuardIfEnable(ps_close, enable_flt);
     if (OB_FAIL(ret)) {
     } else if (is_cursor_close()) {
       if (OB_FAIL(session->close_cursor(stmt_id_))) {

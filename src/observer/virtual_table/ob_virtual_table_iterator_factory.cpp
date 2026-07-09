@@ -80,7 +80,6 @@
 #include "observer/virtual_table/ob_all_virtual_session_info.h"
 #include "observer/virtual_table/ob_all_virtual_memory_info.h"
 #include "observer/virtual_table/ob_all_virtual_raid_stat.h"
-#include "observer/virtual_table/ob_virtual_span_info.h"
 #include "observer/virtual_table/ob_all_virtual_tablet_sstable_macro_info.h"
 #include "observer/virtual_table/ob_virtual_sql_plan_monitor.h"
 #include "observer/virtual_table/ob_virtual_sql_monitor_statname.h"
@@ -161,7 +160,6 @@
 #include "observer/virtual_table/ob_all_virtual_px_p2p_datahub.h"
 #include "observer/virtual_table/ob_all_virtual_tablet_buffer_info.h"
 #include "observer/virtual_table/ob_all_virtual_cgroup_config.h"
-#include "observer/virtual_table/ob_virtual_flt_config.h"
 #include "observer/virtual_table/ob_all_virtual_activity_metrics.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_resource_limit.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_resource_limit_detail.h"
@@ -1205,18 +1203,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_TRACE_SPAN_INFO_TID:
-          {
-            ObVirtualSpanInfo *trace = NULL;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObVirtualSpanInfo,
-                                          trace))) {
-              SERVER_LOG(WARN, "fail to create virtual table", K(ret));
-            } else {
-              trace->set_addr(addr_);
-              vt_iter = static_cast<ObVirtualTableIterator *>(trace);
-            }
-            break;
-          }
           case OB_ALL_VIRTUAL_SHOW_TRACE_TID:
           {
             ObVirtualShowTrace *show_trace = NULL;
@@ -1225,17 +1211,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               SERVER_LOG(WARN, "fail to create virtual table", K(ret));
             } else {
               vt_iter = static_cast<ObVirtualTableIterator *>(show_trace);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_FLT_CONFIG_TID:
-          {
-            ObVirtualFLTConfig *flt_conf = NULL;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObVirtualFLTConfig,
-                                          flt_conf))) {
-              SERVER_LOG(WARN, "fail to create virtual table", K(ret));
-            } else {
-              vt_iter = static_cast<ObVirtualTableIterator *>(flt_conf);
             }
             break;
           }

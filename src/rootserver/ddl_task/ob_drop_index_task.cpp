@@ -113,8 +113,6 @@ int ObDropIndexTask::init(
     if (OB_FAIL(ret)) {
     } else {
       is_inited_ = true;
-      // set up span during recover task
-    ddl_tracing_.open_for_recovery();
     }
   }
   return ret;
@@ -340,7 +338,6 @@ int ObDropIndexTask::process()
   } else if (OB_FAIL(check_switch_succ())) {
     LOG_WARN("check need retry failed", K(ret));
   } else {
-    ddl_tracing_.restore_span_hierarchy();
     const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
     switch (status) {
       case ObDDLTaskStatus::PREPARE:
@@ -391,7 +388,6 @@ int ObDropIndexTask::process()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("error unexpected, task status is not valid", K(ret), K(task_status_));
     }
-    ddl_tracing_.release_span_hierarchy();
     if (OB_FAIL(ret)) {
       add_event_info("drop index task process fail");
       LOG_INFO("drop index task process fail", "ddl_event_info", ObDDLEventInfo());

@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX PL
 #include "ob_dbms_session.h"
 #include "pl/ob_pl.h"
-#include "sql/monitor/flt/ob_flt_control_info_mgr.h"
 
 namespace oceanbase
 {
@@ -71,18 +70,6 @@ int ObDBMSSession::set_identifier(sql::ObExecContext &ctx,
     LOG_WARN("failed to set client id", K(ret));
   }
 
-  if (OB_FAIL(ret)) {
-    // do nothing
-  } else {
-    ObFLTControlInfoManager mgr;
-    if (OB_FAIL(mgr.init())) {
-      LOG_WARN("failed to init full link trace info manager", K(ret));
-    } else if (OB_FAIL(mgr.find_appropriate_con_info(*session))) {
-      LOG_WARN("failed to get control info for client info", K(ret));
-    } else {
-      // do nothing
-    }
-  }
   return ret;
 }
 

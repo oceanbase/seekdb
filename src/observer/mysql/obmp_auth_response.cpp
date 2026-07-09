@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/mysql/obmp_auth_response.h"
-#include "src/sql/monitor/flt/ob_flt_control_info_mgr.h"
 
 namespace oceanbase
 {

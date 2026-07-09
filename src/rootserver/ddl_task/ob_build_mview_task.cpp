@@ -100,7 +100,6 @@ int ObBuildMViewTask::init(
       dst_schema_version_ = schema_version_;
 
       is_inited_ = true;
-      ddl_tracing_.open();
     }
   }
 
@@ -150,7 +149,6 @@ int ObBuildMViewTask::init(const ObDDLTaskRecord &task_record)
       
       dst_schema_version_ = schema_version_;
       is_inited_ = true;
-      ddl_tracing_.open();
     }
   }
   return ret;
@@ -167,7 +165,6 @@ int ObBuildMViewTask::process()
   } else if (!need_retry()) {
     // by pass
   } else {
-    ddl_tracing_.restore_span_hierarchy();
     switch (task_status_) {
       case ObDDLTaskStatus::START_REFRESH_MVIEW_TASK:
         if (OB_FAIL(start_refresh_mview_task())) {
@@ -198,7 +195,6 @@ int ObBuildMViewTask::process()
         LOG_INFO("not expected status", KR(ret), K(task_status_));
         break;
     }
-    ddl_tracing_.release_span_hierarchy();
   }
   return ret;
 }

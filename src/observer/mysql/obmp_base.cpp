@@ -140,7 +140,6 @@ int ObMPBase::after_process(int error_code)
       FLUSH_TRACE();
     }
   }
-  ObFLTUtils::clean_flt_env();
   return ret;
 }
 
@@ -369,31 +368,6 @@ int ObMPBase::do_after_process(sql::ObSQLSessionInfo &session,
   session.reset_plsql_exec_time();
   session.reset_plsql_compile_time();
   ObQueryRetryAshGuard::reset_info();
-  return ret;
-}
-
-int ObMPBase::record_flt_trace(sql::ObSQLSessionInfo &session) const
-{
-  int ret = OB_SUCCESS;
-  //trace end
-  {
-    NG_TRACE(query_end);
-
-    if (session.is_use_trace_log()) {
-      //Does not affect normal logic
-      // show trace will always show last request info
-      if (OB_FAIL(ObFLTUtils::clean_flt_show_trace_env(session))) {
-        LOG_WARN("failed to clean flt show trace env", K(ret));
-      }
-    } else {
-      // not need to record
-      ObString trace_id;
-      trace_id.reset();
-      if (OB_FAIL(session.set_last_flt_trace_id(trace_id))) {
-        LOG_WARN("failed to reset last flt trace id", K(ret));
-      }
-    }
-  }
   return ret;
 }
 

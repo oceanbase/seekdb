@@ -47,8 +47,6 @@
 #include "sql/ob_sql_trans_util.h"
 #include "share/partition_table/ob_partition_location.h"
 #include "common/sql_mode/ob_sql_mode_utils.h"
-#include "sql/monitor/flt/ob_flt_extra_info.h"
-#include "sql/monitor/flt/ob_flt_utils.h"
 #include "sql/parser/ob_parser_utils.h"
 
 namespace oceanbase
@@ -56,12 +54,12 @@ namespace oceanbase
 namespace observer {
 class ObSMConnection;
 }
-using sql::FLTControlInfo;
 namespace sql
 {
 class ObExprRegexpSessionVariables;
 class ObPCMemPctConf;
 class ObBasicSessionInfo;
+class ObShowTraceSessionBuffer;
 class ObPartitionHitInfo
 {
 public:
@@ -1056,19 +1054,8 @@ public:
   int set_cur_phy_plan(const ObPhysicalPlan *cur_phy_plan);
   void reset_cur_phy_plan_to_null();
 
-  void get_flt_span_id(ObString &span_id) const;
-  void get_flt_trace_id(ObString &trace_id) const;
-  int set_flt_span_id(ObString span_id);
-  int set_flt_trace_id(ObString trace_id);
-  const ObString &get_last_flt_trace_id() const;
-  int set_last_flt_trace_id(const common::ObString &trace_id);
-  const ObString &get_last_flt_span_id() const;
-  int set_last_flt_span_id(const common::ObString &span_id);
-  bool is_row_traceformat() const { return flt_vars_.row_traceformat_; }
-  void set_is_row_traceformat(bool v) { flt_vars_.row_traceformat_ = v; }
-  bool is_query_trc_granuality() const { return sys_vars_cache_.get_ob_enable_trace_log()?
-                                            true:flt_vars_.trc_granuality_ == ObTraceGranularity::QUERY_LEVEL; }
-  void set_trc_granuality(ObTraceGranularity trc_gra) { flt_vars_.trc_granuality_ = trc_gra; }
+  bool is_row_traceformat() const { return show_trace_row_format_; }
+  void set_is_row_traceformat(bool v) { show_trace_row_format_ = v; }
   // @pre system variable existsofcaseunder
   // @synopsis Get the type of this variable based on the variable name
   // @param var_name
@@ -1086,6 +1073,10 @@ public:
   {
     return sys_vars_cache_.get_ob_enable_trace_log();
   }
+  ObShowTraceSessionBuffer *get_show_trace_buffer() const { return show_trace_buf_; }
+  int start_show_trace_recording();
+  void finish_show_trace_recording();
+  void destroy_show_trace_buffer();
   int is_use_transmission_checksum(bool &use_transmission_checksum) const;
   int is_select_index_enabled(bool &select_index_enabled) const;
   int get_name_case_mode(common::ObNameCaseMode &case_mode) const;
@@ -2257,7 +2248,8 @@ private:
   uint64_t last_plan_id_;
   uint64_t plan_hash_;
 
-  ObFLTVars flt_vars_;
+  bool show_trace_row_format_;
+  ObShowTraceSessionBuffer *show_trace_buf_;
   obmysql::ObMySQLCapabilityFlags capability_;
   obmysql::ObClientAttributeCapabilityFlags client_attribute_capability_;
   // add by oushen, track changed session info

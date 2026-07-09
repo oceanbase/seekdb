@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/mysql/obmp_set_option.h"
-#include "src/sql/monitor/flt/ob_flt_control_info_mgr.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::obmysql;

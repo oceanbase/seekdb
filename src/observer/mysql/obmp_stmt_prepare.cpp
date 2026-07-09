@@ -180,7 +180,6 @@ int ObMPStmtPrepare::process()
     int64_t sys_version = 0;
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     int64_t packet_len = pkt.get_clen();
-    const bool enable_flt = session.get_control_info().is_valid();
     if (OB_UNLIKELY(!session.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid session", K_(sql), K(ret));
@@ -205,20 +204,7 @@ int ObMPStmtPrepare::process()
     } else if (OB_FAIL(session.check_tenant_status())) {
       need_disconnect = false;
       LOG_INFO("unit has been migrated, need deny new request", K(ret));
-    } else if (OB_FAIL(sql::ObFLTUtils::init_flt_info(session,
-                            enable_flt))) {
-      LOG_WARN("failed to init flt extra info", K(ret));
     } else {
-      FLTSpanGuardIfEnable(ps_prepare, enable_flt);
-      if (enable_flt) {
-        char trace_id_buf[OB_MAX_TRACE_ID_BUFFER_SIZE] = {'\0'};
-        FLT_SET_TAG(log_trace_id, ObCurTraceId::get_trace_id_str(trace_id_buf, sizeof(trace_id_buf)),
-                      receive_ts, get_receive_timestamp(),
-                      client_info, session.get_client_info(),
-                      module_name, session.get_module_name(),
-                      action_name, session.get_action_name(),
-                      sess_id, session.get_server_sid());
-      }
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
       retry_ctrl_.set_tenant_global_schema_version(tenant_version);
       retry_ctrl_.set_sys_global_schema_version(sys_version);
@@ -250,7 +236,6 @@ int ObMPStmtPrepare::process()
 
     if (!session.get_in_transaction()) {
         // transcation ends, end trace
-        FLT_END_TRACE();
     }
 
     if (OB_FAIL(ret) && is_conn_valid()) {
@@ -334,7 +319,6 @@ int ObMPStmtPrepare::process_prepare_stmt(const ObMultiStmtItem &multi_stmt_item
   int tmp_ret = OB_SUCCESS;
   //Clear WARNING BUFFER
   tmp_ret = do_after_process(session, async_resp_used);
-  tmp_ret = record_flt_trace(session);
   // the need_response_error variable ensures that it only occurs in
   // do { do_process } while(retry) will only occur if an error happens before
   // Walk to the send_error_packet logic

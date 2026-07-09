@@ -275,7 +275,6 @@ int ObPxSqcHandler::init_env()
     LOG_ERROR("Fail to lock, ", K(tmp_ret));
   } else {
     is_session_query_locked_ = true;
-    init_flt_content();
   }
 
   if (OB_SUCC(ret) && OB_UNLIKELY(session->is_zombie())) {
@@ -288,18 +287,6 @@ int ObPxSqcHandler::init_env()
   }
   return ret;
 }
-
-void ObPxSqcHandler::init_flt_content()
-{
-  if (OBTRACE->is_inited()) {
-    flt_ctx_.trace_id_ = OBTRACE->get_trace_id();
-    flt_ctx_.span_id_ = OBTRACE->get_root_span_id();
-    flt_ctx_.policy_ = OBTRACE->get_policy();
-  }
-  LOG_TRACE("init flt rpc content", K(flt_ctx_), K(OBTRACE->get_trace_id()));
-}
-
-
 
 int ObPxSqcHandler::destroy_sqc(int &report_ret)
 {

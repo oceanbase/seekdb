@@ -19,7 +19,6 @@
 #include "observer/mysql/obmp_init_db.h"
 #include "observer/mysql/ob_query_retry_ctrl.h"
 #include "share/catalog/ob_catalog_utils.h"
-#include "src/sql/monitor/flt/ob_flt_control_info_mgr.h"
 
 using namespace oceanbase::rpc;
 using namespace oceanbase::obmysql;

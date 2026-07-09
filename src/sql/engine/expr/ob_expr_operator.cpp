@@ -27,6 +27,7 @@
 #include "sql/engine/expr/ob_expr_func_round.h"
 
 #include "common/object/ob_object.h"
+#include "rpc/obmysql/ob_mysql_util.h"
 #include "sql/engine/expr/ob_expr_multiset.h"
 
 namespace oceanbase
@@ -1498,7 +1499,7 @@ int ObExprOperator::aggregate_numeric_accuracy_for_merge(ObExprResType &type,
         type.set_precision(PRECISION_UNKNOWN_YET);
         type.set_scale(SCALE_UNKNOWN_YET);
       } else {
-        precision = static_cast<ObPrecision>(ObMySQLUtil::float_length(scale));
+        precision = static_cast<ObPrecision>(obmysql::ObMySQLUtil::float_length(scale));
         type.set_precision(precision);
         type.set_scale(max_scale_for_real);
       }
@@ -5583,7 +5584,7 @@ int ObMinMaxExprOperator::calc_result_meta_for_comparison(
       if (ob_is_real_type(type.get_type())) {
         if (SCALE_UNKNOWN_YET != result_scale && OB_MAX_DOUBLE_FLOAT_SCALE >= result_scale) {
           type.set_scale(result_scale);
-          type.set_precision(static_cast<ObPrecision>(ObMySQLUtil::float_length(result_scale)));
+          type.set_precision(static_cast<ObPrecision>(obmysql::ObMySQLUtil::float_length(result_scale)));
         } else {
           type.set_scale(SCALE_UNKNOWN_YET);
           type.set_precision(PRECISION_UNKNOWN_YET);

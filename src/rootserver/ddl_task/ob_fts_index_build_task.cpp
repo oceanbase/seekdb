@@ -226,8 +226,6 @@ int ObFtsIndexBuildTask::init(const ObDDLTaskRecord &task_record)
       LOG_WARN("init ddl task monitor info failed", K(ret), K(index_table_id));
     } else {
       is_inited_ = true;
-      // set up span during recover task
-      ddl_tracing_.open_for_recovery();
     }
   }
   return ret;
@@ -249,7 +247,6 @@ int ObFtsIndexBuildTask::process()
     // by pass
   } else {
     // switch case for diff create_index_arg, since there are 4 aux fts tables
-    ddl_tracing_.restore_span_hierarchy();
     const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
     switch (status) {
     case ObDDLTaskStatus::PREPARE: {
@@ -311,7 +308,6 @@ int ObFtsIndexBuildTask::process()
       LOG_WARN("not expected status", K(ret), K(status), K(*this));
     }
     } // end switch
-    ddl_tracing_.release_span_hierarchy();
   }
   return ret;
 }

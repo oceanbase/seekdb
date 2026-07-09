@@ -592,71 +592,11 @@ private:
   bool is_write_defensive_done_;
 };
 
-class ObDDLTask;
-
-struct ObDDLTracing final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObDDLTracing() = delete;
-  explicit ObDDLTracing(const ObDDLTask *ddl_task)
-    : trace_ctx_(), task_span_id_(), status_span_id_(), parent_task_span_id_(),
-      task_start_ts_(0), status_start_ts_(0), parent_task_span_(nullptr),
-      task_span_(nullptr), status_span_(nullptr), task_(ddl_task),
-      is_status_span_begin_(false), is_status_span_end_(false), is_task_span_flushed_(false)
-  {}
-  bool is_valid() const
-  {
-    return task_span_id_.low_ != 0 && task_span_id_.high_ != 0 &&
-           status_span_id_.low_ != 0 && status_span_id_.high_ != 0 &&
-           parent_task_span_id_.low_ != 0 && parent_task_span_id_.high_ != 0 &&
-           task_start_ts_ != 0 && status_start_ts_ != 0;
-  }
-  void open();
-  void open_for_recovery();
-  void restore_span_hierarchy();
-  void release_span_hierarchy();
-  void end_status_span();
-  void close();
-
-private:
-  void init_span_id(trace::ObSpanCtx *span);
-  void init_task_span();
-  void init_status_span();
-  trace::ObSpanCtx* begin_task_span();
-  void end_task_span();
-  trace::ObSpanCtx* begin_status_span(const share::ObDDLTaskStatus status);
-  trace::ObSpanCtx* restore_parent_task_span();
-  trace::ObSpanCtx* restore_task_span();
-  trace::ObSpanCtx* restore_status_span();
-  void record_trace_ctx();
-  void record_parent_task_span(trace::ObSpanCtx *span);
-  void record_task_span(trace::ObSpanCtx *span);
-  void record_status_span(trace::ObSpanCtx *span);
-
-private:
-  // members that will be serialized to ddl task record
-  trace::FltTransCtx trace_ctx_;
-  trace::UUID task_span_id_;      // build index task, drop index task etc
-  trace::UUID status_span_id_;    // status: prepare, succ etc
-  trace::UUID parent_task_span_id_;
-  int64_t task_start_ts_;
-  int64_t status_start_ts_;
-  // members that will not be serialized
-  trace::ObSpanCtx *parent_task_span_;
-  trace::ObSpanCtx *task_span_;
-  trace::ObSpanCtx *status_span_;
-  const ObDDLTask *task_;
-  bool is_status_span_begin_;
-  bool is_status_span_end_;
-  bool is_task_span_flushed_;
-};
-
 class ObDDLTask : public common::ObDLinkBase<ObDDLTask>
 {
 public:
   explicit ObDDLTask(const share::ObDDLType task_type)
-    : lock_(), ddl_tracing_(this), is_inited_(false), need_retry_(true), is_running_(false), is_abort_(false),
+    : lock_(), is_inited_(false), need_retry_(true), is_running_(false), is_abort_(false),
       task_type_(task_type), trace_id_(), sub_task_trace_id_(0), object_id_(0), schema_version_(0), dst_schema_version_(0),
       target_object_id_(0), task_status_(share::ObDDLTaskStatus::PREPARE), snapshot_version_(0), ret_code_(OB_SUCCESS), task_id_(0),
       parent_task_id_(0), parent_task_key_(), task_version_(0), parallelism_(0),
@@ -799,7 +739,6 @@ protected:
 protected:
   static const int64_t TASK_EXECUTE_TIME_THRESHOLD = 3LL * 24 * 60 * 60 * 1000000; // 3 days
   common::TCRWLock lock_;
-  ObDDLTracing ddl_tracing_;
   bool is_inited_;
   bool need_retry_;
   bool is_running_;

@@ -18,7 +18,6 @@
 
 #include "ob_sql_session_mgr.h"
 #include "share/rc/ob_module_provider.h"
-#include "sql/monitor/flt/ob_flt_control_info_mgr.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "sql/engine/dml/ob_trigger_handler.h"
 
@@ -485,28 +484,8 @@ int ObSQLSessionMgr::create_session(const uint32_t sessid,
           K(sessid), K(client_create_time));
     }
   } else {
-    // set tenant info to session, if has.
-    ObFLTControlInfoManager mgr;
-    if (OB_FAIL(mgr.init())) {
-      LOG_WARN("failed to init full link control info", K(ret));
-      if (FALSE_IT(revert_session(tmp_sess))) {
-        LOG_ERROR("fail to free session", K(err), K(sessid));
-      } else if (OB_SUCCESS != (err = sessinfo_map_.del(Key(sessid)))) {
-        LOG_ERROR("fail to free session", K(err), K(sessid));
-      } else {
-        LOG_DEBUG("free session successfully in create session", K(err),
-            K(sessid));
-      }
-    } else if (mgr.is_valid_tenant_config()) {
-      tmp_sess->set_flt_control_info(mgr.get_control_info());
-    }
-
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else {
-      tmp_sess->update_last_active_time();
-      session_info = tmp_sess;
-    }
+    tmp_sess->update_last_active_time();
+    session_info = tmp_sess;
   }
   return ret;
 }

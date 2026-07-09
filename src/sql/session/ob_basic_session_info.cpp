@@ -19,6 +19,7 @@
 
 #include "ob_basic_session_info.h"
 #include "lib/utility/ob_smart_call.h"
+#include "sql/monitor/show_trace/ob_show_trace.h"
 #include "share/rc/ob_module_provider.h"
 #include "sql/plan_cache/ob_prepare_stmt_struct.h"
 #include "share/ob_tenant_timezone_mgr.h"
@@ -120,7 +121,8 @@ ObBasicSessionInfo::ObBasicSessionInfo()
       plan_id_(0),
       last_plan_id_(0),
       plan_hash_(0),
-      flt_vars_(),
+      show_trace_row_format_(true),
+      show_trace_buf_(NULL),
       capability_(),
       changed_sys_vars_(),
       changed_user_vars_(),
@@ -290,6 +292,7 @@ void ObBasicSessionInfo::destroy()
   }
   total_stmt_tables_.reset();
   cur_stmt_tables_.reset();
+  destroy_show_trace_buffer();
 }
 
 void ObBasicSessionInfo::clean_status()
@@ -420,7 +423,8 @@ void ObBasicSessionInfo::reset(bool skip_sys_var)
   sys_var_inc_info_.reset();
   sys_var_in_pc_str_.reset();
   config_in_pc_str_.reset();
-  flt_vars_.reset();
+  show_trace_row_format_ = true;
+  destroy_show_trace_buffer();
   is_first_gen_ = true;
   is_first_gen_config_ = true;
   CHAR_CARRAY_INIT(trace_id_buff_);
@@ -2291,6 +2295,41 @@ void ObBasicSessionInfo::reset_cur_phy_plan_to_null()
   cur_phy_plan_ = NULL;
 }
 
+int ObBasicSessionInfo::start_show_trace_recording()
+{
+  int ret = OB_SUCCESS;
+  if (!is_use_trace_log()) {
+    destroy_show_trace_buffer();
+  } else {
+    if (OB_ISNULL(show_trace_buf_)) {
+      show_trace_buf_ = OB_NEW(ObShowTraceSessionBuffer, ObMemAttr("ShowTrace"));
+      if (OB_ISNULL(show_trace_buf_)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate show trace buffer", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      show_trace_buf_->reset_for_stmt(get_server_sid());
+    }
+  }
+  return ret;
+}
+
+void ObBasicSessionInfo::finish_show_trace_recording()
+{
+  if (OB_NOT_NULL(show_trace_buf_)) {
+    show_trace_buf_->finish_stmt();
+  }
+}
+
+void ObBasicSessionInfo::destroy_show_trace_buffer()
+{
+  if (OB_NOT_NULL(show_trace_buf_)) {
+    ob_delete(show_trace_buf_);
+    show_trace_buf_ = NULL;
+  }
+}
+
 // for cmd only
 void ObBasicSessionInfo::set_cur_sql_id(char *sql_id)
 {
@@ -2310,78 +2349,6 @@ void ObBasicSessionInfo::get_cur_sql_id(char *sql_id_buf, int64_t sql_id_buf_siz
   } else {
     sql_id_buf[0] = '\0';
   }
-}
-
-int ObBasicSessionInfo::set_flt_trace_id(ObString trace_id)
-{
-  int ret = OB_SUCCESS;
-  MEMSET(flt_vars_.flt_trace_id_, 0x00, common::OB_MAX_UUID_LENGTH + 1);
-  flt_vars_.flt_trace_id_[0] = 0xFF;
-  MEMCPY(flt_vars_.flt_trace_id_+1, trace_id.ptr(), common::OB_MAX_UUID_LENGTH);
-  return ret;
-}
-
-int ObBasicSessionInfo::set_flt_span_id(ObString span_id)
-{
-  int ret = OB_SUCCESS;
-  MEMSET(flt_vars_.flt_span_id_, 0x00, common::OB_MAX_UUID_LENGTH + 1);
-  flt_vars_.flt_span_id_[0] = 0xFF;
-  MEMCPY(flt_vars_.flt_span_id_+1, span_id.ptr(), common::OB_MAX_UUID_LENGTH);
-  return ret;
-}
-
-void ObBasicSessionInfo::get_flt_trace_id(ObString &trace_id) const
-{
-  if (flt_vars_.flt_trace_id_[0] == '\0') {
-    trace_id.reset();
-  } else {
-    trace_id.assign(const_cast<char *>(&flt_vars_.flt_trace_id_[1]), common::OB_MAX_UUID_LENGTH);
-  }
-}
-
-void ObBasicSessionInfo::get_flt_span_id(ObString &span_id) const
-{
-  if (flt_vars_.flt_span_id_[0] == '\0') {
-    span_id.reset();
-  } else {
-    span_id.assign(const_cast<char *>(&flt_vars_.flt_span_id_[1]), common::OB_MAX_UUID_LENGTH);
-  }
-}
-
-const ObString &ObBasicSessionInfo::get_last_flt_span_id() const
-{
-  return flt_vars_.last_flt_span_id_;
-}
-int ObBasicSessionInfo::set_last_flt_span_id(const common::ObString &span_id)
-{
-  int ret = OB_SUCCESS;
-  if (span_id.empty()) {
-    flt_vars_.last_flt_span_id_.reset();
-  } else {
-    int64_t span_len = std::min(static_cast<int64_t>(span_id.length()), OB_MAX_UUID_STR_LENGTH);
-    MEMCPY(flt_vars_.last_flt_span_id_buf_, span_id.ptr(), span_len);
-    flt_vars_.last_flt_span_id_buf_[span_len] = '\0';
-    flt_vars_.last_flt_span_id_.assign_ptr(flt_vars_.last_flt_span_id_buf_, span_len);
-  }
-  return ret;
-}
-
-const ObString &ObBasicSessionInfo::get_last_flt_trace_id() const
-{
-  return flt_vars_.last_flt_trace_id_;
-}
-int ObBasicSessionInfo::set_last_flt_trace_id(const common::ObString &trace_id)
-{
-  int ret = OB_SUCCESS;
-  if (trace_id.empty()) {
-    flt_vars_.last_flt_trace_id_.reset();
-  } else {
-    int64_t trace_len = std::min(static_cast<int64_t>(trace_id.length()), OB_MAX_UUID_STR_LENGTH);
-    MEMCPY(flt_vars_.last_flt_trace_id_buf_, trace_id.ptr(), trace_len);
-    flt_vars_.last_flt_trace_id_buf_[trace_len] = '\0';
-    flt_vars_.last_flt_trace_id_.assign_ptr(flt_vars_.last_flt_trace_id_buf_, trace_len);
-  }
-  return ret;
 }
 
 ObObjType ObBasicSessionInfo::get_sys_variable_type(const ObString &var_name) const
@@ -4550,6 +4517,8 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo)
   // No meaningful field for serialization compatibility
   bool is_foreign_key_cascade = false;
   bool is_foreign_key_check_exist = false;
+  ObString unused_last_flt_trace_id;
+  ObString unused_last_flt_span_id;
   LST_DO_CODE(OB_UNIS_ENCODE,
               sys_vars_cache_.inc_data_,
               unused_safe_weak_read_snapshot,
@@ -4581,9 +4550,9 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo)
               thread_data_.client_addr_,
               thread_data_.user_client_addr_,
               process_query_time_,
-              flt_vars_.last_flt_trace_id_,
-              flt_vars_.row_traceformat_,
-              flt_vars_.last_flt_span_id_,
+              unused_last_flt_trace_id,
+              show_trace_row_format_,
+              unused_last_flt_span_id,
               exec_min_cluster_version_,
               is_client_sessid_support_,
               use_rich_vector_format_);
@@ -4758,12 +4727,12 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
 
   sys_var_in_pc_str_.reset(); // sys_var_in_pc_str_ may be contaminated during the deserialization of system variables, and needs to be reset
   config_in_pc_str_.reset();
-  flt_vars_.last_flt_trace_id_.reset();
-  flt_vars_.last_flt_span_id_.reset();
   const ObTZInfoMap *tz_info_map = tz_info_wrap_.get_tz_info_offset().get_tz_info_map();
   // No meaningful field for serialization compatibility
   bool is_foreign_key_cascade = false;
   bool is_foreign_key_check_exist = false;
+  ObString unused_last_flt_trace_id;
+  ObString unused_last_flt_span_id;
   LST_DO_CODE(OB_UNIS_DECODE,
               sys_vars_cache_.inc_data_,
               unused_safe_weak_read_snapshot,
@@ -4795,9 +4764,9 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
               thread_data_.client_addr_,
               thread_data_.user_client_addr_,
               process_query_time_,
-              flt_vars_.last_flt_trace_id_,
-              flt_vars_.row_traceformat_,
-              flt_vars_.last_flt_span_id_);
+              unused_last_flt_trace_id,
+              show_trace_row_format_,
+              unused_last_flt_span_id);
   if (OB_SUCC(ret) && pos < data_len) {
     OB_UNIS_DECODE(exec_min_cluster_version_);
   } else {
@@ -4840,8 +4809,6 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
   sql_scope_flags_.set_flags(sql_scope_flags);
   is_deserialized_ = true;
   tz_info_wrap_.set_tz_info_map(tz_info_map);
-  set_last_flt_trace_id(flt_vars_.last_flt_trace_id_);
-  set_last_flt_span_id(flt_vars_.last_flt_span_id_);
   release_to_pool_ = OB_SUCC(ret);
   force_rich_vector_format_ = ForceRichFormatStatus::Disable;
   }();
@@ -5077,6 +5044,8 @@ OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo)
   // No meaningful field for serialization compatibility
   bool is_foreign_key_cascade = false;
   bool is_foreign_key_check_exist = false;
+  ObString unused_last_flt_trace_id;
+  ObString unused_last_flt_span_id;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
               sys_vars_cache_.inc_data_,
               unused_safe_weak_read_snapshot,
@@ -5108,9 +5077,9 @@ OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo)
               thread_data_.client_addr_,
               thread_data_.user_client_addr_,
               process_query_time_,
-              flt_vars_.last_flt_trace_id_,
-              flt_vars_.row_traceformat_,
-              flt_vars_.last_flt_span_id_,
+              unused_last_flt_trace_id,
+              show_trace_row_format_,
+              unused_last_flt_span_id,
               exec_min_cluster_version_,
               is_client_sessid_support_,
               use_rich_vector_format_);
