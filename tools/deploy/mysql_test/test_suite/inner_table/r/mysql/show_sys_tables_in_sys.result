@@ -3123,7 +3123,7 @@ id	field	type	length	precision	nullable
 19	is_disk_valid	5	0	20	0
 20	disk_error_begin_ts	5	0	20	0
 21	allocated_size	5	0	20	0
-table oceanbase.__all_virtual_tablet_memstore_info column_count 21 table_id 11024
+table oceanbase.__all_virtual_tablet_memstore_info column_count 19 table_id 11024
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11024 order by column_id;
 id	field	type	length	precision	nullable
 16	tablet_id	5	0	20	0
@@ -3136,17 +3136,15 @@ id	field	type	length	precision	nullable
 23	max_end_scn	10	0	20	0
 24	write_ref_count	5	0	20	0
 25	mem_used	5	0	20	0
-26	hash_item_count	5	0	20	0
-27	hash_mem_used	5	0	20	0
-28	btree_item_count	5	0	20	0
-29	btree_mem_used	5	0	20	0
-30	insert_row_count	5	0	20	0
-31	update_row_count	5	0	20	0
-32	delete_row_count	5	0	20	0
-33	freeze_ts	5	0	20	0
-34	freeze_state	22	256	-1	0
-35	freeze_time_dist	22	256	-1	0
-36	compaction_info_list	22	128	-1	0
+26	btree_item_count	5	0	20	0
+27	btree_mem_used	5	0	20	0
+28	insert_row_count	5	0	20	0
+29	update_row_count	5	0	20	0
+30	delete_row_count	5	0	20	0
+31	freeze_ts	5	0	20	0
+32	freeze_state	22	256	-1	0
+33	freeze_time_dist	22	256	-1	0
+34	compaction_info_list	22	128	-1	0
 table oceanbase.__all_virtual_trans_stat column_count 32 table_id 11027
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11027 order by column_id;
 id	field	type	length	precision	nullable

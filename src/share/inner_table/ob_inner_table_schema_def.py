@@ -4781,8 +4781,6 @@ def_table_schema(
   ('max_end_scn', 'uint'),
   ('write_ref_count', 'int'),
   ('mem_used', 'int'),
-  ('hash_item_count', 'int'),
-  ('hash_mem_used', 'int'),
   ('btree_item_count', 'int'),
   ('btree_mem_used', 'int'),
   ('insert_row_count', 'int'),

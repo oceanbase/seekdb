@@ -240,14 +240,6 @@ int ObAllVirtualMemstoreInfo::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(mt->get_occupied_size());
           break;
         case OB_APP_MIN_COLUMN_ID + 10:
-          // hash_item_count (removed, always 0)
-          cur_row_.cells_[i].set_int(0);
-          break;
-        case OB_APP_MIN_COLUMN_ID + 11:
-          // hash_mem_used (removed, always 0)
-          cur_row_.cells_[i].set_int(0);
-          break;
-        case OB_APP_MIN_COLUMN_ID + 12:
           // btree_item_count
           if (nullptr != data_memtable) {
             cur_row_.cells_[i].set_int(data_memtable->get_btree_item_count());
@@ -255,7 +247,7 @@ int ObAllVirtualMemstoreInfo::inner_get_next_row(ObNewRow *&row)
             cur_row_.cells_[i].set_int(0);
           }
           break;
-        case OB_APP_MIN_COLUMN_ID + 13:
+        case OB_APP_MIN_COLUMN_ID + 11:
           // btree_mem_used
           if (nullptr != data_memtable) {
             cur_row_.cells_[i].set_int(data_memtable->get_btree_alloc_memory());
@@ -263,33 +255,33 @@ int ObAllVirtualMemstoreInfo::inner_get_next_row(ObNewRow *&row)
             cur_row_.cells_[i].set_int(0);
           }
           break;
-        case OB_APP_MIN_COLUMN_ID + 14:
+        case OB_APP_MIN_COLUMN_ID + 12:
           // insert_row_count
           cur_row_.cells_[i].set_int(mt_stat.insert_row_count_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 15:
+        case OB_APP_MIN_COLUMN_ID + 13:
           // update_row_count
           cur_row_.cells_[i].set_int(mt_stat.update_row_count_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 16:
+        case OB_APP_MIN_COLUMN_ID + 14:
           // delete_row_count
           cur_row_.cells_[i].set_int(mt_stat.delete_row_count_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 17:
+        case OB_APP_MIN_COLUMN_ID + 15:
           cur_row_.cells_[i].set_int(mt_stat.frozen_time_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 18:
+        case OB_APP_MIN_COLUMN_ID + 16:
           // freeze_state
           cur_row_.cells_[i].set_varchar(storage::TABLET_MEMTABLE_FREEZE_STATE_TO_STR(mt->get_freeze_state()));
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
-        case OB_APP_MIN_COLUMN_ID + 19:
+        case OB_APP_MIN_COLUMN_ID + 17:
           // freeze_time_dist
           get_freeze_time_dist(mt_stat);
           cur_row_.cells_[i].set_varchar(freeze_time_dist_);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
-        case OB_APP_MIN_COLUMN_ID + 20: {
+        case OB_APP_MIN_COLUMN_ID + 18: {
           // compaction info list
           cur_row_.cells_[i].set_varchar("-");
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
