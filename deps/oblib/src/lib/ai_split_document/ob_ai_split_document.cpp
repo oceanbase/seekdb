@@ -10,7 +10,6 @@
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/json/ob_json.h"
-#include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase
 {
@@ -204,7 +203,7 @@ int ObTextSplitIterator::open(const ObString &content, ObIAllocator &allocator, 
     is_done_ = false;
     allocator_ = &allocator;
 
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(MTL_ID(), "AiSplitDoc"));
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("AiSplitDoc"));
     // Create BreakIterator
     UErrorCode status = U_ZERO_ERROR;
     if (params.by_ == ObAiSplitByUnit::WORD) {
@@ -384,7 +383,7 @@ int ObMarkdownSplitIterator::open(const ObString &content, ObIAllocator &allocat
     section_title_.reset();
     section_content_.reset();
     row_alloc_.clear();
-    row_alloc_.set_tenant_id(MTL_ID());
+    row_alloc_.set_attr(lib::ObMemAttr("AiSplitDoc"));
 
     void *buf = allocator.alloc(sizeof(ObTextSplitIterator));
     if (OB_ISNULL(buf)) {
