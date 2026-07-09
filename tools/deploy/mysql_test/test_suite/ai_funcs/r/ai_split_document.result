@@ -1,0 +1,33 @@
+# ==== AI_SPLIT_DOCUMENT(content[, params_json]): split text into chunk rows ====
+DROP DATABASE IF EXISTS ai_split_test;
+CREATE DATABASE ai_split_test;
+USE ai_split_test;
+# one sentence per chunk; columns chunk_id / chunk_offset / chunk_length / chunk_text
+SELECT chunk_id, chunk_offset, chunk_length, chunk_text
+FROM AI_SPLIT_DOCUMENT('First sentence. Second sentence. Third sentence.',
+'{"type":"text","by":"sentence","max":1}');
+chunk_id	chunk_offset	chunk_length	chunk_text
+0	0	15	First sentence.
+1	16	16	Second sentence.
+2	33	15	Third sentence.
+# split by word with a sliding window: max=3, overlap=1 (each window shares 1 word)
+SELECT chunk_id, chunk_text
+FROM AI_SPLIT_DOCUMENT('alpha beta gamma delta epsilon zeta eta theta',
+'{"type":"text","by":"word","max":3,"overlap":1}');
+chunk_id	chunk_text
+0	alpha beta gamma
+1	gamma delta epsilon
+2	epsilon zeta eta
+3	eta theta
+# markdown: each chunk carries its section title
+SELECT chunk_id, chunk_text
+FROM AI_SPLIT_DOCUMENT('# Section A\nThis is content. More here.\n# Section B\nSecond section.',
+'{"type":"markdown","by":"sentence","max":1}');
+chunk_id	chunk_text
+0	# Section A
+This is content.
+1	# Section A
+More here.
+2	# Section B
+Second section.
+DROP DATABASE ai_split_test;

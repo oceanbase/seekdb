@@ -1,0 +1,37 @@
+--echo # ==== load_file(location, filename): read a local file as a BLOB ====
+--disable_warnings
+DROP DATABASE IF EXISTS ai_lf_test;
+--enable_warnings
+CREATE DATABASE ai_lf_test;
+USE ai_lf_test;
+
+# self-contained: create the files this test reads (no pre-existing files on disk required).
+# $MYSQL_TMP_DIR is the harness-provided scratch dir, on the same host as the observer.
+--write_file $MYSQL_TMP_DIR/ai_lf_hello.txt
+Hello from load_file!
+EOF
+--write_file $MYSQL_TMP_DIR/ai_lf_doc.txt
+Document AI splits text. It chunks long files. Each chunk becomes a row.
+EOF
+
+# a LOCATION is the privileged directory load_file reads from (local file:// only in seekdb).
+# hide the absolute scratch path from the recorded result so the test is portable.
+--disable_query_log
+eval CREATE LOCATION lf_loc URL = 'file://$MYSQL_TMP_DIR/';
+--enable_query_log
+
+--echo # whole file content
+SELECT load_file('lf_loc', 'ai_lf_hello.txt') AS content;
+--echo # byte length
+SELECT length(load_file('lf_loc', 'ai_lf_hello.txt')) AS content_len;
+
+--echo # the Document AI pipeline: load a file and split it into chunk rows.
+--echo # load_file returns a binary BLOB, which ai_split_document rejects, so CONVERT it first.
+SELECT chunk_id, chunk_offset, chunk_length, chunk_text
+FROM AI_SPLIT_DOCUMENT(CONVERT(load_file('lf_loc','ai_lf_doc.txt') USING utf8mb4),
+                       '{"type":"text","by":"sentence","max":1}');
+
+DROP LOCATION lf_loc;
+DROP DATABASE ai_lf_test;
+--remove_file $MYSQL_TMP_DIR/ai_lf_hello.txt
+--remove_file $MYSQL_TMP_DIR/ai_lf_doc.txt
