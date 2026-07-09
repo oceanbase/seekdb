@@ -253,19 +253,16 @@ jobs:
           done
           DOC_AI_SCORE=$((LOAD_FILE_PTS + SPLIT_DOC_PTS))
 
-          SCORE_OUTPUT="$VLDB_WORK_DIR/ai_funcs_score.txt"
-          {
-            echo "Document AI Functions Score"
-            echo "==========================="
-            printf "score: %.2f / 100\n" "$DOC_AI_SCORE"
-            echo "load_file: $LOAD_FILE_PTS / 50"
-            echo "ai_split_document: $SPLIT_DOC_PTS / 50"
-            echo
-            echo "IK Custom Dictionary Score"
-            echo "=========================="
-            printf "score: %.2f / 100\n" "$IK_SCORE"
-            echo "ik_custom_dict: $IK_SCORE / 100"
-          } | tee "$SCORE_OUTPUT"
+          echo "Document AI Functions Score"
+          echo "==========================="
+          printf "score: %.2f / 100\n" "$DOC_AI_SCORE"
+          echo "load_file: $LOAD_FILE_PTS / 50"
+          echo "ai_split_document: $SPLIT_DOC_PTS / 50"
+          echo
+          echo "IK Custom Dictionary Score"
+          echo "=========================="
+          printf "score: %.2f / 100\n" "$IK_SCORE"
+          echo "ik_custom_dict: $IK_SCORE / 100"
 
           exit "$fail"
 
