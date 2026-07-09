@@ -136,9 +136,8 @@ int ObExprAIParseDoc::eval_ai_parse_doc(const ObExpr &expr, ObEvalCtx &ctx, ObDa
     res.set_null();
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-    uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret);
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, N_AI_PARSE_DOC));
+    MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_PARSE_DOC));
     ObString model_id = arg_model->get_string();
     ObString context;
     ObString input_type;
@@ -147,7 +146,7 @@ int ObExprAIParseDoc::eval_ai_parse_doc(const ObExpr &expr, ObEvalCtx &ctx, ObDa
     ObJsonObject *params_obj = nullptr;
     ObAIFuncExprInfo *info = nullptr;
     omt::ObAiServiceGuard ai_service_guard;
-    omt::ObTenantAiService *ai_service = MTL(omt::ObTenantAiService *);
+    omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
     const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
     // read the context argument (a url string in phase 1, a blob later)
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *arg_context,

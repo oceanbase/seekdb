@@ -26,7 +26,6 @@ public:
 private:
   static int read_file_from_location(const common::ObString &location_name,
                                      const common::ObString &filename,
-                                     const uint64_t tenant_id,
                                      ObExecContext &exec_ctx,
                                      common::ObIAllocator &alloc,
                                      common::ObString &file_data);

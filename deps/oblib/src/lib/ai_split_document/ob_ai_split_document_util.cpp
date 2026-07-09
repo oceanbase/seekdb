@@ -30,7 +30,7 @@ int ObAiSplitDocumentUtil::split_text_by_unit(const ObString &content,
   const int64_t chunk_step = max_unit - overlap_unit;
   const int64_t chunks_count = chunks.count();
 
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(MTL_ID(), "AiSplitDoc"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("AiSplitDoc"));
   // Create UText
   if (OB_SUCC(ret)) {
     utext = utext_openUTF8(NULL, content.ptr(), content.length(), &status);

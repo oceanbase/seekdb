@@ -10,9 +10,10 @@
 #include "lib/container/ob_se_array.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "lib/json_type/ob_json_base.h"
-#include "lib/json_type/ob_json_parse.h"
-#include "share/ob_define.h"
+#include "common/json_type/ob_json_base.h"
+#include "common/json_type/ob_json_parse.h"
+#include "lib/ob_define.h"
+#include "lib/ob_check_macros.h"
 #include <unicode/brkiter.h>
 #include <unicode/utext.h>
 

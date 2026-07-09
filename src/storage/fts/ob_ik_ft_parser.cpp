@@ -33,7 +33,7 @@
 #include "storage/fts/dict/ob_ft_dat_dict.h"
 #include "storage/fts/dict/ob_ft_cache_dict.h"
 #include "storage/fts/dict/ob_ft_dict_table_iter.h"
-#include "ob_smart_var.h"
+#include "lib/utility/ob_smart_var.h"
 #include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_cjk_processor.h"
 #include "storage/fts/ik/ob_ik_letter_processor.h"
@@ -42,7 +42,7 @@
 #include "storage/fts/ik/ob_ik_surrogate_processor.h"
 #include "plugin/sys/ob_plugin_mgr.h"
 #include "share/rc/ob_tenant_base.h"
-#include "lib/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_client.h"
 
 using namespace oceanbase::plugin;
 
@@ -506,7 +506,7 @@ int ObIKFTParser::build_custom_dict(const ObString &dict_table_full_name)
     table_name = ObString(static_cast<int32_t>(full.length() - dot_pos - 1), full.ptr() + dot_pos + 1);
   }
 
-  ObArenaAllocator trie_alloc(lib::ObMemAttr(MTL_ID(), "IKCustTrie"));
+  ObArenaAllocator trie_alloc(lib::ObMemAttr("IKCustTrie"));
   ObFTTrie<void> trie(trie_alloc, ObCollationType::CS_TYPE_UTF8MB4_BIN);
   int64_t word_count = 0;
 

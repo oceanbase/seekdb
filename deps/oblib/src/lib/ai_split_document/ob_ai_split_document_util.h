@@ -7,7 +7,6 @@
 #define OCEANBASE_LIB_AI_SPLIT_DOCUMENT_OB_AI_SPLIT_DOCUMENT_UTIL_H_
 
 #include "ob_ai_split_document.h"
-#include "share/rc/ob_tenant_base.h"
 #include "lib/alloc/malloc_hook.h"
 
 

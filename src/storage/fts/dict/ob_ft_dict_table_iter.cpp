@@ -136,7 +136,7 @@ int ObFTDictTableIter::init(const ObString &db_name, const ObString &table_name)
       }
       if (OB_FAIL(ret)) {
         // already logged
-      } else if (OB_FAIL(sql_proxy->read(res_, MTL_ID(), sql_string.ptr()))) {
+      } else if (OB_FAIL(sql_proxy->read(res_, sql_string.ptr()))) {
         LOG_WARN("Failed to execute custom dict sql", K(ret), K(sql_string));
       }
     }
