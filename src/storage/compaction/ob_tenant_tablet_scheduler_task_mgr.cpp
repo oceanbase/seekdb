@@ -31,6 +31,7 @@ ObTenantTabletSchedulerTaskMgr::ObTenantTabletSchedulerTaskMgr()
     sstable_gc_tg_id_(-1),
     compaction_refresh_tg_id_(-1),
     schedule_interval_(-1),
+    is_active_medium_loop_(false),
     merge_loop_task_(),
     medium_loop_task_(),
     sstable_gc_task_(),
@@ -51,6 +52,7 @@ void ObTenantTabletSchedulerTaskMgr::destroy()
   DESTROY_THREAD(sstable_gc_tg_id_);
   DESTROY_THREAD(compaction_refresh_tg_id_);
   schedule_interval_ = -1;
+  is_active_medium_loop_ = false;
 }
 
 void ObTenantTabletSchedulerTaskMgr::stop()
@@ -86,11 +88,17 @@ void ObTenantTabletSchedulerTaskMgr::MergeLoopTask::runTimerTask()
 void ObTenantTabletSchedulerTaskMgr::MediumLoopTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
   int64_t cost_ts = ObTimeUtility::fast_current_time();
   ObCurTraceId::init(GCONF.self_addr_);
   if (ObBasicMergeScheduler::could_start_loop_task()) {
-    if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()->schedule_all_tablets_medium())) {
+    ObTenantTabletScheduler *scheduler = share::g_mp->tenant_tablet_scheduler();
+    if (OB_FAIL(scheduler->schedule_all_tablets_medium())) {
       LOG_WARN("Fail to merge all partition", K(ret));
+    }
+    const bool active = scheduler->need_fast_medium_loop();
+    if (OB_TMP_FAIL(scheduler->timer_task_mgr_.set_active_medium_loop(active, false/*immediate*/))) {
+      LOG_WARN_RET(tmp_ret, "failed to switch medium loop", K(active));
     }
     cost_ts = ObTimeUtility::fast_current_time() - cost_ts;
     LOG_INFO("MediumLoopTask", K(cost_ts));
@@ -188,6 +196,8 @@ int ObTenantTabletSchedulerTaskMgr::start()
     LOG_WARN("failed to start medium merge scan thread", K(ret));
   } else if (OB_FAIL(TG_SCHEDULE(medium_loop_tg_id_, medium_loop_task_, schedule_interval_, repeat))) {
     LOG_WARN("Fail to schedule medium merge scan task", K(ret));
+  } else {
+    ATOMIC_STORE(&is_active_medium_loop_, false);
   }
   return ret;
 }
@@ -199,11 +209,29 @@ int ObTenantTabletSchedulerTaskMgr::restart_scheduler_timer_task(
   if (schedule_interval_ == merge_schedule_interval) {
   } else if (OB_FAIL(restart_schedule_timer_task(merge_schedule_interval, merge_loop_tg_id_, merge_loop_task_))) {
     LOG_WARN("failed to reload new merge schedule interval", K(merge_schedule_interval));
-  } else if (OB_FAIL(restart_schedule_timer_task(merge_schedule_interval, medium_loop_tg_id_, medium_loop_task_))) {
+  } else if (!ATOMIC_LOAD(&is_active_medium_loop_)
+      && OB_FAIL(restart_schedule_timer_task(merge_schedule_interval, medium_loop_tg_id_, medium_loop_task_))) {
     LOG_WARN("failed to reload new merge schedule interval", K(merge_schedule_interval));
   } else {
     schedule_interval_ = merge_schedule_interval;
     LOG_INFO("succeeded to reload new merge schedule interval", K(merge_schedule_interval));
+  }
+  return ret;
+}
+
+int ObTenantTabletSchedulerTaskMgr::set_active_medium_loop(
+  const bool active,
+  const bool immediate)
+{
+  int ret = OB_SUCCESS;
+  if (active == ATOMIC_LOAD(&is_active_medium_loop_)) {
+  } else if (OB_FAIL(restart_schedule_timer_task(
+      active ? ACTIVE_MEDIUM_LOOP_INTERVAL : schedule_interval_,
+      medium_loop_tg_id_, medium_loop_task_, immediate))) {
+    LOG_WARN("failed to switch medium loop", K(ret), K(active), K(immediate));
+  } else {
+    ATOMIC_STORE(&is_active_medium_loop_, active);
+    LOG_INFO("switch medium loop", K(active), K(immediate));
   }
   return ret;
 }

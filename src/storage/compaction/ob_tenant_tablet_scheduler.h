@@ -223,6 +223,7 @@ public:
   OB_INLINE ObMviewCompactionValidation &get_mview_validation() { return mview_validation_; }
 private:
   friend struct ObTenantTabletSchedulerTaskMgr;
+  bool need_fast_medium_loop() const;
   int schedule_all_tablets_medium();
   int schedule_ls_minor_merge(ObLSHandle &ls_handle);
   OB_INLINE int schedule_tablet_minor(

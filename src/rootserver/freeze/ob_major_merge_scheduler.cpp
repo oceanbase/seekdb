@@ -356,7 +356,7 @@ int ObMajorMergeScheduler::do_one_round_major_merge()
         }
       }
       // wait some time to merge
-      if (OB_SUCCESS != (tmp_ret = try_idle(DEFAULT_IDLE_US, ret))) {
+      if (OB_SUCCESS != (tmp_ret = try_idle(IN_MERGE_IDLE_US, ret))) {
         LOG_WARN("fail to idle", KR(ret));
       }
 
