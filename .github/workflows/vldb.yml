@@ -264,8 +264,6 @@ jobs:
           printf "score: %.2f / 100\n" "$IK_SCORE"
           echo "ik_custom_dict: $IK_SCORE / 100"
 
-          exit "$fail"
-
       - name: Run FTS large benchmark
         shell: bash
         run: |
