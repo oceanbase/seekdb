@@ -187,10 +187,6 @@ jobs:
 
       - name: Run mysqltest (Document AI functions + custom IK parser)
         shell: bash
-        env:
-          API_KEY: "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"
-          MODEL_NAME: "gpt-4o-mini"
-          API_ENDPOINT: "https://api.openai.com/v1/chat/completions"
         run: |
           set -euo pipefail
           WS="${{ github.workspace }}"
@@ -228,15 +224,13 @@ jobs:
           MTR_TMP="$VLDB_WORK_DIR/mtr_tmp"; mkdir -p "$MTR_TMP"
           cd "$WORKSPACE/tools/deploy"
           export MYSQL_TMP_DIR="$MTR_TMP" OBMYSQL_MS0=127.0.0.1 OBMYSQL_PORT=2881 OBMYSQL_PWD=
-          export AI_FIXTURE_DIR="$WORKSPACE/tools/deploy/mysql_test/test_suite/ai_funcs"
 
-          # ai_funcs suite: load_file, ai_split_document, ai_parse_doc (Document AI) + ik_custom_dict (custom IK parser).
-          # ai_parse_doc's live parse runs when the API_KEY hardcoded in this step's env is set; otherwise it is skipped and the
-          # deterministic error cases keep the run green.
+          # ai_funcs suite (ai_parse_doc excluded -- it needs a live vision endpoint):
+          # load_file, ai_split_document (Document AI) + ik_custom_dict (custom IK parser).
           suite=mysql_test/test_suite/ai_funcs
           fail=0
-          for tf in "$suite"/t/*.test; do
-            t="$(basename "$tf" .test)"
+          for t in load_file ai_split_document ik_custom_dict; do
+            tf="$suite/t/$t.test"
             echo "===================== ai_funcs/$t ====================="
             if "$MT" --host=127.0.0.1 --port=2881 --user=root --database=test \
                  --test-file="$tf" --result-file="$suite/r/$t.result"; then
