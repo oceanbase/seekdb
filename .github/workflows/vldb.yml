@@ -267,10 +267,6 @@ jobs:
             echo "ik_custom_dict: $IK_SCORE / 100"
           } | tee "$SCORE_OUTPUT"
 
-          if [[ "$fail" -ne 0 ]]; then
-            echo "----- observer log tail -----"
-            tail -n 200 "$VLDB_WORK_DIR/log/seekdb.log" 2>/dev/null || true
-          fi
           exit "$fail"
 
       - name: Run FTS large benchmark
