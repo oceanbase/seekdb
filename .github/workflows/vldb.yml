@@ -185,6 +185,73 @@ jobs:
           tail -n 200 "$VLDB_WORK_DIR/log/seekdb.log" 2>/dev/null || true
           exit 1
 
+      - name: Run mysqltest (Document AI functions + custom IK parser)
+        shell: bash
+        env:
+          API_KEY: "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"
+          MODEL_NAME: "gpt-4o-mini"
+          API_ENDPOINT: "https://api.openai.com/v1/chat/completions"
+        run: |
+          set -euo pipefail
+          WS="${{ github.workspace }}"
+          if [[ ! -f "$WS/build.sh" ]] && [[ -f "$(pwd)/build.sh" ]]; then
+            WORKSPACE="$(pwd)"
+          else
+            WORKSPACE="$WS"
+          fi
+          if grep -q 'dep_create.sh' "$WORKSPACE/build.sh" 2>/dev/null; then
+            DEP_PATH="$WORKSPACE/deps/3rd"
+          else
+            DEP_PATH="$WORKSPACE/rpm/.dep_create/var"
+          fi
+          export LD_LIBRARY_PATH="$DEP_PATH/u01/obclient/lib:${LD_LIBRARY_PATH:-}"
+
+          # mysqltest ships next to obclient in the obclient toolchain
+          MT=""
+          for cand in \
+            "$DEP_PATH/u01/obclient/bin/mysqltest" \
+            "$WORKSPACE/deps/3rd/u01/obclient/bin/mysqltest" \
+            "$WORKSPACE/rpm/.dep_create/var/u01/obclient/bin/mysqltest"; do
+            if [[ -x "$cand" ]]; then MT="$cand"; break; fi
+          done
+          if [[ -z "$MT" ]]; then
+            cand="$(find "$DEP_PATH" -maxdepth 8 -path '*/bin/mysqltest' -type f -print -quit 2>/dev/null || true)"
+            if [[ -n "$cand" ]]; then chmod +x "$cand" 2>/dev/null || true; MT="$cand"; fi
+          fi
+          if [[ -z "$MT" || ! -x "$MT" ]]; then echo "mysqltest not found under $DEP_PATH"; exit 1; fi
+          OBC="$(dirname "$MT")/obclient"
+          echo "mysqltest: $MT"
+
+          # mysqltest's default connection needs the 'test' database to exist
+          "$OBC" -h127.0.0.1 -P2881 -uroot -A -e "CREATE DATABASE IF NOT EXISTS test;"
+
+          MTR_TMP="$VLDB_WORK_DIR/mtr_tmp"; mkdir -p "$MTR_TMP"
+          cd "$WORKSPACE/tools/deploy"
+          export MYSQL_TMP_DIR="$MTR_TMP" OBMYSQL_MS0=127.0.0.1 OBMYSQL_PORT=2881 OBMYSQL_PWD=
+          export AI_FIXTURE_DIR="$WORKSPACE/tools/deploy/mysql_test/test_suite/ai_funcs"
+
+          # ai_funcs suite: load_file, ai_split_document, ai_parse_doc (Document AI) + ik_custom_dict (custom IK parser).
+          # ai_parse_doc's live parse runs when the API_KEY hardcoded in this step's env is set; otherwise it is skipped and the
+          # deterministic error cases keep the run green.
+          suite=mysql_test/test_suite/ai_funcs
+          fail=0
+          for tf in "$suite"/t/*.test; do
+            t="$(basename "$tf" .test)"
+            echo "===================== ai_funcs/$t ====================="
+            if "$MT" --host=127.0.0.1 --port=2881 --user=root --database=test \
+                 --test-file="$tf" --result-file="$suite/r/$t.result"; then
+              echo ">>> $t: PASS"
+            else
+              echo ">>> $t: FAIL"
+              fail=1
+            fi
+          done
+          if [[ "$fail" -ne 0 ]]; then
+            echo "----- observer log tail -----"
+            tail -n 200 "$VLDB_WORK_DIR/log/seekdb.log" 2>/dev/null || true
+          fi
+          exit "$fail"
+
       - name: Run FTS large benchmark
         shell: bash
         run: |

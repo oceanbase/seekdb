@@ -1,0 +1,24 @@
+# ==== load_file(location, filename): read a local file as a BLOB ====
+DROP DATABASE IF EXISTS ai_lf_test;
+CREATE DATABASE ai_lf_test;
+USE ai_lf_test;
+# whole file content
+SELECT load_file('lf_loc', 'ai_lf_hello.txt') AS content;
+content
+Hello from load_file!
+
+# byte length
+SELECT length(load_file('lf_loc', 'ai_lf_hello.txt')) AS content_len;
+content_len
+22
+# the Document AI pipeline: load a file and split it into chunk rows.
+# load_file returns a binary BLOB, which ai_split_document rejects, so CONVERT it first.
+SELECT chunk_id, chunk_offset, chunk_length, chunk_text
+FROM AI_SPLIT_DOCUMENT(CONVERT(load_file('lf_loc','ai_lf_doc.txt') USING utf8mb4),
+'{"type":"text","by":"sentence","max":1}');
+chunk_id	chunk_offset	chunk_length	chunk_text
+0	0	24	Document AI splits text.
+1	25	21	It chunks long files.
+2	47	25	Each chunk becomes a row.
+DROP LOCATION lf_loc;
+DROP DATABASE ai_lf_test;
