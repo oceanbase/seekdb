@@ -31,12 +31,6 @@
 #include "share/location_cache/ob_location_service.h"
 #include "share/storage/ob_sqlite_connection_pool.h"
 #include "share/ob_kv_storage.h"
-#ifdef _WIN32
-#include "diagnose/lua/ob_lua_handler_win.h"
-#else
-#include "diagnose/lua/ob_lua_handler.h"
-#endif
-
 #include "sql/ob_sql.h"
 #include "sql/engine/cmd/ob_load_data_rpc.h"
 #include "sql/das/ob_data_access_service.h"
@@ -391,7 +385,6 @@ private:
 
   bool is_log_dir_empty_;
   sql::ObConnectResourceMgr conn_res_mgr_;
-  diagnose::ObUnixDomainListener unix_domain_listener_;
   ObDiskUsageReportTask disk_usage_report_task_;
 
   logservice::ObServerLogBlockMgr log_block_mgr_;

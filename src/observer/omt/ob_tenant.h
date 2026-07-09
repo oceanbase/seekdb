@@ -41,9 +41,6 @@
 #include "lib/thread/ob_adaptive_worker_pool.h"
 #include "lib/lock/ob_tc_rwlock.h"      // TCRWLock
 
-struct lua_State;
-int select_dump_tenant_info(lua_State*);
-
 namespace oceanbase
 {
 namespace observer
@@ -209,7 +206,6 @@ class ObTenant : public share::ObTenantBase,
                  public lib::ObAdaptiveWorkerPool<ObTenant>
 {
   friend class observer::ObAllVirtualDumpTenantInfo;
-  friend int ::select_dump_tenant_info(lua_State*);
   friend int create_worker(ObThWorker* &worker, ObTenant *tenant);
   friend int destroy_worker(ObThWorker *worker);
   friend class ObThWorker;

@@ -406,7 +406,6 @@ using namespace oceanbase::obsys;
 using namespace oceanbase;
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
-using namespace oceanbase::diagnose;
 using namespace oceanbase::observer;
 using namespace oceanbase::share;
 using namespace oceanbase::omt;

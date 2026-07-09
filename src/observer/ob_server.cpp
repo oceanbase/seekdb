@@ -179,7 +179,6 @@ ObServer::ObServer()
     schema_status_proxy_(sql_proxy_),
     is_log_dir_empty_(false),
     conn_res_mgr_(),
-    unix_domain_listener_(),
     disk_usage_report_task_(),
     log_block_mgr_()
 {
@@ -541,10 +540,6 @@ void ObServer::destroy()
     ObTimerMonitor::get_instance().destroy();
     FLOG_INFO("timer monitor destroyed");
 
-    FLOG_INFO("begin to destroy unix domain listener");
-    unix_domain_listener_.destroy();
-    FLOG_INFO("unix domain listener destroyed");
-
     FLOG_INFO("begin to destroy schema service");
     schema_service_.destroy();
     FLOG_INFO("schema service destroyed");
@@ -837,14 +832,6 @@ int ObServer::start(bool embed_mode)
       FLOG_INFO("success to start imc tasks");
     }
 #endif
-
-    if (FAILEDx(unix_domain_listener_.start())) {
-      LOG_ERROR("fail to start unix domain listener", KR(ret));
-    } else {
-      FLOG_INFO("success to start unix domain listener");
-    }
-
-
 
     if (FAILEDx(location_service_.start())) {
       LOG_ERROR("fail to start location service", KR(ret));
@@ -1165,10 +1152,6 @@ int ObServer::stop()
     net_frame_.sql_nio_stop();
     FLOG_INFO("sql nio stopped");
 
-
-    FLOG_INFO("begin to stop unix domain listener");
-    unix_domain_listener_.stop();
-    FLOG_INFO("unix domain listener stopped");
 
     FLOG_INFO("begin to stop schema service");
     schema_service_.stop();
