@@ -34,8 +34,6 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObStorageLoggerManager;
-
 class ObStorageLogger
 {
 public:
@@ -44,7 +42,11 @@ public:
 public:
   //NOT thread safe.
   //Init the redo log and do recovery if there is redo logs in log_dir.
-  int init(ObStorageLoggerManager &slogger_manager, const bool is_server = false);
+  int init(
+      const char *root_dir,
+      const int64_t max_log_file_size,
+      const blocksstable::ObLogFileSpec &log_file_spec,
+      const bool is_server = false);
   int start();
   void stop();
   void wait();
@@ -91,7 +93,6 @@ private:
   ObStorageLogWriter tenant_log_writer_;
   ObServerSlogWriter server_log_writer_;
   char tnt_slog_dir_[MAX_PATH_SIZE];
-  ObStorageLoggerManager *slogger_mgr_;
   // When we write logs with multiple threads, log_writer_'s cursor may not be the newest
   // In other word, the log_writer_'s cursor is only updated when the backup thread flushes
   // So, we need maintain another variable los_seq_ in this class

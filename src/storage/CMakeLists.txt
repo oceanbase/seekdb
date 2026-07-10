@@ -498,6 +498,7 @@ ob_set_subtarget(ob_storage access
   access/ob_multiple_scan_merge.cpp
   access/ob_multiple_skip_scan_merge.cpp
   access/ob_multiple_multi_skip_scan_merge.cpp
+  access/ob_multiple_mview_merge.cpp
   access/ob_index_skip_scanner.cpp
   access/ob_table_scan_iterator.cpp
   access/ob_store_row_iterator.cpp
@@ -695,6 +696,7 @@ ob_set_subtarget(ob_storage compaction
   compaction/ob_sstable_merge_history.cpp
   compaction/ob_batch_freeze_tablets_dag.cpp
   compaction/ob_progressive_merge_helper.cpp
+  compaction/ob_mview_compaction_util.cpp
   compaction/ob_medium_loop.cpp
   compaction/ob_basic_schedule_tablet_func.cpp
   compaction/ob_schedule_tablet_func.cpp
@@ -913,6 +915,24 @@ ob_set_subtarget(ob_storage lob
   lob/ob_lob_retry.cpp
   lob/ob_lob_tablet_dml.cpp
   lob/ob_lob_locator_struct.cpp
+)
+
+ob_set_subtarget(ob_storage mview
+  mview/cmd/ob_mview_executor_util.cpp
+  mview/cmd/ob_mview_purge_log_executor.cpp
+  mview/cmd/ob_mview_refresh_executor.cpp
+  mview/cmd/ob_mview_stats_purge_refresh_stats_executor.cpp
+  mview/cmd/ob_mview_stats_set_mvref_stats_params_executor.cpp
+  mview/cmd/ob_mview_stats_set_system_default_executor.cpp
+  mview/ob_mlog_purge.cpp
+  mview/ob_mview_refresh_helper.cpp
+  mview/ob_mview_refresh_stats_collect.cpp
+  mview/ob_mview_refresh_stats_purge.cpp
+  mview/ob_mview_refresh.cpp
+  mview/ob_mview_transaction.cpp
+  mview/ob_mview_sched_job_utils.cpp
+  mview/ob_major_mv_merge_info.cpp
+  mview/ob_mview_mds.cpp
 )
 
 ob_set_subtarget(ob_storage vector_index

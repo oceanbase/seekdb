@@ -84,16 +84,13 @@ TEST_F(TestStorageLoggerManager, test_manager_basic)
   int ret = OB_SUCCESS;
 
   // test invalid init
-  ObStorageLoggerManager &slogger_mgr = SERVER_STORAGE_META_SERVICE.get_slogger_manager();
-  slogger_mgr.destroy();
-  ret = slogger_mgr.init(nullptr, nullptr, MAX_FILE_SIZE, log_file_spec_);
+  ObStorageLogger slogger;
+  ret = slogger.init(nullptr, MAX_FILE_SIZE, log_file_spec_, true);
   ASSERT_NE(OB_SUCCESS, ret);
   // test normal init
-  ret = slogger_mgr.init(OB_FILE_SYSTEM_ROUTER.get_slog_dir(), OB_FILE_SYSTEM_ROUTER.get_slog_dir(),  MAX_FILE_SIZE, log_file_spec_);
+  ret = slogger.init(OB_FILE_SYSTEM_ROUTER.get_slog_dir(), MAX_FILE_SIZE, log_file_spec_, true);
   ASSERT_EQ(OB_SUCCESS, ret);
-  ASSERT_TRUE(slogger_mgr.need_reserved_);
-
-  slogger_mgr.destroy();
+  slogger.destroy();
 }
 
 TEST_F(TestStorageLoggerManager, test_slogger_basic)
@@ -103,10 +100,9 @@ TEST_F(TestStorageLoggerManager, test_slogger_basic)
   cursor.file_id_ = 3;
   cursor.log_id_ = 5;
   cursor.offset_ = 500;
-  ObStorageLoggerManager &slogger_mgr = SERVER_STORAGE_META_SERVICE.get_slogger_manager();
 
   ObStorageLogger *slogger = OB_NEW(ObStorageLogger, ObModIds::TEST);
-  ASSERT_EQ(OB_SUCCESS, slogger->init(slogger_mgr, 1));
+  ASSERT_EQ(OB_SUCCESS, slogger->init(OB_FILE_SYSTEM_ROUTER.get_slog_dir(), MAX_FILE_SIZE, log_file_spec_, true));
   ASSERT_EQ(OB_SUCCESS, slogger->start());
 
   slogger->start_log(cursor);
@@ -164,16 +160,14 @@ TEST_F(TestStorageLoggerManager, test_slogger_basic)
   ASSERT_EQ(1, start_id);
 
   slogger->destroy();
-  slogger_mgr.destroy();
 }
 
 TEST_F (TestStorageLoggerManager, test_build_item)
 {
   int ret = OB_SUCCESS;
 
-  ObStorageLoggerManager &slogger_mgr = SERVER_STORAGE_META_SERVICE.get_slogger_manager();
   ObStorageLogger *slogger = OB_NEW(ObStorageLogger, ObModIds::TEST);
-  ASSERT_EQ(OB_SUCCESS, slogger->init(slogger_mgr, 1));
+  ASSERT_EQ(OB_SUCCESS, slogger->init(OB_FILE_SYSTEM_ROUTER.get_slog_dir(), MAX_FILE_SIZE, log_file_spec_, true));
   ASSERT_EQ(OB_SUCCESS, slogger->start());
 
   slogger->start_log(start_cursor_);
@@ -258,7 +252,6 @@ TEST_F (TestStorageLoggerManager, test_build_item)
   ASSERT_EQ(OB_SUCCESS, ret);
 
   slogger->destroy();
-  slogger_mgr.destroy();
 }
 
 }

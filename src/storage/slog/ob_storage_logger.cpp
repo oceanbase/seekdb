@@ -18,7 +18,6 @@
 #include "ob_storage_logger.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/file/file_directory_utils.h"
-#include "storage/slog/ob_storage_logger_manager.h"
 #include "storage/slog/ob_storage_log_batch_header.h"
 #include "storage/slog/ob_storage_log_item.h"
 
@@ -32,7 +31,7 @@ namespace storage
 ObStorageLogger::ObStorageLogger()
   : is_inited_(false), log_writer_(nullptr),
     tenant_log_writer_(), server_log_writer_(),
-    slogger_mgr_(nullptr), log_seq_(0), build_log_mutex_(common::ObLatchIds::SLOG_PROCESSING_MUTEX),
+    log_seq_(0), build_log_mutex_(common::ObLatchIds::SLOG_PROCESSING_MUTEX),
     log_file_spec_(), is_start_(false)
 {
 }
@@ -42,24 +41,29 @@ ObStorageLogger::~ObStorageLogger()
   destroy();
 }
 
-int ObStorageLogger::init(ObStorageLoggerManager &slogger_manager, const bool is_server)
+int ObStorageLogger::init(
+    const char *root_dir,
+    const int64_t max_log_file_size,
+    const blocksstable::ObLogFileSpec &log_file_spec,
+    const bool is_server)
 {
   int ret = OB_SUCCESS;
-  const int64_t max_log_file_size = slogger_manager.max_log_file_size_;
-  const blocksstable::ObLogFileSpec &log_file_spec = slogger_manager.log_file_spec_;
   const int64_t max_log_size = NORMAL_LOG_ITEM_SIZE;
   int pret = 0;
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     STORAGE_REDO_LOG(WARN, "The ObStorageLogger has been inited.", K(ret));
+  } else if (OB_UNLIKELY(nullptr == root_dir || max_log_file_size <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_REDO_LOG(WARN, "invalid arguments", K(ret), KP(root_dir), K(max_log_file_size));
   } else {
     if (is_server) {  // seekdb: server-level slog (super block / tenant meta), distinct stream for replay ordering
       log_writer_ = &server_log_writer_;
-      pret = snprintf(tnt_slog_dir_, MAX_PATH_SIZE, "%s/server", slogger_manager.get_root_dir());
+      pret = snprintf(tnt_slog_dir_, MAX_PATH_SIZE, "%s/server", root_dir);
     } else {  // the single (process) tenant storage slog
       log_writer_ = &tenant_log_writer_;
-      pret = snprintf(tnt_slog_dir_, MAX_PATH_SIZE, "%s/sys", slogger_manager.get_root_dir());
+      pret = snprintf(tnt_slog_dir_, MAX_PATH_SIZE, "%s/sys", root_dir);
     }
   }
 
@@ -73,7 +77,6 @@ int ObStorageLogger::init(ObStorageLoggerManager &slogger_manager, const bool is
   } else if (OB_FAIL(log_writer_->init(tnt_slog_dir_, max_log_file_size, max_log_size, log_file_spec))) {
     STORAGE_REDO_LOG(WARN, "fail to init log_writer_", K(ret), K_(tnt_slog_dir), K(max_log_file_size));
   } else {
-    slogger_mgr_ = &slogger_manager;
     log_file_spec_ = log_file_spec;
     is_inited_ = true;
   }
@@ -103,7 +106,6 @@ void ObStorageLogger::destroy()
     log_writer_->destroy();
     log_writer_ = nullptr;
   }
-  slogger_mgr_ = nullptr;
   MEMSET(tnt_slog_dir_, 0, sizeof(tnt_slog_dir_));
   is_inited_ = false;
   log_seq_ = 0;
