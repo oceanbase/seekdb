@@ -73,6 +73,7 @@ namespace common
 #define CM_CONST_TO_DECIMAL_INT_EQ        (1ULL << 19)
 #define CM_BY_TRANSFORMER                (1ULL << 20)
 #define CM_CONST_TO_DECIMAL_INT_UP       (1ULL << 21)
+#define CM_FAST_COLUMN_CONV              (1ULL << 22)
 #define CM_INTERNAL_CAST_IGNORE          (1ULL << 23)
 #define CM_DEMOTE_CAST                   (1ULL << 24)
 // string->integer(int/uint) when default rounding (round to nearest) is performed,
@@ -493,15 +494,10 @@ public:
   static int init(ObIAllocator &allocator);
 
 public:
-  static const ObScale SCALE_DELTA = 0 - number::ObNumber::MIN_SCALE;
-  static const ObScale SCALE_RANGE_SIZE = number::ObNumber::MAX_SCALE - number::ObNumber::MIN_SCALE;
-
   static number::ObNumber MYSQL_MIN[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
   static number::ObNumber MYSQL_MAX[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
   static number::ObNumber MYSQL_CHECK_MIN[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
   static number::ObNumber MYSQL_CHECK_MAX[number::ObNumber::MAX_PRECISION + 1][number::ObNumber::MAX_SCALE + 1];
-  static number::ObNumber NUMBER_CHECK_MIN[OB_MAX_NUMBER_PRECISION + 1][SCALE_RANGE_SIZE + 1];
-  static number::ObNumber NUMBER_CHECK_MAX[OB_MAX_NUMBER_PRECISION + 1][SCALE_RANGE_SIZE + 1];
 };
 
 class ObGeoCastUtils

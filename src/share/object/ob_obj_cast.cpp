@@ -25,6 +25,7 @@
 #include "share/object/ob_obj_cast_util.h"
 #include "share/ob_json_access_utils.h"
 #include "share/object/ob_obj_cast_hooks.h"
+#include "share/roaringbitmap/ob_rb_utils.h"
 #include "share/object/ob_array_cast.h"
 #include "share/object/ob_enumset_str_util.h"
 #include "share/geo/ob_geometry_cast.h"
@@ -67,7 +68,7 @@ namespace common
 {
 using namespace number;
 
-// hook definitions(registered in observer/omt/ob_srs_service.cpp and sql ob_expr_json_func_helper.cpp)
+// hook definitions(registered in observer/omt/ob_tenant_srs.cpp and sql ob_expr_json_func_helper.cpp)
 ObObjCastGetSrsItemFn g_obj_cast_get_srs_item = nullptr;
 ObObjCastJsonMaxDepthFn g_obj_cast_json_max_depth = nullptr;
 
@@ -456,8 +457,6 @@ ObNumber ObNumberConstValue::MYSQL_MIN[ObNumber::MAX_PRECISION + 1][ObNumber::MA
 ObNumber ObNumberConstValue::MYSQL_MAX[ObNumber::MAX_PRECISION + 1][ObNumber::MAX_SCALE + 1] = {};
 ObNumber ObNumberConstValue::MYSQL_CHECK_MIN[ObNumber::MAX_PRECISION + 1][ObNumber::MAX_SCALE + 1] = {};
 ObNumber ObNumberConstValue::MYSQL_CHECK_MAX[ObNumber::MAX_PRECISION + 1][ObNumber::MAX_SCALE + 1] = {};
-ObNumber ObNumberConstValue::NUMBER_CHECK_MIN[OB_MAX_NUMBER_PRECISION + 1][ObNumberConstValue::SCALE_RANGE_SIZE + 1] = {};
-ObNumber ObNumberConstValue::NUMBER_CHECK_MAX[OB_MAX_NUMBER_PRECISION + 1][ObNumberConstValue::SCALE_RANGE_SIZE + 1] = {};
 
 int ObNumberConstValue::init(ObIAllocator &allocator)
 {
@@ -514,52 +513,6 @@ int ObNumberConstValue::init(ObIAllocator &allocator)
     }
   }
 
-  {
-    for (int16_t precision = OB_MIN_NUMBER_PRECISION; OB_SUCC(ret) && precision <= OB_MAX_NUMBER_PRECISION; ++precision) {
-      for (int16_t scale = ObNumber::MIN_SCALE; OB_SUCC(ret) && scale <= ObNumber::MAX_SCALE; ++scale) {
-        pos = 1;
-        MEMSET(buf + pos, 0, BUFFER_SIZE - pos);
-        ObNumber &min_check_num = NUMBER_CHECK_MIN[precision][scale + SCALE_DELTA];
-        ObNumber &max_check_num = NUMBER_CHECK_MAX[precision][scale + SCALE_DELTA];
-        ObString tmp_string;
-
-        if (precision >= scale && scale >= 0) {
-          /* number(3, 1) => legal range(-99.95, 99.95) */
-          if (precision == scale) {
-            buf[pos++] = '0';
-          }
-          MEMSET(buf + pos, '9', precision + 1);
-          buf[pos + precision - scale] = '.';
-          buf[pos + precision + 1] = '5';
-          tmp_string.assign_ptr(buf, pos + precision + 1 + 1);
-        } else if (scale < 0) {
-          /* number(2, -3) => legal range: (-99500, 99500) */
-          MEMSET(buf + pos, '9', precision);
-          buf[pos + precision] = '5';
-          MEMSET(buf + pos + precision + 1, '0', 0 - scale - 1);
-          tmp_string.assign_ptr(buf, pos + precision - scale);
-        } else {
-          //number(2, 3) => legal range:(-0.0995, 0.0995)
-           buf[pos++] = '0';
-           buf[pos++] = '.';
-           MEMSET(buf + pos, '0', scale - precision);
-           MEMSET(buf + pos + scale - precision, '9', precision);
-           buf[pos + scale] = '5';
-           tmp_string.assign_ptr(buf, pos + scale + 1);
-        }
-
-        // make min and max numbers.
-        if (OB_FAIL(min_check_num.from(tmp_string.ptr(), tmp_string.length(), allocator))) {
-          LOG_ERROR("fail to call from", K(precision), K(scale), K(tmp_string), K(ret));
-        } else if (OB_FAIL(max_check_num.from(tmp_string.ptr() + 1, tmp_string.length() - 1, allocator))) {
-          LOG_ERROR("fail to call from", K(precision), K(scale), K(tmp_string), K(ret));
-        } else {
-          total_alloc_size += sizeof(uint32_t) * (min_check_num.get_length() + max_check_num.get_length());
-          LOG_DEBUG("succ to build min max number", K(precision), K(scale), K(tmp_string), K(total_alloc_size), K(min_check_num), K(max_check_num));
-        }
-      }
-    }
-  }
   return ret;
 }
 
@@ -875,7 +828,8 @@ int ObHexUtils::rawtohex(const ObObj &text, ObCastCtx &cast_ctx, ObObj &result)
       case ObCharType:
       case ObLongTextType:
       case ObJsonType:
-      case ObGeometryType: {
+      case ObGeometryType:
+      case ObRoaringBitmapType: {
         // Use the varbinary bytes directly for string-like values.
         str = text.get_varbinary();
         break;
@@ -1492,6 +1446,8 @@ static int common_get_srs_item(ObSrsGuardErased &srs_guard,
 {
   int ret = OB_SUCCESS;
   uint32_t srid = UINT32_MAX;
+  // todo : get effective tenant id
+  
   if (wkb.length() < WKB_GEO_SRID_SIZE) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_WARN("invalid data length", K(ret), K(wkb.length()));
@@ -7802,6 +7758,11 @@ ObCastEnumOrSetFunc OB_CAST_ENUM_OR_SET[ObMaxTC][2] =
     cast_not_support_enum_set,/*enum*/
     cast_not_support_enum_set,/*set*/
   },
+  {
+    /*ObRoaringBitmapTC -> enum_or_set*/
+    cast_not_support_enum_set,/*enum*/
+    cast_not_support_enum_set,/*set*/
+  },
 };
 
 ////////////////////////////////////////////////////////////
@@ -10687,6 +10648,85 @@ static int geometry_decimalint(const ObObjType expected_type, ObObjCastParams &p
   return ret;
 }
 
+static int rb_copy_string(ObObjCastParams &params,
+                            const ObObjType expect_type,
+                            const ObString &src,
+                            ObObj &obj)
+{
+  int ret = OB_SUCCESS;
+  char *buf = NULL;
+  int64_t len = src.length();
+  if (is_lob_storage(expect_type)) {
+    sql::ObTextStringObObjResult str_result(expect_type, &params, &obj, true /*has_lob_header*/);
+    if (OB_FAIL(str_result.init(len))) {
+      LOG_WARN("failed to init ObTextStringObObjResult", K(ret));
+    } else if (OB_FAIL(str_result.append(src.ptr(), len))) {
+      LOG_WARN("failed to append string to ObTextStringObObjResult", K(ret), K(src));
+    } else {
+      str_result.set_result();
+    }
+  } else {
+    if (OB_UNLIKELY(NULL == (buf = static_cast<char*>(params.alloc(len))))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc buffer for string", K(ret));
+    } else {
+      MEMMOVE(buf, src.ptr(), len);
+      obj.set_string(expect_type, buf, static_cast<int32_t>(len));
+    }
+  }
+  return ret;
+}
+
+static int roaringbitmap_string(const ObObjType expect_type, ObObjCastParams &params,
+                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  ObLength res_length = -1;
+  ObString in_str = in.get_string();
+  if (OB_FAIL(common::lob_helper::read_real_string_data(params.allocator_v2_, in, in_str))) {
+    LOG_WARN("fail to get real data.", K(ret), K(in_str));
+  } else if (OB_FAIL(rb_copy_string(params, expect_type, in_str, out))){
+    LOG_WARN("fail to copy string", K(ret), K(expect_type));
+  } else {
+    res_length = static_cast<ObLength>(out.get_string_len());
+  }
+  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
+  return ret;
+}
+
+static int string_roaringbitmap(const ObObjType expect_type, ObObjCastParams &params,
+                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+{
+  int ret = OB_SUCCESS;
+  ObCollationType in_cs_type = in.get_collation_type();
+  if (in_cs_type != CS_TYPE_BINARY) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("invalid in_cs_type of string to cast to roaringbitmap", K(ret), K(in_cs_type));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "cast string collation type not in binary to roaringbitmap");
+  } else if (OB_ISNULL(params.allocator_v2_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid allocator", K(ret));
+  } else {
+    ObIAllocator &temp_allocator = *params.allocator_v2_;
+    ObString in_str = nullptr;
+    ObString out_str = nullptr;
+    if (OB_FAIL(in.get_string(in_str))) {
+      LOG_WARN("fail to get string", K(ret));
+    } else if (OB_FAIL(ObRbUtils::build_binary(temp_allocator, in_str, out_str))) {
+      LOG_WARN("failed to build rb binary", K(ret));
+    } else {
+      sql::ObTextStringObObjResult text_result(ObRoaringBitmapType, &params, &out, true /*has_lob_header*/);
+      if (OB_FAIL(text_result.init(out_str.length(), params.allocator_v2_))) {
+        LOG_WARN("init lob result failed");
+      } else if (OB_FAIL(text_result.append(out_str.ptr(), out_str.length()))) {
+        LOG_WARN("failed to append realdata", K(ret), K(out_str), K(text_result));
+      } else {
+        text_result.set_result();
+      }
+    }
+  }
+  return ret;
+}
 ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
 {
   {
@@ -10720,6 +10760,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_identity,/*collection*/
     cast_identity,/*mysql date*/
     cast_identity,/*mysql datetime*/
+    cast_identity,/*roaringbitmap*/
   },
   {
     /*int -> XXX*/
@@ -10752,6 +10793,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     int_mdate,/*mysql date*/
     int_mdatetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*uint -> XXX*/
@@ -10784,6 +10826,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     uint_mdate,/*mysql date*/
     uint_mdatetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*float -> XXX*/
@@ -10816,6 +10859,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     float_mdate,/*mysql date*/
     float_mdatetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*double -> XXX*/
@@ -10848,6 +10892,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     double_mdate,/*mysql date*/
     double_mdatetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*number -> XXX*/
@@ -10880,6 +10925,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     number_mdate,/*mysql date*/
     number_mdatetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*datetime -> XXX*/
@@ -10912,6 +10958,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     datetime_mdate,/*mysql date*/
     datetime_mdatetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*date -> XXX*/
@@ -10944,6 +10991,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     date_mdate,/*mysql date*/
     date_mdatetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*time -> XXX*/
@@ -10976,6 +11024,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     time_mdate,/*mysql date*/
     time_mdatetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*year -> XXX*/
@@ -11008,6 +11057,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     year_mdate,/*mysql date*/
     year_mdatetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*string -> XXX*/
@@ -11040,6 +11090,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     ob_objcast_string_collection,/*collection*/
     string_mdate,/*mysql date*/
     string_mdatetime,/*mysql datetime*/
+    string_roaringbitmap,/*roaringbitmap*/
   },
   {
     /*extend -> XXX*/
@@ -11072,6 +11123,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     cast_not_support,/*mysql date*/
     cast_not_support,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*unknown -> XXX*/
@@ -11104,6 +11156,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     unknown_other,/*mysql date*/
     unknown_other,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*text -> XXX*/
@@ -11136,6 +11189,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     ob_objcast_string_collection,/*collection*/
     text_mdate,/*mysql date*/
     text_mdatetime,/*mysql datetime*/
+    string_roaringbitmap,/*roaringbitmap*/
   },
   {
     /*bit -> XXX*/
@@ -11168,6 +11222,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     bit_mdate,/*mysql date*/
     bit_mdatetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*enum -> XXX*/
@@ -11200,6 +11255,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     enumset_mdate,/*mysql date*/
     enumset_mdatetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*enumset_inner -> XXX*/
@@ -11232,6 +11288,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     enumset_inner_mdate,/*mysql date*/
     enumset_inner_datetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*otimestamp -> XXX*/
@@ -11264,6 +11321,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_expected,/*collection*/
     cast_not_expected,/*mysql date*/
     cast_not_expected,/*mysql datetime*/
+    cast_not_expected,/*roaringbitmap*/
   },
   {
     /*raw -> XXX*/
@@ -11296,6 +11354,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_expected,/*collection*/
     cast_not_expected,/*mysql date*/
     cast_not_expected,/*mysql datetime*/
+    cast_not_expected,/*roaringbitmap*/
   },
   {
     /*interval -> XXX*/
@@ -11328,6 +11387,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_expected,/*collection*/
     cast_not_expected,/*mysql date*/
     cast_not_expected,/*mysql datetime*/
+    cast_not_expected,/*roaringbitmap*/
   },
   {
     /*rowid -> XXX*/
@@ -11360,6 +11420,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_expected,/*collection*/
     cast_not_expected,/*mysql date*/
     cast_not_expected,/*mysql datetime*/
+    cast_not_expected,/*roaringbitmap*/
   },
   {
     /*lob -> XXX*/
@@ -11392,6 +11453,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     cast_not_support,/*mysql date*/
     cast_not_support,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*json -> XXX*/
@@ -11424,6 +11486,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     json_mdate,/*mysql date*/
     json_mdatetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*geometry -> XXX*/
@@ -11456,6 +11519,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     geometry_mdate,/*mysql date*/
     geometry_mdatetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*udt -> XXX*/
@@ -11488,6 +11552,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_expected,/*collection*/
     cast_not_expected,/*mysql date*/
     cast_not_expected,/*mysql datetime*/
+    cast_not_expected,/*roaringbitmap*/
   },
   {
     /*decimalint-> XXX*/
@@ -11520,6 +11585,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_support,/*collection*/
     decimalint_mdate,/*mysql date*/
     decimalint_mdatetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*collection-> xxx*/
@@ -11552,6 +11618,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_expected,/*collection*/
     cast_not_support,/*mysql date*/
     cast_not_support,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*mysql date-> xxx*/
@@ -11584,6 +11651,7 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_expected,/*collection*/
     cast_identity,/*mysql date*/
     mdate_mdatetime,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
   {
     /*mysql datetime-> xxx*/
@@ -11616,8 +11684,41 @@ ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
     cast_not_expected,/*collection*/
     mdatetime_mdate,/*mysql date*/
     cast_identity,/*mysql datetime*/
+    cast_not_support,/*roaringbitmap*/
   },
-
+  {
+    /*roaringbitmap-> xxx*/
+    cast_not_support,/*null*/
+    cast_not_support,/*int*/
+    cast_not_support,/*uint*/
+    cast_not_support,/*float*/
+    cast_not_support,/*double*/
+    cast_not_support,/*number*/
+    cast_not_support,/*datetime*/
+    cast_not_support,/*date*/
+    cast_not_support,/*time*/
+    cast_not_support,/*year*/
+    roaringbitmap_string,/*string*/
+    cast_not_support,/*extend*/
+    cast_not_support,/*unknown*/
+    roaringbitmap_string,/*text*/
+    cast_not_support,/*bit*/
+    cast_not_expected,/*enumset*/
+    cast_not_expected,/*enumset_inner*/
+    cast_not_support,/*otimestamp*/
+    cast_not_support,/*raw*/
+    cast_not_expected,/*interval*/
+    cast_not_expected,/*rowid*/
+    cast_not_expected,/*lob*/
+    cast_not_support,/*json*/
+    cast_not_support,/*geometry*/
+    cast_not_expected, /*udt*/
+    cast_not_support,/*decimalint*/
+    cast_not_support,/*collection*/
+    cast_not_support,/*mysql date*/
+    cast_not_support,/*mysql datetime*/
+    cast_identity,/*roaringbitmap*/
+  },
 };
 
 ////////////////////////////////////////////////////////////////
@@ -12487,7 +12588,10 @@ int ob_obj_accuracy_check_only(const ObAccuracy &accuracy, const ObCollationType
 }
 
 // ob_obj_to_ob_time_with_date moved definition to sql/engine/expr/ob_datum_cast.cpp(transitional state)
+// Note: master tenant-elim removed the MTL_ID() argument to ObArenaAllocator, HOST must be synced (see routing item)
+
 // ob_obj_to_ob_time_without_date moved definition to sql/engine/expr/ob_datum_cast.cpp(transitional state)
+// Note: master tenant-elim removed the MTL_ID() argument to ObArenaAllocator, HOST must be synced (see routing item)
 
 int ObObjCaster::to_type(const ObObjType expect_type, ObCastCtx &cast_ctx,
                          const ObObj &in_obj, ObObj &buf_obj, const ObObj *&res_obj)

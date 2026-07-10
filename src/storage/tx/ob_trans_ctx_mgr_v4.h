@@ -21,9 +21,10 @@
 #include "ob_tx_stat.h"
 #include "storage/tx_table/ob_tx_table_define.h"
 #include "common/ob_simple_iterator.h"
-#include "lib/lock/ob_qsync_lock.h"
 #include "storage/tx/ob_trans_ctx.h"
-#include "storage/tx/ob_tx_log_adapter.h"
+#include "storage/tx/ob_tx_ls_log_writer.h"
+#include "storage/tx/ob_tx_ls_state_mgr.h"
+#include "storage/tx/ob_tx_retain_ctx_mgr.h"
 #include "storage/tx/ob_tx_log_cb_mgr.h"
 #include "storage/tablelock/ob_lock_table.h"
 #include "storage/tx/ob_keep_alive_ls_handler.h"
@@ -43,6 +44,9 @@ class ObIMemtable;
 class ObLSTxService;
 class ObTransSubmitLogFunctor;
 class ObTxCtxTable;
+struct ObTxCtxMoveArg;
+struct ObTransferMoveTxParam;
+struct ObTransferOutTxParam;
 }
 
 namespace memtable
@@ -55,7 +59,7 @@ namespace transaction
 {
 class ObLSTxCtxMgrStat;
 class ObTransCtx;
-class ObTxCtx;
+class ObPartTransCtx;
 class ObTsMgr;
 class ObITxLogParam;
 class ObITxLogAdapter;
@@ -71,53 +75,94 @@ class TestTxCtxTable;
 namespace transaction
 {
 
+// Is used to store and traverse all ls id maintained
+typedef common::ObSimpleIterator<share::ObLSID,
+        ObModIds::OB_TRANS_VIRTUAL_TABLE_PARTITION, 16> ObLSIDIterator;
+
 // Is used to store and travserse all TxCtx's Stat information;
 typedef common::ObSimpleIterator<ObTxStat,
         ObModIds::OB_TRANS_VIRTUAL_TABLE_TRANS_STAT, 16> ObTxStatIterator;
+
+// Is used to store and travserse all ObLSTxCtxMgr's Stat information
+typedef common::ObSimpleIterator<ObLSTxCtxMgrStat,
+        ObModIds::OB_TRANS_VIRTUAL_TABLE_PARTITION_STAT, 16> ObTxCtxMgrStatIterator;
 
 // Is used to travserse all TxCtx's lock information
 typedef common::ObSimpleIterator<ObTxLockStat,
         ObModIds::OB_TRANS_VIRTUAL_TABLE_TRANS_STAT, 16> ObTxLockStatIterator;
 
-typedef share::ObLightHashMap<ObTransID, ObTransCtx, TransCtxAlloc, common::SpinRWLock, 1 << 14 /*bucket_num*/> ObLSTxCtxMap;
+typedef share::ObLightHashMap<ObTransID, ObTransCtx, TransCtxAlloc, common::SpinRWLock, 1 << 10 /*single LS bucket_num*/> ObLSTxCtxMap;
+
+typedef common::LinkHashNode<share::ObLSID> ObLSTxCtxMgrHashNode;
+typedef common::LinkHashValue<share::ObLSID> ObLSTxCtxMgrHashValue;
 
 struct ObTxCreateArg
 {
   ObTxCreateArg(const bool for_replay,
-                const TxCtxSource ctx_source,
+                const PartCtxSource ctx_source,
                 const ObTransID &trans_id,
+                const share::ObLSID &ls_id,
+                const uint64_t cluster_id,
+                const uint64_t cluster_version,
                 const uint32_t session_id,
+                const uint32_t client_sid,
+                const uint32_t associated_session_id,
+                const common::ObAddr &scheduler,
                 const int64_t trans_expired_time,
-                ObTransService *trans_service)
+                ObTransService *trans_service,
+                ObXATransID xid = ObXATransID(),
+                int64_t epoch = -1,
+                const ObTxCtxMoveArg *move_arg = NULL)
       : for_replay_(for_replay),
         ctx_source_(ctx_source),
         tx_id_(trans_id),
+        ls_id_(ls_id),
+        cluster_id_(cluster_id),
+        cluster_version_(cluster_version),
         session_id_(session_id),
+        client_sid_(client_sid),
+        associated_session_id_(associated_session_id),
+        scheduler_(scheduler),
         trans_expired_time_(trans_expired_time),
-        trans_service_(trans_service) {}
+        trans_service_(trans_service),
+        xid_(xid),
+        epoch_(epoch),
+        move_arg_(move_arg) {}
   bool is_valid() const
   {
-    return tx_id_.is_valid()
+    return ls_id_.is_valid()
+        && tx_id_.is_valid()
         && trans_expired_time_ > 0
         && NULL != trans_service_;
   }
   TO_STRING_KV(K_(for_replay), "ctx_source", to_str_ctx_source(ctx_source_), K_(tx_id),
-                 K_(session_id),
-                 K_(trans_expired_time), KP_(trans_service));
+                 K_(ls_id), K_(cluster_id), K_(cluster_version),
+                 K_(session_id),K_(client_sid), K_(associated_session_id),
+                 K_(scheduler), K_(trans_expired_time), KP_(trans_service),
+                 K_(epoch), K_(xid));
   bool for_replay_;
-  TxCtxSource ctx_source_;
+  PartCtxSource ctx_source_;
   ObTransID tx_id_;
+  share::ObLSID ls_id_;
+  uint64_t cluster_id_;
+  uint64_t cluster_version_;
   uint32_t session_id_;
+  uint32_t client_sid_;
+  uint32_t associated_session_id_;
+  const common::ObAddr &scheduler_;
   int64_t trans_expired_time_;
   ObTransService *trans_service_;
+  ObXATransID xid_;
+  int64_t epoch_;
+  const ObTxCtxMoveArg *move_arg_;
 };
 
 // Is used to store and traverse ObTxID
 const static char OB_SIMPLE_ITERATOR_LABEL_FOR_TX_ID[] = "ObTxCtxMgr";
 typedef common::ObSimpleIterator<ObTransID, OB_SIMPLE_ITERATOR_LABEL_FOR_TX_ID, 16> ObTxIDIterator;
 
-// Transaction Context Manager
-class ObLSTxCtxMgr
+// LogStream Transaction Context Manager
+class ObLSTxCtxMgr: public share::ObLightHashLink<ObLSTxCtxMgr>
 {
 // ut
   friend class unittest::TestTxCtxTable;
@@ -126,6 +171,7 @@ class ObLSTxCtxMgr
   friend class ObTransCtx;
   friend class ObTransCtx;
   friend class ObTransTimer;
+  friend class IterateLSTxCtxMgrStatFunctor;
 
 public:
   typedef common::RWLock RWLock;
@@ -134,7 +180,8 @@ public:
   typedef RWLock::WLockGuardWithRetryInterval WLockGuardWithRetryInterval;
 
   ObLSTxCtxMgr()
-      : tx_log_adapter_(&log_adapter_def_), rwlock_(ObLatchIds::DEFAULT_SPIN_RWLOCK)
+      : tx_log_adapter_(&log_adapter_def_), rwlock_(ObLatchIds::DEFAULT_SPIN_RWLOCK),
+        minor_merge_lock_(ObLatchIds::DEFAULT_SPIN_RWLOCK)
 
   {
     reset();
@@ -142,11 +189,13 @@ public:
 
   virtual ~ObLSTxCtxMgr() { destroy(); }
 
+  // @param [in] tenant: ls's tenant, currently used by ts_mgr;
   // @param [in] ls_id, associated ls_id;
   // @param [in] ts_mgr: used to get gts, see: update_max_replay_commit_version function;
   // @param [in] txs: transaction service which hold the ObTxCtxMgr;
   // @param [in] log_param: the params which is used to init ObLSTxCtxMgr's log_adapter_def_;
-  int init(ObTxTable *tx_table,
+  int init(const share::ObLSID &ls_id,
+           ObTxTable *tx_table,
            ObLockTable *lock_table,
            ObTsMgr *ts_mgr,
            ObTransService *txs,
@@ -162,6 +211,22 @@ public:
   // Offline the in-memory state of the ObLSTxCtxMgr
   int offline();
 
+  int filter_tx_need_transfer(ObIArray<ObTabletID> &tablet_list,
+                              const share::SCN data_end_scn,
+                              ObIArray<transaction::ObTransID> &move_tx_ids);
+
+  int transfer_out_tx_op(const ObTransferOutTxParam &param,
+                         int64_t& active_tx_count,
+                         int64_t &op_tx_count);
+  int wait_tx_write_end(ObTimeoutCtx &timeout_ctx);
+  int collect_tx_ctx(const share::ObLSID dest_ls_id,
+                     const SCN log_scn,
+                     const ObIArray<ObTabletID> &tablet_list,
+                     const ObIArray<ObTransID> *move_tx_ids,
+                     int64_t &colllect_count,
+                     ObIArray<ObTxCtxMoveArg> &res);
+  int move_tx_op(const ObTransferMoveTxParam &move_tx_param,
+                 const ObIArray<ObTxCtxMoveArg> &args);
 public:
   // Create a TxCtx whose tx_id is specified
   // @param [in] tx_id: transaction ID
@@ -170,32 +235,36 @@ public:
   //        been found, and the found TxCtx will be returned through the outgoing parameter tx_ctx;
   // TODO insert_and_get return existed object ptr;
   // @param [out] tx_ctx: newly allocated or already exsited transaction context
+  // Return Values That Need Attention:
   // @return OB_SUCCESS, if the tx_ctx newly allocated or already existed
+  // @return OB_NOT_MASTER, if this ls is a follower replica
   int create_tx_ctx(const ObTxCreateArg &arg,
                     bool& existed,
-                    ObTxCtx *&tx_ctx);
+                    ObPartTransCtx *&tx_ctx);
 
   // Find specified TxCtx from the ObLSTxCtxMgr;
   // @param [in] tx_id: transaction ID
   // @param [in] for_replay: Identifies whether the TxCtx is used by replay processing;
   // @param [out] tx_ctx: context found through ObLSTxCtxMgr's hash table
+  // Return Values That Need Attention:
+  // @return OB_NOT_MASTER, if the LogStream is follower replica
   // @return OB_TRANS_CTX_NOT_EXIST, if the specified TxCtx is not found;
-  int get_tx_ctx(const ObTransID &tx_id, const bool for_replay, ObTxCtx *&tx_ctx);
+  int get_tx_ctx(const ObTransID &tx_id, const bool for_replay, ObPartTransCtx *&tx_ctx);
 
   int get_tx_ctx_with_timeout(const ObTransID &tx_id,
                               const bool for_replay,
-                              ObTxCtx *&tx_ctx,
+                              ObPartTransCtx *&tx_ctx,
                               const int64_t lock_timeout);
 
   // Find specified TxCtx directly from the ObLSTxCtxMgr's hash_map
   // @param [in] tx_id: transaction ID
   // @param [out] tx_ctx: context found through ObLSTxCtxMgr's hash table
   // @return OB_TRANS_CTX_NOT_EXIST, if the specified TxCtx is not found;
-  int get_tx_ctx_directly_from_hash_map(const ObTransID &tx_id, ObTxCtx *&ctx);
+  int get_tx_ctx_directly_from_hash_map(const ObTransID &tx_id, ObPartTransCtx *&ctx);
 
   // Decrease the specified tx_ctx's reference count
   // @param [in] tx_ctx: the TxCtx will be revert
-  int revert_tx_ctx(ObTxCtx *tx_ctx);
+  int revert_tx_ctx(ObPartTransCtx *tx_ctx);
 
   // Decrease the specified tx_ctx's reference count
   // @param [in] tx_ctx: the TxCtx will be revert
@@ -213,13 +282,15 @@ public:
 
   // Get the min prepare version of transaction module of current observer for slave read
   // @param [out] min_prepare_version: MIN(uncommitted tx_ctx's prepare version | ObLSTxCtxMgr)
-  int get_min_uncommit_tx_prepare_version(share::SCN &min_prepare_version);
+  int get_ls_min_uncommit_tx_prepare_version(share::SCN &min_prepare_version);
 
   // Check the ObLSTxCtxMgr's status; if it's stopped, the new transaction ctx will not be created;
   // otherwise, the tx_ctx is created normally
   bool is_stopped() const { return is_stopped_(); }
 
-  // Stop the ObLSTxCtxMgr and kill all local transactions.
+  // Stop the ObLSTxCtxMgr, the function will
+  // 1. stop the ls_log_writer_;
+  // 2. kill all tx in the ls and callback sql;
   // @param [in] graceful: indicate the kill behavior
   int stop(const bool graceful);
 
@@ -271,7 +342,13 @@ public:
                                 ObTransID &block_tx_id);
 
   // check schduler status for tx gc
-  int check_tx_status(share::SCN &min_start_scn, MinStartScnStatus &status);
+  int check_scheduler_status(share::SCN &min_start_scn, MinStartScnStatus &status);
+
+  // Get this ObLSTxCtxMgr's ls_id_
+  const share::ObLSID &get_ls_id() const { return ls_id_; }
+
+  // Get this ObLSTxCtxMgr's ls_log_writer
+  ObTxLSLogWriter *get_ls_log_writer() { return &ls_log_writer_; }
 
   ObITxLogAdapter *get_ls_log_adapter() { return tx_log_adapter_; }
 
@@ -288,12 +365,21 @@ public:
   int get_lock_memtable(ObTableHandleV2 &handle) {
     return lock_table_->get_lock_memtable(handle);
   }
+  // check this ObLSTxCtxMgr is in leader serving state
+  bool in_leader_serving_state();
+
   // dump a single tx data to text
   // @param [in] tx_id
   // @param [in] fd
   int dump_single_tx_data_2_text(const int64_t tx_id, FILE *fd);
   int start_readonly_request();
   int end_readonly_request();
+
+  // check this ObLSTxCtxMgr contains the specified ObLSID
+  bool contain(const share::ObLSID &ls_id)
+  {
+    return ls_id_ == ls_id;
+  }
 
 public:
   // Increase this ObLSTxCtxMgr's total_tx_ctx_count
@@ -322,6 +408,11 @@ public:
   }
   int64_t get_total_active_readonly_request_count() { return ATOMIC_LOAD(&total_active_readonly_request_count_); }
 
+  void inc_total_request_by_transfer_dest() { (void)ATOMIC_AAF(&total_request_by_transfer_dest_, 1); }
+  void dec_total_request_by_transfer_dest() { (void)ATOMIC_AAF(&total_request_by_transfer_dest_, -1); }
+  int64_t get_total_request_by_transfer_dest() {
+    return total_request_by_transfer_dest_;
+  }
   // Get all tx obj lock information in this ObLSTxCtxMgr
   // @param [out] iter: all tx obj lock op information
   int iterate_tx_obj_lock_op(ObLockOpIterator &iter);
@@ -379,6 +470,80 @@ public:
   // TODO Remove
   int get_min_undecided_scn(share::SCN &scn);
 
+  //1. During the minor merge process, the status of uncommitted transactions will be actively
+  //   queried; if ObPartTransCtx is released due to Rebuild, and the query cannot be performed,
+  //   the minor merge process will record an exception failure log and exit;
+  //2. The high risk point is that in the process of minor merge memtable, it is necessary to
+  //   query the status of uncommitted transactions. At this time, the status of Trans is directly
+  //   queried through the pointer to TransCtx in ObMvccTransNode; the use of this pointer is not
+  //   currently protected by reference counting. If ObPartTransCtx is released due to Rebuild
+  //   during use, it will cause a wild pointer;
+  //3. The minor_merge_lock_ is used to prevent this from happening
+  int lock_minor_merge_lock() { return minor_merge_lock_.rdlock(); }
+  int unlock_minor_merge_lock() { return minor_merge_lock_.rdunlock(); };
+
+  // Through this interface, the PALF notifies this ObLSTxCtxMgr to forcibly switch to follower;
+  // When the PALF calls this interface,
+  // all log entries status associated with this ls has been confirmed;
+  // In all normal execution scenarios, the interface does not return failure;
+  // The PALF layer assumes that the operation must succeed, and does not handle the failure;
+  // TODO If this interface return failure, should set the replica to Manual Status;
+  int switch_to_follower_forcedly();
+
+  // Through this interface, the PALF notifies ObLSTxCtxMgr to switch to leader, then it will start
+  // executing switch_to_leader routine;
+  // 1. switch ObLSTxCtxMgr to LEADER_SWITCHING state, submit start_working log entry;
+  // 2. switch ObLSTxCtxMgr to L_WORKING state;
+  //    Travesal ObLSTxCtxMgr and call the switch_to_leader interface of each TxCtx;
+  int switch_to_leader();
+
+  // Through this interface, the PALF notifies ObLSTxCtxMgr to *gracefully* switch to follower;
+  // This interface will be called when actively triggers the replica role switch action;
+  // It is necessary to ensure that the switching process does not kill the transaction;
+  // If the execution fails, the function will try to do the resume leader work by itself;
+  // If the function cannot complete the resume_leader action by itself, it needs to return
+  // OB_NEED_REVOKE, so that PALF will trigger the election process;
+  int switch_to_follower_gracefully();
+
+  // This interface will be called when other module switch_to_follower_gracefully executes failed;
+  // When this interface call is triggered, it can ensure that each TxCtx in ObLSTxCtxMgr
+  // is complete, and its status can be directly reset to Leader status;
+  int resume_leader();
+
+  // Replay the start working log entry. Traverse ObLSTxCtxMgr and set the data_complete_ of each
+  // ObTxCtx to false. Make all the preceding ACTIVE_INFO log entry invalid.
+  // @param [in] log: The start working log entry
+  int replay_start_working_log(const ObTxStartWorkingLog &log, share::SCN start_working_scn);
+
+  // START_WORKING log entry is successfully written to the PALF; According to the current
+  // ObLSTxCtxMgr's status, drive ObLSTxCtxMgr to continue to execute the switch_to_leader routine
+  // or resume_leader routine;
+  int on_start_working_log_cb_succ(share::SCN start_working_scn);
+  int retry_apply_start_working_log();
+
+  // START_WORKING log entry failed to written to the PALF;
+  // Break the switch_to_leader routine or resume_leader routine; switch the ObLSTxCtxMgr's state to F_WORKING
+  int on_start_working_log_cb_fail();
+
+  // 1.In order to support slave-read, it is necessary to ensure the partial order relationship
+  //   between log_id and scn; then before the transaction submits redolog to the PALF,
+  //   The log entry's log id and scn ts will be generated by the PALF, and the partial order
+  //   relationship between log_id and scn is guaranteed by the PALF;
+  // 2.So the redolog entry's commit version may be bigger than the GTS version;
+  //   In the normal transaction execution process, you need to wait for GTS version >= commit version
+  //   before executing the inc the publish_version and responding to the client commit success;
+  // 3.Distributed transactions can handle this situation normally in the recovery process;
+  //   Single ls transactions require special handling;
+  // 4.When the single ls transaction's redolog entry is replayed, the largest
+  //   batch_commit_version on the ls will be calculated
+  //   When start executing swith_to_leader routine, wait_gts_elapse will be called to ensure that
+  //   GTS has exceeded this batch_commit_version;
+  // @param [in] replay_commit_version : replayed single-ls-tx's log entry commit version;
+  void update_max_replay_commit_version(const share::SCN &replay_commit_version)
+  {
+    max_replay_commit_version_.inc_update(replay_commit_version);
+  }
+
   // Iterate all tx ctx in this ls and get the min_start_scn
   int get_min_start_scn(share::SCN &min_start_scn);
 
@@ -386,32 +551,46 @@ public:
   transaction::ObTransService *get_trans_service() { return txs_; }
 
   ObTxLogCbPoolMgr &get_log_cb_pool_mgr() { return log_cb_pool_mgr_;}
+  ObTxRetainCtxMgr &get_retain_ctx_mgr() { return ls_retain_ctx_mgr_; }
+
+  // Get the tenant corresponding to this ObLSTxCtxMgr;
+  
+
+  // check is master
+  bool is_master() const { return is_master_(); }
 
   // check is blocked
   bool is_tx_blocked() const { return is_tx_blocked_(); }
 
   // check all blocked
   bool is_all_blocked() const { return is_all_blocked_(); }
-  bool is_normal_tx_blocked() const { return is_normal_blocked_(); }
 
   // Switch the prev_aggre_log_ts and aggre_log_ts during dump starts
   int refresh_aggre_rec_scn();
 
   // Update aggre_log_ts without lock, because we canot lock using the order of
-  // ObTxCtx -> ObLSTxCtxMgr, It will be a deadlock with normal order.
+  // ObPartTransCtx -> ObLSTxCtxMgr, It will be a deadlock with normal order.
   int update_aggre_log_ts_wo_lock(share::SCN rec_log_ts);
 
   int get_max_decided_scn(share::SCN & scn);
 
+  int do_standby_cleanup();
+
+  int errsim_switch_to_followr_gracefully();
+  int errsim_submit_start_working_log();
+  int errsim_apply_start_working_log();
+
   TO_STRING_KV(KP(this),
-               K_(stopped),
-               K_(block_tx),
-               K_(block_normal_tx),
-               K_(block_all),
+               K_(ls_id),
+               
+               K_(tx_ls_state_mgr),
                K_(total_tx_ctx_count),
                K_(active_tx_count),
+               K_(ls_retain_ctx_mgr),
                K_(aggre_rec_scn),
-               K_(prev_aggre_rec_scn));
+               K_(prev_aggre_rec_scn),
+               "uref",
+               (!is_inited_ ? -1 : get_ref()));
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLSTxCtxMgr);
 
@@ -427,50 +606,85 @@ private:
   int64_t get_tx_ctx_count_() const { return ATOMIC_LOAD(&total_tx_ctx_count_); }
   int create_tx_ctx_(const ObTxCreateArg &arg,
                      bool &existed,
-                     ObTxCtx *&ctx);
-  int get_tx_ctx_(const ObTransID &tx_id, const bool for_replay, ObTxCtx *&tx_ctx);
+                     ObPartTransCtx *&ctx);
+  int get_tx_ctx_(const ObTransID &tx_id, const bool for_replay, ObPartTransCtx *&tx_ctx);
+  int submit_start_working_log_();
+  int try_wait_gts_and_inc_max_commit_ts_();
   share::SCN get_aggre_rec_scn_();
 public:
   static const int64_t MAX_HASH_ITEM_PRINT = 16;
+  static const int64_t WAIT_SW_CB_TIMEOUT = 100 * 1000; // 100 ms
+  static const int64_t WAIT_SW_CB_INTERVAL = 10 * 1000; // 10 ms
   static const int64_t WAIT_READONLY_REQUEST_TIME = 10 * 1000 * 1000;
 
 private:
+  inline bool is_master_() const
+  { return tx_ls_state_mgr_.is_master(); }
+
+  inline bool is_follower_() const
+  { return tx_ls_state_mgr_.is_follower(); }
+
   inline bool is_tx_blocked_() const
-  { return ATOMIC_LOAD(&block_tx_); }
+  { return tx_ls_state_mgr_.is_block_start_tx(); }
 
   inline bool is_normal_blocked_() const
-  { return ATOMIC_LOAD(&block_normal_tx_); }
+  { return tx_ls_state_mgr_.is_block_start_normal_tx(); }
 
   inline bool is_all_blocked_() const
-  { return ATOMIC_LOAD(&block_all_); }
+  { return tx_ls_state_mgr_.is_block_WR(); }
+
+  // check pending substate
+  inline bool is_t_pending_() const
+  { return tx_ls_state_mgr_.is_switch_leader_pending(); }
+
+  inline bool is_r_pending_() const
+  { return tx_ls_state_mgr_.is_resume_leader_pending(); }
+
+  inline bool is_f_pending_() const 
+  { return tx_ls_state_mgr_.is_follower_swl_pending(); }
+
+  inline bool is_pending_() const
+  { return tx_ls_state_mgr_.is_leader_takeover_pending(); }
 
   inline bool is_stopped_() const
-  { return ATOMIC_LOAD(&stopped_); }
+  { return tx_ls_state_mgr_.is_stopped(); }
 
 private:
   // Identifies this ObLSTxCtxMgr is inited or not;
   bool is_inited_;
 
-  bool stopped_;
-  bool block_tx_;
-  bool block_normal_tx_;
-  bool block_all_;
+  // See the ObLSTxCtxMgr's internal class State
+  ObTxLSStateMgr tx_ls_state_mgr_;
 
   // A thread-safe hashmap, used to find and traverse TxCtx in this ObLSTxCtxMgr
   ObLSTxCtxMap ls_tx_ctx_map_;
 
+  // The tenant ID to which this ObLSTxCtxMgr belongs
+  
+
+  // The ls ID associated with this ObLSTxCtxMgr
+  share::ObLSID ls_id_;
 
   // The tx table associated with this ObLSTxCtxMgr
   ObTxTable *tx_table_;
   // The Lock Table associate with this ObLSTxCtxMgr
   ObLockTable *lock_table_;
 
+  // Used to submit START_WORKING LogEntry
+  ObTxLSLogWriter ls_log_writer_;
   ObITxLogAdapter *tx_log_adapter_;
   ObLSTxLogAdapter log_adapter_def_;
 
   ObTxLogCbPoolMgr log_cb_pool_mgr_;
 
+  ObTxRetainCtxMgr ls_retain_ctx_mgr_;
+
   mutable RWLock rwlock_;
+  // lock for concurrency between minor merge and remove / rebuild this LS
+  // ATTENTION: the order between locks should be:
+  //                     rwlock_ -> minor_merge_lock_
+  mutable RWLock minor_merge_lock_;
+
   // Total TxCtx count in this ObLSTxCtxMgr
   int64_t total_tx_ctx_count_ CACHE_ALIGNED;
 
@@ -478,11 +692,22 @@ private:
 
   int64_t active_tx_count_;
 
+  // for transfer dest_ls depend src_ls
+  int64_t total_request_by_transfer_dest_;
+
+  // It is used to record the time point of leader takeover
+  // gts must be refreshed to the newest before the leader provides services
+  MonotonicTs leader_takeover_ts_;
+  bool is_leader_serving_;
+
   // Transaction service which hold the ObTxCtxMgr;
   ObTransService *txs_;
 
   // The time source
   ObTsMgr *ts_mgr_;
+
+  // See the ObLSTxCtxMgr's member function update_max_replay_commit_version
+  share::SCN max_replay_commit_version_;
 
   // Recover log timestamp for aggregated tx ctx. For the purpose of Durability,
   // we need a space to store rec_log_ts for checkpoint[1]. Although tx ctx
@@ -521,8 +746,8 @@ public:
   int set_ready(ObLSTxCtxMgr* ls_tx_ctx_mgr);
   bool is_ready() const {return is_ready_; }
 
-  int get_next_tx_ctx(ObTxCtx *&tx_ctx);
-  int revert_tx_ctx(ObTxCtx *tx_ctx);
+  int get_next_tx_ctx(ObPartTransCtx *&tx_ctx);
+  int revert_tx_ctx(ObPartTransCtx *tx_ctx);
 
 private:
   int get_next_tx_id_(ObTransID& tx_id);
@@ -535,19 +760,40 @@ private:
   ObTxIDIterator tx_id_iter_;
 };
 
+class ObLSTxCtxMgrAlloc
+{
+public:
+  static ObLSTxCtxMgr* alloc_value() { return NULL; }
+  static void free_value(ObLSTxCtxMgr* p)
+  {
+    if (NULL != p) {
+      TRANS_LOG(INFO, "ObLSTxCtxMgr release", K(*p));
+      ObLSTxCtxMgrFactory::release(p);
+    }
+  }
+  static ObLSTxCtxMgrHashNode* alloc_node(ObLSTxCtxMgr* p)
+  {
+    UNUSED(p);
+    return op_alloc(ObLSTxCtxMgrHashNode);
+  }
+  static void free_node(ObLSTxCtxMgrHashNode* node)
+  {
+    if (NULL != node) {
+      op_free(node);
+      node = NULL;
+    }
+  }
+};
+
+typedef share::ObLightHashMap<share::ObLSID, ObLSTxCtxMgr,
+        ObLSTxCtxMgrAlloc, common::ObQSyncLock> ObLSTxCtxMgrMap;
+
 class ObTxCtxMgr
 {
 public:
-  ObTxCtxMgr()
-      : is_inited_(false),
-        is_running_(false),
-        tx_ctx_mgr_(NULL),
-        ts_mgr_(NULL),
-        txs_(NULL)
-  {
-    reset();
-  }
+  ObTxCtxMgr() { reset(); }
   ~ObTxCtxMgr() { destroy(); }
+  // @param [in] tenant: tenant id
   // @param [in] ts_mgr: used to get gts, see: update_max_replay_commit_version function;
   // @param [in] txs: transaction service which hold the ObTxCtxMgr;
   int init(ObTsMgr *ts_mgr, ObTransService *txs);
@@ -555,29 +801,33 @@ public:
   // Mark ObTxCtxMgr as running
   int start();
 
-  // Stop the transaction context manager and mark ObTxCtxMgr not running.
+  // Stop the ObTxCtxMgr; call the stop function of each ObLSTxCtxMgr and mark ObTxCtxMgr is not running;
   int stop();
 
   // Destroy the ObTxCtxMgr;
   void destroy();
 
-  // Wait until the transaction context manager has stopped and holds no TxCtx.
+  // Wait until each ObLSTxCtxMgr has stopped and the number of TxCtx held is 0;
   int wait();
 
   // Reset the ObTxCtxMgr;
   void reset();
 public:
 
-  // Find a specified TxCtx.
+  // Find specified TxCtx from the specified ObLSTxCtxMgr;
+  // @param [in] ls_id: the specified ls ID
   // @param [in] tx_id: transaction ID
   // @param [in] for_replay: Identifies whether the TxCtx is used by replay processing
   // @param [out] tx_ctx: context found through ls transaction context manager's hash table
   // @return OB_SUCCESS, if found the transaction tx_ctx
-  int get_tx_ctx(const ObTransID &tx_id,
+  // @return OB_NOT_MASTER, if the LogStream is follower replica
+  int get_tx_ctx(const share::ObLSID &ls_id,
+                 const ObTransID &tx_id,
                  const bool for_replay,
-                 ObTxCtx *&tx_ctx);
+                 ObPartTransCtx *&tx_ctx);
 
-  // Create a TxCtx with the specified transaction ID.
+  // Create a TxCtx whose tx_id is specified in the specified ObLSTxCtxMgr
+  // @param [in] ls_id: the specified ls ID
   // @param [in] tx_id: transaction ID
   // @param [in] for_replay: Identifies whether the TxCtx is created for replay processing;
   // @param [out] existed:
@@ -585,76 +835,158 @@ public:
   // TODO insert_and_get return existed object ptr;
   // @param [out] tx_ctx: newly allocated or already exsited transaction context
   // @return OB_SUCCESS, if the transaction tx_ctx newly allocated or already existed
+  // @return OB_NOT_MASTER, if this LogStream is a follower replica
   int create_tx_ctx(const ObTxCreateArg &arg,
                     bool& existed,
-                    ObTxCtx *&tx_ctx);
+                    ObPartTransCtx *&tx_ctx);
 
   // Decrease the specified tx_ctx's reference count
   // @param [in] tx_ctx: the TxCtx will be revert
-  int revert_tx_ctx(ObTxCtx *tx_ctx);
+  int revert_tx_ctx(ObPartTransCtx *tx_ctx);
 
-  int create_context_manager(ObTxTable *tx_table,
-                             ObLockTable *lock_table,
-                             storage::ObLSTxService &ls_tx_svr,
-                             ObITxLogParam *param,
-                             ObITxLogAdapter *log_adapter);
+  // Create ObLSTxCtxMgr;
+  // @param [in] tenant: the tenant ID;
+  // @param [in] ls_id: the specifiied ls ID
+  // @param [in] log_param: the params which is used to init ObLSTxCtxMgr's log_adapter_def_;
+  int create_ls(const share::ObLSID &ls_id,
+                ObTxTable *tx_table,
+                ObLockTable *lock_table,
+                storage::ObLSTxService &ls_tx_svr, /* TODO remove this argument*/
+                ObITxLogParam *param,
+                ObITxLogAdapter *log_adapter);
 
-  // Delete the context manager after all active TxCtx objects are stopped.
-  int remove_context_manager(const bool graceful);
+  // Delete the specified ObLSTxCtxMgr, the stop_ls function will be called internally and ensure
+  // that there is no active TxCtx, then the ObLSTxCtxMgr will be deleted from the hash table
+  // of ObTxCtxMgr;
+  // @param [in] ls_id: the specifiied ls ID
+  // @param [in] graceful: indicate the kill behavior
+  int remove_ls(const share::ObLSID &ls_id, const bool graceful);
 
-  // Block the context manager, so that it can no longer create a new TxCtx,
+  // Block the specified ObLSTxCtxMgr, so that it can no longer create a new TxCtx,
   // and returns whether there are still active transactions through out parameters;
+  // @param [in] ls_id: the specifiied ls ID
   // @param [out] is_all_tx_cleaned_up, set it to true, when all transactions are cleaned up;
-  int block_tx(bool &is_all_tx_cleaned_up);
+  int block_tx(const share::ObLSID &ls_id, bool &is_all_tx_cleaned_up);
   // block tx and readonly request
-  int block_all(bool &is_all_tx_cleaned_up);
+  int block_all(const share::ObLSID &ls_id, bool &is_all_tx_cleaned_up);
+
+  // Traverse the specified ObLSTxCtxMgr and kill all transactions it holds;
+  // @param [in] ls_id: the specifiied ls ID
+  int clear_all_tx(const share::ObLSID &ls_id);
+
+  // kill the specified ls's transaction
+  // @param [in] ls_id: the specifiied ls ID
+  // @param [in] graceful: indicate the kill behavior
+  // @param [out] is_all_tx_cleaned_up: set it to true, when all transactions are killed
+
+  //int get_store_ctx(const storage::ObStoreAccessType access_type,
+  //                  ObTxDesc &tx,
+  //                  const ObLSID &ls_id,
+  //                  storage::ObStoreCtx &store_ctx,
+  //                  const int64_t &snapshot_version);
+
+  // revert_store_ctx
+  //int revert_store_ctx(ObTxDesc &ctx, storage::ObStoreCtx &store_ctx);
 
   // Get the min prepare version of transaction module of current observer for slave read
+  // @param [in] indicates the specified ls;
   // @param [out] min_prepare_version: MIN(uncommitted transaction ctx's prepare version)
-  int get_min_uncommit_tx_prepare_version(share::SCN &min_prepare_version);
+  int get_ls_min_uncommit_tx_prepare_version(const share::ObLSID &ls_id, share::SCN &min_prepare_version);
 
-  // Get transaction context manager statistics.
-  // @param [in] addr: the address of the observer;
-  // @param [out] tx_ctx_mgr_stat: the collected context manager statistics;
-  int get_tx_ctx_mgr_stat(const ObAddr &addr,
-                          ObLSTxCtxMgrStat &tx_ctx_mgr_stat);
+  // TODO
+  int get_min_undecided_scn(const share::ObLSID &ls_id, share::SCN &scn);
+
+  // Get all ls ID in the observer
+  // param [out] ls_id_iter: ObLSIDIterator is Used to return all ls id in the observer,
+  //             which is subsequently used for iterative access of virtual table;
+  int iterate_ls_id(ObLSIDIterator &ls_id_iter);
+
+  // Get all ObLSTxCtxMgr's stat info in the observer
+  // @param [in] addr: the address of the observer, which is used to populate each line of output;
+  // @param [out] tx_ctx_mgr_stat_iter: Used to return all the collected ObLSTxCtxMgr's Stat
+  //              information, and then used to iteratively output to the virtual table;
+  int iterate_tx_ctx_mgr_stat(const ObAddr &addr,
+                              ObTxCtxMgrStatIterator &tx_ctx_mgr_stat_iter);
 
   // Get all transaction information at the server level
   // @param [out] tx_stat_iter: Used to return all the collected TxCtx's Stat information,
   //             and then used to iteratively output to the virtual table;
   int iterate_all_observer_tx_stat(ObTxStatIterator &tx_stat_iter);
 
+  // Print all TxCtx in the specific ObLSTxCtxMgr
+  // @param [in] ls_id: the specific ls ID;
+
+  // Get specific ObLSTxCtxMgr's transaction lock stat
+  // @param [in] ls_id: the specified ls_id
+  // @param [out] tx_lock_stat_iter: Used to return all the collected TxLockStat information,
+  //              and then used to iteratively output to the virtual table;
+  int iterate_ls_tx_lock_stat(const share::ObLSID &ls_id,
+                              ObTxLockStatIterator &tx_lock_stat_iter);
+
   // Before Deleting the memtable, remove its associated callback from the callback list of all the
   // active transactions; When the memtable has mini-merged, the commit_version of its associated
   // transaction may be undecided;
+  // @param [in] ls_id: the specified ls_id;
   // @param [in] mt: the memtable point which will be deleted;
-  int remove_callback_for_uncommited_tx(const memtable::ObMemtableSet *memtable_set);
+  int remove_callback_for_uncommited_tx(
+    const ObLSID ls_id,
+    const memtable::ObMemtableSet *memtable_set);
 
   TO_STRING_KV(K(is_inited_), KP(this));
 
 
-  ObLSTxCtxMgr &get_tx_ctx_manager() { return *tx_ctx_mgr_; }
+  // Find specified ObLSTxCtxMgr from the ObTxCtxMgr and increase its reference count;
+  // @param [in] ls_id: the specified ls_id
+  // @param [out] ls_tx_ctx_mgr: the specified ls_tx_ctx_mgr
+  int get_ls_tx_ctx_mgr(const share::ObLSID &ls_id, ObLSTxCtxMgr *&ls_tx_ctx_mgr);
 
+  // Decrease specified ObLSTxCtxMgr's reference count
+  // @param [in] mgr: indicates the ObLSTxCtxMgr whose reference count needs to be decreased;
+  int revert_ls_tx_ctx_mgr(ObLSTxCtxMgr *ls_tx_ctx_mgr);
 
+  // @param [in] ls_id: the specified ls_id
+  int check_scheduler_status(share::ObLSID ls_id);
+
+  int get_max_decided_scn(const share::ObLSID &ls_id, share::SCN & scn);
+
+  int do_all_ls_standby_cleanup(ObTimeGuard &cleanup_timeguard);
+
+  int check_ls_status(const share::ObLSID &ls_id);
 private:
-  int stop_context_manager_(const bool graceful);
+  int create_ls_(const share::ObLSID &ls_id,
+                 ObLSTxService &ls_tx_svr,
+                 ObITxLogParam *param);
 
-  int wait_context_manager_();
+  int remove_ls_(const share::ObLSID &ls_id);
 
-  int remove_context_manager_();
+  int stop_ls_(const share::ObLSID &ls_id, const bool graceful);
 
-  int print_tx_ctx_();
+  int wait_ls_(const share::ObLSID &ls_id);
 
-  void release_tx_ctx_mgr_();
+  int remove_all_ls_();
+  template <typename Fn> int foreach_ls_(Fn &fn) { return ls_tx_ctx_mgr_map_.for_each(fn); }
+  template <typename Fn> int remove_if_(Fn &fn) { return ls_tx_ctx_mgr_map_.remove_if(fn); }
+
+  int print_all_ls_tx_ctx_();
 private:
   bool is_inited_;
 
   bool is_running_;
 
-  ObLSTxCtxMgr *tx_ctx_mgr_;
+  // The tenant ID to which this ObTxCtxMgr belongs
+  
+
+  // A thread-safe hashmap, used to find and traverse ObLSTxCtxMgr
+  ObLSTxCtxMgrMap ls_tx_ctx_mgr_map_;
 
   // The time source
   ObTsMgr *ts_mgr_;
+
+  // Statistical variable that records the number of ObLSTxCtxMgr allocated;
+  int64_t ls_alloc_cnt_;
+
+  // Statistical variable that records the number of ObLSTxCtxMgr released;
+  int64_t ls_release_cnt_;
 
   // Transaction service which hold the ObTxCtxMgr;
   ObTransService *txs_;

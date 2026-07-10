@@ -32,7 +32,7 @@ namespace storage
 
   READ_ALL_COMMITED:
     Read committed row after transaction committed, except empty shell.
-    Return tablet which has finished at least one MDS transaction(not including tablet in NORMAL not committed status).
+    Return tablet which has finished at least one MDS transaction(not including tablet in NORMAL not committed, TRANSFER_IN not committed status).
     Not return CREATING and DELETING who was abandoned from 4.2.
     In addition, you should NOT pass read timeout under this mode.
 
@@ -41,7 +41,9 @@ namespace storage
 
   READ_READABLE_COMMITED:
     Read committed row, not include deleted one. The most frequently used mode. Return
-    tablet in NORMAL status. Not return one in unreadable status.
+    tablet in NORMAL, TRANSFER_IN status. Not return one in unreadable status.
+    If latest tablet status is TRANSFER_OUT, we should check transfer scn to decide
+    whether it is legal to return the tablet.
     If read operation reaches read timeout, you'll get OB_ERR_SHARED_LOCK_CONFLICT error.
 */
 enum class ObMDSGetTabletMode
@@ -55,8 +57,8 @@ class ObTabletCommon final
 {
 public:
   static const int64_t DEFAULT_ITERATOR_TABLET_ID_CNT = 128;
-  static const int64_t BUCKET_LOCK_BUCKET_CNT = 10243L;
-  static const int64_t TABLET_ID_SET_BUCKET_CNT = 10243L;
+  static const int64_t BUCKET_LOCK_BUCKET_CNT = 257L;
+  static const int64_t TABLET_ID_SET_BUCKET_CNT = 257L;
   static const int64_t DEFAULT_GET_TABLET_NO_WAIT = 0; // 0s
   static const int64_t DEFAULT_GET_TABLET_DURATION_US = 1_s;
   static const int64_t DEFAULT_GET_TABLET_DURATION_10_S = 10_s;

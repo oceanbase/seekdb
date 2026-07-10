@@ -20,10 +20,12 @@
 #include "lib/allocator/ob_slice_alloc.h"
 #include "lib/allocator/ob_vslice_alloc.h"
 #include "share/ob_delegate.h"
+#include "share/ob_ls_id.h"
 #include "storage/throttle/ob_share_throttle_define.h"
 
 namespace oceanbase {
 namespace share {
+class ObLSID;
 
 OB_INLINE int64_t &tx_data_throttled_alloc()
 {
@@ -31,7 +33,7 @@ OB_INLINE int64_t &tx_data_throttled_alloc()
   return tx_data_throttled_alloc;
 }
 
-class ObTxDataAllocator {
+class ObTenantTxDataAllocator {
 public:
   using SliceAllocator = ObSliceAlloc;
 
@@ -39,7 +41,7 @@ public:
   static const int64_t TX_DATA_LIMIT_PERCENTAGE = 20;
   static const int64_t TX_DATA_THROTTLE_TRIGGER_PERCENTAGE = 60;
   static const int64_t TX_DATA_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
-  static const int64_t ALLOC_TX_DATA_MAX_CONCURRENCY = 32;
+  static const int64_t ALLOC_TX_DATA_MAX_CONCURRENCY = 8;
   static const uint32_t THROTTLE_TX_DATA_INTERVAL = 20 * 1000; // 20ms
 
   // The tx data memtable will trigger a freeze if its memory use is more than 5%
@@ -49,9 +51,9 @@ public:
   DEFINE_CUSTOM_FUNC_FOR_THROTTLE(TxData);
 
 public:
-  ObTxDataAllocator()
+  ObTenantTxDataAllocator()
       : is_inited_(false), throttle_tool_(nullptr), block_alloc_(), slice_allocator_() {}
-  ~ObTxDataAllocator() { reset(); }
+  ~ObTenantTxDataAllocator() { reset(); }
   int init(const char* label);
   void *alloc(const bool enable_throttle = true, const int64_t abs_expire_time = 0);
   void reset();
@@ -71,23 +73,24 @@ private:
 class ObTxDataThrottleGuard
 {
 public:
-  ObTxDataThrottleGuard(const bool for_replay, const int64_t abs_expire_time);
+  ObTxDataThrottleGuard(const share::ObLSID ls_id, const bool for_replay, const int64_t abs_expire_time);
   ~ObTxDataThrottleGuard();
 
 private:
+  const share::ObLSID ls_id_;
   bool for_replay_;
   int64_t abs_expire_time_;
   share::TxShareThrottleTool *throttle_tool_;
 };
 
-class ObTxDataOpAllocator : public ObIAllocator {
+class ObTenantTxDataOpAllocator : public ObIAllocator {
 private:
-  static const int64_t MDS_ALLOC_CONCURRENCY = 32;
+  static const int64_t MDS_ALLOC_CONCURRENCY = 8;
 public:
   DEFINE_CUSTOM_FUNC_FOR_THROTTLE(Mds);
 
 public:
-  ObTxDataOpAllocator() : is_inited_(false), throttle_tool_(nullptr), block_alloc_(), allocator_() {}
+  ObTenantTxDataOpAllocator() : is_inited_(false), throttle_tool_(nullptr), block_alloc_(), allocator_() {}
 
   int init();
   void destroy() { is_inited_ = false; }
