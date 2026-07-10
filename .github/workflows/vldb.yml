@@ -370,12 +370,14 @@ jobs:
             echo
           fi
 
-          if [[ ! -f "$BENCH_OUTPUT" ]]; then
-            echo "benchmark report not found, skip comment artifact: $BENCH_OUTPUT"
+          if [[ ! -f "$BENCH_OUTPUT" && ! -f "$AI_FUNCS_SCORE" ]]; then
+            echo "neither benchmark report nor ai_funcs score found, skip comment artifact"
             exit 0
           fi
           mkdir -p "$ARTIFACT_DIR"
-          cp -f "$BENCH_OUTPUT" "$ARTIFACT_DIR/report.txt"
+          if [[ -f "$BENCH_OUTPUT" ]]; then
+            cp -f "$BENCH_OUTPUT" "$ARTIFACT_DIR/report.txt"
+          fi
           if [[ -f "$SCORE_OUTPUT" ]]; then
             cp -f "$SCORE_OUTPUT" "$ARTIFACT_DIR/score.txt"
           fi

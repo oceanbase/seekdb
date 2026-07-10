@@ -43,8 +43,9 @@ jobs:
 
           REPORT_PATH="$ARTIFACT_DIR/report.txt"
           SCORE_PATH="$ARTIFACT_DIR/score.txt"
-          if [[ ! -f "$REPORT_PATH" ]]; then
-            echo "benchmark comment artifact not found, skip PR comment"
+          AI_FUNCS_SCORE_PATH="$ARTIFACT_DIR/ai_funcs_score.txt"
+          if [[ ! -f "$REPORT_PATH" && ! -f "$AI_FUNCS_SCORE_PATH" ]]; then
+            echo "comment artifact has neither benchmark report nor ai_funcs score, skip PR comment"
             exit 0
           fi
 
@@ -107,34 +108,49 @@ jobs:
               )
           PY
 
-          python3 - "$REPORT_PATH" "$SCORE_PATH" "$RUN_URL" "$MARKER" > "$COMMENT_BODY" <<'PY'
+          python3 - "$REPORT_PATH" "$SCORE_PATH" "$AI_FUNCS_SCORE_PATH" "$RUN_URL" "$MARKER" > "$COMMENT_BODY" <<'PY'
           import html
           import json
           from pathlib import Path
           import sys
 
-          report_path, score_path, run_url, marker = sys.argv[1:5]
-          report = Path(report_path).read_text(encoding="utf-8").strip()
-          score = ""
-          if score_path and Path(score_path).is_file():
-              score = Path(score_path).read_text(encoding="utf-8").strip()
+          report_path, score_path, ai_funcs_score_path, run_url, marker = sys.argv[1:6]
 
-          parts = [
-              marker,
-              "### FTS Large Benchmark Score",
-              "",
-              "<pre>",
-              html.escape(score or "score output not found"),
-              "</pre>",
-              "",
-              "### FTS Large Benchmark Report",
-              "",
-              "<pre>",
-              html.escape(report),
-              "</pre>",
-              "",
-              f"[Workflow run]({run_url})",
-          ]
+          def read_optional(path):
+              if path and Path(path).is_file():
+                  return Path(path).read_text(encoding="utf-8").strip()
+              return ""
+
+          report = read_optional(report_path)
+          score = read_optional(score_path)
+          ai_funcs_score = read_optional(ai_funcs_score_path)
+
+          parts = [marker]
+          if ai_funcs_score:
+              parts += [
+                  "### Document AI & IK Custom Dictionary Score",
+                  "",
+                  "<pre>",
+                  html.escape(ai_funcs_score),
+                  "</pre>",
+                  "",
+              ]
+          if report:
+              parts += [
+                  "### FTS Large Benchmark Score",
+                  "",
+                  "<pre>",
+                  html.escape(score or "score output not found"),
+                  "</pre>",
+                  "",
+                  "### FTS Large Benchmark Report",
+                  "",
+                  "<pre>",
+                  html.escape(report),
+                  "</pre>",
+                  "",
+              ]
+          parts.append(f"[Workflow run]({run_url})")
           body = "\n".join(parts)
           print(json.dumps({"body": body}, ensure_ascii=False))
           PY
