@@ -1330,7 +1330,6 @@ public:
   TO_STRING_KV(
                
                K_(table_id),
-               K_(consumer_group_id),
                
                K_(session_id),
                K_(parallelism),
@@ -1346,7 +1345,6 @@ public:
     ObDDLArg(),
     
     table_id_(common::OB_INVALID_ID),
-    consumer_group_id_(0),
     session_id_(common::OB_INVALID_ID),
     ddl_type_(share::DDL_INVALID),
     ddl_stmt_str_(),
@@ -1366,7 +1364,6 @@ public:
   {
     
     table_id_ = common::OB_INVALID_ID;
-    consumer_group_id_ = 0;
     
     session_id_ = common::OB_INVALID_ID;
     ddl_type_ = share::DDL_INVALID;
@@ -1377,7 +1374,7 @@ public:
     foreign_key_checks_ = true;
   }
   int init(const uint64_t dest_tid,
-           const uint64_t table_id, const int64_t consumer_group_id, const uint64_t session_id,
+           const uint64_t table_id, const uint64_t session_id,
            const int64_t parallelism, const share::ObDDLType ddl_type,
            const ObSQLMode sql_mode, const ObTimeZoneInfo &tz_info,
            const common::ObString &local_nls_date, const common::ObString &local_nls_timestamp,
@@ -1386,7 +1383,6 @@ public:
            const bool foreign_key_checks);
   
   int64_t get_table_id() const { return table_id_; }
-  int64_t get_consumer_group_id() const { return consumer_group_id_; }
   
   uint64_t get_session_id() const { return session_id_; }
   uint64_t get_parallelism() const { return parallelism_; }
@@ -1403,7 +1399,6 @@ public:
 private:
   
   int64_t table_id_;
-  int64_t consumer_group_id_;
   
   uint64_t session_id_;
   uint64_t parallelism_;
@@ -2390,7 +2385,6 @@ public:
       nls_timestamp_tz_format_ = other.nls_timestamp_tz_format_;
       sql_mode_ = other.sql_mode_;
       inner_sql_exec_addr_ = other.inner_sql_exec_addr_;
-      consumer_group_id_ = other.consumer_group_id_;
       exist_all_column_group_ = other.exist_all_column_group_;
       vidx_refresh_info_ = other.vidx_refresh_info_;
       is_rebuild_index_ = other.is_rebuild_index_;

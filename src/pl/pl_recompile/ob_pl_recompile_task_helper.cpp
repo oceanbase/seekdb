@@ -21,7 +21,6 @@
 #include "pl/ob_pl.h"
 #include "lib/string/ob_sql_string.h"
 #include "lib/string/ob_string.h"
-#include "share/resource_manager/ob_resource_manager.h"
 
 namespace oceanbase
 {

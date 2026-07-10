@@ -104,7 +104,6 @@ int ObLobSplitParam::assign(const ObLobSplitParam &other)
     task_id_ = other.task_id_;
     source_table_id_ = other.source_table_id_;
     dest_schema_id_ = other.dest_schema_id_;
-    consumer_group_id_ = other.consumer_group_id_;
     split_sstable_type_ = other.split_sstable_type_;
     min_split_start_scn_ = other.min_split_start_scn_;
     if (OB_FAIL(new_lob_tablet_ids_.assign(other.new_lob_tablet_ids_))) {
@@ -148,7 +147,6 @@ int ObLobSplitParam::init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg)
     task_id_                = arg.task_id_;
     source_table_id_        = arg.source_table_id_;
     dest_schema_id_         = arg.dest_schema_id_;
-    consumer_group_id_      = arg.consumer_group_id_;
     split_sstable_type_     = arg.split_sstable_type_;
     parallelism_            = arg.parallel_datum_rowkey_list_.count() - 1;
     compaction_scn_         = arg.compaction_scn_;
@@ -178,7 +176,6 @@ int ObLobSplitParam::init(const obcall::ObTabletSplitArg &arg)
     task_id_                = arg.task_id_;
     source_table_id_        = arg.table_id_;
     dest_schema_id_         = arg.lob_table_id_;
-    consumer_group_id_      = arg.consumer_group_id_;
     split_sstable_type_     = arg.split_sstable_type_;
     parallelism_            = arg.parallel_datum_rowkey_list_.count() - 1;
     compaction_scn_         = arg.compaction_scn_;
@@ -407,7 +404,6 @@ int ObTabletLobSplitDag::init_by_param(const share::ObIDagInitParam *param)
   } else if (OB_FAIL(context_.init(param_))) {
     LOG_WARN("init failed", K(ret));
   } else {
-    consumer_group_id_ = tmp_param->consumer_group_id_;
     is_inited_ = true;
   }
   return ret;
@@ -2120,7 +2116,6 @@ int ObTabletLobSplitUtil::write_split_log(
       split_info.source_tablet_id_       = param->ori_lob_meta_tablet_id_;
       split_info.compaction_scn_         = param->compaction_scn_;
       split_info.data_format_version_    = param->data_format_version_;
-      split_info.consumer_group_id_      = param->consumer_group_id_;
       split_info.can_reuse_macro_block_  = false;
       split_info.split_sstable_type_     = param->split_sstable_type_;
       if (OB_FAIL(split_info.lob_col_idxs_.assign(param->lob_col_idxs_))) {
@@ -2144,7 +2139,6 @@ int ObTabletLobSplitUtil::write_split_log(
       split_info.source_tablet_id_       = param->source_tablet_id_;
       split_info.compaction_scn_         = param->compaction_scn_;
       split_info.data_format_version_    = param->data_format_version_;
-      split_info.consumer_group_id_      = param->consumer_group_id_;
       split_info.can_reuse_macro_block_  = param->can_reuse_macro_block_;
       split_info.split_sstable_type_     = param->split_sstable_type_;
       // skip lob col idxs.

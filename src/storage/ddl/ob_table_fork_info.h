@@ -43,7 +43,6 @@ public:
       const int64_t fork_snapshot_version,
       const lib::Worker::CompatMode compat_mode,
       const int64_t data_format_version,
-      const int64_t consumer_group_id,
       const common::ObIArray<common::ObTabletID> &source_tablet_ids,
       const common::ObIArray<common::ObTabletID> &dest_tablet_ids);
   ~ObTableForkInfo() = default;
@@ -54,7 +53,7 @@ public:
   TO_STRING_KV(K_(ls_id), K_(table_id), K_(schema_version), K_(task_id),
                K_(source_tablet_ids), K_(dest_tablet_ids),
                K_(fork_snapshot_version), K_(compat_mode),
-               K_(data_format_version), K_(consumer_group_id));
+               K_(data_format_version));
 public:
   
   share::ObLSID ls_id_;
@@ -66,11 +65,9 @@ public:
   int64_t fork_snapshot_version_;
   lib::Worker::CompatMode compat_mode_;
   int64_t data_format_version_;
-  int64_t consumer_group_id_;
 };
 
 } // namespace storage
 } // namespace oceanbase
 
 #endif // OCEANBASE_STORAGE_DDL_OB_TABLE_FORK_INFO_H_
-

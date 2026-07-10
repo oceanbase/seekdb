@@ -111,7 +111,6 @@ int ObDropMLogExecutor::execute(ObExecContext &ctx, ObDropMLogStmt &stmt)
   }  else if ((OB_INVALID_ID == drop_index_arg.session_id_)
       && FALSE_IT(drop_index_arg.session_id_ = my_session->get_sessid_for_table())) {
     //impossible
-  } else if (FALSE_IT(drop_index_arg.consumer_group_id_ = THIS_WORKER.get_group_id())) {
   } else if (FALSE_IT(drop_index_arg.is_add_to_scheduler_ = true)) {
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(drop_index_arg, drop_index_res); }))) {
     LOG_WARN("rpc proxy drop index failed", "dst", GCTX.self_addr(), KR(ret));

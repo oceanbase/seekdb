@@ -1824,7 +1824,6 @@ void ObSqlNio::run(int64_t idx)
 {
   if (NULL != impl_) {
     lib::set_thread_name("sql_nio", idx);
-    // SET_GROUP_ID(OBCG_SQL_NIO);
     while(!has_set_stop() && !(OB_NOT_NULL(&lib::Thread::current()) ? lib::Thread::current().has_set_stop() : false)) {
       impl_[idx].do_work();
     }

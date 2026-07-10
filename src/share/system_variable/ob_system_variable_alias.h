@@ -197,7 +197,6 @@ namespace share
   static const char* const OB_SV__FORCE_PARALLEL_DML_DOP = "_force_parallel_dml_dop";
   static const char* const OB_SV_PL_BLOCK_TIMEOUT = "ob_pl_block_timeout";
   static const char* const OB_SV_TRANSACTION_READ_ONLY = "transaction_read_only";
-  static const char* const OB_SV_RESOURCE_MANAGER_PLAN = "resource_manager_plan";
   static const char* const OB_SV_PERFORMANCE_SCHEMA = "performance_schema";
   static const char* const OB_SV__OB_PROXY_SESSION_TEMPORARY_TABLE_USED = "_ob_proxy_session_temporary_table_used";
   static const char* const OB_SV__ENABLE_PARALLEL_DDL = "_enable_parallel_ddl";

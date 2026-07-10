@@ -53,7 +53,6 @@ int ObCreateDatabaseExecutor::execute(ObExecContext &ctx, ObCreateDatabaseStmt &
      SQL_ENG_LOG(WARN, "fail to get first stmt" , K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
-    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(ctx.get_physical_plan_ctx())) {
@@ -141,7 +140,6 @@ int ObAlterDatabaseExecutor::execute(ObExecContext &ctx, ObAlterDatabaseStmt &st
      SQL_ENG_LOG(WARN, "fail to get first stmt" , K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
-    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -191,7 +189,6 @@ int ObDropDatabaseExecutor::execute(ObExecContext &ctx, ObDropDatabaseStmt &stmt
      SQL_ENG_LOG(WARN, "fail to get first stmt" , K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
-    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -253,7 +250,6 @@ int ObFlashBackDatabaseExecutor::execute(ObExecContext &ctx, ObFlashBackDatabase
      SQL_ENG_LOG(WARN, "fail to get first stmt" , K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
-    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -284,7 +280,6 @@ int ObPurgeDatabaseExecutor::execute(ObExecContext &ctx, ObPurgeDatabaseStmt &st
      SQL_ENG_LOG(WARN, "fail to get first stmt" , K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
-    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -320,7 +315,6 @@ int ObForkDatabaseExecutor::execute(ObExecContext &ctx, ObForkDatabaseStmt &stmt
   } else {
     // Fillin ddl params.
     tmp_arg.ddl_stmt_str_ = first_stmt;
-    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
     tmp_arg.session_id_ = my_session->get_sessid_for_table();
 
     ObTaskExecutorCtx *task_exec_ctx = NULL;

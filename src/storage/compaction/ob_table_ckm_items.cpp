@@ -21,7 +21,6 @@
 #include "share/schema/ob_multi_version_schema_service.h"  // previously hidden behind a transitive include
 #include "share/ob_force_print_log.h"  // FLOG_*, previously hidden behind a transitive include
 #include "rootserver/freeze/ob_major_merge_progress_util.h"
-#include "share/resource_manager/ob_cgroup_ctrl.h"
 #ifdef ERRSIM
 #endif
 namespace oceanbase

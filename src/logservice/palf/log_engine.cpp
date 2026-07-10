@@ -658,7 +658,6 @@ int LogEngine::read_group_entry_header(const LSN &lsn, LogGroupEntryHeader &log_
   int64_t out_read_size = 0;
   int64_t pos = 0;
   LogIOContext io_ctx(palf_id_, LogIOUser::META_INFO);
-  CONSUMER_GROUP_FUNC_GUARD(io_ctx.get_function_type());
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -1379,7 +1378,6 @@ int LogEngine::construct_log_meta_(const LSN &lsn, block_id_t &expected_next_blo
   ReadBuf &read_buf = guard.read_buf_;
   LogMetaEntry meta_entry;
   LogIOContext io_ctx(palf_id_, LogIOUser::RESTART);
-  CONSUMER_GROUP_FUNC_GUARD(io_ctx.get_function_type());
 
   if (false == lsn.is_valid()) {
     PALF_LOG(INFO, "there is no meta entry, maybe create palf failed", K(ret), K_(palf_id), K_(is_inited));

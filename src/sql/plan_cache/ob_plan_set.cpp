@@ -627,10 +627,6 @@ int ObPlanSet::init_new_set(const ObPlanCacheCtx &pc_ctx,
     is_cli_return_rowid_ = session_info->is_client_return_rowid();
     //add param info
     params_info_.reset();
-    // set variables for resource map rule
-    // if rule changed, plan cache will be flush.
-    resource_map_rule_.deep_copy(pc_ctx.sql_ctx_.resource_map_rule_, alloc_);
-
     if (OB_FAIL(init_pre_calc_exprs(plan, pc_alloc_))) {
       LOG_WARN("failed to init pre calc exprs", K(ret));
     } else if (OB_FAIL(params_info_.reserve(plan.get_params_info().count()))) {

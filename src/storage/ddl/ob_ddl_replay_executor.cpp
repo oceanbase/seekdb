@@ -933,7 +933,6 @@ int ObSplitStartReplayExecutor::prepare_param_from_log(
     param.source_tablet_id_    = info.source_tablet_id_;
     param.compaction_scn_      = info.compaction_scn_;
     param.data_format_version_ = info.data_format_version_;
-    param.consumer_group_id_   = info.consumer_group_id_;
     param.can_reuse_macro_block_ = info.can_reuse_macro_block_;
     param.split_sstable_type_    = info.split_sstable_type_;
     param.user_parallelism_    = info.parallel_datum_rowkey_list_.count() - 1;
@@ -970,7 +969,6 @@ int ObSplitStartReplayExecutor::prepare_param_from_log(
     param.ori_lob_meta_tablet_id_ = info.source_tablet_id_;
     param.compaction_scn_         = info.compaction_scn_;
     param.data_format_version_    = info.data_format_version_;
-    param.consumer_group_id_      = info.consumer_group_id_;
     // skip can_reuse_macro_block
     param.split_sstable_type_     = info.split_sstable_type_;
     param.parallelism_            = info.parallel_datum_rowkey_list_.count() - 1;

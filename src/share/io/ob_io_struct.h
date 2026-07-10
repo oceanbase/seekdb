@@ -529,22 +529,6 @@ private:
   ObIOMemStat sys_mem_stat_;
   ObIOMemStat mem_stat_;
 };
-struct ObIOFuncUsageByMode : ObIOGroupUsage
-{
-};
-typedef ObSEArray<ObIOFuncUsageByMode, static_cast<uint8_t>(ObIOGroupMode::MODECNT)> ObIOFuncUsage;
-typedef ObSEArray<ObIOFuncUsage, static_cast<uint8_t>(share::ObFunctionType::MAX_FUNCTION_NUM)> ObIOFuncUsageArr;
-struct ObIOFuncUsages
-{
-public:
-  ObIOFuncUsages();
-  ~ObIOFuncUsages() = default;
-  int init();
-  int accumulate(ObIORequest &req);
-  TO_STRING_KV(K(func_usages_));
-  ObIOFuncUsageArr func_usages_;
-};
-
 // Device Health status
 enum ObDeviceHealthStatus
 {

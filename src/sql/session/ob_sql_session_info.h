@@ -41,7 +41,6 @@
 #include "sql/monitor/ob_exec_stat.h"
 #include "share/rc/ob_tenant_base.h"
 #include "share/rc/ob_context.h"
-#include "share/resource_manager/ob_cgroup_ctrl.h"
 #include "sql/ob_optimizer_trace_impl.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
@@ -1159,10 +1158,6 @@ public:
     next_client_ps_stmt_id_ = 0;
   }
 
-  int64_t get_expect_group_id() const { return expect_group_id_; }
-  void set_expect_group_id(int64_t group_id) { expect_group_id_ = group_id; }
-	bool get_group_id_not_expected() const { return group_id_not_expected_; }
-  void set_group_id_not_expected(bool value) { group_id_not_expected_ = value; }
   int is_force_temp_table_inline(bool &force_inline) const;
   int is_force_temp_table_materialize(bool &force_materialize) const;
   int is_temp_table_transformation_enabled(bool &transformation_enabled) const;
@@ -1609,10 +1604,6 @@ private:
   //and remove the record when the SQL execution ends
   //in order to access exec ctx through session during SQL execution
   ObExecContext *cur_exec_ctx_;
-  int64_t expect_group_id_;
-  // When try packet retry failed, set this flag true and retry at current thread.
-  // This situation is unexpected and will report a warning to user.
-  bool group_id_not_expected_;
   ObOptimizerTraceImpl optimizer_tracer_;
   int64_t vid_;
   char vip_buf_[MAX_IP_ADDR_LENGTH];

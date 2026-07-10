@@ -19,7 +19,6 @@
 #include "observer/omt/ob_tenant_mtl_helper.h"  // get_mtl_ptr real user(dual MTL framework definitions, header already legalized as conf L2)
 #include "share/rc/ob_module_provider.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
-#include "share/resource_manager/ob_cgroup_ctrl.h"
 #include "share/schema/ob_schema_struct.h"
 #include "lib/resource/ob_affinity_ctrl.h"
 #include "share/ob_server_struct.h"
@@ -90,7 +89,6 @@ ObTenantBase::ObTenantBase(const int64_t epoch, bool enable_tenant_ctx_check)
     unit_min_cpu_(0),
     unit_memory_size_(0),
     switchover_epoch_(0),
-    cgroups_(nullptr),
     enable_tenant_ctx_check_(enable_tenant_ctx_check),
     thread_count_(0),
     marked_prepare_gc_ts_(0)
@@ -122,7 +120,7 @@ public:
   }
 };
 // TODO parameters to be adjusted
-int ObTenantBase::init(ObCgroupCtrl *cgroup)
+int ObTenantBase::init()
 {
   int ret = OB_SUCCESS;
 
@@ -135,11 +133,6 @@ int ObTenantBase::init(ObCgroupCtrl *cgroup)
   } else if (OB_FAIL(thread_dynamic_factor_map_.create(1024, attr))) {
     LOG_WARN("fail to create thread dynamic_factor_map", K(ret));
   } else {
-    if (cgroup == nullptr) {
-      LOG_WARN("ObTenantBase init cgroup is null");
-    } else {
-      cgroups_ = cgroup;
-    }
     inited_ = true;
   }
 
@@ -162,15 +155,6 @@ void ObTenantBase::destroy()
   inited_ = false;
 }
 
-
-
-ObCgroupCtrl *ObTenantBase::get_cgroup()
-{
-  ObCgroupCtrl *cgroup_ctrl = nullptr;
-  cgroup_ctrl = cgroups_;
-  return cgroup_ctrl;
-}
-
 int ObTenantBase::pre_run()
 {
   int ret = OB_SUCCESS;
@@ -187,14 +171,7 @@ int ObTenantBase::pre_run()
   if (GCONF._enable_numa_aware && OB_NUMA_SHARED_INDEX == AFFINITY_CTRL.get_tls_node()) {
     AFFINITY_CTRL.thread_bind_to_node(thread_count_);
   }
-  // register in tenant cgroup without modifying group_id
-  ObCgroupCtrl *cgroup_ctrl = get_cgroup();
-  if (OB_NOT_NULL(cgroup_ctrl) && cgroup_ctrl->is_valid()) {
-    // add thread to tenant OBCG_DEFAULT cgroup
-    ret = cgroup_ctrl->add_self_to_cgroup_();
-  }
-
-  LOG_INFO("tenant thread pre_run", K(ret), K(thread_count_), K(GET_GROUP_ID()));
+  LOG_INFO("tenant thread pre_run", K(ret), K(thread_count_), K(0));
   return ret;
 }
 
@@ -207,7 +184,7 @@ int ObTenantBase::end_run()
     thread_list_.remove(node);
   }
   ATOMIC_DEC(&thread_count_);
-  LOG_INFO("tenant thread end_run", K(ret), K(thread_count_), K(GET_GROUP_ID()));
+  LOG_INFO("tenant thread end_run", K(ret), K(thread_count_), K(0));
   return ret;
 }
 

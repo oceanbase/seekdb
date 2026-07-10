@@ -121,7 +121,6 @@ struct ObPrepareAlterTableArgParam final
 {
 public:
   ObPrepareAlterTableArgParam() :
-    consumer_group_id_(0),
     session_id_(common::OB_INVALID_ID),
     sql_mode_(0),
     tz_info_wrap_(),
@@ -130,8 +129,7 @@ public:
     foreign_key_checks_(true)
   {}
   ~ObPrepareAlterTableArgParam() = default;
-  int init(const int64_t consumer_group_id,
-          const uint64_t session_id,
+  int init(const uint64_t session_id,
           const ObSQLMode &sql_mode,
           const ObString &ddl_stmt_str,
           const ObString &orig_table_name,
@@ -148,8 +146,7 @@ public:
             !target_database_name_.empty();
   }
   int set_nls_formats(const common::ObString *nls_formats);
-  TO_STRING_KV(K_(consumer_group_id),
-                K_(session_id),
+  TO_STRING_KV(K_(session_id),
                 K_(sql_mode),
                 K_(ddl_stmt_str),
                 K_(orig_table_name),
@@ -159,7 +156,6 @@ public:
                 "nls_formats", common::ObArrayWrap<ObString>(nls_formats_, common::ObNLSFormatEnum::NLS_MAX),
                 K_(foreign_key_checks));
 public:
-  int64_t consumer_group_id_;
   uint64_t session_id_;
   ObSQLMode sql_mode_;
   common::ObString ddl_stmt_str_;
@@ -415,7 +411,6 @@ private:
       const share::schema::ObTableSchema *index_schema,
       const int64_t parallelism,
       const int64_t parent_task_id,
-      const int64_t consumer_group_id,
       const int32_t sub_task_trace_id,
       const obcall::ObCreateIndexArg *create_index_arg,
       const share::ObDDLType task_type,
@@ -430,7 +425,6 @@ private:
       const share::schema::ObTableSchema *index_schema,
       const int64_t parallelism,
       const int64_t parent_task_id,
-      const int64_t consumer_group_id,
       const uint64_t tenant_data_version,
       const obcall::ObCreateIndexArg *create_index_arg,
       ObIAllocator &allocator,
@@ -443,7 +437,6 @@ private:
       const share::schema::ObTableSchema *index_schema,
       const int64_t parallelism,
       const int64_t parent_task_id,
-      const int64_t consumer_group_id,
       const share::ObDDLType task_type,
       const obcall::ObCreateIndexArg *create_index_arg,
       const uint64_t tenant_data_version,
@@ -455,7 +448,6 @@ private:
       const share::schema::ObTableSchema *index_schema,
       const int64_t parallelism,
       const int64_t parent_task_id,
-      const int64_t consumer_group_id,
       const obcall::ObCreateIndexArg *create_index_arg,
       const uint64_t tenant_data_version,
       ObIAllocator &allocator,
@@ -470,7 +462,6 @@ private:
       const int64_t schema_version,
       const obcall::ObAlterTableArg *arg,
       const int64_t parent_task_id,
-      const int64_t consumer_group_id,
       const int32_t sub_task_trace_id,
       ObIAllocator &allocator,
       ObDDLTaskRecord &task_record);
@@ -479,7 +470,6 @@ private:
       const share::schema::ObTableSchema *mlog_schema,
       const int64_t parallelism,
       const int64_t parent_task_id,
-      const int64_t consumer_group_id,
       const obcall::ObMViewCompleteRefreshArg *mview_complete_refresh_arg,
       ObIAllocator &allocator,
       ObDDLTaskRecord &task_record);
@@ -489,7 +479,6 @@ private:
       const share::schema::ObTableSchema *src_schema,
       const share::schema::ObTableSchema *dest_schema,
       const int64_t parallelism,
-      const int64_t consumer_group_id,
       const int64_t parent_task_id,
       const int64_t task_id,
       const int32_t sub_task_trace_id,
@@ -505,7 +494,6 @@ private:
       const ObTableSchema *src_schema,
       const ObTableSchema *dest_schema,
       const int64_t parallelism,
-      const int64_t consumer_group_id,
       const int64_t task_id,
       const int32_t sub_task_trace_id,
       const obcall::ObAlterTableArg *alter_table_arg,
@@ -519,7 +507,6 @@ private:
       const share::schema::ObTableSchema *src_schema,
       const share::schema::ObTableSchema *dest_schema,
       const int64_t parallelism,
-      const int64_t consumer_group_id,
       const int64_t task_id,
       const int32_t sub_task_trace_id,
       const obcall::ObAlterTableArg *alter_table_arg,
@@ -531,7 +518,6 @@ private:
       common::ObISQLClient &proxy,
       const int64_t table_id,
       const int64_t schema_version,
-      const int64_t consumer_group_id,
       const int64_t task_id,
       const int32_t sub_task_trace_id,
       const obcall::ObAlterTableArg *alter_table_arg,
@@ -544,7 +530,6 @@ private:
       const ObTableSchema *index_schema,
       const int64_t parallelism,
       const int64_t parent_task_id,
-      const int64_t consumer_group_id,
       const int32_t sub_task_trace_id,
       const obcall::ObRebuildIndexArg *rebuild_index_arg,
       const uint64_t tenant_data_version,
@@ -556,7 +541,6 @@ private:
       const share::ObDDLType &ddl_type,
       const share::schema::ObTableSchema *index_schema,
       const int64_t parent_task_id,
-      const int64_t consumer_group_id,
       const int32_t sub_task_trace_id,
       const obcall::ObDropIndexArg *drop_index_arg,
       ObIAllocator &allocator,
@@ -566,7 +550,6 @@ private:
       common::ObISQLClient &proxy,
       const share::schema::ObTableSchema *index_schema,
       const int64_t schema_version,
-      const int64_t consumer_group_id,
       const share::schema::ObTableSchema *rowkey_doc_schema,
       const share::schema::ObTableSchema *doc_rowkey_schema,
       const share::schema::ObTableSchema *domain_index_schema,
@@ -579,7 +562,6 @@ private:
       common::ObISQLClient &proxy,
       const share::schema::ObTableSchema *index_schema,
       const int64_t schema_version,
-      const int64_t consumer_group_id,
       const share::ObDDLType task_type,
       const share::schema::ObTableSchema *centroid_schema_,
       const share::schema::ObTableSchema *cid_vector_schema_,
@@ -596,7 +578,6 @@ private:
       common::ObISQLClient &proxy,
       const share::schema::ObTableSchema *index_schema,
       const int64_t schema_version,
-      const int64_t consumer_group_id,
       const share::schema::ObTableSchema *vid_rowkey_schema_,
       const share::schema::ObTableSchema *rowkey_vid_schema_,
       const share::schema::ObTableSchema *domain_index_schema,

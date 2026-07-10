@@ -297,8 +297,6 @@ public:
   {
     return is_inited_;
   }
-  int modify_group_io_config(const uint64_t index, const int64_t min_percent,
-      const int64_t max_percent, const int64_t weight_percent);
   ObTrafficControl &get_tc()
   {
     return tc_;
@@ -373,29 +371,14 @@ public:
   int calc_io_memory(const int64_t memory);
   int init_memory_pool(const int64_t memory);
   int update_memory_pool(const int64_t memory);
-  int modify_group_io_config(const uint64_t index,
-                             const int64_t min_percent,
-                             const int64_t max_percent,
-                             const int64_t weight_percent,
-                             const bool deleted = false,
-                             const bool cleared = false);
-
-  //for modify group config
-  //for delete plan
-  //for delete directive
-  //for delete group
-  //Refresh periodically with directive refresh (at most once every 10S)
-  int refresh_group_io_config();
   const ObTenantIOConfig &get_io_config();
   int64_t get_group_num();
   int64_t get_ref_cnt() { return ATOMIC_LOAD(&ref_cnt_); }
   ObIOAllocator *get_tenant_io_allocator() { return &io_allocator_; }
   int print_io_status();
-  int print_io_function_status();
   void inc_ref();
   void dec_ref();
   int get_throttled_time(uint64_t group_id, int64_t &throttled_time);
-  const ObIOFuncUsages& get_io_func_infos();
   OB_INLINE int64_t get_object_storage_io_timeout_ms() const { return io_config_.param_config_.object_storage_io_timeout_ms_; }
 
   TO_STRING_KV(K(is_inited_), K(ref_cnt_), K(io_memory_limit_), K(request_count_), K(result_count_),
@@ -417,7 +400,6 @@ private:
   ObIOUsage io_usage_;            // user group usage
   ObIOUsage io_sys_usage_;        // sys group usage
   ObIOMemStats io_mem_stats_;     // Group Level: IO memory monitor
-  ObIOFuncUsages io_func_infos_;  // Tenant Level: IO function group usage monitor
   DRWLock io_config_lock_;                                      // for map and config
   hash::ObHashMap<ObIOGroupKey, uint64_t> group_id_index_map_;  // key:group_id, value:index
   ObTenantIOSchedulerV2 qsched_;

@@ -70,7 +70,6 @@ typedef common::ObSEArray<common::ObSpatialMBR, 1> ObMbrFilterArray;
 class ObSelectStmt;
 class ObConstRawExpr;
 class ObColumnRefRawExpr;
-struct ObPCResourceMapRule;
 class ObResolverParams;
 class ObGlobalHint;
 class ObSqlSchemaGuard;
@@ -623,26 +622,6 @@ public:
   *  That is the time correctly set by the processor of the RPC
   ------------------------*/
   static void adjust_time_by_ntp_offset(int64_t &dst_timeout_ts);
-
-  static int check_sql_map_expected_resource_group(const ObSqlCtx &context,
-                                            const ObResultSet &result,
-                                            const ObResolverParams *resolve_ctx, 
-                                            const ObStmt *stmt, 
-                                            ObPCResourceMapRule &resource_map_rule);
-
-
-  static int recursive_check_equal_condition(const ObResolverParams *resolve_ctx,
-                                      const ObStmt *stmt,
-                                      const ObRawExpr &expr,
-                                      ObPCResourceMapRule &resource_map_rule,
-                                      uint64_t &group_id);
-
-  static int check_column_with_res_mapping_rule(const ObResolverParams *resolve_ctx,
-                                                const ObStmt *stmt,
-                                                const ObColumnRefRawExpr *col_expr,
-                                                const ObConstRawExpr *const_expr,
-                                                ObPCResourceMapRule &resource_map_rule,
-                                                uint64_t &group_id);
 
   static int async_recompile_view(const share::schema::ObTableSchema &old_view_schema,
                                   ObSelectStmt *select_stmt,

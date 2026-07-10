@@ -62,7 +62,7 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
     } else {
       // Set task_info to OB_TASK_STATE_RUNNING state, which may be used for retries later
       task_info->set_state(OB_TASK_STATE_RUNNING);
-      const int32_t group_id = OB_INVALID_ID == session->get_expect_group_id() ? 0 : session->get_expect_group_id();
+      const int32_t group_id = 0;
       ObExecutorRpcCtx rpc_ctx(plan_ctx->get_timeout_timestamp(),
                                query_ctx.get_task_exec_ctx().get_min_cluster_version(),
                                retry_info,

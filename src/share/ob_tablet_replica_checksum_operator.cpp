@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_tablet_replica_checksum_operator.h"
-#include "share/resource_manager/ob_cgroup_ctrl.h"  // OBCG_DEFAULT, previously hidden behind the scheduler include chain(free within share)
 #include "share/rc/ob_module_provider.h"
 #include "share/storage/ob_tablet_replica_checksum_table_storage.h"
 #include "share/storage/ob_sqlite_connection.h"
@@ -919,7 +918,7 @@ int ObTabletReplicaChecksumOperator::get_tablet_replica_checksum_items(ObMySQLPr
     LOG_WARN("invalid argument", KR(ret));
   } else if (OB_FAIL(batch_get(tablet_pairs, compaction_scn,
         sql_proxy, items, false/*include_larger_than*/,
-        share::OBCG_DEFAULT))) {
+        0))) {
     LOG_WARN("fail to batch get tablet checksum item", KR(ret), K(compaction_scn),
       "pairs_count", tablet_pairs.count());
   } else if (items.get_tablet_cnt() < tablet_pairs.count()) {

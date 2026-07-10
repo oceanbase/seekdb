@@ -44,7 +44,6 @@
 
 #include "observer/mysql/ob_diag.h"
 
-#include "share/resource_manager/ob_cgroup_ctrl.h"
 #include "observer/omt/ob_multi_tenant.h"
 #include "observer/omt/ob_worker_processor.h"
 #include "share/rc/ob_module_provider.h"   // ObIModuleProvider / g_mp (ObServer owns modules)
@@ -366,9 +365,6 @@ private:
   ObVirtualDataAccessService vt_data_service_;
   // Weakly Consistent Read Service
   // blacklist service
-  // Tenant isolation resource management
-  share::ObCgroupCtrl cgroup_ctrl_;
-
   //observer start time
   int64_t start_time_;
   int64_t warm_up_start_time_;

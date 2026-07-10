@@ -18,7 +18,6 @@
 #include "ob_plan_cache_value.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/plan_cache/ob_pcv_set.h"
-#include "share/resource_manager/ob_resource_manager.h"
 #include "sql/plan_cache/ob_values_table_compression.h"
 
 using namespace oceanbase::share::schema;
@@ -520,63 +519,6 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
               SQL_PC_LOG(TRACE, "failed to select plan in plan set", K(ret));
             }
           } else if (NULL != params) {
-            if (pc_ctx.sql_ctx_.enable_sql_resource_manage_) {
-              uint64_t rule_id = plan_set->resource_map_rule_.get_res_map_rule_id();
-              int64_t param_idx = plan_set->resource_map_rule_.get_res_map_rule_param_idx();
-              if (plan_set->resource_map_rule_.use_hint_control_resource()
-                  || (rule_id != OB_INVALID_ID && param_idx != OB_INVALID_INDEX)) {
-                uint64_t final_choosed_group_id = OB_INVALID_ID;
-                // 1. check hint first
-                if (plan_set->resource_map_rule_.use_hint_control_resource()) {
-                } else {
-                  // 2. check col res map rule
-                  
-                  ObString param_text;
-                  ObCollationType cs_type = CS_TYPE_INVALID;
-                  if (OB_UNLIKELY(param_idx < 0 || param_idx >= params->count())) {
-                    ret = OB_ERR_UNEXPECTED;
-                    LOG_ERROR("unexpected res map rule param idx", K(ret), K(rule_id), K(param_idx),
-                              K(params->count()));
-                  } else if (OB_FAIL(session->get_collation_connection(cs_type))) {
-                    LOG_WARN("get collation connection failed", K(ret));
-                  } else if (OB_FAIL(ObObjCaster::get_obj_param_text(
-                               params->at(param_idx), pc_ctx.raw_sql_, pc_ctx.allocator_, cs_type,
-                               param_text))) {
-                    LOG_WARN("get obj param text failed", K(ret));
-                  } else {
-                    final_choosed_group_id = 0;
-                  }
-                }
-                // 3.use default resource group if not match any resource group
-                // OB_INVALID_ID means current neither
-                // resource group specified by hint
-                // nor
-                // user+param_value column rule
-                // is in used
-                // get group_id according to current user.
-                if (OB_SUCC(ret) && OB_INVALID_ID == final_choosed_group_id) {
-                  final_choosed_group_id = 0;
-                }
-                if (OB_SUCC(ret)) {
-                  if (final_choosed_group_id == THIS_WORKER.get_group_id()) {
-                    // do nothing if equals to current group id.
-                  } else if (session->get_is_in_retry()
-                             && OB_NEED_SWITCH_CONSUMER_GROUP
-                                  == session->get_retry_info().get_last_query_retry_err()) {
-                    LOG_ERROR(
-                      "use unexpected group when retry, maybe set packet retry failed before",
-                      K(final_choosed_group_id), K(THIS_WORKER.get_group_id()),
-                      K(plan_set->resource_map_rule_));
-                  } else {
-                    session->set_expect_group_id(final_choosed_group_id);
-                    ret = OB_NEED_SWITCH_CONSUMER_GROUP;
-                  }
-                  LOG_TRACE("get expect rule id", K(ret), K(final_choosed_group_id),
-                            K(THIS_WORKER.get_group_id()), K(session->get_expect_group_id()),
-                            K(pc_ctx.raw_sql_));
-                }
-              }
-            }
             break; // this place is recommended to keep, if removed, additional markers need to be added in for() to judge, and the macro above the for loop should not be used;
           }
         }

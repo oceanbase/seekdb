@@ -691,7 +691,6 @@ ObIDag::ObIDag(const ObDagType::ObDagTypeEnum type)
     dag_ret_(OB_SUCCESS),
     add_time_(0),
     start_time_(0),
-    consumer_group_id_(USER_RESOURCE_OTHER_GROUP_ID),
     error_location_(),
     allocator_(nullptr),
     is_inited_(false),
@@ -777,7 +776,6 @@ void ObIDag::clear_task_list()
 void ObIDag::clear_running_info()
 {
   start_time_ = 0;
-  consumer_group_id_ = USER_RESOURCE_OTHER_GROUP_ID;
   running_task_cnt_ = 0;
   max_concurrent_task_cnt_ = INT64_MAX;
   dag_status_ = ObDagStatus::DAG_STATUS_INITING;
@@ -1183,7 +1181,7 @@ int64_t ObIDag::to_string(char *buf, const int64_t buf_len) const
   } else {
     J_OBJ_START();
     J_KV(KP(this), K_(is_inited), K_(type), "name", get_dag_type_str(type_), K_(id), KPC_(dag_net), K_(dag_ret), K_(dag_status),
-        K_(add_time), K_(start_time), K_(running_task_cnt), K_(max_concurrent_task_cnt), K_(indegree), K_(consumer_group_id), "hash", hash(), K(task_list_.get_size()),
+        K_(add_time), K_(start_time), K_(running_task_cnt), K_(max_concurrent_task_cnt), K_(indegree), "hash", hash(), K(task_list_.get_size()),
         K_(emergency), K_(retry_strategy), K_(is_stop), K_(is_independent));
     J_OBJ_END();
   }
@@ -1918,7 +1916,6 @@ ObTenantDagWorker::ObTenantDagWorker()
     status_(DWS_FREE),
     check_period_(0),
     last_check_time_(0),
-    function_type_(ObFunctionType::DEFAULT_FUNCTION),
     tg_id_(-1),
     hold_by_compaction_dag_(false),
     is_inited_(false)
@@ -1988,7 +1985,6 @@ void ObTenantDagWorker::reset()
   status_ = DWS_FREE;
   check_period_ = 0;
   last_check_time_ = 0;
-  function_type_ = ObFunctionType::DEFAULT_FUNCTION;
   self_ = NULL;
   is_inited_ = false;
   TG_DESTROY(tg_id_);
@@ -2070,7 +2066,6 @@ void ObTenantDagWorker::run1()
 
       if (OB_SUCC(ret)) {
         ObDIActionGuard di_action_guard("DAG", dag->get_dag_module_str(dag->get_type()), dag->get_dag_type_str(dag->get_type()));
-        CONSUMER_GROUP_ID_GUARD(dag->get_consumer_group_id());
         ObDagId dag_id = dag->get_dag_id();
         if (task_->get_sub_task_id() > 0) {
           dag_id.set_sub_id(task_->get_sub_task_id());
@@ -2091,7 +2086,6 @@ void ObTenantDagWorker::run1()
           } else {
             THIS_WORKER.set_log_reduction_mode(LogReductionMode::NONE);
           }
-          CONSUMER_GROUP_FUNC_GUARD(function_type_);
           if (OB_FAIL(task_->do_work())) {
             if (!dag->ignore_warning()) {
               COMMON_LOG(WARN, "failed to do work", K(ret), K(*task_), K(compat_mode));
@@ -5230,11 +5224,6 @@ int ObTenantDagScheduler::dispatch_task(ObITask &task, ObTenantDagWorker *&ret_w
       if (OB_SUCC(ret)) {
         ret_worker = free_workers_.remove_first();
         ret_worker->set_task(&task);
-        if (is_valid_dag_priority(static_cast<ObDagPrio::ObDagPrioEnum>(priority))) {
-          ret_worker->set_function_type(OB_DAG_PRIOS[priority].function_type_);
-        } else {
-          ret_worker->set_function_type(ObFunctionType::DEFAULT_FUNCTION);
-        }
       }
     }
   }

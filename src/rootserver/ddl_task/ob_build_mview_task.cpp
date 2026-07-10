@@ -45,7 +45,6 @@ int ObBuildMViewTask::init(
     const share::schema::ObTableSchema *mview_schema,
     const int64_t schema_version,
     const int64_t parallelism,
-    const int64_t consumer_group_id,
     const obcall::ObMViewCompleteRefreshArg &mview_complete_refresh_arg,
     const int64_t parent_task_id,
     const int64_t task_status,
@@ -89,7 +88,6 @@ int ObBuildMViewTask::init(
     task_id_ = task_id;
     parent_task_id_ = parent_task_id;
     task_version_ = OB_BUILD_MVIEW_TASK_VERSION;
-    consumer_group_id_ = consumer_group_id;
     start_time_ = now;
     data_format_version_ = tenant_data_format_version;
     task_status_ = static_cast<ObDDLTaskStatus>(task_status);

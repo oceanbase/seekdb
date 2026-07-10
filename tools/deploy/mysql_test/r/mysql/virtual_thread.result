@@ -5,7 +5,6 @@ tname	varchar(16)	NO		NULL
 latch_wait	varchar(16)	NO		NULL	
 latch_hold	varchar(256)	NO		NULL	
 trace_id	varchar(40)	NO		NULL	
-cgroup_path	varchar(256)	NO		NULL	
 numa_node	bigint(20)	NO		NULL	
 desc oceanbase.__all_virtual_thread;
 Field	Type	Null	Key	Default	Extra
@@ -14,7 +13,6 @@ tname	varchar(16)	NO		NULL
 latch_wait	varchar(16)	NO		NULL	
 latch_hold	varchar(256)	NO		NULL	
 trace_id	varchar(40)	NO		NULL	
-cgroup_path	varchar(256)	NO		NULL	
 numa_node	bigint(20)	NO		NULL	
 select count(1) from oceanbase.__all_virtual_thread where tname = "";
 count(1)

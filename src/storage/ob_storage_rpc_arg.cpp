@@ -439,7 +439,7 @@ OB_DEF_SERIALIZE(ObDDLBuildSingleReplicaRequestArg)
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE, ls_id_, source_tablet_id_, dest_tablet_id_,
     source_table_id_, dest_schema_id_, schema_version_, snapshot_version_, ddl_type_, task_id_, execution_id_,
-    parallelism_, tablet_task_id_, data_format_version_, consumer_group_id_,
+    parallelism_, tablet_task_id_, data_format_version_,
     dest_ls_id_, dest_schema_version_,
     compaction_scn_, can_reuse_macro_block_, split_sstable_type_,
     lob_col_idxs_, parallel_datum_rowkey_list_, is_no_logging_,
@@ -451,7 +451,7 @@ OB_DEF_DESERIALIZE(ObDDLBuildSingleReplicaRequestArg)
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, ls_id_, source_tablet_id_, dest_tablet_id_,
       source_table_id_, dest_schema_id_, schema_version_, snapshot_version_, ddl_type_, task_id_, execution_id_,
-      parallelism_, tablet_task_id_, data_format_version_, consumer_group_id_,
+      parallelism_, tablet_task_id_, data_format_version_,
       dest_ls_id_, dest_schema_version_,
       compaction_scn_, can_reuse_macro_block_, split_sstable_type_,
       lob_col_idxs_);
@@ -470,7 +470,7 @@ OB_DEF_SERIALIZE_SIZE(ObDDLBuildSingleReplicaRequestArg)
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN, ls_id_, source_tablet_id_, dest_tablet_id_,
     source_table_id_, dest_schema_id_, schema_version_, snapshot_version_, ddl_type_, task_id_, execution_id_,
-    parallelism_, tablet_task_id_, data_format_version_, consumer_group_id_,
+    parallelism_, tablet_task_id_, data_format_version_,
     dest_ls_id_, dest_schema_version_,
     compaction_scn_, can_reuse_macro_block_, split_sstable_type_,
     lob_col_idxs_, parallel_datum_rowkey_list_, is_no_logging_,
@@ -482,7 +482,7 @@ bool ObDDLBuildSingleReplicaRequestArg::is_valid() const
   bool is_valid = ls_id_.is_valid() && source_tablet_id_.is_valid() && dest_tablet_id_.is_valid()
                && OB_INVALID_ID != source_table_id_ && OB_INVALID_ID != dest_schema_id_
                && schema_version_ > 0 && snapshot_version_ > 0 && task_id_ > 0 && parallelism_ > 0
-               && tablet_task_id_ > 0 && data_format_version_ > 0 && consumer_group_id_ >= 0
+               && tablet_task_id_ > 0 && data_format_version_ > 0
                && dest_ls_id_.is_valid() && dest_schema_version_ > 0;
   return is_valid;
 }
@@ -512,7 +512,6 @@ int ObDDLBuildSingleReplicaRequestArg::assign(const ObDDLBuildSingleReplicaReque
     execution_id_ = other.execution_id_;
     tablet_task_id_ = other.tablet_task_id_;
     data_format_version_ = other.data_format_version_;
-    consumer_group_id_ = other.consumer_group_id_;
     compaction_scn_ = other.compaction_scn_;
     can_reuse_macro_block_ = other.can_reuse_macro_block_;
     split_sstable_type_ = other.split_sstable_type_;
@@ -551,7 +550,7 @@ bool ObTabletSplitArg::is_valid() const
       && schema_version_ > 0 && task_id_ > 0
       && source_tablet_id_.is_valid() && dest_tablets_id_.count() > 0
       && compaction_scn_ > 0
-      && data_format_version_ > 0 && consumer_group_id_ >= 0
+      && data_format_version_ > 0
       && split_sstable_type_ >= share::ObSplitSSTableType::SPLIT_BOTH
       && split_sstable_type_ <= share::ObSplitSSTableType::SPLIT_MINOR;
   if (!lob_col_idxs_.empty()) {
@@ -580,7 +579,6 @@ int ObTabletSplitArg::assign(const ObTabletSplitArg &other)
     source_tablet_id_      = other.source_tablet_id_;
     compaction_scn_        = other.compaction_scn_;
     data_format_version_   = other.data_format_version_;
-    consumer_group_id_     = other.consumer_group_id_;
     can_reuse_macro_block_ = other.can_reuse_macro_block_;
     split_sstable_type_    = other.split_sstable_type_;
     min_split_start_scn_   = other.min_split_start_scn_;
@@ -593,7 +591,7 @@ OB_DEF_SERIALIZE(ObTabletSplitArg)
   LST_DO_CODE(OB_UNIS_ENCODE, ls_id_, table_id_, lob_table_id_,
     schema_version_, task_id_, source_tablet_id_,
     dest_tablets_id_, compaction_scn_, data_format_version_,
-    consumer_group_id_, can_reuse_macro_block_, split_sstable_type_,
+    can_reuse_macro_block_, split_sstable_type_,
     lob_col_idxs_, parallel_datum_rowkey_list_, min_split_start_scn_);
   return ret;
 }
@@ -603,7 +601,7 @@ OB_DEF_DESERIALIZE(ObTabletSplitArg)
   LST_DO_CODE(OB_UNIS_DECODE, ls_id_, table_id_, lob_table_id_,
     schema_version_, task_id_, source_tablet_id_,
     dest_tablets_id_, compaction_scn_, data_format_version_,
-    consumer_group_id_, can_reuse_macro_block_, split_sstable_type_,
+    can_reuse_macro_block_, split_sstable_type_,
     lob_col_idxs_);
   if (FAILEDx(ObSplitUtil::deserializ_parallel_datum_rowkey(
       rowkey_allocator_, buf, data_len, pos, parallel_datum_rowkey_list_))) {
@@ -619,7 +617,7 @@ OB_DEF_SERIALIZE_SIZE(ObTabletSplitArg)
   LST_DO_CODE(OB_UNIS_ADD_LEN, ls_id_, table_id_, lob_table_id_,
     schema_version_, task_id_, source_tablet_id_,
     dest_tablets_id_, compaction_scn_, data_format_version_,
-    consumer_group_id_, can_reuse_macro_block_, split_sstable_type_,
+    can_reuse_macro_block_, split_sstable_type_,
     lob_col_idxs_, parallel_datum_rowkey_list_, min_split_start_scn_);
   return len;
 }

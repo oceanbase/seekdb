@@ -41,7 +41,6 @@ public:
       const ObVecIndexDDLChildTaskInfo &vec_index_snapshot_data,
       const ObVecIndexDDLChildTaskInfo &hybrid_embedded_vec,
       const int64_t schema_version,
-      const int64_t consumer_group_id,
       const uint64_t tenant_data_version,
       const obcall::ObDropIndexArg &drop_index_arg);
   int init(const ObDDLTaskRecord &task_record);

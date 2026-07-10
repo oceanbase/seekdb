@@ -561,7 +561,7 @@ ObTabletSplitInfo::ObTabletSplitInfo()
     table_id_(OB_INVALID_ID), lob_table_id_(OB_INVALID_ID),
     schema_version_(0), task_id_(0),
     source_tablet_id_(), dest_tablets_id_(), 
-    compaction_scn_(0), data_format_version_(0), consumer_group_id_(0),
+    compaction_scn_(0), data_format_version_(0),
     can_reuse_macro_block_(false),
     lob_col_idxs_(), parallel_datum_rowkey_list_()
 {
@@ -588,7 +588,6 @@ int ObTabletSplitInfo::assign(const ObTabletSplitInfo &info)
     source_tablet_id_    = info.source_tablet_id_;
     compaction_scn_      = info.compaction_scn_;
     data_format_version_ = info.data_format_version_;
-    consumer_group_id_   = info.consumer_group_id_;
     can_reuse_macro_block_ = info.can_reuse_macro_block_;
   }
   return ret;
@@ -600,7 +599,7 @@ bool ObTabletSplitInfo::is_valid() const
       && schema_version_ > 0 && task_id_ > 0
       && source_tablet_id_.is_valid() && dest_tablets_id_.count() > 0
       && compaction_scn_ > 0
-      && data_format_version_ > 0 && consumer_group_id_ >= 0
+      && data_format_version_ > 0
       && parallel_datum_rowkey_list_.count() > 0;
   if (!lob_col_idxs_.empty()) {
     is_valid = is_valid && (OB_INVALID_ID != lob_table_id_);
@@ -613,7 +612,7 @@ OB_DEF_SERIALIZE(ObTabletSplitInfo)
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE, table_id_, lob_table_id_, schema_version_, 
     task_id_, source_tablet_id_, dest_tablets_id_, 
-    compaction_scn_, data_format_version_, consumer_group_id_,
+    compaction_scn_, data_format_version_,
     can_reuse_macro_block_, split_sstable_type_, lob_col_idxs_,
     parallel_datum_rowkey_list_);
   return ret;
@@ -624,7 +623,7 @@ OB_DEF_DESERIALIZE(ObTabletSplitInfo)
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, table_id_, lob_table_id_, schema_version_, 
     task_id_, source_tablet_id_, dest_tablets_id_, 
-    compaction_scn_, data_format_version_, consumer_group_id_,
+    compaction_scn_, data_format_version_,
     can_reuse_macro_block_, split_sstable_type_, lob_col_idxs_);
   if (FAILEDx(ObSplitUtil::deserializ_parallel_datum_rowkey(
       rowkey_allocator_, buf, data_len, pos, parallel_datum_rowkey_list_))) {
@@ -638,7 +637,7 @@ OB_DEF_SERIALIZE_SIZE(ObTabletSplitInfo)
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN, table_id_, lob_table_id_, schema_version_, 
     task_id_, source_tablet_id_, dest_tablets_id_, 
-    compaction_scn_, data_format_version_, consumer_group_id_,
+    compaction_scn_, data_format_version_,
     can_reuse_macro_block_, split_sstable_type_, lob_col_idxs_,
     parallel_datum_rowkey_list_);
   return len;

@@ -168,7 +168,7 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
         ObDDLType::DDL_FORK_TABLE, &src_table_schema,
         dst_table_schema, src_table_schema.get_table_id(),
         dst_table_schema->get_schema_version(), 0 /* parallelism */,
-        0 /* consumer_group_id */, &allocator, &fork_table_arg,
+        &allocator, &fork_table_arg,
         0 /* parent task id*/);
     param.new_snapshot_version_ = fork_snapshot_version;
 

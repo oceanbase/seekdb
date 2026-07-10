@@ -36,7 +36,6 @@ public:
   virtual int fill_info_param(compaction::ObIBasicInfoParam *&out_param, ObIAllocator &allocator) const override;
   virtual int fill_dag_key(char *buf, const int64_t buf_len) const override;
   virtual lib::Worker::CompatMode get_compat_mode() const override { return compat_mode_; }
-  virtual uint64_t get_consumer_group_id() const override { return consumer_group_id_; }
   virtual bool is_ha_dag() const override { return false; }
 public:
   virtual int basic_init(ObIAllocator &allocator) final;

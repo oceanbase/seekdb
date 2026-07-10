@@ -91,7 +91,6 @@ class ObISQLConnection
 public:
   ObISQLConnection() :
        sessid_(-1),
-       consumer_group_id_(0),
        usable_(true),
        check_priv_(false)
   {}
@@ -176,8 +175,6 @@ public:
   virtual int64_t get_cluster_id() const { return common::OB_INVALID_ID; }
   virtual void set_user_timeout(int64_t user_timeout) { UNUSED(user_timeout); }
   virtual int64_t get_user_timeout() const { return 0; }
-  void set_group_id(const uint64_t v) {consumer_group_id_ = v; }
-  uint64_t get_group_id() const {return consumer_group_id_; }
   void set_usable(bool flag) { usable_ = flag; }
   bool usable() { return usable_; }
   virtual int ping() { return OB_SUCCESS; }
@@ -185,7 +182,6 @@ public:
   bool is_check_priv() { return check_priv_; }
 protected:
   uint32_t sessid_;
-  uint64_t consumer_group_id_; //for resource isolation
   bool usable_;  // usable_ = false: connection is unusable, should not execute query again.
   common::ObArenaAllocator allocator_;
   bool check_priv_;

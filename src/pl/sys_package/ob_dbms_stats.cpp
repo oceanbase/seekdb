@@ -28,7 +28,6 @@
 #include "sql/optimizer/stat/ob_index_stats_estimator.h"
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "sql/optimizer/ob_optimizer_util.h"
-#include "share/resource_manager/ob_resource_manager.h"
 
 namespace oceanbase
 {
@@ -109,8 +108,6 @@ int ObDbmsStats::gather_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
                                                 params.count() > 16 ? &params.at(16) : NULL,
                                                 stat_param))) {
       LOG_WARN("failed to parse stat optitions", K(ret));
-    } else if (OB_FAIL(get_stats_consumer_group_id(stat_param))) {
-      LOG_WARN("failed to get stats consumer gourp id");
     } else if (OB_FAIL(running_monitor.add_table_info(stat_param))) {
       LOG_WARN("failed to add table info", K(ret));
     } else if (stat_param.force_ &&
@@ -243,8 +240,6 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
                                                    NULL/*hist_block_sample*/,
                                                    stat_param))) {
         LOG_WARN("failed to parse stat optitions", K(ret));
-      } else if (OB_FAIL(get_stats_consumer_group_id(stat_param))) {
-        LOG_WARN("failed to get stats consumer gourp id");
       } else if (OB_FAIL(running_monitor.add_table_info(stat_param))) {
         LOG_WARN("failed to add table info", K(ret));
       } else if (stat_param.force_ &&
@@ -6018,8 +6013,6 @@ int ObDbmsStats::gather_table_stats_with_default_param(ObExecContext &ctx,
     LOG_WARN("failed to use default gather stat optitions", K(ret));
   } else if (!stat_param.need_gather_stats()) {
     //do nothing
-  } else if (OB_FAIL(get_stats_consumer_group_id(stat_param))) {
-    LOG_WARN("failed to get stats consumer gourp id");
   } else if (OB_FAIL(running_monitor.add_table_info(stat_param, stat_table.stale_percent_))) {
     LOG_WARN("failed to add table info", K(ret));
   } else if (OB_FAIL(gather_table_stats_by_parts(ctx, task_info.task_start_time_, duration_time, stat_param, 
@@ -7433,11 +7426,6 @@ int ObDbmsStats::adjust_text_column_basic_stats(ObExecContext &ctx,
     }
   }
   return ret;
-}
-
-int ObDbmsStats::get_stats_consumer_group_id(ObTableStatParam &param)
-{
-  return OB_SUCCESS;
 }
 
 int ObDbmsStats::update_analyze_failed_count(const ObTableStatParam &stat_param,

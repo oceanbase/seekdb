@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/tablet/ob_tablet_table_operator.h"
-#include "share/resource_manager/ob_cgroup_ctrl.h"
 #include "share/ob_server_struct.h"
 namespace oceanbase
 {
@@ -86,7 +85,7 @@ int ObTabletTableOperator::init(share::ObSQLiteConnectionPool *pool)
       LOG_WARN("failed to init storage", K(ret));
     } else {
       batch_size_ = MAX_BATCH_COUNT;
-      group_id_ = 0; /*OBCG_DEFAULT*/
+      group_id_ = 0;
       inited_ = true;
       LOG_INFO("tablet table operator init success");
     }

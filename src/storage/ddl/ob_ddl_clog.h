@@ -309,10 +309,10 @@ public:
   ~ObTabletSplitInfo() = default;
   int assign(const ObTabletSplitInfo &info);
   bool is_valid() const;
-  TO_STRING_KV(K_(table_id), K_(lob_table_id), K_(schema_version), 
-    K_(task_id), K_(source_tablet_id), K_(dest_tablets_id), 
-    K_(compaction_scn), K_(data_format_version), K_(consumer_group_id), 
-    K_(can_reuse_macro_block), K_(split_sstable_type), K_(lob_col_idxs), 
+  TO_STRING_KV(K_(table_id), K_(lob_table_id), K_(schema_version),
+    K_(task_id), K_(source_tablet_id), K_(dest_tablets_id),
+    K_(compaction_scn), K_(data_format_version),
+    K_(can_reuse_macro_block), K_(split_sstable_type), K_(lob_col_idxs),
     K_(parallel_datum_rowkey_list));
 public:
   common::ObArenaAllocator rowkey_allocator_; // alloc buf for datum rowkey.
@@ -324,7 +324,6 @@ public:
   common::ObSArray<common::ObTabletID> dest_tablets_id_;
   int64_t compaction_scn_;
   int64_t data_format_version_;
-  uint64_t consumer_group_id_;
   bool can_reuse_macro_block_;
   share::ObSplitSSTableType split_sstable_type_;
   common::ObSEArray<uint64_t, 16> lob_col_idxs_;

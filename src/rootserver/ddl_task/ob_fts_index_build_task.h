@@ -36,7 +36,6 @@ public:
       const ObTableSchema *index_schema,
       const int64_t schema_version,
       const int64_t parallelism,
-      const int64_t consumer_group_id,
       const obcall::ObCreateIndexArg &create_index_arg,
       const uint64_t tenant_data_version,
       const int64_t parent_task_id = 0,
@@ -86,7 +85,6 @@ public:
       K(drop_index_task_submitted_),
       K(schema_version_),
       K(execution_id_),
-      K(consumer_group_id_),
       K(trace_id_),
       K(parallelism_),
       K(create_index_arg_),
@@ -193,7 +191,6 @@ private:
   using ObDDLTask::task_id_;
   using ObDDLTask::schema_version_;
   using ObDDLTask::parallelism_;
-  using ObDDLTask::consumer_group_id_;
   using ObDDLTask::parent_task_id_;
   using ObDDLTask::task_status_;
   using ObDDLTask::snapshot_version_;

@@ -18,7 +18,6 @@
 
 #include "ob_select_into_basic.h"
 #include "lib/compress/ob_compress_util.h"
-#include "share/resource_manager/ob_resource_manager.h"
 #include "share/ob_device_manager.h"
 #include "lib/compress/zstd_1_3_8/ob_zstd_wrapper.h"
 
@@ -91,7 +90,6 @@ int ObStorageAppender::append(const char *buf, const int64_t size, int64_t &writ
   int ret = OB_SUCCESS;
   write_size = 0;
   ObBackupIoAdapter adapter;
-  CONSUMER_GROUP_FUNC_GUARD(share::PRIO_EXPORT);
   if (OB_UNLIKELY(!is_opened_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObStorageAppender not opened", KR(ret), K_(is_opened));
@@ -142,7 +140,6 @@ int ObStorageAppender::close()
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   ObBackupIoAdapter adapter;
-  CONSUMER_GROUP_FUNC_GUARD(share::PRIO_EXPORT);
   // ignore error if not opened
   if (OB_LIKELY(is_opened_)) {
     if (OB_STORAGE_ACCESS_APPENDER == access_type_) {

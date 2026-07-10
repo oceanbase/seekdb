@@ -21,7 +21,6 @@
 #include "lib/thread/thread_mgr_interface.h"
 #include "rpc/frame/ob_req_deliver.h"
 #include "share/ob_thread_pool.h"
-#include "share/resource_manager/ob_cgroup_ctrl.h"
 #include "observer/ob_server_struct.h"
 
 namespace oceanbase
@@ -50,7 +49,7 @@ class QueueThread
 {
 public:
   QueueThread(const char *thread_name = nullptr,
-              uint64_t group_id = share::OBCG_DEFAULT)
+              uint64_t group_id = 0)
       : thread_(queue_, thread_name, group_id), tg_id_(-1), n_thread_(0) {}
 
   ~QueueThread() { destroy(); }
@@ -94,7 +93,6 @@ public:
       if (thread_name_ != nullptr) {
         lib::set_thread_name(thread_name_, get_thread_idx());
       }
-      lib::SET_GROUP_ID();
       queue_.loop();
     }
 

@@ -35,7 +35,7 @@ ObTableForkInfo::ObTableForkInfo()
     source_tablet_ids_(), dest_tablet_ids_(),
     fork_snapshot_version_(0),
     compat_mode_(lib::Worker::CompatMode::INVALID),
-    data_format_version_(0), consumer_group_id_(0)
+    data_format_version_(0)
 {
 }
 
@@ -47,7 +47,6 @@ ObTableForkInfo::ObTableForkInfo(
     const int64_t fork_snapshot_version,
     const lib::Worker::CompatMode compat_mode,
     const int64_t data_format_version,
-    const int64_t consumer_group_id,
     const common::ObIArray<common::ObTabletID> &source_tablet_ids,
     const common::ObIArray<common::ObTabletID> &dest_tablet_ids)
   : ls_id_(ls_id),
@@ -58,8 +57,7 @@ ObTableForkInfo::ObTableForkInfo(
     dest_tablet_ids_(),
     fork_snapshot_version_(fork_snapshot_version),
     compat_mode_(compat_mode),
-    data_format_version_(data_format_version),
-    consumer_group_id_(consumer_group_id)
+    data_format_version_(data_format_version)
 {
   (void)source_tablet_ids_.assign(source_tablet_ids);
   (void)dest_tablet_ids_.assign(dest_tablet_ids);
@@ -84,7 +82,6 @@ int ObTableForkInfo::assign(const ObTableForkInfo &info)
     fork_snapshot_version_ = info.fork_snapshot_version_;
     compat_mode_ = info.compat_mode_;
     data_format_version_ = info.data_format_version_;
-    consumer_group_id_ = info.consumer_group_id_;
   }
   return ret;
 }
@@ -100,8 +97,7 @@ bool ObTableForkInfo::is_valid() const
       && source_tablet_ids_.count() == dest_tablet_ids_.count()
       && fork_snapshot_version_ > 0
       && compat_mode_ != lib::Worker::CompatMode::INVALID
-      && data_format_version_ > 0
-      && consumer_group_id_ >= 0;
+      && data_format_version_ > 0;
 }
 
 int ObTableForkInfo::generate_fork_params(common::ObIArray<ObTabletForkParam> &params) const
@@ -126,7 +122,6 @@ int ObTableForkInfo::generate_fork_params(common::ObIArray<ObTabletForkParam> &p
       fork_param.fork_snapshot_version_ = fork_snapshot_version_;
       fork_param.compat_mode_ = compat_mode_;
       fork_param.data_format_version_ = data_format_version_;
-      fork_param.consumer_group_id_ = consumer_group_id_;
       fork_param.is_inited_ = true;
       if (OB_FAIL(params.push_back(fork_param))) {
         LOG_WARN("failed to push back fork param", K(ret));
@@ -170,7 +165,6 @@ int ObTableForkInfo::get_tablet_fork_param(
       tablet_fork_param.fork_snapshot_version_ = fork_snapshot_version_;
       tablet_fork_param.compat_mode_ = compat_mode_;
       tablet_fork_param.data_format_version_ = data_format_version_;
-      tablet_fork_param.consumer_group_id_ = consumer_group_id_;
       tablet_fork_param.is_inited_ = true;
     }
   }
@@ -182,7 +176,7 @@ OB_DEF_SERIALIZE(ObTableForkInfo)
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE, ls_id_, table_id_, schema_version_, task_id_,
               source_tablet_ids_, dest_tablet_ids_, fork_snapshot_version_,
-              compat_mode_, data_format_version_, consumer_group_id_);
+              compat_mode_, data_format_version_);
   return ret;
 }
 
@@ -191,7 +185,7 @@ OB_DEF_DESERIALIZE(ObTableForkInfo)
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, ls_id_, table_id_, schema_version_, task_id_,
               source_tablet_ids_, dest_tablet_ids_, fork_snapshot_version_,
-              compat_mode_, data_format_version_, consumer_group_id_);
+              compat_mode_, data_format_version_);
   return ret;
 }
 
@@ -200,11 +194,9 @@ OB_DEF_SERIALIZE_SIZE(ObTableForkInfo)
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN, ls_id_, table_id_, schema_version_, task_id_,
               source_tablet_ids_, dest_tablet_ids_, fork_snapshot_version_,
-              compat_mode_, data_format_version_, consumer_group_id_);
+              compat_mode_, data_format_version_);
   return len;
 }
 
 } // namespace storage
 } // namespace oceanbase
-
-

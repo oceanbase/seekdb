@@ -2562,20 +2562,6 @@
     "background_cn": "用户可以通过这两个变量访问或者设置事务的访问模式，当transaction_read_only设置为true时，不允许执行dml语句",
     "ref_url": ""
   },
-  "resource_manager_plan": {
-    "id": 10109,
-    "name": "resource_manager_plan",
-    "default_value": "",
-    "base_value": "",
-    "data_type": "varchar",
-    "on_check_and_convert_func": "ObSysVarOnCheckFuncs::check_update_resource_manager_plan",
-    "info": "specifies tenant resource plan.",
-    "flags": "GLOBAL",
-    "publish_version": "320",
-    "info_cn": "指定租户的资源隔离计划",
-    "background_cn": "租户内的普通线程和并行执行线程会相互抢占CPU资源，通过给租户指定资源隔离计划，可以控制资源抢占策略，隔离资源使用量",
-    "ref_url": ""
-  },
   "performance_schema": {
     "id": 10110,
     "name": "performance_schema",

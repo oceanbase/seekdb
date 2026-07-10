@@ -300,7 +300,7 @@ bool ObCreateHiddenTableArg::is_valid() const
 }
 
 int ObCreateHiddenTableArg::init(const uint64_t dest_tid,
-                                 const uint64_t table_id, const int64_t consumer_group_id, const uint64_t session_id,
+                                 const uint64_t table_id, const uint64_t session_id,
                                  const int64_t parallelism, const share::ObDDLType ddl_type, const ObSQLMode sql_mode,
                                  const ObTimeZoneInfo &tz_info, const common::ObString &local_nls_date,
                                  const common::ObString &local_nls_timestamp, const common::ObString &local_nls_timestamp_tz,
@@ -323,7 +323,6 @@ int ObCreateHiddenTableArg::init(const uint64_t dest_tid,
     
     
     
-    consumer_group_id_ = consumer_group_id;
     table_id_ = table_id;
     parallelism_ = parallelism;
     ddl_type_ = ddl_type;
@@ -349,7 +348,6 @@ OB_DEF_SERIALIZE(ObCreateHiddenTableArg)
     LST_DO_CODE(OB_UNIS_ENCODE,
                 
                 table_id_,
-                consumer_group_id_,
                 
                 session_id_,
                 parallelism_,
@@ -382,7 +380,6 @@ OB_DEF_DESERIALIZE(ObCreateHiddenTableArg)
     LST_DO_CODE(OB_UNIS_DECODE,
               
               table_id_,
-              consumer_group_id_,
               
               session_id_,
               parallelism_,
@@ -430,7 +427,6 @@ OB_DEF_SERIALIZE_SIZE(ObCreateHiddenTableArg)
     LST_DO_CODE(OB_UNIS_ADD_LEN,
                 
                 table_id_,
-                consumer_group_id_,
                 
                 session_id_,
                 parallelism_,

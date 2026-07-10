@@ -43,7 +43,6 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "logservice/ob_tenant_mutil_allocator_mgr.h"
 #include "share/object_storage/ob_device_connectivity.h"
 #include "observer/omt/ob_tenant.h"
-#include "share/resource_manager/ob_resource_manager.h"
 #include "share/sequence/ob_sequence_cache.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 #include "sql/ob_sql_init.h"
@@ -166,7 +165,6 @@ ObServer::ObServer()
     root_service_monitor_(root_service_),
     ob_service_(gctx_),
     multi_tenant_(), vt_data_service_(root_service_, self_addr_, &config_),
-    cgroup_ctrl_(),
     start_time_(ObTimeUtility::current_time()),
     warm_up_start_time_(0),
     diag_(),
@@ -315,12 +313,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init io failed", KR(ret));
     }
     }
-    if (OB_SUCC(ret)) {
-    if (FALSE_IT(cgroup_ctrl_.init())) {
-      LOG_ERROR("should never reach here!", KR(ret));
-    } else if (FALSE_IT(cgroup_ctrl_.init())) {
-      LOG_ERROR("should never reach here!", KR(ret));
-    }
     #ifndef OB_USE_ASAN
     if (OB_SUCC(ret)) {
     if (OB_FAIL(ObMemoryDump::get_instance().init())) {
@@ -441,8 +433,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init timer monitor failed", KR(ret));
     } else if (OB_FAIL(PX_P2P_DH.init())) {
       LOG_ERROR("init px p2p datahub failed", KR(ret));
-    } else if (OB_FAIL(G_RES_MGR.init())) {
-      LOG_ERROR("failed to init resource plan", KR(ret));
 #ifdef ENABLE_IMC
     } else if (OB_FAIL(imc_tasks_.init())) {
       LOG_ERROR("init imc tasks failed", KR(ret));
@@ -466,14 +456,13 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     } else if (OB_FAIL(ObDDLSimPointMgr::get_instance().init())) {
       LOG_WARN("init ddl sim point mgr fail", KR(ret));
 #endif
-    } else {
-      // GDS direct dispatch through GCTX.root_service_
-    }
-  }
-    }
-    }
+	    } else {
+	      // GDS direct dispatch through GCTX.root_service_
+	    }
+	  }
+	}
 
-  if (OB_FAIL(ret)) {
+	if (OB_FAIL(ret)) {
     LOG_ERROR("[OBSERVER_NOTICE] fail to init observer", KR(ret));
     LOG_DBA_FORCE_PRINT(DBA_ERROR, OB_SERVER_INIT_FAIL, ret,
                         DBA_STEP_INC_INFO(server_start),
@@ -691,11 +680,6 @@ void ObServer::destroy()
     FLOG_INFO("begin to destroy clock generator");
     ObClockGenerator::destroy();
     FLOG_INFO("clock generator destroyed");
-
-
-    FLOG_INFO("begin to destroy cgroup service");
-    cgroup_ctrl_.destroy();
-    FLOG_INFO("cgroup service destroyed");
 
     deinit_plugin();
 
@@ -2163,7 +2147,6 @@ int ObServer::init_global_context()
   gctx_.diag_ = &diag_;
   gctx_.scramble_rand_ = &scramble_rand_;
   gctx_.init();
-  gctx_.cgroup_ctrl_ = &cgroup_ctrl_;
   gctx_.schema_status_proxy_ = &schema_status_proxy_;
   gctx_.net_frame_ = &net_frame_;
 

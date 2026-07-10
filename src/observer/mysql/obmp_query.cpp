@@ -314,9 +314,6 @@ int ObMPQuery::process()
     }
   }
 
-  if (is_conn_valid()) {
-    set_request_expect_group_id(sess);
-  }
   if (OB_FAIL(ret) && need_response_error && is_conn_valid()) {
     send_error_packet(ret, NULL);
   }
@@ -698,7 +695,6 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
       sqlstat_record.set_is_in_retry(false);
       session.sql_sess_record_sql_stat_start_value(sqlstat_record);
     }
-    ctx_.enable_sql_resource_manage_ = true;
     if (OB_FAIL(set_session_active(sql, session, single_process_timestamp_))) {
       LOG_WARN("fail to set session active", K(ret));
     } else {
@@ -956,7 +952,6 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
       task_ctx.set_query_sys_begin_schema_version(retry_ctrl_.get_sys_local_schema_version());
       task_ctx.set_min_cluster_version(GET_MIN_CLUSTER_VERSION());
       ctx_.retry_times_ = retry_ctrl_.get_retry_times();
-      ctx_.enable_sql_resource_manage_ = true;
       //storage::ObPartitionService* ps = static_cast<storage::ObPartitionService *> (GCTX.par_ser_);
       //bool is_read_only = false;
       if (OB_FAIL(ret)) {

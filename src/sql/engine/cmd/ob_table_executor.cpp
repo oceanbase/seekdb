@@ -545,7 +545,6 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
   if (OB_FAIL(ret)) {
   } else {
     create_table_arg.is_inner_ = my_session->is_inner();
-    create_table_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
     const_cast<obcall::ObCreateTableArg&>(create_table_arg).ddl_stmt_str_ = first_stmt;
     bool enable_parallel_create_table = false;
     {
@@ -934,7 +933,6 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
       } else if (FALSE_IT(alter_table_arg.sql_mode_ = my_session->get_sql_mode())) {
         // do nothing
       } else if (FALSE_IT(alter_table_arg.parallelism_ = stmt.get_parallelism())) {
-      } else if (FALSE_IT(alter_table_arg.consumer_group_id_ = THIS_WORKER.get_group_id())) {
       } else if (OB_FAIL(check_alter_partition(ctx, stmt, alter_table_arg))) {
         LOG_WARN("check alter partition failed", K(ret));
       } else if (OB_FAIL(check_alter_part_key(ctx, alter_table_arg))) {
@@ -1817,7 +1815,6 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
   } else {
     int64_t affected_rows = 0;
     tmp_arg.ddl_stmt_str_ = first_stmt;
-    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
     my_session = ctx.get_my_session();
     if (NULL == my_session) {
       ret = OB_ERR_UNEXPECTED;
@@ -1977,7 +1974,6 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
     LOG_WARN("get first statement failed", K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
-    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
 
     ObTaskExecutorCtx *task_exec_ctx = NULL;
     if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -2081,7 +2077,6 @@ int ObCreateTableLikeExecutor::execute(ObExecContext &ctx, ObCreateTableLikeStmt
     LOG_WARN("session is null", K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
-    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
     tmp_arg.session_id_ = my_session->get_sessid_for_table();
     ObTaskExecutorCtx *task_exec_ctx = NULL;
     if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -2118,7 +2113,6 @@ int ObForkTableExecutor::execute(ObExecContext &ctx, ObForkTableStmt &stmt)
   } else {
     uint64_t data_version = 0;
     tmp_arg.ddl_stmt_str_ = first_stmt;
-    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
     tmp_arg.session_id_ = my_session->get_sessid_for_table();
     ObTaskExecutorCtx *task_exec_ctx = NULL;
     if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -2143,7 +2137,6 @@ int ObFlashBackTableFromRecyclebinExecutor::execute(ObExecContext &ctx, ObFlashB
     LOG_WARN("get first statement failed", K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
-    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
     ObTaskExecutorCtx *task_exec_ctx = NULL;
     if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
@@ -2158,7 +2151,6 @@ int ObFlashBackTableFromRecyclebinExecutor::execute(ObExecContext &ctx, ObFlashB
 int ObFlashBackTableToScnExecutor::execute(ObExecContext &ctx, ObFlashBackTableToScnStmt &stmt) {
   int ret = OB_SUCCESS;
   obcall::ObFlashBackTableToScnArg &arg = stmt.flashback_table_to_scn_arg_;
-  arg.consumer_group_id_ = THIS_WORKER.get_group_id();
   RowDesc row_desc;
   ObTempExpr *temp_expr = NULL;
   CK(OB_NOT_NULL(ctx.get_sql_ctx()));
@@ -2222,7 +2214,6 @@ int ObPurgeTableExecutor::execute(ObExecContext &ctx, ObPurgeTableStmt &stmt)
     LOG_WARN("get first statement failed", K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
-    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
 
     ObTaskExecutorCtx *task_exec_ctx = NULL;
     if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -2244,7 +2235,6 @@ int ObOptimizeTableExecutor::execute(ObExecContext &ctx, ObOptimizeTableStmt &st
     LOG_WARN("fail to get first stmt", K(ret));
   } else {
     arg.ddl_stmt_str_ = first_stmt;
-    arg.consumer_group_id_ = THIS_WORKER.get_group_id();
     ObTaskExecutorCtx *task_exec_ctx = nullptr;
     if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
       ret = OB_ERR_UNEXPECTED;
@@ -2269,7 +2259,6 @@ int ObOptimizeTenantExecutor::execute(ObExecContext &ctx, ObOptimizeTenantStmt &
     LOG_WARN("error unexpected, my session must not be NULL", K(ret));
   } else {
     arg.ddl_stmt_str_ = first_stmt;
-    arg.consumer_group_id_ = THIS_WORKER.get_group_id();
     ObTaskExecutorCtx *task_exec_ctx = nullptr;
     const observer::ObGlobalContext &gctx = observer::ObServer::get_instance().get_gctx();
     
@@ -2342,7 +2331,6 @@ int ObOptimizeAllExecutor::execute(ObExecContext &ctx, ObOptimizeAllStmt &stmt)
     LOG_WARN("fail to get first stmt", K(ret));
   } else {
     arg.ddl_stmt_str_ = first_stmt;
-    arg.consumer_group_id_ = THIS_WORKER.get_group_id();
     ObTaskExecutorCtx *task_exec_ctx = nullptr;
     ObSchemaGetterGuard schema_guard;
     const observer::ObGlobalContext &gctx = observer::ObServer::get_instance().get_gctx();

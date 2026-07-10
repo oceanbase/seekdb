@@ -1178,7 +1178,6 @@ int ObMPStmtExecute::execute_response(ObSQLSessionInfo &session,
       }
       ret = tmp_ret;
     }
-  } else if (FALSE_IT(ctx_.enable_sql_resource_manage_ = true)) {
   } else if (OB_FAIL(gctx_.sql_engine_->stmt_execute(stmt_id_,
                                                       stmt_type_,
                                                       *params_,
@@ -1627,10 +1626,7 @@ int ObMPStmtExecute::process_execute_stmt(const ObMultiStmtItem &multi_stmt_item
         LOG_WARN("fail to do process", K(ret), K(ctx_.cur_sql_));
       }
       
-      if (is_conn_valid()) {
-        set_request_expect_group_id(&session);
-        // ret = OB_SUCC(bak_ret) ? ret : bak_ret;
-      }
+      // ret = OB_SUCC(bak_ret) ? ret : bak_ret;
     }
     ObThreadLogLevelUtils::clear();
     const int64_t debug_sync_timeout = GCONF.debug_sync_timeout;

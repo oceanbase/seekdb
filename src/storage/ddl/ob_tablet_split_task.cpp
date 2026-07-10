@@ -47,7 +47,7 @@ ObTabletSplitParam::ObTabletSplitParam()
     is_inited_(false), ls_id_(), table_id_(OB_INVALID_ID), 
     schema_version_(0), task_id_(0), source_tablet_id_(), 
     dest_tablets_id_(), compaction_scn_(0), user_parallelism_(0), 
-    compat_mode_(lib::Worker::CompatMode::INVALID),  data_format_version_(0), consumer_group_id_(0),
+    compat_mode_(lib::Worker::CompatMode::INVALID), data_format_version_(0),
     can_reuse_macro_block_(false), split_sstable_type_(share::ObSplitSSTableType::SPLIT_BOTH),
     parallel_datum_rowkey_list_(), min_split_start_scn_()
 {
@@ -64,7 +64,7 @@ bool ObTabletSplitParam::is_valid() const
   return ls_id_.is_valid() && OB_INVALID_ID != table_id_ 
       && schema_version_ > 0 && task_id_ > 0 && source_tablet_id_.is_valid() 
       && dest_tablets_id_.count() > 0 && compaction_scn_ > 0 && user_parallelism_ > 0
-      && compat_mode_ != lib::Worker::CompatMode::INVALID && data_format_version_ > 0 && consumer_group_id_ >= 0
+      && compat_mode_ != lib::Worker::CompatMode::INVALID && data_format_version_ > 0
       && parallel_datum_rowkey_list_.count() > 0;
 }
 
@@ -100,7 +100,6 @@ int ObTabletSplitParam::init(
     user_parallelism_    = param.user_parallelism_;
     compat_mode_         = param.compat_mode_;
     data_format_version_ = param.data_format_version_;
-    consumer_group_id_   = param.consumer_group_id_;
     split_sstable_type_  = param.split_sstable_type_;
     can_reuse_macro_block_ = param.can_reuse_macro_block_;
     min_split_start_scn_   = param.min_split_start_scn_;
@@ -125,7 +124,6 @@ int ObTabletSplitParam::init(const obcall::ObDDLBuildSingleReplicaRequestArg &ar
     compaction_scn_        = arg.compaction_scn_;
     user_parallelism_      = arg.parallel_datum_rowkey_list_.count() - 1;
     data_format_version_   = arg.data_format_version_;
-    consumer_group_id_     = arg.consumer_group_id_;
     split_sstable_type_    = arg.split_sstable_type_;
     can_reuse_macro_block_ = arg.can_reuse_macro_block_;
     min_split_start_scn_   = arg.min_split_start_scn_;
@@ -153,7 +151,6 @@ int ObTabletSplitParam::init(const obcall::ObTabletSplitArg &arg)
     compaction_scn_        = arg.compaction_scn_;
     user_parallelism_      = arg.parallel_datum_rowkey_list_.count() - 1;
     data_format_version_   = arg.data_format_version_;
-    consumer_group_id_     = arg.consumer_group_id_;
     split_sstable_type_    = arg.split_sstable_type_;
     can_reuse_macro_block_ = arg.can_reuse_macro_block_;
     min_split_start_scn_   = arg.min_split_start_scn_;
@@ -381,7 +378,6 @@ int ObTabletSplitDag::init_by_param(const share::ObIDagInitParam *param)
       LOG_INFO("wait conditions satisfied", K(ret), KPC(tmp_param));
     }
   } else {
-    consumer_group_id_ = tmp_param->consumer_group_id_;
     is_inited_ = true;
   }
   return ret;

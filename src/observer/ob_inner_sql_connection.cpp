@@ -705,7 +705,7 @@ int ObInnerSQLConnection::process_audit_record(sql::ObResultSet &result_set,
 
     audit_record.client_addr_ = session.get_peer_addr();
     audit_record.user_client_addr_ = session.get_user_client_addr();
-    audit_record.user_group_ = THIS_WORKER.get_group_id();
+    audit_record.user_group_ = 0;
     audit_record.execution_id_ = execution_id;
     audit_record.ps_stmt_id_ = ps_stmt_id;
     audit_record.ps_inner_stmt_id_ = ps_stmt_id;
@@ -803,9 +803,6 @@ int ObInnerSQLConnection::do_query(sqlclient::ObIExecutor &executor, ObInnerSQLR
       LOG_WARN("executor execute failed", K(ret));
     } else {
       ObSQLSessionInfo &session = res.result_set().get_session();
-      session.set_expect_group_id(group_id_);
-      CONSUMER_GROUP_ID_GUARD(consumer_group_id_);
-      CONSUMER_GROUP_FUNC_GUARD(session.get_ddl_info().is_refreshing_mview() ? ObFunctionType::PRIO_MVIEW : GET_FUNC_TYPE());
       if (OB_ISNULL(res.sql_ctx().schema_guard_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("schema guard is null");
@@ -1482,7 +1479,6 @@ int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
       TimeoutGuard timeout_guard(*this); // backup && restore worker/session timeout
       int64_t query_timeout = OB_DEFAULT_SESSION_TIMEOUT;
       int64_t trx_timeout = OB_DEFAULT_SESSION_TIMEOUT;
-      int64_t consumer_group_id = get_group_id();
       ObSQLMode sql_mode = 0;
       const ObSessionDDLInfo &ddl_info = get_session().get_ddl_info();
       bool is_load_data_exec = get_session().is_load_data_exec_session();

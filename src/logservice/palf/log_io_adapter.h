@@ -31,7 +31,6 @@ class ObDeviceManager;
 namespace share
 {
 class ObLocalDevice;
-class ObResourceManager;
 }
 namespace palf
 {
@@ -61,17 +60,15 @@ private:
 class LogIOAdapter
 {
 public:
-  LogIOAdapter() : log_local_device_(NULL), 
-                   resource_manager_(NULL), io_manager_(NULL), is_inited_(false) {}
+  LogIOAdapter() : log_local_device_(NULL), io_manager_(NULL), is_inited_(false) {}
   ~LogIOAdapter() {
     destroy();
   }
   int init(common::ObIODevice *log_local_device,
-           share::ObResourceManager *resource_manager,
            common::ObIOManager *io_manager);
   void destroy();
   bool is_valid() const {
-    return true && NULL != log_local_device_ && NULL != resource_manager_ && NULL != io_manager_;
+    return true && NULL != log_local_device_ && NULL != io_manager_;
   }
   int open(const char *block_path, 
            const int flags, 
@@ -99,7 +96,6 @@ public:
 private:
   
   common::ObIODevice *log_local_device_;
-  share::ObResourceManager *resource_manager_;
   common::ObIOManager *io_manager_;
   bool is_inited_;
 };

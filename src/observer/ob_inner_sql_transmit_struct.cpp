@@ -41,8 +41,7 @@ OB_DEF_SERIALIZE(obcall::ObInnerSQLTransmitArg)
     ddl_info_,
     is_load_data_exec_,
     nls_formats_,
-    use_external_session_,
-    consumer_group_id_);
+    use_external_session_);
   return ret;
 }
 
@@ -65,8 +64,7 @@ OB_DEF_DESERIALIZE(obcall::ObInnerSQLTransmitArg)
     ddl_info_,
     is_load_data_exec_,
     nls_formats_,
-    use_external_session_,
-    consumer_group_id_);
+    use_external_session_);
   if (OB_SUCC(ret)) {
     (void)sql::ObSQLUtils::adjust_time_by_ntp_offset(worker_timeout_);
   }
@@ -91,8 +89,7 @@ OB_DEF_SERIALIZE_SIZE(obcall::ObInnerSQLTransmitArg)
     ddl_info_,
     is_load_data_exec_,
     nls_formats_,
-    use_external_session_,
-    consumer_group_id_);
+    use_external_session_);
   return len;
 }
 // 

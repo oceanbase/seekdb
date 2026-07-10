@@ -11049,16 +11049,6 @@ int ObDMLResolver::resolve_global_hint(const ParseNode &hint_node,
       }
       break;
     }
-    case T_RESOURCE_GROUP: {
-      CHECK_HINT_PARAM(hint_node, 1) {
-        if (NULL != child0->str_value_) {
-          ObString resource_group;
-          resource_group.assign_ptr(child0->str_value_, static_cast<int32_t>(child0->str_len_));
-          global_hint.merge_resource_group_hint(resource_group);
-        }
-      }
-      break;
-    }
     case T_PX_NODE_POLICY: {
       CHECK_HINT_PARAM(hint_node, 1) {
         if (NULL != child0->str_value_) {

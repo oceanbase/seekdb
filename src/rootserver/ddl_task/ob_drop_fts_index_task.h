@@ -51,7 +51,6 @@ public:
       const ObFTSDDLChildTaskInfo &fts_doc_word,
       const ObString &ddl_stmt_str,
       const int64_t schema_version,
-      const int64_t consumer_group_id,
       const int64_t target_object_id);
   int init(const ObDDLTaskRecord &task_record);
   virtual int process() override;

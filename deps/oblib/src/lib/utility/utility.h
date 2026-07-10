@@ -571,17 +571,6 @@ inline int64_t get_cpu_id()
 // ethernet speed: byte / second.
 int get_ethernet_speed(const char *devname, int64_t &speed);
 int get_ethernet_speed(const ObString &devname, int64_t &speed);
-inline int64_t get_cgroup_memory_limit()
-{
-  int64_t cgroup_memory_limit = INT64_MAX;
-  FILE *file = fopen("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r");
-  if (NULL != file) {
-    fscanf(file, "%ld", &cgroup_memory_limit);
-    fclose(file);
-  }
-  return cgroup_memory_limit;
-}
-
 inline int64_t get_phy_mem_size()
 {
 #ifdef _WIN32
@@ -594,8 +583,7 @@ inline int64_t get_phy_mem_size()
 #else
   static int64_t page_size = sysconf(_SC_PAGE_SIZE);
   static int64_t phys_pages = sysconf(_SC_PHYS_PAGES);
-  static int64_t cgroup_memory_limit = get_cgroup_memory_limit();
-  return MIN(page_size * phys_pages, cgroup_memory_limit);
+  return page_size * phys_pages;
 #endif
 }
 

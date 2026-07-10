@@ -58,7 +58,6 @@ int ObCreateCCLRuleExecutor::execute(ObExecContext &ctx, ObCreateCCLRuleStmt &st
      SQL_ENG_LOG(WARN, "fail to get first stmt" , K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
-    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -102,7 +101,6 @@ int ObDropCCLRuleExecutor::execute(ObExecContext &ctx, ObDropCCLRuleStmt &stmt)
      SQL_ENG_LOG(WARN, "fail to get first stmt" , K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
-    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {

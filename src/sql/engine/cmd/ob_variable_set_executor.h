@@ -108,7 +108,6 @@ private:
                                   const ObSQLMode sql_mode,
                                   const common::ObString var_name,
                                   common::ObObj &val);
-  int update_resource_mapping_rule_version(ObMySQLProxy &sql_proxy);
 
   int update_global_variables(ObExecContext &ctx,
                               ObDDLStmt &stmt,

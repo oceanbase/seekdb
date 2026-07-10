@@ -23,7 +23,6 @@
 #include "observer/ob_srv_network_frame.h"
 #include "storage/ob_file_system_router.h"
 #include "logservice/ob_net_keepalive_adapter.h"            // ObNetKeepAliveAdapter
-#include "share/resource_manager/ob_resource_manager.h"       // ObResourceManager
 #include "share/ob_io_device_helper.h"
 #include "lib/ob_running_mode.h"
 #include "share/ob_share_util.h"  // relocated-definition owner
@@ -219,7 +218,7 @@ int ObLogService::init(const PalfOptions &options,
              KP(log_block_pool), KP(sql_proxy), KP(net_keepalive_adapter));
   } else if (OB_FAIL(PalfEnv::create_palf_env(options, base_dir, self,
                                               alloc_mgr, log_block_pool, &monitor_, &LOCAL_DEVICE_INSTANCE,
-                                              &G_RES_MGR, &OB_IO_MANAGER, palf_env_))) {
+                                              &OB_IO_MANAGER, palf_env_))) {
     CLOG_LOG(WARN, "failed to create_palf_env", K(base_dir), K(ret));
   } else if (OB_ISNULL(palf_env_)) {
     ret = OB_ERR_UNEXPECTED;

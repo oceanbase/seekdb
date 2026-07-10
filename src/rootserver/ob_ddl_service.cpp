@@ -2168,7 +2168,6 @@ int ObDDLService::start_mview_complete_refresh_task(
   obcall::ObMViewCompleteRefreshArg arg;
   
   arg.table_id_ = mview_schema.get_table_id();
-  arg.consumer_group_id_ = THIS_WORKER.get_group_id();
   arg.session_id_ = 100;// FIXME
   
   if (OB_UNLIKELY(nullptr == dep_infos || nullptr == mv_refresh_info)) {
@@ -2226,7 +2225,6 @@ int ObDDLService::start_mview_complete_refresh_task(
                         0/*object_id*/,
                         container_table_schema.get_schema_version(),
                         arg.parallelism_,
-                        arg.consumer_group_id_,
                         &allocator,
                         &arg);
       param.tenant_data_version_ = tenant_data_version;
@@ -6602,7 +6600,6 @@ int ObDDLService::create_aux_index_task_(
                                0/*object_id*/,
                                idx_schema->get_schema_version(),
                                create_index_arg.parallelism_,
-                               create_index_arg.consumer_group_id_,
                                &allocator,
                                &create_index_arg,
                                parent_task_id);
@@ -14491,7 +14488,6 @@ int ObDDLService::alter_table_in_trans(obcall::ObAlterTableArg &alter_table_arg,
                                                                   &del_tablet_ids,
                                                                   &index_schema,
                                                                   alter_table_arg.parallelism_,
-                                                                  const_alter_table_arg.consumer_group_id_,
                                                                   tenant_data_version,
                                                                   alter_table_arg.allocator_,
                                                                   task_record,
@@ -14560,7 +14556,6 @@ int ObDDLService::alter_table_in_trans(obcall::ObAlterTableArg &alter_table_arg,
                                         (*iter)->get_constraint_id(),
                                         new_table_schema.get_schema_version(),
                                         0/*parallelsim*/,
-                                        const_alter_table_arg.consumer_group_id_,
                                         &alter_table_arg.allocator_,
                                         &const_alter_table_arg);
               if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, trans, task_record))) {
@@ -14629,7 +14624,6 @@ int ObDDLService::alter_table_in_trans(obcall::ObAlterTableArg &alter_table_arg,
                                            fk_id,
                                            new_table_schema.get_schema_version(),
                                            0/*parallelism*/,
-                                           const_alter_table_arg.consumer_group_id_,
                                            &alter_table_arg.allocator_,
                                            &const_alter_table_arg);
                 if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, trans, task_record))) {
@@ -15476,7 +15470,6 @@ int ObDDLService::do_offline_ddl_in_trans(obcall::ObAlterTableArg &alter_table_a
                                    0/*object_id*/,
                                    new_table_schema.get_schema_version(),
                                    alter_table_arg.parallelism_,
-                                   alter_table_arg.consumer_group_id_,
                                    &alter_table_arg.allocator_,
                                    &alter_table_arg,
                                    0/*parent_task_id*/,
@@ -15501,7 +15494,6 @@ int ObDDLService::do_offline_ddl_in_trans(obcall::ObAlterTableArg &alter_table_a
                                    0/*object_id*/,
                                    new_table_schema.get_schema_version(),
                                    alter_table_arg.parallelism_,
-                                   alter_table_arg.consumer_group_id_,
                                    &alter_table_arg.allocator_,
                                    &alter_table_arg,
                                    0/*parent_task_id*/,
@@ -15760,8 +15752,7 @@ int ObDDLService::create_hidden_table(
         if (OB_SUCC(ret)) {
           HEAP_VAR(obcall::ObAlterTableArg, alter_table_arg) {
             ObPrepareAlterTableArgParam param;
-            if (OB_FAIL(param.init(create_hidden_table_arg.get_consumer_group_id(),
-                                   create_hidden_table_arg.get_session_id(),
+            if (OB_FAIL(param.init(create_hidden_table_arg.get_session_id(),
                                    create_hidden_table_arg.get_sql_mode(),
                                    create_hidden_table_arg.get_ddl_stmt_str(),
                                    orig_table_schema->get_table_name_str(),
@@ -15797,7 +15788,6 @@ int ObDDLService::create_hidden_table(
                                         table_id,
                                         orig_table_schema->get_schema_version(),
                                         create_hidden_table_arg.get_parallelism(),
-                                        create_hidden_table_arg.get_consumer_group_id(),
                                         &allocator_for_redef,
                                         &alter_table_arg,
                                         0,
@@ -15974,8 +15964,7 @@ int ObDDLService::mview_complete_refresh_in_trans(
           ObString empty_ddl_stmt_str;
           ObPrepareAlterTableArgParam prepare_param;
           ObArray<ObDependencyInfo> dependency_infos;
-          if (OB_FAIL(prepare_param.init(arg.consumer_group_id_,
-                                          arg.session_id_,
+          if (OB_FAIL(prepare_param.init(arg.session_id_,
                                           arg.sql_mode_,
                                           empty_ddl_stmt_str,
                                           container_table_schema->get_table_name_str(),
@@ -16004,7 +15993,6 @@ int ObDDLService::mview_complete_refresh_in_trans(
                                         container_table_schema->get_table_id(),
                                         refreshed_schema_version,
                                         arg.parallelism_,
-                                        arg.consumer_group_id_,
                                         &allocator,
                                         &alter_table_arg,
                                         arg.parent_task_id_,
@@ -22456,7 +22444,6 @@ int ObDDLService::restore_the_table_to_split_completed_state(obcall::ObAlterTabl
                                       data_table_id,
                                       new_table_schema.get_schema_version(),
                                       alter_table_arg.parallelism_,
-                                      alter_table_arg.consumer_group_id_,
                                       &allocator_for_restore,
                                       &alter_table_arg,
                                       0,
@@ -26252,7 +26239,6 @@ int ObDDLService::rebuild_vec_index(const ObRebuildIndexArg &arg, obcall::ObAlte
                                                                     nullptr/*del_data_tablet_ids*/,
                                                                     index_table_schema,
                                                                     rebuild_index_arg.parallelism_,
-                                                                    rebuild_index_arg.consumer_group_id_,
                                                                     tenant_data_version,
                                                                     allocator,
                                                                     task_record))) {
@@ -26386,7 +26372,6 @@ int ObDDLService::rebuild_index(const ObRebuildIndexArg &arg, obcall::ObAlterTab
                                                                  nullptr/*del_data_tablet_ids*/,
                                                                  &new_table_schema,
                                                                  arg.parallelism_,
-                                                                 arg.consumer_group_id_,
                                                                  tenant_data_version,
                                                                  allocator,
                                                                  task_record))) {
@@ -33945,7 +33930,6 @@ int ObDDLService::submit_drop_lob_task_(ObMySQLTransaction &trans,
                              data_table_schema.get_table_id(),
                              data_table_schema.get_schema_version(),
                              0 /* parallelism*/,
-                             arg.consumer_group_id_,
                              &allocator,
                              &arg);
   ObTableLockOwnerID owner_id;

@@ -1431,10 +1431,6 @@ int ObTableLockService::rpc_call_(RpcProxy &proxy_batch,
 {
   int ret = OB_SUCCESS;
   int32_t group_id = 0;
-  group_id = share::OBCG_LOCK;
-  if (request.is_unlock_request()) {
-    group_id = share::OBCG_UNLOCK;
-  }
   if (OB_FAIL(proxy_batch.call(addr,
                                 timeout_us,
                                 GCONF.cluster_id,

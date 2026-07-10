@@ -250,7 +250,6 @@ DIAGNOSE_INFO_PRIORITY_DEF(DIAGNOSE_PRIORITY_HIGH)
 #include "lib/ob_define.h"
 #include "lib/utility/ob_print_utils.h"
 #include "ob_sys_task_stat.h"
-#include "share/resource_manager/ob_resource_plan_info.h"
 
 namespace oceanbase
 {
@@ -268,7 +267,6 @@ struct ObDagPrioStruct
 {
   int64_t score_;
   const char *dag_prio_str_;
-  const ObFunctionType function_type_;
   TO_STRING_KV(K_(score), K_(dag_prio_str));
 };
 
@@ -293,7 +291,7 @@ struct ObDagPrio
 
 static constexpr ObDagPrioStruct OB_DAG_PRIOS[] = {
 #define DAG_SCHEDULER_DAG_PRIO_DEF(dag_prio, score, dag_prio_str, dag_function_type) \
-    {score, dag_prio_str, ObFunctionType::dag_function_type},
+    {score, dag_prio_str},
 #include "ob_dag_scheduler_config.h"
 #undef DAG_SCHEDULER_DAG_PRIO_DEF
 };

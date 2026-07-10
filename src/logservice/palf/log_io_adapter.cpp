@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX PALF
 #include "log_io_adapter.h"
 #include "share/ob_local_device.h"                            // ObLocalDevice
-#include "share/resource_manager/ob_resource_manager.h"       // ObResourceManager
 #include "share/io/ob_io_manager.h"                           // ObIOManager
 #include "lib/string/ob_string.h"                             // ObString
 #include "share/ob_device_manager.h"                          // ObDeviceManager
@@ -92,17 +91,15 @@ share::ObLocalDevice *LogIODeviceWrapper::get_local_device()
 }
 // ========================= LogIOAdapter=====================
 int LogIOAdapter::init(common::ObIODevice *log_local_device,
-                       ObResourceManager *resource_manager,
                        ObIOManager *io_manager)
 {
   int ret = OB_SUCCESS;
-  if (!true || OB_ISNULL(log_local_device) || OB_ISNULL(resource_manager) || OB_ISNULL(io_manager)) {
+  if (!true || OB_ISNULL(log_local_device) || OB_ISNULL(io_manager)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(ret), KP(log_local_device), KP(resource_manager), KP(io_manager));
+    PALF_LOG(WARN, "invalid argument", K(ret), KP(log_local_device), KP(io_manager));
   } else {
     
     log_local_device_ = log_local_device;
-    resource_manager_ = resource_manager;
     io_manager_ = io_manager;
     is_inited_ = true;
   }
@@ -114,7 +111,6 @@ void LogIOAdapter::destroy()
 {
   
   log_local_device_ = NULL;
-  resource_manager_ = NULL;
   io_manager_ = NULL;
   is_inited_ = false;
 }
@@ -171,7 +167,6 @@ int LogIOAdapter::pwrite(const ObIOFd &io_fd,
 {
   int ret = OB_SUCCESS;
   write_size = 0;
-  uint64_t consumer_group_id = 0;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -180,7 +175,6 @@ int LogIOAdapter::pwrite(const ObIOFd &io_fd,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(io_fd), KP(buf), K(count), K(offset));
   } else {
-    CONSUMER_GROUP_FUNC_GUARD(share::ObFunctionType::PRIO_CLOG_HIGH);
 
     ObIOInfo io_info;
     
@@ -215,7 +209,6 @@ int LogIOAdapter::pread(const ObIOFd &io_fd,
 {
   int ret = OB_SUCCESS;
   out_read_size = 0;
-  uint64_t consumer_group_id = 0;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -224,7 +217,6 @@ int LogIOAdapter::pread(const ObIOFd &io_fd,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(io_fd), KP(buf), K(count), K(offset));
   } else {
-    CONSUMER_GROUP_FUNC_GUARD(io_ctx.get_function_type());
     
     ObIOInfo io_info;
     

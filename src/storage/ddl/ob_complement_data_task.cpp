@@ -465,7 +465,6 @@ int ObComplementDataDag::init(const ObDDLBuildSingleReplicaRequestArg &arg)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected", K(ret), K(param_));
   } else {
-    consumer_group_id_ = arg.consumer_group_id_;
     is_inited_ = true;
   }
 

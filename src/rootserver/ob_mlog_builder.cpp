@@ -552,7 +552,6 @@ int ObMLogBuilder::do_create_mlog(
                                   0 /*object_id*/,
                                   mlog_schema.get_schema_version(),
                                   create_mlog_arg.parallelism_,
-                                  create_mlog_arg.consumer_group_id_,
                                   &allocator,
                                   &create_index_arg);
       param.tenant_data_version_ = tenant_data_version;
@@ -663,7 +662,6 @@ int ObMLogBuilder::replace_mlog(ObSchemaGetterGuard &schema_guard,
                                0 /*object_id*/,
                                orig_mlog_schema->get_schema_version(),
                                create_mlog_arg.parallelism_,
-                               create_mlog_arg.consumer_group_id_,
                                &allocator,
                                &rebuild_index_arg);
     param.tenant_data_version_ = data_version;

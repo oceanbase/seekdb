@@ -388,7 +388,7 @@ int ObAllVirtualIOQuota::record_user_group(ObIOUsage &io_usage, const ObTenantIO
         item.total_us_ = info.at(i).avg_total_delay_us_;
         int64_t group_min = 0, group_max = 0, group_weight = 0;
         double iops_scale = 0;
-        if (OB_FAIL(io_config.get_group_config(group_config_index,
+        if (OB_FAIL(io_config.calc_group_config(group_config_index,
                                                group_min,
                                                group_max,
                                                group_weight))) {
@@ -684,12 +684,12 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObTenantIOManager *io_m
                      io_config.group_configs_.at(remote_group_config_index).cleared_ ||
                      io_config.group_configs_.at(remote_group_config_index).deleted_) {
             // do nothing
-          } else if (OB_FAIL(io_config.get_group_config(local_group_config_index,
+          } else if (OB_FAIL(io_config.calc_group_config(local_group_config_index,
                                                       group_min_iops,
                                                       group_max_iops,
                                                       group_iops_weight))) {
             LOG_WARN("get group io config failed", K(ret), K(local_group_config_index));
-          } else if (OB_FAIL(io_config.get_group_config(remote_group_config_index,
+          } else if (OB_FAIL(io_config.calc_group_config(remote_group_config_index,
                                                       group_min_net_bandwidth,
                                                       group_max_net_bandwidth,
                                                       group_net_bandwidth_weight))) {
@@ -968,170 +968,5 @@ int ObAllVirtualGroupIOStat::inner_get_next_row(common::ObNewRow *&row)
   return ret;
 }
 
-/******************              Function IO Stat                *******************/
-ObAllVirtualFunctionIOStat::FuncInfo::FuncInfo()
-  : function_type_(share::ObFunctionType::DEFAULT_FUNCTION),
-    group_mode_(ObIOGroupMode::MODECNT),
-    size_(0),
-    real_iops_(0),
-    real_bw_(0),
-    schedule_us_(0),
-    io_delay_us_(0),
-    total_us_(0)
-{
-
-}
-
-ObAllVirtualFunctionIOStat::FuncInfo::~FuncInfo()
-{
-
-}
-
-ObAllVirtualFunctionIOStat::ObAllVirtualFunctionIOStat()
-  : func_infos_(), func_pos_(0)
-{
-
-}
-ObAllVirtualFunctionIOStat::~ObAllVirtualFunctionIOStat()
-{
-
-}
-int ObAllVirtualFunctionIOStat::init(const common::ObAddr &addr)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(init_addr(addr))) {
-    LOG_WARN("init failed", K(ret), K(addr));
-  } else {
-    {
-      ObRefHolder<ObTenantIOManager> tenant_holder;
-      if (OB_FAIL(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder))) {
-        if (OB_HASH_NOT_EXIST != ret) {
-          LOG_WARN("get tenant io manager failed", K(ret), K(1UL));
-        } else {
-          ret = OB_TENANT_NOT_EXIST;
-          LOG_WARN("tenant not exist", K(ret), K(1UL));
-        }
-      } else if (OB_FAIL(record_function_info(tenant_holder.get_ptr()->get_io_func_infos().func_usages_))) {
-        LOG_WARN("fail to record function item", K(ret), K(1UL));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      is_inited_ = true;
-    }
-  }
-  return ret;
-}
-
-int ObAllVirtualFunctionIOStat::record_function_info(const ObIOFuncUsageArr &func_usages)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!true)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(ret));
-  } else {
-    const int FUNC_NUM = static_cast<uint8_t>(share::ObFunctionType::MAX_FUNCTION_NUM);
-    const int GROUP_MODE_NUM = static_cast<uint8_t>(ObIOGroupMode::MODECNT);
-    for (int i = 0; OB_SUCC(ret) && i < FUNC_NUM; ++i) {
-      for (int j = 0; OB_SUCC(ret) && j < GROUP_MODE_NUM; ++j) {
-        FuncInfo item;
-        
-        item.function_type_ = static_cast<share::ObFunctionType>(i);
-        item.group_mode_ = static_cast<ObIOGroupMode>(j);
-        if (i >= func_usages.count()) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_ERROR("func usages out of range", K(i), K(func_usages.count()));
-        } else if (j >= func_usages.at(i).count()) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_ERROR("func usages by mode out of range", K(i), K(j), K(func_usages.at(i).count()));
-        } else {
-          item.size_ = static_cast<int64_t>(func_usages.at(i).at(j).last_stat_.avg_size_ + 0.5);
-          item.real_iops_ = static_cast<int64_t>(func_usages.at(i).at(j).last_stat_.avg_iops_ + 0.99);
-          item.real_bw_ = func_usages.at(i).at(j).last_stat_.avg_bw_;
-          item.schedule_us_ = func_usages.at(i).at(j).last_stat_.avg_delay_arr_.schedule_delay_us_;
-          item.io_delay_us_ = func_usages.at(i).at(j).last_stat_.avg_delay_arr_.device_delay_us_;
-          item.total_us_ = func_usages.at(i).at(j).last_stat_.avg_delay_arr_.total_delay_us_;
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(func_infos_.push_back(item))) {
-          LOG_WARN("fail to push back func info", K(ret), K(item));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-void ObAllVirtualFunctionIOStat::reset()
-{
-  ObAllVirtualIOStatusIterator::reset();
-  func_infos_.reset();
-  func_pos_ = 0;
-}
-
-int ObAllVirtualFunctionIOStat::inner_get_next_row(common::ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  row = nullptr;
-  ObObj *cells = cur_row_.cells_;
-  if (OB_UNLIKELY(!is_inited_ || nullptr == cells)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), KP(cur_row_.cells_), K(is_inited_));
-  } else if (func_pos_ >= func_infos_.count()) {
-    row = nullptr;
-    ret = OB_ITER_END;
-  } else {
-    const FuncInfo &item = func_infos_.at(func_pos_);
-    for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
-      const uint64_t column_id = output_column_ids_.at(i);
-      switch (column_id) {
-        case FUNCTION_NAME: {
-          cells[i].set_varchar(get_io_function_name(item.function_type_));
-          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case MODE: {
-          const char *str = get_io_mode_string(item.group_mode_);
-          cells[i].set_varchar(str);
-          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case SIZE: {
-          cells[i].set_int(item.size_);
-          break;
-        }
-        case REAL_IOPS: {
-          cells[i].set_int(item.real_iops_);
-          break;
-        }
-        case REAL_MBPS: {
-          cells[i].set_int(item.real_bw_ / 1024L / 1024L);
-          break;
-        }
-        case SCHEDULE_US: {
-          cells[i].set_int(item.schedule_us_);
-          break;
-        }
-        case IO_DELAY_US: {
-          cells[i].set_int(item.io_delay_us_);
-          break;
-        }
-        case TOTAL_US: {
-          cells[i].set_int(item.total_us_);
-          break;
-        }
-        default: {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid column id", K(ret), K(column_id), K(i), K(output_column_ids_));
-          break;
-        }
-      } // end switch
-    } // end for-loop
-    if (OB_SUCC(ret)) {
-      row = &cur_row_;
-    }
-    ++func_pos_;
-  }
-  return ret;
-}
 }// namespace observer
 }// namespace oceanbase

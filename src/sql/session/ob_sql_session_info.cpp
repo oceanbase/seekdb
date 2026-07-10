@@ -145,8 +145,6 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       has_query_executed_(false),
       is_latest_sess_info_(false),
       cur_exec_ctx_(nullptr),
-      expect_group_id_(OB_INVALID_ID),
-      group_id_not_expected_(false),
       vid_(OB_INVALID_ID),
       vport_(0),
       in_bytes_(0),
@@ -305,8 +303,6 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     is_latest_sess_info_ = false;
     int temp_ret = OB_SUCCESS;
     optimizer_tracer_.reset();
-    expect_group_id_ = OB_INVALID_ID;
-    group_id_not_expected_ = false;
     //call at last time
     ObBasicSessionInfo::reset(skip_sys_var);
   }

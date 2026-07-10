@@ -239,7 +239,7 @@ ObPxThreadWorker::~ObPxThreadWorker()
 int ObPxThreadWorker::run(ObPxRpcInitTaskArgs &task_arg)
 {
   int ret = OB_SUCCESS;
-  int64_t group_id = THIS_WORKER.get_group_id();
+  int64_t group_id = 0;
   omt::ObPxPools* px_pools = share::g_mp->px_pools();
   if (OB_ISNULL(px_pools)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;

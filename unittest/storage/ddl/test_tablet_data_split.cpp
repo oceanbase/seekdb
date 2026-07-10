@@ -87,7 +87,6 @@ int TestDataSplit::prepare_mock_start_arg(
   arg.execution_id_        = 1;
   arg.tablet_task_id_      = 1;
   arg.data_format_version_ = 1;
-  arg.consumer_group_id_   = 1;
   arg.dest_ls_id_          = TEST_LS_ID;
   arg.dest_schema_version_ = 1;
   if (is_split) {
@@ -146,7 +145,6 @@ int TestDataSplit::prepare_mock_finish_arg(obcall::ObTabletSplitArg &arg)
   // ASSERT_EQ(OB_SUCCESS, arg.dest_tablets_id_.push_back(TEST_TABLET_ID));
   arg.compaction_scn_ = 1;
   arg.data_format_version_ = 1;
-  arg.consumer_group_id_ = 1;
   arg.can_reuse_macro_block_ = true;
   arg.split_sstable_type_ = ObSplitSSTableType::SPLIT_BOTH;
   // ASSERT_EQ(OB_SUCCESS, arg.lob_col_idxs_.push_back(0));

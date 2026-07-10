@@ -17,7 +17,6 @@
 #include "sql/das/ob_das_parallel_handler.h"
 #include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_data_access_service.h"
-#include "share/resource_manager/ob_cgroup_ctrl.h"
 #include "lib/profile/ob_trace_id.h"
 #include "sql/engine/ob_exec_context.h"
 using namespace oceanbase;

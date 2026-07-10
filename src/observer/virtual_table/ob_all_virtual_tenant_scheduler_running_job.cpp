@@ -166,10 +166,6 @@ int ObAllVirtualTenantSchedulerRunningJob::FillScanner::operator()(
           cur_row_->cells_[cell_idx].set_null();
           break;
         }
-        case RESOURCE_CONSUMER_GROUP: {
-          cur_row_->cells_[cell_idx].set_null();
-          break;
-        }
         case RUNNING_INSTANCE: {
           cur_row_->cells_[cell_idx].set_null();
           break;

@@ -282,35 +282,12 @@ const int64_t OB_MAX_LS_FLAG_LENGTH = 2048;
 const int64_t ESTIMATE_PS_RESERVE_TIME = 100 * 1000;
 const uint64_t MAX_STMT_TYPE_NAME_LENGTH = 128;
 
-const int64_t USER_RESOURCE_GROUP_START_ID = 10000;
-const uint64_t OBCG_DEFAULT_GROUP_ID = 0;
-const uint64_t USER_RESOURCE_OTHER_GROUP_ID = 0;
-const uint64_t OB_INVALID_GROUP_ID = UINT64_MAX;
 const uint64_t OB_INTERNAL_CATALOG_ID = 0;
 const char *const OB_INTERNAL_CATALOG_NAME = "internal";
 const char *const OB_INTERNAL_CATALOG_NAME_UPPER = "INTERNAL";
 const char *const OB_OCEANBASE_NAME = "OceanBase";
 const char *const OB_SEEKDB_NAME = "seekdb";
 const char *const OB_COMPATIBILITY_VERSION = "4.3.5.3";
-
-OB_INLINE bool is_valid_group(const uint64_t group_id)
-{
-  return group_id >= USER_RESOURCE_OTHER_GROUP_ID && group_id != OB_INVALID_GROUP_ID;
-}
-
-OB_INLINE bool is_resource_manager_group(const uint64_t group_id)
-{
-  return group_id >= USER_RESOURCE_GROUP_START_ID && group_id != OB_INVALID_GROUP_ID;
-}
-OB_INLINE bool is_sys_group(const uint64_t group_id)
-{
-  return group_id >= 0 && group_id < USER_RESOURCE_GROUP_START_ID;
-}
-OB_INLINE bool is_valid_resource_group(const uint64_t group_id)
-{
-  //other group or user group
-  return group_id == USER_RESOURCE_OTHER_GROUP_ID || is_resource_manager_group(group_id);
-}
 
 // See ObDeviceHealthStatus for more information
 const int64_t OB_MAX_DEVICE_HEALTH_STATUS_STR_LENGTH = 20;

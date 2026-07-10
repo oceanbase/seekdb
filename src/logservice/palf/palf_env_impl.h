@@ -57,7 +57,6 @@ class ObReqTransport;
 namespace share
 {
 class ObLocalDevice;
-class ObResourceManager;
 }
 namespace palf
 {
@@ -217,7 +216,6 @@ public:
            ILogBlockPool *log_block_pool,
            PalfMonitorCb *monitor,
            common::ObIODevice *log_local_device,
-           share::ObResourceManager *resource_manager,
            common::ObIOManager *io_manager);
   // start function contains two meanings:
   //

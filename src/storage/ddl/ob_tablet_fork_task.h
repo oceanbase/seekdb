@@ -120,7 +120,7 @@ public:
   int init(const ObTabletForkParam &param);
   TO_STRING_KV(K_(is_inited), K_(ls_id), K_(table_id), K_(schema_version),
                K_(task_id), K_(source_tablet_id), K_(dest_tablet_id), K_(fork_snapshot_version),
-               K_(compat_mode), K_(data_format_version), K_(consumer_group_id));
+               K_(compat_mode), K_(data_format_version));
 public:
   bool is_inited_;
   
@@ -133,7 +133,6 @@ public:
   int64_t fork_snapshot_version_;
   lib::Worker::CompatMode compat_mode_;
   int64_t data_format_version_;
-  int64_t consumer_group_id_;
 };
 
 struct ObTabletForkCtx final
@@ -201,15 +200,12 @@ public:
   int fill_dag_key(char *buf, const int64_t buf_len) const override;
   virtual lib::Worker::CompatMode get_compat_mode() const override
   { return param_.compat_mode_; }
-  virtual uint64_t get_consumer_group_id() const override
-  { return static_cast<uint64_t>(consumer_group_id_); }
   virtual bool is_ha_dag() const override { return false; }
   int calc_total_row_count();
 private:
   bool is_inited_;
   ObTabletForkParam param_;
   ObTabletForkCtx context_;
-  int64_t consumer_group_id_;
   DISALLOW_COPY_AND_ASSIGN(ObTabletForkDag);
 };
 
@@ -323,4 +319,3 @@ public:
 }  // end namespace oceanbase
 
 #endif  // OCEANBASE_STORAGE_DDL_OB_TABLET_FORK_TASK_H_
-

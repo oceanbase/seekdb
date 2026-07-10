@@ -269,13 +269,6 @@ ob_set_subtarget(ob_share redolog
   redolog/ob_log_policy.cpp
 )
 
-ob_set_subtarget(ob_share resource_manager
-  resource_manager/ob_cgroup_ctrl.cpp
-  resource_manager/ob_resource_manager.cpp
-  resource_manager/ob_resource_plan_info.cpp
-  resource_manager/ob_resource_plan_manager.cpp
-)
-
 ob_set_subtarget(ob_share schema
   schema/ob_col_desc.cpp
   schema/ob_column_schema.cpp

@@ -331,7 +331,6 @@ int ObDBMSSchedJobClassInfo::deep_copy(common::ObIAllocator &allocator, const Ob
   OZ (log_history_.from(other.log_history_, allocator));
   OZ (ob_write_string(allocator, other.job_class_name_, job_class_name_));
   OZ (ob_write_string(allocator, other.service_, service_));
-  OZ (ob_write_string(allocator, other.resource_consumer_group_, resource_consumer_group_));
   OZ (ob_write_string(allocator, other.logging_level_, logging_level_));
   OZ (ob_write_string(allocator, other.comments_, comments_));
   return ret;

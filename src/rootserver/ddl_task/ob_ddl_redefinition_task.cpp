@@ -45,7 +45,6 @@ ObDDLRedefinitionSSTableBuildTask::ObDDLRedefinitionSSTableBuildTask(
     const int64_t schema_version,
     const int64_t snapshot_version,
     const int64_t execution_id,
-    const int64_t consumer_group_id,
     const ObSQLMode &sql_mode,
     const common::ObCurTraceId::TraceId &trace_id,
     const int64_t parallelism,
@@ -60,7 +59,7 @@ ObDDLRedefinitionSSTableBuildTask::ObDDLRedefinitionSSTableBuildTask(
     const ObString &mview_select_sql)
   : is_inited_(false), task_id_(task_id), data_table_id_(data_table_id),
     dest_table_id_(dest_table_id), schema_version_(schema_version), snapshot_version_(snapshot_version),
-    execution_id_(execution_id), consumer_group_id_(consumer_group_id), sql_mode_(sql_mode), trace_id_(trace_id),
+    execution_id_(execution_id), sql_mode_(sql_mode), trace_id_(trace_id),
     parallelism_(parallelism), use_heap_table_ddl_plan_(use_heap_table_ddl_plan),
     is_mview_complete_refresh_(is_mview_complete_refresh), is_retryable_ddl_(is_retryable_ddl), mview_table_id_(mview_table_id),
     root_service_(root_service), inner_sql_exec_addr_(inner_sql_exec_addr), data_format_version_(0),
@@ -182,7 +181,6 @@ int ObDDLRedefinitionSSTableBuildTask::process()
       session_param.ddl_info_.set_refreshing_mview(is_mview_complete_refresh_);
       session_param.ddl_info_.set_retryable_ddl(is_retryable_ddl_);
       session_param.use_external_session_ = true;  // means session id dispatched by session mgr
-      session_param.consumer_group_id_ = consumer_group_id_;
 
       common::ObAddr *sql_exec_addr = nullptr;
       const int64_t DDL_INNER_SQL_EXECUTE_TIMEOUT = ObDDLUtil::calc_inner_sql_execute_timeout();
@@ -281,7 +279,6 @@ ObAsyncTask *ObDDLRedefinitionSSTableBuildTask::deep_copy(char *buf, const int64
         schema_version_,
         snapshot_version_,
         execution_id_,
-        consumer_group_id_,
         sql_mode_,
         trace_id_,
         parallelism_,
@@ -630,7 +627,6 @@ int ObDDLRedefinitionTask::send_build_single_replica_request()
       param.parallelism_ = std::max(alter_table_arg_.parallelism_, static_cast<int64_t>(1));
       param.execution_id_ = execution_id_;
       param.data_format_version_ = data_format_version_;
-      param.consumer_group_id_ = alter_table_arg_.consumer_group_id_;
       param.is_no_logging_ = is_no_logging_;
       if (OB_FAIL(ObDDLUtil::get_tablets(object_id_, param.source_tablet_ids_))) {
         LOG_WARN("fail to get tablets", K(ret), K(object_id_));
@@ -842,7 +838,6 @@ int ObDDLRedefinitionTask::add_constraint_ddl_task(const int64_t constraint_id)
                                      constraint_id,
                                      table_schema->get_schema_version(),
                                      0L/*parallelism*/,
-                                     consumer_group_id_,
                                      &allocator_,
                                      &alter_table_arg,
                                      task_id_);
@@ -971,7 +966,6 @@ int ObDDLRedefinitionTask::add_fk_ddl_task(const int64_t fk_id)
                                      fk_id,
                                      hidden_table_schema->get_schema_version(),
                                      0L/*parallelism*/,
-                                     consumer_group_id_,
                                      &allocator_,
                                      &alter_table_arg,
                                      task_id_);

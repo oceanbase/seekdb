@@ -35,7 +35,6 @@ public:
       based_schema_object_infos_(),
       parallelism_(0),
       task_id_(0),
-      consumer_group_id_(0),
       is_parallel_(false)
    { }
   virtual ~ObDDLArg() = default;
@@ -63,7 +62,6 @@ public:
     based_schema_object_infos_.reset();
     parallelism_ = 0;
     task_id_ = 0;
-    consumer_group_id_ = 0;
     is_parallel_ = false;
   }
   DECLARE_TO_STRING;
@@ -75,7 +73,6 @@ public:
   common::ObSArray<share::schema::ObBasedSchemaObjectInfo> based_schema_object_infos_;
   int64_t parallelism_;
   int64_t task_id_;
-  int64_t consumer_group_id_;
   //some parallel ddl is effect before 4220, this member is valid after 4220
   bool is_parallel_;
 };

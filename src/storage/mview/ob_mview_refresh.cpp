@@ -519,7 +519,6 @@ int ObMViewRefresher::complete_refresh()
     obcall::ObMViewCompleteRefreshRes res;
     
     arg.table_id_ = mview_id;
-    arg.consumer_group_id_ = THIS_WORKER.get_group_id();
     arg.session_id_ = session_info->get_sessid_for_table();
     arg.parallelism_ = refresh_param_.parallelism_;
     arg.sql_mode_ = session_info->get_sql_mode();

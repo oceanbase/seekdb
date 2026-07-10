@@ -30,7 +30,6 @@
 #include "sql/rewrite/ob_transformer_impl.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
 #include "sql/code_generator/ob_code_generator.h"
-#include "share/resource_manager/ob_resource_manager.h"
 #include "sql/plan_cache/ob_values_table_compression.h"
 #include "pl/ob_pl_resolver.h"
 #include "sql/ob_sql_ccl_rule_manager.h"
@@ -2768,11 +2767,6 @@ int ObSql::generate_stmt(ParseResult &parse_result,
         ret = resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT, *parse_result.result_tree_->children_[0], stmt);
       }
 
-      //check if current sql is using expected resource group
-      //if not, retry sql
-      ObPCResourceMapRule resource_map_rule;
-      OZ(ObSQLUtils::check_sql_map_expected_resource_group(context, result, &resolver_ctx, stmt, resource_map_rule));
-
       // set const param constraint after resolving
       context.all_plan_const_param_constraints_ = &(resolver_ctx.query_ctx_->all_plan_const_param_constraints_);
       context.all_possible_const_param_constraints_ = &(resolver_ctx.query_ctx_->all_possible_const_param_constraints_);
@@ -2783,20 +2777,8 @@ int ObSql::generate_stmt(ParseResult &parse_result,
       context.need_match_all_params_ = resolver_ctx.query_ctx_->need_match_all_params_;
       context.all_local_session_vars_ = &(resolver_ctx.query_ctx_->all_local_session_vars_);
       context.cur_stmt_ = stmt;
-      context.resource_map_rule_.shadow_copy(resource_map_rule);
       LOG_DEBUG("got plan const param constraints", K(resolver_ctx.query_ctx_->all_plan_const_param_constraints_));
       LOG_DEBUG("got all const param constraints", K(resolver_ctx.query_ctx_->all_possible_const_param_constraints_));
-      LOG_TRACE("set sql context rule id", K(ret), K(context.resource_map_rule_), K(&context),
-                K(&resolver_ctx), K(context.is_prepare_stage_), K(context.is_prepare_protocol_),
-                K(NULL != GCTX.cgroup_ctrl_ && GCTX.cgroup_ctrl_->is_valid()),
-                K(result.get_session().is_inner()),
-                K(context.multi_stmt_item_.is_part_of_multi_stmt()),
-                K(context.multi_stmt_item_.get_seq_num()));
-      if (result.get_session().get_group_id_not_expected()) {
-        // ignore ret
-        LOG_USER_WARN(OB_NEED_SWITCH_CONSUMER_GROUP);
-        result.get_session().set_group_id_not_expected(false);
-      }
       NG_TRACE(resolve_end);
       if (OB_SUCC(ret)) {
         // move init datum param store here
@@ -3839,8 +3821,7 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
         || OB_REACH_MAX_CONCURRENT_NUM == ret
         || OB_ARRAY_BINDING_ROLLBACK == ret
         || OB_ERR_PROXY_REROUTE == ret
-        || OB_BATCHED_MULTI_STMT_ROLLBACK == ret
-        || OB_NEED_SWITCH_CONSUMER_GROUP == ret) {
+        || OB_BATCHED_MULTI_STMT_ROLLBACK == ret) {
       /*do nothing*/
     } else {
       get_plan_err = ret;
@@ -3945,8 +3926,7 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
       }
     }
   }
-  if (OB_ERR_PROXY_REROUTE == ret || OB_REACH_MAX_CONCURRENT_NUM == ret || OB_REACH_MAX_CCL_CONCURRENT_NUM == ret
-      || OB_NEED_SWITCH_CONSUMER_GROUP == ret) {
+  if (OB_ERR_PROXY_REROUTE == ret || OB_REACH_MAX_CONCURRENT_NUM == ret || OB_REACH_MAX_CCL_CONCURRENT_NUM == ret) {
     // If sql needs secondary routing, the connection should not be closed
     need_disconnect = false;
   }

@@ -46,7 +46,6 @@ int ObDropLobTask::init(
     const uint64_t data_table_id,
     const int64_t schema_version,
     const int64_t parent_task_id,
-    const int64_t consumer_group_id,
     const obcall::ObDDLArg &ddl_arg)
 {
   int ret = OB_SUCCESS;
@@ -68,7 +67,6 @@ int ObDropLobTask::init(
     schema_version_ = schema_version;
     task_id_ = task_id;
     parent_task_id_ = parent_task_id;
-    consumer_group_id_ = consumer_group_id;
     task_version_ = OB_DROP_LOB_TASK_VERSION;
     
     dst_schema_version_ = schema_version_;

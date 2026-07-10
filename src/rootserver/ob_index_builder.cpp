@@ -656,7 +656,6 @@ int ObIndexBuilder::do_create_global_index(
                                                  nullptr/*del_data_tablet_ids*/,
                                                  &index_schema,
                                                  arg.parallelism_,
-                                                 arg.consumer_group_id_,
                                                  tenant_data_version,
                                                  allocator,
                                                  task_record))) {
@@ -695,7 +694,6 @@ int ObIndexBuilder::submit_build_index_task(
     const ObIArray<ObTabletID> *del_data_tablet_ids,
     const ObTableSchema *index_schema,
     const int64_t parallelism,
-    const int64_t group_id,
     const uint64_t tenant_data_version,
     common::ObIAllocator &allocator,
     ObDDLTaskRecord &task_record,
@@ -709,7 +707,6 @@ int ObIndexBuilder::submit_build_index_task(
                              0/*object_id*/,
                              index_schema->get_schema_version(),
                              parallelism,
-                             group_id,
                              &allocator,
                              &create_index_arg);
   param.tenant_data_version_ = tenant_data_version;
@@ -951,7 +948,6 @@ int ObIndexBuilder::submit_rebuild_index_task(
     const ObIArray<ObTabletID> *del_data_tablet_ids,
     const ObTableSchema *index_schema,
     const int64_t parallelism,
-    const int64_t group_id,
     const uint64_t tenant_data_version,
     common::ObIAllocator &allocator,
     ObDDLTaskRecord &task_record)
@@ -971,7 +967,6 @@ int ObIndexBuilder::submit_rebuild_index_task(
                               0/*object_id*/,
                               index_schema->get_schema_version(),
                               parallelism,
-                              group_id,
                               &allocator,
                               &rebuild_index_arg);
     param.tenant_data_version_ = tenant_data_version;
@@ -1251,7 +1246,6 @@ int ObIndexBuilder::submit_drop_index_task(ObMySQLTransaction &trans,
                                  0/*object_id*/,
                                  index_schema.get_schema_version(),
                                  0/*parallelism*/,
-                                 arg.consumer_group_id_,
                                  &allocator,
                                  &arg,
                                  parent_task_id);
@@ -1290,7 +1284,6 @@ int ObIndexBuilder::submit_drop_index_task(ObMySQLTransaction &trans,
                                  0/*object_id*/,
                                  index_schema.get_schema_version(),
                                  0/*parallelism*/,
-                                 arg.consumer_group_id_,
                                  &allocator,
                                  &arg);
       param.aux_rowkey_doc_schema_ = (-1 == aux_rowkey_doc_ith) ? nullptr : &(index_schemas.at(aux_rowkey_doc_ith));
@@ -1331,7 +1324,6 @@ int ObIndexBuilder::submit_drop_index_task(ObMySQLTransaction &trans,
                                  0/*object_id*/,
                                  index_schema.get_schema_version(),
                                  0/*parallelism*/,
-                                 arg.consumer_group_id_,
                                  &allocator,
                                  &arg);
       param.vec_vid_rowkey_schema_ = vec_vid_rowkey_ith == -1 ? nullptr : &(index_schemas.at(vec_vid_rowkey_ith));
@@ -1578,7 +1570,6 @@ int ObIndexBuilder::do_create_local_index(
                                                  nullptr/*del_data_tablet_ids*/,
                                                  &index_schema,
                                                  create_index_arg.parallelism_,
-                                                 create_index_arg.consumer_group_id_,
                                                  tenant_data_version,
                                                  allocator,
                                                  task_record,

@@ -1961,16 +1961,6 @@ int ObSysVarOnCheckFuncs::check_and_convert_tx_read_only(ObExecContext &ctx,
 }
 
 
-int ObSysVarOnCheckFuncs::check_update_resource_manager_plan(ObExecContext &ctx,
-                                                             const ObSetVar &set_var,
-                                                             const ObBasicSysVar &sys_var,
-                                                             const common::ObObj &val,
-                                                             common::ObObj &out_val)
-{
-  int ret = OB_SUCCESS;
-  return ret;
-}
-
 int ObSysVarOnCheckFuncs::check_log_row_value_option_is_valid(sql::ObExecContext &ctx,
                                                                  const ObSetVar &set_var,
                                                                  const ObBasicSysVar &sys_var,

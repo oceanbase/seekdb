@@ -50,7 +50,7 @@ public:
   int init(const obcall::ObTabletSplitArg &arg);
   TO_STRING_KV(K_(is_inited), K_(ls_id), K_(table_id), K_(schema_version), 
                K_(task_id), K_(source_tablet_id), K_(dest_tablets_id), K_(compaction_scn), K_(user_parallelism), 
-               K_(compat_mode), K_(data_format_version), K_(consumer_group_id),
+               K_(compat_mode), K_(data_format_version),
                K_(can_reuse_macro_block), K_(split_sstable_type), K_(parallel_datum_rowkey_list),
                K_(min_split_start_scn));
 private:
@@ -67,7 +67,6 @@ public:
   int64_t user_parallelism_;
   lib::Worker::CompatMode compat_mode_;
   int64_t data_format_version_;
-  uint64_t consumer_group_id_;
   bool can_reuse_macro_block_;
   share::ObSplitSSTableType split_sstable_type_;
   common::ObSArray<blocksstable::ObDatumRowkey> parallel_datum_rowkey_list_;
@@ -126,8 +125,6 @@ public:
   int fill_dag_key(char *buf, const int64_t buf_len) const override;
   virtual lib::Worker::CompatMode get_compat_mode() const override
   { return param_.compat_mode_; }
-  virtual uint64_t get_consumer_group_id() const override 
-  { return consumer_group_id_; }
   virtual bool is_ha_dag() const override { return false; }
   int report_replica_build_status();
   int calc_total_row_count();

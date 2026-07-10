@@ -18,7 +18,6 @@
 
 #include "share/resource_limit_calculator/ob_resource_commmon.h"
 #include "ob_io_manager.h"
-#include "share/resource_manager/ob_cgroup_ctrl.h"  // ObCgroupCtrl complete type, previously hidden behind a transitive include(free within share)
 #include "share/ob_share_util.h"  // ObShareUtil, previously hidden behind a transitive include(free within share)
 #include "share/ob_server_struct.h"  // GCTX, previously hidden behind a transitive include(free within share)
 #include "share/errsim_module/ob_errsim_module_interface_imp.h"
@@ -831,28 +830,6 @@ int ObIOManager::refresh_tenant_io_param_config(const ObTenantIOConfig::ParamCon
   return ret;
 }
 
-// for unittest
-int ObIOManager::modify_group_io_config(const uint64_t index,
-                                        const int64_t min_percent,
-                                        const int64_t max_percent,
-                                        const int64_t weight_percent)
-{
-  int ret = OB_SUCCESS;
-  ObRefHolder<ObTenantIOManager> tenant_holder;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
-  } else if (OB_FAIL(get_tenant_io_manager(tenant_holder))) {
-    LOG_WARN("get tenant io manager failed", K(ret));
-  } else if (OB_FAIL(tenant_holder.get_ptr()->modify_group_io_config(index, min_percent, max_percent, weight_percent,
-                                                                    false, false))) {
-    LOG_WARN("update tenant io config failed", K(ret), K(min_percent), K(max_percent), K(weight_percent));
-  } else if (OB_FAIL(tenant_holder.get_ptr()->refresh_group_io_config())) {
-    LOG_WARN("fail to refresh group config", K(ret));
-  }
-  return ret;
-}
-
 int ObIOManager::get_tenant_io_manager(ObRefHolder<ObTenantIOManager> &tenant_holder) const
 {
   int ret = OB_SUCCESS;
@@ -987,8 +964,6 @@ int ObTenantIOManager::init(const ObTenantIOConfig &io_config)
     LOG_WARN("invalid argument", K(ret), K(io_config));
   } else if (OB_FAIL(init_memory_pool( io_config.param_config_.memory_limit_))) {
     LOG_WARN("init tenant io memory pool failed", K(ret), K(io_config), K(io_memory_limit_), K(request_count_), K(request_count_));
-  } else if (OB_FAIL(io_func_infos_.init())) {
-    LOG_WARN("init io func infos failed", K(ret));
   } else if (OB_FAIL(io_usage_.init(io_config.group_configs_.count() / IO_MODE_CNT))) {
     LOG_WARN("init io usage failed", K(ret), K(io_usage_), K(io_config.group_configs_.count()));
   } else if (OB_FAIL(io_sys_usage_.init(SYS_MODULE_CNT))) { // local and remote
@@ -1504,77 +1479,8 @@ int ObTenantIOManager::init_group_index_map(const ObTenantIOConfig &io_config)
 
 int ObTenantIOManager::get_group_index(const ObIOGroupKey &key, uint64_t &index)
 {
-  // IOMode in key is correct, no need to consider object device.
   int ret = OB_SUCCESS;
-  if (!is_resource_manager_group(key.group_id_)) {
-    index = (uint64_t)(key.mode_);
-  } else if (OB_FAIL(group_id_index_map_.get_refactored(key, index))) {
-    if (OB_HASH_NOT_EXIST != ret) {
-      LOG_WARN("get index from map failed", K(ret), K(key.group_id_), K(index));
-    }
-  }
-  return ret;
-}
-
-
-int ObTenantIOManager::modify_group_io_config(const uint64_t index,
-                                              const int64_t min_percent,
-                                              const int64_t max_percent,
-                                              const int64_t weight_percent,
-                                              const bool deleted,
-                                              const bool cleared)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(!is_working())) {
-    ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("tenant not working", K(ret));
-  } else if (index < 0 || (index >= io_config_.group_configs_.count()) ||
-             min_percent < 0 || min_percent > 100 ||
-             max_percent < 0 || max_percent > 100 ||
-             max_percent < min_percent ||
-             weight_percent < 0 || weight_percent > 100) {
-    ret = OB_INVALID_CONFIG;
-    LOG_WARN("invalid group config", K(index), K(min_percent), K(max_percent), K(weight_percent));
-  } else {
-    io_config_.group_configs_.at(index).min_percent_ = min_percent;
-    io_config_.group_configs_.at(index).max_percent_ = max_percent;
-    io_config_.group_configs_.at(index).weight_percent_ = weight_percent;
-    io_config_.group_configs_.at(index).cleared_ = cleared;
-    io_config_.group_configs_.at(index).deleted_ = deleted;
-    io_config_.group_config_change_ = true;
-  }
-  return ret;
-}
-
-
-
-
-
-int ObTenantIOManager::refresh_group_io_config()
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(!is_working())) {
-    ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("tenant not working", K(ret));
-  } else if (OB_LIKELY(!io_config_.group_config_change_)) {
-    // group config not change, do nothing
-  } else if (OB_FAIL(io_usage_.refresh_group_num(io_config_.group_configs_.count() / 3))) {
-    LOG_WARN("refresh io usage array failed", K(ret), K(io_config_.group_configs_.count()));
-  } else if (OB_FAIL(io_mem_stats_.get_mem_stat().refresh_group_num(io_config_.group_configs_.count() / 3))) {
-    LOG_WARN("refresh mem array failed", K(ret), K(io_config_.group_configs_.count()));
-  } else if (OB_FAIL(qsched_.update_config(io_config_))) {
-    LOG_WARN("refresh io config failed", K(ret), K(io_config_));
-  } else {
-    LOG_INFO("refresh group io config success", K(io_config_));
-    io_config_.group_config_change_ = false;
-  }
-
+  index = static_cast<uint64_t>(key.mode_);
   return ret;
 }
 
@@ -1845,74 +1751,10 @@ int ObTenantIOManager::print_io_status()
           "obw_limit", 0);
     }
 
-    // print io function status
-    print_io_function_status();
-
     // print callback status
     {
       (void)callback_mgr_.to_string(io_status, sizeof(io_status));
       LOG_INFO("[IO STATUS CALLBACK]", KCSTRING(io_status));
-    }
-  }
-  return ret;
-}
-
-int ObTenantIOManager::print_io_function_status()
-{
-  int ret = OB_SUCCESS;
-  if (!is_working() || !is_inited_) {
-    LOG_WARN("is not working or not inited", K(is_working()), K(is_inited_));
-  } else {
-    char io_status[1024] = { 0 };
-    int FUNC_NUM = static_cast<uint8_t>(share::ObFunctionType::MAX_FUNCTION_NUM);
-    int GROUP_MODE_NUM = static_cast<uint8_t>(ObIOGroupMode::MODECNT);
-    ObIOFuncUsageArr &func_usages = io_func_infos_.func_usages_;
-    for (int i = 0; OB_SUCC(ret) && i < FUNC_NUM; ++i) {
-      for (int j = 0; OB_SUCC(ret) && j < GROUP_MODE_NUM; ++j) {
-        double avg_size = 0;
-        double avg_iops = 0;
-        int64_t avg_bw = 0;
-        int64_t avg_prepare_delay = 0;
-        int64_t avg_schedule_delay = 0;
-        int64_t avg_submit_delay = 0;
-        int64_t avg_device_delay = 0;
-        int64_t avg_total_delay = 0;
-        const char *mode_str = get_io_mode_string(static_cast<ObIOGroupMode>(j));
-        if (i >= func_usages.count()) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_ERROR("func usages out of range", K(i), K(func_usages.count()));
-        } else if (j >= func_usages.at(i).count()) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_ERROR("func usages by mode out of range", K(i), K(j), K(func_usages.at(i).count()));
-        } else if (OB_FAIL(func_usages.at(i).at(j).calc(
-                       avg_size,
-                       avg_iops,
-                       avg_bw,
-                       avg_prepare_delay,
-                       avg_schedule_delay,
-                       avg_submit_delay,
-                       avg_device_delay,
-                       avg_total_delay))) {
-          LOG_WARN("fail to calc func usage", K(ret), K(i), K(j));
-        } else if (avg_size < std::numeric_limits<double>::epsilon()) {
-        } else {
-          ObCStringHelper helper;
-          const char *func_name = helper.convert(get_io_function_name(static_cast<share::ObFunctionType>(i)));
-          snprintf(io_status, sizeof(io_status), 
-                    "function_name:%s, mode:%s, avg_size:%ld, avg_iops:%ld, avg_bw:%ld, [delay/us]: prepare:%ld, schedule:%ld, submit:%ld, device:%ld, total:%ld",
-                    func_name,
-                    mode_str,
-                    static_cast<int64_t>(avg_size + 0.5),
-                    static_cast<int64_t>(avg_iops + 0.99),
-                    avg_bw,
-                    avg_prepare_delay,
-                    avg_schedule_delay,
-                    avg_submit_delay,
-                    avg_device_delay,
-                    avg_total_delay);
-          LOG_INFO("[IO STATUS FUNCTION]", KCSTRING(io_status));
-        }
-      }
     }
   }
   return ret;
@@ -1937,25 +1779,7 @@ void ObTenantIOManager::dec_ref()
 int ObTenantIOManager::get_throttled_time(uint64_t group_id, int64_t &throttled_time)
 {
   int ret = OB_SUCCESS;
-  int64_t current_throttled_time_us = -1;
-  if (OB_FAIL(GCTX.cgroup_ctrl_->get_throttled_time(current_throttled_time_us, group_id))) {
-    LOG_WARN("get throttled time failed", K(ret), K(group_id));
-  } else if (current_throttled_time_us > 0) {
-    uint64_t idx = 0;
-    const uint64_t GROUP_MODE_CNT = static_cast<uint64_t>(ObIOGroupMode::MODECNT);
-    ObIOGroupKey group_key(group_id, ObIOMode::READ);
-    if (OB_FAIL(get_group_index(group_key, idx))) {
-      LOG_WARN("get group index failed", K(ret), K(group_id));
-    } else {
-      idx = idx / GROUP_MODE_CNT;
-      throttled_time = current_throttled_time_us - io_usage_.get_group_throttled_time_us().at(idx);
-      io_usage_.get_group_throttled_time_us().at(idx) = current_throttled_time_us;
-    }
-  }
+  UNUSED(group_id);
+  throttled_time = 0;
   return ret;
-}
-
-const ObIOFuncUsages& ObTenantIOManager::get_io_func_infos()
-{
-  return io_func_infos_;
 }

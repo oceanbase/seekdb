@@ -36,7 +36,6 @@ public:
       const ObTableSchema *index_schema,
       const int64_t schema_version,
       const int64_t parallelism,
-      const int64_t consumer_group_id,
       const share::ObDDLType task_type,
       const obcall::ObCreateIndexArg &create_index_arg,
       const uint64_t tenant_data_version,
@@ -70,8 +69,7 @@ public:
       K(sq_meta_table_task_id_), K(pq_centroid_table_task_id_), K(pq_code_table_task_id_), 
       K(pq_rowkey_cid_table_task_id_),
       K(drop_index_task_id_), K(is_rebuild_index_),
-      K(drop_index_task_submitted_), K(schema_version_), K(execution_id_),
-      K(consumer_group_id_), K(trace_id_), K(parallelism_), K(create_index_arg_));
+      K(drop_index_task_submitted_), K(schema_version_), K(execution_id_));
 
 public:
   void set_centroid_table_id(const uint64_t id) { centroid_table_id_ = id; }
@@ -183,7 +181,6 @@ private:
   using ObDDLTask::task_id_;
   using ObDDLTask::schema_version_;
   using ObDDLTask::parallelism_;
-  using ObDDLTask::consumer_group_id_;
   using ObDDLTask::parent_task_id_;
   using ObDDLTask::task_status_;
   using ObDDLTask::snapshot_version_;

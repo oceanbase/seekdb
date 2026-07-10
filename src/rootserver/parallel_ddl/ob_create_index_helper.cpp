@@ -515,7 +515,6 @@ int ObCreateIndexHelper::operate_schemas_()
                                                               nullptr/*del_data_tablet_ids*/,
                                                               &index_schema,
                                                               arg_.parallelism_,
-                                                              arg_.consumer_group_id_,
                                                               tenant_data_version,
                                                               allocator_,
                                                               task_record_))) {

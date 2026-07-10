@@ -43,7 +43,6 @@
 #include "logservice/ob_tenant_mutil_allocator_mgr.h"
 #include "share/ob_device_manager.h"
 #include "share/ob_io_device_helper.h"
-#include "share/resource_manager/ob_cgroup_ctrl.h"
 #include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "share/schema/ob_multi_version_schema_service.h"
@@ -242,7 +241,6 @@ private:
   int64_t mysql_port_;
   ObAddr self_addr_;
   observer::ObSrvNetworkFrame net_frame_;
-  share::ObCgroupCtrl cgroup_ctrl_;
   omt::ObMultiTenant multi_tenant_;
   MockObService ob_service_;
   share::ObLocationService location_service_;
@@ -467,7 +465,6 @@ void MockTenantModuleEnv::init_gctx_gconf()
   GCTX.ob_service_ = &ob_service_;
   GCTX.omt_ = &multi_tenant_;
   GCTX.sql_engine_ = &sql_engine_;
-  GCTX.cgroup_ctrl_ = &cgroup_ctrl_;
   GCTX.session_mgr_ = &session_mgr_;
   GCTX.scramble_rand_ = &scramble_rand_;
   (void) GCTX.set_server_id(1);
@@ -538,8 +535,6 @@ int MockTenantModuleEnv::init_before_start_mtl()
   } else if (OB_FAIL(tablet_operator_.init(&meta_db_pool_))) {
     STORAGE_LOG(ERROR, "init tablet_operator_ failed", KR(ret));
   } else {
-    // Ignore cgroup error
-    cgroup_ctrl_.init();
     GCTX.sql_proxy_ = &sql_proxy_;
     ObRunningModeConfig::instance().mini_mode_ = true; // make startup_accel_handler_ use only one thread
   }

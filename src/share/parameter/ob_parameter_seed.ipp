@@ -1595,16 +1595,6 @@ DEF_PARAM(dump_data_dictionary_to_log_interval, TIME, OB_CLUSTER_PARAMETER, "24h
         "Range: (0s,+∞)",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-DEF_PARAM(enable_cgroup, BOOL, OB_CLUSTER_PARAMETER, "True",
-         "when set to false, cgroup will not init; when set to true but cgroup root dir is not ready, print ERROR",
-         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(enable_global_background_resource_isolation, BOOL, OB_CLUSTER_PARAMETER, "False",
-         "When set to false, foreground and background tasks are isolated within the tenant; When set to true, isolate background tasks individually upon tenant-level",
-         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE));
-DEF_PARAM(global_background_cpu_quota, DBL, OB_CLUSTER_PARAMETER, "-1", "[-1,)",
-         "When enable_global_background_resource_isolation is True, specify the number of vCPUs allocated to the background tasks"
-         "-1 for the CPU is not limited by the cgroup",
-         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(enable_user_defined_rewrite_rules, BOOL, OB_CLUSTER_PARAMETER, "False",
          "specify whether the user defined rewrite rules are enabled. "
          "Value: True: enable  False: disable",

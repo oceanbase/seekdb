@@ -53,7 +53,6 @@ int ObRebuildIndexTask::init(
     const uint64_t index_table_id,  // domain index table id 
     const int64_t schema_version,
     const int64_t parent_task_id,
-    const int64_t consumer_group_id,
     const int32_t sub_task_trace_id,
     const int64_t parallelism,
     const uint64_t tenant_data_version,
@@ -84,7 +83,6 @@ int ObRebuildIndexTask::init(
     task_id_ = task_id;
     task_type_ = ddl_type;
     parent_task_id_ = parent_task_id;
-    consumer_group_id_ = consumer_group_id;
     sub_task_trace_id_ = sub_task_trace_id;
     task_version_ = OB_REBUILD_INDEX_TASK_VERSION;
     

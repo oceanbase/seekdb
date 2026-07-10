@@ -53,7 +53,6 @@ class ObOptStatManager;
 namespace sql
 {
 struct ObStmtPrepareResult;
-struct ObPCResourceMapRule;
 class ObSPIService;
 class ObIVirtualTableIteratorFactory;
 struct ObSqlCtx;

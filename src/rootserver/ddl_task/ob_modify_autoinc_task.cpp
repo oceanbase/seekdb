@@ -169,7 +169,6 @@ ObModifyAutoincTask::ObModifyAutoincTask()
 int ObModifyAutoincTask::init(const int64_t task_id,
                               const int64_t table_id,
                               const int64_t schema_version,
-                              const int64_t consumer_group_id,
                               const int32_t sub_task_trace_id,
                               const obcall::ObAlterTableArg &alter_table_arg,
                               const int64_t task_status,
@@ -193,7 +192,6 @@ int ObModifyAutoincTask::init(const int64_t task_id,
     object_id_ = table_id;
     target_object_id_ = table_id;
     schema_version_ = schema_version;
-    consumer_group_id_ = consumer_group_id;
     sub_task_trace_id_ = sub_task_trace_id;
     task_status_ = static_cast<ObDDLTaskStatus>(task_status);
     snapshot_version_ = snapshot_version;

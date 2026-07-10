@@ -56,7 +56,6 @@ int ObDropFTSIndexTask::init(
     const ObFTSDDLChildTaskInfo &fts_doc_word,
     const ObString &ddl_stmt_str,
     const int64_t schema_version,
-    const int64_t consumer_group_id,
     const int64_t target_object_id)
 {
   int ret = OB_SUCCESS;
@@ -91,7 +90,6 @@ int ObDropFTSIndexTask::init(
     schema_version_ = schema_version;
     task_id_ = task_id;
     parent_task_id_ = 0; // no parent task
-    consumer_group_id_ = consumer_group_id;
     task_version_ = OB_DROP_FTS_INDEX_TASK_VERSION;
     
     dst_schema_version_ = schema_version;

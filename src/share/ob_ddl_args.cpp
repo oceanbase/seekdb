@@ -33,7 +33,6 @@ int ObDDLArg::assign(const ObDDLArg &other)
     sync_from_primary_ = other.sync_from_primary_;
     parallelism_ = other.parallelism_;
     task_id_ = other.task_id_;
-    consumer_group_id_ = other.consumer_group_id_;
     is_parallel_ = other.is_parallel_;
   }
   return ret;
@@ -48,8 +47,7 @@ DEF_TO_STRING(ObDDLArg)
        K_(sync_from_primary),
        K_(based_schema_object_infos),
        K_(parallelism),
-       K_(task_id),
-       K_(consumer_group_id));
+       K_(task_id));
   return pos;
 }
 
@@ -61,7 +59,6 @@ OB_SERIALIZE_MEMBER(ObDDLArg,
                     based_schema_object_infos_,
                     parallelism_,
                     task_id_,
-                    consumer_group_id_,
                     is_parallel_);
 
 } // namespace obcall

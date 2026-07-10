@@ -62,13 +62,6 @@ int OB_WEAK_SYMBOL common_yield()
   return OB_SUCCESS;
 }
 
-int OB_WEAK_SYMBOL SET_GROUP_ID(bool is_background)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(is_background);
-  return ret;
-}
-
 }  // namespace lib
 }  // namespace oceanbase
 __thread Worker *Worker::self_;
@@ -82,8 +75,6 @@ Worker::Worker()
       worker_level_(INT32_MAX),
       curr_request_level_(0),
       is_th_worker_(false),
-      group_id_(0),
-      func_type_(0),
       timeout_ts_(INT64_MAX),
       ntp_offset_(0),
       disable_wait_(false)

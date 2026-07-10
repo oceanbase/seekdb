@@ -57,7 +57,6 @@ void ObDDLDagThreadPool::run1()
     snprintf(thread_name, OB_THREAD_NAME_BUF_LEN, "DDL_%ld", ddl_dag_->get_ddl_task_param().ddl_task_id_);
     lib::set_thread_name(thread_name);
     ObCurTraceId::set(ddl_dag_->get_dag_id());
-    CONSUMER_GROUP_FUNC_GUARD(ObFunctionType::PRIO_DDL);
     THIS_WORKER.set_session(session_info_);
     THIS_WORKER.set_compatibility_mode(ddl_dag_->get_compat_mode());
 

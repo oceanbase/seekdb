@@ -1166,7 +1166,7 @@ int ObMediumCompactionScheduleFunc::batch_check_medium_meta_table(
     if (OB_FAIL(tablet_infos.init(tablet_ls_infos.count()))) {
       LOG_WARN("failed to reserve array", KR(ret), "array_cnt", tablet_ls_infos.count());
     } else if (OB_FAIL(ObTabletTableOperator::batch_get_tablet_info(GCTX.sql_proxy_,
-        tablet_ls_infos, share::OBCG_STORAGE /*group_list*/, tablet_infos))) {
+        tablet_ls_infos, 0, tablet_infos))) {
       LOG_WARN("failed to get tablet info", K(ret), K(tablet_ls_infos));
     } else {
       time_guard.click(ObCompactionScheduleTimeGuard::SEARCH_META_TABLE);

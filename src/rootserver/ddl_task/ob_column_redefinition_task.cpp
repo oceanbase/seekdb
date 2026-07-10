@@ -39,7 +39,7 @@ ObColumnRedefinitionTask::~ObColumnRedefinitionTask()
 }
 
 int ObColumnRedefinitionTask::init(const int64_t task_id, const share::ObDDLType &ddl_type,
-    const int64_t data_table_id, const int64_t dest_table_id, const int64_t schema_version, const int64_t parallelism, const int64_t consumer_group_id,
+    const int64_t data_table_id, const int64_t dest_table_id, const int64_t schema_version, const int64_t parallelism,
     const int32_t sub_task_trace_id, const obcall::ObAlterTableArg &alter_table_arg, 
     const uint64_t tenant_data_version, const int64_t task_status, const int64_t snapshot_version)
 {
@@ -71,7 +71,6 @@ int ObColumnRedefinitionTask::init(const int64_t task_id, const share::ObDDLType
     task_id_ = task_id;
     parallelism_ = parallelism;
     sub_task_trace_id_ = sub_task_trace_id;
-    consumer_group_id_ = consumer_group_id;
     execution_id_ = 1L;
     start_time_ = ObTimeUtility::current_time();
     if (OB_FAIL(init_ddl_task_monitor_info(target_object_id_))) {
@@ -296,7 +295,6 @@ int ObColumnRedefinitionTask::copy_table_indexes()
                                            0/*object_id*/,
                                            index_schema->get_schema_version(),
                                            parallelism_,
-                                           consumer_group_id_,
                                            &allocator_,
                                            &create_index_arg,
                                            task_id_);

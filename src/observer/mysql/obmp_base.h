@@ -109,8 +109,6 @@ protected:
   int update_proxy_and_client_sys_vars(sql::ObSQLSessionInfo &session);
   int update_charset_sys_vars(ObSMConnection &conn, sql::ObSQLSessionInfo &sess_info);
 
-  void set_request_expect_group_id(sql::ObSQLSessionInfo *session);
-  // Calculate and set the current user's cgroup for resource isolation. If not set, the default cgroup id is 0
   int response_row(sql::ObSQLSessionInfo &session,
                    common::ObNewRow &row,
                    const ColumnsFieldIArray *fields,

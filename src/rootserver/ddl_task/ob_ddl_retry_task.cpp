@@ -157,7 +157,6 @@ int ObDDLRetryTask::init_compat_mode(const share::ObDDLType &ddl_type,
 int ObDDLRetryTask::init(const int64_t task_id,
                          const uint64_t object_id,
                          const int64_t schema_version,
-                         const int64_t consumer_group_id,
                          const int32_t sub_task_trace_id,
                          const share::ObDDLType &ddl_type,
                          const obcall::ObDDLArg *ddl_arg, 
@@ -186,7 +185,6 @@ int ObDDLRetryTask::init(const int64_t task_id,
     object_id_ = object_id;
     target_object_id_ = object_id;
     schema_version_ = schema_version;
-    consumer_group_id_ = consumer_group_id;
     sub_task_trace_id_ = sub_task_trace_id;
     
     task_id_ = task_id;

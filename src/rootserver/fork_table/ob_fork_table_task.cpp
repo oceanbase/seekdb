@@ -709,7 +709,6 @@ int ObForkTableTask::build_fork_info(
         snapshot_version_,
         compat_mode_,
         data_format_version_,
-        consumer_group_id_,
         src_tablet_ids,
         dst_tablet_ids);
     

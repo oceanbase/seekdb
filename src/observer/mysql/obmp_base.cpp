@@ -21,7 +21,6 @@
 #include "rpc/obmysql/packet/ompk_change_user.h"
 #include "rpc/obmysql/packet/ompk_row.h"
 #include "observer/mysql/obsm_row.h"
-#include "share/resource_manager/ob_resource_manager.h"
 #include "observer/mysql/obmp_utils.h"
 #include "observer/mysql/ob_query_driver.h"
 #include "sql/session/ob_sess_info_verify.h"
@@ -369,22 +368,6 @@ int ObMPBase::do_after_process(sql::ObSQLSessionInfo &session,
   session.reset_plsql_compile_time();
   ObQueryRetryAshGuard::reset_info();
   return ret;
-}
-
-void ObMPBase::set_request_expect_group_id(sql::ObSQLSessionInfo *session)
-{
-  if (OB_INVALID_ID != session->get_expect_group_id()) {
-    // Session->expected_group_id_ is set when hit plan cache or resolve a query, and find that
-    // expcted group is consistent with current group.
-    // Set group_id of req_ so that the req_ will be put in the corresponding queue when do packet retry.
-    if (NULL != req_) {
-      req_->set_group_id(session->get_expect_group_id());
-    }
-    // also set conn.group_id_. It means use current consumer group when execute next query for first time.
-    // conn.group_id_ = session->get_expect_group_id();
-    // reset to invalid because session.expected_group_id is single_use.
-    session->set_expect_group_id(OB_INVALID_ID);
-  }
 }
 
 // force refresh schema if local schema version < last schema version

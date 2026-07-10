@@ -261,12 +261,6 @@ int ObMPConnect::process()
     } else if (SS_STOPPING == GCTX.status_) {
       ret = OB_SERVER_IS_STOPPING;
       LOG_WARN("server is stopping", K(ret));
-    } else if (OB_FAIL(init_connection_group(*conn))) {
-      LOG_WARN("fail to init connection group", KR(ret), K(tenant_name_));
-      if (OB_ERR_INVALID_TENANT_NAME == ret && !service_name.empty()) {
-        ret = OB_SERVICE_NAME_NOT_FOUND;
-        LOG_WARN("login via service_name but tenant not exist", KR(ret), K(service_name), K(tenant_name_));
-      }
     } else if (OB_FAIL(guard.switch_to())) {
       LOG_WARN("switch to tenant fail", K(ret));
     } else if (OB_FAIL(check_client_property(*conn))) {
@@ -290,11 +284,7 @@ int ObMPConnect::process()
       LOG_WARN("fail to update charset sys vars", K(ret));
     } else {
       // set connection info to session
-      LOG_TRACE("setup user resource group OK",
-               "user_id", session->get_user_id(),
-               
-               K(user_name_),
-               "group_id", conn->group_id_);
+      LOG_TRACE("setup user session OK", "user_id", session->get_user_id(), K(user_name_));
       conn->set_auth_phase();
       conn->set_logined(true);
       session->get_autocommit(autocommit);
@@ -1267,18 +1257,6 @@ int ObMPConnect::verify_connection() const
         }
 
       }
-    }
-  }
-  return ret;
-}
-
-int ObMPConnect::init_connection_group(ObSMConnection &conn)
-{
-  int ret = OB_SUCCESS;
-  {
-    conn.resource_group_id_ = 1UL;
-    if (OBCG_DIAG_TENANT == conn.group_id_) {
-      user_name_ = ObString::make_string(OB_SYS_USER_NAME);
     }
   }
   return ret;

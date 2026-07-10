@@ -39,7 +39,6 @@ public:
       const int64_t dest_table_id,
       const int64_t schema_version,
       const int64_t parallelism,
-      const int64_t consumer_group_id,
       const int32_t sub_task_trace_id,
       const obcall::ObAlterTableArg &alter_table_arg,
       const uint64_t tenant_data_version,

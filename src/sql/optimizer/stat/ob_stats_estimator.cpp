@@ -436,7 +436,6 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
       } else if (OB_ISNULL(conn)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("conn is null", K(ret), K(conn));
-      } else if (OB_FALSE_IT(conn->set_group_id(static_cast<int64_t>(gather_param.consumer_group_id_)))) {
       } else if (OB_FAIL(conn->execute_read(raw_sql.ptr(), proxy_result))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {

@@ -159,7 +159,6 @@
 #include "observer/virtual_table/ob_all_virtual_thread.h"
 #include "observer/virtual_table/ob_all_virtual_px_p2p_datahub.h"
 #include "observer/virtual_table/ob_all_virtual_tablet_buffer_info.h"
-#include "observer/virtual_table/ob_all_virtual_cgroup_config.h"
 #include "observer/virtual_table/ob_all_virtual_activity_metrics.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_resource_limit.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_resource_limit_detail.h"
@@ -2010,13 +2009,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_CGROUP_CONFIG_TID: {
-            ObAllVirtualCgroupConfig *all_virtual_cgroup_config = NULL;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualCgroupConfig, all_virtual_cgroup_config))) {
-              vt_iter = static_cast<ObVirtualTableIterator *>(all_virtual_cgroup_config);
-            }
-            break;
-          }
           case OB_ALL_VIRTUAL_RESOURCE_LIMIT_TID: {
             ObResourceLimitTable *all_virtual_resource_limit = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObResourceLimitTable,
@@ -2109,17 +2101,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualSqlStat, all_virtual_sqlstat))) {
               all_virtual_sqlstat->set_allocator(&allocator);
               vt_iter = static_cast<ObVirtualTableIterator *>(all_virtual_sqlstat);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_FUNCTION_IO_STAT_TID: {
-            ObAllVirtualFunctionIOStat *all_virtual_func_io_stat = NULL;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualFunctionIOStat, all_virtual_func_io_stat))) {
-              if (OB_FAIL(all_virtual_func_io_stat->init(addr_))) {
-                SERVER_LOG(WARN, "fail to init ObAllVirtualFunctionIOStatus, ", K(ret));
-              } else {
-                vt_iter = static_cast<ObVirtualTableIterator *>(all_virtual_func_io_stat);
-              }
             }
             break;
           }

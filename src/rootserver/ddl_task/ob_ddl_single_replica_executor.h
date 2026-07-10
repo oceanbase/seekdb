@@ -44,7 +44,6 @@ public:
       parallelism_(0),
       execution_id_(-1),
       data_format_version_(0),
-      consumer_group_id_(0),
       compaction_scns_(),
       lob_col_idxs_(),
       can_reuse_macro_blocks_(),
@@ -64,8 +63,7 @@ public:
                      snapshot_version_ > 0 &&
                      task_id_ > 0 &&
                      execution_id_ >= 0 &&
-                     data_format_version_ > 0 &&
-                     consumer_group_id_ >= 0;
+                     data_format_version_ > 0;
     if (is_tablet_split(ddl_type_)) {
       is_valid = is_valid && compaction_scns_.count() == source_tablet_ids_.count()
                           && can_reuse_macro_blocks_.count() == source_tablet_ids_.count()
@@ -80,7 +78,7 @@ public:
                K_(dest_tablet_ids), K_(source_table_ids), K_(dest_table_ids),
                K_(source_schema_versions), K_(dest_schema_versions), K_(snapshot_version),
                K_(task_id), K_(parallelism), K_(execution_id), 
-               K_(data_format_version), K_(consumer_group_id), K_(can_reuse_macro_blocks),
+               K_(data_format_version), K_(can_reuse_macro_blocks),
                K_(parallel_datum_rowkey_list), K(min_split_start_scn_), K_(is_no_logging));
 public:
   
@@ -96,7 +94,6 @@ public:
   int64_t parallelism_;
   int64_t execution_id_;
   int64_t data_format_version_;
-  int64_t consumer_group_id_;
   ObSArray<int64_t> compaction_scns_;
   ObSArray<uint64_t> lob_col_idxs_;
   ObSArray<bool> can_reuse_macro_blocks_;
@@ -201,7 +198,6 @@ public:
       parallelism_(0),
       execution_id_(0),
       data_format_version_(0),
-      consumer_group_id_(0),
       lob_col_idxs_(),
       src_tablet_ids_(),
       dest_tablet_ids_(),
@@ -222,7 +218,7 @@ public:
   
   TO_STRING_KV(K(is_inited_), K(ddl_type_),
                K(ddl_task_id_), K(snapshot_version_), K(parallelism_),
-               K(execution_id_), K(data_format_version_), K(consumer_group_id_),
+               K(execution_id_), K(data_format_version_),
                K(lob_col_idxs_), K(src_tablet_ids_), K(dest_tablet_ids_),
                K(replica_build_ctxs_), K(min_split_start_scn_));
 private:
@@ -272,7 +268,6 @@ private:
   int64_t parallelism_;
   int64_t execution_id_;
   int64_t data_format_version_;
-  int64_t consumer_group_id_;
   ObSArray<uint64_t> lob_col_idxs_;
   ObArray<ObTabletID> src_tablet_ids_;
   ObSArray<ObTabletID> dest_tablet_ids_;

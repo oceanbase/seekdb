@@ -184,7 +184,6 @@ namespace storage {
 
 namespace share
 {
-class ObCgroupCtrl;
 class ObTestModule;
 class ObTenantDagScheduler;
 class ObTenantModuleInitCtx;
@@ -518,11 +517,10 @@ public:
 public:
   ObTenantBase(const int64_t epoch = 0, bool enable_tenant_ctx_check = false);
   ObTenantBase &operator=(const ObTenantBase &ctx);
-  int init(ObCgroupCtrl *cgroup = nullptr);
+  int init();
   void destroy();
   virtual inline uint64_t id() const override { return 1; }
   OB_INLINE int64_t get_epoch() const { return epoch_; }
-  ObCgroupCtrl *get_cgroup();
 
   const ObTenantModuleInitCtx *get_mtl_init_ctx() const { return mtl_init_ctx_; }
 
@@ -607,7 +605,6 @@ private:
   typedef common::hash::ObHashMap<ThreadDynamicNode, double> ThreadDynamicFactorMap;
   ThreadDynamicFactorMap thread_dynamic_factor_map_;
 
-  ObCgroupCtrl *cgroups_;
   bool enable_tenant_ctx_check_;
   int64_t thread_count_;
 

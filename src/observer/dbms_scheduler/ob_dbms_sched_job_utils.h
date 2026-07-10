@@ -299,14 +299,12 @@ class ObDBMSSchedJobClassInfo
 public:
   ObDBMSSchedJobClassInfo() :
     job_class_name_(),
-    resource_consumer_group_(),
     logging_level_(),
     log_history_(),
     comments_() {}
 
   TO_STRING_KV(K(job_class_name_),
               K(service_),
-              K(resource_consumer_group_),
               K(logging_level_),
               K(log_history_),
               K(comments_));
@@ -319,14 +317,12 @@ public:
   common::number::ObNumber &get_log_history() { return log_history_; }
   common::ObString &get_job_class_name() { return job_class_name_; }
   common::ObString &get_service() { return service_; }
-  common::ObString &get_resource_consumer_group() { return resource_consumer_group_; }
   common::ObString &get_logging_level() { return logging_level_; }
   common::ObString &get_comments() { return comments_; }
   int deep_copy(common::ObIAllocator &allocator, const ObDBMSSchedJobClassInfo &other);
 public:
   common::ObString job_class_name_;
   common::ObString service_;
-  common::ObString resource_consumer_group_;
   common::ObString logging_level_;
   common::number::ObNumber log_history_;
   common::ObString comments_;

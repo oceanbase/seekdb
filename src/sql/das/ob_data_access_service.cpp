@@ -506,7 +506,7 @@ int ObDataAccessService::parallel_submit_das_task(ObDASRef &das_ref, ObDasAggreg
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = das_ref.get_exec_ctx().get_my_session();
   int64_t timeout_ts = session->get_query_timeout_ts();
-  int32_t group_id = THIS_WORKER.get_group_id();
+  int32_t group_id = 0;
   int32_t das_group_id = group_id | das::OB_DAS_PARALLEL_POOL_MARK;
   LOG_TRACE("print group_id", K(group_id), K(das::OB_DAS_PARALLEL_POOL_MARK), K(das_group_id));
   if (agg_task.server_ == ctrl_addr_) {

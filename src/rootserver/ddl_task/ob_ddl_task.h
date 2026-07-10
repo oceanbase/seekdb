@@ -218,15 +218,14 @@ struct ObDDLTaskSerializeField final
 {
   OB_UNIS_VERSION(1);
 public:
-  TO_STRING_KV(K_(task_version), K_(parallelism), K_(data_format_version), K_(consumer_group_id),
+  TO_STRING_KV(K_(task_version), K_(parallelism), K_(data_format_version),
                K_(is_abort), K_(sub_task_trace_id), K_(is_unique_index), K_(is_global_index) ,K_(is_pre_split), K_(is_no_logging));
   ObDDLTaskSerializeField() : task_version_(0), parallelism_(0), data_format_version_(0),
-                              consumer_group_id_(0), is_abort_(false), sub_task_trace_id_(0),
+                              is_abort_(false), sub_task_trace_id_(0),
                               is_unique_index_(false), is_global_index_(false), is_pre_split_(false), is_no_logging_(false) {}
   ObDDLTaskSerializeField(const int64_t task_version,
                           const int64_t parallelism,
                           const uint64_t data_format_version,
-                          const int64_t consumer_group_id,
                           const bool is_abort,
                           const int32_t sub_task_trace_id,
                           const bool is_unique_index,
@@ -239,7 +238,6 @@ public:
   int64_t task_version_;
   int64_t parallelism_;
   uint64_t data_format_version_;
-  int64_t consumer_group_id_;
   bool is_abort_;
   int32_t sub_task_trace_id_;
   bool is_unique_index_;
@@ -258,7 +256,6 @@ public:
                        const int64_t object_id,
                        const int64_t schema_version,
                        const int64_t parallelism,
-                       const int64_t consumer_group_id,
                        ObIAllocator *allocator,
                        const obcall::ObDDLArg *ddl_arg = nullptr,
                        const int64_t parent_task_id = 0,
@@ -267,7 +264,7 @@ public:
   ~ObCreateDDLTaskParam() = default;
   bool is_valid() const { return type_ > share::DDL_INVALID
                                  && type_ < share::DDL_MAX && nullptr != allocator_; }
-  TO_STRING_KV(K_(object_id), K_(schema_version), K_(parallelism), K_(consumer_group_id), K_(parent_task_id), K_(task_id),
+  TO_STRING_KV(K_(object_id), K_(schema_version), K_(parallelism), K_(parent_task_id), K_(task_id),
                K_(type), KPC_(src_table_schema), KPC_(dest_table_schema), KPC_(ddl_arg), K_(tenant_data_version),
                K_(sub_task_trace_id), KPC_(aux_rowkey_doc_schema), KPC_(aux_doc_rowkey_schema), KPC_(fts_index_aux_schema), KPC_(aux_doc_word_schema),
                K_(vec_rowkey_vid_schema), K_(vec_vid_rowkey_schema), K_(vec_domain_index_schema), K_(vec_index_id_schema), K_(vec_snapshot_data_schema),
@@ -278,7 +275,6 @@ public:
   int64_t object_id_;
   int64_t schema_version_;
   int64_t parallelism_;
-  int64_t consumer_group_id_;
   int64_t parent_task_id_;
   int64_t task_id_;
   share::ObDDLType type_;
@@ -622,7 +618,6 @@ public:
   void set_task_status(const share::ObDDLTaskStatus new_status) {task_status_ = new_status; }
   void set_is_abort(const bool is_abort) { is_abort_ = is_abort; }
   bool get_is_abort() { return is_abort_; }
-  void set_consumer_group_id(const int64_t group_id) { consumer_group_id_ = group_id; }
   void set_sub_task_trace_id(const int32_t sub_task_trace_id) { sub_task_trace_id_ = sub_task_trace_id; }
   void add_event_info(const ObString &ddl_event_stmt);
   void add_event_info(const share::ObDDLTaskStatus status);
@@ -716,7 +711,7 @@ public:
       K_(ret_code), K_(task_id), K_(parent_task_id), K_(parent_task_key),
       K_(task_version), K_(parallelism), K_(ddl_stmt_str), K_(compat_mode),
       K_(sys_task_id), K_(err_code_occurence_cnt), K_(stat_info),
-      K_(next_schedule_ts), K_(delay_schedule_time), K(execution_id_), K(sql_exec_addrs_), K_(data_format_version), K(consumer_group_id_),
+      K_(next_schedule_ts), K_(delay_schedule_time), K(execution_id_), K(sql_exec_addrs_), K_(data_format_version),
       K_(dst_schema_version), K_(is_pre_split), K_(is_unique_index), K_(is_global_index), K_(consensus_schema_version), K(is_no_logging_));  static const int64_t MAX_ERR_TOLERANCE_CNT = 3L; // Max torlerance count for error code.
   static const int64_t DEFAULT_TASK_IDLE_TIME_US = 10L * 1000L; // 10ms
   static const int64_t MAX_IDLE_TIME_US = 30L * 1000L * 1000L; // 30s
@@ -774,7 +769,6 @@ protected:
   ObArray<common::ObAddr> sql_exec_addrs_;
   int64_t start_time_;
   uint64_t data_format_version_;
-  int64_t consumer_group_id_;
   bool is_pre_split_;
   ObDDLWaitTransEndCtx wait_trans_ctx_;
   bool is_unique_index_;

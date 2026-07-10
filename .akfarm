@@ -3,6 +3,6 @@ mysqltest_for_standalone
 sysbench_for_standalone
 bmsqltest_for_standalone
 !tpch_for_standalone
-vostest
+!vostest
 obtest
 !objdbctest

@@ -81,7 +81,6 @@ private:
                                bool has_more_result) const;
   int init_connect_process(common::ObString &init_sql,
                            sql::ObSQLSessionInfo &session) const;
-  int init_connection_group(ObSMConnection &conn);
   int verify_connection() const;
   int verify_identify(ObSMConnection &conn, sql::ObSQLSessionInfo &session);
   int verify_ip_white_list() const;

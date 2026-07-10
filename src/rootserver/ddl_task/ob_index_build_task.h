@@ -35,7 +35,6 @@ public:
       const int64_t schema_version,
       const int64_t snapshot_version,
       const int64_t execution_id,
-      const int64_t consumer_group_id,
       const common::ObCurTraceId::TraceId &trace_id,
       const int64_t parallelism,
       const bool is_partitioned_local_index_task,
@@ -44,7 +43,7 @@ public:
       const bool is_retryable_ddl)
       : task_id_(task_id), data_table_id_(data_table_id), dest_table_id_(dest_table_id),
         schema_version_(schema_version), snapshot_version_(snapshot_version), execution_id_(execution_id),
-        consumer_group_id_(consumer_group_id), trace_id_(trace_id), parallelism_(parallelism), is_partitioned_local_index_task_(is_partitioned_local_index_task),
+        trace_id_(trace_id), parallelism_(parallelism), is_partitioned_local_index_task_(is_partitioned_local_index_task),
         allocator_("IdxSSTBuildTask"), root_service_(root_service), inner_sql_exec_addr_(inner_sql_exec_addr), is_retryable_ddl_(is_retryable_ddl)
   {
     set_retry_times(0);
@@ -61,7 +60,7 @@ public:
   virtual ObAsyncTask *deep_copy(char *buf, const int64_t buf_size) const override;
   void add_event_info(const int ret, const ObString &ddl_event_stmt);
   TO_STRING_KV(K_(data_table_id), K_(dest_table_id), K_(schema_version), K_(snapshot_version),
-               K_(execution_id), K_(consumer_group_id), K_(trace_id), K_(parallelism), K_(is_partitioned_local_index_task),
+               K_(execution_id), K_(trace_id), K_(parallelism), K_(is_partitioned_local_index_task),
                K_(addition_info), K_(nls_date_format), K_(nls_timestamp_format), K_(nls_timestamp_tz_format), K_(is_retryable_ddl));
 private:
   inline bool is_partitioned_local_index_task() const { return is_partitioned_local_index_task_ == true; }
@@ -72,7 +71,6 @@ private:
   int64_t schema_version_;
   int64_t snapshot_version_;
   int64_t execution_id_;
-  int64_t consumer_group_id_;
   common::ObCurTraceId::TraceId trace_id_;
   int64_t parallelism_;
   bool is_partitioned_local_index_task_;
@@ -100,7 +98,6 @@ public:
       const share::schema::ObTableSchema *index_schema,
       const int64_t schema_version,
       const int64_t parallel,
-      const int64_t consumer_group_id,
       const int32_t sub_task_trace_id,
       const obcall::ObCreateIndexArg &create_index_arg,
       const share::ObDDLType task_type,

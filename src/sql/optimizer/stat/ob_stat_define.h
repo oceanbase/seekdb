@@ -628,10 +628,6 @@ struct ObTableStatParam {
     is_auto_sample_size_(false),
     need_refine_min_max_(false),
     auto_sample_row_cnt_(DEFAULT_AUTO_SAMPLE_ROW_COUNT),
-    consumer_group_id_(0),
-    min_iops_(-1),
-    max_iops_(-1),
-    weight_iops_(-1),
     skip_rate_sample_cnt_(DEFAULT_SKIP_RATE_SAMPLE_COUNT)
   {}
 
@@ -725,10 +721,6 @@ struct ObTableStatParam {
   bool need_refine_min_max_;
   int64_t auto_sample_row_cnt_;
   ObSEArray<PrefixColumnPair, 4> prefix_column_pairs_;
-  uint64_t consumer_group_id_;
-  int64_t min_iops_;
-  int64_t max_iops_;
-  int64_t weight_iops_;
   int64_t skip_rate_sample_cnt_;
   TO_STRING_KV(K(db_name_),
                K(db_id_),
@@ -781,10 +773,6 @@ struct ObTableStatParam {
                K(need_refine_min_max_),
                K(is_auto_sample_size_),
                K(prefix_column_pairs_),
-               K(consumer_group_id_),
-               K(min_iops_),
-               K(max_iops_),
-               K(weight_iops_),
                K(skip_rate_sample_cnt_));
 };
 
@@ -822,7 +810,6 @@ struct ObOptStatGatherParam {
     data_table_id_(OB_INVALID_ID),
     is_global_index_(false),
     part_level_(share::schema::ObPartitionLevel::PARTITION_LEVEL_ZERO),
-    consumer_group_id_(0),
     partition_id_skip_rate_map_(NULL),
     all_column_params_()
   {}
@@ -859,7 +846,6 @@ struct ObOptStatGatherParam {
   uint64_t data_table_id_;
   bool is_global_index_;
   share::schema::ObPartitionLevel part_level_;
-  int64_t consumer_group_id_;
   const PartitionIdSkipRateMap *partition_id_skip_rate_map_;
   ObSEArray<ObColumnStatParam, 4> all_column_params_;
 
@@ -892,7 +878,6 @@ struct ObOptStatGatherParam {
                K(auto_sample_row_cnt_),
                K(data_table_id_),
                K(is_global_index_),
-               K(consumer_group_id_),
                K(all_column_params_));
 };
 

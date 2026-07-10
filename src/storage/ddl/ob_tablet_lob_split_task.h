@@ -95,7 +95,7 @@ public:
     new_lob_tablet_ids_(), schema_version_(0),
     data_format_version_(0), parallelism_(0), compaction_scn_(),
     compat_mode_(lib::Worker::CompatMode::INVALID), task_id_(0),
-    source_table_id_(OB_INVALID_ID), dest_schema_id_(OB_INVALID_ID), consumer_group_id_(0),
+    source_table_id_(OB_INVALID_ID), dest_schema_id_(OB_INVALID_ID),
     lob_col_idxs_(), split_sstable_type_(share::ObSplitSSTableType::SPLIT_BOTH), parallel_datum_rowkey_list_(),
     min_split_start_scn_()
   {}
@@ -108,14 +108,13 @@ public:
            && new_lob_tablet_ids_.count() > 0 && schema_version_ > 0
            && data_format_version_ > 0 && parallelism_ > 0 && compaction_scn_ > 0
            && compat_mode_ != lib::Worker::CompatMode::INVALID
-           && task_id_ > 0 && OB_INVALID_ID != source_table_id_ && OB_INVALID_ID != dest_schema_id_
-           && consumer_group_id_ >= 0 && lob_col_idxs_.count() > 0 && parallel_datum_rowkey_list_.count() > 0;
+           && task_id_ > 0 && OB_INVALID_ID != source_table_id_ && OB_INVALID_ID != dest_schema_id_;
   }
   int assign(const ObLobSplitParam &other);
   TO_STRING_KV(K_(ls_id), K_(ori_lob_meta_tablet_id),
     K_(new_lob_tablet_ids), K_(schema_version), K_(data_format_version),
     K_(parallelism), K_(compaction_scn), K_(compat_mode), K_(task_id), 
-    K_(source_table_id), K_(dest_schema_id), K_(lob_col_idxs), K_(consumer_group_id),
+    K_(source_table_id), K_(dest_schema_id), K_(lob_col_idxs),
     K_(lob_col_idxs), K_(split_sstable_type), K_(parallel_datum_rowkey_list),
     K_(min_split_start_scn));
 private:
@@ -132,7 +131,6 @@ public:
   int64_t task_id_;
   int64_t source_table_id_; // src_main_table_id
   int64_t dest_schema_id_; // src_lob_meta_table_id
-  uint64_t consumer_group_id_;
   ObSArray<uint64_t> lob_col_idxs_;
   share::ObSplitSSTableType split_sstable_type_;
   common::ObSArray<blocksstable::ObDatumRowkey> parallel_datum_rowkey_list_; // calc by main table.
@@ -211,8 +209,6 @@ public:
   int fill_dag_key(char *buf, const int64_t buf_len) const override;
   virtual lib::Worker::CompatMode get_compat_mode() const override
   { return param_.compat_mode_; }
-  virtual uint64_t get_consumer_group_id() const override 
-  { return consumer_group_id_; }
   virtual int create_first_task() override;
   virtual bool ignore_warning() override;
   virtual bool is_ha_dag() const override { return false; }

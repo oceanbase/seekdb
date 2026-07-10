@@ -20,7 +20,6 @@
 
 #define private public
 #define protected public
-#include "share/resource_manager/ob_cgroup_ctrl.h"
 #include "mtlenv/mock_tenant_module_env.h"
 #undef private
 #undef protected
@@ -615,7 +614,6 @@ TEST_F(TestIOStruct, IOResult)
   ObIOInfo read_info;
   read_info.fd_ = fd;
   read_info.flag_.set_mode(ObIOMode::READ);
-  SET_GROUP_ID();
   read_info.flag_.set_wait_event(1);
   read_info.timeout_us_ = DEFAULT_IO_WAIT_TIME_US;
   read_info.offset_ = 89;
@@ -741,7 +739,7 @@ TEST_F(TestIOStruct, IOFaultDetector)
 
 // class TestIOManager : public TestIOStruct
 // {
-//   // basic use resource manager
+//   // basic use io manager
 // public:
 //   static void SetUpTestCase()
 //   {
@@ -959,15 +957,15 @@ struct IOPerfLoad
 {
   IOPerfLoad()
     : tenant_id_(0), device_id_(0), mode_(ObIOMode::MAX_MODE), size_(0), depth_(0), iops_(0),
-      thread_count_(0), is_sequence_(false), group_id_(0), start_delay_ts_(0), stop_delay_ts_(0),
+      thread_count_(0), is_sequence_(false), start_delay_ts_(0), stop_delay_ts_(0),
       device_(nullptr), perf_mode_(IOPerfMode::UNKNOWN)
   {}
   TO_STRING_KV(K(tenant_id_), K(device_id_),
       "mode", ObIOMode::READ == mode_ ? "read" : ObIOMode::WRITE == mode_ ? "write" : "unknown",
-      "group_id", group_id_, "io_size", size_, "io_depth", depth_, "target_iops", iops_,
+      "io_size", size_, "io_depth", depth_, "target_iops", iops_,
       K(thread_count_), K(is_sequence_), K(start_delay_ts_), K(stop_delay_ts_), KP(device_), K(perf_mode_));
   bool is_valid() const {
-    return tenant_id_ > 0 && group_id_ >= 0 && device_id_ > 0
+    return tenant_id_ > 0 && device_id_ > 0
       && mode_ < ObIOMode::MAX_MODE && size_ > 0 && depth_ > 0 && iops_ >= 0
       && thread_count_ > 0 && start_delay_ts_ >= 0 && stop_delay_ts_ > start_delay_ts_ && size_ > 0
       && (ObIOMode::WRITE == mode_ ? is_io_aligned(size_, DIO_ALIGN_SIZE) : true)
@@ -981,7 +979,6 @@ struct IOPerfLoad
   int64_t iops_;
   int32_t thread_count_;
   bool is_sequence_;
-  uint64_t group_id_;
   int64_t start_delay_ts_;
   int64_t stop_delay_ts_;
   IOPerfDevice *device_;
@@ -1085,25 +1082,6 @@ public:
   ObIOFd fd_;
 };
 
-class IOGroupModify : public ThreadPool
-{
-public:
-  IOGroupModify()
-    : modify_init_ts_(0)
-  {}
-  int init(int64_t modify_init_ts, int64_t modify_delay_ts, const IOPerfTenant &curr_tenant);
-  void destroy();
-  virtual void run1() override;
-  TO_STRING_KV(K(load_), K(modify_delay_ts_), K(fd_), K(curr_tenant_));
-public:
-  int64_t modify_init_ts_;
-  int64_t modify_delay_ts_;
-  IOPerfTenant curr_tenant_;
-  ObConcurrentFIFOAllocator allocator_;
-  IOPerfLoad load_;
-  ObIOFd fd_;
-};
-
 class IOTracerSwitch : public ThreadPool
 {
 public:
@@ -1195,7 +1173,6 @@ TEST_F(TestIOStruct, tenant)
   default_config.unit_config_.max_iops_ = 20000L;
   int64_t current_ts = ObTimeUtility::fast_current_time();
   IOPerfLoad load;
-  load.group_id_ = 0;
   load.depth_ = 1;
   IOPerfDevice device;
   device.device_id_ = 1;
@@ -1262,7 +1239,6 @@ TEST_F(TestIOStruct, perf)
     LOG_INFO("wenqu: tenant config", K(curr_config), K(i));
     ObRefHolder<ObTenantIOManager> tenant_holder;
     ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder));
-    ASSERT_SUCC(tenant_holder.get_ptr()->refresh_group_io_config());
   }
   // prepare perf runners
   char *runner_buf = (char *)malloc(perf_loads.count() * sizeof(IOPerfRunner));
@@ -1332,7 +1308,6 @@ TEST_F(TestIOStruct, alloc_memory)
     curr_config.config_.param_config_.memory_limit_ = 16LL * 1024 * 1024; //16MB
     ObRefHolder<ObTenantIOManager> tenant_holder;
     ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder));
-    ASSERT_SUCC(tenant_holder.get_ptr()->refresh_group_io_config());
   }
   // prepare perf runners
   char *runner_buf = (char *)malloc(perf_loads.count() * sizeof(IOPerfRunner));
@@ -1391,7 +1366,6 @@ TEST_F(TestIOStruct, IOTracer)
     LOG_INFO("wenqu: tenant config", K(curr_config), K(i));
     ObRefHolder<ObTenantIOManager> tenant_holder;
     ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder));
-    ASSERT_SUCC(tenant_holder.get_ptr()->refresh_group_io_config());
   }
   // prepare perf runners
   char *runner_buf = (char *)malloc(perf_loads.count() * sizeof(IOPerfRunner));
@@ -1466,7 +1440,6 @@ TEST_F(TestIOStruct, ModifyIOPS)
     LOG_INFO("wenqu: tenant config", K(curr_config), K(i));
     ObRefHolder<ObTenantIOManager> tenant_holder;
     ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder));
-    ASSERT_SUCC(tenant_holder.get_ptr()->refresh_group_io_config());
   }
   // prepare perf runners
   char *runner_buf = (char *)malloc(perf_loads.count() * sizeof(IOPerfRunner));
@@ -1540,7 +1513,6 @@ TEST_F(TestIOStruct, ModifyCallbackThread)
     LOG_INFO("wenqu: tenant config", K(curr_config), K(i));
     ObRefHolder<ObTenantIOManager> tenant_holder;
     ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder));
-    ASSERT_SUCC(tenant_holder.get_ptr()->refresh_group_io_config());
   }
   // prepare perf runners
   char *runner_buf = (char *)malloc(perf_loads.count() * sizeof(IOPerfRunner));
@@ -1575,84 +1547,6 @@ TEST_F(TestIOStruct, ModifyCallbackThread)
   free(modifier_buf);
   LOG_INFO("modify callback thread finished");
 }
-
-TEST_F(TestIOStruct, ModifyGroupIO)
-{
-  // use multi thread to do modify group_io_config
-  bool is_perf_config_exist = false;
-  ASSERT_SUCC(FileDirectoryUtils::is_exists(GROUP_PERF_CONFIG_FILE, is_perf_config_exist));
-  if (!is_perf_config_exist) {
-    write_group_perf_config();
-  }
-  // parse configs
-  IOPerfScheduler scheduler_config;
-  ObArray<IOPerfDevice> perf_devices;
-  ObArray<IOPerfTenant> perf_tenants;
-  ObArray<IOPerfLoad> perf_loads;
-  ASSERT_SUCC(parse_group_perf_config(GROUP_PERF_CONFIG_FILE, scheduler_config, perf_devices, perf_tenants, perf_loads));
-  ASSERT_TRUE(perf_devices.count() > 0);
-  ASSERT_TRUE(perf_tenants.count() > 0);
-  ASSERT_TRUE(perf_loads.count() > 0);
-  const int64_t memory_limit = 30LL * 1024 * 1024 * 1024; // 30GB
-  const int64_t queue_depth = 100L;
-  // prepare devices and files
-  char *device_buf = (char *)malloc(sizeof(ObLocalDevice) * perf_devices.count());
-  ASSERT_TRUE(nullptr != device_buf);
-  for (int64_t i = 0; i < perf_devices.count(); ++i) {
-    IOPerfDevice &curr_config = perf_devices.at(i);
-    ASSERT_SUCC(prepare_file(curr_config.file_path_, curr_config.file_size_, curr_config.fd_));
-    ObLocalDevice *device = new (device_buf + sizeof(ObLocalDevice) * i) ObLocalDevice;
-    ASSERT_SUCC(init_device(curr_config.media_id_, *device));
-    curr_config.device_handle_ = device;
-  }
-  // prepare tenant io manager
-  for (int64_t i = 0; i < perf_tenants.count(); ++i) {
-    IOPerfTenant &curr_config = perf_tenants.at(i);
-    if (curr_config.tenant_id_ == 1002) {
-      LOG_INFO("qilu: tenant config", K(curr_config), K(i));
-      ObRefHolder<ObTenantIOManager> tenant_holder;
-      ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder));
-      ASSERT_SUCC(tenant_holder.get_ptr()->refresh_group_io_config());
-    }
-  }
-  // prepare perf runners
-  char *runner_buf = (char *)malloc(perf_loads.count() * sizeof(IOPerfRunner));
-  char *modifyer_buf = (char *)malloc(perf_loads.count() * sizeof(IOGroupModify));
-  ObArray<IOPerfRunner *> runners;
-  ObArray<IOGroupModify *> modifyers;
-  const int64_t start_ts = ObTimeUtility::current_time() + 10000L;
-  for (int64_t i = 0; i < perf_loads.count(); ++i) {
-    IOPerfRunner *runner = new (runner_buf + i * sizeof(IOPerfRunner)) IOPerfRunner();
-    const IOPerfLoad &cur_load = perf_loads.at(i);
-    if (cur_load.tenant_id_ == 1002) {
-      ASSERT_SUCC(runner->init(start_ts, cur_load));
-      ASSERT_SUCC(runners.push_back(runner));
-      LOG_INFO("runner start now");
-    }
-  }
-  //prepare modifyer
-  for (int64_t i = 0; i < perf_tenants.count(); ++i) {
-    IOPerfTenant &curr_tenant = perf_tenants.at(i);
-    if (curr_tenant.tenant_id_ == 1002) {
-      IOGroupModify *modifyer=new (modifyer_buf + i * sizeof(IOGroupModify)) IOGroupModify();
-      int64_t modify_init_ts = start_ts;
-      int64_t modify_delay_ts = 3000000L; // 3 seconds after start modification
-      ASSERT_SUCC(modifyer->init(modify_init_ts, modify_delay_ts, curr_tenant));
-      ASSERT_SUCC(modifyers.push_back(modifyer));
-    }
-  }
-  // wait perf finished
-  for (int64_t i = 0; i < runners.count(); ++i) {
-    IOPerfRunner *runner = runners.at(i);
-    runner->wait();
-    ASSERT_SUCC(runner->print_result());
-    runner->destroy();
-  }
-  free(runner_buf);
-  free(modifyer_buf);
-  LOG_INFO("qilu: modify group finished");
-}
-
 
 TEST_F(TestIOStruct, abnormal)
 {
@@ -1746,16 +1640,16 @@ void write_group_perf_config()
       "device_id   media_id    async_channel   sync_channel    max_io_depth    file_size_gb    file_path\n"
       "1           0           8               1               64              1               ./perf_test\n"
       "\n"
-      "tenant_id   min_iops    max_iops    weight     max_bandwidth      bandwidth_weight      group\n"
-      "1        5000        100000       700       1000000000      100      10001: testgroup1: 80, 100, 60; 10002: testgroup2: 10, 60, 30; 0: OTHER_GROUPS: 10, 100, 10;\n"
-      "500        1000        50000        1000      1000000000      100      12345: testgroup1: 50, 50, 50; 0: OTHER_GROUPS: 50, 50, 50;\n"
+      "tenant_id   min_iops    max_iops    weight     max_bandwidth      bandwidth_weight\n"
+      "1        5000        100000       700       1000000000      100\n"
+      "500        1000        50000        1000      1000000000      100\n"
       "\n"
-      "tenant_id   device_id     group    io_mode     io_size_byte    io_depth    perf_mode     target_iops     thread_count    is_sequence     start_s    stop_s\n"
-      "1        1             0        r           16384           4           rolling       0               4               0               0          3\n"
-      "1        1             10001        r           16384           4           rolling       0               4               0               1          3\n"
-      "1        1             10002        r           16384           4           rolling       0               4               0               0          3\n"
-      "500        1             0        r           16384           16          rolling       0               4               0               0          3\n"
-      "500        1             12345        r           16384           16          rolling       0               4               0               0          3\n"
+      "tenant_id   device_id     io_mode     io_size_byte    io_depth    perf_mode     target_iops     thread_count    is_sequence     start_s    stop_s\n"
+      "1        1             r           16384           4           rolling       0               4               0               0          3\n"
+      "1        1             r           16384           4           rolling       0               4               0               1          3\n"
+      "1        1             r           16384           4           rolling       0               4               0               0          3\n"
+      "500        1             r           16384           16          rolling       0               4               0               0          3\n"
+      "500        1             r           16384           16          rolling       0               4               0               0          3\n"
       ;
     const int64_t file_len = strlen(file_buf);
     int write_ret = ::write(fd, file_buf, file_len);
@@ -1787,8 +1681,8 @@ int parse_group_perf_config(const char *config_file_path,
     char curr_line[1024] = { 0 };
     const char *scheduler_header = "sender_count     io_greed";
     const char *device_header = "device_id   media_id    async_channel   sync_channel    max_io_depth    file_size_gb    file_path";
-    const char *tenant_header = "tenant_id   min_iops    max_iops    weight     max_bandwidth      bandwidth_weight      group";
-    const char *load_header = "tenant_id   device_id     group    io_mode     io_size_byte    io_depth    perf_mode     target_iops     thread_count    is_sequence     start_s    stop_s";
+    const char *tenant_header = "tenant_id   min_iops    max_iops    weight     max_bandwidth      bandwidth_weight";
+    const char *load_header = "tenant_id   device_id     io_mode     io_size_byte    io_depth    perf_mode     target_iops     thread_count    is_sequence     start_s    stop_s";
     enum class PerfConfigType { SCHEDULER, DEVICE, TENANT, LOAD, MAX };
     PerfConfigType config_type = PerfConfigType::MAX;
     while (OB_SUCC(ret)) {
@@ -1833,37 +1727,33 @@ int parse_group_perf_config(const char *config_file_path,
         }
       } else if (PerfConfigType::TENANT == config_type) {
         IOPerfTenant item;
-        char group_config[1024] = { 0 };
-        int scan_ret = sscanf(curr_line, "%d%ld%ld%ld%ld%ld%[^\n]\n",
+        int scan_ret = sscanf(curr_line, "%d%ld%ld%ld%ld%ld\n",
             &item.tenant_id_, &item.config_.unit_config_.min_iops_, &item.config_.unit_config_.max_iops_,
             &item.config_.unit_config_.weight_, &item.config_.unit_config_.max_net_bandwidth_,
-            &item.config_.unit_config_.net_bandwidth_weight_, group_config);
-        if (OB_UNLIKELY(7 != scan_ret)) {
+            &item.config_.unit_config_.net_bandwidth_weight_);
+        if (OB_UNLIKELY(6 != scan_ret)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("scan config file failed", K(ret), K(scan_ret));
         } else {
           item.config_.param_config_.memory_limit_ = IO_MEMORY_LIMIT;
           item.config_.param_config_.callback_thread_count_ = 0;
-          // parse group config
-          if (OB_FAIL(item.config_.parse_group_config(group_config))) {
-            LOG_WARN("parse group config failed", K(ret), K(group_config));
-          } else if (OB_UNLIKELY(!item.is_valid())) {
+          if (OB_UNLIKELY(!item.is_valid())) {
             ret = OB_INVALID_DATA;
             LOG_WARN("invalid data", K(ret), K(item));
           } else if (OB_FAIL(perf_tenants.push_back(item))) {
             LOG_WARN("add item failed", K(ret), K(item));
           }
-          LOG_INFO("qilu: parse tenant", K(ret), K(item), K(group_config), K(item.config_));
+          LOG_INFO("qilu: parse tenant", K(ret), K(item), K(item.config_));
         }
       } else if (PerfConfigType::LOAD == config_type) {
         IOPerfLoad item;
         char io_mode[16] = { 0 };
         char perf_mode[16] = { 0 };
-        int scan_ret = sscanf(curr_line, "%d%d%ld%s%d%d%s%ld%d%d%ld%ld\n",
-            &item.tenant_id_, &item.device_id_, &item.group_id_, io_mode,
+        int scan_ret = sscanf(curr_line, "%d%d%s%d%d%s%ld%d%d%ld%ld\n",
+            &item.tenant_id_, &item.device_id_, io_mode,
             &item.size_, &item.depth_, perf_mode, &item.iops_, &item.thread_count_,
             (int *)&item.is_sequence_, &item.start_delay_ts_, &item.stop_delay_ts_);
-        if (OB_UNLIKELY(12 != scan_ret)) {
+        if (OB_UNLIKELY(11 != scan_ret)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("scan config file failed", K(ret), K(scan_ret));
         } else {
@@ -1901,7 +1791,7 @@ int parse_group_perf_config(const char *config_file_path,
           } else if (OB_FAIL(perf_loads.push_back(item))) {
             LOG_WARN("add item failed", K(ret), K(item));
           }
-          LOG_INFO("qilu: parse load", K(ret), K(item), K(io_mode), K(item.group_id_));
+          LOG_INFO("qilu: parse load", K(ret), K(item), K(io_mode));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -2031,7 +1921,7 @@ int IOPerfRunner::do_perf_batch()
   const int64_t check_count = load_.iops_ / load_.thread_count_ / (1000L / check_interval_ms);
   int64_t last_check_ts = ObTimeUtility::fast_current_time();
   const bool need_control_io_speed = 0 != load_.iops_;
-  LOG_INFO("perf start", K(load_.tenant_id_), K(load_.group_id_));
+  LOG_INFO("perf start", K(load_.tenant_id_));
   while (!has_set_stop()) {
     (void) do_batch_io();
     if (need_control_io_speed) {
@@ -2053,7 +1943,6 @@ int IOPerfRunner::do_perf_rolling()
 {
   int ret = OB_SUCCESS;
   ObIOInfo info;
-  info.flag_.set_resource_group_id(load_.group_id_);
   info.flag_.set_mode(load_.mode_);
   info.flag_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
   info.fd_ = fd_;
@@ -2148,7 +2037,6 @@ int IOPerfRunner::do_batch_io()
 {
   int ret = OB_SUCCESS;
   ObIOInfo info;
-  info.flag_.set_resource_group_id(load_.group_id_);
   info.flag_.set_mode(load_.mode_);
   info.flag_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
   info.fd_ = fd_;
@@ -2307,65 +2195,6 @@ int IOConfModify::modify_tenant_io( const int64_t min_iops,
     LOG_WARN("refresh tenant io config failed", K(ret), K(curr_tenant.tenant_id_), K(curr_tenant.config_));
   }
   return ret;
-}
-
-int IOGroupModify::init(int64_t modify_init_ts, int64_t modify_delay_ts, const IOPerfTenant &curr_tenant)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!curr_tenant.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(curr_tenant));
-  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "group modifier", 1024LL * 1024 * 1024 * 1024 * 10))) {
-    LOG_WARN("init allocator failed", K(ret));
-  } else {
-    curr_tenant_ = curr_tenant;
-    modify_init_ts_ = modify_init_ts;
-    modify_delay_ts_ = modify_delay_ts;
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(set_thread_count(load_.thread_count_ + 1))) {
-      LOG_WARN("set thread count failed", K(ret), K(modify_init_ts_), K(curr_tenant_));
-    } else if (OB_FAIL(start())) {
-      LOG_WARN("start thread failed", K(ret), K(modify_init_ts_), K(curr_tenant_));
-    }
-  }
-  if (OB_FAIL(ret)) {
-    destroy();
-  }
-  return ret;
-}
-
-void IOGroupModify::destroy()
-{
-  stop();
-  wait();
-  curr_tenant_ = IOPerfTenant();
-}
-
-void IOGroupModify::run1()
-{
-  int ret = OB_SUCCESS;
-  const int64_t thread_idx = get_thread_idx();
-  LOG_INFO("modify thread start");
-
-  //change 1
-  int64_t current_ts = ObTimeUtility::current_time();
-  if (modify_init_ts_ + modify_delay_ts_ > current_ts) {
-    usleep(modify_init_ts_ + modify_delay_ts_ - current_ts);
-  }
-  if (OB_FAIL(OB_IO_MANAGER.modify_group_io_config(0, 100, 100, 100))) {
-    LOG_WARN("fail to modify group config", K(ret));
-  } else if (OB_FAIL(OB_IO_MANAGER.modify_group_io_config((uint64_t)ObStorageUsedMod::STORAGE_USED_MAX + 1, 0, 0, 0))) {
-    LOG_WARN("fail to modify group config", K(ret));
-  }
-
-  //change 2
-  usleep(3000L * 1000L); // sleep 3s
-  if (OB_FAIL(OB_IO_MANAGER.modify_group_io_config(0, 40, 40, 40))) {
-    LOG_WARN("fail to modify group config", K(ret));
-  } else if (OB_FAIL(OB_IO_MANAGER.modify_group_io_config((uint64_t)ObStorageUsedMod::STORAGE_USED_MAX + 1, 60, 60, 60))) {
-    LOG_WARN("fail to modify group config", K(ret));
-  }
 }
 
 int IOTracerSwitch::init(int64_t switch_init_ts, int64_t switch_delay_ts, const IOPerfTenant &curr_tenant)

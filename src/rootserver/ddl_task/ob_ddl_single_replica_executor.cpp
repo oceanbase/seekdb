@@ -165,7 +165,6 @@ int ObDDLReplicaBuildExecutor::build(const ObDDLReplicaBuildExecutorParam &param
     parallelism_ = param.parallelism_;
     execution_id_ = param.execution_id_;
     data_format_version_ = param.data_format_version_;
-    consumer_group_id_ = param.consumer_group_id_;
     min_split_start_scn_ = param.min_split_start_scn_;
     is_no_logging_ = param.is_no_logging_;
     ObArray<ObSingleReplicaBuildCtx> replica_build_ctxs;
@@ -475,7 +474,6 @@ int ObDDLReplicaBuildExecutor::construct_rpc_arg(
     arg.execution_id_ = execution_id_;
     arg.tablet_task_id_ = replica_build_ctx.tablet_task_id_;
     arg.data_format_version_ = data_format_version_;
-    arg.consumer_group_id_ = consumer_group_id_;
     arg.compaction_scn_ = replica_build_ctx.compaction_scn_;
     arg.can_reuse_macro_block_ = replica_build_ctx.can_reuse_macro_block_;
     arg.min_split_start_scn_   = min_split_start_scn_;

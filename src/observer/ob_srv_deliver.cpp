@@ -392,9 +392,11 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
           LOG_WARN("fail to get username and tenant name", K(ret), K(req));
         } else if (0 != STRLEN(user_name_buf)) {
           if (0 == STRCMP(tenant_name_buf, OB_DIAG_TENANT_NAME)) {
+            // tenant@diag logs in as root@tenant; this is independent from resource groups.
             MEMCPY(tenant_name_buf, user_name_buf, STRLEN(user_name_buf));
             tenant_name_buf[STRLEN(user_name_buf)] = '\0';
-            conn->group_id_ = share::OBCG_DIAG_TENANT;
+            MEMCPY(user_name_buf, OB_SYS_USER_NAME, STRLEN(OB_SYS_USER_NAME));
+            user_name_buf[STRLEN(OB_SYS_USER_NAME)] = '\0';
           }
           MEMCPY(conn->user_name_buf_, user_name_buf, STRLEN(user_name_buf));
           conn->user_name_buf_[STRLEN(user_name_buf)] = '\0';

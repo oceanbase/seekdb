@@ -192,24 +192,6 @@ public:
   }
 };
 
-class ObSwitchConsumerGroupRetryPolicy : public ObRetryPolicy
-{
-public:
-  ObSwitchConsumerGroupRetryPolicy() = default;
-  ~ObSwitchConsumerGroupRetryPolicy() = default;
-  virtual void test(ObRetryParam &v) const override
-  {
-    try_packet_retry(v);
-    if (RETRY_TYPE_LOCAL == v.retry_type_) {
-      LOG_WARN_RET(v.err_, "set retry packet failed, retry at local",
-        K(v.ctx_.multi_stmt_item_.is_part_of_multi_stmt()),
-        K(v.ctx_.multi_stmt_item_.get_seq_num()));
-      v.session_.set_group_id_not_expected(true);
-      v.result_.get_exec_context().set_need_disconnect(false);
-    }
-  }
-};
-
 class ObBeforeRetryCheckPolicy : public ObRetryPolicy
 {
 public:
@@ -878,13 +860,6 @@ void ObQueryRetryCtrl::batch_execute_opt_retry_proc(ObRetryParam &v)
   retry_obj.test(batch_opt_retry);
 }
 
-void ObQueryRetryCtrl::switch_consumer_group_retry_proc(ObRetryParam &v)
-{
-  ObRetryObject retry_obj(v);
-  ObSwitchConsumerGroupRetryPolicy switch_group_retry;
-  retry_obj.test(switch_group_retry);
-}
-
 void ObQueryRetryCtrl::timeout_proc(ObRetryParam &v)
 {
   if (is_try_lock_row_err(v.session_.get_retry_info().get_last_query_retry_err())) {
@@ -1142,7 +1117,6 @@ int ObQueryRetryCtrl::init()
   ERR_RETRY_FUNC("SQL",      OB_NO_PARTITION_FOR_INTERVAL_PART,  short_wait_retry_proc,             short_wait_retry_proc,                         nullptr);
   ERR_RETRY_FUNC("SQL",      OB_BATCHED_MULTI_STMT_ROLLBACK,     batch_execute_opt_retry_proc,      batch_execute_opt_retry_proc,                  nullptr);
   ERR_RETRY_FUNC("SQL",      OB_SQL_RETRY_SPM,                   force_local_retry_proc,            force_local_retry_proc,                        nullptr);
-  ERR_RETRY_FUNC("SQL",      OB_NEED_SWITCH_CONSUMER_GROUP,      switch_consumer_group_retry_proc,  empty_proc,                                    nullptr);
 
   /* timeout */
   ERR_RETRY_FUNC("SQL",      OB_TIMEOUT,                         timeout_proc,                timeout_proc,                                        nullptr);

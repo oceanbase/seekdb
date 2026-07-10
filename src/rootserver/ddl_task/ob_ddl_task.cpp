@@ -148,7 +148,6 @@ OB_SERIALIZE_MEMBER(ObDDLSliceInfo, part_ranges_, autoinc_range_interval_);
 ObDDLTaskSerializeField::ObDDLTaskSerializeField(const int64_t task_version,
                                                  const int64_t parallelism,
                                                  const uint64_t data_format_version,
-                                                 const int64_t consumer_group_id,
                                                  const bool is_abort,
                                                  const int32_t sub_task_trace_id,
                                                  const bool is_unique_index,
@@ -159,7 +158,6 @@ ObDDLTaskSerializeField::ObDDLTaskSerializeField(const int64_t task_version,
   task_version_ = task_version;
   parallelism_ = parallelism;
   data_format_version_ = data_format_version;
-  consumer_group_id_ = consumer_group_id;
   is_abort_ = is_abort;
   sub_task_trace_id_ = sub_task_trace_id;
   is_no_logging_ = is_no_logging;
@@ -173,7 +171,6 @@ void ObDDLTaskSerializeField::reset()
   task_version_ = 0;
   parallelism_ = 0;
   data_format_version_ = 0;
-  consumer_group_id_ = 0;
   is_abort_ = false;
   sub_task_trace_id_ = 0;
   is_unique_index_ = false;
@@ -186,7 +183,6 @@ OB_SERIALIZE_MEMBER(ObDDLTaskSerializeField,
                     task_version_,
                     parallelism_,
                     data_format_version_,
-                    consumer_group_id_,
                     is_abort_,
                     sub_task_trace_id_,
                     is_unique_index_,
@@ -195,12 +191,12 @@ OB_SERIALIZE_MEMBER(ObDDLTaskSerializeField,
                     is_no_logging_);
 
 ObCreateDDLTaskParam::ObCreateDDLTaskParam()
-  : sub_task_trace_id_(0), object_id_(OB_INVALID_ID), schema_version_(0), parallelism_(0), 
-    consumer_group_id_(0), parent_task_id_(0), task_id_(0), type_(DDL_INVALID), src_table_schema_(nullptr), 
+  : sub_task_trace_id_(0), object_id_(OB_INVALID_ID), schema_version_(0), parallelism_(0),
+    parent_task_id_(0), task_id_(0), type_(DDL_INVALID), src_table_schema_(nullptr),
     dest_table_schema_(nullptr), ddl_arg_(nullptr), allocator_(nullptr),
     aux_rowkey_doc_schema_(nullptr), aux_doc_rowkey_schema_(nullptr), fts_index_aux_schema_(nullptr), aux_doc_word_schema_(nullptr),
     vec_rowkey_vid_schema_(nullptr), vec_vid_rowkey_schema_(nullptr), vec_domain_index_schema_(nullptr), vec_index_id_schema_(nullptr), vec_snapshot_data_schema_(nullptr),
-    vec_centroid_schema_(nullptr), vec_cid_vector_schema_(nullptr), vec_rowkey_cid_schema_(nullptr), vec_sq_meta_schema_(nullptr), vec_pq_centroid_schema_(nullptr), vec_pq_code_schema_(nullptr), 
+    vec_centroid_schema_(nullptr), vec_cid_vector_schema_(nullptr), vec_rowkey_cid_schema_(nullptr), vec_sq_meta_schema_(nullptr), vec_pq_centroid_schema_(nullptr), vec_pq_code_schema_(nullptr),
     hybrid_vec_embedded_schema_(nullptr), tenant_data_version_(0), ddl_need_retry_at_executor_(false), is_pre_split_(false)
 {
 }
@@ -211,13 +207,12 @@ ObCreateDDLTaskParam::ObCreateDDLTaskParam(const share::ObDDLType &type,
                                            const int64_t object_id,
                                            const int64_t schema_version,
                                            const int64_t parallelism,
-                                           const int64_t consumer_group_id,
                                            ObIAllocator *allocator,
                                            const obcall::ObDDLArg *ddl_arg,
                                            const int64_t parent_task_id,
                                            const int64_t task_id,
                                            const bool ddl_need_retry_at_executor)
-  : sub_task_trace_id_(0), object_id_(object_id), schema_version_(schema_version), parallelism_(parallelism), consumer_group_id_(consumer_group_id),
+  : sub_task_trace_id_(0), object_id_(object_id), schema_version_(schema_version), parallelism_(parallelism),
     parent_task_id_(parent_task_id), task_id_(task_id), type_(type), src_table_schema_(src_table_schema), dest_table_schema_(dest_table_schema),
     ddl_arg_(ddl_arg), allocator_(allocator), aux_rowkey_doc_schema_(nullptr), aux_doc_rowkey_schema_(nullptr),
     fts_index_aux_schema_(nullptr), aux_doc_word_schema_(nullptr), 
@@ -539,7 +534,7 @@ int ObDDLTask::set_ddl_stmt_str(const ObString &ddl_stmt_str)
 int ObDDLTask::serialize_params_to_message(char *buf, const int64_t buf_size, int64_t &pos) const
 {
   int ret = OB_SUCCESS;
-  ObDDLTaskSerializeField serialize_field(task_version_, parallelism_, data_format_version_, consumer_group_id_, is_abort_,
+  ObDDLTaskSerializeField serialize_field(task_version_, parallelism_, data_format_version_, is_abort_,
                                           sub_task_trace_id_, is_unique_index_, is_global_index_, is_pre_split_, is_no_logging_);
   
   if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
@@ -566,7 +561,6 @@ int ObDDLTask::deserialize_params_from_message(const char *buf, const int64_t bu
     task_version_ = serialize_field.task_version_;
     parallelism_ = serialize_field.parallelism_;
     data_format_version_ = serialize_field.data_format_version_;
-    consumer_group_id_ = serialize_field.consumer_group_id_;
     is_abort_ = serialize_field.is_abort_;
     sub_task_trace_id_ = serialize_field.sub_task_trace_id_;
     is_unique_index_ = serialize_field.is_unique_index_;
@@ -579,7 +573,7 @@ int ObDDLTask::deserialize_params_from_message(const char *buf, const int64_t bu
 
 int64_t ObDDLTask::get_serialize_param_size() const
 {
-  ObDDLTaskSerializeField serialize_field(task_version_, parallelism_, data_format_version_, consumer_group_id_, is_abort_,
+  ObDDLTaskSerializeField serialize_field(task_version_, parallelism_, data_format_version_, is_abort_,
                                           sub_task_trace_id_, is_unique_index_, is_global_index_, is_pre_split_, is_no_logging_);
   return serialize_field.get_serialize_size(); 
 }

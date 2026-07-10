@@ -87,17 +87,9 @@ public:
   OB_INLINE void set_curr_request_level(const int32_t level) { curr_request_level_ = level; }
   OB_INLINE int32_t get_curr_request_level() const { return curr_request_level_; }
   OB_INLINE bool is_th_worker() const { return is_th_worker_; }
-  OB_INLINE void set_group_id_(const uint64_t group_id) { group_id_ = group_id;}
-
-  OB_INLINE uint64_t get_group_id() const { return group_id_; }
   OB_INLINE void set_group(void *group) { group_ = group; };
   OB_INLINE void *get_group() { return group_;};
   OB_INLINE bool is_group_worker() const { return OB_NOT_NULL(group_); }
-
-  //OB_INLINE void set_group_id(int32_t group_id) { group_id_ = group_id; }
-
-  OB_INLINE void set_func_type_(uint8_t func_type) { func_type_ = func_type; }
-  OB_INLINE uint8_t get_func_type() const { return func_type_; }
 
   OB_INLINE bool is_timeout_ts_valid() { return INT64_MAX != timeout_ts_;}
   OB_INLINE void set_timeout_ts(int64_t timeout_ts) { timeout_ts_ = timeout_ts; }
@@ -155,9 +147,6 @@ private:
   int32_t worker_level_;
   int32_t curr_request_level_;
   bool is_th_worker_;
-  uint64_t group_id_;
-  uint8_t func_type_;
-
   int64_t timeout_ts_;
 
   //ingnore net time, equal to (receive_ts - send_ts).
@@ -201,72 +190,6 @@ inline Worker &this_worker()
 }
 
 #define THIS_WORKER oceanbase::lib::Worker::self()
-
-#define GET_FUNC_TYPE() (THIS_WORKER.get_func_type())
-#define GET_GROUP_ID() (THIS_WORKER.get_group_id())
-
-int SET_GROUP_ID(bool is_background = false);
-
-
-class ConsumerGroupIdGuard
-{
-public:
-  ConsumerGroupIdGuard(uint64_t group_id)
-    : thread_group_id_(GET_GROUP_ID()), group_changed_(false), ret_(OB_SUCCESS)
-  {
-    group_changed_ = group_id != thread_group_id_;
-    if (is_resource_manager_group(thread_group_id_)) {
-      // has set group id. do nothing.
-    } else if (group_changed_) {
-      ret_ = SET_GROUP_ID();
-    }
-  }
-  ~ConsumerGroupIdGuard()
-  {
-    if (group_changed_) {
-      SET_GROUP_ID();
-    }
-  }
-  int get_ret()
-  {
-    return ret_;
-  }
-
-private:
-  uint64_t thread_group_id_;
-  bool group_changed_;
-  int ret_;
-};
-#define CONSUMER_GROUP_ID_GUARD(group_id) oceanbase::lib::ConsumerGroupIdGuard consumer_group_id_guard_(group_id)
-
-class ConsumerGroupFuncGuard
-{
-public:
-  ConsumerGroupFuncGuard(uint8_t func_type)
-    : thread_func_type_(GET_FUNC_TYPE()), ret_(OB_SUCCESS)
-  {
-    THIS_WORKER.set_func_type_(func_type);
-    group_changed_ = true;
-    ret_ = SET_GROUP_ID(true /* is_background */);
-  }
-  ~ConsumerGroupFuncGuard()
-  {
-    THIS_WORKER.set_func_type_(thread_func_type_);
-    if (group_changed_) {
-      SET_GROUP_ID();
-    }
-  }
-  int get_ret()
-  {
-    return ret_;
-  }
-
-private:
-  uint8_t thread_func_type_;
-  bool group_changed_;
-  int ret_;
-};
-#define CONSUMER_GROUP_FUNC_GUARD(func_type) oceanbase::lib::ConsumerGroupFuncGuard consumer_group_func_guard_(func_type)
 
 class DisableSchedInterGuard
 {

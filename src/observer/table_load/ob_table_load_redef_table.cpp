@@ -121,7 +121,7 @@ int ObTableLoadRedefTable::start(const ObTableLoadRedefTableStartArg &arg,
     int64_t foreign_key_checks = 1;
     session_info.get_foreign_key_checks(foreign_key_checks);
     if (OB_FAIL(create_table_arg.init(1UL, arg.table_id_,
-                                      THIS_WORKER.get_group_id(), session_info.get_sessid_for_table(),
+                                      session_info.get_sessid_for_table(),
                                       arg.parallelism_, ddl_type, session_info.get_sql_mode(),
                                       session_info.get_tz_info_wrap().get_tz_info_offset(),
                                       session_info.get_local_nls_date_format(),

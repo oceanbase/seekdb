@@ -861,7 +861,7 @@ int ObChecksumValidator::get_replica_ckm(const bool include_larger_than/* = fals
   ++statistics_.query_ckm_sql_cnt_;
   return ObTabletReplicaChecksumOperator::batch_get(
       cur_tablet_ls_pair_array_, get_compaction_scn(), *sql_proxy_,
-      replica_ckm_items_, include_larger_than, share::OBCG_DEFAULT);
+      replica_ckm_items_, include_larger_than, 0);
 }
 
 /***************************************** FTS Checksum Section ******************************************/

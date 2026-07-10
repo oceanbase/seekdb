@@ -349,7 +349,7 @@ struct ObAuditRecordData {
   int64_t user_id_;
   char *user_name_;
   int64_t user_name_len_;
-  int user_group_; // user belongs to cgroup id, only main thread displays
+  int user_group_;
   uint64_t db_id_;
   char *db_name_;
   int64_t db_name_len_;
@@ -413,5 +413,4 @@ struct ObAuditRecordData {
 } //namespace sql
 } //namespace oceanbase
 #endif
-
 

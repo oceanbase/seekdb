@@ -105,15 +105,12 @@ class ObPluginMgr;
 
 namespace share
 {
-class ObResourcePlanManager;
 class ObTabletTableOperator;
 class ObSQLiteConnectionPool;
 class ObRsMgr;
 class ObLocationService;
 class ObSchemaStatusProxy;
 class ObKVStorage;
-
-class ObCgroupCtrl;
 
 namespace schema
 {
@@ -152,7 +149,6 @@ struct ObGlobalContext
   int64_t start_service_time_;
   obmysql::ObDiag *diag_;
   common::ObMysqlRandom *scramble_rand_;
-  share::ObCgroupCtrl *cgroup_ctrl_;
   observer::ObSrvNetworkFrame *net_frame_;
 
   observer::ObIDiskReport *disk_reporter_;

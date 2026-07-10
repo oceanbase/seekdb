@@ -155,8 +155,6 @@ ObSqlCtx::ObSqlCtx()
     is_protocol_weak_read_(false),
     flashback_query_expr_(nullptr),
     is_execute_call_stmt_(false),
-    enable_sql_resource_manage_(false),
-    resource_map_rule_(),
     is_text_ps_mode_(false),
     first_plan_hash_(0),
     is_bulk_(false),
@@ -203,8 +201,6 @@ void ObSqlCtx::reset()
   all_local_session_vars_ = nullptr;
   is_ddl_from_primary_ = false;
   is_sensitive_ = false;
-  enable_sql_resource_manage_ = false;
-  resource_map_rule_.reset();
   is_protocol_weak_read_ = false;
   first_plan_hash_ = 0;
   first_outline_data_.reset();

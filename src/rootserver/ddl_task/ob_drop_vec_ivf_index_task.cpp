@@ -60,7 +60,6 @@ int ObDropVecIVFIndexTask::init(
     const ObVecIndexDDLChildTaskInfo &pq_centroid,
     const ObVecIndexDDLChildTaskInfo &pq_code,
     const int64_t schema_version,
-    const int64_t consumer_group_id,
     const uint64_t tenant_data_version,
     const obcall::ObDropIndexArg &drop_index_arg)
 {
@@ -118,7 +117,6 @@ int ObDropVecIVFIndexTask::init(
       schema_version_ = schema_version;
       task_id_ = task_id;
       parent_task_id_ = 0; // no parent task
-      consumer_group_id_ = consumer_group_id;
       task_version_ = OB_DROP_VEC_IVF_INDEX_TASK_VERSION;
       
       dst_schema_version_ = schema_version;

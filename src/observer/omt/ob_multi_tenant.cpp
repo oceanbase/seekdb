@@ -80,13 +80,11 @@
 #include "sql/ob_sql_ccl_rule_manager.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
 #include "observer/omt/ob_tenant_ai_service.h"
-#include "share/resource_manager/ob_resource_plan_manager.h"  // relocated-definition owner
 #include "storage/allocator/ob_memstore_allocator.h"  // relocated-definition owner
 #include "share/io/ob_io_manager.h"  // relocated-definition owner
 // collapsed-from-ObTenantNodeBalancer sys-tenant bring-up/refresh dependencies
 #include "share/unit/ob_unit_config.h"                       // ObUnitConfig::gen_sys_tenant_unit_config
 #include "logservice/ob_tenant_mutil_allocator_mgr.h"        // TMA_MGR_INSTANCE
-#include "share/resource_manager/ob_resource_manager.h"      // G_RES_MGR / ObResourcePlanManager
 #include "logservice/ob_server_log_block_mgr.h"              // GCTX.log_block_mgr_
 #include "common/ob_tenant_data_version_mgr.h"               // ODV_MGR
 
@@ -100,7 +98,6 @@ using namespace oceanbase::storage;
 using namespace oceanbase::storage::checkpoint;
 using namespace oceanbase::obmysql;
 using namespace oceanbase::sql;
-namespace oceanbase { namespace omt { int refresh_global_background_cpu(share::ObResourcePlanManager &mgr); } }
 using namespace oceanbase::sql::dtl;
 using namespace oceanbase::concurrency_control;
 using namespace oceanbase::transaction;
@@ -495,9 +492,6 @@ int ObMultiTenant::create_tenant(const ObTenantMeta &meta, bool write_slog, cons
 
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (OB_ISNULL(GCTX.cgroup_ctrl_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("group ctrl not init", K(ret));
   } else if (write_slog) {
     if (OB_FAIL(SERVER_STORAGE_META_PERSISTER.prepare_create_tenant(meta, tenant_epoch))) {
       LOG_ERROR("fail to write create tenant prepare slog", K(ret));
@@ -508,7 +502,7 @@ int ObMultiTenant::create_tenant(const ObTenantMeta &meta, bool write_slog, cons
 
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(tenant_ = OB_NEW(
-      ObTenant, ObModIds::OMT, tenant_epoch, GCONF.workers_per_cpu_quota.get_value(), *GCTX.cgroup_ctrl_))) {
+      ObTenant, ObModIds::OMT, tenant_epoch, GCONF.workers_per_cpu_quota.get_value()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("new tenant fail", K(ret));
   } else if (FALSE_IT(create_step = ObTenantCreateStep::STEP_TENANT_NEWED)) { //step5
@@ -1310,9 +1304,7 @@ int ObMultiTenant::get_tenant_cpu_time(int64_t &cpu_time) const
   int ret = OB_SUCCESS;
   ObTenant *tenant = nullptr;
   cpu_time = 0;
-  if (OB_NOT_NULL(GCTX.cgroup_ctrl_) && GCTX.cgroup_ctrl_->is_valid()) {
-    ret = GCTX.cgroup_ctrl_->get_cpu_time(cpu_time);
-  } else if (OB_FAIL(get_tenant_unsafe(tenant))) {
+  if (OB_FAIL(get_tenant_unsafe(tenant))) {
   } else {
     cpu_time = tenant->get_cpu_time();
   }
@@ -1472,7 +1464,7 @@ int ObMultiTenant::refresh_sys_tenant()
 
 // Per-tick upkeep on the single sys tenant (collapsed from
 // ObTenantNodeBalancer::periodically_check_tenant): PX/DTL/parallel-servers-target
-// via tenant->periodically_check() + resource-plan refresh. Independent of unit-diff.
+// via tenant->periodically_check(). Independent of unit-diff.
 void ObMultiTenant::periodically_check_sys_tenant_()
 {
   int ret = OB_SUCCESS;
@@ -1485,13 +1477,10 @@ void ObMultiTenant::periodically_check_sys_tenant_()
       locked = true;
     }
   }
-  refresh_global_background_cpu(G_RES_MGR.get_plan_mgr());
   if (locked) {
     tenant->periodically_check();
     IGNORE_RETURN tenant->unlock();
   }
-  ObResourcePlanManager &plan_mgr = G_RES_MGR.get_plan_mgr();
-  LOG_INFO("refresh resource manager plan", K(plan_mgr));
 }
 
 int64_t ObMultiTenant::get_sys_refresh_interval_()
@@ -1527,17 +1516,8 @@ int ObMultiTenant::get_server_allocated_resource(ServerResource &server_resource
 void ObMultiTenant::runTimerTask()
 {
   {
-    bool need_regist_cgroup = false;
-    if (REACH_TIME_INTERVAL(1 * 1000 * 1000L)) {  // every 1s
-      if (OB_NOT_NULL(GCTX.cgroup_ctrl_)) {
-        need_regist_cgroup = GCTX.cgroup_ctrl_->check_cgroup_status();
-      }
-    }
     if (OB_ISNULL(tenant_) || !tenant_active_) {
     } else {
-      if (need_regist_cgroup) {
-        tenant_->regist_threads_to_cgroup();
-      }
       tenant_->timeup();
     }
   }
@@ -1551,9 +1531,6 @@ void ObMultiTenant::runTimerTask()
     if (!OB_ISNULL(tenant_)) {
       ObTaskController::get().allow_next_syslog();
       LOG_INFO("dump tenant info", "tenant", *tenant_);
-      if (OB_NOT_NULL(GCTX.cgroup_ctrl_) && GCTX.cgroup_ctrl_->is_valid()) {
-        tenant_->print_throttled_time();
-      }
     }
   }
 }
@@ -1687,70 +1664,6 @@ int ObMultiTenant::dec_tenant_ddl_count()
   }
   return ret;
 }
-
-// ===== moved from share::ObResourcePlanManager and demoted to omt free function(truly observer-bound: omt tenant iteration/MTL/cgroup) =====
-namespace oceanbase
-{
-namespace omt
-{
-
-int refresh_global_background_cpu(share::ObResourcePlanManager &mgr)
-{
-  int ret = OB_SUCCESS;
-  if (GCONF.enable_global_background_resource_isolation && GCTX.cgroup_ctrl_->is_valid()) {
-    double cpu = static_cast<double>(GCONF.global_background_cpu_quota);
-    if (cpu <= 0) {
-      cpu = -1;
-    }
-    if (cpu >= 0 && OB_FAIL(GCTX.cgroup_ctrl_->set_cpu_shares(cpu,
-                        OB_INVALID_GROUP_ID,
-                        true /* is_background */))) {
-      LOG_WARN("fail to set background cpu shares", K(ret));
-    }
-    int compare_ret = 0;
-    if (OB_SUCC(ret) && OB_SUCC(GCTX.cgroup_ctrl_->compare_cpu(mgr.get_background_quota(), cpu, compare_ret))) {
-      if (0 == compare_ret) {
-        // do nothing
-      } else if (OB_FAIL(GCTX.cgroup_ctrl_->set_cpu_cfs_quota(cpu,
-                     OB_INVALID_GROUP_ID,
-                     true /* is_background */))) {
-        LOG_WARN("fail to set background cpu cfs quota", K(ret));
-      } else {
-        if (compare_ret < 0) {
-#ifdef _WIN32
-          SYSTEM_INFO si;
-          GetSystemInfo(&si);
-          const int64_t phy_cpu_cnt = static_cast<int64_t>(si.dwNumberOfProcessors);
-#else
-          const int64_t phy_cpu_cnt = sysconf(_SC_NPROCESSORS_ONLN);
-#endif
-          int tmp_ret = OB_SUCCESS;
-          {
-            double target_cpu = -1;
-            {
-              target_cpu = (phy_cpu_cnt <= 4) ? 1.0 : OB_DTL_CPU;
-            }
-            if (OB_TMP_FAIL(GCTX.cgroup_ctrl_->compare_cpu(target_cpu, cpu, compare_ret))) {
-              LOG_WARN_RET(tmp_ret, "compare tenant cpu failed", K(tmp_ret), K(1UL));
-            } else if (compare_ret > 0) {
-              target_cpu = cpu;
-            }
-            if (OB_TMP_FAIL(GCTX.cgroup_ctrl_->set_cpu_cfs_quota(target_cpu, OB_INVALID_GROUP_ID, true /* is_background */))) {
-              LOG_WARN_RET(tmp_ret, "set tenant cpu cfs quota failed", K(tmp_ret), K(1UL));
-            }
-          }
-        }
-      }
-      if (OB_SUCC(ret) && 0 != compare_ret) {
-        mgr.set_background_quota(cpu);
-      }
-    }
-  }
-  return ret;
-}
-
-}  // namespace omt
-}  // namespace oceanbase
 
 // ===== calc_nway file-local helper moved together =====
 namespace oceanbase { namespace share {

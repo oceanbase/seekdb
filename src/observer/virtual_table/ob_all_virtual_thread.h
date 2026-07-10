@@ -33,7 +33,6 @@ class ObAllVirtualThread : public common::ObVirtualTableScannerIterator
     LATCH_WAIT,
     LATCH_HOLD,
     TRACE_ID,
-    CGROUP_PATH,
     NUMA_NODE
   };
 
@@ -44,16 +43,12 @@ public:
   virtual void reset() override;
   virtual int inner_get_next_row(common::ObNewRow *&row) override;
 private:
-  static const int32_t PATH_BUFSIZE = 512;
   bool is_inited_;
-  bool is_config_cgroup_;
   char ip_buf_[common::OB_IP_STR_BUFF];
   char tname_[16];
   char wait_addr_[16];
   char locks_addr_[256];
   char trace_id_buf_[40];
-  char cgroup_path_buf_[PATH_BUFSIZE];
-  int read_real_cgroup_path();
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualThread);

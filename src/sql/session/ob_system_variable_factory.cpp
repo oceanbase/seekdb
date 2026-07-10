@@ -822,7 +822,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarForceParallelDmlDop)
         + sizeof(ObSysVarObPlBlockTimeout)
         + sizeof(ObSysVarTransactionReadOnly)
-        + sizeof(ObSysVarResourceManagerPlan)
         + sizeof(ObSysVarPerformanceSchema)
         + sizeof(ObSysVarObProxySessionTemporaryTableUsed)
         + sizeof(ObSysVarEnableParallelDdl)
@@ -3056,15 +3055,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_TRANSACTION_READ_ONLY))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarTransactionReadOnly));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarResourceManagerPlan())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarResourceManagerPlan", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_RESOURCE_MANAGER_PLAN))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarResourceManagerPlan));
       }
     }
     if (OB_SUCC(ret)) {
@@ -9504,10 +9494,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR_TRANSACTION_READ_ONLY: {
       ret = create_one_sys_var<ObSysVarTransactionReadOnly>(allocator_, sys_var_ptr, "ObSysVarTransactionReadOnly");
-      break;
-    }
-    case share::SYS_VAR_RESOURCE_MANAGER_PLAN: {
-      ret = create_one_sys_var<ObSysVarResourceManagerPlan>(allocator_, sys_var_ptr, "ObSysVarResourceManagerPlan");
       break;
     }
     case share::SYS_VAR_PERFORMANCE_SCHEMA: {

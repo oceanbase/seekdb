@@ -172,7 +172,6 @@ int ObLogExternalStorageHandler::pread(const common::ObString &uri,
   real_read_size = 0;
   RLockGuard guard(resize_rw_lock_);
   time_guard.click("after hold by lock");
-  CONSUMER_GROUP_FUNC_GUARD(io_ctx.get_function_type());
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;

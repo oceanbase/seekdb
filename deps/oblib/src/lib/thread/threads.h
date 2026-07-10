@@ -68,8 +68,7 @@ public:
   int try_thread_recycle();
 
   int init();
-  // IRunWrapper is used to specify the tenant context when creating multi-tenant threads
-  // cgroup_ctrl and IRunWrapper work together to achieve CPU isolation for multi-tenant threads
+  // IRunWrapper is used to specify the tenant context when creating multi-tenant threads.
   void set_run_wrapper(IRunWrapper *run_wrapper)
   {
     run_wrapper_ = run_wrapper;

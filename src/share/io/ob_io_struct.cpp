@@ -339,68 +339,6 @@ void ObIOStatDiff::diff(const ObIOStat &io_stat, double &avg_iops, double &avg_b
 }
 
 
-/******************        Function Group Usage      **********************/
-ObIOFuncUsages::ObIOFuncUsages()
-{
-}
-
-int ObIOFuncUsages::init()
-{
-  int ret = OB_SUCCESS;
-  int FUNC_NUM = static_cast<uint8_t>(share::ObFunctionType::MAX_FUNCTION_NUM);
-  int GROUP_MODE_NUM = static_cast<uint8_t>(ObIOGroupMode::MODECNT);
-  func_usages_.set_attr(ObMemAttr("IOFuncUsages"));
-  for (int i = 0; i < FUNC_NUM && OB_SUCC(ret); ++i) {
-    ObIOFuncUsage func_usage;
-    if (OB_FAIL(func_usage.reserve(GROUP_MODE_NUM))) {
-      LOG_WARN("reserve func usage failed", K(ret), K(i));
-    } else {
-      for (int j = 0; j < GROUP_MODE_NUM && OB_SUCC(ret); ++j) {
-        if (OB_FAIL(func_usage.push_back(ObIOFuncUsageByMode()))) {
-          LOG_WARN("func usage push failed", K(ret), K(j));
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(func_usages_.push_back(func_usage))) {
-        LOG_WARN("push func usage failed", K(ret), K(i));
-      }
-    }
-  }
-  return ret;
-}
-int ObIOFuncUsages::accumulate(ObIORequest &req) {
-  int ret = OB_SUCCESS;
-  int64_t io_size = 0;
-  int64_t prepare_delay = 0;
-  int64_t schedule_delay = 0;
-  int64_t submit_delay = 0;
-  int64_t device_delay = 0;
-  int64_t total_delay = 0;
-  uint64_t idx = 0;
-  ObIOGroupMode mode = ObIOGroupMode::MODECNT;
-  if (OB_ISNULL(req.io_result_)){
-    ret = OB_INVALID_ARGUMENT;
-    LOG_ERROR("invalid io result", K(req));
-  } else if (OB_FAIL(req.io_result_->cal_delay_us(
-                 prepare_delay, schedule_delay, submit_delay, device_delay, total_delay))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_INFO("failed to cal delay", K(ret));
-  } else {
-    io_size = req.get_align_size();
-    idx = static_cast<uint8_t>(req.get_flag().get_func_type());
-    mode = req.get_group_mode();
-    if (idx < 0 || idx >= func_usages_.count()) {
-      LOG_ERROR("invalid io usage index", K(idx), K(func_usages_.count()));
-    } else if (mode == ObIOGroupMode::MODECNT) {
-      LOG_ERROR("invalid io usage mode", K(idx), K(mode), K(func_usages_.count()));
-    } else {
-      func_usages_.at(idx).at(static_cast<uint8_t>(mode)).inc(io_size, prepare_delay, schedule_delay, submit_delay, device_delay, total_delay);
-    }
-  }
-  return ret;
-}
-
-
 /******************             IOUsage              **********************/
 ObIOUsage::~ObIOUsage()
 {

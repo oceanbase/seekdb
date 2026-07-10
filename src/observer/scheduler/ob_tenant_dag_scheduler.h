@@ -680,7 +680,6 @@ public:
   virtual int64_t get_data_size() const { return 0; }
   virtual int fill_dag_key(char *buf, const int64_t buf_len) const = 0;
   virtual lib::Worker::CompatMode get_compat_mode() const = 0;
-  virtual uint64_t get_consumer_group_id() const = 0;
   int remove_task(ObITask &task);
 protected:
   void inc_running_task_cnt() { ++running_task_cnt_; }
@@ -703,7 +702,6 @@ protected:
   int dag_ret_;
   int64_t add_time_;
   int64_t start_time_;
-  uint64_t consumer_group_id_;
   share::ObDiagnoseLocation error_location_;
 
 protected:
@@ -932,7 +930,6 @@ public:
   void run1() override;
   int yield();
   void set_task(ObITask *task);
-  void set_function_type(const ObFunctionType function_type) { function_type_ = function_type; }
   bool need_wake_up() const;
   ObITask *get_task() const { return task_; }
   DagWorkerStatus get_status() { return status_; }
@@ -957,7 +954,6 @@ private:
   DagWorkerStatus status_;
   int64_t check_period_;
   int64_t last_check_time_;
-  ObFunctionType function_type_;
   int tg_id_;
   bool hold_by_compaction_dag_;
   bool is_inited_;

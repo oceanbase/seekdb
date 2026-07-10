@@ -308,8 +308,7 @@ ObTabletForkParam::ObTabletForkParam()
     dest_tablet_id_(),
     fork_snapshot_version_(0),
     compat_mode_(lib::Worker::CompatMode::MYSQL),
-    data_format_version_(0),
-    consumer_group_id_(0)
+    data_format_version_(0)
 {
 }
 
@@ -323,8 +322,7 @@ ObTabletForkParam::ObTabletForkParam(const ObTabletForkParam &other)
     dest_tablet_id_(other.dest_tablet_id_),
     fork_snapshot_version_(other.fork_snapshot_version_),
     compat_mode_(other.compat_mode_),
-    data_format_version_(other.data_format_version_),
-    consumer_group_id_(other.consumer_group_id_)
+    data_format_version_(other.data_format_version_)
 {
 }
 
@@ -342,7 +340,6 @@ ObTabletForkParam &ObTabletForkParam::operator=(const ObTabletForkParam &other)
     fork_snapshot_version_ = other.fork_snapshot_version_;
     compat_mode_ = other.compat_mode_;
     data_format_version_ = other.data_format_version_;
-    consumer_group_id_ = other.consumer_group_id_;
   }
   return *this;
 }
@@ -365,7 +362,6 @@ void ObTabletForkParam::reset()
   fork_snapshot_version_ = 0;
   compat_mode_ = lib::Worker::CompatMode::MYSQL;
   data_format_version_ = 0;
-  consumer_group_id_ = 0;
 }
 
 bool ObTabletForkParam::is_valid() const
@@ -378,8 +374,7 @@ bool ObTabletForkParam::is_valid() const
       && dest_tablet_id_.is_valid()
       && fork_snapshot_version_ > 0
       && compat_mode_ != lib::Worker::CompatMode::INVALID
-      && data_format_version_ > 0
-      && consumer_group_id_ >= 0;
+      && data_format_version_ > 0;
 }
 
 int ObTabletForkParam::init(const ObTabletForkParam &param)
@@ -402,7 +397,6 @@ int ObTabletForkParam::init(const ObTabletForkParam &param)
     fork_snapshot_version_ = param.fork_snapshot_version_;
     compat_mode_ = param.compat_mode_;
     data_format_version_ = param.data_format_version_;
-    consumer_group_id_ = param.consumer_group_id_;
     is_inited_ = true;
   }
   return ret;
@@ -620,8 +614,7 @@ ObTabletForkDag::ObTabletForkDag()
   : ObIDag(ObDagType::DAG_TYPE_FORK_TABLE),
     is_inited_(false),
     param_(),
-    context_(),
-    consumer_group_id_(0)
+    context_()
 {
 }
 
@@ -648,7 +641,6 @@ int ObTabletForkDag::init_by_param(const share::ObIDagInitParam *param)
       LOG_INFO("wait conditions satisfied", K(ret), KPC(tmp_param));
     }
   } else {
-    consumer_group_id_ = tmp_param->consumer_group_id_;
     is_inited_ = true;
   }
   return ret;
@@ -1813,4 +1805,3 @@ int ObTabletForkUtil::freeze_tablets(
 
 }  // end namespace storage
 }  // end namespace oceanbase
-

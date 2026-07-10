@@ -79,7 +79,6 @@ int ObVecIVFIndexBuildTask::init(
     const ObTableSchema *index_schema,
     const int64_t schema_version,
     const int64_t parallelism,
-    const int64_t consumer_group_id,
     const ObDDLType task_type,
     const obcall::ObCreateIndexArg &create_index_arg,
     const uint64_t tenant_data_version,
@@ -103,7 +102,6 @@ int ObVecIVFIndexBuildTask::init(
                          OB_ISNULL(index_schema) ||
                          schema_version <= 0 ||
                          parallelism <= 0 ||
-                         consumer_group_id < 0 ||
                          !create_index_arg.is_valid() ||
                          !(tenant_data_version > 0) ||
                          task_status < ObDDLTaskStatus::PREPARE ||
@@ -112,7 +110,6 @@ int ObVecIVFIndexBuildTask::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_id),
         KPC(data_table_schema), KPC(index_schema), K(schema_version), K(parallelism),
-        K(consumer_group_id), K(create_index_arg.is_valid()), K(create_index_arg),
         K(task_status), K(snapshot_version), K(is_rebuild_index));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_,
                                          create_index_arg,
@@ -125,7 +122,6 @@ int ObVecIVFIndexBuildTask::init(
     task_type_ = task_type;
     schema_version_ = schema_version;
     parallelism_ = parallelism;
-    consumer_group_id_ = consumer_group_id;
     parent_task_id_ = parent_task_id;
     if (snapshot_version > 0) {
       snapshot_version_ = snapshot_version;

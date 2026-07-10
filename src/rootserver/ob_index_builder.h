@@ -114,7 +114,6 @@ public:
                               const common::ObIArray<common::ObTabletID> *del_data_tablet_ids,
                               const share::schema::ObTableSchema *index_schema,
                               const int64_t parallelism,
-                              const int64_t group_id,
                               const uint64_t tenant_data_version,
                               common::ObIAllocator &allocator,
                               ObDDLTaskRecord &task_record,
@@ -126,7 +125,6 @@ public:
                                 const common::ObIArray<common::ObTabletID> *del_data_tablet_ids,
                                 const share::schema::ObTableSchema *index_schema,
                                 const int64_t parallelism,
-                                const int64_t group_id,
                                 const uint64_t tenant_data_version,
                                 common::ObIAllocator &allocator,
                                 ObDDLTaskRecord &task_record);

@@ -31,7 +31,7 @@ namespace lib
 void set_hard_memory_limit(int64_t bytes)
 {
   
-  // set resource manager hard memory limit
+  // set tenant allocator hard memory limit
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
     allocator->set_tenant_hard_limit(bytes);
@@ -49,7 +49,7 @@ int64_t get_hard_memory_limit()
 void set_memory_limit(int64_t bytes)
 {
   
-  // set resource manager memory limit
+  // set tenant allocator memory limit
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
     allocator->set_tenant_limit(bytes);
@@ -86,7 +86,7 @@ int64_t get_hard_memory_remain()
 
 void set_tenant_memory_limit(int64_t bytes)
 {
-  // set resource manager memory limit
+  // set tenant allocator memory limit
   if (false) return;
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {

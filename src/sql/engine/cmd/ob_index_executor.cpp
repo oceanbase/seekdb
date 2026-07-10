@@ -85,7 +85,6 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
   } else {
     create_index_arg.is_inner_ = my_session->is_inner();
     create_index_arg.parallelism_ = stmt.get_parallelism();
-    create_index_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
     if (OB_FAIL(index_arg_list.push_back(&create_index_arg))) {
       LOG_WARN("fail to push back create index arg", KR(ret));
     } else if (OB_FAIL(pre_split.get_global_index_pre_split_schema_if_need(
@@ -386,7 +385,6 @@ int ObDropIndexExecutor::execute(ObExecContext &ctx, ObDropIndexStmt &stmt)
   }  else if (OB_INVALID_ID == drop_index_arg.session_id_
              && FALSE_IT(tmp_arg.session_id_ = my_session->get_sessid_for_table())) {
     //impossible
-  } else if (FALSE_IT(tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id())) {
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(drop_index_arg, res); }))) {
     LOG_WARN("rpc proxy drop index failed", "dst", GCTX.self_addr(), K(ret));
   } else if (OB_FAIL(wait_drop_index_finish(res.task_id_, *my_session))) {

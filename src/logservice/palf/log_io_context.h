@@ -18,7 +18,6 @@
 #define OCEANBASE_LOGSERVICE_LOG_IO_CONTEXT_
 #include <cstdint>
 #include "lib/utility/ob_print_utils.h"
-#include "share/resource_manager/ob_resource_plan_info.h"
 #include "log_iterator_info.h"
 
 namespace oceanbase
@@ -61,26 +60,6 @@ inline const char *log_io_user_str(const LogIOUser user_type)
   #undef USER_TYPE_STR
 }
 
-inline share::ObFunctionType log_io_user_prio(const LogIOUser &user_type)
-{
-  share::ObFunctionType prio = share::ObFunctionType::PRIO_CLOG_LOW;
-  if (LogIOUser::REPLAY == user_type ||
-      LogIOUser::FETCHLOG == user_type ||
-      LogIOUser::SHARED_UPLOAD == user_type ||
-      LogIOUser::META_INFO == user_type ||
-      LogIOUser::RESTART == user_type) {
-    prio = share::ObFunctionType::PRIO_CLOG_HIGH;
-  } else if (LogIOUser::CDC == user_type ||
-      LogIOUser::ARCHIVE == user_type ||
-      LogIOUser::RESTORE == user_type ||
-      LogIOUser::STANDBY == user_type) {
-    prio = share::ObFunctionType::PRIO_CLOG_MID;
-  } else {
-    prio = share::ObFunctionType::PRIO_CLOG_MID;
-  }
-  return prio;
-}
-
 class LogIOContext
 {
 public:
@@ -108,7 +87,6 @@ public:
     }
     return *this;
   }
-  share::ObFunctionType get_function_type() const { return log_io_user_prio(user_); }
   void set_start_lsn(const LSN &start_lsn) { iterator_info_.set_start_lsn(start_lsn); }
   LogIteratorInfo *get_iterator_info() { return &iterator_info_; }
   void inc_read_io_cnt() 

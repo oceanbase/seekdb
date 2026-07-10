@@ -21,7 +21,6 @@
 #include "lib/utility/ob_macro_utils.h"            // IS_NOT_INIT
 #include "lib/net/ob_addr.h"                       // ObAddr
 #include "palf_options.h"                          // PalfTransportCompressOptions
-#include "share/resource_manager/ob_cgroup_ctrl.h"
 
 namespace oceanbase
 {

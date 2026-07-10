@@ -181,7 +181,7 @@ FLT_DEF_TAG(sqc_id, "sub query coordinator id, sqc is for scheduling the executi
 FLT_DEF_TAG(qc_id, "id of query coordinator(qc), qc is for scheduling the execution of the plan")
 FLT_DEF_TAG(used_worker_cnt, "count of used worker")
 FLT_DEF_TAG(task_id, "px logical task id")
-FLT_DEF_TAG(group_id, "resource group id, the current thread belongs to")
+FLT_DEF_TAG(group_id, "execution group id, the current thread belongs to")
 FLT_DEF_TAG(sqc_resp_finish_ts, "sqc finish response qc timestamp")
 
 // transaction  TODO shengle SET_TAG

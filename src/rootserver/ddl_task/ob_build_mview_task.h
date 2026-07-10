@@ -33,7 +33,6 @@ public:
            const share::schema::ObTableSchema *mview_schema,
            const int64_t schema_version,
            const int64_t parallel,
-           const int64_t consumer_group_id,
            const obcall::ObMViewCompleteRefreshArg &mview_complete_refresh_arg,
            const int64_t parent_task_id,
            const int64_t task_status = share::ObDDLTaskStatus::START_REFRESH_MVIEW_TASK,

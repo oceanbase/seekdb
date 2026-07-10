@@ -51,7 +51,6 @@ int ObTableRedefinitionTask::init(const ObTableSchema* src_table_schema,
                                   const int64_t task_id,
                                   const share::ObDDLType &ddl_type,
                                   const int64_t parallelism,
-                                  const int64_t consumer_group_id,
                                   const int32_t sub_task_trace_id,
                                   const ObAlterTableArg &alter_table_arg,
                                   const uint64_t tenant_data_version,
@@ -80,7 +79,6 @@ int ObTableRedefinitionTask::init(const ObTableSchema* src_table_schema,
     LOG_WARN("set ddl stmt str failed", K(ret));
   } else {
     set_gmt_create(ObTimeUtility::current_time());
-    consumer_group_id_ = consumer_group_id;
     sub_task_trace_id_ = sub_task_trace_id;
     task_type_ = ddl_type;
     object_id_ = src_table_schema->get_table_id();
@@ -279,7 +277,6 @@ int ObTableRedefinitionTask::send_build_replica_request_by_sql()
         schema_version_,
         snapshot_version_,
         new_execution_id,
-        consumer_group_id_,
         sql_mode,
         trace_id_,
         parallelism_,
@@ -588,7 +585,6 @@ int ObTableRedefinitionTask::copy_table_indexes()
                                            0/*object_id*/,
                                            index_schema->get_schema_version(),
                                            parallelism_,
-                                           consumer_group_id_,
                                            &allocator_,
                                            &create_index_arg,
                                            task_id_);

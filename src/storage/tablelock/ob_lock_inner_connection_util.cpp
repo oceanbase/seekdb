@@ -786,11 +786,6 @@ int ObInnerConnectionLockUtil::request_lock_(const ObLockRequest &arg,
           LOG_WARN("serialize lock table arg failed", K(ret), K(arg));
         } else {
           int32_t group_id = 0;
-          if (arg.is_unlock_request()) {
-            group_id = share::OBCG_UNLOCK;
-          } else {
-            group_id = share::OBCG_LOCK;
-          }
           sql.assign_ptr(tmp_str, arg.get_serialize_size());
           ret = conn->forward_request(operation_type, sql, res, group_id);
         }

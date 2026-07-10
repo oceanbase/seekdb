@@ -227,7 +227,6 @@ public:
   int prepare_merge_ctx(bool &finish_flag); // should be called when the first task of dag starts running
   virtual int64_t to_string(char* buf, const int64_t buf_len) const override;
   virtual lib::Worker::CompatMode get_compat_mode() const override { return compat_mode_; }
-  virtual uint64_t get_consumer_group_id() const override { return consumer_group_id_; }
   virtual int gene_compaction_info(compaction::ObTabletCompactionProgress &progress) override;
   virtual int diagnose_compaction_info(compaction::ObDiagnoseTabletCompProgress &progress) override;
   virtual void set_dag_error_location() override;

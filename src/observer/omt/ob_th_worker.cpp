@@ -52,7 +52,6 @@ int create_worker(ObThWorker* &worker, ObTenant *tenant)
   } else {
     worker->reset();
     worker->set_tenant(tenant);
-    worker->set_group_id_(0);
     worker->set_worker_level(0);
     worker->set_group(nullptr);
     worker->set_numa_info(GCONF._enable_numa_aware, -1);
@@ -404,7 +403,6 @@ void ObThWorker::run(int64_t idx)
   int64_t tid = -1;
   int64_t req_recv_timestamp = -1;
   int32_t worker_level = -1;
-  SET_GROUP_ID();
   this->worker(tid, req_recv_timestamp, worker_level);
 }
 
