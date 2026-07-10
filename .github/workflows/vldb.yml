@@ -253,16 +253,20 @@ jobs:
           done
           DOC_AI_SCORE=$((LOAD_FILE_PTS + SPLIT_DOC_PTS))
 
-          echo "Document AI Functions Score"
-          echo "==========================="
-          printf "score: %.2f / 100\n" "$DOC_AI_SCORE"
-          echo "load_file: $LOAD_FILE_PTS / 50"
-          echo "ai_split_document: $SPLIT_DOC_PTS / 50"
-          echo
-          echo "IK Custom Dictionary Score"
-          echo "=========================="
-          printf "score: %.2f / 100\n" "$IK_SCORE"
-          echo "ik_custom_dict: $IK_SCORE / 100"
+          # Write the score report for the comment-artifact step to pick up.
+          # It is deliberately not printed here.
+          {
+            echo "Document AI Functions Score"
+            echo "==========================="
+            printf "score: %.2f / 100\n" "$DOC_AI_SCORE"
+            echo "load_file: $LOAD_FILE_PTS / 50"
+            echo "ai_split_document: $SPLIT_DOC_PTS / 50"
+            echo
+            echo "IK Custom Dictionary Score"
+            echo "=========================="
+            printf "score: %.2f / 100\n" "$IK_SCORE"
+            echo "ik_custom_dict: $IK_SCORE / 100"
+          } > "$VLDB_WORK_DIR/ai_funcs_score.txt"
 
       - name: Run FTS large benchmark
         shell: bash
@@ -357,7 +361,15 @@ jobs:
           set -euo pipefail
           BENCH_OUTPUT="$VLDB_WORK_DIR/fts_large_bench_report.txt"
           SCORE_OUTPUT="$VLDB_WORK_DIR/fts_large_bench_score.txt"
+          AI_FUNCS_SCORE="$VLDB_WORK_DIR/ai_funcs_score.txt"
           ARTIFACT_DIR="$VLDB_WORK_DIR/fts_large_bench_comment"
+
+          # ai_funcs score, written by the mysqltest step
+          if [[ -f "$AI_FUNCS_SCORE" ]]; then
+            cat "$AI_FUNCS_SCORE"
+            echo
+          fi
+
           if [[ ! -f "$BENCH_OUTPUT" ]]; then
             echo "benchmark report not found, skip comment artifact: $BENCH_OUTPUT"
             exit 0
@@ -366,6 +378,9 @@ jobs:
           cp -f "$BENCH_OUTPUT" "$ARTIFACT_DIR/report.txt"
           if [[ -f "$SCORE_OUTPUT" ]]; then
             cp -f "$SCORE_OUTPUT" "$ARTIFACT_DIR/score.txt"
+          fi
+          if [[ -f "$AI_FUNCS_SCORE" ]]; then
+            cp -f "$AI_FUNCS_SCORE" "$ARTIFACT_DIR/ai_funcs_score.txt"
           fi
           echo "${{ github.event.pull_request.number }}" > "$ARTIFACT_DIR/pr_number"
           echo "${{ github.run_id }}" > "$ARTIFACT_DIR/source_run_id"
