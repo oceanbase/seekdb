@@ -253,18 +253,20 @@ jobs:
           done
           DOC_AI_SCORE=$((LOAD_FILE_PTS + SPLIT_DOC_PTS))
 
-          echo "Document AI Functions Score"
-          echo "==========================="
-          printf "score: %.2f / 100\n" "$DOC_AI_SCORE"
-          echo "load_file: $LOAD_FILE_PTS / 50"
-          echo "ai_split_document: $SPLIT_DOC_PTS / 50"
-          echo
-          echo "IK Custom Dictionary Score"
-          echo "=========================="
-          printf "score: %.2f / 100\n" "$IK_SCORE"
-          echo "ik_custom_dict: $IK_SCORE / 100"
-
-          exit "$fail"
+          # Write the score report for the comment-artifact step to pick up.
+          # It is deliberately not printed here.
+          {
+            echo "Document AI Functions Score"
+            echo "==========================="
+            printf "score: %.2f / 100\n" "$DOC_AI_SCORE"
+            echo "load_file: $LOAD_FILE_PTS / 50"
+            echo "ai_split_document: $SPLIT_DOC_PTS / 50"
+            echo
+            echo "IK Custom Dictionary Score"
+            echo "=========================="
+            printf "score: %.2f / 100\n" "$IK_SCORE"
+            echo "ik_custom_dict: $IK_SCORE / 100"
+          } > "$VLDB_WORK_DIR/ai_funcs_score.txt"
 
       - name: Run FTS large benchmark
         shell: bash
@@ -352,34 +354,52 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Prepare FTS benchmark comment artifact
+      - name: Prepare benchmark comment artifact
         if: ${{ always() && github.event_name == 'pull_request' }}
         shell: bash
         run: |
           set -euo pipefail
-          BENCH_OUTPUT="$VLDB_WORK_DIR/fts_large_bench_report.txt"
-          SCORE_OUTPUT="$VLDB_WORK_DIR/fts_large_bench_score.txt"
-          ARTIFACT_DIR="$VLDB_WORK_DIR/fts_large_bench_comment"
-          if [[ ! -f "$BENCH_OUTPUT" ]]; then
-            echo "benchmark report not found, skip comment artifact: $BENCH_OUTPUT"
+          FTS_REPORT="$VLDB_WORK_DIR/fts_large_bench_report.txt"
+          FTS_SCORE="$VLDB_WORK_DIR/fts_large_bench_score.txt"
+          AI_FUNCS_SCORE="$VLDB_WORK_DIR/ai_funcs_score.txt"
+          ARTIFACT_DIR="$VLDB_WORK_DIR/vldb_comment"
+
+          # ai_funcs score, written by the mysqltest step
+          if [[ -f "$AI_FUNCS_SCORE" ]]; then
+            cat "$AI_FUNCS_SCORE"
+            echo
+          fi
+
+          if [[ ! -f "$FTS_REPORT" && ! -f "$AI_FUNCS_SCORE" ]]; then
+            echo "neither benchmark report nor ai_funcs score found, skip comment artifact"
             exit 0
           fi
           mkdir -p "$ARTIFACT_DIR"
-          cp -f "$BENCH_OUTPUT" "$ARTIFACT_DIR/report.txt"
-          if [[ -f "$SCORE_OUTPUT" ]]; then
-            cp -f "$SCORE_OUTPUT" "$ARTIFACT_DIR/score.txt"
+          # The file names below are a contract with vldb-benchmark-comment.yml, which
+          # runs from the default branch. Renaming one side alone silently drops the
+          # PR comment, so change both together.
+          if [[ -f "$FTS_REPORT" ]]; then
+            cp -f "$FTS_REPORT" "$ARTIFACT_DIR/report.txt"
+          fi
+          if [[ -f "$FTS_SCORE" ]]; then
+            cp -f "$FTS_SCORE" "$ARTIFACT_DIR/score.txt"
+          fi
+          if [[ -f "$AI_FUNCS_SCORE" ]]; then
+            cp -f "$AI_FUNCS_SCORE" "$ARTIFACT_DIR/ai_funcs_score.txt"
           fi
           echo "${{ github.event.pull_request.number }}" > "$ARTIFACT_DIR/pr_number"
           echo "${{ github.run_id }}" > "$ARTIFACT_DIR/source_run_id"
           echo "${{ github.run_attempt }}" > "$ARTIFACT_DIR/source_run_attempt"
 
-      - name: Upload FTS benchmark comment artifact
+      - name: Upload benchmark comment artifact
         if: ${{ always() && github.event_name == 'pull_request' }}
         uses: actions/upload-artifact@v7
         continue-on-error: true
         with:
+          # Artifact name is a contract with vldb-benchmark-comment.yml on the default
+          # branch; renaming it here alone silently disables the PR comment.
           name: vldb-fts-large-benchmark
-          path: ${{ env.VLDB_WORK_DIR }}/fts_large_bench_comment/
+          path: ${{ env.VLDB_WORK_DIR }}/vldb_comment/
           if-no-files-found: ignore
           retention-days: 7
 
