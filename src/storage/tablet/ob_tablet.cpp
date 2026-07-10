@@ -42,6 +42,7 @@
 #include "storage/tablet/ob_tablet_macro_info_iterator.h"
 #include "storage/tablet/ob_tablet_mds_table_mini_merger.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
+#include "storage/ob_direct_load_table_guard.h"
 #include "share/ob_tablet_replica_checksum_operator.h"
 #include "observer/ob_server_event_history_table_operator.h"
 namespace oceanbase
@@ -197,7 +198,7 @@ ObTablet::ObTablet(const bool is_external_tablet)
     is_external_tablet_(is_external_tablet)
 {
 #if defined(__x86_64__) && !defined(ENABLE_OBJ_LEAK_CHECK) && !defined(_WIN32)
-  check_size<ObTablet, ObRowkeyReadInfo, 1448>();
+  check_size<ObTablet, ObRowkeyReadInfo, 1432>();
 #endif
   MEMSET(memtables_, 0x0, sizeof(memtables_));
 }
@@ -7418,6 +7419,35 @@ int ObTablet::get_memtables(common::ObIArray<ObTableHandleV2> &memtables) const
     }
   }
 
+  return ret;
+}
+
+int ObTablet::set_macro_block(
+    const ObDDLMacroBlock &macro_block,
+    const int64_t snapshot_version,
+    const uint64_t data_format_version)
+{
+  int ret = OB_SUCCESS;
+  ObDirectLoadTableGuard guard(*this, macro_block.scn_, true/*for_replay*/);
+  ObDDLKV *ddl_kv = nullptr;
+  if (OB_FAIL(guard.prepare_memtable(ddl_kv))) {
+    LOG_WARN("fail to prepare memtable", KR(ret));
+  } else if (guard.is_write_filtered()) {
+    // do nothing
+  } else if (OB_ISNULL(ddl_kv)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected memtable is null", KR(ret));
+  } else if (OB_FAIL(ddl_kv->set_max_end_scn(macro_block.scn_))) {
+    LOG_WARN("fail to set max end scn", KR(ret), KPC(ddl_kv), K(macro_block));
+  } else if (OB_FAIL(ddl_kv->set_macro_block(*this,
+                                             macro_block,
+                                             snapshot_version,
+                                             data_format_version,
+                                             false /*can_freeze*/))) {
+    LOG_WARN("fail to set macro block", KR(ret), KPC(ddl_kv), K(macro_block), K(snapshot_version), K(data_format_version));
+  } else if (OB_FAIL(ddl_kv->set_rec_scn(macro_block.scn_))) {
+    LOG_WARN("fail to set rec scn", KR(ret), KPC(ddl_kv), K(macro_block));
+  }
   return ret;
 }
 

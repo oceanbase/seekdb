@@ -153,6 +153,110 @@ ob_set_subtarget(ob_server vector_index
   vector_index/ob_vector_kmeans_ctx.cpp
 )
 
+ob_set_subtarget(ob_server table_load
+  table_load/control/ob_table_load_control_rpc_executor.cpp
+  table_load/control/ob_table_load_control_rpc.cpp
+  table_load/control/ob_table_load_control_rpc_struct.cpp
+  table_load/dag/ob_table_load_dag_compact_table_task.cpp
+  table_load/dag/ob_table_load_dag_direct_write_channel.cpp
+  table_load/dag/ob_table_load_dag_direct_write.cpp
+  table_load/dag/ob_table_load_dag_generator.cpp
+  table_load/dag/ob_table_load_dag_heap_mem_sort.cpp
+  table_load/dag/ob_table_load_dag_insert_sstable_task.cpp
+  table_load/dag/ob_table_load_dag_mem_compact.cpp
+  table_load/dag/ob_table_load_dag_mem_sort.cpp
+  table_load/dag/ob_table_load_dag_parallel_heap_table_compactor.cpp
+  table_load/dag/ob_table_load_dag_parallel_merger.cpp
+  table_load/dag/ob_table_load_dag_parallel_sstable_compactor.cpp
+  table_load/dag/ob_table_load_dag_pk_mem_sort.cpp
+  table_load/dag/ob_table_load_dag_pre_sort_write_channel.cpp
+  table_load/dag/ob_table_load_dag_pre_sort_write.cpp
+  table_load/dag/ob_table_load_dag_store_write_channel.cpp
+  table_load/dag/ob_table_load_dag_store_write.cpp
+  table_load/dag/ob_table_load_dag_task.cpp
+  table_load/dag/ob_table_load_dag_write_channel.cpp
+  table_load/dag/ob_table_load_dag.cpp
+  table_load/dag/ob_table_load_empty_insert_dag.cpp
+  table_load/resource/ob_table_load_resource_manager.cpp
+  table_load/resource/ob_table_load_resource_service.cpp
+  table_load/plan/ob_table_load_data_channel.cpp
+  table_load/plan/ob_table_load_data_table_row_handler.cpp
+  table_load/plan/ob_table_load_data_to_index_table_channel.cpp
+  table_load/plan/ob_table_load_data_to_lob_table_channel.cpp
+  table_load/plan/ob_table_load_dml_row_handler.cpp
+  table_load/plan/ob_table_load_full_plan.cpp
+  table_load/plan/ob_table_load_inc_plan.cpp
+  table_load/plan/ob_table_load_unique_index_to_ack_data_table_channel.cpp
+  table_load/plan/ob_table_load_unique_index_to_delete_data_table_channel.cpp
+  table_load/plan/ob_table_load_merge_op.cpp
+  table_load/plan/ob_table_load_normal_row_handler.cpp
+  table_load/plan/ob_table_load_op.cpp
+  table_load/plan/ob_table_load_plan_common.cpp
+  table_load/plan/ob_table_load_plan.cpp
+  table_load/plan/ob_table_load_table_builder.cpp
+  table_load/plan/ob_table_load_table_op.cpp
+  table_load/plan/ob_table_load_unique_index_table_row_handler.cpp
+  table_load/plan/ob_table_load_write_op.cpp
+  table_load/ob_table_load_assigned_memory_manager.cpp
+  table_load/ob_table_load_autoinc_nextval.cpp
+  table_load/ob_table_load_bucket.cpp
+  table_load/ob_table_load_client_service.cpp
+  table_load/ob_table_load_client_task.cpp
+  table_load/ob_table_load_coordinator_ctx.cpp
+  table_load/ob_table_load_coordinator_trans.cpp
+  table_load/ob_table_load_coordinator.cpp
+  table_load/ob_table_load_data_row_delete_handler.cpp
+  table_load/ob_table_load_data_row_insert_handler.cpp
+  table_load/ob_table_load_data_table_builder.cpp
+  table_load/ob_table_load_empty_insert_tablet_ctx_manager.cpp
+  table_load/ob_table_load_error_row_handler.cpp
+  table_load/ob_table_load_exec_ctx.cpp
+  table_load/ob_table_load_index_table_builder.cpp
+  table_load/ob_table_load_instance.cpp
+  table_load/ob_table_load_lob_table_builder.cpp
+  table_load/ob_table_load_manager.cpp
+  table_load/ob_table_load_mem_chunk_manager.cpp
+  table_load/ob_table_load_mem_compactor.cpp
+  table_load/ob_table_load_merge_compact_table_op.cpp
+  table_load/ob_table_load_merge_data_op.cpp
+  table_load/ob_table_load_merge_data_table_op.cpp
+  table_load/ob_table_load_merge_del_lob_op.cpp
+  table_load/ob_table_load_merge_insert_sstable_op.cpp
+  table_load/ob_table_load_merge_mem_sort_op.cpp
+  table_load/ob_table_load_merge_op.cpp
+  table_load/ob_table_load_merge_phase_op.cpp
+  table_load/ob_table_load_merge_table_op.cpp
+  table_load/ob_table_load_multiple_heap_table_compactor.cpp
+  table_load/ob_table_load_obj_cast.cpp
+  table_load/ob_table_load_parallel_merger.cpp
+  table_load/ob_table_load_parallel_table_compactor.cpp
+  table_load/ob_table_load_partition_calc.cpp
+  table_load/ob_table_load_partition_location.cpp
+  table_load/ob_table_load_pre_sort_writer.cpp
+  table_load/ob_table_load_pre_sorter.cpp
+  table_load/ob_table_load_px_batch_rows.cpp
+  table_load/ob_table_load_redef_table.cpp
+  table_load/ob_table_load_row_projector.cpp
+  table_load/ob_table_load_schema.cpp
+  table_load/ob_table_load_service.cpp
+  table_load/ob_table_load_stat.cpp
+  table_load/ob_table_load_store_ctx.cpp
+  table_load/ob_table_load_store_table_ctx.cpp
+  table_load/ob_table_load_store_trans_px_writer.cpp
+  table_load/ob_table_load_store_trans.cpp
+  table_load/ob_table_load_store.cpp
+  table_load/ob_table_load_struct.cpp
+  table_load/ob_table_load_table_ctx.cpp
+  table_load/ob_table_load_task_scheduler.cpp
+  table_load/ob_table_load_task.cpp
+  table_load/ob_table_load_time_convert.cpp
+  table_load/ob_table_load_trans_bucket_writer.cpp
+  table_load/ob_table_load_trans_ctx.cpp
+  table_load/ob_table_load_trans_store.cpp
+  table_load/ob_table_load_unique_index_row_handler.cpp
+  table_load/ob_table_load_utils.cpp
+  table_load/ob_table_load_row.cpp
+)
 
 ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_concurrency_object_pool.cpp
@@ -224,7 +328,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_table_mgr.cpp
   virtual_table/ob_all_virtual_unit.cpp
   virtual_table/ob_all_virtual_tablet_ddl_kv_info.cpp
-  virtual_table/ob_all_virtual_ddl_diagnose_info.cpp
   virtual_table/ob_all_virtual_ddl_sim_point_stat.cpp
   virtual_table/ob_all_virtual_tablet_info.cpp
   virtual_table/ob_all_virtual_server.cpp
@@ -295,9 +398,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_tenant_virtual_warning.cpp
   virtual_table/ob_virtual_data_access_service.cpp
   virtual_table/ob_virtual_open_cursor_table.cpp
-  virtual_table/ob_virtual_sql_monitor.cpp
-  virtual_table/ob_virtual_sql_monitor_statname.cpp
-  virtual_table/ob_virtual_sql_plan_monitor.cpp
   virtual_table/ob_virtual_sql_plan_statistics.cpp
   virtual_table/ob_virtual_table_iterator.cpp
   virtual_table/ob_virtual_table_iterator_factory.cpp

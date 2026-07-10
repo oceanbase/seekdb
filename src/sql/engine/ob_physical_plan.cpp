@@ -107,6 +107,8 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     has_instead_of_trigger_(false),
     min_cluster_version_(GET_MIN_CLUSTER_VERSION()),
     need_record_plan_info_(false),
+    enable_append_(false),
+    append_table_id_(0),
     logical_plan_(),
     use_rich_format_(false),
     subschema_ctx_(allocator_),
@@ -116,10 +118,15 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     is_batch_params_execute_(false),
     all_local_session_vars_(&allocator_),
     udf_has_dml_stmt_(false),
+    enable_inc_direct_load_(false),
+    enable_replace_(false),
+    insert_overwrite_(false),
+    online_sample_percent_(1.),
     can_set_feedback_info_(true),
     need_switch_to_table_lock_worker_(false),
     data_complement_gen_doc_id_(false),
     dml_table_ids_(&allocator_),
+    direct_load_need_sort_(false),
     insertup_can_use_snapshot_opt_(false),
     px_node_policy_(ObPxNodePolicy::INVALID),
     px_node_addrs_(&allocator_),
@@ -200,7 +207,9 @@ void ObPhysicalPlan::reset()
   contain_pl_udf_or_trigger_ = false;
   is_packed_ = false;
   has_instead_of_trigger_ = false;
+  enable_append_ = false;
   use_rich_format_ = false;
+  append_table_id_ = 0;
   stat_.expected_worker_map_.destroy();
   stat_.minimal_worker_map_.destroy();
   need_record_plan_info_ = false;
@@ -212,10 +221,15 @@ void ObPhysicalPlan::reset()
   udf_has_dml_stmt_ = false;
   is_inner_sql_ = false;
   is_batch_params_execute_ = false;
+  enable_inc_direct_load_ = false;
+  enable_replace_ = false;
+  insert_overwrite_ = false;
+  online_sample_percent_ = 1.;
   can_set_feedback_info_.store(true);
   need_switch_to_table_lock_worker_ = false;
   data_complement_gen_doc_id_ = false;
   dml_table_ids_.reset();
+  direct_load_need_sort_ = false;
   insertup_can_use_snapshot_opt_ = false;
   px_node_policy_ = ObPxNodePolicy::INVALID;
   px_node_count_ = ObPxNodeHint::UNSET_PX_NODE_COUNT;
@@ -767,7 +781,6 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     is_need_trans_,
                     ddl_schema_version_,
                     ddl_table_id_,
-                    phy_hint_.monitor_,
                     need_serial_exec_,
                     contain_pl_udf_or_trigger_,
                     is_packed_,
@@ -778,13 +791,20 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     stat_.plan_id_,
                     min_cluster_version_,
                     need_record_plan_info_,
+                    enable_append_,
+                    append_table_id_,
                     subschema_ctx_,
                     use_rich_format_,
                     disable_auto_memory_mgr_,
                     udf_has_dml_stmt_,
                     stat_.format_sql_id_,
+                    enable_inc_direct_load_,
+                    enable_replace_,
+                    insert_overwrite_,
+                    online_sample_percent_,
                     need_switch_to_table_lock_worker_,
                     data_complement_gen_doc_id_,
+                    direct_load_need_sort_,
                     px_parallel_rule_,
                     px_node_policy_,
                     px_node_addrs_,

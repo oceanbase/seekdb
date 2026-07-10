@@ -38,7 +38,6 @@ constexpr int OB_PACKET_NOT_SENT = -4011;
 constexpr int OB_SCHEMA_ERROR = -4029;
 constexpr int OB_TENANT_OUT_OF_MEM = -4030;
 constexpr int OB_UNKNOWN_OBJ = -4031;
-constexpr int OB_NO_MONITOR_DATA = -4032;
 constexpr int OB_TOO_MANY_SSTABLE = -4037;
 constexpr int OB_KILLED_BY_THROTTLING = -4039;
 constexpr int OB_USER_NOT_EXIST = -4042;
@@ -280,6 +279,7 @@ constexpr int OB_LICENSE_EXPIRED = -4406;
 constexpr int OB_MIGRATE_TX_DATA_NOT_CONTINUES = -4408;
 constexpr int OB_IMPORT_NOT_IN_SERVER = -4505;
 constexpr int OB_CONVERT_ERROR = -4507;
+constexpr int OB_BYPASS_TIMEOUT = -4510;
 constexpr int OB_RS_STATE_NOT_ALLOW = -4512;
 constexpr int OB_NO_REPLICA_VALID = -4515;
 constexpr int OB_NO_NEED_UPDATE = -4517;
@@ -1552,6 +1552,7 @@ constexpr int OB_NO_SUCH_FILE_OR_DIRECTORY = -9100;
 constexpr int OB_FILE_OR_DIRECTORY_EXIST = -9101;
 constexpr int OB_FILE_OR_DIRECTORY_PERMISSION_DENIED = -9102;
 constexpr int OB_TOO_MANY_OPEN_FILES = -9103;
+constexpr int OB_DIRECT_LOAD_COMMIT_ERROR = -9104;
 constexpr int OB_STORAGE_DEST_NOT_CONNECT = -9115;
 constexpr int OB_FILE_DELETE_FAILED = -9128;
 constexpr int OB_NO_LS_REPLICA_CAN_DO_BACKUP = -9138;
@@ -1968,7 +1969,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_SCHEMA_ERROR__USER_ERROR_MSG "Schema error"
 #define OB_TENANT_OUT_OF_MEM__USER_ERROR_MSG "Over tenant memory limits"
 #define OB_UNKNOWN_OBJ__USER_ERROR_MSG "Unknown object"
-#define OB_NO_MONITOR_DATA__USER_ERROR_MSG "No monitor data"
 #define OB_SERIALIZE_ERROR__USER_ERROR_MSG "Serialize error"
 #define OB_DESERIALIZE_ERROR__USER_ERROR_MSG "Deserialize error"
 #define OB_AIO_TIMEOUT__USER_ERROR_MSG "Asynchronous IO error"
@@ -2304,6 +2304,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_MIGRATE_TX_DATA_NOT_CONTINUES__USER_ERROR_MSG "migrate tx data not continues"
 #define OB_IMPORT_NOT_IN_SERVER__USER_ERROR_MSG "Import not in service"
 #define OB_CONVERT_ERROR__USER_ERROR_MSG "Convert error"
+#define OB_BYPASS_TIMEOUT__USER_ERROR_MSG "Bypass timeout"
 #define OB_RS_STATE_NOT_ALLOW__USER_ERROR_MSG "RootServer state error"
 #define OB_NO_REPLICA_VALID__USER_ERROR_MSG "No replica is valid"
 #define OB_NO_NEED_UPDATE__USER_ERROR_MSG "No need to update"
@@ -3840,6 +3841,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_FILE_OR_DIRECTORY_EXIST__USER_ERROR_MSG "file or directory already exist"
 #define OB_FILE_OR_DIRECTORY_PERMISSION_DENIED__USER_ERROR_MSG "file or directory permission denied"
 #define OB_TOO_MANY_OPEN_FILES__USER_ERROR_MSG "too many open files"
+#define OB_DIRECT_LOAD_COMMIT_ERROR__USER_ERROR_MSG "fail to commit direct load"
 #define OB_S3_ERROR__USER_ERROR_MSG "S3 error"
 #define OB_TENANT_SNAPSHOT_NOT_EXIST__USER_ERROR_MSG "Tenant snapshot \'%.*s\' does not exist"
 #define OB_TENANT_SNAPSHOT_EXIST__USER_ERROR_MSG "Tenant snapshot \'%.*s\' already exist"
@@ -4295,7 +4297,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_DATA_TOO_LONG_MSG_FMT_V2__USER_ERROR_MSG "Data too long for column '%.*s' at row %ld"
 #define OB_ERR_INVALID_DATE_MSG_FMT_V2__USER_ERROR_MSG "Incorrect datetime value for column '%.*s' at row %ld"
 
-extern int g_all_ob_errnos[2376];
+extern int g_all_ob_errnos[2358];
 
   const char *ob_error_name(const int oberr);
   const char* ob_error_cause(const int oberr);

@@ -31,6 +31,7 @@
 #include "sql/engine/px/ob_granule_util.h"
 #include "sql/optimizer/ob_pwj_comparer.h"
 #include "sql/das/ob_das_context.h"
+#include "sql/engine/cmd/ob_table_direct_insert_ctx.h"
 #include "pl/ob_pl_package_guard.h"
 #include "common/udt/ob_udt_type.h"
 #include "common/udt/ob_collection_type.h"
@@ -520,15 +521,13 @@ public:
     extra_status_check_.remove(&extra_check);
     return common::OB_SUCCESS;
   }
-  int64_t get_register_op_id() { return register_op_id_; }
-  void set_register_op_id(int64_t id) { register_op_id_ = id; }
-  bool is_rt_monitor_node_registered() { return OB_INVALID_ID != register_op_id_; }
   void set_mem_attr(const common::ObMemAttr& attr)
   {
     sche_allocator_.set_attr(attr);
     eval_res_allocator_.set_attr(attr);
     eval_tmp_allocator_.set_attr(attr);
   }
+  ObTableDirectInsertCtx &get_table_direct_insert_ctx() { return table_direct_insert_ctx_; }
   void set_errcode(const int errcode) { ATOMIC_STORE(&errcode_, errcode); }
   int get_errcode() const { return ATOMIC_LOAD(&errcode_); }
   int get_sqludt_meta_by_subschema_id(uint16_t subschema_id, ObSqlUDTMeta &udt_meta) const;
@@ -763,11 +762,11 @@ protected:
   ObExecContext *parent_ctx_;
   int64_t nested_level_; //the number of recursive SQL levels
   bool is_ps_prepare_stage_;
-  // for sql plan monitor
-  int64_t register_op_id_;
   // indicate if eval_tmp_allocator_ is used
   bool tmp_alloc_used_;
   // -------------------
+  // for direct insert
+  ObTableDirectInsertCtx table_direct_insert_ctx_;
   // for deadlock detect, set in do_close_plan
   int errcode_;
   // for feedback

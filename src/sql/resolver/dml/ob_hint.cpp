@@ -32,7 +32,6 @@ void ObPhyPlanHint::reset()
   force_trace_log_ = false;
   log_level_.reset();
   parallel_ = -1;
-  monitor_ = false;
 }
 
 OB_SERIALIZE_MEMBER(ObPhyPlanHint,
@@ -41,8 +40,7 @@ OB_SERIALIZE_MEMBER(ObPhyPlanHint,
                     plan_cache_policy_,
                     force_trace_log_,
                     log_level_,
-                    parallel_,
-                    monitor_);
+                    parallel_);
 
 int ObPhyPlanHint::deep_copy(const ObPhyPlanHint &other, ObIAllocator &allocator)
 {
@@ -52,7 +50,6 @@ int ObPhyPlanHint::deep_copy(const ObPhyPlanHint &other, ObIAllocator &allocator
   plan_cache_policy_ = other.plan_cache_policy_;
   force_trace_log_ = other.force_trace_log_;
   parallel_ = other.parallel_;
-  monitor_ = other.monitor_;
   if (OB_FAIL(ob_write_string(allocator, other.log_level_, log_level_))) {
     LOG_WARN("Failed to deep copy log level", K(ret));
   }
@@ -287,6 +284,11 @@ void ObGlobalHint::merge_opt_features_version_hint(uint64_t opt_features_version
   }
 }
 
+void ObGlobalHint::merge_direct_load_hint(const ObDirectLoadHint &other)
+{
+  direct_load_hint_.merge(other);
+}
+
 // zhanyue todo: try remove this later
 bool ObGlobalHint::has_hint_exclude_concurrent() const
 {
@@ -303,18 +305,19 @@ bool ObGlobalHint::has_hint_exclude_concurrent() const
          || !log_level_.empty()
          || has_parallel_hint()
          || has_dml_parallel_hint()
-         || false != monitor_
          || ObPDMLOption::NOT_SPECIFIED != pdml_option_
          || ObParamOption::NOT_SPECIFIED != param_option_
          || !alloc_op_hints_.empty()
          || !dops_.empty()
          || false != disable_transform_
          || false != disable_cost_based_transform_
+         || false != has_append()
          || !opt_params_.empty()
          || !ob_ddl_schema_versions_.empty()
          || has_gather_opt_stat_hint()
          || false != has_dbms_stats_hint_
          || -1 != dynamic_sampling_
+         || has_direct_load()
          || ObParallelDASOption::NOT_SPECIFIED != parallel_das_dml_option_
          || !px_node_hint_.empty();
 }
@@ -334,7 +337,6 @@ void ObGlobalHint::reset()
   log_level_.reset();
   parallel_ = UNSET_PARALLEL;
   dml_parallel_ = UNSET_PARALLEL;
-  monitor_ = false;
   pdml_option_ = ObPDMLOption::NOT_SPECIFIED;
   param_option_ = ObParamOption::NOT_SPECIFIED;
   dops_.reuse();
@@ -347,6 +349,7 @@ void ObGlobalHint::reset()
   has_dbms_stats_hint_ = false;
   dynamic_sampling_ = ObGlobalHint::UNSET_DYNAMIC_SAMPLING;
   alloc_op_hints_.reuse();
+  direct_load_hint_.reset();
   parallel_das_dml_option_ = ObParallelDASOption::NOT_SPECIFIED;
   px_node_hint_.reset();
 }
@@ -367,7 +370,6 @@ int ObGlobalHint::merge_global_hint(const ObGlobalHint &other)
   merge_max_concurrent_hint(other.max_concurrent_);
   merge_parallel_hint(other.parallel_);
   merge_dml_parallel_hint(other.dml_parallel_);
-  monitor_ |= other.monitor_;
   merge_param_option_hint(other.param_option_);
   merge_opt_features_version_hint(other.opt_features_version_);
   disable_transform_ |= other.disable_transform_;
@@ -376,6 +378,7 @@ int ObGlobalHint::merge_global_hint(const ObGlobalHint &other)
   has_dbms_stats_hint_ |= other.has_dbms_stats_hint_;
   merge_parallel_das_dml_hint(other.parallel_das_dml_option_);
   merge_dynamic_sampling_hint(other.dynamic_sampling_);
+  merge_direct_load_hint(other.direct_load_hint_);
   if (OB_FAIL(merge_alloc_op_hints(other.alloc_op_hints_))) {
     LOG_WARN("failed to merge alloc op hints", K(ret));
   } else if (OB_FAIL(merge_dop_hint(other.dops_))) {
@@ -494,9 +497,6 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   if (OB_SUCC(ret) && has_dml_parallel_hint()) { //DML_PARALLEL
     PRINT_GLOBAL_HINT_NUM("DML_PARALLEL", dml_parallel_);
   }
-  if (OB_SUCC(ret) && monitor_) { //MONITOR
-    PRINT_GLOBAL_HINT_STR("MONITOR");
-  }
   if (OB_SUCC(ret) && ObPDMLOption::NOT_SPECIFIED != pdml_option_) { //PDML
     if (ObPDMLOption::ENABLE == pdml_option_) {
       PRINT_GLOBAL_HINT_STR("ENABLE_PARALLEL_DML");
@@ -562,6 +562,9 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   if (OB_SUCC(ret) && has_dbms_stats_hint()) {
     PRINT_GLOBAL_HINT_STR("DBMS_STATS");
   }
+  if (OB_SUCC(ret) && OB_FAIL(direct_load_hint_.print_direct_load_hint(plan_text))) {
+    LOG_WARN("failed to print direct load hint", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(px_node_hint_.print_px_node_hint(plan_text))) {
     LOG_WARN("failed to print px node hint", K(ret));
   }
@@ -585,6 +588,9 @@ int ObOptimizerStatisticsGatheringHint::print_osg_hint(PlanText &plan_text) cons
   }
   if (OB_SUCC(ret) && (flags_ & OB_OPT_STATS_GATHER)) {
     PRINT_GLOBAL_HINT_STR("GATHER_OPTIMIZER_STATISTICS");
+  }
+  if (OB_SUCC(ret) && (flags_ & OB_APPEND_HINT)) {
+    PRINT_GLOBAL_HINT_STR("APPEND");
   }
   return ret;
 }
@@ -3180,6 +3186,59 @@ int ObAllocOpHint::assign(const ObAllocOpHint& other) {
   id_ = other.id_;
   flags_ = other.flags_;
   alloc_level_ = other.alloc_level_;
+  return ret;
+}
+
+DEFINE_ENUM_FUNC(ObDirectLoadHint::LoadMethod, load_method, DIRECT_LOAD_METHOD_DEF, ObDirectLoadHint::);
+
+void ObDirectLoadHint::reset()
+{
+  flags_ = 0;
+  max_error_row_count_ = 0;
+  load_method_ = INVALID_LOAD_METHOD;
+}
+
+void ObDirectLoadHint::merge(const ObDirectLoadHint &other)
+{
+  has_no_direct_ |= other.has_no_direct_;
+  if (other.has_direct_) {
+    has_direct_ = other.has_direct_;
+    need_sort_ = other.need_sort_;
+    max_error_row_count_ = other.max_error_row_count_;
+    load_method_ = other.load_method_;
+  }
+}
+
+int ObDirectLoadHint::print_direct_load_hint(PlanText &plan_text) const
+{
+  const char* outline_indent = ObQueryHint::get_outline_indent(plan_text.is_oneline_);
+  char *buf = plan_text.buf_;
+  int64_t &buf_len = plan_text.buf_len_;
+  int64_t &pos = plan_text.pos_;
+
+  return print_direct_load_hint_(buf, buf_len, pos, outline_indent);
+}
+
+int ObDirectLoadHint::print_direct_load_hint(char *buf, int64_t buf_len, int64_t &pos) const
+{
+  return print_direct_load_hint_(buf, buf_len, pos, ""/*indent*/);
+}
+
+int ObDirectLoadHint::print_direct_load_hint_(char *buf, int64_t buf_len, int64_t &pos, const char *indent) const
+{
+  int ret = OB_SUCCESS;
+  if (has_no_direct_) {
+    if (OB_FAIL(BUF_PRINTF("%sNO_DIRECT", indent))) {
+      LOG_WARN("failed to print no_direct hint", KR(ret));
+    }
+  } else if (has_direct_) {
+    const char *need_sort_str = need_sort_ ? "TRUE" : "FALSE";
+    const char *load_method_str = get_load_method_string(load_method_);
+    if (OB_FAIL(BUF_PRINTF("%sDIRECT(%s, %ld, '%s')",
+                           indent, need_sort_str, max_error_row_count_, load_method_str))) {
+      LOG_WARN("failed to print direct load hint", KR(ret));
+    }
+  }
   return ret;
 }
 

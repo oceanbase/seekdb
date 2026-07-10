@@ -1017,27 +1017,9 @@ int ObFreezer::decide_real_snapshot_version_(const ObTabletID &tablet_id,
                                              SCN &real_snapshot_version)
 {
   int ret = OB_SUCCESS;
-  ObTabletCreateDeleteMdsUserData user_data;
-  mds::MdsWriter writer;
-  mds::TwoPhaseCommitState trans_stat;
-  share::SCN trans_version;
-
-  if (tablet_id.is_ls_inner_tablet()) {
-    //do nothing
-  } else if (OB_FAIL(tablet->ObITabletMdsInterface::get_latest_tablet_status(user_data,
-                                                                             writer,
-                                                                             trans_stat,
-                                                                             trans_version))) {
-    LOG_WARN("fail to get latest tablet status", K(ret), KPC(tablet));
-  } else if (ObTabletStatus::RESERVED_STATUS_4 == user_data.tablet_status_
-             || ObTabletStatus::RESERVED_STATUS_6 == user_data.tablet_status_) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("reserved tablet status is not supported", K(ret), K(user_data));
-  }
-
-  if (OB_SUCC(ret)) {
-    real_snapshot_version = freeze_snapshot_version;
-  }
+  UNUSED(tablet_id);
+  UNUSED(tablet);
+  real_snapshot_version = freeze_snapshot_version;
 
   return ret;
 }
@@ -1122,6 +1104,8 @@ void ObFreezer::submit_log_if_needed_(ObIArray<ObTableHandleV2> &frozen_memtable
     } else if (OB_ISNULL(tablet_memtable)) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "tablet memtable is unexpected null", KR(ret), K(i));
+    } else if (tablet_memtable->is_direct_load_memtable()) {
+      // skip submit log cause direct load memtable unneeded
     } else if (tablet_memtable->is_data_memtable()) {
       // find one data memtable, submit log and break
       (void)try_submit_log_for_freeze_(true /* is_tablet_freeze */);
@@ -1182,6 +1166,8 @@ int ObFreezer::inner_wait_memtable_freeze_finish_(ObTableHandleV2 &memtable_hand
   } else {
     if (tablet_memtable->is_data_memtable()) {
       ret = wait_data_memtable_freeze_finish_(tablet_memtable);
+    } else if (tablet_memtable->is_direct_load_memtable()) {
+      ret = wait_direct_load_memtable_freeze_finish_(tablet_memtable);
     } else {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(ERROR, "unexpected memtable type", KR(ret), KPC(tablet_memtable));
@@ -1211,6 +1197,29 @@ int ObFreezer::wait_data_memtable_freeze_finish_(ObITabletMemtable *tablet_memta
     } else {
       stat_.add_diagnose_info("tablet_freeze success");
       FLOG_INFO("[Freezer] tablet_freeze_task success(DataMemtable)", K(ret), KPC(memtable));
+    }
+  }
+  return ret;
+}
+
+int ObFreezer::wait_direct_load_memtable_freeze_finish_(ObITabletMemtable *tablet_memtable)
+{
+  int ret = OB_SUCCESS;
+  ObDDLKV *direct_load_memtable = static_cast<ObDDLKV*>(tablet_memtable);
+  if (OB_FAIL(direct_load_memtable->decide_right_boundary())) {
+    STORAGE_LOG(WARN, "freeze direct load memtable failed", KR(ret), KPC(tablet_memtable));
+  } else {
+    int64_t read_lock = LSLOCKALL;
+    int64_t write_lock = 0;
+    ObLSLockGuard lock_ls(ls_, ls_->lock_, read_lock, write_lock);
+    if (OB_FAIL(check_ls_state())) {
+      TRANS_LOG(WARN, "ls state invalid", KR(ret));
+    } else if (OB_FAIL(tablet_memtable->finish_freeze())) {
+      TRANS_LOG(ERROR, "[Freezer] direct load memtable cannot be flushed", K(ret), KPC(tablet_memtable));
+      stat_.add_diagnose_info("direct load memtable cannot be flushed");
+    } else {
+      stat_.add_diagnose_info("tablet_freeze success");
+      FLOG_INFO("[Freezer] tablet_freeze_task success(DirectLoadMemtable)", KP(this), KP(tablet_memtable));
     }
   }
   return ret;

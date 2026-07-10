@@ -33,7 +33,6 @@ enum ObSimType
 {
   SIM_TYPE_ALL = 0,
   SIM_TYPE_DDL = 1,
-  SIM_TYPE_RESERVED = 2,
 };
 
 struct ObDDLSimAction

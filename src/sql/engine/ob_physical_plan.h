@@ -123,7 +123,6 @@ public:
   void inc_large_querys();
   void inc_delayed_large_querys();
   void inc_delayed_px_querys();
-  int update_operator_stat(ObPhyOperatorMonitorInfo &info);
   bool is_need_trans() const { return is_need_trans_; }
   bool is_stmt_modify_trans() const;
   //As there's ObString in phy_hint_,need deep copy
@@ -305,11 +304,29 @@ public:
   inline int64_t get_ddl_execution_id() const { return ddl_execution_id_; }
   inline void set_ddl_task_id(const int64_t ddl_task_id) { ddl_task_id_ = ddl_task_id; }
   inline int64_t get_ddl_task_id() const { return ddl_task_id_; }
+  inline void set_enable_append(const bool enable_append) { enable_append_ = enable_append; }
+  inline bool get_enable_append() const { return enable_append_; }
+  inline void set_append_table_id(const uint64_t append_table_id) { append_table_id_ = append_table_id; }
+  inline void set_is_insert_overwrite(const bool is_insert_overwrite) { insert_overwrite_ = is_insert_overwrite; }
+  inline bool get_is_insert_overwrite() const { return insert_overwrite_; }
   inline void set_use_rich_format(const bool v) { use_rich_format_ = v; }
   inline bool get_use_rich_format() const { return use_rich_format_; }
+  inline uint64_t get_append_table_id() const { return append_table_id_; }
   void set_record_plan_info(bool v) { need_record_plan_info_ = v; }
   bool need_record_plan_info() const { return need_record_plan_info_; }
   bool try_record_plan_info();
+  inline bool get_enable_inc_direct_load() const { return enable_inc_direct_load_; }
+  inline void set_enable_inc_direct_load(const bool enable_inc_direct_load)
+  {
+    enable_inc_direct_load_ = enable_inc_direct_load;
+  }
+  inline bool get_enable_replace() const { return enable_replace_; }
+  inline void set_enable_replace(const bool enable_replace)
+  {
+    enable_replace_ = enable_replace;
+  }
+  inline double get_online_sample_percent() const { return online_sample_percent_; }
+  inline void set_online_sample_percent(double v) { online_sample_percent_ = v; }
   int64_t get_das_dop() { return das_dop_; }
   void set_das_dop(int64_t v) { das_dop_ = v; }
 public:
@@ -423,6 +440,11 @@ public:
   ObIArray<ObLocalSessionVar> & get_all_local_session_vars() { return all_local_session_vars_; }
   ObFixedArray<uint64_t, common::ObIAllocator> &get_dml_table_ids() { return dml_table_ids_; }
   const ObIArray<uint64_t> &get_dml_table_ids() const { return dml_table_ids_; }
+  void set_direct_load_need_sort(const bool direct_load_need_sort)
+  {
+    direct_load_need_sort_ = direct_load_need_sort;
+  }
+  bool get_direct_load_need_sort() const { return direct_load_need_sort_; }
   inline bool get_insertup_can_use_snapshot_opt() const {return insertup_can_use_snapshot_opt_; }
   inline void set_insertup_can_use_snapshot_opt(bool v) { insertup_can_use_snapshot_opt_ = v; }
   void set_is_use_auto_dop(bool use_auto_dop)  { stat_.is_use_auto_dop_ = use_auto_dop; }
@@ -606,6 +628,8 @@ public:
   bool has_instead_of_trigger_; // mask if has instead of trigger on view
   uint64_t min_cluster_version_; // record min cluster version in code gen
   bool need_record_plan_info_;
+  bool enable_append_; // for APPEND hint
+  uint64_t append_table_id_;
   ObLogicalPlanRawData logical_plan_;
   // for detector manager
   bool use_rich_format_;
@@ -619,6 +643,10 @@ private:
 public:
   bool udf_has_dml_stmt_;
 private:
+  bool enable_inc_direct_load_; // for incremental direct load
+  bool enable_replace_; // for incremental direct load
+  bool insert_overwrite_; // for insert overwrite
+  double online_sample_percent_; // for incremental direct load
   std::atomic<bool> can_set_feedback_info_;
   bool need_switch_to_table_lock_worker_; // for table lock switch worker thread
   bool data_complement_gen_doc_id_;
@@ -627,6 +655,7 @@ private:
   // further cursor stmt will check agains
   // to decide whether it read uncommitted data
   common::ObFixedArray<uint64_t, common::ObIAllocator> dml_table_ids_;
+  bool direct_load_need_sort_;
   bool insertup_can_use_snapshot_opt_;
   ObPxNodePolicy px_node_policy_;
   common::ObFixedArray<common::ObAddr, common::ObIAllocator> px_node_addrs_;

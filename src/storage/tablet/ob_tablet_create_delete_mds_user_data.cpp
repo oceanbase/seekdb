@@ -29,13 +29,11 @@ namespace storage
 {
 ObTabletCreateDeleteMdsUserData::ObTabletCreateDeleteMdsUserData()
   : tablet_status_(ObTabletStatus::NONE),
-    reserved_scn_(share::SCN::invalid_scn()),
     data_type_(ObTabletMdsUserDataType::NONE),
     create_commit_scn_(share::SCN::invalid_scn()),
     create_commit_version_(ObTransVersion::INVALID_TRANS_VERSION),
     delete_commit_scn_(share::SCN::invalid_scn()),
-    delete_commit_version_(ObTransVersion::INVALID_TRANS_VERSION),
-    reserved_commit_version_(ObTransVersion::INVALID_TRANS_VERSION)
+    delete_commit_version_(ObTransVersion::INVALID_TRANS_VERSION)
 {
 }
 
@@ -44,13 +42,11 @@ ObTabletCreateDeleteMdsUserData::ObTabletCreateDeleteMdsUserData(
     const ObTabletMdsUserDataType &type,
     const int64_t create_commit_version)
   : tablet_status_(status),
-    reserved_scn_(share::SCN::invalid_scn()),
     data_type_(type),
     create_commit_scn_(share::SCN::invalid_scn()),
     create_commit_version_(create_commit_version),
     delete_commit_scn_(share::SCN::invalid_scn()),
-    delete_commit_version_(ObTransVersion::INVALID_TRANS_VERSION),
-    reserved_commit_version_(ObTransVersion::INVALID_TRANS_VERSION)
+    delete_commit_version_(ObTransVersion::INVALID_TRANS_VERSION)
 {
 }
 
@@ -58,26 +54,22 @@ int ObTabletCreateDeleteMdsUserData::assign(const ObTabletCreateDeleteMdsUserDat
 {
   int ret = OB_SUCCESS;
   tablet_status_ = other.tablet_status_;
-  reserved_scn_ = other.reserved_scn_;
   data_type_ = other.data_type_;
   create_commit_scn_ = other.create_commit_scn_;
   create_commit_version_ = other.create_commit_version_;
   delete_commit_scn_ = other.delete_commit_scn_;
   delete_commit_version_ = other.delete_commit_version_;
-  reserved_commit_version_ = other.reserved_commit_version_;
   return ret;
 }
 
 void ObTabletCreateDeleteMdsUserData::reset()
 {
   tablet_status_ = ObTabletStatus::NONE;
-  reserved_scn_.set_invalid();
   data_type_ = ObTabletMdsUserDataType::NONE;
   create_commit_scn_.set_invalid();
   create_commit_version_ = ObTransVersion::INVALID_TRANS_VERSION;
   delete_commit_scn_.set_invalid();
   delete_commit_version_ = ObTransVersion::INVALID_TRANS_VERSION;
-  reserved_commit_version_ = ObTransVersion::INVALID_TRANS_VERSION;
 }
 
 void ObTabletCreateDeleteMdsUserData::on_init()
@@ -95,13 +87,7 @@ void ObTabletCreateDeleteMdsUserData::on_redo(const share::SCN &redo_scn)
   case ObTabletMdsUserDataType::NONE :
   case ObTabletMdsUserDataType::CREATE_TABLET :
   case ObTabletMdsUserDataType::REMOVE_TABLET :
-  case ObTabletMdsUserDataType::RESERVED_MDS_TYPE_3 :
-  case ObTabletMdsUserDataType::RESERVED_MDS_TYPE_4 :
-  case ObTabletMdsUserDataType::RESERVED_MDS_TYPE_5 :
-  case ObTabletMdsUserDataType::RESERVED_MDS_TYPE_6 :
-  case ObTabletMdsUserDataType::RESERVED_MDS_TYPE_7 : {
     break;
-  }
   default: {
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid cur status for fail", K(ret), KPC(this));
@@ -114,13 +100,7 @@ void ObTabletCreateDeleteMdsUserData::on_commit(const share::SCN &commit_version
   int ret = OB_SUCCESS;
   switch (data_type_) {
   case ObTabletMdsUserDataType::NONE :
-  case ObTabletMdsUserDataType::RESERVED_MDS_TYPE_3 :
-  case ObTabletMdsUserDataType::RESERVED_MDS_TYPE_4 :
-  case ObTabletMdsUserDataType::RESERVED_MDS_TYPE_5 :
-  case ObTabletMdsUserDataType::RESERVED_MDS_TYPE_6 :
-  case ObTabletMdsUserDataType::RESERVED_MDS_TYPE_7 : {
     break;
-  }
   case ObTabletMdsUserDataType::CREATE_TABLET : {
     create_tablet_on_commit_(commit_version, commit_scn);
     break;
@@ -183,13 +163,11 @@ int ObTabletCreateDeleteMdsUserData::set_tablet_empty_shell_trigger()
 OB_SERIALIZE_MEMBER(
     ObTabletCreateDeleteMdsUserData,
     tablet_status_,
-    reserved_scn_,
     data_type_,
     create_commit_scn_,
     create_commit_version_,
     delete_commit_scn_,
-    delete_commit_version_,
-    reserved_commit_version_
+    delete_commit_version_
 )
 
 } // namespace storage
