@@ -18,7 +18,6 @@
 #define OCEANBASE_STORAGE_OB_STORAGE_LOGGER_MANAGER_H_
 
 #include "storage/slog/ob_storage_logger.h"
-#include "storage/slog/ob_storage_log_item.h"
 #include "storage/blocksstable/ob_log_file_spec.h"
 #include "common/log/ob_log_cursor.h"
 
@@ -45,26 +44,12 @@ public:
   void wait();
   void destroy();
 
-  // allocate item and its buffer
-  int alloc_item(const int64_t buf_size, ObStorageLogItem *&log_item, const int64_t num);
-  // free item and its buffer
-  int free_item(ObStorageLogItem *log_item);
-
   int get_server_slogger(ObStorageLogger *&slogger);
   int get_tenant_slog_dir(char (&tenant_clog_dir)[common::MAX_PATH_SIZE]);
   const char *get_root_dir() { return log_dir_; }
   int get_reserved_size(int64_t &reserved_size) const;
 
 private:
-
-  // allocate buffer
-  int alloc_log_buffer(void *&log_buffer);
-  // allocate item
-  int alloc_log_item(ObStorageLogItem *&log_item);
-  // free buffer
-  int free_log_buffer(void *log_buffer);
-  // free item
-  int free_log_item(ObStorageLogItem *log_item);
 
   int get_using_disk_space(int64_t &using_space) const;
 
@@ -73,7 +58,6 @@ private:
 public:
   static constexpr int64_t RESERVED_DISK_SIZE = 128 * 1024 * 1024L; // 128M
 private:
-  static constexpr int64_t NORMAL_LOG_ITEM_SIZE = 8 * 1024; //8KB
 
   const char *log_dir_;
   int64_t max_log_file_size_;
