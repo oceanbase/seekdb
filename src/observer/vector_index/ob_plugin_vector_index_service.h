@@ -336,9 +336,7 @@ public:
     memory_context_(NULL),
     all_vsag_use_mem_(NULL),
     tenant_vec_async_task_sched_(nullptr),
-    is_vec_async_task_started_(false),
-    kmeans_tg_id_(OB_INVALID_TG_ID),
-    embedding_tg_id_(OB_INVALID_TG_ID)
+    is_vec_async_task_started_(false)
   {}
   virtual ~ObPluginVectorIndexService();
   int init(schema::ObMultiVersionSchemaService *schema_service,
@@ -379,8 +377,6 @@ public:
   ObFIFOAllocator &get_allocator() { return allocator_; }
 
   // feature interfaces
-  int get_kmeans_tg_id() { return kmeans_tg_id_; }
-  int get_embedding_tg_id() { return embedding_tg_id_; }
   ObVecIndexAsyncTaskHandler &get_vec_async_task_handle() { return vec_async_task_handle_; }
   ObKmeansBuildTaskHandler& get_kmeans_build_handler() { return kmeans_build_task_handler_; };
   int get_embedding_task_handler(ObEmbeddingTaskHandler *&handler);
@@ -455,7 +451,6 @@ public:
   lib::MemoryContext &get_memory_context() { return memory_context_; }
   uint64_t *get_all_vsag_use_mem() { return all_vsag_use_mem_; }
 
-  int start_kmeans_tg();
   TO_STRING_KV(K_(is_inited), K_(has_start),
                K_(is_ls_or_tablet_changed), KP_(schema_service), KP_(ls_service));
 private:
@@ -488,9 +483,6 @@ private:
   ObVecIndexAsyncTaskHandler vec_async_task_handle_;
   ObKmeansBuildTaskHandler kmeans_build_task_handler_;
   ObEmbeddingTaskHandler embedding_task_handler_;
-  // TODO(haohan): shared_tg_id for kmeans and embedding thread pool
-  int kmeans_tg_id_;
-  int embedding_tg_id_;
 
 public:
   volatile bool stop_flag_;

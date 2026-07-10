@@ -41,14 +41,14 @@ int ObPluginVectorIndexLoadScheduler::init_task_executors(ObLS &ls)
   return ret;
 }
 
-int ObPluginVectorIndexLoadScheduler::init(ObLS *ls, int ttl_timer_tg_id)
+int ObPluginVectorIndexLoadScheduler::init(ObLS *ls, common::ObTimer &ttl_timer)
 {
   int ret = OB_SUCCESS;
   ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
-  if (OB_ISNULL(vector_index_service) || OB_ISNULL(ls) || ttl_timer_tg_id == 0) {
+  if (OB_ISNULL(vector_index_service) || OB_ISNULL(ls) || !ttl_timer.inited()) {
     ret = OB_ERR_UNEXPECTED; 
     LOG_WARN("tenant vector index load task fail",
-      KP(vector_index_service), KP(ls), K(ttl_timer_tg_id), KR(ret));
+      KP(vector_index_service), KP(ls), KR(ret));
   } else if (OB_FAIL(init_task_executors(*ls))) {
     LOG_WARN("fail to init async task exec", K(ret), KP(ls));
   } else {
@@ -57,11 +57,10 @@ int ObPluginVectorIndexLoadScheduler::init(ObLS *ls, int ttl_timer_tg_id)
     
     interval_factor_ = 1;
     is_inited_ = true;
-    ttl_tablet_timer_tg_id_ = ttl_timer_tg_id;
     basic_period_ = VEC_INDEX_SCHEDULAR_BASIC_PERIOD;
     cb_.scheduler_ = this;
-    if (OB_FAIL(TG_SCHEDULE(ttl_timer_tg_id, *this, basic_period_, true))) {
-      LOG_WARN("fail to schedule periodic task", KR(ret), K(ttl_timer_tg_id));
+    if (OB_FAIL(ttl_timer.schedule(*this, basic_period_, true))) {
+      LOG_WARN("fail to schedule periodic task", KR(ret));
     }
   }
   return ret;

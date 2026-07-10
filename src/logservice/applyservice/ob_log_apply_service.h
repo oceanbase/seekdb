@@ -19,6 +19,7 @@
 #include "common/ob_role.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/queue/ob_link_queue.h"
+#include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/thread/ob_thread_lease.h"
 #include "logservice/palf/palf_callback.h"
 #include "logservice/palf/palf_handle.h"
@@ -273,7 +274,7 @@ private:
   ObMiniStat::ObStatItem cb_stat_; // Time taken from cb generation to on_success execution
 };
 
-class ObLogApplyService : public lib::TGLinkTaskHandler
+class ObLogApplyService : public common::ObLinkQueueThreadPool
 {
 public:
   ObLogApplyService();
@@ -289,8 +290,8 @@ public:
   int remove_ls(const share::ObLSID &id);
   int get_apply_status(const share::ObLSID &id, ObApplyStatusGuard &guard);
   void revert_apply_status(ObApplyStatus *apply_status);
-  void handle(common::LinkTask *task);
-  void handle_drop(common::LinkTask *task);
+  void handle(common::LinkTask *task) override;
+  void handle_drop(common::LinkTask *task) override;
   int is_apply_done(const share::ObLSID &id,
                     bool &is_done,
                     palf::LSN &end_lsn);
@@ -350,7 +351,6 @@ private:
 private:
   bool is_inited_;
   bool is_running_;
-  int tg_id_;
   palf::PalfEnv *palf_env_;
   ObLSAdapter *ls_adapter_;
   common::ObLinearHashMap<share::ObLSID, ObApplyStatus*> apply_status_map_;

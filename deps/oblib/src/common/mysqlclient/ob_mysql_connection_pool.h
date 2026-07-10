@@ -86,7 +86,7 @@ public:
                     const char *db_pass = DEFAULT_DB_PASS, const char *db_name = DEFAULT_DB_NAME);
   int set_db_param(const ObString &db_user, const ObString &db_pass,
                     const ObString &db_name);
-  int start(int tg_id);
+  int start();
   void stop();
   void signal_refresh();
   void close_all_connection();
@@ -154,7 +154,7 @@ protected:
   ObMySQLConnection::Mode mode_;
   MySQLConnectionPoolType pool_type_;
 
-  int tg_id_;
+  common::ObTimer timer_;
   ObMySQLServerProvider *server_provider_;
   volatile int64_t busy_conn_count_;
 

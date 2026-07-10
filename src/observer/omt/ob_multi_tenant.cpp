@@ -173,7 +173,8 @@ ObMultiTenant::ObMultiTenant()
       cpu_dump_(false),
       has_synced_(false),
       tenant_active_(false),
-      timer_tg_id_(-1),
+      timer_(),
+      memory_printer_timer_(),
       timer_stopped_(true),
       tenant_limiter_head_(NULL),
       limiter_mutex_()
@@ -261,18 +262,29 @@ int ObMultiTenant::start()
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(create_virtual_tenants())) {
     LOG_ERROR("create virtual tenants failed", K(ret));
-  } else if (OB_FAIL(TG_CREATE(lib::TGDefIDs::MultiTenantTimer, timer_tg_id_))) {
-    LOG_ERROR("create multi tenant timer failed", K(ret));
-  } else if (OB_FAIL(TG_START(timer_tg_id_))) {
-    LOG_ERROR("start multi tenant timer failed", K(ret), K_(timer_tg_id));
-  } else if (OB_FAIL(TG_SCHEDULE(timer_tg_id_, *this, TIME_SLICE_PERIOD, true/*is_repeat*/))) {
-    LOG_ERROR("schedule multi tenant timer failed", K(ret), K_(timer_tg_id));
-  // start memstore print timer.
-  } else if (OB_FAIL(printer.register_timer_task(lib::TGDefIDs::ServerGTimer))) {
-    LOG_ERROR("Fail to register timer task", K(ret));
   } else {
-    timer_stopped_ = false;
-    LOG_INFO("succ to start multi tenant");
+    if (!timer_.inited()
+        && OB_FAIL(timer_.init("MultiTenantTimer", ObMemAttr("MultiTenantTm")))) {
+      LOG_ERROR("create multi tenant timer failed", K(ret));
+    } else if (OB_FAIL(timer_.start())) {
+      LOG_ERROR("start multi tenant timer failed", K(ret));
+    } else {
+      timer_stopped_ = false;
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(timer_.schedule(*this, TIME_SLICE_PERIOD, true/*is_repeat*/))) {
+      LOG_ERROR("schedule multi tenant timer failed", K(ret));
+    // start memstore print timer.
+    } else if (!memory_printer_timer_.inited()
+        && OB_FAIL(memory_printer_timer_.init("MemPrinter", ObMemAttr("MemPrinter")))) {
+      LOG_ERROR("create memory printer timer failed", K(ret));
+    } else if (OB_FAIL(memory_printer_timer_.start())) {
+      LOG_ERROR("start memory printer timer failed", K(ret));
+    } else if (OB_FAIL(printer.register_timer_task(memory_printer_timer_))) {
+      LOG_ERROR("Fail to register timer task", K(ret));
+    } else {
+      LOG_INFO("succ to start multi tenant");
+    }
   }
 
 
@@ -284,9 +296,12 @@ int ObMultiTenant::start()
 
 void ObMultiTenant::stop()
 {
-  if (!timer_stopped_ && timer_tg_id_ != -1) {
-    TG_STOP(timer_tg_id_);
+  if (!timer_stopped_ && timer_.inited()) {
+    timer_.stop();
     timer_stopped_ = true;
+  }
+  if (memory_printer_timer_.inited()) {
+    memory_printer_timer_.stop();
   }
   remove_tenant();
 }
@@ -298,8 +313,11 @@ void ObMultiTenant::wait()
       usleep(50 * 1000);
     }
   }
-  if (timer_tg_id_ != -1) {
-    TG_WAIT(timer_tg_id_);
+  if (timer_.inited()) {
+    timer_.wait();
+  }
+  if (memory_printer_timer_.inited()) {
+    memory_printer_timer_.wait();
   }
 }
 
@@ -309,10 +327,8 @@ void ObMultiTenant::destroy()
   if (OB_NOT_NULL(tenant_)) {
     tenant_->destroy();
   }
-  if (timer_tg_id_ != -1) {
-    TG_DESTROY(timer_tg_id_);
-    timer_tg_id_ = -1;
-  }
+  timer_.destroy();
+  memory_printer_timer_.destroy();
   is_inited_ = false;
 }
 
@@ -521,7 +537,6 @@ int ObMultiTenant::create_tenant(const ObTenantMeta &meta, bool write_slog, cons
   if (OB_FAIL(ret)) {
     // do nothing
   } else {
-    ObTenantSwitchGuard guard(tenant_);
     if (OB_FAIL(share::g_mp->tenant_freezer()->set_tenant_mem_limit(meta.unit_.config_.memory_size(), memory_size))) {
       LOG_WARN("fail to set_tenant_mem_limit", K(ret));
     }
@@ -642,8 +657,6 @@ int ObMultiTenant::update_tenant_unit_no_lock(const ObUnitInfoGetter::ObTenantCo
   } else if (need_persist_unit
              && OB_FAIL(SERVER_STORAGE_META_PERSISTER.update_tenant_unit(tenant->get_epoch(), allowed_new_unit))) {
     LOG_WARN("fail to update tenant unit", K(ret));
-  } else if (OB_FAIL(tenant->update_thread_cnt(max_cpu))) {
-    LOG_WARN("fail to update mtl module thread_cnt", K(ret));
   } else {
     if (tenant->unit_min_cpu() != min_cpu) {
       tenant->set_unit_min_cpu(min_cpu);
@@ -777,22 +790,17 @@ int ObMultiTenant::update_tenant_log_disk_size(const int64_t old_log_disk_size,
                                                int64_t &allowed_new_log_disk_size)
 {
   int ret = OB_SUCCESS;
-  MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-  if (OB_SUCC(guard.switch_to())) {
-    ObLogService *log_service = share::g_mp->log_service();
-    if (OB_ISNULL(log_service)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get log_service failed", K(ret));
-    } else if (OB_FAIL(GCTX.log_block_mgr_->update_tenant(old_log_disk_size, new_log_disk_size,
-                                                          allowed_new_log_disk_size, log_service))) {
-      LOG_WARN("fail to update_tenant", K(old_log_disk_size), K(new_log_disk_size),
-               K(allowed_new_log_disk_size));
-    } else {
-      LOG_INFO("update_tenant_log_disk_size success", K(old_log_disk_size),
-               K(new_log_disk_size), K(allowed_new_log_disk_size));
-    }
+  ObLogService *log_service = share::g_mp->log_service();
+  if (OB_ISNULL(log_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get log_service failed", K(ret));
+  } else if (OB_FAIL(GCTX.log_block_mgr_->update_tenant(old_log_disk_size, new_log_disk_size,
+                                                        allowed_new_log_disk_size, log_service))) {
+    LOG_WARN("fail to update_tenant", K(old_log_disk_size), K(new_log_disk_size),
+             K(allowed_new_log_disk_size));
   } else {
-    LOG_WARN("switch to tenant failed", K(ret));
+    LOG_INFO("update_tenant_log_disk_size success", K(old_log_disk_size),
+             K(new_log_disk_size), K(allowed_new_log_disk_size));
   }
   return ret;
 }
@@ -804,26 +812,23 @@ int ObMultiTenant::update_tenant_config()
   int tmp_ret = OB_SUCCESS;
   if (false == true) {
   } else {
-    MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-    if (OB_SUCC(guard.switch_to())) {
-      if (OB_TMP_FAIL(update_palf_config())) {
-        LOG_WARN("failed to update palf disk config", K(tmp_ret));
-      }
-      if (OB_TMP_FAIL(update_tenant_dag_scheduler_config())) {
-        LOG_WARN("failed to update tenant dag scheduler config", K(tmp_ret));
-      }
-      if (OB_TMP_FAIL(update_tenant_ddl_config())) {
-        LOG_WARN("failed to update tenant ddl config", K(tmp_ret));
-      }
-      if (OB_TMP_FAIL(update_tenant_freezer_config_())) {
-        LOG_WARN("failed to update tenant tenant freezer config", K(tmp_ret));
-      }
-      if (OB_TMP_FAIL(update_throttle_config_())) {
-        LOG_WARN("update throttle config failed", K(ret));
-      }
-      if (OB_TMP_FAIL(update_tenant_query_response_time_flush_config())) {
-        LOG_WARN("failed to update tenant query response time flush config", K(tmp_ret));
-      }
+    if (OB_TMP_FAIL(update_palf_config())) {
+      LOG_WARN("failed to update palf disk config", K(tmp_ret));
+    }
+    if (OB_TMP_FAIL(update_tenant_dag_scheduler_config())) {
+      LOG_WARN("failed to update tenant dag scheduler config", K(tmp_ret));
+    }
+    if (OB_TMP_FAIL(update_tenant_ddl_config())) {
+      LOG_WARN("failed to update tenant ddl config", K(tmp_ret));
+    }
+    if (OB_TMP_FAIL(update_tenant_freezer_config_())) {
+      LOG_WARN("failed to update tenant tenant freezer config", K(tmp_ret));
+    }
+    if (OB_TMP_FAIL(update_throttle_config_())) {
+      LOG_WARN("update throttle config failed", K(ret));
+    }
+    if (OB_TMP_FAIL(update_tenant_query_response_time_flush_config())) {
+      LOG_WARN("failed to update tenant query response time flush config", K(tmp_ret));
     }
   }
   LOG_INFO("update_tenant_config success");
@@ -1515,11 +1520,8 @@ int ObMultiTenant::get_server_allocated_resource(ServerResource &server_resource
 
 void ObMultiTenant::runTimerTask()
 {
-  {
-    if (OB_ISNULL(tenant_) || !tenant_active_) {
-    } else {
-      tenant_->timeup();
-    }
+  if (OB_NOT_NULL(tenant_) && tenant_active_) {
+    tenant_->timeup();
   }
 
   if (is_inited_ && REACH_TIME_INTERVAL(get_sys_refresh_interval_())) {
@@ -1575,8 +1577,7 @@ int ObSharedTimer::mtl_init(ObSharedTimer *&st)
 {
   int ret = common::OB_SUCCESS;
   if (st != NULL) {
-    int &tg_id = st->tg_id_;
-    if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TntSharedTimer, tg_id))) {
+    if (OB_FAIL(st->timer_.init("TntSharedTimer", common::ObMemAttr("TntSharedTimer")))) {
       LOG_WARN("init shared timer failed", K(ret));
     }
   }
@@ -1587,9 +1588,8 @@ int ObSharedTimer::mtl_start(ObSharedTimer *&st)
 {
   int ret = common::OB_SUCCESS;
   if (st != NULL) {
-    int &tg_id = st->tg_id_;
-    if (OB_FAIL(TG_START(tg_id))) {
-      LOG_WARN("init shared timer failed", K(ret), K(tg_id));
+    if (OB_FAIL(st->timer_.start())) {
+      LOG_WARN("start shared timer failed", K(ret));
     }
   }
   return ret;
@@ -1597,30 +1597,42 @@ int ObSharedTimer::mtl_start(ObSharedTimer *&st)
 
 void ObSharedTimer::mtl_stop(ObSharedTimer *&st)
 {
-  if (st != NULL) {
-    int &tg_id = st->tg_id_;
-    if (tg_id > 0) {
-      TG_STOP(tg_id);
-    }
+  if (st != NULL && st->timer_.inited()) {
+    st->timer_.stop();
   }
 }
 
 void ObSharedTimer::mtl_wait(ObSharedTimer *&st)
 {
-  if (st != NULL) {
-    int &tg_id = st->tg_id_;
-    if (tg_id > 0) {
-      TG_WAIT_ONLY(tg_id);
-    }
+  if (st != NULL && st->timer_.inited()) {
+    st->timer_.wait();
   }
 }
 
 void ObSharedTimer::destroy()
 {
-  if (tg_id_ > 0) {
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
-  }
+  timer_.destroy();
+}
+
+int ObSharedTimer::schedule(common::ObTimerTask &task, const int64_t delay,
+    const bool repeat, const bool immediate)
+{
+  return timer_.schedule(task, delay, repeat, immediate);
+}
+
+int ObSharedTimer::cancel_task(const common::ObTimerTask &task)
+{
+  return timer_.cancel_task(task);
+}
+
+int ObSharedTimer::wait_task(const common::ObTimerTask &task)
+{
+  return timer_.wait_task(task);
+}
+
+bool ObSharedTimer::task_exist(const common::ObTimerTask &task)
+{
+  return timer_.task_exist(task);
 }
 
 int ObMultiTenant::inc_tenant_ddl_count(const int64_t cpu_quota_concurrency)
@@ -1711,18 +1723,18 @@ void ObIndexUsageInfoMgr::destroy()
   if (is_inited_) {
     // cancel report task
     if (report_task_.get_is_inited()) {
-      bool is_exist = true;
-      if (TG_TASK_EXIST(share::g_mp->shared_timer()->get_tg_id(), report_task_, is_exist) == OB_SUCCESS && is_exist) {
-        TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), report_task_);
-        TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), report_task_);
+      omt::ObSharedTimer *timer = OB_ISNULL(share::g_mp) ? NULL : share::g_mp->shared_timer();
+      if (OB_NOT_NULL(timer) && timer->task_exist(report_task_)) {
+        timer->cancel_task(report_task_);
+        timer->wait_task(report_task_);
         report_task_.destroy();
       }
     }
     if (refresh_conf_task_.get_is_inited()) {
-      bool is_exist = true;
-      if (TG_TASK_EXIST(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_, is_exist) == OB_SUCCESS && is_exist) {
-        TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_);
-        TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_);
+      omt::ObSharedTimer *timer = OB_ISNULL(share::g_mp) ? NULL : share::g_mp->shared_timer();
+      if (OB_NOT_NULL(timer) && timer->task_exist(refresh_conf_task_)) {
+        timer->cancel_task(refresh_conf_task_);
+        timer->wait_task(refresh_conf_task_);
         refresh_conf_task_.destroy();
       }
     }
@@ -1746,12 +1758,16 @@ int ObIndexUsageInfoMgr::start()
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
+    omt::ObSharedTimer *timer = OB_ISNULL(share::g_mp) ? NULL : share::g_mp->shared_timer();
     // report index usage
-    if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), report_task_, INDEX_USAGE_REPORT_INTERVAL, true))) {
+    if (OB_ISNULL(timer)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("shared timer is null", K(ret));
+    } else if (OB_FAIL(timer->schedule(report_task_, INDEX_USAGE_REPORT_INTERVAL, true))) {
       LOG_WARN("failed to schedule index usage report task", K(ret));
     } else if (OB_FAIL(report_task_.init(this))) {
       LOG_WARN("fail to init report task", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_, INDEX_USAGE_REFRESH_CONF_INTERVAL, true))) {
+    } else if (OB_FAIL(timer->schedule(refresh_conf_task_, INDEX_USAGE_REFRESH_CONF_INTERVAL, true))) {
       LOG_WARN("failed to schedule index usage refresh conf task", K(ret));
     } else if (OB_FAIL(refresh_conf_task_.init((this)))) {
       LOG_WARN("fail to init refresh conf task", K(ret));
@@ -1764,21 +1780,31 @@ int ObIndexUsageInfoMgr::start()
 
 void ObIndexUsageInfoMgr::stop()
 {
-  if (OB_LIKELY(report_task_.get_is_inited())) {
-    TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), report_task_);
-  }
-  if (OB_LIKELY(refresh_conf_task_.get_is_inited())) {
-    TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_);
+  omt::ObSharedTimer *timer = OB_ISNULL(share::g_mp) ? NULL : share::g_mp->shared_timer();
+  if (OB_ISNULL(timer)) {
+    LOG_WARN_RET(OB_ERR_UNEXPECTED, "shared timer is null");
+  } else {
+    if (OB_LIKELY(report_task_.get_is_inited())) {
+      timer->cancel_task(report_task_);
+    }
+    if (OB_LIKELY(refresh_conf_task_.get_is_inited())) {
+      timer->cancel_task(refresh_conf_task_);
+    }
   }
 }
 
 void ObIndexUsageInfoMgr::wait()
 {
-  if (OB_LIKELY(report_task_.get_is_inited())) {
-    TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), report_task_);
-  }
-  if (OB_LIKELY(refresh_conf_task_.get_is_inited())) {
-    TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_);
+  omt::ObSharedTimer *timer = OB_ISNULL(share::g_mp) ? NULL : share::g_mp->shared_timer();
+  if (OB_ISNULL(timer)) {
+    LOG_WARN_RET(OB_ERR_UNEXPECTED, "shared timer is null");
+  } else {
+    if (OB_LIKELY(report_task_.get_is_inited())) {
+      timer->wait_task(report_task_);
+    }
+    if (OB_LIKELY(refresh_conf_task_.get_is_inited())) {
+      timer->wait_task(refresh_conf_task_);
+    }
   }
 }
 

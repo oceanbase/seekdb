@@ -18,6 +18,7 @@
 #define OB_STORAGE_CKPT_TENANT_CHECKPOINT_SLOG_HANDLER_H_
 
 #include "common/log/ob_log_cursor.h"
+#include "lib/task/ob_timer.h"
 #include "observer/ob_server_struct.h"
 #include "storage/slog_ckpt/ob_linked_macro_block_struct.h"
 #include "storage/slog_ckpt/ob_tenant_storage_checkpoint_reader.h"
@@ -197,7 +198,7 @@ private:
   ObMetaBlockListHandle ls_block_handle_;
   ObMetaBlockListHandle tablet_block_handle_;
 
-  int tg_id_;
+  common::ObTimer write_ckpt_timer_;
   ObWriteCheckpointTask write_ckpt_task_;
   ReplayTabletDiskAddrMap replay_tablet_disk_addr_map_;
   lib::ObMutex super_block_mutex_;

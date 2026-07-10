@@ -791,7 +791,10 @@ int ObVecIndexAsyncTaskUtil::fetch_new_trace_id(
 
 /**************************** ObVecIndexAsyncTaskHandler ******************************/
 ObVecIndexAsyncTaskHandler::ObVecIndexAsyncTaskHandler()
-  : is_inited_(false), tg_id_(INVALID_TG_ID), async_task_ref_cnt_(0), stopped_(false)
+  : common::ObSimpleThreadPool(),
+    is_inited_(false),
+    async_task_ref_cnt_(0),
+    stopped_(false)
 {
 }
 
@@ -805,8 +808,11 @@ int ObVecIndexAsyncTaskHandler::init()
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::VectorAsyncTaskPool, tg_id_))) {
-    LOG_WARN("TG_CREATE_TENANT failed", KR(ret));
+  } else if (OB_FAIL(common::ObSimpleThreadPool::init(
+      MIN_THREAD_COUNT,
+      MAX_QUEUE_SIZE,
+      "VectorAsyncTask"))) {
+    LOG_WARN("init vector index async task thread pool failed", KR(ret));
   } else {
     is_inited_ = true;
   }
@@ -819,34 +825,37 @@ int ObVecIndexAsyncTaskHandler::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("handler is not init", KR(ret));
-  } else if (OB_FAIL(TG_SET_ADAPTIVE_THREAD(tg_id_, MIN_THREAD_COUNT, MAX_THREAD_COUNT))) { // must be call TG_SET_ADAPTIVE_THREAD
-    LOG_WARN("TG_SET_ADAPTIVE_THREAD failed", KR(ret), K_(tg_id));
-  } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
-    LOG_WARN("TG_SET_HANDLER_AND_START failed", KR(ret), K_(tg_id));
+  } else if (OB_FAIL(common::ObSimpleThreadPool::set_adaptive_thread(MIN_THREAD_COUNT, MAX_THREAD_COUNT))) {
+    LOG_WARN("set adaptive thread failed", KR(ret));
+  } else if (common::ObSimpleThreadPool::get_thread_count() <= 0
+      && !common::ObSimpleThreadPool::try_expand_one(MIN_THREAD_COUNT)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("start vector index async task thread pool failed", KR(ret));
   } else {
-    LOG_INFO("succ to start vector index async task handler", K_(tg_id));
+    LOG_INFO("succ to start vector index async task handler");
   }
   return ret;
 }
 
 void ObVecIndexAsyncTaskHandler::stop()
 {
-  LOG_INFO("vector index async task handler start to stop", K_(tg_id));
+  LOG_INFO("vector index async task handler start to stop");
   set_stop();
-  if (OB_LIKELY(INVALID_TG_ID != tg_id_)) {
-    TG_STOP(tg_id_);
+  if (is_inited_) {
+    common::ObSimpleThreadPool::stop();
   }
-  LOG_INFO("vector index async task handler finish to stop", K_(tg_id));
+  LOG_INFO("vector index async task handler finish to stop");
 }
 
 
 void ObVecIndexAsyncTaskHandler::destroy()
 {
   LOG_INFO("vector index async task handler start to destroy");
-  if (OB_LIKELY(INVALID_TG_ID != tg_id_)) {
-    TG_DESTROY(tg_id_);
+  if (is_inited_) {
+    common::ObSimpleThreadPool::stop();
+    common::ObSimpleThreadPool::wait();
+    common::ObSimpleThreadPool::destroy();
   }
-  tg_id_ = INVALID_TG_ID;
   is_inited_ = false;
   LOG_INFO("vector index async task handler finish to destroy");
 }
@@ -873,8 +882,8 @@ int ObVecIndexAsyncTaskHandler::push_task(
     } else if (FALSE_IT(async_task = new (async_task) ObVecIndexAsyncTask())) {
     } else if (OB_FAIL(async_task->init(ls_id, ctx->task_status_.task_type_, ctx))) {
       LOG_WARN("fail to init opt async task", KR(ret), K(ls_id));
-    } else if (OB_FAIL(TG_PUSH_TASK(tg_id_, async_task))) {
-      LOG_WARN("fail to TG_PUSH_TASK", KR(ret), KPC(async_task));
+    } else if (OB_FAIL(common::ObSimpleThreadPool::push(async_task))) {
+      LOG_WARN("fail to push task", KR(ret), KPC(async_task));
     } else {
       // !!!! inc async task ref cnt;
       inc_async_task_ref();
@@ -897,8 +906,8 @@ int ObVecIndexAsyncTaskHandler::push_task(
     } else if (FALSE_IT(task = new (task) ObHybridVectorRefreshTask())) {
     } else if (OB_FAIL(task->init(ls_id, ctx->task_status_.task_type_, ctx))) {
       LOG_WARN("fail to init opt async task", KR(ret), K(ls_id));
-    } else if (OB_FAIL(TG_PUSH_TASK(tg_id_, task))) {
-      LOG_WARN("fail to TG_PUSH_TASK", KR(ret), KPC(task));
+    } else if (OB_FAIL(common::ObSimpleThreadPool::push(task))) {
+      LOG_WARN("fail to push task", KR(ret), KPC(task));
     }
     // free memory
     if (OB_FAIL(ret) && OB_NOT_NULL(task)) {
@@ -921,8 +930,8 @@ int ObVecIndexAsyncTaskHandler::push_task(
       LOG_WARN("fail to alloc memory of ObIvfAsyncTask", K(ret), K(ls_id));
     } else if (OB_FAIL(ivf_task->init(ls_id, ctx->task_status_.task_type_, ctx))) {
       LOG_WARN("fail to init opt async task", KR(ret), K(ls_id));
-    } else if (OB_FAIL(TG_PUSH_TASK(tg_id_, ivf_task))) {
-      LOG_WARN("fail to TG_PUSH_TASK", KR(ret), KPC(ivf_task));
+    } else if (OB_FAIL(common::ObSimpleThreadPool::push(ivf_task))) {
+      LOG_WARN("fail to push task", KR(ret), KPC(ivf_task));
     } else {
       // !!!! inc async task ref cnt;
       inc_async_task_ref();

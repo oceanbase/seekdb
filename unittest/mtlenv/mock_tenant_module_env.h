@@ -524,8 +524,6 @@ int MockTenantModuleEnv::init_before_start_mtl()
     STORAGE_LOG(WARN, "init sn tmp page cache failed", KR(ret));
   } else if (OB_SUCCESS != (ret = bandwidth_throttle_.init(1024 * 1024 * 60))) {
     STORAGE_LOG(ERROR, "failed to init bandwidth_throttle_", K(ret));
-  } else if (OB_FAIL(TG_START(lib::TGDefIDs::ServerGTimer))) {
-    STORAGE_LOG(ERROR, "init timer fail", KR(ret));
   } else if (OB_FAIL(ObMdsSchemaHelper::get_instance().init())) {
     STORAGE_LOG(ERROR, "fail to init mds schema helper", K(ret));
   } else if (OB_FAIL(LOG_IO_DEVICE_WRAPPER.init(clog_dir_.c_str(), 8, 128, &OB_IO_MANAGER, &ObDeviceManager::get_instance()))) {
@@ -620,7 +618,7 @@ int MockTenantModuleEnv::start_()
       new_config.io_worker_num_ = 4;
       log_iow_wrapper.destory_and_free_log_io_workers_();
       if (OB_FAIL(log_iow_wrapper.create_and_init_log_io_workers_(
-        new_config, palf_env_impl->cb_thread_pool_.get_tg_id(), palf_env_impl->log_alloc_mgr_, palf_env_impl))) {
+        new_config, &palf_env_impl->cb_thread_pool_, palf_env_impl->log_alloc_mgr_, palf_env_impl))) {
         STORAGE_LOG(WARN, "failed to create_and_init_log_io_workers_", K(new_config));
       } else if (FALSE_IT(log_iow_wrapper.log_writer_parallelism_ = new_config.io_worker_num_)) {
       } else if (FALSE_IT(log_iow_wrapper.is_user_tenant_ = true)) {
@@ -668,10 +666,6 @@ void MockTenantModuleEnv::destroy()
   net_frame_.destroy();
   tmp_file::ObTmpBlockCache::get_instance().destroy();
   tmp_file::ObTmpPageCache::get_instance().destroy();
-  TG_STOP(lib::TGDefIDs::ServerGTimer);
-  TG_WAIT(lib::TGDefIDs::ServerGTimer);
-  TG_DESTROY(lib::TGDefIDs::ServerGTimer);
-
   share::g_mp = nullptr;
 
   destroyed_ = true;

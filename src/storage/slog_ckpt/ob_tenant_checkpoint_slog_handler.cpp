@@ -169,7 +169,7 @@ ObTenantCheckpointSlogHandler::ObTenantCheckpointSlogHandler()
     ckpt_cursor_(),
     ls_block_handle_(),
     tablet_block_handle_(),
-    tg_id_(-1),
+    write_ckpt_timer_(),
     write_ckpt_task_(this),
     replay_tablet_disk_addr_map_(),
     super_block_mutex_()
@@ -183,8 +183,9 @@ int ObTenantCheckpointSlogHandler::init(ObStorageLogger &slogger)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTenantCheckpointSlogHandler has inited", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::WriteCkpt, tg_id_))) {
-    LOG_WARN("fail to tg create tenant", K(ret));
+  } else if (OB_FAIL(write_ckpt_timer_.init(
+      "WriteCkpt", common::ObMemAttr("WriteCkpt")))) {
+    LOG_WARN("fail to init write checkpoint timer", K(ret));
   } else {
     slogger_ = &slogger;
     is_inited_ = true;
@@ -199,11 +200,9 @@ int ObTenantCheckpointSlogHandler::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("ObTenantCheckpointSlogHandler TG_START failed", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, write_ckpt_task_,
+  } else if (OB_FAIL(write_ckpt_timer_.schedule(write_ckpt_task_,
                ObWriteCheckpointTask::WRITE_CHECKPOINT_INTERVAL_US, true))) {
-    LOG_WARN("WriteCheckpointTask TG_SCHEDULE failed", K(ret));
+    LOG_WARN("WriteCheckpointTask schedule failed", K(ret));
   }
   return ret;
 }
@@ -211,7 +210,7 @@ int ObTenantCheckpointSlogHandler::start()
 void ObTenantCheckpointSlogHandler::stop()
 {
   if (IS_INIT) {
-    TG_STOP(tg_id_);
+    write_ckpt_timer_.stop();
   }
   // since the ls service deletes tablets in the stop interface when observer stop,
   // it must ensure that no checkpoint is in progress after stop, otherwise the tablet may be lost
@@ -221,20 +220,17 @@ void ObTenantCheckpointSlogHandler::stop()
 void ObTenantCheckpointSlogHandler::wait()
 {
   if (IS_INIT) {
-    TG_WAIT(tg_id_);
+    write_ckpt_timer_.wait();
   }
 }
 
 void ObTenantCheckpointSlogHandler::destroy()
 {
   if (IS_INIT) {
-    TG_STOP(tg_id_);
-    TG_WAIT(tg_id_);
-    TG_DESTROY(tg_id_);
+    write_ckpt_timer_.destroy();
     slogger_ = nullptr;
     ls_block_handle_.reset();
     tablet_block_handle_.reset();
-    tg_id_ = -1;
     replay_tablet_disk_addr_map_.destroy();
     tablet_key_set_.destroy();
     ckpt_cursor_.reset();

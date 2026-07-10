@@ -312,7 +312,7 @@ private:
   int64_t recycle_threshold_; // begin to recycle node when reach threshold
   int64_t batch_release_; // release node in batch
   
-  int tg_id_;
+  common::ObTimer evict_timer_;
   int64_t rt_node_id_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPlanMonitorNodeList);

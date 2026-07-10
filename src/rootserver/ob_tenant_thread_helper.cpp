@@ -29,23 +29,24 @@ namespace rootserver
 {
 //////////////ObTenantThreadHelper
 int ObTenantThreadHelper::create(
-    const char* thread_name, int tg_def_id, ObTenantThreadHelper &tenant_thread)
+    const char* thread_name, int64_t thread_cnt, ObTenantThreadHelper &tenant_thread)
 {
   int ret = OB_SUCCESS;
+  UNUSED(tenant_thread);
   if (OB_UNLIKELY(is_created_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("has inited", KR(ret));
   } else if (OB_ISNULL(thread_name)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("thread name is null", KR(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(tg_def_id, tg_id_))) {
-    LOG_ERROR("create tg failed", KR(ret));
-  } else if (OB_FAIL(TG_SET_RUNNABLE(tg_id_, *this))) {
-    LOG_ERROR("set thread runable fail", KR(ret));
+  } else if (thread_cnt <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid thread count", KR(ret), K(thread_cnt));
   } else if (OB_FAIL(thread_cond_.init(ObWaitEventIds::REENTRANT_THREAD_COND_WAIT))) {
     LOG_WARN("fail to init cond, ", KR(ret));
   } else {
     thread_name_ = thread_name;
+    thread_cnt_ = thread_cnt;
     is_created_ = true;
     is_first_time_to_start_ = true;
   }
@@ -59,15 +60,17 @@ int ObTenantThreadHelper::start()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (is_first_time_to_start_) {
-    if (OB_FAIL(TG_START(tg_id_))) {
-      LOG_WARN("fail ed to start at first time", KR(ret), K(tg_id_), K(thread_name_));
+    if (OB_FAIL(share::ObReentrantThread::create(thread_cnt_, thread_name_))) {
+      LOG_WARN("fail ed to start at first time", KR(ret), K(thread_cnt_), K(thread_name_));
+    } else if (OB_FAIL(share::ObReentrantThread::logical_start())) {
+      LOG_WARN("failed to logical start at first time", KR(ret), K(thread_cnt_), K(thread_name_));
     } else {
       is_first_time_to_start_ = false;
     }
-  } else if (OB_FAIL(TG_REENTRANT_LOGICAL_START(tg_id_))) {
+  } else if (OB_FAIL(share::ObReentrantThread::logical_start())) {
     LOG_WARN("failed to start", KR(ret));
   }
-  LOG_INFO("[TENANT THREAD] thread start", KR(ret), K(tg_id_), K(thread_name_));
+  LOG_INFO("[TENANT THREAD] thread start", KR(ret), K(thread_cnt_), K(thread_name_));
   return ret;
 }
 
@@ -75,63 +78,69 @@ ERRSIM_POINT_DEF(ERRSIM_SKIP_TENANT_THREAD_STOP);
 void ObTenantThreadHelper::stop()
 {
   int ret = OB_SUCCESS;
-  LOG_INFO("[TENANT THREAD] thread stop start", K(tg_id_), K(thread_name_));
+  LOG_INFO("[TENANT THREAD] thread stop start", K(thread_cnt_), K(thread_name_));
   ret = ERRSIM_SKIP_TENANT_THREAD_STOP;
   if (OB_UNLIKELY(ERRSIM_SKIP_TENANT_THREAD_STOP)) {
     LOG_ERROR("[TENANT THREAD] skip tenant thread stop");
-  } else if (-1 != tg_id_) {
-    TG_REENTRANT_LOGICAL_STOP(tg_id_);
+  } else if (!is_first_time_to_start_) {
+    share::ObReentrantThread::logical_stop();
   }
-  LOG_INFO("[TENANT THREAD] thread stop finish", K(tg_id_), K(thread_name_), KR(ret));
+  LOG_INFO("[TENANT THREAD] thread stop finish", K(thread_cnt_), K(thread_name_), KR(ret));
 }
 
 void ObTenantThreadHelper::wait()
 {
-  LOG_INFO("[TENANT THREAD] thread wait start", K(tg_id_), K(thread_name_));
-  if (-1 != tg_id_) {
-    TG_REENTRANT_LOGICAL_WAIT(tg_id_);
+  LOG_INFO("[TENANT THREAD] thread wait start", K(thread_cnt_), K(thread_name_));
+  if (!is_first_time_to_start_) {
+    share::ObReentrantThread::logical_wait();
   }
-  LOG_INFO("[TENANT THREAD] thread wait finish", K(tg_id_), K(thread_name_));
+  LOG_INFO("[TENANT THREAD] thread wait finish", K(thread_cnt_), K(thread_name_));
 }
 
 void ObTenantThreadHelper::mtl_thread_stop()
 {
-  LOG_INFO("[TENANT THREAD] thread stop start", K(tg_id_), K(thread_name_));
-  if (-1 != tg_id_) {
-    TG_STOP(tg_id_);
+  LOG_INFO("[TENANT THREAD] thread stop start", K(thread_cnt_), K(thread_name_));
+  if (!is_first_time_to_start_) {
+    share::ObReentrantThread::stop();
   }
-  LOG_INFO("[TENANT THREAD] thread stop finish", K(tg_id_), K(thread_name_));
+  LOG_INFO("[TENANT THREAD] thread stop finish", K(thread_cnt_), K(thread_name_));
 }
 
 void ObTenantThreadHelper::mtl_thread_wait()
 {
-  LOG_INFO("[TENANT THREAD] thread wait start", K(tg_id_), K(thread_name_));
-  if (-1 != tg_id_) {
+  LOG_INFO("[TENANT THREAD] thread wait start", K(thread_cnt_), K(thread_name_));
+  if (!is_first_time_to_start_) {
     {
       ObThreadCondGuard guard(thread_cond_);
       thread_cond_.broadcast();
     }
-    TG_WAIT(tg_id_);
+    share::ObReentrantThread::wait();
+    share::ObReentrantThread::destroy();
     is_first_time_to_start_ = true;
   }
-  LOG_INFO("[TENANT THREAD] thread wait finish", K(tg_id_), K(thread_name_));
+  LOG_INFO("[TENANT THREAD] thread wait finish", K(thread_cnt_), K(thread_name_));
 }
 void ObTenantThreadHelper::destroy()
 {
-  LOG_INFO("[TENANT THREAD] thread destory start", K(tg_id_), K(thread_name_));
-  if (-1 != tg_id_) {
-    TG_STOP(tg_id_);
+  LOG_INFO("[TENANT THREAD] thread destory start", K(thread_cnt_), K(thread_name_));
+  if (is_created_) {
+    if (!is_first_time_to_start_) {
+      share::ObReentrantThread::stop();
+    }
     {
       ObThreadCondGuard guard(thread_cond_); 
       thread_cond_.broadcast();
     }
-    TG_WAIT(tg_id_);
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
+    if (!is_first_time_to_start_) {
+      share::ObReentrantThread::wait();
+      share::ObReentrantThread::destroy();
+    }
+    thread_cond_.destroy();
   }
   is_created_ = false;
   is_first_time_to_start_ = true;
-  LOG_INFO("[TENANT THREAD] thread destory finish", K(tg_id_), K(thread_name_));
+  thread_cnt_ = 0;
+  LOG_INFO("[TENANT THREAD] thread destory finish", K(thread_cnt_), K(thread_name_));
 }
 
 void ObTenantThreadHelper::switch_to_follower_forcedly()
@@ -141,7 +150,7 @@ void ObTenantThreadHelper::switch_to_follower_forcedly()
 int ObTenantThreadHelper::switch_to_leader()
 {
   int ret = OB_SUCCESS;
-  LOG_INFO("[TENANT THREAD] thread start", K(tg_id_), K(thread_name_));
+  LOG_INFO("[TENANT THREAD] thread start", K(thread_cnt_), K(thread_name_));
   if (OB_FAIL(start())) {
     LOG_WARN("failed to start thread", KR(ret));
   } else {
@@ -150,7 +159,7 @@ int ObTenantThreadHelper::switch_to_leader()
       LOG_WARN("failed to weakup thread cond", KR(ret));
     }
   }
-  LOG_INFO("[TENANT THREAD] thread start finish", K(tg_id_), K(thread_name_));
+  LOG_INFO("[TENANT THREAD] thread start finish", K(thread_cnt_), K(thread_name_));
   return ret;
 }
 
@@ -189,7 +198,7 @@ int ObTenantThreadHelper::wait_tenant_schema_and_version_ready_()
   return ret;
 }
 
-void ObTenantThreadHelper::run1() {
+void ObTenantThreadHelper::run2() {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_created_)) {
     ret = OB_NOT_INIT;

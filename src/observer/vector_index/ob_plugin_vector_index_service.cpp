@@ -1044,20 +1044,11 @@ void ObPluginVectorIndexService::destroy()
 
     // destroy vec async task
     if (OB_NOT_NULL(tenant_vec_async_task_sched_)) {
-      tenant_vec_async_task_sched_->destroy();  // destroy tg_id_
+      tenant_vec_async_task_sched_->destroy();
       ob_free(tenant_vec_async_task_sched_);
       tenant_vec_async_task_sched_ = nullptr;
     }
 
-    // TODO: destory shared tg_id
-    if (kmeans_tg_id_ != OB_INVALID_TG_ID) {
-      TG_DESTROY(kmeans_tg_id_);
-      kmeans_tg_id_ = OB_INVALID_TG_ID;
-    }
-    if (embedding_tg_id_ != OB_INVALID_TG_ID) {
-      TG_DESTROY(embedding_tg_id_);
-      embedding_tg_id_ = OB_INVALID_TG_ID;
-    }
   }
 }
 
@@ -1170,7 +1161,7 @@ int ObPluginVectorIndexService::alloc_tenant_vec_async_task_sched()
   }
   if (OB_FAIL(ret)) {
     if (OB_NOT_NULL(tenant_vec_async_task_sched_)) {
-      tenant_vec_async_task_sched_->destroy();  // destroy tg_id_
+      tenant_vec_async_task_sched_->destroy();
       ob_free(tenant_vec_async_task_sched_);
       tenant_vec_async_task_sched_ = nullptr;
     }
@@ -1930,17 +1921,6 @@ int ObPluginVectorIndexService::acquire_ivf_cache_mgr_guard(ObLSID ls_id,
     }
   }
 
-  return ret;
-}
-
-int ObPluginVectorIndexService::start_kmeans_tg()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::VectorTaskPool, kmeans_tg_id_))) {
-    LOG_WARN("TG_CREATE_TENANT failed for kmeans thread pool", KR(ret));
-  } else if (OB_FAIL(TG_START(kmeans_tg_id_))) {
-    LOG_WARN("TG_START failed for kmeans thread pool", KR(ret));
-  }
   return ret;
 }
 

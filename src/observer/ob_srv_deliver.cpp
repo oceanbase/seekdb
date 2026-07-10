@@ -18,6 +18,8 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/ob_srv_deliver.h"
+#include "lib/cpu/ob_cpu_topology.h"
+#include "lib/ob_running_mode.h"
 #include "share/rc/ob_module_provider.h"
 
 #include "util/easy_mod_stat.h"
@@ -46,6 +48,23 @@ namespace observer
 ObString extract_user_name(const ObString &in);
 int extract_user_tenant(const ObString &in, ObString &user_name, ObString &tenant_name);
 }  // namespace observer
+
+namespace
+{
+int64_t get_parallel_ddl_thread_cnt()
+{
+  const int64_t normal_thread_cnt = MIN(MAX(common::get_cpu_count() / 2, 1L), 24L);
+  return lib::is_mini_mode() ? 1 : normal_thread_cnt;
+}
+
+int64_t get_diagnose_thread_cnt()
+{
+  return lib::is_mini_mode()
+      ? observer::ObSrvDeliver::MINI_MODE_MYSQL_DIAG_TASK_THREAD_CNT
+      : observer::ObSrvDeliver::MYSQL_DIAG_TASK_THREAD_CNT;
+}
+} // namespace
+
 int get_endpoint_tenant(char *endpoint_tenant_mapping_buf, const int64_t vid, const ObAddr &vaddr, ObString &tenant_name)
 {
   int ret = OB_SUCCESS;
@@ -309,15 +328,15 @@ void ObSrvDeliver::stop()
     ddl_queue_->wait();
   }
   if (NULL != ddl_parallel_queue_) {
-    TG_STOP(lib::TGDefIDs::DDLPQueueTh);
-    TG_WAIT(lib::TGDefIDs::DDLPQueueTh);
+    ddl_parallel_queue_->stop();
+    ddl_parallel_queue_->wait();
   }
 }
 
-int ObSrvDeliver::create_queue_thread(int tg_id, const char *thread_name, QueueThread *&qthread)
+int ObSrvDeliver::create_queue_thread(int64_t thread_cnt, const char *thread_name, QueueThread *&qthread)
 {
   int ret = OB_SUCCESS;
-  qthread = OB_NEW(QueueThread, ObModIds::OB_RPC, thread_name);
+  qthread = OB_NEW(QueueThread, ObModIds::OB_RPC, thread_name, thread_cnt);
   if (OB_ISNULL(qthread)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(qthread->init())) {
@@ -326,8 +345,7 @@ int ObSrvDeliver::create_queue_thread(int tg_id, const char *thread_name, QueueT
     qthread->queue_.set_qhandler(&qhandler_);
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(qthread)) {
-    qthread->tg_id_ = tg_id;
-    ret = TG_SET_RUNNABLE_AND_START(tg_id, qthread->thread_);
+    ret = qthread->start();
   }
   return ret;
 }
@@ -337,9 +355,9 @@ int ObSrvDeliver::init_queue_threads()
   int ret = OB_SUCCESS;
 
   // TODO: fufeng, make it configurable
-  if (OB_FAIL(create_queue_thread(lib::TGDefIDs::DDLQueueTh, "DDLQueueTh", ddl_queue_))) {
-  } else if (OB_FAIL(create_queue_thread(lib::TGDefIDs::DDLPQueueTh, PARALLEL_DDL_THREAD_NAME, ddl_parallel_queue_))) {
-  } else if (OB_FAIL(create_queue_thread(lib::TGDefIDs::DiagnoseQueueTh,
+  if (OB_FAIL(create_queue_thread(DDL_TASK_THREAD_CNT, "DDLQueueTh", ddl_queue_))) {
+  } else if (OB_FAIL(create_queue_thread(get_parallel_ddl_thread_cnt(), PARALLEL_DDL_THREAD_NAME, ddl_parallel_queue_))) {
+  } else if (OB_FAIL(create_queue_thread(get_diagnose_thread_cnt(),
                                          "DiagnoseQueueTh", diagnose_queue_))) {
   } else {
     LOG_INFO("queue thread create successfully", K_(host));

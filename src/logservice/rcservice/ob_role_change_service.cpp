@@ -111,7 +111,6 @@ int RoleChangeEventSet::remove(const RoleChangeEvent &event)
 ObRoleChangeService::ObRoleChangeService() : ls_service_(NULL),
                                              apply_service_(NULL),
                                              replay_service_(NULL),
-                                             tg_id_(-1),
                                              cur_task_info_(),
                                              is_inited_(false)
 {
@@ -129,21 +128,25 @@ int ObRoleChangeService::init(storage::ObLSService *ls_service,
                               logservice::ObILogReplayService *replay_service)
 {
   int ret = OB_SUCCESS;
-  const int tg_id = lib::TGDefIDs::RCService;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(ls_service) || OB_ISNULL(apply_service) || OB_ISNULL(replay_service)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(ret), KP(ls_service), KP(apply_service), KP(replay_service));
-  } else if (OB_FAIL(TG_CREATE_TENANT(tg_id, tg_id_))) {
-    CLOG_LOG(WARN, "ObRoleChangeService TG_CREATE failed", K(ret));
+  } else if (OB_FAIL(common::ObSimpleThreadPool::init(MAX_THREAD_NUM, MAX_RC_EVENT_TASK, "RCSrv"))) {
+    CLOG_LOG(WARN, "ObRoleChangeService thread pool init failed", K(ret));
+  } else if (OB_FAIL(common::ObSimpleThreadPool::set_adaptive_thread(MAX_THREAD_NUM, MAX_THREAD_NUM))) {
+    CLOG_LOG(WARN, "ObRoleChangeService set thread count failed", K(ret));
   } else {
     cur_task_info_.reset();
     ls_service_ = ls_service;
     apply_service_ = apply_service;
     replay_service_ = replay_service;
     is_inited_ = true;
-    CLOG_LOG(INFO, "ObRoleChangeService init success", K(ret), K(tg_id_), KP(ls_service), KP(apply_service), KP(replay_service));
+    CLOG_LOG(INFO, "ObRoleChangeService init success", K(ret), KP(ls_service), KP(apply_service), KP(replay_service));
+  }
+  if (OB_FAIL(ret) && OB_INIT_TWICE != ret) {
+    common::ObSimpleThreadPool::destroy();
   }
   return ret;
 }
@@ -153,10 +156,12 @@ int ObRoleChangeService::start()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
-    CLOG_LOG(WARN, "ObRoleChangeService start failed", K(ret), K(tg_id_));
+  } else if (common::ObSimpleThreadPool::get_thread_count() <= 0
+      && !common::ObSimpleThreadPool::try_expand_one(MAX_THREAD_NUM)) {
+    ret = OB_ERR_UNEXPECTED;
+    CLOG_LOG(WARN, "ObRoleChangeService start failed", K(ret));
   } else {
-    CLOG_LOG(INFO, "ObRoleChangeService start success", K(ret), K(tg_id_));
+    CLOG_LOG(INFO, "ObRoleChangeService start success", K(ret));
   }
   return ret;
 }
@@ -164,18 +169,18 @@ int ObRoleChangeService::start()
 void ObRoleChangeService::wait()
 {
   if (IS_INIT) {
-    TG_STOP(tg_id_);
-    TG_WAIT(tg_id_);
+    common::ObSimpleThreadPool::stop();
+    common::ObSimpleThreadPool::wait();
   }
-  CLOG_LOG(INFO, "ObRoleChangeService wait finish", K(tg_id_));
+  CLOG_LOG(INFO, "ObRoleChangeService wait finish");
 }
 
 void ObRoleChangeService::stop()
 {
   if (IS_INIT) {
-    TG_STOP(tg_id_);
+    common::ObSimpleThreadPool::stop();
   }
-  CLOG_LOG(INFO, "ObRoleChangeService stop finish", K(tg_id_));
+  CLOG_LOG(INFO, "ObRoleChangeService stop finish");
 }
 
 void ObRoleChangeService::destroy()
@@ -183,10 +188,9 @@ void ObRoleChangeService::destroy()
   if (IS_INIT) {
     (void)stop();
     (void)wait();
-    TG_DESTROY(tg_id_);
+    common::ObSimpleThreadPool::destroy();
     is_inited_ = false;
     cur_task_info_.reset();
-    tg_id_ = -1;
     ls_service_ = NULL;
     apply_service_ = NULL;
     replay_service_ = NULL;
@@ -284,7 +288,7 @@ int ObRoleChangeService::push_event_into_queue_(const RoleChangeEvent &event)
     }
   } while(OB_FAIL(ret));
 
-  if (OB_FAIL(TG_PUSH_TASK(tg_id_, rc_event))) {
+  if (OB_FAIL(common::ObSimpleThreadPool::push(rc_event))) {
     CLOG_LOG(WARN, "ObRoleChangeTask push task failed", K(ret), K(event));
   }
   if (OB_FAIL(ret) && NULL != rc_event) {

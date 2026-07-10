@@ -60,18 +60,11 @@ int ObTenantSeqGenerator::start()
 
 void ObTenantSeqGenerator::stop()
 {
-  if (tg_id_ != -1) {
-    TG_STOP(tg_id_);
-  }
 }
 
 
 void ObTenantSeqGenerator::destroy()
 {
-  if (tg_id_ != -1) {
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
-  }
   persister_ = nullptr;
   curr_seqs_.reset();
   preallocated_seqs_.reset();

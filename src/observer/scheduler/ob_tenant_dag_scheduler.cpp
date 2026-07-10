@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 #include "ob_tenant_dag_scheduler.h"
 #include "share/rc/ob_module_provider.h"
-#include "lib/thread/thread_mgr.h"
+#include "lib/thread/ob_thread_name.h"
 #include "storage/compaction/ob_tenant_compaction_progress.h"
 #include "storage/compaction/ob_compaction_dag_ranker.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
@@ -1912,11 +1912,11 @@ _RLOCAL(bool, ObTenantDagWorker::is_reserve_mode_);
 _RLOCAL(compaction::ObCompactionMemoryContext *, ObTenantDagWorker::mem_ctx_);
 
 ObTenantDagWorker::ObTenantDagWorker()
-  : task_(NULL),
+  : lib::ThreadPool(1),
+    task_(NULL),
     status_(DWS_FREE),
     check_period_(0),
     last_check_time_(0),
-    tg_id_(-1),
     hold_by_compaction_dag_(false),
     is_inited_(false)
 {
@@ -1935,8 +1935,8 @@ int ObTenantDagWorker::init(const int64_t check_period)
     COMMON_LOG(WARN, "dag worker is inited twice", K(ret));
   } else if (OB_FAIL(cond_.init(ObWaitEventIds::DAG_WORKER_COND_WAIT))) {
     COMMON_LOG(WARN, "failed to init cond", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::DagWorker, tg_id_))) {
-    COMMON_LOG(WARN, "TG create dag worker failed", K(ret));
+  } else if (OB_FAIL(lib::ThreadPool::init())) {
+    COMMON_LOG(WARN, "init dag worker thread failed", K(ret));
   } else {
     check_period_ = check_period;
     is_inited_ = true;
@@ -1953,7 +1953,7 @@ int ObTenantDagWorker::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantDagWorker not init", K(ret));
-  } else if (OB_FAIL(TG_SET_RUNNABLE_AND_START(tg_id_, *this))) {
+  } else if (OB_FAIL(lib::ThreadPool::start())) {
     LOG_WARN("failed to start ObTenantDagWorker", K(ret));
   }
   return ret;
@@ -1961,13 +1961,13 @@ int ObTenantDagWorker::start()
 
 void ObTenantDagWorker::stop()
 {
-  TG_STOP(tg_id_);
+  lib::ThreadPool::stop();
   notify(DWS_STOP);
 }
 
 void ObTenantDagWorker::wait()
 {
-  TG_WAIT(tg_id_);
+  lib::ThreadPool::wait();
 }
 
 void ObTenantDagWorker::destroy()
@@ -1987,7 +1987,7 @@ void ObTenantDagWorker::reset()
   last_check_time_ = 0;
   self_ = NULL;
   is_inited_ = false;
-  TG_DESTROY(tg_id_);
+  lib::ThreadPool::destroy();
 }
 
 void ObTenantDagWorker::notify(DagWorkerStatus status)
@@ -4277,9 +4277,9 @@ int ObTenantDagScheduler::mtl_init(ObTenantDagScheduler* &scheduler)
 }
 
 ObTenantDagScheduler::ObTenantDagScheduler()
-  : is_inited_(false),
+  : lib::ThreadPool(1),
+    is_inited_(false),
     fast_schedule_dag_net_(false),
-    tg_id_(-1),
     dag_cnt_(0),
     dag_limit_(0),
     compaction_dag_limit_(0),
@@ -4303,12 +4303,12 @@ ObTenantDagScheduler::~ObTenantDagScheduler()
 
 void ObTenantDagScheduler::stop()
 {
-  TG_STOP(tg_id_);
+  lib::ThreadPool::stop();
 }
 
 void ObTenantDagScheduler::wait()
 {
-  TG_WAIT(tg_id_);
+  lib::ThreadPool::wait();
 }
 
 void ObTenantDagScheduler::reload_config()
@@ -4360,8 +4360,8 @@ int ObTenantDagScheduler::init(
     COMMON_LOG(WARN, "init ObTenantDagScheduler with invalid arguments", K(ret), K(dag_limit));
   } else if (OB_FAIL(scheduler_sync_.init(ObWaitEventIds::SCHEDULER_COND_WAIT))) {
     COMMON_LOG(WARN, "failed to init scheduler sync", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::DagScheduler, tg_id_))) {
-    COMMON_LOG(WARN, "TG create dag scheduler failed", K(ret));
+  } else if (OB_FAIL(lib::ThreadPool::init())) {
+    COMMON_LOG(WARN, "init dag scheduler thread failed", K(ret));
   } else if (OB_FAIL(init_allocator(ObModIds::OB_SCHEDULER, mem_context_))) {
     COMMON_LOG(WARN, "failed to init scheduler allocator", K(ret));
   } else if (OB_FAIL(init_allocator("HAScheduler", ha_mem_context_))) {
@@ -4401,7 +4401,7 @@ int ObTenantDagScheduler::init(
     }
   }
 
-  if (FAILEDx(TG_SET_RUNNABLE_AND_START(tg_id_, *this))) {
+  if (FAILEDx(lib::ThreadPool::start())) {
     COMMON_LOG(WARN, "failed to start dag scheduler", K(ret));
   } else {
     is_inited_ = true;
@@ -4475,8 +4475,7 @@ void ObTenantDagScheduler::reset()
   MEMSET(scheduled_dag_cnts_, 0, sizeof(scheduled_dag_cnts_));
   MEMSET(scheduled_task_cnts_, 0, sizeof(scheduled_task_cnts_));
   MEMSET(scheduled_data_size_, 0, sizeof(scheduled_data_size_));
-  TG_DESTROY(tg_id_);
-  tg_id_ = -1;
+  lib::ThreadPool::destroy();
   COMMON_LOG(INFO, "ObTenantDagScheduler destroyed");
 }
 

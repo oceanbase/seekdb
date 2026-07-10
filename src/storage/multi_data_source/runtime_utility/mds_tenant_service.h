@@ -20,6 +20,7 @@
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string_holder.h"
+#include "lib/task/ob_timer.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
@@ -54,9 +55,11 @@ class ObTenantMdsService
 public:
   ObTenantMdsService() : is_inited_(false),
                          recyle_timer_task_(*this),
-                         recyle_timer_id_(-1),
-                         dump_status_timer_id_(-1) {}
+                         recyle_timer_(),
+                         dump_status_timer_() {}
   ~ObTenantMdsService() {
+    recyle_timer_.destroy();
+    dump_status_timer_.destroy();
     MDS_LOG_RET(INFO, OB_SUCCESS, "ObTenantMdsAllocator destructed");
   }
   static int mtl_init(ObTenantMdsService* &);
@@ -109,8 +112,8 @@ private:
   RecyleTimerTask recyle_timer_task_;
   DumpStatusTimerTask dump_status_timer_task_;
 
-  int recyle_timer_id_;
-  int dump_status_timer_id_;
+  common::ObTimer recyle_timer_;
+  common::ObTimer dump_status_timer_;
 };
 
 }  // namespace mds

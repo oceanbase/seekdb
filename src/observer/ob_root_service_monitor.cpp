@@ -39,6 +39,7 @@ ObRootServiceMonitor::ObRootServiceMonitor(ObRootService &root_service)
   : inited_(false),
     root_service_(root_service),
     fail_count_(0),
+    timer_(),
     timer_task_(*this)
 {
 }
@@ -56,6 +57,8 @@ int ObRootServiceMonitor::init()
   if (inited_) {
     ret = OB_INIT_TWICE;
     FLOG_WARN("init twice", KR(ret));
+  } else if (OB_FAIL(timer_.init("RootSvcMonitor", ObMemAttr("RootSvcMon")))) {
+    FLOG_WARN("init root service monitor timer failed", KR(ret));
   } else {
     inited_ = true;
   }
@@ -82,10 +85,8 @@ int ObRootServiceMonitor::start()
   if (!inited_) {
     ret = OB_NOT_INIT;
     FLOG_WARN("not init", KR(ret));
-  } else if (OB_FAIL(TG_START(lib::TGDefIDs::RootServiceMonitor))) {
-    FLOG_WARN("start root service monitor thread failed", KR(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::RootServiceMonitor, timer_task_,
-                                 MONITOR_ROOT_SERVICE_INTERVAL_US, true/*repeat*/, false/*immediate*/))) {
+  } else if (OB_FAIL(timer_.schedule(
+      timer_task_, MONITOR_ROOT_SERVICE_INTERVAL_US, true/*repeat*/, false/*immediate*/))) {
     FLOG_WARN("failed to schedule root service monitor timer task", K(ret));
   }
   return ret;
@@ -98,7 +99,7 @@ void ObRootServiceMonitor::stop()
     ret = OB_NOT_INIT;
     FLOG_WARN("not init", KR(ret));
   } else {
-    TG_STOP(lib::TGDefIDs::RootServiceMonitor);
+    timer_.stop();
   }
 }
 
@@ -109,7 +110,7 @@ void ObRootServiceMonitor::wait()
     ret = OB_NOT_INIT;
     FLOG_WARN("not init", KR(ret));
   } else {
-    TG_WAIT(lib::TGDefIDs::RootServiceMonitor);
+    timer_.wait();
   }
 }
 

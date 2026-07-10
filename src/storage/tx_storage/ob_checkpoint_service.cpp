@@ -49,7 +49,7 @@ int ObCheckPointService::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObCheckPointService init twice.", K(ret));
-  } else if (OB_FAIL(freeze_thread_.init(lib::TGDefIDs::LSFreeze))) {
+  } else if (OB_FAIL(freeze_thread_.init())) {
     LOG_WARN("fail to initialize freeze thread", K(ret));
   } else {
     is_inited_ = true;
@@ -96,7 +96,7 @@ int ObCheckPointService::stop()
     ret = OB_NOT_INIT;
     LOG_WARN("ObCheckPointService is not initialized", K(ret));
   } else {
-    TG_STOP(freeze_thread_.get_tg_id());
+    freeze_thread_.stop();
     LOG_INFO("ObCheckPointService stoped");
   }
   checkpoint_timer_.stop();
@@ -110,7 +110,7 @@ void ObCheckPointService::wait()
   checkpoint_timer_.wait();
   traversal_flush_timer_.wait();
   check_clog_disk_usage_timer_.wait();
-  TG_WAIT(freeze_thread_.get_tg_id());
+  freeze_thread_.wait();
 }
 
 int ObCheckPointService::add_ls_freeze_task(
@@ -126,7 +126,7 @@ int ObCheckPointService::add_ls_freeze_task(
 
 void ObCheckPointService::destroy()
 {
-  TG_DESTROY(freeze_thread_.get_tg_id());
+  freeze_thread_.destroy();
   is_inited_ = false;
   checkpoint_timer_.destroy();
   traversal_flush_timer_.destroy();

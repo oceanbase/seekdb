@@ -20,6 +20,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/atomic/ob_atomic.h"
 #include "lib/allocator/page_arena.h"
+#include "lib/task/ob_timer.h"
 #include "sql/plan_cache/ob_prepare_stmt_struct.h"
 
 namespace oceanbase
@@ -189,7 +190,7 @@ private:
   lib::MemoryContext mem_context_;
   common::ObIAllocator *inner_allocator_;
   ObPsCacheEliminationTask evict_task_;
-  int tg_id_;
+  common::ObTimer evict_timer_;
 };
 
 } // end namespace sql

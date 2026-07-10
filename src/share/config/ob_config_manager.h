@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_SHARE_CONFIG_OB_CONFIG_MANAGER_H_
 #define OCEANBASE_SHARE_CONFIG_OB_CONFIG_MANAGER_H_
 
-#include "lib/thread/thread_mgr_interface.h"
 #include "share/config/ob_server_config.h"
 #include "share/config/ob_system_config.h"
 #include "share/config/ob_reload_config.h"

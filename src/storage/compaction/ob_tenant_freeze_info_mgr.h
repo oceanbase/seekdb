@@ -194,7 +194,7 @@ private:
   common::RWLock lock_;
   int64_t cur_idx_;
   int64_t last_change_ts_;
-  int tg_id_;
+  common::ObTimer reload_timer_;
   bool inited_;
 };
 

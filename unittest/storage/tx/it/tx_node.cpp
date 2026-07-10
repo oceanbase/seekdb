@@ -123,7 +123,6 @@ ObTxNode::ObTxNode(const int64_t ls_id,
   addr.to_string(name_buf_, sizeof(name_buf_));
   msg_consumer_.set_name(name_);
   role_ = Leader;
-  tenant_.enable_tenant_ctx_check_ = false;
   provider_.tenant_freezer_ = &fake_tenant_freezer_;
   provider_.part_trans_ctx_obj_pool_ = &fake_part_trans_ctx_pool_;
   fake_shared_mem_alloc_mgr_.init();

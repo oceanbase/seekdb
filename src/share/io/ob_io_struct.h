@@ -23,7 +23,7 @@
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"
 #include "lib/lock/ob_mutex.h"
 #include "lib/lock/ob_drw_lock.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/threads.h"
 #include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/queue/ob_link_queue.h"
 #include "lib/queue/ob_fixed_queue.h"
@@ -303,7 +303,7 @@ private:
   int64_t last_ts_;
 };
 
-class ObIOTuner : public lib::TGRunnable
+class ObIOTuner : public lib::Threads
 {
 public:
   ObIOTuner();
@@ -355,7 +355,7 @@ protected:
 };
 
 
-class ObAsyncIOChannel : public ObIOChannel, public lib::TGRunnable
+class ObAsyncIOChannel : public ObIOChannel, public lib::Threads
 {
 public:
   ObAsyncIOChannel();
@@ -388,7 +388,7 @@ private:
   static const int64_t AIO_POLLING_TIMEOUT_NS = 1000L * 1000L * 1000L - 1L; // almost 1s, for timespec_valid check
 private:
   bool is_inited_;
-  int tg_id_; // thread group id
+  bool thread_inited_;
   ObIOContext *io_context_;
   ObIOEvents *io_events_;
   struct timespec polling_timeout_;
@@ -538,7 +538,7 @@ enum ObDeviceHealthStatus
 
 const char *device_health_status_to_str(const ObDeviceHealthStatus dhs);
 
-class ObIOFaultDetector : public lib::TGTaskHandler
+class ObIOFaultDetector : public common::ObSimpleThreadPool
 {
 public:
   ObIOFaultDetector(const ObIOConfig &io_config);
@@ -564,6 +564,7 @@ private:
 
 private:
   static const int64_t WRITE_FAILURE_DETECT_EVENT_COUNT = 100;
+  static const int64_t IO_HEALTH_QUEUE_DEPTH = 100;
   bool is_inited_;
   ObSpinLock lock_;
   const ObIOConfig &io_config_;

@@ -47,7 +47,7 @@ void LogIOWorkerWrapper::destroy()
   is_user_tenant_ = false;
 }
 int LogIOWorkerWrapper::init(const LogIOWorkerConfig &config,
-                             int cb_thread_pool_tg_id,
+                             LogIOTaskCbThreadPool *cb_thread_pool,
                              ObIAllocator *allocator,
                              IPalfEnvImpl *palf_env_impl)
 {
@@ -56,11 +56,11 @@ int LogIOWorkerWrapper::init(const LogIOWorkerConfig &config,
     ret = OB_INIT_TWICE;
     LOG_WARN("LogIOWorkerWrapper has inited twice", K(config));
   } else if (!config.is_valid() || OB_UNLIKELY(!true)
-             || 0 >= cb_thread_pool_tg_id || OB_ISNULL(allocator) || OB_ISNULL(palf_env_impl)) {
+             || OB_ISNULL(cb_thread_pool) || OB_ISNULL(allocator) || OB_ISNULL(palf_env_impl)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(config), K(cb_thread_pool_tg_id), KP(allocator),
+    LOG_WARN("invalid argument", K(config), KP(cb_thread_pool), KP(allocator),
              KP(palf_env_impl));
-  } else if (OB_FAIL(create_and_init_log_io_workers_(config, cb_thread_pool_tg_id,
+  } else if (OB_FAIL(create_and_init_log_io_workers_(config, cb_thread_pool,
                                           allocator, palf_env_impl))) {
     LOG_WARN("init_log_io_workers_ failed", K(config));
   } else {
@@ -138,7 +138,7 @@ int64_t LogIOWorkerWrapper::get_last_working_time() const
 }
 
 int LogIOWorkerWrapper::create_and_init_log_io_workers_(const LogIOWorkerConfig &config,
-                                                        const int cb_thread_pool_tg_id,
+                                                        LogIOTaskCbThreadPool *cb_thread_pool,
                                                         ObIAllocator *allocator,
                                                         IPalfEnvImpl *palf_env_impl)
 {
@@ -156,14 +156,14 @@ int LogIOWorkerWrapper::create_and_init_log_io_workers_(const LogIOWorkerConfig 
     iow = new(iow)LogIOWorker();
     // NB:only sys log streams of user tenants need to ignore throtting
     bool need_ignoring_throttling = false;
-    if (OB_FAIL(iow->init(config, cb_thread_pool_tg_id, allocator,
+    if (OB_FAIL(iow->init(config, cb_thread_pool, allocator,
                           &throttle_, need_ignoring_throttling, palf_env_impl))) {
       PALF_LOG(WARN, "init LogIOWorker failed", K(i), K(config),
-               K(cb_thread_pool_tg_id), KP(allocator), KP(palf_env_impl));
+               KP(cb_thread_pool), KP(allocator), KP(palf_env_impl));
     } else {
       log_writer_parallelism_++;
       PALF_LOG(INFO, "init LogIOWorker success", K(i), K(config),
-               K(cb_thread_pool_tg_id), KP(allocator), KP(palf_env_impl), KP(iow),
+               KP(cb_thread_pool), KP(allocator), KP(palf_env_impl), KP(iow),
                KP(log_io_workers_));
     }
   }

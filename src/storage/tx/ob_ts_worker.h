@@ -18,7 +18,7 @@
 #define OCEANBASE_TRANSACTION_OB_TS_WORKER_
 
 #include "lib/utility/utility.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/ob_simple_thread_pool.h"
 #include "share/ob_define.h"
 
 namespace oceanbase
@@ -27,25 +27,26 @@ namespace transaction
 {
 class ObTsResponseTask;
 class ObTsMgr;
-class ObTsWorker : public lib::TGTaskHandler
+class ObTsWorker : public common::ObSimpleThreadPool
 {
 public:
-  ObTsWorker() : is_inited_(false), use_local_worker_(false), ts_mgr_(NULL), tg_id_(-1) {}
+  ObTsWorker() : is_inited_(false), use_local_worker_(false), ts_mgr_(NULL) {}
   ~ObTsWorker() {}
   int init(ObTsMgr *ts_mgr, const bool use_local_worker = false);
   void stop();
   void wait();
   void destroy();
-public:
   int push_task(ObTsResponseTask *task);
+protected:
   void handle(void *task);
 public:
   static const int64_t MAX_TASK_NUM = 10240;
 private:
+  int64_t get_thread_count_() const;
+private:
   bool is_inited_;
   bool use_local_worker_;
   ObTsMgr *ts_mgr_;
-  int tg_id_;
 };
 
 } // transaction

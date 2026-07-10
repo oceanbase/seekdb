@@ -21,8 +21,6 @@
 #include "lib/ob_define.h"
 #include "lib/queue/ob_lighty_queue.h"
 #include "lib/task/ob_timer.h"
-#include "lib/thread/thread_mgr.h"
-#include "lib/thread/thread_mgr_interface.h"
 
 namespace oceanbase
 {

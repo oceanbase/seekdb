@@ -16,7 +16,6 @@
 #ifndef OCEANBASE_LOG_ROUTE_SERVICE_H_
 #define OCEANBASE_LOG_ROUTE_SERVICE_H_
 
-#include "lib/thread/thread_mgr_interface.h"// TGTaskHandler
 #include "logservice/palf/lsn.h"            // LSN
 #include "share/ob_server_struct.h"         // GCTX
 
@@ -39,7 +38,7 @@ namespace logservice
  *    ......
  *
  */
-class ObLogRouteService : public lib::TGTaskHandler
+class ObLogRouteService
 {
 public:
   ObLogRouteService();
@@ -82,7 +81,7 @@ public:
   void stop();
   void wait();
   void destroy();
-  virtual void handle(void *task);
+  void handle(void *task);
 
 public:
   // Get the server synchronously, iterate over the server for the next service log.
@@ -156,7 +155,7 @@ private:
   public:
     explicit ObLSRouteTimerTask(ObLogRouteService &log_route_service);
     virtual ~ObLSRouteTimerTask() {}
-    int init(int tg_id);
+    int init(int thread_id);
     void destroy();
     virtual void runTimerTask() override;
   private:
@@ -179,4 +178,3 @@ private:
 } // namespace oceanbase
 
 #endif
-

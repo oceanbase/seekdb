@@ -43,7 +43,7 @@ int ObDBMSSchedService::init()
     LOG_WARN("[DBMS_SCHED_SERVICE] job master init failed");
   } else if (OB_FAIL(ObTenantThreadHelper::create(
       "DBMSSched",
-      lib::TGDefIDs::DBMSSchedService,
+      1,
       *this))) {
     LOG_WARN("[DBMS_SCHED_SERVICE] fail to create thread", KR(ret));
   } else {

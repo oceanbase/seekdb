@@ -21,7 +21,6 @@
 #include "lib/queue/ob_priority_queue.h"            // ObTLinkQueue16
 #include "lib/utility/ob_macro_utils.h"             // DISALLOW_COPY_AND_ASSIGN
 #include "lib/utility/ob_print_utils.h"             // TO_STRING_KV
-#include "lib/thread/thread_mgr_interface.h"        // TGTaskHandler
 #include "lib/container/ob_fixed_array.h"           // ObSEArrayy
 #include "lib/hash/ob_array_hash_map.h"             // ObArrayHashMap
 #include "lib/atomic/ob_atomic.h"                   // ATOMIC_LOAD
@@ -41,6 +40,7 @@ class ObIAllocator;
 namespace palf
 {
 class LogIOTask;
+class LogIOTaskCbThreadPool;
 class IPalfEnvImpl;
 
 struct LogIOWorkerConfig
@@ -77,7 +77,7 @@ public:
   LogIOWorker();
   ~LogIOWorker();
   int init(const LogIOWorkerConfig &config,
-           const int cb_thread_pool_tg_id,
+           LogIOTaskCbThreadPool *cb_thread_pool,
            ObIAllocator *allocaotr,
            LogWritingThrottle *throttle,
            const bool need_ignore_throttle,
@@ -90,7 +90,7 @@ public:
 
  int notify_need_writing_throttling(const bool &need_throtting);
   static constexpr int64_t MAX_THREAD_NUM = 1;
-  TO_STRING_KV(K_(log_io_worker_num), K_(cb_thread_pool_tg_id), K_(purge_throttling_task_handled_seq), K_(purge_throttling_task_submitted_seq));
+  TO_STRING_KV(K_(log_io_worker_num), KP_(cb_thread_pool), K_(purge_throttling_task_handled_seq), K_(purge_throttling_task_submitted_seq));
 private:
   bool need_reduce_(LogIOTask *task);
   int reduce_io_task_(ObLink *task);
@@ -112,7 +112,7 @@ private:
     int init(int64_t batch_width, int64_t batch_depth, ObIAllocator *allocator, ObMiniStat::ObStatItem *wait_cost_stat);
     void destroy();
     int insert(LogIOFlushLogTask *io_task);
-    int handle(const int64_t tg_id, IPalfEnvImpl *palf_env_impl);
+    int handle(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl);
     bool empty();
     TO_STRING_KV(K_(batch_io_task_array), K_(usable_count), K_(batch_width));
   private:
@@ -135,7 +135,7 @@ private:
 
   // NB: at nowdays, the default 'log_io_worker_num_' is 1.
   int64_t log_io_worker_num_;
-  int cb_thread_pool_tg_id_;
+  LogIOTaskCbThreadPool *cb_thread_pool_;
   IPalfEnvImpl *palf_env_impl_;
   ObTLinkQueue16 queue_;
   BatchLogIOFlushLogTaskMgr batch_io_task_mgr_;

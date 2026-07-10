@@ -23,7 +23,8 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/profile/ob_trace_id.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/ob_async_task_queue.h"
+#include "lib/thread/thread_pool.h"
 #include "share/location_cache/ob_location_struct.h"
 #include "share/ob_errno.h"
 #include "share/ob_thread_pool.h"
@@ -139,7 +140,7 @@ private:
   common::ObConcurrentFIFOAllocator allocator_;
 };
 
-class ObDDLTaskExecutor : public lib::TGRunnable
+class ObDDLTaskExecutor : public lib::ThreadPool
 {
 public:
   ObDDLTaskExecutor();
@@ -158,7 +159,6 @@ private:
   bool is_inited_;
   TaskQueue task_queue_;
   common::ObThreadCond cond_;
-  int tg_id_;
 };
 
 template <typename T>
@@ -194,9 +194,10 @@ public:
   int push_task(ObAsyncTask &task);
 
 private:
+  int64_t get_thread_cnt_() const;
   bool is_thread_started_;
   bool is_stopped_;
-  int tg_id_;
+  ObAsyncTaskQueue task_queue_;
 };
 
 }  // end namespace share

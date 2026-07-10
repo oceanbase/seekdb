@@ -26,7 +26,7 @@
 #endif
 #include <utility>
 #include "lib/signal/ob_signal_struct.h"
-#include "lib/thread/thread_mgr.h"
+#include "lib/thread/ob_thread_name.h"
 #include "lib/container/ob_vector.h"
 
 namespace oceanbase
@@ -143,7 +143,8 @@ public:
 #endif // _WIN32
 
 ObMemoryDump::ObMemoryDump()
-  : pending_(0),
+  : lib::ThreadPool(1),
+    pending_(0),
     print_buf_(nullptr),
     dump_context_(nullptr),
     iter_lock_(),
@@ -208,8 +209,10 @@ int ObMemoryDump::init()
         }
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(TG_SET_RUNNABLE_AND_START(TGDefIDs::MEMORY_DUMP, *this))) {
-          LOG_WARN("start thread pool fail", K(ret));
+        if (OB_FAIL(lib::ThreadPool::init())) {
+          LOG_WARN("memory dump thread pool init fail", K(ret));
+        } else if (OB_FAIL(lib::ThreadPool::start())) {
+          LOG_WARN("start memory dump thread pool fail", K(ret));
         }
       }
     }
@@ -230,18 +233,15 @@ int ObMemoryDump::init()
 void ObMemoryDump::stop()
 {
   if (is_inited_) {
-    {
-      ObThreadCondGuard guard(cond_);
-      cond_.signal();
-    }
-    TG_STOP(TGDefIDs::MEMORY_DUMP);
+    lib::ThreadPool::stop();
+    signal_stop();
   }
 }
 
 void ObMemoryDump::wait()
 {
   if (is_inited_) {
-    TG_WAIT(TGDefIDs::MEMORY_DUMP);
+    lib::ThreadPool::wait();
   }
 }
 
@@ -250,6 +250,7 @@ void ObMemoryDump::destroy()
   if (is_inited_) {
     stop();
     wait();
+    lib::ThreadPool::destroy();
     cond_.destroy();
     is_inited_ = false;
   }

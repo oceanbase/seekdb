@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_DDL_HEART_BEAT_TASK_H
 #define OCEANBASE_STORAGE_OB_DDL_HEART_BEAT_TASK_H
 
+#include "lib/task/ob_timer.h"
 #include "observer/ob_server_struct.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
 
@@ -62,7 +63,7 @@ class ObRedefTableHeartBeatTask : public common::ObTimerTask
 public:
   ObRedefTableHeartBeatTask();
   virtual ~ObRedefTableHeartBeatTask() = default;
-  int init(const int tg_id);
+  int init(common::ObTimer &timer);
   virtual void runTimerTask() override;
 private:
   int send_task_status_to_rs();

@@ -15,7 +15,7 @@
  */
 
 #include "log_io_task_cb_thread_pool.h"
-#include "share/ob_thread_mgr.h"  // OB TG IDs, previously hidden behind the tenant_base include chain, make the dependency explicit
+#include "lib/ob_running_mode.h"
 #include "palf_env_impl.h"                    // PalfEnvImpl
 
 namespace oceanbase
@@ -23,7 +23,8 @@ namespace oceanbase
 namespace palf
 {
 LogIOTaskCbThreadPool::LogIOTaskCbThreadPool()
-    : tg_id_(-1),
+    : common::ObLinkQueueThreadPool(),
+      thread_num_(0),
       palf_env_impl_(NULL),
       is_inited_(false)
 {
@@ -38,20 +39,23 @@ int LogIOTaskCbThreadPool::init(const int64_t log_io_cb_num,
                                 IPalfEnvImpl *palf_env_impl)
 {
   int ret = OB_SUCCESS;
-  const int tg_id = lib::TGDefIDs::LogIOTaskCbThreadPool;
+  const int64_t thread_num = lib::is_mini_mode() ? MINI_MODE_THREAD_NUM : THREAD_NUM;
+  const int64_t task_num_limit = log_io_cb_num;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     PALF_LOG(ERROR, "LogIOTaskCbThreadPool has inited!!!", K(ret));
-  } else if (NULL == palf_env_impl) {
+  } else if (0 >= task_num_limit || NULL == palf_env_impl) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "Invalid argument!!!", K(ret), KPC(palf_env_impl));
-  } else if (OB_FAIL(TG_CREATE_TENANT(tg_id, tg_id_, log_io_cb_num))) {
-    PALF_LOG(WARN, "LogIOTaskCbThreadPool TG_CREATE failed", K(ret));
+    PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(task_num_limit), KPC(palf_env_impl));
+  } else if (OB_FAIL(common::ObLinkQueueThreadPool::init(
+                 thread_num, task_num_limit, "LogIOCB"))) {
+    PALF_LOG(WARN, "LogIOTaskCbThreadPool init failed", K(ret), K(thread_num), K(task_num_limit));
   } else {
+    thread_num_ = thread_num;
     palf_env_impl_ = palf_env_impl;
     is_inited_ = true;
     PALF_LOG(INFO, "LogIOTaskCbThreadPool init success", K(ret),
-        K(tg_id_), KP(palf_env_impl_), KP(palf_env_impl), K(log_io_cb_num));
+        K(thread_num_), KP(palf_env_impl_), KP(palf_env_impl), K(task_num_limit));
   }
   if (OB_FAIL(ret) && OB_INIT_TWICE != ret) {
     destroy();
@@ -65,11 +69,20 @@ int LogIOTaskCbThreadPool::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(ERROR, "LogIOTaskCbThreadPool not inited!!!", K(ret));
-  } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
-    PALF_LOG(ERROR, "start LogIOTaskCbThreadPool failed", K(ret));
   } else {
-    PALF_LOG(INFO, "start LogIOTaskCbThreadPool success", K(ret),
-        K(tg_id_));
+    while (OB_SUCC(ret) && common::ObLinkQueueThreadPool::get_thread_count() < thread_num_) {
+      if (!common::ObLinkQueueThreadPool::try_expand_one(thread_num_)) {
+        ret = OB_ERR_UNEXPECTED;
+        PALF_LOG(ERROR, "start LogIOTaskCbThreadPool failed", K(ret),
+                 K(thread_num_), "cur_thread_cnt", common::ObLinkQueueThreadPool::get_thread_count());
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    PALF_LOG(INFO, "start LogIOTaskCbThreadPool success", K(ret), K(thread_num_));
+  } else {
+    common::ObLinkQueueThreadPool::stop();
+    common::ObLinkQueueThreadPool::wait();
   }
   return ret;
 }
@@ -81,8 +94,8 @@ int LogIOTaskCbThreadPool::stop()
     ret = OB_NOT_INIT;
     PALF_LOG(WARN, "LogIOTaskCbThreadPool not inited!!!", K(ret));
   } else {
-    TG_STOP(tg_id_);
-    PALF_LOG(INFO, "stop LogIOTaskCbThreadPool success", K(tg_id_));
+    common::ObLinkQueueThreadPool::stop();
+    PALF_LOG(INFO, "stop LogIOTaskCbThreadPool success", K(thread_num_));
   }
   return ret;
 }
@@ -94,8 +107,8 @@ int LogIOTaskCbThreadPool::wait()
     ret = OB_NOT_INIT;
     PALF_LOG(WARN, "LogIOTaskCbThreadPool not inited!!!", K(ret));
   } else {
-    TG_WAIT(tg_id_);
-    PALF_LOG(INFO, "wait LogIOTaskCbThreadPool success", K(tg_id_));
+    common::ObLinkQueueThreadPool::wait();
+    PALF_LOG(INFO, "wait LogIOTaskCbThreadPool success", K(thread_num_));
   }
   return ret;
 }
@@ -105,11 +118,9 @@ void LogIOTaskCbThreadPool::destroy()
   stop();
   wait();
   is_inited_ = false;
-  if (-1 != tg_id_) {
-    TG_DESTROY(tg_id_);
-  }
-  tg_id_ = -1;
-  PALF_LOG(INFO, "destroy LogIOTaskCbThreadPool success", K(tg_id_));
+  common::ObLinkQueueThreadPool::destroy();
+  thread_num_ = 0;
+  PALF_LOG(INFO, "destroy LogIOTaskCbThreadPool success", K(thread_num_));
 }
 
 void LogIOTaskCbThreadPool::handle(common::LinkTask *task)
@@ -130,11 +141,6 @@ void LogIOTaskCbThreadPool::handle(common::LinkTask *task)
   if (OB_NOT_NULL(log_io_task)) {
     log_io_task->free_this(palf_env_impl_);
   }
-}
-
-int LogIOTaskCbThreadPool::get_tg_id() const
-{
-  return tg_id_;
 }
 } // end namespace palf
 } // end namespace oceanbase

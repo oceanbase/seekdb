@@ -30,13 +30,13 @@ namespace storage
 {
 ObRedefTableHeartBeatTask::ObRedefTableHeartBeatTask() : is_inited_(false) {}
 
-int ObRedefTableHeartBeatTask::init(const int tg_id)
+int ObRedefTableHeartBeatTask::init(common::ObTimer &timer)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObReDefTableHeartBeatTask has a already been inited", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id, *this, HEARTBEAT_INTERVAL, true))) {
+  } else if (OB_FAIL(timer.schedule(*this, HEARTBEAT_INTERVAL, true))) {
     LOG_WARN("fail to schedule task ObReDefTableHeartBeatTask", K(ret));
   } else {
     is_inited_ = true;

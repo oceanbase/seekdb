@@ -76,6 +76,7 @@ private:
   ObTenantTimezoneMgr();
   bool is_inited_;
   UpdateTenantTZTask update_task_;
+  common::ObTimer timer_;
   common::ObTimeZoneInfoManager *tz_info_mgr_ = nullptr;
   bool usable_;
 public:

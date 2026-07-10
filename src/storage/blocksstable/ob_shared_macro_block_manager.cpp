@@ -70,7 +70,7 @@ ObSharedMacroBlockMgr::ObSharedMacroBlockMgr()
     blocks_mutex_(),
     block_used_size_(),
     defragmentation_task_(*this),
-    tg_id_(-1),
+    defragment_timer_(),
     need_defragment_(false),
     is_inited_(false)
 {
@@ -83,8 +83,7 @@ ObSharedMacroBlockMgr::~ObSharedMacroBlockMgr()
 
 void ObSharedMacroBlockMgr::destroy()
 {
-  TG_DESTROY(tg_id_);
-  tg_id_ = -1;
+  defragment_timer_.destroy();
   macro_handle_.reset();
   offset_ = OB_DEFAULT_MACRO_BLOCK_SIZE; // so we can init block automatically for first write
   header_size_ = 0;
@@ -129,8 +128,9 @@ int ObSharedMacroBlockMgr::init()
     LOG_WARN("fail to serialize common header", K(ret), K(common_header));
   } else if (OB_FAIL(block_used_size_.init("ShareBlksMap"))) {
     LOG_WARN("fail to init block used size array", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::SSTableDefragment, tg_id_))) {
-    LOG_WARN("fail to create thread for sstable defragmentation", K(ret));
+  } else if (OB_FAIL(defragment_timer_.init(
+      "SSTableDefrag", ObMemAttr("SSTableDefrag")))) {
+    LOG_WARN("fail to init timer for sstable defragmentation", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -147,10 +147,8 @@ int ObSharedMacroBlockMgr::start()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObSharedMacroBlockMgr hasn't been inited", K(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("fail to start sstable defragmentation thread", K(ret), K(tg_id_));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, defragmentation_task_, DEFRAGMENT_DELAY_US, true/*repeat*/))) {
-    LOG_WARN("fail to schedule defragmentation task", K(ret), K(tg_id_));
+  } else if (OB_FAIL(defragment_timer_.schedule(defragmentation_task_, DEFRAGMENT_DELAY_US, true/*repeat*/))) {
+    LOG_WARN("fail to schedule defragmentation task", K(ret));
   }
   return ret;
 }
@@ -158,14 +156,14 @@ int ObSharedMacroBlockMgr::start()
 void ObSharedMacroBlockMgr::stop()
 {
   if (OB_LIKELY(is_inited_)) {
-    TG_STOP(tg_id_);
+    defragment_timer_.stop();
   }
 }
 
 void ObSharedMacroBlockMgr::wait()
 {
   if (OB_LIKELY(is_inited_)) {
-    TG_WAIT(tg_id_);
+    defragment_timer_.wait();
   }
 }
 

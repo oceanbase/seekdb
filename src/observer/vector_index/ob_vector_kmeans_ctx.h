@@ -19,6 +19,7 @@
 
 #include "lib/container/ob_se_array.h"
 #include "lib/allocator/page_arena.h"
+#include "lib/thread/ob_simple_thread_pool.h"
 #include "ob_vector_index_util.h"
 #include "storage/vector_type/ob_vector_l2_distance.h"
 #include "storage/vector_type/ob_vector_common_util.h"
@@ -480,18 +481,19 @@ private:
 };
 
 // QUEUE_THREAD
-class ObKmeansBuildTaskHandler : public lib::TGTaskHandler
+class ObKmeansBuildTaskHandler : public common::ObSimpleThreadPool
 {
 public:
-  ObKmeansBuildTaskHandler() : is_inited_(false), tg_id_(INVALID_TG_ID), task_ref_cnt_(0), lock_() {};
+  ObKmeansBuildTaskHandler() : common::ObSimpleThreadPool(), is_inited_(false), task_ref_cnt_(0), lock_() {};
   virtual ~ObKmeansBuildTaskHandler() = default;
-  int init(int tg_id);
+  int init();
   int start();
   void stop();
   void wait();
   void destroy();
   int push_task(ObKmeansBuildTask &build_task);
-  int get_tg_id() { return tg_id_; }
+  bool is_inited() const { return is_inited_; }
+  int64_t get_thread_cnt() const { return common::ObSimpleThreadPool::get_thread_count(); }
 
   void inc_task_ref() { ATOMIC_INC(&task_ref_cnt_); }
   void dec_task_ref() { ATOMIC_DEC(&task_ref_cnt_); }
@@ -507,12 +509,11 @@ public:
   const static int64_t WAIT_RETRY_PUSH_TASK_TIME = 1 * 1000 * 1000; // us
   // push task max wait time: 1s * 5 * 60 = 5 min 
   const static int64_t MAX_RETRY_PUSH_TASK_CNT = 5 * 60;
-  static const int64_t INVALID_TG_ID = -1;
   static const int64_t MIN_THREAD_COUNT = 1;
+  static const int64_t MAX_QUEUE_SIZE = 1024;
 
 private:
   bool is_inited_;
-  int tg_id_;
   volatile int64_t task_ref_cnt_;
 
 public:

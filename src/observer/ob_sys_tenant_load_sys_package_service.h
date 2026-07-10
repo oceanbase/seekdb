@@ -17,6 +17,7 @@
 #define _OCEANBASE_ROOTSERVER_OB_SYS_TENANT_LOAD_SYS_PACKAGE_SERVICE_H_ 1
 
 #include "lib/utility/ob_macro_utils.h"
+#include "lib/task/ob_timer.h"
 #include "logservice/ob_log_base_type.h"
 #include "observer/ob_sys_tenant_load_sys_package_task.h"
 #include "share/scn.h"
@@ -59,7 +60,7 @@ public:
 
 private:
   bool inited_;
-  int tg_id_;
+  common::ObTimer timer_;
   ObSysTenantLoadSysPackageTask task_;
 
 private:

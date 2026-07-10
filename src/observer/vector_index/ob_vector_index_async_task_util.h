@@ -23,7 +23,7 @@
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
 #include "share/ob_ls_id.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/ob_simple_thread_pool.h"
 #include "storage/access/ob_dml_param.h"
 #include "storage/tx/ob_trans_define_v4.h"
 #include "storage/ob_value_row_iterator.h"
@@ -233,7 +233,7 @@ private:
 };
 
 // QUEUE_THREAD
-class ObVecIndexAsyncTaskHandler : public lib::TGTaskHandler
+class ObVecIndexAsyncTaskHandler : public common::ObSimpleThreadPool
 {
 public:
   ObVecIndexAsyncTaskHandler();
@@ -244,7 +244,7 @@ public:
   void destroy();
   int push_task(const ObLSID &ls_id, ObVecIndexAsyncTaskCtx *ctx, ObIAllocator *allocator);
   int get_allocator_by_ls(const ObLSID &ls_id, ObIAllocator *&allocator);
-  int get_tg_id() { return tg_id_; }
+  bool is_inited() const { return is_inited_; }
 
   void inc_async_task_ref() { ATOMIC_INC(&async_task_ref_cnt_); }
   void dec_async_task_ref() { ATOMIC_DEC(&async_task_ref_cnt_); }
@@ -259,12 +259,11 @@ public:
 public:
   static const int64_t MIN_THREAD_COUNT = 1;
   static const int64_t MAX_THREAD_COUNT = 12;
+  static const int64_t MAX_QUEUE_SIZE = 8;
   common::ObSpinLock lock_; // lock for init
 
 private:
-  static const int64_t INVALID_TG_ID = -1;
   bool is_inited_;
-  int tg_id_;
   volatile int64_t async_task_ref_cnt_;
   bool stopped_;
 };

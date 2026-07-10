@@ -623,11 +623,9 @@ int ObMultiKmeansExecutor::init_build_handle(ObKmeansBuildTaskHandler &handle)
   if (OB_ISNULL(service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret));
-  } else if (handle.get_tg_id() != ObKmeansBuildTaskHandler::INVALID_TG_ID) {
+  } else if (handle.is_inited()) {
     // no need to init twice, skip
-  } else if (OB_FAIL(service->start_kmeans_tg())) {
-    LOG_WARN("fail to start kmeans thread pool", K(ret));
-  } else if (OB_FAIL(handle.init(service->get_kmeans_tg_id()))) {
+  } else if (OB_FAIL(handle.init())) {
     LOG_WARN("fail to init vector kmeans build task handle", K(ret));
   } else if (OB_FAIL(handle.start())) {
     LOG_WARN("fail to start vector kmeans build thread pool", K(ret));
@@ -1328,18 +1326,16 @@ bool ObIvfPqBuildHelper::can_use_parallel()
 }
 
 /**************************** ObKmeansBuildTaskHandler ******************************/
-int ObKmeansBuildTaskHandler::init(int tg_id)
+int ObKmeansBuildTaskHandler::init()
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     LOG_INFO("init before", KR(ret));
-  } else if (INVALID_TG_ID == tg_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tg_id", KR(ret), K(tg_id));
+  } else if (OB_FAIL(common::ObSimpleThreadPool::init(MIN_THREAD_COUNT, MAX_QUEUE_SIZE, "VectorTaskPool"))) {
+    LOG_WARN("init vector kmeans build task thread pool failed", KR(ret));
   } else {
-    tg_id_ = tg_id;
     is_inited_ = true;
-    LOG_INFO("init vector kmeans build task handler", K(ret), K_(tg_id));
+    LOG_INFO("init vector kmeans build task handler", K(ret));
   }
   return ret;
 }
@@ -1347,44 +1343,55 @@ int ObKmeansBuildTaskHandler::init(int tg_id)
 int ObKmeansBuildTaskHandler::start()
 {
   int ret = OB_SUCCESS;
+  bool thread_pool_inited = is_inited_;
   int64_t max_thread_cnt = MTL_CPU_COUNT() * THREAD_FACTOR;
   max_thread_cnt = OB_MAX(max_thread_cnt, MIN_THREAD_COUNT);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("handler is not init", KR(ret));
-  } else if (OB_FAIL(TG_SET_ADAPTIVE_THREAD(tg_id_, MIN_THREAD_COUNT,
-                                            max_thread_cnt))) {  // must be call TG_SET_ADAPTIVE_THREAD
-    LOG_WARN("TG_SET_ADAPTIVE_THREAD failed", KR(ret), K_(tg_id));
-  } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
-    LOG_WARN("TG_SET_HANDLER_AND_START failed", KR(ret), K_(tg_id));
+  } else if (OB_FAIL(common::ObSimpleThreadPool::set_adaptive_thread(MIN_THREAD_COUNT, max_thread_cnt))) {
+    LOG_WARN("set vector kmeans build task adaptive thread failed", KR(ret), K(max_thread_cnt));
+  } else if (common::ObSimpleThreadPool::get_thread_count() <= 0
+      && !common::ObSimpleThreadPool::try_expand_one(MIN_THREAD_COUNT)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("start vector kmeans build task thread pool failed", KR(ret), K(max_thread_cnt));
   } else {
-    LOG_INFO("succ to start vector kmeans build task handler", K_(tg_id), K(max_thread_cnt));
+    LOG_INFO("succ to start vector kmeans build task handler", K(max_thread_cnt));
+  }
+  if (OB_FAIL(ret) && thread_pool_inited) {
+    common::ObSimpleThreadPool::stop();
+    common::ObSimpleThreadPool::wait();
+    common::ObSimpleThreadPool::destroy();
+    is_inited_ = false;
   }
   return ret;
 }
 
 void ObKmeansBuildTaskHandler::stop()
 {
-  LOG_INFO("vector kmeans build task start to stop", K_(tg_id));
-  if (OB_LIKELY(INVALID_TG_ID != tg_id_)) {
-    TG_STOP(tg_id_);
+  LOG_INFO("vector kmeans build task start to stop");
+  if (is_inited_) {
+    common::ObSimpleThreadPool::stop();
   }
 }
 
 void ObKmeansBuildTaskHandler::wait()
 {
-  LOG_INFO("vector kmeans build task handler start to wait", K_(tg_id));
-  if (OB_LIKELY(INVALID_TG_ID != tg_id_)) {
-    TG_WAIT(tg_id_);
+  LOG_INFO("vector kmeans build task handler start to wait");
+  if (is_inited_) {
+    common::ObSimpleThreadPool::wait();
   }
 }
 
 void ObKmeansBuildTaskHandler::destroy()
 {
-  LOG_INFO("vector kmeans build task handler start to destroy", K_(tg_id));
-  // tg_id is managed by external service, no need to destroy here
-  tg_id_ = INVALID_TG_ID;
-  is_inited_ = false;
+  LOG_INFO("vector kmeans build task handler start to destroy");
+  if (is_inited_) {
+    common::ObSimpleThreadPool::stop();
+    common::ObSimpleThreadPool::wait();
+    common::ObSimpleThreadPool::destroy();
+    is_inited_ = false;
+  }
 }
 
 int ObKmeansBuildTaskHandler::push_task(ObKmeansBuildTask &build_task)
@@ -1398,12 +1405,12 @@ int ObKmeansBuildTaskHandler::push_task(ObKmeansBuildTask &build_task)
   bool is_push_succ = false;
   int64_t has_retry_cnt = 0;
   while (OB_SUCC(ret) && !is_push_succ && has_retry_cnt++ <= MAX_RETRY_PUSH_TASK_CNT) {
-    if (OB_FAIL(TG_PUSH_TASK(tg_id_, &build_task))) {
+    if (OB_FAIL(common::ObSimpleThreadPool::push(&build_task))) {
       if (ret != OB_EAGAIN) {
-        LOG_WARN("fail to TG_PUSH_TASK", KR(ret), K(build_task));
+        LOG_WARN("fail to push task", KR(ret), K(build_task));
       } else {
         // sleep 1s and retry
-        LOG_DEBUG("fail to TG_PUSH_TASK, queue is full will retry", KR(ret), K(build_task));
+        LOG_DEBUG("fail to push task, queue is full will retry", KR(ret), K(build_task));
         ob_usleep(WAIT_RETRY_PUSH_TASK_TIME);
         ret = OB_SUCCESS;
       }

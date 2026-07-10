@@ -21,8 +21,7 @@
 #include "lib/list/ob_list.h"
 #include "lib/literals/ob_literals.h"
 #include "lib/lock/ob_tc_rwlock.h"
-#include "lib/thread/thread_mgr.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/task/ob_timer.h"
 #include "share/ob_occam_timer.h"
 #include "share/ob_tenant_mgr.h"
 #include "storage/tx_storage/ob_tenant_freezer_rpc.h"
@@ -337,7 +336,7 @@ private:
 ObAddr self_;
   ObRetryMajorInfo retry_major_info_;
 
-  int freeze_trigger_tg_id_;
+  common::ObTimer freeze_trigger_timer_;
   TimerTask freeze_trigger_timer_task_;
   common::ObOccamThreadPool freeze_thread_pool_;
   ObSpinLock freeze_thread_pool_lock_;

@@ -15,7 +15,6 @@
  */
 
 #include "log_shared_queue_thread.h"
-#include "share/ob_thread_mgr.h"  // OB TG IDs, previously hidden behind the tenant_base include chain, make the dependency explicit
 #include "log_shared_task.h"
 #include "palf_env_impl.h"                    // PalfEnvImpl
 
@@ -24,8 +23,8 @@ namespace oceanbase
 namespace palf
 {
 LogSharedQueueTh::LogSharedQueueTh()
-    : submit_log_tg_id_(-1),
-      shared_tg_id_(-1),
+    : submit_log_queue_(*this),
+      shared_queue_(*this),
       palf_env_impl_(NULL),
       is_inited_(false)
 {}
@@ -38,22 +37,20 @@ LogSharedQueueTh::~LogSharedQueueTh()
 int LogSharedQueueTh::init(IPalfEnvImpl *palf_env_impl)
 {
   int ret = OB_SUCCESS;
-  const int submit_log_tg_id = lib::TGDefIDs::LogSubmitLogQueueTh;
-  const int shared_tg_id = lib::TGDefIDs::LogSharedQueueTh;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     PALF_LOG(ERROR, "LogSharedQueueTh has inited", K(ret));
   } else if (NULL == palf_env_impl) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument", K(ret), KP(palf_env_impl));
-  } else if (OB_FAIL(TG_CREATE_TENANT(submit_log_tg_id, submit_log_tg_id_, MAX_LOG_HANDLE_TASK_NUM))) {
-    PALF_LOG(WARN, "LogSharedQueueTh TG_CREATE failed", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(shared_tg_id, shared_tg_id_, MAX_LOG_HANDLE_TASK_NUM))) {
-    PALF_LOG(WARN, "LogSharedQueueTh TG_CREATE failed", K(ret));
+  } else if (OB_FAIL(submit_log_queue_.init(THREAD_NUM, MAX_LOG_HANDLE_TASK_NUM, "LogSubmit"))) {
+    PALF_LOG(WARN, "LogSharedQueueTh submit queue init failed", K(ret));
+  } else if (OB_FAIL(shared_queue_.init(THREAD_NUM, MAX_LOG_HANDLE_TASK_NUM, "LogShared"))) {
+    PALF_LOG(WARN, "LogSharedQueueTh shared queue init failed", K(ret));
   } else {
     palf_env_impl_ = palf_env_impl;
     is_inited_ = true;
-    PALF_LOG(INFO, "LogSharedQueueTh init success", K(ret), K(submit_log_tg_id_), KP(palf_env_impl));
+    PALF_LOG(INFO, "LogSharedQueueTh init success", K(ret), KP(palf_env_impl));
   }
   if (OB_FAIL(ret) && OB_INIT_TWICE != ret) {
     destroy();
@@ -67,13 +64,8 @@ int LogSharedQueueTh::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(ERROR, "LogSharedQueueTh not inited", K(ret));
-  } else if (OB_FAIL(TG_SET_HANDLER_AND_START(submit_log_tg_id_, *this))) {
-    PALF_LOG(ERROR, "start LogSharedQueueTh failed", K(ret));
-  } else if (OB_FAIL(TG_SET_HANDLER_AND_START(shared_tg_id_, *this))) {
-    PALF_LOG(ERROR, "start LogSharedQueueTh failed", K(ret));
   } else {
-    PALF_LOG(INFO, "start LogSharedQueueTh success", K(ret),
-        K(submit_log_tg_id_));
+    PALF_LOG(INFO, "start LogSharedQueueTh success", K(ret));
   }
   return ret;
 }
@@ -85,9 +77,9 @@ int LogSharedQueueTh::stop()
     ret = OB_NOT_INIT;
     PALF_LOG(WARN, "LogSharedQueueTh not inited", K(ret));
   } else {
-    TG_STOP(submit_log_tg_id_);
-    TG_STOP(shared_tg_id_);
-    PALF_LOG(INFO, "stop LogSharedQueueTh success", K(submit_log_tg_id_));
+    submit_log_queue_.stop();
+    shared_queue_.stop();
+    PALF_LOG(INFO, "stop LogSharedQueueTh success");
   }
   return ret;
 }
@@ -99,28 +91,26 @@ int LogSharedQueueTh::wait()
     ret = OB_NOT_INIT;
     PALF_LOG(WARN, "LogSharedQueueTh not inited", K(ret));
   } else {
-    TG_WAIT(submit_log_tg_id_);
-    TG_WAIT(shared_tg_id_);
-    PALF_LOG(INFO, "wait LogSharedQueueTh success", K(submit_log_tg_id_));
+    submit_log_queue_.wait();
+    shared_queue_.wait();
+    PALF_LOG(INFO, "wait LogSharedQueueTh success");
   }
   return ret;
 }
 
 void LogSharedQueueTh::destroy()
 {
-  stop();
-  wait();
-  is_inited_ = false;
-  if (-1 != submit_log_tg_id_) {
-    TG_DESTROY(submit_log_tg_id_);
-    PALF_LOG(INFO, "destroy LogSharedQueueTh success", K(submit_log_tg_id_));
+  if (IS_INIT) {
+    stop();
+    wait();
   }
-  if (-1 != shared_tg_id_) {
-    TG_DESTROY(shared_tg_id_);
-    PALF_LOG(INFO, "destroy LogSharedQueueTh success", K(shared_tg_id_));
+  submit_log_queue_.destroy();
+  shared_queue_.destroy();
+  palf_env_impl_ = NULL;
+  if (IS_INIT) {
+    is_inited_ = false;
   }
-  shared_tg_id_ = -1;
-  submit_log_tg_id_ = -1;
+  PALF_LOG(INFO, "destroy LogSharedQueueTh success");
 }
 
 int LogSharedQueueTh::push_submit_log_task(LogHandleSubmitTask *task)
@@ -130,12 +120,12 @@ int LogSharedQueueTh::push_submit_log_task(LogHandleSubmitTask *task)
     ret = OB_INVALID_ARGUMENT;
   } else {
     int64_t print_log_interval = OB_INVALID_TIMESTAMP;
-    while (OB_FAIL(TG_PUSH_TASK(submit_log_tg_id_, task))) {
+    while (OB_FAIL(submit_log_queue_.push(task))) {
       if (OB_IN_STOP_STATE == ret) {
-        PALF_LOG(WARN, "thread_pool has been stopped, skip task", K(ret), K_(submit_log_tg_id), KPC(task));
+        PALF_LOG(WARN, "thread_pool has been stopped, skip task", K(ret), KPC(task));
         break;
       } else if (palf_reach_time_interval(5 * 1000 * 1000, print_log_interval)) {
-        PALF_LOG(ERROR, "push task failed", K(ret), K_(submit_log_tg_id), KPC(task));
+        PALF_LOG(ERROR, "push task failed", K(ret), KPC(task));
       }
       ob_usleep(1000);
     }
@@ -149,10 +139,9 @@ int LogSharedQueueTh::push_task(LogSharedTask *task)
   if (NULL == task) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    int64_t print_log_interval = OB_INVALID_TIMESTAMP;
-    if (OB_FAIL(TG_PUSH_TASK(shared_tg_id_, task))) {
+    if (OB_FAIL(shared_queue_.push(task))) {
       if (OB_IN_STOP_STATE == ret) {
-        PALF_LOG(WARN, "thread_pool has been stopped, skip task", K(ret), K_(shared_tg_id), KPC(task));
+        PALF_LOG(WARN, "thread_pool has been stopped, skip task", K(ret), KPC(task));
       }
     }
   }
@@ -177,11 +166,6 @@ void LogSharedQueueTh::handle(void *task)
   if (OB_NOT_NULL(log_shared_task)) {
     log_shared_task->free_this(palf_env_impl_);
   }
-}
-
-int LogSharedQueueTh::get_tg_id() const
-{
-  return submit_log_tg_id_;
 }
 
 } // end namespace palf

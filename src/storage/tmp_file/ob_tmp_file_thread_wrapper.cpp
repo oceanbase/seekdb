@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tmp_file_thread_wrapper.h"
+#include "lib/thread/ob_thread_name.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/tmp_file/ob_sn_tmp_file_manager.h"
 
@@ -25,7 +26,7 @@ namespace oceanbase
 namespace tmp_file
 {
 
-ObTmpFileFlushTG::ObTmpFileFlushTG(
+ObTmpFileFlushThread::ObTmpFileFlushThread(
     ObTmpWriteBufferPool &wbp,
     ObTmpFileFlushManager &flush_mgr,
     ObIAllocator &allocator,
@@ -53,21 +54,18 @@ ObTmpFileFlushTG::ObTmpFileFlushTG(
     fast_loop_cnt_(0),
     fast_idle_loop_cnt_(0)
 {
-  for (int32_t i = 0; i < ObTmpFileGlobal::FLUSH_TIMER_CNT; ++i) {
-    flush_timer_tg_id_[i] = -1;
-  }
 }
 
-int ObTmpFileFlushTG::init()
+int ObTmpFileFlushThread::init()
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    STORAGE_LOG(WARN, "ObTmpFileSwapTG init twice");
+    STORAGE_LOG(WARN, "ObTmpFileFlushThread init twice");
   } else {
     for (int32_t i = 0; OB_SUCC(ret) && i < ObTmpFileGlobal::FLUSH_TIMER_CNT; ++i) {
-      if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TmpFileFlush, flush_timer_tg_id_[i]))) {
-        STORAGE_LOG(WARN, "fail to create flush timer thread", KR(ret));
+      if (OB_FAIL(flush_timers_[i].init("TFFlush", common::ObMemAttr("TFFlush")))) {
+        STORAGE_LOG(WARN, "fail to init flush timer", KR(ret), K(i));
       }
     }
     if (OB_SUCC(ret)) {
@@ -96,41 +94,45 @@ int ObTmpFileFlushTG::init()
   return ret;
 }
 
-int ObTmpFileFlushTG::start()
+int ObTmpFileFlushThread::start()
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "ObTmpFileSwapTG not init", KR(ret));
+    STORAGE_LOG(WARN, "ObTmpFileFlushThread not init", KR(ret));
   } else {
     for (int32_t i = 0; OB_SUCC(ret) && i < ObTmpFileGlobal::FLUSH_TIMER_CNT; ++i) {
-      if (OB_FAIL(TG_START(flush_timer_tg_id_[i]))) {
-        LOG_WARN("TG_START flush_timer_tg_id_ failed", KR(ret), K(flush_timer_tg_id_[i]));
+      if (OB_FAIL(flush_timers_[i].start())) {
+        LOG_WARN("start flush timer failed", KR(ret), K(i));
       }
     }
 
     if (OB_SUCC(ret)) {
-      flush_mgr_.set_flush_timer_tg_id(flush_timer_tg_id_, ObTmpFileGlobal::FLUSH_TIMER_CNT);
+      flush_mgr_.set_flush_timers(flush_timers_, ObTmpFileGlobal::FLUSH_TIMER_CNT);
     }
   }
   return ret;
 }
 
-void ObTmpFileFlushTG::stop()
+void ObTmpFileFlushThread::stop()
 {
   for (int32_t i = 0; i < ObTmpFileGlobal::FLUSH_TIMER_CNT; ++i) {
-    TG_STOP(flush_timer_tg_id_[i]);
+    if (flush_timers_[i].inited()) {
+      flush_timers_[i].stop();
+    }
   }
 }
 
-void ObTmpFileFlushTG::wait()
+void ObTmpFileFlushThread::wait()
 {
   for (int32_t i = 0; i < ObTmpFileGlobal::FLUSH_TIMER_CNT; ++i) {
-    TG_WAIT(flush_timer_tg_id_[i]);
+    if (flush_timers_[i].inited()) {
+      flush_timers_[i].wait();
+    }
   }
 }
 
-void ObTmpFileFlushTG::destroy()
+void ObTmpFileFlushThread::destroy()
 {
   clean_up_lists();
   mode_ = RUNNING_MODE::INVALID;
@@ -152,14 +154,11 @@ void ObTmpFileFlushTG::destroy()
 
   is_inited_ = false;
   for (int32_t i = 0; i < ObTmpFileGlobal::FLUSH_TIMER_CNT; ++i) {
-    if (-1 != flush_timer_tg_id_[i]) {
-      TG_DESTROY(flush_timer_tg_id_[i]);
-      flush_timer_tg_id_[i] = -1;
-    }
+    flush_timers_[i].destroy();
   }
 }
 
-void ObTmpFileFlushTG::clean_up_lists()
+void ObTmpFileFlushThread::clean_up_lists()
 {
   int ret = OB_SUCCESS;
   while (!retry_list_.is_empty()) {
@@ -215,33 +214,33 @@ void ObTmpFileFlushTG::clean_up_lists()
   }
 }
 
-void ObTmpFileFlushTG::set_running_mode(const RUNNING_MODE mode)
+void ObTmpFileFlushThread::set_running_mode(const RUNNING_MODE mode)
 {
   mode_ = mode;
 }
 
-void ObTmpFileFlushTG::notify_doing_flush()
+void ObTmpFileFlushThread::notify_doing_flush()
 {
   last_flush_timestamp_ = 0;
 }
 
-void ObTmpFileFlushTG::signal_io_finish(int flush_io_finished_ret)
+void ObTmpFileFlushThread::signal_io_finish(int flush_io_finished_ret)
 {
   flush_io_finished_ret_ = flush_io_finished_ret;
   ++flush_io_finished_round_;
 }
 
-int64_t ObTmpFileFlushTG::get_flush_io_finished_round()
+int64_t ObTmpFileFlushThread::get_flush_io_finished_round()
 {
   return flush_io_finished_round_;
 }
 
-int64_t ObTmpFileFlushTG::get_flush_io_finished_ret()
+int64_t ObTmpFileFlushThread::get_flush_io_finished_ret()
 {
   return flush_io_finished_ret_;
 }
 
-int64_t ObTmpFileFlushTG::cal_idle_time()
+int64_t ObTmpFileFlushThread::cal_idle_time()
 {
   int64_t idle_time = 0;
   int64_t dirty_page_percentage = wbp_.get_dirty_page_percentage();
@@ -263,7 +262,7 @@ int64_t ObTmpFileFlushTG::cal_idle_time()
   return idle_time;
 }
 
-int ObTmpFileFlushTG::try_work()
+int ObTmpFileFlushThread::try_work()
 {
   int ret = OB_SUCCESS;
 
@@ -271,7 +270,7 @@ int ObTmpFileFlushTG::try_work()
   if (0 == last_flush_timestamp_ || cur_time - last_flush_timestamp_ >= cal_idle_time() * 1000) {
     if (OB_UNLIKELY(!SERVER_STORAGE_META_SERVICE.is_started())) {
       ret = OB_NOT_RUNNING;
-      LOG_INFO("ObTmpFileFlushTG does not work before server slog replay finished",
+      LOG_INFO("ObTmpFileFlushThread does not work before server slog replay finished",
           KR(ret), KPC(this));
     } else if (OB_FAIL(do_work_())) {
       STORAGE_LOG(WARN, "fail do flush", KR(ret), KPC(this));
@@ -282,7 +281,7 @@ int ObTmpFileFlushTG::try_work()
   return ret;
 }
 
-int ObTmpFileFlushTG::do_work_()
+int ObTmpFileFlushThread::do_work_()
 {
   int ret = OB_SUCCESS;
 
@@ -306,7 +305,7 @@ int ObTmpFileFlushTG::do_work_()
     tmp_file_block_mgr_.print_block_usage();
     flush_monitor_.print_statistics();
     wbp_.print_statistics();
-    STORAGE_LOG(INFO, "ObTmpFileFlushTG information", KPC(this));
+    STORAGE_LOG(INFO, "ObTmpFileFlushThread information", KPC(this));
     normal_loop_cnt_ = 0;
     normal_idle_loop_cnt_ = 0;
     fast_loop_cnt_ = 0;
@@ -316,7 +315,7 @@ int ObTmpFileFlushTG::do_work_()
 }
 
 // 1. check wait_list_ for IO complete task; 2. retry old task if exists; 3. build new task if needed
-void ObTmpFileFlushTG::flush_fast_()
+void ObTmpFileFlushThread::flush_fast_()
 {
   int ret = OB_SUCCESS;
   int64_t BLOCK_SIZE = ObTmpFileGlobal::SN_BLOCK_SIZE;
@@ -344,7 +343,7 @@ void ObTmpFileFlushTG::flush_fast_()
   }
 }
 
-void ObTmpFileFlushTG::flush_normal_()
+void ObTmpFileFlushThread::flush_normal_()
 {
   int ret = OB_SUCCESS;
   int64_t BLOCK_SIZE = ObTmpFileGlobal::SN_BLOCK_SIZE;
@@ -365,7 +364,7 @@ void ObTmpFileFlushTG::flush_normal_()
   }
 }
 
-int ObTmpFileFlushTG::handle_generated_flush_tasks_(ObSpLinkQueue &flushing_list, int64_t &task_num)
+int ObTmpFileFlushThread::handle_generated_flush_tasks_(ObSpLinkQueue &flushing_list, int64_t &task_num)
 {
   int ret = OB_SUCCESS;
   task_num = 0;
@@ -421,7 +420,7 @@ int ObTmpFileFlushTG::handle_generated_flush_tasks_(ObSpLinkQueue &flushing_list
   return ret;
 }
 
-int ObTmpFileFlushTG::wash_(const int64_t expect_flush_size, const RUNNING_MODE mode)
+int ObTmpFileFlushThread::wash_(const int64_t expect_flush_size, const RUNNING_MODE mode)
 {
   int ret = OB_SUCCESS;
   int64_t flushing_task_cnt = 0;
@@ -460,7 +459,7 @@ int ObTmpFileFlushTG::wash_(const int64_t expect_flush_size, const RUNNING_MODE 
   return ret;
 }
 
-int ObTmpFileFlushTG::retry_fast_flush_meta_task_()
+int ObTmpFileFlushThread::retry_fast_flush_meta_task_()
 {
   int ret = OB_SUCCESS;
   for (int64_t cnt = retry_list_size_; cnt > 0 && !retry_list_.is_empty(); --cnt) {
@@ -492,7 +491,7 @@ int ObTmpFileFlushTG::retry_fast_flush_meta_task_()
   return ret;
 }
 
-int ObTmpFileFlushTG::retry_task_()
+int ObTmpFileFlushThread::retry_task_()
 {
   int ret = OB_SUCCESS;
   for (int64_t cnt = retry_list_size_; cnt > 0 && !retry_list_.is_empty(); --cnt) {
@@ -535,7 +534,7 @@ int ObTmpFileFlushTG::retry_task_()
   return ret;
 }
 
-int ObTmpFileFlushTG::special_flush_meta_tree_page_()
+int ObTmpFileFlushThread::special_flush_meta_tree_page_()
 {
   int ret = OB_SUCCESS;
   ObSpLinkQueue flushing_list;
@@ -559,7 +558,7 @@ int ObTmpFileFlushTG::special_flush_meta_tree_page_()
   return ret;
 }
 
-int ObTmpFileFlushTG::check_flush_task_io_finished_()
+int ObTmpFileFlushThread::check_flush_task_io_finished_()
 {
   int ret = OB_SUCCESS;
   for (int64_t cnt = ATOMIC_LOAD(&wait_list_size_); cnt > 0 && !wait_list_.is_empty(); --cnt) {
@@ -642,7 +641,7 @@ int ObTmpFileFlushTG::check_flush_task_io_finished_()
   return ret;
 }
 
-void ObTmpFileFlushTG::flush_task_finished_(ObTmpFileFlushTask *flush_task)
+void ObTmpFileFlushThread::flush_task_finished_(ObTmpFileFlushTask *flush_task)
 {
   int ret = OB_SUCCESS;
 
@@ -660,7 +659,7 @@ void ObTmpFileFlushTG::flush_task_finished_(ObTmpFileFlushTask *flush_task)
   signal_io_finish(OB_SUCCESS);
 }
 
-int ObTmpFileFlushTG::push_wait_list_(ObTmpFileFlushTask *flush_task)
+int ObTmpFileFlushThread::push_wait_list_(ObTmpFileFlushTask *flush_task)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(flush_task)) {
@@ -674,7 +673,7 @@ int ObTmpFileFlushTG::push_wait_list_(ObTmpFileFlushTask *flush_task)
   return ret;
 }
 
-int ObTmpFileFlushTG::pop_wait_list_(ObTmpFileFlushTask *&flush_task)
+int ObTmpFileFlushThread::pop_wait_list_(ObTmpFileFlushTask *&flush_task)
 {
   int ret = OB_SUCCESS;
   ObSpLinkQueue::Link *link = nullptr;
@@ -690,7 +689,7 @@ int ObTmpFileFlushTG::pop_wait_list_(ObTmpFileFlushTask *&flush_task)
   return ret;
 }
 
-int ObTmpFileFlushTG::push_retry_list_(ObTmpFileFlushTask *flush_task)
+int ObTmpFileFlushThread::push_retry_list_(ObTmpFileFlushTask *flush_task)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(flush_task)){
@@ -704,7 +703,7 @@ int ObTmpFileFlushTG::push_retry_list_(ObTmpFileFlushTask *flush_task)
   return ret;
 }
 
-int ObTmpFileFlushTG::pop_retry_list_(ObTmpFileFlushTask *&flush_task)
+int ObTmpFileFlushThread::pop_retry_list_(ObTmpFileFlushTask *&flush_task)
 {
   int ret = OB_SUCCESS;
   ObSpLinkQueue::Link *link = nullptr;
@@ -720,7 +719,7 @@ int ObTmpFileFlushTG::pop_retry_list_(ObTmpFileFlushTask *&flush_task)
   return ret;
 }
 
-int ObTmpFileFlushTG::push_finished_list_(ObTmpFileFlushTask *flush_task)
+int ObTmpFileFlushThread::push_finished_list_(ObTmpFileFlushTask *flush_task)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(flush_task)){
@@ -734,7 +733,7 @@ int ObTmpFileFlushTG::push_finished_list_(ObTmpFileFlushTask *flush_task)
   return ret;
 }
 
-int ObTmpFileFlushTG::pop_finished_list_(ObTmpFileFlushTask *&flush_task)
+int ObTmpFileFlushThread::pop_finished_list_(ObTmpFileFlushTask *&flush_task)
 {
   int ret = OB_SUCCESS;
   ObSpLinkQueue::Link *link = nullptr;
@@ -750,7 +749,7 @@ int ObTmpFileFlushTG::pop_finished_list_(ObTmpFileFlushTask *&flush_task)
   return ret;
 }
 
-int ObTmpFileFlushTG::get_fast_flush_size_()
+int ObTmpFileFlushThread::get_fast_flush_size_()
 {
   // TODO: move to page cache controller
   const int64_t BLOCK_SIZE = ObTmpFileGlobal::SN_BLOCK_SIZE;
@@ -760,7 +759,7 @@ int ObTmpFileFlushTG::get_fast_flush_size_()
   return flush_size;
 }
 
-int64_t ObTmpFileFlushTG::get_flushing_block_num_threshold_()
+int64_t ObTmpFileFlushThread::get_flushing_block_num_threshold_()
 {
   const int64_t BLOCK_SIZE = ObTmpFileGlobal::SN_BLOCK_SIZE;
   int64_t wbp_mem_limit = wbp_.get_memory_limit();
@@ -772,12 +771,12 @@ int64_t ObTmpFileFlushTG::get_flushing_block_num_threshold_()
 
 // --------------- swap ----------------//
 
-ObTmpFileSwapTG::ObTmpFileSwapTG(ObTmpWriteBufferPool &wbp,
+ObTmpFileSwapThread::ObTmpFileSwapThread(ObTmpWriteBufferPool &wbp,
                                  ObTmpFileEvictionManager &elimination_mgr,
-                                 ObTmpFileFlushTG &flush_tg,
+                                 ObTmpFileFlushThread &flush_thread,
                                  ObTmpFilePageCacheController &pc_ctrl)
-  : is_inited_(false),
-    tg_id_(-1),
+  : lib::ThreadPool(1),
+    is_inited_(false),
     idle_cond_(),
     last_swap_timestamp_(0),
     swap_job_num_(0),
@@ -785,7 +784,7 @@ ObTmpFileSwapTG::ObTmpFileSwapTG(ObTmpWriteBufferPool &wbp,
     working_list_size_(0),
     working_list_(),
     swap_monitor_(),
-    flush_tg_ref_(flush_tg),
+    flush_thread_ref_(flush_thread),
     flush_io_finished_round_(0),
     wbp_(wbp),
     evict_mgr_(elimination_mgr),
@@ -793,18 +792,16 @@ ObTmpFileSwapTG::ObTmpFileSwapTG(ObTmpWriteBufferPool &wbp,
 {
 }
 
-int ObTmpFileSwapTG::init()
+int ObTmpFileSwapThread::init()
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    STORAGE_LOG(WARN, "ObTmpFileSwapTG init twice");
+    STORAGE_LOG(WARN, "ObTmpFileSwapThread init twice");
   } else if (OB_FAIL(idle_cond_.init(ObWaitEventIds::THREAD_IDLING_COND_WAIT))) {
     STORAGE_LOG(WARN, "failed to init condition variable", KR(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TmpFileSwap, tg_id_))) {
-    STORAGE_LOG(WARN, "fail to create swap thread", KR(ret));
-  } else if (OB_FAIL(TG_SET_RUNNABLE(tg_id_, *this))) {
-    STORAGE_LOG(WARN, "fail to set swap tg runnable", KR(ret));
+  } else if (OB_FAIL(lib::ThreadPool::init())) {
+    STORAGE_LOG(WARN, "fail to init swap thread", KR(ret));
   } else {
     is_inited_ = true;
     last_swap_timestamp_ = 0;
@@ -815,48 +812,49 @@ int ObTmpFileSwapTG::init()
   return ret;
 }
 
-int ObTmpFileSwapTG::start()
+int ObTmpFileSwapThread::start()
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "ObTmpFileSwapTG thread is not inited", KR(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    STORAGE_LOG(WARN, "fail to start tmp file ObTmpFileSwapTG thread", KR(ret));
+    STORAGE_LOG(WARN, "ObTmpFileSwapThread thread is not inited", KR(ret));
+  } else if (OB_FAIL(lib::ThreadPool::start())) {
+    STORAGE_LOG(WARN, "fail to start tmp file ObTmpFileSwapThread thread", KR(ret));
   }
   return ret;
 }
 
-void ObTmpFileSwapTG::stop()
+void ObTmpFileSwapThread::stop()
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "ObTmpFileSwapTG thread is not inited", KR(ret));
+    STORAGE_LOG(WARN, "ObTmpFileSwapThread thread is not inited", KR(ret));
   } else {
-    TG_STOP(tg_id_);
+    lib::ThreadPool::stop();
     ObThreadCondGuard guard(idle_cond_);
     idle_cond_.signal();
   }
 }
 
-void ObTmpFileSwapTG::wait()
+void ObTmpFileSwapThread::wait()
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "ObTmpFileSwapTG thread is not inited", KR(ret));
+    STORAGE_LOG(WARN, "ObTmpFileSwapThread thread is not inited", KR(ret));
   } else {
-    TG_WAIT(tg_id_);
+    lib::ThreadPool::wait();
   }
 }
 
-void ObTmpFileSwapTG::destroy()
+void ObTmpFileSwapThread::destroy()
 {
   int ret = OB_SUCCESS;
-  if (-1 != tg_id_) {
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
+  if (is_inited_) {
+    stop();
+    wait();
+    lib::ThreadPool::destroy();
   }
 
   clean_up_lists_();
@@ -868,29 +866,29 @@ void ObTmpFileSwapTG::destroy()
   is_inited_ = false;
 }
 
-int ObTmpFileSwapTG::swap_job_enqueue(ObTmpFileSwapJob *swap_job)
+int ObTmpFileSwapThread::swap_job_enqueue(ObTmpFileSwapJob *swap_job)
 {
   int ret = OB_SUCCESS;
   if (has_set_stop()) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "swap thread has been stopped", KR(ret), K(tg_id_), KP(swap_job));
+    STORAGE_LOG(WARN, "swap thread has been stopped", KR(ret), KP(swap_job));
   } else if (OB_FAIL(swap_job_list_.push(swap_job))) {
-    STORAGE_LOG(WARN, "fail push swap job", KR(ret), K(tg_id_), KP(swap_job));
+    STORAGE_LOG(WARN, "fail push swap job", KR(ret), KP(swap_job));
   } else {
     ATOMIC_INC(&swap_job_num_);
   }
   return ret;
 }
 
-int ObTmpFileSwapTG::swap_job_dequeue(ObTmpFileSwapJob *&swap_job)
+int ObTmpFileSwapThread::swap_job_dequeue(ObTmpFileSwapJob *&swap_job)
 {
   int ret = OB_SUCCESS;
   ObSpLinkQueue::Link *link = nullptr;
   if (OB_FAIL(swap_job_list_.pop(link))) {
-    STORAGE_LOG(DEBUG, "fail to pop swap job", KR(ret), K(tg_id_));
+    STORAGE_LOG(DEBUG, "fail to pop swap job", KR(ret));
   } else if (OB_ISNULL(link)) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "fail to get swap job, ptr is nullptr", KR(ret), K(tg_id_));
+    STORAGE_LOG(WARN, "fail to get swap job, ptr is nullptr", KR(ret));
   } else {
     ATOMIC_DEC(&swap_job_num_);
     swap_job = static_cast<ObTmpFileSwapJob*>(link);
@@ -898,19 +896,19 @@ int ObTmpFileSwapTG::swap_job_dequeue(ObTmpFileSwapJob *&swap_job)
   return ret;
 }
 
-void ObTmpFileSwapTG::notify_doing_swap()
+void ObTmpFileSwapThread::notify_doing_swap()
 {
   ObThreadCondGuard guard(idle_cond_);
   idle_cond_.signal();
 }
 
-int64_t ObTmpFileSwapTG::cal_idle_time()
+int64_t ObTmpFileSwapThread::cal_idle_time()
 {
   int64_t swap_idle_time = ObTmpFilePageCacheController::SWAP_INTERVAL;
   if (OB_UNLIKELY(!SERVER_STORAGE_META_SERVICE.is_started())) {
     swap_idle_time = ObTmpFilePageCacheController::SWAP_INTERVAL;
   } else if (ATOMIC_LOAD(&swap_job_num_) != 0 || ATOMIC_LOAD(&working_list_size_) != 0) {
-    if (flush_io_finished_round_ < flush_tg_ref_.get_flush_io_finished_round()) {
+    if (flush_io_finished_round_ < flush_thread_ref_.get_flush_io_finished_round()) {
       swap_idle_time  = 0;
     } else {
       swap_idle_time  = ObTmpFilePageCacheController::SWAP_FAST_INTERVAL;
@@ -919,7 +917,7 @@ int64_t ObTmpFileSwapTG::cal_idle_time()
   return swap_idle_time;
 }
 
-void ObTmpFileSwapTG::run1()
+void ObTmpFileSwapThread::run1()
 {
   int ret = OB_SUCCESS;
   lib::set_thread_name("TFSwap");
@@ -934,13 +932,13 @@ void ObTmpFileSwapTG::run1()
     }
 
     // overwrite ret
-    if (OB_FAIL(flush_tg_ref_.try_work())) {
+    if (OB_FAIL(flush_thread_ref_.try_work())) {
       STORAGE_LOG(WARN, "fail to try flush work", KR(ret));
     }
 
     ObThreadCondGuard guard(idle_cond_);
     int64_t swap_idle_time = cal_idle_time();
-    int64_t flush_idle_time = flush_tg_ref_.cal_idle_time();
+    int64_t flush_idle_time = flush_thread_ref_.cal_idle_time();
     int64_t idle_time = min(swap_idle_time, flush_idle_time);
     if (!has_set_stop() && idle_time != 0) {
       idle_cond_.wait(idle_time);
@@ -948,7 +946,7 @@ void ObTmpFileSwapTG::run1()
   }
 }
 
-void ObTmpFileSwapTG::clean_up_lists_()
+void ObTmpFileSwapThread::clean_up_lists_()
 {
   int ret = OB_SUCCESS;
   while (!swap_job_list_.is_empty()) {
@@ -971,7 +969,7 @@ void ObTmpFileSwapTG::clean_up_lists_()
   }
 }
 
-int ObTmpFileSwapTG::swap()
+int ObTmpFileSwapThread::swap()
 {
   int ret = OB_SUCCESS;
 
@@ -986,13 +984,13 @@ int ObTmpFileSwapTG::swap()
   return ret;
 }
 
-int ObTmpFileSwapTG::do_work_()
+int ObTmpFileSwapThread::do_work_()
 {
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "ObTmpFileSwapTG not init", KR(ret));
+    STORAGE_LOG(WARN, "ObTmpFileSwapThread not init", KR(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -1013,7 +1011,7 @@ int ObTmpFileSwapTG::do_work_()
       }
     }
     if (ATOMIC_LOAD(&swap_job_num_) == 0 && ATOMIC_LOAD(&working_list_size_) == 0) {
-      flush_tg_ref_.set_running_mode(ObTmpFileFlushTG::RUNNING_MODE::NORMAL);
+      flush_thread_ref_.set_running_mode(ObTmpFileFlushThread::RUNNING_MODE::NORMAL);
     }
   }
   if (TC_REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
@@ -1025,7 +1023,7 @@ int ObTmpFileSwapTG::do_work_()
 // runs in normal mode when there is no swap job.
 // since memory is not tight at this point, we try to evict pages
 // but not guarantee eviction occurs if clean pages are not enough
-int ObTmpFileSwapTG::swap_normal_()
+int ObTmpFileSwapThread::swap_normal_()
 {
   int ret = OB_SUCCESS;
 
@@ -1043,7 +1041,7 @@ int ObTmpFileSwapTG::swap_normal_()
 // attempt to evict pages and wake up caller threads as soon as possible,
 // this may trigger the flush thread to flush a small number of pages (FAST mode).
 // caller threads will be awakened if swap job timeout
-int ObTmpFileSwapTG::swap_fast_()
+int ObTmpFileSwapThread::swap_fast_()
 {
   int ret = OB_SUCCESS;
   while (OB_SUCC(ret) && !swap_job_list_.is_empty()) {
@@ -1071,7 +1069,7 @@ int ObTmpFileSwapTG::swap_fast_()
     int64_t wakeup_job_cnt = 0;
     wakeup_satisfied_jobs_(wakeup_job_cnt);
     wakeup_timeout_jobs_();
-    int io_finished_ret = flush_tg_ref_.get_flush_io_finished_ret();
+    int io_finished_ret = flush_thread_ref_.get_flush_io_finished_ret();
     if (OB_SERVER_OUTOF_DISK_SPACE == io_finished_ret ||
         OB_TMP_FILE_EXCEED_DISK_QUOTA == io_finished_ret) {
       wakeup_all_jobs_(io_finished_ret);
@@ -1079,9 +1077,9 @@ int ObTmpFileSwapTG::swap_fast_()
 
     // do flush if could not evict enough pages
     if (OB_SUCC(ret) && !working_list_.is_empty() && wakeup_job_cnt < PROCCESS_JOB_NUM_PER_BATCH) {
-      flush_io_finished_round_ = flush_tg_ref_.get_flush_io_finished_round();
-      flush_tg_ref_.set_running_mode(ObTmpFileFlushTG::RUNNING_MODE::FAST);
-      flush_tg_ref_.notify_doing_flush();
+      flush_io_finished_round_ = flush_thread_ref_.get_flush_io_finished_round();
+      flush_thread_ref_.set_running_mode(ObTmpFileFlushThread::RUNNING_MODE::FAST);
+      flush_thread_ref_.notify_doing_flush();
       break;
     }
   } // end while
@@ -1089,7 +1087,7 @@ int ObTmpFileSwapTG::swap_fast_()
   return ret;
 }
 
-int ObTmpFileSwapTG::calculate_swap_page_num_(const int64_t batch_size, int64_t &expect_swap_cnt)
+int ObTmpFileSwapThread::calculate_swap_page_num_(const int64_t batch_size, int64_t &expect_swap_cnt)
 {
   int ret = OB_SUCCESS;
   ObSpLinkQueue cur_working_list;
@@ -1116,7 +1114,7 @@ int ObTmpFileSwapTG::calculate_swap_page_num_(const int64_t batch_size, int64_t 
   return ret;
 }
 
-int ObTmpFileSwapTG::wakeup_satisfied_jobs_(int64_t& wakeup_job_cnt)
+int ObTmpFileSwapThread::wakeup_satisfied_jobs_(int64_t& wakeup_job_cnt)
 {
   int ret = OB_SUCCESS;
   wakeup_job_cnt = 0;
@@ -1141,7 +1139,7 @@ int ObTmpFileSwapTG::wakeup_satisfied_jobs_(int64_t& wakeup_job_cnt)
   return ret;
 }
 
-int ObTmpFileSwapTG::wakeup_timeout_jobs_()
+int ObTmpFileSwapThread::wakeup_timeout_jobs_()
 {
   int ret = OB_SUCCESS;
   for (int64_t i = working_list_size_; OB_SUCC(ret) && i > 0 && !working_list_.is_empty(); --i) {
@@ -1157,14 +1155,14 @@ int ObTmpFileSwapTG::wakeup_timeout_jobs_()
       }
     } else {
       if (OB_FAIL(push_working_job_(swap_job))) {
-        STORAGE_LOG(WARN, "fail to push swap job", KR(ret), K(tg_id_), KPC(swap_job));
+        STORAGE_LOG(WARN, "fail to push swap job", KR(ret), KPC(swap_job));
       }
     }
   }
   return ret;
 }
 
-void ObTmpFileSwapTG::wakeup_all_jobs_(int ret_code)
+void ObTmpFileSwapThread::wakeup_all_jobs_(int ret_code)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = working_list_size_; OB_SUCC(ret) && i > 0 && !working_list_.is_empty(); --i) {
@@ -1181,29 +1179,29 @@ void ObTmpFileSwapTG::wakeup_all_jobs_(int ret_code)
   }
 }
 
-int ObTmpFileSwapTG::push_working_job_(ObTmpFileSwapJob *swap_job)
+int ObTmpFileSwapThread::push_working_job_(ObTmpFileSwapJob *swap_job)
 {
   int ret = OB_SUCCESS;
   if (has_set_stop()) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "swap thread has been stopped", KR(ret), K(tg_id_), KP(swap_job));
+    STORAGE_LOG(WARN, "swap thread has been stopped", KR(ret), KP(swap_job));
   } else if (OB_FAIL(working_list_.push(swap_job))) {
-    STORAGE_LOG(WARN, "fail push swap job", KR(ret), K(tg_id_), KPC(swap_job));
+    STORAGE_LOG(WARN, "fail push swap job", KR(ret), KPC(swap_job));
   } else {
     ATOMIC_INC(&working_list_size_);
   }
   return ret;
 }
 
-int ObTmpFileSwapTG::pop_working_job_(ObTmpFileSwapJob *&swap_job)
+int ObTmpFileSwapThread::pop_working_job_(ObTmpFileSwapJob *&swap_job)
 {
   int ret = OB_SUCCESS;
   ObSpLinkQueue::Link *link = nullptr;
   if (OB_FAIL(working_list_.pop(link))) {
-    STORAGE_LOG(DEBUG, "fail to pop swap job", KR(ret), K(tg_id_));
+    STORAGE_LOG(DEBUG, "fail to pop swap job", KR(ret));
   } else if (OB_ISNULL(link)) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "fail to get swap job, ptr is nullptr", KR(ret), K(tg_id_));
+    STORAGE_LOG(WARN, "fail to get swap job, ptr is nullptr", KR(ret));
   } else {
     ATOMIC_DEC(&working_list_size_);
     swap_job = static_cast<ObTmpFileSwapJob*>(link);
@@ -1211,21 +1209,21 @@ int ObTmpFileSwapTG::pop_working_job_(ObTmpFileSwapJob *&swap_job)
   return ret;
 }
 
-int ObTmpFileSwapTG::push_working_job_front_(ObTmpFileSwapJob *swap_job)
+int ObTmpFileSwapThread::push_working_job_front_(ObTmpFileSwapJob *swap_job)
 {
   int ret = OB_SUCCESS;
   if (has_set_stop()) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "swap thread has been stopped", KR(ret), K(tg_id_), KP(swap_job));
+    STORAGE_LOG(WARN, "swap thread has been stopped", KR(ret), KP(swap_job));
   } else if (OB_FAIL(working_list_.push_front(swap_job))) {
-    STORAGE_LOG(WARN, "fail push swap job", KR(ret), K(tg_id_), KPC(swap_job));
+    STORAGE_LOG(WARN, "fail push swap job", KR(ret), KPC(swap_job));
   } else {
     ATOMIC_INC(&working_list_size_);
   }
   return ret;
 }
 
-int ObTmpFileSwapTG::shrink_wbp_if_needed_()
+int ObTmpFileSwapThread::shrink_wbp_if_needed_()
 {
   int ret = OB_SUCCESS;
   int64_t actual_evict_num = 0;
@@ -1239,7 +1237,7 @@ int ObTmpFileSwapTG::shrink_wbp_if_needed_()
           STORAGE_LOG(WARN, "fail to init shrink context", KR(ret), K(wbp_.get_shrink_ctx()));
         } else {
           pc_ctrl_.set_flush_all_data(true);
-          flush_tg_ref_.notify_doing_flush();
+          flush_thread_ref_.notify_doing_flush();
           wbp_.advance_shrink_state();
         }
         break;
@@ -1272,7 +1270,7 @@ int ObTmpFileSwapTG::shrink_wbp_if_needed_()
   }
 
   // abort shrinking if wbp memory limit enlarge or flush fail with OB_SERVER_OUTOF_DISK_SPACE
-  int io_finished_ret = flush_tg_ref_.get_flush_io_finished_ret();
+  int io_finished_ret = flush_thread_ref_.get_flush_io_finished_ret();
   if (wbp_.get_shrink_ctx().is_valid() && (!wbp_.need_to_shrink(is_auto) || OB_SERVER_OUTOF_DISK_SPACE == io_finished_ret)) {
     wbp_.finish_shrinking();
   }

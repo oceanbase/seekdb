@@ -14,12 +14,19 @@
  * limitations under the License.
  */
 
-#include "lib/thread/thread_mgr_interface.h"
+#ifndef OBLIB_THREAD_OB_LINK_TASK_H_
+#define OBLIB_THREAD_OB_LINK_TASK_H_
 
-namespace oceanbase {
-namespace lib {
+#include "lib/queue/ob_link.h"
 
-TLOCAL(uint64_t, TGRunnable::thread_idx_) = 0;
+namespace oceanbase
+{
+namespace common
+{
+// Basic task node used by link-queue based thread pools.
+struct LinkTask : public ObLink {};
 
-} // end of namespace lib
-} // end of namespace oceanbase
+} // namespace common
+} // namespace oceanbase
+
+#endif /* OBLIB_THREAD_OB_LINK_TASK_H_ */

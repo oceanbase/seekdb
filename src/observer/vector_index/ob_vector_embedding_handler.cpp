@@ -22,7 +22,6 @@
 #include "lib/json/ob_json.h"
 #include "common/json_type/ob_json_parse.h"
 #include "common/json_type/ob_json_tree.h"
-#include "share/ob_thread_define.h"
 #include "share/ob_server_struct.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "sql/engine/expr/ob_expr_ai/ob_ai_func_utils.h"
@@ -454,7 +453,7 @@ int ObEmbeddingTask::reschedule(ObEmbeddingTaskHandler *thread_pool)
     
     while (OB_SUCC(ret) && !is_push_succ && retry_cnt++ < MAX_RESCHEDULE_RETRY_CNT) {
       retain_if_managed();
-      if (OB_FAIL(TG_PUSH_TASK(thread_pool->get_tg_id(), this))) {
+      if (OB_FAIL(thread_pool->push(this))) {
         if (ret == OB_EAGAIN) { // task queue is full, will retry
           LOG_DEBUG("task queue is full, will retry", K(retry_cnt), K(MAX_RESCHEDULE_RETRY_CNT), K(*this));
           ob_usleep(RESCHEDULE_RETRY_INTERVAL_US);
@@ -1135,8 +1134,8 @@ int ObEmbeddingTask::get_task_info_for_virtual_table(ObEmbeddingTaskInfo &task_i
 
 //=============================================== ObEmbeddingTaskHandler ================================================
 
-ObEmbeddingTaskHandler::ObEmbeddingTaskHandler() : is_inited_(false),
-                                                  tg_id_(ObEmbeddingTaskHandler::INVALID_TG_ID),
+ObEmbeddingTaskHandler::ObEmbeddingTaskHandler() : common::ObSimpleThreadPool(),
+                                                  is_inited_(false),
                                                   task_ref_cnt_(0),
                                                   dropped_task_cnt_(0) {}
 
@@ -1167,36 +1166,43 @@ int ObEmbeddingTaskHandler::init()
 int ObEmbeddingTaskHandler::start()
 {
   int ret = OB_SUCCESS;
+  bool thread_pool_inited = false;
   int64_t max_thread_cnt = MTL_CPU_COUNT() * THREAD_FACTOR;
   max_thread_cnt = OB_MAX(max_thread_cnt, MIN_THREAD_COUNT);
-  if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::VectorTaskPool, tg_id_))) {
-    LOG_WARN("TG_CREATE_TENANT failed for embedding thread pool", KR(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("TG_START failed for embedding thread pool", KR(ret));
-  } else if (OB_FAIL(TG_SET_ADAPTIVE_THREAD(tg_id_, MIN_THREAD_COUNT,
-                                            max_thread_cnt))) {  // must be call TG_SET_ADAPTIVE_THREAD
-  } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
-    LOG_WARN("TG_SET_HANDLER_AND_START failed", KR(ret), K_(tg_id));
+  if (OB_FAIL(common::ObSimpleThreadPool::init(MIN_THREAD_COUNT, MAX_QUEUE_SIZE, "VectorTaskPool"))) {
+    LOG_WARN("init embedding thread pool failed", KR(ret));
+  } else if (FALSE_IT(thread_pool_inited = true)) {
+  } else if (OB_FAIL(common::ObSimpleThreadPool::set_adaptive_thread(MIN_THREAD_COUNT, max_thread_cnt))) {
+    LOG_WARN("set embedding thread pool adaptive thread failed", KR(ret), K(max_thread_cnt));
+  } else if (common::ObSimpleThreadPool::get_thread_count() <= 0
+      && !common::ObSimpleThreadPool::try_expand_one(MIN_THREAD_COUNT)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("start embedding thread pool failed", KR(ret), K(max_thread_cnt));
   } else {
-    LOG_INFO("succ to start embedding task handler", K_(tg_id));
+    LOG_INFO("succ to start embedding task handler", K(max_thread_cnt));
+  }
+  if (OB_FAIL(ret) && thread_pool_inited) {
+    common::ObSimpleThreadPool::stop();
+    common::ObSimpleThreadPool::wait();
+    common::ObSimpleThreadPool::destroy();
   }
   return ret;
 }
 
 void ObEmbeddingTaskHandler::stop()
 {
-  LOG_INFO("embedding task handler start to stop", K_(tg_id));
-  if (OB_LIKELY(INVALID_TG_ID != tg_id_)) {
-    TG_STOP(tg_id_);
+  LOG_INFO("embedding task handler start to stop");
+  if (is_inited_) {
+    common::ObSimpleThreadPool::stop();
   }
 }
 
 void ObEmbeddingTaskHandler::wait()
 {
   int ret = OB_SUCCESS;
-  LOG_INFO("embedding task handler start to wait", K_(tg_id));
-  if (OB_LIKELY(INVALID_TG_ID != tg_id_)) {
-    TG_WAIT(tg_id_);
+  LOG_INFO("embedding task handler start to wait");
+  if (is_inited_) {
+    common::ObSimpleThreadPool::wait();
   }
   if (OB_FAIL(wait_all_tasks_finished())) {
     LOG_WARN("failed to wait all tasks finished", K(ret));
@@ -1298,7 +1304,7 @@ int ObEmbeddingTaskHandler::get_all_active_tasks(common::ObArray<ObEmbeddingTask
 
 void ObEmbeddingTaskHandler::destroy()
 {
-  LOG_INFO("embedding task handler start to destroy", K_(tg_id), K_(task_ref_cnt), K_(dropped_task_cnt));
+  LOG_INFO("embedding task handler start to destroy", K_(task_ref_cnt), K_(dropped_task_cnt));
   
   if (ATOMIC_LOAD(&task_ref_cnt_) > 0) {
     int ret = OB_SUCCESS;
@@ -1307,10 +1313,11 @@ void ObEmbeddingTaskHandler::destroy()
     }
   }
   
-  if (OB_LIKELY(INVALID_TG_ID != tg_id_)) {
-    TG_DESTROY(tg_id_);
+  if (is_inited_) {
+    common::ObSimpleThreadPool::stop();
+    common::ObSimpleThreadPool::wait();
+    common::ObSimpleThreadPool::destroy();
   }
-  tg_id_ = INVALID_TG_ID;
   is_inited_ = false;
   LOG_INFO("embedding task handler destroyed", K_(task_ref_cnt), K_(dropped_task_cnt));
 }
@@ -1328,11 +1335,11 @@ int ObEmbeddingTaskHandler::push_task(ObEmbeddingTask &task)
     
     while (OB_SUCC(ret) && !is_push_succ && has_retry_cnt++ <= MAX_RETRY_PUSH_TASK_CNT) {
       task.retain_if_managed();
-      if (OB_FAIL(TG_PUSH_TASK(tg_id_, &task))) {
+      if (OB_FAIL(common::ObSimpleThreadPool::push(&task))) {
         if (ret != OB_EAGAIN) {
-          LOG_WARN("fail to TG_PUSH_TASK", KR(ret), K(task));
+          LOG_WARN("fail to push task", KR(ret), K(task));
         } else {
-          LOG_DEBUG("fail to TG_PUSH_TASK, queue is full will retry", KR(ret), K(task));
+          LOG_DEBUG("fail to push task, queue is full will retry", KR(ret), K(task));
           ob_usleep(WAIT_RETRY_PUSH_TASK_TIME);
           ret = OB_SUCCESS;
         }

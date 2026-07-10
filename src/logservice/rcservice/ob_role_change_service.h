@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LOGSERVICE_OB_ROLE_CHANGE_SERVICE_
 #define OCEANBASE_LOGSERVICE_OB_ROLE_CHANGE_SERVICE_
 #include "lib/function/ob_function.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "share/ob_ls_id.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -70,7 +70,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(RoleChangeEventSet);
 };
 
-class ObRoleChangeService : public lib::TGTaskHandler , public palf::PalfRoleChangeCb {
+class ObRoleChangeService : public common::ObSimpleThreadPool, public palf::PalfRoleChangeCb {
 public:
   ObRoleChangeService();
   ~ObRoleChangeService();
@@ -81,7 +81,7 @@ public:
   void wait();
   void stop();
   void destroy();
-  void handle(void *task);
+  void handle(void *task) override;
   int on_role_change(const int64_t id) final override;
   int on_need_change_leader(const int64_t ls_id, const common::ObAddr &dst_addr) final override;
   int diagnose(RCDiagnoseInfo &diagnose_info);
@@ -191,7 +191,6 @@ private:
   logservice::ObLogApplyService *apply_service_;
   logservice::ObILogReplayService *replay_service_;
   RoleChangeEventSet rc_set_;
-  int tg_id_;
   RCDiagnoseInfo cur_task_info_; // for diagnose
   bool is_inited_;
 };

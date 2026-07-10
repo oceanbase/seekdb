@@ -24,6 +24,7 @@
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/lock/ob_mutex.h"
 #include "lib/profile/ob_trace_id.h"
+#include "lib/thread/threads.h"
 #include "share/rc/ob_tenant_base.h"
 #include "observer/scheduler/ob_dag_scheduler_config.h"
 #include "observer/scheduler/ob_diagnose_config.h"
@@ -904,7 +905,7 @@ public:
   int64_t value_;
 };
 
-class ObTenantDagWorker : public lib::TGRunnable, public common::ObDLinkBase<ObTenantDagWorker>
+class ObTenantDagWorker : public lib::ThreadPool, public common::ObDLinkBase<ObTenantDagWorker>
 {
 public:
   typedef common::ObDLinkNode<ObTenantDagWorker *> Node;
@@ -954,7 +955,6 @@ private:
   DagWorkerStatus status_;
   int64_t check_period_;
   int64_t last_check_time_;
-  int tg_id_;
   bool hold_by_compaction_dag_;
   bool is_inited_;
 };
@@ -1287,7 +1287,7 @@ private:
   void sub_##name() { ATOMIC_DEC(&var); } \
   void clear_##name() { ATOMIC_SET(&var, 0); } \
 
-class ObTenantDagScheduler : public lib::TGRunnable
+class ObTenantDagScheduler : public lib::ThreadPool
 {
 public:
   static int mtl_init(ObTenantDagScheduler* &scheduler);
@@ -1467,7 +1467,6 @@ private:
 private:
   bool is_inited_;
   bool fast_schedule_dag_net_;
-  int tg_id_;
   int64_t dag_cnt_;              // atomic value
   int64_t dag_limit_;            // only set in init/destroy
   int64_t compaction_dag_limit_;

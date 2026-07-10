@@ -18,6 +18,7 @@
 #define OCEANBASE_ROOTSERVER_OB_INGRESS_BW_ALLOC_SERVICE_H
 
 #include "share/ob_define.h"
+#include "lib/task/ob_timer.h"
 #include "logservice/ob_log_base_type.h"  //ObIRoleChangeSubHandler ObICheckpointSubHandler ObIReplaySubHandler
 #include "observer/net/ob_net_endpoint_ingress_rpc_struct.h"
 #include "observer/ob_server_struct.h"
@@ -59,7 +60,6 @@ public:
       : is_inited_(false),
         is_leader_(false),
         is_stop_(true),
-        tg_id_(-1),
         cluster_id_(OB_INVALID_CLUSTER_ID),
         expire_time_(0),
         ingress_manager_()
@@ -113,7 +113,6 @@ private:
   bool is_inited_;
   bool is_leader_;
   bool is_stop_;
-  int tg_id_;
   uint64_t cluster_id_;
   int64_t expire_time_;
   ObNetEndpointIngressManager ingress_manager_;

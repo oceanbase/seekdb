@@ -18,7 +18,6 @@
 
 #include "ob_task_define.h"
 #include <numeric>
-#include "share/ob_thread_mgr.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;

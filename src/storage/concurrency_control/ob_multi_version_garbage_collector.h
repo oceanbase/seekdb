@@ -371,7 +371,7 @@ private:
   };
 private:
   TimerTask timer_task_;
-  int timer_tg_id_;
+  common::ObTimer timer_;
 
   int64_t last_study_timestamp_;
   int64_t last_refresh_timestamp_;

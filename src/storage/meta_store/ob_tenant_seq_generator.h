@@ -61,7 +61,6 @@ public:
 
   ObTenantSeqGenerator()
     : is_inited_(false),
-      tg_id_(-1),
       persister_(nullptr),
       curr_seqs_(),
       preallocated_seqs_() {}
@@ -87,7 +86,6 @@ private:
 
 
   bool is_inited_;
-  int tg_id_;
   ObTenantStorageMetaPersister *persister_;
   ObTenantMonotonicIncSeqs curr_seqs_;
   ObTenantMonotonicIncSeqs preallocated_seqs_;

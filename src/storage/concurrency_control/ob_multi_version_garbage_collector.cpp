@@ -36,7 +36,7 @@ int64_t ObMultiVersionGarbageCollector::GARBAGE_COLLECT_RECLAIM_DURATION = 3 * G
 
 ObMultiVersionGarbageCollector::ObMultiVersionGarbageCollector()
   : timer_task_(*this),
-    timer_tg_id_(-1),
+    timer_(),
     last_study_timestamp_(0),
     last_refresh_timestamp_(0),
     last_reclaim_timestamp_(0),
@@ -102,12 +102,10 @@ int ObMultiVersionGarbageCollector::start()
   if(!is_inited_) {
     ret = OB_NOT_INIT;
     MVCC_LOG(ERROR, "has not been inited", KR(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::MultiVersionGarbageCollector, timer_tg_id_))) {
-    MVCC_LOG(ERROR, "fail to create MultiVersionGarbageCollector tg", KR(ret));
-  } else if (OB_FAIL(TG_START(timer_tg_id_))) {
-    MVCC_LOG(ERROR, "fail to start MultiVersionGarbageCollector timer", KR(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(timer_tg_id_, timer_task_,
-                                 GARBAGE_COLLECT_RETRY_INTERVAL, true/*repeat*/, false/*immediate*/))) {
+  } else if (OB_FAIL(timer_.init("MultiVersionGC", ObMemAttr("MultiVersionGC")))) {
+    MVCC_LOG(ERROR, "fail to init MultiVersionGarbageCollector timer", KR(ret));
+  } else if (OB_FAIL(timer_.schedule(timer_task_,
+                                     GARBAGE_COLLECT_RETRY_INTERVAL, true/*repeat*/, false/*immediate*/))) {
     MVCC_LOG(ERROR, "fail to schdule MultiVersionGarbageCollector timer", KR(ret));
   } else {
     MVCC_LOG(INFO, "multi version garbage collector start", KPC(this),
@@ -127,10 +125,7 @@ int ObMultiVersionGarbageCollector::stop()
     MVCC_LOG(WARN, "ObCheckPointService is not initialized", K(ret));
   } else {
     ObTimeGuard timeguard(__func__, 1 * 1000 * 1000);
-    if (timer_tg_id_ != -1) {
-      TG_STOP(timer_tg_id_);
-      TG_WAIT(timer_tg_id_);
-    }
+    timer_.stop();
     last_study_timestamp_ = 0;
     last_refresh_timestamp_ = 0;
     last_reclaim_timestamp_ = 0;
@@ -149,14 +144,13 @@ int ObMultiVersionGarbageCollector::stop()
 
 void ObMultiVersionGarbageCollector::wait()
 {
-  TG_WAIT(timer_tg_id_);
+  timer_.wait();
   MVCC_LOG(INFO, "multi version garbage collector wait", KPC(this));
 }
 
 void ObMultiVersionGarbageCollector::destroy()
 {
-  TG_DESTROY(timer_tg_id_);
-  timer_tg_id_ = -1;
+  timer_.destroy();
   MVCC_LOG(INFO, "multi version garbage collector destroy", KPC(this));
 }
 

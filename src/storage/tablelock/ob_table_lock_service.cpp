@@ -242,7 +242,7 @@ int64_t ObTableLockService::ObOBJLockGarbageCollector::GARBAGE_COLLECT_EXEC_INTE
 int64_t ObTableLockService::ObOBJLockGarbageCollector::GARBAGE_COLLECT_TIMEOUT = 10_min;
 
 ObTableLockService::ObOBJLockGarbageCollector::ObOBJLockGarbageCollector()
-  : tg_id_(-1),
+  : timer_(),
     timer_task_(*this),
     last_success_timestamp_(0) {}
 ObTableLockService::ObOBJLockGarbageCollector::~ObOBJLockGarbageCollector() {}
@@ -250,51 +250,50 @@ ObTableLockService::ObOBJLockGarbageCollector::~ObOBJLockGarbageCollector() {}
 int ObTableLockService::ObOBJLockGarbageCollector::start()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TableLockService, tg_id_))) {
-    LOG_WARN("fail to create timer for ObTableLockService::ObOBJLockGarbageCollector",
+  if (OB_FAIL(timer_.init("OBJLockGC", common::ObMemAttr("OBJLockGC")))) {
+    LOG_WARN("fail to init timer for ObTableLockService::ObOBJLockGarbageCollector",
              KR(ret), KPC(this));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("fail to start timer for ObTableLockService::ObOBJLockGarbageCollector",
-             KR(ret), KPC(this));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_,
-                                 timer_task_,
+  } else if (OB_FAIL(timer_.schedule(timer_task_,
                                  GARBAGE_COLLECT_EXEC_INTERVAL,
                                  true /* repeat */,
                                  false /* immediate */))) {
     LOG_ERROR("ObTableLockService::ObOBJLockGarbageCollector schedules repeat task failed",
-              KR(ret), KPC(this), K_(tg_id));
+              KR(ret), KPC(this));
   } else {
     LOG_INFO("ObTableLockService::ObOBJLockGarbageCollector starts successfully", K(ret),
-             KPC(this), K_(tg_id));
+             KPC(this));
   }
   return ret;
 }
 
 void ObTableLockService::ObOBJLockGarbageCollector::stop()
 {
-  TG_STOP(tg_id_);
-  LOG_INFO("ObTableLockService::ObOBJLockGarbageCollector stops successfully", KPC(this), K_(tg_id));
+  if (timer_.inited()) {
+    timer_.stop();
+  }
+  LOG_INFO("ObTableLockService::ObOBJLockGarbageCollector stops successfully", KPC(this));
 }
 
 void ObTableLockService::ObOBJLockGarbageCollector::wait()
 {
-  TG_WAIT(tg_id_);
-  LOG_INFO("ObTableLockService::ObOBJLockGarbageCollector waits successfully", KPC(this), K_(tg_id));
+  if (timer_.inited()) {
+    timer_.wait();
+  }
+  LOG_INFO("ObTableLockService::ObOBJLockGarbageCollector waits successfully", KPC(this));
 }
 
 void ObTableLockService::ObOBJLockGarbageCollector::destroy()
 {
-  TG_DESTROY(tg_id_);
-  tg_id_ = -1;
+  timer_.destroy();
   LOG_INFO("ObTableLockService::ObOBJLockGarbageCollector destroys successfully", KPC(this));
 }
 
 int ObTableLockService::ObOBJLockGarbageCollector::garbage_collect_right_now()
 {
   int ret = OB_SUCCESS;
-  if (tg_id_ < 0) {
+  if (!timer_.inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("timer of ObTableLockService::ObOBJLockGarbageCollector is not running", K(ret), K_(tg_id));
+    LOG_WARN("timer of ObTableLockService::ObOBJLockGarbageCollector is not running", K(ret));
   } else {
     run_gc_once_();
   }
@@ -308,11 +307,11 @@ void ObTableLockService::ObOBJLockGarbageCollector::run_gc_once_()
   if (OB_FAIL(garbage_collect_for_all_ls_())) {
     check_and_report_timeout_();
     LOG_WARN("check and clear obj lock failed, will retry later",
-             K(ret), K(last_success_timestamp_), KPC(this), K_(tg_id));
+             K(ret), K(last_success_timestamp_), KPC(this));
   } else {
     last_success_timestamp_ = ObClockGenerator::getClock();
     LOG_DEBUG("check and clear obj lock successfully", K(ret),
-              K(last_success_timestamp_), KPC(this), K_(tg_id));
+              K(last_success_timestamp_), KPC(this));
   }
 }
 
@@ -324,9 +323,9 @@ int ObTableLockService::ObOBJLockGarbageCollector::garbage_collect_for_all_ls_()
   ObLSService *ls_service = nullptr;
   ObLS *ls = nullptr;
   bool is_leader = false;
-  if (tg_id_ < 0) {
+  if (!timer_.inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("timer of ObTableLockService::ObOBJLockGarbageCollector is not running", K(ret), K_(tg_id));
+    LOG_WARN("timer of ObTableLockService::ObOBJLockGarbageCollector is not running", K(ret));
   } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("mtl ObLSService should not be null", K(ret));

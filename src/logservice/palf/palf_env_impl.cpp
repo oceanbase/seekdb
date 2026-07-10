@@ -212,7 +212,7 @@ int PalfEnvImpl::init(
   } else if (OB_FAIL(cb_thread_pool_.init(io_cb_num, this))) {
     PALF_LOG(ERROR, "LogIOTaskThreadPool init failed", K(ret));
   } else if (OB_FAIL(log_io_worker_wrapper_.init(log_io_worker_config_,
-                                                 cb_thread_pool_.get_tg_id(),
+                                                 &cb_thread_pool_,
                                                  log_alloc_mgr, this))) {
     PALF_LOG(ERROR, "LogIOWorker init failed", K(ret));
   } else if (OB_FAIL(log_shared_queue_th_.init(this))) {

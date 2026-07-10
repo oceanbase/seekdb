@@ -35,7 +35,7 @@ int ObMViewTimerTask::schedule_task(const int64_t delay, bool repeate, bool imme
   if (OB_ISNULL(timer)) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("shared timer is NULL", KR(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(timer->get_tg_id(), *this, delay, repeate, immediate))) {
+  } else if (OB_FAIL(timer->schedule(*this, delay, repeate, immediate))) {
     LOG_WARN("fail to schedule mview timer task", KR(ret), KP(this), K(delay), K(repeate),
              K(immediate));
   }
@@ -50,7 +50,7 @@ void ObMViewTimerTask::cancel_task()
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("shared timer is NULL", KR(ret));
   } else {
-    TG_CANCEL_TASK(timer->get_tg_id(), *this);
+    timer->cancel_task(*this);
   }
 }
 
@@ -62,7 +62,7 @@ void ObMViewTimerTask::wait_task()
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("shared timer is NULL", KR(ret));
   } else {
-    TG_WAIT_TASK(timer->get_tg_id(), *this);
+    timer->wait_task(*this);
   }
 }
 

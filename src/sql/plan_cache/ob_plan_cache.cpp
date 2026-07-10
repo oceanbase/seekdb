@@ -313,7 +313,7 @@ ObPlanCache::ObPlanCache()
    inner_allocator_(),
    ref_handle_mgr_(),
    destroy_(0),
-   tg_id_(-1),
+   evict_timer_(),
    idle_scan_cursor_(0),
    idle_evict_done_round_(false)
 {
@@ -328,7 +328,7 @@ void ObPlanCache::destroy()
 {
   observer::ObReqTimeGuard req_timeinfo_guard;
   if (inited_) {
-    TG_DESTROY(tg_id_);
+    evict_timer_.destroy();
     if (OB_SUCCESS != (cache_evict_all_obj())) {
       SQL_PC_LOG_RET(WARN, OB_ERROR, "fail to evict all lib cache cache");
     }
@@ -357,16 +357,14 @@ int ObPlanCache::init(int64_t hash_bucket)
                                                   ObModIds::OB_HASH_BUCKET_PLAN_CACHE,
                                                   ObModIds::OB_HASH_NODE_PLAN_CACHE))) {
       SQL_PC_LOG(WARN, "failed to init PlanCache", K(ret));
-    } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::PlanCacheEvict, tg_id_))) {
-      LOG_WARN("failed to create tg", K(ret));
-    } else if (OB_FAIL(TG_START(tg_id_))) {
-      LOG_WARN("failed to start tg", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(tg_id_, evict_task_, GCONF.plan_cache_evict_interval, true))) {
+    } else if (FALSE_IT(evict_task_.plan_cache_ = this)) {
+    } else if (OB_FAIL(evict_timer_.init("PlanCacheEvict", ObMemAttr("PlanCacheEvict")))) {
+      LOG_WARN("failed to init plan cache evict timer", K(ret));
+    } else if (OB_FAIL(evict_timer_.schedule(evict_task_, GCONF.plan_cache_evict_interval, true))) {
       LOG_WARN("failed to schedule refresh task", K(ret));
     } else if (OB_FAIL(set_mem_conf(default_conf))) {
       LOG_WARN("fail to set plan cache memory conf", K(ret));
     } else {
-      evict_task_.plan_cache_ = this;
       cn_factory_.set_lib_cache(this);
       ObMemAttr attr = get_mem_attr();
       
@@ -2250,8 +2248,8 @@ int ObPlanCache::mtl_init(ObPlanCache* &plan_cache)
 void ObPlanCache::mtl_stop(ObPlanCache * &plan_cache)
 {
   if (OB_LIKELY(nullptr != plan_cache)) {
-    TG_CANCEL(plan_cache->tg_id_, plan_cache->evict_task_);
-    TG_STOP(plan_cache->tg_id_);
+    plan_cache->evict_timer_.cancel(plan_cache->evict_task_);
+    plan_cache->evict_timer_.stop();
   }
 }
 
@@ -2496,4 +2494,3 @@ void ObPlanCacheEliminationTask::run_plan_cache_task()
 
 } // end of namespace sql
 } // end of namespace oceanbase
-

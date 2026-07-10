@@ -39,15 +39,12 @@ ObTenantMemoryPrinter &ObTenantMemoryPrinter::get_instance()
   return instance_;
 }
 
-int ObTenantMemoryPrinter::register_timer_task(int tg_id)
+int ObTenantMemoryPrinter::register_timer_task(common::ObTimer &timer)
 {
   int ret = OB_SUCCESS;
   const bool is_repeated = true;
   const int64_t print_delay = 10 * 1000000; // 10s
-  if (OB_FAIL(TG_SCHEDULE(tg_id,
-                          print_task_,
-                          print_delay,
-                          is_repeated))) {
+  if (OB_FAIL(timer.schedule(print_task_, print_delay, is_repeated))) {
     LOG_WARN("fail to schedule print task of tenant manager", K(ret));
   }
   return ret;

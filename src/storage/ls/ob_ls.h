@@ -18,6 +18,7 @@
 #define OCEABASE_STORAGE_OB_LS_
 
 #include "lib/utility/ob_print_utils.h"
+#include "lib/task/ob_timer.h"
 #include "common/ob_member_list.h"
 #include "share/ob_delegate.h"
 #include "lib/worker.h"
@@ -941,7 +942,7 @@ private:
   // table::ObTenantTabletTTLMgr (together with tablet TTL); only the vector index
   // scheduler part is preserved here, driven by its own timer.
   share::ObPluginVectorIndexLoadScheduler vector_idx_scheduler_;
-  int vec_idx_scheduler_tg_id_ = 0;
+  common::ObTimer vector_idx_scheduler_timer_;
 private:
   bool is_inited_;
   

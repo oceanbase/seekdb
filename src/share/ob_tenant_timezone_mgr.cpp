@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SERVER_OMT
 #include "ob_tenant_timezone_mgr.h"
-#include "share/ob_thread_mgr.h"  // TG IDs, previously hidden behind a transitive include(free within share)
 #include "share/rc/ob_module_provider.h"
 #include "share/ob_internal_table_change_notifier.h"
 
@@ -40,6 +39,7 @@ void ObTenantTimezoneMgr::UpdateTenantTZTask::runTimerTask()
 ObTenantTimezoneMgr::ObTenantTimezoneMgr()
     : is_inited_(false),
       update_task_(this),
+      timer_(),
       usable_(false)
 {
 }
@@ -60,6 +60,8 @@ int ObTenantTimezoneMgr::init(ObMySQLProxy &sql_proxy)
   is_inited_ = true;
   if (OB_FAIL(init_timezone(sql_proxy))) {
     LOG_WARN("init timezone info failed", K(ret));
+  } else if (OB_FAIL(timer_.init("TimezoneMgr", ObMemAttr("TimezoneMgr")))) {
+    LOG_WARN("init timezone timer failed", K(ret));
   } else {
     // Register with notifier. Role-change-driven switch_to_leader will
     // trigger the initial refresh after LS promotion; import path triggers
@@ -81,9 +83,9 @@ int ObTenantTimezoneMgr::start()
   const int64_t delay = SLEEP_USECONDS;
   const bool repeat = true;
   const bool immediate = false;
-  if (OB_FAIL(TG_START(lib::TGDefIDs::TIMEZONE_MGR))) {
+  if (OB_FAIL(timer_.start())) {
     LOG_WARN("fail to start timer", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::TIMEZONE_MGR, update_task_, delay, repeat, immediate))) {
+  } else if (OB_FAIL(timer_.schedule(update_task_, delay, repeat, immediate))) {
     LOG_WARN("schedual time zone mgr failed", K(ret));
   }
   return ret;
@@ -91,16 +93,17 @@ int ObTenantTimezoneMgr::start()
 
 void ObTenantTimezoneMgr::stop()
 {
-  TG_STOP(lib::TGDefIDs::TIMEZONE_MGR);
+  timer_.stop();
 }
 
 void ObTenantTimezoneMgr::wait()
 {
-  TG_WAIT(lib::TGDefIDs::TIMEZONE_MGR);
+  timer_.wait();
 }
 
 void ObTenantTimezoneMgr::destroy()
 {
+  timer_.destroy();
   ob_delete(tz_info_mgr_);
 }
 
@@ -143,8 +146,7 @@ int ObTenantTimezoneMgr::refresh_timezone_info()
 int ObTenantTimezoneMgr::schedule_retry()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::TIMEZONE_MGR,
-                          update_task_, 1000000, false))) {
+  if (OB_FAIL(timer_.schedule(update_task_, 1000000, false))) {
     LOG_WARN("schedule timezone retry timer failed", K(ret));
   } else {
     LOG_INFO("[TIMEZONE] retry timer scheduled");

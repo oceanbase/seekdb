@@ -21,7 +21,6 @@
 // lib_get_cpu_khz is a weak symbol (overridden by observer's strong symbol); ob_diagnostic_info_util.h is removed, so declare it explicitly
 namespace oceanbase { namespace common { uint64_t lib_get_cpu_khz(); } }
 #include "lib/rc/ob_rc.h"
-#include "share/ob_thread_mgr.h"  // lib::TGDefIDs::ReqMemEvict (share TG enum extension)
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -55,11 +54,9 @@ int ObPlanMonitorNodeList::init()
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(queue_.init(MOD_LABEL, queue_size))) {
     SERVER_LOG(WARN, "Failed to init ObMySQLRequestQueue", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::ReqMemEvict, tg_id_))) {
-    SERVER_LOG(WARN, "create failed", K(ret));
   } else if (OB_FAIL(node_map_.create(queue_size, attr, attr))) {
     LOG_WARN("failed to create hash map", K(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
+  } else if (OB_FAIL(evict_timer_.init("ReqMemEvict", ObMemAttr("ReqMemEvict")))) {
     SERVER_LOG(WARN, "init timer fail", K(ret));
   } else if (OB_FAIL(allocator_.init(MONITOR_NODE_PAGE_SIZE,
                                      MOD_LABEL,
@@ -69,7 +66,7 @@ int ObPlanMonitorNodeList::init()
     //check FIFO mem used and sql audit records every 1 seconds
     if (OB_FAIL(task_.init(this))) {
       SERVER_LOG(WARN, "fail to init sql audit time tast", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(tg_id_, task_, EVICT_INTERVAL, true))) {
+    } else if (OB_FAIL(evict_timer_.schedule(task_, EVICT_INTERVAL, true))) {
       SERVER_LOG(WARN, "start eliminate task failed", K(ret));
     } else {
       rt_node_id_ = -1;
@@ -89,7 +86,7 @@ int ObPlanMonitorNodeList::init()
 void ObPlanMonitorNodeList::destroy()
 {
   if (!destroyed_) {
-    TG_DESTROY(tg_id_);
+    evict_timer_.destroy();
     clear_queue();
     queue_.destroy();
     allocator_.destroy();

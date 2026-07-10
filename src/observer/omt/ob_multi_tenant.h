@@ -19,8 +19,7 @@
 
 
 #include <functional>
-#include "lib/task/ob_timer_service.h"  // ObTimerTask
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/task/ob_timer.h"
 #include "share/ob_unit_getter.h"       // ObUnitInfoGetter / TenantUnits (formerly via ob_tenant_node_balancer.h)
 
 namespace oceanbase
@@ -49,6 +48,8 @@ namespace omt
 class ObTenant;
 class ObTenantHandle;
 class ObTenantMeta;
+
+// This is the entry class of OMT module.
 
 class ObMultiTenant : public common::ObTimerTask
 {
@@ -202,7 +203,8 @@ protected:
   bool cpu_dump_;
   bool has_synced_;
   bool tenant_active_;
-  int timer_tg_id_;
+  common::ObTimer timer_;
+  common::ObTimer memory_printer_timer_;
   bool timer_stopped_;
 
 private:
@@ -243,15 +245,19 @@ bool ObMultiTenant::has_synced() const
 class ObSharedTimer
 {
 public:
-  ObSharedTimer() : tg_id_(-1) {}
+  ObSharedTimer() : timer_() {}
   static int mtl_init(ObSharedTimer *&st);
   static int mtl_start(ObSharedTimer *&st);
   static void mtl_stop(ObSharedTimer *&st);
   static void mtl_wait(ObSharedTimer *&st);
   void destroy();
-  int get_tg_id() const { return tg_id_; }
+  int schedule(common::ObTimerTask &task, const int64_t delay,
+      bool repeat = false, bool immediate = false);
+  int cancel_task(const common::ObTimerTask &task);
+  int wait_task(const common::ObTimerTask &task);
+  bool task_exist(const common::ObTimerTask &task);
 private:
-  int tg_id_;
+  common::ObTimer timer_;
 };
 
 } // end of namespace omt

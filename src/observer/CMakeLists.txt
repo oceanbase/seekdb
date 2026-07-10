@@ -25,7 +25,6 @@ ob_set_subtarget(ob_server common
   ob_server_utils.cpp
   ob_signal_handle.cpp
   ob_srv_deliver.cpp
-  ob_thread_mgr.cpp
   ob_srv_network_frame.cpp
   ob_srv_xlator.cpp
   ob_ex_rpc.cpp

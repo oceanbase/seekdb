@@ -30,7 +30,7 @@ class ObTenantDutyTask
 {
   static constexpr int64_t SCHEDULE_PERIOD = 10 * 1000L * 1000L;
 public:
-  int schedule(int tg_id);
+  int schedule(common::ObTimer &timer);
   ObTenantDutyTask();
 private:
   void runTimerTask() override;
@@ -63,7 +63,7 @@ private:
 class ObTenantSqlMemoryTimerTask : private common::ObTimerTask
 {
 public:
-  int schedule(int tg_id);
+  int schedule(common::ObTimer &timer);
 private:
   void runTimerTask() override;
 private:

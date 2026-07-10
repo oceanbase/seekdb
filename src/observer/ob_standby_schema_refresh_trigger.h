@@ -29,7 +29,7 @@ namespace schema
 class ObStandbySchemaRefreshTrigger : public common::ObTimerTask
 {
 public:
-  ObStandbySchemaRefreshTrigger() : is_inited_(false), is_scheduled_(false) {}
+  ObStandbySchemaRefreshTrigger() : is_inited_(false), is_scheduled_(false), timer_() {}
   virtual ~ObStandbySchemaRefreshTrigger() {}
   
   int init();
@@ -46,6 +46,7 @@ private:
   
   bool is_inited_;
   bool is_scheduled_;
+  common::ObTimer timer_;
 };
 
 } // namespace schema

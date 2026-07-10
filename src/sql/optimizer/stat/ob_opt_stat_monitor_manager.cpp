@@ -160,7 +160,6 @@ void ObOptStatMonitorManager::destroy()
   if (!destroyed_) {
     destroyed_ = true;
     inited_ = false;
-    TG_DESTROY(tg_id_);
     SpinWLockGuard guard(lock_);
     column_usage_map_.destroy();
     dml_stat_map_.destroy();
@@ -738,11 +737,13 @@ int ObOptStatMonitorManager::mtl_start(ObOptStatMonitorManager* &optstat_monitor
 {
   int ret = OB_SUCCESS;
   if (OB_LIKELY(nullptr != optstat_monitor_mgr)) {
-    if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), optstat_monitor_mgr->get_flush_all_task(),
-                            ObOptStatMonitorFlushAllTask::FLUSH_INTERVAL, true))) {
+    if (OB_FAIL(share::g_mp->shared_timer()->schedule(
+        optstat_monitor_mgr->get_flush_all_task(),
+        ObOptStatMonitorFlushAllTask::FLUSH_INTERVAL, true))) {
       LOG_WARN("failed to scheduler flush all task", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), optstat_monitor_mgr->get_check_task(),
-                                   ObOptStatMonitorCheckTask::CHECK_INTERVAL, true))) {
+    } else if (OB_FAIL(share::g_mp->shared_timer()->schedule(
+        optstat_monitor_mgr->get_check_task(),
+        ObOptStatMonitorCheckTask::CHECK_INTERVAL, true))) {
       LOG_WARN("failed to scheduler check task", K(ret));
     } else {
       optstat_monitor_mgr->get_flush_all_task().disable_timeout_check();
@@ -757,16 +758,16 @@ int ObOptStatMonitorManager::mtl_start(ObOptStatMonitorManager* &optstat_monitor
 void ObOptStatMonitorManager::mtl_stop(ObOptStatMonitorManager* &optstat_monitor_mgr)
 {
   if (OB_LIKELY(nullptr != optstat_monitor_mgr)) {
-    TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), optstat_monitor_mgr->get_flush_all_task());
-    TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), optstat_monitor_mgr->get_check_task());
+    share::g_mp->shared_timer()->cancel_task(optstat_monitor_mgr->get_flush_all_task());
+    share::g_mp->shared_timer()->cancel_task(optstat_monitor_mgr->get_check_task());
   }
 }
 
 void ObOptStatMonitorManager::mtl_wait(ObOptStatMonitorManager* &optstat_monitor_mgr)
 {
   if (OB_LIKELY(nullptr != optstat_monitor_mgr)) {
-    TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), optstat_monitor_mgr->get_flush_all_task());
-    TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), optstat_monitor_mgr->get_check_task());
+    share::g_mp->shared_timer()->wait_task(optstat_monitor_mgr->get_flush_all_task());
+    share::g_mp->shared_timer()->wait_task(optstat_monitor_mgr->get_check_task());
   }
 }
 

@@ -15,8 +15,6 @@
  */
 #define USING_LOG_PREFIX OBLOG
 #include "ob_log_route_service.h"
-#include "lib/thread/thread_mgr.h"  // MTL
-#include "share/ob_thread_mgr.h"    // TG*
 #include "share/ob_server_struct.h"  // GCTX
 #include "share/config/ob_server_config.h"  // GCONF
 #include "lib/string/ob_sql_string.h"  // ObSqlString
@@ -265,16 +263,16 @@ ObLogRouteService::ObLSRouteTimerTask::ObLSRouteTimerTask(ObLogRouteService &log
     log_route_service_(log_route_service)
 {}
 
-int ObLogRouteService::ObLSRouteTimerTask::init(int tg_id)
+int ObLogRouteService::ObLSRouteTimerTask::init(int thread_id)
 {
   int ret = OB_SUCCESS;
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_ERROR("ObLSRouteTimerTask has already been inited", KR(ret), K(tg_id));
+    LOG_ERROR("ObLSRouteTimerTask has already been inited", KR(ret), K(thread_id));
   } else {
     is_inited_ = true;
-    LOG_INFO("ls_route_timer_task inited", K(tg_id));
+    LOG_INFO("ls_route_timer_task inited", K(thread_id));
   }
 
   return ret;
@@ -293,4 +291,3 @@ void ObLogRouteService::ObLSRouteTimerTask::runTimerTask()
 
 } // namespace logservice
 } // namespace oceanbase
-

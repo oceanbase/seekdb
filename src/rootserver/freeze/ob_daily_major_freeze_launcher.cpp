@@ -42,7 +42,8 @@ ObDailyMajorFreezeLauncher::ObDailyMajorFreezeLauncher()
     merge_info_mgr_(nullptr),
     last_check_tablet_ckm_us_(0),
     tablet_ckm_gc_compaction_scn_(SCN::invalid_scn()),
-    stop_(true)
+    stop_(true),
+    timer_()
 {
 }
 
@@ -69,7 +70,11 @@ int ObDailyMajorFreezeLauncher::init(
     sql_proxy_ = &proxy;
     already_launch_ = false;
     stop_ = false;
-    is_inited_ = true;
+    if (OB_FAIL(timer_.init("MFLaunchTimer", ObMemAttr("MFLaunch")))) {
+      LOG_WARN("init MFLaunch timer failed", KR(ret));
+    } else {
+      is_inited_ = true;
+    }
   }
   return ret;
 }
@@ -80,9 +85,9 @@ int ObDailyMajorFreezeLauncher::start()
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDailyMajorFreezeLauncher not init", KR(ret));
-  } else if (OB_FAIL(TG_START(lib::TGDefIDs::MFLaunchTimer))) {
+  } else if (OB_FAIL(timer_.start())) {
     LOG_WARN("start MFLaunch timer failed", KR(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::MFLaunchTimer, *this, LAUNCHER_INTERVAL_US, true/*is_repeat*/))) {
+  } else if (OB_FAIL(timer_.schedule(*this, LAUNCHER_INTERVAL_US, true/*is_repeat*/))) {
     LOG_WARN("schedule MFLaunch timer failed", KR(ret));
   } else {
     stop_ = false;
@@ -122,14 +127,14 @@ void ObDailyMajorFreezeLauncher::stop()
 {
   if (!stop_) {
     stop_ = true;
-    TG_STOP(lib::TGDefIDs::MFLaunchTimer);
+    timer_.stop();
   }
 }
 
 void ObDailyMajorFreezeLauncher::wait()
 {
   if (is_inited_) {
-    TG_WAIT(lib::TGDefIDs::MFLaunchTimer);
+    timer_.wait();
   }
 }
 
@@ -138,7 +143,7 @@ int ObDailyMajorFreezeLauncher::destroy()
   int ret = OB_SUCCESS;
   stop();
   wait();
-  TG_DESTROY(lib::TGDefIDs::MFLaunchTimer);
+  timer_.destroy();
   stop_ = true;
   is_paused_ = false;
   is_inited_ = false;

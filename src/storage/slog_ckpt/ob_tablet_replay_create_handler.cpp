@@ -73,7 +73,6 @@ int ObTabletReplayCreateTask::execute()
     ret = OB_NOT_INIT;
     LOG_WARN("task not init", K(ret), KPC(this));
   } else {
-    ObTenantSwitchGuard guard(tenant_base_);
     if (Type::DISCRETE == type_ &&
         OB_FAIL(handler_->replay_discrete_tablets(replay_item_range_arr_))) {
       LOG_WARN("fail to execute replay_discrete_tablets", K(ret), KPC(this));

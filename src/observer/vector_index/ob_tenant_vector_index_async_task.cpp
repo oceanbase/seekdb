@@ -158,7 +158,8 @@ int ObTenantVecAsyncTaskScheduler::init(ObMySQLProxy &sql_proxy)
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("tenant ttl mgr init twice", KR(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantTTLManager, tg_id_))) {    // generate new timer
+  } else if (OB_FAIL(timer_.init(
+      "TTLManager", common::ObMemAttr("TTLManager")))) {
     LOG_WARN("fail to init timer", KR(ret));
   } else if (OB_FAIL(vec_history_task_.init(sql_proxy))) { // History table cleanup
     LOG_WARN("fail to init clear history task");
@@ -177,9 +178,7 @@ int ObTenantVecAsyncTaskScheduler::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("init ttl scheduler fail", KR(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, vec_history_task_, VEC_INDEX_CLEAR_TASK_PERIOD, true))) {
+  } else if (OB_FAIL(timer_.schedule(vec_history_task_, VEC_INDEX_CLEAR_TASK_PERIOD, true))) {
     LOG_WARN("fail to start vector index clear history task", KR(ret));
   }
   FLOG_INFO("start tenant vector index manager", KR(ret));
@@ -190,22 +189,25 @@ int ObTenantVecAsyncTaskScheduler::start()
 void ObTenantVecAsyncTaskScheduler::wait()
 {
   FLOG_INFO("wait tenant vector index async task manager");
-  TG_WAIT(tg_id_);
+  if (timer_.inited()) {
+    timer_.wait();
+  }
   FLOG_INFO("finish to wait tenant vector index async task manager");
 }
 
 void ObTenantVecAsyncTaskScheduler::stop()
 {
   FLOG_INFO("stop tenant vector index async task manager");
-  TG_STOP(tg_id_);
+  if (timer_.inited()) {
+    timer_.stop();
+  }
   FLOG_INFO("finish to stop tenant vector index async task manager");
 }
 
 void ObTenantVecAsyncTaskScheduler::destroy()
 {
   FLOG_INFO("destroy tenant vector index async task manager");
-  TG_DESTROY(tg_id_);
-  tg_id_ = -1;
+  timer_.destroy();
   FLOG_INFO("finish to destroy tenant vector index async task manager");
 }
 

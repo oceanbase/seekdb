@@ -165,7 +165,7 @@ ObTenantMetaMemMgr::ObTenantMetaMemMgr()
     tablet_map_(),
     flying_tablet_map_(FLYING_TABLET_THRESHOLD),
     external_tablet_cnt_map_(),
-    tg_id_(-1),
+    gc_timer_(),
     table_gc_task_(this),
     refresh_config_task_(),
     tablet_gc_task_(this),
@@ -232,24 +232,23 @@ int ObTenantMetaMemMgr::init()
     LOG_WARN("fail to initialize tablet map", K(ret), K(bucket_num));
   } else if (OB_FAIL(gc_memtable_map_.create(10, "GCMemtableMap", "GCMemtableMap"))) {
     LOG_WARN("fail to initialize gc memtable map", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantMetaMemMgr, tg_id_))) {
-    LOG_WARN("fail to create thread for t3m", K(ret));
   } else if (OB_FAIL(meta_cache_io_allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, "StorMetaCacheIO", mem_limit))) {
     LOG_WARN("fail to init storage meta cache io allocator", K(ret), K(mem_limit));
   } else if (OB_FAIL(fetch_tenant_config())) {
     LOG_WARN("fail to fetch tenant config", K(ret));
   } else {
     init_pool_arr();
+  }
+
+  // Init for persistent bloom filter load thread.
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(bf_load_thread_.init())) {
+    LOG_WARN("fail to init bloom filter load thread", K(ret));
+  } else {
     is_inited_ = true;
   }
 
-  // Init for persistent bloom filter load tg.
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(bf_load_tg_.init())) {
-    LOG_WARN("fail to init bloom filter load tg", K(ret));
-  }
-
-  if (OB_UNLIKELY(!is_inited_)) {
+  if (OB_FAIL(ret) && !is_inited_) {
     destroy();
   }
   return ret;
@@ -307,27 +306,25 @@ int ObTenantMetaMemMgr::start()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantMetaMemMgr hasn't been inited", K(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("fail to start thread for t3m", K(ret), K(tg_id_));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, table_gc_task_, TABLE_GC_INTERVAL_US, true/*repeat*/))) {
+  } else if (OB_FAIL(gc_timer_.init("TenantMetaMem", ObMemAttr("TenantMetaMem")))) {
+    LOG_WARN("fail to init timer for t3m", K(ret));
+  } else if (OB_FAIL(gc_timer_.schedule(table_gc_task_, TABLE_GC_INTERVAL_US, true/*repeat*/))) {
     LOG_WARN("fail to schedule itables gc task", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(
-      tg_id_, refresh_config_task_, REFRESH_CONFIG_INTERVAL_US, true/*repeat*/))) {
+  } else if (OB_FAIL(gc_timer_.schedule(refresh_config_task_, REFRESH_CONFIG_INTERVAL_US, true/*repeat*/))) {
     LOG_WARN("fail to schedule refresh config task", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(
-      tg_id_, tablet_gc_task_, TABLE_GC_INTERVAL_US, true/*repeat*/))) {
+  } else if (OB_FAIL(gc_timer_.schedule(tablet_gc_task_, TABLE_GC_INTERVAL_US, true/*repeat*/))) {
     LOG_WARN("fail to schedule tablet gc task", K(ret));
-  } else if (OB_FAIL(bf_load_tg_.start())) {
-    LOG_WARN("fail to lstart bloom filter load tg", K(ret));
+  } else if (OB_FAIL(bf_load_thread_.start())) {
+    LOG_WARN("fail to start bloom filter load thread", K(ret));
   } else {
-    LOG_INFO("successfully to start t3m's three tasks", K(ret), K(tg_id_));
+    LOG_INFO("successfully to start t3m's three tasks", K(ret));
   }
   return ret;
 }
 
 void ObTenantMetaMemMgr::stop()
 {
-  bf_load_tg_.stop();
+  bf_load_thread_.stop();
   // When the observer exits by kill -15, the release of meta is triggered by prepare_safe_destory
   // called by ObLSService::stop(), then the ObLSService::wait() infinitely check if all meta release completed,
   // so t3m can't stop gc thread until check_all_meta_mem_released is true in ObTenantMetaMemMgr::wait()
@@ -354,22 +351,18 @@ void ObTenantMetaMemMgr::wait()
       }
     }
 
-    TG_STOP(tg_id_);
+    gc_timer_.stop();
+    gc_timer_.wait();
 
-    TG_WAIT(tg_id_);
-
-    // Wait for bloom filter load tg.
-    bf_load_tg_.wait();
+    // Wait for bloom filter load thread.
+    bf_load_thread_.wait();
   }
 }
 
 void ObTenantMetaMemMgr::destroy()
 {
   int ret = OB_SUCCESS;
-  if (tg_id_ != -1) {
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
-  }
+  gc_timer_.destroy();
   full_tablet_creator_.reset(); // must reset after gc_tablets
   flying_tablet_map_.destroy();
   external_tablet_cnt_map_.destroy();
@@ -394,8 +387,8 @@ void ObTenantMetaMemMgr::destroy()
   }
   meta_cache_io_allocator_.destroy();
 
-  // Destroy for bloom filter load tg.
-  bf_load_tg_.destroy();
+  // Destroy for bloom filter load thread.
+  bf_load_thread_.destroy();
 
   is_inited_ = false;
 }
@@ -2056,7 +2049,7 @@ int ObTenantMetaMemMgr::schedule_load_bloomfilter(const storage::ObITable::Table
                                                   const ObDatumRowkey &rowkey)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(bf_load_tg_.add_load_task(sstable_key, ls_id, macro_id, rowkey))) {
+  if (OB_FAIL(bf_load_thread_.add_load_task(sstable_key, ls_id, macro_id, rowkey))) {
     LOG_WARN("fail to add bloom filter load task", K(ret), K(sstable_key), K(macro_id), K(rowkey));
   }
   return ret;

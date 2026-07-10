@@ -212,7 +212,7 @@ public:
     static int64_t GARBAGE_COLLECT_EXEC_INTERVAL;
     static int64_t GARBAGE_COLLECT_TIMEOUT;
   private:
-    int tg_id_;
+    common::ObTimer timer_;
     TimerTask timer_task_;
     int64_t last_success_timestamp_;
   };

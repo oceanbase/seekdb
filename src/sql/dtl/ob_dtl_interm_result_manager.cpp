@@ -686,8 +686,9 @@ int ObDTLIntermResultManager::mtl_start(ObDTLIntermResultManager *&dtl_interm_re
 {
   int ret = OB_SUCCESS;
   if (OB_LIKELY(nullptr != dtl_interm_result_manager)) {
-    if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), dtl_interm_result_manager->get_gc_task(),
-                            ObDTLIntermResultGCTask::REFRESH_INTERVAL, true))) {
+    if (OB_FAIL(share::g_mp->shared_timer()->schedule(
+        dtl_interm_result_manager->get_gc_task(),
+        ObDTLIntermResultGCTask::REFRESH_INTERVAL, true))) {
       LOG_WARN("failed to scheduler flush all task", K(ret));
     } else {
       dtl_interm_result_manager->get_gc_task().disable_timeout_check();
@@ -702,7 +703,7 @@ void ObDTLIntermResultManager::mtl_stop(ObDTLIntermResultManager *&dtl_interm_re
 {
   if (OB_LIKELY(nullptr != dtl_interm_result_manager) &&
       dtl_interm_result_manager->get_gc_task().is_start_) {
-    TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), dtl_interm_result_manager->get_gc_task());
+    share::g_mp->shared_timer()->cancel_task(dtl_interm_result_manager->get_gc_task());
   }
 }
 
@@ -710,7 +711,7 @@ void ObDTLIntermResultManager::mtl_wait(ObDTLIntermResultManager *&dtl_interm_re
 {
   if (OB_LIKELY(nullptr != dtl_interm_result_manager &&
       dtl_interm_result_manager->get_gc_task().is_start_)) {
-    TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), dtl_interm_result_manager->get_gc_task());
+    share::g_mp->shared_timer()->wait_task(dtl_interm_result_manager->get_gc_task());
   }
 }
 

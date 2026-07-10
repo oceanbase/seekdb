@@ -18,7 +18,9 @@
 #define OB_BLOOM_FILTER_LOAD_MAP_H_
 
 #include "lib/hash/ob_hashmap.h"
+#include "lib/lock/ob_thread_cond.h"
 #include "lib/queue/ob_link_queue.h"
+#include "lib/thread/thread_pool.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/ob_i_table.h"
 
@@ -146,11 +148,11 @@ private:
   bool is_inited_;
 };
 
-class ObMacroBlockBloomFilterLoadTG : public lib::TGRunnable
+class ObMacroBlockBloomFilterLoadThread : public lib::ThreadPool
 {
 public:
-  ObMacroBlockBloomFilterLoadTG();
-  ~ObMacroBlockBloomFilterLoadTG();
+  ObMacroBlockBloomFilterLoadThread();
+  ~ObMacroBlockBloomFilterLoadThread();
   int init();
   int start();
   void stop();
@@ -170,10 +172,9 @@ private:
   int do_multi_load(const ObBloomFilterLoadKey &key, ObArray<ValuePair> &array);
   int do_multi_get(const ObBloomFilterLoadKey &key, ObArray<ValuePair> &array);
   int load_macro_block_bloom_filter(const ObDataMacroBlockMeta &macro_meta);
-  DISALLOW_COPY_AND_ASSIGN(ObMacroBlockBloomFilterLoadTG);
+  DISALLOW_COPY_AND_ASSIGN(ObMacroBlockBloomFilterLoadThread);
 
 private:
-  int tg_id_;
   ObThreadCond idle_cond_;
   ObBloomFilterLoadTaskQueue load_task_queue_;
   common::ObFIFOAllocator allocator_;

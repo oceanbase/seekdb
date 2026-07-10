@@ -20,7 +20,6 @@
 #include "common/mysqlclient/ob_server_connection_pool.h"
 #include "common/mysqlclient/ob_mysql_server_provider.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
-#include "lib/thread/thread_mgr.h"
 
 namespace oceanbase
 {
@@ -89,7 +88,7 @@ ObMySQLConnectionPool::ObMySQLConnectionPool()
     is_use_ssl_(true),
     mode_(ObMySQLConnection::MYSQL_MODE),
     pool_type_(MySQLConnectionPoolType::SERVER_POOL),
-    tg_id_(-1),
+    timer_(),
     server_provider_(NULL),
     busy_conn_count_(0),
     user_info_lock_(obsys::WRITE_PRIORITY),
@@ -135,10 +134,7 @@ ObMySQLConnectionPool::~ObMySQLConnectionPool()
 
   stop();
 
-  if (tg_id_ != -1) {
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
-  }
+  timer_.destroy();
 }
 
 void ObMySQLConnectionPool::set_server_provider(ObMySQLServerProvider *provider)
@@ -195,15 +191,16 @@ int ObMySQLConnectionPool::set_db_param(const ObString &db_user, const ObString 
   return ret;
 }
 
-int ObMySQLConnectionPool::start(int tg_id)
+int ObMySQLConnectionPool::start()
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!server_provider_ || -1 == tg_id)) {
+  if (OB_UNLIKELY(!server_provider_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("server_provider_ not inited", K(ret), K(server_provider_), K(tg_id));
+    LOG_WARN("server_provider_ not inited", K(ret), K(server_provider_));
+  } else if (OB_FAIL(timer_.init("MySQLConnPool", ObMemAttr("MySQLConnPool")))) {
+    LOG_WARN("init mysql connection pool timer failed", K(ret));
   } else {
     is_stop_ = false;
-    tg_id_ = tg_id;
     runTimerTask();
   }
   return ret;
@@ -212,17 +209,11 @@ int ObMySQLConnectionPool::start(int tg_id)
 void ObMySQLConnectionPool::stop()
 {
   if (! is_stop_) {
-    int ret = OB_SUCCESS;
-    if (tg_id_ != -1) {
-      int origin_tg_id = tg_id_;
-      if (OB_FAIL(TG_CANCEL_ALL(tg_id_))) {
-        LOG_ERROR("fail to cancel timer task", K(ret), K(tg_id_), K(is_stop_), K(this));
-      } else {
-        TG_STOP(tg_id_);
-        TG_WAIT(tg_id_);
-        tg_id_ = -1;
-        LOG_INFO("ObMySQLConnectionPool stop succ", K(origin_tg_id));
-      }
+    if (timer_.inited()) {
+      timer_.cancel_all();
+      timer_.stop();
+      timer_.destroy();
+      LOG_INFO("ObMySQLConnectionPool stop succ");
     }
     is_stop_ = true;
   }
@@ -230,7 +221,12 @@ void ObMySQLConnectionPool::stop()
 
 void ObMySQLConnectionPool::signal_refresh()
 {
-  TG_CANCEL(tg_id_, *this);
+  if (timer_.inited()) {
+    int ret = timer_.cancel(*this);
+    if (OB_FAIL(ret)) {
+      LOG_WARN("fail to cancel timer task", K(ret), K(is_stop_), K(this));
+    }
+  }
   LOG_INFO("signal_refresh");
   runTimerTask();
 }
@@ -593,9 +589,9 @@ void ObMySQLConnectionPool::runTimerTask()
   common::ObAddr server;
 
   LOG_TRACE("start timer task for refresh connection pool");
-  if (OB_ISNULL(server_provider_) || -1 == tg_id_) {
+  if (OB_ISNULL(server_provider_) || !timer_.inited()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid connection pool", K(server_provider_), K(tg_id_), K(ret));
+    LOG_WARN("invalid connection pool", K(server_provider_), K(ret));
   } else {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = server_provider_->prepare_refresh())) {
@@ -667,7 +663,7 @@ void ObMySQLConnectionPool::runTimerTask()
       refresh_period_ms = config_.connection_refresh_interval_ * 500; //100S;
     }
     if (!is_stop_) {
-      if (OB_FAIL(TG_SCHEDULE(tg_id_, *this, refresh_period_ms, false))) {
+      if (OB_FAIL(timer_.schedule(*this, refresh_period_ms, false))) {
         LOG_ERROR("fail to schedule timer again in mysql connection pool", K(ret));
       } else {
         LOG_TRACE("schedule timer task for refresh next time", K(refresh_period_ms));

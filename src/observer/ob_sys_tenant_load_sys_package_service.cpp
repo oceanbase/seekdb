@@ -16,7 +16,6 @@
 #define USING_LOG_PREFIX RS
 
 #include "observer/ob_sys_tenant_load_sys_package_service.h"
-#include "observer/omt/ob_multi_tenant.h" // for ObSharedTimer
 #include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase
@@ -27,7 +26,7 @@ namespace rootserver
 ObSysTenantLoadSysPackageService::ObSysTenantLoadSysPackageService()
   : inited_(false),
     //is_stopped_(false),
-    tg_id_(-1),
+    timer_(),
     task_()
 {
 }
@@ -64,12 +63,13 @@ int ObSysTenantLoadSysPackageService::start()
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("service not inited", KR(ret), K_(inited));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::SysTntLoadSysPacTimer, tg_id_))) {
-    LOG_WARN("fail to create timer thread", KR(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("fail to start timer thread", KR(ret), K_(tg_id));
-  } else if (OB_FAIL(task_.start(tg_id_))) {
-    LOG_WARN("failed to start sys tenant load sys package task", KR(ret), K_(tg_id));
+  } else if (!timer_.inited()
+      && OB_FAIL(timer_.init("SysTntLoadPkg", common::ObMemAttr("SysTntLoadPkg")))) {
+    LOG_WARN("fail to init timer", KR(ret));
+  } else if (OB_FAIL(timer_.start())) {
+    LOG_WARN("fail to start timer", KR(ret));
+  } else if (OB_FAIL(task_.start(timer_))) {
+    LOG_WARN("failed to start sys tenant load sys package task", KR(ret));
   }
   return ret;
 }
@@ -80,10 +80,9 @@ void ObSysTenantLoadSysPackageService::stop()
   const int64_t start_time = ObTimeUtility::fast_current_time();
   FLOG_INFO("start to stop sys package load service");
   //is_stopped_ = true;
-  if (-1 == tg_id_) {
-    LOG_WARN("invalid tg id when stop service", K_(tg_id));
-  } else {
-    task_.stop(tg_id_);
+  if (timer_.inited()) {
+    task_.stop(timer_);
+    timer_.stop();
   }
   const int64_t cost = ObTimeUtility::fast_current_time() - start_time;
   FLOG_INFO("finish to stop sys package load service", K(cost));
@@ -94,8 +93,8 @@ int ObSysTenantLoadSysPackageService::wait()
   int ret = OB_SUCCESS;
   const int64_t start_time = ObTimeUtility::fast_current_time();
   FLOG_INFO("start to wait sys package load service");
-  if (-1 != tg_id_) {
-    TG_WAIT(tg_id_);
+  if (timer_.inited()) {
+    timer_.wait();
   }
   const int64_t cost = ObTimeUtility::fast_current_time() - start_time;
   FLOG_INFO("finish to wait sys package load service", K(cost));
@@ -106,10 +105,7 @@ void ObSysTenantLoadSysPackageService::destroy()
 {
   FLOG_INFO("start to destroy sys package load service");
   //is_stopped_ = true;
-  if (-1 != tg_id_) {
-    TG_DESTROY(tg_id_);
-  }
-  tg_id_ = -1;
+  timer_.destroy();
   if (inited_) {
     task_.destroy();
     inited_ = false;

@@ -63,7 +63,7 @@ int ObVecAsyncTaskExector::check_and_set_thread_pool()
     if (0 == index_ls_mgr->get_complete_adapter_map().size()) { // no vector index exist, skip
     } else {
       common::ObSpinLockGuard init_guard(thread_pool_handle.lock_); // lock thread pool init to avoid init twice
-      if (thread_pool_handle.get_tg_id() != INVALID_TG_ID) { // no need to init twice, skip
+      if (thread_pool_handle.is_inited()) { // no need to init twice, skip
       } else if (OB_FAIL(thread_pool_handle.init())) {
         LOG_WARN("fail to init vec async task handle", K(ret));
       } else if (OB_FAIL(thread_pool_handle.start())) {

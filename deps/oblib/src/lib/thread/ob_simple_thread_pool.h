@@ -22,6 +22,7 @@
 #include "lib/thread/thread_pool.h"
 #include "lib/thread/ob_dynamic_thread_pool.h"
 #include "lib/thread/ob_adaptive_worker_pool.h"
+#include "lib/thread/ob_link_task.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/lock/ob_mutex.h"
 #include "lib/thread/threads.h"
@@ -92,7 +93,7 @@ public:
   void set_run_wrapper(lib::IRunWrapper *rw) { run_wrapper_ = rw; }
   lib::IRunWrapper *get_run_wrapper() const { return run_wrapper_; }
 
-  // Thread count queries (TG handler compatibility)
+  // Thread count queries
   int64_t get_thread_count() const { return worker_count(); }
   uint64_t get_thread_idx() const { return cur_worker_idx_; }
 

@@ -1511,8 +1511,8 @@ DEF_PARAM(enable_asan_for_memory_context, BOOL, OB_CLUSTER_PARAMETER, "False",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 #endif
 DEF_PARAM(sql_login_thread_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,32]",
-        "the number of threads for sql login request. Range: [0, 32] in integer, 0 stands for use default thread count defined in TG."
-        "the default thread count for login request in TG is normal:6 mini-mode:2",
+        "the number of threads for sql login request. Range: [0, 32] in integer, 0 stands for the built-in default."
+        "the built-in default thread count for login request is normal:6 mini-mode:2",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(tenant_sql_login_thread_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,32]",
         "the number of threads for sql login request of each tenant. Range: [0, 32] in integer, 0 stands for unit_min_cpu",

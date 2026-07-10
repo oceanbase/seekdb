@@ -27,7 +27,7 @@ namespace palf
 {
 LogIOWorker::LogIOWorker()
     : log_io_worker_num_(-1),
-      cb_thread_pool_tg_id_(-1),
+      cb_thread_pool_(NULL),
       palf_env_impl_(NULL),
       do_task_used_ts_(0),
       do_task_count_(0),
@@ -49,7 +49,7 @@ LogIOWorker::~LogIOWorker()
 }
 
 int LogIOWorker::init(const LogIOWorkerConfig &config,
-                      const int cb_thread_pool_tg_id,
+                      LogIOTaskCbThreadPool *cb_thread_pool,
                       ObIAllocator *allocator,
                       LogWritingThrottle *throttle,
                       const bool need_igore_throttle,
@@ -59,10 +59,10 @@ int LogIOWorker::init(const LogIOWorkerConfig &config,
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     PALF_LOG(ERROR, "LogIOWorker has been inited", K(ret));
-  } else if (false == config.is_valid() || 0 >= cb_thread_pool_tg_id || OB_ISNULL(allocator)
+  } else if (false == config.is_valid() || OB_ISNULL(cb_thread_pool) || OB_ISNULL(allocator)
       || OB_ISNULL(throttle) || OB_ISNULL(palf_env_impl)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argument!!!", K(ret), K(config), K(cb_thread_pool_tg_id), KP(allocator),
+    PALF_LOG(ERROR, "invalid argument!!!", K(ret), K(config), KP(cb_thread_pool), KP(allocator),
         KP(throttle), KP(palf_env_impl));
   } else if (OB_FAIL(queue_.init(config.io_queue_capcity_, "IOWorkerLQ"))) {
     PALF_LOG(ERROR, "io task queue init failed", K(ret), K(config));
@@ -74,9 +74,9 @@ int LogIOWorker::init(const LogIOWorkerConfig &config,
   } else {
     share::ObThreadPool::set_run_wrapper(MTL_CTX());
     log_io_worker_num_ = config.io_worker_num_;
-    cb_thread_pool_tg_id_ = cb_thread_pool_tg_id;
+    cb_thread_pool_ = cb_thread_pool;
     palf_env_impl_ = palf_env_impl;
-    PALF_REPORT_INFO_KV(K_(log_io_worker_num), K_(cb_thread_pool_tg_id));
+    PALF_REPORT_INFO_KV(K_(log_io_worker_num), KP_(cb_thread_pool));
     throttle_ = throttle;
     log_io_worker_queue_size_stat_.set_extra_info(EXTRA_INFOS);
     purge_throttling_task_submitted_seq_ = 0;
@@ -90,7 +90,7 @@ int LogIOWorker::init(const LogIOWorkerConfig &config,
       PALF_LOG(ERROR, "generate need_purging_throttling_func_ failed!!!", K(ret), K(config));
     } else {
       is_inited_ = true;
-      PALF_LOG(INFO, "LogIOWorker init success", K(ret), K(config), K(cb_thread_pool_tg_id),
+      PALF_LOG(INFO, "LogIOWorker init success", K(ret), K(config), KP(cb_thread_pool),
                KPC(palf_env_impl));
     }
   }
@@ -110,7 +110,7 @@ void LogIOWorker::destroy()
   purge_throttling_task_submitted_seq_ = 0;
   last_working_time_ = OB_INVALID_TIMESTAMP;
   throttle_ = NULL;
-  cb_thread_pool_tg_id_ = -1;
+  cb_thread_pool_ = NULL;
   palf_env_impl_ = NULL;
   log_io_worker_num_ = -1;
   queue_.destroy();
@@ -184,7 +184,7 @@ int LogIOWorker::handle_io_task_with_throttling_(LogIOTask *io_task)
     LOG_ERROR_RET(tmp_ret, "failed to do_throttling", K(throttling_size));
   }
   const int64_t submit_seq = io_task->get_submit_seq();
-  if (OB_FAIL(io_task->do_task(cb_thread_pool_tg_id_, palf_env_impl_))) {
+  if (OB_FAIL(io_task->do_task(cb_thread_pool_, palf_env_impl_))) {
     PALF_LOG(WARN, "LogIOTask do_task falied");
   } else if (!need_ignoring_throttling_) {
     const int64_t handled_seq = ATOMIC_LOAD(&purge_throttling_task_handled_seq_);
@@ -317,7 +317,7 @@ int LogIOWorker::reduce_io_task_(ObLink *task)
     }
   }
 
-  if (OB_FAIL(batch_io_task_mgr_.handle(cb_thread_pool_tg_id_, palf_env_impl_))) {
+  if (OB_FAIL(batch_io_task_mgr_.handle(cb_thread_pool_, palf_env_impl_))) {
     PALF_LOG(WARN, "batch_io_task_mgr_ handle failed", K(ret), K(batch_io_task_mgr_));
   }
 
@@ -420,7 +420,7 @@ int LogIOWorker::BatchLogIOFlushLogTaskMgr::insert(LogIOFlushLogTask *io_task)
   return ret;
 }
 
-int LogIOWorker::BatchLogIOFlushLogTaskMgr::handle(const int64_t tg_id, IPalfEnvImpl *palf_env_impl)
+int LogIOWorker::BatchLogIOFlushLogTaskMgr::handle(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl)
 {
   int ret = OB_SUCCESS;
   const int64_t count = batch_io_task_array_.count() - usable_count_;
@@ -436,7 +436,7 @@ int LogIOWorker::BatchLogIOFlushLogTaskMgr::handle(const int64_t tg_id, IPalfEnv
                K(ret), KP(io_task), K(i));
     } else if (OB_FAIL(statistics_wait_cost_(first_handle_ts, io_task))) {
       PALF_LOG(WARN, "do statistics failed", K(ret));
-    } else if (OB_FAIL(io_task->do_task(tg_id, palf_env_impl))) {
+    } else if (OB_FAIL(io_task->do_task(cb_thread_pool, palf_env_impl))) {
       PALF_LOG(WARN, "do_task failed", K(ret), KP(io_task));
     } else {
       if (OB_NOT_NULL(wait_cost_stat_)) {

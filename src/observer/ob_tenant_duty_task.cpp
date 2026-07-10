@@ -39,9 +39,9 @@ void ObTenantDutyTask::runTimerTask()
   update_all_tenants();
 }
 
-int ObTenantDutyTask::schedule(int tg_id)
+int ObTenantDutyTask::schedule(common::ObTimer &timer)
 {
-  return TG_SCHEDULE(tg_id, *this, SCHEDULE_PERIOD, true);
+  return timer.schedule(*this, SCHEDULE_PERIOD, true);
 }
 
 void ObTenantDutyTask::update_all_tenants()
@@ -167,9 +167,9 @@ int ObTenantDutyTask::read_tenant_wa_percentage(int64_t &pctg)
 
 //////////////////////////////////////////////////////////////////////////////////////////
 
-int ObTenantSqlMemoryTimerTask::schedule(int tg_id)
+int ObTenantSqlMemoryTimerTask::schedule(common::ObTimer &timer)
 {
-  return TG_SCHEDULE(tg_id, *this, SCHEDULE_PERIOD, true);
+  return timer.schedule(*this, SCHEDULE_PERIOD, true);
 }
 
 void ObTenantSqlMemoryTimerTask::runTimerTask()

@@ -53,7 +53,6 @@ ObDataDictService::ObDataDictService()
     schema_service_(NULL),
     ls_service_(NULL),
     dump_interval_(INT64_MAX),
-    timer_tg_id_(-1),
     last_dump_succ_time_(OB_INVALID_TIMESTAMP),
     force_need_dump_(false)
 {}
@@ -117,7 +116,6 @@ int ObDataDictService::start()
 void ObDataDictService::stop()
 {
   if (IS_INIT && ! stop_flag_) {
-    TG_STOP(timer_tg_id_);
     DDLOG(INFO, "stop datadict_service", K_(is_inited), K_(stop_flag));
   }
 }
@@ -125,19 +123,16 @@ void ObDataDictService::stop()
 void ObDataDictService::wait()
 {
   if (IS_INIT && ! stop_flag_) {
-    TG_WAIT(timer_tg_id_);
     stop_flag_ = true;
-    DDLOG(INFO, "wait datadict_service finish", K_(timer_tg_id));
+    DDLOG(INFO, "wait datadict_service finish");
   }
 }
 
 void ObDataDictService::destroy()
 {
   if (IS_INIT) {
-    TG_DESTROY(timer_tg_id_);
     force_need_dump_ = false;
     last_dump_succ_time_ = OB_INVALID_TIMESTAMP;
-    timer_tg_id_ = -1;
     dump_interval_ = 0;
     ls_service_ = NULL;
     schema_service_ = NULL;

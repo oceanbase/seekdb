@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_DATA_DICTIONARY_SERVICE_
 #define OCEANBASE_DATA_DICTIONARY_SERVICE_
 
-#include "lib/thread/thread_mgr_interface.h" //TGTaskHandler
+#include "lib/task/ob_timer.h"
 
 #include "ob_data_dict_sql_client.h"
 #include "ob_data_dict_storager.h"
@@ -123,7 +123,6 @@ private:
   share::schema::ObMultiVersionSchemaService *schema_service_;
   storage::ObLSService *ls_service_;
   int64_t dump_interval_;
-  int timer_tg_id_;
   int64_t last_dump_succ_time_;
   bool force_need_dump_;
 };

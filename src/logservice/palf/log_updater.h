@@ -35,7 +35,7 @@ public:
   virtual void runTimerTask();
 private:
   IPalfEnvImpl *palf_env_impl_;
-  int tg_id_;
+  common::ObTimer timer_;
   bool is_inited_;
 };
 } // end namespace palf

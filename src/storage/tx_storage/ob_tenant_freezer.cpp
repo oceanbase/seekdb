@@ -45,7 +45,7 @@ double ObTenantFreezer::MDS_TABLE_FREEZE_TRIGGER_TENANT_PERCENTAGE = 2;
 ObTenantFreezer::ObTenantFreezer()
 	: is_inited_(false),
     is_freezing_tx_data_(false),
-    freeze_trigger_tg_id_(-1),
+    freeze_trigger_timer_(),
     freeze_trigger_timer_task_(*this),
     freeze_thread_pool_(),
     freeze_thread_pool_lock_(common::ObLatchIds::FREEZE_THREAD_POOL_LOCK),
@@ -64,7 +64,7 @@ ObTenantFreezer::~ObTenantFreezer()
 
 void ObTenantFreezer::destroy()
 {
-  TG_DESTROY(freeze_trigger_tg_id_);
+  freeze_trigger_timer_.destroy();
   is_freezing_tx_data_ = false;
   self_.reset();
   freezer_stat_.reset();
@@ -92,10 +92,8 @@ int ObTenantFreezer::init()
     LOG_WARN("[TenantFreezer] invalid argument", KR(ret), K(GCONF.self_addr_));
   } else if (OB_FAIL(freeze_thread_pool_.init_and_start(FREEZE_THREAD_NUM, 10, "FrzAsync"))) {
     LOG_WARN("[TenantFreezer] fail to initialize freeze thread pool", KR(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantFreezer, freeze_trigger_tg_id_))) {
-    LOG_WARN("[TenantFreezer] fail to create TenantFreezer timer tg", KR(ret));
-  } else if (OB_FAIL(TG_START(freeze_trigger_tg_id_))) {
-    LOG_WARN("[TenantFreezer] fail to start TenantFreezer timer", K(ret));
+  } else if (OB_FAIL(freeze_trigger_timer_.init("TenantFreezer", ObMemAttr("TenantFreezer")))) {
+    LOG_WARN("[TenantFreezer] fail to init TenantFreezer timer", K(ret));
   } else {
     is_freezing_tx_data_ = false;
     self_ = GCONF.self_addr_;
@@ -120,8 +118,8 @@ int ObTenantFreezer::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("[TenantFreezer] tenant freezer not inited", KR(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(freeze_trigger_tg_id_, freeze_trigger_timer_task_,
-                                 FREEZE_TRIGGER_INTERVAL, true/*repeat*/, false/*immediate*/))) {
+  } else if (OB_FAIL(freeze_trigger_timer_.schedule(freeze_trigger_timer_task_,
+                                                   FREEZE_TRIGGER_INTERVAL, true/*repeat*/, false/*immediate*/))) {
     LOG_WARN("[TenantFreezer] fail to schedule freeze_trigger_timer_task", KR(ret));
   } else {
     LOG_INFO("[TenantFreezer] ObTenantFreezer start", K_(tenant_info));
@@ -136,7 +134,7 @@ int ObTenantFreezer::stop()
     ret = OB_NOT_INIT;
     LOG_WARN("[TenantFreezer] tenant freezer not inited", KR(ret));
   } else {
-    TG_STOP(freeze_trigger_tg_id_);
+    freeze_trigger_timer_.stop();
     // task_list_.stop_all();
     LOG_INFO("[TenantFreezer] ObTenantFreezer stoped done", K_(tenant_info));
   }
@@ -145,7 +143,7 @@ int ObTenantFreezer::stop()
 
 void ObTenantFreezer::wait()
 {
-  TG_WAIT(freeze_trigger_tg_id_);
+  freeze_trigger_timer_.wait();
   // task_list_.wait_all();
   LOG_INFO("[TenantFreezer] ObTenantFreezer wait done", K_(tenant_info));
 }

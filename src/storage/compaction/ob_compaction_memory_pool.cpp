@@ -19,7 +19,6 @@
 #include "ob_compaction_memory_pool.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/ob_force_print_log.h"
-#include "share/ob_thread_mgr.h"
 #include "storage/compaction/ob_compaction_memory_context.h"
 
 using namespace oceanbase;
@@ -216,7 +215,7 @@ ObTenantCompactionMemPool::ObTenantCompactionMemPool()
     total_block_num_(0),
     used_block_num_(0),
     mem_mode_(NORMAL_MODE),
-    tg_id_(0),
+    shrink_timer_(),
     is_inited_(false)
 {
 }
@@ -228,12 +227,12 @@ ObTenantCompactionMemPool::~ObTenantCompactionMemPool()
 
 void ObTenantCompactionMemPool::wait()
 {
-  TG_WAIT(tg_id_);
+  shrink_timer_.wait();
 }
 
 void ObTenantCompactionMemPool::stop()
 {
-  TG_STOP(tg_id_);
+  shrink_timer_.stop();
 }
 
 void ObTenantCompactionMemPool::destroy()
@@ -247,8 +246,7 @@ void ObTenantCompactionMemPool::reset()
 {
   stop();
   wait();
-  TG_DESTROY(tg_id_);
-  tg_id_ = -1;
+  shrink_timer_.destroy();
   {
     ObSpinLockGuard guard(chunk_lock_);
 
@@ -284,11 +282,9 @@ int ObTenantCompactionMemPool::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTenantCompactionMemPool has been inited", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::MergeMemPool, tg_id_))) {
-    LOG_WARN("failed to create MergeMemPool thread", K(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("failed to start stat MergeMemPool thread", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, mem_shrink_task_, CHECK_SHRINK_INTERVAL, repeat))) {
+  } else if (OB_FAIL(shrink_timer_.init("MergeMemPool", ObMemAttr("MergeMemPool")))) {
+    LOG_WARN("failed to init MergeMemPool timer", K(ret));
+  } else if (OB_FAIL(shrink_timer_.schedule(mem_shrink_task_, CHECK_SHRINK_INTERVAL, repeat))) {
     LOG_WARN("failed to schedule tablet stat update task", K(ret));
   } else {
     

@@ -19,7 +19,6 @@
  
 #include "lib/string/ob_string.h"
 #include "share/scn.h"
-#include "lib/thread/thread_mgr_interface.h"
 #include "storage/access/ob_dml_param.h"
 #include "storage/tx/ob_trans_define_v4.h"
 #include "observer/vector_index/ob_vector_index_async_task_util.h"

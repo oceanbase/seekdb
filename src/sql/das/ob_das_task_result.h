@@ -16,6 +16,7 @@
 
 #ifndef OBDEV_SRC_SQL_DAS_OB_DAS_TASK_RESULT_H_
 #define OBDEV_SRC_SQL_DAS_OB_DAS_TASK_RESULT_H_
+#include "lib/task/ob_timer.h"
 #include "share/ob_define.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/lock/ob_mutex.h"
@@ -232,7 +233,7 @@ public:
   ObDASTaskResultGCRunner() {}
   ~ObDASTaskResultGCRunner() = default;
   static ObDASTaskResultGCRunner& get_instance();
-  static int schedule_timer_task();
+  static int schedule_timer_task(common::ObTimer &timer);
   void runTimerTask();
 public:
   const static int64_t REFRESH_INTERVAL = 10 * 1000L * 1000L; // 10s

@@ -21,7 +21,7 @@
 #include "storage/slog/ob_storage_log_item.h"
 #include "storage/slog/ob_storage_log_replayer.h"
 #include "storage/slog/ob_storage_log_writer.h"
-#include "share/ob_thread_mgr.h"
+#include "lib/thread/ob_thread_name.h"
 
 namespace oceanbase
 {
@@ -625,7 +625,7 @@ int ObStorageLogWriter::update_log_item_cursor(
 }
 
 ObStorageLogWriter::ObSLogWriteRunner::ObSLogWriteRunner()
-  : log_writer_(nullptr), tg_id_(-1), is_inited_(false)
+  : lib::ThreadPool(1), log_writer_(nullptr), is_inited_(false)
 {
 }
 
@@ -643,13 +643,11 @@ int ObStorageLogWriter::ObSLogWriteRunner::init(ObStorageLogWriter *log_writer)
   } else if (OB_ISNULL(log_writer)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Log_writer is nullptr.", K(ret), KP(log_writer));
+  } else if (OB_FAIL(lib::ThreadPool::init())) {
+    STORAGE_REDO_LOG(WARN, "Fail to init log writer thread.", K(ret));
   } else {
     log_writer_ = log_writer;
-    if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::StorageLogWriter, tg_id_))) {
-      STORAGE_REDO_LOG(WARN, "Fail to create thread for log writer.", K(ret), K(tg_id_));
-    } else {
-      is_inited_ = true;
-    }
+    is_inited_ = true;
   }
   return ret;
 }
@@ -660,8 +658,8 @@ int ObStorageLogWriter::ObSLogWriteRunner::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     STORAGE_REDO_LOG(WARN, "ObSLogWriteRunner hasn't been inited.", K(ret), K(is_inited_));
-  } else if (OB_FAIL(TG_SET_RUNNABLE_AND_START(tg_id_, *this))) {
-    STORAGE_REDO_LOG(WARN, "Fail to start log writer thread.", K(ret), K(tg_id_));
+  } else if (OB_FAIL(lib::ThreadPool::start())) {
+    STORAGE_REDO_LOG(WARN, "Fail to start log writer thread.", K(ret));
   }
   return ret;
 }
@@ -669,24 +667,30 @@ int ObStorageLogWriter::ObSLogWriteRunner::start()
 void ObStorageLogWriter::ObSLogWriteRunner::destroy()
 {
   if (is_inited_) {
-    TG_DESTROY(tg_id_);
+    stop();
+    wait();
     is_inited_ = false;
   }
 }
 
 void ObStorageLogWriter::ObSLogWriteRunner::stop()
 {
-  TG_STOP(tg_id_);
+  if (is_inited_) {
+    lib::ThreadPool::stop();
+  }
 }
 
 void ObStorageLogWriter::ObSLogWriteRunner::wait()
 {
-  TG_WAIT(tg_id_);
+  if (is_inited_) {
+    lib::ThreadPool::wait();
+    lib::ThreadPool::destroy();
+  }
 }
 
 void ObStorageLogWriter::ObSLogWriteRunner::run1()
 {
-  STORAGE_REDO_LOG(INFO, "ObSLogWriteRunner run", K(tg_id_), K(is_inited_));
+  STORAGE_REDO_LOG(INFO, "ObSLogWriteRunner run", K(is_inited_));
   lib::set_thread_name(log_writer_->get_thread_name());
   log_writer_->flush_log();
 }

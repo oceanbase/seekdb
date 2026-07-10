@@ -21,9 +21,8 @@
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/worker.h"
-#include "lib/hash/ob_hashset.h"
+#include "lib/ob_running_mode.h"
 #include "lib/thread/threads.h"
-#include "lib/thread/thread_mgr.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/task/ob_timer_service.h" // ObTimerService
 #include "share/ob_tenant_role.h"//ObTenantRole
@@ -359,12 +358,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
 #define MTL_INIT_CTX() (share::ObTenantEnv::get_tenant_local()->get_mtl_init_ctx())
 // Get tenant module (single sys tenant)
 #define MTL_WITH_CHECK(TYPE) ::oceanbase::share::mtl_checked<TYPE>()
-// Register thread pool dynamic change
-#define MTL_REGISTER_THREAD_DYNAMIC(factor, th) \
-  share::ObTenantEnv::get_tenant() == nullptr ? OB_ERR_UNEXPECTED : share::ObTenantEnv::get_tenant()->register_module_thread_dynamic(factor, th)
-// Cancel thread pool dynamic change
-#define MTL_UNREGISTER_THREAD_DYNAMIC(th) \
-  share::ObTenantEnv::get_tenant() == nullptr ? OB_ERR_UNEXPECTED : share::ObTenantEnv::get_tenant()->unregister_module_thread_dynamic(th)
 #define MTL_IS_MINI_MODE() share::ObTenantEnv::get_tenant()->is_mini_mode()
 #define MTL_CPU_COUNT() share::ObTenantEnv::get_tenant()->unit_max_cpu()
 #define MTL_MEM_SIZE() share::ObTenantEnv::get_tenant()->unit_memory_size()
@@ -383,70 +376,9 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
 // Helper function
 #define MTL_LIST(...) __VA_ARGS__
 
-// thread dynamic impl interface
-class ThreadDynamicImpl
-{
-public:
-  virtual int set_thread_cnt(int cnt) = 0;
-};
-
-// thread dynamic resource node
-// support TG/Threads/DynamicImpl
-class ThreadDynamicNode
-{
-public:
-  enum DynamicType {
-    INVALID = 0,
-    TG = 1,
-    USER_THREAD = 2,
-    DYNAMIC_IMPL = 3,
-  };
-  ThreadDynamicNode() :type_(INVALID), tg_id_(0),user_thread_(nullptr), dynamic_impl_(nullptr) {}
-  ThreadDynamicNode(int64_t tg_id) :type_(TG), tg_id_(tg_id),user_thread_(nullptr), dynamic_impl_(nullptr) {}
-  ThreadDynamicNode(lib::Threads *th) :type_(USER_THREAD), tg_id_(0),user_thread_(th), dynamic_impl_(nullptr) {}
-  ThreadDynamicNode(ThreadDynamicImpl *dynamic_impl) :type_(DYNAMIC_IMPL), tg_id_(0),user_thread_(nullptr), dynamic_impl_(dynamic_impl) {}
-  bool operator == (const ThreadDynamicNode &other) const {
-    if (type_ == other.type_) {
-      if (type_ == TG) {
-        return tg_id_ == other.tg_id_;
-      } else if (type_ == USER_THREAD) {
-        return user_thread_ == other.user_thread_;
-      } else if (type_ == DYNAMIC_IMPL) {
-        return dynamic_impl_ == other.dynamic_impl_;
-      } else {
-        return false;
-      }
-    }
-    return false;
-  }
-  uint64_t hash() const {
-    int64_t hash_value = 0;
-    if (tg_id_ != 0) {
-      hash_value = tg_id_;
-    } else if (user_thread_ != nullptr) {
-      hash_value = common::murmurhash(&user_thread_, sizeof(user_thread_), hash_value);
-    } else if (dynamic_impl_ != nullptr) {
-      hash_value = common::murmurhash(&dynamic_impl_, sizeof(dynamic_impl_), hash_value);
-    }
-    return hash_value;
-  }
-  int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
-  DynamicType get_type() { return type_; }
-  int64_t get_tg_id() { return tg_id_; }
-  lib::Threads *get_user_thread() { return user_thread_; }
-  ThreadDynamicImpl *get_dynamic_impl() { return dynamic_impl_; }
-
-  TO_STRING_KV(K_(type), K_(tg_id), KP_(user_thread), KP_(dynamic_impl));
-private:
-  DynamicType type_;
-  int64_t tg_id_;
-  lib::Threads *user_thread_;
-  ThreadDynamicImpl *dynamic_impl_;
-};
-
 //======================================================================//
 // Expose the Tenant class to various modules, place the interfaces to be exposed here (tenant-level service, mgr, etc.)
-class ObTenantBase : public lib::TGHelper
+class ObTenantBase : public lib::IRunWrapper
 {
 // get_tenant when omt internally adds a read lock to the tenant,
 // ObTenantSpaceFetcher destructor needs to unlock,
@@ -455,36 +387,12 @@ friend class ObTenantSpaceFetcher;
 friend class omt::ObTenant;
 friend class ObTenantEnv;
 
-struct TGSetDumpFunc
-{
-  static const int64_t BUF_LEN = 128;
-  TGSetDumpFunc() : pos_(0)
-  {
-    MEMSET(buf_, '\0', BUF_LEN);
-  }
-  virtual ~TGSetDumpFunc() = default;
-  int operator()(common::hash::HashSetTypes<int64_t>::pair_type &kv)
-  {
-    return databuff_printf(buf_, BUF_LEN, pos_, " %ld", kv.first);
-  }
-  int64_t pos_;
-  char buf_[BUF_LEN];
-};
-template<class T> struct Identity {};
+	template<class T> struct Identity {};
 
 public:
-  // TGHelper need
   virtual int pre_run() override;
   virtual int end_run() override;
-  virtual void tg_create_cb(int tg_id) override;
-  virtual void tg_destroy_cb(int tg_id) override;
 
-  inline common::hash::ObHashSet<int64_t> &get_tg_set()
-  {
-    return tg_set_;
-  }
-
-  int update_thread_cnt(double tenant_unit_cpu);
   double unit_max_cpu() const { return unit_max_cpu_; }
   double unit_min_cpu() const { return unit_min_cpu_; }
   int64_t set_unit_memory_size(int64_t memory_size)
@@ -509,19 +417,14 @@ public:
   bool is_prepare_unit_gc() const { return marked_prepare_gc_ts_ > 0; }
   int64_t get_prepare_unit_gc_ts() const { return marked_prepare_gc_ts_; }
   int64_t get_max_session_num(const int64_t rl_max_session_num);
-  int register_module_thread_dynamic(double dynamic_factor, int tg_id);
-  int unregister_module_thread_dynamic(int tg_id);
-
-  int register_module_thread_dynamic(double dynamic_factor, lib::Threads *th);
 
 public:
-  ObTenantBase(const int64_t epoch = 0, bool enable_tenant_ctx_check = false);
+  ObTenantBase(const int64_t epoch = 0);
   ObTenantBase &operator=(const ObTenantBase &ctx);
   int init();
   void destroy();
   virtual inline uint64_t id() const override { return 1; }
   OB_INLINE int64_t get_epoch() const { return epoch_; }
-
   const ObTenantModuleInitCtx *get_mtl_init_ctx() const { return mtl_init_ctx_; }
 
   void set_tenant_role(const share::ObTenantRole::Role tenant_role_value)
@@ -600,18 +503,6 @@ protected:
   int64_t switchover_epoch_;
 
 private:
-  common::hash::ObHashSet<int64_t> tg_set_;
-  // tenant thread dynamic follow unit config
-  typedef common::hash::ObHashMap<ThreadDynamicNode, double> ThreadDynamicFactorMap;
-  ThreadDynamicFactorMap thread_dynamic_factor_map_;
-
-  bool enable_tenant_ctx_check_;
-  int64_t thread_count_;
-
-  using ThreadListNode = common::ObDLinkNode<lib::Thread *>;
-  using ThreadList = common::ObDList<ThreadListNode>;
-  ThreadList thread_list_;
-  lib::ObMutex thread_list_lock_;
   int64_t marked_prepare_gc_ts_;
 };
 

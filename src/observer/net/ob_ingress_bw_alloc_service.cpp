@@ -274,10 +274,7 @@ int64_t ObNetEndpointIngressManager::get_map_size()
 
 void ObIngressBWAllocService::wait()
 {
-  if (-1 != tg_id_) {
-    TG_WAIT(tg_id_);
-    LOG_INFO("[INGRESS_SERVICE] ObIngressBWAllocService wait success", K(tg_id_));
-  }
+  LOG_INFO("[INGRESS_SERVICE] ObIngressBWAllocService wait success");
 }
 
 void ObIngressBWAllocService::destroy()
@@ -285,14 +282,8 @@ void ObIngressBWAllocService::destroy()
   is_inited_ = false;
   ATOMIC_SET(&is_leader_, false);
   ATOMIC_SET(&is_stop_, true);
-  if (-1 != tg_id_) {
-    TG_STOP(tg_id_);
-    TG_WAIT(tg_id_);
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
-    ingress_manager_.destroy();
-    LOG_INFO("[INGRESS_SERVICE] ObIngressBWAllocService destroy success", K(tg_id_));
-  }
+  ingress_manager_.destroy();
+  LOG_INFO("[INGRESS_SERVICE] ObIngressBWAllocService destroy success");
 }
 
 int ObIngressBWAllocService::register_endpoint(const obcall::ObNetEndpointKey &endpoint_key, const int64_t expire_time)

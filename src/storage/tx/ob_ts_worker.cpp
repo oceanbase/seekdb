@@ -15,6 +15,7 @@
  */
 
 #include "ob_ts_worker.h"
+#include "lib/ob_running_mode.h"
 #include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
 #include "ob_ts_response_handler.h"
 #include "ob_ts_mgr.h"
@@ -28,6 +29,11 @@ using namespace observer;
 
 namespace transaction
 {
+int64_t ObTsWorker::get_thread_count_() const
+{
+  return lib::is_mini_mode() ? 1 : MAX(common::get_cpu_count() / 12, 1L);
+}
+
 int ObTsWorker::init(ObTsMgr *ts_mgr, const bool use_local_worker)
 {
   int ret = OB_SUCCESS;
@@ -37,16 +43,12 @@ int ObTsWorker::init(ObTsMgr *ts_mgr, const bool use_local_worker)
   } else if (NULL == ts_mgr) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), KP(ts_mgr));
-  } else if (use_local_worker) {
-    if (OB_FAIL(TG_CREATE(lib::TGDefIDs::TSWorker, tg_id_))) {
-      TRANS_LOG(WARN, "ObTsWorker tg create failed", K(ret));
-    } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
-      TRANS_LOG(WARN, "simple thread pool init failed", K(ret));
-    } else {
-      TRANS_LOG(INFO, "ts worker thread pool init success");
-    }
+  } else if (use_local_worker && OB_FAIL(common::ObSimpleThreadPool::init(get_thread_count_(),
+                                                                          MAX_TASK_NUM,
+                                                                          "TSWorker"))) {
+    TRANS_LOG(WARN, "ts worker thread pool init failed", K(ret), K(get_thread_count_()));
   } else {
-    // do nothing
+    TRANS_LOG(INFO, "ts worker thread pool init success", K(use_local_worker), K(get_thread_count_()));
   }
   if (OB_SUCCESS == ret) {
     use_local_worker_ = use_local_worker;
@@ -61,19 +63,28 @@ int ObTsWorker::init(ObTsMgr *ts_mgr, const bool use_local_worker)
 
 void ObTsWorker::stop()
 {
-  TG_STOP(tg_id_);
+  if (is_inited_ && use_local_worker_) {
+    common::ObSimpleThreadPool::stop();
+  }
 }
 
 void ObTsWorker::wait()
 {
-  TG_WAIT(tg_id_);
+  if (is_inited_ && use_local_worker_) {
+    common::ObSimpleThreadPool::wait();
+  }
 }
 
 void ObTsWorker::destroy()
 {
   stop();
   wait();
-  TG_DESTROY(tg_id_);
+  if (is_inited_ && use_local_worker_) {
+    common::ObSimpleThreadPool::destroy();
+  }
+  is_inited_ = false;
+  use_local_worker_ = false;
+  ts_mgr_ = NULL;
 }
 
 int ObTsWorker::push_task(ObTsResponseTask *task)
@@ -86,7 +97,7 @@ int ObTsWorker::push_task(ObTsResponseTask *task)
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), KP(task));
   } else if (use_local_worker_) {
-    if (OB_FAIL(TG_PUSH_TASK(tg_id_, task))) {
+    if (OB_FAIL(common::ObSimpleThreadPool::push(task))) {
       TRANS_LOG(WARN, "push task to local worker failed", K(ret), KP(task));
     }
   } else {

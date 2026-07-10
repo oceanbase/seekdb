@@ -100,11 +100,11 @@ int ObTableLoadResourceManager::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_INFO("ObTableLoadResourceManager init twice", KR(ret), KP(this));
-  } else if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), init_resource_task_,
-                                 REFRESH_AND_CHECK_TASK_FIRST_TIME_INTERVAL, true))) {
+  } else if (OB_FAIL(share::g_mp->shared_timer()->schedule(
+      init_resource_task_, REFRESH_AND_CHECK_TASK_FIRST_TIME_INTERVAL, true))) {
     LOG_WARN("fail to schedule first refresh_and_check task", KR(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), refresh_and_check_task_,
-                                 REFRESH_AND_CHECK_TASK_INTERVAL, true))) {
+  } else if (OB_FAIL(share::g_mp->shared_timer()->schedule(
+      refresh_and_check_task_, REFRESH_AND_CHECK_TASK_INTERVAL, true))) {
     LOG_WARN("fail to schedule refresh_and_check task", KR(ret));
   }
   LOG_INFO("ObTableLoadResourceManager::start", KR(ret));
@@ -114,8 +114,8 @@ int ObTableLoadResourceManager::start()
 
 void ObTableLoadResourceManager::stop()
 {
-  TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), init_resource_task_);
-  TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_and_check_task_);
+  share::g_mp->shared_timer()->cancel_task(init_resource_task_);
+  share::g_mp->shared_timer()->cancel_task(refresh_and_check_task_);
   {
     lib::ObMutexGuard guard(mutex_);
     is_stop_ = true;
@@ -124,8 +124,8 @@ void ObTableLoadResourceManager::stop()
 
 int ObTableLoadResourceManager::wait() 
 {
-  TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), init_resource_task_);
-  TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_and_check_task_);
+  share::g_mp->shared_timer()->wait_task(init_resource_task_);
+  share::g_mp->shared_timer()->wait_task(refresh_and_check_task_);
   return release_all_resource();
 }
 
@@ -133,11 +133,11 @@ void ObTableLoadResourceManager::destroy()
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
-    TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), init_resource_task_);
-    TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), init_resource_task_);
+    share::g_mp->shared_timer()->cancel_task(init_resource_task_);
+    share::g_mp->shared_timer()->wait_task(init_resource_task_);
 
-    TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_and_check_task_);
-    TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_and_check_task_);
+    share::g_mp->shared_timer()->cancel_task(refresh_and_check_task_);
+    share::g_mp->shared_timer()->wait_task(refresh_and_check_task_);
     is_inited_ = false;
   }
 }
@@ -145,15 +145,11 @@ void ObTableLoadResourceManager::destroy()
 int ObTableLoadResourceManager::resume()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(),
-                                 init_resource_task_,
-                                 REFRESH_AND_CHECK_TASK_FIRST_TIME_INTERVAL,
-                                 true))) {
+  if (OB_FAIL(share::g_mp->shared_timer()->schedule(
+      init_resource_task_, REFRESH_AND_CHECK_TASK_FIRST_TIME_INTERVAL, true))) {
     LOG_WARN("fail to schedule first refresh_and_check task", KR(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(),
-                                 refresh_and_check_task_,
-                                 REFRESH_AND_CHECK_TASK_INTERVAL,
-                                 true))) {
+  } else if (OB_FAIL(share::g_mp->shared_timer()->schedule(
+      refresh_and_check_task_, REFRESH_AND_CHECK_TASK_INTERVAL, true))) {
     LOG_WARN("fail to schedule resource check task", KR(ret));
   } else if (OB_FAIL(resource_pool_.clear())) {
     LOG_WARN("fail to clear resource_pool_", KR(ret));
@@ -166,10 +162,10 @@ int ObTableLoadResourceManager::resume()
 
 void ObTableLoadResourceManager::pause()
 {
-  TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), init_resource_task_);
-  TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), init_resource_task_);
-  TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_and_check_task_);
-  TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_and_check_task_);
+  share::g_mp->shared_timer()->cancel_task(init_resource_task_);
+  share::g_mp->shared_timer()->wait_task(init_resource_task_);
+  share::g_mp->shared_timer()->cancel_task(refresh_and_check_task_);
+  share::g_mp->shared_timer()->wait_task(refresh_and_check_task_);
   resource_inited_ = false;
 }
 

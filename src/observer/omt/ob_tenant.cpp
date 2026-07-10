@@ -327,7 +327,7 @@ void ObPxPool::stop()
 
 ObTenant::ObTenant(const int64_t epoch,
                    const int64_t times_of_workers)
-    : ObTenantBase(epoch, true),
+    : ObTenantBase(epoch),
       meta_lock_(),
       tenant_meta_(),
       total_ddl_thread_cnt_(0),
@@ -525,9 +525,6 @@ ERRSIM_POINT_DEF(CREATE_MTL_MODULE_FAIL)
 int ObTenant::create_tenant_module()
 {
   int ret = OB_SUCCESS;
-  const double max_cpu = static_cast<double>(tenant_meta_.unit_.config_.max_cpu());
-  // set tenant ctx to global
-  ObTenantSwitchGuard guard(this);
   // set tenant init param
   FLOG_INFO("begin create mtl module>>>>");
 
@@ -547,8 +544,6 @@ int ObTenant::create_tenant_module()
     LOG_ERROR("init mtl module failed", K(ret));
   } else if (OB_FAIL(OBSERVER.obs_start_modules())) {
     LOG_ERROR("start mtl module failed", K(ret));
-  } else if (OB_FAIL(update_thread_cnt(max_cpu))) {
-    LOG_ERROR("update mtl module thread cnt fail", K(ret));
   }
 
   FLOG_INFO("finish create mtl module>>>>", K(ret));
@@ -605,7 +600,6 @@ void* ObTenant::wait(void* t)
   }
 
   if (!false && !tenant->wait_mtl_finished_) {
-    ObTenantSwitchGuard guard(tenant);
     OBSERVER.obs_stop_modules();
     OBSERVER.obs_wait_modules();
     tenant->wait_mtl_finished_ = true;
@@ -657,12 +651,10 @@ void OB_WEAK_SYMBOL print_all_thread(const char* desc)
 
 void ObTenant::destroy()
 {
-  int tmp_ret = OB_SUCCESS;
   if (ctx_ != nullptr) {
     DESTROY_ENTITY(ctx_);
     ctx_ = nullptr;
   }
-  ObTenantSwitchGuard guard(this);
   print_all_thread("TENANT_BEFORE_DESTROY");
   OBSERVER.obs_destroy_modules();
   ObTenantBase::destroy();
@@ -903,7 +895,6 @@ int ObTenant::acquire_more_worker(int64_t num, int64_t &succ_num, bool force)
   int ret = OB_SUCCESS;
   succ_num = 0;
 
-  ObTenantSwitchGuard guard(this);
   while (OB_SUCC(ret) && num > succ_num) {
     ObThWorker *w = nullptr;
     if (OB_FAIL(create_worker(w, this))) {
@@ -968,15 +959,12 @@ void ObTenant::periodically_check()
 void ObTenant::check_dtl()
 {
   int ret = OB_SUCCESS;
-  {
-    ObTenantSwitchGuard guard(this);
-    auto tenant_dfc = share::g_mp->tenant_dfc();
-    if (OB_NOT_NULL(tenant_dfc)) {
-      tenant_dfc->check_dtl();
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to switch to tenant", K(id()), K(ret));
-    }
+  auto tenant_dfc = share::g_mp->tenant_dfc();
+  if (OB_NOT_NULL(tenant_dfc)) {
+    tenant_dfc->check_dtl();
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tenant dtl fc server is null", K(id()), K(ret));
   }
 }
 
@@ -996,15 +984,12 @@ void ObTenant::check_parallel_servers_target()
 void ObTenant::check_px_thread_recycle()
 {
   int ret = OB_SUCCESS;
-  {
-    ObTenantSwitchGuard guard(this);
-    auto px_pools = share::g_mp->px_pools();
-    if (OB_NOT_NULL(px_pools)) {
-      px_pools->thread_recycle();
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to switch to tenant", K(id()), K(ret));
-    }
+  auto px_pools = share::g_mp->px_pools();
+  if (OB_NOT_NULL(px_pools)) {
+    px_pools->thread_recycle();
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tenant px pools is null", K(id()), K(ret));
   }
 }
 

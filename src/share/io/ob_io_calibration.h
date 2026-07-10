@@ -19,8 +19,7 @@
 
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"
 #include "storage/blocksstable/ob_macro_block_handle.h"  // by-value member real user(already conf L2)
-#include "lib/thread/thread_mgr_interface.h"  // TGRunnable base class, previously hidden behind a transitive include(free within lib)
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/threads.h"
 #include "lib/queue/ob_fixed_queue.h"
 #include "lib/container/ob_array_iterator.h"
 #include "lib/container/ob_array_wrap.h"
@@ -84,7 +83,7 @@ private:
   
 };
 
-class ObIOBenchRunner : public lib::TGRunnable
+class ObIOBenchRunner : public lib::Threads
 {
 public:
   ObIOBenchRunner();
@@ -96,9 +95,9 @@ public:
 
 private:
   bool is_inited_;
+  bool thread_inited_;
   ObArray<blocksstable::ObMacroBlockHandle> block_handles_;
   ObIOBenchLoad load_;
-  int tg_id_;
   int64_t io_count_;
   int64_t rt_us_;
   char *write_buf_;
@@ -106,7 +105,7 @@ private:
   int64_t block_count_;
 };
 
-class ObIOBenchController : public lib::TGRunnable
+class ObIOBenchController : public lib::Threads
 {
 public:
   ObIOBenchController();
@@ -117,7 +116,7 @@ public:
   int64_t get_finish_timestamp();
   int get_ret_code();
 private:
-  int tg_id_;
+  bool thread_inited_;
   lib::ObMutex running_mutex_;
   int64_t start_ts_;
   int64_t finish_ts_;

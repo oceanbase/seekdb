@@ -253,6 +253,8 @@ private:
   int64_t map_once_replace_num_;
   int64_t map_replace_skip_count_;
   KVMapReplaceTask replace_task_;
+  ObTimer wash_timer_;
+  ObTimer replace_timer_;
   bool stopped_;
   int64_t cache_wash_interval_;
 };

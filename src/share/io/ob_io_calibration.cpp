@@ -283,10 +283,11 @@ int ObIOAbility::find_item(const ObIOMode mode, const int64_t size, int64_t &ite
 /******************             IOBenchRunner              **********************/
 
 ObIOBenchRunner::ObIOBenchRunner()
-  : is_inited_(false),
+  : lib::Threads(1),
+    is_inited_(false),
+    thread_inited_(false),
     block_handles_(),
     load_(),
-    tg_id_(-1),
     io_count_(0),
     rt_us_(0),
     write_buf_(nullptr),
@@ -318,24 +319,29 @@ int ObIOBenchRunner::do_benchmark(const ObIOBenchLoad &load, const int64_t threa
     load_ = load;
     io_count_ = 0;
     rt_us_ = 0;
-    if (OB_FAIL(TG_CREATE(TGDefIDs::IO_BENCHMARK, tg_id_))) {
-      LOG_WARN("create thread group failed", K(ret));
-    } else if (OB_FAIL(TG_SET_RUNNABLE(tg_id_, *this))) {
-      LOG_WARN("set tg_runnable failed", K(ret), K(tg_id_));
-    } else if (OB_FAIL(TG_SET_THREAD_CNT(tg_id_, thread_count))) {
+    if (thread_inited_) {
+      lib::Threads::stop();
+      lib::Threads::wait();
+      lib::Threads::destroy();
+      thread_inited_ = false;
+    }
+    if (OB_FAIL(lib::Threads::set_thread_count(thread_count))) {
       LOG_WARN("set thread count failed", K(ret), K(thread_count));
-    } else if (OB_FAIL(TG_START(tg_id_))) {
+    } else if (OB_FAIL(lib::Threads::init())) {
+      LOG_WARN("init benchmark threads failed", K(ret), K(thread_count));
+    } else if (OB_FAIL(lib::Threads::start())) {
       LOG_WARN("start thread failed", K(ret));
     } else {
+      thread_inited_ = true;
 #ifdef _WIN32
       Sleep(static_cast<DWORD>(BENCHMARK_TIMEOUT_S * 1000));
 #else
       sleep(BENCHMARK_TIMEOUT_S);
 #endif
-      TG_STOP(tg_id_);
-      TG_WAIT(tg_id_);
-      TG_DESTROY(tg_id_);
-      tg_id_ = -1;
+      lib::Threads::stop();
+      lib::Threads::wait();
+      lib::Threads::destroy();
+      thread_inited_ = false;
       if (io_count_ <= 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid io count", K(ret), K(io_count_));
@@ -348,17 +354,23 @@ int ObIOBenchRunner::do_benchmark(const ObIOBenchLoad &load, const int64_t threa
       }
       LOG_INFO("IO BENCHMARK finished", K(ret), K_(load), K(result));
     }
+    if (OB_FAIL(ret) && thread_inited_) {
+      lib::Threads::stop();
+      lib::Threads::wait();
+      lib::Threads::destroy();
+      thread_inited_ = false;
+    }
   }
   return ret;
 }
 
 void ObIOBenchRunner::destroy()
 {
-  if (tg_id_ >= 0) {
-    TG_STOP(tg_id_);
-    TG_WAIT(tg_id_);
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
+  if (thread_inited_) {
+    lib::Threads::stop();
+    lib::Threads::wait();
+    lib::Threads::destroy();
+    thread_inited_ = false;
   }
   if (nullptr != write_buf_) {
     ob_free(write_buf_);
@@ -380,18 +392,23 @@ void ObIOBenchRunner::destroy()
 /******************             IOBenchController              **********************/
 
 ObIOBenchController::ObIOBenchController()
-  : tg_id_(-1), running_mutex_(), start_ts_(0), finish_ts_(0), ret_code_(OB_SUCCESS)
+  : lib::Threads(1),
+    thread_inited_(false),
+    running_mutex_(),
+    start_ts_(0),
+    finish_ts_(0),
+    ret_code_(OB_SUCCESS)
 {
 
 }
 
 ObIOBenchController::~ObIOBenchController()
 {
-  if (tg_id_ >= 0) {
-    TG_STOP(tg_id_);
-    TG_WAIT(tg_id_);
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
+  if (thread_inited_) {
+    lib::Threads::stop();
+    lib::Threads::wait();
+    lib::Threads::destroy();
+    thread_inited_ = false;
   }
 }
 
@@ -406,16 +423,24 @@ int ObIOBenchController::start_io_bench()
       ret = OB_SUCCESS;
     }
   } else {
-    if (-1 != tg_id_) {
-      TG_STOP(tg_id_);
-      TG_WAIT(tg_id_);
-      TG_DESTROY(tg_id_);
-      tg_id_ = -1;
+    if (thread_inited_) {
+      lib::Threads::stop();
+      lib::Threads::wait();
+      lib::Threads::destroy();
+      thread_inited_ = false;
     }
-    if (OB_FAIL(TG_CREATE(TGDefIDs::IO_BENCHMARK, tg_id_))) {
-      LOG_WARN("create tg failed", K(ret));
-    } else if (OB_FAIL(TG_SET_RUNNABLE_AND_START(tg_id_, *this))) {
-      LOG_WARN("start thread failed", K(ret), K(tg_id_));
+    if (OB_FAIL(lib::Threads::init())) {
+      LOG_WARN("init thread failed", K(ret));
+    } else if (OB_FAIL(lib::Threads::start())) {
+      LOG_WARN("start thread failed", K(ret));
+    } else {
+      thread_inited_ = true;
+    }
+    if (OB_FAIL(ret) && thread_inited_) {
+      lib::Threads::stop();
+      lib::Threads::wait();
+      lib::Threads::destroy();
+      thread_inited_ = false;
     }
     int tmp_ret = running_mutex_.unlock();
     if (OB_UNLIKELY(OB_SUCCESS != tmp_ret)) {

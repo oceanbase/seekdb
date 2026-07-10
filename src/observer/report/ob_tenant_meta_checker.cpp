@@ -54,7 +54,7 @@ void ObTenantTabletMetaTableCheckTask::runTimerTask()
 ObTenantMetaChecker::ObTenantMetaChecker()
     : inited_(false),
       stopped_(true),
-      tablet_checker_tg_id_(OB_INVALID_INDEX),
+      tablet_checker_timer_(),
       tt_operator_(NULL),
       tablet_meta_check_task_(*this)
 {
@@ -78,8 +78,9 @@ int ObTenantMetaChecker::init(
       || OB_ISNULL(tt_operator)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", KR(ret), KP(tt_operator));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantTabletMetaChecker, tablet_checker_tg_id_))) {
-    LOG_WARN("TG_CREATE_TENANT tablet meta checker failed", KR(ret));
+  } else if (OB_FAIL(tablet_checker_timer_.init(
+      "TbMetaCh", common::ObMemAttr("TbMetaCh")))) {
+    LOG_WARN("init tablet meta checker timer failed", KR(ret));
   } else {
     tt_operator_ = tt_operator;
     inited_ = true;
@@ -95,13 +96,10 @@ int ObTenantMetaChecker::start()
     LOG_WARN("not init", KR(ret));
   } else {
     stopped_ = false;
-    if (OB_FAIL(TG_START(tablet_checker_tg_id_))) {
-      LOG_WARN("TG_START tablet_checker_tg_id failed", KR(ret), K_(tablet_checker_tg_id));
-    } else if (OB_FAIL(schedule_tablet_meta_check_task())) {
-      LOG_WARN("schedule tablet meta check task failed", KR(ret), K_(tablet_checker_tg_id));
+    if (OB_FAIL(schedule_tablet_meta_check_task())) {
+      LOG_WARN("schedule tablet meta check task failed", KR(ret));
     } else {
-      LOG_INFO("ObTenantMetaChecker start success",
-          K_(tablet_checker_tg_id));
+      LOG_INFO("ObTenantMetaChecker start success");
     }
   }
   return ret;
@@ -111,18 +109,16 @@ void ObTenantMetaChecker::stop()
 {
   if (OB_LIKELY(inited_)) {
     stopped_ = true;
-    TG_STOP(tablet_checker_tg_id_);
-    LOG_INFO("ObTenantMetaChecker stop finished",
-        K_(tablet_checker_tg_id));
+    tablet_checker_timer_.stop();
+    LOG_INFO("ObTenantMetaChecker stop finished");
   }
 }
 
 void ObTenantMetaChecker::wait()
 {
   if (OB_LIKELY(inited_)) {
-    TG_WAIT(tablet_checker_tg_id_);
-    LOG_INFO("ObTenantMetaChecker wait finished",
-        K_(tablet_checker_tg_id));
+    tablet_checker_timer_.wait();
+    LOG_INFO("ObTenantMetaChecker wait finished");
   }
 }
 
@@ -132,9 +128,8 @@ void ObTenantMetaChecker::destroy()
     tt_operator_ = nullptr;
     inited_ = false;
     stopped_ = true;
-    TG_DESTROY(tablet_checker_tg_id_);
-    LOG_INFO("ObTenantMetaChecker destroy finished",
-        K_(tablet_checker_tg_id));
+    tablet_checker_timer_.destroy();
+    LOG_INFO("ObTenantMetaChecker destroy finished");
   }
 }
 
@@ -157,10 +152,10 @@ int ObTenantMetaChecker::check_tablet_table()
       LOG_WARN("check replicas not in/match tablet table failed", KR(ret));
     } else if (dangling_count != 0 || report_count != 0) {
       LOG_INFO("checker found and corrected dangling or to report replicas for tablet meta table",
-        KR(ret), K(dangling_count), K(report_count), K_(tablet_checker_tg_id));
+        KR(ret), K(dangling_count), K(report_count));
     }
     LOG_TRACE("finish checking tablet table", KR(ret),
-        K(dangling_count), K(report_count), K_(tablet_checker_tg_id),
+        K(dangling_count), K(report_count),
         K(start_time), "cost_time", ObTimeUtility::current_time() - start_time);
   }
   return ret;
@@ -175,16 +170,15 @@ int ObTenantMetaChecker::schedule_tablet_meta_check_task()
     LOG_WARN("not init", KR(ret));
   } else if (OB_UNLIKELY(stopped_)) {
     ret = OB_CANCELED;
-    LOG_WARN("ObTenantMetaChecker is stopped", KR(ret), K_(tablet_checker_tg_id));
-  } else if (OB_FAIL(TG_SCHEDULE(
-      tablet_checker_tg_id_,
+    LOG_WARN("ObTenantMetaChecker is stopped", KR(ret));
+  } else if (OB_FAIL(tablet_checker_timer_.schedule(
       tablet_meta_check_task_,
       CHECK_INTERVAL,
       false/*repeat*/))) {
-    LOG_WARN("TG_SCHEDULE tablet meta check task failed",
-        KR(ret), K_(tablet_checker_tg_id), K(CHECK_INTERVAL));
+    LOG_WARN("schedule tablet meta check task failed",
+        KR(ret), K(CHECK_INTERVAL));
   } else {
-    LOG_TRACE("schedule tablet meta check task success", K_(tablet_checker_tg_id));
+    LOG_TRACE("schedule tablet meta check task success");
   }
   return ret;
 }
@@ -198,7 +192,7 @@ int ObTenantMetaChecker::build_replica_map_(ObTabletReplicaMap &replica_map)
     LOG_WARN("not init", KR(ret));
   } else if (OB_UNLIKELY(stopped_)) {
     ret = OB_CANCELED;
-    LOG_WARN("ObTenantMetaChecker is stopped", KR(ret), K_(tablet_checker_tg_id));
+    LOG_WARN("ObTenantMetaChecker is stopped", KR(ret));
   } else if (OB_FAIL(replica_map.create(
       hash::cal_next_prime(TABLET_REPLICA_MAP_BUCKET_NUM),
       "TabletCheckMap",
@@ -214,7 +208,7 @@ int ObTenantMetaChecker::build_replica_map_(ObTabletReplicaMap &replica_map)
       tablet_info.reset();
       if (OB_UNLIKELY(stopped_)) {
         ret = OB_CANCELED;
-        LOG_WARN("ObTenantMetaChecker is stopped", KR(ret), K_(tablet_checker_tg_id));
+        LOG_WARN("ObTenantMetaChecker is stopped", KR(ret));
       } else if (OB_FAIL(tt_iter.next(tablet_info))) {
         if (OB_ITER_END != ret) {
           LOG_WARN("tablet table iterator next failed", KR(ret));
@@ -251,7 +245,7 @@ int ObTenantMetaChecker::check_dangling_replicas_(
     LOG_WARN("not init", KR(ret));
   } else if (OB_UNLIKELY(stopped_)) {
     ret = OB_CANCELED;
-    LOG_WARN("ObTenantMetaChecker is stopped", KR(ret), K_(tablet_checker_tg_id));
+    LOG_WARN("ObTenantMetaChecker is stopped", KR(ret));
   } else if (OB_ISNULL(GCTX.ob_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ob_service is null", KR(ret));
@@ -262,7 +256,7 @@ int ObTenantMetaChecker::check_dangling_replicas_(
       const ObTabletID &tablet_id = it->first.get_tablet_id();
       if (OB_UNLIKELY(stopped_)) {
         ret = OB_CANCELED;
-        LOG_WARN("ObTenantMetaChecker is stopped", KR(ret), K_(tablet_checker_tg_id));
+        LOG_WARN("ObTenantMetaChecker is stopped", KR(ret));
       } else if (OB_FAIL(check_tablet_not_exist_in_local_(ls_id, tablet_id, not_exist))) {
         LOG_WARN("fail to check tablet whether exist in local", KR(ret), K(ls_id), K(tablet_id));
       } else if (not_exist) {
@@ -340,7 +334,7 @@ int ObTenantMetaChecker::check_report_replicas_(
     LOG_WARN("not init", KR(ret));
   } else if (OB_UNLIKELY(stopped_)) {
     ret = OB_CANCELED;
-    LOG_WARN("ObTenantMetaChecker is stopped", KR(ret), K_(tablet_checker_tg_id));
+    LOG_WARN("ObTenantMetaChecker is stopped", KR(ret));
   } else if (OB_ISNULL(GCTX.ob_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ob_service is null", KR(ret));
@@ -357,7 +351,7 @@ int ObTenantMetaChecker::check_report_replicas_(
     while(OB_SUCC(ret)) {
       if (OB_UNLIKELY(stopped_)) {
         ret = OB_CANCELED;
-        LOG_WARN("ObTenantMetaChecker is stopped", KR(ret), K_(tablet_checker_tg_id));
+        LOG_WARN("ObTenantMetaChecker is stopped", KR(ret));
       } else if (OB_FAIL(ls_iter->get_next(ls))) {
         if (OB_ITER_END != ret) {
           LOG_WARN("scan next ls failed.", KR(ret));

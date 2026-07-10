@@ -19,7 +19,8 @@
 
 #include "ob_replay_status.h"
 #include "logservice/ob_log_base_header.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/task/ob_timer.h"
+#include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/hash/ob_linear_hash_map.h"
 #include "share/scn.h"
 
@@ -54,7 +55,7 @@ private:
   int64_t last_replayed_log_size_;
   int64_t last_submitted_log_size_;
   ObLogReplayService *rp_sv_;
-  int tg_id_;
+  common::ObTimer timer_;
   bool is_inited_;
 };
 
@@ -70,7 +71,7 @@ public:
 TODO(yaoying.yyy): memory management of replayservice needs to be documented
 */
 
-class ObLogReplayService: public lib::TGLinkTaskHandler, public ObILogReplayService
+class ObLogReplayService: public common::ObLinkQueueThreadPool, public ObILogReplayService
 {
 public:
   ObLogReplayService();
@@ -257,7 +258,6 @@ private:
 private:
   bool is_inited_;
   bool is_running_;
-  int tg_id_;
   ReplayProcessStat replay_stat_;
   ObLSAdapter *ls_adapter_;
   palf::PalfEnv *palf_env_;

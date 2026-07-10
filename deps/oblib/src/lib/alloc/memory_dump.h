@@ -21,7 +21,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/rc/context.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/thread_pool.h"
 
 // This file will be placed under lib for a short period of time to facilitate unit testing. After the function is stable, move to ob
 // The corresponding MySimpleThreadPool will also be deleted
@@ -133,7 +133,7 @@ typedef common::hash::ObHashMap<std::pair<uint64_t, uint64_t>, LabelInfoItem, ha
 using lib::AChunk;
 using lib::ABlock;
 using lib::AObject;
-class ObMemoryDump : public lib::TGRunnable
+class ObMemoryDump : public lib::ThreadPool
 {
 public:
   static constexpr const char *LOG_FILE = "log/memory_meta";
@@ -206,7 +206,7 @@ public:
 
 private:
   void run1() override;
-  void signal_stop() override;
+  void signal_stop();
   void handle(void *task);
 
   void print_malloc_sample_info();

@@ -1416,12 +1416,11 @@ ObDASTaskResultGCRunner& ObDASTaskResultGCRunner::get_instance()
   return gc_runner;
 }
 
-int ObDASTaskResultGCRunner::schedule_timer_task()
+int ObDASTaskResultGCRunner::schedule_timer_task(common::ObTimer &timer)
 {
   int ret = OB_SUCCESS;
   ObDASTaskResultGCRunner& gc_runner = get_instance();
-  if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::ServerGTimer, gc_runner,
-                          ObDASTaskResultGCRunner::REFRESH_INTERVAL, true))) {
+  if (OB_FAIL(timer.schedule(gc_runner, ObDASTaskResultGCRunner::REFRESH_INTERVAL, true))) {
     LOG_WARN("schedule das task result gc runner failed", K(ret));
   }
   return ret;

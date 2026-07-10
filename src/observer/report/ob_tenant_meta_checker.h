@@ -72,7 +72,7 @@ private:
 
   bool inited_;
   bool stopped_;
-  int tablet_checker_tg_id_;
+  common::ObTimer tablet_checker_timer_;
   share::ObTabletTableOperator *tt_operator_; // operator to process __all_tablet_meta_table
   ObTenantTabletMetaTableCheckTask tablet_meta_check_task_; // timer task to check tablet meta
 };

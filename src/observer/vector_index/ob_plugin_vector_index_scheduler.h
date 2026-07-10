@@ -218,7 +218,6 @@ public:
       is_stopped_(false),
       is_logging_(false),
       need_refresh_(true),
-      ttl_tablet_timer_tg_id_(0),
       interval_factor_(1),
       basic_period_(VEC_INDEX_SCHEDULAR_BASIC_PERIOD),
       current_memory_config_(0),
@@ -235,7 +234,7 @@ public:
   {
   }
 
-  int init(ObLS *ls, int ttl_tablet_timer_tg_id_);
+  int init(ObLS *ls, common::ObTimer &ttl_tablet_timer);
   virtual void runTimerTask() override;
   void run_task();
   bool is_inited() { return is_inited_; }
@@ -311,7 +310,7 @@ public:
   int safe_to_destroy(bool &is_safe);
   
   TO_STRING_KV(K_(is_inited), K_(is_leader), K_(need_do_for_switch), K_(is_stopped), K_(is_logging),
-               K_(need_refresh), K_(ttl_tablet_timer_tg_id), K_(interval_factor), 
+               K_(need_refresh), K_(interval_factor),
                K_(basic_period), K_(current_memory_config), K_(dag_ref_cnt), 
                KP_(vector_index_service), KP_(ls), 
                K_(local_schema_version), K_(local_tenant_task));
@@ -362,7 +361,6 @@ private:
   bool need_refresh_;
   common::ObSpinLock logging_lock_;
   
-  int ttl_tablet_timer_tg_id_;
   int interval_factor_;
   int64_t basic_period_;
   int64_t current_memory_config_;

@@ -23,7 +23,6 @@
 
 #include "lib/ob_define.h"
 #include "lib/thread/ob_simple_thread_pool.h"
-#include "lib/thread/thread_mgr_interface.h"
 #include "observer/change_stream/ob_change_stream_dispatcher.h"
 #include "observer/change_stream/ob_change_stream_plugin.h"
 

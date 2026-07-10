@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "lib/thread/ob_thread_name.h"
 #include "lib/utility/ob_sort.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/rc/ob_tenant_base.h"
@@ -160,7 +161,7 @@ void ObBloomFilterLoadTaskQueue::reset()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(load_map_.destroy())) {
-    LOG_ERROR("failed to destroy bloom filter load tg map", K(ret));
+    LOG_ERROR("failed to destroy bloom filter load thread map", K(ret));
   }
   bucket_lock_.destroy();
   allocator_.reset();
@@ -307,82 +308,87 @@ int ObBloomFilterLoadTaskQueue::recycle_array(ObArray<ValuePair> *array)
 }
 
 /**
- * ------------------------------------------ ObMacroBlockBloomFilterLoadTG ------------------------------------------
+ * ------------------------------------------ ObMacroBlockBloomFilterLoadThread ------------------------------------------
  */
 
-ObMacroBlockBloomFilterLoadTG::ObMacroBlockBloomFilterLoadTG()
-    : tg_id_(-1), idle_cond_(), load_task_queue_(), allocator_(), is_inited_(false)
+ObMacroBlockBloomFilterLoadThread::ObMacroBlockBloomFilterLoadThread()
+    : lib::ThreadPool(1), idle_cond_(), load_task_queue_(), allocator_(), is_inited_(false)
 {
 }
 
-ObMacroBlockBloomFilterLoadTG::~ObMacroBlockBloomFilterLoadTG()
+ObMacroBlockBloomFilterLoadThread::~ObMacroBlockBloomFilterLoadThread()
 {
   destroy();
 }
 
-int ObMacroBlockBloomFilterLoadTG::init()
+int ObMacroBlockBloomFilterLoadThread::init()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("fail to init bloom filter load tg tg", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::MaBlkBFLoader, tg_id_))) {
-    LOG_WARN("fail to create bloom filter load tg thread", K(ret));
-  } else if (OB_FAIL(TG_SET_RUNNABLE(tg_id_, *this))) {
-    LOG_WARN("fail to set bloom filter load tg tg runnable", K(ret));
+    LOG_WARN("fail to init bloom filter load thread", K(ret));
+  } else if (OB_FAIL(lib::ThreadPool::init())) {
+    LOG_WARN("fail to init bloom filter load thread", K(ret));
   } else if (OB_FAIL(load_task_queue_.init())) {
     LOG_WARN("failed to init bloom filter load task queue", K(ret));
   } else if (OB_FAIL(idle_cond_.init(ObWaitEventIds::MACRO_BLOOM_FILTER_COND_WAIT))) {
-    LOG_WARN("fail to init bloom filter load tg idle cond", K(ret));
+    LOG_WARN("fail to init bloom filter load thread idle cond", K(ret));
   } else if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(),
                                      OB_MALLOC_MIDDLE_BLOCK_SIZE,
                                      ObMemAttr("BFLoadSecMeta", ObCtxIds::DEFAULT_CTX_ID)))) {
     LOG_WARN("fail to init allocator", K(ret));
   } else {
     is_inited_ = true;
-    LOG_INFO("init macro block bloom filter load tg", K(ret), K(tg_id_));
+    LOG_INFO("init macro block bloom filter load thread", K(ret));
   }
   return ret;
 }
 
-int ObMacroBlockBloomFilterLoadTG::start()
+int ObMacroBlockBloomFilterLoadThread::start()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("fail to start bloom filter load tg", K(ret), K(is_inited_));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("fail to start bloom filter load tg tg", K(ret));
+    LOG_WARN("fail to start bloom filter load thread", K(ret), K(is_inited_));
+  } else if (OB_FAIL(lib::ThreadPool::start())) {
+    LOG_WARN("fail to start bloom filter load thread", K(ret));
   }
-  FLOG_INFO("start macro block bloom filter load tg", K(ret));
+  FLOG_INFO("start macro block bloom filter load thread", K(ret));
   return ret;
 }
 
-void ObMacroBlockBloomFilterLoadTG::stop()
+void ObMacroBlockBloomFilterLoadThread::stop()
 {
-  TG_STOP(tg_id_);
-  LOG_INFO("stop macro block bloom filter load tg");
+  if (is_inited_) {
+    lib::ThreadPool::stop();
+    ObThreadCondGuard guard(idle_cond_);
+    idle_cond_.signal();
+  }
+  LOG_INFO("stop macro block bloom filter load thread");
 }
 
-void ObMacroBlockBloomFilterLoadTG::wait()
+void ObMacroBlockBloomFilterLoadThread::wait()
 {
-  TG_WAIT(tg_id_);
+  if (is_inited_) {
+    lib::ThreadPool::wait();
+  }
 }
 
-void ObMacroBlockBloomFilterLoadTG::destroy()
+void ObMacroBlockBloomFilterLoadThread::destroy()
 {
-  if (tg_id_ != -1) {
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
+  if (is_inited_) {
+    stop();
+    wait();
+    lib::ThreadPool::destroy();
   }
   load_task_queue_.reset();
   idle_cond_.destroy();
   allocator_.reset();
   is_inited_ = false;
-  LOG_INFO("destroy macro block bloom filter load tg");
+  LOG_INFO("destroy macro block bloom filter load thread");
 }
 
-void ObMacroBlockBloomFilterLoadTG::run1()
+void ObMacroBlockBloomFilterLoadThread::run1()
 {
   lib::set_thread_name("MaBlkBFLoad");
 
@@ -424,7 +430,7 @@ void ObMacroBlockBloomFilterLoadTG::run1()
   }
 }
 
-int ObMacroBlockBloomFilterLoadTG::load_macro_block_bloom_filter(const ObDataMacroBlockMeta &macro_meta)
+int ObMacroBlockBloomFilterLoadThread::load_macro_block_bloom_filter(const ObDataMacroBlockMeta &macro_meta)
 {
   int ret = OB_SUCCESS;
 
@@ -459,7 +465,7 @@ int ObMacroBlockBloomFilterLoadTG::load_macro_block_bloom_filter(const ObDataMac
   return ret;
 }
 
-int ObMacroBlockBloomFilterLoadTG::do_multi_get(const ObBloomFilterLoadKey &key,
+int ObMacroBlockBloomFilterLoadThread::do_multi_get(const ObBloomFilterLoadKey &key,
                                                 ObArray<ValuePair> &array)
 {
   int ret = OB_SUCCESS;
@@ -550,7 +556,7 @@ int ObMacroBlockBloomFilterLoadTG::do_multi_get(const ObBloomFilterLoadKey &key,
   return ret;
 }
 
-int ObMacroBlockBloomFilterLoadTG::do_multi_load(const ObBloomFilterLoadKey &key,
+int ObMacroBlockBloomFilterLoadThread::do_multi_load(const ObBloomFilterLoadKey &key,
                                                  ObArray<ValuePair> &array)
 {
   int ret = OB_SUCCESS;
@@ -675,7 +681,7 @@ int ObMacroBlockBloomFilterLoadTG::do_multi_load(const ObBloomFilterLoadKey &key
   return ret;
 }
 
-int ObMacroBlockBloomFilterLoadTG::add_load_task(const storage::ObITable::TableKey &sstable_key,
+int ObMacroBlockBloomFilterLoadThread::add_load_task(const storage::ObITable::TableKey &sstable_key,
                                                  const share::ObLSID &ls_id,
                                                  const MacroBlockId &macro_id,
                                                  const ObDatumRowkey &rowkey)
@@ -684,12 +690,12 @@ int ObMacroBlockBloomFilterLoadTG::add_load_task(const storage::ObITable::TableK
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("fail to add bloom filter load tg task, not inited",
+    LOG_WARN("fail to add bloom filter load thread task, not inited",
              K(ret), K(sstable_key), K(ls_id), K(macro_id), K(rowkey));
   } else if (OB_UNLIKELY(!sstable_key.is_valid() || !macro_id.is_valid()
                          || !storage::ObITable::is_sstable(sstable_key.table_type_))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to add bloom filter load tg task, invalid argument",
+    LOG_WARN("fail to add bloom filter load thread task, invalid argument",
              K(ret), K(sstable_key), K(ls_id), K(macro_id), K(rowkey));
   } else if (OB_FAIL(load_task_queue_.push_task(sstable_key, ls_id, macro_id, rowkey))) {
     LOG_WARN("fail to push back macro id", K(ret), K(sstable_key), K(ls_id), K(macro_id), K(rowkey));

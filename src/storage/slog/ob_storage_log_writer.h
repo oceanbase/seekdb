@@ -28,7 +28,7 @@
 #include "storage/slog/ob_storage_log_write_buffer.h"
 #include "storage/slog/ob_storage_log_nop_log.h"
 #include "storage/blocksstable/ob_log_file_spec.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/thread_pool.h"
 
 namespace oceanbase
 {
@@ -110,7 +110,7 @@ private:
   static int check_server_lease();
 
 private:
-  class ObSLogWriteRunner : public lib::TGRunnable
+  class ObSLogWriteRunner : public lib::ThreadPool
   {
   public:
     ObSLogWriteRunner();
@@ -125,7 +125,6 @@ private:
 
   private:
     ObStorageLogWriter *log_writer_;
-    int tg_id_;
     bool is_inited_;
   };
 

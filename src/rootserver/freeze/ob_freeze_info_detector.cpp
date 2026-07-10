@@ -38,7 +38,8 @@ ObMajorMergeInfoDetector::ObMajorMergeInfoDetector()
   : is_inited_(false), is_paused_(false), is_primary_service_(true),
     is_global_merge_info_adjusted_(false), is_gc_scn_inited_(false), sql_proxy_(nullptr), last_gc_timestamp_(0), last_run_timestamp_(0),
     major_merge_info_mgr_(nullptr), major_scheduler_idling_(nullptr),
-    last_schedule_ts_(0), need_immediate_run_(true)
+    last_schedule_ts_(0), need_immediate_run_(true),
+    timer_()
 {}
 
 ObMajorMergeInfoDetector::~ObMajorMergeInfoDetector()
@@ -63,8 +64,12 @@ int ObMajorMergeInfoDetector::init(
     sql_proxy_ = &sql_proxy;
     major_merge_info_mgr_ = &major_merge_info_mgr;
     major_scheduler_idling_ = &major_scheduler_idling;
-    is_inited_ = true;
-    LOG_INFO("freeze info detector init succ");
+    if (OB_FAIL(timer_.init("FrzInfoDetTimer", ObMemAttr("FrzInfoDet")))) {
+      LOG_WARN("init freeze info detector timer failed", KR(ret));
+    } else {
+      is_inited_ = true;
+      LOG_INFO("freeze info detector init succ");
+    }
   }
   return ret;
 }
@@ -75,9 +80,9 @@ int ObMajorMergeInfoDetector::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObMajorMergeInfoDetector not init", K(ret));
-  } else if (OB_FAIL(TG_START(lib::TGDefIDs::FrzInfoDetTimer))) {
+  } else if (OB_FAIL(timer_.start())) {
     LOG_WARN("start freeze info detector timer failed", KR(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::FrzInfoDetTimer, *this, 1 * 1000 * 1000L, true/*is_repeat*/))) {
+  } else if (OB_FAIL(timer_.schedule(*this, 1 * 1000 * 1000L, true/*is_repeat*/))) {
     LOG_WARN("schedule freeze info detector timer failed", KR(ret));
   } else {
     LOG_INFO("ObMajorMergeInfoDetector start succ");
@@ -304,14 +309,14 @@ int ObMajorMergeInfoDetector::signal()
 void ObMajorMergeInfoDetector::stop()
 {
   if (is_inited_) {
-    TG_STOP(lib::TGDefIDs::FrzInfoDetTimer);
+    timer_.stop();
   }
 }
 
 void ObMajorMergeInfoDetector::wait()
 {
   if (is_inited_) {
-    TG_WAIT(lib::TGDefIDs::FrzInfoDetTimer);
+    timer_.wait();
   }
 }
 
@@ -321,7 +326,7 @@ int ObMajorMergeInfoDetector::destroy()
   stop();
   wait();
   if (is_inited_) {
-    TG_DESTROY(lib::TGDefIDs::FrzInfoDetTimer);
+    timer_.destroy();
   }
   is_paused_ = false;
   is_inited_ = false;

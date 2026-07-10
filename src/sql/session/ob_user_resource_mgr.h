@@ -118,7 +118,7 @@ class ObConnectResourceMgr {
 public:
   ObConnectResourceMgr();
   virtual ~ObConnectResourceMgr();
-  int init(share::schema::ObMultiVersionSchemaService &schema_service);
+  int init(share::schema::ObMultiVersionSchemaService &schema_service, common::ObTimer &timer);
   // ask for tenant connection resource.
   int apply_for_tenant_conn_resource(const ObPrivSet &priv,
                      const uint64_t max_tenant_connections);
@@ -191,6 +191,7 @@ private:
   ObConnectResource tenant_res_;
   bool tenant_res_inited_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
+  common::ObTimer *timer_;
   ConnResourceCleanUpTask cleanup_task_;
   DISALLOW_COPY_AND_ASSIGN(ObConnectResourceMgr);
 };

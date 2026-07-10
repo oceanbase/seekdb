@@ -25,6 +25,7 @@
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/queue/ob_link_queue.h"
+#include "lib/task/ob_timer.h"
 #include "share/ob_ls_id.h"
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"
 #include "storage/blocksstable/ob_macro_block_id.h"
@@ -547,8 +548,7 @@ private:
   ObTabletPointerMap tablet_map_;
   ObFlyingTabletPointerMap flying_tablet_map_;
   ObExternalTabletCntMap external_tablet_cnt_map_;
-  int tg_id_;
-  int persist_tg_id_; // since persist task may cost too much time, we use another thread to exec.
+  common::ObTimer gc_timer_;
   TableGCTask table_gc_task_;
   RefreshConfigTask refresh_config_task_;
   TabletGCTask tablet_gc_task_;
@@ -576,8 +576,8 @@ private:
   int64_t last_access_tenant_config_ts_;
   ObT3MResourceLimitCalculatorHandler t3m_limit_calculator_;
 
-  // For some compelling reason, we can only place persistent bloom filter load tg in t3m.
-  ObMacroBlockBloomFilterLoadTG bf_load_tg_;
+  // For some compelling reason, we can only place persistent bloom filter load thread in t3m.
+  ObMacroBlockBloomFilterLoadThread bf_load_thread_;
 
   bool is_tablet_leak_checker_enabled_;
   bool is_inited_;

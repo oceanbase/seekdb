@@ -19,8 +19,6 @@
 #include "share/rc/ob_module_provider.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "share/rc/ob_tenant_base.h"
-#include "lib/thread/thread_define.h"
-#include "share/ob_thread_define.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include <unistd.h>
 

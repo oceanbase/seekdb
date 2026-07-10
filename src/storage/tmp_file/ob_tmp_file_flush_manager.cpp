@@ -35,6 +35,9 @@ ObTmpFileFlushManager::ObTmpFileFlushManager(ObTmpFilePageCacheController &pc_ct
     flush_priority_mgr_(pc_ctrl.get_flush_priority_mgr()),
     cur_flush_timer_idx_(0)
 {
+  for (int64_t i = 0; i < ObTmpFileGlobal::FLUSH_TIMER_CNT; ++i) {
+    flush_timers_[i] = nullptr;
+  }
 }
 
 int ObTmpFileFlushManager::init()
@@ -55,13 +58,16 @@ int ObTmpFileFlushManager::init()
 void ObTmpFileFlushManager::destroy()
 {
   is_inited_ = false;
+  for (int64_t i = 0; i < ObTmpFileGlobal::FLUSH_TIMER_CNT; ++i) {
+    flush_timers_[i] = nullptr;
+  }
   flush_ctx_.destroy();
 }
 
-void ObTmpFileFlushManager::set_flush_timer_tg_id(int* flush_timer_tg_id, const int64_t timer_cnt)
+void ObTmpFileFlushManager::set_flush_timers(common::ObTimer *flush_timers, const int64_t timer_cnt)
 {
   for (int64_t i = 0; i < timer_cnt && i < ObTmpFileGlobal::FLUSH_TIMER_CNT; ++i) {
-    flush_timer_tg_id_[i] = flush_timer_tg_id[i];
+    flush_timers_[i] = &flush_timers[i];
   }
 }
 
@@ -1022,8 +1028,12 @@ int ObTmpFileFlushManager::handle_async_write_(ObTmpFileFlushTask &flush_task, F
   if (OB_UNLIKELY(cur_flush_timer_idx_ < 0 || cur_flush_timer_idx_ >= ObTmpFileGlobal::FLUSH_TIMER_CNT)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("unexpected cur_flush_timer_idx_", KR(ret), K(cur_flush_timer_idx_));
-  } else if (OB_FAIL(TG_SCHEDULE(flush_timer_tg_id_[cur_flush_timer_idx_], flush_task.get_flush_write_block_task(), 0/*delay*/, false/*repeat*/))) {
-    LOG_WARN("TG_SCHEDULE tmp file write block task failed", KR(ret), K(flush_timer_tg_id_[cur_flush_timer_idx_]), K(cur_flush_timer_idx_), K(flush_task));
+  } else if (OB_ISNULL(flush_timers_[cur_flush_timer_idx_])) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("flush timer is null", KR(ret), K(cur_flush_timer_idx_), K(flush_task));
+  } else if (OB_FAIL(flush_timers_[cur_flush_timer_idx_]->schedule(
+      flush_task.get_flush_write_block_task(), 0/*delay*/, false/*repeat*/))) {
+    LOG_WARN("schedule tmp file write block task failed", KR(ret), K(cur_flush_timer_idx_), K(flush_task));
   } else {
     next_state = FlushState::TFFT_WAIT;
   }

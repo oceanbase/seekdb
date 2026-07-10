@@ -37,8 +37,8 @@ public:
       flush_priority_mgr_(),
       evict_mgr_(),
       flush_mgr_(*this),
-      flush_tg_(write_buffer_pool_, flush_mgr_, task_allocator_, tmp_file_block_manager_),
-      swap_tg_(write_buffer_pool_, evict_mgr_, flush_tg_, *this)
+      flush_thread_(write_buffer_pool_, flush_mgr_, task_allocator_, tmp_file_block_manager_),
+      swap_thread_(write_buffer_pool_, evict_mgr_, flush_thread_, *this)
   {
   }
   ~ObTmpFilePageCacheController() {}
@@ -79,8 +79,8 @@ private:
   ObTmpFileFlushPriorityManager flush_priority_mgr_;
   ObTmpFileEvictionManager evict_mgr_;    // maintain evict lists and evict pages from write buffer pool
   ObTmpFileFlushManager flush_mgr_;       // maintain flush lists and generate flush tasks
-  ObTmpFileFlushTG flush_tg_;             // flush thread
-  ObTmpFileSwapTG swap_tg_;               // swap thread
+  ObTmpFileFlushThread flush_thread_;             // flush thread
+  ObTmpFileSwapThread swap_thread_;               // swap thread
 };
 
 }  // end namespace tmp_file

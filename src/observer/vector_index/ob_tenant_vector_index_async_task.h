@@ -67,7 +67,7 @@ public:
   static const int64_t VEC_INDEX_CLEAR_TASK_PERIOD = 10 * 1000L * 1000L; // 60s
   explicit ObTenantVecAsyncTaskScheduler() 
     : is_inited_(false),
-      tg_id_(-1),
+      timer_(),
       vec_history_task_()
   {}
 
@@ -82,7 +82,7 @@ public:
 private:
   bool is_inited_;
   
-  int tg_id_;
+  common::ObTimer timer_;
   ObVectorIndexHistoryTask vec_history_task_;
 };
 

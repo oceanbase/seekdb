@@ -42,13 +42,13 @@ ObPsCache::ObPsCache()
     mutex_(common::ObLatchIds::PS_CACHE_EVICT_MUTEX_LOCK),
     mem_context_(NULL),
     inner_allocator_(NULL),
-    tg_id_(-1)
+    evict_timer_()
 {
 }
 
 void ObPsCache::destroy()
 {
-  TG_DESTROY(tg_id_);
+  evict_timer_.destroy();
   if (inited_) {
     // ps_stmt_id and ps_stmt_info will have their reference count incremented when created
     // Now PsCache is being destructed, decrement the reference count for all internal objects, if the reference count reaches 0, memory will be explicitly freed
@@ -59,7 +59,6 @@ void ObPsCache::destroy()
     DESTROY_CONTEXT(mem_context_);
     mem_context_ = NULL;
   }
-  tg_id_ = -1;
 }
 
 ObPsCache::~ObPsCache()
@@ -81,8 +80,8 @@ int ObPsCache::mtl_init(ObPsCache* &ps_cache)
 void ObPsCache::mtl_stop(ObPsCache * &ps_cache)
 {
   if (OB_LIKELY(nullptr != ps_cache && ps_cache->is_inited())) {
-    TG_CANCEL(ps_cache->tg_id_, ps_cache->evict_task_);
-    TG_STOP(ps_cache->tg_id_);
+    ps_cache->evict_timer_.cancel(ps_cache->evict_task_);
+    ps_cache->evict_timer_.stop();
   }
 }
 
@@ -111,18 +110,16 @@ int ObPsCache::init(const int64_t hash_bucket)
         mem_context_,
         param))) {
       LOG_WARN("create memory entity failed", K(ret));
-    } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::PsCacheEvict, tg_id_))) {
-      LOG_WARN("failed to create tg", K(ret));
-    } else if (OB_FAIL(TG_START(tg_id_))) {
-      LOG_WARN("failed to start tg", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(tg_id_, evict_task_, GCONF.plan_cache_evict_interval, true))) {
+    } else if (FALSE_IT(evict_task_.ps_cache_ = this)) {
+    } else if (OB_FAIL(evict_timer_.init("PsCacheEvict", ObMemAttr("PsCacheEvict")))) {
+      LOG_WARN("failed to init ps cache evict timer", K(ret));
+    } else if (OB_FAIL(evict_timer_.schedule(evict_task_, GCONF.plan_cache_evict_interval, true))) {
       LOG_WARN("failed to schedule refresh task", K(ret));
 
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL memory entity returned", K(ret));
     } else {
-      evict_task_.ps_cache_ = this;
       inner_allocator_ = &mem_context_->get_allocator();
       
       host_ = const_cast<ObAddr &>(GCTX.self_addr());

@@ -16,6 +16,7 @@
 #ifndef OCEANBASE_STORAGE_META_STORE_OB_SERVER_STORAGE_META_PERSISTER_H_
 #define OCEANBASE_STORAGE_META_STORE_OB_SERVER_STORAGE_META_PERSISTER_H_
 
+#include "lib/allocator/ob_concurrent_fifo_allocator.h"
 #include "share/ob_unit_getter.h"
 
 namespace oceanbase

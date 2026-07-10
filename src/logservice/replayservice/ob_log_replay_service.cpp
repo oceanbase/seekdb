@@ -36,7 +36,7 @@ ReplayProcessStat::ReplayProcessStat()
   : last_replayed_log_size_(-1),
     last_submitted_log_size_(-1),
     rp_sv_(NULL),
-    tg_id_(-1),
+    timer_(),
     is_inited_(false)
   {}
 
@@ -45,26 +45,24 @@ ReplayProcessStat::~ReplayProcessStat()
   last_replayed_log_size_ = -1;
   last_submitted_log_size_ = -1;
   rp_sv_ = NULL;
-  tg_id_ = -1;
   is_inited_ = false;
 }
 
 int ReplayProcessStat::init(ObLogReplayService *rp_sv)
 {
   int ret = OB_SUCCESS;
-  int tg_id = lib::TGDefIDs::ReplayProcessStat;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     CLOG_LOG(WARN, "ReplayProcessStat init twice", K(ret));
   } else if (NULL == rp_sv) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(ERROR, "rp_sv is NULL", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(tg_id, tg_id_))) {
-    CLOG_LOG(ERROR, "ReplayProcessStat create failed", K(ret));
+  } else if (OB_FAIL(timer_.init("ReplayProcessStat", common::ObMemAttr("ReplayStat")))) {
+    CLOG_LOG(ERROR, "ReplayProcessStat timer init failed", K(ret));
   } else {
     last_replayed_log_size_ = -1;
     rp_sv_ = rp_sv;
-    CLOG_LOG(INFO, "ReplayProcessStat init success", K(rp_sv_), K(tg_id_), K(tg_id));
+    CLOG_LOG(INFO, "ReplayProcessStat init success", K(rp_sv_));
     is_inited_ = true;
   }
   return ret;
@@ -75,12 +73,10 @@ int ReplayProcessStat::start()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    CLOG_LOG(WARN, "ReplayProcessStat TG_START failed", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, *this, SCAN_TIMER_INTERVAL, true))) {
-    CLOG_LOG(WARN, "ReplayProcessStat TG_SCHEDULE failed", K(ret));
+  } else if (OB_FAIL(timer_.schedule(*this, SCAN_TIMER_INTERVAL, true))) {
+    CLOG_LOG(WARN, "ReplayProcessStat schedule failed", K(ret));
   } else {
-    CLOG_LOG(INFO, "ReplayProcessStat start success", K(tg_id_), K(rp_sv_));
+    CLOG_LOG(INFO, "ReplayProcessStat start success", K(rp_sv_));
   }
   return ret;
 }
@@ -88,28 +84,25 @@ int ReplayProcessStat::start()
 void ReplayProcessStat::stop()
 {
   if (IS_INIT) {
-    TG_STOP(tg_id_);
-    CLOG_LOG(INFO, "ReplayProcessStat stop finished", K(tg_id_), K(rp_sv_));
+    timer_.stop();
+    CLOG_LOG(INFO, "ReplayProcessStat stop finished", K(rp_sv_));
   }
 }
 
 void ReplayProcessStat::wait()
 {
   if (IS_INIT) {
-    TG_WAIT(tg_id_);
-    CLOG_LOG(INFO, "ReplayProcessStat wait finished", K(tg_id_), K(rp_sv_));
+    timer_.wait();
+    CLOG_LOG(INFO, "ReplayProcessStat wait finished", K(rp_sv_));
   }
 }
 
 void ReplayProcessStat::destroy()
 {
   if (IS_INIT) {
-    CLOG_LOG(INFO, "ReplayProcessStat destroy finished", K(tg_id_), K(rp_sv_));
+    CLOG_LOG(INFO, "ReplayProcessStat destroy finished", K(rp_sv_));
     is_inited_ = false;
-    if (-1 != tg_id_) {
-      TG_DESTROY(tg_id_);
-      tg_id_ = -1;
-    }
+    timer_.destroy();
     rp_sv_ = NULL;
     last_replayed_log_size_ = -1;
   }
@@ -183,9 +176,9 @@ void ReplayProcessStat::runTimerTask()
 
 //---------------ObLogReplayService---------------//
 ObLogReplayService::ObLogReplayService()
-  : is_inited_(false),
+  : common::ObLinkQueueThreadPool(),
+    is_inited_(false),
     is_running_(false),
-    tg_id_(-1),
     replay_stat_(),
     ls_adapter_(NULL),
     palf_env_(NULL),
@@ -217,9 +210,12 @@ int ObLogReplayService::init(PalfEnv *palf_env,
              || OB_ISNULL(allocator_ = allocator)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(ret), KP(palf_env), KP(ls_adapter), KP(allocator));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::ReplayService, tg_id_))) {
-    CLOG_LOG(WARN, "fail to create thread group", K(ret));
-  } else if (OB_FAIL(TG_SET_ADAPTIVE_THREAD(tg_id_, 0, thread_quota * MTL_CPU_COUNT()))) {
+  } else if (OB_FAIL(common::ObLinkQueueThreadPool::init(
+      1,
+      (common::REPLAY_TASK_QUEUE_SIZE + 1) * OB_MAX_LS_NUM_PER_TENANT_PER_SERVER_CAN_BE_SET,
+      "ReplaySrv"))) {
+    CLOG_LOG(WARN, "fail to init replay service thread pool", K(ret));
+  } else if (OB_FAIL(common::ObLinkQueueThreadPool::set_adaptive_thread(0, thread_quota * MTL_CPU_COUNT()))) {
     CLOG_LOG(WARN, "set adaptive thread failed", K(ret));
   } else if (OB_FAIL(replay_status_map_.init("REPLAY_STATUS"))) {
     CLOG_LOG(WARN, "replay_status_map_ init error", K(ret));
@@ -235,7 +231,7 @@ int ObLogReplayService::init(PalfEnv *palf_env,
   }
 
   if (OB_SUCC(ret)) {
-    CLOG_LOG(INFO, "replay service init success", K(tg_id_));
+    CLOG_LOG(INFO, "replay service init success");
   }
   return ret;
 }
@@ -246,7 +242,9 @@ int ObLogReplayService::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "ObLogReplayService not inited!!!", K(ret));
-  } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
+  } else if (common::ObLinkQueueThreadPool::get_thread_count() <= 0
+      && !common::ObLinkQueueThreadPool::try_expand_one(1)) {
+    ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "start ObLogReplayService failed", K(ret));
   } else {
     is_running_ = true;
@@ -255,7 +253,7 @@ int ObLogReplayService::start()
       //Does not affect the playback thread work
       CLOG_LOG(WARN, "replay_stat start failed", K(tmp_ret));
     }
-    CLOG_LOG(INFO, "start ObLogReplayService success", K(ret), K(tg_id_));
+    CLOG_LOG(INFO, "start ObLogReplayService success", K(ret));
   }
   return ret;
 }
@@ -265,6 +263,7 @@ void ObLogReplayService::stop()
   CLOG_LOG(INFO, "replay service stop begin");
   replay_stat_.stop();
   is_running_ = false;
+  common::ObLinkQueueThreadPool::stop();
   CLOG_LOG(INFO, "replay service stop finish");
   return;
 }
@@ -276,15 +275,14 @@ void ObLogReplayService::wait()
   int64_t num = 0;
 
   int ret = OB_SUCCESS;
-  while (OB_SUCC(TG_GET_QUEUE_NUM(tg_id_, num)) && num > 0) {
+  while ((num = common::ObLinkQueueThreadPool::get_queue_num()) > 0) {
     PAUSE();
   }
   if (OB_FAIL(ret)) {
     CLOG_LOG(WARN, "ObLogReplayService failed to get queue number");
   }
   CLOG_LOG(INFO, "replay service SimpleQueue empty");
-  TG_STOP(tg_id_);
-  TG_WAIT(tg_id_);
+  common::ObLinkQueueThreadPool::wait();
   CLOG_LOG(INFO, "replay service SimpleQueue destroy finish");
   CLOG_LOG(INFO, "replay service wait finish");
   return;
@@ -294,11 +292,11 @@ void ObLogReplayService::destroy()
 {
   (void)remove_all_ls_();
   is_inited_ = false;
+  is_running_ = false;
   CLOG_LOG(INFO, "replay service destroy");
-  if (-1 != tg_id_) {
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
-  }
+  common::ObLinkQueueThreadPool::stop();
+  common::ObLinkQueueThreadPool::wait();
+  common::ObLinkQueueThreadPool::destroy();
   replayable_point_.reset();
   replay_stat_.destroy();
   pending_replay_log_size_ = 0;
@@ -678,7 +676,7 @@ int ObLogReplayService::submit_task(ObReplayServiceTask *task)
     CLOG_LOG(ERROR, "task is NULL", K(ret));
   } else {
     task->set_enqueue_ts(ObTimeUtility::fast_current_time());
-    while (OB_FAIL(TG_PUSH_TASK(tg_id_, task)) && OB_EAGAIN == ret) {
+    while (OB_FAIL(common::ObLinkQueueThreadPool::push(task)) && OB_EAGAIN == ret) {
       //Expected not to fail
       ob_throttle_usleep(1000, ret);
       CLOG_LOG(ERROR, "failed to push", K(ret));

@@ -102,7 +102,6 @@ class ObOptStatMonitorManager
 public:
   ObOptStatMonitorManager()
     : inited_(false),
-      tg_id_(-1),
       destroyed_(false),
       mysql_proxy_(NULL)
       {}
@@ -210,7 +209,6 @@ private:
   const static int64_t MAX_PROCESS_BATCH_TABLET_CNT = 1000;
   bool inited_;
   
-  int tg_id_;
   bool destroyed_;
   ObMySQLProxy *mysql_proxy_;
   ColumnUsageMap column_usage_map_;

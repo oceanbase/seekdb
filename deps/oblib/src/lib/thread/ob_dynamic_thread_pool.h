@@ -22,7 +22,6 @@
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/thread/thread_pool.h"
 #include "lib/container/ob_se_array.h"
-#include "lib/thread/thread_mgr_interface.h"
 
 namespace oceanbase
 {
@@ -124,16 +123,16 @@ private:
   int64_t ref_cnt_;
 };
 
-class ObSimpleThreadPoolDynamicMgr : public lib::TGRunnable {
+class ObSimpleThreadPoolDynamicMgr : public lib::ThreadPool {
 public:
   static const int64_t CHECK_INTERVAL_US = 3 * 1000 * 1000;
-  ObSimpleThreadPoolDynamicMgr() : pool_list_(), pool_list_lock_(), is_inited_(false) {}
+  ObSimpleThreadPoolDynamicMgr() : lib::ThreadPool(1), pool_list_(), pool_list_lock_(), is_inited_(false) {}
   virtual ~ObSimpleThreadPoolDynamicMgr();
   int init();
   void stop();
   void wait();
   void destroy();
-  void run1();
+  void run1() override;
   int bind(ObSimpleDynamicThreadPool *pool);
   int unbind(ObSimpleDynamicThreadPool *pool);
   static ObSimpleThreadPoolDynamicMgr &get_instance();

@@ -486,11 +486,11 @@ private:
   // avoid concurrent run of do_restart and bootstrap
   common::ObLatch bootstrap_lock_;
 
-  // timer tg for rootservice periodic tasks
-  int restart_task_tg_id_;
-  int load_ddl_task_tg_id_;
-  int event_table_clear_task_tg_id_;
-  int purge_recyclebin_task_tg_id_;
+  // timers for rootservice periodic tasks
+  common::ObTimer restart_task_timer_;
+  common::ObTimer load_ddl_task_timer_;
+  common::ObTimer event_table_clear_task_timer_;
+  common::ObTimer purge_recyclebin_task_timer_;
 
   // async timer tasks
   ObRestartTask restart_task_;  // repeat on failure and cancel on success

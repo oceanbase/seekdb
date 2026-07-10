@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-#include "share/ob_thread_mgr.h"
 #include "log_updater.h"
 #include "palf_env_impl.h"                    // IPalfEnvImpl
 namespace oceanbase
 {
 namespace palf
 {
-LogUpdater::LogUpdater() : palf_env_impl_(NULL), tg_id_(-1), is_inited_(false) {}
+LogUpdater::LogUpdater() : palf_env_impl_(NULL), timer_(), is_inited_(false) {}
 
 LogUpdater::~LogUpdater()
 {
@@ -31,15 +30,14 @@ LogUpdater::~LogUpdater()
 int LogUpdater::init(IPalfEnvImpl *palf_env_impl)
 {
   int ret = OB_SUCCESS;
-  int tg_id = lib::TGDefIDs::LogUpdater;
   if (NULL == palf_env_impl) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(TG_CREATE_TENANT(tg_id, tg_id_))) {
-    PALF_LOG(ERROR, "LogUpdater create failed", K(ret));
+  } else if (OB_FAIL(timer_.init("LogUpdater", common::ObMemAttr("LogUpdater")))) {
+    PALF_LOG(ERROR, "LogUpdater timer init failed", K(ret));
   } else {
     palf_env_impl_ = palf_env_impl;
     is_inited_ = true;
-    PALF_LOG(INFO, "LogUpdater init success", KPC(palf_env_impl), K(tg_id_), K(tg_id));
+    PALF_LOG(INFO, "LogUpdater init success", KPC(palf_env_impl));
   }
   return ret;
 }
@@ -49,46 +47,39 @@ int LogUpdater::start()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    PALF_LOG(WARN, "LogUpdater TG_START failed", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, *this, PALF_UPDATE_CACHED_STAT_INTERVAL_US, true))) {
-    PALF_LOG(WARN, "LogUpdater TG_SCHEDULE failed", K(ret));
+  } else if (OB_FAIL(timer_.schedule(*this, PALF_UPDATE_CACHED_STAT_INTERVAL_US, true))) {
+    PALF_LOG(WARN, "LogUpdater schedule failed", K(ret));
   } else {
-    PALF_LOG(INFO, "LogUpdater start success", K(tg_id_), KPC(palf_env_impl_));
+    PALF_LOG(INFO, "LogUpdater start success", KPC(palf_env_impl_));
   }
   return ret;
 }
 
 void LogUpdater::stop()
 {
-  if (-1 != tg_id_) {
-    PALF_LOG(INFO, "LogUpdater stop start", K(tg_id_), KPC(palf_env_impl_));
-    TG_STOP(tg_id_);
-    PALF_LOG(INFO, "LogUpdater stop finished", K(tg_id_), KPC(palf_env_impl_));
+  if (IS_INIT) {
+    PALF_LOG(INFO, "LogUpdater stop start", KPC(palf_env_impl_));
+    timer_.stop();
+    PALF_LOG(INFO, "LogUpdater stop finished", KPC(palf_env_impl_));
   }
 }
 
 void LogUpdater::wait()
 {
-  if (-1 != tg_id_) {
-    PALF_LOG(INFO, "LogUpdater wait start", K(tg_id_), KPC(palf_env_impl_));
-    TG_WAIT(tg_id_);
-    PALF_LOG(INFO, "LogUpdater wait finished", K(tg_id_), KPC(palf_env_impl_));
+  if (IS_INIT) {
+    PALF_LOG(INFO, "LogUpdater wait start", KPC(palf_env_impl_));
+    timer_.wait();
+    PALF_LOG(INFO, "LogUpdater wait finished", KPC(palf_env_impl_));
   }
 }
 
 void LogUpdater::destroy()
 {
-  PALF_LOG(INFO, "LogUpdater destroy start", K(tg_id_), KPC(palf_env_impl_));
+  PALF_LOG(INFO, "LogUpdater destroy start", KPC(palf_env_impl_));
   is_inited_ = false;
-  if (-1 != tg_id_) {
-    TG_STOP(tg_id_);
-    TG_WAIT(tg_id_);
-    TG_DESTROY(tg_id_);
-  }
-  tg_id_ = -1;
+  timer_.destroy();
   palf_env_impl_ = NULL;
-  PALF_LOG(INFO, "LogUpdater destroy finish", K(tg_id_), KPC(palf_env_impl_));
+  PALF_LOG(INFO, "LogUpdater destroy finish", KPC(palf_env_impl_));
 }
 
 void LogUpdater::runTimerTask()

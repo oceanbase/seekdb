@@ -239,8 +239,8 @@ int ObLockTable::init(ObLS *parent)
   } else if (OB_ISNULL(lock_mt_mgr_ = static_cast<ObLockMemtableMgr*>(memtable_mgr_handle.get_memtable_mgr()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lock memtable mgr pointer", KR(ret), KPC(parent_));
-  } else if (OB_FAIL(TG_START(lib::TGDefIDs::TableLockService))) {
-    LOG_WARN("fail to start timer for checking obj lock", K(ret));
+  } else if (OB_FAIL(check_obj_lock_timer_.init("OBJLockCheck", ObMemAttr("OBJLockCheck")))) {
+    LOG_WARN("fail to init timer for checking obj lock", K(ret));
   } else {
     parent_ = parent;
     is_inited_ = true;
@@ -258,8 +258,11 @@ int ObLockTable::prepare_for_safe_destroy()
 
 void ObLockTable::destroy()
 {
-  TG_CANCEL_TASK(lib::TGDefIDs::TableLockService, check_obj_lock_task_);
-  TG_WAIT_TASK(lib::TGDefIDs::TableLockService, check_obj_lock_task_);
+  if (check_obj_lock_timer_.inited()) {
+    check_obj_lock_timer_.cancel_task(check_obj_lock_task_);
+    check_obj_lock_timer_.wait_task(check_obj_lock_task_);
+    check_obj_lock_timer_.destroy();
+  }
   parent_ = nullptr;
   lock_mt_mgr_ = nullptr;
   lock_memtable_handle_.reset();
@@ -833,8 +836,9 @@ int ObLockTable::switch_to_leader()
       LOG_INFO("start to check and clear obj lock when switch to leader", K(ret),
               K(parent_->get_ls_id()));
     }
-    if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::TableLockService, check_obj_lock_task_,
-                            0 /* delay */, false /* repeat */))) {
+    if (OB_FAIL(check_obj_lock_timer_.schedule(check_obj_lock_task_,
+                                               0 /* delay */,
+                                               false /* repeat */))) {
       LOG_WARN("schedule check and clear obj lock task failed", K(ret), KPC(parent_));
     }
   }

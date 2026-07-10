@@ -19,7 +19,7 @@
 
 #include "share/ob_define.h"
 #include "lib/net/ob_addr.h"
-#include "lib/thread/thread_mgr.h"
+#include "lib/task/ob_timer.h"
 #include "share/scn.h"
 
 namespace oceanbase
@@ -79,6 +79,7 @@ private:
   int64_t last_check_tablet_ckm_us_;
   share::SCN tablet_ckm_gc_compaction_scn_;
   volatile bool stop_;
+  common::ObTimer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(ObDailyMajorFreezeLauncher);
 };

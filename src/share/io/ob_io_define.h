@@ -26,7 +26,7 @@
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/profile/ob_trace_id.h"
 #include "lib/restore/ob_storage.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/ob_link_task.h"
 #include "lib/worker.h"
 #include "share/ob_define.h"
 

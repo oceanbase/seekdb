@@ -615,7 +615,7 @@ ObTenantTabletStatMgr::ObTenantTabletStatMgr()
     sys_stat_(),
     report_cursor_(0),
     pending_cursor_(0),
-    report_tg_id_(-1),
+    report_timer_(),
     extreme_tablet_cnt_(0),
     is_inited_(false)
 {
@@ -643,11 +643,10 @@ int ObTenantTabletStatMgr::init()
   } else if (OB_FAIL(bucket_lock_.init(bucket_num, ObLatchIds::DEFAULT_BUCKET_LOCK,
                                        ObMemAttr("TabStatMgrLock")))) {
     LOG_WARN("failed to init bucket lock", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TabletStatRpt, report_tg_id_))) {
-    LOG_WARN("failed to create TabletStatRpt thread", K(ret));
-  } else if (OB_FAIL(TG_START(report_tg_id_))) {
-    LOG_WARN("failed to start stat TabletStatRpt thread", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(report_tg_id_, report_stat_task_, TABLET_STAT_PROCESS_INTERVAL, repeat))) {
+  } else if (OB_FAIL(report_timer_.init(
+      "TabletStatRpt", ObMemAttr("TabletStatRpt")))) {
+    LOG_WARN("failed to init TabletStatRpt timer", K(ret));
+  } else if (OB_FAIL(report_timer_.schedule(report_stat_task_, TABLET_STAT_PROCESS_INTERVAL, repeat))) {
     LOG_WARN("failed to schedule tablet stat update task", K(ret));
   } else {
     refresh_sys_stat();
@@ -672,12 +671,16 @@ int ObTenantTabletStatMgr::mtl_init(ObTenantTabletStatMgr* &tablet_stat_mgr)
 
 void ObTenantTabletStatMgr::wait()
 {
-  TG_WAIT(report_tg_id_);
+  if (report_timer_.inited()) {
+    report_timer_.wait();
+  }
 }
 
 void ObTenantTabletStatMgr::stop()
 {
-  TG_STOP(report_tg_id_);
+  if (report_timer_.inited()) {
+    report_timer_.stop();
+  }
 }
 
 void ObTenantTabletStatMgr::destroy()
@@ -691,14 +694,13 @@ void ObTenantTabletStatMgr::reset()
 {
   stop();
   wait();
-  TG_DESTROY(report_tg_id_);
+  report_timer_.destroy();
   {
     ObBucketWLockAllGuard lock_guard(bucket_lock_);
     stream_map_.destroy();
     stream_pool_.destroy();
     report_cursor_ = 0;
     pending_cursor_ = 0;
-    report_tg_id_ = -1;
     is_inited_ = false;
   }
   bucket_lock_.destroy();

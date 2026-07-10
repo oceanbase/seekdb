@@ -21,7 +21,7 @@
 #include "storage/tx/ob_tx_result_struct.h"
 #include "storage/ob_storage_rpc_arg.h"
 #include "observer/ob_server_struct.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/task/ob_timer.h"
 //#include "rootserver/ob_freeze_info_manager.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/config/ob_server_config.h"
@@ -201,6 +201,7 @@ private:
   int64_t tmp_recycle_schema_version_;
   bool tmp_recycle_schema_version_valid_;
   int64_t last_recycle_ts_;
+  common::ObTimer timer_;
   DISALLOW_COPY_AND_ASSIGN(ObSchemaHistoryRecycler);
 };
 

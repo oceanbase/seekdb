@@ -188,8 +188,6 @@ ob_set_subtarget(oblib_lib thread
   thread/ob_reentrant_thread.cpp
   thread/ob_simple_thread_pool.ipp
   thread/ob_map_queue_thread_pool.cpp
-  thread/thread_mgr.cpp
-  thread/thread_mgr_interface.cpp
   thread/protected_stack_allocator.cpp
   thread/thread.cpp
   thread/threads.cpp

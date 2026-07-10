@@ -18,8 +18,6 @@
 #define OCEANBASE_ROOTSERVER_OB_TENANT_THREAD_HELPER_H
 #include "lib/thread/ob_reentrant_thread.h"//ObRsReentrantThread
 #include "logservice/ob_log_base_type.h"
-#include "share/ob_thread_mgr.h" //OBTGDefIDEnum
-#include "lib/thread/thread_mgr_interface.h"          // TGRunnable
 #include "lib/lock/ob_thread_cond.h"//ObThreadCond
 #include "common/ob_zone.h"//ObZone
 
@@ -50,21 +48,29 @@ class ObLogHandler;
 
 namespace rootserver
 {
-class ObTenantThreadHelper : public lib::TGRunnable,
+class ObTenantThreadHelper : public share::ObReentrantThread,
   public logservice::ObIRoleChangeSubHandler
 {
 public:
-  ObTenantThreadHelper() : tg_id_(-1), thread_cond_(), is_created_(false), is_first_time_to_start_(true), thread_name_("") {}
+  ObTenantThreadHelper()
+    : share::ObReentrantThread(),
+      thread_cnt_(0),
+      thread_cond_(),
+      is_created_(false),
+      is_first_time_to_start_(true),
+      thread_name_("")
+  {}
   virtual ~ObTenantThreadHelper() {}
   virtual void do_work() = 0;
-  virtual void run1() override;
+  virtual void run2() override;
+  virtual int blocking_run() override { BLOCKING_RUN_IMPLEMENT(); }
   virtual void destroy();
   int start();
   void stop();
   void wait();
   void mtl_thread_stop();
   void mtl_thread_wait();
-  int create(const char* thread_name, int tg_def_id, ObTenantThreadHelper &tenant_thread);
+  int create(const char* thread_name, int64_t thread_cnt, ObTenantThreadHelper &tenant_thread);
   void idle(const int64_t idle_time_us);
   void wakeup();
 public:
@@ -108,8 +114,8 @@ protected:
  int wait_tenant_schema_ready_();
  int wait_tenant_schema_and_version_ready_();
  int check_can_do_recovery_();
- int tg_id_;
 private:
+  int64_t thread_cnt_;
   common::ObThreadCond thread_cond_;
   bool is_created_;
   bool is_first_time_to_start_;

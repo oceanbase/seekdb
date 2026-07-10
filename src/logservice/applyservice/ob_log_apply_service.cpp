@@ -1031,7 +1031,6 @@ bool ObLogApplyService::ResetApplyStatusFunctor::operator()(const share::ObLSID 
 ObLogApplyService::ObLogApplyService()
     : is_inited_(false),
       is_running_(false),
-      tg_id_(-1),
       palf_env_(NULL),
       ls_adapter_(NULL),
       apply_status_map_()
@@ -1053,10 +1052,13 @@ int ObLogApplyService::init(PalfEnv *palf_env,
              || OB_ISNULL(ls_adapter_ = ls_adapter)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(ret), KP(palf_env), K(ls_adapter));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::ApplyService, tg_id_))) {
-    CLOG_LOG(WARN, "fail to create thread group", K(ret));
-  } else if (OB_FAIL(MTL_REGISTER_THREAD_DYNAMIC(0.5, tg_id_))) {
-    CLOG_LOG(WARN, "MTL_REGISTER_THREAD_DYNAMIC failed", K(ret), K(tg_id_));
+  } else if (OB_FAIL(common::ObLinkQueueThreadPool::init(
+      1,
+      (common::APPLY_TASK_QUEUE_SIZE + 1) * OB_MAX_LS_NUM_PER_TENANT_PER_SERVER_CAN_BE_SET,
+      "ApplySrv"))) {
+    CLOG_LOG(WARN, "fail to init apply service thread pool", K(ret));
+  } else if (OB_FAIL(common::ObLinkQueueThreadPool::set_adaptive_thread(1, 1))) {
+    CLOG_LOG(WARN, "fail to set apply service thread count", K(ret));
   } else if (OB_FAIL(apply_status_map_.init("APPLY_STATUS"))) {
     CLOG_LOG(WARN, "apply_status_map_ init error", K(ret));
   } else {
@@ -1075,11 +1077,9 @@ void ObLogApplyService::destroy()
   is_inited_ = false;
   is_running_ = false;
   CLOG_LOG(INFO, "apply service destroy");
-  if (-1 != tg_id_) {
-    MTL_UNREGISTER_THREAD_DYNAMIC(tg_id_);
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
-  }
+  common::ObLinkQueueThreadPool::stop();
+  common::ObLinkQueueThreadPool::wait();
+  common::ObLinkQueueThreadPool::destroy();
   palf_env_ = NULL;
   ls_adapter_ = NULL;
   apply_status_map_.destroy();
@@ -1091,11 +1091,13 @@ int ObLogApplyService::start()
   if (OB_UNLIKELY(IS_NOT_INIT)) {
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "ObLogApplyService has not been initialized", K(ret));
-  } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
+  } else if (common::ObLinkQueueThreadPool::get_thread_count() <= 0
+      && !common::ObLinkQueueThreadPool::try_expand_one(1)) {
+    ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "start ObLogApplyService failed", K(ret));
   } else {
     ATOMIC_STORE(&is_running_, true);
-    CLOG_LOG(INFO, "start ObLogApplyService success", K(ret), K(tg_id_));
+    CLOG_LOG(INFO, "start ObLogApplyService success", K(ret));
   }
   return ret;
 }
@@ -1105,7 +1107,7 @@ void ObLogApplyService::stop()
   CLOG_LOG(INFO, "ObLogApplyService stop begin");
   ATOMIC_STORE(&is_running_, false);
   //Ensure that no new tasks will enter the thread pool when handle_drop is called
-  TG_STOP(tg_id_);
+  common::ObLinkQueueThreadPool::stop();
   CLOG_LOG(INFO, "ObLogApplyService stop finish");
 }
 
@@ -1113,14 +1115,10 @@ void ObLogApplyService::wait()
 {
   CLOG_LOG(INFO, "ObLogApplyService wait begin");
   int64_t num = 0;
-  int ret = OB_SUCCESS;
-  while (OB_SUCC(TG_GET_QUEUE_NUM(tg_id_, num)) && num > 0) {
+  while ((num = common::ObLinkQueueThreadPool::get_queue_num()) > 0) {
     PAUSE();
   }
-  if (OB_FAIL(ret)) {
-    CLOG_LOG(WARN, "ObLogApplyService failed to get queue number");
-  }
-  TG_WAIT(tg_id_);
+  common::ObLinkQueueThreadPool::wait();
   //At this point, it can be guaranteed that no new queue tasks will enter the thread pool,
   //At the same time, all other modules have called stop, so no new cb will enter the queue
   //It is safe to clean up all remaining cbs
@@ -1298,7 +1296,7 @@ int ObLogApplyService::push_task(ObApplyServiceTask *task)
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(ERROR, "task is NULL", K(ret));
   } else {
-    while (OB_FAIL(TG_PUSH_TASK(tg_id_, task)) && OB_EAGAIN == ret) {
+    while (OB_FAIL(common::ObLinkQueueThreadPool::push(task)) && OB_EAGAIN == ret) {
       //Expected not to fail
       ob_throttle_usleep(1000, ret); //1ms
       CLOG_LOG(ERROR, "failed to push", K(ret));

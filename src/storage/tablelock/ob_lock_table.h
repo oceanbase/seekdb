@@ -82,7 +82,8 @@ public:
       parent_(nullptr),
       lock_mt_mgr_(nullptr),
       lock_memtable_handle_(),
-      check_obj_lock_task_(*this) {}
+      check_obj_lock_task_(*this),
+      check_obj_lock_timer_() {}
   ~ObLockTable() {}
   int init(storage::ObLS *parent);
   int prepare_for_safe_destroy();
@@ -198,6 +199,7 @@ private:
   ObLockMemtableMgr *lock_mt_mgr_;
   storage::ObTableHandleV2 lock_memtable_handle_;
   CheckObjLockTask check_obj_lock_task_;
+  common::ObTimer check_obj_lock_timer_;
   TCRWLock rw_lock_;
 };
 

@@ -260,7 +260,7 @@ int ObIvfAsyncTaskExector::check_and_set_thread_pool()
     ObIAllocator *allocator = index_ls_mgr->get_async_task_opt().get_allocator();
     ObVecIndexAsyncTaskHandler &thread_pool_handle =
         vector_index_service_->get_vec_async_task_handle();
-    if (thread_pool_handle.get_tg_id() != INVALID_TG_ID) {  // no need to init twice, skip
+    if (thread_pool_handle.is_inited()) {  // no need to init twice, skip
     } else if (OB_FAIL(thread_pool_handle.init())) {
       LOG_WARN("fail to init vec async task handle", K(ret));
     } else if (OB_FAIL(thread_pool_handle.start())) {

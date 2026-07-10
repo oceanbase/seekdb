@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_ROOTSERVER_FREEZE_OB_FREEZE_INFO_DETECTOR_
 #define OCEANBASE_ROOTSERVER_FREEZE_OB_FREEZE_INFO_DETECTOR_
 
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/task/ob_timer.h"
 #include "common/ob_role.h"
 
 namespace oceanbase
@@ -94,6 +94,7 @@ private:
   ObThreadIdling *major_scheduler_idling_;
   int64_t last_schedule_ts_;
   bool need_immediate_run_;
+  common::ObTimer timer_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMajorMergeInfoDetector);

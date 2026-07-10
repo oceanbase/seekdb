@@ -26,7 +26,6 @@
 #include "share/ob_all_tenant_info.h"  // ObAllTenantInfo, ObAllTenantInfoProxy
 #include "observer/ob_service.h"  // ObService
 #include "lib/ob_running_mode.h"
-#include "share/ob_thread_mgr.h"
 
 namespace oceanbase
 {
@@ -45,6 +44,8 @@ int ObStandbySchemaRefreshTrigger::init()
   } else if (lib::is_embed_mode()) {
     is_inited_ = true;
     LOG_INFO("ObStandbySchemaRefreshTrigger skip init in embed mode");
+  } else if (OB_FAIL(timer_.init("StandbySchema", ObMemAttr("StandbySchema")))) {
+    LOG_WARN("failed to init standby schema refresh trigger timer", KR(ret));
   } else if (OB_FAIL(schedule_())) {
     LOG_WARN("failed to schedule standby schema refresh trigger", KR(ret));
   } else {
@@ -60,7 +61,7 @@ int ObStandbySchemaRefreshTrigger::stop()
 {
   int ret = OB_SUCCESS;
   if (is_inited_ && is_scheduled_) {
-    TG_CANCEL_TASK(lib::TGDefIDs::ServerGTimer, *this);
+    timer_.cancel_task(*this);
   }
   return ret;
 }
@@ -69,7 +70,7 @@ int ObStandbySchemaRefreshTrigger::wait()
 {
   int ret = OB_SUCCESS;
   if (is_inited_ && is_scheduled_ && !lib::is_embed_mode()) {
-    TG_WAIT_TASK(lib::TGDefIDs::ServerGTimer, *this);
+    timer_.wait_task(*this);
     is_scheduled_ = false;
   }
   return ret;
@@ -80,6 +81,7 @@ void ObStandbySchemaRefreshTrigger::destroy()
   LOG_INFO("ObStandbySchemaRefreshTrigger destroy");
   stop();
   wait();
+  timer_.destroy();
   is_scheduled_ = false;
   is_inited_ = false;
 }
@@ -87,8 +89,7 @@ void ObStandbySchemaRefreshTrigger::destroy()
 int ObStandbySchemaRefreshTrigger::schedule_()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::ServerGTimer, *this,
-      DEFAULT_IDLE_TIME, true /*schedule repeatly*/))) {
+  if (OB_FAIL(timer_.schedule(*this, DEFAULT_IDLE_TIME, true /*schedule repeatly*/))) {
     LOG_WARN("failed to schedule standby schema refresh trigger task", KR(ret));
   }
   return ret;

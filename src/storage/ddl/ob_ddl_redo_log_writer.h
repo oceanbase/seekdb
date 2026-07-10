@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_STORAGE_OB_DDL_REDO_LOG_WRITER_H
 #define OCEANBASE_STORAGE_OB_DDL_REDO_LOG_WRITER_H
+#include "lib/task/ob_timer.h"
 #include "common/ob_tablet_id.h"
 #include "storage/ob_storage_rpc_arg.h"
 #include "share/scn.h"
@@ -125,7 +126,7 @@ private:
 class ObDDLCtrlSpeedHandle final
 {
 public:
-  int init();
+  int init(common::ObTimer &timer);
   static ObDDLCtrlSpeedHandle &get_instance();
   int limit_and_sleep(const share::ObLSID &ls_id,
                       const int64_t bytes,
@@ -138,7 +139,7 @@ private:
   public:
     RefreshSpeedHandleTask();
     virtual ~RefreshSpeedHandleTask();
-    int init(int tg_id);
+    int init(common::ObTimer &timer);
     virtual void runTimerTask() override;
   private:
 #ifdef ERRSIM

@@ -319,13 +319,13 @@ ObDDLCtrlSpeedHandle &ObDDLCtrlSpeedHandle::get_instance()
   return instance;
 }
 
-int ObDDLCtrlSpeedHandle::init()
+int ObDDLCtrlSpeedHandle::init(common::ObTimer &timer)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("inited twice", K(ret));
-  } else if (OB_FAIL(refreshTimerTask_.init(lib::TGDefIDs::ServerGTimer))) {
+  } else if (OB_FAIL(refreshTimerTask_.init(timer))) {
     LOG_WARN("fail to init refreshTimerTask", K(ret));
   } else {
     is_inited_ = true;
@@ -396,7 +396,7 @@ ObDDLCtrlSpeedHandle::RefreshSpeedHandleTask::~RefreshSpeedHandleTask()
   is_inited_ = false;
 }
 
-int ObDDLCtrlSpeedHandle::RefreshSpeedHandleTask::init(int tg_id)
+int ObDDLCtrlSpeedHandle::RefreshSpeedHandleTask::init(common::ObTimer &timer)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -404,7 +404,7 @@ int ObDDLCtrlSpeedHandle::RefreshSpeedHandleTask::init(int tg_id)
     LOG_WARN("init twice", K(ret));
   } else {
     is_inited_ = true;
-    if (OB_FAIL(TG_SCHEDULE(tg_id, *this, REFRESH_INTERVAL, true /* schedule repeatedly */))) {
+    if (OB_FAIL(timer.schedule(*this, REFRESH_INTERVAL, true /* schedule repeatedly */))) {
       LOG_WARN("fail to schedule RefreshSpeedHandle Timer Task", K(ret));
     }
   }
@@ -1932,4 +1932,3 @@ int ObDDLRedoLogWriterCallback::retry(const int64_t timeout_us,
   }
   return ret;
 }
-

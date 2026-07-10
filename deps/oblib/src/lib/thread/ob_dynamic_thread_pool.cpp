@@ -15,7 +15,7 @@
  */
 
 #include "ob_dynamic_thread_pool.h"
-#include "lib/thread/thread_mgr.h"
+#include "lib/thread/ob_thread_name.h"
 
 extern "C" {
 int ob_pthread_create(void **ptr, void *(*start_routine) (void *), void *arg);
@@ -367,8 +367,13 @@ ObSimpleThreadPoolDynamicMgr &ObSimpleThreadPoolDynamicMgr::get_instance()
 int ObSimpleThreadPoolDynamicMgr::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(TG_SET_RUNNABLE_AND_START(lib::TGDefIDs::QUEUE_THREAD_MANAGER, *this))) {
-    COMMON_LOG(WARN, "start thread failed");
+  if (is_inited_) {
+    ret = OB_INIT_TWICE;
+    COMMON_LOG(WARN, "cannot init twice", K(ret));
+  } else if (OB_FAIL(lib::ThreadPool::init())) {
+    COMMON_LOG(WARN, "init simple thread pool dynamic mgr failed", K(ret));
+  } else if (OB_FAIL(lib::ThreadPool::start())) {
+    COMMON_LOG(WARN, "start simple thread pool dynamic mgr failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -378,21 +383,23 @@ int ObSimpleThreadPoolDynamicMgr::init()
 void ObSimpleThreadPoolDynamicMgr::stop()
 {
   if (is_inited_) {
-    TG_STOP(lib::TGDefIDs::QUEUE_THREAD_MANAGER);
+    lib::ThreadPool::stop();
   }
 }
 
 void ObSimpleThreadPoolDynamicMgr::wait()
 {
   if (is_inited_) {
-    TG_WAIT(lib::TGDefIDs::QUEUE_THREAD_MANAGER);
+    lib::ThreadPool::wait();
   }
 }
 
 void ObSimpleThreadPoolDynamicMgr::destroy()
 {
   if (is_inited_) {
-    TG_DESTROY(lib::TGDefIDs::QUEUE_THREAD_MANAGER);
+    stop();
+    wait();
+    lib::ThreadPool::destroy();
     is_inited_ = false;
   }
 }

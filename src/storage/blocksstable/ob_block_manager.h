@@ -23,7 +23,6 @@
 #include "lib/hash/ob_hashset.h"
 #include "lib/hash/ob_linear_hash_map.h"
 #include "lib/lock/ob_bucket_lock.h"
-#include "share/ob_thread_mgr.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/blocksstable/ob_macro_block_checker.h"
 #include "storage/blocksstable/ob_super_block_buffer_holder.h"

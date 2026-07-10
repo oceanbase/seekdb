@@ -46,11 +46,10 @@ private:
   static const int64_t INFO_POOL_RESIZE_INTERVAL = 30 * 1000 * 1000L; // 30s
   static const int64_t TABLET_UPDATER_REFRESH_INTERVAL = 5 * 60 * 1000 * 1000L; // 5min
   static const int64_t MEDIUM_CHECK_INTERVAL = 20 * 1000 * 1000L; // 20s
-  // thread TG id
-  int merge_loop_tg_id_;
-  int medium_loop_tg_id_;
-  int sstable_gc_tg_id_;
-  int compaction_refresh_tg_id_;
+  common::ObTimer merge_loop_timer_;
+  common::ObTimer medium_loop_timer_;
+  common::ObTimer sstable_gc_timer_;
+  common::ObTimer compaction_refresh_timer_;
   int64_t schedule_interval_;
   bool is_active_medium_loop_;
   MergeLoopTask merge_loop_task_;

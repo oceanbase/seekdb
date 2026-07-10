@@ -20,7 +20,7 @@
 #include "ob_vector_index_util.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/lock/ob_latch.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/allocator/ob_allocator.h"
 #include "share/io/ob_io_define.h"
 
@@ -381,7 +381,7 @@ private:
 };
 
 
-class ObEmbeddingTaskHandler : public lib::TGTaskHandler
+class ObEmbeddingTaskHandler : public common::ObSimpleThreadPool
 {
 public:
   ObEmbeddingTaskHandler();
@@ -396,7 +396,6 @@ public:
   virtual void handle_drop(void *task) override;
 
   int push_task(ObEmbeddingTask &task);
-  int get_tg_id() { return tg_id_; }
   void inc_task_ref() { ATOMIC_INC(&task_ref_cnt_); }
   void dec_task_ref() { ATOMIC_DEC(&task_ref_cnt_); }
   void inc_dropped_task_cnt() { ATOMIC_INC(&dropped_task_cnt_); }
@@ -432,7 +431,7 @@ public:
 public:
   // push task max wait time: 1s * 10 = 10s 
   const static int64_t MAX_RETRY_PUSH_TASK_CNT = 10;
-  static const int64_t INVALID_TG_ID = -1;
+  static const int64_t MAX_QUEUE_SIZE = 1024;
   // dynamic thread cnt, max cnt is THREAD_FACTOR * tenent_cpu_cnt
   constexpr static const float THREAD_FACTOR = 0.6;
   // 1s
@@ -441,7 +440,6 @@ public:
 
 private:
   bool is_inited_;
-  int tg_id_;
   volatile int64_t task_ref_cnt_;
   // track dropped tasks for monitoring
   volatile int64_t dropped_task_cnt_; 

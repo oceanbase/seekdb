@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_TRANSACTION_KEEP_ALIVE_SERVICE_
 #define OCEANBASE_TRANSACTION_KEEP_ALIVE_SERVICE_
 
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/task/ob_timer.h"
 
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -77,7 +77,7 @@ private:
   int64_t last_check_start_working_retry_ts_;
   int64_t last_log_cb_pool_adjust_ts_;
   int64_t last_tenant_config_refresh_ts_;
-  int timer_tg_id_;
+  common::ObTimer timer_;
   bool stop_flag_;
 };
 
