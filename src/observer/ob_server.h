@@ -21,7 +21,6 @@
 #include <sys/statvfs.h>
 #endif
 #include "lib/net/ob_net_util.h"
-#include "lib/task/ob_timer.h"
 #include "lib/random/ob_mysql_random.h"
 #include "lib/container/ob_iarray.h"
 
@@ -45,6 +44,7 @@
 
 #include "observer/mysql/ob_diag.h"
 
+#include "share/resource_manager/ob_cgroup_ctrl.h"
 #include "observer/omt/ob_multi_tenant.h"
 #include "observer/omt/ob_worker_processor.h"
 #include "share/rc/ob_module_provider.h"   // ObIModuleProvider / g_mp (ObServer owns modules)
@@ -104,7 +104,7 @@ public:
 
   // Start OceanBase server, this function is blocked after invoking
   // until the server itself stops it.
-  int start(bool embed_mode);
+  int start();
   int wait();
   void prepare_stop();
   bool is_prepare_stopped();
@@ -118,7 +118,7 @@ public:
   public:
     ObCTASCleanUpTask();
     virtual ~ObCTASCleanUpTask() {}
-    int init(ObServer *observer, common::ObTimer &timer);
+    int init(ObServer *observer, int tg_id);
     virtual void runTimerTask() override;
   private:
     const static int64_t CLEANUP_INTERVAL = 60L * 1000L * 1000L;//60s
@@ -131,7 +131,7 @@ public:
   public:
     ObRefreshTimeTask();
     virtual ~ObRefreshTimeTask() {}
-    int init(ObServer *observer, common::ObTimer &timer);
+    int init(ObServer *observer, int tg_id);
     virtual void runTimerTask() override;
   private:
     const static int64_t REFRESH_INTERVAL = 60LL * 60 * 1000 * 1000;//1hr
@@ -144,7 +144,7 @@ public:
   public:
     ObRefreshCpuFreqTimeTask();
     virtual ~ObRefreshCpuFreqTimeTask() {}
-    int init(ObServer *observer, common::ObTimer &timer);
+    int init(ObServer *observer, int tg_id);
     virtual void runTimerTask() override;
   private:
     const static int64_t REFRESH_INTERVAL = 10 * 1000L * 1000L;//10s
@@ -218,6 +218,7 @@ private:
 
   int init_config(const ObServerOptions &opts);
   int init_opts_config(const ObServerOptions &opts, const char *optstr); // init configs from command line
+  int init_create_func();
   int init_data_dir_and_redo_dir(const ObServerOptions &opts);
   int init_self_addr();
   int init_config_module(const char *optstr);
@@ -275,7 +276,6 @@ private:
 
 public:
   static int get_network_speed_from_config_file(int64_t &network_speed);
-  ObInnerSQLConnectionPool &get_inner_sql_conn_pool() { return sql_conn_pool_; }
 public:
   volatile bool need_ctas_cleanup_; //true: ObCTASCleanUpTask should traverse all table schemas to find the one need be dropped
 private:
@@ -364,15 +364,14 @@ private:
   // virtual table related
   ObVirtualDataAccessService vt_data_service_;
   // Weakly Consistent Read Service
-  // blacklist service
+  // Tenant isolation resource management
+  share::ObCgroupCtrl cgroup_ctrl_;
+
   //observer start time
   int64_t start_time_;
   int64_t warm_up_start_time_;
   obmysql::ObDiag diag_;
   common::ObMysqlRandom scramble_rand_;
-  common::ObTimer server_gtimer_;
-  common::ObTimer sql_mem_timer_;
-  common::ObTimer ctas_clean_up_timer_;
   ObTenantDutyTask duty_task_;
   ObTenantSqlMemoryTimerTask sql_mem_task_;
   ObCTASCleanUpTask ctas_clean_up_task_;     // repeat & no retry
@@ -464,6 +463,7 @@ public:
   observer::ObTableLoadService * table_load_service() override { return mods_table_load_service_; }
   observer::ObTableLoadResourceService * table_load_resource_service() override { return mods_table_load_resource_service_; }
   concurrency_control::ObMultiVersionGarbageCollector * multi_version_garbage_collector() override { return mods_multi_version_garbage_collector_; }
+  storage::ObTenantCGReadInfoMgr * tenant_cg_read_info_mgr() override { return mods_tenant_cg_read_info_mgr_; }
   ObTestModule * test_module() override { return mods_test_module_; }
   storage::ObEmptyReadBucket * empty_read_bucket() override { return mods_empty_read_bucket_; }
   rootserver::ObDBMSSchedService * dbms_sched_service() override { return mods_dbms_sched_service_; }
@@ -568,6 +568,7 @@ private:
   observer::ObTableLoadService * mods_table_load_service_ = nullptr;
   observer::ObTableLoadResourceService * mods_table_load_resource_service_ = nullptr;
   concurrency_control::ObMultiVersionGarbageCollector * mods_multi_version_garbage_collector_ = nullptr;
+  storage::ObTenantCGReadInfoMgr * mods_tenant_cg_read_info_mgr_ = nullptr;
   ObTestModule * mods_test_module_ = nullptr;
   storage::ObEmptyReadBucket * mods_empty_read_bucket_ = nullptr;
   rootserver::ObDBMSSchedService * mods_dbms_sched_service_ = nullptr;

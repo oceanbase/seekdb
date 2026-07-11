@@ -52,26 +52,22 @@ class ObSchemaReleaseTimeTask: public common::ObTimerTask
 public:
   ObSchemaReleaseTimeTask();
   virtual ~ObSchemaReleaseTimeTask() {}
-  int init(ObServerSchemaUpdater &schema_updater);
-  void stop();
-  void wait();
-  void destroy();
+  int init(ObServerSchemaUpdater &schema_updater, int tg_id);
   virtual void runTimerTask() override;
 private:
   int schedule_();
 private:
   ObServerSchemaUpdater *schema_updater_;
-  common::ObTimer timer_;
   bool is_inited_;
 };
 
 class TelemetryTask {
 public:
-  TelemetryTask(bool embed_mode);
+  TelemetryTask(bool embedded);
   int report();
-  bool embed_mode_;
+  bool embedded_;
 private:
-  static int report_(bool embed_mode);
+  static int report_(bool embedded);
 };
 
 class ObService
@@ -82,7 +78,7 @@ public:
 
   int init(common::ObMySQLProxy &sql_proxy,
            bool need_bootstrap);
-  int start(bool embed_mode);
+  int start(bool embedded);
   void set_stop();
   void stop();
   void wait();
@@ -135,6 +131,8 @@ public:
                               obcall::ObEstPartRes &res) const;
   int estimate_tablet_block_count(const obcall::ObEstBlockArg &arg,
                                   obcall::ObEstBlockRes &res) const;
+  int estimate_skip_rate(const obcall::ObEstSkipRateArg &arg,
+                         obcall::ObEstSkipRateRes &res) const;
   ////////////////////////////////////////////////////////////////
   // ObCallMinorFreezeP @RS minor freeze
   int minor_freeze(const obcall::ObMinorFreezeArg &arg,

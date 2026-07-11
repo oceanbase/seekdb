@@ -25,6 +25,7 @@ ob_set_subtarget(ob_server common
   ob_server_utils.cpp
   ob_signal_handle.cpp
   ob_srv_deliver.cpp
+  ob_thread_mgr.cpp
   ob_srv_network_frame.cpp
   ob_srv_xlator.cpp
   ob_ex_rpc.cpp
@@ -232,6 +233,7 @@ ob_set_subtarget(ob_server table_load
   table_load/ob_table_load_merge_mem_sort_op.cpp
   table_load/ob_table_load_merge_op.cpp
   table_load/ob_table_load_merge_phase_op.cpp
+  table_load/ob_table_load_merge_rescan_op.cpp
   table_load/ob_table_load_merge_table_op.cpp
   table_load/ob_table_load_multiple_heap_table_compactor.cpp
   table_load/ob_table_load_obj_cast.cpp
@@ -419,6 +421,7 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_sql_plan.cpp
   virtual_table/ob_all_virtual_opt_stat_gather_monitor.cpp
   virtual_table/ob_all_virtual_thread.cpp
+  virtual_table/ob_all_virtual_cgroup_config.cpp
   virtual_table/ob_all_virtual_tenant_resource_limit.cpp
   virtual_table/ob_all_virtual_tenant_resource_limit_detail.cpp
   virtual_table/ob_all_virtual_activity_metrics.cpp
@@ -433,6 +436,7 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_tmp_file.cpp
   virtual_table/ob_all_virtual_log_transport_dest_stat.cpp
   virtual_table/ob_all_virtual_plugin_info.cpp
+  virtual_table/ob_all_virtual_cs_replica_tablet_stats.cpp
   virtual_table/ob_all_virtual_change_stream_refresh_stat.cpp
   virtual_table/ob_all_virtual_dynamic_partition_table.cpp
   virtual_table/ob_tenant_show_catalog_databases.cpp
@@ -625,5 +629,3 @@ else()
 endif()
 
 configure_file(../share/ob_version.cpp.in ob_version.cpp)
-
-add_subdirectory(embed)

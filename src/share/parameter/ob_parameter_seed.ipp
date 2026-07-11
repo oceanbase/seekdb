@@ -78,7 +78,7 @@ DEF_PARAM(devname, STR, OB_CLUSTER_PARAMETER, "lo", "name of network adapter",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::READONLY));
 DEF_PARAM(zone, STR, OB_CLUSTER_PARAMETER, "z1", "specifies the zone name",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(ob_startup_mode, STR, OB_CLUSTER_PARAMETER, "NORMAL", "specifies the observer startup mode. Values: normal",
+DEF_PARAM(ob_startup_mode, STR, OB_CLUSTER_PARAMETER, "NORMAL", "specifies the observer startup mode. Values: normal, physical_flashback, physical_flashback_verify",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::READONLY));
 DEF_PARAM(internal_sql_execute_timeout, TIME, OB_CLUSTER_PARAMETER, "30s", "[1000us, 1h]",
          "the number of microseconds an internal DML request is permitted to "
@@ -167,12 +167,17 @@ DEF_PARAM(default_row_format, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "dynamic",
                      ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
                      "REDUNDANT, COMPACT, DYNAMIC, COMPRESSED, CONDENSED");
 
+DEF_PARAM(default_table_store_format, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "row", common::ObConfigTableStoreFormatChecker,
+                     "Specify the default storage format of creating table: row, column, compound format of row and column"
+                     "values: row, column, compound",
+                     ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
+                     "row, column, compound");
 DEF_PARAM(_no_logging, BOOL, OB_CLUSTER_PARAMETER, "False",
          "set true to skip writing ddl clog when all server using the same oss in shared storage mode",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(storage_rowsets_size, INT, OB_CLUSTER_PARAMETER, "8192", "(0,1048576]",
-        "the row number processed by vectorized storage engine within one batch. Range: (0,1048576]",
+        "the row number processed by vectorized storage engine within one batch in column storage. Range: (0,1048576]",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(weak_read_version_refresh_interval, TIME, OB_CLUSTER_PARAMETER, "1000ms", "[50ms,)",
@@ -1506,8 +1511,8 @@ DEF_PARAM(enable_asan_for_memory_context, BOOL, OB_CLUSTER_PARAMETER, "False",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 #endif
 DEF_PARAM(sql_login_thread_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,32]",
-        "the number of threads for sql login request. Range: [0, 32] in integer, 0 stands for the built-in default."
-        "the built-in default thread count for login request is normal:6 mini-mode:2",
+        "the number of threads for sql login request. Range: [0, 32] in integer, 0 stands for use default thread count defined in TG."
+        "the default thread count for login request in TG is normal:6 mini-mode:2",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(tenant_sql_login_thread_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,32]",
         "the number of threads for sql login request of each tenant. Range: [0, 32] in integer, 0 stands for unit_min_cpu",
@@ -1539,11 +1544,67 @@ DEF_PARAM(_display_non_session_cursor, BOOL, OB_CLUSTER_PARAMETER, "True",
          "whether the content of non session cursors is displayed.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
+//transfer
+DEF_PARAM(_transfer_start_rpc_timeout, TIME, OB_CLUSTER_PARAMETER, "10s", "[1ms,600s]",
+        "transfer start status rpc check some status ready timeout, Range [1ms,600s]. "
+        "The default value is 10s",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
+DEF_PARAM(_transfer_finish_trans_timeout, TIME, OB_CLUSTER_PARAMETER, "10s", "[1s,600s]",
+        "transfer finish transaction timeout, Range [1s,600s]. "
+        "The default value is 10s",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
+DEF_PARAM(_transfer_start_trans_timeout, TIME, OB_CLUSTER_PARAMETER, "1s", "[1ms,600s]",
+        "transfer start transaction timeout, Range [1ms,600s]. "
+        "The default value is 1s",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
+DEF_PARAM(_transfer_start_retry_count, INT, OB_CLUSTER_PARAMETER, "3", "[0,64]",
+        "the number of transfer start retry. Range: [0, 64] in integer",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE));
+
+
+DEF_PARAM(_transfer_service_wakeup_interval, TIME, OB_CLUSTER_PARAMETER, "5m", "[1s,5m]",
+        "transfer service wakeup interval in errsim mode. "
+        "Range: [1s, 5m]",
+        ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
+DEF_PARAM(_transfer_process_lock_tx_timeout, TIME, OB_CLUSTER_PARAMETER, "100s", "[30s,)",
+        "transaction timeout for locking and unlocking transfer task. "
+        "Range: [30s, +∞)",
+        ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
+DEF_PARAM(_transfer_task_tablet_count_threshold, INT, OB_CLUSTER_PARAMETER, "100", "(0,)",
+        "Threshold for the count of tablets that can be processed by a transfer task. "
+        "Range: (0, +∞)",
+        ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(_enable_active_txn_transfer, BOOL, OB_CLUSTER_PARAMETER, "True",
+        "Specifies whether support transfer active tx",
+        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
+DEF_PARAM(_transfer_task_retry_interval, TIME, OB_CLUSTER_PARAMETER, "1m", "[0s,)",
+        "Retry interval after transfer task failure. "
+        "Range: [0s, +∞). Default: 1m",
+        ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+
+// end of transfer
+
 DEF_PARAM(dump_data_dictionary_to_log_interval, TIME, OB_CLUSTER_PARAMETER, "24h", "(0s,]",
          "data dictionary dump to log(SYS LS) interval"
         "Range: (0s,+∞)",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
+DEF_PARAM(enable_cgroup, BOOL, OB_CLUSTER_PARAMETER, "True",
+         "when set to false, cgroup will not init; when set to true but cgroup root dir is not ready, print ERROR",
+         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(enable_global_background_resource_isolation, BOOL, OB_CLUSTER_PARAMETER, "False",
+         "When set to false, foreground and background tasks are isolated within the tenant; When set to true, isolate background tasks individually upon tenant-level",
+         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE));
+DEF_PARAM(global_background_cpu_quota, DBL, OB_CLUSTER_PARAMETER, "-1", "[-1,)",
+         "When enable_global_background_resource_isolation is True, specify the number of vCPUs allocated to the background tasks"
+         "-1 for the CPU is not limited by the cgroup",
+         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(enable_user_defined_rewrite_rules, BOOL, OB_CLUSTER_PARAMETER, "False",
          "specify whether the user defined rewrite rules are enabled. "
          "Value: True: enable  False: disable",
@@ -1680,6 +1741,10 @@ DEF_PARAM(_ls_migration_wait_completing_timeout, TIME, OB_CLUSTER_PARAMETER, "30
         "the wait timeout in ls complete migration phase",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
+// column store section
+DEF_PARAM(_enable_column_store, BOOL, OB_CLUSTER_PARAMETER, "True",
+        "enable the column store format in storage engine",
+        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_enable_skip_index, BOOL, OB_CLUSTER_PARAMETER, "True",
         "enable the skip index in storage engine",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -2051,9 +2116,6 @@ DEF_PARAM(_ob_java_odps_data_transfer_mode, STR_WITH_CHECKER, OB_CLUSTER_PARAMET
 DEF_PARAM(_use_odps_jni_connector, BOOL, OB_CLUSTER_PARAMETER, "False",
          "Enable or disable jni connector for external odps table",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_parquet_row_group_prebuffer_size, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
-        "the parquet prefetch maximum row group size. Range: [0, +∞)",
-        ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(px_node_policy, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "DATA", common::ObConfigPxNodePolicyChecker,
                      "Determining the candidate pool for PX calculation nodes."
                      "\"DATA\": All data nodes involved in the current SQL."
@@ -2198,14 +2260,6 @@ DEF_PARAM(_orc_filter_pushdown_level, INT, OB_CLUSTER_PARAMETER, "4", "[0, 4]",
         "where 0 disables filter pushdown, 1 pushes filters down to the file level, "
         "2 pushes filters down to the stripe level, 3 pushes filters down to the row index level "
         "and 4 pushes filters down to the encoding level. The default value is 4.",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE))
-
-DEF_PARAM(_parquet_filter_pushdown_level, INT, OB_CLUSTER_PARAMETER, "4", "[0, 4]",
-        "This parameter is used to control the predicate push level of the PARQUET external table. "
-        "The optional value is 0, which means disabling filter condition pushdown, "
-        "1, which means pushdown to file level, 2, which means pushdown to RowGroup level, "
-        "3, which means pushdown to Page level and 4, which means pushdown to Encoding level. "
-        "The default value is 4.",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE))
 
 DEF_PARAM(_advance_checkpoint_interval, TIME, OB_CLUSTER_PARAMETER, "10m", "[0m,12h]",

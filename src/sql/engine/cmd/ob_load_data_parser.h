@@ -233,40 +233,6 @@ struct ObCSVGeneralFormat {
   OB_UNIS_VERSION(1);
 };
 
-struct ObParquetGeneralFormat {
-  ObParquetGeneralFormat () :
-    row_group_size_(256LL * 1024 * 1024), /* default 256 MB */
-    compress_type_index_(0), /* default UNCOMPRESSED */
-    column_index_type_(sql::ColumnIndexType::NAME)
-  {}
-  static constexpr const char *OPTION_NAMES[] = {
-    "ROW_GROUP_SIZE",
-    "COMPRESSION",
-    "COLUMN_INDEX_TYPE"
-  };
-  static constexpr const char *COMPRESSION_ALGORITHMS[] = {
-    "UNCOMPRESSED",
-    "SNAPPY",
-    "GZIP",
-    "BROTLI",
-    "ZSTD",
-    "LZ4",
-    "LZ4_FRAME",
-    "LZO",
-    "BZ2",
-    "LZ4_HADOOP"
-  };
-  static constexpr const char *DEFAULT_FILE_EXTENSION = ".parquet";
-
-  int64_t row_group_size_;
-  int64_t compress_type_index_;
-  sql::ColumnIndexType column_index_type_;
-  int to_json_kv_string(char* buf, const int64_t buf_len, int64_t &pos) const;
-  int load_from_json_data(json::Pair *&node, common::ObIAllocator &allocator);
-  TO_STRING_KV(K_(row_group_size), K_(compress_type_index), K_(column_index_type));
-  OB_UNIS_VERSION(1);
-};
-
 struct ObOrcGeneralFormat {
   ObOrcGeneralFormat () :
     stripe_size_(64LL * 1024 * 1024),      /* default 64 MB */
@@ -1113,22 +1079,12 @@ struct ObExternalFileFormat
     OB_UNIS_VERSION(1);
   };
 
-  struct StringList {
-    StringList(common::ObIAllocator &alloc) : allocator_(alloc), strs_(alloc) {}
-    int store_strs(ObIArray<ObString> &strs);
-    common::ObIAllocator &allocator_;
-    common::ObFixedArray<common::ObString, common::ObIAllocator> strs_;
-    TO_STRING_KV(K_(strs));
-    OB_UNIS_VERSION(1);
-  };
-
   enum FormatType {
     INVALID_FORMAT = -1,
-    CSV_FORMAT,
-    PARQUET_FORMAT,
-    ODPS_FORMAT,
-    ORC_FORMAT,
-    MAX_FORMAT
+    CSV_FORMAT = 0,
+    ODPS_FORMAT = 2,
+    ORC_FORMAT = 3,
+    MAX_FORMAT = 4
   };
 
   enum Options {
@@ -1147,7 +1103,6 @@ struct ObExternalFileFormat
   ObOriginFileFormat origin_file_format_str_;
   FormatType format_type_;
   sql::ObCSVGeneralFormat csv_format_;
-  sql::ObParquetGeneralFormat parquet_format_;
   sql::ObODPSGeneralFormat odps_format_;
   sql::ObOrcGeneralFormat orc_format_;
   uint64_t options_;

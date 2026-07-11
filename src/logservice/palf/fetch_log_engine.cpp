@@ -15,6 +15,7 @@
  */
 
 #include "fetch_log_engine.h"
+#include "share/ob_thread_mgr.h"  // OB TG IDs, previously hidden behind the tenant_base include chain, make the dependency explicit
 #include "palf_handle_impl_guard.h"
 #include "palf_env_impl.h"
 
@@ -97,8 +98,9 @@ FetchLogTask& FetchLogTask::operator=(const FetchLogTask &task)
 }
 
 FetchLogEngine::FetchLogEngine()
-  : common::ObLinkQueueThreadPool(),
+  : tg_id_(-1),
     is_inited_(false),
+    enabled_(true),
     palf_env_impl_(NULL),
     allocator_(NULL),
     replayable_point_(),
@@ -110,7 +112,8 @@ FetchLogEngine::FetchLogEngine()
 
 
 int FetchLogEngine::init(IPalfEnvImpl *palf_env_impl,
-                         common::ObILogAllocator *alloc_mgr)
+                         common::ObILogAllocator *alloc_mgr,
+                         const bool enabled)
 {
   int ret = OB_SUCCESS;
 
@@ -121,15 +124,17 @@ int FetchLogEngine::init(IPalfEnvImpl *palf_env_impl,
              || OB_ISNULL(alloc_mgr)) {
     PALF_LOG(WARN, "invalid argument", KP(palf_env_impl), K(alloc_mgr));
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(common::ObLinkQueueThreadPool::init(
-                 FETCH_LOG_THREAD_COUNT,
-                 FETCH_LOG_TASK_MAX_COUNT_PER_LS * OB_MAX_LS_NUM_PER_TENANT_PER_SERVER_CAN_BE_SET,
-                 "FetchLog"))) {
-    PALF_LOG(WARN, "ObSimpleThreadPool::init failed", K(ret));
   } else {
     palf_env_impl_ = palf_env_impl;
     allocator_ = alloc_mgr;
-    is_inited_ = true;
+    enabled_ = enabled;
+    if (enabled_ && OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::LSFetchLogEngine, tg_id_))) {
+      PALF_LOG(WARN, "ObSimpleThreadPool::init failed", K(ret));
+    } else if (enabled_ && OB_FAIL(MTL_REGISTER_THREAD_DYNAMIC(0.5, tg_id_))) {
+      PALF_LOG(WARN, "MTL_REGISTER_THREAD_DYNAMIC failed", K(ret), K(tg_id_));
+    } else {
+      is_inited_ = true;
+    }
   }
   if ((OB_FAIL(ret)) && (OB_INIT_TWICE != ret)) {
     PALF_LOG(WARN, "FetchLogEngine init failed", K(ret), KP(palf_env_impl));
@@ -145,8 +150,12 @@ int FetchLogEngine::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(ERROR, "FetchLogEngine not inited!!!", K(ret));
+  } else if (!enabled_) {
+    PALF_LOG(INFO, "FetchLogEngine is disabled");
+  } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
+    PALF_LOG(ERROR, "start FetchLogEngine failed", K(ret));
   } else {
-    PALF_LOG(INFO, "start FetchLogEngine success", K(ret));
+    PALF_LOG(INFO, "start FetchLogEngine success", K(ret), K(tg_id_));
   }
   return ret;
 }
@@ -157,9 +166,11 @@ int FetchLogEngine::stop()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(WARN, "FetchLogEngine not inited!!!", K(ret));
+  } else if (!enabled_) {
+    PALF_LOG(INFO, "FetchLogEngine is disabled");
   } else {
-    common::ObLinkQueueThreadPool::stop();
-    PALF_LOG(INFO, "stop FetchLogEngine success");
+    TG_STOP(tg_id_);
+    PALF_LOG(INFO, "stop FetchLogEngine success", K(tg_id_));
   }
   return ret;
 }
@@ -170,9 +181,11 @@ int FetchLogEngine::wait()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(WARN, "FetchLogEngine not inited!!!", K(ret));
+  } else if (!enabled_) {
+    PALF_LOG(INFO, "FetchLogEngine is disabled");
   } else {
-    common::ObLinkQueueThreadPool::wait();
-    PALF_LOG(INFO, "wait FetchLogEngine success");
+    TG_WAIT(tg_id_);
+    PALF_LOG(INFO, "wait FetchLogEngine success", K(tg_id_));
   }
   return ret;
 }
@@ -180,15 +193,20 @@ int FetchLogEngine::wait()
 void FetchLogEngine::destroy()
 {
   if (is_inited_) {
-    common::ObLinkQueueThreadPool::stop();
-    common::ObLinkQueueThreadPool::wait();
-    common::ObLinkQueueThreadPool::destroy();
+    stop();
+    wait();
   }
   is_inited_ = false;
+  if (-1 != tg_id_) {
+    MTL_UNREGISTER_THREAD_DYNAMIC(tg_id_);
+    TG_DESTROY(tg_id_);
+  }
+  tg_id_ = -1;
+  enabled_ = true;
   palf_env_impl_ = NULL;
   allocator_ = NULL;
   fetch_task_cache_.destroy();
-  PALF_LOG(INFO, "destroy FetchLogEngine success");
+  PALF_LOG(INFO, "destroy FetchLogEngine success", K(tg_id_));
 }
 
 int FetchLogEngine::submit_fetch_log_task(FetchLogTask *fetch_log_task)
@@ -198,12 +216,15 @@ int FetchLogEngine::submit_fetch_log_task(FetchLogTask *fetch_log_task)
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     PALF_LOG(WARN, "FetchLogEngine not init", K(ret));
+  } else if (!enabled_) {
+    ret = OB_NOT_SUPPORTED;
+    PALF_LOG(WARN, "FetchLogEngine is disabled", K(ret));
   } else if (OB_ISNULL(fetch_log_task)) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(ret), KP(fetch_log_task));
   } else if (OB_FAIL(push_task_into_cache_(fetch_log_task))) {
     PALF_LOG(WARN, "push_task_into_cache_ failed", K(ret), KPC(fetch_log_task));
-  } else if (OB_FAIL(common::ObLinkQueueThreadPool::push(fetch_log_task))) {
+  } else if (OB_FAIL(TG_PUSH_TASK(tg_id_, fetch_log_task))) {
     PALF_LOG(WARN, "push failed", K(ret), KPC(fetch_log_task));
   } else {
     //do nothing
@@ -218,23 +239,32 @@ int FetchLogEngine::push_task_into_cache_(FetchLogTask *fetch_log_task)
   // If this task destn't exist in cache, and cache is full, just ignore it
   // and return OB_SUCCESS.
   int ret = OB_SUCCESS;
-  SpinLockGuard lock_guard(cache_lock_);
-  int64_t count = fetch_task_cache_.count();
-  if (count >= MAX_CACHED_FETCH_TASK_NUM) {
-    if (REACH_THREAD_TIME_INTERVAL(5 * 1000 * 1000)) {
-      PALF_LOG(INFO, "fetch_task_cache_ is full", K(ret), K_(fetch_task_cache));
-    }
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      if (fetch_task_cache_[i].get_id() == fetch_log_task->get_id()
-          && fetch_task_cache_[i].get_server() == fetch_log_task->get_server()) {
-        // found existed task for this <server, id>
-        ret = OB_ENTRY_EXIST;
-        break;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (!enabled_) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (OB_ISNULL(fetch_log_task)) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  if (OB_SUCC(ret)) {
+    SpinLockGuard lock_guard(cache_lock_);
+    int64_t count = fetch_task_cache_.count();
+    if (count >= MAX_CACHED_FETCH_TASK_NUM) {
+      if (REACH_THREAD_TIME_INTERVAL(5 * 1000 * 1000)) {
+        PALF_LOG(INFO, "fetch_task_cache_ is full", K(ret), K_(fetch_task_cache));
       }
-    }
-    if (OB_SUCCESS == ret) {
-      fetch_task_cache_.push_back(*fetch_log_task);
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+        if (fetch_task_cache_[i].get_id() == fetch_log_task->get_id()
+            && fetch_task_cache_[i].get_server() == fetch_log_task->get_server()) {
+          // found existed task for this <server, id>
+          ret = OB_ENTRY_EXIST;
+          break;
+        }
+      }
+      if (OB_SUCCESS == ret) {
+        fetch_task_cache_.push_back(*fetch_log_task);
+      }
     }
   }
   return ret;
@@ -243,16 +273,25 @@ int FetchLogEngine::push_task_into_cache_(FetchLogTask *fetch_log_task)
 int FetchLogEngine::try_remove_task_from_cache_(FetchLogTask *fetch_log_task)
 {
   int ret = OB_SUCCESS;
-  SpinLockGuard lock_guard(cache_lock_);
-  int64_t count = fetch_task_cache_.count();
-  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-    if (fetch_task_cache_[i].get_id() == fetch_log_task->get_id()
-        && fetch_task_cache_[i].get_server() == fetch_log_task->get_server()) {
-      // found existed task for this <server, id>
-      if (OB_FAIL(fetch_task_cache_.remove(i))) {
-        PALF_LOG(WARN, "fetch_task_cache_.remove failed", K(ret), K(i));
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (!enabled_) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (OB_ISNULL(fetch_log_task)) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  if (OB_SUCC(ret)) {
+    SpinLockGuard lock_guard(cache_lock_);
+    int64_t count = fetch_task_cache_.count();
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      if (fetch_task_cache_[i].get_id() == fetch_log_task->get_id()
+          && fetch_task_cache_[i].get_server() == fetch_log_task->get_server()) {
+        // found existed task for this <server, id>
+        if (OB_FAIL(fetch_task_cache_.remove(i))) {
+          PALF_LOG(WARN, "fetch_task_cache_.remove failed", K(ret), K(i));
+        }
+        break;
       }
-      break;
     }
   }
   return ret;
@@ -264,9 +303,14 @@ void FetchLogEngine::handle(common::LinkTask *task)
   IPalfHandleImpl *palf_handle_impl = NULL;
   if (!is_inited_) {
     PALF_LOG(WARN, "FetchLogEngine not init");
+  } else if (!enabled_) {
+    PALF_LOG(WARN, "FetchLogEngine is disabled");
   } else if (OB_ISNULL(task)) {
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(WARN, "invalid argument", KR(ret), KP(task));
+  } else if (OB_ISNULL(palf_env_impl_) || OB_ISNULL(allocator_)) {
+    ret = OB_ERR_UNEXPECTED;
+    PALF_LOG(WARN, "FetchLogEngine dependency is null", K(ret), KP(palf_env_impl_), KP(allocator_));
   } else {
     int64_t handle_start_time_us = ObTimeUtility::current_time();
     FetchLogTask *fetch_log_task = static_cast<FetchLogTask *>(task);
@@ -330,9 +374,15 @@ void FetchLogEngine::handle_drop(common::LinkTask *task)
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     PALF_LOG(WARN, "FetchLogEngine not init");
+  } else if (!enabled_) {
+    ret = OB_NOT_SUPPORTED;
+    PALF_LOG(WARN, "FetchLogEngine is disabled", K(ret));
   } else if (OB_ISNULL(task)) {
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(WARN, "invalid argument", KP(task));
+  } else if (OB_ISNULL(allocator_)) {
+    ret = OB_ERR_UNEXPECTED;
+    PALF_LOG(WARN, "FetchLogEngine allocator is null", K(ret));
   } else {
     FetchLogTask *fetch_log_task = static_cast<FetchLogTask *>(task);
     free_fetch_log_task(fetch_log_task);
@@ -341,12 +391,16 @@ void FetchLogEngine::handle_drop(common::LinkTask *task)
 
 FetchLogTask *FetchLogEngine::alloc_fetch_log_task()
 {
-  return allocator_->alloc_palf_fetch_log_task();
+  return is_inited_ && enabled_ && OB_NOT_NULL(allocator_)
+      ? allocator_->alloc_palf_fetch_log_task()
+      : NULL;
 }
 
 void FetchLogEngine::free_fetch_log_task(FetchLogTask *task)
 {
-  allocator_->free_palf_fetch_log_task(task);
+  if (is_inited_ && enabled_ && OB_NOT_NULL(allocator_) && OB_NOT_NULL(task)) {
+    allocator_->free_palf_fetch_log_task(task);
+  }
 }
 
 int FetchLogEngine::update_replayable_point(const share::SCN &replayable_scn)

@@ -22,8 +22,8 @@
 #include "share/ob_time_utility2.h"
 #include "observer/ob_server.h"
 #include "observer/ob_server_event_history_table_operator.h"
+#include "observer/mysql/obmp_base.h"
 #include "ob_inner_sql_read_context.h"
-#include "observer/mysql/obmp_stmt_execute.h"
 
 namespace oceanbase
 {
@@ -76,94 +76,6 @@ private:
   ObString sql_;
 };
 
-// Prepared Statement Prepare Executor
-class ObPsPrepareExecutor : public sqlclient::ObIExecutor
-{
-public:
-  explicit ObPsPrepareExecutor(const ObString &sql) : sql_(sql), stmt_id_(0), param_count_(0) {}
-  virtual ~ObPsPrepareExecutor() {}
-
-  virtual int execute(sql::ObSql &engine, sql::ObSqlCtx &ctx, sql::ObResultSet &res) override
-  {
-    int ret = OB_SUCCESS;
-    SQL_INFO_GUARD(sql_, ObString(OB_MAX_SQL_ID_LENGTH, ctx.sql_id_));
-    ctx.is_prepare_protocol_ = true;
-    ctx.is_prepare_stage_ = true;
-    ret = engine.stmt_prepare(sql_, ctx, res, false);
-    if (OB_SUCC(ret)) {
-      stmt_id_ = res.get_statement_id();
-    }
-    return ret;
-  }
-
-  virtual int process_result(sql::ObResultSet &res) override
-  {
-    int ret = OB_SUCCESS;
-    // Note: do NOT call res.open() here - do_query() already opens the result.
-    sql::ObSQLSessionInfo &session = res.get_session();
-    sql::ObPsSessionInfo *ps_session_info = nullptr;
-    if (OB_SUCCESS == session.get_ps_session_info(stmt_id_, ps_session_info)) {
-      param_count_ = ps_session_info->get_param_count();
-    }
-    return ret;
-  }
-
-  uint64_t get_stmt_id() const { return stmt_id_; }
-  int64_t get_param_count() const { return param_count_; }
-
-  INHERIT_TO_STRING_KV("ObIExecutor", ObIExecutor, K_(sql), K_(stmt_id), K_(param_count));
-
-private:
-  ObString sql_;
-  uint64_t stmt_id_;
-  int64_t param_count_;
-};
-
-// Prepared Statement Execute Executor
-class ObPsExecuteExecutor : public sqlclient::ObIExecutor
-{
-public:
-  ObPsExecuteExecutor(const uint64_t stmt_id, const ParamStore &params)
-    : stmt_id_(stmt_id), params_(params), affected_rows_(0) {}
-  virtual ~ObPsExecuteExecutor() {}
-
-  virtual int execute(sql::ObSql &engine, sql::ObSqlCtx &ctx, sql::ObResultSet &res) override
-  {
-    int ret = OB_SUCCESS;
-    ctx.is_prepare_protocol_ = true;
-    ctx.is_prepare_stage_ = false;
-
-    // Get stmt_type from ps_session_info
-    sql::ObSQLSessionInfo &session = res.get_session();
-    sql::ObPsSessionInfo *ps_session_info = nullptr;
-    sql::stmt::StmtType stmt_type = sql::stmt::T_NONE;
-    if (OB_SUCCESS == session.get_ps_session_info(stmt_id_, ps_session_info)) {
-      stmt_type = ps_session_info->get_stmt_type();
-    }
-
-    ret = engine.stmt_execute(stmt_id_, stmt_type, params_, ctx, res, false);
-    return ret;
-  }
-
-  virtual int process_result(sql::ObResultSet &res) override
-  {
-    // Note: do NOT call res.open() here.
-    // do_query() already opens the result via ObInnerSQLResult::open() -> result_set_->open().
-    // Calling open() again would trigger start_stmt() twice, causing -4016 error.
-    affected_rows_ = res.get_affected_rows();
-    return OB_SUCCESS;
-  }
-
-  int64_t get_affected_rows() const { return affected_rows_; }
-
-  INHERIT_TO_STRING_KV("ObIExecutor", ObIExecutor, K_(stmt_id), K_(affected_rows));
-
-private:
-  uint64_t stmt_id_;
-  const ParamStore &params_;
-  int64_t affected_rows_;
-};
-
 ObInnerSQLConnection::TimeoutGuard::TimeoutGuard(ObInnerSQLConnection &conn)
   : conn_(conn)
 {
@@ -189,15 +101,9 @@ ObInnerSQLConnection::TimeoutGuard::~TimeoutGuard()
     LOG_ERROR("get timeout failed", KR(ret), K(query_timeout), K(trx_timeout));
   } else {
     if (query_timeout != query_timeout_ || trx_timeout != trx_timeout_) {
-      #ifdef OB_BUILD_EMBED_MODE
-      if (conn_.get_session().is_inner() && OB_FAIL(conn_.set_session_timeout(query_timeout_, trx_timeout_))) {
-        LOG_ERROR("set session timeout failed", K(ret));
-      }
-      #else
       if (OB_FAIL(conn_.set_session_timeout(query_timeout_, trx_timeout_))) {
         LOG_ERROR("set session timeout failed", K(ret));
       }
-      #endif
     }
   }
 }
@@ -705,7 +611,7 @@ int ObInnerSQLConnection::process_audit_record(sql::ObResultSet &result_set,
 
     audit_record.client_addr_ = session.get_peer_addr();
     audit_record.user_client_addr_ = session.get_user_client_addr();
-    audit_record.user_group_ = 0;
+    audit_record.user_group_ = THIS_WORKER.get_group_id();
     audit_record.execution_id_ = execution_id;
     audit_record.ps_stmt_id_ = ps_stmt_id;
     audit_record.ps_inner_stmt_id_ = ps_stmt_id;
@@ -803,6 +709,9 @@ int ObInnerSQLConnection::do_query(sqlclient::ObIExecutor &executor, ObInnerSQLR
       LOG_WARN("executor execute failed", K(ret));
     } else {
       ObSQLSessionInfo &session = res.result_set().get_session();
+      session.set_expect_group_id(group_id_);
+      CONSUMER_GROUP_ID_GUARD(consumer_group_id_);
+      CONSUMER_GROUP_FUNC_GUARD(session.get_ddl_info().is_refreshing_mview() ? ObFunctionType::PRIO_MVIEW : GET_FUNC_TYPE());
       if (OB_ISNULL(res.sql_ctx().schema_guard_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("schema guard is null");
@@ -1479,6 +1388,7 @@ int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
       TimeoutGuard timeout_guard(*this); // backup && restore worker/session timeout
       int64_t query_timeout = OB_DEFAULT_SESSION_TIMEOUT;
       int64_t trx_timeout = OB_DEFAULT_SESSION_TIMEOUT;
+      int64_t consumer_group_id = get_group_id();
       ObSQLMode sql_mode = 0;
       const ObSessionDDLInfo &ddl_info = get_session().get_ddl_info();
       bool is_load_data_exec = get_session().is_load_data_exec_session();
@@ -2155,51 +2065,6 @@ ObInnerSQLSessionGuard::ObInnerSQLSessionGuard(sql::ObSQLSessionInfo *session)
 ObInnerSQLSessionGuard::~ObInnerSQLSessionGuard()
 {
   THIS_WORKER.set_session(last_session_);
-}
-
-// Prepared Statement API Implementation
-
-int ObInnerSQLConnection::stmt_prepare(const ObString &sql,
-                                        uint64_t &stmt_id, int64_t &param_count)
-{
-  int ret = OB_SUCCESS;
-  LOG_INFO("[PS_DEBUG] stmt_prepare called", K(sql), K(inited_), KP(ob_sql_));
-  ObPsPrepareExecutor executor(sql);
-  LOG_INFO("[PS_DEBUG] calling execute(executor)");
-  if (OB_FAIL(execute(executor))) {
-    LOG_WARN("stmt_prepare execute failed", K(ret), K(sql));
-  } else {
-    stmt_id = executor.get_stmt_id();
-    param_count = executor.get_param_count();
-    LOG_INFO("[PS_DEBUG] stmt_prepare success", K(sql), K(stmt_id), K(param_count));
-  }
-  return ret;
-}
-
-int ObInnerSQLConnection::stmt_execute(const uint64_t stmt_id,
-                                        const ParamStore &params, int64_t &affected_rows)
-{
-  int ret = OB_SUCCESS;
-  ObPsExecuteExecutor executor(stmt_id, params);
-  if (OB_FAIL(execute(executor))) {
-    LOG_WARN("stmt_execute failed", K(ret), K(stmt_id));
-  } else {
-    affected_rows = executor.get_affected_rows();
-    LOG_DEBUG("stmt_execute success", K(stmt_id), K(affected_rows));
-  }
-  return ret;
-}
-
-int ObInnerSQLConnection::stmt_close(const uint64_t stmt_id)
-{
-  int ret = OB_SUCCESS;
-  sql::ObSQLSessionInfo &session = get_session();
-  if (OB_FAIL(session.close_ps_stmt(stmt_id))) {
-    LOG_WARN("close_ps_stmt failed", K(ret), K(stmt_id));
-  } else {
-    LOG_DEBUG("stmt_close success", K(stmt_id));
-  }
-  return ret;
 }
 
 } // end of namespace observer

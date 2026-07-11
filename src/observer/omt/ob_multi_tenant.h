@@ -19,7 +19,8 @@
 
 
 #include <functional>
-#include "lib/task/ob_timer.h"
+#include "lib/task/ob_timer_service.h"  // ObTimerTask
+#include "lib/thread/thread_mgr_interface.h"
 #include "share/ob_unit_getter.h"       // ObUnitInfoGetter / TenantUnits (formerly via ob_tenant_node_balancer.h)
 
 namespace oceanbase
@@ -41,6 +42,7 @@ namespace rpc
 {
 class ObRequest;
 }
+namespace share { class ObResourcePlanManager; }
 namespace omt
 {
 
@@ -50,6 +52,8 @@ class ObTenantHandle;
 class ObTenantMeta;
 
 // This is the entry class of OMT module.
+// moved from share::ObResourcePlanManager and demoted(observer-bound)
+int refresh_global_background_cpu(share::ObResourcePlanManager &mgr);
 
 class ObMultiTenant : public common::ObTimerTask
 {
@@ -63,7 +67,8 @@ public:
 
   int init(common::ObAddr myaddr,
            common::ObMySQLProxy *sql_proxy = NULL,
-           bool mtl_bind_flag = true);
+           bool mtl_bind_flag = true,
+           bool embedded = false);
 
   int start();
   void stop();
@@ -147,9 +152,6 @@ public:
   // Bring the single sys tenant fully up at boot: flip hidden->real + first
   // GCONF apply + mark synced. Called once from ObServer::try_update_hidden_sys().
   int bring_up_sys_tenant();
-  // One periodic GCONF-refresh pass on the single sys tenant; used by the OMT
-  // timer (runTimerTask) and the embed boot path.
-  int refresh_sys_tenant();
   int get_server_allocated_resource(ServerResource &server_resource);
 
 protected:
@@ -203,9 +205,9 @@ protected:
   bool cpu_dump_;
   bool has_synced_;
   bool tenant_active_;
-  common::ObTimer timer_;
-  common::ObTimer memory_printer_timer_;
+  int timer_tg_id_;
   bool timer_stopped_;
+  bool embedded_;
 
 private:
   lib::ObShareTenantLimiter *tenant_limiter_head_;
@@ -245,19 +247,15 @@ bool ObMultiTenant::has_synced() const
 class ObSharedTimer
 {
 public:
-  ObSharedTimer() : timer_() {}
+  ObSharedTimer() : tg_id_(-1) {}
   static int mtl_init(ObSharedTimer *&st);
   static int mtl_start(ObSharedTimer *&st);
   static void mtl_stop(ObSharedTimer *&st);
   static void mtl_wait(ObSharedTimer *&st);
   void destroy();
-  int schedule(common::ObTimerTask &task, const int64_t delay,
-      bool repeat = false, bool immediate = false);
-  int cancel_task(const common::ObTimerTask &task);
-  int wait_task(const common::ObTimerTask &task);
-  bool task_exist(const common::ObTimerTask &task);
+  int get_tg_id() const { return tg_id_; }
 private:
-  common::ObTimer timer_;
+  int tg_id_;
 };
 
 } // end of namespace omt

@@ -22,8 +22,8 @@
 #include "palf_handle.h"
 #include "share/ob_ls_id.h"                                     // ObLSID
 #include "share/ob_local_device.h"                            // ObLocalDevice
+#include "share/resource_manager/ob_resource_manager.h"       // ObResourceManager
 #include "share/io/ob_io_manager.h"                           // ObIOManager
-#include "lib/ob_running_mode.h"
 
 namespace oceanbase
 {
@@ -166,6 +166,7 @@ PalfEnvImpl::PalfEnvImpl() : palf_meta_lock_(common::ObLatchIds::PALF_ENV_LOCK),
                              last_palf_epoch_(0),
                              rebuild_replica_log_lag_threshold_(0),
                              enable_log_cache_(false),
+                             enable_fetch_log_engine_(true),
                              diskspace_enough_(true),
                              io_adapter_(),
                              is_inited_(false),
@@ -188,6 +189,7 @@ int PalfEnvImpl::init(
     ILogBlockPool *log_block_pool,
     PalfMonitorCb *monitor,
     common::ObIODevice *log_local_device,
+    ObResourceManager *resource_manager,
     ObIOManager *io_manager)
 {
   int ret = OB_SUCCESS;
@@ -198,21 +200,21 @@ int PalfEnvImpl::init(
     PALF_LOG(ERROR, "PalfEnvImpl is inited twiced", K(ret));
   } else if (OB_ISNULL(base_dir) || !self.is_valid()
              || OB_ISNULL(log_alloc_mgr) || OB_ISNULL(log_block_pool) || OB_ISNULL(monitor) 
-             || OB_ISNULL(log_local_device) || OB_ISNULL(io_manager)) {
+             || OB_ISNULL(log_local_device) || OB_ISNULL(resource_manager) || OB_ISNULL(io_manager)) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "invalid arguments", K(ret), K(base_dir), K(self),
-             KP(log_alloc_mgr), KP(log_block_pool), KP(monitor), KP(log_local_device), KP(io_manager));
+             KP(log_alloc_mgr), KP(log_block_pool), KP(monitor), KP(log_local_device), KP(resource_manager), KP(io_manager));
   } else if (OB_FAIL(init_log_io_worker_config_(options.disk_options_.log_writer_parallelism_,
                                                 log_io_worker_config_))) {
     PALF_LOG(WARN, "init_log_io_worker_config_ failed", K(options));
-  } else if (!lib::is_embed_mode() && OB_FAIL(fetch_log_engine_.init(this, log_alloc_mgr))) {
+  } else if (OB_FAIL(fetch_log_engine_.init(this, log_alloc_mgr, options.enable_fetch_log_engine_))) {
     PALF_LOG(ERROR, "FetchLogEngine init failed", K(ret));
   } else if (OB_FAIL(log_rpc_.init(self, cluster_id))) {
     PALF_LOG(ERROR, "LogRpc init failed", K(ret));
   } else if (OB_FAIL(cb_thread_pool_.init(io_cb_num, this))) {
     PALF_LOG(ERROR, "LogIOTaskThreadPool init failed", K(ret));
   } else if (OB_FAIL(log_io_worker_wrapper_.init(log_io_worker_config_,
-                                                 &cb_thread_pool_,
+                                                 cb_thread_pool_.get_tg_id(),
                                                  log_alloc_mgr, this))) {
     PALF_LOG(ERROR, "LogIOWorker init failed", K(ret));
   } else if (OB_FAIL(log_shared_queue_th_.init(this))) {
@@ -233,7 +235,7 @@ int PalfEnvImpl::init(
     PALF_LOG(ERROR, "disk_options_wrapper_ init failed", K(ret));
   } else if (OB_FAIL(log_updater_.init(this))) {
     PALF_LOG(ERROR, "LogUpdater init failed", K(ret));
-  } else if (OB_FAIL(io_adapter_.init(log_local_device, io_manager))) {
+  } else if (OB_FAIL(io_adapter_.init(log_local_device, resource_manager, io_manager))) {
     PALF_LOG(ERROR, "LogIOAdapter init failed", K(ret));
   } else {
     log_alloc_mgr_ = log_alloc_mgr;
@@ -244,6 +246,7 @@ int PalfEnvImpl::init(
     is_inited_ = true;
     is_running_ = true;
     enable_log_cache_ = options.enable_log_cache_;
+    enable_fetch_log_engine_ = options.enable_fetch_log_engine_;
     PALF_LOG(INFO, "PalfEnvImpl init success", K(ret), K(self_), KPC(this));
   }
   if (OB_FAIL(ret) && OB_INIT_TWICE != ret) {
@@ -267,7 +270,7 @@ int PalfEnvImpl::start()
     PALF_LOG(ERROR, "LogIOWorker start failed", K(ret));
   } else if (OB_FAIL(block_gc_timer_task_.start())) {
     PALF_LOG(ERROR, "FileCollectTimerTask start failed", K(ret));
-	} else if (!lib::is_embed_mode() && OB_FAIL(fetch_log_engine_.start())) {
+  } else if (OB_FAIL(fetch_log_engine_.start())) {
     PALF_LOG(ERROR, "FetchLogEngine start failed", K(ret));
   } else if (OB_FAIL(log_loop_thread_.start())) {
     PALF_LOG(ERROR, "log_loop_thread_ start failed", K(ret));
@@ -332,6 +335,7 @@ void PalfEnvImpl::destroy()
   disk_options_wrapper_.reset();
   rebuild_replica_log_lag_threshold_ = 0;
   enable_log_cache_ = false;
+  enable_fetch_log_engine_ = true;
   io_adapter_.destroy();
 }
 
@@ -782,6 +786,9 @@ int PalfEnvImpl::update_options(const PalfOptions &options)
   } else if (false == options.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(options));
+  } else if (enable_fetch_log_engine_ != options.enable_fetch_log_engine_) {
+    ret = OB_NOT_SUPPORTED;
+    PALF_LOG(WARN, "fetch log engine cannot be switched after startup", K(ret), K(options), KPC(this));
   } else if (OB_FAIL(log_rpc_.update_transport_compress_options(options.compress_options_))) {
     PALF_LOG(WARN, "update_transport_compress_options failed", K(ret), K(options));
   } else if (FALSE_IT(rebuild_replica_log_lag_threshold_ = options.rebuild_replica_log_lag_threshold_)) {
@@ -806,6 +813,7 @@ int PalfEnvImpl::get_options(PalfOptions &options)
     options.compress_options_ = log_rpc_.get_compress_opts();
     options.rebuild_replica_log_lag_threshold_ = rebuild_replica_log_lag_threshold_;
     options.enable_log_cache_ = enable_log_cache_;
+    options.enable_fetch_log_engine_ = enable_fetch_log_engine_;
   }
   return ret;
 }

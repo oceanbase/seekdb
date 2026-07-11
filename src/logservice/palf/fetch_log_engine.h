@@ -18,6 +18,7 @@
 #define OCEANBASE_LOGSERVICE_OB_FETCH_LOG_ENGINE_
 #include <stdint.h>
 #include "lib/thread/ob_simple_thread_pool.h"
+#include "lib/thread/thread_mgr_interface.h"
 #include "log_define.h"
 #include "log_req.h"
 #include "lsn.h"
@@ -76,7 +77,7 @@ private:
   int64_t accepted_mode_pid_;
 };
 
-class FetchLogEngine : public common::ObLinkQueueThreadPool
+class FetchLogEngine : public lib::TGLinkTaskHandler
 {
 public:
   // dynamic with tenant unit
@@ -89,15 +90,16 @@ public:
   FetchLogEngine();
   ~FetchLogEngine() { destroy(); }
 public:
-  int init(IPalfEnvImpl *palf_env_impl, ObILogAllocator *alloc_mgr);
+  int init(IPalfEnvImpl *palf_env_impl, ObILogAllocator *alloc_mgr, const bool enabled = true);
   void destroy();
   int submit_fetch_log_task(FetchLogTask *fetch_log_task);
+  bool is_enabled() const { return is_inited_ && enabled_; }
 public:
   int start();
   int stop();
   int wait();
-  void handle(common::LinkTask *task) override;
-  void handle_drop(common::LinkTask *task) override;
+  void handle(common::LinkTask *task);
+  void handle_drop(common::LinkTask *task);
   FetchLogTask *alloc_fetch_log_task();
   void free_fetch_log_task(FetchLogTask *task);
   int update_replayable_point(const share::SCN &replayable_scn);
@@ -108,7 +110,9 @@ private:
   typedef common::ObSpinLock SpinLock;
   typedef common::ObSpinLockGuard SpinLockGuard;
 private:
+  int tg_id_;
   bool is_inited_;
+  bool enabled_;
   IPalfEnvImpl *palf_env_impl_;
   common::ObILogAllocator *allocator_;
   share::SCN replayable_point_;

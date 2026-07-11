@@ -1005,14 +1005,14 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
   OZ( resolve_for_update_clause(parse_tree.children_[PARSE_SELECT_FOR_UPD]) );
 
   if (OB_SUCC(ret)) {
-    bool has_snapshot_query = false;
-    //select for update requires that no snapshot query related attributes appear anywhere in stmt
+    bool has_flashback_query = false;
+    //select for update requires that no flashback query related attributes appear anywhere in stmt
     if (select_stmt->has_for_update() &&
-        OB_FAIL(check_stmt_has_snapshot_query(select_stmt, true, has_snapshot_query))) {
-      LOG_WARN("failed to check stmt has snapshot query", K(ret));
-    } else if (has_snapshot_query) {
-      ret = OB_ERR_SNAPSHOT_QUERY_WITH_UPDATE;
-      LOG_WARN("select for update and snapshot query exists", K(ret));
+        OB_FAIL(check_stmt_has_flashback_query(select_stmt, true, has_flashback_query))) {
+      LOG_WARN("failed to check stmt has flashback query", K(ret));
+    } else if (has_flashback_query) {
+      ret = OB_ERR_FLASHBACK_QUERY_WITH_UPDATE;
+      LOG_WARN("select for update and flashback query exists", K(ret));
     }
   }
 
@@ -1090,7 +1090,7 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
       }
     }
   }
-  // rowscn pseudo-column cannot be used in snapshot query and view
+  // rowscn pseudo-column cannot be used in flashback query and view
   if (OB_SUCC(ret)) {
     bool has_ora_rowscn = false;
     const common::ObIArray<SelectItem> &items = select_stmt->get_select_items();
@@ -1104,13 +1104,13 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
     }
 
     if (has_ora_rowscn) {
-      bool has_snapshot_query = false;
-      if (OB_FAIL(check_stmt_has_snapshot_query(select_stmt, false, has_snapshot_query))) {
-        LOG_WARN("failed to check stmt has snapshot query", K(ret));
-      } else if (has_snapshot_query) {
+      bool has_flashback_query = false;
+      if (OB_FAIL(check_stmt_has_flashback_query(select_stmt, false, has_flashback_query))) {
+        LOG_WARN("failed to check stmt has flashback query", K(ret));
+      } else if (has_flashback_query) {
         ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "rowscn used with snapshot query");
-        LOG_WARN("rowscn can't use with snapshot query", K(ret));
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "rowscn used with flashback query");
+        LOG_WARN("rowscn can't use with flashback query", K(ret));
       }
     }
   }
@@ -3501,7 +3501,6 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
     }
   }
   if (OB_SUCC(ret) && node->num_child_ > 2 && NULL != (format_node = node->children_[2])) { // format
-    // TODO(bitao): handle other parquet property
     ObResolverUtils::FileFormatContext ff_ctx;
     for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
       if (OB_ISNULL(option_node = format_node->children_[i])) {
@@ -3521,11 +3520,9 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("should set file format type", K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "format without type");
-    } else if (ObExternalFileFormat::PARQUET_FORMAT != external_format.format_type_
-               && ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
+    } else if (ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("select into only support parquet/orc/csv format type now", K(ret),
-               K(external_format.format_type_));
+      LOG_WARN("select into only supports csv format type", K(ret), K(external_format.format_type_));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "this format type");
     } else if (ObExternalFileFormat::CSV_FORMAT == external_format.format_type_) {
       ObCollationType file_cs_type = has_cs_type

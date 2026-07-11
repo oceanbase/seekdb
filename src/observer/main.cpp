@@ -395,6 +395,11 @@ static void disable_hugepage_for_self_text()
   fclose(maps);
 }
 
+__attribute__((constructor(101)))
+static void early_disable_hugepage_for_observer()
+{
+  disable_hugepage_for_self_text();
+}
 #endif
 
 using namespace oceanbase::obsys;
@@ -404,6 +409,8 @@ using namespace oceanbase::common;
 using namespace oceanbase::observer;
 using namespace oceanbase::share;
 using namespace oceanbase::omt;
+
+namespace oceanbase { namespace share { void ob_init_create_func(); } }
 
 #define MPRINT(format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
 #define MPRINTx(format, ...)                                                   \
@@ -673,9 +680,8 @@ int inner_main(int argc, char *argv[])
   const char *const PID_FILE_NAME             = "run/seekdb.pid";
   int               ret                       = OB_SUCCESS;
 
-  const char *embed_mode = is_embed_mode() ? "embed " : "";
-  MPRINT("Starting seekdb (%s %s %s%s) source revision %s.",
-    OB_OCEANBASE_NAME, OB_SEEKDB_NAME, embed_mode, PACKAGE_VERSION, build_version());
+  MPRINT("Starting seekdb (%s %s %s) source revision %s.",
+    OB_OCEANBASE_NAME, OB_SEEKDB_NAME, PACKAGE_VERSION, build_version());
 
 #ifndef _WIN32
   // change signal mask first (POSIX only).
@@ -788,18 +794,17 @@ int inner_main(int argc, char *argv[])
     // records all WARN and ERROR logs in log directory.
     ObWarningBuffer::set_warn_log_on(true);
     if (OB_SUCC(ret)) {
-      const bool embed_mode = opts->embed_mode_;
       const bool initialize = opts->initialize_;
       lib::Worker worker;
       lib::Worker::set_worker_to_thread_local(&worker);
       ObServer &observer = ObServer::get_instance();
-      LOG_INFO("seekdb starts", "seekdb_version", PACKAGE_STRING);
+      LOG_INFO("seekdb starts", "seekdb_version", PACKAGE_STRING, "embedded", opts->embedded_);
       if (OB_FAIL(observer.init(*opts, log_cfg))) {
         LOG_ERROR("seekdb init fail", K(ret));
       }
       OB_DELETE(ObServerOptions, mem_attr, opts);
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(observer.start(embed_mode))) {
+      } else if (OB_FAIL(observer.start())) {
         LOG_ERROR("seekdb start fail", K(ret));
       } else {
         safe_sd_notify(0, "READY=1\n"
@@ -856,9 +861,6 @@ static const char *get_arg_value(int argc, char *argv[], const char *name)
 
 int main(int argc, char *argv[])
 {
-#if defined(__linux__)
-  disable_hugepage_for_self_text();
-#endif
 #ifdef _WIN32
   ::oceanbase::common::g_ob_log_main_entered = true;
 #endif

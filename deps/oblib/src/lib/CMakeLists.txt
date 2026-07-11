@@ -188,6 +188,8 @@ ob_set_subtarget(oblib_lib thread
   thread/ob_reentrant_thread.cpp
   thread/ob_simple_thread_pool.ipp
   thread/ob_map_queue_thread_pool.cpp
+  thread/thread_mgr.cpp
+  thread/thread_mgr_interface.cpp
   thread/protected_stack_allocator.cpp
   thread/thread.cpp
   thread/threads.cpp
@@ -333,11 +335,6 @@ if(UNIX)
   target_compile_options(oblib_lib PUBLIC -fopenmp)
 endif()
 
-if(BUILD_EMBED_MODE)
-    set(GOMP_LIB libgomp_embed_static.a)
-else()
-    set(GOMP_LIB libgomp_static.a)
-endif()
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
   target_link_libraries(oblib_lib
     PUBLIC
@@ -348,7 +345,7 @@ if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
     libopenblas.a
     libgfortran_static.a
     libquadmath_static.a
-    ${GOMP_LIB}
+    libgomp_static.a
     libroaring.a
     libantlr4-runtime.a
     libantlr4-autogen.a
@@ -363,7 +360,7 @@ elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     libdiskann.a
     libopenblas.a
     libgfortran_static.a
-    ${GOMP_LIB}
+    libgomp_static.a
     libroaring.a
     libantlr4-runtime.a
     libantlr4-autogen.a

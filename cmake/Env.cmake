@@ -17,7 +17,11 @@ ob_define(DEVTOOLS_DIR "${CMAKE_SOURCE_DIR}/deps/3rd/usr/local/oceanbase/devtool
 ob_define(DEP_DIR "${CMAKE_SOURCE_DIR}/deps/3rd/usr/local/oceanbase/deps/devel")
 
 ob_define(BUILD_CDC_ONLY OFF)
+# Deprecated no-op retained for compatibility with existing build invocations.
 ob_define(BUILD_EMBED_MODE OFF)
+if(BUILD_EMBED_MODE)
+  message(STATUS "BUILD_EMBED_MODE is deprecated and has no effect")
+endif()
 ob_define(OB_USE_CLANG ON)
 ob_define(OB_ERRSIM OFF)
 ob_define(BUILD_NUMBER 1)
@@ -37,7 +41,6 @@ ob_define(NEED_PARSER_CACHE ON)
 ob_define(OB_CC "")
 ob_define(OB_CXX "")
 ob_define(OB_BUILD_STANDALONE OFF)
-ob_define(OB_BUILD_LITE ON)
 ob_define(DEFAULT_LOG_LEVEL OB_LOG_LEVEL_ERROR)
 ob_define(DEFAULT_LOG_FILE_SIZE_MB 256)
 
@@ -149,9 +152,6 @@ set(ob_close_deps_static_name "")
 
 set(OB_BUILD_CLOSE_MODULES OFF)
 
-# observer lite
-ob_define(OB_BUILD_OBSERVER_LITE ON)
-
 if(OB_BUILD_STANDALONE)
   add_definitions(-DOB_BUILD_STANDALONE)
 endif()
@@ -160,29 +160,12 @@ if (OB_USE_TEST_PUBKEY)
   add_definitions(-DOB_USE_TEST_PUBKEY)
 endif()
 
-if(OB_BUILD_LITE)
-  add_definitions(-DOB_BUILD_LITE)
-endif()
-
-if(OB_BUILD_OBSERVER_LITE)
-  add_definitions(-DOB_BUILD_OBSERVER_LITE)
-endif()
-
 if (OB_BUILD_SYS_VEC_IDX)
  add_definitions(-DOB_BUILD_SYS_VEC_IDX)
 endif()
  
-# should not use initial-exec for tls-model if building OBCDC.
 if(BUILD_CDC_ONLY)
   add_definitions(-DOB_BUILD_CDC_DISABLE_VSAG)
-else()
-  if(NOT BUILD_EMBED_MODE)
-    add_definitions(-DENABLE_INITIAL_EXEC_TLS_MODEL)
-  endif()
-endif()
-
-if(BUILD_EMBED_MODE)
-  add_definitions(-DOB_BUILD_EMBED_MODE)
 endif()
 
 # Find objcopy - on macOS it may be installed via Homebrew or available as llvm-objcopy

@@ -14,18 +14,29 @@
  * limitations under the License.
  */
 
-/*
-** backends/sqlite_backend.h — SQLite backend for speedtest1 benchmark.
-**
-** Thin wrapper: just includes the native sqlite3.h and defines the
-** benchmark name macro.
-*/
+#include <gtest/gtest.h>
 
-#ifndef SQLITE_BACKEND_H
-#define SQLITE_BACKEND_H
+#define private public
+#include "share/cache/ob_kv_storecache.h"
+#undef private
 
-#include "sqlite3.h"
+namespace oceanbase
+{
+namespace common
+{
 
-#define SPEEDTEST_BACKEND_NAME "SQLite"
+TEST(TestKVStorecacheBucket, low_memory_levels)
+{
+  ASSERT_EQ(196613, ObKVGlobalCache::bucket_num_array_[0]);
+  ASSERT_EQ(393241, ObKVGlobalCache::bucket_num_array_[1]);
+  ASSERT_EQ(786433, ObKVGlobalCache::bucket_num_array_[2]);
+}
 
-#endif /* SQLITE_BACKEND_H */
+} // namespace common
+} // namespace oceanbase
+
+int main(int argc, char **argv)
+{
+  testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

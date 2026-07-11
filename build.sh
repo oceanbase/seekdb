@@ -248,7 +248,7 @@ function build
         do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DOB_USE_ASAN=$ASAN_OPTION -DOB_ENABLE_MCMODEL=OFF
         ;;
       xrelease_embedded)
-        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DBUILD_EMBED_MODE=ON
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION
         ;;
       xdebug)
         do_build "$@" -DCMAKE_BUILD_TYPE=Debug -DOB_USE_LLD=$LLD_OPTION

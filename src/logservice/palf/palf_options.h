@@ -88,15 +88,20 @@ struct PalfAppendOptions
     int64_t proposal_id = 0;
     TO_STRING_KV(K(need_nonblock), K(need_check_proposal_id), K(proposal_id));
 };
-// Palf supports switching between access modes
+// Palf supports switching between three modes
 //
 // APPEND: In this mode, PALF assigns LSN and TS to the logs to be committed
 //
 // RAW_WRITE: In this mode, PALF does not have the capability to allocate LSN and TS for pending logs
+//
+// FLASHBACK: In this mode, PALF does not have log writing capability, and replicas do not respond to log pull requests
+// PREPARE_FLASHBACK: In this mode, PALF does not have log writing capability, and logs can be synchronized among replicas
 enum class AccessMode {
   INVALID_ACCESS_MODE = 0,
   APPEND = 1,
   RAW_WRITE = 2,
+  FLASHBACK = 3,
+  PREPARE_FLASHBACK = 4,
 };
 
 inline int access_mode_to_string(const AccessMode access_mode, char *str_buf_, const int64_t str_len)
@@ -106,6 +111,10 @@ inline int access_mode_to_string(const AccessMode access_mode, char *str_buf_, c
     strncpy(str_buf_, "APPEND", str_len);
   } else if (AccessMode::RAW_WRITE == access_mode) {
     strncpy(str_buf_, "RAW_WRITE", str_len);
+  } else if (AccessMode::FLASHBACK == access_mode) {
+    strncpy(str_buf_, "FLASHBACK", str_len);
+  } else if (AccessMode::PREPARE_FLASHBACK == access_mode) {
+    strncpy(str_buf_, "PREPARE_FLASHBACK", str_len);
   } else {
     ret = OB_INVALID_ARGUMENT;
   }
@@ -117,7 +126,9 @@ int get_access_mode(const common::ObString &str, AccessMode &mode);
 inline bool is_valid_access_mode(const AccessMode &access_mode)
 {
   return AccessMode::APPEND == access_mode
-    || AccessMode::RAW_WRITE == access_mode;
+    || AccessMode::RAW_WRITE == access_mode
+    || AccessMode::FLASHBACK == access_mode
+    || AccessMode::PREPARE_FLASHBACK == access_mode;
 }
 
 inline bool can_switch_access_mode_(const AccessMode &src_access_mode, const AccessMode &dst_access_mode)
@@ -128,6 +139,16 @@ inline bool can_switch_access_mode_(const AccessMode &src_access_mode, const Acc
     bool_ret = false;
   } else if (src_access_mode == dst_access_mode) {
     // can not switch to itself
+    bool_ret = false;
+  } else if (src_access_mode == AccessMode::APPEND &&
+      (dst_access_mode == AccessMode::PREPARE_FLASHBACK || dst_access_mode == AccessMode::FLASHBACK)) {
+    // can not switch from APPEND to FLASHBACK
+    bool_ret = false;
+  } else if ((src_access_mode == AccessMode::PREPARE_FLASHBACK || src_access_mode == AccessMode::FLASHBACK) &&
+      dst_access_mode == AccessMode::RAW_WRITE) {
+    // can not switch from FLASHBACK to RAW_WRITE
+    bool_ret = false;
+  } else if (src_access_mode == AccessMode::FLASHBACK && dst_access_mode == AccessMode::PREPARE_FLASHBACK) {
     bool_ret = false;
   }
   return bool_ret;
@@ -156,7 +177,8 @@ struct PalfOptions
   PalfOptions() : disk_options_(),
                   compress_options_(),
                   rebuild_replica_log_lag_threshold_(0),
-                  enable_log_cache_(false)
+                  enable_log_cache_(false),
+                  enable_fetch_log_engine_(true)
   {}
   ~PalfOptions() { reset(); }
   void reset();
@@ -164,12 +186,14 @@ struct PalfOptions
   TO_STRING_KV(K(disk_options_),
                K(compress_options_),
                K(rebuild_replica_log_lag_threshold_),
-               K(enable_log_cache_));
+               K(enable_log_cache_),
+               K(enable_fetch_log_engine_));
 public:
   PalfDiskOptions disk_options_;
   PalfTransportCompressOptions compress_options_;
   int64_t rebuild_replica_log_lag_threshold_;
   bool enable_log_cache_;
+  bool enable_fetch_log_engine_;
 };
 
 struct PalfThrottleOptions

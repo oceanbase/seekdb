@@ -89,10 +89,6 @@ private:
 
 inline int64_t ObClockGenerator::getClock()
 {
-#ifdef OB_BUILD_EMBED_MODE
-  // No background ClockGenerator thread in embed mode: avoid sleep load;
-  return common::ObTimeUtility::current_time();
-#else
   int64_t ts = 0;
   if (OB_UNLIKELY(!clock_generator_.inited_)) {
     TRANS_LOG_RET(WARN, common::OB_NOT_INIT, "clock generator not inited");
@@ -102,7 +98,6 @@ inline int64_t ObClockGenerator::getClock()
   }
 
   return ts;
-#endif
 }
 
 inline int64_t ObClockGenerator::getRealClock()

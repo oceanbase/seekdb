@@ -160,13 +160,6 @@ public:
                             int64_t &affected_rows, bool is_user_sql = false,
                             const common::ObAddr *sql_exec_addr = nullptr) override;
 
-  // Prepared Statement API for embedded mode
-  int stmt_prepare(const ObString &sql,
-                   uint64_t &stmt_id, int64_t &param_count);
-  int stmt_execute(const uint64_t stmt_id,
-                   const ParamStore &params, int64_t &affected_rows);
-  int stmt_close(const uint64_t stmt_id);
-
   virtual int execute_proc(ObIAllocator &allocator,
                           ParamStore &params,
                           ObString &sql,

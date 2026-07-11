@@ -19,10 +19,6 @@
 
 
 #include "sql/engine/ob_operator.h"
-#ifndef OB_BUILD_EMBED_MODE
-#include "sql/engine/basic/ob_arrow_basic.h"
-#include <parquet/api/writer.h>
-#endif
 #include "lib/file/ob_file.h"
 #include "share/io/ob_backup_storage_info.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
@@ -136,113 +132,6 @@ private:
   const bool &has_lob_;
   int64_t &write_offset_;
 };
-
-#ifndef OB_BUILD_EMBED_MODE
-class ObBatchFileWriter : public ObExternalFileWriter
-{
-public:
-  ObBatchFileWriter(const share::ObBackupStorageInfo &access_info,
-                    const IntoFileLocation &file_location):
-    ObExternalFileWriter(access_info, file_location),
-    row_batch_size_(64),
-    row_batch_offset_(0),
-    batch_has_written_(true),
-    batch_allocator_("ParquetOrc", OB_MALLOC_NORMAL_BLOCK_SIZE)
-  {}
-
-  virtual ~ObBatchFileWriter()
-  {
-    batch_allocator_.reset();
-  }
-
-  int64_t get_row_batch_offset() { return row_batch_offset_; }
-  void increase_row_batch_offset() { row_batch_offset_++; }
-  void reset_row_batch_offset() { row_batch_offset_ = 0; }
-  bool reach_batch_end() { return row_batch_offset_ == row_batch_size_; }
-  void set_batch_written(bool has_written) { batch_has_written_ = has_written; }
-  ObIAllocator &get_batch_allocator() { return batch_allocator_; }
-  virtual int write_file() = 0;
-  virtual int64_t get_file_size() = 0;
-
-protected:
-  int64_t row_batch_size_;
-  int64_t row_batch_offset_;
-  bool batch_has_written_;
-  ObArenaAllocator batch_allocator_;
-};
-
-class ObParquetFileWriter : public ObBatchFileWriter
-{
-public:
-  ObParquetFileWriter(const share::ObBackupStorageInfo &access_info,
-                      const IntoFileLocation &file_location,
-                      std::shared_ptr<parquet::schema::GroupNode> parquet_writer_schema):
-    ObBatchFileWriter(access_info, file_location),
-    parquet_file_writer_(nullptr),
-    parquet_rg_writer_(NULL),
-    parquet_row_batch_(),
-    parquet_row_def_levels_(),
-    parquet_value_offsets_(),
-    estimated_bytes_(0),
-    parquet_writer_schema_(parquet_writer_schema)
-  {}
-
-  virtual ~ObParquetFileWriter()
-  {
-    parquet_file_writer_.reset();
-    parquet_writer_schema_.reset();
-  }
-
-  int open_parquet_file_writer(ObArrowMemPool &arrow_alloc,
-                               const int64_t &row_group_size,
-                               const int64_t &compress_type_index,
-                               const int64_t &row_batch_size,
-                               common::ObIAllocator &allocator);
-  int create_parquet_row_batch(const int64_t &row_batch_size, common::ObIAllocator &allocator);
-  bool is_file_writer_null() { return !parquet_file_writer_; }
-  bool is_valid_to_write()
-  {
-    return parquet_file_writer_ && OB_NOT_NULL(parquet_rg_writer_) && !parquet_row_batch_.empty();
-  }
-  parquet::RowGroupWriter* get_row_group_writer() { return parquet_rg_writer_; }
-  void open_next_row_group_writer() { parquet_rg_writer_ = parquet_file_writer_->AppendBufferedRowGroup(); }
-  ObArrayWrap<void*> &get_parquet_row_batch() { return parquet_row_batch_; }
-  ObArrayWrap<int16_t*> &get_parquet_row_def_levels() { return parquet_row_def_levels_; }
-  ObArrayWrap<int64_t> &get_parquet_value_offsets() { return parquet_value_offsets_; }
-  int64_t get_estimated_bytes() { return estimated_bytes_; }
-  void reset_value_offsets()
-  {
-    for (int64_t col_idx = 0; col_idx < parquet_value_offsets_.count(); col_idx++) {
-      parquet_value_offsets_.at(col_idx) = 0;
-    }
-  }
-  int64_t get_file_size() override
-  {
-    return get_row_group_size() + write_bytes_;
-  }
-  int64_t get_row_group_size()
-  {
-    return parquet_rg_writer_->total_bytes_written() + parquet_rg_writer_->total_compressed_bytes()
-           + estimated_bytes_;
-  }
-  virtual int write_file() override;
-  virtual int close_file() override;
-
-private:
-  std::unique_ptr<parquet::ParquetFileWriter> parquet_file_writer_;
-  parquet::RowGroupWriter* parquet_rg_writer_;
-  ObArrayWrap<void*> parquet_row_batch_;
-  ObArrayWrap<int16_t*> parquet_row_def_levels_;
-  ObArrayWrap<int64_t> parquet_value_offsets_;
-  int64_t estimated_bytes_;
-  std::shared_ptr<parquet::schema::GroupNode> parquet_writer_schema_;
-};
-
-#else
-class ObParquetFileWriter
-{};
-
-#endif // !OB_BUILD_EMBED_MODE
 
 }
 }

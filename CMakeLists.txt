@@ -130,7 +130,6 @@ endif()
 
 add_subdirectory(deps/oblib)
 add_subdirectory(src)
-add_subdirectory(sqlite-benchmark)
 
 include(CMakeDependentOption)
 # OB_BUILD_PACKAGE => include tools and build them.

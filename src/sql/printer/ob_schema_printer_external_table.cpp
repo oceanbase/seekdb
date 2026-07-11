@@ -30,6 +30,7 @@ namespace schema
 {
 using namespace std;
 using namespace common;
+using namespace sql;
 
 int ObSchemaPrinter::print_external_table_file_info(const ObTableSchema &table_schema,
                                                     ObIAllocator& allocator,
@@ -62,7 +63,9 @@ int ObSchemaPrinter::print_external_table_file_info(const ObTableSchema &table_s
   }
   if (OB_SUCC(ret) && OB_FAIL(share::ob_get_external_file_location(table_schema, schema_guard_, allocator, location))) {
     LOG_WARN("failed to get external file location", K(ret));
-  } else ;
+  } else if (false) {
+    LOG_WARN("failed to check is odps table or not", K(ret));
+  }
   if (OB_SUCC(ret) && !is_odps_external_table) {
     if (!location_name.empty()) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, "\nLOCATION=@%.*s", location_name.length(), location_name.ptr()))) {
@@ -100,7 +103,8 @@ int ObSchemaPrinter::print_external_table_file_info(const ObTableSchema &table_s
     } else if (OB_FAIL(format.load_from_string(table_format_or_properties, allocator))) {
       SHARE_SCHEMA_LOG(WARN, "fail to load from json string", K(ret));
     } else if (!(format.format_type_ > ObExternalFileFormat::INVALID_FORMAT
-                 && format.format_type_ < ObExternalFileFormat::MAX_FORMAT)) {
+                 && format.format_type_ < ObExternalFileFormat::MAX_FORMAT
+                 && OB_NOT_NULL(ObExternalFileFormat::FORMAT_TYPE_STR[format.format_type_]))) {
       ret = OB_NOT_SUPPORTED;
       SHARE_SCHEMA_LOG(WARN, "unsupported to print file format", K(ret), K(format.format_type_));
     } else if (!is_odps_external_table && OB_FAIL(databuff_printf(buf, buf_len, pos, "\nFORMAT (\n"))) {
@@ -233,14 +237,6 @@ int ObSchemaPrinter::print_external_table_file_info(const ObTableSchema &table_s
       }
     } else if (OB_SUCC(ret) && ObExternalFileFormat::ORC_FORMAT == format.format_type_) {
       ret = OB_NOT_SUPPORTED;
-    } else if (OB_SUCC(ret) && ObExternalFileFormat::PARQUET_FORMAT == format.format_type_) {
-      const ObParquetGeneralFormat &parquet = format.parquet_format_;
-      const char *column_index_type = column_index_type_to_string(parquet.column_index_type_);
-      if (sql::ColumnIndexType::NAME != parquet.column_index_type_ &&
-        OB_FAIL(databuff_printf(buf, buf_len, pos, "\n  COLUMN_INDEX_TYPE = '%.*s',",
-                                static_cast<int>(STRLEN(column_index_type)), column_index_type))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to print column index type", K(ret));
-      }
     }
     if (OB_SUCC(ret)) {
       --pos;

@@ -994,6 +994,9 @@ int ObLogPlan::select_replicas(ObExecContext &exec_ctx,
     } else {
       session->partition_hit().try_set_bool(is_hit_partition);
     }
+  } else if (COLUMN_STORE_ONLY == route_policy_type) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "when route policy is COLUMN_STORE_ONLY, weak read request");
   } else {
     const bool sess_in_retry = session->get_is_in_retry_for_dup_tbl(); // Do not optimize replica selection for duplicate tables during retry state
     const bool is_dup_ls_modified = session->is_dup_ls_modified();
@@ -2952,8 +2955,9 @@ int ObLogPlan::allocate_access_path(AccessPath *ap,
     LOG_WARN("failed to init est cost simple info", K(ret));
   } else {
     scan->set_est_cost_info(&ap->get_cost_table_scan_info());
-    scan->set_snapshot_query_expr(table_item->snapshot_query_expr_);
-    scan->set_snapshot_query_type(table_item->snapshot_query_type_);
+    scan->set_flashback_query_expr(table_item->flashback_query_expr_);
+    scan->set_flashback_query_type(table_item->flashback_query_type_);
+    scan->set_fq_read_tx_uncommitted(get_optimizer_context().get_global_hint().get_flashback_read_tx_uncommitted());
     scan->set_table_id(ap->get_table_id());
     scan->set_ref_table_id(ap->get_ref_table_id());
     scan->set_index_table_id(ap->get_index_table_id());
@@ -2967,6 +2971,7 @@ int ObLogPlan::allocate_access_path(AccessPath *ap,
     scan->set_table_opt_info(ap->table_opt_info_);
     scan->set_access_path(ap);
     scan->set_sample_info(ap->sample_info_);
+    scan->set_use_column_store(ap->use_column_store_);
     if (NULL != table_schema && table_schema->is_tmp_table()) {
       scan->set_session_id(table_schema->get_session_id());
     }
@@ -6443,7 +6448,9 @@ int ObLogPlan::check_table_columns_can_storage_pushdown(const uint64_t table_id,
 {
   int ret = OB_SUCCESS;
   static const int64_t MAX_MICRO_NDV_FACTOR = 1000000;
+  static const int64_t COLUMN_STORE_WIDE_TABLE = 100;
   static const double MAX_NDV_RATIO = 0.2;
+  static const double AVG_COLUMN_STORE_COLUMN_RATIO = 0.5;
 
   const ObTableSchema *table_schema = NULL;
   ObSqlSchemaGuard *sql_schema_guard = NULL;
@@ -6488,6 +6495,12 @@ int ObLogPlan::check_table_columns_can_storage_pushdown(const uint64_t table_id,
     can_push = false;
   } else {
     double micro_block_avg_count = table_meta->get_rows() / table_meta->get_micro_block_count();
+    // TODO it's better to use stat of column group in column store
+    if (table_schema->is_column_store_supported()) {
+      const int64_t column_cnt = table_schema->get_column_count();
+      micro_block_avg_count *= (AVG_COLUMN_STORE_COLUMN_RATIO * column_cnt);
+      can_push = column_cnt >= COLUMN_STORE_WIDE_TABLE && column_meta->get_ndv() < MAX_NDV_RATIO * table_meta->get_rows();
+    }
     if (!can_push) {
       can_push = (micro_block_avg_count * table_meta->get_rows()) > (MAX_MICRO_NDV_FACTOR * column_meta->get_ndv()) &&
                  column_meta->get_ndv() < MAX_NDV_RATIO * table_meta->get_rows();
@@ -8214,7 +8227,6 @@ int ObLogPlan::allocate_select_into_as_top(ObLogicalOperator *&old_top)
   } else {
     ObSelectIntoItem *into_item = stmt->get_select_into();
     ObSEArray<ObRawExpr*, 4> select_exprs;
-    ObExternalFileFormat external_properties;
     if (OB_ISNULL(into_item)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("into item is null", K(ret));
@@ -8222,21 +8234,6 @@ int ObLogPlan::allocate_select_into_as_top(ObLogicalOperator *&old_top)
       LOG_WARN("failed to get select exprs", K(ret));
     } else if (OB_FAIL(select_into->get_select_exprs().assign(select_exprs))) {
       LOG_WARN("failed to get select exprs", K(ret));
-    } else if (!into_item->external_properties_.empty()
-               && OB_FAIL(external_properties.load_from_string(into_item->external_properties_,
-                                                               get_allocator()))) {
-      LOG_WARN("failed to load external properties", K(ret));
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_select_item_size(); i++) {
-      if (!into_item->external_properties_.empty()
-          && (external_properties.format_type_ == ObExternalFileFormat::FormatType::PARQUET_FORMAT)
-          && is_contain(select_into->get_alias_names(), stmt->get_select_item(i).alias_name_)) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("alias names should be different", K(ret));
-        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "alias names, alias names should be different");
-      } else if (OB_FAIL(select_into->get_alias_names().push_back(stmt->get_select_item(i).alias_name_))) {
-        LOG_WARN("failed to push back alias name", K(ret));
-      }
     }
     if (OB_SUCC(ret)) {
       select_into->set_into_type(into_item->into_type_);
@@ -13623,7 +13620,21 @@ int ObLogPlan::find_possible_join_filter_tables(ObLogicalOperator *op,
       info.force_part_filter_ = force_part_hint;
       info.in_current_dfo_ = is_current_dfo;
       if (info.can_use_join_filter_ || info.need_partition_join_filter_) {
-        if (OB_FAIL(get_join_filter_exprs(left_join_conditions,
+        bool use_column_store = false;
+        bool use_row_store = false;
+        if (scan->use_column_store()) {
+          info.use_column_store_ = true;
+        } else if (OB_FAIL(will_use_column_store(info.table_id_,
+                                                 info.index_id_,
+                                                 info.ref_table_id_,
+                                                 use_column_store,
+                                                 use_row_store))) {
+          LOG_WARN("failed to check will use column store", K(ret));
+        } else if (use_column_store) {
+          info.use_column_store_ = true;
+        }
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(get_join_filter_exprs(left_join_conditions,
                                                 right_join_conditions,
                                                 info))) {
           LOG_WARN("failed to get join filter exprs", K(ret));
@@ -13767,6 +13778,77 @@ int ObLogPlan::find_possible_join_filter_tables(ObLogicalOperator *op,
         LOG_WARN("failed to find shuffle table scan", K(ret));
       }
     }
+  }
+  return ret;
+}
+
+int ObLogPlan::will_use_column_store(const uint64_t table_id,
+                                    const uint64_t index_id,
+                                    const uint64_t ref_table_id,
+                                    bool &use_column_store,
+                                    bool &use_row_store)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session_info = NULL;
+  ObSqlSchemaGuard *schema_guard = NULL;
+  const ObTableSchema *schema = NULL;
+  const ObDMLStmt *stmt = NULL;
+  bool hint_force_use_column_store = false;
+  bool hint_force_no_use_column_store = false;
+  bool has_row_store = false;
+  bool has_column_store = false;
+  bool session_disable_column_store = false;
+  bool is_link = false;
+  if (OB_ISNULL(stmt = get_stmt()) ||
+      OB_ISNULL(schema_guard = get_optimizer_context().get_sql_schema_guard()) ||
+      OB_ISNULL(session_info=get_optimizer_context().get_session_info())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("NULL pointer error", K(stmt), K(schema_guard), K(ret));
+  } else if (get_optimizer_context().use_column_store_replica() &&
+             index_id == ref_table_id) {
+    use_column_store = true;
+    use_row_store = false;
+  } else if (OB_FALSE_IT(session_disable_column_store=!session_info->is_enable_column_store())) {
+  } else if (OB_FAIL(schema_guard->get_table_schema(index_id, schema))) {
+    LOG_WARN("failed to get table schema", K(ret));
+  } else if (OB_ISNULL(schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpect null table schema", K(ret));
+  } else if (OB_FAIL(schema->has_all_column_group(has_row_store))) {
+    LOG_WARN("failed to check has row store", K(ret));
+  } else if (OB_FAIL(schema->get_is_column_store(has_column_store))) {
+    LOG_WARN("failed to get is column store", K(ret));
+  } else if (!has_row_store && !has_column_store) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpect schema statue", K(ret));
+  } else if (!has_column_store) {
+    use_row_store = true;
+    use_column_store = false;
+  } else if (!has_row_store) {
+    use_row_store = false;
+    use_column_store = true;
+  } else if (OB_FAIL(get_log_plan_hint().check_use_column_store(table_id,
+                                                                hint_force_use_column_store,
+                                                                hint_force_no_use_column_store))) {
+    LOG_WARN("table_item is null", K(ret), K(table_id));
+  } else if (hint_force_use_column_store) {
+    use_row_store = false;
+    use_column_store = true;
+  } else if (hint_force_no_use_column_store) {
+    use_row_store = true;
+    use_column_store = false;
+  } else if (session_disable_column_store) {
+    use_row_store = true;
+    use_column_store = false;
+  } else if (ObTableAccessPolicy::ROW_STORE == get_optimizer_context().get_table_acces_policy()) {
+    use_row_store = true;
+    use_column_store = false;
+  } else if (ObTableAccessPolicy::COLUMN_STORE == get_optimizer_context().get_table_acces_policy()) {
+    use_row_store = false;
+    use_column_store = true;
+  } else {
+    use_row_store = has_row_store;
+    use_column_store = has_column_store;
   }
   return ret;
 }

@@ -15,6 +15,7 @@
  */
 
 #include "palf_options.h"
+#include "log_define.h"
 
 namespace oceanbase
 {
@@ -26,6 +27,7 @@ void PalfOptions::reset()
   compress_options_.reset();
   rebuild_replica_log_lag_threshold_ = 0;
   enable_log_cache_ = false;
+  enable_fetch_log_engine_ = true;
 }
 
 bool PalfOptions::is_valid() const
@@ -112,7 +114,9 @@ PalfTransportCompressOptions &PalfTransportCompressOptions::operator=(const Palf
 static const char *access_mode_strs[] = {
   "INVALID_ACCESS_MODE",
   "APPEND",
-  "RAW_WRITE"
+  "RAW_WRITE",
+  "FLASHBACK",
+  "PREPARE_FLASHBACK"
 };
 
 int get_access_mode(const common::ObString &str, AccessMode &mode)

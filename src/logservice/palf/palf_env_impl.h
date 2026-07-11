@@ -57,6 +57,7 @@ class ObReqTransport;
 namespace share
 {
 class ObLocalDevice;
+class ObResourceManager;
 }
 namespace palf
 {
@@ -216,6 +217,7 @@ public:
            ILogBlockPool *log_block_pool,
            PalfMonitorCb *monitor,
            common::ObIODevice *log_local_device,
+           share::ObResourceManager *resource_manager,
            common::ObIOManager *io_manager);
   // start function contains two meanings:
   //
@@ -354,6 +356,7 @@ private:
   int64_t last_palf_epoch_;
   int64_t rebuild_replica_log_lag_threshold_;//for rebuild test
   bool enable_log_cache_;
+  bool enable_fetch_log_engine_;
 
   LogIOWorkerConfig log_io_worker_config_;
   bool diskspace_enough_;
