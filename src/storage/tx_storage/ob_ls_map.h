@@ -39,16 +39,14 @@ public:
    : is_inited_(false),
     ls_allocator_(nullptr),
     ls_cnt_(0),
-    ls_buckets_(nullptr),
-    buckets_lock_(nullptr)
+    ls_(nullptr),
+    lock_()
   {
-    reset();
   }
   ~ObLSMap() { destroy(); }
   void reset();
   int init(common::ObIAllocator *ls_allocator);
   void destroy();
-  // allow_multi_true is used during replay
   int add_ls(ObLS &ls);
   int del_ls(const share::ObLSID &ls_id);
   int get_all_ls_id(ObIArray<ObLSID> &ls_id_array);
@@ -68,21 +66,17 @@ public:
 private:
   OB_INLINE void free_ls(ObLS *ls) const;
   void del_ls_impl(ObLS *ls);
-  int choose_preserve_ls(ObLS *left_ls, ObLS *right_ls, ObLS *&result_ls);
-  int remove_duplicate_ls_in_linklist(ObLS *&head);
 private:
-  static const bool ENABLE_RECOVER_ALL_ZONE = false;
   bool is_inited_;
   
   common::ObIAllocator *ls_allocator_;
-  // total ls in current server of current tenant
+  // Seekdb keeps only one LS in current server of current tenant.
   int64_t ls_cnt_;
-  ObLS **ls_buckets_;
-  const static int64_t BUCKETS_CNT = 1; // seekdb has only SYS_LS
-  common::ObQSyncLock *buckets_lock_;
+  ObLS *ls_;
+  mutable common::ObQSyncLock lock_;
 };
 
-//iterate all lss
+// Iterate the only LS in seekdb.
 class ObLSIterator
 {
 public:
@@ -94,11 +88,10 @@ public:
     ls_map_ = &ls_map;
     mod_ = mod;
   }
-  TO_STRING_KV("ls_count", lss_.count(), K_(bucket_pos), K_(array_idx));
+  TO_STRING_KV("has_ls", OB_NOT_NULL(ls_), K_(returned));
 private:
-  common::ObArray<ObLS*> lss_;
-  int64_t bucket_pos_;
-  int64_t array_idx_;
+  ObLS *ls_;
+  bool returned_;
   ObLSMap *ls_map_;
   ObLSGetMod mod_;
 };
@@ -129,20 +122,11 @@ int ObLSMap::operate_ls(const share::ObLSID &ls_id,
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "ObLSMap not init", K(ret), K(ls_id));
   } else {
-    const int64_t pos = ls_id.hash() % BUCKETS_CNT;
-    ObLS *ls = ls_buckets_[pos];
-    common::ObQSyncLockReadGuard bucket_guard(buckets_lock_[pos]);
-    while (OB_NOT_NULL(ls)) {
-      if (ls->get_ls_id() == ls_id) {
-        break;
-      } else {
-        ls = static_cast<ObLS *>(ls->next_);
-      }
-    }
-    if (OB_ISNULL(ls)) {
+    common::ObQSyncLockReadGuard guard(lock_);
+    if (OB_ISNULL(ls_) || ls_->get_ls_id() != ls_id) {
       ret = OB_LS_NOT_EXIST;
     } else {
-      ret = fn(ls_id, ls);
+      ret = fn(ls_id, ls_);
     }
   }
   return ret;
