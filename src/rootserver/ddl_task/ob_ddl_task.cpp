@@ -393,6 +393,9 @@ int ObDDLTask::get_ddl_type_str(const int64_t ddl_type, const char *&ddl_type_st
     case DDL_DROP_VEC_IVFPQ_INDEX:
       ddl_type_str = "drop vec index";
       break;
+    case DDL_ALTER_COLUMN_GROUP:
+      ddl_type_str = "alter column group";
+      break;
     case DDL_MVIEW_COMPLETE_REFRESH:
       ddl_type_str = "mview complete refresh";
       break;
@@ -3194,6 +3197,7 @@ int ObDDLTaskRecordOperator::check_has_conflict_ddl(
               case ObDDLType::DDL_TABLE_REDEFINITION:
               case ObDDLType::DDL_DIRECT_LOAD:
               case ObDDLType::DDL_DIRECT_LOAD_INSERT:
+              case ObDDLType::DDL_ALTER_COLUMN_GROUP:
               case ObDDLType::DDL_MVIEW_COMPLETE_REFRESH:
               case ObDDLType::DDL_PARTITION_SPLIT_RECOVERY_TABLE_REDEFINITION:
                 has_conflict_ddl = true;

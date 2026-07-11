@@ -617,7 +617,7 @@ public:
   bool is_sensitive_;    // whether it contains sensitive information, if so, do not record in sql_audit
   bool is_protocol_weak_read_; // record whether proxy set weak read for this request in protocol flag
   common::ObFixedArray<int64_t, common::ObIAllocator> multi_stmt_rowkey_pos_;
-  ObRawExpr *snapshot_query_expr_;
+  ObRawExpr *flashback_query_expr_;
   ObBaselineKey bl_key_;
   bool is_execute_call_stmt_;
   bool is_text_ps_mode_;

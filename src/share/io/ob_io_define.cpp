@@ -430,7 +430,7 @@ bool ObSNIOInfo::is_valid() const
     // in order to address concurrent write issues, archive checkpoint module would write
     // multiple non-content objects (it stores content in object name) whose size = 0
     && (flag_.is_sync() ? size_ >= 0 : size_ > 0)
-    && timeout_us_ >= 0
+    && timeout_us_ >= 0 //todo qilu: reopen after column_store steady
     && flag_.is_valid()
     && (flag_.is_read() || nullptr != buf_);
 }
@@ -562,7 +562,7 @@ bool ObIOResult::is_valid() const
     // in order to address concurrent write issues, archive checkpoint module would write
     // multiple non-content objects (it stores content in object name) whose size = 0
     && (flag_.is_sync() ? size_ >= 0 : size_ > 0)
-    && timeout_us_ >= 0
+    && timeout_us_ >= 0 //todo qilu: reopen after column_store steady
     && flag_.is_valid()
     && (flag_.is_read() ? (nullptr != io_callback_ || nullptr != user_data_buf_ || flag_.is_detect()) : nullptr != buf_);
 }

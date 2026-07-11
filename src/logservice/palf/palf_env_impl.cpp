@@ -22,7 +22,6 @@
 #include "palf_handle.h"
 #include "share/ob_ls_id.h"                                     // ObLSID
 #include "share/ob_local_device.h"                            // ObLocalDevice
-#include "share/resource_manager/ob_resource_manager.h"       // ObResourceManager
 #include "share/io/ob_io_manager.h"                           // ObIOManager
 
 namespace oceanbase
@@ -189,7 +188,6 @@ int PalfEnvImpl::init(
     ILogBlockPool *log_block_pool,
     PalfMonitorCb *monitor,
     common::ObIODevice *log_local_device,
-    ObResourceManager *resource_manager,
     ObIOManager *io_manager)
 {
   int ret = OB_SUCCESS;
@@ -200,10 +198,10 @@ int PalfEnvImpl::init(
     PALF_LOG(ERROR, "PalfEnvImpl is inited twiced", K(ret));
   } else if (OB_ISNULL(base_dir) || !self.is_valid()
              || OB_ISNULL(log_alloc_mgr) || OB_ISNULL(log_block_pool) || OB_ISNULL(monitor) 
-             || OB_ISNULL(log_local_device) || OB_ISNULL(resource_manager) || OB_ISNULL(io_manager)) {
+             || OB_ISNULL(log_local_device) || OB_ISNULL(io_manager)) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "invalid arguments", K(ret), K(base_dir), K(self),
-             KP(log_alloc_mgr), KP(log_block_pool), KP(monitor), KP(log_local_device), KP(resource_manager), KP(io_manager));
+             KP(log_alloc_mgr), KP(log_block_pool), KP(monitor), KP(log_local_device), KP(io_manager));
   } else if (OB_FAIL(init_log_io_worker_config_(options.disk_options_.log_writer_parallelism_,
                                                 log_io_worker_config_))) {
     PALF_LOG(WARN, "init_log_io_worker_config_ failed", K(options));
@@ -214,7 +212,7 @@ int PalfEnvImpl::init(
   } else if (OB_FAIL(cb_thread_pool_.init(io_cb_num, this))) {
     PALF_LOG(ERROR, "LogIOTaskThreadPool init failed", K(ret));
   } else if (OB_FAIL(log_io_worker_wrapper_.init(log_io_worker_config_,
-                                                 cb_thread_pool_.get_tg_id(),
+                                                 &cb_thread_pool_,
                                                  log_alloc_mgr, this))) {
     PALF_LOG(ERROR, "LogIOWorker init failed", K(ret));
   } else if (OB_FAIL(log_shared_queue_th_.init(this))) {
@@ -235,7 +233,7 @@ int PalfEnvImpl::init(
     PALF_LOG(ERROR, "disk_options_wrapper_ init failed", K(ret));
   } else if (OB_FAIL(log_updater_.init(this))) {
     PALF_LOG(ERROR, "LogUpdater init failed", K(ret));
-  } else if (OB_FAIL(io_adapter_.init(log_local_device, resource_manager, io_manager))) {
+  } else if (OB_FAIL(io_adapter_.init(log_local_device, io_manager))) {
     PALF_LOG(ERROR, "LogIOAdapter init failed", K(ret));
   } else {
     log_alloc_mgr_ = log_alloc_mgr;

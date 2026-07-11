@@ -52,12 +52,16 @@ class ObSchemaReleaseTimeTask: public common::ObTimerTask
 public:
   ObSchemaReleaseTimeTask();
   virtual ~ObSchemaReleaseTimeTask() {}
-  int init(ObServerSchemaUpdater &schema_updater, int tg_id);
+  int init(ObServerSchemaUpdater &schema_updater);
+  void stop();
+  void wait();
+  void destroy();
   virtual void runTimerTask() override;
 private:
   int schedule_();
 private:
   ObServerSchemaUpdater *schema_updater_;
+  common::ObTimer timer_;
   bool is_inited_;
 };
 

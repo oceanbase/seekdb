@@ -25,6 +25,7 @@
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
+#include "sql/resolver/ddl/ob_flashback_stmt.h"
 #include "observer/ob_server_event_history_table_operator.h"
 #include "storage/ob_partition_pre_split.h"
 
@@ -275,8 +276,16 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
     // Handle the scenario of leader-follower switch, if a switch occurs during activation, directly return user session_killed;
     // Subsequent standby database will handle this index;
     if (OB_FAIL(ret)) {
-    } else {
+    } else if (true) {
       //no need to process sys tenant
+    } else {
+      bool is_standby = false;
+      if (OB_FAIL(ObShareUtil::table_check_if_tenant_role_is_standby( is_standby))) {
+        LOG_WARN("fail to execute table_check_if_tenant_role_is_standby", KR(ret));
+      } else if (is_standby) {
+        ret = OB_SESSION_KILLED;
+        LOG_WARN("create index while switchoverd, kill session", KR(ret));
+      }
     }
 
     if (OB_FAIL(ret)) {
@@ -388,6 +397,34 @@ int ObDropIndexExecutor::execute(ObExecContext &ctx, ObDropIndexStmt &stmt)
     "table_id", res.index_table_id_,
     "schema_version", res.schema_version_);
   SQL_ENG_LOG(INFO, "finish drop index execute.", K(ret), "ddl_event_info", ObDDLEventInfo());
+  return ret;
+}
+
+int ObFlashBackIndexExecutor::execute(ObExecContext &ctx, ObFlashBackIndexStmt &stmt) {
+  int ret = OB_SUCCESS;
+  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  const obcall::ObFlashBackIndexArg &flashback_index_arg = stmt.get_flashback_index_arg();
+  ObString first_stmt;
+  if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
+    LOG_WARN("fail to get first stmt" , K(ret));
+  } else {
+    const_cast<obcall::ObFlashBackIndexArg&>(flashback_index_arg).ddl_stmt_str_ = first_stmt;
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get task executor context failed");
+  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->flashback_index(flashback_index_arg); }))) {
+    LOG_WARN("flashback index failed", "dst", GCTX.self_addr(), K(ret));
+  }
+  SERVER_EVENT_ADD("ddl", "flashback index execute finish",
+    "ret", ret,
+    "trace_id", *ObCurTraceId::get_trace_id(),
+    "rpc_dst", GCTX.self_addr(),
+    "origin_table_name", flashback_index_arg.origin_table_name_,
+    "new_table_name", flashback_index_arg.new_table_name_,
+    "info", flashback_index_arg.new_db_name_);
+  SQL_ENG_LOG(INFO, "finish flashback index execute.", K(ret), "ddl_event_info", ObDDLEventInfo());
   return ret;
 }
 

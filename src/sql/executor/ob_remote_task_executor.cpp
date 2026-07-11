@@ -41,6 +41,7 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
   ObQueryRetryInfo *retry_info = NULL;
   ObTask task;
   bool has_sent_task = false;
+  bool has_transfer_err = false;
 
   if (OB_ISNULL(task_info)) {
     ret = OB_INVALID_ARGUMENT;
@@ -72,7 +73,8 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
                                     task,
                                     task_info->get_task_location().get_server(),
                                     *handler,
-                                    has_sent_task))) {
+                                    has_sent_task,
+                                    has_transfer_err))) {
         bool skip_failed_tasks = false;
         int check_ret = OB_SUCCESS;
         if (OB_SUCCESS != (check_ret = should_skip_failed_tasks(*task_info, skip_failed_tasks))) {
@@ -103,6 +105,7 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
         int tmp_ret = handle_tx_after_rpc(handler->get_result(),
                                         session,
                                         has_sent_task,
+                                        has_transfer_err,
                                         plan,
                                           query_ctx);
         ret = COVER_SUCC(tmp_ret);
@@ -185,6 +188,7 @@ int ObRemoteTaskExecutor::build_task(ObExecContext &query_ctx,
 int ObRemoteTaskExecutor::handle_tx_after_rpc(ObScanner *scanner,
                                               ObSQLSessionInfo *session,
                                               const bool has_sent_task,
+                                              const bool has_transfer_err,
                                               const ObPhysicalPlan *phy_plan,
                                               ObExecContext &exec_ctx)
 {
@@ -197,7 +201,8 @@ int ObRemoteTaskExecutor::handle_tx_after_rpc(ObScanner *scanner,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("dml need acquire transaction", K(ret), KPC(session));
   } else if (phy_plan->is_stmt_modify_trans() && has_sent_task) {
-    if (OB_ISNULL(scanner)) {
+    if (has_transfer_err) {
+    } else if (OB_ISNULL(scanner)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("task result is NULL", K(ret));
     } else if (OB_FAIL(share::g_mp->trans_service()
@@ -211,10 +216,10 @@ int ObRemoteTaskExecutor::handle_tx_after_rpc(ObScanner *scanner,
                 "scanner_trans_result", scanner->get_trans_result(),
                 K(tx_desc));
     }
-    if (OB_FAIL(ret)) {
+    if (has_transfer_err || OB_FAIL(ret)) {
       if (exec_ctx.use_remote_sql()) {
         // ignore ret
-        LOG_WARN("remote execute use sql failed, tx will rollback", K(ret));
+        LOG_WARN("remote execute use sql fail with transfer_error, tx will rollback", K(ret));
         session->get_trans_result().set_incomplete();
       } else {
         ObDASCtx &das_ctx = DAS_CTX(exec_ctx);
@@ -228,7 +233,7 @@ int ObRemoteTaskExecutor::handle_tx_after_rpc(ObScanner *scanner,
          LOG_INFO("add touched ls succ", K(ls_ids));
         }
         if (OB_TMP_FAIL(tmp_ret)) {
-          LOG_WARN("remote execute use plan failed and try add touched ls failed, tx will rollback", K(tmp_ret));
+          LOG_WARN("remote execute use plan fail with transfer_error and try add touched ls failed, tx will rollback", K(tmp_ret));
           session->get_trans_result().set_incomplete();
           ret = COVER_SUCC(tmp_ret);
         }

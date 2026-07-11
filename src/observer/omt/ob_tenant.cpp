@@ -25,7 +25,6 @@
 #include <sys/resource.h>
 #endif
 
-#include "share/resource_manager/ob_resource_manager.h"
 #include "sql/engine/px/ob_px_target_monitor.h"
 #include "sql/dtl/ob_dtl_fc_server.h"
 #include "observer/ob_srv_network_frame.h"
@@ -263,9 +262,7 @@ void ObPxPool::run1()
     pm->set_tenant_ctx(common::ObCtxIds::DEFAULT_CTX_ID);
   }
   CLEAR_INTERRUPTABLE();
-  ObCgroupCtrl *cgroup_ctrl = GCTX.cgroup_ctrl_;
   LOG_INFO("run px pool", K(group_id_), K_(active_threads));
-  SET_GROUP_ID();
 
 	if (!is_inited_) {
     queue_.set_limit(common::ObServerConfig::get_instance().tenant_task_queue_size);
@@ -330,9 +327,8 @@ void ObPxPool::stop()
 
 ObTenant::ObTenant(const int64_t epoch,
                    const int64_t times_of_workers,
-                   ObCgroupCtrl &cgroup_ctrl,
                    const bool embedded)
-    : ObTenantBase(epoch, true),
+    : ObTenantBase(epoch),
       meta_lock_(),
       tenant_meta_(),
       total_ddl_thread_cnt_(0),
@@ -354,7 +350,6 @@ ObTenant::ObTenant(const int64_t epoch,
       lock_(),
       mtl_init_ctx_(nullptr),
       workers_lock_(common::ObLatchIds::TENANT_WORKER_LOCK),
-      cgroup_ctrl_(cgroup_ctrl),
       embedded_(embedded),
       disable_user_sched_(false),
       token_change_ts_(0),
@@ -383,7 +378,7 @@ int ObTenant::init(const ObTenantMeta &meta)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(ObTenantBase::init(&cgroup_ctrl_))) {
+  if (OB_FAIL(ObTenantBase::init())) {
     LOG_WARN("fail to init tenant base", K(ret));
   } else if (OB_FAIL(req_queue_.init(AFFINITY_CTRL.get_num_nodes()))) {
     // For now only the enable_numa_aware mode can ensure the number of worker threads is at least the number of
@@ -533,9 +528,6 @@ ERRSIM_POINT_DEF(CREATE_MTL_MODULE_FAIL)
 int ObTenant::create_tenant_module()
 {
   int ret = OB_SUCCESS;
-  const double max_cpu = static_cast<double>(tenant_meta_.unit_.config_.max_cpu());
-  // set tenant ctx to global
-  ObTenantSwitchGuard guard(this);
   // set tenant init param
   FLOG_INFO("begin create mtl module>>>>");
 
@@ -555,8 +547,6 @@ int ObTenant::create_tenant_module()
     LOG_ERROR("init mtl module failed", K(ret));
   } else if (OB_FAIL(OBSERVER.obs_start_modules())) {
     LOG_ERROR("start mtl module failed", K(ret));
-  } else if (OB_FAIL(update_thread_cnt(max_cpu))) {
-    LOG_ERROR("update mtl module thread cnt fail", K(ret));
   }
 
   FLOG_INFO("finish create mtl module>>>>", K(ret));
@@ -613,7 +603,6 @@ void* ObTenant::wait(void* t)
   }
 
   if (!false && !tenant->wait_mtl_finished_) {
-    ObTenantSwitchGuard guard(tenant);
     OBSERVER.obs_stop_modules();
     OBSERVER.obs_wait_modules();
     tenant->wait_mtl_finished_ = true;
@@ -665,12 +654,10 @@ void OB_WEAK_SYMBOL print_all_thread(const char* desc)
 
 void ObTenant::destroy()
 {
-  int tmp_ret = OB_SUCCESS;
   if (ctx_ != nullptr) {
     DESTROY_ENTITY(ctx_);
     ctx_ = nullptr;
   }
-  ObTenantSwitchGuard guard(this);
   print_all_thread("TENANT_BEFORE_DESTROY");
   OBSERVER.obs_destroy_modules();
   ObTenantBase::destroy();
@@ -680,36 +667,17 @@ void ObTenant::destroy()
     mtl_init_ctx_ = nullptr;
   }
 
-  if (!cgroup_ctrl_.is_valid()) {
-    // do nothing
-  } else if (OB_TMP_FAIL(cgroup_ctrl_.remove_cgroup())) {
-    LOG_WARN_RET(tmp_ret, "remove tenant cgroup failed", K(tmp_ret), K(id()));
-  }
-
   req_queue_.destroy();
 }
 
 void ObTenant::set_unit_max_cpu(double cpu)
 {
-  int tmp_ret = OB_SUCCESS;
   unit_max_cpu_ = cpu;
-  if (!cgroup_ctrl_.is_valid() || true) {
-    // do nothing
-    // meta tenant and sys tenant are unlimited
-  } else if (OB_TMP_FAIL(cgroup_ctrl_.set_cpu_cfs_quota(cpu))) {
-    _LOG_WARN_RET(tmp_ret, "set tenant cpu cfs quota failed, cpu=%.2f", cpu);
-  }
 }
 
 void ObTenant::set_unit_min_cpu(double cpu)
 {
-  int tmp_ret = OB_SUCCESS;
   unit_min_cpu_ = cpu;
-  if (!cgroup_ctrl_.is_valid()) {
-    // do nothing
-  } else if (OB_TMP_FAIL(cgroup_ctrl_.set_cpu_shares(cpu))) {
-    _LOG_WARN_RET(tmp_ret, "set tenant cpu shares failed, cpu=%.2f", cpu);
-  }
 }
 
 int64_t ObTenant::cpu_quota_concurrency() const
@@ -883,116 +851,6 @@ int ObTenant::timeup()
   return OB_SUCCESS;
 }
 
-int ObTenant::get_default_group_throttled_time(int64_t &default_group_throttled_time)
-{
-  int ret = OB_SUCCESS;
-  int64_t current_default_group_throttled_time_us = -1;
-  if (OB_FAIL(GCTX.cgroup_ctrl_->get_throttled_time(current_default_group_throttled_time_us, OBCG_DEFAULT_GROUP_ID))) {
-    LOG_WARN("get throttled time failed", K(ret), K(id()));
-  } else if (current_default_group_throttled_time_us > 0) {
-    default_group_throttled_time = current_default_group_throttled_time_us - default_group_throttled_time_us_;
-    default_group_throttled_time_us_ = current_default_group_throttled_time_us;
-  }
-  return ret;
-}
-
-void ObTenant::print_throttled_time()
-{
-  class ThrottledTimeLog
-  {
-  public:
-    ThrottledTimeLog(ObTenant *tenant) : tenant_(tenant)
-    {}
-    ~ThrottledTimeLog()
-    {}
-    int64_t to_string(char *buf, const int64_t len) const
-    {
-      int64_t pos = 0;
-      int tmp_ret = OB_SUCCESS;
-      int64_t tenant_throttled_time = 0;
-      int64_t group_throttled_time = 0;
-
-      if (OB_TMP_FAIL(tenant_->get_default_group_throttled_time(group_throttled_time))) {
-        LOG_WARN_RET(tmp_ret, "get throttled time failed", K(tmp_ret));
-      } else {
-        tenant_throttled_time += group_throttled_time;
-        databuff_printf(buf, len, pos, "group_id: 0, group: OBCG_DEFAULT, throttled_time: %ld;", group_throttled_time);
-      }
-
-      ObCgSet &set = ObCgSet::instance();
-
-      ObRefHolder<ObTenantIOManager> tenant_holder;
-      if (OB_TMP_FAIL(OB_IO_MANAGER.get_tenant_io_manager(tenant_holder))) {
-        LOG_WARN_RET(tmp_ret, "get tenant io manager failed", K(tmp_ret), K(tenant_->id()));
-      } else {
-        const uint64_t MODE_CNT = static_cast<uint64_t>(ObIOMode::MAX_MODE) + 1;
-        for (int64_t i = 0; i < tenant_holder.get_ptr()->get_group_num(); i++) {
-          uint64_t group_config_index = i * MODE_CNT;
-          if (!tenant_holder.get_ptr()->get_io_config().group_configs_.at(group_config_index).deleted_) {
-            uint64_t group_id = tenant_holder.get_ptr()->get_io_config().group_configs_.at(group_config_index).group_id_;
-            if (OB_TMP_FAIL(tenant_holder.get_ptr()->get_throttled_time(group_id, group_throttled_time))) {
-              LOG_WARN_RET(tmp_ret, "get throttled time failed", K(tmp_ret), K(group_id));
-            } else {
-              tenant_throttled_time += group_throttled_time;
-              databuff_printf(buf,
-                  len,
-                  pos,
-                  "group_id: %ld, throttled_time: %ld;",
-                  group_id,
-                  group_throttled_time);
-            }
-          }
-        }
-      }
-      databuff_printf(
-          buf, len, pos, "tenant_throttled_time: %ld;", tenant_throttled_time);
-      return pos;
-    }
-    ObTenant *tenant_;
-  };
-  ThrottledTimeLog throttled_time_log(this);
-  LOG_INFO("dump throttled time info", K(id()), K(throttled_time_log));
-}
-
-void ObTenant::regist_threads_to_cgroup()
-{
-  int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-
-  // set cgroup configs
-  if (OB_TMP_FAIL(cgroup_ctrl_.set_cpu_shares(unit_min_cpu_, OB_INVALID_GROUP_ID))) {
-    LOG_WARN_RET(tmp_ret, "set tenant cpu shares failed", K(tmp_ret), K(id()), K_(unit_min_cpu));
-  } else if (OB_TMP_FAIL(
-                 cgroup_ctrl_.set_cpu_cfs_quota(true ? -1 : unit_max_cpu_, OB_INVALID_GROUP_ID))) {
-    LOG_WARN_RET(tmp_ret, "set tenant cpu cfs quota failed", K(tmp_ret), K(id()), K_(unit_max_cpu));
-  }
-
-  if (OB_SUCC(thread_list_lock_.trylock())) {
-#ifndef _WIN32
-    DLIST_FOREACH_REMOVESAFE(thread_list_node_, thread_list_)
-    {
-      Thread *thread = thread_list_node_->get_data();
-      char *thread_base = (char *)thread->get_pthread();
-      Worker *worker = nullptr;
-      if (OB_NOT_NULL(thread_base)) {
-        GET_OTHER_TSI_ADDR(worker, &Worker::self_);
-        if (OB_NOT_NULL(worker) && OB_NOT_NULL(GCTX.cgroup_ctrl_) && GCTX.cgroup_ctrl_->is_valid() &&
-            OB_FAIL(GCTX.cgroup_ctrl_->add_thread_to_cgroup_(thread->get_tid(), id()))) {
-          LOG_WARN("regist thread to cgroup failed",
-              K(ret),
-              K(thread->get_tid()),
-              K(id()),
-              KP(worker),
-              K(worker->get_group_id()));
-        }
-      }
-    }
-#endif
-    LOG_INFO("regist threads to cgroup from thread list", K(ret), K(id()), K(thread_list_.get_size()));
-    thread_list_lock_.unlock();
-  }
-}
-
 void ObTenant::handle_retry_req(bool need_clear)
 {
   int ret = OB_SUCCESS;
@@ -1040,7 +898,6 @@ int ObTenant::acquire_more_worker(int64_t num, int64_t &succ_num, bool force)
   int ret = OB_SUCCESS;
   succ_num = 0;
 
-  ObTenantSwitchGuard guard(this);
   while (OB_SUCC(ret) && num > succ_num) {
     ObThWorker *w = nullptr;
     if (OB_FAIL(create_worker(w, this))) {
@@ -1105,15 +962,12 @@ void ObTenant::periodically_check()
 void ObTenant::check_dtl()
 {
   int ret = OB_SUCCESS;
-  {
-    ObTenantSwitchGuard guard(this);
-    auto tenant_dfc = share::g_mp->tenant_dfc();
-    if (OB_NOT_NULL(tenant_dfc)) {
-      tenant_dfc->check_dtl();
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to switch to tenant", K(id()), K(ret));
-    }
+  auto tenant_dfc = share::g_mp->tenant_dfc();
+  if (OB_NOT_NULL(tenant_dfc)) {
+    tenant_dfc->check_dtl();
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tenant dtl fc server is null", K(id()), K(ret));
   }
 }
 
@@ -1133,15 +987,12 @@ void ObTenant::check_parallel_servers_target()
 void ObTenant::check_px_thread_recycle()
 {
   int ret = OB_SUCCESS;
-  {
-    ObTenantSwitchGuard guard(this);
-    auto px_pools = share::g_mp->px_pools();
-    if (OB_NOT_NULL(px_pools)) {
-      px_pools->thread_recycle();
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to switch to tenant", K(id()), K(ret));
-    }
+  auto px_pools = share::g_mp->px_pools();
+  if (OB_NOT_NULL(px_pools)) {
+    px_pools->thread_recycle();
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tenant px pools is null", K(id()), K(ret));
   }
 }
 

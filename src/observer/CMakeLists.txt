@@ -25,7 +25,6 @@ ob_set_subtarget(ob_server common
   ob_server_utils.cpp
   ob_signal_handle.cpp
   ob_srv_deliver.cpp
-  ob_thread_mgr.cpp
   ob_srv_network_frame.cpp
   ob_srv_xlator.cpp
   ob_ex_rpc.cpp
@@ -421,7 +420,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_sql_plan.cpp
   virtual_table/ob_all_virtual_opt_stat_gather_monitor.cpp
   virtual_table/ob_all_virtual_thread.cpp
-  virtual_table/ob_all_virtual_cgroup_config.cpp
   virtual_table/ob_all_virtual_tenant_resource_limit.cpp
   virtual_table/ob_all_virtual_tenant_resource_limit_detail.cpp
   virtual_table/ob_all_virtual_activity_metrics.cpp

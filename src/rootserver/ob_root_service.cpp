@@ -65,7 +65,6 @@
 #include "share/table/ob_ttl_util.h"
 #include "rootserver/ob_ai_model_ddl_service.h"
 #include "lib/utility/ob_print_utils.h"     // databuff_printf
-#include "share/ob_thread_mgr.h"
 #include "share/ob_ex_rpc.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
@@ -328,10 +327,10 @@ ObRootService::ObRootService()
     root_minor_freeze_(),
     ddl_service_(),
     bootstrap_lock_(),
-    restart_task_tg_id_(-1),
-    load_ddl_task_tg_id_(-1),
-    event_table_clear_task_tg_id_(-1),
-    purge_recyclebin_task_tg_id_(-1),
+    restart_task_timer_(),
+    load_ddl_task_timer_(),
+    event_table_clear_task_timer_(),
+    purge_recyclebin_task_timer_(),
     restart_task_(*this),
     load_ddl_task_(*this),
     event_table_clear_task_(ROOTSERVICE_EVENT_INSTANCE,
@@ -385,14 +384,14 @@ int ObRootService::init(ObServerConfig &config,
     schema_service_ = schema_service;
   }
 
-  if (FAILEDx(TG_CREATE(lib::TGDefIDs::RootServiceTaskTimer, restart_task_tg_id_))) {
-    FLOG_WARN("create rs restart task timer tg failed", KR(ret));
-  } else if (OB_FAIL(TG_CREATE(lib::TGDefIDs::RootServiceTaskTimer, load_ddl_task_tg_id_))) {
-    FLOG_WARN("create rs load ddl task timer tg failed", KR(ret));
-  } else if (OB_FAIL(TG_CREATE(lib::TGDefIDs::RootServiceTaskTimer, event_table_clear_task_tg_id_))) {
-    FLOG_WARN("create rs event table clear task timer tg failed", KR(ret));
-  } else if (OB_FAIL(TG_CREATE(lib::TGDefIDs::RootServiceTaskTimer, purge_recyclebin_task_tg_id_))) {
-    FLOG_WARN("create rs purge recyclebin task timer tg failed", KR(ret));
+  if (FAILEDx(restart_task_timer_.init("RSRestart", ObMemAttr("RSRestart")))) {
+    FLOG_WARN("init rs restart task timer failed", KR(ret));
+  } else if (OB_FAIL(load_ddl_task_timer_.init("RSLoadDDL", ObMemAttr("RSLoadDDL")))) {
+    FLOG_WARN("init rs load ddl task timer failed", KR(ret));
+  } else if (OB_FAIL(event_table_clear_task_timer_.init("RSEvtClear", ObMemAttr("RSEvtClear")))) {
+    FLOG_WARN("init rs event table clear task timer failed", KR(ret));
+  } else if (OB_FAIL(purge_recyclebin_task_timer_.init("RSPurgeRecycle", ObMemAttr("RSPurgeRecycle")))) {
+    FLOG_WARN("init rs purge recyclebin task timer failed", KR(ret));
   } else if (OB_FAIL(root_minor_freeze_.init())) {
     // init root minor freeze
     FLOG_WARN("init root_minor_freeze_ failed", KR(ret));
@@ -454,23 +453,11 @@ void ObRootService::destroy()
     FLOG_INFO("schema history recycler destroy");
   }
 
-  if (restart_task_tg_id_ != -1) {
-    TG_DESTROY(restart_task_tg_id_);
-    restart_task_tg_id_ = -1;
-  }
-  if (load_ddl_task_tg_id_ != -1) {
-    TG_DESTROY(load_ddl_task_tg_id_);
-    load_ddl_task_tg_id_ = -1;
-  }
-  if (event_table_clear_task_tg_id_ != -1) {
-    TG_DESTROY(event_table_clear_task_tg_id_);
-    event_table_clear_task_tg_id_ = -1;
-  }
-  if (purge_recyclebin_task_tg_id_ != -1) {
-    TG_DESTROY(purge_recyclebin_task_tg_id_);
-    purge_recyclebin_task_tg_id_ = -1;
-  }
-  FLOG_INFO("task timer tg destroy");
+  restart_task_timer_.destroy();
+  load_ddl_task_timer_.destroy();
+  event_table_clear_task_timer_.destroy();
+  purge_recyclebin_task_timer_.destroy();
+  FLOG_INFO("task timer destroy");
 
   ROOTSERVICE_EVENT_INSTANCE.destroy();
   FLOG_INFO("event table operator destroy");
@@ -509,14 +496,14 @@ int ObRootService::start_service()
   } else {
     sql_proxy_.set_active();
     tenant_ddl_service_.restart();
-    if (OB_FAIL(TG_START(restart_task_tg_id_))) {
-      FLOG_WARN("restart task timer tg start failed", KR(ret), K_(restart_task_tg_id));
-    } else if (OB_FAIL(TG_START(load_ddl_task_tg_id_))) {
-      FLOG_WARN("load ddl task timer tg start failed", KR(ret), K_(load_ddl_task_tg_id));
-    } else if (OB_FAIL(TG_START(event_table_clear_task_tg_id_))) {
-      FLOG_WARN("event table clear task timer tg start failed", KR(ret), K_(event_table_clear_task_tg_id));
-    } else if (OB_FAIL(TG_START(purge_recyclebin_task_tg_id_))) {
-      FLOG_WARN("purge recyclebin task timer tg start failed", KR(ret), K_(purge_recyclebin_task_tg_id));
+    if (OB_FAIL(restart_task_timer_.start())) {
+      FLOG_WARN("restart task timer start failed", KR(ret));
+    } else if (OB_FAIL(load_ddl_task_timer_.start())) {
+      FLOG_WARN("load ddl task timer start failed", KR(ret));
+    } else if (OB_FAIL(event_table_clear_task_timer_.start())) {
+      FLOG_WARN("event table clear task timer start failed", KR(ret));
+    } else if (OB_FAIL(purge_recyclebin_task_timer_.start())) {
+      FLOG_WARN("purge recyclebin task timer start failed", KR(ret));
     }
     if (FAILEDx(rs_status_.set_rs_status(status::IN_SERVICE))) {
       FLOG_WARN("fail to set rs status", KR(ret));
@@ -610,11 +597,11 @@ int ObRootService::stop()
       FLOG_INFO("minor freeze stop");
     }
     if (OB_SUCC(ret)) {
-      TG_STOP(restart_task_tg_id_);
-      TG_STOP(load_ddl_task_tg_id_);
-      TG_STOP(event_table_clear_task_tg_id_);
-      TG_STOP(purge_recyclebin_task_tg_id_);
-      FLOG_INFO("task timer tg stop");
+      restart_task_timer_.stop();
+      load_ddl_task_timer_.stop();
+      event_table_clear_task_timer_.stop();
+      purge_recyclebin_task_timer_.stop();
+      FLOG_INFO("task timer stop");
       schema_history_recycler_.stop();
       FLOG_INFO("schema_history_recycler stop");
       dbms_job::ObDBMSJobMaster::get_instance().stop();
@@ -639,11 +626,11 @@ void ObRootService::wait()
   FLOG_INFO("start to wait all thread exit");
   schema_history_recycler_.wait();
   FLOG_INFO("schema_history_recycler exit success");
-  if (restart_task_tg_id_ != -1) { TG_WAIT(restart_task_tg_id_); }
-  if (load_ddl_task_tg_id_ != -1) { TG_WAIT(load_ddl_task_tg_id_); }
-  if (event_table_clear_task_tg_id_ != -1) { TG_WAIT(event_table_clear_task_tg_id_); }
-  if (purge_recyclebin_task_tg_id_ != -1) { TG_WAIT(purge_recyclebin_task_tg_id_); }
-  FLOG_INFO("task timer tg exit success");
+  if (restart_task_timer_.inited()) { restart_task_timer_.wait(); }
+  if (load_ddl_task_timer_.inited()) { load_ddl_task_timer_.wait(); }
+  if (event_table_clear_task_timer_.inited()) { event_table_clear_task_timer_.wait(); }
+  if (purge_recyclebin_task_timer_.inited()) { purge_recyclebin_task_timer_.wait(); }
+  FLOG_INFO("task timer exit success");
   THE_RS_JOB_TABLE.reset_max_job_id();
   int64_t cost = ObTimeUtility::current_time() - start_time;
   ROOTSERVICE_EVENT_ADD("root_service", "finish_wait_stop", K(cost));
@@ -671,7 +658,7 @@ int ObRootService::schedule_recyclebin_task(int64_t delay)
   int ret = OB_SUCCESS;
   const bool did_repeat = false;
 
-  if (OB_FAIL(TG_SCHEDULE(purge_recyclebin_task_tg_id_,
+  if (OB_FAIL(purge_recyclebin_task_timer_.schedule(
               purge_recyclebin_task_, delay, did_repeat))) {
     if (OB_CANCELED != ret) {
       LOG_ERROR("schedule purge recyclebin task failed", KR(ret), K(delay), K(did_repeat));
@@ -696,12 +683,11 @@ int ObRootService::schedule_load_ddl_task()
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(TG_TASK_EXIST(load_ddl_task_tg_id_, load_ddl_task_, task_exist))) {
-    LOG_WARN("failed to check task exist", KR(ret));
+  } else if (FALSE_IT(task_exist = load_ddl_task_timer_.task_exist(load_ddl_task_))) {
   } else if (task_exist) {
     // ignore error
     LOG_WARN("load ddl task already exist", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(load_ddl_task_tg_id_, load_ddl_task_, delay, did_repeat))) {
+  } else if (OB_FAIL(load_ddl_task_timer_.schedule(load_ddl_task_, delay, did_repeat))) {
     LOG_WARN("fail to add timer task", K(ret));
   } else {
     LOG_INFO("succeed to add load ddl task");
@@ -719,8 +705,8 @@ int ObRootService::schedule_restart_timer_task(const int64_t delay)
     const bool did_repeat = true;
     const bool immediate = delay <= 0;
     const int64_t schedule_delay = delay <= 0 ? config_->rootservice_ready_check_interval : delay;
-    if (OB_FAIL(TG_SCHEDULE(restart_task_tg_id_, restart_task_,
-                                           schedule_delay, did_repeat, immediate))) {
+    if (OB_FAIL(restart_task_timer_.schedule(restart_task_,
+                                             schedule_delay, did_repeat, immediate))) {
       LOG_WARN("schedule restart task failed", K(ret), K(delay), K(did_repeat));
     } else {
       LOG_INFO("submit restart task success", K(delay), K(schedule_delay), K(immediate));
@@ -1841,7 +1827,6 @@ int ObRootService::alter_table(const obcall::ObAlterTableArg &arg, obcall::ObAlt
                                    orig_table_schema->get_table_id(),
                                    orig_table_schema->get_schema_version(),
                                    arg.parallelism_,
-                                   arg.consumer_group_id_,
                                    &allocator,
                                    &arg,
                                    0 /*parent task id*/);
@@ -2117,7 +2102,6 @@ int ObRootService::drop_table(const obcall::ObDropTableArg &arg, obcall::ObDDLRe
                                target_object_id,
                                schema_version,
                                arg.parallelism_,
-                               arg.consumer_group_id_,
                                &allocator,
                                &arg,
                                0 /* parent task id*/);
@@ -2214,7 +2198,6 @@ int ObRootService::drop_database(const obcall::ObDropDatabaseArg &arg, ObDropDat
                                 database_id,
                                 schema_version,
                                 arg.parallelism_,
-                                arg.consumer_group_id_,
                                 &allocator,
                                 &arg,
                                 0 /* parent task id*/);
@@ -2526,7 +2509,6 @@ int ObRootService::truncate_table(const obcall::ObTruncateTableArg &arg, obcall:
                                    table_schema->get_table_id(),
                                    table_schema->get_schema_version(),
                                    arg.parallelism_,
-                                   arg.consumer_group_id_,
                                    &allocator,
                                    &arg,
                                    0 /* parent task id*/);
@@ -3150,13 +3132,13 @@ int ObRootService::start_timer_tasks()
     LOG_WARN("not init", K(ret));
   }
 
-  if (OB_SUCCESS == ret && OB_FAIL(TG_TASK_EXIST(event_table_clear_task_tg_id_, event_table_clear_task_, task_exist))) {
-    LOG_WARN("failed to check event table clear task exist", KR(ret));
+  if (OB_SUCCESS == ret) {
+    task_exist = event_table_clear_task_timer_.task_exist(event_table_clear_task_);
   }
   if (OB_SUCCESS == ret && !task_exist) {
     const int64_t delay = ERROR_EVENT_TABLE_CLEAR_INTERVAL ? 10 * 1000 * 1000 :
       ObEventHistoryTableOperator::EVENT_TABLE_CLEAR_INTERVAL;
-    if (OB_FAIL(TG_SCHEDULE(event_table_clear_task_tg_id_, event_table_clear_task_, delay, true, true))) {
+    if (OB_FAIL(event_table_clear_task_timer_.schedule(event_table_clear_task_, delay, true, true))) {
       LOG_WARN("start event table clear task failed", K(delay), K(ret));
     } else {
       LOG_INFO("added event_table_clear_task", K(delay));
@@ -3180,10 +3162,10 @@ int ObRootService::stop_timer_tasks()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    TG_CANCEL_TASK(restart_task_tg_id_, restart_task_);
-    TG_CANCEL_TASK(load_ddl_task_tg_id_, load_ddl_task_);
-    TG_CANCEL_TASK(event_table_clear_task_tg_id_, event_table_clear_task_);
-    TG_CANCEL_TASK(purge_recyclebin_task_tg_id_, purge_recyclebin_task_);
+    restart_task_timer_.cancel_task(restart_task_);
+    load_ddl_task_timer_.cancel_task(load_ddl_task_);
+    event_table_clear_task_timer_.cancel_task(event_table_clear_task_);
+    purge_recyclebin_task_timer_.cancel_task(purge_recyclebin_task_);
   }
 
   //stop other timer tasks here
@@ -3209,7 +3191,7 @@ void ObRootService::ObRestartTask::runTimerTask()
   } else if (OB_FAIL(root_service_.after_restart())) {
     LOG_WARN("root service after restart failed", K(ret));
   } else {
-    TG_CANCEL_TASK(root_service_.restart_task_tg_id_, *this);
+    root_service_.restart_task_timer_.cancel_task(*this);
   }
   FLOG_INFO("after_restart task process finish", KR(ret));
 }
@@ -4125,7 +4107,7 @@ void ObRootService::ObLoadDDLTask::runTimerTask()
   if (OB_FAIL(ret)) {
     LOG_WARN("recover ddl task failed", KR(ret));
   } else {
-    TG_CANCEL_TASK(root_service_.load_ddl_task_tg_id_, *this);
+    root_service_.load_ddl_task_timer_.cancel_task(*this);
   }
 }
 

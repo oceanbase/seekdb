@@ -51,6 +51,7 @@ ObLogService::ObLogService() :
   location_adapter_(),
   ls_adapter_(),
   rpc_proxy_(),
+  flashback_service_(),
   monitor_(),
   update_palf_opts_lock_()
 {}
@@ -158,6 +159,7 @@ void ObLogService::destroy()
   location_adapter_.destroy();
   ls_adapter_.destroy();
   rpc_proxy_.destroy();
+  flashback_service_.destroy();
   if (NULL != palf_env_) {
     PalfEnv::destroy_palf_env(palf_env_);
     palf_env_ = NULL;
@@ -233,6 +235,8 @@ int ObLogService::init(const PalfOptions &options,
     CLOG_LOG(WARN, "failed to init location_adapter_", K(ret));
   } else if (OB_FAIL(rpc_proxy_.init())) {
     CLOG_LOG(WARN, "LogServiceRpcProxy init failed", K(ret));
+  } else if (OB_FAIL(flashback_service_.init(self, &location_adapter_, sql_proxy))) {
+    CLOG_LOG(WARN, "failed to init flashback_service_", K(ret));
   } else {
     net_keepalive_adapter_ = net_keepalive_adapter;
     alloc_mgr_ = alloc_mgr;
@@ -627,6 +631,26 @@ int ObLogService::create_ls_(const share::ObLSID &id,
       palf_env_->close(palf_handle);
       palf_env_->remove(id.id());
     }
+  }
+  return ret;
+}
+
+int ObLogService::flashback(const SCN &flashback_scn,
+                            const int64_t timeout_us)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    CLOG_LOG(WARN, "log_service is not inited", K(ret));
+  } else if (!true ||
+      !flashback_scn.is_valid() ||
+      timeout_us <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    CLOG_LOG(WARN, "invalid arguments", K(ret), K(flashback_scn), K(timeout_us));
+  } else if (OB_FAIL(flashback_service_.flashback(flashback_scn, timeout_us))) {
+    CLOG_LOG(WARN, "flashback failed", K(ret), K(flashback_scn), K(timeout_us));
+  } else {
+    CLOG_LOG(INFO, "flashback success", K(ret), K(flashback_scn), K(timeout_us));
   }
   return ret;
 }

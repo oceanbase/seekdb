@@ -35,6 +35,7 @@
 #include "storage/tablet/ob_tablet_obj_load_helper.h"
 #include "share/scn.h"
 #include "storage/blocksstable/index_block/ob_index_block_dual_meta_iterator.h"
+#include "storage/column_store/ob_column_oriented_sstable.h"
 #include "storage/compaction/ob_sstable_builder.h"
 #include "storage/blocksstable/ob_sstable_private_object_cleaner.h"
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
@@ -99,7 +100,9 @@ int ObForkSnapshotRowScan::build_rowkey_read_info(const ObForkScanParam &param)
                                              full_stored_col_cnt,
                                              param.storage_schema_->get_rowkey_column_num(),
                                              cols_desc,
-                                             false /*use_default_compat_version*/))) {
+                                             false /*is_cg_sstable*/,
+                                             false /*use_default_compat_version*/,
+                                             false/*is_cs_replica_compat*/))) {
     LOG_WARN("fail to init rowkey read info", K(ret), KPC(param.storage_schema_));
   }
   if (OB_FAIL(ret) && nullptr != rowkey_read_info_) {
@@ -575,8 +578,11 @@ int ObTabletForkCtx::prepare_index_builder(const ObTabletForkParam &param)
           true/*is_ddl*/, *storage_schema, param.ls_id_,
           param.dest_tablet_id_, merge_type, snapshot_version, param.data_format_version_,
           dst_tablet_handle_.get_obj()->get_tablet_meta().micro_index_clustered_,
+          dst_tablet_handle_.get_obj()->get_transfer_seq(),
           0/*concurrent_cnt*/,
           sstable->get_end_scn(),
+          nullptr/*cg_schema*/,
+          0/*table_cg_idx*/,
           exec_mode))) {
         LOG_WARN("fail to init data store desc", K(ret), K(param.dest_tablet_id_), K(param));
       } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObSSTableIndexBuilder)))) {
@@ -957,7 +963,11 @@ int ObTabletForkReuseTask::process_reuse_sstable()
       LOG_WARN("failed to build migration sstable param", K(ret), K(src_table_key));
     } else if (OB_FAIL(param.init_for_fork(mig_sstable_param, param_->dest_tablet_id_, src_table_key, meta_handle.get_sstable_meta(), fork_snapshot_scn))) {
       LOG_WARN("init for fork failed", K(ret), K(param_->dest_tablet_id_), K(src_table_key), K(fork_snapshot_scn));
-    } else if (OB_FAIL(context_->create_sstable(param, table_handle))) {
+    } else if (param.table_key().is_co_sstable()
+        && OB_FAIL(context_->create_sstable<ObCOSSTableV2>(param, table_handle))) {
+      LOG_ERROR("failed to create co sstable with reused blocks", K(ret));
+    } else if (!param.table_key().is_co_sstable()
+        && OB_FAIL(context_->create_sstable(param, table_handle))) {
       LOG_ERROR("failed to create sstable with reused blocks", K(ret));
     }
 
@@ -1063,7 +1073,11 @@ int ObTabletForkRewriteTask::process()
         } else if (OB_FAIL(create_param.init_for_split(param_->dest_tablet_id_, src_table_key, basic_meta,
             basic_meta.schema_version_, merge_res, max_end_scn))) {
           LOG_WARN("init create param failed", K(ret), K(max_end_scn));
-        } else if (OB_FAIL(context_->create_sstable(create_param, table_handle))) {
+        } else if (create_param.table_key().is_co_sstable()
+            && OB_FAIL(context_->create_sstable<ObCOSSTableV2>(create_param, table_handle))) {
+          LOG_ERROR("failed to create co sstable", K(ret));
+        } else if (!create_param.table_key().is_co_sstable()
+            && OB_FAIL(context_->create_sstable(create_param, table_handle))) {
           LOG_ERROR("failed to create sstable", K(ret));
         }
         if (OB_SUCC(ret)) {
@@ -1148,8 +1162,11 @@ int ObTabletForkRewriteTask::prepare_macro_block_writer(
         snapshot_version,
         param_->data_format_version_,
         micro_index_clustered,
+        context_->dst_tablet_handle_.get_obj()->get_transfer_seq(),
         0/*concurrent_cnt*/,
         sstable_->get_end_scn(),
+        nullptr/* cg_schema */,
+        0/* table_cg_idx */,
         exec_mode))) {
       LOG_WARN("fail to init data store desc", K(ret), K(param_->dest_tablet_id_), KPC(param_));
     } else if (FALSE_IT(data_desc.get_desc().sstable_index_builder_ = sst_idx_builder)) {

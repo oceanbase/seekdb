@@ -131,7 +131,7 @@ public:
   static int deep_copy_index_arg(common::ObIAllocator &allocator, const obcall::ObCreateIndexArg &source_arg, obcall::ObCreateIndexArg &dest_arg);
   bool is_offline_rebuild() const { return create_index_arg_.is_offline_rebuild_; }
   INHERIT_TO_STRING_KV("ObDDLTask", ObDDLTask, K(index_table_id_), K(is_sstable_complete_task_submitted_), K(sstable_complete_request_time_),
-      K(sstable_complete_ts_), K(check_unique_snapshot_), K(complete_sstable_job_ret_code_), K_(redefinition_execution_id), K(create_index_arg_));
+      K(sstable_complete_ts_), K(check_unique_snapshot_), K(complete_sstable_job_ret_code_), K_(redefinition_execution_id), K(create_index_arg_), K(target_cg_cnt_));
 private:
   int prepare();
   int wait_trans_end();
@@ -162,6 +162,7 @@ private:
   int check_build_local_index_single_replica(bool &is_end);
   int check_need_verify_checksum(bool &need_verify);
   bool is_sstable_complete_task_submitted();
+  int check_target_cg_cnt();
   int update_mlog_last_purge_scn();
   bool is_create_partitioned_local_index();
   int serialize_and_update_message();
@@ -183,6 +184,7 @@ private:
   int64_t redefinition_execution_id_;
   ObDDLTabletScheduler tablet_scheduler_;
   obcall::ObCreateIndexArg create_index_arg_; // this is not a valid arg, only has nls formats for now
+  int64_t target_cg_cnt_; 
   bool is_retryable_ddl_;
 };
 

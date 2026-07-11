@@ -1568,7 +1568,7 @@ const char *ObPartitionSplitTask::get_table_schema(const char *table_name)
   if (OB_ALL_TABLE_STAT_TNAME == table_name) {
     ret_table_schema = "gmt_create, gmt_modified, table_id, object_type, last_analyzed, sstable_row_cnt, sstable_avg_row_len, macro_blk_cnt, micro_blk_cnt, memtable_row_cnt, memtable_avg_row_len, row_cnt, avg_row_len, global_stats, user_stats, stattype_locked, stale_stats, spare1, spare2, spare3, spare4, spare5, spare6, index_type"; 
   } else if (OB_ALL_COLUMN_STAT_TNAME == table_name) {
-    ret_table_schema = "gmt_create, gmt_modified, table_id, column_id, object_type, last_analyzed, distinct_cnt, null_cnt, max_value, b_max_value, min_value, b_min_value, avg_len, distinct_cnt_synopsis, distinct_cnt_synopsis_size, sample_size, density, bucket_cnt, histogram_type, global_stats, user_stats, spare1, spare2, spare3, spare4, spare5, spare6";
+    ret_table_schema = "gmt_create, gmt_modified, table_id, column_id, object_type, last_analyzed, distinct_cnt, null_cnt, max_value, b_max_value, min_value, b_min_value, avg_len, distinct_cnt_synopsis, distinct_cnt_synopsis_size, sample_size, density, bucket_cnt, histogram_type, global_stats, user_stats, spare1, spare2, spare3, spare4, spare5, spare6, cg_macro_blk_cnt, cg_micro_blk_cnt, cg_skip_rate"; 
   } else if (OB_ALL_HISTOGRAM_STAT_TNAME == table_name) {
     ret_table_schema = "gmt_create, gmt_modified, table_id, column_id, endpoint_num, object_type, endpoint_normalized_value, endpoint_value, b_endpoint_value, endpoint_repeat_cnt"; 
   }

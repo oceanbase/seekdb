@@ -349,7 +349,8 @@ int ObDDLCtrlSpeedHandle::limit_and_sleep(const share::ObLSID &ls_id,
     LOG_WARN("invalid argument", K(ret), K(task_id), K(ls_id), K(bytes));
   } else if (OB_FAIL(DDL_SIM(task_id, WRITE_DUPLICATED_DDL_REDO_LOG))) {
     LOG_WARN("ddl sim remote write", K(ret), K(task_id));
-  } else ;
+  } else if (false) {
+  }
   if (OB_SUCC(ret) && OB_FAIL(speed_handle_item_.init(ls_id))) {
     if (OB_INIT_TWICE != ret) {
       LOG_WARN("fail to init speed handle item", K(ret), K(ls_id));
@@ -1636,8 +1637,11 @@ ObDDLRedoLogWriterCallbackInitParam::ObDDLRedoLogWriterCallbackInitParam()
     task_id_(0),
     data_format_version_(0),
     parallel_cnt_(0),
+    cg_cnt_(0),
+    with_cs_replica_(false),
     need_delay_(false),
     need_submit_io_(true),
+    row_id_offset_(-1),
     merge_slice_idx_(0),
     macro_meta_store_(nullptr),
     write_stat_(nullptr),
@@ -1671,8 +1675,11 @@ void ObDDLRedoLogWriterCallbackInitParam::reset()
   task_id_ = 0;
   data_format_version_ = 0;
   parallel_cnt_ = 0;
+  cg_cnt_ = 0;
+  with_cs_replica_ = false;
   need_delay_ = false;
   need_submit_io_ = true;
+  row_id_offset_ = -1;
   merge_slice_idx_ = 0;
   macro_meta_store_ = nullptr;
   write_stat_ = nullptr;
@@ -1703,6 +1710,9 @@ int ObDDLRedoLogWriterCallback::init(ObDDLRedoLogWriterCallbackInitParam &init_p
   } else if (OB_UNLIKELY(!init_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid init param", KR(ret), K(init_param));
+  } else if (OB_UNLIKELY(init_param.table_key_.is_column_store_sstable() && init_param.row_id_offset_ < 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument of column group data", K(ret), K(init_param.table_key_), K(init_param.row_id_offset_));
   } else if (OB_FAIL(ddl_writer_.init(init_param.ls_id_, init_param.tablet_id_))) {
     LOG_WARN("fail to init ddl_writer_", K(ret), K(init_param.ls_id_), K(init_param.tablet_id_));
   } else {
@@ -1732,6 +1742,11 @@ void ObDDLRedoLogWriterCallback::reset()
   ddl_writer_.reset();
   kv_mgr_handle_.reset();
   allocator_.reuse();
+}
+
+bool ObDDLRedoLogWriterCallback::is_column_group_info_valid() const
+{
+  return param_.table_key_.is_column_store_sstable() && param_.row_id_offset_ >= 0;
 }
 
 // check the checksum of macro block
@@ -1765,11 +1780,19 @@ int ObDDLRedoLogWriterCallback::write(const ObStorageObjectHandle &macro_handle,
     redo_info.type_ = param_.direct_load_type_;
     redo_info.data_format_version_ = param_.data_format_version_;
     redo_info.parallel_cnt_ = 0; // TODO @zhuoran.zzr, place holder for shared storage
+    redo_info.cg_cnt_ = 0;
+    redo_info.with_cs_replica_ = param_.with_cs_replica_;
     if (ObDDLMacroBlockType::DDL_MB_SS_EMPTY_DATA_TYPE == param_.block_type_) {
       redo_info.data_buffer_.assign(nullptr, 0);
     } else {
       redo_info.data_buffer_.assign(buf, buf_len);
     }
+    if (is_column_group_info_valid()) {
+      redo_info.merge_slice_idx_ = param_.merge_slice_idx_;
+      redo_info.end_row_id_ = param_.row_id_offset_ + row_count - 1;
+      param_.row_id_offset_ += row_count;
+    }
+    
     if (OB_FAIL(ret)) {
     } else if (nullptr != param_.macro_meta_store_ && OB_FAIL(param_.macro_meta_store_->append(buf, buf_len, macro_handle.get_macro_id()))) {
         LOG_WARN("append macro meta store failed", K(ret), KP(buf), K(buf_len), K(macro_handle.get_macro_id()));

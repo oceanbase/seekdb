@@ -179,6 +179,7 @@ int ObTableStatParam::assign(const ObTableStatParam &other)
   is_auto_sample_size_ = other.is_auto_sample_size_;
   need_refine_min_max_ = other.need_refine_min_max_;
   auto_sample_row_cnt_ = other.auto_sample_row_cnt_;
+  skip_rate_sample_cnt_ = other.skip_rate_sample_cnt_;
   if (OB_FAIL(part_infos_.assign(other.part_infos_))) {
     LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(subpart_infos_.assign(other.subpart_infos_))) {
@@ -250,6 +251,7 @@ int ObOptStatGatherParam::assign(const ObOptStatGatherParam &other)
   degree_ = other.degree_;
   allocator_ = other.allocator_;
   partition_id_block_map_ = other.partition_id_block_map_;
+  partition_id_skip_rate_map_ = other.partition_id_skip_rate_map_;
   gather_start_time_ = other.gather_start_time_;
   stattype_ = other.stattype_;
   is_split_gather_ = other.is_split_gather_;

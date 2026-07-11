@@ -393,7 +393,6 @@ struct ObGlobalHint {
   void merge_osg_hint(int8_t flag);
   void merge_dynamic_sampling_hint(int64_t dynamic_sampling);
   void merge_direct_load_hint(const ObDirectLoadHint &other);
-  void merge_resource_group_hint(const ObString &resource_group);
 
   bool has_hint_exclude_concurrent() const;
   int print_global_hint(PlanText &plan_text) const;
@@ -417,7 +416,6 @@ struct ObGlobalHint {
   bool get_flashback_read_tx_uncommitted() const { return flashback_read_tx_uncommitted_; }
   void set_flashback_read_tx_uncommitted(bool v) { flashback_read_tx_uncommitted_ = v; }
   ObParallelDASOption get_parallel_das_dml_option() const { return parallel_das_dml_option_; }
-  inline const common::ObString& get_resource_group() const { return resource_group_; }
   bool has_append() const {
     return (osg_hint_.flags_ & ObOptimizerStatisticsGatheringHint::OB_APPEND_HINT) ? true : false;
   }
@@ -511,7 +509,6 @@ struct ObGlobalHint {
   int64_t dynamic_sampling_;
   common::ObSArray<ObAllocOpHint> alloc_op_hints_;
   ObDirectLoadHint direct_load_hint_;
-  common::ObString resource_group_;
   ObPxNodeHint px_node_hint_;
 };
 

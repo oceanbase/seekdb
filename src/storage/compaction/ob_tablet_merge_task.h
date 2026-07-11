@@ -76,6 +76,8 @@ struct ObMergeParameter {
   /* rest variables are different for MergeTask */
   ObVersionRange merge_version_range_; // modify for different merge_type
   blocksstable::ObDatumRange merge_range_; // rowkey_range
+  blocksstable::ObDatumRange merge_rowid_range_;
+  ObITableReadInfo *cg_rowkey_read_info_;
   compaction::ObCachedTransStateMgr *trans_state_mgr_;
   share::ObDiagnoseLocation *error_location_;
   ObMviewMergeParameter *mview_merge_param_;
@@ -83,6 +85,7 @@ struct ObMergeParameter {
 
   int64_t to_string(char* buf, const int64_t buf_len) const;
 private:
+  int set_merge_rowid_range(ObIAllocator *allocator);
   int init_mview_merge_param(ObIAllocator *allocator);
   DISALLOW_COPY_AND_ASSIGN(ObMergeParameter);
 };
@@ -217,7 +220,8 @@ public:
         || OB_TABLE_IS_DELETED == dag_ret
         || OB_LS_NOT_EXIST == dag_ret
         || OB_TABLET_NOT_EXIST == dag_ret
-        || OB_CANCELED == dag_ret;
+        || OB_CANCELED == dag_ret
+        || OB_TABLET_TRANSFER_SEQ_NOT_MATCH == dag_ret;
   }
   int get_tablet_and_compat_mode();
   int prepare_merge_ctx(bool &finish_flag); // should be called when the first task of dag starts running
@@ -237,10 +241,12 @@ protected:
   int collect_compaction_param(const ObTabletHandle &tablet_handle);
   void fill_compaction_progress(compaction::ObTabletCompactionProgress &progress,
       ObBasicTabletMergeCtx &ctx,
-      compaction::ObPartitionMergeProgress *input_progress);
+      compaction::ObPartitionMergeProgress *input_progress,
+      int64_t start_cg_idx = 0, int64_t end_cg_idx = 0);
   void fill_diagnose_compaction_progress(compaction::ObDiagnoseTabletCompProgress &progress,
       ObBasicTabletMergeCtx *ctx,
-      compaction::ObPartitionMergeProgress *input_progress);
+      compaction::ObPartitionMergeProgress *input_progress,
+      int64_t start_cg_idx = 0, int64_t end_cg_idx = 0);
   bool is_inited_;
   lib::Worker::CompatMode compat_mode_;
   ObBasicTabletMergeCtx *ctx_;

@@ -15,7 +15,6 @@
  */
 
 #include "fetch_log_engine.h"
-#include "share/ob_thread_mgr.h"  // OB TG IDs, previously hidden behind the tenant_base include chain, make the dependency explicit
 #include "palf_handle_impl_guard.h"
 #include "palf_env_impl.h"
 
@@ -98,7 +97,7 @@ FetchLogTask& FetchLogTask::operator=(const FetchLogTask &task)
 }
 
 FetchLogEngine::FetchLogEngine()
-  : tg_id_(-1),
+  : common::ObLinkQueueThreadPool(),
     is_inited_(false),
     enabled_(true),
     palf_env_impl_(NULL),
@@ -128,10 +127,11 @@ int FetchLogEngine::init(IPalfEnvImpl *palf_env_impl,
     palf_env_impl_ = palf_env_impl;
     allocator_ = alloc_mgr;
     enabled_ = enabled;
-    if (enabled_ && OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::LSFetchLogEngine, tg_id_))) {
+    if (enabled_ && OB_FAIL(common::ObLinkQueueThreadPool::init(
+                        FETCH_LOG_THREAD_COUNT,
+                        FETCH_LOG_TASK_MAX_COUNT_PER_LS * OB_MAX_LS_NUM_PER_TENANT_PER_SERVER_CAN_BE_SET,
+                        "FetchLog"))) {
       PALF_LOG(WARN, "ObSimpleThreadPool::init failed", K(ret));
-    } else if (enabled_ && OB_FAIL(MTL_REGISTER_THREAD_DYNAMIC(0.5, tg_id_))) {
-      PALF_LOG(WARN, "MTL_REGISTER_THREAD_DYNAMIC failed", K(ret), K(tg_id_));
     } else {
       is_inited_ = true;
     }
@@ -152,10 +152,8 @@ int FetchLogEngine::start()
     PALF_LOG(ERROR, "FetchLogEngine not inited!!!", K(ret));
   } else if (!enabled_) {
     PALF_LOG(INFO, "FetchLogEngine is disabled");
-  } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
-    PALF_LOG(ERROR, "start FetchLogEngine failed", K(ret));
   } else {
-    PALF_LOG(INFO, "start FetchLogEngine success", K(ret), K(tg_id_));
+    PALF_LOG(INFO, "start FetchLogEngine success", K(ret));
   }
   return ret;
 }
@@ -169,8 +167,8 @@ int FetchLogEngine::stop()
   } else if (!enabled_) {
     PALF_LOG(INFO, "FetchLogEngine is disabled");
   } else {
-    TG_STOP(tg_id_);
-    PALF_LOG(INFO, "stop FetchLogEngine success", K(tg_id_));
+    common::ObLinkQueueThreadPool::stop();
+    PALF_LOG(INFO, "stop FetchLogEngine success");
   }
   return ret;
 }
@@ -184,29 +182,25 @@ int FetchLogEngine::wait()
   } else if (!enabled_) {
     PALF_LOG(INFO, "FetchLogEngine is disabled");
   } else {
-    TG_WAIT(tg_id_);
-    PALF_LOG(INFO, "wait FetchLogEngine success", K(tg_id_));
+    common::ObLinkQueueThreadPool::wait();
+    PALF_LOG(INFO, "wait FetchLogEngine success");
   }
   return ret;
 }
 
 void FetchLogEngine::destroy()
 {
-  if (is_inited_) {
-    stop();
-    wait();
+  if (is_inited_ && enabled_) {
+    common::ObLinkQueueThreadPool::stop();
+    common::ObLinkQueueThreadPool::wait();
+    common::ObLinkQueueThreadPool::destroy();
   }
   is_inited_ = false;
-  if (-1 != tg_id_) {
-    MTL_UNREGISTER_THREAD_DYNAMIC(tg_id_);
-    TG_DESTROY(tg_id_);
-  }
-  tg_id_ = -1;
   enabled_ = true;
   palf_env_impl_ = NULL;
   allocator_ = NULL;
   fetch_task_cache_.destroy();
-  PALF_LOG(INFO, "destroy FetchLogEngine success", K(tg_id_));
+  PALF_LOG(INFO, "destroy FetchLogEngine success");
 }
 
 int FetchLogEngine::submit_fetch_log_task(FetchLogTask *fetch_log_task)
@@ -224,7 +218,7 @@ int FetchLogEngine::submit_fetch_log_task(FetchLogTask *fetch_log_task)
     PALF_LOG(WARN, "invalid argument", K(ret), KP(fetch_log_task));
   } else if (OB_FAIL(push_task_into_cache_(fetch_log_task))) {
     PALF_LOG(WARN, "push_task_into_cache_ failed", K(ret), KPC(fetch_log_task));
-  } else if (OB_FAIL(TG_PUSH_TASK(tg_id_, fetch_log_task))) {
+  } else if (OB_FAIL(common::ObLinkQueueThreadPool::push(fetch_log_task))) {
     PALF_LOG(WARN, "push failed", K(ret), KPC(fetch_log_task));
   } else {
     //do nothing

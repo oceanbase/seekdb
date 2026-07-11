@@ -36,7 +36,6 @@
 #include "observer/omt/ob_th_worker.h"
 #include "ob_retry_queue.h"
 #include "lib/utility/ob_query_rate_limiter.h"
-#include "share/resource_manager/ob_cgroup_ctrl.h"
 #include "observer/omt/ob_tenant_meta.h"
 #include "lib/thread/ob_adaptive_worker_pool.h"
 #include "lib/lock/ob_tc_rwlock.h"      // TCRWLock
@@ -217,7 +216,6 @@ public:
 
   ObTenant(const int64_t epoch,
            const int64_t times_of_workers,
-           share::ObCgroupCtrl &cgroup_ctrl,
            const bool embedded = false);
   virtual ~ObTenant();
 
@@ -276,9 +274,6 @@ public:
   void set_queue_limit(int64_t limit) { req_queue_.set_limit(limit); }
 
   int timeup();
-  int get_default_group_throttled_time(int64_t &default_group_throttled_time);
-  void print_throttled_time();
-  void regist_threads_to_cgroup();
 
   TO_STRING_KV("id", id(),
                K_(tenant_meta),
@@ -392,9 +387,7 @@ public:
 
   lib::ObMutex workers_lock_;
 
-  share::ObCgroupCtrl &cgroup_ctrl_;
   bool embedded_;
-
   bool disable_user_sched_;
 
   int64_t token_change_ts_ CACHE_ALIGNED;

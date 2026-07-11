@@ -20,7 +20,6 @@
 #include "share/cache/ob_kv_storecache.h"
 #include "share/ob_task_define.h"
 #include "share/ob_debug_sync.h"             // DEBUG_SYNC
-#include "share/ob_thread_mgr.h"
 #include "share/config/ob_server_config.h"
 
 namespace oceanbase
@@ -126,6 +125,8 @@ ObKVGlobalCache::ObKVGlobalCache()
       map_replace_pos_(0),
       map_once_replace_num_(0),
       map_replace_skip_count_(0),
+      wash_timer_(),
+      replace_timer_(),
       stopped_(true),
       cache_wash_interval_(0)
 {
@@ -200,9 +201,9 @@ int ObKVGlobalCache::init(
     COMMON_LOG(WARN, "Fail to init map, ", K(ret), K(bucket_num));
   } else if (OB_FAIL(insts_.init(MAX_CACHE_NUM, configs_, *mem_limit_getter, map_.get_node_allocator()))) {
     COMMON_LOG(WARN, "Fail to init insts, ", K(ret));
-  } else if (OB_FAIL(TG_START(lib::TGDefIDs::KVCacheWash))) {
+  } else if (OB_FAIL(wash_timer_.init("KVCacheWash", ObMemAttr("KVCacheWash")))) {
     COMMON_LOG(WARN, "Fail to init wash timer, ", K(ret));
-  } else if (OB_FAIL(TG_START(lib::TGDefIDs::KVCacheRep))) {
+  } else if (OB_FAIL(replace_timer_.init("KVCacheRep", ObMemAttr("KVCacheRep")))) {
     COMMON_LOG(WARN, "Fail to init replace timer", K(ret));
   } else if (FALSE_IT(cache_wash_interval_ = cache_wash_interval)) {
   } else if (OB_FAIL(reload_wash_interval())) {
@@ -233,16 +234,16 @@ void ObKVGlobalCache::stop()
 {
   if (inited_) {
     stopped_ = true;
-    TG_STOP(lib::TGDefIDs::KVCacheWash);
-    TG_STOP(lib::TGDefIDs::KVCacheRep);
+    wash_timer_.stop();
+    replace_timer_.stop();
   }
 }
 
 void ObKVGlobalCache::wait()
 {
   if (inited_) {
-    TG_WAIT(lib::TGDefIDs::KVCacheWash);
-    TG_WAIT(lib::TGDefIDs::KVCacheRep);
+    wash_timer_.wait();
+    replace_timer_.wait();
   }
 }
 
@@ -254,6 +255,8 @@ void ObKVGlobalCache::destroy()
     // cache in wash thread.
     stop();
     wait();
+    wash_timer_.destroy();
+    replace_timer_.destroy();
     map_.destroy();
     store_.destroy();
     hazard_domain_.reset_retire_list();
@@ -593,32 +596,29 @@ int ObKVGlobalCache::reload_wash_interval()
   int ret = OB_SUCCESS;
   if (0 == cache_wash_interval_) {
     const int64_t wash_interval = GCONF._cache_wash_interval;
-    bool is_exist = false;
-    if (OB_FAIL(TG_TASK_EXIST(lib::TGDefIDs::KVCacheWash, wash_task_, is_exist))) {
-      COMMON_LOG(WARN, "failed to check wash task exist", K(ret));
-    } else if (is_exist && OB_FAIL(TG_CANCEL_R(lib::TGDefIDs::KVCacheWash, wash_task_))) {
+    bool is_exist = wash_timer_.task_exist(wash_task_);
+    if (is_exist && OB_FAIL(wash_timer_.cancel_task(wash_task_))) {
       COMMON_LOG(WARN, "failed to cancel wash task", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::KVCacheWash, wash_task_, wash_interval, true))) {
+    } else if (OB_FAIL(wash_timer_.schedule(wash_task_, wash_interval, true))) {
       COMMON_LOG(WARN, "failed to schedule wash task", K(ret));
     }
 
     is_exist = false;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(TG_TASK_EXIST(lib::TGDefIDs::KVCacheRep, replace_task_, is_exist))) {
-      COMMON_LOG(WARN, "failed to check replace task exist", K(ret));
-    } else if (is_exist && OB_FAIL(TG_CANCEL_R(lib::TGDefIDs::KVCacheRep, replace_task_))) {
+    } else if (FALSE_IT(is_exist = replace_timer_.task_exist(replace_task_))) {
+    } else if (is_exist && OB_FAIL(replace_timer_.cancel_task(replace_task_))) {
       COMMON_LOG(WARN, "failed to cancel replace task", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::KVCacheRep, replace_task_, wash_interval, true))) {
+    } else if (OB_FAIL(replace_timer_.schedule(replace_task_, wash_interval, true))) {
       COMMON_LOG(WARN, "failed to schedule replace task", K(ret));
     }
     if (OB_SUCC(ret)) {
       COMMON_LOG(INFO, "success to reload_wash_interval", K(wash_interval));
     }
   } else if (!inited_) {
-    if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::KVCacheWash, wash_task_, cache_wash_interval_, true))) {
+    if (OB_FAIL(wash_timer_.schedule(wash_task_, cache_wash_interval_, true))) {
       COMMON_LOG(WARN, "failed to schedule wash task", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::KVCacheRep, replace_task_,
-                                   cache_wash_interval_, true))) {
+    } else if (OB_FAIL(replace_timer_.schedule(replace_task_,
+                                               cache_wash_interval_, true))) {
       COMMON_LOG(WARN, "failed to schedule replace task", K(ret));
     }
   }

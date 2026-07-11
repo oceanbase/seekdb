@@ -132,6 +132,9 @@ void ObTenantTabletSchedulerTaskMgr::InfoPoolResizeTask::runTimerTask()
   if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()->gc_info())) {
     LOG_WARN("Fail to gc info", K(ret));
   }
+  if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->gc_cg_info_array())) {
+    LOG_WARN("Fail to gc info", K(ret));
+  }
   if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()->refresh_tenant_status())) {
     LOG_WARN("Fail to refresh tenant status", K(ret));
   }

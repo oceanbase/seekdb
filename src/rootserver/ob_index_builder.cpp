@@ -1930,11 +1930,82 @@ int ObIndexBuilder::generate_schema(
   }
 
   if (OB_SUCC(ret)) {
+    // create index column_group after schema generate
+    if (OB_FAIL(create_index_column_group(arg, schema))) {
+      LOG_WARN("fail to create cg for index", K(ret));
+    }
+  }
+  if (OB_SUCC(ret)) {
     schema.set_micro_index_clustered(data_schema.get_micro_index_clustered());
     schema.set_enable_macro_block_bloom_filter(data_schema.get_enable_macro_block_bloom_filter());
   }
   if (OB_SUCC(ret) && OB_FAIL(ObDDLService::set_dbms_job_exec_env(arg, schema))) {
     LOG_WARN("fail to set dbms_job exec_env", K(ret), K(arg));
+  }
+  return ret;
+}
+
+int ObIndexBuilder::create_index_column_group(const obcall::ObCreateIndexArg &arg, ObTableSchema &index_table_schema)
+{
+  int ret = OB_SUCCESS;
+  uint64_t compat_version = 0;
+  ObArray<uint64_t> column_ids; // not include virtual column
+  index_table_schema.set_column_store(true);
+  bool is_all_cg_exist = arg.exist_all_column_group_; //for compat
+  bool is_each_cg_exist = false;
+  ObColumnGroupSchema tmp_cg;
+  /* check exist column group*/
+  for (int64_t i = 0; OB_SUCC(ret) && i < arg.index_cgs_.count(); ++i) {
+      const obcall::ObCreateIndexArg::ObIndexColumnGroupItem &cur_item = arg.index_cgs_.at(i);
+    if (!cur_item.is_valid()) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid cg item", K(ret), K(cur_item));
+    } else if (ObColumnGroupType::SINGLE_COLUMN_GROUP == cur_item.cg_type_) {
+      is_each_cg_exist = true;
+    } else if (ObColumnGroupType::ALL_COLUMN_GROUP == cur_item.cg_type_) {
+      is_all_cg_exist = true;
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid column group type", K(ret), K(cur_item.cg_type_));
+    }
+  }
+  /* build each column group */
+  if (OB_FAIL(ret)) {
+  } else if (!is_each_cg_exist) {
+  } else if (OB_FAIL(ObSchemaUtils::build_add_each_column_group(index_table_schema, index_table_schema))) {
+    LOG_WARN("failed to build all cg", K(ret));
+  }
+  /* build all column group*/
+  tmp_cg.reset();
+  bool build_old_version_cg = false;
+  if (OB_FAIL(ret)) {
+  } else if (!is_all_cg_exist) {
+  } else if (OB_FAIL(ObSchemaUtils::check_build_old_version_column_group(index_table_schema, build_old_version_cg))) {
+    LOG_WARN("failed to check build old version column group", K(ret), K(index_table_schema));
+  } else if (OB_FAIL(ObSchemaUtils::build_all_column_group(index_table_schema,
+                                                           ALL_COLUMN_GROUP_ID,
+                                                           tmp_cg))) {
+    LOG_WARN("failed to build all column group", K(ret));
+  } else if (OB_FAIL(index_table_schema.add_column_group(tmp_cg))) {
+    LOG_WARN("failed to add column group", K(ret), K(index_table_schema), K(tmp_cg));
+  }
+
+  if (OB_FAIL(ret)) { /* build empty default cg*/
+  } else if (FALSE_IT(tmp_cg.reset())) {
+  } else if (OB_FAIL(ObSchemaUtils::build_column_group(index_table_schema,
+                                                       ObColumnGroupType::DEFAULT_COLUMN_GROUP,
+                                                       OB_DEFAULT_COLUMN_GROUP_NAME, column_ids,
+                                                       DEFAULT_TYPE_COLUMN_GROUP_ID, tmp_cg))) {
+    LOG_WARN("fail to build default type column_group", KR(ret), "table_id", index_table_schema.get_table_id());
+  } else if (OB_FAIL(index_table_schema.add_column_group(tmp_cg))) {
+    LOG_WARN("failed to add column group", K(ret), K(index_table_schema), K(tmp_cg));
+  } else if (OB_FAIL(ObSchemaUtils::alter_rowkey_column_group(index_table_schema))) { /* build rowkey cg*/
+    LOG_WARN("fail to adjust for rowkey column group", K(ret), K(index_table_schema));
+  } else if (OB_FAIL(ObSchemaUtils::alter_default_column_group(index_table_schema))) { /* set val in default cg*/
+    LOG_WARN("fail to adjust for default column group", K(ret), K(index_table_schema));
+  }
+  if (!build_old_version_cg && FAILEDx(index_table_schema.adjust_column_group_array())) {
+    LOG_WARN("fail to adjust column group array", K(ret), K(index_table_schema));
   }
   return ret;
 }

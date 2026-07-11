@@ -410,8 +410,6 @@ using namespace oceanbase::observer;
 using namespace oceanbase::share;
 using namespace oceanbase::omt;
 
-namespace oceanbase { namespace share { void ob_init_create_func(); } }
-
 #define MPRINT(format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
 #define MPRINTx(format, ...)                                                   \
   MPRINT(format, ##__VA_ARGS__);                                               \

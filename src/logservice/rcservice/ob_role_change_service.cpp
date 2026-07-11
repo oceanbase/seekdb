@@ -828,6 +828,12 @@ bool ObRoleChangeService::is_append_mode(const AccessMode &mode) const
   return (AccessMode::APPEND == mode);
 }
 
+bool ObRoleChangeService::is_raw_write_or_flashback_mode(const AccessMode &mode) const
+{
+  return (AccessMode::RAW_WRITE == mode || AccessMode::FLASHBACK == mode ||
+      AccessMode::PREPARE_FLASHBACK == mode);
+}
+
 bool ObRoleChangeService::need_retry_submit_role_change_event_(int ret) const
 {
   bool bool_ret = false;

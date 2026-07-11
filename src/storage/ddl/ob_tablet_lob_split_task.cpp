@@ -1277,9 +1277,6 @@ int ObTabletLobWriteDataTask::prepare_sstable_index_builder(const ObTabletLobWri
     LOG_WARN("invalid new tablet id", K(ret), K(new_tablet_id));
   } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ctx_->ls_handle_, new_tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
     LOG_WARN("get tablet failed", K(ret));
-  } else if (OB_ISNULL(tablet_handle.get_obj())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet is null", K(ret), K(new_tablet_id), K(tablet_handle));
   } else if (OB_FAIL(data_desc.init(true/*is_ddl*/, storage_schema,
         param_->ls_id_,
         new_tablet_id,
@@ -1288,6 +1285,7 @@ int ObTabletLobWriteDataTask::prepare_sstable_index_builder(const ObTabletLobWri
         param_->data_format_version_,
         ctx_->lob_meta_tablet_handle_.get_obj()->get_tablet_meta().micro_index_clustered_,
         0/*concurrent_cnt*/,
+        tablet_handle.get_obj()->get_transfer_seq(),
         write_sstable_ctx.table_key_.get_end_scn()))) {
     LOG_WARN("fail to init data store desc", K(ret), "dest_tablet_id", new_tablet_id, KPC(param_), KPC(ctx_));
   } else {

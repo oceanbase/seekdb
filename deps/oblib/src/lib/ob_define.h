@@ -963,6 +963,15 @@ const int64_t MAX_INFOSCHEMA_COLUMN_PRIVILEGE_LENGTH = 64;
 const int64_t MAX_COLUMN_YES_NO_LENGTH = 3;
 const int64_t MAX_COLUMN_VARCHAR_LENGTH = 262143;
 const int64_t MAX_COLUMN_CHAR_LENGTH = 255;
+//column group
+const uint64_t INVALID_COLUMN_GROUP_ID = 0;
+const uint64_t DEFAULT_TYPE_COLUMN_GROUP_ID = 1; // reserve 2~999
+const uint64_t COLUMN_GROUP_START_ID = 1000;
+const uint64_t ALL_COLUMN_GROUP_ID = 1001;
+const uint64_t ROWKEY_COLUMN_GROUP_ID = 1002;
+const uint64_t DEFAULT_CUSTOMIZED_CG_NUM = 2;
+const int64_t OB_CG_NAME_PREFIX_LENGTH = 5; // length of cg prefix like "__cg_"
+const int64_t OB_MAX_COLUMN_GROUP_NAME_LENGTH = OB_MAX_COLUMN_NAME_LENGTH * OB_MAX_CHAR_LEN + OB_CG_NAME_PREFIX_LENGTH; //(max_column_name_length(128) * ob_max_char_len(3)) + prefix
 const int64_t MAX_NAME_CHAR_LEN = 64;
 const int64_t MAX_AUDIT_FILTER_NAME_LENGTH = 64;
 const int64_t MAX_AUDIT_FILTER_NAME_LENGTH_BYTE = 4 * MAX_AUDIT_FILTER_NAME_LENGTH;
@@ -2060,17 +2069,19 @@ enum ObFreezeStatus
 };
 
 /*
- * |---- 2 bits ---|--- 4 bits ---|--- 2 bits ---|--- 2 bits ---| LSB
- * |-- encryption--|---  clog  ---|-- SSStore ---|--- MemStore--| LSB
+ * |---- 2 bits ---|---- 2 bits ---|--- 4 bits ---|--- 2 bits ---|--- 2 bits ---| LSB
+ * |--column-store-|-- encryption--|---  clog  ---|-- SSStore ---|--- MemStore--| LSB
  */
 const int64_t MEMSTORE_BITS_SHIFT = 0;
 const int64_t SSSTORE_BITS_SHIFT = 2;
 const int64_t CLOG_BITS_SHIFT = 4;
 const int64_t ENCRYPTION_BITS_SHIFT = 8;
+const int64_t COLUMNSTORE_BITS_SHIFT = 10;
 const int64_t REPLICA_TYPE_MEMSTORE_MASK = (0x3UL << MEMSTORE_BITS_SHIFT);
 const int64_t REPLICA_TYPE_SSSTORE_MASK = (0x3UL << SSSTORE_BITS_SHIFT);
 const int64_t REPLICA_TYPE_CLOG_MASK = (0xFUL << CLOG_BITS_SHIFT);
 const int64_t REPLICA_TYPE_ENCRYPTION_MASK = (0x3UL << ENCRYPTION_BITS_SHIFT);
+const int64_t REPLICA_TYPE_COLUMNSTORE_MASK = (0x3UL << COLUMNSTORE_BITS_SHIFT);
 // replica type associated with memstore
 const int64_t WITH_MEMSTORE = 0;
 const int64_t WITHOUT_MEMSTORE = 1;
@@ -2083,6 +2094,9 @@ const int64_t ASYNC_CLOG = 1 << CLOG_BITS_SHIFT;
 // replica type associated with encryption
 const int64_t WITHOUT_ENCRYPTION = 0 << ENCRYPTION_BITS_SHIFT;
 const int64_t WITH_ENCRYPTION = 1 << ENCRYPTION_BITS_SHIFT;
+// replica type associated with columnstore
+const int64_t NOT_COLUMNSTORE = 0 << COLUMNSTORE_BITS_SHIFT;
+const int64_t COLUMNSTORE = 1 << COLUMNSTORE_BITS_SHIFT;
 
 // tracepoint, refer to OB_MAX_CONFIG_xxx
 const int64_t OB_MAX_TRACEPOINT_NAME_LEN = 128;
@@ -2112,6 +2126,8 @@ enum ObReplicaType
   REPLICA_TYPE_ARBITRATION = (ASYNC_CLOG | WITHOUT_SSSTORE | WITHOUT_MEMSTORE), // 21
   // Encrypted log copy: encrypted; paxos member; no sstore; no memstore
   REPLICA_TYPE_ENCRYPTION_LOGONLY = (WITH_ENCRYPTION | SYNC_CLOG | WITHOUT_SSSTORE | WITHOUT_MEMSTORE), // 261
+  // Column-store copy: column-store, not a member of paxos; ssstore; memstore
+  REPLICA_TYPE_COLUMNSTORE = (COLUMNSTORE | ASYNC_CLOG | WITH_SSSTORE | WITH_MEMSTORE), // 1040
   // max value
   REPLICA_TYPE_MAX,
 };
@@ -2134,14 +2150,20 @@ const char *const M_REPLICA_STR = "M";
 // encryption logonly replica
 const char *const ENCRYPTION_LOGONLY_REPLICA_STR = "ENCRYPTION_LOGONLY";
 const char *const E_REPLICA_STR = "E";
+// columnstore replica
+const char *const COLUMNSTORE_REPLICA_STR = "COLUMNSTORE";
+const char *const C_REPLICA_STR = "C";
+
 class ObReplicaTypeCheck
 {
 public:
-  // Currently only full and read-only replicas are valid.
+  // Currently only three types are valid,
+  // including REPLICA_TYPE_FULL, REPLICA_TYPE_READONLY, and REPLICA_TYPE_COLUMNSTORE
   static bool is_replica_type_valid(const int32_t replica_type)
   {
     return REPLICA_TYPE_FULL == replica_type
-           || REPLICA_TYPE_READONLY == replica_type;
+           || REPLICA_TYPE_READONLY == replica_type
+           || REPLICA_TYPE_COLUMNSTORE == replica_type;
   }
   static bool is_can_elected_replica(const int32_t replica_type)
   {
@@ -2154,6 +2176,10 @@ public:
   static bool is_readonly_replica(const int32_t replica_type)
   {
     return (REPLICA_TYPE_READONLY == replica_type);
+  }
+  static bool is_columnstore_replica(const int32_t replica_type)
+  {
+    return (REPLICA_TYPE_COLUMNSTORE == replica_type);
   }
   static bool is_log_replica(const int32_t replica_type)
   {
@@ -2171,7 +2197,7 @@ public:
   }
   static bool is_non_paxos_replica(const int32_t replica_type)
   {
-    return REPLICA_TYPE_READONLY == replica_type;
+    return (REPLICA_TYPE_READONLY == replica_type || REPLICA_TYPE_COLUMNSTORE == replica_type);
   }
   static bool is_writable_replica(const int32_t replica_type)
   {
@@ -2179,7 +2205,8 @@ public:
   }
   static bool is_readable_replica(const int32_t replica_type)
   {
-    return REPLICA_TYPE_FULL == replica_type || REPLICA_TYPE_READONLY == replica_type;
+    return (REPLICA_TYPE_FULL == replica_type || REPLICA_TYPE_READONLY == replica_type
+            || REPLICA_TYPE_COLUMNSTORE == replica_type);
   }
   static bool is_replica_with_memstore(const ObReplicaType replica_type)
   {
@@ -2196,7 +2223,8 @@ public:
   //Currently only copies of F and R can be used for machine reading, not L
   static bool can_slave_read_replica(const int32_t replica_type)
   {
-    return REPLICA_TYPE_FULL == replica_type || REPLICA_TYPE_READONLY == replica_type;
+    return (REPLICA_TYPE_FULL == replica_type || REPLICA_TYPE_READONLY == replica_type
+            || REPLICA_TYPE_COLUMNSTORE == replica_type);
   }
 
   static bool change_replica_op_allow(const ObReplicaType source, const ObReplicaType target)
@@ -2204,6 +2232,8 @@ public:
     bool bool_ret = false;
 
     if (REPLICA_TYPE_LOGONLY == source || REPLICA_TYPE_LOGONLY == target) {
+      bool_ret = false;
+    } else if (REPLICA_TYPE_COLUMNSTORE == source || REPLICA_TYPE_COLUMNSTORE == target) {
       bool_ret = false;
     } else if (REPLICA_TYPE_FULL == source) {
       bool_ret = true;

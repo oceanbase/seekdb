@@ -3222,6 +3222,8 @@ int ObDbmsStats::async_gather_stats_job_proc(sql::ObExecContext &ctx,
   } else if (!session->is_user_session() && no_async_gather) {
     //do nothing
     LOG_INFO("async gather stats abort because of the trace point and not user seesion", K(session->is_user_session()), K(no_async_gather));
+  } else if (false) {
+    // do nothing
   } else if (GCONF.in_upgrade_mode()) {
     //in upgrade, don't async gather table stats
   } else if (!params.empty() && !params.at(0).is_null() &&
@@ -3558,6 +3560,7 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   column_params.reset();
+  bool is_column_store = false;
 
   for (int64_t i = 0; OB_SUCC(ret) && i < table_schema.get_column_count(); ++i) {
     const share::schema::ObColumnSchemaV2 *col = table_schema.get_column_schema_by_idx(i);
@@ -3615,6 +3618,11 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
       }
       if (col->get_meta_type().get_type_class() == ColumnTypeClass::ObTextTC) {
         col_param.set_is_text_column();
+      }
+      if (is_column_store) {
+        if (ObColumnStatParam::is_valid_refine_min_max_type(col->get_meta_type().get_type())) {
+          col_param.set_need_cs_refine_min_max();
+        }
       }
       if (OB_SUCC(ret) && OB_FAIL(column_params.push_back(col_param))) {
         LOG_WARN("failed to push back column param", K(ret));
@@ -4110,7 +4118,7 @@ int ObDbmsStats::parse_gather_stat_options(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   UNUSED(ctx);
-  int64_t stat_options = StatOptionFlags::OPT_APPROXIMATE_NDV | StatOptionFlags::OPT_ESTIMATE_BLOCK;
+  int64_t stat_options = StatOptionFlags::OPT_APPROXIMATE_NDV | StatOptionFlags::OPT_ESTIMATE_BLOCK | StatOptionFlags::OPT_SKIP_RATE_SAMPLE_COUNT;
   number::ObNumber num_est_percent;
   number::ObNumber num_degree;
   double percent = 0.0;
@@ -4396,6 +4404,15 @@ int ObDbmsStats::get_default_stat_options(ObExecContext &ctx,
   }
   if (OB_SUCC(ret) && param.is_auto_gather_ && stat_options & StatOptionFlags::OPT_AUTO_SAMPLE_ROW_COUNT) {
     ObAutoSampleRowCountPrefs *tmp_pref = NULL;
+    if (OB_FAIL(new_stat_prefs(*param.allocator_, ctx.get_my_session(), ObString(), tmp_pref))) {
+      LOG_WARN("failed to new stat prefs", K(ret));
+    } else if (OB_FAIL(stat_prefs.push_back(tmp_pref))) {
+      LOG_WARN("failed to push back", K(ret));
+    }
+  }
+  if (OB_SUCC(ret) &&
+      (stat_options & StatOptionFlags::OPT_SKIP_RATE_SAMPLE_COUNT)) {
+    ObSkipRateSamplePrefs *tmp_pref = NULL;
     if (OB_FAIL(new_stat_prefs(*param.allocator_, ctx.get_my_session(), ObString(), tmp_pref))) {
       LOG_WARN("failed to new stat prefs", K(ret));
     } else if (OB_FAIL(stat_prefs.push_back(tmp_pref))) {
@@ -5651,6 +5668,8 @@ int ObDbmsStats::gather_database_table_stats(sql::ObExecContext &ctx,
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session));
+  } else if (false) {
+    // do nothing
   } else {
     int64_t slice_cnt = 10000; // maximum tables we can gather stats at each iteration
     int64_t last_table_id = 0;
@@ -6234,6 +6253,13 @@ int ObDbmsStats::get_new_stat_pref(ObExecContext &ctx,
     } else {
       stat_pref = tmp_pref;
     }
+  } else if (0 == opt_name.case_compare("SKIP_RATE_SAMPLE_COUNT")) {
+    ObSkipRateSamplePrefs *tmp_pref = NULL;
+    if (OB_FAIL(new_stat_prefs(allocator, ctx.get_my_session(), opt_value, tmp_pref))) {
+      LOG_WARN("failed to new stat prefs", K(ret));
+    } else {
+      stat_pref = tmp_pref;
+    }
   } else {
     ret = OB_ERR_DBMS_STATS_PL;
     LOG_WARN("Invalid input values for pname", K(ret), K(opt_name));
@@ -6244,7 +6270,8 @@ int ObDbmsStats::get_new_stat_pref(ObExecContext &ctx,
                                        "ASYNC_GATHER_SAMPLE_SIZE|ASYNC_GATHER_FULL_TABLE_SIZE|"\
                                        "ASYNC_STALE_MAX_TABLE_SIZE|HIST_EST_PERCENT|HIST_BLOCK_SAMPLE|"\
                                        "APPROXIMATE_NDV(global prefs unique)|ONLINE_ESTIMATE_PERCENT|"\
-                                       "AUTO_SAMPLE_ROW_COUNT(global prefs unique)|GATHER_STATS_BATCH_SIZE" );
+                                       "AUTO_SAMPLE_ROW_COUNT(global prefs unique)|GATHER_STATS_BATCH_SIZE|"\
+                                       "SKIP_RATE_SAMPLE_COUNT prefs" );
   }
   return ret;
 }
@@ -6599,7 +6626,38 @@ int ObDbmsStats::init_column_group_stat_param(const share::schema::ObTableSchema
                                               ObIArray<ObColumnGroupStatParam> &column_group_params)
 {
   int ret = OB_SUCCESS;
-  UNUSED(table_schema);
+  ObSEArray<const ObColumnGroupSchema *, 8> column_group_metas;
+  bool is_column_store = false;
+  if (OB_FAIL(table_schema.get_is_column_store(is_column_store))) {
+    LOG_WARN("failed to get is column store", K(ret));
+  } else if (!is_column_store) {
+    //do nothing
+  } else if (OB_FAIL(table_schema.get_store_column_groups(column_group_metas))) { // get cg metas without empty default cg
+    LOG_WARN("failed to get column group metas", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < column_group_metas.count(); ++i) {
+      if (OB_ISNULL(column_group_metas.at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret), K(column_group_metas.at(i)));
+      } else {
+        ObColumnGroupStatParam col_group_param;
+        col_group_param.column_group_id_ = column_group_metas.at(i)->get_column_group_id();
+        for (int64_t j = 0; OB_SUCC(ret) && j < column_group_metas.at(i)->get_column_id_count(); ++j) {
+          uint64_t column_id = 0;
+          if (OB_FAIL(column_group_metas.at(i)->get_column_id(j, column_id))) {
+            LOG_WARN("failed to get column id", K(ret));
+          } else if (OB_FAIL(col_group_param.column_id_arr_.push_back(column_id))) {
+            LOG_WARN("failed to push back", K(ret));
+          }
+        }
+        if (OB_SUCC(ret)) {
+          if (OB_FAIL(column_group_params.push_back(col_group_param))) {
+            LOG_WARN("failed to push back", K(ret));
+          }
+        }
+      }
+    }
+  }
   LOG_TRACE("init column group stat param", K(column_group_params));
   return ret;
 }
@@ -7066,6 +7124,8 @@ int ObDbmsStats::async_gather_table_stats(sql::ObExecContext &ctx,
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session));
+  } else if (false) {
+    // do nothing
   } else if (GCONF.in_upgrade_mode()) {
     //in upgrade, don't async gather table stats
   } else {

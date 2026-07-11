@@ -97,6 +97,7 @@ using share::schema::GENERATED_TYPE_UNKNOWN;
 using share::schema::ObCstFkValidateFlag;
 using share::schema::ObNameGeneratedType;
 using share::schema::ObTableSchema;
+using share::schema::ObColumnGroupType;
 using share::schema::ObPartitionLevel;
 using share::schema::ObSimpleTableSchemaV2;
 using share::schema::PARTITION_LEVEL_MAX;
@@ -1737,6 +1738,7 @@ public:
       client_session_create_ts_(0),
       lock_priority_(transaction::tablelock::ObTableLockPriority::NORMAL),
       is_direct_load_partition_(false),
+      is_alter_column_group_delayed_(false),
       is_alter_mview_attributes_(false),
       alter_mview_arg_(),
       is_alter_mlog_attributes_(false),
@@ -1861,6 +1863,7 @@ public:
                K_(client_session_create_ts),
                K_(lock_priority),
                K_(is_direct_load_partition),
+               K_(is_alter_column_group_delayed),
                K_(is_alter_mview_attributes),
                K_(alter_mview_arg),
                K_(is_alter_mlog_attributes),
@@ -1907,6 +1910,7 @@ public:
   int64_t client_session_create_ts_;
   transaction::tablelock::ObTableLockPriority lock_priority_;
   bool is_direct_load_partition_;
+  bool is_alter_column_group_delayed_;
   bool is_alter_mview_attributes_;
   ObAlterMViewArg alter_mview_arg_;
   bool is_alter_mlog_attributes_;
@@ -2301,6 +2305,8 @@ public:
         inner_sql_exec_addr_(),
         allocator_(),
         local_session_var_(&allocator_),
+        exist_all_column_group_(false),
+        index_cgs_(),
         vidx_refresh_info_(),
         is_rebuild_index_(false),
         is_index_scope_specified_(false),
@@ -2336,6 +2342,8 @@ public:
     inner_sql_exec_addr_.reset();
     local_session_var_.reset();
     allocator_.reset();
+    exist_all_column_group_ = false;
+    index_cgs_.reset();
     vidx_refresh_info_.reset();
     is_rebuild_index_ = false;
     is_index_scope_specified_ = false;
@@ -2357,6 +2365,8 @@ public:
       SHARE_LOG(WARN, "fail to assign hidden store columns", K(ret));
     } else if (OB_FAIL(fulltext_columns_.assign(other.fulltext_columns_))) {
       SHARE_LOG(WARN, "fail to assign fulltext columns", K(ret));
+    } else if (OB_FAIL(index_cgs_.assign(other.index_cgs_))) {
+      SHARE_LOG(WARN, "fail to assign index cgs", K(ret));
     } else if (OB_FAIL(index_schema_.assign(other.index_schema_))) {
       SHARE_LOG(WARN, "fail to assign index schema", K(ret));
     } else if (OB_FAIL(local_session_var_.deep_copy(other.local_session_var_))){
@@ -2375,6 +2385,7 @@ public:
       nls_timestamp_tz_format_ = other.nls_timestamp_tz_format_;
       sql_mode_ = other.sql_mode_;
       inner_sql_exec_addr_ = other.inner_sql_exec_addr_;
+      exist_all_column_group_ = other.exist_all_column_group_;
       vidx_refresh_info_ = other.vidx_refresh_info_;
       is_rebuild_index_ = other.is_rebuild_index_;
       is_index_scope_specified_ = other.is_index_scope_specified_;
@@ -2393,6 +2404,37 @@ public:
   inline bool is_spatial_index() const { return ObSimpleTableSchemaV2::is_spatial_index(index_type_); }
   inline bool is_multivalue_index() const { return is_multivalue_index_aux(index_type_); }
   inline bool is_vec_index() const { return ObSimpleTableSchemaV2::is_vec_index(index_type_); }
+
+//todo @qilu:only for each_cg now, when support customized cg ,refine this
+  typedef common::ObSEArray<uint64_t, common::DEFAULT_CUSTOMIZED_CG_NUM> ObCGColumnList;
+  struct ObIndexColumnGroupItem final
+  {
+    OB_UNIS_VERSION(1);
+  public:
+    ObIndexColumnGroupItem() : is_each_cg_(false), column_list_(), cg_type_(ObColumnGroupType::SINGLE_COLUMN_GROUP)
+    {} /* to compat former version, force to set default value as single column group*/
+    ~ObIndexColumnGroupItem()
+    {
+      reset();
+    }
+    bool is_valid() const
+    {
+      return cg_type_ < ObColumnGroupType::NORMAL_COLUMN_GROUP;
+    }
+    void reset()
+    {
+      is_each_cg_ = false;
+      column_list_.reset();
+      cg_type_ = ObColumnGroupType::SINGLE_COLUMN_GROUP;
+    }
+    int assign(const ObIndexColumnGroupItem &other);
+    TO_STRING_KV(K(is_each_cg_), K(column_list_), K(cg_type_));
+
+  public:
+    bool is_each_cg_;
+    ObCGColumnList column_list_; /* column list not used yet, wait user define cg*/
+    ObColumnGroupType cg_type_;
+  };
 
 public:
   share::schema::ObIndexType index_type_;
@@ -2416,6 +2458,8 @@ public:
   common::ObAddr inner_sql_exec_addr_;
   common::ObArenaAllocator allocator_;
   share::ObLocalSessionVar local_session_var_;
+  bool exist_all_column_group_;
+  common::ObSEArray<ObIndexColumnGroupItem, 1/*each*/> index_cgs_;
   share::schema::ObVectorIndexRefreshInfo vidx_refresh_info_;
   bool is_rebuild_index_;
   bool is_index_scope_specified_;
@@ -2739,11 +2783,11 @@ public:
   common::ObString foreign_key_name_;
 };
 
-struct ObRecyclebinRestoreTableArg: public ObDDLArg
+struct ObFlashBackTableFromRecyclebinArg: public ObDDLArg
 {
   OB_UNIS_VERSION(1);
 public:
-  ObRecyclebinRestoreTableArg():
+  ObFlashBackTableFromRecyclebinArg():
     ObDDLArg(),
     origin_db_name_(),
     origin_table_name_(),
@@ -2767,11 +2811,58 @@ public:
                K_(origin_table_id));
 };
 
-struct ObRecyclebinRestoreDatabaseArg: public ObDDLArg
+struct ObFlashBackTableToScnArg : public ObDDLArg
+{
+  OB_UNIS_VERSION(1);
+  public:
+  ObFlashBackTableToScnArg():
+    time_point_(-1),
+    tables_(),
+    query_end_time_(-1)
+  {}
+  bool is_valid() const;
+
+  
+  int64_t time_point_;
+  common::ObSArray<ObTableItem> tables_;
+  int64_t query_end_time_;
+
+  TO_STRING_KV(
+               K_(time_point),
+               K_(tables),
+               K_(query_end_time));
+};
+
+struct ObFlashBackIndexArg: public ObDDLArg
 {
   OB_UNIS_VERSION(1);
 public:
-  ObRecyclebinRestoreDatabaseArg():
+  ObFlashBackIndexArg():
+    ObDDLArg(),
+    origin_table_name_(),
+    new_db_name_(),
+    new_table_name_(),
+    origin_table_id_(common::OB_INVALID_ID)
+  {}
+  bool is_valid() const;
+  
+  common::ObString origin_table_name_;
+  common::ObString new_db_name_;
+  common::ObString new_table_name_;
+  uint64_t origin_table_id_;//only used in work thread, no need add to SERIALIZE now
+
+  TO_STRING_KV(
+               K_(origin_table_name),
+               K_(new_db_name),
+               K_(new_table_name),
+               K_(origin_table_id));
+};
+
+struct ObFlashBackDatabaseArg: public ObDDLArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObFlashBackDatabaseArg():
     ObDDLArg(),
     origin_db_name_(),
     new_db_name_()
@@ -2931,13 +3022,15 @@ public:
            const common::ObIArray<int64_t> &table_schema_index,
            const lib::Worker::CompatMode &mode,
            const bool is_create_bind_hidden_tablets,
-           const ObIArray<int64_t> &create_commit_versions);
+           const ObIArray<int64_t> &create_commit_versions,
+           const bool has_cs_replica);
   int init(const ObIArray<common::ObTabletID> &tablet_ids,
            const common::ObTabletID data_tablet_id,
            const common::ObIArray<int64_t> &table_schema_index,
            const lib::Worker::CompatMode &mode,
            const bool is_create_bind_hidden_tablets,
            const ObIArray<int64_t> &create_commit_versions,
+           const bool has_cs_replica,
            const ObIArray<share::ObForkTabletInfo> &fork_tablet_infos);
   common::ObTabletID get_data_tablet_id() const { return data_tablet_id_; }
   int64_t get_tablet_count() const { return tablet_ids_.count(); }
@@ -2952,6 +3045,7 @@ public:
   lib::Worker::CompatMode compat_mode_;
   bool is_create_bind_hidden_tablets_;
   ObSArray<int64_t> create_commit_versions_;
+  bool has_cs_replica_;
   common::ObSArray<share::ObForkTabletInfo> fork_tablet_infos_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCreateTabletInfo);
@@ -4253,17 +4347,19 @@ struct ObTabletMajorFreezeArg
 public:
   ObTabletMajorFreezeArg()
     : ls_id_(),
-      tablet_id_()
+      tablet_id_(),
+      is_rebuild_column_group_(false)
     {}
   ~ObTabletMajorFreezeArg() = default;
   bool is_valid() const
   {
     return true && ls_id_.is_valid() && tablet_id_.is_valid();
   }
-  TO_STRING_KV(K_(ls_id), K_(tablet_id));
+  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(is_rebuild_column_group));
   
   share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
+  bool is_rebuild_column_group_;
 };
 
 
@@ -5714,13 +5810,14 @@ struct ObEstBlockArgElement
 {
   OB_UNIS_VERSION(1);
 public:
-  ObEstBlockArgElement() : tablet_id_(), ls_id_() {}
+  ObEstBlockArgElement() : tablet_id_(), ls_id_(), column_group_ids_() {}
   bool is_valid() const { return tablet_id_.is_valid() && ls_id_.is_valid(); }
   int assign(const ObEstBlockArgElement &other);
   
   ObTabletID tablet_id_;
   share::ObLSID ls_id_;
-  TO_STRING_KV(K_(tablet_id), K_(ls_id));
+  common::ObSEArray<uint64_t, 4> column_group_ids_;
+  TO_STRING_KV(K_(tablet_id), K_(ls_id), K_(column_group_ids));
 };
 
 struct ObEstBlockArg
@@ -5741,11 +5838,13 @@ public:
   int64_t micro_block_count_;
   int64_t sstable_row_count_;
   int64_t memtable_row_count_;
+  common::ObSEArray<int64_t, 4> cg_macro_cnt_arr_;
+  common::ObSEArray<int64_t, 4> cg_micro_cnt_arr_;
   bool is_valid() const { return true; }
   int assign(const ObEstBlockResElement &other);
   ObEstBlockResElement() : macro_block_count_(0), micro_block_count_(0), sstable_row_count_(0), memtable_row_count_(0) {}
   TO_STRING_KV(K(macro_block_count_), K(micro_block_count_),
-      K(sstable_row_count_), K(memtable_row_count_));
+      K(sstable_row_count_), K(memtable_row_count_), K(cg_macro_cnt_arr_), K(cg_micro_cnt_arr_));
 };
 
 struct ObEstBlockRes
@@ -5757,6 +5856,55 @@ public:
   ObEstBlockRes() : tablet_params_res_() {}
   TO_STRING_KV(K(tablet_params_res_));
 };
+
+struct ObEstSkipRateArgElement
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObEstSkipRateArgElement() : table_id_(0), tablet_id_(), ls_id_(), sample_count_(), column_ids_() {}
+  bool is_valid() const { return tablet_id_.is_valid() && ls_id_.is_valid(); }
+  int assign(const ObEstSkipRateArgElement &other);
+  
+  uint64_t table_id_;
+  ObTabletID tablet_id_;
+  share::ObLSID ls_id_;
+  common::ObSEArray<uint64_t, 4> sample_count_;
+  common::ObSEArray<uint64_t, 4> column_ids_;
+  TO_STRING_KV(K_(table_id), K_(tablet_id), K_(ls_id), K_(sample_count), K_(column_ids));
+};
+
+struct ObEstSkipRateArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  common::ObSEArray<ObEstSkipRateArgElement, 4> tablet_params_arg_;
+  bool is_valid() const;
+  ObEstSkipRateArg() : tablet_params_arg_() {}
+  TO_STRING_KV(K(tablet_params_arg_));
+};
+
+struct ObEstSkipRateResElement
+{
+  OB_UNIS_VERSION(1);
+public:
+  common::ObSEArray<double, 4> cg_skip_rate_arr_;
+  common::ObSEArray<uint64_t, 4> sample_count_;
+  bool is_valid() const { return true; }
+  int assign(const ObEstSkipRateResElement &other);
+  ObEstSkipRateResElement(){}
+  TO_STRING_KV(K(cg_skip_rate_arr_), K(sample_count_));
+};
+
+struct ObEstSkipRateRes
+{
+  OB_UNIS_VERSION(1);
+public:
+  common::ObSEArray<ObEstSkipRateResElement, 4> tablet_params_res_;
+  bool is_valid() const { return true; }
+  ObEstSkipRateRes() : tablet_params_res_() {}
+  TO_STRING_KV(K(tablet_params_res_));
+};
+
 
 struct ObBatchGetTabletAutoincSeqArg final
 {

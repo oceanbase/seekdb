@@ -572,6 +572,9 @@ OB_INLINE int ObMPQuery::get_tenant_schema_info_(ObTenantCachedSchemaGuardInfo *
   if (!cached_guard.is_inited()) {
     // First get schema guard
     need_refresh = true;
+  } else if (false) {
+    // change tenant
+    need_refresh = true;
   } else {
     int64_t tmp_tenant_version = 0;
     int64_t tmp_sys_version = 0;

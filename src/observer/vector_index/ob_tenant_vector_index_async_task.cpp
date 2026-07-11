@@ -129,6 +129,9 @@ int ObVectorIndexHistoryTask::init(common::ObMySQLProxy &sql_proxy)
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ttl history task init twice", KR(ret));
+  } else if (false) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tenant id", KR(ret));
   } else {
     sql_proxy_ = &sql_proxy;
     disable_timeout_check();

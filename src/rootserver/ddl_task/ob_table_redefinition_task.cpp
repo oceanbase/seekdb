@@ -36,7 +36,7 @@ ObTableRedefinitionTask::ObTableRedefinitionTask()
     has_rebuild_index_(false), has_rebuild_constraint_(false), has_rebuild_foreign_key_(false), 
     allocator_(lib::ObLabel("RedefTask")),
     is_copy_indexes_(true), is_copy_triggers_(true), is_copy_constraints_(true), is_copy_foreign_keys_(true), 
-    is_ignore_errors_(false), is_do_finish_(false), use_heap_table_ddl_plan_(false),
+    is_ignore_errors_(false), is_do_finish_(false), target_cg_cnt_(0), use_heap_table_ddl_plan_(false),
     is_ddl_retryable_(true), has_rebuild_domain_indexes_(false)
 {
 }
@@ -102,7 +102,9 @@ int ObTableRedefinitionTask::init(const ObTableSchema* src_table_schema,
     
     alter_table_arg_.alter_table_schema_.set_schema_version(schema_version_);
     
-    if (OB_FAIL(init_ddl_task_monitor_info(target_object_id_))) {
+    if (OB_FAIL(dst_table_schema->get_store_column_group_count(target_cg_cnt_))) {
+      LOG_WARN("fail to get target cg cnt", K(ret), KPC(dst_table_schema));
+    } else if (OB_FAIL(init_ddl_task_monitor_info(target_object_id_))) {
       LOG_WARN("init ddl task monitor info failed", K(ret));
     } else if (OB_FAIL(check_ddl_can_retry(ddl_need_retry_at_executor, dst_table_schema))) {
       LOG_WARN("check use heap table ddl plan failed", K(ret));
@@ -1111,6 +1113,7 @@ int64_t ObTableRedefinitionTask::get_serialize_param_size() const
          + serialization::encoded_length_i8(copy_indexes) + serialization::encoded_length_i8(copy_triggers)
          + serialization::encoded_length_i8(copy_constraints) + serialization::encoded_length_i8(copy_foreign_keys)
          + serialization::encoded_length_i8(ignore_errors) + serialization::encoded_length_i8(do_finish)
+         + serialization::encoded_length_i64(target_cg_cnt_)
          + serialization::encoded_length_i64(complete_sstable_job_ret_code_)
          + serialization::encoded_length_i8(use_heap_table_ddl_plan_)
          + serialization::encoded_length_i8(is_ddl_retryable_)
@@ -1145,6 +1148,8 @@ int ObTableRedefinitionTask::serialize_params_to_message(char *buf, const int64_
     LOG_WARN("fail to serialize is_ignore_errors", K(ret));
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, do_finish))) {
     LOG_WARN("fail to serialize is_do_finish", K(ret));
+  } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, target_cg_cnt_))) {
+    LOG_WARN("fail to serialize target_cg_cnt", K(ret));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, complete_sstable_job_ret_code_))) {
     LOG_WARN("fail to serialize complete sstable job ret code", K(ret));
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, use_heap_table_ddl_plan_))) {
@@ -1191,7 +1196,10 @@ int ObTableRedefinitionTask::deserialize_params_from_message(const char *buf, co
       LOG_WARN("fail to deserialize is_ignore_errors_", K(ret));
     } else if (OB_FAIL(serialization::decode_i8(buf, data_len, pos, &do_finish))) {
       LOG_WARN("fail to deserialize is_do_finish_", K(ret));
-    } else {
+    } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &target_cg_cnt_))) {
+      LOG_WARN("fail to deserialize target_cg_ctn_", K(ret));
+    }
+    else {
       is_copy_indexes_ = static_cast<bool>(copy_indexes);
       is_copy_triggers_ = static_cast<bool>(copy_triggers);
       is_copy_constraints_ = static_cast<bool>(copy_constraints);
@@ -1303,8 +1311,8 @@ int ObTableRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
           LOG_WARN("failed to init ObSqlMonitorStats", K(ret), K(task_id_), K(task_type_));
         } else if (OB_FAIL(sql_monitor_stats_collector.get_next_sql_plan_monitor_stat(sql_monitor_stats))) {
           LOG_WARN("failed to get next sql plan monitor stats", K(ret));
-        } else if (OB_FAIL(diagnose_info.process_sql_monitor_and_generate_longops_message(sql_monitor_stats, stat_info_, pos))) {
-          LOG_WARN("failed to process sql monitor and generate longops message", K(ret), K(sql_monitor_stats), K(stat_info_), K(pos));
+        } else if (OB_FAIL(diagnose_info.process_sql_monitor_and_generate_longops_message(sql_monitor_stats, target_cg_cnt_, stat_info_, pos))) {
+          LOG_WARN("failed to process sql monitor and generate longops message", K(ret), K(sql_monitor_stats), K(target_cg_cnt_), K(stat_info_), K(pos)); 
         }
       }
       break;

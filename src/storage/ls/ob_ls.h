@@ -82,7 +82,7 @@ struct ObLSVTInfo
   int64_t checkpoint_lsn_;
   int64_t rebuild_seq_;
   share::SCN tablet_change_checkpoint_scn_;
-  share::SCN reserved_scn_;
+  share::SCN transfer_scn_;
   bool tx_blocked_;
   share::SCN mv_major_merge_scn_;
   share::SCN mv_publish_scn_;
@@ -98,7 +98,7 @@ struct ObLSVTInfo
                K_(checkpoint_lsn),
                K_(rebuild_seq),
                K_(tablet_change_checkpoint_scn),
-               K_(reserved_scn),
+               K_(transfer_scn),
                K_(tx_blocked),
                K_(mv_major_merge_scn),
                K_(mv_publish_scn),
@@ -205,7 +205,8 @@ public:
            const ObMigrationStatus &migration_status,
            const ObRestoreStatus &restore_status,
            const share::SCN &create_scn,
-           const ObMajorMVMergeInfo &major_mv_merge_info);
+           const ObMajorMVMergeInfo &major_mv_merge_info,
+           const ObLSStoreFormat &store_format);
   // I am ready to work now.
   int stop();
   void wait();
@@ -259,6 +260,10 @@ public:
   ObLSPersistentState get_persistent_state() const;
   int finish_create_ls();
 
+  // is current ls replica a column store replica
+  bool is_cs_replica() const;
+  // is current ls replica set contains a column store replica
+  int check_has_cs_replica(bool &has_cs_replica) const;
   // for rebuild
   // remove inner tablet, the memtable and minor sstable of data tablet, disable replay
   // int prepare_rebuild();
@@ -305,6 +310,15 @@ public:
 
   int64_t get_ls_epoch() const { return ls_epoch_; }
   int set_ls_epoch(const int64_t ls_epoch);
+  // for ls gc
+  int block_tablet_transfer_in();
+  // for tablet transfer
+  // this function is used for tablet transfer in
+  // it will check if it is allowed to transfer in and then
+  // do transfer in.
+  // @param [in] tablet_id, the tablet want to transfer.
+  // @return OB_OP_NOT_ALLOW, if the ls is blocked state there is no ls can transfer in.
+
   // do the work after storage meta replay
   // 1) rewrite the migration status if it is failed.
   // 2) load inner tablet and start to work if it is a normal ls.
@@ -426,8 +440,8 @@ public:
   // @param [in] replayable point
   // int get_ls_replayable_point(int64_t &replayable_point);
   DELEGATE_WITH_RET(ls_meta_, get_ls_replayable_point, int);
-  int inc_update_reserved_scn(const share::SCN &reserved_scn);
-  int set_reserved_scn(const share::SCN &reserved_scn);
+  int inc_update_transfer_scn(const share::SCN &transfer_scn);
+  int set_transfer_scn(const share::SCN &transfer_scn);
   // get ls_meta_package and unsorted tablet_ids, add read lock of LSLOCKLSMETA.
   // @param [in] check_archive if need check archive, for backup task is false, migration/rebuild is true
   // @param [out] meta_package
@@ -439,6 +453,8 @@ public:
   }
   DELEGATE_WITH_RET(ls_meta_, get_rebuild_info, int);
   DELEGATE_WITH_RET(ls_meta_, get_create_type, int);
+  DELEGATE_WITH_RET(ls_meta_, get_store_format, ObLSStoreFormat);
+
   // get ls_meta_package and sorted tablet_metas for backup. tablet gc is forbidden meanwhile.
   // @param [in] check_archive if need check archive, migration/rebuild is true
   // @param [in] handle_ls_meta_f, ls meta callback, will be first called.
@@ -521,7 +537,7 @@ public:
   DELEGATE_WITH_RET(ls_tablet_svr_, disable_to_read, void);
   DELEGATE_WITH_RET(ls_tablet_svr_, get_tablet_with_timeout, int);
   DELEGATE_WITH_RET(ls_tablet_svr_, get_mds_table_mgr, int);
-  // check tablet no active memtable
+  // for transfer to check tablet no active memtable
   DELEGATE_WITH_RET(ls_tablet_svr_, check_tablet_no_active_memtable, int);
 
   // ObLockTable interface:
@@ -752,7 +768,18 @@ public:
   DELEGATE_WITH_RET(ls_tx_svr_, print_all_tx_ctx, int);
   DELEGATE_WITH_RET(ls_tx_svr_, retry_apply_start_working_log, int);
 
+  DELEGATE_WITH_RET(ls_tx_svr_, filter_tx_need_transfer, int);
+  // for transfer to modify active tx ctx state
+  DELEGATE_WITH_RET(ls_tx_svr_, transfer_out_tx_op, int);
+
+  // for transfer to wait tx write end
   DELEGATE_WITH_RET(ls_tx_svr_, wait_tx_write_end, int);
+
+  // for transfer collect src_ls tx ctx
+  DELEGATE_WITH_RET(ls_tx_svr_, collect_tx_ctx, int);
+
+  // for transfer move tx ctx to dest_ls
+  DELEGATE_WITH_RET(ls_tx_svr_, move_tx_op, int);
 
   // ObReplayHandler interface:
   DELEGATE_WITH_RET(replay_handler_, replay, int);

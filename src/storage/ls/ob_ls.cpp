@@ -84,7 +84,8 @@ int ObLS::init(const share::ObLSID &ls_id,
                const ObMigrationStatus &migration_status,
                const ObRestoreStatus &restore_status,
                const SCN &create_scn,
-               const ObMajorMVMergeInfo &major_mv_merge_info)
+               const ObMajorMVMergeInfo &major_mv_merge_info,
+               const ObLSStoreFormat &store_format)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -100,11 +101,15 @@ int ObLS::init(const share::ObLSID &ls_id,
   } else if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ls is already initialized", K(ret), K_(ls_meta));
+  } else if (false) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("tenant is not match", K(ret));
   } else if (OB_FAIL(ls_meta_.init(ls_id,
                                    migration_status,
                                    restore_status,
                                    create_scn,
-                                   major_mv_merge_info))) {
+                                   major_mv_merge_info,
+                                   store_format))) {
     LOG_WARN("failed to init ls meta", K(ret), K(ls_id), K(major_mv_merge_info));
   } else if (OB_FAIL(ls_freezer_.init(this))) {
     LOG_WARN("init freezer failed", K(ret), K(ls_id));
@@ -335,6 +340,43 @@ int ObLS::finish_create_ls()
     LOG_WARN("finish create ls failed", KR(ret), K(ls_meta_));
   } else {
     update_state_seq_();
+  }
+  return ret;
+}
+
+bool ObLS::is_cs_replica() const
+{
+  return ls_meta_.get_store_format().is_columnstore();
+}
+
+int ObLS::check_has_cs_replica(bool &has_cs_replica) const
+{
+  int ret = OB_SUCCESS;
+  has_cs_replica = false;
+  ObRole role = INVALID_ROLE;
+  ObMemberList member_list;
+  GlobalLearnerList learner_list;
+  int64_t proposal_id = 0;
+  int64_t paxos_replica_number = 0;
+
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ls is not inited", K(ret));
+  } else if (OB_FAIL(log_handler_.get_role(role, proposal_id))) {
+    LOG_WARN("fail to get role", K(ret), KPC(this));
+  } else if (LEADER != role) {
+    ret = OB_NOT_MASTER;
+    LOG_WARN("local ls is not leader", K(ret), K_(ls_meta));
+  } else if (OB_FAIL(get_paxos_member_list_and_learner_list(member_list, paxos_replica_number, learner_list))) {
+    LOG_WARN("fail to get member list and learner list", K(ret), K_(ls_meta));
+  } else {
+    for (int64_t i = 0; i < learner_list.get_member_number(); i++) {
+      const ObMember &learner = learner_list.get_learner(i);
+      if (learner.is_columnstore()) {
+        has_cs_replica = true;
+        break;
+      }
+    }
   }
   return ret;
 }
@@ -727,7 +769,7 @@ int ObLS::register_sys_service()
     REGISTER_TO_LOGSERVICE(DAS_ID_LOG_BASE_TYPE, share::g_mp->dasid_service());
   }
   if (ls_id.is_sys_ls()) {
-    {
+    if (true) {
       ObIngressBWAllocService *ingress_service = GCTX.net_frame_->get_ingress_service();
       REGISTER_TO_LOGSERVICE(NET_ENDPOINT_INGRESS_LOG_BASE_TYPE, ingress_service);
       REGISTER_TO_LOGSERVICE(MVIEW_MAINTENANCE_SERVICE_LOG_BASE_TYPE, share::g_mp->m_view_maintenance_service());
@@ -1132,7 +1174,7 @@ int ObLS::get_ls_info(ObLSVTInfo &ls_info)
       ls_info.checkpoint_lsn_ = ls_meta_.get_clog_base_lsn().val_;
       ls_info.rebuild_seq_ = ls_meta_.get_rebuild_seq();
       ls_info.tablet_change_checkpoint_scn_ = ls_meta_.get_tablet_change_checkpoint_scn();
-      ls_info.reserved_scn_ = ls_meta_.get_reserved_scn();
+      ls_info.transfer_scn_ = ls_meta_.get_transfer_scn();
       ls_info.tx_blocked_ = tx_blocked;
       ls_info.mv_major_merge_scn_ = ls_meta_.get_major_mv_merge_info().major_mv_merge_scn_;
       ls_info.mv_publish_scn_ = ls_meta_.get_major_mv_merge_info().major_mv_merge_scn_publish_;
@@ -1522,7 +1564,7 @@ int ObLS::replay_get_tablet(
       }
     } else if (mds::TwoPhaseCommitState::ON_COMMIT != trans_stat) {
       if ((ObTabletStatus::NORMAL == data.tablet_status_ && data.create_commit_version_ == ObTransVersion::INVALID_TRANS_VERSION)
-          || ObTabletStatus::RESERVED_5 == data.tablet_status_
+          || ObTabletStatus::TRANSFER_IN == data.tablet_status_
           || ObTabletStatus::SPLIT_DST == data.tablet_status_) {
         ret = OB_EAGAIN;
         LOG_INFO("latest transaction has not committed yet, should retry", KR(ret), K(ls_id), K(tablet_id),
@@ -1921,13 +1963,13 @@ int ObLS::diagnose(DiagnoseInfo &info) const
   return ret;
 }
 
-int ObLS::inc_update_reserved_scn(const share::SCN &reserved_scn)
+int ObLS::inc_update_transfer_scn(const share::SCN &transfer_scn)
 {
   int ret = OB_SUCCESS;
   WRLockGuard guard(meta_rwlock_);
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ls_meta_.inc_update_reserved_scn(ls_epoch_, reserved_scn))) {
-    LOG_WARN("fail to set reserved scn", K(ret), K(reserved_scn), K_(ls_meta));
+  } else if (OB_FAIL(ls_meta_.inc_update_transfer_scn(ls_epoch_, transfer_scn))) {
+    LOG_WARN("fail to set transfer scn", K(ret), K(transfer_scn), K_(ls_meta));
   } else {
     // do nothing
   }

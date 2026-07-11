@@ -21,6 +21,7 @@
 #include <sys/statvfs.h>
 #endif
 #include "lib/net/ob_net_util.h"
+#include "lib/task/ob_timer.h"
 #include "lib/random/ob_mysql_random.h"
 #include "lib/container/ob_iarray.h"
 
@@ -44,7 +45,6 @@
 
 #include "observer/mysql/ob_diag.h"
 
-#include "share/resource_manager/ob_cgroup_ctrl.h"
 #include "observer/omt/ob_multi_tenant.h"
 #include "observer/omt/ob_worker_processor.h"
 #include "share/rc/ob_module_provider.h"   // ObIModuleProvider / g_mp (ObServer owns modules)
@@ -118,7 +118,7 @@ public:
   public:
     ObCTASCleanUpTask();
     virtual ~ObCTASCleanUpTask() {}
-    int init(ObServer *observer, int tg_id);
+    int init(ObServer *observer, common::ObTimer &timer);
     virtual void runTimerTask() override;
   private:
     const static int64_t CLEANUP_INTERVAL = 60L * 1000L * 1000L;//60s
@@ -131,7 +131,7 @@ public:
   public:
     ObRefreshTimeTask();
     virtual ~ObRefreshTimeTask() {}
-    int init(ObServer *observer, int tg_id);
+    int init(ObServer *observer, common::ObTimer &timer);
     virtual void runTimerTask() override;
   private:
     const static int64_t REFRESH_INTERVAL = 60LL * 60 * 1000 * 1000;//1hr
@@ -144,7 +144,7 @@ public:
   public:
     ObRefreshCpuFreqTimeTask();
     virtual ~ObRefreshCpuFreqTimeTask() {}
-    int init(ObServer *observer, int tg_id);
+    int init(ObServer *observer, common::ObTimer &timer);
     virtual void runTimerTask() override;
   private:
     const static int64_t REFRESH_INTERVAL = 10 * 1000L * 1000L;//10s
@@ -218,7 +218,6 @@ private:
 
   int init_config(const ObServerOptions &opts);
   int init_opts_config(const ObServerOptions &opts, const char *optstr); // init configs from command line
-  int init_create_func();
   int init_data_dir_and_redo_dir(const ObServerOptions &opts);
   int init_self_addr();
   int init_config_module(const char *optstr);
@@ -364,14 +363,14 @@ private:
   // virtual table related
   ObVirtualDataAccessService vt_data_service_;
   // Weakly Consistent Read Service
-  // Tenant isolation resource management
-  share::ObCgroupCtrl cgroup_ctrl_;
-
   //observer start time
   int64_t start_time_;
   int64_t warm_up_start_time_;
   obmysql::ObDiag diag_;
   common::ObMysqlRandom scramble_rand_;
+  common::ObTimer server_gtimer_;
+  common::ObTimer sql_mem_timer_;
+  common::ObTimer ctas_clean_up_timer_;
   ObTenantDutyTask duty_task_;
   ObTenantSqlMemoryTimerTask sql_mem_task_;
   ObCTASCleanUpTask ctas_clean_up_task_;     // repeat & no retry

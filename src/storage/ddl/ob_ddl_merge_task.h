@@ -45,6 +45,7 @@ namespace storage
 {
 
 class ObLS;
+class ObCOSSTableV2;
 class ObDDLTableMergeTask;
 
 class ObDDLTableMergeDag : public share::ObIDag
@@ -121,7 +122,7 @@ public:
   ~ObDDLMacroBlockIterator();
   int open(blocksstable::ObSSTable *sstable, const blocksstable::ObDatumRange &query_range, const ObITableReadInfo &read_info, ObIAllocator &allocator);
 
-  int get_next(blocksstable::ObDataMacroBlockMeta &data_macro_meta);
+  int get_next(blocksstable::ObDataMacroBlockMeta &data_macro_meta, int64_t &end_row_offset);
 private:
   bool is_inited_;
   blocksstable::ObSSTable *sstable_;
@@ -153,6 +154,13 @@ public:
       const ObStorageSchema *storage_schema,
       common::ObArenaAllocator &allocator,
       ObArray<ObDDLBlockMeta> &sorted_metas);
+  static int create_ddl_empty_co_sstable(
+      const ObTabletID &tablet_id,
+      const share::SCN &ddl_start_scn,
+      const int64_t snapshot_version,
+      const ObStorageSchema *storage_schema,
+      common::ObArenaAllocator &allocator,
+      ObTableHandleV2 &table_handle);
   static int create_ddl_sstable(
       ObTablet &tablet,
       const ObTabletDDLParam &ddl_param,
@@ -169,7 +177,9 @@ public:
       ObTablet &tablet,
       const ObTabletDDLParam &ddl_param,
       const ObStorageSchema *storage_schema,
-      blocksstable::ObSSTable *sstable);
+      common::ObArenaAllocator &allocator,
+      blocksstable::ObSSTable *sstable,
+      const ObTablesHandleArray &slice_sstables);
 
   static int compact_ddl_kv(
       ObLS &ls,
@@ -216,6 +226,9 @@ public:
       bool &is_data_continue,
       share::SCN &compact_start_scn,
       share::SCN &compact_end_scn);
+
+  static int check_need_replay_column_store(const ObStorageSchema &storage_schema,
+                                            bool &need_replay_column_store);
 
 private:
 

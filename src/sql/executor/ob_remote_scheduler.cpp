@@ -200,6 +200,7 @@ int ObRemoteScheduler::execute_with_sql(ObExecContext &ctx, ObPhysicalPlan *phy_
   ObQueryRetryInfo *retry_info = NULL;
   ObRemoteTask task;
   bool has_sent_task = false;
+  bool has_transfer_err = false;
 
   if (OB_ISNULL(phy_plan) || OB_ISNULL(session) || OB_ISNULL(plan_ctx)) {
     ret = OB_INVALID_ARGUMENT;
@@ -252,7 +253,8 @@ int ObRemoteScheduler::execute_with_sql(ObExecContext &ctx, ObPhysicalPlan *phy_
                                      task,
                                      task.get_runner_svr(),
                                      *handler,
-                                     has_sent_task))) {
+                                     has_sent_task,
+                                     has_transfer_err))) {
       LOG_WARN("task execute failed", K(ret));
     }
 
@@ -260,9 +262,9 @@ int ObRemoteScheduler::execute_with_sql(ObExecContext &ctx, ObPhysicalPlan *phy_
     int tmp_ret = ObRemoteTaskExecutor::handle_tx_after_rpc(handler->get_result(),
                                                             session,
                                                             has_sent_task,
+                                                            has_transfer_err,
                                                             phy_plan,
                                                             ctx);
-    ret = COVER_SUCC(tmp_ret);
     NG_TRACE_EXT(remote_task_completed, OB_ID(ret), ret,
                  OB_ID(runner_svr), task.get_runner_svr(), OB_ID(task), task);
     // Description: After this function returns, the final control will enter ObDirectReceive,

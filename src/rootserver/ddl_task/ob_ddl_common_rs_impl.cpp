@@ -47,6 +47,7 @@
 #include "share/location_cache/ob_location_service.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
+#include "storage/ddl/ob_group_write_macro_block_task.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
 #include "rootserver/ob_index_builder.h"
 #include "lib/worker.h"

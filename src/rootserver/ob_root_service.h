@@ -228,6 +228,7 @@ public:
   int clean_splitted_tablet(const obcall::ObCleanSplittedTabletArg &arg);
 
   //the interface only for switchover: execute skip check enable_ddl
+  int flashback_index(const obcall::ObFlashBackIndexArg &arg);
   int purge_index(const obcall::ObPurgeIndexArg &arg);
   int create_table_like(const obcall::ObCreateTableLikeArg &arg);
   int parallel_create_table_like(const obcall::ObCreateTableLikeArg &arg, obcall::ObCreateTableRes &res);
@@ -236,9 +237,10 @@ public:
   int update_mview_status(const obcall::ObUpdateMViewStatusArg &arg);
   int parallel_update_index_status(const obcall::ObUpdateIndexStatusArg &arg, obcall::ObParallelDDLRes &res);
   int purge_table(const obcall::ObPurgeTableArg &arg);
-  int restore_table_from_recyclebin(const obcall::ObRecyclebinRestoreTableArg &arg);
+  int flashback_table_from_recyclebin(const obcall::ObFlashBackTableFromRecyclebinArg &arg);
+  int flashback_table_to_time_point(const obcall::ObFlashBackTableToScnArg &arg);
   int purge_database(const obcall::ObPurgeDatabaseArg &arg);
-  int restore_database(const obcall::ObRecyclebinRestoreDatabaseArg &arg);
+  int flashback_database(const obcall::ObFlashBackDatabaseArg &arg);
 
   int drop_index_on_failed(const obcall::ObDropIndexArg &arg, obcall::ObDropIndexRes &res);
 
@@ -455,6 +457,7 @@ private:
   int check_data_disk_write_limit_(obcall::ObAdminSetConfigItem &item);
   int check_data_disk_usage_limit_(obcall::ObAdminSetConfigItem &item);
   int check_vector_memory_limit_(obcall::ObAdminSetConfigItem &item);
+  int check_transfer_task_tablet_count_threshold_(obcall::ObAdminSetConfigItem &item);
   int start_ddl_service_();
 private:
   static const int64_t OB_MAX_CLUSTER_REPLICA_COUNT = 10000000;

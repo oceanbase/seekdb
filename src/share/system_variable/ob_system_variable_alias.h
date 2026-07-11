@@ -151,6 +151,7 @@ namespace share
   static const char* const OB_SV_ENABLE_TRANSMISSION_CHECKSUM = "ob_enable_transmission_checksum";
   static const char* const OB_SV_FOREIGN_KEY_CHECKS = "foreign_key_checks";
   static const char* const OB_SV_STATEMENT_TRACE_ID = "ob_statement_trace_id";
+  static const char* const OB_SV_ENABLE_TRUNCATE_FLASHBACK = "ob_enable_truncate_flashback";
   static const char* const OB_SV_TCP_INVITED_NODES = "ob_tcp_invited_nodes";
   static const char* const OB_SV_SQL_THROTTLE_CURRENT_PRIORITY = "sql_throttle_current_priority";
   static const char* const OB_SV_SQL_THROTTLE_PRIORITY = "sql_throttle_priority";
@@ -818,6 +819,7 @@ namespace share
   static const char* const OB_SV__OPTIMIZER_COST_BASED_TRANSFORMATION = "_optimizer_cost_based_transformation";
   static const char* const OB_SV_RANGE_INDEX_DIVE_LIMIT = "range_index_dive_limit";
   static const char* const OB_SV_PARTITION_INDEX_DIVE_LIMIT = "partition_index_dive_limit";
+  static const char* const OB_SV_TABLE_ACCESS_POLICY = "ob_table_access_policy";
   static const char* const OB_SV_PID_FILE = "pid_file";
   static const char* const OB_SV_PORT = "port";
   static const char* const OB_SV_SOCKET = "socket";

@@ -185,6 +185,9 @@ private:
       const int ret,
       const obcall::ObDropIndexArg &arg,
       const share::schema::ObTableSchema *index_schema = nullptr);
+  int create_index_column_group(const obcall::ObCreateIndexArg &arg,
+                                share::schema::ObTableSchema &index_table_schema);
+
   bool rowkey_doc_index_valid(const bool has_docid_col,
                               const int64_t aux_rowkey_doc_ith,
                               const int64_t aux_doc_rowkey_ith,
