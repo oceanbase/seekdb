@@ -44,11 +44,7 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_logic_res(
   ObCStringHelper helper;
   
   const char *str = NULL;
-  if (false) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("only sys tenant can do this", K(ret));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "Only sys tenant can do this. Operator is");
-  } else if (OB_UNLIKELY(2 > params.count())) {
+  if (OB_UNLIKELY(2 > params.count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("params not valid", KR(ret), K(params));
   } else if (OB_FAIL(params.at(0).get_varchar(str_arg))) {
@@ -90,11 +86,7 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_unit(
   int64_t pos = 0;
   int64_t timeout = -1;
   
-  if (false) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("only sys tenant can do this", K(ret));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "Only sys tenant can do this. Operator is");
-  } else if (OB_UNLIKELY(2 > params.count())) {
+  if (OB_UNLIKELY(2 > params.count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("params not valid", KR(ret), K(params));
   } else if (FALSE_IT(addr_str = params.at(0).get_varchar())) {

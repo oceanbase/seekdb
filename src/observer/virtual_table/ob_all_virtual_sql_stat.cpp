@@ -134,7 +134,7 @@ bool ObAllVirtualSqlStatIter::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSes
     // do nothing
   } else if (ObSQLSessionState::QUERY_ACTIVE != sess_info->get_session_state()) {
     // do nothing
-  } else if (true) {
+  } else {
     // WARNNIGN!!!
     // Access to things like cur_sql_ctx_ and cur_plan is forbidden, 
     // these pointers are not guaranteed to be thread-safe and risk CORE!

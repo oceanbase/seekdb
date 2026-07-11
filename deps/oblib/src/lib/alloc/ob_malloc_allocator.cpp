@@ -172,7 +172,6 @@ int ObMallocAllocator::with_resource_handle_invoke(InvokeFunc func)
 
 int ObMallocAllocator::set_tenant_hard_limit(int64_t bytes)
 {
-  if (false) return OB_SUCCESS;
   return with_resource_handle_invoke([bytes](ObTenantMemoryMgr *mgr) {
       mgr->set_hard_limit(bytes);
       return OB_SUCCESS;
@@ -191,7 +190,6 @@ int64_t ObMallocAllocator::get_tenant_hard_limit()
 
 int ObMallocAllocator::set_tenant_limit(int64_t bytes)
 {
-  if (false) return OB_SUCCESS;
   return with_resource_handle_invoke([bytes](ObTenantMemoryMgr *mgr) {
       mgr->set_limit(bytes);
       return OB_SUCCESS;
@@ -334,7 +332,6 @@ int ObMallocAllocator::set_tenant_ctx_idle(const uint64_t ctx_id,
                                            const int64_t size,
                                            const bool reserve /*=false*/)
 {
-  if (false) return OB_SUCCESS;
   int ret = OB_SUCCESS;
   auto allocator = get_tenant_ctx_allocator(ctx_id);
   if (NULL == allocator) {

@@ -5479,8 +5479,7 @@ int ObSchemaGetterGuard::get_schema_mgr_info(const ObSchemaMgrInfo *&schema_mgr_
   int ret = OB_SUCCESS;
   schema_mgr_info = NULL;
   if (schema_mgr_infos_.count() == 2) {
-#define MATCH_TENANT_SCHEMA_MGR(x) if (true) { schema_mgr_info = &schema_mgr_infos_[x]; }
-    MATCH_TENANT_SCHEMA_MGR(1) else MATCH_TENANT_SCHEMA_MGR(0);
+    schema_mgr_info = &schema_mgr_infos_[1];
     if (OB_ISNULL(schema_mgr_info)) {
       ret = OB_TENANT_NOT_EXIST;
     }

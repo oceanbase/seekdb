@@ -349,8 +349,7 @@ int ObDDLCtrlSpeedHandle::limit_and_sleep(const share::ObLSID &ls_id,
     LOG_WARN("invalid argument", K(ret), K(task_id), K(ls_id), K(bytes));
   } else if (OB_FAIL(DDL_SIM(task_id, WRITE_DUPLICATED_DDL_REDO_LOG))) {
     LOG_WARN("ddl sim remote write", K(ret), K(task_id));
-  } else if (false) {
-  }
+  } else ;
   if (OB_SUCC(ret) && OB_FAIL(speed_handle_item_.init(ls_id))) {
     if (OB_INIT_TWICE != ret) {
       LOG_WARN("fail to init speed handle item", K(ret), K(ls_id));

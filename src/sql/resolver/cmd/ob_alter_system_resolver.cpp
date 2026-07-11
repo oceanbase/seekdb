@@ -456,9 +456,6 @@ int ObFreezeResolver::resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode
       } else {
         freeze_stmt->inc_tenant_count(); // if tenant is not explicitly specified, add owned tenant
       }
-    } else if (false) {
-      ret = OB_ERR_NO_PRIVILEGE;
-      LOG_WARN("Only sys tenant can add suffix opt of tablet_id after tenant name", KR(ret));
     } else if (1 != freeze_stmt->get_tenant_count()) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("not suppport to specify several tenant ids or no tenant id for tablet major freeze", K(ret),
@@ -841,12 +838,6 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
           }
         } // normal tenant ends
       } // fine-grained plan evcit ends
-    } else if (false) {
-    // tenant node is not null and current tenant is not sys tenant
-    // due to normal tenant cannot specify tenant, and only can purge
-    // their own plan cache
-      ret = OB_ERR_NO_PRIVILEGE;
-      LOG_WARN("Only sys tenant can do this operation", K(ret));
     } else if (NULL == t_node->children_) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "invalid argument", K(ret));

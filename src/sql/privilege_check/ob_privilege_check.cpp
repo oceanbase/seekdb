@@ -1708,10 +1708,6 @@ int get_create_table_like_stmt_need_privs(
     ObNeedPriv need_priv;
     const ObCreateTableLikeStmt *stmt = static_cast<const ObCreateTableLikeStmt *>(basic_stmt);
     if (OB_FAIL(ret)) {
-    } else if (false) {
-      ret = OB_ERR_NO_PRIVILEGE;
-      LOG_WARN("Can not create other tenant's table. Should not be here except change"
-               "tenant which not suggested", K(ret));
     } else if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, stmt->get_new_db_name()))) {
       LOG_WARN("Can not do this operation on the database", K(session_priv), K(ret));
     } else {
@@ -1748,10 +1744,6 @@ int get_fork_table_stmt_need_privs(
     const ObForkTableStmt *stmt = static_cast<const ObForkTableStmt *>(basic_stmt);
     const obcall::ObForkTableArg &fork_table_arg = stmt->get_fork_table_arg();
     if (OB_FAIL(ret)) {
-    } else if (false) {
-      ret = OB_ERR_NO_PRIVILEGE;
-      LOG_WARN("Can not fork other tenant's table. Should not be here except change"
-               "tenant which not suggested", K(ret));
     } else if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, fork_table_arg.dst_database_name_))) {
       LOG_WARN("Can not do this operation on the database", K(session_priv), K(ret));
     } else {
@@ -1790,10 +1782,6 @@ int get_fork_database_stmt_need_privs(
     const ObForkDatabaseStmt *stmt = static_cast<const ObForkDatabaseStmt *>(basic_stmt);
     const obcall::ObForkDatabaseArg &fork_database_arg = stmt->get_fork_database_arg();
     if (OB_FAIL(ret)) {
-    } else if (false) {
-      ret = OB_ERR_NO_PRIVILEGE;
-      LOG_WARN("Can not fork other tenant's database. Should not be here except change"
-               "tenant which not suggested", K(ret));
     } else if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, fork_database_arg.src_database_name_))) {
       LOG_WARN("Can not do this operation on the source database", K(session_priv), K(ret));
     } else {
@@ -1880,9 +1868,6 @@ int get_boot_strap_stmt_need_privs(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Stmt type should be T_BOOTSTRAP",
              K(ret), "stmt type", basic_stmt->get_stmt_type());
-  } else if (false) {
-    ret = OB_ERR_NO_PRIVILEGE;
-    LOG_WARN("Only sys tenant can do this operation", K(ret));
   } else {
     ObNeedPriv need_priv;
     need_priv.priv_set_ = OB_PRIV_BOOTSTRAP;
@@ -2539,22 +2524,8 @@ int ObPrivilegeCheck::can_do_operation_on_db(const ObSessionPrivInfo &session_pr
                                              const ObString &op_literal)
 {
   int ret = OB_SUCCESS;
-  if (true) {
+  {
     /* system tenant, no checking */
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < table_infos.count(); i++) {
-      const ObDmlTableInfo *table_info = table_infos.at(i);
-      if (OB_ISNULL(table_info)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table info is null");
-      } else if (is_inner_table(table_info->ref_table_id_)) {
-        ret = OB_ERR_NO_TABLE_PRIVILEGE;
-        LOG_USER_ERROR(OB_ERR_NO_TABLE_PRIVILEGE, op_literal.length(), op_literal.ptr(),
-                      session_priv.user_name_.length(), session_priv.user_name_.ptr(),
-                      session_priv.host_name_.length(),session_priv.host_name_.ptr(),
-                      table_info->table_name_.length(), table_info->table_name_.ptr());
-      }
-    }
   }
   return ret;
 }
@@ -2571,28 +2542,6 @@ int ObPrivilegeCheck::can_do_grant_on_db_table(
     LOG_USER_ERROR(OB_ERR_NO_DB_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),
                    session_priv.host_name_.length(),session_priv.host_name_.ptr(),
                    db_name.length(), db_name.ptr());
-  } else if (false) {
-    if (0 == db_name.case_compare(OB_INFORMATION_SCHEMA_NAME)
-      || 0 == db_name.case_compare(OB_RECYCLEBIN_SCHEMA_NAME)
-      || 0 == db_name.case_compare(OB_PUBLIC_SCHEMA_NAME)
-      || 0 == db_name.case_compare(OB_SYS_DATABASE_NAME)) {
-      if (0 == db_name.case_compare(OB_INFORMATION_SCHEMA_NAME)
-        || OB_PRIV_HAS_OTHER(priv_set, OB_PRIV_SELECT)) {
-        ret = OB_ERR_NO_DB_PRIVILEGE;
-        LOG_USER_ERROR(OB_ERR_NO_DB_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),
-                       session_priv.host_name_.length(),session_priv.host_name_.ptr(),
-                       db_name.length(), db_name.ptr());
-      }
-    } else if (ObPrivilegeCheck::is_mysql_org_table(db_name, table_name)) {
-      if (OB_PRIV_HAS_OTHER(priv_set, OB_PRIV_SELECT)) {
-        ret = OB_ERR_NO_TABLE_PRIVILEGE;
-        const char *command = "NOT-SELECT";
-        LOG_USER_ERROR(OB_ERR_NO_TABLE_PRIVILEGE, (int)strlen(command), command,
-                       session_priv.user_name_.length(), session_priv.user_name_.ptr(),
-                       session_priv.host_name_.length(),session_priv.host_name_.ptr(),
-                       table_name.length(), table_name.ptr());
-      }
-    } else { }//do nothing
   } else {
     if (0 == db_name.case_compare(OB_INFORMATION_SCHEMA_NAME)) {
       ret = OB_ERR_NO_DB_PRIVILEGE;

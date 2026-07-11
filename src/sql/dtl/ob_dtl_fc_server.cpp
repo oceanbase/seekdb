@@ -316,21 +316,7 @@ int ObDfcServer::get_current_tenant_dfc(ObTenantDfc *&tenant_dfc)
   if (nullptr == tenant_dfc) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to create tenant dfc", K(ret));
-  } else if (false) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("unexpected tenant mtl");
-    //   // This is to solve the issue that after sys tenant changes tenant to another tenant, it should be able to use the dtl service
-    //   // otherwise there is a bug:
-    //   //
-    //   // The scenario for entering this branch is: the init_sqc rpc did not find tenant resources on this machine,
-    //   // Thus fallback to sys tenant, thus MTL retrieves the dfc tenant id as sys tenant id
-    //   //
-    //   // At this time: return the dfc resource of the sys tenant to the caller
-    // } else {
-    //   ret = OB_ERR_UNEXPECTED;
-    //   LOG_WARN("the tenant id of tenant dfc is not match with tenant id hinted",
-    // }
-  }
+  } else ;
   return ret;
 }
 

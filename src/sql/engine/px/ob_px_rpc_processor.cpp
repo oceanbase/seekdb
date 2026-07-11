@@ -322,7 +322,6 @@ int ObFastInitSqcReportQCMessageCall::mock_sqc_finish_msg()
             LOG_WARN("serialize RPC channel message fail", K(ret));
           } else if (FALSE_IT(buffer->size() = pos)) {
           } else if (FALSE_IT(pos = 0)) {
-          } else if (false) {
           } else if (OB_FAIL(ch->attach(buffer, inc_recv_buf_cnt))) {
             LOG_WARN("fail to feedup buffer", K(ret));
           } else if (FALSE_IT(ch->free_buffer_count())) {

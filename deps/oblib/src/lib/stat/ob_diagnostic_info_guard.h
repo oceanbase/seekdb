@@ -187,8 +187,4 @@ public:
   do {                                                           \
   } while (0)
 
-#define GET_DIAGNOSTIC_INFO                                       \
-  if (false)                                                     \
-  ((oceanbase::common::ObDiagnosticInfo*)nullptr)
-
 #endif /* OB_DIAGNOSTIC_INFO_GUARD_H_ */

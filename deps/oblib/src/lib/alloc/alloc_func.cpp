@@ -87,7 +87,6 @@ int64_t get_hard_memory_remain()
 void set_tenant_memory_limit(int64_t bytes)
 {
   // set tenant allocator memory limit
-  if (false) return;
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
     allocator->set_tenant_limit(bytes);
@@ -177,7 +176,6 @@ int64_t ob_get_reserved_memory()
 
 int set_ctx_limit(uint64_t ctx_id, const int64_t limit)
 {
-  if (false) return OB_SUCCESS;
   int ret = OB_SUCCESS;
   ObMallocAllocator *alloc = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(alloc)) {
@@ -197,7 +195,6 @@ int set_ctx_limit(uint64_t ctx_id, const int64_t limit)
 
 int set_wa_limit(int64_t wa_pctg)
 {
-  if (false) return OB_SUCCESS;
   const int64_t tenant_limit = get_tenant_memory_limit();
   // For small tenants, work_area may only have dozens of M, which is unavailable. Give work_area a lower limit
   const int64_t lower_limit = 150L << 20;
@@ -209,7 +206,6 @@ int set_wa_limit(int64_t wa_pctg)
 
 int set_meta_obj_limit(int64_t meta_obj_pct_lmt)
 {
-  if (false) return OB_SUCCESS;
   const int64_t tenant_limit = get_tenant_memory_limit();
   const int64_t ctx_limit = 0 == meta_obj_pct_lmt ? tenant_limit : (tenant_limit / 100) * meta_obj_pct_lmt;
 
@@ -236,7 +232,6 @@ bool errsim_alloc(const ObMemAttr &attr)
 
 int set_req_chunkmgr_parallel(uint64_t ctx_id, int32_t parallel)
 {
-  if (false) return OB_SUCCESS;
   int ret = OB_SUCCESS;
   ObMallocAllocator *ma = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(ma)) {

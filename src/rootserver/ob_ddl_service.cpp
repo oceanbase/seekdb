@@ -34109,9 +34109,6 @@ int ObDDLTransController::broadcast_consensus_version(const int64_t schema_versi
   } else if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ObDDLTransController", KR(ret));
-  } else if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", KR(ret));
   } else if (OB_ISNULL(GCTX.root_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("rootservice is null", KR(ret));

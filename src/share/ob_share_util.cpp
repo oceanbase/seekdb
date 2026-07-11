@@ -248,12 +248,8 @@ int ObShareUtil::mtl_get_tenant_role(ObTenantRole::Role &tenant_role)
 {
   int ret = OB_SUCCESS;
   tenant_role = ObTenantRole::INVALID_TENANT;
-  if (true) {
+  {
     tenant_role = ObTenantRole::PRIMARY_TENANT;
-  } else {
-    MOD_SCOPE {
-      tenant_role = MTL_GET_TENANT_ROLE_CACHE();
-    }
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(is_invalid_tenant(tenant_role))) {
     ret = OB_NEED_WAIT;
@@ -292,7 +288,7 @@ int ObShareUtil::table_get_tenant_role(ObTenantRole &tenant_role)
   int ret = OB_SUCCESS;
   tenant_role.reset();
   bool is_primary = true;
-  if (true) {
+  {
     if (OB_FAIL(is_primary_cluster(is_primary))) {
       LOG_WARN("fail to check whether is primary cluster", K(is_primary));
     } else if (is_primary) {

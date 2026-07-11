@@ -138,12 +138,9 @@ int ObLobLocatorHelper::fill_lob_locator(ObDatumRow &row,
   } else if (OB_ISNULL(col_descs = access_param.iter_param_.get_out_col_descs())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected null col_descs", K(ret), K(access_param.iter_param_));
-  } else if (true) {
+  } else {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "LOB locator build is unavailable without locator v2", K(ret));
-  } else if (OB_ISNULL(access_param.output_exprs_) || OB_ISNULL(access_param.get_op())) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "output expr or op is null", K(ret), K(access_param));
   }
 
   return ret;

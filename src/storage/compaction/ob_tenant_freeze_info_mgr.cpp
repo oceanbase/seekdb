@@ -564,19 +564,8 @@ int ObTenantFreezeInfoMgr::ReloadTask::refresh_merge_info()
       LOG_INFO("schedule zone to stop major merge", K(global_merge_info));
     } else {
       if (check_tenant_status_) {
-        if (true) {
+        {
           check_tenant_status_ = false;
-        } else if (false) { // skip virtual tenant
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("tenant is unexpected virtual tenant", KR(ret));
-        } else {
-          const ObTenantRole::Role &role = MTL_GET_TENANT_ROLE_CACHE();
-          if (is_primary_tenant(role) || is_standby_tenant(role)) {
-            check_tenant_status_ = false;
-            LOG_INFO("finish check tenant restore", K(role));
-          } else if (REACH_THREAD_TIME_INTERVAL(10L * 1000L * 1000L)) {
-            LOG_INFO("skip restoring tenant to schedule major merge", K(role));
-          }
         }
       }
       if (!check_tenant_status_) {

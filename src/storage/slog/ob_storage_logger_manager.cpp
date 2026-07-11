@@ -319,11 +319,8 @@ int ObStorageLoggerManager::get_tenant_slog_dir(
 {
   int ret = OB_SUCCESS;
   int pret = 0;
-  if (true) {  // seekdb: single tenant -> /sys
+  {  // seekdb: single tenant -> /sys
     pret = snprintf(tenant_slog_dir, MAX_PATH_SIZE, "%s/sys", log_dir_);
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_REDO_LOG(ERROR, "unexpected tenant id", K(ret));
   }
   if (pret < 0 || pret >= MAX_PATH_SIZE) {
     ret = OB_BUF_NOT_ENOUGH;

@@ -183,10 +183,7 @@ int ObTenantServers::init_or_insert_server(
         K(server), K(renew_time));
   } else if (!is_valid()) {
     renew_time_ = renew_time;
-  } else if (false) {
-    ret = OB_CONFLICT_VALUE;
-    LOG_WARN("already initialized; tenant mismatch", KR(ret));
-  }
+  } else ;
 
   // insert_server will ensure that 
   // there are no duplicates in the servers of tenant_servers

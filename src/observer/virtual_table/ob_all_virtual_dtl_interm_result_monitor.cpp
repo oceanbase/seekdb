@@ -218,7 +218,7 @@ int ObAllDtlIntermResultMonitor::fill_scanner()
     SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
   } else {
     
-    if(true) {
+    {
       {
         {
           ObDTLIntermResultMonitorInfoGetter monitor_getter(scanner_, *allocator_, output_column_ids_,
@@ -232,14 +232,6 @@ int ObAllDtlIntermResultMonitor::fill_scanner()
             // so we need to ignore the error code of MTL_SWITCH.
             ret = OB_SUCCESS;
           }
-        }
-      }
-    } else {
-      ObDTLIntermResultMonitorInfoGetter monitor_getter(scanner_, *allocator_, output_column_ids_,
-                                  cur_row_);
-      MOD_SCOPE {
-        if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->generate_monitor_info_rows(monitor_getter))) {
-          SERVER_LOG(WARN, "generate monitor info array failed", K(ret));
         }
       }
     }

@@ -88,7 +88,7 @@ ObSysStat::ObSysStat()
 int ObSysStat::set_initial_values()
 {
   int ret = OB_SUCCESS;
-  if (true) {
+  {
     ob_max_used_id_.value_.set_int(OB_USER_TENANT_ID);
     ob_max_used_unit_config_id_.value_.set_int(OB_USER_UNIT_CONFIG_ID);
     ob_max_used_resource_pool_id_.value_.set_int(OB_USER_RESOURCE_POOL_ID);
@@ -96,15 +96,6 @@ int ObSysStat::set_initial_values()
     ob_max_used_server_id_.value_.set_int(OB_INIT_SERVER_ID - 1);
     ob_max_used_ddl_task_id_.value_.set_int(OB_INIT_DDL_TASK_ID);
     ob_max_used_unit_group_id_.value_.set_int(OB_USER_UNIT_GROUP_ID);
-  } else {
-    const int64_t root_own_count = 6;
-    for (int64_t i = 0; i < root_own_count && OB_SUCC(ret); ++i) {
-      const bool remove_succeed = item_list_.remove_first();
-      if (!remove_succeed) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("remove_succeed should be true", K(ret));
-      }
-    }
   }
   if (OB_SUCC(ret)) {
     ob_max_used_normal_rowid_table_tablet_id_.value_.set_int(ObTabletID::MIN_USER_NORMAL_ROWID_TABLE_TABLET_ID);

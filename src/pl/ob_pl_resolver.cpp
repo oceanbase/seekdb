@@ -1703,18 +1703,14 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
       : extern_type_info->type_subname_ = current_block_->get_namespace().get_package_name());
     if (OB_FAIL(ret)) {
     } else if (3 == access_idxs.count()) {
-      if (true) {
+      {
         extern_type_info->type_owner_ = OB_SYS_DATABASE_ID;
-      } else {
-        extern_type_info->type_owner_ = access_idxs.at(0).var_index_;
       }
       OX (package_id = access_idxs.at(1).var_index_);
       OX (type = access_idxs.at(1).access_type_);
     } else if (2 == access_idxs.count()) {
-      if (true) { // Var in the system package
+      { // Var in the system package
         extern_type_info->type_owner_ = OB_SYS_DATABASE_ID;
-      } else {
-        OZ(resolve_ctx_.session_info_.get_database_id(extern_type_info->type_owner_));
       }
       OX (package_id = access_idxs.at(0).var_index_);
       OX (type = access_idxs.at(0).access_type_);
@@ -1765,10 +1761,8 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
     } else if (access_idxs.count() > 1) { // db.pkg.type or pkg.type
       extern_type_info->type_subname_ = access_idxs.at(access_idxs.count() - 2).var_name_;
       if (3 == access_idxs.count()) {
-        if (true) {
+        {
           extern_type_info->type_owner_ = OB_SYS_DATABASE_ID;
-        } else {
-          extern_type_info->type_owner_ = access_idxs.at(0).var_index_;
         }
       } else {
         extern_type_info->type_owner_ = OB_SYS_DATABASE_ID;
@@ -1797,10 +1791,8 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
     OX (extern_type_info->type_name_ = access_idxs.at(access_idxs.count() - 1).var_name_);
     if (OB_FAIL(ret)) {
     } else if (2 == access_idxs.count()) {
-      if (true) {
+      {
         extern_type_info->type_owner_ = OB_SYS_DATABASE_ID;
-      } else {
-        extern_type_info->type_owner_ = access_idxs.at(0).var_index_;
       }
     } else {
       extern_type_info->type_owner_ = OB_SYS_DATABASE_ID;

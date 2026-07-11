@@ -1478,7 +1478,7 @@ void ObPLBuilderEnvGuard::init(const Info &info,
     if (invoker_set_db) {
       // alway set db in compile phase when version greater or equal than 4.3.5.2
       need_set_db = true;
-    } else if (true) {
+    } else {
       // Definer-right routines need the database set during compile.
       need_set_db = !is_invoker_right;
     }

@@ -294,12 +294,10 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
     OX (routine_param.set_type_subname(access_idxs.at(access_idxs.count() - 2).var_name_));
     if (OB_FAIL(ret)) {
     } else if (3 == access_idxs.count()) {
-      if (true) {
+      {
         OX (routine_param.set_type_owner(OB_SYS_DATABASE_ID));
-      } else {
-        OX (routine_param.set_type_owner(access_idxs.at(0).var_index_));
       }
-    } else if (true) { // var in system package
+    } else { // var in system package
       OX (routine_param.set_type_owner(OB_SYS_DATABASE_ID));
     }
     if (OB_SUCC(ret)) {
@@ -349,15 +347,13 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
       OX (routine_param.set_type_name(access_idxs.at(access_idxs.count()-1).var_name_));
       if (2 == access_idxs.count()) { // pkg.type
         OX (routine_param.set_type_subname(access_idxs.at(0).var_name_));
-        if (true) { // type in system package
+        { // type in system package
           OX (routine_param.set_type_owner(OB_SYS_DATABASE_ID));
         }
       } else if (3 == access_idxs.count()) { // db.pkg.type
         OX (routine_param.set_type_subname(access_idxs.at(1).var_name_));
-        if (true) {
+        {
           OX (routine_param.set_type_owner(OB_SYS_DATABASE_ID));
-        } else {
-          OX (routine_param.set_type_owner(access_idxs.at(0).var_index_));
         }
       }
       if (OB_SUCC(ret)) {
@@ -381,13 +377,11 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
     OX (routine_param.set_type_name(access_idxs.at(access_idxs.count()-1).var_name_));
     if (OB_FAIL(ret)) {
     } else if (2 == access_idxs.count()) {
-      if (true) {
+      {
         // system type, set owner is oceanbase
         routine_param.set_type_owner(OB_SYS_DATABASE_ID);
-      } else {
-        routine_param.set_type_owner(access_idxs.at(0).var_index_);
       }
-    } else if (true) {
+    } else {
       // system type, set owner is oceanbase
       routine_param.set_type_owner(OB_SYS_DATABASE_ID);
     }
@@ -689,52 +683,10 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
       if (OB_SUCC(ret)
           && 3 == param_node->num_child_ // default node
           && OB_NOT_NULL(param_node->children_[2])) {
-        if (true) {
+        {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("stored procedure's paramlist not supported default value in mysql mode", K(ret), K(lbt()));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "stored procedure's paramlist use default value in mysql mode");
-        } else {
-          const ParseNode *default_node = param_node->children_[2];
-          if (OB_UNLIKELY(default_node->type_ != T_SP_DECL_DEFAULT)
-              || OB_ISNULL(default_node->children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("wrong default value node", K(ret));
-          } else if (!routine_param.is_in_sp_param()) {
-            ret = OB_ERR_OUT_PARAM_HAS_DEFAULT;
-            LOG_WARN("out or in out parameter can not has default value", K(ret));
-          } else {
-            ObString default_value(static_cast<int32_t>(default_node->str_len_),
-                                  default_node->str_value_);
-            ObRawExpr *default_expr = NULL;
-            ObPLDataType pl_type;
-            ObObjType src_type = ObMaxType;
-            uint64_t src_type_id = OB_INVALID_ID;
-            ObRoutineMatchInfo::MatchInfo match_info;
-            pl::ObPLEnumSetCtx enum_set_ctx(*params_.allocator_);
-            pl_type.set_enum_set_ctx(&enum_set_ctx);
-            OZ (pl::ObPLDataType::transform_from_iparam(&(routine_param),
-                                                        *(schema_checker_->get_schema_guard()),
-                                                        *(session_info_),
-                                                        *(allocator_),
-                                                        *(params_.sql_proxy_),
-                                                        pl_type));
-            // Default value does not need to be calculated in the CreateRoutine stage, it is calculated at execution time, but here we need to resolve it to avoid users using illegal variables
-            OZ (pl::ObPLResolver::resolve_raw_expr(*(default_node->children_[0]),
-                                                  params_,
-                                                  default_expr,
-                                                  false /*for_writer*/,
-                                                  nullptr,
-                                                  &deps));
-            CK (OB_NOT_NULL(default_expr));
-            OZ (ObResolverUtils::get_type_and_type_id(default_expr, src_type, src_type_id));
-            OZ (ObResolverUtils::check_type_match(
-              params_, match_info, default_expr, src_type, src_type_id, pl_type));
-            OZ (ObSQLUtils::convert_sql_text_to_schema_for_storing(
-              *allocator_, session_info_->get_dtc_params(), default_value));
-            OZ (routine_param.set_default_value(default_value));
-            OX (match_info.need_cast_ ? routine_param.set_default_cast() : void(NULL));
-            OZ (analyze_expr_type(default_expr, routine_info));
-          }
         }
       }
       if (OB_SUCC(ret)) {

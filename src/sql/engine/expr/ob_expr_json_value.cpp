@@ -548,12 +548,9 @@ int ObExprJsonValue::check_default_val_accuracy(const ObAccuracy &accuracy,
       if (OB_SUCC(ret)) {
         if (max_accuracy_len == DEFAULT_STR_LENGTH) { // default string len
         } else if (max_accuracy_len <= 0 || str_len_char > max_accuracy_len) {
-          if (true) {
+          {
             ret = OB_OPERATE_OVERFLOW;
             LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "STRING", "json_value");
-          } else {
-            ret = OB_ERR_VALUE_EXCEEDED_MAX;
-            LOG_USER_ERROR(OB_ERR_VALUE_EXCEEDED_MAX, str_len_char, max_accuracy_len);
           }
         }
       }

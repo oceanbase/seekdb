@@ -116,18 +116,10 @@ bool ObPackageStateVersion::operator ==(const ObPackageStateVersion &other) cons
 
 void ObPackageStateVersion::set_merge_version_and_public_syn_cnt(const ObPLPackage &head, const ObPLPackage *body)
 {
-  if (true) {
-    header_merge_version_ = head.get_sys_schema_version();
-  } else {
-    header_merge_version_ = head.get_tenant_schema_version();
-  }
+  header_merge_version_ = head.get_sys_schema_version();
   header_public_syn_count_ = head.get_public_syn_count();
   if (OB_NOT_NULL(body)) {
-    if (true) {
-      body_merge_version_ = body->get_sys_schema_version();
-    } else {
-      body_merge_version_ = body->get_tenant_schema_version();
-    }
+    body_merge_version_ = body->get_sys_schema_version();
     body_public_syn_count_ = body->get_public_syn_count();
   }
 }

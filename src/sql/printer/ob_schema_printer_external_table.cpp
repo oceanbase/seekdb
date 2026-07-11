@@ -62,9 +62,7 @@ int ObSchemaPrinter::print_external_table_file_info(const ObTableSchema &table_s
   }
   if (OB_SUCC(ret) && OB_FAIL(share::ob_get_external_file_location(table_schema, schema_guard_, allocator, location))) {
     LOG_WARN("failed to get external file location", K(ret));
-  } else if (false) {
-    LOG_WARN("failed to check is odps table or not", K(ret));
-  }
+  } else ;
   if (OB_SUCC(ret) && !is_odps_external_table) {
     if (!location_name.empty()) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, "\nLOCATION=@%.*s", location_name.length(), location_name.ptr()))) {

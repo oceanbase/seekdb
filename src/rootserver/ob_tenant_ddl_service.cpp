@@ -595,7 +595,7 @@ int ObTenantDDLService::update_special_tenant_sys_var(
     LOG_WARN("invalid arguments", KR(ret), K(sys_params), K(params_capacity));
   } else {
     HEAP_VAR(char[OB_MAX_SYS_PARAM_VALUE_LENGTH], val_buf) {
-      if (true) {
+      {
         VAR_INT_TO_STRING(val_buf, sys_variable_schema.get_name_case_mode());
         SET_TENANT_VARIABLE(SYS_VAR_LOWER_CASE_TABLE_NAMES, val_buf);
 

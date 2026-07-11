@@ -4057,7 +4057,7 @@ int ObServerSchemaService::refresh_full_schema(
       // And the latter table was deleted again, at this time refresh will not delete this table in the cache
       if (OB_SUCC(ret)) {
         // after sys tenant refresh full schema, all optimizations of bootstrap should be completed.
-        if (true) {
+        {
           GCTX.in_bootstrap_ = false;
         }
         break;
@@ -4626,7 +4626,7 @@ int ObServerSchemaService::refresh_tenant_full_normal_schema(
     // 1. Add the full tenant schema of the system tenant to schema_cache
     // 2. Initialize the schema memory management structure of ordinary tenants
     // 3. Add the simple tenant schema of all tenants
-    if (true) {
+    {
       ObArray<ObSimpleTenantSchema> simple_tenants;
       if (OB_FAIL(schema_service_->get_all_tenants(sql_client,
                                                    schema_version,
@@ -4672,9 +4672,6 @@ int ObServerSchemaService::refresh_tenant_full_normal_schema(
           }
         }
       }
-    } else {
-      // Ordinary tenant schema refreshing relies on the system tenant to refresh the tenant and
-      // initialize the related memory structure
     }
 
     if (OB_SUCC(ret)) {

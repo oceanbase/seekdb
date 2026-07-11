@@ -284,9 +284,6 @@ int ObUnitInfoGetter::get_tenant_server_configs(ObIArray<ObServerConfig> &server
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (false) {
-    // don't need to set ret, just return empty result
-    LOG_DEBUG("tenant doesn't own any pool");
   } else if (OB_FAIL(get_pools_of_tenant(pools))) {
     LOG_WARN("get_pools_of_tenant failed", K(ret));
   } else if (OB_FAIL(get_units_of_pools(pools, units))) {
@@ -328,9 +325,6 @@ int ObUnitInfoGetter::get_tenant_servers(ObIArray<ObAddr> &servers)
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (false) {
-    // don't need to set ret, just return empty result
-    LOG_WARN("tenant doesn't own any pool");
   } else if (OB_FAIL(get_pools_of_tenant(pools))) {
     LOG_WARN("get_pools_of_tenant failed", K(ret));
   } else if (OB_FAIL(get_units_of_pools(pools, units))) {

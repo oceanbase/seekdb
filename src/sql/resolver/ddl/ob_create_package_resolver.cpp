@@ -176,23 +176,12 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
             LOG_WARN("set package name failed", K(ret), K(package_name));
           } else if (OB_FAIL(package_info.set_source(package_block))) {
             LOG_WARN("set package source failed", K(ret));
-          } else if (true) {
+          } else {
             // Built-in package exec environment defaults.
             // sql_mode = "PIPES_AS_CONCAT,STRICT_ALL_TABLES,PAD_CHAR_TO_FULL_LENGTH"
             {
               OZ (package_info.set_exec_env(ObString("4194304,45,45,45,")));
             }
-          } else {
-            char *buf = static_cast<char*>(allocator_->alloc(OB_MAX_PROC_ENV_LENGTH));
-            int64_t pos = 0;
-            if (OB_ISNULL(buf)) {
-              ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("fail to allocate memory", K(ret));
-            } else if (OB_FAIL(ObExecEnv::gen_exec_env(*session_info_, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
-              LOG_WARN("failed to generate exec env", K(ret));
-            } else if (OB_FAIL(package_info.set_exec_env(ObString(pos, buf)))) {
-              LOG_WARN("set exec env failed", K(ret));
-            } else {}
           }
           if (OB_SUCC(ret) && resolve_success) {
             OZ (resolve_functions_spec(package_info,

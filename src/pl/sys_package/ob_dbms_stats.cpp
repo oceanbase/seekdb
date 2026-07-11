@@ -3222,8 +3222,6 @@ int ObDbmsStats::async_gather_stats_job_proc(sql::ObExecContext &ctx,
   } else if (!session->is_user_session() && no_async_gather) {
     //do nothing
     LOG_INFO("async gather stats abort because of the trace point and not user seesion", K(session->is_user_session()), K(no_async_gather));
-  } else if (false) {
-    // do nothing
   } else if (GCONF.in_upgrade_mode()) {
     //in upgrade, don't async gather table stats
   } else if (!params.empty() && !params.at(0).is_null() &&
@@ -5668,8 +5666,6 @@ int ObDbmsStats::gather_database_table_stats(sql::ObExecContext &ctx,
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session));
-  } else if (false) {
-    // do nothing
   } else {
     int64_t slice_cnt = 10000; // maximum tables we can gather stats at each iteration
     int64_t last_table_id = 0;
@@ -7124,8 +7120,6 @@ int ObDbmsStats::async_gather_table_stats(sql::ObExecContext &ctx,
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session));
-  } else if (false) {
-    // do nothing
   } else if (GCONF.in_upgrade_mode()) {
     //in upgrade, don't async gather table stats
   } else {

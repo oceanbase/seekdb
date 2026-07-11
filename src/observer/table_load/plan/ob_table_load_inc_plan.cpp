@@ -51,9 +51,11 @@ static const uint64_t OB_TABLE_LOAD_INC_BASIC_OPEN_FLAG =
 
 #define OB_TABLE_LOAD_TABLE_CHANNEL_SELECTOR(up_table_op_type, down_table_op_type, \
                                              table_channel_class, desc)            \
-  else if (up_table_op->get_op_type() == ObTableLoadOpType::up_table_op_type &&    \
-           down_table_op->get_op_type() == ObTableLoadOpType::down_table_op_type)  \
+  if (!channel_matched &&                                                          \
+      up_table_op->get_op_type() == ObTableLoadOpType::up_table_op_type &&         \
+      down_table_op->get_op_type() == ObTableLoadOpType::down_table_op_type)       \
   {                                                                                \
+    channel_matched = true;                                                        \
     table_channel = new_table_channel<ObTableLoadOpType::up_table_op_type,         \
                                       ObTableLoadOpType::down_table_op_type>(      \
       up_table_op, down_table_op, allocator_);                                     \
@@ -69,11 +71,9 @@ static const uint64_t OB_TABLE_LOAD_INC_BASIC_OPEN_FLAG =
   {                                                                                               \
     int ret = OB_SUCCESS;                                                                         \
     table_channel = nullptr;                                                                      \
-    if (false) {                                                                                  \
-    }                                                                                             \
+    bool channel_matched = false;                                                                 \
     OB_TABLE_LOAD_TABLE_CHANNEL_DEF(OB_TABLE_LOAD_TABLE_CHANNEL_SELECTOR)                         \
-    else                                                                                          \
-    {                                                                                             \
+    if (!channel_matched) {                                                                       \
       ret = OB_ERR_UNEXPECTED;                                                                    \
       LOG_WARN("unexpected select table channel", KR(ret), KPC(up_table_op), KPC(down_table_op)); \
     }                                                                                             \

@@ -110,9 +110,7 @@ int ObTableIndex::inner_get_next_row(common::ObNewRow *&row)
     const int64_t col_count = output_column_ids_.count();
     bool is_end = false;
     if (OB_INVALID_ID == show_table_id_) {
-      if (false){
-        ret = OB_ITER_END;
-      } else {
+      {
         if (OB_INVALID_ID == static_cast<uint64_t>(database_schema_idx_)) {//first get next row
           if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(database_schemas_))) {
             SERVER_LOG(WARN, "failed to get database schema of tenant");

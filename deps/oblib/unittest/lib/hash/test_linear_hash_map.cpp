@@ -1271,10 +1271,7 @@ TEST(ObLinearHashMap, IteratorTest1)
   uint64_t start = ts();
   while (OB_SUCCESS == itor.next(key, val)) { }
   uint64_t end = ts();
-  if (false) {
-    fprintf(stderr, "iterating through %lu keys costs %lu ms speed %lu keys/sec\n",
-      idx_lmt, (end - start) / 1000, idx_lmt * 1000000 / (end - start));
-  }
+  ;
   delete[] keys;
 }
 

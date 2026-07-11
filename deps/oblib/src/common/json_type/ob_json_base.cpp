@@ -1448,30 +1448,9 @@ int ObIJsonBase::find_timestamp_method(ObIAllocator* allocator, ObSeekParentInfo
 
     ObString str(get_data_length(), get_data());
     
-    if (true) {
+    {
       trans_fail = true;
       LOG_WARN("fail to convert string to otimestamp", K(ret));
-    } else {
-      if (OB_FAIL(ObTimeConverter::otimestamp_to_ob_time(ObTimestampNanoType, ot_data, NULL, ob_time))) {
-        LOG_WARN("fail to convert otimestamp to ob_time", K(ret));
-      } else {
-        ObJsonDatetime* tmp_ans = static_cast<ObJsonDatetime*> (allocator->alloc(sizeof(ObJsonDatetime)));
-        if (OB_ISNULL(tmp_ans)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate row buffer failed at ObJsonDecimal", K(ret));
-        } else {
-          tmp_ans = new (tmp_ans) ObJsonDatetime(ob_time, ObTimestampType);
-          jb_ptr = tmp_ans;
-          if ((OB_FAIL(jb_ptr->find_child(allocator, parent_info, cur_node + 1, 
-                                          last_node, is_auto_wrap,
-                                          only_need_one, is_lax, dup, res)))) {
-            int old_ret = ret;
-            allocator->free(tmp_ans);
-            ret = old_ret;
-            LOG_WARN("fail to seek recursively", K(ret));
-          }
-        }
-      }
     }
   } else if (is_json_number(json_type())) {
     trans_fail = true;
@@ -2104,22 +2083,9 @@ int ObIJsonBase::trans_to_date_timestamp(ObIAllocator* allocator,
     cvrt_ctx.nls_format_ = ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT;
     ObOTimestampData ot_data;
     int16_t scale = 0;
-    if (true) {
+    {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to convert string to otimestamp", K(ret));
-    } else {
-      if (OB_FAIL(ObTimeConverter::otimestamp_to_ob_time(ObTimestampNanoType, ot_data, NULL, ob_time))) {
-        LOG_WARN("fail to convert otimestamp to ob_time", K(ret));
-      } else {
-        ObJsonDatetime* tmp_ans = static_cast<ObJsonDatetime*> (allocator->alloc(sizeof(ObJsonDatetime)));
-        if (OB_ISNULL(tmp_ans)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate row buffer failed at ObJsonDate", K(ret));
-        } else {
-          tmp_ans = new (tmp_ans) ObJsonDatetime(ob_time, ObTimestampType);
-          jb_ptr = tmp_ans;
-        }
-      }
     }
   }
   
@@ -4752,11 +4718,7 @@ int ObIJsonBase::compare(const ObIJsonBase &other, int &res, bool is_path) const
         case ObJsonNodeType::J_STRING: {
           ObString str_a(get_data_length(), get_data());
           ObString str_b(other.get_data_length(), other.get_data());
-          if (false) {
-            if (OB_FAIL(path_compare_string(str_a, str_b, res))) {
-              LOG_WARN("fail to compare json string", K(ret));
-            }
-          } else {
+          {
             res = str_a.compare(str_b);
           }
           break;

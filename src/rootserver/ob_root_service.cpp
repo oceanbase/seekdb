@@ -4512,14 +4512,9 @@ int ObRootService::broadcast_schema(const obcall::ObBroadcastSchemaArg &arg)
   } else {
     ObRefreshSchemaInfo schema_info;
     ObSchemaService *schema_service = schema_service_->get_schema_service();
-    if (true) {
+    {
       // tenant is valid, just refresh specify tenant's schema.
       schema_info.set_schema_version(arg.schema_version_);
-    } else {
-      // tenant =  OB_INVALID_TENANT_ID, indicates refresh all tenants's schema;
-      if (OB_FAIL(schema_service->inc_sequence_id())) {
-        LOG_WARN("increase sequence_id failed", K(ret));
-      }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(schema_service->inc_sequence_id())) {

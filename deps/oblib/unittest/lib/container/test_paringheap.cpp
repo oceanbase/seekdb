@@ -134,9 +134,7 @@ static unsigned heap_validate(heap_t *heap)
   }
 
 label_return:
-  if (false) {
-    heap_print(heap);
-  }
+  ;
   return nnodes;
 }
 

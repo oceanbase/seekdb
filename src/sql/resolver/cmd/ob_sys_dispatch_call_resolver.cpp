@@ -91,10 +91,6 @@ int ObSysDispatchCallResolver::resolve(const ParseNode &parse_tree)
   if (OB_UNLIKELY(OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("argument is nullptr", K(schema_checker_), K(session_info_));
-  } else if (false) {
-    // check tenant privilege for dispatch call, should be sys tenant
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("SYS_DISPATCH_CALL is only supported in sys tenant");
   } else if (OB_UNLIKELY(T_SP_SYS_DISPATCH_CALL != parse_tree.type_)
              || OB_UNLIKELY(3 != parse_tree.num_child_)) {
     ret = OB_ERR_UNEXPECTED;

@@ -101,9 +101,6 @@ int ObLS::init(const share::ObLSID &ls_id,
   } else if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ls is already initialized", K(ret), K_(ls_meta));
-  } else if (false) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("tenant is not match", K(ret));
   } else if (OB_FAIL(ls_meta_.init(ls_id,
                                    migration_status,
                                    restore_status,
@@ -769,7 +766,7 @@ int ObLS::register_sys_service()
     REGISTER_TO_LOGSERVICE(DAS_ID_LOG_BASE_TYPE, share::g_mp->dasid_service());
   }
   if (ls_id.is_sys_ls()) {
-    if (true) {
+    {
       ObIngressBWAllocService *ingress_service = GCTX.net_frame_->get_ingress_service();
       REGISTER_TO_LOGSERVICE(NET_ENDPOINT_INGRESS_LOG_BASE_TYPE, ingress_service);
       REGISTER_TO_LOGSERVICE(MVIEW_MAINTENANCE_SERVICE_LOG_BASE_TYPE, share::g_mp->m_view_maintenance_service());

@@ -276,16 +276,8 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
     // Handle the scenario of leader-follower switch, if a switch occurs during activation, directly return user session_killed;
     // Subsequent standby database will handle this index;
     if (OB_FAIL(ret)) {
-    } else if (true) {
-      //no need to process sys tenant
     } else {
-      bool is_standby = false;
-      if (OB_FAIL(ObShareUtil::table_check_if_tenant_role_is_standby( is_standby))) {
-        LOG_WARN("fail to execute table_check_if_tenant_role_is_standby", KR(ret));
-      } else if (is_standby) {
-        ret = OB_SESSION_KILLED;
-        LOG_WARN("create index while switchoverd, kill session", KR(ret));
-      }
+      //no need to process sys tenant
     }
 
     if (OB_FAIL(ret)) {

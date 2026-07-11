@@ -384,7 +384,7 @@ void TestSqlUtils::do_resolve(
   ParseResult parse_result;
   ObArenaAllocator tmp_alloc;
   OK(parser.parse(query, parse_result));
-  if (true){
+  {
     if (JSON_FORMAT == format) {
       _OB_LOG(INFO, "%s", CSJ(ObParserResultPrintWrapper(*parse_result.result_tree_)));
     } else{

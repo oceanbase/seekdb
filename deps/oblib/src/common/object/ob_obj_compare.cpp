@@ -1130,14 +1130,7 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetTC, ObUIntTC>(const ObObj &obj1, \
     ObCmpRes ret = CR_FALSE;\
     ObOTimestampData v1 = obj1.get_otimestamp_value(); \
     ObOTimestampData v2 = obj2.get_otimestamp_value(); \
-    if (false) { \
-      if (OB_UNLIKELY(INVALID_TZ_OFF == cmp_ctx.tz_off_)) {\
-        LOG_ERROR_RET(common::OB_ERR_UNEXPECTED, "invalid timezone offset", K(obj1), K(obj2)); \
-        ret = CR_OB_ERROR; \
-      } else {\
-        v2.time_us_ -= cmp_ctx.tz_off_;\
-      } \
-    } \
+    ; \
     return (CR_OB_ERROR != ret ? static_cast<int>(v1 op_str v2) : CR_OB_ERROR); \
   }
 
@@ -1153,14 +1146,7 @@ int ObObjCmpFuncs::cmp_func<ObEnumSetTC, ObUIntTC>(const ObObj &obj1, \
     ObCmpRes ret = CR_FALSE;\
     ObOTimestampData v1 = obj1.get_otimestamp_value();\
     ObOTimestampData v2 = obj2.get_otimestamp_value();\
-    if (false) {\
-      if (OB_UNLIKELY(INVALID_TZ_OFF == cmp_ctx.tz_off_)) {\
-        LOG_ERROR_RET(common::OB_ERR_UNEXPECTED, "invalid timezone offset", K(obj1), K(obj2)); \
-        ret = CR_OB_ERROR; \
-      } else {\
-        v2.time_us_ -= cmp_ctx.tz_off_;\
-      }\
-    } \
+    ; \
     return (CR_OB_ERROR != ret \
             ? (v1 < v2 \
               ? CR_LT \

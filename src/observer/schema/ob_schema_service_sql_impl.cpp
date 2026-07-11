@@ -5784,15 +5784,8 @@ int ObSchemaServiceSQLImpl::fetch_expire_recycle_objects(const int64_t expire_ti
       ObSqlString sql;
       // FIXME: The query may time out.
       
-      if (true) {
+      {
         if (OB_FAIL(sql.append_fmt(FETCH_EXPIRE_SYS_ALL_RECYCLEBIN_SQL,
-                                   OB_ALL_RECYCLEBIN_TNAME,
-                                   1UL,
-                                   expire_time))) {
-          LOG_WARN("append sql failed", K(ret), K(expire_time));
-        }
-      } else {
-        if (OB_FAIL(sql.append_fmt(FETCH_EXPIRE_ALL_RECYCLEBIN_SQL,
                                    OB_ALL_RECYCLEBIN_TNAME,
                                    1UL,
                                    expire_time))) {

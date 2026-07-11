@@ -3931,10 +3931,7 @@ OB_SERIALIZE_MEMBER(ObTenantSchemaVersions, tenant_schema_versions_);
 int ObTenantSchemaVersions::add(const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
-  if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(schema_version));
-  } else {
+  {
     TenantIdAndSchemaVersion info;
     
     info.schema_version_ = schema_version;
@@ -5134,10 +5131,7 @@ OB_SERIALIZE_MEMBER((ObDropAiModelArg, ObDDLArg), ai_model_name_);
 int ObCreateAiModelArg::check_valid() const
 {
   int ret = OB_SUCCESS;
-  if (false) {
-    return OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id");
-  } else if (OB_FAIL(model_info_.check_valid())) {
+  if (OB_FAIL(model_info_.check_valid())) {
     LOG_WARN("invalid model info", K(ret), K(model_info_));
   }
   return ret;

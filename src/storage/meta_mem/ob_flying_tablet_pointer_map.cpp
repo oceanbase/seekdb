@@ -40,9 +40,6 @@ int ObFlyingTabletPointerMap::init()
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(map_.create(bucket_num, "FlyTabletPtrMap", "FlyTabletPtrMap"))) {
     LOG_WARN("fail to initialize external tablet cnt map");
   } else if (OB_FAIL(bucket_lock_.init(bucket_num, ObLatchIds::DEFAULT_BUCKET_LOCK, ObMemAttr("FlyTabletMapLk")))) {

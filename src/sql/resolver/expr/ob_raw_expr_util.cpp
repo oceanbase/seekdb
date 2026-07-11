@@ -5692,15 +5692,8 @@ int ObRawExprUtils::build_get_package_var(ObRawExprFactory &expr_factory,
   if (OB_NOT_NULL(spec_info)) {
     ObSqlString func_name;
     ObString copy_func_name;
-    if (true) {
+    {
       OZ (func_name.append_fmt("%.*s.%.*s",
-        spec_info->get_package_name().length(), spec_info->get_package_name().ptr(), var_name.length(), var_name.ptr()));
-    } else {
-      const ObSimpleDatabaseSchema *db_info = NULL;
-      OZ (schema_guard.get_database_schema( spec_info->get_database_id(), db_info));
-      CK (OB_NOT_NULL(db_info));
-      OZ (func_name.append_fmt("%.*s.%.*s.%.*s",
-        db_info->get_database_name_str().length(), db_info->get_database_name_str().ptr(),
         spec_info->get_package_name().length(), spec_info->get_package_name().ptr(), var_name.length(), var_name.ptr()));
     }
     OZ (ob_write_string(expr_factory.get_allocator(), func_name.string(), copy_func_name));

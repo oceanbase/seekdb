@@ -226,11 +226,7 @@ void TestIndexBlockAggregator::init_inv_idx_schema_and_meta(const bool is_major)
 void TestIndexBlockAggregator::generate_row_by_seed(const int64_t seed, ObDatumRow &datum_row)
 {
   // if (0 == seed) {
-  if (false) {
-    for (int64_t i = 0; i < datum_row.get_column_count(); ++i) {
-      datum_row.storage_datums_[i].set_null();
-    }
-  } else {
+  {
     ASSERT_EQ(OB_SUCCESS, row_generate_.get_next_row(seed, datum_row));
   }
 }

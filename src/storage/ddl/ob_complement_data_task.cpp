@@ -1009,26 +1009,12 @@ int ObComplementWriteTask::get_next_chunk(ObChunk *&next_chunk)
        * report its' checksum under the dest tenant, and origin_table_id + ddl_task_id will aviod the conflict.
        */
       else {
-        if (true) { /* use new checksum */
+        { /* use new checksum */
           // add checksum to context and report checksum in merge task
           if (OB_FAIL(context_->add_column_checksum(report_col_checksums, report_col_ids))) {
             LOG_WARN("add column checksum failed", K(ret));
           } else {
             LOG_INFO("use new checksum", K(param_->orig_table_id_), K(report_col_checksums), K(param_->orig_tablet_id_));
-          }
-        } else {
-          if (OB_FAIL(ObDDLChecksumOperator::update_checksum(param_->orig_table_id_,
-                  param_->orig_tablet_id_.id(),
-                  param_->task_id_,
-                  report_col_checksums,
-                  report_col_ids,
-                  1/*execution_id*/,
-                  param_->tablet_task_id_ << ObDDLChecksumItem::PX_SQC_ID_OFFSET | task_id_,
-                  param_->data_format_version_,
-                  *GCTX.sql_proxy_))) {
-            LOG_WARN("fail to report origin table checksum", K(ret));
-          } else {
-            LOG_INFO("update checksum successfully", K(1UL), K(param_->orig_table_id_), K(report_col_checksums));
           }
         }
       }

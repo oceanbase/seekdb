@@ -894,9 +894,6 @@ int ObAutoSplitTaskPollingMgr::get_tenant_cache(ObAutoSplitTaskCache *&tenant_ca
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(inited_));
-  } else if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (FALSE_IT(tenant_cache = tenant_cache_)) {
   } else if (OB_ISNULL(tenant_cache)) {
     ret = OB_HASH_NOT_EXIST;
