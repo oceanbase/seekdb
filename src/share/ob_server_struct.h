@@ -174,6 +174,8 @@ struct ObGlobalContext
   static ObGlobalContext& get_instance();
   void init();
   bool is_inited() const { return inited_; }
+  bool is_embedded_mode() const { return embedded_; }
+  void set_embedded_mode(const bool embedded) { embedded_ = embedded; }
   bool is_standby_cluster() const { return common::STANDBY_CLUSTER == server_role_; }
   // Refer to the high availability zone design document
   // 
@@ -214,6 +216,7 @@ private:
 
   obcall::ObUpgradeStage upgrade_stage_;
   uint64_t server_id_;
+  bool embedded_;
 };
 
 } // end of namespace share

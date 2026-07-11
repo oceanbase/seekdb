@@ -215,8 +215,7 @@ public:
   static constexpr int64_t KEEP_ALIVE_TIMEOUT = 10 * 1000 * 1000L;  // 10s
 
   ObTenant(const int64_t epoch,
-           const int64_t times_of_workers,
-           const bool embedded = false);
+           const int64_t times_of_workers);
   virtual ~ObTenant();
 
   ObTenant(const ObTenant &) = delete;
@@ -387,7 +386,6 @@ public:
 
   lib::ObMutex workers_lock_;
 
-  bool embedded_;
   bool disable_user_sched_;
 
   int64_t token_change_ts_ CACHE_ALIGNED;

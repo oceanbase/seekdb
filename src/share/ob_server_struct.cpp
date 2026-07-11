@@ -78,7 +78,8 @@ DEF_TO_STRING(ObGlobalContext)
        KP_(schema_status_proxy),
        K_(ssl_key_expired_time),
        K_(inited),
-       K_(in_bootstrap));
+       K_(in_bootstrap),
+       K_(embedded));
   J_OBJ_END();
   return pos;
 }

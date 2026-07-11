@@ -192,6 +192,7 @@ ObServer::~ObServer()
 
 int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
 {
+  gctx_.set_embedded_mode(opts.embedded_);
   FLOG_INFO("[OBSERVER_NOTICE] start to init observer");
   DBA_STEP_RESET(server_start);
   int ret = OB_SUCCESS;
@@ -201,14 +202,13 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
   share::g_mp = this;
   init_arches();
   scramble_rand_.init(static_cast<uint64_t>(start_time_), static_cast<uint64_t>(start_time_ / 2));
-  embedded_ = opts.embedded_;
 
   if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));
   }
 
 #ifndef _WIN32
-  if (OB_SUCC(ret) && embedded_) {
+  if (OB_SUCC(ret) && gctx_.is_embedded_mode()) {
     clients_fd_ = ::open("./run/seekdb.clients", O_CREAT | O_RDWR, 0644);
     if (clients_fd_ < 0) {
       ret = OB_ERROR;
@@ -218,7 +218,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     }
   }
 #else
-  if (OB_SUCC(ret) && embedded_) {
+  if (OB_SUCC(ret) && gctx_.is_embedded_mode()) {
     clients_h_ = CreateFileA(
         "run\\seekdb.clients",
         GENERIC_READ | GENERIC_WRITE,
@@ -777,7 +777,7 @@ int ObServer::start()
       FLOG_INFO("success to start root service monitor");
     }
     // Treat --embedded as the embed telemetry reporter; ObService reports bootstrap telemetry synchronously.
-    if (FAILEDx(ob_service_.start(embedded_))) {
+    if (FAILEDx(ob_service_.start())) {
       LOG_ERROR("fail to start oceanbase service", KR(ret));
     } else {
       FLOG_INFO("success to start oceanbase service");
@@ -887,7 +887,7 @@ int ObServer::start()
       }
     }
 
-    if (FAILEDx(net_frame_.start(embedded_))) {
+    if (FAILEDx(net_frame_.start())) {
       LOG_ERROR("fail to start net frame", KR(ret));
     } else {
       FLOG_INFO("success to start net frame");
@@ -1283,7 +1283,7 @@ int ObServer::wait()
   LOG_DBA_INFO_V2(OB_SERVER_WAIT_BEGIN, "observer process wait begin.");
   // wait for stop flag
 
-  if (embedded_) {
+  if (gctx_.is_embedded_mode()) {
     std::thread([this]() { wait_no_client(); }).detach();
   }
 
@@ -1839,8 +1839,7 @@ int ObServer::init_multi_tenant()
 
   if (OB_FAIL(multi_tenant_.init(self_addr_,
                                  &sql_proxy_,
-                                 true /* mtl_bind_flag */,
-                                 embedded_))) {
+                                 true /* mtl_bind_flag */))) {
     LOG_ERROR("init multi tenant fail", KR(ret));
 
   }

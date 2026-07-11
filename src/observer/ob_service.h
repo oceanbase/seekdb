@@ -67,11 +67,8 @@ private:
 
 class TelemetryTask {
 public:
-  TelemetryTask(bool embedded);
+  TelemetryTask() = default;
   int report();
-  bool embedded_;
-private:
-  static int report_(bool embedded);
 };
 
 class ObService
@@ -82,7 +79,7 @@ public:
 
   int init(common::ObMySQLProxy &sql_proxy,
            bool need_bootstrap);
-  int start(bool embedded);
+  int start();
   void set_stop();
   void stop();
   void wait();

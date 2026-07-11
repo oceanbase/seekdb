@@ -63,8 +63,7 @@ public:
 
   int init(common::ObAddr myaddr,
            common::ObMySQLProxy *sql_proxy = NULL,
-           bool mtl_bind_flag = true,
-           bool embedded = false);
+           bool mtl_bind_flag = true);
 
   int start();
   void stop();
@@ -204,7 +203,6 @@ protected:
   common::ObTimer timer_;
   common::ObTimer memory_printer_timer_;
   bool timer_stopped_;
-  bool embedded_;
 
 private:
   lib::ObShareTenantLimiter *tenant_limiter_head_;

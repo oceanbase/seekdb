@@ -46,7 +46,7 @@ public:
 
   int init();
   void destroy();
-  int start(bool disable_tcp = false);
+  int start();
   void sql_nio_stop();
   void wait();
   int stop();

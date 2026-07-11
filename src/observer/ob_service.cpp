@@ -150,20 +150,11 @@ void ObSchemaReleaseTimeTask::runTimerTask()
   }
 }
 
-TelemetryTask::TelemetryTask(bool embedded)
-  : embedded_(embedded)
-{}
-
-int TelemetryTask::report_(bool embedded)
-{
-  const char *env_reporter = std::getenv("REPORTER");
-  const char *reporter = env_reporter ? env_reporter : (embedded ? "embed" : "server");
-  return share::report_telemetry(reporter, "bootstraped");
-}
-
 int TelemetryTask::report()
 {
-  return report_(embedded_);
+  const char *env_reporter = std::getenv("REPORTER");
+  const char *reporter = env_reporter ? env_reporter : (GCTX.is_embedded_mode() ? "embed" : "server");
+  return share::report_telemetry(reporter, "bootstraped");
 }
 
 //////////////////////////////////////
@@ -175,7 +166,7 @@ ObService::ObService(const ObGlobalContext &gctx)
     schema_updater_(),
     gctx_(gctx),
     schema_release_task_(),
-    telemetry_task_(false),
+    telemetry_task_(),
     standby_schema_refresh_trigger_(),
     need_bootstrap_(false)
 {
@@ -241,7 +232,7 @@ int ObService::init(common::ObMySQLProxy &sql_proxy,
   return ret;
 }
 
-int ObService::start(bool embedded)
+int ObService::start()
 {
   int ret = OB_SUCCESS;
   FLOG_INFO("[OBSERVICE_NOTICE] start ob_service begin");
@@ -263,7 +254,6 @@ int ObService::start(bool embedded)
       }
     }
     if (OB_SUCC(ret)) {
-      telemetry_task_.embedded_ = embedded;
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = telemetry_task_.report())) {
         FLOG_WARN("fail to report bootstrap telemetry synchronously", KR(tmp_ret));

@@ -37,7 +37,7 @@ TEST(TestFetchLogEngine, disabled_lifecycle)
 
   ASSERT_EQ(OB_SUCCESS, engine.init(&palf_env, &allocator, false));
   EXPECT_FALSE(engine.is_enabled());
-  EXPECT_EQ(-1, engine.tg_id_);
+  EXPECT_EQ(0, engine.get_thread_count());
   EXPECT_EQ(OB_SUCCESS, engine.start());
   EXPECT_EQ(OB_SUCCESS, engine.stop());
   EXPECT_EQ(OB_SUCCESS, engine.wait());

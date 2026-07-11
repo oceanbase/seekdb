@@ -18,6 +18,7 @@
 #include "ob_tenant.h"
 #include "observer/ob_server.h"   // T3d
 #include "share/rc/ob_module_provider.h"
+#include "share/ob_server_struct.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -326,8 +327,7 @@ void ObPxPool::stop()
 }
 
 ObTenant::ObTenant(const int64_t epoch,
-                   const int64_t times_of_workers,
-                   const bool embedded)
+                   const int64_t times_of_workers)
     : ObTenantBase(epoch),
       meta_lock_(),
       tenant_meta_(),
@@ -350,7 +350,6 @@ ObTenant::ObTenant(const int64_t epoch,
       lock_(),
       mtl_init_ctx_(nullptr),
       workers_lock_(common::ObLatchIds::TENANT_WORKER_LOCK),
-      embedded_(embedded),
       disable_user_sched_(false),
       token_change_ts_(0),
       completion_cnt_(0),
@@ -431,7 +430,7 @@ int ObTenant::construct_mtl_init_ctx(const ObTenantMeta &meta, share::ObTenantMo
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_throttling_percentage_ = 100;
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_throttling_maximum_duration_ = 2LL * 60 * 60 * 1000 * 1000;//2h
     mtl_init_ctx_->palf_options_.disk_options_.log_writer_parallelism_ = 3;
-    mtl_init_ctx_->palf_options_.enable_fetch_log_engine_ = !embedded_;
+    mtl_init_ctx_->palf_options_.enable_fetch_log_engine_ = !GCTX.is_embedded_mode();
     if (OB_UNLIKELY(!true)) {
       ret = false ? OB_SUCCESS : OB_ENTRY_NOT_EXIST;
     } else {

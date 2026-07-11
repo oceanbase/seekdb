@@ -176,7 +176,6 @@ ObMultiTenant::ObMultiTenant()
       timer_(),
       memory_printer_timer_(),
       timer_stopped_(true),
-      embedded_(false),
       tenant_limiter_head_(NULL),
       limiter_mutex_()
 
@@ -227,8 +226,7 @@ static int lob_read_service_mtl_new(common::ObILobReadService *&svc)
 
 int ObMultiTenant::init(ObAddr myaddr,
                         ObMySQLProxy *sql_proxy,
-                        bool mtl_bind_flag,
-                        bool embedded)
+                        bool mtl_bind_flag)
 {
   int ret = OB_SUCCESS;
 
@@ -237,7 +235,6 @@ int ObMultiTenant::init(ObAddr myaddr,
     LOG_WARN("ObMultiTenant has been inited", K(ret));
   } else {
     myaddr_ = myaddr;
-    embedded_ = embedded;
     // Single sys tenant: bring-up + periodic refresh are sourced directly from
     // GCONF inside ObMultiTenant (was ObTenantNodeBalancer + ObUnitInfoGetter).
     UNUSED(sql_proxy);
@@ -333,7 +330,6 @@ void ObMultiTenant::destroy()
   timer_.destroy();
   memory_printer_timer_.destroy();
   is_inited_ = false;
-  embedded_ = false;
 }
 
 int ObMultiTenant::construct_meta_for_hidden_sys(ObTenantMeta &meta)
@@ -522,8 +518,7 @@ int ObMultiTenant::create_tenant(const ObTenantMeta &meta, bool write_slog, cons
 
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(tenant_ = OB_NEW(
-      ObTenant, ObModIds::OMT, tenant_epoch, GCONF.workers_per_cpu_quota.get_value(),
-      embedded_))) {
+      ObTenant, ObModIds::OMT, tenant_epoch, GCONF.workers_per_cpu_quota.get_value()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("new tenant fail", K(ret));
   } else if (FALSE_IT(create_step = ObTenantCreateStep::STEP_TENANT_NEWED)) { //step5
