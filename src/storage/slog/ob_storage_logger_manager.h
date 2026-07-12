@@ -22,6 +22,7 @@
 #include "lib/queue/ob_fixed_queue.h"
 #include "storage/blocksstable/ob_log_file_spec.h"
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"
+#include "lib/lock/ob_spin_lock.h"
 #include "common/log/ob_log_cursor.h"
 
 
@@ -60,7 +61,7 @@ public:
 private:
 
   // prepare for log items and their buffers
-  int prepare_log_buffers(const int64_t count, const int64_t log_buf_size);
+  int prepare_log_buffers(const int64_t count);
   int prepare_log_items(const int64_t count);
 
   // allocate buffer
@@ -83,6 +84,7 @@ private:
   static constexpr int64_t MAX_CONCURRENT_ITEM_CNT = 128;
 
   common::ObArenaAllocator allocator_;
+  common::ObSpinLock allocator_lock_;
   const char *log_dir_;
   int64_t max_log_file_size_;
   bool is_inited_;

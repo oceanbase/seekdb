@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <stdint.h>
 #include "storage/blocksstable/ob_data_file_prepare.h"
 #include "storage/slog/simple_ob_storage_log.h"
 #include "storage/slog/ob_storage_log_batch_header.h"
@@ -55,12 +56,14 @@ public:
 
 public:
   static const int64_t MAX_FILE_SIZE = 256 * 1024 * 1024;
-  const int64_t MAX_CONCURRENT_ITEM_CNT = 128;
+  static const int64_t MAX_CONCURRENT_ITEM_CNT = 128;
 
 public:
   ObLogCursor start_cursor_;
   blocksstable::ObLogFileSpec log_file_spec_;
 };
+
+const int64_t TestStorageLoggerManager::MAX_CONCURRENT_ITEM_CNT;
 
 void TestStorageLoggerManager::SetUp()
 {
@@ -93,7 +96,9 @@ TEST_F(TestStorageLoggerManager, test_manager_basic)
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_TRUE(slogger_mgr.need_reserved_);
   ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.log_buffers_.capacity());
+  ASSERT_EQ(0, slogger_mgr.log_buffers_.get_curr_total());
   ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.slog_items_.capacity());
+  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.slog_items_.get_curr_total());
 
   ObStorageLogItem *log_item = nullptr;
   ObStorageLogItem *log_item_local = nullptr;
@@ -106,22 +111,71 @@ TEST_F(TestStorageLoggerManager, test_manager_basic)
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_TRUE(log_item->is_inited_);
   ASSERT_FALSE(log_item->is_local_);
+  ASSERT_EQ(0, slogger_mgr.log_buffers_.get_curr_total());
+  char *standard_log_buffer = log_item->get_buf();
+  ASSERT_NE(nullptr, standard_log_buffer);
+  ASSERT_EQ(
+      static_cast<uintptr_t>(0),
+      reinterpret_cast<uintptr_t>(standard_log_buffer) & ObLogConstants::LOG_FILE_ALIGN_MASK);
   // test normal item allocation (local)
   ret = slogger_mgr.alloc_item(513 * 1024, log_item_local, 1);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_TRUE(log_item_local->is_inited_);
   ASSERT_TRUE(log_item_local->is_local_);
+  ASSERT_EQ(0, slogger_mgr.log_buffers_.get_curr_total());
 
   // test invalid item free
   ret = slogger_mgr.free_item(nullptr);
   ASSERT_NE(OB_SUCCESS, ret);
+  ASSERT_EQ(0, slogger_mgr.log_buffers_.get_curr_total());
   // test normal item free
   ret = slogger_mgr.free_item(log_item);
   ASSERT_EQ(OB_SUCCESS, ret);
+  ASSERT_EQ(1, slogger_mgr.log_buffers_.get_curr_total());
   ret = slogger_mgr.free_item(log_item_local);
   ASSERT_EQ(OB_SUCCESS, ret);
+  ASSERT_EQ(1, slogger_mgr.log_buffers_.get_curr_total());
+
+  // test standard log buffer reuse
+  ObStorageLogItem *reused_log_item = nullptr;
+  ret = slogger_mgr.alloc_item(3 * 1024, reused_log_item, 1);
+  ASSERT_EQ(OB_SUCCESS, ret);
+  ASSERT_FALSE(reused_log_item->is_local());
+  ASSERT_EQ(standard_log_buffer, reused_log_item->get_buf());
+  ASSERT_EQ(0, slogger_mgr.log_buffers_.get_curr_total());
+  ret = slogger_mgr.free_item(reused_log_item);
+  ASSERT_EQ(OB_SUCCESS, ret);
+  ASSERT_EQ(1, slogger_mgr.log_buffers_.get_curr_total());
 
   slogger_mgr.destroy();
+}
+
+TEST_F(TestStorageLoggerManager, test_max_concurrent_items)
+{
+  int ret = OB_SUCCESS;
+  ObStorageLoggerManager &slogger_mgr = SERVER_STORAGE_META_SERVICE.get_slogger_manager();
+  ObStorageLogItem *log_items[MAX_CONCURRENT_ITEM_CNT] = {nullptr};
+  ObStorageLogItem *extra_log_item = nullptr;
+
+  for (int64_t i = 0; i < MAX_CONCURRENT_ITEM_CNT; ++i) {
+    ret = slogger_mgr.alloc_item(3 * 1024, log_items[i], 1);
+    ASSERT_EQ(OB_SUCCESS, ret);
+    ASSERT_NE(nullptr, log_items[i]);
+  }
+  ASSERT_EQ(0, slogger_mgr.slog_items_.get_curr_total());
+  ASSERT_EQ(0, slogger_mgr.log_buffers_.get_curr_total());
+
+  ret = slogger_mgr.alloc_item(3 * 1024, extra_log_item, 1);
+  ASSERT_EQ(OB_SLOG_REACH_MAX_CONCURRENCY, ret);
+  ASSERT_EQ(nullptr, extra_log_item);
+  ASSERT_EQ(0, slogger_mgr.slog_items_.get_curr_total());
+  ASSERT_EQ(0, slogger_mgr.log_buffers_.get_curr_total());
+
+  for (int64_t i = 0; i < MAX_CONCURRENT_ITEM_CNT; ++i) {
+    ASSERT_EQ(OB_SUCCESS, slogger_mgr.free_item(log_items[i]));
+  }
+  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.slog_items_.get_curr_total());
+  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.log_buffers_.get_curr_total());
 }
 
 TEST_F(TestStorageLoggerManager, test_slogger_basic)
@@ -196,7 +250,7 @@ TEST_F (TestStorageLoggerManager, test_build_item)
   ret = slogger->build_log_item(slog_param, log_item);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT - 1, slogger_mgr.slog_items_.get_curr_total());
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT - 1, slogger_mgr.log_buffers_.get_curr_total());
+  ASSERT_EQ(0, slogger_mgr.log_buffers_.get_curr_total());
   data_len = dummy_header.get_serialize_size() +
             dummy_entry.get_serialize_size() +
             12;
@@ -209,7 +263,7 @@ TEST_F (TestStorageLoggerManager, test_build_item)
   ret = slogger_mgr.free_item(log_item);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.slog_items_.get_curr_total());
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.log_buffers_.get_curr_total());
+  ASSERT_EQ(1, slogger_mgr.log_buffers_.get_curr_total());
 
   // test build single-param large-size item
   SimpleObSlog simple_slog2(512<<10, 't');
@@ -217,7 +271,7 @@ TEST_F (TestStorageLoggerManager, test_build_item)
   ret = slogger->build_log_item(slog_param, log_item);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT - 1, slogger_mgr.slog_items_.get_curr_total());
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.log_buffers_.get_curr_total());
+  ASSERT_EQ(1, slogger_mgr.log_buffers_.get_curr_total());
   data_len = dummy_header.get_serialize_size() +
              dummy_entry.get_serialize_size() +
              (512<<10);
@@ -234,7 +288,7 @@ TEST_F (TestStorageLoggerManager, test_build_item)
   ret = slogger_mgr.free_item(log_item);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.slog_items_.get_curr_total());
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.log_buffers_.get_curr_total());
+  ASSERT_EQ(1, slogger_mgr.log_buffers_.get_curr_total());
 
   ObStorageLogParam slog_param_batch1;
   slog_param_batch1.cmd_ = 39;
@@ -256,7 +310,7 @@ TEST_F (TestStorageLoggerManager, test_build_item)
   ret = slogger->build_log_item(param_arr, log_item);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT - 1, slogger_mgr.slog_items_.get_curr_total());
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT - 1, slogger_mgr.log_buffers_.get_curr_total());
+  ASSERT_EQ(0, slogger_mgr.log_buffers_.get_curr_total());
   data_len = dummy_header.get_serialize_size() +
              3 * dummy_entry.get_serialize_size() +
              111;
@@ -269,7 +323,7 @@ TEST_F (TestStorageLoggerManager, test_build_item)
   ret = slogger_mgr.free_item(log_item);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.slog_items_.get_curr_total());
-  ASSERT_EQ(MAX_CONCURRENT_ITEM_CNT, slogger_mgr.log_buffers_.get_curr_total());
+  ASSERT_EQ(1, slogger_mgr.log_buffers_.get_curr_total());
 
   slogger->destroy();
   slogger_mgr.destroy();

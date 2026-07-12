@@ -31,6 +31,7 @@ namespace storage
 {
 ObStorageLoggerManager::ObStorageLoggerManager()
     : allocator_(SET_USE_UNEXPECTED_500("StorageLoggerM")),
+      allocator_lock_(),
       log_dir_(nullptr),
       max_log_file_size_(0),
       is_inited_(false),
@@ -59,9 +60,9 @@ int ObStorageLoggerManager::init(
   } else if (OB_UNLIKELY(nullptr == log_dir || nullptr == data_dir || max_log_file_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "invalid arguments", K(ret), KP(log_dir), KP(data_dir), K(max_log_file_size));
-  } else if (OB_FAIL(prepare_log_buffers(MAX_CONCURRENT_ITEM_CNT, NORMAL_LOG_ITEM_SIZE))) {
+  } else if (OB_FAIL(prepare_log_buffers(MAX_CONCURRENT_ITEM_CNT))) {
     STORAGE_REDO_LOG(WARN, "fail to prepare log buffers", K(ret),
-        LITERAL_K(MAX_CONCURRENT_ITEM_CNT), LITERAL_K(NORMAL_LOG_ITEM_SIZE));
+        LITERAL_K(MAX_CONCURRENT_ITEM_CNT));
   } else if (OB_FAIL(prepare_log_items(MAX_CONCURRENT_ITEM_CNT))) {
     STORAGE_REDO_LOG(WARN, "fail to prepare log items", K(ret), LITERAL_K(MAX_CONCURRENT_ITEM_CNT));
   } else if (OB_FAIL(check_log_disk(data_dir, log_dir))) {
@@ -146,7 +147,9 @@ int ObStorageLoggerManager::alloc_item(
     const int64_t num)
 {
   int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
   void *log_buffer = nullptr;
+  log_item = nullptr;
   bool alloc_locally = buf_size > NORMAL_LOG_ITEM_SIZE;
   int64_t total_size = buf_size;
 
@@ -168,16 +171,26 @@ int ObStorageLoggerManager::alloc_item(
       ret = OB_SIZE_OVERFLOW;
       STORAGE_REDO_LOG(ERROR, "Log item is too large", K(ret),
           K(total_size), LITERAL_K(ObLogConstants::LOG_ITEM_MAX_LENGTH));
-    } else if (!alloc_locally && OB_FAIL(alloc_log_buffer(log_buffer))) {
-      STORAGE_REDO_LOG(WARN, "Fail to alloc memory for log buffer", K(ret));
     } else if (OB_FAIL(alloc_log_item(log_item))) {
       STORAGE_REDO_LOG(WARN, "Fail to alloc memory for log item", K(ret));
+    } else if (!alloc_locally && OB_FAIL(alloc_log_buffer(log_buffer))) {
+      STORAGE_REDO_LOG(WARN, "Fail to alloc memory for log buffer", K(ret));
     } else if (OB_FAIL(log_item->init(reinterpret_cast<char *>(log_buffer),
         total_size, ObLogConstants::LOG_FILE_ALIGN_SIZE, num))) {
       STORAGE_REDO_LOG(WARN, "Fail to init log item", K(ret));
     } else {
       STORAGE_REDO_LOG(DEBUG, "Successfully alloc memory", K(ret));
     }
+  }
+
+  if (OB_FAIL(ret)) {
+    if (log_buffer != nullptr && OB_TMP_FAIL(free_log_buffer(log_buffer))) {
+      STORAGE_REDO_LOG(WARN, "Fail to revert log buffer", K(tmp_ret), K(ret), KP(log_buffer));
+    }
+    if (log_item != nullptr && OB_TMP_FAIL(slog_items_.push(log_item))) {
+      STORAGE_REDO_LOG(WARN, "Fail to revert log item", K(tmp_ret), K(ret), KP(log_item));
+    }
+    log_item = nullptr;
   }
 
   return ret;
@@ -209,11 +222,26 @@ int ObStorageLoggerManager::free_item(ObStorageLogItem *log_item)
 int ObStorageLoggerManager::alloc_log_buffer(void *&log_buffer)
 {
   int ret = OB_SUCCESS;
+  const int64_t alloc_size = NORMAL_LOG_ITEM_SIZE
+      + ObLogConstants::LOG_FILE_ALIGN_SIZE - 1;
+  char *raw_buffer = nullptr;
+  log_buffer = nullptr;
 
   if (OB_FAIL(log_buffers_.pop(log_buffer))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
-      ret = OB_SLOG_REACH_MAX_CONCURRENCY;
-      STORAGE_REDO_LOG(WARN, "Log buffer reach maximum", K(ret), K(log_buffers_.capacity()));
+      common::ObSpinLockGuard guard(allocator_lock_);
+      // Reserve alignment padding while keeping the buffer owned by the arena.
+      if (OB_ISNULL(raw_buffer = static_cast<char *>(allocator_.alloc(alloc_size)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        STORAGE_REDO_LOG(WARN, "Fail to allocate log buffer",
+            K(ret), K(alloc_size), LITERAL_K(NORMAL_LOG_ITEM_SIZE));
+      } else {
+        // manually align address
+        log_buffer = reinterpret_cast<char *>(upper_align(
+            reinterpret_cast<int64_t>(raw_buffer),
+            ObLogConstants::LOG_FILE_ALIGN_SIZE));
+        ret = OB_SUCCESS;
+      }
     } else {
       STORAGE_REDO_LOG(WARN, "Fail to pop log buffer", K(ret));
     }
@@ -259,7 +287,7 @@ int ObStorageLoggerManager::free_log_item(ObStorageLogItem *log_item)
   return ret;
 }
 
-int ObStorageLoggerManager::prepare_log_buffers(const int64_t count, const int64_t log_buf_size)
+int ObStorageLoggerManager::prepare_log_buffers(const int64_t count)
 {
   int ret = OB_SUCCESS;
 
@@ -268,18 +296,6 @@ int ObStorageLoggerManager::prepare_log_buffers(const int64_t count, const int64
     STORAGE_REDO_LOG(WARN, "Invalid argument", K(ret), K(count));
   } else if (OB_FAIL(log_buffers_.init(count))) {
     STORAGE_REDO_LOG(WARN, "Fail to init log buffers", K(ret), K(count));
-  } else {
-    abort_unless(0 == (log_buf_size & (ObLogConstants::LOG_FILE_ALIGN_SIZE - 1)));
-    char *buf = nullptr;
-    if (OB_ISNULL(buf = (char*)allocator_.alloc_aligned(log_buf_size * count, ObLogConstants::LOG_FILE_ALIGN_SIZE))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_REDO_LOG(ERROR, "Fail to alloc memory for buffers", K(ret), K(log_buf_size));
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      if (OB_FAIL(log_buffers_.push(buf + i * log_buf_size))) {
-        STORAGE_REDO_LOG(ERROR, "Fail to push log buffer", K(ret), KP(buf));
-      }
-    }
   }
 
   return ret;
