@@ -99,17 +99,15 @@ struct ObTabletMajorFreezeParam
 {
 public:
   ObTabletMajorFreezeParam()
-    : tablet_id_(),
-      is_rebuild_column_group_(false)
+    : tablet_id_()
     {}
   ~ObTabletMajorFreezeParam() = default;
   bool is_valid() const
   {
     return tablet_id_.is_valid();
   }
-  TO_STRING_KV(K_(tablet_id), K_(is_rebuild_column_group));
+  TO_STRING_KV(K_(tablet_id));
   common::ObTabletID tablet_id_;
-  bool is_rebuild_column_group_;
 };
 
 class ObMajorFreezeHelper

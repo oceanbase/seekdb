@@ -303,8 +303,7 @@ ObDDLTableStoreParam::ObDDLTableStoreParam()
     ddl_execution_id_(-1),
     data_format_version_(0),
     ddl_redo_callback_(nullptr),
-    ddl_finish_callback_(nullptr),
-    ddl_replay_status_(CS_REPLICA_REPLAY_NONE)
+    ddl_finish_callback_(nullptr)
 {
 
 }
@@ -679,5 +678,4 @@ ObRebuildListener::~ObRebuildListener()
 
 
 /***********************ObBackupRestoreTableSchemaChecker***************************/
-
 

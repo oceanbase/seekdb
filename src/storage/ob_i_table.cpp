@@ -34,7 +34,6 @@ ObITable::TableKey::TableKey()
   :
     tablet_id_(),
     scn_range_(),
-    column_group_idx_(0),
     table_type_(ObITable::MAX_TABLE_TYPE),
     slice_range_()
 {
@@ -45,7 +44,6 @@ void ObITable::TableKey::reset()
 {
   tablet_id_.reset();
   scn_range_.reset();
-  column_group_idx_ = 0;
   table_type_ = ObITable::MAX_TABLE_TYPE;
   slice_range_.reset();
 }
@@ -69,37 +67,19 @@ const char* ObITable::table_type_name_[] =
   "DDL_DUMP",
   "REMOTE_LOGICAL_MINOR",
   "DDL_MEM",
-  "COL_ORIENTED",
-  "NORMAL_COL_GROUP",
-  "ROWKEY_COL_GROUP",
-  "COL_ORIENTED_META",
-  "DDL_MERGE_CO",
-  "DDL_MERGE_CG",
-  "DDL_MEM_CO",
-  "DDL_MEM_CG",
   "DDL_MEM_MINI_SSTABLE",
   "MDS_MINI",
   "MDS_MINOR",
   "MICRO_MINI_SSTABLE",
   "INC_MAJOR_SSTABLE",
-  "INC_COLUMN_ORIENTED_SSTABLE",
-  "INC_NORMAL_COLUMN_GROUP_SSTABLE",
-  "INC_ROWKEY_COLUMN_GROUP_SSTABLE",
   "INC_MAJOR_DDL_DUMP",
-  "INC_MAJOR_DDL_MERGE_CO",
-  "INC_MAJOR_DDL_MERGE_CG",
-  "INC_MAJOR_DDL_MEM_CO",
-  "INC_MAJOR_DDL_MEM_CG",
-  "INC_MAJOR_DDL_MEM",
-  "INC_MAJOR_DDL_AGGREGATE_CO",
-  "INC_MAJOR_DDL_AGGREGATE_CG"
+  "INC_MAJOR_DDL_MEM"
 };
 
 uint64_t ObITable::TableKey::hash() const
 {
   uint64_t hash_value = 0;
   hash_value = common::murmurhash(&table_type_, sizeof(table_type_), hash_value);
-  hash_value = common::murmurhash(&column_group_idx_, sizeof(table_type_), hash_value);
   hash_value = common::murmurhash(&slice_range_, sizeof(slice_range_), hash_value);
   hash_value += tablet_id_.hash();
   if (is_table_with_scn_range()) {
@@ -119,7 +99,6 @@ OB_SERIALIZE_MEMBER(
     ObITable::TableKey,
     tablet_id_,
     scn_range_,
-    column_group_idx_,
     table_type_,
     slice_range_);
 
@@ -594,9 +573,7 @@ int ObTablesHandleArray::add_sstable(ObITable *table, const ObStorageMetaHandle 
       ObStorageMetaKey meta_key(addr);
       ObStorageMetaHandle handle;
       ObSSTable *sstable = nullptr;
-      ObStorageMetaValue::MetaType meta_type = table->is_co_sstable()
-                                             ? ObStorageMetaValue::MetaType::CO_SSTABLE
-                                             : ObStorageMetaValue::MetaType::SSTABLE;
+      ObStorageMetaValue::MetaType meta_type = ObStorageMetaValue::MetaType::SSTABLE;
 
       if (OB_FAIL(meta_cache.get_meta(meta_type, meta_key, handle, nullptr))) {
         LOG_WARN("fail to get sstable from meta cache", K(ret), K(addr));

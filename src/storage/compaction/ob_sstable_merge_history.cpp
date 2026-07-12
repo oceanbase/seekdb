@@ -128,8 +128,6 @@ ObMergeStaticInfo::ObMergeStaticInfo()
     merge_level_(MERGE_LEVEL_MAX),
     exec_mode_(ObExecMode::EXEC_MODE_MAX),
     merge_reason_(ObAdaptiveMergePolicy::NONE),
-    base_major_status_(ObCOMajorSSTableStatus::INVALID_CO_MAJOR_SSTABLE_STATUS),
-    co_major_merge_type_(ObCOMajorMergePolicy::INVALID_CO_MAJOR_MERGE_TYPE),
     is_full_merge_(false),
     is_fake_(false)
 {}
@@ -156,8 +154,6 @@ void ObMergeStaticInfo::reset()
   merge_level_ = MERGE_LEVEL_MAX;
   exec_mode_ = ObExecMode::EXEC_MODE_MAX;
   merge_reason_ = ObAdaptiveMergePolicy::NONE;
-  base_major_status_ = ObCOMajorSSTableStatus::INVALID_CO_MAJOR_SSTABLE_STATUS;
-  co_major_merge_type_ = ObCOMajorMergePolicy::INVALID_CO_MAJOR_MERGE_TYPE;
   is_full_merge_ = false;
   MEMSET(mds_filter_info_str_, '\0', sizeof(mds_filter_info_str_));
 }
@@ -176,8 +172,6 @@ void ObMergeStaticInfo::shallow_copy(const ObMergeStaticInfo &other)
   merge_level_ = other.merge_level_;
   exec_mode_ = other.exec_mode_;
   merge_reason_ = other.merge_reason_;
-  base_major_status_ = other.base_major_status_;
-  co_major_merge_type_ = other.co_major_merge_type_;
   is_full_merge_ = other.is_full_merge_;
   MEMSET(mds_filter_info_str_, '\0', sizeof(mds_filter_info_str_));
   strncpy(mds_filter_info_str_, other.mds_filter_info_str_, strlen(other.mds_filter_info_str_));
@@ -189,8 +183,6 @@ ObMergeRunningInfo::ObMergeRunningInfo()
   : merge_start_time_(0),
     merge_finish_time_(0),
     execute_time_(0),
-    start_cg_idx_(0),
-    end_cg_idx_(0),
     io_percentage_(0),
     dag_id_(),
     parallel_merge_info_(),
@@ -202,8 +194,6 @@ void ObMergeRunningInfo::reset()
   merge_start_time_ = 0;
   merge_finish_time_ = 0;
   execute_time_ = 0;
-  start_cg_idx_ = 0;
-  end_cg_idx_ = 0;
   io_percentage_ = 0;
   dag_id_.reset();
   parallel_merge_info_.reset();
@@ -220,8 +210,6 @@ void ObMergeRunningInfo::shallow_copy(const ObMergeRunningInfo &other)
   merge_start_time_ = other.merge_start_time_;
   merge_finish_time_ = other.merge_finish_time_;
   execute_time_ = other.execute_time_;
-  start_cg_idx_ = other.start_cg_idx_;
-  end_cg_idx_ = other.end_cg_idx_;
   io_percentage_ = other.io_percentage_;
   dag_id_ = other.dag_id_;
   parallel_merge_info_ = other.parallel_merge_info_;
@@ -294,9 +282,6 @@ void ObMergeBlockInfo::add(const ObMergeBlockInfo &other)
   add_without_row_cnt(other);
 }
 
-/*
-* for column store, each batch should have same row cnt, need skip when add
-*/
 void ObMergeBlockInfo::add_without_row_cnt(const ObMergeBlockInfo &other)
 {
   occupy_size_ += other.occupy_size_;

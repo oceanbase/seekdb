@@ -868,15 +868,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigIndexStatsModeChecker);
 };
 
-class ObConfigTableStoreFormatChecker: public ObConfigChecker {
-public:
-  ObConfigTableStoreFormatChecker(){}
-  virtual ~ObConfigTableStoreFormatChecker(){}
-  bool check(const ObConfigItem &t) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigTableStoreFormatChecker);
-};
-
 class ObConfigDDLNoLoggingChecker: public ObConfigChecker {
   public:
     static bool check(const obcall::ObAdminSetConfigItem &t);

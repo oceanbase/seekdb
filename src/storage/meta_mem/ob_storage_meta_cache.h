@@ -70,9 +70,8 @@ public:
   enum MetaType : uint16_t
   {
     SSTABLE         = 0,
-    CO_SSTABLE      = 1,
-    TABLE_STORE     = 2,
-    MAX             = 3,
+    TABLE_STORE     = 1,
+    MAX             = 2,
   };
 public:
   ObStorageMetaValue();
@@ -93,12 +92,6 @@ public:
     obj_ = nullptr;
   }
   static int process_sstable(
-      ObStorageMetaValueHandle &handle,
-      const ObStorageMetaKey &key,
-      const char *buf,
-      const int64_t size,
-      const ObTablet *tablet);
-  static int process_co_sstable(
       ObStorageMetaValueHandle &handle,
       const ObStorageMetaKey &key,
       const char *buf,
@@ -315,4 +308,3 @@ int ObStorageMetaValue::bypass_process_storage_meta(
 } // end oceanbase
 
 #endif /* OCEANBASE_STORAGE_OB_STORAGE_META_CACHE_H_ */
-

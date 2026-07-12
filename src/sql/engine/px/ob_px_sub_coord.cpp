@@ -33,7 +33,7 @@
 #include "sql/engine/basic/ob_select_into_op.h"
 #include "storage/ddl/ob_direct_load_mgr_v3.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
-#include "storage/ddl/ob_column_clustered_dag.h"
+#include "storage/ddl/ob_ddl_insert_dag.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -907,7 +907,7 @@ int ObPxSubCoord::start_ddl()
     if (OB_FAIL(ret))  {
     } else {
       const int64_t px_thread_count = sqc_arg_.sqc_.get_task_count();
-      ObColumnClusteredDagInitParam ddl_dag_param;
+      ObDDLInsertDagInitParam ddl_dag_param;
       ddl_dag_param.direct_load_type_ = ObDirectLoadMgrUtil::ddl_get_direct_load_type(tenant_data_version);
       ddl_dag_param.ddl_thread_count_ = px_thread_count;
       ddl_dag_param.px_thread_count_ = px_thread_count;
@@ -950,7 +950,7 @@ int ObPxSubCoord::end_ddl(const bool need_commit)
     ddl_dag_threads_.stop();
     ddl_dag_threads_.wait();
     ret = ddl_dag_->get_dag_ret();
-    ddl_dag_->~ObColumnClusteredDag();
+    ddl_dag_->~ObDDLInsertDag();
     if (OB_ISNULL(sqc_arg_.exec_ctx_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("sqc exec context is null", K(ret), KPC(ddl_dag_));

@@ -1140,7 +1140,7 @@ int ObMicroBlockDecoder::init_decoders()
       const ObColumnIndexArray &cols_index = read_info_->get_columns_index();
       const ObColDescIArray &cols_desc = read_info_->get_columns_desc();
 
-      if (typeid(ObCGRowkeyReadInfo) == typeid(*read_info_) || typeid(ObCGReadInfo) == typeid(*read_info_) || read_info_->get_columns()->count() < 1) {
+      if (nullptr == read_info_->get_columns() || read_info_->get_columns()->count() < 1) {
         FOREACH_ADD_DECODER(nullptr)
       } else {
         const ObColumnParamIArray *cols_param = read_info_->get_columns();
@@ -1649,7 +1649,7 @@ int ObMicroBlockDecoder::filter_pushdown_filter(
     const int64_t col_count = filter.get_col_count();
     const int64_t trans_col_idx = header_->rowkey_column_count_ > 0 ? read_info_->get_schema_rowkey_count() : INT32_MIN;
     const ObColumnIndexArray &cols_index = read_info_->get_columns_index();
-    const common::ObIArray<int32_t> &col_offsets = filter.get_col_offsets(pd_filter_info.is_pd_to_cg_);
+    const common::ObIArray<int32_t> &col_offsets = filter.get_col_offsets();
     const sql::ColumnParamFixedArray &col_params = filter.get_col_params();
     decoder_allocator_.reuse();
     int64_t row_idx = 0;
@@ -1720,7 +1720,7 @@ int ObMicroBlockDecoder::filter_pushdown_filter(
   int ret = OB_SUCCESS;
   int32_t col_offset = 0;
   ObStorageDatum *datum_buf = pd_filter_info.datum_buf_;
-  const common::ObIArray<int32_t> &col_offsets = filter.get_col_offsets(pd_filter_info.is_pd_to_cg_);
+  const common::ObIArray<int32_t> &col_offsets = filter.get_col_offsets();
   const sql::ColumnParamFixedArray &col_params =filter.get_col_params();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -1863,7 +1863,7 @@ int ObMicroBlockDecoder::filter_black_filter_batch(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K_(row_count), K(pd_filter_info.start_), K(pd_filter_info.count_));
   } else {
-    const common::ObIArray<int32_t> &col_offsets = filter.get_col_offsets(pd_filter_info.is_pd_to_cg_);
+    const common::ObIArray<int32_t> &col_offsets = filter.get_col_offsets();
     const sql::ColumnParamFixedArray &col_params = filter.get_col_params();
     if (1 == col_offsets.count() &&
         (decoders_[col_offsets.at(0)].decoder_->is_new_column() || 

@@ -41,7 +41,6 @@ void ObSSTableRowMultiScanner<PrefetchType>::reuse()
 
 // Explicit instantiations.
 template class ObSSTableRowMultiScanner<ObIndexTreeMultiPassPrefetcher<>>;
-template class ObSSTableRowMultiScanner<ObCOPrefetcher>;
 
 }
 }

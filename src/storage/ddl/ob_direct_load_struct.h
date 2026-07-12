@@ -42,7 +42,6 @@
 #include "storage/ddl/ob_ddl_inc_clog_callback.h"
 #include "storage/lob/ob_lob_meta.h"
 #include "storage/ddl/ob_ddl_seq_generator.h"
-#include "storage/ddl/ob_macro_meta_store_manager.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 
 namespace oceanbase
@@ -61,7 +60,6 @@ namespace storage
 {
 class ObTablet;
 class ObInsertMonitor;
-class ObCOSliceWriter;
 class ObDirectLoadSliceWriter;
 
 class ObIDDLMergeHelper;
@@ -188,15 +186,14 @@ struct ObDirectInsertCommonParam final
 {
 public:
   ObDirectInsertCommonParam()
-    : ls_id_(), tablet_id_(), direct_load_type_(DIRECT_LOAD_INVALID), data_format_version_(0), read_snapshot_(0), replay_normal_in_cs_replica_(false), is_no_logging_(false),
-    is_rescan_data_compl_dag_(false)
+    : ls_id_(), tablet_id_(), direct_load_type_(DIRECT_LOAD_INVALID), data_format_version_(0), read_snapshot_(0), is_no_logging_(false)
 
   {}
   ~ObDirectInsertCommonParam() = default;
   bool is_valid() const { return ls_id_.is_valid() && tablet_id_.is_valid()
       && data_format_version_ >= 0 && read_snapshot_ >= 0 && DIRECT_LOAD_INVALID <= direct_load_type_ && direct_load_type_ <= DIRECT_LOAD_MAX;
   }
-  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(direct_load_type), K_(data_format_version), K_(read_snapshot), K_(replay_normal_in_cs_replica), K_(is_no_logging), K_(is_rescan_data_compl_dag));
+  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(direct_load_type), K_(data_format_version), K_(read_snapshot), K_(is_no_logging));
 public:
   share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
@@ -205,9 +202,7 @@ public:
   // read_snapshot_ is used to scan the source data.
   // For full direct load task, it is also the commit version of the target macro block.
   int64_t read_snapshot_;
-  bool replay_normal_in_cs_replica_; // when ddl and add cs replica are concurrent, leader may write normal clog
   bool is_no_logging_;
-  bool is_rescan_data_compl_dag_; // use for data complement dag rescan path
 };
 
 // only used in runtime execution
@@ -464,14 +459,11 @@ public:
            const transaction::ObTxSEQ &seq_no = transaction::ObTxSEQ());
   bool is_valid() const;
   int assign(const ObDDLTabletMergeDagParamV2 &merge_param);
-  int init_cg_sstable_array( hash::ObHashSet<int64_t> &slice_idxes);
-  int set_cg_slice_sstable(const int64_t slice_idx, const int64_t cg_idx, const ObTableHandleV2 &sstable_handle);
+  int init_slice_sstable_array(hash::ObHashSet<int64_t> &slice_idxes);
+  int set_slice_sstable(const int64_t slice_idx, const ObTableHandleV2 &sstable_handle);
   int get_tablet_param(share::ObLSID &ls_id, ObTabletID &tablet_id, ObWriteTabletParam *&tablet_param) const;
   int get_merge_ctx(ObDDLTabletContext::MergeCtx *&merge_ctx);
   int get_storage_schema(ObStorageSchema *stroage_schema);
-  int get_table_type(const int64_t cg_idx,
-                     ObITable::TableType &table_type,
-                     const ObDirectLoadType direct_load_type) const;
   void set_merge_all_slice() { merge_all_slice_ = true; }
   bool need_merge_all_slice() const { return for_major_ || merge_all_slice_; }
   ObDDLTabletContext *get_tablet_ctx() { return tablet_ctx_; }
@@ -497,8 +489,7 @@ private:
 
 // column organization of row in ObChunkDatumStore::SotredRow
 // <rowkey_columns, multi_version_columns, other_columns_if_exist>
-// this organization is same as row of all_cg in macro block
-// and match the column index in ObStorageColumnGroupSchema
+// This organization matches the row stored in a macro block.
 class ObTabletSliceStore
 {
 public:
@@ -507,8 +498,7 @@ public:
   virtual int append_row(const blocksstable::ObDatumRow &datum_row) = 0;
   virtual int append_batch(const blocksstable::ObBatchDatumRows &datum_rows) = 0;
   virtual int close() = 0;
-  virtual int fill_column_group(const int64_t cg_idx, ObCOSliceWriter *writer, ObInsertMonitor *insert_monitor) = 0;
-  virtual void cancel() = 0; // for exit fill_column_group
+  virtual void cancel() = 0;
   virtual int64_t get_row_count() const { return 0; } // dummy one
   virtual int64_t get_next_block_start_seq() const { return -1; } // invalid block start seq.
   virtual ObDatumRowkey get_compare_key() const { return ObDatumRowkey(); }
@@ -538,10 +528,6 @@ public:
     return OB_NOT_IMPLEMENT;
   }
   virtual int close() override;
-  virtual int fill_column_group(const int64_t cg_idx, ObCOSliceWriter *writer, ObInsertMonitor *insert_monitor) override
-  {
-    return OB_NOT_IMPLEMENT;
-  }
   virtual void cancel() override {}
   virtual int64_t get_row_count() const { return row_cnt_; }
 
@@ -774,11 +760,10 @@ private:
 class ObChunkSliceStore : public ObTabletSliceStore
 {
 public:
-  ObChunkSliceStore() : is_inited_(false), is_canceled_(false), target_store_idx_(-1), row_cnt_(0), arena_allocator_(nullptr), cg_schemas_(), datum_stores_(), rowkey_column_count_(0)
-  {
-    cg_schemas_.set_attr(ObMemAttr("ChunkSlicStoreC"));
-    datum_stores_.set_attr(ObMemAttr("ChunkSlicStoreD"));
-  }
+  ObChunkSliceStore()
+    : is_inited_(false), is_canceled_(false), row_cnt_(0), arena_allocator_(nullptr),
+      datum_store_(nullptr), rowkey_column_count_(0)
+  {}
   virtual ~ObChunkSliceStore() { reset(); }
   int init(const int64_t rowkey_column_count, const ObStorageSchema *storage_schema, ObArenaAllocator &allocator,
            const ObIArray<ObColumnSchemaItem> &col_schema, const int64_t dir_id, const int64_t parallelism);
@@ -788,23 +773,22 @@ public:
     return OB_ERR_UNEXPECTED;
   }
   virtual int close() override;
-  virtual int fill_column_group(const int64_t cg_idx, ObCOSliceWriter *writer, ObInsertMonitor *insert_monitor) override;
   virtual void cancel() override { is_canceled_ = true; }
   void reset();
   virtual int64_t get_row_count() const { return row_cnt_; }
   virtual ObDatumRowkey get_compare_key() const override { return endkey_; }
-  TO_STRING_KV(K(is_inited_), K(is_canceled_), K(target_store_idx_), K(row_cnt_), KP(arena_allocator_), K(datum_stores_), K(endkey_), K(rowkey_column_count_), K(cg_schemas_));
+  TO_STRING_KV(K(is_inited_), K(is_canceled_), K(row_cnt_), KP(arena_allocator_),
+               KP(datum_store_), K(endkey_), K(rowkey_column_count_));
 private:
-  int prepare_datum_stores(const ObStorageSchema *storage_schema, ObIAllocator &allocator,
-                           const ObIArray<ObColumnSchemaItem> &col_array, const int64_t dir_id, const int64_t parallelism);
+  int prepare_datum_store(const ObStorageSchema *storage_schema, ObIAllocator &allocator,
+                          const ObIArray<ObColumnSchemaItem> &col_array,
+                          const int64_t dir_id, const int64_t parallelism);
 public:
   bool is_inited_;
   bool is_canceled_;
-  int64_t target_store_idx_;
   int64_t row_cnt_;
   ObArenaAllocator *arena_allocator_;
-  ObArray<ObStorageColumnGroupSchema> cg_schemas_;
-  ObArray<sql::ObCompactStore *> datum_stores_;
+  sql::ObCompactStore *datum_store_;
   blocksstable::ObDatumRowkey endkey_;
   int64_t rowkey_column_count_;
 };
@@ -814,16 +798,14 @@ class ObChunkBatchSliceStore : public ObTabletSliceStore
 public:
   ObChunkBatchSliceStore()
     : arena_allocator_(nullptr),
-      cg_ctxs_(),
+      row_ctx_(nullptr),
       column_count_(0),
       rowkey_column_count_(0),
       row_cnt_(0),
       start_key_(),
       is_canceled_(false),
       is_inited_(false)
-  {
-    cg_ctxs_.set_attr(ObMemAttr("DL_CK_CG_CTXS"));
-  }
+  {}
   virtual ~ObChunkBatchSliceStore() { reset(); }
   void reset();
   int init(const int64_t rowkey_column_count,
@@ -839,12 +821,11 @@ public:
   }
   virtual int append_batch(const blocksstable::ObBatchDatumRows &datum_rows) override;
   virtual int close() override;
-  virtual int fill_column_group(const int64_t cg_idx, ObCOSliceWriter *writer, ObInsertMonitor *insert_monitor) override;
   virtual void cancel() override { is_canceled_ = true; }
   virtual int64_t get_row_count() const { return row_cnt_; }
   virtual ObDatumRowkey get_compare_key() const override { return start_key_; }
   TO_STRING_KV(KP_(arena_allocator),
-               K_(cg_ctxs),
+               KP_(row_ctx),
                K_(column_count),
                K_(rowkey_column_count),
                K_(row_cnt),
@@ -853,19 +834,18 @@ public:
                K_(is_inited));
 private:
   int init_start_key();
-  int prepare_column_group_ctxs(const ObStorageSchema *storage_schema,
-                                ObIAllocator &allocator,
-                                const ObIArray<ObColumnSchemaItem> &col_array,
-                                const int64_t dir_id,
-                                const int64_t parallelism,
-                                const int64_t max_batch_size);
+  int prepare_row_ctx(const ObStorageSchema *storage_schema,
+                      ObIAllocator &allocator,
+                      const ObIArray<ObColumnSchemaItem> &col_array,
+                      const int64_t dir_id,
+                      const int64_t parallelism,
+                      const int64_t max_batch_size);
 private:
-  struct ColumnGroupCtx
+  struct RowStoreCtx
   {
   public:
-    ColumnGroupCtx()
+    RowStoreCtx()
       : allocator_("DL_CK_VECTOR"),
-        cg_schema_(),
         store_(),
         vectors_(),
         append_vectors_(),
@@ -875,14 +855,11 @@ private:
       vectors_.set_block_allocator(ModulePageAllocator(allocator_));
       append_vectors_.set_block_allocator(ModulePageAllocator(allocator_));
     }
-    TO_STRING_KV(K_(cg_schema),
-                //  K_(store),
-                 K(vectors_.count()),
+    TO_STRING_KV(K(vectors_.count()),
                  K(append_vectors_.count()),
                  K_(brs));
   public:
     ObArenaAllocator allocator_;
-    ObStorageColumnGroupSchema cg_schema_;
     sql::ObTempColumnStore store_;
     ObArray<ObIVector *> vectors_;
     ObArray<ObIVector *> append_vectors_;
@@ -890,7 +867,7 @@ private:
   };
 public:
   ObArenaAllocator *arena_allocator_;
-  ObArray<ColumnGroupCtx *> cg_ctxs_;
+  RowStoreCtx *row_ctx_;
   int64_t column_count_;
   int64_t rowkey_column_count_;
   int64_t row_cnt_;
@@ -899,208 +876,11 @@ public:
   bool is_inited_;
 };
 
-class ObColumnSliceStore : public ObTabletSliceStore
-{
-public:
-  ObColumnSliceStore();
-  virtual ~ObColumnSliceStore();
-  int init(ObIAllocator &allocator,
-           const ObStorageSchema *storage_schema,
-           ObBaseTabletDirectLoadMgr *tablet_direct_load_mgr,
-           const blocksstable::ObMacroDataSeq &data_seq,
-           const int64_t slice_idx,
-           const share::SCN &start_scn,
-           const int64_t dir_id,
-           const bool is_cs_replica);
-  void destroy();
-  virtual int append_row(const blocksstable::ObDatumRow &datum_row) override;
-  virtual int close() override;
-  virtual int append_batch(const blocksstable::ObBatchDatumRows &datum_rows) override { return OB_ERR_UNEXPECTED; }
-  virtual int fill_column_group(const int64_t cg_idx, ObCOSliceWriter *writer, ObInsertMonitor *insert_monitor) override { return OB_ERR_UNEXPECTED; }
-  virtual void cancel() override {}
-  TO_STRING_KV(K(is_inited_), K(row_count_), K(dumped_row_count_), K(ls_id_), K(tablet_id_), K(direct_load_type_),
-      K(tenant_data_version_), K(snapshot_version_), K(ddl_task_id_), K(parallel_task_count_), K(is_micro_index_clustered_),
-      K(tablet_transfer_seq_), K(slice_idx_), K(start_scn_), K(is_cs_replica_), K(start_seqs_), K(datum_stores_), KPC(storage_schema_), KP_(tx_desc), K_(trans_id), K_(seq_no));
-private:
-  int check_need_dump(bool &need_dump);
-  int dump_macro_block();
-private:
-  bool is_inited_;
-  ObIAllocator *allocator_;
-  const ObStorageSchema *storage_schema_; // caller hold this when fill slice
-  int64_t row_count_;
-  ObArray<sql::ObCompactStore *> datum_stores_;
-  int64_t dumped_row_count_;
-
-  share::ObLSID ls_id_;
-  ObTabletID tablet_id_;
-  ObDirectLoadType direct_load_type_;
-  int64_t tenant_data_version_;
-  int64_t snapshot_version_;
-  int64_t ddl_task_id_; // for clog wirte speed limit
-  int64_t parallel_task_count_; // for gc flag in shared storage mode
-  bool is_micro_index_clustered_;
-  int64_t tablet_transfer_seq_;
-
-  ObArray<blocksstable::ObMacroDataSeq> start_seqs_;
-  int64_t slice_idx_;
-  share::SCN start_scn_;
-  bool is_cs_replica_;
-  // for incremental major direct load
-  transaction::ObTxDesc *tx_desc_;
-  transaction::ObTransID trans_id_;
-  transaction::ObTxSEQ seq_no_;
-};
-
-class ObColumnBatchSliceStore : public ObTabletSliceStore
-{
-public:
-  ObColumnBatchSliceStore()
-    : arena_allocator_(nullptr),
-      cg_ctxs_(),
-      column_count_(0),
-      rowkey_column_count_(0),
-      row_cnt_(0),
-      slice_idx_(0),
-      merge_slice_idx_(0),
-      storage_schema_(nullptr),
-      direct_load_type_(DIRECT_LOAD_MAX),
-      tenant_data_version_(0), 
-      snapshot_version_(0), 
-      ddl_task_id_(0), 
-      parallel_task_count_(0),
-      is_micro_index_clustered_(false), 
-      tablet_transfer_seq_(share::OB_INVALID_TRANSFER_SEQ),
-      is_cs_replica_(false),
-      is_inited_(false),
-      tx_desc_(nullptr),
-      trans_id_(),
-      seq_no_()
-  {
-    cg_ctxs_.set_attr(ObMemAttr("DL_CL_CG_CTXS"));
-  }
-  virtual ~ObColumnBatchSliceStore() { reset(); }
-  void reset();
-  int init(const int64_t rowkey_column_count,
-           const ObStorageSchema *storage_schema,
-           ObArenaAllocator &allocator,
-           const int64_t slice_idx,
-           const int64_t merge_slice_idx,
-           ObBaseTabletDirectLoadMgr *tablet_direct_load_mgr,
-           const blocksstable::ObMacroDataSeq &data_seq,
-           const share::SCN &start_scn,
-           const int64_t dir_id,
-           const bool is_cs_replica,
-           const int64_t max_batch_size);
-  virtual int append_row(const blocksstable::ObDatumRow &datum_row) override
-  {
-    return OB_ERR_UNEXPECTED;
-  }
-  virtual int append_batch(const blocksstable::ObBatchDatumRows &datum_rows) override;
-  virtual int close() override;
-  virtual int fill_column_group(const int64_t cg_idx, ObCOSliceWriter *writer, ObInsertMonitor *insert_monitor) override
-  {
-    return OB_ERR_UNEXPECTED;
-  }
-  virtual void cancel() override {}
-  virtual int64_t get_row_count() const { return row_cnt_; }
-  TO_STRING_KV(KP_(arena_allocator),
-               K_(cg_ctxs),
-               K_(column_count),
-               K_(rowkey_column_count),
-               K_(row_cnt),
-               K_(slice_idx),
-               K_(merge_slice_idx),
-               K_(ls_id),
-               K_(tablet_id),
-               K_(direct_load_type),
-               K_(tenant_data_version),
-               K_(snapshot_version),
-               K_(ddl_task_id),
-               K_(parallel_task_count),
-               K_(is_micro_index_clustered),
-               K_(tablet_transfer_seq),
-               K_(start_scn),
-               K_(is_cs_replica),
-               K_(is_inited),
-               KP_(tx_desc),
-               K_(trans_id),
-               K_(seq_no));
-private:
-  int prepare_column_group_ctxs(const ObStorageSchema *storage_schema,
-                                ObIAllocator &allocator,
-                                const ObIArray<ObColumnSchemaItem> &col_array,
-                                const blocksstable::ObMacroDataSeq &data_seq,
-                                const int64_t dir_id,
-                                const int64_t max_batch_size);
-  int check_need_dump(bool &need_dump);
-  int dump_macro_block();
-private:
-  struct ColumnGroupCtx
-  {
-  public:
-    ColumnGroupCtx()
-      : allocator_("DL_CL_VECTOR"),
-        cg_schema_(),
-        store_(),
-        append_vectors_(),
-        brs_(),
-        data_seq_(0),
-        dumped_row_count_(0)
-    {
-      
-      append_vectors_.set_block_allocator(ModulePageAllocator(allocator_));
-      datum_rows_.vectors_.set_block_allocator(ModulePageAllocator(allocator_));
-    }
-    TO_STRING_KV(K_(cg_schema),
-                //  K_(store),
-                 K(append_vectors_.count()),
-                 K_(brs),
-                 K_(datum_rows),
-                 K_(data_seq),
-                 K_(dumped_row_count));
-  public:
-    ObArenaAllocator allocator_;
-    ObStorageColumnGroupSchema cg_schema_;
-    sql::ObTempColumnStore store_;
-    ObArray<ObIVector *> append_vectors_;
-    sql::ObBatchRows brs_;
-    blocksstable::ObBatchDatumRows datum_rows_;
-    blocksstable::ObMacroDataSeq data_seq_;
-    int64_t dumped_row_count_;
-  };
-public:
-  ObArenaAllocator *arena_allocator_;
-  ObArray<ColumnGroupCtx *> cg_ctxs_;
-  int64_t column_count_;
-  int64_t rowkey_column_count_;
-  int64_t row_cnt_;
-  int64_t slice_idx_;
-  int64_t merge_slice_idx_;
-  const ObStorageSchema *storage_schema_; // caller hold this when fill slice
-  share::ObLSID ls_id_;
-  ObTabletID tablet_id_;
-  ObDirectLoadType direct_load_type_;
-  int64_t tenant_data_version_;
-  int64_t snapshot_version_;
-  int64_t ddl_task_id_; // for clog wirte speed limit
-  int64_t parallel_task_count_; // for gc flag in shared storage mode
-  bool is_micro_index_clustered_;
-  int64_t tablet_transfer_seq_;
-  share::SCN start_scn_;
-  bool is_cs_replica_;
-  bool is_inited_;
-  // for incremental major direct load
-  transaction::ObTxDesc *tx_desc_;
-  transaction::ObTransID trans_id_;
-  transaction::ObTxSEQ seq_no_;
-};
-
 class ObMacroBlockSliceStore: public ObTabletSliceStore
 {
 public:
   ObMacroBlockSliceStore()
-   : is_inited_(false), need_process_cs_replica_(false), ddl_redo_callback_(nullptr), macro_block_writer_(true /* use buffer */) {}
+   : is_inited_(false), ddl_redo_callback_(nullptr), macro_block_writer_(true /* use buffer */) {}
   virtual ~ObMacroBlockSliceStore() {
     if (ddl_redo_callback_ != nullptr) {
       common::ob_delete(ddl_redo_callback_);
@@ -1109,76 +889,23 @@ public:
   int init(
       ObBaseTabletDirectLoadMgr *tablet_direct_load_mgr,
       const blocksstable::ObMacroDataSeq &data_seq,
-      const share::SCN &start_scn,
-      const bool need_process_cs_replica = false);
+      const share::SCN &start_scn);
   virtual int append_row(const blocksstable::ObDatumRow &datum_row) override;
   virtual int append_batch(const blocksstable::ObBatchDatumRows &datum_rows) override;
   virtual int close() override;
-  virtual int fill_column_group(const int64_t cg_idx, ObCOSliceWriter *writer, ObInsertMonitor *insert_monitor) override
-  {
-    return OB_ERR_UNEXPECTED;
-  }
   virtual void cancel() override {}
   virtual int64_t get_next_block_start_seq() const override { return macro_block_writer_.get_last_macro_seq(); }
-  TO_STRING_KV(K(is_inited_), K_(need_process_cs_replica), K(macro_block_writer_));
+  TO_STRING_KV(K(is_inited_), K(macro_block_writer_));
 private:
   bool is_inited_;
-  bool need_process_cs_replica_;
   blocksstable::ObIMacroBlockFlushCallback *ddl_redo_callback_;
   blocksstable::ObMacroBlockWriter macro_block_writer_;
-};
-
-class ObMultiSliceStore : public ObTabletSliceStore
-{
-public:
-  ObMultiSliceStore();
-  virtual ~ObMultiSliceStore();
-  int init(
-      ObArenaAllocator &allocator,
-      ObBaseTabletDirectLoadMgr *tablet_direct_load_mgr,
-      const blocksstable::ObMacroDataSeq &data_seq,
-      const int64_t slice_idx,
-      const int64_t merge_slice_idx,
-      const share::SCN &start_scn,
-      const int64_t rowkey_column_count, 
-      const ObStorageSchema *storage_schema, 
-      const ObIArray<ObColumnSchemaItem> &col_schema, 
-      const int64_t dir_id, 
-      const int64_t parallelism,
-      const bool use_batch_store,
-      const int64_t max_batch_size);
-  virtual int append_row(const blocksstable::ObDatumRow &datum_row) override;
-  virtual int append_batch(const blocksstable::ObBatchDatumRows &datum_rows) override;
-  virtual int close() override;
-  virtual int fill_column_group(const int64_t cg_idx, ObCOSliceWriter *writer, ObInsertMonitor *insert_monitor) override;
-  virtual void cancel() override;
-  virtual int64_t get_row_count() const override;
-  virtual int64_t get_next_block_start_seq() const override;
-  virtual ObDatumRowkey get_compare_key() const override;
-  void reset();
-  TO_STRING_KV(K_(is_inited), KPC_(cs_replica_schema), KPC_(row_slice_store), KPC_(column_slice_store));
-private:
-  void free_memory(ObArenaAllocator &allocator);
-private:
-  bool is_inited_;
-  ObArenaAllocator *arena_allocator_;
-  ObStorageSchema *cs_replica_schema_;
-  ObMacroBlockSliceStore *row_slice_store_;
-  ObTabletSliceStore *column_slice_store_;
 };
 
 class ObTabletDirectLoadMgr;
 
 class ObDirectLoadSliceWriter final
 {
-public:
-  enum class ObDirectLoadSliceWriterType: uint8_t
-  {
-    ROW_STORE_WRITER   = 0,
-    COL_STORE_WRITER   = 1,
-    COL_REPLICA_WRITER = 2,
-    WRITER_TYPE_MAX    = 3
-  };
 public:
   ObDirectLoadSliceWriter();
   ~ObDirectLoadSliceWriter();
@@ -1246,13 +973,6 @@ public:
       const ObTabletID &curr_tablet_id,
       ObIStoreRowIterator *row_iter,
       int64_t &affected_rows);
-  int fill_column_group(
-      const ObStorageSchema *storage_schema,
-      const share::SCN &start_scn,
-      ObInsertMonitor *monitor_node = NULL);
-  int fill_aggregated_column_group(
-      const int64_t cg_idx,
-      ObCOSliceWriter *cur_writer);
   int fill_vector_index_data(
     const int64_t snapshot_version,
     const ObStorageSchema *storage_schema,
@@ -1260,20 +980,13 @@ public:
     const ObTableSchemaItem &schema_item,
     ObInsertMonitor* insert_monitor,
     const int64_t context_id);
-  void set_row_offset(const int64_t row_offset) { row_offset_ = row_offset; }
   int64_t get_row_count() const { return nullptr == slice_store_ ? 0 : slice_store_->get_row_count(); }
-  int64_t get_row_offset() const { return row_offset_; }
   blocksstable::ObMacroDataSeq &get_start_seq() { return start_seq_; }
   bool is_empty() const { return 0 == get_row_count(); }
-  bool is_row_store_writer() const { return ObDirectLoadSliceWriterType::ROW_STORE_WRITER == writer_type_; }
-  bool is_col_store_writer() const { return ObDirectLoadSliceWriterType::COL_STORE_WRITER == writer_type_; }
-  bool is_cs_replica_write() const { return ObDirectLoadSliceWriterType::COL_REPLICA_WRITER == writer_type_; }
-  bool need_column_store() const { return is_col_store_writer() || is_cs_replica_write(); }
   ObTabletSliceStore *get_slice_store() const { return slice_store_; }
-  ObDirectLoadSliceWriterType get_writer_type() const { return writer_type_; }
   void cancel();
   int64_t get_next_block_start_seq() const { return nullptr == slice_store_ ? start_seq_.get_data_seq() /*slice empty*/ : slice_store_->get_next_block_start_seq(); }
-  TO_STRING_KV(K(is_inited_), K(writer_type_), K(is_canceled_), K(start_seq_), K(slice_idx_), K(merge_slice_idx_), KPC(slice_store_), K(row_offset_));
+  TO_STRING_KV(K(is_inited_), K(is_canceled_), K(start_seq_), K(slice_idx_), K(merge_slice_idx_), KPC(slice_store_));
 private:
   int fill_lob_into_memtable( // for version < 4.3.0.0
       ObIAllocator &allocator,
@@ -1301,17 +1014,11 @@ private:
       const int64_t rowkey_column_cnt,
       const blocksstable::ObBatchDatumRows &datum_rows);
   int prepare_slice_store_if_need(
-      const int64_t schema_rowkey_column_num,
-      const bool is_slice_store,
-      const int64_t dir_id,
-      const int64_t parallelism,
       const ObStorageSchema *storage_schema, 
       const share::SCN &start_scn,
       const ObString vec_idx_param,
       const int64_t vec_dim,
-      const int64_t context_id,
-      const bool use_vector_store = false,
-      const int64_t max_batch_size = 0);
+      const int64_t context_id);
   int prepare_vector_slice_store(
       const ObStorageSchema *storage_schema,
       const ObString vec_idx_param,
@@ -1349,11 +1056,6 @@ private:
       share::ObTabletCacheInterval &pk_interval,
       ObLobMetaRowIterator *&row_iter);
   int mock_chunk_store(const int64_t row_cnt);
-  int inner_fill_column_group(
-      ObTabletSliceStore *slice_store,
-      const ObStorageSchema *storage_schema,
-      const share::SCN &start_scn,
-      ObInsertMonitor *monitor_node = NULL);
   int inner_fill_vector_index_data(
       ObMacroBlockSliceStore *&macro_block_slice_store,
       ObVectorIndexBaseSliceStore *vec_idx_slice_store,
@@ -1378,7 +1080,6 @@ private:
       ObInsertMonitor* insert_monitor);
 private:
   bool is_inited_;
-  ObDirectLoadSliceWriterType writer_type_;
   bool is_canceled_;
   blocksstable::ObMacroDataSeq start_seq_;
   int64_t slice_idx_;
@@ -1390,65 +1091,6 @@ private:
   common::ObArenaAllocator allocator_;
   common::ObIAllocator *lob_allocator_;
   ObSEArray<int64_t, 256> rowkey_lengths_;
-  int64_t row_offset_;
-};
-
-class ObCOSliceWriter
-{
-public:
-  ObCOSliceWriter()
-    : is_inited_(false),
-      cg_idx_(-1),
-      cg_schema_(nullptr),
-      data_desc_(),
-      index_builder_(true /*use buffer*/),
-      macro_block_writer_(true /*use buffer*/),
-      flush_callback_(nullptr),
-      macro_meta_store_(nullptr),
-      allocator_("COSliceWriter")
-  {
-    
-  }
-  ~ObCOSliceWriter()
-  {
-    if (OB_NOT_NULL(flush_callback_)) {
-      flush_callback_->~ObIMacroBlockFlushCallback();
-      flush_callback_ = nullptr;
-    }
-  }
-  int init(
-      const ObStorageSchema *storage_schema,
-      const int64_t cg_idx,
-      ObBaseTabletDirectLoadMgr *tablet_direct_load_mgr,
-      const blocksstable::ObMacroDataSeq &start_seq,
-      const int64_t row_id_offset,
-      const share::SCN &start_scn,
-      const bool with_cs_replica,
-      const int64_t parallel_idx);
-  void reset();
-  int append_row(
-      const sql::ObChunkDatumStore::StoredRow *stored_row);
-  int append_batch(const blocksstable::ObBatchDatumRows &datum_rows);
-  static int project_cg_row(
-      const ObStorageColumnGroupSchema &cg_schema,
-      const sql::ObChunkDatumStore::StoredRow *stored_row,
-      blocksstable::ObDatumRow &cg_row);
-  int close();
-  blocksstable::ObBatchDatumRows &get_datum_rows() { return datum_rows_; }
-  bool is_inited() { return is_inited_; }
-  TO_STRING_KV(K(is_inited_), K(cg_idx_), KPC(cg_schema_), K(macro_block_writer_), K(data_desc_), K(cg_row_), K(datum_rows_));
-private:
-  bool is_inited_;
-  int64_t cg_idx_;
-  const ObStorageColumnGroupSchema *cg_schema_;
-  blocksstable::ObWholeDataStoreDesc data_desc_;
-  blocksstable::ObSSTableIndexBuilder index_builder_;
-  blocksstable::ObMacroBlockWriter macro_block_writer_;
-  storage::ObIMacroBlockFlushCallback *flush_callback_;
-  blocksstable::ObDatumRow cg_row_;
-  blocksstable::ObBatchDatumRows datum_rows_;
-  blocksstable::ObMacroMetaTempStore *macro_meta_store_;
-  ObArenaAllocator allocator_;
 };
 
 struct ObTabletDirectLoadExecContextId final

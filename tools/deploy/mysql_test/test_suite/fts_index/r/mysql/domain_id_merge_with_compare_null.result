@@ -13,7 +13,6 @@ DELETE t_first, t_second_4 FROM t_first
 LEFT JOIN t_second AS t_second_4 ON t_second_4.pk = NULL;
 drop table t_first;
 drop table t_second;
-alter system set default_table_store_format = "column";
 drop table if exists t_first;
 drop table if exists t_second;
 CREATE TABLE t_first (id INT PRIMARY KEY);
@@ -29,4 +28,3 @@ DELETE t_first, t_second_4 FROM t_first
 LEFT JOIN t_second AS t_second_4 ON t_second_4.pk = NULL;
 drop table t_first;
 drop table t_second;
-alter system set default_table_store_format = "row";

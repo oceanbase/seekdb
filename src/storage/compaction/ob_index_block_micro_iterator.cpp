@@ -161,18 +161,14 @@ int ObIndexBlockMicroIterator::init(
     const ObSSTable *sstable)
 {
   int ret = OB_SUCCESS;
-  const bool is_normal_cg = sstable->is_normal_cg_sstable();
-
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("Init twice", K(ret));
   } else if (OB_UNLIKELY(!table_read_info.is_valid() || !macro_desc.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected read info", K(ret), K(table_read_info), K(macro_desc));
-  } else if (is_normal_cg && OB_FAIL(rowkey_helper_.trans_to_cg_range(macro_desc.start_row_offset_, macro_desc.range_))) {
-      STORAGE_LOG(WARN, "failed to trans cg range", K(ret), K(macro_desc));
   } else {
-    range_ = is_normal_cg ? rowkey_helper_.get_result_range() : macro_desc.range_;
+    range_ = macro_desc.range_;
   }
 
   if (OB_FAIL(ret)) {

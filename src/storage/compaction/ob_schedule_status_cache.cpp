@@ -390,13 +390,7 @@ int ObTabletStatusCache::update_tablet_report_status(
     const ObTablet &tablet)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(tablet.get_tablet_meta().report_status_.found_cg_checksum_error_)) {
-    //TODO(@DanLing) solve this situation, but how to deal with the COSSTable that without the all column group?
-    ret = OB_CHECKSUM_ERROR;
-    if (REACH_THREAD_TIME_INTERVAL(PRINT_LOG_INVERVAL)) {
-      LOG_ERROR("tablet found cg checksum error, skip to schedule merge", K(ret), K(tablet));
-    }
-  } else if (tablet_merge_finish_) {
+  if (tablet_merge_finish_) {
     int tmp_ret = OB_SUCCESS;
     const ObLSID &ls_id = ls.get_ls_id();
     const ObTabletID &tablet_id = tablet.get_tablet_id();

@@ -101,13 +101,10 @@ protected:
     const int64_t schema_version,
     ObMediumCompactionInfo &medium_info);
   int choose_encoding_limit(ObMediumCompactionInfo &medium_info);
-  int init_parallel_range_and_schema_changed_and_co_merge_type(
+  int init_parallel_range_and_schema_changed(
       const ObGetMergeTablesResult &result,
       ObMediumCompactionInfo &medium_info);
   int check_if_schema_changed(ObMediumCompactionInfo &medium_info);
-  int init_co_major_merge_type(
-      const ObGetMergeTablesResult &result,
-      ObMediumCompactionInfo &medium_info);
   int prepare_iter(
       const ObGetMergeTablesResult &result,
       ObTableStoreIterator &table_iter);

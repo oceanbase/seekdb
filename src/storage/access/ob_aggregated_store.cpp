@@ -22,92 +22,6 @@ namespace oceanbase
 namespace storage
 {
 
-void ObCGAggCells::reset()
-{
-  agg_cells_.reset();
-}
-
-bool ObCGAggCells::check_finished() const
-{
-  bool finised = true;
-  for (int i = 0; finised && i < agg_cells_.count(); ++i) {
-    finised = agg_cells_.at(i)->finished();
-  }
-  return finised;
-}
-
-int ObCGAggCells::can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info, const int32_t col_index, bool &can_agg)
-{
-  UNUSED(col_index);
-  int ret = OB_SUCCESS;
-  can_agg = true;
-  for (int i = 0; OB_SUCC(ret) && can_agg && i < agg_cells_.count(); ++i) {
-    if (OB_FAIL(agg_cells_.at(i)->can_use_index_info(index_info, true, can_agg))) {
-      LOG_WARN("fail to check can use index info", K(i), KPC(agg_cells_.at(i)), K(index_info));
-    }
-  }
-  return ret;
-}
-
-int ObCGAggCells::add_agg_cell(ObAggCell *cell)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(cell)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument, cell is null", K(ret));
-  } else if (OB_FAIL(agg_cells_.push_back(cell))) {
-    LOG_WARN("Fail to push back", K(ret));
-  }
-  return ret;
-}
-
-int ObCGAggCells::fill_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < agg_cells_.count(); ++i) {
-    if (OB_FAIL(agg_cells_.at(i)->eval_index_info(index_info, is_cg))) {
-      LOG_WARN("Fail to agg index info", K(ret), KPC(agg_cells_.at(i)));
-    }
-  }
-  return ret;
-}
-
-int ObCGAggCells::eval(blocksstable::ObStorageDatum &datum, const int64_t row_count)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < agg_cells_.count(); ++i) {
-    if (agg_cells_.at(i)->finished()) {
-    } else if (OB_FAIL(agg_cells_.at(i)->eval(datum, row_count))) {
-      LOG_WARN("Fail to eval agg cell", K(ret), K(datum), K(row_count));
-    }
-  }
-  return ret;
-}
-
-int ObCGAggCells::eval_batch(
-    const ObTableIterParam *iter_param,
-    const ObTableAccessContext *context,
-    const int32_t col_offset,
-    blocksstable::ObIMicroBlockReader *reader,
-    const ObPushdownRowIdCtx &pd_row_id_ctx,
-    const bool reserve_memory)
-{
-  UNUSED(reserve_memory);
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(col_offset < 0 || !pd_row_id_ctx.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid arguments", K(ret), K(col_offset), K(pd_row_id_ctx));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < agg_cells_.count(); ++i) {
-    if (agg_cells_.at(i)->finished()) {
-    } else if (OB_FAIL(agg_cells_.at(i)->eval_micro_block(*iter_param, *context, col_offset, reader,
-                                                          pd_row_id_ctx.row_ids_, pd_row_id_ctx.get_row_count()))) {
-      LOG_WARN("Fail to eval micro", K(ret));
-    }
-  }
-  return ret;
-}
-
 ObAggRow::ObAggRow(common::ObIAllocator &allocator) :
     agg_cells_(allocator),
     dummy_agg_cells_(allocator),
@@ -333,7 +247,7 @@ int ObAggregatedStore::check_agg_in_row_mode(const ObTableIterParam &iter_param)
   return ret;
 }
 
-int ObAggregatedStore::fill_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg)
+int ObAggregatedStore::fill_index_info(const blocksstable::ObMicroIndexInfo &index_info)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
@@ -343,7 +257,7 @@ int ObAggregatedStore::fill_index_info(const blocksstable::ObMicroIndexInfo &ind
     set_aggregated_in_prefetch();
     for (int64_t i = 0; OB_SUCC(ret) && i < agg_row_.get_agg_count(); ++i) {
        ObAggCell *cell = agg_row_.at(i);
-       if (OB_FAIL(cell->eval_index_info(index_info, is_cg))) {
+       if (OB_FAIL(cell->eval_index_info(index_info))) {
          LOG_WARN("Failed to eval index info", K(ret), K(i), K(*cell));
        }
     }

@@ -259,9 +259,7 @@ int ObMdsSchemaHelper::build_rowkey_read_info(
       full_stored_col_cnt,
       storage_schema.get_rowkey_column_num(),
       cols_desc,
-      false/*is_cg_sstable*/,
-      true/*use_default_compat_version*/,
-      false/*is_cs_replica_compat*/))) {
+      true/*use_default_compat_version*/))) {
     LOG_WARN("fail to init rowkey read info", K(ret));
   }
 

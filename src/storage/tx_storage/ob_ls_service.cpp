@@ -368,7 +368,6 @@ int ObLSService::inner_create_ls_(const share::ObLSID &lsid,
                                   const ObRestoreStatus &restore_status,
                                   const SCN &create_scn,
                                   const ObMajorMVMergeInfo &major_mv_merge_info,
-                                  const ObLSStoreFormat &store_format,
                                   ObLS *&ls)
 {
   int ret = OB_SUCCESS;
@@ -385,8 +384,7 @@ int ObLSService::inner_create_ls_(const share::ObLSID &lsid,
                               migration_status,
                               restore_status,
                               create_scn,
-                              major_mv_merge_info,
-                              store_format))) {
+                              major_mv_merge_info))) {
     LOG_WARN("fail to init ls", K(ret), K(lsid));
   }
   if (OB_FAIL(ret) && NULL != ls) {
@@ -841,7 +839,6 @@ int ObLSService::replay_create_ls_(const int64_t ls_epoch, const ObLSMeta &ls_me
                                       restore_status,
                                       ls_meta.get_clog_checkpoint_scn(),
                                       ls_meta.get_major_mv_merge_info(),
-                                      ls_meta.get_store_format(),
                                       ls))) {
     LOG_WARN("fail to inner create ls", K(ret), K(ls_meta.ls_id_));
   } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_INNER_CREATED)) {
@@ -1009,8 +1006,6 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
   common::GlobalLearnerList learner_list;
   const ObMigrationStatus migration_status(ObMigrationStatus::OB_MIGRATION_STATUS_NONE);
   const lib::Worker::CompatMode compat_mode(lib::Worker::CompatMode::MYSQL);
-  const ObLSStoreFormat ls_store_format = common::ObLSStoreType::OB_LS_STORE_NORMAL;
-
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("the ls service has not been inited", K(ret));
@@ -1044,9 +1039,8 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
                                               arg.restore_status_,
                                               arg.create_scn_,
                                               major_mv_merge_info/*not init is ok*/,
-                                              ls_store_format,
                                               ls))) {
-      LOG_WARN("create ls failed", K(ret), K(ls_store_format));
+      LOG_WARN("create ls failed", K(ret));
     } else {
       state = ObLSCreateState::CREATE_STATE_INNER_CREATED;
       int64_t ls_epoch = 0;

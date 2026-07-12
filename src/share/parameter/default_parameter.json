@@ -122,11 +122,6 @@
       ],
       "tenant": [
         {
-          "name": "default_table_store_format",
-          "value": "column",
-          "comment": "default to column format for AP"
-        },
-        {
           "name": "_io_read_batch_size",
           "value": "128K",
           "comment": "Maximum batch size in one read io request"

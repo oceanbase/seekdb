@@ -484,11 +484,11 @@ create table t1(c1 vector(3) primary key);
 ERROR 42000: The used storage engine can't index column 'c1'
 drop table if exists t1;
 create table t1(c1 vector(3), c2 vector(3), c3 int, c4 json, c5 char(10), c6 text, c7 longtext, c8 point);
-create index idx_1 on t1(c3) storing(c1) with column group(each column);
+create index idx_1 on t1(c3) storing(c1);
 ERROR 42000: The used storage engine can't index column 'c1'
-create index idx_1 on t1(c3) storing(c2) with column group(each column);
+create index idx_1 on t1(c3) storing(c2);
 ERROR 42000: The used storage engine can't index column 'c2'
-create index idx_1 on t1(c3) storing(c8) with column group(each column);
+create index idx_1 on t1(c3) storing(c8);
 ERROR 42000: The used storage engine can't index column 'c8'
 drop table t1;
 set ob_enable_plan_cache=1;
@@ -549,7 +549,7 @@ partition `p_list2` values in (22267,22268,22269,22270,22271,22272,22273,22274,2
 partition `p_list8` values in (43516,43517,43518,43519,43520,43521,43522,43523,43524),
 partition `p_list4` values in (46161,46162,46163,46164,46165,46166,46167,46168,46169),
 partition `p_list5` values in (51295,51296,51297,51298,51299,51300,51301,51302,51303),
-partition `p_list9` values in (65581,65601,65602,65603,65604,65605,65606,65607,65608)) WITH COLUMN GROUP(all columns, each column);
+partition `p_list9` values in (65581,65601,65602,65603,65604,65605,65606,65607,65608));
 delete /*+  ENABLE_PARALLEL_DML parallel(72) */   from t_list_sJg3;
 drop table t_list_sJg3;
 drop table if exists t;

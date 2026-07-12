@@ -1081,15 +1081,6 @@ bool ObConfigIndexStatsModeChecker::check(const ObConfigItem &t) const {
   return 0 == tmp_str.case_compare("SAMPLED") || 0 == tmp_str.case_compare("ALL");
 }
 
-bool ObConfigTableStoreFormatChecker::check(const ObConfigItem &t) const {
-  bool bret = true;
-  const ObString tmp_str(t.str());
-  return 0 == tmp_str.case_compare("ROW") ||
-         0 == tmp_str.case_compare("COLUMN") ||
-         0 == tmp_str.case_compare("COMPOUND");
-  return bret;
-}
-
 bool ObConfigDDLNoLoggingChecker::check(const obcall::ObAdminSetConfigItem &t) {
   int ret = OB_SUCCESS;
   bool is_valid = true;

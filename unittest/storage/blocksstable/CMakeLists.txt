@@ -24,4 +24,3 @@ storage_unittest(test_macro_seq_generator)
 storage_unittest(test_datum_rowkey_vector)
 
 add_subdirectory(encoding)
-add_subdirectory(cs_encoding)

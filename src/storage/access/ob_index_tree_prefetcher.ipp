@@ -111,7 +111,7 @@ inline int ObIndexTreePrefetcher::init_basic_info(
   const ObITableReadInfo *index_read_info = nullptr;
   if (OB_FAIL(sstable.get_meta(sstable_meta_handle_))) {
     LOG_WARN("failed to get sstable meta handle", K(ret), K(sstable));
-  } else if (OB_FAIL(iter_param.get_index_read_info(sstable.is_normal_cg_sstable(), index_read_info))) {
+  } else if (OB_FAIL(iter_param.get_index_read_info(index_read_info))) {
     LOG_WARN("failed to get index read info", KR(ret), K(sstable), K(iter_param));
   } else {
     table_scan_cnt_++;
@@ -124,7 +124,7 @@ inline int ObIndexTreePrefetcher::init_basic_info(
     datum_utils_ = &index_read_info->get_datum_utils();
     data_version_ = sstable_->get_data_version();
     bool is_normal_query = !access_ctx_->query_flag_.is_daily_merge() && !access_ctx_->query_flag_.is_multi_version_minor_merge();
-    index_tree_height_ = sstable_meta_handle_.get_sstable_meta().get_index_tree_height(sstable.is_ddl_merge_sstable() && is_normal_query);
+    index_tree_height_ = sstable_meta_handle_.get_sstable_meta().get_index_tree_height(false);
     max_rescan_height_ = index_tree_height_ > max_rescan_height_ ? index_tree_height_ : max_rescan_height_;
 
     if (OB_ISNULL(long_life_allocator_ = access_ctx.get_long_life_allocator())) {
@@ -137,7 +137,7 @@ inline int ObIndexTreePrefetcher::init_basic_info(
       } else {
         const ObTablet *cur_tablet = OB_ISNULL(iter_param_->tablet_handle_) ? nullptr : iter_param_->tablet_handle_->get_obj();
         index_scanner_.switch_context(sstable, cur_tablet, *datum_utils_, access_ctx_->query_flag_,
-          ObRowkeyVectorHelper::can_use_non_datum_rowkey_vector(sstable.is_normal_cg_sstable(), iter_param_->tablet_id_)
+          ObRowkeyVectorHelper::can_use_non_datum_rowkey_vector(iter_param_->tablet_id_)
             ? iter_param_->get_read_info() : nullptr);
       }
     } else if (OB_FAIL(init_index_scanner(index_scanner_))) {
@@ -155,9 +155,9 @@ inline int ObIndexTreePrefetcher::single_prefetch(ObSSTableReadHandle &read_hand
   read_handle.row_state_ = ObSSTableRowState::IN_BLOCK;
   read_handle.index_block_info_.reset();
   read_handle.index_block_info_.is_root_ = true;
-  read_handle.index_block_info_.cs_row_range_.start_row_id_ = 0;
-  read_handle.index_block_info_.cs_row_range_.end_row_id_ =
-      sstable_meta_handle_.get_sstable_meta().get_end_row_id(sstable_->is_ddl_merge_empty_sstable());
+  read_handle.index_block_info_.row_id_range_.start_row_id_ = 0;
+  read_handle.index_block_info_.row_id_range_.end_row_id_ =
+      sstable_meta_handle_.get_sstable_meta().get_end_row_id(false);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObIndexTreePrefetcher not init", K(ret));
@@ -253,7 +253,6 @@ inline int ObIndexTreePrefetcher::lookup_in_index_tree(ObSSTableReadHandle &read
         LOG_WARN("Fail to get index block row", K(ret), K_(index_scanner));
       }
     } else if (index_block_info.is_macro_node() &&
-               !sstable_->is_normal_cg_sstable() &&
                OB_FAIL(check_bloom_filter(index_block_info, false, read_handle))) {
       LOG_WARN("Fail to check bloom filter", K(ret), K(index_block_info), K(read_handle));
     } else if (ObSSTableRowState::NOT_EXIST == read_handle.row_state_) {
@@ -290,8 +289,7 @@ inline int ObIndexTreePrefetcher::init_index_scanner(ObIndexBlockRowScanner &ind
       *access_ctx_->stmt_allocator_,
       access_ctx_->query_flag_,
       sstable_->get_macro_offset(),
-      sstable_->is_normal_cg_sstable(),
-      ObRowkeyVectorHelper::can_use_non_datum_rowkey_vector(sstable_->is_normal_cg_sstable(), iter_param_->tablet_id_)
+      ObRowkeyVectorHelper::can_use_non_datum_rowkey_vector(iter_param_->tablet_id_)
         ? iter_param_->get_read_info() : nullptr))) {
     LOG_WARN("init index scanner fail", K(ret), KPC(sstable_), KP(sstable_));
   } else {
@@ -611,9 +609,9 @@ inline int ObIndexTreeMultiPrefetcher::multi_prefetch()
         read_handle.range_idx_ = prefetch_rowkey_idx_;
         read_handle.is_get_ = true;
         read_handle.index_block_info_.is_root_ = true;
-        read_handle.index_block_info_.cs_row_range_.start_row_id_ = 0;
-        read_handle.index_block_info_.cs_row_range_.end_row_id_ =
-            sstable_meta_handle_.get_sstable_meta().get_end_row_id(sstable_->is_ddl_merge_empty_sstable());
+        read_handle.index_block_info_.row_id_range_.start_row_id_ = 0;
+        read_handle.index_block_info_.row_id_range_.end_row_id_ =
+            sstable_meta_handle_.get_sstable_meta().get_end_row_id(false);
         read_handle.is_sorted_multi_get_ = is_rowkey_sorted_;
         if (is_rowkey_sorted_) {
           read_handle.rowkeys_info_ = &rowkeys_info_;
@@ -751,7 +749,6 @@ inline int ObIndexTreeMultiPrefetcher::drill_down(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Fail to prefetch, unexpected level", K(ret), K(cur_level_is_leaf), K(index_block_info));
   } else if (index_block_info.is_macro_node() &&
-             !sstable_->is_normal_cg_sstable() &&
              OB_FAIL(check_bloom_filter(index_block_info, false, read_handle))) {
     LOG_WARN("Fail to check bloom filter", K(ret), K(index_block_info), K(read_handle));
   } else if (ObSSTableRowState::NOT_EXIST == read_handle.row_state_) {
@@ -998,7 +995,7 @@ inline int ObIndexTreeMultiPassPrefetcher<DATA_PREFETCH_DEPTH, INDEX_PREFETCH_DE
         } else {
           const ObTablet *cur_tablet = OB_ISNULL(iter_param_->tablet_handle_) ? nullptr : iter_param_->tablet_handle_->get_obj();
           tree_handles_[level].index_scanner_.switch_context(sstable, cur_tablet, *datum_utils_, access_ctx_->query_flag_,
-            ObRowkeyVectorHelper::can_use_non_datum_rowkey_vector(sstable.is_normal_cg_sstable(), iter_param_->tablet_id_)
+            ObRowkeyVectorHelper::can_use_non_datum_rowkey_vector(iter_param_->tablet_id_)
               ? iter_param_->get_read_info() : nullptr);
         }
       } else if (OB_FAIL(init_index_scanner(tree_handles_[level].index_scanner_))) {
@@ -1084,12 +1081,12 @@ inline int ObIndexTreeMultiPassPrefetcher<DATA_PREFETCH_DEPTH, INDEX_PREFETCH_DE
   max_rescan_range_cnt_ = max_range_prefetching_cnt_ > max_rescan_range_cnt_ ? max_range_prefetching_cnt_ : max_rescan_range_cnt_;
   bool is_normal_query = !access_ctx_->query_flag_.is_daily_merge() && !access_ctx_->query_flag_.is_multi_version_minor_merge();
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(iter_param.get_index_read_info(sstable.is_normal_cg_sstable(), index_read_info))) {
+  } else if (OB_FAIL(iter_param.get_index_read_info(index_read_info))) {
     LOG_WARN("failed to get index read info", KR(ret), K(sstable), K(iter_param));
   } else if (FALSE_IT(datum_utils_ = &index_read_info->get_datum_utils())) {
   } else if (OB_FAIL(sstable.get_meta(sstable_meta_handle_))) {
     LOG_WARN("failed to get sstable meta handle", K(ret));
-  } else if (FALSE_IT(index_tree_height_ = sstable_meta_handle_.get_sstable_meta().get_index_tree_height(is_normal_query && sstable.is_ddl_merge_sstable()))) {
+  } else if (FALSE_IT(index_tree_height_ = sstable_meta_handle_.get_sstable_meta().get_index_tree_height(false))) {
   } else if (FALSE_IT(max_rescan_height_ = index_tree_height_ > max_rescan_height_ ? index_tree_height_ : max_rescan_height_)) {
   } else if (1 >= index_tree_height_ || MAX_INDEX_TREE_HEIGHT < index_tree_height_) {
     ret = OB_ERR_UNEXPECTED;
@@ -1329,7 +1326,7 @@ inline int ObIndexTreeMultiPassPrefetcher<DATA_PREFETCH_DEPTH, INDEX_PREFETCH_DE
           } else if (nullptr != agg_store_ && OB_FAIL(agg_store_->can_use_index_info(block_info, can_agg))) {
             LOG_WARN("Fail to judge can aggregate micro index", K(ret));
           } else if (can_agg) {
-            if (OB_FAIL(agg_store_->fill_index_info(block_info, false))) {
+            if (OB_FAIL(agg_store_->fill_index_info(block_info))) {
               LOG_WARN("Fail to agg index info", K(ret), K(block_info), KPC_(agg_store), KPC(this));
             } else {
               LOG_DEBUG("Success to agg index info", K(ret), K(block_info), KPC_(agg_store));
@@ -1850,7 +1847,7 @@ inline int ObIndexTreeMultiPassPrefetcher<DATA_PREFETCH_DEPTH, INDEX_PREFETCH_DE
       } else if (nullptr != prefetcher.agg_store_ && OB_FAIL(prefetcher.agg_store_->can_use_index_info(index_info, can_agg))) {
         LOG_WARN("Fail to judge can aggregate index info", K(ret), KPC(prefetcher.agg_store_));
       } else if (can_agg) {
-        if (OB_FAIL(prefetcher.agg_store_->fill_index_info(index_info, false))) {
+        if (OB_FAIL(prefetcher.agg_store_->fill_index_info(index_info))) {
           LOG_WARN("Fail to agg index info", K(ret), K(index_info), KPC_(prefetcher.agg_store), KPC(this));
         } else {
           LOG_DEBUG("Success to agg index info", K(ret), K(index_info), KPC_(prefetcher.agg_store), KPC(this));

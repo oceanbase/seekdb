@@ -18,7 +18,6 @@
 #include "storage/tx_table/ob_tx_table_iterator.h"
 #include "storage/blocksstable/ob_macro_block_meta.h"
 #include "storage/blocksstable/index_block/ob_index_block_row_struct.h"
-#include "storage/blocksstable/cs_encoding/ob_column_encoding_struct.h"
 
 namespace oceanbase
 {
@@ -290,7 +289,6 @@ void ObSSTablePrinter::print_macro_block_header(const ObSSTableMacroBlockHeader 
   print_line("data_checksum", sstable_header->fixed_header_.data_checksum_);
   print_line("compressor_type", sstable_header->fixed_header_.compressor_type_);
   print_line("master_key_id", sstable_header->fixed_header_.master_key_id_);
-  print_line("is_normal_cg", sstable_header->is_normal_cg_);
   print_end_line();
 }
 
@@ -607,109 +605,6 @@ void ObSSTablePrinter::print_encoding_column_header(const ObColumnHeader *col_he
   print_end_line();
 }
 
-void ObSSTablePrinter::print_cs_encoding_column_header(const ObCSColumnHeader &col_header, const int64_t col_id)
-{
-  print_title("CS Encoding Column Header", col_id, 1);
-  print_line("col_header.version", col_header.version_);
-  print_line("col_header.type", col_header.type_);
-  print_line("col_header.attrs", col_header.attrs_);
-  print_line("col_header.obj_type", col_header.obj_type_);
-  print_end_line();
-}
-
-void ObSSTablePrinter::print_cs_encoding_all_column_header(const ObAllColumnHeader &all_header)
-{
-  print_title("CS Encoding All Column Header");
-  print_line("version", all_header.version_);
-  print_line("attrs", all_header.attrs_);
-  print_line("all_string_data_length", all_header.all_string_data_length_);
-  print_line("stream_offsets_length", all_header.stream_offsets_length_);
-  print_line("stream_count", all_header.stream_count_);
-  print_end_line();
-}
-
-void ObSSTablePrinter::print_cs_encoding_column_meta(
-    const char *start,
-    const int64_t len,
-    const ObCSColumnHeader &col_header,
-    const int64_t col_id,
-    char *hex_print_buf,
-    const int64_t hex_buf_size,
-    const uint32_t row_cnt)
-{
-  const ObCSColumnHeader::Type type = (ObCSColumnHeader::Type)col_header.type_;
-  print_title("CS Encoding Column Meta", col_id, 1);
-  print_line("col_id", col_id);
-  print_line("col_meta_len", len);
-  if (ObCSColumnHeader::Type::INT_DICT == type || ObCSColumnHeader::Type::STR_DICT == type ) {
-    const ObDictEncodingMeta *dict_meta = reinterpret_cast<const ObDictEncodingMeta *>(start);
-    print_line("dict_meta.version", dict_meta->version_);
-    print_line("dict_meta.attrs", dict_meta->attrs_);
-    print_line("dict_meta.distinct_val_cnt", dict_meta->distinct_val_cnt_);
-    print_line("dict_meta.ref_row_cnt", dict_meta->ref_row_cnt_);
-  } else if (ObCSColumnHeader::Type::SEMISTRUCT == type) {
-    print_semistruct_column_meta(start, len, col_header, row_cnt);
-  } else {
-    print_line("has_nullbitmap", (0 != len));
-  }
-  P_LBRACE();
-  if (hex_print_buf != nullptr) {
-    to_hex_cstr(start, len, hex_print_buf, hex_buf_size);
-    P_VALUE_STR_B(hex_print_buf);
-  }
-  P_RBRACE();
-  P_END();
-  print_end_line();
-}
-
-void ObSSTablePrinter::print_integer_stream_decoder_ctx(
-    const uint32_t stream_idx, const ObIntegerStreamDecoderCtx &ctx,
-    char *hex_print_buf, const int64_t hex_buf_size)
-{
-  print_title("Integer Stream Ctx", stream_idx, 2);
-  print_line("int_count", ctx.count_, 2);
-  print_line("int_meta.version", ctx.meta_.version_, 2);
-  print_line("int_meta.attr", ctx.meta_.attr_, 2);
-  print_line("int_meta.width", ctx.meta_.width_, 2);
-  print_line("int_meta.type", ctx.meta_.type_, 2);
-  print_line("int_meta.base_value", ctx.meta_.base_value_, 2);
-  print_line("int_meta.null_replaced_value", ctx.meta_.null_replaced_value_, 2);
-  print_line("int_meta.decimal_precision_width", ctx.meta_.decimal_precision_width_, 2);
-}
-
-void ObSSTablePrinter::print_string_stream_decoder_ctx(
-    const uint32_t stream_idx, const ObStringStreamDecoderCtx &ctx,
-    char *hex_print_buf, const int64_t hex_buf_size)
-{
-  print_title("String Stream Ctx", stream_idx, 2);
-  print_line("str_meta.version", ctx.meta_.version_, 2);
-  print_line("str_meta.attr", ctx.meta_.attr_, 2);
-  print_line("str_meta.fixed_str_len", ctx.meta_.fixed_str_len_, 2);
-  print_line("str.meta.uncompressed_len", ctx.meta_.uncompressed_len_, 2);
-}
-
-void ObSSTablePrinter::print_cs_encoding_orig_stream_data(
-    const uint32_t stream_cnt, const ObMicroBlockTransformDesc &desc, const char *payload,
-    const uint32_t all_string_data_offset, const uint32_t all_string_data_length)
-{
-  print_title("CS Encoding Column Original Stream Data");
-  print_line("all_string_data_offset", all_string_data_offset);
-  print_line("all_string_data_length", all_string_data_length);
-  print_line("all_string_data_crc", all_string_data_length == 0 ? 0 : ob_crc64_sse42(payload + all_string_data_offset, all_string_data_length));
-  P_END();
-
-  for (int64_t i = 0; i < stream_cnt; i++) {
-    print_line("stream_idx", i);
-    print_line("stream_data_offset", desc.stream_data_pos_arr_[i].offset_);
-    print_line("stream_data_len", desc.stream_data_pos_arr_[i].len_);
-    print_line("is_integer", desc.is_integer_stream(i));
-    if (desc.is_integer_stream(i)) {
-      print_line("integer_stream_crc", ob_crc64_sse42(payload + desc.stream_data_pos_arr_[i].offset_, desc.stream_data_pos_arr_[i].len_));
-    }
-    P_END();
-  }
-  print_end_line();
-}
 
 void ObSSTablePrinter::print_hex_micro_block_header(const ObMicroBlockData &block_data)
 {
@@ -741,100 +636,6 @@ void ObSSTablePrinter::print_hex_micro_block(const ObMicroBlockData &block_data,
 
 }
 
-void ObSSTablePrinter::print_semistruct_column_meta(
-    const char *start,
-    const int64_t len,
-    const ObCSColumnHeader &col_header,
-    const uint32_t row_cnt)
-{
-  int ret = OB_SUCCESS;
-  HEAP_VAR(ObSemiStructSubSchema, sub_schema) {
-    ObSemiStructEncodeMetaDesc semistruct_desc;
-    int64_t pos = 0;
-    semistruct_desc.deserialize(col_header, row_cnt, start, len, pos);
-    print_line("semistruct_type", semistruct_desc.semistruct_header_->type_);
-    print_line("semistruct_header_len", semistruct_desc.semistruct_header_->header_len_);
-    print_line("has_nullbitmap", (0 != semistruct_desc.bitmap_size_));
-    print_line("sub_col_cnt", semistruct_desc.semistruct_header_->column_cnt_);
-    print_line("sub_stream_cnt", semistruct_desc.semistruct_header_->stream_cnt_);
-    print_line("sub_schema_len", semistruct_desc.semistruct_header_->schema_len_);
-
-    pos = 0;
-    sub_schema.decode(semistruct_desc.sub_schema_data_ptr_, semistruct_desc.semistruct_header_->schema_len_, pos);
-    print_sub_schema(sub_schema);
-
-    for (int i = 0; i < semistruct_desc.semistruct_header_->column_cnt_; ++i) {
-      print_cs_encoding_column_header(semistruct_desc.sub_col_headers_[i], i);
-    }
-  }
-}
-
-void ObSSTablePrinter::print_sub_schema(const ObSemiStructSubSchema &sub_schema)
-{
-  print_title("SubSchema Information");
-  const ObIArray<ObSemiStructSubColumn>& freq_columns = sub_schema.get_freq_columns();
-  const ObIArray<ObSemiStructSubColumn>& spare_columns = sub_schema.get_spare_columns();
-  print_line("freq_sub_col_cnt", freq_columns.count());
-  print_line("spare_sub_col_cnt", spare_columns.count());
-  print_freq_column_info(freq_columns);
-  print_spare_column_info(spare_columns);
-  print_end_line();
-}
-
-void ObSSTablePrinter::print_freq_column_info(const ObIArray<ObSemiStructSubColumn>& freq_columns)
-{
-  print_title("Frequent Columns Information");
-  for (int i = 0; i < freq_columns.count(); ++i) {
-    const ObSemiStructSubColumn &sub_col = freq_columns.at(i);
-    print_line("sub column id", sub_col.get_col_id());
-    print_sub_column_path(sub_col.get_path());
-    print_line("sub column obj type", static_cast<int>(sub_col.get_obj_type()));
-    print_line("sub column json type", static_cast<int>(sub_col.get_json_type()));
-    print_end_line();
-  }
-  print_end_line();
-}
-
-void ObSSTablePrinter::print_spare_column_info(const ObIArray<ObSemiStructSubColumn>& spare_columns)
-{
-  print_title("Spare Columns Information");
-  for (int i = 0; i < spare_columns.count(); ++i) {
-    const ObSemiStructSubColumn &sub_col = spare_columns.at(i);
-    print_line("sub column id", sub_col.get_col_id());
-    print_sub_column_path(sub_col.get_path());
-    print_line("sub column obj type", static_cast<int>(sub_col.get_obj_type()));
-    print_line("sub column json type", static_cast<int>(sub_col.get_json_type()));
-    print_line("sub column is spare storage", static_cast<int>(sub_col.is_spare_storage()));
-    print_end_line();
-  }
-  print_end_line();
-}
-
-void ObSSTablePrinter::print_sub_column_path(const share::ObSubColumnPath &sub_col_path)
-{
-  P_TAB_LEVEL(1);
-  P_BAR();
-  P_LINE_NAME("sub column path");
-  P_BAR();
-  for (int i = 0; i < sub_col_path.get_path_item_count(); ++i) {
-    const share::ObSubColumnPathItem& path_item = sub_col_path.get_path_item(i);
-    
-    if (path_item.is_array()) {
-      FPRINTF("[%ld]", path_item.array_idx_);
-    } else {
-      if (i > 0) FPRINTF(".");
-      if (path_item.is_object()) {
-        ObCStringHelper helper;
-        FPRINTF("%s", helper.convert(path_item.key_));
-      } else if (path_item.is_dict_key()) {
-        FPRINTF("%ld", path_item.id_);
-      } else {
-        FPRINTF("unkonwn");
-      }
-    }
-  }
-  P_END();
-}
 
 }
 }

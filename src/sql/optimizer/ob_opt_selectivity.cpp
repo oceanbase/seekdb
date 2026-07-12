@@ -283,9 +283,6 @@ int OptColumnMeta::assign(const OptColumnMeta &other)
   min_val_ = other.min_val_;
   max_val_ = other.max_val_;
   min_max_inited_ = other.min_max_inited_;
-  cg_macro_blk_cnt_ = other.cg_macro_blk_cnt_;
-  cg_micro_blk_cnt_ = other.cg_micro_blk_cnt_;
-  cg_skip_rate_ = other.cg_skip_rate_;
   base_ndv_ = other.base_ndv_;
   return ret;
 }
@@ -293,18 +290,12 @@ int OptColumnMeta::assign(const OptColumnMeta &other)
 void OptColumnMeta::init(const uint64_t column_id,
                          const double ndv,
                          const double num_null,
-                         const double avg_len,
-                         const int64_t cg_macro_blk_cnt /*default 0*/,
-                         const int64_t cg_micro_blk_cnt /*default 0*/,
-                         const double cg_skip_rate /*default 1.0*/)
+                         const double avg_len)
 {
   column_id_ = column_id;
   ndv_ = ndv;
   num_null_ = num_null;
   avg_len_ = avg_len;
-  cg_macro_blk_cnt_ = cg_macro_blk_cnt;
-  cg_micro_blk_cnt_ = cg_micro_blk_cnt;
-  cg_skip_rate_ = cg_skip_rate;
   base_ndv_ = ndv;
 }
 
@@ -512,9 +503,6 @@ int OptTableMeta::refine_column_meta(const OptSelectivityCtx &ctx,
     }
     col_meta.set_column_id(column_id);
     col_meta.set_avg_len(stat.avglen_val_);
-    col_meta.set_cg_macro_blk_cnt(stat.cg_macro_blk_cnt_);
-    col_meta.set_cg_micro_blk_cnt(stat.cg_micro_blk_cnt_);
-    col_meta.set_cg_skip_rate(stat.cg_skip_rate_);
     col_meta.set_base_ndv(col_meta.get_ndv());
   }
   if (OB_SUCC(ret) && col_meta.get_avg_len() == 0) {

@@ -49,20 +49,18 @@ namespace storage
 class ObBlockMetaTreeValue final
 {
 public:
-  ObBlockMetaTreeValue() : co_sstable_row_offset_(0), block_meta_(nullptr), rowkey_(nullptr), header_(), minor_meta_info_() {}
+  ObBlockMetaTreeValue() : block_meta_(nullptr), rowkey_(nullptr), header_(), minor_meta_info_() {}
   ObBlockMetaTreeValue(const blocksstable::ObDataMacroBlockMeta *block_meta,
                        const blocksstable::ObDatumRowkey *rowkey)
-    : co_sstable_row_offset_(0), block_meta_(block_meta), rowkey_(rowkey), header_(), minor_meta_info_(){}
+    : block_meta_(block_meta), rowkey_(rowkey), header_(), minor_meta_info_(){}
   ~ObBlockMetaTreeValue()
   {
-    co_sstable_row_offset_ = 0;
     block_meta_ = nullptr;
     rowkey_ = nullptr;
   }
-  TO_STRING_KV(K_(co_sstable_row_offset), KPC_(block_meta), KPC_(rowkey), K_(header), K_(minor_meta_info));
+  TO_STRING_KV(KPC_(block_meta), KPC_(rowkey), K_(header), K_(minor_meta_info));
 
 public:
-  int64_t co_sstable_row_offset_;
   const blocksstable::ObDataMacroBlockMeta *block_meta_;
   const blocksstable::ObDatumRowkey *rowkey_;
   blocksstable::ObIndexBlockRowHeader header_;
@@ -72,11 +70,10 @@ public:
 struct ObDDLBlockMeta
 {
 public:
-  ObDDLBlockMeta() : block_meta_(nullptr), end_row_offset_(-1) {}
-  TO_STRING_KV(KPC(block_meta_), K(end_row_offset_));
+  ObDDLBlockMeta() : block_meta_(nullptr) {}
+  TO_STRING_KV(KPC(block_meta_));
 public:
   const blocksstable::ObDataMacroBlockMeta *block_meta_;
-  int64_t end_row_offset_;
 };
 
 class ObBlockMetaTree
@@ -97,8 +94,7 @@ public:
   void destroy_tree_value();
   int insert_macro_block(const ObDDLMacroHandle &macro_handle,
                          const blocksstable::ObDatumRowkey *rowkey,
-                         const blocksstable::ObDataMacroBlockMeta *meta,
-                         const int64_t co_sstable_row_offset);
+                         const blocksstable::ObDataMacroBlockMeta *meta);
   int locate_key(const blocksstable::ObDatumRange &range,
                  const blocksstable::ObStorageDatumUtils &datum_utils,
                  blocksstable::DDLBtreeIterator &iter,
@@ -164,7 +160,6 @@ private:
   BtreeNodeAllocator tree_allocator_;
   KeyBtree block_tree_;
   blocksstable::ObWholeDataStoreDesc data_desc_;
-  blocksstable::ObStorageDatumUtils row_id_datum_utils_;
   blocksstable::ObStorageDatumUtils *datum_utils_;
 };
 
@@ -186,8 +181,7 @@ public:
   void reset();
   int insert_block_meta_tree(
       const ObDDLMacroHandle &macro_handle,
-      blocksstable::ObDataMacroBlockMeta *data_macro_meta,
-      const int64_t co_sstable_row_offset);
+      blocksstable::ObDataMacroBlockMeta *data_macro_meta);
   void set_scn_range(
       const share::SCN &start_scn,
       const share::SCN &end_scn);
@@ -319,7 +313,7 @@ public:
   int64_t get_ddl_snapshot_version() const { return ddl_snapshot_version_; }
   int64_t get_macro_block_cnt() const { return macro_block_count_; }
   // not thread safe, external call are limited to ddl merge task
-  int get_ddl_memtable(const int64_t slice_idx, const int64_t cg_idx, ObDDLMemtable *&ddl_memtable);
+  int get_ddl_memtable(const int64_t slice_idx, ObDDLMemtable *&ddl_memtable);
   ObIArray<ObDDLMemtable *> &get_ddl_memtables() { return ddl_memtables_; }
   ObIArray<ObArenaAllocator *> &get_ddl_memtable_allocators() { return ddl_memtable_arena_allocators_; }
   void inc_pending_cnt(); // used by ddl kv pending guard
@@ -340,9 +334,6 @@ public:
     int64_t &row_count) const;
 
   int64_t get_merge_slice_idx() const { return merge_slice_idx_; }
-  OB_INLINE int64_t get_column_group_cnt() const { return column_group_cnt_; }
-  OB_INLINE int64_t get_column_cnt() const { return full_column_cnt_; }
-  OB_INLINE ObCOSSTableBaseType get_co_base_type() const { return co_base_type_; }
 
   // for inc_ddl_kv only
   template<class _callback>
@@ -371,10 +362,7 @@ public:
                        K(ddl_memtables_.count()),
                        K_(merge_slice_idx),
                        K_(seq_no),
-                       K_(ddl_kv_type),
-                       K_(column_group_cnt),
-                       K_(full_column_cnt),
-                       K_(co_base_type));
+                       K_(ddl_kv_type));
 
 private:
   bool is_pending() const { return ATOMIC_LOAD(&pending_cnt_) > 0; }
@@ -413,9 +401,6 @@ private:
   ObArray<common::ObArenaAllocator *> ddl_memtable_arena_allocators_;
   int64_t merge_slice_idx_; // record max slice idx can be merged, require all data begin from start_scn
   ObDDLKVType ddl_kv_type_;
-  int64_t column_group_cnt_;
-  int64_t full_column_cnt_;
-  ObCOSSTableBaseType co_base_type_;
 };
 
 template<class _callback>
@@ -433,7 +418,7 @@ int ObDDLKV::access_first_ddl_memtable(_callback &callback) const
     ret = OB_ENTRY_NOT_EXIST;
   } else if (ddl_memtables_.count() != 1) {
     ret = OB_NOT_SUPPORTED;
-    STORAGE_LOG(WARN, "inc direct load do not support column store yet", K(ret));
+    STORAGE_LOG(WARN, "incremental direct load requires exactly one ddl memtable", K(ret));
   } else {
     ObDDLMemtable *ddl_memtable = ddl_memtables_.at(0);
     ret = callback(ddl_memtable);

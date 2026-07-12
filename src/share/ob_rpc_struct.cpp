@@ -300,7 +300,7 @@ bool ObCreateHiddenTableArg::is_valid() const
 }
 
 int ObCreateHiddenTableArg::init(const uint64_t dest_tid,
-                                 const uint64_t table_id, const int64_t consumer_group_id, const uint64_t session_id,
+                                 const uint64_t table_id, const uint64_t session_id,
                                  const int64_t parallelism, const share::ObDDLType ddl_type, const ObSQLMode sql_mode,
                                  const ObTimeZoneInfo &tz_info, const common::ObString &local_nls_date,
                                  const common::ObString &local_nls_timestamp, const common::ObString &local_nls_timestamp_tz,
@@ -323,7 +323,6 @@ int ObCreateHiddenTableArg::init(const uint64_t dest_tid,
     
     
     
-    consumer_group_id_ = consumer_group_id;
     table_id_ = table_id;
     parallelism_ = parallelism;
     ddl_type_ = ddl_type;
@@ -349,7 +348,6 @@ OB_DEF_SERIALIZE(ObCreateHiddenTableArg)
     LST_DO_CODE(OB_UNIS_ENCODE,
                 
                 table_id_,
-                consumer_group_id_,
                 
                 session_id_,
                 parallelism_,
@@ -382,7 +380,6 @@ OB_DEF_DESERIALIZE(ObCreateHiddenTableArg)
     LST_DO_CODE(OB_UNIS_DECODE,
               
               table_id_,
-              consumer_group_id_,
               
               session_id_,
               parallelism_,
@@ -430,7 +427,6 @@ OB_DEF_SERIALIZE_SIZE(ObCreateHiddenTableArg)
     LST_DO_CODE(OB_UNIS_ADD_LEN,
                 
                 table_id_,
-                consumer_group_id_,
                 
                 session_id_,
                 parallelism_,
@@ -1537,8 +1533,7 @@ OB_DEF_SERIALIZE(ObAlterTableArg)
               client_session_id_,
               client_session_create_ts_,
               lock_priority_,
-              is_direct_load_partition_,
-              is_alter_column_group_delayed_);
+              is_direct_load_partition_);
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(rebuild_index_arg_list_.serialize(buf, buf_len, pos))) {
@@ -1650,8 +1645,7 @@ OB_DEF_DESERIALIZE(ObAlterTableArg)
               client_session_id_,
               client_session_create_ts_,
               lock_priority_,
-              is_direct_load_partition_,
-              is_alter_column_group_delayed_);
+              is_direct_load_partition_);
 
   if (OB_SUCC(ret) && pos < data_len) {
     if (OB_FAIL(rebuild_index_arg_list_.deserialize(buf, data_len, pos))) {
@@ -1717,7 +1711,6 @@ OB_DEF_SERIALIZE_SIZE(ObAlterTableArg)
                 client_session_create_ts_,
                 lock_priority_,
                 is_direct_load_partition_,
-                is_alter_column_group_delayed_,
                 is_alter_mview_attributes_,
                 alter_mview_arg_,
                 is_alter_mlog_attributes_,
@@ -2256,19 +2249,6 @@ bool ObCreateIndexArg::is_valid() const
          && index_using_type_ >= USING_BTREE
          && index_using_type_ < USING_TYPE_MAX;
 }
-OB_SERIALIZE_MEMBER(ObCreateIndexArg::ObIndexColumnGroupItem, is_each_cg_, column_list_, cg_type_);
-
-int ObCreateIndexArg::ObIndexColumnGroupItem::assign(const ObCreateIndexArg::ObIndexColumnGroupItem &other)
-{
-  int ret = OB_SUCCESS;
-  is_each_cg_ = other.is_each_cg_;
-  cg_type_ = other.cg_type_;
-  if (OB_FAIL(column_list_.assign(other.column_list_))) {
-    LOG_WARN("fail to assign array", K(ret));
-  }
-  return ret;
-}
-
 DEF_TO_STRING(ObCreateIndexArg)
 {
   int64_t pos = 0;
@@ -2294,8 +2274,6 @@ DEF_TO_STRING(ObCreateIndexArg)
        K_(sql_mode),
        K_(inner_sql_exec_addr),
        K_(local_session_var),
-       K_(exist_all_column_group),
-       K_(index_cgs),
        K_(vidx_refresh_info),
        K_(is_rebuild_index),
        K_(is_index_scope_specified),
@@ -2326,8 +2304,6 @@ OB_SERIALIZE_MEMBER((ObCreateIndexArg, ObIndexArg),
                     sql_mode_,
                     inner_sql_exec_addr_,
                     local_session_var_,
-                    exist_all_column_group_,
-                    index_cgs_,
                     vidx_refresh_info_,
                     is_rebuild_index_,
                     is_index_scope_specified_,
@@ -3557,8 +3533,7 @@ OB_SERIALIZE_MEMBER(ObRootMinorFreezeArg,
 OB_SERIALIZE_MEMBER(ObTabletMajorFreezeArg,
                     
                     ls_id_,
-                    tablet_id_,
-                    is_rebuild_column_group_);
+                    tablet_id_);
 
 
 OB_SERIALIZE_MEMBER(ObCheckDanglingReplicaFinishArg, server_, version_, dangling_count_);
@@ -4383,7 +4358,6 @@ void ObCreateTabletInfo::reset()
   compat_mode_ = lib::Worker::CompatMode::INVALID;
   is_create_bind_hidden_tablets_ = false;
   create_commit_versions_.reset();
-  has_cs_replica_ = false;
   fork_tablet_infos_.reset();
 }
 
@@ -4405,7 +4379,6 @@ int ObCreateTabletInfo::assign(const ObCreateTabletInfo &info)
     data_tablet_id_ = info.data_tablet_id_;
     compat_mode_ = info.compat_mode_;
     is_create_bind_hidden_tablets_ = info.is_create_bind_hidden_tablets_;
-    has_cs_replica_ = info.has_cs_replica_;
   }
   return ret;
 }
@@ -4415,8 +4388,7 @@ int ObCreateTabletInfo::init(const ObIArray<common::ObTabletID> &tablet_ids,
                              const common::ObIArray<int64_t> &table_schema_index,
                              const lib::Worker::CompatMode &mode,
                              const bool is_create_bind_hidden_tablets,
-                             const ObIArray<int64_t> &create_commit_versions,
-                             const bool has_cs_replica)
+                             const ObIArray<int64_t> &create_commit_versions)
 {
   int ret = OB_SUCCESS;
   bool is_valid = data_tablet_id.is_valid()
@@ -4439,7 +4411,6 @@ int ObCreateTabletInfo::init(const ObIArray<common::ObTabletID> &tablet_ids,
     data_tablet_id_ = data_tablet_id;
     compat_mode_ = mode;
     is_create_bind_hidden_tablets_ = is_create_bind_hidden_tablets;
-    has_cs_replica_ = has_cs_replica;
   }
   return ret;
 }
@@ -4450,7 +4421,6 @@ int ObCreateTabletInfo::init(const ObIArray<common::ObTabletID> &tablet_ids,
                              const lib::Worker::CompatMode &mode,
                              const bool is_create_bind_hidden_tablets,
                              const ObIArray<int64_t> &create_commit_versions,
-                             const bool has_cs_replica,
                              const ObIArray<share::ObForkTabletInfo> &fork_tablet_infos)
 {
   int ret = OB_SUCCESS;
@@ -4459,7 +4429,7 @@ int ObCreateTabletInfo::init(const ObIArray<common::ObTabletID> &tablet_ids,
     LOG_WARN("fork tablet infos count not match tablet ids count", KR(ret), K(tablet_ids.count()),
       K(fork_tablet_infos));
   } else if (OB_FAIL(init(tablet_ids, data_tablet_id, table_schema_index, mode, is_create_bind_hidden_tablets,
-      create_commit_versions, has_cs_replica))) {
+      create_commit_versions))) {
     LOG_WARN("failed to init create tablet info", KR(ret));
   } else if (OB_FAIL(fork_tablet_infos_.assign(fork_tablet_infos))) {
     LOG_WARN("failed to assign fork tablet infos", KR(ret), K(fork_tablet_infos));
@@ -4484,11 +4454,11 @@ int ObCreateTabletInfo::get_fork_tablet_info(const int64_t idx, share::ObForkTab
 DEF_TO_STRING(ObCreateTabletInfo)
 {
   int64_t pos = 0;
-  J_KV(K_(tablet_ids), K_(data_tablet_id), K_(table_schema_index), K_(compat_mode), K_(is_create_bind_hidden_tablets), K_(create_commit_versions), K_(has_cs_replica), K_(fork_tablet_infos));
+  J_KV(K_(tablet_ids), K_(data_tablet_id), K_(table_schema_index), K_(compat_mode), K_(is_create_bind_hidden_tablets), K_(create_commit_versions), K_(fork_tablet_infos));
   return pos;
 }
 
-OB_SERIALIZE_MEMBER(ObCreateTabletInfo, tablet_ids_, data_tablet_id_, table_schema_index_, compat_mode_, is_create_bind_hidden_tablets_, create_commit_versions_, has_cs_replica_, fork_tablet_infos_);
+OB_SERIALIZE_MEMBER(ObCreateTabletInfo, tablet_ids_, data_tablet_id_, table_schema_index_, compat_mode_, is_create_bind_hidden_tablets_, create_commit_versions_, fork_tablet_infos_);
 
 int ObCreateTabletExtraInfo::init(const uint64_t tenant_data_version,
                                   const bool need_create_empty_major,
@@ -4643,10 +4613,10 @@ int ObEstBlockArgElement::assign(const ObEstBlockArgElement &other)
   
   tablet_id_ = other.tablet_id_;
   ls_id_ = other.ls_id_;
-  return column_group_ids_.assign(other.column_group_ids_);
+  return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObEstBlockArgElement, tablet_id_, ls_id_, column_group_ids_);
+OB_SERIALIZE_MEMBER(ObEstBlockArgElement, tablet_id_, ls_id_);
 
 
 
@@ -4659,55 +4629,14 @@ int ObEstBlockResElement::assign(const ObEstBlockResElement &other)
   micro_block_count_ = other.micro_block_count_;
   sstable_row_count_ = other.sstable_row_count_;
   memtable_row_count_ = other.memtable_row_count_;
-  if (OB_FAIL(cg_macro_cnt_arr_.assign(other.cg_macro_cnt_arr_))) {
-    LOG_WARN("failed to assign", K(ret));
-  } else if (OB_FAIL(cg_micro_cnt_arr_.assign(other.cg_micro_cnt_arr_))) {
-    LOG_WARN("failed to assign");
-  }
   return ret;
 }
 
 OB_SERIALIZE_MEMBER(ObEstBlockResElement, macro_block_count_, micro_block_count_,
-    sstable_row_count_, memtable_row_count_, cg_macro_cnt_arr_, cg_micro_cnt_arr_);
+    sstable_row_count_, memtable_row_count_);
 
 
 OB_SERIALIZE_MEMBER(ObEstBlockRes, tablet_params_res_);
-
-int ObEstSkipRateArgElement::assign(const ObEstSkipRateArgElement &other)
-{
-  int ret = OB_SUCCESS;
-  
-  table_id_ = other.table_id_;
-  tablet_id_ = other.tablet_id_;
-  ls_id_ = other.ls_id_;
-  if (OB_FAIL(sample_count_.assign(other.sample_count_))) {
-    LOG_WARN("failed to assign", K(ret));
-  } else if (OB_FAIL(column_ids_.assign(other.column_ids_))) {
-    LOG_WARN("failed to assign", K(ret));
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObEstSkipRateArgElement, table_id_, tablet_id_, ls_id_, sample_count_, column_ids_);
-
-
-OB_SERIALIZE_MEMBER(ObEstSkipRateArg, tablet_params_arg_);
-
-int ObEstSkipRateResElement::assign(const ObEstSkipRateResElement &other)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(cg_skip_rate_arr_.assign(other.cg_skip_rate_arr_))) {
-    LOG_WARN("failed to assign", K(ret));
-  } else if (OB_FAIL(sample_count_.assign(other.sample_count_))) {
-    LOG_WARN("failed to assign", K(ret));
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObEstSkipRateResElement, cg_skip_rate_arr_, sample_count_);
-
-
-OB_SERIALIZE_MEMBER(ObEstSkipRateRes, tablet_params_res_);
 
 OB_SERIALIZE_MEMBER(ObBatchGetTabletAutoincSeqArg, ls_id_, src_tablet_ids_, dest_tablet_ids_);
 

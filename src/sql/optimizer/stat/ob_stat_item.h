@@ -309,13 +309,12 @@ public:
   ObGlobalTableStat()
     : row_count_(0), row_size_(0), data_size_(0),
       macro_block_count_(0), micro_block_count_(0), part_cnt_(0), last_analyzed_(0),
-      cg_macro_cnt_arr_(), cg_micro_cnt_arr_(), stat_locked_(false), stale_stats_(false),
+      stat_locked_(false), stale_stats_(false),
       sstable_row_cnt_(0), memtable_row_cnt_(0)
   {}
 
   void add(int64_t rc, int64_t rs, int64_t ds, int64_t mac, int64_t mic);
   int add(int64_t rc, int64_t rs, int64_t ds, int64_t mac, int64_t mic,
-          ObIArray<int64_t> &cg_macro_arr, ObIArray<int64_t> &cg_micro_arr,
           int64_t scnt, int64_t mcnt);
 
   int64_t get_row_count() const;
@@ -324,8 +323,6 @@ public:
   int64_t get_macro_block_count() const;
   int64_t get_micro_block_count() const;
   int64_t get_last_analyzed() const { return last_analyzed_; }
-  const ObIArray<int64_t> &get_cg_macro_arr() const { return cg_macro_cnt_arr_; }
-  const ObIArray<int64_t> &get_cg_micro_arr() const { return cg_micro_cnt_arr_; }
   void set_last_analyzed(int64_t last_analyzed) { last_analyzed_ = last_analyzed; }
   void set_stat_locked(bool locked) { stat_locked_ = locked; }
   bool get_stat_locked() const { return stat_locked_; }
@@ -342,8 +339,6 @@ public:
                K(micro_block_count_),
                K(part_cnt_),
                K(last_analyzed_),
-               K(cg_macro_cnt_arr_),
-               K(cg_micro_cnt_arr_),
                K(stat_locked_),
                K(stale_stats_),
                K(sstable_row_cnt_),
@@ -357,29 +352,12 @@ private:
   int64_t micro_block_count_;
   int64_t part_cnt_;
   int64_t last_analyzed_;
-  ObArray<int64_t> cg_macro_cnt_arr_;
-  ObArray<int64_t> cg_micro_cnt_arr_;
   bool stat_locked_;
   bool stale_stats_;
   int64_t sstable_row_cnt_;
   int64_t memtable_row_cnt_;
 };
 
-
-class ObGlobalSkipRateStat
-{
-public:
-  ObGlobalSkipRateStat(): count_(0), skip_sample_cnt_arr_(), cg_skip_rate_arr_() {}
-  int add(const ObIArray<uint64_t> &skip_sample_cnt_arr, const ObIArray<double> &cg_skip_rate_arr);
-  const ObIArray<double> &get_skip_rate_arr() const;
-  int merge();
-  TO_STRING_KV(K(skip_sample_cnt_arr_), K(cg_skip_rate_arr_));
-
-private:
-  uint64_t count_; //increment when add
-  ObArray<uint64_t> skip_sample_cnt_arr_;
-  ObArray<double> cg_skip_rate_arr_;
-};
 
 class ObGlobalNullEval
 {
@@ -521,48 +499,6 @@ private:
   int64_t global_num_not_null_;
 };
 
-class ObGlobalCgBlockCntEval {
-public:
-  ObGlobalCgBlockCntEval() : cg_macro_blk_cnt_(0), cg_micro_blk_cnt_(0)
-  {}
-
-  void add_cg_blk_cnt(int64_t cg_macro_blk_cnt, int64_t cg_micro_blk_cnt)
-  {
-    cg_macro_blk_cnt_ += cg_macro_blk_cnt;
-    cg_micro_blk_cnt_ += cg_micro_blk_cnt;
-  }
-
-  int64_t get_cg_macro_blk_cnt() const
-  {
-    return cg_macro_blk_cnt_;
-  }
-
-  int64_t get_cg_micro_blk_cnt() const
-  {
-    return cg_micro_blk_cnt_;
-  }
-
-private:
-  int64_t cg_macro_blk_cnt_;
-  int64_t cg_micro_blk_cnt_;
-};
-
-class ObGlobalCgSkipRateEval 
-{
-public:
-  ObGlobalCgSkipRateEval() : cg_skip_rate_(0.0), cg_micro_blk_cnt_(0) {}
- 
-  void add_cg_skip_rate(double value, int64_t cg_micro_blk_cnt) 
-  {
-    cg_micro_blk_cnt_ += cg_micro_blk_cnt;
-    cg_skip_rate_ += (value * (double)cg_micro_blk_cnt);
-  }
-
-public:
-  double cg_skip_rate_;
-  int64_t cg_micro_blk_cnt_;
-};
-
 struct ObGlobalAllColEvals 
 {
   ObGlobalMinEval min_eval_;
@@ -570,8 +506,6 @@ struct ObGlobalAllColEvals
   ObGlobalNullEval null_eval_;
   ObGlobalAvglenEval avglen_eval_;
   ObGlobalNdvEval ndv_eval_;
-  ObGlobalCgBlockCntEval cg_blk_eval_;
-  ObGlobalCgSkipRateEval cg_skip_rate_eval_;
   bool column_stat_valid_ = true;
   int flush(common::ObIAllocator *alloc);
 
@@ -585,38 +519,21 @@ struct ObGlobalColumnStat
     max_val_(),
     null_val_(0),
     avglen_val_(0),
-    ndv_val_(0),
-    cg_macro_blk_cnt_(0),
-    cg_micro_blk_cnt_(0),
-    cg_skip_rate_(0.0)
+    ndv_val_(0)
   {
     min_val_.set_min_value();
     max_val_.set_max_value();
-  }
-  void add_cg_blk_cnt(int64_t cg_macro_blk_cnt, int64_t cg_micro_blk_cnt)
-  {
-    cg_macro_blk_cnt_ += cg_macro_blk_cnt;
-    cg_micro_blk_cnt_ += cg_micro_blk_cnt;
-  }
-  void add_cg_skip_rate(double value, int64_t cg_micro_blk_cnt) {
-    cg_skip_rate_ += (value * (double)cg_micro_blk_cnt);
   }
   TO_STRING_KV(K(min_val_),
                K(max_val_),
                K(null_val_),
                K(avglen_val_),
-               K(ndv_val_),
-               K(cg_macro_blk_cnt_),
-               K(cg_micro_blk_cnt_),
-               K(cg_skip_rate_));
+               K(ndv_val_));
   ObObj min_val_;
   ObObj max_val_;
   int64_t null_val_;
   int64_t avglen_val_;
   int64_t ndv_val_;
-  int64_t cg_macro_blk_cnt_;
-  int64_t cg_micro_blk_cnt_;
-  double cg_skip_rate_;
 };
 
 template <class T>

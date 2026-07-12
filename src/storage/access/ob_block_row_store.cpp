@@ -77,7 +77,7 @@ int ObBlockRowStore::init(const ObTableAccessParam &param, common::hash::ObHashS
   } else if (nullptr != context_.sample_filter_ 
               && OB_FAIL(context_.sample_filter_->combine_to_filter_tree(pd_filter_info_.filter_))) {
       LOG_WARN("Failed to combine sample filter to filter tree", K(ret), K_(pd_filter_info), KP_(context_.sample_filter));
-  } else if (nullptr != pd_filter_info_.filter_ && !param.iter_param_.is_use_column_store() && param.iter_param_.enable_pd_filter_reorder()) {
+  } else if (nullptr != pd_filter_info_.filter_ && param.iter_param_.enable_pd_filter_reorder()) {
     if (OB_UNLIKELY(nullptr != where_optimizer_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected where optimizer", K(ret), KP_(where_optimizer));
@@ -123,11 +123,7 @@ int ObBlockRowStore::open(ObTableIterParam &iter_param)
       iter_param.disable_pd_filter();
       pd_filter_info_.is_pd_filter_ = false;
     }
-    if (iter_param.is_use_column_store()) {
-      if (OB_FAIL(pd_filter_info_.filter_->init_co_filter_param(iter_param, need_padding))) {
-        LOG_WARN("Failed to init pushdown filter executor", K(ret));
-      }
-    } else if (OB_FAIL(iter_param.build_index_filter_for_row_store(context_.allocator_))) {
+    if (OB_FAIL(iter_param.build_index_filter_for_row_store(context_.allocator_))) {
       LOG_WARN("Failed to build skip index for row store", K(ret));
     } else if (OB_FAIL(pd_filter_info_.filter_->init_filter_param(
             *iter_param.get_col_params(), *iter_param.out_cols_project_, need_padding))) {
@@ -139,4 +135,3 @@ int ObBlockRowStore::open(ObTableIterParam &iter_param)
 
 }
 }
-

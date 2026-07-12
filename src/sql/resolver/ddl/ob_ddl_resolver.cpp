@@ -10871,154 +10871,6 @@ int ObDDLResolver::deep_copy_column_expr_name(common::ObIAllocator &allocator,
   return ret;
 }
 
-int ObDDLResolver::parse_column_group(const ParseNode *column_group_node,
-                                      const ObTableSchema &table_schema,
-                                      ObTableSchema &dst_table_schema,
-                                      const bool is_alter_column_group_delayed)
-{
-  int ret = OB_SUCCESS;
-  bool sql_exist_all_column_group = false;
-  bool sql_exist_single_column_group = false;
-  ObColumnGroupSchema column_group_schema;
-  if (OB_ISNULL(column_group_node)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("column gorup node should not be null", K(ret));
-  } else if (!ObSchemaUtils::can_add_column_group(table_schema)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported table type to add column group", K(ret));
-  } else {
-    dst_table_schema.set_max_used_column_group_id(table_schema.get_max_used_column_group_id());
-  }
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < column_group_node->num_child_; ++i) {
-    if (OB_ISNULL(column_group_node->children_[i])) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "column group node children is null", K(ret), K(i));
-    } else if (column_group_node->children_[i]->type_ == T_ALL_COLUMN_GROUP) {
-      if (sql_exist_all_column_group) {
-        ret = OB_ERR_COLUMN_GROUP_DUPLICATE;
-        SQL_RESV_LOG(WARN, "all column group already exist in sql",
-                     K(ret), K(column_group_node->children_[i]->type_));
-        const ObString error_msg = "all column group";
-        LOG_USER_ERROR(OB_ERR_COLUMN_GROUP_DUPLICATE, error_msg.length(), error_msg.ptr());
-      } else {
-        sql_exist_all_column_group = true;
-      }
-    } else if (column_group_node->children_[i]-> type_ == T_SINGLE_COLUMN_GROUP) {
-      if (sql_exist_single_column_group) {
-        ret = OB_ERR_COLUMN_GROUP_DUPLICATE;
-        SQL_RESV_LOG(WARN, "single column group already exist in sql",
-                     K(ret), K(column_group_node->children_[i]->type_));
-        const ObString error_msg = "single column group";
-        LOG_USER_ERROR(OB_ERR_COLUMN_GROUP_DUPLICATE, error_msg.length(), error_msg.ptr());
-      } else {
-        sql_exist_single_column_group = true;
-      }
-    } else {
-      ret = OB_NOT_SUPPORTED;
-      SQL_RESV_LOG(WARN, "Resovle unsupported column group type",
-                   K(ret), K(column_group_node->children_[i]->type_));
-    }
-  }
-
-  if (OB_SUCC(ret)
-     && OB_UNLIKELY(sql_exist_all_column_group && !sql_exist_single_column_group && is_alter_column_group_delayed)) {
-     ret = OB_NOT_SUPPORTED;
-     SQL_RESV_LOG(WARN, "alter table add all column groups not supprt",
-                  K(ret), K(sql_exist_all_column_group), K(sql_exist_single_column_group), K(is_alter_column_group_delayed));
-  }
-
-  /* all column group */
-  /* column group in resolver do not use real column group id*/
-  /* ddl service use column group name to distingush them*/
-  if (OB_SUCC(ret) && sql_exist_all_column_group) {
-    column_group_schema.reset();
-    if (OB_FAIL(ObSchemaUtils::build_all_column_group(table_schema,
-                                                      dst_table_schema.get_max_used_column_group_id() + 1, // add all cg with id max+1 first, adjust later in adjust_cg_for_offline
-                                                      column_group_schema))) {
-      SQL_RESV_LOG(WARN, "build all column group failed", K(ret));
-    } else if (OB_FAIL(dst_table_schema.add_column_group(column_group_schema))) {
-      SQL_RESV_LOG(WARN, "fail to add column group schema", K(ret));
-    }
-  }
-
-  /* single column group*/
-  if (OB_SUCC(ret) && sql_exist_single_column_group) {
-    if (OB_FAIL(ObSchemaUtils::build_add_each_column_group(table_schema, dst_table_schema))) {
-      LOG_WARN("fail to build each column group", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObDDLResolver::parse_cg_node(const ParseNode &cg_node, obcall::ObCreateIndexArg &create_index_arg) const
-{
-  int ret = OB_SUCCESS;
-  bool is_all_cg_exist = false;
-  bool is_each_cg_exist = false;
-
-  if (OB_UNLIKELY(T_COLUMN_GROUP != cg_node.type_ || cg_node.num_child_ <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument", KR(ret), K(cg_node.type_), K(cg_node.num_child_));
-  } else {
-    const int64_t num_child = cg_node.num_child_;
-    // handle all_type column_group & single_type column_group
-    for (int64_t i = 0; OB_SUCC(ret) && (i < num_child); ++i) {
-      ParseNode *node = cg_node.children_[i];
-      if (OB_ISNULL(node)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("children of column_group_list should not be null", KR(ret));
-      } else if (T_ALL_COLUMN_GROUP == node->type_) {
-        if (is_all_cg_exist) {
-          ret = OB_ERR_COLUMN_GROUP_DUPLICATE;
-          SQL_RESV_LOG(WARN, "all column group already exist in sql",
-                       K(ret), K(node->children_[i]->type_));
-          const ObString error_msg = "all columns";
-          LOG_USER_ERROR(OB_ERR_COLUMN_GROUP_DUPLICATE, error_msg.length(), error_msg.ptr());
-        } else {
-          is_all_cg_exist = true;
-        }
-      } else if (T_SINGLE_COLUMN_GROUP == node->type_) {
-        if (is_each_cg_exist) {
-          ret = OB_ERR_COLUMN_GROUP_DUPLICATE;
-          SQL_RESV_LOG(WARN, "single column group already exist in sql",
-                       K(ret), K(node->type_));
-          const ObString error_msg = "each column";
-          LOG_USER_ERROR(OB_ERR_COLUMN_GROUP_DUPLICATE, error_msg.length(), error_msg.ptr());
-        } else {
-          is_each_cg_exist = true;
-        }
-      } else if (T_NORMAL_COLUMN_GROUP == node->type_) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("column store table with customized column group are not supported", K(ret));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "column store tables with customized column group are");
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (is_each_cg_exist) {
-      obcall::ObCreateIndexArg::ObIndexColumnGroupItem each_cg_item;
-      each_cg_item.is_each_cg_ = true;
-      each_cg_item.cg_type_ = ObColumnGroupType::SINGLE_COLUMN_GROUP;
-      if (OB_FAIL(create_index_arg.index_cgs_.push_back(each_cg_item))) {
-        LOG_WARN("failed to push back value", K(ret));
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (is_all_cg_exist) {
-      obcall::ObCreateIndexArg::ObIndexColumnGroupItem all_cg_item;
-      all_cg_item.is_each_cg_ = false;
-      all_cg_item.cg_type_ = ObColumnGroupType::ALL_COLUMN_GROUP;
-      if (OB_FAIL(create_index_arg.index_cgs_.push_back(all_cg_item))) {
-        LOG_WARN("failed to push back value", K(ret));
-      } else {
-        create_index_arg.exist_all_column_group_ = true; /* for compat*/
-      }
-    }
-  }
-  return ret;
-}
-
 int ObDDLResolver::check_ttl_definition(const ParseNode *node)
 {
   int ret = OB_SUCCESS;
@@ -11086,53 +10938,6 @@ int ObDDLResolver::check_column_is_first_part_key(const ObPartitionKeyInfo &part
     LOG_WARN("storage cache policy column is not the partition key column", K(ret), K(column_id));
   }
   return ret;
-}
-
-int ObDDLResolver::resolve_index_column_group(const ParseNode *cg_node, obcall::ObCreateIndexArg &create_index_arg)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(cg_node) || cg_node->num_child_ <= 0) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "invalid parse tree, column group node is null or have no children!",
-                  K(ret), KP(cg_node));
-  } else if (INDEX_KEYNAME::VEC_KEY == index_keyname_ || INDEX_KEYNAME::FTS_KEY == index_keyname_
-      || INDEX_KEYNAME::MULTI_KEY == index_keyname_ || INDEX_KEYNAME::MULTI_UNIQUE_KEY == index_keyname_) {
-    ret = OB_NOT_SUPPORTED;
-    SQL_RESV_LOG(WARN, "create vector/fulltext/multivalue index with column group not supported", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "create vector/fulltext/multivalue index with column group");
-  } else {
-    bool exist_all_column_group = false;
-    if (OB_FAIL(parse_cg_node(*cg_node, create_index_arg))) {
-      LOG_WARN("fail to parse cg node", KR(ret));
-    }
-  }
-  return ret;
-}
-
-int ObDDLResolver::build_column_group(
-    const ObTableSchema &table_schema,
-    const ObColumnGroupType &cg_type,
-    const ObString &cg_name,
-    const ObIArray<uint64_t> &column_ids,
-    const uint64_t cg_id,
-    ObColumnGroupSchema &column_group)
-{
-  int ret = OB_SUCCESS;
-  if (cg_name.empty() || (cg_type >= ObColumnGroupType::MAX_COLUMN_GROUP)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(cg_name), K(cg_type), "column_id_cnt", column_ids.count());
-  } else if (OB_FAIL(ObSchemaUtils::build_column_group(table_schema, cg_type, cg_name,
-                                                column_ids, cg_id, column_group))) {
-      LOG_WARN("fail to build column group", K(ret));
-  }
-  return ret;
-}
-
-
-
-bool ObDDLResolver::need_column_group(const ObTableSchema &table_schema)
-{
-  return table_schema.is_user_table() || table_schema.is_tmp_table() || table_schema.is_index_table();
 }
 
 int ObDDLResolver::resolve_column_skip_index(
@@ -11849,7 +11654,6 @@ namespace share
 // ===== definition moved from share/ob_ddl_common.cpp(storage/monitor vocabularyround 3) =====
 #include "storage/tablet/ob_tablet_obj_load_helper.h"
 #include "sql/monitor/ob_sql_plan_monitor_node_list.h"
-#include "storage/column_store/ob_column_oriented_sstable.h"
 #include "share/catalog/ob_catalog_properties.h"  // relocated-definition owner
 namespace oceanbase
 {
@@ -11980,13 +11784,11 @@ int ObDDLDiagnoseInfo::calculate_sort_and_insert_info(const ObSqlMonitorStats &s
 }  // namespace share
 }  // namespace oceanbase
 
-// ===== definition moved from share/ob_ddl_common.cpp(is_rowkey_based_co_sstable) =====
 namespace oceanbase
 {
 namespace share
 {
 
-// is_rowkey_based_co_sstable moved to ObDDLStorageUtil
 
 }  // namespace share
 }  // namespace oceanbase

@@ -18,12 +18,9 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_ddl_inc_task.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
-#include "storage/ddl/ob_cg_macro_block_write_task.h"
-#include "storage/ddl/ob_group_write_macro_block_task.h"
+#include "storage/ddl/ob_ddl_macro_block_write_task.h"
 #include "storage/ddl/ob_ddl_pipeline.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/column_store/ob_column_store_replica_util.h"
-#include "storage/ddl/ob_macro_meta_store_manager.h"
 #include "storage/ddl/ob_ddl_merge_task_v2.h"
 #include "storage/ddl/ob_tablet_ddl_kv_mgr.h"
 #include "share/ob_server_struct.h"
@@ -245,7 +242,7 @@ int ObDDLIndependentDag::add_scan_chunk(ObDDLChunk &ddl_chunk, const int64_t tim
                                                             !ddl_chunk.chunk_data_->is_end_chunk());
     
     if (OB_UNLIKELY(nullptr != ddl_chunk.chunk_data_ &&
-                    !(ddl_chunk.chunk_data_->is_cg_row_tmp_files_type() || ddl_chunk.chunk_data_->is_end_chunk()))) {
+                    !(ddl_chunk.chunk_data_->is_ddl_row_tmp_files_type() || ddl_chunk.chunk_data_->is_end_chunk()))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid chunk data", K(ret), KPC(ddl_chunk.chunk_data_));
     } else if (OB_FAIL(get_tablet_context(ddl_chunk.tablet_id_, tablet_context))) {
@@ -529,9 +526,8 @@ int ObDDLIndependentDag::check_is_first_ddl_kv(ObTabletDDLKvMgr &ddl_kv_mgr,
 int ObDDLIndependentDag::inc_generate_write_macro_block_tasks(ObIArray<ObITask *> &write_macro_block_tasks, ObITask *next_task)
 {
   int ret = OB_SUCCESS;
-  // scan_task -> group_write_task -> inc_commit_task -> [next_task]
+  // scan_task -> inc_commit_task -> [next_task]
   ObDDLScanTask *scan_task = nullptr;
-  ObGroupWriteMacroBlockTask *group_write_task = nullptr;
   ObDDLIncCommitTask *inc_commit_task = nullptr;
   if (OB_FAIL(alloc_task(scan_task))) {
     LOG_WARN("fail to alloc scan task", KR(ret));
@@ -540,22 +536,12 @@ int ObDDLIndependentDag::inc_generate_write_macro_block_tasks(ObIArray<ObITask *
   } else if (OB_FAIL(write_macro_block_tasks.push_back(scan_task))) {
     LOG_WARN("fail to push back", KR(ret));
   }
-  // group_write_task
-  else if (OB_FAIL(alloc_task(group_write_task))) {
-    LOG_WARN("fail to alloc group write task", K(ret));
-  } else if (OB_FAIL(group_write_task->init(this))) {
-    LOG_WARN("fail to init group write task", K(ret));
-  } else if (OB_FAIL(write_macro_block_tasks.push_back(group_write_task))) {
-    LOG_WARN("fail to push back", KR(ret));
-  } else if (OB_FAIL(scan_task->add_child(*group_write_task))) {
-    LOG_WARN("fail to add child", KR(ret));
-  }
   // inc_commit_task
   else if (OB_FAIL(alloc_task(inc_commit_task, 0/*tablet_idx*/))) {
     LOG_WARN("fail to alloc inc commit task", KR(ret));
   } else if (OB_FAIL(write_macro_block_tasks.push_back(inc_commit_task))) {
     LOG_WARN("fail to push back", KR(ret));
-  } else if (OB_FAIL(group_write_task->add_child(*inc_commit_task))) {
+  } else if (OB_FAIL(scan_task->add_child(*inc_commit_task))) {
     LOG_WARN("fail to add child", KR(ret));
   }
 
@@ -620,9 +606,8 @@ int ObDDLIndependentDag::inc_generate_write_macro_block_tasks(ObIArray<ObITask *
 int ObDDLIndependentDag::full_generate_write_macro_block_tasks(ObIArray<ObITask *> &write_macro_block_tasks, ObITask *next_task)
 {
   int ret = OB_SUCCESS;
-  // scan_task -> group_write_task|vector_index_tasks -> merge_tasks -> [next_task]
+  // scan_task -> vector_index_tasks -> merge_tasks -> [next_task]
   ObDDLScanTask *scan_task = nullptr;
-  ObGroupWriteMacroBlockTask *group_write_task = nullptr;
   ObArray<ObITask *> vector_index_tasks;
   ObArray<ObITask*> data_merge_tasks;
   ObArray<ObITask*> lob_merge_tasks;
@@ -634,7 +619,7 @@ int ObDDLIndependentDag::full_generate_write_macro_block_tasks(ObIArray<ObITask 
   } else if (OB_FAIL(write_macro_block_tasks.push_back(scan_task))) {
     LOG_WARN("fail to push back", KR(ret));
   }
-  // vector_index_task|group_write_task
+  // vector_index_task
   else if (OB_FAIL(alloc_vector_index_write_and_build_pipeline(ddl_table_schema_.table_item_.index_type_, ls_tablet_ids_, vector_index_tasks))) {
     LOG_WARN("alloc vector index failed", K(ret));
   } else if (!vector_index_tasks.empty()) {
@@ -643,14 +628,6 @@ int ObDDLIndependentDag::full_generate_write_macro_block_tasks(ObIArray<ObITask 
       if (OB_FAIL(write_macro_block_tasks.push_back(vector_index_task))) {
         LOG_WARN("fail to push back", KR(ret));
       }
-    }
-  } else {
-    if (OB_FAIL(alloc_task(group_write_task))) {
-      LOG_WARN("fail to alloc group write task", K(ret));
-    } else if (OB_FAIL(group_write_task->init(this))) {
-      LOG_WARN("fail to init group write task", K(ret));
-    } else if (OB_FAIL(write_macro_block_tasks.push_back(group_write_task))) {
-      LOG_WARN("fail to push back", KR(ret));
     }
   }
   // merge_tasks
@@ -677,15 +654,12 @@ int ObDDLIndependentDag::full_generate_write_macro_block_tasks(ObIArray<ObITask 
   }
   if (OB_FAIL(ret)) {
   } else if (vector_index_tasks.empty()) {
-    if (OB_FAIL(scan_task->add_child(*group_write_task))) {
-      LOG_WARN("fail to add child", KR(ret));
-    }
     for (int64_t i = 0; OB_SUCC(ret) && i < data_merge_tasks.count(); ++i) {
       ObITask *data_merge_task = data_merge_tasks.at(i);
       ObITask *lob_merge_task = lob_merge_tasks.empty() ? nullptr : lob_merge_tasks.at(i);
-      if (OB_FAIL(group_write_task->add_child(*data_merge_task))) {
+      if (OB_FAIL(scan_task->add_child(*data_merge_task))) {
         LOG_WARN("fail to add child", K(ret));
-      } else if (nullptr != lob_merge_task && OB_FAIL(group_write_task->add_child(*lob_merge_task))) {
+      } else if (nullptr != lob_merge_task && OB_FAIL(scan_task->add_child(*lob_merge_task))) {
         LOG_WARN("fail to add child", K(ret));
       } else if (nullptr != next_task) {
         if (OB_FAIL(data_merge_task->add_child(*next_task))) {
@@ -770,7 +744,6 @@ int ObDDLIndependentDag::generate_tablet_write_macro_block_tasks(
     LOG_WARN("fail to push back", KR(ret));
   } else if (is_incremental_direct_load(direct_load_type_)) { // 增量
     const bool for_major = false;
-    ObGroupWriteMacroBlockTask *group_write_task = nullptr;
     ObDDLIncCommitTask *inc_commit_task = nullptr;
     ObITask *data_merge_task = nullptr;
     ObITask *lob_merge_task = nullptr;
@@ -779,16 +752,8 @@ int ObDDLIndependentDag::generate_tablet_write_macro_block_tasks(
       wait_dump = false;
       LOG_INFO("inc major direct load disable wait dump", K(wait_dump));
     }
-    // group_write_task
-    if (OB_FAIL(alloc_task(group_write_task))) {
-      LOG_WARN("fail to alloc group write task", K(ret));
-    } else if (OB_FAIL(group_write_task->init(this, tablet_id))) {
-      LOG_WARN("fail to init group write task", K(ret));
-    } else if (OB_FAIL(write_macro_block_tasks.push_back(group_write_task))) {
-      LOG_WARN("fail to push back", KR(ret));
-    }
     // inc_commit_task
-    else if (OB_FAIL(alloc_task(inc_commit_task, tablet_id))) {
+    if (OB_FAIL(alloc_task(inc_commit_task, tablet_id))) {
       LOG_WARN("fail to alloc inc commit task", KR(ret));
     } else if (OB_FAIL(write_macro_block_tasks.push_back(inc_commit_task))) {
       LOG_WARN("fail to push back", KR(ret));
@@ -805,13 +770,11 @@ int ObDDLIndependentDag::generate_tablet_write_macro_block_tasks(
       LOG_WARN("fail to push back", KR(ret));
     }
     // 依赖关系
-    else if (OB_FAIL(scan_task->add_child(*group_write_task))) {
+    else if (OB_FAIL(scan_task->add_child(*inc_commit_task))) {
       LOG_WARN("fail to add child", KR(ret));
     } else {
-      // scan_task -> group_write_task -> inc_commit_task -> [merge_tasks] -> [next_task]
-      if (OB_FAIL(group_write_task->add_child(*inc_commit_task))) {
-        LOG_WARN("fail to add child", KR(ret));
-      } else if (nullptr != data_merge_task && OB_FAIL(inc_commit_task->add_child(*data_merge_task))) {
+      // scan_task -> inc_commit_task -> [merge_tasks] -> [next_task]
+      if (nullptr != data_merge_task && OB_FAIL(inc_commit_task->add_child(*data_merge_task))) {
         LOG_WARN("fail to add child", KR(ret));
       } else if (nullptr != lob_merge_task && OB_FAIL(inc_commit_task->add_child(*lob_merge_task))) {
         LOG_WARN("fail to add child", KR(ret));
@@ -828,20 +791,11 @@ int ObDDLIndependentDag::generate_tablet_write_macro_block_tasks(
       }
     }
   } else { // 全量
-    // scan_task -> group_write_task -> merge_tasks -> [next_task]
-    ObGroupWriteMacroBlockTask *group_write_task = nullptr;
+    // scan_task -> merge_tasks -> [next_task]
     ObITask *data_merge_task = nullptr;
     ObITask *lob_merge_task = nullptr;
-    // group_write_task
-    if (OB_FAIL(alloc_task(group_write_task))) {
-      LOG_WARN("fail to alloc group write task", K(ret));
-    } else if (OB_FAIL(group_write_task->init(this, tablet_id))) {
-      LOG_WARN("fail to init group write task", K(ret));
-    } else if (OB_FAIL(write_macro_block_tasks.push_back(group_write_task))) {
-      LOG_WARN("fail to push back", KR(ret));
-    }
     // merge_task
-    else if (OB_FAIL(init_tablet_merge_task(tablet_id, true/*for_major*/, data_merge_task, lob_merge_task))) {
+    if (OB_FAIL(init_tablet_merge_task(tablet_id, true/*for_major*/, data_merge_task, lob_merge_task))) {
       LOG_WARN("fail to init tablet merge task", KR(ret));
     } else if (OB_FAIL(write_macro_block_tasks.push_back(data_merge_task))) {
       LOG_WARN("fail to push back", KR(ret));
@@ -850,14 +804,12 @@ int ObDDLIndependentDag::generate_tablet_write_macro_block_tasks(
       LOG_WARN("fail to push back", KR(ret));
     }
     // 依赖关系
-    else if (OB_FAIL(scan_task->add_child(*group_write_task))) {
-      LOG_WARN("fail to add child", KR(ret));
-    } else if (OB_FAIL(group_write_task->add_child(*data_merge_task))) {
+    else if (OB_FAIL(scan_task->add_child(*data_merge_task))) {
       LOG_WARN("fail to add child", KR(ret));
     } else if (nullptr != next_task && OB_FAIL(data_merge_task->add_child(*next_task))) {
       LOG_WARN("fail to add child", KR(ret));
     } else if (nullptr != lob_merge_task) {
-      if (OB_FAIL(group_write_task->add_child(*lob_merge_task))) {
+      if (OB_FAIL(scan_task->add_child(*lob_merge_task))) {
         LOG_WARN("fail to add child", KR(ret));
       } else if (nullptr != next_task && OB_FAIL(lob_merge_task->add_child(*next_task))) {
         LOG_WARN("fail to add child", KR(ret));

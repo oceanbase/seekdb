@@ -18,7 +18,6 @@
 #define OCEANBASE_STORAGE_BLOCKSSTABLE_OB_DDL_SSTABLE_SCAN_MERGE_H
 
 #include "storage/blocksstable/ob_block_sstable_struct.h"
-#include "storage/column_store/ob_column_store_util.h"
 #include "ob_index_block_row_struct.h"
 #include "storage/access/ob_simple_rows_merger.h"
 

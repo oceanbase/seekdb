@@ -214,20 +214,8 @@ public:
       int64_t &macro_block_count,
       int64_t &micro_block_count,
       int64_t &sstable_row_count,
-      int64_t &memtable_row_count,
-      common::ObIArray<int64_t> &cg_macro_cnt_arr,
-      common::ObIArray<int64_t> &cg_micro_cnt_arr) const;
+      int64_t &memtable_row_count) const;
 
-
-  int estimate_skip_index_sortedness(
-      const share::ObLSID &ls_id,
-      const uint64_t& table_id,
-      const common::ObTabletID &tablet_id,
-      const common::ObIArray<uint64_t> &column_ids,
-      const common::ObIArray<uint64_t> &sample_counts,
-      const int64_t timeout_us,
-      common::ObIArray<double> &sortedness,
-      common::ObIArray<uint64_t> &res_sample_counts) const;
 
   int inner_tablet_scan(
       const share::ObLSID &ls_id,

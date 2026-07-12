@@ -490,12 +490,6 @@ private:
       const ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const int64_t merge_version = ObVersionRange::MIN_VERSION);
-  int diagnose_column_store_dag(
-      const ObMergeType merge_type,
-      const ObLSID &ls_id,
-      const ObTabletID &tablet_id,
-      const lib::Worker::CompatMode &compat_mode,
-      const int64_t merge_version = ObVersionRange::MIN_VERSION);
   int diagnose_no_dag(
       const int64_t dag_key,
       const ObMergeType merge_type,

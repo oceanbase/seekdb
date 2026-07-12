@@ -48,12 +48,7 @@ protected:
                            int64_t &pk_data_length,
                            ObColumnSchemaV2 *&col);
 
-  int resolve_column_group_helper(const ParseNode *cg_node, ObTableSchema &table_schema);
-  // check this type of table_schema should build column_group or not
-  virtual int resolve_column_group(const ParseNode *cg_node) final;
   int resolve_table_organization(common::ObServerConfig *tenant_config, ParseNode *node);
-protected:
-  uint64_t cur_column_group_id_;
 };
 
 } // end namespace sql

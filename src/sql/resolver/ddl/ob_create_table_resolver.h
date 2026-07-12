@@ -117,7 +117,6 @@ private:
   // Temporary table helper functions.
 
   typedef common::hash::ObPlacementHashSet<uint64_t, common::OB_MAX_USER_DEFINED_COLUMNS_COUNT> VPColumnIdHashSet;
-  uint64_t gen_column_group_id();
   int add_inner_index_for_heap_gtt();
   int check_max_row_data_length(const ObTableSchema &table_schema);  
   int set_default_micro_index_clustered_(share::schema::ObTableSchema &table_schema);

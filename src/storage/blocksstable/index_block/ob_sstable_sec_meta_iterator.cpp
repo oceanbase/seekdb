@@ -102,7 +102,6 @@ int ObSSTableSecMetaIterator::open(
   }
   if (OB_FAIL(ret) || is_prefetch_end_) {
   } else if (is_ddl_mem_sstable) {
-    const bool is_co_sstable = sstable.is_co_sstable() || sstable.is_ddl_mem_co_cg_sstable();
     const ObMicroBlockData &root_block = sstable_meta_hdl_.get_sstable_meta().get_root_info().get_block_data();
     if (ObMicroBlockData::DDL_BLOCK_TREE != root_block.type_ || nullptr == root_block.buf_) {
       ret = OB_ERR_UNEXPECTED;
@@ -110,12 +109,11 @@ int ObSSTableSecMetaIterator::open(
     } else {
       block_meta_tree_ = reinterpret_cast<ObBlockMetaTree *>(const_cast<char *>(root_block.buf_));
       const int64_t step = max(1, sample_step);
-      if (OB_FAIL(ddl_iter_.set_iter_param(const_cast<ObStorageDatumUtils *>(&rowkey_read_info.get_datum_utils()), is_reverse_scan, block_meta_tree_, is_co_sstable, step))) {
+      if (OB_FAIL(ddl_iter_.set_iter_param(const_cast<ObStorageDatumUtils *>(&rowkey_read_info.get_datum_utils()), is_reverse_scan, block_meta_tree_, step))) {
         LOG_WARN("fail to set ddl iter param", K(ret));
       } else if (OB_FAIL(ddl_iter_.locate_range(query_range,
                                                 true, /*is_left_border*/
-                                                true, /*is_right_border*/
-                                                true /*is_bormal_cg*/))) {
+                                                true /*is_right_border*/))) {
         if (OB_UNLIKELY(OB_BEYOND_THE_RANGE != ret)) {
           LOG_WARN("locate range failed", K(ret), K(query_range), K(ddl_iter_));
         } else {
@@ -135,8 +133,8 @@ int ObSSTableSecMetaIterator::open(
   } else if (OB_FAIL(micro_reader_helper_.init(allocator))) {
     LOG_WARN("Fail to init micro reader helper", K(ret), K(sstable));
   } else {
-    const int64_t store_rowkey_cnt = sstable.is_normal_cg_sstable() ? 1
-        : rowkey_read_info.get_schema_rowkey_count() + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt(); // include multi-version
+    const int64_t store_rowkey_cnt = rowkey_read_info.get_schema_rowkey_count()
+        + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt(); // include multi-version
     is_precise_rowkey_ = store_rowkey_cnt == query_range.get_end_key().get_datum_cnt();
   }
 

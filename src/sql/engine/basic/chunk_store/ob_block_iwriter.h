@@ -51,7 +51,7 @@ public:
 
   virtual int add_row(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx, ObChunkDatumStore::StoredRow **stored_row = nullptr) = 0;
   virtual int add_row(const ObChunkDatumStore::StoredRow &src_sr, ObChunkDatumStore::StoredRow **dst_sr = nullptr) = 0;
-  virtual int add_row(const blocksstable::ObStorageDatum *storage_datums, const ObStorageColumnGroupSchema &cg_schema,
+  virtual int add_row(const blocksstable::ObStorageDatum *storage_datums, const int64_t column_count,
               const int64_t extra_size, ObChunkDatumStore::StoredRow **stored_row) = 0;
 
   virtual int add_batch(const common::ObDatum **datums, const common::ObIArray<ObExpr *> &exprs,

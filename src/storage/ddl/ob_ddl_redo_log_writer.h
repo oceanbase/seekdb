@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_STORAGE_OB_DDL_REDO_LOG_WRITER_H
 #define OCEANBASE_STORAGE_OB_DDL_REDO_LOG_WRITER_H
+#include "lib/task/ob_timer.h"
 #include "common/ob_tablet_id.h"
 #include "storage/ob_storage_rpc_arg.h"
 #include "share/scn.h"
@@ -125,7 +126,7 @@ private:
 class ObDDLCtrlSpeedHandle final
 {
 public:
-  int init();
+  int init(common::ObTimer &timer);
   static ObDDLCtrlSpeedHandle &get_instance();
   int limit_and_sleep(const share::ObLSID &ls_id,
                       const int64_t bytes,
@@ -138,7 +139,7 @@ private:
   public:
     RefreshSpeedHandleTask();
     virtual ~RefreshSpeedHandleTask();
-    int init(int tg_id);
+    int init(common::ObTimer &timer);
     virtual void runTimerTask() override;
   private:
 #ifdef ERRSIM
@@ -341,8 +342,8 @@ struct ObDDLRedoLogWriterCallbackInitParam
   void reset();
   TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(direct_load_type), K_(block_type),
                K_(table_key), K_(start_scn), K_(task_id), K_(data_format_version),
-               K_(parallel_cnt), K_(cg_cnt), K_(with_cs_replica), K_(need_delay),
-               K_(need_submit_io), K_(row_id_offset), K_(merge_slice_idx),
+               K_(parallel_cnt), K_(need_delay),
+               K_(need_submit_io), K_(merge_slice_idx),
                KP_(macro_meta_store), KP_(write_stat), KP_(tx_desc), K_(trans_id), K_(seq_no));
   share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
@@ -353,14 +354,8 @@ struct ObDDLRedoLogWriterCallbackInitParam
   int64_t task_id_;
   uint64_t data_format_version_;
   int64_t parallel_cnt_;
-  int64_t cg_cnt_;
-  bool with_cs_replica_;
   bool need_delay_;
   bool need_submit_io_;
-  // if has one macro block with 100 rows before, this macro block's ddl_start_row_offset will be 100.
-  // if current macro block finish with 50 rows, current macro block's end_row_offset will be 149.
-  // end_row_offset = ddl_start_row_offset + curr_row_count - 1.
-  int64_t row_id_offset_;
   int64_t merge_slice_idx_;
   blocksstable::ObMacroMetaTempStore *macro_meta_store_;
   ObDDLWriteStat *write_stat_;
@@ -384,10 +379,8 @@ public:
       const int64_t buf_len,
       const int64_t row_count) override;
   int wait();
-  virtual int64_t get_ddl_start_row_offset() const override { return param_.row_id_offset_; }
   void set_merge_slice_idx(const int64_t slice_idx) { param_.merge_slice_idx_ = slice_idx; }
 private:
-  bool is_column_group_info_valid() const;
   int inner_write(const ObDDLMacroBlockRedoInfo &redo_info);
   int write_redo_info_array();
   int retry(const int64_t timeout_us, 

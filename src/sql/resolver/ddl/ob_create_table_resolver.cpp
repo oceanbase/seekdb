@@ -436,13 +436,6 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
           }
         }
 
-        // column group
-        if (OB_SUCC(ret)) {
-          if (OB_FAIL(resolve_column_group(create_table_node->children_[6]))) {
-            SQL_RESV_LOG(WARN, "fail to resolve column group", KR(ret));
-          }
-        }
-
         if (OB_SUCC(ret)) {
           ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
           if (OB_FAIL(check_skip_index(table_schema))) {
@@ -2185,23 +2178,6 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
             index_scope_ = GLOBAL_INDEX;
           }
           is_index_part_specified = true;
-        }
-      }
-
-      // index column_group
-      if (OB_SUCC(ret)) { //only mysql support create table with index
-        if (node->num_child_ < 6) {
-          // no cg, ignore
-        } else if (ObItemType::T_INDEX == node->type_ && NULL != node->children_[5]) {
-          if (T_COLUMN_GROUP != node->children_[5]->type_ || node->children_[5]->num_child_ <= 0) {
-            ret = OB_INVALID_ARGUMENT;
-            SQL_RESV_LOG(WARN, "invalid argument", KR(ret), K(node->type_), K(node->num_child_));
-          } else if (OB_ISNULL(node->children_[5]->children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("node is null", K(ret));
-          } else if (OB_FAIL(resolve_index_column_group(node->children_[5], index_arg_))) {
-            SQL_RESV_LOG(WARN, "resolve index column group failed", K(ret));
-          }
         }
       }
 

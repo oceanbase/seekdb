@@ -590,11 +590,6 @@ public:
   int check_row_lock(
       const blocksstable::ObMicroIndexInfo &index_info,
       bool &is_prefetch_end);
-  // For columnar store.
-  OB_INLINE virtual bool switch_to_columnar_scan()
-  {
-    return false;
-  };
   OB_INLINE const blocksstable::ObDatumRowkey& get_border_rowkey()
   {
     return border_rowkey_;

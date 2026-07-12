@@ -171,16 +171,8 @@ protected:
   static int refresh_pk_cache(const common::ObTabletID &tablet_id,
                               share::ObTabletCacheInterval &pk_cache);
   virtual int get_pk_interval(uint64_t count, share::ObTabletCacheInterval &pk_interval);
-
-  //////////////////////// rescan interface ////////////////////////
-public:
-  virtual int calc_range(const int64_t thread_cnt) { return OB_ERR_UNEXPECTED; }
-  virtual int fill_column_group(const int64_t thread_cnt, const int64_t thread_id)
-  {
-    return OB_ERR_UNEXPECTED;
-  }
-
   //////////////////////// params ////////////////////////
+public:
   OB_INLINE ObDirectLoadInsertTableContext *get_table_ctx() { return table_ctx_; }
   OB_INLINE const ObDirectLoadInsertTableParam *get_param() const { return param_; }
   OB_INLINE const share::ObLSID &get_ls_id() const { return ls_id_; }

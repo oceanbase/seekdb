@@ -940,7 +940,6 @@ int ObPartitionSplitTask::send_split_request(
     param.parallelism_ = parallelism_;
     param.execution_id_ = execution_id_;
     param.data_format_version_ = data_format_version_;
-    param.consumer_group_id_ = partition_split_arg_.consumer_group_id_;
     param.min_split_start_scn_ = min_split_start_scn_;
     if (OB_ISNULL(root_service_)) {
       ret = OB_ERR_SYS;
@@ -1569,7 +1568,7 @@ const char *ObPartitionSplitTask::get_table_schema(const char *table_name)
   if (OB_ALL_TABLE_STAT_TNAME == table_name) {
     ret_table_schema = "gmt_create, gmt_modified, table_id, object_type, last_analyzed, sstable_row_cnt, sstable_avg_row_len, macro_blk_cnt, micro_blk_cnt, memtable_row_cnt, memtable_avg_row_len, row_cnt, avg_row_len, global_stats, user_stats, stattype_locked, stale_stats, spare1, spare2, spare3, spare4, spare5, spare6, index_type"; 
   } else if (OB_ALL_COLUMN_STAT_TNAME == table_name) {
-    ret_table_schema = "gmt_create, gmt_modified, table_id, column_id, object_type, last_analyzed, distinct_cnt, null_cnt, max_value, b_max_value, min_value, b_min_value, avg_len, distinct_cnt_synopsis, distinct_cnt_synopsis_size, sample_size, density, bucket_cnt, histogram_type, global_stats, user_stats, spare1, spare2, spare3, spare4, spare5, spare6, cg_macro_blk_cnt, cg_micro_blk_cnt, cg_skip_rate"; 
+    ret_table_schema = "gmt_create, gmt_modified, table_id, column_id, object_type, last_analyzed, distinct_cnt, null_cnt, max_value, b_max_value, min_value, b_min_value, avg_len, distinct_cnt_synopsis, distinct_cnt_synopsis_size, sample_size, density, bucket_cnt, histogram_type, global_stats, user_stats, spare1, spare2, spare3, spare4, spare5, spare6";
   } else if (OB_ALL_HISTOGRAM_STAT_TNAME == table_name) {
     ret_table_schema = "gmt_create, gmt_modified, table_id, column_id, endpoint_num, object_type, endpoint_normalized_value, endpoint_value, b_endpoint_value, endpoint_repeat_cnt"; 
   }
@@ -1838,7 +1837,6 @@ int ObPartitionSplitTask::wait_recovery_task_finish(const share::ObDDLTaskStatus
         alter_table_arg.task_id_ = task_id_;
         alter_table_arg.is_inner_ = true;
         alter_table_arg.parallelism_ = parallelism_;
-        alter_table_arg.consumer_group_id_ = partition_split_arg_.consumer_group_id_;
         alter_table_arg.tz_info_wrap_.set_tz_info_offset(0);
         alter_table_arg.nls_formats_[ObNLSFormatEnum::NLS_DATE] = ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT;
         alter_table_arg.nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP] = ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_FORMAT;
@@ -2632,7 +2630,6 @@ int ObPartitionSplitTask::prepare_tablet_split_infos(
       split_info.source_tablet_id_    = tablet_id;
       split_info.compaction_scn_      = primary_compaction_scn;
       split_info.data_format_version_ = data_format_version_;
-      split_info.consumer_group_id_   = partition_split_arg_.consumer_group_id_;
       split_info.can_reuse_macro_block_ = can_reuse_macro_blocks.at(i);
       split_info.split_sstable_type_  = share::ObSplitSSTableType::SPLIT_BOTH;
       split_info.min_split_start_scn_ = min_split_start_scn_;

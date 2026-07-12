@@ -1238,9 +1238,7 @@ int ObAccessService::estimate_block_count_and_row_count(
     int64_t &macro_block_count,
     int64_t &micro_block_count,
     int64_t &sstable_row_count,
-    int64_t &memtable_row_count,
-    common::ObIArray<int64_t> &cg_macro_cnt_arr,
-    common::ObIArray<int64_t> &cg_micro_cnt_arr) const
+    int64_t &memtable_row_count) const
 {
   int ret = OB_SUCCESS;
   ObLSHandle ls_handle;
@@ -1259,8 +1257,7 @@ int ObAccessService::estimate_block_count_and_row_count(
   } else if (OB_FAIL(ls->get_tablet_svr()->estimate_block_count_and_row_count(
       tablet_id, timeout_us,
       macro_block_count, micro_block_count,
-      sstable_row_count, memtable_row_count,
-      cg_macro_cnt_arr, cg_micro_cnt_arr))) {
+      sstable_row_count, memtable_row_count))) {
     LOG_WARN("failed to estimate block count and row count", K(ret), K(ls_id), K(tablet_id), K(timeout_us));
   }
   return ret;
@@ -1414,55 +1411,6 @@ int ObAccessService::check_mlog_safe_(
   return ret;
 }
 
-
-int ObAccessService::estimate_skip_index_sortedness(
-    const share::ObLSID &ls_id,
-    const uint64_t &table_id,
-    const common::ObTabletID &tablet_id,
-    const common::ObIArray<uint64_t> &column_ids,
-    const common::ObIArray<uint64_t> &sample_counts,
-    const int64_t timeout_us,
-    common::ObIArray<double> &sortedness,
-    common::ObIArray<uint64_t> &res_sample_counts) const
-{
-  int ret = OB_SUCCESS;
-
-  ObLSHandle ls_handle;
-  ObLS *ls = nullptr;
-  ObLSTabletService *tablet_service = nullptr;
-
-  if (IS_NOT_INIT) {
-    ret = OB_ERROR;
-    LOG_WARN("Ob access service is not running", KR(ret));
-  } else if (OB_UNLIKELY(!ls_id.is_valid()) || OB_UNLIKELY(!tablet_id.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", KR(ret), K(ls_id), K(tablet_id));
-  } else if (OB_FAIL(ls_svr_->get_ls(ls_id, ls_handle, ObLSGetMod::DAS_MOD))) {
-    LOG_WARN("Fail to get log stream", KR(ret), K(ls_id));
-  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("Ls should not be null", KR(ret), K(ls_id));
-  } else if (OB_ISNULL(tablet_service = ls->get_tablet_svr())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("Tablet service should not be null", KR(ret), K(ls_id));
-  } else if (OB_FAIL(tablet_service->estimate_skip_index_sortedness(table_id,
-                                                                    tablet_id,
-                                                                    timeout_us,
-                                                                    column_ids,
-                                                                    sample_counts,
-                                                                    sortedness,
-                                                                    res_sample_counts))) {
-    LOG_WARN("Fail to estimate skip index sortedness",
-             KR(ret),
-             K(ls_id),
-             K(tablet_id),
-             K(column_ids),
-             K(sortedness),
-             K(res_sample_counts));
-  }
-
-  return ret;
-}
 
 int ObAccessService::inner_tablet_scan(
     const share::ObLSID &ls_id,

@@ -179,34 +179,6 @@ struct ObTwoNodeCostInfo
   OptSelectivityCtx *sel_ctx_;
 };
 
-struct ObCostColumnGroupInfo {
-  ObCostColumnGroupInfo()
-  :micro_block_count_(0.0),
-  filter_sel_(1.0),
-  skip_rate_(0.0),
-  skip_filter_sel_(1.0)
-  {
-  }
-  int assign(const ObCostColumnGroupInfo& info);
-
-  TO_STRING_KV(
-    K_(filters),
-    K_(access_column_items),
-    K_(column_id),
-    K_(micro_block_count),
-    K_(filter_sel),
-    K_(skip_rate),
-    K_(skip_filter_sel)
-  );
-  common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> filters_;
-  common::ObSEArray<ColumnItem, 4, common::ModulePageAllocator, true> access_column_items_;
-  uint64_t column_id_;
-  int64_t micro_block_count_;
-  double filter_sel_;
-  double skip_rate_;
-  double skip_filter_sel_;
-};
-
 /*
  * store all the info needed to cost table scan
  */
@@ -247,9 +219,7 @@ struct ObCostTableScanInfo
      index_back_row_count_(0.0),
      output_row_count_(0.0),
      batch_type_(common::ObSimpleBatch::ObBatchType::T_NONE),
-     use_column_store_(false),
      at_most_one_range_(false),
-     index_back_with_column_store_(false),
      rescan_left_server_list_(NULL),
      rescan_server_list_(NULL),
      limit_rows_(-1.0),
@@ -271,10 +241,6 @@ struct ObCostTableScanInfo
                K_(postfix_filter_sel), K_(table_filter_sel),
                K_(ss_prefix_ndv), K_(ss_postfix_range_filters_sel),
                K_(limit_rows), K_(total_range_cnt), K_(unique_range_rowcnt),
-               K_(use_column_store),
-               K_(index_back_with_column_store),
-               K_(index_scan_column_group_infos),
-               K_(index_back_column_group_infos),
                K_(batch_type));
   // the following information need to be set before estimating cost
   uint64_t table_id_; // table id
@@ -322,11 +288,7 @@ struct ObCostTableScanInfo
   double output_row_count_;
   common::ObSimpleBatch::ObBatchType batch_type_;
   SampleInfo sample_info_;
-  bool use_column_store_;
   bool at_most_one_range_;
-  bool index_back_with_column_store_;
-  common::ObSEArray<ObCostColumnGroupInfo, 4, common::ModulePageAllocator, true> index_scan_column_group_infos_;
-  common::ObSEArray<ObCostColumnGroupInfo, 4, common::ModulePageAllocator, true> index_back_column_group_infos_;
   const common::ObIArray<common::ObAddr> *rescan_left_server_list_;
   const common::ObIArray<common::ObAddr> *rescan_server_list_;
 
@@ -772,13 +734,11 @@ public:
   int cost_project(double rows, 
                    const ObIArray<ColumnItem> &columns,
                    bool is_get, 
-                   bool use_column_store,
                    double &cost);
 
   int cost_project(double rows, 
                    const ObIArray<ObRawExpr*> &columns,
                    bool is_get, 
-                   bool use_column_store,
                    double &cost);
 
   int cost_full_table_scan_project(double rows, 
@@ -895,14 +855,6 @@ protected:
                       double row_count,
                       double &cost);
 
-  int cost_column_store_index_scan(const ObCostTableScanInfo &est_cost_info,
-                                    double row_count,
-                                    double &cost);
-
-  int cost_column_store_index_back(const ObCostTableScanInfo &est_cost_info,
-                                    double row_count,
-                                    double limit_count,
-                                    double &cost);
   int cost_row_store_index_scan(const ObCostTableScanInfo &est_cost_info,
                                 double row_count,
                                 double &cost);

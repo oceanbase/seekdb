@@ -158,7 +158,6 @@ void AlterColumnSchema::reset()
   next_column_name_.reset();
   prev_column_name_.reset();
   is_first_ = false;
-  column_group_name_.reset();
   is_set_comment_ = false;
 }
 
@@ -177,7 +176,6 @@ OB_SERIALIZE_MEMBER((AlterColumnSchema, ObColumnSchemaV2),
                     next_column_name_,
                     prev_column_name_,
                     is_first_,
-                    column_group_name_,
                     is_set_comment_);
 
 DEFINE_SERIALIZE(AlterTableSchema)
@@ -286,7 +284,6 @@ int64_t AlterColumnSchema::to_string(char* buf, const int64_t buf_len) const
        K_(next_column_name),
        K_(prev_column_name),
        K_(is_unique_key),
-       K_(column_group_name),
        K_(is_set_comment));
   J_COMMA();
   J_NAME(N_ALTER_COLUMN_SCHEMA);
@@ -327,8 +324,6 @@ AlterColumnSchema &AlterColumnSchema::operator=(const AlterColumnSchema &src_sch
       SHARE_LOG(WARN, "failed to deep copy next_column_name", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_schema.get_prev_column_name(), prev_column_name_))) {
       SHARE_LOG(WARN, "failed to deep copy prev_column_name", K(ret));
-    } else if (OB_FAIL(deep_copy_str(src_schema.get_column_group_name(), column_group_name_))) {
-      SHARE_LOG(WARN, "failed to deep copy column_group_name", K(ret));
     } else {
       is_first_ = src_schema.is_first_;
       is_set_comment_ = src_schema.is_set_comment_;
@@ -378,8 +373,6 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
       session_id_ = src_schema.session_id_;
       compressor_type_ = src_schema.compressor_type_;
       lob_inrow_threshold_ = src_schema.lob_inrow_threshold_;
-      is_column_store_supported_ = src_schema.is_column_store_supported_;
-      max_used_column_group_id_ = src_schema.max_used_column_group_id_;
       micro_index_clustered_ = src_schema.micro_index_clustered_;
       enable_macro_block_bloom_filter_ = src_schema.enable_macro_block_bloom_filter_;
       merge_engine_type_ = src_schema.merge_engine_type_;
@@ -511,11 +504,6 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
       }
     }
 
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(assign_column_group(src_schema))) {
-        LOG_WARN("fail to assign column_group", KR(ret), K(src_schema));
-      }
-    }
   }
   if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.ttl_definition_, ttl_definition_))) {
     LOG_WARN("Fail to deep copy ttl definition string", K(ret));

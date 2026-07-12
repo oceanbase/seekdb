@@ -89,7 +89,7 @@ ObTenantFreezeInfoMgr::ObTenantFreezeInfoMgr()
     lock_(),
     cur_idx_(0),
     last_change_ts_(0),
-    tg_id_(-1),
+    reload_timer_(),
     inited_(false)
 {
 }
@@ -123,9 +123,7 @@ int ObTenantFreezeInfoMgr::init(ObISQLClient &sql_proxy)
     STORAGE_LOG(WARN, "fail to init freeze info mgr", K(ret));
   } else if (OB_FAIL(reload_task_.init())) {
     STORAGE_LOG(ERROR, "fail to init reload task", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::FreInfoReload, tg_id_))) {
-    STORAGE_LOG(ERROR, "fail to init timer", K(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
+  } else if (OB_FAIL(reload_timer_.init("FreInfoReload", ObMemAttr("FreInfoReload")))) {
     STORAGE_LOG(ERROR, "fail to init timer", K(ret));
   } else {
     last_change_ts_ = ObTimeUtility::current_time();
@@ -141,9 +139,9 @@ int ObTenantFreezeInfoMgr::start()
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not init", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, reload_task_, RELOAD_INTERVAL, true))) {
+  } else if (OB_FAIL(reload_timer_.schedule(reload_task_, RELOAD_INTERVAL, true))) {
     STORAGE_LOG(ERROR, "fail to schedule reload task", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, update_reserved_snapshot_task_, UPDATE_LS_RESERVED_SNAPSHOT_INTERVAL, true))) {
+  } else if (OB_FAIL(reload_timer_.schedule(update_reserved_snapshot_task_, UPDATE_LS_RESERVED_SNAPSHOT_INTERVAL, true))) {
     STORAGE_LOG(ERROR, "fail to schedule update reserved snapshot task", K(ret));
   }
   return ret;
@@ -151,18 +149,17 @@ int ObTenantFreezeInfoMgr::start()
 
 void ObTenantFreezeInfoMgr::wait()
 {
-  TG_WAIT(tg_id_);
+  reload_timer_.wait();
 }
 
 void ObTenantFreezeInfoMgr::stop()
 {
-  TG_STOP(tg_id_);
+  reload_timer_.stop();
 }
 
 void ObTenantFreezeInfoMgr::destroy()
 {
-  TG_DESTROY(tg_id_);
-  tg_id_ = -1;
+  reload_timer_.destroy();
 }
 
 int64_t ObTenantFreezeInfoMgr::get_latest_frozen_version()
@@ -752,46 +749,5 @@ int ObTenantFreezeInfoMgr::try_update_reserved_snapshot()
   STORAGE_LOG(INFO, "update reserved snapshot finished", K(cost_ts), K(reserved_snapshot));
   return ret;
 }
-
 } // storage
 } // oceanbase
-
-// ===== verify_column_checksum_between_diffrent_replica definition moved from share/ob_tablet_replica_checksum_operator.cpp(real user MTL FreezeInfoMgr) =====
-namespace oceanbase
-{
-namespace share
-{
-
-int ObTabletReplicaChecksumItem::verify_column_checksum_between_diffrent_replica(const ObTabletReplicaChecksumItem &other) const
-{
-  int ret = OB_SUCCESS;
-  ObFreezeInfo boundary_freeze_info;
-  ObFreezeInfo to_check_freeze_info;
-  if (OB_FAIL(share::g_mp->tenant_freeze_info_mgr()->get_lower_bound_freeze_info_before_snapshot_version(compaction_scn_.get_val_for_tx(), boundary_freeze_info))) {
-    if (OB_ENTRY_NOT_EXIST == ret) {
-      ret = OB_SUCCESS;
-    } else {
-      LOG_WARN("failed to get boundary freeze info", K(ret), K_(compaction_scn));
-    }
-  } else if (boundary_freeze_info.is_valid()) {
-    ret = OB_CHECKSUM_ERROR; // it is compacted in lob column checksum fixed version
-    LOG_ERROR("failed to check column checksum", K(ret), K(boundary_freeze_info));
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(share::g_mp->tenant_freeze_info_mgr()->get_freeze_info_by_snapshot_version(compaction_scn_.get_val_for_tx(), to_check_freeze_info))) {
-    if (OB_ENTRY_NOT_EXIST == ret) {
-      ret = OB_SUCCESS;
-    } else {
-      LOG_WARN("failed to get freeze info", K(ret), K_(compaction_scn));
-    }
-  } else if (!to_check_freeze_info.is_valid()) {
-  } else {
-    ret = OB_CHECKSUM_ERROR; // it is compacted in lob column checksum fixed version
-    LOG_ERROR("failed to check column checksum", K(ret), K(to_check_freeze_info));
-  }
-  return ret;
-}
-
-}  // namespace share
-}  // namespace oceanbase

@@ -138,8 +138,6 @@ protected:
   int check_table_lob_infos_(const ObTableSchema &base_table_schema, const ObTableSchema &inc_table_schema);
   int check_table_rowkey_infos_(const ObTableSchema &base_table_schema, const ObTableSchema &inc_table_schema);
   int compare_two_rowkey_info_(const common::ObRowkeyInfo &l_rowkey_info, const common::ObRowkeyInfo &r_rowkey_info, bool &is_equal);
-  int check_table_column_groups_(const ObTableSchema &base_table_schema, const ObTableSchema &inc_table_schema);
-  int compare_two_column_group_schema_(const ObTableSchema &base_table_schema, const ObTableSchema &inc_table_schema, const ObColumnGroupSchema &base_cg_schema, const ObColumnGroupSchema &inc_cg_schema, bool &is_equal);
   // verify if the check constraints of two tables meet the requirements
   int check_table_constraints_(const ObTableSchema &base_table_schema, const ObTableSchema &inc_table_schema);
   int check_table_all_column_conditions_(const ObTableSchema &base_table_schema, const ObTableSchema &inc_table_schema);
@@ -239,7 +237,7 @@ protected:
                                        ObDDLSQLTransaction &trans);
   int build_modify_tablet_binding_args_v1_(const ObIArray<ObTabletID> &tablet_ids,
                                            const int64_t schema_version,
-                                           ObIArray<ObBatchUnbindTabletArg> &modify_args,
+                                           ObIArray<storage::ObBatchUnbindTabletArg> &modify_args,
                                            ObDDLSQLTransaction &trans);
   int get_tablets_(const ObIArray<common::ObTabletID> &tablet_ids,
                    ObIArray<LSTabletID> &tablets,

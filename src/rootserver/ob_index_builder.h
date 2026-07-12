@@ -114,7 +114,6 @@ public:
                               const common::ObIArray<common::ObTabletID> *del_data_tablet_ids,
                               const share::schema::ObTableSchema *index_schema,
                               const int64_t parallelism,
-                              const int64_t group_id,
                               const uint64_t tenant_data_version,
                               common::ObIAllocator &allocator,
                               ObDDLTaskRecord &task_record,
@@ -126,7 +125,6 @@ public:
                                 const common::ObIArray<common::ObTabletID> *del_data_tablet_ids,
                                 const share::schema::ObTableSchema *index_schema,
                                 const int64_t parallelism,
-                                const int64_t group_id,
                                 const uint64_t tenant_data_version,
                                 common::ObIAllocator &allocator,
                                 ObDDLTaskRecord &task_record);
@@ -187,9 +185,6 @@ private:
       const int ret,
       const obcall::ObDropIndexArg &arg,
       const share::schema::ObTableSchema *index_schema = nullptr);
-  int create_index_column_group(const obcall::ObCreateIndexArg &arg,
-                                share::schema::ObTableSchema &index_table_schema);
-
   bool rowkey_doc_index_valid(const bool has_docid_col,
                               const int64_t aux_rowkey_doc_ith,
                               const int64_t aux_doc_rowkey_ith,

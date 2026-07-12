@@ -47,7 +47,6 @@
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_column_checksum_error_operator.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
-#include "storage/column_store/ob_column_store_replica_util.h"
 // ObLogRestoreSourceMgr removed - using config parameter instead
 #include "share/ob_all_tenant_info.h"  // ObAllTenantInfoProxy
 #include "share/ob_server_struct.h"    // GCTX
@@ -76,10 +75,10 @@ namespace observer
 
 
 ObSchemaReleaseTimeTask::ObSchemaReleaseTimeTask()
-: schema_updater_(nullptr), is_inited_(false)
+: schema_updater_(nullptr), timer_(), is_inited_(false)
 {}
 
-int ObSchemaReleaseTimeTask::init(ObServerSchemaUpdater &schema_updater, int tg_id)
+int ObSchemaReleaseTimeTask::init(ObServerSchemaUpdater &schema_updater)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -87,14 +86,37 @@ int ObSchemaReleaseTimeTask::init(ObServerSchemaUpdater &schema_updater, int tg_
     LOG_WARN("ObSchemaReleaseTimeTask has already been inited", K(ret));
   } else {
     schema_updater_ = &schema_updater;
-    is_inited_ = true;
-    if (OB_FAIL(schedule_())) {
+    if (OB_FAIL(timer_.init("SchemaRelease", ObMemAttr("SchemaRelease")))) {
+      LOG_WARN("fail to init ObSchemaReleaseTimeTask timer", KR(ret));
+    } else if (OB_FAIL(schedule_())) {
       LOG_WARN("fail to schedule ObSchemaReleaseTimeTask in init", KR(ret));
+    } else {
+      is_inited_ = true;
     }
   }
   return ret;
 }
 
+void ObSchemaReleaseTimeTask::stop()
+{
+  if (timer_.inited()) {
+    timer_.stop();
+  }
+}
+
+void ObSchemaReleaseTimeTask::wait()
+{
+  if (timer_.inited()) {
+    timer_.wait();
+  }
+}
+
+void ObSchemaReleaseTimeTask::destroy()
+{
+  timer_.destroy();
+  schema_updater_ = nullptr;
+  is_inited_ = false;
+}
 
 int ObSchemaReleaseTimeTask::schedule_()
 {
@@ -103,7 +125,7 @@ int ObSchemaReleaseTimeTask::schedule_()
   if (0 == memory_recycle_interval) {
     memory_recycle_interval = 15L * 60L * 1000L * 1000L; //15mins
   }
-  if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::ServerGTimer, *this, memory_recycle_interval, false /*not schedule repeatly*/))) {
+  if (OB_FAIL(timer_.schedule(*this, memory_recycle_interval, false /*not schedule repeatly*/))) {
     LOG_ERROR("fail to schedule task ObSchemaReleaseTimeTask", KR(ret));
   }
   return ret;
@@ -203,7 +225,7 @@ int ObService::init(common::ObMySQLProxy &sql_proxy,
     FLOG_WARN("init tablet replica checksum operator failed", KR(ret));
   } else if (OB_FAIL(OB_TSC_TIMESTAMP.init())) {
     FLOG_WARN("init tsc timestamp failed", KR(ret));
-  } else if (OB_FAIL(schema_release_task_.init(schema_updater_, lib::TGDefIDs::ServerGTimer))) {
+  } else if (OB_FAIL(schema_release_task_.init(schema_updater_))) {
     FLOG_WARN("init schema release task failed", KR(ret));
   } else if (OB_FAIL(standby_schema_refresh_trigger_.init())) {
     FLOG_WARN("init standby schema refresh trigger failed", KR(ret));
@@ -307,6 +329,9 @@ void ObService::stop()
 
     stopped_ = true;
 
+    FLOG_INFO("begin to stop schema release task");
+    schema_release_task_.stop();
+    FLOG_INFO("schema release task stopped");
     FLOG_INFO("begin to stop schema updater");
     schema_updater_.stop();
     FLOG_INFO("schema updater stopped");
@@ -338,6 +363,9 @@ void ObService::wait()
   if (!inited_) {
     LOG_WARN_RET(OB_NOT_INIT, "ob_service not init", K_(inited));
   } else {
+    FLOG_INFO("begin to wait schema release task");
+    schema_release_task_.wait();
+    FLOG_INFO("wait schema release task success");
     FLOG_INFO("begin to wait schema updater");
     schema_updater_.wait();
     FLOG_INFO("wait schema updater success");
@@ -371,6 +399,9 @@ int ObService::destroy()
     ret = OB_NOT_INIT;
     LOG_WARN("ob_service not init", KR(ret), K_(inited));
   } else {
+    FLOG_INFO("begin to destroy schema release task");
+    schema_release_task_.destroy();
+    FLOG_INFO("schema release task destroyed");
     FLOG_INFO("begin to destroy schema updater");
     schema_updater_.destroy();
     FLOG_INFO("schema updater destroyed");
@@ -731,7 +762,7 @@ int ObService::tablet_major_freeze(const obcall::ObTabletMajorFreezeArg &arg,
   } else {
     MOD_SCOPE {
       if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()->user_request_schedule_medium_merge(
-        arg.ls_id_, arg.tablet_id_, arg.is_rebuild_column_group_))) {
+        arg.ls_id_, arg.tablet_id_))) {
         LOG_WARN("failed to try schedule tablet major freeze", K(ret), K(arg));
       }
     }
@@ -1883,7 +1914,6 @@ int ObService::inner_fill_tablet_info_(
   ObLSHandle ls_handle;
   ObTabletHandle tablet_handle;
   int ret = OB_SUCCESS;
-  bool need_wait_for_report = false;
   ObTablet *tablet = nullptr;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
@@ -1910,15 +1940,10 @@ int ObService::inner_fill_tablet_info_(
   } else if (OB_ISNULL(gctx_.config_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("gctx_.config_ is null", KR(ret), K(tablet_id));
-  } else if (OB_FAIL(ObCSReplicaUtil::check_need_wait_for_report(*ls, *tablet, need_wait_for_report))) {
-    LOG_WARN("fail to check need wait report", K(ret), KPC(ls), KPC(tablet));
-  } else if (need_wait_for_report) {
-    ret = OB_EAGAIN;
-    LOG_WARN("need wait report for cs replica", K(ret), K(tablet_id));
   } else if (OB_FAIL(tablet->get_tablet_report_info(
-     gctx_.self_addr(), tablet_replica, tablet_checksum, need_checksum, ls->is_cs_replica()))) {
+     gctx_.self_addr(), tablet_replica, tablet_checksum, need_checksum))) {
     LOG_WARN("fail to get tablet report info from tablet", KR(ret),
-      "ls_id", ls->get_ls_id(), "is_cs_replica", ls->is_cs_replica(), K(tablet_id));
+      "ls_id", ls->get_ls_id(), K(tablet_id));
   }
   return ret;
 }
@@ -1979,20 +2004,6 @@ int ObService::estimate_tablet_block_count(const obcall::ObEstBlockArg &arg,
     LOG_WARN("service is not inited", K(ret));
   } else if (OB_FAIL(sql::ObStorageEstimator::estimate_block_count_and_row_count(arg, res))) {
     LOG_WARN("failed to estimate block count and row count", K(ret));
-  }
-  return ret;
-}
-
-int ObService::estimate_skip_rate(const obcall::ObEstSkipRateArg &arg,
-                                  obcall::ObEstSkipRateRes &res) const
-{
-  int ret = OB_SUCCESS;
-  LOG_DEBUG("receive estimate tablet skip rate request", K(arg));
-  if (!inited_) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("service is not inited", K(ret));
-  } else if (OB_FAIL(sql::ObStorageEstimator::estimate_skip_rate(arg, res))) {
-    LOG_WARN("failed to estimate skip rate", K(ret));
   }
   return ret;
 }

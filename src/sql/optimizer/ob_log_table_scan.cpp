@@ -96,14 +96,6 @@ const char *ObLogTableScan::get_name() const
     } else {
       name = "DISTRIBUTED TABLE FULL SCAN";
     }
-  } else if (use_column_store()) {
-    if (is_get) {
-      name = "COLUMN TABLE GET";
-    } else if (is_range) {
-      name = "COLUMN TABLE RANGE SCAN";
-    } else {
-      name = "COLUMN TABLE FULL SCAN";
-    }
   } else {
     if (is_get) {
       name = "TABLE GET";
@@ -2566,14 +2558,6 @@ int ObLogTableScan::print_outline_data(PlanText &plan_text)
         LOG_WARN("failed to print use das hint", K(ret));
       }
     }
-    if (OB_SUCC(ret) && use_column_store()) {
-      ObIndexHint use_column_store_hint(T_USE_COLUMN_STORE_HINT);
-      use_column_store_hint.set_qb_name(qb_name);
-      use_column_store_hint.get_table().set_table(*table_item);
-      if (OB_FAIL(use_column_store_hint.print_hint(plan_text))) {
-        LOG_WARN("failed to print use column store hint", K(ret));
-      }
-    }
     if (OB_SUCC(ret) && use_index_merge()) {
       ObUnionMergeHint union_merge_hint;
       union_merge_hint.set_qb_name(qb_name);
@@ -2620,10 +2604,6 @@ int ObLogTableScan::print_used_hint(PlanText &plan_text)
                && use_das() == table_hint->use_das_hint_->is_enable_hint()
                && OB_FAIL(table_hint->use_das_hint_->print_hint(plan_text))) {
       LOG_WARN("failed to print use das hint", K(ret));
-    } else if (NULL != table_hint->use_column_store_hint_
-               && use_column_store() == table_hint->use_column_store_hint_->is_enable_hint()
-               && OB_FAIL(table_hint->use_column_store_hint_->print_hint(plan_text))) {
-      LOG_WARN("failed to print use column_store hint", K(ret));
     } else if (OB_FAIL(check_match_union_merge_hint(table_hint, is_match_union_match_hint))) {
       LOG_WARN("failed to check match union merge hint", K(ret));
     } else if (is_match_union_match_hint

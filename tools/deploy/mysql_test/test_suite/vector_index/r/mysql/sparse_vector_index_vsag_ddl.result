@@ -75,7 +75,7 @@ CREATE TABLE t1 (c1 int primary key, c2 vector(3), vector index idx1(c2) with (l
 ERROR 0A000: the vector index params of distance or type not set is not supported
 CREATE TABLE t1 (c1 int primary key, c2 varchar(32), vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product));
 ERROR 0A000: the vector index params of distance or type not set is not supported
-CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product)) with column group(each column);
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product));
 drop table if exists t1;
 # 后建索引
 CREATE TABLE t1 (c1 int primary key, c2 sparsevector);

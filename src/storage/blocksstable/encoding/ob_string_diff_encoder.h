@@ -144,7 +144,7 @@ private:
       const common::ObDatum &datum,
       const int64_t row_id);
 
-  struct ColumnStoreFiller;
+  struct FixedDataFiller;
 
 private:
   int64_t string_size_;

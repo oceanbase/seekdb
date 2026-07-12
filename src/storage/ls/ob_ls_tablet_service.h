@@ -174,7 +174,6 @@ public:
       const share::SCN &mds_checkpoint_scn,
       const storage::ObTabletMdsUserDataType &create_type,
       const bool micro_index_clustered,
-      const bool has_cs_replica,
       const ObTabletID &split_src_tablet_id,
       const uint64_t data_format_version,
       ObTabletHandle &tablet_handle,
@@ -228,9 +227,7 @@ public:
   int update_tablet_table_store( // only for small sstables defragmentation
       const ObTabletHandle &old_tablet_handle,
       const ObIArray<storage::ObITable *> &tables);
-  int update_tablet_report_status(
-      const common::ObTabletID &tablet_id,
-      const bool found_column_group_checksum_error = false);
+  int update_tablet_report_status(const common::ObTabletID &tablet_id);
   int update_tablet_snapshot_version(
       const common::ObTabletID &tablet_id,
       const int64_t snapshot_version);
@@ -417,26 +414,14 @@ public:
       int64_t &macro_block_count,
       int64_t &micro_block_count,
       int64_t &sstable_row_count,
-      int64_t &memtable_row_count,
-      common::ObIArray<int64_t> &cg_macro_cnt_arr,
-      common::ObIArray<int64_t> &cg_micro_cnt_arr);
+      int64_t &memtable_row_count);
   int estimate_block_count_and_row_count(
       const common::ObTabletID &tablet_id,
       const int64_t timeout_us,
       int64_t &macro_block_count,
       int64_t &micro_block_count,
       int64_t &sstable_row_count,
-      int64_t &memtable_row_count,
-      common::ObIArray<int64_t> &cg_macro_cnt_arr,
-      common::ObIArray<int64_t> &cg_micro_cnt_arr);
-  int estimate_skip_index_sortedness(
-      const uint64_t& table_id,
-      const common::ObTabletID &tablet_id,
-      const int64_t timeout_us,
-      const common::ObIArray<uint64_t> &column_ids,
-      const common::ObIArray<uint64_t> &sample_count,
-      common::ObIArray<double> &sortedness,
-      common::ObIArray<uint64_t> &res_sample_counts);
+      int64_t &memtable_row_count);
   int scan_block_stat(
       const ObTabletHandle &tablet_handle,
       ObBlockStatScanParam &scan_param,
@@ -604,12 +589,6 @@ private:
       const int64_t snapshot_version,
       const ObCreateTabletSchema &create_tablet_schema,
       ObTabletHandle &tablet_handle);
-  int inner_estimate_block_count_and_row_count(
-      ObTabletTableIterator &tablet_iter,
-      int64_t &macro_block_count,
-      int64_t &micro_block_count,
-      int64_t &sstable_row_count,
-      int64_t &memtable_row_count);
   int estimate_block_count_and_row_count_for_split_extra(
       const ObTabletID &tablet_id,
       const int64_t split_cnt,
@@ -618,9 +597,7 @@ private:
       int64_t &macro_block_count,
       int64_t &micro_block_count,
       int64_t &sstable_row_count,
-      int64_t &memtable_row_count,
-      common::ObIArray<int64_t> &cg_macro_cnt_arr,
-      common::ObIArray<int64_t> &cg_micro_cnt_arr);
+      int64_t &memtable_row_count);
 
   int refresh_tablet_addr(
       const share::ObLSID &ls_id,

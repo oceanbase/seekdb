@@ -737,7 +737,7 @@ int ObMicroBlockReader::filter_pushdown_filter(
   } else {
     const int64_t col_count = filter.get_col_count();
     const int64_t trans_col_idx = header_->rowkey_column_count_ > 0 ? read_info_->get_schema_rowkey_count() : INT32_MIN;
-    const common::ObIArray<int32_t> &col_offsets = filter.get_col_offsets(pd_filter_info.is_pd_to_cg_);
+    const common::ObIArray<int32_t> &col_offsets = filter.get_col_offsets();
     const sql::ColumnParamFixedArray &col_params = filter.get_col_params();
     const common::ObIArray<ObStorageDatum> &default_datums = filter.get_default_datums();
     const ObColumnIndexArray &cols_index = read_info_->get_columns_index();

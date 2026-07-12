@@ -1449,12 +1449,6 @@ public:
                                       const ObIArray<ObRawExpr*> &right_join_conditions,
                                       ObIArray<JoinFilterInfo> &join_filter_infos);
 
-  int will_use_column_store(const uint64_t table_id,
-                            const uint64_t index_id,
-                            const uint64_t ref_table_id,
-                            bool &use_column_store,
-                            bool &use_row_store);
-
   int pushdown_join_filter_into_subquery(const ObDMLStmt *parent_stmt,
                                          ObLogicalOperator* child_op,
                                          uint64_t subquery_id,

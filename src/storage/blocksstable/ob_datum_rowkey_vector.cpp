@@ -513,7 +513,6 @@ int ObRowkeyVector::locate_range(
     const ObDatumRange &range,
     const bool is_left_border,
     const bool is_right_border,
-    const bool is_normal_cg,
     const ObStorageDatumUtils &datum_utils,
     int64_t &begin_idx,
     int64_t &end_idx) const
@@ -540,7 +539,7 @@ int ObRowkeyVector::locate_range(
   } else if (!is_right_border || range.get_end_key().is_max_rowkey()) {
     end_idx = row_cnt_ - 1;
   } else if (OB_FAIL(locate_key(begin_idx, row_cnt_, range.get_end_key(), datum_utils,
-                                end_idx, is_normal_cg || !range.get_border_flag().inclusive_end()))) {
+                                end_idx, !range.get_border_flag().inclusive_end()))) {
     LOG_WARN("Failed to locate start key", K(ret));
   } else if (row_cnt_ == end_idx) {
     end_idx--;

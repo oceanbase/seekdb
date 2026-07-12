@@ -430,7 +430,6 @@ ObTableLoadSchema::ObTableLoadSchema()
     schema_version_(0),
     lob_meta_table_id_(OB_INVALID_ID),
     lob_inrow_threshold_(-1),
-    cg_cnt_(0),
     col_nullables_(nullptr),
     is_inited_(false)
 {
@@ -467,7 +466,6 @@ void ObTableLoadSchema::reset()
   schema_version_ = 0;
   lob_meta_table_id_ = OB_INVALID_ID;
   lob_inrow_threshold_ = -1;
-  cg_cnt_ = 0;
   index_table_ids_.reset();
   lob_column_idxs_.reset();
   column_descs_.reset();
@@ -526,7 +524,6 @@ int ObTableLoadSchema::init_table_schema(const ObTableSchema *table_schema)
       lob_meta_table_id_ = table_schema->get_aux_lob_meta_tid();
     }
     lob_inrow_threshold_ = table_schema->get_lob_inrow_threshold();
-    cg_cnt_ = table_schema->get_column_group_count();
     if (OB_FAIL(ObTableLoadUtils::deep_copy(table_schema->get_table_name_str(), table_name_,
                                             allocator_))) {
       LOG_WARN("fail to deep copy table name", KR(ret));

@@ -356,10 +356,6 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
       } else if (!true) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tenant config is invalid", KR(ret));
-      } else if (OB_NOT_NULL(parse_tree.children_[COLUMN_GROUP_NODE])
-                 && OB_FAIL(resolve_column_group_helper(parse_tree.children_[COLUMN_GROUP_NODE],
-                    mv_ainfo->container_table_schema_))) {
-        LOG_WARN("fail to resolve column group", KR(ret));
       } else if (OB_FAIL(resolve_mv_options(select_stmt,
                                             parse_tree.children_[MVIEW_NODE],
                                             mv_ainfo->mv_refresh_info_,

@@ -305,12 +305,6 @@ public:
       uint64_t &curr_udt_set_id,
       ObDDLOperator *ddl_operator,
       common::ObMySQLTransaction *trans);
-  int add_column_to_column_group(
-      const share::schema::ObTableSchema &origin_table_schema,
-      const share::schema::AlterTableSchema &alter_table_schema,
-      share::schema::ObTableSchema &new_table_schema,
-      ObDDLOperator &ddl_operator,
-      common::ObMySQLTransaction &trans);
   int gen_alter_column_new_table_schema_offline(
       const share::schema::ObTableSchema &origin_table_schema,
       share::schema::AlterTableSchema &alter_table_schema,
@@ -1337,8 +1331,7 @@ int check_will_be_having_domain_index_operation(
       common::ObMySQLTransaction &trans,
       common::ObIAllocator &allocator,
       const uint64_t tenant_data_version,
-      const ObString &index_name = ObString(""),
-      const bool ignore_cs_replica = false);
+      const ObString &index_name = ObString(""));
   int drop_child_table_fk(
       const obcall::ObAlterTableArg &alter_table_arg,
       const share::schema::ObTableSchema &orig_table_schema,
@@ -1501,19 +1494,6 @@ int check_will_be_having_domain_index_operation(
                            ObDDLOperator &ddl_operator,
                            common::ObMySQLTransaction &trans,
                            const uint64_t tenant_data_version);
-  int check_alter_column_group(const obcall::ObAlterTableArg &alter_table_arg, share::ObDDLType &ddl_type) const;
-  int alter_column_group(obcall::ObAlterTableArg &alter_table_arg,
-                         const share::schema::ObTableSchema &origin_table_schema,
-                         share::schema::ObTableSchema &new_table_schema,
-                         share::schema::ObSchemaGetterGuard &schema_guard,
-                         ObDDLOperator &ddl_operator,
-                         common::ObMySQLTransaction &trans);
-
-
-  int update_column_group_table_inplace(const share::schema::ObTableSchema &origin_table_schema,
-                                        const share::schema::ObTableSchema &new_table_schema,
-                                        ObDDLOperator &ddl_operator,
-                                        common::ObMySQLTransaction &trans);
   int check_can_alter_table_constraints(
     const obcall::ObAlterTableArg::AlterConstraintType op_type,
     share::schema::ObSchemaGetterGuard &schema_guard,
@@ -1841,11 +1821,6 @@ int check_will_be_having_domain_index_operation(
                                      share::schema::AlterColumnSchema &alter_column_schema,
                                      ObDDLOperator *ddl_operator,
                                      common::ObMySQLTransaction *trans);
-  int alter_table_update_cg_column(common::ObMySQLTransaction &trans, 
-                                   ObDDLOperator &ddl_operator,
-                                   share::schema::ObColumnSchemaV2 &new_column_schema,
-                                   share::schema::ObTableSchema &new_table_schema);
-
   int build_need_flush_role_array(share::schema::ObSchemaGetterGuard &schema_guard,
                                   const share::schema::ObUserInfo *user_info,
                                   const obcall::ObAlterUserProfileArg &arg,
@@ -1984,15 +1959,6 @@ private:
       ObDDLSQLTransaction &trans,
       ObDDLTaskRecord &task_record,
       const int64_t snapshot_version = 0);
-  int adjust_cg_for_offline(ObTableSchema &new_table_schema);
-  int add_column_group(const obcall::ObAlterTableArg &alter_table_arg,
-                       const share::schema::ObTableSchema &ori_table_schema,
-                       share::schema::ObTableSchema &new_table_schema);
-  
-  int drop_column_group(const obcall::ObAlterTableArg &alter_table_arg,
-                        const share::schema::ObTableSchema &ori_table_schema,
-                        share::schema::ObTableSchema &new_table_schema);
-
   int check_alter_heap_table_index(const obcall::ObIndexArg::IndexActionType type,
                                    const ObTableSchema &orig_table_schema,
                                    obcall::ObIndexArg *index_arg);

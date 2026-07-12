@@ -49,7 +49,6 @@ public:
      is_create_bind_hidden_tablets_(false),
      tenant_data_version_(0),
      need_create_empty_majors_(),
-     has_cs_replica_(false),
      fork_tablet_infos_() {}
   virtual ~ObTabletCreatorArg() {}
   bool is_valid() const;
@@ -62,7 +61,6 @@ public:
            const uint64_t tenant_data_version,
            const ObIArray<bool> &need_create_empty_majors,
            const ObIArray<int64_t> &create_commit_versions,
-           const bool has_cs_replica,
            const ObIArray<share::ObForkTabletInfo> &fork_tablet_infos);
   int init(const ObIArray<common::ObTabletID> &tablet_ids,
            const share::ObLSID &ls_key,
@@ -72,8 +70,7 @@ public:
            const bool is_create_bind_hidden_tablets,
            const uint64_t tenant_data_version,
            const ObIArray<bool> &need_create_empty_majors,
-           const ObIArray<int64_t> &create_commit_versions,
-           const bool has_cs_replica);
+           const ObIArray<int64_t> &create_commit_versions);
 
   DECLARE_TO_STRING;
   common::ObArray<common::ObTabletID> tablet_ids_;
@@ -85,7 +82,6 @@ public:
   uint64_t tenant_data_version_;
   common::ObArray<bool> need_create_empty_majors_;
   common::ObArray<int64_t> create_commit_versions_;
-  bool has_cs_replica_;
   common::ObArray<share::ObForkTabletInfo> fork_tablet_infos_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTabletCreatorArg);

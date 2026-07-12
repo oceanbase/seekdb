@@ -19,7 +19,6 @@
 #include "sql/engine/cmd/ob_load_data_utils.h"
 #include "storage/direct_load/ob_direct_load_datum_row.h"
 #include "storage/direct_load/ob_direct_load_dml_row_handler.h"
-#include "storage/direct_load/ob_direct_load_row_iterator.h"
 #include "storage/direct_load/ob_direct_load_vector_utils.h"
 
 namespace oceanbase
@@ -385,117 +384,6 @@ int ObDirectLoadInsertTableBatchRowDirectWriter::close()
     LOG_WARN("fail to close buffer writer", KR(ret));
   } else if (OB_FAIL(close_sstable_slice())) {
     LOG_WARN("fail to close sstable slice", KR(ret));
-  }
-  return ret;
-}
-
-/*
- * ObDirectLoadInsertTableBatchRowStoreWriter
- */
-
-int ObDirectLoadInsertTableBatchRowStoreWriter::init(
-  ObDirectLoadInsertTabletContext *insert_tablet_ctx,
-  const ObDirectLoadInsertTableRowInfo &row_info,
-  const int64_t slice_id,
-  ObDirectLoadDMLRowHandler *dml_row_handler,
-  ObLoadDataStat *job_stat)
-{
-  int ret = OB_SUCCESS;
-  ObDirectLoadRowFlag row_flag;
-  if (IS_INIT) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("ObDirectLoadInsertTableBatchRowStoreWriter init twice", KR(ret), KP(this));
-  } else if (OB_FAIL(inner_init(insert_tablet_ctx, row_info, row_flag, DEFAULT_MAX_BYTES_SIZE))) {
-    LOG_WARN("fail to inner init", KR(ret));
-  } else if (OB_UNLIKELY(slice_id <= 0 || nullptr == job_stat)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(slice_id), KP(job_stat));
-  } else {
-    slice_id_ = slice_id;
-    dml_row_handler_ = dml_row_handler;
-    job_stat_ = job_stat;
-    is_inited_ = true;
-  }
-  return ret;
-}
-
-int ObDirectLoadInsertTableBatchRowStoreWriter::after_flush_batch(ObBatchDatumRows &datum_rows)
-{
-  int ret = OB_SUCCESS;
-  ATOMIC_AAF(&job_stat_->store_.merge_stage_write_rows_, datum_rows.row_count_);
-  if (nullptr != dml_row_handler_ &&
-      OB_FAIL(dml_row_handler_->handle_insert_batch(tablet_id_, datum_rows))) {
-    LOG_WARN("fail to handle insert batch", KR(ret));
-  }
-  return ret;
-}
-
-int ObDirectLoadInsertTableBatchRowStoreWriter::write(ObDirectLoadIStoreRowIterator *row_iter)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObDirectLoadInsertTableBatchRowStoreWriter not init", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(nullptr == row_iter)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(row_iter));
-  } else {
-    const ObDirectLoadRowFlag &row_flag = row_iter->get_row_flag();
-    ObTabletCacheInterval *hide_pk_interval = row_iter->get_hide_pk_interval();
-    int64_t start_pos = batch_rows_.size();
-    const ObDirectLoadDatumRow *datum_row = nullptr;
-    if (OB_UNLIKELY(row_flag.uncontain_hidden_pk_ && nullptr == hide_pk_interval)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid row iter", KR(ret), KPC(row_iter));
-    }
-    batch_rows_.set_row_flag(row_flag);
-    while (OB_SUCC(ret)) {
-      if (OB_UNLIKELY(is_canceled_)) {
-        ret = OB_CANCELED;
-        LOG_WARN("merge task is canceled", KR(ret));
-      } else if (OB_FAIL(row_iter->get_next_row(datum_row))) {
-        if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("fail to get next row", KR(ret));
-        } else {
-          ret = OB_SUCCESS;
-          break;
-        }
-      } else if (OB_ISNULL(datum_row)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected datum row is null", KR(ret));
-      }
-      // There are deleted lines, do not use batch mode
-      else if (OB_UNLIKELY(datum_row->is_delete_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected delete row", KR(ret), KPC(datum_row));
-      }
-      // First process the lob column, reduce memory pressure
-      else if (OB_FAIL(row_handler_.handle_row(const_cast<ObDirectLoadDatumRow &>(*datum_row), row_flag))) {
-        LOG_WARN("fail to handle row", KR(ret), KPC(datum_row), K(row_flag));
-      } else if (OB_FAIL(batch_rows_.append_row(*datum_row))) {
-        LOG_WARN("fail to append row", KR(ret));
-      } else if (is_full()) {
-        if (row_flag.uncontain_hidden_pk_ &&
-            OB_FAIL(ObDirectLoadVectorUtils::batch_fill_hidden_pk(datum_rows_.vectors_.at(0),
-                                                                  start_pos,
-                                                                  batch_rows_.size() - start_pos,
-                                                                  *hide_pk_interval))) {
-          LOG_WARN("fail to batch fill hidden pk", KR(ret));
-        } else if (OB_FAIL(flush_buffer())) {
-          LOG_WARN("fail to flush buffer", KR(ret));
-        } else {
-          start_pos = 0;
-        }
-      }
-    }
-    if (OB_SUCC(ret) && !batch_rows_.empty() && row_flag.uncontain_hidden_pk_) {
-      if (OB_FAIL(ObDirectLoadVectorUtils::batch_fill_hidden_pk(datum_rows_.vectors_.at(0),
-                                                                start_pos,
-                                                                batch_rows_.size() - start_pos,
-                                                                *hide_pk_interval))) {
-        LOG_WARN("fail to batch fill hidden pk", KR(ret));
-      }
-    }
   }
   return ret;
 }

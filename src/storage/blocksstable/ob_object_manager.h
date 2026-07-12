@@ -49,23 +49,19 @@ public:
   }
   void set_ss_share_data_macro_object_opt(
       const int64_t tablet_id,
-      const int64_t data_seq,
-      const int64_t column_group_id)
+      const int64_t data_seq)
   {
     object_type_ = ObStorageObjectType::SHARED_MAJOR_DATA_MACRO;
     ss_share_opt_.tablet_id_ = tablet_id;
     ss_share_opt_.data_seq_ = data_seq;
-    ss_share_opt_.column_group_id_ = column_group_id;
   }
   void set_ss_share_meta_macro_object_opt(
       const int64_t tablet_id,
-      const int64_t data_seq,
-      const int64_t column_group_id)
+      const int64_t data_seq)
   {
     object_type_ = ObStorageObjectType::SHARED_MAJOR_META_MACRO;
     ss_share_opt_.tablet_id_ = tablet_id;
     ss_share_opt_.data_seq_ = data_seq;
-    ss_share_opt_.column_group_id_ = column_group_id;
   }
   void set_ss_tmp_file_object_opt()
   {
@@ -181,19 +177,6 @@ public:
     ss_major_prewarm_opt_.compaction_scn_ = compaction_scn;
   }
 
-  void set_ss_checksum_error_dump_macro_opt(
-    const ObStorageObjectType object_type,
-    const uint64_t tablet_id,
-    const uint64_t cg_id,
-    const uint64_t compaction_scn,
-    const uint64_t block_seq)
-  {
-    object_type_ = object_type;
-    ss_ckm_error_dump_macro_id_opt_.tablet_id_ = tablet_id;
-    ss_ckm_error_dump_macro_id_opt_.cg_id_ = cg_id;
-    ss_ckm_error_dump_macro_id_opt_.compaction_scn_ = compaction_scn;
-    ss_ckm_error_dump_macro_id_opt_.block_seq_ = block_seq;
-  }
   int64_t to_string(char *buf, const int64_t buf_len) const;
 
 public:
@@ -216,7 +199,6 @@ private:
   {
     uint64_t tablet_id_;
     int64_t data_seq_;
-    int64_t column_group_id_;
   };
   struct SSTmpFileObjectOpt
   {
@@ -294,13 +276,6 @@ private:
     uint64_t tablet_id_;
   };
 
-  struct SSCkmErrorDumpMacroObjectOpt
-  {
-    uint64_t tablet_id_;
-    uint64_t cg_id_;
-    uint64_t compaction_scn_;
-    uint64_t block_seq_;
-  };
 public:
   ObStorageObjectType object_type_;
   union
@@ -322,7 +297,6 @@ public:
     SSTabletCompactionStatusObjectOpt ss_tablet_compaction_status_opt_;
     SSMajorPrewarmObjectOpt ss_major_prewarm_opt_;
     SSSharedTabletIdOpt ss_shared_tablet_id_opt_;
-    SSCkmErrorDumpMacroObjectOpt ss_ckm_error_dump_macro_id_opt_;
   };
 
 };

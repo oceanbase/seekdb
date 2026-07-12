@@ -202,9 +202,6 @@ int ObClusteredIndexBlockWriter::build_and_append_clustered_index_micro_block()
             macro_id, block_offset, block_size, logic_micro_id))) {
       LOG_WARN("fail to add clustered index block micro infos", K(ret),
                K(macro_id), K(block_offset), K(block_size), K(logic_micro_id));
-    } else if (clustered_index_store_desc_.is_cg()) {
-      // Reset last rowkey, cause row idx in cg[0] is relatively row idx.
-      last_rowkey_.reset();
     }
     // Clean micro writer status.
     micro_writer_->reuse();
@@ -398,11 +395,6 @@ int ObClusteredIndexBlockWriter::check_order(const ObIndexBlockRowDesc &row_desc
     LOG_WARN("fail to check order, row_desc invalid", K(ret), K(row_desc));
   } else if (!last_rowkey_.is_valid()) {
     // do nothing.
-  } else if (clustered_index_store_desc_.is_cg()) {
-    if (row_desc.row_key_.get_datum(0).get_int() <= last_rowkey_.get_datum(0).get_int()) {
-      ret = OB_ROWKEY_ORDER_ERROR;
-      LOG_ERROR("input rowkey is less then last rowkey.", K(ret), K(row_desc.row_key_), K(last_rowkey_));
-    }
   } else {
     const ObDatumRowkey &cur_rowkey = row_desc.row_key_;
     int32_t compare_result = 0;
@@ -557,28 +549,14 @@ int ObClusteredIndexBlockWriter::make_clustered_index_micro_block_with_reuse(
   // (maybe transformed in micro block cache).
   common::ObQueryFlag mock_query_flag;
   mock_query_flag.multi_version_minor_merge_ = compaction::is_mini_merge(clustered_index_store_desc_.get_merge_type());
-  if (clustered_index_store_desc_.is_cg()) {  // Fetch datum utils for index row scanner
-    const ObITableReadInfo *index_read_info;
-    if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
-      LOG_WARN("fail to get index read info for cg sstable", K(ret), K(clustered_index_store_desc_));
-    } else if (OB_UNLIKELY(!index_read_info->get_datum_utils().is_valid())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected invalid datum utails for cg sstable", K(ret), KPC(index_read_info));
-    } else {
-      datum_utils = &index_read_info->get_datum_utils();
-    }
-  } else {
-    datum_utils = &(clustered_index_store_desc_.get_datum_utils());
-  }
+  datum_utils = &(clustered_index_store_desc_.get_datum_utils());
 
   if (FAILEDx(index_block_row_scanner.init(*datum_utils,
                                            temp_allocator,
                                            mock_query_flag,
-                                           0 /* nested offset */,
-                                           clustered_index_store_desc_.is_cg()))) {
+                                           0 /* nested offset */))) {
     LOG_WARN("fail to init index block row scanner", K(ret),
-             K(clustered_index_store_desc_.get_datum_utils()),
-             K(clustered_index_store_desc_.is_cg()));
+             K(clustered_index_store_desc_.get_datum_utils()));
   } else if (OB_FAIL(index_block_row_scanner.open(macro_id, micro_block_data))) {
     LOG_WARN("fail to open reused micro block data", K(ret), K(macro_id));
   }
@@ -627,7 +605,7 @@ int ObClusteredIndexBlockWriter::make_clustered_index_micro_block_with_reuse(
 
       // Reuse, no need to change macro_id.
       clustered_row_desc.macro_id_ = idx_row_header->get_macro_id();
-      clustered_row_desc.row_offset_ = index_info.cs_row_range_.end_row_id_;
+      clustered_row_desc.row_offset_ = index_info.row_id_range_.end_row_id_;
       clustered_row_desc.max_merged_trans_version_ =
           nullptr == index_info.minor_meta_info_ ? 0 : index_info.minor_meta_info_->max_merged_trans_version_;
       clustered_row_desc.row_count_delta_ =

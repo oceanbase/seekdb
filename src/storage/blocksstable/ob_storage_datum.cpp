@@ -141,7 +141,7 @@ int ObStorageDatumUtils::transform_multi_version_col_desc(const ObIArray<share::
 int ObStorageDatumUtils::init(const ObIArray<share::schema::ObColDesc> &col_descs,
                               const int64_t schema_rowkey_cnt,
                               ObIAllocator &allocator,
-                              const bool is_column_store)
+                              const bool skip_multi_version_cols)
 {
   int ret = OB_SUCCESS;
   ObSEArray<share::schema::ObColDesc, 32> mv_col_descs;
@@ -156,7 +156,8 @@ int ObStorageDatumUtils::init(const ObIArray<share::schema::ObColDesc> &col_desc
     STORAGE_LOG(WARN, "Invalid argument to init storage datum utils", K(ret), K(schema_rowkey_cnt), K(col_descs));
   } else if (OB_FAIL(transform_multi_version_col_desc(col_descs, schema_rowkey_cnt, mv_col_descs))) {
     STORAGE_LOG(WARN, "Failed to transform multi version col descs", K(ret));
-  } else if (FALSE_IT(mv_extra_rowkey_cnt = is_column_store ? 0 : storage::ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt())) {
+  } else if (FALSE_IT(mv_extra_rowkey_cnt = skip_multi_version_cols
+      ? 0 : storage::ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt())) {
   } else if (FALSE_IT(mv_rowkey_cnt = schema_rowkey_cnt + mv_extra_rowkey_cnt)) {
   } else if (OB_FAIL(cmp_funcs_.init(mv_rowkey_cnt, allocator))) {
     STORAGE_LOG(WARN, "Failed to reserve cmp func array", K(ret));

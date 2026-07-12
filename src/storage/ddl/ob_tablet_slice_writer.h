@@ -21,7 +21,7 @@
 #include "share/ob_tablet_autoincrement_param.h"
 #include "storage/direct_load/ob_direct_load_batch_rows.h"
 #include "share/ob_batch_selector.h"
-#include "storage/ddl/ob_cg_row_tmp_file.h"
+#include "storage/ddl/ob_ddl_row_tmp_file.h"
 
 namespace oceanbase
 {
@@ -40,7 +40,7 @@ class ObBatchDatumRows;
 namespace storage
 {
 class ObDDLIndependentDag;
-class ObCgMacroBlockWriter;
+class ObDDLMacroBlockWriter;
 class ObLobMacroBlockWriter;
 
 // write storage rows
@@ -71,15 +71,14 @@ public:
   int close();
   const ObTabletID &get_tablet_id() const { return tablet_id_; }
   int64_t get_slice_idx() const { return slice_idx_; }
-  TO_STRING_KV(K(is_inited_), K(tablet_id_), K(slice_idx_), K(storage_column_count_), K(row_count_), KP(storage_schema_), K(cg_macro_block_writers_.count()), K(unique_index_id_));
+  TO_STRING_KV(K(is_inited_), K(tablet_id_), K(slice_idx_), K(storage_column_count_), K(row_count_), KP(macro_block_writer_), K(unique_index_id_));
 protected:
   bool is_inited_;
   ObArenaAllocator allocator_;
   common::ObTabletID tablet_id_;
   int64_t slice_idx_;
   int64_t storage_column_count_;
-  const ObStorageSchema *storage_schema_;
-  ObArray<ObCgMacroBlockWriter *> cg_macro_block_writers_;
+  ObDDLMacroBlockWriter *macro_block_writer_;
   int64_t row_count_;
   uint64_t unique_index_id_; // for report conflict key if need
 };
@@ -91,7 +90,7 @@ public:
     is_inited_(false),
     ddl_dag_(nullptr),
     row_count_(0),
-    cg_row_file_generator_() { }
+    row_file_generator_() { }
   virtual ~ObTabletSliceTempFileWriter()
   {
     reset();
@@ -108,7 +107,7 @@ protected:
   bool is_inited_;
   ObDDLIndependentDag *ddl_dag_;
   int64_t row_count_;
-  ObCGRowFilesGenerater cg_row_file_generator_;
+  ObDDLRowFileGenerator row_file_generator_;
 };
 class ObTabletSliceIncWriter final : public ObITabletSliceWriter
 {
@@ -127,7 +126,7 @@ private:
   bool is_inited_;
   ObArenaAllocator allocator_;
   int64_t storage_column_count_;
-  ObCgMacroBlockWriter *macro_block_writer_;
+  ObDDLMacroBlockWriter *macro_block_writer_;
   int64_t row_count_;
 };
 
@@ -266,27 +265,12 @@ protected:
   ObDDLRowBuffer buffer_;
 };
 
-class ObCsReplicaTabletSliceWriter : public ObTabletSliceWriter
+// Buffered slice writer for vectorized DDL input.
+class ObBatchSliceWriter : public ObRsSliceWriter
 {
 public:
-  ObCsReplicaTabletSliceWriter() : cg_row_tmp_files_writer_() { };
-  virtual ~ObCsReplicaTabletSliceWriter() = default;
-  virtual int init(const ObWriteMacroParam &param) override;
-  virtual int append_row(const blocksstable::ObDatumRow &row) override;
-  virtual int append_batch(const blocksstable::ObBatchDatumRows &batch_rows) override;
-  virtual int close() override;
-  void reset();
-
-protected:
-  ObTabletSliceBufferTempFileWriter cg_row_tmp_files_writer_;
-};
-
-// column store slice writer
-class ObCsSliceWriter : public ObRsSliceWriter
-{
-public:
-  ObCsSliceWriter();
-  virtual ~ObCsSliceWriter();
+  ObBatchSliceWriter();
+  virtual ~ObBatchSliceWriter();
   // max_batch_size parameter for heap table path
   int init(const ObWriteMacroParam &write_param,
            const bool direct_write_macro_block,
@@ -296,7 +280,7 @@ public:
   virtual int append_current_batch(const ObIArray<ObIVector *> &vectors, share::ObBatchSelector &selector);
   virtual int64_t get_row_count() const override { return row_buffer_.size() + (OB_NOT_NULL(storage_slice_writer_) ? storage_slice_writer_->get_row_count() : 0); }
   virtual int close();
-  INHERIT_TO_STRING_KV("RowStoreSliceWriter", ObRsSliceWriter, K(need_convert_storage_column_), K(direct_write_macro_block_), K(row_buffer_size_), K(row_buffer_.size()));
+  INHERIT_TO_STRING_KV("RowStoreSliceWriter", ObRsSliceWriter, K(need_convert_storage_value_), K(direct_write_macro_block_), K(row_buffer_size_), K(row_buffer_.size()));
 
 protected:
   int convert_to_storage_vector(ObIArray<ObIVector *> &vectors, share::ObBatchSelector &selector);
@@ -308,10 +292,10 @@ protected:
 
 protected:
   ObArenaAllocator arena_;
-  bool need_convert_storage_column_;
+  bool need_convert_storage_value_;
   bool direct_write_macro_block_;
   int64_t row_buffer_size_;
-  ObDirectLoadBatchRows row_buffer_; // columns store need buffer rows to opt performance. idempotence need row buffer to keep same batch size
+  ObDirectLoadBatchRows row_buffer_;
   blocksstable::ObBatchDatumRows buffer_batch_rows_;
   bool need_check_rowkey_order_;
   ObArenaAllocator rowkey_arena_;
@@ -319,7 +303,7 @@ protected:
   blocksstable::ObStorageDatumUtils datum_utils_;
 };
 
-class ObHeapCsSliceWriter : public ObCsSliceWriter
+class ObHeapBatchSliceWriter : public ObBatchSliceWriter
 {
 public:
   int init(const ObWriteMacroParam &write_param,
@@ -335,7 +319,7 @@ public:
   int set_active_row(const uint16_t row_idx) { return active_array_.push_back(row_idx); }
   const ObIArray<uint16_t> &get_active_array() const { return active_array_; }
   void reuse_active_array() { active_array_.reuse(); }
-  INHERIT_TO_STRING_KV("ColumnStoreSliceWriter", ObCsSliceWriter, K(heap_info_));
+  INHERIT_TO_STRING_KV("HeapBatchSliceWriter", ObBatchSliceWriter, K(heap_info_));
 
 private:
   ObHeapSliceInfo heap_info_;
@@ -347,4 +331,3 @@ private:
 }// namespace oceanbase
 
 #endif//_STORAGE_DDL_OB_TABLET_SLICE_WRITER_
-

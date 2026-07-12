@@ -28,28 +28,6 @@ namespace oceanbase
 {
 namespace blocksstable
 {
-struct ObCGRowKeyTransHelper final
-{
-public:
-  ObCGRowKeyTransHelper();
-  ~ObCGRowKeyTransHelper() = default;
-  int trans_to_cg_range(
-      const int64_t start_row_offset,
-      const ObDatumRange &range);
-  int trans_to_cg_rowkey(
-      const int64_t start_row_offset,
-      const ObDatumRowkey &rowkey,
-      const bool is_start_key = true);
-  const ObDatumRowkey &get_result_start_key() const { return result_range_.start_key_; }
-  const ObDatumRowkey &get_result_end_key() const { return result_range_.end_key_; }
-  const ObDatumRange &get_result_range() const { return result_range_; }
-
-private:
-  ObDatumRange result_range_;
-  ObStorageDatum datums_[2];
-  DISALLOW_COPY_AND_ASSIGN(ObCGRowKeyTransHelper);
-};
-
 struct ObIndexBlockTreePathItem
 {
   ObIndexBlockTreePathItem()
@@ -180,7 +158,7 @@ public:
   int move_forward(const bool is_reverse_scan);
   int move_forward_micro(const uint64_t step);
 
-  TO_STRING_KV(K_(cursor_path), K_(is_normal_cg_sstable), K_(curr_path_item));
+  TO_STRING_KV(K_(cursor_path), K_(curr_path_item));
 public:
   // Interfaces to get data on index tree via cursor
   int get_idx_parser(const ObIndexBlockRowParser *&parser);
@@ -279,8 +257,6 @@ private:
 
   // Micro Block Cache Read/Prefetch
   TreeType tree_type_;
-  ObCGRowKeyTransHelper rowkey_helper_;
-  
   int64_t rowkey_column_cnt_;
 
   ObIndexBlockTreePathItem *curr_path_item_;
@@ -290,7 +266,6 @@ private:
   ObIndexBlockRowParser idx_row_parser_;
   const ObITableReadInfo *read_info_;
   ObSSTableMetaHandle sstable_meta_handle_;
-  bool is_normal_cg_sstable_;
   bool is_inited_;
 };
 

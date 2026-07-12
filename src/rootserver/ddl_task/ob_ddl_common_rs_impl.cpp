@@ -47,7 +47,6 @@
 #include "share/location_cache/ob_location_service.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
-#include "storage/ddl/ob_group_write_macro_block_task.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
 #include "rootserver/ob_index_builder.h"
 #include "lib/worker.h"
@@ -1334,7 +1333,6 @@ int ObDDLUtil::check_and_cancel_single_replica_dag(
         arg.execution_id_ = 1; // to ensure arg valid only.
         arg.data_format_version_ = data_format_version; // to ensure arg valid only.
         arg.tablet_task_id_ = 1; // to ensure arg valid only.
-        arg.consumer_group_id_ = 0; // to ensure arg valid only.
         for (int64_t j = 0; OB_SUCC(ret) && j < paxos_server_list.count(); j++) {
           int tmp_ret = OB_SUCCESS;
           obcall::Bool is_replica_dag_exist(true);

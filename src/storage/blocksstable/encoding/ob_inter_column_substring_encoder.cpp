@@ -392,8 +392,8 @@ int ObInterColSubStrEncoder::store_fix_data(ObBufferWriter &buf_writer)
   } else {
     EmptyGetter getter;
     ColumnDataSetter setter(*this);
-    if (OB_FAIL(fill_column_store(buf_writer, *ctx_->col_datums_, getter, setter))) {
-      LOG_WARN("fill inter column substr column store failed", K(ret));
+    if (OB_FAIL(fill_fixed_data(buf_writer, *ctx_->col_datums_, getter, setter))) {
+      LOG_WARN("fill fixed data failed", K(ret));
     }
   }
   return ret;

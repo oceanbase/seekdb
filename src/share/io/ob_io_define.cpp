@@ -20,7 +20,6 @@
 #include "share/ob_force_print_log.h"
 #include "lib/ob_define.h"
 #include "share/config/ob_server_config.h"
-#include "share/resource_manager/ob_resource_plan_info.h"
 #include "ob_io_define.h"
 #include "share/io/ob_io_manager.h"
 #include "lib/restore/ob_object_device.h"
@@ -172,7 +171,6 @@ const char *oceanbase::common::get_io_sys_group_name(ObIOModule module)
 /******************             IOFlag              **********************/
 ObIOFlag::ObIOFlag()
     : mode_(0),
-      func_type_(oceanbase::share::ObFunctionType::DEFAULT_FUNCTION),
       wait_event_id_(0),
       is_sync_(false),
       is_unlimited_(false),
@@ -181,7 +179,6 @@ ObIOFlag::ObIOFlag()
       is_sealed_(true),
       need_close_dev_and_fd_(false),
       reserved_(0),
-      group_id_(USER_RESOURCE_OTHER_GROUP_ID),
       sys_module_id_(OB_INVALID_ID)
 {
 }
@@ -194,7 +191,6 @@ ObIOFlag::~ObIOFlag()
 void ObIOFlag::reset()
 {
   mode_ = 0;
-  group_id_ = USER_RESOURCE_OTHER_GROUP_ID;
   sys_module_id_ = OB_INVALID_ID;
   wait_event_id_ = 0;
   is_sync_ = false;
@@ -204,14 +200,12 @@ void ObIOFlag::reset()
   is_sealed_ = true;
   need_close_dev_and_fd_ = false;
   reserved_ = 0;
-  group_id_ = USER_RESOURCE_OTHER_GROUP_ID;
   sys_module_id_ = OB_INVALID_ID;
 }
 
 bool ObIOFlag::is_valid() const
 {
   return mode_ >= 0 && mode_ < static_cast<int>(ObIOMode::MAX_MODE)
-    && is_valid_group(group_id_)
     && wait_event_id_ > 0;
 }
 
@@ -225,33 +219,9 @@ ObIOMode ObIOFlag::get_mode() const
   return static_cast<ObIOMode>(mode_);
 }
 
-void ObIOFlag::set_resource_group_id(const uint64_t group_id)
-{
-  if (!is_valid_resource_group(group_id)) {
-    group_id_ = USER_RESOURCE_OTHER_GROUP_ID;
-  } else {
-    group_id_ = group_id;
-  }
-}
-
-void ObIOFlag::set_func_type(const uint8_t func_type)
-{
-  func_type_ = func_type;
-}
-
-uint8_t ObIOFlag::get_func_type() const
-{
-  return func_type_;
-}
-
 void ObIOFlag::set_wait_event(int64_t wait_event_id)
 {
   wait_event_id_ = wait_event_id;
-}
-
-uint64_t ObIOFlag::get_resource_group_id() const
-{
-  return group_id_;
 }
 
 uint64_t ObIOFlag::get_sys_module_id() const
@@ -266,8 +236,7 @@ void ObIOFlag::set_sys_module_id(const uint64_t sys_module_id)
 
 bool ObIOFlag::is_sys_module() const
 {
-  return USER_RESOURCE_OTHER_GROUP_ID == group_id_ 
-          && sys_module_id_ >= SYS_MODULE_START_ID
+  return sys_module_id_ >= SYS_MODULE_START_ID
           && sys_module_id_ < SYS_MODULE_END_ID;
 }
 
@@ -461,7 +430,7 @@ bool ObSNIOInfo::is_valid() const
     // in order to address concurrent write issues, archive checkpoint module would write
     // multiple non-content objects (it stores content in object name) whose size = 0
     && (flag_.is_sync() ? size_ >= 0 : size_ > 0)
-    && timeout_us_ >= 0 //todo qilu: reopen after column_store steady
+    && timeout_us_ >= 0
     && flag_.is_valid()
     && (flag_.is_read() || nullptr != buf_);
 }
@@ -593,7 +562,7 @@ bool ObIOResult::is_valid() const
     // in order to address concurrent write issues, archive checkpoint module would write
     // multiple non-content objects (it stores content in object name) whose size = 0
     && (flag_.is_sync() ? size_ >= 0 : size_ > 0)
-    && timeout_us_ >= 0 //todo qilu: reopen after column_store steady
+    && timeout_us_ >= 0
     && flag_.is_valid()
     && (flag_.is_read() ? (nullptr != io_callback_ || nullptr != user_data_buf_ || flag_.is_detect()) : nullptr != buf_);
 }
@@ -633,8 +602,6 @@ int ObIOResult::init(const ObIOInfo &info)
     offset_ = info.offset_;
     size_ = info.size_;
     flag_ = info.flag_;
-    flag_.set_func_type(GET_FUNC_TYPE());
-    flag_.set_resource_group_id(GET_GROUP_ID());
     timeout_us_ = info.timeout_us_;
     if (timeout_us_ <= 0) {
       if (REACH_TIME_INTERVAL(10 * 1000 * 1000L)) {  // 10s
@@ -717,7 +684,7 @@ ObIOMode ObIOResult::get_mode() const
 
 ObIOGroupKey ObIOResult::get_group_key() const
 {
-  return ObIOGroupKey(flag_.get_resource_group_id(), is_object_device_req_ ? get_mode() : ObIOMode::MAX_MODE);
+  return ObIOGroupKey(0, is_object_device_req_ ? get_mode() : ObIOMode::MAX_MODE);
 }
 
 uint64_t ObIOResult::get_sys_module_id() const
@@ -831,7 +798,6 @@ void ObIOResult::finish(const ObIORetCode &ret_code, ObIORequest *req)
             OB_IO_MANAGER.get_tc().calc_usage(*req);
           }
         }
-        tenant_io_mgr_->io_func_infos_.accumulate(*req);
         // record io error
         if (OB_UNLIKELY(OB_IO_ERROR == ret_code_.io_ret_)) {
           OB_IO_MANAGER.get_device_health_detector().record_io_error(*this, *req);
@@ -1118,15 +1084,6 @@ int64_t ObIORequest::timeout_ts() const
   return nullptr == io_result_ ? 0 : io_result_->time_log_.begin_ts_ > 0 ? io_result_->time_log_.begin_ts_ + io_result_->timeout_us_ : 0;
 }
 
-
-oceanbase::share::ObFunctionType ObIORequest::get_func_type() const
-{
-  oceanbase::share::ObFunctionType func_type = oceanbase::share::ObFunctionType::DEFAULT_FUNCTION;
-  if (io_result_ != nullptr) {
-    func_type = static_cast<oceanbase::share::ObFunctionType>(get_flag().get_func_type());
-  }
-  return func_type;
-}
 
 bool ObIORequest::is_sys_module() const
 {
@@ -1948,114 +1905,7 @@ int ObTenantIOConfig::deep_copy(const ObTenantIOConfig &other_config)
   return ret;
 }
 
-//for unittest and performance test script
-int ObTenantIOConfig::parse_group_config(const char *config_str)
-{
-  int ret = OB_SUCCESS;
-  const int64_t max_config_length = 512;
-  char copied_str[max_config_length] = { 0 };
-  if (OB_ISNULL(config_str) || strlen(config_str) > max_config_length) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KCSTRING(config_str));
-  } else if (0 > snprintf(copied_str, max_config_length, "%s", config_str)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("copy config string failed", K(ret), KCSTRING(config_str));
-  } else {
-    str_trim(copied_str);
-    int pos = 0;
-    const int64_t len = strlen(copied_str);
-    for (int64_t i = 0; OB_SUCC(ret) && i < len; ++i) {
-      if (';' == copied_str[i]) {
-        copied_str[i] = '\0';
-      } else if (':' == copied_str[i]) {
-        copied_str[i] = ' ';
-      }
-    }
-    while (OB_SUCC(ret) && pos < len) {
-      const char *tmp_config_str = copied_str + pos;
-      int64_t group_id = 0;
-      char group_idx[max_config_length] = { 0 };
-      char group_namex[max_config_length] = { 0 };
-      ObTenantIOConfig::GroupConfig tmp_group_config;
-      int scan_count = sscanf(tmp_config_str, "%s %s %ld,%ld,%ld",
-                              group_idx,
-                              group_namex,
-                              &tmp_group_config.min_percent_,
-                              &tmp_group_config.max_percent_,
-                              &tmp_group_config.weight_percent_);
-      if (5 != scan_count) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("scan current group config failed", K(ret), K(scan_count), KCSTRING(tmp_config_str), K(tmp_group_config));
-      } else {
-        tmp_group_config.group_id_ = atoi(group_idx);
-        if (0 == tmp_group_config.group_id_) {
-          group_configs_.at((uint8_t)ObIOMode::MAX_MODE) = tmp_group_config;
-        } else if (OB_FAIL(group_configs_.push_back(tmp_group_config))) {
-          LOG_WARN("push back group config failed", K(ret), K(tmp_group_config));
-        }
-        pos += strlen(tmp_config_str) + 1;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      // decide the config of other group
-      int64_t sum_min_percent = 0;
-      int64_t sum_weight_percent = 0;
-      for (uint8_t i = (uint8_t)ObIOMode::READ; i <= (uint8_t)ObIOMode::MAX_MODE; ++i) {
-        for (int64_t j = 0; j < group_configs_.count(); ++j) {
-          if (group_configs_.at(j).is_valid() && group_configs_.at(j).group_id_ != 0) {
-            sum_min_percent += group_configs_.at(j).min_percent_;
-            sum_weight_percent += group_configs_.at(j).weight_percent_;
-          }
-        }
-        if (0 == group_configs_.at(i).group_id_
-            && 0 == group_configs_.at(i).min_percent_
-            && 0 == group_configs_.at(i).max_percent_
-            && 0 == group_configs_.at(i).weight_percent_
-            && sum_weight_percent < 100) {
-          group_configs_.at(i).min_percent_ = 100 - sum_min_percent;
-          group_configs_.at(i).max_percent_ = 100;
-          group_configs_.at(i).weight_percent_ = 100 - sum_weight_percent;
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTenantIOConfig::add_single_group_config(const ObIOGroupKey &key,
-                                              const char *group_name,
-                                              int64_t min_percent,
-                                              int64_t max_percent,
-                                              int64_t weight_percent)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_resource_manager_group(key.group_id_)) || !true ||
-      min_percent < 0 || min_percent > 100 ||
-      max_percent < 0 || max_percent > 100 ||
-      weight_percent < 0 || weight_percent > 100 || 
-      min_percent > max_percent) {
-    ret = OB_INVALID_CONFIG;
-    LOG_WARN("invalid group config", K(ret), K(key.group_id_), K(min_percent), K(max_percent), K(weight_percent));
-  } else {
-    ObTenantIOConfig::GroupConfig tmp_group_config;
-    strncpy(tmp_group_config.group_name_, group_name, common::OB_MAX_RESOURCE_PLAN_NAME_LENGTH);
-    tmp_group_config.group_name_[common::OB_MAX_RESOURCE_PLAN_NAME_LENGTH - 1] = '\0';
-    tmp_group_config.min_percent_ = min_percent;
-    tmp_group_config.max_percent_ = max_percent;
-    tmp_group_config.weight_percent_ = weight_percent;
-    tmp_group_config.group_id_ = key.group_id_;
-    tmp_group_config.mode_ = key.mode_;
-    if (OB_UNLIKELY(!tmp_group_config.is_valid())) {
-      ret = OB_INVALID_CONFIG;
-      LOG_WARN("invalid group config", K(ret), K(tmp_group_config));
-    } else if (OB_FAIL(group_configs_.push_back(tmp_group_config))) {
-      LOG_WARN("push back group config failed", K(ret), K(tmp_group_config));
-    }
-  }
-  return ret;
-}
-
-int ObTenantIOConfig::get_group_config(const uint64_t index, int64_t &min, int64_t &max, int64_t &weight) const
+int ObTenantIOConfig::calc_group_config(const uint64_t index, int64_t &min, int64_t &max, int64_t &weight) const
 {
   int ret = OB_SUCCESS;
   min = 0;

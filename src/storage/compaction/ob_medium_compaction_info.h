@@ -145,7 +145,7 @@ public:
       ret = OB_BUF_NOT_ENOUGH;
     } else {
       buf[pos++] = MAGIC_NUMBER;
-      ret = mds::ObMdsSerializeUtil::mds_key_serialize(medium_snapshot_, buf, buf_len, pos);
+      ret = storage::mds::ObMdsSerializeUtil::mds_key_serialize(medium_snapshot_, buf, buf_len, pos);
     }
     return ret;
   }
@@ -160,7 +160,7 @@ public:
       if (magic_number != MAGIC_NUMBER) {
         ob_abort();// compat case, just abort for fast fail
       } else {
-        ret = mds::ObMdsSerializeUtil::mds_key_deserialize(buf, buf_len, pos, tmp);
+        ret = storage::mds::ObMdsSerializeUtil::mds_key_deserialize(buf, buf_len, pos, tmp);
       }
     }
     if (OB_SUCC(ret)) {
@@ -168,7 +168,7 @@ public:
     }
     return ret;
   }
-  int64_t mds_get_serialize_size() const { return sizeof(MAGIC_NUMBER) + mds::ObMdsSerializeUtil::mds_key_get_serialize_size(medium_snapshot_); }
+  int64_t mds_get_serialize_size() const { return sizeof(MAGIC_NUMBER) + storage::mds::ObMdsSerializeUtil::mds_key_get_serialize_size(medium_snapshot_); }
 
   TO_STRING_KV(K_(medium_snapshot));
 private:
@@ -255,7 +255,7 @@ public:
       uint64_t medium_merge_reason_             : 8;
       uint64_t is_schema_changed_               : SCS_ONE_BIT;
        // record tenant of ls primary_leader, just for throw medium
-      uint64_t co_major_merge_type_             : 4;
+      uint64_t unused_co_major_merge_type_      : 4;
       uint64_t is_skip_tenant_major_            : SCS_ONE_BIT;
       uint64_t contain_mds_filter_info_         : SCS_ONE_BIT;
       uint64_t reserved_                        : SCS_RESERVED_BITS;

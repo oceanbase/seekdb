@@ -38,7 +38,7 @@ public:
   ObTableLoadMergeTableCtx();
   TO_STRING_KV(KP_(store_table_ctx), KP_(insert_table_ctx), KP_(table_store), KP_(dml_row_handler),
                "merge_mode", ObDirectLoadMergeMode::get_type_string(merge_mode_),
-               K_(use_batch_mode), K_(need_calc_range), K_(need_close_insert_tablet_ctx),
+               K_(need_close_insert_tablet_ctx),
                K_(is_del_lob));
 
 public:
@@ -47,9 +47,7 @@ public:
   storage::ObDirectLoadTableStore *table_store_;
   storage::ObDirectLoadDMLRowHandler *dml_row_handler_;
   ObDirectLoadMergeMode::Type merge_mode_;
-  bool use_batch_mode_; // full + columnar table
   // Things to do when the merge task is finished
-  bool need_calc_range_; // precondition for rescan
   bool need_close_insert_tablet_ctx_; // Does this merge need to close insert_table_ctx
   // special merge task marker
   bool is_del_lob_;
@@ -85,7 +83,6 @@ protected:
   {
     NONE = 0,
     MERGE_DATA,
-    RESCAN,
     DEL_LOB,
     COMPLETED
   };
@@ -93,7 +90,6 @@ protected:
 protected:
   ObTableLoadMergeTableCtx inner_ctx_;
   Status status_;
-  bool need_rescan_;
   bool need_del_lob_;
 };
 

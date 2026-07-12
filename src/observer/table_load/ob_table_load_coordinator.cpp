@@ -32,7 +32,6 @@
 #include "observer/table_load/ob_table_load_index_long_wait.h"
 #include "observer/omt/ob_tenant.h"
 #include "storage/direct_load/ob_direct_load_mem_define.h"
-#include "storage/ddl/ob_cg_row_tmp_file.h"
 #include "observer/table_load/ob_table_load_empty_insert_tablet_ctx_manager.h"
 
 namespace oceanbase
@@ -470,33 +469,11 @@ int ObTableLoadCoordinator::gen_apply_arg(ObDirectLoadResourceApplyArg &apply_ar
     int64_t parallel_servers_target = 0;
     if (ctx_->schema_.is_table_without_pk_) {
       // directly write the memory needed for macroblocks
-      if (!ctx_->schema_.is_column_store() ||
-          ObDirectLoadMethod::is_incremental(ctx_->param_.method_)) {
-        // row storage
-        part_unsort_memory = MACROBLOCK_BUFFER_SIZE; // Memory for DDL to construct macroblocks
-        min_part_memory = MACROBLOCK_BUFFER_SIZE; // Memory for DDL to construct macroblocks
-      } else {
-        // Column store
-        part_unsort_memory =
-          ctx_->schema_.cg_cnt_ *
-          ObCGRowFilesGenerater::CG_ROW_FILE_MEMORY_LIMIT; // Memory for DDL to write multiple CG temporary files simultaneously
-        min_part_memory =
-          MAX(ctx_->schema_.cg_cnt_ * ObCGRowFilesGenerater::CG_ROW_FILE_MEMORY_LIMIT,
-              MACROBLOCK_BUFFER_SIZE); // Memory for DDL to write multiple CG temporary files simultaneously, rescan constructs macro block memory by CG
-      }
+      part_unsort_memory = MACROBLOCK_BUFFER_SIZE;
+      min_part_memory = MACROBLOCK_BUFFER_SIZE;
     } else {
-      if (!ctx_->schema_.is_column_store() ||
-          ObDirectLoadMethod::is_incremental(ctx_->param_.method_)) {
-        // row storage
-        part_unsort_memory = SSTABLE_BUFFER_SIZE; // Memory for writing temporary files line by line
-        min_part_memory = MACROBLOCK_BUFFER_SIZE; // Memory for DDL to construct macroblocks
-      } else {
-        // Column store
-        part_unsort_memory = SSTABLE_BUFFER_SIZE; // Memory for writing temporary files by row
-        min_part_memory =
-          MAX(ctx_->schema_.cg_cnt_ * ObCGRowFilesGenerater::CG_ROW_FILE_MEMORY_LIMIT,
-              MACROBLOCK_BUFFER_SIZE); // Memory for DDL to write multiple CG temporary files simultaneously, rescan constructs macro block memory by CG
-      }
+      part_unsort_memory = SSTABLE_BUFFER_SIZE;
+      min_part_memory = MACROBLOCK_BUFFER_SIZE;
     }
     while (OB_SUCC(ret)) {
       apply_arg.apply_array_.reset();

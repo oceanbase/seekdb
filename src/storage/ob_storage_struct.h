@@ -34,7 +34,6 @@
 #include "storage/ob_tablet_ha_status.h"
 #include "storage/blocksstable/ob_major_checksum_info.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "storage/column_store/ob_column_store_replica_ddl_helper.h"
 
 namespace oceanbase
 {
@@ -189,8 +188,7 @@ struct ObTabletReportStatus
     : merge_snapshot_version_(0),
       cur_report_version_(0),
       data_checksum_(0),
-      row_count_(0),
-      found_cg_checksum_error_(false)
+      row_count_(0)
   {
   }
   ~ObTabletReportStatus() { };
@@ -201,14 +199,12 @@ struct ObTabletReportStatus
     data_checksum_ = 0;
     row_count_ = 0;
   }
-  bool need_report() const { return merge_snapshot_version_ > cur_report_version_ && INVALID_VAL != cur_report_version_; }
-  TO_STRING_KV(K_(merge_snapshot_version), K_(cur_report_version), K_(data_checksum), K_(row_count), K_(found_cg_checksum_error));
-  static constexpr int64_t INVALID_VAL = INT64_MIN;
+  bool need_report() const { return merge_snapshot_version_ > cur_report_version_; }
+  TO_STRING_KV(K_(merge_snapshot_version), K_(cur_report_version), K_(data_checksum), K_(row_count));
   int64_t merge_snapshot_version_;
   int64_t cur_report_version_;
   int64_t data_checksum_;
   int64_t row_count_;
-  bool found_cg_checksum_error_;
   OB_UNIS_VERSION(1);
 };
 
@@ -345,7 +341,7 @@ public:
                K_(ddl_start_scn), K_(ddl_commit_scn), K_(ddl_checkpoint_scn),
                K_(ddl_snapshot_version), K_(ddl_execution_id),
                K_(data_format_version), KP_(ddl_redo_callback),
-               KP_(ddl_finish_callback), K_(ddl_replay_status), K_(slice_sstables));
+               KP_(ddl_finish_callback), K(slice_sstables_.count()));
 
 public:
   bool keep_old_ddl_sstable_;
@@ -358,8 +354,6 @@ public:
   int64_t data_format_version_;
   blocksstable::ObIMacroBlockFlushCallback *ddl_redo_callback_;
   blocksstable::ObIMacroBlockFlushCallback *ddl_finish_callback_;
-  // used to decide storage type for replaying ddl clog in cs replica, see ObTabletMeta::ddl_replay_status_ for more detail
-  ObCSReplicaDDLReplayStatus ddl_replay_status_;
   ObArray<const blocksstable::ObSSTable *> slice_sstables_;
 };
 

@@ -964,16 +964,7 @@ int ObPartitionMultiRangeSpliter::get_tables(ObTableStoreIterator &table_iter,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Fail to get valid table", KR(ret), K(table_iter));
     } else if (table->is_major_sstable()) {
-      if (table->is_co_sstable()) {
-        ObCOSSTableV2 *co_sstable = static_cast<ObCOSSTableV2 *>(table);
-        if (co_sstable->is_rowkey_cg_base() && !co_sstable->is_cgs_empty_co_table()) {
-          major_size = co_sstable->get_cs_meta().occupy_size_;
-        } else {
-          major_size = co_sstable->get_occupy_size();
-        }
-      } else {
-        major_size = static_cast<ObSSTable *>(table)->get_occupy_size();
-      }
+      major_size = static_cast<ObSSTable *>(table)->get_occupy_size();
       last_major_sstable = table;
     } else if (table->is_minor_sstable()) {
       if (static_cast<ObSSTable *>(table)->get_occupy_size() <= MIN_SPLIT_TABLE_SIZE) {

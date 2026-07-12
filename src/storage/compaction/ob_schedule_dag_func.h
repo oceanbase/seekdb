@@ -49,7 +49,6 @@ class ObTenantDagScheduler;
 namespace compaction
 {
 struct ObTabletMergeDagParam;
-struct ObCOMergeDagParam;
 struct ObTabletSchedulePair;
 struct ObBatchFreezeTabletsParam;
 
@@ -75,8 +74,6 @@ public:
   static int schedule_lob_tablet_split_dag(
       storage::ObLobSplitParam &param,
       const bool is_emergency = false);
-  static int schedule_tablet_co_merge_dag_net(
-      ObCOMergeDagParam &param);
   static int schedule_and_get_lob_tablet_split_dag(
       storage::ObLobSplitParam &param,
       storage::ObTabletLobSplitDag *&dag,
@@ -94,14 +91,6 @@ public:
 class ObDagParamFunc final
 {
 public:
-  static int fill_param(
-    const share::ObLSID &ls_id,
-    const storage::ObTablet &tablet,
-    const ObMergeType merge_type,
-    const int64_t &merge_snapshot_version,
-    const ObExecMode exec_mode,
-    const share::ObDagId *dag_net_id,
-    ObCOMergeDagParam &param);
   static int fill_param(
     const share::ObLSID &ls_id,
     const storage::ObTablet &tablet,

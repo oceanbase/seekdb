@@ -76,8 +76,6 @@ struct ObMergeParameter {
   /* rest variables are different for MergeTask */
   ObVersionRange merge_version_range_; // modify for different merge_type
   blocksstable::ObDatumRange merge_range_; // rowkey_range
-  blocksstable::ObDatumRange merge_rowid_range_;
-  ObITableReadInfo *cg_rowkey_read_info_;
   compaction::ObCachedTransStateMgr *trans_state_mgr_;
   share::ObDiagnoseLocation *error_location_;
   ObMviewMergeParameter *mview_merge_param_;
@@ -85,7 +83,6 @@ struct ObMergeParameter {
 
   int64_t to_string(char* buf, const int64_t buf_len) const;
 private:
-  int set_merge_rowid_range(ObIAllocator *allocator);
   int init_mview_merge_param(ObIAllocator *allocator);
   DISALLOW_COPY_AND_ASSIGN(ObMergeParameter);
 };
@@ -227,7 +224,6 @@ public:
   int prepare_merge_ctx(bool &finish_flag); // should be called when the first task of dag starts running
   virtual int64_t to_string(char* buf, const int64_t buf_len) const override;
   virtual lib::Worker::CompatMode get_compat_mode() const override { return compat_mode_; }
-  virtual uint64_t get_consumer_group_id() const override { return consumer_group_id_; }
   virtual int gene_compaction_info(compaction::ObTabletCompactionProgress &progress) override;
   virtual int diagnose_compaction_info(compaction::ObDiagnoseTabletCompProgress &progress) override;
   virtual void set_dag_error_location() override;
@@ -242,12 +238,10 @@ protected:
   int collect_compaction_param(const ObTabletHandle &tablet_handle);
   void fill_compaction_progress(compaction::ObTabletCompactionProgress &progress,
       ObBasicTabletMergeCtx &ctx,
-      compaction::ObPartitionMergeProgress *input_progress,
-      int64_t start_cg_idx = 0, int64_t end_cg_idx = 0);
+      compaction::ObPartitionMergeProgress *input_progress);
   void fill_diagnose_compaction_progress(compaction::ObDiagnoseTabletCompProgress &progress,
       ObBasicTabletMergeCtx *ctx,
-      compaction::ObPartitionMergeProgress *input_progress,
-      int64_t start_cg_idx = 0, int64_t end_cg_idx = 0);
+      compaction::ObPartitionMergeProgress *input_progress);
   bool is_inited_;
   lib::Worker::CompatMode compat_mode_;
   ObBasicTabletMergeCtx *ctx_;

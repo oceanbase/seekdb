@@ -156,17 +156,6 @@ create index mv_idx1 on collect_info_mv(item_id);
 --error 1235
 alter table collect_info_mv add index mv_idx1(item_id);
 
-## ------------check mv creation constraint------------
-# check column store mv is not supported
---error 9783
-create materialized view collect_info_mv2 (primary key(user_id, item_id)) partition by hash(user_id) partitions 4 WITH COLUMN GROUP(each column) refresh fast enable query rewrite enable on query computation as select collect_info.user_id, collect_info.item_id, collect_item.item_id dup_item_id, collect_item.price from collect_info inner join collect_item on collect_info.item_id = collect_item.item_id;
-create table collect_info_col(user_id int, item_id int, primary key(user_id, item_id)) partition by hash(user_id) partitions 4 WITH COLUMN GROUP(each column);
-create table collect_item_col(item_id int, price int, primary key(item_id)) duplicate_scope = 'cluster' duplicate_read_consistency = 'weak' WITH COLUMN GROUP(each column);
---error 9783
-create materialized view collect_info_mv3 (primary key(user_id, item_id)) partition by hash(user_id) partitions 4 refresh fast enable query rewrite enable on query computation as select collect_info_col.user_id, collect_info_col.item_id, collect_item.item_id dup_item_id, collect_item.price from collect_info_col inner join collect_item on collect_info_col.item_id = collect_item.item_id;
---error 9783
-create materialized view collect_info_mv4 (primary key(user_id, item_id)) partition by hash(user_id) partitions 4 refresh fast enable query rewrite enable on query computation as select collect_info.user_id, collect_info.item_id, collect_item_col.item_id dup_item_id, collect_item_col.price from collect_info inner join collect_item_col on collect_info.item_id = collect_item_col.item_id;
-
 ## ------------clean up------------
 connection sys;
 set ob_global_debug_sync = 'CREATE_TABLE_BEFORE_PUBLISH_SCHEMA clear';

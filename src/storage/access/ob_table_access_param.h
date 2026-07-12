@@ -61,22 +61,15 @@ public:
   }
   int refresh_lob_column_out_status();
   bool enable_fuse_row_cache(const ObQueryFlag &query_flag, const StorageScanType scan_type) const;
-  //temp solution
-  int get_cg_column_param(const share::schema::ObColumnParam *&column_param) const;
   int build_index_filter_for_row_store(common::ObIAllocator *allocator);
   const ObITableReadInfo *get_read_info(const bool is_get = false) const
   {
 	  return is_get ? rowkey_read_info_ : read_info_;
   }
-  int get_index_read_info(const bool is_cg, const ObITableReadInfo *&index_read_info) const
+  int get_index_read_info(const ObITableReadInfo *&index_read_info) const
   {
-    int ret = OB_SUCCESS;
-    if (is_cg) {
-      ret = share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info);
-    } else {
-      index_read_info = read_info_;
-    }
-    return ret;
+    index_read_info = read_info_;
+    return OB_SUCCESS;
   }
   OB_INLINE int64_t get_out_col_cnt() const
   {
@@ -126,21 +119,6 @@ public:
   {
     return (read_info_ != nullptr && read_info_ != rowkey_read_info_) ? read_info_->need_truncate_filter() : false;
   }
-  bool can_be_reused(const uint32_t cg_idx, const common::ObIArray<sql::ObExpr*> &exprs, const bool is_aggregate)
-  {
-    const sql::ObExprPtrIArray *inner_exprs = is_aggregate ? aggregate_exprs_ : output_exprs_;
-    bool can_reuse = cg_idx == cg_idx_ && enable_pd_aggregate() == is_aggregate
-                      && nullptr != inner_exprs && inner_exprs->count() == exprs.count() ;
-    if (can_reuse) {
-      for (int64_t i = 0; i < exprs.count(); ++i) {
-        if (inner_exprs->at(i) != exprs.at(i)) {
-          can_reuse = false;
-          break;
-        }
-      }
-    }
-    return can_reuse;
-  }
   OB_INLINE bool need_fill_group_idx() const
   { return get_group_idx_col_index() != common::OB_INVALID_INDEX; }
   OB_INLINE int64_t get_ss_rowkey_prefix_cnt() const
@@ -188,12 +166,6 @@ public:
   OB_INLINE bool is_tablet_spliting() const
   { return is_tablet_spliting_; }
   bool need_trans_info() const;
-  OB_INLINE bool is_use_column_store() const
-  { return !(get_read_info()->has_all_column_group()) || pd_storage_flag_.is_use_column_store(); }
-  OB_INLINE void set_use_column_store()
-  { return pd_storage_flag_.set_use_column_store(true); }
-  OB_INLINE void set_not_use_column_store()
-  { return pd_storage_flag_.set_use_column_store(false); }
   OB_INLINE bool is_use_global_iter_pool() const
   { return pd_storage_flag_.is_use_global_iter_pool(); }
   OB_INLINE void set_use_global_iter_pool()
@@ -215,14 +187,9 @@ public:
   uint64_t table_id_;
   common::ObTabletID tablet_id_;
   share::ObLSID ls_id_;
-  uint32_t cg_idx_;
   const ObITableReadInfo *read_info_;
   const ObITableReadInfo *rowkey_read_info_;
   const ObTabletHandle *tablet_handle_; //for ddl merge_query
-  ObCGReadInfoHandle cg_read_info_handle_;
-  //TODO(huronghui.hrh):temp solution
-  const ObColumnParam *cg_col_param_;
-  const common::ObIArray<ObTableReadInfo *> *cg_read_infos_;
   const common::ObIArray<int32_t> *out_cols_project_;
   const common::ObIArray<int32_t> *agg_cols_project_;
   const common::ObIArray<int32_t> *group_by_cols_project_;
@@ -255,7 +222,6 @@ public:
   const sql::ObExpr *auto_split_filter_;
   sql::ExprFixedArray *auto_split_params_;
   bool is_tablet_spliting_;
-  bool is_column_replica_table_;
   bool is_delete_insert_;
   const bool *need_update_tablet_param_;
 };

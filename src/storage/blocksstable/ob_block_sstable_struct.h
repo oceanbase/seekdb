@@ -27,7 +27,6 @@
 #include "share/ob_encryption_util.h"
 #include "share/schema/ob_table_schema.h"
 #include "storage/blocksstable/encoding/ob_encoding_util.h"
-#include "storage/blocksstable/cs_encoding/ob_column_encoding_struct.h"
 #include "storage/blocksstable/ob_log_file_spec.h"
 #include "storage/blocksstable/ob_macro_block_common_header.h"
 #include "storage/blocksstable/ob_sstable_macro_block_header.h"
@@ -445,13 +444,11 @@ struct ObMicroBlockEncodingCtx
   int64_t column_cnt_;
   const common::ObIArray<share::schema::ObColDesc> *col_descs_;
   ObMicroBlockEncoderOpt encoder_opt_;
-  ObCSEncodingOpt cs_encoding_opt_;
 
   mutable int64_t estimate_block_size_;
   mutable int64_t real_block_size_;
   mutable int64_t micro_block_cnt_; // build micro block count
   mutable common::ObArray<ObPreviousEncodingArray<MAX_PREV_ENCODING_COUNT> > previous_encodings_;
-  mutable ObPreviousCSEncoding previous_cs_encoding_;
 
   int64_t *column_encodings_;
   int64_t major_working_cluster_version_;
@@ -464,9 +461,9 @@ struct ObMicroBlockEncodingCtx
 
   ObMicroBlockEncodingCtx() : macro_block_size_(0), micro_block_size_(0),
     rowkey_column_cnt_(0), column_cnt_(0), col_descs_(nullptr),
-    encoder_opt_(), cs_encoding_opt_(), estimate_block_size_(0),
+    encoder_opt_(), estimate_block_size_(0),
     real_block_size_(0), micro_block_cnt_(0),
-    previous_encodings_(), previous_cs_encoding_(),
+    previous_encodings_(),
     column_encodings_(nullptr), major_working_cluster_version_(0),
     row_store_type_(ENCODING_ROW_STORE), need_calc_column_chksum_(false),
     compressor_type_(INVALID_COMPRESSOR), encoding_granularity_(UINT64_MAX),

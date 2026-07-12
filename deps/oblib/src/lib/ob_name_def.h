@@ -177,7 +177,6 @@
 #define N_QID "query_id"
 #define N_PLAN_ID "plan_id"
 #define N_SQL_ID "sql_id"
-#define N_CG_ID "column_group_id"
 #define N_ROWKEY_ID "rowkey_id"
 #define N_JOIN_TID "join_table_id"
 #define N_JOIN_CID "join_column_id"

@@ -15,7 +15,6 @@ connect (conn_admin, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection conn_admin;
 alter system flush plan cache global;
 set @@ob_enable_plan_cache = 0;
-alter system set default_table_store_format = "row";
 --sleep 5
 --sleep 2
 --echo // Case1: normal test. 

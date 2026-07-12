@@ -56,7 +56,6 @@ int ObTabletCreatorArg::init(
     const uint64_t tenant_data_version,
     const ObIArray<bool> &need_create_empty_majors,
     const ObIArray<int64_t> &create_commit_versions,
-    const bool has_cs_replica,
     const ObIArray<share::ObForkTabletInfo> &fork_tablet_infos)
 {
   int ret = OB_SUCCESS;
@@ -90,7 +89,6 @@ int ObTabletCreatorArg::init(
     compat_mode_ = mode;
     is_create_bind_hidden_tablets_ = is_create_bind_hidden_tablets;
     tenant_data_version_ = tenant_data_version;
-    has_cs_replica_ = has_cs_replica;
   }
   return ret;
 }
@@ -104,21 +102,20 @@ int ObTabletCreatorArg::init(
     const bool is_create_bind_hidden_tablets,
     const uint64_t tenant_data_version,
     const ObIArray<bool> &need_create_empty_majors,
-    const ObIArray<int64_t> &create_commit_versions,
-    const bool has_cs_replica)
+    const ObIArray<int64_t> &create_commit_versions)
 {
   ObArray<share::ObForkTabletInfo> empty_fork_tablet_infos;
   return init(tablet_ids, ls_key, data_tablet_id, table_schemas, mode,
               is_create_bind_hidden_tablets, tenant_data_version,
               need_create_empty_majors, create_commit_versions,
-              has_cs_replica, empty_fork_tablet_infos);
+              empty_fork_tablet_infos);
 }
 
 DEF_TO_STRING(ObTabletCreatorArg)
 {
   int64_t pos = 0;
   J_KV(K_(compat_mode), K_(tablet_ids), K_(data_tablet_id), K_(ls_key), K_(table_schemas), K_(is_create_bind_hidden_tablets), 
-    K_(tenant_data_version), K_(need_create_empty_majors), K_(create_commit_versions), K_(has_cs_replica), K_(fork_tablet_infos));
+    K_(tenant_data_version), K_(need_create_empty_majors), K_(create_commit_versions), K_(fork_tablet_infos));
   return pos;
 }
 
@@ -178,7 +175,6 @@ int ObBatchCreateTabletHelper::add_arg_to_batch_arg(
                             tablet_arg.compat_mode_,
                             tablet_arg.is_create_bind_hidden_tablets_,
                             tablet_arg.create_commit_versions_,
-                            tablet_arg.has_cs_replica_,
                             tablet_arg.fork_tablet_infos_))) {
         LOG_WARN("failed to init create tablet info", KR(ret), K(index_array), K(tablet_arg));
       } else if (OB_FAIL(batch_arg_.tablets_.push_back(info))) {
@@ -200,23 +196,6 @@ int ObBatchCreateTabletHelper::add_table_schema_(
   HEAP_VAR(ObTableSchema, table_schema) {
   if (OB_FAIL(table_schema.assign(const_table_schema))) {
     LOG_WARN("failed to assign table_schema", KR(ret), K(const_table_schema));
-  } else if (table_schema.is_user_table() && table_schema.is_table_with_hidden_pk_column()) {
-    /*
-     * When creating heap table (no explicit primary key), or doing offline ddl to drop primary key, the column array in table_schema here is out of order actually.
-     * The `__pk_increment` column is pushed back into column array with column_id 1, and in the LAST of column array in table schema.
-     * Column array in storage schema will be used to construct column group in C-replica, so the `__pk_increment` cg will be the LAST cg.
-     * However, the table schema read from schema_guard (__all_column table) when doing compaction will sort the column array by column id,
-     * so the `__pk_increment` cg will be the FIRST cg when compaction, which cause data inconsistency.
-     *
-     * So we need to sort column array by column id for heap table when creating tablet.
-     * 
-     * testcases:
-     * - tools/deploy/mysql_test/test_suite/column_store_replica/t/drop_heap_table_primary_key.test
-     * - tools/obtest/t/errsim_storage_compaction/column_store_replica/test_rebuild_heap_table_migrate_major.test
-     */
-    if (OB_FAIL(table_schema.sort_column_array_by_column_id())) {
-      LOG_WARN("failed to sort column array", K(ret), K(table_schema));
-    }
   }
 
   if (OB_FAIL(ret)) {

@@ -136,7 +136,7 @@ private:
   }
   bool store_var_dict() const { return 0 > dict_fix_data_size_ || UINT16_MAX < dict_fix_data_size_; }
 
-  struct ColumnStoreFiller;
+  struct FixedDataFiller;
 private:
   ObObjTypeStoreClass store_class_;
   int64_t type_store_size_;

@@ -52,15 +52,11 @@ public:
   void set_migrating();
   void reset_migrating();
 
-  bool is_columnstore() const;
-  void set_columnstore();
-
   TO_STRING_KV(K_(server), K_(timestamp), K_(flag));
   TO_YSON_KV(OB_Y_(server), OB_ID(t), timestamp_, OB_Y_(flag));
   OB_UNIS_VERSION(1);
 protected:
-  static const int64_t MIGRATING_FLAG_BIT = 1;
-  static const int64_t COLUMNSTORE_FLAG_BIT = 0;
+  static const int64_t MIGRATING_FLAG_BIT = 0;
   common::ObAddr server_;
   int64_t timestamp_;
   int64_t flag_;
@@ -111,8 +107,7 @@ public:
       replica_type_(REPLICA_TYPE_FULL),
       memstore_percent_(100)
   {}
-  // construct with server, timestamp and replica_type,
-  //   this func will set columnstore flag if replica_type is C.
+  // construct with server, timestamp and replica_type.
   ObReplicaMember(const common::ObAddr &server,
                   const int64_t timestamp,
                   const common::ObReplicaType replica_type,
@@ -120,19 +115,13 @@ public:
     : ObMember(ObMember(server, timestamp)),
       replica_type_(replica_type),
       memstore_percent_(memstore_percent)
-  {
-    if (REPLICA_TYPE_COLUMNSTORE == replica_type) {
-      ObMember::set_columnstore();
-    }
-  }
+  {}
 public:
   // init with server, timestamp, replica_type.
-  //   this func will set columnstore flag if replica_type is C.
   int init(const common::ObAddr &server,
            const int64_t timestamp,
            const common::ObReplicaType replica_type);
-  // init with existing member whose flag_ may have been set.
-  //   this function will check whether flag_ is consistent with replica_type.
+  // init with an existing member.
   int init(const ObMember &member,
            const common::ObReplicaType replica_type);
   common::ObReplicaType get_replica_type() const;

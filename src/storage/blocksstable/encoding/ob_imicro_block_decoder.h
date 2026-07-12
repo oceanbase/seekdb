@@ -80,7 +80,6 @@ protected:
   virtual int find_bound(const ObDatumRange &range, const int64_t begin_idx, int64_t &row_idx,
     bool &equal, int64_t &end_key_begin_idx, int64_t &end_key_end_idx) override;
 
-  // For column store
   virtual int find_bound(const ObDatumRowkey &key, const bool lower_bound, const int64_t begin_idx,
     const int64_t end_idx, int64_t &row_idx, bool &equal) override;
 

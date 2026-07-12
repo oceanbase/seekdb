@@ -32,7 +32,6 @@ OB_SERIALIZE_MEMBER(ObTenantAdminMergeRequest, type_);
 
 OB_SERIALIZE_MEMBER(ObTenantAdminMergeResponse, err_code_);
 
-OB_SERIALIZE_MEMBER(ObTabletMajorFreezeRequest, ls_id_, tablet_id_, is_rebuild_column_group_);
 
 } // namespace obcall
 } // namespace oceanbase

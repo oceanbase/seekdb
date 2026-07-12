@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "storage/access/ob_table_param.h"
-#include "storage/column_store/ob_column_store_replica_util.h"
+#include "sql/resolver/expr/ob_raw_expr.h"
 
 namespace oceanbase
 {
@@ -557,9 +557,7 @@ ObTableParam::ObTableParam(ObIAllocator &allocator)
     group_by_projector_(allocator),
     output_sel_mask_(allocator),
     pad_col_projector_(allocator),
-    read_param_version_(0),
     main_read_info_(),
-    cg_read_infos_(),
     has_virtual_column_(false),
     use_lob_locator_(false),
     parser_name_(),
@@ -568,10 +566,8 @@ ObTableParam::ObTableParam(ObIAllocator &allocator)
     is_spatial_index_(false),
     is_fts_index_(false),
     is_multivalue_index_(false),
-    is_column_replica_table_(false),
     is_vec_index_(false),
     is_partition_table_(false),
-    is_normal_cgs_at_the_end_(false),
     is_mlog_table_(false),
     is_enable_semistruct_encoding_(false),
     is_safe_filter_with_di_(true),
@@ -592,8 +588,6 @@ void ObTableParam::reset()
   group_by_projector_.reset();
   output_sel_mask_.reset();
   pad_col_projector_.reset();
-  cg_read_infos_.reset();
-  read_param_version_ = 0;
   has_virtual_column_ = false;
   use_lob_locator_ = false;
   parser_name_.reset();
@@ -603,10 +597,8 @@ void ObTableParam::reset()
   is_spatial_index_ = false;
   is_fts_index_ = false;
   is_multivalue_index_ = false;
-  is_column_replica_table_ = false;
   is_vec_index_ = false;
   is_partition_table_ = false;
-  is_normal_cgs_at_the_end_ = false;
   is_mlog_table_ = false;
   is_enable_semistruct_encoding_ = false;
   is_safe_filter_with_di_ = true;
@@ -629,18 +621,7 @@ OB_DEF_SERIALIZE(ObTableParam)
               enable_lob_locator_v2_,
               is_spatial_index_,
               group_by_projector_,
-              is_fts_index_,
-              read_param_version_);
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, cg_read_infos_.count()))) {
-      LOG_WARN("Fail to encode column count", K(ret));
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < cg_read_infos_.count(); ++i) {
-      if (nullptr != cg_read_infos_.at(i) && OB_FAIL(cg_read_infos_.at(i)->serialize(buf, buf_len, pos))) {
-        LOG_WARN("Fail to serialize column", K(ret));
-      }
-    }
-  }
+              is_fts_index_);
   if (OB_SUCC(ret) && is_fts_index_) {
     OB_UNIS_ENCODE(parser_name_);
   }
@@ -648,16 +629,10 @@ OB_DEF_SERIALIZE(ObTableParam)
     OB_UNIS_ENCODE(is_multivalue_index_);
   }
   if (OB_SUCC(ret)) {
-    OB_UNIS_ENCODE(is_column_replica_table_); 
-  }
-  if (OB_SUCC(ret)) {
     OB_UNIS_ENCODE(is_vec_index_);
   }
   if (OB_SUCC(ret)) {
     OB_UNIS_ENCODE(is_partition_table_);
-  }
-  if (OB_SUCC(ret)) {
-    OB_UNIS_ENCODE(is_normal_cgs_at_the_end_); 
   }
   if (OB_SUCC(ret) && is_fts_index_) {
     OB_UNIS_ENCODE(parser_properties_);
@@ -701,41 +676,7 @@ OB_DEF_DESERIALIZE(ObTableParam)
   }
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_DECODE,
-                is_fts_index_,
-                read_param_version_);
-  }
-  if (OB_SUCC(ret) && pos < data_len) {
-    int64_t cg_read_info_cnt = 0;
-    const common::ObIArray<int32_t> *access_cgs = main_read_info_.get_cg_idxs();
-    if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &cg_read_info_cnt))) {
-      LOG_WARN("Fail to decode cg read info count", K(ret));
-    } else if (cg_read_info_cnt > 0) {
-      void *tmp_ptr  = nullptr;
-      if (OB_UNLIKELY(nullptr == access_cgs || access_cgs->count() != cg_read_info_cnt
-                      || ObCGReadInfo::MIX_READ_INFO_LOCAL_CACHE != read_param_version_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected cg read info count", K(ret), KPC(access_cgs), K(cg_read_info_cnt), K_(read_param_version));
-      } else {
-        ObArray<ObTableReadInfo *> tmp_read_infos;
-        for (int64_t i = 0; OB_SUCC(ret) && i < cg_read_info_cnt; ++i) {
-          ObTableReadInfo *cur_read_info = nullptr;
-          if (0 > access_cgs->at(i)) {
-          } else if (OB_ISNULL(tmp_ptr = allocator_.alloc(sizeof(ObTableReadInfo)))) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("alloc failed", K(ret));
-          } else if (FALSE_IT(cur_read_info = new (tmp_ptr) ObTableReadInfo())) {
-          } else if (OB_FAIL(cur_read_info->deserialize(allocator_, buf, data_len, pos))) {
-            LOG_WARN("Fail to deserialize read info", K(ret));
-          }
-          if (OB_SUCC(ret) && OB_FAIL(tmp_read_infos.push_back(cur_read_info))) {
-            LOG_WARN("Fail to add read info", K(ret));
-          }
-        }
-        if (OB_SUCC(ret) && OB_FAIL(cg_read_infos_.init_and_assign(tmp_read_infos, allocator_))) {
-          LOG_WARN("Fail to add read infos", K(ret));
-        }
-      }
-    }
+                is_fts_index_);
   }
 
   if (OB_SUCC(ret) && is_fts_index_ && pos < data_len) {
@@ -752,20 +693,12 @@ OB_DEF_DESERIALIZE(ObTableParam)
                 is_multivalue_index_);
   }
   if (OB_SUCC(ret)) {
-    LST_DO_CODE(OB_UNIS_DECODE, 
-                is_column_replica_table_);
-  }
-  if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_DECODE,
                 is_vec_index_);
   }
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_DECODE,
                 is_partition_table_);
-  }
-  if (OB_SUCC(ret)) {
-    LST_DO_CODE(OB_UNIS_DECODE, 
-                is_normal_cgs_at_the_end_);
   }
   if (OB_SUCC(ret) && is_fts_index_ && pos < data_len) {
     ObString tmp_parser_properties;
@@ -802,16 +735,7 @@ OB_DEF_SERIALIZE_SIZE(ObTableParam)
               enable_lob_locator_v2_,
               is_spatial_index_,
               group_by_projector_,
-              is_fts_index_,
-              read_param_version_);
-  if (OB_SUCC(ret)) {
-    len += serialization::encoded_length_vi64(cg_read_infos_.count());
-    for (int64_t i = 0; OB_SUCC(ret) && i < cg_read_infos_.count(); ++i) {
-      if (nullptr != cg_read_infos_.at(i)) {
-        len += cg_read_infos_.at(i)->get_serialize_size();
-      }
-    }
-  }
+              is_fts_index_);
   if (OB_SUCC(ret) && is_fts_index_) {
     OB_UNIS_ADD_LEN(parser_name_);
   }
@@ -822,20 +746,12 @@ OB_DEF_SERIALIZE_SIZE(ObTableParam)
   }
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_ADD_LEN,
-              is_column_replica_table_);
-  }
-  if (OB_SUCC(ret)) {
-    LST_DO_CODE(OB_UNIS_ADD_LEN,
               is_vec_index_);
   }
 
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_ADD_LEN,
                 is_partition_table_);
-  }
-  if (OB_SUCC(ret)) {
-    LST_DO_CODE(OB_UNIS_ADD_LEN,
-                is_normal_cgs_at_the_end_);
   }
   if (OB_SUCC(ret) && is_fts_index_) {
     OB_UNIS_ADD_LEN(parser_properties_);
@@ -933,8 +849,7 @@ int ObTableParam::construct_columns_and_projector(
     const common::ObIArray<uint64_t> & output_column_ids,
     const common::ObIArray<uint64_t> *tsc_out_cols,
     const bool force_mysql_mode,
-    const sql::ObStoragePushdownFlag &pd_pushdown_flag,
-    const bool query_cs_replica /*=false*/)
+    const sql::ObStoragePushdownFlag &pd_pushdown_flag)
 {
   int ret = OB_SUCCESS;
   static const int64_t COMMON_COLUMN_NUM = 16;
@@ -944,29 +859,14 @@ int ObTableParam::construct_columns_and_projector(
   ObSEArray<int32_t, COMMON_COLUMN_NUM> tmp_access_cols_index;
   ObSEArray<int32_t, COMMON_COLUMN_NUM> tmp_output_projector;
   ObSEArray<bool, COMMON_COLUMN_NUM> tmp_output_sel_mask;
-  ObSEArray<int32_t, COMMON_COLUMN_NUM> tmp_cg_idxs;
   ObSEArray<uint64_t, COMMON_COLUMN_NUM> truncate_col_ids;
   const ObIArray<uint64_t> *access_col_ids = &output_column_ids;
   share::schema::ObColDesc tmp_col_desc;
   share::schema::ObColExtend tmp_col_extend;
-  int32_t cg_idx = 0;
-  bool is_cs = false;
-  bool has_all_column_group = false;
   bool need_truncate_filter = false;
   int64_t rowkey_count = 0;
-  is_column_replica_table_ = false; // row store table schema does not contains cg, if true, need calculate cg idx by designed rules
 
-  if (OB_FAIL(table_schema.get_is_column_store(is_cs))) {
-    LOG_WARN("fail to get is table column store", K(ret), K(table_schema));
-  } else if (!is_cs && query_cs_replica) {
-    is_cs = true;
-    is_column_replica_table_ = true;
-    has_all_column_group = false;
-  }
-  
   if (OB_FAIL(ret)) {
-  } else if (!is_column_replica_table_ && OB_FAIL(table_schema.has_all_column_group(has_all_column_group))) {
-    LOG_WARN("Failed to check if has all column group", K(ret));
   } else {
     // column array
     const ObRowkeyInfo &rowkey_info = table_schema.get_rowkey_info();
@@ -1010,16 +910,10 @@ int ObTableParam::construct_columns_and_projector(
           LOG_WARN("fail to push_back tmp_col_desc", K(ret));
         } else if (OB_FAIL(tmp_access_cols_extend.push_back(tmp_col_extend))) {
           LOG_WARN("fail to push_back tmp_access_cols_extend", K(ret));
-        } else if (is_cs) {
-          if (OB_FAIL(table_schema.get_column_group_index(*column, is_column_replica_table_, cg_idx))) {
-            LOG_WARN("Fail to get column group index", K(ret), KPC(column));
-          } else if (OB_FAIL(tmp_cg_idxs.push_back(cg_idx))) {
-            LOG_WARN("Fail to push back cg idx", K(ret));
-          }
         }
       }
     }
-    if (OB_SUCC(ret) && !is_cs && table_schema.is_global_index_table()) {
+    if (OB_SUCC(ret) && table_schema.is_global_index_table()) {
       ObSEArray<ObColDesc, COMMON_COLUMN_NUM> non_rowkey_column_ids;
       if (OB_FAIL(table_schema.get_column_ids_without_rowkey(non_rowkey_column_ids, true))) {
         LOG_WARN("get column ids failed", K(ret));
@@ -1117,12 +1011,6 @@ int ObTableParam::construct_columns_and_projector(
           LOG_WARN("fail to push_back tmp_access_cols_index", K(ret));
         } else if (OB_FAIL(tmp_access_cols_extend.push_back(tmp_col_extend))) {
           LOG_WARN("fail to push_back tmp_access_cols_extend", K(ret));
-        } else if (is_cs) {
-          if (OB_FAIL(table_schema.get_column_group_index(*column, is_column_replica_table_, cg_idx))) {
-            LOG_WARN("Fail to get column group index", K(ret));
-          } else if (OB_FAIL(tmp_cg_idxs.push_back(cg_idx))) {
-            LOG_WARN("Fail to push back cg idx", K(ret));
-          }
         }
       }
     }
@@ -1191,10 +1079,7 @@ int ObTableParam::construct_columns_and_projector(
                                      tmp_access_cols_desc,
                                      &tmp_access_cols_index,
                                      &tmp_access_cols_param,
-                                     is_cs ? &tmp_cg_idxs : nullptr,
                                      &tmp_access_cols_extend,
-                                     has_all_column_group,
-                                     false/*is_cg_sstable*/,
                                      need_truncate_filter,
                                      table_schema.is_delete_insert_merge_engine()))) {
       LOG_WARN("fail to init main read info", K(ret));
@@ -1205,43 +1090,6 @@ int ObTableParam::construct_columns_and_projector(
     }
   }
   LOG_DEBUG("Generated main read info", K_(main_read_info));
-  read_param_version_ = ObCGReadInfo::MIX_READ_INFO_LOCAL_CACHE;
-  if (OB_SUCC(ret) && is_cs && tmp_cg_idxs.count() <= ObCGReadInfo::get_local_max_cg_cnt()) {
-    // construct cg read infos
-    int64_t cg_cnt = tmp_cg_idxs.count();
-    void *tmp_ptr  = nullptr;
-    ObArray<ObTableReadInfo *> tmp_read_infos;
-    if (OB_UNLIKELY(tmp_access_cols_desc.count() != cg_cnt)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected not equal col count", K(ret), K(cg_cnt), K(tmp_access_cols_desc.count()));
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < cg_cnt; i++) {
-        ObTableReadInfo *cur_read_info = nullptr;
-        if (0 > tmp_cg_idxs.at(i)) {
-        } else if (OB_ISNULL(tmp_ptr = allocator_.alloc(sizeof(ObTableReadInfo)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc failed", K(ret));
-        } else if (FALSE_IT(cur_read_info = new (tmp_ptr) ObTableReadInfo())) {
-        } else if (OB_FAIL(ObTenantCGReadInfoMgr::construct_cg_read_info(allocator_,
-                                                                         tmp_access_cols_desc.at(i),
-                                                                         tmp_access_cols_param.at(i),
-                                                                         *cur_read_info))) {
-          LOG_WARN("Fail to init cg read info", K(ret));
-        }
-
-        if (OB_SUCC(ret) && OB_FAIL(tmp_read_infos.push_back(cur_read_info))) {
-          LOG_WARN("Fail to push back read info", K(ret));
-        }
-      }
-      if (OB_SUCC(ret) && OB_FAIL(cg_read_infos_.init_and_assign(tmp_read_infos, allocator_))) {
-        LOG_WARN("Fail to add read infos", K(ret));
-      }
-    }
-  }
-
-  if (FAILEDx(table_schema.check_is_normal_cgs_at_the_end(is_normal_cgs_at_the_end_))) {
-    LOG_WARN("Fail to check whether normal cgs are at the end of schema array", K(ret), K(table_schema));
-  }
   return ret;
 }
 
@@ -1275,8 +1123,7 @@ int ObTableParam::convert(const ObTableSchema &table_schema,
                           const ObIArray<uint64_t> &access_column_ids,
                           const sql::ObStoragePushdownFlag &pd_pushdown_flag,
                           const common::ObIArray<uint64_t> *tsc_out_cols,
-                          const bool force_mysql_mode,
-                          const bool query_cs_replica /*=false*/)
+                          const bool force_mysql_mode)
 {
   int ret = OB_SUCCESS;
     // if mocked rowid index is used
@@ -1284,7 +1131,7 @@ int ObTableParam::convert(const ObTableSchema &table_schema,
   table_id_ = table_schema.get_table_id();
   const common::ObIArray<ObColumnParam *> *cols_param = nullptr;
 
-  if (OB_FAIL(construct_columns_and_projector(table_schema, access_column_ids, tsc_out_cols, force_mysql_mode, pd_pushdown_flag, query_cs_replica))) {
+  if (OB_FAIL(construct_columns_and_projector(table_schema, access_column_ids, tsc_out_cols, force_mysql_mode, pd_pushdown_flag))) {
     LOG_WARN("construct failed", K(ret));
   } else if (OB_ISNULL(cols_param = main_read_info_.get_columns())) {
     ret = OB_ERR_UNEXPECTED;
@@ -1581,7 +1428,6 @@ int64_t ObTableParam::to_string(char *buf, const int64_t buf_len) const
        K_(group_by_projector),
        K_(output_sel_mask),
        K_(pad_col_projector),
-       K_(read_param_version),
        K_(main_read_info),
        K_(use_lob_locator),
        K_(enable_lob_locator_v2),
@@ -1589,8 +1435,6 @@ int64_t ObTableParam::to_string(char *buf, const int64_t buf_len) const
        K_(parser_name),
        K_(parser_properties),
        K_(is_vec_index),
-       K_(is_column_replica_table),
-       K_(is_normal_cgs_at_the_end),
        K_(is_mlog_table),
        K_(is_enable_semistruct_encoding),
        K_(is_safe_filter_with_di),

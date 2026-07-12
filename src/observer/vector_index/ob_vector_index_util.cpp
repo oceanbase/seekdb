@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include <limits>
+#include <string>
+
 #include "ob_vector_index_util.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/vector_index/ob_vector_index_sched_job_utils.h"
@@ -39,6 +42,155 @@ using namespace sql;
 using namespace common;
 namespace share
 {
+static int get_vsag_metric_from_distance(const ObString &distance_name, const char *&metric)
+{
+  int ret = OB_SUCCESS;
+  metric = nullptr;
+  if (distance_name == "L2") {
+    metric = VEC_INDEX_ALGTH[ObVectorIndexDistAlgorithm::VIDA_L2];
+  } else if (distance_name == "INNER_PRODUCT") {
+    metric = VEC_INDEX_ALGTH[ObVectorIndexDistAlgorithm::VIDA_IP];
+  } else if (distance_name == "COSINE") {
+    metric = VEC_INDEX_ALGTH[ObVectorIndexDistAlgorithm::VIDA_COS];
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected vector index distance name", K(ret), K(distance_name));
+  }
+  return ret;
+}
+
+static bool can_cast_to_int(const int64_t value)
+{
+  return value >= std::numeric_limits<int>::min() && value <= std::numeric_limits<int>::max();
+}
+
+static bool can_cast_to_int16(const int64_t value)
+{
+  return value >= std::numeric_limits<int16_t>::min() && value <= std::numeric_limits<int16_t>::max();
+}
+
+static int validate_vsag_create_index_param(
+    const obvectorutil::CreateIndexParam &param,
+    const char *validate_type)
+{
+  int ret = OB_SUCCESS;
+  std::string vsag_error_msg;
+  if (OB_FAIL(obvectorutil::validate_create_index(param, vsag_error_msg))) {
+    if (param.is_sparse_) {
+      LOG_WARN("invalid sparse vector index params rejected by vsag",
+          K(ret), K(param.index_type_), KCSTRING(validate_type), KCSTRING(param.metric_),
+          K(param.use_reorder_), K(param.doc_prune_ratio_), K(param.window_size_), KCSTRING(vsag_error_msg.c_str()));
+    } else {
+      LOG_WARN("invalid vector index params rejected by vsag",
+          K(ret), K(param.index_type_), KCSTRING(validate_type), K(param.dim_), K(param.max_degree_),
+          K(param.ef_construction_), K(param.ef_search_), K(param.extra_info_size_), KCSTRING(vsag_error_msg.c_str()));
+    }
+  }
+  if (OB_FAIL(ret) && (OB_INVALID_ARGUMENT == ret || OB_NOT_SUPPORTED == ret)) {
+    const char *user_error_msg = !vsag_error_msg.empty()
+        ? vsag_error_msg.c_str()
+        : "invalid vector index params rejected by vsag is";
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, user_error_msg);
+  }
+  return ret;
+}
+
+static int validate_vector_index_vsag_create_index_param(
+    const ObVectorIndexAlgorithmType index_type,
+    const ObString &distance_name,
+    const int64_t dim,
+    const int64_t m_value,
+    const int64_t ef_construction_value,
+    const int64_t ef_search_value,
+    const int64_t extra_info_actual_size,
+    const int16_t refine_type,
+    const int16_t bq_bits_query,
+    const bool bq_use_fht,
+    const bool refine_value,
+    const double drop_ratio_build,
+    const int64_t window_size)
+{
+  int ret = OB_SUCCESS;
+  const char *metric = nullptr;
+  if (OB_FAIL(get_vsag_metric_from_distance(distance_name, metric))) {
+    LOG_WARN("failed to get vsag metric from distance", K(ret), K(distance_name));
+  } else if (!can_cast_to_int(dim)
+             || !can_cast_to_int(m_value)
+             || !can_cast_to_int(ef_construction_value)
+             || !can_cast_to_int(ef_search_value)
+             || !can_cast_to_int(extra_info_actual_size)
+             || !can_cast_to_int(window_size)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("vsag create index param is out of int range", K(ret), K(index_type),
+        K(dim), K(m_value), K(ef_construction_value), K(ef_search_value),
+        K(extra_info_actual_size), K(window_size));
+  } else if (ObVectorIndexAlgorithmType::VIAT_HNSW == index_type ||
+             ObVectorIndexAlgorithmType::VIAT_HNSW_SQ == index_type ||
+             ObVectorIndexAlgorithmType::VIAT_HNSW_BQ == index_type) {
+    obvectorutil::CreateIndexParam param;
+    param.dtype_ = "float32";
+    param.metric_ = metric;
+    param.dim_ = static_cast<int>(dim);
+    param.ef_construction_ = static_cast<int>(ef_construction_value);
+    param.ef_search_ = static_cast<int>(ef_search_value);
+    param.extra_info_size_ = static_cast<int>(extra_info_actual_size);
+    param.refine_type_ = refine_type;
+    param.bq_bits_query_ = bq_bits_query;
+    param.bq_use_fht_ = bq_use_fht;
+    const int64_t hnsw_sq_metric = ObVectorIndexUtil::get_hnswsq_type_metric(m_value);
+    if (ObVectorIndexAlgorithmType::VIAT_HNSW_SQ == index_type) {
+      param.index_type_ = obvsag::HNSW_SQ_TYPE;
+      param.max_degree_ = static_cast<int>(hnsw_sq_metric);
+      param.refine_type_ = 0;
+      param.bq_bits_query_ = ObVectorIndexParam::DEFAULT_BQ_BITS_QUERY;
+      param.bq_use_fht_ = false;
+      if (OB_FAIL(validate_vsag_create_index_param(param, "hnsw_sq_snapshot"))) {
+        LOG_WARN("failed to validate hnsw_sq snapshot create index params", K(ret));
+      } else {
+        param.index_type_ = obvsag::HGRAPH_TYPE;
+        param.max_degree_ = static_cast<int>(m_value);
+        if (OB_FAIL(validate_vsag_create_index_param(param, "hnsw_sq_incr"))) {
+          LOG_WARN("failed to validate hnsw_sq incremental create index params", K(ret));
+        }
+      }
+    } else if (ObVectorIndexAlgorithmType::VIAT_HNSW_BQ == index_type) {
+      param.index_type_ = obvsag::HNSW_BQ_TYPE;
+      param.max_degree_ = static_cast<int>(m_value);
+      if (OB_FAIL(validate_vsag_create_index_param(param, "hnsw_bq_snapshot"))) {
+        LOG_WARN("failed to validate hnsw_bq snapshot create index params", K(ret));
+      } else {
+        param.index_type_ = obvsag::HGRAPH_TYPE;
+        if (OB_FAIL(validate_vsag_create_index_param(param, "hnsw_bq_incr"))) {
+          LOG_WARN("failed to validate hnsw_bq incremental create index params", K(ret));
+        }
+      }
+    } else {
+      param.index_type_ = extra_info_actual_size > 0 ? obvsag::HGRAPH_TYPE : obvsag::HNSW_TYPE;
+      param.max_degree_ = static_cast<int>(m_value);
+      if (OB_FAIL(validate_vsag_create_index_param(param, "hnsw"))) {
+        LOG_WARN("failed to validate hnsw create index params", K(ret), K(param.index_type_));
+      }
+    }
+  } else if (ObVectorIndexAlgorithmType::VIAT_IPIVF == index_type) {
+    obvectorutil::CreateIndexParam param;
+    param.index_type_ = obvsag::IPIVF_TYPE;
+    param.dtype_ = "sparse";
+    param.metric_ = metric;
+    param.use_reorder_ = refine_value;
+    param.doc_prune_ratio_ = static_cast<float>(drop_ratio_build);
+    param.window_size_ = static_cast<int>(window_size);
+    param.is_sparse_ = true;
+    if (OB_FAIL(validate_vsag_create_index_param(param, "sindi"))) {
+      LOG_WARN("failed to validate sindi create index params", K(ret));
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected vector index type to validate vsag create index params", K(ret), K(index_type));
+  }
+  return ret;
+}
+
 /*
   Expect index_param_str to be an uppercase string
 */
@@ -125,12 +277,7 @@ int ObVectorIndexUtil::parser_params_from_string(
           if (OB_FAIL(ObSchemaUtils::str_to_int(new_param_value, int_value))) {
             LOG_WARN("fail to str_to_int", K(ret), K(new_param_value));
           } else if (ObVectorIndexType::VIT_HNSW_INDEX == index_type) {
-            if (int_value >= 5 && int_value <= 128) {
-              param.m_ = int_value;
-            } else {
-              ret = OB_NOT_SUPPORTED;
-              LOG_WARN("not support vector index m value", K(ret), K(int_value), K(new_param_value));
-            }
+            param.m_ = int_value;
           } else if (ObVectorIndexType::VIT_IVF_INDEX == index_type) {
             if (int_value >= 1 && int_value <= 65536) {
               param.m_ = int_value;
@@ -143,21 +290,15 @@ int ObVectorIndexUtil::parser_params_from_string(
           int64_t int_value = 0;
           if (OB_FAIL(ObSchemaUtils::str_to_int(new_param_value, int_value))) {
             LOG_WARN("fail to str_to_int", K(ret), K(new_param_value));
-          } else if (int_value >= 5 && int_value <= 1000) {
-            param.ef_construction_ = int_value;
           } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not support vector index ef_construction value", K(ret), K(int_value), K(new_param_value));
+            param.ef_construction_ = int_value;
           }
         } else if (new_param_name == "EF_SEARCH") {
           int64_t int_value = 0;
           if (OB_FAIL(ObSchemaUtils::str_to_int(new_param_value, int_value))) {
             LOG_WARN("fail to str_to_int", K(ret), K(new_param_value));
-          } else if (int_value >= 1 && int_value <= 160000) {
-            param.ef_search_ = int_value;
           } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not support vector index ef_search value", K(ret), K(int_value), K(new_param_value));
+            param.ef_search_ = int_value;
           }
         } else if (new_param_name == "NLIST") {
           int64_t int_value = 0;
@@ -2726,16 +2867,6 @@ int ObVectorIndexUtil::check_vec_index_param(const ParseNode *option_node,
           LOG_WARN("create ivf index on column with outrow lob data not supported", K(ret), K(vector_dim), K(lob_inrow_threshold));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "create ivf index on column with outrow lob data is");
         }
-        if (OB_SUCC(ret)) {
-          bool is_data_table_column_store = false;
-          if (OB_FAIL(tbl_schema.get_is_column_store(is_data_table_column_store))) {
-            LOG_WARN("fail to get is column store", K(tbl_schema));
-          } else if (is_data_table_column_store) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("create ivf index on table with column store not supported", K(ret), K(tbl_schema));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "create ivf index on table with column store is");
-          }
-        }
       } else if (share::schema::is_vec_spiv_index(vec_index_type)) {
         // do nothing
       }
@@ -3041,12 +3172,16 @@ int ObVectorIndexUtil::check_index_param(
     int32_t str_len = 0;
     int64_t m_value = 0;
     int64_t ef_construction_value = 0;
+    int64_t ef_search_value = 0;
     int64_t sample_per_nlist_value = 0;
     int64_t extra_info_max_size = 0;
     int64_t nlist_value = 0;
     int64_t sync_interval_value = 0;
     int64_t dim_value = 0;
     int64_t nbits_value = 0;
+    int16_t refine_type_value = obvsag::FP32;
+    int16_t bq_bits_query_value = ObVectorIndexParam::DEFAULT_BQ_BITS_QUERY;
+    bool bq_use_fht_value = false;
     bool prune_value = false;
     bool refine_value = false;
     double drop_ratio_build = 0.0;
@@ -3070,6 +3205,7 @@ int ObVectorIndexUtil::check_index_param(
     bool type_ivf_flat_is_set = false;  // ivf
     bool type_ivf_sq8_is_set = false;   // ivf
     bool type_ivf_pq_is_set = false;    // ivf
+    bool type_hnsw_sq_is_set = false;   // hnsw_sq
     bool type_hnsw_bq_is_set = false;   // hnsw_bq
     bool type_hybrid_vec_is_set = false; // hybrid search
     bool refine_type_is_set = false; // hnsw_bq
@@ -3082,6 +3218,7 @@ int ObVectorIndexUtil::check_index_param(
     bool refine_is_set = false;
     bool drop_ratio_build_is_set = false;
     bool drop_ratio_search_is_set = false;
+    ObVectorIndexAlgorithmType vsag_index_type = ObVectorIndexAlgorithmType::VIAT_MAX;
 
     const int64_t default_m_value = 16;
     const int64_t default_ef_construction_value = 200;
@@ -3193,8 +3330,11 @@ int ObVectorIndexUtil::check_index_param(
         } else if (last_variable == "TYPE") {
           if (new_parser_name == "HNSW") {
             type_hnsw_is_set = true;
+            vsag_index_type = ObVectorIndexAlgorithmType::VIAT_HNSW;
           } else if (new_parser_name == "HNSW_SQ") {
             type_hnsw_is_set = true;
+            type_hnsw_sq_is_set = true;
+            vsag_index_type = ObVectorIndexAlgorithmType::VIAT_HNSW_SQ;
           } else if (new_parser_name == "IVF_FLAT") {
             type_ivf_flat_is_set = true;
           } else if (new_parser_name == "IVF_SQ8") {
@@ -3204,8 +3344,10 @@ int ObVectorIndexUtil::check_index_param(
           } else if (new_parser_name == "HNSW_BQ") {
             type_hnsw_is_set = true;
             type_hnsw_bq_is_set = true;
+            vsag_index_type = ObVectorIndexAlgorithmType::VIAT_HNSW_BQ;
           } else if (new_parser_name == "SINDI") {
             type_sindi_is_set = true;
+            vsag_index_type = ObVectorIndexAlgorithmType::VIAT_IPIVF;
           } else {
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("not support vector index type", K(ret), K(new_parser_name));
@@ -3226,6 +3368,7 @@ int ObVectorIndexUtil::check_index_param(
         } else if (last_variable == "EF_SEARCH") {
           if (parser_value >= 1 && parser_value <= 160000 ) {
             ef_search_is_set = true;
+            ef_search_value = parser_value;
           } else {
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("invalid vector index ef_search value", K(ret), K(parser_value));
@@ -3265,6 +3408,7 @@ int ObVectorIndexUtil::check_index_param(
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index refine_type is");
           } else {
             refine_type_is_set = true;
+            refine_type_value = (new_parser_name == "SQ8") ? obvsag::SQ8 : obvsag::FP32;
           }
         } else if (last_variable == "BQ_BITS_QUERY") {
           if (parser_value != 4 && parser_value != 32) {
@@ -3273,6 +3417,7 @@ int ObVectorIndexUtil::check_index_param(
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index bq_bits_query is");
           } else {
             bq_bits_query_set = true;
+            bq_bits_query_value = static_cast<int16_t>(parser_value);
           }
         } else if (last_variable == "REFINE_K") {
           int err = 0;
@@ -3295,6 +3440,7 @@ int ObVectorIndexUtil::check_index_param(
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index bq_use_fht is");
           } else {
             bq_use_fht_is_set = true;
+            bq_use_fht_value = (1 == parser_value);
           }
         } else if (last_variable == "NBITS") {
           if (parser_value >= 1 && parser_value <= 24) {
@@ -3507,7 +3653,12 @@ int ObVectorIndexUtil::check_index_param(
         }
       } else if (hnsw_is_set) {
         ef_construction_value = ef_construction_is_set ? ef_construction_value : default_ef_construction_value;
+        ef_search_value = ef_search_is_set ? ef_search_value : default_ef_search_value;
         m_value = m_is_set ? m_value : default_m_value;
+        if (type_hnsw_bq_is_set) {
+          refine_type_value = refine_type_is_set ? refine_type_value : obvsag::SQ8;
+          bq_use_fht_value = bq_use_fht_is_set ? bq_use_fht_value : true;
+        }
         if (m_value >= 5 && m_value <= 128) {
         } else {
           ret = OB_NOT_SUPPORTED;
@@ -3593,6 +3744,25 @@ int ObVectorIndexUtil::check_index_param(
         } else if (hnsw_is_set && OB_FAIL(check_extra_info_size(tbl_schema, session_info, extra_info_max_size_is_set,
                                                                 extra_info_max_size, extra_info_actual_size))) {
           LOG_WARN("check_extra_info_size failed", K(ret), K(extra_info_max_size), K(tbl_schema));
+        } else if (hnsw_is_set && (!is_text_col || type_hybrid_vec_is_set) &&
+                   OB_FAIL(validate_vector_index_vsag_create_index_param(vsag_index_type,
+                                                                        distance_name,
+                                                                        type_hybrid_vec_is_set ? dim_value : vector_dim,
+                                                                        m_value,
+                                                                        ef_construction_value,
+                                                                        ef_search_value,
+                                                                        extra_info_actual_size,
+                                                                        refine_type_value,
+                                                                        bq_bits_query_value,
+                                                                        bq_use_fht_value,
+                                                                        false,
+                                                                        0,
+                                                                        ObVectorIndexParam::DEFAULT_WINDOW_SIZE))) {
+          LOG_WARN("failed to validate hnsw vsag create index params",
+              K(ret), K(vsag_index_type), K(distance_name),
+              K(vector_dim), K(dim_value), K(m_value), K(ef_construction_value),
+              K(ef_search_value), K(extra_info_actual_size), K(refine_type_value),
+              K(bq_bits_query_value), K(bq_use_fht_value));
         } else if (hnsw_is_set && extra_info_actual_size > 0 && OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
                                                           ", EXTRA_INFO_ACTUAL_SIZE=%ld", extra_info_actual_size))) {
           LOG_WARN("fail to printf databuff", K(ret));
@@ -3659,6 +3829,23 @@ int ObVectorIndexUtil::check_index_param(
             LOG_WARN("sparse vector index not support to set refine or ob_sparse_drop_ratio_build when prune is false.", K(ret), K(refine_value), K(drop_ratio_build));
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "sparse vector index set refine or ob_sparse_drop_ratio_build when prune is false is");
           }
+        }
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(validate_vector_index_vsag_create_index_param(vsag_index_type,
+                                                                        distance_name,
+                                                                        0,
+                                                                        0,
+                                                                        0,
+                                                                        0,
+                                                                        0,
+                                                                        0,
+                                                                        ObVectorIndexParam::DEFAULT_BQ_BITS_QUERY,
+                                                                        false,
+                                                                        refine_value,
+                                                                        drop_ratio_build,
+                                                                        ObVectorIndexParam::DEFAULT_WINDOW_SIZE))) {
+          LOG_WARN("failed to validate sparse vsag create index params",
+              K(ret), K(vsag_index_type), K(distance_name), K(refine_value), K(drop_ratio_build));
         }
       }
     }

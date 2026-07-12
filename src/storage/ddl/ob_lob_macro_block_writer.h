@@ -37,7 +37,7 @@ namespace storage
 class ObDDLRedoLogWriterCallback;
 class ObColumnSchemaItem;
 class ObDDLIndependentDag;
-class ObCgMacroBlockWriter;
+class ObDDLMacroBlockWriter;
 
 class ObLobMacroBlockWriter
 {
@@ -76,7 +76,7 @@ private:
   ObLobMetaWriteIter meta_write_iter_;
   blocksstable::ObDatumRow lob_meta_row_;
 
-  ObCgMacroBlockWriter *macro_block_writer_;
+  ObDDLMacroBlockWriter *macro_block_writer_;
   ObWriteMacroParam param_;
   int64_t total_lob_cell_count_;
   int64_t inrow_lob_cell_count_;

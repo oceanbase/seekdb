@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_i_store.h"
-#include "storage/access/ob_table_param.h"  // ObColumnParam complete type(needed by relocated functions)
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -522,88 +521,6 @@ int ObTableSchema::init_column_meta_array(
 }  // namespace schema
 }  // namespace share
 }  // namespace oceanbase
-
-namespace oceanbase
-{
-namespace share
-{
-namespace schema
-{
-int ObTableSchema::get_column_group_index(
-    const share::schema::ObColumnParam &param,
-    const bool need_calculate_cg_idx,
-    int32_t &cg_idx) const
-{
-  int ret = OB_SUCCESS;
-  const uint64_t column_id = param.get_column_id();
-  cg_idx = -1;
-  if (OB_UNLIKELY(1 >= column_group_cnt_ && !need_calculate_cg_idx)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("No column group exist", K(ret), K(need_calculate_cg_idx), K_(is_column_store_supported), K_(column_group_cnt));
-  } else if (param.is_virtual_gen_col()) {
-    cg_idx = -1;
-  } else if ((column_id < OB_END_RESERVED_COLUMN_ID_NUM || common::OB_MAJOR_REFRESH_MVIEW_OLD_NEW_COLUMN_ID == column_id) &&
-      common::OB_HIDDEN_SESS_CREATE_TIME_COLUMN_ID != column_id &&
-      common::OB_HIDDEN_SESSION_ID_COLUMN_ID != column_id &&
-      common::OB_HIDDEN_PK_INCREMENT_COLUMN_ID != column_id) { // this has its own column group now
-    if (common::OB_HIDDEN_TRANS_VERSION_COLUMN_ID == column_id ||
-        common::OB_HIDDEN_SQL_SEQUENCE_COLUMN_ID == column_id) {
-      if (need_calculate_cg_idx) {
-        cg_idx = OB_CS_COLUMN_REPLICA_ROWKEY_CG_IDX;
-      } else if (OB_FAIL(get_base_rowkey_column_group_index(cg_idx))) {
-        LOG_WARN("Fail to get base/rowkey column group index", K(ret), K(column_id));
-      }
-    } else {
-      // TODO: check the following
-      // TODO: after check, also see ObStorageSchema::get_column_group_index
-      // common::OB_HIDDEN_GROUP_IDX_COLUMN_ID == column_id
-      cg_idx = -1;
-    }
-  } else if (need_calculate_cg_idx) {
-    if (OB_FAIL(calc_column_group_index_(column_id, cg_idx))) {
-      LOG_WARN("Fail to calc_column_group_index", K(ret), K(column_id));
-    }
-  } else {
-    bool found = false;
-    int64_t cg_column_cnt = 0;
-    int32_t iter_cg_idx = 0;
-    uint64_t *cg_column_ids = nullptr;
-    for (int64_t i = 0; OB_SUCC(ret) && !found && i < column_group_cnt_; i++) {
-      if (OB_ISNULL(column_group_arr_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("column_group should not be null", K(ret), K(i), K_(column_group_cnt));
-      } else if (FALSE_IT(cg_column_cnt = column_group_arr_[i]->get_column_id_count())) {
-      } else if (0 == cg_column_cnt) {
-        if (column_group_arr_[i]->get_column_group_type() != DEFAULT_COLUMN_GROUP) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected column group type", K(ret), KPC(column_group_arr_[i]));
-        }
-      } else if (1 < cg_column_cnt || column_group_arr_[i]->get_column_group_type() != ObColumnGroupType::SINGLE_COLUMN_GROUP) {
-        iter_cg_idx++;
-        // ignore column group with more than one column or not each column group cg
-      } else if (OB_ISNULL(cg_column_ids = column_group_arr_[i]->get_column_ids())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected error for null column ids", K(ret), KPC(column_group_arr_[i]));
-      } else if (cg_column_ids[0] != column_id) {
-        iter_cg_idx++;
-      } else {
-        cg_idx = iter_cg_idx;
-        found = true;
-      }
-    }
-
-    if (OB_SUCC(ret) && !found) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected, can not find cg idx", K(ret), K(column_id), K_(max_used_column_group_id));
-    }
-  }
-  LOG_TRACE("[CS-Replica] get column group index", K(ret), K(need_calculate_cg_idx), K(param), K(cg_idx), KPC(this));
-  return ret;
-}
-}  // namespace schema
-}  // namespace share
-}  // namespace oceanbase
-
 
 // === demoted from ObTableSchema  storage free function(old member definition was split across modules, now fully moved out of the share class) ===
 namespace oceanbase

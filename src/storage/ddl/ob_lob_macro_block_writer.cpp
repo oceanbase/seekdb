@@ -19,7 +19,7 @@
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
 #include "storage/lob/ob_lob_access_param.h"
-#include "storage/ddl/ob_cg_macro_block_writer.h"
+#include "storage/ddl/ob_ddl_macro_block_writer.h"
 #include "share/ob_ddl_common.h"
 #include "storage/ob_tablet_autoincrement_service.h"
 #include "storage/ddl/ob_tablet_ddl_kv_mgr.h"
@@ -45,7 +45,7 @@ ObLobMacroBlockWriter::ObLobMacroBlockWriter()
 ObLobMacroBlockWriter::~ObLobMacroBlockWriter()
 {
   if (nullptr != macro_block_writer_) {
-    macro_block_writer_->~ObCgMacroBlockWriter();
+    macro_block_writer_->~ObDDLMacroBlockWriter();
     ob_free(macro_block_writer_);
     macro_block_writer_ = nullptr;
   }
@@ -214,7 +214,7 @@ int ObLobMacroBlockWriter::prepare_macro_block_writer()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(macro_block_writer_)) {
-    if (OB_ISNULL(macro_block_writer_ = OB_NEW(ObCgMacroBlockWriter, ObMemAttr("lob_mb_writer")))) {
+    if (OB_ISNULL(macro_block_writer_ = OB_NEW(ObDDLMacroBlockWriter, ObMemAttr("lob_mb_writer")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alocate memory for cg macro block writer failed", K(ret));
     }
@@ -228,14 +228,12 @@ int ObLobMacroBlockWriter::prepare_macro_block_writer()
       lob_table_key.scn_range_.end_scn_.convert_for_tx(param_.snapshot_version_); // for logic version
     } else if (is_incremental_major_direct_load(param_.direct_load_type_)) { // incremental
       lob_table_key.table_type_ = ObITable::INC_MAJOR_SSTABLE;
-      lob_table_key.column_group_idx_ = 0;
       // slice idx is not the same order with the rowkey of lob. set slice idx 0 here to compare rowkey when merge major sstable
       lob_table_key.slice_range_.start_slice_idx_ = 0;
       lob_table_key.slice_range_.end_slice_idx_ = 0;
       lob_table_key.version_range_.snapshot_version_ = param_.snapshot_version_;
     } else { // full
       lob_table_key.table_type_ = ObITable::MAJOR_SSTABLE;
-      lob_table_key.column_group_idx_ = 0;
       // slice idx is not the same order with the rowkey of lob. set slice idx 0 here to compare rowkey when merge major sstable
       lob_table_key.slice_range_.start_slice_idx_ = 0;
       lob_table_key.slice_range_.end_slice_idx_ = 0;

@@ -25,7 +25,6 @@ using namespace blocksstable;
 using namespace common;
 namespace compaction
 {
-ERRSIM_POINT_DEF(EN_CO_MERGE_REUSE_MICRO);
 
 ObProgressiveMergeMgr::ObProgressiveMergeMgr()
   : progressive_merge_round_(0),
@@ -93,16 +92,13 @@ int ObProgressiveMergeMgr::init(
 }
 
 int64_t ObProgressiveMergeMgr::get_result_progressive_merge_step(
-    const ObTabletID &tablet_id,
-    const int64_t column_group_idx) const // parameters are used for print log
+    const ObTabletID &tablet_id) const
 {
   int64_t result_step = MIN(progressive_merge_num_, progressive_merge_step_ + 1);
 
   if (finish_cur_round_ && result_step < progressive_merge_num_) {
-    if (0 == column_group_idx) { // only print once
-      FLOG_INFO("finish cur progressive_merge_round", K(tablet_id), K(result_step), K_(progressive_merge_round),
-        K_(progressive_merge_step), K_(progressive_merge_num));
-    }
+    FLOG_INFO("finish cur progressive_merge_round", K(tablet_id), K(result_step), K_(progressive_merge_round),
+      K_(progressive_merge_step), K_(progressive_merge_num));
     result_step = progressive_merge_num_; // this result will be used to update pregressive merge step on sstable meta
 #ifdef ERRSIM
     SERVER_EVENT_SYNC_ADD("merge_errsim", "progressive_merge_finish",
@@ -240,15 +236,8 @@ int ObProgressiveMergeHelper::open_macro_iter(
 {
   int ret = OB_SUCCESS;
   const ObStaticMergeParam &static_param = merge_param.static_param_;
-  const storage::ObITableReadInfo *index_read_info = nullptr;
-  if (sstable.is_normal_cg_sstable()) {
-    if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
-      LOG_WARN("failed to get index read info from ObTenantCGReadInfoMgr", KR(ret));
-    }
-  } else {
-    index_read_info = static_param.rowkey_read_info_;
-  }
-  const ObDatumRange &merge_range = sstable.is_normal_cg_sstable() ? merge_param.merge_rowid_range_ : merge_param.merge_range_;
+  const storage::ObITableReadInfo *index_read_info = static_param.rowkey_read_info_;
+  const ObDatumRange &merge_range = merge_param.merge_range_;
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(index_read_info)) {
     ret = OB_ERR_UNEXPECTED;
@@ -289,13 +278,6 @@ int ObProgressiveMergeHelper::check_macro_block_op(const ObMacroBlockDesc &macro
     }
     if (block_op.is_none() && check_macro_need_merge_) {
       bool need_set_block_op = macro_desc.macro_meta_->val_.data_zsize_ < REWRITE_MACRO_SIZE_THRESHOLD;
-#ifdef ERRSIM
-      if (OB_UNLIKELY(EN_CO_MERGE_REUSE_MICRO)) {
-        ret = OB_SUCCESS;
-        need_set_block_op = true;
-        FLOG_INFO("ERRSIM EN_CO_MERGE_REUSE_MICRO", KR(ret), K(need_set_block_op));
-      }
-#endif
       if (!need_set_block_op) {
       } else {
         block_op.set_reorg();

@@ -80,7 +80,6 @@
 #include "observer/virtual_table/ob_all_virtual_session_info.h"
 #include "observer/virtual_table/ob_all_virtual_memory_info.h"
 #include "observer/virtual_table/ob_all_virtual_raid_stat.h"
-#include "observer/virtual_table/ob_virtual_span_info.h"
 #include "observer/virtual_table/ob_all_virtual_tablet_sstable_macro_info.h"
 #include "observer/virtual_table/ob_virtual_sql_plan_monitor.h"
 #include "observer/virtual_table/ob_virtual_sql_monitor_statname.h"
@@ -160,8 +159,6 @@
 #include "observer/virtual_table/ob_all_virtual_thread.h"
 #include "observer/virtual_table/ob_all_virtual_px_p2p_datahub.h"
 #include "observer/virtual_table/ob_all_virtual_tablet_buffer_info.h"
-#include "observer/virtual_table/ob_all_virtual_cgroup_config.h"
-#include "observer/virtual_table/ob_virtual_flt_config.h"
 #include "observer/virtual_table/ob_all_virtual_activity_metrics.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_resource_limit.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_resource_limit_detail.h"
@@ -180,7 +177,6 @@
 #include "observer/virtual_table/ob_all_virtual_log_transport_dest_stat.h"
 #include "observer/virtual_table/ob_all_virtual_plugin_info.h"
 #include "observer/virtual_table/ob_all_virtual_ddl_diagnose_info.h"
-#include "observer/virtual_table/ob_all_virtual_cs_replica_tablet_stats.h"
 #include "observer/virtual_table/ob_all_virtual_change_stream_refresh_stat.h"
 #include "observer/virtual_table/ob_all_virtual_dynamic_partition_table.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_mview_running_job.h"
@@ -1205,18 +1201,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_TRACE_SPAN_INFO_TID:
-          {
-            ObVirtualSpanInfo *trace = NULL;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObVirtualSpanInfo,
-                                          trace))) {
-              SERVER_LOG(WARN, "fail to create virtual table", K(ret));
-            } else {
-              trace->set_addr(addr_);
-              vt_iter = static_cast<ObVirtualTableIterator *>(trace);
-            }
-            break;
-          }
           case OB_ALL_VIRTUAL_SHOW_TRACE_TID:
           {
             ObVirtualShowTrace *show_trace = NULL;
@@ -1225,17 +1209,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               SERVER_LOG(WARN, "fail to create virtual table", K(ret));
             } else {
               vt_iter = static_cast<ObVirtualTableIterator *>(show_trace);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_FLT_CONFIG_TID:
-          {
-            ObVirtualFLTConfig *flt_conf = NULL;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObVirtualFLTConfig,
-                                          flt_conf))) {
-              SERVER_LOG(WARN, "fail to create virtual table", K(ret));
-            } else {
-              vt_iter = static_cast<ObVirtualTableIterator *>(flt_conf);
             }
             break;
           }
@@ -2035,13 +2008,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_CGROUP_CONFIG_TID: {
-            ObAllVirtualCgroupConfig *all_virtual_cgroup_config = NULL;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualCgroupConfig, all_virtual_cgroup_config))) {
-              vt_iter = static_cast<ObVirtualTableIterator *>(all_virtual_cgroup_config);
-            }
-            break;
-          }
           case OB_ALL_VIRTUAL_RESOURCE_LIMIT_TID: {
             ObResourceLimitTable *all_virtual_resource_limit = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObResourceLimitTable,
@@ -2137,17 +2103,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_FUNCTION_IO_STAT_TID: {
-            ObAllVirtualFunctionIOStat *all_virtual_func_io_stat = NULL;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualFunctionIOStat, all_virtual_func_io_stat))) {
-              if (OB_FAIL(all_virtual_func_io_stat->init(addr_))) {
-                SERVER_LOG(WARN, "fail to init ObAllVirtualFunctionIOStatus, ", K(ret));
-              } else {
-                vt_iter = static_cast<ObVirtualTableIterator *>(all_virtual_func_io_stat);
-              }
-            }
-            break;
-          }
           case OB_ALL_VIRTUAL_TEMP_FILE_TID:
           {
             ObAllVirtualTmpFileInfo *all_tmp_file_info = NULL;
@@ -2179,18 +2134,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             } else {
               all_virtual_vector_index_info->set_addr(addr_);
               vt_iter = static_cast<ObVirtualTableIterator *>(all_virtual_vector_index_info);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_CS_REPLICA_TABLET_STATS_TID:
-          {
-            ObAllVirtualCSReplicaTabletStats *all_virtual_cs_replica_tablet_stats = NULL;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualCSReplicaTabletStats, all_virtual_cs_replica_tablet_stats))) {
-              SERVER_LOG(ERROR, "ObAllVirtualCSReplicaTabletStats construct failed", K(ret));
-            } else if (OB_FAIL(all_virtual_cs_replica_tablet_stats->init(&allocator, addr_))) {
-              SERVER_LOG(WARN, "failed to init ObAllVirtualCSReplicaTabletStats", K(ret));
-            } else {
-              vt_iter = static_cast<ObVirtualTableIterator *>(all_virtual_cs_replica_tablet_stats);
             }
             break;
           }

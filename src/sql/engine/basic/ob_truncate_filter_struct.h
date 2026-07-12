@@ -174,7 +174,7 @@ public:
   {
     return filter_.get_col_ids();
   }
-  virtual const common::ObIArray<ObExpr *> *get_cg_col_exprs() const override final;
+  virtual const common::ObIArray<ObExpr *> *get_column_exprs() const override final;
   virtual int init_evaluated_datums(bool &is_valid) override final;
   virtual int filter(ObEvalCtx &eval_ctx, const ObBitVector &skip_bit, bool &filtered) override final;
   virtual int prepare_truncate_param(

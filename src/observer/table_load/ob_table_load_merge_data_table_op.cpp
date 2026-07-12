@@ -46,8 +46,6 @@ int ObTableLoadMergeDataTableOp::inner_init()
   need_del_lob_ = ObDirectLoadMethod::is_incremental(ctx_->param_.method_) &&
                   nullptr != store_ctx_->data_store_table_ctx_->lob_table_ctx_ &&
                   !store_table_ctx->schema_->is_table_without_pk_;
-  need_rescan_ =
-    ObDirectLoadMethod::is_full(ctx_->param_.method_) && store_table_ctx->schema_->is_column_store();
   if (!store_ctx_->write_ctx_.is_fast_heap_table_) {
     if (OB_FAIL(store_table_ctx->init_insert_table_ctx(merge_phase_ctx_->trans_param_,
                                                        true /*online_opt_stat_gather*/,
@@ -135,13 +133,8 @@ int ObTableLoadMergeDataTableOp::inner_init()
         break;
     }
   }
-  // use_batch_mode_
-  inner_ctx_.use_batch_mode_ = (ObDirectLoadMethod::is_full(ctx_->param_.method_) &&
-                                store_table_ctx->schema_->is_column_store());
-  // need_calc_range_
-  inner_ctx_.need_calc_range_ = need_rescan_;
   // need_close_insert_tablet_ctx_
-  inner_ctx_.need_close_insert_tablet_ctx_ = (!need_rescan_ && !need_del_lob_);
+  inner_ctx_.need_close_insert_tablet_ctx_ = !need_del_lob_;
   // is_del_lob_
   inner_ctx_.is_del_lob_ = false;
   merge_table_ctx_ = &inner_ctx_;
@@ -189,7 +182,6 @@ int ObTableLoadMergeDeletePhaseDataTableOp::inner_init()
   FLOG_INFO("ObTableLoadMergeDeletePhaseDataTableOp START");
   ObTableLoadStoreDataTableCtx *store_table_ctx = store_ctx_->data_store_table_ctx_;
   need_del_lob_ = (nullptr != store_ctx_->data_store_table_ctx_->lob_table_ctx_);
-  need_rescan_ = false;
   // init table_build
   if (need_del_lob_ &&
       OB_FAIL(store_ctx_->data_store_table_ctx_->lob_table_ctx_->init_build_delete_table())) {
@@ -228,10 +220,6 @@ int ObTableLoadMergeDeletePhaseDataTableOp::inner_init()
     }
   }
   inner_ctx_.merge_mode_ = ObDirectLoadMergeMode::MERGE_WITH_ORIGIN_QUERY_FOR_DATA;
-  // use_batch_mode_
-  inner_ctx_.use_batch_mode_ = false;
-  // need_calc_range_
-  inner_ctx_.need_calc_range_ = false;
   // need_close_insert_tablet_ctx_
   inner_ctx_.need_close_insert_tablet_ctx_ = !need_del_lob_;
   // is_del_lob_
@@ -274,7 +262,6 @@ int ObTableLoadMergeAckPhaseDataTableOp::inner_init()
   int ret = OB_SUCCESS;
   FLOG_INFO("ObTableLoadMergeAckPhaseDataTableOp START");
   ObTableLoadStoreDataTableCtx *store_table_ctx = store_ctx_->data_store_table_ctx_;
-  need_rescan_ = false;
   need_del_lob_ = false;
 
   // store_table_ctx_
@@ -299,11 +286,6 @@ int ObTableLoadMergeAckPhaseDataTableOp::inner_init()
     }
   }
   inner_ctx_.merge_mode_ = ObDirectLoadMergeMode::MERGE_WITH_ORIGIN_QUERY_FOR_DATA;
-  // use_batch_mode_
-  inner_ctx_.use_batch_mode_ = (ObDirectLoadMethod::is_full(ctx_->param_.method_) &&
-                                store_table_ctx->schema_->is_column_store());
-  // need_calc_range_
-  inner_ctx_.need_calc_range_ = need_rescan_;
   // need_close_insert_tablet_ctx_
   inner_ctx_.need_close_insert_tablet_ctx_ = !need_del_lob_;
   // is_del_lob_

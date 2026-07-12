@@ -142,7 +142,6 @@ private:
   transaction::ObTxDesc *tx_desc_;
   transaction::ObTransID trans_id_;
   int64_t parallel_cnt_;
-  int64_t cg_cnt_;
   transaction::ObTxSEQ seq_no_; // for incremental direct load
 };
 

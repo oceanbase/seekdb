@@ -53,8 +53,7 @@ int64_t ObBatchCreateTabletPrettyArg::to_string(char *buf, const int64_t buf_len
       J_KV("data_tablet_id", info.data_tablet_id_,
            "tablet_ids", info.tablet_ids_,
            "compat_mode", info.compat_mode_,
-           "is_create_bind_hidden_tablets", info.is_create_bind_hidden_tablets_,
-           "has_cs_replica", info.has_cs_replica_);
+           "is_create_bind_hidden_tablets", info.is_create_bind_hidden_tablets_);
     }
     J_NEWLINE();
     J_OBJ_END();

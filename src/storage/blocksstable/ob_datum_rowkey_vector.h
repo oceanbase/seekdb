@@ -28,9 +28,9 @@ namespace blocksstable
 class ObRowkeyVectorHelper
 {
 public:
-  OB_INLINE static bool can_use_non_datum_rowkey_vector(const bool is_cg, const ObTabletID &tablet_id)
+  OB_INLINE static bool can_use_non_datum_rowkey_vector(const ObTabletID &tablet_id)
   {
-    return !is_cg && !tablet_id.is_inner_tablet();
+    return !tablet_id.is_inner_tablet();
   }
 };
 
@@ -170,7 +170,6 @@ public:
       const ObDatumRange &range,
       const bool is_left_border,
       const bool is_right_border,
-      const bool is_normal_cg,
       const ObStorageDatumUtils &datum_utils,
       int64_t &endkey_begin_idx,
       int64_t &endkey_end_idx) const;

@@ -229,11 +229,7 @@ public:
   }
   virtual bool no_data_to_read() const override
   {
-    return is_empty() && !is_ddl_merge_sstable();
-  }
-  virtual bool is_ddl_merge_empty_sstable() const override
-  {
-    return is_empty() && is_ddl_merge_sstable();
+    return is_empty();
   }
   int set_addr(const ObMetaDiskAddr &addr);
   OB_INLINE const ObMetaDiskAddr &get_addr() const { return addr_; }
@@ -309,12 +305,6 @@ public:
     }
     return size;
   }
-
-  int get_cs_range(
-      const ObDatumRange &range,
-      const ObITableReadInfo &index_read_info,
-      ObIAllocator &allocator,
-      ObDatumRange &cs_range);
 
   /*
    * Attention! this func will update TableKey::snapshot_version_ & ObSSTableBasicMeta::root_macro_seq_

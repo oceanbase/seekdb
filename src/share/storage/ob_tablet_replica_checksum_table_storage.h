@@ -41,7 +41,6 @@ struct ObTabletReplicaChecksumEntry
   common::ObString column_checksums_;  // Serialized column checksums (TEXT)
   common::ObString b_column_checksums_;  // Binary column checksums (BLOB)
   int64_t data_checksum_type_;
-  uint64_t co_base_snapshot_version_;
 
   ObTabletReplicaChecksumEntry()
     : tablet_id_(0),
@@ -52,8 +51,7 @@ struct ObTabletReplicaChecksumEntry
       data_checksum_(0),
       column_checksums_(),
       b_column_checksums_(),
-      data_checksum_type_(0),
-      co_base_snapshot_version_(OB_MAX_SCN_TS_NS)
+      data_checksum_type_(0)
   {}
 
   void reset()
@@ -67,7 +65,6 @@ struct ObTabletReplicaChecksumEntry
     column_checksums_.reset();
     b_column_checksums_.reset();
     data_checksum_type_ = 0;
-    co_base_snapshot_version_ = OB_MAX_SCN_TS_NS;
   }
 };
 
@@ -132,4 +129,3 @@ private:
 } // namespace oceanbase
 
 #endif // OCEANBASE_SHARE_STORAGE_OB_TABLET_REPLICA_CHECKSUM_TABLE_STORAGE_H_
-

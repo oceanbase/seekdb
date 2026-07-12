@@ -805,11 +805,9 @@ int ObPushdownFilterConstructor::generate(ObRawExpr *raw_expr, ObPushdownFilterN
   if (OB_ISNULL(raw_expr) || OB_ISNULL(alloc_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid null parameter", K(ret), KP(raw_expr), KP(alloc_));
-  // join runtime filter only in column store can be pushdown as white filter
-  // topn runtime filter can be pushdown as white filter both in row store and column store
-  } else if ((use_column_store_ || T_OP_PUSHDOWN_TOPN_FILTER == raw_expr->get_expr_type())
-             && raw_expr->is_white_runtime_filter_expr()) {
-    // only in column store, the runtime filter can be pushdown as white filter
+  // Topn runtime filter can be pushed down as white filter.
+  } else if (T_OP_PUSHDOWN_TOPN_FILTER == raw_expr->get_expr_type() &&
+             raw_expr->is_white_runtime_filter_expr()) {
     ObOpRawExpr *op_raw_expr = static_cast<ObOpRawExpr *>(raw_expr);
     if (op_raw_expr->get_param_count() > 1) {
       if (OB_FAIL(split_multi_cols_runtime_filter(op_raw_expr, filter_node))) {
@@ -1345,124 +1343,6 @@ int ObPushdownFilterExecutor::init_filter_param(
   return ret;
 }
 
-int ObPushdownFilterExecutor::init_co_filter_param(const ObTableIterParam &iter_param, const bool need_padding)
-{
-  int ret = OB_SUCCESS;
-  const ObITableReadInfo *read_info =  nullptr;
-  const common::ObIArray<int32_t> *access_cgs = nullptr;
-  const common::ObIArray<ObExpr *> *cg_exprs = nullptr;
-  const ObIArray<uint64_t> &col_ids = get_col_ids();
-  const int64_t col_count = col_ids.count();
-  is_padding_mode_ = need_padding;
-  if (OB_UNLIKELY(!iter_param.is_valid() || nullptr == (read_info = iter_param.get_read_info())
-                  || nullptr == read_info->get_cg_idxs())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(iter_param), KPC(iter_param.get_read_info()));
-  } else if (is_filter_node()) {
-    if (0 == col_count) {
-      if (OB_FAIL(init_array_param(cg_idxs_, 1))) {
-        LOG_WARN("Fail to init cg idxs", K(ret), K(col_count));
-      } else if (OB_FAIL(cg_idxs_.push_back(OB_CS_VIRTUAL_CG_IDX))) {
-        LOG_WARN("Failed to push back cg idx", K(ret));
-      }
-    } else if (OB_FAIL(init_array_param(col_params_, col_count))) {
-      LOG_WARN("Fail to init col params", K(ret), K(col_count));
-    } else if (OB_FAIL(init_array_param(col_offsets_, col_count))) {
-      LOG_WARN("Fail to init col offsets", K(ret), K(col_count));
-    } else if (OB_FAIL(init_array_param(cg_col_offsets_, col_count))) {
-      LOG_WARN("Fail to init cg col offsets", K(ret), K(col_count));
-    } else if (OB_FAIL(init_array_param(cg_idxs_, col_count))) {
-      LOG_WARN("Fail to init col offsets", K(ret), K(col_count));
-    } else if (OB_FAIL(init_array_param(default_datums_, col_count))) {
-      LOG_WARN("Fail to init default datums", K(ret), K(col_count));
-    } else if (FALSE_IT(cg_exprs = get_cg_col_exprs())) {
-    } else if (nullptr != cg_exprs && OB_FAIL(cg_col_exprs_.assign(*cg_exprs))) {
-      LOG_WARN("Fail to assign cg exprs", K(ret), KPC(cg_exprs));
-    } else {
-      access_cgs = read_info->get_cg_idxs();
-      for (int64_t i = 0; OB_SUCC(ret) && i < col_count; i++) {
-        int32_t col_pos = -1;
-        int32_t cg_idx = -1;
-        const share::schema::ObColumnParam *col_param = nullptr;
-        const common::ObIArray<share::schema::ObColumnParam *> &col_params = *read_info->get_columns();
-        const common::ObIArray<ObColDesc> &cols_desc = read_info->get_columns_desc();
-        for (col_pos = 0; OB_SUCC(ret) && col_pos < cols_desc.count(); col_pos++) {
-          if (col_ids.at(i) == cols_desc.at(col_pos).col_id_) {
-            cg_idx = access_cgs->at(col_pos);
-            col_param = col_params.at(col_pos);
-            break;
-          }
-        }
-
-        if (OB_FAIL(ret)) {
-        } else if (OB_UNLIKELY(0 > col_pos || 0 > cg_idx || nullptr == col_param)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected result", K(ret), K(col_pos), K(cg_idx), K(col_ids.at(i)));
-        } else if (OB_FAIL(col_offsets_.push_back(col_pos))) {
-          LOG_WARN("failed to push back col offset", K(ret));
-        } else if (OB_FAIL(cg_col_offsets_.push_back(0))) { // TODO: fix this later, use col index when multi cols contained in cg table
-          LOG_WARN("failed to push back col offset", K(ret));
-        } else if (OB_FAIL(cg_idxs_.push_back(cg_idx))) {
-          LOG_WARN("Failed to push back cg idx", K(ret), K(cg_idx));
-        } else {
-          const share::schema::ObColumnParam *cg_col_param = nullptr;
-          blocksstable::ObStorageDatum default_datum;
-          const common::ObObj &def_cell = col_param->get_orig_default_value();
-          const common::ObObjMeta &obj_meta = col_param->get_meta_type();
-          cg_col_param = col_param;
-
-          if (OB_FAIL(col_params_.push_back(cg_col_param))) {
-            LOG_WARN("failed to push back col param", K(ret));
-          } else if (!def_cell.is_nop_value()) {
-            if (OB_FAIL(default_datum.from_obj(def_cell))) {
-              LOG_WARN("convert obj to datum failed", K(ret), K(col_params_.count()), K(def_cell));
-            } else if (obj_meta.is_lob_storage() && !def_cell.is_null()) {
-              // lob def value must have no lob header when not null
-              // When do lob pushdown, should add lob header for default value
-              ObString data = default_datum.get_string();
-              ObString out;
-              if (OB_FAIL(ObLobManager::fill_lob_header(allocator_, data, out))) {
-                LOG_WARN("failed to fill lob header for column", K(ret), K(col_pos), K(def_cell), K(data));
-              } else {
-                default_datum.set_string(out);
-              }
-            }
-          }
-          if (OB_FAIL(ret)) {
-          } else if (OB_FAIL(default_datums_.push_back(default_datum))) {
-            LOG_WARN("Fail to push back default datum", K(ret));
-          }
-          LOG_DEBUG("[COLUMNSTORE] extract one cg idx", K(ret), KPC(read_info), K(col_pos), K(cg_idx), KPC(cg_col_param));
-        }
-      }
-      LOG_DEBUG("[COLUMNSTORE] cons cg idxs", K(ret), K_(cg_idxs), K(col_ids), K_(col_params), K_(col_offsets), K_(cg_col_offsets));
-    }
-  } else {
-    // TODO: @yuxiaozhe.yxz rewrite cg_col_exprs_ in rescan
-    for (uint32_t i = 0; OB_SUCC(ret) && i < n_child_; i++) {
-      if (OB_NOT_NULL(childs_[i]) &&
-          OB_FAIL(childs_[i]->init_co_filter_param(iter_param, need_padding))) {
-        LOG_WARN("Failed to init pushdown filter param", K(ret), K(i), KP(childs_[i]));
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    n_cols_ = col_count;
-  }
-  return ret;
-}
-
-int ObPushdownFilterExecutor::set_cg_param(const common::ObIArray<uint32_t> &cg_idxs, const common::ObIArray<ObExpr *> &exprs)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL((cg_idxs_.assign(cg_idxs)))) {
-    LOG_WARN("Failed to assign cg_idxs", K(ret), K(cg_idxs), K(cg_idxs_));
-  } else if (!exprs.empty() && OB_FAIL(cg_col_exprs_.assign(exprs))) {
-    LOG_WARN("Failed to assign cg_exprs", K(ret), K(exprs));
-  }
-  return ret;
-}
 
 int ObPushdownFilterExecutor::execute(
     sql::ObPushdownFilterExecutor *parent,
@@ -1741,9 +1621,9 @@ ObPushdownFilterExecutor::ObPushdownFilterExecutor(common::ObIAllocator &alloc,
                                                    ObPushdownOperator &op,
                                                    PushdownExecutorType type)
   : type_(type), need_check_row_filter_(false), filter_tree_status_(ObCommonFilterTreeStatus::NONE_FILTER),
-    n_cols_(0), n_child_(0), cg_iter_idx_(INVALID_CG_ITER_IDX), skipped_rows_(0), childs_(nullptr),
-    filter_bitmap_(nullptr), col_params_(alloc), col_offsets_(alloc), cg_col_offsets_(alloc), default_datums_(alloc),
-    cg_idxs_(alloc), cg_col_exprs_(alloc), allocator_(alloc), op_(op), is_padding_mode_(false), is_rewrited_(false), filter_bool_mask_(),
+    n_cols_(0), n_child_(0), skipped_rows_(0), childs_(nullptr),
+    filter_bitmap_(nullptr), col_params_(alloc), col_offsets_(alloc), default_datums_(alloc),
+    allocator_(alloc), op_(op), is_padding_mode_(false), is_rewrited_(false), filter_bool_mask_(),
     enable_reorder_(false), ref_cnt_(0), filter_realtime_statistics_()
 {}
 
@@ -1756,10 +1636,7 @@ ObPushdownFilterExecutor::~ObPushdownFilterExecutor()
   filter_bitmap_ = nullptr;
   col_params_.reset();
   col_offsets_.reset();
-  cg_col_offsets_.reset();
   default_datums_.reset();
-  cg_idxs_.reset();
-  cg_col_exprs_.reset();
   for (uint32_t i = 0; i < n_child_; i++) {
     if (OB_NOT_NULL(childs_[i])) {
       childs_[i]->~ObPushdownFilterExecutor();
@@ -1767,7 +1644,6 @@ ObPushdownFilterExecutor::~ObPushdownFilterExecutor()
     }
   }
   n_child_ = 0;
-  cg_iter_idx_ = INVALID_CG_ITER_IDX;
   need_check_row_filter_ = false;
   is_padding_mode_ = false;
   is_rewrited_ = false;
@@ -1783,7 +1659,6 @@ DEF_TO_STRING(ObPushdownFilterExecutor)
   J_KV(K_(type), K_(need_check_row_filter), K_(n_cols),
        K_(n_child), KP_(childs), KP_(filter_bitmap),
        K_(col_params), K_(default_datums), K_(col_offsets),
-       K_(cg_col_offsets), K_(cg_idxs), K_(cg_col_exprs),
        K_(is_rewrited), K_(filter_bool_mask), K_(is_padding_mode));
   J_OBJ_END();
   return pos;
@@ -1844,7 +1719,7 @@ ObPhysicalFilterExecutor::~ObPhysicalFilterExecutor()
 int ObPhysicalFilterExecutor::filter(blocksstable::ObStorageDatum *datums, int64_t col_cnt, const sql::ObBitVector &skip_bit, bool &filtered)
 {
   int ret = OB_SUCCESS;
-  const common::ObIArray<ObExpr *> *column_exprs = get_cg_col_exprs();
+  const common::ObIArray<ObExpr *> *column_exprs = get_column_exprs();
   if (OB_UNLIKELY(col_cnt != column_exprs->count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected status: column count not match", K(ret), K(col_cnt));
@@ -2255,7 +2130,7 @@ int ObBlackFilterExecutor::judge_greater_or_less(
   sql::ObExpr *assist_expr = nullptr;
   sql::ObExpr *column_expr = nullptr;
   ObEvalCtx &eval_ctx = op_.get_eval_ctx();
-  const common::ObIArray<ObExpr *> *column_exprs = get_cg_col_exprs();
+  const common::ObIArray<ObExpr *> *column_exprs = get_column_exprs();
   if (OB_UNLIKELY(nullptr == column_exprs || column_exprs->count() != 1 ||
                   filter_.assist_exprs_.count() != 2 ||
                   filter_.mono_ < MON_NON || filter_.mono_ > MON_EQ_DESC)) {
@@ -3079,7 +2954,6 @@ void PushdownFilterInfo::reset()
   context_ = nullptr;
   is_inited_ = false;
   is_pd_filter_ = false;
-  is_pd_to_cg_ = false;
   orig_filter_is_null_ = false;
   start_ = -1;
   count_ = 0;
@@ -3092,7 +2966,6 @@ void PushdownFilterInfo::reset()
 
 void PushdownFilterInfo::reuse()
 {
-  is_pd_to_cg_ = false;
   orig_filter_is_null_ = false;
   filter_ = nullptr;
   di_bitmap_ = nullptr;

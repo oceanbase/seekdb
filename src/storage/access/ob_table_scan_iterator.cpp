@@ -152,10 +152,8 @@ bool ObTableScanIterator::can_use_global_iter_pool(const ObQRIterType iter_type)
   if (main_table_param_.iter_param_.tablet_id_.is_inner_tablet()) {
   } else if (scan_param_->use_index_skip_scan() ||
              !scan_param_->sample_info_.is_no_sample() ||
-             main_table_param_.iter_param_.is_use_column_store() ||
              main_table_param_.iter_param_.enable_pd_aggregate() ||
              main_table_param_.iter_param_.enable_pd_group_by() ||
-             main_table_param_.iter_param_.is_column_replica_table_ ||
              main_table_param_.iter_param_.has_lob_column_out_ ||
              scan_param_->is_mview_query()) {
   } else {
@@ -825,17 +823,15 @@ int ObTableScanIterator::check_advance_scan_supported()
                   !scan_param_->sample_info_.is_no_sample() ||
                   scan_param_->use_index_skip_scan() ||
                   scan_param_->is_mview_query() ||
-                  main_table_param_.iter_param_.is_use_column_store() ||
                   main_table_param_.iter_param_.enable_pd_aggregate() ||
                   main_table_param_.iter_param_.enable_pd_group_by())) {
       ret = OB_NOT_SUPPORTED;
-      STORAGE_LOG(WARN, "advance_scan not supported for not forward scan/sample/index skip scan/mview/column store/group by pushdown",
+      STORAGE_LOG(WARN, "advance_scan not supported for not forward scan/sample/index skip scan/mview/group by pushdown",
       K(ret),
       K(scan_param_->scan_flag_.scan_order_),
       K(scan_param_->sample_info_.is_no_sample()),
       K(scan_param_->use_index_skip_scan()),
       K(scan_param_->is_mview_query()),
-      K(main_table_param_.iter_param_.is_use_column_store()),
       K(main_table_param_.iter_param_.enable_pd_aggregate()),
       K(main_table_param_.iter_param_.enable_pd_group_by()),
       K(lbt()));

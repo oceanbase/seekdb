@@ -21,7 +21,6 @@
 #include "observer/table_load/ob_table_load_unique_index_row_handler.h"
 #include "observer/table_load/ob_table_load_merge_data_op.h"
 #include "observer/table_load/ob_table_load_merge_del_lob_op.h"
-#include "observer/table_load/ob_table_load_merge_rescan_op.h"
 #include "observer/table_load/ob_table_load_store_ctx.h"
 #include "observer/table_load/ob_table_load_store_table_ctx.h"
 #include "observer/table_load/ob_table_load_table_ctx.h"
@@ -43,8 +42,6 @@ ObTableLoadMergeTableCtx::ObTableLoadMergeTableCtx()
     table_store_(nullptr),
     dml_row_handler_(nullptr),
     merge_mode_(ObDirectLoadMergeMode::INVALID_MERGE_MODE),
-    use_batch_mode_(false),
-    need_calc_range_(false),
     need_close_insert_tablet_ctx_(false),
     is_del_lob_(false)
 {
@@ -71,7 +68,6 @@ ObTableLoadMergeTableBaseOp::ObTableLoadMergeTableBaseOp(ObTableLoadMergeTableBa
 ObTableLoadMergeTableOp::ObTableLoadMergeTableOp(ObTableLoadMergeTableBaseOp *parent)
   : ObTableLoadMergeTableBaseOp(parent),
     status_(Status::NONE),
-    need_rescan_(false),
     need_del_lob_(false)
 {
 }
@@ -79,7 +75,6 @@ ObTableLoadMergeTableOp::ObTableLoadMergeTableOp(ObTableLoadMergeTableBaseOp *pa
 ObTableLoadMergeTableOp::ObTableLoadMergeTableOp(ObTableLoadMergePhaseBaseOp *parent)
   : ObTableLoadMergeTableBaseOp(parent),
     status_(Status::NONE),
-    need_rescan_(false),
     need_del_lob_(false)
 {
 }
@@ -109,11 +104,7 @@ int ObTableLoadMergeTableOp::switch_next_op(bool is_parent_called)
         child_op_type = ObTableLoadMergeOpType::MERGE_DATA;
         break;
       case Status::MERGE_DATA:
-        if (need_rescan_) {
-          status_ = Status::RESCAN;
-          child_op_type = ObTableLoadMergeOpType::RESCAN;
-          break;
-        } else if (need_del_lob_) {
+        if (need_del_lob_) {
           // del_lob needs lob data, cannot be closed at inner_close time
           if (ObTableLoadMergerPhaseType::INSERT == merge_phase_ctx_->phase_) {
             if (OB_FAIL(
@@ -135,9 +126,6 @@ int ObTableLoadMergeTableOp::switch_next_op(bool is_parent_called)
         } else {
           status_ = Status::COMPLETED;
         }
-        break;
-      case Status::RESCAN:
-        status_ = Status::COMPLETED;
         break;
       case Status::DEL_LOB:
         status_ = Status::COMPLETED;
@@ -170,7 +158,6 @@ int ObTableLoadMergeTableOp::acquire_child_op(ObTableLoadMergeOpType::Type child
   switch (child_op_type) {
     OB_TABLE_LOAD_MERGE_ACQUIRE_CHILD_OP(ObTableLoadMergeOpType::MERGE_DATA,
                                          ObTableLoadMergeDataOp);
-    OB_TABLE_LOAD_MERGE_ACQUIRE_CHILD_OP(ObTableLoadMergeOpType::RESCAN, ObTableLoadMergeRescanOp);
     OB_TABLE_LOAD_MERGE_ACQUIRE_CHILD_OP(ObTableLoadMergeOpType::DEL_LOB, ObTableLoadMergeDelLobOp);
     OB_TABLE_LOAD_MERGE_UNEXPECTED_CHILD_OP_TYPE(child_op_type);
   }
@@ -242,10 +229,6 @@ int ObTableLoadMergeIndexTableOp::inner_init()
     } else {
       inner_ctx_.merge_mode_ = ObDirectLoadMergeMode::NORMAL;
     }
-    // use_batch_mode_
-    inner_ctx_.use_batch_mode_ = false;
-    // need_calc_range_
-    inner_ctx_.need_calc_range_ = false;
     // need_close_insert_tablet_ctx_
     inner_ctx_.need_close_insert_tablet_ctx_ = true;
     // is_del_lob_

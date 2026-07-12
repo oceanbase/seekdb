@@ -39,7 +39,6 @@ struct GatherHelper
     is_approx_gather_(false),
     gather_vectorize_(DEFAULT_STAT_GATHER_VECTOR_BATCH_SIZE),
     running_monitor_(running_monitor),
-    use_column_store_(false),
     use_single_part_(false),
     is_split_column_(false),
     is_all_col_gathered_(false),
@@ -53,7 +52,6 @@ struct GatherHelper
   bool is_approx_gather_;
   int64_t gather_vectorize_;
   ObOptStatRunningMonitor &running_monitor_;
-  bool use_column_store_;
   bool use_single_part_;
 
   bool is_split_column_;
@@ -72,7 +70,6 @@ struct GatherHelper
                K(is_approx_gather_),
                K(gather_vectorize_),
                K(running_monitor_),
-               K(use_column_store_),
                K(use_single_part_),
                K(is_split_column_),
                K(is_all_col_gathered_),
@@ -164,14 +161,12 @@ private:
   static int prepare_gather_stats(ObExecContext &ctx,
                                   const ObTableStatParam &param,
                                   PartitionIdBlockMap &partition_id_block_map,
-                                  PartitionIdSkipRateMap &partition_id_skip_rate_map,
                                   GatherHelper &gather_helper);
   static int do_gather_stats_with_retry(ObExecContext &ctx,
                                         ObMySQLTransaction &trans,
                                         StatLevel stat_level,
                                         const ObIArray<PartInfo> &gather_partition_infos,
                                         const PartitionIdBlockMap *partition_id_block_map,
-                                        const PartitionIdSkipRateMap *partition_id_skip_rate_map,
                                         GatherHelper &gather_helper,
                                         ObTableStatParam &derive_param,
                                         ObIArray<ObOptTableStat *> &all_tstats);
@@ -264,20 +259,17 @@ private:
                                    ObIArray<TaskColumnParam> &batch_task_col_infos,
                                    ObTableStatParam &derive_param,
                                    const PartitionIdBlockMap *partition_id_block_map,
-                                   const PartitionIdSkipRateMap *partition_id_skip_rate_map,
                                    GatherHelper &gather_helper);
 
   static int gather_partition_stats(ObExecContext &ctx,
                                     const ObTableStatParam &param,
                                     const PartitionIdBlockMap *partition_id_block_map,
-                                    const PartitionIdSkipRateMap *partition_id_skip_rate_map,
                                     GatherHelper &gather_helper,
                                     ObIArray<int64_t> &failed_part_ids);
 
   static int collect_last_part_and_global_if_timeout(ObExecContext &ctx,
                                                      const ObTableStatParam &origin_param,
                                                      const PartitionIdBlockMap *partition_id_block_map,
-                                                     const PartitionIdSkipRateMap *partition_id_skip_rate_map,
                                                      GatherHelper &gather_helper,
                                                      ObIArray<int64_t> &failed_part_ids);
 

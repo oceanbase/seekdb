@@ -551,7 +551,7 @@ int ObOptimizerTraceImpl::append(const Path *path)
         append("is index merge: False, index id:", ap.index_id_, ", global index:", ap.is_global_index_, ", unique index:", index_info.is_unique_index_);
       }
       new_line();
-      append("use column store:", ap.use_column_store_, ", use das:", ap.use_das_, ", index back:", index_info.is_index_back_);
+      append("use das:", ap.use_das_, ", index back:", index_info.is_index_back_);
       new_line();
       append("table rows:", ap.get_table_row_count(), ",phy_query_range_row_count:", ap.get_phy_query_range_row_count());
       new_line();
@@ -1131,10 +1131,6 @@ int ObOptimizerTraceImpl::trace_static(const ObDMLStmt *stmt, OptTableMetas &tab
         } else if (OB_FAIL(new_line())) {
           LOG_WARN("failed to append msg", K(ret));
         } else if (OB_FAIL(append("Max:", col_meta->get_max_value()))) {
-          LOG_WARN("failed to append msg", K(ret));
-        } else if (OB_FAIL(new_line())) {
-          LOG_WARN("failed to append msg", K(ret));
-        } else if (OB_FAIL(append("column group micro block count:", col_meta->get_cg_micro_blk_cnt()))) {
           LOG_WARN("failed to append msg", K(ret));
         } else if (OB_FAIL(new_line())) {
           LOG_WARN("failed to append msg", K(ret));

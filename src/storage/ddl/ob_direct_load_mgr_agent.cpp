@@ -30,7 +30,7 @@ using namespace oceanbase::storage;
 
 ObDirectLoadMgrAgent::ObDirectLoadMgrAgent()
   : is_inited_(false), direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID), start_scn_(), execution_id_(-1), mgr_handle_(), lob_mgr_handle_(),
-    cgs_count_(0), lob_writer_(), data_writer_(), idem_start_seq_(0), idem_next_seq_(0)
+    lob_writer_(), data_writer_(), idem_start_seq_(0), idem_next_seq_(0)
 {
 }
 
@@ -46,7 +46,6 @@ void ObDirectLoadMgrAgent::reset()
   mgr_handle_.reset();
   start_scn_.reset();
   execution_id_ = -1;
-  cgs_count_ = 0;
   lob_writer_.reset();
   data_writer_.reset();
   idem_start_seq_ = 0;
@@ -120,8 +119,6 @@ int ObDirectLoadMgrAgent::init_for_sn(
   int ret = OB_SUCCESS;
   ObLSHandle ls_handle;
   ObTabletHandle tablet_handle;
-  ObStorageSchema *storage_schema = nullptr;
-  ObArenaAllocator tmp_arena("ddl_load_schema", OB_MALLOC_NORMAL_BLOCK_SIZE);
   if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(ls_id), K(tablet_id));
@@ -133,9 +130,6 @@ int ObDirectLoadMgrAgent::init_for_sn(
   } else if (OB_UNLIKELY(nullptr == tablet_handle.get_obj())) {
     ret = OB_ERR_SYS;
     LOG_WARN("tablet handle is null", K(ret), K(ls_id), K(tablet_id));
-  } else if (OB_FAIL(tablet_handle.get_obj()->load_storage_schema(tmp_arena, storage_schema))) {
-    LOG_WARN("load storage schema failed", K(ret));
-  } else if (OB_FALSE_IT(cgs_count_ = storage_schema->get_column_groups().count())) {
   } else if (OB_LIKELY(mgr_handle_.is_valid())) {
     if (!start_scn_.is_valid_and_not_min() || execution_id_ < 0) {
       ret = OB_ERR_SYS;
@@ -157,7 +151,6 @@ int ObDirectLoadMgrAgent::init_for_sn(
       LOG_WARN("mgr handle is invalid but the major does not exist under shared-nothing mode", K(ret), K(tablet_id));
     }
   }
-  ObTabletObjLoadHelper::free(tmp_arena, storage_schema);
   return ret;
 }
 
@@ -324,13 +317,11 @@ int ObDirectLoadMgrAgent::fill_sstable_slice_for_sn(
       } else if ((affected_rows % 100 == 0) && OB_NOT_NULL(insert_monitor)) {
         (void) ATOMIC_AAF(&insert_monitor->scanned_row_cnt_, 100);
         (void) ATOMIC_AAF(&insert_monitor->inserted_row_cnt_, 100);
-        (void) ATOMIC_AAF(&insert_monitor->inserted_cg_row_cnt_, cgs_count_ * 100);
       }
     }
     if (OB_SUCC(ret) && OB_NOT_NULL(insert_monitor)) {
       (void) ATOMIC_AAF(&insert_monitor->scanned_row_cnt_, affected_rows % 100);
       (void) ATOMIC_AAF(&insert_monitor->inserted_row_cnt_, affected_rows % 100);
-      (void) ATOMIC_AAF(&insert_monitor->inserted_cg_row_cnt_, cgs_count_ * (affected_rows % 100));
     } 
   }
   return ret;
@@ -649,38 +640,6 @@ int ObDirectLoadMgrAgent::close_sstable_slice_for_sn(
   } else if (OB_FAIL(mgr_handle_.get_base_obj()->close_sstable_slice(
       slice_info.is_lob_slice_, slice_info, start_scn_, execution_id_, insert_monitor, next_seq))) {
     LOG_WARN("close sstable slice failed", K(ret), K(slice_info), K_(start_scn), K_(execution_id));
-  }
-  return ret;
-}
-
-int ObDirectLoadMgrAgent::calc_range(const int64_t context_id, const int64_t thread_cnt)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(!mgr_handle_.is_valid())) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("error sys", K(ret), KPC(this));
-  } else if (OB_FAIL(mgr_handle_.get_base_obj()->calc_range(context_id, thread_cnt))) {
-    LOG_WARN("calc range failed", K(ret));
-  }
-  return ret;
-}
-
-int ObDirectLoadMgrAgent::fill_column_group(
-    const int64_t thread_cnt,
-    const int64_t thread_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(!mgr_handle_.is_valid())) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("error sys", K(ret), KPC(this));
-  } else if (OB_FAIL(mgr_handle_.get_obj()->fill_column_group(thread_cnt, thread_id))) {
-    LOG_WARN("fill column group failed", K(ret), K(thread_cnt), K(thread_id));
   }
   return ret;
 }

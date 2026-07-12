@@ -41,7 +41,6 @@ ObBasicTabletMergeCtx
       - ObTabletMiniMergeCtx
       - ObTabletExeMergeCtx (For minor/meta_major)
       - ObTabletMajorMergeCtx
-  - ObCOTabletMergeCtx (For columnar store)
 */
 
 #define DEFAULT_CONSTRUCTOR(DagName, ParentDag)                                \

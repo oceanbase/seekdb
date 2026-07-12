@@ -149,9 +149,6 @@ int BaseLearnerList<MAX_SIZE, T>::add_learner(const T &learner)
     ret = OB_ENTRY_EXIST;
   } else if (OB_FAIL(learner_array_.push_back(learner))) {
     COMMON_LOG(ERROR, "learner_array_ push back failed", K(ret), K(learner));
-  } else {
-    // For replication and migration of columnar replicas,
-    // learner_list should keep the order of learners as they had been added into.
   }
   return ret;
 }

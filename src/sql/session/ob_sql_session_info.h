@@ -41,10 +41,7 @@
 #include "sql/monitor/ob_exec_stat.h"
 #include "share/rc/ob_tenant_base.h"
 #include "share/rc/ob_context.h"
-#include "share/resource_manager/ob_cgroup_ctrl.h"
-#include "sql/monitor/flt/ob_flt_extra_info.h"
 #include "sql/ob_optimizer_trace_impl.h"
-#include "sql/monitor/flt/ob_flt_span_mgr.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
@@ -197,7 +194,7 @@ enum SessionSyncInfoType {
   SESSION_SYNC_APPLICATION_INFO = 0, // for application info
   SESSION_SYNC_APPLICATION_CONTEXT = 1, // for app ctx
   SESSION_SYNC_CLIENT_ID = 2, // for client identifier
-  SESSION_SYNC_CONTROL_INFO = 3, // for full trace link control info
+  SESSION_SYNC_CONTROL_INFO = 3, // reserved for compatibility
   SESSION_SYNC_SYS_VAR = 4,   // for system variables
   SESSION_SYNC_SEQUENCE_CURRVAL = 5, // for sequence currval
   SESSION_SYNC_ERROR_SYS_VAR = 6, // for error scene need sync sysvar info
@@ -324,10 +321,10 @@ public:
                                    int64_t last_sess_length, bool &found_mismatch);
 };
 
-class ObControlInfoEncoder : public ObSessInfoEncoder {
+class ObNoopSessInfoEncoder : public ObSessInfoEncoder {
 public:
-  ObControlInfoEncoder() : ObSessInfoEncoder() {}
-  virtual ~ObControlInfoEncoder() {}
+  ObNoopSessInfoEncoder() : ObSessInfoEncoder() {}
+  virtual ~ObNoopSessInfoEncoder() {}
   virtual int serialize(ObSQLSessionInfo &sess, char *buf, const int64_t length, int64_t &pos) override;
   virtual int deserialize(ObSQLSessionInfo &sess, const char *buf, const int64_t length, int64_t &pos) override;
   virtual int get_serialize_size(ObSQLSessionInfo &sess, int64_t &length) const override;
@@ -339,7 +336,6 @@ public:
                                 int64_t last_sess_length);
   virtual int display_sess_info(ObSQLSessionInfo &sess, const char* current_sess_buf,
           int64_t current_sess_length, const char* last_sess_buf, int64_t last_sess_length);
-  static const int16_t CONINFO_BY_SESS = 0xC078;
 };
 
 // The current system variable synchronization will not trigger synchronization in
@@ -656,7 +652,6 @@ public:
                                  enable_immediate_row_conflict_check_(false),
                                  range_optimizer_max_mem_size_(128*1024*1024),
                                  _query_record_size_limit_(65536),
-                                 enable_column_store_(false),
                                  enable_decimal_int_type_(false),
                                  enable_mysql_compatible_dates_(false),
                                  print_sample_ppm_(0),
@@ -688,7 +683,6 @@ public:
     int64_t get_px_join_skew_minfreq() const { return px_join_skew_minfreq_; }
     int64_t get_range_optimizer_max_mem_size() const { return range_optimizer_max_mem_size_; }
     int64_t get_query_record_size_limit() const { return _query_record_size_limit_; }
-    bool get_enable_column_store() const { return enable_column_store_; }
     bool get_enable_decimal_int_type() const { return enable_decimal_int_type_; }
     bool enable_enhanced_cursor_validation() const { return enable_enhanced_cursor_validation_; }
     bool get_enable_mysql_compatible_dates() const { return enable_mysql_compatible_dates_; }
@@ -732,7 +726,6 @@ public:
     bool enable_immediate_row_conflict_check_;
     int64_t range_optimizer_max_mem_size_;
     int64_t _query_record_size_limit_;
-    bool enable_column_store_;
     bool enable_decimal_int_type_;
     bool enable_mysql_compatible_dates_;
     // for record sys config print_sample_ppm
@@ -1133,24 +1126,11 @@ public:
   const common::ObString& get_module_name() const { return client_app_info_.module_name_; }
   const common::ObString& get_action_name() const  { return client_app_info_.action_name_; }
   const common::ObString& get_client_info() const { return client_app_info_.client_info_; }
-  const FLTControlInfo& get_control_info() const { return flt_control_info_; }
-  FLTControlInfo& get_control_info() { return flt_control_info_; }
-  void set_flt_control_info(const FLTControlInfo &con_info);
-  void set_flt_control_info_no_sync(const FLTControlInfo &con_info);
-  bool is_send_control_info() { return is_send_control_info_; }
-  void set_send_control_info(bool is_send) { is_send_control_info_ = is_send; }
-  bool is_coninfo_set_by_sess() { return coninfo_set_by_sess_; }
-  void set_coninfo_set_by_sess(bool is_set_by_sess) { coninfo_set_by_sess_ = is_set_by_sess; }
-  bool is_trace_enable() { return trace_enable_; }
-  void set_trace_enable(bool trace_enable) { trace_enable_ = trace_enable; }
-  bool is_auto_flush_trace() {return auto_flush_trace_;}
-  void set_auto_flush_trace(bool auto_flush_trace) { auto_flush_trace_ = auto_flush_trace; }
   ObSysVarEncoder& get_sys_var_encoder() { return sys_var_encoder_; }
   //ObUserVarEncoder& get_usr_var_encoder() { return usr_var_encoder_; }
   ObAppInfoEncoder& get_app_info_encoder() { return app_info_encoder_; }
   ObAppCtxInfoEncoder &get_app_ctx_encoder() { return app_ctx_info_encoder_; }
   ObClientIdInfoEncoder &get_client_info_encoder() { return client_id_info_encoder_;}
-  ObControlInfoEncoder &get_control_info_encoder() { return control_info_encoder_;}
   ObErrorSyncSysVarEncoder &get_error_sync_sys_var_encoder() { return error_sync_sys_var_encoder_;}
   ObSequenceCurrvalEncoder &get_sequence_currval_encoder() { return sequence_currval_encoder_; }
   ObQueryInfoEncoder &get_query_info_encoder() { return query_info_encoder_; }
@@ -1175,10 +1155,6 @@ public:
     next_client_ps_stmt_id_ = 0;
   }
 
-  int64_t get_expect_group_id() const { return expect_group_id_; }
-  void set_expect_group_id(int64_t group_id) { expect_group_id_ = group_id; }
-	bool get_group_id_not_expected() const { return group_id_not_expected_; }
-  void set_group_id_not_expected(bool value) { group_id_not_expected_ = value; }
   int is_force_temp_table_inline(bool &force_inline) const;
   int is_force_temp_table_materialize(bool &force_materialize) const;
   int is_temp_table_transformation_enabled(bool &transformation_enabled) const;
@@ -1302,11 +1278,6 @@ public:
   {
     cached_tenant_config_info_.refresh();
     return cached_tenant_config_info_.get_enable_mysql_compatible_dates();
-  }
-  bool is_enable_column_store()
-  {
-    cached_tenant_config_info_.refresh();
-    return cached_tenant_config_info_.get_enable_column_store();
   }
   bool is_enable_decimal_int_type()
   {
@@ -1455,7 +1426,6 @@ private:
   const common::ObVersionProvider *version_provider_;
   const ObSQLConfigProvider *config_provider_;
   char tenant_buff_[sizeof(share::ObTenantSpaceFetcher)];
-  sql::ObFLTSpanMgr *flt_span_mgr_;
   ObPlanCache *plan_cache_;
   ObPsCache *ps_cache_;
   // Record the number of rows scanned in the select stmt result set for use with found_row() when setting sql_calc_found_row;
@@ -1582,11 +1552,6 @@ private:
   char module_buf_[common::OB_MAX_MOD_NAME_LENGTH];
   char action_buf_[common::OB_MAX_ACT_NAME_LENGTH];
   char client_info_buf_[common::OB_MAX_CLIENT_INFO_LENGTH];
-  FLTControlInfo flt_control_info_;
-  bool trace_enable_ = false;
-  bool is_send_control_info_ = false;  // whether send control info to client
-  bool auto_flush_trace_ = false;
-  bool coninfo_set_by_sess_ = false;
   bool is_lock_session_ = false;
 
   ObSessInfoEncoder* sess_encoders_[SESSION_SYNC_MAX_TYPE] = {
@@ -1594,7 +1559,7 @@ private:
                             &app_info_encoder_,
                             &app_ctx_info_encoder_,
                             &client_id_info_encoder_,
-                            &control_info_encoder_,
+                            &noop_sess_info_encoder_,
                             &sys_var_encoder_,
                             &sequence_currval_encoder_,
                             &error_sync_sys_var_encoder_,
@@ -1605,7 +1570,7 @@ private:
   ObAppInfoEncoder app_info_encoder_;
   ObAppCtxInfoEncoder app_ctx_info_encoder_;
   ObClientIdInfoEncoder client_id_info_encoder_;
-  ObControlInfoEncoder control_info_encoder_;
+  ObNoopSessInfoEncoder noop_sess_info_encoder_;
   ObSequenceCurrvalEncoder sequence_currval_encoder_;
   ObErrorSyncSysVarEncoder error_sync_sys_var_encoder_;
   ObQueryInfoEncoder query_info_encoder_;
@@ -1631,10 +1596,6 @@ private:
   //and remove the record when the SQL execution ends
   //in order to access exec ctx through session during SQL execution
   ObExecContext *cur_exec_ctx_;
-  int64_t expect_group_id_;
-  // When try packet retry failed, set this flag true and retry at current thread.
-  // This situation is unexpected and will report a warning to user.
-  bool group_id_not_expected_;
   ObOptimizerTraceImpl optimizer_tracer_;
   int64_t vid_;
   char vip_buf_[MAX_IP_ADDR_LENGTH];

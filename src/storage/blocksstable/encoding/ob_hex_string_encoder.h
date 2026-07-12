@@ -182,7 +182,7 @@ public:
   INHERIT_TO_STRING_KV("ObIColumnEncoder", ObIColumnEncoder, K_(min_string_size), K_(max_string_size),
       K_(sum_size), K_(null_cnt), K_(nope_cnt), KPC_(header));
 private:
-  struct ColumnStoreFiller;
+  struct FixedDataFiller;
 
 private:
   int64_t min_string_size_;

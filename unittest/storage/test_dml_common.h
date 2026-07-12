@@ -334,7 +334,7 @@ int TestDmlCommon::build_table_param(
   if (OB_UNLIKELY(!table_schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid args", K(ret), K(table_schema));
-  } else if (OB_FAIL(table_param.convert(table_schema, output_column_ids, 0 /* disable enable_column_store */))) {
+  } else if (OB_FAIL(table_param.convert(table_schema, output_column_ids, false /* force_mysql_mode */))) {
     STORAGE_LOG(WARN, "failed to convert to table param", K(ret), K(table_schema), K(output_column_ids));
   }
 
@@ -559,7 +559,7 @@ int TestDmlCommon::build_pure_data_tablet_arg(
     STORAGE_LOG(WARN, "failed to push tablet id into array", K(ret), K(data_tablet_id));
   } else if (OB_FAIL(tablet_schema_index_array.push_back(0))) {
     STORAGE_LOG(WARN, "failed to push index into array", K(ret));
-  } else if (OB_FAIL(tablet_info.init(tablet_id_array, data_tablet_id, tablet_schema_index_array, lib::Worker::CompatMode::MYSQL, false, create_commit_versions, false /*has_cs_replica*/))) {
+  } else if (OB_FAIL(tablet_info.init(tablet_id_array, data_tablet_id, tablet_schema_index_array, lib::Worker::CompatMode::MYSQL, false, create_commit_versions))) {
     STORAGE_LOG(WARN, "failed to init tablet info", K(ret), K(tablet_id_array),
         K(data_tablet_id), K(tablet_schema_index_array));
   } else if (OB_FAIL(arg.init_create_tablet(ls_id, share::SCN::min_scn(), false/*need_check_tablet_cnt*/))) {
@@ -612,7 +612,7 @@ int TestDmlCommon::build_mixed_tablets_arg(
     STORAGE_LOG(WARN, "failed to push index into array", K(ret));
   } else if (OB_FAIL(tablet_schema_index_array.push_back(1))) {
     STORAGE_LOG(WARN, "failed to push index into array", K(ret));
-  } else if (OB_FAIL(tablet_info.init(tablet_id_array, data_tablet_id, tablet_schema_index_array, lib::Worker::CompatMode::MYSQL, false, create_commit_versions, false /*has_cs_replica*/))) {
+  } else if (OB_FAIL(tablet_info.init(tablet_id_array, data_tablet_id, tablet_schema_index_array, lib::Worker::CompatMode::MYSQL, false, create_commit_versions))) {
     STORAGE_LOG(WARN, "failed to init tablet info", K(ret), K(tablet_id_array),
         K(data_tablet_id), K(tablet_schema_index_array));
   } else if (OB_FAIL(arg.init_create_tablet(ls_id, share::SCN::min_scn(), false/*need_check_tablet_cnt*/))) {

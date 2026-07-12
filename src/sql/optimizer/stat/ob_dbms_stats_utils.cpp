@@ -1120,10 +1120,8 @@ int ObDbmsStatsUtils::remove_stat_gather_param_partition_info(int64_t reserved_p
 int ObDbmsStatsUtils::prepare_gather_stat_param(const ObTableStatParam &param,
                                                 StatLevel stat_level,
                                                 const PartitionIdBlockMap *partition_id_block_map,
-                                                const PartitionIdSkipRateMap *partition_id_skip_rate_map,
                                                 bool is_split_gather,
                                                 int64_t gather_vectorize,
-                                                bool use_column_store,
                                                 ObOptStatGatherParam &gather_param)
 {
   int ret = OB_SUCCESS;
@@ -1149,7 +1147,6 @@ int ObDbmsStatsUtils::prepare_gather_stat_param(const ObTableStatParam &param,
   gather_param.max_duration_time_ = param.duration_time_;
   gather_param.allocator_ = param.allocator_;
   gather_param.partition_id_block_map_ = partition_id_block_map;
-  gather_param.partition_id_skip_rate_map_ = partition_id_skip_rate_map;
   gather_param.gather_start_time_ = ObTimeUtility::current_time();
   gather_param.stattype_ = param.stattype_;
   gather_param.is_split_gather_ = is_split_gather;
@@ -1157,7 +1154,6 @@ int ObDbmsStatsUtils::prepare_gather_stat_param(const ObTableStatParam &param,
   gather_param.data_table_name_ = param.data_table_name_;
   gather_param.global_part_id_ = param.global_part_id_;
   gather_param.gather_vectorize_ = gather_vectorize;
-  gather_param.use_column_store_ = use_column_store;
   gather_param.is_async_gather_ = param.is_async_gather_;
   gather_param.async_full_table_size_ = param.async_full_table_size_;
   gather_param.hist_sample_info_.is_sample_ = param.hist_sample_info_.is_sample_;
@@ -1170,7 +1166,6 @@ int ObDbmsStatsUtils::prepare_gather_stat_param(const ObTableStatParam &param,
   gather_param.is_global_index_ = param.is_global_index_;
   gather_param.data_table_id_ = param.data_table_id_;
   gather_param.part_level_ = param.part_level_;
-  gather_param.consumer_group_id_ = param.consumer_group_id_;
   ret = gather_param.column_group_params_.assign(param.column_group_params_);
   if (OB_SUCC(ret)) {
     ret = gather_param.all_column_params_.assign(param.column_params_);

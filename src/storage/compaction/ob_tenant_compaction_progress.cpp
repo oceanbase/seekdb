@@ -49,8 +49,6 @@ void ObCompactionProgress::reset()
   compressed_size_ = 0;
   start_time_ = 0;
   estimated_finish_time_ = 0;
-  start_cg_idx_ = 0;
-  end_cg_idx_ = 0;
 }
 
 
@@ -70,8 +68,6 @@ ObTenantCompactionProgress & ObTenantCompactionProgress::operator=(const ObTenan
   total_tablet_cnt_ = other.total_tablet_cnt_;
   unfinished_tablet_cnt_ = other.unfinished_tablet_cnt_;
   sum_time_guard_ = other.sum_time_guard_;
-  start_cg_idx_ = other.start_cg_idx_;
-  end_cg_idx_ = other.end_cg_idx_;
   real_finish_cnt_ = other.real_finish_cnt_;
   return *this;
 }
@@ -296,8 +292,7 @@ int ObTenantCompactionProgressMgr::update_progress(
     const int64_t scanned_data_size_delta,
     const int64_t estimate_finish_time,
     const bool finish_flag,
-    const ObCompactionTimeGuard *time_guard,
-    const bool co_merge)
+    const ObCompactionTimeGuard *time_guard)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(major_snapshot_version < 0)) {
@@ -309,7 +304,7 @@ int ObTenantCompactionProgressMgr::update_progress(
     if (OB_FAIL(get_pos_(major_snapshot_version, pos))) {
       LOG_WARN("pos is invalid", K(ret), K(pos), K(major_snapshot_version));
     } else if (share::ObIDag::DAG_STATUS_FINISH != array_[pos].status_) {
-      if (finish_flag && !co_merge) {
+      if (finish_flag) {
         if (array_[pos].is_inited_ && OB_UNLIKELY(0 == array_[pos].unfinished_tablet_cnt_)) {
           if (REACH_TIME_INTERVAL(1000 * 1000)) {
             LOG_WARN("unfinished partition count is invalid", K(ret), K(array_[pos].unfinished_tablet_cnt_));

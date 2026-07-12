@@ -711,26 +711,6 @@ private:
                             common::ObArray<ObTableSchema *> &table_schema_array,
                             const uint64_t *table_ids = NULL,
                             const int64_t table_ids_size = 0);
-  int fetch_all_column_group_info(const ObRefreshSchemaStatus &schema_status,
-                                  const int64_t schema_version,
-                                  common::ObISQLClient &sql_client,
-                                  common::ObArray<ObTableSchema *> &table_schema_array,
-                                  const uint64_t *table_ids,
-                                  const int64_t table_ids_size);
-  int fetch_all_column_group_schema(const ObRefreshSchemaStatus &schema_status,
-                                    const int64_t schema_version,
-                                    common::ObISQLClient &sql_client,
-                                    const bool is_history,
-                                    common::ObArray<ObTableSchema *> &table_schema_array,
-                                    const uint64_t *table_ids,
-                                    const int64_t table_ids_size);
-  int fetch_all_column_group_mapping(const ObRefreshSchemaStatus &schema_status,
-                                     const int64_t schema_version,
-                                     common::ObISQLClient &sql_client,
-                                     const bool is_history,
-                                     ObArray<ObTableSchema *> &table_schema_array,
-                                     const uint64_t *table_ids,
-                                     const int64_t table_ids_size);
   int fetch_all_constraint_info_ignore_inner_table(const ObRefreshSchemaStatus &schema_status,
                                                    const int64_t schema_version,
                                                    common::ObISQLClient &sql_client,
@@ -854,12 +834,6 @@ private:
                            common::ObISQLClient &sql_client,
                            ObTableSchema *&table_schema);
 
-  int fetch_column_group_info(const ObRefreshSchemaStatus &schema_status,
-                              const uint64_t table_id,
-                              const int64_t schema_version,
-                              common::ObISQLClient &sql_client,
-                              ObTableSchema *&table_schema);
-
   template<typename TABLE_SCHEMA>
   int fetch_foreign_key_info(const ObRefreshSchemaStatus &schema_status,
                              const uint64_t table_id,
@@ -935,9 +909,6 @@ private:
 
   template<typename SCHEMA>
   int try_mock_partition_array(SCHEMA &table_schema);
-  template<typename SCHEMA>
-  int try_mock_default_column_group(SCHEMA &table_schema);
-
   int fetch_temp_table_schemas(
       const ObRefreshSchemaStatus &schema_status,
       common::ObISQLClient &sql_client,
@@ -1009,8 +980,6 @@ private:
       int64_t &row_cnt);
 
   bool in_parallel_ddl_thread_();
-  bool need_column_group(const ObTableSchema &table_schema);
-
   int construct_tenant_schema_(
       ObIArray<ObTenantSchema> &tenant_schema_array);
   int construct_tenant_schema_(

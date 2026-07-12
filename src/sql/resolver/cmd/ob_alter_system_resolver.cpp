@@ -142,15 +142,6 @@ int ObAlterSystemResolverUtil::resolve_replica_type(const ParseNode *parse_tree,
   return ret;
 }
 
-int ObAlterSystemResolverUtil::check_compatibility_for_replica_type(const ObReplicaType replica_type)
-{
-  int ret = OB_SUCCESS;
-  if (ObReplicaTypeCheck::is_columnstore_replica(replica_type)) {
-  }
-  return ret;
-}
-
-
 int ObAlterSystemResolverUtil::resolve_server(const ParseNode *parse_tree, ObAddr &server)
 {
   int ret = OB_SUCCESS;
@@ -404,8 +395,7 @@ int ObFreezeResolver::resolve(const ParseNode &parse_tree)
         LOG_WARN("wrong freeze parse tree", K(parse_tree.num_child_));
       } else {
         ParseNode *opt_tenant_list_or_tablet_id = parse_tree.children_[1];
-        const ParseNode *opt_rebuild_column_group = parse_tree.children_[2];
-        if (OB_FAIL(resolve_major_freeze_(freeze_stmt, opt_tenant_list_or_tablet_id, opt_rebuild_column_group))) {
+        if (OB_FAIL(resolve_major_freeze_(freeze_stmt, opt_tenant_list_or_tablet_id))) {
           LOG_WARN("resolve major freeze failed", KR(ret), KP(opt_tenant_list_or_tablet_id));
         }
       }
@@ -429,7 +419,7 @@ int ObFreezeResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
-int ObFreezeResolver::resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode *opt_tenant_list_or_tablet_id, const ParseNode *opt_rebuild_column_group)
+int ObFreezeResolver::resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode *opt_tenant_list_or_tablet_id)
 {
   int ret = OB_SUCCESS;
 
@@ -469,15 +459,6 @@ int ObFreezeResolver::resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode
     LOG_WARN("Only sys tenant can add suffix opt(tenant=name)", KR(ret));
   }
 
-  if (OB_FAIL(ret)) {
-  } else if (opt_rebuild_column_group != nullptr) {
-    if (OB_UNLIKELY(!freeze_stmt->get_tablet_id().is_valid())) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("rebuild only supports tablet major freeze", KR(ret));
-    } else {
-      freeze_stmt->set_rebuild_column_group(true);
-    }
-  }
   return ret;
 }
 

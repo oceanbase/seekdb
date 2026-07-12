@@ -131,8 +131,6 @@ public:
   bool is_depend_column(uint64_t column_id) const;
   const storage::ObTableReadInfo &get_read_info() const
   { return read_info_; }
-  inline const common::ObIArray<storage::ObTableReadInfo *> *get_cg_read_infos() const
-  { return cg_read_infos_.empty() ? nullptr : &cg_read_infos_; }
   int has_udf_column(bool &has_udf) const;
   OB_INLINE bool has_async_index() const { return has_async_index_; }
   OB_INLINE void set_has_async_index(bool v) { has_async_index_ = v; }
@@ -162,10 +160,7 @@ private:
   Columns columns_;
   ColumnMap col_map_;
   common::ObString pk_name_; // used for printing primary-key error messages
-  // version of the mixture read info
-  int16_t read_param_version_;
   storage::ObTableReadInfo read_info_;
-  storage::ObFixedMetaObjArray<storage::ObTableReadInfo *> cg_read_infos_;
   int64_t lob_inrow_threshold_;
   uint64_t multivalue_col_id_;
   uint64_t multivalue_arr_col_id_;

@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_single_merge.h"
-#include "storage/column_store/ob_co_sstable_row_getter.h"
 #include "src/storage/ls/ob_ls.h"
 
 namespace oceanbase
@@ -153,10 +152,6 @@ int ObSingleMerge::get_table_row(const int64_t table_idx,
           K(iters_.count()), K(tables.count()));
     }
   }
-  if (OB_SUCC(ret) && ObStoreRowIterator::IteratorCOSingleGet == iter->get_iter_type()
-      && !fuse_row.row_flag_.is_not_exist() && 0 != fuse_row.count_) {
-    reinterpret_cast<ObCOSSTableRowGetter *>(iter)->set_nop_pos(&nop_pos_);
-  }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(iter->get_next_row(prow))) {
       STORAGE_LOG(WARN, "Fail to get row, ", K(ret), K(table_idx));
@@ -266,7 +261,6 @@ int ObSingleMerge::inner_get_next_row(ObDatumRow &row)
                                        access_param_->iter_param_.enable_fuse_row_cache(access_ctx_->query_flag_, scan_type) &&
                                        (is_mview_table_scan(scan_type) ||
                                         read_snapshot_version >= tablet_meta.snapshot_version_) &&
-                                       (!table->is_co_sstable() || static_cast<ObCOSSTableV2 *>(table)->is_all_cg_base()) &&
                                        OB_ISNULL(get_table_param_->tablet_iter_.get_split_extra_tablet_handles_ptr()) &&
                                        OB_ISNULL(get_table_param_->tablet_iter_.get_fork_infos()) &&
                                        !(!tablet_meta.table_store_flag_.with_major_sstable() && tablet_meta.split_info_.get_split_src_tablet_id().is_valid()) && // not split dst tablet

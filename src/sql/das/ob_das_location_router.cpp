@@ -830,9 +830,7 @@ int ObDASLocationRouter::nonblock_get_readable_replica(const ObTabletID &tablet_
   for (int64_t i = 0; OB_SUCC(ret) && i < ls_loc.get_replica_locations().count(); ++i) {
     const ObLSReplicaLocation &tmp_replica_loc = ls_loc.get_replica_locations().at(i);
     {
-      if ((route_policy == COLUMN_STORE_ONLY && tmp_replica_loc.get_replica_type() != REPLICA_TYPE_COLUMNSTORE) ||
-          (route_policy != COLUMN_STORE_ONLY && tmp_replica_loc.get_replica_type() == REPLICA_TYPE_COLUMNSTORE) ||
-          (route_policy == FORCE_READONLY_ZONE && tmp_replica_loc.get_replica_type() != REPLICA_TYPE_READONLY)) {
+      if (route_policy == FORCE_READONLY_ZONE && tmp_replica_loc.get_replica_type() != REPLICA_TYPE_READONLY) {
         // skip the tmp_replica_loc
         LOG_TRACE("skip the replica due to the replica policy.", K(ret), K(tmp_replica_loc.get_replica_type()), K(tmp_replica_loc));
       } else if (tmp_replica_loc.get_server() == GCTX.self_addr()) {
@@ -846,10 +844,6 @@ int ObDASLocationRouter::nonblock_get_readable_replica(const ObTabletID &tablet_
   if (OB_SUCC(ret)) {
     if (local_replica != nullptr) {
       tablet_loc.server_ = local_replica->get_server();
-    } else if (route_policy == COLUMN_STORE_ONLY && remote_replicas.empty()) {
-      //do not retry
-      ret = OB_NO_REPLICA_VALID;
-      LOG_USER_ERROR(OB_NO_REPLICA_VALID);
     } else if (remote_replicas.empty()) {
       ret = OB_NO_READABLE_REPLICA;
       LOG_WARN("there has no readable replica", K(ret), K(tablet_id), K(ls_loc), K(route_policy));

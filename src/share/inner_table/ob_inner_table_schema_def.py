@@ -231,8 +231,7 @@ gen_sqlite_table_def(
       ('data_checksum', 'INTEGER', 'NOT NULL', None),
       ('column_checksums', 'TEXT', 'NULL', None),
       ('b_column_checksums', 'BLOB', 'NULL', None),
-      ('data_checksum_type', 'INTEGER', 'NOT NULL', '0'),
-      ('co_base_snapshot_version', 'INTEGER', 'NOT NULL', None)
+      ('data_checksum_type', 'INTEGER', 'NOT NULL', '0')
   ],
   primary_key = ['tablet_id']
   )
@@ -543,8 +542,6 @@ all_table_def = dict(
       ('kv_attributes', 'varchar:OB_MAX_DEFAULT_VALUE_LENGTH', 'false', ''),
       ('name_generated_type', 'int', 'false', '0'),
       ('lob_inrow_threshold', 'int', 'false', 'OB_DEFAULT_LOB_INROW_THRESHOLD'),
-      ('max_used_column_group_id', 'int', 'false', '1000'),
-      ('column_store', 'int', 'false', '0'),
       ('auto_increment_cache_size', 'int', 'false', '0'),
       ('external_properties', 'varbinary:OB_MAX_VARCHAR_LENGTH', 'true'),
       ('local_session_vars', 'longtext', 'true'),
@@ -2016,62 +2013,9 @@ def_table_schema(**all_tenant_dependency_def)
 # 303: __all_tenant_backup_backup_log_archive_status # abandoned in 4.0
 # 304: __all_backup_backup_log_archive_status_history # abandoned in 4.0
 
-
-def_table_schema(
-# sys index schema def, only for compatible
-  owner = 'xiaochu.yh',
-  table_name    = '__all_res_mgr_plan',
-  table_id      = '305',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('plan', 'varchar:128', 'false')
-  ],
-  in_tenant_space = True,
-  normal_columns = [
-    ('comments', 'varchar:2000', 'true')
-  ]
-  )
-
-def_table_schema(
-  owner = 'xiaochu.yh',
-  table_name     = '__all_res_mgr_directive',
-  table_id       = '306',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('plan', 'varchar:OB_MAX_RESOURCE_PLAN_NAME_LENGTH', 'false'),
-    ('group_or_subplan', 'varchar:OB_MAX_RESOURCE_PLAN_NAME_LENGTH', 'false')
-  ],
-  in_tenant_space = True,
-  normal_columns = [
-    ('comments', 'varchar:2000', 'true'),
-    ('mgmt_p1', 'int', 'false', 100),
-    ('utilization_limit', 'int', 'false', 100),
-    ('min_iops', 'int', 'false', 0),
-    ('max_iops', 'int', 'false', 100),
-    ('weight_iops', 'int', 'false', 0),
-    ('max_net_bandwidth', 'int', 'false', 100),
-    ('net_bandwidth_weight', 'int', 'false', 0)
-  ]
-  )
-
-def_table_schema(
-  owner = 'xiaochu.yh',
-  table_name     = '__all_res_mgr_mapping_rule',
-  table_id       = '307',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('attribute', 'varchar:OB_MAX_RESOURCE_PLAN_NAME_LENGTH', 'false'),
-    ('value', 'varbinary:OB_MAX_RESOURCE_PLAN_NAME_LENGTH', 'false')
-  ],
-  in_tenant_space = True,
-  normal_columns = [
-    ('consumer_group', 'varchar:OB_MAX_RESOURCE_PLAN_NAME_LENGTH', 'true'),
-    ('status', 'int', 'true')
-  ]
-  )
+# 305: removed (legacy resource manager deleted)
+# 306: removed (legacy resource manager deleted)
+# 307: removed (legacy resource manager deleted)
 
 def_table_schema(
     owner = 'zhenjiang.xzj',
@@ -2108,22 +2052,7 @@ def_table_schema(
 # 314: __all_backup_piece_files # abandoned in 4.0
 # 315: __all_backup_set_files # abandoned
 
-
-def_table_schema(
-  owner = 'xiaochu.yh',
-  table_name    = '__all_res_mgr_consumer_group',
-  table_id      = '316',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('consumer_group', 'varchar:OB_MAX_RESOURCE_PLAN_NAME_LENGTH')
-  ],
-  in_tenant_space = True,
-  normal_columns = [
-    ('consumer_group_id', 'int'),
-    ('comments', 'varchar:2000', 'true')
-  ]
-  )
+# 316: removed (legacy resource manager deleted)
 
 # 317: __all_backup_info # abandoned
 
@@ -2342,10 +2271,7 @@ def_table_schema(
       ('spare3', 'int', 'true'),
       ('spare4', 'varchar:MAX_VALUE_LENGTH', 'true'),
       ('spare5', 'varchar:MAX_VALUE_LENGTH', 'true'),
-      ('spare6', 'varchar:MAX_VALUE_LENGTH', 'true'),
-      ('cg_macro_blk_cnt', 'int', 'false', '0'),
-      ('cg_micro_blk_cnt', 'int', 'false', '0'),
-      ('cg_skip_rate', 'double', 'true')
+      ('spare6', 'varchar:MAX_VALUE_LENGTH', 'true')
   ]
   )
 
@@ -2468,10 +2394,7 @@ def_table_schema(
       ('spare3', 'int', 'true'),
       ('spare4', 'varchar:MAX_VALUE_LENGTH', 'true'),
       ('spare5', 'varchar:MAX_VALUE_LENGTH', 'true'),
-      ('spare6', 'varchar:MAX_VALUE_LENGTH', 'true'),
-      ('cg_macro_blk_cnt', 'int', 'false', '0'),
-      ('cg_micro_blk_cnt', 'int', 'false', '0'),
-      ('cg_skip_rate', 'double', 'true')
+      ('spare6', 'varchar:MAX_VALUE_LENGTH', 'true')
   ]
   )
 
@@ -2955,50 +2878,7 @@ def_table_schema(
 # 417 : abandoned
 # 418 : abandoned
 
-all_column_group = dict(
-    owner = 'donglou.zl',
-    table_name    = '__all_column_group',
-    table_id      = '419',
-    table_type = 'SYSTEM_TABLE',
-    gm_columns = ['gmt_create', 'gmt_modified'],
-    rowkey_columns = [
-        ('table_id', 'int'),
-        ('column_group_id', 'int')
-  ],
-    in_tenant_space = True,
-
-    normal_columns = [
-      ('column_group_name', 'varchar:OB_MAX_COLUMN_GROUP_NAME_LENGTH', 'false', ''),
-      ('column_group_type', 'int'),
-      ('block_size', 'int'),
-      ('compressor_type', 'int'),
-      ('row_store_type', 'int')
-  ]
-  )
-
-def_table_schema(**all_column_group)
-
-def_table_schema(**gen_history_table_def(420, all_column_group))
-
-all_column_group_mapping = dict(
-    owner = 'donglou.zl',
-    table_name    = '__all_column_group_mapping',
-    table_id      = '421',
-    table_type = 'SYSTEM_TABLE',
-    gm_columns = ['gmt_create', 'gmt_modified'],
-    rowkey_columns = [
-        ('table_id', 'int'),
-        ('column_group_id', 'int'),
-        ('column_id', 'int')
-  ],
-    in_tenant_space = True,
-
-    normal_columns = []
-  )
-
-def_table_schema(**all_column_group_mapping)
-
-def_table_schema(**gen_history_table_def(422, all_column_group_mapping))
+# 419-422: abandoned metadata tables
 
 # 423: __all_transfer_task (abandoned)
 # 424: __all_transfer_task_history (abandoned)
@@ -3361,7 +3241,6 @@ def_table_schema(
   in_tenant_space = True,
   is_cluster_private = False,
   normal_columns = [
-    ('resource_consumer_group', 'varchar:30', 'true'),
     ('service', 'varchar:64', 'true'),
     ('logging_level', 'varchar:11', 'true'),
     ('log_history', 'number:38:0', 'true'),
@@ -3776,11 +3655,7 @@ def_table_schema(**all_coll_type_def)
 
 # __wr_sql_plan # removed
 
-# __wr_res_mgr_sysstat # removed
-
 # 527: __all_kv_redis_table abandoned
-
-# 526: __wr_res_mgr_sysstat
 
 all_ncomp_dll_v2 = dict(
   owner = 'hr351303',
@@ -4781,8 +4656,6 @@ def_table_schema(
   ('max_end_scn', 'uint'),
   ('write_ref_count', 'int'),
   ('mem_used', 'int'),
-  ('hash_item_count', 'int'),
-  ('hash_mem_used', 'int'),
   ('btree_item_count', 'int'),
   ('btree_mem_used', 'int'),
   ('insert_row_count', 'int'),
@@ -4966,30 +4839,6 @@ def_table_schema(**gen_sqlite_virtual_table_def(
   keywords = all_def_keywords['__all_sys_parameter']))
 
 def_table_schema(
-  owner = 'guoyun.lgy',
-  table_name     = '__all_virtual_trace_span_info',
-  table_id       = '11042',
-  table_type = 'VIRTUAL_TABLE',
-  gm_columns = [],
-  rowkey_columns = [
-    ('request_id', 'int')
-  ],
-  in_tenant_space = True,
-
-  normal_columns = [
-    ('trace_id', 'varchar:OB_MAX_SPAN_LENGTH'),
-    ('span_id', 'varchar:OB_MAX_SPAN_LENGTH'),
-    ('parent_span_id', 'varchar:OB_MAX_SPAN_LENGTH'),
-    ('span_name', 'varchar:OB_MAX_SPAN_LENGTH'),
-    ('ref_type', 'varchar:OB_MAX_REF_TYPE_LENGTH'),
-    ('start_ts', 'int'),
-    ('end_ts', 'int'),
-    ('tags', 'longtext'),
-    ('logs', 'longtext')
-  ],  vtable_route_policy = 'local'
-  )
-
-def_table_schema(
   owner = 'nijia.nj',
   table_name     = '__all_virtual_engine',
   table_id       = '11043',
@@ -5117,8 +4966,7 @@ def_table_schema(
       ('end_key', 'varchar:OB_MAX_ROW_KEY_LENGTH'),
       ('macro_block_type', 'varchar:MAX_VALUE_LENGTH'),
       ('compressor_name', 'varchar:OB_MAX_COMPRESSOR_NAME_LENGTH'),
-      ('row_store_type', 'varchar:OB_MAX_COMPRESSOR_NAME_LENGTH'),
-      ('cg_idx', 'int')
+      ('row_store_type', 'varchar:OB_MAX_COMPRESSOR_NAME_LENGTH')
   ],    vtable_route_policy = 'local'
   )
 
@@ -5526,9 +5374,7 @@ def_table_schema(
     ('progressive_compaction_round', 'int'),
     ('create_time', 'timestamp'),
     ('start_time', 'timestamp'),
-    ('estimated_finish_time', 'timestamp'),
-    ('start_cg_id', 'int'),
-    ('end_cg_id', 'int')
+    ('estimated_finish_time', 'timestamp')
   ],  vtable_route_policy = 'local'
   )
 
@@ -5633,8 +5479,6 @@ def_table_schema(
       ('participant_table', 'varchar:OB_PART_TABLE_INFO_LENGTH'),
       ('macro_id_list', 'varchar:OB_MACRO_ID_INFO_LENGTH'),
       ('comments', 'varchar:OB_COMPACTION_COMMENT_STR_LENGTH'),
-      ('start_cg_id', 'int'),
-      ('end_cg_id', 'int'),
       ('kept_snapshot', 'varchar:OB_COMPACTION_INFO_LENGTH'),
       ('merge_level', 'varchar:OB_MERGE_LEVEL_STR_LENGTH'),
       ('exec_mode', 'varchar:OB_MERGE_TYPE_STR_LENGTH'),
@@ -5642,7 +5486,6 @@ def_table_schema(
       ('io_cost_time_percentage', 'int'),
       ('merge_reason', 'varchar:OB_MERGE_REASON_STR_LENGTH'),
       ('base_major_status', 'varchar:OB_MERGE_TYPE_STR_LENGTH'),
-      ('co_merge_type', 'varchar:OB_MERGE_TYPE_STR_LENGTH'),
       ('mds_filter_info', 'varchar:OB_COMPACTION_COMMENT_STR_LENGTH'),
       ('execute_time', 'int')
   ],  vtable_route_policy = 'local'
@@ -6073,7 +5916,6 @@ def_table_schema(
       ('contain_uncommitted_row', 'varchar:MAX_COLUMN_YES_NO_LENGTH'),
       ('nested_offset', 'int'),
       ('nested_size', 'int'),
-      ('cg_idx', 'int'),
       ('data_checksum', 'int'),
       ('table_flag', 'int')
   ],  vtable_route_policy = 'local'
@@ -7939,7 +7781,6 @@ def_table_schema(
     ('latch_wait',          'varchar:16'),
     ('latch_hold',          'varchar:256'),
     ('trace_id',            'varchar:40'),
-    ('cgroup_path',         'varchar:256'),
     ('numa_node',           'int')
   ],  vtable_route_policy = 'local'
   )
@@ -8026,7 +7867,7 @@ def_table_schema(
   ],  vtable_route_policy = 'local'
   )
 
-# 12398: __all_virtual_column_group # removed (single-tenant: iterate VT mechanism deleted)
+# 12398: removed virtual table
 
 # 12401: __all_virtual_tenant_parameter (abandoned)
 # 12402: __all_virtual_tenant_snapshot (abandoned)
@@ -8071,43 +7912,8 @@ def_table_schema(
 # 12414: __all_virtual_wr_control # removed
 # 12415: __all_virtual_event_history - migrated to SQLite, see gen_sqlite_virtual_table_def above
 
-
-# 12418: __all_virtual_cgroup_info
-def_table_schema(
-  owner             = 'fengshuo.fs',
-  table_name        = '__all_virtual_cgroup_config',
-  table_id          = '12419',
-  table_type        = 'VIRTUAL_TABLE',
-  in_tenant_space   = True,
-  gm_columns        = [],
-  rowkey_columns    = [],
-  normal_columns    = [
-    ('cfs_quota_us',        'int'),
-    ('cfs_period_us',       'int'),
-    ('shares',              'int'),
-    ('cgroup_path',         'varchar:256')
-  ],  vtable_route_policy = 'local'
-  )
-
-def_table_schema(
-  owner = 'guoyun.lgy',
-  table_name = '__all_virtual_flt_config',
-  table_id = '12420',
-  table_type = 'VIRTUAL_TABLE',
-  gm_columns = [],
-  in_tenant_space = True,
-  rowkey_columns = [
-  ],
-  normal_columns = [
-  ('type', 'varchar:16'),
-  ('module_name', 'varchar:MAX_VALUE_LENGTH'),
-  ('action_name', 'varchar:MAX_VALUE_LENGTH'),
-  ('client_identifier', 'varchar:OB_MAX_CONTEXT_CLIENT_IDENTIFIER_LENGTH'),
-  ('level', 'int'),
-  ('sample_percentage', 'int'),
-  ('record_policy', 'varchar:32')
-  ]
-)
+# 12418: removed (legacy resource isolation deleted)
+# 12419: removed (legacy resource isolation deleted)
 
 # 12421: __all_virtual_tenant_scheduler_job_class # removed (single-tenant: iterate VT mechanism deleted)
 
@@ -8141,9 +7947,7 @@ def_table_schema(
   ]
 )
 
-# 12430: __all_virtual_column_group_mapping # removed (single-tenant: iterate VT mechanism deleted)
-# 12431: __all_virtual_column_group_history # removed (single-tenant: iterate VT mechanism deleted)
-# 12432: __all_virtual_column_group_mapping_history # removed (single-tenant: iterate VT mechanism deleted)
+# 12430-12432: removed virtual tables
 
 # 12435: __all_virtual_clone_job (abandoned)
 # 12436: __all_virtual_clone_job_history (abandoned)
@@ -8167,7 +7971,6 @@ def_table_schema(
     ('session_id', 'uint', 'true'),
     ('slave_process_id', 'uint', 'true'),
     ('slave_os_process_id', 'uint', 'true'),
-    ('resource_consumer_group', 'varchar:30', 'true'),
     ('running_instance', 'varchar:30', 'true'),
     ('elapsed_time', 'int', 'true'),
     ('cpu_used', 'int', 'true'),
@@ -8444,7 +8247,6 @@ def_table_schema(
   ],  vtable_route_policy = 'local'
   )
 
-# 12484: __all_virtual_res_mgr_consumer_group
 # 21485: __all_virtual_storage_io_usage (abandoned)
 # 12486: __all_virtual_zone_storage (abandoned)
 
@@ -8547,27 +8349,7 @@ def_table_schema(
 
 # 12503: __all_virtual_kv_redis_table abandoned
 
-
-def_table_schema(
-  owner             = 'zz412656',
-  table_name        = '__all_virtual_function_io_stat',
-  table_id          = '12504',
-  table_type        = 'VIRTUAL_TABLE',
-  gm_columns        = [],
-  rowkey_columns    = [
-    ('function_name',       'varchar:32'),
-    ('mode',                'varchar:32')
-  ],
-  in_tenant_space   = True,
-  normal_columns    = [
-    ('size',                'int'),
-    ('real_iops',           'int'),
-    ('real_mbps',           'int'),
-    ('schedule_us',         'int'),
-    ('io_delay_us',         'int'),
-    ('total_us',            'int')
-  ],  vtable_route_policy = 'local'
-  )
+# 12504: removed (legacy function IO classification deleted)
 
 
 def_table_schema(
@@ -8629,23 +8411,7 @@ def_table_schema(
 
 # 12511: __all_virtual_wr_sql_plan_aux_key2snapshot # removed
 # 12512: __all_virtual_tablet_mds_info
-
-def_table_schema(
-  owner = 'ouyanghongrong.oyh',
-  table_name    = '__all_virtual_cs_replica_tablet_stats',
-  table_id      = '12513',
-  table_type = 'VIRTUAL_TABLE',
-  gm_columns = [],
-  rowkey_columns = [],
-  in_tenant_space=True,
-  normal_columns = [
-    ('tablet_id', 'int'),
-    ('macro_block_cnt', 'int'),
-    ('is_cs', 'bool'),
-    ('is_cs_replica', 'bool'),
-    ('available', 'bool')
-  ],  vtable_route_policy = 'local'
-  )
+# 12513: removed
 
 # 12514: __all_virtual_ddl_diagnose_info
 def_table_schema(
@@ -10682,18 +10448,12 @@ SELECT
     when 3 then 'LOCK_MEMTABLE' when 4 then 'DIRECT_LOAD_MEMTABLE' when 10 then 'MAJOR' when 11 then 'MINOR'
     when 12 then 'MINI' when 13 then 'META'
     when 14 then 'DDL_DUMP' when 15 then 'REMOTE_LOGICAL_MINOR' when 16 then 'DDL_MEM'
-    when 17 then 'CO_MAJOR' when 18 then 'NORMAL_CG' when 19 then 'ROWKEY_CG' when 20 then 'COL_ORIENTED_META'
-    when 21 then 'DDL_MERGE_CO' when 22 then 'DDL_MERGE_CG' when 23 then 'DDL_MEM_CO'
-    when 24 then 'DDL_MEM_CG' when 25 then 'DDL_MEM_MINI_SSTABLE'
-    when 26 then 'MDS_MINI' when 27 then 'MDS_MINOR'
-    when 29 then 'INC_MAJOR' when 30 then 'INC_CO_MAJOR' when 31 then 'INC_NORMAL_CG' when 32 then 'INC_ROWKEY_CG'
-    when 33 then 'INC_DDL_DUMP' when 34 then 'INC_DDL_MERGE_CO' when 35 then 'INC_DDL_MERGE_CG'
-    when 36 then 'INC_DDL_MEM_CO' when 37 then 'INC_DDL_MEM_CG' when 38 then 'INC_DDL_MEM'
-    when 39 then 'INC_DDL_AGGR_CO' when 40 then 'INC_DDL_AGGR_CG'
+    when 17 then 'DDL_MEM_MINI_SSTABLE' when 18 then 'MDS_MINI' when 19 then 'MDS_MINOR'
+    when 20 then 'MICRO_MINI_SSTABLE' when 21 then 'INC_MAJOR'
+    when 22 then 'INC_MAJOR_DDL_DUMP' when 23 then 'INC_MAJOR_DDL_MEM'
     else 'INVALID'
-  end) as TABLE_TYPE,
+ end) as TABLE_TYPE,
  M.TABLET_ID,
- M.CG_IDX,
  M.START_LOG_SCN,
  M.END_LOG_SCN,
  M.DATA_CHECKSUM,
@@ -12892,8 +12652,6 @@ def_table_schema(
       PARTICIPANT_TABLE,
       MACRO_ID_LIST,
       COMMENTS,
-      START_CG_ID,
-      END_CG_ID,
       KEPT_SNAPSHOT,
       MERGE_LEVEL,
       EXEC_MODE,
@@ -12903,7 +12661,6 @@ def_table_schema(
       IO_COST_TIME_PERCENTAGE,
       MERGE_REASON,
       BASE_MAJOR_STATUS,
-      CO_MERGE_TYPE,
       MDS_FILTER_INFO,
       EXECUTE_TIME
     FROM oceanbase.__all_virtual_tablet_compaction_history
@@ -14079,163 +13836,11 @@ def_table_schema(
 # 21309: CDB_OB_DATAFILE
 # 21310: DBA_OB_DATAFILE
 
-def_table_schema(
-  owner           = 'dachuan.sdc',
-  table_name      = 'DBA_RSRC_PLANS',
-  table_id        = '21311',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      CAST(NULL AS NUMBER) AS PLAN_ID,
-      PLAN,
-      CAST(NULL AS NUMBER) AS NUM_PLAN_DIRECTIVES,
-      CAST(NULL AS CHAR(128)) AS CPU_METHOD,
-      CAST(NULL AS CHAR(128)) AS MGMT_METHOD,
-      CAST(NULL AS CHAR(128)) AS ACTIVE_SESS_POOL_MTH,
-      CAST(NULL AS CHAR(128)) AS PARALLEL_DEGREE_LIMIT_MTH,
-      CAST(NULL AS CHAR(128)) AS QUEUING_MTH,
-      CAST(NULL AS CHAR(3)) AS SUB_PLAN,
-      COMMENTS,
-      CAST(NULL AS CHAR(128)) AS STATUS,
-      CAST(NULL AS CHAR(3)) AS MANDATORY
-    FROM
-       oceanbase.__all_res_mgr_plan
-""".replace("\n", " ")
-)
-
-def_table_schema(
-  owner           = 'dachuan.sdc',
-  table_name      = 'DBA_RSRC_PLAN_DIRECTIVES',
-  table_id        = '21312',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      PLAN,
-      GROUP_OR_SUBPLAN,
-      CAST(NULL AS CHAR(14)) AS TYPE,
-      CAST(NULL AS NUMBER) AS CPU_P1,
-      CAST(NULL AS NUMBER) AS CPU_P2,
-      CAST(NULL AS NUMBER) AS CPU_P3,
-      CAST(NULL AS NUMBER) AS CPU_P4,
-      CAST(NULL AS NUMBER) AS CPU_P5,
-      CAST(NULL AS NUMBER) AS CPU_P6,
-      CAST(NULL AS NUMBER) AS CPU_P7,
-      CAST(NULL AS NUMBER) AS CPU_P8,
-      MGMT_P1,
-      CAST(NULL AS NUMBER) AS MGMT_P2,
-      CAST(NULL AS NUMBER) AS MGMT_P3,
-      CAST(NULL AS NUMBER) AS MGMT_P4,
-      CAST(NULL AS NUMBER) AS MGMT_P5,
-      CAST(NULL AS NUMBER) AS MGMT_P6,
-      CAST(NULL AS NUMBER) AS MGMT_P7,
-      CAST(NULL AS NUMBER) AS MGMT_P8,
-      CAST(NULL AS NUMBER) AS ACTIVE_SESS_POOL_P1,
-      CAST(NULL AS NUMBER) AS QUEUEING_P1,
-      CAST(NULL AS NUMBER) AS PARALLEL_TARGET_PERCENTAGE,
-      CAST(NULL AS NUMBER) AS PARALLEL_DEGREE_LIMIT_P1,
-      CAST(NULL AS CHAR(128)) AS SWITCH_GROUP,
-      CAST(NULL AS CHAR(5)) AS SWITCH_FOR_CALL,
-      CAST(NULL AS NUMBER) AS SWITCH_TIME,
-      CAST(NULL AS NUMBER) AS SWITCH_IO_MEGABYTES,
-      CAST(NULL AS NUMBER) AS SWITCH_IO_REQS,
-      CAST(NULL AS CHAR(5)) AS SWITCH_ESTIMATE,
-      CAST(NULL AS NUMBER) AS MAX_EST_EXEC_TIME,
-      CAST(NULL AS NUMBER) AS UNDO_POOL,
-      CAST(NULL AS NUMBER) AS MAX_IDLE_TIME,
-      CAST(NULL AS NUMBER) AS MAX_IDLE_BLOCKER_TIME,
-      CAST(NULL AS NUMBER) AS MAX_UTILIZATION_LIMIT,
-      CAST(NULL AS NUMBER) AS PARALLEL_QUEUE_TIMEOUT,
-      CAST(NULL AS NUMBER) AS SWITCH_TIME_IN_CALL,
-      CAST(NULL AS NUMBER) AS SWITCH_IO_LOGICAL,
-      CAST(NULL AS NUMBER) AS SWITCH_ELAPSED_TIME,
-      CAST(NULL AS NUMBER) AS PARALLEL_SERVER_LIMIT,
-      UTILIZATION_LIMIT,
-      CAST(NULL AS CHAR(12)) AS PARALLEL_STMT_CRITICAL,
-      CAST(NULL AS NUMBER) AS SESSION_PGA_LIMIT,
-      CAST(NULL AS CHAR(6)) AS PQ_TIMEOUT_ACTION,
-      COMMENTS,
-      CAST(NULL AS CHAR(128)) AS STATUS,
-      CAST('YES' AS CHAR(3)) AS MANDATORY
-    FROM
-       oceanbase.__all_res_mgr_directive
-""".replace("\n", " ")
-)
-
-def_table_schema(
-  owner           = 'dachuan.sdc',
-  table_name      = 'DBA_RSRC_GROUP_MAPPINGS',
-  table_id        = '21313',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      ATTRIBUTE,
-      VALUE,
-      CONSUMER_GROUP,
-      CAST(NULL AS CHAR(128)) AS STATUS
-    FROM
-       oceanbase.__all_res_mgr_mapping_rule
-""".replace("\n", " ")
-)
-
-def_table_schema(
-  owner           = 'dachuan.sdc',
-  table_name      = 'DBA_RSRC_CONSUMER_GROUPS',
-  table_id        = '21314',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      CONSUMER_GROUP_ID,
-      CONSUMER_GROUP,
-      CAST(NULL AS CHAR(128)) AS CPU_METHOD,
-      CAST(NULL AS CHAR(128)) AS MGMT_METHOD,
-      CAST(NULL AS CHAR(3)) AS INTERNAL_USE,
-      COMMENTS,
-      CAST(NULL AS CHAR(128)) AS CATEGORY,
-      CAST(NULL AS CHAR(128)) AS STATUS,
-      CAST(NULL AS CHAR(3)) AS MANDATORY
-    FROM
-       oceanbase.__all_res_mgr_consumer_group
-""".replace("\n", " ")
-)
-
-def_table_schema(
-    owner          = 'dachuan.sdc',
-    table_name     = 'V$RSRC_PLAN',
-    table_id       = '21315',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    in_tenant_space = True,
-    rowkey_columns = [],
-    normal_columns = [],
-    view_definition = """SELECT
-          CAST(NULL as NUMBER) AS ID,
-          B.plan NAME,
-          CAST('TRUE' AS CHAR(5)) AS IS_TOP_PLAN,
-          CAST('ON' AS CHAR(3)) AS CPU_MANAGED,
-          CAST(NULL AS CHAR(3)) AS INSTANCE_CAGING,
-          CAST(NULL AS NUMBER) AS PARALLEL_SERVERS_ACTIVE,
-          CAST(NULL AS NUMBER) AS PARALLEL_SERVERS_TOTAL,
-          CAST(NULL AS CHAR(32)) AS PARALLEL_EXECUTION_MANAGED
-        FROM oceanbase.__all_virtual_global_variable A, oceanbase.dba_rsrc_plans B
-        WHERE A.variable_name = 'resource_manager_plan' AND UPPER(A.value) = UPPER(B.plan)
-""".replace("\n", " ")
-  )
+# 21311: removed (legacy resource manager deleted)
+# 21312: removed (legacy resource manager deleted)
+# 21313: removed (legacy resource manager deleted)
+# 21314: removed (legacy resource manager deleted)
+# 21315: removed (legacy resource manager deleted)
 
 # 21318: DBA_OB_LS (abandoned)
 # 21319: CDB_OB_LS (abandoned)
@@ -15753,27 +15358,7 @@ WHERE T.TABLE_TYPE IN (3,6,8,9,14,15)
 # 21367: GV$OB_KV_HOTKEY_STAT
 # 21368: V$OB_KV_HOTKEY_STAT
 
-def_table_schema(
-  owner           = 'renju.rj',
-  table_name      = 'DBA_OB_RSRC_IO_DIRECTIVES',
-  table_id        = '21369',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      PLAN,
-      GROUP_OR_SUBPLAN,
-      COMMENTS,
-      MIN_IOPS,
-      MAX_IOPS,
-      WEIGHT_IOPS
-    FROM
-       oceanbase.__all_res_mgr_directive
-""".replace("\n", " ")
-)
+# 21369: removed (legacy resource manager deleted)
 
 # 21370: GV$OB_TABLET_STATS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_tablet_stat)
 
@@ -16345,9 +15930,6 @@ def_table_schema(
 )
 
 # 21448: CDB_OB_TENANT_EVENT_HISTORY (abandoned)
-# 21449: GV$OB_FLT_TRACE_CONFIG
-# 21449: GV$OB_FLT_TRACE_CONFIG # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_flt_config)
-
 # 21459: GV$OB_SESSION # removed (single-tenant GV/V collapse; folded into V$OB_SESSION)
 def_table_schema(
   owner = 'jingfeng.jf',
@@ -16453,9 +16035,9 @@ def_table_schema(
 
 # 21478: V$OB_TENANT_RUNTIME_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_dump_info)
 
-# 21479: GV$OB_CGROUP_CONFIG # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_cgroup_config)
+# 21479: removed (legacy resource isolation deleted)
 
-# 21480: V$OB_CGROUP_CONFIG # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_cgroup_config)
+# 21480: removed (legacy resource isolation deleted)
 
 # 21481: DBA_WR_SYSTEM_EVENT # removed
 # 21482: CDB_WR_SYSTEM_EVENT # removed
@@ -17171,31 +16753,7 @@ def_table_schema(
   normal_columns  = []
   )
 
-def_table_schema(
-  owner           = 'wyh329796',
-  table_name      = 'DBA_OB_RSRC_DIRECTIVES',
-  table_id        = '21546',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      PLAN,
-      GROUP_OR_SUBPLAN,
-      COMMENTS,
-      MGMT_P1,
-      UTILIZATION_LIMIT,
-      MIN_IOPS,
-      MAX_IOPS,
-      WEIGHT_IOPS,
-      MAX_NET_BANDWIDTH,
-      NET_BANDWIDTH_WEIGHT
-    FROM
-       oceanbase.__all_res_mgr_directive
-""".replace("\n", " ")
-)
+# 21546: removed (legacy resource manager deleted)
 
 # 21548: DBA_OB_SERVICES (abandoned)
 # 21549: CDB_OB_SERVICES (abandoned)
@@ -18393,9 +17951,9 @@ def_table_schema(
 
 # 21619: CDB_OB_KV_REDIS_TABLE abandoned
 
-# 21620: GV$OB_FUNCTION_IO_STAT # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_function_io_stat;)
+# 21620: removed (legacy function IO classification deleted)
 
-# 21621: V$OB_FUNCTION_IO_STAT # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_function_io_stat;)
+# 21621: removed (legacy function IO classification deleted)
 
 def_table_schema(
   owner = 'wuyuefei.wyf',
@@ -18487,29 +18045,7 @@ def_table_schema(
 
 # 21631: GV$OB_STANDBY_LOG_TRANSPORT_STAT
 # 21632: V$OB_STANDBY_LOG_TRANSPORT_STAT
-
-def_table_schema(
-  owner = 'ouyanghongrong.oyh',
-  table_name      = 'DBA_OB_CS_REPLICA_STATS',
-  table_id        = '21633',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    COUNT(*) AS TOTAL_TABLET_CNT,
-    SUM(CASE WHEN available = TRUE THEN 1 ELSE 0 END) AS AVAILABLE_TABLET_CNT,
-    SUM(macro_block_cnt) AS TOTAL_MACRO_BLOCK_CNT,
-    SUM(CASE WHEN available = TRUE THEN macro_block_cnt ELSE 0 END) AS AVAILABLE_MACRO_BLOCK_CNT,
-    CASE
-      WHEN SUM(CASE WHEN available = FALSE THEN 1 ELSE 0 END) > 0 THEN 'FALSE'
-      ELSE 'TRUE'
-    END AS AVAILABLE
-  FROM oceanbase.__all_virtual_cs_replica_tablet_stats
-""".replace("\n", " ")
-  )
+# 21633: removed
 
 # 21635: GV$OB_PLUGINS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plugin_info)
 # 21636: V$OB_PLUGINS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plugin_info)

@@ -405,7 +405,7 @@ int ObMdsTableMiniMerger::init(compaction::ObTabletMergeCtx &ctx, ObMdsMiniMerge
     } else if (OB_FAIL(data_desc_.init(false/*is ddl*/, *storage_schema, ls_id, tablet_id,
         ctx.get_merge_type(), ctx.get_snapshot(), data_version, ctx.static_desc_.micro_index_clustered_,
         ctx.static_desc_.tablet_transfer_seq_, ctx.get_concurrent_cnt(), ctx.static_param_.scn_range_.end_scn_,
-        nullptr/*cg_schema*/, 0/*table_cg_idx*/, ctx.get_exec_mode()))) {
+        ctx.get_exec_mode()))) {
       LOG_WARN("fail to init whole desc", KR(ret), K(ctx), K(ls_id), K(tablet_id));
     } else if (OB_FAIL(macro_start_seq.set_parallel_degree(0))) {
       LOG_WARN("Failed to set parallel degree to macro start seq", K(ret));

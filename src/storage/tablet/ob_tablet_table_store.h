@@ -174,8 +174,8 @@ public:
       const ObTablet &tablet,
       ObTableStoreIterator &iter,
       const ObGetReadTablesMode mode = ObGetReadTablesMode::NORMAL);
-  int get_all_sstable(ObTableStoreIterator &iter, const bool unpack_co_table = false) const;
-  int get_major_sstables(ObTableStoreIterator &iter, const bool unpack_co_table = false) const;
+  int get_all_sstable(ObTableStoreIterator &iter) const;
+  int get_major_sstables(ObTableStoreIterator &iter) const;
   int get_read_major_sstable(const int64_t snapshot_version, ObTableStoreIterator &iter) const;
   int update_memtables(const common::ObIArray<storage::ObITable *> &memtables);
   int clear_memtables();
@@ -260,8 +260,7 @@ private:
       const ObIArray<ObITable *> &tables_array,
       const int64_t multi_version_start,
       const bool allow_duplicate_sstable,
-      int64_t &inc_base_snapshot_version,
-      bool replace_old_row_store_major = false);
+      int64_t &inc_base_snapshot_version);
   int check_and_build_new_major_tables(
       const ObIArray<ObITable *> &tables_array,
       const bool allow_duplicate_sstable,
@@ -391,7 +390,7 @@ private:
       common::ObIArray<ObITable *> &ddl_dump_sstables);
   OB_INLINE int check_major_sstable_empty(const share::SCN &ddl_commit_scn, const ObTablet &tablet, bool &is_major_sstable_empty) const;
   OB_INLINE int check_ddl_complete(const ObTablet &tablet, bool &is_empty) const;
-  int get_ddl_major_sstables(ObIArray<ObITable *> &ddl_major_sstables, bool &has_co_ddl_memtable) const;
+  int get_ddl_major_sstables(ObIArray<ObITable *> &ddl_major_sstables) const;
   // ddl-split
   int check_skip_split_tables_exist_(
       const ObBatchUpdateTableStoreParam &param,
@@ -447,11 +446,7 @@ private:
       ObSSTable *&copied_sstable);
 
 public:
-  static const int64_t TABLE_STORE_VERSION_V1 = 0x0100;
-  static const int64_t TABLE_STORE_VERSION_V2 = 0x0101;
-  static const int64_t TABLE_STORE_VERSION_V3 = 0x0102;
-  static const int64_t TABLE_STORE_VERSION_V4 = 0x0103; // for major_ckm_info_
-  static const int64_t TABLE_STORE_VERSION_V5 = 0x0104; // for inc major sstable
+  static const int64_t TABLE_STORE_VERSION = 0x0105;
   static const int64_t MAX_SSTABLE_CNT = 192;
   // limit table store memory size to one ACHUNK
   static const int64_t MAX_TABLE_STORE_MEMORY_SIZE= lib::ACHUNK_SIZE - lib::AOBJECT_META_SIZE;

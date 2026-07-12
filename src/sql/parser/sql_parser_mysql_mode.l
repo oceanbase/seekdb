@@ -100,10 +100,7 @@ mysql_compatible_comment_with_version \/\*\![0-9]{5}
 mysql_compatible_comment_without_version \/\*\!
 mysql_compatible_comment_end \*\/
 
-ColumnStorePattern  (WITH{whitespace}COLUMN{whitespace}GROUP)
-
 %%
-{ColumnStorePattern}                { REPUT_TOKEN_NEG_SIGN(WITH_COLUMN_GROUP); }
 INTERVAL {
 
   ParseResult *p = (ParseResult *)yyextra;
@@ -1015,8 +1012,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>MONITOR  { return MONITOR; }
 <hint>AUTO { return AUTO; }
 <hint>FORCE { return FORCE; }
-<hint>USE_COLUMN_TABLE { return USE_COLUMN_STORE_HINT; }
-<hint>NO_USE_COLUMN_TABLE { return NO_USE_COLUMN_STORE_HINT; }
 <hint>[(),.@]  {
   ParseResult *p = (ParseResult *)yyextra;
   if (!p->is_ignore_token_) {
@@ -1180,7 +1175,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>PUSHDOWN { return PUSHDOWN; }
 <hint>DECORRELATE { return DECORRELATE; }
 <hint>NO_DECORRELATE { return NO_DECORRELATE; }
-<hint>RESOURCE_GROUP { return RESOURCE_GROUP; }
 <hint>PQ_GBY { return PQ_GBY; }
 <hint>PQ_DISTINCT { return PQ_DISTINCT; }
 <hint>PX_NODE_POLICY {return PX_NODE_POLICY; }

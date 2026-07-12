@@ -1844,7 +1844,6 @@
       "ONLY_READONLY_ZONE",
       "UNMERGE_ZONE_FIRST",
       "UNMERGE_FOLLOWER_FIRST",
-      "COLUMN_STORE_ONLY",
       "FORCE_READONLY_ZONE"
     ],
     "publish_version": "",
@@ -2560,20 +2559,6 @@
     "publish_version": "320",
     "info_cn": "控制是否只允许开启只读事务",
     "background_cn": "用户可以通过这两个变量访问或者设置事务的访问模式，当transaction_read_only设置为true时，不允许执行dml语句",
-    "ref_url": ""
-  },
-  "resource_manager_plan": {
-    "id": 10109,
-    "name": "resource_manager_plan",
-    "default_value": "",
-    "base_value": "",
-    "data_type": "varchar",
-    "on_check_and_convert_func": "ObSysVarOnCheckFuncs::check_update_resource_manager_plan",
-    "info": "specifies tenant resource plan.",
-    "flags": "GLOBAL",
-    "publish_version": "320",
-    "info_cn": "指定租户的资源隔离计划",
-    "background_cn": "租户内的普通线程和并行执行线程会相互抢占CPU资源，通过给租户指定资源隔离计划，可以控制资源抢占策略，隔离资源使用量",
     "ref_url": ""
   },
   "performance_schema": {
@@ -11268,24 +11253,6 @@
     "info": "Indicate the limit on the number of partitions when optimizer use storage cardinality estimation",
     "flags": "SESSION | GLOBAL",
     "publish_version": "425",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": ""
-  },
-  "ob_table_access_policy": {
-    "id": 10742,
-    "name": "ob_table_access_policy",
-    "default_value": "2",
-    "base_value": "2",
-    "data_type": "enum",
-    "info": "Control the optimizer to generate a table access plan that prefers a specific storage format.",
-    "flags": "GLOBAL | SESSION | INFLUENCE_PLAN | NEED_SERIALIZE",
-    "enum_names": [
-      "ROW_STORE",
-      "COLUMN_STORE",
-      "AUTO"
-    ],
-    "publish_version": "433",
     "info_cn": "",
     "background_cn": "",
     "ref_url": ""

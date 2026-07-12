@@ -411,8 +411,7 @@ int ObDbmsStatsPreferences::gen_init_global_prefs_sql(ObSqlString &raw_sql,
   init_perfs_value(ObHistEstPercentPrefs, false/*last value*/);//init hist_est_percent
   init_perfs_value(ObHistBlockSamplePrefs, false/*last value*/);//init hist_block_sample
   init_perfs_value(ObGatherStatBatchSizePrefs, false/*last value*/);//init async/auto gather batch size
-  init_perfs_value(ObAutoSampleRowCountPrefs, false/*last value*/);//init auto_sample_row_count
-  init_perfs_value(ObSkipRateSamplePrefs, true/*last value*/);//init skip_rate_sample_count
+  init_perfs_value(ObAutoSampleRowCountPrefs, true/*last value*/);//init auto_sample_row_count
   if (OB_SUCC(ret)) {
     if (OB_FAIL(raw_sql.append_fmt(INIT_GLOBAL_PREFS,
                                    share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
@@ -1174,45 +1173,6 @@ int ObAutoSampleRowCountPrefs::check_pref_value_validity(ObTableStatParam *param
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN("Illegal auto sample row count", K(ret), K(pvalue_));
       LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Illegal auto sample row count.");
-    }
-  }
-  return ret;
-}
-
-int ObSkipRateSamplePrefs::check_pref_value_validity(ObTableStatParam *param/*default null*/)
-{
-  int ret = OB_SUCCESS;
-  if (!pvalue_.empty()) {
-    ObObj src_obj;
-    ObObj dest_obj;
-    src_obj.set_string(ObVarcharType, pvalue_);
-    ObArenaAllocator calc_buf("SkipRateCnt");
-    ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
-    int64_t block_count = 0;
-    int64_t int_part = 0;
-    //no gather skip rate with tracepoint to keep mysqltest stable
-    bool no_cg_skip_rate = (OB_E(EventTable::EN_LEADER_STORAGE_ESTIMATION) OB_SUCCESS) != OB_SUCCESS;
-    if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
-      LOG_WARN("failed to type", K(ret), K(src_obj));
-    } else if (!dest_obj.get_number().is_valid_int64(int_part)) {
-      ret = OB_ERR_DBMS_STATS_PL;
-      LOG_WARN("Illegal skip rate sample count must interger", K(ret));
-    } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(block_count))) {
-      LOG_WARN("failed to extract valid int64 with trunc", K(ret), K(src_obj));
-    } else if (block_count < 0 || block_count > MAX_SKIP_RATE_SAMPLE_COUNT) {
-      ret = OB_ERR_DBMS_STATS_PL;
-      LOG_WARN( "Illegal skip rate sample count, must in [0,MAX_SKIP_RATE_SAMPLE_COUNT]", K(ret), K(block_count));
-    } else if (NULL != param) {
-      if (no_cg_skip_rate) {
-        param->skip_rate_sample_cnt_ = 0;
-      } else {
-        param->skip_rate_sample_cnt_ = block_count;
-      }
-    }
-    if (OB_FAIL(ret)) {
-      ret = OB_ERR_DBMS_STATS_PL;
-      LOG_WARN( "Illegal skip rate sample count", K(ret), K(pvalue_));
-      LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Illegal skip rate sample count");
     }
   }
   return ret;

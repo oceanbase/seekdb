@@ -578,7 +578,7 @@ select cast('-0' as float);
 
 # cast from string to float/double -> vec
 drop table if exists t1;
-create table t1(a varchar(500) COLLATE utf8mb4_bin DEFAULT NULL) with column group (each column);
+create table t1(a varchar(500) COLLATE utf8mb4_bin DEFAULT NULL);
 insert into t1 values('d');
 insert into t1 values('3.4e39');
 insert into t1 values('3.4e308');

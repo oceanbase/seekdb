@@ -20,7 +20,6 @@
 #include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include "storage/tx/ob_tx_result_struct.h"
 #include "storage/ob_storage_rpc_arg.h"
-#include "share/ob_thread_mgr.h"
 #include "rootserver/ob_schema_history_recycler.h"
 #include "share/ob_ex_rpc.h"
 #include "observer/ob_service.h"
@@ -94,7 +93,8 @@ ObSchemaHistoryRecycler::ObSchemaHistoryRecycler()
   : inited_(false), stop_(false), schema_service_(NULL),
     /*freeze_info_mgr_(NULL),*/ sql_proxy_(NULL), recycle_schema_version_member_(OB_INVALID_VERSION), recycle_schema_version_valid_(false),
     tmp_recycle_schema_version_(OB_INVALID_VERSION), tmp_recycle_schema_version_valid_(false),
-    last_recycle_ts_(0)
+    last_recycle_ts_(0),
+    timer_()
 {
 }
 
@@ -112,10 +112,11 @@ int ObSchemaHistoryRecycler::init(
   if (inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_FAIL(TG_START(lib::TGDefIDs::SchemaRecTimer))) {
-    LOG_WARN("start schema recycler timer failed", KR(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::SchemaRecTimer, *this, 1 * 1000 * 1000L, true/*is_repeat*/))) {
+  } else if (OB_FAIL(timer_.init("SchemaRecTimer", ObMemAttr("SchemaRec")))) {
+    LOG_WARN("init schema recycler timer failed", KR(ret));
+  } else if (OB_FAIL(timer_.schedule(*this, 1 * 1000 * 1000L, true/*is_repeat*/))) {
     LOG_WARN("schedule schema recycler timer failed", KR(ret));
+    timer_.destroy();
   } else {
     schema_service_ = &schema_service;
     //freeze_info_mgr_ = &freeze_info_manager;
@@ -129,7 +130,7 @@ int ObSchemaHistoryRecycler::init(
 
 int ObSchemaHistoryRecycler::start()
 {
-  // Timer TG is created and scheduled in init(); RS restart path still calls start() for API parity.
+  // Timer task is created and scheduled in init(); RS restart path still calls start() for API parity.
   return OB_SUCCESS;
 }
 
@@ -143,11 +144,11 @@ int ObSchemaHistoryRecycler::destroy()
       stop();
     }
     wait();
-    TG_DESTROY(lib::TGDefIDs::SchemaRecTimer);
     recycle_schema_version_member_ = OB_INVALID_VERSION;
     recycle_schema_version_valid_ = false;
     schema_service_ = nullptr;
     sql_proxy_ = nullptr;
+    timer_.destroy();
     inited_ = false;
     stop_ = true;
   }
@@ -162,14 +163,14 @@ void ObSchemaHistoryRecycler::stop()
     LOG_WARN("not init", K(ret));
   } else {
     stop_ = true;
-    TG_STOP(lib::TGDefIDs::SchemaRecTimer);
+    timer_.stop();
   }
 }
 
 void ObSchemaHistoryRecycler::wait()
 {
   if (inited_) {
-    TG_WAIT(lib::TGDefIDs::SchemaRecTimer);
+    timer_.wait();
   }
 }
 
@@ -737,9 +738,6 @@ int ObSchemaHistoryRecycler::try_recycle_schema_history(
     RECYCLE_FIRST_SCHEMA(RECYCLE_ONLY, tablet, OB_ALL_TABLET_TO_TABLE_HISTORY_TNAME, tablet_id);
     ret = OB_SUCCESS; // overwrite ret
 
-    RECYCLE_SECOND_SCHEMA(column_group, OB_ALL_COLUMN_GROUP_HISTORY_TNAME, table_id, column_group_id);
-    RECYCLE_SECOND_SCHEMA(column_group_mapping, OB_ALL_COLUMN_GROUP_MAPPING_HISTORY_TNAME, table_id, column_group_id);
-    ret = OB_SUCCESS; // overwrite ret
     // ----------------------------- database ----------------------------------------
     RECYCLE_FIRST_SCHEMA(RECYCLE_AND_COMPRESS, database, OB_ALL_DATABASE_HISTORY_TNAME,
                          database_id);

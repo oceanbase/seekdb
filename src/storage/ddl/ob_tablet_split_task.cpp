@@ -47,7 +47,7 @@ ObTabletSplitParam::ObTabletSplitParam()
     is_inited_(false), ls_id_(), table_id_(OB_INVALID_ID), 
     schema_version_(0), task_id_(0), source_tablet_id_(), 
     dest_tablets_id_(), compaction_scn_(0), user_parallelism_(0), 
-    compat_mode_(lib::Worker::CompatMode::INVALID),  data_format_version_(0), consumer_group_id_(0),
+    compat_mode_(lib::Worker::CompatMode::INVALID), data_format_version_(0),
     can_reuse_macro_block_(false), split_sstable_type_(share::ObSplitSSTableType::SPLIT_BOTH),
     parallel_datum_rowkey_list_(), min_split_start_scn_()
 {
@@ -64,7 +64,7 @@ bool ObTabletSplitParam::is_valid() const
   return ls_id_.is_valid() && OB_INVALID_ID != table_id_ 
       && schema_version_ > 0 && task_id_ > 0 && source_tablet_id_.is_valid() 
       && dest_tablets_id_.count() > 0 && compaction_scn_ > 0 && user_parallelism_ > 0
-      && compat_mode_ != lib::Worker::CompatMode::INVALID && data_format_version_ > 0 && consumer_group_id_ >= 0
+      && compat_mode_ != lib::Worker::CompatMode::INVALID && data_format_version_ > 0
       && parallel_datum_rowkey_list_.count() > 0;
 }
 
@@ -100,7 +100,6 @@ int ObTabletSplitParam::init(
     user_parallelism_    = param.user_parallelism_;
     compat_mode_         = param.compat_mode_;
     data_format_version_ = param.data_format_version_;
-    consumer_group_id_   = param.consumer_group_id_;
     split_sstable_type_  = param.split_sstable_type_;
     can_reuse_macro_block_ = param.can_reuse_macro_block_;
     min_split_start_scn_   = param.min_split_start_scn_;
@@ -125,7 +124,6 @@ int ObTabletSplitParam::init(const obcall::ObDDLBuildSingleReplicaRequestArg &ar
     compaction_scn_        = arg.compaction_scn_;
     user_parallelism_      = arg.parallel_datum_rowkey_list_.count() - 1;
     data_format_version_   = arg.data_format_version_;
-    consumer_group_id_     = arg.consumer_group_id_;
     split_sstable_type_    = arg.split_sstable_type_;
     can_reuse_macro_block_ = arg.can_reuse_macro_block_;
     min_split_start_scn_   = arg.min_split_start_scn_;
@@ -153,7 +151,6 @@ int ObTabletSplitParam::init(const obcall::ObTabletSplitArg &arg)
     compaction_scn_        = arg.compaction_scn_;
     user_parallelism_      = arg.parallel_datum_rowkey_list_.count() - 1;
     data_format_version_   = arg.data_format_version_;
-    consumer_group_id_     = arg.consumer_group_id_;
     split_sstable_type_    = arg.split_sstable_type_;
     can_reuse_macro_block_ = arg.can_reuse_macro_block_;
     min_split_start_scn_   = arg.min_split_start_scn_;
@@ -298,8 +295,6 @@ int ObTabletSplitCtx::prepare_index_builder(
             tablet_handle.get_obj()->get_transfer_seq(),
             0/*concurrent_cnt*/,
             sstable->get_end_scn(),
-            nullptr/*cg_schema*/,
-            0/*table_cg_idx*/,
             exec_mode))) {
           LOG_WARN("fail to init data store desc", K(ret), K(dst_tablet_id), K(param));
         } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObSSTableIndexBuilder)))) {
@@ -381,7 +376,6 @@ int ObTabletSplitDag::init_by_param(const share::ObIDagInitParam *param)
       LOG_INFO("wait conditions satisfied", K(ret), KPC(tmp_param));
     }
   } else {
-    consumer_group_id_ = tmp_param->consumer_group_id_;
     is_inited_ = true;
   }
   return ret;
@@ -940,8 +934,6 @@ int ObTabletSplitWriteTask::prepare_macro_block_writer(
                                         tablet_handle.get_obj()->get_transfer_seq(),
                                         0/*concurrent_cnt*/,
                                         sstable_->get_end_scn(),
-                                        nullptr/* cg_schema */,
-                                        0/* table_cg_idx */,
                                         exec_mode))) {
         LOG_WARN("fail to init data store desc", K(ret), K(dst_tablet_id), KPC(param_));
       } else if (FALSE_IT(data_desc.get_desc().sstable_index_builder_ = sst_idx_builder)) {
@@ -1729,9 +1721,7 @@ int ObRowScan::build_rowkey_read_info(
                                              full_stored_col_cnt,
                                              param.storage_schema_->get_rowkey_column_num(),
                                              cols_desc,
-                                             false /*is_cg_sstable*/,
-                                             false /*use_default_compat_version*/,
-                                             false/*is_cs_replica_compat*/))) {
+                                             false /*use_default_compat_version*/))) {
     LOG_WARN("fail to init rowkey read info", K(ret), KPC(param.storage_schema_));
   }
   if (OB_FAIL(ret) && nullptr != rowkey_read_info_) {

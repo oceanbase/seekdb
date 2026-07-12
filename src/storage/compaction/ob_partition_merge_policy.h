@@ -17,7 +17,6 @@
 #ifndef OB_PARTITION_MERGE_POLICY_H_
 #define OB_PARTITION_MERGE_POLICY_H_
 
-#include "storage/column_store/ob_column_oriented_sstable.h"
 #include "storage/compaction/ob_tenant_freeze_info_mgr.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "share/ob_table_range.h"
@@ -77,11 +76,6 @@ public:
       storage::ObLS &ls,
       const storage::ObTablet &tablet,
       storage::ObGetMergeTablesResult &result);  
-  static int get_convert_co_major_merge_tables(
-      const storage::ObGetMergeTablesParam &param,
-      storage::ObLS &ls,
-      const storage::ObTablet &tablet,
-      storage::ObGetMergeTablesResult &result);
   static int not_support_merge_type(
       const storage::ObGetMergeTablesParam &param,
       storage::ObLS &ls,
@@ -114,7 +108,7 @@ public:
       storage::ObLS &ls,
       const storage::ObTablet &tablet,
       ObVersionRange &result_version_range,
-      ObStorageSnapshotInfo &snapshot_info);
+      storage::ObStorageSnapshotInfo &snapshot_info);
 
   static int add_table_with_check(storage::ObGetMergeTablesResult &result, storage::ObTableHandleV2 &table_handle);
   static int get_result_by_snapshot(
@@ -129,7 +123,7 @@ private:
       const int64_t max_snapshot_version,
       storage::ObLS &ls,
       const storage::ObTablet &tablet,
-      common::ObIArray<ObTableHandleV2> &memtable_handles,
+      common::ObIArray<storage::ObTableHandleV2> &memtable_handles,
       storage::ObGetMergeTablesResult &result);
 
   static int find_minor_merge_tables(
@@ -237,13 +231,12 @@ public:
     FREQUENT_WRITE = 4,
     TENANT_MAJOR = 5,
     USER_REQUEST = 6,
-    REBUILD_COLUMN_GROUP = 7, // use row_store to rebuild column_store(when column store have error)
-    CRAZY_MEDIUM_FOR_TEST = 8,
+    CRAZY_MEDIUM_FOR_TEST = 7,
     // no incremental data(MEMTABLE/MINI/MINOR) after last major
-    NO_INC_DATA = 9,
+    NO_INC_DATA = 8,
     // no major sstable / table schema is hidden or invalid index
-    DURING_DDL = 10,
-    RECYCLE_TRUNCATE_INFO = 11,
+    DURING_DDL = 9,
+    RECYCLE_TRUNCATE_INFO = 10,
     INVALID_REASON
   };
 
@@ -286,7 +279,7 @@ public:
       int64_t &least_medium_snapshot);
   static int check_adaptive_merge_reason(
       const storage::ObTablet &tablet,
-      const ObTabletStatAnalyzer &tablet_analyzer,
+      const storage::ObTabletStatAnalyzer &tablet_analyzer,
       AdaptiveMergeReason &reason);
   static int check_adaptive_merge_reason_for_event(
       const storage::ObLS &ls,
@@ -294,7 +287,7 @@ public:
       const AdaptiveCompactionEvent &event,
       const int64_t update_row_cnt,
       const int64_t delete_row_cnt,
-      ObTableModeFlag &mode,
+      share::schema::ObTableModeFlag &mode,
       AdaptiveMergeReason &reason);
   static int check_tombstone_reason(
       const storage::ObTablet &tablet,
@@ -334,86 +327,6 @@ public:
   static constexpr int64_t MEDIUM_COOLING_TIME_THRESHOLD_NS = 600_s * 1000; // 1000: set precision from us to ns
   static const int64_t RECYCLE_TRUNCATE_INFO_THRESHOLD = 5;
 };
-
-/*
-  SCHEMA_TYPE
-  1) ALL+EACH
-  ALL+EACH --(BUILD_ROW_STORE_MERGE)--> ALL --(USE_RS_BUILD_SCHEMA_MATCH_MERGE)--> ALL+EACH
-  ALL+EACH --(BUILD_COLUMN_STORE_MERGE)--> ALL+EACH
-  EACH --(BUILD_REDUNDANT_ROW_STORE_MERGE)--> ALL+EACH
-  2) EACH
-  EACH --(BUILD_ROW_STORE_MERGE)--> ALL --(USE_RS_BUILD_SCHEMA_MATCH_MERGE)--> EACH
-  EACH --(BUILD_COLUMN_STORE_MERGE)--> EACH
-
-  BUILD_COLUMN_STORE_MERGE vs. USE_RS_BUILD_SCHEMA_MATCH_MERGE
-  SAME : output a major sstable match schema
-  DIFF : BUILD_COLUMN_STORE_MERGE could reuse CG macro from old major, USE_RS_BUILD_SCHEMA_MATCH_MERGE can't reuse macro
-*/
-
-class ObCOMajorMergePolicy
-{
-public:
-  enum ObCOMajorMergeType : uint8_t
-  {
-    INVALID_CO_MAJOR_MERGE_TYPE = 0,
-    BUILD_COLUMN_STORE_MERGE = 1,
-    BUILD_ROW_STORE_MERGE = 2,
-    USE_RS_BUILD_SCHEMA_MATCH_MERGE = 3,
-    BUILD_REDUNDANT_ROW_STORE_MERGE = 4, // only for cs replica now
-    MAX_CO_MAJOR_MERGE_TYPE = 5
-  };
-  static const char *co_major_merge_type_to_str(const ObCOMajorMergeType co_merge_type);
-  static inline bool is_valid_major_merge_type(const ObCOMajorMergeType &major_merge_type)
-  {
-    return major_merge_type > INVALID_CO_MAJOR_MERGE_TYPE && major_merge_type < MAX_CO_MAJOR_MERGE_TYPE;
-  }
-  static inline bool is_build_column_store_merge(const ObCOMajorMergeType &major_merge_type)
-  {
-    return BUILD_COLUMN_STORE_MERGE == major_merge_type;
-  }
-  static inline bool is_build_row_store_merge(const ObCOMajorMergeType &major_merge_type)
-  {
-    return BUILD_ROW_STORE_MERGE == major_merge_type;
-  }
-  static inline bool is_use_rs_build_schema_match_merge(const ObCOMajorMergeType &major_merge_type)
-  {
-    return USE_RS_BUILD_SCHEMA_MATCH_MERGE == major_merge_type;
-  }
-  static inline bool is_build_redundent_row_store_merge(const ObCOMajorMergeType &major_merge_type)
-  {
-    return BUILD_REDUNDANT_ROW_STORE_MERGE == major_merge_type;
-  }
-  static int decide_co_major_sstable_status(
-      const ObCOSSTableV2 &co_sstable,
-      const ObStorageSchema &storage_schema,
-      ObCOMajorSSTableStatus &major_sstable_status);
-  static bool whether_to_build_row_store(
-      const int64_t &estimate_row_cnt, 
-      const int64_t &column_cnt);
-  static bool whether_to_rebuild_column_store(
-      const ObCOMajorSSTableStatus &major_sstable_status,
-      const int64_t &estimate_row_cnt, 
-      const int64_t &column_cnt);
-  static int accumulate_physical_row_cnt(
-      const ObIArray<ObITable *> &tables,
-      int64_t &physical_row_cnt);
-  static int decide_co_major_merge_type(
-      const ObCOSSTableV2 &co_sstable,
-      const ObIArray<ObITable *> &tables,
-      const ObStorageSchema &storage_schema,
-      ObCOMajorMergeType &major_merge_type);
-
-private:
-  // Thresholds for swtiching major sstable 
-  // build row store
-  static const int64_t ROW_CNT_THRESHOLD_BUILD_ROW_STORE = 10000;
-  static const int64_t COL_CNT_THRESHOLD_BUILD_ROW_STORE = 3;
-  // rebuild column store
-  static const int64_t ROW_CNT_THRESHOLD_REBUILD_COLUMN_STORE = 20000;
-  static const int64_t ROW_CNT_THRESHOLD_REBUILD_ROWKEY_STORE = 16000;
-  static const int64_t COL_CNT_THRESHOLD_REBUILD_COLUMN_STORE = 5;
-};
-
 
 } /* namespace compaction */
 } /* namespace oceanbase */

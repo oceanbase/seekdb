@@ -34,7 +34,6 @@
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tx/ob_timestamp_service.h"
 #include "storage/tx/ob_trans_id_service.h"
-#include "share/ob_thread_mgr.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "src/observer/table_load/resource/ob_table_load_resource_manager.h"
 #include "rootserver/mview/ob_mview_maintenance_service.h"
@@ -85,8 +84,7 @@ int ObLS::init(const share::ObLSID &ls_id,
                const ObMigrationStatus &migration_status,
                const ObRestoreStatus &restore_status,
                const SCN &create_scn,
-               const ObMajorMVMergeInfo &major_mv_merge_info,
-               const ObLSStoreFormat &store_format)
+               const ObMajorMVMergeInfo &major_mv_merge_info)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -109,8 +107,7 @@ int ObLS::init(const share::ObLSID &ls_id,
                                    migration_status,
                                    restore_status,
                                    create_scn,
-                                   major_mv_merge_info,
-                                   store_format))) {
+                                   major_mv_merge_info))) {
     LOG_WARN("failed to init ls meta", K(ret), K(ls_id), K(major_mv_merge_info));
   } else if (OB_FAIL(ls_freezer_.init(this))) {
     LOG_WARN("init freezer failed", K(ret), K(ls_id));
@@ -345,43 +342,6 @@ int ObLS::finish_create_ls()
   return ret;
 }
 
-bool ObLS::is_cs_replica() const
-{
-  return ls_meta_.get_store_format().is_columnstore();
-}
-
-int ObLS::check_has_cs_replica(bool &has_cs_replica) const
-{
-  int ret = OB_SUCCESS;
-  has_cs_replica = false;
-  ObRole role = INVALID_ROLE;
-  ObMemberList member_list;
-  GlobalLearnerList learner_list;
-  int64_t proposal_id = 0;
-  int64_t paxos_replica_number = 0;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
-  } else if (OB_FAIL(log_handler_.get_role(role, proposal_id))) {
-    LOG_WARN("fail to get role", K(ret), KPC(this));
-  } else if (LEADER != role) {
-    ret = OB_NOT_MASTER;
-    LOG_WARN("local ls is not leader", K(ret), K_(ls_meta));
-  } else if (OB_FAIL(get_paxos_member_list_and_learner_list(member_list, paxos_replica_number, learner_list))) {
-    LOG_WARN("fail to get member list and learner list", K(ret), K_(ls_meta));
-  } else {
-    for (int64_t i = 0; i < learner_list.get_member_number(); i++) {
-      const ObMember &learner = learner_list.get_learner(i);
-      if (learner.is_columnstore()) {
-        has_cs_replica = true;
-        break;
-      }
-    }
-  }
-  return ret;
-}
-
 int ObLS::stop()
 {
   int64_t read_lock = 0;
@@ -448,8 +408,8 @@ void ObLS::wait_()
   int64_t retry_times = 0;
   do {
     retry_times++;
-    if (vec_idx_scheduler_tg_id_ != 0) {
-      TG_WAIT(vec_idx_scheduler_tg_id_);
+    if (vector_idx_scheduler_timer_.inited()) {
+      vector_idx_scheduler_timer_.wait();
     }
     if (!wait_finished) {
       ob_usleep(100 * 1000); // 100 ms
@@ -839,7 +799,7 @@ int ObLS::register_to_service_()
   
   // TODO-REVIEW: merge produced a register_to_service_ that only registered
   // common + sys services with a master-flavored inline vector-index-scheduler
-  // init (used the removed member vec_tg_id_). HEAD moved the vector index
+  // init. HEAD moved the vector index
   // scheduler lifecycle into register_sys_service()/register_user_service()
   // via init_vector_idx_scheduler_(); restore that here.
   if (OB_FAIL(register_common_service())) {
@@ -858,14 +818,13 @@ int ObLS::register_to_service_()
 int ObLS::init_vector_idx_scheduler_()
 {
   int ret = OB_SUCCESS;
-  if (0 != vec_idx_scheduler_tg_id_) {
+  if (vector_idx_scheduler_timer_.inited()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("vector index scheduler init twice", KR(ret), K_(vec_idx_scheduler_tg_id));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantTabletTTLMgr, vec_idx_scheduler_tg_id_))) {  // vec mem index sync task
+    LOG_WARN("vector index scheduler init twice", KR(ret));
+  } else if (OB_FAIL(vector_idx_scheduler_timer_.init(
+      "TTLTabletMgr", common::ObMemAttr("TTLTabletMgr")))) {
     LOG_WARN("fail to init vector index scheduler timer", KR(ret));
-  } else if (OB_FAIL(TG_START(vec_idx_scheduler_tg_id_))) {
-    LOG_WARN("fail to start vector index scheduler timer", KR(ret), K_(vec_idx_scheduler_tg_id));
-  } else if (OB_FAIL(vector_idx_scheduler_.init(this, vec_idx_scheduler_tg_id_))) {
+  } else if (OB_FAIL(vector_idx_scheduler_.init(this, vector_idx_scheduler_timer_))) {
     LOG_WARN("fail to init vector idx scheduler", KR(ret));
   }
   return ret;
@@ -873,19 +832,18 @@ int ObLS::init_vector_idx_scheduler_()
 
 void ObLS::stop_vector_idx_scheduler_()
 {
-  if (0 != vec_idx_scheduler_tg_id_) {
-    TG_STOP(vec_idx_scheduler_tg_id_);
+  if (vector_idx_scheduler_timer_.inited()) {
+    vector_idx_scheduler_timer_.stop();
     vector_idx_scheduler_.stop();
   }
 }
 
 void ObLS::destroy_vector_idx_scheduler_()
 {
-  if (0 != vec_idx_scheduler_tg_id_) {
-    TG_WAIT(vec_idx_scheduler_tg_id_);
-    TG_DESTROY(vec_idx_scheduler_tg_id_);
+  if (vector_idx_scheduler_timer_.inited()) {
+    vector_idx_scheduler_timer_.wait();
+    vector_idx_scheduler_timer_.destroy();
     vector_idx_scheduler_.destroy();
-    vec_idx_scheduler_tg_id_ = 0;
   }
 }
 
@@ -893,7 +851,7 @@ int ObLS::vector_idx_scheduler_safe_to_destroy_(bool &is_safe)
 {
   int ret = OB_SUCCESS;
   is_safe = true;
-  if (0 != vec_idx_scheduler_tg_id_ &&
+  if (vector_idx_scheduler_timer_.inited() &&
       OB_FAIL(vector_idx_scheduler_.safe_to_destroy(is_safe))) {
     LOG_WARN("fail to check vector index scheduler safe to destroy", KR(ret), K(is_safe));
   }

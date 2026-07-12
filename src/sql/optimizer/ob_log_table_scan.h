@@ -389,7 +389,6 @@ public:
         has_index_scan_filter_(false),
         has_index_lookup_filter_(false),
         table_type_(share::schema::MAX_TABLE_TYPE),
-        use_column_store_(false),
         doc_id_table_id_(common::OB_INVALID_ID),
         text_retrieval_info_(),
         vector_index_info_(),
@@ -448,12 +447,6 @@ public:
 
   inline bool use_das() const
   { return use_das_; }
-
-  inline void set_use_column_store(bool use_column_store)
-  { use_column_store_ = use_column_store; }
-
-  inline bool use_column_store() const
-  { return use_column_store_; }
 
   /**
    *  Get index table id
@@ -1258,7 +1251,6 @@ protected: // memeber variables
   // end for global index lookup
 
   share::schema::ObTableType table_type_;
-  bool use_column_store_;
   // in the new fts version, doc_id_table_id_ may be invalid.
   uint64_t doc_id_table_id_; // used for rowkey lookup of fulltext, JSON multi-value and vector index
   // text retrieval as index scan

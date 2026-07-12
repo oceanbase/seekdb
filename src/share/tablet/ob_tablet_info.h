@@ -31,9 +31,7 @@ class ObTabletReplicaFilter;
 enum class ObDataChecksumType : uint8_t
 {
   DATA_CHECKSUM_NORMAL = 0,
-  DATA_CHECKSUM_COLUMN_STORE = 1, // for column store replica data checksum
-  DATA_CHECKSUM_NORMAL_WITH_NORMAL_COLUMN = 2, // with hex column checksums
-  DATA_CHECKSUM_COLUMN_STORE_WITH_NORMAL_COLUMN = 3,
+  DATA_CHECKSUM_NORMAL_WITH_NORMAL_COLUMN = 1, // with hex column checksums
   DATA_CHECKSUM_MAX
 };
 
@@ -45,14 +43,7 @@ inline bool is_valid_data_checksum_type(const ObDataChecksumType &type)
 
 inline bool is_normal_column_checksum_type(const ObDataChecksumType &type)
 {
-  return type == ObDataChecksumType::DATA_CHECKSUM_NORMAL_WITH_NORMAL_COLUMN
-     || type == ObDataChecksumType::DATA_CHECKSUM_COLUMN_STORE_WITH_NORMAL_COLUMN;;
-}
-
-inline bool is_column_store_data_checksum_type(const ObDataChecksumType &type)
-{
-  return type == ObDataChecksumType::DATA_CHECKSUM_COLUMN_STORE
-     || type == ObDataChecksumType::DATA_CHECKSUM_COLUMN_STORE_WITH_NORMAL_COLUMN;
+  return type == ObDataChecksumType::DATA_CHECKSUM_NORMAL_WITH_NORMAL_COLUMN;
 }
 
 

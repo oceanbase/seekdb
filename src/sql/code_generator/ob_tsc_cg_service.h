@@ -47,7 +47,6 @@ public:
                                const ObIArray<ObRawExpr *> &access_exprs,
                                const log_op_def::ObLogOpType op_type,
                                const bool is_global_index_lookup,
-                               const bool use_column_store,
                                ObPushdownExprSpec &pd_spec);
   int generate_table_loc_meta(uint64_t table_loc_id,
                               const ObDMLStmt &stmt,

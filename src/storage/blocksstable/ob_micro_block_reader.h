@@ -169,7 +169,6 @@ public:
   OB_INLINE bool single_version_rows() { return nullptr != header_ && header_->single_version_rows_; }
   OB_INLINE bool committed_single_version_rows() { return single_version_rows() && !header_->contain_uncommitted_rows(); }
 
-  // For column store
   virtual int find_bound(
       const ObDatumRowkey &key,
       const bool lower_bound,

@@ -135,7 +135,6 @@ int ObAlterTableConstraintChecker::check_alter_table_constraint(
   const ObAlterTableArg::AlterConstraintType type = alter_table_arg.alter_constraint_type_;
   bool change_cst_column_name = false;
   bool is_alter_decimal_int_offline = false;
-  bool is_column_group_store = false;
   bool can_change_cst_column_name = false;
   bool can_add_cst_on_multi_column = false;
   switch(type) {
@@ -170,15 +169,8 @@ int ObAlterTableConstraintChecker::check_alter_table_constraint(
     }
     // to avoid ddl type being modified from DROP_COLUMN to NORMAL_TYPE
     case obcall::ObAlterTableArg::DROP_CONSTRAINT: {
-      bool is_drop_col_only = false;
       if (share::ObDDLType::DDL_DROP_COLUMN == ddl_type) {
         // Drop column handles the related constraint update.
-      } else if (OB_FAIL(ObCODDLUtil::need_column_group_store(orig_table_schema, is_column_group_store))) {
-        LOG_WARN("fail to check schema is column group store", K(ret));
-      } else if (OB_FAIL(ObSchemaUtils::is_drop_column_only(alter_table_arg.alter_table_schema_, is_drop_col_only))) {
-        LOG_WARN("fail to check is drop column only", K(ret), K(alter_table_arg.alter_table_schema_));
-      } else if (share::ObDDLType::DDL_TABLE_REDEFINITION == ddl_type && is_drop_col_only && is_column_group_store) {
-        // for column store, drop column is table redefinition      
       } else if (OB_FAIL(ddl_service.check_is_alter_decimal_int_offline(ddl_type,
                                                             orig_table_schema,
                                                             alter_table_arg.alter_table_schema_,

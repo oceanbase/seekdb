@@ -784,7 +784,7 @@ int ObBloomFilterCache::inc_empty_read(
     const storage::ObITable::TableKey &sstable_key,
     const MacroBlockId &macro_id,
     const int64_t empty_read_prefix,
-    const ObSSTableReadHandle * read_handle,
+    const storage::ObSSTableReadHandle *read_handle,
     const int64_t empty_read_cnt)
 {
   int ret = OB_SUCCESS;

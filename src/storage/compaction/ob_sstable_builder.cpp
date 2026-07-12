@@ -247,7 +247,7 @@ int ObSSTableRebuilder::build_res_with_rewrite_macros(
   } else if (macro_id_array.count() != 0) {
     build_res_with_rebuild = true;
     iter.reuse();
-    STORAGE_LOG(INFO, "rebuild sstable merge", K(ret), K(data_store_desc_.get_desc().get_table_cg_idx()));
+    STORAGE_LOG(INFO, "rebuild sstable merge", K(ret));
     if (OB_FAIL(rebuild_macro_block(macro_id_array, iter))) {
       STORAGE_LOG(WARN, "fail to rebuild macro block", K(ret), K(macro_id_array));
     } else if (OB_FAIL(rebuild_index_builder_.close_with_macro_seq(
@@ -258,7 +258,7 @@ int ObSSTableRebuilder::build_res_with_rewrite_macros(
       block_info.macro_block_count_ = res.data_blocks_cnt_;
       const ObMergeBlockInfo &block_info_from_builder = rebuild_index_builder_.get_merge_block_info();
       block_info.add_index_block_info(block_info_from_builder);
-      STORAGE_LOG(INFO, "after rebuild sstable", K(ret), "cg_idx", data_store_desc_.get_desc().get_table_cg_idx(),
+      STORAGE_LOG(INFO, "after rebuild sstable", K(ret),
          "old_multiplexed_macro_block_count", block_info.multiplexed_macro_block_count_,
          "old_total_macro_count", block_info.macro_block_count_,
          "new_multiplexed_macro_block_count", multiplexed_macro_block_count,

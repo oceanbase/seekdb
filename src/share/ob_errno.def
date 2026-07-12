@@ -226,7 +226,6 @@ DEFINE_ERROR_DEP(OB_ERR_ALREADY_EXISTS, -4181, -1, "42S01", "Already exist");
 DEFINE_ERROR_DEP(OB_SEARCH_NOT_FOUND, -4182, -1, "HY000", "Value not found");
 DEFINE_ERROR(OB_BEYOND_THE_RANGE, -4183, -1, "HY000", "Key out of range");
 DEFINE_ERROR(OB_SERVER_OUTOF_DISK_SPACE, -4184, -1, "53100", "Server out of disk space");
-DEFINE_ERROR(OB_COLUMN_GROUP_NOT_FOUND, -4185, -1, "HY000", "Column group \'%.*s\' not found");
 DEFINE_ERROR(OB_CS_COMPRESS_LIB_ERROR, -4186, -1, "HY000", "Server failed to get compress library");
 DEFINE_ERROR_DEP(OB_ITEM_NOT_MATCH, -4187, -1, "HY000", "Item not match");
 DEFINE_ERROR(OB_SCHEDULER_TASK_CNT_MISMATCH, -4188, -1, "HY000", "Running task cnt and unfinished task cnt not consistent");
@@ -418,7 +417,6 @@ DEFINE_ERROR(OB_ERR_DUP_RESTART_SPEC, -4382, -1, "HY000", "duplicate RESTART spe
 DEFINE_ERROR(OB_GTI_NOT_READY, -4383, -1, "HY000", "transaction id is not ready");
 DEFINE_ERROR(OB_STACK_OVERFLOW, -4385, -1, "HY000", "stack overflow");
 DEFINE_ERROR(OB_NOT_ALLOW_REMOVING_LEADER, -4386, -1, "HY000", "Do not allow removing leader");
-DEFINE_ERROR(OB_NEED_SWITCH_CONSUMER_GROUP, -4387, 13937, "HY000", "Failed to switch resource group");
 DEFINE_ERROR_DEP(OB_UNEXPECT_INTERNAL_ERROR, -4388, -1, "HY000", "Unexpected internal error happen, please checkout the internal errcode");
 DEFINE_ERROR_DEP(OB_ERR_TOO_MUCH_TIME, -4389, -1, "HY000", "Processing time is too long");
 DEFINE_ERROR(OB_ERR_REMOTE_SCHEMA_NOT_FULL, -4390, -1, "HY000", "Schema of remote server is not refreshed yet");
@@ -590,23 +588,14 @@ DEFINE_ERROR(OB_SKIP_RENEW_LOCATION_BY_RPC, -4698, -1, "HY000", "skip renew loca
 DEFINE_ERROR(OB_RENEW_LOCATION_BY_RPC_FAILED, -4699, -1, "HY000", "renew location by rpc failed");
 DEFINE_ERROR(OB_CLUSTER_ID_NO_MATCH, -4700, -1, "HY000", "cluster id does not match");
 DEFINE_ERROR(OB_ERR_PARAM_INVALID, -4701, -1, "HY000", "parameter cannot be modified because specified value is invalid");
-DEFINE_ERROR_EXT(OB_ERR_RES_OBJ_ALREADY_EXIST, -4702, -1, "HY000", "resource object already exists", "%s %.*s already exists");
-DEFINE_ERROR_EXT(OB_ERR_RES_PLAN_NOT_EXIST, -4703, -1, "HY000", "resource plan does not exist", "resource plan %.*s does not exist");
-DEFINE_ERROR_EXT(OB_ERR_PERCENTAGE_OUT_OF_RANGE, -4704, -1, "HY000", "value is outside valid range of 0 to 100", "value %ld for %s is outside valid range of 0 to 100");
-DEFINE_ERROR_EXT(OB_ERR_PLAN_DIRECTIVE_NOT_EXIST, -4705, -1, "HY000", "plan directive does not exist", "plan directive %.*s, %.*s does not exist");
-DEFINE_ERROR_EXT(OB_ERR_PLAN_DIRECTIVE_ALREADY_EXIST, -4706, -1, "HY000", "plan directive already exists", "plan directive %.*s, %.*s already exists");
-DEFINE_ERROR_EXT(OB_ERR_INVALID_PLAN_DIRECTIVE_NAME, -4707, -1, "HY000", "plan directive name not supported.", "plan directive name '%.*s' not supported.");
 DEFINE_ERROR_EXT(OB_FAILOVER_NOT_ALLOW, -4708, -1, "HY000", "Failover is not allowed", "%s");
 DEFINE_ERROR_EXT(OB_ADD_CLUSTER_NOT_ALLOWED, -4709, -1, "HY000", "Add cluster not allowed.", "Add cluster not allowed. Actions: %s");
-DEFINE_ERROR_EXT(OB_ERR_CONSUMER_GROUP_NOT_EXIST, -4710, -1, "HY000", "consumer group does not exist", "consumer group %.*s does not exist");
 DEFINE_ERROR_EXT(OB_CLUSTER_NOT_ACCESSIBLE, -4711, -1, "HY000", "cluster is not accessible", "cluster is not accessible, cluster_id: %ld");
 DEFINE_ERROR_EXT(OB_TENANT_RESOURCE_UNIT_EXIST, -4712, -1, "HY000", "tenant already has resource unit configured", "tenant already has resource unit configured, id: %ld, seekdb: \'%s\'");
 DEFINE_ERROR_EXT(OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX, -4713, -1, "HY000", "rebuild global index failed when drop/truncate partitions", "rebuild global index:'%.*s' failed when drop/truncate partitions");
 DEFINE_ERROR(OB_ERR_ATLER_TABLE_ILLEGAL_FK, -4714, -1, "HY000", "unique/primary keys in table referenced by enabled foreign keys");
-DEFINE_ERROR(OB_ERR_NO_RESOURCE_MANAGER_PRIVILEGE, -4715, -1, "HY000", "insufficient Resource Manager privileges");
 DEFINE_ERROR(OB_LEADER_COORDINATOR_NEED_RETRY, -4716, -1, "HY000", "leader coordinator needs retry");
 DEFINE_ERROR(OB_REBALANCE_TASK_NEED_RETRY, -4717, -1, "HY000", "rebalance task needs retry");
-DEFINE_ERROR(OB_ERR_RES_MGR_PLAN_NOT_EXIST, -4718, -1, "HY000", "specified resource manager plan does not exist in the data dictionary");
 
 // for log stream and tablet
 DEFINE_ERROR(OB_LS_NOT_EXIST, -4719, -1, "HY000", "log stream does not exist");
@@ -871,7 +860,7 @@ DEFINE_ERROR_EXT(OB_ERR_TOO_MANY_KEYS, -5194, ER_TOO_MANY_KEYS, "42000","Too man
 DEFINE_ERROR_EXT(OB_ERR_TOO_MANY_ROWKEY_COLUMNS, -5195, ER_TOO_MANY_KEY_PARTS, "42000","Too many key parts specified", "Too many key parts specified; max %ld parts allowed");
 DEFINE_ERROR_EXT(OB_ERR_TOO_LONG_KEY_LENGTH, -5196, ER_TOO_LONG_KEY, "42000", "Specified key was too long", "Specified key was too long; max key length is %ld bytes");
 DEFINE_ERROR(OB_ERR_TOO_MANY_COLUMNS, -5197, ER_TOO_MANY_FIELDS, "42000", "Too many columns");
-DEFINE_ERROR_EXT(OB_ERR_TOO_LONG_COLUMN_LENGTH, -5198, ER_TOO_BIG_FIELDLENGTH, "42000", "Column length too big", "Column length too big for column '%s' (max = %d)");
+DEFINE_ERROR_EXT_DEP(OB_ERR_TOO_LONG_COLUMN_LENGTH, -5198, ER_TOO_BIG_FIELDLENGTH, "42000", "Column length too big", "Column length too big for column '%s' (max = %d)");
 DEFINE_ERROR(OB_ERR_TOO_BIG_ROWSIZE, -5199, ER_TOO_BIG_ROWSIZE, "42000", "Row size too large");
 DEFINE_ERROR_EXT(OB_ERR_UNKNOWN_TABLE, -5200, ER_UNKNOWN_TABLE, "42S02", "Unknown table", "Unknown table '%.*s' in %.*s");
 DEFINE_ERROR_EXT(OB_ERR_BAD_TABLE, -5201, ER_BAD_TABLE_ERROR, "42S02", "Unknown table", "Unknown table '%.*s'");
@@ -1070,7 +1059,6 @@ DEFINE_ERROR_EXT(OB_ERR_OBJECT_STRING_DOES_NOT_EXIST, -5400, -1, "HY000", "objec
 DEFINE_ERROR(OB_ERR_RESULTANT_DATA_TYPE_OF_VIRTUAL_COLUMN_IS_NOT_SUPPORTED, -5401, -1, "HY000", "resultant data type of virtual column is not supported");
 DEFINE_ERROR(OB_ERR_GET_STACKED_DIAGNOSTICS, -5402, ER_GET_STACKED_DIAGNOSTICS_INACTIVE, "0Z002", "GET STACKED DIAGNOSTICS when handler not active");
 DEFINE_ERROR(OB_DDL_SCHEMA_VERSION_NOT_MATCH, -5403, -1, "HY000", "ddl schema version not match");
-DEFINE_ERROR_EXT(OB_ERR_COLUMN_GROUP_DUPLICATE, -5404, ER_DUP_FIELDNAME, "42S21", "Duplicate column group name", "Duplicate column group name '%.*s'");
 DEFINE_ERROR_EXT(OB_ERR_RESERVED_SYNTAX, -5405, ER_RESERVED_SYNTAX, "HY000", "The \'%.*s\' syntax is reserved for purposes internal to the OceanBase Server", "The \'%.*s\' syntax is reserved for purposes internal to the OceanBase Server");
 DEFINE_ERROR_EXT(OB_ERR_INVALID_PARAM_TO_PROCEDURE, -5406, ER_WRONG_PARAMETERS_TO_PROCEDURE, "HY000", "Incorrect parameters to procedure \'%.*s\'", "Incorrect parameters to procedure \'%.*s\'");
 DEFINE_ERROR_EXT(OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT, -5407, ER_WRONG_PARAMETERS_TO_NATIVE_FCT, "42000", "Incorrect parameters in the call to native function", "Incorrect parameters in the call to native function '%.*s'");

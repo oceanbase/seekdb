@@ -159,12 +159,6 @@ public:
       const common::ObTabletID &tablet_id,
       const int64_t snapshot_version,
       ObTableHandleV2 &table_handle);
-  static int create_empty_co_sstable(
-      common::ObArenaAllocator &allocator,
-      const ObStorageSchema &storage_schema,
-      const common::ObTabletID &tablet_id,
-      const int64_t snapshot_version,
-      ObTableHandleV2 &table_handle);
 
   template <typename T = blocksstable::ObSSTable>
   static int create_sstable(

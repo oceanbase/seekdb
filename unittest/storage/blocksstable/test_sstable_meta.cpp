@@ -217,7 +217,6 @@ void TestSSTableMacroInfo::TearDown()
 
 void TestSSTableMacroInfo::prepare_create_sstable_param()
 {
-  param_.set_init_value_for_column_store_();
   const int64_t multi_version_col_cnt = ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
   param_.table_key_.table_type_ = ObITable::TableType::MAJOR_SSTABLE;
   param_.table_key_.tablet_id_ = tablet_id_;
@@ -336,7 +335,6 @@ void TestSSTableMeta::construct_sstable(
 
 void TestSSTableMeta::prepare_create_sstable_param()
 {
-  param_.set_init_value_for_column_store_();
   const int64_t multi_version_col_cnt = ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
   param_.table_key_.table_type_ = ObITable::TableType::MAJOR_SSTABLE;
   param_.table_key_.tablet_id_ = tablet_id_;
@@ -898,7 +896,6 @@ TEST_F(TestSSTableMeta, test_sstable_meta_deep_copy)
   OB_LOG(INFO, "kyle", K(src_meta.macro_info_), K(flat_meta_1->macro_info_), K(sizeof(src_meta.macro_info_)), K(sizeof(flat_meta_1->macro_info_)));
   ASSERT_EQ(0, MEMCMP((char*)&src_meta.data_root_info_, (char*)&flat_meta_1->data_root_info_, sizeof(src_meta.data_root_info_)));
   ASSERT_EQ(0, MEMCMP((char*)&src_meta.macro_info_, (char*)&flat_meta_1->macro_info_, sizeof(src_meta.macro_info_)));
-  // ASSERT_EQ(0, MEMCMP((char*)&src_meta.cg_sstables_, (char*)&flat_meta_1->cg_sstables_, sizeof(src_meta.cg_sstables_)));
   ASSERT_EQ(0, MEMCMP(src_meta.column_ckm_struct_.column_checksums_,
                       flat_meta_1->column_ckm_struct_.column_checksums_,
                       src_meta.column_ckm_struct_.count_ * sizeof(int64_t)));
@@ -931,7 +928,6 @@ TEST_F(TestSSTableMeta, test_sstable_meta_deep_copy)
   ASSERT_EQ(0, MEMCMP((char*)&flat_meta_1->basic_meta_, (char*)&flat_meta_2->basic_meta_, sizeof(flat_meta_1->basic_meta_)));
   ASSERT_EQ(0, MEMCMP(&flat_meta_1->data_root_info_, &flat_meta_2->data_root_info_, sizeof(flat_meta_1->data_root_info_)));
   ASSERT_EQ(0, MEMCMP(&flat_meta_1->macro_info_, &flat_meta_2->macro_info_, sizeof(flat_meta_1->macro_info_)));
-  ASSERT_EQ(0, MEMCMP((char*)&flat_meta_1->cg_sstables_, (char*)&flat_meta_2->cg_sstables_, sizeof(flat_meta_1->cg_sstables_)));
   ASSERT_EQ(0, MEMCMP(flat_meta_1->column_ckm_struct_.column_checksums_,
                       flat_meta_2->column_ckm_struct_.column_checksums_,
                       flat_meta_1->column_ckm_struct_.count_ * sizeof(int64_t)));
@@ -999,7 +995,6 @@ TEST_F(TestMigrationSSTableParam, test_migrate_sstable)
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator;
   ObTabletCreateSSTableParam src_sstable_param;
-  src_sstable_param.set_init_value_for_column_store_();
   src_sstable_param.table_key_.table_type_ = ObITable::TableType::MAJOR_SSTABLE;
   src_sstable_param.table_key_.tablet_id_ = tablet_id_;
   src_sstable_param.table_key_.version_range_.base_version_ = ObVersionRange::MIN_VERSION;

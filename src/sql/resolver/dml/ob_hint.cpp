@@ -292,17 +292,6 @@ void ObGlobalHint::merge_direct_load_hint(const ObDirectLoadHint &other)
   direct_load_hint_.merge(other);
 }
 
-// use the first resource group hint now.
-void ObGlobalHint::merge_resource_group_hint(const ObString &resource_group)
-{
-  int tmp_ret = OB_SUCCESS;
-  if (!resource_group_.empty() || resource_group.empty()) {
-    // do nothing
-  } else {
-    resource_group_.assign_ptr(resource_group.ptr(), resource_group.length());
-  }
-}
-
 // zhanyue todo: try remove this later
 bool ObGlobalHint::has_hint_exclude_concurrent() const
 {
@@ -334,7 +323,6 @@ bool ObGlobalHint::has_hint_exclude_concurrent() const
          || -1 != dynamic_sampling_
          || flashback_read_tx_uncommitted_
          || has_direct_load()
-         || !resource_group_.empty()
          || ObParallelDASOption::NOT_SPECIFIED != parallel_das_dml_option_
          || !px_node_hint_.empty();
 }
@@ -369,7 +357,6 @@ void ObGlobalHint::reset()
   dynamic_sampling_ = ObGlobalHint::UNSET_DYNAMIC_SAMPLING;
   alloc_op_hints_.reuse();
   direct_load_hint_.reset();
-  resource_group_.reset();
   parallel_das_dml_option_ = ObParallelDASOption::NOT_SPECIFIED;
   px_node_hint_.reset();
 }
@@ -401,7 +388,6 @@ int ObGlobalHint::merge_global_hint(const ObGlobalHint &other)
   merge_parallel_das_dml_hint(other.parallel_das_dml_option_);
   merge_dynamic_sampling_hint(other.dynamic_sampling_);
   merge_direct_load_hint(other.direct_load_hint_);
-  merge_resource_group_hint(other.resource_group_);
   if (OB_FAIL(merge_alloc_op_hints(other.alloc_op_hints_))) {
     LOG_WARN("failed to merge alloc op hints", K(ret));
   } else if (OB_FAIL(merge_dop_hint(other.dops_))) {
@@ -593,12 +579,6 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   }
   if (OB_SUCC(ret) && OB_FAIL(direct_load_hint_.print_direct_load_hint(plan_text))) {
     LOG_WARN("failed to print direct load hint", KR(ret));
-  }
-  if (OB_SUCC(ret) && !resource_group_.empty()) { //RESOURCE_GROUP
-    if (OB_FAIL(BUF_PRINTF("%sRESOURCE_GROUP(\"%.*s\")", outline_indent,
-                                    resource_group_.length(), resource_group_.ptr() ))) {
-      LOG_WARN("failed to print resource group hint", K(ret));
-    }
   }
   if (OB_SUCC(ret) && OB_FAIL(px_node_hint_.print_px_node_hint(plan_text))) {
     LOG_WARN("failed to print px node hint", K(ret));
@@ -903,16 +883,6 @@ bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObO
     case PARTITION_INDEX_DIVE_LIMIT:
       is_valid = val.is_int();
       break;
-    case OB_TABLE_ACCESS_POLICY: {
-      if (val.is_int()) {
-        is_valid = 0 <= val.get_int() && val.get_int() < static_cast<int64_t>(ObTableAccessPolicy::MAX);
-      } else if (val.is_varchar()) {
-        int64_t type = OB_INVALID_ID;
-        ObSysVarObTableAccessPolicy sv;
-        is_valid = (OB_SUCCESS == sv.find_type(val.get_varchar(), type));
-      }
-      break;
-    }
     case PARTITION_WISE_PLAN_ENABLED: {
       is_valid = val.is_varchar() && (0 == val.get_varchar().case_compare("true")
                                       || 0 == val.get_varchar().case_compare("false"));
@@ -1106,13 +1076,6 @@ int ObOptParamHint::get_enum_opt_param(const OptParamType param_type, int64_t &v
         }
         break;
       }
-      case OB_TABLE_ACCESS_POLICY: {
-        ObSysVarObTableAccessPolicy sv;
-        if (OB_FAIL(sv.find_type(obj.get_varchar(), val))) {
-          LOG_WARN("param obj is invalid", K(ret), K(obj));
-        }
-        break;
-      }
       case ENABLE_OPTIMIZER_ROWGOAL: {
         ObSysVarEnableOptimizerRowgoal sv;
         if (OB_FAIL(sv.find_type(obj.get_varchar(), val))) {
@@ -1246,7 +1209,6 @@ ObItemType ObHint::get_hint_type(ObItemType type)
 
     // optimize hint
     case T_NO_USE_DAS_HINT:     return T_USE_DAS_HINT;
-    case T_NO_USE_COLUMN_STORE_HINT:  return T_USE_COLUMN_STORE_HINT;
     case T_ORDERED:             return T_LEADING;
     case T_NO_USE_MERGE:        return T_USE_MERGE;
     case T_NO_USE_HASH:         return T_USE_HASH;
@@ -1312,7 +1274,6 @@ const char* ObHint::get_hint_name(ObItemType type, bool is_enable_hint /* defaul
     case T_NO_INDEX_HINT:       return "NO_INDEX";
     case T_USE_DAS_HINT:        return is_enable_hint ? "USE_DAS" : "NO_USE_DAS";
     case T_UNION_MERGE_HINT:    return "UNION_MERGE";
-    case T_USE_COLUMN_STORE_HINT: return is_enable_hint ? "USE_COLUMN_TABLE" : "NO_USE_COLUMN_TABLE";
     case T_INDEX_SS_HINT:       return "INDEX_SS";
     case T_INDEX_SS_ASC_HINT:   return "INDEX_SS_ASC";
     case T_INDEX_SS_DESC_HINT:  return "INDEX_SS_DESC";
@@ -2248,8 +2209,7 @@ int ObIndexHint::print_hint_desc(PlanText &plan_text) const
   if (OB_FAIL(table_.print_table_in_hint(plan_text))) {
     LOG_WARN("fail to print table in hint", K(ret));
   } else if (T_FULL_HINT == hint_type_ || 
-             T_USE_DAS_HINT == hint_type_ ||
-             T_USE_COLUMN_STORE_HINT == hint_type_) {
+             T_USE_DAS_HINT == hint_type_) {
     /* do nothing */
   } else if (OB_FAIL(BUF_PRINTF(" \"%.*s\"", index_name_.length(), index_name_.ptr()))) {
     LOG_WARN("fail to print index name", K(ret));

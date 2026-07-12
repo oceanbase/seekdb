@@ -26,7 +26,6 @@
 #include "storage/direct_load/ob_direct_load_multiple_sstable.h"
 #include "storage/direct_load/ob_direct_load_partition_del_lob_task.h"
 #include "storage/direct_load/ob_direct_load_partition_merge_task.h"
-#include "storage/direct_load/ob_direct_load_partition_rescan_task.h"
 #include "storage/direct_load/ob_direct_load_range_splitter.h"
 #include "storage/direct_load/ob_direct_load_table_store.h"
 #include "storage/direct_load/ob_direct_load_sstable.h"
@@ -297,23 +296,6 @@ int ObDirectLoadMergeCtx::build_del_lob_task(ObDirectLoadTableStore &table_store
             LOG_WARN("fail to build del lob task", KR(ret));
           }
         }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObDirectLoadMergeCtx::build_rescan_task(int64_t thread_cnt)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObDirectLoadMergeCtx not init", KR(ret), KP(this));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_merge_ctx_array_.count(); ++i) {
-      ObDirectLoadTabletMergeCtx *tablet_merge_ctx = tablet_merge_ctx_array_.at(i);
-      if (OB_FAIL(tablet_merge_ctx->build_rescan_task(thread_cnt))) {
-        LOG_WARN("fail to build rescan task", KR(ret));
       }
     }
   }
@@ -900,37 +882,6 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task_for_dag(
         del_lob_task->~ObDirectLoadPartitionDelLobTask();
         allocator_.free(del_lob_task);
         del_lob_task = nullptr;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObDirectLoadTabletMergeCtx::build_rescan_task(int64_t thread_cnt)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObDirectLoadTabletMergeCtx not init", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(thread_cnt <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(thread_cnt));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < thread_cnt; ++i) {
-    ObDirectLoadPartitionRescanTask *rescan_task = nullptr;
-    if (OB_ISNULL(rescan_task = OB_NEWx(ObDirectLoadPartitionRescanTask, (&allocator_)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to new ObDirectLoadPartitionRescanTask", KR(ret));
-    } else if (OB_FAIL(rescan_task->init(this, thread_cnt, i))) {
-      LOG_WARN("fail to init merge task", KR(ret));
-    } else if (OB_FAIL(merge_task_array_.push_back(rescan_task))) {
-      LOG_WARN("fail to push back rescan task", KR(ret));
-    }
-    if (OB_FAIL(ret)) {
-      if (nullptr != rescan_task) {
-        rescan_task->~ObDirectLoadPartitionRescanTask();
-        allocator_.free(rescan_task);
-        rescan_task = nullptr;
       }
     }
   }

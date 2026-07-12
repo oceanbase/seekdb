@@ -27,19 +27,17 @@ namespace storage
 //////////////////////////////////////// ObSSTableIndexFilter //////////////////////////////////////////////
 
 int ObSSTableIndexFilter::init(
-    const bool is_cg,
     const ObITableReadInfo* read_info,
     sql::ObPushdownFilterExecutor &pushdown_filter,
     common::ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
-  is_cg_ = is_cg;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("Init ObSSTableIndexFilter twice", K(ret), K_(is_inited));
   } else if (OB_ISNULL(read_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected nullptr read_info", K(ret), KP(read_info), K(is_cg));
+    LOG_WARN("Unexpected nullptr read_info", K(ret), KP(read_info));
   } else if (OB_FAIL(build_skipping_filter_nodes(read_info, pushdown_filter))) {
     LOG_WARN("Fail to build skipping filter node", K(ret));
   } else if (OB_FAIL(skip_filter_executor_.init(MAX(1, pushdown_filter.get_op().get_batch_size()), allocator))) {
@@ -120,7 +118,7 @@ int ObSSTableIndexFilter::is_filtered_by_skipping_index(
     // There is no need to check skipping index because filter result is contant already.
     node.is_already_determinate_ = true;
   } else {
-    const uint32_t col_offset = node.filter_->get_col_offsets(is_cg_).at(0);
+    const uint32_t col_offset = node.filter_->get_col_offsets().at(0);
     const uint32_t col_idx = static_cast<uint32_t>(read_info->get_columns_index().at(col_offset));
     const ObObjMeta obj_meta = read_info->get_columns_desc().at(col_offset).col_type_;
     if (OB_FAIL(skip_filter_executor_.falsifiable_pushdown_filter(col_idx,
@@ -184,21 +182,17 @@ int ObSSTableIndexFilter::find_skipping_index(
   const uint64_t column_id = filter.get_col_ids().at(0);
   const common::ObIArray<ObColumnParam *> *column_params = read_info->get_columns();
   const common::ObIArray<ObColExtend> *column_extend = read_info->get_columns_extend();
-  if ((!is_cg_ && OB_ISNULL(column_params)) || OB_ISNULL(column_extend)) {
+  if (OB_ISNULL(column_params) || OB_ISNULL(column_extend)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected nullptr column_params", K(ret), K_(is_cg), KP(column_params), KP(column_extend));
+    LOG_WARN("Unexpected nullptr column params", K(ret), KP(column_params), KP(column_extend));
   } else if (column_extend->empty()) {
   } else {
     int64_t index = -1;
-    if (!is_cg_) {
-      for (int64_t i = 0; i < column_params->count(); ++i) {
-        if (column_id == column_params->at(i)->get_column_id()) {
-          index = i;
-          break;
-        }
+    for (int64_t i = 0; i < column_params->count(); ++i) {
+      if (column_id == column_params->at(i)->get_column_id()) {
+        index = i;
+        break;
       }
-    } else {
-      index = 0;
     }
     if (OB_UNLIKELY(index < 0)) {
       ret = OB_ERR_UNEXPECTED;
@@ -239,7 +233,6 @@ int ObSSTableIndexFilter::find_useful_skipping_filter(
 //////////////////////////////////////// ObSSTableIndexFilterFactory //////////////////////////////////////////////
 
 int ObSSTableIndexFilterFactory::build_sstable_index_filter(
-    const bool is_cg,
     const ObITableReadInfo* read_info,
     sql::ObPushdownFilterExecutor &pushdown_filter,
     common::ObIAllocator *allocator,
@@ -254,8 +247,8 @@ int ObSSTableIndexFilterFactory::build_sstable_index_filter(
   } else if (OB_ISNULL(tmp_index_filter = OB_NEWx(ObSSTableIndexFilter, allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to new ObSSTableIndexFilter", K(ret));
-  } else if (OB_FAIL(tmp_index_filter->init(is_cg, read_info, pushdown_filter, allocator))) {
-    LOG_WARN("Fail to init ObSSTableIndexFilter", K(ret), K(is_cg));
+  } else if (OB_FAIL(tmp_index_filter->init(read_info, pushdown_filter, allocator))) {
+    LOG_WARN("Fail to init ObSSTableIndexFilter", K(ret));
   }
   if (OB_SUCC(ret) && tmp_index_filter->can_use_skipping_index()) {
     index_filter = tmp_index_filter;

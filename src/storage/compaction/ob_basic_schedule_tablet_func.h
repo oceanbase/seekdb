@@ -54,8 +54,7 @@ protected:
     const storage::ObTablet &tablet,
     const int64_t schedule_scn,
     const ObTabletStatusCache &tablet_status,
-    bool &can_merge,
-    const ObCOMajorMergePolicy::ObCOMajorMergeType co_major_merge_type = ObCOMajorMergePolicy::INVALID_CO_MAJOR_MERGE_TYPE);
+    bool &can_merge);
   int check_need_force_freeze(
     const storage::ObTablet &tablet,
     const int64_t schedule_scn,

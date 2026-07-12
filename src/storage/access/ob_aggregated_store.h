@@ -36,34 +36,6 @@ namespace storage
 static const int64_t AGG_ROW_MODE_COUNT_THRESHOLD = 3;
 static const double AGG_ROW_MODE_RATIO_THRESHOLD = 0.5;
 
-// for column store
-class ObCGAggCells : public ObAggGroupBase
-{
-public:
-  ObCGAggCells() : agg_cells_() 
-  {
-    agg_cells_.set_attr(ObMemAttr("PDAggStore"));
-  }
-  virtual ~ObCGAggCells() { reset(); }
-  void reset();
-  bool check_finished() const;
-  int can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info, const int32_t col_index, bool &can_agg) override;
-  int add_agg_cell(ObAggCell *cell);
-  int eval_batch(
-      const ObTableIterParam *iter_param,
-      const ObTableAccessContext *context,
-      const int32_t col_idx,
-      blocksstable::ObIMicroBlockReader *reader,
-      const ObPushdownRowIdCtx &pd_row_id_ctx,
-      const bool reserve_memory) override;
-  int eval(blocksstable::ObStorageDatum &datum, const int64_t row_count) override;
-  int fill_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg) override;
-  OB_INLINE bool is_vec() const override { return false; }
-  TO_STRING_KV(K_(agg_cells));
-private:
-  common::ObSEArray<ObAggCell*, 1> agg_cells_;
-};
-
 class ObAggRow
 {
 public:
@@ -103,7 +75,7 @@ public:
   virtual void reuse() override;
   int reuse_capacity(const int64_t capacity) override;
   virtual int init(const ObTableAccessParam &param, common::hash::ObHashSet<int32_t> *agg_col_mask = nullptr) override;
-  int fill_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg) override;
+  int fill_index_info(const blocksstable::ObMicroIndexInfo &index_info) override;
   virtual int fill_rows(
       const int64_t group_idx,
       blocksstable::ObIMicroBlockRowScanner &scanner,

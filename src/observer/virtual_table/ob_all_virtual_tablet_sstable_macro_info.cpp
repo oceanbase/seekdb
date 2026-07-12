@@ -319,15 +319,6 @@ int ObAllVirtualTabletSSTableMacroInfo::get_macro_info(
   if (OB_UNLIKELY(!macro_desc.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     SERVER_LOG(WARN, "invalid argument", K(ret), K(macro_desc));
-  } else if (curr_sstable_->is_normal_cg_sstable()) {
-    const storage::ObITableReadInfo *index_read_info = nullptr;
-    if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
-      SERVER_LOG(WARN, "failed to get index read info from ObTenantCGReadInfoMgr", KR(ret));
-    } else if (OB_FAIL(macro_desc.range_.to_store_range(index_read_info->get_columns_desc(),
-                                                 rowkey_allocator_,
-                                                 info.store_range_))) {
-      SERVER_LOG(WARN, "fail to get store range", K(ret), K(macro_desc.range_));
-    }
   } else if (curr_sstable_->is_mds_sstable()) {
     const storage::ObITableReadInfo *index_read_info = storage::ObMdsSchemaHelper::get_instance().get_rowkey_read_info();
     if (OB_FAIL(macro_desc.range_.to_store_range(index_read_info->get_columns_desc(),
@@ -534,10 +525,6 @@ int ObAllVirtualTabletSSTableMacroInfo::gen_row(
         //row_store_type
         cur_row_.cells_[i].set_varchar(ObString::make_string(ObStoreFormat::get_row_store_name(static_cast<ObRowStoreType>(macro_info.row_store_type_))));
         break;
-      case CG_IDX:
-        //cg_idx
-        cur_row_.cells_[i].set_int(table_key.get_column_group_id());
-        break;
       default:
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "invalid column id, ", K(ret), K(col_id));
@@ -651,7 +638,7 @@ int ObAllVirtualTabletSSTableMacroInfo::get_next_sstable()
         } else if (OB_UNLIKELY(!tablet_handle_.is_valid())) {
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "unexpected invalid tablet", K(ret), K_(tablet_handle));
-        } else if (OB_FAIL(tablet_handle_.get_obj()->get_all_sstables(table_store_iter_, true/*unpack co table*/))) {
+        } else if (OB_FAIL(tablet_handle_.get_obj()->get_all_sstables(table_store_iter_))) {
           SERVER_LOG(WARN, "fail to get all tables", K(ret), K_(tablet_handle), K_(table_store_iter));
         } else if (0 != table_store_iter_.count()) {
           break;

@@ -185,7 +185,6 @@ private:
                        const ObRestoreStatus &restore_status,
                        const share::SCN &create_scn,
                        const ObMajorMVMergeInfo &major_mv_merge_info,
-                       const ObLSStoreFormat &store_format,
                        ObLS *&ls);
   int inner_del_ls_(ObLS *&ls);
   int add_ls_to_map_(ObLS *ls);

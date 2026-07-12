@@ -43,7 +43,7 @@ public:
   void reset() {}
   int add_row(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx, ObChunkDatumStore::StoredRow **stored_row = nullptr) override;
   int add_row(const ObChunkDatumStore::StoredRow &src_sr, ObChunkDatumStore::StoredRow **dst_sr = nullptr) override;
-  int add_row(const blocksstable::ObStorageDatum *storage_datums, const ObStorageColumnGroupSchema &cg_schema,
+  int add_row(const blocksstable::ObStorageDatum *storage_datums, const int64_t column_count,
               const int64_t extra_size, ObChunkDatumStore::StoredRow **stored_row) override;
   int close() override;
   int add_batch(const common::ObDatum **datums, const common::ObIArray<ObExpr *> &exprs,
@@ -69,7 +69,7 @@ private:
   int ensure_write(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx);
   int ensure_write(const ObChunkDatumStore::StoredRow &stored_row);
   int ensure_write(const blocksstable::ObStorageDatum *storage_datums,
-                   const ObStorageColumnGroupSchema &cg_schema,
+                   const int64_t column_count,
                    const int64_t extra_size);
 
   // before dump the block we need to unswizzling each row;
@@ -79,7 +79,7 @@ private:
   // get the stored size in writer buffer for a row.
   int get_row_stored_size(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx, uint64_t &size);
   int get_row_stored_size(const blocksstable::ObStorageDatum *storage_datums,
-                          const ObStorageColumnGroupSchema &cg_schema,
+                          const int64_t column_count,
                           const int64_t extra_size, uint64_t &size);
   inline int ensure_init()
   {
@@ -90,7 +90,7 @@ private:
     return ret;
   }
   int inner_add_row(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx, ObChunkDatumStore::StoredRow **stored_row = nullptr);
-  int inner_add_row(const blocksstable::ObStorageDatum *storage_datums, const ObStorageColumnGroupSchema &cg_schema,
+  int inner_add_row(const blocksstable::ObStorageDatum *storage_datums, const int64_t column_count,
                     const int64_t extra_size, ObChunkDatumStore::StoredRow **dst_sr);
 };
 

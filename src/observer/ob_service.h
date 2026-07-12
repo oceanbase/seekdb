@@ -52,12 +52,16 @@ class ObSchemaReleaseTimeTask: public common::ObTimerTask
 public:
   ObSchemaReleaseTimeTask();
   virtual ~ObSchemaReleaseTimeTask() {}
-  int init(ObServerSchemaUpdater &schema_updater, int tg_id);
+  int init(ObServerSchemaUpdater &schema_updater);
+  void stop();
+  void wait();
+  void destroy();
   virtual void runTimerTask() override;
 private:
   int schedule_();
 private:
   ObServerSchemaUpdater *schema_updater_;
+  common::ObTimer timer_;
   bool is_inited_;
 };
 
@@ -131,8 +135,6 @@ public:
                               obcall::ObEstPartRes &res) const;
   int estimate_tablet_block_count(const obcall::ObEstBlockArg &arg,
                                   obcall::ObEstBlockRes &res) const;
-  int estimate_skip_rate(const obcall::ObEstSkipRateArg &arg,
-                         obcall::ObEstSkipRateRes &res) const;
   ////////////////////////////////////////////////////////////////
   // ObCallMinorFreezeP @RS minor freeze
   int minor_freeze(const obcall::ObMinorFreezeArg &arg,

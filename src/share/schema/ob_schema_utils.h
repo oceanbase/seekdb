@@ -142,31 +142,6 @@ public:
   static int add_sys_table_lob_aux_table(
              uint64_t data_table_id,
              ObIArray<ObTableSchema> &table_schemas);
-  static int build_column_group(
-             const share::schema::ObTableSchema &table_schema,
-             const share::schema::ObColumnGroupType &cg_type,
-             const common::ObString &cg_name,
-             const common::ObIArray<uint64_t> &column_ids,
-             const uint64_t cg_id,
-             share::schema::ObColumnGroupSchema &column_group);
-  static int build_all_column_group(
-             const share::schema::ObTableSchema &table_schema,
-             const uint64_t column_group_id,
-             share::schema::ObColumnGroupSchema &column_group_schema);
-  static int build_single_column_group(
-             const share::schema::ObTableSchema &table_schema,
-             share::schema::ObColumnSchemaV2 *column_schema,
-             const uint64_t column_group_id,
-             share::schema::ObColumnGroupSchema &column_group_schema);
-
-  static int build_add_each_column_group(const share::schema::ObTableSchema &table_schema,
-                                         share::schema::ObTableSchema &dst_table_schema);
-  static int alter_rowkey_column_group(share::schema::ObTableSchema &table_schema);
-  static int alter_default_column_group(share::schema::ObTableSchema &new_table_schema);
-
-  static int mock_default_cg(share::schema::ObTableSchema &new_table_schema);
-  static bool can_add_column_group(const ObTableSchema &table_schema);
-
   // Optimized method to batch get latest table schemas from cache or inner_table automatically.
   //
   // @param[in] sql_client: ObISQLClient
@@ -243,7 +218,6 @@ public:
       bool &exist);
 
   static int is_drop_column_only(const schema::AlterTableSchema &alter_table_schema, bool &is_drop_col_only);
-  static int check_build_old_version_column_group(const share::schema::ObTableSchema &table_schema, bool &build_old_version_cg);
 
 private:
   static int get_tenant_variable(schema::ObSchemaGetterGuard &schema_guard,

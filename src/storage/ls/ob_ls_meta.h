@@ -33,7 +33,6 @@
 #include "storage/ls/ob_ls_saved_info.h"
 #include "share/scn.h"
 #include "storage/mview/ob_major_mv_merge_info.h"
-#include "common/ob_store_format.h"       // ObLSStoreFormat
 
 namespace oceanbase
 {
@@ -56,11 +55,6 @@ public:
   ObLSMeta();
   ObLSMeta(const ObLSMeta &ls_meta);
   ~ObLSMeta() {}
-  int init(const share::ObLSID &ls_id,
-           const ObMigrationStatus &migration_status,
-           const ObRestoreStatus &restore_status,
-           const int64_t create_scn,
-           const ObLSStoreFormat &store_format);
   void reset();
   bool is_valid() const;
   int set_start_work_state();
@@ -119,15 +113,12 @@ public:
   int set_major_mv_merge_scn(const int64_t ls_epoch, const SCN &major_mv_merge_scn);
   int set_major_mv_merge_scn_safe_calc(const int64_t ls_epoch, const SCN &major_mv_merge_scn_safe_calc);
   int set_major_mv_merge_scn_publish(const int64_t ls_epoch, const SCN &major_mv_merge_scn_publish);
-  ObLSStoreFormat get_store_format() const;
-
   int init(
       const share::ObLSID &ls_id,
       const ObMigrationStatus &migration_status,
       const ObRestoreStatus &restore_status,
       const share::SCN &create_scn,
-      const ObMajorMVMergeInfo &major_mv_merge_info,
-      const ObLSStoreFormat &store_format);
+      const ObMajorMVMergeInfo &major_mv_merge_info);
 
   ObReplicaType get_replica_type() const
   { return unused_replica_type_; }
@@ -171,8 +162,7 @@ public:
                K_(clog_checkpoint_scn), K_(clog_base_lsn),
                K_(rebuild_seq), K_(migration_status), K(offline_scn_),
                K_(restore_status), K_(replayable_point), K_(tablet_change_checkpoint_scn),
-               K_(all_id_meta), K_(transfer_scn), K_(rebuild_info),
-               K_(store_format));
+               K_(all_id_meta), K_(transfer_scn), K_(rebuild_info));
 private:
   int check_can_update_();
 public:
@@ -212,7 +202,6 @@ private:
   share::SCN transfer_scn_;
   ObLSRebuildInfo rebuild_info_;
   ObMajorMVMergeInfo major_mv_merge_info_;
-  common::ObLSStoreFormat store_format_;    // set on initialization and then remain unchanged
 };
 
 }  // namespace storage

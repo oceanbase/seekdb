@@ -326,7 +326,6 @@ public:
     return OB_NOT_SUPPORTED;
   }
   virtual int64_t get_column_count() const { return OB_NOT_SUPPORTED; }
-  // For column store
   virtual int find_bound(const ObDatumRowkey &key,
                  const bool lower_bound,
                  const int64_t begin_idx,

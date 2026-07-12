@@ -83,12 +83,6 @@ private:
                                   ObDirectLoadMgrAgent &ddl_agent);
   int close_lob_sstable_slice(const int64_t slice_id,
                               ObDirectLoadMgrAgent &ddl_agent);
-
-  //////////////////////// rescan interface ////////////////////////
-public:
-  int calc_range(const int64_t thread_cnt) override;
-  int fill_column_group(const int64_t thread_cnt, const int64_t thread_id) override;
-
   //////////////////////// members ////////////////////////
 public:
   INHERIT_TO_STRING_KV("ObDirectLoadInsertTabletContext", ObDirectLoadInsertTabletContext,

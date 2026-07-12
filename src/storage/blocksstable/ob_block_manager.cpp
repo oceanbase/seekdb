@@ -1069,7 +1069,6 @@ int ObBlockManager::mark_macro_blocks(
       MacroBlockId macro_id;
       MOD_SCOPE
       {
-        CONSUMER_GROUP_FUNC_GUARD(ObFunctionType::PRIO_GC_MACRO_BLOCK);
         if (OB_FAIL(mark_tenant_blocks(mark_info, macro_id_set, tmp_status))) {
           LOG_WARN("fail to mark tenant blocks", K(ret));
         } else if (OB_FALSE_IT(share::g_mp->shared_macro_block_mgr()->get_cur_shared_block(macro_id))) {
@@ -1178,8 +1177,7 @@ int ObBlockManager::mark_sstable_blocks(
   if (OB_UNLIKELY(!handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(handle));
-  } else if (OB_FAIL(handle.get_obj()->get_all_sstables(
-                 table_store_iter, true /* unpac cosstable */))) {
+  } else if (OB_FAIL(handle.get_obj()->get_all_sstables(table_store_iter))) {
     LOG_WARN("fail to get all sstables", K(ret));
   } else {
     while (OB_SUCC(ret)) {

@@ -34,7 +34,7 @@ ObMicroBlockHeader::ObMicroBlockHeader()
     row_count_(0),
     row_store_type_(common::MAX_ROW_STORE),
     opt_(0),
-    opt2_(0),
+    var_column_count_(0),
     row_offset_(0),
     original_length_(0),
     max_merged_trans_version_(0),
@@ -73,7 +73,7 @@ void ObMicroBlockHeader::set_header_checksum()
   format_i32(column_count_, checksum);
   format_i32(rowkey_column_count_, checksum);
   format_i32(has_column_checksum_, checksum);
-  format_i32(opt2_, checksum);
+  format_i32(var_column_count_, checksum);
 
   format_i64(header_size_, checksum);
   format_i64(row_count_, checksum);
@@ -106,7 +106,7 @@ int ObMicroBlockHeader::check_header_checksum() const
   format_i32(column_count_, checksum);
   format_i32(rowkey_column_count_, checksum);
   format_i32(has_column_checksum_, checksum);
-  format_i32(opt2_, checksum);
+  format_i32(var_column_count_, checksum);
 
   format_i64(header_size_, checksum);
   format_i64(row_count_, checksum);

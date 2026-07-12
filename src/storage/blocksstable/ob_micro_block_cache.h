@@ -386,13 +386,11 @@ class ObMicroBlockBufTransformer final
 
  private:
    bool is_inited_;
-   bool is_cs_full_transfrom_;
    const ObMicroBlockDesMeta &block_des_meta_;
    ObMacroBlockReader *reader_;
    ObMicroBlockHeader &header_;
    const char *payload_buf_;
    int64_t payload_size_;
-   ObCSMicroBlockTransformer transformer_;
 };
 
 

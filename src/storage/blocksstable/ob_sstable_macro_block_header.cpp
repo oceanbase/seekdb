@@ -32,7 +32,6 @@ ObSSTableMacroBlockHeader::ObSSTableMacroBlockHeader()
     column_types_(nullptr),
     column_orders_(nullptr),
     column_checksum_(nullptr),
-    is_normal_cg_(false),
     is_inited_(false)
 {
 }
@@ -48,7 +47,6 @@ void ObSSTableMacroBlockHeader::reset()
   column_types_ = nullptr;
   column_orders_ = nullptr;
   column_checksum_ = nullptr;
-  is_normal_cg_ = false;
   is_inited_ = false;
 }
 
@@ -58,7 +56,7 @@ int64_t ObSSTableMacroBlockHeader::to_string(char* buf, const int64_t buf_len) c
   if (OB_ISNULL(buf) || buf_len <= 0) {
   } else {
     J_OBJ_START();
-    J_KV(K_(fixed_header), KP_(column_types), KP_(column_orders), KP_(column_checksum), K_(is_normal_cg));
+    J_KV(K_(fixed_header), KP_(column_types), KP_(column_orders), KP_(column_checksum));
     J_COMMA();
     J_NAME("column_checksum");
     J_COLON();
@@ -203,9 +201,6 @@ int ObSSTableMacroBlockHeader::serialize(char *buf, const int64_t buf_len, int64
       MEMCPY(buf + tmp_pos, column_checksum_, fixed_header_.column_count_ * sizeof(int64_t));
     }
     tmp_pos += fixed_header_.column_count_ * sizeof(int64_t);
-    bool *is_normal_cg = reinterpret_cast<bool *>(buf + tmp_pos);
-    *is_normal_cg = is_normal_cg_;
-    tmp_pos += sizeof(is_normal_cg_);
     if (OB_UNLIKELY(get_serialize_size() != tmp_pos - pos)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("serialize size doesn't match get_serialize_size func", K(ret), K(tmp_pos), K(pos),
@@ -244,7 +239,6 @@ int ObSSTableMacroBlockHeader::deserialize(const char *buf, const int64_t data_l
     column_types_ = nullptr;
     column_orders_ = nullptr;
     column_checksum_ = nullptr;
-    is_normal_cg_ = false;
     if (tmp_pos + obj_metas_size <= max_pos) {
       column_types_ = reinterpret_cast<ObObjMeta *>(const_cast<char *>(buf + tmp_pos));
     }
@@ -260,10 +254,6 @@ int ObSSTableMacroBlockHeader::deserialize(const char *buf, const int64_t data_l
     }
     tmp_pos += chksum_size;
 
-    if (tmp_pos + sizeof(is_normal_cg_) <= max_pos) {
-      is_normal_cg_ = *(reinterpret_cast<bool *>(const_cast<char *>(buf + tmp_pos)));
-      tmp_pos += sizeof(is_normal_cg_);
-    }
     fixed_header_.header_size_ = get_serialize_size();
     if (OB_UNLIKELY(!is_valid())) {
       ret = OB_ERR_UNEXPECTED;
@@ -279,8 +269,7 @@ int ObSSTableMacroBlockHeader::deserialize(const char *buf, const int64_t data_l
 int64_t ObSSTableMacroBlockHeader::get_serialize_size() const
 {
   return get_fixed_header_size() + get_variable_size_in_header(
-    fixed_header_.column_count_, fixed_header_.rowkey_column_count_, fixed_header_.version_)
-    + sizeof(is_normal_cg_);
+    fixed_header_.column_count_, fixed_header_.rowkey_column_count_, fixed_header_.version_);
 }
 
 int64_t ObSSTableMacroBlockHeader::get_fixed_header_size()
@@ -318,8 +307,7 @@ int ObSSTableMacroBlockHeader::init(
   } else {
     fixed_header_.version_ = desc.get_fixed_header_version();
     fixed_header_.header_size_ = static_cast<int32_t>(get_fixed_header_size()
-        + get_variable_size_in_header(desc.get_row_column_count(), desc.get_rowkey_column_count(), fixed_header_.version_))
-        + sizeof(is_normal_cg_);
+        + get_variable_size_in_header(desc.get_row_column_count(), desc.get_rowkey_column_count(), fixed_header_.version_));
     fixed_header_.tablet_id_ = desc.get_tablet_id().id();
     fixed_header_.logical_version_ = desc.get_logical_version();
     fixed_header_.column_count_ =  static_cast<int32_t>(desc.get_row_column_count());
@@ -352,7 +340,6 @@ int ObSSTableMacroBlockHeader::init(
     for (int i = 0; i < fixed_header_.column_count_; i++) {
       column_checksum_[i] = 0;
     }
-    is_normal_cg_ = desc.is_cg();
     is_inited_ = true;
   }
   if (OB_UNLIKELY(!is_inited_)) {

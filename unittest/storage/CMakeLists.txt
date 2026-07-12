@@ -113,7 +113,4 @@ storage_unittest(test_diagnose_info_mgr compaction/test_diagnose_info_mgr.cpp)
 storage_unittest(test_tablet_create_mds_ctx test_tablet_create_mds_ctx.cpp)
 
 storage_unittest(test_sstable_log_ts_range_cut test_sstable_log_ts_range_cut.cpp)
-storage_unittest(test_cg_bitmap column_store/test_cg_bitmap.cpp)
-storage_unittest(test_co_sstable column_store/test_co_sstable.cpp)
-storage_unittest(test_co_sstable_rows_filter column_store/test_co_sstable_rows_filter.cpp)
 storage_unittest(test_compaction_iter compaction/test_compaction_iter.cpp)

@@ -184,7 +184,6 @@ int ObDirectLoadInsertDataTabletContext::create_tablet_direct_load()
     direct_load_param.common_param_.ls_id_ = ls_id_;
     direct_load_param.common_param_.tablet_id_ = tablet_id_;
     direct_load_param.common_param_.is_no_logging_ = param_->is_no_logging_;
-    direct_load_param.common_param_.is_rescan_data_compl_dag_ = false; // unuse
     direct_load_param.runtime_only_param_.exec_ctx_ = nullptr;
     direct_load_param.runtime_only_param_.task_id_ = param_->ddl_task_id_;
     direct_load_param.runtime_only_param_.table_id_ = param_->table_id_;
@@ -547,45 +546,6 @@ int ObDirectLoadInsertDataTabletContext::close_lob_sstable_slice(const int64_t s
     slice_info.context_id_ = context_id_;
     if (OB_FAIL(ddl_agent.close_sstable_slice(slice_info, nullptr /*insert_monitor*/, unused_seq))) {
       LOG_WARN("fail to close tablet direct load", KR(ret), K(slice_id), K(tablet_id_));
-    }
-  }
-  return ret;
-}
-
-//////////////////////// rescan interface ////////////////////////
-
-int ObDirectLoadInsertDataTabletContext::calc_range(const int64_t thread_cnt)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObDirectLoadInsertDataTabletContext not init", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(is_cancel_)) {
-    ret = OB_CANCELED;
-    LOG_WARN("task is cancel", KR(ret));
-  } else {
-    if (OB_FAIL(ddl_agent_.calc_range(context_id_, thread_cnt))) {
-      LOG_WARN("fail to calc range", KR(ret), K(tablet_id_), K(context_id_), K(thread_cnt));
-    } else {
-      LOG_INFO("success to calc range", K(tablet_id_));
-    }
-  }
-  return ret;
-}
-
-int ObDirectLoadInsertDataTabletContext::fill_column_group(const int64_t thread_cnt,
-                                                           const int64_t thread_id)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObDirectLoadInsertDataTabletContext not init", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(is_cancel_)) {
-    ret = OB_CANCELED;
-    LOG_WARN("task is cancel", KR(ret));
-  } else {
-    if (OB_FAIL(ddl_agent_.fill_column_group(thread_cnt, thread_id))) {
-      LOG_WARN("fail to fill column group", KR(ret), K(tablet_id_), K(thread_cnt), K(thread_id));
     }
   }
   return ret;

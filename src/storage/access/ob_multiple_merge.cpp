@@ -192,7 +192,7 @@ int ObMultipleMerge::init(
     } else if (OB_FAIL(alloc_row_store(context, param))) {
       LOG_WARN("fail to alloc row store", K(ret));
     } else if (param.iter_param_.is_use_stmt_iter_pool() &&
-        OB_FAIL(access_ctx_->alloc_iter_pool(access_param_->iter_param_.is_use_column_store()))) {
+        OB_FAIL(access_ctx_->alloc_iter_pool())) {
       LOG_WARN("Failed to init iter pool", K(ret));
     } else if (FALSE_IT(stmt_iter_pool_ = access_ctx_->get_stmt_iter_pool())) {
     } else {
@@ -1452,7 +1452,7 @@ int ObMultipleMerge::open()
     STORAGE_LOG(WARN, "Fail to init nop pos, ", K(ret));
   } else if (FALSE_IT(set_base_version())) {
   } else if (access_param_->iter_param_.is_use_stmt_iter_pool()) {
-    if (OB_FAIL(access_ctx_->alloc_iter_pool(access_param_->iter_param_.is_use_column_store()))) {
+    if (OB_FAIL(access_ctx_->alloc_iter_pool())) {
       LOG_WARN("Failed to init iter pool", K(ret));
     } else {
       stmt_iter_pool_ = access_ctx_->get_stmt_iter_pool();
@@ -2353,9 +2353,6 @@ int ObMultipleMerge::prepare_truncate_filter()
           access_ctx_->stmt_allocator_,
           access_ctx_->truncate_part_filter_))) {
       LOG_WARN("Failed to build truncate part filter", K(ret));
-    } else if (OB_UNLIKELY(access_param_->iter_param_.is_use_column_store() && nullptr != access_ctx_->truncate_part_filter_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected state, do not support truncate filter in column store", K(ret));
     }
   }
   return ret;

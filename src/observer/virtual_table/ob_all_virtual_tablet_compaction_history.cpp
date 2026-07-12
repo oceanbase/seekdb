@@ -78,13 +78,6 @@ int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
     case TABLET_ID:
       cells[i].set_int(static_info.tablet_id_.id());
       break;
-    case START_CG_ID:
-      cells[i].set_int(running_info.start_cg_idx_);
-      break;
-    case END_CG_ID:
-      // start_cg_id == end_cg_id == 0 means row store merge
-      cells[i].set_int(running_info.end_cg_idx_);
-      break;
     case MERGE_TYPE: {
       cells[i].set_varchar(merge_type_to_str(static_info.merge_type_));
       cells[i].set_collation_type(
@@ -228,19 +221,7 @@ int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case BASE_MAJOR_STATUS:
-      if (is_valid_co_major_sstable_status(static_info.base_major_status_)) {
-        cells[i].set_varchar(co_major_sstable_status_to_str(static_info.base_major_status_));
-      } else {
-        cells[i].set_varchar("");
-      }
-      cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-      break;
-    case CO_MERGE_TYPE:
-      if (ObCOMajorMergePolicy::is_valid_major_merge_type(static_info.co_major_merge_type_)) {
-        cells[i].set_varchar(ObCOMajorMergePolicy::co_major_merge_type_to_str(static_info.co_major_merge_type_));
-      } else {
-        cells[i].set_varchar("");
-      }
+      cells[i].set_varchar("");
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case MDS_FILTER_INFO:

@@ -94,14 +94,6 @@ create index mv_idx1 on collect_info_mv(item_id);
 ERROR 0A000: create index on major refresh materialized view is not supported
 alter table collect_info_mv add index mv_idx1(item_id);
 ERROR 0A000: add index on major refresh materialized view is not supported
-create materialized view collect_info_mv2 (primary key(user_id, item_id)) partition by hash(user_id) partitions 4 WITH COLUMN GROUP(each column) refresh fast enable query rewrite enable on query computation as select collect_info.user_id, collect_info.item_id, collect_item.item_id dup_item_id, collect_item.price from collect_info inner join collect_item on collect_info.item_id = collect_item.item_id;
-ERROR HY000: cannot ENABLE ON QUERY COMPUTATION for the materialized view collect_info_mv2: base table collect_info doesn't have mlog table
-create table collect_info_col(user_id int, item_id int, primary key(user_id, item_id)) partition by hash(user_id) partitions 4 WITH COLUMN GROUP(each column);
-create table collect_item_col(item_id int, price int, primary key(item_id)) duplicate_scope = 'cluster' duplicate_read_consistency = 'weak' WITH COLUMN GROUP(each column);
-create materialized view collect_info_mv3 (primary key(user_id, item_id)) partition by hash(user_id) partitions 4 refresh fast enable query rewrite enable on query computation as select collect_info_col.user_id, collect_info_col.item_id, collect_item.item_id dup_item_id, collect_item.price from collect_info_col inner join collect_item on collect_info_col.item_id = collect_item.item_id;
-ERROR HY000: cannot ENABLE ON QUERY COMPUTATION for the materialized view collect_info_mv3: base table collect_info_col doesn't have mlog table
-create materialized view collect_info_mv4 (primary key(user_id, item_id)) partition by hash(user_id) partitions 4 refresh fast enable query rewrite enable on query computation as select collect_info.user_id, collect_info.item_id, collect_item_col.item_id dup_item_id, collect_item_col.price from collect_info inner join collect_item_col on collect_info.item_id = collect_item_col.item_id;
-ERROR HY000: cannot ENABLE ON QUERY COMPUTATION for the materialized view collect_info_mv4: base table collect_info doesn't have mlog table
 set ob_global_debug_sync = 'CREATE_TABLE_BEFORE_PUBLISH_SCHEMA clear';
 set ob_global_debug_sync = 'reset';
 drop database db1;

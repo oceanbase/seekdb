@@ -1639,7 +1639,7 @@ Outputs & filters:
       is_index_back=true, is_global_index=false, 
       range_key([t1.__vid_0], [t1.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
 drop table if exists t1;
-create table t1(c1 int, c2 int, c3 int, v sparsevector, primary key(c1), vector index idx3(v) with (lib=vsag, type=sindi, distance=inner_product)) WITH COLUMN GROUP (each column);
+create table t1(c1 int, c2 int, c3 int, v sparsevector, primary key(c1), vector index idx3(v) with (lib=vsag, type=sindi, distance=inner_product));
 insert into t1 values(1, 1, 10, '{1:0.1,2:0.2, 3:0.3}');
 insert into t1 values(2, 2, 9, '{3:0.3, 2:0.2, 4:0.4}');
 insert into t1 values(3, 3, 8, '{3:0.3, 4:0.4, 5:0.5}');

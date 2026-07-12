@@ -32,7 +32,6 @@
 #include "storage/compaction/ob_compaction_schedule_util.h"
 #include "storage/compaction/ob_medium_loop.h"
 #include "storage/compaction/ob_mview_compaction_util.h"
-#include "storage/column_store/ob_column_store_replica_util.h"
 
 namespace oceanbase
 {
@@ -94,17 +93,6 @@ private:
   static const int64_t FAST_FREEZE_TABLET_STAT_KEY_BUCKET_NUM = 1543;
   common::hash::ObHashMap<ObTabletStatKey, int64_t> store_map_;
   bool enable_fast_freeze_;
-};
-
-
-struct ObCSReplicaChecksumHelper
-{
-public:
-  static int check_column_type(
-      const common::ObTabletID &tablet_id,
-      const share::ObFreezeInfo &freeze_info,
-      const common::ObIArray<int64_t> &column_idxs,
-      bool &is_all_large_text_column);
 };
 
 
@@ -171,30 +159,18 @@ public:
       ObLSHandle &ls_handle,
       ObTabletHandle &tablet_handle,
       const ObGetMergeTablesResult &result);
-  // check whether major/medium could be scheduled. if not, will schedule convert co merge, or update storage schema if needed.
+  // Check whether major/medium compaction can be scheduled.
   static int check_ready_for_major_merge(
       const ObLSID &ls_id,
       const storage::ObTablet &tablet,
-      const ObMergeType merge_type,
-      ObCSReplicaTabletStatus &cs_replica_status);
-  static int get_co_merge_type_for_compaction(
-      const int64_t merge_version, 
-      const storage::ObTablet &tablet,
-      ObCOMajorMergePolicy::ObCOMajorMergeType &co_major_merge_type);
+      const ObMergeType merge_type);
   static int schedule_merge_dag(
       const share::ObLSID &ls_id,
       const storage::ObTablet &tablet,
       const ObMergeType merge_type,
       const int64_t &merge_snapshot_version,
       const ObExecMode exec_mode,
-      const ObDagId *dag_net_id = nullptr,
-      const ObCOMajorMergePolicy::ObCOMajorMergeType co_major_merge_type = ObCOMajorMergePolicy::INVALID_CO_MAJOR_MERGE_TYPE);
-  static int schedule_convert_co_merge_dag_net(
-      const ObLSID &ls_id,
-      const ObTablet &tablet,
-      const int64_t retry_times,
-      const ObDagId& curr_dag_net_id,
-      int &schedule_ret);
+      const ObDagId *dag_net_id = nullptr);
   static int schedule_tablet_ddl_major_merge(
       ObLSHandle &ls_handle,
       ObTabletHandle &tablet_handle);
@@ -216,13 +192,13 @@ public:
   int get_min_dependent_schema_version(int64_t &min_schema_version);
   int user_request_schedule_medium_merge(
     const share::ObLSID &ls_id,
-    const common::ObTabletID &tablet_id,
-    const bool is_rebuild_column_group);
+    const common::ObTabletID &tablet_id);
   OB_INLINE int64_t get_schedule_batch_size() const { return batch_size_mgr_.get_schedule_batch_size(); }
   OB_INLINE int64_t get_checker_batch_size() const { return batch_size_mgr_.get_checker_batch_size(); }
   OB_INLINE ObMviewCompactionValidation &get_mview_validation() { return mview_validation_; }
 private:
   friend struct ObTenantTabletSchedulerTaskMgr;
+  bool need_fast_medium_loop() const;
   int schedule_all_tablets_medium();
   int schedule_ls_minor_merge(ObLSHandle &ls_handle);
   OB_INLINE int schedule_tablet_minor(

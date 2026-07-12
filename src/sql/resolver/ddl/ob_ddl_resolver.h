@@ -385,7 +385,6 @@ public:
   static int get_enable_split_partition(bool &enable_split_partition);
 
   // this func is for compatibility, the row_store_type of OB_STORE_FORMAT_COMPRESSED_MYSQL
-  // has been changed from ENCODING_ROW_STORE to CS_ENCODING_ROW_STORE since 4.2.0.0
   static int get_row_store_type(const ObStoreFormatType store_format, ObRowStoreType &row_store_type);
 
   typedef common::hash::ObPlacementHashSet<share::schema::ObIndexNameHashWrapper, common::OB_MAX_COLUMN_NUMBER> IndexNameSet;
@@ -546,20 +545,6 @@ protected:
       share::schema::ObPartitionFuncType part_func_type,
       common::ObString &func_str,
       common::ObSqlString &part_str);
-  int build_column_group(
-      const share::schema::ObTableSchema &table_schema,
-      const share::schema::ObColumnGroupType &cg_type,
-      const common::ObString &cg_name,
-      const common::ObIArray<uint64_t> &column_ids,
-      const uint64_t cg_id,
-      share::schema::ObColumnGroupSchema &column_group);
-  int parse_cg_node(const ParseNode &cg_node, obcall::ObCreateIndexArg &create_index_arg) const;
-  int parse_column_group(const ParseNode *cg_node, 
-                         const share::schema::ObTableSchema &table_schema, 
-                         share::schema::ObTableSchema &dst_table_schema, 
-                         const bool is_alter_column_group_delayed = false);
-  int resolve_index_column_group(const ParseNode *node, obcall::ObCreateIndexArg &create_index_arg);
-  bool need_column_group(const ObTableSchema &table_schema);
   int resolve_hints(const ParseNode *parse_node, ObDDLStmt &stmt, const ObTableSchema &table_schema);
   int calc_ddl_parallelism(const uint64_t hint_parallelism, const uint64_t table_dop, uint64_t &parallelism);
   int deep_copy_str(const common::ObString &src, common::ObString &dest);

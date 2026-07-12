@@ -84,8 +84,6 @@ int ObLobPieceBuilder::generate_aux_lob_piece_schema(
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(set_lob_table_column_store_if_need(aux_lob_piece_schema))) {
-      LOG_WARN("fail to set lob column store if need", KR(ret));
     } else if ((data_schema.is_partitioned_table() || data_schema.is_auto_partitioned_table())
                && OB_FAIL(aux_lob_piece_schema.assign_partition_schema_without_auto_part_attr(data_schema))) {
       LOG_WARN("fail to assign partition schema", K(aux_lob_piece_schema), K(ret));
@@ -187,18 +185,6 @@ int ObLobPieceBuilder::generate_lob_piece_table_name(
     LOG_WARN("buf is not large enough", K(ret), K(buf_size), K(new_table_id));
   }
 
-  return ret;
-}
-
-int ObLobPieceBuilder::set_lob_table_column_store_if_need(ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-  table_schema.set_column_store(true);
-  if (table_schema.get_column_group_count() == 0) {
-    if (OB_FAIL(table_schema.add_default_column_group())) {
-      LOG_WARN("fail to add default column group", KR(ret), "table_id", table_schema.get_table_id());
-    }
-  }
   return ret;
 }
 

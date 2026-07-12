@@ -510,7 +510,6 @@ int ObTruncateInfoService::execute(ObMySQLTransaction &trans,
                                    ObTableSchema &index_table_schema) {
   int ret = OB_SUCCESS;
   ObInnerSQLConnection *conn = nullptr;
-  bool is_column_store = false;
   index_tablet_array_.reuse();
   ls_id_array_.reuse();
   if (IS_NOT_INIT) {
@@ -519,11 +518,6 @@ int ObTruncateInfoService::execute(ObMySQLTransaction &trans,
   } else if (OB_UNLIKELY(!index_table_schema.is_global_index_table())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("input index schema is not global index", KR(ret), K(index_table_schema));
-  } else if (OB_FAIL(index_table_schema.get_is_column_store(is_column_store))) {
-    LOG_WARN("failed to get is column store", KR(ret), K(index_table_schema));
-  } else if (OB_UNLIKELY(is_column_store)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported write truncate info for column store global index", KR(ret), K(is_column_store), K(index_table_schema));
   } else if (OB_FAIL(ObDDLLock::lock_for_modify_truncate_info_in_trans(index_table_schema.get_table_id(), trans))) {
     LOG_WARN("failed to lock global index", KR(ret), "index_table_id", index_table_schema.get_table_id());
   } else if (OB_FAIL(index_table_schema.get_tablet_ids(index_tablet_array_))) {

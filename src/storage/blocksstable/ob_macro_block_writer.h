@@ -217,7 +217,7 @@ public:
   int get_estimate_meta_block_size(const ObDataMacroBlockMeta &macro_meta, int64_t &estimate_size);
   int check_data_macro_block_need_merge(const ObMacroBlockDesc &macro_desc, bool &need_merge) const;
   int check_meta_macro_block_need_rewrite(bool &need_rewrite) const;
-  int close(ObDagSliceMacroFlusher *macro_block_flusher = nullptr);
+  int close();
   void dump_block_and_writer_buffer();
   inline ObMacroBlocksWriteCtx &get_macro_block_write_ctx() { return block_write_ctx_; }
   inline int64_t get_last_macro_seq() const { return OB_ISNULL(macro_seq_generator_) ? -1 : macro_seq_generator_->get_current(); } /* save our seq num */
@@ -287,9 +287,8 @@ private:
   int write_micro_block(ObMicroBlockDesc &micro_block_desc, const bool need_pre_warm);
   int check_micro_block_need_merge(const ObMicroBlock &micro_block, bool &need_merge);
   int merge_micro_block(const ObMicroBlock &micro_block);
-  int flush_macro_block(ObMacroBlock &macro_block, const bool is_close_flush, ObDagSliceMacroFlusher *macro_block_flusher);
-  int choose_macro_block_flusher(ObDagSliceMacroFlusher *external_block_flusher,
-                                 const bool is_close_flush,
+  int flush_macro_block(ObMacroBlock &macro_block, const bool is_close_flush);
+  int choose_macro_block_flusher(const bool is_close_flush,
                                  ObIMacroBlockFlusher *&final_flusher);
   int prepare_default_macro_block_flusher(const bool is_close_flush);
   int post_flush_normal_macro_block(const ObMacroBlock &macro_block,
@@ -322,7 +321,7 @@ private:
 public:
   static const int64_t DEFAULT_MACRO_BLOCK_REWRTIE_THRESHOLD = 30;
 private:
-  static const int64_t DEFAULT_MINIMUM_CS_ENCODING_BLOCK_SIZE = 16 << 10; // 16KB
+  static const int64_t DEFAULT_MINIMUM_ENCODING_BLOCK_SIZE = 16 << 10; // 16KB
 protected:
   const ObDataStoreDesc *data_store_desc_;
   compaction::ObMergeBlockInfo merge_block_info_;
@@ -361,7 +360,6 @@ private:
   ObSSTablePrivateObjectCleaner *object_cleaner_;
   char *io_buf_;
   ObIMacroBlockValidator *validator_;
-  bool is_cs_encoding_writer_;
   ObDefaultMacroBlockFlusher default_macro_flusher_;
   ObSmallSStableMacroBlockFlusher small_sstable_macro_flusher_;
 };

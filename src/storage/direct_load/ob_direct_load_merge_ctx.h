@@ -102,7 +102,7 @@ public:
   bool is_valid() const;
   TO_STRING_KV(K_(table_id), K_(rowkey_column_num), K_(column_count), KP_(col_descs),
                KP_(datum_utils), KP_(lob_column_idxs), "merge_mode",
-               ObDirectLoadMergeMode::get_type_string(merge_mode_), K_(use_batch_mode),
+               ObDirectLoadMergeMode::get_type_string(merge_mode_),
                KP_(dml_row_handler), KP_(insert_table_ctx), K_(trans_param), KP_(file_mgr),
                KP_(ctx));
 
@@ -116,8 +116,7 @@ public:
   const common::ObArray<int64_t> *lob_column_idxs_;
   // Merge mode
   ObDirectLoadMergeMode::Type merge_mode_;
-  bool use_batch_mode_;
-  ObDirectLoadDMLRowHandler *dml_row_handler_; // rescan when it is nullptr
+  ObDirectLoadDMLRowHandler *dml_row_handler_;
   ObDirectLoadInsertTableContext *insert_table_ctx_;
   // Task-level parameters
   ObDirectLoadTransParam trans_param_;
@@ -140,7 +139,6 @@ public:
            const common::ObIArray<table::ObTableLoadLSIdAndPartitionId> &ls_partition_ids);
   int build_merge_task(ObDirectLoadTableStore &table_store, int64_t thread_cnt);
   int build_del_lob_task(ObDirectLoadTableStore &table_store, int64_t thread_cnt, const bool for_dag);
-  int build_rescan_task(int64_t thread_cnt);
   const common::ObIArray<ObDirectLoadTabletMergeCtx *> &get_tablet_merge_ctxs() const
   {
     return tablet_merge_ctx_array_;
@@ -197,8 +195,6 @@ public:
                                  const ObDirectLoadTableHandleArray &multiple_sstable_array,
                                  ObDirectLoadMultipleMergeRangeSplitter &range_splitter,
                                  const int64_t max_parallel_degree);
-  // rescan task
-  int build_rescan_task(int64_t thread_count);
 
   int inc_finish_count(int ret_code, bool &is_ready);
 

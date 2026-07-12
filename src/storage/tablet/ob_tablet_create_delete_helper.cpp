@@ -633,11 +633,7 @@ int ObTabletCreateDeleteHelper::create_empty_sstable(
   if (OB_UNLIKELY(!storage_schema.is_valid() || snapshot_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid arguments", K(ret), K(snapshot_version), K(storage_schema));
-  } else if (storage_schema.get_column_group_count() > 1) { // column store mode
-    if (OB_FAIL(create_empty_co_sstable(allocator, storage_schema, tablet_id, snapshot_version, table_handle))) {
-      LOG_WARN("failed to create co sstable", K(ret), K(storage_schema));
-    }
-  } else if (OB_FAIL(param.init_for_empty_major_sstable(tablet_id, storage_schema, snapshot_version, -1/*cg idx*/, false/*has all cg*/))) {
+  } else if (OB_FAIL(param.init_for_empty_major_sstable(tablet_id, storage_schema, snapshot_version))) {
     LOG_WARN("failed to build sstable param", K(ret), K(tablet_id), K(storage_schema), K(snapshot_version));
   } else if (OB_FAIL(create_sstable(param, allocator, table_handle))) {
     LOG_WARN("failed to create sstable", K(ret), K(param));
@@ -645,58 +641,6 @@ int ObTabletCreateDeleteHelper::create_empty_sstable(
 
   if (OB_FAIL(ret)) {
     table_handle.reset();
-  }
-  return ret;
-}
-
-int ObTabletCreateDeleteHelper::create_empty_co_sstable(
-    common::ObArenaAllocator &allocator,
-    const ObStorageSchema &storage_schema,
-    const common::ObTabletID &tablet_id,
-    const int64_t snapshot_version,
-    ObTableHandleV2 &table_handle)
-{
-  int ret = OB_SUCCESS;
-  table_handle.reset();
-
-  // build main cg sstables
-  bool has_all_cg = false;
-  const ObIArray<ObStorageColumnGroupSchema> &cg_schemas = storage_schema.get_column_groups();
-  for (int64_t idx = cg_schemas.count() - 1; OB_SUCC(ret) && idx >= 0; --idx) {
-    const ObStorageColumnGroupSchema &cg_schema = cg_schemas.at(idx);
-    if (cg_schema.is_all_column_group()) {
-      has_all_cg = true;
-      break;
-    }
-  }
-
-  ObTableHandleV2 co_handle;
-  for (int64_t idx = 0; OB_SUCC(ret) && idx < cg_schemas.count(); ++idx) {
-    const ObStorageColumnGroupSchema &cg_schema = cg_schemas.at(idx);
-    if (cg_schema.is_all_column_group() || (!has_all_cg && cg_schema.is_rowkey_column_group())) {
-      ObTabletCreateSSTableParam cs_param;
-      ObCOSSTableV2 *co_sstable = nullptr;
-      ObSSTable *sstable = nullptr;
-
-      if (OB_FAIL(cs_param.init_for_empty_major_sstable(tablet_id, storage_schema, snapshot_version, idx, has_all_cg))) {
-        LOG_WARN("failed to build table cs param for column store", K(ret), K(tablet_id), K(cg_schema));
-      } else if (OB_FAIL(create_sstable<ObCOSSTableV2>(cs_param, allocator, co_handle))) {
-        LOG_WARN("failed to create all cg sstable", K(ret), K(cs_param));
-      } else if (OB_FAIL(co_handle.get_sstable(sstable))) {
-        LOG_WARN("failed to get sstable from handle", K(ret), K(co_handle));
-      } else if (OB_ISNULL(co_sstable = static_cast<ObCOSSTableV2 *>(sstable))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null co sstable", K(ret), KPC(sstable));
-      } else if (OB_UNLIKELY(!co_sstable->is_empty())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("co sstable should be empty", K(ret), KPC(co_sstable));
-      } else {
-        table_handle = co_handle;
-      }
-      break;
-    } else {
-      // for optimization, we don't need to create empty cg sstable here.
-    }
   }
   return ret;
 }

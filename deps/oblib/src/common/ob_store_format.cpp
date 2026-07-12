@@ -28,7 +28,6 @@ const char *ObStoreFormat::row_store_name[MAX_ROW_STORE] =
   "flat_row_store",
   "encoding_row_store",
   "selective_encoding_row_store",
-  "cs_encoding_row_store",
 };
 
 const ObStoreFormatItem ObStoreFormat::store_format_items[OB_STORE_FORMAT_MAX] =
@@ -38,7 +37,7 @@ const ObStoreFormatItem ObStoreFormat::store_format_items[OB_STORE_FORMAT_MAX] =
   {"REDUNDANT", "ROW_FORMAT = REDUNDANT", "", FLAT_ROW_STORE},
   {"COMPACT", "ROW_FORMAT = COMPACT", "", FLAT_ROW_STORE},
   {"DYNAMIC", "ROW_FORMAT = DYNAMIC", "", ENCODING_ROW_STORE},
-  {"COMPRESSED", "ROW_FORMAT = COMPRESSED", "", CS_ENCODING_ROW_STORE},
+  {"COMPRESSED", "ROW_FORMAT = COMPRESSED", "", ENCODING_ROW_STORE},
   {"CONDENSED", "ROW_FORMAT = CONDENSED", "", SELECTIVE_ENCODING_ROW_STORE},
 };
 
@@ -100,62 +99,6 @@ int ObStoreFormat::find_store_format_type(const ObString &store_format, ObStoreF
 int ObStoreFormat::find_store_format_type_mysql(const ObString &store_format, ObStoreFormatType &store_format_type)
 {
   return find_store_format_type(store_format, STORE_FORMAT_MYSQL_START, OB_STORE_FORMAT_MAX_MYSQL, store_format_type);
-}
-
-int ObTableStoreFormat::find_table_store_type(const ObString &table_store_format, ObTableStoreType &table_store_type)
-{
-  int ret = OB_SUCCESS;
-  table_store_type = OB_TABLE_STORE_INVALID;
-  if (table_store_format.empty()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Empty table store format str", K(ret), K(table_store_format));
-  } else {
-    if (0 == table_store_format.case_compare("ROW")) {
-      table_store_type = OB_TABLE_STORE_ROW;
-    } else if (0 == table_store_format.case_compare("COLUMN")) {
-      table_store_type = OB_TABLE_STORE_COLUMN;
-    } else if (0 == table_store_format.case_compare("COMPOUND")) {
-      table_store_type = OB_TABLE_STORE_ROW_WITH_COLUMN;
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected store format type", K(ret), K(table_store_format), K(table_store_type));
-    }
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObLSStoreFormat, store_type_);
-bool ObLSStoreFormat::is_valid() const
-{
-  return store_type_ >= OB_LS_STORE_NORMAL && store_type_ < OB_LS_STORE_MAX;
-}
-
-ObLSStoreFormat &ObLSStoreFormat::operator=(const ObLSStoreFormat& rhs)
-{
-  if (&rhs != this) {
-    store_type_ = rhs.store_type_;
-  }
-  return *this;
-}
-
-const char *ObLSStoreFormat::to_str() const
-{
-  const char *str = NULL;
-  switch(store_type_) {
-    case OB_LS_STORE_NORMAL: {
-      str = "NORMAL";
-      break;
-    }
-    case OB_LS_STORE_COLUMN_ONLY: {
-      str = "COLUMN_ONLY";
-      break;
-    }
-    case OB_LS_STORE_MAX:
-    default: {
-      str = "INVALID";
-    }
-  }
-  return str;
 }
 
 }//end namespace common

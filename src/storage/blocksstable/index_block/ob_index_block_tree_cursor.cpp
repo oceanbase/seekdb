@@ -24,49 +24,6 @@ using namespace common;
 using namespace storage;
 namespace blocksstable
 {
-ObCGRowKeyTransHelper::ObCGRowKeyTransHelper()
-  : datums_() {}
-
-int ObCGRowKeyTransHelper::trans_to_cg_range(
-    const int64_t start_row_offset,
-    const ObDatumRange &range)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_FAIL(trans_to_cg_rowkey(start_row_offset, range.start_key_, true/*is_start*/))) {
-    LOG_WARN("Fail to trans start key", K(ret), K(range));
-  } else if (OB_FAIL(trans_to_cg_rowkey(start_row_offset, range.end_key_, false/*is_start*/))) {
-    LOG_WARN("Fail to trans end key", K(ret), K(range));
-  } else {
-    result_range_.border_flag_ = range.border_flag_;
-  }
-
-  return ret;
-}
-
-int ObCGRowKeyTransHelper::trans_to_cg_rowkey(
-    const int64_t start_row_offset,
-    const ObDatumRowkey &rowkey,
-    const bool is_start_key)
-{
-  int ret = OB_SUCCESS;
-  ObDatumRowkey &cg_rowkey = is_start_key ? result_range_.start_key_ : result_range_.end_key_;
-  if (rowkey.is_min_rowkey() || rowkey.is_max_rowkey()) {
-    cg_rowkey = rowkey;
-  } else if (OB_UNLIKELY(rowkey.get_datum_cnt() != 1)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected rowkey column cnt of cg sstable", K(ret), K(rowkey));
-  } else {
-    ObStorageDatum &datum = is_start_key ? datums_[0] : datums_[1];
-    const int64_t row_idx = rowkey.datums_[0].get_int();
-    datum.set_int(row_idx - start_row_offset);
-    if (OB_FAIL(cg_rowkey.assign(&datum, 1))) {
-      LOG_WARN("Fail to assign cg rowkey", K(ret), K(datum), K(rowkey), K(start_row_offset));
-    }
-  }
-  return ret;
-}
-
 /*-------------------------------------ObIndexBlockTreePathItem------------------------------------*/
 void ObIndexBlockTreePathItem::reset()
 {
@@ -334,10 +291,10 @@ int ObIndexBlockTreePath::PathItemStack::expand()
 
 ObIndexBlockTreeCursor::ObIndexBlockTreeCursor()
   : cursor_path_(), index_block_cache_(nullptr), reader_(nullptr), micro_reader_helper_(),
-    tree_type_(TreeType::TREE_TYPE_MAX), rowkey_helper_(), rowkey_column_cnt_(0),
+    tree_type_(TreeType::TREE_TYPE_MAX), rowkey_column_cnt_(0),
     curr_path_item_(), row_(),
     idx_row_parser_(), read_info_(nullptr), sstable_meta_handle_(),
-    is_normal_cg_sstable_(false), is_inited_(false) {}
+    is_inited_(false) {}
 
 ObIndexBlockTreeCursor::~ObIndexBlockTreeCursor()
 {
@@ -354,7 +311,6 @@ void ObIndexBlockTreeCursor::reset()
     reader_ = nullptr;
     read_info_ = nullptr;
     sstable_meta_handle_.reset();
-    is_normal_cg_sstable_ = false;
     is_inited_ = false;
   }
 }
@@ -382,7 +338,7 @@ int ObIndexBlockTreeCursor::init(
   } else if (OB_FAIL(sstable.get_meta(sstable_meta_handle_))) {
     LOG_WARN("Fail to get sstable meta handle", K(ret));
   } else if (FALSE_IT(sstable_rowkey_col_cnt = sstable_meta_handle_.get_sstable_meta().get_basic_meta().rowkey_column_count_)) {
-  } else if (OB_UNLIKELY(!sstable.is_normal_cg_sstable() && sstable_rowkey_col_cnt != read_info->get_rowkey_count())) {
+  } else if (OB_UNLIKELY(sstable_rowkey_col_cnt != read_info->get_rowkey_count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Rowkey column count not match between read info and sstable",
         K(ret), KPC(read_info), K(sstable_rowkey_col_cnt));
@@ -394,7 +350,6 @@ int ObIndexBlockTreeCursor::init(
     read_info_ = read_info;
     rowkey_column_cnt_ = read_info_->get_rowkey_count();
     tree_type_ = tree_type;
-    is_normal_cg_sstable_ = sstable.is_normal_cg_sstable();
     switch (tree_type) {
     case TreeType::INDEX_BLOCK: {
       curr_path_item_->block_data_ =
@@ -626,17 +581,11 @@ int ObIndexBlockTreeCursor::locate_rowkey_in_curr_block(
 {
   int ret = OB_SUCCESS;
   is_beyond_the_range = false;
-  ObStoreRange range;
-  ObDatumRowkey rowkey;
+  const ObDatumRowkey &rowkey = ori_rowkey;
   bool equal = false;
-  const bool is_need_trans_range = is_normal_cg_sstable_ && 0 != curr_path_item_->start_row_offset_;
   if (OB_UNLIKELY(!ori_rowkey.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Rowkey is not valid", K(ret), K(ori_rowkey));
-  } else if (is_need_trans_range && OB_FAIL(rowkey_helper_.trans_to_cg_rowkey(curr_path_item_->start_row_offset_,
-                         ori_rowkey, true/* is start */))) {
-    LOG_WARN("Fail to trans to cg rowkey", K(ret), K(ori_rowkey));
-  } else if (FALSE_IT(rowkey = is_need_trans_range ? rowkey_helper_.get_result_start_key() : ori_rowkey)) {
   } else if (rowkey.is_min_rowkey()) {
     curr_path_item_->curr_row_idx_ = 0;
   } else if (rowkey.is_max_rowkey()) {
@@ -723,14 +672,10 @@ int ObIndexBlockTreeCursor::locate_range_in_curr_block(
   int ret = OB_SUCCESS;
   begin_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
   end_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
-  ObDatumRange range;
-  const bool is_need_trans_range = is_normal_cg_sstable_ && 0 != curr_path_item_->start_row_offset_;
+  const ObDatumRange &range = ori_range;
   if (OB_UNLIKELY(!ori_range.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid range", K(ret), K(ori_range));
-  } else if (is_need_trans_range && OB_FAIL(rowkey_helper_.trans_to_cg_range(curr_path_item_->start_row_offset_, ori_range))) {
-    LOG_WARN("Fail to trans to cg range", K(ret), K(ori_range));
-  } else if (FALSE_IT(range = is_need_trans_range ? rowkey_helper_.get_result_range() : ori_range)) {
   } else if (!curr_path_item_->is_block_transformed_) {
     if (OB_FAIL(reader_->locate_range(range, is_left_border, is_right_border, begin_idx, end_idx, true))) {
       LOG_WARN("Fail to locate range with micro block reader", K(ret), K(range), KPC(curr_path_item_));
@@ -1468,16 +1413,7 @@ int ObIndexBlockTreeCursor::load_micro_block_data(const MacroBlockId &macro_bloc
       ObMicroBlockHeader header;
       if (OB_FAIL(header.deserialize_and_check_header(src_block_buf, src_buf_size))) {
         LOG_WARN("fail to deserialize_and_check_header", K(ret), KP(src_block_buf), K(src_buf_size));
-      } else if (ObStoreFormat::is_row_store_type_with_cs_encoding(static_cast<ObRowStoreType>(header.row_store_type_))) {
-        if (OB_FAIL(macro_reader.decrypt_and_full_transform_data(
-            header, block_des_meta, src_block_buf, src_buf_size,
-            curr_path_item_->block_data_.get_buf(), curr_path_item_->block_data_.get_buf_size(),
-            cursor_path_.get_allocator()))) {
-          LOG_WARN("fail to decrypt_and_full_transform_data", K(ret), K(header), K(block_des_meta));
-        } else {
-          curr_path_item_->is_block_allocated_ = true;
-        }
-      } else { // not cs_encoding
+      } else {
         bool is_compressed = false;
         if (OB_FAIL(macro_reader.do_decrypt_and_decompress_data(
             header, block_des_meta,

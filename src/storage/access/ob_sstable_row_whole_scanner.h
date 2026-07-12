@@ -67,7 +67,6 @@ public:
       is_macro_prefetch_end_(false),
       macro_block_iter_(),
       micro_block_iter_(),
-      rowkey_helper_(),
       micro_scanner_(nullptr),
       is_inited_(false),
       last_micro_block_recycled_(false),
@@ -107,13 +106,6 @@ private:
   int open_macro_block();
   int prefetch();
   int open_micro_block();
-  int open_cg_micro_block();
-  int get_cs_range(
-      const bool is_left_border,
-      const bool is_right_border,
-      const int64_t macro_block_start_row_offset,
-      const int64_t micro_block_start_row_offset,
-      ObCSRange &range);
   OB_INLINE bool is_multi_version_range(const blocksstable::ObDatumRange &range, const int64_t mv_rowkey_col_cnt) const
   {
     const int64_t max_datum_cnt = MAX(range.get_start_key().get_datum_cnt(), range.get_end_key().get_datum_cnt());
@@ -138,7 +130,6 @@ private:
   blocksstable::ObIndexBlockMacroIterator macro_block_iter_;
   blocksstable::ObMicroBlockBareIterator micro_block_iter_;
   MacroScanHandle scan_handles_[PREFETCH_DEPTH];
-  blocksstable::ObCGRowKeyTransHelper rowkey_helper_;
   blocksstable::ObIMicroBlockRowScanner *micro_scanner_;
   bool is_inited_;
   bool last_micro_block_recycled_;

@@ -628,14 +628,10 @@ int ObChecksumValidator::push_tablet_ckm_items_with_update(
   ObTabletChecksumItem tmp_checksum_item;
   for (int64_t i = 0; !stop_ && OB_SUCC(ret) && (i < replica_ckm_items.count()); ++i) {
     const ObTabletReplicaChecksumItem &curr_replica_item = replica_ckm_items.at(i);
-    bool is_cs_replica = false;
     if (OB_UNLIKELY(!curr_replica_item.is_key_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tablet replica checksum is not valid", KR(ret),
                K(curr_replica_item));
-    } else if (OB_FAIL(curr_replica_item.check_data_checksum_type(is_cs_replica))) {
-      LOG_WARN("fail to check data checksum type", KR(ret), K(curr_replica_item));
-    } else if (is_cs_replica) { // skip report data checksum for column store replica to __all_tablet_checksum
     } else {
       if (nullptr != prev_replica_item && curr_replica_item.is_same_tablet( *prev_replica_item)) { // write one checksum_item per tablet
       } else if (OB_FAIL(tmp_checksum_item.assign(curr_replica_item))) {
@@ -861,7 +857,7 @@ int ObChecksumValidator::get_replica_ckm(const bool include_larger_than/* = fals
   ++statistics_.query_ckm_sql_cnt_;
   return ObTabletReplicaChecksumOperator::batch_get(
       cur_tablet_ls_pair_array_, get_compaction_scn(), *sql_proxy_,
-      replica_ckm_items_, include_larger_than, share::OBCG_DEFAULT);
+      replica_ckm_items_, include_larger_than, 0);
 }
 
 /***************************************** FTS Checksum Section ******************************************/

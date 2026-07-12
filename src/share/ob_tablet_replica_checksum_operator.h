@@ -112,15 +112,13 @@ public:
   bool is_valid() const;
   bool is_same_tablet(const ObTabletReplicaChecksumItem &other) const;
   int verify_column_checksum(const ObTabletReplicaChecksumItem &other) const;
-  int verify_column_checksum_between_diffrent_replica(const ObTabletReplicaChecksumItem &other) const;
   int assign(const ObTabletReplicaChecksumItem &other);
   int set_ckm_mem_attr();
-  int check_data_checksum_type(bool &is_cs_replica) const;
-  void set_data_checksum_type(const bool is_cs_replica);
+  void set_data_checksum_type();
   common::ObTabletID get_tablet_id() const { return tablet_id_; }
 
   TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(server), K_(row_count),
-      K_(compaction_scn), K_(data_checksum), K_(column_meta), K_(data_checksum_type), K_(co_base_snapshot_version));
+      K_(compaction_scn), K_(data_checksum), K_(column_meta), K_(data_checksum_type));
 
 public:
   share::ObLSID ls_id_;
@@ -131,7 +129,6 @@ public:
   int64_t data_checksum_;
   ObTabletReplicaReportColumnMeta column_meta_;
   ObDataChecksumType data_checksum_type_;
-  SCN co_base_snapshot_version_;
 };
 typedef ObArrayWithMap<share::ObTabletReplicaChecksumItem> ObReplicaCkmArray;
 
@@ -237,10 +234,9 @@ public:
   void reset();
   int set_data_checksum(const ObTabletReplicaChecksumItem& curr_item);
   int check_data_checksum(const ObTabletReplicaChecksumItem& curr_item);
-  TO_STRING_KV(KPC_(normal_ckm_item), K_(cs_replica_ckm_items));
+  TO_STRING_KV(KPC_(normal_ckm_item));
 private:
   const ObTabletReplicaChecksumItem *normal_ckm_item_;
-  ObSEArray<const ObTabletReplicaChecksumItem *, 3> cs_replica_ckm_items_; // at most support 3 cs replicas now
 };
 
 } // share

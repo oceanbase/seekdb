@@ -21,7 +21,6 @@
 #include "observer/table_load/dag/ob_table_load_dag_parallel_merger.h"
 #include "observer/table_load/ob_table_load_store_ctx.h"
 #include "observer/table_load/plan/ob_table_load_merge_op.h"
-#include "storage/ddl/ob_cg_macro_block_writer.h"
 #include "storage/ddl/ob_tablet_slice_row_iterator.h"
 #include "storage/direct_load/ob_direct_load_i_merge_task.h"
 #include "storage/direct_load/ob_direct_load_insert_table_ctx.h"
@@ -182,21 +181,11 @@ int ObTableLoadInsertSSTableTask::process()
     }
   } else {
     ObITask *task = nullptr;
-    if (dag_->get_ddl_table_schema().table_item_.is_column_store_ &&
-        !(is_incremental_minor_direct_load(dag_->get_direct_load_type()))) {
-      ObTableLoadMemoryFriendWriteMacroBlockTask *write_task = nullptr;
-      if (OB_FAIL(dag_->alloc_task(write_task, this, merge_task))) {
-        LOG_WARN("fail to alloc task", K(ret));
-      } else {
-        task = write_task;
-      }
+    ObTableLoadMacroBlockWriteTask *write_task = nullptr;
+    if (OB_FAIL(dag_->alloc_task(write_task, this, merge_task))) {
+      LOG_WARN("fail to alloc task", K(ret));
     } else {
-      ObTableLoadMacroBlockWriteTask *write_task = nullptr;
-      if (OB_FAIL(dag_->alloc_task(write_task, this, merge_task))) {
-        LOG_WARN("fail to alloc task", K(ret));
-      } else {
-        task = write_task;
-      }
+      task = write_task;
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(task->deep_copy_children(get_child_nodes()))) {
@@ -259,182 +248,6 @@ int ObTableLoadDagInsertSSTableClearTask::process()
 }
 
 /**
- * ObTableLoadMemoryFriendWriteMacroBlockPipeline
- */
-
-ObTableLoadMemoryFriendWriteMacroBlockPipeline::ObTableLoadMemoryFriendWriteMacroBlockPipeline()
-  : ObDDLMemoryFriendWriteMacroBlockPipeline(TASK_TYPE_DIRECT_LOAD_WRITE_MACRO_BLOCK_PIPELINE),
-    is_inited_(false),
-    row_iterator_(nullptr),
-    chunk_(),
-    batch_datum_rows_write_op_(this),
-    cg_row_file_writer_op_(this)
-{
-}
-
-ObTableLoadMemoryFriendWriteMacroBlockPipeline::ObTableLoadMemoryFriendWriteMacroBlockPipeline(
-  ObITabletSliceRowIterator *row_iterator)
-  : ObDDLMemoryFriendWriteMacroBlockPipeline(TASK_TYPE_DIRECT_LOAD_WRITE_MACRO_BLOCK_PIPELINE),
-    is_inited_(false),
-    row_iterator_(row_iterator),
-    chunk_(),
-    batch_datum_rows_write_op_(this),
-    cg_row_file_writer_op_(this)
-{
-}
-
-ObTableLoadMemoryFriendWriteMacroBlockPipeline::~ObTableLoadMemoryFriendWriteMacroBlockPipeline()
-{
-  reset();
-}
-
-int ObTableLoadMemoryFriendWriteMacroBlockPipeline::init()
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(is_inited_)) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("the ObTableLoadMemoryFriendWriteMacroBlockPipeline has been initialized", K(ret));
-  } else if (OB_ISNULL(row_iterator_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected row iterator is null", KR(ret));
-  } else {
-    const ObTabletID tablet_id = row_iterator_->get_tablet_id();
-    const int64_t slice_idx = row_iterator_->get_slice_idx();
-    ObDDLIndependentDag *ddl_dag = static_cast<ObDDLIndependentDag *>(dag_);
-    ObDDLSlice *ddl_slice = nullptr;
-    ObDDLTabletContext *tablet_context = nullptr;
-    bool is_slice_created = false;
-    if (OB_FAIL(ddl_dag->get_tablet_context(tablet_id, tablet_context))) {
-      LOG_WARN("fail to get tablet context", K(ret), K(tablet_id));
-    } else if (OB_UNLIKELY(nullptr == tablet_context)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet context is null", K(ret), K(tablet_id));
-    } else if (OB_FAIL(
-                 tablet_context->get_or_create_slice(slice_idx, ddl_slice, is_slice_created))) {
-      LOG_WARN("fail to get or create slice", K(ret), K(tablet_id), K(slice_idx));
-    }
-    if (FAILEDx(batch_datum_rows_write_op_.init(tablet_id, slice_idx))) {
-      LOG_WARN("fail to initialize batch datum rows write op", K(ret), K(tablet_id), K(slice_idx));
-    } else if (OB_FAIL(add_op(&batch_datum_rows_write_op_))) {
-      LOG_WARN("fail to add batch datum rows write op", K(ret));
-    } else if (OB_FAIL(cg_row_file_writer_op_.init(tablet_id, slice_idx,
-                                                   ObBatchDatumRowsWriteOp::MAX_BATCH_SIZE))) {
-      LOG_WARN("fail to initialize cg row file writer op", K(ret), K(tablet_id), K(slice_idx));
-    } else if (OB_FAIL(add_op(&cg_row_file_writer_op_))) {
-      LOG_WARN("fail to add cg row file writer op", K(ret));
-    } else if (OB_FAIL(ObDDLMemoryFriendWriteMacroBlockPipeline::init(ddl_slice))) {
-      LOG_WARN("fail to initialize ddl memory friend write macro block pipeline", K(ret));
-    } else {
-      is_inited_ = true;
-    }
-  }
-  return ret;
-}
-
-int ObTableLoadMemoryFriendWriteMacroBlockPipeline::get_next_chunk(ObChunk *&chunk)
-{
-  int ret = OB_SUCCESS;
-  chunk = nullptr;
-  chunk_.reset();
-  const ObDatumRow *datum_row_ptr = nullptr;
-  if (!is_inited_ && OB_FAIL(init())) {
-    LOG_WARN("fail to init", KR(ret));
-  } else if (OB_FAIL(row_iterator_->get_next_row(datum_row_ptr))) {
-    if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("fail to get next row", K(ret));
-    } else {
-      ret = OB_SUCCESS;
-      chunk_.set_end_chunk();
-      chunk = &chunk_;
-    }
-  } else {
-    chunk_.type_ = ObChunk::DATUM_ROW;
-    chunk_.datum_row_ = const_cast<ObDatumRow *>(datum_row_ptr);
-    chunk = &chunk_;
-  }
-  return ret;
-}
-
-void ObTableLoadMemoryFriendWriteMacroBlockPipeline::postprocess(int &ret)
-{
-  if (OB_UNLIKELY(OB_ITER_END != ret)) {
-    FLOG_INFO("ret code not expected", K(ret), KPC(this), KPC(dag_));
-    // 旁路的写入任务不支持挂起, 修改错误码
-    if (OB_DAG_TASK_IS_SUSPENDED == ret) {
-      ret = OB_ERR_UNEXPECTED;
-    }
-  } else {
-    ret = OB_SUCCESS;
-    if (OB_FAIL(set_remain_block())) {
-      LOG_WARN("fail to set remain block", K(ret));
-    } else {
-      LOG_INFO("the ObTableLoadMemoryFriendWriteMacroBlockPipeline has ret code iter end", K(ret));
-    }
-  }
-}
-
-void ObTableLoadMemoryFriendWriteMacroBlockPipeline::reset()
-{
-  is_inited_ = false;
-  if (OB_LIKELY(nullptr != row_iterator_)) {
-    ObMemAttr attr("TLD_SliceIter");
-    OB_DELETE(ObITabletSliceRowIterator, attr, row_iterator_);
-    row_iterator_ = nullptr;
-  }
-}
-
-/**
- * ObTableLoadMemoryFriendWriteMacroBlockTask
- */
-
-ObTableLoadMemoryFriendWriteMacroBlockTask::ObTableLoadMemoryFriendWriteMacroBlockTask(
-  ObTableLoadDagInsertSSTableTaskBase *parent, ObDirectLoadIMergeTask *merge_task)
-  : ObTableLoadDagInsertSSTableTaskBase(parent), merge_task_(merge_task)
-{
-}
-
-int ObTableLoadMemoryFriendWriteMacroBlockTask::init()
-{
-  int ret = OB_SUCCESS;
-  if (nullptr == row_iterator_ && OB_FAIL(merge_task_->init_iterator(row_iterator_))) {
-    LOG_WARN("fail to init iterator", KR(ret));
-  } else if (OB_FAIL(ObTableLoadMemoryFriendWriteMacroBlockPipeline::init())) {
-    LOG_WARN("fail to init", KR(ret));
-  }
-  return ret;
-}
-
-int ObTableLoadMemoryFriendWriteMacroBlockTask::generate_next_task(share::ObITask *&next_task)
-{
-  int ret = OB_SUCCESS;
-  next_task = nullptr;
-  ObDirectLoadIMergeTask *merge_task = nullptr;
-  if (OB_FAIL(parallel_merger_->get_next_merge_task(merge_task))) {
-    if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("fail to get next iter", KR(ret));
-    }
-  } else {
-    ObTableLoadMemoryFriendWriteMacroBlockTask *write_task = nullptr;
-    if (OB_FAIL(dag_->alloc_task(write_task, this, merge_task))) {
-      LOG_WARN("fail to alloc task", K(ret));
-    } else {
-      next_task = write_task;
-    }
-  }
-  return ret;
-}
-
-void ObTableLoadMemoryFriendWriteMacroBlockTask::postprocess(int &ret)
-{
-  ObTableLoadMemoryFriendWriteMacroBlockPipeline::postprocess(ret);
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(handle_merge_task_finish(this, merge_task_))) {
-      LOG_WARN("fail to handle merge task finish", K(ret));
-    }
-  }
-}
-
-/**
  * ObTableLoadMacroBlockWriteTask
  */
 
@@ -459,7 +272,7 @@ int ObTableLoadMacroBlockWriteTask::process()
     const int64_t slice_idx = row_iter->get_slice_idx();
     ObWriteMacroParam writer_param;
     writer_param.is_sorted_table_load_ = true;
-    if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id, slice_idx, -1 /*cg_idx*/, dag_,
+    if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id, slice_idx, dag_,
                                              ObTabletSliceBufferTempFileWriter::ObDDLRowBuffer::DEFAULT_MAX_BATCH_SIZE,
                                              writer_param))) {
       LOG_WARN("fail to fill writer param", K(ret), K(tablet_id), K(slice_idx), K(dag_));

@@ -16,45 +16,14 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
-#include "storage/ddl/ob_ddl_storage_util.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_direct_load_mgr_v3.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
-#include "storage/column_store/ob_column_store_replica_util.h"
 namespace oceanbase
 {
 namespace storage
 {
-
-/* TODO @ zhuoran.zzr 
- *        struct direct load mgr won't be used any more, wait to remove it
-*/
-int ObDirectLoadMgrUtil::check_cs_replica_exist(const ObLSID &ls_id, const ObTabletID &tablet_id, bool &is_cs_replica_exist)
-{
-  int ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
-  ObLSService *ls_service = share::g_mp->ls_service();
-  ObTabletHandle tablet_handle;
-  if (!ls_id.is_valid() || !tablet_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id));
-  } else if (OB_ISNULL(ls_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log service should not be null", K(ret));
-  } else if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
-     LOG_WARN("failed to get log stream", K(ret), K(ls_id));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    LOG_WARN("get tablet handle failed", K(ret), K(tablet_id));
-  } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tablet handle", K(ret), K(tablet_handle));
-  } else if (CS_REPLICA_VISIBLE_AND_REPLAY_COLUMN == tablet_handle.get_obj()->get_tablet_meta().ddl_replay_status_ ||
-             CS_REPLICA_VISIBLE_AND_REPLAY_ROW    == tablet_handle.get_obj()->get_tablet_meta().ddl_replay_status_) {
-    is_cs_replica_exist = true;
-  }
-  return ret;
-}
 
 int ObDirectLoadMgrUtil::get_lob_tablet_id(const ObLSID &ls_id, const ObTabletID &tablet_id, ObTabletID &lob_tablet_id)
 {
@@ -236,7 +205,6 @@ int ObDirectLoadMgrUtil::create_idem_tablet_direct_load_mgr(const int64_t execut
   return ret;
 }
 
-// TODO @zhuoran.zzr: is_column_store is set becacuese column store is not supported yet, wait to remove it later
 ObDirectLoadType ObDirectLoadMgrUtil::ddl_get_direct_load_type(const uint64_t data_format_version)
 {
   ObDirectLoadType direct_load_type = ObDirectLoadType::DIRECT_LOAD_INVALID;
@@ -378,24 +346,11 @@ int ObDirectLoadMgrUtil::generate_merge_param(const ObTabletDDLCompleteMdsUserDa
       merge_param.snapshot_version_    = ddl_kvs_handle.at(0).get_obj()->get_snapshot_version();
       merge_param.start_scn_           = mock_scn;
       merge_param.is_commit_           = false;
-      int64_t base_cg_idx = 0;
-      ObArenaAllocator tmp_allocator;
-      ObStorageSchema* storage_schema = nullptr;
-      if (OB_FAIL(tablet.load_storage_schema(tmp_allocator, storage_schema))) {
-        LOG_WARN("failed to get tablet handle", K(ret));
-      } else if (OB_ISNULL(storage_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("storage schema is null", K(ret));
-      } else if (OB_FAIL(ObDDLStorageUtil::get_base_cg_idx(storage_schema, base_cg_idx))) {
-        LOG_WARN("failed to get base cg idx", K(ret), K(storage_schema));
-      } else {
-        merge_param.table_key_.table_type_ = ObITable::TableType::DDL_DUMP_SSTABLE;
-        merge_param.table_key_.tablet_id_ = tablet.get_tablet_id();
-        merge_param.table_key_.scn_range_.start_scn_ = SCN::scn_dec(mock_scn);
-        merge_param.table_key_.scn_range_.end_scn_ = mock_scn;
-        merge_param.table_key_.version_range_.snapshot_version_ = ddl_kvs_handle.at(0).get_obj()->get_snapshot_version();
-        merge_param.table_key_.column_group_idx_ = base_cg_idx;
-      }
+      merge_param.table_key_.table_type_ = ObITable::TableType::DDL_DUMP_SSTABLE;
+      merge_param.table_key_.tablet_id_ = tablet.get_tablet_id();
+      merge_param.table_key_.scn_range_.start_scn_ = SCN::scn_dec(mock_scn);
+      merge_param.table_key_.scn_range_.end_scn_ = mock_scn;
+      merge_param.table_key_.version_range_.snapshot_version_ = ddl_kvs_handle.at(0).get_obj()->get_snapshot_version();
     }
   }
   return ret;

@@ -371,7 +371,6 @@ int assign(const ObColumnSchemaV2 &src_schema);
     return ret;
   }
 
-  int get_each_column_group_name(ObString &cg_name) const;
   inline share::ObLocalSessionVar &get_local_session_var() { return local_session_vars_; }
   inline const share::ObLocalSessionVar &get_local_session_var() const { return local_session_vars_; }
   int is_same_collection_column(const ObColumnSchemaV2 &other, bool &is_same) const;

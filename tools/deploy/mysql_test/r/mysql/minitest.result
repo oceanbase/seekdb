@@ -266,7 +266,6 @@ ob_reserved_meta_memory_percentage	10
 ob_route_policy	READONLY_ZONE_FIRST
 ob_sparse_drop_ratio_search	0
 ob_sql_work_area_percentage	5
-ob_table_access_policy	AUTO
 ob_tcp_invited_nodes	%
 ob_temp_tablespace_size_percentage	0
 ob_trace_info	
@@ -311,7 +310,6 @@ ob_read_consistency	STRONG
 ob_reserved_meta_memory_percentage	10
 ob_route_policy	READONLY_ZONE_FIRST
 ob_sql_work_area_percentage	5
-ob_table_access_policy	AUTO
 ob_tcp_invited_nodes	%
 ob_temp_tablespace_size_percentage	0
 ob_trx_idle_timeout	86400000000

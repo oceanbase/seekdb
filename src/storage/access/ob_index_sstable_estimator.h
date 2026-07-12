@@ -127,10 +127,6 @@ private:
       ObMicroBlockDataHandle &micro_handle,
       bool consider_multi_version,
        ObPartitionEst &est);
-  int cal_total_estimate_result_for_ddl(
-      blocksstable::ObSSTable &sstable,
-      const blocksstable::ObDatumRange &datum_range,
-      ObEstimatedResult &result);
   ObMicroBlockDataHandle &get_read_handle()
   {
     return micro_handles_[level_++ % DEFAULT_GET_MICRO_DATA_HANDLE_CNT];

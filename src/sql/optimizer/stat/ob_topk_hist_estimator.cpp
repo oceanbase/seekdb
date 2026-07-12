@@ -704,7 +704,6 @@ int ObTopkHistEstimator::estimate(const ObOptStatGatherParam &param,
   } else if (OB_FAIL(fill_hints(allocator, 
                                 param.tab_name_, 
                                 param.gather_vectorize_, 
-                                false, 
                                 !param.sample_info_.is_specify_sample()))) {
     LOG_WARN("failed to fill hints", K(ret));
   } else if (OB_FAIL(add_from_table(allocator, param.db_name_, param.tab_name_))) {

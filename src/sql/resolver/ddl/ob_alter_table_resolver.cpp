@@ -638,12 +638,6 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
             }
             break;
           }
-        case T_ALTER_COLUMN_GROUP_OPTION: {
-            if (OB_FAIL(resolve_alter_column_groups(*action_node))) {
-                SQL_RESV_LOG(WARN, "Resolve column group option failed!", K(ret));
-            }
-            break;
-          }
         case T_ALTER_INDEX_OPTION_EXTENDED: {
             alter_table_stmt->set_alter_table_index();
             if (OB_FAIL(resolve_extended_index_options(*action_node))) {
@@ -854,8 +848,6 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(resolve_column_group_for_column())) {
-      LOG_WARN("failed to resolve column group", K(ret));
     } else if (OB_FAIL(check_skip_index(alter_table_stmt->get_alter_table_arg().alter_table_schema_))) {
       LOG_WARN("failed to resolve skip index", K(ret));
     }
@@ -1416,7 +1408,6 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
     ParseNode *column_list_node = nullptr;
     ParseNode *table_option_node = nullptr;
     ParseNode *index_partition_option = nullptr;
-    ParseNode *colulmn_group_node = nullptr;
     bool is_index_part_specified = false;
     CHECK_COMPATIBILITY_MODE(session_info_);
     if (OB_FAIL(ret)) {
@@ -1432,7 +1423,6 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
         if (!is_fulltext_index) {
           index_partition_option = node.children_[4];
         }
-        colulmn_group_node = node.children_[5];
       }
     }
     ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
@@ -1557,20 +1547,6 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
                   index_scope_ = GLOBAL_INDEX;
                 }
                 is_index_part_specified = true;
-              }
-            }
-
-            if (OB_SUCC(ret)) {
-              if (OB_ISNULL(colulmn_group_node)) {
-                // no cg, ignore
-              } else if (T_COLUMN_GROUP != colulmn_group_node->type_ || colulmn_group_node->num_child_ <= 0) {
-                ret = OB_INVALID_ARGUMENT;
-                SQL_RESV_LOG(WARN, "invalid argument", KR(ret), K(colulmn_group_node->type_), K(colulmn_group_node->num_child_));
-              } else if (OB_ISNULL(colulmn_group_node->children_[0])) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("node is null", K(ret));
-              } else if (OB_FAIL(resolve_index_column_group(colulmn_group_node, *create_index_arg))) {
-                SQL_RESV_LOG(WARN, "resolve index column group failed", K(ret));
               }
             }
 
@@ -5666,125 +5642,6 @@ int ObAlterTableResolver::resolve_modify_all_trigger(const ParseNode &node)
   return ret;
 }
 
-int ObAlterTableResolver::resolve_column_group_for_column()
-{
-  int ret = OB_SUCCESS;
-  bool is_normal_column_store_table = false;
-  ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
-  
-  if (OB_ISNULL(alter_table_stmt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null alter_table_stmt", K(ret));
-  } else if (table_schema_->get_column_group_count() > 0) {
-    // TODO, wait to support table update from 4.1 or less
-    ObColumnGroupSchema column_group;
-    char cg_name[OB_MAX_COLUMN_GROUP_NAME_LENGTH];
-    ObArray<uint64_t> column_ids;
-    const share::schema::AlterTableSchema &alter_table_schema =
-        alter_table_stmt->get_alter_table_arg().alter_table_schema_;
-    uint64_t cur_column_group_id = table_schema_->get_max_used_column_group_id();
-    ObTableSchema::const_column_iterator tmp_begin = alter_table_schema.column_begin();
-    ObTableSchema::const_column_iterator tmp_end = alter_table_schema.column_end();
-    for (; OB_SUCC(ret) && (tmp_begin != tmp_end); tmp_begin++) {
-      column_group.reset();
-      AlterColumnSchema *column = static_cast<AlterColumnSchema *>(*tmp_begin);
-      MEMSET(cg_name, '\0', OB_MAX_COLUMN_GROUP_NAME_LENGTH);
-      if (OB_ISNULL(column)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("column should not be null", KR(ret));
-      } else if (column->alter_type_ != OB_DDL_ADD_COLUMN) { // if not add_column, skip
-      } else if (column->is_virtual_generated_column()) { // skip virtual column
-      } else if (0 >= snprintf(cg_name, OB_MAX_COLUMN_GROUP_NAME_LENGTH, "%s_%s",
-          OB_COLUMN_GROUP_NAME_PREFIX, column->get_column_name_str().ptr())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to snprintf", K(ret), KPC(column));
-      // real column_id will be generated later, thus column_ids is empty here
-      } else if (OB_FAIL(build_column_group(*table_schema_, ObColumnGroupType::SINGLE_COLUMN_GROUP,
-            cg_name, column_ids, ++cur_column_group_id, column_group))) {
-        LOG_WARN("failed to build column group", K(ret), KPC(column));
-      } else if (OB_FAIL(alter_table_stmt->add_column_group(column_group))) {
-        // only used for duplicate column in sql
-        if (OB_HASH_EXIST == ret) {
-          ret = OB_ERR_COLUMN_DUPLICATE;
-          LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, column->get_column_name_str().length(), column->get_column_name_str().ptr());
-          LOG_WARN("duplicate column name", K(ret), K(column));
-        } else {
-          LOG_WARN("failed to add column group", K(ret));
-        }
-      } else if (OB_FAIL(column->set_column_group_name(cg_name))) {
-        LOG_WARN("failed to set column group name", K(ret), KPC(column));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObAlterTableResolver::resolve_alter_column_groups(const ParseNode &node)
-{
-  int ret = OB_SUCCESS;
-  ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
-  if (OB_ISNULL(alter_table_stmt) || OB_UNLIKELY(T_ALTER_COLUMN_GROUP_OPTION != node.type_ ||
-                                                 OB_ISNULL(node.children_))) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "get alter table stmt failed", K(ret), K(node.type_), KP(node.children_));
-  } else {
-    const ParseNode *column_group_node = node.children_[0];
-    const ParseNode *delayed_node = nullptr;
-
-    ObAlterTableArg &alter_table_arg = alter_table_stmt->get_alter_table_arg();
-    share::schema::AlterTableSchema &alter_table_schema = alter_table_arg.alter_table_schema_;
-    const uint64_t column_cnt = table_schema_->get_column_count();
-    
-
-    if (OB_ISNULL(column_group_node) || column_group_node->num_child_ <= 0) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "invalid parse tree, column group node is null or have no children!",
-                   K(ret), KP(column_group_node));
-    } else if (!need_column_group(*table_schema_)) {
-      ret = OB_NOT_SUPPORTED;
-      SQL_RESV_LOG(WARN, "table don't support alter column group", K(ret));
-    } else {
-      alter_table_schema.set_column_store(true);
-      if (column_group_node->type_ == T_COLUMN_GROUP_ADD) {
-        alter_table_stmt->get_alter_table_arg().alter_table_schema_.alter_type_ = OB_DDL_ADD_COLUMN_GROUP;
-      } else if (column_group_node->type_ == T_COLUMN_GROUP_DROP) {
-        alter_table_stmt->get_alter_table_arg().alter_table_schema_.alter_type_ = OB_DDL_DROP_COLUMN_GROUP;
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "invalid parse tree ", K(ret), K(column_group_node->type_));
-      }
-
-      if (OB_FAIL(ret)) {
-      } else if (node.num_child_ > 1) {
-        if (FALSE_IT(delayed_node = node.children_[1])) {
-        } else if (OB_ISNULL(delayed_node)) {
-          alter_table_stmt->get_alter_table_arg().is_alter_column_group_delayed_ = false;
-        } else if (T_ALTER_COLUMN_GROUP_DELAYED == delayed_node->type_) {
-          if (T_COLUMN_GROUP_DROP == column_group_node->type_) {
-            ret = OB_NOT_SUPPORTED;
-            SQL_RESV_LOG(WARN, "drop column group in delayed mode is not supported", K(ret));
-          } else {
-            alter_table_stmt->get_alter_table_arg().is_alter_column_group_delayed_ = true;
-            SQL_RESV_LOG(INFO, "set is_alter_column_group_delayed_ to true");
-          } 
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "invalid alter column group delayed type", K(ret), "type", delayed_node->type_);
-        }
-      }
-
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(parse_column_group(column_group_node, 
-                                            *table_schema_, 
-                                            alter_table_schema, 
-                                            alter_table_stmt->get_alter_table_arg().is_alter_column_group_delayed_))) {
-        LOG_WARN("fail to parse column gorup list", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
 int ObAlterTableResolver::check_mysql_rename_column(const AlterColumnSchema &alter_column_schema,
                                                     const ObTableSchema &origin_table_schema,
                                                     ObAlterTableStmt &alter_table_stmt)
@@ -5897,20 +5754,11 @@ int ObAlterTableResolver::check_semistruct_encoding_type(const ObTableSchema &or
   // skip check if semistruct_encoding is disable 
   } else if ((alter_table_bitset_.has_member(obcall::ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE) && ! alter_schema.get_semistruct_encoding_type().is_enable_semistruct_encoding())
     || (! alter_table_bitset_.has_member(obcall::ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE) && ! origin_schema.get_semistruct_encoding_type().is_enable_semistruct_encoding())) {
-  } else if (alter_table_bitset_.has_member(obcall::ObAlterTableArg::STORE_FORMAT)) {
-    if (alter_schema.get_row_store_type() != CS_ENCODING_ROW_STORE) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("semistruct_encoding is not support if cs encoding is not set", K(ret),
-          K(origin_schema.get_row_store_type()), K(alter_schema.get_semistruct_encoding_type()));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "semistruct_encoding is not support if cs encoding is not set");
-    }
   } else {
-    if (origin_schema.get_row_store_type() != CS_ENCODING_ROW_STORE) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("semistruct_encoding is not support if cs encoding is not set", K(ret),
-          K(origin_schema.get_row_store_type()), K(alter_schema.get_semistruct_encoding_type()));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "semistruct_encoding is not support if cs encoding is not set");
-    }
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("semistruct encoding is not supported", K(ret), K(origin_schema.get_semistruct_encoding_type()),
+        K(alter_schema.get_semistruct_encoding_type()));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "semistruct encoding is not supported");
   }
   return ret;
 }

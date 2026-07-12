@@ -153,7 +153,7 @@ ObObjType ObTruncateWhiteFilterNode::get_filter_arg_obj_type(int64_t arg_idx) co
 
 // ------------------------------------------------- ObTruncateWhiteFilterExecutor -------------------------------------------------
 
-const ObIArray<ObExpr *> *ObTruncateWhiteFilterExecutor::get_cg_col_exprs() const
+const ObIArray<ObExpr *> *ObTruncateWhiteFilterExecutor::get_column_exprs() const
 {
   OB_ASSERT_MSG(false, "ObTruncateWhiteFilterExecutor dose not promise cg col exprs");
   return &filter_.column_exprs_;

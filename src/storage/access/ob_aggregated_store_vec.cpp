@@ -42,7 +42,7 @@ ObAggGroupVec::ObAggGroupVec(ObColumnParam* col_param, sql::ObExpr* project_expr
   : agg_cells_(),
     col_param_(col_param),
     project_expr_(project_expr),
-    agg_row_id_(OB_INVALID_CS_ROW_ID),
+    agg_row_id_(INVALID_AGG_ROW_ID),
     col_offset_(col_offset),
     col_index_(col_index),
     agg_type_flag_(),
@@ -62,7 +62,7 @@ void ObAggGroupVec::reuse()
   for (int64_t i = 0; i < agg_cells_.count(); ++i) {
     agg_cells_.at(i)->reuse();
   }
-  agg_row_id_ = OB_INVALID_CS_ROW_ID;
+  agg_row_id_ = INVALID_AGG_ROW_ID;
 }
 
 int ObAggGroupVec::eval(blocksstable::ObStorageDatum &datum, const int64_t row_count)
@@ -110,7 +110,7 @@ int ObAggGroupVec::eval_batch(
   return ret;
 }
 
-int ObAggGroupVec::fill_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg)
+int ObAggGroupVec::fill_index_info(const blocksstable::ObMicroIndexInfo &index_info)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < agg_cells_.count(); ++i) {
@@ -118,8 +118,8 @@ int ObAggGroupVec::fill_index_info(const blocksstable::ObMicroIndexInfo &index_i
     if (OB_ISNULL(agg_cell)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected null agg cell", K(ret), K(i), KP(agg_cell));
-    } else if (OB_FAIL(agg_cell->eval_index_info(index_info, is_cg))) {
-      LOG_WARN("Failed to eval index info", K(ret), K(i), K(index_info), K(is_cg), KPC(this));
+    } else if (OB_FAIL(agg_cell->eval_index_info(index_info))) {
+      LOG_WARN("Failed to eval index info", K(ret), K(i), K(index_info), KPC(this));
     }
   }
   return ret;
@@ -441,7 +441,7 @@ int ObAggregatedStoreVec::can_use_index_info(const blocksstable::ObMicroIndexInf
   return ret;
 }
 
-int ObAggregatedStoreVec::fill_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg)
+int ObAggregatedStoreVec::fill_index_info(const blocksstable::ObMicroIndexInfo &index_info)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
@@ -454,7 +454,7 @@ int ObAggregatedStoreVec::fill_index_info(const blocksstable::ObMicroIndexInfo &
       if (OB_ISNULL(agg_group)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unexpected null aggregate group", K(ret), KP(agg_group));
-      } else if (OB_FAIL(agg_group->fill_index_info(index_info, is_cg))) {
+      } else if (OB_FAIL(agg_group->fill_index_info(index_info))) {
         LOG_WARN("Failed to fill index info in aggr_group", K(ret), K(i));
       }
     }

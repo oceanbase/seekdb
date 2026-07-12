@@ -1469,7 +1469,7 @@ struct RawCompareFunctionProducer
     return cmp_funtion;
   }
 
-  static raw_compare_function_with_null produce_with_null_for_cs(
+  static raw_compare_function_with_null produce_with_null(
       const sql::ObWhiteFilterOperatorType op_type)
   {
     raw_compare_function_with_null cmp_funtion = nullptr;
@@ -1572,13 +1572,13 @@ RawCompareFunctionFactory::RawCompareFunctionFactory()
   }
 
   for (uint32_t k = 0; k < OP_TYPE_CNT; ++k) {
-    cs_functions_with_null_array_[0][k] = RawCompareFunctionProducer<0, 0>::produce_with_null_for_cs(
+    functions_with_null_array_[0][k] = RawCompareFunctionProducer<0, 0>::produce_with_null(
         static_cast<sql::ObWhiteFilterOperatorType>(k));
-    cs_functions_with_null_array_[1][k] = RawCompareFunctionProducer<0, 1>::produce_with_null_for_cs(
+    functions_with_null_array_[1][k] = RawCompareFunctionProducer<0, 1>::produce_with_null(
         static_cast<sql::ObWhiteFilterOperatorType>(k));
-    cs_functions_with_null_array_[2][k] = RawCompareFunctionProducer<0, 2>::produce_with_null_for_cs(
+    functions_with_null_array_[2][k] = RawCompareFunctionProducer<0, 2>::produce_with_null(
         static_cast<sql::ObWhiteFilterOperatorType>(k));
-    cs_functions_with_null_array_[3][k] = RawCompareFunctionProducer<0, 3>::produce_with_null_for_cs(
+    functions_with_null_array_[3][k] = RawCompareFunctionProducer<0, 3>::produce_with_null(
         static_cast<sql::ObWhiteFilterOperatorType>(k));
   }
 }
@@ -1603,14 +1603,14 @@ raw_compare_function RawCompareFunctionFactory::get_cmp_function(
   return cmp_function;
 }
 
-raw_compare_function_with_null RawCompareFunctionFactory::get_cs_cmp_function_with_null(
+raw_compare_function_with_null RawCompareFunctionFactory::get_cmp_function_with_null(
       const int32_t fix_len_tag,
       const sql::ObWhiteFilterOperatorType op_type)
 {
   raw_compare_function_with_null cmp_function = nullptr;
   if (OB_UNLIKELY(fix_len_tag < 0 || fix_len_tag >= FIX_LEN_TAG_CNT)) {
   } else {
-    cmp_function = cs_functions_with_null_array_[fix_len_tag][op_type];
+    cmp_function = functions_with_null_array_[fix_len_tag][op_type];
   }
   return cmp_function;
 }
@@ -1640,54 +1640,6 @@ class RawAggFunctionImpl
     res = res_value;
   }))
 
-  // can not use SIMD
-  OB_MULTITARGET_FUNCTION_AVX2_SSE42(
-  OB_MULTITARGET_FUNCTION_HEADER(static void), raw_min_max_function_with_null, OB_MULTITARGET_FUNCTION_BODY((
-      const unsigned char* raw_data,
-      const uint64_t null_value,
-      uint32_t from,
-      uint32_t to,
-      uint64_t &res)
-  {
-    const DataType *start_pos = reinterpret_cast<const DataType *>(raw_data);
-    const DataType *a_end = start_pos + to;
-    const DataType * __restrict a_pos = start_pos + from;
-    DataType res_value = null_value;
-    while (a_pos < a_end) {
-      if (*a_pos != null_value) {
-        if (res_value == null_value) {
-          res_value = *a_pos;
-        } else if (Op::apply(*a_pos, res_value)) {
-          res_value = *a_pos;
-        }
-      }
-      ++a_pos;
-    }
-    res = res_value;
-  }))
-
-  // can use SIMD
-  // Make sure that: res = 0 for min, res = UINT64_MAX for max
-  OB_MULTITARGET_FUNCTION_AVX2_SSE42(
-  OB_MULTITARGET_FUNCTION_HEADER(static void), raw_min_max_function_with_null_bitmap, OB_MULTITARGET_FUNCTION_BODY((
-      const unsigned char* raw_data,
-      const uint8_t *null_bitmap,
-      uint32_t from,
-      uint32_t to,
-      uint64_t &res)
-  {
-    const DataType *start_pos = reinterpret_cast<const DataType *>(raw_data);
-    const DataType *a_end = start_pos + to;
-    const DataType * __restrict a_pos = start_pos + from;
-    const uint8_t * __restrict b_pos = null_bitmap;
-    while (a_pos < a_end) {
-      if (!*b_pos && Op::apply(*a_pos, res)) {
-        res = *a_pos;
-      }
-      ++a_pos;
-      ++b_pos;
-    }
-  }))
 };
 
 template <bool IS_SIGNED, int32_t LEN_TAG>
@@ -1729,80 +1681,8 @@ struct RawAggFunctionProducer
     return min_max_function;
   }
 
-  static raw_min_max_function_with_null produce_min_max_with_null_for_cs(
-    const uint32_t type)
-  {
-    raw_min_max_function_with_null min_max_function = nullptr;
-    typedef typename ObEncodingTypeInference<IS_SIGNED, LEN_TAG>::Type DataType;
-    const bool is_supported = is_arch_supported(ObTargetArch::AVX2);
-    switch (type) {
-      case 0: // min
-#if OB_USE_MULTITARGET_CODE
-        if (is_supported) {
-          min_max_function = RawAggFunctionImpl<DataType, RawLessOp<DataType>>::raw_min_max_function_with_null_avx2;
-        } else {
-          min_max_function = RawAggFunctionImpl<DataType, RawLessOp<DataType>>::raw_min_max_function_with_null;
-        }
-#else
-        min_max_function = RawAggFunctionImpl<DataType, RawLessOp<DataType>>::raw_min_max_function_with_null;
-#endif
-        break;
-      case 1:
-#if OB_USE_MULTITARGET_CODE
-        if (is_supported) {
-          min_max_function = RawAggFunctionImpl<DataType, RawGreaterOp<DataType>>::raw_min_max_function_with_null_avx2;
-        } else {
-          min_max_function = RawAggFunctionImpl<DataType, RawGreaterOp<DataType>>::raw_min_max_function_with_null;
-        }
-#else
-        min_max_function = RawAggFunctionImpl<DataType, RawGreaterOp<DataType>>::raw_min_max_function_with_null;
-#endif
-        break;
-      default:
-        LOG_ERROR_RET(OB_ERR_UNEXPECTED, "Invalid min max type", K(type));
-        break;
-    }
-    return min_max_function;
-  }
-
-    static raw_min_max_function_with_null_bitmap produce_min_max_with_null_bitmap_for_cs(
-    const uint32_t type)
-  {
-    raw_min_max_function_with_null_bitmap min_max_function = nullptr;
-    typedef typename ObEncodingTypeInference<IS_SIGNED, LEN_TAG>::Type DataType;
-    const bool is_supported = is_arch_supported(ObTargetArch::AVX2);
-    switch (type) {
-      case 0: // min
-#if OB_USE_MULTITARGET_CODE
-        if (is_supported) {
-          min_max_function = RawAggFunctionImpl<DataType, RawLessOp<DataType>>::raw_min_max_function_with_null_bitmap_avx2;
-        } else {
-          min_max_function = RawAggFunctionImpl<DataType, RawLessOp<DataType>>::raw_min_max_function_with_null_bitmap;
-        }
-#else
-        min_max_function = RawAggFunctionImpl<DataType, RawLessOp<DataType>>::raw_min_max_function_with_null_bitmap;
-#endif
-        break;
-      case 1:
-#if OB_USE_MULTITARGET_CODE
-        if (is_supported) {
-          min_max_function = RawAggFunctionImpl<DataType, RawGreaterOp<DataType>>::raw_min_max_function_with_null_bitmap_avx2;
-        } else {
-          min_max_function = RawAggFunctionImpl<DataType, RawGreaterOp<DataType>>::raw_min_max_function_with_null_bitmap;
-        }
-#else
-        min_max_function = RawAggFunctionImpl<DataType, RawGreaterOp<DataType>>::raw_min_max_function_with_null_bitmap;
-#endif
-        break;
-      default:
-        LOG_ERROR_RET(OB_ERR_UNEXPECTED, "Invalid min max type", K(type));
-        break;
-    }
-    return min_max_function;
-  }
 };
 
-// For cs encoding, all value is unsigned
 RawAggFunctionFactory::RawAggFunctionFactory()
 {
   for (uint32_t k = 0; k < MIN_MAX_CNT; ++k) {
@@ -1811,15 +1691,6 @@ RawAggFunctionFactory::RawAggFunctionFactory()
     min_max_functions_array_[2][k] = RawAggFunctionProducer<0, 2>::produce_min_max(k);
     min_max_functions_array_[3][k] = RawAggFunctionProducer<0, 3>::produce_min_max(k);
 
-    cs_min_max_functions_with_null_array_[0][k] = RawAggFunctionProducer<0, 0>::produce_min_max_with_null_for_cs(k);
-    cs_min_max_functions_with_null_array_[1][k] = RawAggFunctionProducer<0, 1>::produce_min_max_with_null_for_cs(k);
-    cs_min_max_functions_with_null_array_[2][k] = RawAggFunctionProducer<0, 2>::produce_min_max_with_null_for_cs(k);
-    cs_min_max_functions_with_null_array_[3][k] = RawAggFunctionProducer<0, 3>::produce_min_max_with_null_for_cs(k);
-
-    cs_min_max_functions_with_null_bitmap_array_[0][k] = RawAggFunctionProducer<0, 0>::produce_min_max_with_null_bitmap_for_cs(k);
-    cs_min_max_functions_with_null_bitmap_array_[1][k] = RawAggFunctionProducer<0, 1>::produce_min_max_with_null_bitmap_for_cs(k);
-    cs_min_max_functions_with_null_bitmap_array_[2][k] = RawAggFunctionProducer<0, 2>::produce_min_max_with_null_bitmap_for_cs(k);
-    cs_min_max_functions_with_null_bitmap_array_[3][k] = RawAggFunctionProducer<0, 3>::produce_min_max_with_null_bitmap_for_cs(k);
   }
 }
 
@@ -1841,30 +1712,5 @@ raw_min_max_function RawAggFunctionFactory::get_min_max_function(
   return min_max_function;
 }
 
-raw_min_max_function_with_null RawAggFunctionFactory::get_cs_min_max_function_with_null(
-    const int32_t fix_len_tag,
-    const bool is_min)
-{
-  raw_min_max_function_with_null min_max_function = nullptr;
-  if (OB_UNLIKELY(fix_len_tag < 0 || fix_len_tag >= FIX_LEN_TAG_CNT)) {
-  } else {
-    min_max_function = cs_min_max_functions_with_null_array_[fix_len_tag][is_min ? 0 : 1];
-  }
-  return min_max_function;
-}
-
-raw_min_max_function_with_null_bitmap RawAggFunctionFactory::get_cs_min_max_function_with_null_bitmap(
-    const int32_t fix_len_tag,
-    const bool is_min)
-{
-  raw_min_max_function_with_null_bitmap min_max_function = nullptr;
-  if (OB_UNLIKELY(fix_len_tag < 0 || fix_len_tag >= FIX_LEN_TAG_CNT)) {
-  } else {
-    min_max_function = cs_min_max_functions_with_null_bitmap_array_[fix_len_tag][is_min ? 0 : 1];
-  }
-  return min_max_function;
-}
-
 } // end namespace blocksstable
 } // end namespace oceanbase
-

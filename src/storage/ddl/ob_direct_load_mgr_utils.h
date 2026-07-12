@@ -49,7 +49,6 @@ static bool need_process_vec_index(const ObIndexType & index_type)
   static int check_major_exist(const ObLSID &ls_id, const ObTabletID &talbet_id, bool is_major_eixst);
   static int generate_merge_param(const ObTabletDDLCompleteArg &arg, ObDDLTableMergeDagParam &merge_param);
   static int generate_merge_param(const ObTabletDDLCompleteMdsUserData &data, ObTablet &tablet, ObDDLTableMergeDagParam &merge_param);
-  static int check_cs_replica_exist(const ObLSID &ls_id, const ObTabletID &tablet_id, bool &is_cs_replica_exist);
   static int is_ddl_need_major_merge(const ObTablet &tablet, bool &ddl_need_merging);
   static int alloc_direct_load_mgr(ObIAllocator &allocator, const ObDirectLoadType &direct_load_type, ObBaseTabletDirectLoadMgr *&direct_load_mgr);
   static int prepare_schema_item_for_vec_idx_data(ObSchemaGetterGuard &schema_guard,

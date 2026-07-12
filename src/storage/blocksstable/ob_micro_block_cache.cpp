@@ -204,9 +204,7 @@ int ObMicroBlockCacheValue::deep_copy(char *buf, const int64_t buf_len, ObIKVCac
       switch (block_data_.type_) {
       case ObMicroBlockData::Type::DATA_BLOCK: {
         MEMCPY(new_buf + block_data_.get_buf_size(), block_data_.get_extra_buf(), block_data_.get_extra_size());
-        if (block_data_.get_store_type() == ObRowStoreType::CS_ENCODING_ROW_STORE) {
-          // no need update cached coder for CS_ENCODING_ROW_STORE
-        } else if (OB_FAIL(ObMicroBlockDecoder::update_cached_decoders(
+        if (OB_FAIL(ObMicroBlockDecoder::update_cached_decoders(
             new_buf + block_data_.get_buf_size(),
             block_data_.get_extra_size(),
             block_data_.get_buf(),
@@ -518,24 +516,12 @@ int ObIMicroBlockIOCallback::read_block_and_copy(
 {
   int ret = OB_SUCCESS;
   block_data.type_ = cache_->get_type();
-  // In normal cases, full_transform is not required if not using block cache,
-  // The ObMicroBlockCSDecoder can do part_transform and use the memory whose life cycle
-  // is consistent with decoder. However, at present, there are cases where rows obtained from
-  // index block or data block are continued to be used after decoder deconstruction,
-  // so the full_transform is also done here.
-  if (ObStoreFormat::is_row_store_type_with_cs_encoding(static_cast<ObRowStoreType>(header.row_store_type_))) {
-    if (OB_FAIL(reader.decrypt_and_full_transform_data(header, block_des_meta_,
-        buffer, size, block_data.get_buf(), block_data.get_buf_size(), nullptr))) {
-      LOG_WARN("fail to decrypt_and_full_transform_data", K(ret), K(header), K_(block_des_meta));
-    }
-  } else {
-    bool is_compressed = false;
-    if (OB_FAIL(reader.do_decrypt_and_decompress_data(
+  bool is_compressed = false;
+  if (OB_FAIL(reader.do_decrypt_and_decompress_data(
         header, block_des_meta_, buffer, size,
         block_data.get_buf(), block_data.get_buf_size(),
         is_compressed, false/*need deep copy*/, nullptr))) {
-      LOG_WARN("fail to do decrypt and decompress data", K(ret));
-    }
+    LOG_WARN("fail to do decrypt and decompress data", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -852,13 +838,7 @@ int ObSyncSingleMicroBLockIOCallback::inner_process(const char *data_buffer, con
       ObMicroBlockHeader header;
       if (OB_FAIL(header.deserialize_and_check_header(src_block_buf, src_buf_size))) {
         LOG_WARN("fail to deserialize_and_check_header", K(ret), KP(src_block_buf), K(src_buf_size));
-      } else if (ObStoreFormat::is_row_store_type_with_cs_encoding(static_cast<ObRowStoreType>(header.row_store_type_))) {
-        if (OB_FAIL(macro_reader_->decrypt_and_full_transform_data(
-            header, block_des_meta_, src_block_buf, src_buf_size,
-            block_data_->get_buf(), block_data_->get_buf_size(), allocator_))) {
-          LOG_WARN("fail to decrypt_and_full_transform_data", K(ret), K(header), K(block_des_meta_), K(is_data_block_));
-        }
-      } else { // not cs_encoding
+      } else {
         if (OB_FAIL(macro_reader_->do_decrypt_and_decompress_data(
             header, block_des_meta_, src_block_buf, src_buf_size, block_data_->get_buf(),
             block_data_->get_buf_size(), is_compressed, true /* need_deep_copy */, allocator_))) {
@@ -1052,8 +1032,6 @@ ObMicroBlockBufTransformer::ObMicroBlockBufTransformer(
                                         const char *buf,
                                         const int64_t buf_size)
   : is_inited_(false),
-    is_cs_full_transfrom_(ObStoreFormat::is_row_store_type_with_cs_encoding(
-      static_cast<ObRowStoreType>(header.row_store_type_))),
     block_des_meta_(block_des_meta),
     reader_(reader), header_(header),
     payload_buf_(buf + header.header_size_),
@@ -1063,25 +1041,8 @@ ObMicroBlockBufTransformer::ObMicroBlockBufTransformer(
 
 int ObMicroBlockBufTransformer::init()
 {
-  int ret = OB_SUCCESS;
-  if (is_cs_full_transfrom_) {
-    bool is_compressed = false;
-    is_compressed = header_.is_compressed_data();
-    if (OB_SUCC(ret)) {
-      if (OB_UNLIKELY(is_compressed)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("cs encoding must has no block-level compression", K(ret), K(header_));
-      } else if (OB_FAIL(transformer_.init(&header_, payload_buf_, payload_size_))) {
-        LOG_WARN("fail to init cs micro block transformer", K(ret), K_(header));
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    is_inited_ = true;
-  }
-
-  return ret;
+  is_inited_ = true;
+  return OB_SUCCESS;
 }
 
 int ObMicroBlockBufTransformer::get_buf_size(int64_t &buf_size) const
@@ -1090,10 +1051,8 @@ int ObMicroBlockBufTransformer::get_buf_size(int64_t &buf_size) const
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
-  } else if (!is_cs_full_transfrom_) {
+  } else {
     buf_size = header_.header_size_ + header_.data_length_;
-  } else if (OB_FAIL(transformer_.calc_full_transform_size(buf_size))) {
-    LOG_WARN("fail to calc transformed size", K(ret), K_(header));
   }
   return ret;
 }
@@ -1107,7 +1066,7 @@ int ObMicroBlockBufTransformer::transfrom(char *block_buf, const int64_t buf_siz
   } else if (OB_UNLIKELY(nullptr == block_buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(block_buf), K(buf_size));
-  } else if (!is_cs_full_transfrom_) {
+  } else {
     ObMicroBlockHeader *micro_header = nullptr;
     int64_t pos = 0;
     if (OB_FAIL(header_.deep_copy(block_buf, buf_size, pos, micro_header))) {
@@ -1120,14 +1079,6 @@ int ObMicroBlockBufTransformer::transfrom(char *block_buf, const int64_t buf_siz
           LOG_WARN("Fail to decompress data with preallocated buffer", K(ret), K_(header));
         }
       }
-    }
-  } else { // is_cs_full_transfrom_
-    int64_t pos = 0;
-    if (OB_FAIL(transformer_.full_transform(block_buf, buf_size, pos))) {
-      LOG_WARN("fail to transfrom cs encoding mirco blcok", K(ret));
-    } else if (OB_UNLIKELY(pos != buf_size)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pos should equal to buf_size", K(ret), K(pos), K(buf_size));
     }
   }
 
@@ -1290,13 +1241,7 @@ int ObDataMicroBlockCache::write_extra_buf(const ObRowStoreType row_store_type,
   int ret = OB_SUCCESS;
   int64_t decoder_size = 0;
 
-  if (ObStoreFormat::is_row_store_type_with_cs_encoding(row_store_type)) {
-    if (OB_FAIL(ObMicroBlockCSDecoder::get_decoder_cache_size(block_buf, block_size, decoder_size))) {
-      LOG_WARN("Fail to get decoder cache size", K(ret));
-    } else if (OB_FAIL(ObMicroBlockCSDecoder::cache_decoders(extra_buf, decoder_size, block_buf, block_size))) {
-      LOG_WARN("Fail to set cache decoder", K(ret));
-    }
-  } else if (OB_FAIL(ObMicroBlockDecoder::get_decoder_cache_size(block_buf, block_size, decoder_size))) {
+  if (OB_FAIL(ObMicroBlockDecoder::get_decoder_cache_size(block_buf, block_size, decoder_size))) {
     LOG_WARN("Fail to get decoder cache size", K(ret));
   } else if (OB_FAIL(ObMicroBlockDecoder::cache_decoders(extra_buf, decoder_size, block_buf, block_size))) {
     LOG_WARN("Fail to set cache decoder", K(ret));
@@ -1403,17 +1348,10 @@ int ObDataMicroBlockCache::reserve_kvpair(
   bool need_decoder = false;
   const int64_t key_size = sizeof(ObMicroBlockCacheKey);
   const ObRowStoreType row_store_type = static_cast<ObRowStoreType>(micro_block_desc.header_->row_store_type_);
-  ObCSMicroBlockTransformer transformer;
   if (OB_UNLIKELY(!micro_block_desc.is_valid() || inst_handle.is_valid()
                   || cache_handle.is_valid() || nullptr != kvpair)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(micro_block_desc), K(inst_handle), K(cache_handle), KP(kvpair));
-  } else if (ObStoreFormat::is_row_store_type_with_cs_encoding(row_store_type)) {
-    if (OB_FAIL(transformer.init(micro_block_desc.header_, micro_block_desc.buf_, micro_block_desc.buf_size_))) {
-      LOG_WARN("fail to init transformer", K(ret), K(micro_block_desc));
-    } else if (OB_FAIL(transformer.calc_full_transform_size(block_size))) {
-      LOG_WARN("fail to calc_full_transform_size", K(ret), K(micro_block_desc));
-    }
   } else {
     block_size = micro_block_desc.header_->header_size_ + micro_block_desc.data_size_;
   }
@@ -1429,15 +1367,8 @@ int ObDataMicroBlockCache::reserve_kvpair(
       char *block_buf = reinterpret_cast<char *>(kvpair->value_) + sizeof(ObMicroBlockCacheValue);
       kvpair->key_ = new (kvpair->key_) ObMicroBlockCacheKey();
       ObMicroBlockCacheValue *cache_value = new (kvpair->value_) ObMicroBlockCacheValue(block_buf, block_size);
-      int64_t pos = 0;
-      if (ObStoreFormat::is_row_store_type_with_cs_encoding(row_store_type)) {
-        if (OB_FAIL(transformer.full_transform(block_buf, block_size, pos))) {
-          LOG_WARN("fail to full transform", K(ret), KP(block_buf), K(block_size));
-        }
-      } else {
-        MEMCPY(block_buf, micro_block_desc.header_, micro_block_desc.header_->header_size_);
-        MEMCPY(block_buf + micro_block_desc.header_->header_size_, micro_block_desc.buf_, micro_block_desc.buf_size_);
-      }
+      MEMCPY(block_buf, micro_block_desc.header_, micro_block_desc.header_->header_size_);
+      MEMCPY(block_buf + micro_block_desc.header_->header_size_, micro_block_desc.buf_, micro_block_desc.buf_size_);
     }
   }
 

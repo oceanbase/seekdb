@@ -104,33 +104,31 @@ namespace blocksstable
   STORAGE_OBJECT_TYPE_INFO(SHARED_MAJOR_DATA_MACRO, "SHARED_MAJOR_DATA_MACRO", false/*is_pin_local*/, false/*is_read_through*/, \
     /*is_valid second_id:tablet_id, third_id:seq_id, fourth_id:N/A */ \
     ((file_id_.second_id() > 0) && (file_id_.second_id() < INT64_MAX) && (file_id_.third_id() >= 0)), \
-    /*to_local_path_format: shared_major_macro_cache/tablet_id_cg_id_macro_seq_id_data */ \
-    (databuff_printf(path_, length, pos, "%s/%s/%ld_%ld_%ld_%s", \
+    /*to_local_path_format: shared_major_macro_cache/tablet_id_macro_seq_id_data */ \
+    (databuff_printf(path_, length, pos, "%s/%s/%ld_%ld_%s", \
                      OB_DIR_MGR.get_local_cache_root_dir(), \
-                     MAJOR_DATA_DIR_STR, file_id_.second_id(), file_id_.column_group_id(), \
-                     file_id_.third_id(), DATA_MACRO_DIR_STR)), \
-    /*to_remote_path_format: cluster_id/tablet/tablet_id/major/sstable/cg_id/data/macro_seq_id */ \
-    (databuff_printf(path_, length, pos, "%s/%s_%ld/%s/%ld/%s/%s/%s_%ld/%s/%ld", \
+                     MAJOR_DATA_DIR_STR, file_id_.second_id(), file_id_.third_id(), DATA_MACRO_DIR_STR)), \
+    /*to_remote_path_format: cluster_id/tablet/tablet_id/major/sstable/data/macro_seq_id */ \
+    (databuff_printf(path_, length, pos, "%s/%s_%ld/%s/%ld/%s/%s/%s/%ld", \
                      object_storage_root_dir, CLUSTER_DIR_STR, cluster_id, \
                      TABLET_DIR_STR, file_id_.second_id(), \
-                     MAJOR_DIR_STR, SHARED_TABLET_SSTABLE_DIR_STR, COLUMN_GROUP_STR, \
-                     file_id_.column_group_id(), DATA_MACRO_DIR_STR, file_id_.third_id())), \
+                     MAJOR_DIR_STR, SHARED_TABLET_SSTABLE_DIR_STR, \
+                     DATA_MACRO_DIR_STR, file_id_.third_id())), \
     /*get_parent_dir*/OB_NOT_SUPPORTED, \
     /*create_parent_dir*/OB_NOT_SUPPORTED) \
   STORAGE_OBJECT_TYPE_INFO(SHARED_MAJOR_META_MACRO, "SHARED_MAJOR_META_MACRO", false/*is_pin_local*/, false/*is_read_through*/, \
     /*is_valid second_id:tablet_id, third_id:seq_id, fourth_id:N/A */ \
     ((file_id_.second_id() > 0) && (file_id_.second_id() < INT64_MAX) && (file_id_.third_id() >= 0)), \
-    /*to_local_path_format: shared_major_macro_cache/tablet_id_cg_id_macro_seq_id_meta */ \
-    (databuff_printf(path_, length, pos, "%s/%s/%ld_%ld_%ld_%s", \
+    /*to_local_path_format: shared_major_macro_cache/tablet_id_macro_seq_id_meta */ \
+    (databuff_printf(path_, length, pos, "%s/%s/%ld_%ld_%s", \
                      OB_DIR_MGR.get_local_cache_root_dir(), \
-                     MAJOR_DATA_DIR_STR, file_id_.second_id(), file_id_.column_group_id(), \
-                     file_id_.third_id(), META_MACRO_DIR_STR)), \
-    /*to_remote_path_format: cluster_id/tablet/tablet_id/major/sstable/cg_id/meta/macro_seq_id */ \
-    (databuff_printf(path_, length, pos, "%s/%s_%ld/%s/%ld/%s/%s/%s_%ld/%s/%ld", \
+                     MAJOR_DATA_DIR_STR, file_id_.second_id(), file_id_.third_id(), META_MACRO_DIR_STR)), \
+    /*to_remote_path_format: cluster_id/tablet/tablet_id/major/sstable/meta/macro_seq_id */ \
+    (databuff_printf(path_, length, pos, "%s/%s_%ld/%s/%ld/%s/%s/%s/%ld", \
                      object_storage_root_dir, CLUSTER_DIR_STR, cluster_id, \
                      TABLET_DIR_STR, file_id_.second_id(), \
-                     MAJOR_DIR_STR, SHARED_TABLET_SSTABLE_DIR_STR, COLUMN_GROUP_STR, \
-                     file_id_.column_group_id(), META_MACRO_DIR_STR, file_id_.third_id())), \
+                     MAJOR_DIR_STR, SHARED_TABLET_SSTABLE_DIR_STR, \
+                     META_MACRO_DIR_STR, file_id_.third_id())), \
     /*get_parent_dir*/OB_NOT_SUPPORTED, \
     /*create_parent_dir*/OB_NOT_SUPPORTED) \
   STORAGE_OBJECT_TYPE_INFO(TMP_FILE, "TMP_FILE", false/*is_pin_local*/, false/*is_read_through*/, \
@@ -452,19 +450,6 @@ namespace blocksstable
                      file_id_.second_id(), get_storage_objet_type_str(object_type))), \
     /*get_parent_dir*/OB_NOT_SUPPORTED, \
     /*create_parent_dir*/OB_NOT_SUPPORTED) \
-  STORAGE_OBJECT_TYPE_INFO(CHECKSUM_ERROR_DUMP_MACRO, "CHECKSUM_ERROR_DUMP_MACRO", false/*is_pin_local*/, true/*is_read_through*/, \
-    /*is_valid second_id:tablet_id, third_id:compaction_scn, fourth_id:block_seq */ \
-    ((file_id_.second_id() > 0) && (file_id_.second_id() < INT64_MAX) && (file_id_.third_id() >= 0) && (file_id_.third_id() < INT64_MAX) && (file_id_.fourth_id() >= 0) && (file_id_.fourth_id() < INT64_MAX)), \
-    /*to_local_path_format*/OB_NOT_SUPPORTED, \
-    /*to_remote_path_format: cluster_id/tablet/tablet_id/major/sstable/cg_id/checksum_error_macro/svr_id_compaction_scn_block_id */ \
-    (databuff_printf(path_, length, pos, "%s/%s_%ld/%s/%ld/%s/%s/%s_%ld/%s/%ld_%ld_%ld", \
-                     object_storage_root_dir, CLUSTER_DIR_STR, cluster_id, \
-                     TABLET_DIR_STR, file_id_.second_id()/*tablet_id*/, \
-                     MAJOR_DIR_STR, SHARED_TABLET_SSTABLE_DIR_STR, \
-                     COLUMN_GROUP_STR, file_id_.column_group_id(), CKM_ERROR_DIR_STR, \
-                     server_id, file_id_.third_id()/*compaction_scn*/, file_id_.fourth_id()/*block_seq*/)), \
-    /*get_parent_dir*/OB_NOT_SUPPORTED, \
-    /*create_parent_dir*/OB_NOT_SUPPORTED) \
   STORAGE_OBJECT_TYPE_INFO(SHARED_MICRO_DATA_MACRO, "SHARED_MICRO_DATA_MACRO", false/*is_pin_local*/, false/*is_read_through*/, \
     /*is_valid*/false, \
     /*to_local_path_format*/OB_NOT_SUPPORTED, \
@@ -602,8 +587,6 @@ public:
   void set_storage_object_type(const uint64_t storage_object_type) { storage_object_type_ = storage_object_type; }
   int64_t incarnation_id() const { return incarnation_id_; }
   void set_incarnation_id(const uint64_t incarnation_id) { incarnation_id_ = incarnation_id; }
-  int64_t column_group_id() const { return column_group_id_; }
-  void set_column_group_id(const uint64_t column_group_id) { column_group_id_ = column_group_id; }
   int64_t macro_transfer_seq() const { return macro_transfer_seq_; }  
   void set_macro_transfer_seq(const int64_t macro_transfer_seq) { macro_transfer_seq_ = macro_transfer_seq; }
   uint64_t tenant_seq() const { return tenant_seq_; }  
@@ -649,8 +632,7 @@ public:
   static const uint64_t SF_BIT_WRITE_SEQ = 52;
   static const uint64_t SF_BIT_STORAGE_OBJECT_TYPE = 8;
   static const uint64_t SF_BIT_INCARNATION_ID = 24;
-  static const uint64_t SF_BIT_COLUMN_GROUP_ID = 16;
-  static const uint64_t SF_BIT_RESERVED = 4;
+  static const uint64_t SF_BIT_RESERVED = 20;
   static const uint64_t SF_BIT_ID_MODE = 8;
   static const uint64_t SF_BIT_VERSION = 4;
   static const uint64_t SF_BIT_TRANSFER_SEQ = 20;
@@ -680,7 +662,6 @@ private:
     struct {
       uint64_t storage_object_type_ : SF_BIT_STORAGE_OBJECT_TYPE;
       uint64_t incarnation_id_  : SF_BIT_INCARNATION_ID;
-      uint64_t column_group_id_ : SF_BIT_COLUMN_GROUP_ID;
       uint64_t ss_reserved_ : SF_BIT_RESERVED;
       uint64_t ss_id_mode_   : SF_BIT_ID_MODE;
       uint64_t ss_version_   : SF_BIT_VERSION;

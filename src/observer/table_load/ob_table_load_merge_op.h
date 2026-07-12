@@ -42,7 +42,6 @@ struct ObTableLoadMergeOpType
   DEF(INDEXES_TABLE, )                       \
   DEF(MERGE_DATA, )                          \
   DEF(DEL_LOB, )                             \
-  DEF(RESCAN, )                              \
   DEF(MEM_SORT, )                            \
   DEF(COMPACT_TABLE, )                       \
   DEF(INSERT_SSTABLE, )
@@ -62,7 +61,6 @@ struct ObTableLoadMergeOpType
   DEF(ObTableLoadMergeOpType::INDEXES_TABLE, ObTableLoadMergeIndexesTableOp)                   \
   DEF(ObTableLoadMergeOpType::MERGE_DATA, ObTableLoadMergeDataOp)                              \
   DEF(ObTableLoadMergeOpType::DEL_LOB, ObTableLoadMergeDelLobOp)                               \
-  DEF(ObTableLoadMergeOpType::RESCAN, ObTableLoadMergeRescanOp)                                \
   DEF(ObTableLoadMergeOpType::MEM_SORT, ObTableLoadMergeMemSortOp)                             \
   DEF(ObTableLoadMergeOpType::COMPACT_TABLE, ObTableLoadMergeCompactTableOp)                   \
   DEF(ObTableLoadMergeOpType::INSERT_SSTABLE, ObTableLoadMergeInsertSSTableOp)

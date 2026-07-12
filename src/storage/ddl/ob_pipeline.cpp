@@ -34,18 +34,18 @@ ObChunk::~ObChunk()
     ob_free(direct_load_batch_rows_);
     direct_load_batch_rows_ = nullptr;
     type_ = INVALID_TYPE;
-  } else if (CG_ROW_TMP_FILES == type_ && nullptr != cg_row_file_arr_) {
-    for (int64_t i = 0; i < cg_row_file_arr_->count(); ++i) {
-      ObCGRowFile *&cg_row_file = cg_row_file_arr_->at(i);
-      if (nullptr != cg_row_file) {
-        cg_row_file->~ObCGRowFile();
-        ob_free(cg_row_file);
-        cg_row_file = nullptr;
+  } else if (DDL_ROW_TMP_FILES == type_ && nullptr != row_file_arr_) {
+    for (int64_t i = 0; i < row_file_arr_->count(); ++i) {
+      ObDDLRowFile *&row_file = row_file_arr_->at(i);
+      if (nullptr != row_file) {
+        row_file->~ObDDLRowFile();
+        ob_free(row_file);
+        row_file = nullptr;
       }
     }
-    cg_row_file_arr_->~ObArray<ObCGRowFile *>();
-    ob_free(cg_row_file_arr_);
-    cg_row_file_arr_ = nullptr;
+    row_file_arr_->~ObArray<ObDDLRowFile *>();
+    ob_free(row_file_arr_);
+    row_file_arr_ = nullptr;
     type_ = INVALID_TYPE;
   } else if (DIRECT_LOAD_ROW_ARRAY == type_) {
     OB_DELETE(ObTableLoadTabletObjRowArray, ObMemAttr("TLD_RowArray"), row_array_);
@@ -64,9 +64,8 @@ bool ObChunk::is_valid() const
   if (bret) {
     switch (type_) {
       case ChunkType::DATUM_ROW:
-      case ChunkType::MACRO_BUFFER:
       case ChunkType::DIRECT_LOAD_BATCH_DATUM_ROWS:
-      case ChunkType::CG_ROW_TMP_FILES:
+      case ChunkType::DDL_ROW_TMP_FILES:
       case ChunkType::BATCH_DATUM_ROWS:
       case ChunkType::DIRECT_LOAD_ROW_ARRAY:
       case ChunkType::TASK_BATCH_INFO:

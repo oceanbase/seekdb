@@ -164,8 +164,6 @@ private:
                                     const ObTableSchema *left_table_schema, bool &is_valid);
   int check_broadcast_table_valid(const ObSelectStmt &stmt, const ObTableSchema *right_table_schema,
                                   bool &is_valid);
-  int check_column_store_valid(const ObSelectStmt &stmt, const ObTableSchema *left_table_schema,
-                               const ObTableSchema *right_table_schema, bool &is_valid);
   static const char *get_table_type_str(const TableItem::TableType type);
   static bool is_child_refresh_type_supported(const ObMVRefreshableType refresh_type);
   int check_union_all_refresh_type(const ObSelectStmt &stmt, ObMVRefreshableType &refresh_type);

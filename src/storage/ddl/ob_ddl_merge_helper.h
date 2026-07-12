@@ -33,6 +33,18 @@ namespace oceanbase
 namespace storage
 {
 class ObSNDDLMergeHelperV2;
+struct ObDDLSliceRange
+{
+  ObDDLSliceRange() : start_slice_idx_(-1), end_slice_idx_(-1) {}
+  ObDDLSliceRange(const int64_t start_slice_idx, const int64_t end_slice_idx)
+    : start_slice_idx_(start_slice_idx), end_slice_idx_(end_slice_idx) {}
+  bool is_valid() const { return start_slice_idx_ >= 0 && end_slice_idx_ >= start_slice_idx_; }
+  TO_STRING_KV(K(start_slice_idx_), K(end_slice_idx_));
+
+  int64_t start_slice_idx_;
+  int64_t end_slice_idx_;
+};
+
 class ObIDDLMergeHelper
 {
 public:
@@ -61,22 +73,19 @@ public:
   }
   virtual int process_prepare_task(ObIDag *dag,
                                    ObDDLTabletMergeDagParamV2 &ddl_merge_param,
-                                   ObIArray<ObTuple<int64_t, int64_t, int64_t>> &cg_slices) = 0 ;
-  virtual int merge_cg_slice(ObIDag* dag,
-                             ObDDLTabletMergeDagParamV2 &merge_param,
-                             const int64_t cg_idx,
-                             const int64_t start_slice,
-                             const int64_t end_slice) 
+                                   ObIArray<ObDDLSliceRange> &slice_ranges) = 0;
+  virtual int merge_slice(ObIDag* dag,
+                          ObDDLTabletMergeDagParamV2 &merge_param,
+                          const int64_t start_slice,
+                          const int64_t end_slice)
   { return OB_NOT_SUPPORTED; }
   virtual int assemble_sstable(ObDDLTabletMergeDagParamV2 &param)
   { return OB_NOT_SUPPORTED; }
   virtual int freeze_ddl_kv(ObDDLTabletMergeDagParamV2 &param);
 
   virtual int prepare_ddl_param(const ObDDLTabletMergeDagParamV2 &merge_param,
-                                const int64_t cg_idx,
                                 ObTabletDDLParam &ddl_param);
   virtual int prepare_ddl_param(const ObDDLTabletMergeDagParamV2 &merge_param,
-                                const int64_t cg_idx, 
                                 const int64_t start_slice_idx,
                                 const int64_t end_slice_idx,
                                 ObTabletDDLParam &ddl_param);
@@ -96,12 +105,11 @@ public:
   virtual ~ObSNDDLMergeHelperV2() {}
   int process_prepare_task(ObIDag *dag,
                            ObDDLTabletMergeDagParamV2 &ddl_merge_param,
-                           ObIArray<ObTuple<int64_t, int64_t, int64_t>> &cg_slices) override;
-  int merge_cg_slice(ObIDag* dag,
-                     ObDDLTabletMergeDagParamV2 &merge_param,
-                     const int64_t cg_idx,
-                     const int64_t start_slice,
-                     const int64_t end_slice);
+                           ObIArray<ObDDLSliceRange> &slice_ranges) override;
+  int merge_slice(ObIDag* dag,
+                  ObDDLTabletMergeDagParamV2 &merge_param,
+                  const int64_t start_slice,
+                  const int64_t end_slice) override;
   int assemble_sstable(ObDDLTabletMergeDagParamV2 &param) override;
 
   int get_rec_scn(ObDDLTabletMergeDagParamV2 &merge_param) override;

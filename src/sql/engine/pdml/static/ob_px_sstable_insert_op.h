@@ -28,9 +28,9 @@ typedef std::pair<share::ObLSID, common::ObTabletID> LSTabletIDPair;
 struct ObInsertMonitor;
 struct ObTabletSliceParam;
 class ObDirectLoadMgrAgent;
-class ObColumnClusteredDag;
+class ObDDLInsertDag;
 class ObISliceWriter;
-class ObHeapCsSliceWriter;
+class ObHeapBatchSliceWriter;
 struct ObDDLAutoincParam;
 }
 
@@ -138,9 +138,9 @@ protected:
   int init_tablet_autoinc_param(const ObTabletID &tablet_id, const int64_t slice_idx, ObDDLAutoincParam &autoinc_param);
   int locate_exprs();
   int check_need_idempotence();
-  int get_or_create_heap_writer(const ObTabletID &tablet_id, const bool is_append_batch, ObISliceWriter *&slice_writer);
+  int get_or_create_heap_writer(const ObTabletID &tablet_id, ObISliceWriter *&slice_writer);
   int generate_tablet_active_rows(const ObIVector *tablet_id_vector, const ObBatchRows &brs,
-                                  hash::ObHashMap<ObTabletID, ObHeapCsSliceWriter *, hash::NoPthreadDefendMode> &slice_writer_map);
+                                  hash::ObHashMap<ObTabletID, ObHeapBatchSliceWriter *, hash::NoPthreadDefendMode> &slice_writer_map);
   int switch_slice_if_need(const ObTabletID &tablet_id, const int64_t slice_idx, const bool is_append_batch,
                            ObISliceWriter *&slice_writer, ObDDLAutoincParam *autoinc_param = nullptr);
   int get_continue_slice(const ObIVector *tablet_id_vector, const ObIVector *slice_info_vector_, const ObBatchRows &brs,
@@ -159,7 +159,7 @@ protected:
   ObExpr *slice_info_expr_; // valid when ordered tablet and idempotent ddl
   ObExpr *tablet_autoinc_expr_; // valid when heap plan
   int64_t tablet_autoinc_column_idx_;
-  storage::ObColumnClusteredDag *ddl_dag_;
+  storage::ObDDLInsertDag *ddl_dag_;
   // for heap plan, direct write tablet
   typedef common::hash::ObHashMap<common::ObTabletID, ObISliceWriter *, common::hash::NoPthreadDefendMode> TabletWriterMap;
   TabletWriterMap heap_tablet_writer_map_;

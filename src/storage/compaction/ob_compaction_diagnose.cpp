@@ -21,7 +21,6 @@
 #include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
 #include "storage/tx_storage/ob_ls_service.h"
 #include "rootserver/freeze/ob_major_freeze_service.h"
-#include "storage/column_store/ob_co_merge_dag.h"
 #include "storage/compaction/ob_schedule_tablet_func.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 
@@ -1397,71 +1396,6 @@ int ObCompactionDiagnoseMgr::diagnose_row_store_dag(
   return ret;
 }
 
-int ObCompactionDiagnoseMgr::diagnose_column_store_dag(
-    const ObMergeType merge_type,
-    const ObLSID &ls_id,
-    const ObTabletID &tablet_id,
-    const lib::Worker::CompatMode &compat_mode,
-    const int64_t compaction_scn)
-{
-  int ret = OB_SUCCESS;
-  // create a fake dag net
-  ObCOMergeDagParam param;
-  param.merge_type_ = merge_type;
-  param.merge_version_ = compaction_scn;
-  param.ls_id_ = ls_id;
-  param.tablet_id_ = tablet_id;
-  param.compat_mode_ = compat_mode;
-  param.skip_get_tablet_ = true;
-
-  int64_t dag_net_start_time = 0;
-  ObCOMergeDagNet dag_net;
-  ObDagId dag_net_id;
-  common::ObSEArray<ObDiagnoseTabletCompProgress, 16> progress_list;
-  progress_list.set_attr(ObMemAttr("diagList"));
-  if (OB_FAIL(dag_net.init_by_param(&param))) {
-    STORAGE_LOG(WARN, "failed to init dag net", K(ret), K(param));
-  } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->diagnose_dag_net(&dag_net, progress_list, dag_net_id, dag_net_start_time))) {
-    if (OB_HASH_NOT_EXIST != ret) {
-      LOG_WARN("failed to diagnose dag net", K(ret), K(ls_id), K(tablet_id));
-    } else {
-      LOG_INFO("dag net may be finished or not exist", K(ret), K(ls_id), K(tablet_id));
-      // dag net may be finished
-      ret = OB_SUCCESS;
-    }
-  } else if (progress_list.empty()) {
-    if (TOLERATE_MEDIUM_SCHEDULE_INTERVAL < ObTimeUtility::fast_current_time() - dag_net_start_time) {
-      ADD_DIAGNOSE_INFO_FOR_TABLET(
-          merge_type,
-          ObCompactionDiagnoseInfo::DIA_STATUS_RUNNING,
-          ObTimeUtility::fast_current_time(),
-          "current_status", "dag net may hang",
-          "dag_net_id", dag_net_id,
-          "dag_net_start_time", dag_net_start_time);
-    }
-  } else {
-    for (int i = 0; i < progress_list.count(); ++i) {
-      ObDiagnoseTabletCompProgress &progress = progress_list.at(i);
-      if (progress.is_valid() && progress.is_suspect_abormal_) { // progress is abnomal
-        ADD_DIAGNOSE_INFO_FOR_TABLET(
-            merge_type,
-            ObCompactionDiagnoseInfo::DIA_STATUS_RUNNING,
-            ObTimeUtility::fast_current_time(),
-            "current_status", "dag may hang",
-            "merge_progress", progress);
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    int64_t dag_key = dag_net.hash();
-    if (OB_FAIL(diagnose_no_dag(dag_key, merge_type, ls_id, tablet_id, compaction_scn))) {
-      LOG_WARN("failed to diagnose no dag", K(ret), K(dag_key), K(ls_id), K(tablet_id));
-    }
-  }
-  LOG_TRACE("diagnose co dag net finished", K(ls_id), K(tablet_id));
-  return ret;
-}
-
 int ObCompactionDiagnoseMgr::diagnose_tablet_merge(
     const ObMergeType merge_type,
     const ObLSID ls_id,
@@ -1470,13 +1404,8 @@ int ObCompactionDiagnoseMgr::diagnose_tablet_merge(
 {
   int ret = OB_SUCCESS;
   const ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
-  lib::Worker::CompatMode compat_mode = tablet.get_tablet_meta().compat_mode_;
-  if (!compaction::is_major_merge_type(merge_type) || tablet.is_row_store()) {
-    if (OB_FAIL(diagnose_row_store_dag(merge_type, ls_id, tablet_id, compaction_scn))) {
-      LOG_WARN("failed to diagnose row store dag", K(ret), K(ls_id), K(tablet_id), K(merge_type), K(compaction_scn));
-    }
-  } else if (OB_FAIL(diagnose_column_store_dag(merge_type, ls_id, tablet_id, compat_mode, compaction_scn))) {
-    LOG_WARN("failed to diagnose column store dag", K(ret), K(ls_id), K(tablet_id), K(merge_type), K(compaction_scn));
+  if (OB_FAIL(diagnose_row_store_dag(merge_type, ls_id, tablet_id, compaction_scn))) {
+    LOG_WARN("failed to diagnose merge dag", K(ret), K(ls_id), K(tablet_id), K(merge_type), K(compaction_scn));
   }
   return ret;
 }

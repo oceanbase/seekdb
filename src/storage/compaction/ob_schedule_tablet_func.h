@@ -54,8 +54,7 @@ private:
     storage::ObTablet &tablet);
   int get_schedule_execute_info(
     storage::ObTablet &tablet,
-    int64_t &schedule_scn,
-    ObCOMajorMergePolicy::ObCOMajorMergeType &co_major_merge_type);
+    int64_t &schedule_scn);
 private:
   ObTabletStatusCache tablet_status_;
   ObCompactionScheduleTimeGuard time_guard_;

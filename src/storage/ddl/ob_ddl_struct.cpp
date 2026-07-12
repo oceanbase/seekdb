@@ -88,7 +88,6 @@ ObDDLMacroBlock::ObDDLMacroBlock()
     ddl_start_scn_(SCN::min_scn()),
     scn_(SCN::min_scn()),
     table_key_(),
-    end_row_id_(-1),
     trans_id_(),
     data_macro_meta_(nullptr),
     buf_(nullptr),
@@ -131,11 +130,6 @@ bool ObDDLMacroBlock::is_valid() const
               && scn_.is_valid_and_not_min();
   ret = ret && logic_id_.is_valid() && nullptr != data_macro_meta_ && data_macro_meta_->is_valid();
   return ret;
-}
-
-bool ObDDLMacroBlock::is_column_group_info_valid() const
-{
-  return table_key_.is_column_store_sstable() && end_row_id_ >= 0;
 }
 
 ObDDLKVHandle &ObDDLKVHandle::operator =(const ObDDLKVHandle &other)
@@ -366,13 +360,10 @@ ObDDLMacroBlockRedoInfo::ObDDLMacroBlockRedoInfo()
     block_type_(ObDDLMacroBlockType::DDL_MB_INVALID_TYPE),
     start_scn_(SCN::min_scn()),
     data_format_version_(0/*for compatibility*/),
-    end_row_id_(-1),
     type_(ObDirectLoadType::DIRECT_LOAD_DDL),
     trans_id_(),
-    with_cs_replica_(false),
     macro_block_id_(MacroBlockId::mock_valid_macro_id()),
     parallel_cnt_(0),
-    cg_cnt_(0),
     merge_slice_idx_(0),
     seq_no_()
 {
@@ -386,13 +377,10 @@ void ObDDLMacroBlockRedoInfo::reset()
   logic_id_.reset();
   start_scn_ = SCN::min_scn();
   data_format_version_ = 0;
-  end_row_id_ = -1;
   type_ = ObDirectLoadType::DIRECT_LOAD_DDL;
   trans_id_.reset();
-  with_cs_replica_ = false;
   macro_block_id_ = MacroBlockId::mock_valid_macro_id();
   parallel_cnt_ = 0;
-  cg_cnt_ = 0;
   merge_slice_idx_ = 0;
   seq_no_.reset();
 }
@@ -418,21 +406,6 @@ bool ObDDLMacroBlockRedoInfo::is_valid() const
   return ret;
 }
 
-bool ObDDLMacroBlockRedoInfo::is_not_compat_cs_replica() const
-{
-  return !with_cs_replica_;
-}
-
-bool ObDDLMacroBlockRedoInfo::is_cs_replica_row_store() const
-{
-  return with_cs_replica_ && !table_key_.is_column_store_sstable();
-}
-
-bool ObDDLMacroBlockRedoInfo::is_cs_replica_column_store() const
-{
-  return with_cs_replica_ && table_key_.is_column_store_sstable();
-}
-
 OB_SERIALIZE_MEMBER(ObDDLMacroBlockRedoInfo,
                     table_key_,
                     data_buffer_,
@@ -440,13 +413,10 @@ OB_SERIALIZE_MEMBER(ObDDLMacroBlockRedoInfo,
                     logic_id_,
                     start_scn_,
                     data_format_version_,
-                    end_row_id_,
                     type_,
                     trans_id_,
-                    with_cs_replica_,
                     macro_block_id_,
                     parallel_cnt_,
-                    cg_cnt_,
                     merge_slice_idx_,
                     seq_no_);
 
@@ -695,8 +665,6 @@ int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
     LOG_WARN("table not exist", K(ret), K(table_id));
   } else if (OB_FAIL(table_schema->get_multi_version_column_descs(column_descs))) {
     LOG_WARN("get column desc array failed", K(ret));
-  } else if (OB_FAIL(table_schema->get_is_column_store(ddl_table_schema.table_item_.is_column_store_))) {
-    LOG_WARN("fail to get is column store", K(ret));
   } else {
     ddl_table_schema.table_id_ = table_id;
     ddl_table_schema.table_item_.is_index_table_ = table_schema->is_index_table();

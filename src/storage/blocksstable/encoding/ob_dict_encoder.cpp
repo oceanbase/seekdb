@@ -348,13 +348,13 @@ bool ObDictEncoder::DictCmp::operator()(
   return res;
 }
 
-struct ObDictEncoder::ColumnStoreFiller
+struct ObDictEncoder::FixedDataFiller
 {
   struct {} INCLUDE_EXT_CELL[0]; // call filler with extend cells
-  STATIC_ASSERT(HAS_MEMBER(ColumnStoreFiller, INCLUDE_EXT_CELL),
+  STATIC_ASSERT(HAS_MEMBER(FixedDataFiller, INCLUDE_EXT_CELL),
       "dict column data filler should be called for extend value cell");
 
-  ColumnStoreFiller(ObDictEncoder &encoder) : enc_(encoder) {}
+  FixedDataFiller(ObDictEncoder &encoder) : enc_(encoder) {}
 
   // get bit packing value
   inline int operator()(const int64_t row_id, const common::ObDatum &, uint64_t &v)
@@ -393,9 +393,9 @@ int ObDictEncoder::store_fix_data(ObBufferWriter &buf_writer)
         ? desc_.bit_packing_length_
         : desc_.fix_data_length_);
 
-    ColumnStoreFiller filler(*this);
-    if (OB_FAIL(fill_column_store(buf_writer, *ctx_->col_datums_, filler, filler))) {
-      LOG_WARN("fill dict column store failed", K(ret));
+    FixedDataFiller filler(*this);
+    if (OB_FAIL(fill_fixed_data(buf_writer, *ctx_->col_datums_, filler, filler))) {
+      LOG_WARN("fill fixed data failed", K(ret));
     }
   }
   return ret;

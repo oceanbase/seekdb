@@ -98,8 +98,8 @@ int __attribute__((weak)) gen_create_tablet_arg(const share::ObLSID &ls_id,
           index_tablet_schema_idxs,
           lib::Worker::CompatMode::MYSQL,
           false,
-          create_commit_versions,
-          false /*has_cs_replica*/))) {
+          create_commit_versions
+          ))) {
     STORAGE_LOG(WARN, "failed to init tablet info", KR(ret), K(index_tablet_ids),
         K(tablet_id), K(index_tablet_schema_idxs));
   } else if (OB_FAIL(arg.init_create_tablet(ls_id, share::SCN::min_scn(), false/*need_check_tablet_cnt*/))) {

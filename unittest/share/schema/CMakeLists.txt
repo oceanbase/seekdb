@@ -9,3 +9,4 @@ function(schema_unittest case)
 endfunction()
 
 schema_unittest(test_table_dml_param)
+schema_unittest(test_table_schema)

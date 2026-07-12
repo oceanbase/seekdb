@@ -129,26 +129,6 @@ public:
   OB_UNIS_VERSION(1);
 };
 
-struct ObTabletMajorFreezeRequest
-{
-public:
-  ObTabletMajorFreezeRequest()
-    : ls_id_(),
-      tablet_id_(),
-      is_rebuild_column_group_()
-    {}
-  ~ObTabletMajorFreezeRequest() = default;
-  bool is_valid() const
-  {
-    return ls_id_.is_valid() && tablet_id_.is_valid();
-  }
-  TO_STRING_KV(K_(ls_id), K_(tablet_id));
-  share::ObLSID ls_id_;
-  common::ObTabletID tablet_id_;
-  bool is_rebuild_column_group_;
-  OB_UNIS_VERSION(1);
-};
-
 } // namespace obcall
 } // namespace oceanbase
 

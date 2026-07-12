@@ -83,10 +83,10 @@ public:
       const bool reserve_memory) override;
   int agg_pushdown_decoder(
       blocksstable::ObIMicroBlockReader *reader,
-      const int32_t col_offset, // column store is 0
+      const int32_t col_offset,
       const ObPushdownRowIdCtx &pd_row_id_ctx); 
   int can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info, const int32_t col_index, bool &can_agg) override;
-  int fill_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg) override;
+  int fill_index_info(const blocksstable::ObMicroIndexInfo &index_info) override;
   int collect_result();
   OB_INLINE int set_agg_type_flag(const ObPDAggType agg_type);
   OB_INLINE bool check_need_project(
@@ -116,8 +116,8 @@ public:
   OB_INLINE bool check_finished() const override { return false; }
   OB_INLINE bool is_agg_finish(const ObPushdownRowIdCtx &pd_row_id_ctx)
   {
-    return OB_INVALID_CS_ROW_ID != agg_row_id_ 
-        && OB_INVALID_CS_ROW_ID != pd_row_id_ctx.bound_row_id_
+    return INVALID_AGG_ROW_ID != agg_row_id_
+        && INVALID_AGG_ROW_ID != pd_row_id_ctx.bound_row_id_
         && ((!pd_row_id_ctx.is_reverse_ && agg_row_id_ >= pd_row_id_ctx.bound_row_id_ ) 
             || (pd_row_id_ctx.is_reverse_ && agg_row_id_ <= pd_row_id_ctx.bound_row_id_));
   }
@@ -128,7 +128,7 @@ public:
   ObSEArray<ObAggCellVec*, 1> agg_cells_;
   ObColumnParam* col_param_;
   sql::ObExpr* project_expr_;
-  int64_t agg_row_id_; // row id in column store, row offset of the microblock in row store.
+  int64_t agg_row_id_;
   int32_t col_offset_; // for row store
   int32_t col_index_;  // for row store
   ObAggTypeFlag agg_type_flag_;
@@ -160,7 +160,7 @@ public:
       const ObFilterResult &res) override;
   virtual int fill_rows(const int64_t group_idx, const int64_t row_count);
   int can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info, bool &can_agg) override;
-  int fill_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg) override;
+  int fill_index_info(const blocksstable::ObMicroIndexInfo &index_info) override;
   int collect_aggregated_result() override;
   int get_agg_group(const sql::ObExpr *expr, ObAggGroupVec *&agg_group);
   INHERIT_TO_STRING_KV("ObVectorStore", ObVectorStore, K_(pd_agg_ctx), K_(agg_groups), 

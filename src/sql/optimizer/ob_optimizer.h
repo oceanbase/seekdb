@@ -206,7 +206,6 @@ namespace sql
     int extract_opt_ctx_basic_flags(const ObDMLStmt &stmt,
                                     ObSQLSessionInfo &session);
     int init_parallel_policy(ObDMLStmt &stmt, const ObSQLSessionInfo &session);
-    int init_replica_policy(ObDMLStmt &stmt, const ObSQLSessionInfo &session);
     int set_auto_dop_params(const ObSQLSessionInfo &session);
     int check_pdml_enabled(const ObDMLStmt &stmt,
                            const ObSQLSessionInfo &session);
@@ -235,7 +234,6 @@ namespace sql
     int check_force_default_stat();
     int init_system_stat();
     int init_correlation_model(ObDMLStmt &stmt, const ObSQLSessionInfo &session);
-    int init_table_access_policy(ObDMLStmt &stmt, const ObSQLSessionInfo &session);
     int init_px_node_opt_info();
     int check_enable_topn_runtime_filter();
 

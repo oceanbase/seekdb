@@ -23,7 +23,6 @@
 #include "storage/tx/ob_defensive_check_mgr.h"
 #include "share/scn.h"
 #include "storage/access/ob_micro_block_handle_mgr.h"
-#include "storage/column_store/ob_i_cg_iterator.h"
 #include "share/ob_fork_table_info.h"
 
 namespace oceanbase
@@ -41,7 +40,6 @@ namespace storage
 template<typename T>
 class ObStoreRowIterPool;
 class ObBlockRowStore;
-class ObCGIterParamPool;
 struct ObTableScanRange;
 class ObTruncatePartitionFilter;
 
@@ -239,7 +237,7 @@ struct ObTableAccessContext
   {
     return is_mview_query() ?  mview_scan_info_->scan_type_ : StorageScanType::NORMAL;
   }
-  int alloc_iter_pool(const bool use_column_store);
+  int alloc_iter_pool();
   void inc_micro_access_cnt();
   int init_scan_allocator(ObTableScanParam &scan_param);
   int init_mview_scan_info(const int64_t multi_version_start, const sql::ObExprPtrIArray *op_filters, sql::ObEvalCtx &eval_ctx);
@@ -308,8 +306,6 @@ struct ObTableAccessContext
     K_(lob_locator_helper),
     KP_(cached_iter_node),
     KP_(stmt_iter_pool),
-    KP_(cg_iter_pool),
-    KP_(cg_param_pool),
     KP_(block_row_store),
     KP_(sample_filter),
     KPC_(mview_scan_info),
@@ -378,8 +374,6 @@ public:
   ObLobLocatorHelper *lob_locator_helper_;
   CachedIteratorNode *cached_iter_node_;
   ObStoreRowIterPool<ObStoreRowIterator> *stmt_iter_pool_;
-  ObStoreRowIterPool<ObICGIterator> *cg_iter_pool_;
-  ObCGIterParamPool *cg_param_pool_;
   ObBlockRowStore *block_row_store_;
   ObRowSampleFilter *sample_filter_;
   compaction::ObCachedTransStateMgr *trans_state_mgr_;

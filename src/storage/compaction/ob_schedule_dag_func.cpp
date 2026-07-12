@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_schedule_dag_func.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/column_store/ob_co_merge_dag.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag_param.h"
 #include "storage/ddl/ob_tablet_lob_split_task.h"
@@ -60,22 +59,6 @@ int ObScheduleDagFunc::schedule_tx_table_merge_dag(
 {
   int ret = OB_SUCCESS;
   CREATE_DAG(ObTxTableMergeDag);
-  return ret;
-}
-
-int ObScheduleDagFunc::schedule_tablet_co_merge_dag_net(
-    ObCOMergeDagParam &param)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->create_and_add_dag_net<ObCOMergeDagNet>(&param))) {
-    if (OB_TASK_EXIST != ret) {
-      LOG_WARN("failed to create dag_net", K(ret), K(param));
-    } else {
-      ret = OB_SUCCESS; // ignore OB_TASK_EXIST
-    }
-  } else {
-    FLOG_INFO("success to create co merge dag_net", K(ret), K(param));
-  }
   return ret;
 }
 
@@ -193,37 +176,6 @@ int ObDagParamFunc::fill_param(
     param.merge_type_ = merge_type;
     param.merge_version_ = merge_snapshot_version;
     param.exec_mode_ = exec_mode;
-  }
-  return ret;
-}
-
-int ObDagParamFunc::fill_param(
-    const share::ObLSID &ls_id,
-    const storage::ObTablet &tablet,
-    const ObMergeType merge_type,
-    const int64_t &merge_snapshot_version,
-    const ObExecMode exec_mode,
-    const share::ObDagId *dag_net_id,
-    ObCOMergeDagParam &param)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!ls_id.is_valid()
-    || !is_valid_merge_type(merge_type)
-    || merge_snapshot_version < ObVersion::MIN_VERSION
-    || !is_valid_exec_mode(exec_mode))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(ls_id), K(merge_snapshot_version),
-      K(exec_mode));
-  } else {
-    param.ls_id_ = ls_id;
-    param.tablet_id_ = tablet.get_tablet_meta().tablet_id_;
-    param.merge_type_ = merge_type;
-    param.merge_version_ = merge_snapshot_version;
-    param.compat_mode_ = tablet.get_tablet_meta().compat_mode_;
-    param.exec_mode_ = exec_mode;
-    if (OB_UNLIKELY(nullptr != dag_net_id)) {
-      param.dag_net_id_ = *dag_net_id;
-    }
   }
   return ret;
 }

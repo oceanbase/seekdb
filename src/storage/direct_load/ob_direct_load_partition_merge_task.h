@@ -63,8 +63,6 @@ private:
   int fill_sstable_slice(const int64_t slice_id,
                          const ObIArray<ObDirectLoadIStoreRowIterator *> &row_iters,
                          ObDirectLoadMgrAgent &ddl_agnet);
-  int fill_sstable_slice_batch(const int64_t slice_id,
-                               const ObIArray<ObDirectLoadIStoreRowIterator *> &row_iters);
 
 protected:
   observer::ObTableLoadTableCtx *ctx_;
@@ -114,7 +112,7 @@ private:
   ObDirectLoadOriginTable *origin_table_;
   const blocksstable::ObDatumRange *range_;
 };
-// Heap table columnar store table unrescan scenario, for existing data primary key values need to be reallocated as well
+// Heap table unrescan scenario: existing data primary key values must be reallocated.
 class ObDirectLoadPartitionOriginDataUnrescanMergeTask : public ObDirectLoadIMergeTask
 {
 public:

@@ -285,8 +285,8 @@ int ObRawEncoder::store_fix_data(ObBufferWriter &buf_writer)
     column_header_.length_ = static_cast<uint32_t>(desc_.bit_packing_length_ > 0
         ? desc_.bit_packing_length_
         : desc_.fix_data_length_);
-    if (OB_FAIL(fill_column_store(buf_writer, *ctx_->col_datums_, getter, DatumDataSetter()))) {
-      LOG_WARN("fill datum column store failed", K(ret));
+    if (OB_FAIL(fill_fixed_data(buf_writer, *ctx_->col_datums_, getter, DatumDataSetter()))) {
+      LOG_WARN("fill fixed data failed", K(ret));
     }
   }
   return ret;

@@ -99,11 +99,6 @@ protected:
   // @return other error codes, failed to replay.
   int do_replay_(ObTabletHandle &handle) override;
   int replay_ddl_start(ObTabletHandle &handle, const bool is_lob_meta_tablet);
-  int pre_process_for_cs_replica(
-      ObTabletDirectLoadInsertParam &direct_load_param,
-      ObITable::TableKey &table_key,
-      ObTabletHandle &tablet_handle,
-      const ObTabletID &tablet_id);
 private:
   const ObDDLStartLog *log_;
 };

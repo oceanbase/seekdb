@@ -57,23 +57,6 @@ public:
       const share::schema::ObTableSchema *table_schema,
       ObIAllocator &allocator,
       ObStorageSchema *&storage_schema);
-  // --- ObCODDLUtil column-store DDL helpers merged in ---
-  static int get_column_checksums(
-      const storage::ObCOSSTableV2 *co_sstable,
-      const storage::ObStorageSchema *storage_schema,
-      ObIArray<int64_t> &column_checksums);
-  static int is_rowkey_based_co_sstable(
-      const storage::ObCOSSTableV2 *co_sstable,
-      const storage::ObStorageSchema *storage_schema,
-      bool &is_rowkey_based);
-  static int get_co_column_checksums_if_need(
-      const ObTabletHandle &tablet_handle,
-      const blocksstable::ObSSTable *sstable,
-      ObIArray<int64_t> &column_checksum_array);
-  static int get_base_cg_idx(
-      const storage::ObStorageSchema *storage_schema,
-      int64_t &base_cg_idx);
-  static int need_column_group_store(const storage::ObStorageSchema &table_schema, bool &need_column_group);
   // --- ObDDLErrorMessageTableOperator::extract_index_key demoted and merged in(storage-bound: ObDatumRowkey/ObStorageDatum) ---
   static int extract_index_key(
       const share::schema::ObTableSchema &index_schema,

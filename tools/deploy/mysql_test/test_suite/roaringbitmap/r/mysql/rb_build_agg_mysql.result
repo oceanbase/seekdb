@@ -319,7 +319,7 @@ select RB_CARDINALITY(rb_build_agg(c1)),  count(distinct c1)from t1;
 RB_CARDINALITY(rb_build_agg(c1))	count(distinct c1)
 424	424
 drop table if exists t1;
-create table t1(id bigint primary key, c1 bigint, c2 bigint, c3 bigint) partition by key(id) partitions 8 with column group (all columns, each column);
+create table t1(id bigint primary key, c1 bigint, c2 bigint, c3 bigint) partition by key(id) partitions 8;
 insert into t1 select abs(random(0)), (abs(random(1))%50000000+455876444690), (abs(random(1))%20+455876444690), abs(random(1)%50000000) from table(generator(1000));
 select /*+ NO_USE_HASH_AGGREGATION  */ RB_CARDINALITY(rb_build_agg(c1)), sum(c3) from t1 group by c2 ;
 RB_CARDINALITY(rb_build_agg(c1))	sum(c3)

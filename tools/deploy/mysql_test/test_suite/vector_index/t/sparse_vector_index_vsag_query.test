@@ -521,7 +521,7 @@ explain select * from t1 order by negative_inner_product(v, '{3:1, 4:1}') APPROX
 drop table if exists t1;
 --enable_warnings
 
-create table t1(c1 int, c2 int, c3 int, v sparsevector, primary key(c1), vector index idx3(v) with (lib=vsag, type=sindi, distance=inner_product)) WITH COLUMN GROUP (each column);
+create table t1(c1 int, c2 int, c3 int, v sparsevector, primary key(c1), vector index idx3(v) with (lib=vsag, type=sindi, distance=inner_product));
 
 insert into t1 values(1, 1, 10, '{1:0.1,2:0.2, 3:0.3}');
 insert into t1 values(2, 2, 9, '{3:0.3, 2:0.2, 4:0.4}');

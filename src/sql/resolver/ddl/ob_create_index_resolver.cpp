@@ -580,20 +580,6 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
       }
     }
 
-    // index column_group
-    if (OB_FAIL(ret)) {
-    } else if (NULL != parse_node.children_[6]) {
-      if (T_COLUMN_GROUP != parse_node.children_[6]->type_ || parse_node.children_[6]->num_child_ <= 0) {
-        ret = OB_INVALID_ARGUMENT;
-        SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(parse_node.children_[6]->type_), K(parse_node.children_[6]->num_child_));
-      } else if (OB_ISNULL(parse_node.children_[6]->children_[0])) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("node is null", K(ret));
-      } else if (OB_FAIL(resolve_index_column_group(parse_node.children_[6], crt_idx_stmt->get_create_index_arg()))) {
-        SQL_RESV_LOG(WARN, "resolve index column group failed", K(ret));
-      }
-    }
-
     if (OB_SUCC(ret)) {
       crt_idx_stmt->set_if_not_exists(NULL != if_not_exist_node);
       // Set block size, if block size is not specified, then use the main table block size

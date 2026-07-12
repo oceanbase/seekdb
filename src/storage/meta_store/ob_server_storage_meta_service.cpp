@@ -171,7 +171,7 @@ int ObLocalDevice::get_data_disk_used_percentage_(
     int64_t &percent) const
 {
   int ret = OB_SUCCESS;
-  int64_t reserved_size = ObStorageLoggerManager::RESERVED_DISK_SIZE;
+  int64_t reserved_size = storage::ObStorageLoggerManager::RESERVED_DISK_SIZE;
 
   if (OB_UNLIKELY(!is_marked_)) {
     ret = OB_NOT_INIT;

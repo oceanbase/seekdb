@@ -65,9 +65,7 @@ public:
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_empty_major_sstable(const ObTabletID &tablet_id,
                                    const ObStorageSchema &storage_schema,
-                                   const int64_t snapshot_version,
-                                   const int64_t column_group_idx,
-                                   const bool has_all_column_group);
+                                   const int64_t snapshot_version);
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_small_sstable(const blocksstable::ObSSTableMergeRes &res,
@@ -77,9 +75,7 @@ public:
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_merge(const compaction::ObBasicTabletMergeCtx &ctx,
-                     const blocksstable::ObSSTableMergeRes &res,
-                     const ObStorageColumnGroupSchema *cg_schema,
-                     const int64_t column_group_idx);
+                     const blocksstable::ObSSTableMergeRes &res);
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_ddl(blocksstable::ObSSTableIndexBuilder *sstable_index_builder,
@@ -156,10 +152,6 @@ public:
   inline bool is_ready_for_read() const { return is_ready_for_read_; }
   inline int64_t data_blocks_cnt() const { return data_blocks_cnt_; }
   inline share::SCN filled_tx_scn() const { return filled_tx_scn_; }
-  inline int32_t co_base_type() const { return co_base_type_; }
-  inline bool is_co_table_without_cgs() const { return is_co_table_without_cgs_; }
-  inline int64_t column_group_cnt() const { return column_group_cnt_; }
-  inline int64_t full_column_cnt() const { return full_column_cnt_; }
 
   // TODO: delete this interface
   // ObTabletMergeInfo::record_start_tx_scn_for_tx_data
@@ -186,11 +178,8 @@ public:
       K_(micro_block_cnt),
       K_(use_old_macro_block_count),
       K_(row_count),
-      K_(column_group_cnt),
-      K_(co_base_type),
       K_(rowkey_column_cnt),
       K_(column_cnt),
-      K_(full_column_cnt),
       K_(column_checksums),
       K_(data_checksum),
       K_(occupy_size),
@@ -199,7 +188,6 @@ public:
       K_(ddl_scn),
       K_(filled_tx_scn),
       K_(tx_data_recycle_scn),
-      K_(is_co_table_without_cgs),
       K_(contain_uncommitted_row),
       K_(is_meta_root),
       K_(compressor_type),
@@ -212,8 +200,7 @@ public:
       KPHEX_(encrypt_key, sizeof(encrypt_key_)),
       K_(table_backup_flag),
       K_(table_shared_flag),
-      K_(uncommitted_tx_id),
-      K_(co_base_snapshot_version));
+      K_(uncommitted_tx_id));
 private:
   static const int64_t DEFAULT_MACRO_BLOCK_CNT = 64;
   int inner_init_with_merge_res(const blocksstable::ObSSTableMergeRes &res);
@@ -225,7 +212,6 @@ private:
       const blocksstable::ObSSTableMacroInfo &macro_info,
       common::ObIArray<blocksstable::MacroBlockId> &data_block_ids,
       common::ObIArray<blocksstable::MacroBlockId> &other_block_ids);
-  void set_init_value_for_column_store_();
 private:
   friend class blocksstable::ObSSTableMeta;
   friend class blocksstable::ObSSTableMacroInfo;
@@ -251,11 +237,8 @@ public:
   int64_t micro_block_cnt_;
   int64_t use_old_macro_block_count_;
   int64_t row_count_;
-  int64_t column_group_cnt_; // only used for column_store
-  int32_t co_base_type_; // used for co sstable 
   int64_t rowkey_column_cnt_;
   int64_t column_cnt_;
-  int64_t full_column_cnt_;
   common::ObSEArray<int64_t, common::OB_ROW_DEFAULT_COLUMNS_COUNT> column_checksums_;
   int64_t data_checksum_;
   int64_t occupy_size_;
@@ -264,7 +247,6 @@ public:
   share::SCN ddl_scn_; // saved into sstable meta
   share::SCN filled_tx_scn_;
   share::SCN tx_data_recycle_scn_;
-  bool is_co_table_without_cgs_; // only used for creating co sstable without cg sstables
   bool contain_uncommitted_row_;
   bool is_meta_root_;
   common::ObCompressorType compressor_type_;
@@ -280,7 +262,6 @@ public:
   storage::ObTableBackupFlag table_backup_flag_; //ObTableBackupFlag will be updated by ObSSTableMergeRes
   storage::ObTableSharedFlag table_shared_flag_; //ObTableSharedFlag will be updated by ObTabletCreateSSTableParam
   int64_t uncommitted_tx_id_;
-  int64_t co_base_snapshot_version_;
 };
 
 } // namespace storage

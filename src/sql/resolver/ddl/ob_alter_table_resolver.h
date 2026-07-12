@@ -215,9 +215,6 @@ private:
                                    const share::schema::ObColumnSchemaV2 &src_col_schema,
                                    const share::schema::ObColumnSchemaV2 &dst_col_schema,
                                    const bool is_part_key);
-  int resolve_column_group_for_column();
-  int resolve_alter_column_groups(const ParseNode &node);
-
   int check_alter_column_schemas_valid(ObAlterTableStmt &stmt);
 
   int check_mysql_rename_column(const share::schema::AlterColumnSchema &alter_column_schema,

@@ -505,77 +505,19 @@ void ObGlobalTableStat::add(int64_t rc, int64_t rs, int64_t ds, int64_t mac, int
 }
 
 int ObGlobalTableStat::add(int64_t rc, int64_t rs, int64_t ds, int64_t mac, int64_t mic,
-                           ObIArray<int64_t> &cg_macro_arr, ObIArray<int64_t> &cg_micro_arr,
                            int64_t scnt, int64_t mcnt)
 {
-  // skip empty partition
-  int ret = OB_SUCCESS;
   if (rc > 0) {
     row_count_ += rc;
     row_size_ += rs;
     data_size_ += ds;
     macro_block_count_ += mac;
     micro_block_count_ += mic;
-    part_cnt_ ++;
+    part_cnt_++;
     sstable_row_cnt_ += scnt;
     memtable_row_cnt_ += mcnt;
-    if (cg_macro_arr.empty()) {
-      //do nothing
-    } else if (cg_macro_cnt_arr_.empty()) {
-      if (OB_FAIL(cg_macro_cnt_arr_.assign(cg_macro_arr))) {
-        LOG_WARN("failed to assign", K(ret));
-      }
-    } else if (OB_UNLIKELY(cg_macro_arr.count() != cg_macro_cnt_arr_.count())) {
-      if (cg_macro_arr.count() == 1) {
-        cg_macro_cnt_arr_.at(0) += cg_macro_arr.at(0);
-      } else if (cg_macro_cnt_arr_.count() == 1) {
-        for (int64_t i = 0; OB_SUCC(ret) && i < cg_macro_arr.count(); ++i) {
-          if (i == 0) {
-            cg_macro_cnt_arr_.at(0) += cg_macro_arr.at(0);
-          } else if (OB_FAIL(cg_macro_cnt_arr_.push_back(cg_macro_arr.at(i)))) {
-            LOG_WARN("failed to push back macro cnt", K(ret));
-          }
-        }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(cg_macro_arr), K(cg_macro_cnt_arr_));
-      }
-    } else {
-      for (int64_t i = 0; i < cg_macro_arr.count(); ++i) {
-        cg_macro_cnt_arr_.at(i) += cg_macro_arr.at(i);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (cg_micro_arr.empty()) {
-      //do nothing
-      } else if (cg_micro_cnt_arr_.empty()) {
-        if (OB_FAIL(cg_micro_cnt_arr_.assign(cg_micro_arr))) {
-          LOG_WARN("failed to assign", K(ret));
-        }
-      } else if (OB_UNLIKELY(cg_micro_arr.count() != cg_micro_cnt_arr_.count())) {
-        if (cg_micro_arr.count() == 1) {
-          cg_micro_cnt_arr_.at(0) += cg_micro_arr.at(0);
-        } else if (cg_micro_cnt_arr_.count() == 1) {
-          for (int64_t i = 0; OB_SUCC(ret) && i < cg_micro_arr.count(); ++i) {
-            if (i == 0) {
-              cg_micro_cnt_arr_.at(0) += cg_micro_arr.at(0);
-            } else if (OB_FAIL(cg_micro_cnt_arr_.push_back(cg_micro_arr.at(i)))) {
-              LOG_WARN("failed to push back micro cnt", K(ret));
-            }
-          }
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected error", K(ret), K(cg_micro_arr), K(cg_micro_cnt_arr_));
-        }
-        
-      } else {
-        for (int64_t i = 0; i < cg_micro_arr.count(); ++i) {
-          cg_micro_cnt_arr_.at(i) += cg_micro_arr.at(i);
-        }
-      }
-    }
   }
-  return ret;
+  return OB_SUCCESS;
 }
 
 int64_t ObGlobalTableStat::get_row_count() const
@@ -605,68 +547,6 @@ int64_t ObGlobalTableStat::get_micro_block_count() const
   return micro_block_count_;
 }
 
-
-const ObIArray<double>& ObGlobalSkipRateStat::get_skip_rate_arr() const
-{
-  return cg_skip_rate_arr_;
-}
-
-int ObGlobalSkipRateStat::add(const ObIArray<uint64_t> &skip_sample_cnt_arr, const ObIArray<double> &cg_skip_rate_arr)
-{
-  int ret = OB_SUCCESS;
-  if (cg_skip_rate_arr.empty()) {
-    //do nothing
-  } else if (count_ == 0 &&
-             !cg_skip_rate_arr.empty() &&
-             OB_FAIL(cg_skip_rate_arr_.prepare_allocate(cg_skip_rate_arr.count()))) {
-    LOG_WARN("failed to prepare allocate", K(ret));
-  } else if (count_ == 0 &&
-             !skip_sample_cnt_arr.empty() &&
-             OB_FAIL(skip_sample_cnt_arr_.prepare_allocate(skip_sample_cnt_arr.count()))) {
-    LOG_WARN("failed to prepare allocate", K(ret));
-  } else if (OB_UNLIKELY(cg_skip_rate_arr.count() != cg_skip_rate_arr_.count()) ||
-             OB_UNLIKELY(skip_sample_cnt_arr.count() != skip_sample_cnt_arr_.count())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(cg_skip_rate_arr), K(cg_skip_rate_arr_), K(skip_sample_cnt_arr));
-  } else if (count_ == 0 && OB_FAIL(cg_skip_rate_arr_.assign(cg_skip_rate_arr))) {
-    LOG_WARN("failed to assign", K(ret));
-  } else if (count_ == 0 && OB_FAIL(skip_sample_cnt_arr_.assign(skip_sample_cnt_arr))) {
-    LOG_WARN("failed to assign", K(ret));
-  } else {
-    for (int64_t i = 0; i < cg_skip_rate_arr_.count(); ++i) {
-      if (count_ == 0) {
-        cg_skip_rate_arr_.at(i) *= (double)skip_sample_cnt_arr_.at(i);
-      } else {
-        cg_skip_rate_arr_.at(i) += (cg_skip_rate_arr.at(i) * (double)skip_sample_cnt_arr.at(i));
-        skip_sample_cnt_arr_.at(i) += (double)skip_sample_cnt_arr.at(i);
-      }
-    }
-    count_++;
-    LOG_TRACE("OPT:skip rate stat add ",K(cg_skip_rate_arr_),K(skip_sample_cnt_arr), K(count_), K(ret));
-  }
-  return ret;
-}
-
-int ObGlobalSkipRateStat::merge()
-{
-  int ret = OB_SUCCESS;
-  if (cg_skip_rate_arr_.empty()) {
-    //do nothing
-  } else {
-    for (int64_t i = 0; i < cg_skip_rate_arr_.count(); ++i) {
-      if (cg_skip_rate_arr_.at(i) == 0) {
-        //do nothing
-      } else if (OB_UNLIKELY(!cg_skip_rate_arr_.at(i) && skip_sample_cnt_arr_.at(i) == 0)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(cg_skip_rate_arr_), K(skip_sample_cnt_arr_));
-      } else {
-        cg_skip_rate_arr_.at(i) /= (double)skip_sample_cnt_arr_.at(i);
-      }
-    }
-  }
-  LOG_TRACE("OPT:skip rate stat merge",K(cg_skip_rate_arr_), K(skip_sample_cnt_arr_), K(ret));
-  return ret;
-}
 
 void ObGlobalNdvEval::add(int64_t ndv, const char *llc_bitmap)
 {
@@ -879,8 +759,6 @@ void ObGlobalAllColEvals::merge(const ObOptColumnStat &col_stats)
     ndv_eval_.add(col_stats.get_num_distinct(), col_stats.get_llc_bitmap());
     null_eval_.add(col_stats.get_num_null());
     avglen_eval_.add(col_stats.get_avg_len());
-    cg_blk_eval_.add_cg_blk_cnt(col_stats.get_cg_macro_blk_cnt(), col_stats.get_cg_micro_blk_cnt());
-    cg_skip_rate_eval_.add_cg_skip_rate(col_stats.get_cg_skip_rate(), col_stats.get_cg_micro_blk_cnt());
     // a partition has min/max values only when it contains a valid value in the other word, ndv is not zero
     if (col_stats.get_num_distinct() != 0) {
       min_eval_.add(col_stats.get_min_value());

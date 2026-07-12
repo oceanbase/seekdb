@@ -39,9 +39,7 @@ public:
     PROGRESSIVE_MERGE_ROUND,
     CREATE_TIME,
     START_TIME,
-    ESTIMATED_FINISH_TIME,
-    START_CG_ID,
-    END_CG_ID
+    ESTIMATED_FINISH_TIME
   };
   ObAllVirtualTabletCompactionProgress();
   virtual ~ObAllVirtualTabletCompactionProgress();

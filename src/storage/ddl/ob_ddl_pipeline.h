@@ -101,7 +101,6 @@ public:
   virtual int get_next_chunk(ObChunk *&chunk) override;
   virtual int finish_chunk(ObChunk *chunk) override;
   virtual void postprocess(int &ret_code) override;
-  virtual int set_remain_block() { return common::OB_SUCCESS; }
   virtual ObITaskPriority get_priority() override;
 
 protected:
@@ -351,7 +350,7 @@ private:
       const int64_t row_pos,
       const common::ObIArray<common::ObIVector *> &vectors,
       ObDDLTabletContext *tablet_context);
-  int append_row_file(ObCGRowFile *cg_row_file, ObDDLTabletContext *tablet_context);
+  int append_row_file(ObDDLRowFile *row_file, ObDDLTabletContext *tablet_context);
 private:
   int64_t vec_dim_;
   common::ObString vec_idx_param_;
@@ -560,7 +559,7 @@ protected:
     UNUSED(output_chunk);
     return OB_SUCCESS;
   }
-  int append_row_file(ObCGRowFile *row_file);
+  int append_row_file(ObDDLRowFile *row_file);
   INHERIT_TO_STRING_KV("ObIVFIndexBaseOperator", ObIVFIndexBaseOperator, K_(vector_col_idx));
 protected:
   int32_t vector_col_idx_;
@@ -739,11 +738,11 @@ public:
 private:
   int get_ready_results(ObChunk &output_chunk, ResultState &result_state);
   int process_input_chunk(const ObChunk &input_chunk);
-  int get_next_row_from_tmp_files(common::ObArray<ObCGRowFile *> *cg_row_file_arr,
+  int get_next_row_from_tmp_files(common::ObArray<ObDDLRowFile *> *row_file_arr,
                                   blocksstable::ObStorageDatum &text,
                                   common::ObArray<blocksstable::ObStorageDatum> &extras,
                                   bool &has_row);
-  int get_next_batch_from_tmp_files(ObCGRowFile *&row_file);
+  int get_next_batch_from_tmp_files(ObDDLRowFile *&row_file);
   int parse_row(const blocksstable::ObDatumRow &current_row,
                 blocksstable::ObStorageDatum &text,
                 common::ObArray<blocksstable::ObStorageDatum> &extras);
@@ -766,7 +765,7 @@ private:
   int64_t batch_size_;
   ObTaskBatchInfo *current_batch_;  // Current batching
 
-  // resumable scan state for CG_ROW_TMP_FILES
+  // resumable scan state for DDL_ROW_TMP_FILES
   int64_t cur_file_idx_;
   blocksstable::ObBatchDatumRows *cur_datum_rows_;
   int64_t cur_row_in_batch_;
@@ -864,15 +863,6 @@ public:
     return ret;
   }
   
-  virtual int set_remain_block() override { 
-    if (OB_ISNULL(ddl_slice_)) {
-      return OB_NOT_INIT;
-    } else {
-      ddl_slice_->set_block_flushed(0);
-      return OB_SUCCESS;
-    }
-  }
-
 private:
   ObHNSWEmbeddingOperator embedding_buffer_op_;
   ObHNSWEmbeddingWriteMacroOperator embedding_write_op_;

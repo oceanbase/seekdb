@@ -60,15 +60,14 @@ double ObOptCostModelParameter::get_micro_block_rnd_cost(const OptSystemStat& st
 
 double ObOptCostModelParameter::get_project_column_cost(const OptSystemStat& stat,
                                                         int64_t type,
-                                                        bool is_rnd,        
-                                                        bool use_column_store) const
+                                                        bool is_rnd) const
 {
     if (stat.get_cpu_speed() <= 0) {
-        return project_params_[use_column_store][is_rnd][type];
+        return project_params_[is_rnd][type];
     } else if (type >=0 && type <= ObMaxTC) {
-        return project_params_[use_column_store][is_rnd][type] / stat.get_cpu_speed();
+        return project_params_[is_rnd][type] / stat.get_cpu_speed();
     } else {
-        return project_params_[use_column_store][is_rnd][0] / stat.get_cpu_speed();
+        return project_params_[is_rnd][0] / stat.get_cpu_speed();
     }
 }
 

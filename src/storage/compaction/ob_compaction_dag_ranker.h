@@ -40,7 +40,6 @@ public:
   static constexpr int64_t MINI_PARALLEL_BASE_MEM = 1 << 30; // 1GB
   static constexpr int64_t MINOR_MEM_PER_THREAD = 6 * 1024L * 1024L; // 6MB
   static constexpr int64_t MAJOR_MEM_PER_THREAD = 5 * 1024L * 1024L; // 5MB
-  static constexpr int64_t CO_MAJOR_CG_BASE_MEM = 3 * 1024L * 1024L; // 3MB
   static constexpr int64_t COMPACTION_BLOCK_FIXED_MEM = 14 * 1024L * 1024L; // 14MB
   static constexpr int64_t COMPACTION_ITER_BASE_MEM = 4 * 1024L * 1024L; // 4MB
   static constexpr int64_t COMPACTION_RESERVED_MEM = 2 * 1024L * 1024L; // 2MB

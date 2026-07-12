@@ -102,7 +102,7 @@ public:
   int init(const common::ObIArray<share::schema::ObColDesc> &col_descs,
            const int64_t schema_rowkey_cnt,
            common::ObIAllocator &allocator,
-           const bool is_column_store = false);
+           const bool skip_multi_version_cols = false);
   // init with array memory on fixed size memory buffer
   int init(const common::ObIArray<share::schema::ObColDesc> &col_descs,
            const int64_t schema_rowkey_cnt,

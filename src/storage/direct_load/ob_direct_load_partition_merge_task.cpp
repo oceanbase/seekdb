@@ -114,23 +114,13 @@ int ObDirectLoadPartitionMergeTask::process()
       LOG_INFO("skip empty sstable slice", K(tablet_id), K(parallel_idx_), K(block_start_seq),
                K(slice_id));
     } else {
-      const bool use_batch_mode = merge_param_->use_batch_mode_;
       LOG_INFO("add sstable slice begin", K(tablet_id), K(parallel_idx_), K(block_start_seq),
-               K(slice_id), K(row_iters.count()), K(use_batch_mode));
+               K(slice_id), K(row_iters.count()));
       if (OB_UNLIKELY(is_stop_)) {
         ret = OB_CANCELED;
         LOG_WARN("merge task canceled", KR(ret));
-      } else {
-        // batch mode does not support writing insert and delete lines simultaneously
-        if (use_batch_mode) {
-          if (OB_FAIL(fill_sstable_slice_batch(slice_id, row_iters))) {
-            LOG_WARN("fail to fill sstable slice batch", KR(ret), K(slice_id));
-          }
-        } else {
-          if (OB_FAIL(fill_sstable_slice(slice_id, row_iters, ddl_agent))) {
-            LOG_WARN("fail to fill sstable slice", KR(ret), K(slice_id), K(ddl_agent));
-          }
-        }
+      } else if (OB_FAIL(fill_sstable_slice(slice_id, row_iters, ddl_agent))) {
+        LOG_WARN("fail to fill sstable slice", KR(ret), K(slice_id), K(ddl_agent));
       }
       LOG_INFO("add sstable slice end", KR(ret), K(tablet_id), K(parallel_idx_), K(affected_rows_));
     }
@@ -168,37 +158,6 @@ int ObDirectLoadPartitionMergeTask::fill_sstable_slice(
     LOG_WARN("fail to fill sstable slice", KR(ret));
   } else if (OB_FAIL(insert_table_row_iter.close())) {
     LOG_WARN("fail to close insert table row iter", KR(ret));
-  }
-  return ret;
-}
-
-int ObDirectLoadPartitionMergeTask::fill_sstable_slice_batch(
-  const int64_t slice_id,
-  const ObIArray<ObDirectLoadIStoreRowIterator *> &row_iters)
-{
-  int ret = OB_SUCCESS;
-  ObDirectLoadInsertTableBatchRowStoreWriter batch_writer;
-  ObDirectLoadInsertTableRowInfo row_info;
-  if (OB_FAIL(insert_tablet_ctx_->get_row_info(row_info))) {
-    LOG_WARN("fail to get row info", KR(ret));
-  } else if (OB_FAIL(batch_writer.init(insert_tablet_ctx_,
-                                       row_info,
-                                       slice_id,
-                                       need_handle_dml_row_ ? merge_param_->dml_row_handler_ : nullptr,
-                                       ctx_->job_stat_))) {
-    LOG_WARN("fail to init buffer writer", KR(ret));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < row_iters.count(); ++i) {
-    ObDirectLoadIStoreRowIterator *row_iter = row_iters.at(i);
-    if (OB_FAIL(batch_writer.write(row_iter))) {
-      LOG_WARN("fail to write", KR(ret));
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(batch_writer.close())) {
-    LOG_WARN("fail to close writer", KR(ret));
-  } else {
-    affected_rows_ = batch_writer.get_row_count();
   }
   return ret;
 }

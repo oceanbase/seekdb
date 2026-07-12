@@ -212,8 +212,6 @@ int ObMacroBlock::inner_init()
                 K(ret), "macro_block_size", spec_->get_macro_block_size());
   } else if (OB_FAIL(reserve_header(*spec_, cur_macro_seq_))) {
     STORAGE_LOG(WARN, "macro block fail to reserve header.", K(ret));
-  } else if (spec_->is_cg()) {
-    last_rowkey_.set_min_rowkey(); // used to protect cg sstable
   }
   return ret;
 }
@@ -245,7 +243,6 @@ int64_t ObMacroBlock::calc_basic_micro_block_data_offset(
 {
   return sizeof(ObMacroBlockCommonHeader)
         + ObSSTableMacroBlockHeader::get_fixed_header_size()
-        + sizeof(bool) /* is_normal_cg */
         + ObSSTableMacroBlockHeader::get_variable_size_in_header(column_cnt, rowkey_col_cnt, fixed_header_version);
 }
 
@@ -274,7 +271,7 @@ int ObMacroBlock::write_micro_block(const ObMicroBlockDesc &micro_block_desc,
     STORAGE_LOG(WARN, "fail to check micro block", K(ret));
   } else if (OB_FAIL(inner_init())) {
     STORAGE_LOG(WARN, "fail to inner init", K(ret));
-  } else if (!spec_->is_cg()) {
+  } else {
     const ObDatumRowkey &last_rowkey = micro_block_desc.last_rowkey_;
     if (OB_UNLIKELY(last_rowkey.get_datum_cnt() != spec_->get_rowkey_column_count())) {
       ret = OB_ERR_UNEXPECTED;
@@ -414,13 +411,12 @@ int ObMacroBlock::flush(ObIMacroBlockFlusher &macro_block_flusher, const bool is
 void ObMacroBlock::print_flush_log(const ObStorageObjectHandle &macro_handle) const
 {
   int ret = OB_SUCCESS;
-  const uint16_t table_cg_idx = spec_ == nullptr ? 0 : spec_->get_table_cg_idx();
   const MacroBlockId macro_id = macro_handle.get_macro_id();
   // ATTENTION! Critical diagnostic log, DO NOT CHANGE!!!
   share::ObTaskController::get().allow_next_syslog();
   STORAGE_LOG(INFO, "macro block writer succeed to flush macro block.", K(ret),
               "block_id", macro_id, K(common_header_), K(macro_header_),
-              K_(contain_uncommitted_row), K_(max_merged_trans_version), KP(&macro_handle), K(table_cg_idx));
+              K_(contain_uncommitted_row), K_(max_merged_trans_version), KP(&macro_handle));
 }
 
 void ObMacroBlock::reset()
@@ -529,7 +525,6 @@ int ObMacroBlock::get_macro_block_meta(ObDataMacroBlockMeta &macro_meta)
 {
   int ret = OB_SUCCESS;
   macro_meta.val_.logic_id_.logic_version_ = spec_->get_logical_version();
-  macro_meta.val_.logic_id_.column_group_idx_= spec_->get_table_cg_idx();
   macro_meta.val_.logic_id_.data_seq_.macro_data_seq_ = macro_header_.fixed_header_.data_seq_;
   macro_meta.val_.logic_id_.tablet_id_ = spec_->get_tablet_id().id();
   macro_meta.val_.logic_id_.is_mds_ = is_mds_merge(spec_->get_merge_type());
@@ -592,8 +587,6 @@ int ObMacroBlock::get_macro_block_meta(ObDataMacroBlockMeta &macro_meta)
   if (OB_SUCC(ret) && OB_UNLIKELY(!macro_meta.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "build invalid macro meta", K(ret), K(macro_meta), K(macro_meta.is_valid()));
-  } else if (spec_->is_cg()) {
-    macro_meta.val_.rowkey_count_ = 1;
   }
   STORAGE_LOG(DEBUG, "build macro block meta", K(ret), K(macro_meta), K_(last_rowkey));
   return ret;

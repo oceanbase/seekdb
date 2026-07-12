@@ -53,7 +53,6 @@ public:
 
   static int resolve_replica_type(const ParseNode *parse_tree,
                                   common::ObReplicaType &replica_type);
-  static int check_compatibility_for_replica_type(const ObReplicaType replica_type);
   static int resolve_string(const ParseNode *parse_tree, common::ObString &string);
   static int resolve_relation_name(const ParseNode *parse_tree, common::ObString &string);
   // resolve opt_server_or_zone
@@ -142,7 +141,7 @@ public:
   virtual ~ObFreezeResolver() {}
   virtual int resolve(const ParseNode &parse_tree);
 private:
-  int resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode *opt_tenant_list_or_tablet_id, const ParseNode *opt_rebuild_column_group);
+  int resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode *opt_tenant_list_or_tablet_id);
   int resolve_minor_freeze_(ObFreezeStmt *freeze_stmt,
                             ParseNode *opt_tenant_list_or_ls_or_tablet_id);
 

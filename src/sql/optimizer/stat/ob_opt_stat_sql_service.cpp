@@ -106,7 +106,7 @@
                                                               "histogram_type," \
                                                               "global_stats," \
                                                               "user_stats,"\
-                                                              "spare1%s%s) VALUES "
+                                                              "spare1) VALUES "
 
 
 #define INSERT_HISTOGRAM_STAT_SQL "INSERT INTO __all_histogram_stat(table_id," \
@@ -240,7 +240,7 @@
                                             "col_stat.bucket_cnt as bucket_cnt,"     \
                                             "col_stat.density as density,"        \
                                             "col_stat.last_analyzed as last_analyzed,"\
-                                            "col_stat.spare1 as compress_type,%s%s%s"\
+                                            "col_stat.spare1 as compress_type,"\
                                             "hist_stat.endpoint_num as endpoint_num, "    \
                                             "hist_stat.b_endpoint_value as b_endpoint_value," \
                                             "hist_stat.endpoint_repeat_cnt as endpoint_repeat_cnt "\
@@ -593,10 +593,7 @@ int ObOptStatSqlService::construct_column_stat_sql(share::schema::ObSchemaGetter
     if (OB_ISNULL(column_stats.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("column stat is null", K(ret));
-    } else if (i == 0 &&
-               OB_FAIL(column_stats_sql.append_fmt(REPLACE_COL_STAT_SQL,
-                                                   ", cg_macro_blk_cnt, cg_micro_blk_cnt",
-                                                   ", cg_skip_rate"))) {
+    } else if (i == 0 && OB_FAIL(column_stats_sql.append(REPLACE_COL_STAT_SQL))) {
       LOG_WARN("failed to append sql", K(ret));
     } else if (OB_FAIL(get_column_stat_sql(allocator,
                                            *column_stats.at(i), current_time,
@@ -980,10 +977,7 @@ int ObOptStatSqlService::get_column_stat_sql(ObIAllocator &allocator,
         OB_FAIL(dml_splicer.add_column("histogram_type", stat.get_histogram().get_type())) ||
         OB_FAIL(dml_splicer.add_column("global_stats", 0)) ||
         OB_FAIL(dml_splicer.add_column("user_stats", 0)) ||
-        OB_FAIL(dml_splicer.add_column("spare1", ObOptStatCompressType::ZSTD_1_3_8_COMPRESS)) ||
-        (OB_FAIL(dml_splicer.add_column("cg_macro_blk_cnt", stat.get_cg_macro_blk_cnt()))) ||
-        (OB_FAIL(dml_splicer.add_column("cg_micro_blk_cnt", stat.get_cg_micro_blk_cnt()))) ||
-        (OB_FAIL(dml_splicer.add_long_double_column("cg_skip_rate", stat.get_cg_skip_rate())))) {
+        OB_FAIL(dml_splicer.add_column("spare1", ObOptStatCompressType::ZSTD_1_3_8_COMPRESS))) {
       LOG_WARN("failed to add dml splicer column", K(ret));
     } else if (OB_FAIL(dml_splicer.splice_values(sql_string))) {
       LOG_WARN("failed to get sql string", K(ret));
@@ -1189,9 +1183,6 @@ int ObOptStatSqlService::fetch_column_stat(ObIAllocator &allocator,
         ret = OB_NOT_INIT;
         LOG_WARN("sql service has not been initialized.", K(ret));
       } else if (OB_FAIL(sql.append_fmt(FETCH_ALL_COLUMN_STAT_SQL_COL,
-                                        "col_stat.cg_macro_blk_cnt as cg_macro_blk_cnt,",
-                                        "col_stat.cg_micro_blk_cnt as cg_micro_blk_cnt,",
-                                        "col_stat.cg_skip_rate as cg_skip_rate,",
                                         share::OB_ALL_COLUMN_STAT_TNAME,
                                         share::OB_ALL_HISTOGRAM_STAT_TNAME,
                                         keys_list_str.string().length(),
@@ -1401,12 +1392,6 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
                 }
               }
             }
-          }
-          if (OB_SUCC(ret)) {
-            EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, cg_macro_blk_cnt, *stat, int64_t, true, true, 0);
-            EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, cg_micro_blk_cnt, *stat, int64_t, true, true, 0);
-            EXTRACT_DOUBLE_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
-                  result, cg_skip_rate, *stat, double, true, true, 0);
           }
         }
       }

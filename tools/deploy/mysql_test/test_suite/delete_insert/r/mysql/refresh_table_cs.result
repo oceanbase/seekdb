@@ -1,5 +1,5 @@
 drop table if exists t1, t2;
-create table t1(id int primary key auto_increment, a int DEFAULT NULL, b int DEFAULT NULL) merge_engine = delete_insert with column group(each column);
+create table t1(id int primary key auto_increment, a int DEFAULT NULL, b int DEFAULT NULL) merge_engine = delete_insert;
 update  t1 set b = 101 where a = 100;
 select * from t1 order by a;
 id	a	b

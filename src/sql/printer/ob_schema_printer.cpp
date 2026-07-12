@@ -126,8 +126,6 @@ int ObSchemaPrinter::print_table_definition(const uint64_t table_id,
       SHARE_SCHEMA_LOG(WARN, "fail to print table options", K(ret), K(*table_schema));
     } else if (OB_FAIL(print_table_definition_partition_options(*table_schema, buf, buf_len, pos, agent_mode, tz_info))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print partition options", K(ret), K(*table_schema));
-    } else if ((!strict_compat_) && OB_FAIL(print_table_definition_column_group(*table_schema, buf, buf_len, pos))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to print column_group", K(ret), K(*table_schema));
     } else if (OB_FAIL(print_table_definition_on_commit_options(*table_schema, buf, buf_len, pos))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print on commit options", K(ret), K(*table_schema));
     }
@@ -660,14 +658,6 @@ int ObSchemaPrinter::print_single_index_definition(const ObTableSchema *index_sc
             SHARE_SCHEMA_LOG(WARN, "fail to print partition info for index", K(ret), KPC(index_schema));
           }
         }
-        // print column group info
-        if (OB_FAIL(ret)) {
-        } else if (strict_compat_) {
-          /* strict mode skip*/
-        } else if (OB_FAIL(print_table_definition_column_group(*index_schema, buf, buf_len, pos))) {
-          LOG_WARN("fail to print column group info", K(ret));
-        }
-
         if (OB_FAIL(ret)) {
         } else if (!index_schema->is_index_visible() && OB_FAIL(databuff_printf(buf, buf_len, pos, " /*!80000 INVISIBLE */"))) {
           LOG_WARN("failed to print invisible info", K(ret));
@@ -2524,8 +2514,6 @@ int ObSchemaPrinter::print_index_table_definition(const uint64_t index_table_id,
     } else if (index_table_schema->is_global_index_table()
                && OB_FAIL(print_table_definition_partition_options(*index_table_schema, buf, buf_len, pos, is_agent_mode, tz_info))) {
       OB_LOG(WARN, "fail to print partition info for index", K(ret), K(*index_table_schema));
-    } else if ((!strict_compat_) && OB_FAIL(print_table_definition_column_group(*index_table_schema, buf, buf_len, pos))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to print column_group", K(ret), K(*index_table_schema));
     } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, ";\n"))) {
       OB_LOG(WARN, "fail to print end ;", K(ret));
     }
@@ -2692,11 +2680,6 @@ int ObSchemaPrinter::print_materialized_view_definition(const uint64_t table_id,
                                                                   agent_mode, 
                                                                   tz_info))) {
         SHARE_SCHEMA_LOG(WARN, "fail to print partition options", KR(ret), K(*container_table_schema));
-      } else if (OB_FAIL(print_table_definition_column_group(*container_table_schema, 
-                                                              buf, 
-                                                              buf_len, 
-                                                              pos))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to print materialized view column group", KR(ret), K(*container_table_schema));
       } else if (OB_FAIL(ObMViewInfo::fetch_mview_info(*GCTX.sql_proxy_, table_id, mview_info))) {
         SHARE_SCHEMA_LOG(WARN, "fail to fecth materialized view info", KR(ret), K(table_id));
       } else if (!strict_compat_) {
@@ -4621,72 +4604,6 @@ int ObSchemaPrinter::print_hash_partition_elements(const ObPartitionSchema *&sch
           }
         }
       }
-    }
-  }
-  return ret;
-}
-
-int ObSchemaPrinter::print_table_definition_column_group(const ObTableSchema &table_schema,
-                                                         char *buf,
-                                                         const int64_t &buf_len,
-                                                         int64_t &pos) const
-{
-  int ret = OB_SUCCESS;
-  ObTableSchema::const_column_group_iterator iter_begin = table_schema.column_group_begin();
-  ObTableSchema::const_column_group_iterator iter_end = table_schema.column_group_end();
-  int64_t print_cg_cnt = 0;
-  bool is_each_cg_exist = false;
-  bool is_all_cg_exist = false;
-  
-  if (table_schema.get_column_group_count() <= 1){
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, " WITH COLUMN GROUP("))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to print column group", K(ret));
-  } else if (OB_FAIL(table_schema.is_column_group_exist(OB_EACH_COLUMN_GROUP_NAME, is_each_cg_exist))) {
-    LOG_WARN("fail to check is each column group exist", K(ret));
-  } else if (OB_FAIL(table_schema.is_column_group_exist(OB_ALL_COLUMN_GROUP_NAME, is_all_cg_exist))) {
-    LOG_WARN("fail to check is all column group exist", K(ret));
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (!is_all_cg_exist) {
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "all columns"))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to print column group", K(ret));
-  } else {
-    print_cg_cnt += 1;
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (!(is_all_cg_exist && is_each_cg_exist)) {
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, ", "))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to print column group", K(ret));        
-  }
-  
-  if (OB_FAIL(ret)){
-  } else if (!is_each_cg_exist) {
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "each column"))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to print column group", K(ret));
-  } else {
-    print_cg_cnt += 1;
-  }
-  
-  for (; OB_SUCC(ret) && iter_begin != iter_end; iter_begin++) {
-    const ObColumnGroupSchema *column_group = *iter_begin;
-    if (OB_ISNULL(column_group)) {
-      ret = OB_ERR_UNEXPECTED;
-      SHARE_SCHEMA_LOG(WARN, "column group should not be null", K(ret), K(table_schema));
-    } else {
-      ObColumnGroupType cg_type = column_group->get_column_group_type();
-      if (cg_type >= ObColumnGroupType::NORMAL_COLUMN_GROUP ) {
-        ret = OB_NOT_SUPPORTED;
-        SHARE_SCHEMA_LOG(WARN, "column group type not supported", K(ret), K(table_schema), KPC(column_group));
-      } else {
-        /* skip, all/each cg check already, default and rowkey not need to be print*/
-      }
-    }
-  }
-  if (OB_SUCC(ret) && print_cg_cnt > 0) {
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, ")"))) {
-      SHARE_SCHEMA_LOG(WARN,"fail to print column group", K(ret)); 
     }
   }
   return ret;

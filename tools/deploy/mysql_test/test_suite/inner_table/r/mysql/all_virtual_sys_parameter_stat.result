@@ -67,7 +67,6 @@ default_row_format
 default_storage_cache_policy
 default_table_merge_engine
 default_table_organization
-default_table_store_format
 devname
 diag_syslog_per_error_limit
 direct_load_allow_fallback
@@ -77,10 +76,8 @@ dump_data_dictionary_to_log_interval
 enable_adaptive_plan_cache
 enable_async_syslog
 enable_auto_split
-enable_cgroup
 enable_ddl
 enable_early_lock_release
-enable_global_background_resource_isolation
 enable_kv_ttl
 enable_lock_priority
 enable_major_freeze
@@ -103,7 +100,6 @@ enable_upgrade_mode
 enable_user_defined_rewrite_rules
 freeze_trigger_percentage
 fuse_row_cache_priority
-global_background_cpu_quota
 global_index_auto_split_policy
 ha_high_thread_score
 ha_info
@@ -316,7 +312,6 @@ _enable_backtrace_function
 _enable_block_file_punch_hole
 _enable_check_trigger_const_variables_assign
 _enable_choose_migration_source_policy
-_enable_column_store
 _enable_compaction_diagnose
 _enable_compatible_monotonic
 _enable_constant_type_demotion

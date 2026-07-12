@@ -42,8 +42,7 @@ enum ObRoutePolicyType
   // Even if the client routes the request to the partition leader, it is still executed locally,
   // The difference lies in the feedback returned to OCJ && ObProxy;
   UNMERGE_FOLLOWER_FIRST = 4,
-  COLUMN_STORE_ONLY = 5,
-  FORCE_READONLY_ZONE = 6,
+  FORCE_READONLY_ZONE = 5,
   POLICY_TYPE_MAX
 };
 
@@ -203,9 +202,7 @@ protected:
     // When the cluster is a read-write zone, and ob_route_policy is UNMERGE_FOLLOWER_FIRST, it is also handled as READONLY_ZONE_FIRST, but with additional feedback content
     // When the cluster has a read-only zone, and ob_route_policy is UNMERGE_FOLLOWER_FIRST, it is also handled as READONLY_ZONE_FIRST, at which point no additional feedback content will be added
     ObRoutePolicyType type = INVALID_POLICY;
-    if (COLUMN_STORE_ONLY == ctx.policy_type_) {
-      type = ctx.policy_type_;
-    } else if (FORCE_READONLY_ZONE == ctx.policy_type_) {
+    if (FORCE_READONLY_ZONE == ctx.policy_type_) {
       type = FORCE_READONLY_ZONE;
     } else {
       type = READONLY_ZONE_FIRST;

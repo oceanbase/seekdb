@@ -61,8 +61,7 @@ class ObAllVirtualTabletSSTableMacroInfo : public common::ObVirtualTableScannerI
     END_KEY,
     BLOCK_TYPE,
     COMPRESSOR_NAME,
-    ROW_STORE_TYPE,
-    CG_IDX
+    ROW_STORE_TYPE
   };
 public:
   ObAllVirtualTabletSSTableMacroInfo();

@@ -75,19 +75,7 @@ int ObMicroBlockBloomFilter::init(const ObDataStoreDesc &data_store_desc)
   } else if (OB_FAIL(hash_set_.create(1024, "MicroBFHashset", "MicroBFHashset"))) {
     LOG_WARN("fail to create hash set", K(ret));
   } else {
-    if (data_store_desc.is_cg()) { // Fetch datum utils for rowkey murmurhash.
-      const ObITableReadInfo *index_read_info;
-      if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
-        LOG_WARN("fail to get index read info for cg sstable", K(ret), K(data_store_desc));
-      } else if (OB_UNLIKELY(!index_read_info->get_datum_utils().is_valid())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected invalid datum utails for cg sstable", K(ret), KPC(index_read_info));
-      } else {
-        datum_utils_ = &index_read_info->get_datum_utils();
-      }
-    } else {
-      datum_utils_ = &(data_store_desc.get_datum_utils());
-    }
+    datum_utils_ = &(data_store_desc.get_datum_utils());
     if (OB_SUCC(ret)) {
       rowkey_column_count_ = datum_utils_->get_rowkey_count();
       // As same as load bf.
@@ -356,19 +344,7 @@ int ObMacroBlockBloomFilter::alloc_bf(const ObDataStoreDesc &data_store_desc, co
   } else if (OB_FAIL(bf_.init_by_row_count(max_row_count_, ObBloomFilter::BLOOM_FILTER_FALSE_POSITIVE_PROB))) {
     LOG_WARN("fail to init new bloom filter", K(ret), K(max_row_count_));
   } else {
-    if (data_store_desc.is_cg()) { // Fetch datum utils for rowkey murmurhash.
-      const ObITableReadInfo *index_read_info;
-      if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
-        LOG_WARN("fail to get index read info for cg sstable", K(ret), K(data_store_desc));
-      } else if (OB_UNLIKELY(!index_read_info->get_datum_utils().is_valid())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected invalid datum utails for cg sstable", K(ret), KPC(index_read_info));
-      } else {
-        rowkey_column_count_ = index_read_info->get_datum_utils().get_rowkey_count();
-      }
-    } else {
-      rowkey_column_count_ = data_store_desc.get_datum_utils().get_rowkey_count();
-    }
+    rowkey_column_count_ = data_store_desc.get_datum_utils().get_rowkey_count();
     // As same as load bf.
     empty_read_prefix_
         = rowkey_column_count_ - storage::ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt() /* mvcc col */;

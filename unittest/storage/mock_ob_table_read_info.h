@@ -56,9 +56,8 @@ int MockObTableReadInfo::init(common::ObIAllocator &allocator,
   const int64_t out_cols_cnt = cols_desc.count();
 
   const int64_t extra_rowkey_col_cnt = storage::ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
-  const bool is_cg_sstable = (schema_rowkey_cnt == 0 && schema_column_count == 1);
-  init_basic_info(schema_column_count, schema_rowkey_cnt, is_cg_sstable,
-    false /*is_cs_replica_compat*/, false /*is_delete_insert_table*/, false/*is_global_index_table*/); // init basic info
+  init_basic_info(schema_column_count, schema_rowkey_cnt,
+    false /*is_delete_insert_table*/, false/*is_global_index_table*/); // init basic info
   if (OB_FAIL(prepare_arrays(allocator, cols_desc, out_cols_cnt))) {
     STORAGE_LOG(WARN, "failed to prepare arrays", K(ret), K(out_cols_cnt));
   } else if (nullptr != cols_param && OB_FAIL(cols_param_.init_and_assign(*cols_param, allocator))) {
@@ -73,7 +72,7 @@ int MockObTableReadInfo::init(common::ObIAllocator &allocator,
       cols_index_.array_[i] = col_index;
       memtable_cols_index_.array_[i] = col_index;
     }
-    if (FAILEDx(init_datum_utils(allocator, false/*is_cg_sstable*/))) {
+    if (FAILEDx(init_datum_utils(allocator))) {
       STORAGE_LOG(WARN, "failed to init sequence read info & datum utils", K(ret));
     } else {
       is_inited_ = true;

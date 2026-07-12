@@ -92,7 +92,6 @@ int ObHybridHistEstimator::estimate(const ObOptStatGatherParam &param,
   } else if (OB_FAIL(fill_hints(allocator, 
                                 param.tab_name_, 
                                 param.gather_vectorize_, 
-                                false, 
                                 !need_sample))) {
     LOG_WARN("failed to fill hints", K(ret));
   } else if (OB_FAIL(add_from_table(allocator, param.db_name_, param.tab_name_))) {
@@ -231,7 +230,7 @@ int ObHybridHistEstimator::estimate_no_sample_col_hydrid_hist(ObIAllocator &allo
                                                           hybrid_col_stats,
                                                           no_sample_idx))) {
     LOG_WARN("failed to add no sample hybrid hist stat items", K(ret));
-  } else if (OB_FAIL(fill_hints(allocator, param.tab_name_, param.gather_vectorize_, false, false))) {
+  } else if (OB_FAIL(fill_hints(allocator, param.tab_name_, param.gather_vectorize_, false))) {
     LOG_WARN("failed to fill hints", K(ret));
   } else if (OB_FAIL(fill_parallel_info(allocator, param.degree_))) {
     LOG_WARN("failed to fill parallel info", K(ret));

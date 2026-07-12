@@ -628,7 +628,6 @@ desc oceanbase.V$OB_SSTABLES;
 Field	Type	Null	Key	Default	Extra
 TABLE_TYPE	varchar(20)	NO		NULL	
 TABLET_ID	bigint(20)	NO		NULL	
-CG_IDX	bigint(20)	NO		NULL	
 START_LOG_SCN	bigint(20) unsigned	NO		NULL	
 END_LOG_SCN	bigint(20) unsigned	NO		NULL	
 DATA_CHECKSUM	bigint(20)	NO		NULL	
@@ -1388,8 +1387,6 @@ PARALLEL_INFO	varchar(512)	NO		NULL
 PARTICIPANT_TABLE	varchar(512)	NO		NULL	
 MACRO_ID_LIST	varchar(256)	NO		NULL	
 COMMENTS	varchar(1024)	NO		NULL	
-START_CG_ID	bigint(20)	NO		NULL	
-END_CG_ID	bigint(20)	NO		NULL	
 KEPT_SNAPSHOT	varchar(128)	NO		NULL	
 MERGE_LEVEL	varchar(64)	NO		NULL	
 EXEC_MODE	varchar(64)	NO		NULL	
@@ -1397,7 +1394,6 @@ IS_FULL_MERGE	varchar(5)	NO		NULL
 IO_COST_TIME_PERCENTAGE	bigint(20)	NO		NULL	
 MERGE_REASON	varchar(32)	NO		NULL	
 BASE_MAJOR_STATUS	varchar(64)	NO		NULL	
-CO_MERGE_TYPE	varchar(64)	NO		NULL	
 MDS_FILTER_INFO	varchar(1024)	NO		NULL	
 EXECUTE_TIME	bigint(20)	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_TABLET_COMPACTION_HISTORY limit 1);
@@ -1820,110 +1816,6 @@ TOTAL	decimal(42,0)	NO
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from information_schema.QUERY_RESPONSE_TIME limit 1);
 cnt
 1
-desc oceanbase.DBA_RSRC_PLANS;
-Field	Type	Null	Key	Default	Extra
-PLAN_ID	decimal(10,0)	NO			
-PLAN	varchar(128)	NO		NULL	
-NUM_PLAN_DIRECTIVES	decimal(10,0)	NO			
-CPU_METHOD	varchar(128)	NO			
-MGMT_METHOD	varchar(128)	NO			
-ACTIVE_SESS_POOL_MTH	varchar(128)	NO			
-PARALLEL_DEGREE_LIMIT_MTH	varchar(128)	NO			
-QUEUING_MTH	varchar(128)	NO			
-SUB_PLAN	varchar(3)	NO			
-COMMENTS	varchar(2000)	YES		NULL	
-STATUS	varchar(128)	NO			
-MANDATORY	varchar(3)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_RSRC_PLANS limit 1);
-cnt
-1
-desc oceanbase.DBA_RSRC_PLAN_DIRECTIVES;
-Field	Type	Null	Key	Default	Extra
-PLAN	varchar(128)	NO		NULL	
-GROUP_OR_SUBPLAN	varchar(128)	NO		NULL	
-TYPE	varchar(14)	NO			
-CPU_P1	decimal(10,0)	NO			
-CPU_P2	decimal(10,0)	NO			
-CPU_P3	decimal(10,0)	NO			
-CPU_P4	decimal(10,0)	NO			
-CPU_P5	decimal(10,0)	NO			
-CPU_P6	decimal(10,0)	NO			
-CPU_P7	decimal(10,0)	NO			
-CPU_P8	decimal(10,0)	NO			
-MGMT_P1	bigint(20)	NO			
-MGMT_P2	decimal(10,0)	NO			
-MGMT_P3	decimal(10,0)	NO			
-MGMT_P4	decimal(10,0)	NO			
-MGMT_P5	decimal(10,0)	NO			
-MGMT_P6	decimal(10,0)	NO			
-MGMT_P7	decimal(10,0)	NO			
-MGMT_P8	decimal(10,0)	NO			
-ACTIVE_SESS_POOL_P1	decimal(10,0)	NO			
-QUEUEING_P1	decimal(10,0)	NO			
-PARALLEL_TARGET_PERCENTAGE	decimal(10,0)	NO			
-PARALLEL_DEGREE_LIMIT_P1	decimal(10,0)	NO			
-SWITCH_GROUP	varchar(128)	NO			
-SWITCH_FOR_CALL	varchar(5)	NO			
-SWITCH_TIME	decimal(10,0)	NO			
-SWITCH_IO_MEGABYTES	decimal(10,0)	NO			
-SWITCH_IO_REQS	decimal(10,0)	NO			
-SWITCH_ESTIMATE	varchar(5)	NO			
-MAX_EST_EXEC_TIME	decimal(10,0)	NO			
-UNDO_POOL	decimal(10,0)	NO			
-MAX_IDLE_TIME	decimal(10,0)	NO			
-MAX_IDLE_BLOCKER_TIME	decimal(10,0)	NO			
-MAX_UTILIZATION_LIMIT	decimal(10,0)	NO			
-PARALLEL_QUEUE_TIMEOUT	decimal(10,0)	NO			
-SWITCH_TIME_IN_CALL	decimal(10,0)	NO			
-SWITCH_IO_LOGICAL	decimal(10,0)	NO			
-SWITCH_ELAPSED_TIME	decimal(10,0)	NO			
-PARALLEL_SERVER_LIMIT	decimal(10,0)	NO			
-UTILIZATION_LIMIT	bigint(20)	NO			
-PARALLEL_STMT_CRITICAL	varchar(12)	NO			
-SESSION_PGA_LIMIT	decimal(10,0)	NO			
-PQ_TIMEOUT_ACTION	varchar(6)	NO			
-COMMENTS	varchar(2000)	YES		NULL	
-STATUS	varchar(128)	NO			
-MANDATORY	varchar(3)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_RSRC_PLAN_DIRECTIVES limit 1);
-cnt
-1
-desc oceanbase.DBA_RSRC_GROUP_MAPPINGS;
-Field	Type	Null	Key	Default	Extra
-ATTRIBUTE	varchar(128)	NO		NULL	
-VALUE	varbinary(128)	NO		NULL	
-CONSUMER_GROUP	varchar(128)	YES		NULL	
-STATUS	varchar(128)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_RSRC_GROUP_MAPPINGS limit 1);
-cnt
-1
-desc oceanbase.DBA_RSRC_CONSUMER_GROUPS;
-Field	Type	Null	Key	Default	Extra
-CONSUMER_GROUP_ID	bigint(20)	NO		NULL	
-CONSUMER_GROUP	varchar(128)	NO		NULL	
-CPU_METHOD	varchar(128)	NO			
-MGMT_METHOD	varchar(128)	NO			
-INTERNAL_USE	varchar(3)	NO			
-COMMENTS	varchar(2000)	YES		NULL	
-CATEGORY	varchar(128)	NO			
-STATUS	varchar(128)	NO			
-MANDATORY	varchar(3)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_RSRC_CONSUMER_GROUPS limit 1);
-cnt
-1
-desc oceanbase.V$RSRC_PLAN;
-Field	Type	Null	Key	Default	Extra
-ID	decimal(10,0)	NO			
-NAME	varchar(128)	NO			
-IS_TOP_PLAN	varchar(5)	NO			
-CPU_MANAGED	varchar(3)	NO			
-INSTANCE_CAGING	varchar(3)	NO			
-PARALLEL_SERVERS_ACTIVE	decimal(10,0)	NO			
-PARALLEL_SERVERS_TOTAL	decimal(10,0)	NO			
-PARALLEL_EXECUTION_MANAGED	varchar(32)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$RSRC_PLAN limit 1);
-cnt
-1
 desc oceanbase.DBA_OB_SERVER_EVENT_HISTORY;
 Field	Type	Null	Key	Default	Extra
 TIMESTAMP	bigint(20)	NO		NULL	
@@ -2291,17 +2183,6 @@ PARTITION_COMMENT	text	NO
 NODEGROUP	varchar(256)	NO			
 TABLESPACE_NAME	varchar(268)	NO			
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from information_schema.PARTITIONS limit 1);
-cnt
-1
-desc oceanbase.DBA_OB_RSRC_IO_DIRECTIVES;
-Field	Type	Null	Key	Default	Extra
-PLAN	varchar(128)	NO		NULL	
-GROUP_OR_SUBPLAN	varchar(128)	NO		NULL	
-COMMENTS	varchar(2000)	YES		NULL	
-MIN_IOPS	bigint(20)	NO			
-MAX_IOPS	bigint(20)	NO			
-WEIGHT_IOPS	bigint(20)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_RSRC_IO_DIRECTIVES limit 1);
 cnt
 1
 desc oceanbase.DBA_OB_DATA_DICTIONARY_IN_LOG;
@@ -2780,21 +2661,6 @@ DESCRIPTION	varchar(4096)	NO		NULL
 IS_ENABLE	varchar(5)	NO		NULL	
 ENABLE_VERSIONS	longtext	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_COMPATIBILITY_CONTROL limit 1);
-cnt
-1
-desc oceanbase.DBA_OB_RSRC_DIRECTIVES;
-Field	Type	Null	Key	Default	Extra
-PLAN	varchar(128)	NO		NULL	
-GROUP_OR_SUBPLAN	varchar(128)	NO		NULL	
-COMMENTS	varchar(2000)	YES		NULL	
-MGMT_P1	bigint(20)	NO			
-UTILIZATION_LIMIT	bigint(20)	NO			
-MIN_IOPS	bigint(20)	NO			
-MAX_IOPS	bigint(20)	NO			
-WEIGHT_IOPS	bigint(20)	NO			
-MAX_NET_BANDWIDTH	bigint(20)	NO			
-NET_BANDWIDTH_WEIGHT	bigint(20)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_RSRC_DIRECTIVES limit 1);
 cnt
 1
 desc information_schema.INNODB_LOCK_WAITS;
@@ -3370,16 +3236,6 @@ COLLATION_CONNECTION	varchar(128)	NO
 DB_COLLATION	varchar(128)	NO			
 BODY_UTF8	longblob	NO			
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from mysql.proc limit 1);
-cnt
-1
-desc oceanbase.DBA_OB_CS_REPLICA_STATS;
-Field	Type	Null	Key	Default	Extra
-TOTAL_TABLET_CNT	bigint(20)	NO			
-AVAILABLE_TABLET_CNT	decimal(42,0)	NO			
-TOTAL_MACRO_BLOCK_CNT	decimal(42,0)	NO		NULL	
-AVAILABLE_MACRO_BLOCK_CNT	decimal(42,0)	NO			
-AVAILABLE	varchar(5)	NO			
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_CS_REPLICA_STATS limit 1);
 cnt
 1
 desc oceanbase.DBA_OB_VECTOR_INDEX_TASKS;

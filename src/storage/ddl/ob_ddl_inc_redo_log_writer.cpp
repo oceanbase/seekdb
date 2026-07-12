@@ -684,7 +684,6 @@ ObDDLIncRedoLogWriterCallback::ObDDLIncRedoLogWriterCallback()
     tx_desc_(nullptr),
     trans_id_(),
     parallel_cnt_(0),
-    cg_cnt_(0),
     seq_no_()
 {
 }
@@ -716,7 +715,6 @@ int ObDDLIncRedoLogWriterCallback::init(ObDDLRedoLogWriterCallbackInitParam &par
     trans_id_ = param.trans_id_;
     seq_no_ = param.seq_no_;
     parallel_cnt_ =  param.parallel_cnt_;
-    cg_cnt_ = param.cg_cnt_;
     is_inited_ = true;
   }
 
@@ -751,9 +749,7 @@ int ObDDLIncRedoLogWriterCallback::write(
     redo_info_.macro_block_id_ = MacroBlockId::mock_valid_macro_id();
     redo_info_.macro_block_id_.set_id_mode((uint64_t)ObMacroBlockIdMode::ID_MODE_SHARE);
     redo_info_.parallel_cnt_ = parallel_cnt_;
-    redo_info_.cg_cnt_ = cg_cnt_;
     redo_info_.seq_no_ = seq_no_;
-    redo_info_.with_cs_replica_ = false; // TODO(chengkong): placeholder for column store replica feature
     if (OB_FAIL(ddl_inc_writer_.write_inc_redo_log_with_retry(redo_info_, macro_block_id_, task_id_, tx_desc_))) {
       LOG_WARN("write ddl inc redo log fail", K(ret));
     }

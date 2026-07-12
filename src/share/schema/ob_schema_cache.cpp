@@ -526,10 +526,6 @@ bool ObSchemaCache::is_necessary_table(const uint64_t table_id) const
          || OB_ALL_PART_IDX_PART_NAME_TID == table_id
          || OB_ALL_SUB_PART_IDX_SUB_PART_NAME_TID == table_id
          || OB_ALL_DEF_SUB_PART_IDX_DEF_SUB_PART_NAME_TID == table_id
-         || OB_ALL_COLUMN_GROUP_TID == table_id
-         || OB_ALL_COLUMN_GROUP_HISTORY_TID == table_id
-         || OB_ALL_COLUMN_GROUP_MAPPING_TID == table_id
-         || OB_ALL_COLUMN_GROUP_MAPPING_HISTORY_TID == table_id
          || OB_ALL_FOREIGN_KEY_TID == table_id
          || OB_ALL_FOREIGN_KEY_HISTORY_TID == table_id
          || OB_ALL_FOREIGN_KEY_IDX_FK_CHILD_TID_TID == table_id

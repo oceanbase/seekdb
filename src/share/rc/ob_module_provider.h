@@ -107,8 +107,6 @@ public:
   virtual observer::ObTableLoadService * table_load_service() { return nullptr; }
   virtual observer::ObTableLoadResourceService * table_load_resource_service() { return nullptr; }
   virtual concurrency_control::ObMultiVersionGarbageCollector * multi_version_garbage_collector() { return nullptr; }
-  virtual sql::ObFLTSpanMgr * flt_span_mgr() { return nullptr; }
-  virtual storage::ObTenantCGReadInfoMgr * tenant_cg_read_info_mgr() { return nullptr; }
   virtual ObTestModule * test_module() { return nullptr; }
   virtual storage::ObEmptyReadBucket * empty_read_bucket() { return nullptr; }
   virtual rootserver::ObDBMSSchedService * dbms_sched_service() { return nullptr; }

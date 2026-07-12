@@ -26,8 +26,7 @@ using namespace share::schema;
 namespace sql
 {
 ObCreateTableResolverBase::ObCreateTableResolverBase(ObResolverParams &params)
-    : ObDDLResolver(params),
-      cur_column_group_id_(COLUMN_GROUP_START_ID)
+    : ObDDLResolver(params)
 {
 }
 
@@ -206,11 +205,10 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
       table_schema.set_auto_increment_cache_size(auto_increment_cache_size_);
     }
     if (OB_SUCC(ret)) {
-      if (table_schema.get_row_store_type() != CS_ENCODING_ROW_STORE
-          && semistruct_encoding_type_.is_enable_semistruct_encoding()) {
+      if (semistruct_encoding_type_.is_enable_semistruct_encoding()) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("semistruct_encoding is not support if cs encoding is not set", K(ret), K(table_schema.get_row_store_type()), K(semistruct_encoding_type_));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "semistruct_encoding is not support if cs encoding is not set");
+        LOG_WARN("semistruct encoding is not supported", K(ret), K(semistruct_encoding_type_));
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "semistruct encoding is not supported");
       } else {
         table_schema.set_semistruct_encoding_type(semistruct_encoding_type_);
       }
@@ -266,98 +264,6 @@ int ObCreateTableResolverBase::add_primary_key_part(const ObString &column_name,
   return ret;
 }
 
-
-int ObCreateTableResolverBase::resolve_column_group_helper(const ParseNode *cg_node, 
-                                                            ObTableSchema &table_schema) 
-{
-  int ret = OB_SUCCESS;
-  ObArray<uint64_t> column_ids; // not include virtual column
-  ObTableStoreType table_store_type = OB_TABLE_STORE_INVALID;
-  
-  const int64_t column_cnt = table_schema.get_column_count();
-  if (OB_FAIL(column_ids.reserve(column_cnt))) {
-      LOG_WARN("fail to reserve", KR(ret), K(column_cnt));
-  } else {
-    table_schema.set_column_store(true);
-    bool is_each_cg_exist = false;
-    if (OB_NOT_NULL(cg_node)) {
-      if (OB_FAIL(parse_column_group(cg_node, table_schema, table_schema))) {
-        LOG_WARN("fail to parse column group", K(ret));
-      }
-    }
-
-    /* build column group when cg node is null && tenant cg valid*/
-    if (OB_FAIL(ret)) {
-    } else if (nullptr == cg_node) {
-      /* force to build each cg*/
-      if (!ObSchemaUtils::can_add_column_group(table_schema)) {
-      } else if (OB_FAIL(ObTableStoreFormat::find_table_store_type(
-                  GCONF.default_table_store_format.get_value_string(),
-                  table_store_type))) {
-        LOG_WARN("fail to get table store format", K(ret), K(table_store_type));
-      } else if (ObTableStoreFormat::is_with_column(table_store_type)) {
-        if (OB_FAIL(ObSchemaUtils::build_add_each_column_group(table_schema, table_schema))) {
-          LOG_WARN("fail to add each column group", K(ret));
-        }
-      }
-
-      /* force to build all cg*/
-      ObColumnGroupSchema all_cg;
-      if (OB_FAIL(ret)) {
-      } else if (!ObSchemaUtils::can_add_column_group(table_schema)) {
-      } else if (ObTableStoreFormat::is_row_with_column_store(table_store_type)) {
-        if (OB_FAIL(ObSchemaUtils::build_all_column_group(table_schema, 
-                                                          ALL_COLUMN_GROUP_ID, all_cg))) {
-          LOG_WARN("fail to add all column group", K(ret));
-        } else if (OB_FAIL(table_schema.add_column_group(all_cg))) {
-          LOG_WARN("fail to build all column group", K(ret));
-        }
-      }
-    }                
-
-    // add default_type column_group, build a empty and then use alter_deafult_cg
-    if (OB_SUCC(ret)) {
-      ObColumnGroupSchema tmp_cg;
-      column_ids.reuse(); 
-      if (OB_FAIL(build_column_group(table_schema, ObColumnGroupType::DEFAULT_COLUMN_GROUP,
-          OB_DEFAULT_COLUMN_GROUP_NAME, column_ids, DEFAULT_TYPE_COLUMN_GROUP_ID, tmp_cg))) {
-        LOG_WARN("fail to build default type column_group", KR(ret), K(table_store_type),
-                  "table_id", table_schema.get_table_id());
-      } else if (OB_FAIL(table_schema.add_column_group(tmp_cg))) {
-        LOG_WARN("fail to add default column group", KR(ret), "table_id", table_schema.get_table_id());
-      } else if (OB_FAIL(ObSchemaUtils::alter_rowkey_column_group(table_schema))) {
-        LOG_WARN("fail to adjust rowkey column group when add column group", K(ret));
-      } else if (OB_FAIL(ObSchemaUtils::alter_default_column_group(table_schema))) {
-        LOG_WARN("fail to adjust default column group", K(ret));
-      }
-    }
-
-    if (FAILEDx(table_schema.adjust_column_group_array())) {
-      LOG_WARN("fail to adjust column group array", K(ret), K(table_schema));
-    }
-  }
-  return ret;
-}
-/*
-* only when default columns store is column_store
-* have to add each column group
-*/
-int ObCreateTableResolverBase::resolve_column_group(const ParseNode *cg_node)
-{
-  int ret = OB_SUCCESS;
-  ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt *>(stmt_);
-
-  if (OB_ISNULL(create_table_stmt)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "create_table_stmt should not be null", KR(ret));
-  } else {
-    ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-    if (OB_FAIL(resolve_column_group_helper(cg_node, table_schema))) {
-      LOG_WARN("fail to resolve column group helper", KR(ret));
-    }
-  }
-  return ret;
-}
 
 int ObCreateTableResolverBase::resolve_table_organization(common::ObServerConfig *tenant_config, ParseNode *node)
 {

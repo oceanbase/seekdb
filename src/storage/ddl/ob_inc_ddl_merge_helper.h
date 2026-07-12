@@ -38,12 +38,11 @@ class ObIncMinDDLMergeHelper: public ObIDDLMergeHelper
 public:
   int process_prepare_task(ObIDag *dag,
                            ObDDLTabletMergeDagParamV2 &ddl_merge_param,
-                           ObIArray<ObTuple<int64_t, int64_t, int64_t>> &cg_slices) override;
-  int merge_cg_slice(ObIDag* dag,
-                     ObDDLTabletMergeDagParamV2 &merge_param,
-                     const int64_t cg_idx,
-                     const int64_t start_slice,
-                     const int64_t end_slice) override;
+                           ObIArray<ObDDLSliceRange> &slice_ranges) override;
+  int merge_slice(ObIDag* dag,
+                  ObDDLTabletMergeDagParamV2 &merge_param,
+                  const int64_t start_slice,
+                  const int64_t end_slice) override;
   int assemble_sstable(ObDDLTabletMergeDagParamV2 &param) override;
   int get_rec_scn(ObDDLTabletMergeDagParamV2 &merge_param) override;
 private:

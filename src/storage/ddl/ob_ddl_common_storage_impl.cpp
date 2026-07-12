@@ -33,7 +33,7 @@
 #include "share/storage/ob_tablet_replica_checksum_table_storage.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
-#include "storage/ddl/ob_cg_macro_block_writer.h"
+#include "storage/ddl/ob_ddl_macro_block_writer.h"
 #include "storage/ddl/ob_lob_macro_block_writer.h"
 
 #include "sql/das/ob_das_utils.h"
@@ -222,91 +222,58 @@ int ObDDLUtil::report_ddl_sstable_checksum(
   } else {
     const int64_t *column_checksums = sst_meta_hdl.get_sstable_meta().get_col_checksum();
     int64_t column_count = sst_meta_hdl.get_sstable_meta().get_col_checksum_cnt();
-    ObArray<int64_t> co_column_checksums;
-    co_column_checksums.set_attr(ObMemAttr("TblDL_Ccc"));
-    if (OB_FAIL(ObDDLStorageUtil::get_co_column_checksums_if_need(tablet_handle, first_major_sstable, co_column_checksums))) {
-      LOG_WARN("get column checksum from co sstable failed", K(ret));
-    } else {
-      for (int64_t retry_cnt = 10; retry_cnt > 0; retry_cnt--) { // overwrite ret
-        if (OB_FAIL(ObTabletDDLUtil::report_ddl_checksum(ls_id,
-                                                        tablet_id,
-                                                        target_table_id,
-                                                        execution_id,
-                                                        ddl_task_id,
-                                                        co_column_checksums.empty() ? column_checksums : co_column_checksums.get_data(),
-                                                        co_column_checksums.empty() ? column_count : co_column_checksums.count(),
-                                                        tenant_data_version))) {
-          LOG_WARN("report ddl column checksum failed", K(ret), K(ls_id), K(tablet_id), K(ddl_task_id));
-        } else {
-          break;
-        }
+    for (int64_t retry_cnt = 10; retry_cnt > 0; retry_cnt--) { // overwrite ret
+      if (OB_FAIL(ObTabletDDLUtil::report_ddl_checksum(ls_id,
+                                                      tablet_id,
+                                                      target_table_id,
+                                                      execution_id,
+                                                      ddl_task_id,
+                                                      column_checksums,
+                                                      column_count,
+                                                      tenant_data_version))) {
+        LOG_WARN("report ddl column checksum failed", K(ret), K(ls_id), K(tablet_id), K(ddl_task_id));
+      } else {
+        break;
       }
-      ob_usleep(100L * 1000L);
     }
+    ob_usleep(100L * 1000L);
   }
   return ret;
 }
 
-int ObDDLUtil::init_cg_macro_block_writers(
+int ObDDLUtil::init_macro_block_writer(
     const ObWriteMacroParam &param,
     ObIAllocator &allocator,
-    const ObStorageSchema *&storage_schema,
-    ObIArray<ObCgMacroBlockWriter *> &cg_writers)
+    ObDDLMacroBlockWriter *&macro_block_writer)
 {
   int ret = OB_SUCCESS;
-  storage_schema = nullptr;
-  cg_writers.reset();
-  ObDDLTabletContext *tablet_context = nullptr;
+  macro_block_writer = nullptr;
   ObMacroDataSeq start_seq;
   const int64_t row_offset = 0;
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(param));
+  } else if (OB_ISNULL(param.tablet_param_.storage_schema_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("storage schema is null", K(ret), K(param));
   } else if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(param.slice_idx_,
                                                      start_seq))) {
     LOG_WARN("init start seq failed", K(ret), K(param.direct_load_type_),
                                       K(param.tablet_id_), K(param.slice_idx_));
   } else {
     const bool is_inc_major = is_incremental_major_direct_load(param.direct_load_type_);
-    const int64_t cg_count = param.tablet_param_.storage_schema_->get_column_group_count();
-    ObITable::TableKey cg_table_key;
-    cg_table_key.tablet_id_ = param.tablet_id_;
-    cg_table_key.version_range_.snapshot_version_ = param.snapshot_version_;
-    storage_schema = param.tablet_param_.storage_schema_;
-    for (int64_t cg_idx = 0; OB_SUCC(ret) && cg_idx < cg_count; ++cg_idx) {
-      cg_table_key.column_group_idx_ = cg_idx;
-      const ObStorageColumnGroupSchema &cg_schema = storage_schema->get_column_groups().at(cg_idx);
-      if (!param.ddl_table_schema_.table_item_.is_column_store_) {
-        cg_table_key.table_type_ = is_inc_major ? ObITable::INC_MAJOR_SSTABLE : ObITable::MAJOR_SSTABLE;
-      } else if (cg_schema.is_rowkey_column_group() || cg_schema.is_all_column_group()) {
-        cg_table_key.slice_range_.start_slice_idx_ = param.slice_idx_;
-        cg_table_key.slice_range_.end_slice_idx_ = param.slice_idx_;
-        cg_table_key.table_type_ = is_inc_major ? ObITable::INC_COLUMN_ORIENTED_SSTABLE
-                                                : ObITable::COLUMN_ORIENTED_SSTABLE;
-      } else {
-        cg_table_key.slice_range_.start_slice_idx_ = param.slice_idx_;
-        cg_table_key.slice_range_.end_slice_idx_ = param.slice_idx_;
-        cg_table_key.table_type_ = is_inc_major ? ObITable::INC_NORMAL_COLUMN_GROUP_SSTABLE
-                                                : ObITable::NORMAL_COLUMN_GROUP_SSTABLE;
-      }
-      ObCgMacroBlockWriter *cg_macro_block_writer = nullptr;
-      if (OB_ISNULL(cg_macro_block_writer = OB_NEWx(ObCgMacroBlockWriter, &allocator))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate memory", K(ret));
-      } else if (OB_FAIL(cg_macro_block_writer->init(param,
-                                                     cg_table_key,
-                                                     start_seq,
-                                                     row_offset))) {
-        LOG_WARN("fail to initialize cg macro block writer", K(ret), K(cg_idx));
-      } else if (OB_FAIL(cg_writers.push_back(cg_macro_block_writer))) {
-        LOG_TRACE("fail to push back cg macro block writer", K(cg_idx), KPC(cg_macro_block_writer));
-      } else {
-        cg_macro_block_writer = nullptr;
-      }
-      if (OB_FAIL(ret) && nullptr != cg_macro_block_writer) {
-        cg_macro_block_writer->~ObCgMacroBlockWriter();
-        allocator.free(cg_macro_block_writer);
-      }
+    ObITable::TableKey table_key;
+    table_key.tablet_id_ = param.tablet_id_;
+    table_key.version_range_.snapshot_version_ = param.snapshot_version_;
+    table_key.table_type_ = is_inc_major ? ObITable::INC_MAJOR_SSTABLE : ObITable::MAJOR_SSTABLE;
+    if (OB_ISNULL(macro_block_writer = OB_NEWx(ObDDLMacroBlockWriter, &allocator))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to allocate memory", K(ret));
+    } else if (OB_FAIL(macro_block_writer->init(param, table_key, start_seq, row_offset))) {
+      LOG_WARN("fail to initialize macro block writer", K(ret), K(table_key));
+    }
+    if (OB_FAIL(ret)) {
+      OB_DELETEx(ObDDLMacroBlockWriter, &allocator, macro_block_writer);
     }
   }
   return ret;
@@ -315,7 +282,7 @@ int ObDDLUtil::init_cg_macro_block_writers(
 int ObDDLUtil::init_inc_macro_block_writer(
     const ObWriteMacroParam &param,
     ObIAllocator &allocator,
-    ObCgMacroBlockWriter *&macro_block_writer)
+    ObDDLMacroBlockWriter *&macro_block_writer)
 {
   int ret = OB_SUCCESS;
   macro_block_writer = nullptr;
@@ -326,6 +293,9 @@ int ObDDLUtil::init_inc_macro_block_writer(
   } else if (!is_incremental_direct_load(param.direct_load_type_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected not incremental direct load", KR(ret), K(param));
+  } else if (OB_ISNULL(param.tablet_param_.storage_schema_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("storage schema is null", K(ret), K(param));
   } else if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(param.slice_idx_,
                                                      start_seq))) {
     LOG_WARN("init start seq failed", KR(ret), K(param.direct_load_type_),
@@ -336,17 +306,14 @@ int ObDDLUtil::init_inc_macro_block_writer(
     table_key.table_type_ = ObITable::MINI_SSTABLE;
     table_key.scn_range_.start_scn_.convert_for_tx(1);
     table_key.scn_range_.end_scn_.convert_for_tx(param.snapshot_version_); // for logic version
-    ObCgMacroBlockWriter *cg_macro_block_writer = nullptr;
-    if (OB_ISNULL(cg_macro_block_writer = OB_NEWx(ObCgMacroBlockWriter, &allocator))) {
+    if (OB_ISNULL(macro_block_writer = OB_NEWx(ObDDLMacroBlockWriter, &allocator))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to new ObCgMacroBlockWriter", KR(ret));
-    } else if (OB_FAIL(cg_macro_block_writer->init(param, table_key, start_seq, 0 /*row_offset*/))) {
-      LOG_WARN("fail to init cg macro block writer", KR(ret), K(param), K(table_key), K(start_seq));
-    } else {
-      macro_block_writer = cg_macro_block_writer;
+      LOG_WARN("fail to new ObDDLMacroBlockWriter", KR(ret));
+    } else if (OB_FAIL(macro_block_writer->init(param, table_key, start_seq, 0 /*row_offset*/))) {
+      LOG_WARN("fail to init DDL macro block writer", KR(ret), K(param), K(table_key), K(start_seq));
     }
     if (OB_FAIL(ret)) {
-      OB_DELETEx(ObCgMacroBlockWriter, &allocator, cg_macro_block_writer);
+      OB_DELETEx(ObDDLMacroBlockWriter, &allocator, macro_block_writer);
     }
   }
   return ret;
@@ -808,7 +775,6 @@ int ObDDLUtil::handle_lob_columns(
 int ObDDLUtil::fill_writer_param(
     const ObTabletID &tablet_id,
     const int64_t slice_idx,
-    const int64_t cg_idx,
     ObDDLIndependentDag *dag,
     const int64_t max_batch_size,
     ObWriteMacroParam &param)
@@ -827,7 +793,6 @@ int ObDDLUtil::fill_writer_param(
     param.lob_meta_tablet_id_ = tablet_context->lob_meta_tablet_id_;
     param.tenant_data_version_ = ddl_task_param.tenant_data_version_;
     param.is_no_logging_ = ddl_task_param.is_no_logging_;
-    param.macro_meta_store_mgr_ = tablet_context->macro_meta_store_mgr_;
     param.schema_version_ = ddl_task_param.schema_version_;
     param.slice_idx_ = slice_idx;
     param.slice_count_ = tablet_context->slice_count_;
@@ -839,7 +804,6 @@ int ObDDLUtil::fill_writer_param(
     param.lob_meta_tablet_param_ = tablet_context->lob_meta_tablet_param_;
     param.tx_info_ = dag->get_tx_info();
     param.is_index_table_ = dag->get_ddl_table_schema().table_item_.is_index_table_;
-    param.cg_idx_ = cg_idx;
     param.ddl_dag_ = dag;
     param.tablet_context_ = tablet_context;
     param.max_batch_size_ = max_batch_size;
@@ -935,10 +899,6 @@ int ObDDLUtil::alloc_storage_macro_block_writer(
     LOG_WARN("the are invalid arguments", K(ret), K(param));
   } else if (is_incremental_minor_direct_load(param.direct_load_type_)) {
     tablet_slice_writer = OB_NEWx(ObTabletSliceIncWriter, &allocator);
-  } else if (param.ddl_table_schema_.table_item_.is_column_store_) {
-    tablet_slice_writer = OB_NEWx(ObTabletSliceTempFileWriter, &allocator);
-  } else if (param.tablet_param_.with_cs_replica_) {
-    tablet_slice_writer = OB_NEWx(ObCsReplicaTabletSliceWriter, &allocator);
   } else {
     tablet_slice_writer = OB_NEWx(ObTabletSliceWriter, &allocator);
   }
@@ -972,13 +932,9 @@ int oceanbase::storage::ObDDLStorageWriteUtil::get_ddl_write_stat(
       ddl_write_stat = &param.tablet_context_->lob_write_stat_;
     }
   } else if (param.tablet_id_ == table_key.tablet_id_) {
-    bool need_write_stat = ObITable::MAJOR_SSTABLE == table_key.table_type_ || (!param.tablet_param_.with_cs_replica_ && ObITable::COLUMN_ORIENTED_SSTABLE == table_key.table_type_);
+    bool need_write_stat = ObITable::MAJOR_SSTABLE == table_key.table_type_;
     if (need_write_stat) {
       ddl_write_stat = &param.tablet_context_->write_stat_;
-    }
-    if (param.ddl_table_schema_.table_item_.is_column_store_ && param.tablet_param_.with_cs_replica_) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid param for cs replica", K(ret), K(param));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -986,8 +942,6 @@ int oceanbase::storage::ObDDLStorageWriteUtil::get_ddl_write_stat(
   }
   return ret;
 }
-
-// get_co_column_checksums_if_need moved to ObDDLStorageUtil
 
 // ===== definition moved from share/ob_ddl_common.cpp: accesses blocksstable::ObDatumRow/ObMacroDataSeq members =====
 // check_null_and_length moved to ob_ddl_common_storage_impl.cpp end of file (ObDDLStorageUtil)
@@ -997,11 +951,6 @@ int oceanbase::storage::ObDDLStorageWriteUtil::get_ddl_write_stat(
 // init_macro_block_seq moved to ob_ddl_common_storage_impl.cpp end of file (ObDDLStorageUtil)
 
 // get_parallel_idx moved to ob_ddl_common_storage_impl.cpp end of file (ObDDLStorageUtil)
-
-// ===== definition moved from share(round12): accesses blocksstable/storage members =====
-// get_base_cg_idx moved to ObDDLStorageUtil
-
-// need_column_group_store moved to ObDDLStorageUtil
 
 int ObSplitUtil::deserializ_parallel_datum_rowkey(
       common::ObIAllocator &rowkey_allocator,
@@ -1546,168 +1495,5 @@ int ObDDLStorageUtil::convert_to_storage_schema(
   return ret;
 }
 
-// --- ObCODDLUtil column-store DDL helpers merged in ---
-
-int ObDDLStorageUtil::get_co_column_checksums_if_need(
-    const ObTabletHandle &tablet_handle,
-    const blocksstable::ObSSTable *sstable,
-    ObIArray<int64_t> &column_checksum_array)
-{
-  int ret = OB_SUCCESS;
-  column_checksum_array.reset();
-  if (OB_UNLIKELY(!tablet_handle.is_valid() || nullptr == sstable)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_handle), KP(sstable));
-  } else if (!sstable->is_co_sstable()) {
-    // do nothing
-  } else {
-    bool is_rowkey_based_co_sstable = false;
-    ObStorageSchema *storage_schema = nullptr;
-    ObArenaAllocator arena("co_ddl_cksm", OB_MALLOC_NORMAL_BLOCK_SIZE);
-    if (OB_FAIL(tablet_handle.get_obj()->load_storage_schema(arena, storage_schema))) {
-      LOG_WARN("load storage schema failed", K(ret));
-    } else if (OB_FAIL(ObDDLStorageUtil::is_rowkey_based_co_sstable(
-            static_cast<const ObCOSSTableV2 *>(sstable), storage_schema, is_rowkey_based_co_sstable))) {
-      LOG_WARN("check is rowkey based co sstable failed", K(ret));
-    } else if (is_rowkey_based_co_sstable) {
-      if (OB_FAIL(ObDDLStorageUtil::get_column_checksums(
-                static_cast<const ObCOSSTableV2 *>(sstable),
-                storage_schema,
-                column_checksum_array))) {
-        LOG_WARN("get column checksum from co sstable failed", K(ret));
-      }
-    }
-    ObTabletObjLoadHelper::free(arena, storage_schema);
-  }
-  return ret;
-}
-
-int ObDDLStorageUtil::get_base_cg_idx(const storage::ObStorageSchema *storage_schema, int64_t &base_cg_idx)
-{
-  int ret = OB_SUCCESS;
-  base_cg_idx = -1;
-  if (OB_UNLIKELY(nullptr == storage_schema)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(storage_schema));
-  } else {
-    bool found_base_cg_idx = false;
-    const ObIArray<ObStorageColumnGroupSchema> &cg_schemas = storage_schema->get_column_groups();
-    for (int64_t i = 0; OB_SUCC(ret) && !found_base_cg_idx && i < cg_schemas.count(); ++i) {
-      const ObStorageColumnGroupSchema &cur_cg_schmea = cg_schemas.at(i);
-      if (cur_cg_schmea.is_all_column_group() || cur_cg_schmea.is_rowkey_column_group()) {
-        base_cg_idx = i;
-        found_base_cg_idx = true;
-      }
-    }
-    if (OB_SUCC(ret) && !found_base_cg_idx) {
-      ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("base columng group schema not found", K(ret));
-    }
-  }
-  LOG_DEBUG("get base cg idx", K(ret), K(base_cg_idx));
-  return ret;
-}
-
-int ObDDLStorageUtil::need_column_group_store(const storage::ObStorageSchema &table_schema, bool &need_column_group)
-{
-  int ret = OB_SUCCESS;
-  need_column_group = table_schema.get_column_group_count() > 1;
-  return ret;
-}
-
-int ObDDLStorageUtil::get_column_checksums(
-    const storage::ObCOSSTableV2 *co_sstable,
-    const storage::ObStorageSchema *storage_schema,
-    ObIArray<int64_t> &column_checksums)
-{
-  int ret = OB_SUCCESS;
-  column_checksums.reset();
-  int64_t column_count = 0;
-  if (OB_UNLIKELY(nullptr == co_sstable || nullptr == storage_schema)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(co_sstable), KP(storage_schema));
-  } else if (OB_FAIL(storage_schema->get_stored_column_count_in_sstable(column_count))) {
-    LOG_WARN("fail to get_stored_column_count_in_sstable", K(ret), KPC(storage_schema));
-  } else {
-    const common::ObIArray<ObStorageColumnGroupSchema> &column_groups = storage_schema->get_column_groups();
-    ObArray<bool/*checksum_ready*/> checksum_ready_array;
-    if (OB_FAIL(checksum_ready_array.reserve(column_count))) {
-      LOG_WARN("reserve checksum ready array failed", K(ret), K(column_count));
-    } else if (OB_FAIL(column_checksums.reserve(column_count))) {
-      LOG_WARN("reserve checksum array failed", K(ret), K(column_count));
-    }
-    for (int64_t i = 0; i < column_count && OB_SUCC(ret); i ++) {
-      if (OB_FAIL(checksum_ready_array.push_back(false))) {
-        LOG_WARN("push back ready flag failed", K(ret), K(i));
-      } else if (OB_FAIL(column_checksums.push_back(0))) {
-        LOG_WARN("fail to push back column checksum", K(ret), K(i));
-      }
-    }
-    ObSSTableWrapper cg_sstable_wrapper;
-    ObSSTable *cg_sstable = nullptr;
-    for (int64_t i = 0; !co_sstable->is_cgs_empty_co_table() && i < column_groups.count() && OB_SUCC(ret); i++) {
-      const ObStorageColumnGroupSchema &column_group = column_groups.at(i);
-      ObSSTableMetaHandle cg_table_meta_hdl;
-      if (column_group.is_all_column_group()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected column_group", K(ret), K(i));
-      } else if (OB_FAIL(co_sstable->fetch_cg_sstable(i, cg_sstable_wrapper))) {
-        LOG_WARN("fail to get cg sstable", K(ret), K(i));
-      } else if (OB_FAIL(cg_sstable_wrapper.get_loaded_column_store_sstable(cg_sstable))) {
-        LOG_WARN("get sstable failed", K(ret));
-      } else if (OB_UNLIKELY(cg_sstable == nullptr || !cg_sstable->is_valid())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpec cg sstable", K(ret), KPC(cg_sstable));
-      } else if (OB_FAIL(cg_sstable->get_meta(cg_table_meta_hdl))) {
-        LOG_WARN("fail to get meta", K(ret), KPC(cg_sstable));
-      } else if (OB_UNLIKELY(cg_table_meta_hdl.get_sstable_meta().get_col_checksum_cnt() != column_group.get_column_count())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected col_checksum_cnt", K(ret),
-            K(cg_table_meta_hdl.get_sstable_meta().get_col_checksum_cnt()), K(column_group.get_column_count()));
-      } else {
-        for (int64_t j = 0; j < column_group.get_column_count() && OB_SUCC(ret); j++) {
-          const uint16_t column_idx = column_group.get_column_idx(j);
-          if (column_idx < 0 || column_idx >= column_checksums.count()) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("invalid column index", K(ret), K(i), K(j), K(column_idx), K(column_checksums.count()));
-          } else {
-            int64_t &column_checksum = column_checksums.at(column_idx);
-            bool &is_checksum_ready = checksum_ready_array.at(column_idx);
-            if (!is_checksum_ready) {
-              column_checksum = cg_table_meta_hdl.get_sstable_meta().get_col_checksum()[j];
-              is_checksum_ready = true;
-            } else if (OB_UNLIKELY(column_checksum != cg_table_meta_hdl.get_sstable_meta().get_col_checksum()[j])) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected col_checksum_cnt", K(ret), K(column_checksum), K(cg_table_meta_hdl.get_sstable_meta().get_col_checksum()[j]));
-            }
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObDDLStorageUtil::is_rowkey_based_co_sstable(
-    const storage::ObCOSSTableV2 *co_sstable,
-    const storage::ObStorageSchema *storage_schema,
-    bool &is_rowkey_based)
-{
-  int ret = OB_SUCCESS;
-  is_rowkey_based = false;
-  if (OB_UNLIKELY(nullptr == co_sstable || nullptr == storage_schema)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(co_sstable), KP(storage_schema));
-  } else {
-    const int64_t base_cg_idx = co_sstable->get_key().get_column_group_id();
-    if (base_cg_idx < 0 || base_cg_idx >= storage_schema->get_column_groups().count()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid base column group index", K(ret), K(base_cg_idx));
-    } else {
-      is_rowkey_based = storage_schema->get_column_groups().at(base_cg_idx).is_rowkey_column_group();
-    }
-  }
-  return ret;
-}
 }  // namespace storage
 }  // namespace oceanbase

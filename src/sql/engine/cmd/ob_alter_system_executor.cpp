@@ -78,7 +78,6 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
         rootserver::ObTabletMajorFreezeParam param;
         
         param.tablet_id_ = stmt.get_tablet_id();
-        param.is_rebuild_column_group_ = stmt.is_rebuild_column_group();
         if (OB_FAIL(rootserver::ObMajorFreezeHelper::tablet_major_freeze(param))) {
           LOG_WARN("failed to schedule tablet major freeze", K(ret), K(param));
         }

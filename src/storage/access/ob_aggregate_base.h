@@ -38,6 +38,7 @@ namespace storage
 #define USE_GROUP_BY_BUF_BLOCK_SIZE 256
 #define USE_GROUP_BY_BUF_MAX_BLOCK_CNT USE_GROUP_BY_MAX_DISTINCT_CNT / USE_GROUP_BY_BUF_BLOCK_SIZE
 static const lib::ObLabel pd_agg_label = "PD_AGGREGATE";
+static constexpr int64_t INVALID_AGG_ROW_ID = -1;
 
 enum ObPDAggType
 {
@@ -71,7 +72,7 @@ public:
       row_cap_(0),
       begin_(-1),
       end_(-1),
-      bound_row_id_(OB_INVALID_CS_ROW_ID),
+      bound_row_id_(INVALID_AGG_ROW_ID),
       is_reverse_(false)
   {}
   ObPushdownRowIdCtx(const int32_t *row_ids, int64_t row_cap, const bool check_scan_order = true)
@@ -79,7 +80,7 @@ public:
       row_cap_(row_cap),
       begin_(-1),
       end_(-1),
-      bound_row_id_(OB_INVALID_CS_ROW_ID)
+      bound_row_id_(INVALID_AGG_ROW_ID)
   {
     if (check_scan_order) {
       is_reverse_ = row_cap_ > 1 && row_ids_[1] < row_ids_[0];
@@ -91,12 +92,12 @@ public:
     row_cap_ = 0;
     begin_ = -1;
     end_ = -1;
-    bound_row_id_ = OB_INVALID_CS_ROW_ID;
+    bound_row_id_ = INVALID_AGG_ROW_ID;
     is_reverse_ = false;
   }
   OB_INLINE bool is_valid() const
   { 
-    bool is_valid_bound = (OB_INVALID_CS_ROW_ID == bound_row_id_ 
+    bool is_valid_bound = (INVALID_AGG_ROW_ID == bound_row_id_
                            || (is_reverse_ && bound_row_id_ <= begin_) 
                            || (!is_reverse_ && bound_row_id_ >= end_));
     return (nullptr != row_ids_ && row_cap_ > 0)
@@ -183,7 +184,7 @@ public:
       const ObPushdownRowIdCtx &pd_row_id_ctx,
       const bool reserve_memory) = 0;
   virtual int can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info, const int32_t col_index, bool &can_agg) = 0;
-  virtual int fill_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg) = 0;
+  virtual int fill_index_info(const blocksstable::ObMicroIndexInfo &index_info) = 0;
   DECLARE_PURE_VIRTUAL_TO_STRING;
 };
 
@@ -192,7 +193,7 @@ class ObAggStoreBase
 public:
   virtual ~ObAggStoreBase() {}
   virtual int can_use_index_info(const blocksstable::ObMicroIndexInfo &index_info, bool &can_agg) = 0;
-  virtual int fill_index_info(const blocksstable::ObMicroIndexInfo &index_info, const bool is_cg) = 0;
+  virtual int fill_index_info(const blocksstable::ObMicroIndexInfo &index_info) = 0;
   virtual int collect_aggregated_result() = 0;
   DECLARE_PURE_VIRTUAL_TO_STRING;
 };

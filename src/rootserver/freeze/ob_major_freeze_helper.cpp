@@ -101,7 +101,7 @@ int ObMajorFreezeHelper::tablet_major_freeze(const ObTabletMajorFreezeParam &par
         int ret = OB_SUCCESS;
         MOD_SCOPE {
           if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()->user_request_schedule_medium_merge(
-              ls_id, param.tablet_id_, param.is_rebuild_column_group_))) {
+              ls_id, param.tablet_id_))) {
             LOG_WARN("failed to try schedule tablet major freeze", K(ret),
                 K(ls_id), K(param));
           }

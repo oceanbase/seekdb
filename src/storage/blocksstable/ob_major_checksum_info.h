@@ -26,7 +26,6 @@ class ObBasicTabletMergeCtx;
 }
 namespace storage
 {
-struct ObStorageColumnGroupSchema;
 class ObStorageSchema;
 }
 namespace blocksstable
@@ -91,26 +90,6 @@ protected:
   int64_t row_count_;
   int64_t data_checksum_;
   ObColumnCkmStruct column_ckm_struct_;
-};
-
-class ObCOMajorChecksumInfo : public ObMajorChecksumInfo
-{
-public:
-  ObCOMajorChecksumInfo()
-    : ObMajorChecksumInfo(), lock_()
-  {}
-  virtual ~ObCOMajorChecksumInfo() {}
-  int init_from_merge_result(
-    ObArenaAllocator &allocator,
-    const compaction::ObBasicTabletMergeCtx &ctx,
-    const storage::ObStorageColumnGroupSchema &cg_schema,
-    const blocksstable::ObSSTableMergeRes &res);
-private:
-  int prepare_column_ckm_array(
-    ObArenaAllocator &allocator,
-    const compaction::ObBasicTabletMergeCtx &ctx,
-    const blocksstable::ObSSTableMergeRes &res);
-  lib::ObMutex lock_;
 };
 
 } // namespace compaction

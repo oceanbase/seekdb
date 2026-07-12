@@ -338,7 +338,7 @@ int ObRowsInfo::refine_rowkeys()
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected not init rowsinfo", K_(delete_count), KP_(rows), K(ret));
-  } else if (OB_FAIL(exist_helper_.table_access_context_.alloc_iter_pool(false))) {
+  } else if (OB_FAIL(exist_helper_.table_access_context_.alloc_iter_pool())) {
     STORAGE_LOG(WARN, "Failed to alloc exist iter pool", K(ret));
   } else {
     for (int64_t i = 0; i < rowkeys_.count(); ++i) {

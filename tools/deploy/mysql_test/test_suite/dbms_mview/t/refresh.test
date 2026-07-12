@@ -139,7 +139,7 @@ CREATE TABLE `ce_sku_base` (
   KEY `idx_item_sku` (`item_id`, `sku_id`) BLOCK_SIZE 16384 LOCAL,
   KEY `idx_compare_item_sku` (`compare_item_id`, `compare_sku_id`, `compare_market_code`) BLOCK_SIZE 16384 LOCAL
 ) AUTO_INCREMENT = 256905904 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=4096
- partition by key(item_id) partitions 64 WITH COLUMN GROUP(all columns, each column);
+ partition by key(item_id) partitions 64;
 
 CREATE TABLE `sl_item_pool` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
@@ -169,7 +169,7 @@ CREATE TABLE `tb_sku_base` (
   PRIMARY KEY (`item_id`, `sku_id`),
   KEY `idx_item` (`item_id`) BLOCK_SIZE 16384 LOCAL
 ) AUTO_INCREMENT = 50047164 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=4096
- partition by key(item_id) WITH COLUMN GROUP(all columns, each column);
+ partition by key(item_id);
 
  CREATE MATERIALIZED VIEW LOG ON ce_sku_base
   PARALLEL 20

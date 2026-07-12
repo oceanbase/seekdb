@@ -85,7 +85,6 @@ public:
       const ObDirectLoadSliceInfo &slice_info,
       ObInsertMonitor *insert_monitor,
       blocksstable::ObMacroDataSeq &next_seq);
-  int calc_range(const int64_t context_id, const int64_t thread_cnt);
 
   /* new interface for direct load mgr v3 */
   int init(ObBaseTabletDirectLoadMgr* direct_load_mgr, ObBaseTabletDirectLoadMgr *lob_load_mgr);
@@ -104,10 +103,6 @@ public:
                                         const ObDirectLoadSliceInfo &slice_info,
                                         share::ObTabletCacheInterval &pk_interval,
                                         blocksstable::ObBatchDatumRows &datum_rows);
-  int calc_range(const int64_t thread_cnt);
-  int fill_column_group(
-      const int64_t thread_cnt,
-      const int64_t thread_id);
   int cancel();
   int close(const int64_t context_id, const bool need_commit, const int64_t execution_id);
   // other utils
@@ -206,7 +201,6 @@ private:
   int64_t execution_id_; // execution_id in the context.
   ObTabletDirectLoadMgrHandle mgr_handle_;
   ObTabletDirectLoadMgrHandle lob_mgr_handle_;
-  int64_t cgs_count_; // count of the column groups, used for the sn's statistics when retry after committed.
 
   /* thread local parameter
    * in direct load mgr, these args are used to save some temp paramters

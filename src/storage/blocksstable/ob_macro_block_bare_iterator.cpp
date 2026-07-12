@@ -879,17 +879,15 @@ int ObMacroBlockRowBareIterator::open(
   } else {
     column_types_ = macro_header.column_types_;
     column_checksums_ = macro_header.column_checksum_;
-    if (!macro_header.is_normal_cg_) {
-      if (OB_FAIL(rowkey_descs_.init(macro_header.fixed_header_.rowkey_column_count_))) {
-        LOG_WARN("fail to init rowkey descs", K(ret), K(macro_header));
-      } else {
-        share::schema::ObColDesc col_desc;
-        for (int64_t i = 0; OB_SUCC(ret) && i < macro_header.fixed_header_.rowkey_column_count_; ++i) {
-          col_desc.col_id_ = common::OB_APP_MIN_COLUMN_ID + i;
-          col_desc.col_type_ = column_types_[i];
-          if (OB_FAIL(rowkey_descs_.push_back(col_desc))) {
-            LOG_WARN("Fail to push col desc to columns", K(ret));
-          }
+    if (OB_FAIL(rowkey_descs_.init(macro_header.fixed_header_.rowkey_column_count_))) {
+      LOG_WARN("fail to init rowkey descs", K(ret), K(macro_header));
+    } else {
+      share::schema::ObColDesc col_desc;
+      for (int64_t i = 0; OB_SUCC(ret) && i < macro_header.fixed_header_.rowkey_column_count_; ++i) {
+        col_desc.col_id_ = common::OB_APP_MIN_COLUMN_ID + i;
+        col_desc.col_type_ = column_types_[i];
+        if (OB_FAIL(rowkey_descs_.push_back(col_desc))) {
+          LOG_WARN("Fail to push col desc to columns", K(ret));
         }
       }
     }
@@ -1047,13 +1045,6 @@ int ObMacroBlockRowBareIterator::init_micro_reader(const ObRowStoreType store_ty
       if (OB_ISNULL(micro_reader_ = OB_NEWx(ObMicroBlockDecoder, allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("Fail to new micro block decoder", K(ret));
-      }
-      break;
-    }
-    case CS_ENCODING_ROW_STORE: {
-      if (OB_ISNULL(micro_reader_ = OB_NEWx(ObMicroBlockCSDecoder, allocator_))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("Fail to new micro block cs decoder", KR(ret));
       }
       break;
     }

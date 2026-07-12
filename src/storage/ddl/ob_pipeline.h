@@ -22,8 +22,7 @@
 #include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "observer/table_load/ob_table_load_row_array.h"
 #include "storage/direct_load/ob_direct_load_batch_datum_rows.h"
-#include "storage/ddl/ob_cg_block_tmp_file.h"
-#include "storage/ddl/ob_cg_row_tmp_file.h"
+#include "storage/ddl/ob_ddl_row_tmp_file.h"
 
 namespace oceanbase
 {
@@ -53,10 +52,9 @@ public:
     INVALID_TYPE = 0,
     ITER_END_TYPE,
     DATUM_ROW,
-    MACRO_BUFFER,
     DAG_TABLET_CONTEXT,
     DIRECT_LOAD_BATCH_DATUM_ROWS,
-    CG_ROW_TMP_FILES,
+    DDL_ROW_TMP_FILES,
     BATCH_DATUM_ROWS,
     DIRECT_LOAD_ROW_ARRAY,
     TASK_BATCH_INFO,
@@ -70,10 +68,9 @@ public:
   void set_end_chunk() { type_ = ChunkType::ITER_END_TYPE; }
   bool is_end_chunk() const { return ChunkType::ITER_END_TYPE == type_; }
   int get_dag_tablet_context(ObDDLTabletContext *&tablet_context) const;
-  OB_INLINE bool is_macro_buffer_type() const { return ChunkType::MACRO_BUFFER == type_; }
   OB_INLINE bool is_direct_load_batch_datum_rows_type() const { return ChunkType::DIRECT_LOAD_BATCH_DATUM_ROWS == type_; }
   OB_INLINE bool is_batch_datum_rows_type() const { return ChunkType::BATCH_DATUM_ROWS == type_; }
-  OB_INLINE bool is_cg_row_tmp_files_type() const { return ChunkType::CG_ROW_TMP_FILES == type_; }
+  OB_INLINE bool is_ddl_row_tmp_files_type() const { return ChunkType::DDL_ROW_TMP_FILES == type_; }
   OB_INLINE bool is_datum_row_type() const { return ChunkType::DATUM_ROW == type_; }
   OB_INLINE bool is_direct_load_row_array_type() const { return ChunkType::DIRECT_LOAD_ROW_ARRAY == type_; }
   OB_INLINE bool is_task_batch_info_type() const { return ChunkType::TASK_BATCH_INFO == type_; }
@@ -84,8 +81,7 @@ public:
     void *data_ptr_;
     storage::ObDirectLoadBatchDatumRows *direct_load_batch_rows_;
     blocksstable::ObDatumRow *datum_row_;
-    ObArray<ObCGBlockFile *> *cg_block_file_arr_;
-    ObArray<ObCGRowFile *> *cg_row_file_arr_;
+    ObArray<ObDDLRowFile *> *row_file_arr_;
     blocksstable::ObBatchDatumRows *bdrs_;
     table::ObTableLoadTabletObjRowArray *row_array_;
     storage::ObTaskBatchInfo *batch_info_;
@@ -147,4 +143,3 @@ protected:
 }  // end namespace storage
 }  // end namespace oceanbase
 #endif//_OCEANBASE_STORAGE_DDL_OB_PIPELINE_H_
-

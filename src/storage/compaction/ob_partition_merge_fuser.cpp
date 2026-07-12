@@ -18,7 +18,6 @@
 
 #include "ob_partition_merge_fuser.h"
 #include "ob_tablet_merge_ctx.h"
-#include "storage/column_store/ob_column_oriented_merge_fuser.h"
 
 namespace oceanbase
 {
@@ -395,16 +394,15 @@ int ObMergeFuserBuilder::build(const ObMergeParameter &merge_param,
     STORAGE_LOG(WARN, "Invalid argument to build MergeFuser", K(merge_param), K(ret));
   } else {
     const ObMergeType merge_type = merge_param.static_param_.get_merge_type();
-    if (is_major_or_meta_merge_type(merge_type) && !merge_param.get_schema()->is_row_store()) {
-      partition_fuser = alloc_helper<ObCOMinorSSTableFuser>(allocator, allocator);
-    } else if (is_major_or_meta_merge_type(merge_type)) {
+    if (is_major_or_meta_merge_type(merge_type)) {
       is_fuse_row_flag = false;
       partition_fuser = alloc_helper<ObMajorPartitionMergeFuser>(allocator, allocator, cluster_version);
     } else {
       partition_fuser = alloc_helper<ObMinorPartitionMergeFuser>(allocator, allocator);
     }
 
-    if (OB_ISNULL(partition_fuser)) {
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(partition_fuser)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "Failed to allocate memory for partition fuser", K(ret), K(merge_param));
     } else if (OB_FAIL(partition_fuser->init(merge_param, is_fuse_row_flag))) {

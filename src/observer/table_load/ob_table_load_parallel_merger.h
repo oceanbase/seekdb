@@ -35,7 +35,6 @@ public:
   ObTableLoadParallelMerger();
   ~ObTableLoadParallelMerger();
   int init_merge_task(ObTableLoadMergeTableBaseOp *op);
-  int init_rescan_task(ObTableLoadMergeTableBaseOp *op);
   int start();
   void stop();
   ObDirectLoadMergeCtx &get_merge_ctx() { return merge_ctx_; }

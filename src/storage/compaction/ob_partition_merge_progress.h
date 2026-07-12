@@ -42,8 +42,7 @@ public:
   virtual ~ObPartitionMergeProgress();
   void reset();
   OB_INLINE bool is_inited() const { return is_inited_; }
-  int init(ObBasicTabletMergeCtx *ctx, ObTabletMergeDag *merge_dag,
-    const int64_t start_cg_idx = 0, const int64_t end_cg_idx = 0);
+  int init(ObBasicTabletMergeCtx *ctx, ObTabletMergeDag *merge_dag);
   virtual int update_merge_progress(const int64_t idx, const int64_t scanned_row_count);
   virtual int finish_merge_progress() { return OB_SUCCESS; }
   int update_merge_info(compaction::ObSSTableMergeHistory &merge_history);
@@ -80,8 +79,6 @@ protected:
   int64_t latest_update_ts_;
   int64_t estimated_finish_time_;
   int64_t pre_scanned_row_cnt_; // for smooth the progress curve
-  int64_t start_cg_idx_;
-  int64_t end_cg_idx_;
   bool is_updating_; // atomic lock
   bool is_empty_merge_;
   bool is_inited_;
@@ -98,20 +95,9 @@ public:
   virtual int finish_merge_progress() override;
   int finish_progress(
     const int64_t merge_version,
-    ObCompactionTimeGuard *time_guard,
-    const bool is_co_merge);
+    ObCompactionTimeGuard *time_guard);
 protected:
   virtual int inner_update_progress_mgr(const int64_t total_scanned_row_cnt) override;
-};
-
-class ObCOMajorMergeProgress : public ObPartitionMajorMergeProgress
-{
-public:
-  ObCOMajorMergeProgress(common::ObIAllocator &allocator)
-    : ObPartitionMajorMergeProgress(allocator)
-  {}
-  ~ObCOMajorMergeProgress() {}
-  virtual int finish_merge_progress() override;
 };
 
 } //compaction

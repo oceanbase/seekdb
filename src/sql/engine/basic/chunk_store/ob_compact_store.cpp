@@ -258,12 +258,13 @@ int ObCompactStore::add_row(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx &
   return ret;
 }
 
-int ObCompactStore::add_row(const blocksstable::ObDatumRow &datum_row, const ObStorageColumnGroupSchema &cg_schema,
-                            const int64_t extra_size, ObChunkDatumStore::StoredRow **stored_row)
+int ObCompactStore::add_row(const blocksstable::ObDatumRow &datum_row, const int64_t extra_size,
+                            ObChunkDatumStore::StoredRow **stored_row)
 {
   int ret = OB_SUCCESS;
   if (inited_) {
-    if (OB_FAIL(writer_->add_row(datum_row.storage_datums_, cg_schema, extra_size, stored_row))) {
+    if (OB_FAIL(writer_->add_row(
+            datum_row.storage_datums_, datum_row.get_column_count(), extra_size, stored_row))) {
       LOG_WARN("fail to add row", K(ret));
     } else {
       row_cnt_++;

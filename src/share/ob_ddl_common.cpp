@@ -185,9 +185,6 @@ const char *oceanbase::share::get_ddl_type(ObDDLType ddl_type)
     case ObDDLType::DDL_CREATE_MVIEW:
       ret_name = "DDL_CREATE_MVIEW";
       break;
-    case ObDDLType::DDL_ALTER_COLUMN_GROUP:
-      ret_name = "DDL_ALTER_COLUMN_GROUP";
-      break;
     case ObDDLType::DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION:
       ret_name = "DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION";
       break;
@@ -214,9 +211,6 @@ const char *oceanbase::share::get_ddl_type(ObDDLType ddl_type)
       break;
     case ObDDLType::DDL_COMPOUND_INSTANT:
       ret_name = "DDL_COMPOUND_INSTANT";
-      break;
-    case ObDDLType::DDL_ALTER_COLUMN_GROUP_DELAYED:
-      ret_name = "DDL_ALTER_COLUMN_GROUP_DELAYED";
       break;
     case ObDDLType::DDL_FORK_TABLE:
       ret_name = "DDL_FORK_TABLE";
@@ -1722,16 +1716,6 @@ bool ObDDLUtil::use_idempotent_mode()
   return true;
 }
 
-bool ObDDLUtil::need_fill_column_group(const bool is_row_store, const bool need_process_cs_replica, const int64_t data_format_version)
-{
-  return (!is_row_store || need_process_cs_replica) && ObDDLUtil::need_rescan_column_store(data_format_version);
-}
-
-bool ObDDLUtil::need_rescan_column_store(const int64_t data_format_version)
-{
-  return false;
-}
-
 // int ObDDLUtil::init_macro_block_seq moved definition to storage/ddl/ob_ddl_common_storage_impl.cpp(accesses blocksstable members)
 
 // int64_t ObDDLUtil::get_parallel_idx moved definition to storage/ddl/ob_ddl_common_storage_impl.cpp(accesses blocksstable members)
@@ -1984,7 +1968,6 @@ int ObSqlMonitorStatsCollector::get_insert_monitor_stats_batch(sqlclient::ObMySQ
 
     EXTRACT_INT_FIELD_MYSQL(*scan_result, "THREAD_ID", insert_node_info.thread_id_, int64_t);
     EXTRACT_TIMESTAMP_FIELD_MYSQL_SKIP_RET(*scan_result, "LAST_REFRESH_TIME", insert_node_info.last_refresh_time_);
-    EXTRACT_INT_FIELD_MYSQL(*scan_result, "OTHERSTAT_1_VALUE", insert_node_info.cg_row_inserted_, int64_t);
     EXTRACT_INT_FIELD_MYSQL(*scan_result, "OTHERSTAT_2_VALUE", insert_node_info.sstable_row_inserted_, int64_t);
     EXTRACT_INT_FIELD_MYSQL(*scan_result, "OTHERSTAT_8_VALUE", insert_node_info.vec_task_thread_pool_cnt_, int64_t);
     EXTRACT_INT_FIELD_MYSQL(*scan_result, "OTHERSTAT_9_VALUE", insert_node_info.vec_task_total_cnt_, int64_t);
@@ -2140,7 +2123,7 @@ int ObDDLDiagnoseInfo::diagnose(const ObSqlMonitorStats &sql_monitor_stats)
   return ret;
 }
 
-int ObDDLDiagnoseInfo::process_sql_monitor_and_generate_longops_message(const ObSqlMonitorStats &sql_monitor_stats, const int64_t target_cg_cnt, ObDDLTaskStatInfo &stat_info, int64_t &pos)
+int ObDDLDiagnoseInfo::process_sql_monitor_and_generate_longops_message(const ObSqlMonitorStats &sql_monitor_stats, ObDDLTaskStatInfo &stat_info, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   if (!is_inited_) {
@@ -2150,8 +2133,8 @@ int ObDDLDiagnoseInfo::process_sql_monitor_and_generate_longops_message(const Ob
     LOG_INFO("failed to calculate sql plan monitor node info", K(ret));
   } else if (OB_FAIL(diagnose_stats_analysis())) {
     LOG_WARN("failed to diagnose stats analysis ", K(ret));
-  } else if (OB_FAIL(generate_session_longops_message(target_cg_cnt, stat_info, pos))) {
-    LOG_WARN("failed to generate session longops message", K(ret), K(target_cg_cnt), K(stat_info), K(pos));
+  } else if (OB_FAIL(generate_session_longops_message(stat_info, pos))) {
+    LOG_WARN("failed to generate session longops message", K(ret), K(stat_info), K(pos));
   }
   return ret;
 }
@@ -2279,8 +2262,6 @@ int ObDDLDiagnoseInfo::calculate_insert_info(
       } else {
         int64_t row_inserted_file_tmp = insert_monitor_node.sstable_row_inserted_;
         row_inserted_file_ += row_inserted_file_tmp;
-        row_inserted_cg_ += insert_monitor_node.cg_row_inserted_;
-
         int64_t finish_time_tmp = insert_monitor_node.last_refresh_time_;
         if (finish_time_tmp > insert_end_time_) {
           insert_end_time_ = finish_time_tmp;
@@ -2457,7 +2438,7 @@ int ObDDLTaskStatInfo::init(const char *&ddl_type_str, const uint64_t table_id)
   return ret;
 }
 
-int ObDDLDiagnoseInfo::generate_session_longops_message(const int64_t target_cg_cnt, ObDDLTaskStatInfo &stat_info, int64_t &pos)
+int ObDDLDiagnoseInfo::generate_session_longops_message(ObDDLTaskStatInfo &stat_info, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   if (ddl_type_ == share::ObDDLType::DDL_CREATE_PARTITIONED_LOCAL_INDEX
@@ -2468,8 +2449,8 @@ int ObDDLDiagnoseInfo::generate_session_longops_message(const int64_t target_cg_
                                  "build local index batch num: %ld, ",
                                  execution_id_))) {
     LOG_WARN("failed to print", K(ret));
-  } else if (state_ == RedefinitionState::DDL_DIAGNOSE_V1 || target_cg_cnt > 1) {
-    if (OB_FAIL(generate_session_longops_message_v1(target_cg_cnt, stat_info, pos))) {
+  } else if (state_ == RedefinitionState::DDL_DIAGNOSE_V1) {
+    if (OB_FAIL(generate_session_longops_message_v1(stat_info, pos))) {
       LOG_WARN("failed to print", K(ret));
     }
   } else {
@@ -2566,38 +2547,23 @@ int ObDDLDiagnoseInfo::generate_session_longops_message(const int64_t target_cg_
   return ret;
 }
 
-int ObDDLDiagnoseInfo::generate_session_longops_message_v1(const int64_t target_cg_cnt, ObDDLTaskStatInfo &stat_info, int64_t &pos)
+int ObDDLDiagnoseInfo::generate_session_longops_message_v1(ObDDLTaskStatInfo &stat_info, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  if (target_cg_cnt > 1) {
-    if (OB_FAIL(databuff_printf(stat_info.message_,
-                                MAX_LONG_OPS_MESSAGE_LENGTH,
-                                pos,
-                                "STATUS: REPLICA BUILD, PARALLELISM: %ld, ROW_SCANNED: %ld, ROW_SORTED: %ld, ROW_INSERTED_INTO_TMP_FILE: %ld, ROW_INSERTED: %ld out of %ld column group rows",
-                                ObDDLUtil::get_real_parallelism(parallelism_, false/*is mv refresh*/),
-                                row_scanned_,
-                                row_sorted_ + row_merge_sorted_,
-                                row_inserted_file_,
-                                row_inserted_cg_,
-                                row_scanned_ * target_cg_cnt))) {
+  if (OB_FAIL(databuff_printf(stat_info.message_,
+                              MAX_LONG_OPS_MESSAGE_LENGTH,
+                              pos,
+                              "STATUS: REPLICA BUILD, PARALLELISM: %ld, ROW_SCANNED: %ld, ROW_SORTED: %ld, ROW_INSERTED: %ld",
+                              ObDDLUtil::get_real_parallelism(parallelism_, false/*is mv refresh*/),
+                              row_scanned_,
+                              row_sorted_ + row_merge_sorted_,
+                              row_inserted_file_))) {
+    LOG_WARN("failed to print", K(ret));
+  } else if (vec_task_trigger_cnt_ > 0) {
+    if (OB_FAIL(databuff_printf(stat_info.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos,
+                                ", VEC_TASK:{ TRIGGER_CNT: %ld, POOL_CNT: %ld, TOTAL: %ld, FINISH: %ld }",
+                                vec_task_trigger_cnt_, vec_task_thread_pool_cnt_, vec_task_total_cnt_, vec_task_finish_cnt_))) {
       LOG_WARN("failed to print", K(ret));
-    }
-  } else {
-    if (OB_FAIL(databuff_printf(stat_info.message_,
-                                MAX_LONG_OPS_MESSAGE_LENGTH,
-                                pos,
-                                "STATUS: REPLICA BUILD, PARALLELISM: %ld, ROW_SCANNED: %ld, ROW_SORTED: %ld, ROW_INSERTED: %ld",
-                                ObDDLUtil::get_real_parallelism(parallelism_, false/*is mv refresh*/),
-                                row_scanned_,
-                                row_sorted_ + row_merge_sorted_,
-                                row_inserted_file_))) {
-      LOG_WARN("failed to print", K(ret));
-    } else if (vec_task_trigger_cnt_ > 0) {
-      if (OB_FAIL(databuff_printf(stat_info.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos,
-                                  ", VEC_TASK:{ TRIGGER_CNT: %ld, POOL_CNT: %ld, TOTAL: %ld, FINISH: %ld }",
-                                  vec_task_trigger_cnt_, vec_task_thread_pool_cnt_, vec_task_total_cnt_, vec_task_finish_cnt_))) {
-        LOG_WARN("failed to print", K(ret));
-      }
     }
   }
   return ret;
@@ -3118,27 +3084,6 @@ int ObCheckTabletDataComplementOp::check_and_wait_old_complement_task(const uint
   if (OB_EAGAIN != ret) {
     LOG_INFO("end to check and wait complement task", K(ret),
       K(table_id), K(is_old_task_session_exist), K(is_dst_checksums_all_report), K(need_exec_new_inner_sql));
-  }
-  return ret;
-}
-
-// moved definition to storage/ddl/ob_ddl_common_storage_impl.cpp(accesses storage/blocksstable members)
-
-// moved definition to sql/resolver/ddl/ob_ddl_resolver.cpp(transitional state)
-
-// moved definition to sql/resolver/ddl/ob_ddl_resolver.cpp(COSSTable vocabulary)
-
-
-
-
-
-// moved definition to storage/ddl/ob_ddl_common_storage_impl.cpp(accesses storage/blocksstable members)
-
-int ObCODDLUtil::need_column_group_store(const schema::ObTableSchema &table_schema, bool &need_column_group)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(table_schema.get_is_column_store(need_column_group))) {
-      SHARE_LOG(WARN, "fail to check whether table is column store", K(ret));
   }
   return ret;
 }

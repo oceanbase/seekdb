@@ -64,9 +64,8 @@ int ObTabletMergeCtx::create_sstable(const ObSSTable *&new_sstable)
   } else {
     LOG_INFO("create new merged sstable", "dag_param", get_dag_param(),
              "snapshot_version", get_snapshot(), "scn_range", static_param_.scn_range_);
-    bool tmp_bool = false;
     mem_ctx_.mem_click();
-    if (OB_FAIL(merge_info_.create_sstable(*this, merged_table_handle_, tmp_bool/*skip_to_create_empty_cg*/))) {
+    if (OB_FAIL(merge_info_.create_sstable(*this, merged_table_handle_))) {
       LOG_WARN("fail to create sstable", KR(ret));
     } else if (OB_FAIL(merged_table_handle_.get_sstable(new_sstable))) {
       LOG_WARN("fail to get sstable", KR(ret), K_(merged_table_handle));

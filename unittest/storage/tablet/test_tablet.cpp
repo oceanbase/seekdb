@@ -523,7 +523,7 @@ TEST_F(TestTablet, test_serialize_mig_param_compat)
   mig_param.ddl_data_format_version_ = 6;
   mig_param.max_serialized_medium_scn_ = 5;
   mig_param.ddl_commit_scn_ = share::SCN::base_scn();
-  mig_param.storage_schema_.storage_schema_version_ = ObStorageSchema::STORAGE_SCHEMA_VERSION_V3;
+  mig_param.storage_schema_.storage_schema_version_ = ObStorageSchema::STORAGE_SCHEMA_VERSION_LATEST;
   mig_param.storage_schema_.schema_version_ = 1;
   mig_param.storage_schema_.column_cnt_ = 1;
   mig_param.storage_schema_.table_type_ = SYSTEM_TABLE;
@@ -621,13 +621,6 @@ TEST_F(TestTablet, reproducing_bug_53174886)
   reproducing_bug();
 }
 
-TEST_F(TestTablet, test_ddl_replay_status_compat)
-{
-  ObITable::TableType ddl_table_type;
-  ObCSReplicaDDLReplayStatus ddl_replay_status;
-  ASSERT_EQ(serialization::encoded_length(ddl_table_type), serialization::encoded_length(ddl_replay_status));
-}
-
 }  // end namespace unittest
 }  // end namespace oceanbase
 
@@ -639,4 +632,3 @@ int main(int argc, char **argv)
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-

@@ -31,23 +31,6 @@ const int64_t ObOptEstCostModel::DEFAULT_MAX_STRING_WIDTH = 64;
 const int64_t ObOptEstCostModel::DEFAULT_FIXED_OBJ_WIDTH = 12;
 const int64_t ObOptEstCostModel::DEFAULT_BATCH_SIZE = 256;
 
-int ObCostColumnGroupInfo::assign(const ObCostColumnGroupInfo& info)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(filters_.assign(info.filters_))) {
-    LOG_WARN("failed to assign filters", K(ret));
-  } else if (OB_FAIL(access_column_items_.assign(info.access_column_items_))) {
-    LOG_WARN("failed to assign column", K(ret));
-  } else {
-    column_id_ = info.column_id_;
-    micro_block_count_ = info.micro_block_count_;
-    filter_sel_ = info.filter_sel_;
-    skip_rate_ = info.skip_rate_;
-    skip_filter_sel_ = info.skip_filter_sel_;
-  }
-  return ret;
-}
-
 int ObCostTableScanInfo::assign(const ObCostTableScanInfo &est_cost_info)
 {
   int ret = OB_SUCCESS;
@@ -73,10 +56,6 @@ int ObCostTableScanInfo::assign(const ObCostTableScanInfo &est_cost_info)
     LOG_WARN("failed to assign access columns", K(ret));
   } else if (OB_FAIL(access_columns_.assign(est_cost_info.access_columns_))) {
     LOG_WARN("failed to assign access columns", K(ret));
-  } else if (OB_FAIL(index_scan_column_group_infos_.assign(est_cost_info.index_scan_column_group_infos_))) {
-    LOG_WARN("failed to to assign column group infos", K(ret));
-  } else if (OB_FAIL(index_back_column_group_infos_.assign(est_cost_info.index_back_column_group_infos_))) {
-    LOG_WARN("failed to to assign column group infos", K(ret));
   } else {
     table_id_ = est_cost_info.table_id_;
     ref_table_id_ = est_cost_info.ref_table_id_;
@@ -104,9 +83,7 @@ int ObCostTableScanInfo::assign(const ObCostTableScanInfo &est_cost_info)
     output_row_count_ = est_cost_info.output_row_count_;
     batch_type_ = est_cost_info.batch_type_;
     sample_info_ = est_cost_info.sample_info_;
-    use_column_store_ = est_cost_info.use_column_store_;
     at_most_one_range_ = est_cost_info.at_most_one_range_;
-    index_back_with_column_store_ = est_cost_info.index_back_with_column_store_;
     rescan_left_server_list_ = est_cost_info.rescan_left_server_list_;
     rescan_server_list_ = est_cost_info.rescan_server_list_;
     limit_rows_ = est_cost_info.limit_rows_;
@@ -1247,7 +1224,7 @@ double ObOptEstCostModel::cost_late_materialization_table_get(int64_t column_cnt
   double op_cost = 0.0;
   double io_cost = cost_params_.get_micro_block_seq_cost(sys_stat_);
   double cpu_cost = (cost_params_.get_cpu_tuple_cost(sys_stat_)
-                         + cost_params_.get_project_column_cost(sys_stat_, ObIntTC, true, false) * column_cnt);
+                         + cost_params_.get_project_column_cost(sys_stat_, ObIntTC, true) * column_cnt);
   op_cost = io_cost + cpu_cost;
   return op_cost;
 }
@@ -1406,15 +1383,9 @@ int ObOptEstCostModel::cost_index_scan(const ObCostTableScanInfo &est_cost_info,
                                       double &index_scan_cost)
 {
   int ret = OB_SUCCESS;
-  if (est_cost_info.use_column_store_ &&
-      OB_FAIL(cost_column_store_index_scan(est_cost_info, 
-                                          row_count,
-                                          index_scan_cost))) {
-    LOG_WARN("failed to calc column store index scan cost", K(ret));
-  } else if (!est_cost_info.use_column_store_ &&
-             OB_FAIL(cost_row_store_index_scan(est_cost_info, 
-                                              row_count,
-                                              index_scan_cost))) {
+  if (OB_FAIL(cost_row_store_index_scan(est_cost_info,
+                                        row_count,
+                                        index_scan_cost))) {
     LOG_WARN("failed to calc row store index scan cost", K(ret));
   }
   return ret;
@@ -1426,138 +1397,11 @@ int ObOptEstCostModel::cost_index_back(const ObCostTableScanInfo &est_cost_info,
                                        double &index_back_cost)
 {
   int ret = OB_SUCCESS;
-  if (est_cost_info.index_back_with_column_store_ &&
-      OB_FAIL(cost_column_store_index_back(est_cost_info, 
-                                          row_count,
-                                          limit_count,
-                                          index_back_cost))) {
-    LOG_WARN("failed to calc column store index back cost", K(ret));
-  } else if (!est_cost_info.index_back_with_column_store_ &&
-             OB_FAIL(cost_row_store_index_back(est_cost_info, 
-                                              row_count,
-                                              limit_count,
-                                              index_back_cost))) {
+  if (OB_FAIL(cost_row_store_index_back(est_cost_info,
+                                        row_count,
+                                        limit_count,
+                                        index_back_cost))) {
     LOG_WARN("failed to calc row store index back cost", K(ret));
-  }
-  return ret;
-}
-
-int ObOptEstCostModel::cost_column_store_index_scan(const ObCostTableScanInfo &est_cost_info,
-                                                    double row_count,
-                                                    double &index_scan_cost)
-{
-  int ret = OB_SUCCESS;
-  double prefix_filter_sel = 1.0;
-  double runtime_filter_sel = est_cost_info.join_filter_sel_;
-  SMART_VAR(ObCostTableScanInfo, column_group_est_cost_info, OB_INVALID_ID, OB_INVALID_ID, OB_INVALID_ID) {
-    if (OB_FAIL(column_group_est_cost_info.assign(est_cost_info))) {
-      LOG_WARN("failed to assign est cost info", K(ret));
-    } else {
-      column_group_est_cost_info.access_column_items_.reuse();
-      column_group_est_cost_info.prefix_filters_.reuse();
-      column_group_est_cost_info.postfix_filters_.reuse();
-      column_group_est_cost_info.use_column_store_ = true;
-      column_group_est_cost_info.join_filter_sel_ = 1.0;
-    }
-    // calc scan cost for each column group
-    for (int64_t i = 0; OB_SUCC(ret) && i < est_cost_info.index_scan_column_group_infos_.count(); ++i) {
-      // prepare est cost info for column group
-      const ObCostColumnGroupInfo &cg_info = est_cost_info.index_scan_column_group_infos_.at(i);
-      double cg_row_count = row_count * prefix_filter_sel * cg_info.skip_filter_sel_ ;
-      column_group_est_cost_info.index_meta_info_.index_micro_block_count_ = cg_info.micro_block_count_;
-      column_group_est_cost_info.table_filters_.reuse();
-      double column_group_cost = 0.0;
-      if (OB_FAIL(column_group_est_cost_info.postfix_filters_.assign(cg_info.filters_))) {
-        LOG_WARN("failed to assign filters", K(ret));
-      } else if (!est_cost_info.index_meta_info_.is_index_back_ &&
-                OB_FAIL(column_group_est_cost_info.access_column_items_.assign(cg_info.access_column_items_))) {
-        LOG_WARN("failed to assign filters", K(ret));
-      } else if (est_cost_info.index_meta_info_.is_index_back_ &&
-                OB_FAIL(column_group_est_cost_info.index_access_column_items_.assign(cg_info.access_column_items_))) {
-        LOG_WARN("failed to assign filters", K(ret));
-      } else if (OB_FAIL(cost_row_store_index_scan(column_group_est_cost_info, 
-                                                   cg_row_count,
-                                                   column_group_cost))) {
-        LOG_WARN("failed to calc index scan cost", K(ret), K(cg_row_count), K(column_group_est_cost_info));
-      } else {
-        index_scan_cost += column_group_cost;
-        OPT_TRACE_COST_MODEL(KV(index_scan_cost), "+=", KV(column_group_cost));
-        prefix_filter_sel *= cg_info.filter_sel_;
-        if (cg_info.filters_.empty() && runtime_filter_sel < 1.0) {
-          prefix_filter_sel *= runtime_filter_sel;
-          runtime_filter_sel = 1.0;
-        }
-        LOG_TRACE("[COST ONE COLUMN GROUP]", K(row_count), K(prefix_filter_sel), K(column_group_cost), K(cg_info.skip_filter_sel_), K(column_group_cost));
-      }
-    }
-  }
-  LOG_TRACE("OPT:[COST INDEX SCAN WITH COLUMN STORE]", K(row_count), K(index_scan_cost));
-  return ret;
-}
-
-int ObOptEstCostModel::cost_column_store_index_back(const ObCostTableScanInfo &est_cost_info,
-                                                    double row_count,
-                                                    double limit_count,
-                                                    double &index_back_cost)
-{
-  int ret = OB_SUCCESS;
-  SMART_VAR(ObCostTableScanInfo, column_group_est_cost_info, OB_INVALID_ID, OB_INVALID_ID, OB_INVALID_ID) {
-    double network_cost = 0.0;
-    index_back_cost = 0.0;
-    const bool limit_before_indexback = est_cost_info.table_filters_.empty() && limit_count >= 0.0;
-    double apply_filter_sel = est_cost_info.postfix_filter_sel_;
-    double index_back_row_count = row_count * apply_filter_sel;
-    if (limit_before_indexback) {
-      index_back_row_count = std::min(index_back_row_count, limit_count);
-    }
-    if (OB_FAIL(column_group_est_cost_info.assign(est_cost_info))) {
-      LOG_WARN("failed to assign est cost info", K(ret));
-    } else {
-      column_group_est_cost_info.access_column_items_.reuse();
-      column_group_est_cost_info.prefix_filters_.reuse();
-      column_group_est_cost_info.postfix_filters_.reuse();
-      column_group_est_cost_info.use_column_store_ = true;
-      column_group_est_cost_info.join_filter_sel_ = 1.0;
-    }
-    // calc scan cost for each column group
-    for (int64_t i = 0; OB_SUCC(ret) && i < est_cost_info.index_back_column_group_infos_.count(); ++i) {
-      // prepare est cost info for column group
-      const ObCostColumnGroupInfo &cg_info = est_cost_info.index_back_column_group_infos_.at(i);
-      double cg_row_count = index_back_row_count;
-      column_group_est_cost_info.index_meta_info_.index_micro_block_count_ = cg_info.micro_block_count_;
-      column_group_est_cost_info.table_filters_.reuse();
-      double column_group_cost = 0.0;
-      if (OB_FAIL(column_group_est_cost_info.table_filters_.assign(cg_info.filters_))) {
-        LOG_WARN("failed to assign filters", K(ret));
-      } else if (OB_FAIL(column_group_est_cost_info.access_column_items_.assign(cg_info.access_column_items_))) {
-        LOG_WARN("failed to assign filters", K(ret));
-      } else if (OB_FAIL(cost_range_get(column_group_est_cost_info, 
-                                        false,
-                                        cg_row_count,
-                                        column_group_cost))) {
-        LOG_WARN("failed to calc index scan cost", K(ret), K(cg_row_count), K(column_group_est_cost_info));
-      } else {
-        index_back_cost += column_group_cost;
-        OPT_TRACE_COST_MODEL(KV(index_back_cost), "+=", KV(column_group_cost));
-        LOG_TRACE("OPT:[COST ONE COLUMN GROUP]", K(row_count), K(index_back_row_count), K(apply_filter_sel), K(column_group_cost), K(cg_info.skip_filter_sel_), K(column_group_cost));
-        apply_filter_sel *= cg_info.filter_sel_;
-        index_back_row_count = row_count * apply_filter_sel;
-        if (limit_before_indexback) {
-          index_back_row_count = std::min(index_back_row_count, limit_count);
-        }
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (est_cost_info.index_meta_info_.is_global_index_ &&
-              OB_FAIL(cost_global_index_back_with_rp(index_back_row_count,
-                                                      est_cost_info,
-                                                      network_cost))) {
-      LOG_WARN("failed to get newwork transform cost for global index", K(ret));
-    } else {
-      index_back_cost += network_cost;
-      OPT_TRACE_COST_MODEL(KV(index_back_cost), "+=", KV(network_cost));
-    }
-    LOG_TRACE("OPT:[COST INDEX BACK WITH COLUMN STORE]", K(row_count), K(index_back_row_count), K(network_cost), K(index_back_cost));
   }
   return ret;
 }
@@ -1852,8 +1696,6 @@ int ObOptEstCostModel::range_get_io_cost(const ObCostTableScanInfo &est_cost_inf
     double num_micro_blocks = 0;
     if (is_scan_index) {
       num_micro_blocks = index_meta_info.get_micro_block_numbers();
-    } else if (est_cost_info.index_back_with_column_store_) {
-      num_micro_blocks = index_meta_info.get_micro_block_numbers();
     } else {
       num_micro_blocks = table_meta_info->get_micro_block_numbers();
     }
@@ -1954,15 +1796,6 @@ int ObOptEstCostModel::range_scan_cpu_cost(const ObCostTableScanInfo &est_cost_i
     if (OB_FAIL(cost_project(row_count,
                             est_cost_info.index_access_column_items_,
                             is_get,
-                            est_cost_info.use_column_store_,
-                            project_cost))) {
-      LOG_WARN("failed to cost project", K(ret));
-    }
-  } else if (est_cost_info.use_column_store_) {
-    if (OB_FAIL(cost_project(row_count,
-                            est_cost_info.access_column_items_,
-                            is_get,
-                            est_cost_info.use_column_store_,
                             project_cost))) {
       LOG_WARN("failed to cost project", K(ret));
     }
@@ -2246,10 +2079,9 @@ double ObOptEstCostModel::cost_hash_quals(double rows, const ObIArray<ObRawExpr 
 }
 
 int ObOptEstCostModel::cost_project(double rows,
-																		const ObIArray<ColumnItem> &columns,
-																		bool is_get,
-                                    bool use_column_store,
-																		double &cost)
+                                    const ObIArray<ColumnItem> &columns,
+                                    bool is_get,
+                                    double &cost)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObRawExpr*, 4> project_columns;
@@ -2264,7 +2096,6 @@ int ObOptEstCostModel::cost_project(double rows,
       OB_FAIL(cost_project(rows, 
                            project_columns, 
                            is_get, 
-                           use_column_store,
                            cost))) {
     LOG_WARN("failed to calc project cost", K(ret));
   }
@@ -2272,10 +2103,9 @@ int ObOptEstCostModel::cost_project(double rows,
 }
 
 int ObOptEstCostModel::cost_project(double rows,
-																		const ObIArray<ObRawExpr*> &columns,
-																		bool is_get,
-                                    bool use_column_store,
-																		double &cost)
+                                    const ObIArray<ObRawExpr*> &columns,
+                                    bool is_get,
+                                    double &cost)
 {
   int ret = OB_SUCCESS;
   double project_one_row_cost = 0.0;
@@ -2292,36 +2122,31 @@ int ObOptEstCostModel::cost_project(double rows,
         // int
         project_one_row_cost += cost_params_.get_project_column_cost(sys_stat_,
                                                                      ObIntTC,
-                                                                     is_get, 
-                                                                     use_column_store);
+                                                                     is_get);
       } else if (type.is_json() || 
                  type.is_geometry() ||
                  type.is_text() ||
                  type.is_lob()) {
         project_one_row_cost += cost_params_.get_project_column_cost(sys_stat_,
                                                                      type.get_type_class(),
-                                                                     is_get, 
-                                                                     use_column_store);
+                                                                     is_get);
       } else if (type.get_accuracy().get_length() > 0) {
         // ObStringTC
         int64_t string_width = type.get_accuracy().get_length();
         string_width = std::min(string_width, ObOptEstCostModel::DEFAULT_MAX_STRING_WIDTH);
         project_one_row_cost += cost_params_.get_project_column_cost(sys_stat_,
                                                                      ObStringTC,
-                                                                     is_get, 
-                                                                     use_column_store) * string_width;
+                                                                     is_get) * string_width;
       } else if (type.get_accuracy().get_precision() > 0) {
         // number, time
         project_one_row_cost += cost_params_.get_project_column_cost(sys_stat_,
                                                                      ObNumberTC,
-                                                                     is_get, 
-                                                                     use_column_store);
+                                                                     is_get);
       } else {
         // default for DEFAULT PK
         project_one_row_cost += cost_params_.get_project_column_cost(sys_stat_,
                                                                      ObIntTC,
-                                                                     is_get, 
-                                                                     use_column_store);
+                                                                     is_get);
       }
     }
   }
@@ -2350,13 +2175,11 @@ int ObOptEstCostModel::cost_full_table_scan_project(double rows,
   } else if (OB_FAIL(cost_project(project_full_row_count, 
                                   est_cost_info.access_column_items_, 
                                   is_get,
-                                  est_cost_info.use_column_store_,
                                   cost))) {
     LOG_WARN("failed to calc project cost", K(ret));
   } else if (OB_FAIL(cost_project(rows, 
                                   filter_columns, 
                                   is_get,
-                                  est_cost_info.use_column_store_,
                                   cost_project_filter_column))) {
     LOG_WARN("failed to calc project cost", K(ret));
   } else {
@@ -2668,13 +2491,11 @@ int ObCostTableScanSimpleInfo::init(const ObCostTableScanInfo &est_cost_info)
   } else if (OB_FAIL(vector_model.cost_project(1,
                                               est_cost_info.access_column_items_,
                                               false,
-                                              false,
                                               index_scan_project_cost_per_row_))) {
     LOG_WARN("failed to cost project", K(ret));
   } else if (OB_FAIL(vector_model.cost_project(1,
                                   est_cost_info.index_access_column_items_,
                                   true,
-                                  false,
                                   index_back_project_cost_per_row_))) {
     LOG_WARN("failed to cost project", K(ret));
   } else {

@@ -1056,11 +1056,6 @@ int ObPartitionMinorMerger::merge_partition(
   return ret;
 }
 
-/*
- * TODO(@DanLing)
- * Add mysql test case after column store branch is merged into master,
- * cause __all_virtual_tablet_stat is on column store.
- */
 int ObPartitionMinorMerger::collect_merge_stat(
     const ObMergeType &merge_type,
     ObPartitionMinorMergeHelper &merge_helper,

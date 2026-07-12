@@ -161,7 +161,6 @@
        macro_block.scn_ = __get_scn();
        macro_block.ddl_start_scn_ = redo_info_.start_scn_;
        macro_block.table_key_ = redo_info_.table_key_;
-       macro_block.end_row_id_ = redo_info_.end_row_id_;
        macro_block.trans_id_ = redo_info_.trans_id_;
        macro_block.seq_no_ = redo_info_.seq_no_;
        const int64_t snapshot_version = redo_info_.table_key_.get_snapshot_version();

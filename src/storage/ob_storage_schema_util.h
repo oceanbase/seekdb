@@ -39,23 +39,11 @@ public:
       const ObStorageSchema &old_schema_on_tablet,
       const ObStorageSchema &param_schema,
       ObStorageSchema *&chosen_schema);
-  static int update_storage_schema(
-      common::ObIAllocator &allocator,
-      const ObStorageSchema &other_schema,
-      ObStorageSchema &input_schema);
-
-  /* TODO(@DanLing) remove this func after column_store merged into master
-   * This func is just for replace ObTabletObjLoadHelper::alloc_and_new on master
-   */
   static int alloc_storage_schema(
       common::ObIAllocator &allocator,
       ObStorageSchema *&new_storage_schema);
   static void free_storage_schema(
       common::ObIAllocator &allocator,
-      ObStorageSchema *&new_storage_schema);
-  static int alloc_cs_replica_storage_schema(
-      common::ObIAllocator &allocator,
-      const ObStorageSchema *storage_schema,
       ObStorageSchema *&new_storage_schema);
 };
 

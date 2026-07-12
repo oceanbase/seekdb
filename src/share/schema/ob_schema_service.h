@@ -124,8 +124,6 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_RENAME_PARTITION, = 60)                             \
   ACT(OB_DDL_RENAME_SUB_PARTITION, = 61)                         \
   ACT(OB_DDL_MODIFY_MATERIALIZED_VIEW_STATUS, = 62)              \
-  ACT(OB_DDL_ADD_COLUMN_GROUP, = 63)                             \
-  ACT(OB_DDL_DROP_COLUMN_GROUP, = 64)                            \
   ACT(OB_DDL_EXCHANGE_PARTITION, = 65)                           \
   ACT(OB_DDL_MODIFY_MVIEW_REFERENCE_TABLE_STATUS, = 66)          \
   ACT(OB_DDL_MODIFY_INDEX_TYPE, = 67)                            \
@@ -510,7 +508,6 @@ public:
       next_column_name_(),
       prev_column_name_(),
       is_first_(false),
-      column_group_name_(),
       is_set_comment_(false)
   {}
 
@@ -529,7 +526,6 @@ public:
       next_column_name_(),
       prev_column_name_(),
       is_first_(false),
-      column_group_name_(),
       is_set_comment_(false)
   {}
   AlterColumnSchema &operator=(const AlterColumnSchema &alter_column_schema);
@@ -543,9 +539,6 @@ public:
   const common::ObString& get_prev_column_name() const { return prev_column_name_;};
   int set_prev_column_name(const common::ObString& prev_column_name)
     { return deep_copy_str(prev_column_name, prev_column_name_); }
-  const common::ObString& get_column_group_name() const { return column_group_name_;};
-  int set_column_group_name(const common::ObString& column_group_name)
-    { return deep_copy_str(column_group_name, column_group_name_); }
   void reset();
 
   ObSchemaOperationType alter_type_;
@@ -561,7 +554,6 @@ public:
   common::ObString next_column_name_;
   common::ObString prev_column_name_;
   bool is_first_;
-  common::ObString column_group_name_;
   bool is_set_comment_;
   DECLARE_VIRTUAL_TO_STRING;
 };

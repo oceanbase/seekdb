@@ -255,8 +255,8 @@ int ObIndexBlockMacroIterator::open(
   } else if (OB_FAIL(tree_cursor_.init(sstable, allocator, &rowkey_read_info))) {
     LOG_WARN("Fail to init tree cursor", K(ret), K(sstable));
   } else {
-    const int64_t store_rowkey_cnt = sstable.is_normal_cg_sstable() ? 1
-        : rowkey_read_info.get_schema_rowkey_count() + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt(); // include multi-version
+    const int64_t store_rowkey_cnt = rowkey_read_info.get_schema_rowkey_count()
+        + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt(); // include multi-version
     const bool is_percise_rowkey = store_rowkey_cnt == range.get_end_key().get_datum_cnt();
     if (is_reverse) {
       if (OB_FAIL(locate_macro_block(
@@ -710,94 +710,6 @@ int ObIndexBlockMacroIterator::locate_macro_block(
     LOG_WARN("Unexpected null parser", K(ret));
   } else if (OB_FAIL(parser->get_start_row_offset(start_row_offset))) {
     LOG_WARN("Fail to get prev row offset", K(ret), KPC(parser));
-  }
-  return ret;
-}
-
-int ObIndexBlockMacroIterator::get_cs_range(
-    const ObITableReadInfo &rowkey_read_info,
-    const bool is_start,
-    ObCSRange &cs_range)
-{
-  int ret = OB_SUCCESS;
-  const MacroBlockId &block_id = is_start ? begin_ : end_;
-  ObCSRowId &cs_key = is_start ? cs_range.start_row_id_ : cs_range.end_row_id_;
-  int64_t macro_start_row_offset = is_start ? begin_block_start_row_offset_ : end_block_start_row_offset_;
-
-  ObMicroBlockBareIterator micro_block_iter;
-  ObMicroBlockData data_block;
-  ObMicroBlockReaderHelper reader_helper;
-  ObIMicroBlockReader *reader = nullptr;
-  int64_t data_begin = 0;
-  int64_t data_end = 0;
-  int64_t micro_start_row_offset = 0;
-
-  // Need to pay attention!!!
-  // The allocator is used to allocate io data buffer, and its memory life cycle needs to be longer than the object handle.
-  common::ObArenaAllocator io_allocator("cs_range");
-  ObStorageObjectHandle macro_handle;
-  ObStorageObjectReadInfo read_info;
-
-  read_info.offset_ = sstable_->get_macro_offset();
-  read_info.size_ = sstable_->get_macro_read_size();
-  read_info.io_desc_.set_mode(ObIOMode::READ);
-  read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
-  read_info.io_desc_.set_sys_module_id(ObIOModule::INDEX_BLOCK_MICRO_ITER_IO);
-  read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
-  read_info.macro_block_id_ = block_id;
-  
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("Macro iter not init", K(ret));
-  } else if (is_iter_end_) {
-    ret = OB_ITER_END;
-    LOG_WARN("Macro iter end", K(ret), KPC_(iter_range), K_(begin), K_(end));
-  } else if (OB_ISNULL(read_info.buf_ =
-      reinterpret_cast<char*>(io_allocator.alloc(read_info.size_)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc macro read info buffer", K(ret), K(read_info.size_));
-  } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, macro_handle))) {
-    LOG_WARN("Fail to read macro block, ", K(ret), K(read_info));
-  } else if (OB_FAIL(macro_handle.wait())) {
-    LOG_WARN("Fail to wait io finish", K(ret), K(macro_handle), K(read_info));
-  } else if (OB_FAIL(micro_block_iter.open(
-      macro_handle.get_buffer(), macro_handle.get_data_size(), *iter_range_,
-      rowkey_read_info, true/*is_left_border*/, true/*is_right_border*/))) {
-    LOG_WARN("Fail to open micro block bare iter", K(ret), K(macro_handle));
-  } else if (OB_FAIL(micro_block_iter.set_end_iter_idx(is_start))) {
-    STORAGE_LOG(WARN, "failed to set_end_iter_idx", K(ret), K(micro_block_iter));
-  } else if (OB_FAIL(micro_block_iter.get_curr_start_row_offset(micro_start_row_offset))) {
-    LOG_WARN("Fail to get prev row offset", K(ret), K(macro_handle));
-  } else if (OB_FAIL(micro_block_iter.get_next_micro_block_data(data_block))) {
-    LOG_WARN("Fail to get get data block", K(ret), K(macro_handle));
-  } else if (OB_FAIL(reader_helper.init(*allocator_))) {
-    LOG_WARN("Fail to init reader helper", K(ret));
-  } else if (OB_FAIL(reader_helper.get_reader(micro_block_iter.get_row_type(), reader))) {
-    LOG_WARN("Fail to get reader", K(ret));
-  } else if (OB_FAIL(reader->init(data_block, rowkey_read_info))) {
-    LOG_WARN("Fail to init data block reader", K(ret), K(rowkey_read_info));
-  } else if (OB_FAIL(reader->locate_range(
-                            *iter_range_,
-                            true/*is_left_border*/,
-                            true/*is_right_border*/,
-                            data_begin,
-                            data_end))) {
-    if (OB_LIKELY(ret == OB_BEYOND_THE_RANGE)) {
-      if (is_start) {
-        data_begin = 0;
-      } else {
-        data_end = -1;
-      }
-      ret = OB_SUCCESS;
-    } else {
-      LOG_WARN("fail to locate range", K(ret), KPC_(iter_range), K(is_start), K(cs_range));
-    }
-  }
-  if (OB_SUCC(ret)) {
-    cs_key = macro_start_row_offset
-           + micro_start_row_offset
-           + (is_start ? data_begin : data_end);
   }
   return ret;
 }

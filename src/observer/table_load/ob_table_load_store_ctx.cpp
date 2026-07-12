@@ -568,7 +568,6 @@ int ObTableLoadStoreCtx::init_write_ctx()
     LOG_WARN("ObTableLoadStoreCtx not init", KR(ret));
   } else {
     static const int64_t MACRO_BLOCK_WRITER_MEM_SIZE = 10 * 1024LL * 1024LL;
-    static const int64_t cg_chunk_mem_limit = 64 * 1024L; // 64K
     // table_data_desc_
     write_ctx_.table_data_desc_ = basic_table_data_desc_;
     write_ctx_.table_data_desc_.rowkey_column_num_ =
@@ -617,15 +616,7 @@ int ObTableLoadStoreCtx::init_write_ctx()
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("wa_mem_limit is too small", KR(ret), K(wa_mem_limit));
         } else if (data_store_table_ctx_->schema_->is_table_without_pk_) {
-          int64_t part_mem_size = 0;
-          if (!data_store_table_ctx_->schema_->is_column_store() ||
-              ObDirectLoadMethod::is_incremental(ctx_->param_.method_)) {
-            // row storage
-            part_mem_size = MACRO_BLOCK_WRITER_MEM_SIZE;
-          } else {
-            // column store
-            part_mem_size = data_store_table_ctx_->schema_->cg_cnt_ * cg_chunk_mem_limit * 10;
-          }
+          const int64_t part_mem_size = MACRO_BLOCK_WRITER_MEM_SIZE;
           const int64_t bucket_cnt = MAX(1, wa_mem_limit / (thread_cnt_ * part_mem_size));
           if (part_cnt <= bucket_cnt || !ctx_->param_.need_sort_) {
             // Fast write to heap table
@@ -773,7 +764,6 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
 {
   int ret = OB_SUCCESS;
   static const int64_t MACRO_BLOCK_WRITER_MEM_SIZE = 10 * 1024LL * 1024LL;
-  static const int64_t cg_chunk_mem_limit = 64 * 1024L; // 64K
   // is_fast_heap_table_, is_multiple_mode_
   switch (ctx_->param_.exe_mode_) {
     // Fast heap table write
@@ -799,15 +789,7 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("wa_mem_limit is too small", KR(ret), K(wa_mem_limit));
       } else if (data_store_table_ctx_->schema_->is_table_without_pk_) {
-        int64_t part_mem_size = 0;
-        if (!data_store_table_ctx_->schema_->is_column_store() ||
-            ObDirectLoadMethod::is_incremental(ctx_->param_.method_)) {
-          // Row storage
-          part_mem_size = MACRO_BLOCK_WRITER_MEM_SIZE;
-        } else {
-          // Column storage
-          part_mem_size = data_store_table_ctx_->schema_->cg_cnt_ * cg_chunk_mem_limit * 10;
-        }
+        const int64_t part_mem_size = MACRO_BLOCK_WRITER_MEM_SIZE;
         const int64_t bucket_cnt = MAX(1, wa_mem_limit / (thread_cnt_ * part_mem_size));
         if (part_cnt <= bucket_cnt || !ctx_->param_.need_sort_) {
           // Fast heap table write
