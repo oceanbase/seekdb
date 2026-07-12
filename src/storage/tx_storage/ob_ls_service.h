@@ -19,12 +19,20 @@
 
 #include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"          // ObConcurrentFIFOAllocator
-#include "storage/ls/ob_ls.h"
+#include "storage/tx_storage/ob_ls_handle.h"
+#include "storage/tx_storage/ob_ls_map.h"
+#include "storage/ob_storage_rpc.h"
+#include "storage/ls/ob_ls_meta_package.h"                      // ObLSMetaPackage
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"
+#include "storage/mview/ob_major_mv_merge_info.h"
 #include "storage/tx/ob_tx_result_struct.h"
 
 namespace oceanbase
 {
+namespace share
+{
+class ObLSID;
+}
 namespace blocksstable
 {
 class ObBaseStorageLogger;
@@ -34,25 +42,31 @@ class ObSuperBlockMetaEntry;
 namespace storage
 {
 class ObLS;
+class ObLSHandle;
 struct ObLSMeta;
 
-// Maintain the single local log stream and its persistent metadata/checkpoint.
+// Maintain the tenant <-> log streams mapping relationship
+// Support log stream meta persistent and checkpoint
 class ObLSService : public ObIResourceLimitCalculatorHandler
 {
   static const int64_t DEFAULT_LOCK_TIMEOUT = 60_s;
-  static const int64_t BASE_RUNTIME_MEMORY_LIMIT = 4LL * 1024 * 1024 * 1024; // 4G
+  static const int64_t SMALL_TENANT_MEMORY_LIMIT = 4LL * 1024 * 1024 * 1024; // 4G
+  static const int64_t TENANT_MEMORY_PER_LS_NEED = 200 * 1024 * 1024L; // 200MB
 public:
   int64_t break_point = -1; // just for test
 public:
   ObLSService();
   virtual ~ObLSService();
 
-  static int server_module_init(ObLSService* &ls_service);
+  static int mtl_init(ObLSService* &ls_service);
   int init();
   int start();
   int stop();
   int wait();
   void destroy();
+  bool is_empty();
+  void inc_ls_safe_destroy_task_cnt();
+  void dec_ls_safe_destroy_task_cnt();
 public:
   // for limit calculator
   virtual int get_current_info(share::ObResourceInfo &info) override;
@@ -61,28 +75,59 @@ public:
   virtual int cal_min_phy_resource_needed(const int64_t num, share::ObMinPhyResourceResult &min_phy_res) override;
 public:
   // create a LS
-  int create_ls(const share::ObServerRole &server_role = share::PRIMARY_SERVER_ROLE);
-  int create_ls_for_restore();
+  int create_ls(const ObTenantRole &tenant_role = PRIMARY_TENANT_ROLE);
+  // create a LS for HA (standby bootstrap/restore use case)
+  int create_ls_for_ha();
 
   // create a LS for replay or update LS's meta
-  // @param [in] ls_epoch, the epoch increases monotonically in database scope when an LS is created
+  // @param [in] ls_epoch, the epoch increases monotonically in tenant scope when an ls is created
   // @param [in] ls_meta, all the parameters that is needed to create a LS for replay
   int replay_create_ls(const int64_t ls_epoch, const ObLSMeta &ls_meta);
   // replay create ls commit slog.
-  int replay_create_ls_commit();
+  // @param [in] ls_id, the create process of which is committed.
+  int replay_create_ls_commit(const share::ObLSID &ls_id);
   // create a LS for replay or update LS's meta
   // @param [in] ls_meta, all the parameters that is needed to create a LS for replay
   int replay_update_ls(const ObLSMeta &ls_meta);
-  // Set the LS to REMOVED state for replay create abort or remove.
-  int replay_remove_ls();
+  // update LS's meta for restore
+  // @param [in] meta_package, all the parameters that is needed to for restore
+  int restore_update_ls(const ObLSMetaPackage &meta_package);
+  // set a LS to REMOVED state and gc it later.
+  // for replay create ls abort or remove
+  // @param [in] ls_id, which ls need to be set REMOVED.
+  int replay_remove_ls(const share::ObLSID &ls_id);
 
-  // get the only log stream in seekdb.
-  int get_ls(ObLS *&ls);
+  // @param [in] ls_id, which ls does we need, mod is the module to get ls
+  // @param [out] handle, a guard of the specified logsream.
+  int get_ls(const share::ObLSID &ls_id,
+             ObLSHandle &handle,
+             ObLSGetMod mod);
+  // @param [in] func, iterate all ls diagnose info
+  int iterate_diagnose(const ObFunction<int(const storage::ObLS &ls)> &func);
 
   // remove the ls that is creating and write abort slog.
   int gc_ls_after_replay_slog();
-  // online the log stream
+  // online all ls
   int online_ls();
+
+  // check whether a ls exist or not.
+  // @param [in] ls_id, the ls we will check.
+  // @param [out] exist, true if the ls exist, else false.
+  int check_ls_exist(const share::ObLSID &ls_id,
+                     bool &exist);
+  // check whether a ls waiting for destroy or not.
+  // @param [in] ls_id, the ls we will check.
+  // @param [out] waiting, true if the ls waiting for destroy, else false.
+  int check_ls_waiting_safe_destroy(const share::ObLSID &ls_id,
+                                    bool &waiting);
+
+  template<class FUNC>
+  int foreach_ls(FUNC &func);
+  template<class FUNC>
+  int foreach_ls(FUNC &func, ObLSGetMod mod);
+
+  // get all ls ids
+  int get_ls_ids(common::ObIArray<share::ObLSID> &ls_id_array);
 
   // tablet operation in transactions
   // Create tablets for a ls
@@ -101,56 +146,118 @@ public:
                               const obcall::ObBatchRemoveTabletArg &batch_arg,
                               obcall::ObRemoveTabletsInTransRes &result);
 
+  obcall::ObStorageRpcProxy *get_storage_rpc_proxy() { return &storage_svr_rpc_proxy_; }
+  storage::ObStorageRpc *get_storage_rpc() { return &storage_rpc_; }
+  ObLSMap *get_ls_map() { return &ls_map_; }
+  int64_t get_ls_count() const { return ls_map_.get_ls_count(); }
+  int dump_ls_info();
+
+
   TO_STRING_KV(K_(is_inited));
 private:
   enum class ObLSCreateState {
       CREATE_STATE_INIT = 0, // begin
-      CREATE_STATE_LS_ALLOCATED = 1,
-      CREATE_STATE_PUBLISHED = 2,
-      CREATE_STATE_WRITE_PREPARE_SLOG = 3,
-      CREATE_STATE_PALF_ENABLED = 4,
-      CREATE_STATE_INNER_TABLET_CREATED = 5,
-      CREATE_STATE_FINISH = 6
+      CREATE_STATE_INNER_CREATED = 1, // inner_create_ls_ succ
+      CREATE_STATE_ADDED_TO_MAP = 2, // add_ls_to_map_ succ
+      CREATE_STATE_WRITE_PREPARE_SLOG = 3, // write_prepare_create_ls_slog_ succ
+      CREATE_STATE_PALF_ENABLED = 4, // enable_palf succ
+      CREATE_STATE_INNER_TABLET_CREATED = 5, // have created inner tablet
+      CREATE_STATE_FINISH
   };
 
   struct ObCreateLSCommonArg
   {
-    share::ObServerRole server_role_;
+    ObTenantRole tenant_role_;
     ObRestoreStatus restore_status_;
     share::SCN create_scn_;
+    int64_t create_type_; // ObLSCreateType::*
     bool need_create_inner_tablet_;
   };
 
   int create_ls_(const ObCreateLSCommonArg &arg);
-  int inner_create_ls_(const ObRestoreStatus &restore_status,
+  int inner_create_ls_(const share::ObLSID &lsid,
+                       const ObMigrationStatus &migration_status,
+                       const ObRestoreStatus &restore_status,
                        const share::SCN &create_scn,
+                       const ObMajorMVMergeInfo &major_mv_merge_info,
+                       const ObLSStoreFormat &store_format,
                        ObLS *&ls);
-  int publish_ls_(ObLS *ls);
-  void free_ls_(ObLS *ls);
+  int inner_del_ls_(ObLS *&ls);
+  int add_ls_to_map_(ObLS *ls);
+  int remove_ls_from_map_(const share::ObLSID &ls_id);
   void remove_ls_(ObLS *ls, const bool remove_from_disk, const bool write_slog);
-  int stop_and_remove_ls_(ObLS *ls, const bool remove_from_disk);
-  int replay_remove_ls_();
+  int safe_remove_ls_(ObLSHandle handle, const bool remove_from_disk);
+  int restore_update_ls_(const ObLSMetaPackage &meta_package);
+  int replay_remove_ls_(const share::ObLSID &ls_id);
   int replay_create_ls_(const int64_t ls_epoch, const ObLSMeta &ls_meta);
   int replay_update_ls_(const ObLSMeta &ls_meta);
-  int post_create_ls_(const bool is_restore, ObLS *ls);
+  int post_create_ls_(const int64_t create_type,
+                      ObLS *&ls);
   void del_ls_after_create_ls_failed_(ObLSCreateState& ls_create_state, ObLS *ls);
 
+  int alloc_ls_(ObLS *&ls);
+  int get_restore_status_(
+      ObRestoreStatus &restore_status);
+  ObRestoreStatus get_restore_status_by_tenant_role_(const ObTenantRole& tenant_role);
+  int64_t get_create_type_by_tenant_role_(const ObTenantRole& tenant_role);
+
   // for resource limit calculator
-  int cal_min_phy_resource_needed_(ObMinPhyResourceResult &min_phy_res);
+  int cal_min_phy_resource_needed_(const int64_t ls_cnt,
+                                   ObMinPhyResourceResult &min_phy_res);
   int get_resource_constraint_value_(ObResoureConstraintValue &constraint_value);
 
 private:
   bool is_inited_;
   bool is_running_; // used by create/remove, only can be used after start and before stop.
   bool is_stopped_;
-  ObLS *ls_;
+  // a map from ls id to ls
+  ObLSMap ls_map_;
 
   common::ObConcurrentFIFOAllocator ls_allocator_;
   // protect the create and remove process
   lib::ObMutex change_lock_;
 
+  //TOD(muwei.ym) src rpc framework should be tenant level
+  obcall::ObStorageRpcProxy storage_svr_rpc_proxy_;
+  storage::ObStorageRpc storage_rpc_;
+
+  // for safe destroy
+  // store the ls is removing
+  int64_t safe_ls_destroy_task_cnt_;
+
+  // for limit calculator
+  // the max ls cnt after observer start
+  int64_t max_ls_cnt_;
   DISALLOW_COPY_AND_ASSIGN(ObLSService);
 };
+
+template <class FUNC>
+int ObLSService::foreach_ls(FUNC &func)
+{
+  return foreach_ls(func, ObLSGetMod::TXSTORAGE_MOD);
+}
+
+template <class FUNC>
+int ObLSService::foreach_ls(FUNC &func, ObLSGetMod mod)
+{
+  int ret = OB_SUCCESS;
+
+  ObLSHandle handle;
+  ObLS *ls = nullptr;
+  if (OB_FAIL(get_ls(share::SYS_LS, handle, mod))) {
+    if (OB_LS_NOT_EXIST == ret) {
+      ret = OB_SUCCESS;
+    } else {
+      STORAGE_LOG(WARN, "get sys ls failed", KR(ret), KP(this));
+    }
+  } else if (OB_ISNULL(ls = handle.get_ls())) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "sys ls is NULL", K(ret), KP(this));
+  } else if (OB_FAIL(func(*ls))) {
+    STORAGE_LOG(WARN, "do function on ls failed", K(ret));
+  }
+  return ret;
+}
 
 }
 }
@@ -158,6 +265,7 @@ namespace oceanbase
 {
 namespace storage
 {
+// demoted from share::ObShareUtil(tenant-level query, gets the sys LS readable SCN through MTL ObLSService)
 int get_sys_ls_readable_scn(share::SCN &readable_scn);
 }
 }

@@ -16,7 +16,6 @@
 
 #include "observer/virtual_table/ob_all_virtual_checkpoint.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -30,7 +29,9 @@ namespace observer
 
 ObAllVirtualCheckpointInfo::ObAllVirtualCheckpointInfo()
     : ObVirtualTableScannerIterator(),
-      ls_(nullptr)
+      addr_(),
+      ls_handle_(),
+      is_ls_iter_end_(false)
 {
 }
 
@@ -41,30 +42,58 @@ ObAllVirtualCheckpointInfo::~ObAllVirtualCheckpointInfo()
 
 void ObAllVirtualCheckpointInfo::reset()
 {
-  ls_ = nullptr;
+  ls_handle_.reset();
+  is_ls_iter_end_ = false;
   ob_checkpoint_iter_.reset();
+  addr_.reset();
   ObVirtualTableScannerIterator::reset();
+}
+
+int ObAllVirtualCheckpointInfo::get_next_ls_(ObLS *&ls)
+{
+  int ret = OB_SUCCESS;
+  ls = nullptr;
+
+  if (is_ls_iter_end_) {
+    ret = OB_ITER_END;
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(share::SYS_LS, ls_handle_, ObLSGetMod::OBSERVER_MOD))) {
+    if (OB_LS_NOT_EXIST == ret) {
+      ret = OB_ITER_END;
+      is_ls_iter_end_ = true;
+    } else {
+      SERVER_LOG(WARN, "get sys ls failed", K(ret));
+    }
+  } else if (OB_ISNULL(ls = ls_handle_.get_ls())) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "sys ls is null", K(ret));
+  } else {
+    is_ls_iter_end_ = true;
+  }
+
+  return ret;
 }
 
 int ObAllVirtualCheckpointInfo::prepare_to_read_()
 {
   int ret = OB_SUCCESS;
+  ObLS *ls = nullptr;
   ObArray<ObCheckpointVTInfo> infos;
   ob_checkpoint_iter_.reset();
-  ObLSService *ls_service = share::g_mp->ls_service();
-  if (OB_ISNULL(ls_service)) {
+  if (OB_FAIL(get_next_ls_(ls))) {
+    if (OB_ITER_END != ret) {
+      SERVER_LOG(WARN, "get_next_ls failed", K(ret));
+    }
+  } else if (NULL == ls) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "ls service is null", K(ret));
-  } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-    SERVER_LOG(WARN, "get log stream failed", K(ret));
+    SERVER_LOG(WARN, "ls shouldn't NULL here", K(ret), K(ls));
   } else if (FALSE_IT(infos.reset())) {
-  } else if (OB_FAIL(ls_->get_checkpoint_info(infos))) {
-    SERVER_LOG(WARN, "get checkpoint info failed", K(ret), KPC(ls_));
+  } else if (OB_FAIL(ls->get_checkpoint_info(infos))) {
+    SERVER_LOG(WARN, "get checkpoint info failed", K(ret), KPC(ls));
   } else {
     int64_t idx = 0;
     for (; idx < infos.count() && OB_SUCC(ret); ++idx) {
       if (OB_FAIL(ob_checkpoint_iter_.push(infos.at(idx)))) {
-        SERVER_LOG(ERROR, "ob_checkpoint_iter push failed", K(ret), KPC(ls_));
+        SERVER_LOG(ERROR, "ob_checkpoint_iter push failed", K(ret), KPC(ls));
       }
     }
   }
@@ -83,12 +112,25 @@ int ObAllVirtualCheckpointInfo::prepare_to_read_()
 int ObAllVirtualCheckpointInfo::get_next_(ObCheckpointVTInfo &checkpoint)
 {
   int ret = OB_SUCCESS;
-  if (!ob_checkpoint_iter_.is_ready() && OB_FAIL(prepare_to_read_())) {
-    SERVER_LOG(WARN, "prepare data failed", K(ret));
-  } else if (OB_FAIL(ob_checkpoint_iter_.get_next(checkpoint))) {
-    if (OB_ITER_END != ret) {
-      SERVER_LOG(WARN, "get next checkpoint info error.", K(ret));
+  // ensure inner_get_next_row can get new data
+  bool need_retry = true;
+  while (need_retry) {
+    if (!ob_checkpoint_iter_.is_ready() && OB_FAIL(prepare_to_read_())) {
+      if (OB_ITER_END == ret) {
+        SERVER_LOG(DEBUG, "iterate checkpoint info iter end", K(ret));
+      } else {
+        SERVER_LOG(WARN, "prepare data failed", K(ret));
+      }
+    } else if (OB_FAIL(ob_checkpoint_iter_.get_next(checkpoint))) {
+      if (OB_ITER_END == ret) {
+        ob_checkpoint_iter_.reset();
+        SERVER_LOG(DEBUG, "iterate checkpoint info iter in the ls end", K(ret));
+        continue;
+      } else {
+        SERVER_LOG(WARN, "get next checkpoint info error.", K(ret));
+      }
     }
+    need_retry = false;
   }
   return ret;
 }

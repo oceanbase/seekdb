@@ -18,7 +18,6 @@
 
 
 #include "ob_ls_map.h"
-#include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -27,57 +26,6 @@ namespace oceanbase
 {
 namespace storage
 {
-// ------------------- ObLSIterator -------------------- //
-ObLSIterator::ObLSIterator()
-  : ls_(nullptr),
-    returned_(false),
-    ls_map_(NULL),
-    mod_(ObLSGetMod::INVALID_MOD)
-{
-}
-
-ObLSIterator::~ObLSIterator()
-{
-  reset();
-}
-
-void ObLSIterator::reset()
-{
-  if (OB_NOT_NULL(ls_map_) && OB_NOT_NULL(ls_)) {
-    ls_map_->revert_ls(ls_, mod_);
-  }
-  ls_ = nullptr;
-  returned_ = false;
-  ls_map_ = nullptr;
-  mod_ = ObLSGetMod::INVALID_MOD;
-}
-
-int ObLSIterator::get_next(ObLS *&ls)
-{
-  int ret = OB_SUCCESS;
-  ls = nullptr;
-
-  if (OB_ISNULL(ls_map_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("The ls service is NULL, ", K(ret));
-  } else if (returned_) {
-    reset();
-    ret = OB_ITER_END;
-  } else {
-    ObQSyncLockReadGuard guard(ls_map_->lock_);
-    if (OB_ISNULL(ls_map_->ls_)) {
-      ret = OB_ITER_END;
-    } else if (OB_FAIL(ls_map_->ls_->get_ref_mgr().inc(mod_))) {
-      LOG_WARN("ls inc ref fail", K(ret));
-    } else {
-      ls_ = ls_map_->ls_;
-      ls = ls_;
-      returned_ = true;
-    }
-  }
-  return ret;
-}
-
 // ------------------- ObLSMap -------------------- //
 void ObLSMap::reset()
 {

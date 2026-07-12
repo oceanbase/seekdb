@@ -19,6 +19,8 @@
 
 #include "observer/ob_server_struct.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
+#include "lib/container/ob_se_array.h"
+#include "lib/lock/ob_spin_lock.h"
 
 namespace oceanbase
 {
@@ -49,12 +51,9 @@ public:
   int remove_register_task_id(const int64_t task_id);
   int send_task_status_to_rs();
 private:
-  static const int64_t BUCKET_LOCK_BUCKET_CNT = 257L;
-  static const int64_t RETRY_COUNT = 3L;
-  static const int64_t RETRY_TIME_INTERVAL = 100L;
-  common::hash::ObHashMap<rootserver::ObDDLTaskID, uint64_t> register_tasks_;
+  common::ObSEArray<rootserver::ObDDLTaskID, 4> register_tasks_;
   bool is_inited_;
-  common::ObBucketLock bucket_lock_;
+  common::ObSpinLock lock_;
 };
 
 class ObRedefTableHeartBeatTask : public common::ObTimerTask

@@ -34,7 +34,6 @@ class ObLSHandle;
 class ObLSMap
 {
 public:
-  friend class ObLSIterator;
   ObLSMap()
    : is_inited_(false),
     ls_allocator_(nullptr),
@@ -74,26 +73,6 @@ private:
   int64_t ls_cnt_;
   ObLS *ls_;
   mutable common::ObQSyncLock lock_;
-};
-
-// Iterate the only LS in seekdb.
-class ObLSIterator
-{
-public:
-  ObLSIterator();
-  virtual ~ObLSIterator();
-  virtual int get_next(ObLS *&ls);
-  void reset();
-  void set_ls_map(ObLSMap &ls_map, ObLSGetMod mod) {
-    ls_map_ = &ls_map;
-    mod_ = mod;
-  }
-  TO_STRING_KV("has_ls", OB_NOT_NULL(ls_), K_(returned));
-private:
-  ObLS *ls_;
-  bool returned_;
-  ObLSMap *ls_map_;
-  ObLSGetMod mod_;
 };
 
 OB_INLINE void ObLSMap::free_ls(ObLS *ls) const

@@ -24,14 +24,12 @@
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/ob_scanner.h"
 #include "storage/tablet/ob_tablet_iterator.h"
+#include "storage/tx_storage/ob_ls_map.h"
+#include "storage/tx_storage/ob_ls_handle.h"
 #include "storage/ls/ob_freezer.h"
 
 namespace oceanbase
 {
-namespace storage
-{
-class ObLS;
-}
 namespace observer
 {
 class ObAllVirtualMinorFreezeInfo : public common::ObVirtualTableScannerIterator
@@ -42,12 +40,20 @@ public:
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
+  inline void set_addr(common::ObAddr &addr)
+  {
+    addr_ = addr;
+  }
 private:
+  int get_next_ls(ObLS *&ls);
   int generate_memtables_info();
   int get_next_freeze_stat(ObFreezerStat &freeze_stat);
   void append_memtable_info_string(const char *name, const char *str, int64_t &size);
 private:
-  storage::ObLS *ls_;
+  common::ObAddr addr_;
+  storage::ObLSHandle ls_handle_;
+  bool is_ls_iter_end_;
+  char ip_buf_[common::OB_IP_STR_BUFF];
   ObStringHolder diagnose_info_;
   common::ObSArray<ObFrozenMemtableInfo> memtables_info_;
   char memtables_info_string_[OB_MAX_CHAR_LENGTH];

@@ -16,7 +16,6 @@
 
 #include "observer/virtual_table/ob_all_virtual_memstore_info.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -29,8 +28,10 @@ namespace observer
 
 ObAllVirtualMemstoreInfo::ObAllVirtualMemstoreInfo()
   : ObVirtualTableScannerIterator(),
-    ls_(nullptr),
-    tablet_iter_(ObMDSGetTabletMode::READ_ALL_COMMITED),
+    addr_(),
+    ls_handle_(),
+    is_ls_iter_end_(false),
+    ls_tablet_iter_(ObMDSGetTabletMode::READ_ALL_COMMITED),
     tables_handle_(),
     memtable_array_pos_(0)
 {
@@ -43,34 +44,73 @@ ObAllVirtualMemstoreInfo::~ObAllVirtualMemstoreInfo()
 
 void ObAllVirtualMemstoreInfo::reset()
 {
-  tablet_iter_.reset();
-  ls_ = nullptr;
+  addr_.reset();
+  ls_tablet_iter_.reset();
+  ls_handle_.reset();
+  is_ls_iter_end_ = false;
   tables_handle_.reset();
   memtable_array_pos_ = 0;
   memset(freeze_time_dist_, 0, OB_MAX_CHAR_LENGTH);
+  memset(compaction_info_buf_, 0, sizeof(compaction_info_buf_));
   ObVirtualTableScannerIterator::reset();
+}
+
+int ObAllVirtualMemstoreInfo::get_next_ls(ObLS *&ls)
+{
+  int ret = OB_SUCCESS;
+  ls = nullptr;
+
+  while (OB_SUCC(ret)) {
+    if (is_ls_iter_end_) {
+      ret = OB_ITER_END;
+    } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(share::SYS_LS, ls_handle_, ObLSGetMod::OBSERVER_MOD))) {
+      if (OB_LS_NOT_EXIST == ret) {
+        ret = OB_ITER_END;
+        is_ls_iter_end_ = true;
+      } else {
+        SERVER_LOG(WARN, "fail to get sys ls", K(ret));
+      }
+    } else if (OB_ISNULL(ls = ls_handle_.get_ls())) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(ERROR, "ls is null", K(ret));
+    } else {
+      is_ls_iter_end_ = true;
+      break;
+    }
+  }
+
+  return ret;
 }
 
 int ObAllVirtualMemstoreInfo::get_next_tablet(ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
-  if (!tablet_iter_.is_valid()) {
-    ObLSService *ls_service = share::g_mp->ls_service();
-    if (OB_ISNULL(ls_service)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "ls service is null", K(ret));
-    } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-      SERVER_LOG(WARN, "get log stream failed", K(ret));
-    } else if (OB_FAIL(ls_->build_tablet_iter(
-        tablet_iter_, true /* except_ls_inner_tablet */))) {
-      SERVER_LOG(WARN, "fail to build tablet iter", K(ret));
+
+  while (OB_SUCC(ret)) {
+    if (!ls_tablet_iter_.is_valid()) {
+      ObLS *ls = nullptr;
+      if (OB_FAIL(get_next_ls(ls))) {
+        if (OB_ITER_END != ret) {
+          SERVER_LOG(WARN, "fail to get next ls", K(ret));
+        }
+      } else if (OB_FAIL(ls->build_tablet_iter(ls_tablet_iter_, true /* except_ls_inner_tablet */))) {
+        SERVER_LOG(WARN, "fail to build tablet iter", K(ret));
+      }
+    }
+
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(ls_tablet_iter_.get_next_tablet(tablet_handle))) {
+      if (OB_ITER_END == ret) {
+        ls_tablet_iter_.reset();
+        ret = OB_SUCCESS;
+      } else {
+        SERVER_LOG(WARN, "fail to get next tablet", K(ret));
+      }
+    } else {
+      break;
     }
   }
-  if (OB_SUCC(ret) && OB_FAIL(tablet_iter_.get_next_tablet(tablet_handle))) {
-    if (OB_ITER_END != ret) {
-      SERVER_LOG(WARN, "fail to get next tablet", K(ret));
-    }
-  }
+
   return ret;
 }
 

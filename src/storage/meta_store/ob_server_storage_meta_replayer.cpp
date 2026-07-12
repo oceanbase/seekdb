@@ -16,7 +16,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/meta_store/ob_server_storage_meta_replayer.h"
-#include "observer/omt/ob_server_runtime_controller.h"
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
 #include "share/rc/ob_module_provider.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
 #include "storage/meta_store/ob_server_storage_meta_persister.h"
@@ -49,15 +49,15 @@ int ObServerStorageMetaReplayer::init(
 int ObServerStorageMetaReplayer::start_replay()
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntimeMeta runtime_meta;
-  bool runtime_meta_valid = false;
+  omt::ObTenantMeta tenant_meta;
+  bool tenant_meta_valid = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_->start_replay())) {
     LOG_WARN("fail to start replay", K(ret));
-  } else if (FALSE_IT(ckpt_slog_handler_->get_replay_result(runtime_meta, runtime_meta_valid))) {
-  } else if (OB_FAIL(apply_replay_result_(runtime_meta, runtime_meta_valid))) {
+  } else if (FALSE_IT(ckpt_slog_handler_->get_replay_result(tenant_meta, tenant_meta_valid))) {
+  } else if (OB_FAIL(apply_replay_result_(tenant_meta, tenant_meta_valid))) {
     LOG_WARN("fail to apply repaly result", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_->do_post_replay_work())) {
     LOG_WARN("fail to do post repaly work", K(ret));
@@ -82,90 +82,110 @@ void ObServerStorageMetaReplayer::destroy()
 }
 
 int ObServerStorageMetaReplayer::apply_replay_result_(
-    const omt::ObServerRuntimeMeta &runtime_meta, const bool is_valid)
+    const omt::ObTenantMeta &tenant_meta, const bool is_valid)
 {
   int ret = OB_SUCCESS;
-  const int64_t runtime_count = is_valid ? 1 : 0;
+  const int64_t tenant_count = is_valid ? 1 : 0;
   if (is_valid) {
-    const ObServerRuntimeCreateStatus create_status = runtime_meta.create_status_;
+    const ObTenantCreateStatus create_status = tenant_meta.create_status_;
 
-    FLOG_INFO("replay runtime result", K(runtime_meta));
+    FLOG_INFO("replay tenant result", K(tenant_meta));
 
     switch (create_status) {
-      case ObServerRuntimeCreateStatus::CREATING : {
-        if (OB_FAIL(handle_runtime_creating_())) {
-          LOG_ERROR("fail to handle runtime creating", K(ret), K(runtime_meta));
+      case ObTenantCreateStatus::CREATING : {
+        if (OB_FAIL(handle_tenant_creating_(tenant_meta))) {
+          LOG_ERROR("fail to handle tenant creating", K(ret), K(tenant_meta));
         }
         break;
       }
-      case ObServerRuntimeCreateStatus::CREATED : {
-        if (OB_FAIL(handle_runtime_create_commit_(runtime_meta))) {
-          LOG_ERROR("fail to handle runtime create commit", K(ret), K(runtime_meta));
+      case ObTenantCreateStatus::CREATED : {
+        if (OB_FAIL(handle_tenant_create_commit_(tenant_meta))) {
+          LOG_ERROR("fail to handle tenant create commit", K(ret), K(tenant_meta));
         }
         break;
       }
-      case ObServerRuntimeCreateStatus::CREATE_ABORT :
+      case ObTenantCreateStatus::DELETING : {
+        if (OB_FAIL(handle_tenant_deleting_(tenant_meta))) {
+          LOG_ERROR("fail to handle tenant deleting", K(ret), K(tenant_meta));
+        }
+        break;
+      }
+      case ObTenantCreateStatus::DELETED :
+      case ObTenantCreateStatus::CREATE_ABORT :
         break;
 
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("runtime create status error", K(ret), K(runtime_meta));
+        LOG_ERROR("tenant create status error", K(ret), K(tenant_meta));
         break;
     }
   }
 
-  if (OB_SUCC(ret) && 0 != runtime_count) {
-    GCTX.server_runtime_controller_->set_synced();
+  if (OB_SUCC(ret) && 0 != tenant_count) {
+    GCTX.omt_->set_synced();
   }
 
-  LOG_INFO("finish replay create runtime", K(ret), K(runtime_count));
+  LOG_INFO("finish replay create tenants", K(ret), K(tenant_count));
 
   return ret;
 }
 
-int ObServerStorageMetaReplayer::handle_runtime_creating_()
+int ObServerStorageMetaReplayer::handle_tenant_creating_(const ObTenantMeta &tenant_meta)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(persister_->clear_runtime_log_dirs())) {
+  if (OB_FAIL(persister_->clear_tenant_log_dir())) {
     LOG_ERROR("fail to clear persistent data", K(ret));
-  } else if (OB_FAIL(persister_->abort_create_runtime())) {
+  } else if (OB_FAIL(persister_->abort_create_tenant( tenant_meta.epoch_))) {
     LOG_ERROR("fail to ab", K(ret));
   }
   return ret;
 }
 
-int ObServerStorageMetaReplayer::handle_runtime_create_commit_(const ObServerRuntimeMeta &runtime_meta)
+int ObServerStorageMetaReplayer::handle_tenant_create_commit_(const ObTenantMeta &tenant_meta)
 {
   int ret = OB_SUCCESS;
   
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(GCTX.server_runtime_controller_->create_runtime(runtime_meta, false/* write_slog */))) {
-    LOG_ERROR("fail to replay create runtime", K(ret), K(runtime_meta));
+  } else if (OB_FAIL(GCTX.omt_->create_tenant(tenant_meta, false/* write_slog */))) {
+    LOG_ERROR("fail to replay create tenant", K(ret), K(tenant_meta));
   }
 
 
+  return ret;
+}
+
+int ObServerStorageMetaReplayer::handle_tenant_deleting_(const ObTenantMeta &tenant_meta)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(persister_->clear_tenant_log_dir())) {
+    LOG_ERROR("fail to clear tenant log dir", K(ret));
+  } else if (OB_FAIL(persister_->commit_delete_tenant( tenant_meta.epoch_))) {
+    LOG_ERROR("fail to commit delete tenant", K(ret));
+  }
   return ret;
 }
 
 int ObServerStorageMetaReplayer::finish_storage_meta_replay_()
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntimeController *omt = GCTX.server_runtime_controller_;
+  omt::ObMultiTenant *omt = GCTX.omt_;
   if (OB_ISNULL(omt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, omt is nullptr", K(ret));
   }
 
   if (OB_SUCC(ret)) {
-    SERVER_MODULE_SCOPE {
-      ObLS *ls = nullptr;
-      if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
-        LOG_WARN("failed to get log stream", K(ret));
-      } else if (OB_FAIL(ls->finish_storage_meta_replay())) {
-        LOG_WARN("finish replay failed", K(ret), KPC(ls));
-      }
-      if (OB_SUCC(ret) && OB_FAIL(share::g_mp->ls_service()->gc_ls_after_replay_slog())) {
+    MOD_SCOPE {
+      auto finish_ls_replay = [&](ObLS &ls) -> int {
+        if (OB_FAIL(ls.finish_storage_meta_replay())) {
+          LOG_WARN("finish replay failed", K(ret), K(ls));
+        }
+        return ret;
+      };
+      if (OB_FAIL(share::g_mp->ls_service()->foreach_ls(finish_ls_replay, ObLSGetMod::STORAGE_MOD))) {
+        LOG_WARN("failed to foreach ls", K(ret));
+      } else if (OB_FAIL(share::g_mp->ls_service()->gc_ls_after_replay_slog())) {
         LOG_WARN("fail to gc ls after replay slog", K(ret));
       }
     }
@@ -177,14 +197,14 @@ int ObServerStorageMetaReplayer::finish_storage_meta_replay_()
 int ObServerStorageMetaReplayer::online_ls_()
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntimeController *omt = GCTX.server_runtime_controller_;
+  omt::ObMultiTenant *omt = GCTX.omt_;
 
   if (OB_ISNULL(omt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, omt is nullptr", K(ret));
   }
   if (OB_SUCC(ret)) {
-    SERVER_MODULE_SCOPE {
+    MOD_SCOPE {
       if (OB_FAIL(share::g_mp->ls_service()->online_ls())) {
         LOG_WARN("fail enable replay clog", K(ret));
       }

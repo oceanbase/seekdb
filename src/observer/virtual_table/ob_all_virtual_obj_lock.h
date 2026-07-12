@@ -19,13 +19,11 @@
 
 #include "storage/tablelock/ob_obj_lock.h"
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "storage/tx_storage/ob_ls_map.h"
+#include "storage/tx_storage/ob_ls_handle.h"
 
 namespace oceanbase
 {
-namespace storage
-{
-class ObLS;
-}
 namespace observer
 {
 
@@ -37,8 +35,13 @@ public:
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
+  inline void set_addr(common::ObAddr &addr)
+  {
+    addr_ = addr;
+  }
 private:
-  int get_next_tx_ctx(transaction::ObTxCtx *&tx_ctx);
+  int get_next_ls();
+  int get_next_tx_ctx(transaction::ObPartTransCtx *&tx_ctx);
   int get_next_lock_id(ObLockID &lock_id);
   int get_next_lock_op(transaction::tablelock::ObTableLockOp &lock_op,
                        transaction::tablelock::ObTableLockPriority &priority);
@@ -48,6 +51,7 @@ private:
   int prepare_start_to_read();
 
 private:
+  static const int64_t MAX_RETRY_TIMES = 10;
   enum
   {
     LOCK_ID = OB_APP_MIN_COLUMN_ID,
@@ -68,10 +72,13 @@ private:
     WAIT_SEQ
   };
 private:
-  storage::ObLS *ls_;
-  transaction::ObTxCtx *tx_ctx_;
+  common::ObAddr addr_;
+  ObLS *ls_;
+  transaction::ObPartTransCtx *tx_ctx_;
+  storage::ObLSHandle ls_handle_;
+  bool is_ls_iter_end_;
   // the tx_ctx of a ls
-  transaction::ObLSTxCtxIterator tx_ctx_iter_;
+  transaction::ObLSTxCtxIterator ls_tx_ctx_iter_;
   // the lock id of a ls
   ObLockIDIterator obj_lock_iter_;
   // the lock op of a obj lock

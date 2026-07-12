@@ -19,22 +19,31 @@
 
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/ob_scanner.h"
+#include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
 #include "lib/container/ob_se_array.h"
 #include "storage/tx/ob_trans_ctx_mgr.h"
+#include "storage/tx_storage/ob_ls_handle.h"
 #include "lib/time/ob_clock_generator.h"
 
 namespace oceanbase
 {
-namespace storage
-{
-class ObLS;
-}
 namespace transaction
 {
 class ObTransService;
 class ObTxLockStat;
 }
+
+//  bool is_inited_;
+//  common::ObAddr addr_;
+//  uint64_t tenant_;
+//  share::ObLSID ls_id_;
+//  ObMemtableKeyInfo memtable_key_;
+//  uint32_t session_id_;
+//  uint64_t proxy_session_id_;
+//  ObTransID tx_id_;
+//  int64_t ctx_create_time_;
+//  int64_t expired_time_;
 
 namespace observer
 {
@@ -48,13 +57,24 @@ public:
   void reset() override;
 private:
   int prepare_start_to_read_();
+  int get_next_ls_(ObLS *&ls);
+  int get_next_tx_ctx_(transaction::ObPartTransCtx *&tx_ctx);
   int get_next_tx_lock_stat_iter_(transaction::ObTxLockStatIterator &tx_lock_stat_iter);
   int get_next_tx_lock_stat_(transaction::ObTxLockStat &tx_lock_stat);
+  static const int64_t OB_MIN_BUFFER_SIZE = 128;
   static const int64_t OB_MEMTABLE_KEY_BUFFER_SIZE = 128;
+  char ip_buffer_[common::OB_IP_STR_BUFF];
+  char tx_id_buffer_[OB_MIN_BUFFER_SIZE];
+  char proxy_session_id_buffer_[OB_MIN_BUFFER_SIZE];
   char memtable_key_buffer_[OB_MEMTABLE_KEY_BUFFER_SIZE];
+  int output_row_(const transaction::ObTxLockStat& tx_lock_stat, ObNewRow *&row);
 private:
-  storage::ObLS *ls_;
-  transaction::ObLSTxCtxIterator tx_ctx_iter_;
+  static const int64_t MAX_RETRY_TIMES = 10;
+  storage::ObLSHandle ls_handle_;
+  bool is_ls_iter_end_;
+  share::ObLSID ls_id_;
+  ObLS *ls_;
+  transaction::ObLSTxCtxIterator ls_tx_ctx_iter_;
   transaction::ObTxLockStatIterator tx_lock_stat_iter_;
 };
 }//observer
