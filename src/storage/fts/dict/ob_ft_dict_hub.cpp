@@ -133,6 +133,28 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
   return ret;
 }
 
+int ObFTDictHub::refresh_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
+{
+  int ret = OB_SUCCESS;
+  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_), desc.name_.hash());
+  ObFTDictInfo info;
+  container.reset();
+
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("dict hub not init", K(ret));
+  } else {
+    ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
+    if (OB_FAIL(ObFTRangeDict::build_cache(desc, container))) {
+      LOG_WARN("failed to refresh dict cache", K(ret), K(desc.name_), K(desc.type_));
+    } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
+    } else if (OB_FAIL(put_dict_info(key, info))) {
+      LOG_WARN("failed to update dict info", K(ret), K(desc.name_), K(desc.type_));
+    }
+  }
+  return ret;
+}
+
 
 int ObFTDictHub::get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info)
 {
