@@ -575,8 +575,7 @@ int select_processlist(lua_State* L)
         char sql_id[common::OB_MAX_SQL_ID_LENGTH + 1];
         if (obmysql::COM_QUERY == sess_info->get_mysql_cmd() ||
             obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
-            obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd() ||
-            obmysql::COM_STMT_PREXECUTE == sess_info->get_mysql_cmd()) {
+            obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd()) {
           sess_info->get_cur_sql_id(sql_id, OB_MAX_SQL_ID_LENGTH + 1);
         } else {
           sql_id[0] = '\0';
@@ -590,8 +589,7 @@ int select_processlist(lua_State* L)
       // info
       if (obmysql::COM_QUERY == sess_info->get_mysql_cmd() ||
           obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
-          obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd() ||
-          obmysql::COM_STMT_PREXECUTE == sess_info->get_mysql_cmd()) {
+          obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd()) {
         UNUSED(sess_info->get_current_query_string().to_string(buf, BUF_LEN));
         gen_.next_column(buf);
       } else {
@@ -634,8 +632,7 @@ int select_processlist(lua_State* L)
       // trace_id
       if (obmysql::COM_QUERY == sess_info->get_mysql_cmd() ||
           obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
-          obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd() ||
-          obmysql::COM_STMT_PREXECUTE == sess_info->get_mysql_cmd()) {
+          obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd()) {
         UNUSED(sess_info->get_current_trace_id().to_string(buf, BUF_LEN));
         gen_.next_column(buf);
       } else {

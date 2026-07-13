@@ -203,7 +203,6 @@ int ObModifyAutoincTask::init(const int64_t task_id,
     
     dst_schema_version_ = schema_version;
     is_inited_ = true;
-    ddl_tracing_.open();
   }
   return ret;
 }
@@ -238,9 +237,6 @@ int ObModifyAutoincTask::init(const ObDDLTaskRecord &task_record)
     
     dst_schema_version_ = schema_version_;
     is_inited_ = true;
-
-    // set up span during recover task
-    ddl_tracing_.open_for_recovery();
   }
   return ret;
 }
@@ -254,7 +250,6 @@ int ObModifyAutoincTask::process()
   } else if (OB_FAIL(check_health())) {
     LOG_WARN("check health failed", K(ret));
   } else {
-    ddl_tracing_.restore_span_hierarchy();
     switch(task_status_) {
       case ObDDLTaskStatus::WAIT_TRANS_END: {
         if (OB_FAIL(wait_trans_end())) {
@@ -286,7 +281,6 @@ int ObModifyAutoincTask::process()
         break;
       }
     }
-    ddl_tracing_.release_span_hierarchy();
     if (OB_FAIL(ret)) {
       add_event_info("modify autoinc task process fail");
       LOG_INFO("modify autoinc task process fail", "ddl_event_info", ObDDLEventInfo());

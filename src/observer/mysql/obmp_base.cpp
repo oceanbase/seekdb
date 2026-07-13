@@ -100,10 +100,8 @@ int ObMPBase::update_proxy_and_client_sys_vars(ObSQLSessionInfo &session)
     LOG_WARN("connection in error, maybe has disconnected", K(ret));
   } else if (OB_FAIL(session.set_proxy_user_privilege(session.get_user_priv_set()))) {
     LOG_WARN("fail to set proxy user privilege system variables", K(ret));
-  } else if (OB_FAIL(session.set_proxy_capability(conn->proxy_cap_flags_.capability_))) {
-    LOG_WARN("fail to set proxy capability", K(ret));
   } else if (OB_FAIL(session.set_client_capability())) {
-    LOG_WARN("fail to set proxy capability", K(ret));
+    LOG_WARN("fail to set client capability", K(ret));
   }
   return ret;
 }
@@ -142,7 +140,6 @@ int ObMPBase::after_process(int error_code)
       FLUSH_TRACE();
     }
   }
-  ObFLTUtils::clean_flt_env();
   return ret;
 }
 
@@ -273,7 +270,6 @@ int ObMPBase::create_session(ObSMConnection *conn, ObSQLSessionInfo *&sess_info)
       } else {
         sess_info->set_ssl_cipher("");
       }
-      sess_info->set_client_sessid(conn->client_sessid_);
     }
   }
   return ret;
@@ -372,31 +368,6 @@ int ObMPBase::do_after_process(sql::ObSQLSessionInfo &session,
   session.reset_plsql_exec_time();
   session.reset_plsql_compile_time();
   ObQueryRetryAshGuard::reset_info();
-  return ret;
-}
-
-int ObMPBase::record_flt_trace(sql::ObSQLSessionInfo &session) const
-{
-  int ret = OB_SUCCESS;
-  //trace end
-  {
-    NG_TRACE(query_end);
-
-    if (session.is_use_trace_log()) {
-      //Does not affect normal logic
-      // show trace will always show last request info
-      if (OB_FAIL(ObFLTUtils::clean_flt_show_trace_env(session))) {
-        LOG_WARN("failed to clean flt show trace env", K(ret));
-      }
-    } else {
-      // not need to record
-      ObString trace_id;
-      trace_id.reset();
-      if (OB_FAIL(session.set_last_flt_trace_id(trace_id))) {
-        LOG_WARN("failed to reset last flt trace id", K(ret));
-      }
-    }
-  }
   return ret;
 }
 
@@ -540,33 +511,6 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
         LOG_WARN("response packet fail", K(ret));
       }
     }
-  }
-  return ret;
-}
-
-int ObMPBase::process_extra_info(sql::ObSQLSessionInfo &session,
-              const obmysql::ObMySQLRawPacket &pkt, bool &need_response_error)
-{
-  int ret = OB_SUCCESS;
-  sql::SessionInfoVerifacation sess_info_verification;
-  LOG_DEBUG("process extra info", K(ret),K(pkt.get_extra_info().exist_sess_info_veri()));
-  if (FALSE_IT(session.set_has_query_executed(true))) {
-  } else if (pkt.get_extra_info().exist_sync_sess_info()
-              && OB_FAIL(ObMPUtils::sync_session_info(session,
-                          pkt.get_extra_info().get_sync_sess_info()))) {
-    // won't response error, disconnect will let proxy sens failure
-    need_response_error = false;
-    LOG_WARN("fail to update sess info", K(ret));
-  } else if (pkt.get_extra_info().exist_sess_info_veri()
-              && OB_FAIL(sql::ObSessInfoVerify::sync_sess_info_veri(session,
-                        pkt.get_extra_info().get_sess_info_veri(),
-                        sess_info_verification))) {
-    LOG_WARN("fail to get verify info requied", K(ret));
-  } else if (pkt.get_extra_info().exist_sess_info_veri() &&
-              pkt.is_proxy_switch_route() &&
-              OB_FAIL(ObSessInfoVerify::verify_session_info(session,
-              sess_info_verification))) {
-    LOG_WARN("fail to verify sess info", K(ret));
   }
   return ret;
 }

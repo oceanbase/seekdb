@@ -35,6 +35,7 @@
 #include "pl/ob_pl_resolver.h"
 #include "sql/ob_sql_ccl_rule_manager.h"
 #include "lib/utility/ob_smart_call.h"
+#include "sql/monitor/show_trace/ob_show_trace.h"
 
 namespace oceanbase
 {
@@ -110,7 +111,7 @@ int ObSql::stmt_query(const common::ObString &stmt, ObSqlCtx &context, ObResultS
 {
   int ret = OB_SUCCESS;
   LinkExecCtxGuard link_guard(result.get_session(), result.get_exec_context());
-  FLTSpanGuard(sql_compile);
+  ObTraceSpanGuard compile_span(&result.get_session(), TRACE_SQL_COMPILE);
   ObTruncatedString trunc_stmt(stmt);
 #ifndef NDEBUG
   LOG_INFO("Begin to handle text statement",
@@ -138,10 +139,7 @@ int ObSql::stmt_query(const common::ObString &stmt, ObSqlCtx &context, ObResultS
   }
   if (OB_ISNULL(result.get_physical_plan())) {
   } else {
-    FLT_SET_TAG(plan_hash, result.get_physical_plan()->get_plan_hash_value());
   }
-  FLT_SET_TAG(database_id, result.get_session().get_database_id(),
-                sql_id, context.sql_id_);
   NG_TRACE_EXT(stmt_query_end, OB_ID(stmt),
                context.is_sensitive_ ? ObString(OB_MASKED_STR) : trunc_stmt.string(),
                OB_ID(stmt_len), stmt.length());
@@ -165,14 +163,7 @@ int ObSql::stmt_execute(const ObPsStmtId stmt_id,
     LOG_WARN("failed to do sanity check", K(ret));
   } else if (OB_FAIL(init_result_set(context, result))) {
     LOG_WARN("failed to init result set", K(ret));
-  } else if (
-#ifdef ERRSIM
-      // inject error for pr-ex protocol only
-      // inject after `init_result_set` because retry test would check session ptr in the exec ctx,
-      // which is initialized by `init_result_set`.
-      OB_FAIL(EVENT_CALL(common::EventTable::COM_STMT_PREXECUTE_EXECUTE_ERROR, context.is_pre_execute_)) ||
-#endif
-      OB_FAIL(handle_ps_execute(stmt_id, stmt_type, params, context, result, is_inner_sql))) {
+  } else if (OB_FAIL(handle_ps_execute(stmt_id, stmt_type, params, context, result, is_inner_sql))) {
     if (OB_ERR_PROXY_REROUTE != ret) {
       LOG_WARN("failed to handle ps execute", K(stmt_id), K(ret));
     }
@@ -183,7 +174,6 @@ int ObSql::stmt_execute(const ObPsStmtId stmt_id,
   if (OB_FAIL(ret) && OB_SUCCESS == result.get_errcode()) {
     result.set_errcode(ret);
   }
-  FLT_SET_TAG(sql_id, context.sql_id_);
   if (OB_FAIL(ret)) {
     rollback_implicit_trans_when_fail(result, ret);
   }
@@ -1051,17 +1041,17 @@ int ObSql::do_real_prepare(const ObString &sql,
 
   if (OB_FAIL(ret)) {
   } else if (result.is_simple_ps_protocol() // simple_ps_protocol only do parse
-             // for anonymous block, only parser in prepare of preexecute
+             // for anonymous block, mock prepare only parses and parameterizes the block
              || (stmt::T_ANONYMOUS_BLOCK == stmt_type
                  && context.is_prepare_protocol_
                  && context.is_prepare_stage_
-                 && context.is_pre_execute_)) {
+                 && context.is_mock_prepare_)) {
     param_cnt = parse_result.question_mark_ctx_.count_;
     info_ctx.normalized_sql_ = sql;
     if (stmt::T_ANONYMOUS_BLOCK == stmt_type
         && context.is_prepare_protocol_
         && context.is_prepare_stage_
-        && context.is_pre_execute_) {
+        && context.is_mock_prepare_) {
       if (OB_FAIL(ectx.get_pl_engine()->parameter_ps_anonymous_block(ectx,
                                                                      allocator,
                                                                      parse_result,
@@ -1076,23 +1066,8 @@ int ObSql::do_real_prepare(const ObString &sql,
         param_field.type_.set_type(ObIntType);
         param_field.cname_ = ObString::make_string("?");
 
-        // 1. why mark 'SP_PARAM_INOUT' here ?
-        //    if this prepare result reused by ps protocol. (here is prexecute protocol prepare)
-        //    ps protocol will use this result to charge `Is this anonymous block has out row or not?`
-        //    and if anonymous block has not out row, anonymous block can use AsyncCmdPlanDriver.
-        //    but for now, anonymous block do not resolve, we can not know about out row infos.
-        //    so we treat all parameter as inout paramter.
-        //
-        // 2. why inout parameter is ok ?
-        //    actully when anonymous block execute, it will do real resolve again,
-        //    and will fill out row infos again, we only use prepare inout infos to avoid to use AsyncCmdPlanDriver,
-        //    because AsyncCmdPlanDriver nerver response result row.
-        //
-        // 3. what if new ps prepare reuse prexecute prepare result?
-        //    it is not possible, because, we mark prexecute flag to PsStmtInfo,
-        //    when ps prepare match PsStmtInfo, will check prexecute flag, if flag is true, will evcit it, and do real prepare.
-        //    so here is a defense, avoid ps prepare reuse wrong.
-        //    if for some reason, ps reuse this, we can make sure result is correct.
+        // Mock prepare does not fully resolve anonymous blocks, so out row info is unknown here.
+        // Mark parameters as INOUT conservatively to avoid selecting an async driver that cannot return rows.
 
         param_field.inout_mode_ = ObRoutineParamInOut::SP_PARAM_INOUT;
         OZ (result.add_param_column(param_field), K(param_field), K(i), K(param_cnt));
@@ -1365,7 +1340,7 @@ int ObSql::handle_pl_prepare(const ObString &sql,
           } else if (FALSE_IT(result.set_stmt_type(stmt_type))) {
           } else if (result.is_simple_ps_protocol()
                     || (stmt::T_ANONYMOUS_BLOCK == stmt_type && context.is_prepare_protocol_
-                        && context.is_prepare_stage_ && context.is_pre_execute_)) {
+                        && context.is_prepare_stage_ && context.is_mock_prepare_)) {
             if (parse_result.is_dynamic_sql_) {
               context.is_dynamic_sql_ = true;
             }
@@ -1380,7 +1355,7 @@ int ObSql::handle_pl_prepare(const ObString &sql,
             normalized_sql = context.is_dynamic_sql_ && parse_result.no_param_sql_len_ > 0
               ? ObString(parse_result.no_param_sql_len_, parse_result.no_param_sql_) : sql;
             if (stmt::T_ANONYMOUS_BLOCK == stmt_type && context.is_prepare_protocol_
-                && context.is_prepare_stage_ && context.is_pre_execute_) {
+                && context.is_prepare_stage_ && context.is_mock_prepare_) {
               OZ (result.reserve_param_columns(param_cnt));
               for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
                 ObField param_field;
@@ -1578,8 +1553,6 @@ int ObSql::handle_pl_execute(const ObString &sql,
   LOG_TRACE("arrive handle pl execute", K(ret),
             "sql", context.is_sensitive_ ? ObString(OB_MASKED_STR) : sql,
             K(is_prepare_protocol), K(is_dynamic_sql), K(lbt()));
-
-  FLT_SET_TAG(pl_handle_sql_execute_sql, sql);
   int64_t start_time = ObTimeUtility::current_time();
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(pctx)) {
@@ -1595,7 +1568,6 @@ int ObSql::handle_pl_execute(const ObString &sql,
     result.get_session().set_exec_min_cluster_version();
   }
   int64_t end_time = ObTimeUtility::current_time();
-  FLT_SET_TAG(pl_handle_sql_execute_time, end_time - start_time);
   if (OB_FAIL(ret) && OB_SUCCESS == result.get_errcode()) {
     result.set_errcode(ret);
   }
@@ -1620,7 +1592,6 @@ int ObSql::handle_pl_execute(const ObString &sql,
       session.set_has_exec_inner_dml(true);
     }
   }
-  FLT_SET_TAG(sql_id, context.sql_id_);
   return ret;
 }
 
@@ -1641,13 +1612,6 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
   } else if (OB_FAIL(init_result_set(context, result))) {
     LOG_WARN("failed to init result set", K(ret));
   }
-
-#ifdef ERRSIM
-  // inject error for pr-ex protocol only
-  if (OB_SUCC(ret)) {
-    ret = OB_E(common::EventTable::COM_STMT_PREXECUTE_PREPARE_ERROR, context.is_pre_execute_) OB_SUCCESS;
-  }
-#endif
 
   if (OB_SUCC(ret)) {
     ObSQLSessionInfo &session = result.get_session();
@@ -1737,14 +1701,6 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
                                                         *stmt_info,
                                                         is_expired))) {
         LOG_WARN("fail to check schema version", K(ret));
-      } else if (!is_expired
-                 && !context.is_pre_execute_ // ps prepare
-                 && stmt_info->get_is_prexecute() // prexecute prepare
-                 && stmt::T_ANONYMOUS_BLOCK == stmt_info->get_stmt_type()
-                 && FALSE_IT(is_expired = true)) {
-        // prexecute prepare anonymous block result can not reused by ps prepare.
-        // but ps prepare anonymous block can reused by prexecute.
-        // here, we replace to ps prepare result.
       } else if (is_expired) {
         stmt_info->set_is_expired();
         if (OB_FAIL(ps_cache->erase_stmt_item(inner_stmt_id, ps_key))) {
@@ -2252,7 +2208,7 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
             LOG_WARN("fail to handle after get plan", K(ret));
           }
         }
-      } else if (stmt::T_ANONYMOUS_BLOCK == stmt_type && !context.is_pre_execute_) {
+      } else if (stmt::T_ANONYMOUS_BLOCK == stmt_type && !context.is_mock_prepare_) {
         ParseResult parse_result;
         MEMSET(&parse_result, 0, SIZEOF(ParseResult));
         if (OB_FAIL(generate_physical_plan(parse_result, NULL, context, result,
@@ -2320,7 +2276,6 @@ int ObSql::handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
   int ret = OB_SUCCESS;
   //trim the sql first, let 'select c1 from t' and '  select c1 from t' and hit the same plan_cache
   const ObString &trimed_stmt = remote_sql_info.remote_sql_;
-  FLTSpanGuard(remote_compile);
 
   ObIAllocator &allocator = THIS_WORKER.get_sql_arena_allocator();
   ObSQLSessionInfo *session = exec_ctx.get_my_session();
@@ -2452,7 +2407,6 @@ int ObSql::handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
 
   if ((NULL != pc_ctx) && !(pc_ctx->sql_ctx_.is_sensitive_)) {
     // if sql context contains sensitive data, can not flush sql info to trace.log
-    FLT_SET_TAG(sql_text, trimed_stmt);
   }
 
 
@@ -2594,7 +2548,6 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
 
   if ((NULL != pc_ctx) && !(pc_ctx->sql_ctx_.is_sensitive_)) {
     // if sql context contains sensitive data, can not flush sql info to trace.log
-    FLT_SET_TAG(sql_text, trimed_stmt);
   }
 
   // set auto-increment related param into physical plan ctx
@@ -2684,7 +2637,6 @@ int ObSql::generate_stmt(ParseResult &parse_result,
                          ParseResult *outline_parse_result)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(resolve);
   uint64_t session_id = 0;
   ObResolverParams resolver_ctx;
   ObPhysicalPlanCtx *plan_ctx = NULL;
@@ -2768,7 +2720,7 @@ int ObSql::generate_stmt(ParseResult &parse_result,
   if (OB_SUCC(ret)) {
     resolver_ctx.is_prepare_protocol_ = context.is_prepare_protocol_;
     resolver_ctx.is_prepare_stage_ = context.is_prepare_stage_;
-    resolver_ctx.is_pre_execute_ = context.is_pre_execute_;
+    resolver_ctx.is_mock_prepare_ = context.is_mock_prepare_;
     resolver_ctx.is_dynamic_sql_ = context.is_dynamic_sql_;
     resolver_ctx.is_dbms_sql_ = context.is_dbms_sql_;
     resolver_ctx.statement_id_ = context.statement_id_;
@@ -2808,7 +2760,7 @@ int ObSql::generate_stmt(ParseResult &parse_result,
       } else if (stmt::T_ANONYMOUS_BLOCK == context.stmt_type_
           && context.is_prepare_protocol_
           && !context.is_prepare_stage_
-          && !context.is_pre_execute_) {
+          && !context.is_mock_prepare_) {
         ParseNode tmp_node;
         tmp_node.type_ = T_SP_ANONYMOUS_BLOCK;
         ret = resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT, tmp_node, stmt);
@@ -3474,7 +3426,6 @@ int ObSql::transform_stmt(ObSqlSchemaGuard *sql_schema_guard,
                           bool ignore_trace_event)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(rewrite);
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_rewrite);
   ObDMLStmt *transform_stmt = stmt;
   int64_t last_mem_usage = exec_ctx.get_allocator().total();
@@ -3570,7 +3521,6 @@ int ObSql::optimize_stmt(
     ObLogPlan *&logical_plan)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(optimize);
   logical_plan = NULL;
   LOG_TRACE("stmt to generate plan", K(stmt));
   OPT_TRACE_TITLE("START GENERATE PLAN");
@@ -3603,7 +3553,6 @@ int ObSql::code_generate(
     ObPhysicalPlan *&phy_plan)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(code_generate);
   int64_t last_mem_usage = 0;
   int64_t codegen_mem_usage = 0;
   ObPhysicalPlanCtx *pctx = result.get_exec_context().get_physical_plan_ctx();
@@ -3996,7 +3945,6 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
       }
     }
   }
-  FLT_SET_TAG(hit_plan, pc_ctx.sql_ctx_.plan_cache_hit_);
   if (OB_ERR_PROXY_REROUTE == ret || OB_REACH_MAX_CONCURRENT_NUM == ret || OB_REACH_MAX_CCL_CONCURRENT_NUM == ret
       || OB_NEED_SWITCH_CONSUMER_GROUP == ret) {
     // If sql needs secondary routing, the connection should not be closed
@@ -4759,7 +4707,6 @@ OB_NOINLINE int ObSql::handle_physical_plan(const ObString &trimed_stmt,
                                             const int get_plan_err)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(hard_parse);
   bool is_valid = true;
   PlanCacheMode mode = pc_ctx.mode_;
   ObString outlined_stmt = trimed_stmt;//use outline if available
@@ -4865,7 +4812,6 @@ int ObSql::handle_parser(const ObString &sql,
 
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(parse);
   int64_t last_mem_usage = pc_ctx.allocator_.total();
   int64_t parser_mem_usage = 0;
   ObPhysicalPlanCtx *pctx = exec_ctx.get_physical_plan_ctx();

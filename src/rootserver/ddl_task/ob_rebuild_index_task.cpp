@@ -92,7 +92,6 @@ int ObRebuildIndexTask::init(
     data_format_version_ = tenant_data_version;
     parallelism_ = parallelism;
     is_inited_ = true;
-    ddl_tracing_.open();
   }
   return ret;
 }
@@ -129,8 +128,6 @@ int ObRebuildIndexTask::init(
     if (OB_FAIL(ret)) {
     } else {
       is_inited_ = true;
-      // set up span during recover task
-      ddl_tracing_.open_for_recovery();
     }
   }
   return ret;
@@ -920,7 +917,6 @@ int ObRebuildIndexTask::process()
   } else if (!need_retry()) {
     // task is done
   } else {
-    ddl_tracing_.restore_span_hierarchy();
     const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
     switch (status) {
       case ObDDLTaskStatus::PREPARE:
@@ -962,7 +958,6 @@ int ObRebuildIndexTask::process()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("error unexpected, task status is not valid", KR(ret), K(task_status_));
     }
-    ddl_tracing_.release_span_hierarchy();
     if (OB_FAIL(ret)) {
       add_event_info("rebuild index task process fail");
       LOG_INFO("rebuild index task process fail", "ddl_event_info", ObDDLEventInfo());

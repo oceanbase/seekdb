@@ -137,8 +137,9 @@ private:
   ObSEArray<pl::ObPLDataType, 32> out_type_;
   ObSEArray<ObString, 32> out_type_name_;
   ObSEArray<ObString, 32> out_type_owner_;
-  /* MySQL mode does not return out parameters to non-standard drivers (obclient, opensource MySQL
-   * driver) unless the parameter is bound with "?" */
+  /* MySQL protocol exposes procedure OUT values to the client only for protocol-bound
+   * output parameters. User/system variable OUT parameters are written back into
+   * the variables and can be read by a following SELECT. */
   ObBitSet<> out_client_params_;
   ObSEArray<int64_t, 32> out_param_id_;
 

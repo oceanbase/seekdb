@@ -23,6 +23,7 @@
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
 #include "share/ob_ex_rpc.h"
+#include "sql/monitor/show_trace/ob_show_trace.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -100,7 +101,20 @@ int ObDfoSchedulerBasic::prepare_schedule_info(ObExecContext &exec_ctx)
 int ObDfoSchedulerBasic::on_sqc_threads_inited(ObExecContext &ctx, ObDfo &dfo) const
 {
   int ret = OB_SUCCESS;
-  UNUSED(ctx);
+  ObSQLSessionInfo *session = ctx.get_my_session();
+  ObShowTraceSessionBuffer *trace_buf = OB_ISNULL(session) ? NULL : session->get_show_trace_buffer();
+  if (!dfo.is_root_dfo() && OB_NOT_NULL(trace_buf) && trace_buf->is_recording()) {
+    ObIArray<ObPxSqcMeta> &sqcs = dfo.get_sqcs();
+    ARRAY_FOREACH_X(sqcs, idx, cnt, true) {
+      const ObPxSqcMeta &sqc = sqcs.at(idx);
+      ObTraceSpanGuard sqc_guard(session, TRACE_PX_SQC);
+      sqc_guard.set_tag(TRACE_TAG_DFO_ID, dfo.get_dfo_id());
+      sqc_guard.set_tag(TRACE_TAG_SQC_ID, sqc.get_sqc_id());
+      sqc_guard.set_tag(TRACE_TAG_QC_ID, dfo.get_qc_id());
+      sqc_guard.set_tag(TRACE_TAG_TASK_COUNT, sqc.get_task_count());
+      sqc_guard.set_tag(TRACE_TAG_RET_CODE, OB_SUCCESS);
+    }
+  }
   if (OB_FAIL(dfo.prepare_channel_info())) {
     LOG_WARN("failed to prepare channel info", K(ret));
   }
@@ -370,7 +384,7 @@ int ObSerialDfoScheduler::dispatch_dtl_data_channel_info(ObExecContext &ctx, ObD
 int ObSerialDfoScheduler::try_schedule_next_dfo(ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(px_schedule);
+  ObTraceSpanGuard px_schedule_span(ctx.get_my_session(), TRACE_PX_SCHEDULE);
   ObDfo *dfo = NULL;
   if (OB_FAIL(coord_info_.dfo_mgr_.get_ready_dfo(dfo))) {
     if (OB_ITER_END != ret) {
@@ -1347,7 +1361,7 @@ int ObParallelDfoScheduler::deal_with_init_sqc_error(ObExecContext &exec_ctx,
 int ObParallelDfoScheduler::try_schedule_next_dfo(ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(px_schedule);
+  ObTraceSpanGuard px_schedule_span(ctx.get_my_session(), TRACE_PX_SCHEDULE);
   ObSEArray<ObDfo *, 3> dfos;
   while (OB_SUCC(ret)) {
     // Each iteration outputs only one pair of DFO, parent & child
@@ -1381,9 +1395,6 @@ int ObParallelDfoScheduler::try_schedule_next_dfo(ObExecContext &ctx)
       if (OB_FAIL(schedule_pair(ctx, child, parent))) {
         LOG_WARN("fail schedule parent and child", K(ret));
       }
-      FLT_SET_TAG(dfo_id, parent.get_dfo_id(),
-                  qc_id, parent.get_qc_id(),
-                  used_worker_cnt, parent.get_used_worker_count());
     }
   }
   return ret;

@@ -77,6 +77,18 @@ int64_t ObBatchFreezeTabletsParam::to_string(char *buf, const int64_t buf_len) c
   J_OBJ_END();
   return pos;
 }
+
+int ObBatchFreezeTabletsParam::assign(const ObBatchFreezeTabletsParam &other)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObBatchExecParam<ObTabletSchedulePair>::assign(other))) {
+    LOG_WARN("failed to assign batch freeze tablets param", K(ret), K(other));
+  } else {
+    loop_cnt_ = other.loop_cnt_;
+  }
+  return ret;
+}
+
 bool ObBatchFreezeTabletsDag::operator == (const ObIDag &other) const
 {
   bool is_same = true;

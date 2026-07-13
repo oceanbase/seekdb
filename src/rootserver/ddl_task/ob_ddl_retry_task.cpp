@@ -197,7 +197,6 @@ int ObDDLRetryTask::init(const int64_t task_id,
     
     dst_schema_version_ = schema_version_;
     is_inited_ = true;
-    ddl_tracing_.open();
   }
   return ret;
 }
@@ -239,9 +238,6 @@ int ObDDLRetryTask::init(const ObDDLTaskRecord &task_record)
     LOG_WARN("init compat mode failed", K(ret));
   } else {
     is_inited_ = true;
-
-    // set up span during recover task
-    ddl_tracing_.open_for_recovery();
   }
   return ret;
 }
@@ -564,7 +560,6 @@ int ObDDLRetryTask::process()
   } else if (!need_retry()) {
     // task finish, do nothing.
   } else {
-    ddl_tracing_.restore_span_hierarchy();
     switch(task_status_) {
       case ObDDLTaskStatus::PREPARE: {
         if (OB_FAIL(prepare(ObDDLTaskStatus::DROP_SCHEMA))) {
@@ -602,7 +597,6 @@ int ObDDLRetryTask::process()
         break;
       }
     }
-    ddl_tracing_.release_span_hierarchy();
     if (OB_FAIL(ret)) {
       add_event_info("ddl retry task process fail");
       LOG_INFO("ddl retry task process fail", K(ret), K(snapshot_version_), K(object_id_), K(target_object_id_), K(schema_version_), "ddl_event_info", ObDDLEventInfo());

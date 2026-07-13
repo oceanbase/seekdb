@@ -20,6 +20,7 @@
 #include "sql/engine/expr/ob_batch_eval_util.h"
 #include "share/object/ob_obj_cast_util.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
+#include "rpc/obmysql/ob_mysql_util.h"
 
 namespace oceanbase
 {
@@ -177,7 +178,7 @@ int ObExprDiv::calc_result_type2(ObExprResType &type,
       if (PRECISION_UNKNOWN_YET != type1.get_precision() &&
           PRECISION_UNKNOWN_YET != type2.get_precision() &&
           SCALE_UNKNOWN_YET != scale) {
-        ObPrecision p1 = ObMySQLUtil::float_length(scale);
+        ObPrecision p1 = obmysql::ObMySQLUtil::float_length(scale);
         ObPrecision p2 = type1.get_precision() - type1.get_scale() + scale;
         if (ObNumberTC == type1.get_type_class() || ObDecimalIntTC == type1.get_type_class()) {
           p2 += decimal_to_double_precision_inc(type1.get_type(), type1.get_scale());
@@ -1027,4 +1028,3 @@ int ObExprDiv::cg_expr(ObExprCGCtx &op_cg_ctx,
 }
 
 #include "ob_expr_div_decint.ipp"
-

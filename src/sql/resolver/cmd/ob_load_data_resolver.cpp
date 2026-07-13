@@ -1397,22 +1397,6 @@ int ObLoadDataResolver::local_infile_enabled(bool &enabled) const
               K(enabled), K(local_infile_capability_flag), K(local_infile_sys_var));
   }
 
-  // 2. let's check the client type.
-  // The obproxy set the capability flag but it does not support load local
-  if (OB_SUCC(ret) && enabled) {
-    if (session_info_->get_client_mode() > common::OB_MIN_CLIENT_MODE &&
-        session_info_->get_client_mode() < OB_MAX_CLIENT_MODE) {
-      // this is an ob client, such as obclient 2.x, objdbc, obproxy, obclient 1.x is not included
-      // check the proxy capability flags
-      obmysql::ObProxyCapabilityFlags proxy_cap = session_info_->get_proxy_cap_flags();
-      LOG_DEBUG("load local infile: get proxy capability flag",
-                K(proxy_cap.capability_), K(proxy_cap.is_load_local_support()));
-      if (!proxy_cap.is_load_local_support()) {
-        enabled = false;
-        LOG_INFO("load data local infile is disabled by client: the obclient proxy capability flag is not set");
-      }
-    }
-  }
   return ret;
 }
 

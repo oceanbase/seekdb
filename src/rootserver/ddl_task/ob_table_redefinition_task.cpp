@@ -114,7 +114,6 @@ int ObTableRedefinitionTask::init(const ObTableSchema* src_table_schema,
       LOG_WARN("fail to get no logging param", K(ret));
     } else {
       is_inited_ = true;
-      ddl_tracing_.open();
     }
   }
 
@@ -170,9 +169,6 @@ int ObTableRedefinitionTask::init(const ObDDLTaskRecord &task_record)
       LOG_WARN("init ddl task monitor info failed", K(ret));
     } else {
       is_inited_ = true;
-
-      // set up span during recover task
-      ddl_tracing_.open_for_recovery();
     }
   }
 
@@ -1017,7 +1013,6 @@ int ObTableRedefinitionTask::process()
   } else if (OB_FAIL(check_health())) {
     LOG_WARN("check task health failed", K(ret));
   } else {
-    ddl_tracing_.restore_span_hierarchy();
     switch(task_status_) {
       case ObDDLTaskStatus::PREPARE:
         if (alter_table_arg_.mview_refresh_info_.is_mview_complete_refresh_ && parent_task_id_ > 0) {
@@ -1087,7 +1082,6 @@ int ObTableRedefinitionTask::process()
         LOG_WARN("unexpected table redefinition task state", K(task_status_));
         break;
     }
-    ddl_tracing_.release_span_hierarchy();
   }
   return ret;
 }

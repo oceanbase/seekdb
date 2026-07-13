@@ -306,7 +306,6 @@ int ObIndexBuildTask::process()
   } else if (!need_retry()) {
     // by pass
   } else {
-    ddl_tracing_.restore_span_hierarchy();
     const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
     switch (status) {
     case ObDDLTaskStatus::PREPARE: {
@@ -363,7 +362,6 @@ int ObIndexBuildTask::process()
       break;
     }
     } // end switch
-    ddl_tracing_.release_span_hierarchy();
     if (OB_FAIL(ret)) {
       add_event_info("index build task process fail");
       LOG_INFO("index build task process fail", "ddl_event_info", ObDDLEventInfo());
@@ -470,7 +468,6 @@ int ObIndexBuildTask::init(
     } else if (OB_FAIL(index_schema->get_store_column_group_count(target_cg_cnt_))) {
       LOG_WARN("fail to get column group cnt", K(ret), K(index_schema));
     }
-    ddl_tracing_.open();
   }
   return ret;
 }
@@ -545,9 +542,6 @@ int ObIndexBuildTask::init(const ObDDLTaskRecord &task_record)
       LOG_WARN("init ddl task monitor info failed", KR(ret));
     } else {
       is_inited_ = true;
-
-      // set up span during recover task
-      ddl_tracing_.open_for_recovery();
     }
   }
   return ret;

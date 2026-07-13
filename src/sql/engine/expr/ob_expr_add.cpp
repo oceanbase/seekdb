@@ -19,6 +19,7 @@
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_batch_eval_util.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
+#include "rpc/obmysql/ob_mysql_util.h"
 
 
 namespace oceanbase
@@ -110,7 +111,7 @@ int ObExprAdd::calc_result_type2(ObExprResType &type,
     ObScale scale2 = static_cast<ObScale>(MAX(type2.get_scale(), 0));
     scale = MAX(scale1, scale2);
     if (type.is_double()) {
-      precision = ObMySQLUtil::float_length(scale);
+      precision = obmysql::ObMySQLUtil::float_length(scale);
     } else if (type.has_result_flag(DECIMAL_INT_ADJUST_FLAG)) {
       precision = MAX(type1.get_precision(), type2.get_precision());
     } else {

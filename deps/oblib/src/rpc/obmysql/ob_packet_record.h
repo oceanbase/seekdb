@@ -16,8 +16,7 @@
 
 #ifndef _OB_MYSQL_OB_PACKET_RECORD_H_
 #define _OB_MYSQL_OB_PACKET_RECORD_H_
-#include "rpc/obmysql/ob_mysql_packet.h" 
-#include "rpc/obmysql/ob_2_0_protocol_struct.h" 
+#include "rpc/obmysql/ob_mysql_packet.h"
 
 namespace oceanbase
 {
@@ -31,27 +30,6 @@ struct ResRecordFlags {
   uint8_t processed_: 1; // Request processing finished, this bit will be marked after sending the packet.
   uint8_t reservered_: 8; // The remaining bits are used for special markers
 };
-
-struct Obp20Header {
-  uint32_t payload_len_; // 4byte
-  Ob20ProtocolFlags flag_; // 4byte
-  int32_t req_id_;         // 4byte
-  uint8_t pkt_seq_;        // 1byte
-  uint16_t ext_flags_;     // 2byte
-  Obp20Header() {
-    payload_len_ = 0;
-    flag_.flags_ = 0;
-    pkt_seq_ = 0;
-    ext_flags_ = 0;
-    req_id_ = 0;
-  }
-  bool is_valid() const {
-    return req_id_ != 0;
-  }
-  ~Obp20Header() {}
-  TO_STRING_KV(K_(payload_len), K_(pkt_seq), K_(req_id), K_(flag_.flags), K_(ext_flags));
-};//12byte
-
 
 /*
   // for send packet
@@ -128,32 +106,6 @@ public:
   }
   // for mysql protocol end 
 
-  // for ob20 protocol
-  inline void record_send_obp20_packet(uint32_t payload_len, Ob20ProtocolFlags flag,
-                                uint8_t pkt_seq, uint16_t ext_flags,
-                                int32_t req_id, uint32_t com_len, uint8_t com_seq)
-  {
-      obp20_header_.payload_len_ = payload_len;
-      obp20_header_.flag_ = flag;
-      obp20_header_.pkt_seq_ = pkt_seq;
-      obp20_header_.req_id_ = req_id;
-      obp20_header_.ext_flags_ = ext_flags;
-      obp_mysql_header_.com_len_ = com_len;
-      obp_mysql_header_.com_seq_ = com_seq;
-  }
-  inline void record_recieve_obp20_packet(Ob20Packet& obp20_pkt)
-  {
-    obp20_header_.payload_len_ = obp20_pkt.get_payload_len();
-    obp20_header_.flag_ = obp20_pkt.get_flags();
-    obp20_header_.pkt_seq_ = obp20_pkt.get_seq();
-    obp20_header_.req_id_ = obp20_pkt.get_request_id();
-    obp20_header_.ext_flags_ = 0;
-    obp_mysql_header_.com_len_ = obp20_pkt.get_comp_len();
-    obp_mysql_header_.com_seq_ = obp20_pkt.get_comp_seq();
-  }
-  // for ob20 protocol end 
-
-
   // for compress mysql protocol
   inline void record_send_comp_packet(uint32_t com_len, uint8_t com_seq) __restrict__  {
     obp_mysql_header_.com_len_ = com_len;
@@ -178,8 +130,7 @@ public:
   }
 
   int64_t to_string(char *buf, const int64_t buf_len) const;
-  Obp20Header obp20_header_;         // 16 byte
-  ObpMysqHeader obp_mysql_header_;   // 16  byte
+  ObpMysqHeader obp_mysql_header_;   // 16 byte
 
 }__attribute((aligned(32)));; // end of class ObPacketRecord
 
@@ -202,39 +153,6 @@ class ObPacketRecordWrapper {
       receiving_file_contents_ = false;
     }
     int64_t to_string(char *buf, int64_t buf_len) const;
-
-    // for 20 protocol
-    inline void begin_seal_obp20_pkt() { start_pkt_pos_ = cur_pkt_pos_; }
-    inline void end_seal_obp20_pkt(uint32_t payload_len, obmysql::Ob20ProtocolFlags flag,
-                                    uint8_t pkt_seq, uint16_t ext_flags, int32_t req_id,
-                                    uint32_t com_len, uint8_t com_seq)
-    {
-      for (int64_t i = start_pkt_pos_;  i < cur_pkt_pos_; i++) {
-        int64_t idx = i % ObPacketRecordWrapper::REC_BUF_SIZE;
-        obmysql::ObPacketRecord& rec = pkt_rec_[idx];
-        rec.record_send_obp20_packet(payload_len, flag, pkt_seq,
-                                        ext_flags, req_id, com_len, com_seq);
-      }
-    }
-
-    inline void record_recieve_obp20_packet(Ob20Packet &obp20_pkt,
-                                                            obmysql::ObMySQLRawPacket &pkt)
-    {
-      int64_t idx = cur_pkt_pos_ % ObPacketRecordWrapper::REC_BUF_SIZE;
-      obmysql::ObPacketRecord& rec = pkt_rec_[idx];
-      rec.record_recieve_obp20_packet(obp20_pkt);
-      rec.record_recieve_mysql_packet(pkt);
-      cur_pkt_pos_++;
-
-      if (OB_UNLIKELY(receiving_file_contents_)) {
-        pkt_rec_[idx].set_file_content();
-        if (0 == pkt.get_clen()) {
-          receiving_file_contents_ = false;
-        }
-      }
-    }
-    // for 20 protocol end
-                              
 
     // for compress protocol
     inline void begin_seal_comp_pkt() { start_pkt_pos_ = cur_pkt_pos_; }

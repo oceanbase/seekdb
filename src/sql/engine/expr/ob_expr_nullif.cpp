@@ -22,6 +22,7 @@
 
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/ob_exec_context.h"
+#include "rpc/obmysql/ob_mysql_util.h"
 
 namespace oceanbase
 {
@@ -76,7 +77,7 @@ int ObExprNullif::se_deduce_type(ObExprResType &type,
   type.set_meta(type1.get_obj_meta());
   type.set_accuracy(type1.get_accuracy());
   if (ob_is_real_type(type.get_type()) && SCALE_UNKNOWN_YET != type1.get_scale()) {
-    type.set_precision(static_cast<ObPrecision>(ObMySQLUtil::float_length(type1.get_scale())));
+    type.set_precision(static_cast<ObPrecision>(obmysql::ObMySQLUtil::float_length(type1.get_scale())));
   } else if (ob_is_string_type(type.get_type()) || ob_is_enumset_tc(type.get_type())) {
     type.set_collation_level(type1.get_collation_level());
     type.set_collation_type(type1.get_collation_type());

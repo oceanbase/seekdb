@@ -57,9 +57,7 @@ int ObMPResetConnection::process()
     session->update_last_active_time();
     session->set_query_start_time(ObTimeUtility::current_time());
     LOG_TRACE("begin reset connection. ", K(session->get_server_sid()));
-    if (OB_FAIL(process_extra_info(*session, pkt, need_response_error))) {
-      LOG_WARN("fail get process extra info", K(ret));
-    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
       OB_LOG(WARN,"fail get schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
       LOG_WARN("get sys variable schema failed", K(ret));
@@ -231,7 +229,6 @@ int ObMPResetConnection::process()
   //send packet to client
   if (OB_SUCC(ret)) {
     ObOKPParam ok_param;
-    //update_last_pkt_pos();
     ok_param.affected_rows_ = 0;
     ok_param.is_partition_hit_ = session->partition_hit().get_bool();
     ok_param.has_more_result_ = false;

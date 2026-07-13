@@ -1180,10 +1180,7 @@ ob_set_subtarget(ob_sql monitor
   monitor/ob_phy_operator_stats.cpp
   monitor/ob_phy_plan_monitor_info.cpp
   monitor/ob_sql_plan_monitor_node_list.cpp
-  monitor/flt/ob_flt_control_info_mgr.cpp
-  monitor/flt/ob_flt_extra_info.cpp
-  monitor/flt/ob_flt_span_mgr.cpp
-  monitor/flt/ob_flt_utils.cpp
+  monitor/show_trace/ob_show_trace.cpp
   monitor/ob_sql_plan.cpp
   monitor/ob_plan_info_manager.cpp
   monitor/ob_sql_stat_record.cpp

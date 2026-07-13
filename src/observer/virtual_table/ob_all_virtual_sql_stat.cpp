@@ -158,8 +158,7 @@ bool ObAllVirtualSqlStatIter::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSes
         ObString sql = ObString::make_empty_string();
         if (obmysql::COM_QUERY == sess_info->get_mysql_cmd() ||
             obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
-            obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd() ||
-            obmysql::COM_STMT_PREXECUTE == sess_info->get_mysql_cmd()) {
+            obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd()) {
           sql = sess_info->get_current_query_string();
         }
 

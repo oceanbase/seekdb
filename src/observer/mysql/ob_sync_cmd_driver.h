@@ -43,8 +43,7 @@ public:
                   const sql::ObSqlCtx &ctx,
                   sql::ObSQLSessionInfo &session,
                   ObQueryRetryCtrl &retry_ctrl,
-                  ObIMPPacketSender &sender,
-                  bool is_prexecute = false);
+                  ObIMPPacketSender &sender);
   virtual ~ObSyncCmdDriver();
 
   int send_eof_packet(bool has_more_result);
@@ -73,4 +72,3 @@ private:
 }
 #endif /* OCEANBASE_OBSERVER_MYSQL_SYNC_CMD_DRIVER_ */
 //// end of header file
-

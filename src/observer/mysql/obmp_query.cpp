@@ -27,6 +27,7 @@
 #include "observer/omt/ob_tenant.h"
 #include "observer/ob_server.h"
 #include "sql/ob_sql_mock_schema_utils.h"
+#include "sql/monitor/show_trace/ob_show_trace.h"
 
 using namespace oceanbase::rpc;
 using namespace oceanbase::obmysql;
@@ -126,7 +127,6 @@ int ObMPQuery::process()
       const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
       int64_t packet_len = pkt.get_clen();
       req_->set_trace_point(ObRequest::OB_EASY_REQUEST_MPQUERY_PROCESS);
-      const bool enable_flt = session.get_control_info().is_valid();
       if (OB_UNLIKELY(!session.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("invalid session", K_(sql), K(ret));
@@ -148,22 +148,11 @@ int ObMPQuery::process()
       } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                   sys_version))) {
         LOG_WARN("fail get tenant broadcast version", K(ret));
-      } else if (pkt.exist_trace_info()
-                 && OB_FAIL(session.update_sys_variable(SYS_VAR_OB_TRACE_INFO,
-                                                        pkt.get_trace_info()))) {
-        LOG_WARN("fail to update trace info", K(ret));
-      } else if (OB_FAIL(process_extra_info(session, pkt, need_response_error))) {
-        LOG_WARN("fail get process extra info", K(ret));
       } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
         //packet size check with session variable max_allowd_packet or net_buffer_length
         need_disconnect = false;
         ret = OB_ERR_NET_PACKET_TOO_LARGE;
         LOG_WARN("packet too large than allowed for the session", K_(sql), K(ret));
-      } else if (OB_FAIL(sql::ObFLTUtils::init_flt_info(pkt.get_extra_info(),
-                              session,
-                              conn->proxy_cap_flags_.is_full_link_trace_support(),
-                              enable_flt))) {
-        LOG_WARN("failed to update flt extra info", K(ret));
       } else if (OB_FAIL(session.check_tenant_status())) {
         need_disconnect = false;
         LOG_INFO("unit has been migrated, need deny new request", K(ret), K(sql_));
@@ -171,17 +160,6 @@ int ObMPQuery::process()
         LOG_WARN("fail to generate configuration strings that can influence execution plan",
                  K(ret));
       } else {
-        FLTSpanGuardIfEnable(com_query_process, enable_flt);
-        if (enable_flt) {
-          char trace_id_buf[OB_MAX_TRACE_ID_BUFFER_SIZE] = {'\0'};
-          FLT_SET_TAG(log_trace_id, ObCurTraceId::get_trace_id_str(trace_id_buf, sizeof(trace_id_buf)),
-                      receive_ts, get_receive_timestamp(),
-                      client_info, session.get_client_info(),
-                      module_name, session.get_module_name(),
-                      action_name, session.get_action_name(),
-                      sess_id, session.get_server_sid());
-        }
-
         THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
         retry_ctrl_.set_tenant_global_schema_version(tenant_version);
         retry_ctrl_.set_sys_global_schema_version(sys_version);
@@ -322,15 +300,11 @@ int ObMPQuery::process()
                                       need_disconnect);
           }
         }
-        if (OB_FAIL(ret) && enable_flt) {
-          FLT_SET_TAG(err_code, ret);
-        }
       }
     }
     // THIS_WORKER.need_retry() means whether to put it back in the queue for retry, including the case of large queries being put back in the queue.
     session.check_and_reset_retry_info(*cur_trace_id, THIS_WORKER.need_retry());
     session.set_last_trace_id(ObCurTraceId::get_trace_id());
-    IGNORE_RETURN record_flt_trace(session);
     // clear thread-local variables used for queue waiting
     // to prevent async callbacks from finishing before 
     // request_finish_callback, which may free the request.
@@ -435,7 +409,9 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
                                    bool &need_disconnect)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(mpquery_single_stmt);
+  sql::OTraceGuard trace(session, multi_stmt_item.get_sql());
+  sql::ObTraceSpanGuard query_span(&session, sql::TRACE_COM_QUERY_PROCESS);
+  sql::ObTraceSpanGuard stmt_span(&session, sql::TRACE_MPQUERY_SINGLE_STMT);
   ObReqTimeGuard req_timeinfo_guard;
   ctx_.bl_key_.reset();
   bool need_response_error = true;
@@ -736,7 +712,7 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
       ctx_.is_show_trace_stmt_ = false;
 
       // exec cmd
-      FLTSpanGuard(sql_execute);
+      sql::ObTraceSpanGuard exec_span(&session, sql::TRACE_SQL_EXECUTE);
       if (OB_FAIL(process_trans_ctrl_cmd(session,
                                          need_disconnect,
                                          async_resp_used,
@@ -1457,10 +1433,10 @@ OB_INLINE int ObMPQuery::response_result(ObMySQLResultSet &result,
                                          bool &async_resp_used)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(sql_execute);
   // When ac = 1, starting a new transaction in the thread to clean up temporary
   // table data can deadlock with the clog callback, so use a synchronous method.
   ObSQLSessionInfo &session = result.get_session();
+  sql::ObTraceSpanGuard exec_span(&session, sql::TRACE_SQL_EXECUTE);
   CHECK_COMPATIBILITY_MODE(&session);
 
   bool need_trans_cb  = result.need_end_trans_callback() && (!force_sync_resp);

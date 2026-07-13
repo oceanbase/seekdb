@@ -60,6 +60,7 @@ struct ObBatchFreezeTabletsParam : public ObBatchExecParam<ObTabletSchedulePair>
       loop_cnt_(loop_cnt)
   {}
   virtual ~ObBatchFreezeTabletsParam() = default;
+  int assign(const ObBatchFreezeTabletsParam &other);
   static constexpr int64_t DEFAULT_BATCH_SIZE = 32;
   int64_t loop_cnt_;
   int64_t to_string(char *buf, const int64_t buf_len) const override;

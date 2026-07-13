@@ -47,8 +47,6 @@
 #include "sql/ob_sql_trans_util.h"
 #include "share/partition_table/ob_partition_location.h"
 #include "common/sql_mode/ob_sql_mode_utils.h"
-#include "sql/monitor/flt/ob_flt_extra_info.h"
-#include "sql/monitor/flt/ob_flt_utils.h"
 #include "sql/parser/ob_parser_utils.h"
 
 namespace oceanbase
@@ -56,12 +54,12 @@ namespace oceanbase
 namespace observer {
 class ObSMConnection;
 }
-using sql::FLTControlInfo;
 namespace sql
 {
 class ObExprRegexpSessionVariables;
 class ObPCMemPctConf;
 class ObBasicSessionInfo;
+class ObShowTraceSessionBuffer;
 class ObPartitionHitInfo
 {
 public:
@@ -1056,19 +1054,8 @@ public:
   int set_cur_phy_plan(const ObPhysicalPlan *cur_phy_plan);
   void reset_cur_phy_plan_to_null();
 
-  void get_flt_span_id(ObString &span_id) const;
-  void get_flt_trace_id(ObString &trace_id) const;
-  int set_flt_span_id(ObString span_id);
-  int set_flt_trace_id(ObString trace_id);
-  const ObString &get_last_flt_trace_id() const;
-  int set_last_flt_trace_id(const common::ObString &trace_id);
-  const ObString &get_last_flt_span_id() const;
-  int set_last_flt_span_id(const common::ObString &span_id);
-  bool is_row_traceformat() const { return flt_vars_.row_traceformat_; }
-  void set_is_row_traceformat(bool v) { flt_vars_.row_traceformat_ = v; }
-  bool is_query_trc_granuality() const { return sys_vars_cache_.get_ob_enable_trace_log()?
-                                            true:flt_vars_.trc_granuality_ == ObTraceGranularity::QUERY_LEVEL; }
-  void set_trc_granuality(ObTraceGranularity trc_gra) { flt_vars_.trc_granuality_ = trc_gra; }
+  bool is_row_traceformat() const { return show_trace_row_format_; }
+  void set_is_row_traceformat(bool v) { show_trace_row_format_ = v; }
   // @pre system variable existsofcaseunder
   // @synopsis Get the type of this variable based on the variable name
   // @param var_name
@@ -1086,6 +1073,10 @@ public:
   {
     return sys_vars_cache_.get_ob_enable_trace_log();
   }
+  ObShowTraceSessionBuffer *get_show_trace_buffer() const { return show_trace_buf_; }
+  int start_show_trace_recording();
+  void finish_show_trace_recording();
+  void destroy_show_trace_buffer();
   int is_use_transmission_checksum(bool &use_transmission_checksum) const;
   int is_select_index_enabled(bool &select_index_enabled) const;
   int get_name_case_mode(common::ObNameCaseMode &case_mode) const;
@@ -1150,10 +1141,6 @@ public:
     return res;
   }
 
-  // client mode related
-  void set_client_mode(const common::ObClientMode mode) { client_mode_ = mode; }
-  common::ObClientMode get_client_mode() const { return client_mode_; }
-  bool is_java_client_mode() const { return common::OB_JAVA_CLIENT_MODE == client_mode_; }
   bool is_obproxy_mode() const { return false; } // obproxy support removed: direct client connections only
 
   int64_t to_string(char *buffer, const int64_t length) const;
@@ -1266,11 +1253,6 @@ public:
     return client_attribute_capability_.cap_flags_.OB_CLIENT_SUPPORT_JDBC_BINARY_DOUBLE;
   }
 
-  void set_proxy_cap_flags(const obmysql::ObProxyCapabilityFlags &proxy_capability)
-  {
-    proxy_capability_ = proxy_capability;
-  }
-  obmysql::ObProxyCapabilityFlags get_proxy_cap_flags() const { return proxy_capability_; }
   //TODO::@yuming, as enable_transmission_checksum is global variables,
   //here we no need get_session for is_enable_transmission_checksum()
   inline bool is_enable_transmission_checksum() const { return true; }
@@ -1285,7 +1267,6 @@ public:
 
   int set_partition_hit(const bool is_hit);
   int set_proxy_user_privilege(const int64_t user_priv_set);
-  int set_proxy_capability(const uint64_t proxy_cap);
   int set_client_capability();
   int set_trans_specified(const bool is_spec);
   int save_trans_status();
@@ -2267,12 +2248,10 @@ private:
   uint64_t last_plan_id_;
   uint64_t plan_hash_;
 
-  ObFLTVars flt_vars_;
-  //=======================ObProxy && OCJ related============================
+  bool show_trace_row_format_;
+  ObShowTraceSessionBuffer *show_trace_buf_;
   obmysql::ObMySQLCapabilityFlags capability_;
-  obmysql::ObProxyCapabilityFlags proxy_capability_;
   obmysql::ObClientAttributeCapabilityFlags client_attribute_capability_;
-  common::ObClientMode client_mode_; // client mode, java client , obproxy or etc.
   // add by oushen, track changed session info
   common::ObSEArray<ChangedVar, 8> changed_sys_vars_;
   common::ObSEArray<common::ObString, 16> changed_user_vars_;

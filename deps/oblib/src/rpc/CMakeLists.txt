@@ -25,8 +25,6 @@ ob_set_subtarget(oblib_rpc frame
 
 ob_set_subtarget(oblib_rpc obmysql
   obmysql/ob_proto_trans_util.cpp
-  obmysql/ob_2_0_protocol_processor.cpp
-  obmysql/ob_2_0_protocol_utils.cpp
   obmysql/ob_easy_sql_request_operator.cpp
   obmysql/ob_mysql_compress_protocol_processor.cpp
   obmysql/ob_mysql_field.cpp
@@ -44,7 +42,6 @@ ob_set_subtarget(oblib_rpc obmysql
   obmysql/ob_sql_sock_processor.cpp
   obmysql/ob_sql_sock_session.cpp
   obmysql/ob_virtual_cs_protocol_processor.cpp
-  obmysql/obp20_extra_info.cpp
   obmysql/ob_packet_record.cpp
 )
 
@@ -57,9 +54,7 @@ ob_set_subtarget(oblib_rpc obmysql_packet
   obmysql/packet/ompk_handshake_response.cpp
   obmysql/packet/ompk_local_infile.cpp
   obmysql/packet/ompk_ok.cpp
-  obmysql/packet/ompk_piece.cpp
   obmysql/packet/ompk_prepare.cpp
-  obmysql/packet/ompk_prexecute.cpp
   obmysql/packet/ompk_resheader.cpp
   obmysql/packet/ompk_row.cpp
   obmysql/packet/ompk_ssl_request.cpp

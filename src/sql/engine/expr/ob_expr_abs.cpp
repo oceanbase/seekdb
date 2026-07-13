@@ -20,6 +20,7 @@
 #include "share/datum/ob_datum_util.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "rpc/obmysql/ob_mysql_util.h"
 
 namespace oceanbase
 {
@@ -692,7 +693,7 @@ int ObExprAbs::calc_result_type1(ObExprResType &type, ObExprResType &type1,
     // The result cannot be of character type, no need to set collation
     if (type.is_double() && type1.get_scale() != SCALE_UNKNOWN_YET) {
       type.set_scale(type1.get_scale());
-      type.set_precision(static_cast<ObPrecision>(ObMySQLUtil::float_length(type1.get_scale())));
+      type.set_precision(static_cast<ObPrecision>(obmysql::ObMySQLUtil::float_length(type1.get_scale())));
     } else {
       type.set_accuracy(type1.get_accuracy());
     }

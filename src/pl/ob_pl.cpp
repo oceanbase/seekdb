@@ -1198,7 +1198,6 @@ int ObPL::execute(ObExecContext &ctx,
                   bool is_called_from_sql)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(pl_execute);
   int64_t execute_start = ObTimeUtility::current_time();
   ObObj local_result(ObMaxType);
   int local_status = OB_SUCCESS;
@@ -1732,9 +1731,7 @@ bool ObPL::parameter_ps_anonymous_block(ObExecContext &ctx,
 int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *block)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(pl_entry);
   CK (OB_NOT_NULL(block));
-  OX (FLT_SET_TAG(pl_entry_sql_text, ObString(block->str_len_, block->str_value_)));
   lib::MemoryContext mem_context = NULL;
   lib::ContextParam param;
   ObPLFunction *routine = NULL;
@@ -1754,8 +1751,6 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
   OZ (ObPLContext::valid_execute_context(ctx));
 
   OX (is_forbid_anony_parameter = ObPL::forbid_anony_parameter(*ctx.get_my_session(), false, is_forbid_anony_parameter));
-
-  OX (FLT_SET_TAG(pl_is_forbid_anony_parameter, is_forbid_anony_parameter));
 
   OX (param.set_mem_attr(ObModIds::OB_PL_TEMP,
                          ObCtxIds::DEFAULT_CTX_ID));
@@ -1781,7 +1776,6 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
       ObString pc_key;
       OZ (parameter_anonymous_block(ctx, block, exec_params, mem_context->get_arena_allocator(), false, pc_key));
       // generate sql_id using paramiterized sql, and overwrite privious sql_id
-      FLT_SET_TAG(pl_anony_parameter_sql_text, pc_key);
       OZ (ObSQLUtils::md5(pc_key, ctx.get_sql_ctx()->sql_id_,
                           (int32_t)sizeof(ctx.get_sql_ctx()->sql_id_)));
       OX (ctx.get_my_session()->set_cur_sql_id(ctx.get_sql_ctx()->sql_id_));
@@ -1867,7 +1861,6 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
         }
       }
       if (nullptr != ctx.get_my_session()) {
-        FLT_SET_TAG(pl_plsql_exec_time, ctx.get_my_session()->get_plsql_exec_time());
       }
     }
   }
@@ -1897,9 +1890,6 @@ int ObPL::execute(ObExecContext &ctx,
                   ObBitSet<OB_DEFAULT_BITSET_SIZE> &out_args)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(pl_entry);
-  FLT_SET_TAG(pl_entry_sql_text, sql);
-  FLT_SET_TAG(pl_entry_stmt_id, stmt_id);
   ObPLFunction *routine = NULL;
   ObCacheObjGuard cacheobj_guard(PL_ANON_HANDLE);
   int64_t old_worker_timeout_ts = 0;
@@ -1976,7 +1966,6 @@ int ObPL::execute(ObExecContext &ctx,
       }
     }
     if (nullptr != ctx.get_my_session()) {
-      FLT_SET_TAG(pl_plsql_exec_time, ctx.get_my_session()->get_plsql_exec_time());
     }
   }
 
@@ -1999,20 +1988,6 @@ int ObPL::execute(ObExecContext &ctx,
                   bool is_called_from_sql)
 {
   int ret = OB_SUCCESS;
-  FLTSpanGuard(pl_entry);
-  if(ctx.get_my_session()->get_control_info().is_valid()) {
-    ObSqlString subprogram_path_str;
-    for (int64_t i = 0; OB_SUCC(ret) && i < subprogram_path.count() - 1; ++i) {
-       subprogram_path_str.append_fmt("subprogram_path[%ld] is %ld,", i,  subprogram_path.at(i));
-    }
-    if (0 < subprogram_path.count()) {
-       subprogram_path_str.append_fmt("subprogram_path[%ld] is %ld", subprogram_path.count() - 1,  subprogram_path.at(subprogram_path.count() - 1));
-    }
-
-    FLT_SET_TAG(pl_entry_subprogram_path, subprogram_path_str.string());
-  }
-  FLT_SET_TAG(pl_entry_package_id, package_id);
-  FLT_SET_TAG(pl_entry_routine_id, routine_id);
   bool debug_mode = false;
   ObPLFunction *routine = NULL;
   ObPLFunction *local_routine = NULL;
@@ -2216,7 +2191,6 @@ int ObPL::execute(ObExecContext &ctx,
 #undef UNPREPARE
   }
   if (nullptr != ctx.get_my_session()) {
-    FLT_SET_TAG(pl_plsql_exec_time, ctx.get_my_session()->get_plsql_exec_time());
   }
 
   return ret;
