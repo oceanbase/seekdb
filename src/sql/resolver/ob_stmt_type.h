@@ -100,7 +100,7 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_REFRESH_SCHEMA, get_sys_tenant_alter_system_priv, 
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CREATE_DATABASE, get_create_database_stmt_need_privs, 96)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_USE_DATABASE, no_priv_needed, 97)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ADMIN_SERVER, get_sys_tenant_alter_system_priv, 98)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RESERVED_3791, get_sys_tenant_alter_system_priv, 103)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RECYCLE_REPLICA, get_sys_tenant_alter_system_priv, 103)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ADMIN_MERGE, get_sys_tenant_alter_system_priv, 104)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ALTER_DATABASE, get_alter_database_stmt_need_privs, 105)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DROP_DATABASE, get_drop_database_stmt_need_privs, 106)
@@ -123,8 +123,9 @@ OB_STMT_TYPE_DEF(T_FORK_TABLE, get_fork_table_stmt_need_privs, 127, ACTION_TYPE_
 // stmt type 127, 128 used by plan baseline, and is been delete
 OB_STMT_TYPE_DEF(T_FORK_DATABASE, get_fork_database_stmt_need_privs, 128, ACTION_TYPE_FORK_DATABASE)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SWITCH_RS_ROLE, get_sys_tenant_alter_system_priv, 129)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RECYCLEBIN_RESTORE_DATABASE, get_restore_database_stmt_need_privs, 131)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RECYCLEBIN_RESTORE_TABLE, get_restore_table_stmt_need_privs, 132)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLASHBACK_DATABASE, get_flashback_database_stmt_need_privs, 131)
+OB_STMT_TYPE_DEF(T_FLASHBACK_TABLE_FROM_RECYCLEBIN, get_flashback_table_stmt_need_privs, 132, ACTION_TYPE_FLASHBACK_TABLE)
+OB_STMT_TYPE_DEF(T_FLASHBACK_INDEX, get_flashback_index_stmt_need_privs, 133, ACTION_TYPE_FLASHBACK)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_PURGE_RECYCLEBIN, get_purge_recyclebin_stmt_need_privs, 134)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_PURGE_DATABASE, get_purge_database_stmt_need_privs, 136)
 OB_STMT_TYPE_DEF(T_PURGE_TABLE, get_purge_table_stmt_need_privs, 137, ACTION_TYPE_PURGE_TABLE)
@@ -174,6 +175,7 @@ OB_STMT_TYPE_DEF(T_CREATE_TABLESPACE, get_create_tablespace_priv, 186, ACTION_TY
 OB_STMT_TYPE_DEF(T_DROP_TABLESPACE, get_create_tablespace_priv, 187, ACTION_TYPE_DROP_TABLESPACE)
 OB_STMT_TYPE_DEF(T_CREATE_TRIGGER, get_trigger_stmt_need_privs, 188, ACTION_TYPE_CREATE_TRIGGER)
 OB_STMT_TYPE_DEF(T_DROP_TRIGGER, get_trigger_stmt_need_privs, 189, ACTION_TYPE_DROP_TRIGGER)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLASHBACK_TABLE_TO_SCN, get_flashback_table_stmt_need_privs, 190)
 OB_STMT_TYPE_DEF(T_CREATE_ROLE, get_role_privs, 191, ACTION_TYPE_CREATE_ROLE)
 OB_STMT_TYPE_DEF(T_DROP_ROLE, get_role_privs, 192, ACTION_TYPE_DROP_ROLE)
 OB_STMT_TYPE_DEF(T_ALTER_ROLE, no_priv_needed, 193, ACTION_TYPE_ALTER_ROLE)
@@ -256,6 +258,8 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ACTIVATE_STANDBY, get_sys_tenant_alter_system_priv
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SWITCHOVER_TO_STANDBY, get_sys_tenant_alter_system_priv, 291)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SWITCHOVER_TO_PRIMARY, get_sys_tenant_alter_system_priv, 293)
 OB_STMT_TYPE_DEF(T_ALTER_SYSTEM_RESET_PARAMETER, get_sys_tenant_alter_system_priv, 292, ACTION_TYPE_ALTER_SYSTEM)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CREATE_MLOG, get_create_mlog_stmt_need_privs, 295)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DROP_MLOG, get_drop_mlog_stmt_need_privs, 296)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLUSH_PRIVILEGES, no_priv_needed, 298)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ALTER_LS_REPLICA, get_sys_tenant_alter_system_priv, 299)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_PROCEDURE_CODE, err_stmt_type_priv, 300)
@@ -308,9 +312,6 @@ OB_STMT_TYPE_DEF(T_EVENT_JOB_DROP, get_event_stmt_need_privs, 345, ACTION_TYPE_E
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CACHE_INDEX, no_priv_needed, 358)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_LOAD_INDEX_INTO_CACHE, no_priv_needed, 359)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_CHECK_TABLE, err_stmt_type_priv, 360)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_OLAP_ASYNC_JOB_SUBMIT, no_priv_needed, 361)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_OLAP_ASYNC_JOB_CANCEL, no_priv_needed, 362)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_OLAP_ASYNC_JOB_STATUS, no_priv_needed, 363)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLUSH_SS_MICRO_CACHE, get_sys_tenant_alter_system_priv, 364)
 // 365 is reserved for a removed statement type.
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_MODULE_DATA, get_sys_tenant_alter_system_priv, 366)
@@ -324,7 +325,7 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ALTER_CATALOG, get_catalog_privs, 372)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DROP_CATALOG, get_catalog_privs, 373)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SET_CATALOG, no_priv_needed, 374)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_CATALOGS, err_stmt_type_priv, 375)
-// 377 is reserved for a removed statement type.
+//377 for T_FLASHBACK_STANDBY_LOG
 
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_CREATE_CATALOG, err_stmt_type_priv, 379)
 

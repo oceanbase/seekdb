@@ -23,6 +23,8 @@
 #include "sql/resolver/ddl/ob_drop_index_stmt.h"
 #include "sql/resolver/ddl/ob_drop_table_stmt.h"
 #include "sql/resolver/ddl/ob_drop_index_stmt.h"
+#include "sql/resolver/ddl/ob_create_mlog_stmt.h"
+#include "sql/resolver/ddl/ob_drop_mlog_stmt.h"
 #include "sql/resolver/ddl/ob_alter_database_stmt.h"
 #include "sql/resolver/ddl/ob_drop_database_stmt.h"
 #include "sql/resolver/ddl/ob_create_database_stmt.h"
@@ -43,6 +45,7 @@
 #include "sql/resolver/ddl/ob_create_table_like_stmt.h"
 #include "sql/resolver/ddl/ob_fork_table_stmt.h"
 #include "sql/resolver/ddl/ob_fork_database_stmt.h"
+#include "sql/resolver/ddl/ob_flashback_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/resolver/ddl/ob_lock_table_stmt.h"
 #include "sql/resolver/dcl/ob_create_user_stmt.h"
@@ -68,7 +71,7 @@
 #include "sql/resolver/ddl/ob_rename_table_stmt.h"
 #include "sql/resolver/ddl/ob_truncate_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_like_stmt.h"
-#include "sql/resolver/ddl/ob_recyclebin_restore_stmt.h"
+#include "sql/resolver/ddl/ob_flashback_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/resolver/ddl/ob_create_func_stmt.h"
 #include "sql/resolver/ddl/ob_drop_func_stmt.h"
@@ -92,6 +95,7 @@
 #include "sql/engine/cmd/ob_database_executor.h"
 #include "sql/engine/cmd/ob_table_executor.h"
 #include "sql/engine/cmd/ob_index_executor.h"
+#include "sql/engine/cmd/ob_mlog_executor.h"
 #include "sql/engine/cmd/ob_kill_executor.h"
 #include "sql/engine/cmd/ob_user_cmd_executor.h"
 #include "sql/engine/cmd/ob_outline_executor.h"
@@ -117,8 +121,6 @@
 #include "sql/resolver/dcl/ob_alter_role_stmt.h"
 #include "sql/resolver/ddl/ob_drop_context_resolver.h"
 #include "sql/engine/cmd/ob_context_executor.h"
-#include "sql/resolver/cmd/ob_olap_async_job_stmt.h"
-#include "sql/engine/cmd/ob_olap_async_job_executor.h"
 #include "sql/resolver/cmd/ob_event_stmt.h"
 #include "sql/engine/cmd/ob_event_executor.h"
 #include "sql/engine/cmd/ob_ccl_rule_executor.h"
@@ -324,6 +326,14 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObDropIndexStmt, ObDropIndexExecutor);
         break;
       }
+      case stmt::T_CREATE_MLOG: {
+        DEFINE_EXECUTE_CMD(ObCreateMLogStmt, ObCreateMLogExecutor);
+        break;
+      }
+      case stmt::T_DROP_MLOG: {
+        DEFINE_EXECUTE_CMD(ObDropMLogStmt, ObDropMLogExecutor);
+        break;
+      }
       case stmt::T_ALTER_VIEW: {
         break;
       }
@@ -343,12 +353,20 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObMergeTableStmt, ObMergeTableExecutor);
         break;
       }
-      case stmt::T_RECYCLEBIN_RESTORE_TABLE: {
-        DEFINE_EXECUTE_CMD(ObRecyclebinRestoreTableStmt, ObRecyclebinRestoreTableExecutor);
+      case stmt::T_FLASHBACK_TABLE_FROM_RECYCLEBIN: {
+        DEFINE_EXECUTE_CMD(ObFlashBackTableFromRecyclebinStmt, ObFlashBackTableFromRecyclebinExecutor);
         break;
       }
-      case stmt::T_RECYCLEBIN_RESTORE_DATABASE: {
-        DEFINE_EXECUTE_CMD(ObRecyclebinRestoreDatabaseStmt, ObRecyclebinRestoreDatabaseExecutor);
+      case stmt::T_FLASHBACK_TABLE_TO_SCN: {
+        DEFINE_EXECUTE_CMD(ObFlashBackTableToScnStmt, ObFlashBackTableToScnExecutor);
+        break;
+      }
+      case stmt::T_FLASHBACK_INDEX: {
+        DEFINE_EXECUTE_CMD(ObFlashBackIndexStmt, ObFlashBackIndexExecutor);
+        break;
+      }
+      case stmt::T_FLASHBACK_DATABASE: {
+        DEFINE_EXECUTE_CMD(ObFlashBackDatabaseStmt, ObFlashBackDatabaseExecutor);
         break;
       }
       case stmt::T_PURGE_TABLE: {
@@ -718,10 +736,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       }
       case stmt::T_ALTER_SYSTEM_RESET_PARAMETER: {
         DEFINE_EXECUTE_CMD(ObResetConfigStmt, ObResetConfigExecutor);
-        break;
-      }
-      case stmt::T_OLAP_ASYNC_JOB_CANCEL: {
-        DEFINE_EXECUTE_CMD(ObOLAPAsyncCancelJobStmt, ObOLAPAsyncCancelJobExecutor);
         break;
       }
       case stmt::T_EVENT_JOB_CREATE: {

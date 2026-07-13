@@ -134,29 +134,18 @@ int ObTransformTempTable::generate_with_clause(ObDMLStmt *&stmt, bool &trans_hap
   ObArray<TempTableInfo> temp_table_infos;
   hash::ObHashMap<uint64_t, ObParentDMLStmt, common::hash::NoPthreadDefendMode> parent_map;
   trans_happened = false;
-  bool enable_temp_table_transform = false;
-  bool has_hint = false;
-  bool is_hint_enabled = false;
-  ObSQLSessionInfo *session_info = NULL;
   if (OB_ISNULL(ctx_) || OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx()) ||
-      OB_ISNULL(session_info = ctx_->session_info_)) {
+      OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null param", K(ctx_), K(ret));
-  } else if (OB_FAIL(session_info->is_temp_table_transformation_enabled(enable_temp_table_transform))) {
-    LOG_WARN("failed to check temp table transform enabled", K(ret));
-  } else if (OB_FAIL(stmt->get_query_ctx()->get_global_hint().opt_params_.get_bool_opt_param(
-              ObOptParamHint::XSOLAPI_GENERATE_WITH_CLAUSE, is_hint_enabled, has_hint))) {
-    LOG_WARN("failed to check has opt param", K(ret));
-  } else if (has_hint) {
-    enable_temp_table_transform = is_hint_enabled;
   }
   if (OB_FAIL(ret)) {
   } else if (ctx_->eval_cost_) {
     OPT_TRACE("disable CTE extraction during cost evaluation");
   } else if (ctx_->is_set_stmt_oversize_) {
     OPT_TRACE("stmt containt oversize set stmt");
-  } else if (!enable_temp_table_transform || ctx_->is_force_inline_) {
-    OPT_TRACE("session variable disable temp table transform");
+  } else if (ctx_->is_force_inline_) {
+    OPT_TRACE("temp table transform is disabled");
   } else if (stmt->has_for_update()) {
     OPT_TRACE("stmt has for update, can not extract CTE");
   } else if (OB_FAIL(parent_map.create(128, "TempTable"))) {

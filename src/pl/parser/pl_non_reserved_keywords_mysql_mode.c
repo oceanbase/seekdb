@@ -198,7 +198,6 @@ static const NonReservedKeyword Mysql_pl_none_reserved_keywords[] =
   {"pragma", PRAGMA},
   {"interface", INTERFACE},
   {"c", C},
-  {"submit", SUBMIT},
   {"job", JOB},
   {"cancel", CANCEL},
   {"xa", XA},

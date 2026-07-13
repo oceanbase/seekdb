@@ -16,24 +16,8 @@
     }
   },
   {
-    "scenario": "olap",
-    "comment": "for real-time data warehouse analytics scenarios.",
-    "variables": {
-      "tenant": [
-      ]
-    }
-  },
-  {
     "scenario": "kv",
     "comment": "for key-value workloads with very high throughput and latency sensitivity",
-    "variables": {
-      "tenant": [
-      ]
-    }
-  },
-  {
-    "scenario": "htap",
-    "comment": "for mixed OLAP and OLTP workload. Typically utilized for obtaining instant insights from active operational data, fraud detection, and personalized recommendations",
     "variables": {
       "tenant": [
       ]

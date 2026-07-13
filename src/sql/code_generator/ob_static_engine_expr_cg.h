@@ -75,7 +75,7 @@ class ObStaticEngineExprCG
 {
 public:
   static const int64_t STACK_OVERFLOW_CHECK_DEPTH = 16;
-  static const int64_t OLTP_WORKLOAD_CARDINALITY = 16;
+  static const int64_t SMALL_SCAN_CARDINALITY = 16;
   static const int64_t DATUM_EVAL_INFO_SIZE = sizeof(ObDatum) + sizeof(ObEvalInfo);
   friend class ObRawExpr;
   struct TmpFrameInfo {
@@ -146,16 +146,9 @@ public:
                         int64_t config_maxrows, int64_t config_target_maxsize,
                         const double scan_cardinality, int64_t lob_rowsets_max_rows);
 
-  // TP workload VS AP workload:
-  // TableScan cardinality(accessed rows) is used to determine TP load so far
-  // More sophisticated rules would be added when optimizer support new
-  // vectorized cost model
-  bool is_oltp_workload(const double scan_cardinality) const {
-    bool is_oltp_workload = false;
-    if (scan_cardinality < OLTP_WORKLOAD_CARDINALITY) {
-      is_oltp_workload = true;
-    }
-    return is_oltp_workload;
+  // Use TableScan cardinality to keep batches small for short scans.
+  bool is_small_scan(const double scan_cardinality) const {
+    return scan_cardinality < SMALL_SCAN_CARDINALITY;
   }
 
   void set_batch_size(const int64_t v) { batch_size_ = v; }

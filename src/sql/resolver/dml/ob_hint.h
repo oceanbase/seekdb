@@ -177,7 +177,6 @@ struct ObOptParamHint
     DEF(USE_PART_SORT_MGB,)                         \
     DEF(USE_DEFAULT_OPT_STAT,)                      \
     DEF(ENABLE_IN_RANGE_OPTIMIZATION,)              \
-    DEF(XSOLAPI_GENERATE_WITH_CLAUSE,)              \
     DEF(WORKAREA_SIZE_POLICY,)                      \
     DEF(ENABLE_RICH_VECTOR_FORMAT,)                 \
     DEF(_ENABLE_STORAGE_CARDINALITY_ESTIMATION,)    \
@@ -220,6 +219,7 @@ struct ObOptParamHint
     DEF(PRESERVE_ORDER_FOR_GROUPBY,)                \
     DEF(ENABLE_PDML_INSERT_UP,)                     \
     DEF(ENABLE_PARTIAL_LIMIT_PUSHDOWN,)             \
+    DEF(PARQUET_FILTER_PUSHDOWN_LEVEL,)             \
     DEF(ORC_FILTER_PUSHDOWN_LEVEL,)                 \
     DEF(ENABLE_INDEX_MERGE,)                        \
     DEF(ENABLE_PARTIAL_GROUP_BY_PUSHDOWN,)          \
@@ -412,6 +412,8 @@ struct ObGlobalHint {
   bool disable_cost_based_transform() const { return disable_cost_based_transform_; }
   inline bool has_dbms_stats_hint() const { return has_dbms_stats_hint_; }
   inline void set_dbms_stats() { has_dbms_stats_hint_ = true; }
+  bool get_flashback_read_tx_uncommitted() const { return flashback_read_tx_uncommitted_; }
+  void set_flashback_read_tx_uncommitted(bool v) { flashback_read_tx_uncommitted_ = v; }
   ObParallelDASOption get_parallel_das_dml_option() const { return parallel_das_dml_option_; }
   bool has_append() const {
     return (osg_hint_.flags_ & ObOptimizerStatisticsGatheringHint::OB_APPEND_HINT) ? true : false;
@@ -501,6 +503,7 @@ struct ObGlobalHint {
   common::ObSArray<ObDDLSchemaVersionHint> ob_ddl_schema_versions_;
   ObOptimizerStatisticsGatheringHint osg_hint_;
   bool has_dbms_stats_hint_;
+  bool flashback_read_tx_uncommitted_;
   ObParallelDASOption parallel_das_dml_option_;
   int64_t dynamic_sampling_;
   common::ObSArray<ObAllocOpHint> alloc_op_hints_;
@@ -600,6 +603,7 @@ public:
       HINT_GROUPBY_PLACEMENT,
       HINT_WIN_MAGIC,
       HINT_COALESCE_AGGR,
+      HINT_MV_REWRITE,
       // optimize hint below
       HINT_OPTIMIZE,    // normal optimize hint
       HINT_ACCESS_PATH,
@@ -1003,6 +1007,31 @@ class ObCoalesceSqHint : public ObTransHint
 private:
   bool has_qb_name_list(const ObIArray<ObString> & qb_names) const;
   common::ObSEArray<QbNameList, 2, common::ModulePageAllocator, true> qb_name_list_;
+};
+
+class ObMVRewriteHint : public ObTransHint
+{
+public:
+  ObMVRewriteHint(ObItemType hint_type)
+    : ObTransHint(hint_type),
+      mv_list_()
+  {
+    set_hint_class(HINT_MV_REWRITE);
+  }
+  virtual ~ObMVRewriteHint() {}
+
+  virtual int print_hint_desc(PlanText &plan_text) const override;
+  common::ObIArray<ObTableInHint> &get_mv_list() { return mv_list_; }
+  const common::ObIArray<ObTableInHint> &get_mv_list() const { return mv_list_; }
+  int check_mv_match_hint(ObCollationType cs_type,
+                          const ObTableSchema *mv_schema,
+                          const ObDatabaseSchema *db_schema,
+                          bool &is_match) const;
+
+  INHERIT_TO_STRING_KV("ObHint", ObHint, K_(mv_list));
+
+private:
+  common::ObSEArray<ObTableInHint, 1, common::ModulePageAllocator, true> mv_list_;
 };
 
 class ObIndexHint : public ObOptHint

@@ -113,9 +113,10 @@ int ObDBMSSchedJobExecutor::init_session(
     OX (session.set_shadow(false));
   }
   if (OB_SUCC(ret)) {
-    if (job_info.is_olap_async_job()) {
-      const int64_t QUERY_TIMEOUT_US = ((job_info.get_max_run_duration() - OLAP_ASYNC_JOB_DEVIATION_SECOND) * 1000000L);
-      const int64_t TRX_TIMEOUT_US = ((job_info.get_max_run_duration() - OLAP_ASYNC_JOB_DEVIATION_SECOND) * 1000000L);
+    if (job_info.is_mview_job()) {
+      // set larger timeout for mview scheduler jobs
+      const int64_t QUERY_TIMEOUT_US = (24 * 60 * 60 * 1000000L); // 24hours
+      const int64_t TRX_TIMEOUT_US = (24 * 60 * 60 * 1000000L); // 24hours
       ObObj query_timeout_obj;
       ObObj trx_timeout_obj;
       query_timeout_obj.set_int(QUERY_TIMEOUT_US);
@@ -247,10 +248,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
     LOG_WARN("failed to create session", KR(ret));
   } else {
     if (job_info.get_what().length() != 0) { // action
-      if (job_info.is_olap_async_job()){
-        OZ (what.append_fmt("%.*s",
-            job_info.get_what().length(), job_info.get_what().ptr()));        
-      } else if (job_info.is_mysql_event_job()) { //mysql event
+      if (job_info.is_mysql_event_job()) { //mysql event
         OZ (what.append_fmt("%.*s",
               job_info.get_what().length(), job_info.get_what().ptr()));          
       } else {
