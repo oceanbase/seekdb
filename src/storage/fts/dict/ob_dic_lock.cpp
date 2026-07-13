@@ -51,6 +51,48 @@ int ObDicLock::lock_dic_tables_out_trans(const ObTenantDicLoader &dic_loader,
   return ret;
 }
 
+int ObDicLock::lock_dic_tables_out_trans(
+    const common::ObIArray<uint64_t> &dict_table_ids,
+    const transaction::tablelock::ObTableLockMode lock_mode,
+    const transaction::tablelock::ObTableLockOwnerID &lock_owner,
+    ObMySQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(dict_table_ids.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("dictionary table ids are empty", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < dict_table_ids.count(); ++i) {
+      const uint64_t table_id = dict_table_ids.at(i);
+      if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid dictionary table id", K(ret), K(table_id));
+      } else if (OB_FAIL(do_table_lock(table_id, lock_mode, lock_owner,
+                                       DEFAULT_TIMEOUT, true /* is_lock */, trans))) {
+        LOG_WARN("failed to lock dictionary table", K(ret), K(table_id), K(lock_mode));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDicLock::lock_dic_tables_out_trans(
+    const uint64_t tenant_id,
+    const transaction::tablelock::ObTableLockMode lock_mode,
+    const transaction::tablelock::ObTableLockOwnerID &lock_owner,
+    ObMySQLTransaction &trans,
+    const common::ObIArray<uint64_t> &dict_table_ids)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tenant id", K(ret), K(tenant_id));
+  } else {
+    ret = lock_dic_tables_out_trans(dict_table_ids, lock_mode, lock_owner, trans);
+  }
+  return ret;
+}
+
 int ObDicLock::lock_dic_tables_out_trans(const ObTenantDicLoader &dic_loader, 
     const transaction::tablelock::ObTableLockMode lock_mode, 
     const transaction::tablelock::ObTableLockOwnerID &lock_owner,
@@ -93,6 +135,48 @@ int ObDicLock::unlock_dic_tables(const ObTenantDicLoader &dic_loader,
   return ret;
 }
 
+int ObDicLock::unlock_dict_tables(
+    const common::ObIArray<uint64_t> &dict_table_ids,
+    const transaction::tablelock::ObTableLockMode lock_mode,
+    const transaction::tablelock::ObTableLockOwnerID &lock_owner,
+    ObMySQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(dict_table_ids.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("dictionary table ids are empty", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < dict_table_ids.count(); ++i) {
+      const uint64_t table_id = dict_table_ids.at(i);
+      if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid dictionary table id", K(ret), K(table_id));
+      } else if (OB_FAIL(do_table_lock(table_id, lock_mode, lock_owner,
+                                       DEFAULT_TIMEOUT, false /* is_lock */, trans))) {
+        LOG_WARN("failed to unlock dictionary table", K(ret), K(table_id), K(lock_mode));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDicLock::unlock_dict_tables(
+    const uint64_t tenant_id,
+    const common::ObIArray<uint64_t> &dict_table_ids,
+    const transaction::tablelock::ObTableLockMode lock_mode,
+    const transaction::tablelock::ObTableLockOwnerID &lock_owner,
+    ObMySQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tenant id", K(ret), K(tenant_id));
+  } else {
+    ret = unlock_dict_tables(dict_table_ids, lock_mode, lock_owner, trans);
+  }
+  return ret;
+}
+
 int ObDicLock::lock_dic_tables_in_trans(
     const ObTenantDicLoader &dic_loader, 
     const transaction::tablelock::ObTableLockMode lock_mode, 
@@ -115,6 +199,50 @@ int ObDicLock::lock_dic_tables_in_trans(
         LOG_WARN("lock dest table failed", KR(ret), K(table_id));
       }
     }
+  }
+  return ret;
+}
+
+int ObDicLock::lock_dic_tables_in_trans(
+    const common::ObIArray<uint64_t> &dict_table_ids,
+    const transaction::tablelock::ObTableLockMode lock_mode,
+    ObMySQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+  observer::ObInnerSQLConnection *conn = nullptr;
+  if (OB_UNLIKELY(dict_table_ids.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("dictionary table ids are empty", K(ret));
+  } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>(trans.get_connection()))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("inner sql connection is null", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < dict_table_ids.count(); ++i) {
+      const uint64_t table_id = dict_table_ids.at(i);
+      if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid dictionary table id", K(ret), K(table_id));
+      } else if (OB_FAIL(transaction::tablelock::ObInnerConnectionLockUtil::lock_table(
+                     table_id, lock_mode, DEFAULT_TIMEOUT, conn))) {
+        LOG_WARN("failed to lock dictionary table", K(ret), K(table_id), K(lock_mode));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDicLock::lock_dic_tables_in_trans(
+    const uint64_t tenant_id,
+    const common::ObIArray<uint64_t> &dict_table_ids,
+    const transaction::tablelock::ObTableLockMode lock_mode,
+    ObMySQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tenant id", K(ret), K(tenant_id));
+  } else {
+    ret = lock_dic_tables_in_trans(dict_table_ids, lock_mode, trans);
   }
   return ret;
 }

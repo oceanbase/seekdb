@@ -24,7 +24,6 @@
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 #include "plugin/sys/ob_plugin_helper.h"
 #include "share/ob_force_print_log.h"
-#include "storage/fts/dict/ob_ft_dict_hub.h"
 #include "storage/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_stop_word.h"
 
@@ -151,8 +150,6 @@ int ObFTParsePluginData::init()
     LOG_WARN("fail to init tenant plugin handler allocator", K(ret));
   } else if (OB_FAIL(init_and_set_stopword_list())) {
     LOG_WARN("fail to init and set stopword list", K(ret));
-  } else if (OB_FAIL(init_dict_hub())) {
-    LOG_WARN("fail to init dict hub", K(ret));
   } else {
     is_inited_ = true;
     FLOG_INFO("succeed to initialize ObTenantFTPluginMgr", KP(this));
@@ -182,19 +179,6 @@ int ObFTParsePluginData::init_and_set_stopword_list()
   return ret;
 }
 
-int ObFTParsePluginData::init_dict_hub()
-{
-  // make dict
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(dict_hub_ = OB_NEWx(ObFTDictHub, &handler_allocator_))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to alloc memory for dict hub.", K(ret));
-  } else if (OB_FAIL(dict_hub_->init())) {
-    LOG_WARN("Failed to init dict hub.", K(ret));
-  }
-  return ret;
-}
-
 void ObFTParsePluginData::destroy()
 {
   if (OB_NOT_NULL(stop_word_checker_)) {
@@ -203,27 +187,8 @@ void ObFTParsePluginData::destroy()
     stop_word_checker_ = nullptr;
   }
 
-  if (!OB_ISNULL(dict_hub_)) {
-    dict_hub_->destroy();
-    dict_hub_->~ObFTDictHub();
-    handler_allocator_.free(dict_hub_);
-    dict_hub_ = nullptr;
-  }
-
   handler_allocator_.reset();
   is_inited_ = false;
-}
-
-int ObFTParsePluginData::get_dict_hub(ObFTDictHub *&hub)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(dict_hub_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("Dict hub is null.", K(ret));
-  } else {
-    hub = dict_hub_;
-  }
-  return ret;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -237,7 +202,9 @@ int ObFTParseHelper::segment(
     const char *ft,
     const int64_t ft_len,
     common::ObIAllocator &allocator,
-    ObAddWord &add_word)
+    ObAddWord &add_word,
+    const bool is_ddl_mode,
+    const bool need_casedown)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(parser_version < 0 || nullptr == parser_desc || nullptr == cs || nullptr == ft || 0 >= ft_len)) {
@@ -257,6 +224,14 @@ int ObFTParseHelper::segment(
         = (property.ik_mode_smart_ ? ObFTIKParam::Mode::SMART : ObFTIKParam::Mode::MAX_WORD);
     param.min_ngram_size_ = property.min_ngram_token_size_;
     param.max_ngram_size_ = property.max_ngram_token_size_;
+    param.ik_param_.main_dict_id_ = property.dict_table_id_;
+    param.ik_param_.quan_dict_id_ = property.quantifier_table_id_;
+    param.ik_param_.stopword_dict_id_ = property.stopword_table_id_;
+    param.ik_param_.main_dict_name_ = property.dict_table_name_;
+    param.ik_param_.quan_dict_name_ = property.quantifier_table_name_;
+    param.ik_param_.stopword_dict_name_ = property.stopword_table_name_;
+    param.is_ddl_mode_ = is_ddl_mode;
+    param.need_casedown_ = need_casedown;
 
     if (OB_FAIL(parser_desc->segment(&param, iter))) {
       LOG_WARN("fail to segment", K(ret), K(param));
@@ -295,7 +270,9 @@ ObFTParseHelper::ObFTParseHelper()
     plugin_param_(nullptr),
     parser_name_(),
     add_word_flag_(),
+    props_(),
     parser_property_(),
+    is_ddl_mode_(false),
     is_inited_(false)
 {
 }
@@ -308,7 +285,8 @@ ObFTParseHelper::~ObFTParseHelper()
 int ObFTParseHelper::init(
     common::ObIAllocator *allocator,
     const common::ObString &plugin_name,
-    const common::ObString &plugin_properties)
+    const common::ObString &plugin_properties,
+    const bool is_ddl_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -319,7 +297,11 @@ int ObFTParseHelper::init(
     LOG_WARN("invalid argument", K(ret), KP(allocator), K(plugin_name));
   } else if (OB_FAIL(parser_name_.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
     LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
-  } else if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, plugin_properties))) {
+  } else if (OB_FAIL(props_.init())) {
+    LOG_WARN("fail to init parser properties", K(ret));
+  } else if (OB_FAIL(props_.parse_from_valid_str(plugin_properties))) {
+    LOG_WARN("fail to parse parser properties", K(ret), K(plugin_properties));
+  } else if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, props_))) {
     LOG_WARN("fail to parse parser property from cstring", K(ret), K(plugin_properties), K(parser_name_));
   } else if (OB_FAIL(ObPluginHelper::find_ftparser(parser_name_.get_parser_name().str(),
                                                    parser_desc_, plugin_param_))) {
@@ -335,6 +317,7 @@ int ObFTParseHelper::init(
     LOG_WARN("fail to set add word flag", K(ret), K(parser_name_));
   } else {
     allocator_ = allocator;
+    is_ddl_mode_ = is_ddl_mode;
     is_inited_ = true;
     LOG_TRACE("succeed to init ft parser helper", K(ret), K(plugin_name), K(plugin_properties), KPC(this));
   }
@@ -350,6 +333,8 @@ void ObFTParseHelper::reset()
   plugin_param_ = nullptr;
   allocator_ = nullptr;
   add_word_flag_.clear();
+  props_.reset();
+  is_ddl_mode_ = false;
   is_inited_ = false;
 }
 
@@ -387,7 +372,9 @@ int ObFTParseHelper::segment(
                     fulltext,
                     fulltext_len,
                     *allocator_,
-                    add_word))) {
+                    add_word,
+                    is_ddl_mode_,
+                    add_word_flag_.casedown()))) {
       LOG_WARN("fail to segment fulltext", K(ret), K(parser_name_), KP(parser_desc_), KP(cs), KP(fulltext),
           K(fulltext_len), KP(allocator_), K(parser_property_));
     } else {
@@ -408,13 +395,18 @@ int ObFTParseHelper::check_is_the_same(
   is_same = false;
   if (is_inited_) {
     storage::ObFTParser parser_name;
+    ObFTParserJsonProps props;
     ObFTParserProperty parser_property;
     if (OB_UNLIKELY(plugin_name.empty())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(plugin_name));
     } else if (OB_FAIL(parser_name.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
       LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
-    } else if (OB_FAIL(parser_property.parse_for_parser_helper(parser_name, plugin_properties))) {
+    } else if (OB_FAIL(props.init())) {
+      LOG_WARN("fail to init parser properties", K(ret));
+    } else if (OB_FAIL(props.parse_from_valid_str(plugin_properties))) {
+      LOG_WARN("fail to parse parser properties", K(ret), K(plugin_properties));
+    } else if (OB_FAIL(parser_property.parse_for_parser_helper(parser_name, props))) {
       LOG_WARN("fail to parse parser property from cstring", K(ret), K(plugin_properties), K(parser_name_));
     } else if (parser_name == parser_name_ && parser_property.is_equal(parser_property_)) {
       is_same = true;

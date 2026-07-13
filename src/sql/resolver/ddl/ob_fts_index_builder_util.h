@@ -20,6 +20,7 @@
 #include "object/ob_object.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
+#include "share/schema/ob_dependency_info.h"
 namespace oceanbase { namespace sql { class ObSchemaChecker; class ObSqlSchemaGuard; } }
 #include "storage/fts/ob_fts_literal.h"
 namespace oceanbase { namespace sql { class ObRawExprFactory; } }  // fwd: previously re-exported through the share schema include chain
@@ -34,6 +35,13 @@ class ObDDLOperator;
 
 namespace share
 {
+enum ObFTDictType : uint64_t
+{
+  OB_FT_DICT_TYPE_MAIN = 1,
+  OB_FT_DICT_TYPE_STOPWORD = 2,
+  OB_FT_DICT_TYPE_QUANTIFIER = 3,
+};
+
 class ObMulValueIndexBuilderUtil;
 
 class ObDocIDUtils
@@ -150,8 +158,21 @@ public:
       const share::schema::ObTableSchema &data_schema,
       obcall::ObCreateIndexArg &arg,
       ObIAllocator *allocator);
+  static int record_fts_dict_table_dependencies(
+      const share::schema::ObTableSchema &index_schema,
+      const obcall::ObIndexOption &index_option,
+      common::ObMySQLTransaction &trans);
+  static int check_fulltext_dict_schema(
+      const share::schema::ObTableSchema &table,
+      const int64_t inline_index_cnt = 0);
+  static int check_can_drop_dict_table(
+      const uint64_t dict_table_id,
+      common::ObMySQLTransaction &trans);
   static int check_need_to_load_dic(const ObString &parser_name,
       bool &need_to_load_dic);
+  static int get_dict_table_ids(
+      const ObString &parser_properties,
+      ObIArray<uint64_t> &dict_table_ids);
   static int try_load_and_lock_dictionary_tables(
       const ObTableSchema &index_schema,
       ObMySQLTransaction &trans);
@@ -295,6 +316,12 @@ private:
       obcall::ObCreateIndexArg &arg,
       ObIAllocator &allocator);
   static int add_skip_index_for_index_column(schema::ObColumnSchemaV2 &column_schema);
+  static int process_dict_table(
+      const storage::ObFTParserJsonProps &props,
+      const uint64_t property,
+      const share::schema::ObTableSchema &index_schema,
+      int (storage::ObFTParserJsonProps::*get_func)(uint64_t &) const,
+      common::ObArray<share::schema::ObDependencyInfo> &dep_infos);
 };
 
 class ObMulValueIndexBuilderUtil

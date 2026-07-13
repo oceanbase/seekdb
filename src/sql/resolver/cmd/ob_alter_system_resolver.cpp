@@ -1145,6 +1145,110 @@ int ObRefreshMemStatResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_REFRESH_FULLTEXT_DICT",
+             K(ret), "type", get_type_name(parse_tree.type_));
+  } else if (OB_UNLIKELY(nullptr == parse_tree.children_ || parse_tree.num_child_ < 1)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("children should not be null", K(ret), K(parse_tree.num_child_));
+  } else if (OB_ISNULL(parse_tree.children_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fulltext dictionary relation node is null", K(ret));
+  } else {
+    ObRefreshFulltextDictStmt *stmt = create_stmt<ObRefreshFulltextDictStmt>();
+    if (OB_ISNULL(stmt)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("create ObRefreshFulltextDictStmt failed", K(ret));
+    } else {
+      stmt_ = stmt;
+      const ParseNode *relation_node = parse_tree.children_[0];
+      ObString database_name;
+      ObString table_name;
+
+      switch (relation_node->type_) {
+        case T_RELATION_FACTOR: {
+          if (OB_UNLIKELY(nullptr == relation_node->children_
+                          || relation_node->num_child_ < 2)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("invalid fulltext dictionary relation node", K(ret),
+                     K(relation_node->num_child_));
+          } else {
+            if (OB_NOT_NULL(relation_node->children_[0])) {
+              database_name.assign_ptr(relation_node->children_[0]->str_value_,
+                                       relation_node->children_[0]->str_len_);
+            }
+            const ParseNode *table_node =
+                relation_node->children_[relation_node->num_child_ - 1];
+            if (OB_NOT_NULL(table_node)) {
+              table_name.assign_ptr(table_node->str_value_, table_node->str_len_);
+            }
+          }
+          break;
+        }
+        case T_VARCHAR:
+        case T_CHAR:
+        case T_IDENT: {
+          ObString full_name;
+          if (T_VARCHAR == relation_node->type_ || T_CHAR == relation_node->type_) {
+            if (OB_FAIL(Util::resolve_string(relation_node, full_name))) {
+              LOG_WARN("resolve fulltext dictionary string failed", K(ret));
+            }
+          } else if (OB_FAIL(Util::resolve_relation_name(relation_node, full_name))) {
+            LOG_WARN("resolve fulltext dictionary relation name failed", K(ret));
+          }
+          if (OB_SUCC(ret)) {
+            const char *dot_pos = full_name.find('.');
+            if (nullptr == dot_pos) {
+              table_name = full_name;
+            } else {
+              database_name = full_name.split_on(dot_pos);
+              table_name = full_name;
+            }
+          }
+          break;
+        }
+        default: {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected fulltext dictionary relation node type", K(ret),
+                   "type", get_type_name(relation_node->type_));
+          break;
+        }
+      }
+
+      if (OB_SUCC(ret) && database_name.empty()) {
+        if (OB_ISNULL(session_info_)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("session info is null", K(ret));
+        } else if (OB_UNLIKELY(session_info_->get_database_name().empty())) {
+          ret = OB_ERR_NO_DB_SELECTED;
+          LOG_WARN("no database selected", K(ret));
+        } else {
+          database_name = session_info_->get_database_name();
+        }
+      }
+
+      if (OB_SUCC(ret)) {
+        if (OB_UNLIKELY(database_name.empty() || table_name.empty())) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid fulltext dictionary table name", K(ret),
+                   K(database_name), K(table_name));
+        } else if (OB_UNLIKELY(nullptr != table_name.find('.'))) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid fulltext dictionary table name format", K(ret), K(table_name));
+        } else {
+          stmt->set_database_name(database_name);
+          stmt->set_table_name(table_name);
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObWashMemFragmentationResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;

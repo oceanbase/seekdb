@@ -21,6 +21,7 @@
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/dict/ob_ft_dict_cache_loader.h"
 #include "storage/fts/ik/ob_ik_processor.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 
@@ -29,24 +30,22 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObFTDictHub;
-
 class ObIKFTParser final : public plugin::ObITokenIterator
 {
 public:
-  ObIKFTParser(ObIAllocator &allocator, ObFTDictHub *hub)
+  ObIKFTParser(ObIAllocator &allocator)
       : allocator_(allocator),
         is_inited_(false),
         coll_type_(ObCollationType::CS_TYPE_INVALID),
         ctx_(nullptr),
-        hub_(hub),
         segmenters_(allocator_),
         cache_main_(allocator),
         cache_quan_(allocator),
         cache_stop_(allocator),
         dict_main_(nullptr),
         dict_quan_(nullptr),
-        dict_stop_(nullptr)
+        dict_stop_(nullptr),
+        cache_loader_(nullptr)
   {
   }
 
@@ -74,15 +73,15 @@ private:
 private:
   int init_dict(const plugin::ObFTParserParam &param);
 
-  int init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &container);
+  int init_cache_loader(const ObFTDictDesc::BuildMode build_mode);
+
+  int init_single_dict(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
   int init_segmenter(const plugin::ObFTParserParam &param);
 
   int init_ctx(const plugin::ObFTParserParam &param);
 
   void reset();
-
-  bool should_read_newest_table() const;
 
   int build_dict_from_cache(const ObFTDictDesc &desc,
                             ObFTCacheRangeContainer &container,
@@ -95,7 +94,6 @@ private:
 
   ObCollationType coll_type_;
   TokenizeContext *ctx_;
-  ObFTDictHub *hub_;
   ObList<ObIIKProcessor *, ObIAllocator> segmenters_;
 
   // For now there's no change of dict in one query, so we can pin dict this level.
@@ -106,6 +104,7 @@ private:
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
+  ObFTDictCacheLoaderBase *cache_loader_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };

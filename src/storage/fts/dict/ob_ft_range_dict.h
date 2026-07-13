@@ -1,17 +1,6 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2024 OceanBase
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef _OCEANBASE_STORAGE_FTS_DICT_OB_FT_RANGE_DICT_H_
@@ -26,7 +15,6 @@
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
-#include "storage/fts/dict/ob_ft_dict_iterator.h"
 
 namespace oceanbase
 {
@@ -35,8 +23,7 @@ namespace storage
 class ObFTRangeDict final : public ObIFTDict
 {
 public:
-  ObFTRangeDict(ObIAllocator &alloc,
-                ObFTCacheRangeContainer *range_container,
+  ObFTRangeDict(ObFTCacheRangeContainer *range_container,
                 const ObFTDictDesc &desc)
       : is_inited_(false), desc_(desc), range_alloc_(lib::ObMemAttr("Range Dict")),
         range_dicts_(&range_alloc_), range_container_(range_container)
@@ -47,8 +34,8 @@ public:
 public:
   struct ObFTRange final
   {
-    ObFTSingleWord start_;
-    ObFTSingleWord end_;
+    ObFTSingleToken start_;
+    ObFTSingleToken end_;
     ObIFTDict *dict_; // a cache dict
   };
 
@@ -59,33 +46,7 @@ public:
   int match_with_hit(const ObString &single_word,
                      const ObDATrieHit &last_hit,
                      ObDATrieHit &hit) const override;
-
-public:
   int build_dict_from_cache(const ObFTCacheRangeContainer &range_container);
-
-  static int try_load_cache(const ObFTDictDesc &desc,
-                            const uint32_t range_count,
-                            ObFTCacheRangeContainer &range_container);
-  static int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container);
-
-  static int build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container);
-
-private:
-  // build cache
-  static int build_ranges(const ObFTDictDesc &desc,
-                          ObIFTDictIterator &iter,
-                          ObFTCacheRangeContainer &range_container);
-
-  // build one range's cache
-  static int build_one_range(const ObFTDictDesc &desc,
-                             const int32_t range_id,
-                             ObIFTDictIterator &iter,
-                             ObFTCacheRangeContainer &container,
-                             bool &build_next_range);
-
-  static int build_ranges_concurrently_thread_pool(const ObFTDictDesc &desc,
-                                                   ObIFTDictIterator &iter,
-                                                   ObFTCacheRangeContainer &range_container);
 
 private:
   void destroy()
@@ -100,7 +61,6 @@ private:
   int find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const;
 
 private:
-  static constexpr int DEFAULT_KEY_PER_RANGE = 50000; // by estimated
   bool is_inited_;
   ObFTDictDesc desc_;
   ObArenaAllocator range_alloc_;
