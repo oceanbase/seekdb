@@ -33,23 +33,18 @@ alter system refresh fulltext dict "fts_ik_custom_dict.dict_words";
 select tokenize('火星数据库支持向量检索', 'ik',
   '[{"additional_args": [{"dict_table": "dict_words"}, {"ik_mode": "smart"}]}]');
 
-create table docs_inline (
-  id int primary key,
-  body varchar(200),
-  fulltext index fidx_inline(body) with parser ik parser_properties=(dict_table="dict_words", ik_mode="smart")
-) organization index default charset = utf8mb4 collate = utf8mb4_general_ci with column group(each column);
-drop table docs_inline;
-
 create table normal_words (
   word varchar(100) primary key
 ) organization index default charset = utf8mb4 collate = utf8mb4_general_ci;
 
---error 1235
 create table docs_bad (
   id int primary key,
-  body varchar(200),
-  fulltext index fidx_bad(body) with parser ik parser_properties=(dict_table="normal_words", ik_mode="smart")
+  body varchar(200)
 ) organization index default charset = utf8mb4 collate = utf8mb4_general_ci with column group(each column);
+--error 1235
+create fulltext index fidx_bad on docs_bad(body)
+  with parser ik parser_properties=(dict_table="normal_words", ik_mode="smart");
+drop table docs_bad;
 
 drop table normal_words;
 

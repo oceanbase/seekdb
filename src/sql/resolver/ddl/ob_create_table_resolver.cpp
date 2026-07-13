@@ -1686,6 +1686,13 @@ int ObCreateTableResolver::generate_index_arg(const bool process_heap_table_prim
     }
     if (OB_FAIL(ret)) {
       // skip
+    } else if (FTS_KEY == index_keyname_
+               && OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(
+                   table_schema,
+                   index_arg_,
+                   allocator_,
+                   OB_ISNULL(schema_checker_) ? nullptr : schema_checker_->get_schema_guard()))) {
+      LOG_WARN("failed to generate fts parser name and property", K(ret));
     } else if (INDEX_TYPE_UNIQUE_GLOBAL == type
                || INDEX_TYPE_NORMAL_GLOBAL == type) {
       ObArray<ObColumnSchemaV2 *> gen_columns;
