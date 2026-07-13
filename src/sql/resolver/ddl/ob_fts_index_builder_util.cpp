@@ -219,13 +219,16 @@ int check_fulltext_dict_table_ref_in_property(const ObTableSchema &index_schema,
   ObString dict_table;
   ObString stopword_table;
   ObString quantifier_table;
+  bool need_to_load_dic = false;
   referenced = false;
   if (index_schema.get_parser_name_str().empty() || index_schema.get_parser_property_str().empty()) {
   } else if (OB_FAIL(parser.parse_from_str(index_schema.get_parser_name_str().ptr(),
                                            index_schema.get_parser_name_str().length()))) {
     LOG_WARN("fail to parse parser name", K(ret), K(index_schema.get_parser_name_str()));
   } else if (FALSE_IT(real_parser_name = ObString(parser.get_parser_name().len(), parser.get_parser_name().str()))) {
-  } else if (!ObFtsIndexBuilderUtil::is_need_dictionary(real_parser_name)) {
+  } else if (OB_FAIL(ObFtsIndexBuilderUtil::check_need_to_load_dic(real_parser_name, need_to_load_dic))) {
+    LOG_WARN("fail to check need to load dictionary", K(ret), K(real_parser_name));
+  } else if (!need_to_load_dic) {
   } else if (OB_FAIL(schema_guard.get_database_schema(index_schema.get_database_id(), database_schema))) {
     LOG_WARN("fail to get fts index database schema", K(ret), K(index_schema));
   } else if (OB_ISNULL(database_schema)) {
