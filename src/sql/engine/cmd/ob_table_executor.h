@@ -257,23 +257,13 @@ private:
 
 };
 
-class ObFlashBackTableFromRecyclebinStmt;
-class ObFlashBackTableFromRecyclebinExecutor
+class ObRecyclebinRestoreTableStmt;
+class ObRecyclebinRestoreTableExecutor
 {
 public:
-  ObFlashBackTableFromRecyclebinExecutor() {}
-  virtual ~ObFlashBackTableFromRecyclebinExecutor() {}
-  int execute(ObExecContext &ctx, ObFlashBackTableFromRecyclebinStmt &stmt);
-private:
-};
-
-class ObFlashBackTableToScnStmt;
-class ObFlashBackTableToScnExecutor
-{
-public:
-  ObFlashBackTableToScnExecutor() {}
-  virtual ~ObFlashBackTableToScnExecutor() {}
-  int execute(ObExecContext &ctx, ObFlashBackTableToScnStmt &stmt);
+  ObRecyclebinRestoreTableExecutor() {}
+  virtual ~ObRecyclebinRestoreTableExecutor() {}
+  int execute(ObExecContext &ctx, ObRecyclebinRestoreTableStmt &stmt);
 private:
 };
 

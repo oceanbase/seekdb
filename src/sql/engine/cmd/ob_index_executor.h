@@ -65,15 +65,6 @@ public:
       sql::ObSQLSessionInfo &session);
 };
 
-class ObFlashBackIndexStmt;
-class ObFlashBackIndexExecutor {
-public:
-  ObFlashBackIndexExecutor() {}
-  virtual ~ObFlashBackIndexExecutor() {}
-  int execute(ObExecContext &ctx, ObFlashBackIndexStmt &stmt);
-private:
-};
-
 class ObPurgeIndexStmt;
 class ObPurgeIndexExecutor {
 public:
@@ -86,4 +77,3 @@ private:
 }
 }
 #endif /* OCEANBASE_SRC_SQL_ENGINE_CMD_OB_INDEX_EXECUTOR_H_ */
-

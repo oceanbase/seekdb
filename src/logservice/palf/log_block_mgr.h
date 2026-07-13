@@ -79,9 +79,8 @@ public:
 
 	int create_tmp_block_handler(const block_id_t block_id);
 
-  // ======================= flashback =====================
+  // ======================= delete =====================
   int delete_block_from_back_to_front_until(const block_id_t block_id);
-  int rename_tmp_block_handler_to_normal(const block_id_t block_id);
   // =======================================================
   TO_STRING_KV(K_(log_dir), K_(dir_fd), K_(min_block_id), K_(max_block_id), K_(curr_writable_block_id));
 private:

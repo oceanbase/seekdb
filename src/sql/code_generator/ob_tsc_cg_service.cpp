@@ -83,20 +83,19 @@ int ObTscCgService::generate_tsc_ctdef(ObLogTableScan &op, ObTableScanCtDef &tsc
       }
     }
   }
-  if (OB_SUCC(ret) && (OB_NOT_NULL(op.get_flashback_query_expr()))) {
-    if (OB_FAIL(cg_.generate_rt_expr(*op.get_flashback_query_expr(),
-                                     tsc_ctdef.flashback_item_.flashback_query_expr_))) {
-      LOG_WARN("generate flashback query expr failed", K(ret));
+  if (OB_SUCC(ret) && (OB_NOT_NULL(op.get_snapshot_query_expr()))) {
+    if (OB_FAIL(cg_.generate_rt_expr(*op.get_snapshot_query_expr(),
+                                     tsc_ctdef.snapshot_item_.snapshot_query_expr_))) {
+      LOG_WARN("generate snapshot query expr failed", K(ret));
     } else {
       const ObExecContext *exec_ctx = nullptr;
-      tsc_ctdef.flashback_item_.flashback_query_type_ = op.get_flashback_query_type();
-      tsc_ctdef.flashback_item_.fq_read_tx_uncommitted_ = op.get_fq_read_tx_uncommitted();
+      tsc_ctdef.snapshot_item_.snapshot_query_type_ = op.get_snapshot_query_type();
       if (OB_ISNULL(exec_ctx = cg_.opt_ctx_->get_exec_ctx())) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid argument", K(ret));
       } else if (cg_.opt_ctx_->is_online_ddl()) {
         ObSqlCtx *sql_ctx = const_cast<ObExecContext *>(exec_ctx)->get_sql_ctx();
-        sql_ctx->flashback_query_expr_ = op.get_flashback_query_expr();
+        sql_ctx->snapshot_query_expr_ = op.get_snapshot_query_expr();
       }
     }
   }
@@ -112,7 +111,7 @@ int ObTscCgService::generate_tsc_ctdef(ObLogTableScan &op, ObTableScanCtDef &tsc
     } else if (OB_FAIL(generate_das_scan_ctdef(op, cg_ctx, scan_ctdef, has_rowscn))) {
       LOG_WARN("generate das scan ctdef failed", K(ret), K(scan_ctdef.ref_table_id_));
     } else {
-      tsc_ctdef.flashback_item_.need_scn_ |= has_rowscn;
+      tsc_ctdef.snapshot_item_.need_scn_ |= has_rowscn;
       root_ctdef = &scan_ctdef;
     }
   }
@@ -415,7 +414,6 @@ int ObTscCgService::generate_table_param(const ObLogTableScan &op,
   ObSqlSchemaGuard *schema_guard = cg_.opt_ctx_->get_sql_schema_guard();
   ObBasicSessionInfo *session_info = cg_.opt_ctx_->get_session_info();
   int64_t route_policy = 0;
-  bool is_cs_replica_query = false;
   CK(OB_NOT_NULL(schema_guard), OB_NOT_NULL(session_info));
   if (OB_UNLIKELY(pd_agg && 0 == scan_ctdef.aggregate_column_ids_.count()) ||
       OB_UNLIKELY(pd_group_by && 0 == scan_ctdef.group_by_column_ids_.count())) {
@@ -442,7 +440,7 @@ int ObTscCgService::generate_table_param(const ObLogTableScan &op,
   } else if (OB_FAIL(session_info->get_sys_variable(SYS_VAR_OB_ROUTE_POLICY, route_policy))) {
     LOG_WARN("get route policy failed", K(ret));
   } else {
-    is_cs_replica_query = ObRoutePolicyType::COLUMN_STORE_ONLY == route_policy;
+    UNUSED(route_policy);
   }
 
   if (OB_FAIL(ret)) {
@@ -451,8 +449,7 @@ int ObTscCgService::generate_table_param(const ObLogTableScan &op,
                                                      scan_ctdef.access_column_ids_,
                                                      scan_ctdef.pd_expr_spec_.pd_storage_flag_,
                                                      &tsc_out_cols,
-                                                     is_real_table_mapping_virtual_table(op.get_ref_table_id()), /* for real agent table , use mysql mode compulsory*/
-                                                     is_cs_replica_query))) {
+                                                     is_real_table_mapping_virtual_table(op.get_ref_table_id()) /* for real agent table , use mysql mode compulsory*/))) {
     LOG_WARN("convert schema failed", K(ret), K(*table_schema),
              K(scan_ctdef.access_column_ids_), K(op.get_index_back()));
   } else if ((pd_agg || pd_group_by) &&
@@ -572,7 +569,6 @@ int ObTscCgService::generate_tsc_filter(const ObLogTableScan &op, ObTableScanSpe
                                                   op.get_access_exprs(),
                                                   op.get_type(),
                                                   op.get_index_back() && op.get_is_index_global(),
-                                                  op.use_column_store(),
                                                   lookup_ctdef->pd_expr_spec_))) {
       LOG_WARN("generate pd storage flag for lookup ctdef failed", K(ret));
     }
@@ -587,7 +583,6 @@ int ObTscCgService::generate_tsc_filter(const ObLogTableScan &op, ObTableScanSpe
                                               op.get_access_exprs(),
                                               op.get_type(),
                                               false, /*generate_pd_storage_flag*/
-                                              op.use_column_store(),
                                               scan_ctdef.pd_expr_spec_))) {
     LOG_WARN("generate pd storage flag for scan ctdef failed", K(ret));
   } else if (lookup_ctdef != nullptr &&
@@ -596,7 +591,6 @@ int ObTscCgService::generate_tsc_filter(const ObLogTableScan &op, ObTableScanSpe
                                        op.get_access_exprs(),
                                        op.get_type(),
                                        op.get_index_back() && op.get_is_index_global(), /*generate_pd_storage_flag*/
-                                       op.use_column_store(),
                                        lookup_ctdef->pd_expr_spec_))) {
     LOG_WARN("generate pd storage flag for lookup ctdef failed", K(ret));
   }
@@ -623,7 +617,6 @@ int ObTscCgService::generate_tsc_filter(const ObLogTableScan &op, ObTableScanSpe
     } else if (pd_filter) {
       ObPushdownFilterConstructor filter_constructor(
           &cg_.phy_plan_->get_allocator(), cg_, &op,
-          scan_ctdef.pd_expr_spec_.pd_storage_flag_.is_use_column_store(),
           scan_ctdef.table_param_.is_enable_semistruct_encoding());
       if (OB_FAIL(filter_constructor.apply(
           scan_pushdown_filters, scan_ctdef.pd_expr_spec_.pd_storage_filters_.get_pushdown_filter()))) {
@@ -642,7 +635,6 @@ int ObTscCgService::generate_tsc_filter(const ObLogTableScan &op, ObTableScanSpe
     } else if (pd_filter) {
       ObPushdownFilterConstructor filter_constructor(
           &cg_.phy_plan_->get_allocator(), cg_, &op,
-          lookup_ctdef->pd_expr_spec_.pd_storage_flag_.is_use_column_store(),
           lookup_ctdef->table_param_.is_enable_semistruct_encoding());
       if (OB_FAIL(filter_constructor.apply(
           lookup_pushdown_filters, lookup_ctdef->pd_expr_spec_.pd_storage_filters_.get_pushdown_filter()))) {
@@ -700,7 +692,6 @@ int ObTscCgService::generate_pd_storage_flag(const ObLogPlan *log_plan,
                                              const ObIArray<ObRawExpr *> &access_exprs,
                                              const log_op_def::ObLogOpType op_type,
                                              const bool is_global_index_lookup,
-                                             const bool use_column_store,
                                              ObPushdownExprSpec &pd_spec)
 {
   int ret = OB_SUCCESS;
@@ -734,8 +725,7 @@ int ObTscCgService::generate_pd_storage_flag(const ObLogPlan *log_plan,
       pd_filter = false;
     } else {
       FOREACH_CNT_X(e, access_exprs, pd_blockscan || pd_filter) {
-        if ((use_column_store && T_ORA_ROWSCN == (*e)->get_expr_type())
-            || T_PSEUDO_OLD_NEW_COL == (*e)->get_expr_type()) {
+        if (T_PSEUDO_OLD_NEW_COL == (*e)->get_expr_type()) {
           pd_blockscan = false;
           pd_filter = false;
         }
@@ -1385,7 +1375,6 @@ int ObTscCgService::generate_das_scan_ctdef(const ObLogTableScan &op,
                                            op.get_access_exprs(),
                                            op.get_type(),
                                            op.get_index_back() && op.get_is_index_global(),
-                                           op.use_column_store(),
                                            scan_ctdef.pd_expr_spec_))) {
         LOG_WARN("failed to generate pd storage flag for index scan ctdef", K(scan_ctdef.ref_table_id_), K(ret));
       } else if (OB_FAIL(cg_.generate_rt_exprs(scan_pushdown_filters, scan_ctdef.pd_expr_spec_.pushdown_filters_))) {
@@ -1393,7 +1382,6 @@ int ObTscCgService::generate_das_scan_ctdef(const ObLogTableScan &op,
       } else if (scan_ctdef.pd_expr_spec_.pd_storage_flag_.is_filter_pushdown()) {
         ObPushdownFilterConstructor filter_constructor(
             &cg_.phy_plan_->get_allocator(), cg_, &op,
-            scan_ctdef.pd_expr_spec_.pd_storage_flag_.is_use_column_store(),
             scan_ctdef.table_param_.is_enable_semistruct_encoding());
         if (OB_FAIL(filter_constructor.apply(
                     scan_pushdown_filters, scan_ctdef.pd_expr_spec_.pd_storage_filters_.get_pushdown_filter()))) {
@@ -4650,7 +4638,7 @@ int ObTscCgService::generate_table_lookup_ctdef(const ObLogTableScan &op,
                                                *tsc_ctdef.lookup_loc_meta_))) {
       LOG_WARN("generate table loc meta failed", K(ret));
     } else {
-      tsc_ctdef.flashback_item_.need_scn_ |= has_rowscn;
+      tsc_ctdef.snapshot_item_.need_scn_ |= has_rowscn;
       // lookup to main table should invoke get
       tsc_ctdef.lookup_ctdef_->is_get_ = true;
     }

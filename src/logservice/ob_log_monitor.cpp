@@ -207,22 +207,6 @@ int ObLogMonitor::record_rebuild_event(const int64_t palf_id,
   return ret;
 }
 
-int ObLogMonitor::record_flashback_event(const int64_t palf_id,
-                                         const int64_t mode_version,
-                                         const share::SCN &flashback_scn,
-                                         const share::SCN &curr_end_scn,
-                                         const share::SCN &curr_max_scn)
-{
-  int ret = OB_SUCCESS;
-  const EventType event = EventType::FLASHBACK;
-  SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
-      "MODE_VERSION", mode_version,
-      "FLASHBACK_SCN", flashback_scn,
-      "CURR_END_SCN", curr_end_scn,
-      "CURR_MAX_SCN", curr_max_scn);
-  return ret;
-}
-
 int ObLogMonitor::record_truncate_event(const int64_t palf_id,
                                         const palf::LSN &lsn,
                                         const int64_t min_block_id,

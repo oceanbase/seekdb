@@ -174,7 +174,6 @@ public:
       : common::ObVTableScanParam(),
         trans_desc_(NULL),
         snapshot_(),
-        fb_read_tx_uncommitted_(false),
         tx_id_(),
         tx_lock_timeout_(-1),
         table_param_(NULL),
@@ -196,7 +195,6 @@ public:
 public:
   transaction::ObTxDesc *trans_desc_;      // transaction handle
   transaction::ObTxReadSnapshot snapshot_;
-  bool fb_read_tx_uncommitted_;
   transaction::ObTransID tx_id_;           // used when read-latest
   int64_t tx_lock_timeout_;
   const share::schema::ObTableParam *table_param_;

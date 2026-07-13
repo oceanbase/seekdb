@@ -102,7 +102,7 @@ public:
                     int64_t new_schema_version,
                     ObISQLClient &sql_client,
                     const ObString *ddl_stmt_str);
-  int flashback_trigger(const ObTriggerInfo &trigger_info,
+  int restore_trigger(const ObTriggerInfo &trigger_info,
                         int64_t new_schema_version,
                         common::ObISQLClient &sql_client);
   int rebuild_trigger_on_rename(const ObTriggerInfo &trigger_info,

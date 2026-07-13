@@ -162,20 +162,6 @@ TEST_F(TestLogModeMgr, test_can_interface)
   can_append_list.push_back(false);
   can_raw_list.push_back(true);
   
-  access_mode_list.push_back(AccessMode::FLASHBACK);
-  state_list.push_back(ModeChangeState::MODE_INIT);
-  can_append_list.push_back(false);
-  can_raw_list.push_back(false);
-
-  access_mode_list.push_back(AccessMode::FLASHBACK);
-  state_list.push_back(ModeChangeState::MODE_PREPARE);
-  can_append_list.push_back(false);
-  can_raw_list.push_back(false);
-
-  access_mode_list.push_back(AccessMode::FLASHBACK);
-  state_list.push_back(ModeChangeState::MODE_ACCEPT);
-  can_append_list.push_back(false);
-  can_raw_list.push_back(false);
   for (int i = 0; i < access_mode_list.size(); i++) {
     LogModeMgr mode_mgr;
     mode_mgr.applied_mode_meta_.access_mode_ = access_mode_list[i];
@@ -297,10 +283,6 @@ TEST_F(TestLogModeMgr, test_can_switch_access_mode)
   dst_access_mode_list.push_back(AccessMode::RAW_WRITE);
   ret_list.push_back(true);
 
-  src_access_mode_list.push_back(AccessMode::APPEND);
-  dst_access_mode_list.push_back(AccessMode::FLASHBACK);
-  ret_list.push_back(false);
-
   src_access_mode_list.push_back(AccessMode::RAW_WRITE);
   dst_access_mode_list.push_back(AccessMode::RAW_WRITE);
   ret_list.push_back(false);
@@ -308,22 +290,6 @@ TEST_F(TestLogModeMgr, test_can_switch_access_mode)
   src_access_mode_list.push_back(AccessMode::RAW_WRITE);
   dst_access_mode_list.push_back(AccessMode::APPEND);
   ret_list.push_back(true);
-
-  src_access_mode_list.push_back(AccessMode::RAW_WRITE);
-  dst_access_mode_list.push_back(AccessMode::FLASHBACK);
-  ret_list.push_back(true);
-
-  src_access_mode_list.push_back(AccessMode::FLASHBACK);
-  dst_access_mode_list.push_back(AccessMode::FLASHBACK);
-  ret_list.push_back(false);
-
-  src_access_mode_list.push_back(AccessMode::FLASHBACK);
-  dst_access_mode_list.push_back(AccessMode::APPEND);
-  ret_list.push_back(true);
-
-  src_access_mode_list.push_back(AccessMode::FLASHBACK);
-  dst_access_mode_list.push_back(AccessMode::RAW_WRITE);
-  ret_list.push_back(false);
 
   for (int i = 0; i < src_access_mode_list.size(); i++) {
     const bool expected = (ret_list[i] == can_switch_access_mode_(src_access_mode_list[i], dst_access_mode_list[i]));

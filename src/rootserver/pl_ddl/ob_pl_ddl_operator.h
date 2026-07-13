@@ -92,7 +92,7 @@ public:
                     common::ObMySQLTransaction &trans,
                     const common::ObString *ddl_stmt_str/*=NULL*/,
                     bool is_update_table_schema_version = true);
-  int flashback_trigger(const share::schema::ObTriggerInfo &trigger_info,
+  int restore_trigger(const share::schema::ObTriggerInfo &trigger_info,
                         uint64_t new_database_id,
                         const common::ObString &new_table_name,
                         share::schema::ObSchemaGetterGuard &schema_guard,
@@ -128,12 +128,12 @@ private:
                           int64_t database_id,
                           int64_t routine_id = OB_INVALID_ID);
   template <typename SchemaType>
-  int build_flashback_object_name(const SchemaType &object_schema,
-                                  const char *data_table_prifix,
-                                  const char *object_type_prefix,
-                                  share::schema::ObSchemaGetterGuard &schema_guard,
-                                  common::ObIAllocator &allocator,
-                                  common::ObString &object_name);
+  int build_recyclebin_restore_object_name(const SchemaType &object_schema,
+                                           const char *data_table_prifix,
+                                           const char *object_type_prefix,
+                                           share::schema::ObSchemaGetterGuard &schema_guard,
+                                           common::ObIAllocator &allocator,
+                                           common::ObString &object_name);
 };
 
 } // namespace rootserver

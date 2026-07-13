@@ -117,7 +117,7 @@ public:
   //                  need read data from storage eagain.(data in cache will not been clean up, therefore,
   //                  user need used a new iterator to read data again)
   //   OB_ERR_OUT_LOWER_BOUND, block has been recycled
-  //   OB_PARTIAL_LOG, this replica has not finished flashback, and iterator start lsn is not the header of LogGroupEntry.
+  //   OB_PARTIAL_LOG, iterator start lsn is not the header of LogGroupEntry.
   int next()
   {
     int ret = OB_SUCCESS;
@@ -143,7 +143,7 @@ public:
   //                  need read data from storage eagain.(data in cache will not been clean up, therefore,
   //                  user need used a new iterator to read data again)
   //   OB_ERR_OUT_LOWER_BOUND, block has been recycled
-  //   OB_PARTIAL_LOG, this replica has not finished flashback, and iterator start lsn is not the header of LogGroupEntry.
+  //   OB_PARTIAL_LOG, iterator start lsn is not the header of LogGroupEntry.
   int next(const share::SCN &replayable_point_scn)
   {
     int ret = OB_SUCCESS;
@@ -169,9 +169,9 @@ public:
   //   OB_NEED_RETRY:
   //     1. the data in cache is not integrity, and the integrity data has been truncate from disk,
   //       need read data from storage eagain.
-  //     2. during read data from disk, there is a concurrently flashback.
+  //     2. data is truncated concurrently while reading from disk.
   //   OB_ERR_OUT_LOWER_BOUND, block has been recycled
-  //   OB_PARTIAL_LOG, this replica has not finished flashback, and iterator start lsn is not the header of LogGroupEntry.
+  //   OB_PARTIAL_LOG, iterator start lsn is not the header of LogGroupEntry.
   int next(const share::SCN &replayable_point_scn,
            share::SCN &next_min_scn,
            bool &iterate_end_by_replayable_point)

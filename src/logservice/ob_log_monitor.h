@@ -62,11 +62,6 @@ public:
   int record_rebuild_event(const int64_t palf_id,
                            const common::ObAddr &server,
                            const palf::LSN &base_lsn) override final;
-  int record_flashback_event(const int64_t palf_id,
-                             const int64_t mode_version,
-                             const share::SCN &flashback_scn,
-                             const share::SCN &curr_end_scn,
-                             const share::SCN &curr_max_scn) override final;
   int record_truncate_event(const int64_t palf_id,
                             const palf::LSN &lsn,
                             const int64_t min_block_id,
@@ -108,7 +103,6 @@ private:
     DISABLE_VOTE,
     ADVANCE_BASE_INFO,
     REBUILD,
-    FLASHBACK,
     TRUNCATE,
     ENTER_ELECTION_SILENT,
     EXIT_ELECTION_SILENT
@@ -146,7 +140,6 @@ private:
       case (EventType::ADVANCE_BASE_INFO):
         return "ADVANCE BASE INFO";
       CHECK_LOG_EVENT_TYPE_STR(REBUILD);
-      CHECK_LOG_EVENT_TYPE_STR(FLASHBACK);
       CHECK_LOG_EVENT_TYPE_STR(TRUNCATE);
       case (EventType::ENTER_ELECTION_SILENT):
         return "ENTER ELECTION SILENT";

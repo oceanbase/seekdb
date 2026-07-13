@@ -312,7 +312,6 @@ DEF_TO_STRING(ObTableScanParam)
        K_(need_scn),
        K_(need_switch_param),
        K_(is_mds_query),
-       K_(fb_read_tx_uncommitted),
        K_(tx_seq_base),
        K_(auto_split_filter_type),
        K_(is_tablet_spliting),

@@ -181,12 +181,6 @@ int PalfHandle::advance_base_info(const palf::PalfBaseInfo &palf_base_info, cons
   return palf_handle_impl_->advance_base_info(palf_base_info, is_rebuild);
 }
 
-int PalfHandle::flashback(const int64_t mode_version, const SCN &flashback_scn, const int64_t timeout_us)
-{
-  CHECK_VALID;
-  return palf_handle_impl_->flashback(mode_version, flashback_scn, timeout_us);
-}
-
 int PalfHandle::get_begin_lsn(LSN &lsn) const
 {
   CHECK_VALID;

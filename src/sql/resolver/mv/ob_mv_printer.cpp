@@ -243,9 +243,9 @@ int ObMVPrinter::gen_delta_table_view(const TableItem &source_table,
     LOG_WARN("failed to generate delta table view select lists", K(ret));
   } else {
     table_item->database_name_ = source_table.database_name_;
-    // mlog need not flashback query
-    table_item->flashback_query_expr_ = NULL;
-    table_item->flashback_query_type_ = TableItem::NOT_USING;
+    // mlog need not snapshot query
+    table_item->snapshot_query_expr_ = NULL;
+    table_item->snapshot_query_type_ = TableItem::NOT_USING;
   }
   return ret;
 }
@@ -826,11 +826,11 @@ void ObMVPrinter::set_info_for_simple_table_item(TableItem &table, const TableIt
   if (ctx_.for_rt_expand()) {
     /* do nothing */
   } else if (MATERIALIZED_VIEW == source_table.table_type_) {
-    table.flashback_query_expr_ = exprs_.mv_refresh_scn_;
-    table.flashback_query_type_ = TableItem::USING_SCN;
+    table.snapshot_query_expr_ = exprs_.mv_refresh_scn_;
+    table.snapshot_query_type_ = TableItem::USING_SCN;
   } else {
-    table.flashback_query_expr_ = exprs_.refresh_scn_;
-    table.flashback_query_type_ = TableItem::USING_SCN;
+    table.snapshot_query_expr_ = exprs_.refresh_scn_;
+    table.snapshot_query_type_ = TableItem::USING_SCN;
   }
 }
 
@@ -1251,11 +1251,11 @@ int ObMVPrinter::set_table_read_snapshot_recursively(ObRawExpr *mv_refresh_scn,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null", K(ret), K(i), KPC(stmt));
       } else if (MATERIALIZED_VIEW == table->table_type_) {
-        table->flashback_query_expr_ = mv_refresh_scn;
-        table->flashback_query_type_ = TableItem::USING_SCN;
+        table->snapshot_query_expr_ = mv_refresh_scn;
+        table->snapshot_query_type_ = TableItem::USING_SCN;
       } else if (table->is_basic_table()) {
-        table->flashback_query_expr_ = table_refresh_scn;
-        table->flashback_query_type_ = TableItem::USING_SCN;
+        table->snapshot_query_expr_ = table_refresh_scn;
+        table->snapshot_query_type_ = TableItem::USING_SCN;
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < child_stmts.count(); ++i) {

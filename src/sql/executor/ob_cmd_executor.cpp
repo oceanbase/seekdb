@@ -45,7 +45,6 @@
 #include "sql/resolver/ddl/ob_create_table_like_stmt.h"
 #include "sql/resolver/ddl/ob_fork_table_stmt.h"
 #include "sql/resolver/ddl/ob_fork_database_stmt.h"
-#include "sql/resolver/ddl/ob_flashback_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/resolver/ddl/ob_lock_table_stmt.h"
 #include "sql/resolver/dcl/ob_create_user_stmt.h"
@@ -71,7 +70,7 @@
 #include "sql/resolver/ddl/ob_rename_table_stmt.h"
 #include "sql/resolver/ddl/ob_truncate_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_like_stmt.h"
-#include "sql/resolver/ddl/ob_flashback_stmt.h"
+#include "sql/resolver/ddl/ob_recyclebin_restore_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/resolver/ddl/ob_create_func_stmt.h"
 #include "sql/resolver/ddl/ob_drop_func_stmt.h"
@@ -355,20 +354,12 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObMergeTableStmt, ObMergeTableExecutor);
         break;
       }
-      case stmt::T_FLASHBACK_TABLE_FROM_RECYCLEBIN: {
-        DEFINE_EXECUTE_CMD(ObFlashBackTableFromRecyclebinStmt, ObFlashBackTableFromRecyclebinExecutor);
+      case stmt::T_RECYCLEBIN_RESTORE_TABLE: {
+        DEFINE_EXECUTE_CMD(ObRecyclebinRestoreTableStmt, ObRecyclebinRestoreTableExecutor);
         break;
       }
-      case stmt::T_FLASHBACK_TABLE_TO_SCN: {
-        DEFINE_EXECUTE_CMD(ObFlashBackTableToScnStmt, ObFlashBackTableToScnExecutor);
-        break;
-      }
-      case stmt::T_FLASHBACK_INDEX: {
-        DEFINE_EXECUTE_CMD(ObFlashBackIndexStmt, ObFlashBackIndexExecutor);
-        break;
-      }
-      case stmt::T_FLASHBACK_DATABASE: {
-        DEFINE_EXECUTE_CMD(ObFlashBackDatabaseStmt, ObFlashBackDatabaseExecutor);
+      case stmt::T_RECYCLEBIN_RESTORE_DATABASE: {
+        DEFINE_EXECUTE_CMD(ObRecyclebinRestoreDatabaseStmt, ObRecyclebinRestoreDatabaseExecutor);
         break;
       }
       case stmt::T_PURGE_TABLE: {

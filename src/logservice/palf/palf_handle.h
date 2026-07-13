@@ -97,7 +97,7 @@ public:
   // OB_INVALID_ARGUMENT.
   // OB_ERR_OUT_OF_LOWER_BOUND, the lsn is out of lower bound.
   // OB_ERR_OUT_OF_UPPER_BOUND, the lsn is out of upper bound.
-  // OB_NEED_RETRY, there is a flashback operation during raw_read.
+  // OB_NEED_RETRY, log blocks changed during raw_read.
   // others.
   // 
   // 1. use oceanbase::share::mtl_malloc_align or oceanbase::common::ob_malloc_align
@@ -174,7 +174,6 @@ public:
   int advance_base_lsn(const LSN &lsn);
   // Migration/rebuild scenario advances base_lsn
   int advance_base_info(const palf::PalfBaseInfo &palf_base_info, const bool is_rebuild);
-  int flashback(const int64_t mode_version, const share::SCN &flashback_scn, const int64_t timeout_us);
   // Return the position information of the earliest readable log in the file
   int get_begin_lsn(LSN &lsn) const;
   int get_begin_scn(share::SCN &scn) const;

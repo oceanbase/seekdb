@@ -195,7 +195,7 @@ int TableItem::deep_copy(ObIRawExprCopier &expr_copier,
   mview_id_ = other.mview_id_;
   mr_mv_flags_ = other.mr_mv_flags_;
   node_ = other.node_; // should deep copy ? seems to be unnecessary
-  flashback_query_type_ = other.flashback_query_type_;
+  snapshot_query_type_ = other.snapshot_query_type_;
   // ddl related
   ddl_schema_version_ = other.ddl_schema_version_;
   ddl_table_id_ = other.ddl_table_id_;
@@ -205,7 +205,7 @@ int TableItem::deep_copy(ObIRawExprCopier &expr_copier,
   if (is_json_table() 
       && OB_FAIL(deep_copy_json_table_def(*other.json_table_def_, expr_copier, allocator))) {
     LOG_WARN("failed to deep copy json table define", K(ret));
-  } else if (OB_FAIL(expr_copier.copy(other.flashback_query_expr_, flashback_query_expr_))) {
+  } else if (OB_FAIL(expr_copier.copy(other.snapshot_query_expr_, snapshot_query_expr_))) {
     LOG_WARN("failed to deep copy raw expr", K(ret));
   } else if (OB_FAIL(expr_copier.copy(other.function_table_expr_, function_table_expr_))) {
     LOG_WARN("failed to copy function table expr", K(ret));
@@ -816,10 +816,10 @@ int ObDMLStmt::iterate_stmt_expr(ObStmtExprVisitor &visitor)
                OB_FAIL(visitor.visit(table_items_.at(i)->function_table_expr_,
                                      SCOPE_FROM))) {
       LOG_WARN("failed to visit function table expr", K(ret));
-    } else if (NULL != table_items_.at(i)->flashback_query_expr_ &&
-               OB_FAIL(visitor.visit(table_items_.at(i)->flashback_query_expr_,
+    } else if (NULL != table_items_.at(i)->snapshot_query_expr_ &&
+               OB_FAIL(visitor.visit(table_items_.at(i)->snapshot_query_expr_,
                                      SCOPE_FROM))) {
-      LOG_WARN("failed to visit flashback query expr", K(ret));
+      LOG_WARN("failed to visit snapshot query expr", K(ret));
     } else if (NULL != table_items_.at(i)->json_table_def_) {
       for (int64_t j = 0; OB_SUCC(ret) && j < table_items_.at(i)->json_table_def_->doc_exprs_.count(); ++j) {
         if (NULL != table_items_.at(i)->json_table_def_->doc_exprs_.at(j) &&

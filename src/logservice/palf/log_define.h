@@ -54,7 +54,6 @@ class SCN;
 }
 namespace palf
 {
-#define FLASHBACK_SUFFIX ".flashback"
 #define TMP_SUFFIX ".tmp"
 
 #define PALF_EVENT(info_string, palf_id, args...) FLOG_INFO("[PALF_EVENT] "info_string, "palf_id", palf_id, args)
@@ -275,25 +274,6 @@ inline bool is_tmp_block(const char *block_name)
   return bool_ret;
 }
 
-inline bool is_flashback_block(const char *block_name)
-{
-  bool bool_ret = false;
-  if (NULL != block_name && NULL != strstr(block_name, FLASHBACK_SUFFIX)) {
-    bool_ret = true;
-  }
-  return bool_ret;
-}
-
-inline int convert_to_flashback_block(const char *log_dir,
-                                      const block_id_t  block_id,
-                                      char *buf,
-                                      const int64_t buf_len)
-{
-  int64_t pos = 0;
-  return databuff_printf(buf, buf_len, pos, "%s/%lu%s", log_dir,
-          block_id, FLASHBACK_SUFFIX);
-}
-
 inline int convert_to_tmp_block(const char *log_dir,
                                const block_id_t  block_id,
                                char *buf,
@@ -357,11 +337,6 @@ inline bool is_valid_file_desc(const FileDesc &fd)
   return 0 <= fd;
 }
 
-inline bool is_valid_flashback_version(const int64_t flashback_version)
-{
-  return 0 <= flashback_version;
-}
-
 int block_id_to_string(const block_id_t block_id,
                        char *str,
                        const int64_t str_len);
@@ -369,9 +344,6 @@ int block_id_to_tmp_string(const block_id_t block_id,
                            char *str,
                            const int64_t str_len);
 
-int block_id_to_flashback_string(const block_id_t block_id,
-																 char *str,
-																 const int64_t str_len);
 int construct_absolute_block_path(const char *dir_path, const block_id_t block_id, const int64_t buf_len, char *absolute_block_path);
 int construct_absolute_tmp_block_path(const char *dir_path, const block_id_t block_id, const int64_t buf_len, char *absolute_tmp_block_path);
 int convert_sys_errno();

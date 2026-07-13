@@ -53,24 +53,21 @@ class ObTableScanOp;
 class ObDASScanOp;
 class ObGlobalIndexLookupOpImpl;
 
-struct FlashBackItem
+struct SnapshotScanItem
 {
 public:
-  FlashBackItem()
+  SnapshotScanItem()
     : need_scn_(false),
-      flashback_query_expr_(nullptr),
-      flashback_query_type_(TableItem::NOT_USING),
-      fq_read_tx_uncommitted_(false)
+      snapshot_query_expr_(nullptr),
+      snapshot_query_type_(TableItem::NOT_USING)
   { }
-  int set_flashback_query_info(ObEvalCtx &eval_ctx, ObDASScanRtDef &scan_rtdef) const;
+  int set_snapshot_query_info(ObEvalCtx &eval_ctx, ObDASScanRtDef &scan_rtdef) const;
   TO_STRING_KV(K_(need_scn),
-               KPC_(flashback_query_expr),
-               K_(flashback_query_type),
-               K_(fq_read_tx_uncommitted));
+               KPC_(snapshot_query_expr),
+               K_(snapshot_query_type));
   bool need_scn_;
-  ObExpr *flashback_query_expr_; //flashback query expr
-  TableItem::FlashBackQueryType flashback_query_type_; //flashback query type
-  bool fq_read_tx_uncommitted_; // whether read uncommitted changes in transaction
+  ObExpr *snapshot_query_expr_; //snapshot query expr
+  TableItem::SnapshotQueryType snapshot_query_type_; //snapshot query type
 };
 
 
@@ -131,7 +128,7 @@ struct ObTableScanCtDef
   OB_UNIS_VERSION(1);
 public:
   ObTableScanCtDef(common::ObIAllocator &allocator)
-    : flashback_item_(),
+    : snapshot_item_(),
       bnlj_param_idxs_(allocator),
       scan_flags_(),
       scan_ctdef_(allocator),
@@ -164,7 +161,7 @@ public:
   int allocate_dppr_table_loc();
   ObDASScanCtDef *get_lookup_ctdef();
   const ObDASScanCtDef *get_lookup_ctdef() const;
-  TO_STRING_KV(K_(flashback_item),
+  TO_STRING_KV(K_(snapshot_item),
                K_(bnlj_param_idxs),
                K_(scan_flags),
                K_(scan_ctdef),
@@ -177,7 +174,7 @@ public:
                K_(is_das_keep_order),
                K_(use_index_merge));
   //the query range of index scan/table scan
-  FlashBackItem flashback_item_;
+  SnapshotScanItem snapshot_item_;
   Int64FixedArray bnlj_param_idxs_;
   // read consistency, cache policy, result order
   common::ObQueryFlag scan_flags_;

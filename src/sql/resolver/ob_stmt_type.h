@@ -123,9 +123,8 @@ OB_STMT_TYPE_DEF(T_FORK_TABLE, get_fork_table_stmt_need_privs, 127, ACTION_TYPE_
 // stmt type 127, 128 used by plan baseline, and is been delete
 OB_STMT_TYPE_DEF(T_FORK_DATABASE, get_fork_database_stmt_need_privs, 128, ACTION_TYPE_FORK_DATABASE)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SWITCH_RS_ROLE, get_sys_tenant_alter_system_priv, 129)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLASHBACK_DATABASE, get_flashback_database_stmt_need_privs, 131)
-OB_STMT_TYPE_DEF(T_FLASHBACK_TABLE_FROM_RECYCLEBIN, get_flashback_table_stmt_need_privs, 132, ACTION_TYPE_FLASHBACK_TABLE)
-OB_STMT_TYPE_DEF(T_FLASHBACK_INDEX, get_flashback_index_stmt_need_privs, 133, ACTION_TYPE_FLASHBACK)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RECYCLEBIN_RESTORE_DATABASE, get_restore_database_stmt_need_privs, 131)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RECYCLEBIN_RESTORE_TABLE, get_restore_table_stmt_need_privs, 132)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_PURGE_RECYCLEBIN, get_purge_recyclebin_stmt_need_privs, 134)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_PURGE_DATABASE, get_purge_database_stmt_need_privs, 136)
 OB_STMT_TYPE_DEF(T_PURGE_TABLE, get_purge_table_stmt_need_privs, 137, ACTION_TYPE_PURGE_TABLE)
@@ -175,7 +174,6 @@ OB_STMT_TYPE_DEF(T_CREATE_TABLESPACE, get_create_tablespace_priv, 186, ACTION_TY
 OB_STMT_TYPE_DEF(T_DROP_TABLESPACE, get_create_tablespace_priv, 187, ACTION_TYPE_DROP_TABLESPACE)
 OB_STMT_TYPE_DEF(T_CREATE_TRIGGER, get_trigger_stmt_need_privs, 188, ACTION_TYPE_CREATE_TRIGGER)
 OB_STMT_TYPE_DEF(T_DROP_TRIGGER, get_trigger_stmt_need_privs, 189, ACTION_TYPE_DROP_TRIGGER)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLASHBACK_TABLE_TO_SCN, get_flashback_table_stmt_need_privs, 190)
 OB_STMT_TYPE_DEF(T_CREATE_ROLE, get_role_privs, 191, ACTION_TYPE_CREATE_ROLE)
 OB_STMT_TYPE_DEF(T_DROP_ROLE, get_role_privs, 192, ACTION_TYPE_DROP_ROLE)
 OB_STMT_TYPE_DEF(T_ALTER_ROLE, no_priv_needed, 193, ACTION_TYPE_ALTER_ROLE)
@@ -328,7 +326,7 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ALTER_CATALOG, get_catalog_privs, 372)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DROP_CATALOG, get_catalog_privs, 373)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SET_CATALOG, no_priv_needed, 374)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_CATALOGS, err_stmt_type_priv, 375)
-//377 for T_FLASHBACK_STANDBY_LOG
+// 377 is reserved for a removed statement type.
 
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_CREATE_CATALOG, err_stmt_type_priv, 379)
 

@@ -59,10 +59,9 @@
 #include "ddl/ob_alter_routine_resolver.h"
 #include "sql/resolver/ddl/ob_create_package_resolver.h"
 #include "sql/resolver/ddl/ob_drop_package_resolver.h"
-#include "sql/resolver/ddl/ob_flashback_resolver.h"
+#include "sql/resolver/ddl/ob_recyclebin_restore_resolver.h"
 #include "sql/resolver/ddl/ob_purge_resolver.h"
 #include "sql/resolver/ddl/ob_analyze_stmt_resolver.h"
-#include "sql/resolver/ddl/ob_flashback_resolver.h"
 #include "sql/resolver/ddl/ob_purge_resolver.h"
 #include "sql/resolver/ddl/ob_create_sequence_resolver.h"
 #include "sql/resolver/ddl/ob_alter_sequence_resolver.h"
@@ -99,7 +98,6 @@
 #include "sql/resolver/cmd/ob_load_data_resolver.h"
 #include "sql/resolver/prepare/ob_execute_resolver.h"
 #include "sql/resolver/prepare/ob_deallocate_resolver.h"
-#include "sql/resolver/ddl/ob_flashback_resolver.h"
 #include "sql/resolver/ddl/ob_purge_resolver.h"
 #include "sql/resolver/ddl/ob_create_sequence_resolver.h"
 #include "sql/resolver/ddl/ob_alter_sequence_resolver.h"
@@ -428,23 +426,12 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(TruncateTable);
         break;
       }
-      case T_FLASHBACK_TABLE_FROM_RECYCLEBIN: {
-        REGISTER_STMT_RESOLVER(FlashBackTableFromRecyclebin);
+      case T_RECYCLEBIN_RESTORE_TABLE: {
+        REGISTER_STMT_RESOLVER(RecyclebinRestoreTable);
         break;
       }
-      case T_FLASHBACK_TABLE_TO_TIMESTAMP:
-      case T_FLASHBACK_TABLE_TO_SCN: {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "flashback table");
-        //REGISTER_STMT_RESOLVER(FlashBackTableToScn);
-        break;
-      }
-      case T_FLASHBACK_INDEX: {
-        REGISTER_STMT_RESOLVER(FlashBackIndex);
-        break;
-      }
-      case T_FLASHBACK_DATABASE: {
-        REGISTER_STMT_RESOLVER(FlashBackDatabase);
+      case T_RECYCLEBIN_RESTORE_DATABASE: {
+        REGISTER_STMT_RESOLVER(RecyclebinRestoreDatabase);
         break;
       }
       case T_PURGE_TABLE: {

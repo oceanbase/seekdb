@@ -419,9 +419,7 @@ int GetBlockCountFunctor::func(const dirent *entry)
     PALF_LOG(WARN, "invalid args", K(ret), KP(entry));
   } else {
     const char *entry_name = entry->d_name;
-		// NB: if there is '0123' or 'xxx.flashback' in log directory,
-		// restart will be failed, the solution is that read block.
-    if (false == is_number(entry_name) && false == is_flashback_block(entry_name)) {
+    if (false == is_number(entry_name)) {
       ret = OB_ERR_UNEXPECTED;
       PALF_LOG(WARN, "this is block is not used for palf!!!", K(ret), K(entry_name));
       // do nothing, skip invalid block like tmp
@@ -441,48 +439,20 @@ int TrimLogDirectoryFunctor::func(const dirent *entry)
   } else {
     const char *entry_name = entry->d_name;
     bool str_is_number = is_number(entry_name);
-    bool str_is_flashback_block = is_flashback_block(entry_name);
-    if (false == str_is_number && false == str_is_flashback_block) {
+    if (false == str_is_number) {
       ret = OB_ERR_UNEXPECTED;
       PALF_LOG(WARN, "this is block is not used for palf!!!", K(ret), K(entry_name));
       // do nothing, skip invalid block like tmp
     } else {
-      if (true == str_is_flashback_block 
-        && OB_FAIL(rename_flashback_to_normal_(entry_name))) {
-        PALF_LOG(ERROR, "rename_flashback_to_normal failed", K(ret), K(dir_), K(entry_name));
+      uint32_t block_id = static_cast<uint32_t>(strtol(entry->d_name, nullptr, 10));
+      if (LOG_INVALID_BLOCK_ID == min_block_id_ || block_id < min_block_id_) {
+        min_block_id_ = block_id;
       }
-      if (OB_SUCC(ret)) {
-        uint32_t block_id = static_cast<uint32_t>(strtol(entry->d_name, nullptr, 10));
-        if (LOG_INVALID_BLOCK_ID == min_block_id_ || block_id < min_block_id_) {
-          min_block_id_ = block_id;
-        }
-        if (LOG_INVALID_BLOCK_ID == max_block_id_ || block_id > max_block_id_) {
-          max_block_id_ = block_id;
-        }
+      if (LOG_INVALID_BLOCK_ID == max_block_id_ || block_id > max_block_id_) {
+        max_block_id_ = block_id;
       }
     }
   }
-  return ret;
-}
-
-int TrimLogDirectoryFunctor::rename_flashback_to_normal_(const char *file_name)
-{
-  int ret = OB_SUCCESS;
-  int dir_fd = -1;
-  char normal_file_name[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-  MEMCPY(normal_file_name, file_name, strlen(file_name) - strlen(FLASHBACK_SUFFIX));
-  const int64_t SLEEP_TS_US = 10 * 1000;
-  if (-1 == (dir_fd = open_directory(dir_))) {
-    ret = convert_sys_errno();
-  } else if (OB_FAIL(try_to_remove_block_(dir_fd, normal_file_name))) {
-    PALF_LOG(ERROR, "try_to_remove_block_ failed", K(file_name), K(normal_file_name));
-  } else if (OB_FAIL(renameat_with_retry(dir_fd, file_name, dir_fd, normal_file_name))) {
-    PALF_LOG(ERROR, "renameat_with_retry failed", K(file_name), K(normal_file_name));
-  } else {}
-  if (-1 != dir_fd) {
-    ::close(dir_fd);
-  }
-
   return ret;
 }
 
@@ -497,7 +467,7 @@ int TrimLogDirectoryFunctor::try_to_remove_block_(const int dir_fd, const char *
   if (OB_FAIL(ret)) {
     if (OB_NO_SUCH_FILE_OR_DIRECTORY == ret) {
       ret = OB_SUCCESS;
-      PALF_LOG(INFO, "before rename flashback to normal and after delete normal file, restart!!!", K(file_name));
+      PALF_LOG(INFO, "block file does not exist during restart trim", K(file_name));
     } else {
       PALF_LOG(ERROR, "open file failed", K(file_name)); 
     }

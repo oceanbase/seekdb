@@ -1278,7 +1278,6 @@ int ObPluginVectorIndexUtils::init_common_scan_param(storage::ObTableScanParam& 
     scan_param.row2exprs_projector_ = nullptr;
     scan_param.need_scn_ = false;
     scan_param.pd_storage_flag_ = false;
-    // not flashback
     // scan_param.fb_snapshot_ = param.fb_snapshot_;
   }
   return ret;

@@ -38,7 +38,6 @@ delimiter ;
 set @@session.ob_query_timeout = 10000000;
 system sleep 5;
 set global recyclebin = 'on';
-set global ob_enable_truncate_flashback = 'on';
 set global _nlj_batching_enabled = true;
 alter system set ob_compaction_schedule_interval = '10s' tenant sys;
 alter system set ob_compaction_schedule_interval = '10s' tenant all_user;

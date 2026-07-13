@@ -95,11 +95,6 @@ public:
   virtual int record_rebuild_event(const int64_t palf_id,
                                    const common::ObAddr &server,
                                    const LSN &base_lsn) = 0;
-  virtual int record_flashback_event(const int64_t palf_id,
-                                     const int64_t mode_version,
-                                     const share::SCN &flashback_scn,
-                                     const share::SCN &curr_end_scn,
-                                     const share::SCN &curr_max_scn) = 0;
   virtual int record_truncate_event(const int64_t palf_id,
                                     const LSN &lsn,
                                     const int64_t min_block_id,

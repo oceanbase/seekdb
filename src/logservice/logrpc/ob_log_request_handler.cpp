@@ -81,38 +81,6 @@ int LogRequestHandler::get_self_addr_(common::ObAddr &self) const
   return ret;
 }
 
-int LogRequestHandler::get_flashback_service_(ObLogFlashbackService *&flashback_srv) const
-{
-  int ret = OB_SUCCESS;
-  logservice::ObLogService *log_service = NULL;
-  if (OB_ISNULL(log_service = share::g_mp->log_service())) {
-    ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "get_log_service failed", K(ret));
-  } else if (OB_ISNULL(flashback_srv = log_service->get_flashback_service())) {
-    ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "log_service.get_flashback_service failed", K(ret));
-  } else {
-    CLOG_LOG(TRACE, "get_flashback_service success", KP(flashback_srv), KP(log_service));
-  }
-  return ret;
-}
-
-int LogRequestHandler::get_replay_service_(ObLogReplayService *&replay_srv) const
-{
-  int ret = OB_SUCCESS;
-  logservice::ObLogService *log_service = NULL;
-  if (OB_ISNULL(log_service = share::g_mp->log_service())) {
-    ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "get_log_service failed", K(ret));
-  } else if (OB_ISNULL(replay_srv = log_service->get_log_replay_service())) {
-    ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "log_service.get_log_replay_service failed", K(ret));
-  } else {
-    CLOG_LOG(TRACE, "get_replay_service success", KP(replay_srv), KP(log_service));
-  }
-  return ret;
-}
-
 template <>
 int LogRequestHandler::handle_sync_request<LogConfigChangeCmd, LogConfigChangeCmdResp>(
     const LogConfigChangeCmd &req,
@@ -268,62 +236,6 @@ int LogRequestHandler::change_access_mode_(const LogChangeAccessModeCmd &req)
     CLOG_LOG(WARN, "change_access_mode failed", K(ret), K(palf_id), K(server));
   } else {
     CLOG_LOG(INFO, "change_access_mode success", K(ret), K(req));
-  }
-  return ret;
-}
-
-template <>
-int LogRequestHandler::handle_request<LogFlashbackMsg>(const LogFlashbackMsg &req)
-{
-  int ret = common::OB_SUCCESS;
-  const int64_t palf_id = req.ls_id_;
-  share::ObLSID ls_id(palf_id);
-  const common::ObAddr &server = req.src_;
-  const bool is_flashback_req = req.is_flashback_req();
-  if (false == req.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(ERROR, "Invalid argument!!!", K(ret), K(req));
-  } else if (is_flashback_req) {
-    constexpr int64_t FLASHBACK_TIMEOUT_US = 2 * 1000L * 1000L;     // 1s
-    palf::PalfHandleGuard palf_handle_guard;
-    logservice::ObLogFlashbackService *flashback_srv = nullptr;
-    common::ObAddr self;
-    logservice::ObLogReplayService *replay_srv = nullptr;
-    palf::AccessMode curr_access_mode = palf::AccessMode::INVALID_ACCESS_MODE;
-    int64_t curr_mode_version = 0;
-    if (OB_FAIL(get_replay_service_(replay_srv))) {
-      CLOG_LOG(WARN, "get_replay_service_ failed", K(ret), K(palf_id));
-    } else if (OB_FAIL(get_palf_handle_guard_(palf_id, palf_handle_guard))) {
-      CLOG_LOG(WARN, "get_palf_handle_guard_ failed", K(ret), K(palf_id));
-    } else if (OB_FAIL(palf_handle_guard.get_access_mode(curr_mode_version, curr_access_mode))) {
-      CLOG_LOG(WARN, "get_access_mode failed", K(ret), K(palf_id), K(self));
-    } else if (req.mode_version_ != curr_mode_version || palf::AccessMode::FLASHBACK != curr_access_mode) {
-      ret = OB_STATE_NOT_MATCH;
-      CLOG_LOG(WARN, "access_mode do not match, can not do flashback", K(ret), K(palf_id), K(self), K(curr_mode_version),
-          K(curr_access_mode), K(req));
-    } else if (OB_FAIL(palf_handle_guard.flashback(req.mode_version_, req.flashback_scn_, FLASHBACK_TIMEOUT_US))) {
-      CLOG_LOG(WARN, "flashback failed", K(ret), K(palf_id), K(req));
-    } else if (OB_FAIL(get_self_addr_(self))) {
-      CLOG_LOG(WARN, "get_self_addr_ failed", K(ret), K(palf_id), K(self));
-    } else if (OB_FAIL(get_flashback_service_(flashback_srv))) {
-      CLOG_LOG(WARN, "get_flashback_service_ failed", K(ret), K(palf_id));
-    } else {
-      // single-replica: deliver flashback response in-process (sender is always self)
-      LogFlashbackMsg flashback_resp(self, palf_id, req.mode_version_, req.flashback_scn_, false);
-      if (OB_FAIL(flashback_srv->handle_flashback_resp(flashback_resp))) {
-        CLOG_LOG(WARN, "handle_flashback_resp failed", K(ret), K(palf_id), K(server), K(flashback_resp));
-      }
-    }
-    CLOG_LOG(INFO, "handle_log_flashback_msg finish", K(ret), K(req));
-  } else {
-    logservice::ObLogFlashbackService *flashback_srv = nullptr;
-    if (OB_FAIL(get_flashback_service_(flashback_srv))) {
-      CLOG_LOG(WARN, "get_flashback_service_ failed", K(ret), K(palf_id));
-    } else if (OB_FAIL(flashback_srv->handle_flashback_resp(req))) {
-      CLOG_LOG(WARN, "handle_flashback_resp failed", K(ret), K(req));
-    } else {
-      CLOG_LOG(INFO, "handle_flashback_resp success", K(ret), K(req));
-    }
   }
   return ret;
 }

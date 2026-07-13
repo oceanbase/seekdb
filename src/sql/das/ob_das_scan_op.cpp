@@ -92,7 +92,6 @@ OB_DEF_SERIALIZE(ObDASScanRtDef)
     pd_storage_flag_,
     need_check_output_datum_,
     is_for_foreign_check_,
-    fb_read_tx_uncommitted_,
     key_ranges_,
     ss_key_ranges_,
     task_count_,
@@ -121,7 +120,6 @@ OB_DEF_DESERIALIZE(ObDASScanRtDef)
     pd_storage_flag_,
     need_check_output_datum_,
     is_for_foreign_check_,
-    fb_read_tx_uncommitted_,
     key_ranges_,
     ss_key_ranges_,
     task_count_,
@@ -153,7 +151,6 @@ OB_DEF_SERIALIZE_SIZE(ObDASScanRtDef)
     pd_storage_flag_,
     need_check_output_datum_,
     is_for_foreign_check_,
-    fb_read_tx_uncommitted_,
     key_ranges_,
     ss_key_ranges_,
     task_count_,
@@ -309,7 +306,6 @@ int ObDASScanOp::init_scan_param()
   scan_param_.pd_storage_flag_ = scan_ctdef_->pd_expr_spec_.pd_storage_flag_.pd_flag_;
   scan_param_.table_scan_opt_ = scan_ctdef_->table_scan_opt_;
   scan_param_.fb_snapshot_ = scan_rtdef_->fb_snapshot_;
-  scan_param_.fb_read_tx_uncommitted_ = scan_rtdef_->fb_read_tx_uncommitted_;
   scan_param_.auto_split_filter_type_ = scan_ctdef_->pd_expr_spec_.auto_split_filter_type_;
   scan_param_.auto_split_filter_ = scan_ctdef_->pd_expr_spec_.auto_split_expr_;
   scan_param_.auto_split_params_ = const_cast<ExprFixedArray *>(&(scan_ctdef_->pd_expr_spec_.auto_split_params_));
@@ -1909,7 +1905,6 @@ OB_INLINE int ObLocalIndexLookupOp::init_scan_param()
   scan_param_.pd_storage_flag_ = lookup_ctdef_->pd_expr_spec_.pd_storage_flag_.pd_flag_;
   scan_param_.table_scan_opt_ = lookup_ctdef_->table_scan_opt_;
   scan_param_.fb_snapshot_ = lookup_rtdef_->fb_snapshot_;
-  scan_param_.fb_read_tx_uncommitted_ = lookup_rtdef_->fb_read_tx_uncommitted_;
   scan_param_.ls_id_ = ls_id_;
   scan_param_.tablet_id_ = tablet_id_;
   scan_param_.main_table_scan_stat_.tsc_monitor_info_ = lookup_rtdef_->tsc_monitor_info_;
@@ -2003,4 +1998,3 @@ int ObLocalIndexLookupOp::revert_iter()
 
 }  // namespace sql
 }  // namespace oceanbase
-

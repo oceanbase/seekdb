@@ -43,7 +43,7 @@
 #include "sql/resolver/ddl/ob_fork_table_stmt.h"
 #include "sql/resolver/ddl/ob_fork_database_stmt.h"
 #include "sql/resolver/ddl/ob_drop_tablegroup_stmt.h"
-#include "sql/resolver/ddl/ob_flashback_stmt.h"
+#include "sql/resolver/ddl/ob_recyclebin_restore_stmt.h"
 #include "sql/resolver/cmd/ob_call_procedure_stmt.h"
 #include "sql/resolver/ddl/ob_lock_table_stmt.h"
 #include "sql/resolver/ddl/ob_alter_routine_stmt.h"
@@ -1993,7 +1993,7 @@ int get_alter_tablegroup_stmt_need_privs(
   return ret;
 }
 
-int get_flashback_table_stmt_need_privs(
+int get_restore_table_stmt_need_privs(
     const ObSessionPrivInfo &session_priv,
     const ObStmt *basic_stmt,
     ObIArray<ObNeedPriv> &need_privs)
@@ -2003,10 +2003,9 @@ int get_flashback_table_stmt_need_privs(
   if (OB_ISNULL(basic_stmt)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (stmt::T_FLASHBACK_TABLE_FROM_RECYCLEBIN != basic_stmt->get_stmt_type()
-      && stmt::T_FLASHBACK_TABLE_TO_SCN != basic_stmt->get_stmt_type()) {
+  } else if (stmt::T_RECYCLEBIN_RESTORE_TABLE != basic_stmt->get_stmt_type()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Stmt type should be T_FLASHBACK_TABLE",
+    LOG_WARN("Stmt type should be T_RECYCLEBIN_RESTORE_TABLE",
              K(ret), "stmt type", basic_stmt->get_stmt_type());
   } else {
     ObNeedPriv need_priv;
@@ -2040,31 +2039,7 @@ int get_purge_recyclebin_stmt_need_privs(
   return ret;
 }
 
-int get_flashback_index_stmt_need_privs(
-    const ObSessionPrivInfo &session_priv,
-    const ObStmt *basic_stmt,
-    ObIArray<ObNeedPriv> &need_privs)
-{
-  UNUSED(session_priv);
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should not be NULL", K(ret));
-  } else if (OB_UNLIKELY(stmt::T_FLASHBACK_INDEX != basic_stmt->get_stmt_type())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Stmt type should be T_FLASHBACK_TABLE",
-             K(ret), "stmt type", basic_stmt->get_stmt_type());
-  } else {
-    ObNeedPriv need_priv;
-    need_priv.priv_set_ = OB_PRIV_SUPER;
-    need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
-    ADD_NEED_PRIV(need_priv);
-  }
-
-  return ret;
-}
-
-int get_flashback_database_stmt_need_privs(
+int get_restore_database_stmt_need_privs(
     const ObSessionPrivInfo &session_priv,
     const ObStmt *basic_stmt,
     ObIArray<ObNeedPriv> &need_privs)
@@ -2074,9 +2049,9 @@ int get_flashback_database_stmt_need_privs(
   if (OB_ISNULL(basic_stmt)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (OB_UNLIKELY(stmt::T_FLASHBACK_DATABASE != basic_stmt->get_stmt_type())) {
+  } else if (OB_UNLIKELY(stmt::T_RECYCLEBIN_RESTORE_DATABASE != basic_stmt->get_stmt_type())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Stmt type should be T_FLASHBACK_DATABASE",
+    LOG_WARN("Stmt type should be T_RECYCLEBIN_RESTORE_DATABASE",
              K(ret), "stmt type", basic_stmt->get_stmt_type());
   } else {
     ObNeedPriv need_priv;

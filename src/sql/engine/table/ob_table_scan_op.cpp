@@ -61,28 +61,24 @@ bool find_skip_delta_buffer_in_ctdef(const ObDASBaseCtDef *ctdef)
 }
 }  // anonymous namespace
 
-int FlashBackItem::set_flashback_query_info(ObEvalCtx &eval_ctx, ObDASScanRtDef &scan_rtdef) const
+int SnapshotScanItem::set_snapshot_query_info(ObEvalCtx &eval_ctx, ObDASScanRtDef &scan_rtdef) const
 {
   int ret = OB_SUCCESS;
   ObDatum *datum = NULL;
-  const ObExpr *expr = flashback_query_expr_;
+  const ObExpr *expr = snapshot_query_expr_;
   scan_rtdef.need_scn_ = need_scn_;
-  if (TableItem::NOT_USING == flashback_query_type_) {
+  if (TableItem::NOT_USING == snapshot_query_type_) {
     // do nothing
   } else if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("flash back query expr is NULL", K(ret));
+    LOG_WARN("snapshot query expr is NULL", K(ret));
   } else if (OB_FAIL(expr->eval(eval_ctx, datum))) {
     LOG_WARN("expr evaluate failed", K(ret));
   } else if (datum->is_null()) {
-    ret = OB_ERR_FLASHBACK_QUERY_EXP_NULL;
+    ret = OB_ERR_SNAPSHOT_QUERY_EXP_NULL;
     LOG_WARN("NULL value", K(ret));
   } else {
-    scan_rtdef.fb_read_tx_uncommitted_ = fq_read_tx_uncommitted_;
-    if (TableItem::USING_TIMESTAMP == flashback_query_type_) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("type not match", K(ret));
-    } else if (TableItem::USING_SCN == flashback_query_type_) {
+    if (TableItem::USING_SCN == snapshot_query_type_) {
       if (ObUInt64Type != expr->datum_meta_.type_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("type not match", K(ret));
@@ -91,10 +87,13 @@ int FlashBackItem::set_flashback_query_info(ObEvalCtx &eval_ctx, ObDASScanRtDef 
       } else {
         LOG_TRACE("fb_snapshot_ result", K(scan_rtdef.fb_snapshot_), K(*datum));
       }
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("type not match", K(ret), K(snapshot_query_type_));
     }
   }
-  // For the case where both hint-specified frozen_version and flashback query specified snapshot version exist, choose to retain
-  // flashback query specified snapshot version, ignore hint specified frozen_version
+  // For the case where both hint-specified frozen_version and snapshot query specified snapshot version exist, choose to retain
+  // snapshot query specified snapshot version, ignore hint specified frozen_version
   if (OB_SUCC(ret)) {
     if (scan_rtdef.fb_snapshot_.is_valid()) {
       scan_rtdef.frozen_version_ = transaction::ObTransVersion::INVALID_TRANS_VERSION;
@@ -110,9 +109,9 @@ OB_DEF_SERIALIZE(ObTableScanCtDef)
 {
   int ret = OB_SUCCESS;
   bool has_lookup = (lookup_ctdef_ != nullptr);
-  OB_UNIS_ENCODE(flashback_item_.need_scn_);
-  OB_UNIS_ENCODE(flashback_item_.flashback_query_expr_);
-  OB_UNIS_ENCODE(flashback_item_.flashback_query_type_);
+  OB_UNIS_ENCODE(snapshot_item_.need_scn_);
+  OB_UNIS_ENCODE(snapshot_item_.snapshot_query_expr_);
+  OB_UNIS_ENCODE(snapshot_item_.snapshot_query_type_);
   OB_UNIS_ENCODE(bnlj_param_idxs_);
   OB_UNIS_ENCODE(scan_flags_);
   OB_UNIS_ENCODE(scan_ctdef_);
@@ -128,7 +127,6 @@ OB_DEF_SERIALIZE(ObTableScanCtDef)
   }
   OB_UNIS_ENCODE(calc_part_id_expr_);
   OB_UNIS_ENCODE(global_index_rowkey_exprs_);
-  OB_UNIS_ENCODE(flashback_item_.fq_read_tx_uncommitted_);
    // abandoned fields, please remove me at next barrier version
   bool abandoned_always_false_aux_lookup = false;
   bool abandoned_always_false_text_ir = false;
@@ -144,9 +142,9 @@ OB_DEF_SERIALIZE_SIZE(ObTableScanCtDef)
 {
   int64_t len = 0;
   bool has_lookup = (lookup_ctdef_ != nullptr);
-  OB_UNIS_ADD_LEN(flashback_item_.need_scn_);
-  OB_UNIS_ADD_LEN(flashback_item_.flashback_query_expr_);
-  OB_UNIS_ADD_LEN(flashback_item_.flashback_query_type_);
+  OB_UNIS_ADD_LEN(snapshot_item_.need_scn_);
+  OB_UNIS_ADD_LEN(snapshot_item_.snapshot_query_expr_);
+  OB_UNIS_ADD_LEN(snapshot_item_.snapshot_query_type_);
   OB_UNIS_ADD_LEN(bnlj_param_idxs_);
   OB_UNIS_ADD_LEN(scan_flags_);
   OB_UNIS_ADD_LEN(scan_ctdef_);
@@ -162,7 +160,6 @@ OB_DEF_SERIALIZE_SIZE(ObTableScanCtDef)
   }
   OB_UNIS_ADD_LEN(calc_part_id_expr_);
   OB_UNIS_ADD_LEN(global_index_rowkey_exprs_);
-  OB_UNIS_ADD_LEN(flashback_item_.fq_read_tx_uncommitted_);
    // abandoned fields, please remove me at next barrier version
   bool abandoned_always_false_aux_lookup = false;
   bool abandoned_always_false_text_ir = false;
@@ -178,9 +175,9 @@ OB_DEF_DESERIALIZE(ObTableScanCtDef)
 {
   int ret = OB_SUCCESS;
   bool has_lookup = false;
-  OB_UNIS_DECODE(flashback_item_.need_scn_);
-  OB_UNIS_DECODE(flashback_item_.flashback_query_expr_);
-  OB_UNIS_DECODE(flashback_item_.flashback_query_type_);
+  OB_UNIS_DECODE(snapshot_item_.need_scn_);
+  OB_UNIS_DECODE(snapshot_item_.snapshot_query_expr_);
+  OB_UNIS_DECODE(snapshot_item_.snapshot_query_type_);
   OB_UNIS_DECODE(bnlj_param_idxs_);
   OB_UNIS_DECODE(scan_flags_);
   OB_UNIS_DECODE(scan_ctdef_);
@@ -213,7 +210,6 @@ OB_DEF_DESERIALIZE(ObTableScanCtDef)
   }
   OB_UNIS_DECODE(calc_part_id_expr_);
   OB_UNIS_DECODE(global_index_rowkey_exprs_);
-  OB_UNIS_DECODE(flashback_item_.fq_read_tx_uncommitted_);
   // abandoned fields, please remove me at next barrier version
   bool abandoned_always_false_aux_lookup = false;
   bool abandoned_always_false_text_ir = false;
@@ -1275,8 +1271,8 @@ OB_INLINE int ObTableScanOp::init_das_scan_rtdef(const ObDASScanCtDef &das_ctdef
     das_rtdef.tenant_schema_version_ = schema_version;
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(tsc_ctdef.flashback_item_.set_flashback_query_info(eval_ctx_, das_rtdef))) {
-      LOG_WARN("failed to set flashback query snapshot version", K(ret));
+    if (OB_FAIL(tsc_ctdef.snapshot_item_.set_snapshot_query_info(eval_ctx_, das_rtdef))) {
+      LOG_WARN("failed to set snapshot query snapshot version", K(ret));
     } else if (MY_SPEC.ref_table_id_ != das_ctdef.ref_table_id_) {
       //only data table scan need to set row scn flag
       das_rtdef.need_scn_ = false;

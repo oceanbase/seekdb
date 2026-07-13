@@ -147,57 +147,6 @@ void LogSlidingWindow::destroy()
   mode_mgr_ = NULL;
 }
 
-int LogSlidingWindow::flashback(const PalfBaseInfo &palf_base_info, const int64_t palf_id, common::ObILogAllocator *alloc_mgr)
-{
-  int ret = OB_SUCCESS;
-  const LogInfo &prev_log_info = palf_base_info.prev_log_info_;
-  sw_.destroy();
-  lsn_allocator_.reset();
-  WLockGuard guard(group_buffer_lock_);  // lock group_buffer_
-  group_buffer_.destroy();
-  checksum_.destroy();
-  match_lsn_map_.destroy();
-  if (OB_FAIL(sw_.init(prev_log_info.log_id_ + 1, PALF_SLIDING_WINDOW_SIZE, alloc_mgr))) {
-    PALF_LOG(WARN, "sw init failed", K(ret), K(palf_id), K(palf_base_info));
-  } else if (OB_FAIL(lsn_allocator_.init(prev_log_info.log_id_,
-          prev_log_info.scn_, palf_base_info.curr_lsn_))) {
-    PALF_LOG(WARN, "lsn_allocator_ init failed", K(ret), K(palf_id));
-  } else if (OB_FAIL(group_buffer_.init(palf_base_info.curr_lsn_))) {
-    PALF_LOG(WARN, "group_buffer_ init failed", K(ret), K(palf_id));
-  } else if (OB_FAIL(checksum_.init(palf_id, prev_log_info.accum_checksum_))) {
-    PALF_LOG(WARN, "checksum_ init failed", K(ret), K(palf_id));
-  } else if (OB_FAIL(match_lsn_map_.init("MatchOffsetMap"))) {
-    PALF_LOG(WARN, "match_lsn_map_ init failed", K(ret), K(palf_id));
-  } else {
-    last_submit_lsn_ = prev_log_info.lsn_;
-    last_submit_end_lsn_ = palf_base_info.curr_lsn_;
-    last_submit_log_id_ = prev_log_info.log_id_;
-    last_submit_log_pid_ = prev_log_info.log_proposal_id_;
-
-    max_flushed_lsn_ = prev_log_info.lsn_;
-    max_flushed_end_lsn_ = palf_base_info.curr_lsn_;
-    max_flushed_log_pid_ = prev_log_info.log_proposal_id_;
-
-    last_slide_log_id_ = prev_log_info.log_id_;
-    last_slide_scn_ = prev_log_info.scn_;
-    last_slide_lsn_ = prev_log_info.lsn_;
-    last_slide_end_lsn_ = palf_base_info.curr_lsn_;
-    last_slide_log_pid_ = prev_log_info.log_proposal_id_;
-    last_slide_log_accum_checksum_ = prev_log_info.accum_checksum_;
-
-    committed_end_lsn_ = palf_base_info.curr_lsn_;
-    reset_match_lsn_map_();
-
-    LogGroupEntryHeader group_header;
-    LogEntryHeader log_header;
-    PALF_LOG(INFO, "sw flashback success", K(ret), KPC(this), K(palf_base_info),
-        "group header size", LogGroupEntryHeader::HEADER_SER_SIZE, "log entry size",
-        LogEntryHeader::HEADER_SER_SIZE, "group_header ser size", group_header.get_serialize_size(),
-        "log header ser size", log_header.get_serialize_size());
-  }
-  return ret;
-}
-
 int LogSlidingWindow::init(const int64_t palf_id,
                            const common::ObAddr &self,
                            LogStateMgr *state_mgr,
@@ -3855,7 +3804,7 @@ bool LogSlidingWindow::is_prev_log_pid_match(const int64_t log_id,
         && local_prev_lsn == prev_lsn
         && local_prev_end_lsn == lsn) {
       // We also need check if end_lsn of prev log matches with next lsn, because the group entry
-      // may be truncated at some inner log entry for flashback case.
+      // may be truncated at some inner log entry.
       bool_ret = true;
     } else {
       bool_ret = false;
@@ -4468,7 +4417,7 @@ int LogSlidingWindow::read_data_from_buffer(const LSN &read_begin_lsn,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argumetns", K(ret), K_(palf_id), K(read_begin_lsn), K(in_read_size), KP(buf));
   } else {
-    RLockGuard guard(group_buffer_lock_);  // protect group_buffer_ from destroy by flashback().
+    RLockGuard guard(group_buffer_lock_);
     if (OB_FAIL(group_buffer_.read_data(read_begin_lsn, in_read_size, buf, out_read_size))) {
       if (OB_ERR_OUT_OF_LOWER_BOUND != ret) {
         PALF_LOG(WARN, "read_data failed", K(ret), K_(palf_id), K(read_begin_lsn), K(in_read_size));

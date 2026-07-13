@@ -60,9 +60,9 @@ ERROR HY000: cannot fast refresh materialized view mv13_1: query has invalid tab
 create view v13_1 as select * from t1;
 create materialized view mv13_2 refresh fast on demand as select c1, c2 from v13_1;
 ERROR HY000: cannot fast refresh materialized view mv13_2: query has invalid table type(GENERATED_TABLE). only basic table and materialized view are supported
-# 14. flashback query is not supported
+# 14. snapshot query is not supported
 create materialized view mv14_1 refresh fast on demand as select c1, c2 from t1 as of snapshot 1;
-ERROR HY000: cannot fast refresh materialized view mv14_1: flashback query is not supported
+ERROR HY000: cannot fast refresh materialized view mv14_1: snapshot query is not supported
 # 15. query with partition hint for table is not supported
 create materialized view mv15_1 refresh fast on demand as select c1, c2 from t1 partition(p1);
 ERROR HY000: cannot fast refresh materialized view mv15_1: query with partition specification for table is not supported

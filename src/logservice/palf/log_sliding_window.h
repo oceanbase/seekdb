@@ -211,7 +211,6 @@ public:
   virtual ~LogSlidingWindow() { destroy(); }
 public:
   virtual void destroy();
-  virtual int flashback(const PalfBaseInfo &palf_base_info, const int64_t palf_id, common::ObILogAllocator *alloc_mgr);
   virtual int init(const int64_t palf_id,
                    const common::ObAddr &self,
                    LogStateMgr *state_mgr,

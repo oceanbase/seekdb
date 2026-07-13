@@ -254,11 +254,6 @@ select /*+max_concurrent(10)*/* from t1;
 ### test for limit ##
 #select emp_id, mgr_id from emp where emp_id = 1 start with emp_id = 1 connect by prior c1 = 1 group by c1 having c1 > 1 limit 10;
 
-########################## test for flashback and purge index ###################################
-#flashback index t1_index to before drop;
-#purge index t1_index;
-
-
 ######################## test for merge stmt ####################################
 --error 5001
 merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched then update set t1.sales = t2.sales when not matched then insert(t1.id, t1.sales) values(t2.id, t2.sales);
@@ -292,12 +287,6 @@ alter tablegroup tg2 add table t1,t2;
 insert into t1 values(X'');
 create table t1(`thedate` date NOT NULL COMMENT '日期');
 alter system bootstrap REGION 'sys_region' ZONE 'zone1' SERVER '10.101.74.122:41425';
-alter system transfer partition table_id = 1, object_id = 1 to ls 1001;
-alter system transfer partition table_id = 1, object_id = 1 to ls 1001 tenant 'mysql';
-alter system cancel transfer partition  table_id = 1, object_id = 1;
-alter system cancel transfer partition  table_id = 1, object_id = 1 tenant 'mysql';
-alter system cancel transfer partition ALL;
-alter system cancel transfer partition ALL tenant 'mysql';
 alter system cancel balance job;
 alter system cancel balance job tenant 'mysql';
 

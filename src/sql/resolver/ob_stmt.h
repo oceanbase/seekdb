@@ -290,11 +290,9 @@ public:
             // materialized view log
             || stmt_type == stmt::T_CREATE_MLOG
             || stmt_type == stmt::T_DROP_MLOG
-            // flashback
-            || stmt_type == stmt::T_FLASHBACK_DATABASE
-            || stmt_type == stmt::T_FLASHBACK_TABLE_FROM_RECYCLEBIN
-            || stmt_type == stmt::T_FLASHBACK_TABLE_TO_SCN
-            || stmt_type == stmt::T_FLASHBACK_INDEX
+            // recyclebin restore
+            || stmt_type == stmt::T_RECYCLEBIN_RESTORE_DATABASE
+            || stmt_type == stmt::T_RECYCLEBIN_RESTORE_TABLE
             // purge
             || stmt_type == stmt::T_PURGE_RECYCLEBIN
             || stmt_type == stmt::T_PURGE_DATABASE
@@ -411,11 +409,9 @@ public:
         // materialized view log
         // || stmt_type == stmt::T_CREATE_MLOG
         // || stmt_type == stmt::T_DROP_MLOG
-        // flashback
-        // || stmt_type == stmt::T_FLASHBACK_DATABASE
-        // || stmt_type == stmt::T_FLASHBACK_TABLE_FROM_RECYCLEBIN
-        // || stmt_type == stmt::T_FLASHBACK_TABLE_TO_SCN
-        // || stmt_type == stmt::T_FLASHBACK_INDEX
+        // recyclebin restore
+        // || stmt_type == stmt::T_RECYCLEBIN_RESTORE_DATABASE
+        // || stmt_type == stmt::T_RECYCLEBIN_RESTORE_TABLE
         // purge
         // || stmt_type == stmt::T_PURGE_RECYCLEBIN
         // || stmt_type == stmt::T_PURGE_DATABASE

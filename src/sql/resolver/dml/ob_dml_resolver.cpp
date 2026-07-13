@@ -2874,19 +2874,19 @@ int ObDMLResolver::resolve_basic_table_without_cte(const ParseNode &parse_tree, 
           LOG_WARN("failed to generate ddl sample info", K(ret));
         }
       }
-      //resolve flashback query node
+      //resolve snapshot query node
       if (OB_SUCCESS == ret && time_node != NULL) {
-        if (OB_FAIL(resolve_flashback_query_node(time_node, table_item))) {
-          LOG_WARN("failed to resolve flashback query node", K(ret));
-        // For view, need to recursively set the flashback query attribute of the corresponding table for the view
+        if (OB_FAIL(resolve_snapshot_query_node(time_node, table_item))) {
+          LOG_WARN("failed to resolve snapshot query node", K(ret));
+        // For view, need to recursively set the snapshot query attribute of the corresponding table for the view
         } else if (table_item->is_view_table_) {
-          if (OB_FAIL(set_flashback_info_for_view(table_item->ref_query_, table_item))) {
-            LOG_WARN("failed to set flashback info for view", K(ret));
+          if (OB_FAIL(set_snapshot_info_for_view(table_item->ref_query_, table_item))) {
+            LOG_WARN("failed to set snapshot info for view", K(ret));
           } else {
-            // After set_flashback_info_for_view is applied to the flashback attribute of view, it is no longer useful, to avoid affecting subsequent judgments
+            // After set_snapshot_info_for_view is applied to the snapshot attribute of view, it is no longer useful, to avoid affecting subsequent judgments
             // Here it is restored to the default value
-            table_item->flashback_query_expr_ = NULL;
-            table_item->flashback_query_type_ = TableItem::NOT_USING;
+            table_item->snapshot_query_expr_ = NULL;
+            table_item->snapshot_query_type_ = TableItem::NOT_USING;
           }
         } else {
           /*do nothing*/
@@ -2980,7 +2980,7 @@ int ObDMLResolver::resolve_table_constraint_items(const TableItem *table_item,
   return ret;
 }
 
-int ObDMLResolver::check_flashback_expr_validity(ObRawExpr *expr, bool &has_column)
+int ObDMLResolver::check_snapshot_expr_validity(ObRawExpr *expr, bool &has_column)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
@@ -2989,14 +2989,14 @@ int ObDMLResolver::check_flashback_expr_validity(ObRawExpr *expr, bool &has_colu
   } else if (expr->is_column_ref_expr()) {
     has_column = true;
   } else if (expr->is_exec_param_expr()) {
-    if (OB_FAIL(check_flashback_expr_validity(
+    if (OB_FAIL(check_snapshot_expr_validity(
                   static_cast<ObExecParamRawExpr *>(expr)->get_ref_expr(),
                   has_column))) {
       LOG_WARN("failed to check exec param expr", K(ret));
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && !has_column && i < expr->get_param_count(); ++i) {
-      if (OB_FAIL(check_flashback_expr_validity(expr->get_param_expr(i),
+      if (OB_FAIL(check_snapshot_expr_validity(expr->get_param_expr(i),
                                                 has_column))) {
         LOG_WARN("failed to check param expr", K(ret));
       }
@@ -3005,7 +3005,7 @@ int ObDMLResolver::check_flashback_expr_validity(ObRawExpr *expr, bool &has_colu
   return ret;
 }
 
-int ObDMLResolver::resolve_flashback_query_node(const ParseNode *time_node, TableItem *table_item)
+int ObDMLResolver::resolve_snapshot_query_node(const ParseNode *time_node, TableItem *table_item)
 {
   int ret = OB_SUCCESS;
   ParseNode *tmp_time_node = NULL;
@@ -3013,8 +3013,7 @@ int ObDMLResolver::resolve_flashback_query_node(const ParseNode *time_node, Tabl
   if (OB_ISNULL(time_node) || OB_ISNULL(table_item) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(time_node), K(table_item));
-  } else if (T_TABLE_FLASHBACK_QUERY_TIMESTAMP == time_node->type_
-             || T_TABLE_FLASHBACK_QUERY_SCN == time_node->type_) {
+  } else if (T_TABLE_SNAPSHOT_QUERY_SCN == time_node->type_) {
     tmp_time_node = time_node->children_[0];
     if (OB_NOT_NULL(tmp_time_node)) {
       ObRawExpr *expr = nullptr;
@@ -3026,38 +3025,28 @@ int ObDMLResolver::resolve_flashback_query_node(const ParseNode *time_node, Tabl
         LOG_WARN("expr is null", K(ret));
       } else if (T_REF_QUERY == expr->get_expr_type()) {
         ret = OB_ERR_INVALID_SUBQUERY_USE;
-        LOG_WARN("flashback query expr should not be subquery", K(ret));
-      } else if (OB_FAIL(check_flashback_expr_validity(expr, has_column))) {
+        LOG_WARN("snapshot query expr should not be subquery", K(ret));
+      } else if (OB_FAIL(check_snapshot_expr_validity(expr, has_column))) {
         LOG_WARN("failed to check expr validity", K(ret));
       } else if (has_column) {
         ret = OB_ERR_COLUMN_NOT_ALLOWED;
         LOG_WARN("column not allowed here", K(ret), K(*expr));
       } else {
-        table_item->flashback_query_expr_ = expr;
-        if (T_TABLE_FLASHBACK_QUERY_TIMESTAMP == time_node->type_) {
-          table_item->flashback_query_type_ = TableItem::USING_TIMESTAMP;
-        } else if (T_TABLE_FLASHBACK_QUERY_SCN == time_node->type_) {
-          table_item->flashback_query_type_ = TableItem::USING_SCN;
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid type", K(time_node->type_), K(ret));
-        }
+        table_item->snapshot_query_expr_ = expr;
+        table_item->snapshot_query_type_ = TableItem::USING_SCN;
       }
     }
     if (OB_SUCC(ret)) {
       // try add cast expr in static typing engine.
-      ObRawExpr *&expr = table_item->flashback_query_expr_;
+      ObRawExpr *&expr = table_item->snapshot_query_expr_;
       ObSysFunRawExpr *dst_expr = NULL;
       CK(NULL != expr);
       CK(NULL != params_.expr_factory_);
       OZ(expr->formalize(session_info_));
       const bool use_default_cm = true;
       ObCastMode cm = 0;
-      if (TableItem::USING_TIMESTAMP == table_item->flashback_query_type_) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid type", K(time_node->type_), K(expr->get_result_type().get_type()), K(ret));
-      } else if (TableItem::USING_SCN == table_item->flashback_query_type_
-                 && ObUInt64Type != expr->get_result_type().get_type()) {
+      if (TableItem::USING_SCN == table_item->snapshot_query_type_
+          && ObUInt64Type != expr->get_result_type().get_type()) {
         ObRawExprResType res_type;
         res_type.set_uint64();
         res_type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY2[MYSQL_MODE][ObUInt64Type]);
@@ -3074,17 +3063,17 @@ int ObDMLResolver::resolve_flashback_query_node(const ParseNode *time_node, Tabl
   }
   return ret;
 }
-// For subquery or view flashback resolution, retain existing flashback attributes if the table already has them.
-// When there are no relevant flashback attributes, set the table to the outer view or subquery flashback attribute, for example:
-// select * from ((select * from t1 as of timestamp time1, t2) as of timestamp time2);
-// At this point, table t1 still retains the original flashback timestamp time1, while table t2 is set to the outer flashback timestamp time2
-int ObDMLResolver::set_flashback_info_for_view(ObSelectStmt *select_stmt, TableItem *table_item)
+// For subquery or view snapshot resolution, retain existing snapshot attributes if the table already has them.
+// When there are no relevant snapshot attributes, set the table to the outer view or subquery snapshot attribute, for example:
+// select * from ((select * from t1 as of snapshot scn1, t2) as of snapshot scn2);
+// At this point, table t1 still retains the original snapshot time1, while table t2 is set to the outer snapshot time2
+int ObDMLResolver::set_snapshot_info_for_view(ObSelectStmt *select_stmt, TableItem *table_item)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObSelectStmt*, 4> child_stmts;
   bool is_stack_overflow = false;
-  if (OB_ISNULL(select_stmt) ||OB_ISNULL(table_item) || OB_ISNULL(table_item->flashback_query_expr_)
-      || OB_UNLIKELY(table_item->flashback_query_type_ == TableItem::NOT_USING)) {
+  if (OB_ISNULL(select_stmt) ||OB_ISNULL(table_item) || OB_ISNULL(table_item->snapshot_query_expr_)
+      || OB_UNLIKELY(table_item->snapshot_query_type_ == TableItem::NOT_USING)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(select_stmt), K(table_item));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
@@ -3095,24 +3084,24 @@ int ObDMLResolver::set_flashback_info_for_view(ObSelectStmt *select_stmt, TableI
   } else if (OB_FAIL(select_stmt->get_child_stmts(child_stmts))) {
     LOG_WARN("failed to get child stmts", K(ret));
   } else {
-    //1.First set the flashback attribute of this layer's stmt table
+    //1.First set the snapshot attribute of this layer's stmt table
     for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt->get_table_size(); ++i) {
       TableItem *cur_table = select_stmt->get_table_item(i);
       if (OB_ISNULL(cur_table)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret), K(cur_table));
-      } else if (cur_table->flashback_query_expr_ != NULL &&
-                 cur_table->flashback_query_type_ != TableItem::NOT_USING) {
+      } else if (cur_table->snapshot_query_expr_ != NULL &&
+                 cur_table->snapshot_query_type_ != TableItem::NOT_USING) {
         /*do nothing */
       } else if (cur_table->is_basic_table()) {
-        cur_table->flashback_query_expr_ = table_item->flashback_query_expr_;
-        cur_table->flashback_query_type_ = table_item->flashback_query_type_;
+        cur_table->snapshot_query_expr_ = table_item->snapshot_query_expr_;
+        cur_table->snapshot_query_type_ = table_item->snapshot_query_type_;
       } else {/*do nothing*/}
     }
-    //2.Recursively set the table flashback attribute of subqueries
+    //2.Recursively set the table snapshot attribute of subqueries
     for (int64_t i = 0; OB_SUCC(ret) && i < child_stmts.count(); i++) {
-      if (OB_FAIL(SMART_CALL(set_flashback_info_for_view(child_stmts.at(i), table_item)))) {
-        LOG_WARN("failed to set flashback info for view", K(ret));
+      if (OB_FAIL(SMART_CALL(set_snapshot_info_for_view(child_stmts.at(i), table_item)))) {
+        LOG_WARN("failed to set snapshot info for view", K(ret));
       } else {/*do nothing*/}
     }
   }
@@ -3144,10 +3133,10 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
       LOG_WARN("fetch clause can't occur in table attributes", K(ret));
     }
   }
-  // Flashback query does not support delete/update/insert statements.
+  // Snapshot query does not support delete/update/insert statements.
   if (OB_SUCC(ret)) {
     if (!stmt->is_select_stmt() && OB_NOT_NULL(time_node)) {
-      ret = OB_ERR_FLASHBACK_QUERY_WITH_UPDATE;
+      ret = OB_ERR_SNAPSHOT_QUERY_WITH_UPDATE;
       LOG_WARN("snapshot expression not allowed here", K(ret));
     } else if (params_.is_from_create_mview_ &&
               OB_FAIL(check_is_table_supported_for_mview(table_node->type_))) {
@@ -3161,7 +3150,7 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
         break;
       }
       case T_SELECT: {
-        bool has_flashback_query = false;
+        bool has_snapshot_query = false;
         if (OB_ISNULL(alias_node)) {
           ret = OB_ERR_PARSER_SYNTAX;
           LOG_WARN("generated table must have alias name");
@@ -3181,22 +3170,22 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
 
         if (OB_FAIL(ret)) {
         } else if (!stmt->is_select_stmt() && !is_update_for_mv_fast_refresh(*stmt) &&
-                  OB_FAIL(check_stmt_has_flashback_query(table_item->ref_query_, false, has_flashback_query))) {
-          LOG_WARN("failed to find stmt refer to flashback query", K(ret));
-        } else if (has_flashback_query) {
-          ret = OB_ERR_FLASHBACK_QUERY_WITH_UPDATE;
+                  OB_FAIL(check_stmt_has_snapshot_query(table_item->ref_query_, false, has_snapshot_query))) {
+          LOG_WARN("failed to find stmt refer to snapshot query", K(ret));
+        } else if (has_snapshot_query) {
+          ret = OB_ERR_SNAPSHOT_QUERY_WITH_UPDATE;
           LOG_WARN("snapshot expression not allowed here", K(ret));
         } else if (OB_NOT_NULL(time_node)) {
-          if (OB_FAIL(resolve_flashback_query_node(time_node, table_item))) {
-            LOG_WARN("failed to resolve flashback query node", K(ret));
-          // For the flashback attribute of subqueries, it needs to be recursively set
-          } else if (OB_FAIL(set_flashback_info_for_view(table_item->ref_query_, table_item))) {
-            LOG_WARN("failed to set flashback info for view", K(ret));
+          if (OB_FAIL(resolve_snapshot_query_node(time_node, table_item))) {
+            LOG_WARN("failed to resolve snapshot query node", K(ret));
+          // For the snapshot attribute of subqueries, it needs to be recursively set
+          } else if (OB_FAIL(set_snapshot_info_for_view(table_item->ref_query_, table_item))) {
+            LOG_WARN("failed to set snapshot info for view", K(ret));
           } else {
-            // The flashback attribute of the generated table is already useless after set_flashback_info_for_view, to avoid affecting subsequent judgments
+            // The snapshot attribute of the generated table is already useless after set_snapshot_info_for_view, to avoid affecting subsequent judgments
             // Here it is restored to the default value
-            table_item->flashback_query_expr_ = NULL;
-            table_item->flashback_query_type_ = TableItem::NOT_USING;
+            table_item->snapshot_query_expr_ = NULL;
+            table_item->snapshot_query_type_ = TableItem::NOT_USING;
           }
         } else {/*do nothing*/}
         break;
@@ -3275,9 +3264,9 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
   return ret;
 }
 
-//  allowed flashback query in mview fast refresh update/insert operator in mysql mode.
+//  allowed snapshot query in mview fast refresh update/insert operator in mysql mode.
 //  specific update stmt is used as below:
-//  update mv1, (... inline view use flashback query, mv1 is not used in this view ...) v1
+//  update mv1, (... inline view use snapshot query, mv1 is not used in this view ...) v1
 //  set mv1.cnt = mv1.cnt + v.cnt
 //  where mv1.c1 = v.c1;
 bool ObDMLResolver::is_update_for_mv_fast_refresh(const ObDMLStmt &stmt)
@@ -3334,7 +3323,7 @@ int ObDMLResolver::check_table_item_with_gen_col_using_udf(const TableItem *tabl
   return ret;
 }
 
-int ObDMLResolver::check_stmt_has_flashback_query(ObDMLStmt *stmt, bool check_all, bool &has_fq)
+int ObDMLResolver::check_stmt_has_snapshot_query(ObDMLStmt *stmt, bool check_all, bool &has_fq)
 {
   int ret = OB_SUCCESS;
   bool is_stack_overflow = false;
@@ -3356,21 +3345,21 @@ int ObDMLResolver::check_stmt_has_flashback_query(ObDMLStmt *stmt, bool check_al
       if (OB_ISNULL(cur_table)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret), K(cur_table));
-      } else if (OB_NOT_NULL(cur_table->flashback_query_expr_)) {
+      } else if (OB_NOT_NULL(cur_table->snapshot_query_expr_)) {
         has_fq = true;
       } else if ((cur_table->is_generated_table() || cur_table->is_temp_table()) && !check_all &&
-                 OB_FAIL(SMART_CALL(check_stmt_has_flashback_query(cur_table->ref_query_,
+                 OB_FAIL(SMART_CALL(check_stmt_has_snapshot_query(cur_table->ref_query_,
                                                                    check_all, has_fq)))) {
-        LOG_WARN("failed to find stmt refer to flashback query", K(ret));
+        LOG_WARN("failed to find stmt refer to snapshot query", K(ret));
       } else {/*do nothing*/}
     }
-    // Need to check if the entire query contains the flashback attribute
+    // Need to check if the entire query contains the snapshot attribute
     if (check_all) {
       for (int64_t i = 0; OB_SUCC(ret) && !has_fq && i < child_stmts.count(); i++) {
-        if (OB_FAIL(SMART_CALL(check_stmt_has_flashback_query(child_stmts.at(i),
+        if (OB_FAIL(SMART_CALL(check_stmt_has_snapshot_query(child_stmts.at(i),
                                                               check_all,
                                                               has_fq)))) {
-          LOG_WARN("failed to check stmt has flashback query", K(ret));
+          LOG_WARN("failed to check stmt has snapshot query", K(ret));
         } else {/*do nothing*/}
       }
     }
@@ -10966,12 +10955,6 @@ int ObDMLResolver::resolve_global_hint(const ParseNode &hint_node,
       }
       break;
     }
-    case T_FLASHBACK_READ_TX_UNCOMMITTED: {
-      CHECK_HINT_PARAM(hint_node, 0) {
-        global_hint.set_flashback_read_tx_uncommitted(true);
-      }
-      break;
-    }
     case T_NO_GATHER_OPTIMIZER_STATISTICS: {
       CHECK_HINT_PARAM(hint_node, 0) {
         global_hint.merge_osg_hint(ObOptimizerStatisticsGatheringHint::OB_NO_OPT_STATS_GATHER);
@@ -11325,8 +11308,6 @@ int ObDMLResolver::resolve_optimize_hint(const ParseNode &hint_node,
     case T_INDEX_SS_HINT:
     case T_INDEX_SS_ASC_HINT:
     case T_INDEX_SS_DESC_HINT:
-    case T_USE_COLUMN_STORE_HINT:
-    case T_NO_USE_COLUMN_STORE_HINT:
     case T_INDEX_ASC_HINT:
     case T_INDEX_DESC_HINT: {
       if (OB_FAIL(resolve_index_hint(hint_node, opt_hint))) {
@@ -11504,8 +11485,7 @@ int ObDMLResolver::resolve_index_hint(const ParseNode &index_node,
   } else if (OB_FAIL(resolve_table_relation_in_hint(*table_node, index_hint->get_table()))) {
     LOG_WARN("Resolve table relation fail", K(ret));
   } else if (T_FULL_HINT == index_hint->get_hint_type() ||
-             T_USE_DAS_HINT == index_hint->get_hint_type() ||
-             T_USE_COLUMN_STORE_HINT == index_hint->get_hint_type()) {
+             T_USE_DAS_HINT == index_hint->get_hint_type()) {
     index_hint->set_qb_name(qb_name);
     opt_hint = index_hint;
   } else if (OB_UNLIKELY(3 > index_node.num_child_) ||

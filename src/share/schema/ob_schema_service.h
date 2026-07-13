@@ -88,14 +88,14 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_TRUNCATE_TABLE_DROP,)                               \
   ACT(OB_DDL_DROP_TABLE_TO_RECYCLEBIN, = 25)                     \
   ACT(OB_DDL_DROP_VIEW_TO_RECYCLEBIN,)                           \
-  ACT(OB_DDL_FLASHBACK_TABLE,)                                   \
-  ACT(OB_DDL_FLASHBACK_VIEW,)                                    \
+  ACT(OB_DDL_RESTORE_TABLE_FROM_RECYCLEBIN,)                                   \
+  ACT(OB_DDL_RESTORE_VIEW_FROM_RECYCLEBIN,)                                    \
   ACT(OB_DDL_ADD_PARTITION,)                                     \
   ACT(OB_DDL_DROP_PARTITION, = 30)                               \
   ACT(OB_DDL_TRUNCATE_DROP_TABLE_TO_RECYCLEBIN,)                 \
   ACT(OB_DDL_RENAME_INDEX,)                                      \
   ACT(OB_DDL_DROP_INDEX_TO_RECYCLEBIN,)                          \
-  ACT(OB_DDL_FLASHBACK_INDEX,)                                   \
+  ACT(OB_DDL_RECOVER_INDEX_FROM_RECYCLEBIN,)                     \
   ACT(OB_DDL_PARTITIONED_TABLE, = 35)                            \
   ACT(OB_DDL_FINISH_SPLIT,)                                      \
   ACT(OB_DDL_ADD_CONSTRAINT,)                                    \
@@ -124,8 +124,6 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_RENAME_PARTITION, = 60)                             \
   ACT(OB_DDL_RENAME_SUB_PARTITION, = 61)                         \
   ACT(OB_DDL_MODIFY_MATERIALIZED_VIEW_STATUS, = 62)              \
-  ACT(OB_DDL_ADD_COLUMN_GROUP, = 63)                             \
-  ACT(OB_DDL_DROP_COLUMN_GROUP, = 64)                            \
   ACT(OB_DDL_EXCHANGE_PARTITION, = 65)                           \
   ACT(OB_DDL_MODIFY_MVIEW_REFERENCE_TABLE_STATUS, = 66)          \
   ACT(OB_DDL_MODIFY_INDEX_TYPE, = 67)                            \
@@ -144,7 +142,6 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_ADD_TENANT_END,)                                    \
   ACT(OB_DDL_RENAME_TENANT,)                                     \
   ACT(OB_DDL_DROP_TENANT_TO_RECYCLEBIN,)                         \
-  ACT(OB_DDL_FLASHBACK_TENANT,)                                  \
   ACT(OB_DDL_TENANT_OPERATION_END, = 200)                        \
   ACT(OB_DDL_DATABASE_OPERATION_BEGIN, = 201)                    \
   ACT(OB_DDL_ADD_DATABASE,)                                      \
@@ -152,7 +149,7 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_DEL_DATABASE,)                                      \
   ACT(OB_DDL_RENAME_DATABASE,)                                   \
   ACT(OB_DDL_DROP_DATABASE_TO_RECYCLEBIN,)                       \
-  ACT(OB_DDL_FLASHBACK_DATABASE,)                                \
+  ACT(OB_DDL_RESTORE_DATABASE_FROM_RECYCLEBIN,)                                \
   ACT(OB_DDL_DELAY_DELETE_DATABASE,)                             \
   ACT(OB_DDL_DATABASE_OPERATION_END, = 300)                      \
   ACT(OB_DDL_TABLEGROUP_OPERATION_BEGIN, = 301)                  \
@@ -293,7 +290,7 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_ALTER_TRIGGER,)                                     \
   ACT(OB_DDL_DROP_TRIGGER,)                                      \
   ACT(OB_DDL_DROP_TRIGGER_TO_RECYCLEBIN,)                        \
-  ACT(OB_DDL_FLASHBACK_TRIGGER,)                                 \
+  ACT(OB_DDL_RESTORE_TRIGGER_FROM_RECYCLEBIN,)                                 \
   ACT(OB_DDL_TRIGGER_OPERATION_END, = 1960)                      \
   ACT(OB_DDL_PROFILE_OPERATION_BEGIN, = 1961)                    \
   ACT(OB_DDL_CREATE_PROFILE,)                                    \
@@ -510,7 +507,6 @@ public:
       next_column_name_(),
       prev_column_name_(),
       is_first_(false),
-      column_group_name_(),
       is_set_comment_(false)
   {}
 
@@ -529,7 +525,6 @@ public:
       next_column_name_(),
       prev_column_name_(),
       is_first_(false),
-      column_group_name_(),
       is_set_comment_(false)
   {}
   AlterColumnSchema &operator=(const AlterColumnSchema &alter_column_schema);
@@ -543,9 +538,6 @@ public:
   const common::ObString& get_prev_column_name() const { return prev_column_name_;};
   int set_prev_column_name(const common::ObString& prev_column_name)
     { return deep_copy_str(prev_column_name, prev_column_name_); }
-  const common::ObString& get_column_group_name() const { return column_group_name_;};
-  int set_column_group_name(const common::ObString& column_group_name)
-    { return deep_copy_str(column_group_name, column_group_name_); }
   void reset();
 
   ObSchemaOperationType alter_type_;
@@ -561,7 +553,6 @@ public:
   common::ObString next_column_name_;
   common::ObString prev_column_name_;
   bool is_first_;
-  common::ObString column_group_name_;
   bool is_set_comment_;
   DECLARE_VIRTUAL_TO_STRING;
 };

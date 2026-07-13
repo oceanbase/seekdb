@@ -723,7 +723,6 @@ int ObDASTextRetrievalMergeIter::init_total_doc_cnt_param(
     scan_param.need_scn_ = rtdef->need_scn_;
     scan_param.pd_storage_flag_ = ctdef->pd_expr_spec_.pd_storage_flag_.pd_flag_;
     scan_param.fb_snapshot_ = rtdef->fb_snapshot_;
-    scan_param.fb_read_tx_uncommitted_ = rtdef->fb_read_tx_uncommitted_;
     scan_param.ls_id_ = ls_id_;
     scan_param.tablet_id_ = domain_id_idx_tablet_id_;
     if (ctdef->pd_expr_spec_.pushdown_filters_.empty()) {

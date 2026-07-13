@@ -686,7 +686,7 @@ int ObPLDDLOperator::alter_trigger(share::schema::ObTriggerInfo &trigger_info,
   return ret;
 }
 
-int ObPLDDLOperator::flashback_trigger(const share::schema::ObTriggerInfo &trigger_info,
+int ObPLDDLOperator::restore_trigger(const share::schema::ObTriggerInfo &trigger_info,
                                        uint64_t new_database_id,
                                        const common::ObString &new_table_name,
                                        share::schema::ObSchemaGetterGuard &schema_guard,
@@ -715,8 +715,8 @@ int ObPLDDLOperator::flashback_trigger(const share::schema::ObTriggerInfo &trigg
   OV (!database_schema->is_in_recyclebin(), OB_OP_NOT_ALLOW, new_database_id);
   OX (new_trigger_info.set_database_id(new_database_id));
   // trigger name.
-  OZ (build_flashback_object_name(new_trigger_info, NULL, "OBTRG",
-                                  schema_guard, allocator, new_trigger_name));
+  OZ (build_recyclebin_restore_object_name(new_trigger_info, NULL, "OBTRG",
+                                           schema_guard, allocator, new_trigger_name));
   OX (new_trigger_info.set_trigger_name(new_trigger_name));
   // other operation.
   OZ (schema_service_.gen_new_schema_version(new_schema_version), 1UL);
@@ -726,7 +726,7 @@ int ObPLDDLOperator::flashback_trigger(const share::schema::ObTriggerInfo &trigg
   } else if (new_table_name.empty()) {
     // If new_table_name is empty, it means that the table does not have a rename, and rebuild_trigger_on_rename is not required.
     // Otherwise, table rename is required, and rebuild_trigger_on_rename is required.
-    OZ (schema_service->get_trigger_sql_service().flashback_trigger(new_trigger_info,
+    OZ (schema_service->get_trigger_sql_service().restore_trigger(new_trigger_info,
                                                                     new_schema_version,
                                                                     trans),
         new_trigger_info.get_trigger_id());
@@ -736,7 +736,7 @@ int ObPLDDLOperator::flashback_trigger(const share::schema::ObTriggerInfo &trigg
                                                                             new_table_name,
                                                                             new_schema_version,
                                                                             trans,
-                                                                            OB_DDL_FLASHBACK_TRIGGER),
+                                                                            OB_DDL_RESTORE_TRIGGER_FROM_RECYCLEBIN),
         database_schema->get_database_name(), new_table_name);
   }
   return ret;
@@ -916,12 +916,12 @@ int ObPLDDLOperator::update_routine_info(share::schema::ObRoutineInfo &routine_i
  * object_type_prefix: OBIDX / OBCHECK / OBTRG ...
  */
 template <typename SchemaType>
-int ObPLDDLOperator::build_flashback_object_name(const SchemaType &object_schema,
-                                                  const char *data_table_prefix,
-                                                  const char *object_type_prefix,
-                                                  ObSchemaGetterGuard &schema_guard,
-                                                  ObIAllocator &allocator,
-                                                  ObString &object_name)
+int ObPLDDLOperator::build_recyclebin_restore_object_name(const SchemaType &object_schema,
+                                                          const char *data_table_prefix,
+                                                          const char *object_type_prefix,
+                                                          ObSchemaGetterGuard &schema_guard,
+                                                          ObIAllocator &allocator,
+                                                          ObString &object_name)
 {
   int ret = OB_SUCCESS;
   char *buf = NULL;
@@ -950,7 +950,7 @@ int ObPLDDLOperator::build_flashback_object_name(const SchemaType &object_schema
     OX (pos = saved_pos);
     OZ (BUF_PRINTF("%ld", ObTimeUtility::current_time()));
     OX (object_name.assign(buf, static_cast<int32_t>(pos)));
-    OZ (schema_guard.check_flashback_object_exist(object_schema, object_name, object_exist));
+    OZ (schema_guard.check_recyclebin_restore_object_exist(object_schema, object_name, object_exist));
   }
   return ret;
 }

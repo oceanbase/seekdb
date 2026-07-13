@@ -649,9 +649,6 @@ int ObShowGrants::print_privs_to_buff(
                                                                             *priv_key_array, OB_PRIV_REFERENCES))) {
         LOG_WARN("print column privs to buff failed", K(ret));
       }
-      if ((priv_set & OB_PRIV_FLASHBACK) && OB_SUCCESS == ret) {
-        ret = BUF_PRINTF(" FLASHBACK,");
-      }
       if ((priv_set & OB_PRIV_READ) && OB_SUCCESS == ret) {
         ret = BUF_PRINTF(" READ,");
       }

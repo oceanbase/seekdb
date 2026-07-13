@@ -1388,9 +1388,9 @@ int ObStmtComparer::compare_basic_table_item(const TableItem *first_table,
   } else if ((first_table->is_basic_table())
              && (second_table->is_basic_table()) 
              && first_table->ref_id_ == second_table->ref_id_
-             && first_table->flashback_query_type_ == second_table->flashback_query_type_
-             && (first_table->flashback_query_expr_ == second_table->flashback_query_expr_
-                 || first_table->flashback_query_expr_->same_as(*second_table->flashback_query_expr_))
+             && first_table->snapshot_query_type_ == second_table->snapshot_query_type_
+             && (first_table->snapshot_query_expr_ == second_table->snapshot_query_expr_
+                 || first_table->snapshot_query_expr_->same_as(*second_table->snapshot_query_expr_))
              && ((first_table->sample_info_ == NULL &&  second_table->sample_info_ == NULL) 
                  || (first_table->sample_info_ != NULL &&  second_table->sample_info_ != NULL 
                      && first_table->sample_info_->same_as(*second_table->sample_info_)))) {
@@ -1571,7 +1571,7 @@ int ObStmtComparer::compare_table_item(const ObDMLStmt *first,
         map_info.table_map_.at(first_table_index - 1) = second_table_index - 1;
       }
     }
-  //TODO:jiangxiu.wt subsequent enable flashback query support for view and generated table, here needs to be handled
+  //TODO:jiangxiu.wt subsequent enable snapshot query support for view and generated table, here needs to be handled
   } else if ((first_table->is_generated_table() &&
              second_table->is_generated_table()) ||
              (first_table->is_lateral_table() &&

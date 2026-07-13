@@ -40,7 +40,6 @@ LogStorage::LogStorage() : ILogStorage(ILogStorageType::DISK_STORAGE),
     update_manifest_cb_(),
     plugins_(NULL),
     log_cache_(NULL),
-    flashback_version_(OB_INVALID_TIMESTAMP),
     is_inited_(false)
 {}
 
@@ -111,7 +110,6 @@ int LogStorage::load_manifest_for_meta_storage(block_id_t &expected_next_block_i
 void LogStorage::destroy()
 {
   is_inited_ = false;
-  flashback_version_ = 0;
   logical_block_size_ = 0;
   palf_id_ = INVALID_PALF_ID;
   need_append_block_header_ = false;
@@ -412,82 +410,6 @@ int LogStorage::truncate_prefix_blocks(const LSN &lsn)
   return ret;
 }
 
-// step1. create tmp block.
-// step2. update manifest.
-// step3. reset log tail.
-int LogStorage::begin_flashback(const LSN &start_lsn_of_block)
-{
-  int ret = OB_SUCCESS;
-  const block_id_t tmp_block_id = lsn_2_block(start_lsn_of_block, logical_block_size_);
-  // create block with 'tmp_block_id.tmp', and swap it with 'curr_writable_handler_' in 'block_mgr_'
-  if (start_lsn_of_block >= log_tail_) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argument", K(ret), KPC(this), K(start_lsn_of_block));
-  } else if (OB_FAIL(block_mgr_.create_tmp_block_handler(tmp_block_id))) {
-    PALF_LOG(ERROR, "LogBlockMgr create_tmp_block_handler failed", K(ret), KPC(this), K(start_lsn_of_block));
-  } else {
-    const LSN origin_log_tail = log_tail_;
-    // make tmp block be writeable, set log_tail_ to start_lsn_of_block.
-    reset_log_tail_for_last_block_(start_lsn_of_block, true);
-    ObSpinLockGuard guard(tail_info_lock_);
-    if (check_in_flashback_(flashback_version_)) {
-      ret = OB_ERR_UNEXPECTED;
-      PALF_LOG(ERROR, "unexpected error, flashback_version_ must be even number", KPC(this), K(start_lsn_of_block));
-    } else {
-      // In process of flashback, each block after start_lsn_of_block is still readable.
-      readable_log_tail_ = origin_log_tail;
-      PALF_EVENT("[BEGIN STORAGE FLASHBACK]", palf_id_, KPC(this), K(start_lsn_of_block));
-    }
-  }
-  return ret;
-}
-
-// step1: delete each block after start_lsn_of_block
-// step2: rename tmp block to normal
-// step2: set readable_log_tail_ to log_tail_, make each block after start_lsn_of_block is not
-// readable.
-int LogStorage::end_flashback(const LSN &start_lsn_of_block)
-{
-  int ret = OB_SUCCESS;
-  const block_id_t block_id = lsn_2_block(start_lsn_of_block, logical_block_size_);
-  if (check_in_flashback_(flashback_version_)) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "unexpected error, flashback_version_ must be even number", KPC(this), K(start_lsn_of_block));
-  } else {
-    // to ensure the integrity of each read data, before delete blocks,
-    // reset readable_log_tail_
-    {
-      ObSpinLockGuard guard(tail_info_lock_);
-      readable_log_tail_ = log_tail_;
-      flashback_version_ ++;
-    }
-
-    // constriaints: 'expected_next_block_id' is used to check whether blocks on disk are integral,
-    // we make sure that the content in each block_id which is greater than or equal to 
-    // 'expected_next_block_id' are not been used.
-    // we can set 'expected_next_block_id' to 'block_id' + 1 because of the block of 'start_lsn_of_block'
-    // must exist.(we will delete each block after 'block_id', not include 'block_id')
-    const block_id_t expected_next_block_id = block_id + 1;
-    if (OB_FAIL(update_manifest_(expected_next_block_id))) {
-      PALF_LOG(WARN, "update_manifest_ failed", K(ret), KPC(this), K(block_id),
-	  			K(expected_next_block_id), K(start_lsn_of_block));
-	  } else if (OB_FAIL(block_mgr_.delete_block_from_back_to_front_until(block_id))) {
-      PALF_LOG(ERROR, "delete_block_from_back_to_front_until failed", K(ret),
-	  			KPC(this), K(start_lsn_of_block));
-    } else if (OB_FAIL(block_mgr_.rename_tmp_block_handler_to_normal(block_id))) {
-      PALF_LOG(ERROR, "LogBlockMgr rename_tmp_block_handler_to_normal failed", K(ret), KPC(this),
-          K(start_lsn_of_block));
-    } else {
-      PALF_EVENT("[END STORAGE FLASHBACK]", palf_id_, KPC(this), K(start_lsn_of_block));
-    }
-    {
-      ObSpinLockGuard guard(tail_info_lock_);
-      flashback_version_ ++;
-    }
-  }
-  return ret;
-}
-
 int LogStorage::delete_block(const block_id_t &block_id)
 {
   int ret = OB_SUCCESS;
@@ -664,7 +586,6 @@ int LogStorage::do_init_(const char *base_dir,
     update_manifest_cb_ = update_manifest_cb;
     plugins_ = plugins;
     log_cache_ = log_cache;
-    flashback_version_ = 0;
     is_inited_ = true;
   }
   if (OB_FAIL(ret) && OB_INIT_TWICE != ret) {
@@ -682,46 +603,18 @@ int LogStorage::do_init_(const char *base_dir,
 // 1. For delete block, LogBlockMgr will inc 'min_block_id_' firstly, and then reuse the block,
 //    after reading, if 'block_id' is smaller than 'min_block_id_', means that the data is not integrity.
 //
-// 2. For flashback block, LogBlockMgr will dec 'max_block_id_' firstly, and then reuse the block.
-//    compare with 'min_block_id_', the 'max_block_id_' will be advanced after writing data, therefore,
-//    we can not check the data whether is integrity according to 'max_block_id_'. to solve this problem,
-//    double check 'flashback_version_' which will be advanced after flashback.
-// 
 int LogStorage::check_read_out_of_bound_(const block_id_t &block_id,
-                                         const int64_t flashback_version,
                                          const bool no_such_block) const
 {
   int ret = OB_SUCCESS;
   block_id_t min_block_id = LOG_INVALID_BLOCK_ID;
   block_id_t max_block_id = LOG_INVALID_BLOCK_ID;
-  LSN readable_log_tail;
-  int64_t curr_flashback_version = OB_INVALID_TIMESTAMP;
-  block_id_t readable_end_block_id = LOG_INVALID_BLOCK_ID;
-  // get_block_id_range firstly, ensure that readable_end_block_id is smaller than or equal to max_block_id
-  // before write any new data.
   if (OB_FAIL(get_block_id_range(min_block_id, max_block_id)) && OB_ENTRY_NOT_EXIST != ret) {
    PALF_LOG(ERROR, "get_block_id_range failed", K(ret), K(min_block_id), K(max_block_id));
-  // get_readable_log_tail_guarded_by_lock_ is a barrier point, all read operations
-  // can read integrity data if flashback_version is same as curr_flashback_version
-  } else if (FALSE_IT(get_readable_log_tail_guarded_by_lock_(readable_log_tail, curr_flashback_version))) {
-  } else if (FALSE_IT(readable_end_block_id = lsn_2_block(readable_log_tail, logical_block_size_))) {
-  // if read data is concurrently with flashback, return OB_NEED_RETRY.
-  // to avoid unnecessary failure, only check flashback_version when read block need to be overwriting.
-  // NB: update 'reabable_log_tail_' and 'flashback_version_' is atomic, and updating is performed before
-  //     overwriting.
-  } else if (block_id >= readable_end_block_id && (flashback_version != curr_flashback_version || check_in_flashback_(curr_flashback_version))) {
-    ret = OB_NEED_RETRY;
-    PALF_LOG(WARN, "there is flashbacking during read data, need read retry",
-             KPC(this), K(flashback_version), K(curr_flashback_version),
-             K(min_block_id), K(max_block_id), K(block_id));
-    // double check after read data. the block whose name is smaller than 'min_block_id' has been deleted
-    // by GC or rebuild, and the data which read successfully may be not intergrity, therefore return OB_ERR_OUT_OF_LOWER_BOUND
   } else if (min_block_id > block_id) {
     ret = OB_ERR_OUT_OF_LOWER_BOUND;
     PALF_LOG(INFO, "read something out of lower bound, the block may be deleted by GC or rebuild",
              K(min_block_id), K(max_block_id), K(block_id));
-    // there is no possibility read data out of upper bound because we have checked flashback_version and checkd
-    // read_lsn whether is greater than readable_log_tail before 'check_read_out_of_bound_'.
   } else if (block_id > max_block_id) {
     ret = OB_ERR_UNEXPECTED; 
     PALF_LOG(ERROR, "unexpected error, the block to be read is greater than max_block_id",
@@ -732,13 +625,11 @@ int LogStorage::check_read_out_of_bound_(const block_id_t &block_id,
     // return OB_ERR_UNEXPECTED.
     if (min_block_id <= block_id && block_id < max_block_id) {
       ret = OB_ERR_UNEXPECTED;
-      PALF_LOG(ERROR, "unexpected error, the block may be deleted by human", KPC(this), K(flashback_version),
+      PALF_LOG(ERROR, "unexpected error, the block may be deleted by human", KPC(this),
                K(min_block_id), K(max_block_id), K(block_id));
-    // if max_block_id == block_id, means that the block whose names with 'block_id' is renaming during
-    // flashback, therefore return OB_NEED_RETRY.
     } else if (max_block_id == block_id) {
       ret = OB_NEED_RETRY;
-      PALF_LOG(WARN, "in flashback, the block is renaming", KPC(this), K(flashback_version), K(min_block_id),
+      PALF_LOG(WARN, "the block is being switched", KPC(this), K(min_block_id),
                K(max_block_id), K(block_id));
     }
   }
@@ -820,8 +711,6 @@ void LogStorage::update_log_tail_guarded_by_lock_(const int64_t log_size)
 {
   ObSpinLockGuard guard(tail_info_lock_);
   log_tail_ = log_tail_ + log_size;
-  // NB: In the process of flashback, 'readable_log_tail_' is the back of last block
-  // 'log_tail_' is the front of last block.
   if (readable_log_tail_ < log_tail_) {
     readable_log_tail_ = log_tail_;
   }
@@ -840,18 +729,10 @@ const LSN &LogStorage::get_log_tail_guarded_by_lock_() const
   return readable_log_tail_;
 }
 
-void LogStorage::get_readable_log_tail_guarded_by_lock_(LSN &readable_log_tail,
-                                                        int64_t &flashback_version) const
+void LogStorage::get_readable_log_tail_guarded_by_lock_(LSN &readable_log_tail) const
 {
   ObSpinLockGuard guard(tail_info_lock_);
   readable_log_tail = readable_log_tail_;
-  flashback_version = flashback_version_;
-}
-
-void LogStorage::get_flashback_version_guarded_by_lock_(int64_t &flashback_version) const
-{
-  ObSpinLockGuard guard(tail_info_lock_);
-  flashback_version = flashback_version_;
 }
 
 offset_t LogStorage::get_phy_offset_(const LSN &lsn) const
@@ -873,8 +754,7 @@ int LogStorage::read_block_header_(const block_id_t block_id,
   // is deleted. NB: we need ensure that the lsn_2_block('readable_log_tail') is smaller than or
   // equal to 'max_block_id'.
   LSN readable_log_tail;
-  int64_t flashback_version = -1;
-  get_readable_log_tail_guarded_by_lock_(readable_log_tail, flashback_version);
+  get_readable_log_tail_guarded_by_lock_(readable_log_tail);
   block_id_t max_block_id = lsn_2_block(readable_log_tail, logical_block_size_);
   bool last_block_has_data = (0 == lsn_2_offset(readable_log_tail, logical_block_size_) ? false : true);
   if (!read_buf.is_valid()) {
@@ -900,12 +780,12 @@ int LogStorage::read_block_header_(const block_id_t block_id,
                K(log_block_header));
     }
     // to ensure the data integrity, we should check 'block_id' whether has integrity data.
-    int tmp_ret = check_read_out_of_bound_(block_id, flashback_version, OB_NO_SUCH_FILE_OR_DIRECTORY == ret);
+    int tmp_ret = check_read_out_of_bound_(block_id, OB_NO_SUCH_FILE_OR_DIRECTORY == ret);
     // overwrite ret code:
-    // 1. if ret is OB_NO_SUCH_FILE_OR_DIRECTORY, the block may be recycled or overwriting(i.e. flashback).
-    // 2. if ret is OB_INVALID_DATA, the block may be being recycled or overwriting(i.e. flashback).
+    // 1. if ret is OB_NO_SUCH_FILE_OR_DIRECTORY, the block may be recycled or overwritten.
+    // 2. if ret is OB_INVALID_DATA, the block may be being recycled or overwritten.
     // 3. if ret is OB_SUCCESS, we should check the data has been read whether is integrity because the block
-    //    may be being recycled or overwriting(i.e. flashback).
+    //    may be being recycled or overwritten.
     if (OB_NO_SUCH_FILE_OR_DIRECTORY == ret 
         || OB_INVALID_DATA == ret
         || OB_SUCC(ret)) {
@@ -945,8 +825,7 @@ int LogStorage::inner_pread_(const LSN &read_lsn,
   int ret = OB_SUCCESS;
   // NB: don't support read data from diffent file.
   LSN readable_log_tail;
-  int64_t flashback_version = -1;
-  get_readable_log_tail_guarded_by_lock_(readable_log_tail, flashback_version);
+  get_readable_log_tail_guarded_by_lock_(readable_log_tail);
   const block_id_t read_block_id = lsn_2_block(read_lsn, logical_block_size_);
   const LSN curr_block_end_lsn = LSN((read_block_id + 1) * logical_block_size_);
   const LSN &max_readable_lsn = MIN(readable_log_tail, curr_block_end_lsn);
@@ -965,14 +844,14 @@ int LogStorage::inner_pread_(const LSN &read_lsn,
   } else {
     bool need_read_disk = true;
     if (is_log_cache_inited_() && false == need_read_log_block_header) {
-      if (OB_FAIL(log_cache_->read(flashback_version, read_lsn, real_in_read_size, 
+      if (OB_FAIL(log_cache_->read(read_lsn, real_in_read_size,
                                    read_buf, out_read_size, io_ctx))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
           ret = OB_SUCCESS;
-          PALF_LOG(TRACE, "miss log cache, read disk", K(flashback_version), K(read_lsn),
+          PALF_LOG(TRACE, "miss log cache, read disk", K(read_lsn),
                    K(real_in_read_size), K(read_buf), K(out_read_size), KPC(this));
         } else {
-          PALF_LOG(WARN, "read log cache failed", K(flashback_version), K(read_lsn),
+          PALF_LOG(WARN, "read log cache failed", K(read_lsn),
                    K(real_in_read_size), K(read_buf), K(out_read_size), KPC(this));
         }
       } else {
@@ -1003,11 +882,11 @@ int LogStorage::inner_pread_(const LSN &read_lsn,
     }
 
     // to ensure the data integrity, we should check 'read_block_id' whether has integrity data.
-    int tmp_ret = check_read_out_of_bound_(read_block_id, flashback_version, OB_NO_SUCH_FILE_OR_DIRECTORY == ret);
+    int tmp_ret = check_read_out_of_bound_(read_block_id, OB_NO_SUCH_FILE_OR_DIRECTORY == ret);
     // overwrite ret code:
-    // 1. if ret is OB_NO_SUCH_FILE_OR_DIRECTORY, the block may be recycled or overwriting(i.e. flashback).
+    // 1. if ret is OB_NO_SUCH_FILE_OR_DIRECTORY, the block may be recycled or overwritten.
     // 2. if ret is OB_SUCCESS, we should check the data has been read whether is integrity because the block
-    //    may be being recycled or overwriting(i.e. flashback).
+    //    may be being recycled or overwritten.
     if (OB_NO_SUCH_FILE_OR_DIRECTORY == ret
         || OB_SUCC(ret)) {
       ret = tmp_ret;
@@ -1030,11 +909,6 @@ void LogStorage::reset_log_tail_for_last_block_(const LSN &lsn, bool last_block_
 int LogStorage::update_manifest_(const block_id_t expected_next_block_id, const bool in_restart)
 {
   return update_manifest_cb_(expected_next_block_id, in_restart);
-}
-
-bool LogStorage::check_in_flashback_(const int64_t flashback_version) const
-{
-  return 1 == (flashback_version_ & 1);
 }
 
 int LogStorage::get_logical_block_size(int64_t &logical_block_size) const

@@ -334,49 +334,6 @@ void LogChangeAccessModeCmd::reset()
 OB_SERIALIZE_MEMBER(LogChangeAccessModeCmd, src_, ls_id_, mode_version_, access_mode_, ref_scn_);
 // ============= LogChangeAccessModeCmd end =============
 
-// ============= LogFlashbackMsg start =============
-LogFlashbackMsg::LogFlashbackMsg()
-    : src_(),
-      ls_id_(-1),
-      mode_version_(palf::INVALID_PROPOSAL_ID),
-      flashback_scn_(),
-      is_flashback_req_(false) { }
-
-LogFlashbackMsg::LogFlashbackMsg(
-    const common::ObAddr &src,
-    const int64_t ls_id,
-    const int64_t mode_version,
-    const SCN &flashback_scn,
-    const bool is_flashback_req)
-    : src_(src),
-      ls_id_(ls_id),
-      mode_version_(mode_version),
-      flashback_scn_(flashback_scn),
-      is_flashback_req_(is_flashback_req) { }
-
-bool LogFlashbackMsg::is_valid() const
-{
-  return true &&
-         src_.is_valid() &&
-         -1 != ls_id_ &&
-         palf::INVALID_PROPOSAL_ID != mode_version_ &&
-         flashback_scn_.is_valid();
-}
-
-void LogFlashbackMsg::reset()
-{
-  
-  src_.reset();
-  ls_id_ = -1;
-  mode_version_ = palf::INVALID_PROPOSAL_ID;
-  flashback_scn_.reset();
-  is_flashback_req_ = false;
-}
-
-OB_SERIALIZE_MEMBER(LogFlashbackMsg, src_, ls_id_,
-    mode_version_, flashback_scn_, is_flashback_req_);
-// ============= LogFlashbackMsg end =============
-
 // ============= LogGetCkptReq begin ===========
 LogGetCkptReq::LogGetCkptReq(
     const common::ObAddr &src,

@@ -72,17 +72,6 @@ struct TruncatePrefixBlocksCbCtx {
   LSN lsn_;
 };
 
-struct FlashbackCbCtx {
-  FlashbackCbCtx(const share::SCN &flashback_scn);
-  FlashbackCbCtx();
-  ~FlashbackCbCtx();
-  bool is_valid() const { return flashback_scn_.is_valid(); }
-  void reset();
-  FlashbackCbCtx& operator=(const FlashbackCbCtx& flashback_ctx);
-  TO_STRING_KV(K_(flashback_scn));
-  share::SCN flashback_scn_;
-};
-
 enum MetaType {
   PREPARE_META = 0,
   CHANGE_CONFIG_META = 1,

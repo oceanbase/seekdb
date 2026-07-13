@@ -375,7 +375,6 @@ public:
         diverse_path_count_(0),
         fq_expr_(NULL),
         fq_type_(TableItem::NOT_USING),
-        fq_read_tx_uncommitted_(false),
         bf_info_(),
         part_join_filter_allocated_(false),
         group_id_expr_(nullptr),
@@ -389,7 +388,6 @@ public:
         has_index_scan_filter_(false),
         has_index_lookup_filter_(false),
         table_type_(share::schema::MAX_TABLE_TYPE),
-        use_column_store_(false),
         doc_id_table_id_(common::OB_INVALID_ID),
         text_retrieval_info_(),
         vector_index_info_(),
@@ -448,12 +446,6 @@ public:
 
   inline bool use_das() const
   { return use_das_; }
-
-  inline void set_use_column_store(bool use_column_store)
-  { use_column_store_ = use_column_store; }
-
-  inline bool use_column_store() const
-  { return use_column_store_; }
 
   /**
    *  Get index table id
@@ -780,13 +772,11 @@ public:
   const common::ObIArray<ObRawExpr*> &get_range_conditions() const { return range_conds_; }
   inline void set_diverse_path_count(int64_t count) { diverse_path_count_ = count; }
   inline int64_t get_diverse_path_count() const { return diverse_path_count_; }
-  inline TableItem::FlashBackQueryType get_flashback_query_type() const {return fq_type_; }
-  inline void set_flashback_query_type(TableItem::FlashBackQueryType type) { fq_type_ = type; }
-  inline bool get_fq_read_tx_uncommitted() const { return fq_read_tx_uncommitted_; }
-  inline void set_fq_read_tx_uncommitted(bool v) { fq_read_tx_uncommitted_ = v; }
-  inline const ObRawExpr* get_flashback_query_expr() const { return fq_expr_; }
-  inline ObRawExpr* &get_flashback_query_expr() { return fq_expr_; }
-  inline void set_flashback_query_expr(ObRawExpr *expr) { fq_expr_ = expr; }
+  inline TableItem::SnapshotQueryType get_snapshot_query_type() const {return fq_type_; }
+  inline void set_snapshot_query_type(TableItem::SnapshotQueryType type) { fq_type_ = type; }
+  inline const ObRawExpr* get_snapshot_query_expr() const { return fq_expr_; }
+  inline ObRawExpr* &get_snapshot_query_expr() { return fq_expr_; }
+  inline void set_snapshot_query_expr(ObRawExpr *expr) { fq_expr_ = expr; }
   int get_phy_location_type(ObTableLocationType &location_type);
   virtual int generate_access_exprs();
   int copy_filter_before_index_back();
@@ -1234,9 +1224,8 @@ protected: // memeber variables
 
   int64_t diverse_path_count_; // count of access path with diverse query ranges
 
-  ObRawExpr* fq_expr_; //flashback query expr
-  TableItem::FlashBackQueryType fq_type_; //flashback query type
-  bool fq_read_tx_uncommitted_; // whether flashback query read uncommitted changes in transaction
+  ObRawExpr* fq_expr_; //snapshot query expr
+  TableItem::SnapshotQueryType fq_type_; //snapshot query type
    // for join partition filter
   ObPxBFStaticInfo bf_info_;
   bool part_join_filter_allocated_;
@@ -1258,7 +1247,6 @@ protected: // memeber variables
   // end for global index lookup
 
   share::schema::ObTableType table_type_;
-  bool use_column_store_;
   // in the new fts version, doc_id_table_id_ may be invalid.
   uint64_t doc_id_table_id_; // used for rowkey lookup of fulltext, JSON multi-value and vector index
   // text retrieval as index scan

@@ -29,7 +29,6 @@
 #include "ob_net_keepalive_adapter.h"
 #include "ob_ls_adapter.h"
 #include "ob_location_adapter.h"
-#include "ob_log_flashback_service.h"                    // ObLogFlashbackService
 #include "ob_log_handler.h"
 #include "ob_log_monitor.h"
 
@@ -174,18 +173,6 @@ public:
   int iterate_apply(const ObFunction<int(const ObApplyStatus&)> &func);
   int iterate_replay(const ObFunction<int(const ObReplayStatus&)> &func);
 
-  // @desc: flashback all log_stream's redo log of tenant 'tenant'
-  // @params [in] const uint64_t tenant: id of tenant which should be flashbacked
-  // @params [in] const SCN &flashback_scn: flashback point
-  // @params [in] const int64_t timeout_us: timeout time (us)
-  // @return
-  //   - OB_SUCCESS
-  //   - OB_INVALID_ARGUEMENT: invalid tenant or flashback_scn
-  //   - OB_NOT_SUPPORTED: meta tenant or sys tenant can't be flashbacked
-  //   - OB_EAGAIN: another flashback operation is doing
-  //   - OB_TIMEOUT: timeout
-  int flashback(const share::SCN &flashback_scn, const int64_t timeout_us);
-
   int diagnose_role_change(RCDiagnoseInfo &diagnose_info);
   int diagnose_replay(const share::ObLSID &id, ReplayDiagnoseInfo &diagnose_info);
   int diagnose_apply(const share::ObLSID &id, ApplyDiagnoseInfo &diagnose_info);
@@ -196,7 +183,6 @@ public:
   ObLogReplayService *get_log_replay_service()  { return &replay_service_; }
   ObLogApplyService *get_log_apply_service()  { return &apply_service_; }
   obcall::ObLogServiceRpcProxy *get_rpc_proxy() { return &rpc_proxy_; }
-  ObLogFlashbackService *get_flashback_service() { return &flashback_service_; }
   // Get restore net driver for standby log sync
   // Returns the net driver from restore service if available
   class ObLogRestoreNetDriver;
@@ -233,7 +219,6 @@ private:
   ObLocationAdapter location_adapter_;
   ObLSAdapter ls_adapter_;
   obcall::ObLogServiceRpcProxy rpc_proxy_;
-  ObLogFlashbackService flashback_service_;
   ObLogMonitor monitor_;
   ObSpinLock update_palf_opts_lock_;
   // Restore service for standby log sync

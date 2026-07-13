@@ -1310,7 +1310,7 @@ int ObPLDDLService::drop_trigger_in_drop_table(ObMySQLTransaction &trans,
   return ret;
 }
 
-int ObPLDDLService::flashback_trigger(const share::schema::ObTableSchema &table_schema,
+int ObPLDDLService::restore_trigger(const share::schema::ObTableSchema &table_schema,
                                       const uint64_t new_database_id,
                                       const common::ObString &new_table_name,
                                       share::schema::ObSchemaGetterGuard &schema_guard,
@@ -1326,7 +1326,7 @@ int ObPLDDLService::flashback_trigger(const share::schema::ObTableSchema &table_
     uint64_t trigger_id = trigger_id_list.at(i);
     OZ (schema_guard.get_trigger_info( trigger_id, trigger_info), trigger_id);
     OV (OB_NOT_NULL(trigger_info), OB_ERR_UNEXPECTED, trigger_id);
-    OZ (pl_operator.flashback_trigger(*trigger_info, new_database_id, new_table_name, schema_guard, trans));
+    OZ (pl_operator.restore_trigger(*trigger_info, new_database_id, new_table_name, schema_guard, trans));
   }
   return ret;
 }

@@ -170,7 +170,6 @@ private:
                                 const bool is_offline) const;
 
   bool is_append_mode(const palf::AccessMode &access_mode) const;
-  bool is_raw_write_or_flashback_mode(const palf::AccessMode &access_mode) const;
 private:
   RoleChangeOptType get_role_change_opt_type_(const common::ObRole &old_role,
                                               const common::ObRole &new_role,

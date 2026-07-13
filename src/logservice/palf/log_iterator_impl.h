@@ -110,15 +110,15 @@ public:
   //      - if the end_lsn get from get_file_end_lsn is smaller than 'log_tail_' of LogStorage, and it's
   //        not the exact boundary of LogGroupEntry(for PalfGroupeBufferIterator, or LogEntry for PalfBufferIterator),
   //        OB_NEED_RETRY may be return.
-  //      - if read_data_from_storage_ is concurrent with the last step of flashback, opening last block on disk may be failed
-  //        due to rename, return OB_NEED_RETRY in this case.(TODO by runlin: retry by myself)
+  //      - if read_data_from_storage_ is concurrent with a storage truncation, opening the last block on disk may fail,
+  //        return OB_NEED_RETRY in this case.(TODO by runlin: retry by myself)
   //   OB_ERR_OUT_LOWER_BOUND
   //      - block has been recycled
   //   OB_CHECKSUM_ERROR
   //      - the accumulate checksum calc by accum_checksum_ and the data checksum of LogGroupEntry is not
   //        same as the accumulate checksum of LogGroupEntry
   //   OB_PARTIAL_LOG
-  //      - this replica has not finished flashback, and iterator start lsn is not the header of LogGroupEntry.
+  //      - iterator start lsn is not the header of LogGroupEntry.
   int next(const share::SCN &replayable_point_scn, LogIOContext &io_ctx);
 
   // param[in] replayable point scn, iterator will ensure that no log will return when the log scn is greater than
@@ -136,15 +136,15 @@ public:
   //      - if the end_lsn get from get_file_end_lsn is smaller than 'log_tail_' of LogStorage, and it's
   //        not the exact boundary of LogGroupEntry(for PalfGroupeBufferIterator, or LogEntry for PalfBufferIterator),
   //        OB_NEED_RETRY may be return.
-  //      - if read_data_from_storage_ is concurrent with the last step of flashback, opening last block on disk may be failed
-  //        due to rename, return OB_NEED_RETRY in this case.(TODO by runlin: retry by myself)
+  //      - if read_data_from_storage_ is concurrent with a storage truncation, opening the last block on disk may fail,
+  //        return OB_NEED_RETRY in this case.(TODO by runlin: retry by myself)
   //   OB_ERR_OUT_LOWER_BOUND
   //      - block has been recycled
   //   OB_CHECKSUM_ERROR
   //      - the accumulate checksum calc by accum_checksum_ and the data checksum of LogGroupEntry is not
   //        same as the accumulate checksum of LogGroupEntry
   //   OB_PARTIAL_LOG
-  //      - this replica has not finished flashback, and iterator start lsn is not the header of LogGroupEntry.
+  //      - iterator start lsn is not the header of LogGroupEntry.
   int next(const share::SCN &replayable_point_scn,
            share::SCN &next_min_scn,
            bool &iterate_end_by_replayable_point, 
@@ -176,8 +176,7 @@ private:
   //   OB_ITER_END
   //   OB_ERR_OUT_LOWER_BOUND
   //   OB_NEED_RETRY: means the data has been truncate concurrently
-  //   OB_PARTIAL_LOG: this replica has not finished flashback, and iterator start lsn
-  //                   is not the header of LogGroupEntry.
+  //   OB_PARTIAL_LOG: iterator start lsn is not the header of LogGroupEntry.
   int get_next_entry_(const SCN &replayable_point_scn,
                       IterateEndInfo &info, 
                       LogIOContext &io_ctx);
@@ -197,8 +196,7 @@ private:
   //   OB_ITER_END
   //      -- means log entry is iterated end by replayable_point_scn
   //   OB_PARTIAL_LOG
-    //    -- this replica has not finished flashback, and iterator start lsn is not the header of
-    //       LogGroupEntry.
+    //    -- iterator start lsn is not the header of LogGroupEntry.
   int parse_one_entry_(const SCN &replayable_point_scn,
                        IterateEndInfo &info);
 
@@ -235,7 +233,7 @@ private:
       }
     } else {
       ret = OB_PARTIAL_LOG;
-      PALF_LOG(WARN, "parse LogEntry failed, may be in flashback mode and this replica has not finished flashback",
+      PALF_LOG(WARN, "parse LogEntry failed, iterator start lsn may not be aligned",
                KPC(this), K(replayable_point_scn), K(info));
     }
     return ret;
@@ -243,7 +241,7 @@ private:
 
   // When entry in file is LogGroupEntry, handle it specifically.
   // 1. for raw write LogGroupEntry, if it's controlled by replayable_point_scn, no need update
-  //    'curr_read_pos_', 'accum_checksum_', because this log may be flashback.
+  //    'curr_read_pos_', 'accum_checksum_', because this log may later become unreadable.
   // 2. for append LogGroupEntry, handle it normally.
   int parse_log_group_entry_(const SCN &replayable_point_scn,
                              IterateEndInfo &info)
@@ -321,19 +319,19 @@ private:
     // NB: when current entry is raw write, and the log scn of current entry is greater than
     //     replayable_point_scn, this log may be clean up, therefore we can not update several fields of
     //     LogIteratorImpl, return OB_ITER_END directly, otherwise, we may not parse new LogGroupEntryHeader
-    //     after flashback position, this will cause one log which is append, but control by replayable_point_scn.
+    //     after the replayable boundary, this will cause one log which is append, but control by replayable_point_scn.
     //
     // NB: we need check the min scn of LogGroupEntry whether has been greater than
     //     replayable_point_scn:
     //     - if LogGroupEntry has two LogEntry, the scn of them are 10, 15 respectively,
     //       replayable_point_scn is 12. in this case, we can read first LogEntry, and
     //       we can update several fields like 'curr_entry_is_raw_write_', 'accum_checksum_'
-    //       and the others('curr_read_pos_'...). when the flashback scn is 12, the LogEntry
+    //       and the others('curr_read_pos_'...). when the replayable boundary is 12, the LogEntry
     //       after 10 will be truncated, the new LogGroupEntry will be generated, meanwhile,
     //       we will advanced 'curr_read_pos_' to the end of first LogEntry and read new LogGroupEntry
     //       correctly.
     //     - if LogGroupEntry has one LogEntry, the scn of it is 13, the several fields are
-    //       not been updated because of it's controlled by replayable_point_scn, when the flashback
+    //       not been updated because of it's controlled by replayable_point_scn, when the replayable
     //       scn is 12, we don't need rollback these fields.
     //
     // NB: for PalfGroupBufferIterator, we should use max scn to control replay and use min scn
@@ -608,7 +606,7 @@ int LogIteratorImpl<ENTRY>::get_next_entry_(const SCN &replayable_point_scn,
           ret = OB_EAGAIN;
           if (read_times > MAX_READ_TIMES_IN_EACH_NEXT) {
             ret = OB_NEED_RETRY;
-            PALF_LOG(INFO, "read data from storage too many times, maybe in flashback", K(ret), KPC(this));
+            PALF_LOG(INFO, "read data from storage too many times, maybe concurrent storage change", K(ret), KPC(this));
             break;
           }
         }
@@ -651,9 +649,9 @@ int LogIteratorImpl<ENTRY>::next(const share::SCN &replayable_point_scn,
 
   // NB: when return OB_ITER_END, we need try to clean up cache, and we should clean up cache only when
   // the log ts of curr entry is greater than 'replayable_point_scn', otherwise, we would return some logs
-  // which has been flashback, consider following case:
-  // 1. T1, 'replayable_point_scn' is 10, the log ts of curr entry is 15, but there is no flashback option.(no any bad effect)
-  // 2. T2, 'replayable_point_scn' is 10, the logs on disk which the log ts after 10 has been flashback, and
+  // that should not be returned, consider following case:
+  // 1. T1, 'replayable_point_scn' is 10, the log ts of curr entry is 15.(no any bad effect)
+  // 2. T2, 'replayable_point_scn' is 10, the logs on disk after 10 are no longer readable, and
   //    return OB_ITER_END because of 'file end lsn'.(no any bad effect)
   // 3. T3, 'replayable_point_scn' has been advanced to 16, and write several logs on disk, however, the cache
   //    of iterator has not been clean up, the old logs will be returned.(bad effect)
@@ -725,7 +723,7 @@ int LogIteratorImpl<ENTRY>::next(const share::SCN &replayable_point_scn,
       //     consider follower case:
       //     T1, iterate an entry successfully, and make prev_entry_scn to 5;
       //     T2, iterate control by readable point scn, scn of 'curr_entry_' is 10, and readable point scn is 8.
-      //     T3, the logs after 8 have been flashback, and no log has been written.
+      //     T3, the logs after 8 are no longer readable, and no log has been written.
       //     if we don't advance 'prev_entry_scn_' to 8, the continuous point of replay service can not update
       //     to 8.
       if (info.log_scn_ > replayable_point_scn) {
@@ -1042,20 +1040,20 @@ void LogIteratorImpl<ENTRY>::try_clean_up_cache_()
     //     1. At T1 timestamp, the LogGroupEntry has three LogEntry, the first LogEntry has been seen by ReplayService,
     //        however, the remained LogEntry can not been seen due to replayable_point_scn (current replayable_point_scn
     //        may be lag behind others).
-    //     2. At T2 timestamp, this replica is in flashback mode, the logs are not been flashback(flashback_scn is greater
-    //        than replayable_point_scn, and there are several logs which SCN is greater than flashback_scn)
+    //     2. At T2 timestamp, mode version has changed, and there are several logs whose SCN is greater than
+    //        replayable_point_scn.
     //     3. At T3 timestamp, ReplayService use next() function, iterator will try_clean_up_cache_ because mode version
     //        has been changed. if reset curr_entry_is_raw_write_, the second LogEntry may be seen by ReplayService even
-    //        if the SCN of this LogEntry is greater than flashback_scn.
+    //        if the SCN of this LogEntry is greater than replayable_point_scn.
     // curr_entry_is_raw_write_ = false;
     curr_entry_size_ = 0;
     init_mode_version_ = current_mode_version;
 
-    // we can not reset prev_entry_scn_, otherwise, after flashback, if there is no logs which can be readable on disk,
+    // we can not reset prev_entry_scn_, otherwise, if there is no logs which can be readable on disk,
     // we can not return a valid next_min_scn.
     // - prev_entry_.reset();
 
-    // we need reset accum_checksum_, otherwise, the accum_checksum_ is the log before flashback, and iterate new
+    // we need reset accum_checksum_, otherwise, the accum_checksum_ is from the previous readable range, and iterate new
     // group log will fail.
     accumulate_checksum_ = -1;
     reset_padding_info_();

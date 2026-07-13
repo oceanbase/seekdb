@@ -104,7 +104,6 @@ constexpr int OB_RELEASE_SCHEMA_ERROR = -4178;
 constexpr int OB_NO_EMPTY_ENTRY = -4180;
 constexpr int OB_BEYOND_THE_RANGE = -4183;
 constexpr int OB_SERVER_OUTOF_DISK_SPACE = -4184;
-constexpr int OB_COLUMN_GROUP_NOT_FOUND = -4185;
 constexpr int OB_CS_COMPRESS_LIB_ERROR = -4186;
 constexpr int OB_SCHEDULER_TASK_CNT_MISMATCH = -4188;
 constexpr int OB_INVALID_MACRO_BLOCK_TYPE = -4189;
@@ -479,7 +478,7 @@ constexpr int OB_NOT_PRIMARY_TENANT = -4782;
 constexpr int OB_SERVICE_STOPPED = -4783;
 constexpr int OB_SERVER_CONNECTION_ERROR = -4784;
 constexpr int OB_ERR_ATLER_TABLE_ILLEGAL_FK_DROP_INDEX = -4785;
-constexpr int OB_ERR_FLASHBACK_QUERY_EXP_NULL = -4786;
+constexpr int OB_ERR_SNAPSHOT_QUERY_EXP_NULL = -4786;
 constexpr int OB_RELEASE_MDS_NODE_ERROR = -4787;
 constexpr int OB_ERR_PARSER_INIT = -5000;
 constexpr int OB_ERR_PARSE_SQL = -5001;
@@ -814,7 +813,6 @@ constexpr int OB_ERR_OBJECT_STRING_DOES_NOT_EXIST = -5400;
 constexpr int OB_ERR_RESULTANT_DATA_TYPE_OF_VIRTUAL_COLUMN_IS_NOT_SUPPORTED = -5401;
 constexpr int OB_ERR_GET_STACKED_DIAGNOSTICS = -5402;
 constexpr int OB_DDL_SCHEMA_VERSION_NOT_MATCH = -5403;
-constexpr int OB_ERR_COLUMN_GROUP_DUPLICATE = -5404;
 constexpr int OB_ERR_RESERVED_SYNTAX = -5405;
 constexpr int OB_ERR_INVALID_PARAM_TO_PROCEDURE = -5406;
 constexpr int OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT = -5407;
@@ -1446,30 +1444,14 @@ constexpr int OB_ELECTION_WARN_T1_NOT_MATCH = -7038;
 constexpr int OB_ELECTION_BELOW_MAJORITY = -7039;
 constexpr int OB_ELECTION_OVER_MAJORITY = -7040;
 constexpr int OB_ELECTION_DURING_UPGRADING = -7041;
-constexpr int OB_TRANSFER_TASK_COMPLETED = -7100;
-constexpr int OB_TOO_MANY_TRANSFER_TASK = -7101;
-constexpr int OB_TRANSFER_TASK_EXIST = -7102;
-constexpr int OB_TRANSFER_TASK_NOT_EXIST = -7103;
 constexpr int OB_NOT_ALLOW_TO_REMOVE = -7104;
 constexpr int OB_RG_NOT_MATCH = -7105;
-constexpr int OB_TRANSFER_TASK_ABORTED = -7106;
-constexpr int OB_TRANSFER_INVALID_MESSAGE = -7107;
-constexpr int OB_TRANSFER_CTX_TS_NOT_MATCH = -7108;
-constexpr int OB_TRANSFER_SYS_ERROR = -7109;
-constexpr int OB_TRANSFER_MEMBER_LIST_NOT_SAME = -7110;
 constexpr int OB_ERR_UNEXPECTED_LOCK_OWNER = -7111;
-constexpr int OB_LS_TRANSFER_SCN_TOO_SMALL = -7112;
-constexpr int OB_TABLET_TRANSFER_SEQ_NOT_MATCH = -7113;
-constexpr int OB_TRANSFER_DETECT_ACTIVE_TRANS = -7114;
-constexpr int OB_TRANSFER_SRC_LS_NOT_EXIST = -7115;
-constexpr int OB_TRANSFER_SRC_TABLET_NOT_EXIST = -7116;
 constexpr int OB_LS_NEED_REBUILD = -7117;
 constexpr int OB_OBSOLETE_CLOG_NEED_SKIP = -7118;
-constexpr int OB_TRANSFER_WAIT_TRANSACTION_END_TIMEOUT = -7119;
 constexpr int OB_TABLET_GC_LOCK_CONFLICT = -7120;
 constexpr int OB_SEQUENCE_NOT_MATCH = -7121;
 constexpr int OB_SEQUENCE_TOO_SMALL = -7122;
-constexpr int OB_TRANSFER_CANNOT_START = -7123;
 constexpr int NEW_MV_MAJOR_VERSION_NOT_MATCH = -7125;
 constexpr int OB_ERR_DIMENSION_NUMBER_IS_OUT_OF_RANGE = -7290;
 constexpr int OB_ERR_INVALID_SRID_IN_SDO_GEOMETRY = -7292;
@@ -1981,12 +1963,11 @@ constexpr int OB_SP_RAISE_APPLICATION_ERROR = -20000;
 constexpr int OB_SP_RAISE_APPLICATION_ERROR_NUM = -21000;
 constexpr int OB_CLOB_ONLY_SUPPORT_WITH_MULTIBYTE_FUN = -22998;
 constexpr int OB_ERR_UPDATE_TWICE = -30926;
-constexpr int OB_ERR_FLASHBACK_QUERY_WITH_UPDATE = -32491;
+constexpr int OB_ERR_SNAPSHOT_QUERY_WITH_UPDATE = -32491;
 constexpr int OB_ERR_UPDATE_ON_EXPR = -38104;
 constexpr int OB_ERR_SPECIFIED_ROW_NO_LONGER_EXISTS = -38105;
 constexpr int OB_ERR_DATA_TOO_LONG_MSG_FMT_V2 = -5167;
 constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
-
 
 #define OB_SUCCESS__USER_ERROR_MSG "Success"
 #define OB_ERROR__USER_ERROR_MSG "Common error"
@@ -2145,7 +2126,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_SEARCH_NOT_FOUND__USER_ERROR_MSG "Value not found"
 #define OB_BEYOND_THE_RANGE__USER_ERROR_MSG "Key out of range"
 #define OB_SERVER_OUTOF_DISK_SPACE__USER_ERROR_MSG "Server out of disk space"
-#define OB_COLUMN_GROUP_NOT_FOUND__USER_ERROR_MSG "Column group \'%.*s\' not found"
 #define OB_CS_COMPRESS_LIB_ERROR__USER_ERROR_MSG "Server failed to get compress library"
 #define OB_ITEM_NOT_MATCH__USER_ERROR_MSG "Item not match"
 #define OB_SCHEDULER_TASK_CNT_MISMATCH__USER_ERROR_MSG "Running task cnt and unfinished task cnt not consistent"
@@ -2562,7 +2542,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_SERVICE_STOPPED__USER_ERROR_MSG "The service has stopped"
 #define OB_SERVER_CONNECTION_ERROR__USER_ERROR_MSG "Server '%s' connection error"
 #define OB_ERR_ATLER_TABLE_ILLEGAL_FK_DROP_INDEX__USER_ERROR_MSG "Cannot drop index '%.*s': needed in a foreign key constraint"
-#define OB_ERR_FLASHBACK_QUERY_EXP_NULL__USER_ERROR_MSG "NULL snapshot expression not allowed here"
+#define OB_ERR_SNAPSHOT_QUERY_EXP_NULL__USER_ERROR_MSG "NULL snapshot expression not allowed here"
 #define OB_RELEASE_MDS_NODE_ERROR__USER_ERROR_MSG "Release mds node error"
 #define OB_ERR_PARSER_INIT__USER_ERROR_MSG "Failed to init SQL parser"
 #define OB_ERR_PARSE_SQL__USER_ERROR_MSG "%s near \'%.*s\' at line %d"
@@ -2933,7 +2913,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_RESULTANT_DATA_TYPE_OF_VIRTUAL_COLUMN_IS_NOT_SUPPORTED__USER_ERROR_MSG "resultant data type of virtual column is not supported"
 #define OB_ERR_GET_STACKED_DIAGNOSTICS__USER_ERROR_MSG "GET STACKED DIAGNOSTICS when handler not active"
 #define OB_DDL_SCHEMA_VERSION_NOT_MATCH__USER_ERROR_MSG "ddl schema version not match"
-#define OB_ERR_COLUMN_GROUP_DUPLICATE__USER_ERROR_MSG "Duplicate column group name '%.*s'"
 #define OB_ERR_RESERVED_SYNTAX__USER_ERROR_MSG "The \'%.*s\' syntax is reserved for purposes internal to the OceanBase Server"
 #define OB_ERR_INVALID_PARAM_TO_PROCEDURE__USER_ERROR_MSG "Incorrect parameters to procedure \'%.*s\'"
 #define OB_ERR_WRONG_PARAMETERS_TO_NATIVE_FCT__USER_ERROR_MSG "Incorrect parameters in the call to native function '%.*s'"
@@ -3660,30 +3639,14 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ELECTION_BELOW_MAJORITY__USER_ERROR_MSG "not reach majority"
 #define OB_ELECTION_OVER_MAJORITY__USER_ERROR_MSG "over majority"
 #define OB_ELECTION_DURING_UPGRADING__USER_ERROR_MSG "election priority mechanism changed, maybe during upgrading"
-#define OB_TRANSFER_TASK_COMPLETED__USER_ERROR_MSG "transfer task completed"
-#define OB_TOO_MANY_TRANSFER_TASK__USER_ERROR_MSG "too many transfer tasks"
-#define OB_TRANSFER_TASK_EXIST__USER_ERROR_MSG "transfer task exist"
-#define OB_TRANSFER_TASK_NOT_EXIST__USER_ERROR_MSG "transfer task not exist"
 #define OB_NOT_ALLOW_TO_REMOVE__USER_ERROR_MSG "not allow to remove"
 #define OB_RG_NOT_MATCH__USER_ERROR_MSG "replication group not match"
-#define OB_TRANSFER_TASK_ABORTED__USER_ERROR_MSG "transfer task aborted"
-#define OB_TRANSFER_INVALID_MESSAGE__USER_ERROR_MSG "transfer invalid message"
-#define OB_TRANSFER_CTX_TS_NOT_MATCH__USER_ERROR_MSG "transfer ctx_ts not match"
-#define OB_TRANSFER_SYS_ERROR__USER_ERROR_MSG "transfer system error"
-#define OB_TRANSFER_MEMBER_LIST_NOT_SAME__USER_ERROR_MSG "transfer src ls and dest ls member list not same"
 #define OB_ERR_UNEXPECTED_LOCK_OWNER__USER_ERROR_MSG "lock owner id is not expected"
-#define OB_LS_TRANSFER_SCN_TOO_SMALL__USER_ERROR_MSG "change member list compare ls transfer scn too small"
-#define OB_TABLET_TRANSFER_SEQ_NOT_MATCH__USER_ERROR_MSG "compare tablet transfer seq not match"
-#define OB_TRANSFER_DETECT_ACTIVE_TRANS__USER_ERROR_MSG "transfer detect active trans"
-#define OB_TRANSFER_SRC_LS_NOT_EXIST__USER_ERROR_MSG "transfer src ls does not exist"
-#define OB_TRANSFER_SRC_TABLET_NOT_EXIST__USER_ERROR_MSG "transfer src tablet does not exist"
 #define OB_LS_NEED_REBUILD__USER_ERROR_MSG "ls need rebuild"
 #define OB_OBSOLETE_CLOG_NEED_SKIP__USER_ERROR_MSG "obsolete clog need skip"
-#define OB_TRANSFER_WAIT_TRANSACTION_END_TIMEOUT__USER_ERROR_MSG "transfer wait transactions end timeout"
 #define OB_TABLET_GC_LOCK_CONFLICT__USER_ERROR_MSG "tablet GC lock conflict"
 #define OB_SEQUENCE_NOT_MATCH__USER_ERROR_MSG "compare sequence not match"
 #define OB_SEQUENCE_TOO_SMALL__USER_ERROR_MSG "compare sequence too small"
-#define OB_TRANSFER_CANNOT_START__USER_ERROR_MSG "transfer cannot start"
 #define OB_PARTITION_ALREADY_BALANCED__USER_ERROR_MSG "partitions are already balanced, %s"
 #define NEW_MV_MAJOR_VERSION_NOT_MATCH__USER_ERROR_MSG "new mv major version is not match"
 #define OB_ERR_GIS_DIFFERENT_SRIDS__USER_ERROR_MSG "Binary geometry function %s given two geometries of different srids: %u and %u, which should have been identical."
@@ -4395,13 +4358,13 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_SP_RAISE_APPLICATION_ERROR_NUM__USER_ERROR_MSG "error number argument to raise_application_error of '%d' is out of range"
 #define OB_CLOB_ONLY_SUPPORT_WITH_MULTIBYTE_FUN__USER_ERROR_MSG "CLOB or NCLOB in multibyte character set not supported"
 #define OB_ERR_UPDATE_TWICE__USER_ERROR_MSG "unable to get a stable set of rows in the source tables"
-#define OB_ERR_FLASHBACK_QUERY_WITH_UPDATE__USER_ERROR_MSG "snapshot expression not allowed here"
+#define OB_ERR_SNAPSHOT_QUERY_WITH_UPDATE__USER_ERROR_MSG "snapshot expression not allowed here"
 #define OB_ERR_UPDATE_ON_EXPR__USER_ERROR_MSG "Columns referenced in the ON Clause cannot be updated:'%.*s'.'%.*s'"
 #define OB_ERR_SPECIFIED_ROW_NO_LONGER_EXISTS__USER_ERROR_MSG "specified row no longer exists"
 #define OB_ERR_DATA_TOO_LONG_MSG_FMT_V2__USER_ERROR_MSG "Data too long for column '%.*s' at row %ld"
 #define OB_ERR_INVALID_DATE_MSG_FMT_V2__USER_ERROR_MSG "Incorrect datetime value for column '%.*s' at row %ld"
 
-extern int g_all_ob_errnos[2410];
+extern int g_all_ob_errnos[2408];
 
   const char *ob_error_name(const int oberr);
   const char* ob_error_cause(const int oberr);
@@ -4416,7 +4379,6 @@ extern int g_all_ob_errnos[2410];
   int ob_errpkt_errno(const int oberr);
   const char *ob_errpkt_strerror(const int oberr);
   const char *ob_errpkt_str_user_error(const int oberr);
-
 
 } // end namespace common
 } // end namespace oceanbase

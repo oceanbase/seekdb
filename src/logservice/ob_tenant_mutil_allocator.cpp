@@ -35,7 +35,6 @@ ObTenantMutilAllocator::ObTenantMutilAllocator()
     LOG_IO_FLUSH_META_TASK_SIZE(sizeof(palf::LogIOFlushMetaTask)),
     LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE(sizeof(palf::LogIOTruncatePrefixBlocksTask)),
     PALF_FETCH_LOG_TASK_SIZE(sizeof(palf::FetchLogTask)),
-    LOG_IO_FLASHBACK_TASK_SIZE(sizeof(palf::LogIOFlashbackTask)),
     LOG_IO_PURGE_THROTTLING_TASK_SIZE(sizeof(palf::LogIOPurgeThrottlingTask)),
     clog_blk_alloc_(),
     replay_log_task_blk_alloc_(REPLAY_MEM_LIMIT_THRESHOLD),
@@ -48,7 +47,6 @@ ObTenantMutilAllocator::ObTenantMutilAllocator()
     log_io_truncate_prefix_blocks_task_alloc_(LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE, ObMemAttr("FlushMeta"), choose_blk_size(LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE), clog_blk_alloc_, this),
     palf_fetch_log_task_alloc_(PALF_FETCH_LOG_TASK_SIZE, ObMemAttr(ObModIds::OB_FETCH_LOG_TASK), choose_blk_size(PALF_FETCH_LOG_TASK_SIZE), clog_blk_alloc_, this),
     replay_log_task_alloc_(ObMemAttr(ObModIds::OB_LOG_REPLAY_TASK), common::OB_MALLOC_BIG_BLOCK_SIZE, replay_log_task_blk_alloc_),
-    log_io_flashback_task_alloc_(LOG_IO_FLASHBACK_TASK_SIZE, ObMemAttr("Flashback"), choose_blk_size(LOG_IO_FLASHBACK_TASK_SIZE), clog_blk_alloc_, this),
     log_io_purge_throttling_task_alloc_(LOG_IO_PURGE_THROTTLING_TASK_SIZE, ObMemAttr("PurgeThrottle"), choose_blk_size(LOG_IO_PURGE_THROTTLING_TASK_SIZE), clog_blk_alloc_, this),
     clog_compression_buf_alloc_(ObMemAttr("LogComBuf"), common::OB_MALLOC_BIG_BLOCK_SIZE, clog_compressing_blk_alloc_)
 {
@@ -79,7 +77,6 @@ void ObTenantMutilAllocator::destroy()
   log_io_truncate_log_task_alloc_.destroy();
   log_io_flush_meta_task_alloc_.destroy();
   log_io_truncate_prefix_blocks_task_alloc_.destroy();
-  log_io_flashback_task_alloc_.destroy();
   log_io_purge_throttling_task_alloc_.destroy();
   palf_fetch_log_task_alloc_.destroy();
   replay_log_task_alloc_.destroy();
@@ -273,24 +270,6 @@ void ObTenantMutilAllocator::free_replay_log_buf(void *ptr)
 {
   if (OB_LIKELY(NULL != ptr)) {
     replay_log_task_alloc_.free(ptr);
-  }
-}
-
-palf::LogIOFlashbackTask *ObTenantMutilAllocator::alloc_log_io_flashback_task(const int64_t palf_id, const int64_t palf_epoch)
-{
-  LogIOFlashbackTask *ret_ptr = NULL;
-  void *ptr = log_io_flashback_task_alloc_.alloc();
-  if (NULL != ptr) {
-    ret_ptr = new(ptr)LogIOFlashbackTask(palf_id, palf_epoch);
-  }
-  return ret_ptr;
-}
-
-void ObTenantMutilAllocator::free_log_io_flashback_task(palf::LogIOFlashbackTask *ptr)
-{
-  if (OB_LIKELY(NULL != ptr)) {
-    ptr->~LogIOFlashbackTask();
-    log_io_flashback_task_alloc_.free(ptr);
   }
 }
 

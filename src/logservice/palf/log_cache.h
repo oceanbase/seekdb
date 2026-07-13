@@ -60,8 +60,7 @@ public:
   int init(const int64_t palf_id, 
            IPalfHandleImpl *palf_handle_impl);
   bool is_inited() const;           
-  int read(const int64_t flashback_version,
-           const LSN &lsn,
+  int read(const LSN &lsn,
            const int64_t in_read_size,
            ReadBuf &read_buf,
            int64_t &out_read_size,

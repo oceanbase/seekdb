@@ -392,11 +392,11 @@ protected:
 
   int check_contain_lateral_node(const ParseNode *parse_tree, bool &is_contain);
 
-  int check_stmt_has_flashback_query(ObDMLStmt *stmt, bool check_all, bool &has_fq);
+  int check_stmt_has_snapshot_query(ObDMLStmt *stmt, bool check_all, bool &has_fq);
   virtual int resolve_basic_table(const ParseNode &parse_tree, TableItem *&table_item);
-  int resolve_flashback_query_node(const ParseNode *time_node, TableItem *table_item);
-  int check_flashback_expr_validity(ObRawExpr *expr, bool &has_column);
-  int set_flashback_info_for_view(ObSelectStmt *select_stmt, TableItem *table_item);
+  int resolve_snapshot_query_node(const ParseNode *time_node, TableItem *table_item);
+  int check_snapshot_expr_validity(ObRawExpr *expr, bool &has_column);
+  int set_snapshot_info_for_view(ObSelectStmt *select_stmt, TableItem *table_item);
   int resolve_base_or_alias_table_item_normal(const uint64_t catalog_id,
                                               const uint64_t database_id,
                                               const common::ObString &catalog_name,

@@ -4963,7 +4963,7 @@ int ObSchemaGetterGuard::check_table_exist(
 }
 
 template <>
-int ObSchemaGetterGuard::check_flashback_object_exist<ObTriggerInfo>(
+int ObSchemaGetterGuard::check_recyclebin_restore_object_exist<ObTriggerInfo>(
     const ObTriggerInfo &object_schema,
     const ObString &object_name,
     bool &object_exist)

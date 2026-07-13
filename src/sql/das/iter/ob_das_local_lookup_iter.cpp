@@ -136,7 +136,6 @@ int ObDASLocalLookupIter::init_scan_param(ObTableScanParam &param, const ObDASSc
     param.need_scn_ = rtdef->need_scn_;
     param.pd_storage_flag_ = ctdef->pd_expr_spec_.pd_storage_flag_.pd_flag_;
     param.fb_snapshot_ = rtdef->fb_snapshot_;
-    param.fb_read_tx_uncommitted_ = rtdef->fb_read_tx_uncommitted_;
     if (rtdef->is_for_foreign_check_) {
       param.trans_desc_ = trans_desc_;
     }

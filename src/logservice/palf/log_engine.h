@@ -55,8 +55,6 @@ class LogWriteBuf;
 class LogGroupEntryHeader;
 class TruncatePrefixBlocksCbCtx;
 class LogIOTruncatePrefixBlocksTask;
-class LogIOFlashbackTask;
-class FlashbackCbCtx;
 class LogIOPurgeThrottlingTask;
 class PurgeThrottlingCbCtx;
 
@@ -163,7 +161,6 @@ public:
 
   int submit_truncate_prefix_blocks_task(
       const TruncatePrefixBlocksCbCtx &truncate_prefix_blocks_ctx);
-  int submit_flashback_task(const FlashbackCbCtx &flashback_ctx);
   int submit_purge_throttling_task(const PurgeThrottlingType purge_type);
 
   virtual int check_config_meta_size(const LogConfigMeta &config_meta) const;
@@ -179,8 +176,6 @@ public:
   int read_group_entry_header(const LSN &lsn, LogGroupEntryHeader &log_group_entry_header);
   int truncate(const LSN &lsn);
   int truncate_prefix_blocks(const LSN &lsn);
-  int begin_flashback(const LSN &start_lsn_of_block);
-  int end_flashback(const LSN &start_lsn_of_block);
   int delete_block(const block_id_t &block_id);
 
   const LSN get_begin_lsn() const;
@@ -200,8 +195,6 @@ public:
   int update_base_lsn_used_for_gc(const LSN &lsn);
   int update_manifest(const block_id_t block_id);
   int append_meta(const char *buf, const int64_t buf_len);
-  int update_log_snapshot_meta_for_flashback(const LogInfo &prev_log_inf,
-                                             const LSN &prev_log_tail_lsn);
   //
   // ===================== MetaStorage end =======================
 
@@ -470,8 +463,6 @@ private:
   int generate_flush_meta_task_(const FlushMetaCbCtx &flush_meta_cb_ctx,
                                 const LogMeta &log_meta,
                                 LogIOFlushMetaTask *&flush_meta_task);
-  int generate_flashback_task_(const FlashbackCbCtx &flashback_cb_ctx,
-                               LogIOFlashbackTask *&flashback_task);
   int generate_purge_throttling_task_(const PurgeThrottlingCbCtx &purge_cb_ctx,
                                       LogIOPurgeThrottlingTask *&purge_task);
   int update_config_meta_guarded_by_lock_(const LogConfigMeta &meta, LogMeta &log_meta);

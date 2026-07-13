@@ -350,8 +350,8 @@ int ObMajorRefreshMJVPrinter::gen_mr_rt_mv_access_mv_data_stmt(ObSelectStmt *&se
     LOG_WARN("failed to generate major refresh real time mview access mv select list", K(ret));
   } else {
     mv_table->database_name_ = mv_db_name_;
-    mv_table->flashback_query_expr_ = exprs_.last_refresh_scn_;
-    mv_table->flashback_query_type_ = TableItem::USING_SCN;
+    mv_table->snapshot_query_expr_ = exprs_.last_refresh_scn_;
+    mv_table->snapshot_query_type_ = TableItem::USING_SCN;
   }
   return ret;
 }
@@ -609,8 +609,8 @@ int ObMajorRefreshMJVPrinter::gen_exists_cond_for_mview(const TableItem &source_
   } else {
     exists_expr = exists_op_expr;
     mv_table->database_name_ = mv_db_name_;
-    mv_table->flashback_query_expr_ = exprs_.last_refresh_scn_;
-    mv_table->flashback_query_type_ = TableItem::USING_SCN;
+    mv_table->snapshot_query_expr_ = exprs_.last_refresh_scn_;
+    mv_table->snapshot_query_type_ = TableItem::USING_SCN;
     query_ref_expr->set_ref_stmt(subquery);
   }
   return ret;
@@ -670,10 +670,10 @@ int ObMajorRefreshMJVPrinter::gen_one_refresh_select_for_major_refresh_mjv(const
   } else if (OB_FAIL(gen_refresh_select_hint_for_major_refresh_mjv(*left_table, *right_table, delta_stmt->get_stmt_hint()))) {
     LOG_WARN("failed to gen refresh select hint for major refresh mjv", K(ret));
   } else {
-    left_table->flashback_query_expr_ = exprs_.refresh_scn_;
-    left_table->flashback_query_type_ = TableItem::USING_SCN;
-    right_table->flashback_query_expr_ = is_delta_left ? exprs_.last_refresh_scn_ : exprs_.refresh_scn_;
-    right_table->flashback_query_type_ = TableItem::USING_SCN;
+    left_table->snapshot_query_expr_ = exprs_.refresh_scn_;
+    left_table->snapshot_query_type_ = TableItem::USING_SCN;
+    right_table->snapshot_query_expr_ = is_delta_left ? exprs_.last_refresh_scn_ : exprs_.refresh_scn_;
+    right_table->snapshot_query_type_ = TableItem::USING_SCN;
   }
   return ret;
 }
@@ -720,10 +720,10 @@ int ObMajorRefreshMJVPrinter::gen_refresh_validation_select_for_major_refresh_mj
     delta_stmt->get_order_items().reset();
     delta_stmt->get_select_item(0).is_real_alias_ = true;
     delta_stmt->get_select_item(0).expr_ = aggr_expr;
-    left_table->flashback_query_expr_ = exprs_.refresh_scn_;
-    left_table->flashback_query_type_ = TableItem::USING_SCN;
-    right_table->flashback_query_expr_ = exprs_.refresh_scn_;
-    right_table->flashback_query_type_ = TableItem::USING_SCN;
+    left_table->snapshot_query_expr_ = exprs_.refresh_scn_;
+    left_table->snapshot_query_type_ = TableItem::USING_SCN;
+    right_table->snapshot_query_expr_ = exprs_.refresh_scn_;
+    right_table->snapshot_query_type_ = TableItem::USING_SCN;
   }
   return ret;
 }

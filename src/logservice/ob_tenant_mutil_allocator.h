@@ -34,7 +34,6 @@ class LogIOTruncateLogTask;
 class LogIOFlushMetaTask;
 class LogIOTruncatePrefixBlocksTask;
 class LogIOFlushMetaTask;
-class LogIOFlashbackTask;
 class LogIOPurgeThrottlingTask;
 class FetchLogTask;
 }
@@ -75,8 +74,6 @@ public:
   virtual void *alloc_replay_log_buf(const int64_t size) = 0;
   virtual void free_replay_task(logservice::ObLogReplayTask *ptr) = 0;
   virtual void free_replay_log_buf(void *ptr) = 0;
-  virtual palf::LogIOFlashbackTask *alloc_log_io_flashback_task(const int64_t palf_id, const int64_t palf_epoch) = 0;
-  virtual void free_log_io_flashback_task(palf::LogIOFlashbackTask *ptr) = 0;
   virtual palf::LogIOPurgeThrottlingTask *alloc_log_io_purge_throttling_task(const int64_t palf_id, const int64_t palf_epoch) = 0;
   virtual void free_log_io_purge_throttling_task(palf::LogIOPurgeThrottlingTask *ptr) = 0;
   virtual void *alloc_append_compression_buf(const int64_t size) = 0;
@@ -144,8 +141,6 @@ public:
   void *alloc_replay_log_buf(const int64_t size);
   void free_replay_task(logservice::ObLogReplayTask *ptr);
   void free_replay_log_buf(void *ptr);
-  palf::LogIOFlashbackTask *alloc_log_io_flashback_task(const int64_t palf_id, const int64_t palf_epoch);
-  void free_log_io_flashback_task(palf::LogIOFlashbackTask *ptr);
   palf::LogIOPurgeThrottlingTask *alloc_log_io_purge_throttling_task(const int64_t palf_id, const int64_t palf_epoch);
   void free_log_io_purge_throttling_task(palf::LogIOPurgeThrottlingTask *ptr);
 
@@ -165,7 +160,6 @@ private:
   const int LOG_IO_FLUSH_META_TASK_SIZE;
   const int LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE;
   const int PALF_FETCH_LOG_TASK_SIZE;
-  const int LOG_IO_FLASHBACK_TASK_SIZE;
   const int LOG_IO_PURGE_THROTTLING_TASK_SIZE;
   ObBlockAllocMgr clog_blk_alloc_;
   ObBlockAllocMgr replay_log_task_blk_alloc_;
@@ -178,7 +172,6 @@ private:
   ObSliceAlloc log_io_truncate_prefix_blocks_task_alloc_;
   ObSliceAlloc palf_fetch_log_task_alloc_;
   ObVSliceAlloc replay_log_task_alloc_;
-  ObSliceAlloc log_io_flashback_task_alloc_;
   ObSliceAlloc log_io_purge_throttling_task_alloc_;
   ObVSliceAlloc clog_compression_buf_alloc_;
 };

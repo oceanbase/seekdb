@@ -2434,21 +2434,6 @@ int ObRootService::clean_splitted_tablet(const obcall::ObCleanSplittedTabletArg 
   return ret;
 }
 
-int ObRootService::flashback_index(const ObFlashBackIndexArg &arg) {
-  int ret = OB_SUCCESS;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (!arg.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(arg), K(ret));
-  } else if (OB_FAIL(ddl_service_.flashback_index(arg))) {
-    LOG_WARN("failed to flashback index", K(ret));
-  }
-
-  return ret;
-}
-
 int ObRootService::purge_index(const ObPurgeIndexArg &arg)
 {
   int ret = OB_SUCCESS;
@@ -2586,7 +2571,7 @@ int ObRootService::truncate_table_v2(const obcall::ObTruncateTableArg &arg, obca
 /**
  * recyclebin related
  */
-int ObRootService::flashback_table_from_recyclebin(const ObFlashBackTableFromRecyclebinArg &arg)
+int ObRootService::restore_table_from_recyclebin(const ObRecyclebinRestoreTableArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -2595,24 +2580,7 @@ int ObRootService::flashback_table_from_recyclebin(const ObFlashBackTableFromRec
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(arg), K(ret));
-  } else if (OB_FAIL(ddl_service_.flashback_table_from_recyclebin(arg))) {
-    LOG_WARN("failed to flash back table", K(ret));
-  }
-  return ret;
-}
-
-int ObRootService::flashback_table_to_time_point(const obcall::ObFlashBackTableToScnArg &arg)
-{
-  int ret = OB_SUCCESS;
-  LOG_INFO("receive flashback table arg", K(arg));
-
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (!arg.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(arg));
-  } else if (OB_FAIL(ddl_service_.flashback_table_to_time_point(arg))) {
+  } else if (OB_FAIL(ddl_service_.restore_table_from_recyclebin(arg))) {
     LOG_WARN("failed to flash back table", K(ret));
   }
   return ret;
@@ -2633,7 +2601,7 @@ int ObRootService::purge_table(const ObPurgeTableArg &arg)
   return ret;
 }
 
-int ObRootService::flashback_database(const ObFlashBackDatabaseArg &arg)
+int ObRootService::restore_database(const ObRecyclebinRestoreDatabaseArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -2642,7 +2610,7 @@ int ObRootService::flashback_database(const ObFlashBackDatabaseArg &arg)
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(arg), K(ret));
-  } else if (OB_FAIL(ddl_service_.flashback_database(arg))) {
+  } else if (OB_FAIL(ddl_service_.restore_database(arg))) {
     LOG_WARN("failed to flash back database", K(ret));
   }
   return ret;
@@ -4299,8 +4267,6 @@ int ObRootService::set_config_pre_hook(obcall::ObAdminSetConfigArg &arg)
           LOG_WARN("config invalid", "item", *item, K(ret), K(i), K(item->batch_ids_.at(i)));
         }
       }
-    } else if (0 == STRCMP(item->name_.ptr(), _TRANSFER_TASK_TABLET_COUNT_THRESHOLD)) {
-      ret = check_transfer_task_tablet_count_threshold_(*item);
     }
   }
   return ret;
@@ -4872,25 +4838,6 @@ int ObRootService::recompile_all_views_batch(const obcall::ObRecompileAllViewsBa
   }
   LOG_INFO("recompile all views batch finish", KR(ret), K(start_time),
       "cost_time", ObTimeUtility::current_time() - start_time);
-  return ret;
-}
-
-int ObRootService::check_transfer_task_tablet_count_threshold_(obcall::ObAdminSetConfigItem &item)
-{
-  int ret = OB_SUCCESS;
-  bool valid = true;
-  int64_t value = ObConfigIntParser::get(item.value_.ptr(), valid);
-  if (valid && (value > OB_MAX_TRANSFER_BINDING_TABLET_CNT)) {
-    valid = false;
-    char err_msg[DEFAULT_BUF_LENGTH];
-    (void)snprintf(err_msg, sizeof(err_msg), "_transfer_task_tablet_count_threshold of tenant 1, "
-        "it cannot be greater than %ld", OB_MAX_TRANSFER_BINDING_TABLET_CNT);
-    LOG_USER_ERROR(OB_INVALID_ARGUMENT, err_msg);
-  }
-  if (!valid) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("config invalid", KR(ret), K(value), K(item));
-  }
   return ret;
 }
 

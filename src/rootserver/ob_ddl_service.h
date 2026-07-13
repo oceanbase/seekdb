@@ -305,12 +305,6 @@ public:
       uint64_t &curr_udt_set_id,
       ObDDLOperator *ddl_operator,
       common::ObMySQLTransaction *trans);
-  int add_column_to_column_group(
-      const share::schema::ObTableSchema &origin_table_schema,
-      const share::schema::AlterTableSchema &alter_table_schema,
-      share::schema::ObTableSchema &new_table_schema,
-      ObDDLOperator &ddl_operator,
-      common::ObMySQLTransaction &trans);
   int gen_alter_column_new_table_schema_offline(
       const share::schema::ObTableSchema &origin_table_schema,
       share::schema::AlterTableSchema &alter_table_schema,
@@ -683,7 +677,6 @@ public:
   int check_create_with_db_id(share::schema::ObDatabaseSchema &schema);
   int replace_table_schema_type(share::schema::ObTableSchema &schema);
 
-  int flashback_table_to_time_point(const obcall::ObFlashBackTableToScnArg &arg);
   //----Functions for recyclebin ----
 
   int check_object_name_matches_db_name(const ObString &origin_table_name,
@@ -696,13 +689,13 @@ public:
       const bool is_newest,
       common::ObIAllocator *allocator,
       common::ObMySQLProxy *sql_proxy);
-  int flashback_table_from_recyclebin(const obcall::ObFlashBackTableFromRecyclebinArg &arg);
-  int flashback_table_from_recyclebin_in_trans(const share::schema::ObTableSchema &table_schema,
+  int restore_table_from_recyclebin(const obcall::ObRecyclebinRestoreTableArg &arg);
+  int restore_table_from_recyclebin_in_trans(const share::schema::ObTableSchema &table_schema,
                                const uint64_t new_db_id,
                                const common::ObString &new_table_name,
                                const common::ObString &ddl_stmt_str,
                                share::schema::ObSchemaGetterGuard &guard);
-  int flashback_aux_table(const share::schema::ObTableSchema &table_schema,
+  int restore_aux_table(const share::schema::ObTableSchema &table_schema,
                           share::schema::ObSchemaGetterGuard &schema_guard,
                           ObMySQLTransaction &trans,
                           ObDDLOperator &ddl_operator,
@@ -710,8 +703,8 @@ public:
                           const share::schema::ObTableType table_type);
   int purge_table(const obcall::ObPurgeTableArg &arg, ObMySQLTransaction *trans = NULL);
 
-  int flashback_database(const obcall::ObFlashBackDatabaseArg &arg);
-  int flashback_database_in_trans(const share::schema::ObDatabaseSchema &db_schema,
+  int restore_database(const obcall::ObRecyclebinRestoreDatabaseArg &arg);
+  int restore_database_in_trans(const share::schema::ObDatabaseSchema &db_schema,
                                   const common::ObString &new_db_name,
                                   share::schema::ObSchemaGetterGuard &guard,
                                   const common::ObString &ddl_stmt_str);
@@ -722,12 +715,6 @@ public:
       const obcall::ObPurgeRecycleBinArg &arg,
       const ObIArray<share::schema::ObRecycleObject> &recycle_objs,
       int64_t &purged_objects);
-  int flashback_index(const obcall::ObFlashBackIndexArg &arg);
-  int flashback_index_in_trans(share::schema::ObSchemaGetterGuard &schema_guard,
-                               const share::schema::ObTableSchema &table_schema,
-                               const uint64_t new_db_id,
-                               const common::ObString &new_table_name,
-                               const common::ObString &ddl_stmt_str);
   int purge_index(const obcall::ObPurgeIndexArg &arg);
   int create_user(obcall::ObCreateUserArg &arg,
                   common::ObIArray<int64_t> &failed_index);
@@ -1337,8 +1324,7 @@ int check_will_be_having_domain_index_operation(
       common::ObMySQLTransaction &trans,
       common::ObIAllocator &allocator,
       const uint64_t tenant_data_version,
-      const ObString &index_name = ObString(""),
-      const bool ignore_cs_replica = false);
+      const ObString &index_name = ObString(""));
   int drop_child_table_fk(
       const obcall::ObAlterTableArg &alter_table_arg,
       const share::schema::ObTableSchema &orig_table_schema,
@@ -1501,19 +1487,6 @@ int check_will_be_having_domain_index_operation(
                            ObDDLOperator &ddl_operator,
                            common::ObMySQLTransaction &trans,
                            const uint64_t tenant_data_version);
-  int check_alter_column_group(const obcall::ObAlterTableArg &alter_table_arg, share::ObDDLType &ddl_type) const;
-  int alter_column_group(obcall::ObAlterTableArg &alter_table_arg,
-                         const share::schema::ObTableSchema &origin_table_schema,
-                         share::schema::ObTableSchema &new_table_schema,
-                         share::schema::ObSchemaGetterGuard &schema_guard,
-                         ObDDLOperator &ddl_operator,
-                         common::ObMySQLTransaction &trans);
-
-
-  int update_column_group_table_inplace(const share::schema::ObTableSchema &origin_table_schema,
-                                        const share::schema::ObTableSchema &new_table_schema,
-                                        ObDDLOperator &ddl_operator,
-                                        common::ObMySQLTransaction &trans);
   int check_can_alter_table_constraints(
     const obcall::ObAlterTableArg::AlterConstraintType op_type,
     share::schema::ObSchemaGetterGuard &schema_guard,
@@ -1841,11 +1814,6 @@ int check_will_be_having_domain_index_operation(
                                      share::schema::AlterColumnSchema &alter_column_schema,
                                      ObDDLOperator *ddl_operator,
                                      common::ObMySQLTransaction *trans);
-  int alter_table_update_cg_column(common::ObMySQLTransaction &trans, 
-                                   ObDDLOperator &ddl_operator,
-                                   share::schema::ObColumnSchemaV2 &new_column_schema,
-                                   share::schema::ObTableSchema &new_table_schema);
-
   int build_need_flush_role_array(share::schema::ObSchemaGetterGuard &schema_guard,
                                   const share::schema::ObUserInfo *user_info,
                                   const obcall::ObAlterUserProfileArg &arg,
@@ -1984,15 +1952,6 @@ private:
       ObDDLSQLTransaction &trans,
       ObDDLTaskRecord &task_record,
       const int64_t snapshot_version = 0);
-  int adjust_cg_for_offline(ObTableSchema &new_table_schema);
-  int add_column_group(const obcall::ObAlterTableArg &alter_table_arg,
-                       const share::schema::ObTableSchema &ori_table_schema,
-                       share::schema::ObTableSchema &new_table_schema);
-  
-  int drop_column_group(const obcall::ObAlterTableArg &alter_table_arg,
-                        const share::schema::ObTableSchema &ori_table_schema,
-                        share::schema::ObTableSchema &new_table_schema);
-
   int check_alter_heap_table_index(const obcall::ObIndexArg::IndexActionType type,
                                    const ObTableSchema &orig_table_schema,
                                    obcall::ObIndexArg *index_arg);

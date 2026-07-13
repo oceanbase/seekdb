@@ -37,10 +37,7 @@ namespace sql
   }
 
 class ObExecContext;
-class ObFlashBackTenantStmt;
 class ObPurgeRecycleBinStmt;
-
-DEF_SIMPLE_EXECUTOR(ObFlashBackTenant);
 
 DEF_SIMPLE_EXECUTOR(ObPurgeRecycleBin);
 

@@ -419,9 +419,7 @@ enum ObDmlEventType
 };
 
 const char *const NORMAL_MODE_STR = "normal";
-const char *const FLASHBACK_MODE_STR = "physical_flashback";
 const char *const ARBITRATION_MODE_STR = "arbitration";
-const char *const FLASHBACK_VERIFY_MODE_STR = "physical_flashback_verify";
 const char *const DISABLED_CLUSTER_MODE_STR = "disabled_cluster";
 const char *const DISABLED_WITH_READONLY_CLUSTER_MODE_STR = "disabled_with_readonly_cluster";
 static const int64_t MODIFY_GC_SNAPSHOT_INTERVAL = 2 * 1000 * 1000; //2s

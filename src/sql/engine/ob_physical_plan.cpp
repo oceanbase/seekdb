@@ -86,7 +86,6 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     is_dep_base_table_(false),
     is_insert_select_(false),
     is_plain_insert_(false),
-    flashback_query_items_(allocator_),
     contain_paramed_column_field_(false),
     first_array_index_(OB_INVALID_INDEX),
     need_consistent_snapshot_(true),
@@ -192,7 +191,6 @@ void ObPhysicalPlan::reset()
   base_constraints_.reset();
   strict_constrinats_.reset();
   non_strict_constrinats_.reset();
-  flashback_query_items_.reset();
   contain_paramed_column_field_ = false;
   first_array_index_ = OB_INVALID_INDEX;
   need_consistent_snapshot_ = true;
@@ -750,9 +748,6 @@ int64_t ObPhysicalPlan::get_max_concurrent_num()
   return ATOMIC_LOAD(&max_concurrent_num_);
 }
 
-OB_SERIALIZE_MEMBER(FlashBackQueryItem,
-                    table_id_,
-                    time_val_);
 // Because we haven't seen the handling of force_trace_log for remote execution yet, so we will not serialize it temporarily
 OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     tenant_schema_version_, // this field is not used at runtime
@@ -779,7 +774,6 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     vars_,
                     px_dop_,
                     has_nested_sql_,
-                    flashback_query_items_,
                     stat_.enable_early_lock_release_,
                     use_pdml_,
                     is_new_engine_,
@@ -1011,17 +1005,6 @@ bool ObPhysicalPlan::has_same_location_constraints(const ObPhysicalPlan &r) cons
   }
   return is_same;
 }
-
-DEF_TO_STRING(FlashBackQueryItem)
-{
-  int64_t pos = 0;
-  J_OBJ_START();
-  J_KV(K_(table_id));
-  J_KV(K_(time_val));
-  J_OBJ_END();
-  return pos;
-}
-
 
 int ObPhysicalPlan::alloc_op_spec(const ObPhyOperatorType type,
                                   const int64_t child_cnt,

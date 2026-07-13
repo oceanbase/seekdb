@@ -80,8 +80,6 @@ int ObDDLSqlGenerator::get_priv_name(const int64_t priv, const char *&name)
       name = "RENAME"; break;
     case OB_PRIV_REFERENCES:
       name = "REFERENCES"; break;
-    case OB_PRIV_FLASHBACK:
-      name = "FLASHBACK"; break;
     case OB_PRIV_READ:
       name = "READ"; break;
     case OB_PRIV_WRITE:

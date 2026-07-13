@@ -2136,7 +2136,7 @@ int LogConfigMgr::wait_log_barrier_(const LogConfigChangeArgs &args,
     PALF_LOG(WARN, "sync_get_committed_end_lsn failed", K(ret), K_(palf_id), K_(self), K(new_config_info));
   } else if (need_skip_log_barrier) {
     ret = OB_SUCCESS;
-    PALF_LOG(INFO, "PALF is in FLASHBACK mode, skip log barrier", K(ret), K_(palf_id), K_(self), \
+    PALF_LOG(INFO, "skip log barrier for current access mode", K(ret), K_(palf_id), K_(self), \
         "accepted_mode_meta", mode_mgr_->get_accepted_mode_meta());
   } else if (FALSE_IT(ret = (first_committed_end_lsn >= prev_log_end_lsn)? OB_SUCCESS: OB_EAGAIN)) {
   } else if (OB_EAGAIN == ret) {
@@ -2192,7 +2192,7 @@ int LogConfigMgr::check_follower_sync_status_(const LogConfigChangeArgs &args,
         K(added_member_has_new_version));
   } else if (need_skip_log_barrier) {
     ret = OB_SUCCESS;
-    PALF_LOG(INFO, "PALF is in FLASHBACK mode, skip log barrier", K(ret), K_(palf_id), K_(self), \
+    PALF_LOG(INFO, "skip log barrier for current access mode", K(ret), K_(palf_id), K_(self), \
         "accepted_mode_meta", mode_mgr_->get_accepted_mode_meta());
   } else if (first_committed_end_lsn >= first_leader_committed_end_lsn) {
     // if committed lsn of new majority do not retreat, then start config change

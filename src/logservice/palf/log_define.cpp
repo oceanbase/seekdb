@@ -81,18 +81,6 @@ int block_id_to_tmp_string(const block_id_t block_id, char *str, const int64_t s
   return ret;
 }
 
-int block_id_to_flashback_string(const block_id_t block_id, char *str, const int64_t str_len)
-{
-  int ret = OB_SUCCESS;
-  if (false == is_valid_block_id(block_id) || OB_ISNULL(str) || 0 >= str_len) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    int64_t pos = 0;
-    ret = databuff_printf(str, str_len, pos, "%lu.flashback", block_id);
-  }
-  return ret;
-}
-
 int construct_absolute_block_path(const char *dir_path, const block_id_t block_id, const int64_t buf_len, char *absolute_block_path)
 {
   int ret = OB_SUCCESS;

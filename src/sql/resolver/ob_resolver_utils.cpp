@@ -1904,11 +1904,9 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       // index
       SET_STMT_TYPE(T_CREATE_INDEX);
       SET_STMT_TYPE(T_DROP_INDEX);
-      // flashback
-      SET_STMT_TYPE(T_FLASHBACK_DATABASE);
-      SET_STMT_TYPE(T_FLASHBACK_TABLE_FROM_RECYCLEBIN);
-      SET_STMT_TYPE(T_FLASHBACK_TABLE_TO_SCN);
-      SET_STMT_TYPE(T_FLASHBACK_INDEX);
+      // recyclebin restore
+      SET_STMT_TYPE(T_RECYCLEBIN_RESTORE_DATABASE);
+      SET_STMT_TYPE(T_RECYCLEBIN_RESTORE_TABLE);
       // purge
       SET_STMT_TYPE(T_PURGE_RECYCLEBIN);
       SET_STMT_TYPE(T_PURGE_DATABASE);

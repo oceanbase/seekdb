@@ -190,7 +190,7 @@ bool LogModeMgr::can_raw_write() const
 
 bool LogModeMgr::can_receive_log() const
 {
-  return applied_mode_meta_.access_mode_ != AccessMode::FLASHBACK;
+  return is_valid_access_mode(applied_mode_meta_.access_mode_);
 }
 
 // need lock-free
@@ -208,7 +208,7 @@ bool LogModeMgr::can_do_paxos_accept() const
 // proected by lock_ in PalfHandleImpl
 bool LogModeMgr::need_skip_log_barrier() const
 {
-  return applied_mode_meta_.access_mode_ == AccessMode::FLASHBACK && can_do_paxos_accept();
+  return false;
 }
 
 int LogModeMgr::can_change_access_mode_(const int64_t mode_version) const
@@ -455,21 +455,6 @@ int LogModeMgr::switch_state_(const AccessMode &access_mode,
         // not reaches majority until LogModeMeta is been flushed by leader,
         // otherwise next change_access_mode/reconfirm may learn wrong ModeMeta
         if (accepted_mode_meta_.proposal_id_ == new_proposal_id_) {
-          // Scenario: There are 3 replicas A, B and C, they are all flashbacked, in this time,
-          // user change_access_mode to APPEND.
-          // Problem: if A restarts after being flashbacked, A's committed_end_lsn will be smaller
-          // than max_flushed_end_lsn even if log in max_flushed_end_lsn has been committed (The
-          // committed_end_lsn recorded in last LogEntryHeader is smaller than it's end_lsn).
-          // Then A was elected to be leader and change access mode to APPEND, if we don't advance
-          // committed_end_lsn of A, some logs which should be readable becomes unreadable in APPEND MODE.
-          // Reason: so we advance committed_end_lsn after switching to APPEND to make last logs readable.
-          if (false == is_reconfirm &&
-              AccessMode::FLASHBACK == applied_mode_meta_.access_mode_ &&
-              AccessMode::APPEND == accepted_mode_meta_.access_mode_) {
-            LSN max_flushed_end_lsn;
-            (void) sw_->get_max_flushed_end_lsn(max_flushed_end_lsn);
-            (void) sw_->try_advance_committed_end_lsn(max_flushed_end_lsn);
-          }
           // wait all committed log slide out
           change_done = (true == is_reconfirm)? true: can_finish_change_mode_();
           if (change_done) {

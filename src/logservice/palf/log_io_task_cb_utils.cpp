@@ -161,32 +161,6 @@ TruncatePrefixBlocksCbCtx& TruncatePrefixBlocksCbCtx::operator=(const TruncatePr
   return *this;
 }
 
-FlashbackCbCtx::FlashbackCbCtx(const SCN &flashback_scn)
-{
-  flashback_scn_ = flashback_scn;
-}
-
-FlashbackCbCtx::FlashbackCbCtx()
-{
-  reset();
-}
-
-FlashbackCbCtx::~FlashbackCbCtx()
-{
-  reset();
-}
-
-void FlashbackCbCtx::reset()
-{
-  flashback_scn_.reset();
-}
-
-FlashbackCbCtx &FlashbackCbCtx::operator=(const FlashbackCbCtx &rhf)
-{
-  flashback_scn_ = rhf.flashback_scn_;
-  return *this;
-}
-
 bool PurgeThrottlingCbCtx::is_valid() const
 {
   return (purge_type_ > INVALID_PURGE_TYPE && purge_type_ < MAX_PURGE_TYPE);

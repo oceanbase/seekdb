@@ -223,7 +223,6 @@ public:
   DELEGATE_WITH_RET(palf_handle_, set_location_cache_cb, int);
   DELEGATE_WITH_RET(palf_handle_, change_access_mode, int);
   DELEGATE_WITH_RET(palf_handle_, get_access_mode, int);
-  DELEGATE_WITH_RET(palf_handle_, flashback, int);
   CONST_DELEGATE_WITH_RET(palf_handle_, stat, int);
   DELEGATE_WITH_RET(palf_handle_, try_lock_config_change, int);
   DELEGATE_WITH_RET(palf_handle_, unlock_config_change, int);

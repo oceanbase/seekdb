@@ -495,7 +495,7 @@ public:
   // - OB_INVALID_ARGUMENT
   // - OB_ENTRY_NOT_EXIST: there is no log in disk
   // - OB_ERR_OUT_OF_LOWER_BOUND: scn is too old, log files may have been recycled
-  // - OB_NEED_RETRY: the block is being flashback, need retry.
+  // - OB_NEED_RETRY: the block is being recycled or switched, need retry.
   // - others: bug
   virtual int locate_by_scn_coarsely(const share::SCN &scn, LSN &result_lsn) = 0;
 
@@ -512,7 +512,7 @@ public:
   // - OB_SUCCESS; locate_by_lsn_coarsely success
   // - OB_INVALID_ARGUMENT
   // - OB_ERR_OUT_OF_LOWER_BOUND: lsn is too small, log files may have been recycled
-  // - OB_NEED_RETRY: the block is being flashback, need retry.
+  // - OB_NEED_RETRY: the block is being recycled or switched, need retry.
   // - others: bug
   virtual int locate_by_lsn_coarsely(const LSN &lsn, share::SCN &result_scn) = 0;
   virtual int get_begin_lsn(LSN &lsn) const = 0;
@@ -556,7 +556,6 @@ public:
   virtual int inner_after_flush_meta(const FlushMetaCbCtx &flush_meta_cb_ctx) = 0;
   virtual int inner_after_truncate_prefix_blocks(const TruncatePrefixBlocksCbCtx &truncate_prefix_cb_ctx) = 0;
   virtual int advance_reuse_lsn(const LSN &flush_log_end_lsn) = 0;
-  virtual int inner_after_flashback(const FlashbackCbCtx &flashback_ctx) = 0;
   virtual int inner_append_log(const LSN &lsn,
                                const LogWriteBuf &write_buf,
                                const share::SCN &scn) = 0;
@@ -567,7 +566,6 @@ public:
                                 const int64_t buf_len) = 0;
   virtual int inner_truncate_log(const LSN &lsn) = 0;
   virtual int inner_truncate_prefix_blocks(const LSN &lsn) = 0;
-  virtual int inner_flashback(const share::SCN &flashback_scn) = 0;
   virtual int check_and_switch_state() = 0;
   virtual int check_and_switch_freeze_mode() = 0;
   virtual bool is_in_period_freeze_mode() const = 0;
@@ -710,10 +708,6 @@ public:
   virtual int advance_election_epoch_and_downgrade_priority(const int64_t proposal_id, 
                                                             const int64_t downgrade_priority_time_us,
                                                             const char *reason) = 0;
-  virtual int flashback(const int64_t mode_version,
-                        const share::SCN &flashback_scn,
-                        const int64_t timeout_us) = 0;
-
   virtual int stat(PalfStat &palf_stat) = 0;
   virtual int get_palf_epoch(int64_t &palf_epoch) const = 0;
   virtual int try_lock_config_change(int64_t lock_owner, int64_t timeout_us) = 0;
@@ -955,7 +949,6 @@ public:
   int inner_after_flush_meta(const FlushMetaCbCtx &flush_meta_cb_ctx) override final;
   int inner_after_truncate_prefix_blocks(const TruncatePrefixBlocksCbCtx &truncate_prefix_cb_ctx) override final;
   int advance_reuse_lsn(const LSN &flush_log_end_lsn);
-  int inner_after_flashback(const FlashbackCbCtx &flashback_ctx) override final;
   int inner_append_log(const LSN &lsn,
                        const LogWriteBuf &write_buf,
                        const share::SCN &scn) override final;
@@ -966,7 +959,6 @@ public:
                         const int64_t buf_len) override final;
   int inner_truncate_log(const LSN &lsn) override final;
   int inner_truncate_prefix_blocks(const LSN &lsn) override final;
-  int inner_flashback(const share::SCN &flashback_scn) override final;
   // ==================================================================
   int check_and_switch_state() override final;
   int check_and_switch_freeze_mode() override final;
@@ -1055,10 +1047,6 @@ public:
                                   const RegisterReturn reg_ret) override final;
   int handle_learner_req(const LogLearner &server, const LogLearnerReqType req_type) override final;
   int get_palf_epoch(int64_t &palf_epoch) const override final;
-  int flashback(const int64_t mode_version,
-                const share::SCN &flashback_scn,
-                const int64_t timeout_us) override final;
-
   //config change lock related function
   int try_lock_config_change(int64_t lock_owner, int64_t timeout_us);
 
@@ -1099,11 +1087,6 @@ private:
                                const int64_t &proposal_id);
   int construct_palf_base_info_(const LSN &max_committed_lsn,
                                 PalfBaseInfo &palf_base_info);
-  int construct_palf_base_info_for_flashback_(const LSN &start_lsn,
-                                              const share::SCN &flashback_scn,
-                                              const LSN &prev_entry_lsn,
-                                              const LogGroupEntryHeader &prev_entry_header,
-                                              PalfBaseInfo &palf_base_info);
   int append_disk_log_to_sw_(const LSN &start_lsn);
   int try_send_committed_info_(const common::ObAddr &server,
                                const LSN &log_lsn,
@@ -1166,7 +1149,6 @@ private:
                                block_id_t &max_block_id,
                                block_id_t &result_block_id);
   int get_block_id_by_scn_(const share::SCN &scn, block_id_t &result_block_id);
-  int get_block_id_by_scn_for_flashback_(const share::SCN &scn, block_id_t &result_block_id);
   void inc_update_last_locate_block_scn_(const block_id_t &block_id, const share::SCN &scn);
   int can_change_config_(const LogConfigChangeArgs &args, int64_t &proposal_id);
   int check_args_and_generate_config_(const LogConfigChangeArgs &args,
@@ -1187,24 +1169,6 @@ private:
                                     const bool is_rebuild);
   int get_election_leader_without_lock_(ObAddr &addr) const;
   int force_set_member_list_(const common::ObMemberList &new_member_list, const int64_t new_replica_num);
-  // ========================= flashback ==============================
-  int can_do_flashback_(const int64_t mode_version,
-                        const share::SCN &flashback_scn,
-                        bool &is_already_done);
-  int do_flashback_(const LSN &start_lsn,
-                    const share::SCN &flashback_scn);
-  int read_and_append_log_group_entry_before_ts_(const LSN &start_lsn,
-                                                 const share::SCN &flashback_scn,
-                                                 char *&last_log_buf,
-                                                 int64_t &last_log_buf_len,
-                                                 LSN &last_log_start_lsn,
-                                                 PalfBaseInfo &palf_base_info);
-  int cut_last_log_and_append_it_(char *last_log_buf,
-                                  const int64_t last_log_buf_len,
-                                  const LSN &last_log_start_lsn,
-                                  const share::SCN &flashback_scn,
-                                  PalfBaseInfo &in_out_palf_base_info);
-  // =================================================================
   int leader_sync_mode_meta_to_arb_member_();
   void is_in_sync_(bool &is_log_sync, bool &is_use_cache);
   int get_leader_max_scn_(SCN &max_scn, LSN &end_lsn);
@@ -1239,13 +1203,6 @@ private:
   typedef common::ObSpinLock SpinLock;
   typedef common::ObSpinLockGuard SpinLockGuard;
   typedef common::RWLock::WLockGuardWithTimeout WLockGuardWithTimeout;
-  enum LogFlashbackState
-  {
-    FLASHBACK_INIT = 0,
-    FLASHBACK_SUCCESS = 1,
-    FLASHBACK_FAILED = 2,
-    FLASHBACK_RECONFIRM = 3,
-  };
 private:
   mutable RWLock lock_;
   char log_dir_[common::MAX_PATH_SIZE];
@@ -1299,9 +1256,7 @@ private:
   mutable SpinLock config_change_lock_;
   SpinLock mode_change_lock_;
   // a spin lock for single replica mutex
-  SpinLock flashback_lock_;
   int64_t last_dump_info_time_us_;
-  LogFlashbackState flashback_state_;
   int64_t last_check_sync_time_us_;
   int64_t last_renew_loc_time_us_;
   int64_t last_print_in_sync_time_us_;

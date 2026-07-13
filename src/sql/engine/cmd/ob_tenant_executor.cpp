@@ -19,7 +19,6 @@
 #include "rootserver/ob_rs_serial_call.h"
 #include "rootserver/ob_root_service.h"
 
-#include "sql/resolver/ddl/ob_flashback_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"

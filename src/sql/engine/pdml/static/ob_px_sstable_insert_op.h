@@ -28,9 +28,9 @@ typedef std::pair<share::ObLSID, common::ObTabletID> LSTabletIDPair;
 struct ObInsertMonitor;
 struct ObTabletSliceParam;
 class ObDirectLoadMgrAgent;
-class ObColumnClusteredDag;
+class ObDDLInsertDag;
 class ObISliceWriter;
-class ObHeapCsSliceWriter;
+class ObHeapBatchSliceWriter;
 struct ObDDLAutoincParam;
 }
 
@@ -67,12 +67,12 @@ class ObPxMultiPartSSTableInsertSpec : public ObPxMultiPartInsertSpec
   OB_UNIS_VERSION_V(1);
 public:
   ObPxMultiPartSSTableInsertSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type)
-    : ObPxMultiPartInsertSpec(alloc, type), flashback_query_expr_(nullptr),
+    : ObPxMultiPartInsertSpec(alloc, type), snapshot_query_expr_(nullptr),
       regenerate_heap_table_pk_(false)
   {}
   int get_snapshot_version(ObEvalCtx &eval_ctx, int64_t &snapshot_version) const;
 public:
-  ObExpr *flashback_query_expr_;
+  ObExpr *snapshot_query_expr_;
   bool regenerate_heap_table_pk_;
   int64_t ddl_slice_id_idx_; // record idx of exprs for ddl slice id
   DISALLOW_COPY_AND_ASSIGN(ObPxMultiPartSSTableInsertSpec);
@@ -138,9 +138,9 @@ protected:
   int init_tablet_autoinc_param(const ObTabletID &tablet_id, const int64_t slice_idx, ObDDLAutoincParam &autoinc_param);
   int locate_exprs();
   int check_need_idempotence();
-  int get_or_create_heap_writer(const ObTabletID &tablet_id, const bool is_append_batch, ObISliceWriter *&slice_writer);
+  int get_or_create_heap_writer(const ObTabletID &tablet_id, ObISliceWriter *&slice_writer);
   int generate_tablet_active_rows(const ObIVector *tablet_id_vector, const ObBatchRows &brs,
-                                  hash::ObHashMap<ObTabletID, ObHeapCsSliceWriter *, hash::NoPthreadDefendMode> &slice_writer_map);
+                                  hash::ObHashMap<ObTabletID, ObHeapBatchSliceWriter *, hash::NoPthreadDefendMode> &slice_writer_map);
   int switch_slice_if_need(const ObTabletID &tablet_id, const int64_t slice_idx, const bool is_append_batch,
                            ObISliceWriter *&slice_writer, ObDDLAutoincParam *autoinc_param = nullptr);
   int get_continue_slice(const ObIVector *tablet_id_vector, const ObIVector *slice_info_vector_, const ObBatchRows &brs,
@@ -159,7 +159,7 @@ protected:
   ObExpr *slice_info_expr_; // valid when ordered tablet and idempotent ddl
   ObExpr *tablet_autoinc_expr_; // valid when heap plan
   int64_t tablet_autoinc_column_idx_;
-  storage::ObColumnClusteredDag *ddl_dag_;
+  storage::ObDDLInsertDag *ddl_dag_;
   // for heap plan, direct write tablet
   typedef common::hash::ObHashMap<common::ObTabletID, ObISliceWriter *, common::hash::NoPthreadDefendMode> TabletWriterMap;
   TabletWriterMap heap_tablet_writer_map_;

@@ -129,7 +129,6 @@ public:
   PALF_PLUGINS_DELEGATE_PTR(palf_monitor_, palf_monitor_lock_, record_disable_vote_event);
   PALF_PLUGINS_DELEGATE_PTR(palf_monitor_, palf_monitor_lock_, record_advance_base_info_event);
   PALF_PLUGINS_DELEGATE_PTR(palf_monitor_, palf_monitor_lock_, record_rebuild_event);
-  PALF_PLUGINS_DELEGATE_PTR(palf_monitor_, palf_monitor_lock_, record_flashback_event);
   PALF_PLUGINS_DELEGATE_PTR(palf_monitor_, palf_monitor_lock_, record_truncate_event);
   PALF_PLUGINS_DELEGATE_PTR(palf_monitor_, palf_monitor_lock_, record_role_change_event);
   PALF_PLUGINS_DELEGATE_PTR(palf_monitor_, palf_monitor_lock_, add_log_write_stat);
@@ -149,4 +148,3 @@ private:
 } // end namespace palf
 } // end namespace oceanbase
 #endif
-

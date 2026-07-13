@@ -205,31 +205,6 @@ public:
   share::SCN ref_scn_;
 };
 
-struct LogFlashbackMsg {
-  OB_UNIS_VERSION(1);
-public:
-  LogFlashbackMsg();
-  LogFlashbackMsg(const common::ObAddr &src,
-                  const int64_t ls_id,
-                  const int64_t mode_version,
-                  const share::SCN &flashback_scn,
-                  const bool is_flashback_req);
-  ~LogFlashbackMsg()
-  {
-    reset();
-  }
-  bool is_valid() const;
-  void reset();
-  bool is_flashback_req() const { return is_flashback_req_; }
-  TO_STRING_KV(K_(src), K_(ls_id), K_(mode_version), K_(flashback_scn), K_(is_flashback_req));
-  
-  common::ObAddr src_;
-  int64_t ls_id_;
-  int64_t mode_version_;
-  share::SCN flashback_scn_;
-  bool is_flashback_req_;
-};
-
 struct LogGetCkptReq {
   OB_UNIS_VERSION(1);
 public:

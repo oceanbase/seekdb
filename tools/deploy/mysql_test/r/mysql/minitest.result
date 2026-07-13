@@ -248,7 +248,6 @@ ob_enable_rich_error_msg	OFF
 ob_enable_show_trace	OFF
 ob_enable_transformation	ON
 ob_enable_transmission_checksum	ON
-ob_enable_truncate_flashback	ON
 ob_hnsw_ef_search	64
 ob_hnsw_extra_info_max_size	1024
 ob_interm_result_mem_limit	2147483648
@@ -266,7 +265,6 @@ ob_reserved_meta_memory_percentage	10
 ob_route_policy	READONLY_ZONE_FIRST
 ob_sparse_drop_ratio_search	0
 ob_sql_work_area_percentage	5
-ob_table_access_policy	AUTO
 ob_tcp_invited_nodes	%
 ob_temp_tablespace_size_percentage	0
 ob_trace_info	
@@ -297,7 +295,6 @@ ob_enable_ps_parameter_anonymous_block	ON
 ob_enable_rich_error_msg	OFF
 ob_enable_transformation	ON
 ob_enable_transmission_checksum	ON
-ob_enable_truncate_flashback	ON
 ob_hnsw_extra_info_max_size	1024
 ob_interm_result_mem_limit	2147483648
 ob_log_level	disabled
@@ -311,7 +308,6 @@ ob_read_consistency	STRONG
 ob_reserved_meta_memory_percentage	10
 ob_route_policy	READONLY_ZONE_FIRST
 ob_sql_work_area_percentage	5
-ob_table_access_policy	AUTO
 ob_tcp_invited_nodes	%
 ob_temp_tablespace_size_percentage	0
 ob_trx_idle_timeout	86400000000

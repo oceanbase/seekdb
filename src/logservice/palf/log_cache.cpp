@@ -148,15 +148,13 @@ bool LogCache::is_inited() const
   return is_inited_;
 }
 
-int LogCache::read(const int64_t flashback_version, 
-                   const LSN &lsn,
+int LogCache::read(const LSN &lsn,
                    const int64_t in_read_size,
                    ReadBuf &read_buf,
                    int64_t &out_read_size,
                    LogIOContext &io_ctx)
 {
   int ret = OB_SUCCESS;
-  UNUSED(flashback_version);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(ERROR, "LogCache is not inited!", K(ret));

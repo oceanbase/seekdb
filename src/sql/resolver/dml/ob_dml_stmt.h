@@ -149,8 +149,8 @@ struct TableItem
     mr_mv_flags_ = 0;
     node_ = NULL;
     view_base_item_ = NULL;
-    flashback_query_expr_ = nullptr;
-    flashback_query_type_ = FlashBackQueryType::NOT_USING;
+    snapshot_query_expr_ = nullptr;
+    snapshot_query_type_ = SnapshotQueryType::NOT_USING;
     function_table_expr_ = nullptr;
     ddl_schema_version_ = 0;
     ddl_table_id_ = common::OB_INVALID_ID;
@@ -180,7 +180,7 @@ struct TableItem
                K_(ddl_schema_version), K_(ddl_table_id),
                K_(is_view_table), K_(part_ids), K_(part_names), K_(cte_type),
                KPC_(function_table_expr),
-               K_(flashback_query_type), KPC_(flashback_query_expr), K_(table_type),
+               K_(snapshot_query_type), KPC_(snapshot_query_expr), K_(table_type),
                K_(exec_params), KPC_(sample_info), K_(mview_id), K_(need_expand_rt_mv),
                K_(catalog_name));
 
@@ -216,10 +216,9 @@ struct TableItem
     FAKE_CTE
   };
 
-  enum FlashBackQueryType
+  enum SnapshotQueryType
   {
     NOT_USING,
-    USING_TIMESTAMP,
     USING_SCN
   };
   //this table resolved from schema, is base table or alias from base table
@@ -304,8 +303,8 @@ struct TableItem
   const ParseNode* node_;
   // base table item for updatable view, can not access after the resolve phase
   const TableItem *view_base_item_;
-  ObRawExpr *flashback_query_expr_;
-  FlashBackQueryType flashback_query_type_;
+  ObRawExpr *snapshot_query_expr_;
+  SnapshotQueryType snapshot_query_type_;
   ObRawExpr *function_table_expr_;
   int64_t ddl_schema_version_;
   int64_t ddl_table_id_;

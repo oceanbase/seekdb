@@ -98,7 +98,7 @@ public:
                                                share::schema::ObTableSchema &new_table_schema,
                                                rootserver::ObDDLOperator &ddl_operator,
                                                ObMySQLTransaction &trans);
-  static int flashback_trigger(const share::schema::ObTableSchema &table_schema,
+  static int restore_trigger(const share::schema::ObTableSchema &table_schema,
                                const uint64_t new_database_id,
                                const common::ObString &new_table_name,
                                share::schema::ObSchemaGetterGuard &schema_guard,

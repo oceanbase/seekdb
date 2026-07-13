@@ -106,7 +106,7 @@ int ObTriggerSqlService::alter_trigger(const ObTriggerInfo &trigger_info,
 }
 
 
-int ObTriggerSqlService::flashback_trigger(const ObTriggerInfo &trigger_info,
+int ObTriggerSqlService::restore_trigger(const ObTriggerInfo &trigger_info,
                                            int64_t new_schema_version,
                                            ObISQLClient &sql_client)
 {
@@ -127,7 +127,7 @@ int ObTriggerSqlService::flashback_trigger(const ObTriggerInfo &trigger_info,
   OZ (exec.exec_insert(OB_ALL_TRIGGER_HISTORY_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   OZ (log_trigger_operation(trigger_info, new_schema_version,
-                            OB_DDL_FLASHBACK_TRIGGER, NULL, sql_client));
+                            OB_DDL_RESTORE_TRIGGER_FROM_RECYCLEBIN, NULL, sql_client));
   return ret;
 }
 

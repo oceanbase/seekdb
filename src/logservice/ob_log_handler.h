@@ -393,7 +393,7 @@ public:
   // - OB_INVALID_ARGUMENT
   // - OB_ENTRY_NOT_EXIST: there is no log in disk
   // - OB_ERR_OUT_OF_LOWER_BOUND: scn is too old, log files may have been recycled
-  // - OB_NEED_RETRY: the block is being flashback, need retry.
+  // - OB_NEED_RETRY: the block is being recycled or switched, need retry.
   // - others: bug
   int locate_by_scn_coarsely(const share::SCN &scn, palf::LSN &result_lsn) override final;
 
@@ -405,7 +405,7 @@ public:
   // - OB_SUCCESS; locate_by_lsn_coarsely success
   // - OB_INVALID_ARGUMENT
   // - OB_ERR_OUT_OF_LOWER_BOUND: lsn is too small, log files may have been recycled
-  // - OB_NEED_RETRY: the block is being flashback, need retry.
+  // - OB_NEED_RETRY: the block is being recycled or switched, need retry.
   // - others: bug
   int locate_by_lsn_coarsely(const palf::LSN &lsn, share::SCN &result_scn) override final;
   // @brief, get max committed scn from applyservice, which is the max scn of log committed by oneself as leader;

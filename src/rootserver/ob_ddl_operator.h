@@ -223,14 +223,6 @@ public:
   int get_part_array_from_table(const share::schema::ObTableSchema &orig_table_schema,
                                 const share::schema::ObTableSchema &inc_table_schema,
                                 common::ObIArray<share::schema::ObPartition*> &part_array);
-  int insert_column_groups(ObMySQLTransaction &trans, const share::schema::ObTableSchema &new_table_schema);
-  int insert_column_ids_into_column_group(ObMySQLTransaction &trans,
-                                          const share::schema::ObTableSchema &new_table_schema,
-                                          const ObIArray<uint64_t> &column_ids,
-                                          const share::schema::ObColumnGroupSchema &column_group);
-  int update_origin_column_group_with_new_schema(ObMySQLTransaction &trans,
-                                                const share::schema::ObTableSchema &origin_table_schema,
-                                                const share::schema::ObTableSchema &new_table_schema);
   int insert_single_column(common::ObMySQLTransaction &trans,
                            const share::schema::ObTableSchema &new_table_schema,
                            share::schema::ObColumnSchemaV2 &new_column);
@@ -403,7 +395,7 @@ public:
                                        common::ObMySQLTransaction &trans,
                                        const common::ObString *ddl_stmt_str,/*= NULL*/
                                        const bool is_truncate_table = false);
-  virtual int flashback_table_from_recyclebin(const share::schema::ObTableSchema &table_schema,
+  virtual int restore_table_from_recyclebin(const share::schema::ObTableSchema &table_schema,
                                               share::schema::ObTableSchema &new_table_schema,
                                               common::ObMySQLTransaction &trans,
                                               const uint64_t new_db_id,
@@ -423,7 +415,7 @@ public:
   virtual int drop_database_to_recyclebin(const share::schema::ObDatabaseSchema &database_schema,
                                           common::ObMySQLTransaction &trans,
                                           const common::ObString *ddl_stmt_str);
-  virtual int flashback_database_from_recyclebin(const share::schema::ObDatabaseSchema &database_schema,
+  virtual int restore_database_from_recyclebin(const share::schema::ObDatabaseSchema &database_schema,
                                                  common::ObMySQLTransaction &trans,
                                                  const common::ObString &new_db_name,
                                                  share::schema::ObSchemaGetterGuard &schema_guard,
@@ -672,7 +664,7 @@ public:
                     common::ObMySQLTransaction &tran,
                     const common::ObString *ddl_stmt_str/*=NULL*/,
                     bool is_update_table_schema_version = true);
-  int flashback_trigger(const share::schema::ObTriggerInfo &trigger_info,
+  int restore_trigger(const share::schema::ObTriggerInfo &trigger_info,
                         uint64_t new_database_id,
                         const common::ObString &new_table_name,
                         share::schema::ObSchemaGetterGuard &schema_guard,
@@ -724,14 +716,6 @@ public:
                            const share::schema::ObTableSchema &new_table_schema,
                            share::schema::ObColumnSchemaV2 &column_schema,
                            const bool need_del_stats /*for online drop column, need delete column stat*/);
-  int update_single_column_group(common::ObMySQLTransaction &trans,
-                                 const share::schema::ObTableSchema &origin_table_schema,
-                                 const share::schema::ObColumnSchemaV2 &new_column_schema);
-  int update_column_and_column_group(common::ObMySQLTransaction &trans,
-                                     const share::schema::ObTableSchema &origin_table_schema,
-                                     const share::schema::ObTableSchema &new_table_schema,
-                                     share::schema::ObColumnSchemaV2 &column_schema,
-                                    const bool need_del_stats /*for online drop column, need delete column stat*/);
   int update_partition_option(common::ObMySQLTransaction &trans,
                               share::schema::ObTableSchema &table_schema);
   int update_partition_option(common::ObMySQLTransaction &trans,

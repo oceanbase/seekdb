@@ -531,7 +531,6 @@ int ObDASDomainIdMergeIter::init_rowkey_domain_scan_param(
     scan_param.need_scn_ = rtdef->need_scn_;
     scan_param.pd_storage_flag_ = ctdef->pd_expr_spec_.pd_storage_flag_.pd_flag_;
     scan_param.fb_snapshot_ = rtdef->fb_snapshot_;
-    scan_param.fb_read_tx_uncommitted_ = rtdef->fb_read_tx_uncommitted_;
     if (rtdef->is_for_foreign_check_) {
       scan_param.trans_desc_ = trans_desc;
     }

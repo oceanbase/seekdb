@@ -725,9 +725,9 @@ public:
                        bool &is_exist);
 
   template <typename SchemaType>
-  int check_flashback_object_exist(const SchemaType &object_schema,
-                                   const common::ObString &object_name,
-                                   bool &object_exist);
+  int check_recyclebin_restore_object_exist(const SchemaType &object_schema,
+                                            const common::ObString &object_name,
+                                            bool &object_exist);
 
   int get_schema_count(int64_t &schema_count);
   int get_schema_size(int64_t &schema_count);

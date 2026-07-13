@@ -100,10 +100,7 @@ mysql_compatible_comment_with_version \/\*\![0-9]{5}
 mysql_compatible_comment_without_version \/\*\!
 mysql_compatible_comment_end \*\/
 
-ColumnStorePattern  (WITH{whitespace}COLUMN{whitespace}GROUP)
-
 %%
-{ColumnStorePattern}                { REPUT_TOKEN_NEG_SIGN(WITH_COLUMN_GROUP); }
 INTERVAL {
 
   ParseResult *p = (ParseResult *)yyextra;
@@ -1015,8 +1012,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>MONITOR  { return MONITOR; }
 <hint>AUTO { return AUTO; }
 <hint>FORCE { return FORCE; }
-<hint>USE_COLUMN_TABLE { return USE_COLUMN_STORE_HINT; }
-<hint>NO_USE_COLUMN_TABLE { return NO_USE_COLUMN_STORE_HINT; }
 <hint>[(),.@]  {
   ParseResult *p = (ParseResult *)yyextra;
   if (!p->is_ignore_token_) {
@@ -1074,7 +1069,6 @@ Timestamp{whitespace}?\"[^\"]*\" {
 <hint>OPTIMIZER_FEATURES_ENABLE { return OPTIMIZER_FEATURES_ENABLE; }
 <hint>NO_QUERY_TRANSFORMATION { return NO_QUERY_TRANSFORMATION; }
 <hint>NO_COST_BASED_QUERY_TRANSFORMATION { return NO_COST_BASED_QUERY_TRANSFORMATION; }
-<hint>FLASHBACK_READ_TX_UNCOMMITTED { return FLASHBACK_READ_TX_UNCOMMITTED; }
 <hint>TRANS_PARAM { return TRANS_PARAM; }
 <hint>PQ_DISTRIBUTE { return PQ_DISTRIBUTE; }
 <hint>PQ_DISTRIBUTE_WINDOW { return PQ_DISTRIBUTE_WINDOW; }

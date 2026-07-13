@@ -59,32 +59,6 @@ typedef common::ObFixedArray<common::ObFixedArray<int64_t, common::ObIAllocator>
 typedef common::ObFixedArray<ObTableLocation, common::ObIAllocator> TableLocationFixedArray;
 typedef common::ObFixedArray<ObPlanPwjConstraint, common::ObIAllocator> PlanPwjConstraintArray;
 typedef common::ObFixedArray<ObDupTabConstraint, common::ObIAllocator> DupTabReplicaArray;
-//deprecated after version 2.2.5
-struct FlashBackQueryItem {
-  OB_UNIS_VERSION(1);
-public:
-  FlashBackQueryItem()
-    : table_id_(common::OB_INVALID_ID),
-      time_val_(transaction::ObTransVersion::INVALID_TRANS_VERSION),
-      time_expr_(nullptr),
-      type_(FLASHBACK_QUERY_ITEM_INVALID)
-  {
-  }
-
-  enum FlashBackQueryItemType
-  {
-    FLASHBACK_QUERY_ITEM_INVALID,
-    FLASHBACK_QUERY_ITEM_TIMESTAMP,
-    FLASHBACK_QUERY_ITEM_SCN
-  };
-
-  DECLARE_TO_STRING;
-
-  int64_t table_id_;
-  int64_t time_val_;
-  ObSqlExpression *time_expr_;
-  FlashBackQueryItemType type_;
-};
 
 class ObPhysicalPlan : public ObPlanCacheObject
 {
@@ -628,8 +602,6 @@ private:
   // insert into values(x),(x)...(x)
   bool is_plain_insert_;
   // **** for spm end ***
-  // Deprecated, compatibility retained
-  common::ObFixedArray<FlashBackQueryItem, common::ObIAllocator> flashback_query_items_;
   // column field array has parameterized column
   // If there are parameterized columns, ob_result_set must deep copy column_fields_ each time, and construct the column using a template
   bool contain_paramed_column_field_;
