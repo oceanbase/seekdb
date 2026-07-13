@@ -2,7 +2,6 @@
 # owner group: storage
 # description: check IK parser custom FULLTEXT_DICT tables.
 
---echo === setup and custom dict usage ===
 --disable_query_log
 --disable_result_log
 --disable_warnings
@@ -10,6 +9,39 @@ drop database if exists fts_ik_custom_dict;
 --enable_warnings
 create database fts_ik_custom_dict;
 use fts_ik_custom_dict;
+--enable_result_log
+--enable_query_log
+
+--echo === FULLTEXT_DICT schema validation ===
+--error 1235
+create table dict_bad_extra (
+  word varchar(100) primary key,
+  extra int
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
+
+--error 1235
+create table dict_bad_name (
+  term varchar(100) primary key
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
+
+--error 1235
+create table dict_bad_type (
+  word int primary key
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
+
+--error 1235
+create table dict_bad_charset (
+  word varchar(100) character set binary primary key
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
+
+--error 1235
+create table dict_bad_pk (
+  word varchar(100)
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
+
+--echo === setup and custom dict usage ===
+--disable_query_log
+--disable_result_log
 
 create table dict_words (
   word varchar(100) primary key
@@ -28,10 +60,23 @@ create fulltext index fidx_body on docs(body)
   with parser ik parser_properties=(dict_table="dict_words", ik_mode="smart");
 
 alter system refresh fulltext dict dict_words;
+alter system refresh fulltext dict fts_ik_custom_dict.dict_words;
+alter system refresh fulltext dict "dict_words";
 alter system refresh fulltext dict "fts_ik_custom_dict.dict_words";
 
 select tokenize('火星数据库支持向量检索', 'ik',
   '[{"additional_args": [{"dict_table": "dict_words"}, {"ik_mode": "smart"}]}]');
+
+insert into dict_words values ('热更新词');
+alter system refresh fulltext dict "dict_words";
+insert into docs values (2, '热更新词已经生效');
+--enable_result_log
+select '火星数据库' member of (tokenize('火星数据库支持向量检索', 'ik',
+  '[{"additional_args": [{"dict_table": "dict_words"}, {"ik_mode": "smart"}]}]')) as has_custom_word;
+select '热更新词' member of (tokenize('热更新词已经生效', 'ik',
+  '[{"additional_args": [{"dict_table": "dict_words"}, {"ik_mode": "smart"}]}]')) as has_dynamic_word;
+select id from docs where match(body) against('热更新词' in boolean mode) order by id;
+--disable_result_log
 
 create table normal_words (
   word varchar(100) primary key
@@ -52,6 +97,26 @@ create table dict_words_unref (
   word varchar(100) primary key
 ) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
 drop table dict_words_unref;
+
+create table stop_words (
+  word varchar(100) primary key
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
+create table quant_words (
+  word varchar(100) primary key
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
+insert into stop_words values ('已经');
+insert into quant_words values ('款');
+create table docs_combo (
+  id int primary key,
+  body varchar(200)
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci with column group(each column);
+create fulltext index fidx_combo on docs_combo(body)
+  with parser ik parser_properties=(
+    dict_table="fts_ik_custom_dict.dict_words",
+    stopword_table="fts_ik_custom_dict.stop_words",
+    quantifier_table="fts_ik_custom_dict.quant_words",
+    ik_mode="max_word"
+  );
 --enable_result_log
 --enable_query_log
 
@@ -65,9 +130,22 @@ rename table dict_words to dict_words_new;
 --error 4179
 drop table dict_words;
 
+--error 1235
+alter table stop_words modify column word varchar(120);
+
+--error 4179
+drop table stop_words;
+
+--error 4179
+drop table quant_words;
+
 --echo === cleanup ===
 --disable_query_log
 --disable_result_log
+drop index fidx_combo on docs_combo;
+drop table docs_combo;
+drop table stop_words;
+drop table quant_words;
 drop index fidx_body on docs;
 drop table docs;
 drop table dict_words;

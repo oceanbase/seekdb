@@ -1,9 +1,43 @@
+=== FULLTEXT_DICT schema validation ===
+create table dict_bad_extra (
+word varchar(100) primary key,
+extra int
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
+ERROR 0A000: FULLTEXT_DICT table with multiple columns not supported
+create table dict_bad_name (
+term varchar(100) primary key
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
+ERROR 0A000: FULLTEXT_DICT table without word column not supported
+create table dict_bad_type (
+word int primary key
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
+ERROR 0A000: FULLTEXT_DICT table word column with non-varchar type not supported
+create table dict_bad_charset (
+word varchar(100) character set binary primary key
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
+ERROR 0A000: FULLTEXT_DICT table with non-utf8mb4 charset not supported
+create table dict_bad_pk (
+word varchar(100)
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
+ERROR 0A000: FULLTEXT_DICT table without word primary key not supported
 === setup and custom dict usage ===
+has_custom_word
+1
+has_dynamic_word
+1
+id
+2
 === DDL protections ===
 alter table dict_words add column extra int;
 ERROR 0A000: alter referenced FULLTEXT_DICT table not supported
 rename table dict_words to dict_words_new;
 ERROR 0A000: rename referenced FULLTEXT_DICT table not supported
 drop table dict_words;
+ERROR HY000: drop referenced FULLTEXT_DICT table not allowed
+alter table stop_words modify column word varchar(120);
+ERROR 0A000: alter referenced FULLTEXT_DICT table not supported
+drop table stop_words;
+ERROR HY000: drop referenced FULLTEXT_DICT table not allowed
+drop table quant_words;
 ERROR HY000: drop referenced FULLTEXT_DICT table not allowed
 === cleanup ===
