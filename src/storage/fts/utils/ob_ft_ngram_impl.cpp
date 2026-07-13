@@ -1,17 +1,6 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2025 OceanBase
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #include "storage/fts/utils/ob_ft_ngram_impl.h"
@@ -73,6 +62,23 @@ void ObFTNgramImpl::reset()
   is_inited_ = false;
 }
 
+int ObFTNgramImpl::reuse_parser(const char *fulltext, const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("Parser has not been inited", K(ret));
+  } else if (OB_UNLIKELY(nullptr == fulltext || 0 >= fulltext_len)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("There are invalid fulltext", K(ret), KP(fulltext), K(fulltext_len));
+  } else {
+    fulltext_start_ = fulltext;
+    fulltext_end_ = fulltext + fulltext_len;
+    cur_ = fulltext_start_;
+    window_.reset();
+  }
+  return ret;
+}
 
 int ObFTNgramImpl::get_next_token(const char *&word,
                                   int64_t &word_len,

@@ -1,17 +1,6 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2024 OceanBase
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_H_
@@ -41,25 +30,25 @@ public:
   {
   }
 
-  bool is_match() const { return is_match_; }
+  inline bool is_match() const { return is_match_; }
 
-  bool is_prefix() const { return is_prefix_; }
+  inline bool is_prefix() const { return is_prefix_; }
 
-  bool is_unmatch() const
+  inline bool is_unmatch() const
   {
     bool unmatch = (!is_match_) && (!is_prefix_);
     return unmatch;
   }
 
-  void set_unmatch()
+  inline void set_unmatch()
   {
     is_match_ = false;
     is_prefix_ = false;
   }
 
-  void set_match() { is_match_ = true; }
+  inline void set_match() { is_match_ = true; }
 
-  void set_prefix() { is_prefix_ = true; }
+  inline void set_prefix() { is_prefix_ = true; }
 
   ObDATrieHit &operator=(const ObDATrieHit &other)
   {
@@ -73,7 +62,7 @@ public:
     return *this;
   }
 
-  bool operator==(const ObDATrieHit &other) const
+  inline bool operator==(const ObDATrieHit &other) const
   {
     return start_pos_ == other.start_pos_ && end_pos_ == other.end_pos_
            && base_idx_ == other.base_idx_ && current_check_ == other.current_check_;

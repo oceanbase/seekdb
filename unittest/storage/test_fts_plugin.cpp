@@ -1,17 +1,6 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2023 OceanBase
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 
@@ -30,7 +19,7 @@
 #include "share/rc/ob_tenant_base.h"
 #include "sql/das/ob_das_utils.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
-#include "storage/fts/ob_fts_stop_word.h"
+#include "storage/fts/ob_fts_stop_token_check.h"
 #include "storage/fts/ob_whitespace_ft_parser.h"
 #include "storage/fts/utils/ob_ft_ngram_impl.h"
 
@@ -41,15 +30,12 @@ namespace oceanbase
 
 namespace storage
 {
-
-typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
-
 int segment_and_calc_word_count(
     common::ObIAllocator &allocator,
     storage::ObFTParseHelper *helper,
     const common::ObObjMeta &meta,
     const ObString &fulltext,
-    ObFTWordMap &words_count)
+    ObFTTokenMap &words_count)
 {
   int ret = OB_SUCCESS;
   int64_t doc_length = 0;
@@ -96,7 +82,7 @@ private:
       const int64_t char_cnt);
 private:
   bool is_min_max_word(const int64_t c_len) const;
-  int casedown_word(const ObFTWord &src, ObFTWord &dst);
+  int casedown_word(const ObFTToken &src, ObFTToken &dst);
   ObObjMeta meta_;
   common::ObIAllocator &allocator_;
   const char *words_[TEST_WORD_COUNT];
@@ -120,7 +106,7 @@ bool ObTestAddWord::is_min_max_word(const int64_t c_len) const
   return c_len < FT_MIN_WORD_LEN || c_len > FT_MAX_WORD_LEN;
 }
 
-int ObTestAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
+int ObTestAddWord::casedown_word(const ObFTToken &src, ObFTToken &dst)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(src.empty())) {
@@ -128,11 +114,10 @@ int ObTestAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
     LOG_WARN("invalid src ft word", K(ret), K(src));
   } else {
     ObString dst_str;
-    if (OB_FAIL(ObCharset::tolower(meta_.get_collation_type(), src.get_word().get_string(), dst_str, allocator_))) {
+    if (OB_FAIL(ObCharset::tolower(meta_.get_collation_type(), src.get_token().get_string(), dst_str, allocator_))) {
       LOG_WARN("fail to tolower", K(ret), K(src), K(meta_));
-    } else {
-      ObFTWord tmp(dst_str.length(), dst_str.ptr(), meta_);
-      dst = tmp;
+    } else if (OB_FAIL(dst.init(dst_str.ptr(), dst_str.length(), meta_, nullptr, nullptr))) {
+      LOG_WARN("fail to init dst token", K(ret), K(dst_str), K(meta_));
     }
   }
   return ret;
@@ -169,18 +154,20 @@ int ObTestAddWord::check_ith_word(
       const int64_t char_cnt)
 {
   int ret = OB_SUCCESS;
-  ObFTWord src_word(word_len, word, meta_);
-  ObFTWord dst_word;
+  ObFTToken src_word;
+  ObFTToken dst_word;
   if (OB_ISNULL(word) || OB_UNLIKELY(0 >= word_len || 0 >= char_cnt)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(word), K(word_len), K(char_cnt));
+  } else if (OB_FAIL(src_word.init(word, word_len, meta_, nullptr, nullptr))) {
+    LOG_WARN("fail to initilize src token", K(ret), K(word), K(word_len), K(meta_));
   } else if (is_min_max_word(char_cnt)) {
     // skip min/max word
   } else if (OB_FAIL(casedown_word(src_word, dst_word))) {
     LOG_WARN("fail to casedown word", K(ret), K(src_word));
   } else if (OB_UNLIKELY(0 != strncmp(words_[ith_word_],
-                                      dst_word.get_word().get_string().ptr(),
-                                      dst_word.get_word().get_string().length()))) {
+                                      dst_word.get_token().get_string().ptr(),
+                                      dst_word.get_token().get_string().length()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the ith word isn't default word", K(ret), K(ith_word_), KCSTRING(words_[ith_word_]), K(dst_word));
   } else {
@@ -220,7 +207,8 @@ void TestDefaultFTParser::SetUp()
 {
   ASSERT_EQ(OB_SUCCESS, desc_.init(&plugin_param_));
 
-  ft_parser_param_.allocator_ = &allocator_;
+  ft_parser_param_.metadata_alloc_ = &allocator_;
+  ft_parser_param_.scratch_alloc_ = &allocator_;
   ft_parser_param_.cs_ = common::ObCharset::get_charset(ObCollationType::CS_TYPE_UTF8MB4_BIN);
   ft_parser_param_.parser_version_ = 0x00001;
   ASSERT_TRUE(nullptr != ft_parser_param_.cs_);
@@ -439,7 +427,6 @@ class ObTestFTParseHelper : public ::testing::Test
 public:
   static const char *name_;
   static const char *properties_;
-  typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
 public:
   ObTestFTParseHelper();
   virtual ~ObTestFTParseHelper() = default;
@@ -472,12 +459,12 @@ ObTestFTParseHelper::ObTestFTParseHelper()
 void ObTestFTParseHelper::SetUp()
 {
   if (OB_ISNULL(GCTX.plugin_mgr_)) {
-    GCTX.plugin_mgr_ = OB_NEW(ObPluginMgr, ObMemAttr("test"));
+    GCTX.plugin_mgr_ = OB_NEW(ObPluginMgr, ObMemAttr(OB_SYS_TENANT_ID, "test"));
     ASSERT_NE(nullptr, GCTX.plugin_mgr_);
     ASSERT_EQ(OB_SUCCESS, GCTX.plugin_mgr_->init(ObString("")));
     ASSERT_EQ(OB_SUCCESS, GCTX.plugin_mgr_->load_builtin_plugins());
   }
-  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_));
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH));
 }
 
 void ObTestFTParseHelper::TearDown()
@@ -499,7 +486,7 @@ void ObTestFTParseHelper::TearDownTestCase()
 
 TEST_F(ObTestFTParseHelper, test_parse_fulltext)
 {
-  ObFTWordMap ft_word_map;
+  ObFTTokenMap ft_word_map;
   ASSERT_EQ(OB_SUCCESS, ft_word_map.create(10, "TestParse"));
   int64_t doc_length = 0;
   ASSERT_EQ(
@@ -514,10 +501,11 @@ TEST_F(ObTestFTParseHelper, test_parse_fulltext)
   ObTestAddWord test_add_word(meta_, allocator_);
   ASSERT_EQ(ObTestAddWord::get_word_cnt_without_stopword(), ft_word_map.size());
   for (int64_t i = 0; i < ft_word_map.size(); ++i) {
-    int64_t word_cnt = 0;
-    ObFTWord word(strlen(test_add_word.words_without_stopword_[i]), test_add_word.words_without_stopword_[i], meta_);
-    ASSERT_EQ(OB_SUCCESS, ft_word_map.get_refactored(word, word_cnt));
-    ASSERT_TRUE(word_cnt >= 1);
+    ObFTToken token;
+    token.init(test_add_word.words_without_stopword_[i], strlen(test_add_word.words_without_stopword_[i]), meta_, nullptr, nullptr);
+    ObFTTokenInfo word_info;
+    ASSERT_EQ(OB_SUCCESS, ft_word_map.get_refactored(token, word_info));
+    ASSERT_TRUE(word_info.count_ >= 1);
   }
 
   ft_word_map.clear();
@@ -548,10 +536,10 @@ TEST_F(ObTestFTParseHelper, test_parse_fulltext)
           doc_length,
           ft_word_map));
 
-  ASSERT_EQ(OB_INVALID_ARGUMENT, parse_helper_.init(nullptr, plugin_name_, plugin_properties_));
-  ASSERT_EQ(OB_INVALID_ARGUMENT, parse_helper_.init(&allocator_, ObString(), plugin_properties_));
+  ASSERT_EQ(OB_INVALID_ARGUMENT, parse_helper_.init(nullptr, plugin_name_, plugin_properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH));
+  ASSERT_EQ(OB_INVALID_ARGUMENT, parse_helper_.init(&allocator_, ObString(), plugin_properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH));
 
-  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_));
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH));
 
   ObObjMeta default_meta;
   default_meta.set_varchar();
@@ -577,13 +565,13 @@ TEST_F(ObTestFTParseHelper, test_parse_fulltext)
           doc_length,
           ft_word_map));
 
-  ASSERT_EQ(OB_INIT_TWICE, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_));
+  ASSERT_EQ(OB_INIT_TWICE, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH));
 
   parse_helper_.reset();
-  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_));
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH));
 
   parse_helper_.reset();
-  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_));
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH));
   ASSERT_EQ(
       OB_SUCCESS,
       parse_helper_.segment(
@@ -594,14 +582,15 @@ TEST_F(ObTestFTParseHelper, test_parse_fulltext)
           ft_word_map));
   ASSERT_EQ(ObTestAddWord::get_word_cnt_without_stopword(), ft_word_map.size());
   for (int64_t i = 0; i < ft_word_map.size(); ++i) {
-    int64_t word_cnt = 0;
-    ObFTWord word(strlen(test_add_word.words_without_stopword_[i]), test_add_word.words_without_stopword_[i], meta_);
-    ASSERT_EQ(OB_SUCCESS, ft_word_map.get_refactored(word, word_cnt));
-    ASSERT_TRUE(word_cnt >= 1);
+    ObFTToken token;
+    token.init(test_add_word.words_without_stopword_[i], strlen(test_add_word.words_without_stopword_[i]), meta_, nullptr, nullptr);
+    ObFTTokenInfo word_info;
+    ASSERT_EQ(OB_SUCCESS, ft_word_map.get_refactored(token, word_info));
+    ASSERT_TRUE(word_info.count_ >= 1);
   }
   parse_helper_.reset();
   ft_word_map.clear();
-  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, "beng.1", plugin_properties_));
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, "beng.1", plugin_properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH));
   ASSERT_EQ(
       OB_SUCCESS,
       parse_helper_.segment(
@@ -612,16 +601,17 @@ TEST_F(ObTestFTParseHelper, test_parse_fulltext)
           ft_word_map));
   ASSERT_EQ(ObTestAddWord::get_word_cnt_without_stopword(), ft_word_map.size());
   for (int64_t i = 0; i < ft_word_map.size(); ++i) {
-    int64_t word_cnt = 0;
-    ObFTWord word(strlen(test_add_word.words_without_stopword_[i]), test_add_word.words_without_stopword_[i], meta_);
-    ASSERT_EQ(OB_SUCCESS, ft_word_map.get_refactored(word, word_cnt));
-    ASSERT_TRUE(word_cnt >= 1);
+    ObFTToken token;
+    token.init(test_add_word.words_without_stopword_[i], strlen(test_add_word.words_without_stopword_[i]), meta_, nullptr, nullptr);
+    ObFTTokenInfo word_info;
+    ASSERT_EQ(OB_SUCCESS, ft_word_map.get_refactored(token, word_info));
+    ASSERT_TRUE(word_info.count_ >= 1);
   }
 }
 
 TEST_F(ObTestFTParseHelper, test_min_and_max_word_len)
 {
-  ObFTWordMap words;
+  ObFTTokenMap words;
   ASSERT_EQ(OB_SUCCESS, words.create(10, "TestParse"));
   int64_t doc_length = 0;
 
@@ -667,7 +657,6 @@ public:
   static const char *name_;
   static const char *properties_;
   static const int64_t TEST_WORD_COUNT = 27;
-  typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
 public:
   ObTestNgramFTParseHelper();
   virtual ~ObTestNgramFTParseHelper() = default;
@@ -704,7 +693,7 @@ ObTestNgramFTParseHelper::ObTestNgramFTParseHelper()
 
 void ObTestNgramFTParseHelper::SetUp()
 {
-  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_));
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH));
 }
 
 void ObTestNgramFTParseHelper::TearDown()
@@ -726,7 +715,7 @@ void ObTestNgramFTParseHelper::TearDownTestCase()
 
 TEST_F(ObTestNgramFTParseHelper, test_parse_fulltext)
 {
-  ObFTWordMap words;
+  ObFTTokenMap words;
   ASSERT_EQ(OB_SUCCESS, words.create(10, "TestParse"));
   int64_t doc_length = 0;
   ASSERT_EQ(
@@ -740,13 +729,14 @@ TEST_F(ObTestNgramFTParseHelper, test_parse_fulltext)
 
   ASSERT_EQ(get_word_count(), words.size());
   for (int64_t i = 0; i < words.size(); ++i) {
-    int64_t word_cnt = 0;
-    ObFTWord word(strlen(ngram_words_[i]), ngram_words_[i], meta_);
-    ASSERT_EQ(OB_SUCCESS, words.get_refactored(word, word_cnt));
-    ASSERT_TRUE(word_cnt >= 1);
+    ObFTToken token;
+    token.init(ngram_words_[i], strlen(ngram_words_[i]), meta_, nullptr, nullptr);
+    ObFTTokenInfo word_info;
+    ASSERT_EQ(OB_SUCCESS, words.get_refactored(token, word_info));
+    ASSERT_TRUE(word_info.count_ >= 1);
   }
 
-  ObFTWordMap ft_word_map;
+  ObFTTokenMap ft_word_map;
   ASSERT_EQ(OB_SUCCESS, ft_word_map.create(10, "TestParse"));
   ASSERT_EQ(
       OB_SUCCESS,
@@ -771,11 +761,11 @@ TEST_F(ObTestNgramFTParseHelper, test_parse_fulltext)
           doc_length,
           words));
 
-  ASSERT_EQ(OB_INVALID_ARGUMENT, parse_helper_.init(nullptr, plugin_name_, plugin_properties_));
-  ASSERT_EQ(OB_INVALID_ARGUMENT, parse_helper_.init(&allocator_, ObString(), plugin_properties_));
+  ASSERT_EQ(OB_INVALID_ARGUMENT, parse_helper_.init(nullptr, plugin_name_, plugin_properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH));
+  ASSERT_EQ(OB_INVALID_ARGUMENT, parse_helper_.init(&allocator_, ObString(), plugin_properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH));
 
   const char *plugin_name = "space.1";
-  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, common::ObString(STRLEN(plugin_name), plugin_name), plugin_properties_));
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, common::ObString(STRLEN(plugin_name), plugin_name), plugin_properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH));
 
   ObObjMeta meta_invalid;
   meta_invalid.set_varchar();
@@ -801,14 +791,14 @@ TEST_F(ObTestNgramFTParseHelper, test_parse_fulltext)
           doc_length,
           words));
 
-  ASSERT_EQ(OB_INIT_TWICE, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_));
+  ASSERT_EQ(OB_INIT_TWICE, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH));
 
   parse_helper_.reset();
   words.clear();
-  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_));
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH));
 
   parse_helper_.reset();
-  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_));
+  ASSERT_EQ(OB_SUCCESS, parse_helper_.init(&allocator_, plugin_name_, plugin_properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH));
   ASSERT_EQ(
       OB_SUCCESS,
       parse_helper_.segment(
@@ -819,16 +809,17 @@ TEST_F(ObTestNgramFTParseHelper, test_parse_fulltext)
           words));
   ASSERT_EQ(get_word_count(), words.size());
   for (int64_t i = 0; i < words.size(); ++i) {
-    int64_t word_cnt = 0;
-    ObFTWord word(strlen(ngram_words_[i]), ngram_words_[i], meta_);
-    ASSERT_EQ(OB_SUCCESS, words.get_refactored(word, word_cnt));
-    ASSERT_TRUE(word_cnt >= 1);
+    ObFTToken token;
+    token.init(ngram_words_[i], strlen(ngram_words_[i]), meta_, nullptr, nullptr);
+    ObFTTokenInfo word_info;
+    ASSERT_EQ(OB_SUCCESS, words.get_refactored(token, word_info));
+    ASSERT_TRUE(word_info.count_ >= 1);
   }
 }
 
 TEST_F(ObTestNgramFTParseHelper, test_parse_corner_case)
 {
-  ObFTWordMap words;
+  ObFTTokenMap words;
   ASSERT_EQ(OB_SUCCESS, words.create(10, "TParseCorner"));
   int64_t doc_length = 0;
 
@@ -847,19 +838,27 @@ TEST_F(ObTestNgramFTParseHelper, test_parse_corner_case)
   ASSERT_EQ(OB_SUCCESS, parse_helper_.segment(meta_, "192.168.2.3", std::strlen("192.168.2.3"), doc_length, words));
   ASSERT_EQ(4, words.size());
   ASSERT_EQ(4, doc_length);
-  int64_t word_cnt = 0;
-  ObFTWord word_19(strlen("19"), "19", meta_);
-  ASSERT_EQ(OB_SUCCESS, words.get_refactored(word_19, word_cnt));
-  ASSERT_EQ(1, word_cnt);
-  ObFTWord word_92(strlen("92"), "92", meta_);
-  ASSERT_EQ(OB_SUCCESS, words.get_refactored(word_92, word_cnt));
-  ASSERT_EQ(1, word_cnt);
-  ObFTWord word_16(strlen("16"), "16", meta_);
-  ASSERT_EQ(OB_SUCCESS, words.get_refactored(word_16, word_cnt));
-  ASSERT_EQ(1, word_cnt);
-  ObFTWord word_68(strlen("68"), "68", meta_);
-  ASSERT_EQ(OB_SUCCESS, words.get_refactored(word_68, word_cnt));
-  ASSERT_EQ(1, word_cnt);
+
+  ObFTToken word_19;
+  ASSERT_EQ(OB_SUCCESS, word_19.init("19", strlen("19"), meta_, nullptr, nullptr));
+  ObFTTokenInfo word_info;
+  ASSERT_EQ(OB_SUCCESS, words.get_refactored(word_19, word_info));
+  ASSERT_EQ(1, word_info.count_);
+
+  ObFTToken word_92;
+  ASSERT_EQ(OB_SUCCESS, word_92.init("92", strlen("92"), meta_, nullptr, nullptr));
+  ASSERT_EQ(OB_SUCCESS, words.get_refactored(word_92, word_info));
+  ASSERT_EQ(1, word_info.count_);
+
+  ObFTToken word_16;
+  ASSERT_EQ(OB_SUCCESS, word_16.init("16", strlen("16"), meta_, nullptr, nullptr));
+  ASSERT_EQ(OB_SUCCESS, words.get_refactored(word_16, word_info));
+  ASSERT_EQ(1, word_info.count_);
+
+  ObFTToken word_68;
+  ASSERT_EQ(OB_SUCCESS, word_68.init("68", strlen("68"), meta_, nullptr, nullptr));
+  ASSERT_EQ(OB_SUCCESS, words.get_refactored(word_68, word_info));
+  ASSERT_EQ(1, word_info.count_);
 }
 
 TEST(ObTestNgramImpl, test_ngram_impl)

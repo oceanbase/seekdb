@@ -33,7 +33,7 @@ namespace storage
 class ObFTCacheDict final : public ObIFTDict
 {
 public:
-  ObFTCacheDict(ObCollationType coll_type, ObFTDAT *dat)
+  ObFTCacheDict(ObCollationType coll_type, const ObFTDAT *dat)
       : coll_type_(coll_type), dat_(dat), reader_(dat)
   {
   }
@@ -55,7 +55,7 @@ public:
 private:
   ObKVCacheHandle handle_; // used to pin the mem block later
   ObCollationType coll_type_;
-  ObFTDAT *dat_ = nullptr;
+  const ObFTDAT *dat_ = nullptr;
   ObFTDATReader<void> reader_;
 
 private:
