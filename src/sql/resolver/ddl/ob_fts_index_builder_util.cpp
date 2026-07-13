@@ -21,6 +21,9 @@
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "storage/fts/dict/ob_dic_lock.h"
+#include "storage/fts/dict/ob_ft_cache_container.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
 #include "share/ob_server_struct.h"
 #include "rootserver/ob_root_service.h"
 #include "plugin/sys/ob_plugin_helper.h"
@@ -115,6 +118,94 @@ bool fulltext_dict_table_name_match(const ObString &configured_table_name,
                && 0 == dict_table_name.case_compare(target_table_name));
   }
   return matched;
+}
+
+bool is_builtin_ik_dict_table(const ObString &table_name)
+{
+  return 0 == table_name.case_compare(storage::ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE)
+         || 0 == table_name.case_compare(storage::ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE)
+         || 0 == table_name.case_compare(storage::ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE);
+}
+
+int load_custom_fulltext_dict_table(const ObTableSchema &data_schema,
+                                    ObSchemaGetterGuard &schema_guard,
+                                    ObIAllocator &allocator,
+                                    const ObString &configured_table_name,
+                                    const storage::ObFTDictType dict_type)
+{
+  int ret = OB_SUCCESS;
+  const ObDatabaseSchema *database_schema = nullptr;
+  const ObTableSchema *dict_table_schema = nullptr;
+  storage::ObFTDictHub *hub = nullptr;
+  ObString dict_database_name;
+  ObString dict_table_name;
+  ObString tmp_name = configured_table_name.trim();
+  char full_name_buf[common::OB_MAX_DATABASE_NAME_LENGTH + common::OB_MAX_TABLE_NAME_LENGTH + 2] = {0};
+
+  if (tmp_name.empty() || 0 == tmp_name.case_compare(storage::ObFTSLiteral::FT_NONE)
+      || is_builtin_ik_dict_table(tmp_name)) {
+  } else {
+    const char *dot_pos = tmp_name.find('.');
+    if (OB_NOT_NULL(dot_pos)) {
+      dict_database_name = tmp_name.split_on(dot_pos).trim();
+      dict_table_name = tmp_name.trim();
+    } else if (OB_FAIL(schema_guard.get_database_schema(data_schema.get_database_id(), database_schema))) {
+      LOG_WARN("fail to get data table database schema", K(ret), K(data_schema));
+    } else if (OB_ISNULL(database_schema)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("data table database schema is null", K(ret), K(data_schema));
+    } else {
+      dict_database_name = database_schema->get_database_name_str();
+      dict_table_name = tmp_name;
+    }
+    if (OB_SUCC(ret)) {
+      if (dict_database_name.empty() || dict_table_name.empty()) {
+        ret = OB_WRONG_TABLE_NAME;
+        LOG_WARN("invalid fulltext dict table name", K(ret), K(configured_table_name));
+      } else if (OB_FAIL(schema_guard.get_table_schema(dict_database_name,
+                                                       dict_table_name,
+                                                       false,
+                                                       dict_table_schema))) {
+        LOG_WARN("fail to get fulltext dict table schema", K(ret), K(dict_database_name), K(dict_table_name));
+      } else if (OB_ISNULL(dict_table_schema)) {
+        ret = OB_TABLE_NOT_EXIST;
+        LOG_WARN("fulltext dict table schema is null", K(ret), K(dict_database_name), K(dict_table_name));
+      } else if (!dict_table_schema->is_fulltext_dict_table()) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_WARN("fulltext parser dict table is not FULLTEXT_DICT", K(ret), K(dict_database_name), K(dict_table_name));
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "use non FULLTEXT_DICT table as fulltext parser dictionary");
+      }
+    }
+    if (OB_SUCC(ret)) {
+      const int64_t full_name_len = snprintf(full_name_buf,
+                                             sizeof(full_name_buf),
+                                             "%.*s.%.*s",
+                                             static_cast<int>(dict_database_name.length()),
+                                             dict_database_name.ptr(),
+                                             static_cast<int>(dict_table_name.length()),
+                                             dict_table_name.ptr());
+      if (OB_UNLIKELY(full_name_len <= 0 || full_name_len >= static_cast<int64_t>(sizeof(full_name_buf)))) {
+        ret = OB_BUF_NOT_ENOUGH;
+        LOG_WARN("failed to format fulltext dict table name", K(ret), K(dict_database_name), K(dict_table_name));
+      } else if (OB_FAIL(storage::ObFTParsePluginData::instance().get_dict_hub(hub))) {
+        LOG_WARN("failed to get fulltext dict hub", K(ret));
+      } else if (OB_ISNULL(hub)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fulltext dict hub is null", K(ret));
+      } else {
+        ObString full_name(static_cast<int32_t>(full_name_len), full_name_buf);
+        storage::ObFTCacheRangeContainer container(allocator);
+        storage::ObFTDictDesc desc(full_name,
+                                   dict_type,
+                                   common::ObCharsetType::CHARSET_UTF8MB4,
+                                   common::ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI);
+        if (OB_FAIL(hub->refresh_cache(desc, container))) {
+          LOG_WARN("failed to load custom fulltext dict table", K(ret), K(full_name), K(dict_type));
+        }
+      }
+    }
+  }
+  return ret;
 }
 
 int check_fulltext_dict_table_ref_in_property(const ObTableSchema &index_schema,
@@ -2069,7 +2160,8 @@ int ObFtsIndexBuilderUtil::push_back_gen_col(
 int ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(
     const share::schema::ObTableSchema &data_schema,
     obcall::ObCreateIndexArg &arg,
-    ObIAllocator *allocator)
+    ObIAllocator *allocator,
+    ObSchemaGetterGuard *schema_guard)
 {
   int ret = OB_SUCCESS;
   share::schema::ObIndexType type = arg.index_type_;
@@ -2084,7 +2176,49 @@ int ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(
     LOG_WARN("fail to generate fts parser name", K(ret), K(arg));
   } else if (OB_FAIL(generate_fts_parser_property(data_schema, arg, *allocator))) {
     LOG_WARN("fail to generate fts parser property", K(ret), K(arg));
-  } else {
+  } else if (OB_NOT_NULL(schema_guard)) {
+    storage::ObFTParser parser;
+    storage::ObFTParserJsonProps parser_properties;
+    ObString parser_name;
+    ObString dict_table;
+    ObString stopword_table;
+    ObString quantifier_table;
+    if (OB_FAIL(parser.parse_from_str(arg.index_option_.parser_name_.ptr(),
+                                      arg.index_option_.parser_name_.length()))) {
+      LOG_WARN("fail to parse fts parser name", K(ret), K(arg.index_option_.parser_name_));
+    } else if (FALSE_IT(parser_name = ObString(parser.get_parser_name().len(), parser.get_parser_name().str()))) {
+    } else if (!is_need_dictionary(parser_name)) {
+    } else if (OB_FAIL(parser_properties.init())) {
+      LOG_WARN("fail to init parser properties", K(ret));
+    } else if (OB_FAIL(parser_properties.parse_from_valid_str(arg.index_option_.parser_properties_))) {
+      LOG_WARN("fail to parse fts parser properties", K(ret), K(arg.index_option_.parser_properties_));
+    } else if (OB_FAIL(parser_properties.config_get_dict_table(dict_table))) {
+      LOG_WARN("fail to get dict_table parser property", K(ret));
+    } else if (OB_FAIL(parser_properties.config_get_stopword_table(stopword_table))) {
+      LOG_WARN("fail to get stopword_table parser property", K(ret));
+    } else if (OB_FAIL(parser_properties.config_get_quantifier_table(quantifier_table))) {
+      LOG_WARN("fail to get quantifier_table parser property", K(ret));
+    } else if (OB_FAIL(load_custom_fulltext_dict_table(data_schema,
+                                                       *schema_guard,
+                                                       *allocator,
+                                                       dict_table,
+                                                       storage::ObFTDictType::DICT_IK_MAIN))) {
+      LOG_WARN("fail to load custom ik main dict table", K(ret), K(dict_table));
+    } else if (OB_FAIL(load_custom_fulltext_dict_table(data_schema,
+                                                       *schema_guard,
+                                                       *allocator,
+                                                       stopword_table,
+                                                       storage::ObFTDictType::DICT_IK_STOP))) {
+      LOG_WARN("fail to load custom ik stopword table", K(ret), K(stopword_table));
+    } else if (OB_FAIL(load_custom_fulltext_dict_table(data_schema,
+                                                       *schema_guard,
+                                                       *allocator,
+                                                       quantifier_table,
+                                                       storage::ObFTDictType::DICT_IK_QUAN))) {
+      LOG_WARN("fail to load custom ik quantifier table", K(ret), K(quantifier_table));
+    }
+  }
+  if (OB_SUCC(ret)) {
     LOG_INFO("succeed to generate fts parser name and property", K(ret), K(arg.index_option_.parser_name_),
         K(arg.index_option_.parser_properties_));
   }

@@ -6884,7 +6884,12 @@ int ObDDLResolver::generate_global_index_schema(
               my_create_index_arg, new_table_schema, *allocator_, gen_columns))) {
         LOG_WARN("fail to adjust expr index args", K(ret));
       } else if (share::schema::is_fts_index(my_create_index_arg.index_type_) &&
-                 OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(*table_schema, my_create_index_arg, allocator_))) {
+                 OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(*table_schema,
+                                                                                      my_create_index_arg,
+                                                                                      allocator_,
+                                                                                      OB_ISNULL(schema_checker_)
+                                                                                          ? nullptr
+                                                                                          : schema_checker_->get_schema_guard()))) {
         LOG_WARN("failed to genearte fts parser name", K(ret));
       } else if (share::schema::is_vec_index(my_create_index_arg.index_type_) &&
                  OB_FAIL((ObVecIndexBuilderUtil::generate_vec_index_name(allocator_, my_create_index_arg.index_type_,

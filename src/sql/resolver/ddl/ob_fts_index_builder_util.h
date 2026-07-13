@@ -149,7 +149,8 @@ public:
   static int generate_fts_parser_name_and_property(
       const share::schema::ObTableSchema &data_schema,
       obcall::ObCreateIndexArg &arg,
-      ObIAllocator *allocator);
+      ObIAllocator *allocator,
+      ObSchemaGetterGuard *schema_guard = nullptr);
   static int check_fulltext_dict_table_referenced(
       const common::ObString &database_name,
       const common::ObString &table_name,
