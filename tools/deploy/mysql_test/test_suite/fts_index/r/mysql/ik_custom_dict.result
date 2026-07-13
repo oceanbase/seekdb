@@ -1,0 +1,9 @@
+=== setup and custom dict usage ===
+=== DDL protections ===
+alter table dict_words add column extra int;
+ERROR 0A000: alter referenced FULLTEXT_DICT table not supported
+rename table dict_words to dict_words_new;
+ERROR 0A000: rename referenced FULLTEXT_DICT table not supported
+drop table dict_words;
+ERROR HY000: drop referenced FULLTEXT_DICT table not allowed
+=== cleanup ===

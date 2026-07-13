@@ -1,0 +1,61 @@
+# owner: lzh
+# owner group: storage
+# description: check IK parser custom FULLTEXT_DICT tables.
+
+--echo === setup and custom dict usage ===
+--disable_query_log
+--disable_result_log
+--disable_warnings
+drop database if exists fts_ik_custom_dict;
+--enable_warnings
+create database fts_ik_custom_dict;
+use fts_ik_custom_dict;
+
+create table dict_words (
+  word varchar(100) primary key
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
+
+insert into dict_words values ('火星数据库'), ('向量检索');
+
+create table docs (
+  id int primary key,
+  body varchar(200)
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci with column group(each column);
+
+insert into docs values (1, '火星数据库支持向量检索');
+
+create fulltext index fidx_body on docs(body)
+  with parser ik parser_properties=(dict_table="dict_words", ik_mode="smart");
+
+alter system refresh fulltext dict dict_words;
+alter system refresh fulltext dict "fts_ik_custom_dict.dict_words";
+
+select tokenize('火星数据库支持向量检索', 'ik',
+  '[{"additional_args": [{"dict_table": "dict_words"}, {"ik_mode": "smart"}]}]');
+
+create table dict_words_unref (
+  word varchar(100) primary key
+) organization index default charset = utf8mb4 collate = utf8mb4_general_ci fulltext_dict = 'Y';
+drop table dict_words_unref;
+--enable_result_log
+--enable_query_log
+
+--echo === DDL protections ===
+--error 1235
+alter table dict_words add column extra int;
+
+--error 1235
+rename table dict_words to dict_words_new;
+
+--error 4179
+drop table dict_words;
+
+--echo === cleanup ===
+--disable_query_log
+--disable_result_log
+drop index fidx_body on docs;
+drop table docs;
+drop table dict_words;
+drop database fts_ik_custom_dict;
+--enable_result_log
+--enable_query_log
