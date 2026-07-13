@@ -134,7 +134,8 @@ int ObDDLResolver::append_fts_args(const share::schema::ObTableSchema &data_sche
                                    bool &fts_common_aux_table_exist,
                                    ObIArray<ObPartitionResolveResult> &resolve_results,
                                    ObIArray<ObCreateIndexArg> &index_arg_list,
-                                   ObIAllocator *allocator)
+                                   ObIAllocator *allocator,
+                                   ObSchemaGetterGuard *schema_guard)
 {
   int ret = OB_SUCCESS;
   ObDocIDType doc_id_type = ObDocIDType::INVALID;
@@ -149,7 +150,8 @@ int ObDDLResolver::append_fts_args(const share::schema::ObTableSchema &data_sche
     if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_index_arg(data_schema,
                                                             index_arg,
                                                             allocator,
-                                                            index_arg_list))) {
+                                                            index_arg_list,
+                                                            schema_guard))) {
       LOG_WARN("failed to append fts_index arg", K(ret));
     } else if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_rowkey_doc_arg(index_arg,
                                                                         allocator,
@@ -162,7 +164,8 @@ int ObDDLResolver::append_fts_args(const share::schema::ObTableSchema &data_sche
     } else if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_doc_word_arg(data_schema,
                                                                       index_arg,
                                                                       allocator,
-                                                                      index_arg_list))) {
+                                                                      index_arg_list,
+                                                                      schema_guard))) {
       LOG_WARN("failed to append fts_doc_word arg", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < num_fts_args; ++i) {
@@ -178,12 +181,14 @@ int ObDDLResolver::append_fts_args(const share::schema::ObTableSchema &data_sche
     if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_index_arg(data_schema,
                                                             index_arg,
                                                             allocator,
-                                                            index_arg_list))) {
+                                                            index_arg_list,
+                                                            schema_guard))) {
       LOG_WARN("failed to append fts_index arg", K(ret));
     } else if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_doc_word_arg(data_schema,
                                                                       index_arg,
                                                                       allocator,
-                                                                      index_arg_list))) {
+                                                                      index_arg_list,
+                                                                      schema_guard))) {
       LOG_WARN("failed to append fts_doc_word arg", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < num_fts_args; ++i) {
