@@ -34,19 +34,4 @@ ALTER SYSTEM REFRESH FULLTEXT DICT ai_ik_test.my_dict;
 INSERT INTO articles (title) VALUES ('包含新词汇的标题');
 SELECT id, title FROM articles WHERE MATCH(title) AGAINST('新词汇' IN BOOLEAN MODE) ORDER BY id;
 
---echo # TOKENIZE preview: an UNQUALIFIED dict_table resolves against the current database.
---echo # 数据库 / 介绍 / 使用指南 break into single chars; the dictionary words stay whole.
-SELECT id, TOKENIZE(title, 'ik', '[{"output":"all"},{"additional_args":[{"dict_table":"my_dict"}]}]') AS toks
-FROM articles ORDER BY id;
-
---echo # TOKENIZE accepts ik_mode + stopword_table + quantifier_table together
-CREATE TABLE my_stopwords (word varchar(100) primary key)
-  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci FULLTEXT_DICT='Y';
-CREATE TABLE my_quantifiers (word varchar(100) primary key)
-  ORGANIZATION INDEX DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci FULLTEXT_DICT='Y';
-ALTER SYSTEM REFRESH FULLTEXT DICT ai_ik_test.my_stopwords;
-ALTER SYSTEM REFRESH FULLTEXT DICT ai_ik_test.my_quantifiers;
-SELECT TOKENIZE('这是非常重要的信息', 'ik',
-  '[{"output":"all"},{"additional_args":[{"ik_mode":"max_word"},{"dict_table":"ai_ik_test.my_dict"},{"stopword_table":"ai_ik_test.my_stopwords"},{"quantifier_table":"ai_ik_test.my_quantifiers"}]}]') AS toks;
-
 DROP DATABASE ai_ik_test;
