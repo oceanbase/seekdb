@@ -21,229 +21,41 @@ namespace oceanbase
 {
 using namespace common;
 using namespace transaction;
-using namespace obcall;
 namespace unittest
 {
 
-class MyResponseRpc
+class TestTimestampService : public ObTimestampService
 {
 public:
-  MyResponseRpc() {}
-  ~MyResponseRpc() {}
-public:
-  void set_valid_arg(const int status,
-                     const ObAddr &sender,
-                     const ObAddr self)
+  int init_for_test()
   {
-    status_ = status;
-    sender_ = sender;
-    self_ = self;
-  }
-  int post(const ObAddr &server, const ObGtsErrResponse &msg)
-  {
-    int ret = OB_SUCCESS;
-    if (!msg.is_valid() ||
-        msg.get_status() != status_ ||
-        msg.get_sender() != sender_ ||
-        server != self_) {
-      ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid argument", K(ret), K(server), K(msg), K(*this));
-    }
-    return ret;
-  }
-  TO_STRING_KV(K_(status), K_(sender), K_(self));
-private:
-  int status_;
-  ObAddr sender_;
-  ObAddr self_;
-};
-
-class MyTimestampService : public ObTimestampService
-{
-public:
-  MyTimestampService() {}
-  ~MyTimestampService() {}
-  void init(const ObAddr &self)
-  {
-    self_ = self;
+    int ret = ObTimestampService::init();
     service_type_ = ServiceType::TimestampService;
     pre_allocated_range_ = TIMESTAMP_PREALLOCATED_RANGE;
-    last_id_ = 0;
-    limited_id_ = ObTimeUtility::current_time_ns() + TIMESTAMP_PREALLOCATED_RANGE;
-  }
-public:
-  int handle_request(const ObGtsRequest &request, ObGtsRpcResult &result)
-  {
-    static int64_t total_cnt = 0;
-    static int64_t total_rt = 0;
-    static const int64_t STATISTICS_INTERVAL_US = 10000000;
-    const MonotonicTs start = MonotonicTs::current_time();
-    int ret = OB_SUCCESS;
-
-    if (OB_UNLIKELY(!request.is_valid())) {
-      ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid argument", KR(ret), K(request));
-    } else {
-      TRANS_LOG(DEBUG, "handle gts request", K(request));
-      int64_t gts = 0;
-      const MonotonicTs srr = request.get_srr();
-      const ObAddr &requester = request.get_sender();
-      int64_t end_id;
-      if (requester == self_) {
-      // Go local call to get gts
-      TRANS_LOG(DEBUG, "handle local gts request", K(requester));
-      ret = handle_local_request_(request, result);
-      } else if (OB_FAIL(get_number(1, ObTimeUtility::current_time_ns(), gts, end_id))) {
-        TRANS_LOG(WARN, "get timestamp failed", KR(ret));
-        int tmp_ret = OB_SUCCESS;
-        ObGtsErrResponse response;
-        if (OB_SUCCESS != (tmp_ret = result.init(ret, srr, 0, 0))) {
-          TRANS_LOG(WARN, "gts result init failed", K(tmp_ret), K(request));
-        } else if (OB_SUCCESS != (tmp_ret = response.init(srr, ret, self_))) {
-          TRANS_LOG(WARN, "gts err response init failed", K(tmp_ret), K(request));
-        } else if (OB_SUCCESS != (tmp_ret = rpc_.post(requester, response))) {
-          TRANS_LOG(WARN, "post gts err response failed", K(tmp_ret), K(response));
-        } else {
-          TRANS_LOG(DEBUG, "post gts err response success", K(response));
-        }
-      } else {
-        if (OB_FAIL(result.init(ret, srr, gts, gts))) {
-          TRANS_LOG(WARN, "gts result init failed", KR(ret), K(request));
-        }
-      }
-    }
+    last_id_ = ObTimeUtility::current_time_ns();
+    limited_id_ = last_id_ + TIMESTAMP_PREALLOCATED_RANGE;
     return ret;
   }
-  int handle_local_request_(const ObGtsRequest &request, obcall::ObGtsRpcResult &result)
-  {
-    int ret = OB_SUCCESS;
-    int64_t gts = 0;
-    const MonotonicTs srr = request.get_srr();
-    int64_t end_id;
-    if (OB_FAIL(get_number(1, ObTimeUtility::current_time_ns(), gts, end_id))) {
-      TRANS_LOG(WARN, "get timestamp failed", KR(ret));
-      int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = result.init(ret, srr, 0, 0))) {
-        TRANS_LOG(WARN, "gts result init failed", K(tmp_ret), K(request));
-      }
-    } else {
-      if (OB_FAIL(result.init(ret, srr, gts, gts))) {
-        TRANS_LOG(WARN, "local gts result init failed", KR(ret), K(request));
-      }
-    }
-    return ret;
-  }
-private:
-  int get_number(const int64_t range, const int64_t base_id, int64_t &start_id, int64_t &end_id)
-  {
-    int ret = OB_SUCCESS;
-    if (range != 1) {
-      ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid argument", K(ret), K(range), K(base_id));
-    } else if (base_id < ObTimeUtility::current_time()) {
-      ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid argument", K(ret), K(range), K(base_id));
-    } else {
-      const int64_t last_id = ATOMIC_LOAD(&last_id_);
-      int64_t tmp_id = 0;
-      if (base_id > last_id) {
-        if (ATOMIC_BCAS(&last_id_, last_id, base_id + range)) {
-          tmp_id = base_id;
-        } else {
-          tmp_id = ATOMIC_FAA(&last_id_, range);
-        }
-      } else {
-        tmp_id = ATOMIC_FAA(&last_id_, range);
-      }
-      start_id = tmp_id;
-    }
-    return ret;
-  }
-  MyResponseRpc rpc_;
 };
 
-class TestObGtsMgr : public ::testing::Test
+TEST(TestObTimestampService, local_timestamp_is_monotonic)
 {
-public :
-  virtual void SetUp() {}
-  virtual void TearDown() {}
-};
+  TestTimestampService service;
+  ASSERT_EQ(OB_SUCCESS, service.init_for_test());
+  int64_t first = 0;
+  int64_t second = 0;
 
-//////////////////////basic function test//////////////////////////////////////////
-
-TEST_F(TestObGtsMgr, handle_gts_request_by_leader)
-{
-  TRANS_LOG(INFO, "called", "func", test_info_->name());
-  const ObAddr client(ObAddr::IPV4, "10.0.0.1", 10000);
-  const ObAddr server(ObAddr::IPV4, "10.0.0.1", 20000);
-  MyTimestampService ts_service;
-  MyResponseRpc response_rpc;
-  ts_service.init(server);
-
-  const MonotonicTs srr = MonotonicTs::current_time();
-  const int64_t ts_range = 1;
-  response_rpc.set_valid_arg(OB_SUCCESS, server, client);
-  ObGtsRequest request;
-  ObGtsRpcResult result;
-  EXPECT_EQ(OB_SUCCESS, request.init(srr, ts_range, client));
-  EXPECT_EQ(OB_SUCCESS, ts_service.handle_request(request, result));
-  EXPECT_EQ(OB_SUCCESS, result.get_status());
-  EXPECT_EQ(srr, result.get_srr());
-  EXPECT_EQ(ts_range - 1, result.get_gts_end() - result.get_gts_start());
-  //EXPECT_TRUE(result.get_gts_start() >= srr);
+  ASSERT_EQ(OB_SUCCESS, service.get_timestamp(first));
+  ASSERT_EQ(OB_SUCCESS, service.get_timestamp(second));
+  EXPECT_GT(first, 0);
+  EXPECT_GT(second, first);
 }
 
-TEST_F(TestObGtsMgr, handle_local_gts_request)
-{
-  TRANS_LOG(INFO, "called", "func", test_info_->name());
-  const ObAddr server(ObAddr::IPV4, "10.0.0.1", 20000);
-  MyTimestampService ts_service;
-  MyResponseRpc response_rpc;
-  ts_service.init(server);
-
-  const MonotonicTs srr = MonotonicTs::current_time();
-  const int64_t ts_range = 1;
-  response_rpc.set_valid_arg(OB_SUCCESS, server, server);
-  ObGtsRequest request;
-  ObGtsRpcResult result;
-  EXPECT_EQ(OB_SUCCESS, request.init(srr, ts_range, server));
-  EXPECT_EQ(OB_SUCCESS, ts_service.handle_request(request, result));
-  EXPECT_EQ(OB_SUCCESS, result.get_status());
-  EXPECT_EQ(srr, result.get_srr());
-  EXPECT_EQ(ts_range - 1, result.get_gts_end() - result.get_gts_start());
-  // EXPECT_TRUE(result.get_gts_start() >= srr);
-}
-
-TEST_F(TestObGtsMgr, invalid_argument)
-{
-  TRANS_LOG(INFO, "called", "func", test_info_->name());
-  const ObAddr client(ObAddr::IPV4, "10.0.0.1", 10000);
-  const ObAddr server(ObAddr::IPV4, "10.0.0.1", 20000);
-  MyTimestampService ts_service;
-  MyResponseRpc response_rpc;
-
-  const MonotonicTs srr = MonotonicTs::current_time();
-  const MonotonicTs stc;
-  const int64_t ts_range = 1;
-  ObGtsRequest request;
-  EXPECT_EQ(OB_INVALID_ARGUMENT, request.init(stc, ts_range, client));
-  EXPECT_EQ(OB_INVALID_ARGUMENT, request.init(srr, 0, client));
-  EXPECT_EQ(OB_INVALID_ARGUMENT, request.init(srr, ts_range, ObAddr()));
-}
-
-}//end of unittest
-}//end of oceanbase
-
-using namespace oceanbase;
-using namespace oceanbase::common;
+} // namespace unittest
+} // namespace oceanbase
 
 int main(int argc, char **argv)
 {
-  int ret = 1;
-  ObLogger &logger = ObLogger::get_logger();
-  logger.set_file_name("test_ob_gts_mgr.log", true);
-  logger.set_log_level(OB_LOG_LEVEL_INFO);
   testing::InitGoogleTest(&argc, argv);
-  ret = RUN_ALL_TESTS();
-  return ret;
+  return RUN_ALL_TESTS();
 }

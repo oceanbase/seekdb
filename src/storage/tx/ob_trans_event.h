@@ -70,12 +70,10 @@ public:
   void add_trans_timeout_count(const int64_t value);
   // count how many transactions are started, via start_trans
   void add_trans_start_count(const int64_t value);
-  // count the total time of transactions, from start_trans to the end of receiving ack from coordinator
+  // count the total time of transactions, from start_trans to the final tx response
   void add_trans_total_used_time(const int64_t value);
   // count the total time of local trans
   void add_local_trans_total_used_time(const int64_t value);
-  // count the total time of distributed trans
-  void add_dist_trans_total_used_time(const int64_t value);
   // count the number of local stmt
   // count the number of remote stmt
   // count the number of distributed stmt
@@ -91,20 +89,14 @@ public:
   void add_trans_commit_time(const int64_t value);
   //Count the time from beginning rollback to receiving the abort response
   void add_trans_rollback_time(const int64_t value);
-  // count the number of transactions with 0 participant
+  // count the number of read-only transactions
   void add_readonly_count(const int64_t value);
-  // count the number of transactions with a single participant
+  // count the number of write transactions
   void add_local_count(const int64_t value);
-  // count the number of transactions with multiple participant
-  void add_dist_count(const int64_t value);
   // count how many redo logs are replayed
   void add_redo_log_replay_count(const int64_t value);
   // count the time spent on replaying redo logs
   void add_redo_log_replay_time(const int64_t value);
-  // count how many prepare logs are replayed
-  void add_prepare_log_replay_count(const int64_t value);
-  // count the time spent on replaying prepare logs
-  void add_prepare_log_replay_time(const int64_t value);
   // count how many commit logs are replayed
   void add_commit_log_replay_count(const int64_t value);
   // count the time spent on replaying commit logs
@@ -123,8 +115,6 @@ public:
   // count the callback time of sp commit log
   // count the number of callbacks of redo logs
   // count the callback time of redo log
-  // count the number of callbacks of prepare logs
-  // count the callback time of prepare log
   // count the number of callbacks of commit logs
   // count the callback time of commit log
   // count the number of callbacks of abort logs
@@ -172,8 +162,7 @@ private:
       trans_multi_partition_count_stat_("trans_single_partition_count"),
       distributed_stmt_stat_("distributed_stmt_count"), local_stmt_stat_("local_stmt_stat"),
       remote_stmt_stat_("remote_stmt_stat"), redo_replay_count_stat_("redo_replay_count"),
-      redo_replay_time_stat_("redo_replay_time"), prepare_replay_count_stat_("prepare_replay_count"),
-      prepare_replay_time_stat_("prepare_replay_time"), commit_replay_count_stat_("commit_replay_count"),
+      redo_replay_time_stat_("redo_replay_time"), commit_replay_count_stat_("commit_replay_count"),
       commit_replay_time_stat_("commit_replay_time"), abort_replay_count_stat_("abort_replay_count"),
       abort_replay_time_stat_("abort_replay_time"), clear_replay_count_stat_("clear_replay_count"),
       clear_replay_time_stat_("clear_replay_time"), stmt_timeout_count_stat_("stmt_timeout_count"),
@@ -208,8 +197,6 @@ private:
   ObTransStatItem remote_stmt_stat_;
   ObTransStatItem redo_replay_count_stat_;
   ObTransStatItem redo_replay_time_stat_;
-  ObTransStatItem prepare_replay_count_stat_;
-  ObTransStatItem prepare_replay_time_stat_;
   ObTransStatItem commit_replay_count_stat_;
   ObTransStatItem commit_replay_time_stat_;
   ObTransStatItem abort_replay_count_stat_;
@@ -252,11 +239,9 @@ private:
 #define TX_STAT_TIME_USED(time) ObTransStatistic::get_instance().add_trans_total_used_time( time);
 #define TX_STAT_COMMIT_TIME_USED(time) ObTransStatistic::get_instance().add_trans_commit_time( time);
 #define TX_STAT_ROLLBACK_TIME_USED(time) ObTransStatistic::get_instance().add_trans_rollback_time( time);
-#define TX_STAT_DIST_INC ObTransStatistic::get_instance().add_dist_count( 1);
 #define TX_STAT_LOCAL_INC ObTransStatistic::get_instance().add_local_count( 1);
 #define TX_STAT_READONLY_INC ObTransStatistic::get_instance().add_readonly_count( 1);
 #define TX_STAT_READ_ELR_ROW_COUNT_INC transaction::ObTransStatistic::get_instance().add_read_elr_row_count( 1);
 #define TX_STAT_LOCAL_TOTAL_TIME_USED(time) ObTransStatistic::get_instance().add_local_trans_total_used_time( time);
-#define TX_STAT_DIST_TOTAL_TIME_USED(time) ObTransStatistic::get_instance().add_dist_trans_total_used_time( time);
 
 #endif // OCEANABAE_TRANSACTION_OB_TRANS_EVENT_

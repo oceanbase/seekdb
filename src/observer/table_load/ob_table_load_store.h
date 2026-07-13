@@ -42,8 +42,8 @@ public:
   ObTableLoadStore(ObTableLoadTableCtx *ctx);
   static int init_ctx(
     ObTableLoadTableCtx *ctx,
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &partition_id_array,
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &target_partition_id_array);
+    const table::ObTableLoadArray<table::ObTableLoadTabletId> &partition_id_array,
+    const table::ObTableLoadArray<table::ObTableLoadTabletId> &target_partition_id_array);
   static void abort_ctx(ObTableLoadTableCtx *ctx, int error_code, bool &is_stopped);
   int init();
 private:

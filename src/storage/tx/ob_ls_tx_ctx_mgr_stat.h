@@ -30,28 +30,29 @@ public:
   ObLSTxCtxMgrStat() { reset(); }
   virtual ~ObLSTxCtxMgrStat() { }
   void reset();
-  int init(const common::ObAddr &addr, const share::ObLSID &ls_id,
-      const bool is_master, const bool is_stopped,
-      const int64_t state,
+  int init(const common::ObAddr &addr,
+      const bool is_stopped, const bool block_tx,
+      const bool block_normal_tx, const bool block_all,
       const int64_t total_tx_ctx_count, const int64_t mgr_addr);
 
   const common::ObAddr &get_addr() const { return addr_; }
-  const share::ObLSID &get_ls_id() const { return ls_id_; }
-  bool is_master() const { return is_master_; }
   bool is_stopped() const { return is_stopped_; }
-  int64_t get_state() const { return state_; }
+  bool is_tx_blocked() const { return block_tx_; }
+  bool is_normal_tx_blocked() const { return block_normal_tx_; }
+  bool is_all_blocked() const { return block_all_; }
   int64_t get_total_tx_ctx_count() const { return total_tx_ctx_count_; }
   int64_t get_mgr_addr() const { return mgr_addr_; }
 
-  TO_STRING_KV(K_(addr), K_(ls_id), K_(is_master), K_(is_stopped), K_(state),
+  TO_STRING_KV(K_(addr), K_(is_stopped), K_(block_tx),
+      K_(block_normal_tx), K_(block_all),
       K_(total_tx_ctx_count), K_(mgr_addr));
 
 private:
   common::ObAddr addr_;
-  share::ObLSID ls_id_;
-  bool is_master_;
   bool is_stopped_;
-  int64_t state_;
+  bool block_tx_;
+  bool block_normal_tx_;
+  bool block_all_;
   int64_t total_tx_ctx_count_;
   int64_t mgr_addr_;
 };

@@ -166,7 +166,6 @@ int ObMdsUnitRowNodeScanIterator<UnitKey, UnitValue>::init(mds::MdsTableHandle &
                                                            const int64_t timeout_ts) {
   #define PRINT_WRAPPER KR(ret), K(*this), K(mds_table_handle)
   int ret = OB_SUCCESS;
-  share::ObLSID ls_id;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     MDS_LOG_NONE(WARN, "ObMdsUnitRowNodeScanIterator init twice");
@@ -175,15 +174,13 @@ int ObMdsUnitRowNodeScanIterator<UnitKey, UnitValue>::init(mds::MdsTableHandle &
     MDS_LOG_NONE(WARN, "mds_table_handle invalid");
   } else if (OB_FAIL(filter_function_.assign(filter))) {
     MDS_LOG_NONE(WARN, "failed to init filter function");
-  } else if (OB_FAIL(mds_table_handle.get_ls_id(ls_id))) {
-    MDS_LOG_NONE(WARN, "failed to get ls_id from mds_table");
   } else {
     int64_t current_ts = ObClockGenerator::getClock();
     int64_t timeout_us = timeout_ts - current_ts > 0 ? timeout_ts - current_ts : 0;
     mds_table_handle_ = mds_table_handle;
     is_inited_ = true;
     is_first_scan_ = true;
-    new (&retry_param_) RetryParam(ls_id, timeout_us);
+    new (&retry_param_) RetryParam(timeout_us);
   }
   return ret;
   #undef PRINT_WRAPPER
@@ -263,11 +260,6 @@ int ObMdsUnitRowNodeScanIterator<UnitKey, UnitValue>::cache_all_nodes_in_row_(Kv
         ret = OB_SUCCESS;
       } else if (retry_param_.check_timeout()) {
         ret = OB_TIMEOUT;
-      } else if ((retry_param_.retry_cnt_ % 50) == 0) {// every 500ms
-        if (retry_param_.check_ls_in_gc_state()) {
-          ret = OB_REPLICA_NOT_READABLE;
-          MDS_LOG_NONE(INFO, "iter scan mds node meet ls gc");
-        }
       }
     }
   } while (OB_EAGAIN == ret);

@@ -78,9 +78,6 @@ public:
                   ObTxDataTable &tx_data_table);
   int64_t get_serialize_size() const;
 
-  void set_compatible_version(const int32_t version) {
-    compatible_version_ = version;
-  }
 private:
   int serialize_(char *buf, const int64_t buf_len, int64_t &pos) const;
   int deserialize_(const char *buf,
@@ -96,27 +93,21 @@ public:
   void reset()
   {
     tx_id_.reset();
-    ls_id_.reset();
     cluster_id_ = OB_INVALID_CLUSTER_ID;
     cluster_version_ = 0;
     tx_data_guard_.reset();
     exec_info_.reset();
     table_lock_info_.reset();
-    compatible_version_ = -1;
   }
   void destroy() { reset(); }
-  TO_STRING_KV(K_(tx_id), K_(ls_id), K_(cluster_id), K_(tx_data_guard),
+  TO_STRING_KV(K_(tx_id), K_(cluster_id), K_(tx_data_guard),
                K_(exec_info), K_(table_lock_info), K_(cluster_version));
   transaction::ObTransID tx_id_;
-  share::ObLSID ls_id_;
   int64_t cluster_id_;
   uint64_t cluster_version_;
   ObTxDataGuard tx_data_guard_;
   transaction::ObTxExecInfo exec_info_;
   transaction::tablelock::ObTableLockInfo table_lock_info_;
-  // used to handle compatible issue when deserialize,
-  // not serialized, set from ObTxCtxTableMeta
-  int32_t compatible_version_;
 };
 
 struct ObTxCtxTableMeta
@@ -131,13 +122,11 @@ public:
   ~ObTxCtxTableMeta() { destroy(); }
 
   bool is_valid() const
-  { return tx_id_.is_valid() && ls_id_.is_valid(); }
+  { return tx_id_.is_valid(); }
 
   void reset()
   {
-    version_ = VERSION_1;
     tx_id_.reset();
-    ls_id_.reset();
     tx_ctx_serialize_size_ = 0;
     row_num_ = 0;
     row_idx_ = 0;
@@ -145,9 +134,7 @@ public:
   void destroy() { reset(); }
   ObTxCtxTableMeta &operator=(const ObTxCtxTableMeta &r)
   {
-    version_ = r.version_;
     tx_id_ = r.tx_id_;
-    ls_id_ = r.ls_id_;
     tx_ctx_serialize_size_ = r.tx_ctx_serialize_size_;
     row_num_ = r.row_num_;
     row_idx_ = r.row_idx_;
@@ -155,12 +142,10 @@ public:
   }
 
   void init(transaction::ObTransID tx_id,
-            share::ObLSID ls_id,
             int64_t row_value_serialize_size,
             int32_t row_num,
             int32_t row_idx) {
     tx_id_ = tx_id;
-    ls_id_ = ls_id;
     tx_ctx_serialize_size_ = row_value_serialize_size;
     row_num_ = row_num;
     row_idx_ = row_idx;
@@ -192,7 +177,6 @@ public:
   bool is_multi_row_next_extent(const ObTxCtxTableMeta& next) const
   {
     return next.tx_id_ == tx_id_ &&
-           next.ls_id_ == ls_id_ &&
            next.tx_ctx_serialize_size_ == tx_ctx_serialize_size_ &&
            next.row_num_ == row_num_ &&
            next.row_idx_ == row_idx_ + 1 &&
@@ -203,26 +187,13 @@ public:
   {
     return tx_ctx_serialize_size_;
   }
-  int32_t get_version() const
-  {
-    return version_;
-  }
-  TO_STRING_KV(K_(tx_id), K_(ls_id), K_(tx_ctx_serialize_size), K_(row_num), K_(row_idx), K_(version));
+  TO_STRING_KV(K_(tx_id), K_(tx_ctx_serialize_size), K_(row_num), K_(row_idx));
 private:
   int serialize_(char* buf, const int64_t buf_len, int64_t &pos) const;
   int deserialize_(const char* buf, const int64_t buf_len, int64_t &pos);
   int64_t get_serialize_size_() const;
-public:
-  static constexpr int VERSION_0 = 0;
-  // V1, fix bug:
-  //   ctx serialized size record in header not equals to real serialized size
-  //   it is because of the CommonID's get serialize_size always return 8
-  //   but it use variant encoding
-  static constexpr int VERSION_1 = 1;
 private:
-  int32_t version_;
   transaction::ObTransID tx_id_;
-  share::ObLSID ls_id_;
   int64_t tx_ctx_serialize_size_;
   int32_t row_num_;
   int32_t row_idx_;
@@ -270,40 +241,6 @@ public:
 
   VIRTUAL_TO_STRING_KV(K_(tx_data_check_data));
 public:
-  // Reserved compatibility data needs to rely both on
-  // the tx table state before the reserved_scn, as well as
-  // the tx table state after the reserved_scn.
-  // Otherwise:
-  //   1. If the tx table state before the reserved_scn is
-  //      not relied upon, there could be a loss of rollbacks in the
-  //      previous undo_status.
-  //   2. If the tx table state after the reserved_scn is
-  //      not relied upon, there could be a loss of the most recent decided txn
-  //      state in the later side.
-  //
-  // When uncommitted data exists around the reserved SCN, it is necessary to
-  // fuse tx data states from both sides of the boundary.
-  //
-  // Therefore, it's necessary to fuse the txn states. While we should note that
-  // txn is composed of txn states(state), commit versions(commit_version) and
-  // rollback sequences(undo_status). Among these:
-  //   1. From the previous side, what's needed are the txn states of the already
-  //      committed transactions before the reserved_scn, along with their
-  //      commit versions and rollback sequences, as well as the rollback
-  //      sequences of txns that are not yet committed.
-  //   2. From the later side, what's required are the transaction states,
-  //      commit versions, and rollback sequences of transactions after the
-  //      reserved_scn.
-  //
-  // Hence, the later side of the txn state for uncommitted data on the previous side
-  // should follow these steps:
-  //   - From the previous side, if a txn has been committed(meaning there
-  //     is a transaction state, commit version, or contained in the rollback
-  //     sequence), it can be directly obtained from the previous side.
-  //   - If a txn is uncommitted on the previous side (no decided txn state, commit
-  //     version, or rollback sequence exists), then its details need to be
-  //     determined from the txn state, commit version, or rollback sequence on
-  //     the later side.
   ObTxDataCheckData tx_data_check_data_;
   // In the tx_data_table, defensive error reporting strategies are implemented,
   // which means that potential errors are proactively handled and reported

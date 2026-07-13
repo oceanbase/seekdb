@@ -54,7 +54,7 @@ int ObLobMetaScanIter::open_remote(ObLobAccessParam &param)
   cur_pos_ = 0;
   cur_byte_pos_ = 0;
   is_remote_ = true;
-  if (OB_FAIL(ObLobRemoteUtil::query(param, ObLobQueryArg::QueryType::READ, param.addr_, remote_ctx_))) {
+  if (OB_FAIL(ObLobRemoteUtil::query(param, obcall::ObLobQueryArg::QueryType::READ, param.addr_, remote_ctx_))) {
     LOG_WARN("fail to init remote query ctx", K(ret));
   }
   return ret;

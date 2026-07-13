@@ -25,28 +25,25 @@ namespace compaction
 {
 struct ObDiagnoseTablet {
   ObDiagnoseTablet()
-    : ls_id_(),
-      tablet_id_()
+    : tablet_id_()
   {}
-  ObDiagnoseTablet(const share::ObLSID &ls_id,  const ObTabletID &tablet_id)
-    : ls_id_(ls_id),
-      tablet_id_(tablet_id)
+  explicit ObDiagnoseTablet(const ObTabletID &tablet_id)
+    : tablet_id_(tablet_id)
   {}
   ~ObDiagnoseTablet() {}
   inline bool operator == (const ObDiagnoseTablet &other) const
   {
-    return ls_id_ == other.ls_id_ && tablet_id_ == other.tablet_id_;
+    return tablet_id_ == other.tablet_id_;
   }
   inline int hash(uint64_t &hash_value) const
   {
     int ret = common::OB_SUCCESS;
-    hash_value = murmurhash(&ls_id_, sizeof(ls_id_), 0);
-    hash_value = murmurhash(&tablet_id_, sizeof(tablet_id_), hash_value);
+    hash_value = murmurhash(&tablet_id_, sizeof(tablet_id_), 0);
     return ret;
   }
   inline bool is_valid() const
   {
-    return ls_id_.is_valid() && tablet_id_.is_valid();
+    return tablet_id_.is_valid();
   }
   static bool is_flagged(int64_t flag, const share::ObDiagnoseTabletType type)
   {
@@ -69,9 +66,8 @@ struct ObDiagnoseTablet {
       input_flag &= ~flag;
     }
   }
-  TO_STRING_KV(K_(ls_id), K_(tablet_id));
+  TO_STRING_KV(K_(tablet_id));
 
-  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
 };
 
@@ -86,12 +82,10 @@ public:
 
   // for diagnose
   int add_diagnose_tablet(
-      const share::ObLSID &ls_id, 
       const ObTabletID &tablet_id, 
       const share::ObDiagnoseTabletType type);
   int get_diagnose_tablets(ObIArray<ObDiagnoseTablet> &diagnose_tablets);
   int delete_diagnose_tablet(
-      const share::ObLSID &ls_id, 
       const ObTabletID &tablet_id,
       const share::ObDiagnoseTabletType type);
   void remove_diagnose_tablets(

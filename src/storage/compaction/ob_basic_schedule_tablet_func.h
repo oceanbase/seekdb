@@ -25,7 +25,6 @@ namespace storage
 class ObLS;
 class ObTablet;
 class ObTabletHandle;
-class ObLSHandle;
 }
 namespace compaction
 {
@@ -33,7 +32,7 @@ struct ObBasicScheduleTabletFunc
 {
   ObBasicScheduleTabletFunc(const int64_t merge_version, const int64_t loop_cnt = 0);
   virtual ~ObBasicScheduleTabletFunc() { destroy(); }
-  int switch_ls(storage::ObLSHandle &ls_handle);
+  int init(storage::ObLS *ls);
   void destroy();
   const ObLSStatusCache &get_ls_status() const { return ls_status_; }
   ObScheduleTabletCnt &get_schedule_tablet_cnt() { return tablet_cnt_; }
@@ -46,7 +45,7 @@ struct ObBasicScheduleTabletFunc
   /*
    * diagnose section
   */
-  int diagnose_switch_ls(storage::ObLSHandle &ls_handle);
+  int diagnose_init(storage::ObLS *ls);
 protected:
   void update_tenant_cached_status();
   virtual void schedule_freeze_dag(const bool force);

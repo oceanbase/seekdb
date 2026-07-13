@@ -43,21 +43,6 @@ private:
 
 using ObRemoveTabletsInTransRes = ObCreateTabletBatchInTransRes;
 
-struct ObRegisterTxDataResult
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObRegisterTxDataResult() : result_(common::OB_SUCCESS), tx_result_() {}
-  ~ObRegisterTxDataResult() {}
-  void reset();
-  TO_STRING_KV(K_(result), K_(tx_result));
-public:
-  int64_t result_;
-  transaction::ObTxExecResult tx_result_;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObRegisterTxDataResult);
-};
-
 }  // namespace obcall
 }  // namespace oceanbase
 #endif

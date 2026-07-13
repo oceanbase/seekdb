@@ -26,7 +26,6 @@ namespace observer
 {
 ObAllVirtualStorageMetaMemoryStatus::ObAllVirtualStorageMetaMemoryStatus()
   : ObVirtualTableScannerIterator(),
-    addr_(),
     pool_idx_(0)
 {
 }
@@ -40,11 +39,10 @@ void ObAllVirtualStorageMetaMemoryStatus::reset()
 {
   pool_idx_ = 0;
   status_arr_.reset();
-  addr_.reset();
   ObVirtualTableScannerIterator::reset();
 }
 
-int ObAllVirtualStorageMetaMemoryStatus::init(ObIAllocator *allocator, common::ObAddr &addr)
+int ObAllVirtualStorageMetaMemoryStatus::init(ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(start_to_read_)) {
@@ -55,7 +53,6 @@ int ObAllVirtualStorageMetaMemoryStatus::init(ObIAllocator *allocator, common::O
     SERVER_LOG(WARN, "invalid argument", K(ret));
   } else {
     allocator_ = allocator;
-    addr_ = addr;
     start_to_read_ = true;
   }
   return ret;

@@ -22,12 +22,6 @@
 
 namespace oceanbase
 {
-namespace obcall
-{
-struct ObFreezeSplitSrcTabletArg;
-struct ObFreezeSplitSrcTabletRes;
-}
-
 namespace rootserver
 {
 
@@ -46,7 +40,7 @@ public:
       const int64_t parallelism)
     : trans_(trans), schema_guard_(schema_guard), allocator_(allocator), tenant_data_version_(tenant_data_version), split_type_(split_type),
       new_table_schemas_(new_table_schemas), upd_table_schemas_(upd_table_schemas), inc_table_schemas_(inc_table_schemas), parallelism_(parallelism),
-      ls_id_(), leader_addr_(), src_tablet_ids_(), dst_tablet_ids_(), start_src_arg_(), start_dst_arg_(), task_id_(0),
+      src_tablet_ids_(), dst_tablet_ids_(), start_src_arg_(), start_dst_arg_(), task_id_(0),
       tablet_creator_(), data_end_scn_(), end_autoinc_seqs_() {}
   ~ObSplitPartitionHelper();
 
@@ -59,19 +53,16 @@ public:
   static int check_allow_split(
       share::schema::ObSchemaGetterGuard &schema_guard,
       const share::schema::ObTableSchema &table_schema);
-  static int freeze_split_src_tablet(
-      const obcall::ObFreezeSplitSrcTabletArg &arg,
-      obcall::ObFreezeSplitSrcTabletRes &res,
-      const int64_t abs_timeout_us);
   static int get_split_src_tablet_id_if_any(const share::schema::ObTableSchema &table_schema, ObTabletID &tablet_id);
   static int check_enable_global_index_auto_split(const share::schema::ObTableSchema &data_table_schema, bool &enable_auto_split, int64_t &auto_part_size);
 
 private:
+  static int freeze_split_src_tablet_(const ObIArray<ObTabletID> &tablet_ids,
+      share::SCN &data_end_scn,
+      const int64_t abs_timeout_us);
   static int prepare_start_args_(const common::ObIArray<share::schema::ObTableSchema *> &new_table_schemas,
       const common::ObIArray<share::schema::ObTableSchema *> &upd_table_schemas,
       const common::ObIArray<const share::schema::ObTableSchema *> &inc_table_schemas,
-      share::ObLSID &ls_id,
-      ObAddr &leader_addr,
       ObIArray<ObTabletID> &src_tablet_ids,
       ObIArray<ObArray<ObTabletID>> &dst_tablet_ids,
       storage::ObTabletSplitMdsArg &start_src_arg,
@@ -80,8 +71,6 @@ private:
       ObIAllocator &allocator,
       ObMySQLTransaction &trans);
   static int prepare_dst_tablet_creator_(const uint64_t tenant_data_version,
-      const share::ObLSID &ls_id,
-      const ObAddr &leader_addr,
       const ObIArray<ObTabletID> &src_tablet_ids,
       const ObIArray<ObArray<ObTabletID>> &dst_tablet_ids,
       const ObIArray<const share::schema::ObTableSchema *> &inc_table_schemas,
@@ -90,33 +79,27 @@ private:
       ObIAllocator &allocator,
       ObTabletCreator *&tablet_creator,
       ObMySQLTransaction &trans);
-  static int insert_dst_tablet_to_ls_and_table_history_(const share::ObLSID &ls_id,
+  static int insert_dst_tablet_mapping_and_table_history_(
       const ObIArray<ObArray<ObTabletID>> &dst_tablet_ids,
       const ObIArray<const share::schema::ObTableSchema *> &inc_table_schemas,
       ObMySQLTransaction &trans);
-  static int delete_src_tablet_to_ls_and_table_history_(const ObIArray<ObTabletID> &dst_tablet_ids,
+  static int delete_src_tablet_mapping_and_table_history_(const ObIArray<ObTabletID> &dst_tablet_ids,
       const int64_t new_schema_version,
       ObMySQLTransaction &trans);
   static int create_ddl_task_(const int64_t task_id,
       const share::ObDDLType split_type,
       const ObIArray<const share::schema::ObTableSchema *> &inc_table_schemas,
       const int64_t parallelism,
-      const share::ObLSID &ls_id,
       const uint64_t tenant_data_version,
       ObIAllocator &allocator,
       ObDDLTaskRecord &task_record,
       ObMySQLTransaction &trans);
-  static int start_src_(const share::ObLSID &ls_id,
-      const ObAddr &leader_addr,
-      const ObIArray<ObTabletID> &src_tablet_ids,
+  static int start_src_(const ObIArray<ObTabletID> &src_tablet_ids,
       const storage::ObTabletSplitMdsArg &start_src_arg,
       share::SCN &data_end_scn,
       ObIArray<std::pair<uint64_t, uint64_t>> &end_autoinc_seqs,
       ObMySQLTransaction &trans);
-  static int start_dst_(const uint64_t tenant_data_version,
-      const share::ObLSID &ls_id,
-      const ObAddr &leader_addr,
-      const ObIArray<const share::schema::ObTableSchema *> &inc_table_schemas,
+  static int start_dst_(const ObIArray<const share::schema::ObTableSchema *> &inc_table_schemas,
       const ObIArray<ObArray<ObTabletID>> &dst_tablet_ids,
       const share::SCN &data_end_scn,
       const ObIArray<std::pair<uint64_t, uint64_t>> &end_autoinc_seqs,
@@ -141,8 +124,6 @@ private:
   int64_t parallelism_;
 
   // prepared before start_src
-  ObLSID ls_id_;
-  ObAddr leader_addr_;
   ObArray<ObTabletID> src_tablet_ids_;
   ObArray<ObArray<ObTabletID>> dst_tablet_ids_;
   ObTabletSplitMdsArg start_src_arg_;

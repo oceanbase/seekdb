@@ -62,7 +62,7 @@ private:
 
 
 public:
-  ObAllVirtualTxData() : addr_(), tx_id_(0) {}
+  ObAllVirtualTxData() : tx_id_(0) {}
   ~ObAllVirtualTxData() {}
 
   TO_STRING_KV(K_(tx_id));
@@ -71,13 +71,8 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset()
   {
-    addr_.reset();
+    ObVirtualTableScannerIterator::reset();
     tx_id_.reset();
-    memset(ip_buf_, 0, sizeof(ip_buf_));
-  }
-  inline void set_addr(common::ObAddr &addr)
-  {
-    addr_ = addr;
   }
 
 private:
@@ -87,9 +82,7 @@ private:
   int fill_in_row_(const VirtualTxDataRow &row_data, common::ObNewRow *&row);
 
 private:
-  common::ObAddr addr_;
   transaction::ObTransID tx_id_;
-  char ip_buf_[common::OB_IP_STR_BUFF];
 
   VirtualTxDataRow tx_data_row_;
 

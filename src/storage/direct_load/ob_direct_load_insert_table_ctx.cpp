@@ -94,7 +94,6 @@ bool ObDirectLoadInsertTableParam::is_valid() const
 ObDirectLoadInsertTabletContext::ObDirectLoadInsertTabletContext()
   : table_ctx_(nullptr),
     param_(nullptr),
-    ls_id_(),
     origin_tablet_id_(),
     tablet_id_(),
     pk_tablet_id_(),

@@ -70,18 +70,6 @@ void ObDataDictSqlClient::destroy()
   sql_proxy_ = NULL;
 }
 
-int ObDataDictSqlClient::get_ls_info(
-    const share::SCN &snapshot_scn,
-    share::ObLSArray &ls_array)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ls_array.push_back(SYS_LS))) {
-    DDLOG(WARN, "push_back normal ls into ls_array failed", KR(ret),
-              K(snapshot_scn));
-  }
-  return ret;
-}
-
 int ObDataDictSqlClient::get_schema_version(
     const share::SCN &snapshot_scn,
     int64_t &schema_version)

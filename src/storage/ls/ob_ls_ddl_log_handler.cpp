@@ -140,7 +140,7 @@ int ObActiveDDLKVIterator::get_next_ddl_kv_mgr(ObDDLKvMgrHandle &handle)
               LOG_WARN("push back to delete tablet id failed", K(ret));
             }
           } else {
-            LOG_WARN("failed to get tablet", K(ret), K(ls_->get_ls_id()), K(tablet_id));
+            LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
           }
         } else if (tablet_handle.get_obj()->get_tablet_meta().ddl_commit_scn_.is_valid_and_not_min() &&
           tablet_handle.get_obj()->get_tablet_meta().ddl_checkpoint_scn_ >= tablet_handle.get_obj()->get_tablet_meta().ddl_commit_scn_) {
@@ -346,30 +346,12 @@ int ObLSDDLLogHandler::replay(const void *buffer,
   return ret;
 }
 
-void ObLSDDLLogHandler::switch_to_follower_forcedly()
+void ObLSDDLLogHandler::deactivate()
 {
   // TODO
 }
 
-int ObLSDDLLogHandler::switch_to_leader()
-{
-  int ret = OB_SUCCESS;
-
-  //TODO
-
-  return ret;
-}
-
-int ObLSDDLLogHandler::switch_to_follower_gracefully()
-{
-  int ret = OB_SUCCESS;
-
-  //TODO
-
-  return ret;
-}
-
-int ObLSDDLLogHandler::resume_leader()
+int ObLSDDLLogHandler::activate()
 {
   int ret = OB_SUCCESS;
 
@@ -423,7 +405,6 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
           ObTabletDirectLoadMgrHandle direct_load_mgr_hdl;
           // TODO @zhuoran.zzr wait to remove it
           if (OB_TMP_FAIL(tenant_direct_load_mgr->get_tablet_mgr_and_check_major(
-                ls_->get_ls_id(),
                 ddl_kv_mgr_handle.get_obj()->get_tablet_id(),
                 true/* is_full_direct_load */,
                 direct_load_mgr_hdl,
@@ -435,7 +416,6 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
             }
           } else {
             DEBUG_SYNC(BEFORE_DDL_CHECKPOINT);
-            param.ls_id_               = ls_->get_ls_id();
             param.tablet_id_           = ddl_kv_mgr_handle.get_obj()->get_tablet_id();
             param.start_scn_           = direct_load_mgr_hdl.get_full_obj()->get_start_scn();
             param.rec_scn_             = rec_scn;
@@ -457,11 +437,11 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
           if (OB_FAIL(ls_->get_tablet(ddl_kv_mgr_handle.get_obj()->get_tablet_id(),
                                            tablet_handle, ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US,
                                            ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-            LOG_WARN("failed to get tablet handle", K(ret), K(ls_->get_ls_id()), K(ddl_kv_mgr_handle.get_obj()->get_tablet_id()));
+            LOG_WARN("failed to get tablet handle", K(ret), K(ddl_kv_mgr_handle.get_obj()->get_tablet_id()));
           } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_complete(share::SCN::max_scn(), arena, ddl_complete))) {
             if (OB_EMPTY_RESULT == ret) {
               ret = OB_SUCCESS;
-              LOG_INFO("no ddl complete", K(ret), K(ls_->get_ls_id()), K(ddl_kv_mgr_handle.get_obj()->get_tablet_id()));
+              LOG_INFO("no ddl complete", K(ret), K(ddl_kv_mgr_handle.get_obj()->get_tablet_id()));
             } else {
               LOG_WARN("failed to get ddl complete", K(ret));
             }
@@ -476,7 +456,7 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
           } else if (OB_TMP_FAIL(compaction::ObScheduleDagFunc::schedule_ddl_table_merge_dag(param))) {
             LOG_WARN("try schedule ddl merge dag failed when ddl kv is full ", K(tmp_ret), K(param));
           } 
-          FLOG_INFO("schedule ddl dump merge task", K(ret), K(ls_->get_ls_id()), K(tablet_handle.get_obj()->get_tablet_id()));
+          FLOG_INFO("schedule ddl dump merge task", K(ret), K(tablet_handle.get_obj()->get_tablet_id()));
         }
       }
     }
@@ -528,7 +508,6 @@ SCN ObLSDDLLogHandler::get_rec_scn()
   }
 
   LOG_INFO("[CHECKPOINT] ObLSDDLLogHandler::get_rec_scn", K(ret),
-      "ls_id", OB_ISNULL(ls_) ? ObLSID() : ls_->get_ls_id(),
       K(barrier_tablet_id), K(rec_scn), K_(last_rec_scn));
   return rec_scn;
 }
@@ -582,7 +561,7 @@ int ObLSDDLLogHandler::replay_ddl_tablet_schema_version_change_log_(const char *
     LOG_WARN("fail to deserialize source barrier log", K(ret));
   } else if (OB_FAIL(replay_executor.init(log, log_scn))) {
     LOG_WARN("failed to init tablet schema version change log replay executor", K(ret));
-  } else if (OB_FAIL(replay_executor.execute(log_scn, ls_->get_ls_id(), log.get_tablet_id()))) {
+  } else if (OB_FAIL(replay_executor.execute(log_scn, log.get_tablet_id()))) {
     if (OB_NO_NEED_UPDATE == ret) {
       LOG_WARN("no need replay tablet schema version change log", K(ret), K(log), K(log_scn));
       ret = OB_SUCCESS;

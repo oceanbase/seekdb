@@ -20,7 +20,6 @@
 #include "lib/lock/ob_tc_rwlock.h"
 #include "logservice/ob_log_base_type.h"
 #include "logservice/palf/lsn.h"
-#include "share/ob_ls_id.h"
 
 namespace oceanbase
 {

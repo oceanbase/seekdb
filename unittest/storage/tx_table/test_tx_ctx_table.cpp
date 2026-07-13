@@ -20,9 +20,12 @@
 #define private public
 #define UNITTEST
 
-#include "storage/tx/ob_trans_part_ctx.h"
-#include "storage/mock_ob_log_handler.h"
-#include "logservice/ob_log_handler.h"
+#include "storage/ls/ob_freezer.h"
+#include "storage/ls/ob_ls.h"
+#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
+#include "storage/tx/ob_tx_ctx.h"
+#include "storage/tx_table/ob_tx_ctx_memtable_mgr.h"
+#include "storage/tx_table/ob_tx_ctx_table.h"
 #include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
@@ -97,11 +100,7 @@ class TestTxCtxTable : public ::testing::Test
 public:
   TestTxCtxTable():
       ls_(),
-      ls_tx_service_(&ls_),
-      ls_data_checkpoint_(),
-      log_handler_(),
       tablet_id_(LS_TX_DATA_TABLET),
-      ls_id_(1),
       tenant_id_(1),
       freezer_(&ls_),
       t3m_(),
@@ -117,11 +116,6 @@ public:
   static ObLSTxCtxMgr ls_tx_ctx_mgr_;
   static ObLSTxCtxMgr ls_tx_ctx_mgr2_;
   ObLS ls_;
-  ObLSWRSHandler ls_loop_worker_;
-  ObLSTxService ls_tx_service_;
-  ObLSTabletService ls_tablet_service_;
-  checkpoint::ObDataCheckpoint ls_data_checkpoint_;
-  MockObLogHandler log_handler_;
   static int64_t ref_count_;
 protected:
   virtual void SetUp() override
@@ -132,7 +126,6 @@ protected:
     EXPECT_EQ(OB_SUCCESS, t3m_.init());
     EXPECT_EQ(OB_SUCCESS,
               ls_tx_ctx_mgr_.init(
-                                  ls_id_,
                                   &ls_.tx_table_,
                                   ls_.get_lock_table(),
                                   (ObTsMgr *)(0x01),
@@ -141,7 +134,6 @@ protected:
                                   nullptr));
     EXPECT_EQ(OB_SUCCESS,
               ls_tx_ctx_mgr2_.init(
-                                  ls_id_,
                                   &ls_.tx_table_,
                                   ls_.get_lock_table(),
                                   (ObTsMgr *)(0x01),
@@ -151,7 +143,6 @@ protected:
     ref_count_ = 0;
     ctx_mt_mgr_ = new ObTxCtxMemtableMgr();
     EXPECT_EQ(OB_SUCCESS, ctx_mt_mgr_->init(tablet_id_,
-                                            ls_id_,
                                             &freezer_,
                                             &t3m_));
     mt_mgr_ = ctx_mt_mgr_;
@@ -185,7 +176,6 @@ protected:
   }
 public:
   ObTabletID tablet_id_;
-  ObLSID ls_id_;
   int64_t tenant_id_;
   ObFreezer freezer_;
   ObTenantMetaMemMgr t3m_;
@@ -270,11 +260,9 @@ TEST_F(TestTxCtxTable, test_tx_ctx_memtable_mgr)
   row = NULL;
 
   ObTransID id1(1);
-  ObLSID ls_id(1);
-  static ObPartTransCtx ctx1;
+  static ObTxCtx ctx1;
   ctx1.trans_id_ = id1;
   ctx1.is_inited_ = true;
-  ctx1.ls_id_ = ls_id;
   ctx1.exec_info_.max_applying_log_ts_.convert_from_ts(1);
   ctx1.replay_completeness_.set(true);
   ctx1.rec_log_ts_.convert_from_ts(996);
@@ -283,10 +271,9 @@ TEST_F(TestTxCtxTable, test_tx_ctx_memtable_mgr)
   ctx1.ctx_tx_data_.test_init(data1, &ls_tx_ctx_mgr_);
 
   ObTransID id2(2);
-  static ObPartTransCtx ctx2;
+  static ObTxCtx ctx2;
   ctx2.trans_id_ = id2;
   ctx2.is_inited_ = true;
-  ctx2.ls_id_ = ls_id;
   ctx2.exec_info_.max_applying_log_ts_.convert_from_ts(2);
   ctx2.replay_completeness_.set(true);
   ctx2.rec_log_ts_.convert_from_ts(996);
@@ -322,7 +309,6 @@ TEST_F(TestTxCtxTable, test_tx_ctx_memtable_mgr)
     ls_tx_ctx_mgr_recover->reset();
     EXPECT_EQ(OB_SUCCESS,
               ls_tx_ctx_mgr_recover->init(
-                                          TestTxCtxTable::ls_id_,
                                           &ls_.tx_table_,
                                           &ls_.lock_table_,
                                           (ObTsMgr *)(0x01),
@@ -375,13 +361,13 @@ TEST_F(TestTxCtxTable, test_tx_ctx_memtable_mgr)
 
 namespace storage
 {
-int ObTxCtxTable::acquire_ref_(const ObLSID& ls_id)
+int ObTxCtxTable::acquire_ref_()
 {
   int ret = OB_SUCCESS;
 
   ls_tx_ctx_mgr_ = &unittest::TestTxCtxTable::ls_tx_ctx_mgr_;
   unittest::TestTxCtxTable::ref_count_++;
-  TRANS_LOG(INFO, "[TX_CTX_TABLE] tx ctx table acquire ref", K(ls_id), K(unittest::TestTxCtxTable::ref_count_), K(this));
+  TRANS_LOG(INFO, "[TX_CTX_TABLE] tx ctx table acquire ref", K(unittest::TestTxCtxTable::ref_count_), K(this));
 
   return ret;
 }
@@ -406,8 +392,7 @@ void ObTxData::dec_ref()
 
 namespace transaction
 {
-int ObLSTxCtxMgr::init(const ObLSID &ls_id,
-                       ObTxTable *tx_table,
+int ObLSTxCtxMgr::init(ObTxTable *tx_table,
                        ObLockTable *lock_table,
                        ObTsMgr *ts_mgr,
                        ObTransService *txs,
@@ -421,41 +406,19 @@ int ObLSTxCtxMgr::init(const ObLSID &ls_id,
     TRANS_LOG(WARN, "ObLSTxCtxMgr inited twice");
     ret = OB_INIT_TWICE;
   } else {
-    //if (ObTransCtxType::PARTICIPANT == ctx_type) {
-    //  bool is_dup_table = false;
-    //  // FIXME. xiaoshi.xjl
-    //  //} else if (OB_FAIL(txs->check_duplicated_partition(ls_id_, is_dup_table))) {
-    //  //  TRANS_LOG(WARN, "check duplicated partition serving error", KR(ret), K(ls_id_));
-    //  if (is_dup_table && OB_FAIL(init_dup_table_mgr())) {
-    //    TRANS_LOG(WARN, "failed to init dup table", K(ret), K(ls_id));
-    //  } else {
-    //    // do nothing
-    //  }
-    //}
-    //if (OB_SUCC(ret) && (ObTransCtxType::PARTICIPANT == ctx_type)) {
-    //  if (OB_ISNULL(core_local_partition_audit_info_ = ObCoreLocalPartitionAuditInfoFactory::alloc())) {
-    //    ret = OB_ALLOCATE_MEMORY_FAILED;
-    //    TRANS_LOG(WARN, "alloc partition audit info error", KR(ret), K(ls_id));
-    //  } else if (OB_FAIL(core_local_partition_audit_info_->init(OB_PARTITION_AUDIT_LOCAL_STORAGE_COUNT))) {
-    //    TRANS_LOG(WARN, "ls_id audit info init error", KR(ret), K(ls_id));
-    //  } else {
-    //    // do nothing
-    //  }
-    //}
     if (OB_FAIL(ls_tx_ctx_map_.init(lib::ObMemAttr("LSTxCtxMgr")))) {
       TRANS_LOG(WARN, "ls_tx_ctx_map_ init fail", KR(ret));
-    } else if (OB_FAIL(tx_ls_state_mgr_.init(ls_id))) {
-      TRANS_LOG(WARN, "init tx_ls_state_mgr_ failed", KR(ret));
-    } else if (OB_FAIL(tx_ls_state_mgr_.switch_tx_ls_state(ObTxLSStateMgr::TxLSAction::START))) {
-      TRANS_LOG(WARN, "start ls_tx_ctx_mgr failed",K(ret),K(tx_ls_state_mgr_));
     } else {
       is_inited_ = true;
-      ls_id_ = ls_id;
+      stopped_ = false;
+      block_tx_ = false;
+      block_normal_tx_ = false;
+      block_all_ = false;
       tx_table_ = tx_table;
       lock_table_ = lock_table,
       txs_ = txs;
       ts_mgr_ = ts_mgr;
-      TRANS_LOG(INFO, "ObLSTxCtxMgr inited success", KP(this), K(ls_id));
+      TRANS_LOG(INFO, "ObLSTxCtxMgr inited success", KP(this));
     }
   }
 

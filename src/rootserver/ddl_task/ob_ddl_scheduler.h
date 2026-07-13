@@ -271,10 +271,8 @@ public:
     return OB_SUCCESS;
   }
   // for role change
-  virtual void switch_to_follower_forcedly() override;
-  virtual int switch_to_leader() override;
-  virtual int switch_to_follower_gracefully() override;
-  virtual int resume_leader() override;
+  void deactivate() override;
+  int activate() override;
 
   // mtl_functions
   static int mtl_init(ObDDLScheduler *&ddl_scheduler);
@@ -312,11 +310,6 @@ public:
       const ObDDLTaskKey &task_key,
       const int ret_code,
       const ObCurTraceId::TraceId &parent_task_trace_id);
-
-  int on_ddl_task_prepare(
-    const ObDDLTaskID &parent_task_id,
-    const int64_t task_id,
-    const ObCurTraceId::TraceId &parent_task_trace_id);
 
   int notify_update_autoinc_end(
       const ObDDLTaskKey &task_key,
@@ -466,14 +459,6 @@ private:
       const obcall::ObAlterTableArg *arg,
       const int64_t parent_task_id,
       const int32_t sub_task_trace_id,
-      ObIAllocator &allocator,
-      ObDDLTaskRecord &task_record);
-  int create_build_mview_task(
-      common::ObISQLClient &proxy,
-      const share::schema::ObTableSchema *mlog_schema,
-      const int64_t parallelism,
-      const int64_t parent_task_id,
-      const obcall::ObMViewCompleteRefreshArg *mview_complete_refresh_arg,
       ObIAllocator &allocator,
       ObDDLTaskRecord &task_record);
   int create_table_redefinition_task(
@@ -629,7 +614,6 @@ int create_partition_split_task(
       const ObDDLTaskRecord &task_record);
   int schedule_build_index_task(
       const ObDDLTaskRecord &task_record);
-  int schedule_build_mview_task(const ObDDLTaskRecord &task_record);
   int schedule_drop_primary_key_task(const ObDDLTaskRecord &task_record);
   int schedule_table_redefinition_task(const ObDDLTaskRecord &task_record);
   int schedule_constraint_task(const ObDDLTaskRecord &task_record);

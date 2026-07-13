@@ -1160,17 +1160,9 @@ int ObAccessPathEstimation::choose_leader_replica(const ObCandiTabletLoc &part_l
                                                   EstimatedPartition &best_partition)
 {
   int ret = OB_SUCCESS;
-  const ObIArray<ObRoutePolicy::CandidateReplica> &replica_loc_array =
-      part_loc_info.get_partition_location().get_replica_locations();
-  for (int64_t i = 0; i < replica_loc_array.count(); ++i) {
-    if (replica_loc_array.at(i).is_strong_leader() &&
-        (can_use_remote || local_addr == replica_loc_array.at(i).get_server())) {
-      best_partition.set(replica_loc_array.at(i).get_server(),
-                         part_loc_info.get_partition_location().get_tablet_id(),
-                         part_loc_info.get_partition_location().get_ls_id());
-      break;
-    }
-  }
+  UNUSED(can_use_remote);
+  best_partition.set(local_addr,
+                     part_loc_info.get_partition_location().get_tablet_id());
   return ret;
 }
 
@@ -1545,7 +1537,6 @@ int ObAccessPathEstimation::add_index_info(ObOptimizerContext &ctx,
     index_est_arg->scan_flag_.index_back_ = ap.est_cost_info_.index_meta_info_.is_index_back_;
     index_est_arg->range_columns_count_ = ap.est_cost_info_.range_columns_.count();
     index_est_arg->tablet_id_ = part.tablet_id_;
-    index_est_arg->ls_id_ = part.ls_id_;
     
     
     index_est_arg->tx_id_ = ctx.get_session_info()->get_tx_id();
@@ -1907,18 +1898,14 @@ int ObAccessPathEstimation::estimate_full_table_rowcount(ObOptimizerContext &ctx
   //if the part loc infos more than 1, we see the dml info inner table and storage inner table.
   } else if (part_loc_info_array.count() > 1) {
     ObSEArray<ObTabletID, 64> all_tablet_ids;
-    ObSEArray<ObLSID, 64> all_ls_ids;
     for (int64_t i = 0; OB_SUCC(ret) && i < part_loc_info_array.count(); ++i) {
       const ObOptTabletLoc &part_loc = part_loc_info_array.at(i).get_partition_location();
       if (OB_FAIL(all_tablet_ids.push_back(part_loc.get_tablet_id()))) {
         LOG_WARN("failed to push back tablet id", K(ret));
-      } else if (OB_FAIL(all_ls_ids.push_back(part_loc.get_ls_id()))) {
-        LOG_WARN("failed to push back tablet id", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(estimate_full_table_rowcount_by_meta_table(ctx, all_tablet_ids,
-                                                             all_ls_ids, meta))) {
+      if (OB_FAIL(estimate_full_table_rowcount_by_meta_table(ctx, all_tablet_ids, meta))) {
         LOG_WARN("failed to estimate full table rowcount by meta table", K(ret));
       } else {
         LOG_TRACE("succeed to estimate full table rowcount", K(meta));
@@ -1979,7 +1966,6 @@ int ObAccessPathEstimation::storage_estimate_full_table_rowcount(ObOptimizerCont
       path_arg.range_columns_count_ = meta.table_rowkey_count_;
       path_arg.batch_.type_ = ObSimpleBatch::T_SCAN;
       path_arg.tablet_id_ = best_index_part.tablet_id_;
-      path_arg.ls_id_ = best_index_part.ls_id_;
       
       path_arg.tx_id_ = ctx.get_session_info()->get_tx_id();
       if (OB_FAIL(ObSQLUtils::make_whole_range(arena,
@@ -2103,7 +2089,6 @@ int ObAccessPathEstimation::storage_estimate_range_rowcount(ObOptimizerContext &
       path_arg.range_columns_count_ = meta.table_rowkey_count_;
       path_arg.batch_.type_ = ObSimpleBatch::T_SCAN;
       path_arg.tablet_id_ = best_index_part.tablet_id_;
-      path_arg.ls_id_ = best_index_part.ls_id_;
       
       path_arg.tx_id_ = ctx.get_session_info()->get_tx_id();
       if (OB_FAIL(construct_scan_range_batch(ctx.get_allocator(), chosen_scan_ranges, path_arg.batch_))) {
@@ -2167,7 +2152,6 @@ int ObAccessPathEstimation::get_key_ranges(ObOptimizerContext &ctx,
 
 int ObAccessPathEstimation::estimate_full_table_rowcount_by_meta_table(ObOptimizerContext &ctx,
                                                                        const ObIArray<ObTabletID> &all_tablet_ids,
-                                                                       const ObIArray<ObLSID> &all_ls_ids,
                                                                        ObTableMetaInfo &meta)
 {
   int ret = OB_SUCCESS;
@@ -2178,7 +2162,6 @@ int ObAccessPathEstimation::estimate_full_table_rowcount_by_meta_table(ObOptimiz
     LOG_WARN("get unexpected null", K(ret), K(ctx.get_session_info()), K(ctx.get_opt_stat_manager()));
   } else if (OB_FAIL(ctx.get_opt_stat_manager()->get_table_rowcnt(meta.ref_table_id_,
                                                                   all_tablet_ids,
-                                                                  all_ls_ids,
                                                                   meta.table_row_count_))) {
     LOG_WARN("failed to get table rowcnt", K(ret));
   } else {

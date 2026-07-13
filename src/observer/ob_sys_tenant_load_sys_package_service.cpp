@@ -113,7 +113,7 @@ void ObSysTenantLoadSysPackageService::destroy()
   FLOG_INFO("finish to destroy sys package load service");
 }
 
-int ObSysTenantLoadSysPackageService::switch_to_leader()
+int ObSysTenantLoadSysPackageService::activate()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
@@ -125,24 +125,11 @@ int ObSysTenantLoadSysPackageService::switch_to_leader()
   return ret;
 }
 
-void ObSysTenantLoadSysPackageService::switch_to_follower_forcedly()
+void ObSysTenantLoadSysPackageService::deactivate()
 {
-  int ret = switch_to_follower_gracefully();
-  if (OB_FAIL(switch_to_follower_gracefully())) {
-    LOG_WARN("failed to switch to follower gracefully", KR(ret));
-  }
-}
-
-int ObSysTenantLoadSysPackageService::switch_to_follower_gracefully()
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("service not inited", KR(ret), K_(inited));
-  } else {
+  if (inited_) {
     stop();
   }
-  return ret;
 }
 
 } // namespace rootserver

@@ -7279,11 +7279,11 @@ int ObSPIService::resolve_into_params(const ParseResult &parse_result,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("result tree is NULL or invalid result tree", K(ret));
   } else if (T_CREATE_VIEW == parse_result.result_tree_->children_[0]->type_) {
-    if (parse_result.result_tree_->children_[0]->num_child_ <= 4
-        || OB_ISNULL(parse_result.result_tree_->children_[0]->children_[4])) {
+    if (parse_result.result_tree_->children_[0]->num_child_ <= 3
+        || OB_ISNULL(parse_result.result_tree_->children_[0]->children_[3])) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result tree is NULL or invalid result tree", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::get_select_into_node(*parse_result.result_tree_->children_[0]->children_[4],
+    } else if (OB_FAIL(ObResolverUtils::get_select_into_node(*parse_result.result_tree_->children_[0]->children_[3],
                                                              into_node,
                                                              true))) {
       LOG_WARN("wrong usage of into clause", K(ret));
@@ -7580,7 +7580,7 @@ int ObSPIService::setup_cursor_snapshot_verify_(ObPLCursorInfo *cursor, ObSPIRes
       LOG_ERROR("for update cursor opened but not trans id invalid", K(ret), KPC(tx), K(snapshot));
     }
     need_register_snapshot = true;
-  } else if (cursor->is_streaming() && tx && tx->is_in_tx() && !tx->is_all_parts_clean()) {
+  } else if (cursor->is_streaming() && tx && tx->is_in_tx() && !tx->is_write_state_clean()) {
     if (exec_ctx.get_my_session()->enable_enhanced_cursor_validation()) {
       need_register_snapshot = false;
       LOG_TRACE("enable cursor open check read uncommitted");

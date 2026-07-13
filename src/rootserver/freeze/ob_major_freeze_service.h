@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_FREEZE_SERVICE_
 #define OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_FREEZE_SERVICE_
 
-#include "share/ob_ls_id.h"
 #include "logservice/ob_log_base_type.h"
 #include "share/scn.h"
 #include "lib/lock/ob_recursive_mutex.h"
@@ -38,7 +37,7 @@ enum ObMajorFreezeServiceType : uint8_t {
 
 class ObMajorFreezeService : public logservice::ObIReplaySubHandler,
                              public logservice::ObICheckpointSubHandler,
-                             public logservice::ObIRoleChangeSubHandler
+                             public logservice::ObILocalLogHandler
 {
 public:
   ObMajorFreezeService() 
@@ -73,11 +72,9 @@ public:
   }
 
   // switch leader
-  void switch_to_follower_forcedly(); 
-  int switch_to_leader(); 
+  void deactivate() override;
+  int activate() override;
 
-  int switch_to_follower_gracefully();
-  int resume_leader() { return switch_to_leader(); }
 
   int launch_major_freeze(const ObMajorFreezeReason freeze_reason);
   int suspend_merge();

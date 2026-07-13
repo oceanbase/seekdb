@@ -208,8 +208,8 @@ void ObTableLoadStoreCtx::destroy()
 }
 
 int ObTableLoadStoreCtx::init(
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &partition_id_array,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &target_partition_id_array)
+  const ObTableLoadArray<ObTableLoadTabletId> &partition_id_array,
+  const ObTableLoadArray<ObTableLoadTabletId> &target_partition_id_array)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -470,8 +470,8 @@ int ObTableLoadStoreCtx::init_trans_param(storage::ObDirectLoadTransParam &trans
 }
 
 int ObTableLoadStoreCtx::init_store_table_ctxs(
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &partition_id_array,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &target_partition_id_array)
+  const ObTableLoadArray<ObTableLoadTabletId> &partition_id_array,
+  const ObTableLoadArray<ObTableLoadTabletId> &target_partition_id_array)
 {
   int ret = OB_SUCCESS;
   // init data store_table_ctx_
@@ -608,7 +608,7 @@ int ObTableLoadStoreCtx::init_write_ctx()
         break;
       // No resource control
       case ObTableLoadExeMode::MAX_TYPE: {
-        const int64_t part_cnt = data_store_table_ctx_->ls_partition_ids_.count();
+        const int64_t part_cnt = data_store_table_ctx_->partition_ids_.count();
         int64_t wa_mem_limit = 0;
         if (OB_FAIL(ObTableLoadService::get_memory_limit(wa_mem_limit))) {
           LOG_WARN("fail to get memory limit", KR(ret));
@@ -711,11 +711,11 @@ int ObTableLoadStoreCtx::init_write_ctx()
       }
     }
     if (OB_SUCC(ret) && ctx_->param_.px_mode_) {
-      const ObArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids =
-        data_store_table_ctx_->ls_partition_ids_;
-      write_ctx_.is_single_part_ = (1 == ls_partition_ids.count());
+      const ObArray<ObTableLoadTabletId> &partition_ids =
+        data_store_table_ctx_->partition_ids_;
+      write_ctx_.is_single_part_ = (1 == partition_ids.count());
       if (write_ctx_.is_single_part_) {
-        write_ctx_.single_tablet_id_ = ls_partition_ids[0].part_tablet_id_.tablet_id_;
+        write_ctx_.single_tablet_id_ = partition_ids[0].part_tablet_id_.tablet_id_;
         if (OB_FAIL(ObDirectLoadVectorUtils::make_const_tablet_id_vector(write_ctx_.single_tablet_id_,
                                                                          allocator_,
                                                                          write_ctx_.single_tablet_id_vector_))) {
@@ -725,8 +725,8 @@ int ObTableLoadStoreCtx::init_write_ctx()
         if (OB_FAIL(write_ctx_.tablet_idx_map_.create(1024, "TLD_TbtIdxMap", "TLD_TbtIdxMap"))) {
           LOG_WARN("fail to create hashmap", KR(ret));
         } else {
-          for (int64_t i = 0; OB_SUCC(ret) && i < ls_partition_ids.count(); ++i) {
-            const ObTabletID &tablet_id = ls_partition_ids[i].part_tablet_id_.tablet_id_;
+          for (int64_t i = 0; OB_SUCC(ret) && i < partition_ids.count(); ++i) {
+            const ObTabletID &tablet_id = partition_ids[i].part_tablet_id_.tablet_id_;
             if (OB_FAIL(write_ctx_.tablet_idx_map_.set_refactored(tablet_id.id(), i))) {
               LOG_WARN("fail to set refactored", KR(ret), K(tablet_id));
               if (OB_HASH_EXIST == ret) {
@@ -781,7 +781,7 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
       break;
     // No resource control
     case ObTableLoadExeMode::MAX_TYPE: {
-      const int64_t part_cnt = data_store_table_ctx_->ls_partition_ids_.count();
+      const int64_t part_cnt = data_store_table_ctx_->partition_ids_.count();
       int64_t wa_mem_limit = 0;
       if (OB_FAIL(ObTableLoadService::get_memory_limit(wa_mem_limit))) {
         LOG_WARN("fail to get memory limit", KR(ret));
@@ -872,11 +872,11 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
     }
   }
   if (OB_SUCC(ret) && ctx_->param_.px_mode_) {
-    const ObArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids =
-      data_store_table_ctx_->ls_partition_ids_;
-    write_ctx_.is_single_part_ = (1 == ls_partition_ids.count());
+    const ObArray<ObTableLoadTabletId> &partition_ids =
+      data_store_table_ctx_->partition_ids_;
+    write_ctx_.is_single_part_ = (1 == partition_ids.count());
     if (write_ctx_.is_single_part_) {
-      write_ctx_.single_tablet_id_ = ls_partition_ids[0].part_tablet_id_.tablet_id_;
+      write_ctx_.single_tablet_id_ = partition_ids[0].part_tablet_id_.tablet_id_;
       if (OB_FAIL(ObDirectLoadVectorUtils::make_const_tablet_id_vector(
             write_ctx_.single_tablet_id_, allocator_, write_ctx_.single_tablet_id_vector_))) {
         LOG_WARN("fail to make const tablet id vector", KR(ret), K(write_ctx_.single_tablet_id_));
@@ -886,8 +886,8 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
             write_ctx_.tablet_idx_map_.create(1024, "TLD_TbtIdxMap", "TLD_TbtIdxMap"))) {
         LOG_WARN("fail to create hashmap", KR(ret));
       } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < ls_partition_ids.count(); ++i) {
-          const ObTabletID &tablet_id = ls_partition_ids[i].part_tablet_id_.tablet_id_;
+        for (int64_t i = 0; OB_SUCC(ret) && i < partition_ids.count(); ++i) {
+          const ObTabletID &tablet_id = partition_ids[i].part_tablet_id_.tablet_id_;
           if (OB_FAIL(write_ctx_.tablet_idx_map_.set_refactored(tablet_id.id(), i))) {
             LOG_WARN("fail to set refactored", KR(ret), K(tablet_id));
             if (OB_HASH_EXIST == ret) {

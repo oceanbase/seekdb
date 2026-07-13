@@ -376,7 +376,6 @@ int ObBasicStatsEstimator::do_estimate_block_count_and_row_count(ObExecContext &
                 
                 
                 arg_element.tablet_id_ = candi_tablet_locs.at(j).get_partition_location().get_tablet_id();
-                arg_element.ls_id_ = candi_tablet_locs.at(j).get_partition_location().get_ls_id();
                 if (OB_FAIL(arg.tablet_params_arg_.push_back(arg_element))) {
                   LOG_WARN("failed to push back", K(ret));
                 } else if (OB_FAIL(skip_idx_set.add_member(j))) {//record

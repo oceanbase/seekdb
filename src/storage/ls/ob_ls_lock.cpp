@@ -70,7 +70,7 @@ int64_t ObLSLock::lock(const ObLS *ls, int64_t hold, int64_t change, const int64
     pos++;
   }
   if (tg.get_diff() >= LOCK_CONFLICT_WARN_TIME) {
-    LOG_WARN("get lock cost too much time", KP(ls), "ls_id", OB_ISNULL(ls) ? ObLSID(0) : ls->get_ls_id());
+    LOG_WARN("get lock cost too much time", KP(ls));
   }
   return res;
 }
@@ -106,7 +106,7 @@ int64_t ObLSLock::try_lock(const ObLS *ls, int64_t hold, int64_t change)
     pos++;
   }
   if (tg.get_diff() >= LOCK_CONFLICT_WARN_TIME) {
-    LOG_WARN("get lock cost too much time", KP(ls), "ls_id", OB_ISNULL(ls) ? ObLSID(0) : ls->get_ls_id());
+    LOG_WARN("get lock cost too much time", KP(ls));
   }
 
   return res;
@@ -204,38 +204,12 @@ ObLSLockGuard::~ObLSLockGuard()
   const int64_t end_ts = ObTimeUtility::current_time();
   if (end_ts - start_ts_ > 5 * 1000 * 1000) {
     FLOG_INFO("ls lock cost too much time", K_(start_ts),
-              "cost_us", end_ts - start_ts_, KP(ls_),
-              "ls_id", OB_ISNULL(ls_) ? ObLSID(0) : ls_->get_ls_id(), K(lbt()));
+              "cost_us", end_ts - start_ts_, KP(ls_), K(lbt()));
   }
   start_ts_ = INT64_MAX;
   ls_ = nullptr;
 }
 
-
-ObLSLockWithPendingReplayGuard::ObLSLockWithPendingReplayGuard(
-    ObLSLock &lock,
-    const share::ObLSID &ls_id,
-    int64_t hold,
-    int64_t change)
-  : lock_(lock),
-    ls_id_(ls_id),
-    mark_(0),
-    start_ts_(INT64_MAX)
-{
-  UNUSEDx(lock_, mark_, hold, change);
-  // TODO: cxf262476 wait the replay engine to be empty
-}
-
-ObLSLockWithPendingReplayGuard::~ObLSLockWithPendingReplayGuard()
-{
-  // TODO: cxf262476 unlock
-  const int64_t end_ts = ObTimeUtility::current_time();
-  if (end_ts - start_ts_ > 5 * 1000 * 1000) {
-    LOG_INFO("ls lock cost too much time", K_(start_ts),
-             "cost_us", end_ts - start_ts_, K(ls_id_), K(lbt()));
-  }
-  start_ts_ = INT64_MAX;
-}
 
 // ================== ls state guard =====================
 ObLSStateGuard::ObLSStateGuard(ObLS *ls)

@@ -29,8 +29,7 @@ namespace storage
 {
 
 ObTableForkInfo::ObTableForkInfo()
-  : ls_id_(),
-    table_id_(OB_INVALID_ID),
+  : table_id_(OB_INVALID_ID),
     schema_version_(0), task_id_(0),
     source_tablet_ids_(), dest_tablet_ids_(),
     fork_snapshot_version_(0),
@@ -40,7 +39,6 @@ ObTableForkInfo::ObTableForkInfo()
 }
 
 ObTableForkInfo::ObTableForkInfo(
-    const share::ObLSID &ls_id,
     const uint64_t table_id,
     const int64_t schema_version,
     const int64_t task_id,
@@ -49,8 +47,7 @@ ObTableForkInfo::ObTableForkInfo(
     const int64_t data_format_version,
     const common::ObIArray<common::ObTabletID> &source_tablet_ids,
     const common::ObIArray<common::ObTabletID> &dest_tablet_ids)
-  : ls_id_(ls_id),
-    table_id_(table_id),
+  : table_id_(table_id),
     schema_version_(schema_version),
     task_id_(task_id),
     source_tablet_ids_(),
@@ -74,8 +71,6 @@ int ObTableForkInfo::assign(const ObTableForkInfo &info)
   } else if (OB_FAIL(dest_tablet_ids_.assign(info.dest_tablet_ids_))) {
     LOG_WARN("failed to assign dest tablet ids", K(ret));
   } else {
-    
-    ls_id_ = info.ls_id_;
     table_id_ = info.table_id_;
     schema_version_ = info.schema_version_;
     task_id_ = info.task_id_;
@@ -88,8 +83,7 @@ int ObTableForkInfo::assign(const ObTableForkInfo &info)
 
 bool ObTableForkInfo::is_valid() const
 {
-  return ls_id_.is_valid()
-      && OB_INVALID_ID != table_id_
+  return OB_INVALID_ID != table_id_
       && schema_version_ > 0
       && task_id_ > 0
       && source_tablet_ids_.count() > 0
@@ -113,7 +107,6 @@ int ObTableForkInfo::generate_fork_params(common::ObIArray<ObTabletForkParam> &p
     for (int64_t i = 0; OB_SUCC(ret) && i < source_tablet_ids_.count(); ++i) {
       ObTabletForkParam fork_param;
       
-      fork_param.ls_id_ = ls_id_;
       fork_param.table_id_ = table_id_;
       fork_param.schema_version_ = schema_version_;
       fork_param.task_id_ = task_id_;
@@ -152,11 +145,10 @@ int ObTableForkInfo::get_tablet_fork_param(
     }
     if (found_idx < 0) {
       ret = OB_ENTRY_NOT_EXIST;
-      LOG_INFO("tablet not in fork info", K(ret), K(tablet_id), K_(task_id), K_(table_id), K_(ls_id));
+      LOG_INFO("tablet not in fork info", K(ret), K(tablet_id), K_(task_id), K_(table_id));
     } else {
       tablet_fork_param.reset();
       
-      tablet_fork_param.ls_id_ = ls_id_;
       tablet_fork_param.table_id_ = table_id_;
       tablet_fork_param.schema_version_ = schema_version_;
       tablet_fork_param.task_id_ = task_id_;
@@ -174,7 +166,7 @@ int ObTableForkInfo::get_tablet_fork_param(
 OB_DEF_SERIALIZE(ObTableForkInfo)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, ls_id_, table_id_, schema_version_, task_id_,
+  LST_DO_CODE(OB_UNIS_ENCODE, table_id_, schema_version_, task_id_,
               source_tablet_ids_, dest_tablet_ids_, fork_snapshot_version_,
               compat_mode_, data_format_version_);
   return ret;
@@ -183,7 +175,7 @@ OB_DEF_SERIALIZE(ObTableForkInfo)
 OB_DEF_DESERIALIZE(ObTableForkInfo)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, ls_id_, table_id_, schema_version_, task_id_,
+  LST_DO_CODE(OB_UNIS_DECODE, table_id_, schema_version_, task_id_,
               source_tablet_ids_, dest_tablet_ids_, fork_snapshot_version_,
               compat_mode_, data_format_version_);
   return ret;
@@ -192,7 +184,7 @@ OB_DEF_DESERIALIZE(ObTableForkInfo)
 OB_DEF_SERIALIZE_SIZE(ObTableForkInfo)
 {
   int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, ls_id_, table_id_, schema_version_, task_id_,
+  LST_DO_CODE(OB_UNIS_ADD_LEN, table_id_, schema_version_, task_id_,
               source_tablet_ids_, dest_tablet_ids_, fork_snapshot_version_,
               compat_mode_, data_format_version_);
   return len;

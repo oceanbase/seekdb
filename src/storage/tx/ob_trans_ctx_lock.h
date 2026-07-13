@@ -46,11 +46,10 @@ typedef common::ObDList<LocalTask> LocalTaskList;
 class CtxLockArg
 {
 public:
-  CtxLockArg() : ls_id_(), trans_id_(), task_list_(), commit_cb_(),
+  CtxLockArg() : trans_id_(), task_list_(), commit_cb_(),
       has_pending_callback_(false), need_retry_redo_sync_(false),
       p_mt_ctx_(NULL) {}
 public:
-  share::ObLSID ls_id_;
   ObTransID trans_id_;
   LocalTaskList task_list_;
   ObTxCommitCallback commit_cb_;

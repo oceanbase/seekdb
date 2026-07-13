@@ -95,7 +95,6 @@ public:
   // used for virtual table
   static const uint64_t LS_DATA_CHECKPOINT_TABLET_ID = 40000;
   int init(ObLS *ls);
-  int safe_to_destroy(bool &is_safe_destroy);
   ObCheckpointDList* get_checkpoint_list(const ObFreezeCheckpointLocation &location)
   {
     ObCheckpointDList *ret = NULL;

@@ -260,7 +260,6 @@ int ObDASSPIVMergeIter::inner_init(ObDASIterParam &param)
   } else {
     ObDASSPIVMergeIterParam spiv_merge_param = static_cast<ObDASSPIVMergeIterParam &>(param);
 
-    ls_id_ = spiv_merge_param.ls_id_;
     tx_desc_ = spiv_merge_param.tx_desc_;
     snapshot_ = spiv_merge_param.snapshot_;
 
@@ -405,8 +404,7 @@ int ObDASSPIVMergeIter::init_dim_iter_param(ObSPIVDimIterParam &dim_param, int64
   } else if (OB_ISNULL(dim_param.inv_idx_scan_param_ = OB_NEWx(ObTableScanParam, &allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory for inv scan param", K(ret));
-  } else if (OB_FAIL(ObDasVecScanUtils::init_scan_param(ls_id_,
-                 dim_docid_value_tablet_id_,
+  } else if (OB_FAIL(ObDasVecScanUtils::init_scan_param(dim_docid_value_tablet_id_,
                  spiv_scan_ctdef_,
                  spiv_scan_rtdef_,
                  tx_desc_,
@@ -450,8 +448,7 @@ int ObDASSPIVMergeIter::create_dim_iters()
         if (OB_ISNULL(block_max_scan_params_[i] = OB_NEWx(ObTableScanParam, &allocator_))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to allocate memory for block max scan param", K(ret));
-        } else if (OB_FAIL(ObDasVecScanUtils::init_scan_param(ls_id_,
-                       dim_docid_value_tablet_id_,
+        } else if (OB_FAIL(ObDasVecScanUtils::init_scan_param(dim_docid_value_tablet_id_,
                        block_max_scan_ctdef_,
                        block_max_scan_rtdef_,
                        tx_desc_,
@@ -588,7 +585,7 @@ int ObDASSPIVMergeIter::inner_reuse()
   } else {
     for (int i = 0; i < inv_dim_scan_iters_.count() && OB_SUCC(ret); ++i) {
       if (OB_FAIL(ObDasVecScanUtils::reuse_iter(
-              ls_id_, inv_dim_scan_iters_[i], *inv_scan_params_[i], dim_docid_value_tablet_id_))) {
+              inv_dim_scan_iters_[i], *inv_scan_params_[i], dim_docid_value_tablet_id_))) {
         LOG_WARN("failed to reuse inv dim scan iter", K(ret));
       }
     }
@@ -1216,8 +1213,7 @@ int ObDASSPIVMergeIter::do_aux_data_table_scan()
     int idx = get_aux_data_tbl_idx();
     const ObDASScanCtDef *aux_data_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(idx, ObTSCIRScanType::OB_VEC_COM_AUX_SCAN);
     ObDASScanRtDef *aux_data_rtdef = vec_aux_rtdef_->get_vec_aux_tbl_rtdef(idx);
-    if (OB_FAIL(ObDasVecScanUtils::init_vec_aux_scan_param(ls_id_,
-                                                           aux_data_tablet_id_,
+    if (OB_FAIL(ObDasVecScanUtils::init_vec_aux_scan_param(aux_data_tablet_id_,
                                                            aux_data_ctdef,
                                                            aux_data_rtdef,
                                                            tx_desc_,
@@ -1248,8 +1244,7 @@ int ObDASSPIVMergeIter::do_rowkey_docid_table_scan()
     const ObDASScanCtDef *rowkey_docid_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(
         vec_aux_ctdef_->get_spiv_rowkey_docid_tbl_idx(), ObTSCIRScanType::OB_VEC_ROWKEY_VID_SCAN); 
     ObDASScanRtDef *rowkey_docid_rtdef = vec_aux_rtdef_->get_vec_aux_tbl_rtdef(vec_aux_ctdef_->get_spiv_rowkey_docid_tbl_idx());
-    if (OB_FAIL(ObDasVecScanUtils::init_scan_param(ls_id_,
-                                                   rowkey_docid_tablet_id_,
+    if (OB_FAIL(ObDasVecScanUtils::init_scan_param(rowkey_docid_tablet_id_,
                                                    rowkey_docid_ctdef,
                                                    rowkey_docid_rtdef,
                                                    tx_desc_,

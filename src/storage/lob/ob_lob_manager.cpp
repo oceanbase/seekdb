@@ -1945,7 +1945,6 @@ int ObLobManager::build_lob_param(ObLobAccessParam& param,
           LOG_WARN("failed to get tx info", K(ret), K(lob));
         } else if (OB_FAIL(lob.get_location_info(location_info))) {
           LOG_WARN("failed to get location info", K(ret), K(lob));
-        } else if (OB_FALSE_IT(param.ls_id_ = share::ObLSID(location_info->ls_id_))) {
         } else if (OB_FALSE_IT(param.tablet_id_ = ObTabletID(location_info->tablet_id_))) {
         } else if (OB_FAIL(param.set_tx_read_snapshot(lob))) {
           LOG_WARN("set_tx_read_snapshot fail", K(ret), K(param), K(lob));
@@ -2094,12 +2093,6 @@ int ObLobManager::prepare_insert_task(
     LOG_WARN("fail to get lob byte len", K(ret), K(task));
   } else if (new_byte_len <= lob_inrow_threshold) {
     // skip if inrow store
-  } else if (param.is_mlog_) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                   "columns more than lob inrow threshold in materialized view log is");
-    LOG_WARN("columns more than lob inrow threshold in materialized view log is not supported ",
-        KR(ret), K(new_byte_len), K(lob_inrow_threshold), K(lbt()));
   } else if (OB_FAIL(prepare_outrow_locator(param, task))) {
     LOG_WARN("prepare_outrow_locator fail", K(ret), K(task), K(param));
   } else {
@@ -2326,7 +2319,7 @@ int ObLobManager::get_outrow_lob_full_data(common::ObLobTextIterCtx &ctx,
     if (OB_SUCC(init_lob_access_param(*this, param, &ctx, cs_type, tmp_alloc))) {
       param.len_ = (ctx.total_access_len_ == 0 ? param.byte_size_ : ctx.total_access_len_);
 
-      if (!param.ls_id_.is_valid() || !param.tablet_id_.is_valid()) {
+      if (!param.tablet_id_.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
         COMMON_LOG(WARN, "Lob: invalid param.", K(ret), K(param));
       } else if (param.byte_size_ == 0) {
@@ -2400,7 +2393,7 @@ int ObLobManager::get_delta_lob_full_data(common::ObLobTextIterCtx &ctx,
       ctx.locator_ = partial_data.locator_;
       if (OB_FAIL(init_lob_access_param(*this, param, &ctx, cs_type, allocator))) {
         COMMON_LOG(WARN, "init_lob_access_param fail", K(ret));
-      } else if (!param.ls_id_.is_valid() || !param.tablet_id_.is_valid()) {
+      } else if (!param.tablet_id_.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
         COMMON_LOG(WARN, "Lob: invalid param.", K(ret), K(param));
       } else if ((param.len_ = param.byte_size_) <= 0) {
@@ -2461,7 +2454,7 @@ int ObLobManager::get_outrow_prefix_data(common::ObLobTextIterCtx &ctx,
     if (OB_SUCC(init_lob_access_param(*this, param, &ctx, cs_type, tmp_alloc))) {
       param.len_ = prefix_char_len;
 
-      if (!param.ls_id_.is_valid() || !param.tablet_id_.is_valid()) {
+      if (!param.tablet_id_.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
         COMMON_LOG(WARN, "Lob: invalid param.", K(ret), K(param));
       } else if (param.byte_size_ < 0 || param.len_ == 0) {
@@ -2524,7 +2517,7 @@ int ObLobManager::get_first_block(common::ObLobTextIterCtx &ctx,
         }
       }
 
-      if (!param.ls_id_.is_valid() || !param.tablet_id_.is_valid()) {
+      if (!param.tablet_id_.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
         COMMON_LOG(WARN, "Lob: invalid param.", K(ret), K(param));
       } else if (param.byte_size_ == 0) {
@@ -2639,7 +2632,7 @@ int ObLobManager::get_outrow_char_len(common::ObLobTextIterCtx &ctx,
   storage::ObLobAccessParam param;
   if (OB_SUCC(init_lob_access_param(*this, param, &ctx, cs_type, tmp_alloc))) {
     uint64_t length = 0;
-    if (!param.ls_id_.is_valid() || !param.tablet_id_.is_valid()) {
+    if (!param.tablet_id_.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
       COMMON_LOG(WARN, "Lob: invalid param.", K(ret), K(param));
     } else if (OB_FAIL(getlength(param, length))) {

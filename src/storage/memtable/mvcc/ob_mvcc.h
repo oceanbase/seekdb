@@ -129,7 +129,7 @@ public:
 
   // elr_trans_preparing is used for early lock release, if you want to release
   // the lock after proposing the commit log and even before the commit log
-  // successfully synced for single ls txn.
+  // successfully synced for the transaction.
   virtual int elr_trans_preparing() { return OB_SUCCESS; }
   // elr_trans_revoke is used to revoke elr after commit failed
   virtual void elr_trans_revoke() { }
@@ -186,4 +186,3 @@ private:
 }; // namespace oceanbase
 
 #endif //OCEANBASE_MEMTABLE_MVCC_OB_MVCC_
-

@@ -157,10 +157,6 @@ int ObAllVirtualDag::fill_cells(share::ObDagInfo &dag_info)
       if (dag_info.dag_type_ >= ObDagType::DAG_TYPE_MINI_MERGE && dag_info.dag_type_ < ObDagType::DAG_TYPE_MAX) {
         cells[i].set_varchar(share::ObIDag::get_dag_type_str(dag_info.dag_type_));
         cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-      } else if (dag_info.dag_net_type_ >= ObDagNetType::DAG_NET_TYPE_MIGRATION
-          && dag_info.dag_net_type_ < ObDagNetType::DAG_NET_TYPE_MAX) {
-        cells[i].set_varchar(share::ObIDagNet::get_dag_net_type_str(dag_info.dag_net_type_));
-        cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       } else {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "unexpected dag info, ", K(ret), K(dag_info));

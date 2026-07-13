@@ -37,7 +37,7 @@ struct ObTabletChecksumItem
 {
 public:
   ObTabletChecksumItem() 
-    : tablet_id_(), ls_id_(), data_checksum_(-1), 
+    : tablet_id_(), data_checksum_(-1),
       row_count_(0), compaction_scn_(), replica_type_(0), column_meta_() {}
   virtual ~ObTabletChecksumItem() = default;
 
@@ -48,12 +48,11 @@ public:
   int assign(const ObTabletChecksumItem &other);
   ObTabletChecksumItem &operator =(const ObTabletChecksumItem &other);
   common::ObTabletID get_tablet_id() const { return tablet_id_; }
-  TO_STRING_KV(K_(tablet_id), K_(ls_id), K_(data_checksum), K_(row_count), 
+  TO_STRING_KV(K_(tablet_id), K_(data_checksum), K_(row_count),
     K_(compaction_scn), K_(replica_type), K_(column_meta));
   
   
   common::ObTabletID tablet_id_;
-  ObLSID ls_id_;
   int64_t data_checksum_;
   int64_t row_count_;
   SCN compaction_scn_;
@@ -72,14 +71,14 @@ public:
   //   else, invalid argument
   static int load_tablet_checksum_items(
       common::ObISQLClient &sql_client,
-      const ObTabletLSPair &start_pair,
+      const common::ObTabletID &start_tablet_id,
       const int64_t batch_cnt,
       const SCN &compaction_scn,
       common::ObIArray<ObTabletChecksumItem> &items);
   // multi get tablet checksum
   static int load_tablet_checksum_items(
       common::ObISQLClient &sql_client,
-      const common::ObIArray<ObTabletLSPair> &pairs,
+      const common::ObIArray<common::ObTabletID> &tablet_ids,
       const SCN &compaction_scn,
       common::ObIArray<ObTabletChecksumItem> &items);
   static int load_tablet_checksum_items(
@@ -89,12 +88,12 @@ public:
   static int update_tablet_checksum_items(
       common::ObISQLClient &sql_client,
       common::ObIArray<ObTabletChecksumItem> &items);
-  // delete records whose compaction_scn <= @gc_compaction_scn and (tablet_id, ls_id) is (1, 1)
+  // delete records whose compaction_scn <= @gc_compaction_scn for the special tablet
   static int delete_special_tablet_checksum_items(
       common::ObISQLClient &sql_client,
       const SCN &gc_compaction_scn);
   // delete limited records whose compaction_scn <= @gc_compaction_scn
-  // , while the record of whose (tablet_id, ls_id) is (1, 1) can't be deleted.
+  // while the special tablet record can't be deleted.
   static int delete_tablet_checksum_items(
       common::ObISQLClient &sql_client,
       const SCN &gc_compaction_scn,
@@ -103,17 +102,17 @@ public:
   static int load_all_compaction_scn(
       common::ObISQLClient &sql_client,
       common::ObIArray<SCN> &compaction_scn_arr);
-  static int is_first_tablet_in_sys_ls_exist(
+  static int is_first_tablet_checksum_exist(
       common::ObISQLClient &sql_client, 
       const SCN &compaction_scn,
       bool &is_exist);
 
 private:
-  static int construct_load_sql_str_(const ObTabletLSPair &start_pair,
+  static int construct_load_sql_str_(const common::ObTabletID &start_tablet_id,
       const int64_t batch_cnt,
       const SCN &compaction_scn,
       common::ObSqlString &sql);
-  static int construct_load_sql_str_(const common::ObIArray<ObTabletLSPair> &pairs,
+  static int construct_load_sql_str_(const common::ObIArray<common::ObTabletID> &tablet_ids,
       const int64_t start_idx,
       const int64_t end_idx,
       const SCN &compaction_scn,

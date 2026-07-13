@@ -35,7 +35,6 @@ class ObStoreRowkey;
 class ObQueryFlag;
 }
 namespace share {
-class ObLSID;
 class SCN;
 }
 namespace blocksstable {
@@ -91,7 +90,6 @@ public:
                                     const common::ObStoreRowkey &row_key,
                                     storage::ObStoreRowLockState &lock_state,
                                     const common::ObTabletID tablet_id,
-                                    const share::ObLSID ls_id,
                                     const int64_t last_compact_cnt,
                                     const int64_t total_trans_node_cnt,
                                     const share::SCN &trans_scn);

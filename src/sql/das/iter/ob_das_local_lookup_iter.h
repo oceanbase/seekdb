@@ -53,7 +53,6 @@ public:
       trans_info_array_(),
       lookup_param_(),
       lookup_tablet_id_(),
-      lookup_ls_id_(),
       trans_desc_(nullptr),
       snapshot_(nullptr),
       is_first_lookup_(true)
@@ -62,7 +61,6 @@ public:
 
   storage::ObTableScanParam &get_lookup_param() { return lookup_param_; }
   void set_tablet_id(const ObTabletID &tablet_id) { lookup_tablet_id_ = tablet_id; }
-  void set_ls_id(const share::ObLSID &ls_id) { lookup_ls_id_ = ls_id; }
   int init_scan_param(storage::ObTableScanParam &param, const ObDASScanCtDef *ctdef, ObDASScanRtDef *rtdef);
 
 protected:
@@ -82,11 +80,9 @@ protected:
 
 protected:
   ObSEArray<ObDatum *, 4> trans_info_array_;
-   // Local lookup das task could rescan multiple times during execution, lookup_tablet_id_ and
-   // lookup_ls_id_ store the lookup parameter for this time.
+   // Local lookup das task could rescan multiple times during execution.
   storage::ObTableScanParam lookup_param_;
   ObTabletID lookup_tablet_id_;
-  share::ObLSID lookup_ls_id_;
   transaction::ObTxDesc *trans_desc_;
   transaction::ObTxReadSnapshot *snapshot_;
   bool is_first_lookup_;

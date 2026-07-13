@@ -224,7 +224,6 @@ public:  // ObTxDataMemtable
 
   int get_iter_start_and_count(const transaction::ObTransID &tx_id, ObTxDataLinkNode *&start_node, int64_t &iterate_row_cnt);
 
-  share::ObLSID get_ls_id() const;
   int64_t get_total_undo_node_cnt() const;
 
   /**

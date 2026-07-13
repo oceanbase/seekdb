@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_TRANSACTION_OB_ID_SERVICE_
 #define OCEANBASE_TRANSACTION_OB_ID_SERVICE_
 
-#include "share/ob_ls_id.h"
 #include "storage/slog/ob_storage_log_struct.h"
 #include "logservice/ob_append_callback.h"
 #include "logservice/ob_log_base_type.h"
@@ -85,8 +84,7 @@ private:
 };
 
 class ObIDService : public logservice::ObIReplaySubHandler,
-                    public logservice::ObICheckpointSubHandler,
-                    public logservice::ObIRoleChangeSubHandler
+                    public logservice::ObICheckpointSubHandler
 {
 public:
   ObIDService() : rwlock_(ObLatchIds::ID_SOURCE_LOCK), log_interval_(100 * 1000) { reset(); }
@@ -98,7 +96,6 @@ public:
     INVALID_ID_SERVICE_TYPE = -1,
     TimestampService,
     TransIDService,
-    DASIDService,
     MAX_SERVICE_TYPE,
   };
 
@@ -120,21 +117,13 @@ public:
 
   // for clog replay
   int replay(const void *buffer, const int64_t buf_size, const palf::LSN &lsn, const share::SCN &log_ts);
-  // Switch main
-  int switch_to_follower_gracefully();
-  void switch_to_follower_forcedly() {}
-  int resume_leader() { return OB_SUCCESS; }
-  int switch_to_leader() { return OB_SUCCESS; }
-
-  int check_leader(bool &leader);
   int check_and_fill_ls();
-  void reset_ls();
   void update_limited_id(const int64_t limited_id, const share::SCN latest_log_ts);
-  int update_ls_id_meta(const bool write_slog);
+  int update_id_meta(const bool write_slog);
   // vtable
   void get_virtual_info(int64_t &last_id, int64_t &limited_id, share::SCN &rec_log_ts,
                         share::SCN &latest_log_ts, int64_t &pre_allocated_range,
-                        int64_t &submit_log_ts, bool &is_master);
+                        int64_t &submit_log_ts);
   static const int64_t SUBMIT_LOG_ALARM_INTERVAL = 100 * 1000;
   static const int64_t MIN_LAST_ID = 1;
 protected:
@@ -161,7 +150,7 @@ protected:
   // current time when submit log
   int64_t submit_log_ts_;
   mutable common::SpinRWLock rwlock_;
-  ObLS *ls_;
+  storage::ObLS *ls_;
   ObPresistIDLogCb cb_;
   common::ObAddr self_;
   common::ObTimeInterval log_interval_;

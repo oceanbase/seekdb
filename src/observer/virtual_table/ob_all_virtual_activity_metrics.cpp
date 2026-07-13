@@ -26,9 +26,7 @@ namespace observer
 ObAllVirtualActivityMetric::ObAllVirtualActivityMetric()
     : ObVirtualTableScannerIterator(),
       current_pos_(0),
-      length_(0),
-      addr_(),
-      ip_buffer_()
+      length_(0)
 {
 }
 
@@ -41,8 +39,6 @@ void ObAllVirtualActivityMetric::reset()
 {
   current_pos_ = 0;
   length_ = 0;
-  addr_.reset();
-  ip_buffer_[0] = '\0';
   ObVirtualTableScannerIterator::reset();
 }
 

@@ -34,7 +34,6 @@ namespace schema
 class ObTableSchema;
 }
 
-class ObLSID;
 class SCN;
 }
 
@@ -57,7 +56,7 @@ namespace mds
 struct BufferCtx;
 }
 
-class ObLSHandle;
+class ObLS;
 class ObTabletHandle;
 class ObLSTabletService;
 
@@ -87,10 +86,6 @@ public:
       const int64_t len,
       const share::SCN &scn,
       mds::BufferCtx &ctx);
-  static int on_commit_for_old_mds(
-    const char* buf,
-    const int64_t len,
-    const transaction::ObMulSourceDataNotifyArg &arg);
   static int register_process(
       const obcall::ObBatchCreateTabletArg &arg,
       mds::BufferCtx &ctx);
@@ -119,15 +114,12 @@ private:
   static bool is_pure_aux_tablets(const obcall::ObCreateTabletInfo &info);
   static bool is_bind_hidden_tablets(const obcall::ObCreateTabletInfo &info);
   static int check_pure_data_or_mixed_tablets_info(
-      const share::ObLSID &ls_id,
       const obcall::ObCreateTabletInfo &info,
       bool &valid);
   static int check_pure_aux_tablets_info(
-      const share::ObLSID &ls_id,
       const obcall::ObCreateTabletInfo &info,
       bool &valid);
   static int check_hidden_tablets_info(
-      const share::ObLSID &ls_id,
       const obcall::ObCreateTabletInfo &hidden_info,
       const obcall::ObCreateTabletInfo *aux_info,
       bool &valid);
@@ -164,18 +156,14 @@ private:
       mds::BufferCtx &ctx,
       common::ObIArray<common::ObTabletID> &tablet_id_array);
   static int rollback_remove_tablets(
-      const share::ObLSID &ls_id,
       const common::ObIArray<common::ObTabletID> &tablet_id_array);
-  static int get_ls(
-      const share::ObLSID &ls_id,
-      ObLSHandle &ls_handle);
+  static int get_ls(ObLS *&tenant_ls);
   static int set_tablet_status(
       ObLSTabletService *ls_tablet_service,
       ObTabletHandle &tablet_handle,
       const bool for_replay,
       const share::SCN &scn,
       mds::BufferCtx &ctx,
-      const bool for_old_mds,
       const storage::ObTabletMdsUserDataType &create_type,
       const int64_t create_commit_version);
   static void handle_ret_for_replay(int &ret);

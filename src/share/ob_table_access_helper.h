@@ -29,7 +29,6 @@
 #include "share/ob_define.h"
 #include "lib/net/ob_addr.h"
 #include "share/ob_errno.h"
-#include "share/ob_ls_id.h"
 #include "share/rc/ob_tenant_base.h"
 #include "share/ob_server_struct.h"
 #include <cstdio>
@@ -583,21 +582,6 @@ private:
     }
     return ret;
     #undef PRINT_WRAPPER
-  }
-  static int get_signle_column_from_signle_row_(common::sqlclient::ObMySQLResult *row,
-                                                const char *column,
-                                                share::ObLSID &ls_id)
-  {
-    TIMEGUARD_INIT(OCCAM, 1_s);
-    int ret = common::OB_SUCCESS;
-    int64_t value = 0;
-    if (CLICK_FAIL(row->get_int(column, value))) {
-      OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(column));
-    } else {
-      ls_id = share::ObLSID(value);
-      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(column), K(value));
-    }
-    return ret;
   }
   static int get_signle_column_from_signle_row_(common::sqlclient::ObMySQLResult *row,
                                                 const char *column,

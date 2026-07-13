@@ -7351,12 +7351,9 @@ int ObOptimizerUtil::get_duplicate_table_replica(const ObCandiTableLoc &phy_tabl
     LOG_WARN("get unexpected partition count", K(ret), K(phy_table_loc.get_partition_cnt()));
   } else {
     const ObCandiTabletLoc &phy_part_loc = phy_table_loc.get_phy_part_loc_info_list().at(0);
-    const ObIArray<ObRoutePolicy::CandidateReplica> &replicas =
-        phy_part_loc.get_partition_location().get_replica_locations();
-    for (int64_t i = 0; OB_SUCC(ret) && i < replicas.count(); ++i) {
-      if (OB_FAIL(valid_addrs.push_back(replicas.at(i).get_server()))) {
-        LOG_WARN("failed to push back replica address", K(ret));
-      } else { /*do nothing*/ }
+    if (OB_FAIL(valid_addrs.push_back(
+            phy_part_loc.get_partition_location().get_local_replica().get_server()))) {
+      LOG_WARN("failed to push back local address", K(ret));
     }
   }
   return ret;
@@ -7371,7 +7368,6 @@ int ObOptimizerUtil::compute_duplicate_table_sharding(const ObAddr &local_addr,
 {
   int ret = OB_SUCCESS;
   ObCandiTableLoc *phy_table_loc = NULL;
-  int64_t replica_index = OB_INVALID_INDEX;
   target_sharding = NULL;
   if (OB_ISNULL(target_sharding = reinterpret_cast<ObShardingInfo*>(
                                   allocator.alloc(sizeof(ObShardingInfo))))) {
@@ -7397,14 +7393,12 @@ int ObOptimizerUtil::compute_duplicate_table_sharding(const ObAddr &local_addr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected partition count", K(ret));
   } else {
-    int64_t dup_table_pos = OB_INVALID_INDEX;
     ObCandiTabletLoc &phy_part_loc =
           phy_table_loc->get_phy_part_loc_info_list_for_update().at(0);
-    if (!phy_part_loc.is_server_in_replica(selected_addr, dup_table_pos)) {
+    if (!phy_part_loc.is_local_server(selected_addr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no server in replica", K(selected_addr), K(ret));
     } else {
-      phy_part_loc.set_selected_replica_idx(dup_table_pos);
       if (local_addr == selected_addr) {
         target_sharding->set_local();
       } else {
@@ -7436,19 +7430,12 @@ int ObOptimizerUtil::generate_duplicate_table_replicas(ObIAllocator &allocator,
     // do nothing
   } else if (OB_FAIL(target_table_loc->assign(*source_table_loc))) {
     LOG_WARN("failed to assign table location", K(ret));
-  } else {
-    ObCandiTabletLoc &phy_part_loc =
-          target_table_loc->get_phy_part_loc_info_list_for_update().at(0);
-    ObOptTabletLoc &opt_tablet_loc = phy_part_loc.get_partition_location();
-    ObIArray<ObRoutePolicy::CandidateReplica> &replica_loc_list = opt_tablet_loc.get_replica_locations();
-    for (int64_t i = replica_loc_list.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
-      if (ObOptimizerUtil::find_item(valid_addrs,
-                                     replica_loc_list.at(i).get_server())) {
-        // do nothing
-      } else if (OB_FAIL(replica_loc_list.remove(i))) {
-        LOG_WARN("failed to remove relica loc list", K(ret));
-      }
-    }
+  } else if (!ObOptimizerUtil::find_item(
+                 valid_addrs,
+                 target_table_loc->get_phy_part_loc_info_list().at(0)
+                     .get_partition_location().get_local_replica().get_server())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("local replica is not valid for duplicate table", K(ret), K(valid_addrs));
   }
   return ret;
 }

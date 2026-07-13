@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include "lib/utility/ob_unify_serialize.h"
 #include "lib/utility/ob_print_utils.h"
+#include "lib/json/ob_yson.h"
 #include "lib/ob_define.h"
 #include "lib/time/ob_time_utility.h"  // ObMonotonicTs
 namespace oceanbase

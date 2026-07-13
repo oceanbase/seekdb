@@ -193,7 +193,6 @@ public:
 
   int fetch_table_rowcnt(const uint64_t table_id,
                          const ObIArray<ObTabletID> &all_tablet_ids,
-                         const ObIArray<share::ObLSID> &all_ls_ids,
                          ObIArray<ObOptTableStat> &tstats);
 
   int update_opt_stat_gather_stat(const ObOptStatGatherStat &gather_stat);
@@ -266,9 +265,8 @@ private:
                                   ObObjMeta &endpoint_meta);
 
   int gen_tablet_list_str(const ObIArray<ObTabletID> &all_tablet_ids,
-                          const ObIArray<share::ObLSID> &all_ls_ids,
                           ObSqlString &tablet_list_str,
-                          ObSqlString &tablet_ls_list_str);
+                          ObSqlString &tablet_tuple_list_str);
 
   int get_gather_stat_value(const ObOptStatGatherStat &gather_stat,
                             ObSqlString &values_list);

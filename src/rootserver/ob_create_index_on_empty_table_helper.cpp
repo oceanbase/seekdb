@@ -68,14 +68,11 @@ int ObCreateIndexOnEmptyTableHelper::check_create_index_on_empty_table_opt(
 int ObCreateIndexOnEmptyTableHelper::get_major_frozen_scn(share::SCN &major_frozen_scn)
 {
   int ret = OB_SUCCESS;
-  bool is_external_consistent = false;
   ObTimeoutCtx ctx;
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
     LOG_WARN("fail to set timeout ctx", KR(ret));
-  } else if (OB_FAIL(OB_TS_MGR.get_ts_sync(ctx.get_timeout(),
-                                           major_frozen_scn,
-                                           is_external_consistent))) {
-    LOG_WARN("fail to get gts sync", KR(ret), K(ctx.get_timeout()), K(major_frozen_scn), K(is_external_consistent));
+  } else if (OB_FAIL(OB_TS_MGR.get_gts_sync(ctx.get_timeout(), major_frozen_scn))) {
+    LOG_WARN("fail to get gts sync", KR(ret), K(ctx.get_timeout()), K(major_frozen_scn));
   }
   return ret;
 }

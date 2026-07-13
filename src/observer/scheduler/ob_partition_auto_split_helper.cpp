@@ -72,7 +72,6 @@ int ObAutoSplitTask::assign(const ObAutoSplitTask &other)
     LOG_WARN("invalid argument", K(ret), K(other));
   } else {
     auto_split_tablet_size_ = other.auto_split_tablet_size_;
-    ls_id_ = other.ls_id_;
     retry_times_ = other.retry_times_;
     tablet_id_ = other.tablet_id_;
     used_disk_space_ = other.used_disk_space_;
@@ -688,7 +687,6 @@ int ObServerAutoSplitScheduler::check_sstable_limit(const storage::ObTablet &tab
 }
 
 int ObServerAutoSplitScheduler::check_and_fetch_tablet_split_info(const storage::ObTabletHandle &tablet_handle,
-                                                                  storage::ObLS &ls,
                                                                   bool &can_split,
                                                                   ObAutoSplitTask &task)
 {
@@ -698,8 +696,6 @@ int ObServerAutoSplitScheduler::check_and_fetch_tablet_split_info(const storage:
   int64_t real_auto_split_size = OB_INVALID_SIZE;
   ObTablet *tablet = nullptr;
   ObTabletPointer *tablet_ptr = nullptr;
-  ObRole role = INVALID_ROLE;
-  const share::ObLSID ls_id = ls.get_ls_id();
   bool num_sstables_exceed_limit = false;
   can_split = false;
   task.reset();
@@ -708,9 +704,9 @@ int ObServerAutoSplitScheduler::check_and_fetch_tablet_split_info(const storage:
   mds::TwoPhaseCommitState trans_stat;// will be removed later
   share::SCN trans_version;// will be removed later
 
-  if (OB_UNLIKELY(!tablet_handle.is_valid() || !ls_id.is_valid())) {
+  if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_handle), K(ls_id));
+    LOG_WARN("invalid argument", K(ret), K(tablet_handle));
   } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("pointer to tablet is nullptr", K(ret), KP(tablet));
@@ -742,8 +738,6 @@ int ObServerAutoSplitScheduler::check_and_fetch_tablet_split_info(const storage:
     can_split = false;
   } else if (OB_FAIL(check_sstable_limit(*tablet, num_sstables_exceed_limit))) {
     LOG_WARN("fail to check sstable limit", K(ret), KPC(tablet));
-  } else if (OB_FAIL(ls.get_ls_role(role))) {
-    LOG_WARN("get role failed", K(ret), K(ls_id));
   } else if (OB_FAIL(check_tablet_creation_limit(ObAutoSplitArgBuilder::get_max_split_partition_num(), 0.8/*safe_ratio*/, auto_split_tablet_size, real_auto_split_size))) {
     LOG_WARN("check_create_new_tablets fail", K(ret));
     if (OB_TOO_MANY_PARTITIONS_ERROR == ret) {
@@ -752,7 +746,7 @@ int ObServerAutoSplitScheduler::check_and_fetch_tablet_split_info(const storage:
     }
   } else {
     can_split = tablet->get_major_table_count() > 0 && tablet->get_data_tablet_id() == tablet->get_tablet_id()
-      && common::ObRole::LEADER == role && !num_sstables_exceed_limit;
+      && !num_sstables_exceed_limit;
     // TODO gaishun.gs resident_info
     const int64_t used_disk_space = tablet->get_tablet_meta().space_usage_.all_sstable_data_required_size_;
     can_split &= (used_disk_space > real_auto_split_size);
@@ -769,7 +763,6 @@ int ObServerAutoSplitScheduler::check_and_fetch_tablet_split_info(const storage:
         can_split = false;
       } else if ((can_split = user_data.get_tablet_status() == ObTabletStatus::Status::NORMAL && (medium_info_list->size() == 0))) {
         
-        task.ls_id_ = ls_id;
         task.tablet_id_ = tablet->get_tablet_id();
         task.auto_split_tablet_size_ = auto_split_tablet_size;
         task.used_disk_space_ = used_disk_space;
@@ -780,7 +773,7 @@ int ObServerAutoSplitScheduler::check_and_fetch_tablet_split_info(const storage:
   return ret;
 }
 
-int ObServerAutoSplitScheduler::push_task(const storage::ObTabletHandle &tablet_handle, oceanbase::storage::ObLS &ls)
+int ObServerAutoSplitScheduler::push_task(const storage::ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
   ObArray<ObAutoSplitTask> task_array;
@@ -789,7 +782,7 @@ int ObServerAutoSplitScheduler::push_task(const storage::ObTabletHandle &tablet_
   if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_handle));
-  } else if (OB_FAIL(check_and_fetch_tablet_split_info(tablet_handle, ls, can_split, task))) {
+  } else if (OB_FAIL(check_and_fetch_tablet_split_info(tablet_handle, can_split, task))) {
     if (OB_UNLIKELY(OB_NOT_SUPPORTED != ret)) {
       LOG_ERROR("failed to check and fetch tablet split info", K(ret), K(task));
     }
@@ -831,7 +824,6 @@ int ObServerAutoSplitScheduler::batch_send_split_request(const ObArray<ObArray<O
       } else {
         obcall::ObAutoSplitTabletArg single_arg;
         single_arg.auto_split_tablet_size_ = task.auto_split_tablet_size_;
-        single_arg.ls_id_ = task.ls_id_;
         single_arg.tablet_id_ = task.tablet_id_;
         
         
@@ -1128,8 +1120,7 @@ int ObAutoSplitTaskPollingMgr::register_tenant_cache(ObAutoSplitTaskCache * cons
   return ret;
 }
 
-int ObAutoSplitArgBuilder::build_arg(const share::ObLSID ls_id,
-                                     const ObTabletID tablet_id,
+int ObAutoSplitArgBuilder::build_arg(const ObTabletID tablet_id,
                                      const int64_t auto_split_tablet_size,
                                      const int64_t used_disk_space,
                                      obcall::ObAlterTableArg &arg)
@@ -1144,12 +1135,10 @@ int ObAutoSplitArgBuilder::build_arg(const share::ObLSID ls_id,
   int64_t ranges_num = 0;
   arg.reset();
 
-  if (false || !ls_id.is_valid() || !tablet_id.is_valid() ||
-      auto_split_tablet_size <= 0 || used_disk_space <= 0 ||
+  if (!tablet_id.is_valid() || auto_split_tablet_size <= 0 || used_disk_space <= 0 ||
       used_disk_space < auto_split_tablet_size ) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(ls_id), K(tablet_id),
-                                 K(auto_split_tablet_size), K(used_disk_space));
+    LOG_WARN("invalid argument", KR(ret), K(tablet_id), K(auto_split_tablet_size), K(used_disk_space));
   } else if (FALSE_IT(ranges_num = (used_disk_space / auto_split_tablet_size +
                                     (used_disk_space % auto_split_tablet_size == 0 ? 0 : 1)))) {
   } else if (FALSE_IT(ranges_num = MAX_SPLIT_PARTITION_NUM > ranges_num ?
@@ -1253,7 +1242,7 @@ int ObAutoSplitArgBuilder::acquire_table_id_of_tablets(const ObIArray<ObTabletID
       LOG_WARN("unexpected null", KR(ret));
     } else if (OB_FAIL(sql.assign_fmt("SELECT table_id, tablet_id FROM oceanbase.%s "
                                       "WHERE tablet_id in (",
-                                      share::OB_ALL_TABLET_TO_LS_TNAME))) {
+                                      share::OB_ALL_TABLET_TO_TABLE_TNAME))) {
       LOG_WARN("failed to assign sql", KR(ret));
     } else {
       for (int64_t idx = 0; OB_SUCC(ret) && (idx < tablet_ids.count()); ++idx) {

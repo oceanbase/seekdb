@@ -45,6 +45,7 @@ class ObTransID;
 namespace storage
 {
 class ObTabletMapKey;
+class ObLS;
 class ObTabletCreateSSTableParam;
 class ObTableHandleV2;
 class ObTablet;
@@ -88,30 +89,12 @@ public:
       const mds::TwoPhaseCommitState &trans_state,
       const share::SCN &trans_version);
   static int check_read_snapshot_for_deleted(
-      ObTablet &tablet,
-      const int64_t snapshot_version,
-      const ObTabletCreateDeleteMdsUserData &user_data,
-      const mds::MdsWriter &writer,
-      const mds::TwoPhaseCommitState &trans_state,
-      const share::SCN &trans_version);
-  static int check_read_snapshot_for_reserved_5(
       const ObTablet &tablet,
       const int64_t snapshot_version,
       const ObTabletCreateDeleteMdsUserData &user_data,
       const mds::MdsWriter &writer,
       const mds::TwoPhaseCommitState &trans_state,
       const share::SCN &trans_version);
-  static int check_read_snapshot_for_deleted_or_reserved_4(
-      const ObTablet &tablet,
-      const int64_t snapshot_version,
-      const ObTabletCreateDeleteMdsUserData &user_data,
-      const mds::MdsWriter &writer,
-      const mds::TwoPhaseCommitState &trans_state,
-      const share::SCN &trans_version);
-  static int check_read_snapshot_for_reserved_6(
-      const ObTablet &tablet,
-      const int64_t snapshot_version,
-      const ObTabletCreateDeleteMdsUserData &user_data);
   static int check_read_snapshot_for_split_src(
       const ObTablet &tablet,
       const int64_t snapshot_version,
@@ -124,7 +107,7 @@ public:
   static int check_read_snapshot_by_commit_version(
       const int64_t snapshot_version,
       const ObTabletCreateDeleteMdsUserData &user_data);
-  static int check_read_snapshot_for_reserved_status_tx(
+  static int check_read_snapshot_for_committed_create_tx(
       const ObTablet &tablet,
       const int64_t snapshot_version,
       const ObTabletCreateDeleteMdsUserData &user_data);
@@ -139,6 +122,7 @@ public:
   static int create_tmp_tablet(
       const ObTabletMapKey &key,
       common::ObArenaAllocator &allocator,
+      ObLS &ls,
       ObTabletHandle &handle);
   static int prepare_create_msd_tablet();
   static int create_msd_tablet(
@@ -172,13 +156,6 @@ public:
       T &sstable);
   static bool is_pure_hidden_tablets(const obcall::ObCreateTabletInfo &info);
 
-  template<typename Arg, typename Helper>
-  static int process_for_old_mds(
-             const char *buf,
-             const int64_t len,
-             const transaction::ObMulSourceDataNotifyArg &notify_arg);
-private:
-
 private:
   class ReadMdsFunctor
   {
@@ -192,70 +169,6 @@ private:
   public:
     int operator()(const ObTabletCreateDeleteMdsUserData &) { return common::OB_SUCCESS; }
   };
-};
-
-template<typename Arg, typename Helper>
-int ObTabletCreateDeleteHelper::process_for_old_mds(
-    const char *buf,
-    const int64_t len,
-    const transaction::ObMulSourceDataNotifyArg &notify_arg)
-{
-  int ret = OB_SUCCESS;
-  Arg arg;
-  bool is_old_mds = false;
-
-  if (OB_ISNULL(buf) || OB_UNLIKELY(len <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid args", K(ret), KP(buf), K(len));
-  } else if (OB_FAIL(Arg::is_old_mds(buf, len, is_old_mds))) {
-    TRANS_LOG(WARN, "failed to is_old_mds", K(ret), KP(buf), K(len));
-  } else if (is_old_mds) {
-    do {
-      int64_t pos = 0;
-      if (OB_FAIL(arg.deserialize(buf, len, pos))) {
-        TRANS_LOG(WARN, "failed to deserialize", KR(ret), K(notify_arg), K(pos));
-        if (notify_arg.for_replay_) {
-          ret = OB_EAGAIN;
-        } else {
-          usleep(100 * 1000);
-        }
-      }
-    } while (OB_FAIL(ret) && !notify_arg.for_replay_);
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_UNLIKELY(!arg.is_valid())) {
-      ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "arg is invalid", K(ret), K(arg));
-    } else if (!arg.is_old_mds_) {
-      ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "arg is not old mds, but buf is old mds", K(ret), K(arg));
-    } else {
-      mds::MdsCtx mds_ctx{mds::MdsWriter{notify_arg.tx_id_}};
-      mds_ctx.set_binding_type_id(mds::TupleTypeIdx<mds::BufferCtxTupleHelper, mds::MdsCtx>::value);
-
-      if (notify_arg.for_replay_) {
-        if (OB_FAIL(Helper::replay_process(arg, notify_arg.scn_, mds_ctx))) {
-          ret = OB_EAGAIN;
-          TRANS_LOG(WARN, "failed to replay_process", K(ret), K(notify_arg), K(arg));
-        }
-      } else {
-        do {
-          if (OB_FAIL(Helper::register_process(arg, mds_ctx))) {
-            TRANS_LOG(ERROR, "fail to register_process, retry", K(ret), K(arg), K(notify_arg));
-            usleep(100 * 1000);
-          }
-        } while (OB_FAIL(ret));
-      }
-
-      if (OB_FAIL(ret)) {
-      } else {
-        mds_ctx.single_log_commit(notify_arg.trans_version_, notify_arg.scn_);
-        TRANS_LOG(INFO, "replay create commit for old_mds", KR(ret), K(arg));
-      }
-    }
-  }
-
-  return ret;
 };
 
 template <typename T>

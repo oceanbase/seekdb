@@ -39,12 +39,11 @@ public:
       const int64_t parallelism,
       const bool is_partitioned_local_index_task,
       ObRootService *root_service,
-      const common::ObAddr &inner_sql_exec_addr,
       const bool is_retryable_ddl)
       : task_id_(task_id), data_table_id_(data_table_id), dest_table_id_(dest_table_id),
         schema_version_(schema_version), snapshot_version_(snapshot_version), execution_id_(execution_id),
         trace_id_(trace_id), parallelism_(parallelism), is_partitioned_local_index_task_(is_partitioned_local_index_task),
-        allocator_("IdxSSTBuildTask"), root_service_(root_service), inner_sql_exec_addr_(inner_sql_exec_addr), is_retryable_ddl_(is_retryable_ddl)
+        allocator_("IdxSSTBuildTask"), root_service_(root_service), is_retryable_ddl_(is_retryable_ddl)
   {
     set_retry_times(0);
   }
@@ -53,7 +52,7 @@ public:
   int set_nls_format(const ObString &nls_date_format,
                      const ObString &nls_timestamp_format,
                      const ObString &nls_timestamp_tz_format);
-  int set_addition_info(const share::ObLSID &ls_id, const common::ObAddr &ls_leader_addr, const ObIArray<ObTabletID> &index_partition_ids);
+  int set_addition_info(const ObIArray<ObTabletID> &index_partition_ids);
   ObDDLTaskID get_ddl_task_id() { return ObDDLTaskID(task_id_); }
   virtual int process() override;
   virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
@@ -79,7 +78,6 @@ private:
   ObString nls_timestamp_format_;
   ObString nls_timestamp_tz_format_;
   ObRootService *root_service_;
-  common::ObAddr inner_sql_exec_addr_;
   ObDDLTaskInfo addition_info_;
   bool is_retryable_ddl_;
 
@@ -154,15 +152,12 @@ private:
   int send_build_single_replica_request(const bool &is_partitioned_local_index_task,
                                         const int64_t &parallelism,
                                         const int64_t &task_execution_id,
-                                        const share::ObLSID &ls_id,
-                                        const common::ObAddr &leader_addr,
                                         const ObIArray<ObTabletID> &index_partition_ids);
   int wait_and_send_single_partition_replica_task(bool &state_finished);
   int check_build_single_replica(bool &is_end);
   int check_build_local_index_single_replica(bool &is_end);
   int check_need_verify_checksum(bool &need_verify);
   bool is_sstable_complete_task_submitted();
-  int update_mlog_last_purge_scn();
   bool is_create_partitioned_local_index();
   int serialize_and_update_message();
 private:

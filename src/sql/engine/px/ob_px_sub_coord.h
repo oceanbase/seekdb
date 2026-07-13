@@ -92,7 +92,7 @@ public:
   void set_is_single_tsc_leaf_dfo(bool flag) { is_single_tsc_leaf_dfo_ = flag; }
   int get_participants(ObPxSqcMeta &sqc,
                        const int64_t table_id,
-                       ObIArray<std::pair<share::ObLSID, ObTabletID>> &ls_tablet_ids) const;
+                       ObIArray<ObTabletID> &tablet_ids) const;
   void destroy_shared_rf_msgs();
 private:
   int setup_loop_proc(ObSqcCtx &sqc_ctx) const;

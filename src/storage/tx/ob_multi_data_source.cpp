@@ -16,7 +16,7 @@
 
 #include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include "ob_multi_data_source.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 #define NEED_MDS_REGISTER_DEFINE
 #include "storage/multi_data_source/compile_utility/mds_register.h"
 #undef NEED_MDS_REGISTER_DEFINE
@@ -39,7 +39,7 @@ namespace transaction
 
 int ObMulSourceTxDataNotifier::notify_table_lock(const ObTxBufferNodeArray &array,
                                                  const ObMulSourceDataNotifyArg &arg,
-                                                 ObPartTransCtx *part_ctx,
+                                                 ObTxCtx *part_ctx,
                                                  int64_t &total_time)
 {
   int ret = OB_SUCCESS;
@@ -81,20 +81,16 @@ int ObMulSourceTxDataNotifier::notify_table_lock(const ObTxBufferNodeArray &arra
 int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
                                       const NotifyType notify_type,
                                       const ObMulSourceDataNotifyArg &arg,
-                                      ObPartTransCtx *part_ctx,
+                                      ObTxCtx *part_ctx,
                                       int64_t &total_time)
 {
   int ret = OB_SUCCESS;
-  ObMemtableCtx *mt_ctx = nullptr;
   const char *can_not_do_tx_end_reason = nullptr;
   bool can_do_tx_end = true;
   ObMulSourceDataNotifyArg tmp_notify_arg = arg;
   if (OB_ISNULL(part_ctx)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(part_ctx));
-  } else if (OB_ISNULL(mt_ctx = part_ctx->get_memtable_ctx())) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "memtable ctx should not null", KR(ret), K(part_ctx));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < array.count(); ++i) {
       ObTimeGuard notify_time;
@@ -116,16 +112,13 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
         }
       }
 
-      OB_ASSERT(node.type_ != ObTxDataSourceType::BEFORE_VERSION_4_1);
       if(OB_FAIL(ret)) {
         //do nothing
-      } else if (node.type_ < ObTxDataSourceType::BEFORE_VERSION_4_1
-          && ObTxDataSourceType::CREATE_TABLET_NEW_MDS != node.type_
-          && ObTxDataSourceType::DELETE_TABLET_NEW_MDS != node.type_
-          && ObTxDataSourceType::UNBIND_TABLET_NEW_MDS != node.type_) {
+      } else if (uses_builtin_mds_notifier(node.type_)) {
         switch (node.type_) {
         case ObTxDataSourceType::TABLE_LOCK: {
-          ret = notify_table_lock(notify_type, buf, len, tmp_notify_arg, mt_ctx);
+          ret = notify_table_lock(
+              notify_type, buf, len, tmp_notify_arg, part_ctx->get_memtable_ctx());
           break;
         }
         case ObTxDataSourceType::LS_TABLE: {
@@ -138,10 +131,6 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
         }
         case ObTxDataSourceType::DDL_BARRIER: {
           ret = notify_ddl_barrier(notify_type, buf, len, tmp_notify_arg);
-          break;
-        }
-        case ObTxDataSourceType::STANDBY_UPGRADE: {
-          ret = notify_standby_upgrade(notify_type, buf, len, tmp_notify_arg);
           break;
         }
         default: {
@@ -212,12 +201,7 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
               break;\
               case NotifyType::ON_COMMIT:\
               MDS_LOG(INFO, "buffer ctx on_commit", K(node), KP(&buffer_ctx), K(buffer_ctx));\
-              if (OB_FAIL(common::meta::MdsCommitForOldMdsWrapper<HELPER_CLASS>::\
-                          on_commit_for_old_mds(buf,\
-                                                len,\
-                                                tmp_notify_arg))) {\
-                MDS_LOG(WARN, "fail to on_commit_for_old_mds", KR(ret));\
-              } else if (arg.for_replay_ && !common::meta::MdsCheckCanReplayWrapper<HELPER_CLASS>::\
+              if (arg.for_replay_ && !common::meta::MdsCheckCanReplayWrapper<HELPER_CLASS>::\
                                             check_can_replay_commit(buf,\
                                                                     len,\
                                                                     arg.scn_,\
@@ -332,30 +316,6 @@ int ObMulSourceTxDataNotifier::notify_ls_table(const NotifyType type,
                                                const ObMulSourceDataNotifyArg &arg)
 {
   int ret = OB_SUCCESS;
-  ob_abort_log_cb_notify_(type, ret, arg.for_replay_);
-
-  return ret;
-}
-
-int ObMulSourceTxDataNotifier::notify_standby_upgrade(const NotifyType type,
-                                               const char *buf, const int64_t len,
-                                               const ObMulSourceDataNotifyArg &arg)
-{
-  int ret = OB_SUCCESS;
-  share::ObStandbyUpgrade data_version;
-  int64_t pos = 0;
-
-  if (OB_ISNULL(buf) || OB_UNLIKELY(len <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(buf), K(len), K(type));
-  } else if (OB_FAIL(data_version.deserialize(buf, len, pos))) {
-    TRANS_LOG(WARN, "failed to deserialize data_version", KR(ret), K(buf), K(len));
-  } else if (pos > len) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
-  }
-  TRANS_LOG(INFO, "standby upgrade notify", KR(ret), K(data_version), K(len), K(type));
-
   ob_abort_log_cb_notify_(type, ret, arg.for_replay_);
 
   return ret;
@@ -497,7 +457,7 @@ OB_SERIALIZE_MEMBER(ObRegisterMdsFlag, need_flush_redo_instantly_, mds_base_scn_
 // ObMDSStr
 //#####################################################
 
-OB_SERIALIZE_MEMBER(ObMDSInnerSQLStr, mds_str_, type_, ls_id_, register_flag_);
+OB_SERIALIZE_MEMBER(ObMDSInnerSQLStr, mds_str_, type_, register_flag_);
 
 ObMDSInnerSQLStr::ObMDSInnerSQLStr() { reset(); }
 
@@ -507,26 +467,23 @@ void ObMDSInnerSQLStr::reset()
 {
   mds_str_.reset();
   type_ = ObTxDataSourceType::UNKNOWN;
-  ls_id_.reset();
   register_flag_.reset();
 }
 
 int ObMDSInnerSQLStr::set(const char *msd_buf,
                           const int64_t msd_buf_len,
                           const ObTxDataSourceType &type,
-                          const share::ObLSID ls_id,
                           const ObRegisterMdsFlag &register_flag)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(msd_buf) || 0 == msd_buf_len || ObTxDataSourceType::UNKNOWN == type || !ls_id.is_valid()) {
+  if (OB_ISNULL(msd_buf) || 0 == msd_buf_len || ObTxDataSourceType::UNKNOWN == type) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid arguments", K(ret), KP(msd_buf), K(msd_buf_len), K(type), K(ls_id));
+    TRANS_LOG(WARN, "invalid arguments", K(ret), KP(msd_buf), K(msd_buf_len), K(type));
   } else if (!mds_str_.empty()) {
     TRANS_LOG(WARN, "MSD str is not empty", K(ret), K(*this));
   } else {
     mds_str_.assign_ptr(msd_buf, msd_buf_len);
     type_ = type;
-    ls_id_ = ls_id;
     register_flag_ = register_flag;
   }
   return ret;

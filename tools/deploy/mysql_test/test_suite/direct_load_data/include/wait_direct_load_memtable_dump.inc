@@ -13,7 +13,7 @@ while($__i__ > 0)
 {
   sleep 1;
   dec $__i__;
-  let $__memstore_cnt__ = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_table_mgr where table_type=4 and tablet_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $__table_id__), cnt, 1);
+  let $__memstore_cnt__ = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_table_mgr where table_type=4 and tablet_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $__table_id__), cnt, 1);
   if ($__memstore_cnt__ == 0)
   {
     let $__i__ = -5;

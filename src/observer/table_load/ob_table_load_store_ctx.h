@@ -127,8 +127,8 @@ public:
   ~ObTableLoadStoreCtx();
   void destroy();
   int init(
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &partition_id_array,
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &target_partition_id_array);
+    const table::ObTableLoadArray<table::ObTableLoadTabletId> &partition_id_array,
+    const table::ObTableLoadArray<table::ObTableLoadTabletId> &target_partition_id_array);
   void stop();
   bool is_valid() const { return is_inited_; }
   bool is_stopped() const;
@@ -216,8 +216,8 @@ private:
   int alloc_trans(const table::ObTableLoadTransId &trans_id, ObTableLoadStoreTrans *&trans);
   int init_session_ctx_array();
   int init_store_table_ctxs(
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &partition_id_array,
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &target_partition_id_array);
+    const table::ObTableLoadArray<table::ObTableLoadTabletId> &partition_id_array,
+    const table::ObTableLoadArray<table::ObTableLoadTabletId> &target_partition_id_array);
   int init_sort_param();
   int generate_autoinc_params(share::AutoincParam &autoinc_param);
   int init_sequence();

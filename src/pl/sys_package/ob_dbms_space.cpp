@@ -939,22 +939,8 @@ int ObDbmsSpace::get_svr_info_from_schema(const ObTableSchema *table_schema,
   } else if (tablet_list.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "can't find tablet", K(ret));
-  } else {
-    const int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
-    ObLSID dummy_ls_id;
-    ObAddr leader_addr;
-    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_list.count(); i++) {
-      if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(GCTX.location_service_,
-                                                    tablet_list.at(i),
-                                                    rpc_timeout,
-                                                    dummy_ls_id,
-                                                    leader_addr
-                                                    ))) {
-        SQL_ENG_LOG(WARN, "fail to get tablet's leader_addr", K(ret));
-      } else if (OB_FAIL(add_var_to_array_no_dup(addr_list, leader_addr))) {
-        SQL_ENG_LOG(WARN, "fail to add add to addr_list", K(ret));
-      }
-    }
+  } else if (OB_FAIL(addr_list.push_back(GCTX.self_addr()))) {
+    SQL_ENG_LOG(WARN, "fail to add local address", K(ret));
   }
 
   return ret;

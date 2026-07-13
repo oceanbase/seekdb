@@ -25,8 +25,7 @@ namespace observer
 {
 ObMemLeakCheckerInfo::ObMemLeakCheckerInfo()
   : ObVirtualTableIterator(),
-    opened_(false),
-    addr_(NULL)
+    opened_(false)
 {
   leak_checker_ = &get_mem_leak_checker();
   label_ = leak_checker_->get_str();
@@ -41,16 +40,15 @@ void ObMemLeakCheckerInfo::reset()
 {
   opened_ = false;
   leak_checker_ = NULL;
-  addr_ = NULL;
   label_ = nullptr;
 }
 
 int ObMemLeakCheckerInfo::sanity_check()
 {
   int ret = OB_SUCCESS;
-  if (NULL == leak_checker_ || NULL == addr_) {
+  if (NULL == leak_checker_) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "invalid argument", K_(leak_checker), K_(addr));
+    SERVER_LOG(WARN, "invalid argument", K_(leak_checker));
   }
   return ret;
 }

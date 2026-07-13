@@ -155,7 +155,6 @@ int ObScheduleDagFunc::schedule_batch_freeze_dag(
 }
 
 int ObDagParamFunc::fill_param(
-    const share::ObLSID &ls_id,
     const storage::ObTablet &tablet,
     const ObMergeType merge_type,
     const int64_t &merge_snapshot_version,
@@ -163,15 +162,12 @@ int ObDagParamFunc::fill_param(
     ObTabletMergeDagParam &param)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!ls_id.is_valid()
-    || !is_valid_merge_type(merge_type)
+  if (OB_UNLIKELY(!is_valid_merge_type(merge_type)
     || merge_snapshot_version < ObVersion::MIN_VERSION
     || !is_valid_exec_mode(exec_mode))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(ls_id), K(merge_snapshot_version),
-      K(exec_mode));
+    LOG_WARN("invalid argument", KR(ret), K(merge_snapshot_version), K(exec_mode));
   } else {
-    param.ls_id_ = ls_id;
     param.tablet_id_ = tablet.get_tablet_meta().tablet_id_;
     param.merge_type_ = merge_type;
     param.merge_version_ = merge_snapshot_version;

@@ -19,7 +19,7 @@
 
 #include "share/ob_define.h"
 #include "lib/task/ob_timer.h"
-#include "logservice/ob_log_base_type.h"  //ObIRoleChangeSubHandler ObICheckpointSubHandler ObIReplaySubHandler
+#include "logservice/ob_log_base_type.h"  //ObILocalLogHandler ObICheckpointSubHandler ObIReplaySubHandler
 #include "observer/net/ob_net_endpoint_ingress_rpc_struct.h"
 #include "observer/ob_server_struct.h"
 
@@ -51,7 +51,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObNetEndpointIngressManager);
 };
 class ObIngressBWAllocService : public common::ObTimerTask,
-                                public logservice::ObIRoleChangeSubHandler,
+                                public logservice::ObILocalLogHandler,
                                 public logservice::ObICheckpointSubHandler,
                                 public logservice::ObIReplaySubHandler
 {
@@ -104,10 +104,8 @@ public:
   }
 
   // for role change
-  void switch_to_follower_forcedly() override final;
-  int switch_to_leader() override final;
-  int switch_to_follower_gracefully() override final;
-  int resume_leader() override final;
+  void deactivate() override final;
+  int activate() override final;
 
 private:
   bool is_inited_;

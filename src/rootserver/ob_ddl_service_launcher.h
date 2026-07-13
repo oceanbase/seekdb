@@ -20,7 +20,7 @@
 #include "common/ob_role.h"      // for ObRole
 #include "lib/utility/ob_macro_utils.h"  // for DISALLOW_COPY_AND_ASSIGN
 //#include "lib/lock/ob_spin_rwlock.h" // for SpinRWLock
-#include "logservice/ob_log_base_type.h" // for ObIRoleChangeSubHandler etc.
+#include "logservice/ob_log_base_type.h" // for ObILocalLogHandler etc.
 #include "share/scn.h"                   // for SCN
 #include "rootserver/ob_tenant_thread_helper.h" // for DEFINE_MTL_FUNC
 
@@ -32,7 +32,7 @@ class SpinRWLock;
 }
 namespace rootserver
 {
-class ObDDLServiceLauncher : public logservice::ObIRoleChangeSubHandler,
+class ObDDLServiceLauncher : public logservice::ObILocalLogHandler,
                              public logservice::ObICheckpointSubHandler,
                              public logservice::ObIReplaySubHandler
 {
@@ -46,11 +46,9 @@ public:
   bool is_inited() const { return inited_; }
   static bool is_ddl_service_started() { return ATOMIC_LOAD(&is_ddl_service_started_); }
 
-  // for ObIRoleChangeSubHandler
-  virtual int switch_to_leader() override;
-  virtual void switch_to_follower_forcedly() override;
-  virtual int switch_to_follower_gracefully() override;
-  virtual int resume_leader() override;
+  // for ObILocalLogHandler
+  int activate() override;
+  void deactivate() override;
 
   int start_ddl_service_with_old_logic(
       const int64_t new_rs_epoch,

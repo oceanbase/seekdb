@@ -57,7 +57,6 @@ int ObDeleteLobMetaRowParam::init(const ObDDLBuildSingleReplicaRequestArg &arg)
     schema_version_ = arg.schema_version_;
     tablet_id_ = arg.source_tablet_id_;
     dest_tablet_id_ = arg.dest_tablet_id_;
-    ls_id_ = arg.ls_id_;
     task_id_ = arg.task_id_;
     execution_id_ = arg.execution_id_;
     tablet_task_id_ = arg.tablet_task_id_;
@@ -134,7 +133,6 @@ uint64_t ObDeleteLobMetaRowDag::hash() const
   } else {
     hash_val = param_.table_id_
              + param_.schema_id_
-             + param_.ls_id_.hash()
              + param_.tablet_id_.hash()
              + param_.dest_tablet_id_.hash()
              + ObDagType::DAG_TYPE_DDL_DEL_LOB_META;
@@ -156,7 +154,7 @@ bool ObDeleteLobMetaRowDag::operator==(const ObIDag &other) const
     } else {
       is_equal = (true) && (true) &&
                  (param_.table_id_ == dag.param_.table_id_) && (param_.schema_id_ == dag.param_.schema_id_) &&
-                 (param_.ls_id_ == dag.param_.ls_id_) && (param_.tablet_id_ == dag.param_.tablet_id_) && 
+                 (param_.tablet_id_ == dag.param_.tablet_id_) &&
                  (param_.dest_tablet_id_ == dag.param_.dest_tablet_id_) && 
                  (param_.delete_lob_meta_ret_ == dag.param_.delete_lob_meta_ret_);
     }
@@ -174,7 +172,6 @@ int ObDeleteLobMetaRowDag::fill_info_param(compaction::ObIBasicInfoParam *&out_p
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid param", K(ret), K(param_));
   } else if (OB_FAIL(ADD_DAG_WARN_INFO_PARAM(out_param, allocator, get_type(), 
-                                param_.ls_id_.id(),
                                 static_cast<int64_t>(param_.table_id_),
                                 static_cast<int64_t>(param_.tablet_id_.id()),
                                 static_cast<int64_t>(param_.dest_tablet_id_.id()),
@@ -194,8 +191,8 @@ int ObDeleteLobMetaRowDag::fill_dag_key(char *buf, const int64_t buf_len) const
   } else if (OB_UNLIKELY(!param_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid params", K(ret), K(param_));
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, "logstream_id=%ld tablet_id=%ld lob_meta_tablet_id=%ld",
-                              param_.ls_id_.id(), param_.tablet_id_.id(), param_.dest_tablet_id_.id()))) {
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, "tablet_id=%ld lob_meta_tablet_id=%ld",
+                              param_.tablet_id_.id(), param_.dest_tablet_id_.id()))) {
     LOG_WARN("fill dag key for ddl table merge dag failed", K(ret), K(param_));
   }
   return ret;
@@ -214,15 +211,13 @@ int ObDeleteLobMetaRowDag::report_replica_build_status()
 #ifdef ERRSIM
     if (OB_SUCC(ret)) {
       ret = OB_E(EventTable::EN_DDL_REPORT_REPLICA_BUILD_STATUS_FAIL) OB_SUCCESS;
-      LOG_INFO("report replica build status errsim", K(ret));
+      LOG_INFO("report DDL build status errsim", K(ret));
     }
 #endif
     obcall::ObDDLBuildSingleReplicaResponseArg arg;
     ObAddr rs_addr = GCTX.self_addr();
     
     
-    arg.ls_id_ = param_.ls_id_;
-    arg.dest_ls_id_ = param_.ls_id_;
     arg.tablet_id_ = param_.tablet_id_;
     arg.source_table_id_ = param_.table_id_;
     arg.dest_schema_id_ = param_.schema_id_;
@@ -233,7 +228,7 @@ int ObDeleteLobMetaRowDag::report_replica_build_status()
     arg.task_id_ = param_.task_id_;
     arg.execution_id_ = param_.execution_id_;
     arg.server_addr_ = GCTX.self_addr();
-    FLOG_INFO("send replica build status response to RS", K(ret), K(arg));
+    FLOG_INFO("send DDL build status response to RS", K(ret), K(arg));
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(GCTX.root_service_->build_ddl_single_replica_response(arg))) {
       LOG_WARN("fail to send build ddl single replica response", K(ret), K(arg));
@@ -292,7 +287,6 @@ int ObDeleteLobMetaRowTask::init_scan_param(ObTableScanParam& scan_param)
       scan_param.tablet_id_ = param_->tablet_id_;
       scan_param.schema_version_ = param_->schema_version_;
       scan_param.is_get_ = false;
-      scan_param.ls_id_ = param_->ls_id_;
       ObQueryFlag query_flag(ObQueryFlag::Forward, // scan_order
                             false, // daily_merge
                             false, // optimize
@@ -396,9 +390,9 @@ int ObDeleteLobMetaRowTask::process()
     if (OB_ISNULL(txs) || OB_ISNULL(tsc_service) || OB_ISNULL(lob_mngr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("should not be null", K(ret), KP(txs), KP(tsc_service), KP(lob_mngr));
-    } else if (OB_FAIL(ObInsertLobColumnHelper::start_trans(param_->ls_id_, true/*is_for_read*/, timeout_us, tx_desc))) {
+    } else if (OB_FAIL(ObInsertLobColumnHelper::start_trans(true/*is_for_read*/, timeout_us, tx_desc))) {
       LOG_WARN("fail to get tx_desc", K(ret));
-    } else if (OB_FAIL(txs->get_ls_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, param_->ls_id_, timeout_us, scan_param.snapshot_))) {
+    } else if (OB_FAIL(txs->get_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, timeout_us, scan_param.snapshot_))) {
       LOG_WARN("fail to get snapshot", K(ret));
     } else if (OB_FAIL(init_scan_param(scan_param))) {
       LOG_WARN("fail to init scan_param", K(ret));
@@ -422,7 +416,6 @@ int ObDeleteLobMetaRowTask::process()
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get row column cnt invalid.", K(ret), K(datum_row->get_column_count()));
         } else if (OB_FAIL(ObInsertLobColumnHelper::delete_lob_column(param_->allocator_,
-                                                                      param_->ls_id_,
                                                                       param_->tablet_id_,
                                                                       collation_type_,
                                                                       datum_row->storage_datums_[0],
@@ -459,7 +452,7 @@ int ObDeleteLobMetaRowTask::process()
       } else if (OB_SUCCESS != (tmp_ret = dag->report_replica_build_status())) {
         // do not override ret if it has already failed.
         ret = OB_SUCCESS == ret ? tmp_ret : ret;
-        LOG_WARN("fail to report replica build status", K(ret), K(tmp_ret));
+        LOG_WARN("fail to report DDL build status", K(ret), K(tmp_ret));
       }
     }
 

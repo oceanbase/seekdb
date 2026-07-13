@@ -183,7 +183,7 @@ struct ObScheduleSuspectInfo : public ObIDiagnoseInfo, public ObMergeDagHash
   bool is_valid() const;
   virtual void shallow_copy(ObIDiagnoseInfo *other) override;
   virtual int64_t get_hash() const override;
-  TO_STRING_KV("merge_type", merge_type_to_str(merge_type_), K_(ls_id), K_(tablet_id), K_(add_time), K_(hash));
+  TO_STRING_KV("merge_type", merge_type_to_str(merge_type_), K_(tablet_id), K_(add_time), K_(hash));
 
   int64_t add_time_;
   int64_t hash_;
@@ -383,7 +383,6 @@ struct ObCompactionDiagnoseInfo
 {
   ObCompactionDiagnoseInfo()
     : merge_type_(),
-      ls_id_(0),
       tablet_id_(0),
       timestamp_(0),
       status_(DIA_STATUS_MAX)
@@ -400,11 +399,10 @@ struct ObCompactionDiagnoseInfo
   };
   const static char *ObDiagnoseStatusStr[DIA_STATUS_MAX];
   static const char * get_diagnose_status_str(ObDiagnoseStatus status);
-  TO_STRING_KV("merge_type", merge_type_to_str(merge_type_), K_(ls_id), K_(tablet_id),
+  TO_STRING_KV("merge_type", merge_type_to_str(merge_type_), K_(tablet_id),
     "status", get_diagnose_status_str(status_), K_(timestamp), K_(diagnose_info));
 
   compaction::ObMergeType merge_type_;
-  int64_t ls_id_;
   int64_t tablet_id_;
   int64_t timestamp_;
   ObDiagnoseStatus status_;
@@ -433,13 +431,12 @@ public:
   int diagnose_tenant(
     bool &diagnose_major_flag,
     int64_t &compaction_scn);
-  void diagnose_tenant_ls(
+  void diagnose_tenant_merge_state(
     const bool diagnose_major_flag,
     const int64_t compaction_scn,
     const ObLSStatusCache &ls_status);
   // diagnose failed report task
   void diagnose_failed_report_task(
-      const ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const int64_t compaction_scn);
   // diagnose waiting or processing report task
@@ -456,7 +453,6 @@ public:
   }
   static int diagnose_dag(
       const compaction::ObMergeType merge_type,
-      const ObLSID ls_id,
       const ObTabletID tablet_id,
       const int64_t merge_version,
       ObTabletMergeDag &dag,
@@ -468,38 +464,32 @@ public:
   }
 
 private:
-  int diagnose_tablet_mini_merge(const ObLSID &ls_id, ObTablet &tablet);
-  int diagnose_tablet_minor_merge(const ObLSID &ls_id, ObTablet &tablet);
+  int diagnose_tablet_mini_merge(ObTablet &tablet);
+  int diagnose_tablet_minor_merge(ObTablet &tablet);
   int diagnose_tablet_major_merge(
       const int64_t compaction_scn,
-      const ObLSID &ls_id,
       const ObTabletStatusCache &tablet_status,
       ObTablet &tablet);
   int diagnose_tablet_medium_merge(
       const bool diagnose_major_flag,
       const int64_t compaction_scn,
-      const ObLSID &ls_id,
       ObTablet &tablet);
   int diagnose_tablet_merge(
       const ObMergeType type,
-      const ObLSID ls_id,
       ObTablet &tablet,
       const int64_t merge_version = ObVersionRange::MIN_VERSION);
   int diagnose_row_store_dag(
       const ObMergeType merge_type,
-      const ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const int64_t merge_version = ObVersionRange::MIN_VERSION);
   int diagnose_no_dag(
       const int64_t dag_key,
       const ObMergeType merge_type,
-      const ObLSID ls_id,
       const ObTabletID tablet_id,
       const int64_t compaction_scn);
   int get_suspect_and_warning_info(
       const int64_t dag_key,
       const ObMergeType merge_type,
-      const ObLSID ls_id,
       const ObTabletID tablet_id,
       ObScheduleSuspectInfo &info,
       ObSuspectInfoType &suspect_type,
@@ -510,11 +500,9 @@ private:
   OB_INLINE bool can_add_diagnose_info() { return idx_ < max_cnt_; }
   int get_and_set_suspect_info(
       const ObMergeType merge_type,
-      const ObLSID &ls_id,
       const ObTabletID &tablet_id);
   int get_suspect_info(
       const ObMergeType merge_type,
-      const ObLSID &ls_id,
       const ObTabletID &tablet_id,
       ObScheduleSuspectInfo &ret_info,
       share::ObSuspectInfoType &suspect_info_type,
@@ -569,17 +557,14 @@ private:
   bool is_opened_;
 };
 
-#define UNKNOW_LS_ID ObLSID(INT64_MAX)
-#define IS_UNKNOW_LS_ID(ls_id) (ObLSID(INT64_MAX) == ls_id)
 #define UNKNOW_TABLET_ID ObTabletID(INT64_MAX)
 #define IS_UNKNOW_TABLET_ID(tablet_id) (ObTabletID(INT64_MAX) == tablet_id)
 
-#define DEL_SUSPECT_INFO(type, ls_id, tablet_id, diagnose_type)                \
+#define DEL_SUSPECT_INFO(type, tablet_id, diagnose_type)                       \
   {                                                                            \
     int tmp_ret = OB_SUCCESS;                                                  \
     compaction::ObMergeDagHash dag_hash;                                       \
     dag_hash.merge_type_ = type;                                               \
-    dag_hash.ls_id_ = ls_id;                                                   \
     dag_hash.tablet_id_ = tablet_id;                                           \
     int64_t hash_value = dag_hash.inner_hash();                                \
     if (OB_TMP_FAIL(share::g_mp->schedule_suspect_info_mgr()                \
@@ -589,11 +574,11 @@ private:
                      K(tmp_ret), K(dag_hash));                                 \
       }                                                                        \
     } else if (OB_TMP_FAIL(share::g_mp->diagnose_tablet_mgr()              \
-                               ->delete_diagnose_tablet(ls_id, tablet_id,      \
+                               ->delete_diagnose_tablet(tablet_id,             \
                                                         diagnose_type))) {     \
       if (OB_HASH_NOT_EXIST != tmp_ret) {                                      \
         LOG_WARN_RET(tmp_ret, "failed to delete diagnose tablet", K(tmp_ret),  \
-                  K(ls_id), K(tablet_id));                                     \
+                  K(tablet_id));                                               \
       }                                                                        \
     } else {                                                                   \
       STORAGE_LOG(DEBUG, "success to delete suspect info", K(tmp_ret),         \
@@ -605,7 +590,7 @@ private:
   template <LOG_TYPENAME_TN##n>                                                                  \
   int SET_DIAGNOSE_INFO(ObCompactionDiagnoseInfo *diagnose_info, bool &is_normal,                \
                 compaction::ObMergeType type,             \
-                const ObLSID ls_id, const ObTabletID tablet_id,          \
+                const ObTabletID tablet_id,          \
                 ObCompactionDiagnoseInfo::ObDiagnoseStatus status,                               \
                 const int64_t timestamp,                                                         \
                 LOG_PARAMETER_KV##n)                                                             \
@@ -615,8 +600,6 @@ private:
     is_normal = false;                                                                                              \
     if (OB_NOT_NULL(diagnose_info)) { \
     diagnose_info->merge_type_ = type;                                                            \
-    diagnose_info->ls_id_ = ls_id.id();                                                     \
-                                                         \
     diagnose_info->tablet_id_ = tablet_id.id();                                                \
     diagnose_info->status_ = status;                                                          \
     diagnose_info->timestamp_ = timestamp;                                                          \
@@ -695,17 +678,14 @@ DEFINE_DIAGNOSE_PRINT_KV(5)
     info_param->param_int_[6] = param_int7;
 
 #define ADD_COMMON_SUSPECT_INFO(merge_type, diagnose_type, info_type, ...) \
-ADD_SUSPECT_INFO(merge_type, diagnose_type, UNKNOW_LS_ID, UNKNOW_TABLET_ID, info_type, __VA_ARGS__)
-
-#define ADD_SUSPECT_LS_INFO(merge_type, diagnose_type, ls_id, info_type, ...) \
-ADD_SUSPECT_INFO(merge_type, diagnose_type, ls_id, UNKNOW_TABLET_ID, info_type, __VA_ARGS__)
+ADD_SUSPECT_INFO(merge_type, diagnose_type, UNKNOW_TABLET_ID, info_type, __VA_ARGS__)
 
 #define INFO_PARAM_STR_LENGTH(n) (n * compaction::OB_DIAGNOSE_INFO_PARAM_STR_LENGTH)
 
 #define DEFINE_SUSPECT_INFO_ADD(n_int)                                                           \
   template<typename T = int64_t>                                                                  \
   int ADD_SUSPECT_INFO(compaction::ObMergeType type, share::ObDiagnoseTabletType diagnose_type,      \
-                const ObLSID ls_id, const ObTabletID tablet_id, ObSuspectInfoType info_type,      \
+                const ObTabletID tablet_id, ObSuspectInfoType info_type,                          \
                 INFO_PARAM_INT##n_int)                                                           \
   {                                                                                              \
     int64_t __pos = 0;                                                                           \
@@ -713,7 +693,6 @@ ADD_SUSPECT_INFO(merge_type, diagnose_type, ls_id, UNKNOW_TABLET_ID, info_type, 
     compaction::ObScheduleSuspectInfo info;                                                      \
     info.priority_ = static_cast<uint32_t>(OB_SUSPECT_INFO_TYPES[info_type].priority);           \
     info.merge_type_ = type;                                                                     \
-    info.ls_id_ = ls_id;                                                                          \
     info.tablet_id_ = tablet_id;                                                                  \
     info.add_time_ = ObTimeUtility::fast_current_time();                                          \
     info.hash_ = info.hash();                                                               \
@@ -725,8 +704,8 @@ ADD_SUSPECT_INFO(merge_type, diagnose_type, ls_id, UNKNOW_TABLET_ID, info_type, 
     info.info_param_ = info_param;                                                               \
     if (OB_FAIL(share::g_mp->schedule_suspect_info_mgr()->add_suspect_info(info.hash(), info))) { \
       STORAGE_LOG(WARN, "failed to add suspect info", K(ret), K(info));                          \
-    } else if (OB_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(ls_id, tablet_id, diagnose_type))) {     \
-      STORAGE_LOG(WARN, "failed to add diagnose tablet", K(ret), K(ls_id), K(tablet_id));         \
+    } else if (OB_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(tablet_id, diagnose_type))) {     \
+      STORAGE_LOG(WARN, "failed to add diagnose tablet", K(ret), K(tablet_id));                   \
     } else {                                                                                      \
       STORAGE_LOG(DEBUG, "success to add suspect info", K(ret), K(info), K(info_type),              \
           "info_type_str", OB_SUSPECT_INFO_TYPES[info_type].info_str, K(diagnose_type));                          \
@@ -740,7 +719,7 @@ ADD_SUSPECT_INFO(merge_type, diagnose_type, ls_id, UNKNOW_TABLET_ID, info_type, 
 #define DEFINE_SUSPECT_INFO_ADD_EXTRA(n, n_int)                                                  \
   template <typename T = int64_t, LOG_TYPENAME_TN##n>                                            \
   int ADD_SUSPECT_INFO(compaction::ObMergeType type, share::ObDiagnoseTabletType diagnose_type,     \
-                const ObLSID ls_id, const ObTabletID tablet_id, ObSuspectInfoType info_type,     \
+                const ObTabletID tablet_id, ObSuspectInfoType info_type,                         \
                 INFO_PARAM_INT##n_int, LOG_PARAMETER_KV##n)             \
   {                                                                                              \
     int64_t __pos = 0;                                                                           \
@@ -748,7 +727,6 @@ ADD_SUSPECT_INFO(merge_type, diagnose_type, ls_id, UNKNOW_TABLET_ID, info_type, 
     compaction::ObScheduleSuspectInfo info;                                                      \
     info.priority_ = static_cast<uint32_t>(OB_SUSPECT_INFO_TYPES[info_type].priority);           \
     info.merge_type_ = type;                                                                     \
-    info.ls_id_ = ls_id;                                                                          \
     info.tablet_id_ = tablet_id;                                                                  \
     info.add_time_ = ObTimeUtility::fast_current_time();                                          \
     info.hash_ = info.hash();                                                               \
@@ -765,8 +743,8 @@ ADD_SUSPECT_INFO(merge_type, diagnose_type, ls_id, UNKNOW_TABLET_ID, info_type, 
       STORAGE_LOG(WARN, "fail to fill parameter kv into info param", K(ret));                     \
     } else if (OB_FAIL(share::g_mp->schedule_suspect_info_mgr()->add_suspect_info(info.hash(), info))) { \
       STORAGE_LOG(WARN, "failed to add suspect info", K(ret), K(info));                          \
-    } else if (OB_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(ls_id, tablet_id, diagnose_type))) { \
-      STORAGE_LOG(WARN, "failed to add diagnose tablet", K(ret), K(ls_id), K(tablet_id));         \
+    } else if (OB_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(tablet_id, diagnose_type))) { \
+      STORAGE_LOG(WARN, "failed to add diagnose tablet", K(ret), K(tablet_id));                   \
     } else {                                                                                      \
       STORAGE_LOG(DEBUG, "success to add suspect info", K(ret), K(info), K(info_type),             \
           "info_type_str", OB_SUSPECT_INFO_TYPES[info_type].info_str, K(diagnose_type));                          \

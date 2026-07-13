@@ -638,7 +638,6 @@ int ObTextRetrievalTokenIter::estimate_token_doc_cnt()
   est_param.index_id_ = inv_idx_agg_param_->index_id_;
   est_param.scan_flag_ = inv_idx_agg_param_->scan_flag_;
   est_param.tablet_id_ = inv_idx_agg_param_->tablet_id_;
-  est_param.ls_id_ = inv_idx_agg_param_->ls_id_;
   est_param.tx_id_ = inv_idx_agg_param_->tx_id_;
   est_param.schema_version_ = inv_idx_agg_param_->schema_version_;
   est_param.frozen_version_ = GET_BATCH_ROWS_READ_SNAPSHOT_VERSION;

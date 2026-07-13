@@ -31,7 +31,6 @@ class ObIAllocator;
 namespace share
 {
 class SCN;
-class ObLSID;
 }
 namespace blocksstable
 {
@@ -40,7 +39,7 @@ class ObSSTable;
 }
 namespace storage
 {
-class ObLSHandle;
+class ObLS;
 class ObStorageSchema;
 class ObTabletCreateSSTableParam;
 
@@ -119,7 +118,7 @@ public:
       const ObStorageSchema *&storage_schema);
 
   static int check_need_fill_empty_sstable(
-      ObLSHandle &ls_handle,
+      ObLS *ls,
       const bool is_minor_sstable,
       const ObITable::TableKey &table_key,
       const common::ObTabletID &dst_tablet_id,
@@ -138,5 +137,4 @@ public:
 } // namespace oceanbase
 
 #endif // OCEANBASE_STORAGE_DDL_OB_TABLET_REBUILD_UTIL_H_
-
 

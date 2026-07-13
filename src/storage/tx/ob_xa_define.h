@@ -271,14 +271,14 @@ public:
   void inc_failure_xa_prepare() { ATOMIC_INC(&total_failure_xa_prepare_); }
   void inc_success_xa_1pc_commit() { ATOMIC_INC(&total_success_xa_1pc_commit_); }
   void inc_failure_xa_1pc_commit() { ATOMIC_INC(&total_failure_xa_1pc_commit_); }
-  void inc_success_xa_2pc_commit() { ATOMIC_INC(&total_success_xa_2pc_commit_); }
-  void inc_failure_xa_2pc_commit() { ATOMIC_INC(&total_failure_xa_2pc_commit_); }
+  void inc_success_xa_prepared_commit() { ATOMIC_INC(&total_success_xa_prepared_commit_); }
+  void inc_failure_xa_prepared_commit() { ATOMIC_INC(&total_failure_xa_prepared_commit_); }
   void inc_xa_rollback() { ATOMIC_INC(&total_xa_rollback_); }
   TO_STRING_KV(K_(total_active_xa_ctx_count), K_(total_standby_clearup_count),
                K_(total_success_xa_start), K_(total_failure_xa_start),
                K_(total_success_xa_prepare), K_(total_failure_xa_prepare),
                K_(total_success_xa_1pc_commit), K_(total_failure_xa_1pc_commit),
-               K_(total_success_xa_2pc_commit), K_(total_failure_xa_2pc_commit),
+               K_(total_success_xa_prepared_commit), K_(total_failure_xa_prepared_commit),
                K_(total_xa_rollback));
 
 private:
@@ -293,8 +293,8 @@ private:
   int64_t total_failure_xa_prepare_;
   int64_t total_success_xa_1pc_commit_;
   int64_t total_failure_xa_1pc_commit_;
-  int64_t total_success_xa_2pc_commit_;
-  int64_t total_failure_xa_2pc_commit_;
+  int64_t total_success_xa_prepared_commit_;
+  int64_t total_failure_xa_prepared_commit_;
   int64_t total_xa_rollback_;
 };
 

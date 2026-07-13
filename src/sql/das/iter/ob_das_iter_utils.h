@@ -85,40 +85,33 @@ public:
   static int set_text_retrieval_related_ids(const ObDASBaseCtDef *attach_ctdef,
                                             ObDASBaseRtDef *attach_rtdef,
                                             const ObDASRelatedTabletID &related_tablet_ids,
-                                            const ObLSID &ls_id,
                                             ObDASIter *root_iter);
   static int set_func_lookup_iter_related_ids(const ObDASBaseCtDef *attach_ctdef,
                                               ObDASBaseRtDef *attach_rtdef,
                                               const ObDASRelatedTabletID &related_tablet_ids,
-                                              const ObLSID &ls_id,
                                               ObDASIter *root_iter);
 
   static int set_index_merge_related_ids(const ObDASBaseCtDef *attach_ctdef,
                                          ObDASBaseRtDef *attach_rtdef,
                                          const ObDASRelatedTabletID &related_tablet_ids,
-                                         const ObLSID &ls_id,
                                          ObDASIter *root_iter);
   static int set_hnsw_lookup_related_ids(const ObDASVecAuxScanCtDef *vec_aux_ctdef,
                                         ObDASVecAuxScanRtDef *vec_aux_rtdef,
                                         ObDASHNSWScanIter *hnsw_scan_iter,
                                         const ObDASRelatedTabletID &related_tablet_ids,
-                                        const ObLSID &ls_id,
                                         ObDASIter *root_iter);
   static int set_vec_lookup_related_ids(const ObDASBaseCtDef *attach_ctdef,
                                         ObDASBaseRtDef *attach_rtdef,
                                         const ObDASRelatedTabletID &related_tablet_ids,
-                                        const ObLSID &ls_id,
                                         ObDASIter *root_iter);
   static int set_vec_pre_filter_related_ids(const ObDASVecAuxScanCtDef *vec_aux_ctdef,
                                             ObDASVecAuxScanRtDef *vec_aux_rtdef,
                                             ObDASIter *pre_filter_iter,
-                                            const ObDASRelatedTabletID &related_tablet_ids,
-                                            const ObLSID &ls_id);
+                                            const ObDASRelatedTabletID &related_tablet_ids);
   static int set_vec_pre_local_lookup_related_ids(const ObDASVecAuxScanCtDef *vec_aux_ctdef,
                                                   ObDASVecAuxScanRtDef *vec_aux_rtdef,
                                                   ObDASIter *pre_filter_iter,
-                                                  const ObDASRelatedTabletID &related_tablet_ids,
-                                                  const ObLSID &ls_id);
+                                                  const ObDASRelatedTabletID &related_tablet_ids);
   static bool is_vec_ivf_scan(const ObDASBaseCtDef *attach_ctdef, ObDASBaseRtDef *attach_rtdef);
   static bool is_vec_spiv_scan(const ObDASBaseCtDef *attach_ctdef, ObDASBaseRtDef *attach_rtdef);
   static bool is_vec_hnsw_scan(const ObDASBaseCtDef *attach_ctdef, ObDASBaseRtDef *attach_rtdef);
@@ -248,7 +241,6 @@ private:
                                             ObDASIter *&iter_tree);
 
   static int create_domain_lookup_sub_tree(ObTableScanParam &scan_param,
-                                           const ObLSID &ls_id,
                                            common::ObIAllocator &alloc,
                                            const ObDASTableLookupCtDef *table_lookup_ctdef,
                                            ObDASTableLookupRtDef *table_lookup_rtdef,
@@ -338,8 +330,7 @@ private:
                                          transaction::ObTxDesc *trans_desc,
                                          transaction::ObTxReadSnapshot *snapshot,
                                          ObDASIter *&iter_tree);
-  static int create_text_retrieval_sub_tree(const ObLSID &ls_id,
-                                            common::ObIAllocator &alloc,
+  static int create_text_retrieval_sub_tree(common::ObIAllocator &alloc,
                                             const ObDASIRScanCtDef *ir_scan_ctdef,
                                             ObDASIRScanRtDef *ir_scan_rtdef,
                                             const ObDASFTSTabletID &related_tablet_ids,
@@ -410,7 +401,6 @@ private:
                                          transaction::ObTxReadSnapshot *snapshot,
                                          ObDASIter *&iter);
   static int create_functional_lookup_sub_tree(ObTableScanParam &scan_param,
-                                               const ObLSID &ls_id,
                                                common::ObIAllocator &alloc,
                                                const ObDASFuncLookupCtDef *table_lookup_ctdef,
                                                ObDASFuncLookupRtDef *table_lookup_rtdef,

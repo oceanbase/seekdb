@@ -56,7 +56,7 @@ private:
 public:
   ObAllVirtualTabletPtr();
   virtual ~ObAllVirtualTabletPtr();
-  int init(common::ObIAllocator *allocator, common::ObAddr &addr);
+  int init(common::ObIAllocator *allocator);
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 private:
@@ -69,8 +69,6 @@ private:
   static const int64_t STR_LEN = 128;
   static const int64_t ADDR_STR_LEN = 256;
 private:
-  common::ObAddr addr_;
-  char ip_buf_[common::OB_IP_STR_BUFF];
   char address_[ADDR_STR_LEN];
   char pointer_[STR_LEN];
   char old_chain_[STR_LEN];

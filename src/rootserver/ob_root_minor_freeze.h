@@ -18,20 +18,10 @@
 #define OCEANBASE_ROOTSERVER_OB_ROOT_MINOR_FREEZE_H_
 
 #include "share/ob_define.h"
-#include "lib/net/ob_addr.h"
 #include "share/ob_rpc_struct.h"
 
 namespace oceanbase
 {
-namespace common
-{
-  template <typename T> class ObIArray;
-}
-
-namespace obcall
-{
-}//end namespace obcall
-
 namespace rootserver
 {
 
@@ -47,53 +37,7 @@ public:
   int destroy();
   int try_minor_freeze(const obcall::ObRootMinorFreezeArg &arg) const;
 private:
-  typedef struct MinorFreezeParam
-  {
-    common::ObAddr server;
-    obcall::ObMinorFreezeArg arg;
-
-    TO_STRING_KV(K(server), K(arg));
-  } MinorFreezeParam;
-
-  class ParamsContainer
-  {
-  public:
-    void reset() { params_.reset(); }
-    bool is_empty() const { return params_.count() <= 0; }
-    const common::ObIArray<MinorFreezeParam> &get_params() const { return params_; }
-
-    int push_back_param(const common::ObAddr &server,
-                        share::ObLSID ls_id = share::INVALID_LS,
-                        const common::ObTabletID &tablet_id = ObTabletID(ObTabletID::INVALID_TABLET_ID));
-
-    TO_STRING_KV(K_(params));
-  private:
-    common::ObSEArray<MinorFreezeParam, 32> params_;
-  };
-
-  static const int64_t MAX_FREEZE_OP_RETRY_CNT = 5;
-  static const int64_t MINOR_FREEZE_TIMEOUT = (1000 * 30 + 1000) * 1000; // copy from major freeze
-
-  int is_server_belongs_to_zone(const common::ObAddr &addr,
-                                const common::ObZone &zone,
-                                bool &server_in_zone) const;
-
-  int init_params_by_ls_or_tablet(share::ObLSID ls_id,
-                                  const common::ObTabletID &tablet_id,
-                                  ParamsContainer &params) const;
-  int init_params_by_tenant(ParamsContainer &params) const;
-
-  int init_params_by_zone(const common::ObZone &zone,
-                          ParamsContainer &params) const;
-
-  int init_params_by_server(const common::ObIArray<common::ObAddr> &server_list,
-                            ParamsContainer &params) const;
-
-  int do_minor_freeze(const ParamsContainer &params) const;
-
   int check_cancel() const;
-  bool is_server_alive(const common::ObAddr &server) const;
-
 
   bool inited_;
   bool stopped_;

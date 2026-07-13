@@ -26,10 +26,8 @@ namespace observer
 ObAllVirtualDynamicPartitionTable::ObAllVirtualDynamicPartitionTable()
   : is_inited_(false),
     schema_service_(NULL),
-    batch_ids_(),
-    cur_tenant_table_ids_(),
-    t_loop_idx_(-1),
-    table_idx_(-1)
+    table_ids_(),
+    table_idx_(0)
 {}
 
 ObAllVirtualDynamicPartitionTable::~ObAllVirtualDynamicPartitionTable()
@@ -49,10 +47,8 @@ int ObAllVirtualDynamicPartitionTable::init(share::schema::ObMultiVersionSchemaS
   } else {
     is_inited_ = true;
     schema_service_ = schema_service;
-    batch_ids_.reset();
-    cur_tenant_table_ids_.reset();
-    
-    table_idx_ = -1;
+    table_ids_.reset();
+    table_idx_ = 0;
   }
   return ret;
 }
@@ -61,10 +57,8 @@ void ObAllVirtualDynamicPartitionTable::destroy()
 {
   is_inited_ = false;
   schema_service_ = NULL;
-  batch_ids_.reset();
-  cur_tenant_table_ids_.reset();
-  
-  table_idx_ = -1;
+  table_ids_.reset();
+  table_idx_ = 0;
 }
 
 int ObAllVirtualDynamicPartitionTable::inner_get_next_row(common::ObNewRow *&row)
@@ -73,59 +67,35 @@ int ObAllVirtualDynamicPartitionTable::inner_get_next_row(common::ObNewRow *&row
   if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "schema service is null", KR(ret));
-  } else if (t_loop_idx_ >= batch_ids_.count() || batch_ids_.empty()) {
-    ret = OB_ITER_END;
   } else {
     bool found_next_table = false;
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *table_schema = NULL;
     int64_t tenant_schema_version = OB_INVALID_VERSION;
-    do {
-      bool found_next_tenant = false;
-      do {
-        if (table_idx_ + 1 >= cur_tenant_table_ids_.count()) {
-          if (OB_FAIL(next_tenant_())) {
-            if (OB_ITER_END != ret) {
-              SERVER_LOG(WARN, "switch to next tenant failed", KR(ret));
-            }
-          }
-        } else {
-          found_next_tenant = true;
-        }
-      } while (OB_SUCC(ret) && !found_next_tenant);
-
-      if (OB_SUCC(ret)) {
-        do {
-          table_idx_ += 1;
-          
-          const uint64_t table_id = cur_tenant_table_ids_.at(table_idx_);
-
-          if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
-            SERVER_LOG(WARN, "fail to get tenant schema guard", KR(ret));
-          } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-            SERVER_LOG(WARN, "fail to get table schema", KR(ret), K(table_id));
-          } else if (OB_ISNULL(table_schema) || !table_schema->with_dynamic_partition_policy()) {
-            // table may be dropped or altered, skip
-            SERVER_LOG(INFO, "table is altered, skip", KR(ret), K(table_id));
-          } else {
-            found_next_table = true;
-            if (OB_FAIL(schema_guard.get_schema_version(tenant_schema_version))) {
-              SERVER_LOG(WARN, "fail to get schema version", KR(ret));
-            }
-          }
-        } while (OB_SUCC(ret) && table_idx_ + 1 < cur_tenant_table_ids_.count() && !found_next_table);
+    if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
+      SERVER_LOG(WARN, "fail to get tenant schema guard", KR(ret));
+    }
+    while (OB_SUCC(ret) && !found_next_table && table_idx_ < table_ids_.count()) {
+      const uint64_t table_id = table_ids_.at(table_idx_++);
+      table_schema = NULL;
+      if (OB_FAIL(schema_guard.get_table_schema(table_id, table_schema))) {
+        SERVER_LOG(WARN, "fail to get table schema", KR(ret), K(table_id));
+      } else if (OB_ISNULL(table_schema) || !table_schema->with_dynamic_partition_policy()) {
+        // The table may have been dropped or altered after inner_open().
+        SERVER_LOG(INFO, "table is altered, skip", K(table_id));
+      } else if (OB_FAIL(schema_guard.get_schema_version(tenant_schema_version))) {
+        SERVER_LOG(WARN, "fail to get schema version", KR(ret));
+      } else {
+        found_next_table = true;
       }
-    } while (OB_SUCC(ret) && !found_next_table);
+    }
 
     if (OB_SUCC(ret) && found_next_table) {
-      if (OB_ISNULL(table_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "table schema is null", KR(ret));
-      } else if (OB_UNLIKELY(!table_schema->with_dynamic_partition_policy())) {
-        SERVER_LOG(WARN, "table schema has no dynamic_partition_policy", KR(ret));
-      } else if (OB_FAIL(build_new_row_(tenant_schema_version, *table_schema, row))) {
+      if (OB_FAIL(build_new_row_(tenant_schema_version, *table_schema, row))) {
         SERVER_LOG(WARN, "fail to build new row", KR(ret), K(table_schema));
       }
+    } else if (OB_SUCC(ret)) {
+      ret = OB_ITER_END;
     }
   }
   return ret;
@@ -134,37 +104,12 @@ int ObAllVirtualDynamicPartitionTable::inner_get_next_row(common::ObNewRow *&row
 int ObAllVirtualDynamicPartitionTable::inner_open()
 {
   int ret = OB_SUCCESS;
-  // single-tenant: no per-tenant batch list to build; batch_ids_ stays empty.
   if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "schema service is null", KR(ret));
-  }
-
-  if (FAILEDx(next_tenant_())) {
-    if (OB_ITER_END != ret) {
-      SERVER_LOG(WARN, "switch to next tenant failed", KR(ret));
-    } else {
-      ret = OB_SUCCESS;
-    }
-  }
-
-  return ret;
-}
-
-int ObAllVirtualDynamicPartitionTable::next_tenant_()
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "schema service is null", KR(ret));
-  } else if (t_loop_idx_ + 1 >= batch_ids_.count()) {
-    ret = OB_ITER_END;
   } else {
-    
-    table_idx_ = -1;
-    cur_tenant_table_ids_.reset();
-
-    
+    table_idx_ = 0;
+    table_ids_.reset();
     ObSchemaGetterGuard schema_guard;
     ObArray<const ObSimpleTableSchemaV2 *> table_schemas;
     if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
@@ -182,11 +127,11 @@ int ObAllVirtualDynamicPartitionTable::next_tenant_()
             || table_schema->is_in_recyclebin()
             || !table_schema->is_normal_schema()) {
           // skip
-        } else if (OB_FAIL(schema_guard.get_database_schema( table_schema->get_database_id(), database_schema))) {
+        } else if (OB_FAIL(schema_guard.get_database_schema(table_schema->get_database_id(), database_schema))) {
           SERVER_LOG(WARN, "fail to get database schema", KR(ret), K(table_schema->get_database_id()));
         } else if (OB_ISNULL(database_schema) || database_schema->is_in_recyclebin()) {
           // skip
-        } else if (OB_FAIL(cur_tenant_table_ids_.push_back(table_schema->get_table_id()))) {
+        } else if (OB_FAIL(table_ids_.push_back(table_schema->get_table_id()))) {
           SERVER_LOG(WARN, "fail to push back table_id", KR(ret), K(table_schema->get_table_id()));
         }
       }
@@ -206,11 +151,7 @@ int ObAllVirtualDynamicPartitionTable::build_new_row_(
   if (OB_ISNULL(cells) || OB_ISNULL(allocator_) || OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "cells or allocator or schema service is null", KR(ret));
-  } else if (t_loop_idx_ >= batch_ids_.count()) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "tenant idx out of bound", KR(ret));
   } else {
-    
     const int64_t col_count = output_column_ids_.count();
     for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < col_count; cell_idx++) {
       uint64_t col_id = output_column_ids_.at(cell_idx);

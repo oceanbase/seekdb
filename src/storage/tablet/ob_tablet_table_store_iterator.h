@@ -94,8 +94,7 @@ public:
     return (NULL == memstore_retired_) ? false : ATOMIC_LOAD(memstore_retired_);
   }
   TO_STRING_KV(K_(table_ptr_array), K_(sstable_handle_array), K_(pos), K_(step), K_(memstore_retired),
-      K_(need_load_sstable), K_(table_store_handle), K_(split_extra_table_store_handles),
-      KP_(fork_infos));
+      K_(need_load_sstable), K_(table_store_handle), K_(split_extra_table_store_handles), KP_(fork_infos));
 private:
   int inner_move_idx_to_next();
   int get_table_ptr_with_meta_handle(

@@ -272,7 +272,7 @@ public:
     return ret;
   }
 private:
-  int serialize_next_tx_ctx_(ObTxLocalBuffer &buffer, int64_t &serialize_size, transaction::ObPartTransCtx *&tx_ctx);
+  int serialize_next_tx_ctx_(ObTxLocalBuffer &buffer, int64_t &serialize_size, transaction::ObTxCtx *&tx_ctx);
 
 private:
   const static int64_t TX_CTX_META_BUF_LENGTH = 256;

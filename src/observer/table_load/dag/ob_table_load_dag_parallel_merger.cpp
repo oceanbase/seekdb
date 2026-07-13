@@ -52,7 +52,7 @@ int ObTableLoadDagParallelMerger::init_merge_ctx()
   param.trans_param_ = op_ctx_->insert_table_ctx_->get_param().trans_param_;
   param.file_mgr_ = store_ctx_->tmp_file_mgr_;
   param.ctx_ = store_ctx_->ctx_;
-  if (OB_FAIL(merge_ctx_.init(param, store_table_ctx->ls_partition_ids_))) {
+  if (OB_FAIL(merge_ctx_.init(param, store_table_ctx->partition_ids_))) {
     LOG_WARN("fail to init merge ctx", KR(ret), K(param));
   }
   return ret;

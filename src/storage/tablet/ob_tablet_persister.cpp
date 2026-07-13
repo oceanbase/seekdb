@@ -60,7 +60,6 @@ ObTabletTransformArg::ObTabletTransformArg()
     table_store_addr_(),
     storage_schema_addr_(),
     tablet_macro_info_addr_(),
-    is_tablet_referenced_by_collect_mv_(false),
     ddl_kvs_(nullptr),
     ddl_kv_count_(0),
     memtable_count_(0)
@@ -81,7 +80,6 @@ void ObTabletTransformArg::reset()
   table_store_addr_.reset();
   storage_schema_addr_.reset();
   tablet_macro_info_addr_.reset();
-  is_tablet_referenced_by_collect_mv_ = false;
   ddl_kvs_ = nullptr;
   ddl_kv_count_ = 0;
   for (int64_t i = 0; i < MAX_MEMSTORE_CNT; ++i) {
@@ -137,7 +135,7 @@ bool ObTabletPersisterParam::is_valid() const
   } else if (is_shared_object()) { // shared
     valid = 0 == ls_epoch_ && start_macro_seq_ >= 0;
   } else { // private
-    valid = ls_id_.is_valid() && ls_epoch_ >= 0 && 0 == start_macro_seq_;
+    valid = ls_epoch_ >= 0 && 0 == start_macro_seq_;
   }
   return valid;
 }
@@ -406,7 +404,7 @@ int ObTabletPersister::modify_and_fill_tablet(
 {
   int ret = OB_SUCCESS;
   const ObTabletMeta &tablet_meta = old_tablet.get_tablet_meta();
-  const ObTabletMapKey key(tablet_meta.ls_id_, tablet_meta.tablet_id_);
+  const ObTabletMapKey key(tablet_meta.tablet_id_);
   const char* buf = reinterpret_cast<const char *>(&old_tablet);
   const bool try_smaller_pool = old_tablet.get_try_cache_size() > ObTenantMetaMemMgr::NORMAL_TABLET_POOL_SIZE
                                 ? false : true;
@@ -451,7 +449,7 @@ int ObTabletPersister::modify_and_fill_tablet(
     LOG_WARN("old tablet doesn't hold ref cnt", K(ret), K(old_tablet));
   } else {
     const ObTabletMeta &tablet_meta = old_tablet.get_tablet_meta();
-    const ObTabletMapKey key(tablet_meta.ls_id_, tablet_meta.tablet_id_);
+    const ObTabletMapKey key(tablet_meta.tablet_id_);
     const char* buf = reinterpret_cast<const char *>(&old_tablet);
     const bool try_smaller_pool = old_tablet.get_try_cache_size() > ObTenantMetaMemMgr::NORMAL_TABLET_POOL_SIZE
                                   ? false : true;
@@ -503,7 +501,6 @@ int ObTabletPersister::convert_tablet_to_mem_arg(
     arg.rowkey_read_info_ptr_ = tablet.rowkey_read_info_;
     arg.table_store_addr_ = tablet.table_store_addr_.addr_;
     arg.storage_schema_addr_ = tablet.storage_schema_addr_.addr_;
-    arg.is_tablet_referenced_by_collect_mv_ = tablet.is_tablet_referenced_by_collect_mv();
     arg.ddl_kvs_ = tablet.ddl_kvs_;
     arg.ddl_kv_count_ = tablet.ddl_kv_count_;
     MEMCPY(arg.memtables_, tablet.memtables_, sizeof(ObIMemtable*) * MAX_MEMSTORE_CNT);
@@ -562,7 +559,6 @@ int ObTabletPersister::convert_tablet_to_disk_arg(
     if (try_cache_size > ObTenantMetaMemMgr::NORMAL_TABLET_POOL_SIZE) {
       type = ObTabletPoolType::TP_LARGE;
     }
-    arg.is_tablet_referenced_by_collect_mv_ = tablet.is_tablet_referenced_by_collect_mv();
   }
 
   return ret;
@@ -583,7 +579,7 @@ int ObTabletPersister::persist_and_fill_tablet(
   ObMultiTimeStats::TimeStats *time_stats = nullptr;
 
   const ObTabletMeta &tablet_meta = old_tablet.get_tablet_meta();
-  const ObTabletMapKey key(tablet_meta.ls_id_, tablet_meta.tablet_id_);
+  const ObTabletMapKey key(tablet_meta.tablet_id_);
   ObTabletPoolType type = ObTabletPoolType::TP_NORMAL;
   bool try_smaller_pool = true;
 
@@ -1030,8 +1026,7 @@ int ObTabletPersister::transform(const ObTabletTransformArg &arg, char *buf, con
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(tiny_tablet->table_store_cache_.init(table_store->get_major_sstables(),
-                                                       table_store->get_minor_sstables(),
-                                                       arg.is_tablet_referenced_by_collect_mv_))) {
+                                                       table_store->get_minor_sstables()))) {
         LOG_WARN("failed to init table store cache", K(ret), KPC(table_store), K(arg));
       } else {
         time_stats->click("init_table_store_cache");

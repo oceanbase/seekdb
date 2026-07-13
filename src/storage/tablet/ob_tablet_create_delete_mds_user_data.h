@@ -20,7 +20,6 @@
 #include <stdint.h>
 #include "lib/utility/ob_print_utils.h"
 #include "share/scn.h"
-#include "share/ob_ls_id.h"
 #include "storage/tablet/ob_tablet_status.h"
 #include "storage/tablet/ob_tablet_common.h"
 
@@ -36,11 +35,11 @@ enum class ObTabletMdsUserDataType : int64_t
   CREATE_TABLET = 1,
   //for drop tablet
   REMOVE_TABLET = 2,
-  RESERVED_3 = 3,
-  RESERVED_4 = 4,
-  RESERVED_5 = 5,
-  RESERVED_6 = 6,
-  RESERVED_7 = 7,
+  RESERVED_MDS_TYPE_3 = 3,
+  RESERVED_MDS_TYPE_4 = 4,
+  RESERVED_MDS_TYPE_5 = 5,
+  RESERVED_MDS_TYPE_6 = 6,
+  RESERVED_MDS_TYPE_7 = 7,
   // for start split src
   START_SPLIT_SRC = 8,
   // for start split dst
@@ -55,7 +54,7 @@ enum class ObTabletMdsUserDataType : int64_t
 
 class ObTabletCreateDeleteMdsUserData
 {
-  OB_UNIS_VERSION(1);
+  OB_UNIS_VERSION(2);
 public:
   ObTabletCreateDeleteMdsUserData();
   ~ObTabletCreateDeleteMdsUserData() = default;
@@ -72,20 +71,17 @@ public:
   void on_redo(const share::SCN &redo_scn);
   void on_commit(const share::SCN &commit_version, const share::SCN &commit_scn);
   // todo(zk250686): tablet shell
-  static int set_tablet_gc_trigger(const share::ObLSID &ls_id);
-  static int set_tablet_empty_shell_trigger(const share::ObLSID &ls_id);
+  static int set_tablet_gc_trigger();
+  static int set_tablet_empty_shell_trigger();
 
   TO_STRING_KV(K_(tablet_status), K_(reserved_scn),
-      K_(reserved_ls_id), K_(data_type),
+      K_(data_type),
       K_(create_commit_scn), K_(create_commit_version),
       K_(delete_commit_scn), K_(delete_commit_version),
       K_(reserved_commit_version), K_(start_split_commit_version));
 private:
-  void reserved_scn_on_redo_(const share::SCN &redo_scn);
   void create_tablet_on_commit_(const share::SCN &commit_version, const share::SCN &commit_scn);
   void delete_tablet_on_commit_(const share::SCN &commit_version, const share::SCN &commit_scn);
-  void reserved_start_on_commit_(const share::SCN &commit_version);
-  void reserved_finish_on_commit_(const share::SCN &commit_version, const share::SCN &commit_scn);
 
   void start_split_src_on_commit_(const share::SCN &commit_version);
   void start_split_dst_on_commit_(const share::SCN &commit_version);
@@ -93,7 +89,6 @@ private:
 public:
   ObTabletStatus tablet_status_;
   share::SCN reserved_scn_;
-  share::ObLSID reserved_ls_id_;
   ObTabletMdsUserDataType data_type_;
 
   // create_commit_scn_ remain unchanged throughout the entire tablet lifecycle

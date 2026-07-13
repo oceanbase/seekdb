@@ -22,7 +22,6 @@
 #include "fixed_sliding_window.h"
 #include "log_define.h"                         // block_id_t
 #include "lsn.h"
-#include "log_req.h"                            // PushLogType
 
 namespace oceanbase
 {
@@ -39,23 +38,20 @@ struct LogTaskHeaderInfo
   share::SCN min_scn_;
   share::SCN max_scn_;
   int64_t data_len_;             // total len without log_group_entry_header
-  int64_t proposal_id_;  // leader's proposal_id when generate this log
   LSN prev_lsn_;
-  int64_t prev_proposal_id_;  // Out-of-order log reception requires validation of this value
-  LSN committed_end_lsn_;     // When logs are received out of order, this value is needed to fill in the preceding gaps
-  int64_t data_checksum_;        // follower receives log for verification, local accum_checksum calculation also uses this value
-  int64_t accum_checksum_;       // follower receives logs out of order and performs checksum validation after filling in preceding gaps with local values
+  LSN committed_end_lsn_;
+  int64_t data_checksum_;
+  int64_t accum_checksum_;
   bool is_padding_log_;
-  bool is_raw_write_;
 
   LogTaskHeaderInfo() { reset(); }
   ~LogTaskHeaderInfo() { reset(); }
   LogTaskHeaderInfo& operator=(const LogTaskHeaderInfo &rval);
   void reset();
   bool is_valid() const;
-  TO_STRING_KV(K_(begin_lsn), K_(end_lsn), K_(log_id), K_(min_scn), K_(max_scn), K_(data_len), K_(proposal_id),
-      K_(prev_lsn), K_(prev_proposal_id), K_(committed_end_lsn),
-      K_(data_checksum), K_(accum_checksum), K_(is_padding_log), K_(is_raw_write));
+  TO_STRING_KV(K_(begin_lsn), K_(end_lsn), K_(log_id), K_(min_scn), K_(max_scn), K_(data_len),
+      K_(prev_lsn), K_(committed_end_lsn),
+      K_(data_checksum), K_(accum_checksum), K_(is_padding_log));
 };
 
 class LogSimpleBitMap
@@ -130,29 +126,22 @@ public:
   void set_group_log_checksum(const int64_t data_checksum);
   void set_prev_lsn(const LSN &prev_lsn);
   LSN get_prev_lsn() const { return header_.prev_lsn_; }
-  void set_prev_log_proposal_id(const int64_t &prev_log_proposal_id);
-  int64_t get_prev_proposal_id() const { return header_.prev_proposal_id_; }
   LogTaskHeaderInfo get_header_info() const { return header_; }
   bool is_padding_log() const { return header_.is_padding_log_; }
-  bool is_raw_write() const { return header_.is_raw_write_; }
   int64_t get_data_len() const { return ATOMIC_LOAD(&(header_.data_len_)); }
   int64_t get_log_id() const { return header_.log_id_; }
   const share::SCN get_min_scn() const {return header_.min_scn_; }
   const share::SCN get_max_scn() const { return header_.max_scn_; }
-  int64_t get_proposal_id() const { return header_.proposal_id_; }
   LSN get_begin_lsn() const { return header_.begin_lsn_; }
   LSN get_end_lsn() const { return header_.end_lsn_; }
   int64_t get_accum_checksum() const { return header_.accum_checksum_; }
   void set_freeze_ts(const int64_t ts);
   void set_submit_ts(const int64_t ts);
   void set_flushed_ts(const int64_t ts);
-  void set_push_log_type(const PushLogType &push_log_type);
   int64_t get_gen_ts() const { return ATOMIC_LOAD(&(gen_ts_)); }
   int64_t get_freeze_ts() const { return ATOMIC_LOAD(&(freeze_ts_)); }
   int64_t get_submit_ts() const { return ATOMIC_LOAD(&(submit_ts_)); }
   int64_t get_flushed_ts() const { return ATOMIC_LOAD(&(flushed_ts_)); }
-  PushLogType get_push_log_type() const { return ATOMIC_LOAD(&push_log_type_);}
-  bool is_fetch_log_type() const;
   TO_STRING_KV(K_(header), K_(state_map), K_(ref_cnt), 
       K_(gen_ts), K_(freeze_ts), K_(submit_ts), K_(flushed_ts),
       "gen_to_freeze cost time", freeze_ts_ - gen_ts_, 
@@ -170,7 +159,6 @@ private:
   mutable int64_t freeze_ts_;
   mutable int64_t submit_ts_;
   mutable int64_t flushed_ts_;
-  mutable PushLogType push_log_type_;
   mutable common::ObLatch lock_;
 };
 } // end namespace palf

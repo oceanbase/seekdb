@@ -178,14 +178,6 @@ TEST_F(TestObVtableEventRecycleBuffer, basic_test) {
   ASSERT_EQ(OB_SUCCESS, vtable_event_buffer.buffer_bkt_[0].cache_.for_each({0}, for_each_dummy_op));
 }
 
-// TEST_F(TestObVtableEventRecycleBuffer, test_global_event_buffer) {
-//   ASSERT_EQ(OB_SUCCESS, observer::ObMdsEventBuffer::init());
-//   observer::MdsEvent e;
-//   ASSERT_EQ(OB_SUCCESS, e.set_event(DefaultAllocator::get_instance(), "TEST EVENT", ObString("test info str")));
-//   observer::ObMdsEventBuffer::append({1, share::ObLSID(1), ObTabletID(1)}, e);
-//   observer::ObMdsEventBuffer::destroy();
-// }
-
 }
 }
 

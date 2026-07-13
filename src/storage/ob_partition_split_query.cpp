@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_partition_split_query.h"
-#include "src/storage/ls/ob_ls.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -28,12 +27,10 @@ using namespace oceanbase::storage;
 
 int ObPartitionSplitQuery::get_tablet_handle(
     const ObTabletID &tablet_id,
-    const ObLSID &ls_id,
     storage::ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
-  const ObTabletMapKey key(ls_id, tablet_id);
+  const ObTabletMapKey key(tablet_id);
   const int64_t snapshot_version = INT64_MAX; // MAX_TRANS_VERSION
   if (OB_FAIL(ObTabletCreateDeleteHelper::check_and_get_tablet(key, tablet_handle,
       ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US,
@@ -278,7 +275,7 @@ int ObPartitionSplitQuery::get_tablet_split_info(
   } else if (!split_info_.is_split_dst_with_partkey() && !split_info_.is_split_dst_without_partkey()) {
     ret = OB_SCHEMA_EAGAIN;
     LOG_WARN("maybe split dst finished, retry", K(ret), K(tablet.get_tablet_meta().tablet_id_),
-        K(tablet.get_tablet_meta().ls_id_));
+        K(split_info_));
   }
   return ret;
 }
@@ -386,18 +383,17 @@ int ObPartitionSplitQuery::fill_auto_split_params(
 {
   int ret = OB_SUCCESS;
   const ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
-  const share::ObLSID &ls_id = tablet.get_tablet_meta().ls_id_;
   ObTabletSplitTscInfo split_info;
 
 #ifdef ERRSIM
   DEBUG_SYNC(BEFORE_FILL_AUTO_SPLIT_PARAMS);
 #endif
 
-  if (!tablet_id.is_valid() || !ls_id.is_valid() 
-      || OB_ISNULL(op) || OB_INVALID_ID == filter_type || OB_ISNULL(filter_params)) {
+  if (!tablet_id.is_valid() || OB_ISNULL(op)
+      || OB_INVALID_ID == filter_type || OB_ISNULL(filter_params)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", 
-      K(ret), K(tablet_id), K(ls_id), KP(op), K(filter_type), KP(filter_params));
+      K(ret), K(tablet_id), KP(op), K(filter_type), KP(filter_params));
   } else if (OB_FAIL(filter_params->count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("auto split filter params is zero", K(ret));
@@ -419,7 +415,7 @@ int ObPartitionSplitQuery::fill_auto_split_params(
     } else if (!split_info.is_split_dst_without_partkey() && is_split_dst) {
       // newly fetched get_split_info's split mds says not split dst, but caller say is_split_dst
       ret = OB_SCHEMA_EAGAIN;
-      LOG_WARN("maybe split dst finished, retry", K(ret), K(tablet_id), K(ls_id));
+      LOG_WARN("maybe split dst finished, retry", K(ret), K(tablet_id));
     } else {
       // only need to fill bypass expr.
       if (OB_ISNULL(expr = filter_params->at(0))) {
@@ -539,4 +535,3 @@ int ObPartitionSplitQuery::fill_range_filter_param(
   LOG_DEBUG("fill range filter param", K(ret), K(lower_bound), K(upper_bound));
   return ret;
 }
-

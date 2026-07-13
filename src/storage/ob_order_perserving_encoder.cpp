@@ -402,7 +402,11 @@ int ObOrderPerservingEncoder::encode_from_string_varlen(
       && ((param.is_memcmp_ && specific::avx2::check_terminator_simd((unsigned char *)str.ptr(), str.length(), 0x00))
       || (!param.is_memcmp_ && specific::avx2::check_terminator_simd((unsigned char *)str.ptr(), str.length(), 0x20)))) {
       MEMCPY(to, str.ptr(), str.length());
-      str_toupper((char *)to, str.length());
+      for (int64_t i = 0; i < str.length(); ++i) {
+        if (to[i] >= 'a' && to[i] <= 'z') {
+          to[i] -= 'a' - 'A';
+        }
+      }
       to += str.length();
       if (param.is_memcmp_) {
         *(to) = 0x00;

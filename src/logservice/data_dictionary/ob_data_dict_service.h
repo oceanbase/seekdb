@@ -43,7 +43,7 @@ namespace datadict
 class ObDataDictService
   : public common::ObTimerTask,
     public logservice::ObIReplaySubHandler,
-    public logservice::ObIRoleChangeSubHandler,
+    public logservice::ObILocalLogHandler,
     public logservice::ObICheckpointSubHandler
 {
 public:
@@ -68,10 +68,8 @@ public:
       const palf::LSN &lsn,
       const share::SCN &scn) override final { return OB_SUCCESS; } // for ReplaySubHandler
   virtual int flush(share::SCN &rec_scn) override final { return OB_SUCCESS; } // for CheckpointSubHandler
-  virtual void switch_to_follower_forcedly() override final; // for RoleChangeSubHandler
-  virtual int switch_to_leader() override final;
-  virtual int switch_to_follower_gracefully() override final;
-  virtual int resume_leader() override final;
+  void deactivate() override final;
+  int activate() override final;
   virtual share::SCN get_rec_scn() override final { return share::SCN::max_scn(); }
 public:
   OB_INLINE int64_t get_last_dump_succ_time() const { return last_dump_succ_time_; }
@@ -80,7 +78,7 @@ public:
   { ATOMIC_SET(&force_need_dump_, need_dump); }
 private:
   void refresh_config_();
-  void switch_role_to_(bool is_leader);
+  void set_active_(bool is_active);
   int do_dump_data_dict_();
   int check_cluster_status_normal_(bool &is_normal);
   int get_snapshot_scn_(share::SCN &snapshot_scn);
@@ -115,7 +113,7 @@ private:
   static const int64_t DEFAULT_REPORT_TIMEOUT;
 private:
   bool is_inited_;
-  bool is_leader_;
+  bool is_active_;
   volatile bool stop_flag_;
   ObArenaAllocator allocator_;
   ObDataDictSqlClient sql_client_;

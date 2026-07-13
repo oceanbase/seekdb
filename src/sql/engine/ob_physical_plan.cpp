@@ -118,7 +118,6 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     is_batch_params_execute_(false),
     all_local_session_vars_(&allocator_),
     udf_has_dml_stmt_(false),
-    mview_ids_(&allocator_),
     enable_inc_direct_load_(false),
     enable_replace_(false),
     insert_overwrite_(false),
@@ -128,7 +127,7 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     data_complement_gen_doc_id_(false),
     dml_table_ids_(&allocator_),
     direct_load_need_sort_(false),
-    insertup_can_do_gts_opt_(false),
+    insertup_can_use_snapshot_opt_(false),
     px_node_policy_(ObPxNodePolicy::INVALID),
     px_node_addrs_(&allocator_),
     px_node_count_(ObPxNodeHint::UNSET_PX_NODE_COUNT),
@@ -222,7 +221,6 @@ void ObPhysicalPlan::reset()
   udf_has_dml_stmt_ = false;
   is_inner_sql_ = false;
   is_batch_params_execute_ = false;
-  mview_ids_.reset();
   enable_inc_direct_load_ = false;
   enable_replace_ = false;
   insert_overwrite_ = false;
@@ -232,7 +230,7 @@ void ObPhysicalPlan::reset()
   data_complement_gen_doc_id_ = false;
   dml_table_ids_.reset();
   direct_load_need_sort_ = false;
-  insertup_can_do_gts_opt_ = false;
+  insertup_can_use_snapshot_opt_ = false;
   px_node_policy_ = ObPxNodePolicy::INVALID;
   px_node_count_ = ObPxNodeHint::UNSET_PX_NODE_COUNT;
   px_node_addrs_.reset();
@@ -801,7 +799,6 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     disable_auto_memory_mgr_,
                     udf_has_dml_stmt_,
                     stat_.format_sql_id_,
-                    mview_ids_,
                     enable_inc_direct_load_,
                     enable_replace_,
                     insert_overwrite_,

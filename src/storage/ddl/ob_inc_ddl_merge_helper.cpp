@@ -51,7 +51,6 @@ int ObIncMinDDLMergeHelper::process_prepare_task(ObIDag *dag,
   int ret = OB_SUCCESS;
   
   slice_ranges.reset();
-  ObLSID ls_id;
   ObTabletID tablet_id;
   ObWriteTabletParam           *tablet_param = nullptr;
   ObDDLTabletContext::MergeCtx *merge_ctx    = nullptr;
@@ -67,15 +66,15 @@ int ObIncMinDDLMergeHelper::process_prepare_task(ObIDag *dag,
   if (!dag_merge_param.is_valid() || nullptr == dag) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(dag_merge_param), KPC(dag));
-  } else if (OB_FAIL(dag_merge_param.get_tablet_param(ls_id, tablet_id, tablet_param))) {
+  } else if (OB_FAIL(dag_merge_param.get_tablet_param(tablet_id, tablet_param))) {
     LOG_WARN("failed to get tablet param", K(ret), K(dag_merge_param));
   } else if (OB_FAIL(dag_merge_param.get_merge_ctx(merge_ctx))) {
     LOG_WARN("failed to get merge ctx", K(ret), K(dag_merge_param));
   } else if (nullptr == tablet_param || nullptr == merge_ctx) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet param & merge ctx should not be null", K(ret));
-  } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(ls_id, tablet_id, tablet_handle))) {
-    LOG_WARN("failed to get tablet handle", K(ret), K(ls_id), K(tablet_id));
+  } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(tablet_id, tablet_handle))) {
+    LOG_WARN("failed to get tablet handle", K(ret), K(tablet_id));
   } else if (!tablet_handle.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tablet handle should not be invalid", K(ret));
@@ -146,7 +145,6 @@ int ObIncMinDDLMergeHelper::merge_slice(ObIDag *dag,
 {
   int ret = OB_SUCCESS;
   
-  ObLSID ls_id;
   ObTabletID tablet_id;
   ObTabletHandle tablet_handle;
   ObWriteTabletParam *tablet_param = nullptr;
@@ -168,14 +166,14 @@ int ObIncMinDDLMergeHelper::merge_slice(ObIDag *dag,
   if (nullptr == dag || !dag_merge_param.is_valid() || start_slice_idx < 0 || start_slice_idx > end_slice_idx) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(dag), K(dag_merge_param), K(start_slice_idx), K(end_slice_idx));
-  } else if (OB_FAIL(dag_merge_param.get_tablet_param(ls_id, tablet_id, tablet_param))) {
+  } else if (OB_FAIL(dag_merge_param.get_tablet_param(tablet_id, tablet_param))) {
     LOG_WARN("failed to get tablet param", K(ret), K(dag_merge_param));
   } else if (OB_FAIL(dag_merge_param.get_merge_ctx(merge_ctx))) {
     LOG_WARN("failed to get merge ctx", K(ret));
   } else if (nullptr == merge_ctx || nullptr == tablet_param) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet param should not be null", K(ret), K(dag_merge_param));
-  } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(ls_id, tablet_id, tablet_handle))) {
+  } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(tablet_id, tablet_handle))) {
     LOG_WARN("failed to get tablet handle", K(ret));
   } else if (OB_ISNULL(ddl_kv = merge_ctx->ddl_kv_handles_.at(0).get_obj())) {
     ret = OB_ERR_UNEXPECTED;
@@ -186,7 +184,6 @@ int ObIncMinDDLMergeHelper::merge_slice(ObIDag *dag,
   if (OB_FAIL(ret)) {
   } else {
     tablet_ddl_param.direct_load_type_    = dag_merge_param.direct_load_type_;
-    tablet_ddl_param.ls_id_               = ls_id;
     tablet_ddl_param.start_scn_           = ddl_kv->get_ddl_start_scn();
     tablet_ddl_param.commit_scn_          = ddl_kv->get_ddl_start_scn();
     tablet_ddl_param.data_format_version_ = dag_merge_param.ddl_task_param_.tenant_data_version_;
@@ -250,13 +247,12 @@ int ObIncMinDDLMergeHelper::assemble_sstable(ObDDLTabletMergeDagParamV2 &dag_mer
 {
   int ret = OB_SUCCESS;
 
-  ObLSID ls_id;
   ObTabletID tablet_id;
   ObWriteTabletParam           *tablet_param = nullptr;
   ObDDLTabletContext::MergeCtx *merge_ctx    = nullptr;
 
   ObLSService *ls_service = share::g_mp->ls_service();
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
 
   ObDDLKV *ddl_kv = nullptr;
   ObTabletHandle tablet_handle;
@@ -267,17 +263,17 @@ int ObIncMinDDLMergeHelper::assemble_sstable(ObDDLTabletMergeDagParamV2 &dag_mer
   if (!dag_merge_param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(dag_merge_param));
-  } else if (OB_FAIL(dag_merge_param.get_tablet_param(ls_id, tablet_id, tablet_param))) {
+  } else if (OB_FAIL(dag_merge_param.get_tablet_param(tablet_id, tablet_param))) {
     LOG_WARN("failed to get tablet ctx", K(ret), K(dag_merge_param));
-  } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(ls_id, tablet_id, tablet_handle))) {
-    LOG_WARN("failed to get tablet handle", K(ret), K(ls_id), K(tablet_id));
+  } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(tablet_id, tablet_handle))) {
+    LOG_WARN("failed to get tablet handle", K(ret), K(tablet_id));
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tablet handle is invalid", K(ret));
   } else if (OB_ISNULL(ls_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls service should not be null", K(ret));
-  } else if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
+  } else if (OB_FAIL(ls_service->get_ls(ls))) {
     LOG_WARN("failed to get ls", K(ret), K(dag_merge_param));
   } else if (OB_FAIL(dag_merge_param.get_merge_ctx(merge_ctx))) {
     LOG_WARN("failed to get merge ctx", K(ret));
@@ -302,7 +298,6 @@ int ObIncMinDDLMergeHelper::assemble_sstable(ObDDLTabletMergeDagParamV2 &dag_mer
      ObUpdateTableStoreParam table_store_param(max(ddl_kv->get_snapshot_version(), tablet_handle.get_obj()->get_snapshot_version()),
                                                    tablet_handle.get_obj()->get_multi_version_start(),
                                                    tablet_param->storage_schema_,
-                                                   ls_handle.get_ls()->get_rebuild_seq(),
                                                    sstable);
     if (OB_FAIL(table_store_param.init_with_compaction_info(ObCompactionTableStoreParam(compaction::MINI_MERGE,
                                                                                         share::SCN::min_scn(),
@@ -312,7 +307,7 @@ int ObIncMinDDLMergeHelper::assemble_sstable(ObDDLTabletMergeDagParamV2 &dag_mer
     } else {
       table_store_param.compaction_info_.clog_checkpoint_scn_ = sstable->get_end_scn();
       ObTabletHandle new_tablet_handle;
-      if (OB_FAIL(ls_handle.get_ls()->update_tablet_table_store(tablet_id, table_store_param, new_tablet_handle))) {
+      if (OB_FAIL(ls->update_tablet_table_store(tablet_id, table_store_param, new_tablet_handle))) {
         LOG_WARN("failed to update tablet table store", K(ret), K(dag_merge_param), K(table_store_param));
       } else {
         FLOG_INFO("ddl update table store success", KPC(new_tablet_handle.get_obj()), K(table_store_param));
@@ -324,7 +319,7 @@ int ObIncMinDDLMergeHelper::assemble_sstable(ObDDLTabletMergeDagParamV2 &dag_mer
   if (OB_SUCC(ret)) {
     int tmp_ret = OB_SUCCESS;
     ObTabletHandle new_tablet_handle;
-    if (OB_TMP_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle,
+    if (OB_TMP_FAIL(ObDDLUtil::ddl_get_tablet(ls,
                                               tablet_id,
                                               new_tablet_handle,
                                               ObMDSGetTabletMode::READ_ALL_COMMITED))) {

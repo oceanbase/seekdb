@@ -104,7 +104,6 @@ public:
     ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
     ObAddr ip_port(ObAddr::VER::IPV4, "119.119.0.1",2023);
     ObCurTraceId::init(ip_port);
-    GCONF._ob_trans_rpc_timeout = 500;
     ObClockGenerator::init();
     const testing::TestInfo* const test_info =
       testing::UnitTest::GetInstance()->current_test_info();
@@ -754,5 +753,4 @@ int main(int argc, char **argv)
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-
 

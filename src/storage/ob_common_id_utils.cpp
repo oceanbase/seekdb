@@ -53,7 +53,7 @@ int ObCommonIDUtils::gen_unique_id(ObCommonID &id)
 int ObCommonIDUtils::gen_unique_id_by_rpc(ObCommonID &id)
 {
   int ret = OB_SUCCESS;
-  // seekdb single-node: all LS leaders are local, just call gen_unique_id directly.
+  // seekdb single-node: the log stream leader is local, so generate the ID directly.
   // Switch tenant context so gen_unique_id's sys tenant check passes.
   MOD_SCOPE {
     if (OB_FAIL(gen_unique_id(id))) {

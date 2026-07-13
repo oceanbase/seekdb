@@ -85,7 +85,7 @@ public:
 
   INHERIT_TO_STRING_KV("ObDASIter", ObDASIter, K_(ir_ctdef), K_(ir_rtdef), K_(tx_desc),
       K_(snapshot), K_(query_tokens), K_(sr_iter_param), K_(sparse_retrieval_iter), K_(dim_iters),
-      K_(ls_id), K_(total_doc_cnt_tablet_id), K_(inv_idx_tablet_id), K_(fwd_idx_tablet_id),
+      K_(total_doc_cnt_tablet_id), K_(inv_idx_tablet_id), K_(fwd_idx_tablet_id),
       K_(flags), K_(check_rangekey_inited), K_(is_inited));
 protected:
   virtual int inner_init(ObDASIterParam &param) override;
@@ -95,11 +95,9 @@ protected:
   virtual int inner_get_next_rows(int64_t &count, int64_t capacity) override;
 public:
   int set_related_tablet_ids(
-      const ObLSID &ls_id,
       const ObDASFTSTabletID &related_tablet_ids)
   {
     int ret = OB_SUCCESS;
-    ls_id_ = ls_id;
     total_doc_cnt_tablet_id_ = related_tablet_ids.domain_id_idx_tablet_id_;
     if (inv_idx_tablet_id_.is_valid() && inv_idx_tablet_id_ != related_tablet_ids.inv_idx_tablet_id_) {
       inv_idx_tablet_switched_ = true;
@@ -124,7 +122,6 @@ public:
 private:
   int init_das_iter_scan_params();
   static int init_das_iter_scan_param(
-      const ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const ObDASScanCtDef *ctdef,
       ObDASScanRtDef *rtdef,
@@ -133,7 +130,6 @@ private:
       common::ObArenaAllocator &allocator,
       ObTableScanParam &scan_param);
   static int reuse_das_iter_scan_param(
-      const ObLSID &ls_id,
       const ObTabletID &tablet_id,
       ObTableScanParam &scan_param);
   int create_dim_iters();
@@ -176,7 +172,6 @@ private:
   ObBlockStatScanParam doc_length_est_param_;
   ObFixedArray<ObSkipIndexColMeta, ObIAllocator> doc_length_est_stat_cols_;
   int64_t topk_limit_;
-  ObLSID ls_id_;
   ObTabletID total_doc_cnt_tablet_id_;
   ObTabletID inv_idx_tablet_id_;
   ObTabletID fwd_idx_tablet_id_;

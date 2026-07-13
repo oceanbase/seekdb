@@ -43,22 +43,18 @@ void ObBasicScheduleTabletFunc::destroy()
   schedule_freeze_dag(true/*force*/); // schedule dag before destroy
 }
 
-int ObBasicScheduleTabletFunc::switch_ls(ObLSHandle &ls_handle)
+int ObBasicScheduleTabletFunc::init(ObLS *ls)
 {
   int ret = OB_SUCCESS;
-  const ObLSID &ls_id = ls_handle.get_ls()->get_ls_id();
-  schedule_freeze_dag(true/*force*/); // schedule dag before switch to next ls
-
-  if (OB_FAIL(ls_status_.init_for_major(merge_version_, ls_handle))) {
+  if (OB_FAIL(ls_status_.init_for_major(merge_version_, ls))) {
     if (OB_LS_NOT_EXIST != ret) {
-      LOG_WARN("failed to init ls status", KR(ret), K_(merge_version), K(ls_id));
+      LOG_WARN("failed to init ls status", KR(ret), K_(merge_version));
     }
   } else if (OB_UNLIKELY(merge_version_ > ObBasicMergeScheduler::INIT_COMPACTION_SCN
       && !ls_status_.can_merge())) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("could not to merge now", K(ret), K(ls_id), K(ls_status_));
+    LOG_WARN("could not to merge now", K(ret), K(ls_status_));
   } else {
-    freeze_param_.ls_id_ = ls_id;
     freeze_param_.compaction_scn_ = merge_version_;
   }
   if (OB_SUCC(ret)) {
@@ -73,8 +69,7 @@ void ObBasicScheduleTabletFunc::update_tenant_cached_status()
   if (OB_NOT_NULL(scheduler)) {
     is_skip_merge_tenant_ = scheduler->get_tenant_status().is_skip_merge_tenant();
     ls_could_schedule_merge_ = scheduler->could_major_merge_start() && ls_status_.can_merge();
-    // can only schedule new round on ls leader
-    ls_could_schedule_new_round_ = ls_could_schedule_merge_ && ls_status_.is_leader_;
+    ls_could_schedule_new_round_ = ls_could_schedule_merge_;
 
     if (!ls_status_.can_merge() && REACH_THREAD_TIME_INTERVAL(PRINT_LOG_INVERVAL)) {
       LOG_INFO("should not schedule major merge for ls", K_(ls_status),
@@ -107,13 +102,13 @@ void ObBasicScheduleTabletFunc::schedule_freeze_dag(const bool force)
 /*
  * diagnose section
  */
-int ObBasicScheduleTabletFunc::diagnose_switch_ls(
-  ObLSHandle &ls_handle)
+int ObBasicScheduleTabletFunc::diagnose_init(
+  ObLS *ls)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ls_status_.init_for_major(merge_version_, ls_handle))) {
+  if (OB_FAIL(ls_status_.init_for_major(merge_version_, ls))) {
     if (OB_LS_NOT_EXIST != ret) {
-      LOG_WARN("failed to init ls status", KR(ret), K_(merge_version), K(ls_handle));
+      LOG_WARN("failed to init ls status", KR(ret), K_(merge_version), KP(ls));
     }
   } else {
     update_tenant_cached_status();
@@ -130,7 +125,6 @@ int ObBasicScheduleTabletFunc::check_with_schedule_scn(
   const ObTabletStatusCache &tablet_status,
   bool &can_merge)
 {
-  const ObLSID &ls_id = ls_status_.ls_id_;
   can_merge = false;
   int ret = OB_SUCCESS;
   bool need_force_freeze = false;
@@ -167,7 +161,6 @@ int ObBasicScheduleTabletFunc::check_with_schedule_scn(
              K(need_merge), K(can_merge), K(schedule_scn), K(need_force_freeze),
              K(weak_read_ts_ready), K_(ls_status), K(tablet_status));
     ADD_SUSPECT_INFO(MEDIUM_MERGE, ObDiagnoseTabletType::TYPE_MEDIUM_MERGE,
-                    ls_id,
                     tablet_id,
                     ObSuspectInfoType::SUSPECT_CANT_MAJOR_MERGE,
                     schedule_scn,

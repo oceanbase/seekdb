@@ -18,7 +18,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/memtable/ob_row_compactor.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 #include "storage/access/ob_rows_info.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
 
@@ -605,7 +605,6 @@ int ObMvccRow::insert_trans_node(ObIMvccCtx &ctx,
             TRANS_LOG(ERROR, "meet unexpected index_node", KR(ret), K(*prev), K(node), K(*index_node), K(*this));
             abort_unless(0);
           } else if (prev->tx_id_ == node.tx_id_
-                     && prev->seq_no_.support_branch()
                      && OB_UNLIKELY(prev->seq_no_ > node.seq_no_)
                      // exclude the concurrently update uk case, which always in branch 0
                      && !(prev->seq_no_.get_branch() == 0 && node.seq_no_.get_branch() == 0)) {
@@ -650,8 +649,7 @@ int ObMvccRow::insert_trans_node(ObIMvccCtx &ctx,
         }
       }
       if (OB_SUCC(ret) && OB_NOT_NULL(tmp) && tmp->tx_id_ == node.tx_id_) {
-        if (tmp->seq_no_.support_branch()
-            && OB_UNLIKELY(tmp->seq_no_ > node.seq_no_)
+        if (OB_UNLIKELY(tmp->seq_no_ > node.seq_no_)
             // exclude the concurrently update uk case, which always in branch 0
             && !(tmp->seq_no_.get_branch() == 0 && node.seq_no_.get_branch() == 0)) {
           ret = OB_ERR_UNEXPECTED;
@@ -816,14 +814,12 @@ int ObMvccRow::remove_callback(ObMvccRowCallback &cb)
       TRANS_LOG(WARN, "MTL(LockWaitMgr) is null", K(ret), KPC(this));
     } else {
       auto tx_ctx = cb.get_trans_ctx();
-      ObAddr tx_scheduler;
       if (OB_ISNULL(tx_ctx)) {
         int tmp_ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(ERROR, "trans ctx is null", KR(tmp_ret), K(cb));
-      } else {
-        tx_scheduler = static_cast<transaction::ObPartTransCtx*>(tx_ctx)->get_scheduler();
       }
-      share::g_mp->lock_wait_mgr()->transform_row_lock_to_tx_lock(cb.get_tablet_id(), *cb.get_key(), ObTransID(node->tx_id_), tx_scheduler);
+      share::g_mp->lock_wait_mgr()->transform_row_lock_to_tx_lock(
+          cb.get_tablet_id(), *cb.get_key(), ObTransID(node->tx_id_));
       if (cb.is_non_unique_local_index_cb()) {
         // row lock holder is no need to set for non-unique local index, so the reset can be skipped
       } else {

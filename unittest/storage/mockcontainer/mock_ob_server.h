@@ -20,7 +20,6 @@
 #include "storage/tx/ob_trans_service.h"
 #include "lib/string/ob_sql_string.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
-#include "storage/tx/ob_gts_rpc.h"
 #include "sql/session/ob_sql_session_mgr.h"
 #include "observer/ob_srv_network_frame.h"
 #include "share/config/ob_server_config.h"

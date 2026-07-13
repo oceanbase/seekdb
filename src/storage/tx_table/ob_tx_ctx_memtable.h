@@ -47,7 +47,7 @@ public:
   ObTxCtxMemtable();
   ~ObTxCtxMemtable();
 
-  int init(const ObITable::TableKey &table_key, const share::ObLSID &ls_id);
+  int init(const ObITable::TableKey &table_key);
 
   void reset();
   int on_memtable_flushed() override;
@@ -102,7 +102,7 @@ public:
   void set_max_end_scn(const share::SCN end_scn);
 
   INHERIT_TO_STRING_KV("ObITable", ObITable, KP(this), K_(snapshot_version),
-                       K_(ls_id), K_(is_frozen), K_(max_end_scn));
+                       K_(is_frozen), K_(max_end_scn));
 
 private:
   bool is_inited_;

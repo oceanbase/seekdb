@@ -49,10 +49,9 @@ struct ObBatchFreezeTabletsParam : public ObBatchExecParam<ObTabletSchedulePair>
       loop_cnt_(0)
   {}
   ObBatchFreezeTabletsParam(
-    const share::ObLSID &ls_id,
     const int64_t merge_version,
     const int64_t loop_cnt = 0)
-    : ObBatchExecParam(BATCH_FREEZE, ls_id, merge_version, DEFAULT_BATCH_SIZE),
+    : ObBatchExecParam(BATCH_FREEZE, merge_version, DEFAULT_BATCH_SIZE),
       loop_cnt_(loop_cnt)
   {}
   virtual ~ObBatchFreezeTabletsParam() = default;

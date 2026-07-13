@@ -333,7 +333,6 @@ public:
       const common::ObQueryFlag &query_flag,
       const int64_t nested_offset,
       const ObITableReadInfo *table_read_info = nullptr);
-  // todo :qilu get ls_id from MTL() after ddl_kv_mgr split to tenant
   int open(
       const MacroBlockId &macro_id,
       const ObMicroBlockData &idx_block_data,

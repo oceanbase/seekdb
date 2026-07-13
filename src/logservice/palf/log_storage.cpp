@@ -33,7 +33,6 @@ LogStorage::LogStorage() : ILogStorage(ILogStorageType::DISK_STORAGE),
     log_block_header_(),
     curr_block_writable_size_(0),
     need_append_block_header_(false),
-    palf_id_(INVALID_PALF_ID),
     logical_block_size_(0),
     tail_info_lock_(common::ObLatchIds::PALF_LOG_ENGINE_LOCK),
     delete_block_lock_(common::ObLatchIds::PALF_LOG_ENGINE_LOCK),
@@ -49,7 +48,7 @@ LogStorage::~LogStorage()
 }
 
 int LogStorage::init(const char *base_dir, const char *sub_dir, const LSN &base_lsn,
-                     const int64_t palf_id, const int64_t logical_block_size,
+                     const int64_t logical_block_size,
                      const int64_t align_size, const int64_t align_buf_size,
                      const UpdateManifestCallback &update_manifest_cb,
                      ILogBlockPool *log_block_pool, LogPlugins *plugins,
@@ -61,7 +60,6 @@ int LogStorage::init(const char *base_dir, const char *sub_dir, const LSN &base_
   } else if (OB_FAIL(do_init_(base_dir,
                               sub_dir,
                               base_lsn,
-                              palf_id,
                               logical_block_size,
                               align_size,
                               align_buf_size,
@@ -70,10 +68,9 @@ int LogStorage::init(const char *base_dir, const char *sub_dir, const LSN &base_
                               plugins,
                               log_cache,
                               io_adapter))) {
-    PALF_LOG(WARN, "LogStorage do_init_ failed", K(ret), K(base_dir), K(sub_dir), K(palf_id));
+    PALF_LOG(WARN, "LogStorage do_init_ failed", K(ret), K(base_dir), K(sub_dir));
   } else {
-    PALF_LOG(INFO, "LogStorage init success", K(ret), K(base_dir), K(sub_dir),
-             K(palf_id), K(base_lsn));
+    PALF_LOG(INFO, "LogStorage init success", K(ret), K(base_dir), K(sub_dir), K(base_lsn));
   }
   return ret;
 }
@@ -111,11 +108,9 @@ void LogStorage::destroy()
 {
   is_inited_ = false;
   logical_block_size_ = 0;
-  palf_id_ = INVALID_PALF_ID;
   need_append_block_header_ = false;
   curr_block_writable_size_ = 0;
   log_block_header_.reset();
-  readable_log_tail_.reset();
   log_tail_.reset();
   log_reader_.destroy();
   block_mgr_.destroy();
@@ -403,10 +398,10 @@ int LogStorage::truncate_prefix_blocks(const LSN &lsn)
 		reset_log_tail_for_last_block_(lsn, false);
     block_mgr_.reset(lsn_2_block(lsn, logical_block_size_));
   }
-  PALF_EVENT("truncate_prefix_blocks success", palf_id_, K(ret), KPC(this),
+  PALF_EVENT("truncate_prefix_blocks success", K(ret), KPC(this),
              K(lsn), K(block_id), K(min_block_id), K(max_block_id),
              K(truncate_end_block_id));
-  plugins_->record_truncate_event(palf_id_, lsn, min_block_id, max_block_id, truncate_end_block_id);
+  plugins_->record_truncate_event(lsn, min_block_id, max_block_id, truncate_end_block_id);
   return ret;
 }
 
@@ -548,7 +543,6 @@ int LogStorage::load_last_block_(const block_id_t min_block_id,
 int LogStorage::do_init_(const char *base_dir,
                          const char *sub_dir,
                          const LSN &base_lsn,
-                         const int64_t palf_id,
                          const int64_t logical_block_size,
                          const int64_t align_size,
                          const int64_t align_buf_size,
@@ -577,11 +571,10 @@ int LogStorage::do_init_(const char *base_dir,
   } else if (OB_FAIL(log_reader_.init(log_dir, logical_block_size + MAX_INFO_BLOCK_SIZE, io_adapter))) {
     PALF_LOG(ERROR, "LogReader init failed", K(ret), K(log_dir));
   } else {
-    log_tail_ = readable_log_tail_ = base_lsn;
+    log_tail_ = base_lsn;
     log_block_header_.reset();
     curr_block_writable_size_ = 0;
     need_append_block_header_ = true;
-    palf_id_ = palf_id;
     logical_block_size_ = logical_block_size;
     update_manifest_cb_ = update_manifest_cb;
     plugins_ = plugins;
@@ -594,15 +587,6 @@ int LogStorage::do_init_(const char *base_dir,
   return ret;
 }
 
-// To ensure the integrity of each read data, we need check the 'block_id' whether is integrity
-// after read data successfully.
-//
-// To ensure the integrity of log blocks, we need check the 'block_id' which opened failed whether
-// is deleted by others.
-//
-// 1. For delete block, LogBlockMgr will inc 'min_block_id_' firstly, and then reuse the block,
-//    after reading, if 'block_id' is smaller than 'min_block_id_', means that the data is not integrity.
-//
 int LogStorage::check_read_out_of_bound_(const block_id_t &block_id,
                                          const bool no_such_block) const
 {
@@ -610,7 +594,7 @@ int LogStorage::check_read_out_of_bound_(const block_id_t &block_id,
   block_id_t min_block_id = LOG_INVALID_BLOCK_ID;
   block_id_t max_block_id = LOG_INVALID_BLOCK_ID;
   if (OB_FAIL(get_block_id_range(min_block_id, max_block_id)) && OB_ENTRY_NOT_EXIST != ret) {
-   PALF_LOG(ERROR, "get_block_id_range failed", K(ret), K(min_block_id), K(max_block_id));
+    PALF_LOG(ERROR, "get_block_id_range failed", K(ret), K(min_block_id), K(max_block_id));
   } else if (min_block_id > block_id) {
     ret = OB_ERR_OUT_OF_LOWER_BOUND;
     PALF_LOG(INFO, "read something out of lower bound, the block may be deleted by GC or rebuild",
@@ -621,8 +605,6 @@ int LogStorage::check_read_out_of_bound_(const block_id_t &block_id,
              K(min_block_id), K(max_block_id), K(block_id));
   }
   if (OB_SUCC(ret) && no_such_block) {
-    // if there is no block whose names with 'block_id' and 'block_id' is in range of [min_block_id, max_block_id)
-    // return OB_ERR_UNEXPECTED.
     if (min_block_id <= block_id && block_id < max_block_id) {
       ret = OB_ERR_UNEXPECTED;
       PALF_LOG(ERROR, "unexpected error, the block may be deleted by human", KPC(this),
@@ -681,8 +663,7 @@ int LogStorage::update_block_header_(const block_id_t block_id,
   int64_t pos = 0;
 
   log_block_header_.update_lsn_and_scn(block_min_lsn, block_min_scn);
-  log_block_header_.update_palf_id_and_curr_block_id(
-      palf_id_, lsn_2_block(log_tail_, logical_block_size_));
+  log_block_header_.update_curr_block_id(lsn_2_block(log_tail_, logical_block_size_));
   log_block_header_.calc_checksum();
 
   if (FALSE_IT(memset(block_header_serialize_buf_, '\0', MAX_INFO_BLOCK_SIZE))) {
@@ -711,28 +692,18 @@ void LogStorage::update_log_tail_guarded_by_lock_(const int64_t log_size)
 {
   ObSpinLockGuard guard(tail_info_lock_);
   log_tail_ = log_tail_ + log_size;
-  if (readable_log_tail_ < log_tail_) {
-    readable_log_tail_ = log_tail_;
-  }
 }
 
 void LogStorage::update_log_tail_guarded_by_lock_(const LSN &lsn)
 {
   ObSpinLockGuard guard(tail_info_lock_);
   log_tail_ = lsn;
-  readable_log_tail_ = log_tail_;
 }
 
-const LSN &LogStorage::get_log_tail_guarded_by_lock_() const
+LSN LogStorage::get_log_tail_guarded_by_lock_() const
 {
   ObSpinLockGuard guard(tail_info_lock_);
-  return readable_log_tail_;
-}
-
-void LogStorage::get_readable_log_tail_guarded_by_lock_(LSN &readable_log_tail) const
-{
-  ObSpinLockGuard guard(tail_info_lock_);
-  readable_log_tail = readable_log_tail_;
+  return log_tail_;
 }
 
 offset_t LogStorage::get_phy_offset_(const LSN &lsn) const
@@ -750,20 +721,16 @@ int LogStorage::read_block_header_(const block_id_t block_id,
   ReadBufGuard read_buf_guard("LogStorage", in_read_size);
   ReadBuf &read_buf = read_buf_guard.read_buf_;
 
-  // 'readable_log_tail' and 'block_header' are snapshot, we can read valid data even if the block
-  // is deleted. NB: we need ensure that the lsn_2_block('readable_log_tail') is smaller than or
-  // equal to 'max_block_id'.
-  LSN readable_log_tail;
-  get_readable_log_tail_guarded_by_lock_(readable_log_tail);
-  block_id_t max_block_id = lsn_2_block(readable_log_tail, logical_block_size_);
-  bool last_block_has_data = (0 == lsn_2_offset(readable_log_tail, logical_block_size_) ? false : true);
+  const LSN log_tail = get_log_tail_guarded_by_lock_();
+  block_id_t max_block_id = lsn_2_block(log_tail, logical_block_size_);
+  bool last_block_has_data = (0 != lsn_2_offset(log_tail, logical_block_size_));
   if (!read_buf.is_valid()) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     PALF_LOG(WARN, "allocate memory failed");
   } else if (block_id > max_block_id || (block_id == max_block_id && false == last_block_has_data)) {
     ret = OB_ERR_OUT_OF_UPPER_BOUND;
     PALF_LOG(WARN, "block_id is large than max_block_id", K(ret), K(block_id),
-             K(readable_log_tail), K(max_block_id), K(log_block_header));
+             K(log_tail), K(max_block_id), K(log_block_header));
   } else {
     LogIOContext io_ctx(LogIOUser::META_INFO);
     if (OB_FAIL(log_reader_.pread(block_id, 0, in_read_size, read_buf, out_read_size, io_ctx))) {
@@ -781,11 +748,6 @@ int LogStorage::read_block_header_(const block_id_t block_id,
     }
     // to ensure the data integrity, we should check 'block_id' whether has integrity data.
     int tmp_ret = check_read_out_of_bound_(block_id, OB_NO_SUCH_FILE_OR_DIRECTORY == ret);
-    // overwrite ret code:
-    // 1. if ret is OB_NO_SUCH_FILE_OR_DIRECTORY, the block may be recycled or overwritten.
-    // 2. if ret is OB_INVALID_DATA, the block may be being recycled or overwritten.
-    // 3. if ret is OB_SUCCESS, we should check the data has been read whether is integrity because the block
-    //    may be being recycled or overwritten.
     if (OB_NO_SUCH_FILE_OR_DIRECTORY == ret 
         || OB_INVALID_DATA == ret
         || OB_SUCC(ret)) {
@@ -824,11 +786,10 @@ int LogStorage::inner_pread_(const LSN &read_lsn,
 {
   int ret = OB_SUCCESS;
   // NB: don't support read data from diffent file.
-  LSN readable_log_tail;
-  get_readable_log_tail_guarded_by_lock_(readable_log_tail);
+  const LSN log_tail = get_log_tail_guarded_by_lock_();
   const block_id_t read_block_id = lsn_2_block(read_lsn, logical_block_size_);
   const LSN curr_block_end_lsn = LSN((read_block_id + 1) * logical_block_size_);
-  const LSN &max_readable_lsn = MIN(readable_log_tail, curr_block_end_lsn);
+  const LSN &max_readable_lsn = MIN(log_tail, curr_block_end_lsn);
   const int64_t real_in_read_size = MIN(max_readable_lsn - read_lsn, in_read_size);
   const offset_t read_offset = lsn_2_offset(read_lsn, logical_block_size_);
   const offset_t real_read_offset =
@@ -836,7 +797,7 @@ int LogStorage::inner_pread_(const LSN &read_lsn,
 
   const LSN begin_lsn = get_begin_lsn();
 
-  if (read_lsn >= readable_log_tail) {
+  if (read_lsn >= log_tail) {
     ret = OB_ERR_OUT_OF_UPPER_BOUND;
     PALF_LOG(WARN, "read something out of upper bound", K(ret), K(read_lsn), K(log_tail_));
   } else if (read_lsn < begin_lsn) {
@@ -878,15 +839,11 @@ int LogStorage::inner_pread_(const LSN &read_lsn,
                K(real_in_read_size),
                K(read_lsn),
                K(out_read_size),
-               K(readable_log_tail));
+               K(log_tail));
     }
 
     // to ensure the data integrity, we should check 'read_block_id' whether has integrity data.
     int tmp_ret = check_read_out_of_bound_(read_block_id, OB_NO_SUCH_FILE_OR_DIRECTORY == ret);
-    // overwrite ret code:
-    // 1. if ret is OB_NO_SUCH_FILE_OR_DIRECTORY, the block may be recycled or overwritten.
-    // 2. if ret is OB_SUCCESS, we should check the data has been read whether is integrity because the block
-    //    may be being recycled or overwritten.
     if (OB_NO_SUCH_FILE_OR_DIRECTORY == ret
         || OB_SUCC(ret)) {
       ret = tmp_ret;
@@ -903,7 +860,7 @@ void LogStorage::reset_log_tail_for_last_block_(const LSN &lsn, bool last_block_
   (void)truncate_block_header_(lsn);
   curr_block_writable_size_ = (true == last_block_exist) ? logical_block_size_ - logical_offset : 0;
   need_append_block_header_ = (curr_block_writable_size_ == logical_block_size_) ? true : false;
-  log_tail_ = readable_log_tail_ = lsn;
+  log_tail_ = lsn;
 }
 
 int LogStorage::update_manifest_(const block_id_t expected_next_block_id, const bool in_restart)

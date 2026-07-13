@@ -395,8 +395,7 @@ int ObDASUpdIterator::get_next_domain_index_rows(ObDatumRow *&rows, int64_t &row
 }
 
 template <>
-int ObDASIndexDMLAdaptor<DAS_OP_TABLE_UPDATE, ObDASUpdIterator>::write_rows(const ObLSID &ls_id,
-                                                                            const ObTabletID &tablet_id,
+int ObDASIndexDMLAdaptor<DAS_OP_TABLE_UPDATE, ObDASUpdIterator>::write_rows(const ObTabletID &tablet_id,
                                                                             const CtDefType &ctdef,
                                                                             RtDefType &rtdef,
                                                                             ObDASUpdIterator &iter,
@@ -406,42 +405,27 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_UPDATE, ObDASUpdIterator>::write_rows(cons
   ObAccessService *as = share::g_mp->access_service();
   if (OB_UNLIKELY((ctdef.table_param_.get_data_table().is_vector_delta_buffer() ||
                   ctdef.table_param_.get_data_table().is_hybrid_vector_index_log()) &&
-                  !ctdef.is_access_mlog_as_master_table_)) {
+                  !ctdef.is_access_main_table_)) {
     // for vector delta buffer/hybrid log table, only do insert when DML with main table
-    if (OB_FAIL(as->insert_rows(ls_id, tablet_id, *tx_desc_, dml_param_,
+    if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_param_,
                                 ctdef.column_ids_, &iter, affected_rows))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_WARN("insert rows to access service failed", K(ret), K(ls_id), K(tablet_id));
+        LOG_WARN("insert rows to access service failed", K(ret), K(tablet_id));
       }
     }
   } else if (OB_UNLIKELY(ctdef.table_param_.get_data_table().is_domain_index())) {
-    if (OB_FAIL(as->delete_rows(ls_id, tablet_id, *tx_desc_, dml_param_,
+    if (OB_FAIL(as->delete_rows(tablet_id, *tx_desc_, dml_param_,
                                 ctdef.column_ids_, &iter, affected_rows))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_WARN("delete rows to access service failed", K(ret), K(ls_id), K(tablet_id));
+        LOG_WARN("delete rows to access service failed", K(ret), K(tablet_id));
       }
-    } else if (OB_FAIL(as->insert_rows(ls_id, tablet_id, *tx_desc_, dml_param_,
+    } else if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_param_,
                                        ctdef.column_ids_, &iter, affected_rows))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_WARN("insert rows to access service failed", K(ret), K(ls_id), K(tablet_id));
+        LOG_WARN("insert rows to access service failed", K(ret), K(tablet_id));
       }
     }
-  } else if (ctdef.table_param_.get_data_table().is_mlog_table()
-      && !ctdef.is_access_mlog_as_master_table_) {
-    ObDASMLogDMLIterator mlog_iter(ls_id, tablet_id, dml_param_, &iter, DAS_OP_TABLE_UPDATE);
-    if (OB_FAIL(as->insert_rows(ls_id,
-                                tablet_id,
-                                *tx_desc_,
-                                dml_param_,
-                                ctdef.column_ids_,
-                                &mlog_iter,
-                                affected_rows))) {
-      if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_WARN("delete rows to access service failed", K(ret));
-      }
-    }
-  } else if (OB_FAIL(as->update_rows(ls_id,
-                                     tablet_id,
+  } else if (OB_FAIL(as->update_rows(tablet_id,
                                      *tx_desc_,
                                      dml_param_,
                                      ctdef.column_ids_,
@@ -485,14 +469,13 @@ int ObDASUpdateOp::open_op()
   upd_adaptor.related_ctdefs_ = &related_ctdefs_;
   upd_adaptor.related_rtdefs_ = &related_rtdefs_;
   upd_adaptor.tablet_id_ = tablet_id_;
-  upd_adaptor.ls_id_ = ls_id_;
   upd_adaptor.related_tablet_ids_ = &related_tablet_ids_;
-  upd_adaptor.is_do_gts_opt_ = das_gts_opt_info_.use_specify_snapshot_;
+  upd_adaptor.use_snapshot_opt_ = das_snapshot_opt_info_.use_specify_snapshot_;
   upd_adaptor.das_allocator_ = &op_alloc_;
   upd_adaptor.ft_doc_word_infos_ = &doc_word_infos;
-  if (OB_FAIL(ObDASDomainUtils::build_ft_doc_word_infos(ls_id_, trans_desc_, snapshot_, related_ctdefs_, related_tablet_ids_,
+  if (OB_FAIL(ObDASDomainUtils::build_ft_doc_word_infos(trans_desc_, snapshot_, related_ctdefs_, related_tablet_ids_,
           upd_ctdef_->is_main_table_in_fts_ddl_, doc_word_infos))) {
-    LOG_WARN("fail to build fulltext doc word infos", K(ret), K(ls_id_), KPC(snapshot_), K(related_ctdefs_),
+    LOG_WARN("fail to build fulltext doc word infos", K(ret), KPC(snapshot_), K(related_ctdefs_),
         K(related_tablet_ids_));
   } else if (OB_FAIL(upd_adaptor.write_tablet(upd_iter, affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {

@@ -193,7 +193,6 @@ int ObDDLEmptyShellChecker::check_split_src_deleted_tablet(
   can_become_empty_shell = false;
   SCN decided_scn;
   const ObTabletID tablet_id(tablet.get_tablet_meta().tablet_id_);
-  const share::ObLSID ls_id(tablet.get_tablet_meta().ls_id_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not init", K(ret));
@@ -208,7 +207,7 @@ int ObDDLEmptyShellChecker::check_split_src_deleted_tablet(
     need_retry = true;
     if (REACH_THREAD_TIME_INTERVAL(1 * 1000 * 1000/*1s*/)) {
       STORAGE_LOG(INFO, "decided_scn is smaller than tablet delete commit scn",
-        K(ls_id), K(tablet_id), K(user_data), K(decided_scn));
+        K(tablet_id), K(user_data), K(decided_scn));
     }
   } else {
     int tmp_ret = OB_SUCCESS;

@@ -24,13 +24,11 @@
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/container/ob_se_array.h"
 #include "common/ob_simple_iterator.h"
-#include "share/ob_ls_id.h"
 #include "share/ob_light_hashmap.h"
 #include "storage/memtable/ob_memtable_context.h"
 #include "ob_trans_ctx.h"
 #include "ob_trans_stat.h"
 
-#include "storage/tx/ob_tx_ls_log_writer.h"
 #include "storage/tx_table/ob_tx_table_define.h"
 #include "storage/tx/ob_tx_log_adapter.h"
 #include "ob_trans_ctx_mgr_v4.h"

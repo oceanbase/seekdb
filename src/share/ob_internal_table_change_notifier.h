@@ -27,7 +27,7 @@ namespace oceanbase
 namespace share
 {
 
-class ObInternalTableChangeNotifier : public logservice::ObIRoleChangeSubHandler
+class ObInternalTableChangeNotifier : public logservice::ObILocalLogHandler
 {
 public:
   using ModuleCallback = common::ObFunction<int()>;
@@ -44,11 +44,9 @@ public:
   // switch_to_leader. Returns immediately — the actual work is async.
   int notify(table::ObModuleDataArg::ObExecModule module);
 
-  // ObIRoleChangeSubHandler — called by ObRoleChangeHandler when LS switches role.
-  void switch_to_follower_forcedly() override;
-  int switch_to_leader() override;
-  int switch_to_follower_gracefully() override { return OB_SUCCESS; }
-  int resume_leader() override { return OB_SUCCESS; }
+  // ObILocalLogHandler — called by ObLocalLogHandlerSet when LS switches role.
+  void deactivate() override;
+  int activate() override;
 
 private:
   ObInternalTableChangeNotifier();

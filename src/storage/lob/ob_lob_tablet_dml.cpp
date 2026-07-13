@@ -55,11 +55,8 @@ int ObLobTabletDmlHelper::build_common_lob_param_for_dml(
   lob_param.tx_desc_ = run_ctx.store_ctx_.mvcc_acc_ctx_.tx_desc_;
   lob_param.parent_seq_no_ = run_ctx.store_ctx_.mvcc_acc_ctx_.tx_scn_;
   lob_param.tx_id_ = lob_param.tx_desc_->get_tx_id();
-  lob_param.is_mlog_ = run_ctx.dml_param_.table_param_->get_data_table().is_mlog_table();
-
   lob_param.sql_mode_ = run_ctx.dml_param_.sql_mode_;
   lob_param.is_total_quantity_log_ = run_ctx.dml_param_.is_total_quantity_log_;
-  lob_param.ls_id_ = run_ctx.store_ctx_.ls_id_;
   lob_param.tablet_id_ = run_ctx.relative_table_.get_tablet_id();
   lob_param.lob_meta_tablet_id_ = run_ctx.lob_dml_ctx_.lob_meta_tablet_id_;
   lob_param.lob_piece_tablet_id_ = run_ctx.lob_dml_ctx_.lob_piece_tablet_id_;
@@ -80,8 +77,7 @@ int ObLobTabletDmlHelper::build_common_lob_param_for_dml(
     // NOTE:
     // lob_insert need table_scan, the snapshot already generated in
     // run_ctx.store_ctx, use it as an LS ReadSnapshot
-    lob_param.snapshot_.init_ls_read(run_ctx.store_ctx_.ls_id_,
-                                      run_ctx.store_ctx_.mvcc_acc_ctx_.snapshot_);
+    lob_param.snapshot_.init_ls_read(run_ctx.store_ctx_.mvcc_acc_ctx_.snapshot_);
   }
   return ret;
 }

@@ -187,17 +187,6 @@ int MockObServer::init(const char *schema_file,
     }
   }
 
-  //init gts local cache mgr
-  if (OB_SUCC(ret)) {
-    if (OB_SUCCESS != (ret = OB_TS_MGR.init(self_addr_,
-         *GCTX.schema_service_,
-         *GCTX.location_service_))) {
-      STORAGE_LOG(WARN, "init gts local cache mgr failed", K(ret));
-    } else {
-      STORAGE_LOG(INFO, "init gts local cache mgr success");
-    }
-  }
-
   //init multi tenant
   if (OB_SUCC(ret)) {
     if (OB_SUCCESS != (ret = init_multi_tenant())) {
@@ -249,8 +238,6 @@ int MockObServer::start()
     ret = OB_NOT_INIT;
   } else if (OB_SUCCESS != (ret = net_frame_.start())) {
     STORAGE_LOG(WARN, "net frame start error", K(ret));
-  } else if (OB_FAIL(OB_TS_MGR.start())) {
-    STORAGE_LOG(WARN, "start gts cache mgr error", K(ret));
   } else {
     STORAGE_LOG(INFO, "net frame start success");
   }
@@ -273,7 +260,6 @@ int MockObServer::stop()
   } else if (OB_SUCCESS != (ret = net_frame_.stop())) {
     STORAGE_LOG(WARN, "net frame stop error", K(ret));
   } else {
-    OB_TS_MGR.stop();
     STORAGE_LOG(INFO, "net frame stop success");
   }
   multi_tenant_.stop();
@@ -290,7 +276,6 @@ int MockObServer::wait()
   int ret = OB_SUCCESS;
   multi_tenant_.wait();
   net_frame_.wait();
-  (void)OB_TS_MGR.wait();
   if (OB_SUCC(ret)) {
     STORAGE_LOG(INFO, "ob server wait success");
   }

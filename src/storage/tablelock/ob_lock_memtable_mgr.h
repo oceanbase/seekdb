@@ -28,7 +28,6 @@ class ObTabletID;
 
 namespace share
 {
-class ObLSID;
 }
 
 namespace memtable
@@ -59,7 +58,6 @@ public:
   // Init the memtable mgr, we use logstream id to fetch the ls_ctx_mgr and t3m
   // to alloc the memtable.
   virtual int init(const common::ObTabletID &tablet_id,
-                   const share::ObLSID &ls_id,
                    storage::ObFreezer *freezer,
                    storage::ObTenantMetaMemMgr *t3m) override;
   virtual void destroy() override;
@@ -74,7 +72,6 @@ private:
                                      const bool force = false) override;
 
 private:
-  share::ObLSID ls_id_;
   common::ObQSyncLock lock_def_;
 };
 

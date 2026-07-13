@@ -26,13 +26,12 @@ using namespace oceanbase::share::schema;
 using namespace oceanbase::sql;
 
 ObBaseTabletDirectLoadMgr::ObBaseTabletDirectLoadMgr()
- : ls_id_(), tablet_id_(), table_key_(), tenant_data_version_(), direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID), ref_cnt_(0)
+ : tablet_id_(), table_key_(), tenant_data_version_(), direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID), ref_cnt_(0)
 {
 }
 
 ObBaseTabletDirectLoadMgr::~ObBaseTabletDirectLoadMgr()
 {
-  ls_id_.reset();
   tablet_id_.reset();
   table_key_.reset();
   tenant_data_version_ = 0;

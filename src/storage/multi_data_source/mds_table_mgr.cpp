@@ -143,7 +143,7 @@ struct OrderOp {
 };
 int ObMdsTableMgr::flush(SCN recycle_scn, bool need_freeze)
 {
-  #define PRINT_WRAPPER KR(ret), K(ls_->get_ls_id()), K(recycle_scn), K(need_freeze), K(order_flusher_for_some),\
+  #define PRINT_WRAPPER KR(ret), K(recycle_scn), K(need_freeze), K(order_flusher_for_some),\
                         K(max_consequent_callbacked_scn), K(*this)
   MDS_TG(10_s);
   int ret = OB_SUCCESS;
@@ -196,7 +196,7 @@ void ObMdsTableMgr::order_flush_(FlusherForSome &order_flusher_for_some,
                                  share::SCN freezing_scn,
                                  share::SCN max_consequent_callbacked_scn)
 {
-  #define PRINT_WRAPPER KR(ret), K(ls_->get_ls_id()), K(freezing_scn), K(order_flusher_for_some),\
+  #define PRINT_WRAPPER KR(ret), K(freezing_scn), K(order_flusher_for_some),\
                         K(third_sacn_mds_table_cnt), K(max_consequent_callbacked_scn), K(order_flusher_for_all.count()),\
                         K(*this)
   MDS_TG(10_s);

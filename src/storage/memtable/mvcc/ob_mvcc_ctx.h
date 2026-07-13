@@ -35,7 +35,7 @@ class ObTxTableGuard;
 }
 namespace transaction
 {
-class ObPartTransCtx;
+class ObTxCtx;
 namespace tablelock
 {
 class ObMemCtxLockOpLinkNode;
@@ -113,7 +113,7 @@ public: // for mvcc engine invoke
   virtual void add_trans_mem_total_size(const int64_t size) = 0;
   virtual void inc_pending_log_size(const int64_t size) = 0;
   virtual transaction::ObTransID get_tx_id() const = 0;
-  virtual transaction::ObPartTransCtx *get_trans_ctx() const = 0;
+  virtual transaction::ObTxCtx *get_trans_ctx() const = 0;
   // statics maintainness for txn logging
   virtual void inc_unsubmitted_cnt() = 0;
   virtual void dec_unsubmitted_cnt() = 0;

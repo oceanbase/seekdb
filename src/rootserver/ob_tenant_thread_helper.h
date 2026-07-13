@@ -49,7 +49,7 @@ class ObLogHandler;
 namespace rootserver
 {
 class ObTenantThreadHelper : public share::ObReentrantThread,
-  public logservice::ObIRoleChangeSubHandler
+  public logservice::ObILocalLogHandler
 {
 public:
   ObTenantThreadHelper()
@@ -74,18 +74,8 @@ public:
   void idle(const int64_t idle_time_us);
   void wakeup();
 public:
-  virtual void switch_to_follower_forcedly() override;
-  
-  virtual int switch_to_leader() override;
-  virtual int switch_to_follower_gracefully() override
-  {
-    stop();
-    return OB_SUCCESS;
-  }
-  virtual int resume_leader() override
-  {
-    return OB_SUCCESS;
-  }
+  void deactivate() override;
+  int activate() override;
 public:
 #define DEFINE_MTL_FUNC(TYPE)\
   static int mtl_init(TYPE *&ka) {\

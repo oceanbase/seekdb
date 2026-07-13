@@ -54,12 +54,6 @@ public:
   LSN get_committed_end_lsn() const { return header_.get_committed_end_lsn(); }
   const LogGroupEntryHeader &get_header() const { return header_; }
   const char *get_data_buf() const { return buf_; }
-  // @brief truncate log group entry the upper_limit_scn, only log entries with scn not bigger than which can reserve
-  // param[in] upper_limit_scn the upper bound to determain which log entries can reserve
-  // param[in] pre_accum_checksum, the accum_checksum of the pre log
-  int truncate(const share::SCN &upper_limit_scn, const int64_t pre_accum_checksum);
-  bool check_compatibility() const;
-
   TO_STRING_KV("LogGroupEntryHeader", header_);
   NEED_SERIALIZE_AND_DESERIALIZE;
   static const int64_t BLOCK_SIZE = PALF_BLOCK_SIZE;

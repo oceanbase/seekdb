@@ -60,11 +60,6 @@ enum ObLogBaseType
   //for standby timestamp service
   STANDBY_TIMESTAMP_LOG_BASE_TYPE = 13,
 
-  // for global auto increment service
-  GAIS_LOG_BASE_TYPE = 14,
-
-  // for das id service
-  DAS_ID_LOG_BASE_TYPE = 15,
   //for recovery_ls_service
   RESTORE_SERVICE_LOG_BASE_TYPE = 16,
 
@@ -101,22 +96,16 @@ enum ObLogBaseType
 
   COMMON_LS_SERVICE_LOG_BASE_TYPE = 36,
 
-  // only use role change service, do not write clog
+  // local lifecycle callback only; does not write clog
   LS_BLOCK_TX_SERVICE_LOG_BASE_TYPE = 37,
 
 
   TTL_LOG_BASE_TYPE = 39,
-  
-  // for table load resource manager
-  TABLE_LOAD_RESOURCE_SERVICE_LOG_BASE_TYPE = 40,
 
   // for tenant snapshot
   SNAPSHOT_SCHEDULER_LOG_BASE_TYPE = 41,
   //for tenant clone
   CLONE_SCHEDULER_LOG_BASE_TYPE = 42,
-
-  // for mview maintenance service
-  MVIEW_MAINTENANCE_SERVICE_LOG_BASE_TYPE = 43,
 
   // for DBMS_SCHEDULER
   DBMS_SCHEDULER_LOG_BASE_TYPE = 45,
@@ -143,7 +132,7 @@ enum ObLogBaseType
   DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE = 54,
   // for vector index scheduler
   VEC_INDEX_SERVICE_LOG_BASE_TYPE  = 60,
-  // for sys tenant load sys package service on sys ls leader
+  // for the local sys tenant package service
   SYS_TENANT_LOAD_SYS_PACKAGE_SERVICE_LOG_BASE_TYPE = 61,
   // for internal table change notifier (timezone, SRS, etc.)
   INTERNAL_TABLE_NOTIFIER_LOG_BASE_TYPE = 62,
@@ -189,10 +178,6 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str ,"RECOVERY_LS_SERVICE", str_len);
   } else if (log_type == STANDBY_TIMESTAMP_LOG_BASE_TYPE) {
     strncpy(str ,"STANDBY_TIMESTAMP", str_len);
-  } else if (log_type == GAIS_LOG_BASE_TYPE) {
-    strncpy(str ,"GAIS", str_len);
-  } else if (log_type == DAS_ID_LOG_BASE_TYPE) {
-    strncpy(str ,"DAS_ID", str_len);
   } else if (log_type == RESTORE_SERVICE_LOG_BASE_TYPE) {
     strncpy(str ,"RESTORE_SERVICE", str_len);
   } else if (log_type == RESERVED_SNAPSHOT_LOG_BASE_TYPE) {
@@ -229,10 +214,6 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str ,"SNAPSHOT_SCHEDULER", str_len);
   } else if (log_type == CLONE_SCHEDULER_LOG_BASE_TYPE) {
     strncpy(str ,"CLONE_SCHEDULER", str_len);
-  } else if (log_type == TABLE_LOAD_RESOURCE_SERVICE_LOG_BASE_TYPE) {
-    strncpy(str ,"TABLE_LOAD_RESOURCE_SERVICE", str_len);
-  } else if (log_type == MVIEW_MAINTENANCE_SERVICE_LOG_BASE_TYPE) {
-    strncpy(str, "MVIEW_MAINTENANCE_SERVICE_LOG_BASE_TYPE", str_len);
   } else if (log_type == TABLE_LOCK_LOG_BASE_TYPE) {
     strncpy(str ,"TABLE_LOCK", str_len);
   } else if (log_type == SHARED_STORAGE_PRE_WARM_LOG_BASE_TYPE) {
@@ -279,29 +260,12 @@ public:
                      const share::SCN &scn) = 0;
 };
 
-class ObIRoleChangeSubHandler
+class ObILocalLogHandler
 {
 public:
-  virtual void switch_to_follower_forcedly() = 0;
-  virtual int switch_to_leader() = 0;
-  // @retval
-  //   OB_SUCCESS, role switch execution succeeded
-  //   OB_LS_NEED_REVOKE, role switch execution failed, need to step down proactively
-  //   OTHERS , role switch execution failed, no need to resign proactively
-  //
-  // The reason for adding OB_LS_NEED_REVOKE is that switch_to_follower_gracefully includes two steps:
-  //   a. Execute leader->follower;
-  //   b. Execute follower->leader switch.
-  //
-  //   a. Execution successful, indicates that the subsequent leader switch work can be performed
-  //   a. Execution failed, need to execute 1.b
-  //   b. Execution successful, indicates that this leader switch operation failed, but does not require an active resignation
-  //   b. Execution failed, indicates that this leader switch operation failed, but needs to step down proactively
-  //
-  // After negotiation, it was decided to use error codes to distinguish the above various exceptions.
-  virtual int switch_to_follower_gracefully() = 0;
-  virtual int resume_leader() = 0;
-  VIRTUAL_TO_STRING_KV("ObIRoleChangeSubHandler", "Dummy");
+  virtual void deactivate() = 0;
+  virtual int activate() = 0;
+  VIRTUAL_TO_STRING_KV("ObILocalLogHandler", "Dummy");
 };
 
 // services inherit from ObICheckpointSubHandler
@@ -316,33 +280,48 @@ public:
 #define REGISTER_TO_LOGSERVICE(type, subhandler)                                            \
   if (OB_SUCC(ret)) {                                                                       \
     if (OB_FAIL(replay_handler_.register_handler(type, subhandler))) {                      \
-      LOG_WARN("replay_handler_ register failed", K(ret), K(type), K(ls_meta_.ls_id_));     \
-    } else if (OB_FAIL(role_change_handler_.register_handler(type, subhandler))) {          \
-      LOG_WARN("role_change_handler_ register failed", K(ret), K(type), K(ls_meta_.ls_id_));\
+      LOG_WARN("replay_handler_ register failed", K(ret), K(type));                        \
+    } else if (OB_FAIL(local_log_handler_set_.register_handler(type, subhandler))) {          \
+      LOG_WARN("local_log_handler_set_ register failed", K(ret), K(type));                 \
     } else if (OB_FAIL(checkpoint_executor_.register_handler(type, subhandler))) {          \
-      LOG_WARN("checkpoint_executor_ register failed", K(ret), K(type), K(ls_meta_.ls_id_));\
+      LOG_WARN("checkpoint_executor_ register failed", K(ret), K(type));                   \
     } else {                                                                                \
-      LOG_INFO("register to logservice success", K(type), K(ls_meta_.ls_id_));              \
+      LOG_INFO("register to logservice success", K(type));                                 \
     }                                                                                       \
   }
 
 #define UNREGISTER_FROM_LOGSERVICE(type, subhandler)                                        \
   (void)replay_handler_.unregister_handler(type);                                           \
-  (void)role_change_handler_.unregister_handler(type);                                      \
+  (void)local_log_handler_set_.unregister_handler(type);                                      \
   (void)checkpoint_executor_.unregister_handler(type);                                      \
+
+#define REGISTER_REPLAY_CHECKPOINT_HANDLER(type, subhandler)                                \
+  if (OB_SUCC(ret)) {                                                                        \
+    if (OB_FAIL(replay_handler_.register_handler(type, subhandler))) {                       \
+      LOG_WARN("replay_handler_ register failed", K(ret), K(type));                         \
+    } else if (OB_FAIL(checkpoint_executor_.register_handler(type, subhandler))) {           \
+      LOG_WARN("checkpoint_executor_ register failed", K(ret), K(type));                    \
+    } else {                                                                                 \
+      LOG_INFO("register replay and checkpoint handler success", K(type));                  \
+    }                                                                                        \
+  }
+
+#define UNREGISTER_REPLAY_CHECKPOINT_HANDLER(type)                                          \
+  (void)replay_handler_.unregister_handler(type);                                            \
+  (void)checkpoint_executor_.unregister_handler(type);                                       \
 
 #define REGISTER_TO_RESTORESERVICE(type, subhandler)                                        \
   if (OB_SUCC(ret)) {                                                                       \
-    if (OB_FAIL(restore_role_change_handler_.register_handler(type, subhandler))) {         \
-      LOG_WARN("restore_role_change_handler_ register failed",                              \
-          K(ret), K(type), K(ls_meta_.ls_id_));                                             \
+    if (OB_FAIL(restore_local_log_handler_set_.register_handler(type, subhandler))) {         \
+      LOG_WARN("restore_local_log_handler_set_ register failed",                              \
+          K(ret), K(type));                                                                 \
     } else {                                                                                \
-      LOG_INFO("register to restoreservice success", K(type), K(ls_meta_.ls_id_));          \
+      LOG_INFO("register to restoreservice success", K(type));                             \
     }                                                                                       \
   }
 
 #define UNREGISTER_FROM_RESTORESERVICE(type, subhandler)                                     \
-  (void)restore_role_change_handler_.unregister_handler(type);
+  (void)restore_local_log_handler_set_.unregister_handler(type);
 } // namespace logservice
 } // namespace oceanbase
 

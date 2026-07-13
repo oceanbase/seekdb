@@ -234,41 +234,26 @@ int ObLoadDataBase::memory_wait_local(ObExecContext &ctx,
     }
 
     bool need_wait_freeze = true;
-    ObAddr leader_addr;
-    ObDASLocationRouter &loc_router = DAS_CTX(ctx).get_location_router();
 
     while (OB_SUCC(ret) && need_wait_freeze) {
 
       ob_usleep(WAIT_INTERVAL_US);
 
-      leader_addr.reset();
       res.reuse();
-      char leader_ip_str[MAX_IP_ADDR_LENGTH];
-      const int64_t retry_us = 200 * 1000;
-      //Try to use the results in the cache as much as possible, without forcing a cache refresh.
-      const int64_t expire_renew_time = 0;
       if (OB_FAIL(ObLoadDataUtils::check_session_status(*session))) {
         LOG_WARN("session is not valid during wait", K(ret));
-      } else if (OB_FAIL(loc_router.get_leader(tablet_id, leader_addr, expire_renew_time))) {
-        LOG_WARN("failed to get location", K(ret));
-        ob_usleep(retry_us);
-      } else {
-        LOG_DEBUG("get participants", K(tablet_id), K(leader_addr));
       }
 
       if (OB_FAIL(ret)) {
-      } else if (!leader_addr.ip_to_string(leader_ip_str, sizeof(leader_ip_str))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("format leader ip failed", K(ret), K(leader_addr));
       } else if (OB_FAIL(sql.assign_fmt(SERVER_TENANT_MEMORY_EXAMINE_SQL))) {
-        LOG_WARN("fail to append sql", K(ret), K(leader_addr));
+        LOG_WARN("fail to append sql", K(ret));
       } else if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
         LOG_WARN("fail to execute sql", K(ret), K(sql));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get sql result", K(ret));
       } else if (OB_FAIL(result->next())) {
-        LOG_WARN("fail to get result, force renew location", K(ret), K(leader_addr));
+        LOG_WARN("fail to get result", K(ret));
         if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
         }
@@ -277,24 +262,14 @@ int ObLoadDataBase::memory_wait_local(ObExecContext &ctx,
         //LOG_INFO("LOAD DATA is waiting for tenant memory available",
                  //K(waited_seconds), K(total_wait_secs));
       }
-      //if it is location exception, refresh location cache with block interface
-      //because load data can only local retry
-      loc_router.refresh_location_cache_by_errno(false, ret);
     }
 
     //print info
     if (OB_SUCC(ret)) {
       int64_t wait_secs = (ObTimeUtil::current_time() - start_wait_ts) / 1000000;
       total_wait_secs += wait_secs;
-      if (leader_addr != server_addr) {
-        LOG_INFO("LOAD DATA location change",
-                 "old_addr", server_addr,
-                 "new_addr", leader_addr);
-        server_addr = leader_addr;
-        is_leader_changed = true;
-      } else {
-        is_leader_changed = false;
-      }
+      server_addr = GCTX.self_addr();
+      is_leader_changed = false;
       LOG_INFO("LOAD DATA is resumed",
                "waited_seconds", wait_secs,
                K(total_wait_secs));
@@ -2248,36 +2223,13 @@ void ObDataFragMgr::distory_datafrag(ObDataFrag *frag) {
 int ObPartDataFragMgr::update_part_location(ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
-  const int64_t retry_us = 200 * 1000;
-  const int64_t retry_timeout =
-    std::min(ObTimeUtil::current_time() + 30 * USECS_PER_SEC, // the RTO is 30s
-             ctx.get_my_session()->get_query_timeout_ts());
+  UNUSED(ctx);
 
   if (OB_UNLIKELY(!tablet_id_.is_valid())) {
     ret = OB_NOT_INIT;
     LOG_WARN("invalid partition key", K(ret));
   } else {
-    bool force_renew = false;
-    ObDASLocationRouter &loc_router = DAS_CTX(ctx).get_location_router();
-    do {
-      const int64_t expire_renew_time = force_renew ? INT64_MAX : 0;
-      if (OB_FAIL(loc_router.get_leader(tablet_id_, leader_addr_, expire_renew_time))) {
-        if (is_location_service_renew_error(ret) && !force_renew) {
-          // retry one time
-          force_renew = true;
-          LOG_WARN("failed to get location and force renew", K(ret), K(tablet_id_));
-        } else {
-          LOG_WARN("failed to get location", K(ret), K(tablet_id_));
-          if (ObTimeUtil::current_time() + retry_us > retry_timeout) {
-            force_renew = false;
-          } else {
-            ob_usleep(retry_us);
-          }
-        }
-      } else {
-        LOG_DEBUG("get participants", K(tablet_id_), K(leader_addr_));
-      }
-    } while (is_location_service_renew_error(ret) && force_renew);
+    leader_addr_ = GCTX.self_addr();
   }
 
   return ret;

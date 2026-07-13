@@ -18,7 +18,6 @@
 #define _OB_MEM_LEAK_CHECKER_INFO_H_
 
 #include "share/ob_define.h"
-#include "lib/net/ob_addr.h"
 #include "lib/allocator/ob_mem_leak_checker.h"
 
 #include "observer/virtual_table/ob_virtual_table_iterator.h"
@@ -39,9 +38,6 @@ class ObMemLeakCheckerInfo : public common::ObVirtualTableIterator
 public:
   ObMemLeakCheckerInfo();
   virtual ~ObMemLeakCheckerInfo();
-
-  inline void set_addr(common::ObAddr &addr) {addr_ = &addr;}
-  
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 private:
@@ -52,7 +48,6 @@ private:
   common::ObMemLeakChecker *leak_checker_;
   common::ObMemLeakChecker::mod_info_map_t::hashmap::const_iterator it_;
   common::ObMemLeakChecker::mod_info_map_t info_map_;
-  common::ObAddr *addr_;
   const char *label_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMemLeakCheckerInfo);

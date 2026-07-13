@@ -35,7 +35,7 @@ class ObPushdownOperator;
 namespace storage
 {
 class ObTabletHandle;
-class ObLSHandle;
+class ObLS;
 struct ObTabletSplitTscInfo;
 }
 namespace share
@@ -53,7 +53,6 @@ public:
   // FIXME:remove it
   int get_tablet_handle(
       const ObTabletID &tablet_id,
-      const ObLSID &ls_id,
       storage::ObTabletHandle &tablet_handle);
 
   int get_tablet_split_range(

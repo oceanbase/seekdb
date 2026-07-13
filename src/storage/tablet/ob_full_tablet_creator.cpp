@@ -16,7 +16,7 @@
 
 #include "ob_full_tablet_creator.h"
 #include "share/rc/ob_module_provider.h"
-#include "src/storage/tx_storage/ob_ls_map.h"
+#include "storage/tablet/ob_tablet.h"
 
 #define USING_LOG_PREFIX STORAGE
 
@@ -46,10 +46,10 @@ int ObFullTabletCreator::init()
       OB_MALLOC_NORMAL_BLOCK_SIZE/2, ObMemAttr("TinyAllocator", ObCtxIds::DEFAULT_CTX_ID)))) {
     LOG_WARN("fail to init tenant tiny allocator", K(ret));
   } else {
-    ContextParam param;
+    lib::ContextParam param;
     param.set_mem_attr("MSTXCTX", common::ObCtxIds::DEFAULT_CTX_ID)
       .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE)
-      .set_properties(ALLOC_THREAD_SAFE);
+      .set_properties(lib::ALLOC_THREAD_SAFE);
     if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mstx_mem_ctx_, param))) {
       LOG_WARN("fail to create entity", K(ret));
     } else if (nullptr == mstx_mem_ctx_) {
@@ -94,7 +94,7 @@ int ObFullTabletCreator::throttle_tablet_creation()
   int ret = OB_SUCCESS;
 
   bool need_wait = false;
-  const int64_t limit_size = get_tenant_memory_limit() / 20; // 5%
+  const int64_t limit_size = lib::get_tenant_memory_limit() / 20; // 5%
   const int64_t timeout = 5 * 1000L; // 5ms for effective replay
   const int64_t log_timeout = 1 * 1000 * 1000L; // 1s
   const int64_t start_time = ObTimeUtility::fast_current_time();

@@ -32,7 +32,6 @@ public:
   virtual ~MockObAccessService() = default;
 public:
   int insert_rows(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       transaction::ObTxDesc &tx_desc,
       const ObDMLBaseParam &dml_param,

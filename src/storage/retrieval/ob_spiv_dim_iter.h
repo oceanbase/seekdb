@@ -59,7 +59,6 @@ struct ObSPIVDimIterParam
   const ObDASScanCtDef *inv_idx_scan_ctdef_;
   ObDASScanRtDef *inv_idx_scan_rtdef_;
   sql::ObEvalCtx *eval_ctx_;
-  share::ObLSID ls_id_;
   ObTabletID dim_docid_value_tablet_id_;
   double query_value_;
   uint32_t dim_;
@@ -79,7 +78,6 @@ public:
         inv_scan_domain_id_expr_(nullptr),
         inv_scan_score_expr_(nullptr),
         eval_ctx_(nullptr),
-        ls_id_(),
         dim_docid_value_tablet_id_(),
         is_inited_(false),
         max_batch_size_(1),
@@ -132,7 +130,6 @@ private:
   const ObDASScanCtDef *inv_idx_scan_ctdef_;
   ObDASScanRtDef *inv_idx_scan_rtdef_;
   sql::ObEvalCtx *eval_ctx_;
-  share::ObLSID ls_id_;
   ObTabletID dim_docid_value_tablet_id_;
   bool is_inited_;
   int64_t max_batch_size_;

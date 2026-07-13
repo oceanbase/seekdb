@@ -52,10 +52,6 @@ public:
   static int register_process(
       obcall::ObBatchRemoveTabletArg &arg,
       mds::BufferCtx &ctx);
-  static int on_commit_for_old_mds(
-      const char* buf,
-      const int64_t len,
-      const transaction::ObMulSourceDataNotifyArg &notify_arg);
   static int on_replay(
       const char* buf,
       const int64_t len,

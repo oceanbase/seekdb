@@ -233,13 +233,11 @@ public:
   virtual ~ObIMemtableMgr();
 
   int init(
-      const share::ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const lib::Worker::CompatMode compat_mode);
 
   int init(
       const ObTabletID &tablet_id,
-      const share::ObLSID &ls_id,
       const int64_t max_saved_schema_version,
       const int64_t max_saved_medium_scn,
       const lib::Worker::CompatMode compat_mode,
@@ -291,14 +289,12 @@ public:
 
   virtual int init_storage_recorder(
       const ObTabletID &tablet_id,
-      const share::ObLSID &ls_id,
       const int64_t max_saved_schema_version,
       const int64_t max_saved_medium_scn,
       const lib::Worker::CompatMode compat_mode,
       logservice::ObLogHandler *log_handler)
   { // do nothing
     UNUSED(tablet_id);
-    UNUSED(ls_id);
     UNUSED(max_saved_schema_version);
     UNUSED(max_saved_medium_scn);
     UNUSED(compat_mode);
@@ -324,7 +320,6 @@ protected:
   void release_head_memtable();
   void release_tail_memtable();
   virtual int init(const ObTabletID &tablet_id,
-                   const share::ObLSID &ls_id,
                    ObFreezer *freezer,
                    ObTenantMetaMemMgr *t3m) = 0;
 protected:

@@ -51,19 +51,15 @@ private:
 public:
   ObAllVirtualStorageMetaMemoryStatus();
   virtual ~ObAllVirtualStorageMetaMemoryStatus();
-  int init(common::ObIAllocator *allocator, common::ObAddr &addr);
+  int init(common::ObIAllocator *allocator);
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 
 private:
 private:
-  static const int64_t STRING_LEN = 128;
   static const int64_t POOL_NUM = 10;
 
 private:
-  common::ObAddr addr_;
-  char ip_buf_[common::OB_IP_STR_BUFF];
-  char address_[STRING_LEN];
   int64_t pool_idx_;
   ObSEArray<ObTenantMetaMemStatus, POOL_NUM> status_arr_;
 private:

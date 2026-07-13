@@ -38,8 +38,6 @@ class ObConfigManager;
 
 namespace obcall
 {
-struct ObAdminChangeReplicaArg;
-struct ObAdminMigrateReplicaArg;
 struct ObServerZoneArg;
 struct ObAdminMergeArg;
 struct ObAdminClearRoottableArg;

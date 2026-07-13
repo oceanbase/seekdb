@@ -75,24 +75,6 @@ public:
   ObSharedObjectReaderWriter &get_shared_object_raw_reader_writer() { return shared_object_raw_rwriter_; }
   storage::ObStorageLogger &get_slogger() { return slogger_; }
 
-  class ObLSItemIterator final
-  {
-  public:
-    explicit ObLSItemIterator(const storage::ObTenantSuperBlock &super_block):
-      idx_(0),
-      tenant_super_block_(super_block)
-      {}
-    ~ObLSItemIterator() = default;
-    int get_next_ls_item(storage::ObLSItem &item);
-    TO_STRING_KV(K_(idx), K_(tenant_super_block));
-  private:
-    int64_t idx_;
-    const storage::ObTenantSuperBlock tenant_super_block_;
-    DISALLOW_COPY_AND_ASSIGN(ObLSItemIterator);
-  };
-  int get_ls_items_by_status(
-    const storage::ObLSItemStatus status,
-    ObIArray<storage::ObLSItem> &ls_items);
 private:
 private:
   bool is_inited_;

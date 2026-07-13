@@ -17,7 +17,7 @@
 #include "ob_tx_ctx_table.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_service.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 
 namespace oceanbase
 {
@@ -103,21 +103,18 @@ int ObTxCtxTableRecoverHelper::recover_one_tx_ctx_(transaction::ObLSTxCtxMgr* ls
                                                    ObTxCtxTableInfo& ctx_info)
 {
   int ret = OB_SUCCESS;
-  transaction::ObPartTransCtx *tx_ctx = NULL;
+  transaction::ObTxCtx *tx_ctx = NULL;
   bool tx_ctx_existed = true;
-  common::ObAddr scheduler;
   // since 4.3 cluster_version in ctx_info
   uint64_t cluster_version = ctx_info.cluster_version_;
   transaction::ObTxCreateArg arg(true,  /* for_replay */
-                                 PartCtxSource::RECOVER,
+                                 TxCtxSource::RECOVER,
                                  ctx_info.tx_id_,
-                                 ctx_info.ls_id_,
                                  ctx_info.cluster_id_,     /* cluster_id */
                                  cluster_version,
                                  0, /*session_id*/
                                  0, /*client_sid*/
                                  0, /*associated_session_id*/
-                                 scheduler,
                                  INT64_MAX,
                                  share::g_mp->trans_service());
   if (OB_FAIL(ls_tx_ctx_mgr->create_tx_ctx(arg,
@@ -215,10 +212,9 @@ int ObTxCtxTableRecoverHelper::recover(const blocksstable::ObDatumRow &row,
 
   if (OB_SUCC(ret) && buf_completed) {
     ctx_info_.reset();
-    transaction::ObPartTransCtx *tx_ctx = NULL;
+    transaction::ObTxCtx *tx_ctx = NULL;
     int64_t pos = 0;
     bool tx_ctx_existed = true;
-    ctx_info_.set_compatible_version(curr_meta.get_version());
     if (FALSE_IT(TLOCAL_P_TX_BUFFER_NODE_ARRAY = &ctx_info_.exec_info_.multi_data_source_)) {// FIXME: for compat issue, should be removed after barrier version
     } else if (OB_FAIL(ctx_info_.deserialize(deserialize_buf, deserialize_buf_length, pos, tx_data_table))) {
       STORAGE_LOG(WARN, "failed to deserialize status_info", K(ret), K_(ctx_info));
@@ -244,10 +240,8 @@ int ObTxCtxTableRecoverHelper::recover(const blocksstable::ObDatumRow &row,
 }
 
 ObTxCtxTable::ObTxCtxTable()
-  : ls_id_(),
-    ls_tx_ctx_mgr_(NULL)
+  : ls_tx_ctx_mgr_(NULL)
 {
-  ls_id_.reset();
 }
 
 ObTxCtxTable::~ObTxCtxTable()
@@ -255,28 +249,22 @@ ObTxCtxTable::~ObTxCtxTable()
   reset();
 }
 
-int ObTxCtxTable::init(const ObLSID& ls_id) {
-  return acquire_ref_(ls_id);
+int ObTxCtxTable::init() {
+  return acquire_ref_();
 }
 
-OB_WEAK_SYMBOL int ObTxCtxTable::acquire_ref_(const ObLSID& ls_id)
+OB_WEAK_SYMBOL int ObTxCtxTable::acquire_ref_()
 {
   reset();
   int ret = OB_SUCCESS;
   transaction::ObTransService *txs = NULL;
-  ls_id_ = ls_id;
 
   if (NULL == ls_tx_ctx_mgr_) {
     if (OB_ISNULL(txs = share::g_mp->trans_service())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "trans_service get fail", K(ret));
-    } else if (OB_FAIL(txs->get_tx_ctx_mgr().get_ls_tx_ctx_mgr(ls_id, ls_tx_ctx_mgr_))) {
-      TRANS_LOG(ERROR, "get ls tx ctx mgr with ref failed", KP(txs));
-    } else if (NULL == ls_tx_ctx_mgr_) {
-      ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "ls tx ctx mgr is null", KP(txs));
     } else {
-      TRANS_LOG(INFO, "get ls tx ctx mgr successfully", KP(txs));
+      ls_tx_ctx_mgr_ = &txs->get_tx_ctx_mgr().get_tx_ctx_manager();
     }
   }
 
@@ -286,19 +274,7 @@ OB_WEAK_SYMBOL int ObTxCtxTable::acquire_ref_(const ObLSID& ls_id)
 OB_WEAK_SYMBOL int ObTxCtxTable::release_ref_()
 {
   int ret = OB_SUCCESS;
-  transaction::ObTransService *txs = NULL;
-
-  if (NULL != ls_tx_ctx_mgr_) {
-    if (OB_ISNULL(txs = share::g_mp->trans_service())) {
-      ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "trans_service get fail", K(ret));
-    } else if (OB_FAIL(txs->get_tx_ctx_mgr().revert_ls_tx_ctx_mgr(ls_tx_ctx_mgr_))) {
-      TRANS_LOG(ERROR, "revert ls tx ctx mgr with ref failed", KP(txs));
-    } else {
-      TRANS_LOG(INFO, "revert ls tx ctx mgr successfully", K(ls_id_), K(this));
-      ls_tx_ctx_mgr_ = NULL;
-    }
-  }
+  ls_tx_ctx_mgr_ = NULL;
 
   return ret;
 }
@@ -313,7 +289,6 @@ void ObTxCtxTable::reset()
 {
   recover_helper_.reset();
   release_ref_();
-  ls_id_.reset();
   ls_tx_ctx_mgr_ = NULL;
 }
 

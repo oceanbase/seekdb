@@ -26,7 +26,7 @@ namespace storage
 class ObLS;
 
 class ObLSStorageClogHandler : public logservice::ObIReplaySubHandler,
-                                 public logservice::ObIRoleChangeSubHandler,
+                                 public logservice::ObILocalLogHandler,
                                  public logservice::ObICheckpointSubHandler
 {
 public:
@@ -44,19 +44,11 @@ public:
       const palf::LSN &lsn,
       const share::SCN &scn) override final;
 
-  // for role change
-  void switch_to_follower_forcedly() override final
+  // local lifecycle
+  void deactivate() override final
   {
   }
-  int switch_to_leader() override final
-  {
-    return OB_SUCCESS;
-  }
-  int switch_to_follower_gracefully() override final
-  {
-    return OB_SUCCESS;
-  }
-  int resume_leader() override final
+  int activate() override final
   {
     return OB_SUCCESS;
   }

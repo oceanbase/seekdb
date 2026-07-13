@@ -26,8 +26,7 @@ using namespace share;
 namespace palf
 {
 LogIOWorker::LogIOWorker()
-    : log_io_worker_num_(-1),
-      cb_thread_pool_(NULL),
+    : cb_thread_pool_(NULL),
       palf_env_impl_(NULL),
       do_task_used_ts_(0),
       do_task_count_(0),
@@ -66,17 +65,15 @@ int LogIOWorker::init(const LogIOWorkerConfig &config,
         KP(throttle), KP(palf_env_impl));
   } else if (OB_FAIL(queue_.init(config.io_queue_capcity_, "IOWorkerLQ"))) {
     PALF_LOG(ERROR, "io task queue init failed", K(ret), K(config));
-  } else if (OB_FAIL(batch_io_task_mgr_.init(config.batch_width_,
-                                             config.batch_depth_,
+  } else if (OB_FAIL(batch_io_task_mgr_.init(config.batch_depth_,
                                              allocator,
                                              &wait_cost_stat_))) {
     PALF_LOG(ERROR, "BatchLogIOFlushLogTaskMgr init failed", K(ret), K(config));
   } else {
     share::ObThreadPool::set_run_wrapper(MTL_CTX());
-    log_io_worker_num_ = config.io_worker_num_;
     cb_thread_pool_ = cb_thread_pool;
     palf_env_impl_ = palf_env_impl;
-    PALF_REPORT_INFO_KV(K_(log_io_worker_num), KP_(cb_thread_pool));
+    PALF_REPORT_INFO_KV(KP_(cb_thread_pool));
     throttle_ = throttle;
     log_io_worker_queue_size_stat_.set_extra_info(EXTRA_INFOS);
     purge_throttling_task_submitted_seq_ = 0;
@@ -112,7 +109,6 @@ void LogIOWorker::destroy()
   throttle_ = NULL;
   cb_thread_pool_ = NULL;
   palf_env_impl_ = NULL;
-  log_io_worker_num_ = -1;
   queue_.destroy();
   batch_io_task_mgr_.destroy();
 }
@@ -271,7 +267,6 @@ bool LogIOWorker::need_reduce_(LogIOTask *io_task)
       break;
     case LogIOTaskType::FLUSH_META_TYPE:
     case LogIOTaskType::TRUNCATE_PREFIX_TYPE:
-    case LogIOTaskType::TRUNCATE_LOG_TYPE:
     default:
       break;
   }
@@ -339,8 +334,7 @@ int LogIOWorker::update_throttling_options_()
 }
 
 LogIOWorker::BatchLogIOFlushLogTaskMgr::BatchLogIOFlushLogTaskMgr()
-  : handle_count_(0), usable_count_(0), batch_width_(0),
-    wait_cost_stat_(NULL)
+  : batch_io_task_(), handle_count_(0), wait_cost_stat_(NULL)
 {}
 
 LogIOWorker::BatchLogIOFlushLogTaskMgr::~BatchLogIOFlushLogTaskMgr()
@@ -348,41 +342,14 @@ LogIOWorker::BatchLogIOFlushLogTaskMgr::~BatchLogIOFlushLogTaskMgr()
   destroy();
 }
 
-int LogIOWorker::BatchLogIOFlushLogTaskMgr::init(int64_t batch_width,
-                                                 int64_t batch_depth,
+int LogIOWorker::BatchLogIOFlushLogTaskMgr::init(int64_t batch_depth,
                                                  ObIAllocator *allocator,
                                                  ObMiniStat::ObStatItem *wait_cost_stat)
 {
   int ret = OB_SUCCESS;
-  batch_io_task_array_.set_allocator(allocator);
-  if (OB_FAIL(batch_io_task_array_.init(batch_width))) {
-    PALF_LOG(ERROR, "batch_io_task_array_ init failed", K(ret));
+  if (OB_FAIL(batch_io_task_.init(batch_depth, allocator))) {
+    PALF_LOG(ERROR, "BatchLogIOFlushLogTask init failed", K(ret));
   } else {
-    for (int i = 0; i < batch_width  && OB_SUCC(ret); i++) {
-      bool last_io_task_push_success = false;
-      char *ptr = reinterpret_cast<char*>(mtl_malloc(sizeof(BatchLogIOFlushLogTask), "LogIOTask"));
-      BatchLogIOFlushLogTask *io_task = NULL;
-      if (NULL == ptr) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        PALF_LOG(ERROR, "allocate memory failed", K(ret));
-      } else if (FALSE_IT(io_task = new(ptr)(BatchLogIOFlushLogTask))) {
-      } else if (OB_FAIL(io_task->init(batch_depth, allocator))) {
-        PALF_LOG(ERROR, "BatchLogIOFlushLogTask init failed", K(ret));
-        // NB: push batch will not failed becaue batch_io_task_array_ has reserved.
-      } else if (OB_FAIL(batch_io_task_array_.push_back(io_task))) {
-        PALF_LOG(ERROR, "batch_io_task_array_ push_back failed", K(ret), KP(io_task));
-      } else {
-        last_io_task_push_success = true;
-        PALF_LOG(INFO, "BatchLogIOFlushLogTask init success", K(ret), K(i),
-                 KP(io_task));
-      }
-      if (!last_io_task_push_success && NULL != io_task) {
-        io_task->destroy();
-        mtl_free(io_task);
-        io_task = NULL;
-      }
-    }
-    batch_width_ = usable_count_ = batch_width;
     wait_cost_stat_ = wait_cost_stat;
   }
   if (OB_FAIL(ret)) {
@@ -393,29 +360,16 @@ int LogIOWorker::BatchLogIOFlushLogTaskMgr::init(int64_t batch_width,
 
 void LogIOWorker::BatchLogIOFlushLogTaskMgr::destroy()
 {
-  handle_count_ = batch_width_ = usable_count_ = 0;
-  for (int i = 0; i < batch_io_task_array_.count(); i++) {
-    BatchLogIOFlushLogTask *&io_task = batch_io_task_array_[i];
-    if (NULL != io_task) {
-      io_task->~BatchLogIOFlushLogTask();
-      mtl_free(io_task);
-      io_task = NULL;
-    }
-  }
+  handle_count_ = 0;
+  batch_io_task_.destroy();
   wait_cost_stat_ = NULL;
-  batch_io_task_array_.destroy();
 }
 
 int LogIOWorker::BatchLogIOFlushLogTaskMgr::insert(LogIOFlushLogTask *io_task)
 {
-  int ret = OB_SUCCESS;
-  BatchLogIOFlushLogTask *batch_io_task = NULL;
-  const int64_t palf_id = io_task->get_palf_id();
-  if (OB_FAIL(find_usable_batch_io_task_(palf_id, batch_io_task))) {
-    PALF_LOG(WARN, "find_usable_batch_io_task_ failed", K(ret), K(palf_id));
-  } else if (OB_FAIL(batch_io_task->push_back(io_task))) {
-    PALF_LOG(TRACE, "push_back failed", K(ret), K(palf_id), KPC(io_task));
-  } else {
+  int ret = batch_io_task_.push_back(io_task);
+  if (OB_FAIL(ret)) {
+    PALF_LOG(TRACE, "push_back failed", K(ret), KPC(io_task));
   }
   return ret;
 }
@@ -423,18 +377,10 @@ int LogIOWorker::BatchLogIOFlushLogTaskMgr::insert(LogIOFlushLogTask *io_task)
 int LogIOWorker::BatchLogIOFlushLogTaskMgr::handle(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl)
 {
   int ret = OB_SUCCESS;
-  const int64_t count = batch_io_task_array_.count() - usable_count_;
-  // Each BatchLogIOFlushLogTask is a set LogIOFlushLogTask of one palf instance,
-  // even if execute 'do_task_' for one of LogIOFlushLogTask failed, we need
-  // execute 'do_task_' for next LogIOFlushLogTask.
-  const int64_t first_handle_ts = ObTimeUtility::fast_current_time();
-  for (int64_t i = 0; i < count; i++) {
-    BatchLogIOFlushLogTask *io_task = batch_io_task_array_[i];
-    if (OB_ISNULL(io_task)) {
-      ret = OB_ERR_UNEXPECTED;
-      PALF_LOG(ERROR, "BatchLogIOFlushLogTask in batch_io_task_array_ is nullptr, unexpected error!!!",
-               K(ret), KP(io_task), K(i));
-    } else if (OB_FAIL(statistics_wait_cost_(first_handle_ts, io_task))) {
+  BatchLogIOFlushLogTask *io_task = &batch_io_task_;
+  if (!empty()) {
+    const int64_t first_handle_ts = ObTimeUtility::fast_current_time();
+    if (OB_FAIL(statistics_wait_cost_(first_handle_ts, io_task))) {
       PALF_LOG(WARN, "do statistics failed", K(ret));
     } else if (OB_FAIL(io_task->do_task(cb_thread_pool, palf_env_impl))) {
       PALF_LOG(WARN, "do_task failed", K(ret), KP(io_task));
@@ -443,61 +389,17 @@ int LogIOWorker::BatchLogIOFlushLogTaskMgr::handle(LogIOTaskCbThreadPool *cb_thr
         wait_cost_stat_->stat(io_task->get_count(), io_task->get_accum_in_queue_time());
       }
       io_task->reset_accum_in_queue_time();
-      PALF_LOG(TRACE, "BatchLogIOFlushLogTaskMgr::handle success", K(ret), K(handle_count_),
-          KP(io_task));
+      PALF_LOG(TRACE, "BatchLogIOFlushLogTaskMgr::handle success", K(ret), K(handle_count_), KP(io_task));
     }
-    if (OB_NOT_NULL(io_task)) {
-      // 'handle_count_' used for statistics
-      handle_count_ += io_task->get_count();
-      io_task->reuse();
-      usable_count_++;
-    }
+    handle_count_ += io_task->get_count();
+    io_task->reuse();
   }
   return ret;
 }
 
 bool LogIOWorker::BatchLogIOFlushLogTaskMgr::empty()
 {
-  return usable_count_ == batch_width_;
-}
-
-int LogIOWorker::BatchLogIOFlushLogTaskMgr::find_usable_batch_io_task_(
-    const int64_t palf_id, BatchLogIOFlushLogTask *&batch_io_task)
-{
-  int ret = OB_SUCCESS;
-  const int64_t count = batch_io_task_array_.count();
-  bool found = false;
-  // 1. check whether the same palf id already exist in 'batch_io_task_array_',
-  // and get the BatchLogIOFlushLogTask in 'batch_io_task_array_' which has the
-  // same palf id.
-  for (int64_t i = 0; i < count && false == found; i++) {
-    BatchLogIOFlushLogTask *tmp_task = batch_io_task_array_[i];
-    if (OB_ISNULL(tmp_task)) {
-      ret = OB_ERR_UNEXPECTED;
-      PALF_LOG(ERROR, "unexpected error, tmp_task is nullptr", K(ret), KP(tmp_task), K(i));
-    } else if (palf_id == tmp_task->get_palf_id()) {
-      found = true;
-      batch_io_task = tmp_task;
-    }
-  }
-  // 2. if there is no same palf id in 'batch_io_task_array_', get the first
-  // available BatchLogIOFlushLogTask in 'batch_io_task_array_'.
-  for (int64_t i = 0; usable_count_ > 0 && i < count && false == found; i++) {
-    BatchLogIOFlushLogTask *tmp_task = batch_io_task_array_[i];
-    if (OB_ISNULL(tmp_task)) {
-      ret = OB_ERR_UNEXPECTED;
-      PALF_LOG(ERROR, "unexpected error, tmp_task is nullptr", K(ret), KP(tmp_task), K(i));
-    } else if (INVALID_PALF_ID == tmp_task->get_palf_id()) {
-      found = true;
-      batch_io_task = tmp_task;
-      usable_count_--;
-    }
-  }
-  PALF_LOG(TRACE, "find_usable_batch_io_task_ finished", K(ret), K(usable_count_), K(count), KP(this));
-  if (OB_SUCC(ret)) {
-    ret = true == found ? OB_SUCCESS : OB_SIZE_OVERFLOW;
-  }
-  return ret;
+  return 0 == batch_io_task_.get_count();
 }
 
 int64_t LogIOWorker::inc_and_fetch_purge_throttling_submitted_seq_()

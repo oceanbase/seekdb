@@ -83,7 +83,7 @@ private:
     }
     bool is_equal(const Item &item) const
     {
-      return true && key_ == item.key_;
+      return key_ == item.key_;
     }
     void set_concerned() { is_concerned_ = true; }
     bool is_concerned() const { return is_concerned_; }

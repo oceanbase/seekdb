@@ -52,7 +52,6 @@ public:
 public:
   int init(
       const int64_t context_id,
-      const share::ObLSID &ls_id,
       const ObTabletID &tablet_id/*always data tablet id.*/,
       const ObDirectLoadType &type);
   int open_sstable_slice(
@@ -119,9 +118,7 @@ public:
   TO_STRING_KV(K_(is_inited), K_(direct_load_type), K_(start_scn), K_(execution_id), KP(mgr_handle_.get_obj()));
 private:
   int close_for_idem();
-  int init_for_sn(
-      const share::ObLSID &ls_id,
-      const ObTabletID &tablet_id);
+  int init_for_sn(const ObTabletID &tablet_id);
   int init_for_ss();
   int open_sstable_slice_for_ss(
       const blocksstable::ObMacroDataSeq &start_seq,

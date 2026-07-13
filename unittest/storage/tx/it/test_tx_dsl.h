@@ -15,28 +15,20 @@
  */
 
 #define START_ONE_TX_NODE(n1)                                           \
-    auto n1 = new ObTxNode(1, ObAddr(ObAddr::VER::IPV4, "127.0.0.1", 8888), bus_); \
+    auto n1 = new ObTxNode(ObAddr(ObAddr::VER::IPV4, "127.0.0.1", 8888), bus_); \
     NAMED_DEFER(defer_n1, delete(n1));                                  \
     ASSERT_EQ(OB_SUCCESS, n1->start());                                 \
     LOG_INFO("##START_ONE_TX_NODE##", "node.addr_", n1->addr_);
 
-#define START_TWO_TX_NODE(n1, n2)                                       \
-    auto n1 = new ObTxNode(1, ObAddr(ObAddr::VER::IPV4, "127.0.0.1", 8888), bus_); \
-    auto n2 = new ObTxNode(2, ObAddr(ObAddr::VER::IPV4, "127.0.0.2", 8888), bus_); \
+#define START_TX_REPLAY_PAIR(n1, n2)                                    \
+    auto n1 = new ObTxNode(ObAddr(ObAddr::VER::IPV4, "127.0.0.1", 8888), bus_); \
+    auto n2 = new ObTxNode(ObAddr(ObAddr::VER::IPV4, "127.0.0.2", 8888), bus_); \
     NAMED_DEFER(defer_n1, delete(n1));                                  \
     NAMED_DEFER(defer_n2, delete(n2));                                  \
     ASSERT_EQ(OB_SUCCESS, n1->start());                                 \
+    n2->set_replay_source(*n1);                                         \
     ASSERT_EQ(OB_SUCCESS, n2->start());                                 \
-    LOG_INFO("##START_TWO_TX_NODE##", K(n1->addr_), K(n2->addr_));
-
-#define START_TWO_TX_NODE_WITH_LSID(n1, n2, ls_id)                                       \
-  auto n1 = new ObTxNode(ls_id, ObAddr(ObAddr::VER::IPV4, "127.0.0.1", 8888), bus_);     \
-  auto n2 = new ObTxNode(ls_id + 1, ObAddr(ObAddr::VER::IPV4, "127.0.0.2", 8888), bus_); \
-  NAMED_DEFER(defer_n1, delete (n1));                                                    \
-  NAMED_DEFER(defer_n2, delete (n2));                                                    \
-  ASSERT_EQ(OB_SUCCESS, n1->start());                                                    \
-  ASSERT_EQ(OB_SUCCESS, n2->start());                                                    \
-  LOG_INFO("##START_TWO_TX_NODE##", K(n1->addr_), K(n2->addr_));
+    LOG_INFO("##START_TX_REPLAY_PAIR##", K(n1->addr_), K(n2->addr_));
 
 #define PREPARE_TX(n1, tx)                                              \
     ObTxDescGuard guard = n1->get_tx_guard();                           \
@@ -62,10 +54,7 @@
     ASSERT_EQ(OB_SUCCESS, n1->create_branch_savepoint(tx, branch, sp));
 
 #define ROLLBACK_TO_IMPLICIT_SAVEPOINT(n1, tx, sp, timeout_us)          \
-    n1->rollback_to_implicit_savepoint(tx, sp, n1->ts_after_us(timeout_us), nullptr)
-
-#define ROLLBACK_TO_IMPLICIT_SAVEPOINT_X(n1, tx, sp, timeout_us, extra_touched_ls)          \
-    n1->rollback_to_implicit_savepoint(tx, sp, n1->ts_after_us(timeout_us), extra_touched_ls)
+    n1->rollback_to_implicit_savepoint(tx, sp, n1->ts_after_us(timeout_us), false)
 
 #define INJECT_LINK_FAILURE(n1, n2)                                     \
     ASSERT_EQ(OB_SUCCESS, bus_.inject_link_failure(n1->addr_, n2->addr_)); \
@@ -102,36 +91,7 @@
 
 #define FLUSH_REDO(n1)                                                  \
     do {                                                                \
-        ObLSTxCtxMgr *ls_tx_ctx_mgr = NULL;                             \
-        ASSERT_EQ(n1->txs_.tx_ctx_mgr_.get_ls_tx_ctx_mgr(n1->ls_id_, ls_tx_ctx_mgr), OB_SUCCESS); \
+        ObLSTxCtxMgr &tx_ctx_mgr = n1->txs_.tx_ctx_mgr_.get_tx_ctx_manager(); \
         ObTransID fail_tx_id;                                           \
-        ASSERT_EQ(ls_tx_ctx_mgr->traverse_tx_to_submit_redo_log(fail_tx_id, UINT32_MAX), OB_SUCCESS); \
-    } while(0)
-
-#define SWITCH_TO_FOLLOWER_FORCEDLY(n1)                                 \
-    do {                                                                \
-        ObLSTxCtxMgr *ls_tx_ctx_mgr = NULL;                             \
-        ASSERT_EQ(n1->txs_.tx_ctx_mgr_.get_ls_tx_ctx_mgr(n1->ls_id_, ls_tx_ctx_mgr), OB_SUCCESS); \
-        ASSERT_EQ(ls_tx_ctx_mgr->switch_to_follower_forcedly(), OB_SUCCESS); \
-    } while(0)
-
-#define SWITCH_TO_FOLLOWER_GRACEFULLY(n1)                               \
-    do {                                                                \
-        ObLSTxCtxMgr *ls_tx_ctx_mgr = NULL;                             \
-        ASSERT_EQ(n1->txs_.tx_ctx_mgr_.get_ls_tx_ctx_mgr(n1->ls_id_, ls_tx_ctx_mgr), OB_SUCCESS); \
-        ASSERT_EQ(ls_tx_ctx_mgr->switch_to_follower_gracefully(), OB_SUCCESS); \
-    } while(0)
-
-#define SWITCH_TO_LEADER(n1)                                            \
-    do {                                                                \
-        ObLSTxCtxMgr *ls_tx_ctx_mgr = NULL;                             \
-        ASSERT_EQ(n1->txs_.tx_ctx_mgr_.get_ls_tx_ctx_mgr(n1->ls_id_, ls_tx_ctx_mgr), OB_SUCCESS); \
-        ASSERT_EQ(ls_tx_ctx_mgr->switch_to_leader(), OB_SUCCESS);       \
-        /* wait state to LEADER */                                      \
-        while (!ls_tx_ctx_mgr->is_master()) {                           \
-            if (REACH_TIME_INTERVAL(500_ms)) {                          \
-                TRANS_LOG(INFO, "wait LS TxCtxMgr to be leader", KPC(ls_tx_ctx_mgr)); \
-            }                                                           \
-            usleep(10_ms);                                              \
-        }                                                               \
+        ASSERT_EQ(tx_ctx_mgr.traverse_tx_to_submit_redo_log(fail_tx_id, UINT32_MAX), OB_SUCCESS); \
     } while(0)

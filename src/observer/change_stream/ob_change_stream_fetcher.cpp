@@ -36,7 +36,6 @@
 #include "logservice/ob_log_base_header.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/tx_storage/ob_ls_handle.h"
 #include "logservice/ob_log_handler.h"
 #include "logservice/palf/log_io_context.h"
 #include "share/rc/ob_tenant_base.h"
@@ -51,7 +50,6 @@ ObCSFetcher::ObCSFetcher()
   : share::ObThreadPool(1),
     is_inited_(false),
     dispatcher_(nullptr),
-    ls_id_(ObLSID::SYS_LS_ID),
     iter_(),
     current_lsn_(),
     current_scn_(),
@@ -113,7 +111,7 @@ int ObCSFetcher::init_consumption_position_()
       start_lsn = current_lsn_;
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(logservice::seek_log_iterator(ls_id_, start_lsn, iter_))) {
+      if (OB_FAIL(logservice::seek_log_iterator(start_lsn, iter_))) {
         LOG_WARN("CSFetcher: fail to seek_log_iterator by min_dep_lsn", KR(ret), K(start_lsn));
       } else {
         current_lsn_ = start_lsn;
@@ -122,7 +120,7 @@ int ObCSFetcher::init_consumption_position_()
     }
   }
   if (OB_SUCC(ret)) {
-    palf::LogIOContext io_ctx(ls_id_.id(), palf::LogIOUser::CDC);
+    palf::LogIOContext io_ctx(palf::LogIOUser::CDC);
     if (OB_FAIL(iter_.set_io_context(io_ctx))) {
       LOG_WARN("CSFetcher: fail to set_io_context", KR(ret));
     }
@@ -167,7 +165,7 @@ int ObCSFetcher::init_consumption_position_()
             LOG_INFO("CSFetcher: schema version initialized by SCN", K(current_schema_version_));
           }
         }
-        if (OB_SUCC(ret) && OB_FAIL(logservice::seek_log_iterator(ls_id_, start_lsn, iter_))) {
+        if (OB_SUCC(ret) && OB_FAIL(logservice::seek_log_iterator(start_lsn, iter_))) {
           LOG_WARN("CSFetcher: fail to seek back after schema init", KR(ret));
         }
       }
@@ -246,14 +244,10 @@ int ObCSFetcher::get_min_dep_lsn(palf::LSN &min_lsn)
   min_lsn.reset();
 
   palf::LSN end_lsn;
-  storage::ObLSHandle tmp_handle;
   storage::ObLS *ls = nullptr;
-  logservice::ObLogHandler *log_handler = nullptr;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, tmp_handle, storage::ObLSGetMod::LOG_MOD))
-      || OB_ISNULL(ls = tmp_handle.get_ls())
-      || OB_ISNULL(log_handler = ls->get_log_handler())
-      || OB_FAIL(log_handler->get_end_lsn(end_lsn))) {
-    LOG_WARN("CSFetcher: fail to get end_lsn for min_dep_lsn", KR(ret), K(ls_id_));
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))
+      || OB_FAIL(ls->get_log_handler()->get_end_lsn(end_lsn))) {
+    LOG_WARN("CSFetcher: fail to get end_lsn for min_dep_lsn", KR(ret));
     return ret;
   }
 
@@ -302,7 +296,7 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
   refresh_scn.reset();
 
   SCN gts_scn;
-  if (OB_FAIL(OB_TS_MGR.get_gts(NULL, gts_scn))) {
+  if (OB_FAIL(OB_TS_MGR.get_gts(gts_scn))) {
     LOG_WARN("CSFetcher: fail to get GTS for refresh_scn", KR(ret));
     return ret;
   }
@@ -326,14 +320,10 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
   // Fetch max_lsn to distinguish case 3 and case 4.
   palf::LSN max_lsn;
   {
-    storage::ObLSHandle tmp_handle;
     storage::ObLS *ls = nullptr;
-    logservice::ObLogHandler *log_handler = nullptr;
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, tmp_handle, storage::ObLSGetMod::LOG_MOD))
-        || OB_ISNULL(ls = tmp_handle.get_ls())
-        || OB_ISNULL(log_handler = ls->get_log_handler())
-        || OB_FAIL(log_handler->get_max_lsn(max_lsn))) {
-      LOG_WARN("CSFetcher: fail to get max_lsn in get_refresh_scn", KR(ret), K(ls_id_));
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))
+        || OB_FAIL(ls->get_log_handler()->get_max_lsn(max_lsn))) {
+      LOG_WARN("CSFetcher: fail to get max_lsn in get_refresh_scn", KR(ret));
       return ret;
     }
   }
@@ -341,7 +331,7 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
   if (current_lsn_.is_valid() && current_lsn_ >= max_lsn) {
     // Case 3: caught up — no pending logs, advance to GTS.
     SCN gts_scn;
-    if (OB_FAIL(OB_TS_MGR.get_gts(NULL, gts_scn))) {
+    if (OB_FAIL(OB_TS_MGR.get_gts(gts_scn))) {
       LOG_WARN("CSFetcher: fail to get GTS for refresh_scn (caught-up)", KR(ret));
     } else {
       refresh_scn = gts_scn;
@@ -877,7 +867,7 @@ void ObCSFetcher::run1()
       if (OB_SUCC(init_consumption_position_())) {
         iter_ready = true;
         FLOG_INFO("CSFetcher: iterator initialized, starting consumption",
-                  K(current_lsn_), K(current_scn_), K(ls_id_));
+                  K(current_lsn_), K(current_scn_));
       } else {
         LOG_WARN("CSFetcher: init consumption position failed, retry", KR(ret));
         usleep(CS_FETCHER_INIT_FAIL_SLEEP_US);

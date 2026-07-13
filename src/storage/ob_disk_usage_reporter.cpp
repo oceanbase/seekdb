@@ -20,6 +20,7 @@
 
 
 #include "logservice/ob_log_service.h"
+#include "storage/tx_storage/ob_ls_service.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
 #include "logservice/ob_server_log_block_mgr.h"
@@ -88,34 +89,19 @@ int ObDiskUsageReportTask::count_tenant_data()
     STORAGE_LOG(WARN, "failed to get tenant's meta block list", K(ret));
   } else {
     ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
-    ObLSService *ls_service = share::g_mp->ls_service();
-    if (OB_ISNULL(ls_service) || OB_ISNULL(t3m) ) {
+    if (OB_ISNULL(t3m)) {
       ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "unexpected error!!! ls_service and t3m must not nullptr", K(ret), KP(ls_service), KP(t3m));
+      STORAGE_LOG(WARN, "tenant meta memory manager must not be null", K(ret), KP(t3m));
     } else {
       ObTenantTabletPtrWithInMemObjIterator tablet_ptr_iter(*t3m);
       ObTabletPointerHandle pointer_handle;
       ObTabletHandle unused_tablet_handle;
       ObTabletMapKey tablet_map_key;
       const ObTabletPointer *tablet_pointer = nullptr;
-      ObLSHandle ls_handle;
-      common::ObRole ls_role;
-      ObLS *ls = NULL;
-      bool is_leader = false;
-
       while (OB_SUCC(ret) && OB_SUCC(tablet_ptr_iter.get_next_tablet_pointer(tablet_map_key, pointer_handle, unused_tablet_handle))) {
         if (OB_UNLIKELY(!pointer_handle.is_valid())) {
           ret = OB_ERR_UNEXPECTED;
           STORAGE_LOG(WARN, "unexpected invalid tablet", K(ret), K(pointer_handle));
-        } else if (OB_NOT_NULL(ls) && ls->get_ls_id() == tablet_map_key.ls_id_) {
-          // do not need get_ls again
-        } else if (OB_FAIL(ls_service->get_ls(tablet_map_key.ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-          STORAGE_LOG(WARN, "get_ls failed", K(tablet_map_key.ls_id_));
-        } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-          ret = OB_ERR_UNEXPECTED;
-          STORAGE_LOG(WARN, "unexpected error!!! ls must not nullptr", K(tablet_map_key.ls_id_));
-        } else if (OB_FAIL(ls->get_ls_role(ls_role))) {
-          STORAGE_LOG(WARN, "fail to get ls_role", K(ret), KPC(ls));
         } 
         
         if (OB_FAIL(ret)) {
@@ -246,4 +232,3 @@ int ObDiskUsageReportTask::delete_tenant_usage_stat()
 
 } // namespace storage
 } // namespace oceanbase
-

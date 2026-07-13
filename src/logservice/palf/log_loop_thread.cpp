@@ -84,7 +84,7 @@ void LogLoopThread::log_loop_()
     const int64_t start_ts = ObTimeUtility::current_time();
 
     IPalfHandleImpl *handle = nullptr;
-    if (OB_SUCCESS != palf_env_impl_->get_palf_handle_impl(SYS_PALF_ID, handle)) {
+    if (OB_SUCCESS != palf_env_impl_->get_palf_handle_impl(handle)) {
       ob_usleep(run_interval_, true/*is_idle_sleep*/);
       continue;
     }

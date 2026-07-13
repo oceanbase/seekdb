@@ -197,7 +197,7 @@ public:
     TASK_TYPE_FAST_MIGRATE_ASYNC_TASK = 36,
     TASK_TYPE_VALIDATE_BACKUP = 37,
     TASK_TYPE_VALIDATE_FINISH = 38,
-    TASK_TYPE_BUILD_CHANGE_REPLICA = 39,
+    TASK_TYPE_RESERVED_39 = 39,
     TASK_TYPE_RESTORE_TAILORED_PREPARE = 40,
     TASK_TYPE_RESTORE_TAILORED_PROCESS = 41,
     TASK_TYPE_RESTORE_TAILORED_FINISH = 42,
@@ -1008,8 +1008,8 @@ public:
     const ObDagId &dag_id, bool &exist);
   int cancel_dag_net(const ObDagId &dag_id);
   int get_first_dag_net(ObIDagNet *&dag_net);
-  int check_ls_compaction_dag_exist_with_cancel(const ObLSID &ls_id, bool &exist);
-  int get_min_end_scn_from_major_dag(const ObLSID &ls_id, SCN &min_end_scn);
+  int check_compaction_dag_exist_with_cancel(bool &exist);
+  int get_min_end_scn_from_major_dag(SCN &min_end_scn);
 private:
   bool is_dag_map_full_();
   typedef common::ObDList<ObIDagNet> DagNetList;
@@ -1127,8 +1127,8 @@ public:
 
   // 1. check ls compaction exist
   // 2. cancel ls compaction waiting dag
-  int check_ls_compaction_dag_exist_with_cancel(const ObLSID &ls_id, bool &exist);
-  int get_min_end_scn_from_major_dag(const ObLSID &ls_id, SCN &min_end_scn);
+  int check_compaction_dag_exist_with_cancel(bool &exist);
+  int get_min_end_scn_from_major_dag(SCN &min_end_scn);
   int get_compaction_dag_count(int64_t dag_count);
   int get_max_major_finish_time(const int64_t version, int64_t &estimated_finish_time);
   int diagnose_dag(
@@ -1384,8 +1384,8 @@ public:
 
   // 1. check ls compaction exist
   // 2. cancel ls compaction waiting dag
-  int check_ls_compaction_dag_exist_with_cancel(const ObLSID &ls_id, bool &exist);
-  int get_min_end_scn_from_major_dag(const ObLSID &ls_id, SCN &min_end_scn);
+  int check_compaction_dag_exist_with_cancel(bool &exist);
+  int get_min_end_scn_from_major_dag(SCN &min_end_scn);
   int check_dag_net_exist(
       const ObDagId &dag_id, bool &exist);
   int cancel_dag_net(const ObDagId &dag_id);

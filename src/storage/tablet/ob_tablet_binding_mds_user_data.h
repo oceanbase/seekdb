@@ -64,8 +64,7 @@ public:
                 K_(data_tablet_id),
                 K_(hidden_tablet_id),
                 K_(lob_meta_tablet_id),
-                K_(lob_piece_tablet_id),
-                K_(is_old_mds));
+                K_(lob_piece_tablet_id));
 
 public:
   int64_t snapshot_version_; // if redefined it is max readable snapshot, else it is min readable snapshot.
@@ -75,7 +74,6 @@ public:
   common::ObTabletID lob_meta_tablet_id_;
   common::ObTabletID lob_piece_tablet_id_;
   bool redefined_;
-  bool is_old_mds_;
 };
 } // namespace storage
 } // namespace oceanbase

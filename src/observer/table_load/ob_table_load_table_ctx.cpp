@@ -233,8 +233,8 @@ int ObTableLoadTableCtx::init_coordinator_ctx(const ObIArray<uint64_t> &column_i
 }
 
 int ObTableLoadTableCtx::init_store_ctx(
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &partition_id_array,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &target_partition_id_array)
+  const ObTableLoadArray<ObTableLoadTabletId> &partition_id_array,
+  const ObTableLoadArray<ObTableLoadTabletId> &target_partition_id_array)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {

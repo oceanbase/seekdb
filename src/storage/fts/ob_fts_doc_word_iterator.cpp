@@ -45,7 +45,6 @@ ObFTDocWordScanIterator::~ObFTDocWordScanIterator()
 
 int ObFTDocWordScanIterator::init(
     const uint64_t table_id,
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     const transaction::ObTxReadSnapshot *snapshot,
     const int64_t schema_version)
@@ -54,8 +53,8 @@ int ObFTDocWordScanIterator::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init fulltext doc word scan iterator twice", K(ret), K(is_inited_));
-  } else if (OB_FAIL(init_scan_param(table_id, ls_id, tablet_id, snapshot, schema_version))) {
-    LOG_WARN("fail to init scan param", K(ret), K(table_id), K(ls_id), K(tablet_id), K(snapshot), K(schema_version));
+  } else if (OB_FAIL(init_scan_param(table_id, tablet_id, snapshot, schema_version))) {
+    LOG_WARN("fail to init scan param", K(ret), K(table_id), K(tablet_id), K(snapshot), K(schema_version));
   } else {
     is_inited_ = true;
   }
@@ -155,7 +154,6 @@ int ObFTDocWordScanIterator::get_next_row(blocksstable::ObDatumRow *&datum_row)
 
 int ObFTDocWordScanIterator::init_scan_param(
     const uint64_t table_id,
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     const transaction::ObTxReadSnapshot *snapshot,
     const int64_t schema_version)
@@ -172,16 +170,14 @@ int ObFTDocWordScanIterator::init_scan_param(
                          false // read_latest
                         );
   if (OB_UNLIKELY(OB_INVALID_ID == table_id
-              || !ls_id.is_valid()
               || !tablet_id.is_valid()
               || nullptr == snapshot
               || schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(table_id), K(ls_id), K(tablet_id), KPC(snapshot), K(schema_version));
+    LOG_WARN("invalid arguments", K(ret), K(table_id), K(tablet_id), KPC(snapshot), K(schema_version));
   } else if (OB_FAIL(build_table_param(table_id, table_param_, scan_param_.column_ids_))) {
     LOG_WARN("fail to build table param", K(ret), K(table_id));
   } else {
-    scan_param_.ls_id_ = ls_id;
     scan_param_.tablet_id_ = tablet_id;
     scan_param_.schema_version_ = schema_version;
     scan_param_.is_get_ = false;

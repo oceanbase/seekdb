@@ -31,7 +31,6 @@ class ObLogHandler;
 } // namespace palf
 namespace share
 {
-class ObLSID;
 }
 namespace storage
 {
@@ -80,7 +79,7 @@ public:
   void reset();
 
   // leader
-  int try_update_for_leader(
+  int try_update(
       const int64_t update_version,
       ObIAllocator *allocator,
       const int64_t timeout_ts = 1000000);
@@ -109,8 +108,8 @@ protected:
       const char *buf,
       const int64_t size,
       int64_t &pos) = 0;
-  virtual int sync_clog_succ_for_leader(const int64_t update_version) = 0;
-  virtual void sync_clog_failed_for_leader() = 0;
+  virtual int on_sync_clog_success(const int64_t update_version) = 0;
+  virtual void on_sync_clog_failure() = 0;
   // call prepare struct only once
   virtual int prepare_struct_in_lock(
       int64_t &update_version,
@@ -136,11 +135,9 @@ protected:
   share::SCN get_log_scn() const { return clog_scn_; }
 
   int get_tablet_handle(
-      const share::ObLSID &ls_id,
       const ObTabletID &tablet_id,
       ObTabletHandle &tablet_handle);
   int replay_get_tablet_handle(
-      const share::ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const share::SCN &scn,
       ObTabletHandle &tablet_handle);

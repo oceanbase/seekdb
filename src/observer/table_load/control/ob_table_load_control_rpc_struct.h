@@ -197,8 +197,8 @@ public:
   bool online_opt_stat_gather_;
   ObTableLoadDDLParam ddl_param_;
   // partition info
-  table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> partition_id_array_; // origin table
-  table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> target_partition_id_array_; // target table
+  table::ObTableLoadArray<table::ObTableLoadTabletId> partition_id_array_; // origin table
+  table::ObTableLoadArray<table::ObTableLoadTabletId> target_partition_id_array_; // target table
   sql::ObSQLSessionInfo *session_info_;
   sql::ObFreeSessionCtx free_session_ctx_;
   int64_t avail_memory_;
@@ -491,8 +491,8 @@ public:
 public:
   uint64_t table_id_;
   ObTableLoadDDLParam ddl_param_;
-  ObSArray<table::ObTableLoadLSIdAndPartitionId> partition_id_array_; // origin table
-  ObSArray<table::ObTableLoadLSIdAndPartitionId> target_partition_id_array_; // target table
+  ObSArray<table::ObTableLoadTabletId> partition_id_array_; // origin table
+  ObSArray<table::ObTableLoadTabletId> target_partition_id_array_; // target table
 };
 
 } // namespace observer

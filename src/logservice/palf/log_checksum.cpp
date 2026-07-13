@@ -30,17 +30,16 @@ LogChecksum::LogChecksum()
     verify_checksum_(0)
 {}
 
-int LogChecksum::init(const int64_t palf_id, const int64_t accum_checksum)
+int LogChecksum::init(const int64_t accum_checksum)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
   } else {
-    palf_id_ = palf_id;
     accum_checksum_ = accum_checksum;
     verify_checksum_ = accum_checksum;
     is_inited_ = true;
-    PALF_LOG(INFO, "LogChecksum init success", K_(palf_id), K_(verify_checksum), K_(accum_checksum));
+    PALF_LOG(INFO, "LogChecksum init success", K_(verify_checksum), K_(accum_checksum));
   }
   return ret;
 }
@@ -48,7 +47,6 @@ int LogChecksum::init(const int64_t palf_id, const int64_t accum_checksum)
 void LogChecksum::destroy()
 {
   is_inited_ = false;
-  palf_id_ = INVALID_PALF_ID;
   accum_checksum_ = 0;
   verify_checksum_ = 0;
 }
@@ -64,7 +62,7 @@ int LogChecksum::acquire_accum_checksum(const int64_t data_checksum,
     accum_checksum_ = common::ob_crc64(accum_checksum_, const_cast<int64_t *>(&data_checksum),
                                        sizeof(data_checksum));
     accum_checksum = accum_checksum_;
-    PALF_LOG(TRACE, "acquire_accum_checksum success", K_(palf_id), K(data_checksum), K_(verify_checksum),
+    PALF_LOG(TRACE, "acquire_accum_checksum success", K(data_checksum), K_(verify_checksum),
         K_(prev_accum_checksum), K_(accum_checksum));
   }
   return ret;
@@ -85,7 +83,7 @@ int LogChecksum::verify_accum_checksum(const int64_t data_checksum,
   } else {
     // Update verify_checksum_ when checking succeeds.
     verify_checksum_ = new_verify_checksum;
-    PALF_LOG(TRACE, "verify_accum_checksum success", K(ret), K_(palf_id), K(data_checksum), K(accum_checksum),
+    PALF_LOG(TRACE, "verify_accum_checksum success", K(ret), K(data_checksum), K(accum_checksum),
              K_(verify_checksum), K_(accum_checksum));
   }
   
@@ -119,12 +117,12 @@ int LogChecksum::rollback_accum_checksum(const int64_t curr_accum_checksum)
   int ret = common::OB_SUCCESS;
   if (curr_accum_checksum != accum_checksum_) {
     ret = OB_STATE_NOT_MATCH;
-    PALF_LOG(WARN, "accum_checksum does not match", K_(palf_id), K(curr_accum_checksum), K_(prev_accum_checksum),
+    PALF_LOG(WARN, "accum_checksum does not match", K(curr_accum_checksum), K_(prev_accum_checksum),
         K_(accum_checksum));
   } else {
     accum_checksum_ = prev_accum_checksum_;
     prev_accum_checksum_ = 0;
-    PALF_LOG(INFO, "rollback_accum_checksum", K_(palf_id), K(curr_accum_checksum), K_(prev_accum_checksum),
+    PALF_LOG(INFO, "rollback_accum_checksum", K(curr_accum_checksum), K_(prev_accum_checksum),
         K_(accum_checksum));
   }
   return ret;
@@ -133,13 +131,13 @@ int LogChecksum::rollback_accum_checksum(const int64_t curr_accum_checksum)
 void LogChecksum::set_accum_checksum(const int64_t accum_checksum)
 {
   accum_checksum_ = accum_checksum;
-  PALF_LOG(INFO, "set_accum_checksum", K_(palf_id), K(accum_checksum));
+  PALF_LOG(INFO, "set_accum_checksum", K(accum_checksum));
 }
 
 void LogChecksum::set_verify_checksum(const int64_t verify_checksum)
 {
   verify_checksum_ = verify_checksum;
-  PALF_LOG(INFO, "set_verify_checksum", K_(palf_id), K(verify_checksum));
+  PALF_LOG(INFO, "set_verify_checksum", K(verify_checksum));
 }
 
 } // namespace palf

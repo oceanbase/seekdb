@@ -22,7 +22,6 @@
 #include "lib/hash_func/murmur_hash.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include "meta_programming/ob_type_traits.h"
-#include "share/ob_ls_id.h"
 #include "src/storage/multi_data_source/compile_utility/compile_mapper.h"
 #include "src/storage/multi_data_source/mds_node.h"
 #include "src/storage/multi_data_source/compile_utility/map_type_index_in_tuple.h"
@@ -105,7 +104,7 @@ public:
   int64_t to_string(char *buf, const int64_t buf_len) const;
   int64_t simple_to_string(char *buf, const int64_t buf_len, int64_t &pos) const;
   template <typename K, typename V>
-  int convert_to_user_mds_node(UserMdsNode<K, V> &user_mds_node, const share::ObLSID &ls_id, const ObTabletID &tablet_id) const;
+  int convert_to_user_mds_node(UserMdsNode<K, V> &user_mds_node) const;
 
   int assign(const MdsDumpNode &rhs, ObIAllocator &alloc);
 
@@ -113,7 +112,6 @@ public:
   int deserialize(common::ObIAllocator &allocator, const char *buf, const int64_t data_len, int64_t &pos);
   int64_t get_serialize_size() const;
 
-  static constexpr int64_t UNIS_VERSION_V1 = 1;
   static constexpr int64_t UNIS_VERSION = 2;
 
   // member state
@@ -285,7 +283,7 @@ inline int MdsDumpKey::convert_to_user_key<DummyKey>(DummyKey &user_key) const
 }
 
 template <typename K, typename V>
-int MdsDumpNode::convert_to_user_mds_node(UserMdsNode<K, V> &user_mds_node, const share::ObLSID &ls_id, const ObTabletID &tablet_id) const
+int MdsDumpNode::convert_to_user_mds_node(UserMdsNode<K, V> &user_mds_node) const
 {
   #define PRINT_WRAPPER KR(ret), K(*this), K(generated_hash), K(typeid(V).name())
   int ret = OB_SUCCESS;

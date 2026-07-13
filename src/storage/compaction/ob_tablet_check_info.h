@@ -19,7 +19,6 @@
 
 #include "lib/utility/ob_print_utils.h"
 #include "common/ob_tablet_id.h"
-#include "share/ob_ls_id.h"
 
 namespace oceanbase
 {
@@ -31,13 +30,11 @@ class ObTabletCheckInfo
 public:
   ObTabletCheckInfo()
     : tablet_id_(),
-      ls_id_(),
       check_medium_scn_(0)
   {}
 
-  ObTabletCheckInfo(const common::ObTabletID &tablet_id, const share::ObLSID &ls_id, int64_t medium_scn)
+  ObTabletCheckInfo(const common::ObTabletID &tablet_id, int64_t medium_scn)
     : tablet_id_(tablet_id),
-      ls_id_(ls_id),
       check_medium_scn_(medium_scn)
   {}
 
@@ -50,14 +47,12 @@ public:
     return OB_SUCCESS;
   }
   const ObTabletID &get_tablet_id() const { return tablet_id_; }
-  const share::ObLSID &get_ls_id() const { return ls_id_; }
   int64_t get_medium_scn() const { return check_medium_scn_; }
   bool operator==(const ObTabletCheckInfo &other) const;
-  TO_STRING_KV(K_(tablet_id), K_(ls_id), K_(check_medium_scn));
+  TO_STRING_KV(K_(tablet_id), K_(check_medium_scn));
 
 private:
   common::ObTabletID tablet_id_;
-  share::ObLSID ls_id_;
   int64_t check_medium_scn_;
 };
 

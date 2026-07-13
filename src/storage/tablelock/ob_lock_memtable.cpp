@@ -21,7 +21,7 @@
 #include "storage/tablelock/ob_table_lock_iterator.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/tablelock/ob_table_lock_deadlock.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -89,18 +89,17 @@ int ObLockTableSplitLogCb::on_failure()
   return ret;
 }
 
-int ObLockTableSplitLogCb::init(ObLockMemtable *memtable, const share::ObLSID &ls_id)
+int ObLockTableSplitLogCb::init(ObLockMemtable *memtable)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init ObLockTableSplitLogCb twice", KR(ret), K(memtable), K(ls_id));
-  } else if (!is_valid_(memtable, ls_id)){
+    LOG_WARN("init ObLockTableSplitLogCb twice", KR(ret), K(memtable));
+  } else if (!is_valid_(memtable)){
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the parameters is invalid", K(ret), K(memtable), K(ls_id));
+    LOG_WARN("the parameters is invalid", K(ret), K(memtable));
   } else {
     memtable_ = memtable;
-    ls_id_ = ls_id;
     is_inited_ = true;
   }
   return ret;
@@ -136,17 +135,13 @@ int ObLockTableSplitLogCb::set(const ObTabletID &src_tablet_id,
 }
 
 
-bool ObLockTableSplitLogCb::is_valid_(const ObLockMemtable *memtable, const ObLSID &ls_id)
+bool ObLockTableSplitLogCb::is_valid_(const ObLockMemtable *memtable)
 {
   int ret = OB_SUCCESS;
   bool is_valid = true;
   if (OB_ISNULL(memtable)) {
     is_valid = false;
     LOG_WARN("ObLockMemtable in ObLockTableSplitLogCb is null");
-  }
-  if (!ls_id.is_valid()) {
-    is_valid = false;
-    LOG_WARN("ObLSID in ObLockTableSplitLogCb is invalid");
   }
   return is_valid;
 }
@@ -186,7 +181,7 @@ ObLockMemtable::ObLockMemtable()
     max_committed_scn_(),
     is_frozen_(false),
     need_check_tablet_status_(false),
-    reserved_counter_(0),
+    tablet_status_check_counter_(0),
     freezer_(nullptr),
     flush_lock_(common::ObLatchIds::CLOG_CKPT_LOCK)
 {}
@@ -198,29 +193,26 @@ ObLockMemtable::~ObLockMemtable()
 
 int ObLockMemtable::init(
     const ObITable::TableKey &table_key,
-    const ObLSID &ls_id,
     ObFreezer *freezer)
 {
   int ret = OB_SUCCESS;
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init ObLockMemtable twice", KR(ret), K(ls_id));
+    LOG_WARN("init ObLockMemtable twice", KR(ret));
   } else if (OB_ISNULL(freezer)
-            || !ls_id.is_valid()
             || !table_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_id), K(freezer), K(table_key));
+    LOG_WARN("invalid argument", K(ret), K(freezer), K(table_key));
   } else {
     if (OB_FAIL(ObITable::init(table_key))) {
       LOG_WARN("ObITable::init fail", K(ret), K(table_key));
     } else if (OB_FAIL(obj_lock_map_.init())) {
       LOG_WARN("lock map mgr init failed.", K(ret));
     } else {
-      ls_id_ = ls_id;
       freezer_ = freezer;
       is_inited_ = true;
-      LOG_INFO("ObLockMemtable init successfully", K(ls_id), K(table_key), K(this));
+      LOG_INFO("ObLockMemtable init successfully", K(table_key), K(this));
     }
     if (OB_FAIL(ret)) {
       reset();
@@ -240,7 +232,7 @@ void ObLockMemtable::reset()
   flushed_scn_.set_min();
   is_frozen_ = false;
   need_check_tablet_status_ = false;
-  reserved_counter_ = 0;
+  tablet_status_check_counter_ = 0;
   freezer_ = nullptr;
   is_inited_ = false;
 }
@@ -261,8 +253,8 @@ int ObLockMemtable::lock_(
   bool register_to_deadlock = false;
   ObTxIDSet conflict_tx_set;
   const bool is_two_phase_lock = param.is_two_phase_lock_;
-  int64_t input_reserved_counter = -1;
-  int64_t output_reserved_counter = -1;
+  int64_t input_status_check_counter = -1;
+  int64_t output_status_check_counter = -1;
 
   // 1. record lock myself(check conflict).
   // 2. record lock at memtable ctx.
@@ -279,8 +271,8 @@ int ObLockMemtable::lock_(
       if (OB_FAIL(guard.write_auth(ctx))) {
         LOG_WARN("not allow lock table.", K(ret), K(ctx));
       } else if (OB_FAIL(check_tablet_write_allow_(lock_op,
-                                                   input_reserved_counter,
-                                                   output_reserved_counter))) {
+                                                   input_status_check_counter,
+                                                   output_status_check_counter))) {
         LOG_WARN("check tablet write allow failed", K(ret), K(lock_op));
       } else {
         mem_ctx = static_cast<ObMemtableCtx *>(ctx.mvcc_acc_ctx_.mem_ctx_);
@@ -314,10 +306,10 @@ int ObLockMemtable::lock_(
           LOG_WARN("record lock at mem_ctx failed.", K(ret), K(lock_op));
         } else if (FALSE_IT(succ_step = STEP_IN_MEM_CTX)) {
         } else {
-          input_reserved_counter = output_reserved_counter;
+          input_status_check_counter = output_status_check_counter;
           ret = check_tablet_write_allow_(lock_op,
-                                          input_reserved_counter,
-                                          output_reserved_counter);
+                                          input_status_check_counter,
+                                          output_status_check_counter);
         }
       }
       if (OB_FAIL(ret) && succ_step == STEP_IN_LOCK_MGR) {
@@ -430,13 +422,12 @@ int ObLockMemtable::lock_(
 }
 
 int ObLockMemtable::check_tablet_write_allow_(const ObTableLockOp &lock_op,
-                                              const int64_t input_reserved_counter,
-                                              int64_t &output_reserved_counter)
+                                              const int64_t input_status_check_counter,
+                                              int64_t &output_status_check_counter)
 {
   int ret = OB_SUCCESS;
   ObTabletID tablet_id;
-  ObLSHandle ls_handle;
-  ObLS *ls = nullptr;
+  ObLS *tenant_ls = nullptr;
   ObTabletHandle tablet_handle;
   ObTabletCreateDeleteMdsUserData data;
   mds::MdsWriter writer;
@@ -445,30 +436,27 @@ int ObLockMemtable::check_tablet_write_allow_(const ObTableLockOp &lock_op,
 
   // the order must be ensured
   bool need_check_tablet_status = ATOMIC_LOAD(&need_check_tablet_status_);
-  output_reserved_counter = ATOMIC_LOAD(&reserved_counter_);
+  output_status_check_counter = ATOMIC_LOAD(&tablet_status_check_counter_);
 
   if (!need_check_tablet_status
-      && (input_reserved_counter < 0
-          || input_reserved_counter == output_reserved_counter)) {
+      && (input_status_check_counter < 0
+          || input_status_check_counter == output_status_check_counter)) {
   } else if (!lock_op.lock_id_.is_tablet_lock()) {
   } else if (OB_FAIL(lock_op.lock_id_.convert_to(tablet_id))) {
     LOG_WARN("convert lock id to tablet_id failed", K(ret), K(lock_op));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::TABLELOCK_MOD))) {
-    LOG_WARN("failed to get ls", K(ret), K(ls_id_));
-  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls should not be NULL", K(ret), KP(ls));
-  } else if (OB_FAIL(ls->get_tablet(tablet_id,
-                                    tablet_handle,
-                                    0,
-                                    ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    LOG_WARN("get tablet with timeout failed", K(ret), K(ls->get_ls_id()), K(tablet_id));
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+    LOG_WARN("failed to get ls", K(ret));
+  } else if (OB_FAIL(tenant_ls->get_tablet(tablet_id,
+                                                    tablet_handle,
+                                                    0,
+                                                    ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
+    LOG_WARN("get tablet with timeout failed", K(ret), K(tablet_id));
   } else if (OB_FAIL(tablet_handle.get_obj()->ObITabletMdsInterface::get_latest_tablet_status(
       data, writer, trans_stat, trans_version))) {
     LOG_WARN("failed to get CreateDeleteMdsUserData", KR(ret));
     if (OB_EMPTY_RESULT == ret) {
       ret = OB_TABLET_NOT_EXIST;
-      LOG_WARN("failed to get CreateDeleteMdsUserData", KR(ret), K(ls->get_ls_id()), K(tablet_id));
+      LOG_WARN("failed to get CreateDeleteMdsUserData", KR(ret), K(tablet_id));
     }
   } else if (trans_stat == mds::TwoPhaseCommitState::ON_COMMIT && data.tablet_status_.is_writable_for_dml()) {
     // allow
@@ -492,8 +480,8 @@ int ObLockMemtable::unlock_(
   bool need_retry = false;
   uint64_t unused_lock_mode_cnt_in_same_trans[TABLE_LOCK_MODE_COUNT] = {0, 0, 0, 0, 0};
   ObLockStep succ_step = STEP_BEGIN;
-  int64_t input_reserved_counter = -1;
-  int64_t output_reserved_counter = -1;
+  int64_t input_status_check_counter = -1;
+  int64_t output_status_check_counter = -1;
 
   // 1. record unlock op myself(check conflict).
   // 2. record unlock op at memtable ctx.
@@ -512,8 +500,8 @@ int ObLockMemtable::unlock_(
       } else if (OB_FAIL(guard.write_auth(ctx))) {
         LOG_WARN("not allow unlock table.", K(ret), K(ctx));
       } else if (OB_FAIL(check_tablet_write_allow_(unlock_op,
-                                                   input_reserved_counter,
-                                                   output_reserved_counter))) {
+                                                   input_status_check_counter,
+                                                   output_status_check_counter))) {
         LOG_WARN("check tablet write allow failed", K(ret), K(unlock_op));
       } else if (FALSE_IT(mem_ctx = static_cast<ObMemtableCtx *>(ctx.mvcc_acc_ctx_.mem_ctx_))) {
         // check whether the unlock op exist already
@@ -538,10 +526,10 @@ int ObLockMemtable::unlock_(
         LOG_WARN("record lock at mem_ctx failed.", K(ret), K(unlock_op));
       } else if (FALSE_IT(succ_step = STEP_IN_MEM_CTX)) {
       } else {
-        input_reserved_counter = output_reserved_counter;
+        input_status_check_counter = output_status_check_counter;
         ret = check_tablet_write_allow_(unlock_op,
-                                        input_reserved_counter,
-                                        output_reserved_counter);
+                                        input_status_check_counter,
+                                        output_status_check_counter);
       }
       if (OB_FAIL(ret) && succ_step == STEP_IN_LOCK_MGR) {
         obj_lock_map_.remove_lock_record(unlock_op);
@@ -639,23 +627,20 @@ int ObLockMemtable::post_obj_lock_conflict_(ObMvccAccessCtx &acc_ctx,
     LOG_WARN("can not get tenant lock_wait_mgr MTL");
   } else {
     int tmp_ret = OB_SUCCESS;
-    auto tx_ctx = acc_ctx.tx_ctx_;
     auto tx_id = acc_ctx.get_tx_id();
-    bool remote_tx = tx_ctx->get_scheduler() != tx_ctx->get_addr();
     // TODO: one thread only can wait at one lock now.
     // this may be not enough.
     if (OB_TMP_FAIL(lock_wait_mgr->post_lock(OB_TRY_LOCK_ROW_CONFLICT,
                                              LS_LOCK_TABLET,
                                              lock_id,
                                              lock_wait_expire_ts,
-                                             remote_tx,
+                                             false,
                                              -1,
                                              -1,  // total_trans_node_cnt
                                              acc_ctx.tx_desc_->get_assoc_session_id(),
                                              tx_id,
                                              conflict_tx_id,
                                              lock_mode,
-                                             ls_id_,
                                              recheck_f))) {
       LOG_WARN("post_lock after tx conflict failed",
                K(tmp_ret), K(tx_id), K(conflict_tx_id));
@@ -676,8 +661,7 @@ void ObLockMemtable::update_rec_and_max_committed_scn(const share::SCN &commit_s
              K(commit_scn),
              K(rec_scn_),
              K(pre_rec_scn_),
-             K(freeze_scn_),
-             K(ls_id_));
+             K(freeze_scn_));
     pre_rec_scn_.dec_update(commit_scn);
   } else {
     rec_scn_.dec_update(commit_scn);
@@ -935,7 +919,7 @@ int ObLockMemtable::update_lock_status(
   } else if ((OUT_TRANS_LOCK == op_info.op_type_ || OUT_TRANS_UNLOCK == op_info.op_type_)
              && LOCK_OP_COMPLETE == status) {
     update_rec_and_max_committed_scn(commit_scn);
-    LOG_INFO("out_trans update_lock_status", K(ret), K(op_info), K(commit_scn), K(status), K(rec_scn_), K(ls_id_));
+    LOG_INFO("out_trans update_lock_status", K(ret), K(op_info), K(commit_scn), K(status), K(rec_scn_));
   }
   LOG_DEBUG("ObLockMemtable::update_lock_status", K(ret), K(op_info), K(commit_scn), K(status));
   return ret;
@@ -1111,7 +1095,7 @@ SCN ObLockMemtable::get_rec_scn()
   // no need lock because rec_scn_ aesc except INT64_MAX
   LOG_INFO("rec_scn of ObLockMemtable is ",
            K(rec_scn_), K(flushed_scn_), K(pre_rec_scn_),
-           K(freeze_scn_), K(max_committed_scn_), K(is_frozen_), K(ls_id_));
+           K(freeze_scn_), K(max_committed_scn_), K(is_frozen_));
   // If pre_rec_scn_ is max, it means that previous memtable
   // has already been flushed. In ohter words, it means that
   // rec_scn_ is ready to work, so we can return rec_scn_.
@@ -1130,7 +1114,7 @@ SCN ObLockMemtable::get_rec_scn()
     if (pre_rec_scn_ > rec_scn_) {
       LOG_INFO("prec_rec_scn_ is larger than rec_scn_!", K(pre_rec_scn_),
                K(rec_scn_), K(flushed_scn_), K(freeze_scn_),
-               K(max_committed_scn_), K(is_frozen_), K(ls_id_));
+               K(max_committed_scn_), K(is_frozen_));
     }
     return share::SCN::min(pre_rec_scn_, rec_scn_);
   }
@@ -1156,17 +1140,17 @@ int ObLockMemtable::on_memtable_flushed()
   } else {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("freeze_scn_ should not smaller than flushed_scn_", K(ret),
-              K_(flushed_scn), K_(freeze_scn), K_(ls_id));
+              K_(flushed_scn), K_(freeze_scn));
   }
   ATOMIC_STORE(&is_frozen_, false);
-  LOG_INFO("lock memtable on_memtable_flushed success", K(ret), K(flushed_scn_), K(ls_id_));
+  LOG_INFO("lock memtable on_memtable_flushed success", K(ret), K(flushed_scn_));
   return ret;
 }
 
 bool ObLockMemtable::can_be_minor_merged()
 {
   bool bool_ret = is_frozen_memtable();
-  LOG_INFO("ObLockMemtable::can_be_minor_merged", K(bool_ret), K(ls_id_));
+  LOG_INFO("ObLockMemtable::can_be_minor_merged", K(bool_ret));
   return bool_ret;
 }
 
@@ -1189,11 +1173,11 @@ int ObLockMemtable::flush(SCN recycle_scn,
     SCN rec_scn = get_rec_scn();
     if (rec_scn >= recycle_scn) {
       LOG_INFO("lock memtable no need to flush", K(rec_scn), K(recycle_scn),
-               K(is_frozen_), K(ls_id_));
+               K(is_frozen_));
     } else if (is_active_memtable()) {
       freeze_scn_.inc_update(max_committed_scn_);
       if (flushed_scn_ >= freeze_scn_) {
-        LOG_INFO("skip freeze because of flushed", K_(ls_id), K_(flushed_scn), K_(freeze_scn));
+        LOG_INFO("skip freeze because of flushed", K_(flushed_scn), K_(freeze_scn));
       } else {
         pre_rec_scn_ = rec_scn_;
         rec_scn_.set_max();
@@ -1212,7 +1196,7 @@ int ObLockMemtable::flush(SCN recycle_scn,
   if (is_frozen_memtable()) {
     SCN max_consequent_callbacked_scn = SCN::min_scn();
     if (OB_FAIL(freezer_->get_max_consequent_callbacked_scn(max_consequent_callbacked_scn))) {
-      LOG_WARN("get_max_consequent_callbacked_scn failed", K(ret), K(ls_id_));
+      LOG_WARN("get_max_consequent_callbacked_scn failed", K(ret));
     } else if (max_consequent_callbacked_scn < freeze_scn_) {
       LOG_INFO("lock memtable not ready for flush",
                K(max_consequent_callbacked_scn),
@@ -1221,7 +1205,6 @@ int ObLockMemtable::flush(SCN recycle_scn,
       // dependent to judging is_active_memtable() in dag
       // otherwise maybe merge active memtable
       compaction::ObTabletMergeDagParam param;
-      param.ls_id_ = ls_id_;
       param.tablet_id_ = LS_LOCK_TABLET;
       param.merge_type_ = compaction::MINI_MERGE;
       param.merge_version_ = ObVersion::MIN_VERSION;
@@ -1230,7 +1213,7 @@ int ObLockMemtable::flush(SCN recycle_scn,
           LOG_WARN("failed to schedule lock_memtable merge dag", K(ret), K(this));
         }
       } else {
-        LOG_INFO("schedule lock_memtable merge_dag successfully", K(ls_id_), K(freeze_scn_));
+        LOG_INFO("schedule lock_memtable merge_dag successfully", K(freeze_scn_));
       }
     }
   }
@@ -1347,7 +1330,7 @@ int ObLockMemtable::replay_row(
       LOG_WARN("replay lock failed", K(ret), K(lock_op));
     }
   }
-  LOG_DEBUG("ObMemtable::replay_row finish.", K(ret), K(lock_id), K(ls_id_));
+  LOG_DEBUG("ObMemtable::replay_row finish.", K(ret), K(lock_id));
   return ret;
 }
 
@@ -1366,7 +1349,7 @@ int ObLockMemtable::replay_lock(
   } else if (OB_FAIL(replay_lock_(mem_ctx, lock_op, scn))) {
     LOG_WARN("replay lock failed", K(ret), K(lock_op));
   }
-  LOG_DEBUG("ObMemtable::replay_lock finish.", K(ret), K(lock_op), K(ls_id_), K(scn));
+  LOG_DEBUG("ObMemtable::replay_lock finish.", K(ret), K(lock_op), K(scn));
   return ret;
 }
 
@@ -1381,8 +1364,8 @@ int ObLockMemtable::table_lock_split(const ObTabletID &src_tablet_id,
   if (OB_FAIL(check_valid_for_table_lock_split_(src_tablet_id, dst_tablet_ids))) {
     LOG_WARN(
       "the parameters for table lock split is invlaid", K(ret), K(split_cb), K(src_tablet_id), K(dst_tablet_ids));
-  } else if (OB_FAIL(split_cb.init(this, ls_id_))) {
-    LOG_WARN("init ObLockTableSplitLogCb failed", K(ret), K(ls_id_));
+  } else if (OB_FAIL(split_cb.init(this))) {
+    LOG_WARN("init ObLockTableSplitLogCb failed", K(ret));
   } else if (OB_FAIL(obj_lock_map_.table_lock_split(src_tablet_id, dst_tablet_ids, trans_id, split_cb))) {
     LOG_WARN("table lock split failed", K(ret), K(src_tablet_id), K(dst_tablet_ids), K(trans_id), K(split_cb));
   }
@@ -1401,24 +1384,16 @@ int ObLockMemtable::register_into_deadlock_detector_(
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   ObTransLockPartID tx_lock_part_id;
-  ObAddr parent_addr;
-  const ObLSID &ls_id = ctx.ls_id_;
   const int64_t priority = ~(ctx.mvcc_acc_ctx_.tx_desc_->get_active_ts());
   tx_lock_part_id.lock_id_ = lock_op.lock_id_;
   tx_lock_part_id.trans_id_ = lock_op.create_trans_id_;
   if (OB_FAIL(ObTableLockDeadlockDetectorHelper::register_trans_lock_part(
-      tx_lock_part_id, ls_id, priority))) {
-    LOG_WARN("register trans lock part failed", K(ret), K(tx_lock_part_id),
-             K(ls_id));
-  } else if (OB_FAIL(ObTransDeadlockDetectorAdapter::get_trans_scheduler_info_on_participant(
-      tx_lock_part_id.trans_id_, ls_id, parent_addr))) {
-    LOG_WARN("get scheduler address failed", K(tx_lock_part_id), K(ls_id));
+      tx_lock_part_id, priority))) {
+    LOG_WARN("register trans lock part failed", K(ret), K(tx_lock_part_id));
   } else if (OB_FAIL(ObTableLockDeadlockDetectorHelper::add_parent(
-      tx_lock_part_id, parent_addr, lock_op.create_trans_id_))) {
+      tx_lock_part_id, GCTX.self_addr(), lock_op.create_trans_id_))) {
     LOG_WARN("add parent failed", K(ret), K(tx_lock_part_id));
-  } else if (OB_FAIL(ObTableLockDeadlockDetectorHelper::block(tx_lock_part_id,
-                                                              ls_id,
-                                                              lock_op))) {
+  } else if (OB_FAIL(ObTableLockDeadlockDetectorHelper::block(tx_lock_part_id, lock_op))) {
     LOG_WARN("add dependency failed", K(ret), K(tx_lock_part_id));
   } else {
     LOG_DEBUG("succeed register to the dead lock detector");
@@ -1588,7 +1563,7 @@ int ObLockMemtable::switch_to_follower()
 void ObLockMemtable::enable_check_tablet_status(const bool need_check)
 {
   // the order must be ensured
-  ATOMIC_INC(&reserved_counter_);
+  ATOMIC_INC(&tablet_status_check_counter_);
   ATOMIC_STORE(&need_check_tablet_status_, need_check);
 }
 

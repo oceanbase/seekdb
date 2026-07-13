@@ -163,7 +163,7 @@ int ObTableLoadTransStoreWriter::StoreWriter::init(ObTableLoadStoreCtx *store_ct
       trans_store_ = trans_store;
       session_id_ = session_id;
       is_single_part_ = (store_ctx_->write_ctx_.is_multiple_mode_ ||
-                         1 == store_ctx->data_store_table_ctx_->ls_partition_ids_.count());
+                         1 == store_ctx->data_store_table_ctx_->partition_ids_.count());
       is_inited_ = true;
     }
   }
@@ -462,7 +462,7 @@ int ObTableLoadTransStoreWriter::DirectWriter::init(ObTableLoadStoreCtx *store_c
     } else {
       store_ctx_ = store_ctx;
       max_batch_size_ = store_ctx->ctx_->param_.batch_size_;
-      is_single_part_ = (1 == store_ctx->data_store_table_ctx_->ls_partition_ids_.count());
+      is_single_part_ = (1 == store_ctx->data_store_table_ctx_->partition_ids_.count());
       is_inited_ = true;
     }
   }

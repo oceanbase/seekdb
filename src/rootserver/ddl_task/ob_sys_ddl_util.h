@@ -35,7 +35,7 @@ namespace rootserver
     } else if (OB_UNLIKELY(!GCTX.omt_->has_tenant())) {                   \
       ret = OB_TENANT_NOT_EXIST;                                                          \
       LOG_WARN("local server does not have SYS tenant resource", KR(ret));                \
-    } else if (OB_FAIL(ObDDLUtil::check_local_is_sys_leader())) {                         \
+    } else if (OB_FAIL(ObDDLUtil::check_local_sys_tenant())) {                           \
       LOG_WARN("local is not sys tenant leader", KR(ret));                                \
     } else {                                                                              \
       MOD_SCOPE {                                                      \
@@ -65,7 +65,6 @@ public:
   SYS_DDL_SCHEDULER_FUNC(modify_redef_task);
   SYS_DDL_SCHEDULER_FUNC(on_column_checksum_calc_reply);
   SYS_DDL_SCHEDULER_FUNC(on_ddl_task_finish);
-  SYS_DDL_SCHEDULER_FUNC(on_ddl_task_prepare);
   SYS_DDL_SCHEDULER_FUNC(on_sstable_complement_job_reply);
   SYS_DDL_SCHEDULER_FUNC(prepare_alter_table_arg);
   SYS_DDL_SCHEDULER_FUNC(recover_task);

@@ -25,7 +25,6 @@
 #include "common/row/ob_row_iterator.h"
 #include "observer/vector_index/ob_plugin_vector_index_util.h"
 #include "storage/ob_i_store.h"
-#include "share/ob_ls_id.h"
 #include "share/rc/ob_tenant_base.h"
 #include "lib/oblog/ob_log_module.h"
 #include "observer/vector_index/ob_plugin_vector_index_serialize.h"
@@ -50,14 +49,12 @@ public:
   void reset();
   static const int64_t OB_VECTOR_INDEX_STATISTICS_SIZE = 2048;
   static const int64_t OB_VECTOR_INDEX_SYNC_INFO_SIZE = 1024;
-  TO_STRING_KV(K_(ls_id),
-               K_(rowkey_vid_table_id), K_(vid_rowkey_table_id), K_(inc_index_table_id),
+  TO_STRING_KV(K_(rowkey_vid_table_id), K_(vid_rowkey_table_id), K_(inc_index_table_id),
                K_(vbitmap_table_id), K_(snapshot_index_table_id), K_(data_table_id), K_(embedded_table_id),
                K_(rowkey_vid_tablet_id), K_(vid_rowkey_tablet_id), K_(inc_index_tablet_id),
                K_(vbitmap_tablet_id), K_(snapshot_index_tablet_id), K_(data_tablet_id), K_(embedded_tablet_id),
                K_(statistics), K_(sync_info));
 public:
-  int64_t ls_id_;
   // table_id
   int64_t rowkey_vid_table_id_;
   int64_t vid_rowkey_table_id_;
@@ -674,13 +671,11 @@ public:
   int check_index_id_table_readnext_status(ObVectorQueryAdaptorResultContext *ctx,
                                            common::ObNewRowIterator *row_iter,
                                            SCN query_scn,
-                                           bool is_async_mode = false,
-                                           ObLSID ls_id = ObLSID());
+                                           bool is_async_mode = false);
   // Async mode only: no read_scn parsing, uses complete_index_mem_data_incremental / build_temp_bitmap
   int check_index_id_table_readnext_status_async(ObVectorQueryAdaptorResultContext *ctx,
                                                  common::ObNewRowIterator *row_iter,
-                                                 SCN query_scn,
-                                                 ObLSID ls_id);
+                                                 SCN query_scn);
   int build_temp_bitmap_from_index_id_table(ObVectorQueryAdaptorResultContext *ctx,
                                             common::ObNewRowIterator *row_iter,
                                             SCN query_scn,
@@ -688,8 +683,7 @@ public:
   // Query Processor third
   int check_snapshot_table_wait_status(ObVectorQueryAdaptorResultContext *ctx);
 
-  int query_result(ObLSID &ls_id,
-                   ObVectorQueryAdaptorResultContext *ctx,
+  int query_result(ObVectorQueryAdaptorResultContext *ctx,
                    ObVectorQueryConditions *query_cond,
                    ObVectorQueryVidIterator *&vids_iter);
   int deserialize_snap_data(ObVectorQueryConditions *query_cond, blocksstable::ObDatumRow *row);
@@ -712,12 +706,9 @@ public:
                               blocksstable::ObDatumRow *last_row,
                               ObArray<uint64_t> &i_vids);
   int complete_index_mem_data_incremental(ObVectorQueryAdaptorResultContext *ctx,
-                                         ObLSID ls_id,
                                          SCN query_scn,
                                          ObArray<uint64_t> &i_vids);
-  // Background bitmap refresh: constructs a minimal synthetic context and calls
-  // complete_index_mem_data_incremental with SYS_LS (consistent with write_to_vsag_).
-  // Same table-scan code path as a query-time refresh, but without a live query context.
+  // Background bitmap refresh uses the same table-scan code path as query-time refresh.
   int refresh_bitmap_background();
   int update_incr_bitmap(const int64_t *vids, int64_t count);
   int prepare_delta_mem_data(roaring::api::roaring64_bitmap_t *gene_bitmap,

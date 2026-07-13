@@ -83,7 +83,7 @@ void ObDDLServiceLauncher::destroy()
              K(duration_time));
 }
 
-int ObDDLServiceLauncher::switch_to_leader()
+int ObDDLServiceLauncher::activate()
 {
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time();
@@ -107,27 +107,9 @@ int ObDDLServiceLauncher::get_sys_palf_role_and_epoch(
     common::ObRole &role,
     int64_t &proposal_id)
 {
-  int ret = OB_SUCCESS;
-  role = FOLLOWER;
-  proposal_id = 0;
-  if (OB_ISNULL(GCTX.omt_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.omt_));
-  } else if (OB_UNLIKELY(!GCTX.omt_->has_tenant())) {
-    ret = OB_TENANT_NOT_EXIST;
-    LOG_WARN("local server does not have SYS tenant resource", KR(ret));
-  } else {
-    MOD_SCOPE {
-      logservice::ObLogService *log_service = share::g_mp->log_service();
-      if (OB_ISNULL(log_service)) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("mtl ObLogService should not be null", KR(ret), KP(log_service));
-      } else if (OB_FAIL(log_service->get_palf_role(SYS_LS, role, proposal_id))) {
-        LOG_WARN("failed to get role from palf", KR(ret));
-      }
-    }
-  }
-  return ret;
+  role = LEADER;
+  proposal_id = 1;
+  return OB_SUCCESS;
 }
 
 int ObDDLServiceLauncher::start_ddl_service_with_old_logic(
@@ -154,46 +136,15 @@ int ObDDLServiceLauncher::start_ddl_service_with_old_logic(
   return ret;
 }
 
-int ObDDLServiceLauncher::resume_leader()
+void ObDDLServiceLauncher::deactivate()
 {
-  int ret = OB_SUCCESS;
-  FLOG_INFO("[DDL_SERVICE_LAUNCHER] begin resume_leader for ddl_service_launcher");
-  if (OB_FAIL(switch_to_leader())) {
-    LOG_WARN("fail to switch to leader", KR(ret));
-  }
-  FLOG_INFO("[DDL_SERVICE_LAUNCHER] finish resume_leader for ddl_service_launcher", KR(ret));
-  return ret;
-}
-
-void ObDDLServiceLauncher::switch_to_follower_forcedly()
-{
-  FLOG_INFO("[DDL_SERVICE_LAUNCHER] begin switch_to_follower_forcedly for ddl_service_launcher");
-  switch_to_follower_gracefully();
-  FLOG_INFO("[DDL_SERVICE_LAUNCHER] finish switch_to_follower_forcedly for ddl_service_launcher");
-}
-
-int ObDDLServiceLauncher::switch_to_follower_gracefully()
-{
-  int ret = OB_SUCCESS;
-  int64_t start_time = ObTimeUtility::current_time();
-  FLOG_INFO("[DDL_SERVICE_LAUNCHER] begin switch_to_follower_gracefully for ddl_service_launcher");
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ddl service launcher is not inited", KR(ret), K_(inited));
-  } else {
+  if (inited_) {
     SpinWLockGuard guard(rw_lock_);
     if (OB_NOT_NULL(GCTX.root_service_)) {
-      // try reset cache for schema refresh
       GCTX.root_service_->get_ddl_service().get_index_name_checker().reset_all_cache();
-      FLOG_INFO("reset index name checker success");
     }
     ATOMIC_SET(&is_ddl_service_started_, false);
   }
-  // rw_lock_ is released now
-  int64_t duration_time = ObTimeUtility::current_time() - start_time;
-  FLOG_INFO("[DDL_SERVICE_LAUNCHER] finish switch_to_follower_gracefully for ddl_service_launcher", KR(ret),
-             K(duration_time));
-  return ret;
 }
 
 int ObDDLServiceLauncher::init_sequence_id_(

@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_STORAGE_TABLELOCK_OB_LOCK_UTILS_H
 #define OCEANBASE_STORAGE_TABLELOCK_OB_LOCK_UTILS_H
 
-#include "share/ob_ls_id.h" // ObLSID
 #include "share/inner_table/ob_inner_table_schema.h"
 #include "storage/tablelock/ob_table_lock_common.h" // ObTableLockMode
 
@@ -62,26 +61,6 @@ public:
       const uint64_t inner_table_id,
       const ObTableLockMode &lock_mode,
       const bool is_from_sql);
-};
-
-class ObLSObjLockUtil
-{
-public:
-  /*
-   * lock ls in trans with internal_sql_execute_timeout
-   *
-   * @param[in] trans:           ObMySQLTransaction
-   * @param[in] ls_id:           target log stream(ls) id
-   * @param[in] lock_mode:       obj lock mode
-   * @return
-   * - OB_SUCCESS:               lock ls successfully
-   * - OB_TRY_LOCK_ROW_CONFLICT: lock conflict
-   * - other:                    lock failed
-   */
-  static int lock_ls_in_trans(
-      common::ObMySQLTransaction &trans,
-      const share::ObLSID &ls_id,
-      const ObTableLockMode &lock_mode);
 };
 
 } // end namespace tablelock

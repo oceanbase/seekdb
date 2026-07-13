@@ -92,7 +92,6 @@ ObDASTextRetrievalMergeIter::ObDASTextRetrievalMergeIter()
     ir_rtdef_(nullptr),
     tx_desc_(nullptr),
     snapshot_(nullptr),
-    ls_id_(),
     domain_id_idx_tablet_id_(),
     query_tokens_(),
     cache_doc_ids_(),
@@ -139,15 +138,12 @@ int ObDASTextRetrievalMergeIter::rescan()
 }
 
 int ObDASTextRetrievalMergeIter::set_related_tablet_ids(
-    const ObLSID &ls_id,
     const ObDASFTSTabletID &related_tablet_ids)
 {
   int ret = OB_SUCCESS;
-  ls_id_ = ls_id;
   domain_id_idx_tablet_id_ = related_tablet_ids.domain_id_idx_tablet_id_;
   for (int64_t i = 0; i < token_iters_.count(); ++i) {
-    token_iters_.at(i)->set_ls_tablet_ids(
-        ls_id,
+    token_iters_.at(i)->set_tablet_ids(
         related_tablet_ids.inv_idx_tablet_id_,
         related_tablet_ids.fwd_idx_tablet_id_);
   }
@@ -450,7 +446,6 @@ int ObDASTextRetrievalMergeIter::inner_reuse()
   whole_doc_agg_param_.need_switch_param_ = whole_doc_agg_param_.need_switch_param_
       || ((old_tablet_id.is_valid() && old_tablet_id != domain_id_idx_tablet_id_ ) ? true : false);
   whole_doc_agg_param_.tablet_id_ = domain_id_idx_tablet_id_;
-  whole_doc_agg_param_.ls_id_ = ls_id_;
   if (!force_return_docid_ || whole_doc_agg_param_.need_switch_param_) {
     doc_cnt_calculated_ = false;
   }
@@ -723,7 +718,6 @@ int ObDASTextRetrievalMergeIter::init_total_doc_cnt_param(
     scan_param.need_scn_ = rtdef->need_scn_;
     scan_param.pd_storage_flag_ = ctdef->pd_expr_spec_.pd_storage_flag_.pd_flag_;
     scan_param.fb_snapshot_ = rtdef->fb_snapshot_;
-    scan_param.ls_id_ = ls_id_;
     scan_param.tablet_id_ = domain_id_idx_tablet_id_;
     if (ctdef->pd_expr_spec_.pushdown_filters_.empty()) {
       scan_param.op_filters_ = &ctdef->pd_expr_spec_.pushdown_filters_;
@@ -774,7 +768,6 @@ int ObDASTextRetrievalMergeIter::do_total_doc_cnt()
       whole_doc_agg_param_.need_switch_param_ = whole_doc_agg_param_.need_switch_param_
           || ((old_tablet_id.is_valid() && old_tablet_id != domain_id_idx_tablet_id_ ) ? true : false);
       whole_doc_agg_param_.tablet_id_ = domain_id_idx_tablet_id_;
-      whole_doc_agg_param_.ls_id_ = ls_id_;
       if (!force_return_docid_ || whole_doc_agg_param_.need_switch_param_) {
         if (OB_FAIL(whole_doc_cnt_iter_->reuse())) {
           LOG_WARN("failed to reuse whole doc cnt iter", K(ret));

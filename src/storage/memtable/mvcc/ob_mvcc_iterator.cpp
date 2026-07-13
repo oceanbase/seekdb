@@ -32,7 +32,6 @@ namespace memtable
 int ObMvccValueIterator::init(ObMvccAccessCtx &ctx,
                               const ObMemtableKey *key,
                               ObMvccRow *value,
-                              const share::ObLSID memtable_ls_id,
                               const ObQueryFlag &query_flag)
 {
   int ret = OB_SUCCESS;
@@ -45,7 +44,6 @@ int ObMvccValueIterator::init(ObMvccAccessCtx &ctx,
     is_inited_ = true;
   } else {
     value_ = value;
-    memtable_ls_id_ = memtable_ls_id;
     if (OB_FAIL(lock_for_read_(query_flag))) {
       TRANS_LOG(WARN, "fail to find start pos for iterator", K(ret));
     } else {
@@ -62,7 +60,6 @@ int ObMvccValueIterator::init(ObMvccAccessCtx &ctx,
             K(query_flag.is_read_latest()),
             KPC(key),
             K(ctx),
-            K(memtable_ls_id),
             K(lbt()));
   return ret;
 }
@@ -345,7 +342,6 @@ void ObMvccValueIterator::move_to_next_node_()
 ObMvccRowIterator::ObMvccRowIterator()
     : is_inited_(false),
       ctx_(NULL),
-      memtable_ls_id_(),
       query_flag_(),
       value_iter_(),
       query_engine_(NULL),
@@ -362,7 +358,6 @@ int ObMvccRowIterator::init(
     ObQueryEngine &query_engine,
     ObMvccAccessCtx &ctx,
     const ObMvccScanRange &range,
-    const share::ObLSID memtable_ls_id,
     const ObQueryFlag &query_flag)
 {
   int ret = OB_SUCCESS;
@@ -378,7 +373,6 @@ int ObMvccRowIterator::init(
     ctx_ = &ctx;
     query_flag_ = query_flag;
     query_engine_ = &query_engine;
-    memtable_ls_id_ = memtable_ls_id;
     is_inited_ = true;
   }
   return ret;
@@ -408,7 +402,7 @@ int ObMvccRowIterator::get_next_row(
     } else if (NULL == (value = query_engine_iter_->get_value())) {
       TRANS_LOG(ERROR, "unexpected value null pointer", "ctx", *ctx_);
       ret = OB_ERR_UNEXPECTED;
-    } else if (query_flag_.is_for_foreign_key_check() || query_flag_.is_plain_insert_gts_opt()) {
+    } else if (query_flag_.is_for_foreign_key_check() || query_flag_.is_snapshot_opt()) {
       if (OB_FAIL(ObRowConflictHandler::check_foreign_key_constraint_for_memtable(*ctx_, value, lock_state))) {
         // we will throw error code if it's failed here, but we need to
         // post lock with key outside, so we have to set it here.
@@ -417,7 +411,7 @@ int ObMvccRowIterator::get_next_row(
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(value_iter_.init(*ctx_, tmp_key, value, memtable_ls_id_, query_flag_))) {
+    } else if (OB_FAIL(value_iter_.init(*ctx_, tmp_key, value, query_flag_))) {
       TRANS_LOG(WARN, "value iter init fail", K(ret), "ctx", *ctx_, KP(value), K(*value));
     } else if (!value_iter_.is_exist()) {
       // mvcc row is empty(no tnode), so we continue
@@ -434,7 +428,6 @@ void ObMvccRowIterator::reset()
 {
   is_inited_ = false;
   ctx_ = NULL;
-  memtable_ls_id_.reset();
   query_flag_.reset();
   value_iter_.reset();
   if (NULL != query_engine_iter_) {

@@ -596,14 +596,11 @@ int ObCreateIndexHelper::create_tablets_()
   } else {
     ObTableSchema &index_schema = index_schemas_.at(0);
     ObTableCreator table_creator(frozen_scn, get_trans_());
-    common::ObArray<share::ObLSID> ls_id_array;
     const ObTablegroupSchema *data_tablegroup_schema = NULL; // keep NULL if no tablegroup
     ObSEArray<bool, 1> need_create_empty_majors;
     uint64_t tenant_data_version = 0;
     if (OB_FAIL(table_creator.init(true/*need_tablet_cnt_check*/))) {
       LOG_WARN("fail to init table craetor", KR(ret));
-    } else if (OB_FAIL(ls_id_array.push_back(ObLSID(SYS_LS)))) {
-      LOG_WARN("fail to push back sys ls", KR(ret));
     } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
       LOG_WARN("fail to get data version", KR(ret));
     } else if (OB_INVALID_ID != orig_data_table_schema_->get_tablegroup_id()) {
@@ -625,13 +622,12 @@ int ObCreateIndexHelper::create_tablets_()
       } else if (OB_FAIL(table_creator.add_create_tablets_of_local_aux_tables_arg(
                                        schemas,
                                        orig_data_table_schema_,
-                                       ls_id_array,
                                        tenant_data_version,
                                        need_create_empty_majors))) {
-        LOG_WARN("create table tablet failed", KR(ret), K(index_schema), K(ls_id_array));
+        LOG_WARN("create table tablet failed", KR(ret), K(index_schema));
       }
     } else {
-      if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(index_schema, ls_id_array,
+      if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(index_schema,
                                        tenant_data_version, create_index_on_empty_table_opt_/*need create major sstable*/))) {
         LOG_WARN("create table tablet failed", KR(ret), K(index_schema));
       }

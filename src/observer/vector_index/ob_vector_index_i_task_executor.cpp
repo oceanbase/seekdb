@@ -40,18 +40,14 @@ int ObVecITaskExecutor::init(storage::ObLS *ls)
   return ret;
 }
 
-int ObVecITaskExecutor::get_index_ls_mgr(ObPluginVectorIndexMgr *&index_ls_mgr)
+int ObVecITaskExecutor::get_index_mgr(ObPluginVectorIndexMgr *&index_mgr)
 {
   int ret = OB_SUCCESS;
-  index_ls_mgr = nullptr;
   if (OB_ISNULL(ls_) || OB_ISNULL(vector_index_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret), KP(ls_), KP(vector_index_service_));
-  } else if (OB_FAIL(vector_index_service_->acquire_vector_index_mgr(ls_->get_ls_id(), index_ls_mgr))) {
-    LOG_WARN("fail to acquire vector index mgr", K(ret), K(ls_->get_ls_id()));
-  } else if (OB_ISNULL(index_ls_mgr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), KP(index_ls_mgr));
+  } else {
+    index_mgr = &vector_index_service_->get_index_mgr();
   }
   return ret;
 }
@@ -60,16 +56,16 @@ int ObVecITaskExecutor::get_index_ls_mgr(ObPluginVectorIndexMgr *&index_ls_mgr)
 int ObVecITaskExecutor::resume_task()
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexMgr *index_ls_mgr = nullptr;
+  ObPluginVectorIndexMgr *index_mgr = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("vector index load task not inited", KR(ret));
   } else if (!check_operation_allow()) { // skip
-  } else if (OB_FAIL(get_index_ls_mgr(index_ls_mgr))) { // skip
-    LOG_WARN("fail to get index ls mgr", K(ret), K(ls_->get_ls_id()));
+  } else if (OB_FAIL(get_index_mgr(index_mgr))) { // skip
+    LOG_WARN("fail to get index ls mgr", K(ret));
   } else {
     const bool for_update = true; // select for update
-    ObVecIndexAsyncTaskOption &task_opt = index_ls_mgr->get_async_task_opt();
+    ObVecIndexAsyncTaskOption &task_opt = index_mgr->get_async_task_opt();
     ObVecIndexFieldArray filters;
     
     if (OB_FAIL(ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
@@ -84,16 +80,16 @@ int ObVecITaskExecutor::load_task_from_inner_table()
 {
   int ret = OB_SUCCESS;
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
-  ObPluginVectorIndexMgr *index_ls_mgr = nullptr;
+  ObPluginVectorIndexMgr *index_mgr = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("vector index load task not inited", KR(ret));
   } else if (!check_operation_allow()) { // skip
-  } else if (OB_FAIL(get_index_ls_mgr(index_ls_mgr))) {
-    LOG_WARN("fail to get index ls mgr", K(ret), K(ls_->get_ls_id()));
-  } else if (OB_ISNULL(index_ls_mgr) || OB_ISNULL(sql_proxy)) {
+  } else if (OB_FAIL(get_index_mgr(index_mgr))) {
+    LOG_WARN("fail to get index ls mgr", K(ret));
+  } else if (OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null pointer", K(ret), K(index_ls_mgr), K(sql_proxy));
+    LOG_WARN("get unexpected null pointer", K(ret), K(sql_proxy));
   } else {
     ObVecIndexFieldArray filters;
     ObVecIndexTaskStatusField field1;
@@ -102,7 +98,7 @@ int ObVecITaskExecutor::load_task_from_inner_table()
     ObVecIndexTaskStatusField field2;
     field2.field_name_ = "status";
     field2.data_.uint_ = ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_PREPARE;
-    ObVecIndexAsyncTaskOption &task_opt = index_ls_mgr->get_async_task_opt();
+    ObVecIndexAsyncTaskOption &task_opt = index_mgr->get_async_task_opt();
     
     if (OB_FAIL(filters.push_back(field1))) {
       LOG_WARN("fail to push back field", K(ret));
@@ -119,7 +115,7 @@ int ObVecITaskExecutor::load_task_from_inner_table()
 int ObVecITaskExecutor::start_task()
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexMgr *index_ls_mgr = nullptr;
+  ObPluginVectorIndexMgr *index_mgr = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("vector async task not init", K(ret));
@@ -127,11 +123,11 @@ int ObVecITaskExecutor::start_task()
   } else if (OB_ISNULL(vector_index_service_) || OB_ISNULL(ls_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret), KP(vector_index_service_), KP(ls_));
-  } else if (OB_FAIL(get_index_ls_mgr(index_ls_mgr))) {
-    LOG_WARN("fail to get index ls mgr", K(ret), K(ls_->get_ls_id()));
+  } else if (OB_FAIL(get_index_mgr(index_mgr))) {
+    LOG_WARN("fail to get index ls mgr", K(ret));
   } else {
     ObVecIndexTaskCtxArray task_ctx_array;
-    ObVecIndexAsyncTaskOption &task_opt = index_ls_mgr->get_async_task_opt();
+    ObVecIndexAsyncTaskOption &task_opt = index_mgr->get_async_task_opt();
     FOREACH_X(iter, task_opt.get_async_task_map(), OB_SUCC(ret)) {
       ObTabletID tablet_id = iter->first;
       ObVecIndexAsyncTaskCtx *task_ctx = iter->second;
@@ -150,12 +146,12 @@ int ObVecITaskExecutor::start_task()
             int tmp_ret = OB_SUCCESS;
             if (task_ctx->in_thread_pool_) {                // skip push task 
               LOG_DEBUG("task is in thread pool already", KPC(task_ctx));
-            } else if (OB_FAIL(task_handle.push_task(ls_->get_ls_id(), task_ctx, task_opt.get_allocator()))) {
-              LOG_WARN("fail to push task to thread pool", K(ret), K(ls_->get_ls_id()), K(*task_ctx));
+            } else if (OB_FAIL(task_handle.push_task(task_ctx, task_opt.get_allocator()))) {
+              LOG_WARN("fail to push task to thread pool", K(ret), K(*task_ctx));
             } else if (FALSE_IT(task_ctx->in_thread_pool_ = true)) {
             } else if (OB_FAIL(update_status_and_ret_code(task_ctx))) {
               LOG_WARN("fail to update task status to inner table", 
-                K(ret), K(ls_->get_ls_id()), K(*task_ctx));
+                K(ret), K(*task_ctx));
             } else if (task_ctx->sys_task_id_.is_invalid() && OB_TMP_FAIL(ObVecIndexAsyncTaskUtil::add_sys_task(task_ctx))) {
               LOG_WARN("add sys task failed", K(tmp_ret));
             }
@@ -165,7 +161,7 @@ int ObVecITaskExecutor::start_task()
           {
             if (OB_FAIL(update_status_and_ret_code(task_ctx))) {
               LOG_WARN("fail to update task status to inner table", 
-                K(ret), K(ls_->get_ls_id()), K(*task_ctx));
+                K(ret), K(*task_ctx));
             }
             break;
           }
@@ -174,7 +170,7 @@ int ObVecITaskExecutor::start_task()
             // update task status in inner table   
             if (OB_FAIL(update_status_and_ret_code(task_ctx))) {
               LOG_WARN("fail to update task status to inner table", 
-                K(ret), K(ls_->get_ls_id()), K(*task_ctx));
+                K(ret), K(*task_ctx));
             } else if (OB_FAIL(task_ctx_array.push_back(task_ctx))) {
               LOG_WARN("fail to push back task_ctx_array", K(ret), K(task_ctx));
             }
@@ -373,7 +369,7 @@ int ObVecITaskExecutor::insert_new_task(ObVecIndexTaskCtxArray &task_ctx_array)
       LOG_WARN("fail start transaction", K(ret));
     } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::batch_insert_vec_task(
         OB_ALL_VECTOR_INDEX_TASK_TNAME, trans, task_ctx_array))) {
-      LOG_WARN("fail to insert vec tasks", K(ret), K(ls_->get_ls_id()));
+      LOG_WARN("fail to insert vec tasks", K(ret));
     }
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
@@ -391,14 +387,14 @@ int ObVecITaskExecutor::clear_old_task_ctx_if_need()
 {
   int ret = OB_SUCCESS;
   bool all_task_is_finish = true;
-  ObPluginVectorIndexMgr *index_ls_mgr = nullptr;
+  ObPluginVectorIndexMgr *index_mgr = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("vector async task not init", KR(ret));
-  } else if (OB_FAIL(get_index_ls_mgr(index_ls_mgr))) { // skip
-    LOG_WARN("fail to get index ls mgr", K(ret), K(ls_->get_ls_id()));
+  } else if (OB_FAIL(get_index_mgr(index_mgr))) { // skip
+    LOG_WARN("fail to get index ls mgr", K(ret));
   } else {
-    ObVecIndexAsyncTaskOption &task_opt = index_ls_mgr->get_async_task_opt();
+    ObVecIndexAsyncTaskOption &task_opt = index_mgr->get_async_task_opt();
     FOREACH_X(iter, task_opt.get_async_task_map(), OB_SUCC(ret) && all_task_is_finish) {
       ObTabletID tablet_id = iter->first;
       ObVecIndexAsyncTaskCtx *task_ctx = iter->second;
@@ -411,7 +407,7 @@ int ObVecITaskExecutor::clear_old_task_ctx_if_need()
         all_task_is_finish = false; // break if has unfinish task
       }
     }
-    if (OB_SUCC(ret) && all_task_is_finish && (0 == task_opt.get_ls_processing_task_cnt())) {
+    if (OB_SUCC(ret) && all_task_is_finish && (0 == task_opt.get_processing_task_cnt())) {
       // all tasks is finish and task record in map should be removed expectedly.
       // when map size > 0, is not expected.
       if (task_opt.get_async_task_map().size() > 0) {
@@ -429,14 +425,13 @@ int ObVecITaskExecutor::clear_old_task_ctx_if_need()
           }
         }
       } else {
-        index_ls_mgr->get_async_task_opt().get_allocator()->reset();
+        index_mgr->get_async_task_opt().get_allocator()->reset();
         LOG_DEBUG("reset vector async task ctx memory", K(ret), 
-          K(index_ls_mgr->get_async_task_opt().get_allocator()),
-          K(ls_->get_ls_id()), K(all_task_is_finish));
+          K(index_mgr->get_async_task_opt().get_allocator()), K(all_task_is_finish));
       }
     } else {
       LOG_DEBUG("not reset vector async task ctx memory", 
-        K(ret), K(all_task_is_finish), K(task_opt.get_ls_processing_task_cnt()));
+        K(ret), K(all_task_is_finish), K(task_opt.get_processing_task_cnt()));
     }
   }
   return OB_SUCCESS;

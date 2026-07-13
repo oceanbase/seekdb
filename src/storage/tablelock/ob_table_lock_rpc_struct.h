@@ -30,7 +30,6 @@ namespace oceanbase
 
 namespace share
 {
-class ObLSID;
 }
 
 namespace transaction
@@ -417,15 +416,12 @@ struct ObLockAloneTabletRequest : public ObLockTabletsRequest
 {
   OB_UNIS_VERSION_V(1);
 public:
-  ObLockAloneTabletRequest() : ls_id_()
+  ObLockAloneTabletRequest()
   { type_ = ObLockMsgType::LOCK_ALONE_TABLET_REQ; }
   virtual ~ObLockAloneTabletRequest() { reset(); }
   virtual void reset();
   virtual bool is_valid() const;
   virtual ObTableLockTaskType get_task_type() const { return LOCK_ALONE_TABLET; }
-  INHERIT_TO_STRING_KV("ObLockTabletsRequest", ObLockTabletsRequest, K_(ls_id));
- public:
-  share::ObLSID ls_id_;
 };
 
 struct ObUnLockAloneTabletRequest : public ObLockAloneTabletRequest
@@ -483,7 +479,6 @@ class ObTableLockTaskRequest final
 public:
   ObTableLockTaskRequest()
     : task_type_(INVALID_LOCK_TASK_TYPE),
-      lsid_(),
       param_(),
       tx_desc_(nullptr),
       need_release_tx_(false)
@@ -492,14 +487,12 @@ public:
   void reset();
   int set(
       const ObTableLockTaskType task_type,
-      const share::ObLSID &lsid,
       const ObLockParam &param,
       transaction::ObTxDesc *tx_desc);
 
   bool is_valid() const
   {
     return (task_type_ < MAX_TASK_TYPE
-            && lsid_.is_valid()
             && param_.is_valid()
             && OB_NOT_NULL(tx_desc_)
             && tx_desc_->is_valid());
@@ -514,10 +507,9 @@ public:
   }
   bool is_timeout() const;
 
-  TO_STRING_KV(K(task_type_), K(lsid_), K(param_), KP(tx_desc_));
+  TO_STRING_KV(K(task_type_), K(param_), KP(tx_desc_));
 public:
   ObTableLockTaskType task_type_;
-  share::ObLSID lsid_; // go to which ls to lock.
   ObLockParam param_;
   transaction::ObTxDesc *tx_desc_;
 private:
@@ -537,7 +529,6 @@ class ObLockTaskBatchRequest final
 public:
   ObLockTaskBatchRequest() :
       task_type_(INVALID_LOCK_TASK_TYPE),
-      lsid_(),
       params_(),
       tx_desc_(nullptr),
       need_release_tx_(false)
@@ -552,25 +543,23 @@ public:
       }
     }
     task_type_ = INVALID_LOCK_TASK_TYPE;
-    lsid_.reset();
     tx_desc_ = nullptr;
     need_release_tx_ = false;
     params_.reset();
   }
-  int init(const ObTableLockTaskType task_type, const share::ObLSID &lsid, transaction::ObTxDesc *tx_desc)
+  int init(const ObTableLockTaskType task_type, transaction::ObTxDesc *tx_desc)
   {
     int ret = OB_SUCCESS;
-    if (OB_UNLIKELY(!(task_type < MAX_TASK_TYPE)) || OB_UNLIKELY(!lsid.is_valid()) || OB_ISNULL(tx_desc)) {
+    if (OB_UNLIKELY(!(task_type < MAX_TASK_TYPE)) || OB_ISNULL(tx_desc)) {
       ret = OB_INVALID_ARGUMENT;
-      TABLELOCK_LOG(WARN, "invalid argument", K(ret), K(task_type), K(lsid), KP(tx_desc));
+      TABLELOCK_LOG(WARN, "invalid argument", K(ret), K(task_type), KP(tx_desc));
     } else {
       task_type_ = task_type;
-      lsid_ = lsid;
       tx_desc_ = tx_desc;
     }
     return ret;
   }
-  bool is_inited() const { return (task_type_ < MAX_TASK_TYPE && lsid_.is_valid() && OB_NOT_NULL(tx_desc_)); }
+  bool is_inited() const { return (task_type_ < MAX_TASK_TYPE && OB_NOT_NULL(tx_desc_)); }
   bool is_valid() const
   {
     bool valid = true;
@@ -596,7 +585,6 @@ public:
       TABLELOCK_LOG(WARN, "failed to assign params", KR(ret), K(arg));
     } else {
       task_type_ = arg.task_type_;
-      lsid_ = arg.lsid_;
       tx_desc_ = arg.tx_desc_;
     }
     return ret;
@@ -610,10 +598,9 @@ public:
     return !is_unlock_request();
   }
 
-  TO_STRING_KV(K(task_type_), K(lsid_), K(params_), KPC(tx_desc_));
+  TO_STRING_KV(K(task_type_), K(params_), KPC(tx_desc_));
 public:
   ObTableLockTaskType task_type_;
-  share::ObLSID lsid_; // go to which ls to lock.
   common::ObSArray<LockParam> params_;
   transaction::ObTxDesc *tx_desc_;
 private:
@@ -631,7 +618,6 @@ OB_DEF_SERIALIZE_SIZE(ObLockTaskBatchRequest<T>, template <typename T>)
   } else {
     LST_DO_CODE(OB_UNIS_ADD_LEN,
                 task_type_,
-                lsid_,
                 params_,
                 *tx_desc_);
   }
@@ -647,7 +633,6 @@ OB_DEF_SERIALIZE(ObLockTaskBatchRequest<T>, template <typename T>)
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE,
                 task_type_,
-                lsid_,
                 params_,
                 *tx_desc_);
   }
@@ -657,7 +642,7 @@ OB_DEF_SERIALIZE(ObLockTaskBatchRequest<T>, template <typename T>)
 OB_DEF_DESERIALIZE(ObLockTaskBatchRequest<T>, template <typename T>)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, task_type_, lsid_, params_);
+  LST_DO_CODE(OB_UNIS_DECODE, task_type_, params_);
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(TxDescHelper::deserialize_tx_desc(buf, data_len, pos, tx_desc_))) {
@@ -766,16 +751,11 @@ struct ObAdminRemoveLockOpArg
 {
   OB_UNIS_VERSION(1);
 public:
-  ObAdminRemoveLockOpArg() : ls_id_(), lock_op_() {}
-  ~ObAdminRemoveLockOpArg()
-  {
-    ls_id_.reset();
-  }
-  int set(const share::ObLSID &ls_id,
-          const ObTableLockOp &lock_op);
-  TO_STRING_KV(K_(ls_id), K_(lock_op));
+  ObAdminRemoveLockOpArg() : lock_op_() {}
+  ~ObAdminRemoveLockOpArg() {}
+  int set(const ObTableLockOp &lock_op);
+  TO_STRING_KV(K_(lock_op));
 public:
-  share::ObLSID ls_id_;
   ObTableLockOp lock_op_;
 };
 
@@ -784,24 +764,20 @@ struct ObAdminUpdateLockOpArg
   OB_UNIS_VERSION(1);
 public:
   ObAdminUpdateLockOpArg()
-    : ls_id_(),
-      lock_op_(),
+    : lock_op_(),
       commit_version_(),
       commit_scn_()
   {}
   ~ObAdminUpdateLockOpArg()
   {
-    ls_id_.reset();
     commit_version_.reset();
     commit_scn_.reset();
   }
-  int set(const share::ObLSID &ls_id,
-          const ObTableLockOp &lock_op,
+  int set(const ObTableLockOp &lock_op,
           const share::SCN &commit_version,
           const share::SCN &commit_scn);
-  TO_STRING_KV(K_(ls_id), K_(lock_op), K_(commit_version), K_(commit_scn));
+  TO_STRING_KV(K_(lock_op), K_(commit_version), K_(commit_scn));
 public:
-  share::ObLSID ls_id_;
   ObTableLockOp lock_op_;
   share::SCN commit_version_;
   share::SCN commit_scn_;

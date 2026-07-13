@@ -100,7 +100,6 @@ public:
   OB_INLINE virtual void reset_uncompacted_tablets() override { uncompact_info_.reset(); }
   virtual int check_progress() override;
   const compaction::ObBasicMergeProgress &get_merge_progress() const override { return progress_; }
-  const compaction::ObTabletLSPairCache &get_tablet_ls_pair_cache() const { return tablet_ls_pair_cache_; }
 private:
   int set_table_compaction_info_status(const uint64_t table_id, const compaction::ObTableCompactionInfo::Status status);
 
@@ -122,12 +121,11 @@ private:
   int check_table_merge_progress(
     share::schema::ObSchemaGetterGuard &schema_guard,
     ObIArray<uint64_t> &unfinish_table_id_array);
-  int get_tablet_ls_pairs(
-    const uint64_t table_id,
+  int get_tablet_ids(
     const share::schema::ObSimpleTableSchemaV2 &simple_schema,
-    ObIArray<share::ObTabletLSPair> &cur_tablet_ls_pair_array);
+    ObIArray<common::ObTabletID> &cur_tablet_ids);
   int update_table_compaction_info_by_tablet(
-    const ObIArray<share::ObTabletLSPair> &cur_tablet_ls_pair_array,
+    const ObIArray<common::ObTabletID> &cur_tablet_ids,
     compaction::ObTableCompactionInfo &table_compaction_info);
   int prepare_unfinish_table_ids();
   int check_schema_version();
@@ -192,13 +190,12 @@ private:
   ObFTSGroupArray fts_group_array_;
   ObChecksumValidator ckm_validator_;
   compaction::ObUncompactInfo uncompact_info_;
-  // cache of ls_infos in __all_ls_meta_table
+  // cache of log stream meta info
   // statistics section
   compaction::ObRSCompactionTimeGuard total_time_guard_;
   compaction::ObCkmValidatorStatistics validator_statistics_;
-  compaction::ObTabletLSPairCache tablet_ls_pair_cache_;
   compaction::ObScheduleBatchSizeMgr batch_size_mgr_;
-  ObArray<share::ObTabletLSPair> finish_tablet_ls_pair_array_;
+  ObArray<common::ObTabletID> finish_tablet_ids_;
   ObArray<share::ObTabletChecksumItem> finish_tablet_ckm_array_;
   DISALLOW_COPY_AND_ASSIGN(ObMajorMergeProgressChecker);
 };

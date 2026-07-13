@@ -24,7 +24,7 @@ using namespace sql;
 namespace observer
 {
 
-ObAllPxWorkerStatTable::ObAllPxWorkerStatTable():addr_(NULL), start_to_read_(false),
+ObAllPxWorkerStatTable::ObAllPxWorkerStatTable():start_to_read_(false),
     stat_array_(), index_(0)
 {
 }
@@ -33,7 +33,6 @@ ObAllPxWorkerStatTable::~ObAllPxWorkerStatTable()
 }
 void ObAllPxWorkerStatTable::reset() 
 {
-  addr_ = NULL;
   start_to_read_ = false;
   stat_array_.reset();
   index_ = 0;
@@ -42,9 +41,9 @@ int ObAllPxWorkerStatTable::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObObj *cells = cur_row_.cells_;
-    if (OB_ISNULL(allocator_) || OB_ISNULL(addr_)) {
+  if (OB_ISNULL(allocator_)) {
     ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "allocator_ or addr_ is null", K_(allocator), K_(addr), K(ret));
+    SERVER_LOG(WARN, "allocator_ is null", K_(allocator), K(ret));
   } else if (OB_ISNULL(cells)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
@@ -121,4 +120,3 @@ int ObAllPxWorkerStatTable::inner_get_next_row(ObNewRow *&row)
 
 }/* ns observer*/
 }/* ns oceanbase */
-

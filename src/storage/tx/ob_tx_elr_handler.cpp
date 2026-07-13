@@ -15,7 +15,7 @@
  */
 
 #include "ob_tx_elr_handler.h"
-#include "ob_trans_part_ctx.h"
+#include "ob_tx_ctx.h"
 #include "ob_trans_service.h"
 
 namespace oceanbase
@@ -29,7 +29,7 @@ void ObTxELRHandler::reset()
   mt_ctx_ = NULL;
 }
 
-int ObTxELRHandler::check_and_early_lock_release(bool has_row_updated, ObPartTransCtx *ctx)
+int ObTxELRHandler::check_and_early_lock_release(bool has_row_updated, ObTxCtx *ctx)
 {
   int ret = OB_SUCCESS;
 

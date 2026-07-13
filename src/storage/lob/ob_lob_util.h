@@ -147,8 +147,7 @@ public:
   static const uint64_t LOB_ACCESS_TX_TIMEOUT = 60000000; // 60s
   static const uint64_t LOB_ALLOCATOR_RESET_CYCLE = 128;
 public:
-  static int start_trans(const share::ObLSID &ls_id,
-                         const bool is_for_read,
+  static int start_trans(const bool is_for_read,
                          const int64_t timeout_ts,
                          transaction::ObTxDesc *&tx_desc);
   static int end_trans(transaction::ObTxDesc *tx_desc,
@@ -156,7 +155,6 @@ public:
                        const int64_t timeout_ts);
 
   static int insert_lob_column(ObIAllocator &allocator,
-                               const share::ObLSID ls_id,
                                const common::ObTabletID tablet_id,
                                const ObObjType &obj_type,
                                const ObCollationType &cs_type,
@@ -165,7 +163,6 @@ public:
                                const int64_t timeout_ts,
                                const bool has_lob_header);
   static int delete_lob_column(ObIAllocator &allocator,
-                               const share::ObLSID ls_id,
                                const common::ObTabletID tablet_id,
                                const ObCollationType& collation_type,
                                blocksstable::ObStorageDatum &datum,
@@ -180,7 +177,6 @@ public:
                                ObIAllocator &lob_allocator,
                                transaction::ObTxDesc *tx_desc,
                                share::ObTabletCacheInterval &lob_id_geneator,
-                               const share::ObLSID ls_id,
                                const common::ObTabletID tablet_id,
                                const common::ObTabletID lob_meta_tablet_id,
                                const ObObjType &obj_type,
@@ -276,5 +272,3 @@ public:
 } // oceanbase
 
 #endif
-
-

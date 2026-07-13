@@ -177,29 +177,14 @@ int ObServerStorageMetaReplayer::finish_storage_meta_replay_()
 
   if (OB_SUCC(ret)) {
     MOD_SCOPE {
-      common::ObSharedGuard<ObLSIterator> ls_iter;
-      ObLS *ls = nullptr;
-      ObLSTabletService *ls_tablet_svr = nullptr;
-      if (OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter, ObLSGetMod::STORAGE_MOD))) {
-        LOG_WARN("failed to get ls iter", K(ret));
-      } else {
-        while (OB_SUCC(ret)) {
-          if (OB_FAIL(ls_iter->get_next(ls))) {
-            if (OB_ITER_END != ret) {
-              LOG_WARN("fail to get next ls", K(ret));
-            }
-          } else if (nullptr == ls) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("ls is null", K(ret));
-          } else if (OB_FAIL(ls->finish_storage_meta_replay())) {
-            LOG_WARN("finish replay failed", K(ret), KPC(ls));
-          }
-        }
-        if (OB_ITER_END == ret) {
-          if (OB_FAIL(share::g_mp->ls_service()->gc_ls_after_replay_slog())) {
-            LOG_WARN("fail to gc ls after replay slog", K(ret));
-          }
-        }
+      ObLS *tenant_ls = nullptr;
+      if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+        LOG_WARN("failed to get log stream", K(ret));
+      } else if (OB_FAIL(tenant_ls->finish_storage_meta_replay())) {
+        LOG_WARN("finish replay failed", K(ret));
+      }
+      if (OB_SUCC(ret) && OB_FAIL(share::g_mp->ls_service()->gc_ls_after_replay_slog())) {
+        LOG_WARN("fail to gc ls after replay slog", K(ret));
       }
     }
   }

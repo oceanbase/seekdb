@@ -100,11 +100,6 @@ int64_t UserMdsNode<K, V>::to_string(char * buf, const int64_t buf_len) const
   databuff_printf(buf, buf_len, pos, "this:0x%lx, ", (unsigned long)this);
 #endif
   if (nullptr != p_mds_table) {
-    databuff_print_multi_objs(buf, buf_len, pos, "ls_id:", p_mds_table->ls_id_, ", ");
-  } else {
-    databuff_printf(buf, buf_len, pos, "ls_id:%s, ", "NULL");
-  }
-  if (nullptr != p_mds_table) {
     databuff_print_multi_objs(buf, buf_len, pos, "tablet_id:", p_mds_table->tablet_id_, ", ");
   } else {
     databuff_printf(buf, buf_len, pos, "tablet_id:%s, ", "NULL");
@@ -362,7 +357,6 @@ int UserMdsNode<K, V>::fill_virtual_info(MdsNodeInfoForVirtualTable &mds_node_in
     MDS_LOG(WARN, "fail construct ObStringHolder", K(*this));
   } else {
     if (OB_LIKELY(has_valid_link_back_ptr_())) {
-      mds_node_info.ls_id_ = p_mds_row_->p_mds_unit_->p_mds_table_->get_ls_id();
       mds_node_info.tablet_id_ = p_mds_row_->p_mds_unit_->p_mds_table_->get_tablet_id();
     }
     mds_node_info.writer_ = MdsWriter(status_.union_.field_.writer_type_, writer_id_);
@@ -393,8 +387,7 @@ void UserMdsNode<K, V>::report_event_(const char (&event_str)[N],
   } else if (OB_FAIL(fill_event_(event, event_str, stack_buffer, buffer_size))) {
     MDS_LOG(WARN, "fail fill mds event", K(*this));
   } else {
-    observer::MdsEventKey key(p_mds_row_->p_mds_unit_->p_mds_table_->ls_id_,
-                              p_mds_row_->p_mds_unit_->p_mds_table_->tablet_id_);
+    observer::MdsEventKey key(p_mds_row_->p_mds_unit_->p_mds_table_->tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, p_mds_row_->p_mds_unit_->p_mds_table_, file, line, function_name);
   }
 }

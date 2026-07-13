@@ -16,6 +16,7 @@
 #include "ob_all_virtual_tx_data.h"
 #include "share/rc/ob_module_provider.h"
 
+#include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase {
@@ -157,22 +158,17 @@ int ObAllVirtualTxData::generate_virtual_tx_data_row_(VirtualTxDataRow &tx_data_
   int ret = OB_SUCCESS;
   MOD_SCOPE
   {
-    ObLSHandle ls_handle;
     ObLS *ls = nullptr;
     ObLSService *ls_service = share::g_mp->ls_service();
-    if (OB_FAIL(ls_service->get_ls(share::SYS_LS, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
-      if (OB_LS_NOT_EXIST == ret) {
-        ret = OB_ITER_END;
-      } else {
-        SERVER_LOG(WARN, "get ls from ls service failed", KR(ret));
-      }
-    } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
+    if (OB_ISNULL(ls_service)) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(ERROR, "get ls failed from ls handle", KR(ret), K(ls_handle));
+      SERVER_LOG(WARN, "ls service is null", KR(ret));
+    } else if (OB_FAIL(ls_service->get_ls(ls))) {
+      SERVER_LOG(WARN, "get ls from ls service failed", KR(ret));
     } else if (OB_FAIL(ls->generate_virtual_tx_data_row(tx_id_, tx_data_row))) {
-      SERVER_LOG(WARN, "ls genenrate virtual tx data row failed", KR(ret), K(ls_handle));
+      SERVER_LOG(WARN, "ls genenrate virtual tx data row failed", KR(ret), K(ls));
     } else {
-      SERVER_LOG(DEBUG, "generate tx data row succeed", KPC(ls), K(tx_data_row));
+      SERVER_LOG(DEBUG, "generate tx data row succeed", K(tx_data_row));
     }
   }
 

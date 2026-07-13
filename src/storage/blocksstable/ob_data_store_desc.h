@@ -23,7 +23,6 @@
 #include "storage/compaction/ob_compaction_memory_context.h"
 #include "common/ob_tablet_id.h"
 #include "common/ob_store_format.h"
-#include "share/ob_ls_id.h"
 #include "share/scn.h"
 
 namespace oceanbase
@@ -57,7 +56,6 @@ public:
   int init(
     const bool is_ddl,
     const share::schema::ObMergeSchema &merge_schema,
-    const share::ObLSID &ls_id,
     const common::ObTabletID tablet_id,
     const compaction::ObMergeType merge_type,
     const int64_t snapshot_version,
@@ -72,7 +70,6 @@ public:
   void reset();
   int assign(const ObStaticDataStoreDesc &desc);
   TO_STRING_KV(
-      K_(ls_id),
       K_(tablet_id),
       K_(concurrent_cnt),
       "merge_type", merge_type_to_str(merge_type_),
@@ -107,7 +104,6 @@ public:
   bool is_ddl_; // only used to print ERROR or WARN log
   compaction::ObMergeType merge_type_;
   ObCompressorType compressor_type_;
-  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   int64_t concurrent_cnt_;
   int64_t macro_block_size_;
@@ -262,7 +258,6 @@ public:
   STATIC_DESC_FUNC(int64_t, macro_store_size);
   STATIC_DESC_FUNC(int64_t, micro_block_size_limit);
   STATIC_DESC_FUNC(compaction::ObMergeType, merge_type);
-  STATIC_DESC_FUNC(const share::ObLSID&, ls_id);
   STATIC_DESC_FUNC(const ObTabletID&, tablet_id);
   STATIC_DESC_FUNC(int64_t, progressive_merge_round);
   STATIC_DESC_FUNC(int64_t, schema_version);
@@ -355,7 +350,6 @@ struct ObWholeDataStoreDesc
   int init(
     const bool is_ddl,
     const share::schema::ObMergeSchema &merge_schema,
-    const share::ObLSID &ls_id,
     const common::ObTabletID tablet_id,
     const compaction::ObMergeType merge_type,
     const int64_t snapshot_version,

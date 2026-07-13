@@ -41,7 +41,6 @@ ObTableLockService::ObTableLockCtx::ObTableLockCtx() :
   is_in_trans_(false),
   table_id_(OB_INVALID_ID),
   partition_id_(OB_INVALID_ID),
-  ls_id_(ObLSID::INVALID_LS_ID),
   lock_op_type_(UNKNOWN_TYPE),
   origin_timeout_us_(-1),
   timeout_us_(-1),
@@ -50,6 +49,7 @@ ObTableLockService::ObTableLockCtx::ObTableLockCtx() :
   tx_desc_(nullptr),
   tx_param_(),
   current_savepoint_(),
+  need_rollback_(false),
   tablet_list_(),
   obj_list_(),
   lock_mode_(MAX_LOCK_MODE),
@@ -75,8 +75,8 @@ ObTableLockService::ObTableLockCtx::ObTableLockCtx() :
 void ObTableLockService::ObRetryCtx::reuse()
 {
   need_retry_ = false;
-  send_rpc_count_ = 0;
-  rpc_ls_array_.reuse();
+  task_executed_ = false;
+  task_prepared_ = false;
   retry_lock_ids_.reuse();
 }
 
@@ -163,7 +163,6 @@ int ObTableLockService::ObTableLockCtx::set_by_lock_req(const ObLockRequest &arg
         task_type_ = LOCK_ALONE_TABLET;
       }
       table_id_ = lock_arg.table_id_;
-      ls_id_ = lock_arg.ls_id_;
       if (OB_FAIL(set_tablet_id(lock_arg.tablet_ids_))) {
         LOG_WARN("set tablet id failed", K(ret), K(lock_arg));
       }
@@ -304,7 +303,7 @@ void ObTableLockService::ObOBJLockGarbageCollector::run_gc_once_()
 {
   common::ObDIActionGuard ag("TableLockService", "OBJLockGC", "GCTimer");
   int ret = OB_SUCCESS;
-  if (OB_FAIL(garbage_collect_for_all_ls_())) {
+  if (OB_FAIL(garbage_collect_())) {
     check_and_report_timeout_();
     LOG_WARN("check and clear obj lock failed, will retry later",
              K(ret), K(last_success_timestamp_), KPC(this));
@@ -315,40 +314,15 @@ void ObTableLockService::ObOBJLockGarbageCollector::run_gc_once_()
   }
 }
 
-int ObTableLockService::ObOBJLockGarbageCollector::garbage_collect_for_all_ls_()
+int ObTableLockService::ObOBJLockGarbageCollector::garbage_collect_()
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  ObSharedGuard<ObLSIterator> ls_iter_guard;
-  ObLSService *ls_service = nullptr;
-  ObLS *ls = nullptr;
-  bool is_leader = false;
   if (!timer_.inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("timer of ObTableLockService::ObOBJLockGarbageCollector is not running", K(ret));
-  } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mtl ObLSService should not be null", K(ret));
-  } else if (OB_FAIL(ls_service->get_ls_iter(ls_iter_guard, ObLSGetMod::TABLELOCK_MOD))) {
-    LOG_WARN("fail to get ls iterator", K(ret));
-  } else {
-    do {
-      if (OB_FAIL(ls_iter_guard->get_next(ls))) {
-        if (OB_ITER_END != ret) {
-          LOG_WARN("get next iter failed", K(ret));
-        }
-      } else if (ls->is_sys_ls()) {
-        if (OB_TMP_FAIL(check_is_leader_(ls, is_leader))) {
-          LOG_WARN("can not check whether this ls is leader", K(ret), K(tmp_ret), K(ls->get_ls_id()));
-        } else if (is_leader && OB_TMP_FAIL(ObTableLockDetector::do_detect_and_clear())) {
-          LOG_WARN("do_detect_and_clear failed", K(ret), K(tmp_ret), K(ls->get_ls_id()));
-        }
-      } else {
-        LOG_INFO("finish check and clear obj lock", K(ls->get_ls_id()));
-      }
-    } while (OB_SUCC(ret));
+  } else if (OB_FAIL(ObTableLockDetector::do_detect_and_clear())) {
+    LOG_WARN("do_detect_and_clear failed", K(ret));
   }
-  ret = OB_ITER_END == ret ? OB_SUCCESS : ret;
   return ret;
 }
 
@@ -365,21 +339,6 @@ void ObTableLockService::ObOBJLockGarbageCollector::check_and_report_timeout_()
     LOG_ERROR("task failed too many times", K(current_timestamp),
               K(last_success_timestamp_), KPC(this));
   }
-}
-
-int ObTableLockService::ObOBJLockGarbageCollector::check_is_leader_(ObLS *ls, bool &is_leader)
-{
-  int ret = OB_SUCCESS;
-  ObRole role;
-  int64_t proposal_id = 0;
-  is_leader = false;
-
-  if (OB_FAIL(ls->get_log_handler()->get_role(role, proposal_id))) {
-    STORAGE_LOG(WARN, "failed to get role", K(ret), K(ls->get_ls_id()));
-  } else {
-    is_leader = is_strong_leader(role);
-  }
-  return ret;
 }
 
 int ObTableLockService::ObTableLockCtx::set_tablet_id(const common::ObIArray<common::ObTabletID> &tablet_ids)
@@ -429,13 +388,6 @@ int64_t ObTableLockService::ObTableLockCtx::remain_timeoutus() const
   return remain_us > 0 ? remain_us : 0;
 }
 
-int64_t ObTableLockService::ObTableLockCtx::get_rpc_timeoutus() const
-{
-  // rpc timeout should larger than stmt remain timeout us.
-  // we add 2 second now.
-  return (remain_timeoutus() + DEFAULT_RPC_TIMEOUT_US);
-}
-
 int64_t ObTableLockService::ObTableLockCtx::get_tablet_cnt() const
 {
   return tablet_list_.count();
@@ -446,28 +398,14 @@ const ObTabletID &ObTableLockService::ObTableLockCtx::get_tablet_id(const int64_
   return tablet_list_.at(index);
 }
 
-int ObTableLockService::ObTableLockCtx::add_touched_ls(const ObLSID &lsid)
+void ObTableLockService::ObTableLockCtx::mark_need_rollback()
 {
-  int ret = OB_SUCCESS;
-  bool exist = false;
-  // check if the touched ls exist.
-  for (int64_t i = 0; OB_SUCC(ret) && i < need_rollback_ls_.count(); i++) {
-    ObLSID &curr = need_rollback_ls_.at(i);
-    if (curr == lsid) {
-      exist = true;
-      break;
-    }
-  }
-  // add if the touched ls not exist.
-  if (!exist && OB_FAIL(need_rollback_ls_.push_back(lsid))) {
-    LOG_ERROR("add touche ls failed", K(ret), K(lsid));
-  }
-  return ret;
+  need_rollback_ = true;
 }
 
-void ObTableLockService::ObTableLockCtx::clean_touched_ls()
+void ObTableLockService::ObTableLockCtx::clear_need_rollback()
 {
-  need_rollback_ls_.reuse();
+  need_rollback_ = false;
 }
 
 bool ObTableLockService::ObTableLockCtx::is_deadlock_avoid_enabled() const
@@ -488,14 +426,11 @@ int ObTableLockService::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("lock service init twice.", K(ret));
   } else if (OB_UNLIKELY(!GCTX.self_addr().is_valid()) ||
-             OB_ISNULL(GCTX.net_frame_) ||
-             OB_ISNULL(GCTX.location_service_) ||
              OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(GCTX.self_addr()),
-             KP(GCTX.net_frame_), KP(GCTX.location_service_), KP(GCTX.sql_proxy_));
+             KP(GCTX.sql_proxy_));
   } else {
-    location_service_ = GCTX.location_service_;
     sql_proxy_ = GCTX.sql_proxy_;
     is_inited_ = true;
   }
@@ -526,7 +461,6 @@ void ObTableLockService::wait()
 void ObTableLockService::destroy()
 {
   obj_lock_garbage_collector_.destroy();
-  location_service_ = nullptr;
   sql_proxy_ = nullptr;
   is_inited_ = false;
 }
@@ -939,16 +873,16 @@ int ObTableLockService::process_lock_task_(ObTableLockCtx &ctx)
 int ObTableLockService::process_obj_lock_task_(ObTableLockCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  ObLSLockMap ls_lock_map;
+  ObLockSet lock_set;
 
   if (ctx.obj_list_.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("obj list is empty when lock obj", K(ret), K(ctx));
-  } else if (OB_FAIL(get_ls_lock_map_(ctx, LOCK_SERVICE_LS, ctx.obj_list_, ls_lock_map))) {
-    LOG_WARN("get ls_lock_map failed", K(ret), K(ctx));
-  } else if (ctx.is_enable_lock_priority_ && !ctx.is_unlock_task() && OB_FAIL(process_obj_lock_with_prio_(ctx, ls_lock_map))) {
+  } else if (OB_FAIL(get_lock_set_(ctx, ctx.obj_list_, lock_set))) {
+    LOG_WARN("get lock_set failed", K(ret), K(ctx));
+  } else if (ctx.is_enable_lock_priority_ && !ctx.is_unlock_task() && OB_FAIL(process_obj_lock_with_prio_(ctx, lock_set))) {
     LOG_WARN("add obj lock into queue failed", K(ret), K(ctx));
-  } else if (OB_FAIL(process_obj_lock_(ctx, ls_lock_map))) {
+  } else if (OB_FAIL(process_obj_lock_(ctx, lock_set))) {
     LOG_WARN("lock obj failed", K(ret), K(ctx));
   }
   return ret;
@@ -957,7 +891,7 @@ int ObTableLockService::process_obj_lock_task_(ObTableLockCtx &ctx)
 int ObTableLockService::process_table_lock_task_(ObTableLockCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  ObLSLockMap table_ls_lock_map;
+  ObLockSet table_lock_set;
   ObLockID table_lock_id;
   ObTableLockMode table_lock_mode = ctx.lock_mode_;
 
@@ -966,8 +900,8 @@ int ObTableLockService::process_table_lock_task_(ObTableLockCtx &ctx)
   } else if (is_part_table_lock_(ctx.task_type_)
              && OB_FAIL(get_table_lock_mode_(ctx.task_type_, ctx.lock_mode_, table_lock_mode))) {
     LOG_WARN("get table lock mode failed", K(ret), K(ctx), K(ctx.task_type_), K(ctx.lock_mode_));
-  } else if (OB_FAIL(get_ls_lock_map_(ctx, LOCK_SERVICE_LS, table_lock_id, table_ls_lock_map))) {
-    LOG_WARN("get ls_lock_map failed", K(ret), K(ctx));
+  } else if (OB_FAIL(get_lock_set_(ctx, table_lock_id, table_lock_set))) {
+    LOG_WARN("get lock_set failed", K(ret), K(ctx));
     // NOTICE:
     // When lock_priority is enabled, we need to obtain the table's schema and tablets to enqueue the corresponding
     // tablets into the locking queue for prioritized locking. However, at this point, the table is not yet locked.
@@ -981,12 +915,12 @@ int ObTableLockService::process_table_lock_task_(ObTableLockCtx &ctx)
                process_table_tablet_lock_with_prio_(ctx,
                                                     ctx.lock_mode_,
                                                     table_lock_mode,
-                                                    table_ls_lock_map))) {
+                                                    table_lock_set))) {
     LOG_WARN("add table and tablet lock into queue failed", K(ret), K(ctx));
   } else if (OB_FAIL(process_table_tablet_lock_(ctx,
                                                 ctx.lock_mode_,
                                                 table_lock_mode,
-                                                table_ls_lock_map))) {
+                                                table_lock_set))) {
     LOG_WARN("lock table and tablet failed", K(ret), K(table_lock_mode), K(ctx));
   }
   return ret;
@@ -995,17 +929,17 @@ int ObTableLockService::process_table_lock_task_(ObTableLockCtx &ctx)
 int ObTableLockService::process_alone_tablet_lock_task_(ObTableLockCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  ObLSLockMap ls_lock_map;
+  ObLockSet lock_set;
 
   // TODO: yanyuan.cxf we may need the right schema_version while lock/unlock alone tablet.
   ctx.schema_version_ = 0;
 
-  if (OB_FAIL(get_ls_lock_map_(ctx, ctx.tablet_list_, ls_lock_map))) {
-    LOG_WARN("fail to get ls lock map", K(ret), K(ctx.get_tablet_cnt()));
+  if (OB_FAIL(get_lock_set_(ctx, ctx.tablet_list_, lock_set))) {
+    LOG_WARN("fail to get lock set", K(ret), K(ctx.get_tablet_cnt()));
   } else if (ctx.is_enable_lock_priority_ && !ctx.is_unlock_task()
-             && OB_FAIL(process_obj_lock_with_prio_(ctx, ls_lock_map))) {
+             && OB_FAIL(process_obj_lock_with_prio_(ctx, lock_set))) {
     LOG_WARN("add alone tablet lock into queue failed", K(ret), K(ctx));
-  } else if (OB_FAIL(process_obj_lock_(ctx, ls_lock_map))) {
+  } else if (OB_FAIL(process_obj_lock_(ctx, lock_set))) {
     LOG_WARN("lock alone tablet failed", K(ret), K(ctx));
   }
   return ret;
@@ -1059,320 +993,233 @@ int ObTableLockService::get_retry_lock_ids_(const ObLockIDArray &lock_ids,
   return ret;
 }
 
-int ObTableLockService::get_retry_lock_ids_(const ObLSID &ls_id,
-                                            const ObLSLockMap &ls_lock_map,
+int ObTableLockService::get_retry_lock_ids_(const ObLockSet &lock_set,
                                             const int64_t start_pos,
                                             ObLockIDArray &retry_lock_ids)
 {
   int ret = OB_SUCCESS;
-  const ObLockIDArray *lock_ids = nullptr;
-  // get the retry tablet list
-  if (OB_ISNULL(lock_ids = ls_lock_map.get(ls_id))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the ls not exist at tablet map", K(ret), K(ls_id));
-  } else if (OB_FAIL(get_retry_lock_ids_(*lock_ids, start_pos, retry_lock_ids))) {
-    // get the lock ids
+  if (OB_FAIL(get_retry_lock_ids_(lock_set.get_lock_ids(), start_pos, retry_lock_ids))) {
     LOG_WARN("get retry lock id list failed", K(ret));
   }
   return ret;
 }
 
-int ObTableLockService::collect_rollback_info_(const share::ObLSID &ls_id,
+int ObTableLockService::collect_rollback_info_(ObTableLockCtx &ctx)
+{
+  int ret = OB_SUCCESS;
+  ctx.mark_need_rollback();
+  LOG_DEBUG("ObTableLockService::collect_rollback_info_", K(ret), K(ctx));
+  return ret;
+}
+
+int ObTableLockService::collect_rollback_info_(const ObRetryCtx &retry_ctx,
                                                ObTableLockCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ctx.add_touched_ls(ls_id))) {
-    LOG_ERROR("add touched ls failed.", K(ret), K(ls_id));
+  if (retry_ctx.task_prepared_) {
+    ctx.mark_need_rollback();
   }
   LOG_DEBUG("ObTableLockService::collect_rollback_info_", K(ret), K(ctx));
   return ret;
 }
 
-int ObTableLockService::collect_rollback_info_(const ObArray<share::ObLSID> &ls_array,
-                                               ObTableLockCtx &ctx)
-{
-  int ret = OB_SUCCESS;
-  // all rpcs treated as failed
-  for (int i = 0; i < ls_array.count() && OB_SUCC(ret); i++) {
-    if (OB_FAIL(ctx.add_touched_ls(ls_array.at(i)))) {
-      LOG_ERROR("add touched ls failed.", K(ret), K(ls_array.at(i)));
-    }
-  }
-  LOG_DEBUG("ObTableLockService::collect_rollback_info_", K(ret), K(ctx));
-  return ret;
-}
-
-template<class RpcProxy>
-int ObTableLockService::collect_rollback_info_(const ObArray<share::ObLSID> &ls_array,
-                                               RpcProxy &proxy_batch,
-                                               ObTableLockCtx &ctx)
-{
-  int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-
-  // 1. need wait rpcs that sent finish
-  //    otherwise proxy reused or destructored will cause flying rpc core
-  // 2. don't use arg/dest here because call() may has failure.
-  // 3. return_array/result can be used only when wait_all() is success.
-  ObArray<int> return_code_array;
-  if (OB_TMP_FAIL(proxy_batch.wait_all(return_code_array))) {
-    LOG_WARN("wait rpc failed", K(tmp_ret));
-  }
-
-  if (OB_FAIL(collect_rollback_info_(ls_array, ctx))) {
-    LOG_WARN("collect rollback info failed", K(ret));
-  }
-  return ret;
-}
-
-template<class RpcProxy>
-int ObTableLockService::handle_parallel_rpc_response_(RpcProxy &proxy_batch,
+template<class LocalExecutor>
+int ObTableLockService::handle_task_result_(LocalExecutor &executor,
                                                       ObTableLockCtx &ctx,
-                                                      const ObLSLockMap &ls_lock_map,
+                                                      const ObLockSet &lock_set,
                                                       bool &can_retry,
                                                       ObRetryCtx &retry_ctx)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   ObTransService *txs = share::g_mp->trans_service();
-  ObLSID ls_id;
 
   can_retry = true;
   retry_ctx.need_retry_ = true;
-  // handle result
-  ObArray<int> return_code_array;
-  if (OB_TMP_FAIL(proxy_batch.wait_all(return_code_array))
-      || OB_TMP_FAIL(proxy_batch.check_return_cnt(return_code_array.count()))
-      || retry_ctx.send_rpc_count_ != return_code_array.count()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rpc failed", KR(ret), KR(tmp_ret), K(retry_ctx.send_rpc_count_), K(return_code_array.count()));
-    // we need add the ls into touched to make rollback.
-    can_retry = false;
-    retry_ctx.need_retry_ = false;
-    (void) collect_rollback_info_(retry_ctx.rpc_ls_array_, ctx);
-  } else {
-    //check each ret of every rpc
-    const ObTableLockTaskResult *result = nullptr;
-    for (int64_t i = 0; i < return_code_array.count(); ++i) {
-      result = nullptr;
-      tmp_ret = return_code_array.at(i);
-      ls_id = retry_ctx.rpc_ls_array_.at(i);
-      if (need_retry_whole_rpc_task_(tmp_ret)) {
-        // rpc failed, but we need retry the whole rpc task.
-        LOG_WARN("lock rpc failed, but we need retry", KR(tmp_ret), K(i), K(ls_id));
-        if (OB_TMP_FAIL(get_retry_lock_ids_(ls_id,
-                                            ls_lock_map,
-                                            0,
-                                            retry_ctx.retry_lock_ids_))) {
-          can_retry = false;
-          retry_ctx.need_retry_ = false;
-          ret = tmp_ret;
-          LOG_WARN("get retry tablet list failed", KR(ret), K(ls_id));
-        }
-      } else {
-        if (OB_TMP_FAIL(tmp_ret)) {
-          LOG_WARN("lock rpc failed", KR(tmp_ret), K(i), K(ls_id));
-        } else if (OB_ISNULL(result = proxy_batch.get_results().at(i))) {
-          tmp_ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("result is null", KR(tmp_ret), K(i), K(ls_id));
-        } else if (OB_TMP_FAIL(result->get_tx_result_code())) {
-          LOG_WARN("get tx exec result failed", KR(tmp_ret), K(i), K(ls_id));
-        } else if (OB_TMP_FAIL(txs->add_tx_exec_result(*ctx.tx_desc_,
-                                                       result->tx_result_))) {
-          LOG_WARN("failed to add exec result", K(tmp_ret), K(ctx), K(result->tx_result_));
-        }
+  if (retry_ctx.task_executed_) {
+    const ObTableLockTaskResult &result = executor.get_result();
+    tmp_ret = executor.get_return_code();
+    if (need_retry_whole_task_(tmp_ret)) {
+      LOG_WARN("lock task failed, but we need retry", KR(tmp_ret));
+      if (OB_TMP_FAIL(get_retry_lock_ids_(lock_set,
+                                          0,
+                                          retry_ctx.retry_lock_ids_))) {
+        can_retry = false;
+        retry_ctx.need_retry_ = false;
+        ret = tmp_ret;
+        LOG_WARN("get retry tablet list failed", KR(ret));
+      }
+    } else {
+      if (OB_TMP_FAIL(tmp_ret)) {
+        LOG_WARN("lock task failed", KR(tmp_ret));
+      } else if (OB_TMP_FAIL(result.get_tx_result_code())) {
+        LOG_WARN("get tx exec result failed", KR(tmp_ret));
+      } else if (OB_TMP_FAIL(txs->add_tx_exec_result(*ctx.tx_desc_,
+                                                     result.tx_result_))) {
+        LOG_WARN("failed to add exec result", K(tmp_ret), K(ctx), K(result.tx_result_));
+      }
 
-        // rpc failed or we get tx exec result failed,
-        // we need add the ls into touched to make rollback.
-        if (OB_TMP_FAIL(tmp_ret)) {
-          ret = tmp_ret;
-          can_retry = false;
-          retry_ctx.need_retry_ = false;
-          (void) collect_rollback_info_(ls_id, ctx);
-        } else {
-          // if error codes are only OB_TRY_LOCK_ROW_CONFLICT, will retry
-          tmp_ret = result->get_ret_code();
-          if (need_retry_part_rpc_task_(tmp_ret, result)) {
-            LOG_WARN("lock rpc failed, but we need retry", KR(tmp_ret), K(i), K(ls_id));
-            if (OB_TMP_FAIL(get_retry_lock_ids_(ls_id,
-                                                ls_lock_map,
-                                                result->get_success_pos() + 1,
-                                                retry_ctx.retry_lock_ids_))) {
-              can_retry = false;
-              retry_ctx.need_retry_ = false;
-              ret = tmp_ret;
-              LOG_WARN("get retry tablet list failed", KR(ret), K(ls_id));
-            }
-          } else if (OB_TRANS_KILLED == tmp_ret) {
-            // the trans need kill.
-            ctx.tx_is_killed_ = true;
-            can_retry = false;
-          } else if (OB_TMP_FAIL(tmp_ret)) {
+      // Execution or transaction-result failures require statement rollback.
+      if (OB_TMP_FAIL(tmp_ret)) {
+        ret = tmp_ret;
+        can_retry = false;
+        retry_ctx.need_retry_ = false;
+        (void) collect_rollback_info_(ctx);
+      } else {
+        tmp_ret = result.get_ret_code();
+        if (need_retry_partial_task_(tmp_ret, &result)) {
+          LOG_WARN("lock task failed, but we need retry", KR(tmp_ret));
+          if (OB_TMP_FAIL(get_retry_lock_ids_(lock_set,
+                                              result.get_success_pos() + 1,
+                                              retry_ctx.retry_lock_ids_))) {
             can_retry = false;
             retry_ctx.need_retry_ = false;
+            ret = tmp_ret;
+            LOG_WARN("get retry tablet list failed", KR(ret));
           }
-          if (OB_TMP_FAIL(tmp_ret)) {
-            LOG_WARN("lock rpc wrong", K(tmp_ret), K(ls_id));
-            if (OB_SUCC(ret) || ret == OB_TRY_LOCK_ROW_CONFLICT) {
-              ret = tmp_ret;
-            }
+        } else if (OB_TRANS_KILLED == tmp_ret) {
+          ctx.tx_is_killed_ = true;
+          can_retry = false;
+        } else if (OB_TMP_FAIL(tmp_ret)) {
+          retry_ctx.need_retry_ = false;
+          can_retry = false;
+        }
+        if (OB_TMP_FAIL(tmp_ret)) {
+          LOG_WARN("lock task failed", K(tmp_ret));
+          if (OB_SUCC(ret) || ret == OB_TRY_LOCK_ROW_CONFLICT) {
+            ret = tmp_ret;
           }
         }
       }
     }
   }
-  LOG_DEBUG("ObTableLockService::handle_parallel_rpc_response_", K(ret), K(ctx));
+  LOG_DEBUG("ObTableLockService::handle_task_result_", K(ret), K(ctx));
 
   return ret;
 }
 
-int ObTableLockService::pre_check_lock_(ObTableLockCtx &ctx, const ObLSLockMap &ls_lock_map)
+int ObTableLockService::pre_check_lock_(ObTableLockCtx &ctx, const ObLockSet &lock_set)
 {
   int ret = OB_SUCCESS;
-  ret = batch_pre_check_lock_(ctx, ls_lock_map);
+  ret = batch_pre_check_lock_(ctx, lock_set);
   return ret;
 }
 
 // for 4.1
-template<class RpcProxy>
-int ObTableLockService::parallel_batch_rpc_handle_(RpcProxy &proxy_batch,
+template<class LocalExecutor>
+int ObTableLockService::execute_lock_set_in_batches_(LocalExecutor &executor,
                                                    ObTableLockCtx &ctx,
-                                                   const ObLSLockMap &ls_lock_map)
+                                                   const ObLockSet &lock_set)
 {
   int ret = OB_SUCCESS;
-  constexpr static int64_t MAP_NUM = 2;
-  ObLSLockMap maps[MAP_NUM];
-  const ObLSLockMap *in_map = nullptr;
-  ObLSLockMap *retry_map = nullptr;
-  bool can_retry = true;       // whether the whole rpc task can retry.
+  constexpr static int64_t RETRY_SET_NUM = 2;
+  ObLockSet retry_sets[RETRY_SET_NUM];
+  const ObLockSet *input_set = nullptr;
+  ObLockSet *retry_set = nullptr;
+  bool can_retry = true;
   int64_t retry_times = 1;
-  for (int64_t i = 0; i < MAP_NUM && OB_SUCC(ret); i++) {
-    if (OB_FAIL(maps[i].create(10, lib::ObLabel("LSLockMap")))) {
-      LOG_WARN("ls lock map create failed", KR(ret), K(i));
-    }
-  }
   if (OB_FAIL(ret)) {
     // do nothing
   } else {
-    retry_map = const_cast<ObLSLockMap *>(&ls_lock_map);
+    retry_set = const_cast<ObLockSet *>(&lock_set);
     do {
-      in_map = retry_map;
-      retry_map = &maps[retry_times % MAP_NUM];
-      if (OB_FAIL(retry_map->reuse())) {
-        LOG_WARN("reuse retry map failed", K(ret));
-      } else if (OB_FAIL(parallel_batch_rpc_handle_(proxy_batch,
+      input_set = retry_set;
+      retry_set = &retry_sets[retry_times % RETRY_SET_NUM];
+      if (OB_FAIL(retry_set->reuse())) {
+        LOG_WARN("reuse retry set failed", K(ret));
+      } else if (OB_FAIL(execute_lock_set_in_batches_(executor,
                                                     ctx,
-                                                    *in_map,
+                                                    *input_set,
                                                     can_retry,
-                                                    *retry_map))) {
-        LOG_WARN("process rpc failed", KR(ret), K(can_retry), K(ctx), K(retry_times));
+                                                    *retry_set))) {
+        LOG_WARN("process lock task failed", KR(ret), K(can_retry), K(ctx), K(retry_times));
       }
-      if (can_retry && !retry_map->empty()) {
+      if (can_retry && !retry_set->empty()) {
         retry_times++;
       }
       if (retry_times % 10 == 0) {
         LOG_WARN("retry too many times", K(retry_times), K(can_retry), K(ctx));
-        FOREACH(data, ls_lock_map) {
-          const share::ObLSID &ls_id = data->first;
-          const ObLockIDArray &lock_ids = data->second;
-          LOG_WARN("retry data", K(ls_id), K(lock_ids));
-        }
+        LOG_WARN("retry lock data", K(lock_set));
       }
-    } while (can_retry && !retry_map->empty());
+    } while (can_retry && !retry_set->empty());
   }
   return ret;
 }
 
-template<class RpcProxy>
-int ObTableLockService::parallel_send_rpc_task_(RpcProxy &proxy_batch,
+template<class LocalExecutor>
+int ObTableLockService::execute_lock_set_once_(LocalExecutor &executor,
                                                 ObTableLockCtx &ctx,
-                                                const ObLSLockMap &ls_lock_map,
+                                                const ObLockSet &lock_set,
                                                 ObRetryCtx &retry_ctx)
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  bool has_retry = false;
 
-  retry_ctx.send_rpc_count_ = 0;
-  // send async rpc parallel
-  FOREACH_X(data, ls_lock_map, OB_SUCC(ret)) {
-    const share::ObLSID &ls_id = data->first;
-    const ObLockIDArray &lock_ids = data->second;
-    if (!has_retry) {
-      if (OB_FAIL(send_rpc_task_(proxy_batch,
-                                 ctx,
-                                 ls_id,
-                                 lock_ids,
-                                 retry_ctx))) {
-        LOG_WARN("send rpc task failed", K(ret));
-      }
-    }
-    if (retry_ctx.need_retry_ || has_retry) {
-      has_retry = true;
-      if (OB_TMP_FAIL(get_retry_lock_ids_(lock_ids,
-                                          0,
-                                          retry_ctx.retry_lock_ids_))) {
-        LOG_WARN("get retry tablet failed", KR(ret));
-        ret = tmp_ret;
-      };
+  retry_ctx.reuse();
+  if (!lock_set.empty()) {
+    const ObLockIDArray &lock_ids = lock_set.get_lock_ids();
+    if (OB_FAIL(execute_lock_task_(executor,
+                               ctx,
+                               lock_ids,
+                               retry_ctx))) {
+      LOG_WARN("execute lock task failed", K(ret));
+    } else if (retry_ctx.need_retry_
+               && OB_FAIL(get_retry_lock_ids_(lock_ids,
+                                              0,
+                                              retry_ctx.retry_lock_ids_))) {
+      LOG_WARN("get retry tablet failed", KR(ret));
     }
   }
   return ret;
 }
 
-template<class RpcProxy>
-int ObTableLockService::parallel_batch_rpc_handle_(RpcProxy &proxy_batch,
+template<class LocalExecutor>
+int ObTableLockService::execute_lock_set_in_batches_(LocalExecutor &executor,
                                                    ObTableLockCtx &ctx,
-                                                   const ObLSLockMap &ls_lock_map,
+                                                   const ObLockSet &lock_set,
                                                    bool &can_retry,
-                                                   ObLSLockMap &retry_ls_lock_map)
+                                                   ObLockSet &retry_lock_set)
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
   ObRetryCtx retry_ctx;
-  proxy_batch.reuse();
 
-  // send async rpc parallel
-  if (OB_FAIL(parallel_send_rpc_task_(proxy_batch,
+  if (OB_FAIL(execute_lock_set_once_(executor,
                                       ctx,
-                                      ls_lock_map,
+                                      lock_set,
                                       retry_ctx))) {
     can_retry = false;
-    (void)collect_rollback_info_(retry_ctx.rpc_ls_array_, proxy_batch, ctx);
-    LOG_WARN("send rpc task failed", KR(ret));
+    (void)collect_rollback_info_(retry_ctx, ctx);
+    LOG_WARN("execute lock task failed", KR(ret));
   } else {
-    // process rpc response
-    ret = handle_parallel_rpc_response_(proxy_batch,
+    ret = handle_task_result_(executor,
                                         ctx,
-                                        ls_lock_map,
+                                        lock_set,
                                         can_retry,
                                         retry_ctx);
   }
 
-  // get the retry map
+  // get the retry set
   if (can_retry && retry_ctx.retry_lock_ids_.count() != 0) {
-    LOG_WARN("lock rpc failed, but we need retry", K(ret), K(can_retry), K(retry_ctx));
-    if (OB_FAIL(fill_ls_lock_map_(ctx,
+    LOG_WARN("lock task failed, but we need retry", K(ret), K(can_retry), K(retry_ctx));
+    if (OB_FAIL(fill_lock_set_(ctx,
                                   retry_ctx.retry_lock_ids_,
-                                  retry_ls_lock_map,
-                                  true /* force refresh location */))) {
-      LOG_WARN("refill ls lock map failed", KP(ret), K(ctx));
+                                  retry_lock_set))) {
+      LOG_WARN("refill lock set failed", KP(ret), K(ctx));
       can_retry = false;
     }
   }
 
-  LOG_DEBUG("ObTableLockService::parallel_batch_rpc_handle_", K(ret), K(ctx));
+  LOG_DEBUG("ObTableLockService::execute_lock_set_in_batches_", K(ret), K(ctx));
   return ret;
 }
 
 int ObTableLockService::batch_pre_check_lock_(ObTableLockCtx &ctx,
-                                              const ObLSLockMap &ls_lock_map)
+                                              const ObLockSet &lock_set)
 {
   int ret = OB_SUCCESS;
   int last_ret = OB_SUCCESS;
   int64_t USLEEP_TIME = 100; // 0.1 ms
   bool need_retry = false;
-  observer::ObLocalBatchLockProxy<ObLockTaskBatchRequest<ObLockParam>> proxy_batch(
+  observer::ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObLockParam>> executor(
       observer::handle_batch_lock_task);
   // only used in LOCK_TABLE/LOCK_PARTITION
   if (LOCK_TABLE == ctx.task_type_ ||
@@ -1384,9 +1231,9 @@ int ObTableLockService::batch_pre_check_lock_(ObTableLockCtx &ctx,
           OB_ERR_EXCLUSIVE_LOCK_CONFLICT : OB_TIMEOUT;
         LOG_WARN("process obj lock timeout", K(ret), K(ctx));
       } else {
-        ret = parallel_batch_rpc_handle_(proxy_batch,
+        ret = execute_lock_set_in_batches_(executor,
                                          ctx,
-                                         ls_lock_map);
+                                         lock_set);
         // the process process may be timeout because left time not enough,
         // just rewrite it to OB_ERR_EXCLUSIVE_LOCK_CONFLICT
         if (is_timeout_ret_code_(ret)) {
@@ -1418,24 +1265,6 @@ int ObTableLockService::batch_pre_check_lock_(ObTableLockCtx &ctx,
       }
     } while (need_retry);  // retry task level
     LOG_DEBUG("ObTableLockService::pre_check_lock_", K(ret), K(ctx));
-  }
-  return ret;
-}
-
-template<class RpcProxy, class LockRequest>
-int ObTableLockService::rpc_call_(RpcProxy &proxy_batch,
-                                  const ObAddr &addr,
-                                  const int64_t timeout_us,
-                                  const LockRequest &request)
-{
-  int ret = OB_SUCCESS;
-  int32_t group_id = 0;
-  if (OB_FAIL(proxy_batch.call(addr,
-                                timeout_us,
-                                GCONF.cluster_id,
-                                group_id,
-                                request))) {
-    LOG_WARN("failed to all async rpc", KR(ret), K(addr), K(timeout_us), K(request));
   }
   return ret;
 }
@@ -1484,15 +1313,14 @@ int ObTableLockService::get_table_partition_level_(const ObTableID table_id,
 
 int ObTableLockService::pack_batch_request_(ObTableLockCtx &ctx,
                                             const ObTableLockTaskType task_type,
-                                            const share::ObLSID &ls_id,
                                             const ObLockIDArray &lock_ids,
                                             ObLockTaskBatchRequest<ObLockParam> &request)
 {
   int ret = OB_SUCCESS;
   ObLockParam lock_param;
 
-  if (OB_FAIL(request.init(task_type, ls_id, ctx.tx_desc_))) {
-    LOG_WARN("request init failed", K(ret), K(ctx), K(ls_id), KP(ctx.tx_desc_), K(lock_ids), K(task_type));
+  if (OB_FAIL(request.init(task_type, ctx.tx_desc_))) {
+    LOG_WARN("request init failed", K(ret), K(ctx), KP(ctx.tx_desc_), K(lock_ids), K(task_type));
   } else {
     for (int i = 0; i < lock_ids.count() && OB_SUCC(ret); ++i) {
       lock_param.reset();
@@ -1520,14 +1348,13 @@ int ObTableLockService::pack_batch_request_(ObTableLockCtx &ctx,
 
 int ObTableLockService::pack_batch_request_(ObTableLockCtx &ctx,
                                             const ObTableLockTaskType task_type,
-                                            const share::ObLSID &ls_id,
                                             const ObLockIDArray &lock_ids,
                                             ObLockTaskBatchRequest<ObReplaceLockParam> &request)
 {
   int ret = OB_SUCCESS;
   ObReplaceLockParam lock_param;
-  if (OB_FAIL(request.init(task_type, ls_id, ctx.tx_desc_))) {
-    LOG_WARN("request init failed", K(ret), K(ctx), K(ls_id), KP(ctx.tx_desc_), K(lock_ids), K(task_type));
+  if (OB_FAIL(request.init(task_type, ctx.tx_desc_))) {
+    LOG_WARN("request init failed", K(ret), K(ctx), KP(ctx.tx_desc_), K(lock_ids), K(task_type));
   } else if (!ctx.is_replace_task()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("lock_param is not compatible with request", K(ret), K(ctx), K(task_type));
@@ -1546,76 +1373,65 @@ int ObTableLockService::pack_batch_request_(ObTableLockCtx &ctx,
 }
 
 
-template<class RpcProxy>
-int ObTableLockService::batch_rpc_handle_(RpcProxy &proxy_batch,
+template<class LocalExecutor>
+int ObTableLockService::execute_lock_set_(LocalExecutor &executor,
                                           ObTableLockCtx &ctx,
-                                          const ObLSLockMap &ls_lock_map)
+                                          const ObLockSet &lock_set)
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  constexpr static int64_t MAP_NUM = 2;
-  ObLSLockMap maps[MAP_NUM];
-  const ObLSLockMap *in_map = nullptr;
-  ObLSLockMap *retry_map = nullptr;
-  bool can_retry = true;       // whether the whole rpc task can retry.
+  constexpr static int64_t RETRY_SET_NUM = 2;
+  ObLockSet retry_sets[RETRY_SET_NUM];
+  const ObLockSet *input_set = nullptr;
+  ObLockSet *retry_set = nullptr;
+  bool can_retry = true;
   int64_t retry_times = 1;
-  for (int64_t i = 0; i < MAP_NUM && OB_SUCC(ret); i++) {
-    if (OB_FAIL(maps[i].create(10, lib::ObLabel("LSLockMap")))) {
-      LOG_WARN("ls lock map create failed", KR(ret), K(i));
-    }
-  }
   if (OB_FAIL(ret)) {
     // do nothing
   } else {
-    retry_map = const_cast<ObLSLockMap *>(&ls_lock_map);
+    retry_set = const_cast<ObLockSet *>(&lock_set);
     do {
-      in_map = retry_map;
-      retry_map = &maps[retry_times % MAP_NUM];
-      if (OB_FAIL(retry_map->reuse())) {
-        LOG_WARN("reuse retry map failed", K(ret));
-      } else if (OB_FAIL(batch_rpc_handle_(proxy_batch,
+      input_set = retry_set;
+      retry_set = &retry_sets[retry_times % RETRY_SET_NUM];
+      if (OB_FAIL(retry_set->reuse())) {
+        LOG_WARN("reuse retry set failed", K(ret));
+      } else if (OB_FAIL(execute_lock_set_(executor,
                                            ctx,
-                                           *in_map,
+                                           *input_set,
                                            can_retry,
-                                           *retry_map))) {
-        LOG_WARN("process rpc failed", KR(ret), K(ctx), K(retry_times));
+                                           *retry_set))) {
+        LOG_WARN("process lock task failed", KR(ret), K(ctx), K(retry_times));
       }
-      if (can_retry && !retry_map->empty()) {
+      if (can_retry && !retry_set->empty()) {
         retry_times++;
       }
       if (retry_times % 10 == 0) {
-        LOG_WARN("retry too many times", K(retry_times), K(ctx), K(retry_map->size()));
+        LOG_WARN("retry too many times", K(retry_times), K(ctx), K(retry_set->size()));
       }
-    } while (can_retry && !retry_map->empty());
+    } while (can_retry && !retry_set->empty());
   }
   return ret;
 }
 
-template <class RpcProxy>
-int ObTableLockService::send_rpc_task_(RpcProxy &proxy_batch,
+template <class LocalExecutor>
+int ObTableLockService::execute_lock_task_(LocalExecutor &executor,
                                        ObTableLockCtx &ctx,
-                                       const share::ObLSID &ls_id,
                                        const ObLockIDArray &lock_ids,
                                        ObRetryCtx &retry_ctx)
 {
   int ret = OB_SUCCESS;
-  ObAddr addr;
 
   retry_ctx.need_retry_ = false;
-  if (OB_FAIL(retry_ctx.rpc_ls_array_.push_back(ls_id))) {
-    LOG_WARN("push_back lsid failed", K(ret), K(ls_id));
-  } else if (OB_FAIL(get_ls_leader_(
-               ctx.tx_desc_->get_cluster_id(), ls_id, ctx.abs_timeout_ts_, addr))) {
-    if (need_renew_location_(ret)) {
-      retry_ctx.need_retry_ = true;
-      ret = OB_SUCCESS;
-    }
-    LOG_WARN("failed to get ls leader", K(ret), K(ctx), K(ls_id));
-  } else if (ctx.is_timeout()) {
-    ret = OB_TIMEOUT;
-    LOG_WARN("process obj lock timeout", K(ret), K(ctx));
+  if (OB_UNLIKELY(retry_ctx.task_prepared_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("single table lock task already prepared", K(ret), K(retry_ctx));
   } else {
-    ret = pack_and_call_rpc_(proxy_batch, ctx, ls_id, lock_ids, addr, retry_ctx);
+    retry_ctx.task_prepared_ = true;
+    if (ctx.is_timeout()) {
+      ret = OB_TIMEOUT;
+      LOG_WARN("process obj lock timeout", K(ret), K(ctx));
+    } else {
+      ret = pack_and_execute_task_(executor, ctx, lock_ids, retry_ctx);
+    }
   }
 
   if (OB_FAIL(ret)) {
@@ -1624,109 +1440,106 @@ int ObTableLockService::send_rpc_task_(RpcProxy &proxy_batch,
   return ret;
 }
 
-template <typename RpcProxy>
-int ObTableLockService::pack_and_call_rpc_(RpcProxy &proxy_batch,
+template <typename LocalExecutor>
+int ObTableLockService::pack_and_execute_task_(LocalExecutor &executor,
                                            ObTableLockCtx &ctx,
-                                           const share::ObLSID &ls_id,
                                            const ObLockIDArray &lock_ids,
-                                           const ObAddr &addr,
                                            ObRetryCtx &retry_ctx)
 {
   int ret = OB_SUCCESS;
   ObLockTaskBatchRequest<ObLockParam> request;
-  if (OB_FAIL(pack_batch_request_(ctx, ctx.task_type_, ls_id, lock_ids, request))) {
-    LOG_WARN("pack_batch_request_ failed", K(ret), K(ls_id), K(ctx), K(lock_ids));
-  } else if (OB_FAIL(rpc_call_(proxy_batch, addr, ctx.get_rpc_timeoutus(), request))) {
-    LOG_WARN("failed to call async rpc", KR(ret), K(addr), K(ctx.abs_timeout_ts_), K(request));
+  if (OB_FAIL(pack_batch_request_(ctx, ctx.task_type_, lock_ids, request))) {
+    LOG_WARN("pack_batch_request_ failed", K(ret), K(ctx), K(lock_ids));
+  } else if (OB_UNLIKELY(retry_ctx.task_executed_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("single table lock task already executed", K(ret), K(retry_ctx));
+  } else if (OB_FAIL(executor.execute(request))) {
+    LOG_WARN("failed to execute local lock task", KR(ret), K(ctx.abs_timeout_ts_), K(request));
   } else {
-    retry_ctx.send_rpc_count_++;
+    retry_ctx.task_executed_ = true;
     ALLOW_NEXT_LOG();
-    LOG_INFO("send table lock rpc", KR(ret), K(retry_ctx.send_rpc_count_), K(addr), "request", request);
+    LOG_INFO("execute table lock task", KR(ret), K(retry_ctx), "request", request);
   }
   return ret;
 }
 
 template <>
-int ObTableLockService::pack_and_call_rpc_(observer::ObLocalBatchLockProxy<ObLockTaskBatchRequest<ObReplaceLockParam>> &proxy_batch,
+int ObTableLockService::pack_and_execute_task_(observer::ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObReplaceLockParam>> &executor,
                                            ObTableLockCtx &ctx,
-                                           const share::ObLSID &ls_id,
                                            const ObLockIDArray &lock_ids,
-                                           const ObAddr &addr,
                                            ObRetryCtx &retry_ctx)
 {
   int ret = OB_SUCCESS;
   ObLockTaskBatchRequest<ObReplaceLockParam> request;
-  if (OB_FAIL(pack_batch_request_(ctx, ctx.task_type_, ls_id, lock_ids, request))) {
-    LOG_WARN("pack_batch_request_ failed", K(ret), K(ls_id), K(ctx), K(lock_ids));
-  } else if (OB_FAIL(rpc_call_(proxy_batch, addr, ctx.get_rpc_timeoutus(), request))) {
-    LOG_WARN("failed to call async rpc", KR(ret), K(addr), K(ctx.abs_timeout_ts_), K(request));
+  if (OB_FAIL(pack_batch_request_(ctx, ctx.task_type_, lock_ids, request))) {
+    LOG_WARN("pack_batch_request_ failed", K(ret), K(ctx), K(lock_ids));
+  } else if (OB_UNLIKELY(retry_ctx.task_executed_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("single table lock task already executed", K(ret), K(retry_ctx));
+  } else if (OB_FAIL(executor.execute(request))) {
+    LOG_WARN("failed to execute local lock task", KR(ret), K(ctx.abs_timeout_ts_), K(request));
   } else {
-    retry_ctx.send_rpc_count_++;
+    retry_ctx.task_executed_ = true;
     ALLOW_NEXT_LOG();
-    LOG_INFO("send table lock rpc", KR(ret), K(retry_ctx.send_rpc_count_), K(addr), "request", request);
+    LOG_INFO("execute table lock task", KR(ret), K(retry_ctx), "request", request);
   }
   return ret;
 }
 
-template <class RpcProxy>
-int ObTableLockService::send_one_rpc_task_(RpcProxy &proxy_batch,
+template <class LocalExecutor>
+int ObTableLockService::execute_one_lock_task_(LocalExecutor &executor,
                                            ObTableLockCtx &ctx,
-                                           const share::ObLSID &ls_id,
                                            const ObLockIDArray &lock_ids,
                                            ObRetryCtx &retry_ctx)
 {
   int ret = OB_SUCCESS;
 
-  retry_ctx.send_rpc_count_ = 0;
-  if (OB_FAIL(send_rpc_task_(proxy_batch,
+  retry_ctx.reuse();
+  if (OB_FAIL(execute_lock_task_(executor,
                              ctx,
-                             ls_id,
                              lock_ids,
                              retry_ctx))) {
-    LOG_WARN("send rpc task failed", K(ret), K(ls_id));
+    LOG_WARN("execute lock task failed", K(ret));
   } else if (retry_ctx.need_retry_) {
     if (OB_FAIL(get_retry_lock_ids_(lock_ids,
                                     0,
                                     retry_ctx.retry_lock_ids_))) {
       retry_ctx.need_retry_ = false;
       LOG_WARN("get retry tablet failed", KR(ret));
-    };
+    }
   }
   return ret;
 }
 
-template<class RpcProxy>
-int ObTableLockService::batch_rpc_handle_(RpcProxy &proxy_batch,
+template<class LocalExecutor>
+int ObTableLockService::execute_lock_set_(LocalExecutor &executor,
                                           ObTableLockCtx &ctx,
-                                          const ObLSLockMap &ls_lock_map,
+                                          const ObLockSet &lock_set,
                                           bool &can_retry,
-                                          ObLSLockMap &retry_ls_lock_map)
+                                          ObLockSet &retry_lock_set)
 {
   int ret = OB_SUCCESS;
   ObLockIDArray retry_lock_ids;
   ObRetryCtx retry_ctx;
-  FOREACH_X(data, ls_lock_map, OB_SUCC(ret) || can_retry) {
-    proxy_batch.reuse();
+  if (!lock_set.empty()) {
     retry_ctx.reuse();
-    const share::ObLSID &ls_id = data->first;
-    const ObLockIDArray &lock_ids = data->second;
+    const ObLockIDArray &lock_ids = lock_set.get_lock_ids();
 
-    if (OB_FAIL(send_one_rpc_task_(proxy_batch,
+    if (OB_FAIL(execute_one_lock_task_(executor,
                                    ctx,
-                                   ls_id,
                                    lock_ids,
                                    retry_ctx))) {
       can_retry = false;
-      (void)collect_rollback_info_(retry_ctx.rpc_ls_array_, proxy_batch, ctx);
-      LOG_WARN("send rpc task failed", KR(ret));
+      (void)collect_rollback_info_(retry_ctx, ctx);
+      LOG_WARN("execute lock task failed", KR(ret));
     } else {
-      ret = handle_parallel_rpc_response_(proxy_batch,
+      ret = handle_task_result_(executor,
                                           ctx,
-                                          ls_lock_map,
+                                          lock_set,
                                           can_retry,
                                           retry_ctx);
     }
-    // collect one rpc's retry tablets.
+    // Collect retry tablets from the local task result.
     if (can_retry) {
       if (OB_FAIL(get_retry_lock_ids_(retry_ctx.retry_lock_ids_,
                                       0,
@@ -1736,13 +1549,12 @@ int ObTableLockService::batch_rpc_handle_(RpcProxy &proxy_batch,
       }
     }
   }
-  // get the retry map
+  // get the retry set
   if (can_retry && retry_lock_ids.count() != 0) {
-    if (OB_FAIL(fill_ls_lock_map_(ctx,
-                                  retry_lock_ids,
-                                  retry_ls_lock_map,
-                                  true /* force refresh location */))) {
-      LOG_WARN("refill ls lock map failed", KP(ret), K(ctx));
+    if (OB_FAIL(fill_lock_set_(ctx,
+                                         retry_lock_ids,
+                                         retry_lock_set))) {
+      LOG_WARN("refill lock set failed", KP(ret), K(ctx));
       can_retry = false;
     }
   }
@@ -1750,21 +1562,21 @@ int ObTableLockService::batch_rpc_handle_(RpcProxy &proxy_batch,
 }
 
 int ObTableLockService::inner_process_obj_lock_batch_(ObTableLockCtx &ctx,
-                                                      const ObLSLockMap &lock_map)
+                                                      const ObLockSet &lock_map)
 {
   int ret = OB_SUCCESS;
   if (ctx.is_unlock_task()) {
-    observer::ObLocalBatchLockProxy<ObLockTaskBatchRequest<ObLockParam>> proxy_batch(
+    observer::ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObLockParam>> executor(
         observer::handle_high_priority_batch_lock_task);
-    ret = batch_rpc_handle_(proxy_batch, ctx, lock_map);
+    ret = execute_lock_set_(executor, ctx, lock_map);
   } else if (ctx.is_replace_task()) {
-    observer::ObLocalBatchLockProxy<ObLockTaskBatchRequest<ObReplaceLockParam>> proxy_batch(
+    observer::ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObReplaceLockParam>> executor(
         observer::handle_batch_replace_lock_task);
-    ret = batch_rpc_handle_(proxy_batch, ctx, lock_map);
+    ret = execute_lock_set_(executor, ctx, lock_map);
   } else {
-    observer::ObLocalBatchLockProxy<ObLockTaskBatchRequest<ObLockParam>> proxy_batch(
+    observer::ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObLockParam>> executor(
         observer::handle_batch_lock_task);
-    ret = batch_rpc_handle_(proxy_batch, ctx, lock_map);
+    ret = execute_lock_set_(executor, ctx, lock_map);
   }
   return ret;
 }
@@ -1772,20 +1584,20 @@ int ObTableLockService::inner_process_obj_lock_batch_(ObTableLockCtx &ctx,
 int ObTableLockService::process_table_tablet_lock_with_prio_(ObTableLockCtx &ctx,
                                                              const ObTableLockMode lock_mode,
                                                              const ObTableLockMode table_lock_mode,
-                                                             const ObLSLockMap &table_ls_lock_map)
+                                                             const ObLockSet &table_lock_set)
 {
   int ret = OB_SUCCESS;
-  ObLSLockMap tablet_ls_lock_map;
+  ObLockSet tablet_lock_set;
 
   ctx.schema_version_ = 0;
   ctx.lock_mode_ = table_lock_mode;
 
-  if (OB_FAIL(process_obj_lock_with_prio_(ctx, table_ls_lock_map))) {
+  if (OB_FAIL(process_obj_lock_with_prio_(ctx, table_lock_set))) {
     LOG_WARN("lock table failed", K(ret), K(ctx), K(lock_mode));
-  } else if (OB_FAIL(get_tablet_ls_lock_map_(lock_mode, ctx, tablet_ls_lock_map))) {
-    LOG_WARN("failed to get_tablet_ls_lock_map_", K(ret), K(ctx), K(lock_mode));
+  } else if (OB_FAIL(get_tablet_lock_set_(lock_mode, ctx, tablet_lock_set))) {
+    LOG_WARN("failed to get_tablet_lock_set_", K(ret), K(ctx), K(lock_mode));
   } else if (FALSE_IT(ctx.lock_mode_ = lock_mode)) {
-  } else if (OB_FAIL(process_obj_lock_with_prio_(ctx, tablet_ls_lock_map))) {
+  } else if (OB_FAIL(process_obj_lock_with_prio_(ctx, tablet_lock_set))) {
     LOG_WARN("lock tablet failed", K(ret), K(ctx));
   }
   LOG_DEBUG("ObTableLockService::process_table_tablet_lock_with_prio_",
@@ -1800,31 +1612,31 @@ int ObTableLockService::process_table_tablet_lock_with_prio_(ObTableLockCtx &ctx
 int ObTableLockService::process_table_tablet_lock_(ObTableLockCtx &ctx,
                                                    const ObTableLockMode lock_mode,
                                                    const ObTableLockMode table_lock_mode,
-                                                   const ObLSLockMap &table_ls_lock_map)
+                                                   const ObLockSet &table_lock_set)
 {
   int ret = OB_SUCCESS;
-  ObLSLockMap tablet_ls_lock_map;
+  ObLockSet tablet_lock_set;
 
   ctx.schema_version_ = 0;
   ctx.lock_mode_ = table_lock_mode;
 
-  if (OB_FAIL(process_obj_lock_(ctx, table_ls_lock_map))) {
+  if (OB_FAIL(process_obj_lock_(ctx, table_lock_set))) {
     LOG_WARN("lock table failed", K(ret), K(ctx), K(table_lock_mode));
   }
   DEBUG_SYNC(TABLE_LOCK_AFTER_LOCK_TABLE_BEFORE_LOCK_TABLET);
-  if (FAILEDx(get_tablet_ls_lock_map_(lock_mode, ctx, tablet_ls_lock_map))) {
-    LOG_WARN("get tablet ls_lock_map failed", K(ret), K(ctx), K(lock_mode));
+  if (FAILEDx(get_tablet_lock_set_(lock_mode, ctx, tablet_lock_set))) {
+    LOG_WARN("get tablet lock_set failed", K(ret), K(ctx), K(lock_mode));
   } else if (FALSE_IT(ctx.lock_mode_ = lock_mode)) {
-  } else  if (!ctx.is_enable_lock_priority_ && OB_FAIL(pre_check_lock_(ctx, tablet_ls_lock_map))) {
+  } else  if (!ctx.is_enable_lock_priority_ && OB_FAIL(pre_check_lock_(ctx, tablet_lock_set))) {
     LOG_WARN("failed to pre_check_lock_", K(ret), K(ctx), K(lock_mode));
-  } else if (OB_FAIL(process_obj_lock_(ctx, tablet_ls_lock_map))) {
+  } else if (OB_FAIL(process_obj_lock_(ctx, tablet_lock_set))) {
     LOG_WARN("lock tablet failed", K(ret), K(ctx), K(lock_mode));
   }
   return ret;
 }
 
 int ObTableLockService::process_obj_lock_with_prio_(ObTableLockCtx &ctx,
-                                                    const ObLSLockMap &ls_lock_map)
+                                                    const ObLockSet &lock_set)
 {
   int ret = OB_SUCCESS;
   const ObTableLockTaskType ori_task_type = ctx.task_type_;
@@ -1838,7 +1650,7 @@ int ObTableLockService::process_obj_lock_with_prio_(ObTableLockCtx &ctx,
     } else {
       ctx.task_type_ = ObTableLockTaskType::ADD_LOCK_INTO_QUEUE;
     }
-    if (OB_FAIL(process_obj_lock_(ctx, ls_lock_map))) {
+    if (OB_FAIL(process_obj_lock_(ctx, lock_set))) {
       LOG_WARN("process_obj_lock_ failed", K(ret), K(ctx));
     }
     ctx.task_type_ = ori_task_type;
@@ -1849,7 +1661,7 @@ int ObTableLockService::process_obj_lock_with_prio_(ObTableLockCtx &ctx,
 }
 
 int ObTableLockService::process_obj_lock_(ObTableLockCtx &ctx,
-                                          const ObLSLockMap &ls_lock_map)
+                                          const ObLockSet &lock_set)
 
 {
   int ret = OB_SUCCESS;
@@ -1863,7 +1675,7 @@ int ObTableLockService::process_obj_lock_(ObTableLockCtx &ctx,
     } else if (OB_FAIL(start_sub_tx_(ctx))) {
       LOG_WARN("failed to start sub tx", K(ret), K(ctx));
     } else if (OB_FAIL(inner_process_obj_lock_batch_(ctx,
-                                                     ls_lock_map))) {
+                                                     lock_set))) {
       LOG_WARN("fail to lock tablets", K(ret));
       need_retry = need_retry_single_task_(ctx, ret);
       // rollback the sub tx and overwrite the ret code.
@@ -1902,65 +1714,6 @@ int ObTableLockService::check_op_allowed_(const uint64_t table_id,
       is_allowed = false;
     }
   }
-  return ret;
-}
-
-int ObTableLockService::get_lock_id_ls_(
-    const ObTableLockCtx &ctx,
-    const ObLockID &lock_id,
-    ObLSID &ls_id,
-    bool force_refresh)
-{
-  int ret = OB_SUCCESS;
-  if (lock_id.is_tablet_lock()) {
-    ObTabletID tablet_id;
-    if (OB_FAIL(lock_id.convert_to(tablet_id))) {
-      LOG_WARN("convert tablet id failed", K(ret), K(lock_id));
-    } else if (OB_FAIL(get_tablet_ls_(ctx, tablet_id, ls_id, force_refresh))) {
-      LOG_WARN("get tablet ls failed", K(ret), K(tablet_id), K(force_refresh));
-    }
-  } else {
-    ls_id = LOCK_SERVICE_LS;
-  }
-  return ret;
-}
-
-int ObTableLockService::get_tablet_ls_(
-    const ObTableLockCtx &ctx,
-    const ObTabletID &tablet_id,
-    ObLSID &ls_id,
-    bool force_refresh)
-{
-  int ret = OB_SUCCESS;
-  bool unused_cache_hit;
-  
-  if (LOCK_ALONE_TABLET == ctx.task_type_ || UNLOCK_ALONE_TABLET == ctx.task_type_
-      || REPLACE_LOCK_ALONE_TABLET == ctx.task_type_) {
-    // we have specified the ls, just do lock and unlock at the specified ls
-    ls_id = ctx.ls_id_;
-  } else if (force_refresh) {
-    if (OB_FAIL(location_service_->get(tablet_id,
-                                       INT64_MAX,
-                                       unused_cache_hit,
-                                       ls_id))) {
-      LOG_WARN("failed to sync get ls by tablet failed.",
-               K(ret), K(1UL), K(tablet_id));
-    }
-  } else if (OB_FAIL(location_service_->nonblock_get(tablet_id, ls_id))) {
-    if (OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST == ret &&
-        OB_FAIL(location_service_->get(tablet_id,
-                                       INT64_MAX,
-                                       unused_cache_hit,
-                                       ls_id))) {
-      LOG_ERROR("failed to sync get ls by tablet failed.",
-               K(ret), K(1UL), K(tablet_id));
-    } else if (OB_FAIL(ret)) {
-      LOG_WARN("failed to get ls by tablet", K(ret), K(1UL),
-               K(tablet_id));
-    }
-  }
-  LOG_DEBUG("get tablet ls", K(ret), K(1UL), K(tablet_id), K(ls_id));
-
   return ret;
 }
 
@@ -2019,83 +1772,55 @@ int ObTableLockService::get_process_tablets_(const ObSimpleTableSchemaV2 *table_
   return ret;
 }
 
-int ObTableLockService::fill_ls_lock_map_(ObTableLockCtx &ctx,
+int ObTableLockService::fill_lock_set_(ObTableLockCtx &ctx,
                                           const ObLockIDArray &lock_ids,
-                                          ObLSLockMap &ls_lock_map,
-                                          bool force_refresh_location)
+                                          ObLockSet &lock_set)
 {
   int ret = OB_SUCCESS;
-  share::ObLSID ls_id;
-  ObLockIDArray lock_array;
-  ObLockIDArray *p = nullptr;
-  if (OB_FAIL(ls_lock_map.reuse())) {
-    LOG_WARN("fail to reuse ls_lock_map", KR(ret));
+  UNUSED(ctx);
+  if (OB_FAIL(lock_set.reuse())) {
+    LOG_WARN("fail to reuse lock set", KR(ret));
   } else {
     for (int64_t i = 0; i < lock_ids.count() && OB_SUCC(ret); ++i) {
-      ls_id.reset();
-      lock_array.reuse();
-      p = nullptr;
       const ObLockID &lock_id = lock_ids.at(i);
-      if (OB_FAIL(get_lock_id_ls_(ctx, lock_id, ls_id, force_refresh_location))) {
-        LOG_WARN("failed to get lock ls", K(ret), K(lock_id));
-      } else if (OB_FAIL(ls_lock_map.set_refactored(ls_id, lock_array)) &&
-                 OB_ENTRY_EXIST != ret && OB_HASH_EXIST != ret) {
-        LOG_WARN("fail to set ls_lock_map", K(ret), K(ls_id));
-      } else if (OB_ISNULL(p = ls_lock_map.get(ls_id))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the ls not exist at ls lock map", K(ret), K(ls_id));
-      } else if (OB_FAIL(p->push_back(lock_id))) {
-        LOG_WARN("push_back lock_id failed", K(ret), K(ls_id), K(lock_id));
+      if (OB_FAIL(lock_set.push_back(lock_id))) {
+        LOG_WARN("push_back lock_id failed", K(ret), K(lock_id));
       }
-      LOG_DEBUG("lock add to lock map", K(lock_id), K(i));
+      LOG_DEBUG("lock added to lock set", K(lock_id), K(i));
     }
   }
 
   return ret;
 }
 
-int ObTableLockService::fill_ls_lock_map_(ObTableLockCtx &ctx,
+int ObTableLockService::fill_lock_set_(ObTableLockCtx &ctx,
                                          const common::ObTabletIDArray &tablets,
-                                         ObLSLockMap &ls_lock_map)
+                                         ObLockSet &lock_set)
 {
   int ret = OB_SUCCESS;
-  share::ObLSID ls_id;
-  ObLockIDArray lock_array;
-  ObLockIDArray *p = nullptr;
   ObLockID lock_id;
-  if (OB_FAIL(ls_lock_map.reuse())) {
-    LOG_WARN("fail to reuse ls_lock_map", KR(ret));
+  if (OB_FAIL(lock_set.reuse())) {
+    LOG_WARN("fail to reuse lock set", KR(ret));
   } else {
     for (int64_t i = 0; i < tablets.count() && OB_SUCC(ret); ++i) {
-      ls_id.reset();
-      lock_array.reuse();
-      p = nullptr;
       lock_id.reset();
       const ObTabletID &tablet_id = tablets.at(i);
-      if (OB_FAIL(get_tablet_ls_(ctx, tablet_id, ls_id))) {
-        LOG_WARN("failed to get tablet ls", K(ret), K(tablet_id));
-      } else if (OB_FAIL(get_lock_id(tablet_id,
+      if (OB_FAIL(get_lock_id(tablet_id,
                                      lock_id))) {
         LOG_WARN("get lock id failed", K(ret), K(ctx));
-      } else if (OB_FAIL(ls_lock_map.set_refactored(ls_id, lock_array)) &&
-                 OB_ENTRY_EXIST != ret && OB_HASH_EXIST != ret) {
-        LOG_WARN("fail to set ls_lock_map", K(ret), K(ls_id));
-      } else if (OB_ISNULL(p = ls_lock_map.get(ls_id))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the ls not exist at ls lock map", K(ret), K(ls_id));
-      } else if (OB_FAIL(p->push_back(lock_id))) {
-        LOG_WARN("push_back lock_id failed", K(ret), K(ls_id), K(lock_id));
+      } else if (OB_FAIL(lock_set.push_back(lock_id))) {
+        LOG_WARN("push_back lock_id failed", K(ret), K(lock_id));
       }
-      LOG_DEBUG("tablet add to lock map", K(lock_id), K(tablet_id), K(i));
+      LOG_DEBUG("tablet added to lock set", K(lock_id), K(tablet_id), K(i));
     }
   }
 
   return ret;
 }
 
-int ObTableLockService::get_tablet_ls_lock_map_(const ObTableLockMode lock_mode,
+int ObTableLockService::get_tablet_lock_set_(const ObTableLockMode lock_mode,
                                                 ObTableLockCtx &ctx,
-                                                ObLSLockMap &tablet_ls_lock_map)
+                                                ObLockSet &tablet_lock_set)
 {
   int ret = OB_SUCCESS;
   ObSimpleTableSchemaV2 *table_schema = nullptr;
@@ -2112,67 +1837,47 @@ int ObTableLockService::get_tablet_ls_lock_map_(const ObTableLockMode lock_mode,
   } else if (FALSE_IT(ctx.schema_version_ = table_schema->get_schema_version())) {
   } else if (OB_FAIL(get_process_tablets_(table_schema, ctx))) {
     LOG_WARN("failed to get parts", K(ret), K(ctx));
-  } else if (OB_FAIL(get_ls_lock_map_(ctx, ctx.tablet_list_, tablet_ls_lock_map))) {
-    LOG_WARN("fail to get ls lock map", K(ret), K(ctx.get_tablet_cnt()));
+  } else if (OB_FAIL(get_lock_set_(ctx, ctx.tablet_list_, tablet_lock_set))) {
+    LOG_WARN("fail to get lock set", K(ret), K(ctx.get_tablet_cnt()));
   }
   return ret;
 }
 
-int ObTableLockService::get_ls_lock_map_(ObTableLockCtx &ctx,
-                                         const share::ObLSID &ls_id,
+int ObTableLockService::get_lock_set_(ObTableLockCtx &ctx,
                                          const ObLockID &lock_id,
-                                         ObLSLockMap &ls_lock_map)
+                                         ObLockSet &lock_set)
 {
   int ret = OB_SUCCESS;
-  ObLockIDArray lock_array;
-  ObLockIDArray *p = nullptr;
 
-  if (OB_FAIL(ls_lock_map.create(10, lib::ObLabel("LSLockMap")))) {
-    LOG_WARN("ls_lock_map create failed");
-  } else if (OB_FAIL(ls_lock_map.set_refactored(ls_id, lock_array)) &&
-             OB_ENTRY_EXIST != ret && OB_HASH_EXIST != ret) {
-    LOG_WARN("fail to set tablet_map", K(ret), K(ls_id));
-  } else if (OB_ISNULL(p = const_cast<ObLockIDArray *>(ls_lock_map.get(ls_id)))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the ls not exist at tablet map", K(ret), K(ls_id));
-  } else if (OB_FAIL(p->push_back(lock_id))) {
-    LOG_WARN("push_back lock_id failed", K(ret), K(ls_id), K(lock_id));
+  if (OB_FAIL(lock_set.reuse())) {
+    LOG_WARN("fail to reuse lock set", KR(ret));
+  } else if (OB_FAIL(lock_set.push_back(lock_id))) {
+    LOG_WARN("push_back lock_id failed", K(ret), K(lock_id));
   }
   return ret;
 }
 
-int ObTableLockService::get_ls_lock_map_(ObTableLockCtx &ctx,
-                                         const share::ObLSID &ls_id,
+int ObTableLockService::get_lock_set_(ObTableLockCtx &ctx,
                                          const common::ObIArray<ObLockID> &lock_ids,
-                                         ObLSLockMap &ls_lock_map)
+                                         ObLockSet &lock_set)
 {
   int ret = OB_SUCCESS;
-  ObLockIDArray lock_array;
-  ObLockIDArray *p = nullptr;
 
-  if (OB_FAIL(ls_lock_map.create(10, lib::ObLabel("LSLockMap")))) {
-    LOG_WARN("ls_lock_map create failed");
-  } else if (OB_FAIL(ls_lock_map.set_refactored(ls_id, lock_array)) &&
-             OB_ENTRY_EXIST != ret && OB_HASH_EXIST != ret) {
-    LOG_WARN("fail to set tablet_map", K(ret), K(ls_id));
-  } else if (OB_ISNULL(p = const_cast<ObLockIDArray *>(ls_lock_map.get(ls_id)))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the ls not exist at tablet map", K(ret), K(ls_id));
-  } else if (OB_FAIL(p->assign(lock_ids))) {
-    LOG_WARN("assign lock_ids failed", K(ret), K(ls_id), K(lock_ids));
+  if (OB_FAIL(lock_set.reuse())) {
+    LOG_WARN("fail to reuse lock set", KR(ret));
+  } else if (OB_FAIL(lock_set.assign(lock_ids))) {
+    LOG_WARN("assign lock_ids failed", K(ret), K(lock_ids));
   }
   return ret;
 }
 
-int ObTableLockService::get_ls_lock_map_(ObTableLockCtx &ctx,
+int ObTableLockService::get_lock_set_(ObTableLockCtx &ctx,
                                          const common::ObTabletIDArray &tablets,
-                                         ObLSLockMap &ls_lock_map)
+                                         ObLockSet &lock_set)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ls_lock_map.create(10, lib::ObLabel("LSLockMap")))) {
-    LOG_WARN("ls_lock_map create failed", KR(ret));
-  } else if (OB_FAIL(fill_ls_lock_map_(ctx, tablets, ls_lock_map))) {
-    LOG_WARN("fill ls lock map failed", KR(ret));
+  if (OB_FAIL(fill_lock_set_(ctx, tablets, lock_set))) {
+    LOG_WARN("fill lock set failed", KR(ret));
   }
 
   return ret;
@@ -2190,9 +1895,7 @@ bool ObTableLockService::need_retry_trans_(const ObTableLockCtx &ctx,
                   !ctx.is_try_lock() &&
                   !ctx.is_timeout());
     // retry condition 2
-    need_retry = need_retry || ((OB_NOT_MASTER == ret ||
-                                 OB_LS_NOT_EXIST == ret ||
-                                 OB_TABLET_NOT_EXIST == ret) && !ctx.is_timeout());
+    need_retry = need_retry || (OB_TABLET_NOT_EXIST == ret && !ctx.is_timeout());
   }
   return need_retry;
 }
@@ -2202,34 +1905,26 @@ bool ObTableLockService::need_retry_single_task_(const ObTableLockCtx &ctx,
 {
   bool need_retry = false;
   if (ctx.is_in_trans_) {
-    need_retry = (OB_NOT_MASTER == ret ||
-                  OB_LS_NOT_EXIST == ret ||
-                  OB_TABLET_NOT_EXIST == ret);
+    need_retry = (OB_TABLET_NOT_EXIST == ret);
   } else {
     // TODO: yanyuan.cxf multi data source can not rollback, so we can not retry.
   }
   return need_retry;
 }
 
-bool ObTableLockService::need_retry_whole_rpc_task_(const int ret)
+bool ObTableLockService::need_retry_whole_task_(const int ret)
 {
   return (OB_TENANT_NOT_IN_SERVER == ret);
 }
 
-bool ObTableLockService::need_retry_part_rpc_task_(const int ret,
-                                                   const ObTableLockTaskResult *result) const
+bool ObTableLockService::need_retry_partial_task_(const int ret,
+                                                  const ObTableLockTaskResult *result) const
 {
   bool need_retry = false;
-  need_retry = (OB_LS_NOT_EXIST == ret ||
-                OB_TABLET_NOT_EXIST == ret);
+  need_retry = (OB_TABLET_NOT_EXIST == ret);
   need_retry = need_retry && result->can_retry();
-  // retry if OB_LS_NOT_EXIST/OB_TABLET_NOT_EXIST and lock task result is can retry.
+  // Retry if the tablet is being created and the lock task can retry.
   return need_retry;
-}
-
-bool ObTableLockService::need_renew_location_(const int64_t ret) const
-{
-  return (OB_LS_LOCATION_NOT_EXIST == ret || OB_LS_LOCATION_LEADER_NOT_EXIST == ret);
 }
 
 int ObTableLockService::rewrite_return_code_(const int ret, const int ret_code_before_end_stmt_or_tx, const bool is_from_sql) const
@@ -2254,43 +1949,14 @@ bool ObTableLockService::is_lock_conflict_ret_code_(const int ret) const
 bool ObTableLockService::is_timeout_ret_code_(const int ret) const
 {
   return (OB_TIMEOUT == ret || OB_TRANS_TIMEOUT == ret ||
-          OB_TRANS_STMT_TIMEOUT == ret || OB_GET_LOCATION_TIME_OUT == ret);
+          OB_TRANS_STMT_TIMEOUT == ret);
 }
 
 bool ObTableLockService::is_can_retry_err_(const int ret) const
 {
   return (OB_TRANS_KILLED == ret || OB_OBJ_UNLOCK_CONFLICT == ret || OB_OBJ_LOCK_NOT_COMPLETED == ret
-          || OB_TRY_LOCK_ROW_CONFLICT == ret || OB_ERR_EXCLUSIVE_LOCK_CONFLICT == ret || OB_NOT_MASTER == ret
-          || OB_TIMEOUT == ret || OB_LS_LOCATION_LEADER_NOT_EXIST == ret || OB_TRANS_CTX_NOT_EXIST == ret);
-}
-
-int ObTableLockService::get_ls_leader_(
-    const int64_t cluster_id,
-    const ObLSID &ls_id,
-    const int64_t abs_timeout_ts,
-    ObAddr &addr)
-{
-  int ret = OB_SUCCESS;
-  // priority to set timeout_ctx: ctx > worker > default_timeout
-  ObTimeoutCtx ctx;
-  if (OB_FAIL(ctx.set_abs_timeout(abs_timeout_ts))) {
-    LOG_WARN("set abs timeout ts failed", KR(ret));
-  } else if (OB_ISNULL(location_service_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("table lock service not inited", K(ret));
-  } else if (OB_FAIL(location_service_->get_leader(cluster_id,
-                                                   ls_id,
-                                                   true, /* force renew */
-                                                   addr))) {
-    LOG_WARN("failed to get ls leader with retry until timeout",
-             K(ret), K(cluster_id), K(ls_id), K(addr));
-  } else {
-    LOG_DEBUG("get ls leader from location_service",
-              K(ret), K(cluster_id), K(ls_id), K(addr));
-  }
-  LOG_DEBUG("ObTableLockService::process_obj_lock_", K(ret), K(ls_id), K(addr));
-
-  return ret;
+          || OB_TRY_LOCK_ROW_CONFLICT == ret || OB_ERR_EXCLUSIVE_LOCK_CONFLICT == ret
+          || OB_TIMEOUT == ret || OB_TRANS_CTX_NOT_EXIST == ret);
 }
 
 int ObTableLockService::start_tx_(ObTableLockCtx &ctx)
@@ -2400,16 +2066,16 @@ int ObTableLockService::end_sub_tx_(ObTableLockCtx &ctx, const bool is_rollback)
     const auto &savepoint = ctx.current_savepoint_;
     const int64_t expire_ts = OB_MAX(ctx.abs_timeout_ts_, DEFAULT_TIMEOUT_US + ObTimeUtility::current_time());
     ObTransService *txs = share::g_mp->trans_service();
-    if (is_rollback &&
-        OB_FAIL(txs->rollback_to_implicit_savepoint(*ctx.tx_desc_,
-                                                    savepoint,
-                                                    expire_ts,
-                                                    &ctx.need_rollback_ls_))) {
-      LOG_WARN("fail to rollback sub tx", K(ret), K(ctx.tx_desc_),
-               K(ctx.need_rollback_ls_));
-    }
+	    if (is_rollback &&
+	        OB_FAIL(txs->rollback_to_implicit_savepoint(*ctx.tx_desc_,
+	                                                    savepoint,
+	                                                    expire_ts,
+	                                                    ctx.need_rollback()))) {
+	      LOG_WARN("fail to rollback sub tx", K(ret), K(ctx.tx_desc_),
+	               K(ctx.need_rollback_));
+	    }
 
-    ctx.clean_touched_ls();
+    ctx.clear_need_rollback();
     ctx.reset_savepoint();
   }
   LOG_DEBUG("ObTableLockService::end_sub_tx_", K(ret), K(ctx));
@@ -2453,16 +2119,16 @@ int ObTableLockService::end_stmt_(ObTableLockCtx &ctx, const bool is_rollback)
     const int64_t expire_ts = OB_MAX(ctx.abs_timeout_ts_, DEFAULT_TIMEOUT_US + ObTimeUtility::current_time());
     ObTransService *txs = share::g_mp->trans_service();
     // just rollback the whole stmt, if it is needed.
-    if (is_rollback &&
-        OB_FAIL(txs->rollback_to_implicit_savepoint(*ctx.tx_desc_,
-                                                    savepoint,
-                                                    expire_ts,
-                                                    &ctx.need_rollback_ls_))) {
-      LOG_WARN("fail to rollback stmt", K(ret), K(ctx.tx_desc_),
-               K(ctx.need_rollback_ls_));
-    }
+	    if (is_rollback &&
+	        OB_FAIL(txs->rollback_to_implicit_savepoint(*ctx.tx_desc_,
+	                                                    savepoint,
+	                                                    expire_ts,
+	                                                    ctx.need_rollback()))) {
+	      LOG_WARN("fail to rollback stmt", K(ret), K(ctx.tx_desc_),
+	               K(ctx.need_rollback_));
+	    }
     LOG_DEBUG("ObTableLockService::end_stmt_", K(ret), K(ctx), K(is_rollback));
-    ctx.clean_touched_ls();
+    ctx.clear_need_rollback();
     ctx.reset_stmt_savepoint();
   }
 

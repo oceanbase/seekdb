@@ -50,7 +50,6 @@ ObAllVirtualPluginInfo::ObAllVirtualPluginInfo() {}
 ObAllVirtualPluginInfo::~ObAllVirtualPluginInfo() { reset(); }
 
 void ObAllVirtualPluginInfo::reset() {
-  addr_.reset();
   plugin_entries_.reset();
   iter_index_ = -1;
 }

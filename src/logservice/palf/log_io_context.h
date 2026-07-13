@@ -66,7 +66,6 @@ public:
   LogIOContext();
   // do not get group_id
   LogIOContext(const LogIOUser &user);
-  LogIOContext(const int64_t palf_id, const LogIOUser &user);
   ~LogIOContext() { destroy(); }
   bool is_valid() const
   {
@@ -74,14 +73,12 @@ public:
   }
   void destroy()
   {
-    palf_id_ = 0;
     user_ = LogIOUser::DEFAULT;
     iterator_info_.reset();
   }
   LogIOContext &operator=(const LogIOContext &io_ctx)
   {
     if (&io_ctx != this) {
-      this->palf_id_ = io_ctx.palf_id_;
       this->user_ = io_ctx.user_;
       this->iterator_info_ = io_ctx.iterator_info_;
     }
@@ -113,9 +110,8 @@ public:
   {
     iterator_info_.inc_cache_read_size(read_size);
   }
-  TO_STRING_KV("user", log_io_user_str(user_), K_(palf_id), K_(iterator_info));
+  TO_STRING_KV("user", log_io_user_str(user_), K_(iterator_info));
 private:
-  int64_t palf_id_;
   LogIOUser user_;
   LogIteratorInfo iterator_info_;
 };

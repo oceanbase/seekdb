@@ -49,7 +49,6 @@ protected:
   storage::ObTenantTabletIterator *tablet_iter_;
   common::ObArenaAllocator tablet_allocator_;
   ObTabletHandle tablet_handle_;
-  int64_t ls_id_;
   char ip_buf_[common::OB_IP_STR_BUFF];
   void *iter_buf_;
 private:

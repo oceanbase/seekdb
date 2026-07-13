@@ -103,12 +103,9 @@ TEST_F(TestMacroBlockId, verification)
 TEST_F(TestMacroBlockId, test_path_id)
 {
   int ret = OB_SUCCESS;
-  blocksstable::ObStorageObjectOpt curr_opt;
   MacroBlockId test_block_id;
-  uint64_t test_ls_id = 1001;
   uint64_t test_tablet_id = 200001;
   uint64_t test_tablet_version = ObStorageObjectOpt::INVALID_TABLET_VERSION;
-  curr_opt.set_ss_private_tablet_meta_object_opt(test_ls_id, test_tablet_id, test_tablet_version);
   OB_LOG(INFO, "before set");
   hex_dump(&test_block_id.fourth_id_,
            sizeof(int64_t),
@@ -118,11 +115,11 @@ TEST_F(TestMacroBlockId, test_path_id)
   // in ss mode
   test_block_id.set_version_v2();
   test_block_id.set_id_mode((uint64_t)ObMacroBlockIdMode::ID_MODE_SHARE);
-  test_block_id.set_storage_object_type(static_cast<int64_t>(curr_opt.object_type_));
+  test_block_id.set_storage_object_type(static_cast<int64_t>(ObStorageObjectType::PRIVATE_META_MACRO));
   test_block_id.set_incarnation_id(0);
-  test_block_id.set_second_id(curr_opt.ss_private_tablet_opt_.ls_id_);
-  test_block_id.set_third_id(curr_opt.ss_private_tablet_opt_.tablet_id_);
-  test_block_id.set_meta_version_id(curr_opt.ss_private_tablet_opt_.version_);
+  test_block_id.set_second_id(test_tablet_id);
+  test_block_id.set_third_id(1/*server_id*/);
+  test_block_id.set_meta_version_id(test_tablet_version);
   test_block_id.set_meta_path_id(-1);
 
   OB_LOG(INFO, "after set");

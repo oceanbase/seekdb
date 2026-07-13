@@ -39,7 +39,6 @@ int ObSPIVDaaTDimIter::init(const ObSPIVDimIterParam &iter_param)
   inv_idx_scan_rtdef_ = iter_param.inv_idx_scan_rtdef_;
   max_batch_size_ = OB_MAX(iter_param.eval_ctx_->max_batch_size_, 1);
   eval_ctx_ = iter_param.eval_ctx_;
-  ls_id_ = iter_param.ls_id_;
   dim_docid_value_tablet_id_ = iter_param.dim_docid_value_tablet_id_;
   dim_ = iter_param.dim_;
   cur_idx_ = -1;

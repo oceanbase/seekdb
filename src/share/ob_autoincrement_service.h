@@ -25,7 +25,6 @@
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/ob_timeout_ctx.h"
 #include "share/ob_autoincrement_param.h"
-#include "share/ob_gais_client.h"
 #include "share/ob_i_global_autoincrement_service.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_multi_version_schema_service.h"
@@ -38,11 +37,8 @@ namespace schema
 {
 class ObTableSchema;
 }
-static const int64_t  TIME_SKEW = 100 * 1000;                 // 100ms, time skew
 static const int64_t  PRE_OP_TIMEOUT = 500 * 1000;            // 500ms, for prefetch or presync
-static const int64_t  SYNC_OP_TIMEOUT = 1000 * 1000;          // 1000ms, for first sync
 static const int      PRE_OP_THRESHOLD = 4;                   // for prefetch or presync
-static const int64_t  PARTITION_LOCATION_SET_BUCKET_NUM = 3;
 static const int64_t  FETCH_SEQ_NUM_ONCE = 1000;
 static const uint64_t AUTO_INC_DEFAULT_NB_MAX_BITS = 16;                                  // from MySQL
 static const uint64_t AUTO_INC_DEFAULT_NB_MAX = (1 << AUTO_INC_DEFAULT_NB_MAX_BITS) - 1;  // from MySQL
@@ -296,10 +292,8 @@ private:
 class ObCallGlobalAutoIncrementService : public ObIGlobalAutoIncrementService
 {
 public:
-  ObCallGlobalAutoIncrementService() : is_inited_(false) {}
+  ObCallGlobalAutoIncrementService() = default;
   virtual ~ObCallGlobalAutoIncrementService() = default;
-
-  int init(const common::ObAddr &addr);
 
   virtual int get_value(
       const AutoincKey &key,
@@ -339,14 +333,9 @@ public:
                                            uint64_t &value) override final;
 
   int clear_global_autoinc_cache(const AutoincKey &key);
-  ObGAISRequestRpc *get_gais_request_rpc() { return &gais_request_rpc_; }
 
   int get_sequence_next_value(const schema::ObSequenceSchema &schema, ObSequenceValue &nextval);
 
-private:
-  bool is_inited_;
-  ObGAISClient gais_client_;
-  ObGAISRequestRpc gais_request_rpc_;
 };
 
 class ObAutoincrementService
@@ -359,8 +348,7 @@ public:
   ObAutoincrementService();
   ~ObAutoincrementService();
   static ObAutoincrementService &get_instance();
-  int init(common::ObAddr &addr,
-           common::ObMySQLProxy *mysql_proxy,
+  int init(common::ObMySQLProxy *mysql_proxy,
            share::schema::ObMultiVersionSchemaService *schema_service);
   int get_handle(AutoincParam &param, CacheHandle *&handle);
   int get_handle(const schema::ObSequenceSchema &schema, ObSequenceValue &nextval);
@@ -370,20 +358,11 @@ public:
 
   int sync_insert_value_local(AutoincParam &param);
 
-  int sync_auto_increment_all(const uint64_t table_id,
-                              const uint64_t column_id,
-                              const uint64_t sync_value);
-  // int sync_table_auto_increment(
-  //     uint64_t tenant,
-  //     AutoincKey &key,
-  //     uint64_t auto_increment);
-  int refresh_sync_value(const obcall::ObAutoincSyncArg &arg);
-
-  int clear_autoinc_cache_all(const uint64_t table_id,
-                              const uint64_t column_id,
-                              const bool autoinc_mode_is_order,
-                              const bool ignore_rpc_errors = true);
-  int clear_autoinc_cache(const obcall::ObAutoincSyncArg &arg);
+  int refresh_auto_increment_cache(const uint64_t table_id,
+                                   const uint64_t column_id,
+                                   const uint64_t sync_value);
+  int clear_autoinc_cache(const uint64_t table_id,
+                          const uint64_t column_id);
 
   int get_sequence_value(const uint64_t table_id,
                          const uint64_t column_id,
@@ -428,8 +407,6 @@ public:
                              const uint64_t offset,
                              const uint64_t increment,
                              uint64_t &prev_value);
-  ObGAISRequestRpc* get_gais_request_rpc()
-  { return global_autoinc_service_.get_gais_request_rpc(); }
   static uint64_t get_max_value(const common::ObObjType type);
 
 private:
@@ -449,12 +426,9 @@ private:
                         const uint64_t column_id,
                         TableNode &table_node,
                         const bool sync_presync = false);
-  int get_server_set(const uint64_t table_id,
-                     common::hash::ObHashSet<common::ObAddr> &server_set,
-                     const bool get_follower = false);
-  int sync_value_to_other_servers(
-      AutoincParam &param,
-      uint64_t insert_value);
+  int refresh_sync_value_(const uint64_t table_id,
+                          const uint64_t column_id,
+                          const uint64_t sync_value);
 
   int try_periodic_refresh_global_sync_value(
       uint64_t table_id,
@@ -473,7 +447,6 @@ private:
 private:
   common::ObSmallAllocator node_allocator_;
   common::ObSmallAllocator handle_allocator_;
-  common::ObAddr           my_addr_;
   common::ObMySQLProxy     *mysql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   ObCallGlobalAutoIncrementService global_autoinc_service_;             // for order increment mode

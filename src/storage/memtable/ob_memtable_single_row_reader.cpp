@@ -124,7 +124,6 @@ int ObMemtableSingleRowReader::init_a_new_range(const ObDatumRange &new_range_to
     if (OB_FAIL(mvcc_engine.scan(context_->store_ctx_->mvcc_acc_ctx_,
                                  context_->query_flag_,
                                  mvcc_scan_range,
-                                 memtable_->get_ls_id(),
                                  row_iter_))) {
       TRANS_LOG(WARN, "mvcc engine scan fail", K(ret), K(mvcc_scan_range));
     } else if (OB_FAIL(bitmap_.init(read_info_->get_request_count(), read_info_->get_schema_rowkey_count()))) {
@@ -313,7 +312,6 @@ int ObMemtableSingleRowReader::get_next_value_iter_(const ObMemtableKey *&key, O
             *tmp_rowkey,
             lock_state,
             context_->tablet_id_,
-            context_->ls_id_,
             0,
             0 /* these two params get from mvcc_row, and for statistics, so we ignore them */,
             lock_state.trans_scn_);

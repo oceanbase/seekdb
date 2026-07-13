@@ -15,8 +15,8 @@
  */
 
 #include "ob_gti_source.h"
-#include "ob_trans_service.h"
-#include "ob_gti_rpc.h"
+#include "ob_trans_id_service.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -26,31 +26,16 @@ using namespace share;
 namespace transaction
 {
 
-int ObGtiSource::init(const ObAddr &server)
+int ObGtiSource::init()
 {
   int ret = OB_SUCCESS;
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     TRANS_LOG(WARN, "init twice", KR(ret));
-  } else if (OB_UNLIKELY(!server.is_valid())) {
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(server));
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(gti_request_rpc_ = ObGtiRequestRpcFactory::alloc())) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    TRANS_LOG(WARN, "alloc gti_reqeust_rpc fail", KR(ret));
-  } else if (OB_FAIL(gti_request_rpc_->init(server, this))) {
-    TRANS_LOG(WARN, "response rpc init failed", KR(ret), K(server));
   } else {
-    server_ = server;
     is_inited_ = true;
-    TRANS_LOG(INFO, "gti source init success", K(server), KP(this));
-  }
-  if (OB_FAIL(ret)) {
-    if (NULL != gti_request_rpc_) {
-      ObGtiRequestRpcFactory::release(gti_request_rpc_);
-      gti_request_rpc_ = NULL;
-    }
+    TRANS_LOG(INFO, "gti source init success", KP(this));
   }
 
   return ret;
@@ -66,8 +51,6 @@ int ObGtiSource::start()
   } else if (is_running_) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "ObGtiSource is already running", KR(ret));
-  } else if (OB_FAIL(gti_request_rpc_->start())) {
-    TRANS_LOG(WARN, "gti request rpc start", KR(ret));
   } else {
     is_running_ = true;
     TRANS_LOG(INFO, "ObGtiSource start success");
@@ -77,34 +60,13 @@ int ObGtiSource::start()
 
 void ObGtiSource::stop()
 {
-  int ret = OB_SUCCESS;
-
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObGtiSource is not inited", KR(ret));
-  } else if (OB_FAIL(gti_request_rpc_->stop())) {
-    TRANS_LOG(WARN, "gti request rpc stop", KR(ret));
-  } else {
-    is_running_ = false;
-    TRANS_LOG(INFO, "ObGtiSource stop success");
-  }
+  is_running_ = false;
+  TRANS_LOG(INFO, "ObGtiSource stop success");
 }
 
 void ObGtiSource::wait()
 {
-  int ret = OB_SUCCESS;
-
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObGtiSource is not inited", KR(ret));
-  } else if (is_running_) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "ObGtiSource is running", KR(ret));
-  } else if (OB_FAIL(gti_request_rpc_->wait())) {
-    TRANS_LOG(WARN, "gti request rpc wait", KR(ret));
-  } else {
-    TRANS_LOG(INFO, "ObGtiSource wait success");
-  }
+  TRANS_LOG(INFO, "ObGtiSource wait success");
 }
 
 void ObGtiSource::destroy()
@@ -115,10 +77,6 @@ void ObGtiSource::destroy()
       wait();
     }
     is_inited_ = false;
-  }
-  if (NULL != gti_request_rpc_) {
-    ObGtiRequestRpcFactory::release(gti_request_rpc_);
-    gti_request_rpc_ = NULL;
   }
   TRANS_LOG(INFO, "ObGtiSource destroyed");
 }
@@ -134,19 +92,10 @@ void ObGtiSource::reset()
   }
   cur_idx_ = 0;
   cache_idx_ = 0;
-  server_.reset();
-  gti_request_rpc_ = NULL;
-  gti_cache_leader_.reset();
   retry_request_cnt_ = 0;
   last_request_ts_ = 0;
   preallocate_count_ = MIN_PREALLOCATE_COUNT;
   last_update_ts_ = ObTimeUtility::current_time();
-}
-
-int ObGtiSource::refresh_gti_location()
-{
-  int ret = OB_SUCCESS;
-  return ret;
 }
 
 int ObGtiSource::update_trans_id(const int64_t start_id, const int64_t end_id)
@@ -202,11 +151,13 @@ int ObGtiSource::get_trans_id(int64_t &trans_id)
       retry_interval = min(retry_request_cnt_ * RETRY_REQUEST_INTERVAL, MAX_RETRY_REQUEST_INTERVAL);
     }
     if (cur_ts - last_request_ts_ > retry_interval && ATOMIC_BCAS(&is_requesting_, false, true)) {
-      ObGtiRequest req;
-      if (OB_FAIL(req.init(get_preallocate_count_()))) {
-        TRANS_LOG(WARN, "ObGtiRequest init fail", KR(ret));
-      } else if (OB_FAIL(gti_request_rpc_->post(req))) {
-        TRANS_LOG(WARN, "ObGtiRequest post fail", KR(ret));
+      const int64_t range = get_preallocate_count_();
+      int64_t start_id = 0;
+      int64_t end_id = 0;
+      if (OB_FAIL(share::g_mp->trans_id_service()->get_number(range, 0, start_id, end_id))) {
+        TRANS_LOG(WARN, "allocate transaction id range failed", KR(ret), K(range));
+      } else if (OB_FAIL(update_trans_id(start_id, end_id))) {
+        TRANS_LOG(WARN, "cache transaction id range failed", KR(ret), K(start_id), K(end_id));
       } else {
         last_request_ts_ = cur_ts;
         retry_request_cnt_++;

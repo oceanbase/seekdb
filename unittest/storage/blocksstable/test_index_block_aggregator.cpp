@@ -1030,9 +1030,9 @@ TEST_F(TestIndexBlockAggregator, test_loose_min_max_data_desc)
 
   ASSERT_EQ(OB_SUCCESS, storage_schema.init(arena, table_schema, lib::Worker::CompatMode::MYSQL));
 
-  ASSERT_EQ(OB_SUCCESS, major_static_desc.init(false, table_schema, ObLSID(1002), ObTabletID(200000), compaction::MAJOR_MERGE, 10000, share::SCN::invalid_scn(),
+  ASSERT_EQ(OB_SUCCESS, major_static_desc.init(false, table_schema, ObTabletID(200000), compaction::MAJOR_MERGE, 10000, share::SCN::invalid_scn(),
       DATA_VERSION_1_0_0_0, compaction::EXEC_MODE_LOCAL, false, 0));
-  ASSERT_EQ(OB_SUCCESS, minor_static_desc.init(false, table_schema, ObLSID(1002), ObTabletID(200000), compaction::MINI_MERGE, 1, share::SCN::base_scn(),
+  ASSERT_EQ(OB_SUCCESS, minor_static_desc.init(false, table_schema, ObTabletID(200000), compaction::MINI_MERGE, 1, share::SCN::base_scn(),
       DATA_VERSION_1_0_0_0, compaction::EXEC_MODE_LOCAL, false, 0));
 
   ASSERT_EQ(OB_SUCCESS, major_data_desc.init(major_static_desc, storage_schema));

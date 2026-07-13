@@ -59,32 +59,29 @@ struct ObTxStat
   ~ObTxStat() { }
   void reset();
   int init(const common::ObAddr &addr, const ObTransID &tx_id,  const bool has_decided,
-           const share::ObLSID &ls_id, const share::ObLSArray &participants,
+           const bool has_write_state,
            const int64_t tx_ctx_create_time, const int64_t tx_expired_time,
            const int64_t ref_cnt, const int64_t last_op_sn,
            const int64_t pending_write, const int64_t state,
-           const int tx_type, const int64_t part_tx_action,
+           const int64_t part_tx_action,
            const void* const tx_ctx_addr,
            const int64_t pending_log_size, const int64_t flushed_log_size,
-           const int64_t role_state,
            const int64_t session_id, const uint32_t client_sid,
-           const common::ObAddr &scheduler,
            const bool is_exiting, const ObXATransID &xid,
-           const share::ObLSID &coord, const int64_t last_request_ts,
+           const int64_t last_request_ts,
            share::SCN start_scn, share::SCN end_scn, share::SCN rec_scn,
            const int busy_cbs_cnt,
            int replay_completeness,
            share::SCN serial_final_scn);
   TO_STRING_KV(K_(addr), K_(tx_id),
-               K_(has_decided), K_(ls_id), K_(participants),
+               K_(has_decided), K_(has_write_state),
                K_(tx_ctx_create_time), K_(tx_expired_time), K_(ref_cnt),
-               K_(last_op_sn), K_(pending_write), K_(state), K_(tx_type),
+               K_(last_op_sn), K_(pending_write), K_(state),
                KP_(tx_ctx_addr),
                K_(pending_log_size), K_(flushed_log_size),
-               K_(role_state), K_(session_id), K_(client_sid),
-               K_(scheduler_addr), K_(is_exiting),
-               K_(xid), K_(coord), K_(last_request_ts),
-               K_(xid), K_(coord), K_(last_request_ts),
+               K_(session_id), K_(client_sid),
+               K_(is_exiting),
+               K_(xid), K_(last_request_ts),
                K_(start_scn), K_(end_scn), K_(rec_scn),
                K_(busy_cbs_cnt),
                K_(serial_final_scn),
@@ -95,26 +92,21 @@ public:
   common::ObAddr addr_;
   ObTransID tx_id_;
   bool has_decided_;
-  share::ObLSID ls_id_;
-  share::ObLSArray participants_;
+  bool has_write_state_;
   int64_t tx_ctx_create_time_;
   int64_t tx_expired_time_;
   int64_t ref_cnt_;
   int64_t last_op_sn_;
   int64_t pending_write_;
   int64_t state_;
-  int tx_type_;
   int64_t part_tx_action_;
   const void *tx_ctx_addr_;
   int64_t pending_log_size_;
   int64_t flushed_log_size_;
-  int64_t role_state_;
   int64_t session_id_;
   uint32_t client_sid_;
-  common::ObAddr scheduler_addr_;
   bool is_exiting_;
   ObXATransID xid_;
-  share::ObLSID coord_;
   int64_t last_request_ts_;
   share::SCN start_scn_;
   share::SCN end_scn_;
@@ -155,7 +147,6 @@ public:
   ObTxLockStat() { reset(); }
   ~ObTxLockStat() {}
   int init(const common::ObAddr &addr,
-            const share::ObLSID &ls_id,
             const ObMemtableKeyInfo &memtable_key_info,
             uint32_t session_id,
             uint32_t client_sid,
@@ -166,7 +157,6 @@ public:
   void reset();
   const common::ObAddr &get_addr() const { return addr_; }
   
-  const share::ObLSID &get_ls_id() const { return ls_id_; }
   const ObMemtableKeyInfo &get_memtable_key_info() const { return memtable_key_info_; }
   uint32_t get_session_id() const { return session_id_; }
   uint64_t get_proxy_session_id() const { return proxy_session_id_; }
@@ -176,7 +166,6 @@ public:
   int64_t get_tx_expired_time() const { return tx_expired_time_; }
 
   TO_STRING_KV(K_(addr),
-               K_(ls_id),
                K_(memtable_key_info),
                K_(session_id),
                K_(proxy_session_id),
@@ -187,7 +176,6 @@ public:
 private:
   bool is_inited_;
   common::ObAddr addr_;
-  share::ObLSID ls_id_;
   ObMemtableKeyInfo memtable_key_info_;
   uint32_t session_id_;
   uint64_t proxy_session_id_;
@@ -203,15 +191,15 @@ public:
   ObTxSchedulerStat() { reset(); }
   ~ObTxSchedulerStat() { }
   void reset();
-  int init(const common::ObAddr &addr,
-            const uint32_t sess_id,
-            const uint32_t client_sid,
-            const ObTransID &tx_id,
-            const int64_t state,
-            const int64_t cluster_id,
-            const ObXATransID &xid,
-            const share::ObLSID &coord_id,
-            const ObTxPartList &parts,
+	  int init(const common::ObAddr &addr,
+	            const uint32_t sess_id,
+	            const uint32_t client_sid,
+	            const ObTransID &tx_id,
+	            const int64_t state,
+	            const int64_t cluster_id,
+	            const ObXATransID &xid,
+	            const bool has_write_state,
+	            const ObTxWriteState &write_state,
             const ObTxIsolationLevel &isolation,
             const share::SCN &snapshot_version,
             const ObTxAccessMode &access_mode,
@@ -225,9 +213,9 @@ public:
             const ObTxSavePointList &savepoints,
             const int16_t abort_cause,
             const bool can_elr);
-  TO_STRING_KV(K_(addr), K_(sess_id), K_(client_sid),
-               K_(tx_id), K_(state), K_(cluster_id),
-               K_(xid), K_(coord_id), K_(parts),
+	  TO_STRING_KV(K_(addr), K_(sess_id), K_(client_sid),
+	               K_(tx_id), K_(state), K_(cluster_id),
+	               K_(xid), K_(has_write_state), K_(write_state),
                K_(isolation), K_(snapshot_version),
                K_(access_mode), K_(op_sn),
                K_(flag), K_(active_ts), K_(expire_ts),
@@ -244,10 +232,10 @@ public:
   uint32_t client_sid_;
   ObTransID tx_id_;
   int64_t state_;
-  int64_t cluster_id_;
-  ObXATransID xid_;
-  share::ObLSID coord_id_;
-  ObTxPartList parts_;
+	  int64_t cluster_id_;
+	  ObXATransID xid_;
+	  bool has_write_state_;
+  ObTxWriteState write_state_;
   ObTxIsolationLevel isolation_;
   share::SCN snapshot_version_;
   ObTxAccessMode access_mode_;

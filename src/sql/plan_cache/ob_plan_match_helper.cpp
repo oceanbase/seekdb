@@ -33,7 +33,6 @@ int ObPlanMatchHelper::match_plan(const ObPlanCacheCtx &pc_ctx,
   int ret = OB_SUCCESS;
   bool has_duplicate_table = false;
   bool is_retrying = false;
-  bool is_dup_ls_modified = false;
   is_matched = true;
   const ObAddr &server = pc_ctx.exec_ctx_.get_addr();
   const ObIArray<LocationConstraint>& base_cons = plan->get_base_constraints();
@@ -51,11 +50,10 @@ int ObPlanMatchHelper::match_plan(const ObPlanCacheCtx &pc_ctx,
     // match all
     is_matched = true;
   } else {
-    is_dup_ls_modified = GET_MY_SESSION(pc_ctx.exec_ctx_)->is_dup_ls_modified();
     if (OB_NOT_NULL(plan_set_) && plan_set_->has_duplicate_table()) {
       if (OB_FAIL(pc_ctx.is_retry(is_retrying))) {
         LOG_WARN("failed to test if retrying", K(ret));
-      } else if (is_retrying || is_dup_ls_modified) {
+      } else if (is_retrying) {
         has_duplicate_table = false;
       } else {
         has_duplicate_table = true;

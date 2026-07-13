@@ -45,9 +45,9 @@ ObMajorMergeProgressChecker::ObMajorMergeProgressChecker(
       freeze_info_(), sql_proxy_(nullptr),
       schema_service_(nullptr), progress_(),
       tablet_status_map_(), table_compaction_map_(), fts_group_array_(),
-      ckm_validator_(stop_, tablet_ls_pair_cache_, tablet_status_map_,
+      ckm_validator_(stop_, tablet_status_map_,
                      table_compaction_map_, idx_ckm_validate_array_, validator_statistics_,
-                     finish_tablet_ls_pair_array_, finish_tablet_ckm_array_, uncompact_info_, fts_group_array_),
+                     finish_tablet_ids_, finish_tablet_ckm_array_, uncompact_info_, fts_group_array_),
       uncompact_info_(), total_time_guard_(), validator_statistics_(), batch_size_mgr_() {}
 
 int ObMajorMergeProgressChecker::init(
@@ -68,7 +68,7 @@ int ObMajorMergeProgressChecker::init(
     LOG_WARN("fail to init checksum validator", KR(ret));
   } else {
     idx_ckm_validate_array_.set_attr(ObMemAttr("RSCompCkmPair"));
-    finish_tablet_ls_pair_array_.set_attr(ObMemAttr("RSCompTabPair"));
+    finish_tablet_ids_.set_attr(ObMemAttr("RSCompTabIds"));
     finish_tablet_ckm_array_.set_attr(ObMemAttr("RSCompCkmArray"));
     sql_proxy_ = &sql_proxy;
     schema_service_ = &schema_service;
@@ -127,12 +127,11 @@ int ObMajorMergeProgressChecker::clear_cached_info()
     first_loop_in_cur_round_ = true;
     table_ids_.reset();
     idx_ckm_validate_array_.reset();
-    finish_tablet_ls_pair_array_.reset();
+    finish_tablet_ids_.reset();
     finish_tablet_ckm_array_.reset();
     progress_.reset();
     ckm_validator_.clear_cached_info();
     loop_cnt_ = 0;
-    tablet_ls_pair_cache_.reuse();
     reset_uncompacted_tablets();
   }
   return ret;
@@ -216,7 +215,7 @@ int ObMajorMergeProgressChecker::check_table_merge_progress(
   int64_t idx = table_ids_.batch_start_idx_;
   int64_t table_cnt = 0;
 
-  SMART_VAR(ObArray<share::ObTabletLSPair>, cur_tablet_ls_pair_array) {
+  SMART_VAR(ObArray<ObTabletID>, cur_tablet_ids) {
     for ( ; OB_SUCC(ret) && !stop_ && idx < table_ids_.count(); ++idx) {
       const uint64_t table_id = table_ids_.at(idx);
       const ObSimpleTableSchemaV2 *simple_schema = nullptr;
@@ -243,14 +242,14 @@ int ObMajorMergeProgressChecker::check_table_merge_progress(
       } else if (OB_UNLIKELY(nullptr == simple_schema || !simple_schema->has_tablet())) {
         // like VIEW, it does not have tablet, treat it as compaction finished and can skip verifying
         table_compaction_info.set_can_skip_verifying();
-      } else if (OB_FAIL(get_tablet_ls_pairs(table_id, *simple_schema, cur_tablet_ls_pair_array))) {
+      } else if (OB_FAIL(get_tablet_ids(*simple_schema, cur_tablet_ids))) {
         if (OB_ITEM_NOT_MATCH == ret) {
           ret = OB_SUCCESS;
           table_compaction_info.set_can_skip_verifying();
         } else {
-          LOG_WARN("failed to get table pairs", K(ret), KPC(simple_schema));
+          LOG_WARN("failed to get tablet ids", K(ret), KPC(simple_schema));
         }
-      } else if (table_compaction_info.is_uncompacted() && OB_FAIL(update_table_compaction_info_by_tablet(cur_tablet_ls_pair_array, table_compaction_info))) {
+      } else if (table_compaction_info.is_uncompacted() && OB_FAIL(update_table_compaction_info_by_tablet(cur_tablet_ids, table_compaction_info))) {
         LOG_ERROR("failed to check table compaction finish", K(ret));
       } else if (table_compaction_info.is_compacted()) {
         table_compaction_info.set_verified();
@@ -261,21 +260,21 @@ int ObMajorMergeProgressChecker::check_table_merge_progress(
       } else if (FALSE_IT(progress_.update_table_cnt(table_compaction_info.status_))) {
       } else if (table_compaction_info.finish_verified()) {
         int tmp_ret = OB_SUCCESS;
-        if (OB_TMP_FAIL(finish_tablet_ls_pair_array_.push_back(cur_tablet_ls_pair_array))) {
-          LOG_WARN("failed to push back tablet ls pair array", KR(tmp_ret), K(cur_tablet_ls_pair_array));
-        } else if (finish_tablet_ls_pair_array_.count() < MAX_BATCH_INSERT_COUNT) {
+        if (OB_TMP_FAIL(finish_tablet_ids_.push_back(cur_tablet_ids))) {
+          LOG_WARN("failed to push back tablet ids", KR(tmp_ret), K(cur_tablet_ids));
+        } else if (finish_tablet_ids_.count() < MAX_BATCH_INSERT_COUNT) {
         } else if (OB_TMP_FAIL(ObTabletMetaTableCompactionOperator::batch_update_report_scn(get_compaction_scn_val(),
-                                                                                            finish_tablet_ls_pair_array_,
+                                                                                            finish_tablet_ids_,
                                                                                             ObTabletReplica::ScnStatus::SCN_STATUS_ERROR /*except_status*/))) {
-          LOG_WARN("fail to batch update report_scn", KR(tmp_ret), K_(finish_tablet_ls_pair_array));
+          LOG_WARN("fail to batch update report_scn", KR(tmp_ret), K_(finish_tablet_ids));
         } else {
-          LOG_INFO("success to batch update report_scn", "table_cnt", finish_tablet_ls_pair_array_.count());
-          finish_tablet_ls_pair_array_.reuse();
+          LOG_INFO("success to batch update report_scn", "table_cnt", finish_tablet_ids_.count());
+          finish_tablet_ids_.reuse();
         }
       } else if (OB_FAIL(unfinish_table_id_array.push_back(table_id))) {
         LOG_WARN("failed to push table_id into finish_array", KR(ret), K(table_compaction_info));
       }
-      cur_tablet_ls_pair_array.reuse();
+      cur_tablet_ids.reuse();
       if (++table_cnt >= table_batch_size) {
         break;
       }
@@ -291,20 +290,20 @@ int ObMajorMergeProgressChecker::check_table_merge_progress(
 }
 
 int ObMajorMergeProgressChecker::update_table_compaction_info_by_tablet(
-    const ObIArray<share::ObTabletLSPair> &cur_tablet_ls_pair_array,
+    const ObIArray<ObTabletID> &cur_tablet_ids,
     ObTableCompactionInfo &table_compaction_info)
 {
   int ret = OB_SUCCESS;
   int64_t idx = 0;
-  for ( ; OB_SUCC(ret) && idx < cur_tablet_ls_pair_array.count(); ++idx) {
-    const ObTabletID &tablet_id = cur_tablet_ls_pair_array.at(idx).get_tablet_id();
+  for ( ; OB_SUCC(ret) && idx < cur_tablet_ids.count(); ++idx) {
+    const ObTabletID &tablet_id = cur_tablet_ids.at(idx);
     ObTabletCompactionStatusEnum tablet_status = ObTabletCompactionStatusEnum::INITIAL;
     if (OB_FAIL(tablet_status_map_.get_refactored(tablet_id, tablet_status))) {
       // if tablet not finish compaction, it won't be added into this map
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
         table_compaction_info.set_uncompacted();
-        LOG_TRACE("tablet not exist in tablet status map", KR(ret), K(tablet_id), K(cur_tablet_ls_pair_array), K(table_compaction_info));
+        LOG_TRACE("tablet not exist in tablet status map", KR(ret), K(tablet_id), K(cur_tablet_ids), K(table_compaction_info));
 #ifdef ERRSIM
         ret = OB_E(EventTable::EN_SKIP_INDEX_MAJOR) ret;
         if (OB_FAIL(ret)) {
@@ -329,8 +328,8 @@ int ObMajorMergeProgressChecker::update_table_compaction_info_by_tablet(
   }
 
   if (OB_SUCC(ret)) {
-    if (idx == cur_tablet_ls_pair_array.count()) { // loop finish
-      table_compaction_info.tablet_cnt_ = cur_tablet_ls_pair_array.count();
+    if (idx == cur_tablet_ids.count()) { // loop finish
+      table_compaction_info.tablet_cnt_ = cur_tablet_ids.count();
       table_compaction_info.set_compacted();
     }
     LOG_TRACE("update table compaction info by tablet", KR(ret), K(table_compaction_info));
@@ -339,10 +338,9 @@ int ObMajorMergeProgressChecker::update_table_compaction_info_by_tablet(
 }
 
 
-int ObMajorMergeProgressChecker::get_tablet_ls_pairs(
-  const uint64_t table_id,
+int ObMajorMergeProgressChecker::get_tablet_ids(
   const share::schema::ObSimpleTableSchemaV2 &simple_schema,
-  ObIArray<share::ObTabletLSPair> &cur_tablet_ls_pair_array)
+  ObIArray<ObTabletID> &cur_tablet_ids)
 {
   int ret = OB_SUCCESS;
   SMART_VAR(ObArray<ObTabletID>, tablet_ids) {
@@ -351,13 +349,13 @@ int ObMajorMergeProgressChecker::get_tablet_ls_pairs(
     } else if (OB_UNLIKELY(tablet_ids.empty())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get tablet_ids of current table schema", KR(ret), K(simple_schema));
-    } else if (OB_FAIL(cur_tablet_ls_pair_array.reserve(tablet_ids.count()))) {
+    } else if (OB_FAIL(cur_tablet_ids.reserve(tablet_ids.count()))) {
       LOG_WARN("failed to reserve tablet array", KR(ret), K(tablet_ids.count()));
-    } else if (OB_FAIL(tablet_ls_pair_cache_.get_tablet_ls_pairs(table_id, tablet_ids, cur_tablet_ls_pair_array))) {
-      LOG_WARN("failed to tablet ls pair", KR(ret), K(table_id), K(tablet_ids));
-    } else if (OB_UNLIKELY(cur_tablet_ls_pair_array.empty())) {
+    } else if (OB_FAIL(cur_tablet_ids.assign(tablet_ids))) {
+      LOG_WARN("failed to assign tablet ids", KR(ret), K(tablet_ids));
+    } else if (OB_UNLIKELY(cur_tablet_ids.empty())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet ls pair array is unexpected empty", KR(ret), K(simple_schema), K(cur_tablet_ls_pair_array));
+      LOG_WARN("tablet id array is unexpected empty", KR(ret), K(simple_schema), K(cur_tablet_ids));
     } else {
 #ifdef ERRSIM
       static int64_t enter_cnt = 0;
@@ -366,14 +364,14 @@ int ObMajorMergeProgressChecker::get_tablet_ls_pairs(
         if (OB_FAIL(ret)) {
           if (enter_cnt++ == 0) {
             ret = OB_ITEM_NOT_MATCH;
-            STORAGE_LOG(INFO, "ERRSIM EN_GET_TABLET_LS_PAIR_IN_RS", K(ret), K(simple_schema), K(cur_tablet_ls_pair_array));
+            STORAGE_LOG(INFO, "ERRSIM EN_GET_TABLET_LS_PAIR_IN_RS", K(ret), K(simple_schema), K(cur_tablet_ids));
           } else {
             ret = OB_SUCCESS;
           }
         }
       }
 #endif
-      LOG_TRACE("success to get tablet ls pairs", KR(ret), K(cur_tablet_ls_pair_array));
+      LOG_TRACE("success to get tablet ids", KR(ret), K(cur_tablet_ids));
     }
   }
   return ret;
@@ -618,10 +616,8 @@ int ObMajorMergeProgressChecker::prepare_check_progress(
   }
   if (FAILEDx(rebuild_tablet_status_map())) {
     LOG_WARN("failed to rebuild tablet status map by tablet cnt", K(ret));
-  } else if (OB_FAIL(tablet_ls_pair_cache_.try_refresh(first_loop_in_cur_round_ /*force_refresh*/))) {
-    LOG_WARN("failed to refresh tablet ls pair", K(ret));
   } else {
-    tmp_time_guard.click(ObRSCompactionTimeGuard::GET_TABLET_LS_PAIRS);
+    tmp_time_guard.click(ObRSCompactionTimeGuard::GET_TABLET_IDS);
     first_loop_in_cur_round_ = false;
     exist_uncompacted_table = progress_.exist_uncompacted_table();
     progress_.clear_before_each_loop();
@@ -656,7 +652,7 @@ int ObMajorMergeProgressChecker::check_index_and_rest_table()
     } else
 #endif
     if (OB_FAIL(ckm_validator_.deal_with_special_table_at_last(finish_validate))) {
-      LOG_WARN("fail to handle table with first tablet in sys ls", KR(ret),
+      LOG_WARN("fail to handle first tablet checksum", KR(ret),
         "compaction_scn", get_compaction_scn());
     } else if (finish_validate) {
       progress_.deal_with_special_tablet();
@@ -752,7 +748,7 @@ int ObMajorMergeProgressChecker::check_progress()
     const int64_t cost_us = ObTimeUtility::fast_current_time() - start_time;
     ++loop_cnt_;
     if (OB_SUCCESS == last_errno_) {
-      DEL_SUSPECT_INFO(compaction::MAJOR_MERGE, UNKNOW_LS_ID, UNKNOW_TABLET_ID, share::ObDiagnoseTabletType::TYPE_RS_MAJOR_MERGE);
+      DEL_SUSPECT_INFO(compaction::MAJOR_MERGE, UNKNOW_TABLET_ID, share::ObDiagnoseTabletType::TYPE_RS_MAJOR_MERGE);
     }
 
     print_unfinish_info(cost_us);
@@ -910,9 +906,9 @@ int ObMajorMergeProgressChecker::deal_with_validated_table(
   }
   if (OB_SUCC(ret) && validate_finish) {
     if (table_ckm.is_inited() ) {
-      if (OB_TMP_FAIL(ckm_validator_.push_finish_tablet_ls_pairs_with_update(
-          table_ckm.get_tablet_ls_pairs()))) {
-        LOG_WARN("failed to push back tablet_ls_pair", KR(tmp_ret));
+      if (OB_TMP_FAIL(ckm_validator_.push_finish_tablet_ids_with_update(
+          table_id, table_ckm.get_tablet_ids()))) {
+        LOG_WARN("failed to push back tablet ids", KR(tmp_ret), K(table_id));
       }
       if (OB_TMP_FAIL(ckm_validator_.push_tablet_ckm_items_with_update(
           table_ckm.get_ckm_items()))) {
@@ -949,7 +945,7 @@ int ObMajorMergeProgressChecker::loop_index_ckm_validate_array()
       data_table_ckm.clear();
       prev_data_table_id = data_table_id;
       if (OB_FAIL(data_table_ckm.build(data_table_id, get_compaction_scn(),
-                                       *sql_proxy_, schema_guard, get_tablet_ls_pair_cache()))) {
+                                       *sql_proxy_, schema_guard))) {
         LOG_WARN("fail to prepare schema checksum items", KR(ret), K(data_table_id));
       } else {
         ++validator_statistics_.query_ckm_sql_cnt_;
@@ -991,8 +987,7 @@ int ObMajorMergeProgressChecker::get_idx_ckm_and_validate(
   // only for case : check special index table first
   if (should_handle_index_table) {
     if (OB_FAIL(index_table_ckm.build(index_table_id, get_compaction_scn(),
-                                      *sql_proxy_, schema_guard,
-                                      get_tablet_ls_pair_cache()))) {
+                                      *sql_proxy_, schema_guard))) {
       LOG_WARN("failed to get checksum items", KR(ret), K(index_table_id), "compaction_scn", get_compaction_scn());
     } else if (OB_UNLIKELY(index_table_ckm.get_table_schema()->should_not_validate_data_index_ckm())) {
       ret = OB_ERR_UNEXPECTED;
@@ -1084,27 +1079,23 @@ int ObMajorMergeProgressChecker::generate_tablet_status_map()
       ObTabletCompactionStatusEnum status = ObTabletCompactionStatusEnum::COMPACTED;
       SCN replica_snapshot_scn;
       SCN report_scn;
-      const ObLSID &ls_id = tablet_info.get_ls_id();
-      FOREACH_CNT_X(replica, tablet_info.get_replicas(), OB_SUCC(ret)) {
-        filter = false;
-        if (OB_FAIL(replica_snapshot_scn.convert_for_tx(replica->get_snapshot_version()))) {
-          LOG_WARN("fail to convert val to SCN", KR(ret), KPC(replica));
-        } else if (OB_UNLIKELY(ObTabletReplica::ScnStatus::SCN_STATUS_ERROR == replica->get_status())) {
-          ret = OB_CHECKSUM_ERROR;
-          LOG_ERROR("ERROR! ERROR! ERROR! find error status tablet replica", KR(ret), K(tablet_info));
-        } else if (replica_snapshot_scn < get_compaction_scn()) {
-          status = ObTabletCompactionStatusEnum::INITIAL;
-          (void) uncompact_info_.add_tablet(*replica);
-          LOG_TRACE("unfinish tablet", KR(ret), KPC(replica), K(replica_snapshot_scn), "compaction_scn", get_compaction_scn());
-          break;
-        } else if (OB_FAIL(report_scn.convert_for_tx(replica->get_report_scn()))) { // check report_scn
-          LOG_WARN("fail to convert val to SCN", KR(ret), KPC(replica));
-        } else if (report_scn >= get_compaction_scn()
-          || replica_snapshot_scn > get_compaction_scn()) {
-          status = ObTabletCompactionStatusEnum::CAN_SKIP_VERIFYING;
-          break;
-        }
-      } // end of FOREACH
+      const ObTabletReplica &replica = tablet_info.get_replica();
+      filter = false;
+      if (OB_FAIL(replica_snapshot_scn.convert_for_tx(replica.get_snapshot_version()))) {
+        LOG_WARN("fail to convert val to SCN", KR(ret), K(replica));
+      } else if (OB_UNLIKELY(ObTabletReplica::ScnStatus::SCN_STATUS_ERROR == replica.get_status())) {
+        ret = OB_CHECKSUM_ERROR;
+        LOG_ERROR("ERROR! ERROR! ERROR! find error status tablet replica", KR(ret), K(tablet_info));
+      } else if (replica_snapshot_scn < get_compaction_scn()) {
+        status = ObTabletCompactionStatusEnum::INITIAL;
+        (void) uncompact_info_.add_tablet(replica);
+        LOG_TRACE("unfinish tablet", KR(ret), K(replica), K(replica_snapshot_scn), "compaction_scn", get_compaction_scn());
+      } else if (OB_FAIL(report_scn.convert_for_tx(replica.get_report_scn()))) { // check report_scn
+        LOG_WARN("fail to convert val to SCN", KR(ret), K(replica));
+      } else if (report_scn >= get_compaction_scn()
+        || replica_snapshot_scn > get_compaction_scn()) {
+        status = ObTabletCompactionStatusEnum::CAN_SKIP_VERIFYING;
+      }
       if (OB_SUCC(ret) && ObTabletCompactionStatusEnum::INITIAL != status) {
         ++progress_.merged_tablet_cnt_;
         if (OB_FAIL(tablet_status_map_.set_refactored(tablet_info.get_tablet_id(), status, 1/*overwrite*/))) {

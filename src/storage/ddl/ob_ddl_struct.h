@@ -532,7 +532,7 @@ struct ObWriteMacroParam final
 {
 public:
   ObWriteMacroParam()
-    : ls_id_(), tablet_id_(), tenant_data_version_(0), is_no_logging_(false),
+    : tablet_id_(), tenant_data_version_(0), is_no_logging_(false),
       schema_version_(0), slice_idx_(0), slice_count_(0), ddl_thread_count_(0), snapshot_version_(0), direct_load_type_(DIRECT_LOAD_INVALID),
       task_id_(0), is_index_table_(false), tx_info_(), ddl_table_schema_(), tablet_param_(), lob_meta_tablet_param_(),
       ddl_dag_(nullptr), tablet_context_(nullptr), max_batch_size_(0), start_sequence_(), row_offset_(0),
@@ -541,19 +541,18 @@ public:
   ~ObWriteMacroParam() = default;
   bool is_valid() const
   {
-    return ls_id_.is_valid() && tablet_id_.is_valid() && tenant_data_version_ > 0 && schema_version_ > 0
+    return tablet_id_.is_valid() && tenant_data_version_ > 0 && schema_version_ > 0
         && slice_idx_ >= 0 && snapshot_version_ > 0 && direct_load_type_ > DIRECT_LOAD_INVALID
         && direct_load_type_ < DIRECT_LOAD_MAX && task_id_ > 0
         && (!is_incremental_major_direct_load(direct_load_type_)
             || (is_incremental_major_direct_load(direct_load_type_) && tx_info_.is_valid()));
   }
   int64_t get_logic_parallel_count() const { return slice_count_ > 0 ? slice_count_ : ddl_thread_count_; }
-  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(lob_meta_tablet_id), K_(tenant_data_version), K_(is_no_logging),
+  TO_STRING_KV(K_(tablet_id), K_(lob_meta_tablet_id), K_(tenant_data_version), K_(is_no_logging),
       K_(schema_version), K_(slice_idx), K_(slice_count), K_(ddl_thread_count), K_(snapshot_version), K_(direct_load_type),
       K_(task_id), K_(is_index_table), K_(ddl_table_schema), K_(tablet_param), K_(lob_meta_tablet_param), KP_(tablet_context),
       K_(is_sorted_table_load));
 public:
-  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   ObTabletID lob_meta_tablet_id_;
   int64_t tenant_data_version_;

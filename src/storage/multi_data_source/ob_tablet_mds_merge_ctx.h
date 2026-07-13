@@ -46,22 +46,6 @@ protected:
   virtual int update_tablet(ObTabletHandle &new_tablet_handle) override;
 };
 
-class ObTabletCrossLSMdsMinorMergeCtx : public compaction::ObTabletMergeCtx
-{
-public:
-  ObTabletCrossLSMdsMinorMergeCtx(compaction::ObTabletMergeDagParam &param, common::ObArenaAllocator &allocator);
-  virtual ~ObTabletCrossLSMdsMinorMergeCtx() { free_schema(); }
-public:
-  virtual int prepare_schema() override;
-  virtual int prepare_index_tree() override;
-  virtual void free_schema() override;
-  virtual int get_merge_tables(ObGetMergeTablesResult &get_merge_table_result) override;
-  virtual int update_tablet(ObTabletHandle &new_tablet_handle) override;
-
-private:
-  int prepare_compaction_filter();
-
-};
 } // namespace storage
 } // namespace oceanbase
 

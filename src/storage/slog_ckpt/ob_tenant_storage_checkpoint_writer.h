@@ -25,11 +25,6 @@
 
 namespace oceanbase
 {
-namespace share
-{
-class ObLSID;
-}
-
 namespace storage
 {
 struct ObLSCkptMember;
@@ -60,18 +55,6 @@ public:
   int record_meta(blocksstable::MacroBlockId &ls_meta_entry);
 
   // record meta for snapshot
-  int record_single_ls_meta(
-      const blocksstable::MacroBlockId &orig_ls_meta_entry,
-      const share::ObLSID &ls_id,
-      ObIArray<blocksstable::MacroBlockId> &orig_linked_block_list,
-      blocksstable::MacroBlockId &ls_meta_entry,
-      share::SCN &clog_max_scn);
-  int delete_single_ls_meta(
-      const blocksstable::MacroBlockId &orig_ls_meta_entry,
-      const share::ObLSID &ls_id,
-      ObIArray<blocksstable::MacroBlockId> &orig_linked_block_list,
-      blocksstable::MacroBlockId &ls_meta_entry);
-
   int get_ls_block_list(common::ObIArray<blocksstable::MacroBlockId> *&block_list);
   int get_tablet_block_list(common::ObIArray<blocksstable::MacroBlockId> *&block_list);
   int batch_compare_and_swap_tablet();
@@ -96,9 +79,6 @@ private:
     TO_STRING_KV(K_(tablet_key), K_(old_addr), K_(new_addr), K_(tablet_pool_type), K_(need_rollback));
   };
 
-  int copy_ls_meta_for_deleting(const ObMetaDiskAddr &addr, const char *buf, const int64_t buf_len,
-                                const share::ObLSID &ls_id);
-  int copy_ls_meta_for_creating(const ObMetaDiskAddr &addr, const char *buf, const int64_t buf_len);
   int write_item(const ObLSCkptMember &ls_ckpt_member);
   int close(blocksstable::MacroBlockId &ls_meta_entry);
   int do_record_ls_meta(ObLS &ls, share::SCN &clog_max_scn);

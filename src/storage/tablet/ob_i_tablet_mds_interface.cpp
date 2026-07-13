@@ -19,6 +19,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_mds_scan_param_helper.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
+#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 
 namespace oceanbase
 {
@@ -183,7 +184,6 @@ int ObITabletMdsInterface::get_split_data(
   } else {
     // TODO(lihongqin.lhq): use get_latest_committed and block during 2pc
     const share::SCN snapshot = share::SCN::max_scn();
-
     if (CLICK_FAIL((get_snapshot<mds::DummyKey, ObTabletSplitMdsUserData>(mds::DummyKey(),
         ReadSplitDataOp(data), snapshot, timeout)))) {
       if (OB_EMPTY_RESULT != ret) {
@@ -214,7 +214,6 @@ int ObITabletMdsInterface::split_partkey_compare(const blocksstable::ObDatumRowk
   } else {
     // TODO(lihongqin.lhq): use get_latest_committed and block during 2pc
     const share::SCN snapshot = share::SCN::max_scn();
-
     if (CLICK_FAIL((get_snapshot<mds::DummyKey, ObTabletSplitMdsUserData>(mds::DummyKey(),
         ReadSplitDataPartkeyCompareOp(rowkey, rowkey_read_info, partkey_projector, cmp_ret), snapshot, timeout)))) {
       if (OB_EMPTY_RESULT != ret) {
@@ -236,14 +235,12 @@ int ObITabletMdsInterface::read_raw_data(
     mds::MdsDumpKV &kv) const
 {
   int ret = OB_SUCCESS;
-  const share::ObLSID &ls_id = get_tablet_meta_().ls_id_;
   const common::ObTabletID &tablet_id = get_tablet_meta_().tablet_id_;
   const int64_t abs_timeout = timeout_us + ObClockGenerator::getClock();
   ObMdsReadInfoCollector placeholder_collector;
   SMART_VARS_3((ObTableScanParam, scan_param), (ObStoreCtx, store_ctx), (ObMdsRowIterator, iter)) {
     if (OB_FAIL(ObMdsScanParamHelper::build_scan_param(
         allocator,
-        ls_id,
         tablet_id,
         ObMdsSchemaHelper::MDS_TABLE_ID,
         mds_unit_id,
@@ -298,11 +295,10 @@ int ObITabletMdsInterface::get_tablet_handle_from_this(
 {
   int ret = OB_SUCCESS;
   const ObTablet *tablet = static_cast<const ObTablet*>(this);
-  const share::ObLSID &ls_id = get_tablet_meta_().ls_id_;
   const common::ObTabletID &tablet_id = get_tablet_meta_().tablet_id_;
   ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   if (OB_FAIL(t3m->build_tablet_handle_for_mds_scan(const_cast<ObTablet*>(tablet), tablet_handle))) {
-    MDS_LOG(WARN, "fail to build tablet handle", K(ret), K(ls_id), K(tablet_id));
+    MDS_LOG(WARN, "fail to build tablet handle", K(ret), K(tablet_id));
   } 
   return ret;
 }

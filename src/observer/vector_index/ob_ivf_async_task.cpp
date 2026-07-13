@@ -17,7 +17,6 @@
 #include "ob_ivf_async_task.h"
 #include "share/rc/ob_module_provider.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
-#include "share/ob_ls_id.h"
 #include "observer/vector_index/ob_vector_index_ivf_cache_util.h"
 
 namespace oceanbase
@@ -27,18 +26,10 @@ namespace share
 int ObIvfAsyncTask::delete_deprecated_cache(ObPluginVectorIndexService &vector_index_service)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexMgr *ls_index_mgr = nullptr;
-  if (OB_FAIL(vector_index_service.get_ls_index_mgr_map().get_refactored(ls_id_, ls_index_mgr))) {
-    if (ret == OB_HASH_NOT_EXIST) {
-      // do not need delete
-      ret = OB_SUCCESS;
-    } else {
-      LOG_WARN("failed to get vector index mgr for ls", KR(ret), K(ls_id_));
-    }
-  } else if (OB_FAIL(ls_index_mgr->erase_ivf_cache_mgr(ctx_->task_status_.tablet_id_))) {
+  ObPluginVectorIndexMgr *index_mgr = &vector_index_service.get_index_mgr();
+  if (OB_FAIL(index_mgr->erase_ivf_cache_mgr(ctx_->task_status_.tablet_id_))) {
     if (ret != OB_HASH_NOT_EXIST) {
       LOG_WARN("failed to erase vector index ivf cache mgr",
-               K(ls_id_),
                K(ctx_->task_status_.tablet_id_),
                KR(ret));
     } else {  // already removed
@@ -78,15 +69,13 @@ int ObIvfAsyncTask::write_cache(ObPluginVectorIndexService &vector_index_service
              K(1UL),
              K(ctx_->task_status_.table_id_),
              KPC(aux_table_info));
-  } else if (OB_FAIL(vector_index_service.acquire_ivf_cache_mgr_guard(ls_id_,
-                                                                      ctx_->task_status_.tablet_id_,
+  } else if (OB_FAIL(vector_index_service.acquire_ivf_cache_mgr_guard(ctx_->task_status_.tablet_id_,
                                                                       vec_param,
                                                                       vec_param.dim_,
                                                                       ctx_->task_status_.table_id_,
                                                                       cache_guard))) {
     LOG_WARN("fail to acquire ivf cache mgr with vec param",
              K(ret),
-             K(ls_id_),
              K(ctx_->task_status_),
              K(vec_param));
   } else if (OB_ISNULL(cache_mgr = cache_guard.get_ivf_cache_mgr())) {
@@ -133,7 +122,7 @@ int ObIvfAsyncTask::do_work()
     LOG_WARN("unexpected nullptr", K(ret), KP(ctx_), KP(vector_index_service));
   } else if (OB_ISNULL(vec_idx_mgr_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("get invalid vector index ls mgr", KR(ret), K(ls_id_));
+    LOG_WARN("get invalid vector index manager", KR(ret));
   } else if (ctx_->task_status_.task_type_ == OB_VECTOR_ASYNC_INDEX_IVF_CLEAN) {
     if (OB_FAIL(delete_deprecated_cache(*vector_index_service))) {
       LOG_WARN("fail to delete deprecated cache", K(ret));

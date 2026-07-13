@@ -24,10 +24,6 @@ namespace storage
 namespace mds
 {
 
-bool RetryParam::check_ls_in_gc_state() const {
-  return false;
-}
-
 }
 }
 }

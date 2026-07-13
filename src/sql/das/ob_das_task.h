@@ -45,11 +45,11 @@ struct ObDASTCBInterruptInfo;
 typedef ObDLinkNode<ObIDASTaskOp*> DasTaskNode;
 typedef ObDList<DasTaskNode> DasTaskLinkedList;
 
-struct ObDASGTSOptInfo
+struct ObDASSnapshotOptInfo
 {
   OB_UNIS_VERSION(1);
 public:
-  ObDASGTSOptInfo(common::ObIAllocator &alloc)
+  ObDASSnapshotOptInfo(common::ObIAllocator &alloc)
     : alloc_(alloc),
       use_specify_snapshot_(false),
       isolation_level_(),
@@ -58,7 +58,7 @@ public:
   {
   }
 
-  ~ObDASGTSOptInfo()
+  ~ObDASSnapshotOptInfo()
   {
     if (specify_snapshot_ != nullptr) {
       specify_snapshot_->~ObTxReadSnapshot();
@@ -174,7 +174,7 @@ public:
       op_result_(nullptr),
       attach_ctdef_(nullptr),
       attach_rtdef_(nullptr),
-      das_gts_opt_info_(op_alloc),
+      das_snapshot_opt_info_(op_alloc),
       plan_line_id_(0),
       das_task_start_timestamp_(0)
   {
@@ -190,8 +190,6 @@ public:
   const common::ObTabletID &get_tablet_id() const { return tablet_id_; }
   void set_task_id(const int64_t task_id) { task_id_ = task_id; }
   int64_t get_task_id() const { return task_id_; }
-  void set_ls_id(const share::ObLSID &ls_id) { ls_id_ = ls_id; }
-  const share::ObLSID &get_ls_id() const { return ls_id_; }
   void set_tablet_loc(const ObDASTabletLoc *tablet_loc) { tablet_loc_ = tablet_loc; }
   // tablet_loc_ will not be serialized, therefore it cannot be accessed during the execution phase
   // of DASTaskOp. It can only be touched through das_ref and data_access_service layer.
@@ -240,7 +238,6 @@ public:
                        KPC_(trans_desc),
                        KPC_(snapshot),
                        K_(tablet_id),
-                       K_(ls_id),
                        KPC_(tablet_loc),
                        K_(related_ctdefs),
                        K_(related_rtdefs),
@@ -285,8 +282,8 @@ public:
   void set_inner_rescan(bool flag) { inner_rescan_ = flag; }
   void set_write_buff_full(bool v) { write_buff_full_ = v; }
   bool is_write_buff_full() { return write_buff_full_; }
-  ObDASGTSOptInfo &get_das_gts_opt_info() { return das_gts_opt_info_; }
-  int init_das_gts_opt_info(transaction::ObTxIsolationLevel isolation_level);
+  ObDASSnapshotOptInfo &get_das_snapshot_opt_info() { return das_snapshot_opt_info_; }
+  int init_das_snapshot_opt_info(transaction::ObTxIsolationLevel isolation_level);
 
 protected:
   int start_das_task();
@@ -322,7 +319,6 @@ protected:
   };
   int16_t write_branch_id_;  // branch id for parallel write, required for partially rollback
   common::ObTabletID tablet_id_;
-  share::ObLSID ls_id_;
   // tablet_loc_ will not be serialized, therefore it cannot be accessed during the execution phase
   // of DASTaskOp. It can only be touched through das_ref and data_access_service layer.
   const ObDASTabletLoc *tablet_loc_;
@@ -349,7 +345,7 @@ protected:
   //rowkey merging for index merge operations, and so on.
   const ObDASBaseCtDef *attach_ctdef_;
   ObDASBaseRtDef *attach_rtdef_;
-  ObDASGTSOptInfo das_gts_opt_info_;
+  ObDASSnapshotOptInfo das_snapshot_opt_info_;
   int64_t plan_line_id_; //plan operator id
 public:
   int64_t das_task_start_timestamp_;

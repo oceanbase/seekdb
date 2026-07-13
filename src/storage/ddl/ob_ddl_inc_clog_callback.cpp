@@ -29,22 +29,21 @@
  using namespace share;
  using namespace common;
  
- ObDDLIncStartClogCb::ObDDLIncStartClogCb()
-   : is_inited_(false), ls_id_(), log_basic_()
+ObDDLIncStartClogCb::ObDDLIncStartClogCb()
+   : is_inited_(false), log_basic_()
  {
  }
  
- int ObDDLIncStartClogCb::init(const ObLSID &ls_id, const ObDDLIncLogBasic &log_basic)
+ int ObDDLIncStartClogCb::init(const ObDDLIncLogBasic &log_basic)
  {
    int ret = OB_SUCCESS;
    if (IS_INIT) {
      ret = OB_INIT_TWICE;
      LOG_WARN("init twice", K(ret));
-   } else if (OB_UNLIKELY(!ls_id.is_valid() || !log_basic.is_valid())) {
+   } else if (OB_UNLIKELY(!log_basic.is_valid())) {
      ret = OB_INVALID_ARGUMENT;
-     LOG_WARN("invalid argument", K(ret), K(ls_id), K(log_basic));
+     LOG_WARN("invalid argument", K(ret), K(log_basic));
    } else {
-     ls_id_ = ls_id;
      log_basic_ = log_basic;
      is_inited_ = true;
    }
@@ -59,7 +58,7 @@
    status_.set_ret_code(ret);
    status_.set_state(STATE_SUCCESS);
    SCN scn = __get_scn();
-   FLOG_INFO("write ddl inc start log success", K(ls_id_), K(scn), K(log_basic_));
+   FLOG_INFO("write ddl inc start log success", K(scn), K(log_basic_));
    try_release();
    return OB_SUCCESS;
  }
@@ -82,8 +81,8 @@
    }
  }
  
- ObDDLIncRedoClogCb::ObDDLIncRedoClogCb()
-   : is_inited_(false), ls_id_(), redo_info_(), macro_block_id_(),
+ObDDLIncRedoClogCb::ObDDLIncRedoClogCb()
+   : is_inited_(false), redo_info_(), macro_block_id_(),
      data_buffer_lock_(), is_data_buffer_freed_(false)
  {
  
@@ -98,8 +97,7 @@
    macro_block_id_.reset();
  }
  
- int ObDDLIncRedoClogCb::init(const share::ObLSID &ls_id,
-                                 const storage::ObDDLMacroBlockRedoInfo &redo_info,
+ int ObDDLIncRedoClogCb::init(const storage::ObDDLMacroBlockRedoInfo &redo_info,
                                  const blocksstable::MacroBlockId &macro_block_id,
                                  ObTabletHandle &tablet_handle)
  {
@@ -107,14 +105,13 @@
    if (OB_UNLIKELY(is_inited_)) {
      ret = OB_INIT_TWICE;
      LOG_WARN("init twice", K(ret));
-   } else if (OB_UNLIKELY(!ls_id.is_valid() || !redo_info.is_valid() || !macro_block_id.is_valid())) {
+   } else if (OB_UNLIKELY(!redo_info.is_valid() || !macro_block_id.is_valid())) {
      ret = OB_INVALID_ARGUMENT;
-     LOG_WARN("invalid argument", K(ret), K(ls_id), K(redo_info), K(macro_block_id));
+     LOG_WARN("invalid argument", K(ret), K(redo_info), K(macro_block_id));
    } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.inc_ref(macro_block_id))) {
      LOG_WARN("inc reference count failed", K(ret), K(macro_block_id));
    } else {
      redo_info_ = redo_info;
-     ls_id_ = ls_id;
      macro_block_id_ = macro_block_id;
      tablet_handle_ = tablet_handle;
    }
@@ -184,22 +181,21 @@
    return OB_SUCCESS;
  }
  
- ObDDLIncCommitClogCb::ObDDLIncCommitClogCb()
-   : is_inited_(false), ls_id_(), log_basic_()
+ObDDLIncCommitClogCb::ObDDLIncCommitClogCb()
+   : is_inited_(false), log_basic_()
  {
  }
  
- int ObDDLIncCommitClogCb::init(const ObLSID &ls_id, const ObDDLIncLogBasic &log_basic)
+ int ObDDLIncCommitClogCb::init(const ObDDLIncLogBasic &log_basic)
  {
    int ret = OB_SUCCESS;
    if (IS_INIT) {
      ret = OB_INIT_TWICE;
      LOG_WARN("init twice", K(ret));
-   } else if (OB_UNLIKELY(!ls_id.is_valid() || !log_basic.is_valid())) {
+   } else if (OB_UNLIKELY(!log_basic.is_valid())) {
      ret = OB_INVALID_ARGUMENT;
-     LOG_WARN("invalid argument", K(ret), K(ls_id), K(log_basic));
+     LOG_WARN("invalid argument", K(ret), K(log_basic));
    } else {
-     ls_id_ = ls_id;
      log_basic_ = log_basic;
      is_inited_ = true;
    }
@@ -212,12 +208,8 @@
    int ret = OB_SUCCESS;
    common::ObTimeGuard timeguard("ObDDLIncCommitClogCb::on_success", 1 * 1000 * 1000); // 1s
    ObLS *ls = nullptr;
-   ObLSHandle ls_handle;
-   if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
-     LOG_WARN("get ls failed", K(ret), K(ls_id_));
-   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-     ret = OB_ERR_UNEXPECTED;
-     LOG_ERROR("ls should not be null", K(ret), K(log_basic_.get_tablet_id()));
+   if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+     LOG_WARN("get ls failed", K(ret));
    } else {
      const bool is_sync = false;
      (void)ls->tablet_freeze(log_basic_.get_tablet_id(),
@@ -233,7 +225,7 @@
                                ObFreezeSourceFlag::DIRECT_INC_START);
      }
      SCN scn = __get_scn();
-     FLOG_INFO("write ddl inc commit log success", K(ls_id_), K(scn), K(log_basic_));
+     FLOG_INFO("write ddl inc commit log success", K(scn), K(log_basic_));
    }
  
    status_.set_ret_code(ret);

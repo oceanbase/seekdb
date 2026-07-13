@@ -101,7 +101,7 @@ private:
   int inner_get_tablet(
       const ObLobAccessParam &param,
       const common::ObTabletID &tablet_id,
-      ObLSHandle &ls_handle,
+      ObLS *tenant_ls,
       ObTabletHandle &handle);
 
   bool check_lob_tablet_id(
@@ -152,6 +152,5 @@ private:
 } // oceanbase
 
 #endif
-
 
 

@@ -17,14 +17,13 @@
 #ifndef OCEANBASE_LOGSERVICE_LOG_APPLY_SERVICE_
 #define OCEANBASE_LOGSERVICE_LOG_APPLY_SERVICE_
 #include "common/ob_role.h"
-#include "lib/hash/ob_link_hashmap.h"
+#include "lib/lock/ob_qsync_lock.h"
 #include "lib/queue/ob_link_queue.h"
 #include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/thread/ob_thread_lease.h"
 #include "logservice/palf/palf_callback.h"
 #include "logservice/palf/palf_handle.h"
 #include "share/scn.h"
-#include "share/ob_ls_id.h"
 
 namespace oceanbase
 {
@@ -54,16 +53,10 @@ enum class ObApplyServiceTaskType
 //Virtual table statistics
 struct LSApplyStat
 {
-  int64_t ls_id_;
-  common::ObRole role_;
-  int64_t proposal_id_;
   palf::LSN end_lsn_;
   int64_t pending_cnt_;
 
-  TO_STRING_KV(K(ls_id_),
-               K(role_),
-               K(proposal_id_),
-               K(end_lsn_),
+  TO_STRING_KV(K(end_lsn_),
                K(pending_cnt_));
 };
 
@@ -85,10 +78,8 @@ public:
   ObApplyFsCb(ObApplyStatus *apply_status);
   ~ObApplyFsCb();
   void destroy();
-  int update_end_lsn(int64_t id,
-                     const palf::LSN &end_lsn,
-                     const share::SCN &end_scn,
-                     const int64_t proposal_id);
+  int update_end_lsn(const palf::LSN &end_lsn,
+                     const share::SCN &end_scn);
 private:
   ObApplyStatus *apply_status_;
 };
@@ -160,8 +151,7 @@ public:
   ObApplyStatus();
   ~ObApplyStatus();
 public:
-  int init(const share::ObLSID &id,
-           palf::PalfEnv *palf_env,
+  int init(palf::PalfEnv *palf_env,
            ObLogApplyService *ap_sv);
   void destroy();
   int stop();
@@ -173,12 +163,10 @@ public:
   int try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue, bool &is_timeslice_run_out);
   int is_apply_done(bool &is_done,
                     palf::LSN &end_lsn);
-  //leader-follower switch related
-  //int can_switch_to_follower(bool &can_revoke); //Non-maximum protection mode does not require
-  int switch_to_leader(const int64_t new_proposal_id);
-  int switch_to_follower();
+  int start_local_append();
+  int stop_local_append();
   //palf related
-  int update_palf_committed_end_lsn(const palf::LSN &end_lsn, const share::SCN &end_scn, const int64_t proposal_id);
+  int update_palf_committed_end_lsn(const palf::LSN &end_lsn, const share::SCN &end_scn);
   share::SCN get_palf_committed_end_scn() const;
   int unregister_file_size_cb();
   void close_palf_handle();
@@ -187,33 +175,8 @@ public:
   int stat(LSApplyStat &stat) const;
   int handle_drop_cb();
   int diagnose(ApplyDiagnoseInfo &diagnose_info);
-  // offline related
-  //
-  // The constraint between palf and apply:
-  //
-  // Palf guarantee that switch apply to follower only when there is not
-  // any uncommitted logs in previous LEADER, therefore, apply only update
-  // 'palf_committed_end_lsn_' when 'proposal_id_' is as same as current
-  // proposal_id of palf.
-  //
-  // To increase robustness, apply assums that update 'palf_committed_end_lsn_'
-  // when the role of apply is LEADER execpet above constraints. otherwise,
-  // apply consider it as unexpected error.
-  //
-  // However, in rebuild scenario, apply will be reset to FOLLOWER even if there
-  // are logs to be committed when 'proposal_id_' is as same as current proposal_id
-  // of palf.
-  //
-  // To solve above problem, add an interface which used to reset 'proposal_id_' of
-  // apply.
-  //
-  // NB: this interface only can be used in 'ObLogHandler::offline'.
-  void reset_proposal_id();
-  // NB: this interface only can be used in 'ObLogHandler::online'.
   void reset_meta();
-  TO_STRING_KV(K(ls_id_),
-               K(role_),
-               K(proposal_id_),
+  TO_STRING_KV(K(accepting_append_),
                K(palf_committed_end_lsn_),
                K(palf_committed_end_scn_),
                K(last_check_scn_),
@@ -223,7 +186,7 @@ private:
   int check_and_update_max_applied_scn_(const share::SCN scn);
   int update_last_check_scn_();
   int handle_drop_cb_queue_(ObApplyServiceQueueTask &cb_queue);
-  int switch_to_follower_();
+  int stop_local_append_();
   //Get profiling information from cb
   void get_cb_trace_(AppendCb *cb,
                      int64_t &append_start_time,
@@ -248,9 +211,7 @@ private:
   bool is_inited_;
   bool is_in_stop_state_; // after stop, it cannot take over, remaining cb will continue to be processed
   int64_t ref_cnt_; // guarantee the effectiveness of self memory
-  share::ObLSID ls_id_;
-  common::ObRole role_;
-  int64_t proposal_id_;
+  bool accepting_append_;
   ObLogApplyService *ap_sv_;
   palf::LSN palf_committed_end_lsn_;
   share::SCN palf_committed_end_scn_;
@@ -263,7 +224,7 @@ private:
   palf::PalfEnv *palf_env_;
   palf::PalfHandle palf_handle_;
   ObApplyFsCb fs_cb_;
-  mutable RWLock lock_; // protect role_, proposal_id_ and is_in_stop_state_
+  mutable RWLock lock_;
   mutable lib::ObMutex mutex_; // Mutex for acquiring the maximum consecutive checkpoint will not be called concurrently
   mutable int64_t get_info_debug_time_;
   mutable int64_t try_wrlock_debug_time_;
@@ -286,78 +247,37 @@ public:
   int start();
   void stop();
   void wait();
-  int add_ls(const share::ObLSID &id);
-  int remove_ls(const share::ObLSID &id);
-  int get_apply_status(const share::ObLSID &id, ObApplyStatusGuard &guard);
+  int create_status();
+  int remove_status();
+  int get_apply_status(ObApplyStatusGuard &guard);
   void revert_apply_status(ObApplyStatus *apply_status);
   void handle(common::LinkTask *task) override;
   void handle_drop(common::LinkTask *task) override;
-  int is_apply_done(const share::ObLSID &id,
-                    bool &is_done,
+  int is_apply_done(bool &is_done,
                     palf::LSN &end_lsn);
-  int switch_to_leader(const share::ObLSID &id, const int64_t proposal_id);
-  int switch_to_follower(const share::ObLSID &id);
-  int get_max_applied_scn(const share::ObLSID &id, share::SCN &scn);
-  int get_palf_committed_end_scn(const share::ObLSID &id, share::SCN &scn);
+  int start_local_append();
+  int stop_local_append();
+  int get_max_applied_scn(share::SCN &scn);
+  int get_palf_committed_end_scn(share::SCN &scn);
   int push_task(ObApplyServiceTask *task);
-  int wait_append_sync(const share::ObLSID &ls_id);
-  int stat_for_each(const common::ObFunction<int (const ObApplyStatus &)> &func);
-  int diagnose(const share::ObLSID &id, ApplyDiagnoseInfo &diagnose_info);
-public:
-  class GetApplyStatusFunctor
-  {
-  public:
-    GetApplyStatusFunctor(ObApplyStatusGuard &guard)
-        : ret_code_(common::OB_SUCCESS), guard_(guard){}
-    ~GetApplyStatusFunctor(){}
-    bool operator()(const share::ObLSID &id, ObApplyStatus *apply_status);
-    int get_ret_code() const { return ret_code_; }
-    TO_STRING_KV(K(ret_code_));
-  private:
-    int ret_code_;
-    ObApplyStatusGuard &guard_;
-  };
-  class RemoveApplyStatusFunctor
-  {
-  public:
-    explicit RemoveApplyStatusFunctor()
-        : ret_code_(common::OB_SUCCESS) {}
-    ~RemoveApplyStatusFunctor(){}
-    bool operator()(const share::ObLSID &id, ObApplyStatus *replay_status);
-    int get_ret_code() const { return ret_code_; }
-    TO_STRING_KV(K(ret_code_));
-  private:
-    int ret_code_;
-  };
-  //Delete and clean up all cb
-  class ResetApplyStatusFunctor
-  {
-  public:
-    explicit ResetApplyStatusFunctor()
-        : ret_code_(common::OB_SUCCESS) {}
-    ~ResetApplyStatusFunctor(){}
-    bool operator()(const share::ObLSID &id, ObApplyStatus *replay_status);
-    int get_ret_code() const { return ret_code_; }
-    TO_STRING_KV(K(ret_code_));
-  private:
-    int ret_code_;
-  };
+  int wait_append_sync();
+  int stat(LSApplyStat &apply_stat);
+  int diagnose(ApplyDiagnoseInfo &diagnose_info);
 private:
   int handle_cb_queue_(ObApplyStatus *apply_status,
                        ObApplyServiceQueueTask *cb_queue,
                        bool &is_timeslice_run_out);
   int handle_submit_task_(ObApplyStatus *apply_status);
-  int remove_all_ls_();
 private:
   bool is_inited_;
   bool is_running_;
   palf::PalfEnv *palf_env_;
   ObLSAdapter *ls_adapter_;
-  common::ObLinearHashMap<share::ObLSID, ObApplyStatus*> apply_status_map_;
+  ObApplyStatus *apply_status_;
+  mutable common::ObQSyncLock lock_;
   DISALLOW_COPY_AND_ASSIGN(ObLogApplyService);
 };
 
-// for apply_status_map in apply service
 class ObApplyStatusGuard
 {
 public:
@@ -367,7 +287,7 @@ public:
 private:
   void set_apply_status_(ObApplyStatus *apply_status);
 private:
-  friend class ObLogApplyService::GetApplyStatusFunctor;
+  friend class ObLogApplyService;
   ObApplyStatus *apply_status_;
   DISALLOW_COPY_AND_ASSIGN(ObApplyStatusGuard);
 };

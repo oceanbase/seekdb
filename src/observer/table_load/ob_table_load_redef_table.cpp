@@ -86,30 +86,6 @@ int ObTableLoadRedefTable::start(const ObTableLoadRedefTableStartArg &arg,
   if (OB_UNLIKELY(!arg.is_valid())) { 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(arg));
-  } else if (session_info.get_ddl_info().is_mview_complete_refresh()) {
-    ObExecContext *exec_ctx = session_info.get_cur_exec_ctx();
-    const ObPhysicalPlanCtx *plan_ctx = nullptr;
-    const ObPhysicalPlan *plan = nullptr;
-    if (OB_ISNULL(exec_ctx)
-        || OB_ISNULL(plan_ctx = exec_ctx->get_physical_plan_ctx())
-        || OB_ISNULL(plan = plan_ctx->get_phy_plan())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null physical plan (ctx)", KR(ret), KP(plan_ctx), KP(plan));
-    } else {
-      res.task_id_ = plan->get_ddl_task_id();
-      share::ObDDLTaskStatus status = share::ObDDLTaskStatus::PREPARE;
-      bool unused_is_offline_index_rebuild = false;
-      if (OB_FAIL(ObDDLUtil::get_data_information(res.task_id_,
-          res.data_format_version_,
-          res.snapshot_version_,
-          status,
-          res.dest_table_id_,
-          res.schema_version_,
-          res.is_no_logging_,
-          unused_is_offline_index_rebuild))) {
-        LOG_WARN("fail to get ddl task info", KR(ret), K(arg));
-      }
-    }
   } else {
     const int64_t origin_timeout_ts = THIS_WORKER.get_timeout_ts();
     ObCreateHiddenTableArg create_table_arg;
@@ -172,8 +148,6 @@ int ObTableLoadRedefTable::finish(const ObTableLoadRedefTableFinishArg &arg,
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(arg));
-  } else if (session_info.get_ddl_info().is_mview_complete_refresh()) {
-    //pass
   } else {
     int64_t foreign_key_checks = 0;
     session_info.get_foreign_key_checks(foreign_key_checks);
@@ -203,8 +177,6 @@ int ObTableLoadRedefTable::finish(const ObTableLoadRedefTableFinishArg &arg,
       build_single_replica_response_arg.dest_schema_id_      = arg.dest_table_id_;
       build_single_replica_response_arg.schema_version_      = arg.schema_version_;
       build_single_replica_response_arg.dest_schema_version_ = arg.schema_version_;
-      build_single_replica_response_arg.ls_id_               = share::ObLSID(1);
-      build_single_replica_response_arg.dest_ls_id_          = share::ObLSID(1);
       build_single_replica_response_arg.tablet_id_           = ObTableID(-1);
       build_single_replica_response_arg.snapshot_version_    = 1;
       build_single_replica_response_arg.execution_id_        = 1;
@@ -232,8 +204,6 @@ int ObTableLoadRedefTable::abort(const ObTableLoadRedefTableAbortArg &arg,
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(arg));
-  } else if (session_info.get_ddl_info().is_mview_complete_refresh()) {
-    //pass
   } else {
     const int64_t origin_timeout_ts = THIS_WORKER.get_timeout_ts();
     ObAbortRedefTableArg abort_redef_table_arg;

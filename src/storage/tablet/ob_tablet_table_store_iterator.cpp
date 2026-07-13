@@ -122,7 +122,7 @@ int ObTableStoreIterator::get_next(ObTableHandleV2 &table_handle)
   ObITable *table = nullptr;
   if (OB_UNLIKELY(!split_extra_table_store_handles_.empty())) {
     ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("doesn't support cross tablet get table handl", K(ret), K(split_extra_table_store_handles_));
+    LOG_ERROR("doesn't support cross tablet get table handle", K(ret), K(split_extra_table_store_handles_));
   } else if (OB_FAIL(inner_move_idx_to_next())) {
   } else {
     if (OB_FAIL(get_ith_table(pos_, table))) {

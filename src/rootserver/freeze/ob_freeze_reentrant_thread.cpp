@@ -79,26 +79,5 @@ int ObFreezeReentrantThread::try_idle(
   return ret;
 }
 
-int ObFreezeReentrantThread::obtain_proposal_id_from_ls(
-    const bool is_primary_service,
-    int64_t &proposal_id,
-    ObRole &role)
-{
-  int ret = OB_SUCCESS;
-
-  storage::ObLSHandle ls_handle;
-  logservice::ObLogHandler *handler = nullptr;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(SYS_LS, ls_handle, ObLSGetMod::RS_MOD))) {
-    LOG_WARN("fail to get ls", KR(ret));
-  } else if (OB_ISNULL(ls_handle.get_ls())
-      || OB_ISNULL(handler = ls_handle.get_ls()->get_log_handler())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("should not null", KR(ret), K(is_primary_service));
-  } else if (OB_FAIL(handler->get_role(role, proposal_id))) {
-    LOG_WARN("fail to get role", KR(ret), K(is_primary_service));
-  }
-  return ret;
-}
-
 } // rootserver
 } // oceanbase

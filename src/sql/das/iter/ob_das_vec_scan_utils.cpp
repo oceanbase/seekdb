@@ -333,8 +333,7 @@ int ObDasVecScanUtils::init_sort(const ObDASVecAuxScanCtDef *ir_ctdef,
   return ret;
 }
 
-int ObDasVecScanUtils::reuse_iter(const share::ObLSID &ls_id,
-                                  ObDASScanIter *iter,
+int ObDasVecScanUtils::reuse_iter(ObDASScanIter *iter,
                                   ObTableScanParam &scan_param,
                                   const ObTabletID tablet_id)
 {
@@ -344,7 +343,6 @@ int ObDasVecScanUtils::reuse_iter(const share::ObLSID &ls_id,
   scan_param.need_switch_param_ =
       scan_param.need_switch_param_ || (scan_tablet_id.is_valid() && (tablet_id != scan_tablet_id));
   scan_param.tablet_id_ = tablet_id;
-  scan_param.ls_id_ = ls_id;
 
   if (OB_NOT_NULL(iter) && OB_FAIL(iter->reuse())) {
     LOG_WARN("reuse iter failed", K(ret));
@@ -353,8 +351,7 @@ int ObDasVecScanUtils::reuse_iter(const share::ObLSID &ls_id,
   return ret;
 }
 
-int ObDasVecScanUtils::init_scan_param(const share::ObLSID &ls_id,
-                                       const common::ObTabletID &tablet_id,
+int ObDasVecScanUtils::init_scan_param(const common::ObTabletID &tablet_id,
                                        const ObDASScanCtDef *ctdef,
                                        ObDASScanRtDef *rtdef,
                                        transaction::ObTxDesc *tx_desc,
@@ -396,7 +393,6 @@ int ObDasVecScanUtils::init_scan_param(const share::ObLSID &ls_id,
     if (rtdef->is_for_foreign_check_) {
       scan_param.trans_desc_ = tx_desc;
     }
-    scan_param.ls_id_ = ls_id;
     scan_param.tablet_id_ = tablet_id;
     if (rtdef->sample_info_ != nullptr) {
       scan_param.sample_info_ = *rtdef->sample_info_;
@@ -426,8 +422,7 @@ int ObDasVecScanUtils::init_scan_param(const share::ObLSID &ls_id,
   return ret;
 }
 
-int ObDasVecScanUtils::init_vec_aux_scan_param(const share::ObLSID &ls_id,
-                                               const common::ObTabletID &tablet_id,
+int ObDasVecScanUtils::init_vec_aux_scan_param(const common::ObTabletID &tablet_id,
                                                const sql::ObDASScanCtDef *ctdef,
                                                sql::ObDASScanRtDef *rtdef,
                                                transaction::ObTxDesc *tx_desc,
@@ -439,7 +434,7 @@ int ObDasVecScanUtils::init_vec_aux_scan_param(const share::ObLSID &ls_id,
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(
-          ObDasVecScanUtils::init_scan_param(ls_id, tablet_id, ctdef, rtdef, tx_desc, snapshot, scan_param, is_get, scan_allocator))) {
+          ObDasVecScanUtils::init_scan_param(tablet_id, ctdef, rtdef, tx_desc, snapshot, scan_param, is_get, scan_allocator))) {
     LOG_WARN("failed to generate init vec aux scan param", K(ret));
   } else {
     scan_param.is_for_foreign_check_ = false;

@@ -55,47 +55,6 @@
    */
 #ifdef DEF_MODULE
 #ifdef DEF_EVENT
-  /**
-   * @description:
-   * Log events related to tenant role change
-   * failover to primary/switchover to primary/switchover to standby
-   */
-  class TENANT_ROLE_CHANGE {
-    public:
-      DEF_MODULE(TENANT_ROLE_CHANGE, "TENANT ROLE CHANGE");
-      DEF_EVENT(TENANT_ROLE_CHANGE, SWITCHOVER_TO_PRIMARY_START, "SWITCHOVER TO PRIMARY START",
-                STMT_STR,
-                TENANT_INFO);
-      DEF_EVENT(TENANT_ROLE_CHANGE, SWITCHOVER_TO_PRIMARY_END, "SWITCHOVER TO PRIMARY END",
-                STMT_STR,
-                TENANT_INFO,
-                SWITCHOVER_SCN,
-                COST_DETAIL,
-                ALL_LS);
-      DEF_EVENT(TENANT_ROLE_CHANGE, SWITCHOVER_TO_STANDBY_START, "SWITCHOVER TO STANDBY START",
-                STMT_STR,
-                TENANT_INFO);
-      DEF_EVENT(TENANT_ROLE_CHANGE, SWITCHOVER_TO_STANDBY_END, "SWITCHOVER TO STANDBY END",
-                STMT_STR,
-                TENANT_INFO,
-                SWITCHOVER_SCN,
-                COST_DETAIL,
-                ALL_LS);
-      DEF_EVENT(TENANT_ROLE_CHANGE, FAILOVER_TO_PRIMARY_START, "FAILOVER TO PRIMARY START",
-                STMT_STR,
-                TENANT_INFO);
-      DEF_EVENT(TENANT_ROLE_CHANGE, FAILOVER_TO_PRIMARY_END, "FAILOVER TO PRIMARY END",
-                STMT_STR,
-                TENANT_INFO,
-                FAILOVER_SCN,
-                COST_DETAIL,
-                ALL_LS);
-      DEF_EVENT(TENANT_ROLE_CHANGE, WAIT_LOG_SYNC, "WAIT LOG SYNC",
-                IS_SYS_LS_SYNCED,
-                IS_ALL_LS_SYNCED,
-                NON_SYNC_INFO);
-  };
-
   class SERVICE_NAME {
     public:
       DEF_MODULE(SERVICE_NAME, "SERVICE NAME");

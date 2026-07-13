@@ -638,7 +638,6 @@ public:
   {
   public:
     ObCachedTenantConfigInfo(ObSQLSessionInfo *session) :
-                                 is_external_consistent_(false),
                                  enable_batched_multi_statement_(false),
                                  enable_sql_extension_(false),
                                  enable_bloom_filter_(true),
@@ -648,7 +647,6 @@ public:
                                  hash_area_size_(128*1024*1024),
                                  data_version_(0),
                                  enable_query_response_time_stats_(false),
-                                 enable_insertup_replace_gts_opt_(false),
                                  enable_immediate_row_conflict_check_(false),
                                  range_optimizer_max_mem_size_(128*1024*1024),
                                  _query_record_size_limit_(65536),
@@ -669,7 +667,6 @@ public:
     }
     ~ObCachedTenantConfigInfo() {}
     void refresh();
-    bool get_is_external_consistent() const { return is_external_consistent_; }
     bool get_enable_batched_multi_statement() const { return enable_batched_multi_statement_; }
     bool get_enable_bloom_filter() const { return enable_bloom_filter_; }
     bool get_enable_sql_extension() const { return enable_sql_extension_; }
@@ -677,7 +674,6 @@ public:
     int64_t get_hash_area_size() const { return ATOMIC_LOAD(&hash_area_size_); }
     uint64_t get_data_version() const { return ATOMIC_LOAD(&data_version_); }
     bool enable_query_response_time_stats() const { return enable_query_response_time_stats_; }
-    bool enable_insertup_replace_gts_opt() const { return ATOMIC_LOAD(&enable_insertup_replace_gts_opt_); }
     int64_t get_print_sample_ppm() const { return ATOMIC_LOAD(&print_sample_ppm_); }
     bool get_px_join_skew_handling() const { return px_join_skew_handling_; }
     int64_t get_px_join_skew_minfreq() const { return px_join_skew_minfreq_; }
@@ -712,7 +708,6 @@ public:
 
   private:
     // Tenant-level configuration item cache session, avoid refreshing every time it is retrieved
-    bool is_external_consistent_;
     bool enable_batched_multi_statement_;
     bool enable_sql_extension_;
     bool enable_bloom_filter_;
@@ -722,7 +717,6 @@ public:
     int64_t hash_area_size_;
     uint64_t data_version_;
     bool enable_query_response_time_stats_;
-    bool enable_insertup_replace_gts_opt_;
     bool enable_immediate_row_conflict_check_;
     int64_t range_optimizer_max_mem_size_;
     int64_t _query_record_size_limit_;
@@ -1197,11 +1191,6 @@ public:
   void set_xa_last_result(const int result) { xa_last_result_ = result; }
   // For performance optimization, tenant-level configuration items do not need to be retrieved in real time, they are cached in the session, and refreshed every 5s
   void refresh_tenant_config() { cached_tenant_config_info_.refresh(); }
-  bool is_support_external_consistent()
-  {
-    cached_tenant_config_info_.refresh();
-    return cached_tenant_config_info_.get_is_external_consistent();
-  }
   bool is_enable_batched_multi_statement()
   {
     cached_tenant_config_info_.refresh();
@@ -1249,11 +1238,6 @@ public:
   {
     cached_tenant_config_info_.refresh();
     return cached_tenant_config_info_.enable_query_response_time_stats();
-  }
-  bool enable_insertup_replace_gts_opt()
-  {
-    cached_tenant_config_info_.refresh();
-    return cached_tenant_config_info_.enable_insertup_replace_gts_opt();
   }
   bool enable_immediate_row_conflict_check()
   {

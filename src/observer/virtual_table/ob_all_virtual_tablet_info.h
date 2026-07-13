@@ -24,10 +24,13 @@
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/ob_scanner.h"
 #include "storage/tablet/ob_tablet_iterator.h"
-#include "storage/tx_storage/ob_ls_map.h"
 
 namespace oceanbase
 {
+namespace storage
+{
+class ObLS;
+}
 namespace observer
 {
 class ObAllVirtualTabletInfo : public common::ObVirtualTableScannerIterator
@@ -38,19 +41,11 @@ public:
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  inline void set_addr(common::ObAddr &addr)
-  {
-    addr_ = addr;
-  }
 private:
-  int get_next_ls(ObLS *&ls);
   int get_next_tablet(storage::ObTabletHandle &tablet_handle);
 private:
-  common::ObAddr addr_;
-  ObSharedGuard<storage::ObLSIterator> ls_iter_guard_;
-  storage::ObLSTabletIterator ls_tablet_iter_;
-  char ip_buf_[common::OB_IP_STR_BUFF];
-  common::ObSEArray<ObTableHandleV2, 2> tables_handle_;
+  storage::ObLS *ls_;
+  storage::ObLSTabletIterator tablet_iter_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualTabletInfo);
 };

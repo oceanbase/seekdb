@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SHARE
 #include "share/ob_tablet_reorganize_history_table_operator.h"
 #include "share/ob_server_struct.h"
-#include "share/location_cache/ob_location_service.h"
 
 namespace oceanbase
 {
@@ -27,11 +26,9 @@ namespace share
 int ObTabletReorganizeHistoryTableOperator::check_tablet_has_reorganized(
     common::ObMySQLProxy &proxy,
     const common::ObTabletID &tablet_id,
-    share::ObLSID &ls_id,
     bool &reorganized)
 {
   int ret = OB_SUCCESS;
-  ls_id.reset();
   reorganized = false;
   ObSqlString sql;
 
@@ -59,8 +56,6 @@ int ObTabletReorganizeHistoryTableOperator::check_tablet_has_reorganized(
           LOG_WARN("failed to get next row", K(ret), K(sql));
         }
       } else {
-        int64_t tmp_ls_id = 0;
-        ls_id = ObLSID::SYS_LS_ID;
         reorganized = true;
       }
     }
@@ -70,17 +65,13 @@ int ObTabletReorganizeHistoryTableOperator::check_tablet_has_reorganized(
 
 int ObTabletReorganizeHistoryTableOperator::get_all_split_tablet_pairs(
     ObMySQLProxy &sql_proxy,
-    const ObLSID &ls_id,
     ObIArray<ReorganizeTabletPair> &tablet_pairs)
 {
   int ret = OB_SUCCESS;
   common::ObSqlString sql_string;
   // clear tablet pairs array
   tablet_pairs.reuse();
-  if (false || !ls_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_id));
-  } else {
+  {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
       
@@ -121,7 +112,6 @@ int ObTabletReorganizeHistoryTableOperator::get_all_split_tablet_pairs(
 
 int ObTabletReorganizeHistoryTableOperator::get_split_tablet_pairs_by_src(
     ObMySQLProxy &sql_proxy,
-    const ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     ObIArray<ReorganizeTabletPair> &tablet_pairs)
 {
@@ -129,10 +119,7 @@ int ObTabletReorganizeHistoryTableOperator::get_split_tablet_pairs_by_src(
   common::ObSqlString sql_string;
   // clear tablet pairs array
   tablet_pairs.reuse();
-  if (false || !ls_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_id));
-  } else {
+  {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
        
@@ -224,8 +211,7 @@ int ObTabletReorganizeHistoryTableOperator::insert_(
     LOG_WARN("invalid argument", K(ret), K(dest_tablet_ids));
   } else {
     common::ObSqlString insert_sql;
-    ObTabletReorganizeRecord complete_record(incomplete_record.ls_id_, 
-                                             incomplete_record.src_tablet_id_, 
+    ObTabletReorganizeRecord complete_record(incomplete_record.src_tablet_id_,
                                              incomplete_record.dest_tablet_id_, 
                                              incomplete_record.type_, 
                                              incomplete_record.create_time_, 
@@ -275,7 +261,7 @@ int ObTabletReorganizeHistoryTableOperator::batch_insert(
   if (OB_FAIL(trans.start(&sql_proxy))) {
     LOG_WARN("failed to start trans", K(ret));
   } else {
-    if (OB_FAIL(inner_batch_insert_(trans, split_arg.src_ls_id_, split_arg.src_tablet_id_, split_arg.dest_tablet_ids_, start_time, finish_time))) {
+    if (OB_FAIL(inner_batch_insert_(trans, split_arg.src_tablet_id_, split_arg.dest_tablet_ids_, start_time, finish_time))) {
       LOG_WARN("failed to inner batch insert", K(ret));
     } else if (split_arg.src_local_index_tablet_ids_.count() != split_arg.dest_local_index_tablet_ids_.count()) {
       ret = OB_ERR_UNEXPECTED;
@@ -284,7 +270,7 @@ int ObTabletReorganizeHistoryTableOperator::batch_insert(
       ARRAY_FOREACH_X(split_arg.dest_local_index_tablet_ids_, idx, cnt, OB_SUCC(ret)) {
         const ObTabletID &src_tablet_id = split_arg.src_local_index_tablet_ids_.at(idx);
         const ObSArray<ObTabletID> &dest_tablet_ids = split_arg.dest_local_index_tablet_ids_.at(idx);
-        if (OB_FAIL(inner_batch_insert_(trans, split_arg.src_ls_id_, src_tablet_id, dest_tablet_ids, start_time, finish_time))) {
+        if (OB_FAIL(inner_batch_insert_(trans, src_tablet_id, dest_tablet_ids, start_time, finish_time))) {
           LOG_WARN("failed to inner batch insert", K(ret));
         }
       }
@@ -297,7 +283,7 @@ int ObTabletReorganizeHistoryTableOperator::batch_insert(
       ARRAY_FOREACH_X(split_arg.dest_lob_tablet_ids_, idx, cnt, OB_SUCC(ret)) {
         const ObTabletID &src_tablet_id = split_arg.src_lob_tablet_ids_.at(idx);
         const ObSArray<ObTabletID> &dest_tablet_ids = split_arg.dest_lob_tablet_ids_.at(idx);
-        if (OB_FAIL(inner_batch_insert_(trans, split_arg.src_ls_id_, src_tablet_id, dest_tablet_ids, start_time, finish_time))) {
+        if (OB_FAIL(inner_batch_insert_(trans, src_tablet_id, dest_tablet_ids, start_time, finish_time))) {
           LOG_WARN("failed to inner batch insert", K(ret));
         }
       }
@@ -314,7 +300,6 @@ int ObTabletReorganizeHistoryTableOperator::batch_insert(
 
 int ObTabletReorganizeHistoryTableOperator::inner_batch_insert_(
     ObISQLClient &sql_proxy,
-    const share::ObLSID src_ls_id,
     const ObTabletID &tablet_id,
     const ObSArray<ObTabletID> &dest_tablet_ids,
     const int64 start_time,
@@ -322,28 +307,14 @@ int ObTabletReorganizeHistoryTableOperator::inner_batch_insert_(
 {
   int ret = OB_SUCCESS;
   ObArray<ObTabletReorganizeRecord> records;
-  share::ObLSID ls_id = src_ls_id;
-  ObAddr leader_addr;
-  ObLocationService *location_service = nullptr;
-  const int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
-  // it's guranteed that all dest_tablets_ids are located at the same server with src
-  // so all the records can share one single record instance
-  if (OB_ISNULL(location_service = GCTX.location_service_)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("location_cache is null", K(ret));
-  } else if (!ls_id.is_valid() && OB_FAIL(ObDDLUtil::get_tablet_leader_addr(location_service, tablet_id, rpc_timeout, ls_id, leader_addr))) {
-    LOG_WARN("get tablet leader addr failed", K(ret));
-  }
   ObTabletID invalid_des_tablet_id;
-  ObTabletReorganizeRecord incomplete_record = ObTabletReorganizeRecord(ls_id,
-                                                                        tablet_id,
+  ObTabletReorganizeRecord incomplete_record = ObTabletReorganizeRecord(tablet_id,
                                                                         invalid_des_tablet_id,
                                                                         ObTabletReorganizeType::SPLIT,
                                                                         start_time/*create_time*/,
                                                                         finish_time/*finish_time*/);
   
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(insert_(sql_proxy, incomplete_record, dest_tablet_ids))) {
+  if (OB_FAIL(insert_(sql_proxy, incomplete_record, dest_tablet_ids))) {
     LOG_WARN("failed to insert record", K(ret), K(records));
   }
   return ret;

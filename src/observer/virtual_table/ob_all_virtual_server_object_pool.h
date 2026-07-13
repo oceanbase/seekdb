@@ -34,11 +34,8 @@ public:
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  void set_addr(common::ObAddr &addr) { addr_ = &addr; }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualServerObjectPool);
-private:
-  common::ObAddr *addr_;
 };
 
 }

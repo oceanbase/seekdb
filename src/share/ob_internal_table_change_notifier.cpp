@@ -102,11 +102,11 @@ int ObInternalTableChangeNotifier::notify(
   return ret;
 }
 
-void ObInternalTableChangeNotifier::switch_to_follower_forcedly()
+void ObInternalTableChangeNotifier::deactivate()
 {
 }
 
-int ObInternalTableChangeNotifier::switch_to_leader()
+int ObInternalTableChangeNotifier::activate()
 {
   int ret = OB_SUCCESS;
   

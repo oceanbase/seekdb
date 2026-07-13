@@ -42,7 +42,7 @@ ObMajorFreezeService::~ObMajorFreezeService()
   ob_delete(tenant_major_freeze_);
 }
 
-int ObMajorFreezeService::switch_to_leader()
+int ObMajorFreezeService::activate()
 {
   ObRecursiveMutexGuard switch_guard(switch_lock_);
   int64_t start_time_us = ObTimeUtility::current_time();
@@ -66,20 +66,10 @@ int ObMajorFreezeService::switch_to_leader()
   return ret;
 }
 
-int ObMajorFreezeService::switch_to_follower_gracefully()
+void ObMajorFreezeService::deactivate()
 {
   int ret = OB_SUCCESS;
-  LOG_INFO("switch_to_follower_gracefully");
-  if (OB_FAIL(inner_switch_to_follower())) {
-    LOG_WARN("fail to switch to follower", KR(ret));
-  }
-  return ret;
-}
-
-void ObMajorFreezeService::switch_to_follower_forcedly()
-{
-  int ret = OB_SUCCESS;
-  LOG_INFO("switch_to_follower_forcedly");
+  LOG_INFO("deactivate major freeze service");
   if (OB_FAIL(inner_switch_to_follower())) {
     LOG_WARN("fail to switch to follower", KR(ret));
   }

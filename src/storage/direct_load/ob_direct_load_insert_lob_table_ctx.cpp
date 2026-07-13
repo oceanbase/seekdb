@@ -41,7 +41,6 @@ ObDirectLoadInsertLobTabletContext::~ObDirectLoadInsertLobTabletContext() {}
 
 int ObDirectLoadInsertLobTabletContext::init(ObDirectLoadInsertLobTableContext *table_ctx,
                                              ObDirectLoadInsertDataTabletContext *data_tablet_ctx,
-                                             const ObLSID &ls_id,
                                              const ObTabletID &origin_tablet_id,
                                              const ObTabletID &tablet_id)
 {
@@ -49,16 +48,15 @@ int ObDirectLoadInsertLobTabletContext::init(ObDirectLoadInsertLobTableContext *
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDirectLoadInsertDataTabletContext init twice", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(nullptr == table_ctx || nullptr == data_tablet_ctx || !ls_id.is_valid() ||
+  } else if (OB_UNLIKELY(nullptr == table_ctx || nullptr == data_tablet_ctx ||
                          !origin_tablet_id.is_valid() || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(table_ctx), KP(data_tablet_ctx), K(ls_id),
+    LOG_WARN("invalid args", KR(ret), KP(table_ctx), KP(data_tablet_ctx),
              K(origin_tablet_id), K(tablet_id));
   } else {
     table_ctx_ = table_ctx;
     param_ = &table_ctx->param_;
     data_tablet_ctx_ = data_tablet_ctx;
-    ls_id_ = ls_id;
     origin_tablet_id_ = origin_tablet_id;
     tablet_id_ = tablet_id;
     pk_tablet_id_ = tablet_id_; // get from target table
@@ -232,28 +230,28 @@ ObDirectLoadInsertLobTableContext::~ObDirectLoadInsertLobTableContext() {}
 
 int ObDirectLoadInsertLobTableContext::init(
   const ObDirectLoadInsertTableParam &param, ObDirectLoadInsertDataTableContext *data_table_ctx,
-  const ObIArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids,
-  const ObIArray<ObTableLoadLSIdAndPartitionId> &target_ls_partition_ids,
-  const ObIArray<ObTableLoadLSIdAndPartitionId> &data_ls_partition_ids)
+  const ObIArray<ObTableLoadTabletId> &partition_ids,
+  const ObIArray<ObTableLoadTabletId> &target_partition_ids,
+  const ObIArray<ObTableLoadTabletId> &data_partition_ids)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDirectLoadInsertDataTableContext init twice", KR(ret), KP(this));
   } else if (OB_UNLIKELY(!param.is_valid() || nullptr == data_table_ctx ||
-                         ls_partition_ids.empty() || target_ls_partition_ids.empty() ||
-                         ls_partition_ids.count() != target_ls_partition_ids.count())) {
+                         partition_ids.empty() || target_partition_ids.empty() ||
+                         partition_ids.count() != target_partition_ids.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(param), KP(data_table_ctx), K(ls_partition_ids),
-             K(target_ls_partition_ids));
+    LOG_WARN("invalid args", KR(ret), K(param), KP(data_table_ctx), K(partition_ids),
+             K(target_partition_ids));
   } else {
     param_ = param;
     if (OB_FAIL(inner_init())) {
       LOG_WARN("fail to inner init", KR(ret));
     } else if (OB_FAIL(create_all_tablet_contexts(data_table_ctx,
-                                                  ls_partition_ids,
-                                                  target_ls_partition_ids,
-                                                  data_ls_partition_ids))) {
+                                                  partition_ids,
+                                                  target_partition_ids,
+                                                  data_partition_ids))) {
       LOG_WARN("fail to create all tablet contexts", KR(ret));
     } else {
       data_table_ctx->set_lob_table_ctx(this);
@@ -266,16 +264,15 @@ int ObDirectLoadInsertLobTableContext::init(
 
 int ObDirectLoadInsertLobTableContext::create_all_tablet_contexts(
   ObDirectLoadInsertDataTableContext *data_table_ctx,
-  const ObIArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids,
-  const ObIArray<ObTableLoadLSIdAndPartitionId> &target_ls_partition_ids,
-  const ObIArray<ObTableLoadLSIdAndPartitionId> &data_ls_partition_ids)
+  const ObIArray<ObTableLoadTabletId> &partition_ids,
+  const ObIArray<ObTableLoadTabletId> &target_partition_ids,
+  const ObIArray<ObTableLoadTabletId> &data_partition_ids)
 {
   int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < ls_partition_ids.count(); ++i) {
-    const ObTabletID &origin_tablet_id = ls_partition_ids.at(i).part_tablet_id_.tablet_id_;
-    const ObLSID &ls_id = target_ls_partition_ids.at(i).ls_id_;
-    const ObTabletID &tablet_id = target_ls_partition_ids.at(i).part_tablet_id_.tablet_id_;
-    const ObTabletID &data_tablet_id = data_ls_partition_ids.at(i).part_tablet_id_.tablet_id_;
+  for (int64_t i = 0; OB_SUCC(ret) && i < partition_ids.count(); ++i) {
+    const ObTabletID &origin_tablet_id = partition_ids.at(i).part_tablet_id_.tablet_id_;
+    const ObTabletID &tablet_id = target_partition_ids.at(i).part_tablet_id_.tablet_id_;
+    const ObTabletID &data_tablet_id = data_partition_ids.at(i).part_tablet_id_.tablet_id_;
     ObDirectLoadInsertTabletContext *data_tablet_ctx = nullptr;
     ObDirectLoadInsertLobTabletContext *lob_tablet_ctx = nullptr;
     if (OB_FAIL(data_table_ctx->get_tablet_context(data_tablet_id, data_tablet_ctx))) {
@@ -285,7 +282,7 @@ int ObDirectLoadInsertLobTableContext::create_all_tablet_contexts(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadInsertLobTabletContext", KR(ret));
     } else if (OB_FAIL(lob_tablet_ctx->init(
-                 this, static_cast<ObDirectLoadInsertDataTabletContext *>(data_tablet_ctx), ls_id,
+                 this, static_cast<ObDirectLoadInsertDataTabletContext *>(data_tablet_ctx),
                  origin_tablet_id, tablet_id))) {
       LOG_WARN("fail to init tablet ctx", KR(ret));
     } else if (OB_FAIL(tablet_ctx_map_.set_refactored(origin_tablet_id, lob_tablet_ctx))) {

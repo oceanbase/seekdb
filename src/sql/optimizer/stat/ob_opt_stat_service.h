@@ -57,7 +57,6 @@ public:
 
   int get_table_rowcnt(const uint64_t table_id,
                        const ObIArray<ObTabletID> &all_tablet_ids,
-                       const ObIArray<share::ObLSID> &all_ls_ids,
                        int64_t &table_rowcnt);
 
   int get_system_stat(const ObOptSystemStat::Key &key,
@@ -82,7 +81,6 @@ private:
 
   int load_table_rowcnt_and_put_cache(const uint64_t table_id,
                                       const ObIArray<ObTabletID> &all_tablet_ids,
-                                      const ObIArray<share::ObLSID> &all_ls_ids,
                                       int64_t &table_rowcnt);
 
   int init_table_stats(ObIAllocator &allocator,

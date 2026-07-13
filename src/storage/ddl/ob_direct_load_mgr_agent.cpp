@@ -78,7 +78,6 @@ int ObDirectLoadMgrAgent::init(ObBaseTabletDirectLoadMgr *direct_load_mgr, ObBas
 
 int ObDirectLoadMgrAgent::init(
     const int64_t context_id,
-    const share::ObLSID &ls_id,
     const ObTabletID &tablet_id/*always data tablet id.*/,
     const ObDirectLoadType &type)
 {
@@ -88,22 +87,21 @@ int ObDirectLoadMgrAgent::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_UNLIKELY(context_id <= 0 
-      || !ls_id.is_valid() 
       || !tablet_id.is_valid())
       || !is_valid_direct_load(type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(context_id), K(ls_id), K(tablet_id), K(type));
+    LOG_WARN("invalid args", K(ret), K(context_id), K(tablet_id), K(type));
   } else if (OB_ISNULL(tenant_direct_load_mgr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(tenant_direct_load_mgr->get_agent_exec_context(
-      context_id, ls_id, tablet_id, type, mgr_handle_, start_scn_, execution_id_))) {
+      context_id, tablet_id, type, mgr_handle_, start_scn_, execution_id_))) {
     LOG_WARN("get agent exec context failed", K(ret), K(context_id), K(tablet_id));
   } else if (is_shared_storage_dempotent_mode(type)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid direct load type which not used any more", K(ret));
-  } else if (OB_FAIL(init_for_sn(ls_id, tablet_id))) {
-    LOG_WARN("init for sn failed", K(ret), K(ls_id), K(tablet_id));
+  } else if (OB_FAIL(init_for_sn(tablet_id))) {
+    LOG_WARN("init for sn failed", K(ret), K(tablet_id));
   }
   if (OB_SUCC(ret)) {
     direct_load_type_ = type;
@@ -112,24 +110,22 @@ int ObDirectLoadMgrAgent::init(
   return ret;
 }
 
-int ObDirectLoadMgrAgent::init_for_sn(
-    const share::ObLSID &ls_id,
-    const ObTabletID &tablet_id)
+int ObDirectLoadMgrAgent::init_for_sn(const ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
-  if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid())) {
+  if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(ls_id), K(tablet_id));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(ls_id));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle,
+    LOG_WARN("invalid args", K(ret), K(tablet_id));
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    LOG_WARN("failed to get log stream", K(ret));
+  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls,
       tablet_id, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    LOG_WARN("get tablet handle failed", K(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("get tablet handle failed", K(ret), K(tablet_id));
   } else if (OB_UNLIKELY(nullptr == tablet_handle.get_obj())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("tablet handle is null", K(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("tablet handle is null", K(ret), K(tablet_id));
   } else if (OB_LIKELY(mgr_handle_.is_valid())) {
     if (!start_scn_.is_valid_and_not_min() || execution_id_ < 0) {
       ret = OB_ERR_SYS;
@@ -137,13 +133,13 @@ int ObDirectLoadMgrAgent::init_for_sn(
     }
   } else if (OB_UNLIKELY(is_incremental_direct_load(direct_load_type_))) {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("mgr handle not exist", K(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("mgr handle not exist", K(ret), K(tablet_id));
   } else {
     const blocksstable::ObSSTable *first_major_sstable = nullptr;
     ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
     if (OB_FAIL(ObTabletDDLUtil::check_and_get_major_sstable(
-        ls_id, tablet_id, first_major_sstable, table_store_wrapper))) {
-      LOG_WARN("check if major sstable exist failed", K(ret), K(ls_id), K(tablet_id));
+        tablet_id, first_major_sstable, table_store_wrapper))) {
+      LOG_WARN("check if major sstable exist failed", K(ret), K(tablet_id));
     } else if (OB_NOT_NULL(first_major_sstable)) {
       LOG_INFO("skip, mgr handle is invalid due to major exist under shared-nothing mode", K(tablet_id));
     } else {
@@ -608,7 +604,7 @@ int ObDirectLoadMgrAgent::close(const int64_t context_id, const bool need_commit
     LOG_WARN("mgr handle is invalid", K(ret));
   } else if (!is_idem_type(direct_load_type_)) {
     ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
-    if (OB_FAIL(tenant_direct_load_mgr->close_tablet_direct_load(context_id, direct_load_type_, mgr_handle_.get_base_obj()->get_ls_id(), mgr_handle_.get_base_obj()->get_tablet_id(), need_commit, true/*emergent_finish*/,
+    if (OB_FAIL(tenant_direct_load_mgr->close_tablet_direct_load(context_id, direct_load_type_, mgr_handle_.get_base_obj()->get_tablet_id(), need_commit, true/*emergent_finish*/,
     mgr_handle_.get_base_obj()->get_ddl_task_id(), mgr_handle_.get_base_obj()->get_build_param().runtime_only_param_.table_id_, execution_id))) {
         LOG_WARN("close tablet direct load failed", K(ret), KPC(mgr_handle_.get_base_obj()));
       }

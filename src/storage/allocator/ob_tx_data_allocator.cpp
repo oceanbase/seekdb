@@ -64,10 +64,9 @@ void ObTenantTxDataAllocator::reset()
 
 // moved definition to storage ls_service.cpp(TX_DATA_SLICE_SIZE real user)
 
-ObTxDataThrottleGuard::ObTxDataThrottleGuard(const ObLSID ls_id,
-                                             const bool for_replay,
+ObTxDataThrottleGuard::ObTxDataThrottleGuard(const bool for_replay,
                                              const int64_t abs_expire_time)
-    : ls_id_(ls_id), for_replay_(for_replay), abs_expire_time_(abs_expire_time)
+    : for_replay_(for_replay), abs_expire_time_(abs_expire_time)
 {
   throttle_tool_ = &(share::g_mp->shared_mem_alloc_mgr()->share_resource_throttle_tool());
   if (0 == abs_expire_time) {

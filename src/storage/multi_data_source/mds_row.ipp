@@ -653,17 +653,17 @@ struct DumpNodeOP {
                                   MdsAllocator::get_instance()))) {
       MDS_LOG_SCAN(WARN, "failt to convert user mds node to dump node", K(node));
     /**********************this is different logic from normal logic***************************************************/
-    } else if (specified_node.user_data_.data_type_ == ObTabletMdsUserDataType::RESERVED_7) {
+    } else if (specified_node.user_data_.data_type_ == ObTabletMdsUserDataType::RESERVED_MDS_TYPE_7) {
       if (specified_node.seq_no_.is_min()) {
-        dump_kv_.v_.seq_no_ = transaction::ObTxSEQ::mk_v0(47);
+        dump_kv_.v_.seq_no_ = transaction::ObTxSEQ(47, 0);
         dump_kv_.v_.crc_check_number_ = dump_kv_.v_.generate_hash();
         MDS_LOG(INFO, "convert reserved tablet status mds node's seq no from min to 47 for compat issue", K(node), K(dump_kv_));
       } else {
         MDS_LOG(TRACE, "no need convert reserved tablet status mds node's seq no cause it is valid", K(node), K(dump_kv_));
       }
-    } else if (specified_node.user_data_.data_type_ == ObTabletMdsUserDataType::RESERVED_3) {
+    } else if (specified_node.user_data_.data_type_ == ObTabletMdsUserDataType::RESERVED_MDS_TYPE_3) {
       if (specified_node.seq_no_.is_min()) {
-        dump_kv_.v_.seq_no_ = transaction::ObTxSEQ::mk_v0(100);
+        dump_kv_.v_.seq_no_ = transaction::ObTxSEQ(100, 0);
         dump_kv_.v_.crc_check_number_ = dump_kv_.v_.generate_hash();
         MDS_LOG(INFO, "convert reserved tablet status mds node's seq no from min to 100 for compat issue", K(node), K(dump_kv_));
       } else {
@@ -881,8 +881,7 @@ void MdsRow<K, V>::report_event_(const char (&event_str)[N],
   } else if (OB_FAIL(node.fill_event_(event, event_str, stack_buffer, buffer_size))) {
     MDS_LOG(WARN, "fail fill mds event", K(*this));
   } else {
-    observer::MdsEventKey key(MdsRowBase<K, V>::p_mds_unit_->p_mds_table_->ls_id_,
-                              MdsRowBase<K, V>::p_mds_unit_->p_mds_table_->tablet_id_);
+    observer::MdsEventKey key(MdsRowBase<K, V>::p_mds_unit_->p_mds_table_->tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, MdsRowBase<K, V>::p_mds_unit_->p_mds_table_, file, line, function_name);
   }
 }

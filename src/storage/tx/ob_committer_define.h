@@ -31,44 +31,6 @@ class ObICommitCallback
 };
 // =================== NB: REMOVE DURING JOINT DEBUGGING ===================
 
-enum class ObTwoPhaseCommitLogType : uint8_t
-{
-  OB_LOG_TX_INIT = 0,
-  OB_LOG_TX_COMMIT_INFO,
-  OB_LOG_TX_PREPARE,
-  OB_LOG_TX_PRE_COMMIT,
-  OB_LOG_TX_COMMIT,
-  OB_LOG_TX_ABORT,
-  OB_LOG_TX_CLEAR,
-  OB_LOG_TX_MAX,
-};
-
-enum class ObTwoPhaseCommitMsgType : uint8_t
-{
-  OB_MSG_TX_UNKNOWN = 0,
-  OB_MSG_TX_PREPARE_REQ,
-  OB_MSG_TX_PREPARE_RESP,
-  OB_MSG_TX_PRE_COMMIT_REQ,
-  OB_MSG_TX_PRE_COMMIT_RESP,
-  OB_MSG_TX_COMMIT_REQ,
-  OB_MSG_TX_COMMIT_RESP,
-  OB_MSG_TX_ABORT_REQ,
-  OB_MSG_TX_ABORT_RESP,
-  OB_MSG_TX_CLEAR_REQ,
-  OB_MSG_TX_CLEAR_RESP,
-  OB_MSG_TX_PREPARE_REDO_REQ,
-  OB_MSG_TX_PREPARE_REDO_RESP,
-  OB_MSG_TX_MAX,
-};
-
-enum class Ob2PCRole : int8_t
-{
-  UNKNOWN = -1,
-  ROOT = 0,
-  INTERNAL,
-  LEAF,
-};
-
 enum class ObTxState : uint8_t
 {
   UNKNOWN = 0,
@@ -82,25 +44,10 @@ enum class ObTxState : uint8_t
   MAX = 100
 };
 
-const int64_t OB_C2PC_UPSTREAM_ID = INT64_MAX - 1;
-const int64_t OB_C2PC_SENDER_ID = INT64_MAX - 2;
-
 #define TRX_ENUM_CASE_TO_STR(class_name, src) \
   case class_name::src:                       \
     str = #src;                               \
     break;
-
-static const char *to_str_2pc_role(Ob2PCRole role)
-{
-  const char *str = "INVALID";
-  switch (role) {
-    TRX_ENUM_CASE_TO_STR(Ob2PCRole, UNKNOWN)
-    TRX_ENUM_CASE_TO_STR(Ob2PCRole, ROOT)
-    TRX_ENUM_CASE_TO_STR(Ob2PCRole, INTERNAL)
-    TRX_ENUM_CASE_TO_STR(Ob2PCRole, LEAF)
-  };
-  return str;
-}
 
 static const char *to_str_tx_state(ObTxState state)
 {

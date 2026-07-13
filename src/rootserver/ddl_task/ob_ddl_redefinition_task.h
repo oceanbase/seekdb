@@ -40,20 +40,15 @@ public:
       const common::ObCurTraceId::TraceId &trace_id,
       const int64_t parallelism,
       const bool use_heap_table_ddl_plan,
-      const bool is_mview_complete_refresh,
-      const int64_t mview_table_id,
       ObRootService *root_service,
       const common::ObAddr &inner_sql_exec_addr,
       const int64_t data_format_version,
-      const bool is_retryable_ddl,
-      const uint64_t mview_target_data_sync_scn,
-      const ObString &mview_select_sql);
+      const bool is_retryable_ddl);
   int init(
       const ObTableSchema &orig_table_schema,
       const ObTableSchema &hidden_table_schema,
       const AlterTableSchema &alter_table_schema,
-      const ObTimeZoneInfoWrap &tz_info_wrap,
-      const common::ObIArray<share::schema::ObBasedSchemaObjectInfo> &based_schema_object_infos);
+      const ObTimeZoneInfoWrap &tz_info_wrap);
   ObDDLTaskID get_ddl_task_id() { return ObDDLTaskID(task_id_); }
   virtual ~ObDDLRedefinitionSSTableBuildTask() = default;
   virtual int process() override;
@@ -74,15 +69,10 @@ private:
   common::ObCurTraceId::TraceId trace_id_;
   int64_t parallelism_;
   bool use_heap_table_ddl_plan_;
-  bool is_mview_complete_refresh_;
   bool is_retryable_ddl_;
-  int64_t mview_table_id_;
-  common::ObArray<share::schema::ObBasedSchemaObjectInfo> based_schema_object_infos_;
   ObRootService *root_service_;
   common::ObAddr inner_sql_exec_addr_;
   int64_t data_format_version_;
-  uint64_t mview_target_data_sync_scn_;
-  ObString mview_select_sql_;
 };
 
 class ObSyncTabletAutoincSeqCtx final
@@ -98,13 +88,6 @@ public:
   TO_STRING_KV(K_(is_inited), K_(is_synced), K_(orig_src_tablet_ids), K_(src_tablet_ids),
                K_(dest_tablet_ids), K_(autoinc_params));
 private:
-  int build_ls_to_tablet_map(
-      share::ObLocationService *location_service,
-      const common::ObIArray<share::ObMigrateTabletAutoincSeqParam> &tablet_ids,
-      const int64_t timeout,
-      const bool force_renew,
-      const bool by_src_tablet,
-      common::hash::ObHashMap<share::ObLSID, common::ObSEArray<share::ObMigrateTabletAutoincSeqParam, 1>> &map);
   int call_and_process_all_tablet_autoinc_seqs(const bool is_get);
   bool is_error_need_retry(const int ret_code) const
   {
@@ -112,10 +95,8 @@ private:
            common::OB_EAGAIN == ret_code;
   }
 private:
-  static const int64_t MAP_BUCKET_NUM = 1024;
   bool is_inited_;
   bool is_synced_;
-  bool need_renew_location_;
   ObSEArray<ObTabletID, 1> orig_src_tablet_ids_;
   ObSEArray<ObTabletID, 1> src_tablet_ids_;
   ObSEArray<ObTabletID, 1> dest_tablet_ids_;
@@ -264,10 +245,6 @@ protected:
                                       obcall::ObAlterTableArg &alter_table_arg);
   int64_t get_build_replica_request_time();
 private:
-  int add_table_tablets_for_snapshot_(const uint64_t table_id, ObSchemaGetterGuard &schema_guard,
-                                      common::ObIArray<common::ObTabletID> &tablet_ids);
-  int prepare_tablets_for_major_refresh_mv_(common::ObIArray<common::ObTabletID> &tablet_ids);
-
   virtual int cleanup_impl() override;
 protected:
   static const int64_t MAP_BUCKET_NUM = 1024;

@@ -319,7 +319,6 @@ int ObDASScanOp::init_scan_param()
   if (scan_rtdef_->is_for_foreign_check_) {
     scan_param_.trans_desc_ = trans_desc_;
   }
-  scan_param_.ls_id_ = ls_id_;
   scan_param_.tablet_id_ = tablet_id_;
   if (scan_rtdef_->sample_info_ != nullptr) {
     scan_param_.sample_info_ = *scan_rtdef_->sample_info_;
@@ -745,10 +744,8 @@ int ObDASScanOp::rescan()
   int &ret = errcode_;
   reset_access_datums_ptr();
   scan_param_.tablet_id_ = tablet_id_;
-  scan_param_.ls_id_ = ls_id_;
 
   LOG_DEBUG("begin to das table rescan",
-            "ls_id", scan_param_.ls_id_,
             "tablet_id", scan_param_.tablet_id_,
             "scan_range", scan_param_.key_ranges_,
             "range_pos", scan_param_.range_array_pos_);
@@ -800,14 +797,13 @@ int ObDASScanOp::reuse_iter()
           case ITER_TREE_LOCAL_LOOKUP: {
             ObDASLocalLookupIter *lookup_iter = static_cast<ObDASLocalLookupIter*>(result_);
             lookup_iter->set_tablet_id(tablet_ids_.lookup_tablet_id_);
-            lookup_iter->set_ls_id(ls_id_);
             break;
           }
           case ITER_TREE_MATCH: 
           case ITER_TREE_TEXT_RETRIEVAL: {
             ObDASIter *result_iter = static_cast<ObDASIter *>(result_);
             if (OB_FAIL(ObDASIterUtils::set_text_retrieval_related_ids(
-                attach_ctdef_, attach_rtdef_, tablet_ids_, ls_id_, result_iter))) {
+                attach_ctdef_, attach_rtdef_, tablet_ids_, result_iter))) {
               LOG_WARN("failed to set text retrieval related ids", K(ret));
             }
             break;
@@ -815,7 +811,7 @@ int ObDASScanOp::reuse_iter()
           case ITER_TREE_INDEX_MERGE: {
             ObDASIter *result_iter = static_cast<ObDASIter *>(result_);
             if (OB_FAIL(ObDASIterUtils::set_index_merge_related_ids(
-                attach_ctdef_, attach_rtdef_, tablet_ids_, ls_id_, result_iter))) {
+                attach_ctdef_, attach_rtdef_, tablet_ids_, result_iter))) {
               LOG_WARN("failed to set index merge related ids", K(ret));
             }
             break;
@@ -823,7 +819,7 @@ int ObDASScanOp::reuse_iter()
           case ITER_TREE_FUNC_LOOKUP: {
             ObDASIter *result_iter = static_cast<ObDASIter *>(result_);
             if (OB_FAIL(ObDASIterUtils::set_func_lookup_iter_related_ids(
-                attach_ctdef_, attach_rtdef_, tablet_ids_, ls_id_, result_iter))) {
+                attach_ctdef_, attach_rtdef_, tablet_ids_, result_iter))) {
               LOG_WARN("failed to set text retrieval related ids", K(ret));
             }
             break;
@@ -832,20 +828,18 @@ int ObDASScanOp::reuse_iter()
             if (OB_NOT_NULL(get_lookup_ctdef())) {
               ObDASLocalLookupIter *lookup_iter = static_cast<ObDASLocalLookupIter*>(result_);
               lookup_iter->set_tablet_id(tablet_ids_.lookup_tablet_id_);
-              lookup_iter->set_ls_id(ls_id_);
             }
             break;
           }
           case ITER_TREE_GIS_LOOKUP: {
             ObDASLocalLookupIter *lookup_iter = static_cast<ObDASLocalLookupIter*>(result_);
             lookup_iter->set_tablet_id(tablet_ids_.lookup_tablet_id_);
-            lookup_iter->set_ls_id(ls_id_);
             break;
           }
           case ITER_TREE_VEC_LOOKUP: {
             ObDASIter *result_iter = static_cast<ObDASIter *>(result_);
             if (OB_FAIL(ObDASIterUtils::set_vec_lookup_related_ids(
-                attach_ctdef_, attach_rtdef_, tablet_ids_, ls_id_, result_iter))) {
+                attach_ctdef_, attach_rtdef_, tablet_ids_, result_iter))) {
               LOG_WARN("failed to set vector index related ids", K(ret));
             }
             break;
@@ -857,7 +851,7 @@ int ObDASScanOp::reuse_iter()
       }
       if (FAILEDx(result->get_domain_id_merge_iter(domain_id_merge_iter))) {
         LOG_WARN("fail to get domain id merge iter", K(ret));
-      } else if (OB_NOT_NULL(domain_id_merge_iter) && OB_FAIL(domain_id_merge_iter->set_domain_id_merge_related_ids(tablet_ids_, ls_id_))) {
+      } else if (OB_NOT_NULL(domain_id_merge_iter) && OB_FAIL(domain_id_merge_iter->set_domain_id_merge_related_ids(tablet_ids_))) {
         LOG_WARN("fail to set domain id merge related ids", K(ret));
       } else if (OB_FAIL(result->reuse())) {
         LOG_WARN("failed to reuse das iter tree", K(ret));
@@ -1794,7 +1788,6 @@ int ObLocalIndexLookupOp::do_index_lookup()
     const ObTabletID &storage_tablet_id = scan_param_.tablet_id_;
     scan_param_.need_switch_param_ = (storage_tablet_id.is_valid() && storage_tablet_id != tablet_id_ ? true : false);
     scan_param_.tablet_id_ = tablet_id_;
-    scan_param_.ls_id_ = ls_id_;
     if (OB_FAIL(reuse_iter())) {
       LOG_WARN("failed to reuse iter", K(ret));
     } else if (OB_FAIL(tsc_service.table_rescan(scan_param_, storage_iter))) {
@@ -1853,7 +1846,7 @@ int ObLocalIndexLookupOp::check_lookup_row_cnt()
                       "data_table_tablet_id", tablet_id_ ,
                       KPC_(snapshot),
                       KPC_(tx_desc));
-      concurrency_control::ObDataValidationService::set_delay_resource_recycle(ls_id_);
+      concurrency_control::ObDataValidationService::set_delay_resource_recycle();
       (void)print_trans_info_and_key_range_();
     }
   }
@@ -1905,7 +1898,6 @@ OB_INLINE int ObLocalIndexLookupOp::init_scan_param()
   scan_param_.pd_storage_flag_ = lookup_ctdef_->pd_expr_spec_.pd_storage_flag_.pd_flag_;
   scan_param_.table_scan_opt_ = lookup_ctdef_->table_scan_opt_;
   scan_param_.fb_snapshot_ = lookup_rtdef_->fb_snapshot_;
-  scan_param_.ls_id_ = ls_id_;
   scan_param_.tablet_id_ = tablet_id_;
   scan_param_.main_table_scan_stat_.tsc_monitor_info_ = lookup_rtdef_->tsc_monitor_info_;
   if (lookup_rtdef_->is_for_foreign_check_) {

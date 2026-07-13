@@ -16,7 +16,6 @@
 
 #include "ob_compaction_suggestion.h"
 #include "share/rc/ob_module_provider.h"
-#include "src/storage/tx_storage/ob_ls_map.h"
 
 namespace oceanbase
 {
@@ -411,7 +410,6 @@ int ObCompactionSuggestionMgr::analyze_for_suggestion(
       suggestion.merge_type_ = MEDIUM_MERGE;
     }
     
-    suggestion.ls_id_ = UNKNOW_LS_ID.id();
     suggestion.tablet_id_ = UNKNOW_TABLET_ID.id();
     suggestion.merge_start_time_ = common::ObTimeUtility::fast_current_time();
     suggestion.merge_finish_time_ = suggestion.merge_start_time_;
@@ -555,7 +553,6 @@ int ObCompactionSuggestionMgr::analyze_merge_info(
 
     if (strlen(buf) > 0) {
       suggestion.merge_type_ = static_info.merge_type_;
-      suggestion.ls_id_ = static_info.ls_id_.id();
       suggestion.tablet_id_ = static_info.tablet_id_.id();
       suggestion.merge_start_time_ = running_info.merge_start_time_;
       suggestion.merge_finish_time_ = running_info.merge_finish_time_;

@@ -28,7 +28,7 @@ namespace obcall
 // Lightweight buffer-fill interface. The obcall ObBatchRpc transport (proxy +
 // processor + ObBatchPacket) has been removed for single-replica seekdb, but
 // ObIFill is still used as the serialize-into-buffer contract by transaction
-// messages (ObTxMsg) and SQL task events.
+// SQL task events.
 class ObIFill
 {
 public:

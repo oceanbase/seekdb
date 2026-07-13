@@ -41,8 +41,7 @@ enum ObMaxIdType
   OB_MAX_USED_UNIT_GROUP_ID_TYPE,
   OB_MAX_USED_NORMAL_ROWID_TABLE_TABLET_ID_TYPE, /* used for tablet_id */
   OB_MAX_USED_EXTENDED_ROWID_TABLE_TABLET_ID_TYPE,     /* used for tablet_id */
-  OB_MAX_USED_LS_ID_TYPE,
-  OB_MAX_USED_LS_GROUP_ID_TYPE,
+  OB_MAX_USED_RESERVED_10_TYPE,
   OB_MAX_USED_SYS_PL_OBJECT_ID_TYPE, /* used for sys package object id */
   OB_MAX_USED_OBJECT_ID_TYPE,        /* used for all kinds of user schema objects */
   OB_MAX_USED_LOCK_OWNER_ID_TYPE,

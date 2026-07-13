@@ -103,14 +103,6 @@ public:
   //              int(bool is_rollback, const ObPartitionArray &cur_stmt_all_participants,
   //              const transaction::ObPartitionEpochArray &epoch_arr,
   //              const ObPartitionArray &discard_participants, transaction::ObTransDesc &trans_desc));
-  // MOCK_METHOD3(start_participant,
-  //     int(transaction::ObTransDesc &trans_desc,
-  //     const common::ObPartitionArray &participants,
-  //     transaction::ObPartitionEpochArray &partition_epoch_arr));
-  // MOCK_METHOD4(end_participant, int(bool is_rollback,
-  //                                   transaction::ObTransDesc &trans_desc,
-  //                                   const common::ObPartitionArray &participants,
-  //                                   transaction::ObEndParticipantsRes &res));
   MOCK_METHOD2(table_scan,
                int(ObVTableScanParam &param, common::ObNewRowIterator *&result));
   MOCK_METHOD3(join_mv_scan, int(storage::ObTableScanParam &left_param,

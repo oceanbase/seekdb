@@ -100,18 +100,18 @@ void ObDirectLoadMergeCtx::reset()
 }
 
 int ObDirectLoadMergeCtx::init(const ObDirectLoadMergeParam &param,
-                               const ObIArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids)
+                               const ObIArray<ObTableLoadTabletId> &partition_ids)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDirectLoadMerger init twice", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(!param.is_valid() || ls_partition_ids.empty())) {
+  } else if (OB_UNLIKELY(!param.is_valid() || partition_ids.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(param), K(ls_partition_ids));
+    LOG_WARN("invalid args", KR(ret), K(param), K(partition_ids));
   } else {
     param_ = param;
-    if (OB_FAIL(create_all_tablet_ctxs(ls_partition_ids))) {
+    if (OB_FAIL(create_all_tablet_ctxs(partition_ids))) {
       LOG_WARN("fail to create all tablet ctxs", KR(ret));
     } else {
       struct
@@ -131,17 +131,17 @@ int ObDirectLoadMergeCtx::init(const ObDirectLoadMergeParam &param,
 }
 
 int ObDirectLoadMergeCtx::create_all_tablet_ctxs(
-  const ObIArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids)
+  const ObIArray<ObTableLoadTabletId> &partition_ids)
 {
   int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < ls_partition_ids.count(); ++i) {
-    const ObTableLoadLSIdAndPartitionId &ls_partition_id = ls_partition_ids.at(i);
+  for (int64_t i = 0; OB_SUCC(ret) && i < partition_ids.count(); ++i) {
+    const ObTableLoadTabletId &partition_id = partition_ids.at(i);
     ObDirectLoadTabletMergeCtx *tablet_ctx = nullptr;
     if (OB_ISNULL(tablet_ctx = OB_NEWx(ObDirectLoadTabletMergeCtx, (&allocator_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadTabletMergeCtx", KR(ret));
-    } else if (OB_FAIL(tablet_ctx->init(this, ls_partition_id))) {
-      LOG_WARN("fail to init tablet ctx", KR(ret), K(ls_partition_id));
+    } else if (OB_FAIL(tablet_ctx->init(this, partition_id))) {
+      LOG_WARN("fail to init tablet ctx", KR(ret), K(partition_id));
     } else if (OB_FAIL(tablet_merge_ctx_array_.push_back(tablet_ctx))) {
       LOG_WARN("fail to push back", KR(ret));
     }
@@ -345,26 +345,25 @@ void ObDirectLoadTabletMergeCtx::reset()
 }
 
 int ObDirectLoadTabletMergeCtx::init(ObDirectLoadMergeCtx *merge_ctx,
-                                     const ObTableLoadLSIdAndPartitionId &ls_partition_id)
+                                     const ObTableLoadTabletId &partition_id)
 
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDirectLoadTabletMergeCtx init twice", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(nullptr == merge_ctx || !ls_partition_id.is_valid())) {
+  } else if (OB_UNLIKELY(nullptr == merge_ctx || !partition_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(merge_ctx), K(ls_partition_id));
+    LOG_WARN("invalid args", KR(ret), KP(merge_ctx), K(partition_id));
   } else {
     merge_ctx_ = merge_ctx;
     param_ = &merge_ctx->param_;
-    tablet_id_ = ls_partition_id.part_tablet_id_.tablet_id_;
+    tablet_id_ = partition_id.part_tablet_id_.tablet_id_;
     if (OB_FAIL(param_->insert_table_ctx_->get_tablet_context(tablet_id_, insert_tablet_ctx_))) {
       LOG_WARN("fail to get insert tablet ctx", KR(ret), K(tablet_id_));
     } else if (ObDirectLoadMergeMode::merge_need_origin_table(param_->merge_mode_)) {
       ObDirectLoadOriginTableCreateParam origin_table_param;
       origin_table_param.table_id_ = param_->table_id_;
-      origin_table_param.ls_id_ = ls_partition_id.ls_id_;
       origin_table_param.tablet_id_ = tablet_id_;
       origin_table_param.tx_id_ = param_->trans_param_.tx_id_;
       origin_table_param.tx_seq_ = param_->trans_param_.tx_seq_;

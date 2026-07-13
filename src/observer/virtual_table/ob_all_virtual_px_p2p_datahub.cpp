@@ -30,27 +30,21 @@ int ObAllPxP2PDatahubTable::P2PMsgTraverseCall::operator() (
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(entry.second)) {
-    if (false &&
-        false) {
-      /*do nothing*/
-    } else {
-      P2PDatahubNode node;
-      node.p2p_datahub_id_ = entry.second->get_p2p_datahub_id();
-      node.msg_type_ = (int64_t)entry.second->get_msg_type();
-      node.start_time_ = entry.second->get_start_time();
-      
-      node.trace_id_ = entry.second->get_trace_id();
-      node.timeout_ts_ = entry.second->get_timeout_ts();
-      if (OB_FAIL(node_array_.push_back(node))) {
-        SERVER_LOG(WARN, "fail to push back node", K(ret));
-      }
+    P2PDatahubNode node;
+    node.p2p_datahub_id_ = entry.second->get_p2p_datahub_id();
+    node.msg_type_ = (int64_t)entry.second->get_msg_type();
+    node.start_time_ = entry.second->get_start_time();
+    node.trace_id_ = entry.second->get_trace_id();
+    node.timeout_ts_ = entry.second->get_timeout_ts();
+    if (OB_FAIL(node_array_.push_back(node))) {
+      SERVER_LOG(WARN, "fail to push back node", K(ret));
     }
   }
   return ret;
 }
 
 
-ObAllPxP2PDatahubTable::ObAllPxP2PDatahubTable():addr_(NULL), start_to_read_(false),
+ObAllPxP2PDatahubTable::ObAllPxP2PDatahubTable():start_to_read_(false),
     node_array_(), index_(0)
 {
 }
@@ -60,7 +54,6 @@ ObAllPxP2PDatahubTable::~ObAllPxP2PDatahubTable()
 
 void ObAllPxP2PDatahubTable::reset()
 {
-  addr_ = NULL;
   start_to_read_ = false;
   node_array_.reset();
   index_ = 0;
@@ -80,9 +73,9 @@ int ObAllPxP2PDatahubTable::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObObj *cells = cur_row_.cells_;
-    if (OB_ISNULL(allocator_) || OB_ISNULL(addr_)) {
+  if (OB_ISNULL(allocator_)) {
     ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "allocator_ or addr_ is null", K_(allocator), K_(addr), K(ret));
+    SERVER_LOG(WARN, "allocator_ is null", K_(allocator), K(ret));
   } else if (OB_ISNULL(cells)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
@@ -164,4 +157,3 @@ int ObAllPxP2PDatahubTable::inner_get_next_row(ObNewRow *&row)
 
 }/* ns observer*/
 }/* ns oceanbase */
-

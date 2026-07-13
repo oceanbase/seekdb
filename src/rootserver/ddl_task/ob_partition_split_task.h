@@ -195,9 +195,8 @@ private:
       const ObSArray<ObTabletID> &tablet_ids,
       bool &is_end);
   int check_compaction_progress(
-      const share::ObLSID &ls_id,
       const ObTabletID &tablet_id, 
-      const ObIArray<ObAddr> &split_replica_addrs,
+      const ObAddr &split_replica_addr,
       bool &is_end);
   int send_split_request(
       const ObPartitionSplitReplicaType replica_type);
@@ -232,8 +231,6 @@ private:
   int prepare_tablet_split_ranges(
       ObSEArray<ObSEArray<blocksstable::ObDatumRowkey, 8>, 8> &parallel_datum_rowkey_list);
   int prepare_tablet_split_infos(
-      const share::ObLSID &ls_id,
-      const ObAddr &leader_addr,
       ObIArray<obcall::ObTabletSplitArg> &split_info_array);
   int update_task_message();
 private:

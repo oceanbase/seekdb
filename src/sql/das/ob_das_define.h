@@ -17,7 +17,7 @@
 #ifndef OBDEV_SRC_SQL_DAS_OB_DAS_DEFINE_H_
 #define OBDEV_SRC_SQL_DAS_OB_DAS_DEFINE_H_
 #include "share/ob_define.h"
-#include "share/ob_ls_id.h"
+#include "lib/list/ob_list.h"
 #include "share/location_cache/ob_location_struct.h"
 #include "common/ob_tablet_id.h"
 #include "sql/ob_phy_table_location.h"
@@ -178,7 +178,6 @@ struct ObDASTabletLoc
 public:
   ObDASTabletLoc()
     : tablet_id_(),
-      ls_id_(),
       server_(),
       loc_meta_(nullptr),
       next_(this),
@@ -189,7 +188,6 @@ public:
   ~ObDASTabletLoc() = default;
 
   TO_STRING_KV(K_(tablet_id),
-               K_(ls_id),
                K_(server),
                K_(loc_meta),
                K_(in_retry),
@@ -203,9 +201,6 @@ public:
    * because ObDASTabletLoc will not be released
    */
   common::ObTabletID tablet_id_; //the data_object_id corresponding to partition_id
-  //To reduce the conversion between tablet_id to ls_id,
-  //DAS caches ls_id_, SQL should not actually touch ls_id_
-  share::ObLSID ls_id_;
   common::ObAddr server_;
   const ObDASTableLocMeta *loc_meta_; //reference the table location meta, not serialize it
   ObDASTabletLoc *next_; //to bind all data table and local index tablet location

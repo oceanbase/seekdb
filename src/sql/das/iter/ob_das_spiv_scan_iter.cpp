@@ -39,7 +39,6 @@ int ObDASSPIVScanIter::inner_init(ObDASIterParam &param)
     scan_iter_ = static_cast<ObDASScanIter *>(spiv_scan_param.scan_iter_);
     scan_ctdef_ = spiv_scan_param.scan_ctdef_;
     scan_rtdef_ = spiv_scan_param.scan_rtdef_;
-    ls_id_ = spiv_scan_param.ls_id_;
     tx_desc_ = spiv_scan_param.tx_desc_;
     snapshot_ = spiv_scan_param.snapshot_;
     dim_ = spiv_scan_param.dim_;
@@ -59,7 +58,7 @@ int ObDASSPIVScanIter::inner_init(ObDASIterParam &param)
       LOG_WARN("failed to build scan range", K(ret));
     } else if (OB_FAIL(scan_iter_param_.key_ranges_.push_back(scan_range))) {
       LOG_WARN("failed to push lookup range", K(ret));
-    } else if (OB_FAIL(ObDasVecScanUtils::init_scan_param(ls_id_, dim_docid_value_tablet_id_, scan_ctdef_, scan_rtdef_, 
+    } else if (OB_FAIL(ObDasVecScanUtils::init_scan_param(dim_docid_value_tablet_id_, scan_ctdef_, scan_rtdef_,
                                       tx_desc_, snapshot_, scan_iter_param_, false))) {
       LOG_WARN("failed to init scan param", K(ret), K(dim_docid_value_tablet_id_));
     } else {
@@ -73,7 +72,7 @@ int ObDASSPIVScanIter::inner_init(ObDASIterParam &param)
 int ObDASSPIVScanIter::inner_reuse()
 {
   int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(scan_iter_) && OB_FAIL(ObDasVecScanUtils::reuse_iter(ls_id_, scan_iter_, scan_iter_param_, dim_docid_value_tablet_id_))) {
+  if (OB_NOT_NULL(scan_iter_) && OB_FAIL(ObDasVecScanUtils::reuse_iter(scan_iter_, scan_iter_param_, dim_docid_value_tablet_id_))) {
     LOG_WARN("failed to reuse scan iter", K(ret));
   } else if (is_first_scan_) {
     scan_iter_param_.need_switch_param_ = false;

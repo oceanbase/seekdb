@@ -30,6 +30,8 @@ namespace oceanbase
 namespace storage
 {
 
+class ObLS;
+
 struct ObIStoreRowIteratorPtr
 {
 public:
@@ -90,7 +92,7 @@ struct ObLobSplitParam : public share::ObIDagInitParam
 {
 public:
   ObLobSplitParam() :
-    rowkey_allocator_("LobSplitRowkey", OB_MALLOC_NORMAL_BLOCK_SIZE), ls_id_(share::ObLSID::INVALID_LS_ID),
+    rowkey_allocator_("LobSplitRowkey", OB_MALLOC_NORMAL_BLOCK_SIZE),
     ori_lob_meta_tablet_id_(ObTabletID::INVALID_TABLET_ID),
     new_lob_tablet_ids_(), schema_version_(0),
     data_format_version_(0), parallelism_(0), compaction_scn_(),
@@ -104,14 +106,14 @@ public:
   int init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
   int init(const obcall::ObTabletSplitArg &arg);
   bool is_valid() const {
-    return ls_id_.is_valid() && ori_lob_meta_tablet_id_.is_valid()
+    return ori_lob_meta_tablet_id_.is_valid()
            && new_lob_tablet_ids_.count() > 0 && schema_version_ > 0
            && data_format_version_ > 0 && parallelism_ > 0 && compaction_scn_ > 0
            && compat_mode_ != lib::Worker::CompatMode::INVALID
            && task_id_ > 0 && OB_INVALID_ID != source_table_id_ && OB_INVALID_ID != dest_schema_id_;
   }
   int assign(const ObLobSplitParam &other);
-  TO_STRING_KV(K_(ls_id), K_(ori_lob_meta_tablet_id),
+  TO_STRING_KV(K_(ori_lob_meta_tablet_id),
     K_(new_lob_tablet_ids), K_(schema_version), K_(data_format_version),
     K_(parallelism), K_(compaction_scn), K_(compat_mode), K_(task_id), 
     K_(source_table_id), K_(dest_schema_id), K_(lob_col_idxs),
@@ -120,7 +122,6 @@ public:
 private:
   common::ObArenaAllocator rowkey_allocator_; // for DatumRowkey.
 public:
-  share::ObLSID ls_id_;
   ObTabletID ori_lob_meta_tablet_id_;
   ObArray<ObTabletID> new_lob_tablet_ids_;
   int64_t schema_version_;
@@ -143,14 +144,14 @@ public:
   ObLobSplitContext() :
     range_allocator_("LobSplitRange", OB_MALLOC_NORMAL_BLOCK_SIZE), 
     is_inited_(false), data_ret_(0), is_lob_piece_(false),
-    ls_handle_(), main_tablet_id_(ObTabletID::INVALID_TABLET_ID),
+    ls_(nullptr), main_tablet_id_(ObTabletID::INVALID_TABLET_ID),
     allocator_(common::ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE),
     main_tablet_handle_(), lob_meta_tablet_handle_(),
     m_allocator_(allocator_), new_main_tablet_ids_(OB_MALLOC_NORMAL_BLOCK_SIZE, m_allocator_),
     new_lob_tablet_ids_(OB_MALLOC_NORMAL_BLOCK_SIZE, m_allocator_),
     cmp_ret_(0), comparer_(cmp_ret_), total_map_(nullptr), sub_maps_(),
     skipped_split_major_keys_(),
-    row_inserted_(0), physical_row_count_(0), ls_rebuild_seq_(-1)
+    row_inserted_(0), physical_row_count_(0)
   {}
   ~ObLobSplitContext() { destroy(); }
   int init(const ObLobSplitParam& param);
@@ -159,11 +160,10 @@ public:
   inline bool is_valid() const { return is_inited_; }
   void destroy();
   TO_STRING_KV(K_(is_inited), K_(data_ret), K_(is_lob_piece),
-    K_(ls_handle), K_(main_tablet_id), K_(main_tablet_handle),
+    K_(ls), K_(main_tablet_id), K_(main_tablet_handle),
     K_(lob_meta_tablet_handle), K_(new_main_tablet_ids),
     K_(new_lob_tablet_ids), KPC_(total_map), K_(sub_maps), K_(main_table_ranges), 
-    K_(skipped_split_major_keys), K_(row_inserted), K_(physical_row_count),
-    K_(ls_rebuild_seq));
+    K_(skipped_split_major_keys), K_(row_inserted), K_(physical_row_count));
 private:
   common::ObArenaAllocator range_allocator_; // for datum range.
 public:
@@ -171,7 +171,7 @@ public:
   bool is_inited_;
   int data_ret_;
   bool is_lob_piece_;
-  ObLSHandle ls_handle_;
+  ObLS *ls_;
   ObTabletID main_tablet_id_;
   common::ObArenaAllocator allocator_;
   ObTabletHandle main_tablet_handle_;
@@ -189,7 +189,6 @@ public:
   ObArray<ObITable::TableKey> skipped_split_major_keys_;
   int64_t row_inserted_;
   int64_t physical_row_count_;
-  int64_t ls_rebuild_seq_;
 };
 
 
@@ -378,7 +377,6 @@ public:
   static int write_split_log(
       const bool is_lob_tablet,
       const bool is_start_request,
-      const share::ObLSID &ls_id,
       const share::ObIDagInitParam *input_param,
       share::SCN &scn);
 };

@@ -3938,7 +3938,6 @@ int ObVectorIndexUtil::get_vector_index_type(
 
 void ObVecIdxSnapshotDataWriteCtx::reset()
 {
-  ls_id_.reset();
   data_tablet_id_.reset();
   lob_meta_tablet_id_.reset();
   lob_piece_tablet_id_.reset();
@@ -4826,11 +4825,11 @@ int ObVectorIndexUtil::check_rename_rebuild_confilt(
     LOG_WARN("failed to get index schema by name", K(ret), K(ori_index_name));
   } else if (OB_NOT_NULL(orig_index_schema) && orig_index_schema->is_vec_index()) {
     bool has_rebuild_index_task = false;
-    if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::check_has_index_or_mlog_task(trans,
+    if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::check_has_index_task(trans,
                                                                       *orig_index_schema,
                                                                       origin_table_schema.get_table_id(),
                                                                       has_rebuild_index_task))) {
-      LOG_WARN("fail to check has index or mlog task", KR(ret), K(ori_index_name));
+      LOG_WARN("fail to check has index task", KR(ret), K(ori_index_name));
     } else if (has_rebuild_index_task) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("not support to rename vector index while rebuild is in progress", KR(ret), K(ori_index_name));

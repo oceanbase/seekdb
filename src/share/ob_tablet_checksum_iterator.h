@@ -30,8 +30,6 @@ class ObISQLClient;
 }
 namespace share
 {
-class ObTabletLSPair;
-
 class ObTabletChecksumIterator
 {
 

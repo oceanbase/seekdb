@@ -348,7 +348,6 @@ int ObBootstrap::prepare_create_partitions(
     LOG_WARN("check_inner_stat failed", KR(ret));
   } else if (tschema.has_partition()) {
     common::ObArray<const share::schema::ObTableSchema*> table_schema_ptrs;
-    common::ObArray<share::ObLSID> ls_id_array;
     common::ObArray<bool> need_create_empty_majors;
     ObArray<uint64_t> index_tids;
     uint64_t lob_meta_table_id = 0;
@@ -392,17 +391,11 @@ int ObBootstrap::prepare_create_partitions(
           }
         }
 
-        for (int64_t j = 0; OB_SUCC(ret) && j < tschema.get_all_part_num(); ++j) {
-          if (OB_FAIL(ls_id_array.push_back(share::ObLSID(SYS_LS)))) {
-            LOG_WARN("fail to push back ls id", KR(ret));
-          }
-        }
       }
     }
 
     if (OB_SUCC(ret) && OB_FAIL(creator.add_create_tablets_of_tables_arg(
         table_schema_ptrs,
-        ls_id_array,
         DATA_CURRENT_VERSION,
         need_create_empty_majors/*need_create_empty_major_sstable*/))) {
       LOG_ERROR("fail to add create tablet arg", KR(ret));
@@ -436,7 +429,6 @@ int ObBootstrap::prepare_create_partition(
   } else if (tschema.has_partition()) {
     common::ObArray<share::schema::ObTableSchema> table_schema_array;
     common::ObArray<const share::schema::ObTableSchema*> table_schema_ptrs;
-    common::ObArray<share::ObLSID> ls_id_array;
     common::ObArray<bool> need_create_empty_majors;
     if (OB_FAIL(generate_table_schema_array_for_create_partition(tschema, table_schema_array))) {
       LOG_WARN("fail to generate table schema array", KR(ret));
@@ -453,18 +445,11 @@ int ObBootstrap::prepare_create_partition(
           LOG_WARN("fail to push back", KR(ret), K(table_schema_array));
         }
       }
-
-      for (int i = 0; i < tschema.get_all_part_num() && OB_SUCC(ret); ++i) {
-        if (OB_FAIL(ls_id_array.push_back(share::ObLSID(SYS_LS)))) {
-          LOG_WARN("fail to push back", KR(ret));
-        }
-      }
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(creator.add_create_tablets_of_tables_arg(
             table_schema_ptrs,
-            ls_id_array,
             DATA_CURRENT_VERSION,
             need_create_empty_majors/*need_create_empty_major_sstable*/))) {
       LOG_WARN("fail to add create tablet arg", KR(ret));

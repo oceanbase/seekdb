@@ -209,7 +209,6 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
       tablet_loc = new(tablet_buf) ObDASTabletLoc();
       tablet_loc->server_ = replica_loc.get_server();
       tablet_loc->tablet_id_ = opt_tablet_loc.get_tablet_id();
-      tablet_loc->ls_id_ = opt_tablet_loc.get_ls_id();
       tablet_loc->partition_id_ = opt_tablet_loc.get_partition_id();
       tablet_loc->first_level_part_id_ = opt_tablet_loc.get_first_level_part_id();
       tablet_loc->loc_meta_ = table_loc.loc_meta_;
@@ -266,7 +265,6 @@ OB_INLINE int ObDASCtx::build_related_tablet_loc(ObDASTabletLoc &tablet_loc)
     if (OB_SUCC(ret)) {
       related_tablet_loc = new(related_loc_buf) ObDASTabletLoc();
       related_tablet_loc->tablet_id_ = rv->tablet_id_;
-      related_tablet_loc->ls_id_ = tablet_loc.ls_id_;
       related_tablet_loc->server_ = tablet_loc.server_;
       related_tablet_loc->loc_meta_ = related_table_loc->loc_meta_;
       related_tablet_loc->next_ = tablet_loc.next_;
@@ -407,22 +405,6 @@ int ObDASCtx::build_table_loc_meta(const ObDASTableLocMeta &src,
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDASUtils::build_table_loc_meta(allocator_, src, dst))) {
     LOG_WARN("build table loc meta failed", K(ret));
-  }
-  return ret;
-}
-
-int ObDASCtx::get_all_lsid(share::ObLSArray &ls_ids)
-{
-  int ret = OB_SUCCESS;
-  FOREACH_X(table_node, table_locs_, OB_SUCC(ret)) {
-    ObDASTableLoc *table_loc = *table_node;
-    for (DASTabletLocListIter tablet_node = table_loc->tablet_locs_begin();
-         OB_SUCC(ret) && tablet_node != table_loc->tablet_locs_end(); ++tablet_node) {
-      ObDASTabletLoc *tablet_loc = *tablet_node;
-      if (!is_contain(ls_ids, tablet_loc->ls_id_)) {
-        ret = ls_ids.push_back(tablet_loc->ls_id_);
-      }
-    }
   }
   return ret;
 }

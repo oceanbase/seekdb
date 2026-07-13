@@ -26,7 +26,7 @@ namespace oceanbase
 {
 namespace rootserver
 {
-class ObSysTenantLoadSysPackageService : public logservice::ObIRoleChangeSubHandler,
+class ObSysTenantLoadSysPackageService : public logservice::ObILocalLogHandler,
                                          public logservice::ObICheckpointSubHandler,
                                          public logservice::ObIReplaySubHandler
 {
@@ -42,11 +42,9 @@ public:
   int wait();
   void destroy();
 
-  // for ObIRoleChangeSubHandler
-  virtual int switch_to_leader() override;
-  virtual void switch_to_follower_forcedly() override;
-  virtual int switch_to_follower_gracefully() override;
-  virtual int resume_leader() override { return switch_to_leader(); }
+  // for ObILocalLogHandler
+  int activate() override;
+  void deactivate() override;
 
   // for checkpoint/replay
   virtual share::SCN get_rec_scn() override { return share::SCN::max_scn(); }

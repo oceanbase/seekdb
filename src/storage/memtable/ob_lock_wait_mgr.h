@@ -80,16 +80,13 @@ public:
     int ret = OB_SUCCESS;
     UserBinaryKey user_key;
     ObTransID trans_id;
-    ObAddr trans_scheduler;
     ObDependencyResource resource;
-    #define PRINT_WRAPPER KR(ret), K_(hash), K(trans_id), K(trans_scheduler)
+    #define PRINT_WRAPPER KR(ret), K_(hash), K(trans_id)
     if (OB_FAIL(mapper_.get_hash_holder(hash_, trans_id))) {
       DETECT_LOG(WARN, "get hash holder failed", PRINT_WRAPPER);
     } else if (OB_FAIL(user_key.set_user_key(trans_id))) {
       DETECT_LOG(WARN, "set user key failed", PRINT_WRAPPER);
-    } else if (OB_FAIL(ObTransDeadlockDetectorAdapter::get_conflict_trans_scheduler(trans_id, trans_scheduler))) {
-      DETECT_LOG(WARN, "get trans scheduler failed", PRINT_WRAPPER);
-    } else if (OB_FAIL(resource.set_args(trans_scheduler, user_key))) {
+    } else if (OB_FAIL(resource.set_args(GCTX.self_addr(), user_key))) {
       DETECT_LOG(WARN, "resource set args failed", PRINT_WRAPPER);
     } else if (OB_FAIL(resource_array.push_back(resource))) {
       DETECT_LOG(WARN, "fail to push resource to array", PRINT_WRAPPER);
@@ -243,7 +240,6 @@ public:
                 const uint32_t sess_id,
                 const transaction::ObTransID &tx_id,
                 const transaction::ObTransID &holder_tx_id,
-                const ObLSID &ls_id,
                 ObFunction<int(bool &, bool &)> &rechecker);
   int post_lock(const int tmp_ret,
                 const ObTabletID &tablet_id,
@@ -256,14 +252,12 @@ public:
                 const transaction::ObTransID &tx_id,
                 const transaction::ObTransID &holder_tx_id,
                 const transaction::tablelock::ObTableLockMode &lock_mode,
-                const ObLSID &ls_id,
                 ObFunction<int(bool &need_wait)> &check_need_wait);
   // when removing the callbacks of uncommitted transaction, we need move
   // the conflict dependency from rows to transactions
   int transform_row_lock_to_tx_lock(const ObTabletID &tablet_id,
                                     const Key &key,
-                                    const transaction::ObTransID &tx_id,
-                                    const ObAddr &tx_scheduler);
+                                    const transaction::ObTransID &tx_id);
   // wakeup the request waiting on the row
   void wakeup(const ObTabletID &tablet_id, const Key& key);
   // wakeup the request waiting on the transaction

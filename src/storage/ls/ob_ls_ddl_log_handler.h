@@ -60,7 +60,7 @@ private:
 };
 
 class ObLSDDLLogHandler : public logservice::ObIReplaySubHandler,
-                          public logservice::ObIRoleChangeSubHandler,
+                          public logservice::ObILocalLogHandler,
                           public logservice::ObICheckpointSubHandler
 {
 public:
@@ -71,7 +71,6 @@ public:
   int init(ObLS *ls);
   void reset();
 
-  // for migrate and rebuild
   int offline();
   int online();
 
@@ -81,11 +80,9 @@ public:
              const palf::LSN &lsn,
              const share::SCN &log_ts) override final;
 
-  // for role change
-  void switch_to_follower_forcedly() override final;
-  int switch_to_leader() override final;
-  int switch_to_follower_gracefully() override final;
-  int resume_leader() override final;
+  // local lifecycle
+  void deactivate() override final;
+  int activate() override final;
 
   // for checkpoint
   int flush(share::SCN &rec_scn) override final;

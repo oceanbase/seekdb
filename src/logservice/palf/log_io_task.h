@@ -37,7 +37,6 @@ enum class LogIOTaskType
   FLUSH_LOG_TYPE = 1,
   FLUSH_META_TYPE = 2,
   TRUNCATE_PREFIX_TYPE = 3,
-  TRUNCATE_LOG_TYPE = 4,
   PURGE_THROTTLING_TYPE = 6,
 };
 
@@ -49,7 +48,6 @@ OB_INLINE const char *log_io_task_type_str(const LogIOTaskType type)
     IO_TASK_TYPE_NAME(FLUSH_LOG_TYPE);
     IO_TASK_TYPE_NAME(FLUSH_META_TYPE);
     IO_TASK_TYPE_NAME(TRUNCATE_PREFIX_TYPE);
-    IO_TASK_TYPE_NAME(TRUNCATE_LOG_TYPE);
     IO_TASK_TYPE_NAME(PURGE_THROTTLING_TYPE);
     default: str = "UNKNOWN_TYPE";
   }
@@ -65,7 +63,7 @@ int push_task_into_cb_thread_pool(LogIOTaskCbThreadPool *cb_thread_pool, LogIOTa
 class LogIOTask : public common::LinkTask
 {
 public:
-	LogIOTask(const int64_t palf_id, const int64_t palf_epoch);
+	explicit LogIOTask(const int64_t palf_epoch);
   virtual ~LogIOTask();
 	void reset();
 public:
@@ -75,13 +73,11 @@ public:
   int64_t get_init_task_ts();
   void free_this(IPalfEnvImpl *palf_env_impl);
   int64_t get_io_size();
-  int64_t get_palf_id() const { return palf_id_; }
   int64_t get_submit_seq() const {return submit_seq_;}
   void set_submit_seq(const int64_t submit_seq) {submit_seq_ = submit_seq;}
   bool need_purge_throttling();
   int64_t get_palf_epoch() const { return palf_epoch_; }
 	VIRTUAL_TO_STRING_KV("BaseClass", "LogIOTask",
-			"palf_id", palf_id_,
 			"palf_epoch", palf_epoch_,
 			"create_task_ts", init_task_ts_,
 			"push_cb_into_cb_pool_ts", push_cb_into_cb_pool_ts_,
@@ -97,7 +93,6 @@ protected:
 	int push_task_into_cb_thread_pool_(LogIOTaskCbThreadPool *cb_thread_pool, LogIOTask *io_task);
 
 protected:
-  int64_t palf_id_;
   int64_t palf_epoch_;
 	int64_t init_task_ts_;
 	int64_t push_cb_into_cb_pool_ts_;
@@ -111,7 +106,7 @@ private:
 class LogIOFlushLogTask : public LogIOTask {
   friend class BatchLogIOFlushLogTask;
 public:
-  LogIOFlushLogTask(const int64_t palf_id,const int64_t palf_epoch);
+  explicit LogIOFlushLogTask(const int64_t palf_epoch);
   ~LogIOFlushLogTask() override;
 
   int init(const FlushLogCbCtx &flush_log_cb_ctx,
@@ -134,30 +129,9 @@ private:
   bool is_inited_;
 };
 
-class LogIOTruncateLogTask : public LogIOTask {
-public:
-  LogIOTruncateLogTask(const int64_t palf_id,const int64_t palf_epoch);
-  ~LogIOTruncateLogTask() override;
-
-  int init(const TruncateLogCbCtx &truncate_log_cb_ctx);
-  void destroy();
-
-  INHERIT_TO_STRING_KV("LogIOTask", LogIOTask, K_(truncate_log_cb_ctx));
-private:
-  int do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfHandleImplGuard &guard) override final;
-  int after_consume_(IPalfHandleImplGuard &guard) override final;
-  LogIOTaskType get_io_task_type_() const override final { return LogIOTaskType::TRUNCATE_LOG_TYPE; }
-  void free_this_(IPalfEnvImpl *palf_env_impl) override final;
-  int64_t get_io_size_() const override final {return 0;}
-  bool need_purge_throttling_() const override final {return false;}
-private:
-  TruncateLogCbCtx truncate_log_cb_ctx_;
-  bool is_inited_;
-};
-
 class LogIOFlushMetaTask : public LogIOTask {
 public:
-  LogIOFlushMetaTask(const int64_t palf_id,const int64_t palf_epoch);
+  explicit LogIOFlushMetaTask(const int64_t palf_epoch);
   ~LogIOFlushMetaTask() override;
 
 public:
@@ -184,7 +158,7 @@ private:
 
 class LogIOTruncatePrefixBlocksTask : public LogIOTask {
 public:
-  LogIOTruncatePrefixBlocksTask(const int64_t palf_id,const int64_t palf_epoch);
+  explicit LogIOTruncatePrefixBlocksTask(const int64_t palf_epoch);
   ~LogIOTruncatePrefixBlocksTask();
 
   int init(const TruncatePrefixBlocksCbCtx& truncate_prefix_blocks_ctx);
@@ -217,11 +191,10 @@ public:
   void get_io_task_array(BatchIOTaskArray& io_task_array) { io_task_array = io_task_array_; }
   int do_task(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl);
   void reset_accum_in_queue_time() { accum_in_queue_time_ = 0; }
-  int64_t get_palf_id() const { return palf_id_; }
   int64_t get_count() const { return io_task_array_.count(); }
   int64_t get_accum_in_queue_time() const { return accum_in_queue_time_; }
 
-  TO_STRING_KV(K_(palf_id), "count", io_task_array_.count(), K_(lsn_array), K_(accum_size));
+  TO_STRING_KV("count", io_task_array_.count(), K_(lsn_array), K_(accum_size));
 private:
   int push_flush_cb_to_thread_pool_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl);
   int do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl);
@@ -232,7 +205,6 @@ private:
   LogWriteBufArray log_write_buf_array_;
   SCNArray scn_array_;
   LSNArray lsn_array_;
-  int64_t palf_id_;
   int64_t accum_in_queue_time_;
   int64_t accum_size_;
   bool is_inited_;
@@ -240,11 +212,11 @@ private:
 
 class LogIOPurgeThrottlingTask : public LogIOTask {
 public:
-  LogIOPurgeThrottlingTask(const int64_t palf_id, const int64_t palf_epoch);
+  explicit LogIOPurgeThrottlingTask(const int64_t palf_epoch);
   ~LogIOPurgeThrottlingTask();
   void reset();
 public:
-  int init(const PurgeThrottlingCbCtx & purge_ctx);
+  int init(const PurgeThrottlingCbCtx &purge_ctx);
   void destroy();
   INHERIT_TO_STRING_KV("LogIOTask", LogIOTask, K_(purge_ctx), K_(is_inited));
 private:

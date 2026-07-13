@@ -41,7 +41,6 @@ void ObTransStat::reset()
   state_ = static_cast<int64_t>(ObTxState::UNKNOWN);
   session_id_ = 0;
   proxy_session_id_ = 0;
-  trans_type_ = TransType::UNKNOWN_TRANS;
   part_trans_action_ = ObPartTransAction::UNKNOWN;
   lock_for_read_retry_count_ = 0;
   ctx_addr_ = 0;

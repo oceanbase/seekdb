@@ -28,9 +28,7 @@ namespace observer
 int ObVirtualDataAccessService::table_scan(ObVTableScanParam &param, ObNewRowIterator *&result)
 {
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_read);
-  const share::ObLSID &ls_id = param.ls_id_;
   common::ObASHTabletIdSetterGuard ash_tablet_id_guard(param.index_id_);
-  ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(ls_id_, ls_id.id());
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, param.index_id_);
   int ret = OB_SUCCESS;
   ObVirtualTableIterator *vt_iter = NULL;

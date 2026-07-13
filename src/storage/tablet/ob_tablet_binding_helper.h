@@ -24,7 +24,6 @@
 #include "lib/container/ob_array_serialization.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "lib/ob_define.h"
-#include "share/ob_ls_id.h"
 #include "storage/tablet/ob_tablet_binding_mds_user_data.h"
 
 namespace oceanbase
@@ -63,7 +62,6 @@ class MdsCtx;
 }
 
 class ObLS;
-class ObLSHandle;
 class ObTabletHandle;
 class ObTabletTxMultiSourceDataUnit;
 class ObTabletMapKey;
@@ -76,19 +74,14 @@ public:
   ~ObBatchUnbindTabletArg() {}
   int assign(const ObBatchUnbindTabletArg &other);
   inline bool is_redefined() const { return schema_version_ != OB_INVALID_VERSION; }
-  TO_STRING_KV(K_(ls_id), K_(schema_version), K_(orig_tablet_ids), K_(hidden_tablet_ids), K_(is_write_defensive));
+  TO_STRING_KV(K_(schema_version), K_(orig_tablet_ids), K_(hidden_tablet_ids), K_(is_write_defensive));
   bool is_valid() { return true; }
-  static int is_old_mds(const char *buf, const int64_t len, bool &is_old_mds);
-  static int skip_array_len(const char *buf, int64_t data_len, int64_t &pos);
-  OB_UNIS_VERSION_V(1);
+  OB_UNIS_VERSION_V(2);
 
 public:
-  
-  share::ObLSID ls_id_;
   int64_t schema_version_;
   ObSArray<ObTabletID> orig_tablet_ids_;
   ObSArray<ObTabletID> hidden_tablet_ids_;
-  bool is_old_mds_;
   bool is_write_defensive_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObBatchUnbindTabletArg);
@@ -100,13 +93,12 @@ public:
   ObBatchUnbindLobTabletArg();
   ~ObBatchUnbindLobTabletArg() {}
   int assign(const ObBatchUnbindLobTabletArg &other);
-  TO_STRING_KV(K_(ls_id), K_(data_tablet_ids));
+  TO_STRING_KV(K_(data_tablet_ids));
   bool is_valid() { return true; }
-  OB_UNIS_VERSION_V(1);
+  OB_UNIS_VERSION_V(2);
 
 public:
   
-  share::ObLSID ls_id_;
   ObSArray<ObTabletID> data_tablet_ids_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObBatchUnbindLobTabletArg);
@@ -122,16 +114,16 @@ public:
 
   // create tablet by new mds
   static int modify_tablet_binding_for_new_mds_create(const obcall::ObBatchCreateTabletArg &arg, const share::SCN &replay_scn, mds::BufferCtx &ctx);
-  static int bind_hidden_tablet_to_orig_tablet(ObLS &ls, const obcall::ObCreateTabletInfo &info, const share::SCN &replay_scn, mds::BufferCtx &ctx, const bool for_old_mds);
+  static int bind_hidden_tablet_to_orig_tablet(ObLS &ls, const obcall::ObCreateTabletInfo &info, const share::SCN &replay_scn, mds::BufferCtx &ctx);
   static int bind_lob_tablet_to_data_tablet(ObLS &ls, const obcall::ObBatchCreateTabletArg &arg, const obcall::ObCreateTabletInfo &info, const share::SCN &replay_scn, mds::BufferCtx &ctx);
   // TODO (lihongqin.lhq) delete get_tablet_for_new_mds
   static int get_tablet_for_new_mds(const ObLS &ls, const ObTabletID &tablet_id, const share::SCN &replay_scn, ObTabletHandle &handle);
 
   // common
   template<typename F>
-  static int modify_tablet_binding_new_mds(ObLS &ls, const ObTabletID &tablet_id, const share::SCN &replay_scn, mds::BufferCtx &ctx, const bool for_old_mds, F &&op);
+  static int modify_tablet_binding_new_mds(ObLS &ls, const ObTabletID &tablet_id, const share::SCN &replay_scn, mds::BufferCtx &ctx, F &&op);
   static int has_lob_tablets(const obcall::ObBatchCreateTabletArg &arg, const obcall::ObCreateTabletInfo &info, bool &has_lob);
-  static int get_ls(const share::ObLSID &ls_id, ObLSHandle &ls_handle);
+  static int get_ls(ObLS *&tenant_ls);
   static int build_single_table_write_defensive(const share::schema::ObTableSchema &table_schema,
                                                 const int64_t schema_version,
                                                 rootserver::ObDDLSQLTransaction &trans);
@@ -148,7 +140,6 @@ class ObTabletUnbindMdsHelper
 public:
   static int on_register(const char* buf, const int64_t len, mds::BufferCtx &ctx);
   static int register_process(ObBatchUnbindTabletArg &arg, mds::BufferCtx &ctx);
-  static int on_commit_for_old_mds(const char* buf, const int64_t len, const transaction::ObMulSourceDataNotifyArg &notify_arg);
   static int replay_process(ObBatchUnbindTabletArg &arg, const share::SCN &scn, mds::BufferCtx &ctx);
   static int on_replay(const char* buf, const int64_t len, const share::SCN &scn, mds::BufferCtx &ctx);
 private:
@@ -160,7 +151,7 @@ private:
 class ObTabletBindingMdsArg final
 {
 public:
-  OB_UNIS_VERSION(1);
+  OB_UNIS_VERSION(2);
 public:
   // arg with such tablet cnt cannot be more than mds buffer limit (1.5M)
   const static int64_t BATCH_TABLET_CNT = 8192;
@@ -168,11 +159,8 @@ public:
   ~ObTabletBindingMdsArg() {}
   bool is_valid() const;
   void reset();
-  TO_STRING_KV(K_(ls_id), K_(tablet_ids), K_(binding_datas));
+  TO_STRING_KV(K_(tablet_ids), K_(binding_datas));
 public:
-  
-  uint64_t tenant_data_version_;
-  share::ObLSID ls_id_;
   ObSArray<ObTabletID> tablet_ids_;
   ObSArray<ObTabletBindingMdsUserData> binding_datas_;
 private:
@@ -266,10 +254,10 @@ struct ModifyBindingByOps final
   ObIArray<F> &ops_;
 };
 
-struct LSTabletCmp final
+struct TabletIDCmp final
 {
-  bool operator()(const std::pair<share::ObLSID, ObTabletID> &lhs, const std::pair<share::ObLSID, ObTabletID> &rhs) {
-    return lhs.first != rhs.first ? lhs.first < rhs.first : lhs.second < rhs.second;
+  bool operator()(const ObTabletID &lhs, const ObTabletID &rhs) {
+    return lhs < rhs;
   }
 };
 
@@ -280,15 +268,14 @@ public:
   static int on_replay(const char* buf, const int64_t len, const share::SCN &scn, mds::BufferCtx &ctx);
 
 public:
-  static int get_sorted_ls_tablets(const ObIArray<ObTabletID> &tablet_ids,
-    ObArray<std::pair<share::ObLSID, ObTabletID>> &ls_tablets,
+  static int get_sorted_tablets(const ObIArray<ObTabletID> &tablet_ids,
+    ObArray<ObTabletID> &sorted_tablet_ids,
     ObMySQLTransaction &trans);
   static int batch_get_tablet_binding(
     const int64_t abs_timeout_us,
     const obcall::ObBatchGetTabletBindingArg &arg,
     obcall::ObBatchGetTabletBindingRes &res);
-  static int get_tablet_binding_mds_by_rpc(const share::ObLSID &ls_id,
-    const ObIArray<ObTabletID> &tablet_ids,
+  static int get_tablet_binding_mds_by_rpc(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t abs_timeout_us,
     ObIArray<ObTabletBindingMdsUserData> &datas);
   static int modify_tablet_binding_for_create(const obcall::ObBatchCreateTabletArg &arg,
@@ -311,8 +298,7 @@ public:
 
 private:
   template<typename F>
-  static int modify_tablet_binding_(const share::ObLSID &ls_id,
-    const ObIArray<ObTabletID> &tablet_ids,
+  static int modify_tablet_binding_batch_(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t abs_timeout_us,
     F &&op,
     ObMySQLTransaction &trans);

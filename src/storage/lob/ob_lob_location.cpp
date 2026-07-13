@@ -25,38 +25,6 @@ namespace oceanbase
 namespace storage
 {
 
-int ObLobLocationUtil::get_ls_leader(ObLobAccessParam& param,
-    const share::ObLSID &ls_id, common::ObAddr &leader)
-{
-  int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  const int64_t cluster_id = GCONF.cluster_id;
-  if (OB_ISNULL(GCTX.location_service_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("location cache is NULL", K(ret));
-  } else if (!ls_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid args", K(ret), K(ls_id));
-  } else {
-    uint32_t renew_count = 0;
-    const uint32_t max_renew_count = 10;
-    const int64_t retry_us = 200 * 1000;
-    do {
-      if (OB_FAIL(GCTX.location_service_->nonblock_get_leader(cluster_id, ls_id, leader))) {
-        LOG_WARN("failed to get location", K(ret), K(ls_id), K(cluster_id));
-      } else {
-        LOG_DEBUG("get ls leader", K(ls_id), K(leader), K(cluster_id));
-      }
-    } while (OB_LS_LOCATION_NOT_EXIST == ret && renew_count < max_renew_count);
-
-    if (OB_SUCC(ret) && !leader.is_valid()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("leader addr is invalid", K(ret), K(ls_id), K(leader), K(cluster_id));
-    }
-  }
-  return ret;
-}
-
 int ObLobLocationUtil::is_remote(ObLobAccessParam& param, bool& is_remote, common::ObAddr& dst_addr)
 {
   int ret = OB_SUCCESS;
@@ -83,9 +51,7 @@ int ObLobLocationUtil::is_remote(ObLobAccessParam& param, bool& is_remote, commo
         dst_addr = retry_info->addr_;
       }
     } else {
-      if (OB_FAIL(get_ls_leader(param, param.ls_id_, dst_addr))) {
-        LOG_WARN("failed to get ls leader", K(ret), K(param.ls_id_));
-      }
+      dst_addr = self_addr;
     }
     if (OB_SUCC(ret)) {
       // lob from other tenant also should read by rpc
@@ -172,12 +138,6 @@ int ObLobLocationUtil::lob_refresh_location(ObLobAccessParam &param, int last_er
       LOG_WARN("tablet id is changed", K(ret), K(tablet_loc), K(param), KPC(location_info));
     } else {
       param.addr_ = tablet_loc.server_;
-      if (tablet_loc.ls_id_ != param.ls_id_) {
-        LOG_INFO("[LOB RETRY] lob retry find tablet ls id is changed",
-                 K(param.tablet_id_), K(param.ls_id_), K(tablet_loc.ls_id_), K(last_err), K(retry_cnt));
-        param.ls_id_ = tablet_loc.ls_id_;
-        location_info->ls_id_ = tablet_loc.ls_id_.id();
-      }
     }
   }
   LOG_TRACE("[LOB RETRY] after do fresh location", K(ret), K(last_err), K(retry_cnt), K(has_retry_info), K(param));
@@ -187,41 +147,8 @@ int ObLobLocationUtil::lob_refresh_location(ObLobAccessParam &param, int last_er
 
 int ObLobLocationUtil::get_ls_leader(ObLobAccessParam& param)
 {
-  int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  
-  const int64_t cluster_id = GCONF.cluster_id;
-  const share::ObLSID &ls_id = param.ls_id_;
-  ObAddr leader_addr;
-
-  if (OB_ISNULL(GCTX.location_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("location service is null", K(ret), K(param));
-  } else if (!ls_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(ls_id), K(param));
-  } else {
-    uint32_t renew_count = 0;
-    const uint32_t max_renew_count = 10;
-    const int64_t retry_us = 200 * 1000;
-    do {
-      if (OB_FAIL(GCTX.location_service_->nonblock_get_leader(cluster_id, ls_id, leader_addr))) {
-        LOG_WARN("failed to get location", K(ret), K(ls_id), K(cluster_id), K(renew_count));
-      } else {
-        LOG_TRACE("[LOB] get ls leader", K(ls_id), K(leader_addr), K(cluster_id), K(renew_count));
-      }
-    } while (OB_LS_LOCATION_NOT_EXIST == ret && renew_count < max_renew_count);
-
-
-    if (OB_FAIL(ret)) {
-    } else if (!leader_addr.is_valid()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("leader addr is invalid", K(ret), K(ls_id), K(leader_addr), K(cluster_id));
-    } else {
-      param.addr_ = leader_addr;
-    }
-  }
-  return ret;
+  param.addr_ = MYADDR;
+  return OB_SUCCESS;
 }
 
 

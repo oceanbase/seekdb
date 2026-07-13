@@ -81,7 +81,6 @@ int ObMdsRowIterator::init(
       table_scan_param_ = &scan_param;
       is_inited_ = true;
       LOG_DEBUG("succeed to init mds row iterator", K(ret),
-          "ls_id", tablet_handle.get_obj()->get_ls_id(),
           "tablet_id", tablet_handle.get_obj()->get_tablet_id(),
           K(scan_param));
     }

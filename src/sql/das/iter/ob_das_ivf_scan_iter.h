@@ -51,7 +51,7 @@ namespace sql
   }                                                                                    \
   if (index_end) {                                                                     \
     int tmp_ret = (ret == OB_ITER_END) ? OB_SUCCESS : ret;                             \
-    if (OB_FAIL(ObDasVecScanUtils::reuse_iter(ls_id_, iter, scan_param, tablet_id))) { \
+    if (OB_FAIL(ObDasVecScanUtils::reuse_iter(iter, scan_param, tablet_id))) { \
       LOG_WARN("failed to reuse rowkey cid iter.", K(ret));                            \
     } else {                                                                           \
       ret = tmp_ret;                                                                   \
@@ -62,7 +62,6 @@ struct ObDASIvfScanIterParam : public ObDASIterParam {
 public:
   explicit ObDASIvfScanIterParam(const ObVectorIndexAlgorithmType index_type)
       : ObDASIterParam(ObDASIterType::DAS_ITER_IVF_SCAN),
-        ls_id_(),
         tx_desc_(nullptr),
         snapshot_(nullptr),
         inv_idx_scan_iter_(nullptr),
@@ -81,7 +80,7 @@ public:
 
   virtual bool is_valid() const override
   {
-    bool bret = ls_id_.is_valid() && nullptr != tx_desc_ && nullptr != snapshot_ && nullptr != inv_idx_scan_iter_ &&
+    bool bret = nullptr != tx_desc_ && nullptr != snapshot_ && nullptr != inv_idx_scan_iter_ &&
                 nullptr != vec_aux_ctdef_ && nullptr != vec_aux_rtdef_;
     if (bret != true) {
     } else if (index_type == ObVectorIndexAlgorithmType::VIAT_IVF_FLAT) {
@@ -99,7 +98,6 @@ public:
     return bret;
   }
 
-  share::ObLSID ls_id_;
   transaction::ObTxDesc *tx_desc_;
   transaction::ObTxReadSnapshot *snapshot_;
 
@@ -163,7 +161,6 @@ public:
         mem_context_(nullptr),
         vec_op_alloc_("IvfIdxLookupOp", OB_MALLOC_NORMAL_BLOCK_SIZE),
         persist_alloc_(ObMemAttr("IvfScan")),
-        ls_id_(),
         tx_desc_(nullptr),
         snapshot_(nullptr),
         centroid_iter_(nullptr),
@@ -215,11 +212,6 @@ public:
   ObDASIter *get_inv_idx_scan_iter()
   {
     return inv_idx_scan_iter_;
-  }
-
-  void set_ls_id(const share::ObLSID &ls_id)
-  {
-    ls_id_ = ls_id;
   }
 
 protected:
@@ -328,7 +320,6 @@ protected:
   // unlike vec_op_alloc_ do reset() in inner_resuse()
   // persist_alloc_ do reset() in inner_release()
   ObArenaAllocator persist_alloc_;
-  share::ObLSID ls_id_;
   transaction::ObTxDesc *tx_desc_;
   transaction::ObTxReadSnapshot *snapshot_;
 
@@ -561,7 +552,7 @@ protected:
   {
     int ret = OB_SUCCESS;
     if (!sq_meta_iter_first_scan_ &&
-        OB_FAIL(ObDasVecScanUtils::reuse_iter(ls_id_, sq_meta_iter_, sq_meta_scan_param_, sq_meta_tablet_id_))) {
+        OB_FAIL(ObDasVecScanUtils::reuse_iter(sq_meta_iter_, sq_meta_scan_param_, sq_meta_tablet_id_))) {
       LOG_WARN("failed to reuse iter", K(ret));
     } else {
       ret = ObDASIvfScanIter::inner_reuse();

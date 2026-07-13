@@ -18,77 +18,33 @@
 
 
 #include "ob_ddl_service.h"
-#include "share/tablet/ob_tablet_to_ls_operator.h"
-#include "storage/tx_storage/ob_ls_service.h"
+#include "share/schema/ob_schema_getter_guard.h"
 
 namespace oceanbase
 {
 namespace rootserver
 {
 
-static int get_ls_from_table(const share::schema::ObTableSchema &table_schema,
-                             ObDDLSQLTransaction &trans, common::ObIArray<share::ObLSID> &ls_ids)
+static int check_tenant_not_active()
 {
   int ret = OB_SUCCESS;
-  ObArray<ObTabletID> tablet_ids;
-  int64_t all_part_num = 0;
-  if (-1 == (all_part_num = table_schema.get_all_part_num())) {
+  ObSchemaGetterGuard schema_guard;
+  const ObSimpleTenantSchema *tenant_schema = nullptr;
+  if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get tablet num", K(table_schema), KR(ret));
-  } else if (OB_FAIL(ls_ids.reserve(all_part_num))) {
-    LOG_WARN("fail to reserve array", KR(ret), K(all_part_num));
-  } else if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
-    LOG_WARN("fail to get tablet ids", KR(ret), K(table_schema));
+    LOG_WARN("schema service is null", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("get tenant schema guard failed", K(ret));
+  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
+    LOG_WARN("get tenant schema failed", K(ret));
+  } else if (OB_ISNULL(tenant_schema)) {
+    ret = OB_TENANT_NOT_EXIST;
+    LOG_WARN("tenant does not exist", K(ret));
+  } else if (tenant_schema->is_normal() || tenant_schema->is_dropping()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("tenant is still active", K(ret));
   } else {
-    // use sys_ls if is sys tablet firstly
-    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
-      const ObTabletID &tablet_id = tablet_ids.at(i);
-      if (tablet_id.belong_to_sys_ls()) {
-        if (OB_FAIL(ls_ids.push_back(share::SYS_LS))) {
-          LOG_WARN("push back ls id fail", KR(ret), K(i), K(tablet_id));
-        }
-      }
-    }
-    if(OB_FAIL(ret)) {
-    } else if (ls_ids.count() == 0) {
-      // no sys tablet, get ls id from system table
-      if (OB_FAIL(share::ObTabletToLSTableOperator::batch_get_ls(trans, tablet_ids, ls_ids))) {
-        LOG_WARN("fail to batch_get_ls", KR(ret), K(tablet_ids), K(ls_ids), K(table_schema));
-      }
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (ls_ids.count() != all_part_num) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the ls of tablet is not equal partition num", KR(ret), K(ls_ids.count()), K(all_part_num),
-        K(tablet_ids), K(ls_ids), K(table_schema));
-  }
-  return ret;
-}
-
-static int check_ls_not_exist(const common::ObArray<share::ObLSID> &ls_ids)
-{
-  int ret = OB_SUCCESS;
-  int64_t not_exist_ls_cnt = 0;
-  for (int i = 0; OB_SUCC(ret) && i < ls_ids.count(); ++i){
-    const ObLSID ls_id = ls_ids.at(i);
-    ObLSExistState state;
-    if (OB_FAIL(ObLocationService::check_ls_exist(ls_id, state))) {
-      LOG_WARN("failed to check ls exist", KR(ret), K(i), K(ls_id));
-    } else if (state.is_deleted()) {
-      ++not_exist_ls_cnt;
-      LOG_WARN("ls is deleted", KR(ret), K(i), K(ls_id), K(state));      
-    }
-  }
-  if (OB_SUCC(ret)) {
-    if (0 == not_exist_ls_cnt) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("all ls exist, unexcepted situation", KR(ret), K(not_exist_ls_cnt), K(ls_ids.count()), K(ls_ids));
-    } else if (not_exist_ls_cnt != ls_ids.count()) {
-      LOG_ERROR("there are some ls exist, some not exist", KR(ret), K(not_exist_ls_cnt), K(ls_ids.count()), K(ls_ids));
-    } else {
-      LOG_ERROR("all ls not exist", KR(ret), K(not_exist_ls_cnt), K(ls_ids.count()), K(ls_ids));
-    }
+    LOG_INFO("tenant is not active", K(ret));
   }
   return ret;
 }
@@ -115,8 +71,6 @@ int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonel
     bool exist = false;
     bool ignore_ls_not_exist_for_lob_meta = false;
     bool ignore_ls_not_exist_for_lob_piece = false;
-    common::ObArray<share::ObLSID> lob_meta_ls_ids;
-    common::ObArray<share::ObLSID> lob_piece_ls_ids;
 
     HEAP_VAR(ObTableSchema, tmp_lob_table_schema) {
       if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
@@ -145,15 +99,13 @@ int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonel
       // 4. drop lob meta table
       } else if (OB_FAIL(tmp_lob_table_schema.assign(*lob_meta_table_schema_ptr))) {
         LOG_WARN("fail to assign lob meta table schema", KR(ret));
-      } else if (OB_FAIL(get_ls_from_table(tmp_lob_table_schema, trans, lob_meta_ls_ids))) {
-        LOG_WARN("get ls of lob meta table fail", KR(ret), K(arg), K(tmp_lob_table_schema));
       } else if (OB_FAIL(ddl_operator.drop_table(tmp_lob_table_schema, trans, nullptr/*ddl_stmt_str*/, false/*is_truncate_table*/,
           nullptr/*drop_table_set*/, false/*is_drop_db*/, true/*delete_priv*/, true/*is_force_drop_lonely_lob_aux_table*/))) {
         LOG_ERROR("fail to drop lob meta table", KR(ret), K(tmp_lob_table_schema));
         if (OB_LS_NOT_EXIST == ret || OB_LS_IS_DELETED == ret) {
           int tmp_ret = OB_SUCCESS;
-          if (OB_TMP_FAIL(check_ls_not_exist(lob_meta_ls_ids))) {
-            LOG_WARN("check_ls_not_exist fail", KR(tmp_ret));
+          if (OB_TMP_FAIL(check_tenant_not_active())) {
+            LOG_WARN("check tenant state failed", KR(tmp_ret));
           } else {
             LOG_ERROR("ls not exist, ignore this when drop lob meta aux table", KR(ret), K(tmp_lob_table_schema));
             ret = OB_SUCCESS;
@@ -167,15 +119,13 @@ int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonel
       } else if (FALSE_IT(tmp_lob_table_schema.reset())) {
       } else if (OB_FAIL(tmp_lob_table_schema.assign(*lob_piece_table_schema_ptr))) {
         LOG_WARN("fail to assign lob piece table schema", KR(ret));
-      } else if (OB_FAIL(get_ls_from_table(tmp_lob_table_schema, trans, lob_piece_ls_ids))) {
-        LOG_WARN("get ls of lob piece table fail", KR(ret), K(arg), K(tmp_lob_table_schema));
       } else if (OB_FAIL(ddl_operator.drop_table(tmp_lob_table_schema, trans, nullptr/*ddl_stmt_str*/, false/*is_truncate_table*/,
           nullptr/*drop_table_set*/, false/*is_drop_db*/, true/*delete_priv*/, true/*is_force_drop_lonely_lob_aux_table*/))) {
         LOG_WARN("fail to drop lob piece table", KR(ret), K(tmp_lob_table_schema));
         if (OB_LS_NOT_EXIST == ret || OB_LS_IS_DELETED == ret) {
           int tmp_ret = OB_SUCCESS;
-          if (OB_TMP_FAIL(check_ls_not_exist(lob_piece_ls_ids))) {
-             LOG_WARN("check_ls_not_exist fail", KR(tmp_ret));
+          if (OB_TMP_FAIL(check_tenant_not_active())) {
+             LOG_WARN("check tenant state failed", KR(tmp_ret));
           } else {
             LOG_ERROR("ls not exist, ignore this when drop lob piece aux table", KR(ret), K(tmp_lob_table_schema));
             ret = OB_SUCCESS;

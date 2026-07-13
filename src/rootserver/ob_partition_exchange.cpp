@@ -20,7 +20,8 @@
 #include "ob_root_service.h"
 #include "share/ob_sql_client_decorator.h" // ObSQLClientRetryWeak
 #include "share/tablet/ob_tablet_to_table_history_operator.h" // ObTabletToTableHistoryOperator
-#include "share/tablet/ob_tablet_to_ls_operator.h"
+#include "share/tablet/ob_tablet_mapping_operator.h"
+#include "storage/tablet/ob_tablet_binding_helper.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 
 namespace oceanbase
@@ -1794,7 +1795,7 @@ int ObPartitionExchange::update_exchange_table_non_schema_attributes_(const ObTa
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(old_partition_ids), K(new_partition_ids), K(old_table_schema), K(new_table_id), K(old_tablet_ids));
   } else {
-    // modify inner table __all_tablet_to_ls, __all_sequence_value or __all_sequence_value, __all_table_stat, __all_column_stat, __all_histogram_stat, __all_monitor_modified
+    // modify tablet mapping, __all_sequence_value, __all_table_stat, __all_column_stat, __all_histogram_stat, __all_monitor_modified
     if (OB_FAIL(update_table_to_tablet_ids_mapping_( new_table_id, old_tablet_ids, trans))) {
       LOG_WARN("fail to update table to tablet id mapping", K(ret), K(new_table_id), K(old_tablet_ids));
     } else if (!old_table_schema.is_aux_table()) {
@@ -1898,7 +1899,7 @@ int ObPartitionExchange::update_table_to_tablet_ids_mapping_(const uint64_t tabl
     LOG_WARN("invalid argument", K(ret), K(table_id), K(tablet_ids.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
-      if (OB_FAIL(ObTabletToLSTableOperator::update_table_to_tablet_id_mapping(trans, table_id, tablet_ids.at(i)))) {
+      if (OB_FAIL(ObTabletMappingTableOperator::update_table_to_tablet_id_mapping(trans, table_id, tablet_ids.at(i)))) {
         LOG_WARN("fail to update table to tablet id mapping", K(ret), K(table_id), K(tablet_ids.at(i)));
       }
     }
@@ -2271,74 +2272,6 @@ int ObPartitionExchange::build_single_table_rw_defensive_(const ObIArray<common:
   return ret;
 }
 
-int ObPartitionExchange::build_modify_tablet_binding_args_v1_(const ObIArray<ObTabletID> &tablet_ids,
-                                                              const int64_t schema_version,
-                                                              ObIArray<storage::ObBatchUnbindTabletArg> &modify_args,
-                                                              ObDDLSQLTransaction &trans)
-{
-  int ret = OB_SUCCESS;
-  ObArray<LSTabletID> tablets;
-  if (OB_FAIL(get_tablets_( tablet_ids, tablets, trans))) {
-    LOG_WARN("failed to get tablet ids of orig table", K(ret));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < tablets.count(); i++) {
-    const ObLSID &ls_id = tablets[i].first;
-    int64_t j = 0;
-    for (; j < modify_args.count(); j++) {
-      if (modify_args.at(j).ls_id_ == ls_id) {
-        break;
-      }
-    }
-    if (j == modify_args.count()) {
-      storage::ObBatchUnbindTabletArg modify_arg;
-      
-      modify_arg.ls_id_ = ls_id;
-      modify_arg.schema_version_ = schema_version;
-      if (OB_FAIL(modify_args.push_back(modify_arg))) {
-        LOG_WARN("failed to push back modify arg", K(ret));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (0 <= j && j < modify_args.count()) {
-        storage::ObBatchUnbindTabletArg &modify_arg = modify_args.at(j);
-        const ObTabletID &tablet_id = tablets[i].second;
-        if (OB_FAIL(modify_arg.hidden_tablet_ids_.push_back(tablet_id))) {
-          LOG_WARN("failed to push back", K(ret)); 
-        }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Array idx out of bounds", K(ret), K(j), K(modify_args.count()));
-      }
-    }
-  }
-  LOG_DEBUG("build modify tablet binding args", K(ret), K(modify_args));
-  return ret;
-}
-
-int ObPartitionExchange::get_tablets_(const ObIArray<common::ObTabletID> &tablet_ids,
-                                      ObIArray<LSTabletID> &tablets,
-                                      ObDDLSQLTransaction &trans)
-{
-  int ret = OB_SUCCESS;
-  ObArray<ObLSID> ls_ids;
-  tablets.reset();
-  if (OB_UNLIKELY(tablet_ids.count() < 1)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_ids));
-  } else if (OB_FAIL(ObTabletToLSTableOperator::batch_get_ls(trans, tablet_ids, ls_ids))) {
-    LOG_WARN("failed to batch get ls", K(ret));
-  } else if (OB_UNLIKELY(tablet_ids.count() != ls_ids.count())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tablet ids ls ids", K(ret));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
-    if (OB_FAIL(tablets.push_back({ls_ids.at(i), tablet_ids.at(i)}))) {
-      LOG_WARN("failed to push back tablet id and ls id", K(ret));
-    }
-  }
-  return ret;
-}
-
 int ObPartitionExchange::adapting_cdc_changes_in_exchange_partition_(const uint64_t partitioned_table_id,
                                                                      const uint64_t non_partitioned_table_id,
                                                                      ObDDLSQLTransaction &trans)
@@ -2354,9 +2287,6 @@ int ObPartitionExchange::adapting_cdc_changes_in_exchange_partition_(const uint6
     LOG_WARN("fail to set refactored pt nt schema mapping", K(ret), K(partitioned_table_id), K(non_partitioned_table_id));
   } else {
     ObChangeTabletToTableArg arg;
-    share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
-    
-    arg.ls_id_ = ls_id;
     arg.base_table_id_ = partitioned_table_id;
     arg.inc_table_id_ = non_partitioned_table_id;
     common::hash::ObHashMap<uint64_t, uint64_t>::iterator iter_table;
@@ -2402,7 +2332,7 @@ int ObPartitionExchange::adapting_cdc_changes_in_exchange_partition_(const uint6
           LOG_WARN("failed to allocate", K(ret));
         } else if (OB_FAIL(arg.serialize(buf, size, pos))) {
           LOG_WARN("failed to serialize arg", K(ret));
-        } else if (OB_FAIL(trans.register_tx_data(arg.ls_id_, transaction::ObTxDataSourceType::CHANGE_TABLET_TO_TABLE_MDS, buf, pos))) {
+        } else if (OB_FAIL(trans.register_tx_data(transaction::ObTxDataSourceType::CHANGE_TABLET_TO_TABLE_MDS, buf, pos))) {
           LOG_WARN("failed to register tx data", K(ret));
         }
       }
@@ -2803,7 +2733,7 @@ int ObPartitionExchange::ddl_exchange_table_partitions(
 
 
 
-OB_SERIALIZE_MEMBER(ObChangeTabletToTableArg, ls_id_, base_table_id_, inc_table_id_, table_ids_, tablet_ids_);
+OB_SERIALIZE_MEMBER(ObChangeTabletToTableArg, base_table_id_, inc_table_id_, table_ids_, tablet_ids_);
 
 }//end namespace rootserver
 }//end namespace oceanbase

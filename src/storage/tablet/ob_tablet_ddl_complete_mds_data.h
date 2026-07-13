@@ -19,7 +19,6 @@
 
 #include <stdint.h>
 #include "lib/utility/ob_print_utils.h"
-#include "share/ob_ls_id.h"
 #include "share/scn.h"
 #include "common/ob_tablet_id.h"
 #include "storage/tablet/ob_tablet_common.h"

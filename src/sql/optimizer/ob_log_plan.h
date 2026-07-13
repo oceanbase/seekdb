@@ -1796,8 +1796,7 @@ private: // member functions
   static int strong_select_replicas(const common::ObAddr &local_server,
                                     common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
                                     bool &is_hit_partition,
-                                    bool sess_in_retry,
-                                    bool is_dup_ls_modified);
+                                    bool sess_in_retry);
   static int weak_select_replicas(const common::ObAddr &local_server,
                                   ObRoutePolicyType route_type,
                                   int64_t max_read_stale_time,

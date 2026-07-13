@@ -24,7 +24,6 @@
 #include "share/object_storage/ob_object_storage_struct.h"
 #include "share/ob_schema_version_info.h"
 #include "share/ob_unit_replica_counter.h"
-#include "share/ob_ls_id.h"
 #include "share/ob_max_id_cache.h"
 
 #include "rpc/ob_packet.h"
@@ -202,7 +201,6 @@ public:
   int cancel_ddl_task(const obcall::ObCancelDDLTaskArg &arg);
   int alter_tablegroup(const obcall::ObAlterTablegroupArg &arg);
   int maintain_obj_dependency_info(const obcall::ObDependencyObjDDLArg &arg);
-  int mview_complete_refresh(const obcall::ObMViewCompleteRefreshArg &arg, obcall::ObMViewCompleteRefreshRes &res);
   int rename_table(const obcall::ObRenameTableArg &arg);
   int fork_table(const obcall::ObForkTableArg &arg, obcall::ObDDLRes &res);
   int fork_database(const obcall::ObForkDatabaseArg &arg, obcall::ObDDLRes &res);
@@ -219,7 +217,6 @@ public:
   int drop_database(const obcall::ObDropDatabaseArg &arg, obcall::ObDropDatabaseRes &drop_database_res);
   int drop_tablegroup(const obcall::ObDropTablegroupArg &arg);
   int drop_index(const obcall::ObDropIndexArg &arg, obcall::ObDropIndexRes &res);
-  int create_mlog(const obcall::ObCreateMLogArg &arg, obcall::ObCreateMLogRes &res);
   int drop_lob(const obcall::ObDropLobArg &arg);
   int force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonelyLobAuxTableArg &drop_table_arg);
   int rebuild_vec_index(const obcall::ObRebuildIndexArg &arg, obcall::ObAlterTableRes &res);
@@ -233,7 +230,6 @@ public:
   int parallel_create_table_like(const obcall::ObCreateTableLikeArg &arg, obcall::ObCreateTableRes &res);
   int root_minor_freeze(const obcall::ObRootMinorFreezeArg &arg);
   int update_index_status(const obcall::ObUpdateIndexStatusArg &arg);
-  int update_mview_status(const obcall::ObUpdateMViewStatusArg &arg);
   int parallel_update_index_status(const obcall::ObUpdateIndexStatusArg &arg, obcall::ObParallelDDLRes &res);
   int purge_table(const obcall::ObPurgeTableArg &arg);
   int restore_table_from_recyclebin(const obcall::ObRecyclebinRestoreTableArg &arg);
@@ -397,9 +393,6 @@ private:
   int check_parallel_ddl_conflict(
       share::schema::ObSchemaGetterGuard &schema_guard,
       const obcall::ObDDLArg &arg);
-  int increase_rs_epoch_and_get_proposal_id_(
-      int64_t &new_rs_epoch,
-      int64_t &proposal_id_to_check);
   // create system table in mysql backend for debugging mode.
   int init_debug_database();
   int do_restart();

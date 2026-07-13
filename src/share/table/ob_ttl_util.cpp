@@ -19,7 +19,6 @@
 #include "share/ob_server_struct.h"
 #include "share/table/ob_ttl_util.h"
 #include "share/ob_tenant_timezone_mgr.h"
-#include "share/location_cache/ob_location_service.h"
 #include "lib/json/ob_json.h"
 #include "share/schema/ob_dependency_info.h"
 #include "share/ob_ex_rpc.h"
@@ -892,65 +891,8 @@ int ObTTLUtil::dispatch_one_tenant_ttl(obcall::ObTTLRequestArg::TTLRequestType t
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(ttl_info));
   } else {
-    const int64_t launch_start_time = ObTimeUtility::current_time();
-    ObAddr leader;
-    obcall::ObTTLRequestArg req;
-    obcall::ObTTLResponseArg resp;
-    
-    
-    
-    req.cmd_code_ = type;
-    req.trigger_type_ = TRIGGER_TYPE::USER_TRIGGER;
-    if (OB_ISNULL(GCTX.location_service_)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid GCTX", KR(ret));
-    } else {
-      const int64_t MAX_RETRY_COUNT = 5;
-      bool ttl_done = false;
-      static const int64_t MAX_PROCESS_TIME_US = 10 * 1000 * 1000L;
-      for (int64_t i = 0; OB_SUCC(ret) && (!ttl_done) && (i < MAX_RETRY_COUNT); ++i) {
-        if (OB_FAIL(GCTX.location_service_->get_leader_with_retry_until_timeout(GCONF.cluster_id, share::SYS_LS, leader))) {
-          LOG_WARN("fail to get ls locaiton leader", KR(ret), K(1UL));
-        } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
-          // table_api removed from build: ObTTLService is gone, TTL task launch unsupported
-          int ret = OB_NOT_SUPPORTED;
-          resp.err_code_ = ret;
-          return ret;
-        }))) {
-          LOG_WARN("tenant ttl rpc failed", KR(ret), K(1UL), K(leader), K(ttl_info));
-        } else {
-          ret = resp.err_code_;
-        }
-        
-        if (OB_FAIL(ret)) {
-          if (OB_LEADER_NOT_EXIST == ret || OB_EAGAIN == ret) {
-            const int64_t RESERVED_TIME_US = 600 * 1000; // 600 ms
-            const int64_t timeout_remain_us = THIS_WORKER.get_timeout_remain();
-            const int64_t idle_time_us = 200 * 1000 * (i + 1);
-            if (timeout_remain_us - idle_time_us > RESERVED_TIME_US) {
-              LOG_WARN("leader may switch or ddl confilict, will retry", KR(ret), K(ttl_info),
-                "ori_leader", leader, K(timeout_remain_us), K(idle_time_us), K(RESERVED_TIME_US));
-              ob_throttle_usleep((const useconds_t)idle_time_us, ret);
-              ret = OB_SUCCESS;
-            } else {
-              LOG_WARN("leader may switch or ddl confilict, will not retry cuz timeout_remain is "
-                "not enough", KR(ret), K(ttl_info), "ori_leader", leader,
-                K(timeout_remain_us), K(idle_time_us), K(RESERVED_TIME_US));
-            }
-          }
-        } else {
-          ttl_done = true;
-        }
-      }
-
-      if (OB_SUCC(ret) && !ttl_done) {
-        ret = OB_EAGAIN;
-        LOG_WARN("fail to retry ttl cuz switching role", KR(ret), K(MAX_RETRY_COUNT));
-      }
-    }
-    
-    const int64_t launch_cost_time = ObTimeUtility::current_time() - launch_start_time;
-    LOG_INFO("do tenant ttl", KR(ret), K(leader), K(ttl_info), K(launch_cost_time));
+    UNUSED(type);
+    ret = OB_NOT_SUPPORTED;
   }
   return ret;
 }

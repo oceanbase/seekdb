@@ -20,6 +20,7 @@
 #include "ob_aggregated_store_vec.h"
 #include "storage/blocksstable/ob_micro_block_row_scanner.h"
 #include "storage/access/ob_pushdown_aggregate.h"
+#include "storage/lob/ob_lob_manager.h"
 
 namespace oceanbase
 {

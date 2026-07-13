@@ -56,7 +56,6 @@ namespace sql {
   class ObPlanMonitorNodeList;
   class ObPlanBaselineMgr;
   class ObDataAccessService;
-  class ObDASIDService;
   class ObPlanCache;
   class ObPsCache;
   class ObSQLCCLRuleManager;
@@ -104,7 +103,7 @@ namespace transaction {
   class ObTransIDService;
   class ObUniqueIDService;
   class ObTxLoopWorker;
-  class ObPartTransCtx;
+  class ObTxCtx;
   namespace tablelock {
     class ObTableLockService;
   }
@@ -139,8 +138,6 @@ namespace compaction
   class ObTenantMediumChecker;
   class ObTenantTabletScheduler;
   class ObTenantCompactionObjMgr;
-  class ObTenantLSMergeScheduler;
-  class ObTenantLSMergeChecker;
 }
 namespace memtable
 {
@@ -151,7 +148,6 @@ namespace rootserver
   class ObPrimaryMajorFreezeService;
   class ObRestoreMajorFreezeService;
   class ObDBMSSchedService;
-  class ObMViewMaintenanceService;
   class ObDDLScheduler;
   class ObDDLServiceLauncher;
   class ObSysTenantLoadSysPackageService;
@@ -218,14 +214,12 @@ namespace detector
 #define SSMicroCachePrewarmService
 #define SSMicroCache
 #define TenantCompactionObjMgr
-#define TenantLSMergeScheduler
-#define TenantLSMergeChecker
 #define PublicBlockGCService
 #define StorageCachePolicyService
 // List the types of tenant-local variables that need to be added here, the tenant will create an instance for each type.
 // The lifecycle of each instance is driven by ObServer's explicit obs_* routines.
 // Use the MTL interface to obtain an instance.
-using ObPartTransCtxObjPool = common::ObServerObjectPool<transaction::ObPartTransCtx>;
+using ObTxCtxObjPool = common::ObServerObjectPool<transaction::ObTxCtx>;
 using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage::ObTableScanIterator>;
 #define MTL_MEMBERS                                  \
   MTL_LIST(                                          \
@@ -233,7 +227,7 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       oceanbase::sql::ObTenantSQLSessionMgr*,        \
       storage::ObTenantMetaMemMgr*,                  \
       storage::ObTenantFTPluginMgr*,                 \
-      ObPartTransCtxObjPool*,                        \
+      ObTxCtxObjPool*,                        \
       ObTableScanIteratorObjPool*,                   \
       common::ObTenantIOManager*,                    \
       storage::mds::ObTenantMdsService*,             \
@@ -282,7 +276,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       sql::dtl::ObDTLIntermResultManager*,           \
       sql::ObPlanMonitorNodeList*,                   \
       sql::ObDataAccessService*,                     \
-      sql::ObDASIDService*,                          \
       share::schema::ObTenantSchemaService*,         \
       storage::ObTenantFreezer*,                     \
       storage::checkpoint::ObCheckPointService *,    \
@@ -296,8 +289,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       share::ObTenantDagScheduler*,                  \
       storage::ObStorageHAService*,                  \
       storage::ObTenantFreezeInfoMgr*,               \
-      TenantLSMergeScheduler                         \
-      TenantLSMergeChecker                           \
       transaction::ObTxLoopWorker *,                 \
       storage::ObAccessService*,                     \
       datadict::ObDataDictService*,                  \
@@ -316,7 +307,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       table::ObTableObjectPoolMgr*,                \
       share::ObIndexUsageInfoMgr*,                  \
       storage::ObTabletMemtableMgrPool*,            \
-      rootserver::ObMViewMaintenanceService*,       \
       PublicBlockGCService                          \
       share::ObResourceLimitCalculator*,            \
       storage::ObGlobalIteratorPool*,                \

@@ -18,7 +18,6 @@
 #define OCEANBASE_STORAGE_OB_COMMON_CHECKPOINT_H_
 
 #include <cstdint>
-#include "share/ob_ls_id.h"
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
 

@@ -23,6 +23,7 @@
 #include "ob_complement_data_task.h"
 #include "rootserver/ob_root_service.h"
 #include "logservice/ob_log_service.h"
+#include "storage/tx_storage/ob_ls_service.h"
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_sim_point.h"
 #include "share/schema/ob_part_mgr_util.h"
@@ -77,12 +78,12 @@ void add_ddl_event(const ObComplementDataParam *param, const ObString &stmt)
 int ObComplementDataParam::fill_tablet_param()
 {
   int ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(dest_ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
     LOG_WARN("failed to get log stream", K(ret), K(param));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle,
+  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls,
                                                dest_tablet_id_,
                                                tablet_handle,
                                                ObMDSGetTabletMode::READ_ALL_COMMITED))) {
@@ -102,8 +103,8 @@ int ObComplementDataParam::fill_tablet_param()
     } else if (mds_data.lob_meta_tablet_id_.is_valid()) {
       dest_lob_meta_tablet_id_ = mds_data.lob_meta_tablet_id_;
       ObTabletHandle lob_meta_tablet_handle;
-      if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, mds_data.lob_meta_tablet_id_, lob_meta_tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
-        LOG_WARN("ddl get tablet failed", K(ret), K(ls_handle));
+      if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, mds_data.lob_meta_tablet_id_, lob_meta_tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
+        LOG_WARN("ddl get tablet failed", K(ret), K(ls));
       } else if (OB_FAIL(lob_meta_tablet_handle.get_obj()->load_storage_schema(allocator_, lob_meta_tablet_param_.storage_schema_))) {
         LOG_WARN("load storage schema failed", K(ret));
       } else {
@@ -196,8 +197,6 @@ int ObComplementDataParam::init(const ObDDLBuildSingleReplicaRequestArg &arg)
     dest_schema_version_ = dest_schema_version;
     orig_tablet_id_ = arg.source_tablet_id_;
     dest_tablet_id_ = arg.dest_tablet_id_;
-    orig_ls_id_ = arg.ls_id_;
-    dest_ls_id_ = arg.dest_ls_id_;
     task_id_ = arg.task_id_;
     execution_id_ = arg.execution_id_;
     tablet_task_id_ = arg.tablet_task_id_;
@@ -239,7 +238,6 @@ int ObComplementDataParam::prepare_task_ranges()
         LOG_INFO("succeed to to init task ranges", K(ret), K(user_parallelism_), K(concurrent_cnt_), K(ranges_));
       }
     } else if (OB_FAIL(split_task_ranges(task_id_,
-                                         orig_ls_id_,
                                          orig_tablet_id_,
                                          orig_schema_tablet_size_,
                                          user_parallelism_))) {
@@ -263,7 +261,6 @@ int ObComplementDataParam::prepare_task_ranges()
 // split task ranges to do table scan based on the whole range on the specified tablet.
 int ObComplementDataParam::split_task_ranges(
     const int64_t task_id,
-    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     const int64_t tablet_size,
     const int64_t hint_parallelism)
@@ -272,21 +269,18 @@ int ObComplementDataParam::split_task_ranges(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::get_task_ranges(task_id, ls_id, tablet_id, tablet_size, hint_parallelism, allocator_, ranges_))) {
+  } else if (OB_FAIL(ObDDLUtil::get_task_ranges(task_id, tablet_id, tablet_size, hint_parallelism, allocator_, ranges_))) {
     LOG_WARN("get_task_ranges failed", K(ret), KPC(this));
   } else {
-    ObLSHandle ls_handle;
+    ObLS *ls = nullptr;
     ObTabletTableIterator iterator;
     ObLSTabletService *tablet_service = nullptr;
-    if (OB_UNLIKELY(task_id <= 0 || !ls_id.is_valid() || !tablet_id.is_valid())) {
+    if (OB_UNLIKELY(task_id <= 0 || !tablet_id.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arguments", K(ret), K(task_id), K(ls_id), K(tablet_id));
-    } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
-      LOG_WARN("fail to get log stream", K(ret), K(arg));
-    } else if (OB_UNLIKELY(nullptr == ls_handle.get_ls())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ls is null", K(ret), K(ls_handle));
-    } else if (OB_ISNULL(tablet_service = ls_handle.get_ls()->get_tablet_svr())) {
+      LOG_WARN("invalid arguments", K(ret), K(task_id), K(tablet_id));
+    } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+      LOG_WARN("fail to get log stream", K(ret));
+    } else if (OB_ISNULL(tablet_service = ls->get_tablet_svr())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet service is nullptr", K(ret));
     } else {
@@ -305,7 +299,7 @@ int ObComplementDataContext::init(
 {
   int ret = OB_SUCCESS;
   UNUSED(hidden_table_schema);
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
   const ObSSTable *first_major_sstable = nullptr;
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
@@ -315,9 +309,9 @@ int ObComplementDataContext::init(
   } else if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(param));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(param.dest_ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
     LOG_WARN("failed to get log stream", K(ret), K(param));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle,
+  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls,
                                                param.dest_tablet_id_,
                                                tablet_handle,
                                                ObMDSGetTabletMode::READ_ALL_COMMITED))) {
@@ -325,7 +319,7 @@ int ObComplementDataContext::init(
   } else if (OB_UNLIKELY(nullptr == tablet_handle.get_obj())) {
     ret = OB_ERR_SYS;
     LOG_WARN("tablet handle is null", K(ret), K(param));
-  } else if (OB_FAIL(ObTabletDDLUtil::check_and_get_major_sstable(param.dest_ls_id_, param.dest_tablet_id_, first_major_sstable, table_store_wrapper))) {
+  } else if (OB_FAIL(ObTabletDDLUtil::check_and_get_major_sstable(param.dest_tablet_id_, first_major_sstable, table_store_wrapper))) {
     LOG_WARN("check if major sstable exist failed", K(ret), K(param));
   } else if (nullptr != first_major_sstable) {
     LOG_INFO("major exists, skip create tablet direct load mgr", K(ret), K(param));
@@ -344,7 +338,7 @@ int ObComplementDataContext::init(
       LOG_WARN("failed to alloc memory", K(ret));
     } else {
       tablet_ctx_ = new (buf) ObDDLTabletContext();
-       if (OB_FAIL(tablet_ctx_->init(param.dest_ls_id_, param.dest_tablet_id_, param.user_parallelism_, param.snapshot_version_, param.direct_load_type_, param.ddl_table_schema_))) {
+       if (OB_FAIL(tablet_ctx_->init(param.dest_tablet_id_, param.user_parallelism_, param.snapshot_version_, param.direct_load_type_, param.ddl_table_schema_))) {
         LOG_WARN("failed to init tablet ctx", K(ret));
       }
     }
@@ -476,7 +470,6 @@ int ObComplementDataDag::calc_total_row_count()
     // FIXME(YIREN), How to calc the row count of the source tablet for restore table.
     // RPC?
   } else if (OB_FAIL(ObDDLUtil::get_tablet_physical_row_cnt(
-                                  param_.orig_ls_id_,
                                   param_.orig_tablet_id_,
                                   true, // calc_sstable = true
                                   true, // calc_memtable = true
@@ -528,8 +521,7 @@ int ObComplementDataDag::create_first_task()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc memory", K(ret));
   } else if (FALSE_IT(context_.tablet_ctx_ = new (buf) ObDDLTabletContext())) {
-  } else if (OB_FAIL(context_.tablet_ctx_->init(param_.dest_ls_id_,
-                                                param_.dest_tablet_id_,
+  } else if (OB_FAIL(context_.tablet_ctx_->init(param_.dest_tablet_id_,
                                                 param_.user_parallelism_,
                                                 param_.snapshot_version_,
                                                 param_.direct_load_type_,
@@ -669,7 +661,6 @@ uint64_t ObComplementDataDag::hash() const
   } else {
     hash_val = 1UL + 1UL
              + param_.orig_table_id_ + param_.dest_table_id_
-             + param_.orig_ls_id_.hash() + param_.dest_ls_id_.hash()
              + param_.orig_tablet_id_.hash() + param_.dest_tablet_id_.hash() + ObDagType::DAG_TYPE_DDL;
   }
   return hash_val;
@@ -689,7 +680,6 @@ bool ObComplementDataDag::operator==(const ObIDag &other) const
     } else {
       is_equal = (1UL == 1UL) && (1UL == 1UL) &&
                  (param_.orig_table_id_ == dag.param_.orig_table_id_) && (param_.dest_table_id_ == dag.param_.dest_table_id_) &&
-                 (param_.orig_ls_id_ == dag.param_.orig_ls_id_) && (param_.dest_ls_id_ == dag.param_.dest_ls_id_) &&
                  (param_.orig_tablet_id_ == dag.param_.orig_tablet_id_) && (param_.dest_tablet_id_ == dag.param_.dest_tablet_id_);
     }
   }
@@ -711,7 +701,7 @@ int ObComplementDataDag::report_replica_build_status()
 #ifdef ERRSIM
     if (OB_SUCC(ret)) {
       ret = OB_E(EventTable::EN_DDL_REPORT_REPLICA_BUILD_STATUS_FAIL) OB_SUCCESS;
-      LOG_INFO("report replica build status errsim", K(ret));
+      LOG_INFO("report DDL build status errsim", K(ret));
     }
 #endif
     obcall::ObDDLBuildSingleReplicaResponseArg arg;
@@ -719,8 +709,6 @@ int ObComplementDataDag::report_replica_build_status()
     
     
     
-    arg.ls_id_ = param_.orig_ls_id_;
-    arg.dest_ls_id_ = param_.dest_ls_id_;
     arg.tablet_id_ = param_.orig_tablet_id_;
     arg.source_table_id_ = param_.orig_table_id_;
     arg.dest_schema_id_ = param_.dest_table_id_;
@@ -733,7 +721,7 @@ int ObComplementDataDag::report_replica_build_status()
     arg.row_inserted_ = context_.row_inserted_;
     arg.physical_row_count_ = context_.physical_row_count_;
     arg.server_addr_ = GCTX.self_addr();
-    FLOG_INFO("send replica build status response to RS", K(ret), K(context_), K(arg));
+    FLOG_INFO("send DDL build status response to RS", K(ret), K(context_), K(arg));
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(GCTX.root_service_->build_ddl_single_replica_response(arg))) {
       LOG_WARN("fail to send build ddl single replica response", K(ret), K(arg));
@@ -754,7 +742,6 @@ int ObComplementDataDag::fill_info_param(compaction::ObIBasicInfoParam *&out_par
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid param", K(ret), K(param_));
   } else if (OB_FAIL(ADD_DAG_WARN_INFO_PARAM(out_param, allocator, get_type(), 
-                                param_.orig_ls_id_.id(),
                                 static_cast<int64_t>(param_.orig_tablet_id_.id()),
                                 static_cast<int64_t>(param_.dest_tablet_id_.id()),
                                 static_cast<int64_t>(param_.orig_table_id_),
@@ -775,8 +762,8 @@ int ObComplementDataDag::fill_dag_key(char *buf, const int64_t buf_len) const
   } else if (OB_UNLIKELY(!param_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid params", K(ret), K(param_));
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, "logstream_id=%ld source_tablet_id=%ld dest_tablet_id=%ld",
-                              param_.orig_ls_id_.id(), param_.orig_tablet_id_.id(), param_.dest_tablet_id_.id()))) {
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, "source_tablet_id=%ld dest_tablet_id=%ld",
+                              param_.orig_tablet_id_.id(), param_.dest_tablet_id_.id()))) {
     LOG_WARN("fill dag key for ddl table merge dag failed", K(ret), K(param_));
   }
   return ret;
@@ -1011,7 +998,6 @@ int ObComplementWriteTask::get_next_chunk(ObChunk *&next_chunk)
 int ObComplementWriteTask::fill_writer_param(ObWriteMacroParam &param)
 {
   int ret = OB_SUCCESS;
-  param.ls_id_ = param_->dest_ls_id_;
   param.tablet_id_ = param_->dest_tablet_id_;
   param.tenant_data_version_ = param_->data_format_version_;
   param.is_no_logging_ = param_->is_no_logging_;
@@ -1255,21 +1241,18 @@ int ObComplementWriteTask::do_local_scan()
         false,
         false);
     const bool allow_not_ready = false;
-    ObLSHandle ls_handle;
+    ObLS *ls = nullptr;
     ObTabletTableIterator iterator;
     ObSSTable *sstable = nullptr;
     
     const int64_t schema_version = param_->dest_schema_version_;
     scan_ = scan;
 
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(param_->orig_ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
       LOG_WARN("fail to get log stream", K(ret), KPC(param_));
-    } else if (OB_UNLIKELY(nullptr == ls_handle.get_ls())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ls is null", K(ret), K(ls_handle));
     } else if (OB_FAIL(DDL_SIM(param_->task_id_, COMPLEMENT_DATA_TASK_LOCAL_SCAN_FAILED))) {
       LOG_WARN("ddl sim failure", K(ret), KPC(param_));
-    } else if (OB_FAIL(ls_handle.get_ls()->get_tablet_svr()->get_read_tables(param_->orig_tablet_id_,
+    } else if (OB_FAIL(ls->get_tablet_svr()->get_read_tables(param_->orig_tablet_id_,
         ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US,
         param_->snapshot_version_, param_->snapshot_version_, iterator, allow_not_ready, false/*need_split_src_table*/, false/*need_split_dst_table*/))) {
       if (OB_REPLICA_NOT_READABLE == ret) {
@@ -1315,7 +1298,6 @@ int ObComplementWriteTask::do_local_scan()
                                         false/*unique_index_checking*/))) {
         LOG_WARN("fail to init local scan param", K(ret), K(*param_));
       } else if (OB_FAIL(scan->table_scan(*data_table_schema,
-                                               param_->orig_ls_id_,
                                                param_->orig_tablet_id_,
                                                iterator,
                                                query_flag,
@@ -1415,7 +1397,7 @@ int ObComplementMergeTask::process()
   ObTablet *tablet = nullptr;
   ObArray<int64_t> report_col_checksums;
   ObArray<int64_t> report_col_ids;
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
   if (OB_ISNULL(tmp_dag) || ObDagType::DAG_TYPE_DDL != tmp_dag->get_type()) {
     ret = OB_ERR_UNEXPECTED;
@@ -1429,19 +1411,16 @@ int ObComplementMergeTask::process()
     ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
     const ObSSTable *first_major_sstable = nullptr;
     ObSSTableMetaHandle sst_meta_hdl;
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(param_->dest_ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
-      LOG_WARN("failed to get log stream", K(ret), K(ls_id));
-    } else if (OB_UNLIKELY(nullptr == ls_handle.get_ls())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ls is null", K(ret), K(ls_handle));
-    } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, param_->dest_tablet_id_, tablet_handle,
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+      LOG_WARN("failed to get log stream", K(ret));
+    } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, param_->dest_tablet_id_, tablet_handle,
       ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-      LOG_WARN("get tablet handle failed", K(ret), K(ls_id), KPC_(param));
+      LOG_WARN("get tablet handle failed", K(ret), KPC_(param));
     } else if (OB_UNLIKELY(nullptr == tablet_handle.get_obj())) {
       ret = OB_ERR_SYS;
-      LOG_WARN("tablet handle is null", K(ret), K(ls_id), KPC_(param));
+      LOG_WARN("tablet handle is null", K(ret), KPC_(param));
     } else if (OB_FAIL(ObTabletDDLUtil::check_and_get_major_sstable(
-        param_->dest_ls_id_, param_->dest_tablet_id_, first_major_sstable, table_store_wrapper))) {
+        param_->dest_tablet_id_, first_major_sstable, table_store_wrapper))) {
       LOG_WARN("check if major sstable exist failed", K(ret), K(*param_));
     } else if (OB_ISNULL(first_major_sstable)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1451,8 +1430,7 @@ int ObComplementMergeTask::process()
     } else {
       const int64_t *column_checksums = sst_meta_hdl.get_sstable_meta().get_col_checksum();
       const int64_t column_count = sst_meta_hdl.get_sstable_meta().get_col_checksum_cnt();
-      if (OB_FAIL(ObTabletDDLUtil::report_ddl_checksum(param_->dest_ls_id_,
-                                                         param_->dest_tablet_id_,
+      if (OB_FAIL(ObTabletDDLUtil::report_ddl_checksum(param_->dest_tablet_id_,
                                                          param_->dest_table_id_,
                                                          1 /* execution_id */,
                                                          param_->task_id_,
@@ -1460,7 +1438,7 @@ int ObComplementMergeTask::process()
                                                          column_count,
                                                          param_->data_format_version_))) {
         LOG_WARN("report ddl column checksum failed", K(ret), K(*param_));
-      } else if (OB_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(param_->dest_ls_id_, param_->dest_tablet_id_))) {
+      } else if (OB_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(param_->dest_tablet_id_))) {
         LOG_WARN("fail to submit tablet update task", K(ret), K(*param_));
       }
     }
@@ -1487,7 +1465,7 @@ int ObComplementMergeTask::process()
     OB_SUCCESS != (tmp_ret = dag->report_replica_build_status())) {
     // do not override ret if it has already failed.
     ret = OB_SUCCESS == ret ? tmp_ret : ret;
-    LOG_WARN("fail to report replica build status", K(ret), K(tmp_ret));
+    LOG_WARN("fail to report DDL build status", K(ret), K(tmp_ret));
   }
 
   add_ddl_event(param_, "complement merge task");
@@ -1660,7 +1638,6 @@ int ObLocalScan::check_generated_column_exist(
 
 int ObLocalScan::table_scan(
     const ObTableSchema &data_table_schema,
-    const share::ObLSID &ls_id,
     const ObTabletID &tablet_id,
     ObTabletTableIterator &table_iter,
     ObQueryFlag &query_flag,
@@ -1671,7 +1648,7 @@ int ObLocalScan::table_scan(
     LOG_WARN("fail to construct column schema", K(ret), K(col_params_));
   } else if (OB_FAIL(construct_access_param(data_table_schema, tablet_id))) {
     LOG_WARN("fail to construct access param", K(ret), K(col_params_));
-  } else if (OB_FAIL(construct_range_ctx(query_flag, ls_id))) {
+  } else if (OB_FAIL(construct_range_ctx(query_flag))) {
     LOG_WARN("fail to construct range ctx", K(ret), K(query_flag));
   } else if (OB_FAIL(construct_multiple_scan_merge(table_iter, range))) {
     LOG_WARN("fail to construct multiple scan merge", K(ret), K(table_iter), K(range));
@@ -1788,8 +1765,7 @@ int ObLocalScan::construct_access_param(
 }
 
 //construct version range and ctx
-int ObLocalScan::construct_range_ctx(ObQueryFlag &query_flag,
-                                     const share::ObLSID &ls_id)
+int ObLocalScan::construct_range_ctx(ObQueryFlag &query_flag)
 {
   int ret = OB_SUCCESS;
   common::ObVersionRange trans_version_range;
@@ -1798,13 +1774,12 @@ int ObLocalScan::construct_range_ctx(ObQueryFlag &query_flag,
   trans_version_range.base_version_ = 0;
   SCN tmp_scn;
   if (OB_FAIL(tmp_scn.convert_for_tx(snapshot_version_))) {
-    LOG_WARN("convert fail", K(ret), K(ls_id), K_(snapshot_version));
-  } else if (OB_FAIL(ctx_.init_for_read(ls_id,
-                                        access_param_.iter_param_.tablet_id_,
+    LOG_WARN("convert fail", K(ret), K_(snapshot_version));
+  } else if (OB_FAIL(ctx_.init_for_read(access_param_.iter_param_.tablet_id_,
                                         INT64_MAX,
                                         -1,
                                         tmp_scn))) {
-    LOG_WARN("fail to init store ctx", K(ret), K(ls_id));
+    LOG_WARN("fail to init store ctx", K(ret));
   } else if (OB_FAIL(access_ctx_.init(query_flag, ctx_, allocator_, allocator_, trans_version_range))) {
     LOG_WARN("fail to init accesss ctx", K(ret));
   }

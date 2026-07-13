@@ -69,7 +69,6 @@ const char *ObICompactionFilter::ObFilterTypeStr[] =
 {
   "TX_DATA_MINOR",
   "MDS_MINOR_FILTER_DATA",
-  "MDS_MINOR_CROSS_LS",
   "MDS_IN_MEDIUM_INFO",
   "FILTER_TYPE_MAX"
 };

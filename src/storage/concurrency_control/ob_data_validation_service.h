@@ -28,7 +28,7 @@ namespace concurrency_control
 class ObDataValidationService
 {
 public:
-  static void set_delay_resource_recycle(const ObLSID ls_id);
+  static void set_delay_resource_recycle();
 };
 
 } // namespace concurrency_control

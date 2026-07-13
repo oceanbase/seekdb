@@ -21,7 +21,6 @@
 #include "common/mysqlclient/ob_isql_client.h"
 #include "common/ob_zone.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
-#include "share/ob_ls_id.h"
 #include "share/tablet/ob_tablet_info.h"
 #include "share/ob_server_struct.h"
 #include "storage/compaction/ob_ckm_error_tablet_info.h"
@@ -42,25 +41,22 @@ struct ObTabletCompactionScnInfo
 {
 public:
   ObTabletCompactionScnInfo()
-   : ls_id_(0),
-     tablet_id_(0),
+   : tablet_id_(0),
      compaction_scn_(0),
      report_scn_(0),
      status_(ObTabletReplica::SCN_STATUS_MAX)
    {}
   ObTabletCompactionScnInfo(
-      const ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const ObTabletReplica::ScnStatus status)
-   : ls_id_(ls_id.id()),
-     tablet_id_(tablet_id.id()),
+   : tablet_id_(tablet_id.id()),
      compaction_scn_(0),
      report_scn_(0),
      status_(status)
    {}
   bool is_valid() const
   {
-    return true && ls_id_ > 0 && tablet_id_ > 0 && report_scn_ >= 0;
+    return tablet_id_ > 0 && report_scn_ >= 0;
   }
   // only check when last compaction type is major
   bool could_schedule_next_round(const int64_t major_frozen_scn)
@@ -69,15 +65,13 @@ public:
   }
   void reset()
   {
-    ls_id_ = 0;
     tablet_id_ = 0;
     compaction_scn_ = 0;
     report_scn_ = 0;
     status_ = ObTabletReplica::SCN_STATUS_MAX;
   }
-  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(compaction_scn), K_(report_scn), K_(status));
+  TO_STRING_KV(K_(tablet_id), K_(compaction_scn), K_(report_scn), K_(status));
 public:
-  int64_t ls_id_;
   int64_t tablet_id_;
   int64_t compaction_scn_;
   int64_t report_scn_;
@@ -88,15 +82,15 @@ public:
 class ObTabletMetaTableCompactionOperator
 {
 public:
-  static int batch_set_info_status(const ObIArray<compaction::ObCkmErrorTabletLSInfo> &tablet_ls_pairs,
+  static int batch_set_info_status(const ObIArray<compaction::ObCkmErrorTabletInfo> &tablet_infos,
       int64_t &affected_rows);
   static int get_status(
       const ObTabletCompactionScnInfo &input_info,
       ObTabletCompactionScnInfo &ret_info);
-  // update report_scn of all tablets which belong to @tablet_pairs
+  // update report_scn of all tablets in @tablet_ids
   static int batch_update_report_scn(
       const uint64_t global_broadcast_scn_val,
-      const common::ObIArray<ObTabletLSPair> &tablet_pairs,
+      const common::ObIArray<common::ObTabletID> &tablet_ids,
       const ObTabletReplica::ScnStatus &except_status);
   // after major_freeze, update all tablets' report_scn to global_broadcast_scn_val
   static int batch_update_report_scn(
@@ -105,8 +99,7 @@ public:
       const volatile bool &stop);
   // designed for 'clear merge error'. it updates all tablets' status to SCN_STATUS_IDLE
   static int batch_update_status();
-  static int batch_update_unequal_report_scn_tablet(const share::ObLSID &ls_id,
-      const int64_t major_frozen_scn,
+  static int batch_update_unequal_report_scn_tablet(const int64_t major_frozen_scn,
       const common::ObIArray<ObTabletID> &input_tablet_id_array);
   static int get_min_compaction_scn(SCN &min_compaction_scn);
   static int range_scan_for_compaction(const int64_t compaction_scn,
@@ -131,9 +124,6 @@ private:
       common::ObMySQLTransaction &trans,
       const bool is_update_finish_scn,
       const common::ObIArray<share::ObTabletReplica> &replicas);
-  static int inner_batch_update_unequal_report_scn_tablet(const share::ObLSID &ls_id,
-      const int64_t major_frozen_scn,
-      const common::ObIArray<ObTabletID> &unequal_tablet_id_array);
   static int append_tablet_id_array(const common::ObIArray<ObTabletID> &input_tablet_id_array,
       const int64_t start_idx,
       const int64_t end_idx,

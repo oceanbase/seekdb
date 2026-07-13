@@ -16,6 +16,7 @@
 
 #include "storage/concurrency_control/ob_data_validation_service.h"
 #include "share/rc/ob_module_provider.h"
+#include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
 {
@@ -23,26 +24,18 @@ namespace concurrency_control
 {
 
 
-void ObDataValidationService::set_delay_resource_recycle(const ObLSID ls_id)
+void ObDataValidationService::set_delay_resource_recycle()
 {
   int ret = OB_SUCCESS;
-  ObLSHandle handle;
-  ObLSService *ls_service = share::g_mp->ls_service();
   ObLS *ls = nullptr;
   const bool need_delay_opt = GCONF._delay_resource_recycle_after_correctness_issue;
 
   if (OB_LIKELY(!need_delay_opt)) {
     // do nothing
-  } else if (OB_UNLIKELY(!ls_id.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(ret), K(ls_id));
-  } else if (OB_FAIL(ls_service->get_ls(ls_id, handle, ObLSGetMod::TXSTORAGE_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
     if (OB_LS_NOT_EXIST != ret) {
-      TRANS_LOG(DEBUG, "get log stream failed", K(ls_id), K(ret));
+      TRANS_LOG(DEBUG, "get log stream failed", K(ret));
     }
-  } else if (OB_ISNULL(ls = handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "get log stream failed", K(ls_id), K(ret));
   } else {
     ls->set_delay_resource_recycle();
   }

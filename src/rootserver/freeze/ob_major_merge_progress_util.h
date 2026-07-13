@@ -17,7 +17,6 @@
 #define OB_ROOTSERVER_FREEZE_MAJOR_MERGE_PROGRESS_UTIL_H_
 #include "share/compaction/ob_compaction_time_guard.h"
 #include "share/ob_delegate.h"
-#include "share/ob_ls_id.h"
 #include "share/tablet/ob_tablet_info.h"
 namespace oceanbase
 {
@@ -231,7 +230,6 @@ struct ObUnfinishTableIds
 };
 
 typedef hash::ObHashMap<ObTabletID, ObTabletCompactionStatusEnum> ObTabletStatusMap;
-typedef common::ObArray<share::ObTabletLSPair> ObTabletLSPairArray;
 typedef hash::ObHashMap<uint64_t, ObTableCompactionInfo> ObTableCompactionInfoMap;
 
 struct ObCkmValidatorStatistics
@@ -254,36 +252,6 @@ struct ObCkmValidatorStatistics
   int64_t checker_validate_idx_cnt_;
 };
 
-// single thread operation
-struct ObTabletLSPairCache
-{
-public:
-  ObTabletLSPairCache();
-  ~ObTabletLSPairCache();
-  
-  void reuse();
-  void destroy();
-  int try_refresh(const bool force_refresh = false);
-  int get_tablet_ls_pairs(
-    const uint64_t table_id,
-    const ObIArray<ObTabletID> &tablet_ids,
-    ObIArray<share::ObTabletLSPair> &pairs) const;
-  int get_tablet_ls_id(
-    const uint64_t table_id,
-    const ObTabletID tablet_id,
-    share::ObLSID &ls_id) const;
-  TO_STRING_KV(K_(last_refresh_ts), "map_cnt", map_.size());
-private:
-  int refresh();
-  int rebuild_map_by_tablet_cnt();
-  const static int64_t RANGE_SIZE = 1000;
-  const static int64_t REFRESH_CACHE_TIME_INTERVAL = 60 * 1000 * 1000; // 1m
-  const static int64_t TABLET_LS_MAP_BUCKET_CNT = 3000;
-  const static int64_t TABLET_LS_MAP_BUCKET_MAX_CNT = 300000;
-  int64_t last_refresh_ts_;
-  hash::ObHashMap<common::ObTabletID, share::ObLSID> map_;
-};
-
 struct ObUncompactInfo
 {
 public:
@@ -293,9 +261,7 @@ public:
   void add_table(const uint64_t table_id);
   void add_skip_verify_table(const uint64_t table_id);
   void add_tablet(const share::ObTabletReplica &replica);
-  void add_tablet(
-    const share::ObLSID &ls_id,
-    const common::ObTabletID &tablet_id);
+  void add_tablet(const common::ObTabletID &tablet_id);
   int get_uncompact_info(
     common::ObIArray<share::ObTabletReplica> &input_tablets,
     common::ObIArray<uint64_t> &input_table_ids) const;

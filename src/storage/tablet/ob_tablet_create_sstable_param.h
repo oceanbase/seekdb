@@ -36,7 +36,7 @@ struct ObBlockInfo;
 struct ObSSTableBasicMeta;
 class ObSSTableMacroInfo;
 class ObSSTableMeta;
-class ObMigrationSSTableParam;
+class ObForkSSTableParam;
 class ObSSTable;
 class ObSSTableIndexBuilder;
 }
@@ -123,20 +123,12 @@ public:
                          const int64_t sstable_logic_seq,
                          const blocksstable::ObSSTableMergeRes &res);
 
-  int init_for_fork(const blocksstable::ObMigrationSSTableParam &sstable_param,
+  int init_for_fork(const blocksstable::ObForkSSTableParam &sstable_param,
                     const ObTabletID &dst_tablet_id,
                     const ObITable::TableKey &src_table_key,
                     const blocksstable::ObSSTableMeta &sstable_meta,
                     const share::SCN &max_end_scn = share::SCN());
 
-  // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
-  int init_for_ha(const blocksstable::ObMigrationSSTableParam &migration_param,
-                  const blocksstable::ObSSTableMergeRes &res);
-
-  // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
-  int init_for_ha(const blocksstable::ObMigrationSSTableParam &migration_param);
-
-  // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_mds(const compaction::ObBasicTabletMergeCtx &ctx,
                    const blocksstable::ObSSTableMergeRes &res,
                    const ObStorageSchema &mds_schema);
@@ -197,8 +189,7 @@ public:
 private:
   static const int64_t DEFAULT_MACRO_BLOCK_CNT = 64;
   int inner_init_with_merge_res(const blocksstable::ObSSTableMergeRes &res);
-  int inner_init_with_shared_sstable(const blocksstable::ObMigrationSSTableParam &migration_param);
-  int inner_init_with_shared_sstable(const blocksstable::ObMigrationSSTableParam &sstable_param,
+  int inner_init_with_shared_sstable(const blocksstable::ObForkSSTableParam &sstable_param,
                                      const common::ObIArray<blocksstable::MacroBlockId> &data_block_ids,
                                      const common::ObIArray<blocksstable::MacroBlockId> &other_block_ids);
   int collect_macro_block_ids_from_meta(

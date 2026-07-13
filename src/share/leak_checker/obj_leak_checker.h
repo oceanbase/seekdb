@@ -31,7 +31,6 @@ namespace share
 enum ObLeakCheckObjType
 {
   LEAK_CHECK_OBJ_TABLET_HANDLE,
-  LEAK_CHECK_OBJ_LS_HANDLE,
   LEAK_CHECK_OBJ_MAX_NUM
 };
 

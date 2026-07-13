@@ -187,7 +187,7 @@ FLT_DEF_TAG(sqc_resp_finish_ts, "sqc finish response qc timestamp")
 // transaction  TODO shengle SET_TAG
 FLT_DEF_TAG(trans_id, "transaction identifier")
 FLT_DEF_TAG(trans_type, "transaction type : 1 is for sp trans and 2 is for dist trans")
-FLT_DEF_TAG(participant_num, "total participant number")
+FLT_DEF_TAG(write_participant_num, "total write participant number")
 FLT_DEF_TAG(trans_expired_time, "transaction expired time")
 FLT_DEF_TAG(trans_start_ts, "transaction start ts")
 FLT_DEF_TAG(session_id, "session id")

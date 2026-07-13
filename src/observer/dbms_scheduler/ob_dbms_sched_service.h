@@ -18,7 +18,7 @@
 #define OCEANBASE_ROOTSERVER_OB_DBMS_SCHEDULER_SERVICE_H
 
 #include "share/ob_define.h"
-#include "logservice/ob_log_base_type.h"                        //ObIRoleChangeSubHandler ObICheckpointSubHandler ObIReplaySubHandler
+#include "logservice/ob_log_base_type.h"                        //ObILocalLogHandler ObICheckpointSubHandler ObIReplaySubHandler
 #include "observer/dbms_scheduler/ob_dbms_sched_job_master.h"
 #include "rootserver/ob_tenant_thread_helper.h" // for ObTenantThreadHelper
 
@@ -71,10 +71,8 @@ public:
   }
 
   // for role change
-  virtual void switch_to_follower_forcedly() override;
-  virtual int switch_to_leader() override;
-  virtual int switch_to_follower_gracefully() override;
-  virtual int resume_leader() override;
+  void deactivate() override;
+  int activate() override;
 
 private:
   dbms_scheduler::ObDBMSSchedJobMaster job_master_;

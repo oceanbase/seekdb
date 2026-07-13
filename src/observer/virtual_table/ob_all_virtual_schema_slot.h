@@ -43,23 +43,19 @@ class ObAllVirtualSchemaSlot: public common::ObVirtualTableScannerIterator
   };
 public:
   explicit ObAllVirtualSchemaSlot(share::schema::ObMultiVersionSchemaService &schema_service)
-             : t_loop_idx_(OB_INVALID_INDEX), slot_idx_(0), 
+             : slot_idx_(OB_INVALID_INDEX),
                schema_service_(schema_service), schema_slot_infos_() {}
   virtual ~ObAllVirtualSchemaSlot() {}
 public:
-  virtual int inner_open();
   virtual int inner_get_next_row(common::ObNewRow *&row);
-  void reset(common::ObIAllocator &allocator, common::ObIArray<ObSchemaSlot> &schema_slot_infos);
-  int get_next_tenant_slot_info(ObSchemaSlot &schema_slot);
-
 private:
-  int64_t t_loop_idx_;// tenant_iterator
-  int64_t slot_idx_;// slot iterator
-  const static int64_t DEFAULT_TENANT_NUM = 10;
+  void reset_slot_infos_(common::ObIAllocator &allocator);
+  int get_next_slot_info_(ObSchemaSlot &schema_slot);
+
+  int64_t slot_idx_;
   const static int64_t DEFAULT_SLOT_NUM = 128;
-  char ip_buffer_[OB_MAX_SERVER_ADDR_SIZE];
   share::schema::ObMultiVersionSchemaService &schema_service_;
-  common::ObSEArray<ObSchemaSlot, DEFAULT_SLOT_NUM> schema_slot_infos_;// specified tenant's all slot info
+  common::ObSEArray<ObSchemaSlot, DEFAULT_SLOT_NUM> schema_slot_infos_;
 }; //class ObAllVirtualSchemaSlot
 }//namespace observer
 }//namespace oceanbase

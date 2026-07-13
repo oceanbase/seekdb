@@ -15,7 +15,8 @@
  */
 
 #include "ob_mvcc_ctx.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
+#include "storage/ls/ob_freezer.h"
 namespace oceanbase
 {
 using namespace common;
@@ -359,14 +360,14 @@ int ObIMvccCtx::register_ext_info_commit_cb(
 }
 
 #include "storage/tx/ob_trans_service.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 namespace oceanbase {
 namespace memtable {
 ObMvccWriteGuard::~ObMvccWriteGuard()
 {
   if (NULL != ctx_) {
     int ret = OB_SUCCESS;
-    transaction::ObPartTransCtx *tx_ctx = ctx_->get_trans_ctx();
+    transaction::ObTxCtx *tx_ctx = ctx_->get_trans_ctx();
     ctx_->write_done();
 
     if (OB_NOT_NULL(memtable_)

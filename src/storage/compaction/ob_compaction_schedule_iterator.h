@@ -15,20 +15,14 @@
  */
 #ifndef OB_STORAGE_COMPACTION_COMPACTION_SCHEDUL_ITERATOR_H_
 #define OB_STORAGE_COMPACTION_COMPACTION_SCHEDUL_ITERATOR_H_
-#include "storage/ls/ob_ls_get_mod.h"
 #include "storage/tablet/ob_tablet_common.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/literals/ob_literals.h"
-#include "storage/tx_storage/ob_ls_handle.h"
 #include "common/ob_tablet_id.h"
 #include "storage/ls/ob_ls.h"
 
 namespace oceanbase
 {
-namespace share
-{
-class ObLSID;
-}
 namespace common
 {
 class ObTabletID;
@@ -36,7 +30,6 @@ class ObTabletID;
 namespace storage
 {
 class ObLS;
-class ObLSHandle;
 class ObTabletHandle;
 class ObLSTabletService;
 }
@@ -50,10 +43,8 @@ public:
   {
     ObTabletArray();
     ~ObTabletArray() { reset(); }
-    bool is_ls_iter_end() const
+    bool is_tablet_iter_end() const
     {
-      // not init means cur ls not iter before
-      // when init, need check array
       return is_inited_ && (array_.empty() || tablet_idx_ >= array_.count());
     }
     void reset()
@@ -72,15 +63,14 @@ public:
     TO_STRING_KV(K_(tablet_idx), "tablet_cnt", count(), K_(array), K_(is_inited));
     static const int64_t TABLET_ID_ARRAY_CNT = 2000;
     int64_t tablet_idx_;
-    // array may be empty after inited on SS
     common::ObSEArray<common::ObTabletID, TABLET_ID_ARRAY_CNT> array_;
     bool is_inited_;
   };
 public:
   ObBasicMergeScheduleIterator();
   ~ObBasicMergeScheduleIterator() = default;
-  int init(const int64_t schedule_batch_size);
-  virtual int get_next_ls(storage::ObLSHandle &ls_handle);
+  int init(const int64_t schedule_batch_size, storage::ObLS *ls);
+  storage::ObLS *get_ls() const { return ls_; }
   int get_next_tablet(storage::ObTabletHandle &tablet_handle);
   bool is_scan_finish() const { return scan_finish_; }
   bool tenant_merge_finish() const { return merge_finish_ & scan_finish_; }
@@ -89,10 +79,10 @@ public:
   }
   void reset_basic_iter();
   bool is_valid() const;
-  void skip_cur_ls()
+  void finish_scan()
   {
-    ++ls_idx_;
-    cur_ls_handle_.reset();
+    scan_finish_ = true;
+    ls_ = nullptr;
     tablet_ids_.reset();
   }
   void start_cur_batch()
@@ -101,18 +91,14 @@ public:
   }
   int64_t to_string(char *buf, const int64_t buf_len) const;
 protected:
-  virtual int get_cur_ls_handle(storage::ObLSHandle &ls_handle) = 0;
   virtual int get_tablet_ids() = 0;
   virtual int get_tablet_handle(const ObTabletID &tablet_id, storage::ObTabletHandle &tablet_handle) = 0;
 protected:
-  static const int64_t LS_ID_ARRAY_CNT = 10;
   bool scan_finish_;
   bool merge_finish_;
-  int64_t ls_idx_;
   int64_t schedule_tablet_cnt_;
   int64_t max_batch_tablet_cnt_;
-  storage::ObLSHandle cur_ls_handle_;
-  common::ObSEArray<share::ObLSID, LS_ID_ARRAY_CNT> ls_ids_;
+  storage::ObLS *ls_;
   ObTabletArray tablet_ids_;
 };
 
@@ -128,7 +114,6 @@ public:
   void set_tablet_get_mode(const storage::ObMDSGetTabletMode mode) { tablet_get_mode_ = mode; }
   void reset();
 protected:
-  virtual int get_cur_ls_handle(storage::ObLSHandle &ls_handle) override;
   virtual int get_tablet_ids() override;
   virtual int get_tablet_handle(const ObTabletID &tablet_id, storage::ObTabletHandle &tablet_handle) override;
 protected:

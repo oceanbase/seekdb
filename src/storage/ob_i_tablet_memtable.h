@@ -247,7 +247,7 @@ public:
   // *************** pure virtual functions *****************
   virtual bool is_inited() const = 0;
   virtual int init(const ObITable::TableKey &table_key,
-                   ObLSHandle &ls_handle,
+                   ObLS *tenant_ls,
                    ObFreezer *freezer,
                    ObTabletMemtableMgr *memtable_mgr,
                    const int64_t schema_version,
@@ -334,7 +334,6 @@ public:
 
   INHERIT_TO_STRING_KV("ObITable",
                        ObITable,
-                       K(ls_id_),
                        K(allow_freeze_),
                        K(is_flushed_),
                        K(is_tablet_freeze_),

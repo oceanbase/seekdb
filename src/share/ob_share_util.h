@@ -110,10 +110,7 @@ public:
   static inline uint64_t compute_server_index(uint64_t server_id) {
     return server_id % (MAX_SERVER_COUNT + 1);
   }
-  // get_sys_ls_readable_scn has been demoted to storage::free function(see end of file storage ns)
   // check_clog_disk_full_or_hang has been demoted to logservice::free function
-  // get_tenant_gts has been demoted to storage::free function(transaction::get_tenant_gts, see end of file storage/transaction ns and ob_ts_mgr.cpp)
-  // Note: master still keeps ObShareUtil::get_tenant_gts(SCN&) shape and still has callers, changed to transaction::get_tenant_gts (see routing item)
   static int gen_sys_unit(ObUnit &unit);
   static int gen_sys_resource_pool(ObResourcePool &resource_pool);
   static int gen_default_sys_tenant_schema(schema::ObTenantSchema &tenant_schema);

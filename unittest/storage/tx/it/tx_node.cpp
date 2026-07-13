@@ -82,30 +82,13 @@ int ObTxDescGuard::release() {
 
 ObString ObTxNode::get_identifer_str()
 {
-  struct ID {
-    ObAddr addr;
-    int64_t ls_id;
-    DECLARE_TO_STRING {
-      int64_t pos = 0;
-      int32_t pos0 = 0;
-      addr.addr_to_buffer(buf, buf_len, pos0);
-      pos += pos0;
-      BUF_PRINTF("_%ld", ls_id);
-      return pos;
-    }
-  } identifer = {
-    .addr = addr_,
-    .ls_id = ls_id_.id()
-  };
-  int64_t pos = identifer.to_string(buf_, sizeof(buf_));
+  const int64_t pos = addr_.to_string(buf_, sizeof(buf_));
   return ObString(pos, buf_);
 }
-ObTxNode::ObTxNode(const int64_t ls_id,
-                   const ObAddr &addr,
+ObTxNode::ObTxNode(const ObAddr &addr,
                    MsgBus &msg_bus) :
   name_(name_buf_),
   addr_(addr),
-  ls_id_(ls_id),
   tenant_id_(1001),
   tenant_(0, 10),
   fake_part_trans_ctx_pool_(false, false, 4),
@@ -115,14 +98,13 @@ ObTxNode::ObTxNode(const int64_t ls_id,
                 std::bind(&ObTxNode::handle_msg_,
                           this, std::placeholders::_1)),
   t3m_(),
-  fake_rpc_(&msg_bus, addr, &get_location_adapter_()),
   lock_memtable_(),
-  fake_tx_log_adapter_(nullptr)
+  fake_tx_log_adapter_(nullptr),
+  owns_log_adapter_(false)
 {
   fake_part_trans_ctx_pool_.init();
   addr.to_string(name_buf_, sizeof(name_buf_));
   msg_consumer_.set_name(name_);
-  role_ = Leader;
   provider_.tenant_freezer_ = &fake_tenant_freezer_;
   provider_.part_trans_ctx_obj_pool_ = &fake_part_trans_ctx_pool_;
   fake_shared_mem_alloc_mgr_.init();
@@ -147,8 +129,6 @@ ObTxNode::ObTxNode(const int64_t ls_id,
   // txn service
   int ret = OB_SUCCESS;
   OZ(txs_.init(addr,
-               &fake_rpc_,
-               &get_location_adapter_(),
                &get_gti_source_(),
                &get_ts_mgr_(),
                &schema_service_));
@@ -158,9 +138,8 @@ ObTxNode::ObTxNode(const int64_t ls_id,
   OZ(fake_lock_wait_mgr_.init());
   provider_.lock_wait_mgr_ = &fake_lock_wait_mgr_;
   ls_service_.is_inited_ = true;
-  OZ(ls_service_.ls_map_.init(lib::ObMallocAllocator::get_instance()));
+  ls_service_.is_stopped_ = true;
   provider_.ls_service_ = &ls_service_;
-  OZ (create_memtable_(100000, memtable_));
   {
     ObColDesc col_desc;
     col_desc.col_id_ = 1;
@@ -171,7 +150,6 @@ ObTxNode::ObTxNode(const int64_t ls_id,
     columns_.push_back(col_desc);
   }
   OZ(msg_bus.regist(addr, *this));
-  OZ(drop_msg_type_set_.create(16));
   FAST_FAIL();
 }
 ObTxDescGuard ObTxNode::get_tx_guard() {
@@ -186,23 +164,24 @@ int ObTxNode::start() {
   ObTenantEnv::set_tenant(&tenant_);
   share::g_mp = &provider_;
 
-  if (ObTxNodeRole::Leader == role_) {
+  if (nullptr == fake_tx_log_adapter_) {
     fake_tx_log_adapter_ = new ObFakeTxLogAdapter();
+    owns_log_adapter_ = true;
     OZ(fake_tx_log_adapter_->start());
   }
   get_ts_mgr_().reset();
   OZ(msg_consumer_.start());
   OZ(txs_.start());
-  OZ(create_ls_(ls_id_));
-  ObLSTxCtxMgr *ls_tx_ctx_mgr = NULL;
-  OZ(txs_.tx_ctx_mgr_.get_ls_tx_ctx_mgr(ls_id_, ls_tx_ctx_mgr));
-  if (ObTxNodeRole::Leader == role_) {
-    OZ(ls_tx_ctx_mgr->switch_to_leader());
-    wait_all_redolog_applied();
-    CK(ls_tx_ctx_mgr->is_master_());
-  }
-  if (ls_tx_ctx_mgr) {
-    fake_tx_table_.tx_ctx_table_.ls_tx_ctx_mgr_ = ls_tx_ctx_mgr;
+  OZ(txs_.tx_ctx_mgr_.create_context_manager(&fake_tx_table_,
+                                             &fake_lock_table_,
+                                             *fake_ls_.get_tx_svr(),
+                                             (ObITxLogParam*)0x01,
+                                             fake_tx_log_adapter_));
+  fake_ls_.get_tx_svr()->online();
+  OZ(publish_fake_ls_());
+  if (OB_SUCC(ret)) {
+    ObLSTxCtxMgr &tx_ctx_mgr = txs_.tx_ctx_mgr_.get_tx_ctx_manager();
+    fake_tx_table_.tx_ctx_table_.ls_tx_ctx_mgr_ = &tx_ctx_mgr;
     fake_tx_table_.is_inited_ = true;
     fake_tx_table_.ls_ = &fake_ls_;
     fake_tx_table_.online();
@@ -212,54 +191,8 @@ int ObTxNode::start() {
     fake_ls_.tx_table_.is_inited_ = true;
     fake_ls_.tx_table_.online();
     fake_ls_.ls_meta_.clog_checkpoint_scn_ = share::SCN::max_scn();
-  } else {
-    abort();
+    OZ(create_memtable_(100000, memtable_));
   }
-  return ret;
-}
-
-struct MsgInfo {
-  void *msg_ptr_ = NULL;
-  int64_t recv_time_ = 0;
-  ObAddr sender_;
-  bool is_callback_msg_ = false;
-  bool is_sync_msg_ = false;
-  TxMsgCallbackMsg callback_msg_;
-  int16_t msg_type_;
-  int64_t size_;
-  const char* buf_;
-  TO_STRING_KV(K_(msg_ptr),
-               K_(recv_time),
-               K_(sender),
-               K_(is_callback_msg),
-               K_(is_sync_msg),
-               K_(msg_type),
-               K_(callback_msg),
-               K_(size));
-};
-
-int get_msg_info(ObTxNode::MsgPack *pkt, MsgInfo& msg_info)
-{
-  int ret = OB_SUCCESS;
-  const char* buf = pkt->body_.ptr();
-  int64_t size = pkt->body_.length();
-  int64_t pos = 0;
-  char cat = 0;  int16_t pcode = 0;
-  OZ (serialization::decode(buf, size, pos, cat));
-  if (cat == 1) {
-    msg_info.is_callback_msg_ = true;
-    OZ (msg_info.callback_msg_.deserialize(buf, size, pos));
-    msg_info.msg_type_ = msg_info.callback_msg_.type_;
-  } else {
-    OZ (serialization::decode(buf, size, pos, pcode));
-    msg_info.msg_type_ = pcode;
-    msg_info.buf_ = buf + pos;
-    msg_info.size_ = size - pos;
-  }
-  msg_info.is_sync_msg_ = pkt->is_sync_msg_;
-  msg_info.msg_ptr_ = (void*)pkt->body_.ptr();
-  msg_info.recv_time_ = pkt->recv_time_;
-  msg_info.sender_ = pkt->sender_;
   return ret;
 }
 
@@ -270,9 +203,9 @@ void ObTxNode::dump_msg_queue_()
   int i = 0;
   while(OB_SUCC(msg_queue_.pop((ObLink*&)msg))) {
     ++i;
-    MsgInfo msg_info;
-    OZ (get_msg_info(msg, msg_info));
-    TRANS_LOG(INFO,"[dump_msg]", K(i), K(msg_info), K(ret), KPC(this));
+    TRANS_LOG(INFO,"[dump_msg]", K(i), K(ret), KPC(this));
+    ob_free((void*)const_cast<char*>(msg->body_.ptr()));
+    delete msg;
   }
 }
 
@@ -301,18 +234,18 @@ ObTxNode::~ObTxNode() __attribute__((optnone)) {
   TRANS_LOG(INFO, "destroy TxNode", KPC(this));
   ObTenantEnv::set_tenant(&tenant_);
   share::g_mp = &provider_;
-  OZ(txs_.tx_ctx_mgr_.revert_ls_tx_ctx_mgr(fake_tx_table_.tx_ctx_table_.ls_tx_ctx_mgr_));
   fake_tx_table_.tx_ctx_table_.ls_tx_ctx_mgr_ = nullptr;
   bool is_tx_clean = false;
   int retry_cnt = 0;
   do {
     usleep(2000);
-    txs_.block_tx(ls_id_, is_tx_clean);
+    txs_.block_tx(is_tx_clean);
   } while(!is_tx_clean && ++retry_cnt < 1000);
   OX(txs_.stop());
   OZ(txs_.wait_());
-  OZ(drop_ls_(ls_id_));
-  if (role_ == Leader && fake_tx_log_adapter_) {
+  OZ(txs_.tx_ctx_mgr_.remove_context_manager(true));
+  provider_.trans_service_ = nullptr;
+  if (owns_log_adapter_ && fake_tx_log_adapter_) {
     fake_tx_log_adapter_->stop();
     fake_tx_log_adapter_->wait();
     fake_tx_log_adapter_->destroy();
@@ -320,23 +253,14 @@ ObTxNode::~ObTxNode() __attribute__((optnone)) {
   msg_consumer_.stop();
   msg_consumer_.wait();
   dump_msg_queue_();
-  //fake_tx_table_.is_inited_ = false;
   if (memtable_) {
     delete memtable_;
+    memtable_ = nullptr;
   }
-  if (role_ == Leader && fake_tx_log_adapter_) {
+  OZ(retire_fake_ls_());
+  ls_service_.destroy();
+  if (owns_log_adapter_ && fake_tx_log_adapter_) {
     delete fake_tx_log_adapter_;
-  }
-  fake_ls_.ls_meta_.ls_id_ = ObLSID(1001);
-  // seekdb runs a single sys tenant that is never deleted. Under the global
-  // tenant-context model (g_tenant_ptr), this test's multiple ObTxNodes share
-  // one global tenant pointer, so a node's background threads may switch the
-  // pointer concurrently and a sibling node may already have cleaned up the
-  // shared LS/tx state. These teardown steps are therefore best-effort:
-  // tolerate benign cleanup errors (e.g. OB_LS_NOT_EXIST) instead of aborting.
-  if (OB_FAIL(ret)) {
-    TRANS_LOG(WARN, "ignore best-effort TxNode teardown error", K(ret));
-    ret = OB_SUCCESS;
   }
   FAST_FAIL();
   ObTenantEnv::set_tenant(NULL);
@@ -350,65 +274,36 @@ int ObTxNode::create_memtable_(const int64_t tablet_id, memtable::ObMemtable *&m
   table_key.tablet_id_ = tablet_id;
   table_key.scn_range_.start_scn_.convert_for_gts(100);
   table_key.scn_range_.end_scn_.set_max();
-  ObLSHandle ls_handle;
-  ls_handle.set_ls(ls_service_.ls_map_, fake_ls_, ObLSGetMod::DATA_MEMTABLE_MOD);
-  OZ (t->init(table_key, ls_handle, &fake_freezer_, &fake_memtable_mgr_, 0, 0));
+  ObLS *ls = nullptr;
+  OZ(ls_service_.get_ls(ls));
+  OZ(t->init(table_key, ls, &fake_freezer_, &fake_memtable_mgr_, 0, 0));
   if (OB_SUCC(ret)) {
     mt = t;
   } else { delete t; }
   return ret;
 }
 
-int ObTxNode::create_ls_(const ObLSID ls_id) {
-  int ret = OB_SUCCESS;
-  OZ(txs_.tx_ctx_mgr_.create_ls(ls_id,
-                                &fake_tx_table_,
-                                &fake_lock_table_,
-                                *fake_ls_.get_tx_svr(),
-                                (ObITxLogParam*)0x01,
-                                fake_tx_log_adapter_));
-  if (Leader == role_) {
-    OZ(get_location_adapter_().fill(ls_id, addr_));
-  }
-  fake_ls_.ls_meta_.ls_id_ = ls_id;
-  fake_ls_.get_tx_svr()->online();
-  fake_ls_.get_ref_mgr().inc(ObLSGetMod::TXSTORAGE_MOD);
-  share::g_mp->ls_service()->ls_map_.add_ls(fake_ls_);
-  return ret;
-}
-
-int ObTxNode::drop_ls_(const ObLSID ls_id) {
-  int ret = OB_SUCCESS;
-  OZ(txs_.tx_ctx_mgr_.remove_ls(ls_id, true));
-  get_location_adapter_().remove(ls_id);
-  OZ(share::g_mp->ls_service()->ls_map_.del_ls(ls_id));
-  return ret;
-}
-
-int ObTxNode::recv_msg_callback_(TxMsgCallbackMsg &msg)
+int ObTxNode::publish_fake_ls_()
 {
-  TRANS_LOG(INFO, "recv msg callback", K(msg), KPC(this));
-  ObTenantEnv::set_tenant(&tenant_);
-  share::g_mp = &provider_;
   int ret = OB_SUCCESS;
-  switch(msg.type_) {
-  case TxMsgCallbackMsg::SAVEPOINT_ROLLBACK:
-    // ignore, has changed to use async resp msg
-    break;
-  case TxMsgCallbackMsg::NORMAL:
-    OZ(txs_.handle_trans_msg_callback(msg.sender_ls_id_,
-                                      msg.receiver_ls_id_,
-                                      msg.tx_id_,
-                                      msg.orig_msg_type_,
-                                      msg.tx_rpc_result_.status_,
-                                      msg.receiver_addr_,
-                                      msg.request_id_,
-                                      msg.tx_rpc_result_.private_data_));
-    break;
-  default:
-    ret = OB_ERR_UNEXPECTED;
+  if (OB_NOT_NULL(ls_service_.ls_)) {
+    ret = OB_INIT_TWICE;
+    TRANS_LOG(WARN, "fake ls is already published", K(ret), KP(ls_service_.ls_));
+  } else {
+    ls_service_.ls_ = &fake_ls_;
   }
-  TRANS_LOG(INFO, "handle msg callback done", K(ret), K(msg), KPC(this));
+  return ret;
+}
+
+int ObTxNode::retire_fake_ls_()
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(ls_service_.ls_) && ls_service_.ls_ != &fake_ls_) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(ERROR, "unexpected ls in fake ls service", K(ret), KP(ls_service_.ls_));
+  } else {
+    ls_service_.ls_ = nullptr;
+  }
   return ret;
 }
 
@@ -446,66 +341,8 @@ int ObTxNode::handle_msg_(MsgPack *pkt)
   ObTenantEnv::set_tenant(&tenant_);
   share::g_mp = &provider_;
   TRANS_LOG(INFO, "begin to handle_msg", "msg_ptr", OB_P(pkt->body_.ptr()), KPC(this));
-  int ret = OB_SUCCESS;
-  MsgInfo msg_info;
-  OZ (get_msg_info(pkt, msg_info));
-  auto sender = msg_info.sender_;
-  const char* buf = msg_info.buf_;
-  int64_t size = msg_info.size_;
-  int64_t pos = 0;
-  if (OB_SUCC(ret) && msg_info.is_callback_msg_) {
-    return recv_msg_callback_(msg_info.callback_msg_);
-  }
-  int16_t msg_type = msg_info.msg_type_;
-  if (OB_HASH_EXIST == drop_msg_type_set_.exist_refactored(msg_type)) {
-    TRANS_LOG(WARN, "drop msg", K(msg_type), KPC(this));
-    return OB_SUCCESS;
-  }
-  switch (msg_type) {
-#define TX_MSG_HANDLER__(t, clz, func)                  \
-  case t:                                               \
-  {                                                     \
-    clz msg;                                            \
-    ObTransRpcResult rslt;                              \
-    OZ(msg.deserialize(buf, size, pos));                \
-    TRANS_LOG(TRACE, "handle_msg::", K(msg), KPC(this));        \
-    auto status = txs_.func(msg, rslt);                 \
-    rslt.status_ = status;                              \
-    OZ(fake_rpc_.send_msg_callback(sender, msg, rslt)); \
-    break;                                              \
-  }
-  TX_MSG_HANDLER__(TX_COMMIT, ObTxCommitMsg, handle_trans_commit_request);
-  TX_MSG_HANDLER__(TX_COMMIT_RESP, ObTxCommitRespMsg, handle_trans_commit_response);
-  TX_MSG_HANDLER__(TX_ABORT, ObTxAbortMsg, handle_trans_abort_request);
-  TX_MSG_HANDLER__(KEEPALIVE, ObTxKeepaliveMsg, handle_trans_keepalive);
-  TX_MSG_HANDLER__(KEEPALIVE_RESP, ObTxKeepaliveRespMsg, handle_trans_keepalive_response);
-  TX_MSG_HANDLER__(ROLLBACK_SAVEPOINT_RESP, ObTxRollbackSPRespMsg, handle_sp_rollback_response);
-#undef TX_MSG_HANDLER__
-  case ROLLBACK_SAVEPOINT:
-    {
-      ObTxRollbackSPMsg msg;
-      obcall::ObTxRpcRollbackSPResult rslt;
-      OZ(msg.deserialize(buf, size, pos));
-      TRANS_LOG(TRACE, "handle_msg", K(msg), KPC(this));
-      OZ(txs_.handle_sp_rollback_request(msg, rslt), msg);
-      break;
-    }
-  case TX_2PC_PREPARE_REQ:
-  case TX_2PC_PREPARE_RESP:
-  case TX_2PC_PRE_COMMIT_REQ:
-  case TX_2PC_PRE_COMMIT_RESP:
-  case TX_2PC_COMMIT_REQ:
-  case TX_2PC_COMMIT_RESP:
-  case TX_2PC_ABORT_REQ:
-  case TX_2PC_ABORT_RESP:
-  case TX_2PC_CLEAR_REQ:
-  case TX_2PC_CLEAR_RESP:
-    OZ(txs_.handle_tx_batch_req(msg_type, buf + pos, size - pos, false));
-  break;
-  default:
-    ret = OB_NOT_SUPPORTED;
-  }
-  if (msg_info.is_sync_msg_) {
+  int ret = OB_NOT_SUPPORTED;
+  if (pkt->is_sync_msg_) {
     pkt->resp_ready_ = true;
     pkt->cond_.signal();
   } else {
@@ -537,7 +374,6 @@ int ObTxNode::read(const ObTxReadSnapshot &snapshot,
   share::g_mp = &provider_;
   ObStoreCtx read_store_ctx;
   read_store_ctx.ls_ = &fake_ls_;
-  read_store_ctx.ls_id_ = ls_id_;
   OZ(txs_.get_read_store_ctx(snapshot, false, 5000ll * 1000, read_store_ctx));
   // HACK, refine: mock LS's each member in some way
   read_store_ctx.mvcc_acc_ctx_.tx_table_guards_.tx_table_guard_.init(&fake_tx_table_);
@@ -606,7 +442,7 @@ int ObTxNode::atomic_write(ObTxDesc &tx, const int64_t key, const int64_t value,
   OZ(create_implicit_savepoint(tx, tx_param, sp, true));
   OZ(write(tx, key, value));
   if (sp.is_valid() && OB_FAIL(ret)) {
-    OZ(rollback_to_implicit_savepoint(tx, sp, expire_ts, nullptr));
+    OZ(rollback_to_implicit_savepoint(tx, sp, expire_ts, false));
   }
   return ret;
 }
@@ -637,7 +473,6 @@ int ObTxNode::write(ObTxDesc &tx,
   ObITable *mtb = memtable_;
   iter->add_table(mtb);
   write_store_ctx.ls_ = &fake_ls_;
-  write_store_ctx.ls_id_ = ls_id_;
   write_store_ctx.table_iter_ = iter;
   write_store_ctx.branch_ = branch;
   concurrent_control::ObWriteFlag write_flag;
@@ -703,7 +538,6 @@ int ObTxNode::write_begin(ObTxDesc &tx,
   iter->reset();
   ObITable *mtb = memtable_;
   iter->add_table(mtb);
-  write_store_ctx.ls_id_ = ls_id_;
   write_store_ctx.ls_ = &fake_ls_;
   write_store_ctx.table_iter_ = iter;
   concurrent_control::ObWriteFlag write_flag;
@@ -793,7 +627,6 @@ int ObTxNode::replay(const void *buffer,
     share::SCN log_scn;
     log_scn.convert_for_tx(ts_ns);
     ObFakeTxReplayExecutor executor(&fake_ls_,
-                                    ls_id_,
                                     fake_ls_.get_tx_svr(),
                                     lsn,
                                     log_scn,

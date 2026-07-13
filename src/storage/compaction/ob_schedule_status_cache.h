@@ -18,7 +18,6 @@
 #include "share/scn.h"
 #include "storage/compaction/ob_compaction_schedule_util.h"
 #include "storage/compaction/ob_batch_freeze_tablets_dag.h"
-#include "storage/tx_storage/ob_ls_handle.h"
 namespace oceanbase
 {
 namespace storage
@@ -36,7 +35,7 @@ struct ObLSStatusCache final
   {
     CAN_MERGE = 0,
     WEAK_READ_TS_NOT_READY,
-    OFFLINE_OR_DELETED,
+    OFFLINE,
     STATE_MAX,
   };
   static const char *ls_state_to_str(const LSState &state);
@@ -45,14 +44,12 @@ struct ObLSStatusCache final
     return state >= CAN_MERGE && state < STATE_MAX;
   }
   ObLSStatusCache()
-    : ls_handle_(),
-      ls_id_(),
+    : ls_(nullptr),
       weak_read_ts_(),
-      is_leader_(false),
       state_(STATE_MAX)
   {}
   ~ObLSStatusCache() {}
-  int init_for_major(const int64_t merge_version, storage::ObLSHandle &ls_handle);
+  int init_for_major(const int64_t merge_version, storage::ObLS *ls);
   bool can_merge() const { return CAN_MERGE == state_; }
   void reset();
   int check_restore_status(storage::ObLS &ls);
@@ -60,18 +57,16 @@ struct ObLSStatusCache final
   static bool check_weak_read_ts_ready(
       const int64_t &merge_version,
       storage::ObLS &ls);
-  bool is_valid() const { return ls_id_.is_valid() && ls_handle_.is_valid(); }
+  bool is_valid() const { return OB_NOT_NULL(ls_); }
   storage::ObLS &get_ls()
   {
     OB_ASSERT_MSG(is_valid(), "ObLSStatusCache is not valid");
-    return *ls_handle_.get_ls();
+    return *ls_;
   }
-  TO_STRING_KV(K_(ls_id), K_(weak_read_ts), K_(is_leader), "state", ls_state_to_str(state_));
+  TO_STRING_KV(K_(weak_read_ts), "state", ls_state_to_str(state_));
   static const int64_t PRINT_LOG_INVERVAL = 2 * 60 * 1000 * 1000L; // 2m
-  storage::ObLSHandle ls_handle_;
-  share::ObLSID ls_id_;
+  storage::ObLS *ls_;
   share::SCN weak_read_ts_;
-  bool is_leader_;
   LSState state_;
 };
 
@@ -95,7 +90,7 @@ public:
   enum TabletScheduleNewRoundState : uint8_t
   {
     CAN_SCHEDULE_NEW_ROUND = 0,
-    RESERVED_STATE,
+    RESERVED_STATUS_BLOCKED,
     DURING_SPLIT,
     NEED_CHECK_LAST_MEDIUM_CKM,
     EXIST_UNFINISH_MEDIUM,
@@ -155,12 +150,10 @@ protected:
     const storage::ObTablet &tablet,
     const bool is_remote_tenant);
   int check_medium_list(
-    const share::ObLSID &ls_id,
     const storage::ObTablet &tablet,
     const bool normal_schedule);
   int register_map(const ObTablet &tablet);
   void inner_init_could_schedule_new_round(
-    const ObLSID &ls_id,
     const ObTablet &tablet,
     const bool ls_could_schedule_new_round,
     const bool normal_schedule);

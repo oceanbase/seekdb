@@ -28,12 +28,11 @@ namespace oceanbase
 namespace sql
 {
 
-enum ObDmlGTSOptState
+enum ObDmlSnapshotOptState
 {
-  WITHOUT_GTS_OPT_STATE = 0,
-  USE_PARTITION_SNAPSHOT_STATE = 1,
-  WITH_UNIQUE_GLOBAL_INDEX_STATE = 2,
-  GTE_GTS_STATE = 3,
+  WITHOUT_SNAPSHOT_OPT_STATE = 0,
+  USE_RESPONSE_SNAPSHOT_STATE = 1,
+  USE_STMT_SNAPSHOT_STATE = 2,
 };
   
 class ForeignKeyHandle

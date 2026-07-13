@@ -17,7 +17,7 @@
 #include "ob_mvcc_trans_ctx.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 
 namespace oceanbase
 {
@@ -353,7 +353,7 @@ int ObTransCallbackMgr::append(ObITransCallback *node)
     node->set_epoch(write_epoch_);
   }
   const transaction::ObTxSEQ seq_no = node->get_seq_no();
-  if (seq_no.support_branch()) {
+  {
     int slot = seq_no.get_branch() % MAX_CALLBACK_LIST_COUNT;
     if (slot > 0
         && for_replay_
@@ -407,16 +407,6 @@ int ObTransCallbackMgr::append(ObITransCallback *node)
     } else {
       ret = callback_lists_[slot - 1].append_callback(node, for_replay_, parallel_replay_, is_serial_final_());
     }
-  } else if (!for_replay_) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "write by older version", K(ret), K(seq_no), KPC(this));
-#ifdef ENABLE_DEBUG_LOG
-    ob_abort();
-#endif
-  } else {
-    // for replay, before version 4.2.4
-    ret = callback_list_.append_callback(node, for_replay_, parallel_replay_, true);
-    add_main_list_append_cnt();
   }
 #ifdef ENABLE_DEBUG_LOG
   memtable_set_injection_sleep();
@@ -448,8 +438,7 @@ int ObTransCallbackMgr::append(ObITransCallback *head,
 
     // Step2: find the slot for register or replay
     const transaction::ObTxSEQ seq_no = head->get_seq_no();
-    if (OB_LIKELY(seq_no.support_branch())) {
-      // NEW since version 4.2.4, select by branch
+    {
       int slot = seq_no.get_branch() % MAX_CALLBACK_LIST_COUNT;
       if (OB_UNLIKELY(slot > 0
                       && for_replay_
@@ -514,21 +503,6 @@ int ObTransCallbackMgr::append(ObITransCallback *head,
                                                         parallel_replay_,
                                                         is_serial_final_());
       }
-    } else if (!for_replay_) {
-      ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "write by older version", K(ret), K(seq_no), KPC(this));
-#ifdef ENABLE_DEBUG_LOG
-      ob_abort();
-#endif
-    } else {
-      // for replay, before version 4.2.4
-      ret = callback_list_.append_callback(head,
-                                           tail,
-                                           length,
-                                           for_replay_,
-                                           parallel_replay_,
-                                           true /*is_serial_final*/);
-      add_main_list_append_cnt();
     }
 
     // Step3: revert the side effect if the append failed
@@ -574,7 +548,7 @@ int ObTransCallbackMgr::rollback_to(const ObTxSEQ to_seq_no,
   int ret = OB_SUCCESS;
   int slot = -1;
   remove_cnt = callback_remove_for_rollback_to_count_;
-  if (OB_LIKELY(to_seq_no.support_branch())) { // since 4.2.4
+  {
     // it is a global savepoint, rollback on all list
     if (to_seq_no.get_branch() == 0) {
       CALLBACK_LISTS_FOREACH(idx, list) {
@@ -603,14 +577,6 @@ int ObTransCallbackMgr::rollback_to(const ObTxSEQ to_seq_no,
                   KPC(this), KPC(get_trans_ctx()), K(replay_scn), K(to_seq_no), K(from_seq_no));
       }
     }
-  } else if (!for_replay_) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "leader rollback to with old version", K(ret), K(to_seq_no), KPC(this));
-#ifdef ENABLE_DEBUG_LOG
-    ob_abort();
-#endif
-  } else { // for replay, before 4.2.4
-    ret = callback_list_.remove_callbacks_for_rollback_to(to_seq_no, from_seq_no, replay_scn);
   }
   if (OB_FAIL(ret)) {
     TRANS_LOG(WARN, "rollback to fail", K(ret), K(slot), K(from_seq_no), K(to_seq_no));
@@ -619,7 +585,7 @@ int ObTransCallbackMgr::rollback_to(const ObTxSEQ to_seq_no,
   return ret;
 }
 
-transaction::ObPartTransCtx *ObTransCallbackMgr::get_trans_ctx() const
+transaction::ObTxCtx *ObTransCallbackMgr::get_trans_ctx() const
 {
   return host_.get_trans_ctx();
 }
@@ -2342,4 +2308,3 @@ int64_t ObTransCallbackMgr::get_flushed_log_size() const
 
 }; // end namespace mvcc
 }; // end namespace oceanbase
-

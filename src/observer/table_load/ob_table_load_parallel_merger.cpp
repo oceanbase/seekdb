@@ -59,7 +59,7 @@ int ObTableLoadParallelMerger::init_merge_ctx(ObTableLoadMergeTableBaseOp *op)
   param.trans_param_ = op->merge_phase_ctx_->trans_param_;
   param.file_mgr_ = op->store_ctx_->tmp_file_mgr_;
   param.ctx_ = op->ctx_;
-  if (OB_FAIL(merge_ctx_.init(param, store_table_ctx->ls_partition_ids_))) {
+  if (OB_FAIL(merge_ctx_.init(param, store_table_ctx->partition_ids_))) {
     LOG_WARN("fail to init merge ctx", KR(ret), K(param));
   }
   return ret;

@@ -53,7 +53,6 @@ ObDASFuncDataIter::ObDASFuncDataIter()
     main_lookup_rtdef_(nullptr),
     main_lookup_iter_(nullptr),
     main_lookup_tablet_id_(0),
-    main_lookup_ls_id_(0),
     main_lookup_param_(),
     merge_memctx_(),
     doc_ids_(),
@@ -76,12 +75,11 @@ int ObDASFuncDataIter::do_table_scan()
     LOG_WARN("fail to build rowkey doc range", K(ret));
   } else {
     if (nullptr != main_lookup_iter_) {
-      if (OB_UNLIKELY(!main_lookup_tablet_id_.is_valid() || !main_lookup_ls_id_.is_valid())) {
+      if (OB_UNLIKELY(!main_lookup_tablet_id_.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, main lookup tablet id or ls id is invalid", K(ret), K(main_lookup_tablet_id_), K(main_lookup_ls_id_));
+        LOG_WARN("unexpected error, main lookup tablet id is invalid", K(ret), K(main_lookup_tablet_id_));
       } else {
         main_lookup_param_.tablet_id_ = main_lookup_tablet_id_;
-        main_lookup_param_.ls_id_ = main_lookup_ls_id_;
         if (OB_FAIL(main_lookup_iter_->do_table_scan())) {
           LOG_WARN("fail to do table scan for main lookup table", K(ret), KPC(main_lookup_iter_));
         }
@@ -213,7 +211,6 @@ int ObDASFuncDataIter::inner_reuse()
       main_lookup_param_.need_switch_param_ = main_lookup_param_.need_switch_param_ ||
           ((old_tablet_id.is_valid() && old_tablet_id != main_lookup_tablet_id_) ? true : false);
       main_lookup_param_.tablet_id_ = main_lookup_tablet_id_;
-      main_lookup_param_.ls_id_ = main_lookup_ls_id_;
       if (!main_lookup_param_.key_ranges_.empty()) {
         main_lookup_param_.key_ranges_.reuse();
       }

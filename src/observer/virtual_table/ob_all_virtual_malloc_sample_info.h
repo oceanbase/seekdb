@@ -30,7 +30,6 @@ class ObMallocSampleInfo : public common::ObVirtualTableScannerIterator
 public:
   ObMallocSampleInfo();
   virtual ~ObMallocSampleInfo();
-  virtual int inner_open();
   virtual void reset();
   virtual int inner_get_next_row(common::ObNewRow *&row);
 private:
@@ -45,7 +44,6 @@ private:
     ALLOC_COUNT,
     ALLOC_BYTES,
   };
-  char ip_buf_[common::OB_IP_STR_BUFF];
   char bt_[lib::MAX_BACKTRACE_LENGTH];
   lib::ObMallocSampleMap::const_iterator it_;
   lib::ObMallocSampleMap malloc_sample_map_;

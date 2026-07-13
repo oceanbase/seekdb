@@ -338,30 +338,15 @@ void ObIngressBWAllocService::runTimerTask()
   }
 }
 
-void ObIngressBWAllocService::switch_to_follower_forcedly()
+void ObIngressBWAllocService::deactivate()
 {
   ATOMIC_STORE(&is_leader_, false);
 }
-int ObIngressBWAllocService::switch_to_leader()
+int ObIngressBWAllocService::activate()
 {
   int ret = OB_SUCCESS;
   ATOMIC_STORE(&is_leader_, true);
   return ret;
 }
-int ObIngressBWAllocService::switch_to_follower_gracefully()
-{
-  int ret = OB_SUCCESS;
-  ATOMIC_STORE(&is_leader_, false);
-  return ret;
-}
-int ObIngressBWAllocService::resume_leader()
-{
-  int ret = OB_SUCCESS;
-  if (!is_leader()) {
-    ATOMIC_STORE(&is_leader_, true);
-  }
-  return ret;
-}
-
 }  // namespace rootserver
 }  // namespace oceanbase

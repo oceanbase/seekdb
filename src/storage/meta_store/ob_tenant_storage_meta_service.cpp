@@ -19,6 +19,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/ob_file_system_router.h"
 #include "storage/tablet/ob_tablet_macro_info_iterator.h"
 #include "observer/omt/ob_tenant.h"
 #include "storage/ls/ob_ls.h"
@@ -59,7 +60,10 @@ int ObTenantStorageMetaService::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("has inited", K(ret));
   } else if (!is_shared_storage &&
-      OB_FAIL(slogger_.init(SERVER_STORAGE_META_SERVICE.get_slogger_manager()))) {
+      OB_FAIL(slogger_.init(
+        OB_FILE_SYSTEM_ROUTER.get_slog_dir(),
+        ObLogConstants::MAX_LOG_FILE_SIZE,
+        OB_FILE_SYSTEM_ROUTER.get_slog_file_spec()))) {
     LOG_WARN("failed to init slogger", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.init(slogger_))) {
     LOG_WARN("fail to init tenant checkpoint slog hander", K(ret));
@@ -273,47 +277,6 @@ int ObTenantStorageMetaService::read_from_share_blk(
     LOG_WARN("fail to wait for read handle", K(ret));
   } else if (OB_FAIL(read_handle.get_data(allocator, buf, buf_len))) {
     LOG_WARN("fail to get data from read handle", K(ret), KP(buf), K(buf_len));
-  }
-  return ret;
-}
-
-int ObTenantStorageMetaService::ObLSItemIterator::get_next_ls_item(
-      storage::ObLSItem &item)
-{
-  int ret = OB_SUCCESS;
-  if (idx_ == tenant_super_block_.ls_cnt_) {
-    ret = OB_ITER_END;
-  } else {
-    item = tenant_super_block_.ls_item_arr_[idx_++];
-  }
-  return ret;
-}
-
-int ObTenantStorageMetaService::get_ls_items_by_status(
-    const storage::ObLSItemStatus status,
-    ObIArray<storage::ObLSItem> &ls_items)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else {
-    ls_items.reuse();
-    omt::ObTenant *tenant = static_cast<omt::ObTenant*>(MTL_CTX());
-    HEAP_VAR(ObLSItemIterator, ls_item_iter, tenant->get_super_block()) {
-      ObLSItem ls_item;
-      while (OB_SUCC(ls_item_iter.get_next_ls_item(ls_item))) {
-        if (status == ls_item.status_ &&
-            OB_FAIL(ls_items.push_back(ls_item))) {
-          LOG_WARN("failed to push back tenant_item", K(ret), K(ls_item), K(ls_items), K(ls_item_iter));
-        }
-      }
-      if (OB_ITER_END == ret) {
-        ret = OB_SUCCESS;
-      } else {
-        LOG_WARN("failed to get tenant items by status", K(ret), K(ls_item), K(ls_items), K(ls_item_iter));
-      }
-    }
   }
   return ret;
 }

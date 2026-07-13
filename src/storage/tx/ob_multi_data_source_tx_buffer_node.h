@@ -40,7 +40,7 @@ enum class ObTxDataSourceType : int64_t;
 
 class ObTxBufferNode
 {
-  friend class ObPartTransCtx;
+  friend class ObTxCtx;
   friend class ObTxExecInfo;
   friend class ObMulSourceTxDataNotifier;
   friend class ObTxMDSCache;

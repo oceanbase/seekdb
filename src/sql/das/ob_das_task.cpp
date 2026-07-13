@@ -109,12 +109,12 @@ int ObIDASTaskOp::swizzling_remote_task(ObDASRemoteInfo *remote_info)
   int ret = OB_SUCCESS;
   if (remote_info != nullptr) {
     snapshot_ = &remote_info->snapshot_;
-    if (das_gts_opt_info_.use_specify_snapshot_) {
-      if (OB_ISNULL(das_gts_opt_info_.get_specify_snapshot())) {
+    if (das_snapshot_opt_info_.use_specify_snapshot_) {
+      if (OB_ISNULL(das_snapshot_opt_info_.get_specify_snapshot())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected nullptr of specify_snapshot", K(ret));
       } else {
-        snapshot_ = das_gts_opt_info_.get_specify_snapshot();
+        snapshot_ = das_snapshot_opt_info_.get_specify_snapshot();
       }
     }
   }
@@ -172,13 +172,13 @@ int ObIDASTaskOp::end_das_task()
   return ret;
 }
 
-int ObIDASTaskOp::init_das_gts_opt_info(transaction::ObTxIsolationLevel isolation_level)
+int ObIDASTaskOp::init_das_snapshot_opt_info(transaction::ObTxIsolationLevel isolation_level)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(get_das_gts_opt_info().init(isolation_level))) {
-    LOG_WARN("fail to init das gts opt", K(ret), K(isolation_level));
+  if (OB_FAIL(get_das_snapshot_opt_info().init(isolation_level))) {
+    LOG_WARN("fail to init das snapshot opt", K(ret), K(isolation_level));
   } else {
-    snapshot_ = get_das_gts_opt_info().get_specify_snapshot();
+    snapshot_ = get_das_snapshot_opt_info().get_specify_snapshot();
   }
   return ret;
 }
@@ -187,16 +187,15 @@ OB_SERIALIZE_MEMBER(ObIDASTaskOp,
                     task_id_,
                     task_flag_,
                     tablet_id_,
-                    ls_id_,
                     related_ctdefs_,
                     related_rtdefs_,
                     related_tablet_ids_,
                     attach_ctdef_,
                     attach_rtdef_,
-                    das_gts_opt_info_,
+                    das_snapshot_opt_info_,
                     plan_line_id_);
 
-OB_DEF_SERIALIZE(ObDASGTSOptInfo)
+OB_DEF_SERIALIZE(ObDASSnapshotOptInfo)
 {
   int ret = OB_SUCCESS;
   bool serialize_specify_snapshot = specify_snapshot_ == nullptr ? false : true;
@@ -210,7 +209,7 @@ OB_DEF_SERIALIZE(ObDASGTSOptInfo)
   return ret;
 }
 
-OB_DEF_DESERIALIZE(ObDASGTSOptInfo)
+OB_DEF_DESERIALIZE(ObDASSnapshotOptInfo)
 {
   int ret = OB_SUCCESS;
   bool serialize_specify_snapshot = false;
@@ -220,7 +219,7 @@ OB_DEF_DESERIALIZE(ObDASGTSOptInfo)
               serialize_specify_snapshot);
   if (serialize_specify_snapshot) {
     if (OB_FAIL(init(isolation_level_))) {
-      LOG_WARN("fail to init gts_opt_info", K(ret));
+      LOG_WARN("fail to init snapshot opt info", K(ret));
     } else {
       OB_UNIS_DECODE(*specify_snapshot_);
     }
@@ -228,7 +227,7 @@ OB_DEF_DESERIALIZE(ObDASGTSOptInfo)
   return ret;
 }
 
-OB_DEF_SERIALIZE_SIZE(ObDASGTSOptInfo)
+OB_DEF_SERIALIZE_SIZE(ObDASSnapshotOptInfo)
 {
   int64_t len = 0;
   bool serialize_specify_snapshot = specify_snapshot_ == nullptr ? false : true;
@@ -242,7 +241,7 @@ OB_DEF_SERIALIZE_SIZE(ObDASGTSOptInfo)
   return len;
 }
 
-int ObDASGTSOptInfo::init(transaction::ObTxIsolationLevel isolation_level)
+int ObDASSnapshotOptInfo::init(transaction::ObTxIsolationLevel isolation_level)
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;

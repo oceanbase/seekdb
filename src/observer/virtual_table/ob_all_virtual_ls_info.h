@@ -18,10 +18,14 @@
 #define OB_ALL_VIRTUAL_OB_LS_INFO_H_
 
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "storage/tx_storage/ob_ls_map.h"
 
 namespace oceanbase
 {
+namespace storage
+{
+class ObLS;
+struct ObLSVTInfo;
+}
 namespace observer
 {
 
@@ -33,18 +37,8 @@ public:
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  inline void set_addr(common::ObAddr &addr)
-  {
-    addr_ = addr;
-  }
 private:
-private:
-  int next_ls_info_(ObLSVTInfo &ls_info);
-private:
-  common::ObAddr addr_;
-  char ip_buf_[common::OB_IP_STR_BUFF];
-  char state_name_[common::MAX_LS_STATE_LENGTH];
-  ObSharedGuard<storage::ObLSIterator> ls_iter_guard_;
+  storage::ObLS *ls_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualLSInfo);
 };

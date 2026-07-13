@@ -49,21 +49,19 @@ int MdsTableBase::advance_state_to(State new_state) const
 }
 
 int MdsTableBase::init(const ObTabletID tablet_id,
-                       const share::ObLSID ls_id,
                        const share::SCN mds_ckpt_scn_from_tablet,// this is used to filter replayed nodes after removed action
                        ObTabletPointer *pointer,
                        ObMdsTableMgr *p_mgr)
 {
   int ret = OB_SUCCESS;
   MDS_TG(1_ms);
-  if (!ls_id.is_valid() || !tablet_id.is_valid()) {
+  if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    MDS_LOG(ERROR, "invalid argument", KR(ret), K(*this), K(ls_id), K(tablet_id));
+    MDS_LOG(ERROR, "invalid argument", KR(ret), K(*this), K(tablet_id));
   } else if (MDS_FAIL(advance_state_to(State::INIT))) {
-    MDS_LOG(ERROR, "mds table maybe init twice", KR(ret), K(*this), K(ls_id), K(tablet_id));
+    MDS_LOG(ERROR, "mds table maybe init twice", KR(ret), K(*this), K(tablet_id));
   } else {
     tablet_id_ = tablet_id;
-    ls_id_ = ls_id;
     last_inner_recycled_scn_ = mds_ckpt_scn_from_tablet;
     if (OB_NOT_NULL(p_mgr)) {
       mgr_handle_.set_mds_table_mgr(p_mgr);
@@ -71,7 +69,7 @@ int MdsTableBase::init(const ObTabletID tablet_id,
       debug_info_.init_trace_id_ = *ObCurTraceId::get_trace_id();
       debug_info_.init_ts_ = ObClockGenerator::getClock();
       if (MDS_FAIL(register_to_mds_table_mgr())) {
-        MDS_LOG(ERROR, "fail to register mds table", KR(ret), K(*this), K(ls_id), K(tablet_id));
+        MDS_LOG(ERROR, "fail to register mds table", KR(ret), K(*this), K(tablet_id));
       }
     }
   }
@@ -138,7 +136,7 @@ int MdsTableBase::unregister_from_mds_table_mgr()
   MDS_TG(1_ms);
   if (!mgr_handle_.is_valid()) {
     MDS_LOG(INFO, "no need unregister from mds_table_mgr cause invalid mds_table_mgr", KR(ret), K(*this));
-  } else if (!ls_id_.is_valid() || !tablet_id_.is_valid()) {
+  } else if (!tablet_id_.is_valid()) {
     MDS_LOG(INFO, "no need unregister from mds_table_mgr cause invalid id", KR(ret), K(*this));
   } else if (MDS_FAIL(mgr_handle_.get_mds_table_mgr()->unregister_from_mds_table_mgr(this))) {
     MDS_LOG(ERROR, "fail to unregister mds table", K(*this));
@@ -154,7 +152,7 @@ int MdsTableBase::unregister_from_removed_recorder()
   MDS_TG(1_ms);
   if (!mgr_handle_.is_valid()) {
     MDS_LOG(INFO, "no need unregister from mds_table_mgr cause invalid mds_table_mgr", KR(ret), K(*this));
-  } else if (!ls_id_.is_valid() || !tablet_id_.is_valid()) {
+  } else if (!tablet_id_.is_valid()) {
     MDS_LOG(INFO, "no need unregister from mds_table_mgr cause invalid id", KR(ret), K(*this));
   } else {
     mgr_handle_.get_mds_table_mgr()->unregister_from_removed_mds_table_recorder(this);
@@ -167,17 +165,14 @@ int MdsTableBase::get_ls_max_consequent_callbacked_scn_(share::SCN &max_conseque
 {
   int ret = OB_SUCCESS;
   ObLSService *ls_service = share::g_mp->ls_service();
-  ObLSHandle ls_handle;
+  ObLS *tenant_ls = nullptr;
   MDS_TG(1_ms);
-  if (!ls_id_.is_valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    MDS_LOG(WARN, "ls id not valid", KR(ret), K(*this));
-  } else if (OB_ISNULL(ls_service)) {
+  if (OB_ISNULL(ls_service)) {
     ret = OB_BAD_NULL_ERROR;
     MDS_LOG(WARN, "ls tx service is null", KR(ret), K(*this));
-  } else if (MDS_FAIL(ls_service->get_ls(ls_id_, ls_handle, ObLSGetMod::MDS_TABLE_MOD))) {
-    MDS_LOG(WARN, "fail to get ls handle", KR(ret), K(*this));
-  } else if (MDS_FAIL(ls_handle.get_ls()->get_freezer()->get_max_consequent_callbacked_scn(max_consequent_callbacked_scn))) {
+  } else if (MDS_FAIL(ls_service->get_ls(tenant_ls))) {
+    MDS_LOG(WARN, "fail to get ls", KR(ret), K(*this));
+  } else if (MDS_FAIL(tenant_ls->get_freezer()->get_max_consequent_callbacked_scn(max_consequent_callbacked_scn))) {
     MDS_LOG(WARN, "fail to get max_consequent_callbacked_scn", KR(ret), K(*this));
   }
   return ret;
@@ -187,7 +182,6 @@ int MdsTableBase::merge(const int64_t construct_sequence, const share::SCN &flus
 {
   int ret = OB_SUCCESS;
   ObMdsTableMergeDagParam param;
-  param.ls_id_ = ls_id_;
   param.tablet_id_ = tablet_id_;
   param.flush_scn_ = flushing_scn;
   param.mds_construct_sequence_ = construct_sequence;
@@ -278,11 +272,6 @@ void MdsTableBase::try_advance_max_aborted_scn(const share::SCN scn)
 common::ObTabletID MdsTableBase::get_tablet_id() const
 {
   return tablet_id_;
-}
-
-share::ObLSID MdsTableBase::get_ls_id() const
-{
-  return ls_id_;
 }
 
 share::SCN MdsTableBase::get_rec_scn()

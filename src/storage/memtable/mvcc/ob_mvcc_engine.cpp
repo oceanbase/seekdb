@@ -106,7 +106,6 @@ int ObMvccEngine::try_compact_row_when_mvcc_read_(const SCN &snapshot_version,
 int ObMvccEngine::get(ObMvccAccessCtx &ctx,
                       const ObQueryFlag &query_flag,
                       const ObMemtableKey *parameter_key,
-                      const share::ObLSID memtable_ls_id,
                       ObMemtableKey *returned_key,
                       ObMvccValueIterator &value_iter,
                       ObStoreRowLockState &lock_state)
@@ -131,7 +130,7 @@ int ObMvccEngine::get(ObMvccAccessCtx &ctx,
     if (OB_SUCCESS != (tmp_ret = try_compact_row_when_mvcc_read_(ctx.get_snapshot_version(), *value))) {
       TRANS_LOG(WARN, "fail to try to compact row", K(tmp_ret));
     }
-  } else if (query_flag.is_for_foreign_key_check() || query_flag.is_plain_insert_gts_opt()) {
+  } else if (query_flag.is_for_foreign_key_check() || query_flag.is_snapshot_opt()) {
     ret = ObRowConflictHandler::check_foreign_key_constraint_for_memtable(ctx, value, lock_state);
   } else {
     // do nothing
@@ -140,7 +139,6 @@ int ObMvccEngine::get(ObMvccAccessCtx &ctx,
     if (OB_FAIL(value_iter.init(ctx,
                                 returned_key,
                                 value,
-                                memtable_ls_id,
                                 query_flag))) {
       TRANS_LOG(WARN, "ObMvccValueIterator init fail", KR(ret));
     }
@@ -155,7 +153,6 @@ int ObMvccEngine::scan(
     ObMvccAccessCtx &ctx,
     const ObQueryFlag &query_flag,
     const ObMvccScanRange &range,
-    const share::ObLSID memtable_ls_id,
     ObMvccRowIterator &row_iter)
 {
   int ret = OB_SUCCESS;
@@ -168,7 +165,6 @@ int ObMvccEngine::scan(
   } else if (OB_FAIL(row_iter.init(*query_engine_,
                                    ctx,
                                    range,
-                                   memtable_ls_id,
                                    query_flag))) {
     TRANS_LOG(WARN, "row_iter init fail", K(ret));
   } else {

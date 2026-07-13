@@ -22,8 +22,8 @@ namespace oceanbase
 {
 namespace palf
 {
-LogSharedTask::LogSharedTask(const int64_t palf_id,const int64_t palf_epoch)
-  : palf_id_(palf_id), palf_epoch_(palf_epoch)
+LogSharedTask::LogSharedTask(const int64_t palf_epoch)
+  : palf_epoch_(palf_epoch)
 {}
 
 LogSharedTask::~LogSharedTask()
@@ -38,12 +38,11 @@ void LogSharedTask::destroy()
 
 void LogSharedTask::reset()
 {
-  palf_id_ = INVALID_PALF_ID;
   palf_epoch_ = -1;
 }
 
-LogHandleSubmitTask::LogHandleSubmitTask(const int64_t palf_id,const int64_t palf_epoch)
-  : LogSharedTask(palf_id, palf_epoch)
+LogHandleSubmitTask::LogHandleSubmitTask(const int64_t palf_epoch)
+  : LogSharedTask(palf_epoch)
 {}
 
 LogHandleSubmitTask::~LogHandleSubmitTask()
@@ -60,7 +59,7 @@ int LogHandleSubmitTask::do_task(IPalfEnvImpl *palf_env_impl)
   int64_t palf_epoch = -1;
   IPalfHandleImplGuard guard;
   common::ObTimeGuard time_guard("handle submit task", 100 * 1000);
-  if (OB_FAIL(palf_env_impl->get_palf_handle_impl(palf_id_, guard))) {
+  if (OB_FAIL(palf_env_impl->get_palf_handle_impl(guard))) {
     PALF_LOG(WARN, "IPalfEnvImpl get_palf_handle_impl failed", K(ret), KPC(this));
   } else if (OB_FAIL(guard.get_palf_handle_impl()->get_palf_epoch(palf_epoch))) {
     PALF_LOG(WARN, "IPalfEnvImpl get_palf_epoch failed", K(ret), KPC(this));

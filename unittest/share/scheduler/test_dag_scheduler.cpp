@@ -1049,77 +1049,16 @@ TEST_F(TestDagScheduler, test_emergency_task)
   EXPECT_EQ(3, op.value());
 }
 
-class TestCompMidCancelDag : public compaction::ObTabletMergeDag
+class TestTabletMergeDag : public compaction::ObTabletMergeDag
 {
 public:
-  TestCompMidCancelDag()
+  TestTabletMergeDag()
     : compaction::ObTabletMergeDag(ObDagType::DAG_TYPE_MERGE_EXECUTE){}
-  virtual const share::ObLSID & get_ls_id() const override { return ls_id_; }
   virtual lib::Worker::CompatMode get_compat_mode() const override
   { return lib::Worker::CompatMode::MYSQL; }
 private:
-  DISALLOW_COPY_AND_ASSIGN(TestCompMidCancelDag);
+  DISALLOW_COPY_AND_ASSIGN(TestTabletMergeDag);
 };
-
-TEST_F(TestDagScheduler, test_check_ls_compaction_dag_exist_with_cancel)
-{
-  ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
-  ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice, 64));
-  EXPECT_EQ(OB_SUCCESS, scheduler->set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_MID, 1));
-  EXPECT_EQ(OB_SUCCESS, scheduler->set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_LOW, 1));
-  EXPECT_EQ(1, scheduler->prio_sche_[ObDagPrio::DAG_PRIO_COMPACTION_MID].limits_);
-  EXPECT_EQ(1, scheduler->prio_sche_[ObDagPrio::DAG_PRIO_COMPACTION_LOW].limits_);
-
-  LoopWaitTask *wait_task = nullptr;
-  LoopWaitTask *wait_task2 = nullptr;
-  const int64_t dag_cnt = 6;
-  // add 6 dag at prio = DAG_PRIO_COMPACTION_MID
-  const int64_t ls_cnt = 2;
-  ObLSID ls_ids[ls_cnt] = {ObLSID(1), ObLSID(2)};
-  bool finish_flag[ls_cnt] = {false, false};
-  for (int64_t i = 0; i < dag_cnt; ++i) {
-    const int64_t idx = i % ls_cnt;
-    TestCompMidCancelDag *dag = NULL;
-    EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(dag));
-    dag->ls_id_ = ls_ids[idx];
-    dag->tablet_id_ = ObTabletID(i);
-    EXPECT_EQ(OB_SUCCESS, alloc_task(*dag, wait_task));
-    EXPECT_EQ(OB_SUCCESS, wait_task->init(1, 2, finish_flag[idx]));
-    EXPECT_EQ(OB_SUCCESS, dag->add_task(*wait_task));
-    EXPECT_EQ(OB_SUCCESS, scheduler->add_dag(dag));
-  }
-  // add 2 dag at prio = DAG_PRIO_COMPACTION_LOW
-  for (int64_t i = 0; i < ls_cnt; ++i) {
-    ObBatchFreezeTabletsDag *batch_freeze_dag = NULL;
-    EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(batch_freeze_dag));
-    batch_freeze_dag->param_.ls_id_ = ls_ids[i];
-    EXPECT_EQ(OB_SUCCESS, alloc_task(*batch_freeze_dag, wait_task2));
-    EXPECT_EQ(OB_SUCCESS, wait_task2->init(1, 2, finish_flag[i]));
-    EXPECT_EQ(OB_SUCCESS, batch_freeze_dag->add_task(*wait_task2));
-    EXPECT_EQ(OB_SUCCESS, scheduler->add_dag(batch_freeze_dag));
-  }
-  EXPECT_EQ(dag_cnt, scheduler->dag_cnts_[ObDagType::DAG_TYPE_MERGE_EXECUTE]);
-  CHECK_EQ_UTIL_TIMEOUT(1, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_COMPACTION_MID));
-  CHECK_EQ_UTIL_TIMEOUT(1, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_COMPACTION_LOW));
-
-  // cancel waiting dag of ls_ids[0], all dag of ls_ids[1] will be destroyed when check_cancel
-  bool exist = false;
-  EXPECT_EQ(OB_SUCCESS, scheduler->check_ls_compaction_dag_exist_with_cancel(ls_ids[0], exist));
-  EXPECT_EQ(exist, true);
-  EXPECT_EQ(4, scheduler->dag_cnts_[ObDagType::DAG_TYPE_MERGE_EXECUTE]);
-
-  EXPECT_EQ(OB_SUCCESS, scheduler->check_ls_compaction_dag_exist_with_cancel(ls_ids[1], exist));
-  EXPECT_EQ(exist, false);
-
-  finish_flag[0] = true;
-  wait_scheduler();
-
-  EXPECT_EQ(OB_SUCCESS, scheduler->check_ls_compaction_dag_exist_with_cancel(ls_ids[0], exist));
-  EXPECT_EQ(exist, false);
-  EXPECT_EQ(OB_SUCCESS, scheduler->check_ls_compaction_dag_exist_with_cancel(ls_ids[0], exist));
-  EXPECT_EQ(exist, false);
-}
 
 TEST_F(TestDagScheduler, test_cancel_running_dag)
 {
@@ -1279,15 +1218,13 @@ TEST_F(TestDagScheduler, DISABLED_test_max_concurrent_task)
   EXPECT_EQ(7, scheduler->prio_sche_[ObDagPrio::DAG_PRIO_COMPACTION_MID].limits_);
 
   const int64_t dag_cnt = 3;
-  ObLSID ls_id(1001);
   bool finish_flag[dag_cnt] = {false, false, false};
   for (int64_t idx = 0; idx < dag_cnt; ++idx) {
-    TestCompMidCancelDag *dag = nullptr;
+    TestTabletMergeDag *dag = nullptr;
     LoopWaitTask *wait_task = nullptr;
     ObTabletID tablet_id(200001 + idx);
     EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(dag));
     dag->max_concurrent_task_cnt_ = 2;
-    dag->ls_id_ = ls_id;
     dag->tablet_id_ = tablet_id;
     EXPECT_EQ(OB_SUCCESS, alloc_task(*dag, wait_task));
     EXPECT_EQ(OB_SUCCESS, wait_task->init(1, 10 /*cnt*/, finish_flag[idx]));

@@ -29,6 +29,7 @@
 #include "storage/direct_load/ob_direct_load_insert_lob_table_ctx.h"
 #include "storage/direct_load/ob_direct_load_struct.h"
 #include "storage/tablet/ob_tablet.h"
+#include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -276,8 +277,8 @@ ObTableLoadStoreDataTableCtx::~ObTableLoadStoreDataTableCtx()
 
 int ObTableLoadStoreDataTableCtx::init(
   const uint64_t table_id,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &partition_id_array,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &target_partition_id_array)
+  const ObTableLoadArray<ObTableLoadTabletId> &partition_id_array,
+  const ObTableLoadArray<ObTableLoadTabletId> &target_partition_id_array)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -299,7 +300,7 @@ int ObTableLoadStoreDataTableCtx::init(
     LOG_WARN("fail to init table store", KR(ret));
   } else if (OB_FAIL(ack_table_store_.init())) {
     LOG_WARN("fail to init table store", KR(ret));
-  } else if (OB_FAIL(init_ls_partition_ids(partition_id_array, target_partition_id_array))) {
+  } else if (OB_FAIL(init_partition_ids(partition_id_array, target_partition_id_array))) {
     LOG_WARN("fail to init ls partition ids", KR(ret));
   } else if (!schema_->lob_column_idxs_.empty()) {
     if (OB_ISNULL(lob_table_ctx_ =
@@ -353,47 +354,44 @@ int ObTableLoadStoreDataTableCtx::init_data_project()
   return ret;
 }
 
-int ObTableLoadStoreDataTableCtx::init_ls_partition_ids(
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &target_ls_partition_ids)
+int ObTableLoadStoreDataTableCtx::init_partition_ids(
+  const ObTableLoadArray<ObTableLoadTabletId> &partition_ids,
+  const ObTableLoadArray<ObTableLoadTabletId> &target_partition_ids)
 {
   int ret = OB_SUCCESS;
   const bool is_incremental = ObDirectLoadMethod::is_incremental(store_ctx_->ctx_->param_.method_);
-  for (int64_t i = 0; OB_SUCC(ret) && i < ls_partition_ids.count(); ++i) {
-    const ObTableLoadLSIdAndPartitionId &ls_partition_id = ls_partition_ids[i];
-    if (is_incremental && OB_FAIL(check_tablet(ls_partition_id.ls_id_,
-                                               ls_partition_id.part_tablet_id_.tablet_id_,
+  for (int64_t i = 0; OB_SUCC(ret) && i < partition_ids.count(); ++i) {
+    const ObTableLoadTabletId &partition_id = partition_ids[i];
+    if (is_incremental && OB_FAIL(check_tablet(partition_id.part_tablet_id_.tablet_id_,
                                                store_ctx_->ctx_->ddl_param_.schema_version_))) {
       LOG_WARN("fail to check tablet", KR(ret),
-                                       K(ls_partition_id.ls_id_),
-                                       K(ls_partition_id.part_tablet_id_.tablet_id_));
-    } else if (OB_FAIL(ls_partition_ids_.push_back(ls_partition_id))) {
+                                       K(partition_id.part_tablet_id_.tablet_id_));
+    } else if (OB_FAIL(partition_ids_.push_back(partition_id))) {
       LOG_WARN("fail to push back ", KR(ret));
     }
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < target_ls_partition_ids.count(); ++i) {
-    const ObTableLoadLSIdAndPartitionId &ls_partition_id = target_ls_partition_ids[i];
-    if (OB_FAIL(target_ls_partition_ids_.push_back(ls_partition_id))) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < target_partition_ids.count(); ++i) {
+    const ObTableLoadTabletId &partition_id = target_partition_ids[i];
+    if (OB_FAIL(target_partition_ids_.push_back(partition_id))) {
       LOG_WARN("fail to push back", KR(ret));
     }
   }
   return ret;
 }
 
-int ObTableLoadStoreDataTableCtx::check_tablet(const ObLSID &ls_id,
-                                               const ObTabletID &tablet_id,
+int ObTableLoadStoreDataTableCtx::check_tablet(const ObTabletID &tablet_id,
                                                const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
   ObLSService *ls_service = nullptr;
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
   if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls service is nullptr", KR(ret));
-  } else if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
-    LOG_WARN("fail to get ls", KR(ret), K(ls_id));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle,
+  } else if (OB_FAIL(ls_service->get_ls(ls))) {
+    LOG_WARN("fail to get ls", KR(ret));
+  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls,
                                                tablet_id,
                                                tablet_handle,
                                                ObMDSGetTabletMode::READ_ALL_COMMITED))) {
@@ -459,8 +457,8 @@ int ObTableLoadStoreDataTableCtx::init_insert_table_ctx(const ObDirectLoadTransP
                     OB_NEWx(ObDirectLoadInsertDataTableContext, (&allocator_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadInsertDataTableContext", KR(ret));
-    } else if (OB_FAIL(insert_data_table_ctx->init(insert_table_param, ls_partition_ids_,
-                                                   target_ls_partition_ids_))) {
+    } else if (OB_FAIL(insert_data_table_ctx->init(insert_table_param, partition_ids_,
+                                                   target_partition_ids_))) {
       LOG_WARN("fail to init insert table ctx", KR(ret));
     }
     // init lob insert_table_ctx_
@@ -545,8 +543,8 @@ int ObTableLoadStoreDataTableCtx::open_insert_table_ctx(
                     OB_NEWx(ObDirectLoadInsertDataTableContext, (&allocator)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadInsertDataTableContext", KR(ret));
-    } else if (OB_FAIL(insert_data_table_ctx->init(insert_table_param, ls_partition_ids_,
-                                                   target_ls_partition_ids_))) {
+    } else if (OB_FAIL(insert_data_table_ctx->init(insert_table_param, partition_ids_,
+                                                   target_partition_ids_))) {
       LOG_WARN("fail to init insert table ctx", KR(ret));
     } else {
       insert_table_ctx = insert_data_table_ctx;
@@ -638,8 +636,8 @@ ObTableLoadStoreLobTableCtx::~ObTableLoadStoreLobTableCtx()
 
 int ObTableLoadStoreLobTableCtx::init(
   const uint64_t table_id,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &partition_id_array,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &target_partition_id_array)
+  const ObTableLoadArray<ObTableLoadTabletId> &partition_id_array,
+  const ObTableLoadArray<ObTableLoadTabletId> &target_partition_id_array)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -657,7 +655,7 @@ int ObTableLoadStoreLobTableCtx::init(
     LOG_WARN("fail to init delete table store", KR(ret));
   } else if (OB_FAIL(tablet_id_map_.create(1024, ObMemAttr("TLD_TbltIDMap")))) {
     LOG_WARN("fail to create hashmap", KR(ret));
-  } else if (OB_FAIL(init_ls_partition_ids(partition_id_array, target_partition_id_array))) {
+  } else if (OB_FAIL(init_partition_ids(partition_id_array, target_partition_id_array))) {
     LOG_WARN("fail to init ls partition ids", KR(ret));
   } else {
     is_inited_ = true;
@@ -665,38 +663,36 @@ int ObTableLoadStoreLobTableCtx::init(
   return ret;
 }
 
-int ObTableLoadStoreLobTableCtx::init_ls_partition_ids(
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &target_ls_partition_ids)
+int ObTableLoadStoreLobTableCtx::init_partition_ids(
+  const ObTableLoadArray<ObTableLoadTabletId> &partition_ids,
+  const ObTableLoadArray<ObTableLoadTabletId> &target_partition_ids)
 {
   int ret = OB_SUCCESS;
   ObLSService *ls_service = nullptr;
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
   ObTabletBindingMdsUserData ddl_data;
-  ObTableLoadLSIdAndPartitionId lob_ls_partition_id;
+  ObTableLoadTabletId lob_partition_id;
   if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected err", K(ret));
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < ls_partition_ids.count(); ++i) {
-    const ObTableLoadLSIdAndPartitionId &ls_partition_id = ls_partition_ids[i];
-    const ObLSID &ls_id = ls_partition_id.ls_id_;
-    const ObTabletID &tablet_id = ls_partition_id.part_tablet_id_.tablet_id_;
-    if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < partition_ids.count(); ++i) {
+    const ObTableLoadTabletId &partition_id = partition_ids[i];
+    const ObTabletID &tablet_id = partition_id.part_tablet_id_.tablet_id_;
+    if (OB_FAIL(ls_service->get_ls(ls))) {
       LOG_WARN("failed to get log stream", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, tablet_id, tablet_handle,
+    } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, tablet_id, tablet_handle,
                                                  ObMDSGetTabletMode::READ_ALL_COMMITED))) {
       LOG_WARN("get tablet handle failed", K(ret));
     } else if (OB_FAIL(tablet_handle.get_obj()->ObITabletMdsInterface::get_ddl_data(SCN::max_scn(),
                                                                                     ddl_data))) {
       LOG_WARN("get ddl data failed", K(ret));
     } else {
-      lob_ls_partition_id.ls_id_ = ls_id;
-      lob_ls_partition_id.part_tablet_id_.partition_id_ =
-        ls_partition_id.part_tablet_id_.partition_id_;
-      lob_ls_partition_id.part_tablet_id_.tablet_id_ = ddl_data.lob_meta_tablet_id_;
-      if (OB_FAIL(ls_partition_ids_.push_back(lob_ls_partition_id))) {
+      lob_partition_id.part_tablet_id_.partition_id_ =
+        partition_id.part_tablet_id_.partition_id_;
+      lob_partition_id.part_tablet_id_.tablet_id_ = ddl_data.lob_meta_tablet_id_;
+      if (OB_FAIL(partition_ids_.push_back(lob_partition_id))) {
         LOG_WARN("fail to push back ", KR(ret));
       }
       // set map
@@ -705,24 +701,22 @@ int ObTableLoadStoreLobTableCtx::init_ls_partition_ids(
       }
     }
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < target_ls_partition_ids.count(); ++i) {
-    const ObTableLoadLSIdAndPartitionId &ls_partition_id = target_ls_partition_ids[i];
-    const ObLSID &ls_id = ls_partition_id.ls_id_;
-    const ObTabletID &tablet_id = ls_partition_id.part_tablet_id_.tablet_id_;
-    if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < target_partition_ids.count(); ++i) {
+    const ObTableLoadTabletId &partition_id = target_partition_ids[i];
+    const ObTabletID &tablet_id = partition_id.part_tablet_id_.tablet_id_;
+    if (OB_FAIL(ls_service->get_ls(ls))) {
       LOG_WARN("failed to get log stream", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, tablet_id, tablet_handle,
+    } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, tablet_id, tablet_handle,
                                                  ObMDSGetTabletMode::READ_ALL_COMMITED))) {
       LOG_WARN("get tablet handle failed", K(ret));
     } else if (OB_FAIL(tablet_handle.get_obj()->ObITabletMdsInterface::get_ddl_data(SCN::max_scn(),
                                                                                     ddl_data))) {
       LOG_WARN("get ddl data failed", K(ret));
     } else {
-      lob_ls_partition_id.ls_id_ = ls_id;
-      lob_ls_partition_id.part_tablet_id_.partition_id_ =
-        ls_partition_id.part_tablet_id_.partition_id_;
-      lob_ls_partition_id.part_tablet_id_.tablet_id_ = ddl_data.lob_meta_tablet_id_;
-      if (OB_FAIL(target_ls_partition_ids_.push_back(lob_ls_partition_id))) {
+      lob_partition_id.part_tablet_id_.partition_id_ =
+        partition_id.part_tablet_id_.partition_id_;
+      lob_partition_id.part_tablet_id_.tablet_id_ = ddl_data.lob_meta_tablet_id_;
+      if (OB_FAIL(target_partition_ids_.push_back(lob_partition_id))) {
         LOG_WARN("fail to push back", KR(ret));
       }
     }
@@ -812,8 +806,8 @@ int ObTableLoadStoreLobTableCtx::init_insert_table_ctx(const ObDirectLoadTransPa
     } else if (OB_FAIL(insert_lob_table_ctx->init(insert_table_param,
                                                   static_cast<ObDirectLoadInsertDataTableContext *>(
                                                     data_table_ctx_->insert_table_ctx_),
-                                                  ls_partition_ids_, target_ls_partition_ids_,
-                                                  data_table_ctx_->ls_partition_ids_))) {
+                                                  partition_ids_, target_partition_ids_,
+                                                  data_table_ctx_->partition_ids_))) {
       LOG_WARN("fail to init insert table ctx", KR(ret));
     }
   }
@@ -886,7 +880,7 @@ int ObTableLoadStoreLobTableCtx::open_insert_table_ctx(
       LOG_WARN("fail to new ObDirectLoadInsertDataTableContext", KR(ret));
     } else if (OB_FAIL(insert_lob_table_ctx->init(
                  insert_table_param,
-                 ls_partition_ids_, target_ls_partition_ids_))) {
+                 partition_ids_, target_partition_ids_))) {
       LOG_WARN("fail to init insert table ctx", KR(ret));
     } else {
       insert_table_ctx = insert_lob_table_ctx;
@@ -971,8 +965,8 @@ ObTableLoadStoreIndexTableCtx::~ObTableLoadStoreIndexTableCtx()
 
 int ObTableLoadStoreIndexTableCtx::init(
   const uint64_t table_id,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &partition_id_array,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &target_partition_id_array)
+  const ObTableLoadArray<ObTableLoadTabletId> &partition_id_array,
+  const ObTableLoadArray<ObTableLoadTabletId> &target_partition_id_array)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -992,7 +986,7 @@ int ObTableLoadStoreIndexTableCtx::init(
     LOG_WARN("fail to init delete table store", KR(ret));
   } else if (OB_FAIL(init_index_projector())) {
     LOG_WARN("fail to init index projector", KR(ret));
-  } else if (OB_FAIL(init_ls_partition_ids(partition_id_array, target_partition_id_array))) {
+  } else if (OB_FAIL(init_partition_ids(partition_id_array, target_partition_id_array))) {
     LOG_WARN("fail to init ls partition ids", KR(ret));
   } else {
     is_inited_ = true;
@@ -1035,33 +1029,31 @@ int ObTableLoadStoreIndexTableCtx::init_index_projector()
   return ret;
 }
 
-int ObTableLoadStoreIndexTableCtx::init_ls_partition_ids(
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &ls_partition_ids,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &target_ls_partition_ids)
+int ObTableLoadStoreIndexTableCtx::init_partition_ids(
+  const ObTableLoadArray<ObTableLoadTabletId> &partition_ids,
+  const ObTableLoadArray<ObTableLoadTabletId> &target_partition_ids)
 {
   int ret = OB_SUCCESS;
-  ObTableLoadLSIdAndPartitionId index_ls_partition_id;
-  for (int64_t i = 0; OB_SUCC(ret) && i < ls_partition_ids.count(); ++i) {
-    const ObTableLoadLSIdAndPartitionId &ls_partition_id = ls_partition_ids[i];
-    const ObTabletID &data_tablet_id = ls_partition_id.part_tablet_id_.tablet_id_;
-    index_ls_partition_id.ls_id_ = ls_partition_id.ls_id_;
+  ObTableLoadTabletId index_partition_id;
+  for (int64_t i = 0; OB_SUCC(ret) && i < partition_ids.count(); ++i) {
+    const ObTableLoadTabletId &partition_id = partition_ids[i];
+    const ObTabletID &data_tablet_id = partition_id.part_tablet_id_.tablet_id_;
     if (OB_FAIL(project_->get_dest_tablet_id_and_part_id_by_src_tablet_id(
-          data_tablet_id, index_ls_partition_id.part_tablet_id_.tablet_id_,
-          index_ls_partition_id.part_tablet_id_.partition_id_))) {
+          data_tablet_id, index_partition_id.part_tablet_id_.tablet_id_,
+          index_partition_id.part_tablet_id_.partition_id_))) {
       LOG_WARN("fail to get index_tablet_id", KR(ret), K(data_tablet_id));
-    } else if (OB_FAIL(ls_partition_ids_.push_back(index_ls_partition_id))) {
+    } else if (OB_FAIL(partition_ids_.push_back(index_partition_id))) {
       LOG_WARN("fail to push back", KR(ret));
     }
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < target_ls_partition_ids.count(); ++i) {
-    const ObTableLoadLSIdAndPartitionId &ls_partition_id = target_ls_partition_ids[i];
-    const ObTabletID &data_tablet_id = ls_partition_id.part_tablet_id_.tablet_id_;
-    index_ls_partition_id.ls_id_ = ls_partition_id.ls_id_;
+  for (int64_t i = 0; OB_SUCC(ret) && i < target_partition_ids.count(); ++i) {
+    const ObTableLoadTabletId &partition_id = target_partition_ids[i];
+    const ObTabletID &data_tablet_id = partition_id.part_tablet_id_.tablet_id_;
     if (OB_FAIL(project_->get_dest_tablet_id_and_part_id_by_src_tablet_id(
-          data_tablet_id, index_ls_partition_id.part_tablet_id_.tablet_id_,
-          index_ls_partition_id.part_tablet_id_.partition_id_))) {
+          data_tablet_id, index_partition_id.part_tablet_id_.tablet_id_,
+          index_partition_id.part_tablet_id_.partition_id_))) {
       LOG_WARN("fail to get index_tablet_id", KR(ret), K(data_tablet_id));
-    } else if (OB_FAIL(target_ls_partition_ids_.push_back(index_ls_partition_id))) {
+    } else if (OB_FAIL(target_partition_ids_.push_back(index_partition_id))) {
       LOG_WARN("fail to push back", KR(ret));
     }
   }
@@ -1120,8 +1112,8 @@ int ObTableLoadStoreIndexTableCtx::init_insert_table_ctx(const ObDirectLoadTrans
                     OB_NEWx(ObDirectLoadInsertDataTableContext, (&allocator_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadInsertDataTableContext", KR(ret));
-    } else if (OB_FAIL(insert_data_table_ctx->init(insert_table_param, ls_partition_ids_,
-                                                   target_ls_partition_ids_))) {
+    } else if (OB_FAIL(insert_data_table_ctx->init(insert_table_param, partition_ids_,
+                                                   target_partition_ids_))) {
       LOG_WARN("fail to init insert table ctx", KR(ret));
     }
   }
@@ -1192,8 +1184,8 @@ int ObTableLoadStoreIndexTableCtx::open_insert_table_ctx(
                     OB_NEWx(ObDirectLoadInsertDataTableContext, (&allocator)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadInsertDataTableContext", KR(ret));
-    } else if (OB_FAIL(insert_index_table_ctx->init(insert_table_param, ls_partition_ids_,
-                                                    target_ls_partition_ids_))) {
+    } else if (OB_FAIL(insert_index_table_ctx->init(insert_table_param, partition_ids_,
+                                                    target_partition_ids_))) {
       LOG_WARN("fail to init insert table ctx", KR(ret));
     } else {
       insert_table_ctx = insert_index_table_ctx;

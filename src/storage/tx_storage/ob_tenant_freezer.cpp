@@ -65,6 +65,7 @@ ObTenantFreezer::~ObTenantFreezer()
 void ObTenantFreezer::destroy()
 {
   freeze_trigger_timer_.destroy();
+  freeze_thread_pool_.thread_pool_.reset();
   is_freezing_tx_data_ = false;
   self_.reset();
   freezer_stat_.reset();
@@ -135,6 +136,9 @@ int ObTenantFreezer::stop()
     LOG_WARN("[TenantFreezer] tenant freezer not inited", KR(ret));
   } else {
     freeze_trigger_timer_.stop();
+    if (freeze_thread_pool_.thread_pool_.is_valid()) {
+      freeze_thread_pool_.thread_pool_->stop();
+    }
     // task_list_.stop_all();
     LOG_INFO("[TenantFreezer] ObTenantFreezer stoped done", K_(tenant_info));
   }
@@ -144,6 +148,9 @@ int ObTenantFreezer::stop()
 void ObTenantFreezer::wait()
 {
   freeze_trigger_timer_.wait();
+  if (freeze_thread_pool_.thread_pool_.is_valid()) {
+    freeze_thread_pool_.thread_pool_->wait();
+  }
   // task_list_.wait_all();
   LOG_INFO("[TenantFreezer] ObTenantFreezer wait done", K_(tenant_info));
 }
@@ -152,28 +159,22 @@ bool ObTenantFreezer::exist_ls_freezing()
 {
   int ret = OB_SUCCESS;
   bool exist_ls_freezing = false;
-  common::ObSharedGuard<ObLSIterator> iter;
+  ObLS *ls = nullptr;
   ObLSService *ls_srv = share::g_mp->ls_service();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("[TenantFreezer] tenant freezer not inited", KR(ret));
-  } else if (OB_FAIL(ls_srv->get_ls_iter(iter, ObLSGetMod::TXSTORAGE_MOD))) {
-    LOG_WARN("[TenantFreezer] fail to get log stream iterator", KR(ret));
+  } else if (OB_ISNULL(ls_srv)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("[TenantFreezer] ls service is null", KR(ret));
+  } else if (OB_FAIL(ls_srv->get_ls(ls))) {
+    LOG_WARN("[TenantFreezer] fail to get log stream", KR(ret));
   } else {
-    ObLS *ls = nullptr;
-    while (OB_SUCC(iter->get_next(ls))) {
-      if (ls->get_freezer()->is_ls_freeze_running()) {
-        exist_ls_freezing = true;
-        break;
-      }
-    }
-
-    if (ret == OB_ITER_END) {
-      ret = OB_SUCCESS;
-    }
-
-    if (OB_FAIL(ret)) {
-      LOG_WARN("[TenantFreezer] iter ls failed", K(ret));
+    if (OB_ISNULL(ls->get_freezer())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("[TenantFreezer] freezer is null", KR(ret));
+    } else {
+      exist_ls_freezing = ls->get_freezer()->is_ls_freeze_running();
     }
   }
 
@@ -190,27 +191,22 @@ bool ObTenantFreezer::exist_ls_throttle_is_skipping()
       ATOMIC_BCAS(&throttle_is_skipping_cache_.update_ts_, last_update_ts, cur_ts)) {
     bool exist_ls_throttle_is_skipping = false;
 
-    common::ObSharedGuard<ObLSIterator> iter;
+    ObLS *ls = nullptr;
     ObLSService *ls_srv = share::g_mp->ls_service();
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
       LOG_WARN("[TenantFreezer] tenant freezer not inited", KR(ret));
-    } else if (OB_FAIL(ls_srv->get_ls_iter(iter, ObLSGetMod::TXSTORAGE_MOD))) {
-      LOG_WARN("[TenantFreezer] fail to get log stream iterator", KR(ret));
+    } else if (OB_ISNULL(ls_srv)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("[TenantFreezer] ls service is null", KR(ret));
+    } else if (OB_FAIL(ls_srv->get_ls(ls))) {
+      LOG_WARN("[TenantFreezer] fail to get log stream", KR(ret));
     } else {
-      ObLS *ls = nullptr;
-      while (OB_SUCC(iter->get_next(ls))) {
-        if (ls->get_freezer()->throttle_is_skipping()) {
-          exist_ls_throttle_is_skipping = true;
-          break;
-        }
-      }
-      if (ret == OB_ITER_END) {
-        ret = OB_SUCCESS;
-      }
-
-      if (OB_FAIL(ret)) {
-        LOG_WARN("[TenantFreezer] iter ls failed", K(ret));
+      if (OB_ISNULL(ls->get_freezer())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("[TenantFreezer] freezer is null", KR(ret));
+      } else {
+        exist_ls_throttle_is_skipping = ls->get_freezer()->throttle_is_skipping();
       }
     }
 
@@ -342,37 +338,26 @@ int ObTenantFreezer::tenant_freeze_data_()
 {
   int ret = OB_SUCCESS;
   int first_fail_ret = OB_SUCCESS;
-  common::ObSharedGuard<ObLSIterator> iter;
-  ObLSService *ls_srv = share::g_mp->ls_service();
+  ObLS *ls = nullptr;
   FLOG_INFO("[TenantFreezer] tenant_freeze start", KR(ret));
 
   ObTenantFreezeGuard freeze_guard(ret, tenant_info_);
-  if (OB_FAIL(ls_srv->get_ls_iter(iter, ObLSGetMod::TXSTORAGE_MOD))) {
-    LOG_WARN("[TenantFreezer] fail to get log stream iterator", KR(ret));
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    LOG_WARN("[TenantFreezer] fail to get log stream", KR(ret));
   } else {
-    ObLS *ls = nullptr;
-    int ls_cnt = 0;
-    for (; OB_SUCC(iter->get_next(ls)); ++ls_cnt) {
-      // wait until this ls freeze finished to make sure not freeze frequently because
-      // of this ls freeze stuck.
-      if (OB_FAIL(ls_freeze_data_(ls))) {
-        if (OB_SUCCESS == first_fail_ret) {
-          first_fail_ret = ret;
-        }
-        LOG_ERROR("[TenantFreezer] fail to freeze logstream", KR(ret), K(ls->get_ls_id()));
+    // Wait for the freeze to finish to avoid repeatedly freezing a stuck LS.
+    if (OB_FAIL(ls_freeze_data_(ls))) {
+      if (OB_SUCCESS == first_fail_ret) {
+        first_fail_ret = ret;
       }
-    }
-    if (ret == OB_ITER_END) {
-      ret = OB_SUCCESS;
-      if (ls_cnt > 0) {
-        LOG_INFO("[TenantFreezer] succeed to freeze tenant", KR(ret), K(ls_cnt));
-      } else {
-        LOG_WARN("[TenantFreezer] no logstream", KR(ret), K(ls_cnt));
-      }
+      LOG_ERROR("[TenantFreezer] fail to freeze logstream", KR(ret));
     }
     if (first_fail_ret != OB_SUCCESS &&
         first_fail_ret != OB_ITER_END) {
       ret = first_fail_ret;
+    }
+    if (OB_SUCC(ret)) {
+      LOG_INFO("[TenantFreezer] succeed to freeze tenant", KR(ret));
     }
   }
 
@@ -384,11 +369,7 @@ int ObTenantFreezer::tenant_freeze(const ObFreezeSourceFlag source)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  ObLSService *ls_svr = share::g_mp->ls_service();
-  common::ObSharedGuard<ObLSIterator> guard;
-  ObLSIterator *iter = NULL;
   ObLS *ls = nullptr;
-  int ls_cnt = 0;
   int64_t abs_timeout_ts = INT64_MAX;
 
   if (IS_NOT_INIT) {
@@ -397,21 +378,13 @@ int ObTenantFreezer::tenant_freeze(const ObFreezeSourceFlag source)
   } else if (OB_FAIL(ObShareUtil::get_abs_timeout(MAX_FREEZE_TIMEOUT_US /* default timeout */,
                                                   abs_timeout_ts))) {
     LOG_WARN("get timeout ts failed", KR(ret));
-  } else if (OB_FAIL(ls_svr->get_ls_iter(guard, ObLSGetMod::TXSTORAGE_MOD))) {
-    LOG_WARN("get log stream iter failed", K(ret));
-  } else if (OB_ISNULL(iter = guard.get_ptr())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("iter is NULL", K(ret));
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    LOG_WARN("[TenantFreezer] fail to get log stream", KR(ret));
   } else if (OB_FAIL(set_tenant_freezing_())) {
     LOG_WARN("set tenant freeze failed", K(ret));
   } else {
-    for (; OB_SUCC(iter->get_next(ls)); ++ls_cnt) {
-      if (OB_TMP_FAIL(ls_freeze_all_unit_(ls, abs_timeout_ts, source))) {
-        LOG_WARN("ls freeze all unit failed", K(tmp_ret), K(ls->get_ls_id()));
-      }
-    }
-    if (ret == OB_ITER_END) {
-      ret = OB_SUCCESS;
+    if (OB_TMP_FAIL(ls_freeze_all_unit_(ls, abs_timeout_ts, source))) {
+      LOG_WARN("ls freeze all unit failed", K(tmp_ret));
     }
   }
 
@@ -427,36 +400,7 @@ int ObTenantFreezer::tenant_freeze(const ObFreezeSourceFlag source)
   return ret;
 }
 
-int ObTenantFreezer::ls_freeze_all_unit(const share::ObLSID &ls_id,
-                                        const ObFreezeSourceFlag source)
-{
-  int ret = OB_SUCCESS;
-  ObLSService *ls_srv = share::g_mp->ls_service();
-  ObLSHandle handle;
-  ObLS *ls = nullptr;
-  const bool need_rewrite_tablet_meta = false;
-  int64_t abs_timeout_ts = 0;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("[TenantFreezer] tenant freezer not inited", KR(ret));
-  } else if (OB_FAIL(ObShareUtil::get_abs_timeout(MAX_FREEZE_TIMEOUT_US /* default timeout */,
-                                                  abs_timeout_ts))) {
-    LOG_WARN("get timeout ts failed", KR(ret));
-  } else if (OB_FAIL(ls_srv->get_ls(ls_id, handle, ObLSGetMod::TXSTORAGE_MOD))) {
-    LOG_WARN("[TenantFreezer] fail to get ls", K(ret), K(ls_id));
-  } else if (OB_ISNULL(ls = handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("[TenantFreezer] ls is null", KR(ret), K(ls_id));
-  } else if (OB_FAIL(ls_freeze_all_unit_(ls, abs_timeout_ts, source))) {
-    LOG_WARN("[TenantFreezer] logstream freeze failed", KR(ret), K(ls_id));
-  }
-
-  return ret;
-}
-
-int ObTenantFreezer::tablet_freeze(share::ObLSID ls_id,
-                                   const common::ObTabletID &tablet_id,
+int ObTenantFreezer::tablet_freeze(const common::ObTabletID &tablet_id,
                                    const bool is_sync,
                                    const int64_t max_retry_time_us,
                                    const bool need_rewrite_tablet_meta,
@@ -464,15 +408,12 @@ int ObTenantFreezer::tablet_freeze(share::ObLSID ls_id,
 {
   int ret = OB_SUCCESS;
   bool is_cache_hit = false;
-  ObLSService *ls_srv = share::g_mp->ls_service();
-  ObLSHandle handle;
   ObLS *ls = nullptr;
   // 0 as default timeout ts
   const int64_t abs_timeout_ts = (0 == max_retry_time_us) ? 0 : ObClockGenerator::getClock() + max_retry_time_us;
 
   FLOG_INFO("[TenantFreezer] tablet_freeze start",
             KR(ret),
-            K(ls_id),
             K(is_sync),
             K(need_rewrite_tablet_meta),
             K(tablet_id),
@@ -481,19 +422,14 @@ int ObTenantFreezer::tablet_freeze(share::ObLSID ls_id,
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("[TenantFreezer] tenant freezer not inited", KR(ret));
-  } else if (!ls_id.is_valid()) {
-    LOG_ERROR("[TenantFreezer] ls id can not be invalid", KR(ret), K(tablet_id));
-  } else if (OB_FAIL(ls_srv->get_ls(ls_id, handle, ObLSGetMod::TXSTORAGE_MOD))) {
-    LOG_WARN("[TenantFreezer] fail to get ls", K(ret), K(ls_id));
-  } else if (OB_ISNULL(ls = handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("[TenantFreezer] ls is null", KR(ret), K(ls_id));
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    LOG_WARN("[TenantFreezer] fail to get ls", K(ret));
   } else if (OB_FAIL(ls->tablet_freeze(tablet_id,
                                        is_sync,
                                        abs_timeout_ts,
                                        need_rewrite_tablet_meta,
                                        source))) {
-    LOG_ERROR("[TenantFreezer] fail to freeze tablet", KR(ret), K(ls_id), K(tablet_id));
+    LOG_ERROR("[TenantFreezer] fail to freeze tablet", KR(ret), K(tablet_id));
     if (OB_NOT_RUNNING == ret) {
       ret = OB_SUCCESS;
     }
@@ -600,40 +536,23 @@ int ObTenantFreezer::get_tx_data_info_for_freeze_(int64_t &tenant_tx_data_frozen
   int ret = OB_SUCCESS;
   tenant_tx_data_frozen_mem_used = 0;
   tenant_tx_data_active_mem_used = 0;
-  common::ObSharedGuard<ObLSIterator> iter;
+  ObLS *ls = nullptr;
   ObLSService *ls_srv = share::g_mp->ls_service();
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("[TenantFreezer] tenant freezer not inited", KR(ret));
-  } else if (OB_FAIL(ls_srv->get_ls_iter(iter, ObLSGetMod::TXSTORAGE_MOD))) {
-    LOG_WARN("[TenantFreezer] fail to get log stream iterator", KR(ret));
+  } else if (OB_ISNULL(ls_srv)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("[TenantFreezer] ls service is null", KR(ret));
+  } else if (OB_FAIL(ls_srv->get_ls(ls))) {
+    LOG_WARN("[TenantFreezer] fail to get log stream", KR(ret));
   } else {
-    ObLS *ls = nullptr;
-    int ls_cnt = 0;
-    for (; OB_SUCC(ret) && OB_SUCC(iter->get_next(ls)); ++ls_cnt) {
-      int tmp_ret = OB_SUCCESS;
-      int64_t ls_tx_data_frozen_mem_used = 0;
-      int64_t ls_tx_data_active_mem_used = 0;
-      if (!for_statistic_print && OB_NOT_NULL(ls) && ls->tx_table_need_re_freeze()) {
-        need_re_freeze = true;
-        break;
-      }
-
-      if (OB_TMP_FAIL(get_ls_tx_data_memory_info_(
-              ls, ls_tx_data_frozen_mem_used, ls_tx_data_active_mem_used, for_statistic_print))) {
-        LOG_WARN("[TenantFreezer] fail to get tx data mem used in one ls", KR(ret), K(ls->get_ls_id()));
-      } else {
-        tenant_tx_data_frozen_mem_used += ls_tx_data_frozen_mem_used;
-        tenant_tx_data_active_mem_used += ls_tx_data_active_mem_used;
-      }
-    }
-
-    if (ret == OB_ITER_END) {
-      ret = OB_SUCCESS;
-      if (0 == ls_cnt) {
-        LOG_WARN("[TenantFreezer] no logstream", KR(ret), K(ls_cnt), K(tenant_info_));
-      }
+    if (!for_statistic_print && ls->tx_table_need_re_freeze()) {
+      need_re_freeze = true;
+    } else if (OB_FAIL(get_ls_tx_data_memory_info_(
+            ls, tenant_tx_data_frozen_mem_used, tenant_tx_data_active_mem_used, for_statistic_print))) {
+      LOG_WARN("[TenantFreezer] fail to get tx data memory usage", KR(ret));
     }
   }
   return ret;
@@ -650,10 +569,7 @@ int ObTenantFreezer::get_ls_tx_data_memory_info_(ObLS *ls,
   ObTxDataMemtableMgr *memtable_mgr = nullptr;
   ObSEArray<ObTableHandleV2, 2> memtable_handles;
   ObTxDataMemtable *memtable = nullptr;
-  if (OB_ISNULL(ls)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("[TenantFreezer] get ls tx data mem used failed.", KR(ret));
-  } else if (OB_FAIL(ls->get_tablet_svr()->get_tx_data_memtable_mgr(mgr_handle))) {
+  if (OB_FAIL(ls->get_tablet_svr()->get_tx_data_memtable_mgr(mgr_handle))) {
     LOG_WARN("[TenantFreezer] get tx data memtable mgr failed.", KR(ret));
   } else if (OB_ISNULL(memtable_mgr
                        = static_cast<ObTxDataMemtableMgr *>(mgr_handle.get_memtable_mgr()))) {
@@ -684,8 +600,7 @@ int ObTenantFreezer::get_ls_tx_data_memory_info_(ObLS *ls,
 
   if (for_statistic_print) {
     LOG_INFO("TxData Memory Statistic(logstream info): ",
-             "ls_id", ls->get_ls_id(),
-             "Frozen TxData Memory(MB)", ls_tx_data_frozen_mem_used/ONE_MB,
+                          "Frozen TxData Memory(MB)", ls_tx_data_frozen_mem_used/ONE_MB,
              "Active TxData Memory(MB)", ls_tx_data_active_mem_used/ONE_MB);
   }
 
@@ -757,12 +672,11 @@ int ObTenantFreezer::do_freeze_diagnose()
   return ret;
 }
 
-void ObTenantFreezer::record_freezer_source_event(const ObLSID &ls_id,
-                                                  const ObFreezeSourceFlag source)
+void ObTenantFreezer::record_freezer_source_event(const ObFreezeSourceFlag source)
 {
   if (is_valid_freeze_source((source))) {
     ATOMIC_AAF(&freezer_stat_.captured_source_times_[static_cast<int64_t>(source)], 1);
-    STORAGE_LOG(INFO, "[Freezer] freeze from source", K(ls_id), "freeze_source", obj_to_cstring(source));
+    STORAGE_LOG(INFO, "[Freezer] freeze from source", "freeze_source", obj_to_cstring(source));
   }
 }
 

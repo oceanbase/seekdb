@@ -94,9 +94,7 @@ int ObLobDataReader::read_lob_data_impl(blocksstable::ObStorageDatum &datum, ObC
       param.snapshot_.core_ = access_ctx_->store_ctx_->mvcc_acc_ctx_.snapshot_;
       param.snapshot_.valid_ = true;
       param.snapshot_.source_ = transaction::ObTxReadSnapshot::SRC::LS;
-      param.snapshot_.snapshot_lsid_ = access_ctx_->store_ctx_->ls_id_;
       param.sql_mode_ = access_ctx_->sql_mode_;
-      param.ls_id_ = access_ctx_->ls_id_;
       param.tablet_id_ = tablet_id_;
       param.allocator_ = &allocator_;
       param.lob_common_ = const_cast<ObLobCommon*>(&lob_common);

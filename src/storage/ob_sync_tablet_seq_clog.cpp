@@ -102,24 +102,21 @@ ObSyncTabletSeqMdsLogCb::ObSyncTabletSeqMdsLogCb()
 {
 }
 
-int ObSyncTabletSeqMdsLogCb::init(const ObLSID &ls_id, const ObTabletID &tablet_id, const int64_t writer_id)
+int ObSyncTabletSeqMdsLogCb::init(const ObTabletID &tablet_id, const int64_t writer_id)
 {
   int ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
+  ObLS *tenant_ls = nullptr;
   ObLSService *ls_srv = share::g_mp->ls_service();
-  if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid())) {
+  if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid ls id or tablet id", K(ret), K(ls_id), K(tablet_id));
-  } else if (OB_FAIL(ls_srv->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
-    LOG_WARN("get ls handle failed", K(ret), K(ls_id));
-  } else if (OB_ISNULL(ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls is unexpected null", K(ret));
-  } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(tablet_id,
+    LOG_WARN("invalid tablet id", K(ret), K(tablet_id));
+  } else if (OB_FAIL(ls_srv->get_ls(tenant_ls))) {
+    LOG_WARN("get ls failed", K(ret));
+  } else if (OB_FAIL(tenant_ls->get_tablet(tablet_id,
                                                     tablet_handle_,
                                                     0,
                                                     ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    LOG_WARN("failed to get tablet", K(ls_id), K(tablet_id));
+    LOG_WARN("failed to get tablet", K(tablet_id));
   } else if (OB_FAIL(mds_ctx_.set_writer(mds::MdsWriter{mds::WriterType::AUTO_INC_SEQ, writer_id}))) {
     LOG_WARN("fail to set writer", K(ret), K(writer_id));
   }

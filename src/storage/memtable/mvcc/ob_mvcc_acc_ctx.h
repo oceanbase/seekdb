@@ -28,7 +28,7 @@
 namespace oceanbase
 {
 namespace transaction {
-class ObPartTransCtx;
+class ObTxCtx;
 }
 
 namespace storage {
@@ -156,7 +156,7 @@ public:
       && tx_table_guards_.is_valid()
       && (!tx_ctx_ || mem_ctx_);
   }
-  int init_read(transaction::ObPartTransCtx *tx_ctx, /* nullable */
+  int init_read(transaction::ObTxCtx *tx_ctx, /* nullable */
                 ObMemtableCtx *mem_ctx, /* nullable */
                 storage::ObTxTable *tx_table,
                 const transaction::ObTxSnapshot &snapshot,
@@ -199,7 +199,7 @@ public:
     snapshot.version_ = snapshot_version;
     return init_read(NULL, NULL, tx_table, snapshot, timeout, tx_lock_timeout, false, false, NULL);
   }
-  int init_write(transaction::ObPartTransCtx &tx_ctx,
+  int init_write(transaction::ObTxCtx &tx_ctx,
                  ObMemtableCtx &mem_ctx,
                  const transaction::ObTransID &tx_id,
                  const transaction::ObTxSEQ tx_scn,
@@ -243,7 +243,7 @@ public:
   {
     abs_lock_timeout_ts_ = abs_lock_timeout;
   }
-  int init_replay(transaction::ObPartTransCtx &tx_ctx,
+  int init_replay(transaction::ObTxCtx &tx_ctx,
                   ObMemtableCtx &mem_ctx,
                   const transaction::ObTransID &tx_id)
   {
@@ -350,7 +350,7 @@ public: // NOTE: those field should only be accessed by txn relative routine
   // specials for MvccWrite
   transaction::ObTransID tx_id_;
   transaction::ObTxDesc *tx_desc_;             // the txn descriptor
-  transaction::ObPartTransCtx *tx_ctx_;        // the txn context
+  transaction::ObTxCtx *tx_ctx_;        // the txn context
   ObMemtableCtx *mem_ctx_;                     // memtable-ctx
   transaction::ObTxSEQ tx_scn_;                // the change's number of this modify
   concurrent_control::ObWriteFlag write_flag_; // the write flag of the write process

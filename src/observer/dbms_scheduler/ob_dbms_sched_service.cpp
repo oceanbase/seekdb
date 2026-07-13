@@ -117,41 +117,24 @@ void ObDBMSSchedService::destroy()
   LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService destroy success");
 }
 
-void ObDBMSSchedService::switch_to_follower_forcedly()
+void ObDBMSSchedService::deactivate()
 {
-  switch_to_follower_gracefully();
+  if (job_master_.is_inited()) {
+    job_master_.switch_to_follower();
+    ObTenantThreadHelper::deactivate();
+    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService stopped");
+  }
 }
-int ObDBMSSchedService::switch_to_leader()
+int ObDBMSSchedService::activate()
 {
   int ret = OB_SUCCESS;
   if (job_master_.is_inited()) {
     job_master_.switch_to_leader();
-    ObTenantThreadHelper::switch_to_leader();
+    ObTenantThreadHelper::activate();
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch leader");
   }
   return ret;
 }
-int ObDBMSSchedService::switch_to_follower_gracefully()
-{
-  int ret = OB_SUCCESS;
-  if (job_master_.is_inited()) {
-    job_master_.switch_to_follower();
-    ObTenantThreadHelper::switch_to_follower_gracefully();
-    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch follower");
-  }
-  return ret;
-}
-int ObDBMSSchedService::resume_leader()
-{
-  int ret = OB_SUCCESS;
-  if (!is_leader()) {
-    if (OB_FAIL(switch_to_leader())) {
-       LOG_INFO("[DBMS_SCHED_SERVICE] resume leader failed");
-    }
-  }
-  return ret;
-}
-
 void ObDBMSSchedService::wakeup_scheduler()
 {
   int ret = OB_SUCCESS;

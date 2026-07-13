@@ -47,7 +47,7 @@ class ObMvccRow;
 
 namespace transaction
 {
-class ObPartTransCtx;
+class ObTxCtx;
 }
 
 
@@ -55,7 +55,6 @@ namespace storage
 {
 class ObTableStoreIterator;
 class ObLS;
-class ObLSHandle;
 class ObTablet;
 class ObITable;
 struct ObStoreCtx;
@@ -471,18 +470,17 @@ struct ObStoreCtx
   void reset();
   bool is_valid() const
   {
-    return ls_id_.is_valid() && OB_NOT_NULL(ls_) && mvcc_acc_ctx_.is_valid();
+    return OB_NOT_NULL(ls_) && mvcc_acc_ctx_.is_valid();
   }
   bool is_read() const { return mvcc_acc_ctx_.is_read(); }
   bool is_write() const { return mvcc_acc_ctx_.is_write(); }
   bool is_replay() const { return mvcc_acc_ctx_.is_replay(); }
   bool is_read_store_ctx() const { return is_read_store_ctx_; }
-  int init_for_read(const share::ObLSID &ls_id,
-                    const common::ObTabletID tablet_id,
+  int init_for_read(const common::ObTabletID tablet_id,
                     const int64_t timeout,
                     const int64_t lock_timeout_us,
                     const share::SCN &snapshot_version);
-  int init_for_read(const storage::ObLSHandle &ls_handle,
+  int init_for_read(storage::ObLS *tenant_ls,
                     const int64_t timeout,
                     const int64_t lock_timeout_us,
                     const share::SCN &snapshot_version);
@@ -498,7 +496,6 @@ struct ObStoreCtx
   int get_all_tables(ObIArray<ObITable *> &iter_tables);
   int get_fork_snapshot_scn(const common::ObTabletID &tablet_id, share::SCN &fork_snapshot_scn);
   TO_STRING_KV(KP(this),
-               K_(ls_id),
                KP_(ls),
                K_(branch),
                K_(timeout),
@@ -510,7 +507,6 @@ struct ObStoreCtx
                K_(is_read_store_ctx),
                K_(update_full_column),
                K_(is_fork_ctx));
-  share::ObLSID ls_id_;
   storage::ObLS *ls_;
   int16_t branch_;                                 // parallel write id
   common::ObTabletID tablet_id_;

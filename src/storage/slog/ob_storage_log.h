@@ -29,7 +29,6 @@ namespace oceanbase
 
 namespace share
 {
-  class ObLSID;
 }
 namespace storage
 {
@@ -132,47 +131,28 @@ private:
   ObLSMeta ls_meta_;
 };
 
-struct ObLSIDLog : public ObIBaseStorageLogEntry
+struct ObLSMarkerLog : public ObIBaseStorageLogEntry
 {
 public:
-  explicit ObLSIDLog(share::ObLSID &ls_id);
-  virtual ~ObLSIDLog() {}
-  virtual bool is_valid() const override;
+  ObLSMarkerLog() = default;
+  virtual ~ObLSMarkerLog() = default;
+  virtual bool is_valid() const override { return true; }
 
   DECLARE_TO_STRING;
   OB_UNIS_VERSION_V(1);
 
-protected:
-  share::ObLSID &ls_id_;
 };
 
 using ObCreateLSPrepareSlog = ObLSMetaLog;
-using ObCreateLSAbortSLog = ObLSIDLog;
-using ObCreateLSCommitSLog = ObLSIDLog;
-using ObDeleteLSLog = ObLSIDLog;
-
-struct ObCreateTabletLog : public ObIBaseStorageLogEntry
-{
-public:
-  ObCreateTabletLog() {}
-  explicit ObCreateTabletLog(ObTablet *tablet);
-  virtual ~ObCreateTabletLog() {}
-  virtual int serialize(char *buf, const int64_t buf_len, int64_t &pos) const override;
-  virtual int deserialize(const char *buf, const int64_t data_len, int64_t &pos) override;
-  virtual int64_t get_serialize_size() const override;
-  virtual bool is_valid() const override;
-
-  DECLARE_TO_STRING;
-
-public:
-  ObTablet *tablet_;
-};
+using ObCreateLSAbortSLog = ObLSMarkerLog;
+using ObCreateLSCommitSLog = ObLSMarkerLog;
+using ObDeleteLSLog = ObLSMarkerLog;
 
 struct ObDeleteTabletLog : public ObIBaseStorageLogEntry
 {
 public:
   ObDeleteTabletLog();
-  ObDeleteTabletLog(const share::ObLSID &ls_id, const common::ObTabletID &tablet_id);
+  explicit ObDeleteTabletLog(const common::ObTabletID &tablet_id);
   virtual ~ObDeleteTabletLog() {}
   virtual bool is_valid() const override;
 
@@ -180,7 +160,6 @@ public:
   OB_UNIS_VERSION_V(1);
 
 public:
-  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
 };
 
@@ -189,7 +168,6 @@ struct ObUpdateTabletLog : public ObIBaseStorageLogEntry
 public:
   ObUpdateTabletLog() = default;
   ObUpdateTabletLog(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const ObMetaDiskAddr &disk_addr);
   virtual ~ObUpdateTabletLog() = default;
@@ -197,7 +175,6 @@ public:
   DECLARE_TO_STRING;
   OB_UNIS_VERSION_V(1);
 public:
-  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   ObMetaDiskAddr disk_addr_;
 };
@@ -205,10 +182,10 @@ public:
 struct ObEmptyShellTabletLog : public ObIBaseStorageLogEntry
 {
 public:
-  const int64_t EMPTY_SHELL_SLOG_VERSION = 1;
+  const int64_t EMPTY_SHELL_SLOG_VERSION = 2;
 public:
   ObEmptyShellTabletLog() = default;
-  explicit ObEmptyShellTabletLog(const ObLSID &ls_id_, const ObTabletID &tablet_id, ObTablet *tablet);
+  explicit ObEmptyShellTabletLog(const ObTabletID &tablet_id, ObTablet *tablet);
   virtual ~ObEmptyShellTabletLog() {}
   virtual bool is_valid() const override;
   virtual int serialize(
@@ -228,7 +205,6 @@ public:
   DECLARE_TO_STRING;
 public:
   int64_t version_;
-  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   ObTablet *tablet_;
 };

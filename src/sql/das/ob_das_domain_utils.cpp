@@ -236,7 +236,6 @@ int ObDASDomainUtils::generate_spatial_index_rows(
 }
 
 int ObDASDomainUtils::build_ft_doc_word_infos(
-    const share::ObLSID &ls_id,
     const transaction::ObTxDesc *trans_desc,
     const transaction::ObTxReadSnapshot *snapshot,
     const common::ObIArray<const ObDASBaseCtDef *> &related_ctdefs,
@@ -245,9 +244,9 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
     common::ObIArray<ObFTDocWordInfo> &doc_word_infos)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!ls_id.is_valid() || OB_ISNULL(snapshot))) {
+  if (OB_UNLIKELY(OB_ISNULL(snapshot))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(ls_id), KPC(snapshot));
+    LOG_WARN("invalid arguments", K(ret), KPC(snapshot));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < related_ctdefs.count(); ++i) {
     ObFTDocWordInfo doc_word_info;
@@ -258,7 +257,6 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
     } else if (related_ctdef->table_param_.get_data_table().is_fts_doc_word_aux()) {
       doc_word_info.table_id_ = related_ctdef->table_param_.get_data_table().get_table_id();
       doc_word_info.doc_word_table_id_ = related_ctdef->table_param_.get_data_table().get_table_id();
-      doc_word_info.doc_word_ls_id_ = ls_id;
       doc_word_info.doc_word_tablet_id_ = related_tablet_ids.at(i);
       doc_word_info.doc_word_schema_version_ = related_ctdef->table_param_.get_data_table().get_schema_version();
       doc_word_info.doc_word_found_ = true;
@@ -280,7 +278,6 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
         } else if (doc_word_related_ctdef->table_param_.get_data_table().is_fts_doc_word_aux()
             && 0 == doc_word_related_ctdef->table_param_.get_data_table().get_index_name().case_compare(buf)) {
           doc_word_info.doc_word_table_id_ = doc_word_related_ctdef->table_param_.get_data_table().get_table_id();
-          doc_word_info.doc_word_ls_id_ = ls_id;
           doc_word_info.doc_word_tablet_id_ = related_tablet_ids.at(j);
           doc_word_info.doc_word_schema_version_ = doc_word_related_ctdef->table_param_.get_data_table().get_schema_version();
           doc_word_info.doc_word_found_ = true;
@@ -300,7 +297,7 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
       LOG_WARN("fail to refresh seq no", K(ret), K(i), KPC(related_ctdef), K(doc_word_info));
     }
   }
-  LOG_TRACE("build_ft_doc_word_infos", K(ret), K(ls_id), K(snapshot), K(doc_word_infos), K(related_ctdefs),
+  LOG_TRACE("build_ft_doc_word_infos", K(ret), K(snapshot), K(doc_word_infos), K(related_ctdefs),
       K(related_tablet_ids));
   return ret;
 }
@@ -956,7 +953,6 @@ int ObFTDMLIterator::rewind()
         LOG_WARN("unexpected error, doc word info is nullptr", K(ret), KPC(doc_word_info_));
       } else if (FALSE_IT(ft_doc_word_iter_.reset())) {
       } else if (OB_FAIL(ft_doc_word_iter_.init(doc_word_info_->doc_word_table_id_,
-                                                doc_word_info_->doc_word_ls_id_,
                                                 doc_word_info_->doc_word_tablet_id_,
                                                 &doc_word_info_->snapshot_,
                                                 doc_word_info_->doc_word_schema_version_))) {
@@ -991,7 +987,6 @@ int ObFTDMLIterator::init(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected error, doc word info is nullptr", K(ret), KPC(doc_word_info_));
         } else if (OB_FAIL(ft_doc_word_iter_.init(doc_word_info_->doc_word_table_id_,
-                                                  doc_word_info_->doc_word_ls_id_,
                                                   doc_word_info_->doc_word_tablet_id_,
                                                   &doc_word_info_->snapshot_,
                                                   doc_word_info_->doc_word_schema_version_))) {
@@ -1054,7 +1049,6 @@ int ObFTDMLIterator::change_domain_dml_mode(const ObDomainDMLMode &mode)
           LOG_WARN("unexpected error, doc word info is nullptr", K(ret), KPC(doc_word_info_));
         } else if (FALSE_IT(ft_doc_word_iter_.reset())) {
         } else if (OB_FAIL(ft_doc_word_iter_.init(doc_word_info_->doc_word_table_id_,
-                                                  doc_word_info_->doc_word_ls_id_,
                                                   doc_word_info_->doc_word_tablet_id_,
                                                   &doc_word_info_->snapshot_,
                                                   doc_word_info_->doc_word_schema_version_))) {

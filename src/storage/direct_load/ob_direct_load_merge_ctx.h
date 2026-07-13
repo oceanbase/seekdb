@@ -136,7 +136,7 @@ public:
   ~ObDirectLoadMergeCtx();
   void reset();
   int init(const ObDirectLoadMergeParam &param,
-           const common::ObIArray<table::ObTableLoadLSIdAndPartitionId> &ls_partition_ids);
+           const common::ObIArray<table::ObTableLoadTabletId> &partition_ids);
   int build_merge_task(ObDirectLoadTableStore &table_store, int64_t thread_cnt);
   int build_del_lob_task(ObDirectLoadTableStore &table_store, int64_t thread_cnt, const bool for_dag);
   const common::ObIArray<ObDirectLoadTabletMergeCtx *> &get_tablet_merge_ctxs() const
@@ -146,7 +146,7 @@ public:
 
 private:
   int create_all_tablet_ctxs(
-    const common::ObIArray<table::ObTableLoadLSIdAndPartitionId> &ls_partition_ids);
+    const common::ObIArray<table::ObTableLoadTabletId> &partition_ids);
 
 private:
   common::ObArenaAllocator allocator_;
@@ -164,7 +164,7 @@ public:
   ~ObDirectLoadTabletMergeCtx();
   void reset();
   int init(ObDirectLoadMergeCtx *merge_ctx,
-           const table::ObTableLoadLSIdAndPartitionId &ls_partition_id);
+           const table::ObTableLoadTabletId &partition_id);
   // No import data merge task
   int build_empty_data_merge_task(const ObDirectLoadTableDataDesc &table_data_desc,
                                   int64_t max_parallel_degree);

@@ -1,7 +1,7 @@
 --disable_query_log
 --disable_result_log
-let $use_spb_bk = query_get_value(select value from oceanbase.__tenant_virtual_session_variable where VARIABLE_NAME = 'optimizer_use_sql_plan_baselines',value, 1);
-let $cap_spb_bk = query_get_value(select value from oceanbase.__tenant_virtual_session_variable where VARIABLE_NAME = 'optimizer_capture_sql_plan_baselines',value, 1);
+let $use_spb_bk = query_get_value(select variable_value from information_schema.session_variables where variable_name = 'optimizer_use_sql_plan_baselines', variable_value, 1);
+let $cap_spb_bk = query_get_value(select variable_value from information_schema.session_variables where variable_name = 'optimizer_capture_sql_plan_baselines', variable_value, 1);
 set global optimizer_use_sql_plan_baselines = 'OFF';
 set global optimizer_capture_sql_plan_baselines = 'OFF';
 set session optimizer_use_sql_plan_baselines = 'OFF';

@@ -18,10 +18,13 @@
 #define OB_ALL_VIRTUAL_TX_DATA_TABLE_H_
 
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "storage/tx_storage/ob_ls_map.h"
 
 namespace oceanbase
 {
+namespace storage
+{
+class ObLS;
+}
 namespace observer
 {
 class ObAllVirtualTxDataTable : public common::ObVirtualTableScannerIterator {
@@ -51,10 +54,6 @@ public:
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  inline void set_addr(common::ObAddr &addr)
-  {
-    addr_ = addr;
-  }
 
 private:
   int get_next_tx_data_table_(ObITable *&tx_data_memtable);
@@ -62,12 +61,10 @@ private:
   int prepare_row_data_(ObITable *tx_data_table, RowData &row_data);
 
 private:
-  common::ObAddr addr_;
-  char ip_buf_[common::OB_IP_STR_BUFF];
-
   int64_t memtable_array_pos_;
   int64_t sstable_array_pos_;
-  ObSharedGuard<storage::ObLSIterator> ls_iter_guard_;
+  storage::ObLS *ls_;
+  bool tables_loaded_;
   ObTabletHandle tablet_handle_;
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper_;
   ObMemtableMgrHandle mgr_handle_;

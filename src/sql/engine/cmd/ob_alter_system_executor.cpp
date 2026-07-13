@@ -56,13 +56,7 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
   } else {
     if (!stmt.is_major_freeze()) {
       ObRootMinorFreezeArg arg;
-      if (OB_FAIL(arg.server_list_.assign(stmt.get_server_list()))) {
-        LOG_WARN("failed to assign server_list", K(ret));
-      } else {
-        arg.zone_ = stmt.get_zone();
-        arg.tablet_id_ = stmt.get_tablet_id();
-        arg.ls_id_ = stmt.get_ls_id();
-      }
+      arg.tablet_id_ = stmt.get_tablet_id();
       // access check:
       // not allow user_tenant to freeze other tenants
       if (OB_SUCC(ret)) {

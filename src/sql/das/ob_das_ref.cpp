@@ -531,7 +531,7 @@ int ObDASRef::close_all_task()
     bool merge_trans_result_fail = (ret != OB_SUCCESS);
     // any fail during merge trans_result,
     // need set trans_result incomplete, in order to
-    // indicate some transaction participants info unknown
+    // indicate transaction write state info unknown
     if (merge_trans_result_fail && OB_NOT_NULL(session)) {
       LOG_WARN("close all task fail, set trans_result to incomplete", K(ret));
       session->get_trans_result().set_incomplete();
@@ -573,10 +573,9 @@ int ObDASRef::create_das_task(const ObDASTabletLoc *tablet_loc,
     task_op->set_task_id(task_id);
     task_op->in_stmt_retry_ = session->get_is_in_retry();
     task_op->set_tablet_id(tablet_loc->tablet_id_);
-    task_op->set_ls_id(tablet_loc->ls_id_);
     task_op->set_tablet_loc(tablet_loc);
-    if (is_do_gts_opt() && OB_FAIL(task_op->init_das_gts_opt_info(session->get_tx_isolation()))) {
-      LOG_WARN("fail to init gts opt info", K(ret), K(session->get_tx_isolation()));
+    if (is_snapshot_opt_enabled() && OB_FAIL(task_op->init_das_snapshot_opt_info(session->get_tx_isolation()))) {
+      LOG_WARN("fail to init snapshot opt info", K(ret), K(session->get_tx_isolation()));
     } else if (OB_FAIL(add_aggregated_task(task_op, op_type))) {
       LOG_WARN("failed to add aggregated task", K(ret));
     }
@@ -659,35 +658,6 @@ int ObDASRef::add_aggregated_task(ObIDASTaskOp *das_task, ObDASOpType op_type)
     LOG_WARN("add batched task failed", KR(ret), KPC(das_task));
   }
   return ret;
-}
-
-bool ObDASRef::check_tasks_same_ls_and_is_local(share::ObLSID &ls_id)
-{
-  ObIDASTaskOp *first_das_op = nullptr;
-  bool is_all_same = true;
-  DASTaskIter task_iter = begin_task_iter();
-  const common::ObAddr &ctrl_addr = share::g_mp->data_access_service()->get_ctrl_addr();
-  if (!has_task()) {
-    is_all_same = false;
-  }
-  while (is_all_same && !task_iter.is_end()) {
-    ObIDASTaskOp *das_op = *task_iter;
-    if (OB_ISNULL(first_das_op)) {
-      first_das_op = das_op;
-      if (first_das_op->get_tablet_loc()->server_ != ctrl_addr) {
-        is_all_same = false;
-      }
-    } else if (first_das_op->get_ls_id() != das_op->get_ls_id() ||
-        first_das_op->get_tablet_loc()->server_ != das_op->get_tablet_loc()->server_) {
-      is_all_same = false;
-    }
-    ++task_iter;
-  }
-
-  if (is_all_same) {
-    ls_id = first_das_op->get_ls_id();
-  }
-  return is_all_same;
 }
 
 void ObDASRef::reset()

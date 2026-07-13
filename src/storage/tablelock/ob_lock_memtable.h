@@ -80,7 +80,6 @@ public:
   ObLockTableSplitLogCb()
     : is_inited_(false),
       memtable_(nullptr),
-      ls_id_(share::ObLSID::INVALID_LS_ID),
       src_tablet_id_(OB_INVALID_ID),
       dst_tablet_ids_(),
       is_logging_(false),
@@ -88,7 +87,7 @@ public:
       last_submit_log_ts_(OB_INVALID_TIMESTAMP),
       last_submit_scn_() {}
   virtual ~ObLockTableSplitLogCb() {}
-  int init(ObLockMemtable *memtable, const share::ObLSID &ls_id);
+  int init(ObLockMemtable *memtable);
   int set(const ObTabletID &src_tablet_id, const ObSArray<common::ObTabletID> &dst_tablet_ids);
   bool cb_success() { return cb_success_; };
   // we should ensure that the lock memtable won't be released
@@ -98,7 +97,6 @@ public:
   const char *get_cb_name() const override { return "LockTableSplitLogCb"; }
   TO_STRING_KV(K(is_inited_),
                K(memtable_),
-               K(ls_id_),
                K(src_tablet_id_),
                K(dst_tablet_ids_),
                K(last_submit_log_ts_),
@@ -106,12 +104,11 @@ public:
                K(is_logging_),
                K(cb_success_));
 private:
-  bool is_valid_(const ObLockMemtable *memtable, const share::ObLSID &ls_id);
+  bool is_valid_(const ObLockMemtable *memtable);
 private:
   bool is_inited_;
 
   ObLockMemtable *memtable_;
-  share::ObLSID ls_id_;
   ObTabletID src_tablet_id_;
   ObSArray<ObTabletID> dst_tablet_ids_;
 
@@ -142,9 +139,7 @@ public:
   ObLockMemtable();
   ~ObLockMemtable();
 
-  int init(const ObITable::TableKey &table_key,
-           const share::ObLSID &ls_id,
-           storage::ObFreezer *freezer);
+  int init(const ObITable::TableKey &table_key, storage::ObFreezer *freezer);
   void reset();
   // =================== LOCK FUNCTIONS =====================
   // try to lock a object.
@@ -298,7 +293,7 @@ public:
 
   void enable_check_tablet_status(const bool need_check);
 
-  INHERIT_TO_STRING_KV("ObITable", ObITable, KP(this), K_(snapshot_version), K_(ls_id));
+  INHERIT_TO_STRING_KV("ObITable", ObITable, KP(this), K_(snapshot_version));
 private:
   enum ObLockStep {
     STEP_BEGIN = 0,
@@ -346,8 +341,8 @@ private:
   int unregister_from_deadlock_detector_(const ObTableLockOp &lock_op);
 
   int check_tablet_write_allow_(const ObTableLockOp &lock_op,
-                                const int64_t input_reserved_counter,
-                                int64_t &output_reserved_counter);
+                                const int64_t input_status_check_counter,
+                                int64_t &output_status_check_counter);
   int get_lock_wait_expire_ts_(const int64_t lock_wait_start_ts);
   int check_and_set_tx_lock_timeout_(const memtable::ObMvccAccessCtx &acc_ctx);
 private:
@@ -369,10 +364,9 @@ private:
   share::SCN pre_rec_scn_;
   share::SCN max_committed_scn_;
   bool is_frozen_;
-  // enable tablet status check
   bool need_check_tablet_status_;
-  // detect status changes between table lock operations
-  int64_t reserved_counter_;
+  // Detect tablet status check toggles between two table-lock operations.
+  int64_t tablet_status_check_counter_;
 
   storage::ObFreezer *freezer_;
   RWLock flush_lock_;        // lock before change ts

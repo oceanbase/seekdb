@@ -25,9 +25,7 @@ namespace observer
 {
 
 ObAllVirtualTenantMemstoreInfo::ObAllVirtualTenantMemstoreInfo()
-    : ObVirtualTableScannerIterator(),
-      current_pos_(0),
-      addr_()
+    : ObVirtualTableScannerIterator()
 {
 }
 
@@ -38,92 +36,56 @@ ObAllVirtualTenantMemstoreInfo::~ObAllVirtualTenantMemstoreInfo()
 
 void ObAllVirtualTenantMemstoreInfo::reset()
 {
-  current_pos_ = 0;
-  addr_.reset();
   ObVirtualTableScannerIterator::reset();
 }
 
 int ObAllVirtualTenantMemstoreInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  if (NULL == allocator_) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
-  } else if (!start_to_read_) {
-    ObObj *cells = NULL;
-    // allocator_ is allocator of PageArena type, no need to free
-    if (NULL == (cells = cur_row_.cells_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
-    } else {
-      
-      char ip_buf[common::OB_IP_STR_BUFF];
-      omt::ObMultiTenant *omt = GCTX.omt_;
-      if (OB_ISNULL(omt)) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "omt is null", K(ret));
+  if (start_to_read_) {
+    ret = OB_ITER_END;
+  } else {
+    start_to_read_ = true;
+    int64_t active_span = 0;
+    int64_t memstore_used = 0;
+    int64_t freeze_trigger = 0;
+    int64_t memstore_limit = 0;
+    int64_t freeze_cnt = 0;
+    MOD_SCOPE {
+      storage::ObTenantFreezer *freezer = share::g_mp->tenant_freezer();
+      if (OB_FAIL(freezer->get_tenant_memstore_cond(active_span,
+                                                     memstore_used,
+                                                     freeze_trigger,
+                                                     memstore_limit,
+                                                     freeze_cnt))) {
+        SERVER_LOG(WARN, "fail to get memstore used", K(ret));
       }
-      // does not check ret code, run for the single (sys) tenant.
-      {
-        int64_t active_span = 0;
-        int64_t memstore_used = 0;
-        int64_t freeze_trigger = 0;
-        int64_t memstore_limit = 0;
-        int64_t freeze_cnt = 0;
-        MOD_SCOPE {
-          storage::ObTenantFreezer *freezer = nullptr;
-          if (FALSE_IT(freezer = share::g_mp->tenant_freezer())) {
-          } else if (OB_FAIL(freezer->get_tenant_memstore_cond(active_span,
-                                                               memstore_used,
-                                                               freeze_trigger,
-                                                               memstore_limit,
-                                                               freeze_cnt))) {
-            SERVER_LOG(WARN, "fail to get memstore used", K(ret));
-          }
-          for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
-            uint64_t col_id = output_column_ids_.at(i);
-            switch (col_id) {
-              case ACTIVE_SPAN:
-                cells[i].set_int(active_span);
-                break;
-              case FREEZE_TRIGGER:
-                cells[i].set_int(freeze_trigger);
-                break;
-              case FREEZE_CNT:
-                cells[i].set_int(freeze_cnt);
-                break;
-              case MEMSTORE_USED:
-                cells[i].set_int(memstore_used);
-                break;
-              case MEMSTORE_LIMIT:
-                cells[i].set_int(memstore_limit);
-                break;
-              default:
-                // abnormal column id
-                ret = OB_ERR_UNEXPECTED;
-                SERVER_LOG(WARN, "unexpected column id", K(ret));
-                break;
-            }
-          }
-          if (OB_SUCCESS == ret
-              && OB_SUCCESS != (ret = scanner_.add_row(cur_row_))) {
-            SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
-          }
+      for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
+        switch (output_column_ids_.at(i)) {
+          case ACTIVE_SPAN:
+            cur_row_.cells_[i].set_int(active_span);
+            break;
+          case FREEZE_TRIGGER:
+            cur_row_.cells_[i].set_int(freeze_trigger);
+            break;
+          case FREEZE_CNT:
+            cur_row_.cells_[i].set_int(freeze_cnt);
+            break;
+          case MEMSTORE_USED:
+            cur_row_.cells_[i].set_int(memstore_used);
+            break;
+          case MEMSTORE_LIMIT:
+            cur_row_.cells_[i].set_int(memstore_limit);
+            break;
+          default:
+            ret = OB_ERR_UNEXPECTED;
+            SERVER_LOG(WARN, "unexpected column id", K(ret), K(output_column_ids_.at(i)));
+            break;
         }
       }
-      // always start to read, event it failed.
-      scanner_it_ = scanner_.begin();
-      start_to_read_ = true;
-    }
-  }
-  // always get next row, if we have start to read.
-  if (start_to_read_) {
-    if (OB_SUCCESS != (ret = scanner_it_.get_next_row(cur_row_))) {
-      if (OB_ITER_END != ret) {
-        SERVER_LOG(WARN, "fail to get next row", K(ret));
+      if (OB_SUCC(ret)) {
+        row = &cur_row_;
       }
-    } else {
-      row = &cur_row_;
     }
   }
   return ret;

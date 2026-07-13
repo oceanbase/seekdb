@@ -22,7 +22,7 @@
 #include "lib/objectpool/ob_server_object_pool.h"
 #include "storage/tx/ob_trans_define.h"
 #include "storage/tx/ob_trans_service.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
 #include "share/rc/ob_tenant_base.h"
 #include "observer/omt/ob_tenant.h"
 #include "storage/tablelock/ob_lock_memtable.h"
@@ -38,7 +38,6 @@
 
 #include "../mock_utils/msg_bus.h"
 #include "../mock_utils/basic_fake_define.h"
-#include "../mock_utils/ob_fake_tx_rpc.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
@@ -128,11 +127,6 @@ private:
   ObTxDesc *tx_desc_;
 };
 
-enum ObTxNodeRole {
-  Leader = 1,
-  Follower = 2,
-};
-
 // Single-tenant seekdb dissolves ObTenantBase::set<T>/get<T> module slots;
 // modules now route through share::g_mp (ObIModuleProvider). This test injects
 // its fakes by overriding the relevant getters and pointing g_mp at this node.
@@ -141,7 +135,7 @@ class FakeModuleProvider : public share::ObIModuleProvider
 {
 public:
   storage::ObTenantFreezer *tenant_freezer() override { return tenant_freezer_; }
-  ObPartTransCtxObjPool *part_trans_ctx_obj_pool() override { return part_trans_ctx_obj_pool_; }
+  ObTxCtxObjPool *part_trans_ctx_obj_pool() override { return part_trans_ctx_obj_pool_; }
   share::ObSharedMemAllocMgr *shared_mem_alloc_mgr() override { return shared_mem_alloc_mgr_; }
   transaction::ObTransService *trans_service() override { return trans_service_; }
   common::ObOptStatMonitorManager *opt_stat_monitor_manager() override { return opt_stat_monitor_manager_; }
@@ -149,7 +143,7 @@ public:
   storage::ObLSService *ls_service() override { return ls_service_; }
 
   storage::ObTenantFreezer *tenant_freezer_ = nullptr;
-  ObPartTransCtxObjPool *part_trans_ctx_obj_pool_ = nullptr;
+  ObTxCtxObjPool *part_trans_ctx_obj_pool_ = nullptr;
   share::ObSharedMemAllocMgr *shared_mem_alloc_mgr_ = nullptr;
   transaction::ObTransService *trans_service_ = nullptr;
   common::ObOptStatMonitorManager *opt_stat_monitor_manager_ = nullptr;
@@ -161,7 +155,7 @@ public:
 // Single-tenant seekdb routes module access through share::g_mp; a fake IT harness
 // must: (1) wire the provider's shared_mem_alloc_mgr so alloc/throttle resolve,
 // (2) point g_mp at it, (3) set g_modules_ready so MOD_SCOPE-gated paths (e.g.
-// ObPartTransCtx::submit_log_impl_) run instead of being silently skipped -- the
+// ObTxCtx::submit_log_impl_) run instead of being silently skipped -- the
 // real observer sets this true during tenant start (omt/ob_tenant.cpp), and
 // (4) init the alloc mgr. Intentionally never clears g_mp: the providers are static
 // and outlive every fixture, and clearing it in TearDown would crash members that
@@ -177,18 +171,17 @@ inline void publish_test_module_provider(FakeModuleProvider &provider,
 
 class ObTxNode final : public MsgEndPoint {
 public:
-  ObTxNode(const int64_t ls_id,
-           const ObAddr &addr,
+  ObTxNode(const ObAddr &addr,
            MsgBus &msg_bus);
   ~ObTxNode();
   int start();
-  void set_as_follower_replica(ObTxNode& leader_replica) {
-    role_ = ObTxNodeRole::Follower;
-    fake_tx_log_adapter_ = leader_replica.fake_tx_log_adapter_;
+  void set_replay_source(ObTxNode &source) {
+    fake_tx_log_adapter_ = source.fake_tx_log_adapter_;
+    owns_log_adapter_ = false;
   }
 
 public:
-  TO_STRING_KV(KP(this), K(addr_), K_(ls_id), K(msg_queue_.size()));
+  TO_STRING_KV(KP(this), K(addr_), K(msg_queue_.size()));
   ObString get_identifer_str();
   ObTxDescGuard get_tx_guard();
   // the simple r/w interface
@@ -234,10 +227,10 @@ public:
   DELEGATE_TENANT_WITH_RET(txs_, release_explicit_savepoint, int);
   DELEGATE_TENANT_WITH_RET(txs_, rollback_to_implicit_savepoint, int);
   DELEGATE_TENANT_WITH_RET(txs_, interrupt, int);
-  int get_tx_ctx(const share::ObLSID &ls_id, const ObTransID &tx_id, ObPartTransCtx *&ctx) {
-    return txs_.tx_ctx_mgr_.get_tx_ctx(ls_id, tx_id, false, ctx);
+  int get_tx_ctx(const ObTransID &tx_id, ObTxCtx *&ctx) {
+    return txs_.tx_ctx_mgr_.get_tx_ctx(tx_id, false, ctx);
   }
-  int revert_tx_ctx(ObPartTransCtx *ctx) { return txs_.tx_ctx_mgr_.revert_tx_ctx(ctx); }
+  int revert_tx_ctx(ObTxCtx *ctx) { return txs_.tx_ctx_mgr_.revert_tx_ctx(ctx); }
 public:
   struct MsgPack : ObLink {
     MsgPack(const ObAddr &addr, ObString &body, bool is_sync_msg = false)
@@ -256,39 +249,32 @@ public:
   int handle_msg_(MsgPack *pkt);
 private:
   int create_memtable_(const int64_t tablet_id, memtable::ObMemtable *& mt);
-  int create_ls_(const ObLSID ls_id);
-  int drop_ls_(const ObLSID ls_id);
-  int recv_msg_callback_(TxMsgCallbackMsg &msg);
+  int publish_fake_ls_();
+  int retire_fake_ls_();
   void wait_all_redolog_applied()
   { while (fake_tx_log_adapter_->get_inflight_cnt() != 0) usleep(1000); }
 
   int wait_all_tx_ctx_is_destoryed()
   {
     int ret = OB_SUCCESS;
-    ObLSTxCtxMgr *ls_tx_ctx_mgr = NULL;
-    OZ(txs_.tx_ctx_mgr_.get_ls_tx_ctx_mgr(ls_id_, ls_tx_ctx_mgr));
+    ObLSTxCtxMgr &tx_ctx_mgr = txs_.tx_ctx_mgr_.get_tx_ctx_manager();
     int i = 0;
-    int tx_count = ls_tx_ctx_mgr->get_tx_ctx_count();
+    int tx_count = tx_ctx_mgr.get_tx_ctx_count();
     for (i = 0; tx_count > 0 && i < 2000; ++i) {
-      tx_count = ls_tx_ctx_mgr->get_tx_ctx_count();
+      tx_count = tx_ctx_mgr.get_tx_ctx_count();
       usleep(500);
     }
     if (2000 == i) {
       ret = OB_ERR_UNEXPECTED;
       LOG_INFO("wait all tx ctx destoryed fail, print all tx:", K(tx_count));
       const bool verbose = true;
-      ls_tx_ctx_mgr->print_all_tx_ctx(ObLSTxCtxMgr::MAX_HASH_ITEM_PRINT, verbose);
+      tx_ctx_mgr.print_all_tx_ctx(ObLSTxCtxMgr::MAX_HASH_ITEM_PRINT, verbose);
       LOG_INFO("print all tx end", K(ret));
     }
-    OZ(txs_.tx_ctx_mgr_.revert_ls_tx_ctx_mgr(ls_tx_ctx_mgr));
     return ret;
   }
   void dump_msg_queue_();
 public:
-  static ObFakeLocationAdapter &get_location_adapter_() {
-    static ObFakeLocationAdapter l;
-    return l;
-  }
   static ObFakeGtiSource &get_gti_source_() {
     static ObFakeGtiSource txIdGenerator;
     return txIdGenerator;
@@ -302,26 +288,15 @@ public:
   int64_t ts_after_us(int64_t d) const { return ObTimeUtility::current_time() + d; }
   int64_t ts_after_ms(int64_t d) const { return ObTimeUtility::current_time() + d * 1000; }
 
-private:
-  static void reset_localtion_adapter() {
-    get_location_adapter_().reset();
-  }
 public:
-  void add_drop_msg_type(TX_MSG_TYPE type) {
-    drop_msg_type_set_.set_refactored(type);
-  }
-  void del_drop_msg_type(TX_MSG_TYPE type) {
-    drop_msg_type_set_.erase_refactored(type);
-  }
   void wait_all_msg_consumed();
   void wait_tx_log_synced();
 public:
   ObString name_; char name_buf_[MAX_IP_PORT_LENGTH];
   ObAddr addr_;
-  ObLSID ls_id_;
   int64_t tenant_id_;
   omt::ObTenant tenant_;
-  common::ObServerObjectPool<ObPartTransCtx> fake_part_trans_ctx_pool_;
+  common::ObServerObjectPool<ObTxCtx> fake_part_trans_ctx_pool_;
   ObTransService txs_;
   memtable::ObMemtable *memtable_;
   ObSEArray<ObColDesc, 2> columns_;
@@ -330,7 +305,6 @@ public:
   QueueConsumer<MsgPack> msg_consumer_;
   // fake objects
   storage::ObTenantMetaMemMgr t3m_;
-  ObFakeTransRpc fake_rpc_;
   ObFakeGtiSource fake_gti_source_;
   ObFakeTsMgr fake_ts_mgr_;
   share::schema::ObMultiVersionSchemaService schema_service_;
@@ -341,14 +315,13 @@ public:
   ObSharedMemAllocMgr fake_shared_mem_alloc_mgr_;
   ObLS fake_ls_;
   ObFreezer fake_freezer_;
-  ObTxNodeRole role_;
   ObFakeTxLogAdapter* fake_tx_log_adapter_;
+  bool owns_log_adapter_;
   ObTabletMemtableMgr fake_memtable_mgr_;
   ObOptStatMonitorManager fake_opt_stat_mgr_;
   ObLockWaitMgr fake_lock_wait_mgr_;
   ObLSService ls_service_;
   FakeModuleProvider provider_;
-  common::hash::ObHashSet<int16_t> drop_msg_type_set_;
   std::function<int(int,void *)> extra_msg_handler_;
   char buf_[256];
 };

@@ -130,8 +130,7 @@ class ObDDLMacroBlockClogCb : public logservice::AppendCb
 public:
   ObDDLMacroBlockClogCb();
   virtual ~ObDDLMacroBlockClogCb();
-  int init(const share::ObLSID &ls_id,
-           const storage::ObDDLMacroBlockRedoInfo &redo_info,
+  int init(const storage::ObDDLMacroBlockRedoInfo &redo_info,
            const blocksstable::MacroBlockId &macro_block_id,
            ObTabletHandle &tablet_handle,
            const ObDirectLoadType &direct_load_type);
@@ -146,7 +145,6 @@ public:
 private:
   bool is_inited_;
   ObDDLClogCbStatus status_;
-  share::ObLSID ls_id_;
   blocksstable::MacroBlockId macro_block_id_;
   ObSpinLock data_buffer_lock_;
   bool is_data_buffer_freed_;
@@ -164,8 +162,7 @@ class ObDDLCommitClogCb : public logservice::AppendCb
 public:
   ObDDLCommitClogCb();
   virtual ~ObDDLCommitClogCb() = default;
-  int init(const share::ObLSID &ls_id,
-           const common::ObTabletID &tablet_id,
+  int init(const common::ObTabletID &tablet_id,
            const share::SCN &start_scn,
            const uint32_t lock_tid,
            ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
@@ -178,11 +175,10 @@ public:
   int get_ret_code() const { return status_.get_ret_code(); }
   void try_release();
   const char *get_cb_name() const override { return "DDLCommitClogCb"; }
-  TO_STRING_KV(K(is_inited_), K(status_), K(ls_id_), K(tablet_id_), K(start_scn_), K_(lock_tid));
+  TO_STRING_KV(K(is_inited_), K(status_), K(tablet_id_), K(start_scn_), K_(lock_tid));
 private:
   bool is_inited_;
   ObDDLClogCbStatus status_;
-  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   share::SCN start_scn_;
   uint32_t lock_tid_;
@@ -289,13 +285,12 @@ private:
 
 class ObDDLBarrierLog final {
 public:
-  ObDDLBarrierLog() : ls_id_(), hidden_tablet_ids_() {}
+  ObDDLBarrierLog() : hidden_tablet_ids_() {}
   ~ObDDLBarrierLog() {}
-  bool is_valid() const { return ls_id_.is_valid() && hidden_tablet_ids_.count() > 0; }
-  TO_STRING_KV(K_(ls_id), K_(hidden_tablet_ids));
+  bool is_valid() const { return hidden_tablet_ids_.count() > 0; }
+  TO_STRING_KV(K_(hidden_tablet_ids));
   OB_UNIS_VERSION_V(1);
 public:
-  share::ObLSID ls_id_;
   common::ObSArray<common::ObTabletID> hidden_tablet_ids_;
 };
 
@@ -317,8 +312,8 @@ public:
   common::ObArenaAllocator rowkey_allocator_; // alloc buf for datum rowkey.
   uint64_t table_id_; // scan rows needed, index table id or main table id.
   uint64_t lob_table_id_; // scan rows needed, valid when split lob tablet.
-  int64_t schema_version_; // report replica build status needed.
-  int64_t task_id_; // report replica build status needed.
+  int64_t schema_version_; // report DDL build status needed.
+  int64_t task_id_; // report DDL build status needed.
   common::ObTabletID source_tablet_id_;
   common::ObSArray<common::ObTabletID> dest_tablets_id_;
   int64_t compaction_scn_;

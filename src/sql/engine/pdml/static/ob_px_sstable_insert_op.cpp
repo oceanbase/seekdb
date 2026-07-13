@@ -1039,7 +1039,7 @@ int ObPxMultiPartSSTableInsertOp::sync_tablet_doc_id(ObISliceWriter *slice_write
                                                                             slice_writer->get_row_count());
       if (OB_FAIL(get_data_tablet_id(tablet_id, data_tablet_id))) {
         LOG_WARN("fail to get data tablet id", K(ret), K(tablet_id));
-      } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(tablet_context->ls_id_, data_tablet_id, last_autoinc_val))) {
+      } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(data_tablet_id, last_autoinc_val))) {
         LOG_WARN("set tablet autoinc seq failed", K(ret), KPC(slice_writer));
       }
     }

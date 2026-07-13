@@ -22,24 +22,13 @@ namespace oceanbase
 {
 namespace observer
 {
-int ObAllVirtualServerSchemaInfo::inner_open()
-{
-  int ret = OB_SUCCESS;
-  idx_ = 0;
-  share::schema::ObSchemaGetterGuard guard;
-  if (OB_FAIL(schema_service_.get_tenant_schema_guard(guard))) {
-    LOG_WARN("fail to get schema guard", K(ret));
-  }
-  return ret;
-}
-
 int ObAllVirtualServerSchemaInfo::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  if (idx_ >= 1) {
+  if (start_to_read_) {
     ret = OB_ITER_END;
   } else {
-    
+    start_to_read_ = true;
     int64_t refreshed_schema_version = OB_INVALID_VERSION;
     int64_t received_schema_version = OB_INVALID_VERSION;
     int64_t schema_count = OB_INVALID_ID;
@@ -97,7 +86,6 @@ int ObAllVirtualServerSchemaInfo::inner_get_next_row(common::ObNewRow *&row)
 
     if (OB_SUCC(ret)) {
       row = &cur_row_;
-      idx_++;
     }
   }
   return ret;

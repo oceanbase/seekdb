@@ -41,7 +41,6 @@ class ObTabletID;
 
 namespace share
 {
-class ObLSID;
 namespace schema
 {
 class ObTableSchema;
@@ -73,7 +72,7 @@ class ObLockMemtable;
 class ObLockMemtableMgr;
 
 class ObLockTable : public logservice::ObIReplaySubHandler,
-                    public logservice::ObIRoleChangeSubHandler,
+                    public logservice::ObILocalLogHandler,
                     public logservice::ObICheckpointSubHandler
 {
 public:
@@ -165,10 +164,8 @@ public:
   share::SCN get_rec_scn() override;
   int flush(share::SCN &rec_scn) override;
   // for role change
-  void switch_to_follower_forcedly() override;
-  int switch_to_leader() override;
-  int switch_to_follower_gracefully() override;
-  int resume_leader() override { return OB_SUCCESS; }
+  void deactivate() override;
+  int activate() override;
   // flush lock_memtable that flush had been failed                     
 
 

@@ -24,7 +24,6 @@
 #include "lib/container/ob_2d_array.h"
 #include "common/mysqlclient/ob_mysql_connection.h"
 #include "share/geo/ob_s2adapter.h"
-#include "share/partition_table/ob_partition_location.h"
 #include "share/ob_i_sql_expression.h"          // ObISqlExpression,ObExprCtx
 #include "storage/access/ob_table_param.h"        // ObColDesc
 #include "share/schema/ob_multi_version_schema_service.h"     // ObMultiVersionSchemaService
@@ -78,30 +77,26 @@ struct ObPlanCacheCtx;
 struct EstimatedPartition {
   common::ObAddr addr_;
   common::ObTabletID tablet_id_;
-  share::ObLSID ls_id_;
 
-  EstimatedPartition() : addr_(), tablet_id_(), ls_id_()
+  EstimatedPartition() : addr_(), tablet_id_()
   {}
 
   bool is_valid() const {
-    return addr_.is_valid() && tablet_id_.is_valid() && ls_id_.is_valid();
+    return addr_.is_valid() && tablet_id_.is_valid();
   }
 
   void reset() {
     addr_.reset();
     tablet_id_.reset();
-    ls_id_.reset();
   }
 
   void set(const common::ObAddr &addr,
-           const common::ObTabletID &tablet_id,
-           const share::ObLSID &ls_id) {
+           const common::ObTabletID &tablet_id) {
     addr_ = addr;
     tablet_id_ = tablet_id;
-    ls_id_ = ls_id;
   }
 
-  TO_STRING_KV(K_(addr), K_(tablet_id), K_(ls_id));
+  TO_STRING_KV(K_(addr), K_(tablet_id));
 };
 
 struct ObHiddenColumnItem

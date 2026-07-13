@@ -83,11 +83,6 @@ bool LogGroupEntry::check_integrity(int64_t &data_checksum) const
 }
 
 
-int LogGroupEntry::truncate(const SCN &upper_limit_scn, const int64_t pre_accum_checksum)
-{
-  return header_.truncate(buf_, get_data_len(), upper_limit_scn, pre_accum_checksum);
-}
-
 DEFINE_SERIALIZE(LogGroupEntry)
 {
   int ret = OB_SUCCESS;
@@ -156,9 +151,5 @@ int LogGroupEntry::get_log_min_scn(SCN &min_scn) const
   return ret;
 }
 
-bool LogGroupEntry::check_compatibility() const
-{
-  return header_.check_compatibility();
-}
 } // end namespace palf
 } // end namespace oceanbase

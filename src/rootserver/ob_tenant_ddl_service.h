@@ -75,8 +75,6 @@ struct ObSysStat
   // all tenant own
   Item ob_max_used_normal_rowid_table_tablet_id_;
   Item ob_max_used_extended_rowid_table_tablet_id_;
-  Item ob_max_used_ls_id_;
-  Item ob_max_used_ls_group_id_;
   Item ob_max_used_sys_pl_object_id_;
   Item ob_max_used_object_id_;
   Item ob_max_used_rewrite_rule_version_;

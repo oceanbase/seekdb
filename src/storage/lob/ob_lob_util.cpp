@@ -48,8 +48,7 @@ void ObLobCharsetUtil::transform_query_result_charset(
   byte_len = ObCharset::charpos(coll_type, data + byte_st, len - byte_st, byte_len);
 }
 
-int ObInsertLobColumnHelper::start_trans(const share::ObLSID &ls_id,
-                                         const bool is_for_read,
+int ObInsertLobColumnHelper::start_trans(const bool is_for_read,
                                          const int64_t timeout_ts,
                                          ObTxDesc *&tx_desc)
 {
@@ -103,7 +102,6 @@ int ObInsertLobColumnHelper::end_trans(transaction::ObTxDesc *tx_desc,
 }
 
 int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
-                                               const share::ObLSID ls_id,
                                                const common::ObTabletID tablet_id,
                                                const ObObjType &obj_type,
                                                const ObCollationType &cs_type,
@@ -146,9 +144,9 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
         }
       }
     } else {
-      if (OB_FAIL(start_trans(ls_id, false/*is_for_read*/, timeout_ts, tx_desc))) {
+      if (OB_FAIL(start_trans(false/*is_for_read*/, timeout_ts, tx_desc))) {
         LOG_WARN("fail to get tx_desc", K(ret));
-      } else if (OB_FAIL(txs->get_ls_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, ls_id, timeout_ts, snapshot))) {
+      } else if (OB_FAIL(txs->get_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, timeout_ts, snapshot))) {
         LOG_WARN("fail to get snapshot", K(ret));
       } else {
         // 4.0 text tc compatiable
@@ -159,7 +157,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
           LOG_WARN("assign snapshot fail", K(ret));
         } else {
           lob_param.sql_mode_ = SMO_DEFAULT;
-          lob_param.ls_id_ = ls_id;
           lob_param.tablet_id_ = tablet_id;
           lob_param.coll_type_ = ObLobCharsetUtil::get_collation_type(obj_type, cs_type);
           lob_param.allocator_ = &allocator;
@@ -196,7 +193,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
                                                ObIAllocator &lob_allocator,
                                                transaction::ObTxDesc *tx_desc,
                                                share::ObTabletCacheInterval &lob_id_geneator,
-                                               const share::ObLSID ls_id,
                                                const common::ObTabletID tablet_id,
                                                const common::ObTabletID lob_meta_tablet_id,
                                                const ObObjType &obj_type,
@@ -255,7 +251,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
       lob_param.tx_desc_ = tx_desc;
       // lob_param.snapshot_ = snapshot;
       lob_param.sql_mode_ = SMO_DEFAULT;
-      lob_param.ls_id_ = ls_id;
       lob_param.tablet_id_ = tablet_id;
       lob_param.coll_type_ = ObLobCharsetUtil::get_collation_type(obj_type, collation_type);
       lob_param.allocator_ = &allocator;
@@ -284,7 +279,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
 }
 
 int ObInsertLobColumnHelper::delete_lob_column(ObIAllocator &allocator,
-                                              const share::ObLSID ls_id,
                                               const common::ObTabletID tablet_id,
                                               const ObCollationType& collation_type,
                                               blocksstable::ObStorageDatum &datum,
@@ -310,9 +304,9 @@ int ObInsertLobColumnHelper::delete_lob_column(ObIAllocator &allocator,
     if (lob.has_inrow_data()) {
       // delete inrow lob no need to use the lob manager
     } else {
-      if (OB_FAIL(start_trans(ls_id, false/*is_for_read*/, timeout_ts, tx_desc))) {
+      if (OB_FAIL(start_trans(false/*is_for_read*/, timeout_ts, tx_desc))) {
         LOG_WARN("fail to get tx_desc", K(ret));
-      } else if (OB_FAIL(txs->get_ls_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, ls_id, timeout_ts, snapshot))) {
+      } else if (OB_FAIL(txs->get_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, timeout_ts, snapshot))) {
         LOG_WARN("fail to get snapshot", K(ret));
       } else {
         // 4.0 text tc compatiable

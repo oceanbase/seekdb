@@ -141,12 +141,6 @@ void ObTransStatistic::add_local_count(const int64_t value)
   EVENT_ADD(TRANS_LOCAL_COUNT, value);
 }
 
-void ObTransStatistic::add_dist_count(const int64_t value)
-{
-  ObTenantDiagnosticInfoSummaryGuard g;
-  EVENT_ADD(TRANS_DIST_COUNT, value);
-}
-
 void ObTransStatistic::add_redo_log_replay_count(const int64_t value)
 {
   ObTenantDiagnosticInfoSummaryGuard g;
@@ -157,18 +151,6 @@ void ObTransStatistic::add_redo_log_replay_time(const int64_t value)
 {
   ObTenantDiagnosticInfoSummaryGuard g;
   EVENT_ADD(REDO_LOG_REPLAY_TIME, value);
-}
-
-void ObTransStatistic::add_prepare_log_replay_count(const int64_t value)
-{
-  ObTenantDiagnosticInfoSummaryGuard g;
-  EVENT_ADD(PREPARE_LOG_REPLAY_COUNT, value);
-}
-
-void ObTransStatistic::add_prepare_log_replay_time(const int64_t value)
-{
-  ObTenantDiagnosticInfoSummaryGuard g;
-  EVENT_ADD(PREPARE_LOG_REPLAY_TIME, value);
 }
 
 void ObTransStatistic::add_commit_log_replay_count(const int64_t value)
@@ -268,11 +250,5 @@ void ObTransStatistic::add_local_trans_total_used_time(const int64_t value)
   ObTenantDiagnosticInfoSummaryGuard g;
   EVENT_ADD(TRANS_LOCAL_TOTAL_USED_TIME, value);
 }
-void ObTransStatistic::add_dist_trans_total_used_time(const int64_t value)
-{
-  ObTenantDiagnosticInfoSummaryGuard g;
-  EVENT_ADD(TRANS_DIST_TOTAL_USED_TIME, value);
-}
-
 } // transaction
 } // oceanbase

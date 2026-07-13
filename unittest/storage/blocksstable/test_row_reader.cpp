@@ -22,6 +22,7 @@
 
 
 #include "ob_data_file_prepare.h"
+#include "storage/memtable/ob_nop_bitmap.h"
 #include "unittest/storage/mock_ob_table_read_info.h"
 
 #ifndef INT24_MIN

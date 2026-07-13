@@ -60,7 +60,6 @@ private:
 
 private:
   bool is_inited_;
-  ObLSID ls_id_;
   ObTabletID tablet_id_;
 
   ObTabletID lob_meta_tablet_id_;

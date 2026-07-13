@@ -26,7 +26,6 @@ namespace observer
 {
 ObAllVirtualTabletPtr::ObAllVirtualTabletPtr()
   : ObVirtualTableScannerIterator(),
-    addr_(),
     tablet_iter_(nullptr),
     iter_buf_(nullptr)
 {
@@ -43,7 +42,6 @@ void ObAllVirtualTabletPtr::reset()
     tablet_iter_->~ObTenantTabletPtrWithInMemObjIterator();
     tablet_iter_ = nullptr;
   }
-  addr_.reset();
   if (OB_NOT_NULL(iter_buf_)) {
     allocator_->free(iter_buf_);
     iter_buf_ = nullptr;
@@ -51,7 +49,7 @@ void ObAllVirtualTabletPtr::reset()
   ObVirtualTableScannerIterator::reset();
 }
 
-int ObAllVirtualTabletPtr::init(ObIAllocator *allocator, common::ObAddr &addr)
+int ObAllVirtualTabletPtr::init(ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(start_to_read_)) {
@@ -65,7 +63,6 @@ int ObAllVirtualTabletPtr::init(ObIAllocator *allocator, common::ObAddr &addr)
     SERVER_LOG(WARN, "fail to alloc tablet iter buf", K(ret));
   } else {
     allocator_ = allocator;
-    addr_ = addr;
     start_to_read_ = true;
   }
   return ret;

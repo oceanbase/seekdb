@@ -52,7 +52,7 @@ int LogGroupBuffer::init(const LSN &start_lsn)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid arguments", K(ret), K(start_lsn));
   } else {
-    int64_t group_buffer_size = FOLLOWER_DEFAULT_GROUP_BUFFER_SIZE;
+    int64_t group_buffer_size = DEFAULT_GROUP_BUFFER_SIZE;
     // omt::ObTenantConfigGuard tenant_config(&GCONF);
     // if (!tenant_config.is_valid()) {
     //  PALF_LOG(WARN, "get tenant config failed", K(ret));
@@ -341,40 +341,17 @@ int LogGroupBuffer::check_log_buf_wrapped(const LSN &lsn, const int64_t log_len,
   return ret;
 }
 // Depend on the write lock of palf_handle_impl to ensure no concurrent updates to group_buffer during the call to this interface
-int LogGroupBuffer::to_leader()
+int LogGroupBuffer::activate()
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-#if LEADER_DEFAULT_GROUP_BUFFER_SIZE != FOLLOWER_DEFAULT_GROUP_BUFFER_SIZE
-  } else if (LEADER_DEFAULT_GROUP_BUFFER_SIZE == get_available_buffer_size()) {
-    ret = OB_STATE_NOT_MATCH;
-    PALF_LOG(WARN, "available_buffer_size_ is already for leader", K(ret), K_(available_buffer_size));
-#endif
   } else {
-    ATOMIC_STORE(&available_buffer_size_, LEADER_DEFAULT_GROUP_BUFFER_SIZE);
+    ATOMIC_STORE(&available_buffer_size_, DEFAULT_GROUP_BUFFER_SIZE);
   }
-  PALF_LOG(INFO, "to_leader finished", K(ret), K_(available_buffer_size), K_(reserved_buffer_size));
+  PALF_LOG(INFO, "activate group buffer finished", K(ret), K_(available_buffer_size), K_(reserved_buffer_size));
   return ret;
 }
-// Depend on the write lock of palf_handle_impl to ensure no concurrent updates to group_buffer during the call to this interface
-int LogGroupBuffer::to_follower()
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (FOLLOWER_DEFAULT_GROUP_BUFFER_SIZE == get_available_buffer_size()) {
-  // The case is maybe : pending -> reconfirm fail -> pending.
-  PALF_LOG(INFO, "current buffer_size is already for follower, no need execute again", K(ret),
-      K_(available_buffer_size));
-  } else {
-    // Here we cannot reset buffer, because some data may be waiting to flush.
-    ATOMIC_STORE(&available_buffer_size_, FOLLOWER_DEFAULT_GROUP_BUFFER_SIZE);
-  }
-  PALF_LOG(INFO, "to_follower finished", K(ret), K_(available_buffer_size), K_(reserved_buffer_size));
-  return ret;
-}
-
 int64_t LogGroupBuffer::get_available_buffer_size() const
 {
   // This available_buffer_size_ will change according to role.

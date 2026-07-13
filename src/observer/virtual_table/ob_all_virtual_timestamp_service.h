@@ -18,50 +18,22 @@
 #define OB_ALL_VIRTUAL_TIMESTAMP_SERVICE_H_
 
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "storage/tx/ob_timestamp_access.h"
-#include "lib/container/ob_array.h"
 
 namespace oceanbase
 {
-namespace share
-{
-namespace schema
-{
-class ObMultiVersionSchemaService;
-class ObSchemaGetterGuard;
-}
-}
-
 namespace observer
 {
 class ObAllVirtualTimestampService: public common::ObVirtualTableScannerIterator
 {
 public:
   explicit ObAllVirtualTimestampService() { reset(); }
-  virtual ~ObAllVirtualTimestampService() { destroy(); }
+  virtual ~ObAllVirtualTimestampService() = default;
 public:
-  virtual void reset();
-  virtual void destroy() { reset(); }
-  virtual int inner_get_next_row(common::ObNewRow *&row);
-  TO_STRING_KV(K_(ts_value),
-               K_(service_role), K_(is_primary),
-               K_(role), K_(service_epoch));
+  void reset() override;
+  int inner_get_next_row(common::ObNewRow *&row) override;
+  TO_STRING_KV(K_(ts_value));
 private:
-  int prepare_start_to_read_();
-  int get_next_info_();
-  int fill_ids_();
-private:
-  bool init_;
-  bool done_;
-  int64_t expire_time_;
-  char ip_buf_[common::OB_IP_STR_BUFF];
-  
   int64_t ts_value_;
-  transaction::ObTimestampAccess::ServiceType service_role_;
-  bool is_primary_;
-  common::ObRole role_;
-  char role_str_[32];
-  int64_t service_epoch_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualTimestampService);
 };

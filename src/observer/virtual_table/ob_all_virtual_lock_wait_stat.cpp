@@ -43,57 +43,17 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
 
-  if (OB_ISNULL(allocator_)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
-  } else if (!start_to_read_ && OB_FAIL(make_this_ready_to_read())) {
-    SERVER_LOG(WARN, "prepare_start_to_read_ error", K(ret), K(start_to_read_));
-  } else if (OB_ISNULL(node_iter_ = share::g_mp->lock_wait_mgr()
+  if (!start_to_read_) {
+    start_to_read_ = true;
+  }
+  if (OB_ISNULL(node_iter_ = share::g_mp->lock_wait_mgr()
                                         ->next(node_iter_, &cur_node_))) {
     ret = OB_ITER_END;
   } else {
-    int type = 0; // 1-TR 2-TX 3-TM
-    get_lock_type(node_iter_->hash_, type);
+    const int type = get_lock_type(node_iter_->hash_);
     const int64_t col_count = output_column_ids_.count();
-        // resolve compatibility problem
-    const int column_id_fix_offset = BLOCK_SESSION_ID;
-    ObString column_name;
-    bool exist = false;
-    bool need_align = false;
-    if (OB_ISNULL(table_schema_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(ERROR, "table_schema of all_virtual_lock_wait_stat is NULL", K(ret));
-    } else {
-      table_schema_->get_column_name_by_column_id(column_id_fix_offset, column_name, exist);
-      if (!exist) {
-        // no need align
-      } else if (column_name == "holder_session_id" || column_name == "HOLDER_SESSION_ID") {
-        /*
-          *  ...
-          *  |     session_id    |
-          *  | holder_session_id |  <---- is here in the first version of 4.3.2
-          *  |  block_session_id |
-          *  ...
-          *
-          *  ...
-          *  |      trans_id     |
-          *  |  holder_trans_id  |
-          *  | holder_session_id |  <---- is here in later version
-          *  ...
-          * */
-        need_align = true;
-      }
-    }
-
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
-      uint64_t col_id = output_column_ids_.at(i);
-      if (need_align) {
-        if (col_id > column_id_fix_offset) {
-          col_id -= 1;
-        } else if (col_id == column_id_fix_offset) {
-          col_id = HOLDER_SESSION_ID;
-        }
-      }
+      const uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case TABLET_ID:
           cur_row_.cells_[i].set_int(node_iter_->tablet_id_);
@@ -144,41 +104,24 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(type);
           break;
         case LMODE: {
-          // For compatibility, column type should be determined by schema before cluster is in upgrade mode.
-          const ObColumnSchemaV2 *tmp_column_schema = nullptr;
-          bool type_is_varchar = true;
-          if (OB_ISNULL(table_schema_) ||
-              OB_ISNULL(tmp_column_schema = table_schema_->get_column_schema(col_id))) {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "table or column schema is null", KR(ret), KP(table_schema_), KP(tmp_column_schema));
+          if (type == 1 || type == 2) {
+            cur_row_.cells_[i].set_varchar("X");
+          } else if (type == 3) {
+            char lock_mode_tmp[MAX_LOCK_MODE_BUF_LENGTH];
+            if (OB_FAIL(lock_mode_to_string(node_iter_->lock_mode_,
+                                            lock_mode_tmp,
+                                            sizeof(lock_mode_tmp)))) {
+              SERVER_LOG(WARN, "get lock mode failed", K(ret), K(node_iter_));
+            } else {
+              snprintf(lock_mode_, sizeof(lock_mode_), "%s", lock_mode_tmp);
+              cur_row_.cells_[i].set_varchar(lock_mode_);
+            }
           } else {
-            type_is_varchar = tmp_column_schema->get_meta_type().is_character_type();
+            cur_row_.cells_[i].set_varchar("UNKNOWN");
           }
           if (OB_SUCC(ret)) {
-            if (type_is_varchar) {
-              if (type == 1 || type == 2) {
-                cur_row_.cells_[i].set_varchar("X");
-              } else if (type == 3) {
-                char lock_mode_tmp[MAX_LOCK_MODE_BUF_LENGTH];
-                if (OB_FAIL(lock_mode_to_string(node_iter_->lock_mode_,
-                                                lock_mode_tmp,
-                                                sizeof(lock_mode_tmp)))) {
-                  SERVER_LOG(WARN, "get lock mode failed", K(ret),
-                              K(node_iter_));
-                } else {
-                  snprintf(lock_mode_, sizeof(lock_mode_), "%s",
-                            lock_mode_tmp);
-                  cur_row_.cells_[i].set_varchar(lock_mode_);
-                }
-              }
-              cur_row_.cells_[i].set_collation_type(
-                  ObCharset::get_default_collation(
-                      ObCharset::get_default_charset()));
-            } else {
-              // this column is invalid when the
-              // version of observer is before 4.2
-              cur_row_.cells_[i].set_int(0);
-            }
+            cur_row_.cells_[i].set_collation_type(
+                ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
         }
@@ -216,35 +159,6 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
         case HOLDER_SESSION_ID:
           cur_row_.cells_[i].set_int(node_iter_->holder_sessid_);
           break;
-        case ASSOC_SESS_ID: {
-          cur_row_.cells_[i].set_int(0);
-          break;
-        }
-        case WAIT_TIMEOUT: {
-          cur_row_.cells_[i].set_int(0);
-          break;
-        }
-        case TX_ACTIVE_TS: {
-          cur_row_.cells_[i].set_int(0);
-          break;
-        }
-        case NODE_ID: {
-          cur_row_.cells_[i].set_int(0);
-          break;
-        }
-        case NODE_TYPE: {
-          cur_row_.cells_[i].set_int(0);
-          break;
-        }
-        case REMTOE_ADDR: {
-          cur_row_.cells_[i].set_varchar("0.0.0.0");
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case IS_PLACEHOLDER: {
-          cur_row_.cells_[i].set_int(0);
-          break;
-        }
         default:
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "invalid col_id", K(ret), K(col_id));
@@ -258,10 +172,9 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
   return ret;
 }
 
-int ObAllVirtualLockWaitStat::get_lock_type(int64_t hash, int &type)
+int ObAllVirtualLockWaitStat::get_lock_type(int64_t hash) const
 {
-  int ret = OB_SUCCESS;
-  type = 0; // invalid type
+  int type = 0;
   if (LockHashHelper::is_rowkey_hash(hash)) {
     type = 1;
   } else if (LockHashHelper::is_trans_hash(hash)) {
@@ -269,7 +182,7 @@ int ObAllVirtualLockWaitStat::get_lock_type(int64_t hash, int &type)
   } else if (LockHashHelper::is_table_lock_hash(hash)) {
     type = 3;
   }
-  return ret;
+  return type;
 }
 
 int ObAllVirtualLockWaitStat::get_rowkey_holder(int64_t hash, transaction::ObTransID &holder)
@@ -281,22 +194,6 @@ int ObAllVirtualLockWaitStat::get_rowkey_holder(int64_t hash, transaction::ObTra
     SERVER_LOG(ERROR, "MTL(LockWaitMgr) is null");
   } else if (OB_FAIL(lwm->get_hash_holder(hash, holder))){
     SERVER_LOG(WARN, "get rowkey holder from lock wait mgr failed", K(ret), K(hash));
-  }
-  return ret;
-}
-
-int ObAllVirtualLockWaitStat::make_this_ready_to_read()
-{
-  int ret = OB_SUCCESS;
-  ObObj *cells = NULL;
-  if (OB_ISNULL(allocator_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(ERROR, "invalid allocator is NULL", K(allocator_), K(ret));
-  } else if (OB_ISNULL(cells = cur_row_.cells_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
-  } else {
-    start_to_read_ = true;
   }
   return ret;
 }

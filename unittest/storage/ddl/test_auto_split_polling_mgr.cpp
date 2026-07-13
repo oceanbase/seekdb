@@ -44,7 +44,6 @@ using namespace compaction;
 static const uint64_t TEST_TENANT_A_ID = 1002;
 static const uint64_t TEST_TENANT_B_ID = 1003;
 static const uint64_t TEST_TENANT_C_ID = 1004;
-static const ObLSID ls_id{1};
 
 class TestSplitTaskScheduler : public ::testing::Test
 {
@@ -105,9 +104,9 @@ TEST_F(TestSplitTaskScheduler, simple_push_and_pop)
 {
   ObArray<ObAutoSplitTask> task_array;
   ObArray<uint64_t> ids;
-  ObAutoSplitTask task_a(ls_id, 1/*tablet_id*/, 1/*auto_split_size*/, 2/*used_disk_size*/, 0);
-  ObAutoSplitTask task_b(ls_id, 2/*tablet_id*/, 1/*auto_split_size*/, 3/*used_disk_size*/, 0);
-  ObAutoSplitTask task_c(ls_id, 3/*tablet_id*/, 1/*auto_split_size*/, 4/*used_disk_size*/, 0);
+  ObAutoSplitTask task_a(1/*tablet_id*/, 1/*auto_split_size*/, 2/*used_disk_size*/, 0);
+  ObAutoSplitTask task_b(2/*tablet_id*/, 1/*auto_split_size*/, 3/*used_disk_size*/, 0);
+  ObAutoSplitTask task_c(3/*tablet_id*/, 1/*auto_split_size*/, 4/*used_disk_size*/, 0);
   ASSERT_OK(task_array.push_back(task_a));
   ASSERT_OK(polling_mgr_.push_tasks(task_array));
   task_array.reuse();
@@ -154,8 +153,8 @@ TEST_F(TestSplitTaskScheduler, simple_push_and_pop)
 TEST_F(TestSplitTaskScheduler, test_reset) 
 {
   ObArray<ObAutoSplitTask> task_array;
-  ObAutoSplitTask task_a(ls_id, 1/*tablet_id*/, 1/*auto_split_size*/, 2/*used_disk_size*/, 0);
-  ObAutoSplitTask task_b(ls_id, 2/*tablet_id*/, 1/*auto_split_size*/, 3/*used_disk_size*/, 0);
+  ObAutoSplitTask task_a(1/*tablet_id*/, 1/*auto_split_size*/, 2/*used_disk_size*/, 0);
+  ObAutoSplitTask task_b(2/*tablet_id*/, 1/*auto_split_size*/, 3/*used_disk_size*/, 0);
   ASSERT_OK(task_array.push_back(task_a));
   ASSERT_OK(polling_mgr_.push_tasks(task_array));
   task_array.reuse();
@@ -182,12 +181,12 @@ TEST_F(TestSplitTaskScheduler, test_reset)
 TEST_F(TestSplitTaskScheduler, single_tenant_hard_push_and_pop)
 {
   ObArray<ObAutoSplitTask> task_array;
-  ObAutoSplitTask task_high_prio(ls_id, 1000/*tablet_id*/, 1/*auto_split_size*/, 1000/*used_disk_size*/, 0);
+  ObAutoSplitTask task_high_prio(1000/*tablet_id*/, 1/*auto_split_size*/, 1000/*used_disk_size*/, 0);
   ASSERT_OK(task_array.push_back(task_high_prio));
   ASSERT_OK(polling_mgr_.push_tasks(task_array));
   task_array.reuse();
   for (int64_t i = 2; i < ObAutoSplitTaskCache::CACHE_MAX_CAPACITY + 10; ++i ) {
-    ASSERT_OK(task_array.push_back(ObAutoSplitTask(ls_id, i/*tablet_id*/, 1/*auto_split_size*/, i/*used_disk_size*/, 0)));
+    ASSERT_OK(task_array.push_back(ObAutoSplitTask(i/*tablet_id*/, 1/*auto_split_size*/, i/*used_disk_size*/, 0)));
     ASSERT_OK(polling_mgr_.push_tasks(task_array));
     task_array.reuse();
   }
@@ -245,11 +244,11 @@ TEST_F(TestSplitTaskScheduler, parallel_push_and_pop)
   for (int64_t i = 0; i < nums_1.count(); ++i ) {
     tmp_array.reuse();
     int64_t num_1 = nums_1.at(i);
-    ASSERT_OK(tmp_array.push_back(ObAutoSplitTask(ls_id, num_1/*tablet_id*/, 1/*auto_split_size*/, num_1/*used_disk_size*/, 0)));
+    ASSERT_OK(tmp_array.push_back(ObAutoSplitTask(num_1/*tablet_id*/, 1/*auto_split_size*/, num_1/*used_disk_size*/, 0)));
     ASSERT_OK(task_array_1.push_back(tmp_array));
     tmp_array.reuse();
     int64_t num_2 = nums_2.at(i);
-    ASSERT_OK(tmp_array.push_back(ObAutoSplitTask(ls_id, num_2/*tablet_id*/, 1/*auto_split_size*/, num_2/*used_disk_size*/, 0)));
+    ASSERT_OK(tmp_array.push_back(ObAutoSplitTask(num_2/*tablet_id*/, 1/*auto_split_size*/, num_2/*used_disk_size*/, 0)));
     ASSERT_OK(task_array_2.push_back(tmp_array));
   }
 

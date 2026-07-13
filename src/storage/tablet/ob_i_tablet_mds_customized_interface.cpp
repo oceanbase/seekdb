@@ -58,21 +58,14 @@ int ObITabletMdsCustomizedInterface::get_latest_split_data(
   if (OB_UNLIKELY(!check_is_inited_())) {
     ret = OB_NOT_INIT;
     MDS_LOG_GET(WARN, "not inited");
-  } else {
-    ObITabletMdsInterface *src = nullptr;
-    ObTabletHandle src_tablet_handle;
-
-    if (OB_FAIL(ret)) {
-    } else if (CLICK_FAIL((cross_ls_get_latest<ObTabletSplitMdsUserData>(
-        src,
+  } else if (CLICK_FAIL((get_latest<ObTabletSplitMdsUserData>(
         ReadSplitDataOp(data),
         writer,
         trans_stat,
         trans_version,
         read_seq)))) {
-      if (OB_EMPTY_RESULT != ret) {
-        MDS_LOG_GET(WARN, "fail to cross ls get latest", K(lbt()));
-      }
+    if (OB_EMPTY_RESULT != ret) {
+      MDS_LOG_GET(WARN, "fail to get latest", K(lbt()));
     }
   }
   return ret;
@@ -93,21 +86,14 @@ int ObITabletMdsCustomizedInterface::get_latest_autoinc_seq(
   if (OB_UNLIKELY(!check_is_inited_())) {
     ret = OB_NOT_INIT;
     MDS_LOG_GET(WARN, "not inited");
-  } else {
-    ObITabletMdsInterface *src = nullptr;
-    ObTabletHandle src_tablet_handle;
-
-    if (OB_FAIL(ret)) {
-    } else if (CLICK_FAIL((cross_ls_get_latest<ObTabletAutoincSeq>(
-        src,
+  } else if (CLICK_FAIL((get_latest<ObTabletAutoincSeq>(
         ReadAutoIncSeqOp(allocator, data),
         writer,
         trans_stat,
         trans_version,
         read_seq)))) {
-      if (OB_EMPTY_RESULT != ret) {
-        MDS_LOG_GET(WARN, "fail to cross ls get latest", K(lbt()));
-      }
+    if (OB_EMPTY_RESULT != ret) {
+      MDS_LOG_GET(WARN, "fail to get latest", K(lbt()));
     }
   }
   return ret;

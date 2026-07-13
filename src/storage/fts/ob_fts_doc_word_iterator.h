@@ -37,7 +37,6 @@ public:
 
   int init(
       const uint64_t table_id,
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const transaction::ObTxReadSnapshot *snapshot,
       const int64_t schema_version);
@@ -50,7 +49,6 @@ public:
 private:
   int init_scan_param(
       const uint64_t table_id,
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const transaction::ObTxReadSnapshot *snapshot,
       const int64_t schema_version);

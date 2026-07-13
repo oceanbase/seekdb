@@ -22,7 +22,6 @@
 #include "sql/engine/px/ob_px_admission.h"
 #include "sql/engine/cmd/ob_table_direct_insert_service.h"
 #include "src/sql/plan_cache/ob_plan_cache.h"
-#include "src/rootserver/mview/ob_mview_maintenance_service.h"
 #include "src/sql/ob_sql_ccl_rule_manager.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
@@ -261,19 +260,9 @@ int ObResultSet::implicit_commit_before_cmd_execute(ObSQLSessionInfo &session_in
 {
   int ret = OB_SUCCESS;
   if (session_info.is_in_transaction() && session_info.associated_xa()) {
-    int tmp_ret = OB_SUCCESS;
-    transaction::ObTxDesc *tx_desc = session_info.get_tx_desc();
     const transaction::ObXATransID xid = session_info.get_xid();
-    const transaction::ObGlobalTxType global_tx_type = tx_desc->get_global_tx_type(xid);
-    if (transaction::ObGlobalTxType::XA_TRANS == global_tx_type) {
-      // commit is not allowed in xa trans
-      ret = OB_TRANS_XA_ERR_COMMIT;
-      LOG_WARN("COMMIT is not allowed in a xa trans", K(ret), K(xid), K(global_tx_type),
-          KPC(tx_desc));
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected global trans type", K(ret), K(xid), K(global_tx_type), KPC(tx_desc));
-    }
+    ret = OB_TRANS_XA_ERR_COMMIT;
+    LOG_WARN("COMMIT is not allowed in a xa trans", K(ret), K(xid));
     exec_ctx.set_need_disconnect(false);
   } else {
     ret = ObSqlTransControl::end_trans_before_cmd_execute(session_info,
@@ -482,8 +471,6 @@ OB_INLINE int ObResultSet::do_open_plan(ObExecContext &ctx)
   int ret = OB_SUCCESS;
   ctx.reset_op_env();
   exec_result_ = &(ctx.get_task_exec_ctx().get_execute_result());
-  rootserver::ObMViewMaintenanceService *mview_maintenance_service = 
-                                        share::g_mp->m_view_maintenance_service();
   if (stmt::T_PREPARE != stmt_type_) {
     if (OB_FAIL(ctx.init_phy_op(physical_plan_->get_phy_operator_size()))) {
       LOG_WARN("fail init exec phy op ctx", K(ret));
@@ -500,18 +487,8 @@ OB_INLINE int ObResultSet::do_open_plan(ObExecContext &ctx)
 
 
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(mview_maintenance_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mview_maintenance_service is null", K(ret), KP(mview_maintenance_service));
   } else if (OB_FAIL(start_stmt())) {
     LOG_WARN("fail start stmt", K(ret));
-  } else if (!physical_plan_->get_mview_ids().empty() && OB_PHY_PLAN_REMOTE != physical_plan_->get_plan_type()
-             && OB_FAIL((mview_maintenance_service->get_mview_refresh_info(physical_plan_->get_mview_ids(),
-                                                                           ctx.get_sql_proxy(),
-                                                                           ctx.get_das_ctx().get_snapshot().core_.version_,
-                                                                           ctx.get_physical_plan_ctx()->get_mview_ids(),
-                                                                           ctx.get_physical_plan_ctx()->get_last_refresh_scns())))) {
-    LOG_WARN("fail to set last_refresh_scns", K(ret), K(physical_plan_->get_mview_ids()));
   } else {
     ObPhysicalPlanCtx *plan_ctx = NULL;
     if (OB_ISNULL(plan_ctx = get_exec_context().get_physical_plan_ctx())) {

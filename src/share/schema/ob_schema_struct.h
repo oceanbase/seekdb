@@ -71,10 +71,6 @@ namespace rootserver
 class ObRandomZoneSelector;
 struct ObReplicaAddr;
 }
-namespace obcall
-{
-struct ObMVAdditionalInfo;
-}
 namespace share
 {
 namespace schema
@@ -295,13 +291,11 @@ enum ObTableType
   USER_INDEX     = 5,      // urgly, compatible with uniform process in ddl_service
                            // will add index for sys table???
   TMP_TABLE      = 6,      // Temporary table in mysql compatibility mode
-  MATERIALIZED_VIEW  = 7,  // Must be put behind, otherwise compatibility will fail
   TMP_TABLE_ALL      = 10, // All types of temporary tables, only used for alter system statements
   AUX_VERTIAL_PARTITION_TABLE = 11,
   AUX_LOB_PIECE  = 12,
   AUX_LOB_META   = 13,
   EXTERNAL_TABLE = 14,
-  MATERIALIZED_VIEW_LOG = 15,
   MAX_TABLE_TYPE
 };
 
@@ -317,9 +311,6 @@ bool is_index_table(const ObTableType table_type);
 bool is_aux_lob_meta_table(const ObTableType table_type);
 bool is_aux_lob_piece_table(const ObTableType table_type);
 bool is_aux_lob_table(const ObTableType table_type);
-bool is_mlog_table(const ObTableType table_type);
-
-const int64_t OB_MLOG_TABLE_CNT = 1;
 const int64_t OB_AUX_LOB_TABLE_CNT = 2; // aux lob meta + aux lob piece
 // The max count of aux tables that can be created for each index.
 // Some special indexes such as full-text index(FTS), multi-value index, vector index, etc., have multiple aux tables.
@@ -332,10 +323,10 @@ const int64_t OB_MAX_SHARED_TABLE_CNT_PER_INDEX_TYPE = 2;
 const int64_t OB_MAX_TABLE_CNT_PER_INDEX = 4;
 // The max count of aux tables with physical tablets per user data table.
 const int64_t OB_MAX_AUX_TABLE_PER_MAIN_TABLE = OB_MAX_INDEX_PER_TABLE * OB_MAX_TABLE_CNT_PER_INDEX +
-                                           OB_MAX_SHARED_TABLE_CNT_PER_INDEX_TYPE + OB_AUX_LOB_TABLE_CNT + OB_MLOG_TABLE_CNT; // 517
+                                           OB_MAX_SHARED_TABLE_CNT_PER_INDEX_TYPE + OB_AUX_LOB_TABLE_CNT;
 
 //       If the new index has multiple aux tables, you need to make sure that OB_MAX_AUX_TABLE_PER_MAIN_TABLE is correct and
-//       max aux tables can be created.
+//       verify that a partition with max aux tables can be processed.
 enum ObIndexType
 {
   INDEX_TYPE_IS_NOT = 0,//is not index table
@@ -1108,8 +1099,7 @@ inline bool is_related_table(
     const ObIndexType &index_type)
 {
   return is_index_local_storage(index_type)
-      || is_aux_lob_table(table_type)
-      || is_mlog_table(table_type);
+      || is_aux_lob_table(table_type);
 }
 
 inline bool index_has_tablet(const ObIndexType &index_type)
@@ -3653,65 +3643,6 @@ enum class ObVetcorIndexDistanceMetric : int64_t
   HAMMING = 5,
 };
 
-enum class ObMLogPurgeMode : int64_t
-{
-  IMMEDIATE_SYNC = 0,
-  IMMEDIATE_ASYNC = 1,
-  DEFERRED = 2,
-  MAX
-};
-
-enum class ObMViewBuildMode : int64_t
-{
-  IMMEDIATE = 0,
-  DEFERRED = 1,
-  PERBUILT = 2,
-  MAX
-};
-
-
-enum struct ObMVRefreshMethod : int64_t
-{
-  NEVER = 0,
-  COMPLETE = 1,
-  FAST = 2,
-  FORCE = 3,
-  MAX
-};
-
-enum struct ObMVRefreshMode : int64_t
-{
-  NEVER = 0,
-  DEMAND = 1,
-  COMMIT = 2,
-  STATEMENT = 3,
-  MAJOR_COMPACTION = 4,
-  MAX
-};
-
-enum struct ObMVRefreshType : int64_t
-{
-  COMPLETE = 0,
-  FAST = 1,
-  MAX
-};
-
-enum class ObMVRefreshStatsCollectionLevel : int64_t
-{
-  NONE = 0,
-  TYPICAL = 1,
-  ADVANCED = 2,
-  MAX
-};
-
-enum class ObMVNestedRefreshMode : int64_t
-{
-  INDIVIDUAL = 0,
-  INCONSISTENT = 1,
-  CONSISTENT = 2,
-  MAX
-};
-
 struct ObVectorIndexRefreshInfo
 {
   OB_UNIS_VERSION(1);
@@ -3735,62 +3666,6 @@ public:
   TO_STRING_KV(K_(exec_env), K_(index_params));
 };
 
-struct ObMVRefreshInfo
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObMVRefreshMethod refresh_method_;
-  ObMVRefreshMode refresh_mode_;
-  common::ObObj start_time_;
-  ObString next_time_expr_;
-  ObString exec_env_;
-  int64_t parallel_;
-  int64_t refresh_dop_;
-  ObMVNestedRefreshMode nested_refresh_mode_;
-
-  ObMVRefreshInfo() :
-  refresh_method_(ObMVRefreshMethod::NEVER),
-  refresh_mode_(ObMVRefreshMode::DEMAND),
-  start_time_(),
-  next_time_expr_(),
-  exec_env_(),
-  parallel_(OB_INVALID_COUNT),
-  refresh_dop_(0),
-  nested_refresh_mode_(ObMVNestedRefreshMode::INDIVIDUAL) {}
-
-  void reset() {
-    refresh_method_ = ObMVRefreshMethod::NEVER;
-    refresh_mode_ = ObMVRefreshMode::DEMAND;
-    start_time_.reset();
-    next_time_expr_.reset();
-    exec_env_.reset();
-    parallel_ = OB_INVALID_COUNT;
-    refresh_dop_ = 0;
-    nested_refresh_mode_ = ObMVNestedRefreshMode::INDIVIDUAL;
-  }
-
-  bool operator == (const ObMVRefreshInfo &other) const {
-    return refresh_method_ == other.refresh_method_
-      && refresh_mode_ == other.refresh_mode_
-      && start_time_ == other.start_time_
-      && next_time_expr_ == other.next_time_expr_
-      && exec_env_ == other.exec_env_
-      && parallel_ == other.parallel_
-      && refresh_dop_ == other.refresh_dop_
-      && nested_refresh_mode_ == other.nested_refresh_mode_;
-  }
-
-
-  TO_STRING_KV(K_(refresh_mode),
-      K_(refresh_method),
-      K_(start_time),
-      K_(next_time_expr),
-      K_(exec_env),
-      K_(parallel),
-      K_(refresh_dop),
-      K_(nested_refresh_mode));
-};
-
 class ObViewSchema : public ObSchema
 {
   OB_UNIS_VERSION(1);
@@ -3808,7 +3683,6 @@ public:
   inline int set_view_definition(const common::ObString &view_definition) { return deep_copy_str(view_definition, view_definition_); }
   inline void set_view_check_option(const ViewCheckOption option) { view_check_option_ = option; }
   inline void set_view_is_updatable(const bool is_updatable) { view_is_updatable_ = is_updatable; }
-  inline void set_materialized(const bool materialized) { materialized_ = materialized; }
   inline void set_character_set_client(const common::ObCharsetType character_set_client) {
     character_set_client_ = character_set_client;
   }
@@ -3822,13 +3696,8 @@ public:
   inline const char *get_view_definition() const { return extract_str(view_definition_); }
   inline ViewCheckOption get_view_check_option() const { return view_check_option_; }
   inline bool get_view_is_updatable() const { return view_is_updatable_; }
-  inline bool get_materialized() const { return materialized_; }
   inline common::ObCharsetType get_character_set_client() const { return character_set_client_; }
   inline common::ObCollationType get_collation_connection() const { return collation_connection_; }
-  inline const ObMVRefreshInfo *get_mv_refresh_info() const { return mv_refresh_info_; }
-  inline void set_mv_refresh_info(const ObMVRefreshInfo *mv_refresh_info) { mv_refresh_info_ = mv_refresh_info; }
-  inline void set_container_table_id(uint64_t container_table_id) { container_table_id_ = container_table_id; }
-  inline uint64_t get_container_table_id() const { return container_table_id_; }
 
   int64_t get_convert_size() const;
   virtual bool is_valid() const;
@@ -3837,17 +3706,13 @@ public:
   TO_STRING_KV(N_VIEW_DEFINITION, view_definition_,
                N_CHECK_OPTION, ob_view_check_option_str(view_check_option_),
                N_IS_UPDATABLE, STR_BOOL(view_is_updatable_),
-               N_IS_MATERIALIZED, STR_BOOL(materialized_),
                K_(character_set_client), K_(collation_connection));
 private:
   common::ObString view_definition_;
   ViewCheckOption view_check_option_;
   bool view_is_updatable_;
-  bool materialized_;
   common::ObCharsetType character_set_client_;
   common::ObCollationType collation_connection_;
-  uint64_t container_table_id_;
-  const ObMVRefreshInfo *mv_refresh_info_; //only for pass write param, don't need serialize and memory is hold by caller
 };
 
 class ObColumnSchemaHashWrapper
@@ -6438,35 +6303,30 @@ public:
   ObAuxTableMetaInfo()
     : table_id_(common::OB_INVALID_ID),
       table_type_(MAX_TABLE_TYPE),
-      index_type_(INDEX_TYPE_MAX),
-      is_tmp_mlog_(false)
+      index_type_(INDEX_TYPE_MAX)
   {}
   ObAuxTableMetaInfo(
       const uint64_t table_id,
       const ObTableType table_type,
-      const ObIndexType index_type,
-      const bool is_tmp_mlog = false)
+      const ObIndexType index_type)
       : table_id_(table_id),
         table_type_(table_type),
-        index_type_(index_type),
-        is_tmp_mlog_(is_tmp_mlog)
+        index_type_(index_type)
   {}
   bool operator ==(const ObAuxTableMetaInfo &other) const {
     return (table_id_ == other.table_id_
             && table_type_ == other.table_type_
-            && index_type_ == other.index_type_
-            && is_tmp_mlog_ == other.is_tmp_mlog_);
+            && index_type_ == other.index_type_);
   }
   int64_t get_convert_size() const
   {
     int64_t convert_size = sizeof(*this);
     return convert_size;
   }
-  TO_STRING_KV(K_(table_id), K_(table_type), K_(index_type), K_(is_tmp_mlog));
+  TO_STRING_KV(K_(table_id), K_(table_type), K_(index_type));
   uint64_t table_id_;
   ObTableType table_type_;
   ObIndexType index_type_;
-  bool is_tmp_mlog_;
 };
 
 enum ObConstraintType

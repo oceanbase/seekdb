@@ -151,7 +151,7 @@ public:
   common::SpinRWLock &get_lock() { return lock_; }
   int64_t get_ref() { return ref_cnt_; }
   int add_tx_op(ObTxOp &tx_op);
-  int add_tx_op_batch(transaction::ObTransID tx_id, share::ObLSID ls_id, share::SCN op_scn, ObTxOpArray &tx_op_batch);
+  int add_tx_op_batch(transaction::ObTransID tx_id, share::SCN op_scn, ObTxOpArray &tx_op_batch);
   int reserve_tx_op_space(int64_t count);
 
   TO_STRING_KV(K_(ref_cnt), K_(undo_status_list), K_(tx_op_list));

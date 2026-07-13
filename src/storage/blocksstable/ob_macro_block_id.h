@@ -177,80 +177,6 @@ namespace blocksstable
     (OB_DIR_MGR.get_local_tenant_dir(path, length, file_id.second_id(), file_id.third_id())), \
     /*create_parent_dir*/ \
     (OB_DIR_MGR.create_tenant_dir(file_id.second_id(), file_id.third_id()))) \
-  STORAGE_OBJECT_TYPE_INFO(LS_META, "LS_META", true/*is_pin_local*/, false/*is_read_through*/, \
-    /*is_valid second_id:ls_id, third_id:N/A, fourth_id:N/A */ \
-    ((file_id_.second_id() >= 0) && (file_id_.second_id() < INT64_MAX)), \
-    /*to_local_path_format: ls/ls_id_epoch_id/ls_meta */ \
-    (databuff_printf(path_, length, pos, "%s/%s/%ld_%ld/%s", \
-                    OB_DIR_MGR.get_local_cache_root_dir(), LS_DIR_STR, \
-                    file_id_.second_id(), ls_epoch_id_, get_storage_objet_type_str(object_type))), \
-    /*to_remote_path_format*/OB_NOT_SUPPORTED, \
-    /*get_parent_dir: ls/ls_id_epoch_id */ \
-    (OB_DIR_MGR.get_ls_id_dir(path, length, file_id.second_id(), ls_epoch_id)), \
-    /*create_parent_dir*/ \
-    (OB_DIR_MGR.create_ls_id_dir(file_id.second_id(), ls_epoch_id))) \
-  STORAGE_OBJECT_TYPE_INFO(LS_DUP_TABLE_META, "LS_DUP_TABLE_META", true/*is_pin_local*/, false/*is_read_through*/, \
-    /*is_valid second_id:ls_id, third_id:N/A, fourth_id:N/A */ \
-    ((file_id_.second_id() >= 0) && (file_id_.second_id() < INT64_MAX)), \
-    /*to_local_path_format: ls/ls_id_epoch_id/ls_dup_table_meta */ \
-    (databuff_printf(path_, length, pos, "%s/%s/%ld_%ld/%s", \
-                     OB_DIR_MGR.get_local_cache_root_dir(), LS_DIR_STR, \
-                     file_id_.second_id(), ls_epoch_id_, get_storage_objet_type_str(object_type))), \
-    /*to_remote_path_format*/OB_NOT_SUPPORTED, \
-    /*get_parent_dir: ls/ls_id_epoch_id */ \
-    (OB_DIR_MGR.get_ls_id_dir(path, length, file_id.second_id(), ls_epoch_id)), \
-    /*create_parent_dir*/ \
-    (OB_DIR_MGR.create_ls_id_dir(file_id.second_id(), ls_epoch_id))) \
-  STORAGE_OBJECT_TYPE_INFO(LS_ACTIVE_TABLET_ARRAY, "LS_ACTIVE_TABLET_ARRAY", true/*is_pin_local*/, false/*is_read_through*/, \
-    /*is_valid second_id:ls_id, third_id:N/A, fourth_id:N/A */ \
-    ((file_id_.second_id() >= 0) && (file_id_.second_id() < INT64_MAX)), \
-    /*to_local_path_format: ls/ls_id_epoch_id/tablet_id_array */ \
-    (databuff_printf(path_, length, pos, "%s/%s/%ld_%ld/%s", \
-                     OB_DIR_MGR.get_local_cache_root_dir(), LS_DIR_STR, \
-                     file_id_.second_id(), ls_epoch_id_, get_storage_objet_type_str(object_type))), \
-    /*to_remote_path_format*/OB_NOT_SUPPORTED, \
-    /*get_parent_dir: ls/ls_id_epoch_id */ \
-    (OB_DIR_MGR.get_ls_id_dir(path, length, file_id.second_id(), ls_epoch_id)), \
-    /*create_parent_dir*/ \
-    (OB_DIR_MGR.create_ls_id_dir(file_id.second_id(), ls_epoch_id))) \
-  STORAGE_OBJECT_TYPE_INFO(LS_PENDING_FREE_TABLET_ARRAY, "LS_PENDING_FREE_TABLET_ARRAY", true/*is_pin_local*/, false/*is_read_through*/, \
-    /*is_valid second_id:ls_id, third_id:N/A, fourth_id:N/A */ \
-    ((file_id_.second_id() >= 0) && (file_id_.second_id() < INT64_MAX)), \
-    /*to_local_path_format: ls/ls_id_epoch_id/pending_free_tablet_array */ \
-    (databuff_printf(path_, length, pos, "%s/%s/%ld_%ld/%s", \
-                     OB_DIR_MGR.get_local_cache_root_dir(), LS_DIR_STR, \
-                     file_id_.second_id(), ls_epoch_id_, get_storage_objet_type_str(object_type))), \
-    /*to_remote_path_format*/OB_NOT_SUPPORTED, \
-    /*get_parent_dir: ls/ls_id_epoch_id */ \
-    (OB_DIR_MGR.get_ls_id_dir(path, length, file_id.second_id(), ls_epoch_id)), \
-    /*create_parent_dir*/ \
-    (OB_DIR_MGR.create_ls_id_dir(file_id.second_id(), ls_epoch_id))) \
-  STORAGE_OBJECT_TYPE_INFO(PRIVATE_TABLET_META, "PRIVATE_TABLET_META", true/*is_pin_local*/, false/*is_read_through*/, \
-    /*is_valid second_id:ls_id, third_id:tablet_id, fourth_id:meta_path_id+meta_version_id */ \
-    ((file_id_.second_id() >= 0) && (file_id_.second_id() < INT64_MAX) && (file_id_.third_id() > 0) && (file_id_.meta_path_id() >= 0) && (file_id_.meta_version_id() >= 0)), \
-    /*to_local_path_format: ls/ls_id_epoch_id/tablet_meta/tablet_id/tablet_meta_version_path_id */ \
-    (databuff_printf(path_, length, pos, "%s/%s/%ld_%ld/%s/%ld/%ld_%ld", \
-                     OB_DIR_MGR.get_local_cache_root_dir(), \
-                     LS_DIR_STR, file_id_.second_id(), ls_epoch_id_, TABLET_META_DIR_STR, \
-                     file_id_.third_id(), file_id_.meta_version_id(), file_id_.meta_path_id())), \
-    /*to_remote_path_format*/OB_NOT_SUPPORTED, \
-    /*get_parent_dir: ls/ls_id_epoch_id/tablet_meta/tablet_id/ */ \
-    (OB_DIR_MGR.get_tablet_meta_tablet_id_dir(path, length, file_id.second_id(), ls_epoch_id, file_id.third_id())), \
-    /*create_parent_dir*/ \
-    (OB_DIR_MGR.create_tablet_meta_tablet_id_dir(file_id.second_id(), ls_epoch_id, file_id.third_id()))) \
-  STORAGE_OBJECT_TYPE_INFO(PRIVATE_TABLET_CURRENT_VERSION, "PRIVATE_TABLET_CURRENT_VERSION", true/*is_pin_local*/, false/*is_read_through*/, \
-    /*is_valid second_id:ls_id, third_id:tablet_id, fourth_id:N/A */ \
-    ((file_id_.second_id() >= 0) && (file_id_.second_id() < INT64_MAX) && (file_id_.third_id() > 0)), \
-    /*to_local_path_format: ls/ls_id_epoch_id/tablet_meta/tablet_id/current_version */ \
-    (databuff_printf(path_, length, pos, "%s/%s/%ld_%ld/%s/%ld/%s", \
-                     OB_DIR_MGR.get_local_cache_root_dir(), LS_DIR_STR, \
-                     file_id_.second_id(), ls_epoch_id_, TABLET_META_DIR_STR, file_id_.third_id(), \
-                     get_storage_objet_type_str(object_type))), \
-    /*to_remote_path_format*/OB_NOT_SUPPORTED, \
-    /*get_parent_dir: ls/ls_id_epoch_id/tablet_meta/tablet_id/ */ \
-    (OB_DIR_MGR.get_tablet_meta_tablet_id_dir(path, length, file_id.second_id(), ls_epoch_id, file_id.third_id())), \
-    /*create_parent_dir*/ \
-    (OB_DIR_MGR.create_tablet_meta_tablet_id_dir(file_id.second_id(), ls_epoch_id, file_id.third_id()))) \
   STORAGE_OBJECT_TYPE_INFO(SHARED_MAJOR_TABLET_META, "SHARED_MAJOR_TABLET_META", false/*is_pin_local*/, true/*is_read_through*/, \
     /*is_valid second_id:tablet_id, third_id:meta_version_id, fourth_id:N/A */ \
     ((file_id_.second_id() > 0) && (file_id_.second_id() < INT64_MAX) && (file_id_.third_id() >= 0)), \
@@ -260,28 +186,6 @@ namespace blocksstable
                      object_storage_root_dir, CLUSTER_DIR_STR, cluster_id, \
                      TABLET_DIR_STR, file_id_.second_id(), MAJOR_DIR_STR, \
                      SHARED_TABLET_META_DIR_STR, file_id_.third_id())), \
-    /*get_parent_dir*/OB_NOT_SUPPORTED, \
-    /*create_parent_dir*/OB_NOT_SUPPORTED) \
-  STORAGE_OBJECT_TYPE_INFO(COMPACTION_SERVER, "COMPACTION_SERVER", false/*is_pin_local*/, true/*is_read_through*/, \
-    /*is_valid second_id:ls_id, third_id:N/A, fourth_id:N/A */ \
-    ((file_id_.second_id() >= 0) && (file_id_.second_id() < INT64_MAX)), \
-    /*to_local_path_format*/OB_NOT_SUPPORTED, \
-    /*to_remote_path_format: cluster_id/compaction/scheduler/ls_id_compaction_servers */ \
-    (databuff_printf(path_, length, pos, "%s/%s_%ld/%s/%s/%ld_%s", \
-                     object_storage_root_dir, CLUSTER_DIR_STR, cluster_id, \
-                     COMPACTION_DIR_STR, SCHEDULER_DIR_STR, file_id_.second_id(), \
-                     get_storage_objet_type_str(object_type))), \
-    /*get_parent_dir*/OB_NOT_SUPPORTED, \
-    /*create_parent_dir*/OB_NOT_SUPPORTED) \
-  STORAGE_OBJECT_TYPE_INFO(LS_SVR_COMPACTION_STATUS, "LS_SVR_COMPACTION_STATUS", false/*is_pin_local*/, true/*is_read_through*/, \
-    /*is_valid second_id:ls_id, third_id:server_id, fourth_id:N/A */ \
-    ((file_id_.second_id() >= 0) && (file_id_.second_id() < INT64_MAX) && (file_id_.third_id() > 0)), \
-    /*to_local_path_format*/OB_NOT_SUPPORTED, \
-    /*to_remote_path_format: cluster_id/compaction/compactor/ls_id_server_id_ls_svr_compaction_status */ \
-    (databuff_printf(path_, length, pos, "%s/%s_%ld/%s/%s/%ld_%ld_%s", \
-                    object_storage_root_dir, CLUSTER_DIR_STR, cluster_id, \
-                    COMPACTION_DIR_STR, COMPACTOR_DIR_STR, file_id_.second_id(), file_id_.third_id(), \
-                    get_storage_objet_type_str(object_type))), \
     /*get_parent_dir*/OB_NOT_SUPPORTED, \
     /*create_parent_dir*/OB_NOT_SUPPORTED) \
   STORAGE_OBJECT_TYPE_INFO(COMPACTION_REPORT, "COMPACTION_REPORT", false/*is_pin_local*/, true/*is_read_through*/, \
@@ -315,17 +219,6 @@ namespace blocksstable
                      object_storage_root_dir, CLUSTER_DIR_STR, cluster_id, \
                      TABLET_DIR_STR, file_id_.second_id(), MAJOR_DIR_STR, \
                      SHARED_TABLET_META_DIR_STR, get_storage_objet_type_str(object_type))), \
-    /*get_parent_dir*/OB_NOT_SUPPORTED, \
-    /*create_parent_dir*/OB_NOT_SUPPORTED) \
-  STORAGE_OBJECT_TYPE_INFO(LS_COMPACTION_STATUS, "LS_COMPACTION_STATUS", false/*is_pin_local*/, true/*is_read_through*/, \
-    /*is_valid second_id:ls_id, third_id:N/A, fourth_id:N/A */ \
-    ((file_id_.second_id() >= 0) && (file_id_.second_id() < INT64_MAX)), \
-    /*to_local_path_format*/OB_NOT_SUPPORTED, \
-    /*to_remote_path_format: cluster_id/compaction/scheduler/ls_id_ls_compaction_status */ \
-    (databuff_printf(path_, length, pos, "%s/%s_%ld/%s/%s/%ld_%s", \
-                     object_storage_root_dir, CLUSTER_DIR_STR, cluster_id, \
-                     COMPACTION_DIR_STR, SCHEDULER_DIR_STR, file_id_.second_id(), \
-                     get_storage_objet_type_str(object_type))), \
     /*get_parent_dir*/OB_NOT_SUPPORTED, \
     /*create_parent_dir*/OB_NOT_SUPPORTED) \
   STORAGE_OBJECT_TYPE_INFO(TABLET_COMPACTION_STATUS, "TABLET_COMPACTION_STATUS", false/*is_pin_local*/, true/*is_read_through*/, \
@@ -403,17 +296,6 @@ namespace blocksstable
     (databuff_printf(path_, length, pos, "%s/%s_%ld/%s/%ld", \
                      object_storage_root_dir, CLUSTER_DIR_STR, cluster_id, \
                      TABLET_IDS_DIR_STR, file_id_.second_id())), \
-    /*get_parent_dir*/OB_NOT_SUPPORTED, \
-    /*create_parent_dir*/OB_NOT_SUPPORTED) \
-  STORAGE_OBJECT_TYPE_INFO(LS_COMPACTION_LIST, "LS_COMPACTION_LIST", false/*is_pin_local*/, true/*is_read_through*/, \
-    /*is_valid second_id:ls_id, third_id:N/A, fourth_id:N/A */ \
-    ((file_id_.second_id() >= 0) && (file_id_.second_id() < INT64_MAX)), \
-    /*to_local_path_format*/OB_NOT_SUPPORTED, \
-    /*to_remote_path_format: cluster_id/compaction/scheduler/ls_id_ls_compaction_list */ \
-    (databuff_printf(path_, length, pos, "%s/%s_%ld/%s/%s/%ld_%s", \
-                     object_storage_root_dir, CLUSTER_DIR_STR, cluster_id, \
-                     COMPACTION_DIR_STR, SCHEDULER_DIR_STR, file_id_.second_id(), \
-                     get_storage_objet_type_str(object_type))), \
     /*get_parent_dir*/OB_NOT_SUPPORTED, \
     /*create_parent_dir*/OB_NOT_SUPPORTED) \
   STORAGE_OBJECT_TYPE_INFO(IS_SHARED_TABLET_DELETED, "IS_SHARED_TABLET_DELETED", false/*is_pin_local*/, true/*is_read_through*/, \
@@ -671,7 +553,6 @@ private:
       int64_t macro_path_id_       : SF_BIT_PATH_ID;
       int64_t tenant_seq_          : SF_BIT_TENANT_SEQ;
     };
-    // for PRIVATE_TABLET_META and PRIVATE_TABLET_CURRENT_VERSION
     struct {
       int64_t meta_path_id_        : SF_BIT_PATH_ID;
       uint64_t meta_version_id_    : SF_BIT_META_VERSION_ID;

@@ -845,7 +845,7 @@ int ObAdminSetTP::execute(const obcall::ObAdminSetTPArg &arg)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), KR(ret));
   } else if (OB_FAIL(call_all(arg))) {
-    LOG_WARN("execute report replica failed", KR(ret), K(arg));
+    LOG_WARN("execute set tracepoint failed", KR(ret), K(arg));
   }
   LOG_INFO("end execute set_tp request", K(arg));
   return ret;
@@ -861,7 +861,7 @@ int ObAdminSetTP::call_server(const ObAddr &server)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid server", K(server), KR(ret));
   } else if (OB_FAIL(GCTX.ob_service_->set_tracepoint(arg_))) {
-    LOG_WARN("request server report replica failed", KR(ret), K(server));
+    LOG_WARN("request server set tracepoint failed", KR(ret), K(server));
   }
   return ret;
 }

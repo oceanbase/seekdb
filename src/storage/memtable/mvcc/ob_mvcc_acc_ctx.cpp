@@ -39,7 +39,7 @@ int ObMvccAccessCtx::get_write_seq(ObTxSEQ &seq) const
 {
   int ret = OB_SUCCESS;
   // for update uk or pk, set branch part to 0, in orer to let tx-callback fall into single list
-  if (tx_scn_.support_branch() && write_flag_.is_update_uk()) {
+  if (write_flag_.is_update_uk()) {
     const int branch = tx_scn_.get_branch();
     if (branch == 0) {
       seq = tx_scn_;

@@ -67,7 +67,6 @@ private:
 
 void init_merge_history(ObSSTableMergeHistory &merge_info)
 {
-  merge_info.static_info_.ls_id_ = 1;
   merge_info.static_info_.tablet_id_ = 3;
   merge_info.static_info_.compaction_scn_ = 100;
   merge_info.static_info_.merge_type_ = ObMergeType::MINOR_MERGE;

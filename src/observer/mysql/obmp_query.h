@@ -38,7 +38,6 @@ namespace schema
 {
 class ObTableSchema;
 }
-class ObPartitionLocation;
 }
 namespace observer
 {

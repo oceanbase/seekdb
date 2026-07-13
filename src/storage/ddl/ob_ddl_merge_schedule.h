@@ -35,13 +35,13 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObLSHandle;
+class ObLS;
 class ObTabletHandle;
 class ObDDLMergeScheduler
 {
 public:
-  static int schedule_ddl_merge(ObLSHandle &ls_handle, ObTabletHandle &tablet_handl);
-  static int schedule_tablet_ddl_major_merge(ObLSHandle &ls_handle, ObTabletHandle &tablet_handle);
+  static int schedule_ddl_merge(ObLS *ls, ObTabletHandle &tablet_handle);
+  static int schedule_tablet_ddl_major_merge(ObLS *ls, ObTabletHandle &tablet_handle);
 private:
   /* check need merge */
   static int check_tablet_need_merge(ObTablet &tablet, ObDDLKvMgrHandle &ddl_kv_mgr_handle, bool &need_schedule_merge, ObDDLKVType &ddl_kv_type);

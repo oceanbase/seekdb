@@ -28,7 +28,6 @@ class ObStorageObjectOpt;
 namespace storage
 {
 class ObTenantSuperBlock;
-class ObLSItem;
 class ObTenantStorageMetaPersister;
 class ObTenantCheckpointSlogHandler;
 class ObTenantStorageMetaReplayer

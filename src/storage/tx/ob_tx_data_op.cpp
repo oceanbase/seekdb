@@ -222,7 +222,7 @@ int ObTxDataOp::reserve_tx_op_space(int64_t count)
   return ret;
 }
 
-int ObTxDataOp::add_tx_op_batch(transaction::ObTransID tx_id, share::ObLSID ls_id, share::SCN op_scn, ObTxOpArray &tx_op_batch)
+int ObTxDataOp::add_tx_op_batch(transaction::ObTransID tx_id, share::SCN op_scn, ObTxOpArray &tx_op_batch)
 {
   int ret = OB_SUCCESS;
   SpinWLockGuard lock_guard(lock_);
@@ -237,11 +237,11 @@ int ObTxDataOp::add_tx_op_batch(transaction::ObTransID tx_id, share::ObLSID ls_i
     // !!! we must promise tx_op_batch atomic append into tx_op_list
     // otherwise tx_op replay filter with log_scn compare op_scn will cause serious problem
     if (OB_FAIL(ret)) {
-      STORAGE_LOG(ERROR, "tx_op_batch is not atomic append", K(tx_id), K(ls_id), K(tx_op_list_), K(tx_op_batch), K(op_scn));
+      STORAGE_LOG(ERROR, "tx_op_batch is not atomic append", K(tx_id), K(tx_op_list_), K(tx_op_batch), K(op_scn));
       ob_abort();
     }
   }
-  STORAGE_LOG(INFO, "add_tx_op", K(ret), K(tx_id), K(ls_id), K(op_scn), K(tx_op_batch.count()), K(tx_op_list_.get_count()), K(tx_op_batch));
+  STORAGE_LOG(INFO, "add_tx_op", K(ret), K(tx_id), K(op_scn), K(tx_op_batch.count()), K(tx_op_list_.get_count()), K(tx_op_batch));
   return ret;
 }
 

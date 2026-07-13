@@ -312,9 +312,7 @@ constexpr int OB_MERGE_ALREADY_STARTED = -4548;
 constexpr int OB_ROOTSERVICE_EXIST = -4549;
 constexpr int OB_RS_SHUTDOWN = -4550;
 constexpr int OB_SERVER_MIGRATE_IN_DENIED = -4551;
-constexpr int OB_REBALANCE_TASK_CANT_EXEC = -4552;
 constexpr int OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT = -4553;
-constexpr int OB_REBALANCE_TASK_NOT_IN_PROGRESS = -4554;
 constexpr int OB_DATA_SOURCE_NOT_EXIST = -4600;
 constexpr int OB_DATA_SOURCE_TABLE_NOT_EXIST = -4601;
 constexpr int OB_DATA_SOURCE_RANGE_NOT_EXIST = -4602;
@@ -417,9 +415,7 @@ constexpr int OB_TENANT_RESOURCE_UNIT_EXIST = -4712;
 constexpr int OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX = -4713;
 constexpr int OB_ERR_ATLER_TABLE_ILLEGAL_FK = -4714;
 constexpr int OB_LEADER_COORDINATOR_NEED_RETRY = -4716;
-constexpr int OB_REBALANCE_TASK_NEED_RETRY = -4717;
 constexpr int OB_LS_NOT_EXIST = -4719;
-constexpr int OB_TOO_MANY_TENANT_LS = -4720;
 constexpr int OB_LS_LOCATION_NOT_EXIST = -4721;
 constexpr int OB_LS_LOCATION_LEADER_NOT_EXIST = -4722;
 constexpr int OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST = -4723;
@@ -437,7 +433,6 @@ constexpr int OB_RESOURCE_UNIT_VALUE_INVALID = -4736;
 constexpr int OB_LS_EXIST = -4737;
 constexpr int OB_DEVICE_EXIST = -4738;
 constexpr int OB_DEVICE_NOT_EXIST = -4739;
-constexpr int OB_LS_REPLICA_TASK_RESULT_UNCERTAIN = -4740;
 constexpr int OB_WAIT_REPLAY_TIMEOUT = -4741;
 constexpr int OB_WAIT_TABLET_READY_TIMEOUT = -4742;
 constexpr int OB_FREEZE_SERVICE_EPOCH_MISMATCH = -4743;
@@ -1375,7 +1370,6 @@ constexpr int OB_TRANS_IDLE_TIMEOUT = -6278;
 constexpr int OB_TRANS_FREE_ROUTE_NOT_SUPPORTED = -6279;
 constexpr int OB_TRANS_LIVE_TOO_MUCH_TIME = -6280;
 constexpr int OB_TRANS_COMMIT_TOO_MUCH_TIME = -6281;
-constexpr int OB_TRANS_TOO_MANY_PARTICIPANTS = -6282;
 constexpr int OB_LOG_ALREADY_SPLIT = -6283;
 constexpr int INCORRECT_ARGUMENTS_TO_URL_DECODE = -6286;
 constexpr int OB_TX_PENDING_LOG_OVERFLOW = -6288;
@@ -1452,7 +1446,6 @@ constexpr int OB_OBSOLETE_CLOG_NEED_SKIP = -7118;
 constexpr int OB_TABLET_GC_LOCK_CONFLICT = -7120;
 constexpr int OB_SEQUENCE_NOT_MATCH = -7121;
 constexpr int OB_SEQUENCE_TOO_SMALL = -7122;
-constexpr int NEW_MV_MAJOR_VERSION_NOT_MATCH = -7125;
 constexpr int OB_ERR_DIMENSION_NUMBER_IS_OUT_OF_RANGE = -7290;
 constexpr int OB_ERR_INVALID_SRID_IN_SDO_GEOMETRY = -7292;
 constexpr int OB_ERR_INVALID_GTYPE_FOR_POINT_OBJECT = -7293;
@@ -1523,7 +1516,6 @@ constexpr int OB_LOG_ARCHIVE_ALREADY_STOPPED = -9034;
 constexpr int OB_RESTORE_INDEX_FAILED = -9035;
 constexpr int OB_BACKUP_IN_PROGRESS = -9036;
 constexpr int OB_INVALID_LOG_ARCHIVE_STATUS = -9037;
-constexpr int OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST = -9038;
 constexpr int OB_LOG_ARCHIVE_LEADER_CHANGED = -9039;
 constexpr int OB_BACKUP_CAN_NOT_START = -9040;
 constexpr int OB_CANCEL_BACKUP_NOT_ALLOWED = -9041;
@@ -1576,7 +1568,6 @@ constexpr int OB_STORAGE_DEST_NOT_CONNECT = -9115;
 constexpr int OB_TABLET_IS_SPLIT_SRC = -9123;
 constexpr int OB_TABLET_STATUS_NO_NEED_TO_SPLIT = -9127;
 constexpr int OB_FILE_DELETE_FAILED = -9128;
-constexpr int OB_BACKUP_MISSING_MVIEW_DEP_TABLET_SSTABLE = -9136;
 constexpr int OB_NO_LS_REPLICA_CAN_DO_BACKUP = -9138;
 constexpr int OB_RESOURCE_RELEASED = -9141;
 constexpr int OB_ERR_RESIZE_FILE_TO_SMALLER = -9200;
@@ -1833,13 +1824,6 @@ constexpr int OB_ERR_WRONG_USAGE = -9751;
 constexpr int OB_ERR_FORALL_ON_REMOTE_TABLE = -9752;
 constexpr int OB_ERR_SEQUENCE_NOT_DEFINE = -9753;
 constexpr int OB_ERR_DEBUG_ID_NOT_EXIST = -9754;
-constexpr int OB_ERR_TABLE_NO_MLOG = -9755;
-constexpr int OB_ERR_MLOG_EXIST = -9756;
-constexpr int OB_ERR_MVIEW_NOT_EXIST = -9757;
-constexpr int OB_ERR_MVIEW_EXIST = -9758;
-constexpr int OB_ERR_MLOG_IS_YOUNGER = -9759;
-constexpr int OB_ERR_MVIEW_CAN_NOT_FAST_REFRESH = -9760;
-constexpr int OB_ERR_MVIEW_NEVER_REFRESH = -9761;
 constexpr int OB_ERR_CLIENT_LOCAL_FILES_DISABLED = -9762;
 constexpr int OB_ERR_OUT_PARAM_NOT_BIND_VAR = -9763;
 constexpr int OB_ERR_TIME_EARLIER_THAN_SYSDATE = -9764;
@@ -1861,7 +1845,6 @@ constexpr int OB_ERR_EVENT_CANNOT_ALTER_IN_THE_PAST = -9779;
 constexpr int OB_ERR_EVENT_RECURSION_FORBIDDEN = -9780;
 constexpr int OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR = -9781;
 constexpr int OB_ERR_INVALID_CHARACTER = -9782;
-constexpr int OB_ERR_MVIEW_CAN_NOT_ON_QUERY_COMPUTE = -9783;
 constexpr int OB_ERR_CURSOR_ATTR_APPLY = -9784;
 constexpr int OB_UTL_TCP_BUFFER_TOO_SMALL = -9785;
 constexpr int OB_UTL_TCP_END_OF_INPUT = -9786;
@@ -1886,11 +1869,7 @@ constexpr int OB_ERR_LOGON_TRIGGER = -9804;
 constexpr int OB_ERR_LOGOFF_TRIGGER = -9805;
 constexpr int OB_ERR_MALFORMED_WRAPPED_UNIT = -9806;
 constexpr int OB_ERR_INVALID_PLSQL_UNIT = -9807;
-constexpr int OB_ERR_MVIEW_INVALID_TABLE_TYPE = -9808;
-constexpr int OB_ERR_MVIEW_BASE_TABLE_ALTERED = -9809;
-constexpr int OB_ERR_MVIEW_MISSING_DEPENDENCE = -9810;
 constexpr int OB_ERR_INVALID_NESTED_CURSOR = -9811;
-constexpr int OB_ERR_MVIEW_CAN_NOT_NESTED_CONSISTENT_REFRESH = -9812;
 constexpr int OB_TTL_NOT_ENABLE = -10501;
 constexpr int OB_TTL_COLUMN_NOT_EXIST = -10502;
 constexpr int OB_TTL_COLUMN_TYPE_NOT_SUPPORTED = -10503;
@@ -1968,6 +1947,7 @@ constexpr int OB_ERR_UPDATE_ON_EXPR = -38104;
 constexpr int OB_ERR_SPECIFIED_ROW_NO_LONGER_EXISTS = -38105;
 constexpr int OB_ERR_DATA_TOO_LONG_MSG_FMT_V2 = -5167;
 constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
+
 
 #define OB_SUCCESS__USER_ERROR_MSG "Success"
 #define OB_ERROR__USER_ERROR_MSG "Common error"
@@ -2370,9 +2350,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ROOTSERVICE_EXIST__USER_ERROR_MSG "rootservice already exist"
 #define OB_RS_SHUTDOWN__USER_ERROR_MSG "rootservice is shutdown"
 #define OB_SERVER_MIGRATE_IN_DENIED__USER_ERROR_MSG "server migrate in denied"
-#define OB_REBALANCE_TASK_CANT_EXEC__USER_ERROR_MSG "rebalance task can not executing now"
 #define OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT__USER_ERROR_MSG "rootserver can not hold more partition"
-#define OB_REBALANCE_TASK_NOT_IN_PROGRESS__USER_ERROR_MSG "rebalance task not in progress on seekdb"
 #define OB_DATA_SOURCE_NOT_EXIST__USER_ERROR_MSG "Data source not exist"
 #define OB_DATA_SOURCE_TABLE_NOT_EXIST__USER_ERROR_MSG "Data source table not exist"
 #define OB_DATA_SOURCE_RANGE_NOT_EXIST__USER_ERROR_MSG "Data source range not exist"
@@ -2475,9 +2453,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX__USER_ERROR_MSG "rebuild global index:'%.*s' failed when drop/truncate partitions"
 #define OB_ERR_ATLER_TABLE_ILLEGAL_FK__USER_ERROR_MSG "unique/primary keys in table referenced by enabled foreign keys"
 #define OB_LEADER_COORDINATOR_NEED_RETRY__USER_ERROR_MSG "leader coordinator needs retry"
-#define OB_REBALANCE_TASK_NEED_RETRY__USER_ERROR_MSG "rebalance task needs retry"
 #define OB_LS_NOT_EXIST__USER_ERROR_MSG "log stream does not exist"
-#define OB_TOO_MANY_TENANT_LS__USER_ERROR_MSG "too many log streams were defined for this tenant"
 #define OB_LS_LOCATION_NOT_EXIST__USER_ERROR_MSG "log stream location does not exist"
 #define OB_LS_LOCATION_LEADER_NOT_EXIST__USER_ERROR_MSG "log stream location leader does not exist"
 #define OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST__USER_ERROR_MSG "mapping between tablet and log stream does not exist"
@@ -2497,7 +2473,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_LS_EXIST__USER_ERROR_MSG "log stream already exist"
 #define OB_DEVICE_EXIST__USER_ERROR_MSG "Unexpected device existence"
 #define OB_DEVICE_NOT_EXIST__USER_ERROR_MSG "Device does not exist"
-#define OB_LS_REPLICA_TASK_RESULT_UNCERTAIN__USER_ERROR_MSG "log stream replica task result is uncertain"
 #define OB_WAIT_REPLAY_TIMEOUT__USER_ERROR_MSG "log stream wait log replay timeout"
 #define OB_WAIT_TABLET_READY_TIMEOUT__USER_ERROR_MSG "log stream wait tablet ready timeout"
 #define OB_FREEZE_SERVICE_EPOCH_MISMATCH__USER_ERROR_MSG "freeze service epoch is not expected"
@@ -3568,7 +3543,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_TRANS_FREE_ROUTE_NOT_SUPPORTED__USER_ERROR_MSG "Query is not supported to be executed on txn temporary node"
 #define OB_TRANS_LIVE_TOO_MUCH_TIME__USER_ERROR_MSG "Transaction cost too much without commit or rollback"
 #define OB_TRANS_COMMIT_TOO_MUCH_TIME__USER_ERROR_MSG "Transaction commit cost too much"
-#define OB_TRANS_TOO_MANY_PARTICIPANTS__USER_ERROR_MSG "too many transaction participants"
 #define OB_LOG_ALREADY_SPLIT__USER_ERROR_MSG "The big log entry has been split into multiple part"
 #define OB_ERR_UNSUPPROTED_REF_IN_JSON_SCHEMA__USER_ERROR_MSG "This version doesn't yet support 'references in JSON Schema."
 #define OB_ERR_TYPE_OF_JSON_SCHEMA__USER_ERROR_MSG "Invalid JSON type in argument, should be object."
@@ -3648,7 +3622,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_SEQUENCE_NOT_MATCH__USER_ERROR_MSG "compare sequence not match"
 #define OB_SEQUENCE_TOO_SMALL__USER_ERROR_MSG "compare sequence too small"
 #define OB_PARTITION_ALREADY_BALANCED__USER_ERROR_MSG "partitions are already balanced, %s"
-#define NEW_MV_MAJOR_VERSION_NOT_MATCH__USER_ERROR_MSG "new mv major version is not match"
 #define OB_ERR_GIS_DIFFERENT_SRIDS__USER_ERROR_MSG "Binary geometry function %s given two geometries of different srids: %u and %u, which should have been identical."
 #define OB_ERR_GIS_UNSUPPORTED_ARGUMENT__USER_ERROR_MSG "Calling geometry function %s with unsupported types of arguments."
 #define OB_ERR_GIS_UNKNOWN_ERROR__USER_ERROR_MSG "Unknown GIS error occurred in function %s."
@@ -3831,7 +3804,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_RESTORE_INDEX_FAILED__USER_ERROR_MSG "restore index failed"
 #define OB_BACKUP_IN_PROGRESS__USER_ERROR_MSG "Backup is in progress"
 #define OB_INVALID_LOG_ARCHIVE_STATUS__USER_ERROR_MSG "log archive status is not valid"
-#define OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST__USER_ERROR_MSG "Cannot add replica during set member list in restore"
 #define OB_LOG_ARCHIVE_LEADER_CHANGED__USER_ERROR_MSG "pg log archive leader changed"
 #define OB_BACKUP_CAN_NOT_START__USER_ERROR_MSG "backup can not start, because %s"
 #define OB_CANCEL_BACKUP_NOT_ALLOWED__USER_ERROR_MSG "cancel backup do not allow"
@@ -3925,7 +3897,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_BACKUP_ZONE_IDC_REGION_INVALID__USER_ERROR_MSG "%s"
 #define OB_ERR_TMP_FILE_ALREADY_SEALED__USER_ERROR_MSG "tmp file has already sealed"
 #define OB_TMP_FILE_EXCEED_DISK_QUOTA__USER_ERROR_MSG "tmp file exceeds disk quota"
-#define OB_BACKUP_MISSING_MVIEW_DEP_TABLET_SSTABLE__USER_ERROR_MSG "Backup missing mview dependent tablet sstable, sstable maybe recycled"
 #define OB_ERR_DUPLICATE_INDEX__USER_ERROR_MSG "Duplicate index \'%s\' defined on the table \'%s.%s\'"
 #define OB_NO_LS_REPLICA_CAN_DO_BACKUP__USER_ERROR_MSG "No suitable replica found to perform backup"
 #define OB_INVALID_KMS_DEST__USER_ERROR_MSG "%s is not a valid uri"
@@ -4189,13 +4160,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_FORALL_ON_REMOTE_TABLE__USER_ERROR_MSG "FORALL INSERT/UPDATE/DELETE not support on remote tables"
 #define OB_ERR_SEQUENCE_NOT_DEFINE__USER_ERROR_MSG "sequence is not yet defined in this session"
 #define OB_ERR_DEBUG_ID_NOT_EXIST__USER_ERROR_MSG "debug_session_id = %u does not exist"
-#define OB_ERR_TABLE_NO_MLOG__USER_ERROR_MSG "table `%s`.`%s` does not have a materialized view log"
-#define OB_ERR_MLOG_EXIST__USER_ERROR_MSG "a materialized view log already exists on table `%s`"
-#define OB_ERR_MVIEW_NOT_EXIST__USER_ERROR_MSG "materialized view `%s`.`%s` does not exist"
-#define OB_ERR_MVIEW_EXIST__USER_ERROR_MSG "materialized view `%s`.`%s` already exists"
-#define OB_ERR_MLOG_IS_YOUNGER__USER_ERROR_MSG "materialized view log on `%s`.`%s` younger than last refresh"
-#define OB_ERR_MVIEW_CAN_NOT_FAST_REFRESH__USER_ERROR_MSG "cannot fast refresh materialized view %s: %s"
-#define OB_ERR_MVIEW_NEVER_REFRESH__USER_ERROR_MSG "cannot explicitly refresh a NEVER REFRESH materialized view (`%s`)"
 #define OB_ERR_CLIENT_LOCAL_FILES_DISABLED__USER_ERROR_MSG "Loading local data is disabled; this must be enabled on both the client and server sides"
 #define OB_ERR_OUT_PARAM_NOT_BIND_VAR__USER_ERROR_MSG "output parameter not a bind variable"
 #define OB_ERR_TIME_EARLIER_THAN_SYSDATE__USER_ERROR_MSG "the parameter %s must evaluate to a time in the future"
@@ -4217,7 +4181,6 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_EVENT_RECURSION_FORBIDDEN__USER_ERROR_MSG "Recursion of EVENT DDL statements is forbidden when body is present"
 #define OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR__USER_ERROR_MSG "Table has no partition for value"
 #define OB_ERR_INVALID_CHARACTER__USER_ERROR_MSG "invalid character"
-#define OB_ERR_MVIEW_CAN_NOT_ON_QUERY_COMPUTE__USER_ERROR_MSG "cannot ENABLE ON QUERY COMPUTATION for the materialized view %s: %s"
 #define OB_ERR_CURSOR_ATTR_APPLY__USER_ERROR_MSG "cursor attribute may not be applied to non-cursor %.*s"
 #define OB_UTL_TCP_BUFFER_TOO_SMALL__USER_ERROR_MSG "buffer too small"
 #define OB_UTL_TCP_END_OF_INPUT__USER_ERROR_MSG "end-of-input reached"
@@ -4242,11 +4205,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_LOGOFF_TRIGGER__USER_ERROR_MSG "client logoff triggers cannot have AFTER type"
 #define OB_ERR_MALFORMED_WRAPPED_UNIT__USER_ERROR_MSG "malformed or corrupted wrapped unit"
 #define OB_ERR_INVALID_PLSQL_UNIT__USER_ERROR_MSG "input to DBMS_DDL.WRAP is not a legal PL/SQL unit"
-#define OB_ERR_MVIEW_INVALID_TABLE_TYPE__USER_ERROR_MSG "Table type is not valid, the definition of materialized view can only reference user tables or other materialized views"
-#define OB_ERR_MVIEW_BASE_TABLE_ALTERED__USER_ERROR_MSG "Base tables are altered during the creation or complete refresh of materialized views, please try again when base tables have no ongoing DDL operations"
-#define OB_ERR_MVIEW_MISSING_DEPENDENCE__USER_ERROR_MSG "Materialized view %s.%s has invalid dependency info, please perform a complete refresh to recover."
 #define OB_ERR_INVALID_NESTED_CURSOR__USER_ERROR_MSG "Cursor Variable in record, object, or collection is not supported by this release"
-#define OB_ERR_MVIEW_CAN_NOT_NESTED_CONSISTENT_REFRESH__USER_ERROR_MSG "materialized view can not nested consistent refresh"
 #define OB_TTL_NOT_ENABLE__USER_ERROR_MSG "TTL feature is not enabled"
 #define OB_TTL_COLUMN_NOT_EXIST__USER_ERROR_MSG "TTL column '%.*s' not exists"
 #define OB_TTL_COLUMN_TYPE_NOT_SUPPORTED__USER_ERROR_MSG "Column type of '%.*s' is not supported for TTL definition"
@@ -4364,7 +4323,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_DATA_TOO_LONG_MSG_FMT_V2__USER_ERROR_MSG "Data too long for column '%.*s' at row %ld"
 #define OB_ERR_INVALID_DATE_MSG_FMT_V2__USER_ERROR_MSG "Incorrect datetime value for column '%.*s' at row %ld"
 
-extern int g_all_ob_errnos[2408];
+extern int g_all_ob_errnos[2378];
 
   const char *ob_error_name(const int oberr);
   const char* ob_error_cause(const int oberr);
@@ -4379,6 +4338,7 @@ extern int g_all_ob_errnos[2408];
   int ob_errpkt_errno(const int oberr);
   const char *ob_errpkt_strerror(const int oberr);
   const char *ob_errpkt_str_user_error(const int oberr);
+
 
 } // end namespace common
 } // end namespace oceanbase

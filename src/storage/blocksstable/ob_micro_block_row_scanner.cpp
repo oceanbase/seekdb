@@ -1951,9 +1951,9 @@ int ObMultiVersionMicroBlockRowScanner::check_foreign_key(
   ObStoreRowLockState lock_state;
   const int64_t snapshot_version = context_->trans_version_range_.snapshot_version_;
   memtable::ObMvccAccessCtx &acc_ctx = context_->store_ctx_->mvcc_acc_ctx_;
-  bool is_plain_insert_gts_opt = context_->query_flag_.is_plain_insert_gts_opt();
+  bool is_snapshot_opt = context_->query_flag_.is_snapshot_opt();
   bool is_for_fk_check = context_->query_flag_.is_for_foreign_key_check();
-  if ((is_plain_insert_gts_opt || is_for_fk_check) &&
+  if ((is_snapshot_opt || is_for_fk_check) &&
       OB_FAIL(ObRowConflictHandler::check_foreign_key_constraint_for_sstable(
               acc_ctx.get_tx_table_guards(),
               acc_ctx.get_tx_id(),
@@ -1975,7 +1975,6 @@ int ObMultiVersionMicroBlockRowScanner::check_foreign_key(
                   store_rowkey,
                   lock_state,
                   context_->tablet_id_,
-                  context_->ls_id_,
                   0, 0 /* these two params get from mvcc_row, and for statistics, so we ignore them */,
                   sstable_->get_end_scn());
       }

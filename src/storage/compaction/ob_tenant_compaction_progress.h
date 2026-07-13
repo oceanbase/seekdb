@@ -154,17 +154,15 @@ struct ObTabletCompactionProgress : public ObCompactionProgress
 {
   ObTabletCompactionProgress()
     : ObCompactionProgress(),
-      ls_id_(0),
       tablet_id_(0),
       dag_id_(),
       progressive_merge_round_(0),
       create_time_(0)
   {
   }
-  INHERIT_TO_STRING_KV("ObCompactionProgress", ObCompactionProgress, K_(ls_id),
-      K_(tablet_id), K_(dag_id), K_(progressive_merge_round), K_(create_time));
+  INHERIT_TO_STRING_KV("ObCompactionProgress", ObCompactionProgress, K_(tablet_id),
+      K_(dag_id), K_(progressive_merge_round), K_(create_time));
 
-  int64_t ls_id_;
   int64_t tablet_id_;
   share::ObDagId dag_id_;
   int64_t progressive_merge_round_;

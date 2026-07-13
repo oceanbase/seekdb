@@ -149,8 +149,7 @@ int ObTableScanRange::init(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to init table scan range", K(ret), K(simple_batch));
   } else if (FALSE_IT(allocator_ = &allocator)) {
-  } else if (OB_FAIL(split_query.get_tablet_handle(scan_param.tablet_id_, 
-      scan_param.ls_id_, tablet_handle))) {
+  } else if (OB_FAIL(split_query.get_tablet_handle(scan_param.tablet_id_, tablet_handle))) {
     STORAGE_LOG(WARN, "fail to get tablet handle", K(ret), K(scan_param));
   } else if (OB_FAIL(ObTabletSplitMdsHelper::get_is_spliting(*tablet_handle.get_obj(), is_tablet_spliting))) {
     STORAGE_LOG(WARN, "fail to get tablet split status", K(ret));
@@ -308,7 +307,6 @@ int ObTableScanRange::init_ranges(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to init ranges", K(ret), K(allocator_));
   } else {
-    const ObLSID &ls_id = tablet.get_tablet_meta().ls_id_;
     const ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
     const int64_t range_cnt = ranges.count();
     if (0 == range_cnt) {
@@ -343,7 +341,7 @@ int ObTableScanRange::init_ranges(
             *allocator_, 
             datum_range,
             is_false))) {
-          STORAGE_LOG(WARN, "Failed to get split datum range", K(ret), K(tablet_id), K(ls_id));
+          STORAGE_LOG(WARN, "Failed to get split datum range", K(ret), K(tablet_id));
         } else if (is_false) {
           STORAGE_LOG(INFO, "Range after split is empty", K(ret), K(range_cnt), K(i), K(tablet_id), K(range));
         } else if (OB_FAIL(ranges_.push_back(datum_range))) {
@@ -381,7 +379,6 @@ int ObTableScanRange::init_ranges_in_skip_scan(const ObTablet &tablet,
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to init ranges", K(ret), K(allocator_), K(ranges.count()), K(skip_scan_ranges.count()));
   } else {
-    const ObLSID &ls_id = tablet.get_tablet_meta().ls_id_;
     const ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
     common::ObSEArray<ObSkipScanWrappedRange, DEFAULT_RANGE_CNT> wrapped_ranges_;
     const int64_t range_cnt = ranges.count();
@@ -406,7 +403,7 @@ int ObTableScanRange::init_ranges_in_skip_scan(const ObTablet &tablet,
           *allocator_,
           wrapped_range.datum_range_,
           is_false))) {
-        STORAGE_LOG(WARN, "Failed to get split datum range", K(ret), K(tablet_id), K(ls_id));
+        STORAGE_LOG(WARN, "Failed to get split datum range", K(ret), K(tablet_id));
       } else if (is_false) {
         STORAGE_LOG(INFO, "Range after split is empty", K(ret), K(range_cnt), K(i), K(tablet_id), K(range), K(skip_scan_range));
       } else if (OB_FAIL(wrapped_range.datum_skip_range_.from_range(skip_scan_range, *allocator_, enable_new_false_range_))) {

@@ -59,14 +59,13 @@ int ObDASLockOp::open_op()
   ObAccessService *as = share::g_mp->access_service();
   storage::ObStoreCtxGuard store_ctx_guard;
 
-  if (OB_FAIL(as->get_write_store_ctx_guard(ls_id_,
-                                            lock_rtdef_->timeout_ts_,
+  if (OB_FAIL(as->get_write_store_ctx_guard(lock_rtdef_->timeout_ts_,
                                             *trans_desc_,
                                             *snapshot_,
                                             write_branch_id_,
                                             dml_param.write_flag_,
                                             store_ctx_guard))) {
-    LOG_WARN("fail to get_write_access_tx_ctx_guard", K(ret), K(ls_id_));
+    LOG_WARN("fail to get_write_access_tx_ctx_guard", K(ret));
   } else if (OB_FAIL(ObDMLService::init_dml_param(
       *lock_ctdef_,
       *lock_rtdef_,
@@ -75,10 +74,9 @@ int ObDASLockOp::open_op()
       op_alloc_,
       store_ctx_guard,
       dml_param,
-      das_gts_opt_info_.use_specify_snapshot_))) {
+      das_snapshot_opt_info_.use_specify_snapshot_))) {
     LOG_WARN("init dml param failed", K(ret));
-  } else if (OB_FAIL(as->lock_rows(ls_id_,
-                                   tablet_id_,
+  } else if (OB_FAIL(as->lock_rows(tablet_id_,
                                    *trans_desc_,
                                    dml_param,
                                    lock_rtdef_->for_upd_wait_time_,

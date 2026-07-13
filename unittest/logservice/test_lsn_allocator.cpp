@@ -36,14 +36,10 @@ public:
   virtual void SetUp();
   virtual void TearDown();
 protected:
-  int64_t  palf_id_;
   LSNAllocator lsn_allocator_;
 };
 
-TestLSNAllocator::TestLSNAllocator()
-    : palf_id_(1)
-{
-}
+TestLSNAllocator::TestLSNAllocator() {}
 
 TestLSNAllocator::~TestLSNAllocator()
 {

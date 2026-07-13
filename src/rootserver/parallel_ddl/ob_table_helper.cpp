@@ -413,12 +413,8 @@ int ObTableHelper::create_tablets_()
     if (OB_FAIL(ret)) {
     } else {
       ObArray<const ObTableSchema*> schemas;
-      common::ObArray<share::ObLSID> ls_id_array;
       ObArray<bool> need_create_empty_majors;
       ObArray<uint64_t> table_ids;
-      if (OB_FAIL(ls_id_array.push_back(ObLSID(SYS_LS)))) {
-        LOG_WARN("fail to push back sys ls", KR(ret));
-      }
       for (int64_t i = 0; OB_SUCC(ret) && i < new_tables_.count(); i++) {
         const ObTableSchema &new_table = new_tables_.at(i);
         const uint64_t table_id = new_table.get_table_id();
@@ -432,7 +428,7 @@ int ObTableHelper::create_tablets_()
           }
         } else {
           if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(
-                     new_table, ls_id_array, tenant_data_version, true/*need create major sstable*/))) {
+                     new_table, tenant_data_version, true/*need create major sstable*/))) {
             LOG_WARN("create table partitions failed", KR(ret), K(new_table));
           }
         }
@@ -447,7 +443,7 @@ int ObTableHelper::create_tablets_()
                                                               K(last_schema_version));
       } else if (schemas.count() > 0) {
         if (OB_FAIL(table_creator.add_create_tablets_of_tables_arg(
-                   schemas, ls_id_array, tenant_data_version, need_create_empty_majors /*need create major sstable*/))) {
+                   schemas, tenant_data_version, need_create_empty_majors /*need create major sstable*/))) {
           LOG_WARN("create table partitions failed", KR(ret), K(data_table));
         } else if (OB_FAIL(table_creator.execute())) {
           LOG_WARN("execute create partition failed", KR(ret));

@@ -41,7 +41,7 @@ struct ObWriteFlag
   #define OBWF_BIT_UPDATE_PK_DOP        1
   #define OBWF_BIT_IMMEDIATE_CHECK      1
   #define OBWF_BIT_DELETE_INSERT        1
-  #define OBWF_BIT_PLAIN_INSERT_GTS_OPT 1
+  #define OBWF_BIT_SNAPSHOT_OPT       1
   #define OBWF_BIT_RESERVED            50
 
   static const uint64_t OBWF_MASK_RESERVED_COMPAT_0 = (0x1UL << OBWF_BIT_RESERVED_COMPAT_0) - 1;
@@ -70,7 +70,7 @@ struct ObWriteFlag
       uint64_t is_update_pk_dop_     : OBWF_BIT_UPDATE_PK_DOP;    // 0: false(default), 1: true
       uint64_t immediate_row_check_  : OBWF_BIT_IMMEDIATE_CHECK;  // 0: false(default), 1: true
       uint64_t is_delete_insert_     : OBWF_BIT_DELETE_INSERT;    // 0: false(default), 1: true
-      uint64_t is_plain_ins_gts_opt_ : OBWF_BIT_PLAIN_INSERT_GTS_OPT;
+      uint64_t use_snapshot_opt_      : OBWF_BIT_SNAPSHOT_OPT;
       uint64_t reserved_             : OBWF_BIT_RESERVED;
     };
   };
@@ -100,8 +100,8 @@ struct ObWriteFlag
   inline bool is_update_pk_dop() const { return is_update_pk_dop_; }
   inline void set_immediate_row_check() { immediate_row_check_ = true; }
   inline bool is_immediate_row_check() const { return immediate_row_check_; }
-  inline void set_plain_insert_gts_opt() { is_plain_ins_gts_opt_ = true; }
-  inline bool is_plain_insert_gts_opt() const { return is_plain_ins_gts_opt_; }
+  inline void set_snapshot_opt() { use_snapshot_opt_ = true; }
+  inline bool is_snapshot_opt() const { return use_snapshot_opt_; }
   inline void set_is_delete_insert() { is_delete_insert_ = true; }
   inline bool is_delete_insert() const { return is_delete_insert_; }
 
@@ -117,7 +117,7 @@ struct ObWriteFlag
                "is_update_pk_dop", is_update_pk_dop_,
                "immediate_row_check",  immediate_row_check_,
                "is_delete_insert", is_delete_insert_,
-               "is_plain_ins_gts_opt", is_plain_ins_gts_opt_);
+               "use_snapshot_opt", use_snapshot_opt_);
 
   OB_UNIS_VERSION(1);
 };

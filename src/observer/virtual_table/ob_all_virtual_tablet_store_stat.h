@@ -35,7 +35,6 @@ public:
 protected:
   int fill_cells(const storage::ObTableStoreStat &stat);
 private:
-  char ip_buf_[common::OB_IP_STR_BUFF];
   char rowkey_prefix_info_[common::COLUMN_DEFAULT_LENGTH]; //json format
   storage::ObTableStoreStat stat_;
   storage::ObTableStoreStatIterator stat_iter_;

@@ -417,8 +417,7 @@ int ObTabletReplicaReportColumnMeta::get_serialize_str(
 /****************************** ObTabletReplicaChecksumItem ******************************/
 
 ObTabletReplicaChecksumItem::ObTabletReplicaChecksumItem()
-  : ls_id_(),
-    tablet_id_(),
+  : tablet_id_(),
     server_(),
     row_count_(0),
     compaction_scn_(),
@@ -429,7 +428,6 @@ ObTabletReplicaChecksumItem::ObTabletReplicaChecksumItem()
 
 void ObTabletReplicaChecksumItem::reset()
 {
-  ls_id_.reset();
   tablet_id_.reset();
   server_.reset();
   row_count_ = 0;
@@ -441,8 +439,7 @@ void ObTabletReplicaChecksumItem::reset()
 
 bool ObTabletReplicaChecksumItem::is_key_valid() const
 {
-  return ls_id_.is_valid_with_tenant()
-      && tablet_id_.is_valid_with_tenant()
+  return tablet_id_.is_valid_with_tenant()
       && server_.is_valid();
 }
 
@@ -457,8 +454,6 @@ bool ObTabletReplicaChecksumItem::is_same_tablet(const ObTabletReplicaChecksumIt
 {
   return is_key_valid()
       && other.is_key_valid()
-      && true
-      && ls_id_ == other.ls_id_
       && tablet_id_ == other.tablet_id_;
 }
 
@@ -496,7 +491,6 @@ int ObTabletReplicaChecksumItem::assign(const ObTabletReplicaChecksumItem &other
       LOG_WARN("fail to assign column meta", KR(ret), K(other));
     } else {
       tablet_id_ = other.tablet_id_;
-      ls_id_ = other.ls_id_;
       server_ = other.server_;
       row_count_ = other.row_count_;
       compaction_scn_ = other.compaction_scn_;
@@ -615,16 +609,16 @@ int ObTabletReplicaChecksumOperator::batch_update_with_trans(
 
 int ObTabletReplicaChecksumOperator::batch_remove_with_trans(
     ObSQLiteConnection *conn,
-    const common::ObIArray<share::ObTabletReplica> &tablet_replicas)
+    const common::ObIArray<share::ObTabletReplica> &tablet_meta_rows)
 {
   int ret = OB_SUCCESS;
-  const int64_t replicas_count = tablet_replicas.count();
+  const int64_t tablet_meta_row_count = tablet_meta_rows.count();
   if (OB_ISNULL(conn)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid connection", K(ret));
-  } else if (OB_UNLIKELY(false || replicas_count <= 0)) {
+  } else if (OB_UNLIKELY(tablet_meta_row_count <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), "tablet_replica cnt", replicas_count);
+    LOG_WARN("invalid argument", KR(ret), K(tablet_meta_row_count));
   } else if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("storage not initialized", K(ret));
@@ -637,8 +631,8 @@ int ObTabletReplicaChecksumOperator::batch_remove_with_trans(
     if (OB_FAIL(conn->prepare_execute(delete_sql, stmt))) {
       LOG_WARN("failed to prepare execute", K(ret));
     } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < replicas_count; ++i) {
-        const ObTabletReplica &replica = tablet_replicas.at(i);
+      for (int64_t i = 0; OB_SUCC(ret) && i < tablet_meta_row_count; ++i) {
+        const ObTabletReplica &replica = tablet_meta_rows.at(i);
         if (replica.primary_keys_are_valid()) {
           auto binder = [&](ObSQLiteBinder &b) -> int {
             b.bind_int64(replica.get_tablet_id().id());
@@ -684,32 +678,32 @@ int ObTabletReplicaChecksumOperator::remove_residual_checksum(
   return ret;
 }
 
-int ObTabletReplicaChecksumOperator::get_tablets_replica_checksum(const ObIArray<compaction::ObTabletCheckInfo> &pairs,
+int ObTabletReplicaChecksumOperator::get_tablets_replica_checksum(
+    const ObIArray<compaction::ObTabletCheckInfo> &tablet_check_infos,
     ObReplicaCkmArray &tablet_replica_checksum_items)
 {
   int ret = OB_SUCCESS;
-  const int64_t pairs_cnt = pairs.count();
-  if (OB_UNLIKELY(!true || pairs_cnt <= 0)) {
+  const int64_t tablet_check_info_cnt = tablet_check_infos.count();
+  if (OB_UNLIKELY(tablet_check_info_cnt <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(pairs));
+    LOG_WARN("invalid arguments", KR(ret), K(tablet_check_infos));
   } else if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("storage not initialized", K(ret));
   } else {
-    // Convert ObTabletCheckInfo to ObTabletLSPair
-    ObSEArray<ObTabletLSPair, 64> tablet_ls_pairs;
-    for (int64_t i = 0; OB_SUCC(ret) && i < pairs_cnt; ++i) {
-      const compaction::ObTabletCheckInfo &check_info = pairs.at(i);
-      if (OB_FAIL(tablet_ls_pairs.push_back(ObTabletLSPair(check_info.get_tablet_id(), check_info.get_ls_id())))) {
-        LOG_WARN("failed to push back tablet ls pair", K(ret));
+    ObSEArray<ObTabletID, 64> tablet_ids;
+    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_check_info_cnt; ++i) {
+      const compaction::ObTabletCheckInfo &check_info = tablet_check_infos.at(i);
+      if (OB_FAIL(tablet_ids.push_back(check_info.get_tablet_id()))) {
+        LOG_WARN("failed to push back tablet id", K(ret), K(check_info));
       }
     }
     if (OB_SUCC(ret)) {
-      ret = storage_.batch_get(tablet_ls_pairs, SCN(), tablet_replica_checksum_items, false);
+      ret = storage_.batch_get(tablet_ids, SCN(), tablet_replica_checksum_items, false);
       if (OB_FAIL(ret)) {
         LOG_WARN("failed to batch get from storage", K(ret));
       } else {
-        LOG_TRACE("success to get tablet replica checksum items", KR(ret), K(pairs_cnt));
+        LOG_TRACE("success to get tablet replica checksum items", KR(ret), K(tablet_check_info_cnt));
       }
     }
   }
@@ -717,7 +711,7 @@ int ObTabletReplicaChecksumOperator::get_tablets_replica_checksum(const ObIArray
 }
 
 int ObTabletReplicaChecksumOperator::batch_get(
-    const ObIArray<ObTabletLSPair> &pairs,
+    const ObIArray<ObTabletID> &tablet_ids,
     const SCN &compaction_scn,
     ObISQLClient &sql_proxy,
     ObReplicaCkmArray &items,
@@ -726,15 +720,15 @@ int ObTabletReplicaChecksumOperator::batch_get(
 {
   int ret = OB_SUCCESS;
   items.reset();
-  const int64_t pairs_cnt = pairs.count();
-  if (OB_UNLIKELY(pairs_cnt < 1 || false || group_id < 0)) {
+  const int64_t tablet_cnt = tablet_ids.count();
+  if (OB_UNLIKELY(tablet_cnt < 1 || group_id < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(pairs_cnt), K(group_id));
+    LOG_WARN("invalid argument", KR(ret), K(tablet_cnt), K(group_id));
   } else if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("storage not initialized", K(ret));
   } else {
-    ret = storage_.batch_get(pairs, compaction_scn, items, include_larger_than);
+    ret = storage_.batch_get(tablet_ids, compaction_scn, items, include_larger_than);
     if (OB_FAIL(ret)) {
       LOG_WARN("failed to batch get from storage", K(ret));
     }
@@ -839,7 +833,6 @@ int ObTabletReplicaChecksumOperator::construct_tablet_replica_checksum_item_(
     LOG_WARN("fail to convert val to SCN", KR(ret), K(compaction_scn_val));
   } else {
     item.tablet_id_ = (uint64_t)int_tablet_id;
-    item.ls_id_ = ObLSID::SYS_LS_ID;
     item.server_ = GCTX.self_addr();
     if (OB_FAIL(item.column_meta_.set_with_str(item.data_checksum_type_, b_column_meta_str))) {
       LOG_WARN("fail to set column meta", KR(ret), K(compaction_scn_val), K(b_column_meta_str));
@@ -870,19 +863,19 @@ int ObTabletReplicaChecksumOperator::construct_tablet_replica_checksum_item_(
 
 int ObTabletReplicaChecksumOperator::get_tablet_replica_checksum_items(ObMySQLProxy &sql_proxy,
     const SCN &compaction_scn,
-    const ObIArray<ObTabletLSPair> &tablet_pairs,
+    const ObIArray<ObTabletID> &tablet_ids,
     ObReplicaCkmArray &items)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!true)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_FAIL(batch_get(tablet_pairs, compaction_scn,
+  } else if (OB_FAIL(batch_get(tablet_ids, compaction_scn,
         sql_proxy, items, false/*include_larger_than*/,
         0))) {
     LOG_WARN("fail to batch get tablet checksum item", KR(ret), K(compaction_scn),
-      "pairs_count", tablet_pairs.count());
-  } else if (items.get_tablet_cnt() < tablet_pairs.count()) {
+      "tablet_count", tablet_ids.count());
+  } else if (items.get_tablet_cnt() < tablet_ids.count()) {
     ret = OB_ITEM_NOT_MATCH;
     LOG_WARN("fail to get tablet replica checksum items", KR(ret), K(compaction_scn),
       K(items));
@@ -1021,12 +1014,6 @@ int ObTabletReplicaChecksumOperator::multi_get(
     ret = OB_NOT_INIT;
     LOG_WARN("storage not initialized", K(ret));
   } else {
-    // Convert tablet_ids to tablet-ls pairs (we need ls_id, but multi_get only provides tablet_id)
-    // For now, we'll query all replicas for these tablets and filter by compaction_scn
-    ObSEArray<ObTabletLSPair, 64> tablet_ls_pairs;
-    // Since we don't have ls_id, we'll need to query all and filter
-    // For efficiency, we'll use range_get with a large range and filter
-    // But a better approach is to query by tablet_id list
     const char *select_sql =
       "SELECT tablet_id, compaction_scn, "
       "       row_count, data_checksum, column_checksums, b_column_checksums, "
@@ -1071,7 +1058,6 @@ int ObTabletReplicaChecksumOperator::multi_get(
 
         
         item.tablet_id_ = ObTabletID(tablet_id_val);
-        item.ls_id_ = ObLSID::SYS_LS_ID;
         item.server_ = GCTX.self_addr();
         item.compaction_scn_.convert_for_inner_table_field(compaction_scn_val);
         item.row_count_ = row_count;
@@ -1084,7 +1070,7 @@ int ObTabletReplicaChecksumOperator::multi_get(
           int tmp_ret = item.column_meta_.set_with_str(item.data_checksum_type_, b_column_checksums_obstr);
           if (OB_SUCCESS != tmp_ret) {
             LOG_WARN("failed to set column meta with b_column_checksums blob, skip invalid data",
-                     K(tmp_ret), K(b_column_checksums_obstr), K(item.tablet_id_), K(item.ls_id_));
+                     K(tmp_ret), K(b_column_checksums_obstr), K(item.tablet_id_));
             item.column_meta_.reset();
           }
         }

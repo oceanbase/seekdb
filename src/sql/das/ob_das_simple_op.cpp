@@ -60,14 +60,13 @@ int ObDASSplitRangesOp::open_op()
 {
   int ret = OB_SUCCESS;
   ObAccessService *access_service = share::g_mp->access_service();
-  if (OB_FAIL(access_service->split_multi_ranges(ls_id_,
-                                                 tablet_id_,
+  if (OB_FAIL(access_service->split_multi_ranges(tablet_id_,
                                                  timeout_us_,
                                                  ranges_,
                                                  expected_task_count_,
                                                  op_alloc_,
                                                  multi_range_split_array_))) {
-    LOG_WARN("failed to split multi ranges", K(ret), K_(ls_id), K_(tablet_id));
+    LOG_WARN("failed to split multi ranges", K(ret), K_(tablet_id));
   }
   return ret;
 }
@@ -210,12 +209,11 @@ int ObDASRangesCostOp::open_op()
 {
   int ret = OB_SUCCESS;
   ObAccessService *access_service = share::g_mp->access_service();
-  if (OB_FAIL(access_service->get_multi_ranges_cost(ls_id_,
-                                                    tablet_id_,
+  if (OB_FAIL(access_service->get_multi_ranges_cost(tablet_id_,
                                                     timeout_us_,
                                                     ranges_,
                                                     total_size_))) {
-    LOG_WARN("failed to get multi ranges cost", K(ret), K_(ls_id), K_(tablet_id));
+    LOG_WARN("failed to get multi ranges cost", K(ret), K_(tablet_id));
   }
   return ret;
 }

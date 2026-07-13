@@ -59,26 +59,18 @@ private:
   static const uint32_t END_TRANS_EXECUTED_BIT     = (1 << 2);
   static const uint32_t START_STMT_EXECUTED_BIT    = (1 << 4);
   static const uint32_t END_STMT_EXECUTED_BIT      = (1 << 6);
-  static const uint32_t START_PART_EXECUTED_BIT    = (1 << 8);
-  static const uint32_t END_PART_EXECUTED_BIT      = (1 << 10);
   static const uint32_t START_TRANS_SUCC_BIT       = (1 << 1);
   static const uint32_t END_TRANS_SUCC_BIT         = (1 << 3);
   static const uint32_t START_STMT_SUCC_BIT        = (1 << 5);
   static const uint32_t END_STMT_SUCC_BIT          = (1 << 7);
-  static const uint32_t START_PART_SUCC_BIT        = (1 << 9);
-  static const uint32_t END_PART_SUCC_BIT          = (1 << 11);
   static const uint32_t START_TRANS_EXECUTED_SHIFT = 1;
   static const uint32_t END_TRANS_EXECUTED_SHIFT   = 3;
   static const uint32_t START_STMT_EXECUTED_SHIFT  = 5;
   static const uint32_t END_STMT_EXECUTED_SHIFT    = 7;
-  static const uint32_t START_PART_EXECUTED_SHIFT  = 9;
-  static const uint32_t END_PART_EXECUTED_SHIFT    = 11;
   static const uint32_t START_TRANS_EXECUTED_MASK = (0xFFFFFFFF ^ (0x3 << 0));
   static const uint32_t END_TRANS_EXECUTED_MASK   = (0xFFFFFFFF ^ (0x3 << 2));
   static const uint32_t START_STMT_EXECUTED_MASK  = (0xFFFFFFFF ^ (0x3 << 4));
   static const uint32_t END_STMT_EXECUTED_MASK    = (0xFFFFFFFF ^ (0x3 << 6));
-  static const uint32_t START_PART_EXECUTED_MASK  = (0xFFFFFFFF ^ (0x3 << 8));
-  static const uint32_t END_PART_EXECUTED_MASK    = (0xFFFFFFFF ^ (0x3 << 10));
 public:
   TransState() : state_(0) {}
   ~TransState() {}
@@ -90,23 +82,15 @@ public:
   { state_ = ((state_ | START_STMT_EXECUTED_BIT) | (is_succ << START_STMT_EXECUTED_SHIFT)); }
   void set_end_stmt_executed(bool is_succ)
   { state_ = ((state_ | END_STMT_EXECUTED_BIT) | (is_succ << END_STMT_EXECUTED_SHIFT)); }
-  void set_start_participant_executed(bool is_succ)
-  { state_ = ((state_ | START_PART_EXECUTED_BIT) | (is_succ << START_PART_EXECUTED_SHIFT)); }
-  void set_end_participant_executed(bool is_succ)
-  { state_ = ((state_ | END_PART_EXECUTED_BIT) | (is_succ << END_PART_EXECUTED_SHIFT)); }
 
   void clear_start_trans_executed()
   { state_ = (state_ & START_TRANS_EXECUTED_MASK); }
   void clear_start_stmt_executed()
   { state_ = (state_ & START_STMT_EXECUTED_MASK); }
-  void clear_start_participant_executed()
-  { state_ = (state_ & START_PART_EXECUTED_MASK); }
   void clear_end_trans_executed()
   { state_ = (state_ & END_TRANS_EXECUTED_MASK); }
   void clear_end_stmt_executed()
   { state_ = (state_ & END_STMT_EXECUTED_MASK); }
-  void clear_end_participant_executed()
-  { state_ = (state_ & END_PART_EXECUTED_MASK); }
 
   bool is_start_trans_executed() const
   { return state_ & START_TRANS_EXECUTED_BIT; }
@@ -116,10 +100,6 @@ public:
   { return state_ & START_STMT_EXECUTED_BIT; }
   bool is_end_stmt_executed() const
   { return state_ & END_STMT_EXECUTED_BIT; }
-  bool is_start_participant_executed() const
-  { return state_ & START_PART_EXECUTED_BIT; }
-  bool is_end_participant_executed() const
-  { return state_ & END_PART_EXECUTED_BIT; }
   bool is_start_trans_success() const
   { return state_ & START_TRANS_SUCC_BIT; }
   bool is_end_trans_success() const
@@ -128,17 +108,13 @@ public:
   { return state_ & START_STMT_SUCC_BIT; }
   bool is_end_stmt_success() const
   { return state_ & END_STMT_SUCC_BIT; }
-  bool is_start_participant_success() const
-  { return state_ & START_PART_SUCC_BIT; }
-  bool is_end_participant_success() const
-  { return state_ & END_PART_SUCC_BIT; }
 
   void reset()
   { state_ = 0; }
 
 private:
   uint32_t state_;
-  // cached for start_stmt, start_participants, end_participants
+  // cached for transaction and statement lifecycle
 };
 
 /* Inner class, used only within this file. Converts Consistency from the SQL layer to the transaction layer.
@@ -208,10 +184,6 @@ public:
                            const int64_t expire_ts,
                            ObEndTransAsyncCallback *callback);
   static int start_stmt(ObExecContext &ctx);
-  static int get_ls_read_snapshot(ObSQLSessionInfo *session,
-                                  ObPhysicalPlanCtx *plan_ctx,
-                                  const share::ObLSID &local_ls_id,
-                                  transaction::ObTxReadSnapshot &snapshot);
   static int get_read_snapshot(ObSQLSessionInfo *session,
                                ObPhysicalPlanCtx *plan_ctx,
                                transaction::ObTxReadSnapshot &snapshot);
@@ -270,10 +242,6 @@ public:
                         const transaction::tablelock::ObTableLockMode lock_mode,
                         const int64_t wait_lock_seconds);
   static void clear_xa_branch(const transaction::ObXATransID &xid, transaction::ObTxDesc *&tx_desc);
-  static int check_ls_readable(const share::ObLSID &ls_id,
-                               const common::ObAddr &addr,
-                               const int64_t max_stale_time_us,
-                               bool &can_read);
   static uint32_t get_real_session_id(ObSQLSessionInfo &session);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSqlTransControl);
@@ -286,10 +254,6 @@ private:
   static int start_hook_if_need_(ObSQLSessionInfo &session,
                                  transaction::ObTransService *txs,
                                  bool &start_hook);
-  static int get_first_lsid(const ObDASCtx &das_ctx, share::ObLSID &first_lsid, bool &is_single_tablet);
-  static bool has_same_lsid(const ObDASCtx &das_ctx,
-                            const transaction::ObTxReadSnapshot &snapshot,
-                            share::ObLSID &first_lsid);
 public:
   /*
    * create a savepoint without name
@@ -304,11 +268,11 @@ public:
    * rollback to savepoint
    *
    * [convention]:
-   *   transaction layer use trans_result (which maintained by SQL-engine) to decide rollback participants
+   *   transaction layer use trans_result (which maintained by SQL-engine) to decide rollback write state
    *   therefore if trans_result not been collected completed, trans_result.incomplete flag must be set
    *   before do rollback.
-   *   and if trans_result was incomplete, SQL-engine should pass the participants to transaction layer
-   *   (the participants was calculated from table-locations inner this function)
+   *   and if trans_result was incomplete, SQL-engine should pass the participant to transaction layer
+   *   (the participant was calculated from table-locations inner this function)
    *
    * for example: the sql-task executed timeout and its result was unknown, and then do rollback_savepoint;
    *   in this case, the trans_result was incomplete, the flag must been set.

@@ -165,14 +165,8 @@ void ObTxTimeoutTask::runTimerTask()
     ObTransService *txs = txs_;
     ObTxDesc *tx_desc = tx_desc_;
     DEFER({ txs->release_tx_ref(*tx_desc); });
-    if (tx_desc_->is_xa_trans() && tx_desc_->is_sub2pc()) {
-      if (OB_FAIL(txs_->handle_timeout_for_xa(*tx_desc_, delay_))) {
-        TRANS_LOG(WARN, "fail to handle timeout", K(ret), KPC_(tx_desc));
-      }
-    } else {
-      if (OB_FAIL(txs_->handle_tx_commit_timeout(*tx_desc_, delay_))) {
-        TRANS_LOG(WARN, "handle timeout fail", K(ret), KPC_(tx_desc));
-      }
+    if (OB_FAIL(txs_->handle_tx_commit_timeout(*tx_desc_, delay_))) {
+      TRANS_LOG(WARN, "handle timeout fail", K(ret), KPC_(tx_desc));
     }
   }
 }

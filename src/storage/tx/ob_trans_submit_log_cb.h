@@ -25,7 +25,6 @@
 #include "ob_trans_define.h"
 #include "ob_tx_ctx_mds.h"
 #include "ob_trans_event.h"
-#include "share/ob_ls_id.h"
 #include "logservice/ob_log_handler.h"
 #include "logservice/ob_append_callback.h"
 #include "lib/list/ob_dlink_node.h"
@@ -45,7 +44,7 @@ class ObTxData;
 namespace transaction
 {
 class ObTransService;
-class ObPartTransCtx;
+class ObTxCtx;
 class ObTxLogCbGroup;
 }
 

@@ -388,7 +388,6 @@ int ObHNSWSerializeCallback::operator()(const char *data, const int64_t data_siz
   ObLobAccessParam lob_param;
   lob_param.set_tmp_allocator(param.tmp_allocator_);
   lob_param.allocator_ = param.allocator_;
-  lob_param.ls_id_ = vctx->get_ls_id();
   lob_param.tablet_id_ = vctx->get_data_tablet_id();
   lob_param.lob_meta_tablet_id_ = vctx->get_lob_meta_tablet_id();
   lob_param.lob_piece_tablet_id_ = vctx->get_lob_piece_tablet_id();

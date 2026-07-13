@@ -19,8 +19,6 @@
 
 #include "lib/utility/ob_print_utils.h"
 #include "storage/compaction/ob_partition_merge_progress.h"
-#include "storage/tx_storage/ob_ls_map.h"
-#include "storage/tx_storage/ob_ls_handle.h"
 #include "share/scn.h"
 #include "storage/ob_tenant_tablet_stat_mgr.h"
 #include "storage/compaction/ob_tablet_merge_info.h"

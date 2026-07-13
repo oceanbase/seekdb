@@ -59,14 +59,15 @@ public:
   int check_tablet_table();
   int schedule_tablet_meta_check_task();
 private:
-  static const int64_t TABLET_REPLICA_MAP_BUCKET_NUM = 64 * 1024;
-  typedef common::hash::ObHashMap<share::ObTabletLSPair, share::ObTabletReplica> ObTabletReplicaMap;
+  static const int64_t TABLET_META_ROW_MAP_BUCKET_NUM = 64 * 1024;
+  typedef common::hash::ObHashMap<ObTabletID, share::ObTabletReplica> ObTabletMetaRowMap;
 
-  int build_replica_map_(ObTabletReplicaMap &replica_map);
-  int check_dangling_replicas_(ObTabletReplicaMap &replica_map, int64_t &dangling_count);
-  int check_report_replicas_(ObTabletReplicaMap &replica_map, int64_t &report_count);
+  int build_tablet_meta_row_map_(ObTabletMetaRowMap &tablet_meta_row_map);
+  int check_stale_tablet_meta_rows_(ObTabletMetaRowMap &tablet_meta_row_map, int64_t &stale_row_count);
+  int check_missing_or_changed_tablet_meta_rows_(
+      ObTabletMetaRowMap &tablet_meta_row_map,
+      int64_t &missing_or_changed_row_count);
   int check_tablet_not_exist_in_local_(
-      const share::ObLSID &ls_id,
       const ObTabletID &tablet_id,
       bool &not_exist);
 

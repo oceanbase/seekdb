@@ -46,7 +46,6 @@ public:
   int64_t get_trans_refer_cnt() const { return refer_; }
   int64_t get_sql_no() const { return sql_no_; }
   int64_t get_state() const { return state_; }
-  int get_trans_type() const { return trans_type_; }
   int64_t get_part_trans_action() const { return part_trans_action_; }
   uint64_t get_lock_for_read_retry_count() const { return lock_for_read_retry_count_; }
   int64_t get_ctx_addr() const { return ctx_addr_; }
@@ -60,7 +59,7 @@ public:
   TO_STRING_KV(K_(addr), K_(trans_id), K_(is_exiting), K_(is_readonly),
       K_(has_decided), K_(is_dirty), K_(active_memstore_version),
       K_(trans_param), K_(ctx_create_time), K_(expired_time), K_(refer),
-      K_(sql_no), K_(state), K_(session_id), K_(proxy_session_id), K_(trans_type),
+      K_(sql_no), K_(state), K_(session_id), K_(proxy_session_id),
       K_(ctx_addr), K_(prev_trans_arr), K_(next_trans_arr), K_(prev_trans_commit_count), K_(ctx_id),
       K_(pending_log_size), K_(flushed_log_size));
 private:
@@ -80,8 +79,6 @@ private:
   int64_t state_;
   uint32_t session_id_;
   uint64_t proxy_session_id_;
-  //SP_TRANS,MINI_SP_TRANS,DIST_TRANS
-  int trans_type_;
   int64_t part_trans_action_;
   uint64_t lock_for_read_retry_count_;
   int64_t ctx_addr_;

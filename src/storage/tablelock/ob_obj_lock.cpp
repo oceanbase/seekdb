@@ -2335,8 +2335,6 @@ int ObOBJLock::submit_log_(ObLockTableSplitLogCb &callback,
                            const ObSArray<common::ObTabletID> &dst_tablet_ids)
 {
   int ret = OB_SUCCESS;
-  ObLSID ls_id;
-
   if (!callback.is_logging_) {
     callback.is_logging_ = true;
     ObLockTableSplitLog split_log;
@@ -2352,9 +2350,7 @@ int ObOBJLock::submit_log_(ObLockTableSplitLogCb &callback,
       logservice::ObLogBaseHeader base_header(logservice::ObLogBaseType::TABLE_LOCK_LOG_BASE_TYPE,
                                               logservice::ObReplayBarrierType::NO_NEED_BARRIER);
       buffer_size += base_header.get_serialize_size();
-      ObLSService *ls_service = nullptr;
-      ObLSHandle ls_handle;
-      ObLS *ls = nullptr;
+      ObLS *tenant_ls = nullptr;
       const bool need_nonblock = false;
       palf::LSN lsn;
       SCN scn;
@@ -2366,15 +2362,10 @@ int ObOBJLock::submit_log_(ObLockTableSplitLogCb &callback,
         LOG_WARN("failed to serialize split log header", K(ret), K(buffer_size), K(pos));
       } else if (OB_FAIL(split_log.serialize(buffer, buffer_size, pos))) {
         LOG_WARN("failed to serialize split log", K(ret), K(buffer_size), K(pos));
-      } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("mtl ObLSService should not be null", K(ret));
-      } else if (OB_FAIL(ls_service->get_ls(callback.ls_id_, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
+      } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
         LOG_WARN("failed to get ls", K(ret));
-      } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ls should not be NULL", K(ret));
-      } else if (OB_FAIL(ls->append(buffer, buffer_size, SCN::min_scn(), need_nonblock, false/*allow_compression*/, &callback, lsn, scn))) {
+      } else if (OB_FAIL(tenant_ls->append(buffer, buffer_size, SCN::min_scn(),
+              need_nonblock, false/*allow_compression*/, &callback, lsn, scn))) {
         LOG_WARN("failed to submit log", K(ret), K(buffer_size), K(pos));
       } else {
         // These params should be gotten after append log to LS,

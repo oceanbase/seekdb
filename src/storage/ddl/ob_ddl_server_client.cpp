@@ -270,8 +270,7 @@ int ObDDLServerClient::finish_redef_table(const obcall::ObFinishRedefTableArg &f
     "trace_id", *ObCurTraceId::get_trace_id(),
     "task_id", finish_redef_arg.task_id_,
     "snapshot_version", build_single_arg.snapshot_version_,
-    "rpc_dst", rs_leader_addr,
-    "info", build_single_arg.ls_id_);
+    "rpc_dst", rs_leader_addr);
   LOG_INFO("finish redef table.", K(ret), "ddl_event_info", ObDDLEventInfo(), K(finish_redef_arg), K(build_single_arg), K(rs_leader_addr));
   return ret;
 }

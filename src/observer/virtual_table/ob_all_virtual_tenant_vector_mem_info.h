@@ -41,19 +41,15 @@ public:
   ObAllVirtualTenantVectorMemInfo();
   virtual ~ObAllVirtualTenantVectorMemInfo();
 public:
-  inline void set_addr(common::ObAddr &addr) { addr_ = addr; }
   virtual int inner_get_next_row(common::ObNewRow *&row);
-  virtual void reset();
 private:
   int64_t fill_glibc_used_info();
-  common::ObAddr addr_;
-  uint64_t current_pos_;
   lib::ObMallocSampleMap::const_iterator it_;
   lib::ObMallocSampleMap malloc_sample_map_;
   char vector_used_str_[OB_MAX_MYSQL_VARCHAR_LENGTH];
-  common::ObSEArray<obcall::ObLSTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> complete_tablet_ids_;
-  common::ObSEArray<obcall::ObLSTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> partial_tablet_ids_;
-  common::ObSEArray<obcall::ObLSTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> cache_tablet_ids_;
+  common::ObSEArray<obcall::ObTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> complete_tablet_ids_;
+  common::ObSEArray<obcall::ObTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> partial_tablet_ids_;
+  common::ObSEArray<obcall::ObTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> cache_tablet_ids_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualTenantVectorMemInfo);
 };

@@ -112,7 +112,7 @@ public:
   virtual ~ObRSCompactionTimeGuard() {}
   enum CompactionEvent : uint16_t {
     PREPARE_UNFINISH_TABLE_IDS = 0,
-    GET_TABLET_LS_PAIRS,
+    GET_TABLET_IDS,
     GET_TABLET_META_TABLE,
     CKM_VERIFICATION,
     COMPACTION_EVENT_MAX,
@@ -193,7 +193,7 @@ public:
   {}
   virtual ~ObSSCompactionTimeGuard() {}
   enum CompactionEvent : uint16_t {
-    // ls merge scheduler
+    // tablet merge scheduler
     GET_SCHEDULE_TABLET,
     PREPARE_CLOG,
     UPDATE_TABLET_OBJ,

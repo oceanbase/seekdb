@@ -24,7 +24,6 @@
 #include "share/ob_all_tenant_info.h"  // ObAllTenantInfoProxy
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/tx_storage/ob_ls_handle.h"
 
 using namespace oceanbase;
 using namespace oceanbase::observer;
@@ -133,18 +132,9 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
     // Get sync_scn and readable_scn from LS in real-time
     uint64_t sync_scn_val = 0;
     uint64_t readable_scn_val = 0;
-    storage::ObLSHandle ls_handle;
-    share::ObLSID sys_ls_id(share::ObLSID::SYS_LS_ID);
-    storage::ObLSService *ls_svr = share::g_mp->ls_service();
-    storage::ObLS *ls = NULL;
-    if (OB_ISNULL(ls_svr)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected", K(ret));
-    } else if (OB_FAIL(ls_svr->get_ls(sys_ls_id, ls_handle, storage::ObLSGetMod::OBSERVER_MOD))){
+    storage::ObLS *ls = nullptr;
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))){
       SERVER_LOG(WARN, "get ls failed", K(ret));
-    } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "ls is NULL", K(ret));
     } else {
       share::SCN sync_scn;
       share::SCN readable_scn;

@@ -23,8 +23,7 @@ using namespace common;
 namespace palf
 {
 
-IPalfHandleImplGuard::IPalfHandleImplGuard() : palf_id_(),
-                                               palf_handle_impl_(NULL),
+IPalfHandleImplGuard::IPalfHandleImplGuard() : palf_handle_impl_(NULL),
                                                palf_env_impl_(NULL)
 {
 }
@@ -36,7 +35,7 @@ IPalfHandleImplGuard::~IPalfHandleImplGuard()
 
 bool IPalfHandleImplGuard::is_valid() const
 {
-  return true == is_valid_palf_id(palf_id_) && NULL != palf_handle_impl_ && NULL != palf_env_impl_;
+  return NULL != palf_handle_impl_ && NULL != palf_env_impl_;
 }
 
 void IPalfHandleImplGuard::reset()
@@ -46,7 +45,6 @@ void IPalfHandleImplGuard::reset()
   } 
   palf_handle_impl_ = NULL;  
   palf_env_impl_ = NULL;
-  palf_id_ = -1;
 };
 
 } // end namespace palf

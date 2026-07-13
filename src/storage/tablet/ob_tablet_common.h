@@ -32,7 +32,7 @@ namespace storage
 
   READ_ALL_COMMITED:
     Read committed row after transaction committed, except empty shell.
-    Return tablet which has finished at least one MDS transaction(not including tablet in NORMAL not committed, reserved not committed status).
+    Return tablet which has finished at least one MDS transaction(not including tablet in NORMAL not committed, RESERVED_STATUS_5 not committed status).
     Not return CREATING and DELETING who was abandoned from 4.2.
     In addition, you should NOT pass read timeout under this mode.
 
@@ -41,9 +41,8 @@ namespace storage
 
   READ_READABLE_COMMITED:
     Read committed row, not include deleted one. The most frequently used mode. Return
-    tablet in NORMAL or reserved status. Not return one in unreadable status.
-    If latest tablet status is reserved, we should check reserved scn to decide
-    whether it is legal to return the tablet.
+    tablet in NORMAL, RESERVED_STATUS_5 status. Not return one in unreadable status.
+    RESERVED_STATUS_4 is not readable in seekdb.
     If read operation reaches read timeout, you'll get OB_ERR_SHARED_LOCK_CONFLICT error.
 */
 enum class ObMDSGetTabletMode

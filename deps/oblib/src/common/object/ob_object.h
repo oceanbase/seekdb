@@ -922,13 +922,12 @@ struct ObMemLobReadSnapshot
 struct ObMemLobLocationInfo
 {
   ObMemLobLocationInfo(){}
-  ObMemLobLocationInfo(int64_t table_id, int64_t ls_id, ObCollationType collation_id) :
-    tablet_id_(table_id), ls_id_(ls_id), cid_(collation_id)
+  ObMemLobLocationInfo(int64_t table_id, ObCollationType collation_id) :
+    tablet_id_(table_id), cid_(collation_id)
   {}
-  TO_STRING_KV(K_(tablet_id), K_(ls_id), K_(cid));
+  TO_STRING_KV(K_(tablet_id), K_(cid));
 
   int64_t tablet_id_;
-  int64_t ls_id_;
   ObCollationType cid_; // charset for dbmslob
   char data_[0];
 };

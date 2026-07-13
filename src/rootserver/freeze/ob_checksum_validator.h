@@ -61,12 +61,11 @@ class ObChecksumValidator
 public:
   ObChecksumValidator(
     volatile bool &stop,
-    const compaction::ObTabletLSPairCache &tablet_ls_pair_cache,
     const compaction::ObTabletStatusMap &tablet_status_map,
     compaction::ObTableCompactionInfoMap &table_compaction_map,
     compaction::ObIndexCkmValidatePairArray &idx_ckm_validate_array,
     compaction::ObCkmValidatorStatistics &statistics,
-    ObArray<share::ObTabletLSPair> &finish_tablet_ls_pair_array,
+    ObArray<common::ObTabletID> &finish_tablet_ids,
     ObArray<share::ObTabletChecksumItem> &finish_tablet_ckm_array,
     compaction::ObUncompactInfo &uncompact_info,
     ObFTSGroupArray &fts_group_array)
@@ -81,11 +80,10 @@ public:
       major_merge_start_us_(0),
       statistics_(statistics),
       sql_proxy_(nullptr),
-      tablet_ls_pair_cache_(tablet_ls_pair_cache),
       tablet_status_map_(tablet_status_map),
       table_compaction_map_(table_compaction_map),
       idx_ckm_validate_array_(idx_ckm_validate_array),
-      finish_tablet_ls_pair_array_(finish_tablet_ls_pair_array),
+      finish_tablet_ids_(finish_tablet_ids),
       finish_tablet_ckm_array_(finish_tablet_ckm_array),
       uncompact_info_(uncompact_info),
       fts_group_array_(fts_group_array),
@@ -117,8 +115,9 @@ public:
   }
   int push_tablet_ckm_items_with_update(
     const ObIArray<share::ObTabletReplicaChecksumItem> &replica_ckm_items);
-  int push_finish_tablet_ls_pairs_with_update(
-    const common::ObIArray<share::ObTabletLSPair> &tablet_ls_pairs);
+  int push_finish_tablet_ids_with_update(
+    const uint64_t table_id,
+    const common::ObIArray<common::ObTabletID> &tablet_ids);
   int batch_write_tablet_ckm();
   int batch_update_report_scn();
   static int check_column_checksum(
@@ -135,7 +134,7 @@ private:
   int check_inner_status();
   int get_table_compaction_info(const uint64_t table_id, compaction::ObTableCompactionInfo &table_compaction_info);
   int set_need_validate();
-  int get_tablet_ls_pairs(const share::schema::ObSimpleTableSchemaV2 &simple_schema);
+  int get_tablet_ids(const share::schema::ObSimpleTableSchemaV2 &simple_schema);
   int get_replica_ckm(const bool include_larger_than = false);
   /* Tablet Replica Checksum Section */
   int validate_tablet_replica_checksum();
@@ -185,11 +184,10 @@ private:
   compaction::ObCkmValidatorStatistics &statistics_;
   common::ObMySQLProxy *sql_proxy_;
   /* reference to obj in PorgressChecker */
-  const compaction::ObTabletLSPairCache &tablet_ls_pair_cache_;
   const compaction::ObTabletStatusMap &tablet_status_map_;
   compaction::ObTableCompactionInfoMap &table_compaction_map_;
   compaction::ObIndexCkmValidatePairArray &idx_ckm_validate_array_;
-  ObArray<share::ObTabletLSPair> &finish_tablet_ls_pair_array_;
+  ObArray<common::ObTabletID> &finish_tablet_ids_;
   ObArray<share::ObTabletChecksumItem> &finish_tablet_ckm_array_;
   compaction::ObUncompactInfo &uncompact_info_;
   ObFTSGroupArray &fts_group_array_;
@@ -198,7 +196,7 @@ private:
   share::schema::ObSchemaGetterGuard *schema_guard_;
   const share::schema::ObSimpleTableSchemaV2 *simple_schema_;
   compaction::ObTableCompactionInfo table_compaction_info_;
-  ObArray<share::ObTabletLSPair> cur_tablet_ls_pair_array_;
+  ObArray<common::ObTabletID> cur_tablet_ids_;
   share::ObReplicaCkmArray replica_ckm_items_;
   compaction::ObTableCkmItems last_table_ckm_items_; // only cached last data table with index
 };

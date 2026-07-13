@@ -77,7 +77,7 @@ public:
       group_params_(nullptr),
       skip_scan_group_id_(-1),
       group_rescan_cnt_(-1),
-      use_gts_opt_(false),
+      use_snapshot_opt_(false),
       parent_table_set_(allocator),
       real_das_dop_(0),
       flags_(0)
@@ -127,7 +127,6 @@ public:
   int get_das_tablet_mapper(const uint64_t ref_table_id,
                             ObDASTabletMapper &tablet_mapper,
                             const DASTableIDArrayWrap *related_table_ids = nullptr);
-  int get_all_lsid(share::ObLSArray &ls_ids);
   int64_t get_related_tablet_cnt() const;
   int set_snapshot(const transaction::ObTxReadSnapshot &snapshot) { return snapshot_.assign(snapshot); }
   transaction::ObTxReadSnapshot &get_snapshot() { return snapshot_; }
@@ -161,8 +160,8 @@ public:
                                     bool &exist, uint64_t &array_idx);
   int64_t get_real_das_dop() { return real_das_dop_; }
   void set_real_das_dop(int64_t v) { real_das_dop_ = v; }
-  void set_use_gts_opt(bool v) { use_gts_opt_ = v; }
-  bool get_use_gts_opt() { return use_gts_opt_; }
+  void set_use_snapshot_opt(bool v) { use_snapshot_opt_ = v; }
+  bool get_use_snapshot_opt() { return use_snapshot_opt_; }
 
   TO_STRING_KV(K_(table_locs),
                K_(is_fk_cascading),
@@ -191,7 +190,7 @@ private:
   const GroupParamArray *group_params_; //only allowed to be modified by GroupParamBackupGuard
   int64_t skip_scan_group_id_; //only allowed to be modified by GroupParamBackupGuard
   int64_t group_rescan_cnt_; //only allowed to be modified by GroupParamBackupGuard
-  bool use_gts_opt_; // without get gts
+  bool use_snapshot_opt_;
   DASTableIdList parent_table_set_; // The list of parent table, for inner sql.
   int64_t real_das_dop_;
 public:

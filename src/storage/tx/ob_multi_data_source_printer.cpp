@@ -33,10 +33,6 @@ const char *ObMultiDataSourcePrinter::to_str_mds_type(const ObTxDataSourceType &
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, LS_TABLE);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, DDL_BARRIER);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, DDL_TRANS);
-    TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, STANDBY_UPGRADE);
-    TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, STANDBY_UPGRADE_DATA_VERSION);
-    TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, BEFORE_VERSION_4_1);
-
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, TEST1);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, TEST2);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, TEST3);
@@ -47,12 +43,7 @@ const char *ObMultiDataSourcePrinter::to_str_mds_type(const ObTxDataSourceType &
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, CHANGE_TABLET_TO_TABLE_MDS);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, TABLET_SPLIT);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, TABLET_BINDING);
-    TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, MV_PUBLISH_SCN);
-    TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, MV_NOTICE_SAFE);
-    TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, MV_UPDATE_SCN);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, SYNC_TRUNCATE_INFO);
-    TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, MV_MERGE_SCN);
-    TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, MVIEW_MDS_OP);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, DDL_COMPLETE_MDS);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, TABLET_FORK);
     TRX_ENUM_CASE_TO_STR(ObTxDataSourceType, MAX_TYPE);

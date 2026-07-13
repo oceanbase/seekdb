@@ -919,7 +919,7 @@ int ObPxSubCoord::start_ddl()
       ddl_dag_param.ddl_task_param_.schema_version_ = schema_version; // for idempotence, the schema version must be fixed, so get it from task record
       ddl_dag_param.ddl_task_param_.is_no_logging_ = is_no_logging;
       ddl_dag_param.ddl_task_param_.is_offline_index_rebuild_ = is_offline_index_rebuild;
-      if (OB_FAIL(get_participants(sqc_arg_.sqc_, ddl_table_id, ddl_dag_param.ls_tablet_ids_))) {
+      if (OB_FAIL(get_participants(sqc_arg_.sqc_, ddl_table_id, ddl_dag_param.tablet_ids_))) {
         LOG_WARN("fail to get tablet ids", K(ret), K(ddl_task_id), K(ddl_table_id));
       } else if (OB_FAIL(ObTenantDagScheduler::alloc_dag(exec_ctx->get_allocator(), false/*is_ha_dag*/, ddl_dag_))) {
         LOG_WARN("alloc ddl dag failed", K(ret), K(ddl_task_id), KP(ddl_dag_));
@@ -972,13 +972,16 @@ void ObPxSubCoord::ddl_rewrite_ret_code(int &ret_code)
 
 int ObPxSubCoord::get_participants(ObPxSqcMeta &sqc,
                                    const int64_t table_id,
-                                   ObIArray<std::pair<ObLSID, ObTabletID>> &ls_tablet_ids) const
+                                   ObIArray<ObTabletID> &tablet_ids) const
 {
   int ret = OB_SUCCESS;
   const DASTabletLocIArray &locations = sqc.get_access_table_locations();
   for (int64_t i = 0; OB_SUCC(ret) && i < locations.count(); ++i) {
     ObDASTabletLoc *tablet_loc = ObDASUtils::get_related_tablet_loc(*locations.at(i), table_id);
-    if (OB_FAIL(add_var_to_array_no_dup(ls_tablet_ids, std::make_pair(tablet_loc->ls_id_, tablet_loc->tablet_id_)))) {
+    if (OB_ISNULL(tablet_loc)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("tablet location is null", K(ret), K(table_id), K(i));
+    } else if (OB_FAIL(add_var_to_array_no_dup(tablet_ids, tablet_loc->tablet_id_))) {
       LOG_WARN("add var to array no dup failed", K(ret));
     }
   }

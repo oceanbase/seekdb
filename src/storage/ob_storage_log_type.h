@@ -79,7 +79,6 @@ enum ObStorageLogType
   // for test
   OB_LOG_TEST = 30000,
 
-  OB_LOG_TRANS_LITE = 40006,
   OB_LOG_ADD_PARTITION_TO_PG = 40007,
   OB_LOG_REMOVE_PARTITION_FROM_PG = 40008,
   OB_PARTITION_SCHEMA_VERSION_CHANGE_LOG = 40009,
@@ -198,9 +197,6 @@ public:
         break;
       case OB_LOG_TEST:
         log_type_str = "TEST";
-        break;
-      case OB_LOG_TRANS_LITE:
-        log_type_str = "TRANS_LITE";
         break;
       case OB_LOG_ADD_PARTITION_TO_PG:
         log_type_str = "ADD_PARTITION_TO_PG";
@@ -374,7 +370,6 @@ public:
            || is_test_log(log_type)
            || is_freeze_log(log_type)
            || is_offline_partition_log(log_type)
-           || OB_LOG_TRANS_LITE == log_type
            || is_split_log(log_type)
            || is_start_membership_log(log_type)
            || is_checkpoint_log(log_type)

@@ -19,12 +19,9 @@
 #include "share/rc/ob_module_provider.h"
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
-#include "share/ob_ls_id.h"
 #include "share/ob_rpc_struct.h"
-#include "storage/ls/ob_ls_get_mod.h"
 #include "storage/multi_data_source/buffer_ctx.h"
 #include "storage/multi_data_source/mds_ctx.h"
-#include "storage/tx_storage/ob_ls_handle.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet_ddl_complete_mds_helper.h"
 #include "storage/ddl/ob_direct_load_struct.h"
@@ -46,7 +43,7 @@ namespace oceanbase
 namespace storage
 {
 ObTabletDDLCompleteArg::ObTabletDDLCompleteArg():
-  has_complete_(false), ls_id_(), tablet_id_(), direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID),
+  has_complete_(false), tablet_id_(), direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID),
   rec_scn_(share::SCN::min_scn()), start_scn_(share::SCN::min_scn()),data_format_version_(0), snapshot_version_(0), table_key_(),
   storage_schema_(), allocator_()
 { }
@@ -60,7 +57,6 @@ ObTabletDDLCompleteArg::~ObTabletDDLCompleteArg()
 void ObTabletDDLCompleteArg::reset()
 {
   has_complete_ = false;
-  ls_id_.reset();
   tablet_id_.reset();
   direct_load_type_ = ObDirectLoadType::DIRECT_LOAD_INVALID;
   rec_scn_ = share::SCN::min_scn();
@@ -74,8 +70,8 @@ void ObTabletDDLCompleteArg::reset()
 }
 bool ObTabletDDLCompleteArg::is_valid() const
 {
-  return (!has_complete_ && ls_id_.is_valid() && tablet_id_.is_valid()) ||
-         (has_complete_ && ls_id_.is_valid() && tablet_id_.is_valid() && table_key_.is_valid()
+  return (!has_complete_ && tablet_id_.is_valid()) ||
+         (has_complete_ && tablet_id_.is_valid() && table_key_.is_valid()
                         && nullptr != storage_schema_ && storage_schema_->is_valid() && write_stat_.is_valid())
           || (is_incremental_major_direct_load(direct_load_type_)
               && OB_NOT_NULL(storage_schema_)
@@ -120,7 +116,6 @@ int ObTabletDDLCompleteArg::assign(const ObTabletDDLCompleteArg &other)
     LOG_WARN("failed to set write_stat", K(ret));
   }else {
     has_complete_ = other.has_complete_;
-    ls_id_ = other.ls_id_;
     tablet_id_ = other.tablet_id_;
     direct_load_type_ = other.direct_load_type_;
     rec_scn_ = other.rec_scn_;
@@ -137,7 +132,7 @@ int64_t ObTabletDDLCompleteArg::get_serialize_size() const
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              has_complete_, ls_id_, tablet_id_,
+              has_complete_, tablet_id_,
               direct_load_type_, rec_scn_, start_scn_,
               data_format_version_, snapshot_version_,
               table_key_, write_stat_, trans_id_);
@@ -151,7 +146,7 @@ int ObTabletDDLCompleteArg::serialize(char *buf, const int64_t buf_len, int64_t 
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-              has_complete_, ls_id_, tablet_id_, direct_load_type_, rec_scn_, start_scn_,
+              has_complete_, tablet_id_, direct_load_type_, rec_scn_, start_scn_,
               data_format_version_, snapshot_version_, table_key_, write_stat_, trans_id_);
   if (OB_FAIL(ret)) {
   } else if (has_complete_) {
@@ -168,7 +163,7 @@ int ObTabletDDLCompleteArg::serialize(char *buf, const int64_t buf_len, int64_t 
 int ObTabletDDLCompleteArg::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, has_complete_, ls_id_, tablet_id_, direct_load_type_, rec_scn_, start_scn_,
+  LST_DO_CODE(OB_UNIS_DECODE, has_complete_, tablet_id_, direct_load_type_, rec_scn_, start_scn_,
               data_format_version_, snapshot_version_, table_key_, write_stat_, trans_id_);
   if (OB_FAIL(ret)) {
   } else if (has_complete_) {
@@ -225,7 +220,7 @@ int ObTabletDDLCompleteMdsHelper::process(const char* buf, const int64_t len, co
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid arg", K(ret), K(arg));
   } else {
-    ObLSHandle ls_handle;
+    ObLS *tenant_ls = nullptr;
     ObLSService *ls_service = share::g_mp->ls_service();
     common::ObArenaAllocator allocator(ObMemAttr("Ddl_Com_MdsH"));
     ObTabletDDLCompleteMdsUserData data;
@@ -233,12 +228,12 @@ int ObTabletDDLCompleteMdsHelper::process(const char* buf, const int64_t len, co
     if (OB_ISNULL(ls_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ls_service is null", K(ret));
-    } else if (OB_FAIL(ls_service->get_ls(arg.ls_id_, ls_handle, ObLSGetMod::MDS_TABLE_MOD))) {
+    } else if (OB_FAIL(ls_service->get_ls(tenant_ls))) {
       LOG_WARN("failed to get ls", K(ret), K(arg));
     } else if (OB_FAIL(data.set_with_merge_arg(arg, allocator))) {
       LOG_WARN("failed to set with merge arg", K(ret));
     } else {
-      if (OB_FAIL(process_ddl(ctx, ls_handle, arg.tablet_id_, data, scn, for_replay))) {
+      if (OB_FAIL(process_ddl(ctx, tenant_ls, arg.tablet_id_, data, scn, for_replay))) {
         LOG_WARN("failed to process ddl", KR(ret), K(arg), K(data), K(scn), K(for_replay));
       }
     }
@@ -249,7 +244,7 @@ int ObTabletDDLCompleteMdsHelper::process(const char* buf, const int64_t len, co
 
 int ObTabletDDLCompleteMdsHelper::process_ddl(
     mds::BufferCtx &ctx,
-    ObLSHandle &ls_handle,
+    ObLS *tenant_ls,
     const ObTabletID &tablet_id,
     const ObTabletDDLCompleteMdsUserData &data,
     const share::SCN &scn,
@@ -258,21 +253,18 @@ int ObTabletDDLCompleteMdsHelper::process_ddl(
   int ret = OB_SUCCESS;
   MDS_TG(1_s);
   mds::MdsCtx &user_ctx = static_cast<mds::MdsCtx&>(ctx);
-  ObLS* ls = nullptr;
   ObTabletHandle tablet_handle;
-  if (OB_UNLIKELY(!ls_handle.is_valid() || !tablet_id.is_valid() || !data.is_valid())) {
+  if (OB_UNLIKELY(!tablet_id.is_valid() || !data.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected invalid argument", KR(ret), K(ls_handle), K(tablet_id), K(data));
-  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls is null", KR(ret), K(ls_handle));
+    LOG_WARN("unexpected invalid argument", KR(ret), K(tablet_id), K(data));
   } else if (!for_replay) {
-    if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
+    if (OB_FAIL(ObDDLUtil::ddl_get_tablet(tenant_ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
     } else if (OB_FAIL(ObTabletDDLCompleteReplayExecutor::freeze_ddl_kv(*tablet_handle.get_obj(), data))) {
       LOG_WARN("failed to freeze ddl kv", K(ret));
     } else if (OB_FAIL(ObTabletDDLCompleteReplayExecutor::update_tablet_table_store(*tablet_handle.get_obj(), data))) {
       LOG_WARN("failed to update tablet table store", K(ret));
-    } else if (CLICK_FAIL(ls->get_tablet_svr()->set_ddl_complete(tablet_id, mds::DummyKey(), data, user_ctx, 0/*lock_timeout_us*/))) {
+    } else if (CLICK_FAIL(tenant_ls->get_tablet_svr()->set_ddl_complete(
+            tablet_id, mds::DummyKey(), data, user_ctx, 0/*lock_timeout_us*/))) {
       if (OB_ERR_EXCLUSIVE_LOCK_CONFLICT == ret) {
         ret = OB_EAGAIN;
       } else {
@@ -286,9 +278,9 @@ int ObTabletDDLCompleteMdsHelper::process_ddl(
     }
   } else {
     ObTabletDDLCompleteReplayExecutor replay_executor;
-    if (CLICK_FAIL(replay_executor.init(ctx, scn, false /* for old mds */, data))) {
+    if (CLICK_FAIL(replay_executor.init(ctx, scn, data))) {
       LOG_ERROR("failed to inti replay executor", K(ret));
-    } else if (CLICK_FAIL(replay_executor.execute(scn, ls->get_ls_id(), tablet_id))) {
+    } else if (CLICK_FAIL(replay_executor.execute(scn, tablet_id))) {
       LOG_ERROR("failed to execute replay ddl complete mds data", K(ret));
     }
   }
@@ -335,8 +327,8 @@ int ObTabletDDLCompleteMdsHelper::record_ddl_complete_arg_to_mds(
     } else if (OB_ISNULL(conn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null connection", KR(ret), KP(conn));
-    } else if (OB_FAIL(conn->register_multi_data_source(complete_arg.ls_id_, ObTxDataSourceType::DDL_COMPLETE_MDS, buf, buf_len))) {
-      LOG_WARN("failed to register multi data source", KR(ret), K(complete_arg.ls_id_));
+    } else if (OB_FAIL(conn->register_multi_data_source(ObTxDataSourceType::DDL_COMPLETE_MDS, buf, buf_len))) {
+      LOG_WARN("failed to register multi data source", KR(ret));
     } else if (OB_FAIL(trans.end(OB_SUCC(ret)))) {
       LOG_WARN("failed to end trans", KR(ret));
     } else {

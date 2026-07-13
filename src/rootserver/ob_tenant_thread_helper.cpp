@@ -143,11 +143,11 @@ void ObTenantThreadHelper::destroy()
   LOG_INFO("[TENANT THREAD] thread destory finish", K(thread_cnt_), K(thread_name_));
 }
 
-void ObTenantThreadHelper::switch_to_follower_forcedly()
+void ObTenantThreadHelper::deactivate()
 {
   stop();
 }
-int ObTenantThreadHelper::switch_to_leader()
+int ObTenantThreadHelper::activate()
 {
   int ret = OB_SUCCESS;
   LOG_INFO("[TENANT THREAD] thread start", K(thread_cnt_), K(thread_name_));

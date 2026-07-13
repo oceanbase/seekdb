@@ -20,7 +20,6 @@
 #include "logservice/ob_log_base_type.h"
 #include "share/schema/ob_part_mgr_util.h"
 #include "share/schema/ob_table_schema.h"
-#include "share/ob_ls_id.h"
 #include "common/ob_tablet_id.h"
 
 namespace oceanbase
@@ -64,17 +63,17 @@ struct ObAutoSplitTask final
 {
 public:
   ObAutoSplitTask() 
-    : ls_id_(), tablet_id_(), auto_split_tablet_size_(OB_INVALID_SIZE), used_disk_space_(OB_INVALID_SIZE), retry_times_(OB_INVALID_COUNT)
+    : tablet_id_(), auto_split_tablet_size_(OB_INVALID_SIZE), used_disk_space_(OB_INVALID_SIZE), retry_times_(OB_INVALID_COUNT)
     {}
-  ObAutoSplitTask(const ObLSID &ls_id, const ObTableID &tablet_id, const int64_t auto_split_tablet_size, const int64_t used_disk_space, const int64_t retry_times)
-    : ls_id_(ls_id), tablet_id_(tablet_id), 
+  ObAutoSplitTask(const ObTableID &tablet_id, const int64_t auto_split_tablet_size, const int64_t used_disk_space, const int64_t retry_times)
+    : tablet_id_(tablet_id),
       auto_split_tablet_size_(auto_split_tablet_size), used_disk_space_(used_disk_space), retry_times_(retry_times) 
     {}
   ~ObAutoSplitTask() = default;
-  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(auto_split_tablet_size), K_(used_disk_space), K_(retry_times));
+  TO_STRING_KV(K_(tablet_id), K_(auto_split_tablet_size), K_(used_disk_space), K_(retry_times));
   bool is_valid() const
   {
-    return ls_id_.is_valid() && tablet_id_.is_valid() && retry_times_ >= 0
+    return tablet_id_.is_valid() && retry_times_ >= 0
         && auto_split_tablet_size_ > 0 && used_disk_space_ > 0 && used_disk_space_ > auto_split_tablet_size_; 
   }
   void reset() 
@@ -82,13 +81,11 @@ public:
     auto_split_tablet_size_ = OB_INVALID_SIZE;
     used_disk_space_ = OB_INVALID_SIZE;
     retry_times_ = OB_INVALID_COUNT;
-    ls_id_.reset();
     tablet_id_.reset();
   }
   int assign(const ObAutoSplitTask &other);
   void increment_retry_times() { ++retry_times_; }
 public:
-  ObLSID ls_id_;
   ObTabletID tablet_id_;
   int64_t auto_split_tablet_size_;
   int64_t used_disk_space_;
@@ -198,8 +195,7 @@ public:
   ObAutoSplitArgBuilder() {}
   ~ObAutoSplitArgBuilder() {}
   inline static int32_t get_max_split_partition_num() { return MAX_SPLIT_PARTITION_NUM; }
-  int build_arg(const share::ObLSID ls_id,
-                const ObTabletID tablet_id,
+  int build_arg(const ObTabletID tablet_id,
                 const int64_t auto_split_tablet_size,
                 const int64_t used_disk_space,
                 obcall::ObAlterTableArg &arg);                                            
@@ -317,7 +313,7 @@ public:
   const static int64_t OB_SERVER_DELAYED_TIME = (10 * 1000L * 1000L); //10s     
 public:
   static ObServerAutoSplitScheduler &get_instance();
-  int push_task(const storage::ObTabletHandle &teblet_handle, storage::ObLS &ls);
+  int push_task(const storage::ObTabletHandle &teblet_handle);
   int init() { return polling_manager_.init(); }
   void reset() { polling_manager_.reset(); }
   static int cal_real_auto_split_size(const double base_ratio, const double cur_ratio, const int64_t auto_split_size, int64_t &real_auto_split_size);
@@ -328,7 +324,7 @@ private:
     {}
   ~ObServerAutoSplitScheduler () {}
   int batch_send_split_request(const ObArray<ObArray<ObAutoSplitTask>> &task_array);
-  int check_and_fetch_tablet_split_info(const storage::ObTabletHandle &teblet_handle, storage::ObLS &ls, bool &can_split, ObAutoSplitTask &task);
+  int check_and_fetch_tablet_split_info(const storage::ObTabletHandle &teblet_handle, bool &can_split, ObAutoSplitTask &task);
   int check_sstable_limit(const storage::ObTablet &tablet, bool &exceed_limit);
 private:
   const static int64_t MAX_SPLIT_RPC_IN_BATCH = 20;

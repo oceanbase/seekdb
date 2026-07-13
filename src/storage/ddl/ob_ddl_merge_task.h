@@ -95,9 +95,9 @@ public:
   virtual int process() override;
   TO_STRING_KV(K_(is_inited), K_(merge_param));
 private:
-  int merge_ddl_kvs(ObLSHandle &ls_handle, ObTablet &tablet);
-  int merge_full_direct_load_ddl_kvs(ObLSHandle &ls_handle, ObTablet &tablet);
-  int merge_full_direct_load_ddl_kvs_for_sn(ObLSHandle &ls_handle, ObTablet &tablet);
+  int merge_ddl_kvs(ObLS *ls, ObTablet &tablet);
+  int merge_full_direct_load_ddl_kvs(ObLS *ls, ObTablet &tablet);
+  int merge_full_direct_load_ddl_kvs_for_sn(ObLS *ls, ObTablet &tablet);
   int check_macro_intergrate_for_sn(const ObTabletDDLParam &ddl_param,
                                     ObTablet &tablet,
                                     SCN &compact_start_scn,
@@ -106,7 +106,7 @@ private:
                                          ObTablet &tablet,
                                          SCN &compact_start_scn,
                                          SCN &compact_end_scn);
-  int merge_incremental_direct_load_ddl_kvs(ObLSHandle &ls_handle, ObTablet &tablet);
+  int merge_incremental_direct_load_ddl_kvs(ObLS *ls, ObTablet &tablet);
 private:
   bool is_inited_;
   ObDDLTableMergeDagParam merge_param_;
@@ -187,8 +187,7 @@ public:
       ObStorageSchema *&storage_schema,
       const ObIArray<ObDDLKVHandle> &frozen_ddl_kvs);
 
-  static int report_ddl_checksum(const share::ObLSID &ls_id,
-                                 const ObTabletID &tablet_id,
+  static int report_ddl_checksum(const ObTabletID &tablet_id,
                                  const uint64_t table_id,
                                  const int64_t execution_id,
                                  const int64_t ddl_task_id,
@@ -197,7 +196,6 @@ public:
                                  const uint64_t data_format_version);
 
   static int check_and_get_major_sstable(
-      const share::ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const blocksstable::ObSSTable *&first_major_sstable,
       ObTabletMemberWrapper<ObTabletTableStore> &table_store_wrapper);

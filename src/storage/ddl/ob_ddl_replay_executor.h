@@ -216,13 +216,11 @@ public:
       const ObTabletSplitStartLog &log,
       const share::SCN &scn);
   static int prepare_param_from_log(
-      const share::ObLSID &ls_id,
       const ObTabletHandle &handle,
       const ObTabletSplitInfo &info,
       const share::SCN &scn,
       ObTabletSplitParam &param);
   static int prepare_param_from_log(
-      const share::ObLSID &ls_id,
       const ObTabletHandle &handle,
       const ObTabletSplitInfo &info,
       const share::SCN &scn,
@@ -241,7 +239,6 @@ protected:
 
 private:
   int check_need_wait_split_finished(
-      const share::ObLSID &ls_id,
       const ObTabletHandle &handle,
       const ObIArray<ObTabletID> &dest_tablets_id,
       bool &need_wait_split_finished);

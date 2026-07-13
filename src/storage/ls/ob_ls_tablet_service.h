@@ -27,7 +27,7 @@
 #include "storage/ob_dml_common.h"
 #include "storage/ob_relative_table.h"
 #include "storage/slog/ob_storage_log.h"
-#include "storage/ob_tablet_ha_status.h"
+#include "storage/ob_tablet_restore_state.h"
 #include "storage/tablelock/ob_lock_memtable_mgr.h"
 #include "storage/tx_table/ob_tx_ctx_memtable_mgr.h"
 #include "storage/tx_table/ob_tx_data_memtable_mgr.h"
@@ -57,7 +57,6 @@ struct ColumnMap;
 
 namespace blocksstable
 {
-class ObMigrationSSTableParam;
 struct ObDatumRowkey;
 enum ObDmlFlag;
 class ObDatumRowStore;
@@ -85,21 +84,18 @@ class ObTableScanIterator;
 class ObRowGetter;
 class ObLSTabletIterator;
 class ObLSTabletAddrIterator;
-class ObHALSTabletIDIterator;
-class ObHALSTabletIterator;
 class ObLSTabletFastIter;
 class ObTabletMapKey;
 struct ObStorageLogParam;
 struct ObTabletCreateSSTableParam;
 struct ObUpdateTableStoreParam;
-struct ObMigrationTabletParam;
 class ObTableScanRange;
 class ObTabletCreateDeleteMdsUserData;
 class ObBlockStatScanParam;
 class ObBlockStatIterator;
 
 class ObLSTabletService : public logservice::ObIReplaySubHandler,
-                          public logservice::ObIRoleChangeSubHandler,
+                          public logservice::ObILocalLogHandler,
                           public logservice::ObICheckpointSubHandler
 {
 public:
@@ -116,18 +112,6 @@ public:
   // TODO: delete it if apply sequence
   // set allocators frozen to reduce active tenant_memory in ObLS::offline_()
   int set_frozen_for_all_memtables();
-public:
-  class AllowToReadMgr final
-  {
-  public:
-    AllowToReadMgr() : allow_to_read_(false) {}
-    ~AllowToReadMgr() = default;
-    void disable_to_read();
-    void enable_to_read();
-    void load_allow_to_read_info(bool &allow_to_read);
-  private:
-    bool allow_to_read_;
-  };
 private:
   // for replay
   virtual int replay(
@@ -136,11 +120,9 @@ private:
       const palf::LSN &lsn,
       const share::SCN &scn) override;
 
-  // for role change
-  virtual void switch_to_follower_forcedly() override;
-  virtual int switch_to_leader() override;
-  virtual int switch_to_follower_gracefully() override;
-  virtual int resume_leader() override;
+  // local lifecycle
+  void deactivate() override;
+  int activate() override;
 
   // for checkpoint
   virtual int flush(share::SCN &recycle_scn) override;
@@ -148,21 +130,17 @@ private:
 
 public:
   int prepare_for_safe_destroy();
-  int safe_to_destroy(bool &is_safe);
 
   // tablet operation
   int create_ls_inner_tablet(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const share::SCN &frozen_timestamp,
       const ObCreateTabletSchema &create_tablet_schema,
       const share::SCN &create_scn);
   int remove_ls_inner_tablet(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id);
 
   int create_tablet(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const common::ObTabletID &data_tablet_id,
       const share::SCN &create_scn,
@@ -179,7 +157,6 @@ public:
       ObTabletHandle &tablet_handle,
       const share::ObForkTabletInfo &fork_info = share::ObForkTabletInfo());
   int rollback_remove_tablet(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id);
 
   int get_tablet(
@@ -193,7 +170,6 @@ public:
       const int64_t retry_timeout_us,
       const ObMDSGetTabletMode mode = ObMDSGetTabletMode::READ_READABLE_COMMITED,
       const share::SCN &snapshot = share::SCN::max_scn());
-  int get_ls_migration_required_size(int64_t &required_size);
   int remove_tablets(const common::ObIArray<common::ObTabletID> &tablet_id_array);
   // Exactly deletion compared with input tablets
   int remove_tablet(const ObTabletHandle& tablet_handle);
@@ -242,22 +218,8 @@ public:
       const common::ObTabletID &tablet_id,
       const ObTabletRestoreStatus::STATUS &restore_status,
       const bool need_to_set_split_data_complete);
-  int update_tablet_ha_data_status(
-      const common::ObTabletID &tablet_id,
-      const ObTabletDataStatus::STATUS &data_status);
-  int update_tablet_ha_expected_status(
-      const common::ObTabletID &tablet_id,
-      const ObTabletExpectedStatus::STATUS &expected_status);
-  // Get tablet handle but ignore empty shell. Return OB_TABLET_NOT_EXIST if it is empty shell.
-  int ha_get_tablet(
-      const common::ObTabletID &tablet_id,
-      ObTabletHandle &handle);
+  int update_tablet_column_store_schema(const common::ObTabletID &tablet_id);
   int get_tablet_without_memtables(
-      const WashTabletPriority &priority,
-      const ObTabletMapKey &key,
-      common::ObArenaAllocator &allocator,
-      ObTabletHandle &handle);
-  int ha_get_tablet_without_memtables(
       const WashTabletPriority &priority,
       const ObTabletMapKey &key,
       common::ObArenaAllocator &allocator,
@@ -288,7 +250,6 @@ public:
       const bool allow_no_ready_read,
       const bool need_split_src_table,
       const bool need_split_dst_table);
-  int check_allow_to_read();
   int set_tablet_status(
       const common::ObTabletID &tablet_id,
       const ObTabletCreateDeleteMdsUserData &tablet_status,
@@ -424,34 +385,16 @@ public:
   // iterator
   int build_tablet_iter(ObLSTabletIterator &iter, const bool except_ls_inner_tablet = false);
   int build_tablet_iter(ObLSTabletAddrIterator &iter);
-  int build_tablet_iter(ObHALSTabletIDIterator &iter);
-  int build_tablet_iter(ObHALSTabletIterator &iter);
 
   int is_tablet_exist(const common::ObTabletID &tablet_id, bool &is_exist);
 
-  // migration section
-  typedef common::ObFunction<int(const obcall::ObCopyTabletInfo &tablet_info, const ObTabletHandle &tablet_handle)> HandleTabletMetaFunc;
-  int ha_scan_all_tablets(
-      const HandleTabletMetaFunc &handle_tablet_meta_f,
-      const bool need_sorted_tablet_id);
-  int trim_rebuild_tablet(
-      const ObTabletID &tablet_id,
-      const bool is_rollback = false);
-  int rebuild_create_tablet(
-      const ObMigrationTabletParam &mig_tablet_param,
-      const bool keep_old);
-  int create_or_update_migration_tablet(
-      const ObMigrationTabletParam &mig_tablet_param);
   int build_tablet_with_batch_tables(
       const ObTabletID &tablet_id,
       const ObBatchUpdateTableStoreParam &param);
-  void enable_to_read();
-  void disable_to_read();
   int get_all_tablet_ids(const bool except_ls_inner_tablet, common::ObIArray<ObTabletID> &tablet_id_array);
 
   int flush_mds_table(int64_t recycle_scn);
 
-  // check tablet write stop
   int check_tablet_no_active_memtable(const ObIArray<ObTabletID> &tablet_list, bool &has);
 
 protected:
@@ -549,14 +492,8 @@ private:
       ObTabletHandle &new_handle,
       ObTimeGuard &time_guard);
   int safe_create_cas_tablet(
-      const ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const ObMetaDiskAddr &addr,
-      ObTabletHandle &tablet_handle,
-      ObTimeGuard &time_guard);
-  int safe_create_cas_empty_shell(
-      const ObLSID &ls_id,
-      const ObTabletID &tablet_id,
       ObTabletHandle &tablet_handle,
       ObTimeGuard &time_guard);
   void report_tablet_to_rs(const common::ObTabletID &tablet_id);
@@ -571,11 +508,9 @@ private:
       ObTableScanParam &param);
   int get_tablet_addr(const ObTabletMapKey &key, ObMetaDiskAddr &addr);
   int has_tablet(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       bool &b_exist);
   int create_inner_tablet(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const common::ObTabletID &data_tablet_id,
       const share::SCN &create_scn,
@@ -593,31 +528,18 @@ private:
       int64_t &memtable_row_count);
 
   int refresh_tablet_addr(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const ObUpdateTabletPointerParam &param,
       ObTabletHandle &tablet_handle);
   int do_remove_tablet(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id);
   int inner_remove_tablet(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id);
   int rollback_remove_tablet_without_lock(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id);
-  int rollback_rebuild_tablet(const ObTabletID &tablet_id);
-  int trim_old_tablets(const ObTabletID &tablet_id);
-  int rebuild_tablet_with_old(
-      const ObMigrationTabletParam &mig_tablet_param,
-      ObTabletHandle &tablet_guard);
-  int migrate_update_tablet(const ObMigrationTabletParam &mig_tablet_param);
-  int migrate_create_tablet(
-      const ObMigrationTabletParam &mig_tablet_param,
-      ObTabletHandle &handle);
   int delete_all_tablets();
   int offline_build_tablet_without_memtable_();
-  int offline_gc_tablet_for_aborted_create_();
+  int offline_gc_uncommitted_tablets_();
   int offline_destroy_memtable_and_mds_table_();
 
   int inner_get_read_tables(
@@ -645,10 +567,6 @@ private:
       const ObTabletMapKey &key,
       const int64_t ls_epoch,
       ObTabletHandle &tablet_handle);
-  static int check_real_leader_for_4377_(const ObLSID ls_id);
-  static int check_need_rollback_for_4377_(const transaction::ObTxDesc *tx_desc,
-                                           ObTabletHandle &tablet_handle);
-  static int check_parts_tx_state_for_4377_(transaction::ObTxDesc *tx_desc);
   static int check_old_row_legitimacy(
       const blocksstable::ObStoreCmpFuncs &cmp_funcs,
       ObTabletHandle &data_tablet_handle,
@@ -881,16 +799,6 @@ private:
   static void dump_diag_info_for_old_row_loss(
       ObDMLRunningCtx &run_ctx,
       const blocksstable::ObDatumRow &datum_row);
-  int set_allow_to_read_(ObLS *ls);
-  // TODO(chenqingxiang.cqx): remove this
-  int create_empty_shell_tablet(
-      const ObMigrationTabletParam &param,
-      ObTabletHandle &tablet_handle);
-  int check_rollback_tablet_is_same_(
-      const share::ObLSID &ls_id,
-      const common::ObTabletID &tablet_id,
-      bool &is_same);
-
   // for lob tablet dml
   static int check_rowkey_length(
       const ObDMLRunningCtx &run_ctx,
@@ -1028,7 +936,6 @@ private:
   mds::ObMdsTableMgr mds_table_mgr_;
   ObTabletIDSet tablet_id_set_;
   common::ObBucketLock bucket_lock_; // for tablet update, not for dml
-  AllowToReadMgr allow_to_read_mgr_;
   bool is_inited_;
   bool is_stopped_;
 };

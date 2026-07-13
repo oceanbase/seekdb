@@ -115,8 +115,7 @@ void PartTableInfo::fill_info(char *buf, const int64_t buf_len) const
  * -------------------------------------------------------------------ObMergeStaticInfo-------------------------------------------------------------------
  */
 ObMergeStaticInfo::ObMergeStaticInfo()
-  : ls_id_(),
-    tablet_id_(),
+  : tablet_id_(),
     merge_type_(INVALID_MERGE_TYPE),
     compaction_scn_(0),
     concurrent_cnt_(0),
@@ -134,15 +133,13 @@ ObMergeStaticInfo::ObMergeStaticInfo()
 
 bool ObMergeStaticInfo::is_valid() const
 {
-  return ls_id_.is_valid() &&
-         ((tablet_id_.is_valid() && is_valid_merge_type(merge_type_)) ||
+  return ((tablet_id_.is_valid() && is_valid_merge_type(merge_type_)) ||
           BATCH_EXEC == merge_type_) &&
          compaction_scn_ > 0 && is_valid_exec_mode(exec_mode_);
 }
 
 void ObMergeStaticInfo::reset()
 {
-  ls_id_.reset();
   tablet_id_.reset();
   merge_type_ = INVALID_MERGE_TYPE;
   compaction_scn_ = 0;
@@ -160,7 +157,6 @@ void ObMergeStaticInfo::reset()
 
 void ObMergeStaticInfo::shallow_copy(const ObMergeStaticInfo &other)
 {
-  ls_id_ = other.ls_id_;
   tablet_id_ = other.tablet_id_;
   merge_type_ = other.merge_type_;
   compaction_scn_ = other.compaction_scn_;

@@ -327,7 +327,6 @@ private:
 
   static int estimate_full_table_rowcount_by_meta_table(ObOptimizerContext &ctx,
                                                         const ObIArray<ObTabletID> &all_tablet_ids,
-                                                        const ObIArray<ObLSID> &all_ls_ids,
                                                         ObTableMetaInfo &meta);
 
   static int get_need_dynamic_sampling_columns(const ObLogPlan* log_plan,

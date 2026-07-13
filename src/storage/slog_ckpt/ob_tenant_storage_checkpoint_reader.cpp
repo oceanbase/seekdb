@@ -40,9 +40,9 @@ int ObTenantStorageCheckpointReader::iter_read_meta_item(
   ObMemAttr mem_attr(ObModIds::OB_CHECKPOINT);
 
   if (OB_UNLIKELY(IS_EMPTY_BLOCK_LIST(entry_block))) {
-    LOG_INFO("has no snapshot of log stream", K(ret));
+    LOG_INFO("has no storage metadata checkpoint", K(ret));
   } else if (OB_FAIL(item_reader.init(entry_block, mem_attr))) {
-    LOG_WARN("failed to init log stream item reader");
+    LOG_WARN("failed to init storage metadata item reader");
   } else {
     char *item_buf = nullptr;
     int64_t item_buf_len = 0;
@@ -50,7 +50,7 @@ int ObTenantStorageCheckpointReader::iter_read_meta_item(
     while (OB_SUCC(ret)) {
       if (OB_FAIL(item_reader.get_next_item(item_buf, item_buf_len, addr))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("fail to get next log stream item", K(ret));
+          LOG_WARN("fail to get next storage metadata item", K(ret));
         } else {
           ret = OB_SUCCESS;
           break;
@@ -71,6 +71,37 @@ int ObTenantStorageCheckpointReader::iter_read_meta_item(
     }
   }
 
+  return ret;
+}
+
+int ObTenantStorageCheckpointReader::read_single_meta_item(
+    const MacroBlockId &entry_block,
+    const ObStorageMetaOp &op,
+    ObIArray<MacroBlockId> &block_list)
+{
+  int ret = OB_SUCCESS;
+  int64_t item_count = 0;
+  const ObStorageMetaOp count_item_op = [&item_count](
+      const ObMetaDiskAddr &addr, const char *buf, const int64_t buf_len) -> int {
+    int ret = OB_SUCCESS;
+    UNUSED(addr);
+    UNUSED(buf);
+    UNUSED(buf_len);
+    if (OB_UNLIKELY(++item_count > 1)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("multiple metadata items found for singleton checkpoint", K(ret), K(item_count));
+    }
+    return ret;
+  };
+
+  if (OB_FAIL(iter_read_meta_item(entry_block, count_item_op, block_list))) {
+    LOG_WARN("failed to validate singleton metadata checkpoint", K(ret), K(entry_block));
+  } else if (OB_UNLIKELY(!IS_EMPTY_BLOCK_LIST(entry_block) && 1 != item_count)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("singleton metadata checkpoint contains no item", K(ret), K(entry_block));
+  } else if (1 == item_count && OB_FAIL(iter_read_meta_item(entry_block, op, block_list))) {
+    LOG_WARN("failed to read singleton metadata checkpoint", K(ret), K(entry_block));
+  }
   return ret;
 }
 

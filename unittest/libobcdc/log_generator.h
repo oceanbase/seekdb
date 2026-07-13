@@ -67,16 +67,15 @@ private:
 // usage example: generate a log_entry with redo+commit_info
 // LogEntry log_entry;
 // palf::LSN lsn;
-// ObTxLogGenerator log_generator(xxx);
+// ObTxLogGenerator log_generator(tx_id, cluster_id);
 // log_generator.gen_redo_log()
 // log_generator.gen_commit_info_log()
 // log_generator.gen_log_entry(log_entry, lsn)
 class ObTxLogGenerator
 {
 public:
-  ObTxLogGenerator(const uint64_t tenant_id, const int64_t ls_id, const int64_t tx_id, const uint64_t cluster_id)
-    : tls_id_(tenant_id, share::ObLSID(ls_id)),
-      block_builder_(tx_id, cluster_id),
+  ObTxLogGenerator(const int64_t tx_id, const uint64_t cluster_id)
+    : block_builder_(tx_id, cluster_id),
       lsn_arr_(),
       last_record_lsn_(),
       last_normal_lsn_(),
@@ -86,7 +85,6 @@ public:
       trace_id_str_("obcdc_unittest_trace"),
       can_elr_(false),
       is_dup_(false),
-      is_sub2pc_(false),
       epoch_(1024),
       last_op_scn_(2048),
       checksum_(29890209),
@@ -193,7 +191,6 @@ private:
   // lsn of last log_entry, may be invalid if haven't generate any log_entry.
   palf::LSN last_lsn_();
 private:
-  logservice::TenantLSID tls_id_;
   ObTxLogBlockBuilder block_builder_;
   ObLogLSNArray lsn_arr_;
   LSN last_record_lsn_;
@@ -204,7 +201,6 @@ private:
   common::ObString trace_id_str_;
   bool can_elr_;
   bool is_dup_;
-  bool is_sub2pc_;
   int64_t epoch_;
   int64_t last_op_scn_;
   int64_t checksum_;
@@ -300,13 +296,12 @@ void ObTxLogGenerator::gen_commit_info_log()
 
 void ObTxLogGenerator::gen_prepare_log()
 {
-  share::ObLSArray inc_ls_arr;
   transaction::LogOffSet prev_lsn = last_lsn_();
   ObTxPrevLogType prev_log_type(ObTxPrevLogType::TypeEnum::COMMIT_INFO);
-  ObTxPrepareLog prepare_log(inc_ls_arr, prev_lsn, prev_log_type);
+  ObTxPrepareLog prepare_log(prev_lsn, prev_log_type);
   LOG_DEBUG("gen prepare_log", K(prepare_log));
   EXPECT_EQ(OB_SUCCESS, block_builder_.fill_tx_log_except_redo(prepare_log));
-  trans_type_ = transaction::TransType::DIST_TRANS; // dist trans.
+  trans_type_ = transaction::TransType::SP_TRANS;
 }
 
 void ObTxLogGenerator::gen_commit_log()
@@ -315,27 +310,17 @@ void ObTxLogGenerator::gen_commit_log()
   share::SCN commit_version;
   commit_version.convert_for_logservice(commit_ts);
   uint64_t checksum = 0;
-  share::ObLSArray inc_ls_arr;
   ObTxBufferNodeArray mds_arr;
-  transaction::ObLSLogInfoArray ls_info_arr;
 
-  if (transaction::TransType::DIST_TRANS == trans_type_) {
-    ObLSLogInfo ls_info1(share::ObLSID(1), LSN(190));
-    ObLSLogInfo ls_info2(share::ObLSID(1001), last_lsn_());
-    EXPECT_EQ(OB_SUCCESS, ls_info_arr.push_back(ls_info1));
-    EXPECT_EQ(OB_SUCCESS, ls_info_arr.push_back(ls_info2));
-  }
   ObArray<uint8_t> checksum_signature;
   ObTxPrevLogType prev_log_type(ObTxPrevLogType::TypeEnum::PREPARE);
   ObTxCommitLog commit_log(
       commit_version,
       checksum,
       checksum_signature,
-      inc_ls_arr,
       mds_arr,
       trans_type_,
       last_lsn_(),
-      ls_info_arr, 
       prev_log_type);
   LOG_DEBUG("gen commit_log", K(commit_log));
   EXPECT_EQ(OB_SUCCESS, block_builder_.fill_tx_log_except_redo(commit_log));

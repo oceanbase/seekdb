@@ -113,7 +113,7 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
     if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL, is_partition_hit))) {
       LOG_WARN("send error packet fail", K(sret), K(ret));
     }
-    //According to the agreement with the transaction layer, regardless of whether end_participant and end_stmt succeed or not,
+    //According to the agreement with the transaction layer, regardless of whether end_stmt succeeds or not,
     //Determine whether the transaction commit or rollback is successful by only checking if the final end_trans is successful,
     // and SQL must ensure that end_trans is called, when calling end_trans it checks if the connection needs to be terminated,
     //So here there is no need to check if the connection needs to be terminated

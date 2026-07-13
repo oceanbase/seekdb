@@ -829,16 +829,9 @@ int ObPxCoordOp::check_all_sqc(ObIArray<ObDfo *> &active_dfos,
         sqc.set_server_not_alive(false);
         sqc.set_interrupt_by_dm(false);
         const DASTabletLocIArray &access_locations = sqc.get_access_table_locations();
-        for (int64_t i = 0; i < access_locations.count() && OB_SUCC(ret); i++) {
-          if (OB_FAIL(ctx_.get_my_session()->get_trans_result().add_touched_ls(access_locations.at(i)->ls_id_))) {
-            LOG_WARN("add touched ls failed", K(ret));
-          }
-        }
         const DASTabletLocIArray &extra_access_locations = sqc.get_extra_access_table_locations();
-        for (int64_t i = 0; i < extra_access_locations.count() && OB_SUCC(ret); i++) {
-          if (OB_FAIL(ctx_.get_my_session()->get_trans_result().add_touched_ls(extra_access_locations.at(i)->ls_id_))) {
-            LOG_WARN("add touched ls failed", K(ret));
-          }
+        if (access_locations.count() > 0 || extra_access_locations.count() > 0) {
+          ctx_.get_my_session()->get_trans_result().mark_touched_storage();
         }
         LOG_WARN("server not alive", K(sqc), K(access_locations),
                   K(sqc.get_access_table_location_keys()), K(extra_access_locations));

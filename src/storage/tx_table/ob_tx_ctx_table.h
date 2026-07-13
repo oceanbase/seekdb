@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_STORAGE_OB_TX_CTX_TABLE
 #define OCEANBASE_STORAGE_OB_TX_CTX_TABLE
 
-#include "share/ob_ls_id.h"
 #include "storage/ob_i_store.h"
 #include "storage/tx_table/ob_tx_table_define.h"
 #include "storage/tx_table/tx_table_local_buffer.h"
@@ -61,7 +60,6 @@ private:
   struct ObTxCtxTableMeta prev_meta_;
   ObTxLocalBuffer buf_;
   int64_t prev_end_pos_;
-  share::ObLSID ls_id_;
   ObTxCtxTableInfo ctx_info_;
 };
 
@@ -97,7 +95,7 @@ public:
   ObTxCtxTable();
   ~ObTxCtxTable();
 
-  int init(const share::ObLSID& ls_id);
+  int init();
 
   void reset();
 
@@ -108,7 +106,7 @@ public:
 
   // We need the reference count to keep the life cycle of the ls_tx_ctx_mgr.
   // And the ObTxTable is a guard for automatical management of it.
-  int acquire_ref_(const share::ObLSID& ls_id);
+  int acquire_ref_();
 
   int release_ref_();
 
@@ -123,7 +121,6 @@ public:
   transaction::ObLSTxCtxMgr *get_ls_tx_ctx_mgr();
 
 private:
-  share::ObLSID ls_id_;
   transaction::ObLSTxCtxMgr *ls_tx_ctx_mgr_;
 
 private:

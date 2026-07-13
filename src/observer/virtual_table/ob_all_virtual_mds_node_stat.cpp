@@ -15,7 +15,9 @@
  */
  
 #include "ob_all_virtual_mds_node_stat.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ls/ob_ls.h"
+#include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
 {
@@ -64,20 +66,6 @@ struct ApplyOnTabletOp {
   char *temp_buffer_;
 };
 
-struct ApplyOnLSOp {
-  ApplyOnLSOp(ObAllVirtualMdsNodeStat *table, ApplyOnTabletOp &apply_on_tablet_op)
-  : table_(table),
-  apply_on_tablet_op_(apply_on_tablet_op) {}
-  int operator()(ObLS &ls) {
-    int ret = OB_SUCCESS;
-    (void) table_->get_tablet_info_(ls, apply_on_tablet_op_);
-    return OB_SUCCESS;
-  }
-  ObAllVirtualMdsNodeStat *table_;
-  ApplyOnTabletOp &apply_on_tablet_op_;
-};
-
-
 int ObAllVirtualMdsNodeStat::get_mds_table_handle_(ObTablet &tablet,
                                                    mds::MdsTableHandle &handle,
                                                    const bool create_if_not_exist)
@@ -101,9 +89,15 @@ int ObAllVirtualMdsNodeStat::inner_get_next_row(common::ObNewRow *&row)
         MDS_LOG(WARN, "fail to alloc buffer", K(*this));
       } else {
         ApplyOnTabletOp apply_on_table_op(this, temp_buffer);
-        ApplyOnLSOp apply_on_ls_op(this, apply_on_table_op);
-        if (OB_FAIL(ObTenantMdsService::for_each_ls_in_tenant(apply_on_ls_op))) {
-          MDS_LOG(WARN, "failed to do for_each_ls_in_tenant", K(ret));
+        ObLS *ls = nullptr;
+        ObLSService *ls_service = share::g_mp->ls_service();
+        if (OB_ISNULL(ls_service)) {
+          ret = OB_ERR_UNEXPECTED;
+          MDS_LOG(WARN, "ls service is null", K(ret));
+        } else if (OB_FAIL(ls_service->get_ls(ls))) {
+          MDS_LOG(WARN, "get log stream failed", K(ret));
+        } else if (OB_FAIL(get_tablet_info_(*ls, apply_on_table_op))) {
+          MDS_LOG(WARN, "iterate mds node failed", K(ret));
           ret = OB_SUCCESS;
         }
         if (OB_FAIL(ret)) {

@@ -41,10 +41,8 @@ namespace blocksstable
 
 uint64_t ObBloomFilterLoadKey::hash() const
 {
-  const uint64_t ls_id_hash_value = ls_id_.hash();
   const uint64_t table_key_hash_value = table_key_.hash();
   uint64_t hash_value = 0;
-  hash_value = common::murmurhash(&ls_id_hash_value, sizeof(ls_id_hash_value), hash_value);
   hash_value = common::murmurhash(&table_key_hash_value, sizeof(table_key_hash_value), hash_value);
   return hash_value;
 }
@@ -57,12 +55,12 @@ int ObBloomFilterLoadKey::hash(uint64_t &hash_val) const
 
 bool ObBloomFilterLoadKey::operator == (const ObBloomFilterLoadKey &other) const
 {
-  return ls_id_ == other.ls_id_ && table_key_ == other.table_key_;
+  return table_key_ == other.table_key_;
 }
 
 bool ObBloomFilterLoadKey::is_valid() const
 {
-  return ls_id_.is_valid() && table_key_.is_valid();
+  return table_key_.is_valid();
 }
 
 /**
@@ -169,12 +167,11 @@ void ObBloomFilterLoadTaskQueue::reset()
 }
 
 int ObBloomFilterLoadTaskQueue::push_task(const storage::ObITable::TableKey &sstable_key,
-                                          const share::ObLSID &ls_id,
                                           const MacroBlockId &macro_id,
                                           const ObDatumRowkey &rowkey)
 {
   int ret = OB_SUCCESS;
-  const ObBloomFilterLoadKey key(ls_id, sstable_key);
+  const ObBloomFilterLoadKey key(sstable_key);
   ValuePair value(macro_id, allocator_);
 
   // Deep copy value pair.
@@ -470,7 +467,7 @@ int ObMacroBlockBloomFilterLoadThread::do_multi_get(const ObBloomFilterLoadKey &
 {
   int ret = OB_SUCCESS;
   const common::ObTabletID tablet_id = key.table_key_.get_tablet_id();
-  const ObTabletMapKey tablet_map_key(key.ls_id_, tablet_id);
+  const ObTabletMapKey tablet_map_key(tablet_id);
   const int64_t array_count = array.count();
   ObTabletHandle tablet_handle;
   ObTableHandleV2 sstable_handle;
@@ -561,7 +558,7 @@ int ObMacroBlockBloomFilterLoadThread::do_multi_load(const ObBloomFilterLoadKey 
 {
   int ret = OB_SUCCESS;
   const common::ObTabletID tablet_id = key.table_key_.get_tablet_id();
-  const ObTabletMapKey tablet_map_key(key.ls_id_, tablet_id);
+  const ObTabletMapKey tablet_map_key(tablet_id);
   const int64_t array_count = array.count();
   ObTabletHandle tablet_handle;
   ObTableHandleV2 sstable_handle;
@@ -682,7 +679,6 @@ int ObMacroBlockBloomFilterLoadThread::do_multi_load(const ObBloomFilterLoadKey 
 }
 
 int ObMacroBlockBloomFilterLoadThread::add_load_task(const storage::ObITable::TableKey &sstable_key,
-                                                 const share::ObLSID &ls_id,
                                                  const MacroBlockId &macro_id,
                                                  const ObDatumRowkey &rowkey)
 {
@@ -691,14 +687,14 @@ int ObMacroBlockBloomFilterLoadThread::add_load_task(const storage::ObITable::Ta
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("fail to add bloom filter load thread task, not inited",
-             K(ret), K(sstable_key), K(ls_id), K(macro_id), K(rowkey));
+             K(ret), K(sstable_key), K(macro_id), K(rowkey));
   } else if (OB_UNLIKELY(!sstable_key.is_valid() || !macro_id.is_valid()
                          || !storage::ObITable::is_sstable(sstable_key.table_type_))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to add bloom filter load thread task, invalid argument",
-             K(ret), K(sstable_key), K(ls_id), K(macro_id), K(rowkey));
-  } else if (OB_FAIL(load_task_queue_.push_task(sstable_key, ls_id, macro_id, rowkey))) {
-    LOG_WARN("fail to push back macro id", K(ret), K(sstable_key), K(ls_id), K(macro_id), K(rowkey));
+             K(ret), K(sstable_key), K(macro_id), K(rowkey));
+  } else if (OB_FAIL(load_task_queue_.push_task(sstable_key, macro_id, rowkey))) {
+    LOG_WARN("fail to push back macro id", K(ret), K(sstable_key), K(macro_id), K(rowkey));
   } else {
     // Signal for next batch load.
     ObThreadCondGuard guard(idle_cond_);

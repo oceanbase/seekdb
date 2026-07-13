@@ -140,7 +140,7 @@ uint16_t ObCompactionTimeGuard::get_max_event_count(const ObCompactionTimeGuardT
  */
 const char *ObRSCompactionTimeGuard::CompactionEventStr[] = {
     "PREPARE_UNFINISH_TABLE_IDS",
-    "GET_TABLET_LS_PAIRS",
+    "GET_TABLET_IDS",
     "GET_TABLET_META_TABLE",
     "CKM_VERIFICATION"
 };

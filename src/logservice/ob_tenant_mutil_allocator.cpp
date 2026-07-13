@@ -15,7 +15,9 @@
  */
 
 #include "ob_tenant_mutil_allocator.h"
-#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
+#include "share/ob_server_struct.h"
+#include "observer/omt/ob_multi_tenant.h"
+#include "logservice/palf/log_io_task.h"
 #include "logservice/palf/log_shared_task.h"
 #include "logservice/replayservice/ob_replay_status.h"
 
@@ -31,10 +33,8 @@ ObTenantMutilAllocator::ObTenantMutilAllocator()
   : total_limit_(INT64_MAX), pending_replay_mutator_size_(0),
     LOG_HANDLE_SUBMIT_TASK_SIZE(sizeof(palf::LogHandleSubmitTask)),
     LOG_IO_FLUSH_LOG_TASK_SIZE(sizeof(palf::LogIOFlushLogTask)),
-    LOG_IO_TRUNCATE_LOG_TASK_SIZE(sizeof(palf::LogIOTruncateLogTask)),
     LOG_IO_FLUSH_META_TASK_SIZE(sizeof(palf::LogIOFlushMetaTask)),
     LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE(sizeof(palf::LogIOTruncatePrefixBlocksTask)),
-    PALF_FETCH_LOG_TASK_SIZE(sizeof(palf::FetchLogTask)),
     LOG_IO_PURGE_THROTTLING_TASK_SIZE(sizeof(palf::LogIOPurgeThrottlingTask)),
     clog_blk_alloc_(),
     replay_log_task_blk_alloc_(REPLAY_MEM_LIMIT_THRESHOLD),
@@ -42,10 +42,8 @@ ObTenantMutilAllocator::ObTenantMutilAllocator()
     clog_ge_alloc_(ObMemAttr(ObModIds::OB_CLOG_GE), ObVSliceAlloc::DEFAULT_BLOCK_SIZE, clog_blk_alloc_),
     log_handle_submit_task_alloc_(LOG_HANDLE_SUBMIT_TASK_SIZE, ObMemAttr("HandleSubmit"), choose_blk_size(LOG_HANDLE_SUBMIT_TASK_SIZE), clog_blk_alloc_, this),
     log_io_flush_log_task_alloc_(LOG_IO_FLUSH_LOG_TASK_SIZE, ObMemAttr("FlushLog"), choose_blk_size(LOG_IO_FLUSH_LOG_TASK_SIZE), clog_blk_alloc_, this),
-    log_io_truncate_log_task_alloc_(LOG_IO_TRUNCATE_LOG_TASK_SIZE, ObMemAttr("TruncateLog"), choose_blk_size(LOG_IO_TRUNCATE_LOG_TASK_SIZE), clog_blk_alloc_, this),
     log_io_flush_meta_task_alloc_(LOG_IO_FLUSH_META_TASK_SIZE, ObMemAttr("FlushMeta"), choose_blk_size(LOG_IO_FLUSH_META_TASK_SIZE), clog_blk_alloc_, this),
     log_io_truncate_prefix_blocks_task_alloc_(LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE, ObMemAttr("FlushMeta"), choose_blk_size(LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE), clog_blk_alloc_, this),
-    palf_fetch_log_task_alloc_(PALF_FETCH_LOG_TASK_SIZE, ObMemAttr(ObModIds::OB_FETCH_LOG_TASK), choose_blk_size(PALF_FETCH_LOG_TASK_SIZE), clog_blk_alloc_, this),
     replay_log_task_alloc_(ObMemAttr(ObModIds::OB_LOG_REPLAY_TASK), common::OB_MALLOC_BIG_BLOCK_SIZE, replay_log_task_blk_alloc_),
     log_io_purge_throttling_task_alloc_(LOG_IO_PURGE_THROTTLING_TASK_SIZE, ObMemAttr("PurgeThrottle"), choose_blk_size(LOG_IO_PURGE_THROTTLING_TASK_SIZE), clog_blk_alloc_, this),
     clog_compression_buf_alloc_(ObMemAttr("LogComBuf"), common::OB_MALLOC_BIG_BLOCK_SIZE, clog_compressing_blk_alloc_)
@@ -74,11 +72,9 @@ void ObTenantMutilAllocator::destroy()
   clog_ge_alloc_.destroy();
   log_handle_submit_task_alloc_.destroy();
   log_io_flush_log_task_alloc_.destroy();
-  log_io_truncate_log_task_alloc_.destroy();
   log_io_flush_meta_task_alloc_.destroy();
   log_io_truncate_prefix_blocks_task_alloc_.destroy();
   log_io_purge_throttling_task_alloc_.destroy();
-  palf_fetch_log_task_alloc_.destroy();
   replay_log_task_alloc_.destroy();
   clog_compression_buf_alloc_.destroy();
 }
@@ -130,12 +126,12 @@ const ObBlockAllocMgr &ObTenantMutilAllocator::get_clog_blk_alloc_mgr() const
 }
 
 LogIOFlushLogTask *ObTenantMutilAllocator::alloc_log_io_flush_log_task(
-		const int64_t palf_id, const int64_t palf_epoch)
+		const int64_t palf_epoch)
 {
   LogIOFlushLogTask *ret_ptr = NULL;
   void *ptr = log_io_flush_log_task_alloc_.alloc();
   if (NULL != ptr) {
-    ret_ptr = new(ptr)LogIOFlushLogTask(palf_id, palf_epoch);
+    ret_ptr = new(ptr)LogIOFlushLogTask(palf_epoch);
     ATOMIC_INC(&flying_log_task_);
   }
   return ret_ptr;
@@ -151,12 +147,12 @@ void ObTenantMutilAllocator::free_log_io_flush_log_task(LogIOFlushLogTask *ptr)
 }
 
 LogHandleSubmitTask *ObTenantMutilAllocator::alloc_log_handle_submit_task(
-		const int64_t palf_id, const int64_t palf_epoch)
+		const int64_t palf_epoch)
 {
   LogHandleSubmitTask *ret_ptr = NULL;
   void *ptr = log_handle_submit_task_alloc_.alloc();
   if (NULL != ptr) {
-    ret_ptr = new(ptr)LogHandleSubmitTask(palf_id, palf_epoch);
+    ret_ptr = new(ptr)LogHandleSubmitTask(palf_epoch);
     ATOMIC_INC(&flying_log_handle_submit_task_);
   }
   return ret_ptr;
@@ -171,32 +167,13 @@ void ObTenantMutilAllocator::free_log_handle_submit_task(LogHandleSubmitTask *pt
   }
 }
 
-LogIOTruncateLogTask *ObTenantMutilAllocator::alloc_log_io_truncate_log_task(
-		const int64_t palf_id, const int64_t palf_epoch)
-{
-  LogIOTruncateLogTask *ret_ptr = NULL;
-  void *ptr = log_io_truncate_log_task_alloc_.alloc();
-  if (NULL != ptr) {
-    ret_ptr = new(ptr) LogIOTruncateLogTask(palf_id, palf_epoch);
-  }
-  return ret_ptr;
-}
-
-void ObTenantMutilAllocator::free_log_io_truncate_log_task(LogIOTruncateLogTask *ptr)
-{
-  if (OB_LIKELY(NULL != ptr)) {
-    ptr->~LogIOTruncateLogTask();
-    log_io_truncate_log_task_alloc_.free(ptr);
-  }
-}
-
 LogIOFlushMetaTask *ObTenantMutilAllocator::alloc_log_io_flush_meta_task(
-		const int64_t palf_id, const int64_t palf_epoch)
+		const int64_t palf_epoch)
 {
   LogIOFlushMetaTask *ret_ptr = NULL;
   void *ptr = log_io_flush_meta_task_alloc_.alloc();
   if (NULL != ptr) {
-    ret_ptr = new(ptr)LogIOFlushMetaTask(palf_id, palf_epoch);
+    ret_ptr = new(ptr)LogIOFlushMetaTask(palf_epoch);
     ATOMIC_INC(&flying_meta_task_);
   }
   return ret_ptr;
@@ -212,12 +189,12 @@ void ObTenantMutilAllocator::free_log_io_flush_meta_task(LogIOFlushMetaTask *ptr
 }
 
 palf::LogIOTruncatePrefixBlocksTask *ObTenantMutilAllocator::alloc_log_io_truncate_prefix_blocks_task(
-		const int64_t palf_id, const int64_t palf_epoch)
+		const int64_t palf_epoch)
 {
   LogIOTruncatePrefixBlocksTask *ret_ptr = NULL;
   void *ptr = log_io_truncate_prefix_blocks_task_alloc_.alloc();
   if (NULL != ptr) {
-    ret_ptr = new(ptr)LogIOTruncatePrefixBlocksTask(palf_id ,palf_epoch);
+    ret_ptr = new(ptr)LogIOTruncatePrefixBlocksTask(palf_epoch);
   }
   return ret_ptr;
 }
@@ -227,24 +204,6 @@ void ObTenantMutilAllocator::free_log_io_truncate_prefix_blocks_task(palf::LogIO
   if (OB_LIKELY(NULL != ptr)) {
     ptr->~LogIOTruncatePrefixBlocksTask();
     log_io_truncate_prefix_blocks_task_alloc_.free(ptr);
-  }
-}
-
-palf::FetchLogTask *ObTenantMutilAllocator::alloc_palf_fetch_log_task()
-{
-  FetchLogTask *ret_ptr = NULL;
-  void *ptr = palf_fetch_log_task_alloc_.alloc();
-  if (NULL != ptr) {
-    ret_ptr = new(ptr)FetchLogTask();
-  }
-  return ret_ptr;
-}
-
-void ObTenantMutilAllocator::free_palf_fetch_log_task(palf::FetchLogTask *ptr)
-{
-  if (OB_LIKELY(NULL != ptr)) {
-    ptr->~FetchLogTask();
-    palf_fetch_log_task_alloc_.free(ptr);
   }
 }
 
@@ -273,12 +232,12 @@ void ObTenantMutilAllocator::free_replay_log_buf(void *ptr)
   }
 }
 
-LogIOPurgeThrottlingTask *ObTenantMutilAllocator::alloc_log_io_purge_throttling_task(const int64_t palf_id, const int64_t palf_epoch)
+LogIOPurgeThrottlingTask *ObTenantMutilAllocator::alloc_log_io_purge_throttling_task(const int64_t palf_epoch)
 {
   LogIOPurgeThrottlingTask *ret_ptr = NULL;
   void *ptr = log_io_purge_throttling_task_alloc_.alloc();
   if (NULL != ptr) {
-    ret_ptr = new(ptr)LogIOPurgeThrottlingTask(palf_id, palf_epoch);
+    ret_ptr = new(ptr)LogIOPurgeThrottlingTask(palf_epoch);
   }
   return ret_ptr;
 }

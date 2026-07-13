@@ -42,7 +42,6 @@ ObTabletDDLCompleteReplayExecutor::ObTabletDDLCompleteReplayExecutor()
 int ObTabletDDLCompleteReplayExecutor::init(
     mds::BufferCtx &user_ctx,
     const share::SCN &scn,
-    const bool for_old_mds,
     const ObTabletDDLCompleteMdsUserData &user_data)
 {
   int ret = OB_SUCCESS;
@@ -56,7 +55,6 @@ int ObTabletDDLCompleteReplayExecutor::init(
     user_ctx_ = &user_ctx;
     scn_ = scn;
     is_inited_ = true;
-    for_old_mds_ = for_old_mds;
     user_data_ = &user_data;
   }
   return ret;
@@ -79,7 +77,7 @@ int ObTabletDDLCompleteReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(replay_to_mds_table_(tablet_handle, *user_data_, user_ctx, scn_, for_old_mds_))) {
+  } else if (OB_FAIL(replay_to_mds_table_(tablet_handle, *user_data_, user_ctx, scn_))) {
     LOG_WARN("failed to replay to tablet", K(ret));
   } else if (user_data_->has_complete_) {
     /* use tmp ret to avoid pending replay */
@@ -110,9 +108,7 @@ int ObTabletDDLCompleteReplayExecutor::freeze_ddl_kv(ObTablet &tablet, const ObT
 int ObTabletDDLCompleteReplayExecutor::update_tablet_table_store(ObTablet &tablet, const ObTabletDDLCompleteMdsUserData &user_data)
 {
   int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
-  ObLSHandle ls_handle;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLS *tenant_ls = nullptr;
   ObTabletHandle new_tablet_handle;
 
   const ObSSTable *first_major_sstable = nullptr;
@@ -125,21 +121,14 @@ int ObTabletDDLCompleteReplayExecutor::update_tablet_table_store(ObTablet &table
   } else if (nullptr != first_major_sstable) {
     /* do nothing */
     LOG_INFO("first major sstable exist, do nothing", K(ret), K(user_data));
-  } else if (OB_ISNULL(ls_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls_service is null", K(ret));
-  } else if (OB_FAIL(ls_service->get_ls(tablet.get_ls_id(), ls_handle, ObLSGetMod::MDS_TABLE_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
     LOG_WARN("failed to get ls", K(ret), K(user_data));
-  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls is null", K(ret));
   } else {
     ObUpdateTableStoreParam param(user_data.snapshot_version_,
                                     ObVersionRange::MIN_VERSION, // multi_version_start
-                                    &user_data.storage_schema_,
-                                    ls_handle.get_ls()->get_rebuild_seq());
+                                    &user_data.storage_schema_);
     param.ddl_info_.keep_old_ddl_sstable_ = true;
-    if (OB_FAIL(ls_handle.get_ls()->update_tablet_table_store(user_data.table_key_.tablet_id_, param, new_tablet_handle))) {
+    if (OB_FAIL(tenant_ls->update_tablet_table_store(user_data.table_key_.tablet_id_, param, new_tablet_handle))) {
       LOG_WARN("failed to update table store", K(ret));
     }
   }

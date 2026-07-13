@@ -160,9 +160,6 @@ public:
   virtual int get_next_rows(const int64_t capacity, int64_t &count) override;
   virtual int inner_get_next_rows(const int64_t capacity, int64_t &count);
   virtual int process();
-  virtual void set_ls_related_tablet_id(const share::ObLSID &ls_id, const ObDASRelatedTabletID &related_tablet_ids)
-  {}
-
 protected:
   // for pre-filter
   common::hash::ObHashSet<ObDocIdExt> valid_docid_set_;

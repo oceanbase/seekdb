@@ -29,7 +29,6 @@ using namespace oceanbase::logservice;
 
 ObAllVirtualUnit::ObAllVirtualUnit()
     : ObVirtualTableScannerIterator(),
-      addr_(),
       tenant_meta_(),
       has_row_(false),
       consumed_(false)
@@ -43,21 +42,19 @@ ObAllVirtualUnit::~ObAllVirtualUnit()
 
 void ObAllVirtualUnit::reset()
 {
-  addr_.reset();
   tenant_meta_ = omt::ObTenantMeta();
   has_row_ = false;
   consumed_ = false;
   ObVirtualTableScannerIterator::reset();
 }
 
-int ObAllVirtualUnit::init(common::ObAddr &addr)
+int ObAllVirtualUnit::init()
 {
   int ret = OB_SUCCESS;
   if (start_to_read_) {
     ret = OB_INIT_TWICE;
     SERVER_LOG(WARN, "cannot init twice", K(ret));
   } else {
-    addr_ = addr;
     start_to_read_ = true;
   }
   return ret;
@@ -208,4 +205,3 @@ int ObAllVirtualUnit::get_clog_disk_used_size_(int64_t &log_used_size)
   // return OB_SUCCESS whatever.
   return OB_SUCCESS;
 }
-

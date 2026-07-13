@@ -918,12 +918,10 @@ class ObVecIdxSnapshotDataWriteCtx final
 {
 public:
   ObVecIdxSnapshotDataWriteCtx()
-    : ls_id_(), data_tablet_id_(), lob_meta_tablet_id_(), lob_piece_tablet_id_(),
+    : data_tablet_id_(), lob_meta_tablet_id_(), lob_piece_tablet_id_(),
       vals_()
   {}
   ~ObVecIdxSnapshotDataWriteCtx() {}
-  ObLSID& get_ls_id() { return ls_id_; }
-  const ObLSID& get_ls_id() const { return ls_id_; }
   ObTabletID& get_data_tablet_id() { return data_tablet_id_; }
   const ObTabletID& get_data_tablet_id() const { return data_tablet_id_; }
   ObTabletID& get_lob_meta_tablet_id() { return lob_meta_tablet_id_; }
@@ -932,9 +930,8 @@ public:
   const ObTabletID& get_lob_piece_tablet_id() const { return lob_piece_tablet_id_; }
   ObIArray<ObString>& get_vals() { return vals_; }
   void reset();
-  TO_STRING_KV(K(ls_id_), K(data_tablet_id_), K(lob_meta_tablet_id_), K(lob_piece_tablet_id_), K(vals_));
+  TO_STRING_KV(K(data_tablet_id_), K(lob_meta_tablet_id_), K(lob_piece_tablet_id_), K(vals_));
 public:
-  ObLSID ls_id_;
   ObTabletID data_tablet_id_;
   ObTabletID lob_meta_tablet_id_;
   ObTabletID lob_piece_tablet_id_;

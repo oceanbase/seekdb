@@ -24,7 +24,6 @@
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "rootserver/ob_root_service.h"
 #include "observer/ob_service.h"
-#include "src/storage/tx_storage/ob_ls_map.h"
 #include "share/ob_tablet_reorganize_history_table_operator.h"
 
 using namespace oceanbase::rootserver;
@@ -629,32 +628,21 @@ int ObPartitionSplitTask::check_freeze_progress(
   int ret = OB_SUCCESS;
   is_end = false;
   int64_t num_tablet_finished = 0;
-  ObLocationService *location_service = nullptr;
   ObArray<ObTabletID> request_tablet_ids;
-  const int64_t rpc_timeout = max(GCONF.rpc_timeout, static_cast<int64_t>(1000L * 1000L * 9L));
   for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
     const ObTabletID &tablet_id = tablet_ids.at(i);
-    share::ObLSID ls_id;
-    ObAddr leader_addr;
-    if (OB_ISNULL(location_service = GCTX.location_service_)) {
-      ret = OB_ERR_SYS;
-      LOG_WARN("location_cache is null", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(location_service, tablet_id, rpc_timeout, ls_id, leader_addr))) {
-      LOG_WARN("get tablet leader addr failed", K(ret));
-    } else {
+    {
       ObCheckProgressStatus freeze_status;
       if (OB_FAIL(freeze_progress_map_.get_refactored(
               tablet_id, freeze_status))) {
-        LOG_WARN("failed to get addr freeze status", K(ret), K(leader_addr));
+        LOG_WARN("failed to get freeze status", K(ret), K(tablet_id));
       } else if (freeze_status == ObCheckProgressStatus::NOT_STARTED ||
           freeze_status == ObCheckProgressStatus::ONGOING) {
         // Direct call (seekdb: all tablets are local).
-        UNUSED(leader_addr);
         obcall::ObCheckMemtableCntArg arg;
         obcall::ObCheckMemtableCntResult cur_result;
         
         
-        arg.ls_id_ = ls_id;
         arg.tablet_id_ = tablet_id;
         int call_ret = GCTX.ob_service_->check_memtable_cnt(arg, cur_result);
         UNUSED(call_ret);
@@ -662,7 +650,7 @@ int ObPartitionSplitTask::check_freeze_progress(
           TCWLockGuard guard(lock_);
           if (OB_FAIL(freeze_progress_map_.set_refactored(tablet_id,
                   ObCheckProgressStatus::ONGOING, true/*overwrite*/))) {
-            LOG_WARN("failed to update addr freeze status", K(ret), K(leader_addr));
+            LOG_WARN("failed to update freeze status", K(ret), K(tablet_id));
           } else if (OB_FAIL(request_tablet_ids.push_back(tablet_id))) {
             LOG_WARN("failed to push back tablet id", K(ret));
           } else if (cur_result.memtable_cnt_ == 0) {
@@ -689,9 +677,7 @@ int ObPartitionSplitTask::wait_compaction_end(
   int ret = OB_SUCCESS;
   int64_t num_tablet_finished = 0;
   // TODO hanxuan grab mem lock
-  ObLSID ls_id;
-  ObAddr unused_addr;
-  ObArray<ObAddr> split_replica_addrs;
+  ObAddr split_replica_addr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -705,18 +691,11 @@ int ObPartitionSplitTask::wait_compaction_end(
   } else if (OB_FAIL(init_compaction_scn_map())) {
     LOG_WARN("failed to setup compaction scn map", K(ret));
   } else { // check tablet compaction progress
-    const ObTabletID &any_tablet_id = all_src_tablet_ids_.at(0);
-    const int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
-    if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(
-          GCTX.location_service_, any_tablet_id, rpc_timeout, ls_id, unused_addr))) {
-      LOG_WARN("get ls id failed", K(ret), K(any_tablet_id));
-    } else if (OB_FAIL(ObDDLUtil::get_split_replicas_addrs(ls_id, split_replica_addrs))) {
-      LOG_WARN("get split replica addrs failed", K(ret), K(ls_id));
-    } 
+    split_replica_addr = GCTX.self_addr();
     for (int64_t i = 0; OB_SUCC(ret) && i < all_src_tablet_ids_.count(); ++i) {
       const ObTabletID &tablet_id = all_src_tablet_ids_.at(i);
       bool current_tablet_finished = false;
-      if (OB_FAIL(check_compaction_progress(ls_id, tablet_id, split_replica_addrs, current_tablet_finished))) {
+      if (OB_FAIL(check_compaction_progress(tablet_id, split_replica_addr, current_tablet_finished))) {
         LOG_WARN("failed to check compaction progress", K(ret));
       } else if (current_tablet_finished) {
         ++num_tablet_finished;
@@ -733,20 +712,7 @@ int ObPartitionSplitTask::wait_compaction_end(
   if (OB_FAIL(ret)) {
   } else if (num_tablet_finished == all_src_tablet_ids_.count()) {
     DEBUG_SYNC(PARTITION_SPLIT_WAIT_COMPACTION_END);
-    ObArray<ObAddr> double_check_replica_addrs;
-    ObArray<ObAddr> different_replica_addrs;
-    // double check.
-    if (OB_FAIL(ObDDLUtil::get_split_replicas_addrs(ls_id, double_check_replica_addrs))) {
-      LOG_WARN("get split replica addrs failed", K(ret), K(ls_id));
-    } else if (double_check_replica_addrs.count() != split_replica_addrs.count()) {
-      ret = OB_EAGAIN;
-      LOG_INFO("need retry when double check failed", K(ret), K(split_replica_addrs), K(double_check_replica_addrs));
-    } else if OB_FAIL(get_difference(split_replica_addrs, double_check_replica_addrs, different_replica_addrs)) {
-      LOG_WARN("get difference failed", K(ret));
-    } else if (!different_replica_addrs.empty()) {
-      ret = OB_EAGAIN;
-      LOG_INFO("different replica addrs occur, need retry", K(ret), K(split_replica_addrs), K(double_check_replica_addrs));
-    } else if (OB_FAIL(serialize_compaction_scn_to_task_record())) {
+    if (OB_FAIL(serialize_compaction_scn_to_task_record())) {
       LOG_WARN("failed to serialize compaction scn to ddl task record", K(ret));
     } else if (OB_FAIL(switch_status(next_task_status, true, ret))) {
       LOG_WARN("failed to switch task status", K(ret));
@@ -757,86 +723,78 @@ int ObPartitionSplitTask::wait_compaction_end(
 }
 
 int ObPartitionSplitTask::check_compaction_progress(
-    const ObLSID &ls_id,
     const ObTabletID &tablet_id,
-    const ObIArray<ObAddr> &split_replica_addrs,
+    const ObAddr &split_replica_addr,
     bool& is_end)
 {
   int ret = OB_SUCCESS;
   is_end = false;
-  const int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
-  if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid() || split_replica_addrs.empty())) {
+  if (OB_UNLIKELY(!tablet_id.is_valid() || !split_replica_addr.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(ls_id), K(tablet_id), K(split_replica_addrs));
+    LOG_WARN("invalid arg", K(ret), K(tablet_id), K(split_replica_addr));
   } else if (OB_UNLIKELY(all_src_tablet_ids_.empty())) {
     ret = OB_ERR_SYS;
     LOG_WARN("unexpected null tablet ids", K(ret), KPC(this));
   } else if (!compaction_progress_map_.created() && OB_FAIL(compaction_progress_map_.create(all_src_tablet_ids_.count(), lib::ObLabel("DDLWaitCompact")))) {
     LOG_ERROR("failed to create compaction progress map", K(ret));
   } else {
-    int64_t compaction_end_number = 0;
-    for (int64_t i = 0; OB_SUCC(ret) && i < split_replica_addrs.count(); i++) {
-      ObCheckProgressStatus compaction_status;
-      const common::ObAddr &replica_addr = split_replica_addrs.at(i);
-      const ObCheckProgressKey<common::ObAddr> check_progress_key(replica_addr, tablet_id);
-      if (OB_FAIL(compaction_progress_map_.get_refactored(check_progress_key, compaction_status))) {
-        if (OB_HASH_NOT_EXIST == ret) {
-          // override ret.
-          TCWLockGuard guard(lock_);
-          if (OB_FAIL(compaction_progress_map_.set_refactored(check_progress_key, ObCheckProgressStatus::NOT_STARTED))) {
-            LOG_WARN("failed to set compaction progress", K(ret));
-          } else {
-            compaction_status = ObCheckProgressStatus::NOT_STARTED;
-          }
+    ObCheckProgressStatus compaction_status;
+    const ObCheckProgressKey<common::ObAddr> check_progress_key(split_replica_addr, tablet_id);
+    if (OB_FAIL(compaction_progress_map_.get_refactored(check_progress_key, compaction_status))) {
+      if (OB_HASH_NOT_EXIST == ret) {
+        ret = OB_SUCCESS;
+        TCWLockGuard guard(lock_);
+        if (OB_FAIL(compaction_progress_map_.set_refactored(check_progress_key, ObCheckProgressStatus::NOT_STARTED))) {
+          LOG_WARN("failed to set compaction progress", K(ret));
         } else {
-          LOG_WARN("failed to get from map", K(ret));
-        }
-      }
-
-      if (OB_FAIL(ret)) {
-      } else if (ObCheckProgressStatus::DONE != compaction_status) {
-        // check compaction status
-        obcall::ObCheckMediumCompactionInfoListArg arg;
-        
-        arg.ls_id_ = ls_id;
-        arg.tablet_id_ = tablet_id;
-        // Direct call (seekdb: all replicas are local).
-        UNUSED(replica_addr);
-        obcall::ObCheckMediumCompactionInfoListResult result;
-        int call_ret = GCTX.ob_service_->check_medium_compaction_info_list_cnt(arg, result);
-        if (OB_FAIL(call_ret)) {
-          LOG_WARN("check medium compaction failed", K(call_ret), K(arg));
-        } else {
-          TCWLockGuard guard(lock_);
-          if (result.info_list_cnt_ > 0) {
-            if (OB_FAIL(compaction_progress_map_.set_refactored(check_progress_key, ObCheckProgressStatus::ONGOING, true/*overwrite*/))) {
-              LOG_WARN("failed to update compaction progress", K(ret), K(replica_addr));
-            }
-          } else if (result.info_list_cnt_ == 0) {
-            int64_t existed_compaction_scn;
-            if (OB_FAIL(tablet_compaction_scn_map_.get_refactored(tablet_id, existed_compaction_scn))) {
-              if (OB_HASH_NOT_EXIST == ret) {
-                if (OB_FAIL(tablet_compaction_scn_map_.set_refactored(tablet_id, result.primary_compaction_scn_))) {
-                  LOG_WARN("failed to set tablet primary compaction scn", K(ret), K(tablet_id));
-                }
-              } else {
-                LOG_WARN("get compaction scn from map failed", K(ret), K(tablet_id));
-              }
-            } else if (OB_UNLIKELY(existed_compaction_scn != result.primary_compaction_scn_)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unequal compaction scn between replicas", K(ret), K(tablet_id), K(replica_addr), K(existed_compaction_scn), K(result.primary_compaction_scn_));
-            } else if (OB_FAIL(compaction_progress_map_.set_refactored(check_progress_key, ObCheckProgressStatus::DONE, true/*overwrite*/))) {
-              LOG_WARN("failed to update compaction progress", K(ret), K(replica_addr));
-            } else {
-              compaction_end_number++;
-            }
-          }
+          compaction_status = ObCheckProgressStatus::NOT_STARTED;
         }
       } else {
-        compaction_end_number++; // compact done.
+        LOG_WARN("failed to get from map", K(ret));
       }
     }
-    is_end = OB_SUCC(ret) && (compaction_end_number == split_replica_addrs.count()) ? true : false;
+
+    if (OB_FAIL(ret)) {
+    } else if (ObCheckProgressStatus::DONE != compaction_status) {
+      obcall::ObCheckMediumCompactionInfoListArg arg;
+      arg.tablet_id_ = tablet_id;
+      obcall::ObCheckMediumCompactionInfoListResult result;
+      int call_ret = GCTX.ob_service_->check_medium_compaction_info_list_cnt(arg, result);
+      if (OB_FAIL(call_ret)) {
+        LOG_WARN("check medium compaction failed", K(call_ret), K(arg));
+      } else {
+        TCWLockGuard guard(lock_);
+        if (result.info_list_cnt_ > 0) {
+          if (OB_FAIL(compaction_progress_map_.set_refactored(
+              check_progress_key, ObCheckProgressStatus::ONGOING, true/*overwrite*/))) {
+            LOG_WARN("failed to update compaction progress", K(ret), K(split_replica_addr));
+          }
+        } else if (result.info_list_cnt_ == 0) {
+          int64_t existed_compaction_scn;
+          if (OB_FAIL(tablet_compaction_scn_map_.get_refactored(tablet_id, existed_compaction_scn))) {
+            if (OB_HASH_NOT_EXIST == ret) {
+              ret = OB_SUCCESS;
+              if (OB_FAIL(tablet_compaction_scn_map_.set_refactored(tablet_id, result.primary_compaction_scn_))) {
+                LOG_WARN("failed to set tablet primary compaction scn", K(ret), K(tablet_id));
+              }
+            } else {
+              LOG_WARN("get compaction scn from map failed", K(ret), K(tablet_id));
+            }
+          } else if (OB_UNLIKELY(existed_compaction_scn != result.primary_compaction_scn_)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("unexpected compaction scn change", K(ret), K(tablet_id),
+                K(split_replica_addr), K(existed_compaction_scn), K(result.primary_compaction_scn_));
+          } else if (OB_FAIL(compaction_progress_map_.set_refactored(
+              check_progress_key, ObCheckProgressStatus::DONE, true/*overwrite*/))) {
+            LOG_WARN("failed to update compaction progress", K(ret), K(split_replica_addr));
+          } else {
+            is_end = true;
+          }
+        }
+      }
+    } else {
+      is_end = true;
+    }
   }
   return ret;
 }
@@ -1368,19 +1326,12 @@ int ObPartitionSplitTask::setup_split_finish_items(
   int ret = OB_SUCCESS;
   leader_addr.reset();
   split_info_array.reset();
-  ObLSID ls_id;
   ObArray<obcall::ObTabletSplitArg> tmp_split_info_array;
-  ObLocationService *location_service = nullptr;
-  const int64_t rpc_timeout = max(GCONF.rpc_timeout, static_cast<int64_t>(1000L * 1000L * 9L));
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(location_service = GCTX.location_service_)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("location_cache is null", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(location_service, partition_split_arg_.src_tablet_id_, rpc_timeout, ls_id, leader_addr))) {
-    LOG_WARN("get tablet leader addr failed", K(ret), "tablet_id", partition_split_arg_.src_tablet_id_);
-  } else if (OB_FAIL(prepare_tablet_split_infos(ls_id, leader_addr, tmp_split_info_array))) {
+  } else if (FALSE_IT(leader_addr = GCTX.self_addr())) {
+  } else if (OB_FAIL(prepare_tablet_split_infos(tmp_split_info_array))) {
     LOG_WARN("prepare tablet split infos failed", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tmp_split_info_array.count(); ++i) {
@@ -2496,9 +2447,6 @@ int ObPartitionSplitTask::prepare_tablet_split_ranges(
 {
   int ret = OB_SUCCESS;
   parallel_datum_rowkey_list.reset();
-  ObLSID ls_id;
-  ObAddr leader_addr;
-  const int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
   const int64_t source_index_tablets_cnt = partition_split_arg_.src_local_index_tablet_ids_.count();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -2518,8 +2466,6 @@ int ObPartitionSplitTask::prepare_tablet_split_ranges(
     LOG_WARN("unexpected err, empty parallel rowkey list under a mismatched status", K(ret), K(task_status_));
   } else if (OB_FAIL(index_tablet_parallel_rowkey_list_.prepare_allocate(source_index_tablets_cnt))) {
     LOG_WARN("prepare alloc failed", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(GCTX.location_service_, partition_split_arg_.src_tablet_id_, rpc_timeout, ls_id, leader_addr))) {
-    LOG_WARN("failed to get orig leader addr", K(ret), "tablet_id", partition_split_arg_.src_tablet_id_);
   } else {
     for (int64_t tablet_idx = 0; OB_SUCC(ret) && tablet_idx < 1 /*data_tablet*/ + source_index_tablets_cnt; tablet_idx++) {
       const ObTabletID &src_tablet_id = tablet_idx == 0 ? partition_split_arg_.src_tablet_id_ : partition_split_arg_.src_local_index_tablet_ids_.at(tablet_idx - 1);
@@ -2527,7 +2473,6 @@ int ObPartitionSplitTask::prepare_tablet_split_ranges(
             data_tablet_parallel_rowkey_list_ : index_tablet_parallel_rowkey_list_.at(tablet_idx - 1);
       obcall::ObPrepareSplitRangesArg arg;
       obcall::ObPrepareSplitRangesRes result;
-      arg.ls_id_              = ls_id;
       arg.tablet_id_          = src_tablet_id;
       arg.user_parallelism_   = parallelism_; // parallelism_;
       arg.schema_tablet_size_ = std::max(tablet_size_, static_cast<int64_t>(128 * 1024 * 1024L)/*128MB*/);
@@ -2583,8 +2528,6 @@ int ObPartitionSplitTask::prepare_tablet_split_ranges(
 }
 
 int ObPartitionSplitTask::prepare_tablet_split_infos(
-    const share::ObLSID &ls_id,
-    const ObAddr &leader_addr, 
     ObIArray<ObTabletSplitArg> &split_info_array)
 {
   int ret = OB_SUCCESS;
@@ -2594,7 +2537,6 @@ int ObPartitionSplitTask::prepare_tablet_split_infos(
   ObSArray<bool> can_reuse_macro_blocks;
   ObSchemaGetterGuard schema_guard;
   ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
-  const int64_t rpc_timeout = max(GCONF.rpc_timeout, static_cast<int64_t>(1000L * 1000L * 9L));
   if (all_src_tablet_ids_.empty() && OB_FAIL(setup_src_tablet_ids_array())) {
     LOG_WARN("failed to setup all src tablet ids", K(ret));
   } else if (OB_FAIL(setup_lob_idxs_arr(lob_col_idxs))) {
@@ -2622,7 +2564,6 @@ int ObPartitionSplitTask::prepare_tablet_split_infos(
       LOG_WARN("failed to get compaction scn for tablet", K(ret), K(tablet_id));
     } else {
       ObTabletSplitArg split_info;
-      split_info.ls_id_               = ls_id;
       split_info.table_id_            = i < lob_tablet_start_idx ? table_ids.at(i) : object_id_;
       split_info.lob_table_id_        = i < lob_tablet_start_idx ? OB_INVALID_ID : table_ids.at(i);
       split_info.schema_version_      = schema_version_;

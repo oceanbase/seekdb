@@ -24,9 +24,10 @@
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "storage/allocator/ob_tenant_vector_allocator.h"
+#include "storage/tx/ob_ts_mgr.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_getter_guard.h"
-#include "share/tablet/ob_tablet_to_ls_operator.h"
+#include "share/tablet/ob_tablet_mapping_operator.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_share_util.h"
 #include "common/ob_timeout_ctx.h"
@@ -37,8 +38,7 @@ namespace share
 {
 
 ObVectorIndexInfo::ObVectorIndexInfo()
-  : ls_id_(share::ObLSID::INVALID_LS_ID),
-    rowkey_vid_table_id_(common::OB_INVALID_ID),
+  : rowkey_vid_table_id_(common::OB_INVALID_ID),
     vid_rowkey_table_id_(common::OB_INVALID_ID),
     inc_index_table_id_(common::OB_INVALID_ID),
     vbitmap_table_id_(common::OB_INVALID_ID),
@@ -59,7 +59,6 @@ ObVectorIndexInfo::ObVectorIndexInfo()
 
 void ObVectorIndexInfo::reset()
 {
-  ls_id_ = share::ObLSID::INVALID_LS_ID;
   rowkey_vid_table_id_ = common::OB_INVALID_ID;
   vid_rowkey_table_id_ = common::OB_INVALID_ID;
   inc_index_table_id_ = common::OB_INVALID_ID;
@@ -1131,7 +1130,7 @@ int ObPluginVectorIndexAdaptor::get_current_scn(share::SCN &current_scn)
   if (OB_ISNULL(txs)) {
     ret = OB_ERR_SYS;
     LOG_WARN("trans service is null", KR(ret));
-  } else if (OB_FAIL(txs->get_ts_mgr()->get_gts(stc, NULL, current_scn, rts))) {
+  } else if (OB_FAIL(txs->get_ts_mgr()->get_gts(stc, current_scn, rts))) {
     LOG_WARN("get scn from cache.", KR(ret));
   }
   return ret;
@@ -2533,8 +2532,7 @@ int ObPluginVectorIndexAdaptor::complete_delta_buffer_table_data(ObVectorQueryAd
 int ObPluginVectorIndexAdaptor::check_index_id_table_readnext_status(ObVectorQueryAdaptorResultContext *ctx,
                                                                      common::ObNewRowIterator *row_iter,
                                                                      SCN query_scn,
-                                                                     bool is_async_mode,
-                                                                     ObLSID ls_id)
+                                                                     bool is_async_mode)
 {
   LOG_INFO("check_index_id_table_readnext_status");
   INIT_SUCC(ret);
@@ -2563,7 +2561,7 @@ int ObPluginVectorIndexAdaptor::check_index_id_table_readnext_status(ObVectorQue
     }
   } else if (is_async_mode) {
     // Async mode: branch early, no read_scn parsing at all
-    ret = check_index_id_table_readnext_status_async(ctx, row_iter, query_scn, ls_id);
+    ret = check_index_id_table_readnext_status_async(ctx, row_iter, query_scn);
   } else if (OB_FAIL(table_scan_iter->get_next_row(datum_row))) {
     if (ret == OB_ITER_END) {
       ret = OB_SUCCESS;
@@ -2618,8 +2616,7 @@ int ObPluginVectorIndexAdaptor::check_index_id_table_readnext_status(ObVectorQue
 int ObPluginVectorIndexAdaptor::check_index_id_table_readnext_status_async(
     ObVectorQueryAdaptorResultContext *ctx,
     common::ObNewRowIterator *row_iter,
-    SCN query_scn,
-    ObLSID ls_id)
+    SCN query_scn)
 {
   // Async mode: no read_scn parsing. Use complete_index_mem_data_incremental for both
   // full/incremental (no check_if_complete_index, no complete_index_mem_data)
@@ -2638,7 +2635,7 @@ int ObPluginVectorIndexAdaptor::check_index_id_table_readnext_status_async(
         OB_FAIL(ctx->init_bitmaps())) {
       LOG_WARN("failed to init ctx bitmaps.", K(ret));
     } else {
-      ret = complete_index_mem_data_incremental(ctx, ls_id, query_scn, i_vids);
+      ret = complete_index_mem_data_incremental(ctx, query_scn, i_vids);
       if (OB_FAIL(ret)) {
         LOG_WARN("failed to complete index mem data incrementally", K(ret), K(vbitmap_data_->scn_));
       } else {
@@ -2968,7 +2965,6 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data(SCN read_scn,
 }
 
 int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQueryAdaptorResultContext *ctx,
-                                                                   ObLSID ls_id,
                                                                    SCN query_scn,
                                                                    ObArray<uint64_t> &i_vids)
 {
@@ -3002,20 +2998,20 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
       ret = common::OB_ERR_UNEXPECTED;
       LOG_WARN("sql_proxy is null", K(ret));
     } else {
-      // Query __all_tablet_to_ls to get table_id by tablet_id
+      // Query legacy tablet mapping to get table_id by tablet_id.
       common::ObSEArray<common::ObTabletID, 1> tablet_ids;
-      common::ObSEArray<::oceanbase::share::ObTabletToLSInfo, 1> tablet_infos;
+      common::ObSEArray<::oceanbase::share::ObTabletTablePair, 1> tablet_infos;
       if (OB_FAIL(tablet_ids.push_back(vbitmap_tablet_id_))) {
         LOG_WARN("fail to push back tablet_id", K(ret), K(vbitmap_tablet_id_));
-      } else if (OB_FAIL(::oceanbase::share::ObTabletToLSTableOperator::batch_get(
+      } else if (OB_FAIL(::oceanbase::share::ObTabletMappingTableOperator::batch_get(
                      *GCTX.sql_proxy_, tablet_ids, tablet_infos))) {
         if (common::OB_ITEM_NOT_MATCH == ret) {
-          // Tablet not in __all_tablet_to_ls yet (table just created), retry later
+          // Tablet mapping is not visible yet (table just created), retry later.
           ret = common::OB_EAGAIN;
-          LOG_WARN("vbitmap tablet not found in __all_tablet_to_ls, may need retry",
+          LOG_WARN("vbitmap tablet mapping not found, may need retry",
                    K(ret), K(vbitmap_tablet_id_));
         } else {
-          LOG_WARN("fail to get tablet info from __all_tablet_to_ls", K(ret), K(vbitmap_tablet_id_));
+          LOG_WARN("fail to get tablet mapping", K(ret), K(vbitmap_tablet_id_));
         }
       } else if (tablet_infos.count() != 1) {
         ret = common::OB_ERR_UNEXPECTED;
@@ -3085,8 +3081,7 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
       storage::ObTableScanParam scan_param;
       schema::ObTableParam table_param(tmp_allocator);
       // Read index_id_table using copied base_scn (thread-safe)
-      if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id,
-                                                              this,
+      if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(this,
                                                               query_scn,
                                                               INDEX_TYPE_VEC_INDEX_ID_LOCAL,
                                                               tmp_allocator,
@@ -3098,7 +3093,7 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
                                                               false,
                                                               false,
                                                               &base_scn))) {
-        LOG_WARN("failed to read index_id table incrementally", K(ret), K(ls_id), K(base_scn));
+        LOG_WARN("failed to read index_id table incrementally", K(ret), K(base_scn));
       } else {
         ObTableScanIterator *table_scan_iter = static_cast<ObTableScanIterator *>(incr_iter);
         while (OB_SUCC(ret)) {
@@ -3187,8 +3182,7 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
 // ---------------------------------------------------------------------------
 // refresh_bitmap_background(): background bitmap refresh that mirrors the
 // query-time path (complete_index_mem_data_incremental) without a live query
-// context.  Uses SYS_LS, which is consistent with write_to_vsag_() in the
-// change_stream plugin.  The result bitmaps written into the synthetic ctx
+// context. The result bitmaps written into the synthetic ctx
 // are discarded; the valuable side-effect is the update to vbitmap_data_.
 // ---------------------------------------------------------------------------
 int ObPluginVectorIndexAdaptor::refresh_bitmap_background()
@@ -3210,7 +3204,7 @@ int ObPluginVectorIndexAdaptor::refresh_bitmap_background()
     LOG_WARN("fail to get read snapshot version", KR(ret));
   } else if (OB_FAIL(ctx.init_bitmaps())) {
     LOG_WARN("failed to init bitmaps for background bitmap refresh", K(ret));
-  } else if (OB_FAIL(complete_index_mem_data_incremental(&ctx, share::SYS_LS, snapshot_scn, i_vids))) {
+  } else if (OB_FAIL(complete_index_mem_data_incremental(&ctx, snapshot_scn, i_vids))) {
     LOG_WARN("background bitmap refresh failed", K(ret), K(vbitmap_tablet_id_));
   } else {
     FLOG_INFO("refresh_bitmap_background", K(snapshot_scn), K(i_vids.count()));
@@ -4248,8 +4242,7 @@ int ObPluginVectorIndexAdaptor::query_next_result(ObVectorQueryAdaptorResultCont
   return ret;
 }
 
-int ObPluginVectorIndexAdaptor::query_result(ObLSID &ls_id,
-                                             ObVectorQueryAdaptorResultContext *ctx,
+int ObPluginVectorIndexAdaptor::query_result(ObVectorQueryAdaptorResultContext *ctx,
                                              ObVectorQueryConditions *query_cond,
                                              ObVectorQueryVidIterator *&vids_iter)
 {
@@ -4314,7 +4307,7 @@ int ObPluginVectorIndexAdaptor::query_result(ObLSID &ls_id,
         if (get_create_type() == CreateTypeComplete) {
           ctx->status_ = PVQ_REFRESH;
           LOG_INFO("query result need refresh adapter, ls leader",
-              K(ret), K(ls_id), K(ctx->get_ls_leader()), K(snapshot_tablet_id_), K(get_snapshot_key_prefix()), K(row->storage_datums_[0].get_string()));
+              K(ret), K(ctx->get_ls_leader()), K(snapshot_tablet_id_), K(get_snapshot_key_prefix()), K(row->storage_datums_[0].get_string()));
         } else if (OB_FAIL(deserialize_snap_data(query_cond, row))) {
           if (ret == OB_ERR_VSAG_RETURN_ERROR) {
             // snapshot data may be transiently incomplete under concurrent DDL/DML;
@@ -4322,7 +4315,7 @@ int ObPluginVectorIndexAdaptor::query_result(ObLSID &ls_id,
             ctx->status_ = PVQ_REFRESH;
             ret = OB_SUCCESS;
             LOG_INFO("deserialize snap data got vsag transient error, mark refresh",
-                K(ls_id), K(snapshot_tablet_id_), K(get_snapshot_key_prefix()),
+                K(snapshot_tablet_id_), K(get_snapshot_key_prefix()),
                 K(row->storage_datums_[0].get_string()));
           } else {
             LOG_WARN("failed to deserialize snap data", K(ret));

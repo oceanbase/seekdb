@@ -16,9 +16,7 @@
 
 #ifndef OCEANBASE_LOGSERVICE_PALF_HANDLE_
 #define OCEANBASE_LOGSERVICE_PALF_HANDLE_
-#include "common/ob_member_list.h"
 #include "common/ob_role.h"
-#include "election_self.h"
 #include "lsn.h"
 #include "palf_handle_impl.h"
 #include "palf_handle_impl_guard.h"
@@ -33,8 +31,6 @@ namespace palf
 {
 class PalfAppendOptions;
 class PalfFSCb;
-class PalfRoleChangeCb;
-class PalfLocationCacheCb;
 class PalfHandle
 {
 public:
@@ -53,22 +49,7 @@ public:
   // @brief move-assignment operator
   PalfHandle& operator=(PalfHandle &&rhs);
   bool operator==(const PalfHandle &rhs) const;
-  // After successfully creating the log stream, set the initial member list information, only allowed to execute once
-  //
-  // @param [in] member_list, member list of the log stream
-  // @param [in] paxos_replica_num, the number of replicas in the log stream paxos member group
-  //
-  // @return :TODO
-  // @brief set the initial member list of paxos group after creating
-  // palf successfully, it can only be called once
-  // @param[in] ObMemberList, the initial member list, do not include arbitration replica
-  // @param[in] int64_t, the paxos relica num
-  // @retval
-  //    return OB_SUCCESS if success
-  //    else return other errno
-  int set_initial_member_list(const common::ObMemberList &member_list,
-                              const int64_t paxos_replica_num,
-                              const common::GlobalLearnerList &learner_list);
+  int bootstrap();
   //================ File access related interfaces =======================
   int append(const PalfAppendOptions &opts,
              const void *buffer,
@@ -76,11 +57,6 @@ public:
              const share::SCN &ref_scn,
              LSN &lsn,
              share::SCN &scn);
-
-  int raw_write(const PalfAppendOptions &opts,
-                const LSN &lsn,
-                const void *buffer,
-                const int64_t nbytes);
 
   // @brief: read up to 'nbytes' from palf at offset of 'lsn' into the 'read_buf', and 
   //         there are alignment restrictions on the length and address of user-space buffers
@@ -165,15 +141,8 @@ public:
   // - OB_ERR_OUT_OF_LOWER_BOUND: lsn is too small, log files may have been recycled
   // - others: bug
   int locate_by_lsn_coarsely(const LSN &lsn, share::SCN &result_scn);
-  // Enable log synchronization
-  int enable_sync();
-  // Close log synchronization
-  int disable_sync();
-  bool is_sync_enabled() const;
   // Advance the file's recyclable point
   int advance_base_lsn(const LSN &lsn);
-  // Migration/rebuild scenario advances base_lsn
-  int advance_base_info(const palf::PalfBaseInfo &palf_base_info, const bool is_rebuild);
   // Return the position information of the earliest readable log in the file
   int get_begin_lsn(LSN &lsn) const;
   int get_begin_scn(share::SCN &scn) const;
@@ -192,247 +161,18 @@ public:
   int get_end_scn(share::SCN &scn) const;
   int get_max_lsn(LSN &lsn) const;
   int get_max_scn(share::SCN &scn) const;
-  int get_last_rebuild_lsn(LSN &last_rebuild_lsn) const;
-  // @brief get readable end lsn for this replica, all logs before it can be readable.
+  // @brief get readable end lsn; all logs before it are readable.
   // @param[out] lsn, readable end lsn.
   // -- OB_NOT_INIT           not_init
   // -- OB_SUCCESS
   int get_readable_end_lsn(LSN &lsn) const;
-  //================= Distributed related interfaces =========================
-  // Return the current replica's role, only Leader and Follower roles exist
-	//
-	// @param [out] role, current replica's role
-	// @param [out] leader_epoch, indicates a term of the leader, ensuring monotonic increase in scenarios of leader-follower switch and restart
-	// @param [out] is_pending_state, indicates whether the current replica is in a pending state
- 	//
- 	// @return :TODO
-  int get_role(common::ObRole &role, int64_t &proposal_id, bool &is_pending_state) const;
-  int get_palf_id(int64_t &palf_id) const;
   int get_palf_epoch(int64_t &palf_epoch) const;
 
-  int get_global_learner_list(common::GlobalLearnerList &learner_list) const;
-  int get_paxos_member_list(common::ObMemberList &member_list, int64_t &paxos_replica_num) const;
-  int get_config_version(LogConfigVersion &config_version) const;
-  int get_paxos_member_list_and_learner_list(common::ObMemberList &member_list,
-                                             int64_t &paxos_replica_num,
-                                             GlobalLearnerList &learner_list) const;
-  int get_stable_membership(LogConfigVersion &config_version,
-                            common::ObMemberList &member_list,
-                            int64_t &paxos_replica_num,
-                            common::GlobalLearnerList &learner_list) const;
-  int get_election_leader(common::ObAddr &addr) const;
-  int get_parent(common::ObAddr &parent) const;
 
-  // @brief: a special config change interface, change replica number of paxos group
-  // @param[in] common::ObMemberList: current memberlist, for pre-check
-  // @param[in] const int64_t curr_replica_num: current replica num, for pre-check
-  // @param[in] const int64_t new_replica_num: new replica num
-  // @param[in] const int64_t timeout_us: timeout, us
-  // @return
-  // - OB_SUCCESS: change_replica_num successfully
-  // - OB_INVALID_ARGUMENT: invalid argumemt or not supported config change
-  // - OB_TIMEOUT: change_replica_num timeout
-  // - OB_NOT_MASTER: not leader or rolechange during membership changing
-  // - other: bug
-  int change_replica_num(const common::ObMemberList &member_list,
-                         const int64_t curr_replica_num,
-                         const int64_t new_replica_num,
-                         const int64_t timeout_us);
-  // @brief: force set self as single member
-  int force_set_as_single_replica();
-  // @brief: force set member list.
-  // @param[in] const common::ObMemberList &new_member_list: members which will be added
-  // @param[in] const int64_t new_replica_num: replica number of paxos group after forcing to set member list
-  // @return
-  // - OB_SUCCESS: force_set_member_list successfully
-  // - OB_TIMEOUT: force_set_member_list timeout
-  // - OB_NOT_RUNNING: log stream is stopped
-  // - OB_INVALID_ARGUMENT: invalid argument
-  // - other: bug
-  int force_set_member_list(const common::ObMemberList &new_member_list, const int64_t new_replica_num);
 
-  int get_ack_info_array(LogMemberAckInfoList &ack_info_array,
-                         common::GlobalLearnerList &degraded_list) const;
-  // @brief, add a member to paxos group, can be called only in leader
-  // @param[in] common::ObMember &member: member which will be added
-  // @param[in] const int64_t new_replica_num: replica number of paxos group after adding 'member'
-  // @param[in] const LogConfigVersion &config_version: config_version for leader checking
-  // @param[in] const int64_t timeout_us: add member timeout, us
-  // @return
-  // - OB_SUCCESS: add member successfully
-  // - OB_INVALID_ARGUMENT: invalid argumemt or not supported config change
-  // - OB_TIMEOUT: add member timeout
-  // - OB_NOT_MASTER: not leader or rolechange during membership changing
-  // - OB_STATE_NOT_MATCH: not the same leader
-  // - other: bug
-  int add_member(const common::ObMember &member,
-                 const int64_t new_replica_num,
-                 const LogConfigVersion &config_version,
-                 const int64_t timeout_us);
-
-  // @brief, remove a member from paxos group, can be called only in leader
-  // @param[in] common::ObMember &member: member which will be removed
-  // @param[in] const int64_t new_replica_num: replica number of paxos group after removing 'member'
-  // @param[in] const int64_t timeout_us: remove member timeout, us
-  // @return
-  // - OB_SUCCESS: remove member successfully
-  // - OB_INVALID_ARGUMENT: invalid argumemt or not supported config change
-  // - OB_TIMEOUT: remove member timeout
-  // - OB_NOT_MASTER: not leader or rolechange during membership changing
-  // - other: bug
-  int remove_member(const common::ObMember &member,
-                    const int64_t new_replica_num,
-                    const int64_t timeout_us);
-
-  // @brief, replace old_member with new_member, can be called only in leader
-  // @param[in] const common::ObMember &added_member: member will be added
-  // @param[in] const common::ObMember &removed_member: member will be removed
-  // @param[in] const LogConfigVersion &config_version: config_version for leader checking
-  // @param[in] const int64_t timeout_us
-  // @return
-  // - OB_SUCCESS: replace member successfully
-  // - OB_INVALID_ARGUMENT: invalid argumemt or not supported config change
-  // - OB_TIMEOUT: replace member timeout
-  // - OB_NOT_MASTER: not leader or rolechange during membership changing
-  // - other: bug
-  int replace_member(const common::ObMember &added_member,
-                     const common::ObMember &removed_member,
-                     const LogConfigVersion &config_version,
-                     const int64_t timeout_us);
-
-  // @brief: add a learner(read only replica) in this clsuter
-  // @param[in] const common::ObMember &added_learner: learner will be added
-  // @param[in] const int64_t timeout_us
-  // @return
-  // - OB_SUCCESS
-  // - OB_INVALID_ARGUMENT: invalid argument
-  // - OB_TIMEOUT: add_learner timeout
-  // - OB_NOT_MASTER: not leader or rolechange during membership changing
-  int add_learner(const common::ObMember &added_learner,
-                  const int64_t timeout_us);
-
-  // @brief: remove a learner(read only replica) in this clsuter
-  // @param[in] const common::ObMember &removed_learner: learner will be removed
-  // @param[in] const int64_t timeout_us
-  // @return
-  // - OB_SUCCESS
-  // - OB_INVALID_ARGUMENT: invalid argument
-  // - OB_TIMEOUT: remove_learner timeout
-  // - OB_NOT_MASTER: not leader or rolechange during membership changing
-  int remove_learner(const common::ObMember &removed_learner,
-                     const int64_t timeout_us);
-
-  // @brief: switch a learner(read only replica) to acceptor(full replica) in this clsuter
-  // @param[in] const common::ObMember &learner: learner will be switched to acceptor
-  // @param[in] const int64_t new_replica_num: replica number of paxos group after switching
-  //            learner to acceptor (similar to add_member)
-  // @param[in] const LogConfigVersion &config_version: config_version for leader checking
-  // @param[in] const int64_t timeout_us
-  // @return
-  // - OB_SUCCESS
-  // - OB_INVALID_ARGUMENT: invalid argument
-  // - OB_TIMEOUT: switch_learner_to_acceptor timeout
-  // - OB_NOT_MASTER: not leader or rolechange during membership changing
-  int switch_learner_to_acceptor(const common::ObMember &learner,
-                                 const int64_t new_replica_num,
-                                 const LogConfigVersion &config_version,
-                                 const int64_t timeout_us);
-
-  // @brief: switch an acceptor(full replica) to learner(read only replica) in this clsuter
-  // @param[in] const common::ObMember &member: acceptor will be switched to learner
-  // @param[in] const int64_t new_replica_num: replica number of paxos group after switching
-  //            acceptor to learner (similar to remove_member)
-  // @param[in] const int64_t timeout_us
-  // @return
-  // - OB_SUCCESS
-  // - OB_INVALID_ARGUMENT: invalid argument
-  // - OB_TIMEOUT: switch_acceptor_to_learner timeout
-  // - OB_NOT_MASTER: not leader or rolechange during membership changing
-  int switch_acceptor_to_learner(const common::ObMember &member,
-                                 const int64_t new_replica_num,
-                                 const int64_t timeout_us);
-
-  // @brief, replace removed_learners with added_learners
-  // @param[in] const common::ObMemberList &added_learners: learners will be added
-  // @param[in] const common::ObMemberList &removed_learners: learners will be removed
-  // @param[in] const int64_t timeout_us
-  // @return
-  // - OB_SUCCESS: replace learner successfully
-  // - OB_INVALID_ARGUMENT: invalid argumemt or not supported config change
-  // - OB_TIMEOUT: replace learner timeout
-  // - OB_NOT_MASTER: not leader or rolechange during membership changing
-  // - other: bug
-  int replace_learners(const common::ObMemberList &added_learners,
-                       const common::ObMemberList &removed_learners,
-                       const int64_t timeout_us);
-
-  // @brief, replace removed_member with learner
-  // @param[in] const common::ObMember &added_member: member will be added
-  // @param[in] const common::ObMember &removed_member: member will be removed
-  // @param[in] const LogConfigVersion &config_version: config_version for leader checking
-  // @param[in] const int64_t timeout_us
-  // @return
-  // - OB_SUCCESS: replace member successfully
-  // - OB_INVALID_ARGUMENT: invalid argumemt or not supported config change
-  // - OB_TIMEOUT: replace member timeout
-  // - OB_NOT_MASTER: not leader or rolechange during membership changing
-  // - other: bug
-  int replace_member_with_learner(const common::ObMember &added_member,
-                                  const common::ObMember &removed_member,
-                                  const LogConfigVersion &config_version,
-                                  const int64_t timeout_us);
-  int advance_election_epoch_and_downgrade_priority(const int64_t proposal_id,
-                                                    const int64_t downgrade_priority_time_us,
-                                                    const char *reason);
-  int change_leader_to(const common::ObAddr &dst_addr);
-  // @brief: change AccessMode of palf.
-  // @param[in] const int64_t &proposal_id: current proposal_id of leader
-  // @param[in] const int64_t &mode_version: mode_version corresponding to AccessMode,
-  // can be gotted by get_access_mode
-  // @param[in] const palf::AccessMode access_mode: access_mode will be changed to
-  // @param[in] const int64_t ref_scn: scn of all submitted logs after changing access mode
-  // are bigger than ref_scn
-  // NB: ref_scn will take effect only when:
-  //     a. ref_scn is bigger than/equal to max_ts(get_max_scn())
-  //     b. AccessMode is set to APPEND
-  // @retval
-  //   OB_SUCCESS
-  //   OB_NOT_MASTER: self is not active leader
-  //   OB_EAGAIN: another change_acess_mode is running, try again later
-  // NB: 1. if return OB_EAGAIN, caller need execute 'change_access_mode' again.
-  //     2. before execute 'change_access_mode', caller need execute 'get_access_mode' to
-  //      get 'mode_version' and pass it to 'change_access_mode'
-  int change_access_mode(const int64_t proposal_id,
-                         const int64_t mode_version,
-                         const AccessMode &access_mode,
-                         const share::SCN &ref_scn);
-  // @brief: query the access_mode of palf and it's corresponding mode_version
-  // @param[out] palf::AccessMode &access_mode: current access_mode
-  // @param[out] int64_t &mode_version: mode_version corresponding to AccessMode
-  // @retval
-  //   OB_SUCCESS
-  int get_access_mode(int64_t &mode_version, AccessMode &access_mode) const;
-  int get_access_mode(AccessMode &access_mode) const;
-  int get_access_mode_version(int64_t &mode_version) const;
-  int get_access_mode_ref_scn(int64_t &mode_version,
-                              AccessMode &access_mode,
+  int get_access_mode_ref_scn(AccessMode &access_mode,
                               SCN &ref_scn) const;
 
-  // @brief: check whether the palf instance is allowed to vote for logs
-  // By default, return true;
-  // After calling disable_vote(), return false.
-  bool is_vote_enabled() const;
-  // @brief: store a persistent flag which means this paxos replica
-  // can not reply ack when receiving logs.
-  // @param[in] need_check_log_missing: for rebuildinng caused by log missing, need check whether log
-  // By default, paxos replica can reply ack.
-  // @return:
-  int disable_vote(const bool need_check_log_missing);
-  // @brief: store a persistent flag which means this paxos replica
-  // can reply ack when receiving logs.
-  // By default, paxos replica can reply ack.
-  // @return:
-  int enable_vote();
 	//================= Callback function registration ===========================
   // @brief: register a callback to PalfHandleImpl, and do something in
   // this callback when file size has changed.
@@ -443,66 +183,16 @@ public:
   // NB: not thread safe
   int unregister_file_size_cb();
 
-  // @brief: register a callback to PalfHandleImpl, and do something in
-  // this callback when role has changed.
-  // NB: not thread safe
-  int register_role_change_cb(PalfRoleChangeCb *rc_cb);
-
-  // @brief: unregister a callback from PalfHandleImpl
-  // NB: not thread safe
-  int unregister_role_change_cb();
-
-  // @brief: register a callback to PalfHandleImpl, and do something in
-  // this callback when there is a rebuild operation.
-  // NB: not thread safe
-  int register_rebuild_cb(PalfRebuildCb *rebuild_cb);
-
-  // @brief: unregister a callback from PalfHandleImpl
-  // NB: not thread safe
-  int unregister_rebuild_cb();
 	//================= Dependency function registration ===========================
-  int set_location_cache_cb(PalfLocationCacheCb *lc_cb);
-  int reset_location_cache_cb();
-  int set_election_priority(election::ElectionPriority *priority);
-  int reset_election_priority();
   int stat(PalfStat &palf_stat) const;
 
-  //---------config change lock related--------//
-  //@return
-  // -- OB_NOT_INIT           not_init
-  // -- OB_SUCCESS            successfull lock
-  // -- OB_TRY_LOCK_CONFIG_CHANGE_CONFLICT   failed to lock because of locked by others
-  // -- OB_TIMEOUT              timeout, may lock successfully or not
-  // -- OB_EAGAIN               other config change operation is going on,need retry later
-  // -- OB_NOT_MASTER           this replica is not leader, not refresh location and retry with actual leader
-  // -- OB_STATE_NOT_MATCH        lock_owner is smaller than previous lock_owner
-  int try_lock_config_change(int64_t lock_owner, int64_t timeout_us);
-  //@return
-  // -- OB_NOT_INIT           not_init
-  // -- OB_SUCCESS            successfull unlock
-  // -- OB_TIMEOUT            timeout, may unlock successfully or not
-  // -- OB_EAGAIN             other config change operation is going on,need retry later
-  // -- OB_NOT_MASTER         this replica is not leader, need refresh location and retry with actual leader
-  // -- OB_STATE_NOT_MATCH    lock_owner is smaller than previous lock_owner,or lock_owner is bigger than previous lock_owner
-  int unlock_config_change(int64_t lock_owner, int64_t timeout_us);
-  //@return
-  // -- OB_NOT_INIT           not_init
-  // -- OB_SUCCESS            success
-  // -- OB_NOT_MASTER         this replica is not leader, not refresh location and retry with actual leader
-  // -- OB_EAGAIN             is_locking or unlocking
-  int get_config_change_lock_stat(int64_t &lock_owner, bool &is_locked);
 
-
-
-  // @param [out] diagnose info, current diagnose info of palf
   int diagnose(PalfDiagnoseInfo &diagnose_info) const;
 
-  TO_STRING_KV(KP(palf_handle_impl_), KP(rc_cb_), KP(fs_cb_));
+  TO_STRING_KV(KP(palf_handle_impl_), KP(fs_cb_));
 private:
   palf::IPalfHandleImpl *palf_handle_impl_;
-  palf::PalfRoleChangeCbNode *rc_cb_;
   palf::PalfFSCbNode *fs_cb_;
-  palf::PalfRebuildCbNode *rebuild_cb_;
 };
 } // end namespace oceanbase
 } // end namespace palf

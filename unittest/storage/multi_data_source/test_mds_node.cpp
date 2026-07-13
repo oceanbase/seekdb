@@ -102,8 +102,8 @@ struct UserDataWithCallBack
 
 TEST_F(TestMdsNode, call_user_method) {
   MdsRow<DummyKey, UserDataWithCallBack> row;
-  MdsCtx ctx(mds::MdsWriter(transaction::ObTransID(100)), transaction::ObTxSEQ::mk_v0(1));// commit finally
-  ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(1), ctx, {share::ObLSID(0), 0}));
+  MdsCtx ctx(mds::MdsWriter(transaction::ObTransID(100)), transaction::ObTxSEQ(1, 0));// commit finally
+  ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(1), ctx, {0}));
   ctx.on_redo(mock_scn(1));
   ctx.before_prepare();
   ctx.on_prepare(mock_scn(2));
@@ -116,8 +116,8 @@ TEST_F(TestMdsNode, call_user_method) {
 
 TEST_F(TestMdsNode, release_node_while_node_in_ctx) {
   MdsRow<DummyKey, UserDataWithCallBack> row;
-  MdsCtx ctx(mds::MdsWriter(transaction::ObTransID(100)), transaction::ObTxSEQ::mk_v0(1));// commit finally
-  ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(1), ctx, {share::ObLSID(0), 0}));
+  MdsCtx ctx(mds::MdsWriter(transaction::ObTransID(100)), transaction::ObTxSEQ(1, 0));// commit finally
+  ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(1), ctx, {0}));
   ctx.on_redo(mock_scn(1));
   ctx.before_prepare();
   row.~MdsRow();
@@ -132,17 +132,17 @@ TEST_F(TestMdsNode, release_node_while_node_in_ctx_concurrent) {
   call_try_on_commit = 0;
   call_try_on_abort = 0;
   MdsRow<DummyKey, UserDataWithCallBack> row;
-  MdsCtx ctx(mds::MdsWriter(transaction::ObTransID(100)), transaction::ObTxSEQ::mk_v0(1));// commit finally
+  MdsCtx ctx(mds::MdsWriter(transaction::ObTransID(100)), transaction::ObTxSEQ(1, 0));// commit finally
   // Submitting these nodes will take 50ms
-  ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(1), ctx, {share::ObLSID(0), 0}));
+  ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(1), ctx, {0}));
   ASSERT_EQ(OB_SUCCESS, ctx.inc_seq_no());
-  ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(2), ctx, {share::ObLSID(0), 0}));
+  ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(2), ctx, {0}));
   ASSERT_EQ(OB_SUCCESS, ctx.inc_seq_no());
-  ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(3), ctx, {share::ObLSID(0), 0}));
+  ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(3), ctx, {0}));
   ASSERT_EQ(OB_SUCCESS, ctx.inc_seq_no());
-  ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(4), ctx, {share::ObLSID(0), 0}));
+  ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(4), ctx, {0}));
   ASSERT_EQ(OB_SUCCESS, ctx.inc_seq_no());
-  ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(5), ctx, {share::ObLSID(0), 0}));
+  ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(5), ctx, {0}));
   ASSERT_EQ(OB_SUCCESS, ctx.inc_seq_no());
 
   std::thread t1([&ctx]() {
@@ -217,8 +217,8 @@ TEST_F(TestMdsNode, release_node_while_node_in_ctx_concurrent) {
 // }
 
 TEST_F(TestMdsNode, test_node_print) {
-  UserMdsNode<DummyKey, UserDataWithCallBack> node0(nullptr, MdsNodeType::SET, WriterType::TRANSACTION, 1, transaction::ObTxSEQ::mk_v0(100));
-  UserMdsNode<DummyKey, UserDataWithCallBack> node1(nullptr, MdsNodeType::SET, WriterType::TRANSACTION, 1, transaction::ObTxSEQ::mk_v0(100));
+  UserMdsNode<DummyKey, UserDataWithCallBack> node0(nullptr, MdsNodeType::SET, WriterType::TRANSACTION, 1, transaction::ObTxSEQ(100, 0));
+  UserMdsNode<DummyKey, UserDataWithCallBack> node1(nullptr, MdsNodeType::SET, WriterType::TRANSACTION, 1, transaction::ObTxSEQ(100, 0));
 }
 
 

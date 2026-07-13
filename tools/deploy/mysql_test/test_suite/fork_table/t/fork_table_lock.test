@@ -74,12 +74,12 @@ connection obsys;
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（源表A）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_a0_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_a0_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_a0_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_a0_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表B）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b0_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_b0_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b0_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_b0_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 释放 fork A to B，让它继续执行
@@ -175,17 +175,17 @@ connection obsys;
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（源表A）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_a1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_a1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_a1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_a1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表B）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_b1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_b1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表C）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_c1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_c1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_c1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_c1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 释放 fork A to C，让它先完成
@@ -207,12 +207,12 @@ connection obsys;
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（源表A）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_a1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_a1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_a1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_a1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表B）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_b1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_b1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 释放 fork A to B，让它继续执行
@@ -315,12 +315,12 @@ connection obsys;
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（表B）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_b2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_b2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表C）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_c2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_c2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_c2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_c2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 释放 fork B to C，让它先完成
@@ -342,12 +342,12 @@ connection obsys;
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（表B）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_b2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_b2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表C）
 --disable_query_log
---eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_c2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_c2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_c2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_table where table_id = $table_c2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
 --enable_query_log
 
 --echo # 释放 fork A to B，让它完成

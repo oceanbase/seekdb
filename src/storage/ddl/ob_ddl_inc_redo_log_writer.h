@@ -48,11 +48,9 @@ public:
   static const int64_t DEFAULT_RETRY_TIMEOUT_US = 60L * 1000L * 1000L; // 1min
   ObDDLIncRedoLogWriter();
   ~ObDDLIncRedoLogWriter();
-  int init(
-      const share::ObLSID &ls_id,
-      const ObTabletID &tablet_id);
+  int init(const ObTabletID &tablet_id);
   void reset();
-  static bool need_retry(int ret_code, bool allow_remote_write);
+  static bool need_retry(int ret_code);
   int write_inc_start_log_with_retry(
       const ObTabletID &lob_meta_tablet_id, 
       transaction::ObTxDesc *tx_desc,
@@ -64,7 +62,6 @@ public:
       transaction::ObTxDesc *tx_desc);
   int wait_inc_redo_log_finish();
   int write_inc_commit_log_with_retry(
-      const bool allow_remote_write,
       const ObTabletID &lob_meta_tablet_id,
       transaction::ObTxDesc *tx_desc);
 private:
@@ -78,14 +75,11 @@ private:
       const int64_t task_id,
       transaction::ObTxDesc *tx_desc);
   int write_inc_commit_log(
-      const bool allow_remote_write,
       const ObTabletID &lob_meta_tablet_id,
       transaction::ObTxDesc *tx_desc);
   int get_write_store_ctx_guard(
       transaction::ObTxDesc *tx_desc,
-      ObStoreCtxGuard &ctx_guard,
-      storage::ObLS *&ls);
-  int switch_to_remote_write();
+      ObStoreCtxGuard &ctx_guard);
   int local_write_inc_start_log(
       ObDDLIncStartLog &log,
       transaction::ObTxDesc *tx_desc,
@@ -98,20 +92,10 @@ private:
   int local_write_inc_commit_log(
       ObDDLIncCommitLog &log,
       transaction::ObTxDesc *tx_desc);
-  int retry_remote_write_inc_commit_log(
-      const common::ObTabletID lob_meta_tablet_id,
-      transaction::ObTxDesc *tx_desc);
-  int remote_write_inc_commit_log(
-      const common::ObTabletID lob_meta_tablet_id,
-      transaction::ObTxDesc *tx_desc);
 private:
   bool is_inited_;
-  bool remote_write_;
-  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   ObDDLIncLogHandle ddl_inc_log_handle_;
-  ObAddr leader_addr_;
-  share::ObLSID leader_ls_id_;
   char *buffer_;
 };
 

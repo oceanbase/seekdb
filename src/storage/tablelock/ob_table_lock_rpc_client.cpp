@@ -17,8 +17,6 @@
 #define USING_LOG_PREFIX TABLELOCK
 
 #include "ob_table_lock_rpc_client.h"
-#include "share/location_cache/ob_location_service.h"
-#include "observer/ob_srv_network_frame.h"
 
 namespace oceanbase
 {
@@ -28,31 +26,6 @@ namespace transaction
 {
 namespace tablelock
 {
-
-static inline int get_ls_leader(
-    const int64_t cluster_id,
-    const ObLSID &ls_id,
-    const int64_t abs_timeout_ts,
-    ObAddr &addr)
-{
-  int ret = OB_SUCCESS;
-  ObLocationService *location_service = GCTX.location_service_;
-  if (OB_ISNULL(location_service)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("location_service not inited", K(ret));
-  } else if (OB_FAIL(location_service->get_leader_with_retry_until_timeout(
-      cluster_id,
-      ls_id,
-      addr,
-      abs_timeout_ts))) {
-    LOG_WARN("failed to get ls leader with retry until timeout",
-        K(ret), K(cluster_id), K(ls_id), K(addr), K(abs_timeout_ts));
-  } else {
-    LOG_DEBUG("get ls leader from location_service",
-        K(ret), K(cluster_id), K(ls_id), K(addr), K(abs_timeout_ts));
-  }
-  return ret;
-}
 
 int ObTableLockRpcClient::init()
 {

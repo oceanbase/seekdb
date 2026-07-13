@@ -44,7 +44,6 @@ TEST_F(TestTabletCreateMdsCtx, start_mds_ctx)
   int ret = OB_SUCCESS;
 
   mds::ObTabletCreateMdsCtx mds_ctx{mds::MdsWriter{transaction::ObTransID{123}}};
-  mds_ctx.set_ls_id(share::ObLSID(1001));
 
   // serialize
   const int64_t serialize_size = mds_ctx.get_serialize_size();
@@ -59,7 +58,6 @@ TEST_F(TestTabletCreateMdsCtx, start_mds_ctx)
   ret = ctx.deserialize(buffer, serialize_size, pos);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(pos, serialize_size);
-  ASSERT_EQ(ctx.ls_id_, mds_ctx.ls_id_);
   ASSERT_EQ(ctx.writer_.writer_id_, mds_ctx.writer_.writer_id_);
 
   delete [] buffer;

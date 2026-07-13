@@ -258,17 +258,14 @@ int ObTableRedefinitionTask::send_build_replica_request_by_sql()
     if (!modify_autoinc) {
       sql_mode = sql_mode | SMO_NO_AUTO_VALUE_ON_ZERO;
     }
-    // get execute inner sql addr
-    if (OB_FAIL(ObDDLUtil::get_sys_ls_leader_addr(GCONF.cluster_id, alter_table_arg_.inner_sql_exec_addr_))) {
-      LOG_WARN("get sys ls leader addr fail", K(ret));
-      ret = OB_SUCCESS; // ignore ret
-    } else if (OB_FAIL(set_sql_exec_addr(alter_table_arg_.inner_sql_exec_addr_))) {
+    alter_table_arg_.inner_sql_exec_addr_ = GCTX.self_addr();
+    if (OB_FAIL(set_sql_exec_addr(alter_table_arg_.inner_sql_exec_addr_))) {
       LOG_WARN("failed to set sql execute addr", K(ret), K(alter_table_arg_.inner_sql_exec_addr_));
-    }
-    ObSchemaGetterGuard schema_guard;
-    const ObTableSchema *orig_table_schema = nullptr;
-    const ObTableSchema *hidden_table_schema = nullptr;
-    ObDDLRedefinitionSSTableBuildTask task(
+    } else {
+      ObSchemaGetterGuard schema_guard;
+      const ObTableSchema *orig_table_schema = nullptr;
+      const ObTableSchema *hidden_table_schema = nullptr;
+      ObDDLRedefinitionSSTableBuildTask task(
         task_id_,
         object_id_,
         target_object_id_,
@@ -279,24 +276,21 @@ int ObTableRedefinitionTask::send_build_replica_request_by_sql()
         trace_id_,
         parallelism_,
         use_heap_table_ddl_plan_,
-        alter_table_arg_.mview_refresh_info_.is_mview_complete_refresh_,
-        alter_table_arg_.mview_refresh_info_.mview_table_id_,
         GCTX.root_service_,
         alter_table_arg_.inner_sql_exec_addr_,
         data_format_version_,
-        is_ddl_retryable_,
-        alter_table_arg_.mview_refresh_info_.mview_target_data_sync_scn_.get_val_for_gts(),
-        alter_table_arg_.mview_refresh_info_.select_sql_);
-    if (OB_FAIL(root_service->get_ddl_service().get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
-      LOG_WARN("get schema guard failed", K(ret));
-    } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, orig_table_schema))) {
-      LOG_WARN("failed to get orig table schema", K(ret));
-    } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, hidden_table_schema))) {
-      LOG_WARN("fail to get table schema", K(ret), K(target_object_id_));
-    } else if (OB_FAIL(task.init(*orig_table_schema, *hidden_table_schema, alter_table_arg_.alter_table_schema_, alter_table_arg_.tz_info_wrap_, alter_table_arg_.based_schema_object_infos_))) {
-      LOG_WARN("fail to init table redefinition sstable build task", K(ret));
-    } else if (OB_FAIL(root_service->submit_ddl_single_replica_build_task(task))) {
-      LOG_WARN("fail to submit ddl build single replica", K(ret));
+        is_ddl_retryable_);
+      if (OB_FAIL(root_service->get_ddl_service().get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
+        LOG_WARN("get schema guard failed", K(ret));
+      } else if (OB_FAIL(schema_guard.get_table_schema(object_id_, orig_table_schema))) {
+        LOG_WARN("failed to get orig table schema", K(ret));
+      } else if (OB_FAIL(schema_guard.get_table_schema(target_object_id_, hidden_table_schema))) {
+        LOG_WARN("fail to get table schema", K(ret), K(target_object_id_));
+      } else if (OB_FAIL(task.init(*orig_table_schema, *hidden_table_schema, alter_table_arg_.alter_table_schema_, alter_table_arg_.tz_info_wrap_))) {
+        LOG_WARN("fail to init table redefinition sstable build task", K(ret));
+      } else if (OB_FAIL(root_service->submit_ddl_single_replica_build_task(task))) {
+        LOG_WARN("fail to submit ddl build single replica", K(ret));
+      }
     }
   }
   return ret;
@@ -335,8 +329,6 @@ int ObTableRedefinitionTask::check_ddl_can_retry(const bool ddl_need_retry_at_ex
     LOG_WARN("invalid arguments", K(ret), KP(table_schema));
   } else if (OB_FAIL(check_use_heap_table_ddl_plan(table_schema))) {
     LOG_WARN("check use heap table ddl plan failed", K(ret));
-  } else if (ObDDLUtil::is_mview_not_retryable(task_type_)) {
-    is_ddl_retryable_ = false;
   } else {
     if (ObDDLUtil::use_idempotent_mode()) {
       if (use_heap_table_ddl_plan_) {
@@ -361,8 +353,7 @@ int ObTableRedefinitionTask::check_use_heap_table_ddl_plan(const ObTableSchema *
   } else if (OB_FAIL(DDL_SIM(task_id_, TABLE_REDEF_TASK_CHECK_USE_HEAP_PLAN_FAILED))) {
     LOG_WARN("ddl sim failure", K(task_id_));
   } else if (target_table_schema->is_table_with_hidden_pk_column() &&
-             (DDL_ALTER_PARTITION_BY == task_type_ || DDL_DROP_PRIMARY_KEY == task_type_ ||
-              DDL_MVIEW_COMPLETE_REFRESH == task_type_)) {
+             (DDL_ALTER_PARTITION_BY == task_type_ || DDL_DROP_PRIMARY_KEY == task_type_)) {
     use_heap_table_ddl_plan_ = true;
   }
   return ret;
@@ -434,8 +425,7 @@ int ObTableRedefinitionTask::replica_end_check(const int ret_code)
   int ret = OB_SUCCESS;
   switch(task_type_) {
     case DDL_DIRECT_LOAD :
-    case DDL_DIRECT_LOAD_INSERT :
-    case DDL_MVIEW_COMPLETE_REFRESH: {
+    case DDL_DIRECT_LOAD_INSERT : {
       break;
     }
     default : {
@@ -468,8 +458,8 @@ int ObTableRedefinitionTask::copy_table_indexes()
     int64_t active_task_cnt = 0;
     // check if has rebuild index
     if (has_rebuild_index_) {
-    } else if (OB_FAIL(ObDDLTaskRecordOperator::get_create_index_or_mlog_task_cnt(*GCTX.sql_proxy_, target_object_id_, active_task_cnt))) {
-      LOG_WARN("failed to check index or mlog task cnt", K(ret));
+    } else if (OB_FAIL(ObDDLTaskRecordOperator::get_create_index_task_cnt(*GCTX.sql_proxy_, target_object_id_, active_task_cnt))) {
+      LOG_WARN("failed to check index task cnt", K(ret));
     } else if (active_task_cnt >= MAX_ACTIVE_TASK_CNT) {
       ret = OB_EAGAIN;
     } else {
@@ -488,17 +478,11 @@ int ObTableRedefinitionTask::copy_table_indexes()
         LOG_WARN("error unexpected, table schema must not be nullptr", K(ret), K(target_object_id_));
       } else {
         const common::ObIArray<ObAuxTableMetaInfo> &index_infos = table_schema->get_simple_index_infos();
-        if ((index_infos.count() > 0) || (table_schema->mv_container_table()
-                                          && table_schema->has_mlog_table())) {
+        if (index_infos.count() > 0) {
           // if there is indexes in new tables, if so, the indexes is already rebuilt in new table
           for (int64_t i = 0; OB_SUCC(ret) && i < index_infos.count(); ++i) {
             if (OB_FAIL(index_ids.push_back(index_infos.at(i).table_id_))) {
               LOG_WARN("push back index id failed", K(ret));
-            }
-          }
-          if (OB_SUCC(ret) && table_schema->has_mlog_table()) {
-            if (OB_FAIL(index_ids.push_back(table_schema->get_mlog_tid()))) {
-              LOG_WARN("failed to push back mlog tid", KR(ret), K(table_schema->get_mlog_tid()));
             }
           }
           LOG_INFO("indexes schema are already built", K(index_ids));
@@ -561,13 +545,7 @@ int ObTableRedefinitionTask::copy_table_indexes()
             } else if (active_task_cnt >= MAX_ACTIVE_TASK_CNT) {
               ret = OB_EAGAIN;
             } else {
-              ObDDLType ddl_type = ObDDLType::DDL_CREATE_INDEX;
-              if (index_schema->is_mlog_table()) {
-                ddl_type = ObDDLType::DDL_CREATE_MLOG;
-                create_index_arg.index_action_type_ = ObIndexArg::ADD_MLOG;
-              } else {
-                ddl_type = get_create_index_type(data_format_version_, *index_schema);
-              }
+              ObDDLType ddl_type = get_create_index_type(data_format_version_, *index_schema);
               create_index_arg.index_type_ = index_schema->get_index_type();
               if (index_schema->is_vec_index() || index_schema->is_fts_index() || index_schema->is_multivalue_index()) {
                 has_rebuild_domain_indexes_ = true;
@@ -898,9 +876,6 @@ int ObTableRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status)
     }
   } else if (OB_FAIL(sync_stats_info())) {
     LOG_WARN("fail to sync stats info", K(ret), K(object_id_), K(target_object_id_));
-  } else if (alter_table_arg_.mview_refresh_info_.is_mview_complete_refresh_ &&
-             OB_FAIL(alter_table_arg_.mview_refresh_info_.refresh_scn_.convert_for_inner_table_field(snapshot_version_))) {
-    LOG_WARN("fail to convert scn", K(ret), K(snapshot_version_));
   } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(target_object_id_, ddl_rpc_timeout))) {
             LOG_WARN("get ddl rpc timeout fail", K(ret));
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->      execute_ddl_task(alter_table_arg_, objs); }))) {
@@ -1009,16 +984,8 @@ int ObTableRedefinitionTask::process()
   } else {
     switch(task_status_) {
       case ObDDLTaskStatus::PREPARE:
-        if (alter_table_arg_.mview_refresh_info_.is_mview_complete_refresh_ && parent_task_id_ > 0) {
-          const ObDDLTaskID parent_task_id(parent_task_id_);
-          if (OB_FAIL(ObSysDDLSchedulerUtil::on_ddl_task_prepare(parent_task_id, task_id_, trace_id_))) {
-            LOG_WARN("fail to do parent task callback", KR(ret));
-          }
-        }
-        if (OB_SUCC(ret)) {
-          if (OB_FAIL(prepare(ObDDLTaskStatus::WAIT_TRANS_END))) {
-            LOG_WARN("fail to prepare table redefinition task", K(ret));
-          }
+        if (OB_FAIL(prepare(ObDDLTaskStatus::WAIT_TRANS_END))) {
+          LOG_WARN("fail to prepare table redefinition task", K(ret));
         }
         break;
       case ObDDLTaskStatus::WAIT_TRANS_END:

@@ -135,10 +135,10 @@ int ObTableLoadDagDirectChunkWriter::init(ObTableLoadDagWriteChannel *write_chan
     write_channel_ = static_cast<ObTableLoadDagDirectWriteChannel *>(write_channel);
     max_batch_size_ = store_ctx_->ctx_->param_.batch_size_;
     const int64_t tablet_cnt =
-      write_channel_->op_->op_ctx_->store_table_ctx_->ls_partition_ids_.count();
+      write_channel_->op_->op_ctx_->store_table_ctx_->partition_ids_.count();
     if (1 == tablet_cnt) {
       is_single_part_ = true;
-      single_tablet_id_ = write_channel_->op_->op_ctx_->store_table_ctx_->ls_partition_ids_[0]
+      single_tablet_id_ = write_channel_->op_->op_ctx_->store_table_ctx_->partition_ids_[0]
                             .part_tablet_id_.tablet_id_;
     }
     if (OB_FAIL(batch_writer_map_.create(64, "TLD_BW_Map", "TLD_BW_Map"))) {

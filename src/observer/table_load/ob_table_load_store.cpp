@@ -52,8 +52,8 @@ ObTableLoadStore::ObTableLoadStore(ObTableLoadTableCtx *ctx)
 
 int ObTableLoadStore::init_ctx(
   ObTableLoadTableCtx *ctx,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &partition_id_array,
-  const ObTableLoadArray<ObTableLoadLSIdAndPartitionId> &target_partition_id_array)
+  const ObTableLoadArray<ObTableLoadTabletId> &partition_id_array,
+  const ObTableLoadArray<ObTableLoadTabletId> &target_partition_id_array)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx)) {

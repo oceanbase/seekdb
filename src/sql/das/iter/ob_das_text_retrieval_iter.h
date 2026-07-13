@@ -19,7 +19,6 @@
 
 #include "ob_das_iter.h"
 #include "lib/container/ob_se_array.h"
-#include "share/ob_ls_id.h"
 #include "src/storage/access/ob_dml_param.h"
 
 namespace oceanbase
@@ -79,12 +78,9 @@ public:
 
   int set_query_token(const ObString &query_token);
   int set_query_token_and_rangekey(const ObString &query_token, const common::ObIArray<ObDocIdExt> &doc_id, const int64_t &batch_size);
-  void set_ls_tablet_ids(
-      const share::ObLSID &ls_id,
-      const ObTabletID &inv_tablet_id,
-      const ObTabletID &fwd_tablet_id)
+  void set_tablet_ids(const ObTabletID &inv_tablet_id,
+                      const ObTabletID &fwd_tablet_id)
   {
-    ls_id_ = ls_id;
     inv_idx_tablet_id_ = inv_tablet_id;
     fwd_idx_tablet_id_ = fwd_tablet_id;
   }
@@ -100,7 +96,6 @@ protected:
   int init_inv_idx_scan_param();
   int init_fwd_idx_scan_param();
   static int init_base_idx_scan_param(
-      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const sql::ObDASScanCtDef *ctdef,
       ObDASScanRtDef *rtdef,
@@ -175,7 +170,6 @@ protected:
   ObDASIRScanRtDef *ir_rtdef_;
   transaction::ObTxDesc *tx_desc_;
   transaction::ObTxReadSnapshot *snapshot_;
-  share::ObLSID ls_id_;
   common::ObTabletID inv_idx_tablet_id_;
   common::ObTabletID fwd_idx_tablet_id_;
   storage::ObTableScanParam inv_idx_scan_param_;

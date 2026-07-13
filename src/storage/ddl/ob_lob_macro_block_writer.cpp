@@ -72,7 +72,6 @@ int ObLobMacroBlockWriter::init(const ObWriteMacroParam &param,
     lob_column_count_ = param.ddl_table_schema_.lob_column_idxs_.count();
     lob_id_cache_.tablet_id_ = lob_meta_tablet_id_;
     lob_inrow_threshold_ = param.ddl_table_schema_.table_item_.lob_inrow_threshold_;
-    ls_id_ = param.ls_id_;
     tablet_id_ = param.tablet_id_;
     param_ = param;
 
@@ -132,7 +131,6 @@ int ObLobMacroBlockWriter::write(const ObColumnSchemaItem &column_schema, ObIAll
                                                                   lob_arena_/*lob_allocator*/,
                                                                   param_.tx_info_.tx_desc_,
                                                                   lob_id_cache_,
-                                                                  ls_id_,
                                                                   tablet_id_,
                                                                   lob_meta_tablet_id_,
                                                                   column_schema.col_type_.get_type(),
@@ -296,7 +294,7 @@ int ObLobMacroBlockWriter::close()
     uint64_t last_lob_id = 0;
     if (OB_FAIL(lob_id_cache_.get_value(last_lob_id))) {
       LOG_WARN("get last lob id failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(ls_id_, lob_meta_tablet_id_, last_lob_id))) {
+    } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(lob_meta_tablet_id_, last_lob_id))) {
       LOG_WARN("update max lob id failed", K(ret), K(last_lob_id));
     }
   }

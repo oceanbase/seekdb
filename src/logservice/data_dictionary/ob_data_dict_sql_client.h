@@ -20,7 +20,6 @@
 #include "common/mysqlclient/ob_mysql_result.h"    // ObMySQLResult
 #include "logservice/palf/lsn.h"                // LSN
 #include "share/scn.h"                // SCN
-#include "share/ob_ls_id.h"                     // ObLSArray
 
 namespace oceanbase
 {
@@ -40,9 +39,6 @@ public:
   int init(common::ObMySQLProxy *sql_client);
   void destroy();
 public:
-  int get_ls_info(
-      const share::SCN &snapshot_scn,
-      share::ObLSArray &ls_array);
   int get_schema_version(
       const share::SCN &snapshot_scn,
       int64_t &schema_version);

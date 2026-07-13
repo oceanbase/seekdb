@@ -34,16 +34,14 @@ class ObTabletSnapshotMaping
 public:
   ObTabletSnapshotMaping()
     : snapshot_(),
-      tablet_id_(),
-      ls_id_()
+      tablet_id_()
   {}
   ~ObTabletSnapshotMaping() = default;
   int assign(const ObTabletSnapshotMaping &other);
   bool operator==(const ObTabletSnapshotMaping &other) const;
-  TO_STRING_KV(K_(snapshot), K_(tablet_id), K_(ls_id));
+  TO_STRING_KV(K_(snapshot), K_(tablet_id));
   transaction::ObTxReadSnapshot snapshot_;
   common::ObTabletID tablet_id_;
-  share::ObLSID ls_id_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTabletSnapshotMaping);
 };
@@ -214,7 +212,7 @@ public:
   // Initial conflict_checker
   int init_conflict_checker(const ObExprFrameInfo *expr_frame_info,
                             ObDASTableLoc *table_loc,
-                            bool use_partition_gts_opt);
+                            bool use_response_snapshot);
   void set_local_tablet_loc(ObDASTabletLoc *tablet_loc) { local_tablet_loc_ = tablet_loc; }
   // Initial conflict_map
   int create_conflict_map(int64_t replace_row_cnt);
@@ -264,7 +262,7 @@ public:
   int reuse();
 
   int collect_all_snapshot(transaction::ObTxReadSnapshot &snapshot, const ObDASTabletLoc *tablet_loc);
-  int get_snapshot_by_ids(ObTabletID tablet_id, share::ObLSID ls_id, bool &founded, transaction::ObTxReadSnapshot &snapshot);
+  int get_snapshot_by_tablet(ObTabletID tablet_id, bool &founded, transaction::ObTxReadSnapshot &snapshot);
 
   int set_partition_snapshot_for_das_task(ObDASRef &das_ref);
 

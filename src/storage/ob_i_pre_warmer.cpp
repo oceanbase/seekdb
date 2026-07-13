@@ -22,7 +22,7 @@ namespace oceanbase
 namespace share
 {
 
-int ObPreWarmerParam::init(const share::ObLSID &ls_id, const common::ObTabletID &tablet_id, const bool use_fixed_percentage)
+int ObPreWarmerParam::init(const common::ObTabletID &tablet_id, const bool use_fixed_percentage)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -34,15 +34,15 @@ int ObPreWarmerParam::init(const share::ObLSID &ls_id, const common::ObTabletID 
 
       if (fixed_percentage_ > 0) {
         tmp_type = MEM_PRE_WARM;
-        LOG_INFO("use fixed percentage for prewarm", K(ls_id), K(tablet_id), K_(fixed_percentage), K(tmp_type));
+        LOG_INFO("use fixed percentage for prewarm", K(tablet_id), K_(fixed_percentage), K(tmp_type));
       }
     }
     if (PRE_WARM_TYPE_NONE == tmp_type) {
       storage::ObTabletStatAnalyzer tablet_analyzer;
       if (OB_TMP_FAIL(share::g_mp->tenant_tablet_stat_mgr()
-                  ->get_tablet_analyzer(ls_id, tablet_id, tablet_analyzer))) {
+                  ->get_tablet_analyzer(tablet_id, tablet_analyzer))) {
         if (OB_HASH_NOT_EXIST != tmp_ret) {
-          LOG_WARN_RET(tmp_ret, "Failed to get tablet stat analyzer", K(ls_id), K(tablet_id));
+          LOG_WARN_RET(tmp_ret, "Failed to get tablet stat analyzer", K(tablet_id));
         }
       } else {
         tmp_type = MEM_PRE_WARM;

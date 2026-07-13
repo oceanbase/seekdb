@@ -63,7 +63,6 @@ ObForkSnapshotRowScan::ObForkSnapshotRowScan()
     rowkey_read_info_(nullptr), 
     access_param_(), 
     allocator_("ForkSnapScan"),
-    ls_id_(),
     fork_snapshot_version_(0)
 {}
 
@@ -142,7 +141,6 @@ int ObForkSnapshotRowScan::construct_access_param(const ObForkScanParam &param)
 }
 
 int ObForkSnapshotRowScan::construct_access_ctx(
-    const share::ObLSID &ls_id,
     const ObTabletID &tablet_id,
     const int64_t fork_snapshot_version)
 {
@@ -165,19 +163,15 @@ int ObForkSnapshotRowScan::construct_access_ctx(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_UNLIKELY(!ls_id.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(ls_id));
   } else {
     share::SCN snapshot_scn;
     if (OB_FAIL(snapshot_scn.convert_for_tx(fork_snapshot_version))) {
       LOG_WARN("failed to convert snapshot version", K(ret), K(fork_snapshot_version));
-    } else if (OB_FAIL(ctx_.init_for_read(ls_id,
-                                          tablet_id,
+    } else if (OB_FAIL(ctx_.init_for_read(tablet_id,
                                           INT64_MAX, // query_expire_ts
                                           -1, // lock_timeout_us
                                           snapshot_scn))) {  // Use fork_snapshot_version SCN instead of SCN::max_scn()
-      LOG_WARN("fail to init store ctx", K(ret), K(ls_id), K(snapshot_scn));
+      LOG_WARN("fail to init store ctx", K(ret), K(snapshot_scn));
     } else if (OB_FAIL(access_ctx_.init(query_flag, 
                                         ctx_, 
                                         allocator_, 
@@ -187,9 +181,9 @@ int ObForkSnapshotRowScan::construct_access_ctx(
     }
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("construct access ctx failed", KR(ret), K(ls_id), K(tablet_id), K(fork_snapshot_version));
+    LOG_WARN("construct access ctx failed", KR(ret), K(tablet_id), K(fork_snapshot_version));
   } else {
-    LOG_DEBUG("construct access ctx finished", K(ls_id), K(tablet_id), K(fork_snapshot_version));
+    LOG_DEBUG("construct access ctx finished", K(tablet_id), K(fork_snapshot_version));
   }
   return ret;
 }
@@ -197,7 +191,6 @@ int ObForkSnapshotRowScan::construct_access_ctx(
 int ObForkSnapshotRowScan::init(
     const ObForkScanParam &param,
     blocksstable::ObSSTable &sstable,
-    const share::ObLSID &ls_id,
     const int64_t fork_snapshot_version)
 {
   int ret = OB_SUCCESS;
@@ -205,15 +198,15 @@ int ObForkSnapshotRowScan::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_UNLIKELY(!param.is_valid() || !sstable.is_valid() || !ls_id.is_valid() || fork_snapshot_version <= 0)) {
+  } else if (OB_UNLIKELY(!param.is_valid() || !sstable.is_valid() || fork_snapshot_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(param), K(sstable), K(ls_id), K(fork_snapshot_version));
+    LOG_WARN("invalid args", K(ret), K(param), K(sstable), K(fork_snapshot_version));
   } else if (OB_FAIL(construct_access_param(param))) {
     LOG_WARN("construct access param failed", K(ret), K(param));
   } else {
     const ObTabletID &tablet_id = param.tablet_handle_.get_obj()->get_tablet_meta().tablet_id_;
-    if (OB_FAIL(construct_access_ctx(ls_id, tablet_id, fork_snapshot_version))) {
-      LOG_WARN("construct access ctx failed", K(ret), K(ls_id), K(tablet_id), K(fork_snapshot_version));
+    if (OB_FAIL(construct_access_ctx(tablet_id, fork_snapshot_version))) {
+      LOG_WARN("construct access ctx failed", K(ret), K(tablet_id), K(fork_snapshot_version));
     } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObSSTableRowWholeScanner)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc mem failed", K(ret));
@@ -224,7 +217,6 @@ int ObForkSnapshotRowScan::init(
                                        param.query_range_))) {
       LOG_WARN("construct iterator failed", K(ret));
     } else {
-      ls_id_ = ls_id;
       fork_snapshot_version_ = fork_snapshot_version;
       is_inited_ = true;
     }
@@ -297,7 +289,6 @@ int ObForkSnapshotRowScan::get_next_row(const ObDatumRow *&tmp_row)
 
 ObTabletForkParam::ObTabletForkParam()
   : is_inited_(false),
-    ls_id_(),
     table_id_(OB_INVALID_ID),
     schema_version_(0),
     task_id_(0),
@@ -311,7 +302,6 @@ ObTabletForkParam::ObTabletForkParam()
 
 ObTabletForkParam::ObTabletForkParam(const ObTabletForkParam &other)
   : is_inited_(other.is_inited_),
-    ls_id_(other.ls_id_),
     table_id_(other.table_id_),
     schema_version_(other.schema_version_),
     task_id_(other.task_id_),
@@ -327,8 +317,6 @@ ObTabletForkParam &ObTabletForkParam::operator=(const ObTabletForkParam &other)
 {
   if (this != &other) {
     is_inited_ = other.is_inited_;
-    
-    ls_id_ = other.ls_id_;
     table_id_ = other.table_id_;
     schema_version_ = other.schema_version_;
     task_id_ = other.task_id_;
@@ -349,8 +337,6 @@ ObTabletForkParam::~ObTabletForkParam()
 void ObTabletForkParam::reset()
 {
   is_inited_ = false;
-  
-  ls_id_.reset();
   table_id_ = OB_INVALID_ID;
   schema_version_ = 0;
   task_id_ = 0;
@@ -363,8 +349,7 @@ void ObTabletForkParam::reset()
 
 bool ObTabletForkParam::is_valid() const
 {
-  return ls_id_.is_valid()
-      && OB_INVALID_ID != table_id_
+  return OB_INVALID_ID != table_id_
       && schema_version_ > 0
       && task_id_ > 0
       && source_tablet_id_.is_valid()
@@ -384,8 +369,6 @@ int ObTabletForkParam::init(const ObTabletForkParam &param)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(param));
   } else {
-    
-    ls_id_ = param.ls_id_;
     table_id_ = param.table_id_;
     schema_version_ = param.schema_version_;
     task_id_ = param.task_id_;
@@ -405,7 +388,7 @@ ObTabletForkCtx::ObTabletForkCtx()
     allocator_lock_(),
     is_inited_(false),
     complement_data_ret_(OB_SUCCESS),
-    ls_handle_(),
+    ls_(nullptr),
     src_tablet_handle_(),
     dst_tablet_handle_(),
     snapshot_table_store_(),
@@ -414,17 +397,15 @@ ObTabletForkCtx::ObTabletForkCtx()
     clipped_schemas_map_(),
     created_sstable_handles_(),
     created_sstable_handles_lock_(),
-    row_inserted_(0),
-    ls_rebuild_seq_(-1)
+    row_inserted_(0)
 {
 }
 
 ObTabletForkCtx::~ObTabletForkCtx()
 {
   is_inited_ = false;
-  ls_rebuild_seq_ = -1;
   complement_data_ret_ = OB_SUCCESS;
-  ls_handle_.reset();
+  ls_ = nullptr;
   src_tablet_handle_.reset();
   dst_tablet_handle_.reset();
   snapshot_table_store_.reset();
@@ -438,7 +419,7 @@ ObTabletForkCtx::~ObTabletForkCtx()
 
 bool ObTabletForkCtx::is_valid() const
 {
-  return is_inited_ && ls_handle_.is_valid() && src_tablet_handle_.is_valid() && dst_tablet_handle_.is_valid();
+  return is_inited_ && OB_NOT_NULL(ls_) && src_tablet_handle_.is_valid() && dst_tablet_handle_.is_valid();
 }
 
 int ObTabletForkCtx::add_created_sstable(const ObTableHandleV2 &handle)
@@ -490,9 +471,9 @@ int ObTabletForkCtx::init(const ObTabletForkParam &param)
     } else {
       LOG_DEBUG("fork condition not satisfied yet, need retry", K(param));
     }
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(param.ls_id_, ls_handle_, ObLSGetMod::DDL_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_))) {
     LOG_WARN("failed to get log stream", K(ret), K(param));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle_,
+  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_,
       param.source_tablet_id_, src_tablet_handle_, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
     LOG_WARN("get source tablet failed", K(ret), K(param.source_tablet_id_));
   } else if (OB_FAIL(src_tablet_handle_.get_obj()->fetch_table_store(snapshot_table_store_))) {
@@ -507,11 +488,10 @@ int ObTabletForkCtx::init(const ObTabletForkParam &param)
       table_store_iterator_,
       ObGetReadTablesMode::NORMAL))) {
     LOG_WARN("fail to fetch snapshot read tables", K(ret), K(param));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle_,
+  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_,
       param.dest_tablet_id_, dst_tablet_handle_, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
     LOG_WARN("get destination tablet failed", K(ret), K(param.dest_tablet_id_));
   } else {
-    ls_rebuild_seq_ = ls_handle_.get_ls()->get_rebuild_seq();
     complement_data_ret_ = OB_SUCCESS;
     is_inited_ = true;
   }
@@ -572,7 +552,7 @@ int ObTabletForkCtx::prepare_index_builder(const ObTabletForkParam &param)
       const int64_t snapshot_version = param.fork_snapshot_version_;
 
       if (OB_FAIL(data_desc.init(
-          true/*is_ddl*/, *storage_schema, param.ls_id_,
+          true/*is_ddl*/, *storage_schema,
           param.dest_tablet_id_, merge_type, snapshot_version, param.data_format_version_,
           dst_tablet_handle_.get_obj()->get_tablet_meta().micro_index_clustered_,
           0/*concurrent_cnt*/,
@@ -734,8 +714,7 @@ uint64_t ObTabletForkDag::hash() const
     ret = OB_ERR_SYS;
     LOG_ERROR("invalid argument", K(ret), K(is_inited_), K(param_));
   } else {
-    hash_val = param_.ls_id_.hash() 
-             + param_.table_id_ + param_.schema_version_
+    hash_val = param_.table_id_ + param_.schema_version_
              + param_.source_tablet_id_.hash() + param_.dest_tablet_id_.hash()
              + static_cast<uint64_t>(param_.fork_snapshot_version_)
              + ObDagType::DAG_TYPE_FORK_TABLE;
@@ -755,9 +734,7 @@ bool ObTabletForkDag::operator==(const ObIDag &other) const
       ret = OB_ERR_SYS;
       LOG_WARN("invalid argument", K(ret), K(param_), K(dag.param_));
     } else {
-      is_equal = true
-              && param_.ls_id_ == dag.param_.ls_id_
-              && param_.schema_version_ == dag.param_.schema_version_
+      is_equal = param_.schema_version_ == dag.param_.schema_version_
               && param_.source_tablet_id_ == dag.param_.source_tablet_id_
               && param_.dest_tablet_id_ == dag.param_.dest_tablet_id_;
     }
@@ -772,7 +749,7 @@ int ObTabletForkDag::fill_info_param(compaction::ObIBasicInfoParam *&out_param, 
     ret = OB_NOT_INIT;
     LOG_WARN("ObTabletForkDag has not been initialized", K(ret));
   } else if (OB_FAIL(ADD_DAG_WARN_INFO_PARAM(out_param, allocator, get_type(), 
-      static_cast<int64_t>(param_.ls_id_.id()), static_cast<int64_t>(param_.source_tablet_id_.id())))) {
+      static_cast<int64_t>(param_.source_tablet_id_.id())))) {
     LOG_WARN("failed to fill info param", K(ret));
   }
   return ret;
@@ -788,9 +765,9 @@ int ObTabletForkDag::fill_dag_key(char *buf, const int64_t buf_len) const
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid param", K(ret), K(param_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, 
-      "Fork table: src_tablet_id=%ld, dst_tablet_id=%ld, fork_snapshot_version=%ld, ls_id=%ld, schema_version=%ld",
+      "Fork table: src_tablet_id=%ld, dst_tablet_id=%ld, fork_snapshot_version=%ld, schema_version=%ld",
       param_.source_tablet_id_.id(), param_.dest_tablet_id_.id(), param_.fork_snapshot_version_,
-      param_.ls_id_.id(), param_.schema_version_))) {
+      param_.schema_version_))) {
     LOG_WARN("fail to fill dag key", K(ret), K(param_));
   }
   return ret;
@@ -939,7 +916,7 @@ int ObTabletForkReuseTask::process_reuse_sstable()
   int ret = OB_SUCCESS;
   ObTabletCreateSSTableParam param;
   ObTableHandleV2 table_handle;
-  blocksstable::ObMigrationSSTableParam mig_sstable_param;
+  blocksstable::ObForkSSTableParam fork_sstable_param;
   share::SCN fork_snapshot_scn;
   
   if (OB_ISNULL(sstable_)) {
@@ -952,10 +929,10 @@ int ObTabletForkReuseTask::process_reuse_sstable()
     ObSSTableMetaHandle meta_handle;
     if (OB_FAIL(sstable_->get_meta(meta_handle))) {
       LOG_WARN("failed to get sstable meta", K(ret));
-    } else if (OB_FAIL(context_->src_tablet_handle_.get_obj()->build_migration_sstable_param(
-        src_table_key, mig_sstable_param, true/*is_fork_table*/))) {
-      LOG_WARN("failed to build migration sstable param", K(ret), K(src_table_key));
-    } else if (OB_FAIL(param.init_for_fork(mig_sstable_param, param_->dest_tablet_id_, src_table_key, meta_handle.get_sstable_meta(), fork_snapshot_scn))) {
+    } else if (OB_FAIL(context_->src_tablet_handle_.get_obj()->build_fork_sstable_param(
+        src_table_key, fork_sstable_param))) {
+      LOG_WARN("failed to build fork sstable param", K(ret), K(src_table_key));
+    } else if (OB_FAIL(param.init_for_fork(fork_sstable_param, param_->dest_tablet_id_, src_table_key, meta_handle.get_sstable_meta(), fork_snapshot_scn))) {
       LOG_WARN("init for fork failed", K(ret), K(param_->dest_tablet_id_), K(src_table_key), K(fork_snapshot_scn));
     } else if (OB_FAIL(context_->create_sstable(param, table_handle))) {
       LOG_ERROR("failed to create sstable with reused blocks", K(ret));
@@ -1142,7 +1119,6 @@ int ObTabletForkRewriteTask::prepare_macro_block_writer(
     
     if (OB_FAIL(data_desc.init(
         true/*is_ddl*/, clipped_storage_schema,
-        param_->ls_id_,
         param_->dest_tablet_id_,
         merge_type,
         snapshot_version,
@@ -1163,7 +1139,7 @@ int ObTabletForkRewriteTask::prepare_macro_block_writer(
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("alloc mem failed", K(ret));
       } else if (FALSE_IT(macro_block_writer = new (buf) ObMacroBlockWriter())) {
-      } else if (OB_FAIL(pre_warm_param.init(param_->ls_id_, param_->dest_tablet_id_))) {
+      } else if (OB_FAIL(pre_warm_param.init(param_->dest_tablet_id_))) {
         LOG_WARN("failed to init pre warm param", K(ret), K(param_->dest_tablet_id_), KPC(param_));
       } else if (OB_FAIL(ObSSTablePrivateObjectCleaner::get_cleaner_from_data_store_desc(
                              data_desc.get_desc(),
@@ -1210,7 +1186,7 @@ int ObTabletForkRewriteTask::process_rewrite_sstable_task(
         whole_range,
         clipped_storage_schema);
     
-    if (OB_FAIL(row_scan.init(scan_param, *sstable_, param_->ls_id_, param_->fork_snapshot_version_))) {
+    if (OB_FAIL(row_scan.init(scan_param, *sstable_, param_->fork_snapshot_version_))) {
       LOG_WARN("init fork snapshot row scan failed", K(ret));
     } else {
       const ObDatumRow *row = nullptr;
@@ -1361,7 +1337,7 @@ int ObTabletForkMergeTask::create_sstables()
       bool need_fill_empty_sstable = false;
       share::SCN end_scn;
       if (OB_FAIL(ObTabletRebuildUtil::check_need_fill_empty_sstable(
-              context_->ls_handle_,
+              context_->ls_,
               max_end_scn_minor_sstable->is_minor_sstable(),
               max_end_scn_minor_sstable->get_key(),
               param_->dest_tablet_id_,
@@ -1403,8 +1379,7 @@ int ObTabletForkMergeTask::create_sstables()
     // Batch update table store with all created sstables
     if (OB_SUCC(ret) && src_table_cnt > 0) {
       if (OB_FAIL(update_table_store_with_batch_tables(
-              context_->ls_rebuild_seq_,
-              context_->ls_handle_,
+              context_->ls_,
               context_->src_tablet_handle_,
               context_->dst_tablet_handle_,
               param_->dest_tablet_id_,
@@ -1419,8 +1394,7 @@ int ObTabletForkMergeTask::create_sstables()
 }
 
 int ObTabletForkMergeTask::update_table_store_with_batch_tables(
-    const int64_t ls_rebuild_seq,
-    const ObLSHandle &ls_handle,
+    ObLS *ls,
     const ObTabletHandle &src_tablet_handle,
     const ObTabletHandle &dst_tablet_handle,
     const ObTabletID &dst_tablet_id,
@@ -1431,17 +1405,17 @@ int ObTabletForkMergeTask::update_table_store_with_batch_tables(
   ObBatchUpdateTableStoreParam param;
   param.reset();
   ObSEArray<ObITable *, MAX_SSTABLE_CNT_IN_STORAGE> batch_tables;
-  ObMigrationTabletParam src_tablet_param;
+  ObArenaAllocator schema_allocator(common::ObMemAttr("ForkSchema"));
+  ObStorageSchema *src_storage_schema = nullptr;
 
   if (OB_FAIL(ret)) {
-  } else if (OB_UNLIKELY(ls_rebuild_seq == -1
-      || !ls_handle.is_valid()
+  } else if (OB_UNLIKELY(OB_ISNULL(ls)
       || !src_tablet_handle.is_valid()
       || !dst_tablet_handle.is_valid()
       || !dst_tablet_id.is_valid()
       || !is_valid_merge_type(merge_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(ls_rebuild_seq), K(ls_handle), K(src_tablet_handle),
+    LOG_WARN("invalid arg", K(ret), K(ls), K(src_tablet_handle),
       K(dst_tablet_handle), K(dst_tablet_id), K(merge_type));
   } else if (OB_FAIL(tables_handle.get_tables(batch_tables))) {
     LOG_WARN("fork table: get batch sstables failed", KR(ret), KPC_(param), K(dst_tablet_id));
@@ -1450,16 +1424,16 @@ int ObTabletForkMergeTask::update_table_store_with_batch_tables(
     // TODO(fankun.fan): meta major sstable
   } else if (OB_UNLIKELY(src_tablet_handle.get_obj()->is_empty_shell())) {
     LOG_WARN("fork table: src tablet is empty shell, skip src storage schema", K(dst_tablet_id), K(src_tablet_handle));
-  } else if (OB_FAIL(src_tablet_handle.get_obj()->build_migration_tablet_param(src_tablet_param))) {
-    LOG_WARN("fork table: build src tablet param failed", K(ret), K(dst_tablet_id), K(src_tablet_handle));
-  } else if (OB_UNLIKELY(!src_tablet_param.storage_schema_.is_valid())) {
-    LOG_WARN("fork table: src storage schema is invalid, skip using it", K(dst_tablet_id), K(src_tablet_param.storage_schema_));
+  } else if (OB_FAIL(src_tablet_handle.get_obj()->load_storage_schema(schema_allocator, src_storage_schema))) {
+    LOG_WARN("fork table: load src storage schema failed", K(ret), K(dst_tablet_id), K(src_tablet_handle));
+  } else if (OB_ISNULL(src_storage_schema) || OB_UNLIKELY(!src_storage_schema->is_valid())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fork table: src storage schema is invalid", K(ret), K(dst_tablet_id), KP(src_storage_schema));
   } else {
-    param.tablet_meta_ = &src_tablet_param;
+    param.storage_schema_ = src_storage_schema;
   }
 
   if (OB_SUCC(ret)) {
-    param.rebuild_seq_ = ls_rebuild_seq;
     param.release_mds_scn_.set_min();
     param.tablet_fork_param_.snapshot_version_ = param_->fork_snapshot_version_;
     param.tablet_fork_param_.multi_version_start_ = param_->fork_snapshot_version_;
@@ -1497,7 +1471,7 @@ int ObTabletForkMergeTask::update_table_store_with_batch_tables(
     param.tablet_fork_param_.clog_checkpoint_scn_ = clog_checkpoint_scn;
     param.tablet_fork_param_.mds_checkpoint_scn_ = mds_checkpoint_scn;
     
-    if (OB_FAIL(ls_handle.get_ls()->build_tablet_with_batch_tables(dst_tablet_id, param))) {
+    if (OB_FAIL(ls->build_tablet_with_batch_tables(dst_tablet_id, param))) {
       LOG_WARN("fork table: update tablet table store failed", KR(ret), KPC_(param), K(dst_tablet_id),
           "batch_cnt", batch_tables.count(), K(minor_cnt), K(major_cnt),
           "min_start_scn", min_start_scn_val, "max_end_scn", max_end_scn_val,
@@ -1512,6 +1486,7 @@ int ObTabletForkMergeTask::update_table_store_with_batch_tables(
     }
   }
 
+  ObTabletObjLoadHelper::free(schema_allocator, src_storage_schema);
   return ret;
 }
 
@@ -1522,16 +1497,16 @@ int ObTabletForkUtil::check_satisfy_fork_condition(
   int ret = OB_SUCCESS;
   is_satisfied = false;
   bool need_freeze = false;
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
   ObArray<ObTableHandleV2> memtable_handles;
 
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(param));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(param.ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
-    LOG_WARN("failed to get ls", K(ret), K(param.ls_id_));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, param.source_tablet_id_, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    LOG_WARN("failed to get ls", K(ret));
+  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, param.source_tablet_id_, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("failed to get tablet", K(ret), K(param.source_tablet_id_));
   } else if (OB_UNLIKELY(nullptr == tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
@@ -1572,8 +1547,8 @@ int ObTabletForkUtil::check_satisfy_fork_condition(
     }
     
     if (OB_SUCC(ret) && need_freeze) {
-      if (OB_FAIL(ObTabletForkUtil::freeze_tablet(param.ls_id_, param.source_tablet_id_))) {
-        LOG_WARN("failed to freeze tablet", K(ret), K(param.ls_id_), K(param.source_tablet_id_));
+      if (OB_FAIL(ObTabletForkUtil::freeze_tablet(param.source_tablet_id_))) {
+        LOG_WARN("failed to freeze tablet", K(ret), K(param.source_tablet_id_));
       }
       ob_usleep(100 * 1000L); // 100ms
     }
@@ -1588,23 +1563,23 @@ int ObTabletForkUtil::check_fork_data_complete(
 {
   int ret = OB_SUCCESS;
   is_complete = false;
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
   share::ObForkTabletInfo fork_info;
 
   if (OB_UNLIKELY(!dest_tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(SYS_LS), K(dest_tablet_id));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(SYS_LS, ls_handle, ObLSGetMod::DDL_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(SYS_LS));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, dest_tablet_id, 
+    LOG_WARN("invalid arg", K(ret), K(dest_tablet_id));
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    LOG_WARN("failed to get log stream", K(ret));
+  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, dest_tablet_id,
       tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    LOG_WARN("failed to get tablet handle", K(ret), K(SYS_LS), K(dest_tablet_id));
+    LOG_WARN("failed to get tablet handle", K(ret), K(dest_tablet_id));
   } else if (OB_UNLIKELY(nullptr == tablet_handle.get_obj())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("tablet handle is null", K(ret), K(SYS_LS), K(dest_tablet_id));
+    LOG_WARN("tablet handle is null", K(ret), K(dest_tablet_id));
   } else if (OB_FAIL(tablet_handle.get_obj()->get_fork_info(fork_info))) {
-    LOG_WARN("failed to get fork_info from tablet", K(ret), K(SYS_LS), K(dest_tablet_id));
+    LOG_WARN("failed to get fork_info from tablet", K(ret), K(dest_tablet_id));
   } else if (fork_info.get_fork_src_tablet_id().is_valid() && fork_info.is_complete()) {
     is_complete = true;
     LOG_DEBUG("tablet fork data complement complete", K(dest_tablet_id), K(fork_info));
@@ -1696,7 +1671,6 @@ int ObTabletForkUtil::try_schedule_fork_dags(const ObTableForkInfo &fork_info)
     int64_t fail_cnt = 0;
     LOG_INFO("fork table: schedule fork dags begin",
         "task_id", fork_info.task_id_,
-        K(fork_info.ls_id_),
         "table_id", fork_info.table_id_,
         "schema_version", fork_info.schema_version_,
         "fork_snapshot_version", fork_info.fork_snapshot_version_,
@@ -1720,7 +1694,6 @@ int ObTabletForkUtil::try_schedule_fork_dags(const ObTableForkInfo &fork_info)
     }
     LOG_INFO("fork table: schedule fork dags finish",
         "task_id", fork_info.task_id_,
-        K(fork_info.ls_id_),
         "tablet_cnt", fork_params.count(),
         K(scheduled_cnt), K(exist_cnt), K(fail_cnt),
         KR(ret));
@@ -1729,7 +1702,6 @@ int ObTabletForkUtil::try_schedule_fork_dags(const ObTableForkInfo &fork_info)
 }
 
 int ObTabletForkUtil::freeze_tablet(
-    const share::ObLSID &ls_id,
     const ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
@@ -1738,9 +1710,9 @@ int ObTabletForkUtil::freeze_tablet(
   if (OB_ISNULL(tenant_freezer)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ObTenantFreezer is null", K(ret));
-  } else if (OB_UNLIKELY(!ls_id.is_valid()) || OB_UNLIKELY(!tablet_id.is_valid())) {
+  } else if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("invalid arguments", K(ret), K(tablet_id));
   } else {
     // Freeze the tablet
     const bool is_sync = false;
@@ -1748,8 +1720,7 @@ int ObTabletForkUtil::freeze_tablet(
     const bool need_rewrite_tablet_meta = false;
     const ObFreezeSourceFlag source = ObFreezeSourceFlag::FREEZE_TRIGGER;
     
-    if (OB_FAIL(tenant_freezer->tablet_freeze(ls_id,
-                                              tablet_id,
+    if (OB_FAIL(tenant_freezer->tablet_freeze(tablet_id,
                                               is_sync,
                                               max_retry_time_us,
                                               need_rewrite_tablet_meta,
@@ -1768,17 +1739,16 @@ int ObTabletForkUtil::freeze_tablet(
 }
 
 int ObTabletForkUtil::freeze_tablets(
-    const share::ObLSID &ls_id,
     const ObIArray<ObTabletID> &tablet_ids)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!ls_id.is_valid()) || OB_UNLIKELY(tablet_ids.empty())) {
+  if (OB_UNLIKELY(tablet_ids.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(ls_id), K(tablet_ids.count()));
+    LOG_WARN("invalid arguments", K(ret), K(tablet_ids.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
       const ObTabletID &tablet_id = tablet_ids.at(i);
-      if (OB_FAIL(ObTabletForkUtil::freeze_tablet(ls_id, tablet_id))) {
+      if (OB_FAIL(ObTabletForkUtil::freeze_tablet(tablet_id))) {
         LOG_WARN("failed to freeze tablet", K(ret), K(tablet_id));
       }
     }

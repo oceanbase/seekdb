@@ -63,7 +63,6 @@ void ObDiagnoseTabletMgr::destroy()
 
 // for diagnose
 int ObDiagnoseTabletMgr::add_diagnose_tablet(
-  const share::ObLSID &ls_id, 
   const ObTabletID &tablet_id, 
   const share::ObDiagnoseTabletType type)
 {
@@ -72,13 +71,13 @@ int ObDiagnoseTabletMgr::add_diagnose_tablet(
     ret = OB_NOT_INIT;
     LOG_WARN("ObDiagnoseTabletMgr is not init", K(ret));
   } else {
-    if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid() 
+    if (OB_UNLIKELY(!tablet_id.is_valid()
         || !is_valid_diagnose_tablet_type(type))) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id), K(type));
+      LOG_WARN("invalid argument", K(ret), K(tablet_id), K(type));
     } else {
       lib::ObMutexGuard guard(diagnose_lock_);
-      ObDiagnoseTablet diagnose_tablet(ls_id, tablet_id);
+      ObDiagnoseTablet diagnose_tablet(tablet_id);
       int64_t flag = 0;
       if (OB_FAIL(diagnose_tablet_map_.get_refactored(diagnose_tablet, flag))) {
         if (OB_HASH_NOT_EXIST != ret) {
@@ -121,7 +120,6 @@ int ObDiagnoseTabletMgr::get_diagnose_tablets(ObIArray<ObDiagnoseTablet> &diagno
 }
 
 int ObDiagnoseTabletMgr::delete_diagnose_tablet(
-  const share::ObLSID &ls_id, 
   const ObTabletID &tablet_id,
   const share::ObDiagnoseTabletType type)
 {
@@ -130,13 +128,13 @@ int ObDiagnoseTabletMgr::delete_diagnose_tablet(
     ret = OB_NOT_INIT;
    LOG_WARN("ObDiagnoseTabletMgr is not init", K(ret));
   } else {
-    if (!ls_id.is_valid() || !tablet_id.is_valid() 
+    if (!tablet_id.is_valid()
         || !is_valid_diagnose_tablet_type(type)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id), K(type));
+      LOG_WARN("invalid argument", K(ret), K(tablet_id), K(type));
     } else {
       lib::ObMutexGuard guard(diagnose_lock_);
-      ObDiagnoseTablet diagnose_tablet(ls_id, tablet_id);
+      ObDiagnoseTablet diagnose_tablet(tablet_id);
       int64_t flag = 0;
       if (OB_FAIL(diagnose_tablet_map_.get_refactored(diagnose_tablet, flag))) {
         if (OB_HASH_NOT_EXIST != ret) {

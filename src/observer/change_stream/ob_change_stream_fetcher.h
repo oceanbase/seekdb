@@ -26,7 +26,6 @@
 #include "lib/hash/ob_hashmap.h"
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
-#include "share/ob_ls_id.h"
 #include "share/ob_thread_pool.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "logservice/palf/lsn.h"
@@ -185,7 +184,6 @@ private:
 
   bool is_inited_;
   ObCSDispatcher *dispatcher_;
-  share::ObLSID ls_id_;
   palf::PalfBufferIterator iter_;
   palf::LSN current_lsn_;
   SCN current_scn_;

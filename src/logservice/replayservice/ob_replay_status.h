@@ -32,7 +32,6 @@
 #include "lib/utility/ob_print_utils.h"
 #include "share/ob_define.h"
 #include "share/ob_errno.h"
-#include "share/ob_ls_id.h"
 #include "logservice/ob_log_handler.h"
 
 namespace oceanbase
@@ -63,17 +62,13 @@ enum class ObReplayServiceTaskType
 //Virtual table statistics
 struct LSReplayStat
 {
-  int64_t ls_id_;
-  common::ObRole role_;
   palf::LSN end_lsn_;
   bool enabled_;
   palf::LSN unsubmitted_lsn_;
   share::SCN unsubmitted_scn_;
   int64_t pending_cnt_;
 
-  TO_STRING_KV(K(ls_id_),
-               K(role_),
-               K(end_lsn_),
+  TO_STRING_KV(K(end_lsn_),
                K(enabled_),
                K(unsubmitted_lsn_),
                K(unsubmitted_scn_),
@@ -123,16 +118,14 @@ public:
   {
     reset();
   }
-  ObLogReplayTask(const share::ObLSID &ls_id,
-                  const ObLogBaseHeader &header,
+  ObLogReplayTask(const ObLogBaseHeader &header,
                   const palf::LSN &lsn,
                   const share::SCN &scn,
                   const int64_t log_size,
                   const int64_t base_header_len,
                   void *decompression_buf,
                   int64_t decompressed_log_size)
-      : ls_id_(ls_id),
-      log_type_(header.get_log_type()),
+      : log_type_(header.get_log_type()),
       lsn_(lsn),
       scn_(scn),
       is_pre_barrier_(header.need_pre_replay_barrier()),
@@ -159,7 +152,6 @@ public:
   int64_t get_replay_payload_size() const;
   void shallow_copy(const ObLogReplayTask &other);
 public:
-  share::ObLSID ls_id_;
   ObLogBaseType log_type_;
   palf::LSN lsn_;
   share::SCN scn_;
@@ -260,10 +252,7 @@ protected:
   ObReplayServiceTaskType type_;
   //for debug: task wait in queue too much time
   int64_t enqueue_ts_;
-  // If only linkhashmap manages the lifecycle of replay status, ObReplayServiceTask only stores ls_id,
-  // Then in the ABA scenario, the remaining tasks will get a new replay status and replay,
-  // Therefore the task itself needs to record the replay status, and this will make the replay status not only used at the linkhashmap.
-  // So it is necessary for replay status to manage its own reference count, the reference count of linkhashmap is redundant.
+  // Tasks retain the replay status so queued work cannot observe a recycled status object.
   ObReplayStatus *replay_status_;
   TaskErrInfo err_info_;
   //control state transition of queue
@@ -289,7 +278,6 @@ public:
   }
   int init(const palf::LSN &base_lsn,
            const share::SCN &base_scn,
-           const share::ObLSID &id,
            ObReplayStatus *replay_status);
   void reset() override;
   void destroy() override;
@@ -309,8 +297,7 @@ public:
   int next_log(const share::SCN &replayable_point,
                bool &iterate_end_by_replayable_point);
   // Reset the iterator with the current endpoint as the new starting point
-  int reset_iterator(const share::ObLSID &id,
-                     const palf::LSN &begin_lsn);
+  int reset_iterator(const palf::LSN &begin_lsn);
 
   INHERIT_TO_STRING_KV("ObReplayServiceSubmitTask", ObReplayServiceTask,
                        K(next_to_submit_lsn_),
@@ -406,13 +393,14 @@ public:
     replay_status_ = NULL;
   }
   // Callback interface, call the update_end_offset interface of replay status
-  int update_end_lsn(int64_t id, const palf::LSN &end_offset, const share::SCN &end_scn, const int64_t proposal_id);
+  int update_end_lsn(const palf::LSN &end_offset, const share::SCN &end_scn);
 private:
   ObReplayStatus *replay_status_;
 };
 
 class ObReplayStatus
 {
+  friend class ObReplayServiceSubmitTask;
 public:
   typedef common::RWLock RWLock;
   typedef RWLock::RLockGuard RLockGuard;
@@ -453,8 +441,7 @@ public:
 public:
   ObReplayStatus();
   ~ObReplayStatus();
-  int init(const share::ObLSID &id,
-           palf::PalfEnv *palf_env,
+  int init(palf::PalfEnv *palf_env,
            ObLogReplayService *rp_sv);
   void destroy();
 public:
@@ -466,7 +453,7 @@ public:
   bool is_enabled() const;
   // for replay service when holding rdlock
   bool is_enabled_without_lock() const;
-  // for follower speed_limit
+  // Replay submission flow control.
   // 1. avoid more replay cause OOM because speed_limit cannot work when freeze
   // 2. quick improving max_undecided_log to reduce freeze cost
   void block_submit();
@@ -482,11 +469,11 @@ public:
     rwlock_.unlock();
   }
 
-  void switch_to_leader();
-  void switch_to_follower(const palf::LSN &begin_lsn);
+  void disable_local_replay();
+  void enable_local_replay(const palf::LSN &begin_lsn);
   // check whether all logs has finished replaying
   //
-  // during Leader Reconfirm->Leader Takeover，demanding that there is no log that need to be replayed,
+  // Before enabling local append, there must be no remaining log to replay.
   // this function will be invoked and check whether the returned is_done is true
   // @param [out] is_done，true if all logs have been replayed
   //
@@ -514,7 +501,6 @@ public:
   //Release the special log_buf in ObLogReplayTask, only forward barrier logs are effective
   void free_replay_task_log_buf(ObLogReplayTask *task);
 
-  int get_ls_id(share::ObLSID &id);
   int get_min_unreplayed_lsn(palf::LSN &lsn);
   int get_max_replayed_scn(share::SCN &scn);
   int get_min_unreplayed_log_info(palf::LSN &lsn,
@@ -576,10 +562,9 @@ public:
     last_check_memstore_lsn_ = lsn;
   }
 
-  TO_STRING_KV(K(ls_id_),
-               K(is_enabled_),
+  TO_STRING_KV(K(is_enabled_),
                K(is_submit_blocked_),
-               K(role_),
+               K(local_replay_enabled_),
                K(err_info_),
                K(ref_cnt_),
                K(post_barrier_lsn_),
@@ -609,8 +594,7 @@ private:
   bool is_inited_;
   bool is_enabled_;  // forbidden replay and fetch log if false
   bool is_submit_blocked_; // allow replay log if true
-  common::ObRole role_;  // leader do not need replay
-  share::ObLSID ls_id_;
+  bool local_replay_enabled_;
   // guarantee the effectiveness of self memory:
   // inc_ref() before push task into replay_service, dec_ref() after replay_service finished handling task
   int64_t ref_cnt_;
@@ -624,8 +608,7 @@ private:
   // Hold the read lock until the log replay is complete when replaying a log entry
   // Ensure that no log replay will occur after write lock is disabled
   mutable RWLock rwlock_;
-  // protect is_submit_blocked_ and role_
-  mutable RWLock rolelock_;
+  mutable RWLock local_replay_lock_;
 
   ObLogReplayService *rp_sv_;
   // be sure to clear these queues when the partition is offline to prevent old replay task is replayed in situation of migrating out and then migrating in
@@ -641,7 +624,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObReplayStatus);
 };
 
-// get replay status with ref protection, for map in replay service
+// Keeps the single replay status alive while it is in use.
 class ObReplayStatusGuard
 {
 public:

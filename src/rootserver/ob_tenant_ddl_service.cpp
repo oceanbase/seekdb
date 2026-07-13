@@ -22,7 +22,6 @@
 #include "rootserver/ob_tenant_thread_helper.h"
 #include "rootserver/ob_ddl_service.h"
 #include "rootserver/ob_root_service.h"
-#include "share/location_cache/ob_location_service.h"
 #include "rootserver/ob_table_creator.h"
 #include "share/ob_global_stat_proxy.h"
 #include "share/ob_schema_status_proxy.h"

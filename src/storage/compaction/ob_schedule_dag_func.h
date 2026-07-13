@@ -22,10 +22,6 @@
 
 namespace oceanbase
 {
-namespace share
-{
-class ObLSID;
-}
 namespace storage
 {
 namespace mds
@@ -92,7 +88,6 @@ class ObDagParamFunc final
 {
 public:
   static int fill_param(
-    const share::ObLSID &ls_id,
     const storage::ObTablet &tablet,
     const ObMergeType merge_type,
     const int64_t &merge_snapshot_version,

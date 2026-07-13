@@ -21,7 +21,6 @@
 #include "share/ob_ddl_task_executor.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
-#include "storage/tablet/ob_tablet_binding_helper.h"
 #include "sql/optimizer/stat/ob_stat_define.h"
 
 namespace oceanbase
@@ -31,11 +30,26 @@ namespace share
 class AutoincParam;
 namespace schema
 {
+struct AlterTableSchema;
+class ObColumnGroupSchema;
+class ObColumnSchemaV2;
+class ObPartition;
+class ObPartitionSchema;
+class ObSubPartition;
 class ObTableSchema;
 }
 }
 namespace rootserver
 {
+using share::schema::AlterTableSchema;
+using share::schema::ObSchemaGetterGuard;
+using share::schema::ObColumnGroupSchema;
+using share::schema::ObColumnSchemaV2;
+using share::schema::ObPartition;
+using share::schema::ObPartitionSchema;
+using share::schema::ObSubPartition;
+using share::schema::ObTableSchema;
+
 class ObDDLService;
 class ObDDLSQLTransaction;
 class ObDDLOperator;
@@ -84,7 +98,6 @@ static inline bool is_partition_exchange_between_subpart_and_part(const ObPartit
 class ObPartitionExchange
 {
 public:
-  typedef std::pair<share::ObLSID, common::ObTabletID> LSTabletID;
   // 'is_part_id_exchanged = false' only happens in partition-level direct load
   explicit ObPartitionExchange(ObDDLService &ddl_service,
                                const bool is_part_id_exchanged = true);
@@ -235,13 +248,6 @@ protected:
   int build_single_table_rw_defensive_(const ObIArray<common::ObTabletID> &tablet_ids,
                                        const int64_t schema_version,
                                        ObDDLSQLTransaction &trans);
-  int build_modify_tablet_binding_args_v1_(const ObIArray<ObTabletID> &tablet_ids,
-                                           const int64_t schema_version,
-                                           ObIArray<storage::ObBatchUnbindTabletArg> &modify_args,
-                                           ObDDLSQLTransaction &trans);
-  int get_tablets_(const ObIArray<common::ObTabletID> &tablet_ids,
-                   ObIArray<LSTabletID> &tablets,
-                   ObDDLSQLTransaction &trans);
   int adapting_cdc_changes_in_exchange_partition_(const uint64_t partitioned_table_id,
                                                   const uint64_t non_partitioned_table_id,
                                                   ObDDLSQLTransaction &trans);
@@ -352,16 +358,15 @@ struct ObChangeTabletToTableArg final
 {
   OB_UNIS_VERSION_V(1);
 public:
-  ObChangeTabletToTableArg() : ls_id_(), base_table_id_(OB_INVALID_ID), inc_table_id_(OB_INVALID_ID), tablet_ids_(), table_ids_() {}
+  ObChangeTabletToTableArg() : base_table_id_(OB_INVALID_ID), inc_table_id_(OB_INVALID_ID), tablet_ids_(), table_ids_() {}
   ~ObChangeTabletToTableArg() {}
-  share::ObLSID ls_id_;
   uint64_t base_table_id_; // PT table, always with the large amount of data.
   uint64_t inc_table_id_; // NT table, with the incremental data.
    // tablet ids of data table, index table, lob meta/piece table.
   common::ObSArray<ObTabletID> tablet_ids_; 
   // the table ids corresponding to the tablet ids.
   common::ObSArray<uint64_t> table_ids_;
-  TO_STRING_KV(K_(ls_id), K_(base_table_id), K_(inc_table_id), K_(tablet_ids), K_(table_ids));
+  TO_STRING_KV(K_(base_table_id), K_(inc_table_id), K_(tablet_ids), K_(table_ids));
 };
 
 }//end namespace rootserver

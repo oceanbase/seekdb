@@ -52,9 +52,8 @@ class ObMdsRangeQueryIteratorHelper
 public:
   static int get_mds_table(const ObTabletHandle &tablet_handle, mds::MdsTableHandle &mds_table);
   static int check_mds_data_complete(const ObTabletHandle &tablet_handle, bool &is_data_complete);
-  static int get_tablet_ls_id_and_tablet_id(
+  static int get_tablet_id(
       const ObTabletHandle &tablet_handle,
-      ObLSID &ls_id,
       ObTabletID &tablet_id);
 };
 

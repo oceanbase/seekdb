@@ -85,8 +85,7 @@ OB_SERIALIZE_MEMBER_INHERIT(ObLockTabletRequest, ObLockTableRequest,
 OB_SERIALIZE_MEMBER_INHERIT(ObLockTabletsRequest, ObLockTableRequest,
                             tablet_ids_);
 
-OB_SERIALIZE_MEMBER_INHERIT(ObLockAloneTabletRequest, ObLockTabletsRequest,
-                            ls_id_);
+OB_SERIALIZE_MEMBER_INHERIT(ObLockAloneTabletRequest, ObLockTabletsRequest);
 
 OB_SERIALIZE_MEMBER(ObReplaceLockRequest,
                     new_lock_mode_,
@@ -110,7 +109,6 @@ OB_DEF_SERIALIZE_SIZE(ObTableLockTaskRequest)
   } else {
     LST_DO_CODE(OB_UNIS_ADD_LEN,
                 task_type_,
-                lsid_,
                 param_,
                 *tx_desc_);
   }
@@ -126,7 +124,6 @@ OB_DEF_SERIALIZE(ObTableLockTaskRequest)
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE,
                 task_type_,
-                lsid_,
                 param_,
                 *tx_desc_);
   }
@@ -138,7 +135,6 @@ OB_DEF_DESERIALIZE(ObTableLockTaskRequest)
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE,
               task_type_,
-              lsid_,
               param_);
   if (OB_FAIL(ret)) {
     // do nothing
@@ -384,7 +380,6 @@ bool ObLockParam::is_valid() const
             || ObLockOBJType::OBJ_TYPE_DATABASE_NAME == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_OBJECT_NAME == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_DBMS_LOCK == lock_id_.obj_type_
-            || ObLockOBJType::OBJ_TYPE_MATERIALIZED_VIEW == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_MYSQL_LOCK_FUNC == lock_id_.obj_type_
             || ObLockOBJType::OBJ_TYPE_REFRESH_VECTOR_INDEX == lock_id_.obj_type_)));
 }
@@ -679,15 +674,13 @@ bool ObUnLockTabletsRequest::is_valid() const
 void ObLockAloneTabletRequest::reset()
 {
   ObLockTabletsRequest::reset();
-  ls_id_.reset();
 }
 
 bool ObLockAloneTabletRequest::is_valid() const
 {
   bool is_valid = true;
   is_valid = (ObLockMsgType::LOCK_ALONE_TABLET_REQ == type_ &&
-              ObLockRequest::is_valid() &&
-              ls_id_.is_valid());
+              ObLockRequest::is_valid());
   for (int64_t i = 0; i < tablet_ids_.count() && is_valid; i++) {
     is_valid = is_valid && tablet_ids_.at(i).is_valid();
   }
@@ -704,8 +697,7 @@ bool ObUnLockAloneTabletRequest::is_valid() const
   bool is_valid = true;
   is_valid = ((ObLockMsgType::LOCK_ALONE_TABLET_REQ == type_ ||
                ObLockMsgType::UNLOCK_ALONE_TABLET_REQ == type_) &&
-              ObLockRequest::is_valid() &&
-              ls_id_.is_valid());
+              ObLockRequest::is_valid());
   for (int64_t i = 0; i < tablet_ids_.count() && is_valid; i++) {
     is_valid = is_valid && tablet_ids_.at(i).is_valid();
   }
@@ -784,20 +776,17 @@ bool ObReplaceAllLocksRequest::is_valid() const
 
 int ObTableLockTaskRequest::set(
   const ObTableLockTaskType task_type,
-  const share::ObLSID &lsid,
   const ObLockParam &param,
   transaction::ObTxDesc *tx_desc)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!(task_type < MAX_TASK_TYPE)) ||
-      OB_UNLIKELY(!lsid.is_valid()) ||
       OB_UNLIKELY(!param.is_valid()) ||
       OB_ISNULL(tx_desc)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_type), K(lsid), K(param), KP(tx_desc));
+    LOG_WARN("invalid argument", K(ret), K(task_type), K(param), KP(tx_desc));
   } else {
     task_type_ = task_type;
-    lsid_ = lsid;
     param_ = param;
     tx_desc_ = tx_desc;
   }
@@ -819,7 +808,6 @@ void ObTableLockTaskRequest::reset()
     }
   }
   task_type_ = INVALID_LOCK_TASK_TYPE;
-  lsid_.reset();
   param_.reset();
   tx_desc_ = nullptr;
   need_release_tx_ = false;
@@ -851,19 +839,15 @@ int ObInTransLockTableRequest::assign(const ObInTransLockTableRequest &arg)
 OB_SERIALIZE_MEMBER_INHERIT(ObInTransLockTabletRequest, ObInTransLockTableRequest, tablet_id_);
 
 
-OB_SERIALIZE_MEMBER(ObAdminRemoveLockOpArg, ls_id_, lock_op_);
+OB_SERIALIZE_MEMBER(ObAdminRemoveLockOpArg, lock_op_);
 
-int ObAdminRemoveLockOpArg::set(const share::ObLSID &ls_id,
-                                const ObTableLockOp &lock_op)
+int ObAdminRemoveLockOpArg::set(const ObTableLockOp &lock_op)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false ||
-                  !ls_id.is_valid() ||
-                  !lock_op.is_valid())) {
+  if (OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(ls_id), K(lock_op));
+    LOG_WARN("invalid argument", KR(ret), K(lock_op));
   } else {
-    ls_id_ = ls_id;
     lock_op_ = lock_op;
   }
   return ret;
@@ -871,25 +855,21 @@ int ObAdminRemoveLockOpArg::set(const share::ObLSID &ls_id,
 
 
 
-OB_SERIALIZE_MEMBER(ObAdminUpdateLockOpArg, ls_id_, lock_op_,
+OB_SERIALIZE_MEMBER(ObAdminUpdateLockOpArg, lock_op_,
                     commit_version_, commit_scn_);
 
-int ObAdminUpdateLockOpArg::set(const share::ObLSID &ls_id,
-                                const ObTableLockOp &lock_op,
+int ObAdminUpdateLockOpArg::set(const ObTableLockOp &lock_op,
                                 const share::SCN &commit_version,
                                 const share::SCN &commit_scn)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false ||
-                  !ls_id.is_valid() ||
-                  !lock_op.is_valid() ||
+  if (OB_UNLIKELY(!lock_op.is_valid() ||
                   !commit_version.is_valid() ||
                   !commit_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(ls_id), K(lock_op),
+    LOG_WARN("invalid argument", KR(ret), K(lock_op),
              K(commit_version), K(commit_scn));
   } else {
-    ls_id_ = ls_id;
     lock_op_ = lock_op;
     commit_version_ = commit_version;
     commit_scn_ = commit_scn;

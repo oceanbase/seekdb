@@ -22,7 +22,6 @@
 #include <typeinfo>
 #include "lib/atomic/ob_atomic.h"
 #include "ob_tablet_id.h"
-#include "share/ob_ls_id.h"
 #include "src/share/ob_errno.h"
 #include "common/meta_programming/ob_type_traits.h"
 #include "mds_tenant_service.h"

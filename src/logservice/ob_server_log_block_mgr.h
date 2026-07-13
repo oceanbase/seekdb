@@ -128,7 +128,7 @@ private:
                               const int flag);
   int fsync_until_success_(const palf::FileDesc &src_fd);
   int scan_tenant_dir_(const char *tenant_dir, int64_t &has_allocated_block_cnt);
-  int scan_ls_dir_(const char *tenant_dir, int64_t &has_allocated_block_cnt);
+  int scan_log_stream_dir_(const char *log_stream_dir, int64_t &has_allocated_block_cnt);
 private:
   typedef common::ObFunction<int(int64_t&)> GetTenantsLogDiskSize;
   GetTenantsLogDiskSize get_tenants_log_disk_size_func_;

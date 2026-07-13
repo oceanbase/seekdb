@@ -60,12 +60,14 @@ public:
 
 private:
   static constexpr uint64_t TEST_TENANT_ID = OB_SERVER_TENANT_ID;
+  ObLS fake_ls_;
   ObTabletPointerMap tablet_map_;
   common::ObArenaAllocator allocator_;
 };
 
 TestMetaPointerMap::TestMetaPointerMap()
-  : tablet_map_()
+  : fake_ls_(),
+    tablet_map_()
 {
 }
 
@@ -98,10 +100,7 @@ void TestMetaPointerMap::TearDown()
 
 void TestMetaPointerMap::FakeLs(ObLS &ls)
 {
-  ls.ls_meta_.ls_id_.id_ = 1001;
-  ls.ls_meta_.migration_status_ = ObMigrationStatus::OB_MIGRATION_STATUS_NONE;
   ls.ls_meta_.restore_status_ = ObRestoreStatus::Status::NONE;
-  ls.ls_meta_.rebuild_seq_ = 0;
 }
 
 class CalculateSize final
@@ -135,11 +134,10 @@ int CalculateSize::operator()(common::hash::HashMapPair<ObTabletMapKey, ObTablet
 
 TEST_F(TestMetaPointerMap, test_meta_pointer_handle)
 {
-  ObLS fake_ls;
-  FakeLs(fake_ls);
+  FakeLs(fake_ls_);
 
-  ObLSTabletService *tablet_svr = fake_ls.get_tablet_svr();
-  int ret = tablet_svr->init(&fake_ls);
+  ObLSTabletService *tablet_svr = fake_ls_.get_tablet_svr();
+  int ret = tablet_svr->init(&fake_ls_);
   ASSERT_EQ(common::OB_SUCCESS, ret);
 
   ObDDLKvMgrHandle ddl_kv_mgr_hdl;
@@ -151,13 +149,11 @@ TEST_F(TestMetaPointerMap, test_meta_pointer_handle)
   ret = MTL(ObTenantMetaMemMgr*)->acquire_tablet_ddl_kv_mgr(ddl_kv_mgr_hdl);
   ASSERT_EQ(common::OB_SUCCESS, ret);
 
-  ObLSHandle ls_handle;
-  ls_handle.ls_ = &fake_ls;
-  ObTabletPointer tablet_ptr(ls_handle, memtable_mgr_hdl);
+  ObTabletPointer tablet_ptr(&fake_ls_, memtable_mgr_hdl);
   ObMetaDiskAddr phy_addr;
   phy_addr.set_none_addr();
   tablet_ptr.set_addr_with_reset_obj(phy_addr);
-  const ObTabletMapKey key(ObLSID(1001), ObTabletID(101));
+  const ObTabletMapKey key(ObTabletID(101));
 
   ret = tablet_map_.set(key, tablet_ptr);
   ASSERT_EQ(common::OB_SUCCESS, ret);
@@ -199,10 +195,9 @@ TEST_F(TestMetaPointerMap, test_meta_pointer_handle)
 
 TEST_F(TestMetaPointerMap, test_meta_pointer_map)
 {
-  ObLS fake_ls;
-  FakeLs(fake_ls);
-  ObLSTabletService *tablet_svr = fake_ls.get_tablet_svr();
-  int ret = tablet_svr->init(&fake_ls);
+  FakeLs(fake_ls_);
+  ObLSTabletService *tablet_svr = fake_ls_.get_tablet_svr();
+  int ret = tablet_svr->init(&fake_ls_);
   ASSERT_EQ(common::OB_SUCCESS, ret);
 
   ObDDLKvMgrHandle ddl_kv_mgr_hdl;
@@ -214,13 +209,11 @@ TEST_F(TestMetaPointerMap, test_meta_pointer_map)
   ret = MTL(ObTenantMetaMemMgr*)->acquire_tablet_ddl_kv_mgr(ddl_kv_mgr_hdl);
   ASSERT_EQ(common::OB_SUCCESS, ret);
 
-  ObLSHandle ls_handle;
-  ls_handle.ls_ = &fake_ls;
-  ObTabletPointer tablet_ptr(ls_handle, memtable_mgr_hdl);
+  ObTabletPointer tablet_ptr(&fake_ls_, memtable_mgr_hdl);
   ObMetaDiskAddr phy_addr;
   phy_addr.set_none_addr();
   tablet_ptr.set_addr_with_reset_obj(phy_addr);
-  const ObTabletMapKey key(ObLSID(1001), ObTabletID(101));
+  const ObTabletMapKey key(ObTabletID(101));
 
   ret = tablet_map_.set(key, tablet_ptr);
   ASSERT_EQ(common::OB_SUCCESS, ret);
@@ -297,11 +290,10 @@ TEST_F(TestMetaPointerMap, test_meta_pointer_map)
 
 TEST_F(TestMetaPointerMap, test_erase_and_load_concurrency)
 {
-  ObLS fake_ls;
-  FakeLs(fake_ls);
+  FakeLs(fake_ls_);
 
-  ObLSTabletService *tablet_svr = fake_ls.get_tablet_svr();
-  int ret = tablet_svr->init(&fake_ls);
+  ObLSTabletService *tablet_svr = fake_ls_.get_tablet_svr();
+  int ret = tablet_svr->init(&fake_ls_);
   ASSERT_EQ(common::OB_SUCCESS, ret);
 
   ObDDLKvMgrHandle ddl_kv_mgr_hdl;
@@ -313,13 +305,11 @@ TEST_F(TestMetaPointerMap, test_erase_and_load_concurrency)
   ret = MTL(ObTenantMetaMemMgr*)->acquire_tablet_ddl_kv_mgr(ddl_kv_mgr_hdl);
   ASSERT_EQ(common::OB_SUCCESS, ret);
 
-  ObLSHandle ls_handle;
-  ls_handle.ls_ = &fake_ls;
-  ObTabletPointer tablet_ptr(ls_handle, memtable_mgr_hdl);
+  ObTabletPointer tablet_ptr(&fake_ls_, memtable_mgr_hdl);
   ObMetaDiskAddr phy_addr;
   phy_addr.set_none_addr();
   tablet_ptr.set_addr_with_reset_obj(phy_addr);
-  const ObTabletMapKey key(ObLSID(1001), ObTabletID(101));
+  const ObTabletMapKey key(ObTabletID(101));
 
   ret = tablet_map_.set(key, tablet_ptr);
   ASSERT_EQ(common::OB_SUCCESS, ret);

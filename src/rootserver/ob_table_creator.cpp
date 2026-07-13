@@ -70,7 +70,7 @@ int ObTableCreator::execute()
   if (OB_FAIL(tablet_creator_.execute())) {
     LOG_WARN("fail to execute tablet creator", KR(ret));
   } else if (tablet_infos_.count() > 0
-             && OB_FAIL(share::ObTabletToLSTableOperator::batch_update(trans_, tablet_infos_))) {
+             && OB_FAIL(share::ObTabletMappingTableOperator::batch_update(trans_, tablet_infos_))) {
     LOG_ERROR("fail to batch update tablet info", KR(ret));
   }
   return ret;
@@ -79,7 +79,6 @@ int ObTableCreator::execute()
 int ObTableCreator::add_create_tablets_of_local_aux_tables_arg(
                     const common::ObIArray<const share::schema::ObTableSchema*> &schemas,
                     const share::schema::ObTableSchema *data_table_schema,
-                    const common::ObIArray<share::ObLSID> &ls_id_array,
                     const uint64_t tenant_data_version,
                     const common::ObIArray<bool> &need_create_empty_majors)
 {
@@ -89,8 +88,7 @@ int ObTableCreator::add_create_tablets_of_local_aux_tables_arg(
     LOG_WARN("data_table_schema must be null, when table_schema is not local index", KR(ret));
   } else if (!data_table_schema->has_tablet() ||
       data_table_schema->is_index_table() ||
-      data_table_schema->is_aux_lob_table() ||
-      data_table_schema->is_mlog_table()) {
+      data_table_schema->is_aux_lob_table()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("data_table_schema must be data table", KR(ret), KPC(data_table_schema));
   } else if (OB_UNLIKELY(tenant_data_version <= 0 || need_create_empty_majors.count() != schemas.count())) {
@@ -104,15 +102,14 @@ int ObTableCreator::add_create_tablets_of_local_aux_tables_arg(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("ptr is null", KR(ret), K(schemas));
     } else if (!aux_schema->is_index_local_storage()
-        && !aux_schema->is_aux_lob_table()
-        && !aux_schema->is_mlog_table()) {
+        && !aux_schema->is_aux_lob_table()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("aux_schema must be local aux table", KR(ret), K(schemas), KPC(aux_schema));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(add_create_tablets_of_tables_arg_(
-          schemas, data_table_schema, ls_id_array, tenant_data_version, need_create_empty_majors))) {
+          schemas, data_table_schema, tenant_data_version, need_create_empty_majors))) {
     LOG_WARN("fail to add_create_tablets_of_tables_arg_", KR(ret), K(schemas));
   }
   return ret;
@@ -121,7 +118,6 @@ int ObTableCreator::add_create_tablets_of_local_aux_tables_arg(
 int ObTableCreator::add_create_bind_tablets_of_hidden_table_arg(
                     const share::schema::ObTableSchema &orig_table_schema,
                     const share::schema::ObTableSchema &hidden_table_schema,
-                    const common::ObIArray<share::ObLSID> &ls_id_array,
                     const uint64_t tenant_data_version)
 {
   int ret = OB_SUCCESS;
@@ -130,15 +126,13 @@ int ObTableCreator::add_create_bind_tablets_of_hidden_table_arg(
   if (OB_UNLIKELY(!orig_table_schema.has_tablet()
       || orig_table_schema.is_index_table()
       || hidden_table_schema.is_index_table()
-      || orig_table_schema.is_mlog_table()
-      || hidden_table_schema.is_mlog_table()
       || !hidden_table_schema.is_user_hidden_table())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("both orig and hidden table must be data table", K(ret), K(orig_table_schema), K(hidden_table_schema));
   } else if (OB_FAIL(schemas.push_back(&hidden_table_schema)) || OB_FAIL(need_create_empty_majors.push_back(false))) {
     LOG_WARN("failed to push back hidden table schema", K(ret));
   } else if (OB_FAIL(add_create_tablets_of_tables_arg_(
-          schemas, &orig_table_schema, ls_id_array, tenant_data_version, need_create_empty_majors))) {
+          schemas, &orig_table_schema, tenant_data_version, need_create_empty_majors))) {
     LOG_WARN("failed to add arg", K(ret), K(schemas));
   }
   return ret;
@@ -146,7 +140,6 @@ int ObTableCreator::add_create_bind_tablets_of_hidden_table_arg(
 
 int ObTableCreator::add_create_tablets_of_table_arg(
                     const share::schema::ObTableSchema &table_schema,
-                    const common::ObIArray<share::ObLSID> &ls_id_array,
                     const uint64_t tenant_data_version,
                     const bool need_create_empty_major_sstable,
                     share::schema::ObSchemaGetterGuard *schema_guard)
@@ -155,13 +148,13 @@ int ObTableCreator::add_create_tablets_of_table_arg(
   ObSEArray<const share::schema::ObTableSchema*, 1> schemas;
   ObSEArray<bool, 1> need_create_empty_majors;
   if (!table_schema.has_tablet() || table_schema.is_index_local_storage() || table_schema.is_aux_lob_table()
-    || table_schema.is_mlog_table() || tenant_data_version <= 0) {
+    || tenant_data_version <= 0) {
     LOG_WARN("table_schema must be data table or global indexes", KR(ret), K(table_schema), K(tenant_data_version));
   } else if (OB_FAIL(schemas.push_back(&table_schema))
     || OB_FAIL(need_create_empty_majors.push_back(need_create_empty_major_sstable))) {
     LOG_WARN("failed to push_back", KR(ret), K(table_schema), K(need_create_empty_major_sstable));
   } else if (OB_FAIL(add_create_tablets_of_tables_arg_(
-          schemas, NULL, ls_id_array, tenant_data_version, need_create_empty_majors, schema_guard))) {
+          schemas, NULL, tenant_data_version, need_create_empty_majors, schema_guard))) {
     LOG_WARN("failed to add create tablet arg", KR(ret), K(table_schema));
   }
   return ret;
@@ -169,7 +162,6 @@ int ObTableCreator::add_create_tablets_of_table_arg(
 
 int ObTableCreator::add_create_tablets_of_tables_arg(
                     const common::ObIArray<const share::schema::ObTableSchema*> &schemas,
-                    const common::ObIArray<share::ObLSID> &ls_id_array,
                     const uint64_t tenant_data_version,
                     const common::ObIArray<bool> &need_create_empty_majors,
                     share::schema::ObSchemaGetterGuard *schema_guard)
@@ -189,15 +181,13 @@ int ObTableCreator::add_create_tablets_of_tables_arg(
     } else if (0 == i) {
       if (!table_schema->has_tablet()
           || table_schema->is_index_table()
-          || table_schema->is_aux_lob_table()
-          || table_schema->is_mlog_table()) {
+          || table_schema->is_aux_lob_table()) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("data_table_schema must be data table", KR(ret), KPC(table_schema));
       }
     } else {
       if (!table_schema->is_index_local_storage()
-          && !table_schema->is_aux_lob_table()
-          && !table_schema->is_mlog_table()) {
+          && !table_schema->is_aux_lob_table()) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("table_schema must be local index", KR(ret), K(schemas), KPC(table_schema));
       }
@@ -205,7 +195,7 @@ int ObTableCreator::add_create_tablets_of_tables_arg(
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(add_create_tablets_of_tables_arg_(
-          schemas, NULL, ls_id_array, tenant_data_version, need_create_empty_majors, schema_guard))) {
+          schemas, NULL, tenant_data_version, need_create_empty_majors, schema_guard))) {
     LOG_WARN("fail to add_create_tablets_of_tables_arg_", KR(ret), K(schemas));
   }
   return ret;
@@ -217,7 +207,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg(
 int ObTableCreator::add_create_tablets_of_tables_arg_(
                     const common::ObIArray<const share::schema::ObTableSchema*> &schemas,
                     const share::schema::ObTableSchema *data_table_schema,
-                    const common::ObIArray<share::ObLSID> &ls_id_array,
                     const uint64_t tenant_data_version,
                     const common::ObIArray<bool> &need_create_empty_majors,
                     share::schema::ObSchemaGetterGuard *schema_guard)
@@ -238,8 +227,7 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
     common::ObArray<share::ObTabletTablePair> pairs;
     bool is_create_bind_hidden_tablets = false;
     if (table_schema.is_index_local_storage()
-        || table_schema.is_aux_lob_table()
-        || table_schema.is_mlog_table()) {
+        || table_schema.is_aux_lob_table()) {
       if (OB_ISNULL(data_table_schema)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("data_table_schema is NULL when create local_index", KR(ret));
@@ -268,10 +256,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
 
     if (FAILEDx(pairs.reserve(all_part_num * schema_cnt))) {
       LOG_WARN("fail to reserve array", KR(ret), K(all_part_num), K(schema_cnt));
-    } else if (OB_FAIL(ls_id_array_.reserve(all_part_num))) {
-      LOG_WARN("fail to reserve array", KR(ret), K(all_part_num));
-    } else if (OB_FAIL(ls_id_array_.assign(ls_id_array))) {
-      LOG_WARN("fail to assign ls id array", KR(ret));
     } else {
       for (int64_t i = 1; OB_SUCC(ret) && i < schema_cnt; ++i) {
         if (OB_ISNULL(schemas.at(i))) {
@@ -288,7 +272,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
     }
 
     if (OB_SUCC(ret)) {
-      int64_t ls_idx = 0;
       ObPartitionLevel part_level = table_schema.get_part_level();
       lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
       if (part_level >= PARTITION_LEVEL_MAX) {
@@ -299,7 +282,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
                     schemas,
                     *data_table_schema,
                     compat_mode,
-                    ObLSID(SYS_LS),
                     pairs,
                     OB_INVALID_INDEX,
                     OB_INVALID_INDEX,
@@ -326,7 +308,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
                           schemas,
                           *data_table_schema,
                           compat_mode,
-                          ObLSID(SYS_LS),
                           pairs,
                           i,
                           OB_INVALID_INDEX,
@@ -353,7 +334,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
                                 schemas,
                                 *data_table_schema,
                                 compat_mode,
-                                ObLSID(SYS_LS),
                                 pairs,
                                 i,
                                 j,
@@ -395,7 +375,6 @@ int ObTableCreator::generate_create_tablet_arg_(
                     const common::ObIArray<const share::schema::ObTableSchema*> &schemas,
                     const ObTableSchema &data_table_schema,
                     const lib::Worker::CompatMode &mode,
-                    const share::ObLSID &ls_id,
                     common::ObIArray<share::ObTabletTablePair> &pairs,
                     const int64_t part_idx,
                     const int64_t subpart_idx,
@@ -444,7 +423,7 @@ int ObTableCreator::generate_create_tablet_arg_(
       tablet_id = part->get_tablet_id();
     }
     share::ObTabletTablePair pair;
-    share::ObTabletToLSInfo tablet_info(tablet_id, ls_id, table_schema_ptr->get_table_id());
+    share::ObTabletTablePair tablet_info(tablet_id, table_schema_ptr->get_table_id());
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(tablet_id_array.push_back(tablet_id))) {
       LOG_WARN("failed to assign table schema point", KR(ret));
@@ -471,13 +450,12 @@ int ObTableCreator::generate_create_tablet_arg_(
     }
   }
   if (OB_SUCC(ret) && fork_tablet_infos.count() > 0) {
-    LOG_INFO("generate fork tablet infos finished", "fork_tablet_cnt", fork_tablet_infos.count(), K(ls_id));
+    LOG_INFO("generate fork tablet infos finished", "fork_tablet_cnt", fork_tablet_infos.count());
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(create_tablet_arg.init(
                         tablet_id_array,
-                        ls_id,
                         data_tablet_id,
                         schemas,
                         mode,

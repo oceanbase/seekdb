@@ -24,7 +24,6 @@
 #include "common/ob_tablet_id.h"
 #include "share/ob_errno.h"
 #include "lib/worker.h"
-#include "share/ob_ls_id.h"
 #include "cmath"
 #ifdef __linux__
 #include <features.h>

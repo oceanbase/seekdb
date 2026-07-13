@@ -73,7 +73,7 @@ int ObIvfCacheUtil::scan_and_write_ivf_cent_cache(ObPluginVectorIndexService &se
   return ret;
 }
 
-int ObIvfCacheUtil::is_cache_writable(const ObLSID &ls_id, int64_t table_id,
+int ObIvfCacheUtil::is_cache_writable(int64_t table_id,
                                       const ObTabletID &tablet_id,
                                       const ObVectorIndexParam &vec_param, int64_t dim,
                                       bool &is_writable)
@@ -87,11 +87,9 @@ int ObIvfCacheUtil::is_cache_writable(const ObLSID &ls_id, int64_t table_id,
   if (OB_ISNULL(vector_index_service)) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("unexpected nullptr", K(ret), KP(vector_index_service));
-  } else if (OB_FAIL(vector_index_service->acquire_ivf_cache_mgr_guard(
-                 ls_id, tablet_id, vec_param, dim, table_id, cache_guard))) {
+  } else if (OB_FAIL(vector_index_service->acquire_ivf_cache_mgr_guard(tablet_id, vec_param, dim, table_id, cache_guard))) {
     LOG_WARN("fail to acquire ivf cache mgr with vec param",
              K(ret),
-             K(ls_id),
              K(tablet_id),
              K(vec_param),
              K(dim));

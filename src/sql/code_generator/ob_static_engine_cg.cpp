@@ -119,7 +119,6 @@
 #include "sql/engine/set/ob_hash_intersect_vec_op.h"
 #include "sql/engine/set/ob_hash_except_vec_op.h"
 #include "sql/engine/join/ob_merge_join_vec_op.h"
-#include "sql/resolver/mv/ob_mv_provider.h"
 #include "sql/engine/set/ob_merge_set_vec_op.h"
 #include "sql/engine/set/ob_merge_union_vec_op.h"
 #include "sql/engine/set/ob_merge_intersect_vec_op.h"
@@ -754,11 +753,6 @@ int ObStaticEngineCG::generate_spec_basic(ObLogicalOperator &op,
     OZ(add_output_datum_check_flag(spec));
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(extract_all_mview_ids(cur_op_exprs_))) {
-      LOG_WARN("fail to extract all mview ids", K(ret));
-    }
-  }
-  if (OB_SUCC(ret)) {
     CK (OB_NOT_NULL(op.get_plan())
         && OB_NOT_NULL(op.get_plan()->get_stmt())
         && OB_NOT_NULL(op.get_plan()->get_stmt()->get_query_ctx()));
@@ -809,37 +803,6 @@ int ObStaticEngineCG::get_query_compress_type(const ObLogPlan &log_plan,
     LOG_WARN("unexpected compression algorithm", K(ret));
   }
   LOG_TRACE("check query compress type", K(ret), K(compress_type));
-  return ret;
-}
-
-int ObStaticEngineCG::extract_all_mview_ids(const ObIArray<ObRawExpr *> &exprs)
-{
-  int ret = OB_SUCCESS;
-  for (int i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
-    if (OB_FAIL(extract_all_mview_ids(exprs.at(i)))) {
-      LOG_WARN("extract all mview ids failed", K(ret), K(i), KPC(exprs.at(i)));
-    }
-  }
-  return ret;
-}
-
-int ObStaticEngineCG::extract_all_mview_ids(const ObRawExpr *expr)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret), K(expr));
-  } else if (ObItemType::T_FUN_SYS_LAST_REFRESH_SCN == expr->get_expr_type()) {
-    if (OB_FAIL(add_var_to_array_no_dup(mview_ids_, static_cast<const ObSysFunRawExpr*>(expr)->get_mview_id()))) {
-      LOG_WARN("failed to add var to array no dup", K(ret), K(mview_ids_.count()));
-    }
-  } else {
-    for (int i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
-      if (OB_FAIL(SMART_CALL(extract_all_mview_ids(expr->get_param_expr(i))))) {
-        LOG_WARN("extract all mview ids failed", K(ret), KPC(expr->get_param_expr(i)));
-      }
-    }
-  }
   return ret;
 }
 
@@ -2853,7 +2816,7 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObTableReplaceSpec &spec, c
 {
   int ret = OB_SUCCESS;
   UNUSED(in_root_job);
-  bool can_do_gts_opt = false;
+  bool can_use_snapshot_opt = false;
   bool has_unique_index = false;
   bool has_partition_index = false;
   const ObIArray<IndexDMLInfo *> &insert_dml_infos = op.get_index_dml_infos();;
@@ -2862,19 +2825,19 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObTableReplaceSpec &spec, c
   if (NULL == primary_dml_info) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
-  } else if (OB_FAIL(op.is_insertup_or_replace_values(can_do_gts_opt))) {
+  } else if (OB_FAIL(op.is_insertup_or_replace_values(can_use_snapshot_opt))) {
     LOG_WARN("fail to check is plain insert", K(ret));
-  } else if (!can_do_gts_opt) {
+  } else if (!can_use_snapshot_opt) {
     // do nothing
-    LOG_TRACE("can't do insert_up gts opt", K(op.get_insert_up_index_dml_infos()));
+    LOG_TRACE("can't do insert_up snapshot opt", K(op.get_insert_up_index_dml_infos()));
   } else if (OB_FAIL(check_has_global_partiton_index(op.get_plan(),
                                                      primary_dml_info->ref_table_id_,
                                                      has_partition_index))) {
     LOG_WARN("check has global partition index failed", K(ret), K(primary_dml_info->ref_table_id_));
   } else if (has_partition_index) {
-    LOG_TRACE("has partition index, can't support gts opt");
+    LOG_TRACE("has partition index, can't support snapshot opt");
   } else {
-    spec.plan_->set_insertup_can_do_gts_opt(can_do_gts_opt);
+    spec.plan_->set_insertup_can_use_snapshot_opt(can_use_snapshot_opt);
     if (OB_FAIL(check_has_global_unique_index(op.get_plan(), primary_dml_info->ref_table_id_, has_unique_index))) {
       LOG_WARN("check has global unique index", K(ret), K(primary_dml_info->ref_table_id_));
     } else {
@@ -3288,16 +3251,16 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObTableInsertUpSpec &spec, 
   }
 
   if (OB_SUCC(ret)) {
-    bool can_do_gts_opt = false;
+    bool can_use_snapshot_opt = false;
     bool has_unique_index = false;
     bool update_part_key = false;
     bool has_partition_index = false;
     const IndexDMLInfo *ins_pri_dml_info = op.get_index_dml_infos().at(0);
-    if (OB_FAIL(op.is_insertup_or_replace_values(can_do_gts_opt))) {
+    if (OB_FAIL(op.is_insertup_or_replace_values(can_use_snapshot_opt))) {
       LOG_WARN("fail to check is plain insert", K(ret));
-    } else if (!can_do_gts_opt) {
+    } else if (!can_use_snapshot_opt) {
       // do nothing
-      LOG_TRACE("can't do insert_up gts opt", K(op.get_insert_up_index_dml_infos()));
+      LOG_TRACE("can't do insert_up snapshot opt", K(op.get_insert_up_index_dml_infos()));
     } else if (OB_FAIL(check_has_update_part_key(op.get_insert_up_index_dml_infos(), update_part_key))) {
       LOG_WARN("fail to check has update part key", K(ret), K(op.get_insert_up_index_dml_infos()));
     } else if (update_part_key) {
@@ -3308,9 +3271,9 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObTableInsertUpSpec &spec, 
                                                        has_partition_index))) {
       LOG_WARN("check has global partition index failed", K(ins_pri_dml_info->ref_table_id_));
     } else if (has_partition_index) {
-      LOG_TRACE("has partition index, can't support gts opt");
+      LOG_TRACE("has partition index, can't support snapshot opt");
     } else {
-      spec.plan_->set_insertup_can_do_gts_opt(can_do_gts_opt);
+      spec.plan_->set_insertup_can_use_snapshot_opt(can_use_snapshot_opt);
       if (OB_FAIL(check_has_global_unique_index(op.get_plan(), ins_pri_dml_info->ref_table_id_, has_unique_index))) {
         LOG_WARN("check has global unique index", K(ret), K(ins_pri_dml_info->ref_table_id_));
       } else {
@@ -5125,8 +5088,7 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
 
   if (OB_SUCC(ret)) {
     if (opt_ctx_->is_online_ddl() &&
-        stmt::T_INSERT == opt_ctx_->get_session_info()->get_stmt_type() &&
-        !opt_ctx_->get_session_info()->get_ddl_info().is_mview_complete_refresh()) {
+        stmt::T_INSERT == opt_ctx_->get_session_info()->get_stmt_type()) {
       spec.report_col_checksum_ = true;
     }
   }
@@ -8157,9 +8119,6 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
              || OB_ISNULL(exec_ctx->get_stmt_factory()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid query_ctx", K(ret));
-  } else if (my_session->get_ddl_info().is_refreshing_mview()
-             && OB_FAIL(check_refreshing_mview_session_var(*schema_guard, *my_session, log_plan.get_stmt()))) {
-    LOG_WARN("failed to check refreshing mview session var", K(ret));
   } else {
     ret = phy_plan.set_params_info(*(log_plan.get_optimizer_context().get_params()));
   }
@@ -8200,8 +8159,6 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
       LOG_WARN("set expected worker map", K(ret));
     } else if (OB_FAIL(phy_plan.set_minimal_worker_map(log_plan.get_optimizer_context().get_minimal_worker_map()))) {
       LOG_WARN("set minimal worker map", K(ret));
-    } else if (OB_FAIL(phy_plan.set_mview_ids(mview_ids_))) {
-      LOG_WARN("failed to set set mview_ids", K(ret), K(mview_ids_.count()));
     } else {
       if (log_plan.get_optimizer_context().is_online_ddl()) {
         if (log_plan.get_stmt()->get_table_items().count() > 0) {
@@ -8215,17 +8172,6 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
             phy_plan.set_ddl_schema_version(insert_table_item->ddl_schema_version_);
             phy_plan.set_ddl_table_id(insert_table_item->ddl_table_id_);
             phy_plan.set_ddl_execution_id(ddl_execution_id);
-            phy_plan.set_ddl_task_id(ddl_task_id);
-          }
-        }
-      }
-      if (log_plan.get_optimizer_context().get_session_info()->get_ddl_info().is_mview_complete_refresh()) {
-        if (log_plan.get_stmt()->get_table_items().count() > 0) {
-          const TableItem *insert_table_item = log_plan.get_stmt()->get_table_item(0);
-          if (nullptr != insert_table_item) {
-            int64_t ddl_task_id = 0;
-            const ObOptParamHint *opt_params = &log_plan.get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
-            OZ(opt_params->get_integer_opt_param(ObOptParamHint::DDL_TASK_ID, ddl_task_id));
             phy_plan.set_ddl_task_id(ddl_task_id);
           }
         }
@@ -8453,33 +8399,6 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
 
   if (OB_SUCC(ret)) {
     phy_plan_->calc_whether_need_trans();
-  }
-  return ret;
-}
-
-int ObStaticEngineCG::check_refreshing_mview_session_var(ObSchemaGetterGuard &schema_guard,
-                                                         ObSQLSessionInfo &session,
-                                                         const ObDMLStmt *dml_stmt)
-{
-  int ret = OB_SUCCESS;
-  bool is_same = false;
-  uint64_t mview_id = OB_INVALID_ID;
-  const share::schema::ObTableSchema *mview_schema = NULL;
-  const ObDelUpdStmt *del_up_stmt = dynamic_cast<const ObDelUpdStmt*>(dml_stmt);
-  bool is_vars_matched = false;
-  if (!session.get_ddl_info().is_refreshing_mview() || OB_ISNULL(del_up_stmt)) {
-    /* do nothing */
-  } else if (OB_FAIL(del_up_stmt->get_modified_materialized_view_id(mview_id))) {
-    LOG_WARN("fail to get modified mview_id", K(ret), K(mview_id));
-  } else if (OB_INVALID_ID == mview_id) {
-    /* do nothing */
-  } else if (OB_FAIL(schema_guard.get_table_schema( mview_id, mview_schema))) {
-    LOG_WARN("fail to get mview schema", K(ret), K(mview_id));
-  } else if (OB_ISNULL(mview_schema)) {
-    ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("fail to get mview schema", K(ret), K(mview_id));
-  } else if (OB_FAIL(ObMVProvider::check_mview_dep_session_vars(*mview_schema, session, true, is_vars_matched))) {
-    LOG_WARN("failed to check mview dep session vars", K(ret));
   }
   return ret;
 }

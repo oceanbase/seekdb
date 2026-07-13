@@ -21,7 +21,7 @@
 #include "rootserver/fork_table/ob_fork_table_info_builder.h"
 #include "share/tablet/ob_tablet_info.h" // ObTabletTablePair
 
-#include "share/tablet/ob_tablet_to_ls_operator.h"
+#include "share/tablet/ob_tablet_mapping_operator.h"
 #include "share/ob_ddl_common.h" // ObForkTabletInfo
 
 namespace oceanbase
@@ -40,7 +40,6 @@ public:
       ObMySQLTransaction &trans)
                 : tablet_creator_(frozen_scn, trans),
                   trans_(trans),
-                  ls_id_array_(),
                   inited_(false),
                   fork_table_info_builder_{} {}
 
@@ -59,7 +58,6 @@ public:
   // @param [in] schemas, tables schema for creating tablets, the first is data table, others are its local indexes
   int add_create_tablets_of_tables_arg(
       const common::ObIArray<const share::schema::ObTableSchema*> &schemas,
-      const common::ObIArray<share::ObLSID> &ls_id_array,
       const uint64_t tenant_data_version,
       const common::ObIArray<bool> &need_create_empty_majors,
       share::schema::ObSchemaGetterGuard *schema_guard = nullptr);
@@ -71,7 +69,6 @@ public:
   int add_create_tablets_of_local_aux_tables_arg(
       const common::ObIArray<const share::schema::ObTableSchema*> &schemas,
       const share::schema::ObTableSchema *data_table_schema,
-      const common::ObIArray<share::ObLSID> &ls_id_array,
       const uint64_t tenant_data_version,
       const common::ObIArray<bool> &need_create_empty_majors);
 
@@ -79,7 +76,6 @@ public:
   int add_create_bind_tablets_of_hidden_table_arg(
       const share::schema::ObTableSchema &orig_table_schema,
       const share::schema::ObTableSchema &hidden_table_schema,
-      const common::ObIArray<share::ObLSID> &ls_id_array,
       const uint64_t tenant_data_version);
 
   // create tablets in a table
@@ -87,7 +83,6 @@ public:
   // @param [in] table_schema, table schema for creating tablets
   int add_create_tablets_of_table_arg(
       const share::schema::ObTableSchema &table_schema,
-      const common::ObIArray<share::ObLSID> &ls_id_array,
       const uint64_t tenant_data_version,
       const bool need_create_empty_major_sstable,
       share::schema::ObSchemaGetterGuard *schema_guard = nullptr);
@@ -95,7 +90,6 @@ private:
   int add_create_tablets_of_tables_arg_(
       const common::ObIArray<const share::schema::ObTableSchema*> &schemas,
       const share::schema::ObTableSchema *data_table_schema,
-      const common::ObIArray<share::ObLSID> &ls_id_array,
       const uint64_t tenant_data_version,
       const common::ObIArray<bool> &need_create_empty_majors,
       share::schema::ObSchemaGetterGuard *schema_guard = nullptr);
@@ -103,7 +97,6 @@ private:
       const common::ObIArray<const share::schema::ObTableSchema*> &schemas,
       const ObTableSchema &data_table_schema,
       const lib::Worker::CompatMode &mode,
-      const share::ObLSID &ls_id,
       common::ObIArray<share::ObTabletTablePair> &pairs,
       const int64_t part_idx,
       const int64_t subpart_idx,
@@ -118,8 +111,7 @@ private:
 private:
   ObTabletCreator tablet_creator_;
   ObMySQLTransaction &trans_;
-  common::ObArray<share::ObLSID> ls_id_array_;
-  common::ObArray<share::ObTabletToLSInfo> tablet_infos_;
+  common::ObArray<share::ObTabletTablePair> tablet_infos_;
   bool inited_;
   ObForkTableInfoBuilder fork_table_info_builder_;
 };

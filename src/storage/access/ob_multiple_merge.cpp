@@ -22,7 +22,8 @@
 #include "ob_aggregated_store.h"
 #include "ob_aggregated_store_vec.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "storage/tx/ob_trans_part_ctx.h"
+#include "storage/tx/ob_tx_ctx.h"
+#include "storage/tx_storage/ob_ls_service.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/concurrency_control/ob_data_validation_service.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
@@ -167,9 +168,6 @@ int ObMultipleMerge::init(
     }
     unprojected_row_.count_ = 0;
     get_table_param_ = &get_table_param;
-    if (access_ctx_->is_mview_query()) {
-      access_param_->iter_param_.is_delete_insert_ = false;
-    }
     access_param_->iter_param_.set_tablet_handle(get_table_param.tablet_iter_.get_tablet_handle_ptr());
     const ObITableReadInfo *read_info = access_param_->iter_param_.get_read_info();
     const int64_t batch_size = access_param_->iter_param_.vectorized_enabled_ ? access_param_->get_op()->get_batch_size() : 1;
@@ -259,7 +257,6 @@ int ObMultipleMerge::build_extra_access_ctx()
             if (OB_FAIL(fork_snapshot_scn.convert_for_tx(fork_info.get_fork_snapshot_version()))) {
               LOG_WARN("fail to convert snapshot version", KR(ret), K(fork_info));
             } else if (OB_FAIL(fork_store_ctx->init_for_read(
-                access_ctx_->store_ctx_->ls_id_,
                 fork_src_tablet_id,
                 access_ctx_->store_ctx_->timeout_,
                 0, // tx_lock_timeout
@@ -1139,7 +1136,6 @@ void ObMultipleMerge::report_tablet_stat()
     int tmp_ret = OB_SUCCESS;
     bool report_succ = false; /*placeholder*/
     storage::ObTabletStat tablet_stat;
-    tablet_stat.ls_id_ = access_ctx_->ls_id_.id();
     tablet_stat.tablet_id_ = access_ctx_->tablet_id_.id();
     tablet_stat.query_cnt_ = 1;
     tablet_stat.scan_logical_row_cnt_ = access_ctx_->table_store_stat_.logical_read_cnt_;
@@ -1993,7 +1989,7 @@ int ObMultipleMerge::refresh_table_on_demand()
 int ObMultipleMerge::refresh_tablet_iter()
 {
   int ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
+  ObLS *tenant_ls = nullptr;
   if (OB_UNLIKELY(!get_table_param_->tablet_iter_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet iter is invalid", K(ret), K(get_table_param_->tablet_iter_));
@@ -2001,18 +1997,14 @@ int ObMultipleMerge::refresh_tablet_iter()
     // reset first, in case get_read_tables fail and rowkey_read_info_ become dangling
     access_param_->iter_param_.rowkey_read_info_ = nullptr;
     const int64_t remain_timeout = THIS_WORKER.get_timeout_remain();
-    const share::ObLSID &ls_id = access_ctx_->ls_id_;
     const common::ObTabletID &tablet_id = get_table_param_->tablet_iter_.get_tablet()->get_tablet_meta().tablet_id_;
     const int64_t snapshot_version = generate_read_tables_version();
     if (OB_UNLIKELY(remain_timeout <= 0)) {
       ret = OB_TIMEOUT;
-      LOG_WARN("timeout reached", K(ret), K(ls_id), K(tablet_id), K(remain_timeout));
-    } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-      LOG_WARN("failed to get ls", K(ret), K(ls_id));
-    } else if (OB_ISNULL(ls_handle.get_ls())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ls is null", K(ret), K(ls_handle));
-    } else if (OB_FAIL(ls_handle.get_ls()->get_tablet_svr()->get_read_tables(
+      LOG_WARN("timeout reached", K(ret), K(tablet_id), K(remain_timeout));
+    } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+      LOG_WARN("failed to get ls", K(ret));
+    } else if (OB_FAIL(tenant_ls->get_tablet_svr()->get_read_tables(
         tablet_id,
         remain_timeout,
         snapshot_version,
@@ -2021,7 +2013,7 @@ int ObMultipleMerge::refresh_tablet_iter()
         false/*allow_not_ready*/,
         true/*need_split_src_table*/,
         true/*need_split_dst_table*/))) {
-      LOG_WARN("failed to refresh tablet iterator", K(ret), K(ls_id), K_(get_table_param), KP_(access_param));
+      LOG_WARN("failed to refresh tablet iterator", K(ret), K_(get_table_param), KP_(access_param));
     } else {
       get_table_param_->refreshed_merge_ = this;
       access_param_->iter_param_.rowkey_read_info_ =
@@ -2198,7 +2190,7 @@ int ObMultipleMerge::handle_4377(const char* func)
                      OB_ERR_DEFENSIVE_CHECK,
                      "msg", "Fatal Error!!! Catch a defensive error!",
                      "index lookup: row not found in data-table");
-    concurrency_control::ObDataValidationService::set_delay_resource_recycle(access_ctx_->ls_id_);
+    concurrency_control::ObDataValidationService::set_delay_resource_recycle();
     dump_table_statistic_for_4377();
     dump_tx_statistic_for_4377(access_ctx_->store_ctx_);
   }
@@ -2270,7 +2262,7 @@ int ObMultipleMerge::check_base_version(const bool is_di_merge_scan) const {
 void ObMultipleMerge::set_base_version() const {
   // When the major table is currently being processed, the snapshot version is taken and placed
   // in the current context for base version to filter unnecessary rows in the mini or minor sstable
-  if (!access_ctx_->is_mview_query() && is_scan()) {
+  if (is_scan()) {
     access_ctx_->trans_version_range_.base_version_ = major_table_version_;
     LOG_DEBUG("set base version", K_(access_ctx_->trans_version_range));
   }

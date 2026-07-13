@@ -136,7 +136,7 @@ int ObTableLoadDagStoreChunkWriter::init(ObTableLoadDagWriteChannel *write_chann
     store_ctx_ = write_channel->store_ctx_;
     is_single_part_ =
       (store_ctx_->write_ctx_.is_multiple_mode_ ||
-       1 == write_channel_->op_->op_ctx_->store_table_ctx_->ls_partition_ids_.count());
+       1 == write_channel_->op_->op_ctx_->store_table_ctx_->partition_ids_.count());
     if (OB_FAIL(table_builder_map_.create(64, "TLD_TB_Map", "TLD_TB_Map"))) {
       LOG_WARN("fail to create hashmap", KR(ret));
     } else if (OB_FAIL(datum_row_.init(

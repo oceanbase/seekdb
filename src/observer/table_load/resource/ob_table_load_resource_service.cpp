@@ -50,6 +50,10 @@ int ObTableLoadResourceService::init()
     LOG_WARN("init twice", KR(ret));
   } else {
     is_inited_ = true;
+    if (OB_FAIL(alloc_resource_manager())) {
+      is_inited_ = false;
+      LOG_WARN("fail to alloc resource manager", KR(ret));
+    }
   }
 
   return ret;
@@ -101,49 +105,6 @@ void ObTableLoadResourceService::destroy()
     resource_manager_->destroy();
   }
   LOG_INFO("resource_service finish to destroy");
-}
-
-int ObTableLoadResourceService::switch_to_leader()
-{
-  int ret = OB_SUCCESS;
-  ObMutexGuard switch_guard(switch_lock_);
-  int64_t start_time_us = ObTimeUtility::current_time();
-  if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("fail to check_inner_stat", KR(ret));
-  } else {
-    if (OB_ISNULL(resource_manager_)) {
-      obsys::ObWLockGuard w_guard(rw_lock_);
-      if (OB_FAIL(alloc_resource_manager())) {
-        LOG_WARN("fail to alloc resource_manager", KR(ret));
-      }
-    } else {
-      obsys::ObRLockGuard r_guard(rw_lock_);
-      ret = resource_manager_->resume();
-      LOG_INFO("resource_service finish to resume",KR(ret));
-    }
-  }
-  const int64_t cost_us = ObTimeUtility::current_time() - start_time_us;
-  FLOG_INFO("resource_manager: switch_to_leader", KR(ret), K(cost_us), KP_(resource_manager));
-
-  return ret;
-}
-
-int ObTableLoadResourceService::switch_to_follower_gracefully() {
-  int ret = OB_SUCCESS;
-  LOG_INFO("switch_to_follower_gracefully");
-  if (OB_FAIL(inner_switch_to_follower())) {
-    LOG_WARN("fail to switch to follower", KR(ret));
-  }
-  
-  return ret;
-}
-
-void ObTableLoadResourceService::switch_to_follower_forcedly() {
-  int ret = OB_SUCCESS;
-  LOG_INFO("switch_to_follower_forcedly");
-  if (OB_FAIL(inner_switch_to_follower())) {
-    LOG_WARN("fail to switch to follower", KR(ret));
-  }
 }
 
 int ObTableLoadResourceService::alloc_resource_manager()
@@ -207,21 +168,6 @@ int ObTableLoadResourceService::delete_resource_manager()
   return ret;
 }
 
-int ObTableLoadResourceService::inner_switch_to_follower()
-{
-  int ret = OB_SUCCESS;
-  ObMutexGuard switch_guard(switch_lock_);
-  obsys::ObRLockGuard r_guard(rw_lock_);
-  const int64_t start_time_us = ObTimeUtility::current_time();
-  if (OB_NOT_NULL(resource_manager_)) {
-    resource_manager_->pause();
-  }
-  const int64_t cost_us = ObTimeUtility::current_time() - start_time_us;
-  FLOG_INFO("resource_manager: switch_to_follower", KR(ret), K(cost_us), KP_(resource_manager));
-  
-  return ret;
-}
-
 int ObTableLoadResourceService::check_inner_stat()
 {
   int ret = OB_SUCCESS;
@@ -233,88 +179,14 @@ int ObTableLoadResourceService::check_inner_stat()
   return ret;
 }
 
-int ObTableLoadResourceService::get_leader_addr(
-    const share::ObLSID &ls_id,
-    ObAddr &leader)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(GCTX.location_service_->get_leader_with_retry_until_timeout(
-      GCONF.cluster_id, ls_id, leader, GET_LEADER_RETRY_TIMEOUT))) {
-    LOG_WARN("fail to get ls location leader", KR(ret), K(ls_id));    
-    if (is_location_service_renew_error(ret)) {
-      ret = OB_EAGAIN;
-    }
-  }
-
-  return ret;
-}
-
-int ObTableLoadResourceService::local_apply_resource(ObDirectLoadResourceApplyArg &arg, ObDirectLoadResourceOpRes &res)
-{
-  int ret = OB_SUCCESS;
-  ObTableLoadResourceService *service = nullptr;
-  if (OB_ISNULL(service = share::g_mp->table_load_resource_service())) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("null table load resource service", KR(ret));
-  } else if(OB_ISNULL(service->resource_manager_)) {
-    ret = OB_EAGAIN;
-    LOG_WARN("resource_manager_ is null", KR(ret));
-  } else {
-    ret = service->resource_manager_->apply_resource(arg, res);
-  }
-  
-  return ret;
-}
-
-int ObTableLoadResourceService::local_release_resource(ObDirectLoadResourceReleaseArg &arg)
-{
-  int ret = OB_SUCCESS;
-  ObTableLoadResourceService *service = nullptr;
-  if (OB_ISNULL(service = share::g_mp->table_load_resource_service())) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("null table load resource service", KR(ret));
-  } else if(OB_ISNULL(service->resource_manager_)) {
-    ret = OB_EAGAIN;
-    LOG_WARN("resource_manager_ is null", KR(ret));
-  } else {
-    ret = service->resource_manager_->release_resource(arg);
-  }
-  
-  return ret;
-}
-
-int ObTableLoadResourceService::local_update_resource(ObDirectLoadResourceUpdateArg &arg)
-{
-  int ret = OB_SUCCESS;
-  ObTableLoadResourceService *service = nullptr;
-  if (OB_ISNULL(service = share::g_mp->table_load_resource_service())) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("null table load resource service", KR(ret));
-  } else if(OB_ISNULL(service->resource_manager_)) {
-    ret = OB_EAGAIN;
-    LOG_WARN("resource_manager_ is null", KR(ret));
-  } else {
-    ret = service->resource_manager_->update_resource(arg);
-  }
-  
-  return ret;
-}
-
-int ObTableLoadResourceService::apply_resource(ObDirectLoadResourceApplyArg &arg, ObDirectLoadResourceOpRes &res)
+int ObTableLoadResourceService::apply_resource(ObDirectLoadResourceApplyArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(arg), KR(ret));
   } else {
-    ObAddr leader;
-    if (OB_FAIL(get_leader_addr(share::SYS_LS, leader))) {
-      LOG_WARN("fail to get leader addr", KR(ret));
-    } else if (ObTableLoadUtils::is_local_addr(leader)) {
-      ret = local_apply_resource(arg, res);
-    } else {
-      TABLE_LOAD_RESOURCE_RPC_CALL(apply_resource, leader, arg, res);
-    }
+    ret = share::g_mp->table_load_resource_service()->resource_manager_->apply_resource(arg);
   }
   
   return ret;
@@ -327,14 +199,7 @@ int ObTableLoadResourceService::release_resource(ObDirectLoadResourceReleaseArg 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(arg), KR(ret));
   } else {
-    ObAddr leader;
-    if (OB_FAIL(get_leader_addr(share::SYS_LS, leader))) {
-      LOG_WARN("fail to get leader addr", KR(ret));
-    } else if (ObTableLoadUtils::is_local_addr(leader)) {
-      ret = local_release_resource(arg);
-    } else {
-      TABLE_LOAD_RESOURCE_RPC_CALL(release_resource, leader, arg);
-    }
+    ret = share::g_mp->table_load_resource_service()->resource_manager_->release_resource(arg);
   }
   
   return ret;

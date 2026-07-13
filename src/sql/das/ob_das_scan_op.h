@@ -489,7 +489,6 @@ public:
       rowkey_iter_(nullptr),
       lookup_iter_(),
       tablet_id_(),
-      ls_id_(),
       scan_param_(),
       lookup_memctx_(),
       status_(0),
@@ -522,7 +521,6 @@ public:
   bool is_group_scan() const { return is_group_scan_; }
   void set_tablet_id(const common::ObTabletID &tablet_id) { tablet_id_ = tablet_id; }
   void set_index_tablet_id(const common::ObTabletID &tablet_id) { index_tablet_id_ = tablet_id; }
-  void set_ls_id(const share::ObLSID &ls_id) { ls_id_ = ls_id; }
   void set_rowkey_iter(common::ObNewRowIterator *rowkey_iter) {rowkey_iter_ = rowkey_iter;}
   common::ObNewRowIterator *get_rowkey_iter() { return rowkey_iter_; }
   int reuse_iter();
@@ -532,7 +530,6 @@ public:
                        KPC_(tx_desc),
                        KPC_(snapshot),
                        K_(tablet_id),
-                       K_(ls_id),
                        K_(state),
                        K_(index_end));
   common::ObITabletScan &get_tsc_service();
@@ -552,7 +549,6 @@ protected:
   common::ObNewRowIterator *rowkey_iter_;
   common::ObNewRowIterator *lookup_iter_;
   common::ObTabletID tablet_id_;
-  share::ObLSID ls_id_;
   storage::ObTableScanParam scan_param_;
 
   ObSEArray<ObDatum *, 4> trans_info_array_;

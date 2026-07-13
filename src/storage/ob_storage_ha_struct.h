@@ -18,7 +18,6 @@
 #define OCEABASE_STORAGE_HA_STRUCT_
 
 #include "lib/ob_define.h"
-#include "share/ob_ls_id.h"
 #include "common/ob_member.h"
 #include "common/ob_tablet_id.h"
 #include "lib/container/ob_array.h"
@@ -27,82 +26,12 @@
 #include "storage/blocksstable/ob_datum_rowkey.h"
 #include "storage/blocksstable/ob_logic_macro_id.h"
 #include "observer/scheduler/ob_dag_scheduler_config.h"
-#include "common/ob_learner_list.h"
-#include "storage/ob_tablet_ha_status.h"
+#include "storage/ob_tablet_restore_state.h"
 
 namespace oceanbase
 {
 namespace storage
 {
-
-enum ObMigrationStatus
-{
-  OB_MIGRATION_STATUS_NONE = 0,
-  OB_MIGRATION_STATUS_ADD = 1,
-  OB_MIGRATION_STATUS_ADD_FAIL = 2,
-  OB_MIGRATION_STATUS_MIGRATE = 3,
-  OB_MIGRATION_STATUS_MIGRATE_FAIL = 4,
-  OB_MIGRATION_STATUS_REBUILD = 5,
-  OB_MIGRATION_STATUS_REBUILD_FAIL = 6,
-  OB_MIGRATION_STATUS_CHANGE = 7,
-  OB_MIGRATION_STATUS_RESTORE_STANDBY = 8,
-  OB_MIGRATION_STATUS_HOLD = 9,
-  OB_MIGRATION_STATUS_MIGRATE_WAIT = 10,
-  OB_MIGRATION_STATUS_ADD_WAIT = 11,
-  OB_MIGRATION_STATUS_REBUILD_WAIT = 12,
-  OB_MIGRATION_STATUS_GC = 13,  // ls wait allow gc
-  OB_MIGRATION_STATUS_MAX,
-};
-
-struct ObMigrationOpType
-{
-  enum TYPE
-  {
-    ADD_LS_OP = 0,
-    MIGRATE_LS_OP = 1,
-    REBUILD_LS_OP = 2,
-    CHANGE_LS_OP = 3,
-    REMOVE_LS_OP = 4,
-    RESTORE_STANDBY_LS_OP = 5,
-    REBUILD_TABLET_OP = 6,
-    REPLACE_LS_OP = 7,
-    MAX_LS_OP,
-  };
-  static const char *get_str(const TYPE &status);
-  static OB_INLINE bool is_valid(const TYPE &type) { return type >= 0 && type < MAX_LS_OP; }
-};
-
-struct ObMigrationStatusHelper
-{
-public:
-  static int trans_migration_op(const ObMigrationOpType::TYPE &op_type, ObMigrationStatus &migrate_status);
-  static int trans_reboot_status(const ObMigrationStatus &cur_status, ObMigrationStatus &reboot_status);
-  static bool check_can_restore(const ObMigrationStatus &cur_status);
-  // Check the migration status. The LS in the XXX_FAIL state is considered to be an abandoned LS, which can be judged to be directly GC when restarting
-  static bool need_online(const ObMigrationStatus &cur_status);
-  static bool check_allow_gc_abandoned_ls(const ObMigrationStatus &cur_status);
-  static bool check_can_migrate_out(const ObMigrationStatus &cur_status);
-  static int check_can_change_status(
-      const ObMigrationStatus &cur_status,
-      const ObMigrationStatus &change_status,
-      bool &can_change);
-  static bool is_valid(const ObMigrationStatus &status);
-  static bool check_can_report_readable_scn(
-      const ObMigrationStatus &cur_status);
-private:
-  static bool check_migration_status_is_fail_(const ObMigrationStatus &cur_status);
-  static int set_ls_migrate_gc_status_(
-      ObLS &ls,
-      bool &allow_gc);
-};
-
-enum ObMigrationOpPriority
-{
-  PRIO_HIGH = 0,
-  PRIO_LOW = 1,
-  PRIO_MID = 2,
-  PRIO_INVALID
-};
 
 struct ObStorageHASrcInfo
 {
@@ -133,60 +62,6 @@ struct ObMacroBlockCopyArgInfo
   TO_STRING_KV(K_(logic_macro_block_id));
 
   blocksstable::ObLogicMacroBlockId logic_macro_block_id_;
-};
-
-struct ObCopyTabletStatus
-{
-  enum STATUS
-  {
-    TABLET_EXIST = 0,
-    TABLET_NOT_EXIST = 1,
-    MAX_STATUS,
-  };
-  static OB_INLINE bool is_valid(const STATUS &status) { return status >= 0 && status < MAX_STATUS; }
-};
-
-struct ObCopyTabletSimpleInfo
-{
-  ObCopyTabletSimpleInfo();
-  virtual ~ObCopyTabletSimpleInfo() {}
-  bool is_valid() const;
-  void reset();
-  TO_STRING_KV(K_(tablet_id), K_(status));
-  common::ObTabletID tablet_id_;
-  ObCopyTabletStatus::STATUS status_;
-  int64_t data_size_;
-};
-
-struct ObMigrationFakeBlockID
-{
-  ObMigrationFakeBlockID();
-  virtual ~ObMigrationFakeBlockID() = default;
-  TO_STRING_KV(K_(migration_fake_block_id));
-  static const int64_t FAKE_BLOCK_INDEX = INT64_MAX -1;
-  blocksstable::MacroBlockId migration_fake_block_id_;
-};
-
-struct ObCopySSTableHelper
-{
-};
-
-class ObIHAHandler
-{
-public:
-  ObIHAHandler() {}
-  virtual ~ObIHAHandler() {}
-  virtual int process() = 0;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObIHAHandler);
-};
-
-struct ObMigrationUtils
-{
-  static bool is_need_retry_error(const int err);
-  static int get_ls_rebuild_seq(
-      const share::ObLSID &ls_id,
-      int64_t &rebuild_seq);
 };
 
 struct ObCopyTableKeyInfo final
@@ -281,7 +156,6 @@ public:
   {
     NONE = 0,
     CLOG = 1,
-    RESERVED_2 = 2,
     TABLET = 3,
     MAX
   };
@@ -475,34 +349,6 @@ private:
   bool is_inited_;
   ReuseMaps reuse_maps_;
   DISALLOW_COPY_AND_ASSIGN(ObMacroBlockReuseMgr);
-};
-
-struct ObLogicTabletID final
-{
-public:
-  ObLogicTabletID();
-  ~ObLogicTabletID() = default;
-  int init(const common::ObTabletID &tablet_id);
-  void reset();
-  bool operator == (const ObLogicTabletID &other) const;
-  TO_STRING_KV(
-      K_(tablet_id));
-  common::ObTabletID tablet_id_;
-};
-
-struct ObLSMemberListInfo final
-{
-public:
-  ObLSMemberListInfo();
-  ~ObLSMemberListInfo() = default;
-  bool is_valid() const;
-
-  TO_STRING_KV(K_(learner_list), K_(leader_addr), K_(member_list));
-  common::GlobalLearnerList learner_list_;
-  common::ObAddr leader_addr_;
-  common::ObArray<common::ObAddr> member_list_;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObLSMemberListInfo);
 };
 
 }

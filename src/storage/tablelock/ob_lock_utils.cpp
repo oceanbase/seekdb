@@ -63,37 +63,6 @@ int ObInnerTableLockUtil::lock_inner_table_in_trans(
   return ret;
 }
 
-int ObLSObjLockUtil::lock_ls_in_trans(
-    common::ObMySQLTransaction &trans,
-    const ObLSID &ls_id,
-    const transaction::tablelock::ObTableLockMode &lock_mode)
-{
-  int ret = OB_SUCCESS;
-  ObInnerSQLConnection *conn = NULL;
-  ObTimeoutCtx ctx;
-  const int64_t DEFAULT_TIMEOUT = GCONF.internal_sql_execute_timeout;
-  if (OB_UNLIKELY(!ls_id.is_valid_with_tenant() || !is_lock_mode_valid(lock_mode))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(ls_id), K(lock_mode));
-  } else if (OB_ISNULL(conn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("connection is null", KR(ret), K(ls_id));
-  } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT))) {
-    LOG_WARN("fail to set default_timeout_ctx", KR(ret));
-  } else {
-    ObLockObjRequest lock_arg;
-    lock_arg.lock_mode_ = lock_mode;
-    lock_arg.op_type_ = IN_TRANS_COMMON_LOCK;
-    lock_arg.timeout_us_ = ctx.get_timeout();
-    lock_arg.obj_type_ = ObLockOBJType::OBJ_TYPE_LS;
-    lock_arg.obj_id_ = ls_id.id();
-    if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg, conn))) {
-      LOG_WARN("lock obj failed", KR(ret), K(lock_arg));
-    }
-  }
-  return ret;
-}
-
 } // end namespace tablelock
 } // end namespace transaction
 } // end namespace oceanbase

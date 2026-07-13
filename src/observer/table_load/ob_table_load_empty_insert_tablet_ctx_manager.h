@@ -32,7 +32,7 @@ namespace observer
 
 class ObTableLoadEmptyInsertTabletCtxManager
 {
-  using LeaderInfo = ObTableLoadPartitionLocation::LeaderInfo;
+  using LocalInfo = ObTableLoadPartitionLocation::LocalInfo;
   static const int64_t TABLET_COUNT_PER_TASK = 20;
 public:
   ObTableLoadEmptyInsertTabletCtxManager();
@@ -41,26 +41,25 @@ public:
       const common::ObIArray<table::ObTableLoadPartitionId> &partition_ids,
       const common::ObIArray<table::ObTableLoadPartitionId> &target_partition_ids);
   int get_next_task(ObAddr &addr,
-                    ObIArray<table::ObTableLoadLSIdAndPartitionId> &partition_ids,
-                    ObIArray<table::ObTableLoadLSIdAndPartitionId> &target_partition_ids);
+                    ObIArray<table::ObTableLoadTabletId> &partition_ids,
+                    ObIArray<table::ObTableLoadTabletId> &target_partition_ids);
   int set_thread_count(const int64_t thread_count);
   int handle_thread_finish(bool &is_finish);
   static int execute(const uint64_t &table_id,
                      const ObTableLoadDDLParam &ddl_param,
-                     const ObIArray<table::ObTableLoadLSIdAndPartitionId> &ls_part_ids,
-                     const ObIArray<table::ObTableLoadLSIdAndPartitionId> &target_ls_part_ids);
+                     const ObIArray<table::ObTableLoadTabletId> &partition_ids,
+                     const ObIArray<table::ObTableLoadTabletId> &target_partition_ids);
   static int execute_for_dag(const uint64_t &table_id,
                              const ObTableLoadDDLParam &ddl_param,
-                             const ObIArray<table::ObTableLoadLSIdAndPartitionId> &ls_part_ids,
-                             const ObIArray<table::ObTableLoadLSIdAndPartitionId> &target_ls_part_ids);
+                             const ObIArray<table::ObTableLoadTabletId> &partition_ids,
+                             const ObIArray<table::ObTableLoadTabletId> &target_partition_ids);
 private:
   ObTableLoadPartitionLocation partition_location_;
   ObTableLoadPartitionLocation target_partition_location_;
-  table::ObTableLoadArray<LeaderInfo> all_leader_info_array_;
-  table::ObTableLoadArray<LeaderInfo> target_all_leader_info_array_;
+  LocalInfo local_info_;
+  LocalInfo target_local_info_;
   int64_t thread_count_ CACHE_ALIGNED;
   lib::ObMutex op_lock_;
-  int64_t idx_;
   int64_t start_;
   bool is_inited_;
 };

@@ -32,23 +32,23 @@ namespace share
 int ObVecEmbeddingAsyncTaskExecutor::load_task(uint64_t &task_trace_base_num)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexMgr *index_ls_mgr = nullptr;
+  ObPluginVectorIndexMgr *index_mgr = nullptr;
   ObArray<ObVecIndexAsyncTaskCtx*> task_ctx_array;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("vector async task not init", KR(ret));
   } else if (!check_operation_allow()) { // skip
-  } else if (OB_FAIL(get_index_ls_mgr(index_ls_mgr))) { // skip
-    LOG_WARN("fail to get index ls mgr", K(ret), K(ls_->get_ls_id()));
+  } else if (OB_FAIL(get_index_mgr(index_mgr))) { // skip
+    LOG_WARN("fail to get index ls mgr", K(ret));
   } else {
-    ObVecIndexAsyncTaskOption &task_opt = index_ls_mgr->get_async_task_opt();
+    ObVecIndexAsyncTaskOption &task_opt = index_mgr->get_async_task_opt();
     ObIAllocator *allocator = task_opt.get_allocator();
     const int64_t current_task_cnt = ObVecIndexAsyncTaskUtil::get_processing_task_cnt(task_opt);
     ObSEArray<ObAdapterMapKeyValue, 4> adapter_array;
     ObAdapterMapFunc adapter_map_func(adapter_array);
 
-    RWLock::RLockGuard lock_guard(index_ls_mgr->get_adapter_map_lock());
-    if (OB_FAIL(index_ls_mgr->get_complete_adapter_map().foreach_refactored(adapter_map_func))) {
+    RWLock::RLockGuard lock_guard(index_mgr->get_adapter_map_lock());
+    if (OB_FAIL(index_mgr->get_complete_adapter_map().foreach_refactored(adapter_map_func))) {
       LOG_WARN("fail to foreach adapter map", KR(ret));
     }
     FOREACH_X(iter, adapter_array, OB_SUCC(ret) && (task_ctx_array.count() + current_task_cnt <= MAX_ASYNC_TASK_PROCESSING_COUNT)) {
@@ -78,7 +78,7 @@ int ObVecEmbeddingAsyncTaskExecutor::load_task(uint64_t &task_trace_base_num)
         } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::fetch_new_trace_id(++task_trace_base_num, allocator, new_trace_id))) {
           LOG_WARN("fail to fetch new trace id", K(ret), K(tablet_id));
         } else {
-          LOG_DEBUG("start load task", K(ret), K(tablet_id), K(task_trace_base_num), K(ls_->get_ls_id()));
+          LOG_DEBUG("start load task", K(ret), K(tablet_id), K(task_trace_base_num));
           // 1. update task_ctx to async task map
           
           task_ctx->ls_ = ls_;
@@ -92,7 +92,7 @@ int ObVecEmbeddingAsyncTaskExecutor::load_task(uint64_t &task_trace_base_num)
           task_ctx->task_status_.trace_id_ = new_trace_id;
           task_ctx->task_status_.target_scn_.convert_from_ts(ObTimeUtility::current_time());
           
-          if (OB_FAIL(index_ls_mgr->get_async_task_opt().add_task_ctx(tablet_id, task_ctx, inc_new_task))) { // not overwrite
+          if (OB_FAIL(index_mgr->get_async_task_opt().add_task_ctx(tablet_id, task_ctx, inc_new_task))) { // not overwrite
             LOG_WARN("fail to add task ctx", K(ret));
           } else if (inc_new_task && OB_FAIL(task_ctx_array.push_back(task_ctx))) {
             LOG_WARN("fail to push back task status", K(ret), K(task_ctx));
@@ -107,15 +107,15 @@ int ObVecEmbeddingAsyncTaskExecutor::load_task(uint64_t &task_trace_base_num)
         }
       }
     }
-    LOG_INFO("finish load async task", K(ret), K(ls_->get_ls_id()), K(task_ctx_array.count()), K(current_task_cnt));
+    LOG_INFO("finish load async task", K(ret), K(task_ctx_array.count()), K(current_task_cnt));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(insert_new_task(task_ctx_array))) {
-    LOG_WARN("fail to insert new tasks", K(ret), K(ls_->get_ls_id()));
+    LOG_WARN("fail to insert new tasks", K(ret));
   }
   // clear on fail
   if (OB_FAIL(ret) && !task_ctx_array.empty()) {
-    if (OB_FAIL(clear_task_ctxs(index_ls_mgr->get_async_task_opt(), task_ctx_array))) {
+    if (OB_FAIL(clear_task_ctxs(index_mgr->get_async_task_opt(), task_ctx_array))) {
       LOG_WARN("fail to clear task ctx", K(ret));
     }
   }
@@ -155,7 +155,7 @@ ObHybridVectorRefreshTask::do_work()
     │   └── ObEmbeddingTask::is_completed()
     ├── prepare_index_id_data()                                 // generate data for deleting table 4
     ├── ObInsertLobColumnHelper::start_trans()
-    ├── txs->get_ls_read_snapshot()
+    ├── txs->get_read_snapshot()
     ├── do_refresh_only()
     │   ├── init_dml_param()
     │   │   ├── table_param.convert()
@@ -184,7 +184,7 @@ int ObHybridVectorRefreshTask::do_work()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret), KPC(task_ctx));
   } else {
-    LOG_INFO("start do_work", K(ret), K(task_ctx->task_status_), K(ls_id_));
+    LOG_INFO("start do_work", K(ret), K(task_ctx->task_status_));
   }
   while (OB_SUCC(ret) && !exec_finish) {
     switch (current_status()) {
@@ -478,7 +478,7 @@ int ObHybridVectorRefreshTask::init_dml_param(uint64_t table_id,
     dml_param.store_ctx_guard_ = &store_ctx_guard;
     dml_param.schema_version_ = table_schema->get_schema_version();
     dml_param.dml_allocator_ = &allocator_;
-    if (OB_FAIL(oas->get_write_store_ctx_guard(ls_id_, timeout_us, *tx_desc, snapshot, 0, dml_param.write_flag_, store_ctx_guard))) {
+    if (OB_FAIL(oas->get_write_store_ctx_guard(timeout_us, *tx_desc, snapshot, 0, dml_param.write_flag_, store_ctx_guard))) {
       LOG_WARN("failed to get write store context guard", K(ret));
     }
   }
@@ -550,8 +550,7 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
       LOG_WARN("allocate memory failed", K(ret), K(table_param));
     } else if (FALSE_IT(table_param = new(table_param)schema::ObTableParam(task_ctx->allocator_))) {
     } else if (FALSE_IT(ctx_->task_status_.target_scn_.convert_from_ts(ObTimeUtility::current_time()))) {
-    } else if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_,
-        &adaptor, 
+    } else if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(&adaptor,
         ctx_->task_status_.target_scn_,
         INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL,
         task_ctx->allocator_,
@@ -737,7 +736,7 @@ int ObHybridVectorRefreshTask::do_refresh_only(
       LOG_WARN("unexpected error", K(ret), KPC(task_ctx), K(oas));
     } else if (OB_FAIL(init_dml_param(adaptor.get_vbitmap_table_id(), dml_param, table_dml_param, task_ctx->index_id_column_ids_, tx_desc, snapshot, store_ctx_guard))) {
       LOG_WARN("failed to init dml param", K(ret), K(dml_param), K(table_dml_param));
-    } else if (OB_FAIL(oas->insert_rows(ls_id_, adaptor.get_vbitmap_tablet_id(), *tx_desc, dml_param, task_ctx->index_id_column_ids_, &index_id_iter, affected_rows))) {
+    } else if (OB_FAIL(oas->insert_rows(adaptor.get_vbitmap_tablet_id(), *tx_desc, dml_param, task_ctx->index_id_column_ids_, &index_id_iter, affected_rows))) {
       LOG_WARN("failed to insert rows to index id table", K(ret), K(adaptor.get_vbitmap_table_id()));
     }
     store_ctx_guard.reset();
@@ -751,7 +750,7 @@ int ObHybridVectorRefreshTask::do_refresh_only(
       LOG_WARN("failed to remove ora_rowscn column", K(ret));
     } else if (OB_FAIL(init_dml_param(adaptor.get_inc_table_id(), dml_param, index_id_dml_param, delta_delete_column_id, tx_desc, snapshot, store_ctx_guard))) {
       LOG_WARN("failed to init dml param", K(ret), K(dml_param), K(index_id_dml_param));
-    } else if (OB_FAIL(oas->delete_rows(ls_id_, adaptor.get_inc_tablet_id(), *tx_desc, dml_param, delta_delete_column_id, &delta_delete_iter, affected_rows))) {
+    } else if (OB_FAIL(oas->delete_rows(adaptor.get_inc_tablet_id(), *tx_desc, dml_param, delta_delete_column_id, &delta_delete_iter, affected_rows))) {
       LOG_WARN("failed to insert rows to index id table", K(ret), K(adaptor.get_inc_table_id()));
     }
     store_ctx_guard.reset();
@@ -850,8 +849,7 @@ int ObHybridVectorRefreshTask::delete_embedded_table(ObPluginVectorIndexAdaptor 
       common::ObNewRowIterator *scan_iter = nullptr;
       ObStorageDatumUtils util;
       ObArenaAllocator scan_allocator("VecEmbedding", OB_MALLOC_NORMAL_BLOCK_SIZE);
-      if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_, 
-          &adaptor,
+      if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(&adaptor,
           snapshot.version(),
           INDEX_TYPE_HYBRID_INDEX_EMBEDDED_LOCAL,
           allocator_,
@@ -912,7 +910,7 @@ int ObHybridVectorRefreshTask::delete_embedded_table(ObPluginVectorIndexAdaptor 
       LOG_WARN("unexpected error", K(ret), KPC(task_ctx), K(oas));
     } else if (OB_FAIL(init_dml_param(adaptor.get_embedded_table_id(), dml_param, table_dml_param, dml_column_ids, tx_desc, snapshot, store_ctx_guard))) {
       LOG_WARN("failed to init dml param", K(ret), K(dml_param), K(table_dml_param));
-    } else if (OB_FAIL(oas->delete_rows(ls_id_, adaptor.get_embedded_tablet_id(), *tx_desc, dml_param, dml_column_ids, &delete_iter, affected_rows))) {
+    } else if (OB_FAIL(oas->delete_rows(adaptor.get_embedded_tablet_id(), *tx_desc, dml_param, dml_column_ids, &delete_iter, affected_rows))) {
       LOG_WARN("failed to delete rows from embedded table", K(ret), K(adaptor.get_embedded_tablet_id()));
     }
     store_ctx_guard.reset();
@@ -953,10 +951,10 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
   } else if (OB_ISNULL(txs)) {
     ret =  OB_ERR_UNEXPECTED;
     LOG_WARN("get null ptr", K(ret), KPC(task_ctx), K(txs));
-  } else if (OB_FAIL(ObInsertLobColumnHelper::start_trans(ls_id_, false/*is_for_read*/, timeout_us, tx_desc))) {
+  } else if (OB_FAIL(ObInsertLobColumnHelper::start_trans(false/*is_for_read*/, timeout_us, tx_desc))) {
     LOG_WARN("fail to start trans", K(ret));
   } else if (FALSE_IT(trans_start = true)) {
-  } else if (OB_FAIL(txs->get_ls_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, ls_id_, timeout_us, snapshot))) {
+  } else if (OB_FAIL(txs->get_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, timeout_us, snapshot))) {
     LOG_WARN("fail to get snapshot", K(ret));
   } else if (OB_FAIL(do_refresh_only(adaptor, tx_desc, snapshot, store_ctx_guard, index_id_iter, delta_delete_iter))) {
     LOG_WARN("fail to do refresh", K(ret));
@@ -982,8 +980,7 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
       int64_t loop_cnt = 0;
       if (OB_FAIL(new_row.init(task_ctx->embedded_table_column_ids_.count()))) {
         LOG_WARN("fail to init datum row", K(ret), K(task_ctx->embedded_table_column_ids_), K(new_row));
-      } else if (adaptor.get_is_need_vid() && OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_, 
-              &adaptor,
+      } else if (adaptor.get_is_need_vid() && OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(&adaptor,
               ctx_->task_status_.target_scn_,
               INDEX_TYPE_VEC_VID_ROWKEY_LOCAL,
               allocator_,
@@ -1060,8 +1057,7 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
             ObTableScanIterator *embedded_table_scan_iter = nullptr;
             ObArenaAllocator embedde_scan_allocator("VecEmbedding", OB_MALLOC_NORMAL_BLOCK_SIZE);
             ObRowkey rowkey(obj_ptr, embedded_rowkey_count);
-            if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_, 
-                &adaptor,
+            if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(&adaptor,
                 snapshot.version(),
                 INDEX_TYPE_HYBRID_INDEX_EMBEDDED_LOCAL,
                 allocator_,
@@ -1130,7 +1126,7 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
       LOG_WARN("unexpected error", K(ret), KPC(task_ctx), K(oas));
     } else if (OB_FAIL(init_dml_param(adaptor.get_embedded_table_id(), dml_param, table_dml_param, task_ctx->embedded_table_column_ids_, tx_desc, snapshot, store_ctx_guard))) {
       LOG_WARN("failed to init dml param", K(ret), K(dml_param), K(table_dml_param));
-    } else if (OB_FAIL(oas->update_rows(ls_id_, adaptor.get_embedded_tablet_id(), *tx_desc, dml_param, task_ctx->embedded_table_column_ids_, task_ctx->embedded_table_update_ids_, &embedded_iter, affected_rows))) {
+    } else if (OB_FAIL(oas->update_rows(adaptor.get_embedded_tablet_id(), *tx_desc, dml_param, task_ctx->embedded_table_column_ids_, task_ctx->embedded_table_update_ids_, &embedded_iter, affected_rows))) {
       LOG_WARN("failed to insert rows to embedded table", K(ret), K(adaptor.get_embedded_tablet_id()));
     }
     store_ctx_guard.reset();

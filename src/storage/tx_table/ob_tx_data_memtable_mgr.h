@@ -96,7 +96,6 @@ public:  // ObTxDataMemtableMgr
   ObTxDataMemtableMgr();
   virtual ~ObTxDataMemtableMgr();
   int init(const common::ObTabletID &tablet_id,
-           const share::ObLSID &ls_id,
            ObFreezer *freezer,
            ObTenantMetaMemMgr *t3m) override;
   virtual void destroy() override;
@@ -155,7 +154,6 @@ public:  // ObTxDataMemtableMgr
   INHERIT_TO_STRING_KV("ObIMemtableMgr",
                        ObIMemtableMgr,
                        K_(is_freezing),
-                       K_(ls_id),
                        K_(mini_merge_recycle_commit_versions_ts),
                        KP_(tx_data_table),
                        KP_(ls_tablet_svr));
@@ -187,7 +185,6 @@ private:  // ObTxDataMemtableMgr
 
 private:  // ObTxDataMemtableMgr
   bool is_freezing_;
-  share::ObLSID ls_id_;
   int64_t mini_merge_recycle_commit_versions_ts_;
   ObTxDataTable *tx_data_table_;
   ObLSTabletService *ls_tablet_svr_;

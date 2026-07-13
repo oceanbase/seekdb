@@ -61,15 +61,6 @@ private:
   ObArenaAllocator allocator_;
 };
 
-class ObCrossLSMdsMinorFilter : public compaction::ObICompactionFilter
-{
-public:
-  ObCrossLSMdsMinorFilter();
-  virtual ~ObCrossLSMdsMinorFilter() = default;
-public:
-  virtual int filter(const blocksstable::ObDatumRow &row, ObFilterRet &filter_ret) override;
-  virtual CompactionFilterType get_filter_type() const override { return MDS_MINOR_CROSS_LS; }
-};
 } // namespace storage
 } // namespace oceanbase
 

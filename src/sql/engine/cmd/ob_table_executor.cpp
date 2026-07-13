@@ -37,7 +37,6 @@
 
 #include "sql/printer/ob_select_stmt_printer.h"
 #include "observer/ob_server_event_history_table_operator.h"
-#include "storage/mview/cmd/ob_mview_executor_util.h"
 #include "storage/ob_partition_pre_split.h"
 
 namespace oceanbase
@@ -535,7 +534,6 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
     LOG_WARN("get first statement failed", K(ret));
   } else if (table_schema.is_duplicate_table()) {
 
-  // TODO@jingyu_cr: make sure whether sys log stream have to be duplicated
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "create duplicate table under sys or meta tenant");
     LOG_WARN("create dup table not supported", KR(ret), K(table_schema));
@@ -578,23 +576,6 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
           LOG_WARN("fail to execute parallel ddl", KR(ret), K(create_table_arg), K(res));
         }
       }
-      if (OB_SUCC(ret)) {
-        if (create_table_arg.schema_.is_materialized_view()) {
-          ObSQLSessionInfo *session_info = ctx.get_my_session();
-          if (session_info == nullptr) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("session_info should not be nullptr", KR(ret));
-          } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(res.task_id_, false/*do not retry at executor*/, session_info, true))) {
-            if (storage::ObMViewExecutorUtil::is_mview_refresh_retry_ret_code(ret)) {
-              LOG_WARN("retry create mview", KR(ret), "task_id", res.task_id_);
-              ret = OB_EAGAIN;
-            } else {
-              LOG_WARN("fail to create mview", KR(ret), "task_id", res.task_id_);
-            }
-          }
-        }
-      }
-      
     } else {
       if (OB_FAIL(execute_ctas(ctx, stmt))){  // Processing of query-based table creation
         LOG_WARN("execute create table as select failed", KR(ret));

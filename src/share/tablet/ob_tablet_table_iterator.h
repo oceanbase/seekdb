@@ -28,7 +28,7 @@ class ObISQLClient;
 }
 namespace share
 {
-class ObTabletToLSTableOperator;
+class ObTabletMappingTableOperator;
 class ObTabletTableOperator;
 class ObTabletInfo;
 
@@ -92,8 +92,7 @@ private:
 private:
   bool first_prefetch_;
   common::ObISQLClient *sql_proxy_;
-  int64_t valid_tablet_ls_pairs_idx_;
-  common::ObArray<ObTabletLSPair> valid_tablet_ls_pairs_;
+  common::ObArray<ObTabletID> valid_tablet_ids_;
   ObTabletTableOperator tablet_table_operator_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTenantTabletMetaIterator);

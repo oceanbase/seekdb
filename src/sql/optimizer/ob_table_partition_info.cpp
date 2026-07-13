@@ -135,17 +135,6 @@ int ObTablePartitionInfo::calc_phy_table_loc_and_select_leader(ObExecContext &ex
     } else if (OB_SUCCESS != (tmp_ret = candi_table_loc.assign(candi_table_loc_))) {
       LOG_WARN("fail to assign", K(tmp_ret), K(candi_table_loc_));
     } else {
-      ObCandiTabletLocIArray &info_array = candi_table_loc.get_phy_part_loc_info_list_for_update();
-
-      for (int64_t i = 0; i < info_array.count() && OB_SUCCESS == tmp_ret; i++) {
-        ObCandiTabletLoc &info = info_array.at(i);
-        if (info.get_partition_location().get_replica_locations().count() <= 0) {
-          //nothing todo
-        } else if (OB_SUCCESS != (tmp_ret = info.set_selected_replica_idx(0))) {
-          LOG_WARN("fail to set selected replica index", KR(ret));
-        }
-      }
-
       if (OB_SUCCESS != tmp_ret) {
         //nothing todo
       } else if (OB_SUCCESS != (tmp_ret = task_exec_ctx

@@ -58,7 +58,7 @@ int ObTruncateInfoMdsHelper::on_register(
   ObArenaAllocator tmp_allocator;
   ObTruncateTabletArg arg;
   int64_t pos = 0;
-  ObLSHandle ls_handle;
+  ObLS *tenant_ls = nullptr;
   ObTabletHandle tablet_handle;
   mds::MdsCtx &user_ctx = static_cast<mds::MdsCtx &>(ctx);
 
@@ -70,10 +70,10 @@ int ObTruncateInfoMdsHelper::on_register(
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("arg is invalid", K(ret), K(arg));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(arg.ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
     LOG_WARN("failed to get log stream", K(ret), K(arg));
-  } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(arg.index_tablet_id_, tablet_handle))) {
-    LOG_WARN("failed to get tablet", K(ret), K(arg.ls_id_), K(arg.index_tablet_id_));
+  } else if (OB_FAIL(tenant_ls->get_tablet(arg.index_tablet_id_, tablet_handle))) {
+    LOG_WARN("failed to get tablet", K(ret), K(arg.index_tablet_id_));
   } else if (OB_FAIL(tablet_handle.get_obj()->set_truncate_info(
       arg.truncate_info_.key_,
       arg.truncate_info_,
@@ -109,7 +109,7 @@ int ObTruncateInfoMdsHelper::on_replay(
     ObTruncateInfoClogReplayExecutor executor(arg);
     if (OB_FAIL(executor.init(ctx, scn))) {
       LOG_WARN("failed to init reply executor", K(ret), K(arg), K(ctx), K(scn));
-    } else if (OB_FAIL(executor.execute(scn, arg.ls_id_, arg.index_tablet_id_))) {
+    } else if (OB_FAIL(executor.execute(scn, arg.index_tablet_id_))) {
       LOG_WARN("failed to executor", K(ret), K(arg), K(ctx), K(scn));
     } else {
       LOG_INFO("[TRUNCATE INFO] on_replay for ObTruncateTabletArg", K(ret), K(arg));

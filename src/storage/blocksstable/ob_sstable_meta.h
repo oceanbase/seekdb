@@ -339,53 +339,35 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObSSTableMeta);
 };
 
-class ObMigrationSSTableParam final
+class ObForkSSTableParam final
 {
 public:
-  ObMigrationSSTableParam();
-  ~ObMigrationSSTableParam();
+  ObForkSSTableParam();
+  ~ObForkSSTableParam();
   bool is_valid() const;
   void reset();
-  int assign(const ObMigrationSSTableParam &param);
-  bool is_empty_sstable() const;
-  bool is_shared_sstable() const;
-  bool is_shared_macro_blocks_sstable() const;
-  bool is_only_shared_macro_blocks_sstable() const;
-  int get_merge_res(blocksstable::ObSSTableMergeRes &res) const;
-  TO_STRING_KV(K_(basic_meta), 
-               K(column_checksums_.count()), 
+  TO_STRING_KV(K_(basic_meta),
+               K(column_checksums_.count()),
                K_(column_checksums),
-               K_(table_key),
-               K(column_default_checksums_.count()),
-               K_(column_default_checksums),  
-               K_(is_small_sstable),
                K_(root_block_addr), 
                KP_(root_block_buf),
                K_(data_block_macro_meta_addr), 
                KP_(data_block_macro_meta_buf),
                K_(is_meta_root));
 private:
-  int addr_serialize(const ObMetaDiskAddr &addr, const char *addr_buf, char *buf, const int64_t buf_len, int64_t &pos) const;
-  int addr_deserialize(const char *buf, const int64_t data_len, int64_t &pos, ObMetaDiskAddr &addr, char *&root__buf);
-  int64_t addr_get_serialize_size(const ObMetaDiskAddr &addr) const;
-  static const int64_t MIGRATION_SSTABLE_PARAM_VERSION = 1;
   typedef common::ObSEArray<int64_t, common::OB_ROW_DEFAULT_COLUMNS_COUNT> ColChecksumArray;
 public:
   common::ObArenaAllocator allocator_;
   ObSSTableBasicMeta basic_meta_;
   ColChecksumArray column_checksums_;
-  storage::ObITable::TableKey table_key_;
-  ColChecksumArray column_default_checksums_;
-  bool is_small_sstable_;
   // for shared data
   ObMetaDiskAddr root_block_addr_;
   char *root_block_buf_;
   ObMetaDiskAddr data_block_macro_meta_addr_;
   char *data_block_macro_meta_buf_;
   bool is_meta_root_;
-  OB_UNIS_VERSION(MIGRATION_SSTABLE_PARAM_VERSION);
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObMigrationSSTableParam);
+  DISALLOW_COPY_AND_ASSIGN(ObForkSSTableParam);
 };
 
 class ObSSTableMetaChecker
@@ -397,9 +379,6 @@ public:
       const ObSSTableMeta &new_sstable_meta);
   static int check_sstable_meta(
       const ObSSTableMeta &old_sstable_meta,
-      const ObSSTableMeta &new_sstable_meta);
-  static int check_sstable_meta(
-      const ObMigrationSSTableParam &migration_param,
       const ObSSTableMeta &new_sstable_meta);
   static int check_sstable_basic_meta(
       const ObSSTableBasicMeta &old_sstable_basic_meta,

@@ -271,7 +271,6 @@ int ObMicroBlockRowGetter::get_block_row(ObSSTableReadHandle &read_handle,
       if (!context_->query_flag_.is_index_back() && context_->query_flag_.is_use_bloomfilter_cache()
           && !sstable_->is_small_sstable()) {
         (void)OB_STORE_CACHE.get_bf_cache().inc_empty_read(param_->table_id_,
-                                                           param_->ls_id_,
                                                            sstable_->get_key(),
                                                            read_handle.micro_handle_->macro_block_id_,
                                                            read_handle.get_rowkey().get_datum_cnt(),

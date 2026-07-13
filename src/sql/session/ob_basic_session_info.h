@@ -45,7 +45,6 @@
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/ob_sql_context.h"
 #include "sql/ob_sql_trans_util.h"
-#include "share/partition_table/ob_partition_location.h"
 #include "common/sql_mode/ob_sql_mode_utils.h"
 #include "sql/parser/ob_parser_utils.h"
 
@@ -712,7 +711,6 @@ public:
   int get_regexp_time_limit(int64_t &v) const;
   int get_regexp_session_vars(ObExprRegexpSessionVariables &vars) const;
   int get_activate_all_role_on_login(bool &v) const;
-  int get_mview_refresh_dop(uint64_t &v) const;
   int update_timezone_info();
   const common::ObTimeZoneInfo *get_timezone_info() const { return tz_info_wrap_.get_time_zone_info(); }
   const common::ObTimeZoneInfoWrap &get_tz_info_wrap() const { return tz_info_wrap_; }
@@ -1064,8 +1062,6 @@ public:
   // The following helper function is for conveniently viewing the value of a system variable
   int if_aggr_pushdown_allowed(bool &aggr_pushdown_allowed) const;
   int is_transformation_enabled(bool &transformation_enabled) const;
-  int get_query_rewrite_enabled(int64_t &query_rewrite_enabled) const;
-  int get_query_rewrite_integrity(int64_t &query_rewrite_integrity) const;
   int is_serial_set_order_forced(bool &force_set_order) const;
   int is_old_charset_aggregation_enabled(bool &is_enable) const;
   int is_storage_estimation_enabled(bool &storage_estimation_enabled) const;
@@ -1412,7 +1408,6 @@ public:
   bool has_explicit_start_trans() const { return tx_desc_ != NULL && tx_desc_->is_explicit(); }
   bool is_in_transaction() const { return tx_desc_ != NULL && tx_desc_->is_in_tx(); }
   bool has_active_autocommit_trans(transaction::ObTransID &trans_id);
-  bool is_dup_ls_modified() const { return tx_desc_ != NULL && tx_desc_->is_dup_ls_modified(); }
   bool get_in_transaction() const { return is_in_transaction(); }
   uint64_t get_trans_flags() const { return trans_flags_.get_flags(); }
   void set_has_exec_inner_dml(bool value) { trans_flags_.set_has_exec_inner_dml(value); }

@@ -39,11 +39,9 @@ public:
   {
     UNUSED(cb_impl);
   }
-  int on_role_change(int64_t id)
+  int on_role_change()
   {
-    int ret = OB_SUCCESS;
-    UNUSED(id);
-    return ret;
+    return OB_SUCCESS;
   }
 };
 

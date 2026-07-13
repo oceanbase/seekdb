@@ -77,8 +77,8 @@ public:
   ~ObTableLoadStoreTableCtx();
   virtual int init(
     const uint64_t table_id,
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &partition_id_array,
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId>
+    const table::ObTableLoadArray<table::ObTableLoadTabletId> &partition_id_array,
+    const table::ObTableLoadArray<table::ObTableLoadTabletId>
       &target_partition_id_array) = 0;
 
   int get_table_data_desc(const ObTableLoadInputDataType::Type input_data_type,
@@ -125,8 +125,8 @@ public:
   ObTableLoadStoreCtx *store_ctx_;
   uint64_t table_id_;
   ObTableLoadSchema *schema_;
-  common::ObArray<table::ObTableLoadLSIdAndPartitionId> ls_partition_ids_;
-  common::ObArray<table::ObTableLoadLSIdAndPartitionId> target_ls_partition_ids_;
+  common::ObArray<table::ObTableLoadTabletId> partition_ids_;
+  common::ObArray<table::ObTableLoadTabletId> target_partition_ids_;
   storage::ObDirectLoadInsertTableContext *insert_table_ctx_;
 
 protected:
@@ -140,20 +140,19 @@ public:
   ObTableLoadStoreDataTableCtx(ObTableLoadStoreCtx *store_ctx);
   virtual ~ObTableLoadStoreDataTableCtx();
   int init(const uint64_t table_id,
-           const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &partition_id_array,
-           const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId>
+           const table::ObTableLoadArray<table::ObTableLoadTabletId> &partition_id_array,
+           const table::ObTableLoadArray<table::ObTableLoadTabletId>
              &target_partition_id_array) override;
   ObTableLoadStoreLobTableCtx *get_lob_table_ctx() const { return lob_table_ctx_; }
 
 private:
   int init_data_project();
-  int init_ls_partition_ids(
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &partition_id_array,
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &target_partition_id_array);
+  int init_partition_ids(
+    const table::ObTableLoadArray<table::ObTableLoadTabletId> &partition_id_array,
+    const table::ObTableLoadArray<table::ObTableLoadTabletId> &target_partition_id_array);
   int acquire_table_builder(ObTableLoadDataTableBuilder *&table_builder, ObIAllocator &allocator,
                             ObDirectLoadTableDataDesc table_data_desc);
-  int check_tablet(const share::ObLSID &ls_id,
-                   const ObTabletID &tablet_id,
+  int check_tablet(const ObTabletID &tablet_id,
                    const int64_t schema_version);
   //////////////////////// insert_table_ctx ////////////////////////
 public:
@@ -182,16 +181,16 @@ public:
                               ObTableLoadStoreDataTableCtx *data_table_ctx);
   virtual ~ObTableLoadStoreLobTableCtx();
   int init(const uint64_t table_id,
-           const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &partition_id_array,
-           const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId>
+           const table::ObTableLoadArray<table::ObTableLoadTabletId> &partition_id_array,
+           const table::ObTableLoadArray<table::ObTableLoadTabletId>
              &target_partition_id_array) override;
   ObTableLoadStoreDataTableCtx *get_data_table_ctx() const { return data_table_ctx_; }
   int get_tablet_id(const ObTabletID &data_tablet_id, ObTabletID &tablet_id);
 
 private:
-  int init_ls_partition_ids(
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &partition_id_array,
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &target_partition_id_array);
+  int init_partition_ids(
+    const table::ObTableLoadArray<table::ObTableLoadTabletId> &partition_id_array,
+    const table::ObTableLoadArray<table::ObTableLoadTabletId> &target_partition_id_array);
   int acquire_table_builder(ObTableLoadLobTableBuilder *&table_builder, ObIAllocator &allocator,
                             ObDirectLoadTableDataDesc table_data_desc);
   //////////////////////// insert_table_ctx ////////////////////////
@@ -223,15 +222,15 @@ public:
   ObTableLoadStoreIndexTableCtx(ObTableLoadStoreCtx *store_ctx);
   virtual ~ObTableLoadStoreIndexTableCtx();
   int init(const uint64_t table_id,
-           const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &partition_id_array,
-           const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId>
+           const table::ObTableLoadArray<table::ObTableLoadTabletId> &partition_id_array,
+           const table::ObTableLoadArray<table::ObTableLoadTabletId>
              &target_partition_id_array) override;
 
 private:
   int init_index_projector();
-  int init_ls_partition_ids(
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &partition_id_array,
-    const table::ObTableLoadArray<table::ObTableLoadLSIdAndPartitionId> &target_partition_id_array);
+  int init_partition_ids(
+    const table::ObTableLoadArray<table::ObTableLoadTabletId> &partition_id_array,
+    const table::ObTableLoadArray<table::ObTableLoadTabletId> &target_partition_id_array);
   int acquire_table_builder(ObTableLoadIndexTableBuilder *&table_builder, ObIAllocator &allocator,
                             ObDirectLoadTableDataDesc table_data_desc);
   //////////////////////// insert_table_ctx ////////////////////////

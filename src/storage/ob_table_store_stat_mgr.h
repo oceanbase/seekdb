@@ -25,7 +25,6 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/task/ob_timer.h"
 #include "common/ob_tablet_id.h"
-#include "share/ob_ls_id.h"
 
 namespace oceanbase
 {
@@ -67,7 +66,7 @@ public:
 
   void reset();
   bool is_valid() const;
-  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(table_id),
+  TO_STRING_KV(K_(tablet_id), K_(table_id),
                K_(row_cache_hit_cnt), K_(row_cache_miss_cnt), K_(row_cache_put_cnt),
                K_(bf_filter_cnt), K_(bf_empty_read_cnt), K_(bf_access_cnt),
                K_(block_cache_hit_cnt), K_(block_cache_miss_cnt),
@@ -82,7 +81,6 @@ public:
                K_(sstable_bf_access_cnt), K_(rowkey_prefix),
                K_(logical_read_cnt), K_(physical_read_cnt));
 
-  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   common::ObTableID table_id_;
   int64_t row_cache_hit_cnt_;

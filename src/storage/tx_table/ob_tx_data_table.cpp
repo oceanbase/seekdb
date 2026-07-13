@@ -64,11 +64,9 @@ int ObTxDataTable::init(ObLS *ls, ObTxCtxTable *tx_ctx_table)
       ObMemAttr("CommitVersions"));
 
     ls_ = ls;
-    ls_id_ = ls->get_ls_id();
     memtable_mgr_ = static_cast<ObTxDataMemtableMgr *>(memtable_mgr_handle.get_memtable_mgr());
     tx_ctx_table_ = tx_ctx_table;
     tablet_id_ = LS_TX_DATA_TABLET;
-    latest_reserved_scn_.reset();
 
     is_inited_ = true;
     FLOG_INFO("tx data table init success", K(sizeof(ObTxData)), K(sizeof(ObTxDataLinkNode)), KPC(this));
@@ -179,7 +177,6 @@ void ObTxDataTable::reset()
   tx_ctx_table_ = nullptr;
   calc_upper_trans_version_cache_.reset();
   memtables_cache_.reuse();
-  latest_reserved_scn_.reset();
   is_started_ = false;
   is_inited_ = false;
 }
@@ -187,7 +184,7 @@ void ObTxDataTable::reset()
 int ObTxDataTable::prepare_for_safe_destroy()
 {
   int ret = clean_memtables_cache_();
-  LOG_INFO("tx data table prepare for safe destroy", KR(ret), K(ls_id_));
+  LOG_INFO("tx data table prepare for safe destroy", KR(ret));
   return ret;
 }
 
@@ -232,7 +229,6 @@ int ObTxDataTable::online()
       TCWLockGuard lock_guard(calc_upper_trans_version_cache_.lock_);
       calc_upper_trans_version_cache_.reset();
     }
-    latest_reserved_scn_.reset();
     is_started_ = true;
   }
 
@@ -359,7 +355,6 @@ int ObTxDataTable::insert_(ObTxData *&tx_data, ObTxDataMemtableWriteGuard &write
         STORAGE_LOG(WARN,
                     "insert tx data into tx data memtable failed",
                     KR(ret),
-                    K(ls_id_),
                     KPC(tx_data),
                     KPC(tx_data_memtable));
       } else {
@@ -672,7 +667,6 @@ int ObTxDataTable::get_recycle_scn(SCN &recycle_scn)
 {
   int ret = OB_SUCCESS;
   ObTabletHandle tablet_handle;
-  ObMigrationStatus migration_status;
   ObRestoreStatus restore_status;
   ObTimeGuard tg("get recycle scn", 10L * 1000L * 1000L /* 10 seconds */);
   SCN min_end_scn = SCN::max_scn();
@@ -689,22 +683,17 @@ int ObTxDataTable::get_recycle_scn(SCN &recycle_scn)
   } else if (OB_UNLIKELY(EN_COMPACTION_TX_DATA_GET_MIN_SCN)) {
     ret = OB_EAGAIN;
     STORAGE_LOG(INFO, "EN_COMPACTION_TX_DATA_GET_MIN_SCN", KR(ret));
-  } else if (OB_FAIL(ls_->get_migration_status(migration_status))) {
-    STORAGE_LOG(WARN, "get migration status failed", KR(ret), "ls_id", ls_->get_ls_id());
-  } else if (ObMigrationStatus::OB_MIGRATION_STATUS_NONE != migration_status) {
-    recycle_scn.set_min();
-    STORAGE_LOG(INFO, "logstream is in migration state. skip recycle tx data", "ls_id", ls_->get_ls_id());
   } else if (OB_FAIL(ls_->get_restore_status(restore_status))) {
-    STORAGE_LOG(WARN, "get restore status failed", KR(ret), "ls_id", ls_->get_ls_id());
+    STORAGE_LOG(WARN, "get restore status failed", KR(ret));
   } else if (ObRestoreStatus::Status::NONE != restore_status.get_status()) {
     recycle_scn.set_min();
-    STORAGE_LOG(INFO, "logstream is in restore state. skip recycle tx data", "ls_id", ls_->get_ls_id());
+    STORAGE_LOG(INFO, "logstream is in restore state. skip recycle tx data");
   } else if (FALSE_IT(tg.click("iterate tablets start"))) {
   } else if (OB_FAIL(ls_tablet_svr_->get_ls_min_end_scn(min_end_scn_from_latest_tablets,
                                                         min_end_scn_from_old_tablets))) {
     STORAGE_LOG(WARN, "fail to get ls min end log ts", KR(ret));
-  } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->get_min_end_scn_from_major_dag(ls_->get_ls_id(), min_end_scn_from_major_dag))) {
-    STORAGE_LOG(WARN, "fail to get ls min end log ts from major dag", KR(ret), "ls_id", ls_->get_ls_id());
+  } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->get_min_end_scn_from_major_dag(min_end_scn_from_major_dag))) {
+    STORAGE_LOG(WARN, "fail to get min end log ts from major dag", KR(ret));
   } else if (FALSE_IT(tg.click("iterate tablets finish"))) {
   } else {
     min_end_scn = std::min(min_end_scn_from_old_tablets, min_end_scn_from_latest_tablets);
@@ -717,7 +706,7 @@ int ObTxDataTable::get_recycle_scn(SCN &recycle_scn)
       SCN snapshot_version;
       MonotonicTs unused_ts(0);
       int tmp_ret = OB_SUCCESS;
-      if (OB_TMP_FAIL(OB_TS_MGR.get_gts(MonotonicTs(1), NULL, snapshot_version, unused_ts))) {
+      if (OB_TMP_FAIL(OB_TS_MGR.get_gts(MonotonicTs(1), snapshot_version, unused_ts))) {
         LOG_WARN("failed to get snapshot version", K(tmp_ret));
         // recycle nothing this time
         recycle_scn.set_min();
@@ -729,8 +718,7 @@ int ObTxDataTable::get_recycle_scn(SCN &recycle_scn)
 
   FLOG_INFO("get tx data recycle scn finish.",
             KR(ret),
-            "ls_id", ls_->get_ls_id(),
-            K(recycle_scn),
+                        K(recycle_scn),
             K(min_end_scn_from_old_tablets),
             K(min_end_scn_from_latest_tablets),
             K(min_end_scn_from_major_dag));
@@ -749,26 +737,24 @@ int ObTxDataTable::get_recycle_scn(SCN &recycle_scn)
 int ObTxDataTable::self_freeze_task()
 {
   int ret = OB_SUCCESS;
-  const ObLSID ls_id = get_ls_id();
-
-  STORAGE_LOG(DEBUG, "start tx data table self freeze task", K(ls_id));
+  STORAGE_LOG(DEBUG, "start tx data table self freeze task");
 
   const int64_t current_time = ObClockGenerator::getClock();
   int64_t last_freeze_ts = 0;
   if (freeze_freq_controller_.can_freeze(current_time, last_freeze_ts)) {
     if (OB_FAIL(memtable_mgr_->flush(SCN::max_scn(), true))) {
       if (OB_NO_NEED_MERGE == ret) {
-        STORAGE_LOG(INFO, "tx data table no need merge", KR(ret), K(ls_id));
+        STORAGE_LOG(INFO, "tx data table no need merge", KR(ret));
       } else {
         (void)freeze_freq_controller_.rollback_freeze_ts(current_time, last_freeze_ts);
-        STORAGE_LOG(WARN, "self freeze of tx data memtable failed.", KR(ret), K(ls_id), KPC(memtable_mgr_));
+        STORAGE_LOG(WARN, "self freeze of tx data memtable failed.", KR(ret), KPC(memtable_mgr_));
       }
     }
   } else {
     // skip freeze tx data this time
   }
 
-  STORAGE_LOG(DEBUG, "finish tx data table self freeze task", KR(ret), K(get_ls_id()));
+  STORAGE_LOG(DEBUG, "finish tx data table self freeze task", KR(ret));
   return ret;
 }
 
@@ -780,7 +766,7 @@ int ObTxDataTable::get_upper_trans_version_before_given_scn(const SCN sstable_en
   bool skip_calc = false;
   upper_trans_version.set_max();
 
-  STORAGE_LOG(DEBUG, "start get upper trans version", K(get_ls_id()));
+  STORAGE_LOG(DEBUG, "start get upper trans version");
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -805,12 +791,11 @@ int ObTxDataTable::get_upper_trans_version_before_given_scn(const SCN sstable_en
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "invalid cache for upper trans version calculation. ", KR(ret));
     } else if (OB_FAIL(calc_upper_trans_scn_(sstable_end_scn, upper_trans_version))) {
-      STORAGE_LOG(WARN, "calc upper trans version failed", KR(ret), "ls_id", get_ls_id());
+      STORAGE_LOG(WARN, "calc upper trans version failed", KR(ret));
     } else {
       FLOG_INFO("get upper trans version finish.",
                 KR(ret),
                 K(skip_calc),
-                K(ls_id_),
                 K(sstable_end_scn),
                 K(upper_trans_version));
     }
@@ -919,7 +904,7 @@ bool ObTxDataTable::skip_this_sstable_end_scn_(const SCN &sstable_end_scn)
   // make sure the max decided log ts is greater than sstable_end_scn
   if (OB_FAIL(ls_->get_max_decided_scn(max_decided_scn))) {
     need_skip = true;
-    STORAGE_LOG(WARN, "get max decided log ts failed", KR(ret), K(ls_id_).id());
+    STORAGE_LOG(WARN, "get max decided log ts failed", KR(ret));
   }
 
   // check if the min_start_scn_in_ctx is larger than sstable_end_scn
@@ -972,8 +957,7 @@ int ObTxDataTable::check_min_start_in_ctx_(const SCN &sstable_end_scn,
   if (OB_FAIL(ls_->get_uncommitted_tx_min_start_scn(min_start_scn, effective_scn))) {
     need_skip = true;
     STORAGE_LOG(DEBUG, "get uncommited tx min_start_scn failed", KR(ret), K(sstable_end_scn), K(max_decided_scn));
-  } else if (min_start_scn <= sstable_end_scn || max_decided_scn <= effective_scn ||
-             (latest_reserved_scn_.is_valid() && effective_scn < latest_reserved_scn_)) {
+  } else if (min_start_scn <= sstable_end_scn || max_decided_scn <= effective_scn) {
     need_skip = true;
     STORAGE_LOG(DEBUG,
                 "skip calculate upper_trans_version",
@@ -981,7 +965,6 @@ int ObTxDataTable::check_min_start_in_ctx_(const SCN &sstable_end_scn,
                 K(max_decided_scn),
                 K(min_start_scn),
                 K(effective_scn),
-                K(latest_reserved_scn_),
                 K(need_skip));
   } else {
     // there is no ctx whose start_scn less than sstable_end_scn
@@ -1137,7 +1120,6 @@ int ObTxDataTable::calc_upper_trans_scn_(const SCN sstable_end_scn, SCN &upper_t
               K(sstable_end_scn),
               K(upper_trans_version),
               K(calc_upper_trans_version_cache_),
-              K(ls_id_),
               "array_count", array.count(),
               "chose_idx", l);
 
@@ -1196,7 +1178,7 @@ int ObTxDataTable::get_start_tx_scn(SCN &start_tx_scn)
   } else if (OB_ISNULL(oldest_minor_sstable = static_cast<ObSSTable *>(
       table_store_wrapper.get_member()->get_minor_sstables().get_boundary_table(false /*is_last*/)))) {
     start_tx_scn.set_max();
-    STORAGE_LOG(INFO, "this logstream do not have tx data sstable", K(start_tx_scn), K(get_ls_id()), KPC(tablet));
+    STORAGE_LOG(INFO, "this logstream do not have tx data sstable", K(start_tx_scn), KPC(tablet));
   } else if (OB_FAIL(oldest_minor_sstable->get_meta(meta_handle))) {
     LOG_WARN("fail to get sstable meta", K(ret));
   } else if (FALSE_IT(start_tx_scn = meta_handle.get_sstable_meta().get_filled_tx_scn())) {
@@ -1214,19 +1196,6 @@ void ObTxDataTable::disable_upper_trans_calculation()
   {
     TCWLockGuard lock_guard(calc_upper_trans_version_cache_.lock_);
     calc_upper_trans_version_cache_.reset();
-  }
-}
-
-void ObTxDataTable::enable_upper_trans_calculation(const share::SCN latest_reserved_scn)
-{
-  {
-    TCWLockGuard lock_guard(calc_upper_trans_version_cache_.lock_);
-    calc_upper_trans_version_cache_.reset();
-  }
-  if (latest_reserved_scn_.is_valid()) {
-    latest_reserved_scn_ = SCN::max(latest_reserved_scn, latest_reserved_scn_);
-  } else {
-    latest_reserved_scn_ = latest_reserved_scn;
   }
 }
 
@@ -1294,7 +1263,7 @@ int ObTxDataTable::dump_tx_data_in_sstable_2_text_(const ObTransID tx_id, FILE *
 }
 
 ERRSIM_POINT_DEF(EN_TX_DATA_MAX_FREEZE_INTERVAL_SECOND)
-bool ObTxDataTable::FreezeFrequencyController::need_re_freeze(const share::ObLSID ls_id)
+bool ObTxDataTable::FreezeFrequencyController::need_re_freeze()
 {
   // Inject logic to modify default freeze interval
   int tmp_ret = OB_SUCCESS;
@@ -1316,7 +1285,6 @@ bool ObTxDataTable::FreezeFrequencyController::need_re_freeze(const share::ObLSI
     need_re_freeze = true;
     STORAGE_LOG(INFO,
                 "tx data table need refreeze",
-                K(ls_id),
                 K(max_freeze_interval),
                 KTIME(last_request_ts),
                 KTIME(last_freeze_ts),
@@ -1325,8 +1293,6 @@ bool ObTxDataTable::FreezeFrequencyController::need_re_freeze(const share::ObLSI
 
   return need_re_freeze;
 }
-
-share::ObLSID ObTxDataTable::get_ls_id() { return ls_id_; }
 
 int ObTxDataTable::get_sstable_recycle_scn(share::SCN &recycle_scn)
 {

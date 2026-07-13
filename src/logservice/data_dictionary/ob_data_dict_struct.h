@@ -18,7 +18,6 @@
 #define  OCEANBASE_DICT_SERVICE_META_DICT_STRUCT_
 
 #include "common/ob_tablet_id.h"
-#include "share/ob_ls_id.h" // share::ObLSID
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_table_schema.h"
 #include "share/scn.h"
@@ -123,12 +122,7 @@ public:
   ObDictTenantMeta &operator=(const ObDictTenantMeta &src_schema) = delete;
 
 public:
-  // For schema_service (without ls_info)
   int init(const share::schema::ObTenantSchema &tenant_schema);
-  // For data_dict_service
-  int init_with_ls_info(
-      const share::schema::ObTenantSchema &tenant_schema,
-      const share::ObLSArray &ls_array);
   // For incremental data update
   int incremental_data_update(const ObDictTenantMeta &new_tenant_meta);
 
@@ -153,16 +147,13 @@ public:
   OB_INLINE common::ObCharsetType get_charset_type() const { return charset_type_; }
   OB_INLINE common::ObCollationType get_collation_type() const { return collation_type_; }
   OB_INLINE bool is_in_recyclebin() const { return in_recyclebin_; }
-  OB_INLINE const share::ObLSArray &get_ls_array() const { return ls_arr_; }
-
   NEED_SERIALIZE_AND_DESERIALIZE_DICT;
   TO_STRING_KV(
       
       K_(schema_version),
       K_(tenant_name),
       K_(tenant_status),
-      K_(in_recyclebin),
-      K_(ls_arr));
+      K_(in_recyclebin));
 
 private:
   ObIAllocator *allocator_;
@@ -178,7 +169,6 @@ private:
   common::ObCharsetType charset_type_;
   common::ObCollationType collation_type_;
   bool in_recyclebin_;
-  share::ObLSArray ls_arr_;
 }; // end of ObDictTenantMeta
 
 class ObDictDatabaseMeta
@@ -289,8 +279,7 @@ public:
   OB_INLINE bool is_virtual_generated_column() const { return column_flags_ & VIRTUAL_GENERATED_COLUMN_FLAG; }
   OB_INLINE bool is_stored_generated_column() const { return column_flags_ & STORED_GENERATED_COLUMN_FLAG; }
   OB_INLINE bool is_generated_column() const { return is_virtual_generated_column() || is_stored_generated_column(); }
-  OB_INLINE bool is_shadow_column() const { return (column_id_ > common::OB_MIN_SHADOW_COLUMN_ID)
-                                                    && !is_mlog_special_column(column_id_); }
+  OB_INLINE bool is_shadow_column() const { return column_id_ > common::OB_MIN_SHADOW_COLUMN_ID; }
   OB_INLINE bool has_generated_column_deps() const { return column_flags_ & GENERATED_DEPS_CASCADE_FLAG; }
   int get_cascaded_column_ids(ObIArray<uint64_t> &column_ids) const;
 
@@ -422,12 +411,10 @@ public:
   OB_INLINE bool is_view_table() const
   {
     return share::schema::ObTableType::USER_VIEW == table_type_
-        || share::schema::ObTableType::SYSTEM_VIEW == table_type_
-        || share::schema::ObTableType::MATERIALIZED_VIEW == table_type_;
+        || share::schema::ObTableType::SYSTEM_VIEW == table_type_;
   }
   OB_INLINE share::schema::ObIndexType get_index_type() const { return index_type_; }
   OB_INLINE bool is_index_table() const { return share::schema::is_index_table(table_type_); }
-  OB_INLINE bool is_mlog_table() const { return share::schema::is_mlog_table(table_type_); }
   OB_INLINE bool is_normal_index() const
   {
     return share::schema::INDEX_TYPE_NORMAL_LOCAL == index_type_

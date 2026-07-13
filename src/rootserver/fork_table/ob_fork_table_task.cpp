@@ -22,7 +22,6 @@
 #include "rootserver/ob_ddl_operator.h"
 #include "share/ob_ddl_common.h"
 #include "share/schema/ob_schema_getter_guard.h"
-#include "share/location_cache/ob_location_service.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/ob_ddl_task_executor.h"
 #include "share/ob_ddl_sim_point.h"
@@ -32,7 +31,7 @@
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_share_util.h"
 #include "common/ob_timeout_ctx.h"
-#include "share/tablet/ob_tablet_to_ls_operator.h"
+#include "share/tablet/ob_tablet_mapping_operator.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h"
 #include "storage/ddl/ob_tablet_fork_task.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
@@ -351,8 +350,8 @@ int ObForkTableTask::wait_freeze_end(const ObDDLTaskStatus next_task_status)
     LOG_WARN("fail to get schema guard", K(ret));
   } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, object_id_, src_tablet_ids))) {
     LOG_WARN("fail to get src tablet ids", K(ret));
-  } else if (OB_FAIL(storage::ObTabletForkUtil::freeze_tablets(SYS_LS, src_tablet_ids))) {
-    LOG_WARN("fail to freeze tablets", K(ret), K(SYS_LS), K(src_tablet_ids));
+  } else if (OB_FAIL(storage::ObTabletForkUtil::freeze_tablets(src_tablet_ids))) {
+    LOG_WARN("fail to freeze tablets", K(ret), K(src_tablet_ids));
   }
 
   if (OB_SUCC(ret)) {
@@ -363,14 +362,13 @@ int ObForkTableTask::wait_freeze_end(const ObDDLTaskStatus next_task_status)
     } else if (OB_UNLIKELY(!freeze_log.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid fork freeze log", K(ret), K(freeze_log));
-    } else if (OB_FAIL(ObDDLRedoLogWriter::write_auto_fork_log(SYS_LS,
-                                                               ObDDLClogType::DDL_TABLE_FORK_FREEZE_LOG,
+    } else if (OB_FAIL(ObDDLRedoLogWriter::write_auto_fork_log(ObDDLClogType::DDL_TABLE_FORK_FREEZE_LOG,
                                                                logservice::ObReplayBarrierType::NO_NEED_BARRIER,
                                                                freeze_log,
                                                                free_log_scn))) {
       LOG_WARN("fail to write table fork freeze log", K(ret), K(freeze_log));
     } else {
-      LOG_INFO("fork table freeze stage done", K(task_id_), K(SYS_LS), K(free_log_scn),
+      LOG_INFO("fork table freeze stage done", K(task_id_), K(free_log_scn),
           "src_table_id", object_id_, "tablet_cnt", src_tablet_ids.count(),
           "cost_us", ObTimeUtility::current_time() - start_ts);
       LOG_DEBUG("fork table freeze log detail", K(task_id_), K(freeze_log));
@@ -411,14 +409,13 @@ int ObForkTableTask::build_data(const ObDDLTaskStatus next_task_status)
     LOG_WARN("fail to assign fork info", K(ret));
   } else if (OB_FAIL(storage::ObTabletForkUtil::try_schedule_fork_dags(fork_info))) {
     LOG_WARN("fail to try schedule fork dags", K(ret));
-  } else if (OB_FAIL(ObDDLRedoLogWriter::write_auto_fork_log(SYS_LS,
-                                                             ObDDLClogType::DDL_TABLE_FORK_START_LOG,
+  } else if (OB_FAIL(ObDDLRedoLogWriter::write_auto_fork_log(ObDDLClogType::DDL_TABLE_FORK_START_LOG,
                                                              logservice::ObReplayBarrierType::STRICT_BARRIER,
                                                              start_log,
                                                              start_log_scn))) {
     LOG_WARN("fail to write table fork start log", K(ret), K(start_log));
   } else {
-    LOG_INFO("fork table build_data stage started", K(task_id_), K(SYS_LS), K(start_log_scn),
+    LOG_INFO("fork table build_data stage started", K(task_id_), K(start_log_scn),
         "src_table_id", object_id_, "dst_table_id", target_object_id_,
         "tablet_cnt", src_tablet_ids.count(),
         "cost_us", ObTimeUtility::current_time() - start_ts);
@@ -503,14 +500,13 @@ int ObForkTableTask::wait_data_complement(const ObDDLTaskStatus next_task_status
         finish_log.fork_info_ = fork_info;
         SCN scn;
         if (OB_FAIL(ObDDLRedoLogWriter::write_auto_fork_log(
-            SYS_LS,
             ObDDLClogType::DDL_TABLE_FORK_FINISH_LOG,
             logservice::ObReplayBarrierType::STRICT_BARRIER,
             finish_log,
             scn))) {
           LOG_WARN("fail to write table fork finish log", K(ret), K(finish_log));
         } else {
-          LOG_INFO("fork table finish log written", K(task_id_), K(SYS_LS), K(scn),
+          LOG_INFO("fork table finish log written", K(task_id_), K(scn),
               "src_table_id", object_id_, "dst_table_id", target_object_id_,
               "tablet_cnt", dst_tablet_ids.count());
           LOG_DEBUG("fork table finish log detail", K(task_id_), K(finish_log));
@@ -702,7 +698,6 @@ int ObForkTableTask::build_fork_info(
     LOG_WARN("src and dst tablet count mismatch", K(ret), K(src_tablet_ids.count()), K(dst_tablet_ids.count()));
   } else {
     fork_info = storage::ObTableForkInfo(
-        SYS_LS,
         object_id_,
         schema_version_,
         task_id_,
@@ -722,4 +717,3 @@ int ObForkTableTask::build_fork_info(
 
 }  // namespace rootserver
 }  // namespace oceanbase
-

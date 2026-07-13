@@ -28,12 +28,6 @@ namespace common
 class ObTabletID;
 class ObNewRow;
 }  // namespace common
-namespace share
-{
-class ObLSID;
-class ObLSLocation;
-class ObLSReplicaLocation;
-}  // namespace share
 namespace sql
 {
 struct ObDASTableLocMeta;
@@ -362,10 +356,6 @@ class ObDASLocationRouter
 public:
   ObDASLocationRouter(common::ObIAllocator &allocator);
   ~ObDASLocationRouter();
-  int nonblock_get(const ObDASTableLocMeta &loc_meta,
-                   const common::ObTabletID &tablet_id,
-                   share::ObLSLocation &location);
-
   int nonblock_get_candi_tablet_locations(const ObDASTableLocMeta &loc_meta,
                                           const common::ObIArray<ObTabletID> &tablet_ids,
                                           const common::ObIArray<ObObjectID> &partition_ids,
@@ -377,14 +367,8 @@ public:
                      ObDASTabletLoc &tablet_loc);
   int nonblock_get_leader(const ObTabletID &tablet_id,
                           ObDASTabletLoc &tablet_loc);
-  int get_leader(const common::ObTabletID &tablet_id,
-                 ObAddr &leader_addr,
-                 int64_t expire_renew_time);
-  int get_full_ls_replica_loc(const ObDASTabletLoc &tablet_loc,
-                              share::ObLSReplicaLocation &replica_loc);
   void refresh_location_cache_by_errno(bool is_nonblock, int err_no);
   void force_refresh_location_cache(bool is_nonblock, int err_no);
-  int block_renew_tablet_location(const common::ObTabletID &tablet_id, share::ObLSLocation &ls_loc);
   int save_touched_tablet_id(const common::ObTabletID &tablet_id) { return all_tablet_list_.push_back(tablet_id); }
   void set_last_errno(int err_no) { last_errno_ = err_no; }
   int get_last_errno() const { return last_errno_; }
@@ -412,15 +396,6 @@ public:
   TO_STRING_KV(K(all_tablet_list_));
 private:
   int get_vt_svr_pair(uint64_t vt_id, const VirtualSvrPair *&vt_svr_pair);
-  int get_vt_tablet_loc(uint64_t table_id,
-                        const common::ObTabletID &tablet_id,
-                        ObDASTabletLoc &tablet_loc);
-  int get_vt_ls_location(uint64_t table_id,
-                         const common::ObTabletID &tablet_id,
-                         share::ObLSLocation &location);
-  int nonblock_get_readable_replica(const common::ObTabletID &tablet_id,
-                                    ObDASTabletLoc &tablet_loc,
-                                    const ObRoutePolicyType route_policy);
 private:
   int last_errno_;
   int cur_errno_;

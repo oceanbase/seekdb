@@ -56,14 +56,14 @@ public:
   bool is_occupied() const { return tx_id_.get_id() > 0; }
   bool is_reserved() const { return get_group_no() == RESERVED_LOG_CB_GROUP_NO; }
 
-  int occupy_by_tx(ObPartTransCtx *tx_ctx);
+  int occupy_by_tx(ObTxCtx *tx_ctx);
 
   int check_and_reset_log_cbs(const bool skip_check);
 
 
   int64_t get_group_no() const { return ATOMIC_LOAD(&group_no_); }
   int64_t get_occupy_ts() const { return occupy_ts_; }
-  ObPartTransCtx *get_tx_ctx() const { return tx_ctx_; }
+  ObTxCtx *get_tx_ctx() const { return tx_ctx_; }
   const ObTransID get_trans_id() const { return tx_id_; }
 
   ObTxLogCb *get_log_cb_by_index(const int64_t index)
@@ -99,7 +99,7 @@ private:
 private:
   int64_t group_no_;
   ObTransID tx_id_;
-  ObPartTransCtx *tx_ctx_;
+  ObTxCtx *tx_ctx_;
   ObTxLogCb log_cbs_[MAX_LOG_CB_COUNT_IN_GROUP];
 
   int64_t occupy_ts_;

@@ -22,20 +22,12 @@ namespace oceanbase
 namespace palf
 {
 LogIOContext::LogIOContext()
-    : palf_id_(0),
-      user_()
+    : user_()
 {
 }
 
 LogIOContext::LogIOContext(const LogIOUser &user)
-    : palf_id_(0),
-      user_(user)
-{
-}
-
-LogIOContext::LogIOContext(const int64_t palf_id, const LogIOUser &user)
-    : palf_id_(palf_id),
-      user_(user)
+    : user_(user)
 {
 }
 

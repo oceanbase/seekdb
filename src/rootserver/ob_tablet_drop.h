@@ -23,7 +23,6 @@
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_define.h"
 #include "common/ob_tablet_id.h"
-#include "share/ob_ls_id.h"
 
 namespace oceanbase
 {
@@ -34,7 +33,6 @@ namespace schema
 class ObTableSchema;
 }
 
-class ObLSID;
 }
 
 namespace rpc
@@ -52,6 +50,7 @@ public:
       int64_t schema_version)
                 : trans_(trans),
                   allocator_("TbtDrop"),
+                  tablet_ids_(NULL),
                   schema_version_(schema_version),
                   inited_(false) {}
   virtual ~ObTabletDrop();
@@ -66,23 +65,18 @@ public:
   // 2. or all are local indexes of a table
   int add_drop_tablets_of_table_arg(
       const common::ObIArray<const share::schema::ObTableSchema*> &schemas);
-  int get_ls_from_table(const share::schema::ObTableSchema &table_schema,
-                        const bool is_include_hidden,
-                        common::ObIArray<share::ObLSID> &assign_ls_id_array);
 private:
   int drop_tablet_(
       const common::ObIArray<const share::schema::ObTableSchema *> &table_schema_ptr_array,
-      const share::ObLSID &ls_key,
       const int64_t i, 
       const int64_t j,
       const bool is_hidden);
 private:
   ObMySQLTransaction &trans_;
   ObArenaAllocator allocator_;
-  common::hash::ObHashMap<share::ObLSID, common::ObIArray<ObTabletID>*> args_map_;
+  common::ObIArray<ObTabletID> *tablet_ids_;
   int64_t schema_version_;
   bool inited_;
-  const int64_t MAP_BUCKET_NUM = 1024;
 };
 }
 }

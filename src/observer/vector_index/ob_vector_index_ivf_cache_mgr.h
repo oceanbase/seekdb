@@ -18,7 +18,6 @@
 #define OCEANBASE_SHARE_IVF_CACHE_MGR_H_
 #include "common/datum/ob_datum.h"
 #include "storage/ob_i_store.h"
-#include "share/ob_ls_id.h"
 #include "share/rc/ob_tenant_base.h"
 #include "lib/oblog/ob_log_module.h"
 #include "ob_vector_index_util.h"

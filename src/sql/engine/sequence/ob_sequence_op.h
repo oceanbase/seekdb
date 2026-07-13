@@ -23,10 +23,6 @@
 
 namespace oceanbase
 {
-namespace obcall
-{
-class ObGAISNextSequenceValRpcResult;
-}
 namespace share
 {
 class ObGAISNextSequenceValReq;
@@ -84,8 +80,6 @@ class ObLocalSequenceExecutor : public ObSequenceExecutor {
     virtual void reset() override;
     virtual void destroy() override;
     virtual int get_nextval(ObExecContext &ctx) override;
-    int handle_gais_request(const share::ObGAISNextSequenceValReq &request,
-                                  obcall::ObGAISNextSequenceValRpcResult &result);
   private:
     // sequence exposes to user layer is a cache
     // cache underlying responsible for sequence cache update and global coordination

@@ -79,7 +79,6 @@ public:
 private:
   virtual int parse(const int32_t cmd, const char *buf, const int64_t len, FILE *stream) override;
 
-  int try_write_checkpoint_for_compat();
   int read_checkpoint(const ObServerSuperBlock &super_block);
   int replay_and_apply_server_slog(const common::ObLogCursor &replay_start_point);
   int replay_server_slog(const common::ObLogCursor &replay_start_point, common::ObLogCursor &replay_finish_point);

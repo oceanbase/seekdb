@@ -28,7 +28,7 @@ namespace transaction
 #define MAX_SYNC_SIZE_HISTORY_RECORD_SIZE 10
 // #define MAX_SYNC_SIZE_HISTORY_ARRAY_SIZE = MAX_SYNC_SIZE_HISTORY_RECORD_SIZE * 2;
 
-class ObPartTransCtx;
+class ObTxCtx;
 
 typedef common::ObDList<ObTxLogCbPool> TxLogCbPoolList;
 
@@ -40,23 +40,20 @@ public:
 public:
   ObTxLogCbPoolMgr() : allocator_("TxLogCbPool") { reset(); }
 
-  int init(const ObLSID ls_id);
+  int init();
   void reset();
   void destroy();
 
-  // release in switch_to_follower or replay
   int clear_log_cb_pool(const bool for_replay);
-  int switch_to_leader(const int64_t active_tx_cnt);
 
   int adjust_log_cb_pool(const int64_t active_tx_cnt);
 
-  int acquire_idle_log_cb_group(ObTxLogCbGroup *&group_ptr, ObPartTransCtx *tx_ctx);
+  int acquire_idle_log_cb_group(ObTxLogCbGroup *&group_ptr, ObTxCtx *tx_ctx);
   
-  void dec_ls_occupying_cnt() {ATOMIC_DEC(&ls_occupying_cnt_);} 
+  void dec_occupying_cnt() {ATOMIC_DEC(&occupying_cnt_);}
   bool is_all_busy();
 
-  TO_STRING_KV(K(ls_id_),
-               K(is_inited_),
+  TO_STRING_KV(K(is_inited_),
                K(allow_expand_),
                K(pool_list_.get_size()),
                KP(idle_pool_ptr_));
@@ -104,7 +101,6 @@ private:
 
 private:
   bool is_inited_;
-  ObLSID ls_id_;
   TransModulePageAllocator allocator_;
 
   common::SpinRWLock pool_list_rw_lock_;
@@ -114,7 +110,7 @@ private:
   common::SpinRWLock sync_size_his_lock_;
   int64_t sync_size_history_[MAX_SYNC_SIZE_HISTORY_RECORD_SIZE * 2];
 
-  int64_t ls_occupying_cnt_; 
+  int64_t occupying_cnt_;
   int64_t acquire_extra_log_cb_group_failed_cnt_; 
 
   // modified by the read-only lock

@@ -794,7 +794,7 @@ class ObFatherDagNet : public ObIDagNet
 {
 public:
   ObFatherDagNet() :
-    ObIDagNet(ObDagNetType::DAG_NET_TYPE_MIGRATION),
+    ObIDagNet(ObDagNetType::DAG_NET_TYPE_RESERVED_7),
     id_(ObTimeUtility::current_time() + random()),
     op_()
   {}
@@ -1808,7 +1808,7 @@ class ObLoopDagNet : public ObIDagNet
 {
 public:
   ObLoopDagNet() :
-    ObIDagNet(ObDagNetType::DAG_NET_TYPE_MIGRATION),
+    ObIDagNet(ObDagNetType::DAG_NET_TYPE_RESERVED_7),
     id_(ObTimeUtility::current_time() + random()),
     op_()
   {}

@@ -65,10 +65,14 @@ public:
       const transaction::tablelock::ObTableLockOwnerID lock_owner,
       ObMySQLTransaction &trans);
 
-  static int lock_for_split_partition(
+  static int lock_src_and_dst_for_split_partition(
       const share::schema::ObTableSchema &table_schema,
-      const share::ObLSID *ls_id,
-      const ObIArray<ObTabletID> *src_tablet_ids,
+      const ObIArray<ObTabletID> &src_tablet_ids,
+      const ObIArray<ObTabletID> &dst_tablet_ids,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+  static int lock_dst_for_split_partition(
+      const share::schema::ObTableSchema &table_schema,
       const ObIArray<ObTabletID> &dst_tablet_ids,
       const transaction::tablelock::ObTableLockOwnerID lock_owner,
       ObMySQLTransaction &trans);
@@ -181,10 +185,6 @@ private:
     const int64_t timeout_us,
     const bool is_lock,
     ObMySQLTransaction &trans);
-  static int check_tablet_in_same_ls(
-      const share::schema::ObTableSchema &lhs_schema,
-      const share::schema::ObTableSchema &rhs_schema,
-      ObMySQLTransaction &trans);
   static int replace_tablet_lock(const uint64_t table_id,
     const ObIArray<ObTabletID> &tablet_ids,
     const transaction::tablelock::ObTableLockMode old_lock_mode,
@@ -193,12 +193,11 @@ private:
     const transaction::tablelock::ObTableLockOwnerID new_lock_owner,
     const int64_t timeout_us,
     ObMySQLTransaction &trans);
-  static int get_unlock_alone_tablet_request_args(const transaction::tablelock::ObTableLockMode lock_mode,
+  static int get_unlock_alone_tablet_request_arg(const transaction::tablelock::ObTableLockMode lock_mode,
     const transaction::tablelock::ObTableLockOwnerID lock_owner,
     const int64_t timeout_us,
     const ObIArray<ObTabletID> &tablet_ids,
-    ObArray<transaction::tablelock::ObUnLockAloneTabletRequest> &unlock_args,
-    ObMySQLTransaction &trans);
+    transaction::tablelock::ObUnLockAloneTabletRequest &unlock_arg);
   static int lock_table_and_global_indexes_for_fork(
       share::schema::ObSchemaGetterGuard &schema_guard,
       const share::schema::ObTableSchema &table_schema,

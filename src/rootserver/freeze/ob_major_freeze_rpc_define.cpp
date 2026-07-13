@@ -32,6 +32,5 @@ OB_SERIALIZE_MEMBER(ObTenantAdminMergeRequest, type_);
 
 OB_SERIALIZE_MEMBER(ObTenantAdminMergeResponse, err_code_);
 
-
 } // namespace obcall
 } // namespace oceanbase

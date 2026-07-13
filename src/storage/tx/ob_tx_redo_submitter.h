@@ -17,23 +17,22 @@
 #ifndef OCEANBASE_TRANSACTION_OB_TRANS_REDO_SUBMITTER
 #define OCEANBASE_TRANSACTION_OB_TRANS_REDO_SUBMITTER
 
-#include "ob_trans_part_ctx.h"
+#include "ob_tx_ctx.h"
 
 namespace oceanbase
 {
 namespace transaction
 {
-class ObPartTransCtx;
+class ObTxCtx;
 
 class ObTxRedoSubmitter
 {
 public:
-  ObTxRedoSubmitter(ObPartTransCtx &tx_ctx,
+  ObTxRedoSubmitter(ObTxCtx &tx_ctx,
                     memtable::ObMemtableCtx &mt_ctx) :
     tx_ctx_(tx_ctx),
     mt_ctx_(mt_ctx),
     tx_id_(tx_ctx.get_trans_id()),
-    ls_id_(tx_ctx.get_ls_id()),
     log_block_(NULL),
     log_cb_(NULL),
     helper_(NULL),
@@ -84,7 +83,6 @@ private:
   int after_submit_redo_out_();
 public:
   TO_STRING_KV(K_(tx_id),
-               K_(ls_id),
                K_(from_all_list),
                K_(flush_all),
                K_(flush_freeze_clock),
@@ -94,10 +92,9 @@ public:
                K_(submit_out_cnt),
                K_(submit_cb_list_idx));
 private:
-  ObPartTransCtx &tx_ctx_;
+  ObTxCtx &tx_ctx_;
   memtable::ObMemtableCtx &mt_ctx_;
   const ObTransID tx_id_;
-  const share::ObLSID ls_id_;
   ObTxLogBlock *log_block_;
   ObTxLogCb *log_cb_;
   memtable::ObRedoLogSubmitHelper *helper_;
@@ -408,7 +405,7 @@ int ObTxRedoSubmitter::fill_log_block_(memtable::ObTxFillRedoCtx &ctx)
   bool need_retry = false;
   do {
     need_retry = false;
-    ObTxRedoLog log(tx_ctx_.get_cluster_version());
+    ObTxRedoLog log;
     ret = log_block_->prepare_mutator_buf(log);
     ctx.buf_ = log.get_mutator_buf();
     ctx.buf_len_ = log.get_mutator_size();

@@ -30,14 +30,5 @@ DEF_TO_STRING(ObCreateTabletBatchInTransRes)
 
 OB_SERIALIZE_MEMBER(ObCreateTabletBatchInTransRes, ret_, tx_result_);
 
-void ObRegisterTxDataResult::reset()
-{
-  result_ = OB_SUCCESS;
-  tx_result_.reset();
-  return;
-}
-
-OB_SERIALIZE_MEMBER(ObRegisterTxDataResult, result_, tx_result_);
-
 }  // namespace obcall
 }  // namespace oceanbase

@@ -47,7 +47,7 @@ inline const char *shared_type_2_str(const LogSharedTaskType type)
 class LogSharedTask
 {
 public:
-  LogSharedTask(const int64_t palf_id, const int64_t palf_epoch);
+  explicit LogSharedTask(const int64_t palf_epoch);
   virtual ~LogSharedTask();
   void destroy();
   void reset();
@@ -55,10 +55,8 @@ public:
   virtual void free_this(IPalfEnvImpl *palf_env_impl) = 0;
   virtual LogSharedTaskType get_shared_task_type() const = 0;
   VIRTUAL_TO_STRING_KV("BaseClass", "LogSharedTask",
-      "palf_id", palf_id_,
       "palf_epoch", palf_epoch_);
 protected:
-  int64_t palf_id_;
   int64_t palf_epoch_;
 private:
   DISALLOW_COPY_AND_ASSIGN(LogSharedTask);
@@ -67,7 +65,7 @@ private:
 class LogHandleSubmitTask : public LogSharedTask
 {
 public:
-  LogHandleSubmitTask(const int64_t palf_id, const int64_t palf_epoch);
+  explicit LogHandleSubmitTask(const int64_t palf_epoch);
   ~LogHandleSubmitTask() override;
   int do_task(IPalfEnvImpl *palf_env_impl) override;
   void free_this(IPalfEnvImpl *palf_env_impl) override;

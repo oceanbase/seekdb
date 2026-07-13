@@ -38,7 +38,7 @@ class SCN;
 
 namespace storage
 {
-class ObLSHandle;
+class ObLS;
 class ObTabletReplayCreateHandler;
 class ObLSTabletService;
 
@@ -153,7 +153,7 @@ private:
       const int64_t buf_len,
       ObArenaAllocator &allocator);
   static int replay_clone_tablet(const ObTabletReplayItem &replay_item, const char *buf, const int64_t buf_len);
-  static int get_tablet_svr_(const share::ObLSID &ls_id, ObLSTabletService *&ls_tablet_svr, ObLSHandle &ls_handle);
+  static int get_tablet_svr_(ObLSTabletService *&ls_tablet_svr, ObLS *&tenant_ls);
   int add_item_range_to_task_(
       observer::ObStartupAccelTaskHandler* startup_accel_handler,
       const ObTabletReplayCreateTask::Type type,

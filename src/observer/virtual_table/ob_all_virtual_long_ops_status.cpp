@@ -24,7 +24,7 @@ using namespace oceanbase::share;
 
 ObAllVirtualLongOpsStatus::ObAllVirtualLongOpsStatus()
   : ObVirtualTableScannerIterator(),
-    addr_(), longops_value_(), longops_iter_()
+    longops_value_(), longops_iter_()
 {
 }
 
@@ -35,7 +35,6 @@ ObAllVirtualLongOpsStatus::~ObAllVirtualLongOpsStatus()
 
 void ObAllVirtualLongOpsStatus::reset()
 {
-  addr_.reset();
   ObVirtualTableScannerIterator::reset();
 }
 

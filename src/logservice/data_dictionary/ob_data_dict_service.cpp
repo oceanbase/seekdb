@@ -17,6 +17,7 @@
 #include "ob_data_dict_service.h"
 #include "share/rc/ob_module_provider.h"
 
+#include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"                 // ObLSService
 #include "storage/tx/ob_ts_mgr.h"                             // OB_TS_MGR
 
@@ -45,7 +46,7 @@ const int64_t ObDataDictService::DEFAULT_REPORT_TIMEOUT = 10 * _MIN_;
 
 ObDataDictService::ObDataDictService()
   : is_inited_(false),
-    is_leader_(false),
+    is_active_(false),
     stop_flag_(true),
     allocator_("ObDataDictSvc"),
     sql_client_(),
@@ -140,7 +141,7 @@ void ObDataDictService::destroy()
     sql_client_.destroy();
     allocator_.reset();
     stop_flag_ = true;
-    is_leader_ = false;
+    is_active_ = false;
     is_inited_ = false;
     DDLOG(INFO, "destroy datadict_service");
   }
@@ -152,12 +153,12 @@ void ObDataDictService::runTimerTask()
 
   if (IS_INIT) {
     refresh_config_();
-    bool is_leader = ATOMIC_LOAD(&is_leader_);
+    bool is_active = ATOMIC_LOAD(&is_active_);
     const int64_t start_time = ObClockGenerator::getClock();
     const bool is_reach_time_interval = (start_time >= ATOMIC_LOAD(&last_dump_succ_time_) + ATOMIC_LOAD(&dump_interval_));
     const bool force_need_dump = ATOMIC_LOAD(&force_need_dump_);
 
-    if (is_leader && (is_reach_time_interval || force_need_dump)) {
+    if (is_active && (is_reach_time_interval || force_need_dump)) {
       int ret = OB_SUCCESS;
       uint64_t data_version = 0;
 
@@ -165,7 +166,7 @@ void ObDataDictService::runTimerTask()
         DDLOG(WARN, "get_min_data_version failed", KR(ret), K(force_need_dump));
       } else if (OB_FAIL(do_dump_data_dict_())) {
         if (OB_STATE_NOT_MATCH == ret) {
-          DDLOG(WARN, "dump_data_dict_, maybe not ls_leader or lsn not valid, ignore.", KR(ret), K(force_need_dump));
+          DDLOG(WARN, "dump_data_dict_, maybe not local_log or lsn not valid, ignore.", KR(ret), K(force_need_dump));
         } else if (OB_IN_STOP_STATE != ret) {
           DDLOG(WARN, "dump_data_dict_ failed", KR(ret), K(force_need_dump));
         }
@@ -184,33 +185,17 @@ void ObDataDictService::runTimerTask()
   }
 }
 
-void ObDataDictService::switch_to_follower_forcedly()
+void ObDataDictService::deactivate()
 {
-  bool is_leader = false;
-  switch_role_to_(is_leader);
+  bool is_active = false;
+  set_active_(is_active);
 }
 
-int ObDataDictService::switch_to_leader()
+int ObDataDictService::activate()
 {
   int ret = OB_SUCCESS;
-  bool is_leader = true;
-  switch_role_to_(is_leader);
-  return ret;
-}
-
-int ObDataDictService::switch_to_follower_gracefully()
-{
-  int ret = OB_SUCCESS;
-  bool is_leader = false;
-  switch_role_to_(is_leader);
-  return ret;
-}
-
-int ObDataDictService::resume_leader()
-{
-  int ret = OB_SUCCESS;
-  bool is_leader = true;
-  switch_role_to_(is_leader);
+  bool is_active = true;
+  set_active_(is_active);
   return ret;
 }
 
@@ -223,26 +208,22 @@ void ObDataDictService::refresh_config_()
   }
 }
 
-OB_INLINE void ObDataDictService::switch_role_to_(bool is_leader)
+OB_INLINE void ObDataDictService::set_active_(bool is_active)
 {
-  ATOMIC_SET(&is_leader_, is_leader);
-  ATOMIC_SET(&stop_flag_, ! is_leader);
-  DDLOG(INFO, "switch_role", K(is_leader));
+  ATOMIC_SET(&is_active_, is_active);
+  ATOMIC_SET(&stop_flag_, ! is_active);
+  DDLOG(INFO, "set data dictionary active state", K(is_active));
 }
 
 int ObDataDictService::do_dump_data_dict_()
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  ObLSHandle ls_handle; // NOTICE: ls_handle is a guard for usage of log_handler.
-  ObLS *ls = NULL;
+  ObLS *ls = nullptr;
   ObLogHandler *log_handler = NULL;
-  bool is_leader = false;
   share::SCN snapshot_scn;
   palf::LSN start_lsn;
   palf::LSN end_lsn;
-  int64_t start_proposal_id = 0;
-  int64_t end_proposal_id = 0;
   bool is_cluster_status_normal = false;
   bool is_data_dict_dump_success = false;
   bool is_any_log_callback_fail = false;
@@ -262,30 +243,19 @@ int ObDataDictService::do_dump_data_dict_()
     DDLOG(TRACE, "check_cluster_status_normal_ failed", KR(ret), K(is_cluster_status_normal));
   } else if (OB_UNLIKELY(! is_cluster_status_normal)) {
     DDLOG(TRACE, "cluster_status not normal, won't dump_data_dict", K(is_cluster_status_normal));
-  } else if (OB_FAIL(ls_service_->get_ls(share::SYS_LS, ls_handle, ObLSGetMod::DATA_DICT_MOD))) {
-    if (OB_LS_NOT_EXIST != ret || REACH_TIME_INTERVAL_THREAD_LOCAL(PRINT_DETAIL_INTERVAL)) {
-      DDLOG(WARN, "get_ls for data_dict_service from ls_service failed", KR(ret));
-    }
-  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    DDLOG(WARN, "invalid ls get from ls_handle", KR(ret));
-  } else if (OB_ISNULL(log_handler = ls->get_log_handler())) {
-    ret = OB_ERR_UNEXPECTED;
-    DDLOG(WARN, "invalid log_handler_ get from OBLS", KR(ret));
-  } else if (OB_FAIL(check_ls_leader(log_handler, is_leader, start_proposal_id))) {
-    DDLOG(WARN, "check_is_sys_ls_leader failed", KR(ret), K(start_proposal_id));
-  } else if (! is_leader) {
-    ret = OB_STATE_NOT_MATCH;
-    DDLOG(WARN, "won't do_dump_data_dict_ cause not ls_leader", KR(ret), K(is_leader), K(start_proposal_id));
-    // do nothing if not ls leader.
-  } else if (OB_FAIL(get_snapshot_scn_(snapshot_scn))) {
-    DDLOG(WARN, "get_snapshot_scn failed", KR(ret), K(snapshot_scn));
-  } else if (OB_FAIL(storage_.prepare(snapshot_scn, log_handler))) {
-    DDLOG(WARN, "storage prepare for data_dict_dump failed", KR(ret), K(snapshot_scn));
-  } else if (OB_FAIL(generate_dict_and_dump_(snapshot_scn))) {
-    DDLOG(WARN, "generate_dict_and_dump_", KR(ret), K(snapshot_scn), K(start_proposal_id));
+  } else if (OB_FAIL(ls_service_->get_ls(ls))) {
+    DDLOG(WARN, "get log stream for data dictionary failed", KR(ret));
   } else {
-    is_data_dict_dump_success = true;
+    log_handler = ls->get_log_handler();
+    if (OB_FAIL(get_snapshot_scn_(snapshot_scn))) {
+      DDLOG(WARN, "get_snapshot_scn failed", KR(ret), K(snapshot_scn));
+    } else if (OB_FAIL(storage_.prepare(snapshot_scn, log_handler))) {
+      DDLOG(WARN, "storage prepare for data_dict_dump failed", KR(ret), K(snapshot_scn));
+    } else if (OB_FAIL(generate_dict_and_dump_(snapshot_scn))) {
+      DDLOG(WARN, "generate_dict_and_dump_", KR(ret), K(snapshot_scn));
+    } else {
+      is_data_dict_dump_success = true;
+    }
   }
 
   if (OB_SUCCESS != (tmp_ret = storage_.finish(
@@ -303,12 +273,6 @@ int ObDataDictService::do_dump_data_dict_()
     ret = OB_STATE_NOT_MATCH;
     DDLOG(INFO, "won't report data_dict persist info cause data_dict dump failed or log_callback failed",
         KR(ret), K(is_data_dict_dump_success), K(is_any_log_callback_fail));
-  } else if (OB_FAIL(check_ls_leader(log_handler, is_leader, end_proposal_id))) {
-    DDLOG(WARN, "check_is_sys_ls_leader failed", KR(ret), K(start_proposal_id), K(end_proposal_id));
-  } else if (OB_UNLIKELY(! is_leader || start_proposal_id != end_proposal_id)) {
-    ret = OB_STATE_NOT_MATCH;
-    DDLOG(INFO, "won't report data_dict persist info cause currently not ls_leader or not the same election term",
-        KR(ret), K(is_leader), K(start_proposal_id), K(end_proposal_id));
   } else {
     // only report when dict dump success and all log_callback success.
     const int64_t half_dump_interval = ATOMIC_LOAD(&dump_interval_) / 2;
@@ -371,7 +335,7 @@ int ObDataDictService::get_snapshot_scn_(share::SCN &snapshot_scn)
   const int64_t expire_ts_ns = get_timestamp_ns() + gts_get_timeout_ns;
 
   do{
-    if (OB_FAIL(OB_TS_MGR.get_gts(stc, NULL, gts_scn, tmp_receive_gts_ts))) {
+    if (OB_FAIL(OB_TS_MGR.get_gts(stc, gts_scn, tmp_receive_gts_ts))) {
       if (OB_EAGAIN == ret) {
         if (expire_ts_ns < get_timestamp_ns()) {
           ret = OB_TIMEOUT;
@@ -477,7 +441,6 @@ int ObDataDictService::handle_tenant_meta_(
     ObIArray<uint64_t> &table_ids)
 {
   int ret = OB_SUCCESS;
-  ObLSArray ls_array;
   database_ids.reset();
   table_ids.reset();
   const ObTenantSchema *tenant_schema = NULL;
@@ -486,9 +449,7 @@ int ObDataDictService::handle_tenant_meta_(
   ObDictTenantMeta tenant_meta(&allocator_);
   ObDictMetaHeader header(ObDictMetaType::TENANT_META);
 
-  if (OB_FAIL(sql_client_.get_ls_info(snapshot_scn, ls_array))) {
-    DDLOG(WARN, "get_ls_info failed", KR(ret), K(snapshot_scn), K(ls_array));
-  } else if (OB_FAIL(get_tenant_schema_guard_(schema_version, tenant_schema_guard, true/*is_force_fallback*/))) {
+  if (OB_FAIL(get_tenant_schema_guard_(schema_version, tenant_schema_guard, true/*is_force_fallback*/))) {
     DDLOG(WARN, "get_tenant_schema_guard failed", KR(ret), K(snapshot_scn), K(schema_version));
     ret = OB_SCHEMA_EAGAIN;
   } else if (OB_FAIL(check_tenant_status_normal_(tenant_schema_guard, is_normal))) {
@@ -500,8 +461,8 @@ int ObDataDictService::handle_tenant_meta_(
   } else if (OB_ISNULL(tenant_schema)) {
     ret = OB_ERR_UNEXPECTED;
     DDLOG(WARN, "invalid tenant_schema", KR(ret), K(snapshot_scn));
-  } else if (OB_FAIL(tenant_meta.init_with_ls_info(*tenant_schema, ls_array))) {
-    DDLOG(WARN, "init tenant_meta failed", KR(ret), K(ls_array), K(tenant_meta));
+  } else if (OB_FAIL(tenant_meta.init(*tenant_schema))) {
+    DDLOG(WARN, "init tenant_meta failed", KR(ret), K(tenant_meta));
   } else if (OB_FAIL(get_database_ids_(tenant_schema_guard, database_ids))) {
     DDLOG(WARN, "get_database_ids_in_tenant failed", KR(ret), K(snapshot_scn), K(schema_version));
   } else if (OB_FAIL(tenant_schema_guard.get_table_ids_in_tenant(table_ids))) {
@@ -646,7 +607,7 @@ int ObDataDictService::handle_table_metas_(
 
     if (OB_SUCC(ret) && stop_flag_) {
       ret = OB_STATE_NOT_MATCH;
-      DDLOG(WARN, "data_dict service marked stop_flag, may already switch to follower", KR(ret), K_(stop_flag));
+      DDLOG(WARN, "data_dict service marked stop_flag, may already stop", KR(ret), K_(stop_flag));
     }
   }
 

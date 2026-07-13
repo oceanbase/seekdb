@@ -1886,16 +1886,15 @@ int ObOptStatSqlService::batch_update_online_col_state(const uint64_t table_id,
 
 int ObOptStatSqlService::fetch_table_rowcnt(const uint64_t table_id,
                                             const ObIArray<ObTabletID> &all_tablet_ids,
-                                            const ObIArray<share::ObLSID> &all_ls_ids,
                                             ObIArray<ObOptTableStat> &tstats)
 {
   int ret = OB_SUCCESS;
   ObSqlString raw_sql;
   ObSqlString tablet_list_str;
-  ObSqlString tablet_ls_list_str;
+  ObSqlString tablet_tuple_list_str;
   uint64_t real_table_id = share::is_real_table_mapping_virtual_table(table_id) ?
                            ObSchemaUtils::get_real_table_mappings_tid(table_id) : table_id;
-  if (OB_FAIL(gen_tablet_list_str(all_tablet_ids, all_ls_ids, tablet_list_str, tablet_ls_list_str))) {
+  if (OB_FAIL(gen_tablet_list_str(all_tablet_ids, tablet_list_str, tablet_tuple_list_str))) {
     LOG_WARN("failed to gen tablet list str", K(ret));
   } else if (OB_FAIL(raw_sql.append_fmt("select /*+opt_param('enable_in_range_optimization','true') opt_param('use_default_opt_stat','true')*/"\
                                          "tablet_id, max(row_count) from "\
@@ -1909,7 +1908,7 @@ int ObOptStatSqlService::fetch_table_rowcnt(const uint64_t table_id,
                                          tablet_list_str.ptr(),
                                          share::OB_ALL_TABLET_CHECKSUM_TNAME,
                                          share::OB_ALL_FREEZE_INFO_TNAME,
-                                         tablet_ls_list_str.ptr()))) {
+                                         tablet_tuple_list_str.ptr()))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
@@ -1961,14 +1960,13 @@ int ObOptStatSqlService::fetch_table_rowcnt(const uint64_t table_id,
 }
 
 int ObOptStatSqlService::gen_tablet_list_str(const ObIArray<ObTabletID> &all_tablet_ids,
-                                             const ObIArray<share::ObLSID> &all_ls_ids,
                                              ObSqlString &tablet_list_str,
-                                             ObSqlString &tablet_ls_list_str)
+                                             ObSqlString &tablet_tuple_list_str)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(all_tablet_ids.empty() || all_tablet_ids.count() != all_ls_ids.count())) {
+  if (OB_UNLIKELY(all_tablet_ids.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(all_tablet_ids), K(all_ls_ids));
+    LOG_WARN("get unexpected error", K(ret), K(all_tablet_ids));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < all_tablet_ids.count(); ++i) {
       char prefix = i == 0 ? '(' : ' ';
@@ -1978,10 +1976,10 @@ int ObOptStatSqlService::gen_tablet_list_str(const ObIArray<ObTabletID> &all_tab
                                              all_tablet_ids.at(i).id(),
                                              suffix))) {
         LOG_WARN("failed to append fmt", K(ret));
-      } else if (OB_FAIL(tablet_ls_list_str.append_fmt("%c(%lu)%c",
-                                                       prefix,
-                                                       all_tablet_ids.at(i).id(),
-                                                       suffix))) {
+      } else if (OB_FAIL(tablet_tuple_list_str.append_fmt("%c(%lu)%c",
+                                                          prefix,
+                                                          all_tablet_ids.at(i).id(),
+                                                          suffix))) {
         LOG_WARN("failed to append fmt", K(ret));
       } else {/*do nothing*/}
     }

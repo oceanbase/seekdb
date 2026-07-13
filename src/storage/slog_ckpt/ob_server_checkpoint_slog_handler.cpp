@@ -160,8 +160,6 @@ int ObServerCheckpointSlogHandler::do_post_replay_work()
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.first_mark_device())) { // mark must after finish replay slog
     LOG_WARN("fail to first mark device", K(ret));
-  } else if (OB_FAIL(try_write_checkpoint_for_compat())) {
-    LOG_WARN("fail to try write checkpoint for compat", K(ret));
   } else {
     tenant_meta_valid_for_replay_ = false;
   }
@@ -182,47 +180,6 @@ void ObServerCheckpointSlogHandler::destroy()
 {
   is_inited_ = false;
   task_timer_.destroy();
-}
-
-int ObServerCheckpointSlogHandler::try_write_checkpoint_for_compat()
-{
-  int ret = OB_SUCCESS;
-  omt::ObTenantMeta meta;
-  bool exist = false;
-  omt::ObMultiTenant *omt = GCTX.omt_;
-  if (OB_ISNULL(omt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, omt is nullptr", K(ret));
-  } else if (OB_FAIL(omt->get_tenant_meta_for_ckpt(meta, exist))) {
-    LOG_WARN("fail to get tenant meta", K(ret), KP(omt));
-  } else {
-    bool need_svr_ckpt = false;
-    if (exist && meta.super_block_.is_old_version()) {
-      ObTenantSuperBlock &super_block = meta.super_block_;
-      {
-        MOD_SCOPE {
-          if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->write_checkpoint(true/*is_force*/))) {
-            LOG_WARN("fail to write tenant slog checkpoint", K(ret));
-          } else {
-            // we don't write checkpoint or update super_block for hidden tenant
-            // so it is necessary to update version here
-            if (super_block.is_hidden_) {
-              super_block.version_ = ObTenantSuperBlock::TENANT_SUPER_BLOCK_VERSION;
-              omt::ObTenant *tenant = static_cast<omt::ObTenant*>(share::ObTenantEnv::get_tenant());
-              tenant->set_tenant_super_block(super_block);
-            }
-            need_svr_ckpt = true;
-          }
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (need_svr_ckpt && OB_FAIL(write_checkpoint(true/*is_force*/))) {
-        LOG_ERROR("fail to write server checkpoint", K(ret));
-      }
-    }
-  }
-  return ret;
 }
 
 int ObServerCheckpointSlogHandler::read_checkpoint(const ObServerSuperBlock &super_block)

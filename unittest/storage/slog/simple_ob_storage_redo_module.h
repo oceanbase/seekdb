@@ -29,7 +29,7 @@
 #include "src/storage/slog/ob_storage_log_reader.h"
 #include "src/storage/slog/ob_storage_logger.h"
 #include "src/storage/ls/ob_ls_tablet_service.h"
-#include "src/storage/tx_storage/ob_ls_handle.h"
+#include "src/storage/ls/ob_ls.h"
 #include "src/storage/tx_storage/ob_ls_service.h"
 #include "src/storage/tablet/ob_tablet.h"
 #include "src/storage/meta_store/ob_tenant_storage_meta_service.h"
@@ -155,7 +155,7 @@ public:
   int read_from_disk_addr(const ObMetaDiskAddr &phy_addr, char *buf, const int64_t buf_len, char *&r_buf, int64_t &r_len);
   int read_from_share_blk(const ObMetaDiskAddr &addr, common::ObArenaAllocator &allocator, char *&buf, int64_t &buf_len);
   int read_from_slog(const ObMetaDiskAddr &phy_addr, char *buf, const int64_t buf_len, int64_t &pos);
-  int get_tablet_svr(const share::ObLSID &ls_id, ObLSTabletService *&ls_tablet_svr, ObLSHandle &ls_handle);
+  int get_tablet_svr(ObLSTabletService *&ls_tablet_svr, ObLS *&ls);
   bool operator ==(SimpleObStorageModule &redo_module);
   void reset();
 
@@ -200,11 +200,11 @@ int SimpleObStorageModule::replay(const ObRedoModuleReplayParam &param)
   if (ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE != main_type) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_REDO_LOG(WARN, "The main type is wrong.", K(main_type));
-  } else if (ObRedoLogSubType::OB_REDO_LOG_CREATE_LS == sub_type) {
+  } else if (ObRedoLogSubType::OB_REDO_LOG_UPDATE_TABLET == sub_type) {
     if (OB_FAIL(slogs_[index_].deserialize(buf, buf_len, pos))) {
       STORAGE_REDO_LOG(WARN, "Fail to recover slog.", K(sub_type), K(buf), K(buf_len));
     }
-  } else if (ObRedoLogSubType::OB_REDO_LOG_DELETE_LS == sub_type) {
+  } else if (ObRedoLogSubType::OB_REDO_LOG_DELETE_TABLET == sub_type) {
     // do nothing
   } else if (ObRedoLogSubType::OB_REDO_LOG_EMPTY_SHELL_TABLET == sub_type) {
     if (OB_FAIL(inner_replay_empty_shell_tablet(param))) {
@@ -221,20 +221,18 @@ int SimpleObStorageModule::replay(const ObRedoModuleReplayParam &param)
 }
 
 int SimpleObStorageModule::get_tablet_svr(
-    const ObLSID &ls_id,
     ObLSTabletService *&ls_tablet_svr,
-    ObLSHandle &ls_handle)
+    ObLS *&ls)
 {
   int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-    STORAGE_LOG(WARN, "fail to get ls handle", K(ret), K(ls_id));
-  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    STORAGE_LOG(WARN, "fail to get ls", K(ret));
+  } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "ls is null", K(ret), K(ls_id));
+    STORAGE_LOG(WARN, "ls is null", K(ret));
   } else if (OB_ISNULL(ls_tablet_svr = ls->get_tablet_svr())) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "tablet service is null", K(ret), K(ls_id));
+    STORAGE_LOG(WARN, "tablet service is null", K(ret));
   }
   return ret;
 }
@@ -245,7 +243,7 @@ int SimpleObStorageModule::inner_replay_empty_shell_tablet(const ObRedoModuleRep
   int64_t pos = 0;
   ObArenaAllocator allocator;
   ObLSTabletService *ls_tablet_svr = nullptr;
-  ObLSHandle ls_handle;
+  ObLS *ls = nullptr;
   char *buf = nullptr;
   int64_t buf_len = 0;
   ObEmptyShellTabletLog slog;
@@ -253,8 +251,8 @@ int SimpleObStorageModule::inner_replay_empty_shell_tablet(const ObRedoModuleRep
     STORAGE_LOG(WARN, "failed to serialize tablet_id_", K(ret), K(param.disk_addr_.size()), K(pos));
   } else if (OB_FAIL(read_from_disk(param.disk_addr_, allocator, buf, buf_len))) {
     STORAGE_LOG(WARN, "read from disk failed", K(ret), K(param.disk_addr_), K(buf_len));
-  } else if (OB_FAIL(get_tablet_svr(slog.ls_id_, ls_tablet_svr, ls_handle))) {
-    STORAGE_LOG(WARN, "get tablet svr failed", K(ret), K(slog.ls_id_));
+  } else if (OB_FAIL(get_tablet_svr(ls_tablet_svr, ls))) {
+    STORAGE_LOG(WARN, "get tablet svr failed", K(ret));
   } else if (OB_FAIL(ls_tablet_svr->replay_create_tablet(param.disk_addr_, buf, buf_len, slog.tablet_id_))) {
     STORAGE_LOG(WARN, "replay empty shell tablet failed", K(ret), K(param.disk_addr_), K(slog.tablet_id_));
   }

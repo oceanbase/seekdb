@@ -25,10 +25,8 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/allocator/ob_vslice_alloc.h"
-#include "share/ob_ls_id.h"
 #include "share/ob_occam_timer.h"
 #include "storage/allocator/ob_mds_allocator.h"
-#include "storage/tx_storage/ob_ls_handle.h"
 #include "lib/hash/ob_linear_hash_map.h"
 
 namespace oceanbase
@@ -40,7 +38,6 @@ class SCN;
 namespace storage
 {
 class ObLS;
-class ObLSHandle;
 class ObTablet;
 class ObTabletHandle;
 namespace mds
@@ -67,9 +64,6 @@ public:
   static void mtl_stop(ObTenantMdsService* &);
   static void mtl_wait(ObTenantMdsService* &);
   void destroy() { this->~ObTenantMdsService(); }
-  static int for_each_ls_in_tenant(const ObFunction<int(ObLS &)> &op);
-  static int for_each_tablet_in_ls(ObLS &ls, const ObFunction<int(ObTablet &)> &op);
-  static int for_each_mds_table_in_ls(ObLS &ls, const ObFunction<int(ObTablet &)> &op);
   share::ObTenantBufferCtxAllocator &get_buffer_ctx_allocator() { return buffer_ctx_allocator_; }
   TO_STRING_KV(KP(this), K_(is_inited))
 public:
@@ -80,6 +74,7 @@ public:
 private:
   static void try_recycle_mds_table_task();
   static void dump_special_mds_table_status_task();
+  static int for_each_mds_table_(ObLS &ls, const ObFunction<int(ObTablet &)> &op);
 
   static int process_with_tablet_(ObTablet &tablet);
   static int get_tablet_oldest_scn_(ObTablet &tablet, share::SCN &oldest_scn);

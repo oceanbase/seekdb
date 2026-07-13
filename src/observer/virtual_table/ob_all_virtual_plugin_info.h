@@ -38,20 +38,11 @@ public:
   virtual void reset() override;
   virtual int inner_open() override;
   virtual int inner_close() override;
-  inline void set_addr(common::ObAddr &addr)
-  {
-    addr_ = addr;
-  }
 
 private:
-  common::ObAddr addr_;
-  char ip_buf_[common::OB_IP_STR_BUFF];
-
   ObArray<plugin::ObPluginEntryHandle *> plugin_entries_;
 
   int64_t iter_index_ = -1;
-
-  TO_STRING_KV(K(addr_));
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualPluginInfo);

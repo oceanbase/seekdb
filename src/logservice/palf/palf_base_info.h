@@ -27,7 +27,7 @@ namespace palf
 {
 struct LogInfo
 {
-  OB_UNIS_VERSION(1);
+  OB_UNIS_VERSION(2);
 public:
   LogInfo();
   ~LogInfo();
@@ -38,14 +38,13 @@ public:
   bool operator!=(const LogInfo &log_info) const;
   void generate_by_default();
 
-  TO_STRING_KV(K_(log_id), K_(lsn), K_(scn), K_(log_proposal_id), K_(accum_checksum));
+  TO_STRING_KV(K_(log_id), K_(lsn), K_(scn), K_(accum_checksum));
 
-  static constexpr int64_t LOG_INFO_VERSION = 1;
+  static constexpr int64_t LOG_INFO_VERSION = 2;
   int64_t version_;
   int64_t log_id_;
   LSN lsn_;
   share::SCN scn_;
-  int64_t log_proposal_id_;
   int64_t accum_checksum_;
 };
 

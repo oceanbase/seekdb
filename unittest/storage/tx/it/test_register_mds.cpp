@@ -97,20 +97,16 @@ private:
 };
 
 
-OB_NOINLINE int ObTransService::acquire_local_snapshot_(const share::ObLSID &ls_id,
-                                                        SCN &snapshot,
-                                                        const bool is_read_only,
-                                                        ObRole &role)
+OB_NOINLINE int ObTransService::acquire_local_snapshot_(SCN &snapshot)
 {
   int ret = OB_SUCCESS;
   snapshot = tx_version_mgr_.get_max_commit_ts(false);
-  role = LEADER;
   return ret;
 }
 
 bool NOTIFY_MDS_ERRSIM = false;
 
-OB_NOINLINE int ObPartTransCtx::errsim_notify_mds_()
+OB_NOINLINE int ObTxCtx::errsim_notify_mds_()
 {
   int ret = OB_SUCCESS;
 
@@ -133,7 +129,6 @@ public:
     ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
     const uint64_t tv = ObTimeUtility::current_time();
     ObCurTraceId::set(&tv);
-    GCONF._ob_trans_rpc_timeout = 500;
     ObClockGenerator::init();
     const testing::TestInfo *const test_info =
         testing::UnitTest::GetInstance()->current_test_info();
@@ -158,26 +153,23 @@ public:
 
 #define GC_MDS_RETAIN_CTX(node)                                                                    \
   {                                                                                                \
-    ObLSTxCtxMgr *ls_tx_ctx_mgr1 = nullptr;                                                        \
-    ASSERT_EQ(OB_SUCCESS, node->txs_.tx_ctx_mgr_.get_ls_tx_ctx_mgr(node->ls_id_, ls_tx_ctx_mgr1)); \
-    ls_tx_ctx_mgr1->get_retain_ctx_mgr().try_gc_retain_ctx(&node->fake_ls_);                       \
-    ASSERT_EQ(OB_SUCCESS, node->txs_.tx_ctx_mgr_.revert_ls_tx_ctx_mgr(ls_tx_ctx_mgr1));            \
+    ObLSTxCtxMgr &tx_ctx_mgr = node->txs_.tx_ctx_mgr_.get_tx_ctx_manager();                        \
+    tx_ctx_mgr.get_retain_ctx_mgr().try_gc_retain_ctx(&node->fake_ls_);                            \
   }
 
 TEST_F(ObTestRegisterMDS, basic)
 {
-  START_TWO_TX_NODE_WITH_LSID(n1, n2, 2001);
+  START_TX_REPLAY_PAIR(n1, n2);
   PREPARE_TX(n1, tx);
   PREPARE_TX_PARAM(tx_param);
   const char *mds_str = "register mds basic";
 
   ASSERT_EQ(OB_SUCCESS, n1->start_tx(tx, tx_param));
-  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, n1->ls_id_, ObTxDataSourceType::DDL_TRANS,
-                                                      mds_str, strlen(mds_str), 0));
+  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, ObTxDataSourceType::DDL_TRANS,
+                                                      mds_str, strlen(mds_str)));
   n2->wait_all_redolog_applied();
   ASSERT_EQ(OB_SUCCESS, n1->commit_tx(tx, n1->ts_after_ms(500)));
 
-  n2->set_as_follower_replica(*n1);
   ReplayLogEntryFunctor functor(n2);
   ASSERT_EQ(OB_SUCCESS, n2->fake_tx_log_adapter_->replay_all(functor));
 
@@ -190,7 +182,7 @@ TEST_F(ObTestRegisterMDS, basic)
 
 TEST_F(ObTestRegisterMDS, basic_big_mds)
 {
-  START_TWO_TX_NODE_WITH_LSID(n1, n2, 2003);
+  START_TX_REPLAY_PAIR(n1, n2);
   PREPARE_TX(n1, tx);
   PREPARE_TX_PARAM(tx_param);
   tx_param.timeout_us_ = 1000 * 1000 * 1000;
@@ -200,13 +192,12 @@ TEST_F(ObTestRegisterMDS, basic_big_mds)
   memset(mds_str, 'M', sizeof(char) * char_count);
 
   ASSERT_EQ(OB_SUCCESS, n1->start_tx(tx, tx_param));
-  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, n1->ls_id_, ObTxDataSourceType::DDL_TRANS,
-                                                      mds_str, char_count, 0));
+  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, ObTxDataSourceType::DDL_TRANS,
+                                                      mds_str, char_count));
   n1->wait_all_redolog_applied();
 
   ASSERT_EQ(OB_SUCCESS, n1->commit_tx(tx, n1->ts_after_ms(100 * 1000)));
 
-  n2->set_as_follower_replica(*n1);
   ReplayLogEntryFunctor functor(n2);
   ASSERT_EQ(OB_SUCCESS, n2->fake_tx_log_adapter_->replay_all(functor));
 
@@ -219,7 +210,7 @@ TEST_F(ObTestRegisterMDS, basic_big_mds)
 
 TEST_F(ObTestRegisterMDS, merge_mds_log)
 {
-  START_TWO_TX_NODE_WITH_LSID(n1, n2, 2010);
+  START_TX_REPLAY_PAIR(n1, n2);
   PREPARE_TX(n1, tx);
   PREPARE_TX_PARAM(tx_param);
   tx_param.timeout_us_ = 1000 * 1000 * 1000;
@@ -232,30 +223,30 @@ TEST_F(ObTestRegisterMDS, merge_mds_log)
   memset(large_mds_str, 'M', sizeof(char) * LARGE_CHAR_CNT);
 
   ASSERT_EQ(OB_SUCCESS, n1->start_tx(tx, tx_param));
-  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, n1->ls_id_, ObTxDataSourceType::DDL_TRANS,
-                                                      normal_mds_str, NORMAL_CHAR_CNT, 0));
-  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, n1->ls_id_, ObTxDataSourceType::DDL_TRANS,
-                                                      normal_mds_str, NORMAL_CHAR_CNT, 0));
-  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, n1->ls_id_, ObTxDataSourceType::DDL_TRANS,
-                                                      normal_mds_str, NORMAL_CHAR_CNT, 0));
+  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, ObTxDataSourceType::DDL_TRANS,
+                                                      normal_mds_str, NORMAL_CHAR_CNT));
+  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, ObTxDataSourceType::DDL_TRANS,
+                                                      normal_mds_str, NORMAL_CHAR_CNT));
+  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, ObTxDataSourceType::DDL_TRANS,
+                                                      normal_mds_str, NORMAL_CHAR_CNT));
   n1->wait_all_redolog_applied();
 
-  ObPartTransCtx *ctx = nullptr;
-  ASSERT_EQ(OB_SUCCESS, n1->get_tx_ctx(n1->ls_id_, tx.tx_id_, ctx));
+  ObTxCtx *ctx = nullptr;
+  ASSERT_EQ(OB_SUCCESS, n1->get_tx_ctx(tx.tx_id_, ctx));
   ASSERT_EQ(OB_SUCCESS, ctx->exec_info_.redo_lsns_.count() == 2);
 
-  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, n1->ls_id_, ObTxDataSourceType::DDL_TRANS,
-                                                      normal_mds_str, NORMAL_CHAR_CNT, 0));
-  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, n1->ls_id_, ObTxDataSourceType::DDL_TRANS,
-                                                      large_mds_str, LARGE_CHAR_CNT, 0));
+  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, ObTxDataSourceType::DDL_TRANS,
+                                                      normal_mds_str, NORMAL_CHAR_CNT));
+  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, ObTxDataSourceType::DDL_TRANS,
+                                                      large_mds_str, LARGE_CHAR_CNT));
   n1->wait_all_redolog_applied();
   ASSERT_EQ(OB_SUCCESS, ctx->exec_info_.redo_lsns_.count()
                             == (2 + 1 + LARGE_CHAR_CNT / common::OB_MAX_LOG_ALLOWED_SIZE));
 
-  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, n1->ls_id_, ObTxDataSourceType::DDL_TRANS,
-                                                      normal_mds_str, NORMAL_CHAR_CNT, 0));
-  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, n1->ls_id_, ObTxDataSourceType::DDL_TRANS,
-                                                      normal_mds_str, NORMAL_CHAR_CNT, 0));
+  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, ObTxDataSourceType::DDL_TRANS,
+                                                      normal_mds_str, NORMAL_CHAR_CNT));
+  ASSERT_EQ(OB_SUCCESS, n1->txs_.register_mds_into_tx(tx, ObTxDataSourceType::DDL_TRANS,
+                                                      normal_mds_str, NORMAL_CHAR_CNT));
   n1->wait_all_redolog_applied();
   ASSERT_EQ(OB_SUCCESS, ctx->exec_info_.redo_lsns_.count()
                             == (2 + 1 + LARGE_CHAR_CNT / common::OB_MAX_LOG_ALLOWED_SIZE + 1));
@@ -264,7 +255,6 @@ TEST_F(ObTestRegisterMDS, merge_mds_log)
 
   ASSERT_EQ(OB_SUCCESS, n1->commit_tx(tx, n1->ts_after_ms(100 * 1000)));
 
-  n2->set_as_follower_replica(*n1);
   ReplayLogEntryFunctor functor(n2);
   ASSERT_EQ(OB_SUCCESS, n2->fake_tx_log_adapter_->replay_all(functor));
 
@@ -278,7 +268,7 @@ TEST_F(ObTestRegisterMDS, merge_mds_log)
 
 TEST_F(ObTestRegisterMDS, notify_mds_error)
 {
-  START_TWO_TX_NODE_WITH_LSID(n1, n2, 2005);
+  START_TX_REPLAY_PAIR(n1, n2);
   PREPARE_TX(n1, tx);
   PREPARE_TX_PARAM(tx_param);
   const char *mds_str = "register mds basic";
@@ -286,14 +276,13 @@ TEST_F(ObTestRegisterMDS, notify_mds_error)
   ASSERT_EQ(OB_SUCCESS, n1->start_tx(tx, tx_param));
 
   NOTIFY_MDS_ERRSIM = true;
-  ASSERT_EQ(OB_ERR_UNEXPECTED, n1->txs_.register_mds_into_tx(tx, n1->ls_id_, ObTxDataSourceType::DDL_TRANS,
-                                                      mds_str, strlen(mds_str), 0));
+  ASSERT_EQ(OB_ERR_UNEXPECTED, n1->txs_.register_mds_into_tx(tx, ObTxDataSourceType::DDL_TRANS,
+                                                      mds_str, strlen(mds_str)));
   NOTIFY_MDS_ERRSIM = false;
 
   n2->wait_all_redolog_applied();
   ASSERT_EQ(OB_SUCCESS, n1->commit_tx(tx, n1->ts_after_ms(500)));
 
-  n2->set_as_follower_replica(*n1);
   ReplayLogEntryFunctor functor(n2);
   ASSERT_EQ(OB_SUCCESS, n2->fake_tx_log_adapter_->replay_all(functor));
 

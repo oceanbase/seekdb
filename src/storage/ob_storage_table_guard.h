@@ -26,7 +26,6 @@ namespace oceanbase
 namespace share
 {
 class ObThrottleInfoGuard;
-class ObLSID;
 }
 
 namespace common{
@@ -82,8 +81,7 @@ private:
       memtable::ObMemtable *memtable,
       bool &bool_ret);
   int check_freeze_to_inc_write_ref(memtable::ObMemtable *table, bool &bool_ret);
-  int create_data_memtable_for_replay_(const share::ObLSID &ls_id,
-                                       const common::ObTabletID &tablet_id,
+  int create_data_memtable_for_replay_(const common::ObTabletID &tablet_id,
                                        bool &no_need_create);
   bool need_to_refresh_table(ObTableStoreIterator &iter);
   void check_if_need_log_(bool &need_log, bool &need_log_error);

@@ -27,7 +27,7 @@ using namespace compaction;
 namespace share
 {
 
-int ObTabletMetaTableCompactionOperator::batch_set_info_status(const ObIArray<ObCkmErrorTabletLSInfo> &error_pairs,
+int ObTabletMetaTableCompactionOperator::batch_set_info_status(const ObIArray<ObCkmErrorTabletInfo> &error_tablets,
     int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
@@ -40,17 +40,17 @@ int ObTabletMetaTableCompactionOperator::batch_set_info_status(const ObIArray<Ob
     if (OB_FAIL(storage.init(GCTX.meta_db_pool_))) {
       LOG_WARN("failed to init storage", K(ret));
     } else {
-      ObArray<ObTabletLSPair> tablet_ls_pairs;
+      ObArray<ObTabletID> tablet_ids;
       ObArray<int64_t> compaction_scns;
-      for (int64_t i = 0; OB_SUCC(ret) && i < error_pairs.count(); ++i) {
-        if (OB_FAIL(tablet_ls_pairs.push_back(error_pairs.at(i).tablet_info_))) {
-          LOG_WARN("failed to push back tablet_ls_pair", K(ret));
-        } else if (OB_FAIL(compaction_scns.push_back(error_pairs.at(i).compaction_scn_))) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < error_tablets.count(); ++i) {
+        if (OB_FAIL(tablet_ids.push_back(error_tablets.at(i).tablet_info_))) {
+          LOG_WARN("failed to push back tablet id", K(ret));
+        } else if (OB_FAIL(compaction_scns.push_back(error_tablets.at(i).compaction_scn_))) {
           LOG_WARN("failed to push back compaction_scn", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(storage.batch_update_status(tablet_ls_pairs,
+        if (OB_FAIL(storage.batch_update_status(tablet_ids,
             compaction_scns,
             (int64_t)ObTabletReplica::ScnStatus::SCN_STATUS_ERROR,
             affected_rows))) {
@@ -84,14 +84,13 @@ int ObTabletMetaTableCompactionOperator::get_status(
       int64_t report_scn = 0;
       int64_t status = 0;
       if (OB_FAIL(storage.get_max_report_scn_and_status(common::ObTabletID(input_info.tablet_id_),
-          ObLSID(input_info.ls_id_),
           report_scn,
           status))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
           LOG_WARN("failed to get max report_scn and status", KR(ret), K(input_info));
         }
       } else {
-        ret_info = input_info; // assign ls_id / tablet_id
+        ret_info = input_info;
         ret_info.report_scn_ = report_scn;
         ret_info.status_ = ObTabletReplica::ScnStatus(status);
         LOG_TRACE("success to get medium snapshot info", K(ret_info));
@@ -101,7 +100,7 @@ int ObTabletMetaTableCompactionOperator::get_status(
   return ret;
 }
 
-int ObTabletMetaTableCompactionOperator::batch_update_unequal_report_scn_tablet(const share::ObLSID &ls_id,
+int ObTabletMetaTableCompactionOperator::batch_update_unequal_report_scn_tablet(
       const int64_t major_frozen_scn,
       const common::ObIArray<ObTabletID> &input_tablet_id_array)
 {
@@ -110,7 +109,7 @@ int ObTabletMetaTableCompactionOperator::batch_update_unequal_report_scn_tablet(
     ret = OB_NOT_INIT;
     LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
-    LOG_INFO("start to update unequal tablet id array", KR(ret), K(ls_id), K(major_frozen_scn),
+    LOG_INFO("start to update unequal tablet id array", KR(ret), K(major_frozen_scn),
       "input_tablet_id_array_cnt", input_tablet_id_array.count());
     ObTabletMetaTableStorage storage;
     if (OB_FAIL(storage.init(GCTX.meta_db_pool_))) {
@@ -129,15 +128,15 @@ int ObTabletMetaTableCompactionOperator::batch_update_unequal_report_scn_tablet(
           }
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(storage.get_distinct_tablet_ids_with_conditions(ls_id, batch_tablet_ids, major_frozen_scn, unequal_tablet_id_array))) {
+          if (OB_FAIL(storage.get_distinct_tablet_ids_with_conditions(batch_tablet_ids, major_frozen_scn, unequal_tablet_id_array))) {
             LOG_WARN("failed to get distinct tablet_ids with conditions", K(ret));
           } else if (unequal_tablet_id_array.count() > 0) {
             LOG_TRACE("success to get unequal tablet_id array", K(ret), K(unequal_tablet_id_array));
             int64_t tmp_affected_rows = 0;
-            if (OB_FAIL(storage.batch_update_report_scn_unequal(ls_id, unequal_tablet_id_array, major_frozen_scn, tmp_affected_rows))) {
+            if (OB_FAIL(storage.batch_update_report_scn_unequal(unequal_tablet_id_array, major_frozen_scn, tmp_affected_rows))) {
               LOG_WARN("fail to update unequal tablet id array", KR(ret));
             } else {
-              LOG_INFO("success to update unequal report_scn", K(ret), K(ls_id), K(tmp_affected_rows));
+              LOG_INFO("success to update unequal report_scn", K(ret), K(tmp_affected_rows));
             }
             unequal_tablet_id_array.reuse();
           }
@@ -231,37 +230,6 @@ int ObTabletMetaTableCompactionOperator::append_tablet_id_array(const common::Ob
   }
   return ret;
 }
-
-int ObTabletMetaTableCompactionOperator::inner_batch_update_unequal_report_scn_tablet(const share::ObLSID &ls_id,
-    const int64_t major_frozen_scn,
-    const common::ObIArray<ObTabletID> &unequal_tablet_id_array)
-{
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-#ifdef ERRSIM
-  ret = OB_E(EventTable::EN_COMPACTION_UPDATE_REPORT_SCN) ret;
-  if (OB_FAIL(ret)) {
-    LOG_INFO("ERRSIM EN_COMPACTION_UPDATE_REPORT_SCN", K(ret));
-  }
-#endif
-  if (OB_FAIL(ret)) {
-    // ERRSIM error, skip
-  } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
-  } else {
-    ObTabletMetaTableStorage storage;
-    if (OB_FAIL(storage.init(GCTX.meta_db_pool_))) {
-      LOG_WARN("failed to init storage", K(ret));
-    } else if (OB_FAIL(storage.batch_update_report_scn_unequal(ls_id, unequal_tablet_id_array, major_frozen_scn, affected_rows))) {
-      LOG_WARN("fail to update unequal report_scn", KR(ret), K(ls_id));
-    } else if (affected_rows > 0) {
-      LOG_INFO("success to update unequal report_scn", K(ret), K(ls_id), K(unequal_tablet_id_array.count()), K(affected_rows));
-    }
-  }
-  return ret;
-}
-
 
 int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
     const uint64_t global_broadcast_scn_val,
@@ -424,15 +392,15 @@ int ObTabletMetaTableCompactionOperator::get_tablet_replica_cnt(int64_t &tablet_
 
 int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
     const uint64_t global_broadcast_scn_val,
-    const ObIArray<ObTabletLSPair> &tablet_pairs,
+    const ObIArray<ObTabletID> &tablet_ids,
     const ObTabletReplica::ScnStatus &except_status)
 {
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
-  const int64_t all_pair_cnt = tablet_pairs.count();
-  if (OB_UNLIKELY(all_pair_cnt < 1)) {
+  const int64_t all_tablet_cnt = tablet_ids.count();
+  if (OB_UNLIKELY(all_tablet_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(all_pair_cnt));
+    LOG_WARN("invalid argument", KR(ret), K(all_tablet_cnt));
   } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("meta_db_pool_ is not initialized", K(ret));
@@ -441,18 +409,18 @@ int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
     if (OB_FAIL(storage.init(GCTX.meta_db_pool_))) {
       LOG_WARN("failed to init storage", K(ret));
     } else {
-      for (int64_t i = 0; OB_SUCC(ret) && (i < all_pair_cnt); i += MAX_BATCH_COUNT) {
-        const int64_t cur_end_idx = MIN(i + MAX_BATCH_COUNT, all_pair_cnt);
-        ObArray<ObTabletLSPair> batch_pairs;
+      for (int64_t i = 0; OB_SUCC(ret) && (i < all_tablet_cnt); i += MAX_BATCH_COUNT) {
+        const int64_t cur_end_idx = MIN(i + MAX_BATCH_COUNT, all_tablet_cnt);
+        ObArray<ObTabletID> batch_tablet_ids;
         for (int64_t idx = i; OB_SUCC(ret) && (idx < cur_end_idx); ++idx) {
-          if (OB_FAIL(batch_pairs.push_back(tablet_pairs.at(idx)))) {
-            LOG_WARN("failed to push back tablet_ls_pair", K(ret));
+          if (OB_FAIL(batch_tablet_ids.push_back(tablet_ids.at(idx)))) {
+            LOG_WARN("failed to push back tablet id", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
           int64_t tmp_affected_rows = 0;
           if (OB_FAIL(storage.batch_update_report_scn(
-              batch_pairs,
+              batch_tablet_ids,
               global_broadcast_scn_val,
               global_broadcast_scn_val,
               (int64_t)except_status,
@@ -460,7 +428,7 @@ int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
             LOG_WARN("fail to batch update report_scn", KR(ret), K(global_broadcast_scn_val));
           } else {
             affected_rows += tmp_affected_rows;
-            LOG_TRACE("success to update report_scn", KR(ret), K(batch_pairs), K(tmp_affected_rows));
+            LOG_TRACE("success to update report_scn", KR(ret), K(batch_tablet_ids), K(tmp_affected_rows));
           }
         }
       }

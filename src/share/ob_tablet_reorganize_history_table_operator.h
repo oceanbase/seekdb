@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "share/ob_ls_id.h"
 #include "share/ob_rpc_struct.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 
@@ -39,14 +38,12 @@ class ObTabletReorganizeRecord final
 public:
   ObTabletReorganizeRecord() = default;
   ObTabletReorganizeRecord(
-      const ObLSID &ls_id,
       const ObTabletID &src_tablet_id,
       const ObTabletID &dest_tablet_id,
       const ObTabletReorganizeType type,
       const uint64_t create_time,
       const uint64_t finish_time)
-    : ls_id_(ls_id),
-    src_tablet_id_(src_tablet_id),
+    : src_tablet_id_(src_tablet_id),
     dest_tablet_id_(dest_tablet_id),
     type_(type),
     create_time_(create_time),
@@ -54,16 +51,14 @@ public:
   {}
   bool is_valid() const
   {
-    return ls_id_.is_valid() &&
-      src_tablet_id_.is_valid() &&
+    return src_tablet_id_.is_valid() &&
       dest_tablet_id_.is_valid() &&
       type_ > INVALID_REORGANIZE_TYPE &&
       type_ < MAX_REORGANIZE_TYPE;
   }
-  TO_STRING_KV(K(ls_id_), K(src_tablet_id_), K(dest_tablet_id_),
+  TO_STRING_KV(K(src_tablet_id_), K(dest_tablet_id_),
       K(type_), K(create_time_), K(finish_time_));
   void reset() {
-    ls_id_.reset();
     src_tablet_id_.reset();
     dest_tablet_id_.reset();
     type_ = INVALID_REORGANIZE_TYPE;
@@ -71,7 +66,6 @@ public:
     finish_time_ = 0;
   }
 public:
-  ObLSID ls_id_;
   ObTabletID src_tablet_id_;
   ObTabletID dest_tablet_id_;
   ObTabletReorganizeType type_;
@@ -104,15 +98,12 @@ public:
   static int check_tablet_has_reorganized(
       common::ObMySQLProxy &sql_proxy,
       const common::ObTabletID &tablet_id,
-      share::ObLSID &ls_id,
       bool &reorganized);
   static int get_all_split_tablet_pairs(
       ObMySQLProxy &sql_proxy,
-      const ObLSID &ls_id,
       ObIArray<ReorganizeTabletPair> &tablet_pairs);
   static int get_split_tablet_pairs_by_src(
       ObMySQLProxy &sql_proxy,
-      const ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       ObIArray<ReorganizeTabletPair> &tablet_pairs);
   static int get_split_tablet_pairs_by_dest(
@@ -132,7 +123,6 @@ public:
 private:
   static int inner_batch_insert_(
       ObISQLClient &sql_proxy,
-      const share::ObLSID src_ls_id,
       const ObTabletID &tablet_id,
       const ObSArray<ObTabletID> &dest_tablet_ids,
       const int64 start_time,

@@ -139,20 +139,7 @@ int MockTxLogAdapter::submit_log(const char *buf,
       waiting_cbs_.push_back(cb);
     }
   } else {
-    ret = OB_NOT_MASTER;
-  }
-  return ret;
-}
-
-int MockTxLogAdapter::get_role(bool &is_leader, int64_t &epoch)
-{
-  int ret = OB_SUCCESS;
-
-  if (ATOMIC_LOAD(&is_running_)) {
-    is_leader = true;
-    epoch = 1;
-  } else {
-    is_leader = false;
+    ret = OB_NOT_RUNNING;
   }
   return ret;
 }

@@ -168,7 +168,6 @@ int ObDASHNSWScanIter::inner_init(ObDASIterParam &param)
     LOG_WARN("invalid das iter param type for hnsw scan iter", K(ret), K(param));
   } else {
     ObDASHNSWScanIterParam &hnsw_scan_param = static_cast<ObDASHNSWScanIterParam &>(param);
-    ls_id_ = hnsw_scan_param.ls_id_;
     tx_desc_ = hnsw_scan_param.tx_desc_;
     snapshot_ = hnsw_scan_param.snapshot_;
     use_vid_ = hnsw_scan_param.use_vid_;
@@ -300,7 +299,7 @@ int ObDASHNSWScanIter::reuse_func_lookup_iter()
   int tmp_ret = OB_SUCCESS;
   if (func_lookup_iter_->get_type() == ObDASIterType::DAS_ITER_FUNC_LOOKUP) {
     ObDASFuncLookupIter* func_iter = static_cast<ObDASFuncLookupIter*>(func_lookup_iter_);
-    if (OB_FAIL(ObDasVecScanUtils::reuse_iter(ls_id_, func_iter->get_index_scan_iter(), func_filter_scan_param_, rowkey_doc_tablet_id_))) {
+    if (OB_FAIL(ObDasVecScanUtils::reuse_iter(func_iter->get_index_scan_iter(), func_filter_scan_param_, rowkey_doc_tablet_id_))) {
       LOG_WARN("failed to set lookup key", K(ret));
       tmp_ret = tmp_ret == OB_SUCCESS ? ret : tmp_ret;
       ret = OB_SUCCESS;
@@ -968,8 +967,8 @@ int ObDASHNSWScanIter::process_adaptor_state_hnsw(ObIAllocator &allocator, bool 
   index_ctx.data_tablet_id_ = com_aux_vec_tablet_id_;
   bool ls_leader = true;
 
-  if (OB_FAIL(vec_index_service->acquire_adapter_guard(ls_id_, index_ctx, adaptor_guard, &vec_index_param_, dim_))) {
-    LOG_WARN("failed to get ObPluginVectorIndexAdapter", K(ret), K(ls_id_), K(index_ctx));
+  if (OB_FAIL(vec_index_service->acquire_adapter_guard(index_ctx, adaptor_guard, &vec_index_param_, dim_))) {
+    LOG_WARN("failed to get ObPluginVectorIndexAdapter", K(ret), K(index_ctx));
   } else {
     share::ObPluginVectorIndexAdaptor* adaptor = adaptor_guard.get_adatper();
     if (OB_ISNULL(adaptor)) {
@@ -979,8 +978,8 @@ int ObDASHNSWScanIter::process_adaptor_state_hnsw(ObIAllocator &allocator, bool 
       LOG_WARN("failed to set query condition.", K(ret));
     } else if (vec_aux_ctdef_->relevance_col_cnt_ > 0  && OB_FAIL(init_rel_map(adaptor))) {
       LOG_WARN("failed to init rel map", K(ret));
-    } else if (OB_FAIL(ObPluginVectorIndexUtils::get_ls_leader_flag(ls_id_, ls_leader))) {
-      LOG_WARN("fail to get ls leader flag", K(ret), K(ls_id_));
+    } else if (OB_FAIL(ObPluginVectorIndexUtils::get_leader_flag(ls_leader))) {
+      LOG_WARN("fail to get ls leader flag", K(ret));
     } else if (OB_FALSE_IT(ada_ctx.set_ls_leader(ls_leader))) {
     } else if (OB_FALSE_IT(ada_ctx.set_sparse_vector(is_ipivf()))) {
     } else {
@@ -1538,10 +1537,10 @@ int ObDASHNSWScanIter::process_adaptor_state_pre_filter(
 
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_NULL(snapshot_iter_) && OB_FALSE_IT(query_cond_.row_iter_ = snapshot_iter_->get_output_result_iter())) {
-    } else if (OB_FAIL(adaptor->query_result(ls_id_, ada_ctx, &query_cond_, adaptor_vid_iter_))) {
+    } else if (OB_FAIL(adaptor->query_result(ada_ctx, &query_cond_, adaptor_vid_iter_))) {
       LOG_WARN("failed to query result.", K(ret));
     } else if (PVQ_REFRESH == ada_ctx->get_status()) {
-      if (OB_FAIL(ObPluginVectorIndexUtils::query_need_refresh_memdata(adaptor, ls_id_))) {
+      if (OB_FAIL(ObPluginVectorIndexUtils::query_need_refresh_memdata(adaptor))) {
         if (ret != OB_SCHEMA_EAGAIN) {
           LOG_WARN("fail to refresh memdata in query", K(ret));
         }
@@ -2649,7 +2648,7 @@ int ObDASHNSWScanIter::filter_func_lookup_iter(bool is_vectorized,
 
     if (func_lookup_first_scan_) {
       func_filter_scan_param_.need_switch_param_ = false;
-      if (OB_FAIL(ObDasVecScanUtils::init_scan_param(ls_id_, rowkey_doc_tablet_id_,
+      if (OB_FAIL(ObDasVecScanUtils::init_scan_param(rowkey_doc_tablet_id_,
                    static_cast<const ObDASScanCtDef*>(func_iter->index_ctdef_),
                    static_cast<ObDASScanRtDef*>(func_iter->index_rtdef_), tx_desc_, snapshot_, func_filter_scan_param_))) {
         LOG_WARN("failed to init scan param", K(ret));
@@ -3111,7 +3110,7 @@ int ObDASHNSWScanIter::call_pva_interface(const ObVidAdaLookupStatus& cur_state,
       if (!index_id_scan_param_.snapshot_.is_valid() || !index_id_scan_param_.snapshot_.core_.version_.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get index id scan param invalid.", K(ret));
-      } else if (OB_FAIL(adaptor.check_index_id_table_readnext_status(&ada_ctx, real_index_id_iter, index_id_scan_param_.snapshot_.core_.version_, skip_delta_buffer_, ls_id_))) {
+      } else if (OB_FAIL(adaptor.check_index_id_table_readnext_status(&ada_ctx, real_index_id_iter, index_id_scan_param_.snapshot_.core_.version_, skip_delta_buffer_))) {
         LOG_WARN("failed to check index id table readnext status.", K(ret));
       }
       break;
@@ -3126,13 +3125,13 @@ int ObDASHNSWScanIter::call_pva_interface(const ObVidAdaLookupStatus& cur_state,
       if (OB_NOT_NULL(snapshot_iter_) && OB_FALSE_IT(query_cond_.row_iter_ = snapshot_iter_->get_output_result_iter())) {
       } else if (!ada_ctx.get_ls_leader() && OB_FAIL(prepare_follower_query_cond(query_cond_))) {
         LOG_WARN("fail to prepare query cond of follower", K(ret));
-      } else if (OB_FAIL(adaptor.query_result(ls_id_, &ada_ctx, &query_cond_, is_iter_filter() ? tmp_adaptor_vid_iter_ : adaptor_vid_iter_))) {
+      } else if (OB_FAIL(adaptor.query_result(&ada_ctx, &query_cond_, is_iter_filter() ? tmp_adaptor_vid_iter_ : adaptor_vid_iter_))) {
         LOG_WARN("failed to query result.", K(ret));
       }
       break;
     }
     case ObVidAdaLookupStatus::STATES_REFRESH: {        // refresh
-      if (OB_FAIL(ObPluginVectorIndexUtils::query_need_refresh_memdata(&adaptor, ls_id_))) {
+      if (OB_FAIL(ObPluginVectorIndexUtils::query_need_refresh_memdata(&adaptor))) {
         if (ret != OB_SCHEMA_EAGAIN) {
           LOG_WARN("fail to refresh memdata in query", K(ret));
         }
@@ -3718,7 +3717,7 @@ int ObDASHNSWScanIter::do_com_aux_vec_table_scan()
     const ObDASScanCtDef *com_aux_tbl_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(
         vec_aux_ctdef_->get_com_aux_tbl_idx(), ObTSCIRScanType::OB_VEC_COM_AUX_SCAN);
     ObDASScanRtDef *com_aux_tbl_rtdef = vec_aux_rtdef_->get_vec_aux_tbl_rtdef(vec_aux_ctdef_->get_com_aux_tbl_idx());
-    if (OB_FAIL(ObDasVecScanUtils::init_vec_aux_scan_param(ls_id_,
+    if (OB_FAIL(ObDasVecScanUtils::init_vec_aux_scan_param(
                                                            com_aux_vec_tablet_id_,
                                                            com_aux_tbl_ctdef,
                                                            com_aux_tbl_rtdef,
@@ -3778,11 +3777,11 @@ int ObDASHNSWScanIter::do_rowkey_vid_table_scan()
     rowkey_vid_scan_param_.need_switch_param_ = false;
     ObDASScanIter *inv_idx_scan_iter = static_cast<ObDASScanIter *>(inv_idx_scan_iter_);
     if (!is_primary_pre_with_rowkey_with_filter_ &&
-        OB_FAIL(ObDasVecScanUtils::init_scan_param(ls_id_, rowkey_vid_tablet_id_, rowkey_vid_ctdef, rowkey_vid_rtdef,
+        OB_FAIL(ObDasVecScanUtils::init_scan_param(rowkey_vid_tablet_id_, rowkey_vid_ctdef, rowkey_vid_rtdef,
                                                   tx_desc_, snapshot_, rowkey_vid_scan_param_))) {
       LOG_WARN("failed to init scan param", K(ret));
     } else if (is_primary_pre_with_rowkey_with_filter_ &&
-        OB_FAIL(ObDasVecScanUtils::init_scan_param(ls_id_, rowkey_vid_tablet_id_, rowkey_vid_ctdef, rowkey_vid_rtdef,
+        OB_FAIL(ObDasVecScanUtils::init_scan_param(rowkey_vid_tablet_id_, rowkey_vid_ctdef, rowkey_vid_rtdef,
                                                   tx_desc_, snapshot_, rowkey_vid_scan_param_,
                                                   inv_idx_scan_iter->get_scan_param().is_get_))) {
       LOG_WARN("failed to init scan param", K(ret));
@@ -3812,7 +3811,7 @@ int ObDASHNSWScanIter::do_aux_table_scan_need_reuse(bool &first_scan,
 
   ObNewRange scan_range;
   if (first_scan) {
-    if (OB_FAIL(ObDasVecScanUtils::init_vec_aux_scan_param(ls_id_, tablet_id, ctdef, rtdef,tx_desc_, snapshot_, scan_param, is_get))) {
+    if (OB_FAIL(ObDasVecScanUtils::init_vec_aux_scan_param(tablet_id, ctdef, rtdef,tx_desc_, snapshot_, scan_param, is_get))) {
       LOG_WARN("failed to init scan param", K(ret));
     } else if (OB_FALSE_IT(ObDasVecScanUtils::set_whole_range(scan_range, ctdef->ref_table_id_))) {
       LOG_WARN("failed to generate init scan range", K(ret));
@@ -3825,7 +3824,7 @@ int ObDASHNSWScanIter::do_aux_table_scan_need_reuse(bool &first_scan,
       first_scan = false;
     }
   } else {
-    if (OB_FAIL(ObDasVecScanUtils::reuse_iter(ls_id_, iter, scan_param, tablet_id))) {
+    if (OB_FAIL(ObDasVecScanUtils::reuse_iter(iter, scan_param, tablet_id))) {
       LOG_WARN("failed to reuse scan iterator", K(ret));
     } else if (OB_FALSE_IT(ObDasVecScanUtils::set_whole_range(scan_range, ctdef->ref_table_id_))) {
     } else if (OB_FAIL(scan_param.key_ranges_.push_back(scan_range))) {
@@ -3849,7 +3848,7 @@ int ObDASHNSWScanIter::do_aux_table_scan(bool &first_scan,
   if (first_scan) {
     scan_param.need_switch_param_ = false;
     if (OB_FAIL(
-            ObDasVecScanUtils::init_scan_param(ls_id_, tablet_id, ctdef, rtdef, tx_desc_, snapshot_, scan_param))) {
+            ObDasVecScanUtils::init_scan_param(tablet_id, ctdef, rtdef, tx_desc_, snapshot_, scan_param))) {
       LOG_WARN("failed to init scan param", K(ret));
     } else if (OB_FALSE_IT(iter->set_scan_param(scan_param))) {
     } else if (OB_FAIL(iter->do_table_scan())) {

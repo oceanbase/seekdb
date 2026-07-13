@@ -37,12 +37,10 @@ public:
   }
   int init(const ObTableScanParam &scan_param,
            const ObStoreCtx &ctx,
-           const share::ObLSID &ls_id,
            const int64_t snapshot_version);
   int init(const uint64_t table_id,
            const uint64_t tablet_id,
            const ObStoreCtx &ctx,
-           const share::ObLSID &ls_id,
            const int64_t snapshot_version);
   int fill_lob_locator(blocksstable::ObDatumRow &row, bool is_projected_row,
                        const ObTableAccessParam &access_param);
@@ -61,7 +59,7 @@ public:
   }
   OB_INLINE bool is_valid() const { return is_inited_; }
   OB_INLINE bool enable_lob_locator_v2() const { return enable_locator_v2_; }
-  TO_STRING_KV(K_(table_id), K_(ls_id), K_(tx_id), K_(snapshot_version), K_(tx_read_snapshot),
+  TO_STRING_KV(K_(table_id), K_(tx_id), K_(snapshot_version), K_(tx_read_snapshot),
    K_(enable_locator_v2), K_(is_inited), K_(scan_flag), K_(tx_seq_base), K_(is_access_index));
 private:
   static const int64_t DEFAULT_LOCATOR_OBJ_ARRAY_SIZE = 8;
@@ -79,7 +77,6 @@ private:
 private:
   uint64_t table_id_;
   uint64_t tablet_id_;
-  int64_t ls_id_;
   int64_t tx_id_;
   int64_t snapshot_version_;
   transaction::ObTxReadSnapshot tx_read_snapshot_;

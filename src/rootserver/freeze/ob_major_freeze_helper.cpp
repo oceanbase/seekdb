@@ -19,7 +19,6 @@
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/ob_freeze_info_proxy.h"
-#include "share/location_cache/ob_location_service.h"
 #include "src/observer/ob_srv_network_frame.h"
 #include "share/ob_ex_rpc.h"
 #include "rootserver/freeze/ob_major_freeze_service.h"
@@ -78,9 +77,6 @@ int ObMajorFreezeHelper::tablet_major_freeze(const ObTabletMajorFreezeParam &par
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(param));
-  } else if (OB_UNLIKELY(nullptr == GCTX.location_service_ || nullptr == GCTX.net_frame_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid GCTX", KR(ret));
   } else if (!GCONF.enable_major_freeze) {
     ret = OB_MAJOR_FREEZE_NOT_ALLOW;
     LOG_WARN("enable_major_freeze is off, refuse to to major_freeze", K(param), KR(ret));
@@ -88,29 +84,14 @@ int ObMajorFreezeHelper::tablet_major_freeze(const ObTabletMajorFreezeParam &par
     LOG_INFO("tablet major freeze", K(ret), K(param));
     const int64_t start_time = ObTimeUtility::fast_current_time();
     
-    share::ObLSID ls_id;
-    bool is_cache_hit = false;
-
-    if (OB_FAIL(GCTX.location_service_->get(
-      param.tablet_id_, MAX_PROCESS_TIME_US, is_cache_hit, ls_id))) {
-      LOG_WARN("failed to get ls_id", K(ret), K(param.tablet_id_));
-    } else {
-      // RPC removed: leader is self on single replica; dispatch in-process.
-      // Mirrors ObService::tablet_major_freeze local logic.
-      ret = ex_rpc::sync_call([&]() -> int {
-        int ret = OB_SUCCESS;
-        MOD_SCOPE {
-          if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()->user_request_schedule_medium_merge(
-              ls_id, param.tablet_id_))) {
-            LOG_WARN("failed to try schedule tablet major freeze", K(ret),
-                K(ls_id), K(param));
-          }
-        }
-        return ret;
-      });
+    MOD_SCOPE {
+      if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()->user_request_schedule_medium_merge(
+          param.tablet_id_))) {
+        LOG_WARN("failed to try schedule tablet major freeze", K(ret), K(param));
+      }
     }
     const int64_t cost_time = ObTimeUtility::current_time() - start_time;
-    LOG_INFO("do tenant major freeze", KR(ret), K(ls_id), K(param), K(cost_time));
+    LOG_INFO("do tenant major freeze", KR(ret), K(param), K(cost_time));
   }
   return ret;
 }

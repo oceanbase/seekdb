@@ -36,7 +36,6 @@ using namespace compaction;
 
 static const int64_t TEST_TENANT_ID = 1;
 static const int64_t TEST_TABLE_ID = 8000;
-static const ObLSID TEST_LS_ID = ObLSID(9001);
 static const ObTabletID TEST_TABLET_ID = ObTabletID(2323233);
 static const int64_t TEST_LOB_COL_CNT = 3;
 static const int64_t TEST_SPLIT_DST_CNT = 2;
@@ -74,7 +73,6 @@ int TestDataSplit::prepare_mock_start_arg(
     obcall::ObDDLBuildSingleReplicaRequestArg &arg)
 {
   int ret = OB_SUCCESS;
-  arg.ls_id_               = TEST_LS_ID;
   arg.source_tablet_id_    = TEST_TABLET_ID;
   arg.dest_tablet_id_      = TEST_TABLET_ID;
   arg.source_table_id_     = TEST_TABLE_ID;
@@ -87,7 +85,6 @@ int TestDataSplit::prepare_mock_start_arg(
   arg.execution_id_        = 1;
   arg.tablet_task_id_      = 1;
   arg.data_format_version_ = 1;
-  arg.dest_ls_id_          = TEST_LS_ID;
   arg.dest_schema_version_ = 1;
   if (is_split) {
     arg.ddl_type_ = 100;
@@ -135,7 +132,6 @@ int TestDataSplit::prepare_mock_start_arg(
 int TestDataSplit::prepare_mock_finish_arg(obcall::ObTabletSplitArg &arg)
 {
   int ret = OB_SUCCESS;
-  arg.ls_id_ = TEST_LS_ID;
   arg.table_id_ = TEST_TABLE_ID;
   arg.lob_table_id_ = TEST_TABLE_ID;
   arg.schema_version_ = 1;

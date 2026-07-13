@@ -23,10 +23,6 @@
 #include "share/ob_define.h"
 namespace oceanbase
 {
-namespace common
-{
-class ObAddr;
-}
 namespace observer
 {
 class ObAllVirtualTenantMemstoreInfo : public common::ObVirtualTableScannerIterator
@@ -44,10 +40,6 @@ public:
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  inline void set_addr(common::ObAddr &addr) { addr_ = addr; }
-private:
-  uint64_t current_pos_;
-  common::ObAddr addr_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualTenantMemstoreInfo);
 };

@@ -16,7 +16,6 @@
 
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_PALF_STAT_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_PALF_STAT_
-#include "observer/omt/ob_multi_tenant.h"
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
@@ -35,28 +34,16 @@ namespace observer
 class ObAllVirtualPalfStat: public common::ObVirtualTableScannerIterator
 {
 public:
-  explicit ObAllVirtualPalfStat(omt::ObMultiTenant *omt);
+  ObAllVirtualPalfStat() = default;
   virtual ~ObAllVirtualPalfStat();
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   void destroy();
 private:
   int insert_log_stat_(const logservice::ObLogStat &log_stat, common::ObNewRow *row);
-  int member_list_to_string_(const common::ObMemberList &member_list);
-  int learner_list_to_string_(const common::GlobalLearnerList &learner_list, char *output_buf);
 private:
   static const int64_t VARCHAR_32 = 32;
-  static const int64_t VARCHAR_64 = 64;
-  char role_str_[VARCHAR_32] = {'\0'};
   char access_mode_str_[VARCHAR_32] = {'\0'};
-  char ip_[common::OB_IP_PORT_STR_BUFF] = {'\0'};
-  ObSqlString member_list_buf_;
-  char arbitration_member_buf_[MAX_SINGLE_MEMBER_LENGTH] = {'\0'};
-  char degraded_list_buf_[MAX_LEARNER_LIST_LENGTH] = {'\0'};
-  char config_version_buf_[palf::LogConfigVersion::CONFIG_VERSION_LEN] = {'\0'};
-  char replica_type_str_[VARCHAR_32] = {'\0'};
-  char learner_list_buf_[MAX_LEARNER_LIST_LENGTH] = {'\0'};
-  omt::ObMultiTenant *omt_;
 };
 }//namespace observer
 }//namespace oceanbase

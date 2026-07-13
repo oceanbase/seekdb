@@ -32,7 +32,6 @@ namespace oceanbase
 
 namespace share
 {
-class ObLSID;
 }
 
 namespace storage

@@ -491,14 +491,10 @@ int ObMajorMergeInfoManager::adjust_global_merge_info()
 int ObMajorMergeInfoManager::get_gts(SCN &gts_scn) const
 {
   int ret = OB_SUCCESS;
-  bool is_external_consistent = true;
   const int64_t timeout_us = 10 * 1000 * 1000;
 
-  if (OB_FAIL(OB_TS_MGR.get_ts_sync(timeout_us, gts_scn, is_external_consistent))) {
+  if (OB_FAIL(OB_TS_MGR.get_gts_sync(timeout_us, gts_scn))) {
     LOG_WARN("fail to get ts sync", K(ret), K(timeout_us));
-  } else if (!is_external_consistent) { // only suppport gts in 4.0
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("cannot freeze without gts", KR(ret));
   }
   return ret;
 }

@@ -139,20 +139,17 @@ private:
   int register_mds_(
     observer::ObInnerSQLConnection &conn,
     const ObTruncateTabletArg &arg);
-  int retry_register_mds_(
-    observer::ObInnerSQLConnection &conn,
-    const ObTruncateTabletArg &arg,
-    const char *buf,
-    const int64_t buf_len);
-  static bool need_retry_errno(const int ret);
-  static const int64_t SLEEP_INTERVAL = 100 * 1000L; // 100ms
+  int register_mds_(
+      observer::ObInnerSQLConnection &conn,
+      const ObTruncateTabletArg &arg,
+      const char *buf,
+      const int64_t buf_len);
 private:
   ObArenaAllocator allocator_; // for part_key_info_, only init once
   ObArenaAllocator loop_allocator_; // for loop index tablets
   const obcall::ObAlterTableArg &arg_;
   const share::schema::ObTableSchema &data_table_schema_;
   ObSEArray<ObTabletID, 8> index_tablet_array_;
-  ObSEArray<share::ObLSID, 8> ls_id_array_;
   ObTruncatePartKeyInfo part_key_info_;
   int64_t ddl_task_id_;
   bool is_inited_;

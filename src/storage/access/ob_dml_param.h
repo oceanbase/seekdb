@@ -209,9 +209,6 @@ public:
   OB_INLINE bool use_index_skip_scan() const {
     return (1 == ss_key_ranges_.count()) && (!ss_key_ranges_.at(0).is_whole_range());
   }
-  OB_INLINE bool is_mview_query() const {
-    return nullptr != op_filters_ && scan_flag_.is_mr_mview_query();
-  }
   void destroy() override
   {
     if (OB_UNLIKELY(ss_key_ranges_.get_capacity() > OB_DEFAULT_RANGE_COUNT)) {
@@ -296,7 +293,7 @@ struct ObDMLBaseParam
   const blocksstable::ObDatumRow *data_row_for_lob_; // for tablet split
   bool is_main_table_in_fts_ddl_; // whether the main table is in fts ddl when dml is executed
   // Set by DAS layer when the table has async-mode indexes (e.g. sync_mode=async HNSW).
-  // Propagated to ObPartTransCtx::has_async_index_redo_ -> ObTxLogBlockHeader::HAS_ASYNC_INDEX
+  // Propagated to ObTxCtx::has_async_index_redo_ -> ObTxLogBlockHeader::HAS_ASYNC_INDEX
   // for Change Stream fast filtering in the Fetcher.
   bool has_async_index_;
   bool is_valid() const { return (timeout_ > 0 && schema_version_ >= 0) && nullptr != store_ctx_guard_; }

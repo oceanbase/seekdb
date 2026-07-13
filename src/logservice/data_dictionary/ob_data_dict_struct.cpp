@@ -363,21 +363,6 @@ int ObDictTenantMeta::incremental_data_update(const ObDictTenantMeta &new_tenant
   return ret;
 }
 
-int ObDictTenantMeta::init_with_ls_info(
-    const schema::ObTenantSchema &tenant_schema,
-    const share::ObLSArray &ls_array)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_FAIL(init(tenant_schema))) {
-    DDLOG(WARN, "init tenant_meta by schema failed", KR(ret), K(tenant_schema));
-  } else if (OB_FAIL(ls_arr_.assign(ls_array))) {
-    DDLOG(WARN, "assign ls_info_arr failed", KR(ret), K(ls_array), K(tenant_schema), KPC(this));
-  }
-
-  return ret;
-}
-
 ObDictDatabaseMeta::ObDictDatabaseMeta(ObIAllocator *allocator) : allocator_(allocator), database_name_()
 {
   reset();
@@ -1348,7 +1333,7 @@ int ObDictTableMeta::build_column_id_arr_(const share::schema::ObTableSchema &ta
 {
   int ret = OB_SUCCESS;
   column_id_arr_order_by_table_def_.reset();
-  if (table_schema.is_view_table() && !table_schema.is_materialized_view()) {
+  if (table_schema.is_view_table()) {
     DDLOG(DEBUG, "build_column_id_arr_ skip view", KPC(this));
   } else {
     ObColumnIterByPrevNextID pre_next_id_iter(table_schema);

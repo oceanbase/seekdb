@@ -488,8 +488,7 @@ int ObJoinOrder::compute_sharding_info_with_part_info(ObTableLocationType locati
     bool can_reselect_replica = (phy_tbl_info.is_duplicate_table_not_in_dml() &&
         (1 == phy_tbl_info.get_phy_part_loc_info_list().count())
         && !session_info->get_is_in_retry_for_dup_tbl()
-        && !is_modified
-        && !session_info->is_dup_ls_modified());
+        && !is_modified);
     sharding_info = new(sharding_info) ObShardingInfo();
     sharding_info->set_location_type(location_type);
     if (OB_FAIL(sharding_info->init_partition_info(
@@ -4253,7 +4252,6 @@ int ObJoinOrder::get_valid_index_ids(const uint64_t table_id,
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(ref_table_id,
                                                             tids,
                                                             index_count,
-                                                            false,
                                                             can_use_global_index,
                                                             false /*domain index*/,
                                                             false /*spatial index*/,
@@ -4517,7 +4515,6 @@ int ObJoinOrder::fill_opt_info_index_name(const uint64_t table_id,
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(base_table_id,
                                                             index_ids,
                                                             index_count,
-                                                            false,
                                                             true /*global index*/,
                                                             true /*domain index*/))) {
     LOG_WARN("failed to get can read index", K(base_table_id), K(ret));
@@ -16748,7 +16745,6 @@ int ObJoinOrder::compute_fd_item_set_for_table_scan(const uint64_t table_id,
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(table_ref_id,
                                                             index_tids,
                                                             index_count,
-                                                            false,
                                                             true  /*global index*/,
                                                             false /*domain index*/))) {
     LOG_WARN("failed to get can read index", K(ret), K(table_ref_id));

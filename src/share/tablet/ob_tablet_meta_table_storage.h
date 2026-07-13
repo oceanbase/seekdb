@@ -20,7 +20,6 @@
 #include "share/tablet/ob_tablet_info.h"
 #include "lib/container/ob_iarray.h"
 #include "share/storage/ob_sqlite_connection_pool.h"
-#include <functional>
 
 namespace oceanbase
 {
@@ -45,22 +44,9 @@ public:
 
   bool is_inited() const { return nullptr != pool_; }
 
-  // Get tablet replica by primary keys
-  int get(
-      const common::ObTabletID &tablet_id,
-      const ObLSID &ls_id,
-      const common::ObAddr &addr,
-      ObTabletReplica &tablet_replica);
-
-  // Get tablet info (all replicas for a tablet)
-  int get(
-      const common::ObTabletID &tablet_id,
-      const ObLSID &ls_id,
-      ObTabletInfo &tablet_info);
-
   // Batch get tablet infos
   int batch_get(
-      const ObIArray<ObTabletLSPair> &tablet_ls_pairs,
+      const ObIArray<common::ObTabletID> &tablet_ids,
       ObIArray<ObTabletInfo> &tablet_infos);
 
   // Range get tablet infos
@@ -72,16 +58,16 @@ public:
   int batch_update(
       const ObIArray<ObTabletReplica> &replicas);
 
-  // Batch update replicas within an external transaction
+  // Batch update tablet meta rows within an external transaction
   int batch_update(
       ObSQLiteConnection *conn,
       const ObIArray<ObTabletReplica> &replicas);
 
-  // Batch remove replicas
+  // Batch remove tablet meta rows
   int batch_remove(
       const ObIArray<ObTabletReplica> &replicas);
 
-  // Batch remove replicas within an external transaction
+  // Batch remove tablet meta rows within an external transaction
   int batch_remove(
       ObSQLiteConnection *conn,
       const ObIArray<ObTabletReplica> &replicas);
@@ -92,14 +78,12 @@ public:
       const int64_t limit,
       int64_t &affected_rows);
 
-  // Get max data_size for a tablet-ls pair
+  // Get max data_size for a tablet
   int get_max_data_size(const common::ObTabletID &tablet_id,
-      const ObLSID &ls_id,
       int64_t &data_size);
 
-  // Get max report_scn and max status for a tablet-ls pair
+  // Get max report_scn and max status for a tablet
   int get_max_report_scn_and_status(const common::ObTabletID &tablet_id,
-      const ObLSID &ls_id,
       int64_t &report_scn,
       int64_t &status);
 
@@ -109,15 +93,15 @@ public:
   // Get tablet replica count for a tenant
   int get_tablet_replica_cnt(int64_t &tablet_replica_cnt);
 
-  // Batch update status for specific tablet-ls pairs with compaction_scn
-  int batch_update_status(const ObIArray<ObTabletLSPair> &tablet_ls_pairs,
+  // Batch update status for specific tablets with compaction_scn
+  int batch_update_status(const ObIArray<common::ObTabletID> &tablet_ids,
       const ObIArray<int64_t> &compaction_scns,
       const int64_t status,
       int64_t &affected_rows);
 
   // Batch update report_scn for tablets
   int batch_update_report_scn(
-      const ObIArray<ObTabletLSPair> &tablet_ls_pairs,
+      const ObIArray<common::ObTabletID> &tablet_ids,
       const uint64_t report_scn,
       const uint64_t compaction_scn_min,
       const int64_t except_status,
@@ -143,8 +127,8 @@ public:
       const int64_t limit,
       ObIArray<common::ObTabletID> &tablet_ids);
 
-  // Get distinct tablet_ids for a tenant-ls with conditions
-  int get_distinct_tablet_ids_with_conditions(const ObLSID &ls_id,
+  // Get distinct tablet_ids with conditions
+  int get_distinct_tablet_ids_with_conditions(
       const ObIArray<common::ObTabletID> &tablet_ids,
       const uint64_t report_scn_max,
       ObIArray<common::ObTabletID> &result_tablet_ids);
@@ -162,7 +146,7 @@ public:
       ObIArray<ObTabletInfo> &tablet_infos);
 
   // Batch update report_scn for tablets with conditions (for unequal report_scn update)
-  int batch_update_report_scn_unequal(const ObLSID &ls_id,
+  int batch_update_report_scn_unequal(
       const ObIArray<common::ObTabletID> &tablet_ids,
       const uint64_t major_frozen_scn,
       int64_t &affected_rows);
@@ -171,9 +155,9 @@ private:
   // Create table if not exists
   int create_table_if_not_exists();
 
-  // Helper to construct tablet infos from replicas (grouping logic)
-  int group_replicas_to_tablet_infos(
-      const ObIArray<ObTabletReplica> &replicas,
+  // Helper to construct tablet infos from local tablet meta rows.
+  int build_tablet_infos_from_rows(
+      const ObIArray<ObTabletReplica> &tablet_meta_rows,
       ObIArray<ObTabletInfo> &tablet_infos);
 
   ObSQLiteConnectionPool *pool_;
@@ -183,4 +167,3 @@ private:
 } // namespace oceanbase
 
 #endif // OCEANBASE_SHARE_TABLET_OB_TABLET_META_TABLE_STORAGE_H_
-

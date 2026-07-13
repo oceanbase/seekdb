@@ -16,8 +16,8 @@
 
 #ifndef OBDEV_SRC_SQL_DAS_OB_DATA_ACCESS_SERVICE_H_
 #define OBDEV_SRC_SQL_DAS_OB_DATA_ACCESS_SERVICE_H_
+#include "lib/atomic/ob_atomic.h"
 #include "share/ob_define.h"
-#include "sql/das/ob_das_id_cache.h"
 #include "sql/das/ob_das_task_result.h"
 #include "sql/das/ob_das_ref.h"
 namespace oceanbase
@@ -68,7 +68,7 @@ private:
                                    ObDASBaseRtDef *attach_rtdef);
 private:
   common::ObAddr ctrl_addr_;
-  ObDASIDCache id_cache_;
+  int64_t next_das_id_ CACHE_ALIGNED;
   ObDASTaskResultMgr task_result_mgr_;
   int32_t das_concurrency_limit_;
 };

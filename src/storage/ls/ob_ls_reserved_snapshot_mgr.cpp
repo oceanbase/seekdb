@@ -15,8 +15,6 @@
  */
 #define USING_LOG_PREFIX STORAGE
 #include "ob_ls_reserved_snapshot_mgr.h"
-#include "share/rc/ob_module_provider.h"
-#include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
 {
@@ -31,10 +29,9 @@ ObLSReservedSnapshotMgr::ObLSReservedSnapshotMgr()
    min_reserved_snapshot_(0),
    next_reserved_snapshot_(0),
    snapshot_lock_(ObLatchIds::LS_RESERVED_SNAPSHOT_LOCK),
-   sync_clog_lock_(),
-   ls_(nullptr),
-   ls_handle_(),
-   dependent_tablet_set_(),
+    sync_clog_lock_(),
+    ls_(nullptr),
+    dependent_tablet_set_(),
    clog_cb_(*this),
    last_print_log_ts_(ObTimeUtility::fast_current_time()),
    clog_buf_()
@@ -63,7 +60,7 @@ int ObLSReservedSnapshotMgr::init(ObLS *ls, ObLogHandler *log_handler)
   } else {
     ls_ = ls;
     is_inited_ = true;
-    LOG_INFO("success to init snapshot mgr", K(ret), KP(ls), "ls_id", ls_->get_ls_id(), KP(this));
+    LOG_INFO("success to init snapshot mgr", K(ret), KP(ls), KP(this));
   }
   return ret;
 }
@@ -76,7 +73,6 @@ void ObLSReservedSnapshotMgr::destroy()
   min_reserved_snapshot_ = 0;
   next_reserved_snapshot_ = 0;
   ls_ = nullptr;
-  ls_handle_.reset();
   last_print_log_ts_ = 0;
   if (dependent_tablet_set_.created()) {
     dependent_tablet_set_.destroy();
@@ -97,9 +93,9 @@ int ObLSReservedSnapshotMgr::add_dependent_medium_tablet(const ObTabletID tablet
     } else if (OB_UNLIKELY(OB_HASH_NOT_EXIST != hash_ret)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to check exist in tablet set", K(ret), K(hash_ret),
-          "ls_id", ls_->get_ls_id(), K(tablet_id));
+          K(tablet_id));
     } else if (OB_FAIL(dependent_tablet_set_.set_refactored(tablet_id.id()))) {
-      LOG_WARN("failed to set tablet_id", K(ret), "ls_id", ls_->get_ls_id(), K(tablet_id));
+      LOG_WARN("failed to set tablet_id", K(ret), K(tablet_id));
     }
   }
   return ret;
@@ -115,8 +111,7 @@ int ObLSReservedSnapshotMgr::del_dependent_medium_tablet(const ObTabletID tablet
   } else {
     common::TCWLockGuard lock_guard(snapshot_lock_);
     if (OB_FAIL(dependent_tablet_set_.erase_refactored(tablet_id.id()))) {
-      LOG_WARN("failed to erase tablet id", K(ret), "ls_id", ls_->get_ls_id(),
-          K(tablet_id), K(dependent_tablet_set_.size()), KP(this));
+      LOG_WARN("failed to erase tablet id", K(ret),           K(tablet_id), K(dependent_tablet_set_.size()), KP(this));
     } else if (0 == dependent_tablet_set_.size()
         && next_reserved_snapshot_ > 0
         && next_reserved_snapshot_ > min_reserved_snapshot_) {
@@ -152,16 +147,16 @@ int ObLSReservedSnapshotMgr::submit_log(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("clog_buf or clog_len is invalid", K(ret), KP(clog_buf), K(clog_len));
   } else if (OB_FAIL(write_clog(clog_buf, clog_len))) {
-    LOG_WARN("fail to submit log", K(ret), "ls_id", ls_->get_ls_id());
+    LOG_WARN("fail to submit log", K(ret));
   } else {
-    LOG_DEBUG("submit reserved snapshot log success", "ls_id", ls_->get_ls_id(), K(reserved_snapshot));
+    LOG_DEBUG("submit reserved snapshot log success", K(reserved_snapshot));
   }
 
   return ret;
 }
 
 // called by ObTenantFreezeInfoMgr, sync clog in Timer
-int ObLSReservedSnapshotMgr::update_min_reserved_snapshot_for_leader(const int64_t new_snapshot_version)
+int ObLSReservedSnapshotMgr::update_min_reserved_snapshot(const int64_t new_snapshot_version)
 {
   int ret = OB_SUCCESS;
   bool send_log_flag = false;
@@ -172,8 +167,7 @@ int ObLSReservedSnapshotMgr::update_min_reserved_snapshot_for_leader(const int64
     common::TCWLockGuard lock_guard(snapshot_lock_);
     if (new_snapshot_version < min_reserved_snapshot_) {
       ret = OB_SNAPSHOT_DISCARDED;
-      LOG_WARN("failed to update min reserved snapshot", K(ret), "ls_id", ls_->get_ls_id(),
-        K(new_snapshot_version), K(min_reserved_snapshot_));
+      LOG_WARN("failed to update min reserved snapshot", K(ret),         K(new_snapshot_version), K(min_reserved_snapshot_));
     } else if (0 == dependent_tablet_set_.size()) { // no dependent tablet, can push snapshot forward
       if (new_snapshot_version > min_reserved_snapshot_) {
         // update min_reserved_snapshot and send clog
@@ -191,8 +185,7 @@ int ObLSReservedSnapshotMgr::update_min_reserved_snapshot_for_leader(const int64
     if (OB_FAIL(sync_clog(new_snapshot_version))) {
       LOG_WARN("failed to send update reserved snapshot log", K(ret), K(new_snapshot_version));
     } else if (need_print_log()) {
-      LOG_INFO("submit reserved snapshot log success", "ls_id", ls_->get_ls_id(),
-          K(new_snapshot_version));
+      LOG_INFO("submit reserved snapshot log success",           K(new_snapshot_version));
     }
   }
   return ret;
@@ -210,16 +203,15 @@ int ObLSReservedSnapshotMgr::try_sync_reserved_snapshot(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(new_reserved_snapshot));
   } else if (update_flag) {
-    if (OB_FAIL(update_min_reserved_snapshot_for_leader(new_reserved_snapshot))) {
+    if (OB_FAIL(update_min_reserved_snapshot(new_reserved_snapshot))) {
       if (OB_SNAPSHOT_DISCARDED != ret) {
-        LOG_WARN("failed to update min_reserved_snapshot", K(ret), "ls_id", ls_->get_ls_id(), K(new_reserved_snapshot));
+        LOG_WARN("failed to update min_reserved_snapshot", K(ret), K(new_reserved_snapshot));
       }
     }
   } else if (OB_FAIL(sync_clog(new_reserved_snapshot))) {
     LOG_WARN("failed to send update reserved snapshot log", K(ret), K(new_reserved_snapshot));
   } else if (need_print_log()) {
-    LOG_INFO("submit reserved snapshot log success", "ls_id", ls_->get_ls_id(),
-        K(new_reserved_snapshot));
+    LOG_INFO("submit reserved snapshot log success",         K(new_reserved_snapshot));
   }
   return ret;
 }
@@ -228,8 +220,8 @@ int ObLSReservedSnapshotMgr::sync_clog(const int64_t new_reserved_snapshot)
 {
   int ret = OB_SUCCESS;
   ObMutexGuard guard(sync_clog_lock_);
-  if (OB_FAIL(try_update_for_leader(new_reserved_snapshot, nullptr/*allocator*/))) {
-    LOG_WARN("failed to send update reserved snapshot log", K(ret), "ls_id", ls_->get_ls_id(), K(new_reserved_snapshot));
+  if (OB_FAIL(try_update(new_reserved_snapshot, nullptr/*allocator*/))) {
+    LOG_WARN("failed to send update reserved snapshot log", K(ret), K(new_reserved_snapshot));
   }
   return ret;
 }
@@ -243,10 +235,9 @@ int ObLSReservedSnapshotMgr::replay_reserved_snapshot_log(
     ret = OB_NOT_INIT;
     LOG_WARN("ObLSReservedSnapshotMgr not inited", K(ret), KP(ls_));
   } else if (OB_FAIL(serialization::decode_i64(buf, size, pos, &reserved_snapshot))) {
-    LOG_WARN("fail to deserialize reserved_snapshot", K(ret), "ls_id", ls_->get_ls_id());
+    LOG_WARN("fail to deserialize reserved_snapshot", K(ret));
   } else if (OB_FAIL(ObIStorageClogRecorder::replay_clog(reserved_snapshot, scn, buf, size, pos))) {
-    LOG_WARN("failed to update reserved snapshot by log", K(ret), "ls_id", ls_->get_ls_id(),
-        K(min_reserved_snapshot_), K(reserved_snapshot));
+    LOG_WARN("failed to update reserved snapshot by log", K(ret),         K(min_reserved_snapshot_), K(reserved_snapshot));
   }
   return ret;
 }
@@ -267,7 +258,7 @@ int ObLSReservedSnapshotMgr::inner_replay_clog(
   return ret;
 }
 
-int ObLSReservedSnapshotMgr::sync_clog_succ_for_leader(const int64_t update_version)
+int ObLSReservedSnapshotMgr::on_sync_clog_success(const int64_t update_version)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_update_reserved_snapshot(update_version))) {
@@ -286,8 +277,7 @@ int ObLSReservedSnapshotMgr::inner_update_reserved_snapshot(const int64_t reserv
     common::TCWLockGuard lock_guard(snapshot_lock_);
     if (reserved_snapshot > min_reserved_snapshot_) {
       min_reserved_snapshot_ = reserved_snapshot;
-      LOG_INFO("success to update reserved snapshot", K(ret), "ls_id", ls_->get_ls_id(),
-          K(min_reserved_snapshot_));
+      LOG_INFO("success to update reserved snapshot", K(ret),           K(min_reserved_snapshot_));
     }
   }
   return ret;
@@ -309,12 +299,10 @@ int ObLSReservedSnapshotMgr::prepare_struct_in_lock(
       ObLogBaseType::RESERVED_SNAPSHOT_LOG_BASE_TYPE,
       ObReplayBarrierType::PRE_BARRIER/*need_replay_pre_barrier*/);
 
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_->get_ls_id(), ls_handle_, ObLSGetMod::STORAGE_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), "ls_id", ls_->get_ls_id());
-  } else if (OB_FAIL(log_header.serialize(clog_buf_, CLOG_BUF_LEN, pos))) {
+  if (OB_FAIL(log_header.serialize(clog_buf_, CLOG_BUF_LEN, pos))) {
     LOG_WARN("failed to serialize log header", K(ret));
   } else if (OB_FAIL(serialization::encode_i64(clog_buf_, CLOG_BUF_LEN, pos, update_version))) {
-    LOG_WARN("generate reserved snapshot log", K(ret), "ls_id", ls_->get_ls_id(), K(pos), K(CLOG_BUF_LEN));
+    LOG_WARN("generate reserved snapshot log", K(ret), K(pos), K(CLOG_BUF_LEN));
   } else {
     logcb_ptr_ = &clog_cb_;
     clog_buf = clog_buf_;
@@ -325,7 +313,6 @@ int ObLSReservedSnapshotMgr::prepare_struct_in_lock(
 
 void ObLSReservedSnapshotMgr::free_struct_in_lock()
 {
-  ls_handle_.reset();
   clog_cb_.reset();
 }
 

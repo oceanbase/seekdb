@@ -301,18 +301,6 @@ EOF
     fi
     echo "$conf" > $HOME/seekdb/tools/deploy/config.yaml
 
-    if [[ $WITH_SHARED_STORAGE == "1" ]]
-    then
-        # shared_storage 需要在global修改相关的mode
-        share_storage_workdir="$(date +%s)-$(uuidgen)"
-        first_global_line_count=`sed -n '/global:/=' $HOME/seekdb/tools/deploy/config.yaml | head -n 1`
-        set +x
-        sed -i "${first_global_line_count}a\    mode: 'shared_storage'\n\
-    shared_storage: \"oss://oss-436751-0701-all-test/$FARM2_RUN_USER/$share_storage_workdir?host=oss-cn-hangzhou.aliyuncs.com&access_id=${SENSITIVE_TEST_OSS_ID_FOR_OBJECT_STORAGE_FOR_TOTAL}&access_key=${SENSITIVE_TEST_OSS_KEY_FOR_OBJECT_STORAGE_FOR_TOTAL}&max_iops=0&max_bandwidth=0B&scope=region\""  $HOME/seekdb/tools/deploy/config.yaml
-        sed -i "s/datafile_size: '20G'/datafile_size: '200G'/g" $HOME/seekdb/tools/deploy/config.yaml
-        set -x
-    fi
-
     if [[ $SHARED_STORAGE_MODE == "1" ]]
     then
         # shared_storage 需要在global修改相关的mode
@@ -327,10 +315,7 @@ EOF
     shared_storage: \"s3://farm-test/mysqltest/$share_storage_workdir/clog_and_data?host=http://$MINIO_IP:9000&access_id=minioadmin&access_key=minioadmin&s3_region=us-east-1&max_iops=10000&max_bandwidth=1GB&scope=region\""  $HOME/seekdb/tools/deploy/config.yaml
     fi
 
-    if [[ ! $WITH_SHARED_STORAGE == "1" ]]
-    then
-        cat $HOME/seekdb/tools/deploy/config.yaml
-    fi
+    cat $HOME/seekdb/tools/deploy/config.yaml
 }
 
 function obd_prepare_bin {
@@ -650,26 +635,6 @@ function obd_run_mysqltest {
         mv compare.out $HOME/mysqltest${submarker}_compare_output.$SLICE_IDX
         echo "finish!"
         return $ret
-    elif [[ $WITH_SHARED_STORAGE == "1" ]]
-    then
-        # 把sensitive_test目录下的测试集合移动到tools/deploy/mysql_test 
-        # 并且创建一个新的目录用来表示单独的测试
-        if [[ ! -d $HOME/seekdb/sensitive_test/mysql_test ]]
-        then
-            return 0
-        fi
-        need_mv_dirs=`ls -1 $HOME/seekdb/sensitive_test/mysql_test/test_suite|xargs`
-        run_suites=""
-        for need_mv_dir in $need_mv_dirs
-        do
-            new_dir=$HOME/seekdb/tools/deploy/mysql_test/test_suite/shared_storage__${need_mv_dir}
-            run_suites="${run_suites}shared_storage__${need_mv_dir},"
-            mkdir -p $new_dir
-            cp -r $HOME/seekdb/sensitive_test/mysql_test/test_suite/$need_mv_dir/* $new_dir
-        done
-        run_suites=`echo $run_suites | awk '{print substr($0, 1, length($0)-1)}'`
-        mysqltest_cmd="$obd test mysqltest $ob_name $SERVER_ARGS --mysqltest-bin=./mysqltest --obclient-bin=./obclient $COLLECT_ARG --init-sql-dir=$HOME/seekdb/tools/deploy --log-dir=./var/log $REBOOT_TIMEOUT $VERBOSE_ARG $EXTRA_ARGS_WITHOUT_CASE --suite=$run_suites"
-        $mysqltest_cmd $INIT_FLIES $SCHE_ARGS 2>&1 | tee compare.out && ( exit ${PIPESTATUS[0]})
     else
         if [[ -f $HOME/seekdb/tools/deploy/error_log_filter.json && ( $BRANCH == 'master' || $BRANCH == "4_2_x_release" ) && "$FROM_FARM" == '1' ]]
         then
@@ -709,12 +674,6 @@ function obd_collect_log {
     mkdir -p collected_log/mysqltest_rec_log
     find $DATA_PATH -name 'core[.-]*' | xargs -i cp {} collected_log
     [[ "$OBD_HOME" != "" ]] && mv $OBD_HOME/.obd/log/*  collected_log/obd_log/
-    set +x
-    if [[ $WITH_SHARED_STORAGE == "1" ]]
-    then
-        sed -i  "s/${SENSITIVE_TEST_OSS_KEY_FOR_OBJECT_STORAGE_FOR_TOTAL}//" collected_log/obd_log/obd
-    fi
-    set -x
     mv seekdb/tools/deploy/var/log/* collected_log/mysqltest_log/
     mv seekdb/tools/deploy/var/rec_log/* collected_log/mysqltest_rec_log/
     mv collected_log collected_log_$SLICE_IDX
@@ -751,14 +710,6 @@ function run {
       ([[ -f $HOME/seekdb/deps/3rd/oceanbase.el7.x86_64.deps ]] && [[ "$(grep 'ob-deploy' $HOME/seekdb/deps/3rd/oceanbase.el7.x86_64.deps )" != "" ]]) ||
       ([[ -f $HOME/seekdb/deps/init/oceanbase.el7.x86_64.deps ]] && [[ "$(grep 'ob-deploy' $HOME/seekdb/deps/init/oceanbase.el7.x86_64.deps )" != "" ]])
     then
-        if [[ $WITH_SHARED_STORAGE == "1" ]]
-        then
-            # 单独判断下是否有对应的case集合
-            if [[ ! -d $HOME/seekdb/sensitive_test/mysql_test ]]
-            then
-                return 0
-            fi
-        fi
         timeout=18000
         [[ "$SPECIAL_RUN" == "1" ]] && timeout=72000
         obd_prepare_env &&

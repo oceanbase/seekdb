@@ -684,7 +684,7 @@ bool ObAllVirtualTabletSSTableMacroInfo::check_tenant_need_ignore()
 {
   // In this feature branch, rowkey of __all_virtual_tablet_sstable_macro_info is:
   //   (tablet_id, end_log_scn, macro_idx_in_sstable)
-  // It doesn't contain tenant/svr_ip/svr_port/ls_id, so we cannot safely prune tenants by key_ranges_.
+  // It doesn't contain tenant or server columns, so key_ranges_ cannot safely prune tenants.
   return false;
 }
 

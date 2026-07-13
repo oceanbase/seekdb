@@ -25,8 +25,7 @@
 #include "storage/direct_load/ob_table_load_dml_stat.h"
 #include "storage/direct_load/ob_table_load_sql_statistics.h"
 #include "observer/table_load/ob_table_load_row_array.h"
-#include "observer/table_load/resource/ob_table_load_resource_rpc_struct.h"
-#include "observer/table_load/resource/ob_table_load_resource_rpc.h"
+#include "observer/table_load/resource/ob_table_load_resource_struct.h"
 #include "observer/table_load/resource/ob_table_load_resource_service.h"
 #include "observer/table_load/ob_table_load_assigned_memory_manager.h"
 #include "observer/table_load/ob_table_load_partition_location.h"
@@ -74,7 +73,7 @@ private:
   int check_need_sort_for_lob_or_index(bool &need_sort) const;
   int calc_session_count(const int64_t total_session_count,
                          const int64_t max_session_count,
-                         const table::ObTableLoadArray<observer::ObTableLoadPartitionLocation::LeaderInfo> all_leader_info_array,
+                         const observer::ObTableLoadPartitionLocation::LocalInfo &local_info,
                          ObArray<int64_t> &partitions,
                          ObDirectLoadResourceApplyArg &apply_arg,
                          int64_t &coord_session_count,
@@ -147,10 +146,9 @@ public:
             const table::ObTableLoadObjRowArray &obj_rows);
   // for client
   int flush(ObTableLoadCoordinatorTrans *trans);
-  // Only write to the leader node
-  int write_peer_leader(const table::ObTableLoadTransId &trans_id, int32_t session_id,
-                        uint64_t sequence_no, const table::ObTableLoadTabletObjRowArray &tablet_obj_rows,
-                        const common::ObAddr &addr);
+  int write_local(const table::ObTableLoadTransId &trans_id, int32_t session_id,
+                  uint64_t sequence_no,
+                  const table::ObTableLoadTabletObjRowArray &tablet_obj_rows);
 private:
   class WriteTaskProcessor;
   class WriteTaskCallback;

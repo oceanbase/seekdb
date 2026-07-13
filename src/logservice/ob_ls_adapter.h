@@ -18,8 +18,6 @@
 #define OCEANBASE_LOGSERVICE_OB_LS_ADAPTER_H_
 
 #include <stdint.h>
-#include "share/ob_ls_id.h"
-
 namespace oceanbase
 {
 namespace storage
@@ -38,7 +36,7 @@ public:
   void destroy();
 public:
   virtual int replay(ObLogReplayTask *replay_task);
-  virtual int wait_append_sync(const share::ObLSID &ls_id);
+  virtual int wait_append_sync();
 private:
 const int64_t MAX_SINGLE_REPLAY_WARNING_TIME_THRESOLD = 100 * 1000; //100ms
   const int64_t MAX_SINGLE_REPLAY_ERROR_TIME_THRESOLD = 2 * 1000 * 1000; // 2s Single log replay execution time exceeding this value reports error

@@ -16,48 +16,26 @@
 
 # define USING_LOG_PREFIX SERVER
 #include "ob_all_virtual_schema_memory.h"
-#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {
 namespace observer
 {
-int ObAllVirtualSchemaMemory::inner_open()
+int ObAllVirtualSchemaMemory::get_next_mem_info_(ObSchemaMemory &schema_mem)
 {
   int ret = OB_SUCCESS;
-  const ObAddr &addr = GCTX.self_addr();
 
-  if (false == addr.ip_to_string(ip_buffer_, sizeof(ip_buffer_))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to convert ip to string", KR(ret), K(addr));
-  }
-  return ret;
-}
-
-int ObAllVirtualSchemaMemory::get_next_tenant_mem_info(ObSchemaMemory &schema_mem) {
-  int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-
-  if (mem_idx_ >= schema_mem_infos_.count()) {
-    do {
+  if (OB_INVALID_INDEX == mem_idx_) {
+    if (OB_FAIL(schema_service_.get_tenant_mem_info(1UL, schema_mem_infos_))) {
+      LOG_WARN("fail to get tenant mem info", KR(ret));
       schema_mem_infos_.reset();
-      if (++t_loop_idx_ >= 1) {
-        ret = OB_ITER_END;
-      } else {
-        
-        if (OB_SUCCESS != (tmp_ret = schema_service_.get_tenant_mem_info(1UL, schema_mem_infos_))) {
-          LOG_WARN("fail to get tenant mem info", KR(tmp_ret), K(1UL));
-          schema_mem_infos_.reset();
-        } else {
-          mem_idx_ = 0;
-        }
-      }
-    } while (0 == schema_mem_infos_.count() && OB_SUCC(ret));
+    } else {
+      mem_idx_ = 0;
+    }
   }
   if (OB_SUCC(ret)) {
-    if (OB_UNLIKELY(mem_idx_ < 0 || mem_idx_ >= schema_mem_infos_.count())) {
-      ret = OB_ERROR_OUT_OF_RANGE;
-      LOG_WARN("mem_idx_ out of range", KR(ret), K(mem_idx_));
+    if (mem_idx_ >= schema_mem_infos_.count()) {
+      ret = OB_ITER_END;
     } else {
       schema_mem = schema_mem_infos_[mem_idx_++];
     }
@@ -70,7 +48,7 @@ int ObAllVirtualSchemaMemory::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   ObSchemaMemory schema_mem;
 
-  if (OB_FAIL(get_next_tenant_mem_info(schema_mem))) {
+  if (OB_FAIL(get_next_mem_info_(schema_mem))) {
     if (OB_ITER_END != ret) {
       LOG_WARN("fail to get next tenant_mem_info", KR(ret));
     }

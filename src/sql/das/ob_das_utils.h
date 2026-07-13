@@ -17,7 +17,6 @@
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_UTILS_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_UTILS_H_
 #include "share/ob_define.h"
-#include "share/ob_ls_id.h"
 #include "share/location_cache/ob_location_struct.h"
 #include "common/ob_tablet_id.h"
 #include "sql/dtl/ob_dtl_task.h"
@@ -132,12 +131,6 @@ public:
     }
     return ret;
   }
-  static int generate_mlog_row(const share::ObLSID &ls_id,
-                               const common::ObTabletID &tablet_id,
-                               const storage::ObDMLBaseParam &dml_param,
-                               blocksstable::ObDatumRow &row,
-                               ObDASOpType op_type,
-                               bool is_old_row);
 };
 }  // namespace sql
 }  // namespace oceanbase

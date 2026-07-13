@@ -34,10 +34,6 @@
 
 namespace oceanbase
 {
-namespace share
-{
-  class ObLSLocation;
-}
 namespace sql
 {
 class ObRawExpr;

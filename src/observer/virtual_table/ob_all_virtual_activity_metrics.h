@@ -26,10 +26,6 @@
 
 namespace oceanbase
 {
-namespace common
-{
-class ObAddr;
-}
 namespace observer
 {
 class ObAllVirtualActivityMetric : public common::ObVirtualTableScannerIterator
@@ -51,7 +47,6 @@ public:
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  inline void set_addr(common::ObAddr &addr) { addr_ = addr; }
 private:
   int get_next_freezer_stat_(storage::ObTenantFreezerStat& stat);
   int prepare_start_to_read_();
@@ -59,8 +54,6 @@ private:
 private:
   int64_t current_pos_;
   int64_t length_;
-  common::ObAddr addr_;
-  char ip_buffer_[common::OB_IP_STR_BUFF];
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualActivityMetric);
 };

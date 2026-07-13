@@ -286,7 +286,6 @@ DEF_TO_STRING(ObTableScanParam)
   int64_t pos = 0;
   J_OBJ_START();
   J_KV(K_(tablet_id),
-       K_(ls_id),
        N_COLUMN_IDS, column_ids_,
        N_INDEX_ID, index_id_,
        N_KEY_RANGES, key_ranges_,

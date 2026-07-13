@@ -33,7 +33,6 @@ public:
   virtual int inner_open();
   virtual int inner_get_next_row(common::ObNewRow *&row);
 private:
-  int next_tenant_();
   int build_new_row_(const int64_t tenant_schema_version,
                      const share::schema::ObTableSchema &table_schema,
                      common::ObNewRow *&row);
@@ -56,9 +55,7 @@ private:
 private:
   bool is_inited_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
-  common::ObArray<uint64_t> batch_ids_;
-  common::ObArray<uint64_t> cur_tenant_table_ids_;
-  int64_t t_loop_idx_;
+  common::ObArray<uint64_t> table_ids_;
   int64_t table_idx_;
 };
 } // namespace observer

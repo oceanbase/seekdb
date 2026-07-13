@@ -489,9 +489,7 @@ DEFINE_ERROR(OB_MERGE_ALREADY_STARTED, -4548, -1, "HY000", "merge already starte
 DEFINE_ERROR(OB_ROOTSERVICE_EXIST, -4549, -1, "HY000", "rootservice already exist");
 DEFINE_ERROR(OB_RS_SHUTDOWN, -4550, -1, "HY000", "rootservice is shutdown");
 DEFINE_ERROR(OB_SERVER_MIGRATE_IN_DENIED, -4551, -1, "HY000", "server migrate in denied");
-DEFINE_ERROR(OB_REBALANCE_TASK_CANT_EXEC, -4552, -1, "HY000", "rebalance task can not executing now");
 DEFINE_ERROR(OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT, -4553, -1, "HY000", "rootserver can not hold more partition");
-DEFINE_ERROR(OB_REBALANCE_TASK_NOT_IN_PROGRESS, -4554, -1, "HY000", "rebalance task not in progress on seekdb");
 DEFINE_ERROR(OB_DATA_SOURCE_NOT_EXIST, -4600, -1, "HY000", "Data source not exist");
 DEFINE_ERROR(OB_DATA_SOURCE_TABLE_NOT_EXIST, -4601, -1, "HY000", "Data source table not exist");
 DEFINE_ERROR(OB_DATA_SOURCE_RANGE_NOT_EXIST, -4602, -1, "HY000", "Data source range not exist");
@@ -595,11 +593,9 @@ DEFINE_ERROR_EXT(OB_TENANT_RESOURCE_UNIT_EXIST, -4712, -1, "HY000", "tenant alre
 DEFINE_ERROR_EXT(OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX, -4713, -1, "HY000", "rebuild global index failed when drop/truncate partitions", "rebuild global index:'%.*s' failed when drop/truncate partitions");
 DEFINE_ERROR(OB_ERR_ATLER_TABLE_ILLEGAL_FK, -4714, -1, "HY000", "unique/primary keys in table referenced by enabled foreign keys");
 DEFINE_ERROR(OB_LEADER_COORDINATOR_NEED_RETRY, -4716, -1, "HY000", "leader coordinator needs retry");
-DEFINE_ERROR(OB_REBALANCE_TASK_NEED_RETRY, -4717, -1, "HY000", "rebalance task needs retry");
 
 // for log stream and tablet
 DEFINE_ERROR(OB_LS_NOT_EXIST, -4719, -1, "HY000", "log stream does not exist");
-DEFINE_ERROR(OB_TOO_MANY_TENANT_LS, -4720, -1, "HY000", "too many log streams were defined for this tenant");
 DEFINE_ERROR(OB_LS_LOCATION_NOT_EXIST, -4721, -1, "HY000", "log stream location does not exist");
 DEFINE_ERROR(OB_LS_LOCATION_LEADER_NOT_EXIST, -4722, -1, "HY000", "log stream location leader does not exist");
 DEFINE_ERROR(OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST, -4723, -1, "HY000", "mapping between tablet and log stream does not exist");
@@ -620,7 +616,6 @@ DEFINE_ERROR(OB_RESOURCE_UNIT_VALUE_INVALID, -4736, -1, "HY000", "resource unit 
 DEFINE_ERROR(OB_LS_EXIST, -4737, -1, "HY000", "log stream already exist");
 DEFINE_ERROR(OB_DEVICE_EXIST, -4738, -1, "HY000", "Unexpected device existence");
 DEFINE_ERROR(OB_DEVICE_NOT_EXIST, -4739, -1, "HY000", "Device does not exist");
-DEFINE_ERROR(OB_LS_REPLICA_TASK_RESULT_UNCERTAIN, -4740, -1, "HY000", "log stream replica task result is uncertain");
 DEFINE_ERROR(OB_WAIT_REPLAY_TIMEOUT, -4741, -1, "HY000", "log stream wait log replay timeout");
 DEFINE_ERROR(OB_WAIT_TABLET_READY_TIMEOUT, -4742, -1, "HY000", "log stream wait tablet ready timeout");
 DEFINE_ERROR(OB_FREEZE_SERVICE_EPOCH_MISMATCH, -4743, -1, "HY000", "freeze service epoch is not expected");
@@ -1778,7 +1773,6 @@ DEFINE_ERROR(OB_TRANS_FREE_ROUTE_NOT_SUPPORTED, -6279, 6279, "HY000", "Query is 
 
 DEFINE_ERROR(OB_TRANS_LIVE_TOO_MUCH_TIME, -6280, -1, "HY000", "Transaction cost too much without commit or rollback");
 DEFINE_ERROR(OB_TRANS_COMMIT_TOO_MUCH_TIME, -6281, -1, "HY000", "Transaction commit cost too much");
-DEFINE_ERROR(OB_TRANS_TOO_MANY_PARTICIPANTS, -6282, 6002, "40000", "too many transaction participants");
 
 DEFINE_ERROR(OB_LOG_ALREADY_SPLIT, -6283, -1, "HY000", "The big log entry has been split into multiple part");
 // for json schema
@@ -1902,7 +1896,6 @@ DEFINE_ERROR(OB_TABLET_GC_LOCK_CONFLICT, -7120, -1, "HY000", "tablet GC lock con
 DEFINE_ERROR(OB_SEQUENCE_NOT_MATCH, -7121, -1, "HY000", "compare sequence not match");
 DEFINE_ERROR(OB_SEQUENCE_TOO_SMALL, -7122, -1, "HY000", "compare sequence too small");
 DEFINE_ERROR_EXT_DEP(OB_PARTITION_ALREADY_BALANCED, -7124, -1, "HY000", "partitions are already balanced", "partitions are already balanced, %s");
-DEFINE_ERROR(NEW_MV_MAJOR_VERSION_NOT_MATCH, -7125, -1, "HY000", "new mv major version is not match");
 
 // 余留位置
 ////////////////////////////////////////////////////////////////
@@ -2178,7 +2171,6 @@ DEFINE_ERROR(OB_LOG_ARCHIVE_ALREADY_STOPPED, -9034, -1, "HY000", "log archive al
 DEFINE_ERROR(OB_RESTORE_INDEX_FAILED, -9035, -1, "HY000", "restore index failed");
 DEFINE_ERROR(OB_BACKUP_IN_PROGRESS, -9036, -1, "HY000", "Backup is in progress");
 DEFINE_ERROR(OB_INVALID_LOG_ARCHIVE_STATUS, -9037, -1, "HY000", "log archive status is not valid");
-DEFINE_ERROR(OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST, -9038, -1, "HY000", "Cannot add replica during set member list in restore");
 DEFINE_ERROR(OB_LOG_ARCHIVE_LEADER_CHANGED, -9039, -1, "HY000", "pg log archive leader changed");
 DEFINE_ERROR_EXT(OB_BACKUP_CAN_NOT_START, -9040, -1, "HY000", "backup can not start", "backup can not start, because %s");
 DEFINE_ERROR(OB_CANCEL_BACKUP_NOT_ALLOWED, -9041, -1, "HY000", "cancel backup do not allow");
@@ -2289,7 +2281,6 @@ DEFINE_ERROR_EXT_DEP(OB_BACKUP_ZONE_IDC_REGION_INVALID, -9133, -1, "HY000", "bac
 
 DEFINE_ERROR_DEP(OB_ERR_TMP_FILE_ALREADY_SEALED, -9134, -1, "HY000", "tmp file has already sealed");
 DEFINE_ERROR_DEP(OB_TMP_FILE_EXCEED_DISK_QUOTA, -9135, -1, "HY000", "tmp file exceeds disk quota");
-DEFINE_ERROR(OB_BACKUP_MISSING_MVIEW_DEP_TABLET_SSTABLE, -9136, -1, "HY000", "Backup missing mview dependent tablet sstable, sstable maybe recycled");
 DEFINE_ERROR_DEP(OB_ERR_DUPLICATE_INDEX, -9137, ER_DUP_INDEX, "HY000", "Duplicate index \'%s\' defined on the table \'%s.%s\'");
 DEFINE_ERROR(OB_NO_LS_REPLICA_CAN_DO_BACKUP, -9138, -1, "HY000", "No suitable replica found to perform backup");
 DEFINE_ERROR_EXT_DEP(OB_INVALID_KMS_DEST, -9139, -1, "HY000", "kms destination is not valid", "%s is not a valid uri");
@@ -2585,13 +2576,6 @@ DEFINE_ERROR_EXT(OB_ERR_WRONG_USAGE, -9751, ER_WRONG_USAGE, "HY000", "Incorrect 
 DEFINE_ERROR(OB_ERR_FORALL_ON_REMOTE_TABLE, -9752, -1, "HY000", "FORALL INSERT/UPDATE/DELETE not support on remote tables");
 DEFINE_ERROR(OB_ERR_SEQUENCE_NOT_DEFINE, -9753, -1, "HY000", "sequence is not yet defined in this session");
 DEFINE_ERROR_EXT(OB_ERR_DEBUG_ID_NOT_EXIST, -9754, -1, "HY000", "debug_session_id does not exist", "debug_session_id = %u does not exist");
-DEFINE_ERROR_EXT(OB_ERR_TABLE_NO_MLOG, -9755, -1, "HY000", "table does not have a materialized view log", "table `%s`.`%s` does not have a materialized view log");
-DEFINE_ERROR_EXT(OB_ERR_MLOG_EXIST, -9756, -1, "HY000", "a materialized view log already exists on table", "a materialized view log already exists on table `%s`");
-DEFINE_ERROR_EXT(OB_ERR_MVIEW_NOT_EXIST, -9757, -1, "HY000", "materialized view does not exist", "materialized view `%s`.`%s` does not exist");
-DEFINE_ERROR_EXT(OB_ERR_MVIEW_EXIST, -9758, -1, "HY000", "materialized view already exists", "materialized view `%s`.`%s` already exists");
-DEFINE_ERROR_EXT(OB_ERR_MLOG_IS_YOUNGER, -9759, -1, "HY000", "materialized view log younger than last refresh", "materialized view log on `%s`.`%s` younger than last refresh");
-DEFINE_ERROR_EXT(OB_ERR_MVIEW_CAN_NOT_FAST_REFRESH, -9760, -1, "HY000", "cannot fast refresh materialized view", "cannot fast refresh materialized view %s: %s");
-DEFINE_ERROR_EXT(OB_ERR_MVIEW_NEVER_REFRESH, -9761, -1, "HY000", "cannot explicitly refresh a NEVER REFRESH materialized view", "cannot explicitly refresh a NEVER REFRESH materialized view (`%s`)");
 DEFINE_ERROR(OB_ERR_CLIENT_LOCAL_FILES_DISABLED, -9762, ER_CLIENT_LOCAL_FILES_DISABLED, "42000", "Loading local data is disabled; this must be enabled on both the client and server sides");
 DEFINE_ERROR(OB_ERR_OUT_PARAM_NOT_BIND_VAR, -9763, -1, "HY000", "output parameter not a bind variable");
 DEFINE_ERROR_EXT(OB_ERR_TIME_EARLIER_THAN_SYSDATE, -9764, -1, "HY000", "the parameter must evaluate to a time in the future", "the parameter %s must evaluate to a time in the future");
@@ -2614,7 +2598,6 @@ DEFINE_ERROR(OB_ERR_EVENT_CANNOT_ALTER_IN_THE_PAST, -9779, ER_EVENT_CANNOT_ALTER
 DEFINE_ERROR(OB_ERR_EVENT_RECURSION_FORBIDDEN, -9780, ER_EVENT_RECURSION_FORBIDDEN, "HY000", "Recursion of EVENT DDL statements is forbidden when body is present");
 DEFINE_ERROR(OB_NO_PARTITION_FOR_GIVEN_VALUE_SCHEMA_ERROR, -9781, ER_NO_PARTITION_FOR_GIVEN_VALUE, "HY000", "Table has no partition for value");
 DEFINE_ERROR(OB_ERR_INVALID_CHARACTER, -9782, -1, "HY000", "invalid character");
-DEFINE_ERROR_EXT(OB_ERR_MVIEW_CAN_NOT_ON_QUERY_COMPUTE, -9783, -1, "HY000", "cannot ENABLE ON QUERY COMPUTATION for the materialized view", "cannot ENABLE ON QUERY COMPUTATION for the materialized view %s: %s");
 DEFINE_ERROR_EXT(OB_ERR_CURSOR_ATTR_APPLY, -9784, -1, "HY000", "cursor attribute may not be applied to non-cursor", "cursor attribute may not be applied to non-cursor %.*s");
 DEFINE_ERROR(OB_UTL_TCP_BUFFER_TOO_SMALL, -9785, -1, "HY000", "buffer too small");
 DEFINE_ERROR(OB_UTL_TCP_END_OF_INPUT, -9786, -1, "HY000", "end-of-input reached");
@@ -2639,11 +2622,7 @@ DEFINE_ERROR(OB_ERR_LOGON_TRIGGER, -9804, -1, "HY000", "client logon triggers ca
 DEFINE_ERROR(OB_ERR_LOGOFF_TRIGGER, -9805, -1, "HY000", "client logoff triggers cannot have AFTER type");
 DEFINE_ERROR(OB_ERR_MALFORMED_WRAPPED_UNIT, -9806, -1, "HY000", "malformed or corrupted wrapped unit");
 DEFINE_ERROR(OB_ERR_INVALID_PLSQL_UNIT, -9807, -1, "HY000", "input to DBMS_DDL.WRAP is not a legal PL/SQL unit");
-DEFINE_ERROR(OB_ERR_MVIEW_INVALID_TABLE_TYPE, -9808, -1, "HY000", "Table type is not valid, the definition of materialized view can only reference user tables or other materialized views");
-DEFINE_ERROR(OB_ERR_MVIEW_BASE_TABLE_ALTERED, -9809, -1, "HY000", "Base tables are altered during the creation or complete refresh of materialized views, please try again when base tables have no ongoing DDL operations");
-DEFINE_ERROR(OB_ERR_MVIEW_MISSING_DEPENDENCE, -9810, -1, "HY000", "Materialized view %s.%s has invalid dependency info, please perform a complete refresh to recover.");
 DEFINE_ERROR(OB_ERR_INVALID_NESTED_CURSOR, -9811, -1, "HY000", "Cursor Variable in record, object, or collection is not supported by this release");
-DEFINE_ERROR(OB_ERR_MVIEW_CAN_NOT_NESTED_CONSISTENT_REFRESH, -9812, -1, "HY000", "materialized view can not nested consistent refresh");
 // 余留位置
 ////////////////////////////////////////////////////////////////
 // PL/SQL错误码值域 [-9500, -10000)

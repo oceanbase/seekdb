@@ -31,14 +31,12 @@ namespace mds
 
 struct RetryParam {
   RetryParam():
-  ls_id_(0),
   start_ts_(0),
   last_print_ts_(0),
   timeout_ts_(0),
   retry_cnt_(0),
   print_interval_(0) {}
-  RetryParam(share::ObLSID ls_id, int64_t lock_timeout_us, int64_t print_interval = 500_ms) :
-  ls_id_(ls_id),
+  RetryParam(int64_t lock_timeout_us, int64_t print_interval = 500_ms) :
   start_ts_(ObClockGenerator::getClock()),
   last_print_ts_(0),
   // to avoid over MAX limit, signed number overlimit bahavior is not defined by standard
@@ -55,9 +53,7 @@ struct RetryParam {
     return ret;
   }
   bool check_timeout() const { return ObClockGenerator::getClock() > timeout_ts_; }
-  bool check_ls_in_gc_state() const;
-  TO_STRING_KV(K_(ls_id), KTIME_(start_ts), KTIME_(last_print_ts), KTIME_(timeout_ts), K_(retry_cnt), K_(print_interval));
-  share::ObLSID ls_id_;
+  TO_STRING_KV(KTIME_(start_ts), KTIME_(last_print_ts), KTIME_(timeout_ts), K_(retry_cnt), K_(print_interval));
   int64_t start_ts_;
   mutable int64_t last_print_ts_;
   int64_t timeout_ts_;
@@ -97,15 +93,6 @@ int retry_release_lock_with_op_until_timeout(const MdsLock &lock,
         }
       }
     } // release lock
-    if (OB_EAGAIN == ret && MODE == LockMode::READ) {
-      if ((retry_param.retry_cnt_ % 50) == 0) {// every 500ms check ls status
-#ifndef UNITTEST_DEBUG
-        if (retry_param.check_ls_in_gc_state()) {
-          ret = OB_REPLICA_NOT_READABLE;
-        }
-#endif
-      }
-    }
   } while (OB_EAGAIN == ret && ({ ob_usleep(10_ms); ++retry_param; true; }));
   return ret;
   #undef PRINT_WRAPPER

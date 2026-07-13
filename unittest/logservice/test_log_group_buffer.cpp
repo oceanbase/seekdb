@@ -40,14 +40,10 @@ public:
   virtual void SetUp();
   virtual void TearDown();
 protected:
-  int64_t  palf_id_;
   LogGroupBuffer log_group_buffer_;
 };
 
-TestLogGroupBuffer::TestLogGroupBuffer()
-    : palf_id_(1)
-{
-}
+TestLogGroupBuffer::TestLogGroupBuffer() {}
 
 TestLogGroupBuffer::~TestLogGroupBuffer()
 {
@@ -293,24 +289,12 @@ TEST_F(TestLogGroupBuffer, test_check_log_buf_wrapped)
   EXPECT_TRUE(is_wrapped);
 }
 
-TEST_F(TestLogGroupBuffer, test_to_leader)
+TEST_F(TestLogGroupBuffer, test_activate)
 {
-  EXPECT_EQ(OB_NOT_INIT, log_group_buffer_.to_leader());
+  EXPECT_EQ(OB_NOT_INIT, log_group_buffer_.activate());
   LSN start_lsn(100);
   EXPECT_EQ(OB_SUCCESS, log_group_buffer_.init(start_lsn));
-  EXPECT_EQ(OB_SUCCESS, log_group_buffer_.to_leader());
-#if LEADER_DEFAULT_GROUP_BUFFER_SIZE != FOLLOWER_DEFAULT_GROUP_BUFFER_SIZE
-  EXPECT_EQ(OB_STATE_NOT_MATCH, log_group_buffer_.to_leader());
-#endif
-}
-
-TEST_F(TestLogGroupBuffer, test_to_follower)
-{
-  EXPECT_EQ(OB_NOT_INIT, log_group_buffer_.to_follower());
-  LSN start_lsn(100);
-  EXPECT_EQ(OB_SUCCESS, log_group_buffer_.init(start_lsn));
-  EXPECT_EQ(OB_SUCCESS, log_group_buffer_.to_follower());
-  EXPECT_EQ(OB_SUCCESS, log_group_buffer_.to_follower());
+  EXPECT_EQ(OB_SUCCESS, log_group_buffer_.activate());
 }
 
 TEST_F(TestLogGroupBuffer, test_read_data)

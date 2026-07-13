@@ -44,7 +44,7 @@ ObDirectLoadOriginTableCreateParam::~ObDirectLoadOriginTableCreateParam()
 
 bool ObDirectLoadOriginTableCreateParam::is_valid() const
 {
-  return OB_INVALID_ID != table_id_ && tablet_id_.is_valid() && ls_id_.is_valid();
+  return OB_INVALID_ID != table_id_ && tablet_id_.is_valid();
 }
 
 /**
@@ -64,7 +64,6 @@ void ObDirectLoadOriginTableMeta::reset()
 {
   table_id_ = OB_INVALID_ID;
   tablet_id_.reset();
-  ls_id_.reset();
   tx_id_.reset();
   tx_seq_.reset();
 }
@@ -104,24 +103,14 @@ int ObDirectLoadOriginTable::init(const ObDirectLoadOriginTableCreateParam &para
     LOG_WARN("invalid args", KR(ret), K(param));
   } else {
     const ObTabletID &tablet_id = param.tablet_id_;
-    const ObLSID &ls_id = param.ls_id_;
-    ObLSService *ls_svr = nullptr;
-    ObLSHandle ls_handle;
-    ObLS *ls = nullptr;
-    if (OB_ISNULL(ls_svr = share::g_mp->ls_service())) {
-      ret = OB_ERR_SYS;
-      LOG_WARN("MTL ObLSService is null", KR(ret));
-    } else if (OB_FAIL(ls_svr->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-      LOG_WARN("fail to get ls", KR(ret), K(ls));
-    } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected ls is nullptr", KR(ret));
-    } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle_))) {
+    ObLS *tenant_ls = nullptr;
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+      LOG_WARN("fail to get ls", KR(ret));
+    } else if (OB_FAIL(tenant_ls->get_tablet(tablet_id, tablet_handle_))) {
       LOG_WARN("fail to get tablet", KR(ret), K(tablet_id));
     } else if (OB_FAIL(prepare_tables())) {
       LOG_WARN("fail to prepare tables", KR(ret));
     } else {
-      meta_.ls_id_ = param.ls_id_;
       meta_.table_id_ = param.table_id_;
       meta_.tablet_id_ = param.tablet_id_;
       meta_.tx_id_ = param.tx_id_;
@@ -373,8 +362,7 @@ int ObDirectLoadOriginTableAccessor::init_table_access_ctx(bool skip_read_lob)
   share::SCN snapshot_scn;
   if (OB_FAIL(snapshot_scn.convert_for_tx(snapshot_version))) {
     LOG_WARN("fail to convert scn", KR(ret));
-  } else if (OB_FAIL(store_ctx_.init_for_read(origin_table_->get_meta().ls_id_,
-                                              tablet_id,
+  } else if (OB_FAIL(store_ctx_.init_for_read(tablet_id,
                                               INT64_MAX,
                                               -1,
                                               snapshot_scn))) {

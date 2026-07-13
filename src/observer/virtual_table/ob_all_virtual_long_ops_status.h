@@ -32,15 +32,8 @@ public:
   virtual ~ObAllVirtualLongOpsStatus();
   virtual int inner_get_next_row(common::ObNewRow *&row) override;
   virtual void reset() override;
-  inline void set_addr(common::ObAddr &addr)
-  {
-    addr_ = addr;
-  }
-private:
-
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualLongOpsStatus);
-  common::ObAddr addr_;
   share::ObLongopsValue longops_value_;
   share::ObLongopsIterator longops_iter_;
   char ip_buf_[common::OB_IP_STR_BUFF];

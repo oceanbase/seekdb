@@ -234,13 +234,6 @@ private:
   int construct_replica_build_ctxs(
       const ObDDLReplicaBuildExecutorParam &param,
       ObArray<ObSingleReplicaBuildCtx> &replica_build_ctxs) const;
-  int get_refreshed_replica_addrs(
-      const bool send_to_all_replicas,
-      ObArray<ObTabletID> &replica_tablet_ids,
-      ObArray<ObAddr> &replica_addrs) const;
-  int refresh_replica_build_ctxs(
-      const ObArray<ObTabletID> &replica_tablet_ids,
-      const ObArray<ObAddr> &replica_addrs);
   int update_build_ctx(
       ObSingleReplicaBuildCtx &build_ctx,
       const obcall::ObDDLBuildSingleReplicaRequestResult *result,

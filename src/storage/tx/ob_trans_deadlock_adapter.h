@@ -132,20 +132,15 @@ class ObTransDeadlockDetectorAdapter
   // if trans node on row removed(for example:1, dump trans. 2, a trans write too many row.)
   // change the dependency relationship from row to trans
   static int change_detector_waiting_obj_from_row_to_trans(const ObTransID &self_trans_id,
-                                                           const ObTransID &conflict_trans_id,
-                                                           const ObAddr &scheduler_addr);
+                                                           const ObTransID &conflict_trans_id);
   // for all path
   static void unregister_from_deadlock_detector(const ObTransID &self_trans_id, const UnregisterPath path);
   /**********************************/
-  static int get_conflict_trans_scheduler(const ObTransID &self_trans_id, ObAddr &scheduler_addr);
   static int kill_tx(const uint32_t sess_id);
   static int get_session_info(const uint32_t session_id, SessionGuard &guard);
-  static int get_trans_scheduler_info_on_participant(const ObTransID trans_id,
-                                                     const share::ObLSID ls_id, 
-                                                     ObAddr &scheduler_addr);
   static int register_or_replace_conflict_trans_ids(const ObTransID self_tx_id,
                                                     const uint32_t self_session_id,
-                                                    const ObArray<ObTransIDAndAddr> &conflict_tx_ids);
+                                                    const ObArray<ObTransID> &conflict_tx_ids);
   static int kill_stmt(const uint32_t sess_id);
   static void copy_str_and_translate_apostrophe(const char *src_ptr,
                                                 const int64_t src_len,
@@ -154,16 +149,16 @@ class ObTransDeadlockDetectorAdapter
 private:
   static int register_to_deadlock_detector_(const ObTransID self_tx_id,
                                             const uint32_t self_session_id,
-                                            const ObIArray<ObTransIDAndAddr> &conflict_tx_ids,
+                                            const ObIArray<ObTransID> &conflict_tx_ids,
                                             SessionGuard &session_guard);
   static int replace_conflict_trans_ids_(const ObTransID self_tx_id,
-                                         const ObIArray<ObTransIDAndAddr> &conflict_tx_ids,
+                                         const ObIArray<ObTransID> &conflict_tx_ids,
                                          SessionGuard &session_guard);
   static int create_detector_node_and_set_parent_if_needed_(CollectCallBack &on_collect_op,
                                                             const ObTransID &self_trans_id,
                                                             const uint32_t sess_id);
   static int get_session_related_info_(const uint32_t sess_id, int64_t &query_timeout);
-  static int gen_dependency_resource_array_(const ObIArray<ObTransIDAndAddr> &blocked_trans_ids_and_addrs,
+  static int gen_dependency_resource_array_(const ObIArray<ObTransID> &blocked_trans_ids,
                                             ObIArray<share::detector::ObDependencyResource> &dependency_resources);
   static void try_unregister_deadlock_detector_(sql::ObSQLSessionInfo &session, const ObTransID &trans_id, UnregisterPath path);
 };

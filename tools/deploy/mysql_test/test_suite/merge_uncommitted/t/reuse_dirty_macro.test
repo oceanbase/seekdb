@@ -72,7 +72,7 @@ connection conn1;
 select count(1) from test_uncommitted_trx_minor_merge;
 
 connection conn0;
-let $use_old=query_get_value(select multiplexed_macro_block_count from oceanbase.__all_virtual_tablet_compaction_history where tablet_id in (select tablet_id from __all_tablet_to_ls where table_id = $__table_id__) order by finish_time desc limit 1, multiplexed_macro_block_count, 1);
+let $use_old=query_get_value(select multiplexed_macro_block_count from oceanbase.__all_virtual_tablet_compaction_history where tablet_id in (select tablet_id from __all_tablet_to_table where table_id = $__table_id__) order by finish_time desc limit 1, multiplexed_macro_block_count, 1);
 if ($use_old > 0)
 {
   --echo should not reuse macro

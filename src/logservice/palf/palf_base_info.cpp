@@ -26,7 +26,6 @@ LogInfo::LogInfo()
       log_id_(OB_INVALID_LOG_ID),
       lsn_(),
       scn_(),
-      log_proposal_id_(INVALID_PROPOSAL_ID),
       accum_checksum_(-1)
 {}
 
@@ -41,7 +40,6 @@ void LogInfo::reset()
   log_id_ = OB_INVALID_LOG_ID;
   lsn_.reset();
   scn_.reset();
-  log_proposal_id_ = INVALID_PROPOSAL_ID;
   accum_checksum_ = -1;
 }
 
@@ -51,7 +49,6 @@ void LogInfo::operator=(const LogInfo &log_info)
   this->log_id_ = log_info.log_id_;
   this->lsn_ = log_info.lsn_;
   this->scn_ = log_info.scn_;
-  this->log_proposal_id_ = log_info.log_proposal_id_;
   this->accum_checksum_ = log_info.accum_checksum_;
 }
 
@@ -66,7 +63,6 @@ bool LogInfo::operator==(const LogInfo &log_info) const
   return log_id_ == log_info.log_id_ &&
          lsn_ == log_info.lsn_ &&
          scn_ == log_info.scn_ &&
-         log_proposal_id_ == log_info.log_proposal_id_ &&
          accum_checksum_ == log_info.accum_checksum_;
 }
 
@@ -83,11 +79,10 @@ void LogInfo::generate_by_default()
   LSN default_prev_lsn(PALF_INITIAL_LSN_VAL);
   lsn_ = default_prev_lsn;
   scn_.set_min();
-  log_proposal_id_ = INVALID_PROPOSAL_ID;
   accum_checksum_ = -1;
 }
 
-OB_SERIALIZE_MEMBER(LogInfo, version_, log_id_, scn_, lsn_, log_proposal_id_, accum_checksum_);
+OB_SERIALIZE_MEMBER(LogInfo, version_, log_id_, scn_, lsn_, accum_checksum_);
 
 PalfBaseInfo::PalfBaseInfo()
     : version_(-1),

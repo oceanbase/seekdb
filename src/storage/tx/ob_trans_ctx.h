@@ -25,9 +25,8 @@
 #include "lib/list/ob_dlist.h"
 #include "lib/list/ob_dlink_node.h"
 #include "share/ob_cluster_version.h"
-#include "ob_location_adapter.h"
-#include "ob_trans_rpc.h"
 #include "ob_trans_define.h"
+#include "ob_trans_factory.h"
 #include "ob_trans_timer.h"
 #include "ob_trans_result.h"
 #include "ob_trans_submit_log_cb.h"
@@ -83,12 +82,12 @@ static inline void protocol_error(const int64_t state, const int64_t msg_type)
 // change one of the signature of `ObTransCtx`.
 // For Example: If you change the signature of the function `commit` in
 // `ObTransCtx`, you should also modify the signatore of function `commit` in
-// `ObPartTransCtx`, `ObScheTransCtx`
+// `ObTxCtx`, `ObScheTransCtx`
 class ObTransCtx: public share::ObLightHashLink<ObTransCtx>
 {
   friend class CtxLock;
 public:
-  ObTransCtx(const char *ctx_type_str = "unknow", const int64_t ctx_type = ObTransCtxType::UNKNOWN)
+  ObTransCtx()
       : trans_expired_time_(0), ctx_create_time_(0),
       trans_service_(NULL), tlog_(NULL),
       cluster_version_(0), ls_tx_ctx_mgr_(NULL),
@@ -96,7 +95,6 @@ public:
       client_sid_(UINT32_MAX),
       associated_session_id_(UINT32_MAX),
       stc_(0), part_trans_action_(ObPartTransAction::UNKNOWN),
-      callback_scheduler_on_clear_(false),
       pending_callback_param_(common::OB_SUCCESS), p_mt_ctx_(NULL),
       is_exiting_(false), for_replay_(false),
       has_pending_callback_(false),
@@ -113,7 +111,6 @@ public:
   bool is_readonly() const { return false; }
   void set_for_replay(const bool for_replay) { for_replay_ = for_replay; }
   bool is_for_replay() const { return for_replay_; }
-  const share::ObLSID &get_ls_id() const { return ls_id_; }
   int set_ls_tx_ctx_mgr(ObLSTxCtxMgr *ls_tx_ctx_mgr)
   {
     ls_tx_ctx_mgr_ = ls_tx_ctx_mgr;
@@ -121,11 +118,6 @@ public:
   }
   ObLSTxCtxMgr *get_ls_tx_ctx_mgr() { return ls_tx_ctx_mgr_; }
   ObTransService *get_trans_service() { return trans_service_; }
-  int set_ls_id(const share::ObLSID &ls_id)
-  {
-    ls_id_ = ls_id;
-    return common::OB_SUCCESS;
-  }
   int set_trans_id(const ObTransID &trans_id)
   {
     int ret = OB_SUCCESS;
@@ -156,7 +148,6 @@ public:
   virtual int64_t get_part_trans_action() const { return part_trans_action_; }
   int acquire_ctx_ref() { return acquire_ctx_ref_(); }
   void release_ctx_ref();
-  ObITransRpc *get_trans_rpc() const { return rpc_; }
 public:
   virtual bool is_inited() const = 0;
   virtual int handle_timeout(const int64_t delay) = 0;
@@ -180,8 +171,8 @@ protected:
   void set_stc_(const MonotonicTs stc);
   void set_stc_by_now_();
   MonotonicTs get_stc_();
-  bool has_callback_scheduler_();
-  int defer_callback_scheduler_(const int ret, const share::SCN &commit_version);
+  bool has_commit_callback_();
+  int defer_commit_callback_(const int ret, const share::SCN &commit_version);
   int prepare_commit_cb_for_role_change_(const int cb_ret, ObTxCommitCallback *&cb_list);
   int64_t get_remaining_wait_interval_us_()
   {
@@ -207,7 +198,8 @@ protected:
   virtual int register_timeout_task_(const int64_t interval_us);
   virtual int unregister_timeout_task_();
   void generate_request_id_();
-  void update_trans_2pc_timeout_();
+  void update_commit_retry_timeout_();
+  static int64_t get_commit_retry_interval_us_();
   int set_app_trace_info_(const ObString &app_trace_info);
   int set_app_trace_id_(const ObString &app_trace_id);
 public:
@@ -218,22 +210,18 @@ public:
   static const int64_t RP_TOTAL_NUM = 100 * 1000;
    // if 600 seconds after trans timeout, warn is required
   static const int64_t OB_TRANS_WARN_USE_TIME = 600 * 1000 * 1000;
-  static const int64_t MAX_TRANS_2PC_TIMEOUT_US = 3 * 1000 * 1000; // 3s
+  static const int64_t MAX_TRANS_COMMIT_RETRY_TIMEOUT_US = 3 * 1000 * 1000; // 3s
 protected:
   //0x0078746365657266 means freectx
   static const int64_t UNKNOWN_FREE_CTX_MAGIC_NUM = 0x0078746365657266;
   //0x006e776f6e6b6e75 means resetctx
   static const int64_t UNKNOWN_RESET_CTX_MAGIC_NUM = 0x006e776f6e6b6e75;
   static const int64_t CHECK_GC_PARTITION_INTERVAL = 10 * 1000 * 1000;
-  // the time interval of asking scheduler for participant
-  static const int64_t CHECK_SCHEDULER_STATUS_INTERVAL = 10 * 1000 * 1000;
-  // the time interval of asking scheduler for rs
-  static const int64_t CHECK_RS_SCHEDULER_STATUS_INTERVAL = 60 * 1000 * 1000;
+  static const int64_t CHECK_TX_STATUS_INTERVAL = 10 * 1000 * 1000;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTransCtx);
 protected:
   
-  share::ObLSID ls_id_;
   ObTransID trans_id_;
 
   common::ObAddr addr_;
@@ -255,8 +243,6 @@ protected:
   // the variable is used to record the action of the current transaction in the stmt execution
   int64_t part_trans_action_;
   ObTxCommitCallback commit_cb_;
-  // [only used by mysqltest]: will callback scheduler when clear log is persistented
-  bool callback_scheduler_on_clear_;
   ObTransNeedWaitWrap trans_need_wait_wrap_;
   int pending_callback_param_;
   // it is used to wake up the lock queue after submitting the log of elr trans
@@ -270,8 +256,7 @@ protected:
   int64_t opid_;
 
   int64_t request_id_;
-  ObITransRpc *rpc_;
-  int64_t trans_2pc_timeout_;
+  int64_t commit_retry_timeout_;
   ObTransTimeoutTask timeout_task_;
   ObITransTimer *timer_;
   ObTraceInfo trace_info_;
@@ -287,7 +272,7 @@ public:
   void free_value(ObTransCtx* ctx)
   {
     if (NULL != ctx) {
-      ObTransCtxFactory::release(ctx);
+      ObTxCtxFactory::release(ctx);
     }
   }
 };

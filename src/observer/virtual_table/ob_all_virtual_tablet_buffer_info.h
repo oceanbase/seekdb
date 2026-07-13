@@ -25,7 +25,6 @@
 #include "share/rc/ob_tenant_base.h"
 #include "observer/omt/ob_multi_tenant.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "share/ob_ls_id.h"
 #include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 
 namespace oceanbase

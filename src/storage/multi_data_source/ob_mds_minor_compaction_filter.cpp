@@ -133,36 +133,5 @@ int ObMdsMinorFilter::filter_truncate_info(
   return ret;
 }
 
-ObCrossLSMdsMinorFilter::ObCrossLSMdsMinorFilter()
-  : ObICompactionFilter()
-{
-}
-
-int ObCrossLSMdsMinorFilter::filter(
-    const blocksstable::ObDatumRow &row,
-    ObFilterRet &filter_ret)
-{
-  int ret = OB_SUCCESS;
-  filter_ret = FILTER_RET_MAX;
-  mds::MdsDumpKVStorageAdapter kv_adapter;
-  constexpr uint8_t tablet_status_mds_unit_id = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, ObTabletCreateDeleteMdsUserData>>::value;
-
-  if (OB_FAIL(kv_adapter.convert_from_mds_multi_version_row(row))) {
-    LOG_WARN("fail to convert from mds multi version row", K(ret), K(row));
-  } else if (tablet_status_mds_unit_id == kv_adapter.get_type()) {
-    if (OB_UNLIKELY(row.is_uncommitted_row()
-        || !row.is_compacted_multi_version_row())) { // not filter uncommitted row
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("uncommitted row or uncompacted row in mds table", K(ret), K(row));
-    } else {
-      filter_ret = FILTER_RET_REMOVE;
-      LOG_DEBUG("filter tablet status for cross ls mds minor merge", K(ret));
-    }
-  } else {
-    filter_ret = FILTER_RET_NOT_CHANGE;
-  }
-
-  return ret;
-}
 } // namespace storage
 } // namespace oceanbase

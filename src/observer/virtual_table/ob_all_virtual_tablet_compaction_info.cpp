@@ -70,9 +70,6 @@ int ObAllVirtualTabletCompactionInfo::inner_get_next_row(common::ObNewRow *&row)
       } else if (OB_ISNULL(tablet = tablet_handle_.get_obj())) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "tablet is null", K(ret), K(tablet_handle_));
-      } else if (!tablet->get_tablet_meta().ha_status_.is_data_status_complete()) {
-        ret = OB_EAGAIN;
-        LOG_DEBUG("query all_virtual_tablet_compaction_info, tablet_data not complete", K(ret), K(tablet->get_tablet_id()), K(tablet->get_ls_id()));
       }
     // quit while, excepted errcode : OB_ITER_END, OB_SUCCESS
     } while(OB_EAGAIN == ret);

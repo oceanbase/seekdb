@@ -32,9 +32,7 @@
 #include "ob_multiple_skip_scan_merge.h"
 #include "ob_multiple_multi_skip_scan_merge.h"
 #include "ob_single_merge.h"
-#include "ob_multiple_mview_merge.h"
 #include "storage/tx_storage/ob_access_service.h"
-#include "storage/tx_storage/ob_ls_map.h"
 #include "storage/tx/ob_trans_service.h"
 #include "ob_table_scan_range.h"
 #include "ob_global_iterator_pool.h"
@@ -71,7 +69,6 @@ public:
 
   // A offline ls will disable replay status and kill all part_ctx on the follower.
   // We can not read the uncommitted data which has not replay commit log yet.
-  int check_ls_offline_after_read();
 public:
   static constexpr int64_t RP_MAX_FREE_LIST_NUM = 1024;
   static constexpr const char LABEL[] = "RPTableScanIter";
@@ -116,7 +113,6 @@ private:
   ObMemtableRowSampleIterator *memtable_row_sample_iterator_;
   ObRowSampleIterator *row_sample_iterator_;
   ObBlockSampleIterator *block_sample_iterator_; // TODO: @yuanzhe refactor
-  ObMviewMergeWrapper *mview_merge_wrapper_;
   // we should consider the constructor cost
   ObTableAccessParam main_table_param_;
   ObTableAccessContext main_table_ctx_;

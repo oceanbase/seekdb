@@ -41,16 +41,14 @@ public:
       freeze_all_flag_(0),
       opt_server_list_(),
       opt_tenant_count_(0),
-      opt_tablet_id_(),
-      opt_ls_id_(share::ObLSID::INVALID_LS_ID) {}
+      opt_tablet_id_() {}
   ObFreezeStmt(common::ObIAllocator *name_pool)
     : ObSystemCmdStmt(name_pool, stmt::T_FREEZE),
       major_freeze_(false),
       freeze_all_flag_(0),
       opt_server_list_(),
       opt_tenant_count_(0),
-      opt_tablet_id_(),
-      opt_ls_id_(share::ObLSID::INVALID_LS_ID) {}
+      opt_tablet_id_() {}
   virtual ~ObFreezeStmt() {}
 
   bool is_major_freeze() const { return major_freeze_; }
@@ -69,13 +67,12 @@ public:
   inline void reset_tenant_count() { opt_tenant_count_ = 0; }
   inline common::ObZone &get_zone() { return opt_zone_; }
   inline common::ObTabletID &get_tablet_id() { return opt_tablet_id_; }
-  inline int64_t &get_ls_id() { return opt_ls_id_; }
   inline int push_server(const common::ObAddr& server) {
     return opt_server_list_.push_back(server);
   }
 
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(major_freeze), K(freeze_all_flag_), 
-               K(opt_server_list_), K(opt_tenant_count_), K(opt_tablet_id_), K(opt_ls_id_));
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(major_freeze), K(freeze_all_flag_),
+               K(opt_server_list_), K(opt_tenant_count_), K(opt_tablet_id_));
 private:
   bool major_freeze_;
   // for major_freeze, it is ignore server list
@@ -90,7 +87,6 @@ private:
   
   // for minor_freeze only
   common::ObTabletID opt_tablet_id_;
-  int64_t opt_ls_id_;
 };
 
 class ObFlushCacheStmt : public ObSystemCmdStmt

@@ -937,7 +937,6 @@ template <typename T>
 int ObInnerSQLConnection::retry_while_no_tenant_resource(const int64_t cluster_id, T function)
 {
   int ret = OB_SUCCESS;
-  share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
   const int64_t max_retry_us = 128 * 1000;
   int64_t retry_us = 2 * 1000;
   bool need_retry = is_in_trans() ? false : true;
@@ -962,7 +961,7 @@ int ObInnerSQLConnection::retry_while_no_tenant_resource(const int64_t cluster_i
         LOG_WARN("timeout, do not need retry", K(ret), K(abs_timeout_us), K(now));
       } else if (OB_FAIL(function())) {
         if (is_unit_migrate(ret)) {
-          LOG_INFO("failed to get newest location and will force renew", K(ret), K(ls_id));
+          LOG_INFO("failed to get newest location and will force renew", K(ret));
           ob_usleep(retry_us);
           if (retry_us < max_retry_us) {
             retry_us = retry_us * 2;
@@ -1032,8 +1031,6 @@ int ObInnerSQLConnection::start_transaction_inner(
         // remote
       } else {
         TimeoutGuard timeout_guard(*this); // backup && restore worker/session timeout
-        common::ObAddr resource_server_addr; // MYADDR
-        share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
         int64_t query_timeout = OB_INVALID_TIMESTAMP;
         int64_t trx_timeout = OB_INVALID_TIMESTAMP;
         ObSQLMode sql_mode = 0;
@@ -1047,10 +1044,7 @@ int ObInnerSQLConnection::start_transaction_inner(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("resource_conn_id is not invalid or resource_svr is valid in start_transaction",
               K(ret), K(get_resource_conn_id()), K(get_resource_svr()));
-        } else if (OB_FAIL(nonblock_get_leader(GCONF.cluster_id, ls_id,
-                                               resource_server_addr))) {
-          LOG_WARN("nonblock get leader failed", KR(ret), K(ls_id), K(resource_server_addr));
-        } else if (FALSE_IT(set_resource_svr(resource_server_addr))) {
+        } else if (FALSE_IT(set_resource_svr(GCTX.self_addr()))) {
         } else if (OB_FAIL(get_session_timeout_for_rpc(query_timeout, trx_timeout))) {
           LOG_WARN("fail to get_session_timeout_for_rpc", K(ret), K(query_timeout), K(trx_timeout));
         } else {
@@ -1071,7 +1065,6 @@ int ObInnerSQLConnection::start_transaction_inner(
 }
 
 int ObInnerSQLConnection::register_multi_data_source(
-                                                     const share::ObLSID ls_id,
                                                      const transaction::ObTxDataSourceType type,
                                                      const char *buf,
                                                      const int64_t buf_len,
@@ -1104,16 +1097,14 @@ int ObInnerSQLConnection::register_multi_data_source(
         if (OB_ISNULL(tx_desc = get_session().get_tx_desc())) {
           // TODO ADD LOG and check get_session
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Invalid tx_desc", K(ret), K(ls_id), K(type));
+          LOG_WARN("Invalid tx_desc", K(ret), K(type));
         } else {
           MOD_SCOPE
           {
             if (OB_FAIL(share::g_mp->trans_service()->register_mds_into_tx(*tx_desc,
-                                                                                 ls_id,
                                                                                  type,
                                                                                  buf,
                                                                                  buf_len,
-                                                                                 0,
                                                                                  register_flag))) {
               LOG_WARN("regiser multi data source failed", K(ret), K(type));
             } else if (OB_FAIL(res.close())) {
@@ -1144,8 +1135,8 @@ int ObInnerSQLConnection::register_multi_data_source(
           char *tmp_str = nullptr;
           int64_t pos = 0;
           ObString sql;
-          if (OB_FAIL(mds_str.set(buf, buf_len, type, ls_id, register_flag))) {
-            LOG_WARN("set multi source data in msd_str error", K(ret), K(type), K(ls_id));
+          if (OB_FAIL(mds_str.set(buf, buf_len, type, register_flag))) {
+            LOG_WARN("set multi source data in msd_str error", K(ret), K(type));
           } else if (OB_ISNULL(tmp_str = static_cast<char *>(
                                    ob_malloc(mds_str.get_serialize_size(), "MulTxDataStr")))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1193,7 +1184,6 @@ int ObInnerSQLConnection::forward_request_(const int64_t op_type,
   ObInnerSqlWaitGuard guard(is_inner_session(), nullptr, inner_session_);
   TimeoutGuard timeout_guard(*this); // backup && restore worker/session timeout
   common::ObAddr resource_server_addr; // MYADDR
-  share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
   int64_t query_timeout = OB_INVALID_TIMESTAMP;
   int64_t trx_timeout = OB_INVALID_TIMESTAMP;
   ObSQLMode sql_mode = 0;
@@ -1398,15 +1388,8 @@ int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
           set_resource_svr(*sql_exec_addr);
           set_resource_conn_id(OB_INVALID_ID);
       } else { // not in trans
-        common::ObAddr resource_server_addr;
-        share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
-        if (OB_FAIL(nonblock_get_leader(
-                    GCONF.cluster_id, ls_id, resource_server_addr))) {
-          LOG_WARN("nonblock get leader failed", K(ret), K(ls_id));
-        } else {
-          set_resource_svr(resource_server_addr);
-          set_resource_conn_id(OB_INVALID_ID);
-        }
+        set_resource_svr(GCTX.self_addr());
+        set_resource_conn_id(OB_INVALID_ID);
       }
       if (FAILEDx(get_session_timeout_for_rpc(query_timeout, trx_timeout))) {
         LOG_WARN("fail to get_session_timeout_for_rpc", K(ret), K(query_timeout), K(trx_timeout));
@@ -1547,15 +1530,8 @@ int ObInnerSQLConnection::execute_read_inner(const int64_t cluster_id,
        set_resource_conn_id(OB_INVALID_ID);
        LOG_INFO("set sql exec addr", KR(ret), K(*sql_exec_addr));
     } else {
-      common::ObAddr resource_server_addr;
-      share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
-      if (OB_FAIL(nonblock_get_leader(
-                  cluster_id, ls_id, resource_server_addr))) {
-        LOG_WARN("nonblock get leader failed", K(ret), K(ls_id), K(cluster_id));
-      } else {
-        set_resource_svr(resource_server_addr);
-        set_resource_conn_id(OB_INVALID_ID);
-      }
+      set_resource_svr(GCTX.self_addr());
+      set_resource_conn_id(OB_INVALID_ID);
     }
     if (FAILEDx(get_session_timeout_for_rpc(query_timeout, trx_timeout))) {
       LOG_WARN("fail to get_session_timeout_for_rpc", K(ret), K(query_timeout), K(trx_timeout));
@@ -1579,50 +1555,6 @@ int ObInnerSQLConnection::execute_read_inner(const int64_t cluster_id,
   if (OB_SUCC(ret)) {
     ref_ctx_ = read_ctx;
   }
-  return ret;
-}
-
-int ObInnerSQLConnection::nonblock_get_leader(
-    const int64_t cluster_id,
-    const share::ObLSID ls_id,
-    common::ObAddr &leader)
-{
-  int ret = OB_SUCCESS;
-  TimeoutGuard timeout_guard(*this); // backup && restore worker/session timeout
-  int64_t abs_timeout_us = 0;
-  int64_t start_time = ObTimeUtility::current_time();
-  int64_t old_query_start_time = get_session().get_query_start_time();
-  get_session().set_query_start_time(start_time);
-
-  if (OB_ISNULL(GCTX.location_service_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("location cache is NULL", K(ret));
-  } else if (OB_FAIL(set_timeout(abs_timeout_us))) {
-    LOG_WARN("set timeout failed", K(ret));
-  } else {
-    int64_t tmp_abs_timeout_us = 0;
-    const int64_t retry_interval_us = 200 * 1000; // 200ms
-    do {
-      ret = OB_SUCCESS;
-      tmp_abs_timeout_us = ObTimeUtility::current_time() + GCONF.location_cache_refresh_sql_timeout;
-      if (THIS_WORKER.is_timeout()) {
-        ret = OB_TIMEOUT;
-        LOG_WARN("already timeout", K(ret), K(THIS_WORKER.get_timeout_ts()));
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(GCTX.location_service_->get_leader_with_retry_until_timeout(
-                  cluster_id, ls_id, leader, tmp_abs_timeout_us, retry_interval_us))) {
-        LOG_WARN("get leader with retry until timeout failed",  KR(ret), K(ls_id),
-            K(leader), K(cluster_id), K(tmp_abs_timeout_us), K(retry_interval_us));
-      } else if (OB_UNLIKELY(!leader.is_valid())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("leader addr invalid", K(ret), K(cluster_id), K(ls_id), K(leader));
-      } else {
-        LOG_DEBUG("get participants", K(ls_id), K(leader), K(cluster_id));
-      }
-    } while (is_location_service_renew_error(ret));
-  }
-  get_session().set_query_start_time(old_query_start_time);
   return ret;
 }
 

@@ -45,7 +45,6 @@ int ObTabletTruncateInfoReader::init(
     ObTableScanParam &scan_param)
 {
   int ret = OB_SUCCESS;
-  const share::ObLSID &ls_id = tablet.get_ls_id();
   const common::ObTabletID &tablet_id = tablet.get_tablet_id();
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -53,7 +52,7 @@ int ObTabletTruncateInfoReader::init(
   } else if (OB_FAIL((tablet.mds_range_query<ObTruncateInfoKey, ObTruncateInfo>(
       scan_param,
       iter_)))) {
-    LOG_WARN("fail to do build query range iter", K(ret), K(ls_id), K(tablet_id), K(scan_param));
+    LOG_WARN("fail to do build query range iter", K(ret), K(tablet_id), K(scan_param));
   } else {
     is_inited_ = true;
   }
