@@ -34,6 +34,12 @@ public:
   DECLARE_PURE_VIRTUAL_TO_STRING;
 };
 
+enum ObStartupAccelType
+{
+  SERVER_ACCEL = 1,
+  TENANT_ACCEL = 2,
+};
+
 class ObStartupAccelTaskHandler : public common::ObSimpleThreadPool
 {
 public:
@@ -42,7 +48,7 @@ public:
 
   ObStartupAccelTaskHandler();
   ~ObStartupAccelTaskHandler();
-  int init();
+  int init(ObStartupAccelType accel_type);
   int start();
   void stop();
   void wait();
@@ -56,6 +62,7 @@ protected:
 
 private:
   bool is_inited_;
+  ObStartupAccelType accel_type_;
   common::ObFIFOAllocator task_allocator_;
 };
 

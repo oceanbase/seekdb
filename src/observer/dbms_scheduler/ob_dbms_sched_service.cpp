@@ -16,7 +16,7 @@
 
 #include "observer/dbms_scheduler/ob_dbms_sched_service.h"
 #include "share/rc/ob_module_provider.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 #define USING_LOG_PREFIX SERVER
 
 namespace oceanbase
@@ -26,7 +26,7 @@ using namespace oceanbase::share;
 namespace rootserver
 {
 
-int ObDBMSSchedService::server_module_init(ObDBMSSchedService *&dbms_sched_service)
+int ObDBMSSchedService::mtl_init(ObDBMSSchedService *&dbms_sched_service)
 {
   return dbms_sched_service->init();
 }
@@ -39,9 +39,10 @@ int ObDBMSSchedService::init()
     LOG_WARN("has inited", KR(ret));
   } else if (OB_FAIL(job_master_.init(GCTX.sql_proxy_, GCTX.schema_service_))) {
     LOG_WARN("[DBMS_SCHED_SERVICE] job master init failed");
-  } else if (OB_FAIL(ObServerThreadHelper::create(
+  } else if (OB_FAIL(ObTenantThreadHelper::create(
       "DBMSSched",
-      1))) {
+      1,
+      *this))) {
     LOG_WARN("[DBMS_SCHED_SERVICE] fail to create thread", KR(ret));
   } else {
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService init success");
@@ -57,7 +58,7 @@ int ObDBMSSchedService::start()
     LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.start())) {
     LOG_WARN("[DBMS_SCHED_SERVICE] job master start failed", K(ret));
-  } else if (OB_FAIL(ObServerThreadHelper::start())) {
+  } else if (OB_FAIL(ObTenantThreadHelper::start())) {
     LOG_WARN("[DBMS_SCHED_SERVICE] failed to start thread", KR(ret));
   } else {
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService start success");
@@ -85,7 +86,7 @@ void ObDBMSSchedService::stop()
   } else if (OB_FAIL(job_master_.stop())) {
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService stop failure");
   } else {
-    ObServerThreadHelper::stop();
+    ObTenantThreadHelper::stop();
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService stop success");
   }
 }
@@ -97,7 +98,7 @@ void ObDBMSSchedService::wait()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else {
-    ObServerThreadHelper::wait();
+    ObTenantThreadHelper::wait();
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService wait success");
   }
 }
@@ -111,35 +112,50 @@ void ObDBMSSchedService::destroy()
     } else {
       LOG_INFO("[DBMS_SCHED_SERVICE] job master destroy success");
     }
-    ObServerThreadHelper::destroy();
+    ObTenantThreadHelper::destroy();
   }
   LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService destroy success");
 }
 
-void ObDBMSSchedService::deactivate()
+void ObDBMSSchedService::switch_to_follower_forcedly()
 {
-  if (job_master_.is_inited()) {
-    job_master_.switch_to_follower();
-    ObServerThreadHelper::switch_to_follower_gracefully();
-    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch follower");
-  }
+  switch_to_follower_gracefully();
 }
-int ObDBMSSchedService::activate()
+int ObDBMSSchedService::switch_to_leader()
 {
   int ret = OB_SUCCESS;
   if (job_master_.is_inited()) {
     job_master_.switch_to_leader();
-    if (OB_FAIL(ObServerThreadHelper::switch_to_leader())) {
-      LOG_WARN("[DBMS_SCHED_SERVICE] failed to switch helper thread to leader", KR(ret));
-    }
+    ObTenantThreadHelper::switch_to_leader();
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch leader");
   }
   return ret;
 }
+int ObDBMSSchedService::switch_to_follower_gracefully()
+{
+  int ret = OB_SUCCESS;
+  if (job_master_.is_inited()) {
+    job_master_.switch_to_follower();
+    ObTenantThreadHelper::switch_to_follower_gracefully();
+    LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService switch follower");
+  }
+  return ret;
+}
+int ObDBMSSchedService::resume_leader()
+{
+  int ret = OB_SUCCESS;
+  if (!is_leader()) {
+    if (OB_FAIL(switch_to_leader())) {
+       LOG_INFO("[DBMS_SCHED_SERVICE] resume leader failed");
+    }
+  }
+  return ret;
+}
+
 void ObDBMSSchedService::wakeup_scheduler()
 {
   int ret = OB_SUCCESS;
-  SERVER_MODULE_SCOPE {
+  MOD_SCOPE {
     rootserver::ObDBMSSchedService *svc = share::g_mp->dbms_sched_service();
     if (OB_NOT_NULL(svc)) {
       svc->job_master_.wakeup();

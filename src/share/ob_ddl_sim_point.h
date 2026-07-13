@@ -33,6 +33,7 @@ enum ObSimType
 {
   SIM_TYPE_ALL = 0,
   SIM_TYPE_DDL = 1,
+  SIM_TYPE_RESERVED_2 = 2,
 };
 
 struct ObDDLSimAction
@@ -111,6 +112,18 @@ public:
   };
 };
 
+struct ObTenantDDLSimContext
+{
+public:
+  ObTenantDDLSimContext() : type_(SIM_TYPE_ALL), seed_(0), trigger_percent_(0), fixed_points_(nullptr) {}
+  DECLARE_TO_STRING;
+public:
+  ObSimType type_;
+  int64_t seed_;
+  int64_t trigger_percent_;
+  bool *fixed_points_;
+};
+
 class ObDDLSimPointMgr
 {
 public:
@@ -140,6 +153,8 @@ public:
   static ObDDLSimPointMgr &get_instance();
   ObIAllocator &get_arena_allocator() { return arena_; }
   TO_STRING_KV(K(is_inited_), K(task_sim_map_.size()));
+private:
+  int generate_task_sim_map(const ObTenantDDLSimContext &tenant_context, const int64_t current_task_id, const std::initializer_list<ObDDLSimPointID> &point_ids);
 private:
   ObDDLSimPointMgr();
   DISABLE_COPY_ASSIGN(ObDDLSimPointMgr);

@@ -46,7 +46,7 @@ public:
 public:
   static constexpr int64_t THREAD_NUM = 1;
   static constexpr int64_t MINI_MODE_THREAD_NUM = 1;
-  static constexpr int64_t MAX_LOG_HANDLE_TASK_NUM = 10;
+  static constexpr int64_t MAX_LOG_HANDLE_TASK_NUM = 10 * OB_MAX_LS_NUM_PER_TENANT_PER_SERVER;
 private:
   class TaskQueue : public common::ObSimpleThreadPool
   {

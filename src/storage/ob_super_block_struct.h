@@ -19,10 +19,11 @@
 
 #include "common/log/ob_log_cursor.h"
 #include "storage/blocksstable/ob_macro_block_id.h"
-#include "share/server_snapshot/ob_server_snapshot_id.h"
+#include "share/tenant_snapshot/ob_tenant_snapshot_id.h"
 #include "share/ob_ls_id.h"
 #include "common/ob_tablet_id.h"
 #include "storage/meta_mem/ob_meta_obj_struct.h"
+#include "storage/meta_store/ob_tenant_seq_generator.h"
 
 namespace oceanbase
 {
@@ -36,8 +37,9 @@ enum GCTabletType
 {
   InvalidType = -1,
   DropTablet = 0,
-  CreateAbort = 1,
-  DropLS = 2
+  ReservedOut = 1,
+  CreateAbort = 2,
+  DropLS = 3
 };
 
 struct ObServerSuperBlockHeader final
@@ -59,11 +61,13 @@ public:
   int32_t body_crc_;
 };
 
-enum class ObServerRuntimeCreateStatus
+enum class ObTenantCreateStatus
 {
   CREATING = 0,
   CREATED, // 1
   CREATE_ABORT, // 2
+  DELETING, // 3
+  DELETED, // 4
   MAX
 };
 
@@ -78,9 +82,9 @@ public:
 
   int64_t total_macro_block_count_;
   int64_t total_file_size_;
-  // Local recovery cursor and checkpoint entry for the process-wide server runtime.
   common::ObLogCursor replay_start_point_;
-  blocksstable::MacroBlockId runtime_meta_entry_;
+  // entry to the (single) server tenant-meta checkpoint
+  blocksstable::MacroBlockId tenant_meta_entry_;
 
   ServerSuperBlockBody();
   bool is_valid() const;
@@ -93,7 +97,7 @@ public:
                K_(total_macro_block_count),
                K_(total_file_size),
                K_(replay_start_point),
-               K_(runtime_meta_entry));
+               K_(tenant_meta_entry));
 
   OB_UNIS_VERSION(SUPER_BLOCK_BODY_VERSION);
 };
@@ -132,10 +136,10 @@ public:
   ServerSuperBlockBody body_;
 };
 
-struct ObServerSnapshotMeta final
+struct ObTenantSnapshotMeta final
 {
 public:
-  ObServerSnapshotMeta()
+  ObTenantSnapshotMeta()
     : ls_meta_entry_(oceanbase::storage::ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK), snapshot_id_()
   {
   }
@@ -144,31 +148,29 @@ public:
   OB_UNIS_VERSION(1);
 public:
   blocksstable::MacroBlockId ls_meta_entry_;
-  share::ObServerSnapshotID snapshot_id_;
+  share::ObTenantSnapshotID snapshot_id_;
 };
 
 enum class ObLSItemStatus : uint8_t
 {
   CREATING = 0,
-  CREATED,
-  CREATE_ABORT,
-  DELETED,
+  CREATED, // 1
+  CREATE_ABORT, // 2
+  DELETED, // 3
   MAX
 };
 
 struct ObLSItem
 {
 public:
-  ObLSItem()
-    : ls_id_(),
-      epoch_(0),
-      status_(ObLSItemStatus::MAX),
-      min_macro_seq_(UINT64_MAX),
-      max_macro_seq_(UINT64_MAX)
-  {
-  }
+  ObLSItem() :
+    ls_id_(),
+    epoch_(0),
+    status_(ObLSItemStatus::MAX),
+    min_macro_seq_(UINT64_MAX),
+    max_macro_seq_(UINT64_MAX) {}
   virtual ~ObLSItem() { reset(); }
-
+  
   void reset()
   {
     ls_id_.reset();
@@ -180,15 +182,13 @@ public:
 
   bool is_valid() const
   {
-    return ls_id_.is_valid()
-        && epoch_ >= 0
-        && ObLSItemStatus::MAX != status_
-        && min_macro_seq_ < max_macro_seq_;
+    return ls_id_.is_valid() && epoch_ >= 0 && ObLSItemStatus::MAX != status_ && min_macro_seq_ < max_macro_seq_;
   }
 
   TO_STRING_KV(K_(ls_id), K_(epoch), K_(status), K_(min_macro_seq), K_(max_macro_seq));
   OB_UNIS_VERSION_V(1);
 
+public:
   share::ObLSID ls_id_;
   int64_t epoch_;
   ObLSItemStatus status_;
@@ -196,25 +196,30 @@ public:
   uint64_t max_macro_seq_;
 };
 
-struct ObServerRuntimeSuperBlock final
+struct ObTenantSuperBlock final
 {
 public:
   static const int64_t MAX_SNAPSHOT_NUM = 32;
-  static const int64_t SERVER_RUNTIME_SUPER_BLOCK_VERSION = 4;
+  static const int64_t MIN_SUPER_BLOCK_VERSION = 0;
+  static const int64_t TENANT_SUPER_BLOCK_VERSION_V1 = 1;
+  static const int64_t TENANT_SUPER_BLOCK_VERSION_V3 = 3;
+  static const int64_t TENANT_SUPER_BLOCK_VERSION = 4;
   static const int64_t MAX_LS_COUNT = 128;
-  ObServerRuntimeSuperBlock();
-  ObServerRuntimeSuperBlock(const bool is_hidden);
-  ~ObServerRuntimeSuperBlock() = default;
-  ObServerRuntimeSuperBlock(const ObServerRuntimeSuperBlock &other);
-  ObServerRuntimeSuperBlock &operator==(const ObServerRuntimeSuperBlock &other) = delete;
-  ObServerRuntimeSuperBlock &operator!=(const ObServerRuntimeSuperBlock &other) = delete;
-  void copy_snapshots_from(const ObServerRuntimeSuperBlock &other);
+  ObTenantSuperBlock();
+  ObTenantSuperBlock(const bool is_hidden);
+  ~ObTenantSuperBlock() = default;
+  ObTenantSuperBlock(const ObTenantSuperBlock &other);
+  ObTenantSuperBlock &operator==(const ObTenantSuperBlock &other) = delete;
+  ObTenantSuperBlock &operator!=(const ObTenantSuperBlock &other) = delete;
+  void copy_snapshots_from(const ObTenantSuperBlock &other);
   void reset();
   bool is_valid() const;
-  int get_snapshot(const share::ObServerSnapshotID &snapshot_id, ObServerSnapshotMeta &snapshot) const;
-  int add_snapshot(const ObServerSnapshotMeta &snapshot);
-  int delete_snapshot(const share::ObServerSnapshotID &snapshot_id);
-  int check_new_snapshot(const share::ObServerSnapshotID &snapshot_id) const;
+  int get_snapshot(const share::ObTenantSnapshotID &snapshot_id, ObTenantSnapshotMeta &snapshot) const;
+  bool is_old_version() const { return version_ < TENANT_SUPER_BLOCK_VERSION; }
+  int add_snapshot(const ObTenantSnapshotMeta &snapshot);
+  int delete_snapshot(const share::ObTenantSnapshotID &snapshot_id);
+  int check_new_snapshot(const share::ObTenantSnapshotID &snapshot_id) const;
+  bool is_trivial_version() const { return version_ == TENANT_SUPER_BLOCK_VERSION_V1; }
 
   TO_STRING_KV(
                K_(replay_start_point),
@@ -223,13 +228,14 @@ public:
                K_(is_hidden),
                K_(version),
                K_(snapshot_cnt),
+               K_(preallocated_seqs),
                K_(auto_inc_ls_epoch),
                K_(ls_cnt));
 
-  OB_UNIS_VERSION(SERVER_RUNTIME_SUPER_BLOCK_VERSION);
+  OB_UNIS_VERSION(TENANT_SUPER_BLOCK_VERSION);
 public:
   
-  // Local recovery state for LS and tablet metadata.
+  // only meaningful for shared-nothing
   common::ObLogCursor replay_start_point_;
   blocksstable::MacroBlockId ls_meta_entry_;
   blocksstable::MacroBlockId tablet_meta_entry_;
@@ -237,8 +243,9 @@ public:
   bool is_hidden_;
   int64_t version_;
   int64_t snapshot_cnt_;
-  ObServerSnapshotMeta snapshots_[MAX_SNAPSHOT_NUM];
-  // Persisted LS catalog state for the current server runtime.
+  ObTenantSnapshotMeta tenant_snapshots_[MAX_SNAPSHOT_NUM];
+  // only meaningful for shared-storage
+  ObTenantMonotonicIncSeqs preallocated_seqs_;
   int64_t auto_inc_ls_epoch_;
   int64_t ls_cnt_;
   ObLSItem ls_item_arr_[MAX_LS_COUNT];
@@ -247,6 +254,135 @@ public:
 #define IS_EMPTY_BLOCK_LIST(entry_block) (entry_block == oceanbase::storage::ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK)
 // Due to the design of slog, the log_id_'s initial value must be 1
 #define SET_FIRST_VALID_SLOG_CURSOR(cursor) (set_cursor(cursor, 1/*file_id*/, 1/*log_id*/, 0/*offset*/))
+
+
+struct ObActiveTabletItem
+{
+public:
+  ObActiveTabletItem();
+  ObActiveTabletItem(const common::ObTabletID tablet_id, const int64_t union_id);
+  int64_t get_path_id() const { return meta_path_id_; }
+  uint64_t get_tablet_meta_version() const { return meta_version_id_; }
+
+  TO_STRING_KV(K_(tablet_id), K_(meta_path_id), K_(meta_version_id));
+  OB_UNIS_VERSION(1);
+
+public:
+  common::ObTabletID tablet_id_;
+  union {
+    int64_t union_id_;
+    // for PRIVATE_TABLET_META
+    struct {
+      int64_t meta_path_id_       : blocksstable::MacroBlockId::SF_BIT_PATH_ID;
+      uint64_t meta_version_id_   : blocksstable::MacroBlockId::SF_BIT_META_VERSION_ID;
+    };
+  };
+};
+
+struct ObLSActiveTabletArray
+{
+public:
+  ObLSActiveTabletArray()
+    : items_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("ActiveItems")) {}
+
+  ObLSActiveTabletArray(const ObLSActiveTabletArray &) = delete;
+  ObLSActiveTabletArray &operator=(const ObLSActiveTabletArray &) = delete;
+
+  bool is_valid() const { return items_.count() >= 0; }
+
+  TO_STRING_KV(K_(items));
+
+  OB_UNIS_VERSION(1);
+
+public:
+  common::ObSEArray<ObActiveTabletItem, 16> items_; 
+};
+
+enum class ObPendingFreeTabletStatus : uint8_t
+{
+  WAIT_GC = 0,
+  WAIT_VERIFY, // 1
+  VERIFIED, // 2
+  MAX
+};
+
+struct ObPendingFreeTabletItem
+{
+public:
+  ObPendingFreeTabletItem()
+    : tablet_id_(),
+      tablet_meta_version_(0),
+      status_(ObPendingFreeTabletStatus::MAX),
+      free_time_(0),
+      gc_type_(GCTabletType::DropTablet)
+  {}
+  ObPendingFreeTabletItem(
+    const common::ObTabletID tablet_id,
+    const int64_t tablet_meta_version,
+    const ObPendingFreeTabletStatus status,
+    const int64_t free_time,
+    const GCTabletType gc_type)
+    : tablet_id_(tablet_id), tablet_meta_version_(tablet_meta_version), 
+      status_(status), free_time_(free_time),
+      gc_type_(gc_type)
+  {}
+
+  bool is_valid() const
+  { 
+    return tablet_id_.is_valid() && tablet_meta_version_ > 0 &&
+        ObPendingFreeTabletStatus::MAX != status_;
+  }
+  bool operator == (const ObPendingFreeTabletItem &other) const {
+    return tablet_id_ == other.tablet_id_ &&
+           tablet_meta_version_ == other.tablet_meta_version_ &&
+           status_ == other.status_;
+  }
+
+  TO_STRING_KV(K_(tablet_id), K_(tablet_meta_version), K_(status));
+  OB_UNIS_VERSION(1);
+
+public:
+  common::ObTabletID tablet_id_;
+  int64_t tablet_meta_version_;
+  ObPendingFreeTabletStatus status_;
+  // pending_free_items in pending_free_tablet_arr are incremented according to free time
+  int64_t free_time_;
+  GCTabletType gc_type_;
+};
+
+struct ObLSPendingFreeTabletArray
+{
+public:
+  ObLSPendingFreeTabletArray()
+    : items_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("PendFreeItems")) {}
+
+  ObLSPendingFreeTabletArray(const ObLSPendingFreeTabletArray &) = delete;
+  ObLSPendingFreeTabletArray &operator=(const ObLSPendingFreeTabletArray &) = delete;
+
+  bool is_valid() const { return items_.count() >= 0; }
+  int assign(const ObLSPendingFreeTabletArray &other);
+
+  TO_STRING_KV(K_(items));
+
+  OB_UNIS_VERSION(1);
+
+public:
+  common::ObSEArray<ObPendingFreeTabletItem, 16> items_; 
+};
+
+struct ObPrivateTabletCurrentVersion
+{
+public:
+  ObPrivateTabletCurrentVersion() : tablet_addr_() {}
+
+  bool is_valid() const { return tablet_addr_.is_valid(); }
+
+  TO_STRING_KV(K_(tablet_addr));
+  OB_UNIS_VERSION(1);
+
+public:
+  ObMetaDiskAddr tablet_addr_;
+};
 
 }  // end namespace storage
 }  // end namespace oceanbase

@@ -338,6 +338,7 @@ int ObTabletMdsData::init_for_evict_medium_info(
       extra_medium_info_.last_compaction_type_ = is_major_merge(merge_type) ? compaction::ObMediumCompactionInfo::MAJOR_COMPACTION : compaction::ObMediumCompactionInfo::MEDIUM_COMPACTION;
       extra_medium_info_.last_medium_scn_ = finish_medium_scn;
       extra_medium_info_.wait_check_flag_ = false;
+      // no need check in shared storage
     } else {
       extra_medium_info_ = other.extra_medium_info_;
     }
@@ -791,7 +792,7 @@ int ObTabletMdsData::read_items(
 {
   int ret = OB_SUCCESS;
   common::ObIAllocator *allocator = input_array_struct.allocator_;
-  ObObjectLinkIter iter;
+  ObSharedObjectLinkIter iter;
   ITEM *info = nullptr;
   char *buf = nullptr;
   int64_t len = 0;
@@ -860,7 +861,7 @@ int ObTabletMdsData::build_mds_data(
       LOG_WARN("failed to alloc and new mda data medium info list", K(ret));
     } else if (OB_FAIL(mds_data.medium_info_list_.ptr_->init_for_first_creation(allocator))) {
       LOG_WARN("failed to init mda data medium info list", K(ret));
-    }
+    } // the interface is for compat, no need init with truncate info
 
     DLIST_FOREACH(info, medium_info_list) {
       if (OB_FAIL(mds_data.medium_info_list_.ptr_->append(*info))) {
@@ -895,13 +896,13 @@ int ObTabletMdsData::build_tablet_status(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("node is null", K(ret), KP(node));
     } else {
-      key->mds_table_id_ = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
+      key->mds_table_id_ = mds::TupleTypeIdx<mds::MdsTableTypeTuple, mds::NormalMdsTable>::value;
       key->mds_unit_id_ = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, ObTabletCreateDeleteMdsUserData>>::value;
       key->allocator_ = &allocator;
       // no need to serialize dummy key
       key->key_.reset();
 
-      node->mds_table_id_ = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
+      node->mds_table_id_ = mds::TupleTypeIdx<mds::MdsTableTypeTuple, mds::NormalMdsTable>::value;
       node->mds_unit_id_ = mds::TupleTypeIdx<mds::NormalMdsTable, ObTabletCreateDeleteMdsUserData>::value;
 
       node->status_.union_.field_.node_type_ = mds::MdsNodeType::SET;
@@ -922,13 +923,13 @@ int ObTabletMdsData::build_tablet_status(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("node is null", K(ret), KP(node));
     } else {
-      key->mds_table_id_ = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
+      key->mds_table_id_ = mds::TupleTypeIdx<mds::MdsTableTypeTuple, mds::NormalMdsTable>::value;
       key->mds_unit_id_ = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, ObTabletCreateDeleteMdsUserData>>::value;
       key->allocator_ = &allocator;
       // no need to serialize dummy key
       key->key_.reset();
 
-      node->mds_table_id_ = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
+      node->mds_table_id_ = mds::TupleTypeIdx<mds::MdsTableTypeTuple, mds::NormalMdsTable>::value;
       node->mds_unit_id_ = mds::TupleTypeIdx<mds::NormalMdsTable, ObTabletCreateDeleteMdsUserData>::value;
 
       node->status_.union_.field_.node_type_ = mds::MdsNodeType::SET;
@@ -957,6 +958,8 @@ int ObTabletMdsData::build_tablet_status(
     user_data.tablet_status_ = tx_data.tablet_status_;
     user_data.create_commit_scn_ = create_commit_scn;
     user_data.create_commit_version_ = tx_data.tx_scn_.get_val_for_tx();
+    user_data.reserved_scn_ = tx_data.reserved_scn_;
+    user_data.reserved_ls_id_ = tx_data.reserved_ls_id_;
     if (ObTabletStatus::DELETED == tx_data.tablet_status_) {
       //TODO(bizhu) check deleted trans scn
       user_data.delete_commit_scn_ = tx_data.tx_scn_;
@@ -1013,13 +1016,13 @@ int ObTabletMdsData::build_aux_tablet_info(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("node is null", K(ret), KP(node));
     } else {
-      key->mds_table_id_ = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
+      key->mds_table_id_ = mds::TupleTypeIdx<mds::MdsTableTypeTuple, mds::NormalMdsTable>::value;
       key->mds_unit_id_ = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, ObTabletBindingMdsUserData>>::value;
       key->allocator_ = &allocator;
       // no need to serialize dummy key
       key->key_.reset();
 
-      node->mds_table_id_ = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
+      node->mds_table_id_ = mds::TupleTypeIdx<mds::MdsTableTypeTuple, mds::NormalMdsTable>::value;
       node->mds_unit_id_ = mds::TupleTypeIdx<mds::NormalMdsTable, ObTabletBindingMdsUserData>::value;
 
       node->status_.union_.field_.node_type_ = mds::MdsNodeType::SET;
@@ -1041,13 +1044,13 @@ int ObTabletMdsData::build_aux_tablet_info(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("node is null", K(ret), KP(node));
     } else {
-      key->mds_table_id_ = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
+      key->mds_table_id_ = mds::TupleTypeIdx<mds::MdsTableTypeTuple, mds::NormalMdsTable>::value;
       key->mds_unit_id_ = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, ObTabletBindingMdsUserData>>::value;
       key->allocator_ = &allocator;
       // no need to serialize dummy key
       key->key_.reset();
 
-      node->mds_table_id_ = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
+      node->mds_table_id_ = mds::TupleTypeIdx<mds::MdsTableTypeTuple, mds::NormalMdsTable>::value;
       node->mds_unit_id_ = mds::TupleTypeIdx<mds::NormalMdsTable, ObTabletBindingMdsUserData>::value;
 
       node->status_.union_.field_.node_type_ = mds::MdsNodeType::SET;

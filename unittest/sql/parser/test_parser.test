@@ -61,7 +61,50 @@ update d.t1 PARTITION (p2) SET id = 2 WHERE name = 'Jill';
 INSERT INTO d.t1 PARTITION (p3, p4) VALUES (24, 'Tim', 'Greene', 3, 1),  (26, 'Linda', 'Mills', 2, 1);
 REPLACE INTO d.t1 PARTITION (p0) VALUES (20, 'Jan', 'Jones', 3, 2);
 SELECT e.id, s.city, d.name FROM e JOIN stores PARTITION (p1) ON e.id=s.id JOIN departments PARTITION (p0) ON e.id=d.id;
+#alter system switch replica leader zone = 'z1';
+#alter system switch replica leader server = '127.0.0.1:80';
+#alter system switch replica leader partition_id = '1%8@3001' server = '127.0.0.1:80';
+#alter system switch replica leader partition_id '1%8@3001' server '127.0.0.1:80';
+alter system report replica;
+alter system report replica server = '127.0.0.1:80';
+alter system report replica zone = 'z1';
+alter system recycle replica;
+alter system recycle replica server = '127.0.0.1:80';
+alter system recycle replica server '127.0.0.1:80';
+alter system recycle replica zone = 'z1';
+alter system recycle replica zone 'z1';
 alter system major freeze;
+alter system start merge zone = 'z1';
+alter system suspend merge;
+alter system suspend merge tenant = sys;
+alter system suspend merge tenant = all_user;
+alter system suspend merge tenant = all_meta;
+alter system resume merge;
+alter system resume merge tenant = sys;
+alter system resume merge tenant = all_user;
+alter system resume merge tenant = all_meta;
+alter system clear roottable;
+alter system clear roottable tenant = 'xxx';
+alter system modify zone 'z1' set region 'r1'
+--error 5001
+alter system start zone 'z1' region 'r1'
+alter system modify zone 'z1' IDC 'idc1'
+alter system modify zone 'z1' set IDC 'idc1', region 'r1'
+alter system add zone 'z1' idc 'idc1', region 'r1'
+alter system add zone 'z1' idc 'idc1'
+alter system modify zone 'z1'
+--error 5001
+alter system start zone 'z1' IDC 'idc1'
+--error 5001
+alter system start zone 'z1' zone_type 'ReadWrite'
+alter system add zone 'z1' zone_type 'ReadWrite', idc 'idc1', region 'r1'
+alter system add zone 'z1' zone_type 'ReadWrite', idc 'idc1'
+alter system add zone 'z1' zone_type 'ReadWrite', region 'r1'
+alter system add zone 'z1' zone_type 'ReadWrite'
+alter system modify zone 'z1' zone_type 'ReadWrite', idc 'idc1', region 'r1'
+alter system modify zone 'z1' zone_type 'ReadWrite', idc 'idc1'
+alter system modify zone 'z1' zone_type 'ReadWrite', region 'r1'
+alter system modify zone 'z1' zone_type 'ReadWrite'
 select * from t1 where c1>ANY(select c1 from t2 where c2>1);
 select * from t1 where c1>SOME(select c1 from t2 where c2>1);
 select * from t1 where c1>ALL(select c1 from t2 where c2>1);
@@ -132,6 +175,16 @@ create outline out_name on insert /*+ssssss*/ into t1 values(1, 2)  to insert /*
 drop outline out_name;
 drop outline db_name.out_name;
 
+#test create tenant, alter tenant
+create tenant tt1 replica_num = 1, primary_zone = 'zone1', resource_pool_list = ('zone1') set ob_tcp_invited_nodes='%';
+create tenant if not exists tt1 replica_num = 1, primary_zone = 'zone1', resource_pool_list = ('zone1') set ob_tcp_invited_nodes='%';
+create tenant tt1 replica_num = 1, primary_zone = 'zone1', resource_pool_list = ('zone1'), locality = 'auto_locality_strategy' set ob_tcp_invited_nodes='%';
+create tenant if not exists tt1 replica_num = 1, primary_zone = 'zone1', resource_pool_list = ('zone1'), locality = 'auto_locality_strategy' set ob_tcp_invited_nodes='%';
+create tenant tt1 replica_num = 1, primary_zone = 'zone1', resource_pool_list = ('zone1'), logonly_replica_num = 1 set ob_tcp_invited_nodes='%';
+create tenant if not exists tt1 replica_num = 1, primary_zone = 'zone1', resource_pool_list = ('zone1'), logonly_replica_num = 1 set ob_tcp_invited_nodes='%';
+
+select /*+max_concurrent(-10)*/* from t1;
+select /*+max_concurrent(10)*/* from t1;
 
 
 ########################## test for hierarchical query ###################################
@@ -201,6 +254,11 @@ drop outline db_name.out_name;
 ### test for limit ##
 #select emp_id, mgr_id from emp where emp_id = 1 start with emp_id = 1 connect by prior c1 = 1 group by c1 having c1 > 1 limit 10;
 
+########################## test for flashback and purge index ###################################
+#flashback index t1_index to before drop;
+#purge index t1_index;
+
+
 ######################## test for merge stmt ####################################
 --error 5001
 merge into targetTable t1 using sourceTable t2 on (t1.id = t2.id) when matched then update set t1.sales = t2.sales when not matched then insert(t1.id, t1.sales) values(t2.id, t2.sales);
@@ -228,5 +286,36 @@ select unique distinct(    max(c1)), c2 from t1;
 --error 5001
 select unique(*) from t1;
 
+############# tablegroup ##################
+--sql_mode mysql
+alter tablegroup tg2 add table t1,t2;
 insert into t1 values(X'');
 create table t1(`thedate` date NOT NULL COMMENT '日期');
+alter system bootstrap REGION 'sys_region' ZONE 'zone1' SERVER '10.101.74.122:41425';
+alter system cancel balance job;
+alter system cancel balance job tenant 'mysql';
+
+
+
+alter system add replica ls=100 server='100.88.107.212:5000' replica_type='F' data_source='100.88.107.212:5001' paxos_replica_num=3 tenant='mysql_tenant';
+alter system add replica ls=100 server='100.88.107.212:5000' replica_type='F' data_source='100.88.107.212:5001' paxos_replica_num=3;
+alter system add replica ls=100 server='100.88.107.212:5000' replica_type='F' data_source='100.88.107.212:5001';
+alter system add replica ls=100 server='100.88.107.212:5000' replica_type='F';
+
+alter system remove replica ls=100 server='100.88.107.212:5000' paxos_replica_num=3 tenant='mysql_tenant';
+alter system remove replica ls=100 server='100.88.107.212:5000' paxos_replica_num=3;
+alter system remove replica ls=100 server='100.88.107.212:5000';
+
+alter system modify replica ls=100 server='100.88.107.212:5000' replica_type='F' paxos_replica_num=3 tenant='mysql_tenant';
+alter system modify replica ls=100 server='100.88.107.212:5000' replica_type='F' paxos_replica_num=3;
+alter system modify replica ls=100 server='100.88.107.212:5000' replica_type='F';
+
+alter system modify ls=100 paxos_replica_num=3 tenant='mysql_tenant';
+alter system modify ls=100 paxos_replica_num=3;
+
+alter system migrate replica ls=100 source='100.88.107.212:5000' destination='100.88.107.212:5000' data_source='100.88.107.212:5001' tenant='mysql_tenant';
+alter system migrate replica ls=100 source='100.88.107.212:5000' destination='100.88.107.212:5000' data_source='100.88.107.212:5001';
+alter system migrate replica ls=100 source='100.88.107.212:5000' destination='100.88.107.212:5000';
+
+alter system cancel replica task task_id = 'xxx' tenant='mysql_tenant';
+alter system cancel replica task task_id = 'xxx';

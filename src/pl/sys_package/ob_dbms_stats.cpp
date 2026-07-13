@@ -71,7 +71,7 @@ int ObDbmsStats::gather_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
   int64_t task_cnt = 1;
   int64_t start_time = ObTimeUtility::current_time();
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_ISNULL(ctx.get_my_session())) {
@@ -147,6 +147,7 @@ int ObDbmsStats::gather_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
     task_info.task_end_time_ = ObTimeUtility::current_time();
     task_info.ret_code_ = ret;
     task_info.failed_count_ = ret == OB_SUCCESS ? 0 : 1;
+    update_optimizer_gather_stat_info(&task_info, &gather_stat);
     ObOptStatGatherStatList::instance().remove(gather_stat);
   }
   return ret;
@@ -182,7 +183,7 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
   global_param.allocator_ = &ctx.get_allocator();
   int64_t start_time = ObTimeUtility::current_time();
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_ISNULL(ctx.get_my_session())) {
@@ -218,8 +219,8 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
       ObOptStatGatherStatList::instance().push(gather_stat);
       ObOptStatGatherAudit audit(tmp_alloc);
       ObOptStatRunningMonitor running_monitor(ctx.get_allocator(), start_time, stat_param.allocator_->used(), gather_stat, audit);
-      if (OB_FAIL(refresh_runtime_schema_guard(ctx))) {
-        LOG_WARN("refresh runtime schema guard failed", K(ret));
+      if (OB_FAIL(refresh_tenant_schema_guard(ctx))) {
+        LOG_WARN("refresh tenant schema guard failed", K(ret));
       } else if (OB_FAIL(THIS_WORKER.check_status())) {
         LOG_WARN("check status failed", KR(ret));
       } else if (OB_FAIL(running_monitor.add_monitor_info(ObOptStatRunningPhase::GATHER_PREPARE))) {
@@ -281,6 +282,7 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
         }
       }
       running_monitor.set_monitor_result(ret, ObTimeUtility::current_time(), stat_param.allocator_->used());
+      update_optimizer_gather_stat_info(NULL, &gather_stat);
       ObOptStatGatherStatList::instance().remove(gather_stat);
       task_info.completed_table_count_ ++;
       ret = ret == OB_TABLE_NOT_EXIST ? OB_SUCCESS : ret;//skip table not exist in schema stats op.
@@ -288,6 +290,7 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
     task_info.task_end_time_ = ObTimeUtility::current_time();
     task_info.ret_code_ = ret;
     task_info.failed_count_ = ret == OB_SUCCESS ? 0 : table_ids.count() - i + 1;
+    update_optimizer_gather_stat_info(&task_info, NULL);
   }
   }
   return ret;
@@ -327,7 +330,7 @@ int ObDbmsStats::gather_index_stats(ObExecContext &ctx, ParamStore &params, ObOb
   empty_cascade.set_null();
   ObSEArray<uint64_t, 1> dummy_column_ids;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (params.at(11).is_null()) {
@@ -553,7 +556,7 @@ int ObDbmsStats::set_table_stats(ObExecContext &ctx, ParamStore &params, ObObj &
   ObSetTableStatParam param;
   param.table_param_.allocator_ = &ctx.get_allocator();
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(parse_set_table_info(ctx,
@@ -633,7 +636,7 @@ int ObDbmsStats::set_column_stats(sql::ObExecContext &ctx,
   ObSetColumnStatParam param;
   param.table_param_.allocator_ = &ctx.get_allocator();
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (params.at(2).is_null() && !params.at(1).is_null()) {
@@ -731,7 +734,7 @@ int ObDbmsStats::set_index_stats(ObExecContext &ctx, ParamStore &params, ObObj &
   number::ObNumber num_nummacroblks;
   number::ObNumber num_nummicroblks;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (params.at(22).is_null()) {
@@ -814,7 +817,7 @@ int ObDbmsStats::delete_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
   bool cascade_columns = false;
   bool cascade_indexes = false;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(parse_table_part_info(ctx,
@@ -896,7 +899,7 @@ int ObDbmsStats::delete_column_stats(ObExecContext &ctx, ParamStore &params, ObO
   bool cascade_parts = false;
   bool only_histogram = false;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(parse_table_part_info(ctx,
@@ -973,7 +976,7 @@ int ObDbmsStats::delete_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
     global_param.allocator_ = &ctx.get_allocator();
     ObSEArray<uint64_t, 4> table_ids;
     if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-      LOG_WARN("statistics tables are not writable", K(ret));
+      LOG_WARN("failed to check tenant is restore", K(ret));
     } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
       LOG_WARN("failed to implicit commit before gather stats", K(ret));
     } else if (ctx.get_my_session()->get_is_in_retry()) {
@@ -990,8 +993,8 @@ int ObDbmsStats::delete_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
         stat_table.table_id_ = table_ids.at(i);
         ObTableStatParam stat_param = global_param;
         stat_param.allocator_ = &tmp_alloc;//use the temp allocator to free memory after delete stats.
-        if (OB_FAIL(refresh_runtime_schema_guard(ctx))) {
-          LOG_WARN("refresh runtime schema guard failed", K(ret));
+        if (OB_FAIL(refresh_tenant_schema_guard(ctx))) {
+          LOG_WARN("refresh tenant schema guard failed", K(ret));
         } else if (OB_FAIL(parse_table_part_info(ctx, stat_table, stat_param))) {
           LOG_WARN("failed to parse table part info", K(ret));
         } else if (!params.at(4).is_null() && OB_FAIL(params.at(4).get_bool(stat_param.no_invalidate_))) {
@@ -1063,7 +1066,7 @@ int ObDbmsStats::delete_index_stats(ObExecContext &ctx, ParamStore &params, ObOb
   bool cascade_parts = false;
   bool only_histogram = false;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (params.at(10).is_null()) {
@@ -1214,6 +1217,14 @@ int ObDbmsStats::create_stat_table(ObExecContext &ctx, ParamStore &params, ObObj
                                                 param.tab_name_,
                                                 false))) {
       LOG_WARN("failed to convert vaild ident name", K(ret));
+    } else if (!params.at(2).is_null() && OB_FAIL(params.at(2).get_varchar(param.tab_group_))) {
+      LOG_WARN("failed to get tblspace", K(ret));
+    } else if (!params.at(2).is_null() &&
+               OB_FAIL(convert_vaild_ident_name(*param.allocator_,
+                                                session->get_dtc_params(),
+                                                param.tab_group_,
+                                                false))) {
+      LOG_WARN("failed to convert vaild ident name", K(ret));
     } else if (!params.at(3).is_null() && OB_FAIL(params.at(3).get_bool(is_temp_table))) {
       LOG_WARN("failed to get global_temporary", K(ret));
     } else if (param.tab_name_.empty()) {
@@ -1319,7 +1330,7 @@ int ObDbmsStats::export_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
     ObString empty_string;
     const share::schema::ObTableSchema *table_schema = NULL;
     if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-      LOG_WARN("statistics tables are not writable", K(ret));
+      LOG_WARN("failed to check tenant is restore", K(ret));
     } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
       LOG_WARN("failed to implicit commit before gather stats", K(ret));
     } else if (OB_FAIL(parse_table_part_info(ctx,
@@ -1400,7 +1411,7 @@ int ObDbmsStats::export_column_stats(sql::ObExecContext &ctx,
   const share::schema::ObTableSchema *table_schema = NULL;
   stat_param.cascade_ = true;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(parse_table_part_info(ctx,
@@ -1463,7 +1474,7 @@ int ObDbmsStats::export_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
     ObSEArray<uint64_t, 4> table_ids;
     ObString tmp_str;
     if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-      LOG_WARN("statistics tables are not writable", K(ret));
+      LOG_WARN("failed to check tenant is restore", K(ret));
     } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
       LOG_WARN("failed to implicit commit before gather stats", K(ret));
     } else if (ctx.get_my_session()->get_is_in_retry()) {
@@ -1501,8 +1512,8 @@ int ObDbmsStats::export_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
           stat_param.stat_id_ = stat_table_param.stat_id_;
           stat_param.cascade_ = true;
           stat_param.allocator_ = &tmp_alloc;//use the temp allocator to free memory after export stats.
-          if (OB_FAIL(refresh_runtime_schema_guard(ctx))) {
-            LOG_WARN("refresh runtime schema guard failed", K(ret));
+          if (OB_FAIL(refresh_tenant_schema_guard(ctx))) {
+            LOG_WARN("refresh tenant schema guard failed", K(ret));
           } else if (OB_FAIL(parse_table_part_info(ctx, stat_table, stat_param))) {
             LOG_WARN("failed to parse table part info", K(ret));
           } else if (OB_FAIL(ObDbmsStatsExportImport::export_table_stats(ctx, stat_param, tmp_str))) {
@@ -1545,7 +1556,7 @@ int ObDbmsStats::export_index_stats(ObExecContext &ctx, ParamStore &params, ObOb
   stat_table_param.allocator_ = &ctx.get_allocator();
   const share::schema::ObTableSchema *table_schema = NULL;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (params.at(6).is_null()) {
@@ -1653,7 +1664,7 @@ int ObDbmsStats::import_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
     bool cascade_index = false;
     const share::schema::ObTableSchema *table_schema = NULL;
     if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-      LOG_WARN("statistics tables are not writable", K(ret));
+      LOG_WARN("failed to check tenant is restore", K(ret));
     } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
       LOG_WARN("failed to implicit commit before gather stats", K(ret));
     } else if (OB_FAIL(parse_table_part_info(ctx,
@@ -1753,7 +1764,7 @@ int ObDbmsStats::import_column_stats(sql::ObExecContext &ctx,
   const share::schema::ObTableSchema *table_schema = NULL;
   stat_param.cascade_ = true;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(parse_table_part_info(ctx,
@@ -1827,7 +1838,7 @@ int ObDbmsStats::import_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
     const share::schema::ObTableSchema *table_schema = NULL;
     ObSEArray<uint64_t, 4> table_ids;
     if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-      LOG_WARN("statistics tables are not writable", K(ret));
+      LOG_WARN("failed to check tenant is restore", K(ret));
     } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
       LOG_WARN("failed to implicit commit before gather stats", K(ret));
     } else if (ctx.get_my_session()->get_is_in_retry()) {
@@ -1868,8 +1879,8 @@ int ObDbmsStats::import_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
           stat_param.part_stat_param_.need_modify_ = true;
           stat_param.subpart_stat_param_.need_modify_ = true;
           stat_param.allocator_ = &tmp_alloc;//use the temp allocator to free memory after stat import
-          if (OB_FAIL(refresh_runtime_schema_guard(ctx))) {
-            LOG_WARN("refresh runtime schema guard failed", K(ret));
+          if (OB_FAIL(refresh_tenant_schema_guard(ctx))) {
+            LOG_WARN("refresh tenant schema guard failed", K(ret));
           } else if (OB_FAIL(parse_table_part_info(ctx, stat_table, stat_param))) {
             LOG_WARN("failed to parse table part info", K(ret));
           } else if (!params.at(4).is_null() && OB_FAIL(params.at(4).get_bool(stat_param.no_invalidate_))) {
@@ -1932,7 +1943,7 @@ int ObDbmsStats::import_index_stats(ObExecContext &ctx, ParamStore &params, ObOb
   index_stat_param.is_index_stat_ = true;
   const share::schema::ObTableSchema *table_schema = NULL;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (params.at(8).is_null()) {
@@ -2055,7 +2066,7 @@ int ObDbmsStats::lock_table_stats(sql::ObExecContext &ctx,
   part_name.set_null();
   ObString stat_type_str;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(parse_table_part_info(ctx,
@@ -2108,7 +2119,7 @@ int ObDbmsStats::lock_partition_stats(sql::ObExecContext &ctx,
   stat_param.allocator_ = &ctx.get_allocator();
   stat_param.stattype_ = StatTypeLocked::PARTITION_ALL_TYPE;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (params.at(2).is_null()) {
@@ -2158,7 +2169,7 @@ int ObDbmsStats::lock_schema_stats(sql::ObExecContext &ctx,
     global_param.allocator_ = &ctx.get_allocator();
     ObSEArray<uint64_t, 4> table_ids;
     if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-      LOG_WARN("statistics tables are not writable", K(ret));
+      LOG_WARN("failed to check tenant is restore", K(ret));
     } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
       LOG_WARN("failed to implicit commit before gather stats", K(ret));
     } else if (ctx.get_my_session()->get_is_in_retry()) {
@@ -2182,8 +2193,8 @@ int ObDbmsStats::lock_schema_stats(sql::ObExecContext &ctx,
         stat_table.database_id_ = global_param.db_id_;
         stat_table.table_id_ = table_ids.at(i);
         ObTableStatParam stat_param = global_param;
-        if (OB_FAIL(refresh_runtime_schema_guard(ctx))) {
-          LOG_WARN("refresh runtime schema guard failed", K(ret));
+        if (OB_FAIL(refresh_tenant_schema_guard(ctx))) {
+          LOG_WARN("refresh tenant schema guard failed", K(ret));
         } else if (OB_FAIL(parse_table_part_info(ctx, stat_table, stat_param))) {
           LOG_WARN("failed to parse table part info", K(ret));
         } else {
@@ -2270,7 +2281,7 @@ int ObDbmsStats::unlock_table_stats(sql::ObExecContext &ctx,
   stat_param.allocator_ = &ctx.get_allocator();
   stat_param.stattype_ = StatTypeLocked::TABLE_ALL_TYPE;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(parse_table_part_info(ctx,
@@ -2324,7 +2335,7 @@ int ObDbmsStats::unlock_partition_stats(sql::ObExecContext &ctx,
   stat_param.allocator_ = &ctx.get_allocator();
   stat_param.stattype_ = StatTypeLocked::PARTITION_ALL_TYPE;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (params.at(2).is_null()) {
@@ -2396,8 +2407,8 @@ int ObDbmsStats::unlock_schema_stats(sql::ObExecContext &ctx,
         stat_table.database_id_ = global_param.db_id_;
         stat_table.table_id_ = table_ids.at(i);
         ObTableStatParam stat_param = global_param;
-        if (OB_FAIL(refresh_runtime_schema_guard(ctx))) {
-          LOG_WARN("refresh runtime schema guard failed", K(ret));
+        if (OB_FAIL(refresh_tenant_schema_guard(ctx))) {
+          LOG_WARN("refresh tenant schema guard failed", K(ret));
         } else if (OB_FAIL(parse_table_part_info(ctx, stat_table, stat_param))) {
           LOG_WARN("failed to parse table part info", K(ret));
         } else {
@@ -2450,7 +2461,7 @@ int ObDbmsStats::restore_table_stats(sql::ObExecContext &ctx,
   bool restore_cluster_index = false;
   int64_t specify_time = 0;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(parse_table_part_info(ctx,
@@ -2552,7 +2563,7 @@ int ObDbmsStats::restore_schema_stats(sql::ObExecContext &ctx,
   ObSEArray<uint64_t, 4> table_ids;
   int64_t specify_time = 0;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (ctx.get_my_session()->get_is_in_retry()) {
@@ -2590,8 +2601,8 @@ int ObDbmsStats::restore_schema_stats(sql::ObExecContext &ctx,
       stat_table.table_id_ = table_ids.at(i);
       ObTableStatParam stat_param = global_param;
       stat_param.allocator_ = &tmp_alloc;////use the temp allocator to free memory after stat restore
-      if (OB_FAIL(refresh_runtime_schema_guard(ctx))) {
-        LOG_WARN("refresh runtime schema guard failed", K(ret));
+      if (OB_FAIL(refresh_tenant_schema_guard(ctx))) {
+        LOG_WARN("refresh tenant schema guard failed", K(ret));
       } else if (OB_FAIL(parse_table_part_info(ctx, stat_table, stat_param))) {
         LOG_WARN("failed to parse table part info", K(ret));
       } else if (!params.at(2).is_null() && OB_FAIL(params.at(2).get_bool(stat_param.force_))) {
@@ -2638,7 +2649,7 @@ int ObDbmsStats::purge_stats(sql::ObExecContext &ctx,
   UNUSED(result);
   int64_t specify_time = -1;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else {
@@ -2697,7 +2708,7 @@ int ObDbmsStats::alter_stats_history_retention(sql::ObExecContext &ctx,
   int64_t new_retention = OPT_DEFAULT_STATS_RETENTION;//default value
   double retention_tmp = 0.0; // bugfix:
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (!params.at(0).is_null() && OB_FAIL(params.at(0).get_number(num_retention))) {
@@ -2738,7 +2749,7 @@ int ObDbmsStats::get_stats_history_availability(sql::ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(ctx.get_my_session()));
   } else if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsHistoryManager::get_stats_history_retention_and_availability(ctx, false, result))) {
     LOG_WARN("failed to get stats history availability", K(ret));
   } else if (result.is_null()) {
@@ -2775,7 +2786,7 @@ int ObDbmsStats::get_stats_history_retention(sql::ObExecContext &ctx,
   number::ObNumber num_retention;
   int64_t retention_val = 0;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsHistoryManager::get_stats_history_retention_and_availability(ctx, true, retention))) {
     LOG_WARN("failed to get stats history retention", K(ret));
   } else if (OB_FAIL(retention.get_number(num_retention))) {
@@ -2811,7 +2822,7 @@ int ObDbmsStats::reset_global_pref_defaults(sql::ObExecContext &ctx,
   UNUSED(params);
   UNUSED(result);
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(ObDbmsStatsPreferences::reset_global_pref_defaults(ctx))) {
@@ -2845,7 +2856,7 @@ int ObDbmsStats::get_prefs(sql::ObExecContext &ctx,
   ObStatPrefs *stat_pref = NULL;
   
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (!params.at(0).is_null() && OB_FAIL(params.at(0).get_string(opt_name))) {
     LOG_WARN("failed to get string", K(ret));
   } else if (!params.at(0).is_null() &&
@@ -2889,7 +2900,7 @@ int ObDbmsStats::set_global_prefs(sql::ObExecContext &ctx,
   ObSEArray<uint64_t, 4> table_ids;
   ObStatPrefs *stat_pref = NULL;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (!params.at(0).is_null() && OB_FAIL(params.at(0).get_string(opt_name))) {
@@ -2945,7 +2956,7 @@ int ObDbmsStats::set_schema_prefs(sql::ObExecContext &ctx,
   global_param.allocator_ = &ctx.get_allocator();
   ObStatPrefs *stat_pref = NULL;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (ctx.get_my_session()->get_is_in_retry()) {
@@ -3012,7 +3023,7 @@ int ObDbmsStats::set_table_prefs(sql::ObExecContext &ctx,
   bool use_size_auto = false;
   bool is_async_gather = false;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(parse_table_part_info(ctx, params.at(0), params.at(1), dummy_param, param))) {
@@ -3073,7 +3084,7 @@ int ObDbmsStats::delete_schema_prefs(sql::ObExecContext &ctx,
   dummy_param.allocator_ = &ctx.get_allocator();
   ObStatPrefs *stat_pref = NULL;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (ctx.get_my_session()->get_is_in_retry()) {
@@ -3127,7 +3138,7 @@ int ObDbmsStats::delete_table_prefs(sql::ObExecContext &ctx,
   ObSEArray<uint64_t, 4> table_ids;
   ObStatPrefs *stat_pref = NULL;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(parse_table_part_info(ctx, params.at(0), params.at(1), dummy_param, param))) {
@@ -3211,6 +3222,8 @@ int ObDbmsStats::async_gather_stats_job_proc(sql::ObExecContext &ctx,
   } else if (!session->is_user_session() && no_async_gather) {
     //do nothing
     LOG_INFO("async gather stats abort because of the trace point and not user seesion", K(session->is_user_session()), K(no_async_gather));
+  } else if (GCONF.in_upgrade_mode()) {
+    //in upgrade, don't async gather table stats
   } else if (!params.empty() && !params.at(0).is_null() &&
              OB_FAIL(params.at(0).get_int(duration_time))) {
     LOG_WARN("failed to get duration", K(ret), K(params.at(0)));
@@ -3240,6 +3253,7 @@ int ObDbmsStats::async_gather_stats_job_proc(sql::ObExecContext &ctx,
     ret = ret == OB_TIMEOUT ? OB_SUCCESS : ret;
     task_info.task_end_time_ = ObTimeUtility::current_time();
     task_info.ret_code_ = is_can_async_gather ? ret : OB_ERR_QUERY_INTERRUPTED;
+    update_optimizer_gather_stat_info(&task_info, NULL);
   }
   return ret;
 }
@@ -3299,7 +3313,7 @@ int ObDbmsStats::update_stat_cache(obcall::ObUpdateStatCacheArg &stat_arg,
     ret = OB_TIMEOUT;
     LOG_WARN("query timeout is reached", K(ret), K(timeout));
   } else if (OB_FAIL(ex_rpc::sync_call([&]{
-    return ObOptStatManager::get_instance().refresh_stat_cache(stat_arg);
+    return ObOptStatManager::get_instance().add_refresh_stat_task(stat_arg);
   }))) {
       LOG_WARN("failed to update local stat cache caused by unknow error",
                                         K(ret), K(stat_arg));
@@ -3544,6 +3558,7 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   column_params.reset();
+  bool is_column_store = false;
 
   for (int64_t i = 0; OB_SUCC(ret) && i < table_schema.get_column_count(); ++i) {
     const share::schema::ObColumnSchemaV2 *col = table_schema.get_column_schema_by_idx(i);
@@ -3602,6 +3617,11 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
       if (col->get_meta_type().get_type_class() == ColumnTypeClass::ObTextTC) {
         col_param.set_is_text_column();
       }
+      if (is_column_store) {
+        if (ObColumnStatParam::is_valid_refine_min_max_type(col->get_meta_type().get_type())) {
+          col_param.set_need_cs_refine_min_max();
+        }
+      }
       if (OB_SUCC(ret) && OB_FAIL(column_params.push_back(col_param))) {
         LOG_WARN("failed to push back column param", K(ret));
       }
@@ -3615,6 +3635,7 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
   } else if (OB_FAIL(schema_guard.get_can_read_index_array(table_schema.get_table_id(),
                                                            tids,
                                                            index_aux_count,
+                                                           false, /*with_mv*/
                                                            true, /*with_global_index*/
                                                            false /*domain index*/))) {
     LOG_WARN("failed to get can read index", K(table_schema.get_table_id()), K(ret));
@@ -3944,6 +3965,10 @@ int ObDbmsStats::parse_table_info(ObExecContext &ctx,
                                                  is_index,
                                                  table_schema))) {
         LOG_WARN("failed to get table schema", K(ret), K(param.db_name_), K(param.tab_name_));
+      } else if (nullptr != table_schema && table_schema->is_materialized_view()) {
+        if (OB_FAIL(schema_guard->get_table_schema( table_schema->get_data_table_id(), table_schema))) {
+          LOG_WARN("fail to get mview container table schema", KR(ret), K(table_schema->get_data_table_id()));
+        }
       }
     } else {
       if (OB_FAIL(schema_guard->get_idx_schema_by_origin_idx_name(param.db_id_,
@@ -4091,14 +4116,15 @@ int ObDbmsStats::parse_gather_stat_options(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   UNUSED(ctx);
-  int64_t stat_options = StatOptionFlags::OPT_APPROXIMATE_NDV | StatOptionFlags::OPT_ESTIMATE_BLOCK;
+  int64_t stat_options = StatOptionFlags::OPT_APPROXIMATE_NDV | StatOptionFlags::OPT_ESTIMATE_BLOCK | StatOptionFlags::OPT_SKIP_RATE_SAMPLE_COUNT;
   number::ObNumber num_est_percent;
   number::ObNumber num_degree;
   double percent = 0.0;
   if (OB_ISNULL(param.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(param.allocator_));
-  } else if (est_percent.is_null() || is_virtual_table(param.table_id_)) {
+  } else if (est_percent.is_null() ||
+            (is_virtual_table(param.table_id_) && !is_real_table_mapping_virtual_table(param.table_id_))) {
     //if specify estimate percent null meanings 100% percent sample
     param.sample_info_.set_percent(100.0);
   } else if (OB_FAIL(est_percent.get_number(num_est_percent))) {
@@ -4382,6 +4408,15 @@ int ObDbmsStats::get_default_stat_options(ObExecContext &ctx,
       LOG_WARN("failed to push back", K(ret));
     }
   }
+  if (OB_SUCC(ret) &&
+      (stat_options & StatOptionFlags::OPT_SKIP_RATE_SAMPLE_COUNT)) {
+    ObSkipRateSamplePrefs *tmp_pref = NULL;
+    if (OB_FAIL(new_stat_prefs(*param.allocator_, ctx.get_my_session(), ObString(), tmp_pref))) {
+      LOG_WARN("failed to new stat prefs", K(ret));
+    } else if (OB_FAIL(stat_prefs.push_back(tmp_pref))) {
+      LOG_WARN("failed to push back", K(ret));
+    }
+  }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObDbmsStatsPreferences::get_sys_default_stat_options(ctx, stat_prefs, param))) {
       LOG_WARN("failed to get sys default stat options", K(ret));
@@ -4396,8 +4431,9 @@ int ObDbmsStats::parse_granularity_and_method_opt(ObExecContext &ctx,
                                                   ObTableStatParam &param)
 {
   int ret = OB_SUCCESS;
-  // Virtual tables do not gather histograms.
-  bool is_vt = is_virtual_table(param.table_id_);
+  //virtual table(not include real agent table) doesn't gather histogram.
+  bool is_vt = is_virtual_table(param.table_id_) &&
+               !share::is_real_table_mapping_virtual_table(param.table_id_);
   bool use_size_auto = false;
   if (0 == param.method_opt_.case_compare("Z") && !is_vt) {
     if (OB_FAIL(set_default_column_params(param.column_params_))) {
@@ -4605,7 +4641,7 @@ int ObDbmsStats::parse_method_opt(sql::ObExecContext &ctx,
     ObParser parser(*allocator,
                     ctx.get_my_session()->get_sql_mode(),
                     ctx.get_my_session()->get_charsets4parser());
-    ParseMode parse_mode = METHOD_OPT_MODE;
+    ParseMode parse_mode = DYNAMIC_SQL_MODE;
     ParseResult parse_result;
     const ParseNode *for_stmt = NULL;
     if (OB_FAIL(parser.parse(method_opt, parse_result, parse_mode))) {
@@ -5303,7 +5339,7 @@ int ObDbmsStats::flush_database_monitoring_info(sql::ObExecContext &ctx,
   bool is_flush_dml_stat = true;
   bool ignore_failed = false;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObOptStatMonitorManager::flush_database_monitoring_info(ctx,
                                                                              is_flush_col_usage,
                                                                              is_flush_dml_stat,
@@ -5324,11 +5360,11 @@ int ObDbmsStats::check_statistic_table_writeable(sql::ObExecContext &ctx)
   if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", KR(ret), KP(ctx.get_my_session()));
-  } else if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
-    LOG_WARN("fail to execute check_if_server_role_is_primary", KR(ret));
+  } else if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
+    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
   } else if (OB_UNLIKELY(!is_primary)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "use dbms_stats on a standby database");
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "use dbms_stats during non-primary tenant");
   }
   return ret;
 }
@@ -5548,6 +5584,9 @@ int ObDbmsStats::get_all_table_ids_in_database(ObExecContext &ctx,
             // 1. user table
             // 2. valid sys table
             // 3. valid virtual table
+          } else if (share::is_real_table_mapping_virtual_table(table_schemas.at(i)->get_table_id())
+                     && table_schemas.at(i)->is_index_table()) {
+            // skip
           } else if (OB_FAIL(table_ids.push_back(table_schemas.at(i)->get_table_id()))) {
             LOG_WARN("failed to push back id", K(ret));
           } else {/*do nothing*/}
@@ -5610,6 +5649,7 @@ int ObDbmsStats::gather_database_stats_job_proc(sql::ObExecContext &ctx,
     ret = ret == OB_TIMEOUT ? OB_SUCCESS : ret;
     task_info.task_end_time_ = ObTimeUtility::current_time();
     task_info.ret_code_ = ret;
+    update_optimizer_gather_stat_info(&task_info, NULL);
   }
   return ret;
 }
@@ -5638,8 +5678,8 @@ int ObDbmsStats::gather_database_table_stats(sql::ObExecContext &ctx,
         for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count(); ++i) {
           if (OB_FAIL(THIS_WORKER.check_status())) {
             LOG_WARN("failed to check status", K(ret));
-          } else if (OB_FAIL(refresh_runtime_schema_guard(ctx))) {
-            LOG_WARN("refresh runtime schema guard failed", K(ret));
+          } else if (OB_FAIL(refresh_tenant_schema_guard(ctx))) {
+            LOG_WARN("refresh tenant schema guard failed", K(ret));
           } else if (OB_FAIL(do_gather_table_stats(ctx, table_ids.at(i),
                                                    duration_time, succeed_cnt, task_info))) {
             LOG_WARN("failed to gather table stats", K(ret));
@@ -5844,7 +5884,10 @@ int ObDbmsStats::get_non_partitioned_table_stale_percent(sql::ObExecContext &ctx
                                                          StatTable &stat_table)
 {
   int ret = OB_SUCCESS;
-  uint64_t table_id = table_schema.get_table_id();
+  //if this is virtual table real agent, we need see the real table id modifed count
+  uint64_t table_id = share::is_real_table_mapping_virtual_table(table_schema.get_table_id()) ?
+                                   share::get_real_table_mappings_tid(table_schema.get_table_id()) :
+                                   table_schema.get_table_id();
   const int64_t part_id = PARTITION_LEVEL_ZERO == table_schema.get_part_level() ? table_schema.get_table_id() : -1;
   int64_t inc_modified_count = 0;
   int64_t row_cnt = 0;
@@ -6019,6 +6062,9 @@ int ObDbmsStats::gather_table_stats_with_default_param(ObExecContext &ctx,
     }
   }
   running_monitor.set_monitor_result(ret, ObTimeUtility::current_time(), stat_param.allocator_->used());
+  if (stat_param.need_gather_stats()) {
+    update_optimizer_gather_stat_info(NULL, &gather_stat);
+  }
   ObOptStatGatherStatList::instance().remove(gather_stat);
   task_info.completed_table_count_ ++;
   return ret;
@@ -6203,6 +6249,13 @@ int ObDbmsStats::get_new_stat_pref(ObExecContext &ctx,
     } else {
       stat_pref = tmp_pref;
     }
+  } else if (0 == opt_name.case_compare("SKIP_RATE_SAMPLE_COUNT")) {
+    ObSkipRateSamplePrefs *tmp_pref = NULL;
+    if (OB_FAIL(new_stat_prefs(allocator, ctx.get_my_session(), opt_value, tmp_pref))) {
+      LOG_WARN("failed to new stat prefs", K(ret));
+    } else {
+      stat_pref = tmp_pref;
+    }
   } else {
     ret = OB_ERR_DBMS_STATS_PL;
     LOG_WARN("Invalid input values for pname", K(ret), K(opt_name));
@@ -6213,7 +6266,8 @@ int ObDbmsStats::get_new_stat_pref(ObExecContext &ctx,
                                        "ASYNC_GATHER_SAMPLE_SIZE|ASYNC_GATHER_FULL_TABLE_SIZE|"\
                                        "ASYNC_STALE_MAX_TABLE_SIZE|HIST_EST_PERCENT|HIST_BLOCK_SAMPLE|"\
                                        "APPROXIMATE_NDV(global prefs unique)|ONLINE_ESTIMATE_PERCENT|"\
-                                       "AUTO_SAMPLE_ROW_COUNT(global prefs unique)|GATHER_STATS_BATCH_SIZE" );
+                                       "AUTO_SAMPLE_ROW_COUNT(global prefs unique)|GATHER_STATS_BATCH_SIZE|"\
+                                       "SKIP_RATE_SAMPLE_COUNT prefs" );
   }
   return ret;
 }
@@ -6568,23 +6622,54 @@ int ObDbmsStats::init_column_group_stat_param(const share::schema::ObTableSchema
                                               ObIArray<ObColumnGroupStatParam> &column_group_params)
 {
   int ret = OB_SUCCESS;
-  UNUSED(table_schema);
+  ObSEArray<const ObColumnGroupSchema *, 8> column_group_metas;
+  bool is_column_store = false;
+  if (OB_FAIL(table_schema.get_is_column_store(is_column_store))) {
+    LOG_WARN("failed to get is column store", K(ret));
+  } else if (!is_column_store) {
+    //do nothing
+  } else if (OB_FAIL(table_schema.get_store_column_groups(column_group_metas))) { // get cg metas without empty default cg
+    LOG_WARN("failed to get column group metas", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < column_group_metas.count(); ++i) {
+      if (OB_ISNULL(column_group_metas.at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret), K(column_group_metas.at(i)));
+      } else {
+        ObColumnGroupStatParam col_group_param;
+        col_group_param.column_group_id_ = column_group_metas.at(i)->get_column_group_id();
+        for (int64_t j = 0; OB_SUCC(ret) && j < column_group_metas.at(i)->get_column_id_count(); ++j) {
+          uint64_t column_id = 0;
+          if (OB_FAIL(column_group_metas.at(i)->get_column_id(j, column_id))) {
+            LOG_WARN("failed to get column id", K(ret));
+          } else if (OB_FAIL(col_group_param.column_id_arr_.push_back(column_id))) {
+            LOG_WARN("failed to push back", K(ret));
+          }
+        }
+        if (OB_SUCC(ret)) {
+          if (OB_FAIL(column_group_params.push_back(col_group_param))) {
+            LOG_WARN("failed to push back", K(ret));
+          }
+        }
+      }
+    }
+  }
   LOG_TRACE("init column group stat param", K(column_group_params));
   return ret;
 }
 
 
-//Avoid holding schema guard for a long time to caused dynamic leakage of schema memory, we need refresh runtime schema guard
-int ObDbmsStats::refresh_runtime_schema_guard(ObExecContext &ctx)
+//Avoid holding schema guard for a long time to caused dynamic leakage of schema memory, we need refresh tenant schema guard
+int ObDbmsStats::refresh_tenant_schema_guard(ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx.get_my_session()) || OB_ISNULL(ctx.get_sql_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(ctx.get_my_session()), K(ctx.get_sql_ctx()));
   } else {
-    ObCachedSchemaGuardInfo &cached_schema_info = ctx.get_my_session()->get_cached_schema_guard_info();
-    if (OB_FAIL(cached_schema_info.refresh_runtime_schema_guard())) {
-      LOG_WARN("refresh runtime schema guard failed", K(ret));
+    ObTenantCachedSchemaGuardInfo &cached_schema_info = ctx.get_my_session()->get_cached_schema_guard_info();
+    if (OB_FAIL(cached_schema_info.refresh_tenant_schema_guard())) {
+      LOG_WARN("refresh tenant schema guard failed", K(ret));
     } else {
       ctx.get_sql_ctx()->schema_guard_ = &(cached_schema_info.get_schema_guard());
     }
@@ -6612,7 +6697,7 @@ int ObDbmsStats::gather_system_stats(sql::ObExecContext &ctx,
   } else if (OB_FAIL(check_modify_system_stats_pri(*session))) {
     LOG_WARN("failed to check is unix connection", K(ret));
   } else if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(ObDbmsStatsExecutor::gather_system_stats(ctx))) {
@@ -6643,7 +6728,7 @@ int ObDbmsStats::delete_system_stats(sql::ObExecContext &ctx,
   } else if (OB_FAIL(check_modify_system_stats_pri(*session))) {
     LOG_WARN("failed to check is unix connection", K(ret));
   } else if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(ObDbmsStatsExecutor::delete_system_stats(ctx))) {
@@ -6680,7 +6765,7 @@ int ObDbmsStats::set_system_stats(sql::ObExecContext &ctx,
   } else if (OB_FAIL(check_modify_system_stats_pri(*session))) {
     LOG_WARN("failed to check is unix connection", K(ret));
   } else if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (2 != params.count()) {
@@ -6728,7 +6813,7 @@ int ObDbmsStats::update_system_stats_cache()
     ret = OB_TIMEOUT;
     LOG_WARN("query timeout is reached", K(ret), K(timeout));
   } else if (OB_FAIL(ex_rpc::sync_call([&]{
-    return ObOptStatManager::get_instance().refresh_stat_cache(stat_arg);
+    return ObOptStatManager::get_instance().add_refresh_stat_task(stat_arg);
   }))) {
     LOG_WARN("failed to update local stat cache caused by unknow error",
                                       K(ret), K(stat_arg));
@@ -6797,7 +6882,7 @@ int ObDbmsStats::copy_table_stats(sql::ObExecContext &ctx,
   ObObjParam dummy_part_name;
   dummy_part_name.set_null();
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
-    LOG_WARN("statistics tables are not writable", K(ret));
+    LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(parse_table_part_info(ctx,
@@ -6999,6 +7084,31 @@ bool ObDbmsStats::is_partition_no_regather(int64_t part_id,
   return is_true;
 }
 
+void ObDbmsStats::update_optimizer_gather_stat_info(const ObOptStatTaskInfo *task_info,
+                                                    const ObOptStatGatherStat *gather_stat)
+{
+  int ret = OB_SUCCESS;
+  sql::ObSQLSessionInfo *origin_session = THIS_WORKER.get_session();
+  int64_t origin_timeout = THIS_WORKER.get_timeout_ts();
+  THIS_WORKER.set_session(NULL);
+  const int64_t MAX_UPDATE_OPT_GATHER_STAT_TIMEOUT = 10000000;//default 10 seconds
+  THIS_WORKER.set_timeout_ts(MAX_UPDATE_OPT_GATHER_STAT_TIMEOUT + ObTimeUtility::current_time());
+  if (task_info != NULL && task_info->task_table_count_ > 0) {
+    if (OB_FAIL(ObOptStatManager::get_instance().update_opt_stat_task_stat(*task_info))) {
+      LOG_WARN("failed to update opt stat task stat", K(ret));
+      LOG_USER_WARN(OB_ERR_DBMS_STATS_PL, "failed to update opt stat task stat");
+    }
+  }
+  if (gather_stat != NULL) {
+    if (OB_FAIL(ObOptStatManager::get_instance().update_opt_stat_gather_stat(*gather_stat))) {
+      LOG_WARN("failed to update opt stat gather stat", K(ret));
+      LOG_USER_WARN(OB_ERR_DBMS_STATS_PL, "failed to update opt stat gather stat");
+    }
+  }
+  THIS_WORKER.set_session(origin_session);
+  THIS_WORKER.set_timeout_ts(origin_timeout);
+}
+
 int ObDbmsStats::async_gather_table_stats(sql::ObExecContext &ctx,
                                           const int64_t duration_time,
                                           int64_t &succeed_cnt,
@@ -7010,6 +7120,8 @@ int ObDbmsStats::async_gather_table_stats(sql::ObExecContext &ctx,
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session));
+  } else if (GCONF.in_upgrade_mode()) {
+    //in upgrade, don't async gather table stats
   } else {
     const int64_t max_slice_cnt = 2000;  // maximum tables we can async gather stats at each iteration
     const int64_t MAX_BATCH = 3; 
@@ -7034,8 +7146,8 @@ int ObDbmsStats::async_gather_table_stats(sql::ObExecContext &ctx,
       } else {
         task_info.task_table_count_ += async_stat_tables.count();
         for (int64_t i = 0; OB_SUCC(ret) && i < async_stat_tables.count(); ++i) {
-          if (OB_FAIL(refresh_runtime_schema_guard(ctx))) {
-            LOG_WARN("refresh runtime schema guard failed", K(ret));
+          if (OB_FAIL(refresh_tenant_schema_guard(ctx))) {
+            LOG_WARN("refresh tenant schema guard failed", K(ret));
           } else if (OB_FAIL(do_async_gather_table_stats(
                          ctx, async_stat_tables.at(i), duration_time, succeed_cnt, task_info))) {
             LOG_WARN("failed to do async gather table stats", K(ret));

@@ -30,6 +30,7 @@ namespace oceanbase
 namespace storage
 {
 
+class ObMacroMetaStoreManager;
 class ObDDLIndependentDag;
 struct ObDDLTabletContext;
 
@@ -44,6 +45,7 @@ enum ObDDLMacroBlockType
   DDL_MB_INDEX_TYPE = 2,
   DDL_MB_SSTABLE_META_TYPE = 3,
   DDL_MB_TABLET_META_TYPE = 4,
+  DDL_MB_SS_EMPTY_DATA_TYPE = 5,
 };
 
 class ObDDLMacroHandle
@@ -69,21 +71,25 @@ public:
   ~ObDDLMacroBlock();
   const blocksstable::MacroBlockId &get_block_id() const { return block_handle_.get_block_id(); }
   int set_data_macro_meta(const blocksstable::MacroBlockId &macro_id,
-                          const char* macor_block_buf,
-                          const int64_t size,
+                          const char* macor_block_buf, 
+                          const int64_t size, 
                           const ObDDLMacroBlockType &block_type,
                           const bool force_set_macro_meta = false);
   bool is_valid() const;
+  bool is_column_group_info_valid() const;
   TO_STRING_KV(K_(block_handle),
                K_(logic_id),
                K_(block_type),
                K_(ddl_start_scn),
                K_(scn),
                K_(table_key),
+               K_(end_row_id),
+               K_(trans_id),
                KPC_(data_macro_meta),
                KP_(buf),
                K_(size),
-               K_(merge_slice_idx));
+               K_(merge_slice_idx),
+               K_(seq_no));
 public:
   ObArenaAllocator allocator_; // used to hold data_macro_meta_
   ObDDLMacroHandle block_handle_;
@@ -92,27 +98,35 @@ public:
   share::SCN ddl_start_scn_;
   share::SCN scn_;
   ObITable::TableKey table_key_;
+  int64_t end_row_id_;
+  transaction::ObTransID trans_id_; // for incremental direct load only
   blocksstable::ObDataMacroBlockMeta *data_macro_meta_;
   const char* buf_; // only used for warm up
   int64_t size_;
   int64_t merge_slice_idx_;
+  transaction::ObTxSEQ seq_no_; // for incremental direct load only
 };
 
 class ObDDLKV;
 class ObDDLKVHandle final
 {
 public:
-  ObDDLKVHandle() : ddl_kv_(nullptr) {}
-  ObDDLKVHandle(const ObDDLKVHandle &other) : ddl_kv_(nullptr) { *this = other; }
+  ObDDLKVHandle() : ddl_kv_(nullptr), t3m_(nullptr), allocator_(nullptr) {}
+  ObDDLKVHandle(const ObDDLKVHandle &other) : ddl_kv_(nullptr), t3m_(nullptr), allocator_(nullptr) { *this = other; }
   ObDDLKVHandle &operator =(const ObDDLKVHandle &other);
   ~ObDDLKVHandle() { reset(); }
   ObDDLKV* get_obj() const { return ddl_kv_; }
   bool is_valid() const;
+  // for full direct load
   int set_obj(ObDDLKV *ddl_kv);
+  // for incremental direct load
+  int set_obj(ObTableHandleV2 &table_handle);
   void reset();
   DECLARE_TO_STRING;
 private:
   ObDDLKV *ddl_kv_;
+  ObTenantMetaMemMgr *t3m_;
+  common::ObIAllocator *allocator_;
 };
 
 class ObTablet;
@@ -121,21 +135,23 @@ class ObDDLKVPendingGuard final
 {
 public:
   static int set_macro_block(
-    ObTablet *tablet,
-    const ObDDLMacroBlock &macro_block,
+    ObTablet *tablet, 
+    const ObDDLMacroBlock &macro_block, 
     const int64_t snapshot_version,
     const uint64_t data_format_version,
     ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
     const ObDirectLoadType direct_load_type);
 public:
   ObDDLKVPendingGuard(
-    ObTablet *tablet,
-    const share::SCN &scn,
+    ObTablet *tablet, 
+    const share::SCN &scn, 
     const share::SCN &start_scn,
-    const int64_t snapshot_version,
-    const uint64_t data_format_version,
+    const int64_t snapshot_version, // used for shared-storage mode.
+    const uint64_t data_format_version, // used for shared-storage mode.
     ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-    const ObDirectLoadType direct_load_type);
+    const ObDirectLoadType direct_load_type,
+    const transaction::ObTransID &trans_id = transaction::ObTransID(),
+    const transaction::ObTxSEQ &seq_no = transaction::ObTxSEQ());
   ~ObDDLKVPendingGuard();
   int get_ret() const { return ret_; }
   int get_ddl_kv(ObDDLKV *&kv);
@@ -156,6 +172,18 @@ public:
   ObDDLMacroBlockRedoInfo();
   ~ObDDLMacroBlockRedoInfo() = default;
   bool is_valid() const;
+  /* 
+   * For tow conditions: 
+   *   1. column store table, unnessasery to generate double redo clog.
+   *   2. row store table, but unnessasery to process cs replica.
+   *     (a) cs replica not exist, may not be created or is creating. 
+   *     (b) table is not user data table.
+   */
+  bool is_not_compat_cs_replica() const;
+  // If cs replica exist, this redo clog is suitable for F/R replica.
+  bool is_cs_replica_row_store() const;
+  // If cs replica exist, this redo clog is suitable for C replica.
+  bool is_cs_replica_column_store() const;
   void reset();
   TO_STRING_KV(K_(table_key),
                K_(data_buffer),
@@ -163,10 +191,15 @@ public:
                K_(logic_id),
                K_(start_scn),
                K_(data_format_version),
+               K_(end_row_id),
                K_(type),
+               K_(trans_id),
+               K_(with_cs_replica),
                K_(macro_block_id),
                K_(parallel_cnt),
-               K_(merge_slice_idx));
+               K_(cg_cnt),
+               K_(merge_slice_idx),
+               K_(seq_no));
 public:
   storage::ObITable::TableKey table_key_;
   ObString data_buffer_;
@@ -174,16 +207,23 @@ public:
   blocksstable::ObLogicMacroBlockId logic_id_;
   share::SCN start_scn_;
   uint64_t data_format_version_;
+  int64_t end_row_id_;
+  /* type is not a relialbe val, only inc major may be write !!!!*/
   storage::ObDirectLoadType type_;
+  transaction::ObTransID trans_id_; // for incremental direct load only
+  bool with_cs_replica_;
   blocksstable::MacroBlockId macro_block_id_; // for shared storage mode
   // for shared storage gc occupy info
   int64_t parallel_cnt_;
+  int64_t cg_cnt_;
   int64_t merge_slice_idx_;
+  transaction::ObTxSEQ seq_no_; // for incremental direct load only
 };
 
 class ObBaseTabletDirectLoadMgr;
 class ObTabletDirectLoadMgr;
 class ObTabletFullDirectLoadMgr;
+class ObTabletIncDirectLoadMgr;
 class ObTabletDirectLoadMgrV3;
 class ObTabletDirectLoadMgrHandle final
 {
@@ -198,6 +238,7 @@ public:
   ObTabletDirectLoadMgr *get_obj();
   const ObTabletDirectLoadMgr *get_obj() const;
   ObTabletFullDirectLoadMgr *get_full_obj() const;
+  ObTabletIncDirectLoadMgr *get_inc_obj() const;
   void reset();
   bool is_valid() const;
   /*
@@ -212,7 +253,7 @@ private:
   ObIAllocator *allocator;
 };
 
-class ObIDirectLoadRowIterator : public ObIStoreRowIterator
+class ObIDirectLoadRowIterator : public ObIStoreRowIterator 
 {
 public:
   ObIDirectLoadRowIterator() {}
@@ -223,6 +264,8 @@ public:
 enum ObDDLKVType {
   DDL_KV_INVALID = 0,
   DDL_KV_FULL = 1,
+  DDL_KV_INC_MINOR = 2,
+  DDL_KV_INC_MAJOR = 3,
   DDL_KV_MAX
 };
 
@@ -237,17 +280,39 @@ static inline bool is_full_ddl_kv(const ObDDLKVType &type)
   return (ObDDLKVType::DDL_KV_FULL == type);
 }
 
+static inline bool is_inc_minor_ddl_kv(const ObDDLKVType &type)
+{
+  return (ObDDLKVType::DDL_KV_INC_MINOR == type);
+}
+
+static inline bool is_inc_major_ddl_kv(const ObDDLKVType &type)
+{
+  return (ObDDLKVType::DDL_KV_INC_MAJOR == type);
+}
+
 static ObDDLKVType convert_direct_load_type_to_ddl_kv_type(const ObDirectLoadType &direct_load_type)
 {
-  return is_full_direct_load(direct_load_type) ? ObDDLKVType::DDL_KV_FULL
-                                               : ObDDLKVType::DDL_KV_INVALID;
+  ObDDLKVType ddl_kv_type = ObDDLKVType::DDL_KV_INVALID;
+  switch (direct_load_type) {
+    case ObDirectLoadType::DIRECT_LOAD_INCREMENTAL:
+      ddl_kv_type = ObDDLKVType::DDL_KV_INC_MINOR;
+      break;
+    case ObDirectLoadType::DIRECT_LOAD_INCREMENTAL_MAJOR:
+      ddl_kv_type = ObDDLKVType::DDL_KV_INC_MAJOR;
+      break;
+    default:
+      ddl_kv_type = ObDDLKVType::DDL_KV_FULL; 
+      break;
+  }
+  return ddl_kv_type;
 }
 
 struct ObInsertMonitor final {
 public:
-  ObInsertMonitor(int64_t &tmp_scan_row, int64_t &tmp_insert_row)
+  ObInsertMonitor(int64_t &tmp_scan_row, int64_t &tmp_insert_row, int64_t &cg_insert_row)
       : scanned_row_cnt_(tmp_scan_row),
         inserted_row_cnt_(tmp_insert_row),
+        inserted_cg_row_cnt_(cg_insert_row),
         vec_index_task_thread_pool_cnt_(nullptr),
         vec_index_task_total_cnt_(nullptr),
         vec_index_task_finish_cnt_(nullptr){};
@@ -256,6 +321,7 @@ public:
 public:
   int64_t &scanned_row_cnt_;
   int64_t &inserted_row_cnt_;
+  int64_t &inserted_cg_row_cnt_;
   int64_t *vec_index_task_thread_pool_cnt_;
   int64_t *vec_index_task_total_cnt_;
   int64_t *vec_index_task_finish_cnt_;
@@ -280,31 +346,33 @@ public:
 struct ObDDLTaskParam
 {
 public:
-  ObDDLTaskParam() : data_format_version_(0), snapshot_version_(0), schema_version_(0), ddl_task_id_(0), execution_id_(0),
-    target_table_id_(0), max_batch_size_(0), is_offline_index_rebuild_(false) {}
+  ObDDLTaskParam() : tenant_data_version_(0), snapshot_version_(0), schema_version_(0), ddl_task_id_(0), execution_id_(0), 
+    target_table_id_(0),  is_no_logging_(false), max_batch_size_(0), is_offline_index_rebuild_(false) {}
   void reset()
   {
-    data_format_version_ = 0;
+    tenant_data_version_ = 0;
     snapshot_version_ = 0;
     schema_version_ = 0;
     ddl_task_id_ = 0;
     execution_id_ = 0;
     target_table_id_ = 0;
+    is_no_logging_ = false;
     max_batch_size_ = 0;
     is_offline_index_rebuild_ = false;
   }
-  bool is_valid() const { return ddl_task_id_ > 0 && execution_id_ >= 0 && data_format_version_ > 0 && snapshot_version_ >= 0 && target_table_id_ > 0 && schema_version_ > 0; }
-  TO_STRING_KV(K_(ddl_task_id), K_(execution_id), K_(data_format_version), K_(snapshot_version), K_(target_table_id), K_(schema_version), K_(max_batch_size), K_(is_offline_index_rebuild));
+  bool is_valid() const { return ddl_task_id_ > 0 && execution_id_ >= 0 && tenant_data_version_ > 0 && snapshot_version_ >= 0 && target_table_id_ > 0 && schema_version_ > 0; }
+  TO_STRING_KV(K_(ddl_task_id), K_(execution_id), K_(tenant_data_version), K_(snapshot_version), K_(target_table_id), K_(schema_version), K_(is_no_logging), K_(max_batch_size), K_(is_offline_index_rebuild));
 public:
   /* necessary param */
-  int64_t data_format_version_;
+  int64_t tenant_data_version_;
   int64_t snapshot_version_;
-
+  
   /* optional param only used for leader major merge */
   int64_t schema_version_;
   int64_t ddl_task_id_;
   int64_t execution_id_;
   int64_t target_table_id_;
+  bool is_no_logging_;
   int64_t max_batch_size_; // for batch rows when load data, from hint named load_batch_size
   bool is_offline_index_rebuild_;
 };
@@ -326,7 +394,7 @@ struct ObTableSchemaItem final
 {
 public:
   ObTableSchemaItem()
-    : is_index_table_(false), is_unique_index_(false), has_lob_rowkey_(false),
+    : is_column_store_(false), is_index_table_(false), is_unique_index_(false), has_lob_rowkey_(false),
       rowkey_column_num_(0), compress_type_(NONE_COMPRESSOR), lob_inrow_threshold_(OB_DEFAULT_LOB_INROW_THRESHOLD),
       vec_idx_param_(), vec_dim_(0), index_type_(INDEX_TYPE_IS_NOT)
   {}
@@ -334,6 +402,7 @@ public:
   bool is_skip_lob() const { return is_index_table_ || vec_dim_ > 0; }
   void reset()
   {
+    is_column_store_ = false;
     is_index_table_ = false;
     is_unique_index_ = false;
     has_lob_rowkey_ = false;
@@ -344,11 +413,12 @@ public:
     vec_dim_ = 0;
     index_type_ = INDEX_TYPE_IS_NOT;
   }
-  TO_STRING_KV(K_(is_index_table), K_(is_unique_index), K_(has_lob_rowkey),
+  TO_STRING_KV(K_(is_column_store), K_(is_index_table), K_(is_unique_index), K_(has_lob_rowkey),
     K_(rowkey_column_num), K_(compress_type), K_(lob_inrow_threshold), K_(vec_idx_param), K_(vec_dim),
     K_(index_type));
 
 public:
+  bool is_column_store_;
   bool is_index_table_;
   bool is_unique_index_;
   bool has_lob_rowkey_;
@@ -446,47 +516,82 @@ public:
   ObArray<share::schema::ObColDesc> column_descs_;
 };
 
+// transaction info for inc direct load
+struct ObDirectLoadTxInfo
+{
+public:
+  ObDirectLoadTxInfo() : tx_desc_(nullptr), trans_id_(), seq_no_(0) {}
+  void reset()
+  {
+    tx_desc_ = nullptr;
+    trans_id_.reset();
+    seq_no_ = 0;
+  }
+  bool is_valid() const { return nullptr != tx_desc_ && trans_id_.is_valid() && seq_no_ > 0; }
+  TO_STRING_KV(K_(trans_id), K_(seq_no), K_(tx_desc));
+public:
+  transaction::ObTxDesc *tx_desc_;
+  transaction::ObTransID trans_id_; 
+  int64_t seq_no_;
+};
+
 struct ObWriteTabletParam
 {
 public:
   ObWriteTabletParam() :
     is_micro_index_clustered_(false),
-    storage_schema_(nullptr) { }
+    with_cs_replica_(false),
+    storage_schema_(nullptr),
+    cs_replica_storage_schema_(nullptr) { }
   void reset()
   {
     is_micro_index_clustered_ = false;
+    with_cs_replica_ = false;
+    reorganization_scn_.reset();
     storage_schema_ = nullptr;
+    cs_replica_storage_schema_ = nullptr;
   }
-  TO_STRING_KV(K_(is_micro_index_clustered), KP_(storage_schema));
+  TO_STRING_KV(K_(is_micro_index_clustered), K_(with_cs_replica), K_(reorganization_scn),
+               KP_(storage_schema), KP_(cs_replica_storage_schema));
 public:
   bool is_micro_index_clustered_; // get from tablet meta
+  bool with_cs_replica_; // get from tablet meta
+  share::SCN reorganization_scn_; // get from tablet meta
   ObStorageSchema *storage_schema_; // references to ObDDLTableSchema
+  ObStorageSchema *cs_replica_storage_schema_;
 };
 
 struct ObWriteMacroParam final
 {
 public:
   ObWriteMacroParam()
-    : tablet_id_(), lob_meta_tablet_id_(), data_format_version_(0), schema_version_(0), slice_idx_(0), slice_count_(0),
-      ddl_thread_count_(0), snapshot_version_(0), direct_load_type_(DIRECT_LOAD_INVALID),
-      task_id_(0), is_index_table_(false), ddl_table_schema_(), tablet_param_(), lob_meta_tablet_param_(),
-      ddl_dag_(nullptr), tablet_context_(nullptr), max_batch_size_(0), start_sequence_(), row_offset_(0)
+    : ls_id_(), tablet_id_(), tenant_data_version_(0), is_no_logging_(false), macro_meta_store_mgr_(nullptr),
+      schema_version_(0), slice_idx_(0), slice_count_(0), ddl_thread_count_(0), snapshot_version_(0), direct_load_type_(DIRECT_LOAD_INVALID),
+      task_id_(0), is_index_table_(false), tx_info_(), ddl_table_schema_(), tablet_param_(), lob_meta_tablet_param_(),
+      cg_idx_(-1), ddl_dag_(nullptr), tablet_context_(nullptr), max_batch_size_(0), start_sequence_(), row_offset_(0),
+      is_sorted_table_load_(false)
   {}
   ~ObWriteMacroParam() = default;
   bool is_valid() const
   {
-    return tablet_id_.is_valid() && data_format_version_ > 0 && schema_version_ > 0
-        && slice_idx_ >= 0 && snapshot_version_ > 0 && is_full_direct_load(direct_load_type_)
-        && task_id_ > 0;
+    return ls_id_.is_valid() && tablet_id_.is_valid() && tenant_data_version_ > 0 && schema_version_ > 0
+        && slice_idx_ >= 0 && snapshot_version_ > 0 && direct_load_type_ > DIRECT_LOAD_INVALID
+        && direct_load_type_ < DIRECT_LOAD_MAX && task_id_ > 0
+        && (!is_incremental_major_direct_load(direct_load_type_)
+            || (is_incremental_major_direct_load(direct_load_type_) && tx_info_.is_valid()));
   }
   int64_t get_logic_parallel_count() const { return slice_count_ > 0 ? slice_count_ : ddl_thread_count_; }
-  TO_STRING_KV(K_(tablet_id), K_(lob_meta_tablet_id), K_(data_format_version),
+  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(lob_meta_tablet_id), K_(tenant_data_version), K_(is_no_logging), KP_(macro_meta_store_mgr),
       K_(schema_version), K_(slice_idx), K_(slice_count), K_(ddl_thread_count), K_(snapshot_version), K_(direct_load_type),
-      K_(task_id), K_(is_index_table), K_(ddl_table_schema), K_(tablet_param), K_(lob_meta_tablet_param), KP_(tablet_context));
+      K_(task_id), K_(is_index_table), K_(ddl_table_schema), K_(tablet_param), K_(lob_meta_tablet_param), KP_(tablet_context),
+      K_(is_sorted_table_load));
 public:
+  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   ObTabletID lob_meta_tablet_id_;
-  int64_t data_format_version_;
+  int64_t tenant_data_version_;
+  bool is_no_logging_;
+  ObMacroMetaStoreManager *macro_meta_store_mgr_;
   int64_t schema_version_;
   int64_t slice_idx_;
   int64_t slice_count_;
@@ -495,14 +600,17 @@ public:
   ObDirectLoadType direct_load_type_;
   int64_t task_id_;
   bool is_index_table_;
+  ObDirectLoadTxInfo tx_info_;
   ObDDLTableSchema ddl_table_schema_;
   ObWriteTabletParam tablet_param_;
   ObWriteTabletParam lob_meta_tablet_param_;
+  int64_t cg_idx_;
   ObDDLIndependentDag *ddl_dag_;
   ObDDLTabletContext *tablet_context_;
   int64_t max_batch_size_;
   blocksstable::ObMacroDataSeq start_sequence_;
   int64_t row_offset_;
+  bool is_sorted_table_load_;
 };
 
 }  // end namespace storage

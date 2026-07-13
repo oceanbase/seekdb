@@ -57,7 +57,7 @@ struct MdsDefaultDeepCopyOperation {
 class ObITabletMdsInterface
 {
   friend class ObTabletCreateDeleteHelper;
-  friend class ObDirectLoadMgr; // TODO(@gaishun.gs): refactor later
+  friend class ObTenantDirectLoadMgr; // TODO(@gaishun.gs): refactor later
 public:
   // new mds
   // Currently, we only support read LATEST multi source data, so please pass MAX_SCN as snapshot.
@@ -143,11 +143,26 @@ public:
                    OP &&read_op,
                    const share::SCN snapshot,
                    const int64_t timeout_us) const;
+  int get_split_data(ObTabletSplitMdsUserData &data,
+                     const int64_t timeout) const;
+  int split_partkey_compare(const blocksstable::ObDatumRowkey &rowkey,
+                            const ObITableReadInfo &rowkey_read_info,
+                            const ObIArray<uint64_t> &partkey_projector,
+                            int &cmp_ret,
+                            const int64_t timeout) const;
   int fill_virtual_info(ObIArray<mds::MdsNodeInfoForVirtualTable> &mds_node_info_array) const;
-  TO_STRING_KV(KP(this), "is_inited", check_is_inited_(),
+  TO_STRING_KV(KP(this), "is_inited", check_is_inited_(), "ls_id", get_tablet_meta_().ls_id_,
                "tablet_id", get_tablet_id_(), KP(get_tablet_pointer_()));
   int get_mds_table_rec_scn(share::SCN &rec_scn);
   int mds_table_flush(const share::SCN &recycle_scn);
+  // get tablet status from MDS, and check whether reserved state redo scn is valid.
+  // @param [in] written : if current tablet status is reserved, set true if redo_scn is valid, otherwise set fasle
+  // @return OB_STATE_NOT_MATCH : tablet status is not reserved.
+  //         OB_EMPTY_RESULT : never has tablet status written.
+  //         OB_LS_OFFLINE : read meet ls offline
+  //         other error...
+  // CAUTIONS: this interface is only for reserved compatibility status.
+  int check_reserved_status_redo_written(bool &written);
   template <typename T>
   int get_latest_committed_data(T &value, ObIAllocator *alloc = nullptr);
 protected:// implemented by ObTablet
@@ -201,6 +216,13 @@ protected:// implemented by ObTablet
   int replay(T &&mds,
              mds::MdsCtx &ctx,
              const share::SCN &scn);
+  template <typename T, typename OP>
+  int cross_ls_get_latest(const ObITabletMdsInterface *another,
+                          OP &&read_op,
+                          mds::MdsWriter &writer,// FIXME(zk250686): should not exposed, will be removed later
+                          mds::TwoPhaseCommitState &trans_stat,// FIXME(zk250686): should not exposed, will be removed later
+                          share::SCN &trans_version,// FIXME(zk250686): should not exposed, will be removed later
+                          const int64_t read_seq = 0) const;
   template <typename Key, typename Value>
   int replay(const Key &key,
              Value &&mds,
@@ -211,6 +233,16 @@ private:
   int replay_remove(const Key &key,
                     mds::MdsCtx &ctx,
                     const share::SCN &scn);// called only by ObTabletReplayExecutor
+  template <typename Key, typename Value, typename OP>
+  int cross_ls_get_snapshot(const ObITabletMdsInterface *another,
+                            const Key &key,
+                            OP &&read_op,
+                            const share::SCN snapshot,
+                            const int64_t timeout_us) const;
+  template <typename T>
+  int cross_ls_get_latest_committed(const ObITabletMdsInterface *another,
+                                    T &value,
+                                    ObIAllocator *alloc = nullptr) const;
   common::ObTabletID get_tablet_id_() const;
   template <typename T>
   int obj_to_string_holder_(const T &obj, ObStringHolder &holder) const;
@@ -280,6 +312,34 @@ struct ReadAutoIncSeqValueOp
     return data.get_autoinc_seq_value(auto_inc_seq_value_);
   }
   uint64_t &auto_inc_seq_value_;
+};
+
+struct ReadSplitDataOp
+{
+  ReadSplitDataOp(ObTabletSplitMdsUserData &split_data) : split_data_(split_data) {}
+  int operator()(const ObTabletSplitMdsUserData &data)
+  {
+    return split_data_.assign(data);
+  }
+  ObTabletSplitMdsUserData &split_data_;
+};
+
+struct ReadSplitDataPartkeyCompareOp
+{
+  ReadSplitDataPartkeyCompareOp(const blocksstable::ObDatumRowkey &rowkey,
+                                const ObITableReadInfo &rowkey_read_info,
+                                const ObIArray<uint64_t> &partkey_projector,
+                                int &cmp_ret)
+    : rowkey_(rowkey), rowkey_read_info_(rowkey_read_info), partkey_projector_(partkey_projector),
+      cmp_ret_(cmp_ret) {}
+  int operator()(const ObTabletSplitMdsUserData &data)
+  {
+    return data.partkey_compare(rowkey_, rowkey_read_info_, partkey_projector_, cmp_ret_);
+  }
+  const blocksstable::ObDatumRowkey &rowkey_;
+  const ObITableReadInfo &rowkey_read_info_;
+  const ObIArray<uint64_t> &partkey_projector_;
+  int &cmp_ret_;
 };
 
 }

@@ -18,14 +18,14 @@
 #define STORAGE_MULTI_DATA_SOURCE_MDS_ROW_IPP
 
 #include "lib/ob_errno.h"
-#include "share/ob_version_parser.h"
+#include "share/ob_cluster_version.h"
 #include "share/ob_errno.h"
 #include "storage/multi_data_source/compile_utility/mds_dummy_key.h"
 #include "storage/multi_data_source/mds_node.h"
 #include "storage/multi_data_source/mds_table_base.h"
 #include "storage/multi_data_source/adapter_define/mds_dump_node.h"
 #include "storage/multi_data_source/runtime_utility/common_define.h"
-#include "storage/multi_data_source/runtime_utility/mds_service.h"
+#include "storage/multi_data_source/runtime_utility/mds_tenant_service.h"
 #include "storage/tx/ob_tx_seq.h"
 #ifndef STORAGE_MULTI_DATA_SOURCE_MDS_ROW_H_IPP
 #define STORAGE_MULTI_DATA_SOURCE_MDS_ROW_H_IPP
@@ -243,11 +243,10 @@ int MdsRow<K, V>::construct_insert_record_user_mds_node_(MdsRowBase<K, V> *mds_r
     last_inner_recycled_scn = mds_row->p_mds_unit_->p_mds_table_->last_inner_recycled_scn_;
   }
   if (!scn.is_max() && !ctx.get_seq_no().is_valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    MDS_LOG_SET(WARN, "invalid transaction sequence in replayed mds node");
+    ctx.set_seq_no(transaction::ObTxSEQ::MIN_VAL());
+    MDS_LOG_SET(WARN, "seq no on mds ctx is invalid, maybe meet old version CLOG, convert to min scn");
   }
-  if (OB_FAIL(ret)) {
-  } else if (scn.is_max()) { // current write operation
+  if (scn.is_max()) {// write operation on leader after upgrade
     if (OB_FAIL(sorted_list_.reverse_for_each_node(CheckNodeInSameWriterSeqIncLogicOp(ctx)))) {// can not assert here, cause some modules maynot adapt this logic yet
       MDS_LOG_SET(WARN, "seq_no is not satisfied inc logic");
     }
@@ -613,6 +612,11 @@ struct DumpNodeOP {
     }
     STATE state_;
   };
+  // if not tablet status node, don't compile special compat logic
+  template <typename Key = K,
+            typename Value = V,
+            typename std::enable_if<!(std::is_same<Key, DummyKey>::value &&
+                                    std::is_same<Value, ObTabletCreateDeleteMdsUserData>::value), bool>::type = true>
   int dump_node_(const UserMdsNode<K, V> &node) {
     #define PRINT_WRAPPER KR(ret), K(*this)
     int ret = OB_SUCCESS;
@@ -632,6 +636,53 @@ struct DumpNodeOP {
     return ret;
     #undef PRINT_WRAPPER
   }
+  /**********************this is for compat issue**********************************************************************/
+  // if tablet status node, DO compile special compat logic
+  template <typename Key = K,
+            typename Value = V,
+            typename std::enable_if<std::is_same<Key, DummyKey>::value &&
+                                    std::is_same<Value, ObTabletCreateDeleteMdsUserData>::value, bool>::type = true>
+  int dump_node_(const UserMdsNode<K, V> &node) {
+    #define PRINT_WRAPPER KR(ret), K(*this)
+    const UserMdsNode<DummyKey, ObTabletCreateDeleteMdsUserData> &specified_node = node;
+    int ret = OB_SUCCESS;
+    MDS_TG(1_ms);
+    if (MDS_FAIL(dump_kv_.v_.init(mds_table_id_,
+                                  mds_unit_id_,
+                                  node,
+                                  MdsAllocator::get_instance()))) {
+      MDS_LOG_SCAN(WARN, "failt to convert user mds node to dump node", K(node));
+    /**********************this is different logic from normal logic***************************************************/
+    } else if (specified_node.user_data_.data_type_ == ObTabletMdsUserDataType::RESERVED_7) {
+      if (specified_node.seq_no_.is_min()) {
+        dump_kv_.v_.seq_no_ = transaction::ObTxSEQ::mk_v0(47);
+        dump_kv_.v_.crc_check_number_ = dump_kv_.v_.generate_hash();
+        MDS_LOG(INFO, "convert reserved tablet status mds node's seq no from min to 47 for compat issue", K(node), K(dump_kv_));
+      } else {
+        MDS_LOG(TRACE, "no need convert reserved tablet status mds node's seq no cause it is valid", K(node), K(dump_kv_));
+      }
+    } else if (specified_node.user_data_.data_type_ == ObTabletMdsUserDataType::RESERVED_3) {
+      if (specified_node.seq_no_.is_min()) {
+        dump_kv_.v_.seq_no_ = transaction::ObTxSEQ::mk_v0(100);
+        dump_kv_.v_.crc_check_number_ = dump_kv_.v_.generate_hash();
+        MDS_LOG(INFO, "convert reserved tablet status mds node's seq no from min to 100 for compat issue", K(node), K(dump_kv_));
+      } else {
+        MDS_LOG(TRACE, "no need convert reserved tablet status mds node's seq no cause it is valid", K(node), K(dump_kv_));
+      }
+    }
+    if (OB_FAIL(ret)) {
+    /**********************this is different logic from normal logic***************************************************/
+    } else if (MDS_FAIL(dump_op_(dump_kv_))) {
+      MDS_LOG_SCAN(WARN, "failt to apply op on dump node", K(node));
+    } else if (for_flush_) {
+      row_.report_event_("DUMP_NODE_FOR_FLUSH", node);
+    } else {
+      // report_event_("DUMP_NODE", node);
+    }
+    return ret;
+    #undef PRINT_WRAPPER
+  }
+  /********************************************************************************************************************/
   int scan_from_new_to_old_(const UserMdsNode<K, V> &node) {
     int ret = OB_SUCCESS;
     if (!check_node_scn_beflow_flush(node, flush_scn_)) {// skip
@@ -830,7 +881,8 @@ void MdsRow<K, V>::report_event_(const char (&event_str)[N],
   } else if (OB_FAIL(node.fill_event_(event, event_str, stack_buffer, buffer_size))) {
     MDS_LOG(WARN, "fail fill mds event", K(*this));
   } else {
-    observer::MdsEventKey key(MdsRowBase<K, V>::p_mds_unit_->p_mds_table_->tablet_id_);
+    observer::MdsEventKey key(MdsRowBase<K, V>::p_mds_unit_->p_mds_table_->ls_id_,
+                              MdsRowBase<K, V>::p_mds_unit_->p_mds_table_->tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, MdsRowBase<K, V>::p_mds_unit_->p_mds_table_, file, line, function_name);
   }
 }

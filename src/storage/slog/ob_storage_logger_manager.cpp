@@ -1,0 +1,415 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX STORAGE_REDO
+#ifndef _WIN32
+#include <sys/statvfs.h>
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
+#include "share/rc/ob_module_provider.h"
+#endif
+#include "ob_storage_logger_manager.h"
+#include "storage/meta_store/ob_tenant_storage_meta_service.h"
+
+namespace oceanbase
+{
+using namespace common;
+
+namespace storage
+{
+ObStorageLoggerManager::ObStorageLoggerManager()
+    : allocator_(SET_USE_UNEXPECTED_500("StorageLoggerM")),
+      log_dir_(nullptr),
+      max_log_file_size_(0),
+      is_inited_(false),
+      log_file_spec_(),
+      server_slogger_(),
+      need_reserved_(false)
+{
+}
+
+ObStorageLoggerManager::~ObStorageLoggerManager()
+{
+  destroy();
+}
+
+int ObStorageLoggerManager::init(
+    const char *log_dir,
+    const char *data_dir,
+    const int64_t max_log_file_size,
+    const blocksstable::ObLogFileSpec &log_file_spec)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_UNLIKELY(is_inited_)) {
+    ret = OB_INIT_TWICE;
+    STORAGE_REDO_LOG(WARN, "The ObStorageLoggerManager has been inited.", K(ret));
+  } else if (OB_UNLIKELY(nullptr == log_dir || nullptr == data_dir || max_log_file_size <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_REDO_LOG(WARN, "invalid arguments", K(ret), KP(log_dir), KP(data_dir), K(max_log_file_size));
+  } else if (OB_FAIL(prepare_log_buffers(MAX_CONCURRENT_ITEM_CNT, NORMAL_LOG_ITEM_SIZE))) {
+    STORAGE_REDO_LOG(WARN, "fail to prepare log buffers", K(ret),
+        LITERAL_K(MAX_CONCURRENT_ITEM_CNT), LITERAL_K(NORMAL_LOG_ITEM_SIZE));
+  } else if (OB_FAIL(prepare_log_items(MAX_CONCURRENT_ITEM_CNT))) {
+    STORAGE_REDO_LOG(WARN, "fail to prepare log items", K(ret), LITERAL_K(MAX_CONCURRENT_ITEM_CNT));
+  } else if (OB_FAIL(check_log_disk(data_dir, log_dir))) {
+    STORAGE_REDO_LOG(WARN, "fail to set need reserved", K(ret));
+  } else {
+    log_dir_ = log_dir;
+    max_log_file_size_ = max_log_file_size;
+    log_file_spec_ = log_file_spec;
+    if (OB_FAIL(server_slogger_.init(*this, true /*is_server*/))) {
+      STORAGE_REDO_LOG(WARN, "fail to init server slogger", K(ret));
+    } else {
+      is_inited_ = true;
+    }
+  }
+
+  if (IS_NOT_INIT) {
+    destroy();
+  }
+  return ret;
+}
+
+int ObStorageLoggerManager::start()
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    STORAGE_REDO_LOG(WARN, "not inited", K(ret));
+  } else if (OB_FAIL(server_slogger_.start())) {
+    STORAGE_REDO_LOG(WARN,  "fail to start server slogger", K(ret));
+  }
+  return ret;
+}
+
+void ObStorageLoggerManager::stop()
+{
+  if (IS_INIT) {
+    server_slogger_.stop();
+  }
+}
+
+void ObStorageLoggerManager::wait()
+{
+  if (IS_INIT) {
+    server_slogger_.wait();
+  }
+}
+
+
+
+void ObStorageLoggerManager::destroy()
+{
+  log_file_spec_.reset();
+  max_log_file_size_ = 0;
+  server_slogger_.destroy();
+
+  log_buffers_.destroy();
+  slog_items_.destroy();
+  allocator_.reset();
+
+  log_dir_ = nullptr;
+  is_inited_ = false;
+  need_reserved_ = false;
+}
+
+int ObStorageLoggerManager::get_server_slogger(ObStorageLogger *&slogger)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    STORAGE_REDO_LOG(WARN, "The ObStorageLoggerManager has not been inited.", K(ret));
+  } else {
+    slogger = &server_slogger_;
+  }
+
+  return ret;
+}
+
+int ObStorageLoggerManager::alloc_item(
+    const int64_t buf_size,
+    ObStorageLogItem *&log_item,
+    const int64_t num)
+{
+  int ret = OB_SUCCESS;
+  void *log_buffer = nullptr;
+  bool alloc_locally = buf_size > NORMAL_LOG_ITEM_SIZE;
+  int64_t total_size = buf_size;
+
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    STORAGE_REDO_LOG(WARN, "The ObStorageLoggerManager has not been inited.", K(ret));
+  } else if (OB_UNLIKELY(buf_size <= 0 || num <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_REDO_LOG(WARN, "Invalid arguments.", K(ret), K(buf_size), K(num));
+  } else if (alloc_locally) {
+    total_size = upper_align(buf_size, ObLogConstants::LOG_FILE_ALIGN_SIZE);
+    STORAGE_REDO_LOG(INFO, "Large log item", LITERAL_K(NORMAL_LOG_ITEM_SIZE), K(total_size));
+  } else {
+    total_size = NORMAL_LOG_ITEM_SIZE;
+  }
+
+  if (OB_SUCC(ret)) {
+    if (total_size > ObLogConstants::LOG_ITEM_MAX_LENGTH) {
+      ret = OB_SIZE_OVERFLOW;
+      STORAGE_REDO_LOG(ERROR, "Log item is too large", K(ret),
+          K(total_size), LITERAL_K(ObLogConstants::LOG_ITEM_MAX_LENGTH));
+    } else if (!alloc_locally && OB_FAIL(alloc_log_buffer(log_buffer))) {
+      STORAGE_REDO_LOG(WARN, "Fail to alloc memory for log buffer", K(ret));
+    } else if (OB_FAIL(alloc_log_item(log_item))) {
+      STORAGE_REDO_LOG(WARN, "Fail to alloc memory for log item", K(ret));
+    } else if (OB_FAIL(log_item->init(reinterpret_cast<char *>(log_buffer),
+        total_size, ObLogConstants::LOG_FILE_ALIGN_SIZE, num))) {
+      STORAGE_REDO_LOG(WARN, "Fail to init log item", K(ret));
+    } else {
+      STORAGE_REDO_LOG(DEBUG, "Successfully alloc memory", K(ret));
+    }
+  }
+
+  return ret;
+}
+
+int ObStorageLoggerManager::free_item(ObStorageLogItem *log_item)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    STORAGE_REDO_LOG(WARN, "The ObStorageLoggerManager has not been inited.", K(ret));
+  } else if (OB_UNLIKELY(nullptr == log_item)) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_REDO_LOG(WARN, "Invalid argument.", K(ret));
+  } else if (!log_item->is_local() && NULL != log_item->get_buf()) {
+    if (OB_FAIL(free_log_buffer(log_item->get_buf()))) {
+      STORAGE_REDO_LOG(ERROR, "fail to free slog buffer", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret) && OB_FAIL(free_log_item(log_item))) {
+    STORAGE_REDO_LOG(ERROR, "fail to free the slog item", K(ret));
+  }
+
+  return ret;
+}
+
+int ObStorageLoggerManager::alloc_log_buffer(void *&log_buffer)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_FAIL(log_buffers_.pop(log_buffer))) {
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      ret = OB_SLOG_REACH_MAX_CONCURRENCY;
+      STORAGE_REDO_LOG(WARN, "Log buffer reach maximum", K(ret), K(log_buffers_.capacity()));
+    } else {
+      STORAGE_REDO_LOG(WARN, "Fail to pop log buffer", K(ret));
+    }
+  }
+
+  return ret;
+}
+
+int ObStorageLoggerManager::free_log_buffer(void *log_buffer)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_FAIL(log_buffers_.push(log_buffer))) {
+    STORAGE_REDO_LOG(WARN, "Fail to push log buffer", K(ret));
+  }
+  return ret;
+}
+
+int ObStorageLoggerManager::alloc_log_item(ObStorageLogItem *&log_item)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_FAIL(slog_items_.pop(log_item))) {
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      ret = OB_SLOG_REACH_MAX_CONCURRENCY;
+      STORAGE_REDO_LOG(WARN, "Log items reach maximum", K(ret), K(slog_items_.capacity()));
+    } else {
+      STORAGE_REDO_LOG(WARN, "Fail to pop log item", K(ret));
+    }
+  }
+
+  return ret;
+}
+
+int ObStorageLoggerManager::free_log_item(ObStorageLogItem *log_item)
+{
+  int ret = OB_SUCCESS;
+  log_item->destroy();
+
+  if (OB_FAIL(slog_items_.push(log_item))) {
+    STORAGE_REDO_LOG(ERROR, "Fail to push log item", K(ret), KP(log_item));
+  }
+  return ret;
+}
+
+int ObStorageLoggerManager::prepare_log_buffers(const int64_t count, const int64_t log_buf_size)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_UNLIKELY(count <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_REDO_LOG(WARN, "Invalid argument", K(ret), K(count));
+  } else if (OB_FAIL(log_buffers_.init(count))) {
+    STORAGE_REDO_LOG(WARN, "Fail to init log buffers", K(ret), K(count));
+  } else {
+    abort_unless(0 == (log_buf_size & (ObLogConstants::LOG_FILE_ALIGN_SIZE - 1)));
+    char *buf = nullptr;
+    if (OB_ISNULL(buf = (char*)allocator_.alloc_aligned(log_buf_size * count, ObLogConstants::LOG_FILE_ALIGN_SIZE))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      STORAGE_REDO_LOG(ERROR, "Fail to alloc memory for buffers", K(ret), K(log_buf_size));
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      if (OB_FAIL(log_buffers_.push(buf + i * log_buf_size))) {
+        STORAGE_REDO_LOG(ERROR, "Fail to push log buffer", K(ret), KP(buf));
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObStorageLoggerManager::prepare_log_items(const int64_t count)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_UNLIKELY(count<= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_REDO_LOG(WARN, "Invalid argument", K(ret), K(count));
+  } else if (OB_FAIL(slog_items_.init(count))) {
+    STORAGE_REDO_LOG(WARN, "Fail to init log_items_", K(ret), K(count));
+  } else {
+    void *ptr = nullptr;
+    ObStorageLogItem *log_item = nullptr;
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
+      if (nullptr == (ptr = allocator_.alloc(sizeof(ObStorageLogItem)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        STORAGE_REDO_LOG(ERROR, "Fail to alloc memory for log item",
+          K(ret), "size", sizeof(ObStorageLogItem));
+      } else {
+        log_item = new (ptr) ObStorageLogItem();
+        if (OB_FAIL(slog_items_.push(log_item))) {
+          STORAGE_REDO_LOG(ERROR, "Fail to push log item", K(ret), KP(log_item));
+        }
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObStorageLoggerManager::get_tenant_slog_dir(
+    char (&tenant_slog_dir)[common::MAX_PATH_SIZE])
+{
+  int ret = OB_SUCCESS;
+  int pret = 0;
+  {  // seekdb: single tenant -> /sys
+    pret = snprintf(tenant_slog_dir, MAX_PATH_SIZE, "%s/sys", log_dir_);
+  }
+  if (pret < 0 || pret >= MAX_PATH_SIZE) {
+    ret = OB_BUF_NOT_ENOUGH;
+    STORAGE_REDO_LOG(ERROR, "construct tenant slog path fail", K(ret));
+  }
+  return ret;
+}
+
+int ObStorageLoggerManager::check_log_disk(
+    const char *data_dir,
+    const char *log_dir)
+{
+  int ret = OB_SUCCESS;
+  need_reserved_ = false;
+  if (OB_ISNULL(data_dir) || OB_ISNULL(log_dir)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument", K(ret), KP(data_dir), KP(log_dir));
+#ifdef _WIN32
+  } else {
+    // On Windows, skip statvfs check; assume disk space is sufficient
+    UNUSEDx(data_dir, log_dir);
+  }
+#else
+  } else {
+    struct statvfs data_svfs;
+    struct statvfs log_svfs;
+    if (OB_UNLIKELY(0 != statvfs(data_dir, &data_svfs))) {
+      ret = OB_IO_ERROR;
+      LOG_WARN("fail to get sstable directory vfs", K(ret), K(data_dir));
+    } else if (OB_UNLIKELY(0 != statvfs(log_dir, &log_svfs))) {
+      ret = OB_IO_ERROR;
+      LOG_WARN("fail to get slog directory vfs", K(ret), K(log_dir));
+    } else if (OB_UNLIKELY(0 >= log_svfs.f_bavail)) {
+      ret = OB_DISK_ERROR;
+      LOG_ERROR("slog disk is full, please check", K(ret), K(log_dir), K(log_svfs.f_bavail));
+    } else {
+      // if slog and data are on the same disk, need reserved space when resize file
+      need_reserved_ = (data_svfs.f_fsid == log_svfs.f_fsid);
+    }
+  }
+#endif
+  return ret;
+}
+
+int ObStorageLoggerManager::get_using_disk_space(int64_t &using_space) const
+{
+  int ret = OB_SUCCESS;
+  omt::ObMultiTenant *omt = GCTX.omt_;
+  using_space = 0;
+  if (OB_FAIL(server_slogger_.get_using_disk_space(using_space))) {
+    STORAGE_REDO_LOG(WARN, "fail to get using disk space", K(ret), K(using_space));
+  } else if (OB_ISNULL(omt)) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_REDO_LOG(WARN, "unexpected error, omt is nullptr", K(ret), KP(omt));
+  } else {
+    {
+      MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
+      if (OB_FAIL(guard.switch_to(false))) {
+        STORAGE_REDO_LOG(WARN, "fail to switch tenant", K(ret));
+      } else {
+        int64_t tenant_using_size = 0;
+        if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->get_slogger().get_using_disk_space(tenant_using_size))) {
+          STORAGE_REDO_LOG(WARN, "fail to get the disk space that slog used", K(ret));
+        } else {
+          using_space += tenant_using_size;
+        }
+      }
+      if (OB_TENANT_NOT_IN_SERVER == ret) {
+        ret = OB_SUCCESS;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObStorageLoggerManager::get_reserved_size(int64_t &reserved_size) const
+{
+  int ret = OB_SUCCESS;
+  reserved_size = 0;
+  if (need_reserved_) {
+    int64_t used_size = 0;
+    if (OB_FAIL(get_using_disk_space(used_size))) {
+      STORAGE_REDO_LOG(WARN, "fail to get using size for slog", K(ret));
+    } else {
+      reserved_size = std::max(static_cast<int64_t>(0), RESERVED_DISK_SIZE - used_size);
+    }
+  }
+  return ret;
+}
+
+}
+}

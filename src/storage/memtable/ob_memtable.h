@@ -19,6 +19,8 @@
 
 #include "storage/allocator/ob_memstore_allocator.h"
 #include "share/rc/ob_module_provider.h"
+#include "share/ob_tenant_mgr.h"
+#include "share/ob_cluster_version.h"
 #include "lib/literals/ob_literals.h"
 #include "lib/worker.h"
 
@@ -193,7 +195,7 @@ public: // derived from ObFreezeCheckpoint
 
 public: // derived from ObITabletMemtable
   virtual int init(const ObITable::TableKey &table_key,
-                   ObLS *tenant_ls,
+                   ObLSHandle &ls_handle,
                    storage::ObFreezer *freezer,
                    storage::ObTabletMemtableMgr *memtable_mgr,
                    const int64_t schema_version,
@@ -218,7 +220,7 @@ public: // derived from ObITable
   // rowkey_len is the length of the row key in columns and new_row(NB: can we encapsulate it better?)
   // columns is the schema of the new_row, it both contains the row key and row value
   // update_idx is the index of the updated columns for update
-  // old_row is the old version of the row for set action and is consumed by the local Change Stream
+  // old_row is the old version of the row for set action, it contains all columns(NB: it works for liboblog only currently)
   // new_row is the new version of the row for set action, it only contains the necessary columns for update and entire columns for insert
   virtual int set(
       const storage::ObTableIterParam &param,
@@ -347,29 +349,34 @@ public:
   const ObMvccEngine &get_mvcc_engine() const { return mvcc_engine_; }
   void pre_batch_destroy_keybtree();
   static int batch_remove_unused_callback_for_uncommited_txn(
+    const share::ObLSID ls_id,
     const memtable::ObMemtableSet *memtable_set);
 
   /* freeze */
-  virtual int flush() override;
+  virtual int flush(share::ObLSID ls_id) override;
 
   bool is_empty() const override
   {
     return ObITable::get_end_scn() == ObITable::get_start_scn() &&
       share::ObScnRange::MIN_SCN == get_max_end_scn();
   }
-  void fill_compaction_param_(compaction::ObTabletMergeDagParam &param);
+  void fill_compaction_param_(
+    const int64_t current_time,
+    compaction::ObTabletMergeDagParam &param);
   int resolve_snapshot_version_();
   int resolve_max_end_scn_();
   // User should take response of the recommend scn. All version smaller than
   // recommend scn should belong to the tables before the memtable and the
   // memtable. And under exception case, user need guarantee all new data is
   // bigger than the recommend_scn.
-  inline void set_recommend_snapshot_freeze(const share::SCN recommend_scn)
+  inline void set_recommend_freeze(const share::SCN recommend_scn)
   {
     recommend_snapshot_version_.atomic_set(recommend_scn);
-    ATOMIC_STORE(&recommend_snapshot_freeze_flag_, true);
+    ATOMIC_STORE(&recommend_freeze_flag_, true);
   }
-  inline bool is_recommend_freeze() const { return ATOMIC_LOAD(&recommend_snapshot_freeze_flag_); }
+  inline bool is_recommend_freeze() const { return ATOMIC_LOAD(&recommend_freeze_flag_); }
+  virtual void set_delete_insert_flag(const bool rhs) override { is_delete_insert_table_ = rhs; }
+  inline bool is_delete_insert_table() const { return is_delete_insert_table_; }
   virtual uint32_t get_freeze_flag() override;
   blocksstable::ObDatumRange &m_get_real_range(blocksstable::ObDatumRange &real_range,
                                         const blocksstable::ObDatumRange &range, const bool is_reverse) const;
@@ -395,8 +402,10 @@ public:
                        K_(contain_hotspot_row),
                        K_(snapshot_version),
                        K_(contain_hotspot_row),
-                       K_(recommend_snapshot_freeze_flag),
-                       K_(recommend_snapshot_version));
+                       K_(ls_id),
+                       K_(recommend_freeze_flag),
+                       K_(recommend_snapshot_version),
+                       K_(is_delete_insert_table));
 private:
   static const int64_t OB_EMPTY_MEMSTORE_MAX_SIZE = 10L << 20; // 10MB
 
@@ -492,10 +501,11 @@ private:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMemtable);
   bool is_inited_;
-  bool recommend_snapshot_freeze_flag_;
+  bool recommend_freeze_flag_;
   bool contain_hotspot_row_;
+  bool is_delete_insert_table_;
 
-  storage::ObLS *ls_;
+  storage::ObLSHandle ls_handle_;
   ObSingleMemstoreAllocator local_allocator_;
   ObMTKVBuilder kv_builder_;
   ObQueryEngine query_engine_;
@@ -508,6 +518,7 @@ private:
   share::SCN recommend_snapshot_version_;
 
   int64_t state_;
+  lib::Worker::CompatMode mode_;
   int64_t minor_merged_time_;
   int64_t max_column_cnt_; // record max column count of row
 };

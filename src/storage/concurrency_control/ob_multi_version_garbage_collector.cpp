@@ -16,10 +16,12 @@
 
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "share/rc/ob_module_provider.h"
+#include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx/ob_trans_service.h"
-#include "storage/tx/ob_ts_mgr.h"
 #include "storage/tx/ob_weak_read_util.h"
+#include "rootserver/mview/ob_mview_maintenance_service.h"
 #include "share/ob_server_struct.h"
+#include "lib/container/ob_array.h"
 #include "share/ob_io_device_helper.h"
 
 namespace oceanbase
@@ -27,22 +29,28 @@ namespace oceanbase
 namespace concurrency_control
 {
 
+int64_t ObMultiVersionGarbageCollector::GARBAGE_COLLECT_PRECISION = 1_s;
 int64_t ObMultiVersionGarbageCollector::GARBAGE_COLLECT_RETRY_INTERVAL = 1_min;
 int64_t ObMultiVersionGarbageCollector::GARBAGE_COLLECT_EXEC_INTERVAL = 10 * GARBAGE_COLLECT_RETRY_INTERVAL;
+int64_t ObMultiVersionGarbageCollector::GARBAGE_COLLECT_RECLAIM_DURATION = 3 * GARBAGE_COLLECT_EXEC_INTERVAL;
 
 ObMultiVersionGarbageCollector::ObMultiVersionGarbageCollector()
   : timer_task_(*this),
     timer_(),
     last_study_timestamp_(0),
+    last_refresh_timestamp_(0),
+    last_reclaim_timestamp_(0),
     last_sstable_overflow_timestamp_(0),
     has_error_when_study_(false),
+    refresh_error_too_long_(false),
+    has_error_when_reclaim_(false),
     gc_is_disabled_(false),
-    local_reserved_snapshot_(share::SCN::min_scn()),
+    global_reserved_snapshot_(share::SCN::min_scn()),
     is_inited_(false) {}
 
 ObMultiVersionGarbageCollector::~ObMultiVersionGarbageCollector() {}
 
-int ObMultiVersionGarbageCollector::server_module_init(ObMultiVersionGarbageCollector *&m)
+int ObMultiVersionGarbageCollector::mtl_init(ObMultiVersionGarbageCollector *&m)
 {
   return m->init();
 }
@@ -53,12 +61,21 @@ int ObMultiVersionGarbageCollector::init()
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     MVCC_LOG(WARN, "ObMultiVersionGarbageCollector init twice", K(ret), KP(this));
+  } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
+    ret = OB_NOT_INIT;
+    MVCC_LOG(WARN, "meta_db_pool_ is not initialized", K(ret));
+  } else if (OB_FAIL(snapshot_storage_.init(GCTX.meta_db_pool_))) {
+    MVCC_LOG(WARN, "failed to init snapshot storage", K(ret));
   } else {
     last_study_timestamp_ = 0;
+    last_refresh_timestamp_ = 0;
+    last_reclaim_timestamp_ = 0;
     last_sstable_overflow_timestamp_ = 0;
     has_error_when_study_ = false;
+    refresh_error_too_long_ = false;
+    has_error_when_reclaim_ = false;
     gc_is_disabled_ = false;
-    local_reserved_snapshot_ = share::SCN::min_scn();
+    global_reserved_snapshot_ = share::SCN::min_scn();
     is_inited_ = true;
     MVCC_LOG(INFO, "multi version garbage collector init", KP(this));
   }
@@ -68,10 +85,14 @@ int ObMultiVersionGarbageCollector::init()
 void ObMultiVersionGarbageCollector::cure()
 {
   last_study_timestamp_ = 0;
+  last_refresh_timestamp_ = 0;
+  last_reclaim_timestamp_ = 0;
   last_sstable_overflow_timestamp_ = 0;
   has_error_when_study_ = false;
+  refresh_error_too_long_ = false;
+  has_error_when_reclaim_ = false;
   gc_is_disabled_ = false;
-  local_reserved_snapshot_ = share::SCN::min_scn();
+  global_reserved_snapshot_ = share::SCN::min_scn();
 }
 
 int ObMultiVersionGarbageCollector::start()
@@ -89,7 +110,7 @@ int ObMultiVersionGarbageCollector::start()
   } else {
     MVCC_LOG(INFO, "multi version garbage collector start", KPC(this),
              K(GARBAGE_COLLECT_RETRY_INTERVAL), K(GARBAGE_COLLECT_EXEC_INTERVAL),
-             K(local_reserved_snapshot_));
+             K(GARBAGE_COLLECT_PRECISION), K(GARBAGE_COLLECT_RECLAIM_DURATION));
   }
 
   return ret;
@@ -106,10 +127,14 @@ int ObMultiVersionGarbageCollector::stop()
     ObTimeGuard timeguard(__func__, 1 * 1000 * 1000);
     timer_.stop();
     last_study_timestamp_ = 0;
+    last_refresh_timestamp_ = 0;
+    last_reclaim_timestamp_ = 0;
     last_sstable_overflow_timestamp_ = 0;
     has_error_when_study_ = false;
+    refresh_error_too_long_ = false;
+    has_error_when_reclaim_ = false;
     gc_is_disabled_ = false;
-    local_reserved_snapshot_ = share::SCN::min_scn();
+    global_reserved_snapshot_ = share::SCN::min_scn();
     is_inited_ = false;
     MVCC_LOG(INFO, "multi version garbage collector stop", KPC(this));
   }
@@ -131,20 +156,20 @@ void ObMultiVersionGarbageCollector::destroy()
 
 void ObMultiVersionGarbageCollector::run_timer_task()
 {
+   int ret = OB_SUCCESS;
+   uint64_t data_version = 0;
    if (!GCONF._mvcc_gc_using_min_txn_snapshot) {
      cure();
    } else {
+     // compatibility is important
      (void)repeat_study();
-     const int ret = refresh_disk_status_();
-     if (OB_SUCCESS != ret) {
-       gc_is_disabled_ = true;
-       MVCC_LOG(WARN, "refresh local disk status failed, disable mvcc gc optimization",
-                K(ret), KPC(this));
-     }
+     (void)repeat_refresh();
+     (void)repeat_reclaim();
    }
 }
-
-// Sample every ten minutes, or every minute while the previous sample failed.
+// study means learning for the different ObMultiVersionSnapshotType and
+// reporting to the inner table. And the repeat_study will study each time when
+// meeting the error or meeting the time requirement.
 void ObMultiVersionGarbageCollector::repeat_study()
 {
   int ret = OB_SUCCESS;
@@ -154,7 +179,7 @@ void ObMultiVersionGarbageCollector::repeat_study()
       // study every 10 min(default of GARBAGE_COLLECT_EXEC_INTERVAL)
       || current_timestamp - last_study_timestamp_ > GARBAGE_COLLECT_EXEC_INTERVAL) {
     if (OB_FAIL(study())) {
-      update_study_status_(ret, current_timestamp);
+      has_error_when_study_ = true;
       if (current_timestamp - last_study_timestamp_ > 10 * GARBAGE_COLLECT_EXEC_INTERVAL
           && 0 != last_study_timestamp_
           // for mock or test that change GARBAGE_COLLECT_EXEC_INTERVAL to a small value
@@ -166,7 +191,8 @@ void ObMultiVersionGarbageCollector::repeat_study()
                  KPC(this), K(current_timestamp));
       }
     } else {
-      update_study_status_(ret, current_timestamp);
+      has_error_when_study_ = false;
+      last_study_timestamp_ = common::ObTimeUtility::current_time();
       MVCC_LOG(INFO, "repeat study successfully", K(ret), KPC(this),
                K(current_timestamp), K(GARBAGE_COLLECT_EXEC_INTERVAL));
     }
@@ -176,25 +202,113 @@ void ObMultiVersionGarbageCollector::repeat_study()
   }
 }
 
-void ObMultiVersionGarbageCollector::update_study_status_(
-    const int study_ret,
-    const int64_t study_timestamp)
+// collect means collection for the different ObMultiVersionSnapshotType from
+// the inner table. And the repeat_collect will study each time when meeting the
+// time requirement.
+void ObMultiVersionGarbageCollector::repeat_refresh()
 {
-  if (OB_SUCCESS == study_ret) {
-    has_error_when_study_ = false;
-    last_study_timestamp_ = study_timestamp;
+  int ret = OB_SUCCESS;
+  const int64_t current_timestamp = ObClockGenerator::getRealClock();
+
+  // collect every 1 min(default of GARBAGE_COLLECT_RETRY_INTERVAL)
+  if (OB_FAIL(refresh_())) {
+    if (is_refresh_fail() ||
+        (current_timestamp - last_refresh_timestamp_ > 30 * GARBAGE_COLLECT_RETRY_INTERVAL
+         && 0 != last_refresh_timestamp_
+         // for mock or test that change GARBAGE_COLLECT_RETRY_INTERVAL to a small value
+         && current_timestamp - last_refresh_timestamp_ > 30 * 1_min)) {
+      // the server may cannot contact to the inner table and prevent reserved
+      // snapshot from advancing. We think the multi-version data on this server
+      // is not reachable for all active txns, so we gives up to use follow the
+      // rules of multi-version garbage collector and use the undo_retention and
+      // snapshot_gc_ts as the new mechanism to guarantee the recycle of data.
+      refresh_error_too_long_ = true;
+      MVCC_LOG(ERROR, "repeat refresh failed too much time", K(ret),
+               KPC(this), K(current_timestamp));
+    } else {
+      MVCC_LOG(WARN, "repeat refresh failed, we will retry immediately", K(ret),
+               KPC(this), K(current_timestamp));
+    }
   } else {
-    // A failed sample is retried on the next timer tick, but it does not
-    // invalidate the last complete sample.  Before the first successful
-    // sample the cached value is min_scn(), which conservatively keeps all
-    // multi-version data.
-    has_error_when_study_ = true;
+    refresh_error_too_long_ = false;
+    last_refresh_timestamp_ = common::ObTimeUtility::current_time();
+    MVCC_LOG(INFO, "repeat refresh successfully", K(ret), KPC(this),
+             K(current_timestamp), K(GARBAGE_COLLECT_RETRY_INTERVAL));
   }
 }
 
-// The four values cover transactions that began before this sample and each
-// snapshot source available to transactions that begin after it.  Their minimum
-// is the local safe watermark; it is published only after every sample succeeds.
+// reclaim means collecting and reclaiming the expired entries in the inner
+// table. And the repeat_reclaim will relaim each time we meeting the error or
+// meeting the time requirement.
+void ObMultiVersionGarbageCollector::repeat_reclaim()
+{
+  int ret = OB_SUCCESS;
+  const int64_t current_timestamp = ObClockGenerator::getRealClock();
+
+  if (has_error_when_reclaim_  // enconter error during last reclaim
+      // reclaim every 10 min(default of GARBAGE_COLLECT_EXEC_INTERVAL)
+      || current_timestamp - last_reclaim_timestamp_ > GARBAGE_COLLECT_EXEC_INTERVAL) {
+    if (OB_FAIL(reclaim())) {
+      has_error_when_reclaim_ = true;
+      if (current_timestamp - last_reclaim_timestamp_ > 10 * GARBAGE_COLLECT_EXEC_INTERVAL
+          && 0 != last_reclaim_timestamp_
+          // for mock or test that change GARBAGE_COLLECT_EXEC_INTERVAL to a small value
+          && current_timestamp - last_reclaim_timestamp_ > 10 * 10_min) {
+        MVCC_LOG(ERROR, "repeat reclaim failed too much time", K(ret),
+                 KPC(this), K(current_timestamp));
+      } else {
+        MVCC_LOG(WARN, "repeat reclaim failed, we will retry immediately", K(ret),
+                 KPC(this), K(current_timestamp));
+      }
+    } else {
+      has_error_when_reclaim_ = false;
+      last_reclaim_timestamp_ = common::ObTimeUtility::current_time();
+      MVCC_LOG(INFO, "repeat reclaim successfully", K(ret), KPC(this),
+               K(current_timestamp), K(GARBAGE_COLLECT_EXEC_INTERVAL));
+    }
+  } else {
+    MVCC_LOG(INFO, "skip repeat reclaim", K(ret), KPC(this),
+             K(current_timestamp), K(GARBAGE_COLLECT_EXEC_INTERVAL));
+  }
+}
+
+// According to the requirement of the multi-version garbage collector and the
+// document 
+// four timestamp from each OceanBase node:
+// 1. The timestamp of the minimum unallocation GTS
+// 2. The timestamp of the minimum unallocation WRS
+// 3. The maximum commit timestamp of each node
+// 4. The minimum snapshot of the active txns of each node
+//
+//   |                                           |
+//   +--t1----C----------------------t2--------->| Machine1
+//   |                                           |
+//   |                                           |
+//   +-------------------C---------------------->| Machine2
+//   |                                           |
+//   |                                           |
+//   +----------------------------------C------->| Machine3
+//   |                                           |
+//           GARBAGE_COLLECT_EXEC_INTERVAL
+//
+// Let's watch for the above example, three machines may each report(the action
+// "C"" in the above picture) its timestamps to inner table at different times
+// during the GARBAGE_COLLECT_EXEC_INTERVAL. We can think the questions basing on
+// one of the instance. Let's go for the machine1:
+// (Let's think that a txn must only starts on one of the machine(called TxDesc))
+// 1. If the txn starts before the report started:
+//   a. If the txn has finished before C, we need not take it into consideration.
+//   b. If the txn has not finished, we will consider it with the above timestamp 4.
+// 2. If the txn starts after the report started:
+//   a. The txn using GTS as snapshot, we will consider it with the above timestamp 1.
+//   b. The txn using WRS as snapshot, we will consider it with the above timestamp 2.
+//   c. The txn using max committed version as snapshot, we will consider it with the
+//      above timestamp 3.
+//
+// So if we generalize all machines using the above rules, all txns started on known
+// machine will be taken into condsideration based on our alogorithm
+//
+// NB: So we must insert or update the 4 entries atomically for the correctness.
 int ObMultiVersionGarbageCollector::study()
 {
   int ret = OB_SUCCESS;
@@ -224,8 +338,8 @@ int ObMultiVersionGarbageCollector::study()
   if (OB_SUCC(ret)) {
     bool is_primary = true;
     
-    if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
-      MVCC_LOG(WARN, "fail to execute check_if_server_role_is_primary", KR(ret));
+    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
+      MVCC_LOG(WARN, "fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
     } else if (is_primary && OB_FAIL(study_min_unallocated_WRS(min_unallocated_WRS))) {
       MVCC_LOG(WARN, "study min unallocated GTS failed", K(ret), K(is_primary));
     } else if (!min_unallocated_WRS.is_valid() || min_unallocated_WRS.is_min()) {
@@ -267,34 +381,19 @@ int ObMultiVersionGarbageCollector::study()
 
   timeguard.click("study_min_active_txn_version");
 
-  if (OB_SUCC(ret)) {
-    share::SCN reserved_snapshot = min_unallocated_GTS;
-    if (min_unallocated_WRS < reserved_snapshot) {
-      reserved_snapshot = min_unallocated_WRS;
-    }
-    if (max_committed_txn_version < reserved_snapshot) {
-      reserved_snapshot = max_committed_txn_version;
-    }
-    if (min_active_txn_version < reserved_snapshot) {
-      reserved_snapshot = min_active_txn_version;
-    }
-    if (OB_UNLIKELY(!reserved_snapshot.is_valid() || reserved_snapshot.is_max())) {
-      ret = OB_ERR_UNEXPECTED;
-      MVCC_LOG(ERROR, "invalid locally calculated reserved snapshot",
-               K(ret), K(reserved_snapshot));
-    } else {
-      // Publish only after all four samples succeed.  Readers therefore see
-      // either the previous complete sample or this complete sample, never a
-      // partially refreshed set of watermarks.
-      local_reserved_snapshot_.atomic_set(reserved_snapshot);
-      MVCC_LOG(INFO, "publish local reserved snapshot", K(reserved_snapshot));
-    }
+  if (OB_SUCC(ret) &&
+      can_report() &&
+      OB_FAIL(report(min_unallocated_GTS,
+                     min_unallocated_WRS,
+                     max_committed_txn_version,
+                     min_active_txn_version))) {
+    MVCC_LOG(WARN, "report garbage collect info failed", K(ret));
   }
 
-  timeguard.click("publish");
+  timeguard.click("report");
 
   MVCC_LOG(INFO, "study multi version garabage collector end",
-           K(ret), KPC(this), K(min_unallocated_GTS), K(min_unallocated_WRS),
+           K(ret), KPC(this), K(min_unallocated_GTS), K(min_unallocated_GTS),
            K(max_committed_txn_version), K(min_active_txn_version));
 
   return ret;
@@ -305,17 +404,34 @@ int ObMultiVersionGarbageCollector::study_min_unallocated_GTS(share::SCN &min_un
 {
   int ret = OB_SUCCESS;
 
+  const transaction::MonotonicTs stc_ahead = transaction::MonotonicTs::current_time() ;
+  transaction::MonotonicTs unused_receive_gts_ts(0);
   const int64_t timeout_us = 1 * 1000 * 1000; // 1s
+  const int64_t expire_time_us = common::ObTimeUtility::current_time() + timeout_us;
   share::SCN gts_scn;
 
-  if (OB_FAIL(OB_TS_MGR.get_gts_sync(timeout_us, gts_scn))) {
-    MVCC_LOG(WARN, "get gts fail", KR(ret));
-  } else if (!gts_scn.is_valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    MVCC_LOG(ERROR, "get gts fail", K(gts_scn), K(ret));
-  } else {
-    min_unallocated_GTS = gts_scn;
-  }
+  do {
+    // We get the gts each 10ms in order not to report too much error during reboot
+    // and continue to fetch under the failure among 1s.
+    ret = OB_TS_MGR.get_gts(stc_ahead,
+                            NULL, // gts task
+                            gts_scn,
+                            unused_receive_gts_ts);
+    if (ret == OB_EAGAIN) {
+      if (common::ObTimeUtility::current_time() > expire_time_us) {
+        ret = OB_TIMEOUT;
+      } else {
+        ob_usleep(10 * 1000/*10ms*/);
+      }
+    } else if (OB_FAIL(ret)) {
+      MVCC_LOG(WARN, "get gts fail", KR(ret));
+    } else if (!gts_scn.is_valid()) {
+      ret = OB_ERR_UNEXPECTED;
+      MVCC_LOG(ERROR, "get gts fail", K(gts_scn), K(ret));
+    } else {
+      min_unallocated_GTS = gts_scn;
+    }
+  } while (ret == OB_EAGAIN);
 
   return ret;
 }
@@ -333,6 +449,7 @@ int ObMultiVersionGarbageCollector::study_min_unallocated_WRS(
 
   if (OB_FAIL(share::g_mp->trans_service()->get_weak_read_snapshot_version(
                 -1, // system variable : max read stale time for user
+                false,
                 min_unallocated_WRS))) {
     MVCC_LOG(WARN, "fail to get weak read snapshot", K(ret));
     if (OB_REPLICA_NOT_READABLE == ret) {
@@ -348,7 +465,8 @@ int ObMultiVersionGarbageCollector::study_min_unallocated_WRS(
   return ret;
 }
 
-// The read snapshot version may be based on the maximum committed transaction version.
+// The read snapshot version may base on max committed txn version for the
+// single ls txn, so we need study it on each machine.
 int ObMultiVersionGarbageCollector::study_max_committed_txn_version(
   share::SCN &max_committed_txn_version)
 {
@@ -391,31 +509,126 @@ int ObMultiVersionGarbageCollector::study_min_active_txn_version(
     MVCC_LOG(WARN, "get min active snaphot version failed", K(ret));
   }
 
+  share::SCN min_mview_mds_snapshot;
+  if (FAILEDx(share::g_mp->m_view_maintenance_service()->get_min_mview_mds_snapshot(min_mview_mds_snapshot))) {
+    MVCC_LOG(WARN, "get min mview active snaphot version failed", K(ret));
+  } else if (min_mview_mds_snapshot.is_valid() && min_mview_mds_snapshot < min_active_txn_version) {
+    MVCC_LOG(INFO, "study_min_active_txn_version", K(min_active_txn_version), K(min_mview_mds_snapshot));
+    min_active_txn_version = min_mview_mds_snapshot;
+  }
   return ret;
 }
 
-int ObMultiVersionGarbageCollector::refresh_disk_status_()
+// refresh_ will timely collect the multi-version garbage collection info from
+// inner table. We need take three factors into consideration. 1, GC may be
+// disabled by disk monitor; 2, gc info may go back, and we should ignore these
+// value; 3, gc may use INT64_MAX under exceptional condition, and we also need
+// ignore it.
+int ObMultiVersionGarbageCollector::refresh_()
 {
   int ret = OB_SUCCESS;
-  bool is_almost_full = false;
-  if (OB_FAIL(is_disk_almost_full_(is_almost_full))) {
-    MVCC_LOG(WARN, "check disk almost full failed", K(ret), KPC(this));
+  concurrency_control::ObMultiVersionGCSnapshotCalculator collector;
+
+  ObTimeGuard timeguard(__func__, 1 * 1000 * 1000);
+
+  if (is_refresh_fail()) {
+    ret = OB_EAGAIN;
+    MVCC_LOG(WARN, "mock refresh failed", K(ret), KPC(this), K(collector));
+  } else if (OB_FAIL(share::g_mp->multi_version_garbage_collector()->collect(collector))) {
+    MVCC_LOG(WARN, "collect snapshot info sql failed", K(ret), KPC(this), K(collector));
   } else {
-    update_disk_pressure_status_(is_almost_full);
+    // Step1: check whether gc status is disabled, then set or reset the gc
+    // status based on the collector's result;
+    decide_gc_status_(collector.get_status());
+    timeguard.click("decide_gc_status_");
+
+    // Step2: whether gc status is wrong or not on the server, we need refresh
+    // it continuously. We will ignore the return code because it will not
+    // effect the refresh result.
+    int tmp_ret = OB_SUCCESS;
+    if (OB_TMP_FAIL(disk_monitor_(collector.is_this_server_disabled()))) {
+      MVCC_LOG(WARN, "disk mintor failed", KPC(this), K(collector), K(tmp_ret));
+    }
+
+    timeguard.click("disk_mointor_");
+
+    // Step3: cache the reserved snapshot of active txn for future use.
+    // NB: be care of the lower value and maximum value which is not reasonable
+    decide_reserved_snapshot_version_(collector.get_reserved_snapshot_version(),
+                                      collector.get_reserved_snapshot_type());
+
+    timeguard.click("decide_reserved_snapshot_");
+
+    MVCC_LOG(INFO, "multi-version garbage collector refresh successfully",
+             KPC(this), K(collector));
   }
+
   return ret;
 }
 
-void ObMultiVersionGarbageCollector::update_disk_pressure_status_(
-    const bool is_almost_full)
+void ObMultiVersionGarbageCollector::decide_gc_status_(const ObMultiVersionGCStatus gc_status)
 {
-  const int ret = OB_SUCCESS;
-  if (is_almost_full && !gc_is_disabled_) {
-    MVCC_LOG(WARN, "local mvcc gc disabled by disk pressure", KPC(this));
-  } else if (!is_almost_full && gc_is_disabled_) {
-    MVCC_LOG(INFO, "local mvcc gc re-enabled after disk pressure cleared", KPC(this));
+  if (gc_status & ObMultiVersionGCStatus::DISABLED_GC_STATUS) {
+    MVCC_LOG_RET(WARN, OB_ERR_UNEXPECTED, "gc status is disabled", KPC(this),
+             K(global_reserved_snapshot_), K(gc_status));
+    gc_is_disabled_ = true;
+  } else if (gc_is_disabled_) {
+    MVCC_LOG(INFO, "gc status is enabled", KPC(this),
+             K(global_reserved_snapshot_), K(gc_status));
+    gc_is_disabled_ = false;
   }
-  gc_is_disabled_ = is_almost_full;
+}
+
+void ObMultiVersionGarbageCollector::decide_reserved_snapshot_version_(
+  const share::SCN reserved_snapshot,
+  const ObMultiVersionSnapshotType reserved_type)
+{
+  int ret = OB_SUCCESS;
+
+  if (!reserved_snapshot.is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    MVCC_LOG(ERROR, "reserved is not valid", K(ret), KPC(this),
+             K(global_reserved_snapshot_), K(reserved_snapshot));
+  } else if (reserved_snapshot < global_reserved_snapshot_) {
+    if ((global_reserved_snapshot_.get_val_for_tx() -
+         reserved_snapshot.get_val_for_tx()) / 1000 > 30 * 1_min) {
+      // We ignore the reserved snapshot with too late snapshot and report WARN
+      // because there may be servers offline and online suddenly and report a
+      // stale txn version. And we report error for a too too old snapshot.
+      // NB: There may be WRS service which disables the monotonic weak read and
+      // finally causes the timestamp to go back, so we should ignore it.
+      if (ObMultiVersionSnapshotType::MIN_UNALLOCATED_WRS == reserved_type
+          && !transaction::ObWeakReadUtil::enable_monotonic_weak_read()) {
+        MVCC_LOG(WARN, "update a smaller reserved snapshot with wrs disable monotonic weak read",
+                 K(ret), KPC(this), K(global_reserved_snapshot_), K(reserved_snapshot));
+      } else if (ObMultiVersionSnapshotType::MIN_UNALLOCATED_WRS == reserved_type
+                 && ((global_reserved_snapshot_.get_val_for_tx() -
+                      reserved_snapshot.get_val_for_tx()) / 1000 >
+                     MAX(transaction::ObWeakReadUtil::max_stale_time_for_weak_consistency(),
+                         100 * 1_min))) {
+        MVCC_LOG(ERROR, "update a too too smaller reserved snapshot with wrs!!!",
+                 K(ret), KPC(this), K(global_reserved_snapshot_), K(reserved_snapshot),
+                 K(transaction::ObWeakReadUtil::max_stale_time_for_weak_consistency()));
+      } else if ((global_reserved_snapshot_.get_val_for_tx() -
+                  reserved_snapshot.get_val_for_tx()) / 1000 > 100 * 1_min) {
+        MVCC_LOG(WARN, "update a too too smaller reserved snapshot!!!", K(ret), KPC(this),
+                 K(global_reserved_snapshot_), K(reserved_snapshot));
+      } else {
+        MVCC_LOG(WARN, "update a too smaller reserved snapshot!", K(ret), KPC(this),
+                 K(global_reserved_snapshot_), K(reserved_snapshot));
+      }
+    } else {
+      MVCC_LOG(WARN, "update a smaller reserved snapshot", K(ret), KPC(this),
+               K(global_reserved_snapshot_), K(reserved_snapshot));
+    }
+  } else if (reserved_snapshot.is_max()) {
+    MVCC_LOG(WARN, "reserved snapshot is max value", K(ret), KPC(this),
+             K(global_reserved_snapshot_), K(reserved_snapshot));
+  } else {
+    MVCC_LOG(INFO, "succeed to update global reserved snapshot", K(ret), KPC(this),
+             K(global_reserved_snapshot_), K(reserved_snapshot));
+    global_reserved_snapshot_.atomic_set(reserved_snapshot);
+  }
 }
 
 share::SCN ObMultiVersionGarbageCollector::get_reserved_snapshot_for_active_txn() const
@@ -423,23 +636,397 @@ share::SCN ObMultiVersionGarbageCollector::get_reserved_snapshot_for_active_txn(
 
   if (!GCONF._mvcc_gc_using_min_txn_snapshot) {
     return share::SCN::max_scn();
+  } else if (refresh_error_too_long_) {
+    if (REACH_THREAD_TIME_INTERVAL(1_s)) {
+      MVCC_LOG_RET(WARN, OB_ERR_UNEXPECTED, "get reserved snapshot for active txn with long not updated", KPC(this));
+    }
+    return share::SCN::max_scn();
   } else if (gc_is_disabled_) {
     if (REACH_THREAD_TIME_INTERVAL(1_s)) {
       MVCC_LOG_RET(WARN, OB_ERR_UNEXPECTED, "get reserved snapshot for active txn with gc is disabled", KPC(this));
     }
     return share::SCN::max_scn();
   } else {
-    return local_reserved_snapshot_.atomic_load();
+    return global_reserved_snapshot_.atomic_load();
   }
 }
 
 bool ObMultiVersionGarbageCollector::is_gc_disabled() const
 {
-  return gc_is_disabled_;
+  return gc_is_disabled_        // gc status is not allowed
+    || refresh_error_too_long_; // refresh inner table failed
 }
 
-// Disable the local active-transaction watermark optimization while disk
-// pressure or an sstable overflow is present.
+// collect reads all entries from inner-table, and apply functor to all entries
+// to let users use it freely.
+// NB: it will stop if functor report error, so use it carefully
+int ObMultiVersionGarbageCollector::collect(ObMultiVersionGCSnapshotFunctor& calculator)
+{
+  int ret = OB_SUCCESS;
+  
+
+  if (OB_UNLIKELY(!snapshot_storage_.is_inited())) {
+    ret = OB_NOT_INIT;
+    MVCC_LOG(WARN, "snapshot storage not init", KR(ret));
+  } else {
+    ObArray<share::ObReservedSnapshotEntry> entries;
+    if (OB_FAIL(snapshot_storage_.get_all(entries))) {
+      MVCC_LOG(WARN, "failed to get all snapshot entries", KR(ret));
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < entries.count(); ++i) {
+        const share::ObReservedSnapshotEntry &entry = entries.at(i);
+        share::SCN snapshot_version_scn;
+        
+        if (OB_FAIL(snapshot_version_scn.convert_for_inner_table_field(entry.snapshot_version_))) {
+          MVCC_LOG(WARN, "set min snapshot version scn failed", K(ret), K(entry.snapshot_version_));
+        } else if (OB_FAIL(calculator(snapshot_version_scn,
+                                      static_cast<ObMultiVersionSnapshotType>(entry.snapshot_type_),
+                                      static_cast<ObMultiVersionGCStatus>(entry.status_),
+                                      entry.create_time_,
+                                      entry.svr_addr_))) {
+          MVCC_LOG(WARN, "calculate snapshot version failed", K(ret));
+        } else {
+          MVCC_LOG(INFO, "multi version garbage collector collects successfully",
+                   K(entry.snapshot_version_), K(entry.snapshot_type_), 
+                   K(entry.create_time_), K(entry.svr_addr_), K(entry.status_));
+        }
+      }
+    }
+  }
+
+  return ret;
+}
+
+// mock for disabling report
+bool ObMultiVersionGarbageCollector::can_report()
+{
+  return true;
+}
+
+// mock for disabling refresh
+bool ObMultiVersionGarbageCollector::is_refresh_fail()
+{
+  return false;
+}
+
+// report will report the four entries into the inner table.
+// NB: the 4 entries must be inserted atomically as the reason has been talked
+//     about in the function 'study' for the rule 2.
+int ObMultiVersionGarbageCollector::report(const share::SCN min_unallocated_GTS,
+                                           const share::SCN min_unallocated_WRS,
+                                           const share::SCN max_committed_txn_version,
+                                           const share::SCN min_active_txn_version)
+{
+  int ret = OB_SUCCESS;
+  const ObAddr &self_addr = GCTX.self_addr();
+  
+  const int64_t current_ts = ObClockGenerator::getRealClock();
+
+  if (OB_UNLIKELY(!snapshot_storage_.is_inited())) {
+    ret = OB_NOT_INIT;
+    MVCC_LOG(WARN, "snapshot storage not init", KR(ret));
+  } else {
+    ObArray<share::ObReservedSnapshotEntry> entries;
+    share::ObReservedSnapshotEntry entry;
+
+    // MIN_UNALLOCATED_GTS
+    
+    entry.snapshot_type_ = (uint64_t)(ObMultiVersionSnapshotType::MIN_UNALLOCATED_GTS);
+    entry.svr_addr_ = self_addr;
+    entry.create_time_ = current_ts;
+    entry.snapshot_version_ = min_unallocated_GTS.get_val_for_inner_table_field();
+    entry.status_ = (uint64_t)(ObMultiVersionGCStatus::NORMAL_GC_STATUS);
+    if (OB_FAIL(entries.push_back(entry))) {
+      MVCC_LOG(WARN, "failed to push back entry", KR(ret));
+    }
+
+    // MIN_UNALLOCATED_WRS
+    if (OB_SUCC(ret)) {
+      entry.snapshot_type_ = (uint64_t)(ObMultiVersionSnapshotType::MIN_UNALLOCATED_WRS);
+      entry.snapshot_version_ = min_unallocated_WRS.get_val_for_inner_table_field();
+      if (OB_FAIL(entries.push_back(entry))) {
+        MVCC_LOG(WARN, "failed to push back entry", KR(ret));
+      }
+    }
+
+    // MAX_COMMITTED_TXN_VERSION
+    if (OB_SUCC(ret)) {
+      entry.snapshot_type_ = (uint64_t)(ObMultiVersionSnapshotType::MAX_COMMITTED_TXN_VERSION);
+      entry.snapshot_version_ = max_committed_txn_version.get_val_for_inner_table_field();
+      if (OB_FAIL(entries.push_back(entry))) {
+        MVCC_LOG(WARN, "failed to push back entry", KR(ret));
+      }
+    }
+
+    // ACTIVE_TXN_SNAPSHOT
+    if (OB_SUCC(ret)) {
+      entry.snapshot_type_ = (uint64_t)(ObMultiVersionSnapshotType::ACTIVE_TXN_SNAPSHOT);
+      entry.snapshot_version_ = min_active_txn_version.get_val_for_inner_table_field();
+      if (OB_FAIL(entries.push_back(entry))) {
+        MVCC_LOG(WARN, "failed to push back entry", KR(ret));
+      }
+    }
+
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(snapshot_storage_.insert_or_update(entries))) {
+        MVCC_LOG(WARN, "failed to insert or update snapshot entries", KR(ret));
+      } else {
+        MVCC_LOG(INFO, "report multi version snapshot success", KR(ret), K(entries.count()));
+      }
+    }
+  }
+
+  return ret;
+}
+
+// update_status will update the four entries' status into the inner table.
+// NB: the 4 entries must be updated atomically as the reason has been talked
+//     about in the function 'study' for the rule 2.
+int ObMultiVersionGarbageCollector::update_status(const ObMultiVersionGCStatus status)
+{
+  int ret = OB_SUCCESS;
+  const ObAddr &self_addr = GCTX.self_addr();
+  
+
+  if (OB_UNLIKELY(!snapshot_storage_.is_inited())) {
+    ret = OB_NOT_INIT;
+    MVCC_LOG(WARN, "snapshot storage not init", KR(ret));
+  } else if (OB_FAIL(snapshot_storage_.update_status(self_addr, (uint64_t)(status)))) {
+    MVCC_LOG(WARN, "failed to update status", KR(ret), K(status));
+  } else {
+    MVCC_LOG(INFO, "update multi version snapshot status success", KR(ret), K(status));
+  }
+
+  return ret;
+}
+
+// We need reclaim expired entries in the inner table under exceptional
+// conditions. For example, when the node where the active txn is located
+// cannot update the inner table in time due to abnormal reasons, the snapshot
+// value cannot be advanced and a large number of versions cannot be recycled.
+// So we need to handle snapshot processing in abnormal situations.
+//
+// Firstly, we rely on the sys ls's ability to manage the ls. We hope that if
+// the node cannot contact to the inner table due to abnormalities, then
+// eventually the entries of this node will be removed from the innner table, so
+// that we no longer rely on this Timestamps provided by the node as recycling
+// snapshots.(implemented in the reclaim)
+//
+// Secondly, we rely on the each node's ability to ignore faulty timestamps. We
+// hope that if the sys ls cannot contact to the inner table and remove the
+// entries in time, each node will ignore the timestamps that has not been
+// updated for a long time.(implemented in the ObMultiVersionGCSnapshotCalculator).
+//
+// Finally, in the worst case, the node cannot contact to the inner table and
+// fail to advance the snapshot it maintained. We think the multi-version data
+// on the node is not reachable for active txns, so we ignore the value of the
+// inner table and use the undo_retention and the snapshot_gc_ts as the new
+// mechanism.(implemented in the repeat_refresh)
+//
+// All in all, our purpose is that no matter what the exception is, we must be
+// able to provide a user-reasonable(may be value of the customer) recycling
+// snapshot that all users can understand.
+int ObMultiVersionGarbageCollector::reclaim()
+{
+  int ret = OB_SUCCESS;
+  ObLS *ls = NULL;
+  storage::ObLSHandle ls_handle;
+  logservice::ObLogHandler *handler = nullptr;
+  int64_t old_proposal_id = 0;
+  ObArray<ObAddr> reclaimable_servers;
+  ObArray<ObAddr> snapshot_servers;
+  bool is_this_server_disabled = false;
+  common::ObRole role;
+
+  ObTimeGuard timeguard(__func__, 1 * 1000 * 1000);
+
+  if (OB_FAIL(share::g_mp->ls_service()->
+              get_ls(share::SYS_LS, ls_handle, ObLSGetMod::MULTI_VERSION_GARBAGE_COLLOECTOR_MOD))) {
+    MVCC_LOG(WARN, "get sys ls failed", K(ret));
+    ret = OB_SUCCESS;
+  } else if (OB_ISNULL(ls = ls_handle.get_ls())
+             || OB_ISNULL(handler = ls_handle.get_ls()->get_log_handler())) {
+    ret = OB_ERR_UNEXPECTED;
+    MVCC_LOG(ERROR, "log stream is NULL", K(ret), K(ls));
+  } else if (OB_FAIL(handler->get_role(role, old_proposal_id))) {
+    MVCC_LOG(WARN, "fail to get role", KR(ret));
+  } else if (common::is_leader_like(role)) {
+    timeguard.click("get_leader");
+
+    // TODO(handora.qc): use nicer timer
+    const int64_t current_timestamp = ObClockGenerator::getRealClock();
+
+    ObMultiVersionGCSnapshotOperator collector(
+      [current_timestamp,
+       &reclaimable_servers,
+       &snapshot_servers,
+       &is_this_server_disabled](const share::SCN snapshot_version,
+                                 const ObMultiVersionSnapshotType snapshot_type,
+                                 const ObMultiVersionGCStatus status,
+                                 const int64_t create_time,
+                                 const ObAddr addr) -> int {
+        int ret = OB_SUCCESS;
+        int tmp_ret = OB_SUCCESS;
+        bool need_reclaim = false;
+
+        if (OB_FAIL(snapshot_servers.push_back(addr))) {
+          MVCC_LOG(WARN, "push array failed", K(ret));
+        } else {
+          // TODO(handora.qc): use a better time monitor for the node lost for a long time
+          if (current_timestamp > create_time
+              && current_timestamp - create_time > GARBAGE_COLLECT_RECLAIM_DURATION) {
+            need_reclaim = true; // server will be always exist and alive in lite version
+          }
+
+          if (need_reclaim) {
+            bool exist = false;
+            for (int64_t i = 0; !exist && i < reclaimable_servers.count(); i++) {
+              if (addr == reclaimable_servers[i]) {
+                exist = true;
+              }
+            }
+            if (!exist && OB_FAIL(reclaimable_servers.push_back(addr))) {
+              MVCC_LOG(WARN, "push back array failed", K(ret));
+            }
+          }
+        }
+
+        if (!is_this_server_disabled &&
+            addr == GCTX.self_addr() &&
+            status != ObMultiVersionGCStatus::NORMAL_GC_STATUS) {
+          is_this_server_disabled = true;
+        }
+
+        return ret;
+      });
+
+    // collect all info for reclaimable servers and all reported servers
+    if (OB_FAIL(collect(collector))) {
+      MVCC_LOG(WARN, "collect snapshot info failed", K(ret));
+    } else {
+      int tmp_ret = OB_SUCCESS;
+      timeguard.click("collect");
+
+      if (0 == reclaimable_servers.count()) {
+        // all snapshot info is not reclaimable
+        MVCC_LOG(INFO, "skip all alivavle snapshots info");
+        // reclaim all uncessary servers
+      } else if (OB_TMP_FAIL((reclaim_(reclaimable_servers)))) {
+        MVCC_LOG(WARN, "reclaim snapshot info failed", K(tmp_ret),
+                 K(reclaimable_servers));
+        if (OB_SUCC(ret)) {
+          ret = tmp_ret;
+        }
+      }
+
+      timeguard.click("reclaim_");
+
+      if (0 == snapshot_servers.count()) {
+        MVCC_LOG(WARN, "no alive servers now, please check it clearly",
+                 KPC(this), K(snapshot_servers), K(reclaimable_servers));
+        // monitor all servers
+      } else if (OB_TMP_FAIL(monitor_(snapshot_servers))) {
+        MVCC_LOG(WARN, "snapshots servers are mintor failed",
+                 KPC(this), K(snapshot_servers), K(tmp_ret));
+        if (OB_SUCC(ret)) {
+          ret = tmp_ret;
+        }
+      }
+
+      timeguard.click("monitor_");
+    }
+  }
+
+  MVCC_LOG(INFO, "reclaim multi version garabage collector end", KPC(this),
+           K(ret), K(role), K(reclaimable_servers), K(snapshot_servers),
+           K(is_this_server_disabled));
+
+  return ret;
+}
+
+// mointor checks all servers in the inner table and server manager and check
+// whether there exists a server in the server manager and does not report its
+// timestamps from beginning to the end.
+int ObMultiVersionGarbageCollector::monitor_(const ObArray<ObAddr> &snapshot_servers)
+{
+  int ret = OB_SUCCESS;
+  return ret;
+}
+
+// disk monitor will monitor the current disk status and report to inner table
+// in time when finding the status of the two parties does not match.
+//
+// The demand comes from the following story:
+// Some scenes often appear in the online environment that long-running
+// snapshots prevent data from recycling, so we must take disk usage into
+// consideration. So we timely check the disk usage and report it to the
+// inner_table(called gc status). And all server will check the gc status
+// before using it.
+int ObMultiVersionGarbageCollector::disk_monitor_(const bool is_this_server_alomost_full)
+{
+  int ret = OB_SUCCESS;
+  bool is_almost_full = false;
+  bool need_report = false;
+
+  if (OB_FAIL(is_disk_almost_full_(is_almost_full))) {
+    MVCC_LOG(WARN, "check disk almost full failed", K(ret), KPC(this));
+  } else if (is_this_server_alomost_full && is_almost_full) {
+    need_report = false;
+    MVCC_LOG(WARN, "the disk still be full of the disk", K(ret), KPC(this));
+  } else if (!is_this_server_alomost_full && is_almost_full) {
+    MVCC_LOG(WARN, "the disk becoming full of the disk", K(ret), KPC(this));
+    need_report = true;
+  } else if (!is_this_server_alomost_full && !is_almost_full) {
+    // normal scense
+    need_report = false;
+  } else if (is_this_server_alomost_full && !is_almost_full) {
+    MVCC_LOG(INFO, "the disk becoming not full of the disk", K(ret), KPC(this));
+    need_report = true;
+  }
+
+  if (need_report) {
+    ObMultiVersionGCStatus status = is_almost_full ?
+      ObMultiVersionGCStatus::DISABLED_GC_STATUS :
+      ObMultiVersionGCStatus::NORMAL_GC_STATUS;
+    if (OB_FAIL(update_status(status))) {
+      MVCC_LOG(WARN, "disk monitor failed", K(ret), K(status));
+    } else {
+      MVCC_LOG(INFO, "report disk monitor succeed", K(ret), K(status),
+               K(is_this_server_alomost_full), K(is_almost_full));
+    }
+  }
+
+  return ret;
+}
+
+// reclaim remove entries according to reclaimable_snapshots_info
+int ObMultiVersionGarbageCollector::reclaim_(const ObArray<ObAddr> &reclaimable_servers)
+{
+  int ret = OB_SUCCESS;
+  
+
+  if (OB_UNLIKELY(!snapshot_storage_.is_inited())) {
+    ret = OB_NOT_INIT;
+    MVCC_LOG(WARN, "snapshot storage not init", KR(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < reclaimable_servers.count(); ++i) {
+      const ObAddr &addr = reclaimable_servers[i];
+      if (OB_FAIL(snapshot_storage_.delete_expired(addr))) {
+        MVCC_LOG(WARN, "failed to delete expired snapshot", KR(ret), K(addr));
+      } else {
+        MVCC_LOG(INFO, "reclaim expired multi version snapshot success", KR(ret), K(addr));
+      }
+    }
+  }
+
+  return ret;
+}
+
+// Some scenes often appear in the online environment that long-running
+// snapshots prevent data from recycling, so we must take disk usage into
+// consideration. So we timely check the disk usage and report it to the
+// inner_table(called gc status). And all server will check the gc status
+// before using it.
 int ObMultiVersionGarbageCollector::is_disk_almost_full_(bool &is_almost_full)
 {
   int ret = OB_SUCCESS;
@@ -490,6 +1077,141 @@ bool ObMultiVersionGarbageCollector::is_sstable_overflow_()
   return b_ret;
 }
 
+ObMultiVersionGCSnapshotCalculator::ObMultiVersionGCSnapshotCalculator()
+  : reserved_snapshot_version_(share::SCN::max_scn()),
+    reserved_snapshot_type_(ObMultiVersionSnapshotType::MIN_SNAPSHOT_TYPE),
+    reserved_status_(ObMultiVersionGCStatus::INVALID_GC_STATUS),
+    reserved_create_time_(0),
+    reserved_addr_(),
+    is_this_server_disabled_(false),
+    status_(ObMultiVersionGCStatus::NORMAL_GC_STATUS) {}
+
+ObMultiVersionGCSnapshotCalculator::~ObMultiVersionGCSnapshotCalculator()
+{
+  reserved_snapshot_version_ = share::SCN::max_scn();
+  reserved_snapshot_type_ = ObMultiVersionSnapshotType::MIN_SNAPSHOT_TYPE;
+  reserved_status_ = ObMultiVersionGCStatus::INVALID_GC_STATUS;
+  reserved_create_time_ = 0;
+  reserved_addr_.reset();
+  is_this_server_disabled_ = false;
+  status_ = ObMultiVersionGCStatus::NORMAL_GC_STATUS;
+}
+
+int ObMultiVersionGCSnapshotCalculator::operator()(const share::SCN snapshot_version,
+                                                   const ObMultiVersionSnapshotType snapshot_type,
+                                                   const ObMultiVersionGCStatus status,
+                                                   const int64_t create_time,
+                                                   const ObAddr addr)
+{
+  int ret = OB_SUCCESS;
+  // TODO(handora.qc): change machine time to nicer time
+  const int64_t current_ts = ObClockGenerator::getRealClock();
+
+  // Step1: calculate the minumium reserved version and record it
+  if (snapshot_version < reserved_snapshot_version_) {
+    if (current_ts > create_time &&
+        current_ts - create_time > 2 * ObMultiVersionGarbageCollector::GARBAGE_COLLECT_RECLAIM_DURATION &&
+        // for mock or test that change GARBAGE_COLLECT_EXEC_INTERVAL to a small value
+        current_ts - create_time > 2 * 3 * 10_min) {
+      // we report WARN here because there may be servers offline and online
+      // suddenly and report a stale txn or there may be tenant being dropped
+      // and alived server may fetch the tenant info
+      MVCC_LOG(WARN, "ignore too old version", K(snapshot_version),
+               K(snapshot_type), K(current_ts), K(create_time), K(addr));
+    } else {
+      reserved_snapshot_version_ = snapshot_version;
+      reserved_snapshot_type_ = snapshot_type;
+      reserved_create_time_ = create_time;
+      reserved_addr_ = addr;
+    }
+  }
+
+  // Step2: ensure the gc status of the current server
+  if (!is_this_server_disabled_ &&
+      addr == GCTX.self_addr() &&
+      status != ObMultiVersionGCStatus::NORMAL_GC_STATUS) {
+    is_this_server_disabled_ = true;
+  }
+
+  // Step3: merge the status of all multi-version gc status
+  status_ = status_ | status;
+
+  return ret;
+}
+
+share::SCN ObMultiVersionGCSnapshotCalculator::get_reserved_snapshot_version() const
+{
+  return reserved_snapshot_version_;
+}
+
+ObMultiVersionSnapshotType ObMultiVersionGCSnapshotCalculator::get_reserved_snapshot_type() const
+{
+  return reserved_snapshot_type_;
+}
+
+ObMultiVersionGCStatus ObMultiVersionGCSnapshotCalculator::get_status() const
+{
+  return status_;
+}
+
+ObMultiVersionSnapshotInfo::ObMultiVersionSnapshotInfo()
+  : snapshot_version_(share::SCN::min_scn()),
+    snapshot_type_(ObMultiVersionSnapshotType::MIN_SNAPSHOT_TYPE),
+    status_(ObMultiVersionGCStatus::INVALID_GC_STATUS),
+    create_time_(0),
+    addr_() {}
+
+ObMultiVersionSnapshotInfo::ObMultiVersionSnapshotInfo(const share::SCN snapshot_version,
+                                                       const ObMultiVersionSnapshotType snapshot_type,
+                                                       const ObMultiVersionGCStatus status,
+                                                       const int64_t create_time,
+                                                       const ObAddr addr)
+  : snapshot_version_(snapshot_version),
+    snapshot_type_(snapshot_type),
+    status_(status),
+    create_time_(create_time),
+    addr_(addr) {}
+
+ObMultiVersionGCSnapshotCollector::ObMultiVersionGCSnapshotCollector(
+  ObIArray<ObMultiVersionSnapshotInfo> &snapshot_info)
+  : snapshots_info_(snapshot_info) {}
+
+ObMultiVersionGCSnapshotCollector::~ObMultiVersionGCSnapshotCollector() {}
+
+int ObMultiVersionGCSnapshotCollector::operator()(const share::SCN snapshot_version,
+                                                  const ObMultiVersionSnapshotType snapshot_type,
+                                                  const ObMultiVersionGCStatus status,
+                                                  const int64_t create_time,
+                                                  const ObAddr addr)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_FAIL(snapshots_info_.push_back(ObMultiVersionSnapshotInfo(snapshot_version,
+                                                                   snapshot_type,
+                                                                   status,
+                                                                   create_time,
+                                                                   addr)))) {
+    MVCC_LOG(WARN, "push back to snapshots info failed", K(ret));
+  }
+
+  return ret;
+}
+
+ObMultiVersionGCSnapshotOperator::ObMultiVersionGCSnapshotOperator(
+  const ObMultiVersionGCSnapshotFunction &func)
+  : func_(func) {}
+
+int ObMultiVersionGCSnapshotOperator::operator()(const share::SCN snapshot_version,
+                                                 const ObMultiVersionSnapshotType snapshot_type,
+                                                 const ObMultiVersionGCStatus status,
+                                                 const int64_t create_time,
+                                                 const ObAddr addr)
+{
+  return func_(snapshot_version, snapshot_type, status, create_time, addr);
+}
+
+// Functor to fetch the status of all alived session
+// TODO(handora.qc): using better timestamp instead of cur state start time
 bool GetMinActiveSnapshotVersionFunctor::operator()(sql::ObSQLSessionMgr::Key key,
                                                     sql::ObSQLSessionInfo *sess_info)
 {

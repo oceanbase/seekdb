@@ -30,12 +30,14 @@
 #include "storage/blocksstable/ob_kvcache_pre_warmer.h"
 #include "ob_index_block_aggregator.h"
 #include "storage/blocksstable/ob_data_store_desc.h"
+#include "storage/blocksstable/ob_sstable_private_object_cleaner.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
 
 namespace oceanbase
 {
 namespace blocksstable
 {
+struct ObBlockInfo;
 struct ObIndexTreeRootCtx;
 class ObIMicroBlockReader;
 class ObIMacroBlockFlushCallback;
@@ -45,6 +47,7 @@ static const uint32_t META_BLOCK_VERSION = 1;
 static const int64_t DEFAULT_MICRO_BLOCK_WRITER_COUNT = 64;
 static const int64_t DEFAULT_MACRO_BLOCK_CNT = 64;
 static const int64_t SMALL_SSTABLE_THRESHOLD = 1 << 20; // 1M
+static const int64_t SMALL_SSTABLE_ROW_COUNT_THRESHOLD_FOR_CG = 50000;
 
 typedef common::ObSEArray<ObIndexTreeRootCtx *, DEFAULT_MICRO_BLOCK_WRITER_COUNT>
     IndexTreeRootCtxList;
@@ -59,12 +62,14 @@ typedef common::ObSEArray<int64_t, DEFAULT_MACRO_LEVEL_ROWS_COUNT>
 enum ObIndexBuildTaskType : uint8_t
 {
   MERGE_TASK = 0,
-  REBUILD_NORMAL_TASK = 1,
-  REBUILD_DDL_TASK = 2,
-  REBUILD_BACKUP_TASK = 3,
-  REBUILD_BACKUP_DDL_TASK = 4,
+  MERGE_CG_TASK = 1,
+  REBUILD_NORMAL_TASK = 2,
+  REBUILD_CG_SELF_CAL_TASK = 3,
+  REBUILD_DDL_TASK = 4,
+  REBUILD_BACKUP_TASK = 5,
+  REBUILD_BACKUP_DDL_TASK = 6,
 
-  IDX_BLK_BUILD_MAX_TYPE = 5
+  IDX_BLK_BUILD_MAX_TYPE = 7
 };
 
 
@@ -145,6 +150,27 @@ public:
   }
   int &ret_;
   const ObStorageDatumUtils &datum_utils_;
+};
+
+struct ObIndexTreeRootCtxCGCompare final
+{
+public:
+  ObIndexTreeRootCtxCGCompare(int &ret) : ret_(ret) {}
+  ~ObIndexTreeRootCtxCGCompare() = default;
+  bool operator() (const ObIndexTreeRootCtx *left, const ObIndexTreeRootCtx *right)
+  {
+    int &ret = ret_;
+    bool cmp_ret = false;
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(left) || OB_ISNULL(right) || left->task_idx_ < 0 || right->task_idx_ < 0) {
+      ret = OB_ERR_UNEXPECTED;
+      STORAGE_LOG(WARN, "unexpected null root block desc", K(ret), KPC(left), KPC(right));
+    } else {
+      cmp_ret = left->task_idx_ < right->task_idx_;
+    }
+    return cmp_ret;
+  }
+  int &ret_;
 };
 
 struct ObDataMacroMetaCompare final
@@ -246,7 +272,8 @@ public:
                K_(occupy_size), K_(original_size), K_(data_checksum),
                K_(use_old_macro_block_count), K_(compressor_type),
                K_(root_row_store_type), K_(nested_offset), K_(nested_size),
-               K_(table_backup_flag), K_(root_macro_seq));
+               K_(table_backup_flag), K_(root_macro_seq), K_(encrypt_id),
+               K_(master_key_id), KPHEX_(encrypt_key, sizeof(encrypt_key_)));
 
 public:
   ObIndexTreeRootBlockDesc root_desc_;
@@ -266,11 +293,14 @@ public:
   int64_t use_old_macro_block_count_;
   common::ObSEArray<int64_t, 1> data_column_checksums_;
   common::ObCompressorType compressor_type_;
+  int64_t encrypt_id_;
+  int64_t master_key_id_;
   int64_t nested_offset_;
   int64_t nested_size_;
   ObTableBackupFlag table_backup_flag_;
   ObRowStoreType root_row_store_type_;
   int64_t root_macro_seq_;
+  char encrypt_key_[share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH];
   DISALLOW_COPY_AND_ASSIGN(ObSSTableMergeRes);
 };
 
@@ -370,12 +400,13 @@ public:
                  const ObMacroBlock &macro_block);
   int clustered_index_append_row(const ObMicroBlockDesc &micro_block_desc);
   int write_clustered_index_micro_block();
-  int generate_macro_row(ObMacroBlock &macro_block, const bool need_write_macro_meta);
+  int generate_macro_row(ObMacroBlock &macro_block, const int64_t ddl_start_row_offset, const bool need_write_macro_meta);
   int append_meta_row_to_dumper(const MacroBlockId &block_id);
   int set_block_info(const ObBlockInfo &block_info);
   int append_macro_block(const ObDataMacroBlockMeta &macro_meta,
                          const ObMicroBlockData *micro_block_data);
   int cal_macro_meta_block_size(const ObDatumRowkey &rowkey,
+                                const int64_t macro_block_bf_size,
                                 int64_t &estimate_block_size);
   int set_parallel_task_idx(const int64_t task_idx);
   inline int64_t get_estimate_index_block_size() const { return estimate_leaf_block_size_; }
@@ -387,12 +418,18 @@ public:
 private:
   int append_index_micro_block_and_macro_meta(
       ObMacroBlock &macro_block,
+      const int64_t ddl_start_row_offset,
       const bool need_write_macro_meta);
   int write_meta_block(
       ObMacroBlock &macro_block,
-      const ObIndexBlockRowDesc &macro_row_desc);
+      const ObIndexBlockRowDesc &macro_row_desc,
+      const int64_t ddl_start_row_offset);
+
+  void update_macro_meta_with_offset(const int64_t macro_block_row_count, const int64_t ddl_start_row_offset);
   virtual int insert_and_update_index_tree(const ObDatumRow *index_row) override;
   int generate_macro_meta_row_desc(const ObMicroBlockDesc &micro_block_desc, ObIndexBlockRowDesc &macro_row_desc);
+  int add_row_offset(ObIndexBlockRowDesc &row_desc);
+  int add_clustered_row_offset(ObIndexBlockRowDesc &row_desc);
   virtual OB_INLINE bool need_pre_warm() const override { return true; }
   void inner_reset();
 private:
@@ -405,6 +442,7 @@ private:
   ObIMicroBlockWriter *meta_block_writer_;
   ObDatumRow meta_row_;
   ObDataMacroBlockMeta macro_meta_;
+  ObStorageDatum cg_rowkey_;
   ObDataStoreDesc *leaf_store_desc_;
   ObDataStoreDesc *local_leaf_store_desc_;
   ObClusteredIndexBlockWriter *clustered_index_writer_;
@@ -501,7 +539,7 @@ private:
       common::ObIArray<ObIODevice *> *device_handle_array,
       ObIMacroBlockFlushCallback *callback);
   static bool use_absolute_offset(const ObITable::TableKey &table_key);
-  void set_task_type(const bool use_absolute_offset, const common::ObIArray<ObIODevice *> *device_handle_array);
+  void set_task_type(const bool is_cg, const bool use_absolute_offset, const common::ObIArray<ObIODevice *> *device_handle_array);
   OB_INLINE bool need_index_tree_dumper() const;
   int check_and_get_abs_offset(const ObDataMacroBlockMeta &macro_meta, const int64_t absolute_row_offset, int64_t &abs_offset);
   int inner_append_macro_row(
@@ -558,8 +596,10 @@ public:
       : index_block_loader_(),
         meta_row_(),
         roots_(nullptr),
+        row_idx_(-1),
         block_cnt_(0),
         cur_roots_idx_(),
+        is_cg_(false),
         is_inited_(false)
     {}
     ~ObMacroMetaIter() = default;
@@ -567,31 +607,36 @@ public:
         common::ObIAllocator &allocator,
         IndexTreeRootCtxList &roots,
         const int64_t meta_row_column_count,
+        const bool is_cg,
         const uint64_t data_version);
     int get_next_macro_block(ObDataMacroBlockMeta &macro_meta);
     int64_t get_macro_block_count() const { return block_cnt_; }
     void reuse();
-    TO_STRING_KV(K_(is_inited), K_(cur_roots_idx), K_(block_cnt), K_(index_block_loader));
+    TO_STRING_KV(K_(is_inited), K_(is_cg), K_(row_idx),
+        K_(cur_roots_idx), K_(block_cnt), K_(index_block_loader));
   private:
     ObIndexBlockLoader index_block_loader_;
     ObDatumRow meta_row_;
     IndexTreeRootCtxList *roots_;
+    int64_t row_idx_;
     int64_t block_cnt_;
     int64_t cur_roots_idx_;
+    bool is_cg_;
     bool is_inited_;
   };
 
-public:
   enum ObSpaceOptimizationMode
   {
-    ENABLE = 0,
-    DISABLE = 1,
+    ENABLE = 0,   // enable the optimization for small sstable
+    DISABLE = 1,  // disable the optimization
   };
 
+public:
   explicit ObSSTableIndexBuilder(const bool use_double_write_buffer);
   ~ObSSTableIndexBuilder();
-  int init(const ObDataStoreDesc &data_desc,
-           ObSpaceOptimizationMode mode = ENABLE);
+  int init(
+      const ObDataStoreDesc &data_desc,
+      ObSpaceOptimizationMode mode = ENABLE);
   void reset();
   int acquire_index_builder(ObDataIndexBlockBuilder *&builder,
                             const ObDataStoreDesc &data_store_desc,
@@ -627,8 +672,9 @@ public:
   bool is_inited() const { return is_inited_; }
   bool is_closed() const { return is_closed_; }
   bool enable_dump_disk() const { return enable_dump_disk_; }
-  OB_INLINE ObSpaceOptimizationMode get_optimization_mode() const { return optimization_mode_; }
+  OB_INLINE ObSSTablePrivateObjectCleaner & get_private_object_cleaner() { return object_cleaner_; }
   bool micro_index_clustered() const;
+  OB_INLINE ObSpaceOptimizationMode get_optimization_mode() const { return optimization_mode_; }
   const compaction::ObMergeBlockInfo &get_merge_block_info() const { return macro_writer_.get_merge_block_info(); }
   TO_STRING_KV(K(roots_.count()));
 
@@ -643,15 +689,16 @@ public:
       const char *buf,
       const int64_t buf_size,
       ObSSTableMacroBlockHeader &macro_header);
-  static int get_single_macro_meta(ObIAllocator &allocator,
-                                   ObIndexBlockLoader &index_block_loader,
-                                   const ObDataStoreDesc &container_store_desc,
-                                   const IndexTreeRootCtxList &roots,
-                                   ObDataMacroBlockMeta &macro_meta);
-  static bool satisfies_small_sstable_pre_requisites(
-      ObSpaceOptimizationMode mode,
-      int64_t concurrent_cnt,
-      const ObIODevice *device_handle);
+  static int get_single_macro_meta_for_small_sstable(ObIAllocator &allocator,
+                                                     ObIndexBlockLoader &index_block_loader,
+                                                     const ObDataStoreDesc &container_store_desc,
+                                                     const IndexTreeRootCtxList &roots,
+                                                     ObDataMacroBlockMeta &macro_meta);
+  static bool satisfies_small_sstable_pre_requisites(ObSSTableIndexBuilder::ObSpaceOptimizationMode mode,
+                                                     int64_t concurrent_cnt,
+                                                     bool is_cg,
+                                                     int64_t row_count,
+                                                     const ObIODevice *device_handle);
 
 private:
   int new_index_builder(ObDataIndexBlockBuilder *&builder,
@@ -695,6 +742,7 @@ private:
                       ObSSTableMergeRes &res,
                       int64_t &macro_seq,
                       ObIMacroBlockFlushCallback *callback);
+  int build_cg_meta_tree();
   int build_meta_tree_from_all_mem_meta_block();
   int build_meta_tree_from_meta_block(ObSSTableMergeRes &res);
   int build_meta_tree_from_backup_meta_block(ObSSTableMergeRes &res);
@@ -724,6 +772,7 @@ private:
   ObIODevice *device_handle_;
   IndexTreeRootCtxList roots_;
   ObSSTableMergeRes res_;
+  ObSSTablePrivateObjectCleaner object_cleaner_;
   ObSpaceOptimizationMode optimization_mode_;
   bool enable_dump_disk_;
   bool is_closed_;

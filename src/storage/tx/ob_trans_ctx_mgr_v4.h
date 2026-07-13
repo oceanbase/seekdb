@@ -44,9 +44,6 @@ class ObIMemtable;
 class ObLSTxService;
 class ObTransSubmitLogFunctor;
 class ObTxCtxTable;
-struct ObTxCtxMoveArg;
-struct ObTransferMoveTxParam;
-struct ObTransferOutTxParam;
 }
 
 namespace memtable
@@ -111,8 +108,7 @@ struct ObTxCreateArg
                 const int64_t trans_expired_time,
                 ObTransService *trans_service,
                 ObXATransID xid = ObXATransID(),
-                int64_t epoch = -1,
-                const ObTxCtxMoveArg *move_arg = NULL)
+                int64_t epoch = -1)
       : for_replay_(for_replay),
         ctx_source_(ctx_source),
         tx_id_(trans_id),
@@ -126,8 +122,7 @@ struct ObTxCreateArg
         trans_expired_time_(trans_expired_time),
         trans_service_(trans_service),
         xid_(xid),
-        epoch_(epoch),
-        move_arg_(move_arg) {}
+        epoch_(epoch) {}
   bool is_valid() const
   {
     return ls_id_.is_valid()
@@ -154,7 +149,6 @@ struct ObTxCreateArg
   ObTransService *trans_service_;
   ObXATransID xid_;
   int64_t epoch_;
-  const ObTxCtxMoveArg *move_arg_;
 };
 
 // Is used to store and traverse ObTxID
@@ -211,22 +205,7 @@ public:
   // Offline the in-memory state of the ObLSTxCtxMgr
   int offline();
 
-  int filter_tx_need_transfer(ObIArray<ObTabletID> &tablet_list,
-                              const share::SCN data_end_scn,
-                              ObIArray<transaction::ObTransID> &move_tx_ids);
-
-  int transfer_out_tx_op(const ObTransferOutTxParam &param,
-                         int64_t& active_tx_count,
-                         int64_t &op_tx_count);
   int wait_tx_write_end(ObTimeoutCtx &timeout_ctx);
-  int collect_tx_ctx(const share::ObLSID dest_ls_id,
-                     const SCN log_scn,
-                     const ObIArray<ObTabletID> &tablet_list,
-                     const ObIArray<ObTransID> *move_tx_ids,
-                     int64_t &colllect_count,
-                     ObIArray<ObTxCtxMoveArg> &res);
-  int move_tx_op(const ObTransferMoveTxParam &move_tx_param,
-                 const ObIArray<ObTxCtxMoveArg> &args);
 public:
   // Create a TxCtx whose tx_id is specified
   // @param [in] tx_id: transaction ID
@@ -408,11 +387,6 @@ public:
   }
   int64_t get_total_active_readonly_request_count() { return ATOMIC_LOAD(&total_active_readonly_request_count_); }
 
-  void inc_total_request_by_transfer_dest() { (void)ATOMIC_AAF(&total_request_by_transfer_dest_, 1); }
-  void dec_total_request_by_transfer_dest() { (void)ATOMIC_AAF(&total_request_by_transfer_dest_, -1); }
-  int64_t get_total_request_by_transfer_dest() {
-    return total_request_by_transfer_dest_;
-  }
   // Get all tx obj lock information in this ObLSTxCtxMgr
   // @param [out] iter: all tx obj lock op information
   int iterate_tx_obj_lock_op(ObLockOpIterator &iter);
@@ -691,9 +665,6 @@ private:
   int64_t total_active_readonly_request_count_ CACHE_ALIGNED;
 
   int64_t active_tx_count_;
-
-  // for transfer dest_ls depend src_ls
-  int64_t total_request_by_transfer_dest_;
 
   // It is used to record the time point of leader takeover
   // gts must be refreshed to the newest before the leader provides services

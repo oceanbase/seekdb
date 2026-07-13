@@ -43,11 +43,13 @@ TEST_F(TestMacroBlockId, local_mode)
   MacroBlockId m_local(77, (1L << 33), 0);
   OB_LOG(INFO, "local", K(m_local));
   OB_LOG(INFO, "raw", K(m_local.write_seq_), K(m_local.second_id_));
+  ASSERT_TRUE(MacroBlockId::MACRO_BLOCK_ID_VERSION_V2 == m_local.version_);
+  ASSERT_EQ((uint64_t)ObMacroBlockIdMode::ID_MODE_LOCAL, m_local.id_mode_);
   ASSERT_EQ(77, m_local.write_seq_);
   ASSERT_EQ((1L << 33), m_local.block_index_);
   ASSERT_EQ(0, m_local.third_id_);
 
-  const int64_t buf_len = 24;
+  const int64_t buf_len = 32;
   char buf[buf_len] = {0};
 
   int64_t pos = 0;
@@ -63,6 +65,8 @@ TEST_F(TestMacroBlockId, local_mode)
   OB_LOG(INFO, "raw", K(m_local_des.write_seq_), K(m_local_des.second_id_));
   ASSERT_TRUE(m_local.get_serialize_size() == pos);
 
+  ASSERT_TRUE(MacroBlockId::MACRO_BLOCK_ID_VERSION_V2 == m_local_des.version_);
+  ASSERT_EQ((uint64_t)ObMacroBlockIdMode::ID_MODE_LOCAL, m_local_des.id_mode_);
   ASSERT_EQ(m_local.write_seq_, m_local_des.write_seq_);
   ASSERT_EQ((1L << 33), m_local_des.block_index_);
   ASSERT_EQ(0, m_local_des.third_id_);
@@ -96,6 +100,75 @@ TEST_F(TestMacroBlockId, verification)
   ASSERT_EQ(0, pos);
 }
 
+TEST_F(TestMacroBlockId, test_path_id)
+{
+  int ret = OB_SUCCESS;
+  blocksstable::ObStorageObjectOpt curr_opt;
+  MacroBlockId test_block_id;
+  uint64_t test_ls_id = 1001;
+  uint64_t test_tablet_id = 200001;
+  uint64_t test_tablet_version = ObStorageObjectOpt::INVALID_TABLET_VERSION;
+  curr_opt.set_ss_private_tablet_meta_object_opt(test_ls_id, test_tablet_id, test_tablet_version);
+  OB_LOG(INFO, "before set");
+  hex_dump(&test_block_id.fourth_id_,
+           sizeof(int64_t),
+           true,
+           OB_LOG_LEVEL_WARN);
+
+  // in ss mode
+  test_block_id.set_version_v2();
+  test_block_id.set_id_mode((uint64_t)ObMacroBlockIdMode::ID_MODE_SHARE);
+  test_block_id.set_storage_object_type(static_cast<int64_t>(curr_opt.object_type_));
+  test_block_id.set_incarnation_id(0);
+  test_block_id.set_column_group_id(0);
+  test_block_id.set_second_id(curr_opt.ss_private_tablet_opt_.ls_id_);
+  test_block_id.set_third_id(curr_opt.ss_private_tablet_opt_.tablet_id_);
+  test_block_id.set_meta_version_id(curr_opt.ss_private_tablet_opt_.version_);
+  test_block_id.set_meta_path_id(-1);
+
+  OB_LOG(INFO, "after set");
+  hex_dump(&test_block_id.fourth_id_,
+           sizeof(int64_t),
+           true,
+           OB_LOG_LEVEL_WARN);
+
+  OB_LOG(INFO, "show test_block_id", K(test_block_id), K(test_block_id.meta_path_id()), K(test_block_id.meta_version_id()));
+  int64_t path_id1 = test_block_id.meta_path_id();
+  OB_LOG(INFO, "path_id1");
+  hex_dump(&path_id1,
+           sizeof(int64_t),
+           true,
+           OB_LOG_LEVEL_WARN);
+  uint64_t tablet_version1 = test_block_id.meta_version_id();
+  OB_LOG(INFO, "tablet_version1");
+  hex_dump(&tablet_version1,
+           sizeof(uint64_t),
+           true,
+           OB_LOG_LEVEL_WARN);
+
+  ASSERT_EQ(-1, path_id1);
+  ASSERT_EQ(ObStorageObjectOpt::INVALID_TABLET_VERSION, tablet_version1);
+  ASSERT_FALSE(test_block_id.is_valid());
+
+  const int64_t buf_len = 50;
+  char buf[buf_len] = {0};
+  int64_t pos = 0;
+  ret = test_block_id.serialize(buf, 50, pos);
+  ASSERT_EQ(OB_INVALID_ARGUMENT, ret);
+  ASSERT_EQ(0, pos);
+  
+  test_block_id.set_meta_path_id(0);
+  test_block_id.set_meta_version_id(100002);
+
+  ret = test_block_id.serialize(buf, 50, pos);
+  ASSERT_EQ(OB_SUCCESS, ret);
+  ASSERT_EQ(32, pos);
+  
+  pos = 0;
+  ret = test_block_id.deserialize(buf, 50, pos);
+  ASSERT_EQ(OB_SUCCESS, ret);
+  ASSERT_EQ(32, pos);
+}
 }
 }
 

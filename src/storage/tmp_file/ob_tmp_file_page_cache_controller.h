@@ -48,6 +48,7 @@ public:
   static const int64_t SWAP_FAST_INTERVAL = 5;      // 5ms
   static const int64_t SWAP_INTERVAL = 1000;        // 1s
   static const int64_t REFRESH_CONFIG_INTERVAL = 10 * 1000 * 1000;  // 10s
+  static const int64_t ACCESS_TENANT_CONFIG_TIMEOUT_US = 10 * 1000; // 10ms
   virtual int init();
   int start();
   void stop();
@@ -71,7 +72,7 @@ private:
 private:
   bool is_inited_;
   bool flush_all_data_;                   // set to true to flush all pages when shrinking write buffer pool
-  int64_t disk_usage_limit_;              // Periodically refreshed from runtime configuration.
+  int64_t disk_usage_limit_;              // periodically read disk usage limit from tenant config
   ObTmpFileBlockManager &tmp_file_block_manager_;    // ref to ObTmpFileBlockManager
   ObFIFOAllocator task_allocator_;        // used by flush_mgr_ to allocate flush tasks
   ObTmpWriteBufferPool write_buffer_pool_;

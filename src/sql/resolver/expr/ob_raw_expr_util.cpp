@@ -1575,6 +1575,7 @@ int ObRawExprUtils::build_generated_column_expr(const ObString &expr_str,
                                                 ObRawExpr *&expr,
                                                 ObIArray<ObQualifiedName> &columns,
                                                 const ObTableSchema * table_schema,
+                                                const bool sequence_allowed,
                                                 ObDMLResolver *dml_resolver,
                                                 const ObSchemaChecker *schema_checker,
                                                 const ObResolverUtils::PureFunctionCheckStatus
@@ -1590,6 +1591,7 @@ int ObRawExprUtils::build_generated_column_expr(const ObString &expr_str,
                                           expr,
                                           columns,
                                           table_schema,
+                                          sequence_allowed,
                                           dml_resolver,
                                           schema_checker,
                                           check_status,
@@ -1607,6 +1609,7 @@ int ObRawExprUtils::build_generated_column_expr(const ObString &expr_str,
                                                 ObRawExpr *&expr,
                                                 ObIArray<ObQualifiedName> &columns,
                                                 const ObTableSchema * table_schema,
+                                                const bool sequence_allowed,
                                                 ObDMLResolver *dml_resolver,
                                                 const ObSchemaChecker *schema_checker,
                                                 const ObResolverUtils::PureFunctionCheckStatus
@@ -1625,7 +1628,7 @@ int ObRawExprUtils::build_generated_column_expr(const ObString &expr_str,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("node is null");
   } else if (OB_FAIL(build_generated_column_expr(expr_factory, session_info, *node,
-                                                 expr, columns, table_schema,
+                                                 expr, columns, table_schema, sequence_allowed,
                                                  dml_resolver,
                                                  schema_checker, check_status,
                                                  need_check_simple_column,
@@ -1636,6 +1639,154 @@ int ObRawExprUtils::build_generated_column_expr(const ObString &expr_str,
   return ret;
 }
 
+int ObRawExprUtils::build_seq_nextval_expr(ObRawExpr *&expr,
+                                          const ObSQLSessionInfo *session_info,
+                                          ObRawExprFactory *expr_factory,
+                                          const ObQualifiedName &q_name,
+                                          uint64_t seq_id,
+                                          ObDMLStmt *stmt)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(session_info)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info is NULL", K(ret));
+  } else {
+    const ObString &database_name = q_name.database_name_.empty() ?
+                                    session_info->get_database_name() : q_name.database_name_;
+    if (OB_FAIL(build_seq_nextval_expr(expr, session_info, expr_factory, database_name,
+                                q_name.tbl_name_, q_name.col_name_, seq_id, stmt))) {
+      LOG_WARN("build seq nextval expr failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+// build sequence_object.currval and sequence_object.nextval expr
+int ObRawExprUtils::build_seq_nextval_expr(ObRawExpr *&expr,
+                                          const ObSQLSessionInfo *session_info,
+                                          ObRawExprFactory *expr_factory,
+                                          const ObString &database_name,
+                                          const ObString &tbl_name,
+                                          const ObString &col_name,
+                                          uint64_t seq_id,
+                                          ObDMLStmt *stmt)
+{
+  int ret = OB_SUCCESS;
+  ObRawExpr *exists_seq_expr = NULL;
+  ObSequenceRawExpr *func_expr = NULL;
+  ObConstRawExpr *col_id_expr = NULL;
+  if (OB_ISNULL(session_info) || OB_ISNULL(expr_factory)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info is NULL", K(ret), K(session_info), K(expr_factory));
+  } else if (NULL != stmt && OB_FAIL(stmt->get_sequence_expr(exists_seq_expr,
+                                                   tbl_name,
+                                                   col_name,
+                                                   seq_id))) {
+    LOG_WARN("failed to get sequence expr", K(ret));
+  } else if (exists_seq_expr != NULL) {
+    expr = exists_seq_expr;
+  } else if (OB_FAIL(expr_factory->create_raw_expr(T_FUN_SYS_SEQ_NEXTVAL, func_expr))) {
+    LOG_WARN("create nextval failed", K(ret));
+  } else if (OB_FAIL(expr_factory->create_raw_expr(T_UINT64, col_id_expr))) {
+    LOG_WARN("create const raw expr failed", K(ret));
+  } else {
+    ObObj col_id;
+    col_id.set_uint64(seq_id);
+    col_id_expr->set_value(col_id);
+    if (OB_FAIL(func_expr->set_sequence_meta(database_name, tbl_name, col_name, seq_id))) {
+      LOG_WARN("failed to set sequence meta", K(ret));
+    } else if (OB_FAIL(func_expr->add_flag(IS_SEQ_EXPR))) {
+      LOG_WARN("failed to add flag", K(ret));
+    } else if (OB_FAIL(func_expr->set_param_expr(col_id_expr))) {
+      LOG_WARN("set function param expr failed", K(ret));
+    } else if (OB_FAIL(func_expr->formalize(session_info))) {
+      LOG_WARN("failed to extract info", K(ret));
+    } else if (NULL != stmt && OB_FAIL(stmt->get_pseudo_column_like_exprs().push_back(func_expr))) {
+      LOG_WARN("failed to push back sequence expr", K(ret));
+    } else {
+      expr = func_expr;
+    }
+  }
+  return ret;
+}
+
+int ObRawExprUtils::resolve_sequence_object(const ObQualifiedName &q_name,
+                                           ObDMLResolver *dml_resolver,
+                                           const ObSQLSessionInfo *session_info,
+                                           ObRawExprFactory *expr_factory,
+                                           ObSequenceNamespaceChecker &sequence_namespace_checker,
+                                           ObRawExpr *&real_ref_expr,
+                                           bool is_generated_column)
+{
+  int ret = OB_SUCCESS;
+  uint64_t sequence_id = OB_INVALID_ID;
+  ObRawExpr *column_expr = NULL;
+  ObDMLStmt *stmt = NULL == dml_resolver ? NULL : dml_resolver->get_stmt();
+  if (!q_name.tbl_name_.empty() &&
+        ObSequenceNamespaceChecker::is_curr_or_next_val(q_name.col_name_)) {
+    LOG_DEBUG("sequence object", K(q_name));
+    // don't check scope for sequence in definition of generated column.
+    // sequence expr will only be used later when insert or update column with default value.
+    ObStmtScope current_scope = NULL != dml_resolver && !is_generated_column
+                                  ? dml_resolver->get_current_scope()
+                                  : T_FIELD_LIST_SCOPE;
+    if (OB_FAIL(sequence_namespace_checker.check_sequence_namespace(q_name,
+                                                                    sequence_id))) {
+      // Except for table creation, sequence_not_exist error can be ignored in the resolver phase
+      // for sequence in definition of default column. If an error needs to be reported such as when
+      // insert or update column with default value, check it again in the execution phase.
+      if (NULL != stmt && stmt::T_CREATE_TABLE != stmt->get_stmt_type() && is_generated_column
+          && ret == OB_ERR_BAD_FIELD_ERROR) {
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN_IGNORE_COL_NOTFOUND(ret, "check basic column namespace failed", K(ret), K(q_name));
+      }
+    }
+    if (OB_FAIL(ret)) {
+      // do nothing
+    } else if (OB_UNLIKELY(T_FIELD_LIST_SCOPE != current_scope &&
+                           T_UPDATE_SCOPE != current_scope &&
+                           T_INSERT_SCOPE != current_scope)) {
+      // sequence can only appear in the following three scenarios:
+      //  - select seq from ...
+      //  - insert into t1 values (seq...
+      //  - update t1 set c1 = seq xxxx
+      // Cannot appear in the context of where, group by, limit, having, etc.
+      ret = OB_ERR_SEQ_NOT_ALLOWED_HERE;
+    } else if (OB_FAIL(build_seq_nextval_expr(column_expr, session_info, expr_factory, q_name,
+                                              sequence_id, stmt))) {
+      LOG_WARN("resolve column item failed", K(ret));
+    } else {
+      real_ref_expr = column_expr;
+      StmtType type = stmt::T_NONE;
+      if (NULL != dml_resolver) {
+        if (OB_ISNULL(stmt)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("stmt of dml resolver is null", K(ret));
+        } else if (FALSE_IT(type = stmt->get_stmt_type())) {
+        } else if (is_generated_column && stmt::T_INSERT != type && stmt::T_UPDATE != type) {
+          // do nothing. only generate sequence operator in INSERT/UPDATE stmt.
+        } else if (!is_generated_column) {
+          if (0 == q_name.col_name_.case_compare("NEXTVAL")) {
+            // Record sequence id to plan
+            if (OB_FAIL(dml_resolver->add_sequence_id_to_stmt(sequence_id))) {
+              LOG_WARN("fail add id to stmt", K(sequence_id), K(ret));
+            }
+          } else if (0 == q_name.col_name_.case_compare("CURRVAL")) {
+            if (OB_FAIL(dml_resolver->add_sequence_id_to_stmt(sequence_id, true))) {
+              LOG_WARN("fail add id to stmt", K(sequence_id), K(ret));
+            }
+          }
+        }
+      }
+    }
+  } else {
+    // No discovery of nextval, currval pattern,
+    // is not a sequence object, throw it to the outside for handling
+    ret = OB_ERR_BAD_FIELD_ERROR;
+  }
+  return ret;
+}
 /**
  * @brief Used to determine whether a function or pseudocolumn is deterministic.
  * Any function specified in a generated column, function-based index, or CHECK
@@ -1753,6 +1904,7 @@ int ObRawExprUtils::build_generated_column_expr(const obcall::ObCreateIndexArg *
                                                  expr,
                                                  columns,
                                                  &table_schema,
+                                                 false,
                                                  NULL,
                                                  schema_checker,
                                                  check_status))) {
@@ -1910,6 +2062,7 @@ int ObRawExprUtils::build_generated_column_expr(ObRawExprFactory &expr_factory,
                                                 ObRawExpr *&expr,
                                                 ObIArray<ObQualifiedName> &columns,
                                                 const ObTableSchema *new_table_schema,
+                                                const bool sequence_allowed,
                                                 ObDMLResolver *dml_resolver,
                                                 const ObSchemaChecker *schema_checker,
                                                 const ObResolverUtils::PureFunctionCheckStatus
@@ -2464,7 +2617,7 @@ int ObRawExprUtils::check_generated_column_expr_str(const common::ObString &expr
   ObRawExpr *expr = NULL;
   ObArray<ObQualifiedName> columns;
   if (OB_FAIL(ObRawExprUtils::build_generated_column_expr(expr_str, expr_factory, session,
-      expr, columns, &table_schema, NULL))) {
+      expr, columns, &table_schema, false /* allow_sequence*/, NULL))) {
     LOG_WARN("generated column expr str after printer is valid", K(expr_str), K(ret));
   }
   return ret;
@@ -2806,7 +2959,8 @@ int ObRawExprUtils::extract_set_op_exprs(const ObIArray<ObRawExpr*> &exprs,
 
 int ObRawExprUtils::extract_column_exprs(const ObRawExpr *raw_expr,
                                          ObIArray<ObRawExpr*> &column_exprs,
-                                         bool need_pseudo_column)
+                                         bool need_pseudo_column,
+                                         bool can_extract_pseudo_column_ref)
 {
   int ret = OB_SUCCESS;
   if (NULL == raw_expr) {
@@ -2814,7 +2968,10 @@ int ObRawExprUtils::extract_column_exprs(const ObRawExpr *raw_expr,
     LOG_WARN("invalid raw expr", K(ret), K(raw_expr));
   } else {
     if (T_REF_COLUMN == raw_expr->get_expr_type()) {
-      ret = add_var_to_array_no_dup(column_exprs, const_cast<ObRawExpr*>(raw_expr));
+      const ObColumnRefRawExpr *columnref_expr = static_cast<const ObColumnRefRawExpr*>(raw_expr);
+      if (can_extract_pseudo_column_ref || !columnref_expr->is_pseudo_column_ref()) {
+        ret = add_var_to_array_no_dup(column_exprs, const_cast<ObRawExpr*>(raw_expr));
+      }
     } else if ((raw_expr->is_pseudo_column_expr() ||
                 raw_expr->is_op_pseudo_column_expr()) && need_pseudo_column) {
       ret = add_var_to_array_no_dup(column_exprs, const_cast<ObRawExpr*>(raw_expr));
@@ -2822,7 +2979,7 @@ int ObRawExprUtils::extract_column_exprs(const ObRawExpr *raw_expr,
       int64_t N = raw_expr->get_param_count();
       for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
         if (OB_FAIL(SMART_CALL(extract_column_exprs(raw_expr->get_param_expr(i), column_exprs,
-            need_pseudo_column)))) {
+            need_pseudo_column, can_extract_pseudo_column_ref)))) {
           LOG_WARN("failed to extract column exprs", K(ret));
         }
       }
@@ -2916,6 +3073,29 @@ int ObRawExprUtils::extract_column_exprs(ObRawExpr* expr,
                                                   rel_ids,
                                                   column_exprs)))) {
         LOG_WARN("fail to extract column exprs", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObRawExprUtils::extract_invalid_sequence_expr(ObRawExpr *raw_expr,
+                                                ObRawExpr *&sequence_expr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(raw_expr)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid raw expr", K(ret), K(raw_expr));
+  } else if (T_FUN_SYS_SEQ_NEXTVAL == raw_expr->get_expr_type()
+             && reinterpret_cast<const ObSequenceRawExpr *>(raw_expr)->get_sequence_id()
+                  == OB_INVALID_ID) {
+    sequence_expr = raw_expr;
+  } else {
+    int64_t N = raw_expr->get_param_count();
+    for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
+      if (OB_FAIL(SMART_CALL(extract_invalid_sequence_expr(raw_expr->get_param_expr(i),
+                                                      sequence_expr)))) {
+        LOG_WARN("failed to extract invalid sequence expr", K(ret));
       }
     }
   }
@@ -3069,14 +3249,16 @@ int ObRawExprUtils::extract_virtual_generated_column_parents(
 
 int ObRawExprUtils::extract_column_exprs(const ObIArray<ObRawExpr*> &exprs,
                                          ObIArray<ObRawExpr*> &column_exprs,
-                                         bool need_pseudo_column)
+                                         bool need_pseudo_column,
+                                         bool can_extract_pseudo_column_ref)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
     if (OB_ISNULL(exprs.at(i))) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Expr is NULL", K(ret), K(i));
-    } else if (OB_FAIL(extract_column_exprs(exprs.at(i), column_exprs, need_pseudo_column))) {
+    } else if (OB_FAIL(extract_column_exprs(exprs.at(i), column_exprs, need_pseudo_column,
+        can_extract_pseudo_column_ref))) {
       LOG_WARN("Failed to extract column exprs", K(ret));
     } else { } //do nothing
   }
@@ -3271,6 +3453,10 @@ int ObRawExprUtils::try_add_cast_expr_above(ObRawExprFactory *expr_factory,
                   && (dst_type.is_character_type() || dst_type.is_null()))
             || (src_type.is_character_type() && dst_type.is_character_type())))
       {
+      // cases like: select xmltype(var)||xmltype(var) as "res1" from t1 t;
+      // xmltype is a lp constructor, an implicit cast is added to cast PL xmltype to SQL xmltype
+      // when deduce concat, another cast is needed to cast SQL xmltype to string
+      // it is a unary cast (cast from string to xmltype is not allowed)
       ret = OB_ERR_UNEXPECTED;
 #ifdef DEBUG
       LOG_ERROR("try to add implicit cast again, check if type deduction is correct",
@@ -4132,6 +4318,20 @@ bool ObRawExprUtils::need_column_conv(const ObRawExprResType &expected_type,
   return bret;
 }
 
+bool ObRawExprUtils::check_exprs_type_collation_accuracy_equal(const ObRawExpr *expr1, const ObRawExpr *expr2)
+{
+  int equal = false;
+  if (expr1->get_data_type() == expr2->get_data_type()
+      && expr1->get_collation_type() == expr2->get_collation_type()
+      && expr1->get_accuracy() == expr2->get_accuracy()) {
+    equal = true;
+    if (ob_is_collection_sql_type(expr1->get_data_type())
+        && expr1->get_subschema_id() != expr2->get_subschema_id()) {
+      equal = false;
+    }
+  }
+  return equal;
+}
 // This method should be used with caution, it will lose enum type enum_set_values
 int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
                                            const share::schema::ObColumnSchemaV2 *column_schema,
@@ -7039,6 +7239,8 @@ int ObRawExprUtils::build_inner_wf_aggr_status_expr(ObRawExprFactory &factory,
   return ret;
 }
 
+// only for rollup distributor and collector
+
 int ObRawExprUtils::build_pseudo_ddl_slice_id(ObRawExprFactory &factory,
                                                 const ObSQLSessionInfo &session_info,
                                                 ObRawExpr *&out)
@@ -7120,7 +7322,8 @@ int ObRawExprUtils::build_remove_const_expr(ObRawExprFactory &factory,
 bool ObRawExprUtils::is_pseudo_column_like_expr(const ObRawExpr &expr)
 {
   bool bret = false;
-  if (ObRawExpr::EXPR_PSEUDO_COLUMN == expr.get_expr_class()) {
+  if (ObRawExpr::EXPR_PSEUDO_COLUMN == expr.get_expr_class() ||
+      T_FUN_SYS_SEQ_NEXTVAL == expr.get_expr_type()) {
     bret = true;
   }
   return bret;

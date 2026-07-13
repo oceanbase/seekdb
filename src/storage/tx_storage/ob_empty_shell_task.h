@@ -22,6 +22,7 @@
 #include "share/scn.h"
 #include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
+#include "storage/tx_storage/ob_empty_shell_object_checker.h"
 
 namespace oceanbase
 {
@@ -55,6 +56,15 @@ private:
   int check_candidate_tablet_(const ObTablet &tablet, bool &can_become_shell, bool &need_retry);
   int get_empty_shell_tablet_ids(common::ObTabletIDArray &empty_shell_tablet_ids, bool &need_retry);
   int update_tablets_to_empty_shell(ObLS *ls, const common::ObIArray<common::ObTabletID> &tablet_ids);
+  // Conditions for a reserved deleted tablet status to become an empty shell in standby database(1 or 2 or 3 or 4):
+  // 1. Tenant-level replayable scn is greater than the finish_scn of reserved deleted tablet
+  // 2. The node dest_ls where the tablet resides does not exist;
+  // 3. The migration status of dest_ls is OB_MIGRATION_STATUS_MIGRATE;
+  // 4. The replay decided scn of dest_ls is greater than the finish_scn of reserved deleted tablet
+  int check_reserved_deleted_tablet_(const ObTablet &tablet, const ObTabletCreateDeleteMdsUserData &user_data, bool &can, bool &need_retry);
+
+  static int get_readable_scn(share::SCN &readable_scn);
+
 public:
   obsys::ObRWLock wait_lock_;
 
@@ -62,6 +72,7 @@ private:
   storage::ObLS *ls_;
   bool is_trigger_;
   bool stopped_;
+  ObDDLEmptyShellChecker ddl_empty_shell_checker_; // to record the tag deleted time of the ddl tablet.
   bool is_inited_;
 };
 

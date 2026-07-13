@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include "lib/utility/ob_print_utils.h"
+#include "share/ob_ls_id.h"
 #include "common/ob_tablet_id.h"
 
 namespace oceanbase
@@ -29,7 +30,7 @@ class ObTabletMapKey final
 {
 public:
   ObTabletMapKey();
-  explicit ObTabletMapKey(const common::ObTabletID &tablet_id);
+  ObTabletMapKey(const share::ObLSID &ls_id, const common::ObTabletID &tablet_id);
   ~ObTabletMapKey();
 
   void reset();
@@ -41,19 +42,20 @@ public:
   int hash(uint64_t &hash_val) const;
   uint64_t hash() const;
 
-  TO_STRING_KV(K_(tablet_id));
+  TO_STRING_KV(K_(ls_id), K_(tablet_id));
 public:
+  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
 };
 
 inline bool ObTabletMapKey::is_valid() const
 {
-  return tablet_id_.is_valid();
+  return ls_id_.is_valid() && tablet_id_.is_valid();
 }
 
 inline bool ObTabletMapKey::operator ==(const ObTabletMapKey &other) const
 {
-  return tablet_id_ == other.tablet_id_;
+  return ls_id_ == other.ls_id_ && tablet_id_ == other.tablet_id_;
 }
 
 inline bool ObTabletMapKey::operator !=(const ObTabletMapKey &other) const
@@ -63,7 +65,7 @@ inline bool ObTabletMapKey::operator !=(const ObTabletMapKey &other) const
 
 inline bool ObTabletMapKey::operator <(const ObTabletMapKey &other) const
 {
-  return tablet_id_ < other.tablet_id_;
+  return ls_id_ < other.ls_id_ && tablet_id_ < other.tablet_id_;
 }
 
 class ObDieingTabletMapKey final

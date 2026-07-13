@@ -31,6 +31,7 @@ namespace storage
 ObLobLocatorHelper::ObLobLocatorHelper()
   : table_id_(OB_INVALID_ID),
     tablet_id_(OB_INVALID_ID),
+    ls_id_(OB_INVALID_ID),
     tx_read_snapshot_(),
     fb_snapshot_(),
     rowid_objs_(),
@@ -51,6 +52,7 @@ ObLobLocatorHelper::~ObLobLocatorHelper()
 
 int ObLobLocatorHelper::init(const ObTableScanParam &scan_param,
                              const ObStoreCtx &ctx,
+                             const share::ObLSID &ls_id,
                              const int64_t snapshot_version)
 {
   int ret = OB_SUCCESS;
@@ -65,10 +67,11 @@ int ObLobLocatorHelper::init(const ObTableScanParam &scan_param,
     if (OB_UNLIKELY(!table_param.enable_lob_locator_v2())) {
       // LOB locator v2 is required in MySQL-only mode.
       ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "unexpected compatibility mode for ObLobLocatorHelper", K(ret), K(table_param));
+      STORAGE_LOG(WARN, "Unexpected tenant mode to init ObLobLocatorHelper", K(ret), K(table_param));
     } else {
       table_id_ = table_param.get_table_id();
       tablet_id_ = scan_param.tablet_id_.id();
+      ls_id_ = ls_id.id();
       enable_locator_v2_ = table_param.enable_lob_locator_v2();
       scan_flag_ = scan_param.scan_flag_;
       tx_seq_base_ = scan_param.tx_seq_base_;
@@ -92,6 +95,7 @@ int ObLobLocatorHelper::init(const ObTableScanParam &scan_param,
 int ObLobLocatorHelper::init(const uint64_t table_id,
                              const uint64_t tablet_id,
                              const ObStoreCtx &ctx,
+                             const share::ObLSID &ls_id,
                              const int64_t snapshot_version)
 {
   int ret = OB_SUCCESS;
@@ -100,13 +104,14 @@ int ObLobLocatorHelper::init(const uint64_t table_id,
     STORAGE_LOG(WARN, "ObLobLocatorHelper init twice", K(ret), K(*this));
   } else if (OB_UNLIKELY(snapshot_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "Invalid argument to init ObLobLocatorHelper", K(ret), K(snapshot_version));
-  } else if (OB_FAIL(tx_read_snapshot_.build_snapshot_for_lob(ctx.mvcc_acc_ctx_.snapshot_))) {
-    STORAGE_LOG(WARN, "build_snapshot_for_lob fail", K(ret), K(snapshot_version), K(ctx.mvcc_acc_ctx_.snapshot_));
+    STORAGE_LOG(WARN, "Invalid argument to init ObLobLocatorHelper", K(ret), K(ls_id), K(snapshot_version));
+  } else if (OB_FAIL(tx_read_snapshot_.build_snapshot_for_lob(ctx.mvcc_acc_ctx_.snapshot_, ls_id))) {
+    STORAGE_LOG(WARN, "build_snapshot_for_lob fail", K(ret), K(ls_id), K(snapshot_version), K(ctx.mvcc_acc_ctx_.snapshot_));
   } else {
     // table id is only used to determine if it is a systable, this interface created locator will not construct a real rowid
     table_id_ = table_id;
     tablet_id_ = tablet_id;
+    ls_id_ = ls_id.id();
     enable_locator_v2_ = true; // must be called en locator v2 enabled
     is_inited_ = true;
     is_access_index_ = false;
@@ -260,7 +265,7 @@ int ObLobLocatorHelper::fuse_mem_lob_header(ObObj &def_obj, uint64_t col_id, boo
       int64_t read_snapshot_size = 0;
       ObString read_snapshot_data;
       if (extern_flags.has_read_snapshot_) {
-        read_snapshot_size = tx_read_snapshot_.get_serialize_size_for_lob(fb_snapshot_);
+        read_snapshot_size = tx_read_snapshot_.get_serialize_size_for_lob(share::ObLSID(ls_id_), fb_snapshot_);
       }
 
       int64_t full_loc_size = ObLobLocatorV2::calc_locator_full_len(extern_flags,
@@ -289,7 +294,7 @@ int ObLobLocatorHelper::fuse_mem_lob_header(ObObj &def_obj, uint64_t col_id, boo
           ObMemLobTxInfo tx_info(tx_read_snapshot_.version().get_val_for_tx(),
                                  tx_read_snapshot_.tx_id().get_id(),
                                  tx_read_snapshot_.tx_seq().cast_to_int());
-          ObMemLobLocationInfo location_info(tablet_id_, def_obj.get_collation_type());
+          ObMemLobLocationInfo location_info(tablet_id_, ls_id_, def_obj.get_collation_type());
           if (OB_FAIL(locator.set_table_info(table_id_, col_id))) { // ToDo: @gehao should be column idx
             STORAGE_LOG(WARN, "Lob: set table info failed", K(ret), K(table_id_), K(col_id));
           } else if (extern_flags.has_tx_info_ && OB_FAIL(locator.set_tx_info(tx_info))) {
@@ -301,7 +306,7 @@ int ObLobLocatorHelper::fuse_mem_lob_header(ObObj &def_obj, uint64_t col_id, boo
             int64_t pos = 0;
             if (OB_FAIL(locator.get_read_snapshot_data(read_snapshot_data))) {
               STORAGE_LOG(WARN, "Lob: get_read_snapshot_data failed", K(ret), K(locator));
-            } else if (OB_FAIL(tx_read_snapshot_.serialize_for_lob(fb_snapshot_,
+            } else if (OB_FAIL(tx_read_snapshot_.serialize_for_lob(share::ObLSID(ls_id_), fb_snapshot_,
                 read_snapshot_data.ptr(), read_snapshot_data.length(), pos))) { 
               STORAGE_LOG(WARN, "Lob: serialize_for_lob failed", K(ret), K(locator));
             }
@@ -384,7 +389,7 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
     }
 
     if (OB_SUCC(ret) && extern_flags.has_read_snapshot_) {
-      read_snapshot_size = tx_read_snapshot_.get_serialize_size_for_lob(fb_snapshot_);
+      read_snapshot_size = tx_read_snapshot_.get_serialize_size_for_lob(share::ObLSID(ls_id_), fb_snapshot_);
     }
 
     int64_t full_loc_size = 0;
@@ -438,17 +443,21 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
         // if scan with index, get data tablet id
         common::ObTabletID target_tablet_id(tablet_id_);
         if (is_access_index_) {
-          ObLS *tenant_ls = nullptr;
+          share::ObLSID tmp_ls_id(ls_id_);
+          ObLSHandle ls_handle;
           ObTabletHandle tablet_handle;
-          if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
-            LOG_WARN("failed to get log stream", K(ret));
-          } else if (OB_FAIL(tenant_ls->get_tablet(target_tablet_id, tablet_handle))) {
+          if (OB_FAIL(share::g_mp->ls_service()->get_ls(tmp_ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+            LOG_WARN("failed to get log stream", K(ret), K(ls_id_));
+          } else if (OB_ISNULL(ls_handle.get_ls())) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_ERROR("ls should not be null", K(ret));
+          } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(target_tablet_id, tablet_handle))) {
             LOG_WARN("fail to get tablet handle", K(ret), K(target_tablet_id));
           } else {
             target_tablet_id = tablet_handle.get_obj()->get_data_tablet_id();
           }
         }
-        ObMemLobLocationInfo location_info(target_tablet_id.id(), cs_type);
+        ObMemLobLocationInfo location_info(target_tablet_id.id(), ls_id_, cs_type);
         if (OB_FAIL(ret)) {
         } else if (has_extern && OB_FAIL(locator.set_table_info(table_id_, column_id))) { // should be column idx
           STORAGE_LOG(WARN, "Lob: set table info failed", K(ret), K(table_id_), K(column_id));
@@ -464,7 +473,7 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
           int64_t pos = 0;
           if (OB_FAIL(locator.get_read_snapshot_data(read_snapshot_data))) {
             STORAGE_LOG(WARN, "Lob: get_read_snapshot_data failed", K(ret), K(locator));
-          } else if (OB_FAIL(tx_read_snapshot_.serialize_for_lob(fb_snapshot_,
+          } else if (OB_FAIL(tx_read_snapshot_.serialize_for_lob(share::ObLSID(ls_id_), fb_snapshot_,
               read_snapshot_data.ptr(), read_snapshot_data.length(), pos))) { 
             STORAGE_LOG(WARN, "Lob: serialize_for_lob failed", K(ret), K(locator));
           }
@@ -512,6 +521,7 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
             ObArenaAllocator tmp_lob_allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
             ObLobAccessParam param;
             param.tx_desc_ = NULL;
+            param.ls_id_ = share::ObLSID(ls_id_);
             param.sql_mode_ = access_ctx.sql_mode_;
             param.tablet_id_ = ObTabletID(tablet_id_);
 

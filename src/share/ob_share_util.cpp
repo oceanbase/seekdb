@@ -18,7 +18,7 @@
 #include "share/rc/ob_module_provider.h" // for share::g_mp
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_global_stat_proxy.h" // for ObGlobalStatProxy
-#include "share/schema/ob_schema_struct.h" // for ObServerRuntimeSchema
+#include "share/schema/ob_schema_struct.h" // for ObTenantSchema
 #include "share/ob_server_struct.h"
 #include "share/io/ob_io_manager.h"  // OB_IO_MANAGER, previously hidden behind a removed include chain, make the dependency explicit
 #include "share/config/ob_server_config.h" // GCONF (get_rs_default_timeout_ctx)
@@ -244,86 +244,224 @@ int ObShareUtil::get_ora_rowscn(
   return ret;
 }
 
-int ObShareUtil::get_server_role(ObServerRole::Role &server_role)
+int ObShareUtil::mtl_get_tenant_role(ObTenantRole::Role &tenant_role)
 {
   int ret = OB_SUCCESS;
-  server_role = GCTX.server_role_;
-  if (OB_SUCC(ret) && OB_UNLIKELY(is_invalid_role(server_role))) {
+  tenant_role = ObTenantRole::INVALID_TENANT;
+  {
+    tenant_role = ObTenantRole::PRIMARY_TENANT;
+  }
+  if (OB_SUCC(ret) && OB_UNLIKELY(is_invalid_tenant(tenant_role))) {
     ret = OB_NEED_WAIT;
-    LOG_WARN("server role is not ready, need wait", KR(ret), K(server_role));
+    LOG_WARN("tenant role is not ready, need wait", KR(ret), K(tenant_role));
   }
   return ret;
 }
 
-int ObShareUtil::check_if_server_role_is_primary(bool &is_primary)
+int ObShareUtil::mtl_check_if_tenant_role_is_primary(bool &is_primary)
 {
   int ret = OB_SUCCESS;
   is_primary = false;
-  ObServerRole::Role server_role;
-  if (OB_FAIL(get_server_role(server_role))) {
-    LOG_WARN("fail to execute get_server_role", KR(ret));
-  } else if (is_primary_role(server_role)) {
+  ObTenantRole::Role tenant_role;
+  if (OB_FAIL(mtl_get_tenant_role( tenant_role))) {
+    LOG_WARN("fail to execute mtl_get_tenant_role", KR(ret));
+  } else if (is_primary_tenant(tenant_role)) {
     is_primary = true;
   }
   return ret;
 }
 
-int ObShareUtil::check_if_server_role_is_standby(bool &is_standby)
+int ObShareUtil::mtl_check_if_tenant_role_is_standby(bool &is_standby)
 {
   int ret = OB_SUCCESS;
   is_standby = false;
-  ObServerRole::Role server_role;
-  if (OB_FAIL(get_server_role(server_role))) {
-    LOG_WARN("fail to execute get_server_role", KR(ret));
-  } else if (is_standby_role(server_role)) {
+  ObTenantRole::Role tenant_role;
+  if (OB_FAIL(mtl_get_tenant_role( tenant_role))) {
+    LOG_WARN("fail to execute mtl_get_tenant_role", KR(ret));
+  } else if (is_standby_tenant(tenant_role)) {
     is_standby = true;
   }
   return ret;
 }
-int ObShareUtil::get_server_role_state(ObServerRole &server_role)
+int ObShareUtil::table_get_tenant_role(ObTenantRole &tenant_role)
 {
   int ret = OB_SUCCESS;
-  server_role.reset();
-  server_role = GCTX.server_role_;
+  tenant_role.reset();
+  bool is_primary = true;
+  {
+    if (OB_FAIL(is_primary_cluster(is_primary))) {
+      LOG_WARN("fail to check whether is primary cluster", K(is_primary));
+    } else if (is_primary) {
+      tenant_role = ObTenantRole::PRIMARY_TENANT;
+    } else {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("standby cluster not supported now", KR(ret));
+    }
+  }
   return ret;
 }
 
-int ObShareUtil::check_if_server_role_state_is_primary(bool &is_primary)
+int ObShareUtil::table_check_if_tenant_role_is_primary(bool &is_primary)
 {
   int ret = OB_SUCCESS;
-  share::ObServerRole server_role;
+  share::ObTenantRole tenant_role;
   is_primary = false;
-  if (OB_FAIL(get_server_role_state(server_role))) {
-    LOG_WARN("fail to execute get_server_role_state", KR(ret));
-  } else if (server_role.is_primary()) {
+  if (OB_FAIL(table_get_tenant_role( tenant_role))) {
+    LOG_WARN("fail to execute table_get_tenant_role", KR(ret));
+  } else if (tenant_role.is_primary()) {
     is_primary = true;
   }
   return ret;
 }
-int ObShareUtil::check_if_server_role_state_is_standby(bool &is_standby)
+int ObShareUtil::table_check_if_tenant_role_is_standby(bool &is_standby)
 {
   int ret = OB_SUCCESS;
-  share::ObServerRole server_role;
+  share::ObTenantRole tenant_role;
   is_standby = false;
-  if (OB_FAIL(get_server_role_state(server_role))) {
-    LOG_WARN("fail to execute get_server_role_state", KR(ret));
-  } else if (server_role.is_standby()) {
+  if (OB_FAIL(table_get_tenant_role( tenant_role))) {
+    LOG_WARN("fail to execute table_get_tenant_role", KR(ret));
+  } else if (tenant_role.is_standby()) {
     is_standby = true;
   }
   return ret;
 }
-int ObShareUtil::gen_default_server_runtime_schema(schema::ObServerRuntimeSchema &runtime_schema)
+const char *ObShareUtil::replica_type_to_string(const ObReplicaType type)
+{
+  const char *str = NULL;
+  switch (type) {
+    case ObReplicaType::REPLICA_TYPE_FULL: {
+      str = FULL_REPLICA_STR;
+      break;
+    }
+    case ObReplicaType::REPLICA_TYPE_BACKUP: {
+      str = BACKUP_REPLICA_STR;
+      break;
+    }
+    case ObReplicaType::REPLICA_TYPE_LOGONLY: {
+      str = LOGONLY_REPLICA_STR;
+      break;
+    }
+    case ObReplicaType::REPLICA_TYPE_READONLY: {
+      str = READONLY_REPLICA_STR;
+      break;
+    }
+    case ObReplicaType::REPLICA_TYPE_MEMONLY: {
+      str = MEMONLY_REPLICA_STR;
+      break;
+    }
+    case ObReplicaType::REPLICA_TYPE_ENCRYPTION_LOGONLY: {
+      str = ENCRYPTION_LOGONLY_REPLICA_STR;
+      break;
+    }
+    case ObReplicaType::REPLICA_TYPE_COLUMNSTORE: {
+      str = COLUMNSTORE_REPLICA_STR;
+      break;
+    }
+    default: {
+      str = "INVALID";
+      break;
+    }
+  }
+  return str;
+}
+
+// retrun REPLICA_TYPE_INVALID if str is invaild
+ObReplicaType ObShareUtil::string_to_replica_type(const char *str)
+{
+  return string_to_replica_type(ObString(str));
+}
+
+// retrun REPLICA_TYPE_INVALID if str is invaild
+ObReplicaType ObShareUtil::string_to_replica_type(const ObString &str)
+{
+  ObReplicaType replica_type = REPLICA_TYPE_INVALID;
+  if (OB_UNLIKELY(str.empty())) {
+    replica_type = REPLICA_TYPE_INVALID;
+  } else if (0 == str.case_compare(FULL_REPLICA_STR) || 0 == str.case_compare(F_REPLICA_STR)) {
+    replica_type = REPLICA_TYPE_FULL;
+  } else if (0 == str.case_compare(READONLY_REPLICA_STR) || 0 == str.case_compare(R_REPLICA_STR)) {
+    replica_type = REPLICA_TYPE_READONLY;
+  } else if (0 == str.case_compare(COLUMNSTORE_REPLICA_STR) || 0 == str.case_compare(C_REPLICA_STR)) {
+    replica_type = REPLICA_TYPE_COLUMNSTORE;
+  } else if (0 == str.case_compare(LOGONLY_REPLICA_STR) || 0 == str.case_compare(L_REPLICA_STR)) {
+    replica_type = REPLICA_TYPE_LOGONLY;
+  } else if (0 == str.case_compare(ENCRYPTION_LOGONLY_REPLICA_STR) || 0 == str.case_compare(E_REPLICA_STR)) {
+    replica_type = REPLICA_TYPE_ENCRYPTION_LOGONLY;
+  } else if (0 == str.case_compare(BACKUP_REPLICA_STR) || 0 == str.case_compare(B_REPLICA_STR)) {
+    replica_type = REPLICA_TYPE_BACKUP;
+  } else if (0 == str.case_compare(MEMONLY_REPLICA_STR) || 0 == str.case_compare(M_REPLICA_STR)) {
+    replica_type = REPLICA_TYPE_MEMONLY;
+  } else {
+    replica_type = REPLICA_TYPE_INVALID;
+  }
+  return replica_type;
+}
+
+// get_sys_ls_readable_scn moved definition to storage/tx_storage/ob_ls_service.cpp(real user ObLSService/ObLS complete type, previously hidden behind a removed include chain)
+// Note: master tenant-elim changed the original body(MTL(ObLSService*) -> share::g_mp->ls_service()), HOST must be synced (see routing item)
+
+// check_clog_disk_full_or_hang moved definition to logservice/ob_log_service.cpp(removes share→logservice dependency, declaration remains in this class header)
+// Note: master tenant-elim changed the original body(MTL(logservice::ObLogService*) -> share::g_mp->log_service()), HOST must be synced (see routing item)
+
+// get_tenant_gts moved definition to storage/tx/ob_ts_mgr.cpp(removes share→storage dependency, declaration remains in this class header)
+// Note: master tenant-elim changed the original body(removed the tenant_id parameter, OB_TS_MGR.get_gts removed the tenant_id argument), HOST must be synced (see routing item)
+
+int ObShareUtil::gen_sys_unit(ObUnit &unit)
 {
   int ret = OB_SUCCESS;
-  runtime_schema.reset();
+  unit.reset();
+  if (OB_ISNULL(GCTX.config_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid server", KR(ret), KP(GCTX.config_));
+  } else {
+    unit.unit_id_ = OB_SYS_UNIT_ID;
+    unit.resource_pool_id_ = OB_SYS_RESOURCE_POOL_ID;
+    unit.unit_group_id_ = OB_SYS_UNIT_GROUP_ID;
+    unit.zone_ = GCTX.config_->zone.str();
+    unit.server_ = GCTX.self_addr();
+    unit.migrate_from_server_.reset();
+    unit.is_manual_migrate_ = false;
+    unit.status_ = ObUnit::UNIT_STATUS_ACTIVE;
+    unit.replica_type_ = REPLICA_TYPE_FULL;
+  }
+  return ret;
+}
+
+int ObShareUtil::gen_sys_resource_pool(ObResourcePool &resource_pool)
+{
+  int ret = OB_SUCCESS;
+  resource_pool.reset();
+  if (OB_ISNULL(GCTX.config_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid server", KR(ret), KP(GCTX.config_));
+  } else if (OB_FAIL(resource_pool.zone_list_.push_back(GCTX.config_->zone.str()))) {
+    LOG_WARN("fail to push back zone into array", KR(ret));
+  } else if (OB_FAIL(resource_pool.name_.assign("sys_pool"))) {
+    LOG_WARN("fail to construct pool name", KR(ret));
+  } else {
+    resource_pool.resource_pool_id_ = OB_SYS_RESOURCE_POOL_ID;
+    resource_pool.unit_count_ = 1;
+    resource_pool.unit_config_id_ = ObUnitConfig::SYS_UNIT_CONFIG_ID;
+
+    resource_pool.replica_type_ = REPLICA_TYPE_FULL;
+  }
+  return ret;
+}
+
+int ObShareUtil::gen_default_sys_tenant_schema(schema::ObTenantSchema &tenant_schema)
+{
+  int ret = OB_SUCCESS;
+  tenant_schema.reset();
   int64_t schema_version = 0;
   if (OB_ISNULL(GCTX.config_) || OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.config_), KP(GCTX.schema_service_));
-  } else if (OB_FAIL(runtime_schema.set_runtime_name(OB_SERVER_RUNTIME_NAME))) {
-    LOG_WARN("set_runtime_name failed", "runtime_name", OB_SERVER_RUNTIME_NAME, KR(ret));
-  } else if (OB_FAIL(runtime_schema.set_comment("server runtime"))) {
-    LOG_WARN("set_comment failed", "comment", "server runtime", KR(ret));
+  } else if (OB_FAIL(tenant_schema.set_tenant_name(OB_SYS_TENANT_NAME))) {
+    LOG_WARN("set_tenant_name failed", "tenant_name", OB_SYS_TENANT_NAME, KR(ret));
+  } else if (OB_FAIL(tenant_schema.set_comment("system tenant"))) {
+    LOG_WARN("set_comment failed", "comment", "system tenant", KR(ret));
+  } else if (OB_FAIL(tenant_schema.add_zone(GCTX.config_->zone.str()))) {
+    LOG_WARN("fail to push back zone", KR(ret));
   } else {
     if (OB_ISNULL(GCTX.sql_proxy_)) {
       ret = OB_INVALID_ARGUMENT;
@@ -333,28 +471,36 @@ int ObShareUtil::gen_default_server_runtime_schema(schema::ObServerRuntimeSchema
       if (OB_FAIL(proxy.get_baseline_schema_version(schema_version))) {
         LOG_WARN("get_baseline_schema_version failed", KR(ret));
       } else if (-1 == schema_version) {
-        // Bootstrap starts with schema version 1 before the global stat row is visible.
-        LOG_INFO("use bootstrap schema version", KR(ret));
+        // in bootstrap procedure, add_tenant may raise error, just mock schema_version = 1 is ok
+        LOG_INFO("in bootstrap procedure, mock schema_version to 1", KR(ret));
         schema_version = 1;
       }
     }
-    if (OB_SUCC(ret)) {
-      runtime_schema.set_schema_version(schema_version);
-      runtime_schema.set_locked(false);
-      runtime_schema.set_read_only(false);
-      runtime_schema.set_in_recyclebin(false);
-      runtime_schema.set_status(schema::ObServerRuntimeStatus::SERVER_RUNTIME_STATUS_NORMAL);
-      // The runtime schema uses the fixed MySQL charset, collation, and name-case defaults.
+    if (OB_FAIL(ret)) {
+    } else {
+
+      tenant_schema.set_schema_version(schema_version);
+      tenant_schema.set_locked(false);
+      tenant_schema.set_read_only(false);
+      tenant_schema.set_default_tablegroup_id(OB_INVALID_ID);
+      tenant_schema.set_in_recyclebin(false);
+      tenant_schema.set_status(schema::ObTenantStatus::TENANT_STATUS_NORMAL);
+      // seekdb is MySQL-only: compatibility_mode field removed from ObTenantSchema.
+      // charset_type_ not used, default is ok
+      // collation_type_ not used, default is ok
+      // name_case_mode_ not used, default is ok
+      // default_tablegroup_name_ not used, default is ok
     }
   }
-  LOG_INFO("finish constructing server runtime schema", KR(ret), K(runtime_schema), K(schema_version));
+  LOG_INFO("finish construct sys tenant schema", KR(ret), K(tenant_schema), K(schema_version));
   return ret;
 }
 
-int ObShareUtil::is_primary_server(bool &is_primary)
+int ObShareUtil::is_primary_cluster(bool &is_primary)
 {
   int ret = OB_SUCCESS;
-  is_primary = ObServerRole::PRIMARY_ROLE == GCTX.server_role_;
+  //TODO@jiage: get role from config
+  is_primary = true;
   return ret;
 }
 

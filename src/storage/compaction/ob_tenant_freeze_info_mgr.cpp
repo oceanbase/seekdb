@@ -89,7 +89,7 @@ ObTenantFreezeInfoMgr::ObTenantFreezeInfoMgr()
     lock_(),
     cur_idx_(0),
     last_change_ts_(0),
-    tg_id_(-1),
+    reload_timer_(),
     inited_(false)
 {
 }
@@ -123,9 +123,7 @@ int ObTenantFreezeInfoMgr::init(ObISQLClient &sql_proxy)
     STORAGE_LOG(WARN, "fail to init freeze info mgr", K(ret));
   } else if (OB_FAIL(reload_task_.init())) {
     STORAGE_LOG(ERROR, "fail to init reload task", K(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::FreInfoReload, tg_id_))) {
-    STORAGE_LOG(ERROR, "fail to init timer", K(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
+  } else if (OB_FAIL(reload_timer_.init("FreInfoReload", ObMemAttr("FreInfoReload")))) {
     STORAGE_LOG(ERROR, "fail to init timer", K(ret));
   } else {
     last_change_ts_ = ObTimeUtility::current_time();
@@ -141,9 +139,9 @@ int ObTenantFreezeInfoMgr::start()
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not init", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, reload_task_, RELOAD_INTERVAL, true))) {
+  } else if (OB_FAIL(reload_timer_.schedule(reload_task_, RELOAD_INTERVAL, true))) {
     STORAGE_LOG(ERROR, "fail to schedule reload task", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, update_reserved_snapshot_task_, UPDATE_LS_RESERVED_SNAPSHOT_INTERVAL, true))) {
+  } else if (OB_FAIL(reload_timer_.schedule(update_reserved_snapshot_task_, UPDATE_LS_RESERVED_SNAPSHOT_INTERVAL, true))) {
     STORAGE_LOG(ERROR, "fail to schedule update reserved snapshot task", K(ret));
   }
   return ret;
@@ -151,18 +149,17 @@ int ObTenantFreezeInfoMgr::start()
 
 void ObTenantFreezeInfoMgr::wait()
 {
-  TG_WAIT(tg_id_);
+  reload_timer_.wait();
 }
 
 void ObTenantFreezeInfoMgr::stop()
 {
-  TG_STOP(tg_id_);
+  reload_timer_.stop();
 }
 
 void ObTenantFreezeInfoMgr::destroy()
 {
-  TG_DESTROY(tg_id_);
-  tg_id_ = -1;
+  reload_timer_.destroy();
 }
 
 int64_t ObTenantFreezeInfoMgr::get_latest_frozen_version()
@@ -567,19 +564,8 @@ int ObTenantFreezeInfoMgr::ReloadTask::refresh_merge_info()
       LOG_INFO("schedule zone to stop major merge", K(global_merge_info));
     } else {
       if (check_tenant_status_) {
-        if (true) {
+        {
           check_tenant_status_ = false;
-        } else if (false) { // skip virtual tenant
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("tenant is unexpected virtual tenant", KR(ret));
-        } else {
-          const ObTenantRole::Role &role = MTL_GET_TENANT_ROLE_CACHE();
-          if (is_primary_tenant(role) || is_standby_tenant(role)) {
-            check_tenant_status_ = false;
-            LOG_INFO("finish check tenant restore", K(role));
-          } else if (REACH_THREAD_TIME_INTERVAL(10L * 1000L * 1000L)) {
-            LOG_INFO("skip restoring tenant to schedule major merge", K(role));
-          }
         }
       }
       if (!check_tenant_status_) {

@@ -19,7 +19,6 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_mds_scan_param_helper.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
-#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 
 namespace oceanbase
 {
@@ -171,6 +170,63 @@ int ObITabletMdsInterface::get_autoinc_seq(
   #undef PRINT_WRAPPER
 }
 
+int ObITabletMdsInterface::get_split_data(
+    ObTabletSplitMdsUserData &data,
+    const int64_t timeout) const
+{
+  #define PRINT_WRAPPER KR(ret), K(data), K(timeout)
+  MDS_TG(10_ms);
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!check_is_inited_())) {
+    ret = OB_NOT_INIT;
+    MDS_LOG_GET(WARN, "not inited");
+  } else {
+    // TODO(lihongqin.lhq): use get_latest_committed and block during 2pc
+    const share::SCN snapshot = share::SCN::max_scn();
+
+    if (CLICK_FAIL((get_snapshot<mds::DummyKey, ObTabletSplitMdsUserData>(mds::DummyKey(),
+        ReadSplitDataOp(data), snapshot, timeout)))) {
+      if (OB_EMPTY_RESULT != ret) {
+        MDS_LOG_GET(WARN, "fail to get snapshot", K(lbt()));
+      } else {
+        data.reset(); // use default value
+        ret = OB_SUCCESS;
+      }
+    }
+  }
+
+  return ret;
+  #undef PRINT_WRAPPER
+}
+
+int ObITabletMdsInterface::split_partkey_compare(const blocksstable::ObDatumRowkey &rowkey,
+                                                 const ObITableReadInfo &rowkey_read_info,
+                                                 const ObIArray<uint64_t> &partkey_projector,
+                                                 int &cmp_ret,
+                                                 const int64_t timeout) const
+{
+  #define PRINT_WRAPPER KR(ret), K(rowkey), K(rowkey_read_info)
+  MDS_TG(10_ms);
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!check_is_inited_())) {
+    ret = OB_NOT_INIT;
+    MDS_LOG_GET(WARN, "not inited");
+  } else {
+    // TODO(lihongqin.lhq): use get_latest_committed and block during 2pc
+    const share::SCN snapshot = share::SCN::max_scn();
+
+    if (CLICK_FAIL((get_snapshot<mds::DummyKey, ObTabletSplitMdsUserData>(mds::DummyKey(),
+        ReadSplitDataPartkeyCompareOp(rowkey, rowkey_read_info, partkey_projector, cmp_ret), snapshot, timeout)))) {
+      if (OB_EMPTY_RESULT != ret) {
+        MDS_LOG_GET(WARN, "fail to get snapshot", K(ret), K(lbt()));
+      }
+    }
+  }
+
+  return ret;
+  #undef PRINT_WRAPPER 
+}
+
 int ObITabletMdsInterface::read_raw_data(
     common::ObIAllocator &allocator,
     const uint8_t mds_unit_id,
@@ -180,12 +236,14 @@ int ObITabletMdsInterface::read_raw_data(
     mds::MdsDumpKV &kv) const
 {
   int ret = OB_SUCCESS;
+  const share::ObLSID &ls_id = get_tablet_meta_().ls_id_;
   const common::ObTabletID &tablet_id = get_tablet_meta_().tablet_id_;
   const int64_t abs_timeout = timeout_us + ObClockGenerator::getClock();
   ObMdsReadInfoCollector placeholder_collector;
   SMART_VARS_3((ObTableScanParam, scan_param), (ObStoreCtx, store_ctx), (ObMdsRowIterator, iter)) {
     if (OB_FAIL(ObMdsScanParamHelper::build_scan_param(
         allocator,
+        ls_id,
         tablet_id,
         ObMdsSchemaHelper::MDS_TABLE_ID,
         mds_unit_id,
@@ -240,10 +298,11 @@ int ObITabletMdsInterface::get_tablet_handle_from_this(
 {
   int ret = OB_SUCCESS;
   const ObTablet *tablet = static_cast<const ObTablet*>(this);
+  const share::ObLSID &ls_id = get_tablet_meta_().ls_id_;
   const common::ObTabletID &tablet_id = get_tablet_meta_().tablet_id_;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   if (OB_FAIL(t3m->build_tablet_handle_for_mds_scan(const_cast<ObTablet*>(tablet), tablet_handle))) {
-    MDS_LOG(WARN, "fail to build tablet handle", K(ret), K(tablet_id));
+    MDS_LOG(WARN, "fail to build tablet handle", K(ret), K(ls_id), K(tablet_id));
   } 
   return ret;
 }

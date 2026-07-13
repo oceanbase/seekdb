@@ -59,17 +59,23 @@ private:
   int try_broadcast_freeze_info();
   int try_renew_snapshot_gc_scn();
   int try_minor_freeze();
-  int try_reload_merge_info();
+  int try_update_zone_info();
 
   int can_start_work(bool &can_work);
   bool is_primary_service() { return is_primary_service_; }
+  int check_tenant_is_restore(bool &is_restore);
   int try_reload_freeze_info();
-  // Adjust global_merge_info in memory before scheduling major freezes.
+  // adjust global_merge_info in memory to avoid useless major freezes on restore major_freeze_service
   int try_adjust_global_merge_info();
   int check_global_merge_info(bool &is_initial) const;
+  int obtain_proposal_id_from_ls(const bool is_primary_service,
+                                 int64_t &proposal_id,
+                                 common::ObRole &role);
   void update_last_run_timestamp_();
-  // After a server switches to primary, FreezeInfoDetector may not have write access
-  // immediately. Delay the first snapshot_gc_scn check to allow the service to settle.
+  // For backup-restore tenant that switchover to primary tenant, FreezeInfoDetector is not able to
+  // has write access immediately when it starts. Thus, FreezeInfoDetector can not renew
+  // snapshot_gc_scn immediately. Therefore, let FreezeInfoDetector to check snapshot_gc_scn
+  // after it has started for a period of time (e.g., 10 min).
   // 
   bool need_check_snapshot_gc_scn(const int64_t start_time_us);
 

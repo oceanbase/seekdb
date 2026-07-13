@@ -18,13 +18,14 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_index_build_task.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "share/ob_ddl_checksum.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
-#include "rootserver/ob_local_management_service.h"
+#include "rootserver/ob_root_service.h"
+#include "share/schema/ob_mlog_info.h"
 
 using namespace oceanbase::rootserver;
 using namespace oceanbase::common;
@@ -55,12 +56,15 @@ int ObIndexSSTableBuildTask::set_nls_format(const ObString &nls_date_format,
   return ret;
 }
 
-int ObIndexSSTableBuildTask::set_addition_info(const ObIArray<ObTabletID> &index_partition_ids)
+int ObIndexSSTableBuildTask::set_addition_info(const share::ObLSID &ls_id, const common::ObAddr &ls_leader_addr, const ObIArray<ObTabletID> &index_partition_ids)
 {
   int ret = OB_SUCCESS;
   if (index_partition_ids.count() > 0) {
     if (OB_FAIL(addition_info_.partition_ids_.assign(index_partition_ids))) {
       LOG_WARN("ObArray assign failed", K(ret), K(index_partition_ids));
+    } else {
+      addition_info_.ls_id_ = ls_id;
+      addition_info_.ls_leader_addr_ = ls_leader_addr;
     }
   }
   return ret;
@@ -100,12 +104,12 @@ int ObIndexSSTableBuildTask::process()
   }
 #endif
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
       schema_guard))) {
-    LOG_WARN("fail to get runtime schema guard", K(ret), K(data_table_id_));
+    LOG_WARN("fail to get tenant schema guard", K(ret), K(data_table_id_));
   } else if (OB_FAIL(schema_guard.check_formal_guard())) {
     LOG_WARN("fail to check formal guard", K(ret));
-  } else if (OB_FAIL(DDL_SIM(task_id_, BUILD_LOCAL_ASYNC_TASK_FAILED))) {
+  } else if (OB_FAIL(DDL_SIM(task_id_, BUILD_REPLICA_ASYNC_TASK_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id_, data_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(data_table_id_));
@@ -143,7 +147,7 @@ int ObIndexSSTableBuildTask::process()
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObDDLUtil::generate_local_build_sql(data_table_id_,
+      if (OB_FAIL(ObDDLUtil::generate_build_replica_sql(data_table_id_,
                                                             dest_table_id_,
                                                             data_schema->get_schema_version(),
                                                             snapshot_version_,
@@ -155,7 +159,7 @@ int ObIndexSSTableBuildTask::process()
                                                             nullptr,
                                                             partition_names,
                                                             sql_string))) {
-        LOG_WARN("fail to generate local build sql", K(ret));
+        LOG_WARN("fail to generate build replica sql", K(ret));
       } else if (OB_FAIL(data_schema->is_need_padding_for_generated_column(need_padding))) {
         LOG_WARN("fail to check need padding", K(ret));
       } else {
@@ -174,12 +178,17 @@ int ObIndexSSTableBuildTask::process()
         session_param.nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP_TZ] = nls_timestamp_tz_format_;
         session_param.use_external_session_ = true;  // means session id dispatched by session mgr
 
+        common::ObAddr *sql_exec_addr = nullptr;
+        if (inner_sql_exec_addr_.is_valid()) {
+          sql_exec_addr = &inner_sql_exec_addr_;
+          LOG_INFO("inner sql execute addr" , K(*sql_exec_addr));
+        }
         int tmp_ret = OB_SUCCESS;
         user_sql_proxy = GCTX.ddl_sql_proxy_;
         DEBUG_SYNC(BEFORE_INDEX_SSTABLE_BUILD_TASK_SEND_SQL);
         ObTimeoutCtx timeout_ctx;
         const int64_t DDL_INNER_SQL_EXECUTE_TIMEOUT = ObDDLUtil::calc_inner_sql_execute_timeout();
-        ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::RS_CREATE_INDEX_LOCAL_BUILD);
+        ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::RS_CREATE_INDEX_BUILD_REPLICA);
         add_event_info(ret, "index sstable build task send innersql");
         LOG_INFO("execute sql" , K(sql_string), K(data_table_id_), K(DDL_INNER_SQL_EXECUTE_TIMEOUT), "ddl_event_info", ObDDLEventInfo());
         if (OB_FAIL(timeout_ctx.set_trx_timeout_us(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
@@ -189,8 +198,8 @@ int ObIndexSSTableBuildTask::process()
         } else if (OB_FAIL(DDL_SIM(task_id_, CREATE_INDEX_BUILD_SSTABLE_FAILED))) {
           LOG_WARN("ddl sim failure: create index build sstable failed", K(ret), K(task_id_));
         } else if (OB_FAIL(user_sql_proxy->write(sql_string.ptr(), affected_rows,
-                    &session_param))) {
-          LOG_WARN("fail to execute local build sql", K(ret));
+                    ObCompatibilityMode::MYSQL_MODE, &session_param, sql_exec_addr))) {
+          LOG_WARN("fail to execute build replica sql", K(ret));
         }
 
         if (OB_SUCC(ret)) {
@@ -228,11 +237,12 @@ void ObIndexSSTableBuildTask::add_event_info(const int ret, const ObString &ddl_
   char table_id_buffer[256];
   snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%ld, dest_table_id:%ld",
             data_table_id_, dest_table_id_);
-  MANAGEMENT_EVENT_ADD("ddl scheduler", ddl_event_stmt.ptr(),
+  ROOTSERVICE_EVENT_ADD("ddl scheduler", ddl_event_stmt.ptr(),
     "ret", ret,
     K_(trace_id),
     K_(task_id),
-    "table_id", table_id_buffer);
+    "table_id", table_id_buffer,
+    "sql_exec_addr", inner_sql_exec_addr_);
 }
 
 ObAsyncTask *ObIndexSSTableBuildTask::deep_copy(char *buf, const int64_t buf_size) const
@@ -251,12 +261,14 @@ ObAsyncTask *ObIndexSSTableBuildTask::deep_copy(char *buf, const int64_t buf_siz
         trace_id_,
         parallelism_,
         is_partitioned_local_index_task_,
+        root_service_,
+        inner_sql_exec_addr_,
         is_retryable_ddl_);
     if (OB_SUCCESS != (task->set_nls_format(nls_date_format_, nls_timestamp_format_, nls_timestamp_tz_format_))) {
       task->~ObIndexSSTableBuildTask();
       task = nullptr;
       LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "failed to set nls format");
-    } else if (OB_SUCCESS != (task->set_addition_info(addition_info_.partition_ids_))) {
+    } else if (OB_SUCCESS != (task->set_addition_info(addition_info_.ls_id_, addition_info_.ls_leader_addr_, addition_info_.partition_ids_))) {
       task->~ObIndexSSTableBuildTask();
       task = nullptr;
       LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "failed to set index partition ids");
@@ -267,9 +279,9 @@ ObAsyncTask *ObIndexSSTableBuildTask::deep_copy(char *buf, const int64_t buf_siz
 /***************         ObIndexBuildTask        *************/
 
 ObIndexBuildTask::ObIndexBuildTask()
-  : ObDDLTask(ObDDLType::DDL_CREATE_INDEX), index_table_id_(target_object_id_), local_management_service_(nullptr),
+  : ObDDLTask(ObDDLType::DDL_CREATE_INDEX), index_table_id_(target_object_id_), root_service_(nullptr),
     is_sstable_complete_task_submitted_(false), sstable_complete_request_time_(0), sstable_complete_ts_(0),
-    check_unique_snapshot_(0), complete_sstable_job_ret_code_(INT64_MAX), create_index_arg_(),
+    check_unique_snapshot_(0), complete_sstable_job_ret_code_(INT64_MAX), create_index_arg_(), target_cg_cnt_(0),
     is_retryable_ddl_(true)
 {
 
@@ -367,7 +379,7 @@ int ObIndexBuildTask::init(
     const obcall::ObCreateIndexArg &create_index_arg,
     const share::ObDDLType task_type,
     const int64_t parent_task_id /* = 0 */,
-    const uint64_t data_format_version,
+    const uint64_t tenant_data_version,
     const int64_t task_status /* = TaskStatus::PREPARE */,
     const int64_t snapshot_version /* = 0 */,
     const bool is_retryable_ddl /* = true*/)
@@ -376,9 +388,9 @@ int ObIndexBuildTask::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
+    LOG_WARN("root_service is null", K(ret), KP(root_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl service not started", KR(ret));
@@ -386,7 +398,7 @@ int ObIndexBuildTask::init(
         !(data_table_schema != nullptr
           && index_schema != nullptr
           && schema_version > 0
-          && data_format_version > 0
+          && tenant_data_version > 0
           && (task_status >= ObDDLTaskStatus::PREPARE && task_status <= ObDDLTaskStatus::SUCCESS)
           && task_id > 0))) {
     ret = OB_INVALID_ARGUMENT;
@@ -397,6 +409,11 @@ int ObIndexBuildTask::init(
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("fail to get table schema", K(ret));
+  } else if (OB_UNLIKELY((ObIndexArg::ADD_MLOG == create_index_arg_.index_action_type_)
+      && (!index_schema->is_mlog_table()))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("index action is add_mlog but index schema is not mlog",
+        KR(ret), K(create_index_arg_.index_action_type_), K(index_schema->get_table_type()));
   } else {
     set_gmt_create(ObTimeUtility::current_time());
     task_type_ = task_type;
@@ -427,7 +444,7 @@ int ObIndexBuildTask::init(
     parent_task_id_ = parent_task_id;
     task_version_ = OB_INDEX_BUILD_TASK_VERSION;
     start_time_ = ObTimeUtility::current_time();
-    data_format_version_ = data_format_version;
+    data_format_version_ = tenant_data_version;
     is_retryable_ddl_ = is_retryable_ddl;
     if (OB_SUCC(ret)) {
       task_status_ = static_cast<ObDDLTaskStatus>(task_status);
@@ -435,12 +452,18 @@ int ObIndexBuildTask::init(
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(init_ddl_task_monitor_info(index_schema->get_table_id()))) {
       LOG_WARN("init ddl task monitor info failed", K(ret));
+    } else if (OB_FAIL(ObDDLUtil::get_no_logging_param(is_no_logging_))) {
+      LOG_WARN("fail to get no logging param", K(ret));
     } else {
       
       dst_schema_version_ = schema_version_;
       is_inited_ = true;
     }
 
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(index_schema->get_store_column_group_count(target_cg_cnt_))) {
+      LOG_WARN("fail to get column group cnt", K(ret), K(index_schema));
+    }
   }
   return ret;
 }
@@ -457,9 +480,9 @@ int ObIndexBuildTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("local_management_service is null", KR(ret), KP(local_management_service_));
+    LOG_WARN("root_service is null", KR(ret), KP(root_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl service not started", KR(ret));
@@ -470,6 +493,24 @@ int ObIndexBuildTask::init(const ObDDLTaskRecord &task_record)
     LOG_WARN("ddl sim failure", K(task_record.task_id_));
   } else if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(), task_record.message_.length(), pos))) {
     LOG_WARN("deserialize params from message failed", KR(ret));
+  } else if (ObIndexArg::ADD_MLOG == create_index_arg_.index_action_type_) {
+    ObSchemaGetterGuard schema_guard;
+    const ObTableSchema *index_schema = nullptr;
+    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
+                schema_guard, schema_version))) {
+      LOG_WARN("fail to get schema guard", KR(ret), K(index_table_id), K(schema_version));
+    } else if (OB_FAIL(schema_guard.check_formal_guard())) {
+      LOG_WARN("schema_guard is not formal", KR(ret), K(index_table_id));
+    } else if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_schema))) {
+      LOG_WARN("fail to get table schema", KR(ret), K(index_table_id));
+    } else if (OB_ISNULL(index_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("fail to get table schema", KR(ret));
+    } else if (OB_UNLIKELY((!index_schema->is_mlog_table()))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("index action is add_mlog but index schema is not mlog",
+          KR(ret), K(create_index_arg_.index_action_type_), K(index_schema->get_table_type()));
+    }
   }
   if (OB_SUCC(ret)) {
     task_type_ = task_record.ddl_type_;
@@ -481,7 +522,7 @@ int ObIndexBuildTask::init(const ObDDLTaskRecord &task_record)
     execution_id_ = task_record.execution_id_;
     task_status_ = static_cast<ObDDLTaskStatus>(task_record.task_status_);
     task_type_ = task_record.ddl_type_; // could be create index / mlog
-    published_schema_version_ = task_record.published_schema_version_;
+    consensus_schema_version_ = task_record.consensus_schema_version_;
     if (ObDDLTaskStatus::VALIDATE_CHECKSUM == task_status_) {
       sstable_complete_ts_ = ObTimeUtility::current_time();
     }
@@ -553,7 +594,7 @@ int ObIndexBuildTask::check_health()
     const ObTableSchema *index_schema = nullptr;
     bool is_data_table_exist = false;
     bool is_index_table_exist = false;
-    if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
+    if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("get tanant schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.check_table_exist(object_id_, is_data_table_exist))) {
       LOG_WARN("check data table exist failed", K(ret), K(object_id_));
@@ -681,7 +722,10 @@ int ObIndexBuildTask::wait_trans_end()
   }
 
   if (snapshot_version_ > 0 || OB_FAIL(ret)) {
-    (void)switch_status(ObDDLTaskStatus::REDEFINITION, true, ret);
+    // a newly-created mlog is empty
+    ObDDLTaskStatus next_status = (ObIndexArg::ADD_MLOG == create_index_arg_.index_action_type_) ?
+                                      ObDDLTaskStatus::TAKE_EFFECT : ObDDLTaskStatus::REDEFINITION;
+    (void)switch_status(next_status, true, ret);
     LOG_INFO("wait_trans_end finished", K(ret), K(*this));
   }
   return ret;
@@ -710,8 +754,8 @@ int ObIndexBuildTask::hold_snapshot(
     const ObTableSchema *index_table_schema = nullptr;
     ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
     bool need_acquire_lob = false;
-    if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
-      LOG_WARN("get runtime schema guard failed", K(ret));
+    if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("get tenant schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_table_schema))) {
       LOG_WARN("get table schema failed", K(ret), K(object_id_));
     } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, index_table_schema))) {
@@ -731,13 +775,13 @@ int ObIndexBuildTask::hold_snapshot(
     } else if (need_acquire_lob && data_table_schema->get_aux_lob_piece_tid() != OB_INVALID_ID &&
                OB_FAIL(ObDDLUtil::get_tablets(data_table_schema->get_aux_lob_piece_tid(), tablet_ids))) {
       LOG_WARN("failed to get data lob piece table snapshot", K(ret));
-    } else if (OB_ISNULL(GCTX.local_management_service_)) {
+    } else if (OB_ISNULL(GCTX.root_service_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), KP(GCTX.local_management_service_));
-    } else if (OB_UNLIKELY(!GCTX.local_management_service_->get_ddl_service().is_inited())) {
+      LOG_WARN("invalid argument", KR(ret), KP(GCTX.root_service_));
+    } else if (OB_UNLIKELY(!GCTX.root_service_->get_ddl_service().is_inited())) {
       ret = OB_NOT_INIT;
       LOG_WARN("not init", KR(ret));
-    } else if (OB_FAIL(GCTX.local_management_service_->get_ddl_service().get_snapshot_mgr().batch_acquire_snapshot(
+    } else if (OB_FAIL(GCTX.root_service_->get_ddl_service().get_snapshot_mgr().batch_acquire_snapshot(
             trans, SNAPSHOT_FOR_DDL, schema_version_, snapshot_scn, nullptr, tablet_ids))) {
       LOG_WARN("batch acquire snapshot failed", K(ret), K(tablet_ids));
     }
@@ -755,27 +799,27 @@ int ObIndexBuildTask::release_snapshot(const int64_t snapshot)
   } else if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_RELEASE_SNAPSHOT_FAILED))) {
     LOG_WARN("ddl sim failure: release snapshot failed", K(ret), K(task_id_));
   } else {
-    ObDDLService &ddl_service = local_management_service_->get_ddl_service();
+    ObDDLService &ddl_service = root_service_->get_ddl_service();
     ObSEArray<ObTabletID, 2> tablet_ids;
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *data_table_schema = nullptr;
     ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
     if (OB_FAIL(ObDDLUtil::get_tablets(object_id_, tablet_ids))) {
-      if (OB_TABLE_NOT_EXIST == ret || OB_RUNTIME_SCHEMA_NOT_READY == ret) {
+      if (OB_TABLE_NOT_EXIST == ret || OB_TENANT_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
         LOG_WARN("failed to get data table snapshot", K(ret));
       }
     } else if (OB_FAIL(ObDDLUtil::get_tablets(target_object_id_, tablet_ids))) {
-      if (OB_TABLE_NOT_EXIST == ret || OB_RUNTIME_SCHEMA_NOT_READY == ret) {
+      if (OB_TABLE_NOT_EXIST == ret || OB_TENANT_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
         LOG_WARN("failed to get dest table snapshot", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
-      LOG_WARN("get runtime schema guard failed", K(ret));
+    } else if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("get tenant schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_table_schema))) {
       LOG_WARN("get table schema failed", K(ret), K(object_id_));
     } else if (OB_ISNULL(data_table_schema)) {
@@ -805,7 +849,7 @@ int ObIndexBuildTask::release_snapshot(const int64_t snapshot)
   return ret;
 }
 
-int ObIndexBuildTask::reap_old_local_build_task(bool &need_exec_new_inner_sql)
+int ObIndexBuildTask::reap_old_replica_build_task(bool &need_exec_new_inner_sql)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
@@ -815,9 +859,9 @@ int ObIndexBuildTask::reap_old_local_build_task(bool &need_exec_new_inner_sql)
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObIndexBuildTask has not been inited", K(ret));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
       schema_guard))) {
-    LOG_WARN("fail to get runtime schema guard", K(ret), K(data_table_id));
+    LOG_WARN("fail to get tenant schema guard", K(ret), K(data_table_id));
   } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id, table_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(data_table_id));
   } else if (OB_UNLIKELY(nullptr == table_schema)) {
@@ -828,10 +872,11 @@ int ObIndexBuildTask::reap_old_local_build_task(bool &need_exec_new_inner_sql)
     const ObTabletID unused_tablet_id;
     const ObDDLTaskInfo unused_addition_info;
     const int old_ret_code = OB_SUCCESS;
+    ObAddr invalid_addr;
     if (old_execution_id < 0) {
       need_exec_new_inner_sql = true;
     } else if (OB_FAIL(ObCheckTabletDataComplementOp::check_and_wait_old_complement_task(dest_table_id,
-        task_id_, old_execution_id, trace_id_,
+        task_id_, old_execution_id, invalid_addr, trace_id_,
         table_schema->get_schema_version(), snapshot_version_, need_exec_new_inner_sql))) {
       if (OB_EAGAIN != ret) {
         LOG_WARN("failed to check and wait old complement task", K(ret));
@@ -847,26 +892,29 @@ int ObIndexBuildTask::reap_old_local_build_task(bool &need_exec_new_inner_sql)
 }
 
 // construct ObIndexSSTableBuildTask build task
-int ObIndexBuildTask::send_local_build_request(
-    const bool &is_partitioned_local_index_task,
-    const int64_t &parallelism,
-    const int64_t &task_execution_id,
-    const ObIArray<ObTabletID> &index_partition_ids)
+int ObIndexBuildTask::send_build_single_replica_request(const bool &is_partitioned_local_index_task, const int64_t &parallelism, const int64_t &task_execution_id, const share::ObLSID &ls_id, const common::ObAddr &leader_addr, const ObIArray<ObTabletID> &index_partition_ids)
 {
   int ret = OB_SUCCESS;
   int64_t new_task_execution_id = task_execution_id;
+  common::ObAddr ls_leader_addr = leader_addr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObIndexBuildTask has not been inited", K(ret));
-  } else if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_SEND_LOCAL_BUILD_REQUEST_FAILED))) {
+  } else if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_SEND_BUILD_REPLICA_REQUEST_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(task_id_));
-  } else if (OB_ISNULL(local_management_service_)) {
+  } else if (OB_ISNULL(root_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(local_management_service_));
+    LOG_WARN("invalid argument", KR(ret), KP(root_service_));
   } else {
+    if (OB_FAIL(ObDDLUtil::get_sys_ls_leader_addr(GCONF.cluster_id, create_index_arg_.inner_sql_exec_addr_))) {
+      LOG_WARN("get sys ls leader addr fail", K(ret));
+      ret = OB_SUCCESS; // ingore ret
+    }
     if (!is_partitioned_local_index_task) {
       if (OB_FAIL(ObDDLTask::push_task_execution_id(task_id_, task_type_, is_retryable_ddl_, new_task_execution_id))) {
         LOG_WARN("failed to fetch new execution id", K(ret), K(task_id_), K(task_type_), K(new_task_execution_id));
+      } else {
+        ls_leader_addr = create_index_arg_.inner_sql_exec_addr_;
       }
     } else if (OB_UNLIKELY(index_partition_ids.count() < 1)) {
       ret = OB_INVALID_ARGUMENT;
@@ -884,14 +932,18 @@ int ObIndexBuildTask::send_local_build_request(
           trace_id_,
           parallelism,
           is_partitioned_local_index_task,
+          root_service_,
+          ls_leader_addr,
           is_retryable_ddl_);
-      if (OB_FAIL(task.set_nls_format(create_index_arg_.nls_date_format_,
+      if (OB_FAIL(set_sql_exec_addr(ls_leader_addr))) {
+        LOG_WARN("failed to set sql execute addr", K(ret), K(ls_leader_addr));
+      } else if (OB_FAIL(task.set_nls_format(create_index_arg_.nls_date_format_,
                                       create_index_arg_.nls_timestamp_format_,
                                       create_index_arg_.nls_timestamp_tz_format_))) {
         LOG_WARN("failed to set nls format", K(ret), K(create_index_arg_));
-      } else if (OB_FAIL(task.set_addition_info(index_partition_ids))) {
+      } else if (OB_FAIL(task.set_addition_info(ls_id, ls_leader_addr, index_partition_ids))) {
         LOG_WARN("failed to set partition ids", K(ret), K(index_partition_ids));
-      } else if (OB_FAIL(local_management_service_->submit_ddl_local_build_task(task))) {
+      } else if (OB_FAIL(root_service_->submit_ddl_single_replica_build_task(task))) {
         LOG_WARN("fail to submit task", K(ret), KPC(this));
       } else {
         is_sstable_complete_task_submitted_ = true;
@@ -902,11 +954,13 @@ int ObIndexBuildTask::send_local_build_request(
   return ret;
 }
 
-int ObIndexBuildTask::wait_and_send_local_partition_build_task(bool &state_finished)
+int ObIndexBuildTask::wait_and_send_single_partition_replica_task(bool &state_finished)
 {
   int ret = OB_SUCCESS;
   int64_t parallelism = 0;
   int64_t execution_id = 0;
+  share::ObLSID ls_id;
+  common::ObAddr leader_addr;
   ObArray<ObTabletID> tablets;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -914,7 +968,7 @@ int ObIndexBuildTask::wait_and_send_local_partition_build_task(bool &state_finis
   } else if (ObDDLTaskStatus::REDEFINITION != task_status_) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("task status not match", K(ret), K(task_status_));
-  } else if (OB_FAIL(tablet_scheduler_.get_next_batch_tablets(is_retryable_ddl_, parallelism, execution_id, tablets))) {
+  } else if (OB_FAIL(tablet_scheduler_.get_next_batch_tablets(is_retryable_ddl_, parallelism, execution_id, ls_id, leader_addr, tablets))) {
     if (OB_UNLIKELY(ret == OB_EAGAIN)) {
       ret = OB_SUCCESS;
     } else if (OB_UNLIKELY(ret == OB_ITER_END)) {
@@ -928,14 +982,14 @@ int ObIndexBuildTask::wait_and_send_local_partition_build_task(bool &state_finis
     }
   } else if (OB_FAIL(serialize_and_update_message())) {
     LOG_WARN("fail to serialize and update message", K(ret));
-  } else if (OB_FAIL(send_local_build_request(true, parallelism, execution_id, tablets))) {
-    LOG_WARN("fail to send build local partition build request", K(ret), K(parallelism), K(execution_id), K(tablets));
+  } else if (OB_FAIL(send_build_single_replica_request(true, parallelism, execution_id, ls_id, leader_addr, tablets))) {
+    LOG_WARN("fail to send build single partition replica request", K(ret), K(parallelism), K(execution_id), K(tablets));
   }
   return ret;
 }
 
 //check whether all leaders have completed the complement task
-int ObIndexBuildTask::check_local_build(bool &is_end)
+int ObIndexBuildTask::check_build_single_replica(bool &is_end)
 {
   int ret = OB_SUCCESS;
   is_end = false;
@@ -947,7 +1001,7 @@ int ObIndexBuildTask::check_local_build(bool &is_end)
   } else if (OB_SUCCESS != complete_sstable_job_ret_code_) {
     ret_code_ = complete_sstable_job_ret_code_;
     LOG_WARN("sstable complete job has failed", K(ret_code_), K(object_id_), K(index_table_id_));
-    if (is_local_build_need_retry(ret_code_) && is_retryable_ddl_) {
+    if (is_replica_build_need_retry(ret_code_) && is_retryable_ddl_) {
       // retry sql job by re-submit
       is_sstable_complete_task_submitted_ = false;
       complete_sstable_job_ret_code_ = INT64_MAX;
@@ -967,7 +1021,7 @@ int ObIndexBuildTask::check_local_build(bool &is_end)
   return ret;
 }
 
-int ObIndexBuildTask::check_local_index_build(bool &is_end)
+int ObIndexBuildTask::check_build_local_index_single_replica(bool &is_end)
 {
   int ret = OB_SUCCESS;
   is_end = false;
@@ -978,7 +1032,7 @@ int ObIndexBuildTask::check_local_index_build(bool &is_end)
   } else if (OB_SUCCESS != complete_sstable_job_ret_code_) {
     ret_code_ = complete_sstable_job_ret_code_;
     LOG_WARN("sstable complete job has failed", K(ret_code_), K(object_id_), K(index_table_id_));
-    if (is_local_build_need_retry(ret_code_) && is_retryable_ddl_) {
+    if (is_replica_build_need_retry(ret_code_) && is_retryable_ddl_) {
       // retry sql job by re-submit
       complete_sstable_job_ret_code_ = INT64_MAX;
       ret_code_ = OB_SUCCESS;
@@ -1006,6 +1060,8 @@ int ObIndexBuildTask::wait_data_complement()
   int ret = OB_SUCCESS;
   bool state_finished = false;
   bool is_request_end = false;
+  share::ObLSID ls_id;
+  common::ObAddr leader_addr;
   ObArray<ObTabletID> index_partition_ids;
   if (OB_UNLIKELY(!is_inited_) || OB_ISNULL(GCTX.schema_service_) || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_NOT_INIT;
@@ -1020,7 +1076,7 @@ int ObIndexBuildTask::wait_data_complement()
   // submit a job to complete sstable for the index table on snapshot_version
   if (OB_SUCC(ret) && !state_finished && !is_sstable_complete_task_submitted()) {
     bool need_exec_new_inner_sql = false;
-    if (OB_FAIL(reap_old_local_build_task(need_exec_new_inner_sql))) {
+    if (OB_FAIL(reap_old_replica_build_task(need_exec_new_inner_sql))) {
       if (OB_EAGAIN == ret) {
         ret = OB_SUCCESS; // retry
       } else {
@@ -1028,18 +1084,16 @@ int ObIndexBuildTask::wait_data_complement()
       }
     } else if (!need_exec_new_inner_sql) {
       state_finished = true;
-    } else if (OB_FAIL(send_local_build_request(false, parallelism_, 0, index_partition_ids))) {
-      LOG_WARN("fail to send build local build request", K(ret), K(parallelism_), K(index_partition_ids));
+    } else if (OB_FAIL(send_build_single_replica_request(false, parallelism_, 0, ls_id, leader_addr, index_partition_ids))) {
+      LOG_WARN("fail to send build single replica request", K(ret), K(parallelism_), K(index_partition_ids));
     }
   }
 
-  // Keep the legacy point for tests and tooling that still use the replica-build name.
   DEBUG_SYNC(CREATE_INDEX_REPLICA_BUILD);
-  DEBUG_SYNC(CREATE_INDEX_LOCAL_BUILD);
 
   if (OB_SUCC(ret) && !state_finished && is_sstable_complete_task_submitted()) {
-    if (OB_FAIL(check_local_build(is_request_end))) {
-      LOG_WARN("fail to check build local build", K(ret));
+    if (OB_FAIL(check_build_single_replica(is_request_end))) {
+      LOG_WARN("fail to check build single replica", K(ret));
     } else if (is_request_end) {
       ret = complete_sstable_job_ret_code_;
       state_finished = true;
@@ -1067,8 +1121,8 @@ int ObIndexBuildTask::wait_data_complement()
     uint64_t doc_id_col_id = OB_INVALID_ID;
     if (share::schema::is_rowkey_doc_aux(create_index_arg_.index_type_) ||
         share::schema::is_doc_rowkey_aux(create_index_arg_.index_type_)) {
-      if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
-        LOG_WARN("get runtime schema guard failed", KR(ret));
+      if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
+        LOG_WARN("get tenant schema guard failed", KR(ret));
       } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_table_schema))) {
         LOG_WARN("get table schema failed", KR(ret), K(object_id_));
       } else if (OB_ISNULL(data_table_schema)) {
@@ -1128,18 +1182,16 @@ int ObIndexBuildTask::wait_local_index_data_complement()
     }
   }
   if (OB_SUCC(ret) && !state_finished && is_sstable_complete_task_submitted()) {
-    if (OB_FAIL(wait_and_send_local_partition_build_task(state_finished))) {
-      LOG_WARN("fail to send local partition build task", K(ret), KPC(this));
+    if (OB_FAIL(wait_and_send_single_partition_replica_task(state_finished))) {
+      LOG_WARN("fail to send single partition replica task", K(ret), KPC(this));
     }
   }
 
-  // Keep the legacy point for tests and tooling that still use the replica-build name.
   DEBUG_SYNC(CREATE_INDEX_REPLICA_BUILD);
-  DEBUG_SYNC(CREATE_INDEX_LOCAL_BUILD);
 
   if (OB_SUCC(ret) && !state_finished && is_sstable_complete_task_submitted()) {
-    if (OB_FAIL(check_local_index_build(is_request_end))) {
-      LOG_WARN("fail to check build local build", K(ret));
+    if (OB_FAIL(check_build_local_index_single_replica(is_request_end))) {
+      LOG_WARN("fail to check build single replica", K(ret));
     } else if (is_request_end) {
       ret = complete_sstable_job_ret_code_;
       state_finished = true;
@@ -1165,8 +1217,8 @@ int ObIndexBuildTask::wait_local_index_data_complement()
     ObMultiVersionSchemaService &schema_service = *GCTX.schema_service_;
     if (share::schema::is_rowkey_doc_aux(create_index_arg_.index_type_) ||
         share::schema::is_doc_rowkey_aux(create_index_arg_.index_type_)) {
-      if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
-        LOG_WARN("get runtime schema guard failed", KR(ret));
+      if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
+        LOG_WARN("get tenant schema guard failed", KR(ret));
       } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_table_schema))) {
         LOG_WARN("get table schema failed", KR(ret), K(object_id_));
       } else if (OB_ISNULL(data_table_schema)) {
@@ -1246,6 +1298,8 @@ int ObIndexBuildTask::check_need_verify_checksum(bool &need_verify)
     ObArenaAllocator allocator("uk_checksum");
     if (parent_task_id_ != 0 && OB_FAIL(ObDDLTaskRecordOperator::get_ddl_task_record( parent_task_id_, *GCTX.sql_proxy_, allocator, task_record))) {
       LOG_WARN("fail to get ddl task record", K(ret), K(parent_task_id_));
+    } else if (share::is_direct_load_task(task_record.ddl_type_)) {
+      need_verify = false;
     } else {
       need_verify = true;
     }
@@ -1256,7 +1310,7 @@ int ObIndexBuildTask::check_need_verify_checksum(bool &need_verify)
     const ObTableSchema *index_schema = nullptr;
     const ObTableSchema *data_table_schema = nullptr;
     ObArray<ObColDesc> index_column_ids;
-    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("fail to get schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, index_schema))) {
       LOG_WARN("get table schema failed", K(ret), K(target_object_id_));
@@ -1409,11 +1463,13 @@ int ObIndexBuildTask::update_complete_sstable_job_status(
     LOG_WARN("snapshot version not match", K(ret), K(addr), K(snapshot_version), K(snapshot_version_));
   } else {
     if (is_create_partitioned_local_index()) {
-      if (OB_UNLIKELY(addition_info.partition_ids_.count() < 1)) {
+      if (OB_UNLIKELY(addition_info.partition_ids_.count() < 1 || !addition_info.ls_id_.is_valid() || !addition_info.ls_leader_addr_.is_valid())) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid argument", K(ret), K(addition_info), K(ret_code));
-      } else if (OB_FAIL(tablet_scheduler_.confirm_batch_tablets_status(execution_id, OB_SUCCESS == ret_code, addition_info.partition_ids_))) {
+      } else if (OB_FAIL(tablet_scheduler_.confirm_batch_tablets_status(execution_id, OB_SUCCESS == ret_code, addition_info.ls_id_, addition_info.partition_ids_))) {
         LOG_WARN("fail to confirm batch tablets status", K(ret), K(execution_id), K(ret_code), K(addition_info));
+      } else if (OB_FAIL(remove_sql_exec_addr(addition_info.ls_leader_addr_))) {
+        LOG_WARN("failed to remove sql execute addr", K(ret), K(addition_info));
       }
     } else if (OB_UNLIKELY(execution_id < execution_id_)) {
       ret = OB_TASK_EXPIRED;
@@ -1457,12 +1513,12 @@ int ObIndexBuildTask::enable_index()
     int64_t version_in_inner_table = OB_INVALID_VERSION;
     int64_t local_schema_version = OB_INVALID_VERSION;
     bool is_standby = false;
-    if (OB_FAIL(ObShareUtil::check_if_server_role_state_is_standby( is_standby))) {
-      LOG_WARN("fail to execute check_if_server_role_state_is_standby", KR(ret));
+    if (OB_FAIL(ObShareUtil::table_check_if_tenant_role_is_standby( is_standby))) {
+      LOG_WARN("fail to execute table_check_if_tenant_role_is_standby", KR(ret));
     } else if (is_standby) {
       ret = OB_OP_NOT_ALLOW;
-      LOG_WARN("create global index in a standby database is not allowed", K(ret), K(index_table_id_));
-    } else if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
+      LOG_WARN("create global index in standby tenant is not allowed", K(ret), K(index_table_id_));
+    } else if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("fail to get schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.check_table_exist(index_table_id_, index_table_exist))) {
       LOG_WARN("fail to check table exist", K(ret), K(index_table_id_));
@@ -1486,6 +1542,9 @@ int ObIndexBuildTask::enable_index()
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("index status not match", K(ret), K(index_table_id_), K(index_status));
         }
+      } else if ((ObIndexArg::ADD_MLOG == create_index_arg_.index_action_type_)
+          && OB_FAIL(update_mlog_last_purge_scn())) {
+        LOG_WARN("failed to update mlog last purge scn", KR(ret));
       } else if (OB_FAIL(update_index_status_in_schema(*index_schema, INDEX_STATUS_AVAILABLE, schema_guard))) {
         LOG_WARN("fail to try notify index take effect", K(ret), K(index_table_id_));
       } else {
@@ -1557,7 +1616,7 @@ int ObIndexBuildTask::update_index_status_in_schema(const ObTableSchema &index_s
     } else {
       const bool is_parallel = create_index_arg_.is_parallel_;
       if (!is_parallel) {
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->update_index_status(arg); }))) {
+        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->update_index_status(arg); }))) {
           LOG_WARN("update index status failed", K(ret), K(arg));
         }
       } else {
@@ -1565,10 +1624,10 @@ int ObIndexBuildTask::update_index_status_in_schema(const ObTableSchema &index_s
         ObTimeoutCtx ctx;
         if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF._ob_ddl_timeout))) {
           LOG_WARN("fail to set timeout ctx", KR(ret));
-        } else if (OB_FAIL(GCTX.local_management_service_->parallel_update_index_status(arg, res))) {
+        } else if (OB_FAIL(GCTX.root_service_->parallel_update_index_status(arg, res))) {
           LOG_WARN("fail to parallel update index status", KR(ret), K(arg));
         } else {
-          published_schema_version_ = res.schema_version_;
+          consensus_schema_version_ = res.schema_version_;
         }
       }
       if (OB_SUCC(ret)) {
@@ -1596,11 +1655,11 @@ int ObIndexBuildTask::clean_on_failed()
     ObSchemaGetterGuard schema_guard;
     bool drop_index_on_failed = true; // TODO@wenqu: index building triggered by truncate partition may need keep the failed index schema
     bool index_status_is_available = false;
-    if (OB_ISNULL(local_management_service_)) {
+    if (OB_ISNULL(root_service_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), KP(local_management_service_));
-    } else if (OB_FAIL(local_management_service_->get_ddl_service().get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
-      LOG_WARN("get runtime schema failed", K(ret));
+      LOG_WARN("invalid argument", KR(ret), KP(root_service_));
+    } else if (OB_FAIL(root_service_->get_ddl_service().get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
+      LOG_WARN("get tenant schema failed", K(ret));
     } else if (OB_FAIL(schema_guard.check_table_exist(index_table_id_, is_index_exist))) {
       LOG_WARN("check table exist failed", K(ret), K(index_table_id_));
     } else if (!is_index_exist) {
@@ -1628,7 +1687,7 @@ int ObIndexBuildTask::clean_on_failed()
       } else if (!wait_trans_ctx_.is_inited() && OB_FAIL(wait_trans_ctx_.init(
               task_id_, task_status_, object_id_, ObDDLWaitTransEndCtx::WaitTransType::WAIT_SCHEMA_TRANS_WITHOUT_WRITE_DEFENSIVE, index_schema->get_schema_version()))) {
         // Reasons for no need write densive:
-        // 1. setting write defensive mds may be concurrent with tablet state changes
+        // 1. setting write defensive mds may race with concurrent tablet status changes
         // 2. writes to index still concurrent with dropping index, because the write defensive is done on data tablets
         LOG_WARN("init wait_trans_ctx failed", K(ret), K(object_id_), K(index_table_id_));
       } else if (OB_FAIL(wait_trans_ctx_.try_wait(is_trans_end, tmp_snapshot_version))) {
@@ -1655,6 +1714,17 @@ int ObIndexBuildTask::clean_on_failed()
         } else if (index_schema->is_in_recyclebin()) {
           // index is already in recyclebin, skip get index name, use a fake one, this is just to pass IndexArg validity check
           index_name = "__fake";
+        } else if (ObIndexArg::ADD_MLOG == create_index_arg_.index_action_type_) {
+          const ObString &data_table_name = data_table_schema->get_table_name_str();
+          if (OB_FAIL(index_schema->get_mlog_name(index_name))) {
+            LOG_WARN("failed to get mlog name", KR(ret));
+          } else if (OB_FALSE_IT(index_action_type = obcall::ObIndexArg::DROP_MLOG)) {
+          } else if ((0 == parent_task_id_) && create_index_arg_.ddl_stmt_str_.empty()) {
+            if (OB_FAIL(drop_index_sql.append_fmt("drop materialized view log on %.*s",
+                data_table_name.length(), data_table_name.ptr()))) {
+              LOG_WARN("failed to generate drop mlog sql", KR(ret), K(data_table_name));
+            }
+          }
         } else if (OB_FAIL(index_schema->get_index_name(index_name))) {
           LOG_WARN("get index name failed", K(ret));
         } else if (0 == parent_task_id_) {
@@ -1688,7 +1758,7 @@ int ObIndexBuildTask::clean_on_failed()
           drop_index_arg.task_id_ = task_id_;
           if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
             LOG_WARN("get ddl rpc timeout fail", K(ret));
-          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_index(drop_index_arg, drop_index_res); }))) {
+          } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(drop_index_arg, drop_index_res); }))) {
             LOG_WARN("drop index failed", K(ret));
           }
           LOG_INFO("drop index when build failed", K(ret), K(drop_index_arg));
@@ -1754,7 +1824,7 @@ int ObIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
-  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %ld, ", task_id_);
+  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TENANT_ID: 1, TASK_ID: %ld, ", task_id_);
   switch(status) {
     case ObDDLTaskStatus::PREPARE: {
       if (OB_FAIL(databuff_printf(stat_info_.message_,
@@ -1786,11 +1856,22 @@ int ObIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
       break;
     }
     case ObDDLTaskStatus::REDEFINITION: {
-      if (OB_FAIL(databuff_printf(stat_info_.message_,
-                                  MAX_LONG_OPS_MESSAGE_LENGTH,
-                                  pos,
-                                  "STATUS: REDEFINITION"))) {
-        LOG_WARN("failed to print", K(ret));
+      SMART_VARS_3((share::ObSqlMonitorStatsCollector, sql_monitor_stats_collector),
+                   (share::ObDDLDiagnoseInfo, diagnose_info),
+                   (share::ObSqlMonitorStats, sql_monitor_stats)) {
+        if (OB_FAIL(sql_monitor_stats_collector.scan_task_id_.push_back(task_id_))) {
+          LOG_WARN("failed to push back", K(ret));
+        } else if (OB_FAIL(sql_monitor_stats_collector.init(GCTX.sql_proxy_))) {
+          LOG_WARN("failed to init ObSqlMonitorStatsCollector", K(ret));
+        } else if (OB_FAIL(diagnose_info.init(task_id_, task_type_, execution_id_))) {
+          LOG_WARN("failed to init ObDDLDiagnoseInfo", K(ret), K(task_id_), K(task_type_));
+        } else if (OB_FAIL(sql_monitor_stats.init(task_id_, task_type_))) {
+          LOG_WARN("failed to init ObSqlMonitorStats", K(ret), K(task_id_), K(task_type_));
+        } else if (OB_FAIL(sql_monitor_stats_collector.get_next_sql_plan_monitor_stat(sql_monitor_stats))) {
+          LOG_WARN("failed to get next sql plan monitor stats", K(ret));
+        } else if (OB_FAIL(diagnose_info.process_sql_monitor_and_generate_longops_message(sql_monitor_stats, target_cg_cnt_, stat_info_, pos))) {
+          LOG_WARN("failed to process sql monitor and generate longops message", K(ret), K(sql_monitor_stats), K(target_cg_cnt_), K(stat_info_), K(pos)); 
+        }
       }
       break;
     }
@@ -1856,7 +1937,7 @@ int ObIndexBuildTask::serialize_params_to_message(char *buf, const int64_t buf_l
   } else if (OB_FAIL(create_index_arg_.serialize(buf, buf_len, pos))) {
     LOG_WARN("serialize create index arg failed", K(ret));
   } else {
-    LST_DO_CODE(OB_UNIS_ENCODE, check_unique_snapshot_, is_retryable_ddl_);
+    LST_DO_CODE(OB_UNIS_ENCODE, check_unique_snapshot_, target_cg_cnt_, is_retryable_ddl_);
   }
 
   if (OB_SUCC(ret)) {
@@ -1881,7 +1962,7 @@ int ObIndexBuildTask::deserialize_params_from_message(const char *buf, const int
   } else if (OB_FAIL(deep_copy_table_arg(allocator_, tmp_arg, create_index_arg_))) {
     LOG_WARN("deep copy create index arg failed", K(ret));
   } else {
-    LST_DO_CODE(OB_UNIS_DECODE, check_unique_snapshot_, is_retryable_ddl_);
+    LST_DO_CODE(OB_UNIS_DECODE, check_unique_snapshot_, target_cg_cnt_, is_retryable_ddl_);
   }
 
   if (OB_SUCC(ret) && data_len - pos > 0) {
@@ -1898,8 +1979,45 @@ int64_t ObIndexBuildTask::get_serialize_param_size() const
   return create_index_arg_.get_serialize_size()
       + serialization::encoded_length_i64(check_unique_snapshot_)
       + ObDDLTask::get_serialize_param_size()
+      + serialization::encoded_length_i64(target_cg_cnt_)
       + serialization::encoded_length_i8(is_retryable_ddl_)
       + tablet_scheduler_.get_serialize_size();
+}
+
+int ObIndexBuildTask::update_mlog_last_purge_scn()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(GCTX.sql_proxy_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql proxy is null", KR(ret));
+  } else {
+    ObMySQLTransaction trans;
+    ObMLogInfo mlog_info;
+    if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+      LOG_WARN("failed to start trans", KR(ret));
+    } else if (OB_FAIL(ObMLogInfo::fetch_mlog_info(trans, index_table_id_, mlog_info, true/*for_update*/))) {
+      LOG_WARN("failed to fetch mlog info", KR(ret));
+    } else {
+      mlog_info.set_last_purge_scn(snapshot_version_);
+      mlog_info.set_last_purge_date(ObTimeUtility::current_time());
+      mlog_info.set_last_purge_time(0);
+      mlog_info.set_last_purge_rows(0);
+      char trace_id_buf[OB_MAX_TRACE_ID_BUFFER_SIZE] = {'\0'};
+      if (OB_FAIL(mlog_info.set_last_purge_trace_id(ObCurTraceId::get_trace_id_str(trace_id_buf, sizeof(trace_id_buf))))) {
+        LOG_WARN("failed to set last purge trace id", KR(ret));
+      } else if (OB_FAIL(ObMLogInfo::update_mlog_last_purge_info(trans, mlog_info))) {
+        LOG_WARN("failed to update mlog last purge info", KR(ret), K(mlog_info));
+      }
+    }
+    if (trans.is_started()) {
+      int tmp_ret = OB_SUCCESS;
+      if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
+        LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
+        ret = OB_SUCC(ret) ? tmp_ret : ret;
+      }
+    }
+  }
+  return ret;
 }
 
 int ObIndexBuildTask::serialize_and_update_message()

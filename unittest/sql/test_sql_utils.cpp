@@ -19,8 +19,7 @@
 #include "observer/ob_server.h"
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
 #include "sql/plan_cache/ob_ps_cache.h"
-#include "storage/tx_storage/ob_server_mem_limit_getter.h"
-#include "share/rc/ob_server_runtime.h"
+#include "storage/tx_storage/ob_tenant_mem_limit_getter.h"
 using namespace oceanbase::observer;
 //c funcs
 namespace test
@@ -155,8 +154,9 @@ TestSqlUtils::TestSqlUtils()
       next_user_id_(OB_MIN_USER_OBJECT_ID),
       sys_database_id_(OB_SYS_DATABASE_ID),
       next_user_database_id_(OB_MIN_USER_OBJECT_ID),
-      sys_tenant_id_(OB_SERVER_RUNTIME_ID),
+      sys_tenant_id_(OB_SERVER_TENANT_ID),
       schema_version_(2),
+      //next_user_tenant_id_(OB_USER_TENANT_ID),
       allocator_(ObModIds::TEST),
       expr_factory_(allocator_),
       stmt_factory_(allocator_),
@@ -168,8 +168,14 @@ TestSqlUtils::TestSqlUtils()
     memset(schema_file_path_, '\0', 128);
     exec_ctx_.set_sql_ctx(&sql_ctx_);
 
-    static share::ObServerRuntimeState runtime_state;
-    share::g_server_runtime = &runtime_state;
+    static ObTenantBase tenant_ctx;
+    ObTenantEnv::set_tenant(&tenant_ctx);
+
+    auto& cluster_version = ObClusterVersion::get_instance();
+    cluster_version.init(&common::ObServerConfig::get_instance());
+
+    cluster_version.refresh_cluster_version("4.3.0.0");
+    ODV_MGR.init(true);
 
     ObServer &observer = ObServer::get_instance();
     int ret = OB_SUCCESS;
@@ -191,7 +197,7 @@ void TestSqlUtils::init()
 
   GCTX.schema_service_ = schema_service_;
 
-  ObKVGlobalCache::get_instance().init(&ObServerMemLimitGetter::get_instance());
+  ObKVGlobalCache::get_instance().init(&ObTenantMemLimitGetter::get_instance());
 
   if (OB_SUCCESS != (ret = ObPreProcessSysVars::init_sys_var())) {
     _OB_LOG(WARN, "PreProcessing system value init failed, ret=%ld", ret);
@@ -206,7 +212,7 @@ void TestSqlUtils::init()
     sql_schema_guard_.set_schema_guard(&schema_guard_);
     sql_ctx_.schema_guard_ = &schema_guard_;
     ObString tenant("sql_test");
-    ASSERT_TRUE(OB_SUCCESS == session_info_.init_runtime(tenant));
+    ASSERT_TRUE(OB_SUCCESS == session_info_.init_tenant(tenant));
 
     ObArenaAllocator *allocator = NULL;
     uint32_t version = 0;
@@ -215,6 +221,10 @@ void TestSqlUtils::init()
       ASSERT_TRUE(0);
     } else {
       exec_ctx_.set_my_session(&session_info_);
+    }
+
+    if (OB_SUCC(ret)) {
+      exec_ctx_.get_task_executor_ctx()->set_min_cluster_version(CLUSTER_VERSION_1_0_0_0);
     }
 
     if (OB_FAIL(ret)) {
@@ -228,7 +238,7 @@ void TestSqlUtils::init()
       OK(session_info_.load_default_sys_variable(true, true));
       //OK(session_info_.load_sys_variable(sql_mode, type, value, ObSysVarFlag::GLOBAL_SCOPE | ObSysVarFlag::SESSION_SCOPE));
       const uint64_t tenant_id = 1;
-      ASSERT_TRUE(OB_SUCCESS == session_info_.init_runtime(tenant));
+      ASSERT_TRUE(OB_SUCCESS == session_info_.init_tenant(tenant));
       session_info_.set_user(OB_SYS_USER_NAME, OB_SYS_HOST_NAME, OB_SYS_USER_ID);
       session_info_.set_user_priv_set(OB_PRIV_ALL | OB_PRIV_GRANT | OB_PRIV_BOOTSTRAP);
       session_info_.set_default_database(OB_SYS_DATABASE_NAME, CS_TYPE_UTF8MB4_GENERAL_CI);
@@ -276,7 +286,7 @@ void TestSqlUtils::destroy()
   next_user_id_ = OB_MIN_USER_OBJECT_ID;
   sys_database_id_ = OB_SYS_DATABASE_ID;
   next_user_database_id_= OB_MIN_USER_OBJECT_ID;
-  sys_tenant_id_ = OB_SERVER_RUNTIME_ID;
+  sys_tenant_id_ = OB_SERVER_TENANT_ID;
   next_user_table_id_map_.destroy();
   session_info_.~ObSQLSessionInfo();
   new (&session_info_) ObSQLSessionInfo();
@@ -383,6 +393,7 @@ void TestSqlUtils::do_resolve(
   }
   ParseNode *root = parse_result.result_tree_->children_[0];
   ParamStore param_store ( (ObWrapperAllocator(tmp_alloc)) );
+  ObMaxConcurrentParam::FixParamStore fixed_param_store(OB_MALLOC_NORMAL_BLOCK_SIZE, ObWrapperAllocator(&allocator_));
   bool is_transform_outline = false;
   if (parameterized) {
     SqlInfo not_param_info;
@@ -397,6 +408,7 @@ void TestSqlUtils::do_resolve(
                                                       not_param_info,
                                                       param_store,
                                                       NULL,
+                                                      fixed_param_store,
                                                       is_transform_outline));
     }
   }
@@ -476,10 +488,10 @@ int TestSqlUtils::create_system_table()
     sys_table_schema_creators,
     virtual_table_schema_creators,
     NULL };
-  const ObServerRuntimeSchema *runtime_schema = NULL;
-  if (OB_FAIL(schema_guard_.get_server_runtime_info(runtime_schema))) {
+  const ObTenantSchema *tenant_schema = NULL;
+  if (OB_FAIL(schema_guard_.get_tenant_info(tenant_schema))) {
     _OB_LOG(WARN, "get tenant info fail, ret %d", ret);
-  } else if (OB_ISNULL(runtime_schema)) {
+  } else if (OB_ISNULL(tenant_schema)) {
     ret = OB_SCHEMA_ERROR;
     _OB_LOG(WARN, "tenant schema is null, ret %d", ret);
   }
@@ -548,6 +560,7 @@ void TestSqlUtils::do_create_table(ObStmt *&stmt)
   _OB_LOG(INFO, "table_schema=%s", CSJ(table_schema));
   common::ObString database_name = create_table_stmt->get_create_table_arg().db_name_;
 
+  table_schema.set_tablegroup_id(OB_SYS_TABLEGROUP_ID);
   OK(schema_guard_.get_database_id(database_name, database_id));
   OB_ASSERT(OB_INVALID_ID != database_id);
   uint64_t table_id = OB_INVALID_ID;
@@ -558,7 +571,7 @@ void TestSqlUtils::do_create_table(ObStmt *&stmt)
     //combine the database_id and tenant_id
     table_schema.set_database_id(database_id);
     //get the next_table_id of this tenant and database
-    uint64_t next_table_id = get_next_table_id(OB_SERVER_RUNTIME_ID);
+    uint64_t next_table_id = get_next_table_id(OB_SERVER_TENANT_ID);
     table_schema.set_table_id(next_table_id);
     //table_schema.set_data_table_id( combine_id(next_user_tenant_id_, next_table_id));
 
@@ -578,18 +591,18 @@ void TestSqlUtils::do_create_table(ObStmt *&stmt)
 int TestSqlUtils::add_table_schema(ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
-  const ObServerRuntimeSchema *runtime_schema = NULL;
+  const ObTenantSchema *tenant_schema = NULL;
   const ObSysVariableSchema *sys_variable= NULL;
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_guard_.get_server_runtime_info(runtime_schema))) {
+    if (OB_FAIL(schema_guard_.get_tenant_info(tenant_schema))) {
       OB_LOG(WARN, "get tenant info failed", K(table_schema), K(ret));
-    } else if (OB_ISNULL(runtime_schema)) {
-      ret = OB_RUNTIME_SCHEMA_NOT_READY;
+    } else if (OB_ISNULL(tenant_schema)) {
+      ret = OB_TENANT_NOT_EXIST;
       OB_LOG(WARN, "tenant schema is null", K(ret));
     } else if (OB_FAIL(schema_guard_.get_sys_variable_schema(sys_variable))) {
       OB_LOG(WARN, "get sys variable failed", K(sys_variable), K(ret));
     } else if (OB_ISNULL(sys_variable)) {
-      ret = OB_RUNTIME_SCHEMA_NOT_READY;
+      ret = OB_TENANT_NOT_EXIST;
       OB_LOG(WARN, "sys variable schema is null", K(ret));
     } else {
       ObNameCaseMode local_mode = sys_variable->get_name_case_mode();
@@ -629,17 +642,17 @@ void TestSqlUtils::do_drop_table(ObStmt *&stmt)
 int TestSqlUtils::drop_table_schema(const ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
-  const ObServerRuntimeSchema *runtime_schema = NULL;
+  const ObTenantSchema *tenant_schema = NULL;
   const ObSysVariableSchema *sys_variable = NULL;
-  if (OB_FAIL(schema_guard_.get_server_runtime_info(runtime_schema))) {
+  if (OB_FAIL(schema_guard_.get_tenant_info(tenant_schema))) {
     OB_LOG(WARN, "get tenant info failed", K_(sys_tenant_id), K(ret));
-  } else if (OB_ISNULL(runtime_schema)) {
-    ret = OB_RUNTIME_SCHEMA_NOT_READY;
+  } else if (OB_ISNULL(tenant_schema)) {
+    ret = OB_TENANT_NOT_EXIST;
     OB_LOG(WARN, "tenant schema is null", K(ret));
   } else if (OB_FAIL(schema_guard_.get_sys_variable_schema(sys_variable))) {
     OB_LOG(WARN, "get sys variable failed", K(sys_variable), K(ret));
   } else if (OB_ISNULL(sys_variable)) {
-    ret = OB_RUNTIME_SCHEMA_NOT_READY;
+    ret = OB_TENANT_NOT_EXIST;
     OB_LOG(WARN, "sys variable schema is null", K(ret));
   } else {
     ObNameCaseMode local_mode = sys_variable->get_name_case_mode();
@@ -676,18 +689,18 @@ void TestSqlUtils::do_create_database(ObStmt *&stmt)
 int TestSqlUtils::add_database_schema(ObDatabaseSchema &database_schema)
 {
   int ret = OB_SUCCESS;
-  const ObServerRuntimeSchema *runtime_schema = NULL;
+  const ObTenantSchema *tenant_schema = NULL;
   const ObSysVariableSchema *sys_variable = NULL;
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_guard_.get_server_runtime_info(runtime_schema))) {
+    if (OB_FAIL(schema_guard_.get_tenant_info(tenant_schema))) {
       OB_LOG(WARN, "get tenant info failed", K(database_schema), K(ret));
-    } else if (OB_ISNULL(runtime_schema)) {
-      ret = OB_RUNTIME_SCHEMA_NOT_READY;
+    } else if (OB_ISNULL(tenant_schema)) {
+      ret = OB_TENANT_NOT_EXIST;
       OB_LOG(WARN, "tenant schema is null", K(ret));
     } else if (OB_FAIL(schema_guard_.get_sys_variable_schema(sys_variable))) {
       OB_LOG(WARN, "get sys variable failed", K(sys_variable), K(ret));
     } else if (OB_ISNULL(sys_variable)) {
-      ret = OB_RUNTIME_SCHEMA_NOT_READY;
+      ret = OB_TENANT_NOT_EXIST;
       OB_LOG(WARN, "sys variable schema is null", K(ret));
     } else {
       ObNameCaseMode local_mode = sys_variable->get_name_case_mode();
@@ -841,16 +854,18 @@ void TestSqlUtils::generate_index_schema(ObCreateIndexStmt &stmt)
   OK(ObTableSchema::build_index_table_name(allocator_, data_table_schema->get_table_id(), index_arg.index_name_,index_table_name));
   ASSERT_EQ(OB_SUCCESS, index_schema.set_table_name(index_table_name));
   index_schema.set_block_size(index_arg.index_option_.block_size_);
+  index_schema.set_is_use_bloomfilter(index_arg.index_option_.use_bloom_filter_);
   index_schema.set_progressive_merge_num(index_arg.index_option_.progressive_merge_num_);
   index_schema.set_data_table_id(data_table_schema->get_table_id());
   ASSERT_EQ(OB_SUCCESS, index_schema.set_compress_func_name(index_arg.index_option_.compress_method_));
   ASSERT_EQ(OB_SUCCESS, index_schema.set_comment(index_arg.index_option_.comment_));
   index_schema.set_table_type(USER_INDEX);
   index_schema.set_index_type(index_arg.index_type_);
+  index_schema.set_tablegroup_id(0);
   index_schema.set_index_status(INDEX_STATUS_AVAILABLE);
   _OB_LOG(INFO, "origin index_schema database id is %ld", index_schema.get_database_id() );
   //combine the database_id and tenant_id
-  uint64_t next_index_tid = get_next_table_id(OB_SERVER_RUNTIME_ID);
+  uint64_t next_index_tid = get_next_table_id(OB_SERVER_TENANT_ID);
   index_schema.set_table_id(next_index_tid);
   index_schema.set_index_status(INDEX_STATUS_AVAILABLE);
   ASSERT_TRUE(NULL != data_table_schema);

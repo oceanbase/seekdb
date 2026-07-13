@@ -85,10 +85,10 @@ public:
   bool is_valid() const { return version_ >= SSTABLE_META_CACHE_VERSION; }
   int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
   int deserialize(const char *buf, const int64_t data_len, int64_t &pos);
+  int deserialize_for_compat(const bool has_multi_version_row, const char *buf, const int64_t data_len, int64_t &pos);
   int64_t get_serialize_size() const;
 
-  TO_STRING_KV(K_(version), K_(has_multi_version_row), K_(status), K_(data_macro_block_count),
-        K_(nested_size), K_(nested_offset),
+  TO_STRING_KV(K_(version), K_(has_multi_version_row), K_(status), K_(data_macro_block_count), K_(nested_size), K_(nested_offset),
         K_(total_macro_block_count), K_(total_use_old_macro_block_count), K_(row_count), K_(occupy_size), K_(data_checksum),
         K_(max_merged_trans_version), K_(upper_trans_version), K_(filled_tx_scn), K_(contain_uncommitted_row));
 public:
@@ -181,6 +181,7 @@ public:
       const ObSSTableIndexScanParam &scan_param,
       ObIAllocator &allocator,
       ObSSTableIndexScanner *&idx_scanner);
+  int bf_may_contain_rowkey(const ObDatumRowkey &rowkey, bool &contain);
   int fill_column_ckm_array(ObIArray<int64_t> &column_checksums) const;
   // For transaction
   int check_row_locked(
@@ -228,7 +229,11 @@ public:
   }
   virtual bool no_data_to_read() const override
   {
-    return is_empty();
+    return is_empty() && !is_ddl_merge_sstable();
+  }
+  virtual bool is_ddl_merge_empty_sstable() const override
+  {
+    return is_empty() && is_ddl_merge_sstable();
   }
   int set_addr(const ObMetaDiskAddr &addr);
   OB_INLINE const ObMetaDiskAddr &get_addr() const { return addr_; }
@@ -260,8 +265,7 @@ public:
   GET_SSTABLE_META_DEFINE_FUNC(int64_t, total_use_old_macro_block_count);
   OB_INLINE bool is_small_sstable() const
   {
-    return OB_DEFAULT_MACRO_BLOCK_SIZE != meta_cache_.nested_size_
-        && 0 < meta_cache_.nested_offset_;
+    return OB_DEFAULT_MACRO_BLOCK_SIZE != meta_cache_.nested_size_ && 0 < meta_cache_.nested_offset_;
   }
   int64_t get_data_version() const
   {
@@ -280,7 +284,7 @@ public:
       const int64_t snapshot_version,
       blocksstable::ObIMacroBlockFlushCallback *ddl_redo_cb,
       int64_t &macro_start_seq,
-      ObObjectsWriteCtx &linked_block_write_ctx);
+      ObSharedObjectsWriteCtx &linked_block_write_ctx);
   int get_meta(ObSSTableMetaHandle &meta_handle, common::ObSafeArenaAllocator *allocator = nullptr) const;
   // load sstable meta bypass. Lifetime is guaranteed by allocator, which should cover this sstable
   int bypass_load_meta(common::ObArenaAllocator &allocator);
@@ -304,6 +308,12 @@ public:
     }
     return size;
   }
+
+  int get_cs_range(
+      const ObDatumRange &range,
+      const ObITableReadInfo &index_read_info,
+      ObIAllocator &allocator,
+      ObDatumRange &cs_range);
 
   /*
    * Attention! this func will update TableKey::snapshot_version_ & ObSSTableBasicMeta::root_macro_seq_
@@ -361,22 +371,34 @@ protected:
   int64_t get_sstable_fix_serialize_payload_size() const;
   int inner_deep_copy_and_inc_macro_ref(common::ObIAllocator &allocator, ObSSTable *&sstable) const;
 protected:
-  static const int64_t SSTABLE_VERSION = 2;
+  static const int64_t SSTABLE_VERSION = 1;
+  static const int64_t SSTABLE_VERSION_V2 = 2;
   struct StatusForSerialize
   {
-    enum PayloadType : uint8_t
+    StatusForSerialize()
+      : with_fixed_struct_(0),
+        with_meta_(0),
+        reserved_(0),
+        compat_magic_(COMPAT_MAGIC) {}
+    OB_INLINE void reset() { new (this) StatusForSerialize(); }
+    OB_INLINE bool with_fixed_struct() { return 1 == with_fixed_struct_; }
+    OB_INLINE bool with_meta() { return 1 == with_meta_; }
+
+    OB_INLINE void set_with_fixed_struct() { with_fixed_struct_ = 1; }
+    OB_INLINE void set_with_meta() { with_meta_ = 1; }
+    static const int8_t COMPAT_MAGIC = 0x55;
+    union
     {
-      FIXED_STRUCT = 0,
-      META = 1,
-      MAX_TYPE = 2,
+      uint16_t pack_;
+      struct
+      {
+        uint16_t with_fixed_struct_:1;
+        uint16_t with_meta_:1;
+
+        uint16_t reserved_:6;
+        uint16_t compat_magic_:8;
+      };
     };
-    StatusForSerialize() : payload_type_(MAX_TYPE) {}
-    OB_INLINE bool is_valid() const { return payload_type_ < MAX_TYPE; }
-    OB_INLINE bool with_fixed_struct() const { return FIXED_STRUCT == payload_type_; }
-    OB_INLINE bool with_meta() const { return META == payload_type_; }
-    OB_INLINE void set_with_fixed_struct() { payload_type_ = FIXED_STRUCT; }
-    OB_INLINE void set_with_meta() { payload_type_ = META; }
-    uint8_t payload_type_;
   };
 protected:
   ObMetaDiskAddr addr_; // serialized in table store

@@ -21,7 +21,7 @@
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "share/ob_tablet_checksum_operator.h"
 #include "observer/ob_srv_network_frame.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
 
 namespace oceanbase
@@ -105,7 +105,7 @@ void ObDailyMajorFreezeLauncher::runTimerTask()
     LOG_WARN("fail to run, not init", KR(ret));
   } else if (stop_ || is_paused()) {
   } else {
-    SERVER_MODULE_SCOPE {
+    MOD_SCOPE {
       LOG_INFO("start daily major_freeze_launcher");
       LOG_TRACE("run daily major freeze launcher");
 
@@ -185,7 +185,9 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
         do {
           ObMajorFreezeParam param;
           param.freeze_reason_ = MF_DAILY_MERGE;
-          if (OB_FAIL(ObMajorFreezeHelper::major_freeze(param))) {
+          if (OB_FAIL(param.add_freeze_info())) {
+            LOG_WARN("fail to push_back", KR(ret));
+          } else if (OB_FAIL(ObMajorFreezeHelper::major_freeze(param))) {
             if ((OB_TIMEOUT == ret)) {
               ret = OB_EAGAIN; // in order to try launch major freeze again, set ret = OB_EAGAIN here
               LOG_WARN("may be ddl confilict, will try to launch major freeze again", KR(ret), K(param),
@@ -246,7 +248,7 @@ int ObDailyMajorFreezeLauncher::try_gc_freeze_info()
 int ObDailyMajorFreezeLauncher::try_gc_tablet_checksum()
 {
   int ret = OB_SUCCESS;
-  // Keep 30 days of tablet checksums.
+  // keep 30 days for tablet_checksum whose (tablet_id, ls_id) is (1, 1)
   const int64_t MAX_KEEP_INTERVAL_NS =  30LL * 24 * 60 * 60 * 1000 * 1000 * 1000; // 30 day
   const int64_t MIN_RESERVED_COUNT = 8;
   SCN cur_gts_scn;

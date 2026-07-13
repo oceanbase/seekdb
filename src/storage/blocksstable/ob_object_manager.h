@@ -26,35 +26,299 @@ namespace oceanbase
 {
 namespace blocksstable
 {
-enum class ObStorageObjectType : uint8_t
-{
-  DATA_MACRO = 0,
-  META_MACRO,
-  MAX
-};
-
 // ================================= ObStorageObjectOpt ====================================//
 
 class ObStorageObjectOpt final
 {
 public:
   ObStorageObjectOpt()
-    : object_type_(ObStorageObjectType::DATA_MACRO) {}
+    : object_type_(ObStorageObjectType::PRIVATE_DATA_MACRO) {}
 
   ~ObStorageObjectOpt() {}
-  void set_data_macro_object_opt()
+  void set_private_object_opt(const int64_t tablet_id = -1)
   {
-    object_type_ = ObStorageObjectType::DATA_MACRO;
+    object_type_ = ObStorageObjectType::PRIVATE_DATA_MACRO;
+    private_opt_.tablet_id_ = tablet_id;
   }
-  void set_meta_macro_object_opt()
+  void set_private_meta_macro_object_opt(const int64_t tablet_id = -1)
   {
-    object_type_ = ObStorageObjectType::META_MACRO;
+    object_type_ = ObStorageObjectType::PRIVATE_META_MACRO;
+    private_opt_.tablet_id_ = tablet_id;
+  }
+  void set_ss_share_data_macro_object_opt(
+      const int64_t tablet_id,
+      const int64_t data_seq,
+      const int64_t column_group_id)
+  {
+    object_type_ = ObStorageObjectType::SHARED_MAJOR_DATA_MACRO;
+    ss_share_opt_.tablet_id_ = tablet_id;
+    ss_share_opt_.data_seq_ = data_seq;
+    ss_share_opt_.column_group_id_ = column_group_id;
+  }
+  void set_ss_share_meta_macro_object_opt(
+      const int64_t tablet_id,
+      const int64_t data_seq,
+      const int64_t column_group_id)
+  {
+    object_type_ = ObStorageObjectType::SHARED_MAJOR_META_MACRO;
+    ss_share_opt_.tablet_id_ = tablet_id;
+    ss_share_opt_.data_seq_ = data_seq;
+    ss_share_opt_.column_group_id_ = column_group_id;
+  }
+  void set_ss_tmp_file_object_opt()
+  {
+    object_type_ = ObStorageObjectType::TMP_FILE;
+  };
+  void set_ss_sever_level_meta_object_opt(const ObStorageObjectType object_type)
+  {
+    object_type_ = object_type;
+  };
+  void set_ss_tenant_level_meta_object_opt(
+      const ObStorageObjectType object_type,
+      const int64_t tenant_epoch_id)
+  {
+    object_type_ = object_type;
+    
+    ss_tenant_level_opt_.tenant_epoch_id_ = tenant_epoch_id;
+  };
+  void set_ss_ls_level_meta_object_opt(
+      const ObStorageObjectType object_type, const int64_t ls_id)
+  {
+    object_type_ = object_type;
+    ss_ls_level_opt_.ls_id_ = ls_id;
+  };
+
+  void set_ss_private_tablet_meta_object_opt(
+      const int64_t ls_id, const uint64_t tablet_id, const uint64_t version)
+  {
+    object_type_ = ObStorageObjectType::PRIVATE_TABLET_META;
+    ss_private_tablet_opt_.ls_id_ = ls_id;
+    ss_private_tablet_opt_.tablet_id_ = tablet_id;
+    ss_private_tablet_opt_.version_ = version;
+  }
+  void set_ss_private_tablet_meta_current_verison_object_opt(
+      const int64_t ls_id, const uint64_t tablet_id)
+  {
+    object_type_ = ObStorageObjectType::PRIVATE_TABLET_CURRENT_VERSION;
+    ss_private_tablet_current_version_opt_.ls_id_ = ls_id;
+    ss_private_tablet_current_version_opt_.tablet_id_ = tablet_id;
   }
 
+  void set_ss_share_tablet_meta_object_opt(
+      const uint64_t tablet_id,
+      const int64_t version)
+  {
+    object_type_ = ObStorageObjectType::SHARED_MAJOR_TABLET_META;
+    ss_share_tablet_opt_.tablet_id_ = tablet_id;
+    ss_share_tablet_opt_.version_ = version;
+  }
+  void set_ss_shared_tablet_id_object_opt(
+    const uint64_t tablet_id)
+  {
+    object_type_ = ObStorageObjectType::SHARED_TABLET_ID;
+    ss_shared_tablet_id_opt_.tablet_id_ = tablet_id;
+  }
+  void set_ss_is_deleted_object_opt(
+    const uint64_t tablet_id)
+  {
+    object_type_ = ObStorageObjectType::IS_SHARED_TABLET_DELETED;
+    ss_shared_tablet_id_opt_.tablet_id_ = tablet_id;
+  }
+  void set_ss_is_shared_tenant_deleted_object_opt(
+    )
+  {
+    object_type_ = ObStorageObjectType::IS_SHARED_TENANT_DELETED;
+    
+  }
+  void set_ss_compaction_scheduler_object_opt(
+      const ObStorageObjectType object_type, const int64_t ls_id)
+  {
+    object_type_ = object_type;
+    ss_compaction_scheduler_opt_.ls_id_ = ls_id;
+  };
+  void set_ss_compactor_svr_object_opt(
+      const ObStorageObjectType object_type, const int64_t server_id)
+  {
+    object_type_ = object_type;
+    ss_svr_compactor_opt_.server_id_ = server_id;
+  };
+  void set_ss_compactor_ls_svr_object_opt(
+    const ObStorageObjectType object_type,  const int64_t ls_id, const int64_t server_id)
+  {
+    object_type_ = object_type;
+    ss_ls_svr_compactor_opt_.ls_id_ = ls_id;
+    ss_ls_svr_compactor_opt_.server_id_ = server_id;
+  };
+  void set_ss_gc_info_object_opt(
+    const uint64_t tablet_id)
+  {
+    object_type_ = ObStorageObjectType::SHARED_MAJOR_GC_INFO;
+    ss_gc_info_opt_.tablet_id_ = tablet_id;
+  }
+  void set_ss_meta_list_object_opt(
+    const uint64_t tablet_id)
+  {
+    object_type_ = ObStorageObjectType::SHARED_MAJOR_META_LIST;
+    ss_meta_list_opt_.tablet_id_ = tablet_id;
+  }
+  void set_ss_tablet_compaction_status_object_opt(
+    const uint64_t tablet_id,
+    const int64_t scn_id)
+  {
+    object_type_ = ObStorageObjectType::TABLET_COMPACTION_STATUS;
+    ss_tablet_compaction_status_opt_.tablet_id_ = tablet_id;
+    ss_tablet_compaction_status_opt_.scn_id_ = scn_id;
+  }
+
+  void set_ss_major_prewarm_opt(
+    const ObStorageObjectType object_type, const uint64_t tablet_id, const uint64_t compaction_scn)
+  {
+    object_type_ = object_type;
+    ss_major_prewarm_opt_.tablet_id_ = tablet_id;
+    ss_major_prewarm_opt_.compaction_scn_ = compaction_scn;
+  }
+
+  void set_ss_checksum_error_dump_macro_opt(
+    const ObStorageObjectType object_type,
+    const uint64_t tablet_id,
+    const uint64_t cg_id,
+    const uint64_t compaction_scn,
+    const uint64_t block_seq)
+  {
+    object_type_ = object_type;
+    ss_ckm_error_dump_macro_id_opt_.tablet_id_ = tablet_id;
+    ss_ckm_error_dump_macro_id_opt_.cg_id_ = cg_id;
+    ss_ckm_error_dump_macro_id_opt_.compaction_scn_ = compaction_scn;
+    ss_ckm_error_dump_macro_id_opt_.block_seq_ = block_seq;
+  }
   int64_t to_string(char *buf, const int64_t buf_len) const;
 
 public:
+  // Must match MacroBlockId::meta_version_id_ (SF_BIT_META_VERSION_ID-bit unsigned field).
+  static constexpr uint64_t INVALID_TABLET_VERSION =
+      (1llu << (MacroBlockId::SF_BIT_META_VERSION_ID)) - 1;
+  static bool is_inaccurate_tablet_addr(const storage::ObMetaDiskAddr &tablet_meta_addr)
+  {
+    return tablet_meta_addr.is_block() && tablet_meta_addr.block_id().meta_version_id() == INVALID_TABLET_VERSION;
+  }
+
+private:
+  struct PrivateObjectOpt
+  {
+    uint64_t tablet_id_;
+  };
+  struct SSShareObjectOpt
+  {
+    uint64_t tablet_id_;
+    int64_t data_seq_;
+    int64_t column_group_id_;
+  };
+  struct SSTmpFileObjectOpt
+  {
+  };
+
+  // server level meta include: server_meta
+  struct SSServerLevelMetaObjectOpt
+  {
+  };
+  // tenant level meta include: tenant_meta/unit_meta
+  struct SSTenantLevelMetaObjectOpt
+  {
+    
+    int64_t tenant_epoch_id_;
+  };
+  // ls level meta include:
+  // ls_meta/dup_table_meta/active_tablet_array/pending_free_tablet_array
+  struct SSLSLevelMetaObjectOpt
+  {
+    uint64_t ls_id_;
+  };
+
+  struct SSPrivateTabletMetaObjectOpt
+  {
+    uint64_t ls_id_;
+    uint64_t tablet_id_;
+    int64_t version_;
+  };
+  struct SSPrivateTabletCurrentVersionObjectOpt
+  {
+    uint64_t ls_id_;
+    uint64_t tablet_id_;
+  };
+
+  struct SSShareTabletMetaObjectOpt
+  {
+    uint64_t tablet_id_;
+    int64_t version_;
+  };
+
+  struct SSCompactionSchedulerObjectOpt
+  {
+    uint64_t ls_id_;
+  };
+  struct SSCompactorSvrObjectOpt
+  {
+    int64_t server_id_;
+  };
+  struct SSCompactorLSSvrObjectOpt
+  {
+    uint64_t ls_id_;
+    int64_t server_id_;
+  };
+  struct SSGCInfoObjectOpt
+  {
+    uint64_t tablet_id_;
+  };
+  struct SSGCMetaListObjectOpt
+  {
+    uint64_t tablet_id_;
+  };
+  struct SSTabletCompactionStatusObjectOpt
+  {
+    uint64_t tablet_id_;
+    int64_t scn_id_;
+  };
+  struct SSMajorPrewarmObjectOpt
+  {
+    uint64_t tablet_id_;
+    uint64_t compaction_scn_;
+  };
+  struct SSSharedTabletIdOpt
+  {
+    uint64_t tablet_id_;
+  };
+
+  struct SSCkmErrorDumpMacroObjectOpt
+  {
+    uint64_t tablet_id_;
+    uint64_t cg_id_;
+    uint64_t compaction_scn_;
+    uint64_t block_seq_;
+  };
+public:
   ObStorageObjectType object_type_;
+  union
+  {
+    PrivateObjectOpt private_opt_;
+    SSShareObjectOpt ss_share_opt_;
+    SSTmpFileObjectOpt ss_tmp_file_opt_;
+    SSServerLevelMetaObjectOpt ss_server_level_opt_;
+    SSTenantLevelMetaObjectOpt ss_tenant_level_opt_;
+    SSLSLevelMetaObjectOpt ss_ls_level_opt_;
+    SSPrivateTabletMetaObjectOpt ss_private_tablet_opt_;
+    SSPrivateTabletCurrentVersionObjectOpt ss_private_tablet_current_version_opt_;
+    SSShareTabletMetaObjectOpt ss_share_tablet_opt_;
+    SSCompactionSchedulerObjectOpt ss_compaction_scheduler_opt_;
+    SSCompactorSvrObjectOpt ss_svr_compactor_opt_;
+    SSCompactorLSSvrObjectOpt ss_ls_svr_compactor_opt_;
+    SSGCInfoObjectOpt ss_gc_info_opt_;
+    SSGCMetaListObjectOpt ss_meta_list_opt_;
+    SSTabletCompactionStatusObjectOpt ss_tablet_compaction_status_opt_;
+    SSMajorPrewarmObjectOpt ss_major_prewarm_opt_;
+    SSSharedTabletIdOpt ss_shared_tablet_id_opt_;
+    SSCkmErrorDumpMacroObjectOpt ss_ckm_error_dump_macro_id_opt_;
+  };
+
 };
 
 // ================================== ObObjectManager =====================================//
@@ -98,7 +362,7 @@ public:
       const int64_t reserved_size);
   int check_disk_space_available();
   int update_super_block(const common::ObLogCursor &replay_start_point,
-                         const blocksstable::MacroBlockId &runtime_meta_entry);
+                         const blocksstable::MacroBlockId &tenant_meta_entry);
 
   static ObObjectManager &get_instance();
 

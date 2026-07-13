@@ -21,6 +21,7 @@
 #include "share/ob_ls_id.h"
 #include "lib/hash/ob_hashmap.h"
 #include "share/rc/ob_tenant_base.h"
+#include "lib/task/ob_timer.h"
 #include "share/schema/ob_table_schema.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/allocator/ob_fifo_allocator.h"
@@ -473,7 +474,7 @@ private:
   ObTenantSysStat sys_stat_;
   uint64_t report_cursor_;
   uint64_t pending_cursor_;
-  int report_tg_id_;
+  common::ObTimer report_timer_;
   int64_t extreme_tablet_cnt_;
   bool is_inited_;
 };

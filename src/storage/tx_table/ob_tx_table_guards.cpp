@@ -85,6 +85,7 @@ int ObTxTableGuards::lock_for_read(
   LockForReadFunctor fn(lock_for_read_arg,
                         can_read,
                         trans_version,
+                        tx_table_guard_.get_ls_id(),
                         cleanout_op,
                         recheck_op);
 
@@ -109,6 +110,7 @@ int ObTxTableGuards::lock_for_read(
   LockForReadFunctor fn(lock_for_read_arg,
                         can_read,
                         trans_version,
+                        tx_table_guard_.get_ls_id(),
                         clean_nothing_op,
                         recheck_nothing_op);
 
@@ -137,6 +139,11 @@ int ObTxTableGuards::cleanout_tx_node(
   }
 
   return ret;
+}
+
+bool ObTxTableGuards::check_ls_offline()
+{
+  return tx_table_guard_.check_ls_offline();
 }
 
 int ObTxTableGuards::check_with_tx_data(

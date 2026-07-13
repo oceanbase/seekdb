@@ -27,7 +27,7 @@
 #include "observer/vector_index/ob_vector_embedding_handler.h"
 #include "observer/ai_service/ob_ai_service_struct.h"
 #include "storage/ob_value_row_iterator.h"
-#include "observer/omt/ob_ai_service.h"
+#include "observer/omt/ob_tenant_ai_service.h"
  
 namespace oceanbase
 {
@@ -50,6 +50,8 @@ public:
   {}
   virtual ~ObVecEmbeddingAsyncTaskExecutor() {}
   virtual int load_task(uint64_t &task_trace_base_num) override;
+private:  
+  bool check_operation_allow() override;
 };
 
 // vector index async task ctx

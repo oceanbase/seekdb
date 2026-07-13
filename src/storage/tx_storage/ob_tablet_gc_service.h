@@ -96,6 +96,8 @@ public:
       const bool only_persist,
       bool &need_retry,
       bool &no_need_wait_persist);
+  int get_max_tablet_reserved_scn(const common::ObIArray<ObTabletHandle> &deleted_tablets, share::SCN &reserved_scn);
+  int set_ls_reserved_scn(const common::ObIArray<ObTabletHandle> &deleted_tablets);
   int gc_tablets(const common::ObIArray<ObTabletHandle> &deleted_tablets);
   bool check_stop() { return ATOMIC_LOAD(&update_enabled_) == false; }
   int disable_gc();
@@ -141,7 +143,7 @@ public:
       tablet_shell_task_(*this)
   {}
 
-  static int server_module_init(ObTabletGCService *&m);
+  static int mtl_init(ObTabletGCService *&m);
   int init();
   int start();
   int stop();

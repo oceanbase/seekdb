@@ -22,7 +22,7 @@
 #include "storage/ls/ob_ls.h"                  // ObLS
 #include "storage/tablelock/ob_table_lock_iterator.h"
 #include "storage/tablelock/ob_lock_memtable.h"
-#include "storage/tx_storage/ob_memstore_freezer.h"
+#include "storage/tx_storage/ob_tenant_freezer.h"
 
 namespace oceanbase
 {
@@ -218,6 +218,7 @@ int ObLockTable::get_table_schema_(
     LOG_WARN("failed to add column", K(ret), K(value_column));
   } else {
     schema.set_micro_index_clustered(false);
+    schema.set_enable_macro_block_bloom_filter(false);
   }
   return ret;
 }
@@ -272,7 +273,7 @@ int ObLockTable::offline()
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(parent_)) {
-    LOG_INFO("lock table offline");
+    LOG_INFO("lock table offline", K(parent_->get_ls_id()));
   }
 
   // release all lock memtables before clean cache
@@ -301,7 +302,7 @@ int ObLockTable::online()
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
   ObLSTabletService *ls_tablet_svr = nullptr;
   if (OB_NOT_NULL(parent_)) {
-    LOG_INFO("online lock table");
+    LOG_INFO("online lock table", K(parent_->get_ls_id()));
   }
   
   CreateMemtableArg arg;
@@ -336,10 +337,11 @@ int ObLockTable::online()
   return ret;
 }
 
-int ObLockTable::create_tablet(const SCN &create_scn)
+int ObLockTable::create_tablet(const lib::Worker::CompatMode compat_mode, const SCN &create_scn)
 {
   int ret = OB_SUCCESS;
   
+  const share::ObLSID &ls_id = parent_->get_ls_id();
   share::schema::ObTableSchema table_schema;
   ObIMemtableMgr *memtable_mgr = nullptr;
   ObMemtableMgrHandle memtable_mgr_handle;
@@ -350,15 +352,16 @@ int ObLockTable::create_tablet(const SCN &create_scn)
     LOG_WARN("ObLockTable not inited", K(ret));
   } else if (OB_FAIL(get_table_schema_(table_schema))) {
     LOG_WARN("get lock table schema failed", K(ret));
-  } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema,
+  } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema, compat_mode,
         false/*skip_column_info*/, DATA_CURRENT_VERSION))) {
     LOG_WARN("failed to init storage schema", KR(ret), K(table_schema));
-  } else if (OB_FAIL(parent_->create_ls_inner_tablet(LS_LOCK_TABLET,
+  } else if (OB_FAIL(parent_->create_ls_inner_tablet(ls_id,
+                                                     LS_LOCK_TABLET,
                                                      ObLS::LS_INNER_TABLET_FROZEN_SCN,
                                                      create_tablet_schema,
                                                      create_scn))) {
-    LOG_WARN("failed to create lock tablet", K(ret), K(LS_LOCK_TABLET),
-             K(table_schema), K(create_scn));
+    LOG_WARN("failed to create lock tablet", K(ret), K(ls_id), K(LS_LOCK_TABLET),
+             K(table_schema), K(compat_mode), K(create_scn));
   } else if (OB_FAIL(parent_->get_tablet_svr()->
                      get_lock_memtable_mgr(memtable_mgr_handle))) {
     LOG_WARN("get_lock_memtable_mgr failed", K(ret));
@@ -374,10 +377,11 @@ int ObLockTable::create_tablet(const SCN &create_scn)
 int ObLockTable::remove_tablet()
 {
   int ret = OB_SUCCESS;
+  const share::ObLSID &ls_id = parent_->get_ls_id();
   if (IS_NOT_INIT) {
     LOG_WARN("lock table does not inited, remove do nothing");
-  } else if (OB_FAIL(parent_->remove_ls_inner_tablet(LS_LOCK_TABLET))) {
-    LOG_ERROR("failed to remove ls inner tablet", K(ret), K(LS_LOCK_TABLET));
+  } else if (OB_FAIL(parent_->remove_ls_inner_tablet(ls_id, LS_LOCK_TABLET))) {
+    LOG_ERROR("failed to remove ls inner tablet", K(ret), K(ls_id), K(LS_LOCK_TABLET));
     ob_usleep(1000 * 1000);
     ob_abort();
   }
@@ -681,6 +685,30 @@ int ObLockTable::get_lock_op_iter(const ObLockID &lock_id,
   return ret;
 }
 
+int ObLockTable::replay(const void *buffer,
+                        const int64_t nbytes,
+                        const palf::LSN &lsn,
+                        const share::SCN &scn)
+{
+  int ret = OB_SUCCESS;
+  ObTableHandleV2 handle;
+  ObLockMemtable *memtable = nullptr;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    TABLELOCK_LOG(WARN, "ObLockTable not inited", K(ret));
+  } else if (OB_FAIL(get_lock_memtable(handle))) {
+    TABLELOCK_LOG(WARN, "get lock memtable failed", K(ret));
+  } else if (OB_FAIL(handle.get_lock_memtable(memtable))) {
+    TABLELOCK_LOG(ERROR, "get lock memtable from lock handle failed", K(ret));
+  } else if (OB_FAIL(memtable->replay_split_log(buffer,
+                                                nbytes,
+                                                lsn,
+                                                scn))) {
+    TABLELOCK_LOG(WARN, "ObLockTable::replay failed", K(ret));                                    
+  }
+  return ret;
+}
+
 int ObLockTable::admin_remove_lock_op(const ObTableLockOp &op_info)
 {
   int ret = OB_SUCCESS;
@@ -795,7 +823,7 @@ int ObLockTable::add_lock_into_queue(storage::ObStoreCtx &ctx, const ObLockParam
   return ret;
 }
 
-int ObLockTable::activate()
+int ObLockTable::switch_to_leader()
 {
   int ret = OB_SUCCESS;
   common::ObTimeGuard timeguard("switch_to_leader", 10 * 1000);
@@ -805,7 +833,8 @@ int ObLockTable::activate()
   } else {
     timeguard.click();
     if (OB_NOT_NULL(parent_)) {
-      LOG_INFO("start to check and clear obj lock when switch to leader", K(ret));
+      LOG_INFO("start to check and clear obj lock when switch to leader", K(ret),
+              K(parent_->get_ls_id()));
     }
     if (OB_FAIL(check_obj_lock_timer_.schedule(check_obj_lock_task_,
                                                0 /* delay */,
@@ -820,7 +849,8 @@ int ObLockTable::activate()
       // ignore ret
       LOG_WARN("parent ls of ObLockTable is null", K(ret));
     } else {
-      LOG_WARN("collect obj lock garbage when switch to leader failed", K(ret));
+      LOG_WARN("collect obj lock garbage when switch to leader failed", K(ret),
+               K(parent_->get_ls_id()));
     }
   } else {
     // switch to leader for lock memtable
@@ -838,7 +868,7 @@ int ObLockTable::activate()
   return ret;
 }
 
-void ObLockTable::deactivate()
+void ObLockTable::switch_to_follower_forcedly()
 {
   int ret = OB_SUCCESS;
   common::ObTimeGuard timeguard("switch_to_follower", 10 * 1000);
@@ -849,6 +879,20 @@ void ObLockTable::deactivate()
     LOG_WARN("switch to follower failed", K(ret));
   }
   timeguard.click();
+}
+
+int ObLockTable::switch_to_follower_gracefully()
+{
+  int ret = OB_SUCCESS;
+  common::ObTimeGuard timeguard("switch_to_follower", 10 * 1000);
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObLockTable is not inited", K(ret));
+  } else if (OB_FAIL(switch_to_follower_())) {
+    LOG_WARN("switch to follower failed", K(ret));
+  }
+  timeguard.click();
+  return ret;
 }
 
 int ObLockTable::switch_to_follower_()
@@ -890,6 +934,8 @@ int ObLockTable::flush(share::SCN &scn)
   int ret = OB_SUCCESS;
   ObTableHandleV2 handle;
   ObLockMemtable *memtable = nullptr;
+  const share::ObLSID &ls_id = parent_->get_ls_id();
+
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     TABLELOCK_LOG(WARN, "ObLockTable not inited", K(ret));

@@ -18,6 +18,7 @@
 #define OCEANBASE_STORAGE_OB_TABLET_HANDLE
 
 #include "storage/meta_mem/ob_meta_obj_struct.h"
+#include "share/leak_checker/obj_leak_checker.h"
 #include "storage/tablet/ob_table_store_util.h"
 #include "storage/tablet/ob_tablet_table_store_iterator.h"
 #include "share/ob_ddl_common.h"
@@ -39,12 +40,14 @@ class ObTabletHandle : public ObMetaObjGuard<ObTablet>
 private:
   typedef ObMetaObjGuard<ObTablet> Base;
 public:
-  ObTabletHandle();
+  ObTabletHandle(const char *file = __builtin_FILE(),
+                 const int line = __builtin_LINE(),
+                 const char *func = __builtin_FUNCTION());
   ObTabletHandle(const ObTabletHandle &other);
   virtual ~ObTabletHandle();
   ObTabletHandle &operator = (const ObTabletHandle &other);
   virtual void set_obj(ObMetaObj<ObTablet> &obj) override;
-  virtual void set_obj(ObTablet *obj, common::ObIAllocator *allocator, ObStorageMetaMemMgr *t3m) override;
+  virtual void set_obj(ObTablet *obj, common::ObIAllocator *allocator, ObTenantMetaMemMgr *t3m) override;
   virtual void reset() override;
   virtual bool need_hold_time_check() const override { return true; }
   void set_wash_priority(const WashTabletPriority priority) { wash_priority_ = priority; }
@@ -55,20 +58,26 @@ public:
   int64_t get_buf_len() const { return get_buf_header().buf_len_; }
   DECLARE_VIRTUAL_TO_STRING;
 private:
+  int register_into_leak_checker(const char *file, const int line, const char *func);
+  int inc_ref_in_leak_checker(ObTenantMetaMemMgr *t3m);
+  int dec_ref_in_leak_checker(ObTenantMetaMemMgr *t3m);
   int64_t calc_wash_score(const WashTabletPriority priority) const;
   ObMetaObjBufferHeader &get_buf_header() const
   {
     return ObMetaObjBufferHelper::get_buffer_header(reinterpret_cast<char *>(obj_));
   }
 private:
+  int32_t index_;  // initialize as -1
   WashTabletPriority wash_priority_;
   bool allow_copy_and_assign_;
+  DEFINE_OBJ_LEAK_DEBUG_NODE(node_);
 };
 
 class ObTabletTableIterator final
 {
   friend class ObTablet;
   friend class ObLSTabletService;
+  typedef ObSEArray<ObTabletHandle, 1> SplitExtraTabletHandleArray;
   typedef ObSEArray<share::ObForkTabletInfo, 1> ForkTabletInfoArray;
   typedef ObSEArray<ObTabletHandle, 1> ForkTabletHandleArray;
   struct ForkCtx final
@@ -89,11 +98,13 @@ public:
   ObTabletTableIterator()
       : tablet_handle_(),
         table_store_iter_(),
+        split_extra_tablet_handles_(),
         fork_ctx_(nullptr)
   {}
   explicit ObTabletTableIterator(const bool is_reverse)
       : tablet_handle_(),
         table_store_iter_(is_reverse),
+        split_extra_tablet_handles_(),
         fork_ctx_(nullptr)
   {}
   int assign(const ObTabletTableIterator& other);
@@ -102,6 +113,7 @@ public:
   {
     table_store_iter_.reset();
     tablet_handle_.reset();
+    split_extra_tablet_handles_.reset();
     destroy_fork_ctx_();
   }
   bool is_valid() const { return tablet_handle_.is_valid() || table_store_iter_.is_valid(); }
@@ -111,23 +123,29 @@ public:
   ObTablet *get_tablet() { return tablet_handle_.get_obj(); }
   const ObTabletHandle &get_tablet_handle() { return tablet_handle_; }
   const ObTabletHandle *get_tablet_handle_ptr() const { return &tablet_handle_; }
+  const ObIArray<ObTabletHandle> *get_split_extra_tablet_handles_ptr() const { return split_extra_tablet_handles_.empty() ? nullptr : &split_extra_tablet_handles_; }
   const ObIArray<share::ObForkTabletInfo> *get_fork_infos() const
   {
     return (nullptr == fork_ctx_ || fork_ctx_->fork_infos_.empty()) ? nullptr : &fork_ctx_->fork_infos_;
   }
   int set_tablet_handle(const ObTabletHandle &tablet_handle);
+  int add_split_extra_tablet_handle(const ObTabletHandle &tablet_handle);
   int add_fork_tablet_handle(const ObTabletHandle &tablet_handle, share::ObForkTabletInfo &fork_info);
   int refresh_read_tables_from_tablet(
       const int64_t snapshot_version,
       const bool allow_no_ready_read,
-      const bool major_sstable_only);
+      const bool major_sstable_only,
+      const bool need_split_src_table,
+      const bool need_split_dst_table);
   int get_mds_sstables_from_tablet(const int64_t snapshot_version);
   int get_read_tables_from_tablet(
       const int64_t snapshot_version,
       const bool allow_no_ready_read,
       const bool major_sstable_only,
+      const bool need_split_src_table,
+      const bool need_split_dst_table,
       ObIArray<ObITable *> &tables);
-  TO_STRING_KV(K_(tablet_handle), K_(table_store_iter), KPC_(fork_ctx));
+  TO_STRING_KV(K_(tablet_handle), K_(table_store_iter), K_(split_extra_tablet_handles), KPC_(fork_ctx));
 private:
   void destroy_fork_ctx_()
   {
@@ -154,6 +172,7 @@ private:
 
   ObTabletHandle tablet_handle_;
   ObTableStoreIterator table_store_iter_;
+  SplitExtraTabletHandleArray split_extra_tablet_handles_;
   ForkCtx *fork_ctx_;
   DISALLOW_COPY_AND_ASSIGN(ObTabletTableIterator);
 };
@@ -161,7 +180,7 @@ private:
 struct ObGetTableParam final
 {
 public:
-  ObGetTableParam() : frozen_version_(-1), sample_info_(), tablet_iter_(), refreshed_merge_(nullptr) {}
+  ObGetTableParam() : frozen_version_(-1), sample_info_(), tablet_iter_(), refreshed_merge_(nullptr), need_split_dst_table_(true) {}
   ~ObGetTableParam() { reset(); }
   bool is_valid() const { return tablet_iter_.is_valid(); }
   void reset()
@@ -170,8 +189,9 @@ public:
     sample_info_.reset();
     tablet_iter_.reset();
     refreshed_merge_ = nullptr;
+    need_split_dst_table_ = true;
   }
-  TO_STRING_KV(K_(frozen_version), K_(sample_info), K_(tablet_iter));
+  TO_STRING_KV(K_(frozen_version), K_(sample_info), K_(tablet_iter), K_(need_split_dst_table));
 public:
   int64_t frozen_version_;
   common::SampleInfo sample_info_;
@@ -181,6 +201,9 @@ public:
   // before rescan.
   void *refreshed_merge_;
 
+  // true means maybe need split dst table, which is always safe because get_read_tables will check by mds again;
+  // false means no need split dst table, which is for optimization and UNSAFE
+  bool need_split_dst_table_;
   DISALLOW_COPY_AND_ASSIGN(ObGetTableParam);
 };
 

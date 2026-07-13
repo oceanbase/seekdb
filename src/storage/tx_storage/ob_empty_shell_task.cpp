@@ -268,7 +268,7 @@ int ObTabletEmptyShellHandler::check_candidate_tablet_(const ObTablet &tablet, b
   return ret;
 }
 
-int ObTabletEmptyShellHandler::check_transfer_out_deleted_tablet_(
+int ObTabletEmptyShellHandler::check_reserved_deleted_tablet_(
     const ObTablet &tablet,
     const ObTabletCreateDeleteMdsUserData &user_data,
     bool &can,
@@ -282,16 +282,16 @@ int ObTabletEmptyShellHandler::check_transfer_out_deleted_tablet_(
   ObLSHandle ls_handle;
   ObLS *ls = NULL;
   const ObTabletID tablet_id(tablet.get_tablet_meta().tablet_id_);
-  if (!user_data.is_valid() || !user_data.transfer_ls_id_.is_valid()) {
+  if (!user_data.is_valid() || !user_data.reserved_ls_id_.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "arguments are invalid", K(ret), K(user_data));
   } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "ls service should not be null", K(ret), KP(ls_service));
-  } else if (OB_FAIL(ls_service->get_ls(user_data.transfer_ls_id_, ls_handle, ObLSGetMod::TABLET_MOD))) {
+  } else if (OB_FAIL(ls_service->get_ls(user_data.reserved_ls_id_, ls_handle, ObLSGetMod::TABLET_MOD))) {
     if (OB_LS_NOT_EXIST == ret) {
       can = true;
-      STORAGE_LOG(INFO, "transfer dest ls not exist, src tablet can become empty shell", K(ret), "ls_id", ls_->get_ls_id(), K(user_data));
+      STORAGE_LOG(INFO, "reserved dest ls not exist, src tablet can become empty shell", K(ret), "ls_id", user_data.reserved_ls_id_, K(user_data));
       ret = OB_SUCCESS;
     } else {
       STORAGE_LOG(WARN, "failed to get ls", K(ret), K(user_data));
@@ -314,7 +314,7 @@ int ObTabletEmptyShellHandler::check_transfer_out_deleted_tablet_(
     STORAGE_LOG(WARN, "failed to get max decided scn", K(ret), K(user_data));
   } else if (decided_scn >= user_data.delete_commit_scn_) {
     can = true;
-    STORAGE_LOG(INFO, "decided_scn is bigger than transfer finish scn", K(ret),
+    STORAGE_LOG(INFO, "decided_scn is bigger than reserved finish scn", K(ret),
       "ls_id", ls_->get_ls_id(), K(tablet_id), K(can), K(user_data), K(decided_scn));
   } else {
     need_retry = true;

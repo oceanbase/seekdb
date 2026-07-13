@@ -206,10 +206,10 @@ void ObTabletGCService::ObTabletChangeTask::runTimerTask()
             need_retry = true;
             STORAGE_LOG(WARN, "failed to set_tablet_change_checkpoint_scn", KPC(ls), KR(ret), K(decided_scn));
           }
-          // 8. set ls transfer scn
-          else if (!only_persist && OB_FAIL(tablet_gc_handler->set_ls_transfer_scn(deleted_tablets))) {
+          // 8. set ls reserved scn
+          else if (!only_persist && OB_FAIL(tablet_gc_handler->set_ls_reserved_scn(deleted_tablets))) {
             need_retry = true;
-            STORAGE_LOG(ERROR, "failed to set ls transfer scn", KPC(ls), KR(ret), K(decided_scn));
+            STORAGE_LOG(ERROR, "failed to set ls reserved scn", KPC(ls), KR(ret), K(decided_scn));
           }
           // 9. check and gc deleted_tablets
           else if (!only_persist && !deleted_tablets.empty() 
@@ -658,7 +658,7 @@ int ObTabletGCHandler::gc_tablets(const common::ObIArray<ObTabletHandle> &delete
         SERVER_EVENT_SYNC_ADD("tablet_gc", "gc_tablet_finish",
                               "ls_id", tablet_handle.get_obj()->get_tablet_meta().ls_id_.id(),
                               "tablet_id", tablet_handle.get_obj()->get_tablet_meta().tablet_id_.id(),
-                              "transfer_seq", 0);
+                              "path_id", 0);
 #endif
         STORAGE_LOG(INFO, "gc tablet finish", K(ret),
                           "ls_id", tablet_handle.get_obj()->get_tablet_meta().ls_id_,
@@ -674,15 +674,15 @@ int ObTabletGCHandler::gc_tablets(const common::ObIArray<ObTabletHandle> &delete
   return ret;
 }
 
-int ObTabletGCHandler::get_max_tablet_transfer_scn(
+int ObTabletGCHandler::get_max_tablet_reserved_scn(
     const common::ObIArray<ObTabletHandle> &deleted_tablets,
-    share::SCN &transfer_scn)
+    share::SCN &reserved_scn)
 {
   int ret = OB_SUCCESS;
   const bool need_initial_state = false;
   const bool need_sorted_tablet_id = false;
   ObHALSTabletIDIterator iter(ls_->get_ls_id(), need_initial_state, need_sorted_tablet_id);
-  share::SCN max_transfer_scn = share::SCN::min_scn();
+  share::SCN max_reserved_scn = share::SCN::min_scn();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "tablet gc handler is not inited", KR(ret));
@@ -707,30 +707,30 @@ int ObTabletGCHandler::get_max_tablet_transfer_scn(
               "ls_id", tablet->get_tablet_meta().ls_id_,
               "tablet_id", tablet->get_tablet_meta().tablet_id_);
         }
-      } else if (share::SCN::invalid_scn() == mds_data.transfer_scn_) {
+      } else if (share::SCN::invalid_scn() == mds_data.reserved_scn_) {
         // do nothing
       } else {
-        transfer_scn = mds_data.transfer_scn_;
-        max_transfer_scn = MAX(transfer_scn, max_transfer_scn);
+        reserved_scn = mds_data.reserved_scn_;
+        max_reserved_scn = MAX(reserved_scn, max_reserved_scn);
       }
     }
     if (OB_SUCC(ret)) {
-      transfer_scn = max_transfer_scn;
+      reserved_scn = max_reserved_scn;
     }
   }
   return ret;
 }
 
-int ObTabletGCHandler::set_ls_transfer_scn(const common::ObIArray<ObTabletHandle> &deleted_tablets)
+int ObTabletGCHandler::set_ls_reserved_scn(const common::ObIArray<ObTabletHandle> &deleted_tablets)
 {
   int ret = OB_SUCCESS;
-  share::SCN tablet_max_transfer_scn;
+  share::SCN tablet_max_reserved_scn;
   if (0 == deleted_tablets.count()) {
     // do nothing
-  } else if (OB_FAIL(get_max_tablet_transfer_scn(deleted_tablets, tablet_max_transfer_scn))) {
-    STORAGE_LOG(WARN, "failed to get max tablet transfer scn", K(ret));
-  } else if (OB_FAIL(ls_->inc_update_transfer_scn(tablet_max_transfer_scn))) {
-    LOG_WARN("failed to set transfer scn", K(ret));
+  } else if (OB_FAIL(get_max_tablet_reserved_scn(deleted_tablets, tablet_max_reserved_scn))) {
+    STORAGE_LOG(WARN, "failed to get max tablet reserved scn", K(ret));
+  } else if (OB_FAIL(ls_->inc_update_reserved_scn(tablet_max_reserved_scn))) {
+    LOG_WARN("failed to set reserved scn", K(ret));
   }
   return ret;
 }

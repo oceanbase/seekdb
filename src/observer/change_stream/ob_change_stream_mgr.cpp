@@ -18,7 +18,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "share/rc/ob_module_provider.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_tenant_base.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include <unistd.h>
 
@@ -45,7 +45,7 @@ ObChangeStreamMgr::~ObChangeStreamMgr()
   destroy();
 }
 
-int ObChangeStreamMgr::server_module_init(ObChangeStreamMgr *&mgr)
+int ObChangeStreamMgr::mtl_init(ObChangeStreamMgr *&mgr)
 {
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(mgr)) {
@@ -54,7 +54,7 @@ int ObChangeStreamMgr::server_module_init(ObChangeStreamMgr *&mgr)
   } else if (OB_FAIL(mgr->init())) {
     LOG_WARN("ObChangeStreamMgr init failed", KR(ret));
   } else {
-    LOG_INFO("ObChangeStreamMgr server_module_init success",  KP(share::server_runtime()));
+    LOG_INFO("ObChangeStreamMgr mtl_init success",  KP(MTL_CTX()));
   }
   return ret;
 }
@@ -138,8 +138,8 @@ int ObChangeStreamMgr::wait_refresh_scn(
   const int64_t SLEEP_INTERVAL_US = 100 * 1000; // 100ms
   const int64_t abs_timeout_us = ObTimeUtility::current_time() + timeout_us;
 
-  if (OB_FAIL(OB_TS_MGR.get_gts_sync(abs_timeout_us - ObTimeUtility::current_time(),
-                                    safe_visible_scn))) {
+  if (OB_FAIL(OB_TS_MGR.get_ts_sync(abs_timeout_us - ObTimeUtility::current_time(),
+                                     safe_visible_scn))) {
     LOG_WARN("get gts for safe visible scn failed", KR(ret));
   } else {
     ObChangeStreamMgr *mgr = share::g_mp->change_stream_mgr();

@@ -19,7 +19,9 @@
 #include "ob_all_virtual_sql_stat.h"
 #include "lib/utility/ob_mod_define.h"
 #include "share/rc/ob_module_provider.h"
-#include "share/rc/ob_server_runtime.h"
+#include "lib/utility/ob_mod_define.h"
+#include "observer/omt/ob_multi_tenant.h"
+#include "share/rc/ob_tenant_base.h"
 #include "share/rc/ob_context.h"
 #include "observer/ob_server_struct.h"
 #include "sql/plan_cache/ob_plan_cache.h"
@@ -71,10 +73,12 @@ void ObAllVirtualSqlStatIter::reset()
 int ObAllVirtualSqlStatIter::init(ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(allocator)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("allocator is null", KR(ret));
-  } else {
+  if (OB_ISNULL(GCTX.omt_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null of omt", KR(ret));
+  }
+  
+  if (OB_SUCC(ret)) {
     const int64_t default_bucket_num  = 64;
     if (OB_FAIL(tmp_sql_stat_map_.create(default_bucket_num, ObMemAttr("TmpSqlStatMgr")))) {
       LOG_WARN("fail to create tmp sql stat map", K(ret));
@@ -94,10 +98,8 @@ int ObAllVirtualSqlStatIter::get_next_batch_sql_stat()
     LOG_WARN("failed to clear tmp sql stat map", K(ret));
   } else if (FALSE_IT(sql_stat_cache_id_array_.reuse())) {
   } else {
-    if (!share::g_server_modules_ready) {
-      done_ = true;
-      ret = OB_ITER_END;
-    } else {
+    
+    MOD_SCOPE {
       ObReqTimeGuard req_timeinfo_guard;
       ObPlanCache* plan_cache = share::g_mp->plan_cache();
       if (OB_NOT_NULL(plan_cache)) {
@@ -115,6 +117,8 @@ int ObAllVirtualSqlStatIter::get_next_batch_sql_stat()
         }
       }
       done_ = true;
+    } else {
+      LOG_WARN("failed to switch mtl tenant", K(ret));
     }
   }
   return ret;
@@ -186,26 +190,22 @@ int ObAllVirtualSqlStatIter::get_next_sql_stat (
   int ret = OB_SUCCESS;
   while (OB_SUCC(ret) && sql_stat_cache_id_array_idx_ >= sql_stat_cache_id_array_.count() && tmp_sql_stat_map_.empty()) {
     if (OB_FAIL(get_next_batch_sql_stat())) {
-      if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get next SQL stat batch", K(ret));
-      }
+      LOG_WARN("failed to get next tenant sql stat", K(ret));
     } else {
       sql_stat_cache_id_array_idx_ = 0;
     }
   }
 
   if (OB_SUCC(ret)) {
-    if (!share::g_server_modules_ready) {
-      ret = OB_ITER_END;
-    } else {
+    MOD_SCOPE {
       if (sql_stat_cache_id_array_idx_ < sql_stat_cache_id_array_.count()) {
         ObReqTimeGuard req_timeinfo_guard;
         ObPlanCache* plan_cache = share::g_mp->plan_cache();
         if (OB_NOT_NULL(plan_cache)) {
           uint64_t cur_sql_stat_cache_id = sql_stat_cache_id_array_.at(sql_stat_cache_id_array_idx_);
           sql_stat_cache_id_array_idx_++;
-          ObCacheObjGuard guard;
-          int tmp_ret = plan_cache->ref_cache_obj(cur_sql_stat_cache_id, guard);
+          ObCacheObjGuard guard(VT_SQL_STAT_HANDLE);
+          int tmp_ret = plan_cache->ref_cache_obj(cur_sql_stat_cache_id, guard); // plan reference count plus VT_SQL_STAT_HANDLE
           if (OB_HASH_NOT_EXIST == tmp_ret) {
             //do nothing;
           } else if (OB_SUCCESS != tmp_ret) {
@@ -581,6 +581,14 @@ int ObAllVirtualSqlStat::fill_row(
         } else {
           cells[cell_idx].set_int(port_);
         }
+        break;
+      }
+      case ROUTE_MISS_TOTAL: {
+        cells[cell_idx].set_int(sql_stat_record->get_route_miss_total());
+        break;
+      }
+      case ROUTE_MISS_DELTA: {
+        cells[cell_idx].set_int(sql_stat_record->get_route_miss_delta());
         break;
       }
       case FIRST_LOAD_TIME: {

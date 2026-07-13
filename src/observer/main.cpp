@@ -55,15 +55,16 @@ static void seekdb_cov_init_profile_file(int argc, char **argv)
 #include "lib/oblog/ob_easy_log.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/oblog/ob_warning_buffer.h"
+#include "lib/allocator/ob_mem_leak_checker.h"
 #include "rpc/ob_libeasy_mem_pool.h"
 #include "lib/signal/ob_signal_struct.h"
 #include "lib/utility/ob_defer.h"
 #include "observer/ob_command_line_parser.h"
 #include "observer/ob_server.h"
-#include "share/ob_encryption_util.h"
 #include "observer/ob_server_utils.h"
 #include "observer/ob_signal_handle.h"
 #include "share/config/ob_server_config.h"
+#include "share/ob_tenant_mgr.h"
 #include "share/ob_version.h"
 #include <curl/curl.h>
 #include <stdlib.h>
@@ -595,7 +596,7 @@ static int check_uid_before_start(const char *dir_path)
     /* do nothing */
   } else {
     if (current_uid != dir_info.st_uid) {
-      ret = OB_FILE_OR_DIRECTORY_PERMISSION_DENIED;
+      ret = OB_UTL_FILE_ACCESS_DENIED;
       MPRINT("ERROR: current user(uid=%u) that starts seekdb is not the same with the original one(uid=%u), seekdb starts failed!",
               current_uid, dir_info.st_uid);
     }
@@ -662,14 +663,19 @@ int inner_main(int argc, char *argv[])
 
   // Fake routines for current thread.
 
+#ifndef OB_USE_ASAN
+  get_mem_leak_checker().init();
+#endif
+
   ObCurTraceId::SeqGenerator::seq_generator_  = ObTimeUtility::current_time();
   static const int  LOG_FILE_SIZE             = DEFAULT_LOG_FILE_SIZE_MB * 1024 * 1024;
   const char *const LOG_FILE_NAME             = "log/seekdb.log";
   const char *const PID_FILE_NAME             = "run/seekdb.pid";
   int               ret                       = OB_SUCCESS;
 
-  MPRINT("Starting seekdb (%s %s %s) source revision %s.",
-    OB_OCEANBASE_NAME, OB_SEEKDB_NAME, PACKAGE_VERSION, build_version());
+  const char *embed_mode = is_embed_mode() ? "embed " : "";
+  MPRINT("Starting seekdb (%s %s %s%s) source revision %s.",
+    OB_OCEANBASE_NAME, OB_SEEKDB_NAME, embed_mode, PACKAGE_VERSION, build_version());
 
 #ifndef _WIN32
   // change signal mask first (POSIX only).
@@ -782,17 +788,18 @@ int inner_main(int argc, char *argv[])
     // records all WARN and ERROR logs in log directory.
     ObWarningBuffer::set_warn_log_on(true);
     if (OB_SUCC(ret)) {
+      const bool embed_mode = opts->embed_mode_;
       const bool initialize = opts->initialize_;
       lib::Worker worker;
       lib::Worker::set_worker_to_thread_local(&worker);
       ObServer &observer = ObServer::get_instance();
-      LOG_INFO("seekdb starts", "seekdb_version", PACKAGE_STRING, "embedded", opts->embedded_);
+      LOG_INFO("seekdb starts", "seekdb_version", PACKAGE_STRING);
       if (OB_FAIL(observer.init(*opts, log_cfg))) {
         LOG_ERROR("seekdb init fail", K(ret));
       }
       OB_DELETE(ObServerOptions, mem_attr, opts);
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(observer.start())) {
+      } else if (OB_FAIL(observer.start(embed_mode))) {
         LOG_ERROR("seekdb start fail", K(ret));
       } else {
         safe_sd_notify(0, "READY=1\n"
@@ -819,6 +826,13 @@ int inner_main(int argc, char *argv[])
   LOG_INFO("seekdb exits", "seekdb_version", PACKAGE_STRING);
   return ret;
 }
+
+#ifdef OB_USE_ASAN
+const char* __asan_default_options()
+{
+  return "abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:log_path=./log/asan.log";
+}
+#endif
 
 #ifdef _WIN32
 static bool has_arg(int argc, char *argv[], const char *name)

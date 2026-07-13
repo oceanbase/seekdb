@@ -19,7 +19,6 @@
 
 #include "share/config/ob_common_config.h"
 #include "share/config/ob_system_config.h"
-#include "lib/lock/ob_drw_lock.h"
 
 namespace oceanbase
 {
@@ -31,32 +30,42 @@ namespace unittest
 namespace common
 {
 class ObISQLClient;
+const char* const MIN_OBSERVER_VERSION = "min_observer_version";
+const char* const __MIN_FULL_RESOURCE_POOL_MEMORY = "__min_full_resource_pool_memory";
 const char* const MERGER_CHECK_INTERVAL = "merger_check_interval";
 const char* const ENABLE_MAJOR_FREEZE = "enable_major_freeze";
 const char* const ENABLE_DDL = "enable_ddl";
 const char* const ENABLE_AUTO_LEADER_SWITCH = "enable_auto_leader_switch";
 const char* const MAJOR_COMPACT_TRIGGER = "major_compact_trigger";
 const char* const ENABLE_PERF_EVENT = "enable_perf_event";
+const char *const OB_STR_TRC_CONTROL_INFO = "_trace_control_info";
 const char* const CONFIG_TRUE_VALUE_BOOL = "1";
 const char* const CONFIG_FALSE_VALUE_BOOL = "0";
 const char* const CONFIG_TRUE_VALUE_STRING = "true";
 const char* const CONFIG_FALSE_VALUE_STRING = "false";
+const char* const OBCONFIG_URL = "obconfig_url";
 const char* const SCHEMA_HISTORY_RECYCLE_INTERVAL = "schema_history_recycle_interval";
 const char* const _RECYCLEBIN_OBJECT_PURGE_FREQUENCY = "_recyclebin_object_purge_frequency";
+const char* const CLUSTER_ID = "cluster_id";
+const char* const CLUSTER_NAME = "cluster";
 const char* const FREEZE_TRIGGER_PERCENTAGE = "freeze_trigger_percentage";
+const char* const _NO_LOGGING = "_no_logging";
 const char* const WRITING_THROTTLEIUNG_TRIGGER_PERCENTAGE = "writing_throttling_trigger_percentage";
 const char* const DATA_DISK_WRITE_LIMIT_PERCENTAGE = "data_disk_write_limit_percentage";
 const char* const DATA_DISK_USAGE_LIMIT_PERCENTAGE = "data_disk_usage_limit_percentage";
 const char* const _TX_SHARE_MEMORY_LIMIT_PERCENTAGE = "_tx_share_memory_limit_percentage";
 const char* const MEMSTORE_LIMIT_PERCENTAGE = "memstore_limit_percentage";
-const char* const INTERNAL_MEMSTORE_LIMIT_PERCENTAGE = "_memstore_limit_percentage";
+const char* const TENANT_MEMSTORE_LIMIT_PERCENTAGE = "_memstore_limit_percentage";
 const char* const _TX_DATA_MEMORY_LIMIT_PERCENTAGE = "_tx_data_memory_limit_percentage";
 const char* const _MDS_MEMORY_LIMIT_PERCENTAGE = "_mds_memory_limit_percentage";
+const char* const COMPATIBLE = "compatible";
+const char* const ENABLE_COMPATIBLE_MONOTONIC = "_enable_compatible_monotonic";
 const char* const WEAK_READ_VERSION_REFRESH_INTERVAL = "weak_read_version_refresh_interval";
 const char* const LOG_DISK_UTILIZATION_LIMIT_THRESHOLD = "log_disk_utilization_limit_threshold";
 const char* const LOG_DISK_THROTTLING_PERCENTAGE = "log_disk_throttling_percentage";
 const char* const OB_VECTOR_MEMORY_LIMIT_PERCENTAGE = "ob_vector_memory_limit_percentage";
 const char* const DEFAULT_TABLE_ORGANIZATION = "default_table_organization";
+const char* const DEFAULT_TABLE_STORE_FORMAT = "default_table_store_format";
 
 class ObServerMemoryConfig;
 
@@ -80,13 +89,15 @@ public:
                        const int64_t version = 0,
                        const bool check_config = true);
 
-  double get_server_default_min_cpu();
-  double get_server_default_max_cpu();
+  double get_sys_tenant_default_min_cpu();
+  double get_sys_tenant_default_max_cpu();
 
   virtual int64_t update_version() { return ATOMIC_AAF(&global_version_, 1); }
   virtual ObServerRole get_server_type() const { return common::OB_SERVER; }
   virtual bool is_debug_sync_enabled() const { return static_cast<int64_t>(debug_sync_timeout) > 0; }
 
+  virtual double user_location_cpu_quota() const { return location_cache_cpu_quota; }
+  virtual double sys_location_cpu_quota() const { return std::max(1., user_location_cpu_quota() / 2); }
   virtual double root_location_cpu_quota() const { return 1.; }
   virtual double core_location_cpu_quota() const { return 1.; }
 
@@ -104,7 +115,14 @@ public:
     return v == 2;
   }
 
+  // false for 1.4.2 -> 1.4.3
+  // true for 1.3.4 -> 1.4.2
+  // During major version upgrade, disable freeze merge, migration replication, and other system functions
+  // Minor version supports gray-scale upgrade, does not disable these features, and requires support for rollback
+  bool is_major_version_upgrade() const { return false; }
+  bool in_major_version_upgrade_mode() const { return in_upgrade_mode() && is_major_version_upgrade(); }
   bool enable_new_major() const {  return true; }
+  bool in_upgrade_mode() const;
   bool is_valid() const { return  system_config_!= NULL; };
   int publish_special_config_after_dump();
 
@@ -112,7 +130,7 @@ public:
   int64_t disk_actual_space_;
   ObAddr self_addr_;
   mutable common::DRWLock rwlock_;
-  static const int64_t INITIAL_RUNTIME_CONFIG_VERSION = 1;
+  static const int64_t INITIAL_TENANT_CONF_VERSION = 1;
 public:
 ///////////////////////////////////////////////////////////////////////////////
 // use MACRO 'OB_CLUSTER_PARAMETER' to define new cluster parameters
@@ -147,7 +165,7 @@ public:
   int64_t get_server_hard_memory_limit() { return hard_memory_limit_; }
   int64_t get_reserved_server_memory() { return 1LL<<30; }
   int64_t get_server_memory_avail() { return memory_limit_; }
-  void check_limit();
+  void check_limit(bool ignore_error);
 private:
   int64_t memory_limit_;
   int64_t hard_memory_limit_;

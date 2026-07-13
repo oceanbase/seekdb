@@ -6,12 +6,10 @@ ob_set_subtarget(oblib_lib downsink_qt
   thread/ob_balance_filter.cpp
 )
 
-ob_set_subtarget(oblib_lib errsim_module_type
-  errsim_module/ob_errsim_module_type.cpp
-)
-
 if (OB_ERRSIM)
-  ob_set_subtarget(oblib_lib errsim_module_interface
+  ob_set_subtarget(oblib_lib errsim_module
+    errsim_module/ob_errsim_module_type.cpp
+    errsim_module/ob_tenant_errsim_event.cpp
     errsim_module/ob_errsim_module_interface.cpp
   )
 endif()
@@ -42,6 +40,7 @@ ob_set_subtarget(oblib_lib common
   ob_define.cpp
   ob_lib_config.cpp
   ob_name_id_def.cpp
+  ob_replica_define.cpp
   ob_running_mode.cpp
   runtime.cpp
   worker.cpp
@@ -143,6 +142,7 @@ ob_set_subtarget(oblib_lib common_mixed
   wait_event/ob_wait_event.cpp
   locale/ob_locale_type.cc
   locale/ob_locale.cpp
+  other/recursion.cpp
 )
 
 ob_set_subtarget(oblib_lib lock
@@ -191,7 +191,7 @@ ob_set_subtarget(oblib_lib thread
   thread/protected_stack_allocator.cpp
   thread/thread.cpp
   thread/threads.cpp
-  thread/ob_thread_hook.cpp
+  thread/ob_tenant_hook.cpp
   thread/ob_pthread.cpp
   thread/ob_thread_name.cpp
 )
@@ -206,11 +206,16 @@ ob_set_subtarget(oblib_lib utility
   utility/ob_utility.cpp
   utility/utility.cpp
   utility/ob_backtrace.cpp
+  utility/ob_unify_serialize.cpp
   utility/ob_hyperloglog.cpp
 )
 
 ob_set_subtarget(oblib_lib ssl
   ssl/ob_ssl_config.cpp
+)
+
+ob_set_subtarget(oblib_lib vtoa
+  vtoa/ob_vtoa_util.cpp
 )
 
 ob_set_subtarget(oblib_lib ob_vector_util
@@ -237,11 +242,15 @@ ob_set_subtarget(ob_malloc_object_list common_alloc
   alloc/ob_malloc_allocator.cpp
   alloc/ob_malloc_callback.cpp
   alloc/ob_malloc_sample_struct.cpp
-  alloc/ob_ctx_allocator.cpp
+  alloc/ob_tenant_ctx_allocator.cpp
   alloc/object_mgr.cpp
   alloc/object_set.cpp
+  alloc/memory_sanity.cpp
+  alloc/ob_futex_v2.cpp
+  alloc/ob_latch_v2.cpp
   resource/achunk_mgr.cpp
   resource/ob_resource_mgr.cpp
+  resource/ob_affinity_ctrl.cpp
   allocator/ob_allocator_v2.cpp
   allocator/ob_block_alloc_mgr.cpp
   allocator/ob_concurrent_fifo_allocator.cpp
@@ -250,6 +259,7 @@ ob_set_subtarget(ob_malloc_object_list common_alloc
   allocator/ob_fifo_allocator.cpp
   allocator/ob_hazard_ref.cpp
   allocator/ob_malloc.cpp
+  allocator/ob_mem_leak_checker.cpp
   utility/ob_mod_define.cpp
   allocator/ob_page_manager.cpp
   allocator/ob_slice_alloc.cpp
@@ -258,6 +268,11 @@ ob_set_subtarget(ob_malloc_object_list common_alloc
 
 ob_add_new_object_target(ob_malloc_object ob_malloc_object_list)
 target_link_libraries(ob_malloc_object oblib_base_without_pass)
+if (ENABLE_SANITY)
+  if (${ARCHITECTURE} STREQUAL "x86_64" OR ${ARCHITECTURE} STREQUAL "aarch64")
+    target_link_libraries(ob_malloc_object ${DEVTOOLS_DIR}/lib64/libsanity.a)
+  endif()
+endif()
 add_library(ob_malloc STATIC)
 target_link_libraries(ob_malloc ob_malloc_object)
 
@@ -267,6 +282,9 @@ if(NOT APPLE AND NOT WIN32 AND NOT ANDROID)
       alloc/malloc_hook.cpp
       alloc/malloc_hook.h
       alloc/malloc_hook_extended.cpp)
+  if (BUILD_CDC_ONLY)
+    set_target_properties(malloc_hook PROPERTIES EXCLUDE_FROM_ALL TRUE)
+  endif()
   target_link_libraries(malloc_hook oblib_base)
 endif()
 
@@ -284,6 +302,7 @@ else()
   )
 endif()
 
+if (NOT BUILD_CDC_ONLY)
 if (ANDROID)
 # vsag vector library -- Android: all libs installed to DEP_DIR/lib by ob-deps
 target_link_directories(
@@ -314,6 +333,11 @@ if(UNIX)
   target_compile_options(oblib_lib PUBLIC -fopenmp)
 endif()
 
+if(BUILD_EMBED_MODE)
+    set(GOMP_LIB libgomp_embed_static.a)
+else()
+    set(GOMP_LIB libgomp_static.a)
+endif()
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
   target_link_libraries(oblib_lib
     PUBLIC
@@ -324,7 +348,7 @@ if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
     libopenblas.a
     libgfortran_static.a
     libquadmath_static.a
-    libgomp_static.a
+    ${GOMP_LIB}
     libroaring.a
     libantlr4-runtime.a
     libantlr4-autogen.a
@@ -339,7 +363,7 @@ elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     libdiskann.a
     libopenblas.a
     libgfortran_static.a
-    libgomp_static.a
+    ${GOMP_LIB}
     libroaring.a
     libantlr4-runtime.a
     libantlr4-autogen.a
@@ -385,6 +409,8 @@ else()
 endif()
 
 endif()
-# Use this stub only for targets that do not need diagnostic state, such as unit tests.
+endif()
+
+# ATTENTION: add this cpp file as library only if compiled target doesn't need diagnose. like unittest or cdc.
 add_library(mock_di stat/mock_diagnostic_info.cpp)
 target_include_directories(mock_di PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/deps/oblib/src)

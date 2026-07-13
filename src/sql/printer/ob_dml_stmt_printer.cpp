@@ -342,6 +342,23 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
           DATA_PRINTF(" %.*s", LEN_AND_PTR(table_item->alias_name_));
           break;
         }
+        case MulModeTableType::OB_RB_ITERATE_TABLE_TYPE : {
+          if (table_item->json_table_def_->doc_exprs_.count() > 1 ) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "print rb_iterate table with more than 1 params");
+          } else {
+            DATA_PRINTF("RB_ITERATE(");
+            if (OB_FAIL(expr_printer_.do_print(table_item->json_table_def_->doc_exprs_.at(0), T_FROM_SCOPE))) {
+              LOG_WARN("failed to print expr", K(ret));
+            }
+            DATA_PRINTF(")");
+            DATA_PRINTF(" %.*s", LEN_AND_PTR(table_item->alias_name_));
+            DATA_PRINTF("(");
+            DATA_PRINTF("%.*s", LEN_AND_PTR(table_item->json_table_def_->all_cols_.at(1)->col_name_));
+            DATA_PRINTF(")");
+          }
+          break;
+        }
         case MulModeTableType::OB_UNNEST_TABLE_TYPE : {
           DATA_PRINTF("UNNEST(");
           for (int64_t i = 0; OB_SUCC(ret) && i < table_item->json_table_def_->doc_exprs_.count(); ++i) {
@@ -832,6 +849,10 @@ int ObDMLStmtPrinter::print_mysql_json_return_type(int64_t value, ObDataType dat
       }
       break;
     }
+    case T_ROARINGBITMAP: {
+      DATA_PRINTF("roaringbitmap ");
+      break;
+    }
     default: {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unknown cast type", K(ret), K(cast_type));
@@ -1127,6 +1148,8 @@ int ObDMLStmtPrinter::print_json_table_nested_column(const TableItem *table_item
         } else if (col_info.on_mismatch_type_ == 2) {
           DATA_PRINTF(" (type error)");
         }
+      } else if (col_info.col_type_ == static_cast<int32_t>(COL_TYPE_RB_ITERATE)) {
+        DATA_PRINTF(" RB_ITERATE");
       }
     }    
   }
@@ -1268,7 +1291,7 @@ int ObDMLStmtPrinter::print_base_table(const TableItem *table_item)
         }
       }
 
-      // snapshot query
+      // flashback query
       if (OB_SUCC(ret)) {
         bool explain_non_extend = false;
         if (OB_NOT_NULL(stmt_->get_query_ctx()) &&
@@ -1277,15 +1300,20 @@ int ObDMLStmtPrinter::print_base_table(const TableItem *table_item)
           explain_non_extend = !static_cast<const ObExplainStmt *>
                                 (stmt_->get_query_ctx()->root_stmt_)->is_explain_extended();
         }
-        if (OB_NOT_NULL(table_item->snapshot_query_expr_)) {
-          if (table_item->snapshot_query_type_ == TableItem::USING_SCN) {
+        if (OB_NOT_NULL(table_item->flashback_query_expr_)) {
+          if (table_item->flashback_query_type_ == TableItem::USING_TIMESTAMP) {
+            DATA_PRINTF(" as of timestamp "); 
+            if (OB_FAIL(expr_printer_.do_print(table_item->flashback_query_expr_, T_NONE_SCOPE))) {
+              LOG_WARN("fail to print where expr", K(ret));
+            }
+          } else if (table_item->flashback_query_type_ == TableItem::USING_SCN) {
             DATA_PRINTF(" as of snapshot "); 
-            if (OB_FAIL(expr_printer_.do_print(table_item->snapshot_query_expr_, T_NONE_SCOPE))) {
+            if (OB_FAIL(expr_printer_.do_print(table_item->flashback_query_expr_, T_NONE_SCOPE))) {
               LOG_WARN("fail to print where expr", K(ret));
             }
           } else {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected type", K(ret), K(table_item->snapshot_query_type_));
+            LOG_WARN("get unexpected type", K(ret), K(table_item->flashback_query_type_));
           }
         }
       }
@@ -1820,5 +1848,24 @@ int ObDMLStmtPrinter::print_with()
   }
   return ret;
 }
+// 0. Keep catalog printing disabled unless the cases below explicitly require it.
+// 1. external catalog must be reversed, when external catalog is parsed it means the upgrade is complete
+// 2. internal catalog does not necessarily need to be reversed
+// 2.1 Reverse concatenate view definition without concatenating internal (otherwise refresh case will be triggered and perceived by the user)
+// 2.2 Do not concatenate during upgrade (the old server cannot parse the concatenated sql)
+bool ObDMLStmtPrinter::need_print_catalog_name(const ObString& catalog_name)
+{
+  bool need_print = false;
+  if (!ObCatalogUtils::is_internal_catalog_name(catalog_name)) {
+    need_print = true;
+  } else if (print_params_.not_print_internal_catalog_) {
+  } else {
+    need_print = true;
+  }
+  return need_print;
+}
+
 } //end of namespace sql
 } //end of namespace oceanbase
+
+

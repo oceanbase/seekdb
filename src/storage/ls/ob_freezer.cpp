@@ -1064,7 +1064,7 @@ int ObFreezer::decide_real_snapshot_version_(const ObTabletID &tablet_id,
   int ret = OB_SUCCESS;
   ObTabletCreateDeleteMdsUserData user_data;
   bool is_committed = false;
-  share::SCN transfer_scn = share::SCN::max_scn();
+  share::SCN reserved_scn = share::SCN::max_scn();
   mds::MdsWriter writer;
   mds::TwoPhaseCommitState trans_stat;
   share::SCN trans_version;
@@ -1076,24 +1076,19 @@ int ObFreezer::decide_real_snapshot_version_(const ObTabletID &tablet_id,
                                                                              trans_stat,
                                                                              trans_version))) {
     LOG_WARN("fail to get latest tablet status", K(ret), KPC(tablet));
-  } else if (ObTabletStatus::TRANSFER_OUT != user_data.tablet_status_
-             && ObTabletStatus::TRANSFER_OUT_DELETED != user_data.tablet_status_) {
+  } else if (ObTabletStatus::RESERVED_4 != user_data.tablet_status_
+             && ObTabletStatus::RESERVED_6 != user_data.tablet_status_) {
     //do nothing
-  } else if (user_data.transfer_scn_.is_valid()
-             // transfer's status and transfer_scn may not be synced because
-             // transfer_out_prepare log changes the status and transfer_out log
-             // changes the transfer_scn, while we can use origin freeze
-             // snapshot version because the transfer_out log which decides the
-             // transfer_scn has not been synced or replayed
-             && share::SCN::min_scn() != user_data.transfer_scn_) {
-    transfer_scn = user_data.transfer_scn_;
+  } else if (user_data.reserved_scn_.is_valid()
+             && share::SCN::min_scn() != user_data.reserved_scn_) {
+    reserved_scn = user_data.reserved_scn_;
   }
 
   if (OB_SUCC(ret)) {
-    real_snapshot_version = MIN(freeze_snapshot_version, transfer_scn);
+    real_snapshot_version = MIN(freeze_snapshot_version, reserved_scn);
     if (real_snapshot_version != freeze_snapshot_version) {
-      FLOG_INFO("update tablet snapshot version changed snapshot version for transfer",
-                K(real_snapshot_version), K(freeze_snapshot_version), K(transfer_scn), K(user_data));
+      FLOG_INFO("update tablet snapshot version changed snapshot version",
+                K(real_snapshot_version), K(freeze_snapshot_version), K(reserved_scn), K(user_data));
     }
   }
 

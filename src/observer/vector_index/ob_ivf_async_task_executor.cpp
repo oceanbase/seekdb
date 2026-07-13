@@ -132,14 +132,16 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::is_cache_writable(const ObIvfAuxTab
                  ObVectorIndexType::VIT_IVF_INDEX,
                  vec_param))) {
     LOG_WARN("fail to get vector index param with dim", K(ret), K(table_info));
-  } else if (OB_FAIL(ObIvfCacheUtil::is_cache_writable(table_info.centroid_table_id_,
+  } else if (OB_FAIL(ObIvfCacheUtil::is_cache_writable(ls_->get_ls_id(),
+                                                       table_info.centroid_table_id_,
                                                        table_info.centroid_tablet_ids_[idx],
                                                        vec_param,
                                                        vec_param.dim_,
                                                        is_writable))) {
     LOG_WARN("fail to check is cache writable", K(ret), K(table_info));
   } else if (!is_writable && table_info.type_ == ObVectorIndexAlgorithmType::VIAT_IVF_PQ) {
-    if (OB_FAIL(ObIvfCacheUtil::is_cache_writable(table_info.centroid_table_id_,
+    if (OB_FAIL(ObIvfCacheUtil::is_cache_writable(ls_->get_ls_id(),
+                                                  table_info.centroid_table_id_,
                                                   table_info.centroid_tablet_ids_[idx],
                                                   vec_param,
                                                   vec_param.dim_,
@@ -229,20 +231,33 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::operator()(ObIvfAuxTableInfoEntry &
   return ret;
 }
 
+bool ObIvfAsyncTaskExector::check_operation_allow()
+{
+  // NOTE: vector_index_optimize_duty_time (in_active_time) only constrains the
+  // creation of AUTO-triggered per-tablet IVF maintenance tasks (i.e. load_task()).
+  // It must NOT block:
+  //   - loading existing MANUAL tasks from the inner table (load_task_from_inner_table)
+  //   - executing already-loaded tasks (start_task)
+  //   - cleaning up finished/stale task contexts (clear_old_task_ctx_if_need)
+  // Otherwise dbms_vector.rebuild_index and the auto-registered <vidx>_rebuild
+  // sched job would be silently blocked outside the duty window.
+  return true;
+}
+
 int ObIvfAsyncTaskExector::check_and_set_thread_pool()
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexMgr *index_mgr = nullptr;
+  ObPluginVectorIndexMgr *index_ls_mgr = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("vector index load task not inited", K(ret));
   } else if (OB_ISNULL(vector_index_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret));
-  } else if (OB_FAIL(get_index_mgr(index_mgr))) {
+  } else if (OB_FAIL(get_index_ls_mgr(index_ls_mgr))) {
     LOG_WARN("fail to get index ls mgr", K(ret));
   } else {
-    ObIAllocator *allocator = index_mgr->get_async_task_opt().get_allocator();
+    ObIAllocator *allocator = index_ls_mgr->get_async_task_opt().get_allocator();
     ObVecIndexAsyncTaskHandler &thread_pool_handle =
         vector_index_service_->get_vec_async_task_handle();
     if (thread_pool_handle.is_inited()) {  // no need to init twice, skip
@@ -422,11 +437,11 @@ int ObIvfAsyncTaskExector::check_schema_version_changed(bool &schema_changed)
   int64_t schema_version = 0;
   ObSchemaGetterGuard schema_guard;
   
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
           schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {
-    LOG_WARN("fail to get runtime schema version", K(ret));
+    LOG_WARN("fail to get tenant schema version", K(ret));
   } else if (!ObSchemaService::is_formal_version(schema_version)) {
     ret = OB_EAGAIN;
     LOG_INFO("is not a formal_schema_version", KR(ret), K(schema_version));
@@ -443,8 +458,8 @@ int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObIvfAuxTableInfoMap &aux
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, DEFAULT_TABLE_ID_ARRAY_SIZE> table_id_array;
   ObMemAttr memattr("IvfTaskExec");
-  if (OB_FAIL(ObVecIndexAsyncTaskUtil::get_table_ids(table_id_array))) {
-    LOG_WARN("fail to get runtime table ids", KR(ret));
+  if (OB_FAIL(ObTTLUtil::get_tenant_table_ids(table_id_array))) {
+    LOG_WARN("fail to get tenant table ids", KR(ret));
   } else if (!table_id_array.empty() &&
              OB_FAIL(aux_table_info_map.create(DEFAULT_TABLE_ID_ARRAY_SIZE, memattr, memattr))) {
     LOG_WARN("fail to create param map", KR(ret));
@@ -456,7 +471,7 @@ int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObIvfAuxTableInfoMap &aux
     start_idx = end_idx;
     end_idx = MIN(table_id_array.count(), start_idx + DEFAULT_TABLE_ID_ARRAY_SIZE);
 
-    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
             schema_guard))) {
       LOG_WARN("fail to get schema guard", KR(ret));
     }
@@ -474,12 +489,13 @@ int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObIvfAuxTableInfoMap &aux
 int ObIvfAsyncTaskExector::load_task(uint64_t &task_trace_base_num)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexMgr *index_mgr = nullptr;
+  ObPluginVectorIndexMgr *index_ls_mgr = nullptr;
   ObSchemaGetterGuard schema_guard;
   bool is_active_time = true;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("vector async task not init", KR(ret));
+  } else if (!check_operation_allow()) {                 // skip
   // vector_index_optimize_duty_time only constrains AUTO-triggered per-tablet
   // IVF maintenance task creation here. MANUAL tasks (dbms_vector.rebuild_index
   // and the auto-registered <vidx>_rebuild sched job) go through a separate
@@ -487,34 +503,35 @@ int ObIvfAsyncTaskExector::load_task(uint64_t &task_trace_base_num)
   } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::in_active_time(is_active_time))) {
     LOG_WARN("fail to get active time", KR(ret));
   } else if (!is_active_time) {
-    LOG_INFO("skip auto-create per-tablet ivf maintenance tasks, not in active time");
-  } else if (OB_FAIL(get_index_mgr(index_mgr))) {  // skip
-    LOG_WARN("fail to get index ls mgr", K(ret));
+    LOG_INFO("skip auto-create per-tablet ivf maintenance tasks, not in active time",
+             K(ls_->get_ls_id()));
+  } else if (OB_FAIL(get_index_ls_mgr(index_ls_mgr))) {  // skip
+    LOG_WARN("fail to get index ls mgr", K(ret), K(ls_->get_ls_id()));
   } else if (OB_ISNULL(ls_)) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null ls", K(ret));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
                  schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else {
     ObVecIndexTaskCtxArray task_status_array;
     LoadTaskCallback load_task_func(
-        index_mgr->get_async_task_opt(), *ls_, task_status_array, schema_guard, task_trace_base_num);
+        index_ls_mgr->get_async_task_opt(), *ls_, task_status_array, schema_guard, task_trace_base_num);
     ObIvfAuxTableInfoMap aux_table_info_map;
 
-    if (OB_FAIL(index_mgr->get_ivf_cache_mgr_map().foreach_refactored(
+    if (OB_FAIL(index_ls_mgr->get_ivf_cache_mgr_map().foreach_refactored(
             load_task_func))) {  // ivf clean task
       LOG_WARN("fail to do load task each entry", K(ret), K(load_task_func));
     } else if (OB_FAIL(generate_aux_table_info_map(aux_table_info_map))) {
-      LOG_WARN("fail to generate aux table info map", K(ret));
+      LOG_WARN("fail to generate aux table info map", K(ret), K(ls_->get_ls_id()));
     } else if (OB_FAIL(aux_table_info_map.foreach_refactored(load_task_func))) {  // ivf load task
       LOG_WARN("fail to do load task each entry", K(ret), K(load_task_func));
     } else if (OB_FAIL(insert_new_task(task_status_array))) {
-      LOG_WARN("fail to insert new task", K(ret));
+      LOG_WARN("fail to insert new task", K(ret), K(ls_->get_ls_id()));
     }
     // clear on fail
     if (OB_FAIL(ret) && !task_status_array.empty()) {
-      if (OB_FAIL(clear_task_ctxs(index_mgr->get_async_task_opt(), task_status_array))) {
+      if (OB_FAIL(clear_task_ctxs(index_ls_mgr->get_async_task_opt(), task_status_array))) {
         LOG_WARN("fail to clear task ctx", K(ret));
       }
     }

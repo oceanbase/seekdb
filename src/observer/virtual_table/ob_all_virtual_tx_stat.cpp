@@ -26,43 +26,100 @@ namespace oceanbase
 {
 namespace observer
 {
-ObGVTxStat::ObGVTxStat()
-    : ObVirtualTableScannerIterator(),
-      ctx_addr_buffer_(),
-      tx_stat_iter_(),
-      cstring_helper_()
-{}
-
 void ObGVTxStat::reset()
 {
+  participants_buffer_[0] = '\0';
+  scheduler_buffer_[0] = '\0';
   ctx_addr_buffer_[0] = '\0';
-  tx_stat_iter_.reset();
-  cstring_helper_.reset();
+
   ObVirtualTableScannerIterator::reset();
+  xid_.reset();
+  init_ = false;
+  cstring_helper_.reset();
+}
+
+void ObGVTxStat::destroy()
+{
+  memset(participants_buffer_, 0, OB_MAX_BUFFER_SIZE);
+  memset(scheduler_buffer_, 0, MAX_IP_PORT_LENGTH + 8);
+  memset(ctx_addr_buffer_, 0, CTX_ADDR_BUFFER_SIZE);
+
+  ObVirtualTableScannerIterator::reset();
+  xid_.reset();
+  init_ = false;
+  cstring_helper_.reset();
 }
 
 int ObGVTxStat::prepare_start_to_read_()
 {
   int ret = OB_SUCCESS;
   tx_stat_iter_.reset();
-  if (OB_ISNULL(allocator_)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "allocator is null", K(ret));
+  if (NULL == allocator_) {
+    SERVER_LOG(WARN, "invalid argument, allocator_ or txs_ is null", "allocator",
+        OB_P(allocator_));
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_SUCCESS != (ret = fill_ids_())) {
+    SERVER_LOG(WARN, "fail to fill tenant ids", K(ret));
   } else {
-    SERVER_MODULE_SCOPE {
-      transaction::ObTransService *txs = share::g_mp->trans_service();
-      if (OB_ISNULL(txs)) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "transaction service is null", K(ret));
-      } else if (OB_FAIL(txs->iterate_all_observer_tx_stat(tx_stat_iter_))) {
-        SERVER_LOG(WARN, "iterate transaction stat error", K(ret));
+    {
+      MOD_SCOPE {
+        transaction::ObTransService *txs = share::g_mp->trans_service();
+        if (OB_SUCCESS != (ret = txs->iterate_all_observer_tx_stat(tx_stat_iter_))) {
+          SERVER_LOG(WARN, "iterate transaction stat error", K(ret));
+          // when interate tenant failed, show all info collected, not need return error code
+          if (OB_NOT_RUNNING == ret || OB_NOT_INIT == ret) {
+            ret = OB_SUCCESS;
+          }
+        }
       }
     }
   }
-  if (OB_SUCC(ret) && OB_FAIL(tx_stat_iter_.set_ready())) {
+  if (OB_SUCCESS != ret) {
+    // SERVER_LOG(WARN, "fail to prepare start to read", K(ret));
+  } else if (OB_SUCCESS != (ret = tx_stat_iter_.set_ready())) { // set ready for the first count
     SERVER_LOG(WARN, "ObTransStatIterator set ready error", K(ret));
-  } else if (OB_SUCC(ret)) {
+  } else {
     start_to_read_ = true;
+  }
+
+  return ret;
+}
+
+int ObGVTxStat::init()
+{
+  int ret = OB_SUCCESS;
+  if (init_) {
+    ret = OB_INIT_TWICE;
+    SERVER_LOG(WARN, "init twice", K(ret));
+  } else {
+    init_ = true;
+  }
+  return ret;
+}
+
+int ObGVTxStat::get_next_tx_info_(ObTxStat &tx_stat)
+{
+  ObTxStat tmp_tx_stat;
+
+  int ret = tx_stat_iter_.get_next(tmp_tx_stat);
+
+  if (OB_SUCC(ret)) {
+    tx_stat = tmp_tx_stat;
+  }
+
+  return ret;
+}
+
+int ObGVTxStat::fill_ids_()
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_UNLIKELY(!init_)) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "not init", K(ret));
+  } else if (OB_ISNULL(GCTX.omt_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "fail to get multi tenant from GCTX", K(ret));
   }
 
   return ret;
@@ -75,7 +132,7 @@ int ObGVTxStat::inner_get_next_row(ObNewRow *&row)
 
   if (!start_to_read_ && OB_SUCCESS != (ret = prepare_start_to_read_())) {
     SERVER_LOG(WARN, "prepare start to read error", K(ret), K(start_to_read_));
-  } else if (OB_FAIL(tx_stat_iter_.get_next(tx_stat))) {
+  } else if (OB_SUCCESS != (ret = get_next_tx_info_(tx_stat))) {
     if (OB_ITER_END != ret) {
       SERVER_LOG(WARN, "ObGVTxStat iter error", K(ret));
     } else {
@@ -83,22 +140,38 @@ int ObGVTxStat::inner_get_next_row(ObNewRow *&row)
     }
   } else {
     const int64_t col_count = output_column_ids_.count();
+    xid_ = tx_stat.xid_;
     cstring_helper_.reset();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
+        case TX_TYPE:
+          cur_row_.cells_[i].set_int(tx_stat.tx_type_);
+          break;
         case TX_ID:
           cur_row_.cells_[i].set_int(tx_stat.tx_id_.get_id());
           break;
         case SESSION_ID:
-          cur_row_.cells_[i].set_int(tx_stat.session_id_);
+          cur_row_.cells_[i].set_int(tx_stat.client_sid_);
+          break;
+        case SCHEDULER_ADDR:
+          (void)tx_stat.scheduler_addr_.to_string(scheduler_buffer_, MAX_IP_PORT_LENGTH + 8);
+          cur_row_.cells_[i].set_varchar(scheduler_buffer_);
+          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case IS_DECIDED:
           cur_row_.cells_[i].set_bool(tx_stat.has_decided_);
           break;
-        case WRITE_STATE:
-          cur_row_.cells_[i].set_varchar(tx_stat.has_write_state_ ? "true" : "false");
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+        case PARTICIPANTS:
+          // if participants' count is equal to 0, then its value is NULL
+          if (0 < tx_stat.participants_.count()) {
+            (void)tx_stat.participants_.to_string(participants_buffer_, OB_MAX_BUFFER_SIZE);
+            cur_row_.cells_[i].set_varchar(participants_buffer_);
+            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+          } else {
+            cur_row_.cells_[i].reset();
+            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+          }
           break;
         case TX_CTX_CREATE_TIME:
           if (is_valid_timestamp_(tx_stat.tx_ctx_create_time_)) {
@@ -133,9 +206,13 @@ int ObGVTxStat::inner_get_next_row(ObNewRow *&row)
           break;
         case TX_CTX_ADDR:
           ctx_addr_buffer_[0] = 0;
-            snprintf(ctx_addr_buffer_, CTX_ADDR_BUFFER_SIZE, "0x%lx", (uint64_t)tx_stat.tx_ctx_addr_);
+          snprintf(ctx_addr_buffer_, 18, "0x%lx", (uint64_t)tx_stat.tx_ctx_addr_);
           cur_row_.cells_[i].set_varchar(ctx_addr_buffer_);
           cur_row_.cells_[i].set_default_collation_type();
+          break;
+        case MEM_CTX_ID:
+          //TODO shanyan.g removed schema
+          cur_row_.cells_[i].set_int(-1);
           break;
         case PENDING_LOG_SIZE:
           cur_row_.cells_[i].set_int(tx_stat.pending_log_size_);
@@ -143,11 +220,42 @@ int ObGVTxStat::inner_get_next_row(ObNewRow *&row)
         case FLUSHED_LOG_SIZE:
           cur_row_.cells_[i].set_int(tx_stat.flushed_log_size_);
           break;
+        case ROLE_STATE:
+          cur_row_.cells_[i].set_int(tx_stat.role_state_);
+          break;
         case IS_EXITING:
           cur_row_.cells_[i].set_int(tx_stat.is_exiting_);
           break;
+        case COORD:
+          cur_row_.cells_[i].set_int(tx_stat.coord_.id());
+          break;
         case LAST_REQUEST_TS:
           cur_row_.cells_[i].set_timestamp(tx_stat.last_request_ts_);
+          break;
+        case GTRID:
+          if (!xid_.empty()) {
+            cur_row_.cells_[i].set_varchar(xid_.get_gtrid_str());
+            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+          } else {
+            // use default value NULL
+            cur_row_.cells_[i].reset();
+          }
+          break;
+        case BQUAL:
+          if (!xid_.empty()) {
+            cur_row_.cells_[i].set_varchar(xid_.get_bqual_str());
+            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+          } else {
+            // use default value NULL
+            cur_row_.cells_[i].reset();
+          }
+          break;
+        case FORMAT_ID:
+          if (!xid_.empty()) {
+            cur_row_.cells_[i].set_int(xid_.get_format_id());
+          } else {
+            cur_row_.cells_[i].set_int(-1);
+          }
           break;
         case START_SCN:
           cur_row_.cells_[i].set_uint64(tx_stat.start_scn_.get_val_for_inner_table_field());

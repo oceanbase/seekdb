@@ -27,7 +27,7 @@
 #include "storage/tx/ob_trans_define.h"
 #include "storage/ls/ob_ls_tablet_service.h"
 #include "storage/ls/ob_ls.h"
-#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
+#include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
 #include "storage/tablet/ob_tablet_obj_load_helper.h"
@@ -45,7 +45,7 @@ public:
       const share::schema::ObTableSchema &table_schema,
       ObTabletCreateSSTableParam &param);
   static int create_tablet(
-      ObLS *ls,
+      ObLSHandle &ls_handle,
       const common::ObTabletID &tablet_id,
       const share::schema::ObTableSchema &table_schema,
       common::ObArenaAllocator &allocator,
@@ -53,14 +53,14 @@ public:
       const share::SCN &create_commit_scn,
       ObTabletHandle &handle);
   static int create_tablet(
-      ObLS *ls,
+      ObLSHandle &ls_handle,
       const common::ObTabletID &tablet_id,
       const share::schema::ObTableSchema &table_schema,
       common::ObArenaAllocator &allocator,
       const ObTabletStatus::Status tablet_status = ObTabletStatus::NORMAL,
       const share::SCN &create_commit_scn = share::SCN::min_scn());
   static int remove_tablet(
-      ObLS *ls,
+      const ObLSHandle &ls_handle,
       const common::ObTabletID &tablet_id);
 };
 
@@ -69,6 +69,7 @@ inline void TestTabletHelper::prepare_sstable_param(
     const share::schema::ObTableSchema &table_schema,
     ObTabletCreateSSTableParam &param)
 {
+  param.set_init_value_for_column_store_();
   const int64_t multi_version_col_cnt = ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
   param.table_key_.table_type_ = ObITable::TableType::MAJOR_SSTABLE;
   param.table_key_.tablet_id_ = tablet_id;
@@ -99,7 +100,10 @@ inline void TestTabletHelper::prepare_sstable_param(
   param.tx_data_recycle_scn_.set_min();
   param.original_size_ = 0;
   param.compressor_type_ = ObCompressorType::NONE_COMPRESSOR;
+  param.encrypt_id_ = 0;
+  param.master_key_id_ = 0;
   param.table_backup_flag_.reset();
+  param.table_shared_flag_.reset();
   param.recycle_version_ = 0;
   param.root_macro_seq_ = 0;
   param.row_count_ = 0;
@@ -109,7 +113,7 @@ inline void TestTabletHelper::prepare_sstable_param(
 }
 
 inline int TestTabletHelper::create_tablet(
-    ObLS *ls,
+    ObLSHandle &ls_handle,
     const common::ObTabletID &tablet_id,
     const share::schema::ObTableSchema &table_schema,
     common::ObArenaAllocator &allocator,
@@ -118,40 +122,45 @@ inline int TestTabletHelper::create_tablet(
     ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
-  ObLSTabletService *ls_tablet_svr = ls->get_tablet_svr();
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObLSTabletService *ls_tablet_svr = ls_handle.get_ls()->get_tablet_svr();
+  const lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   ObArenaAllocator schema_allocator;
   ObCreateTabletSchema create_tablet_schema;
 
   ObTabletCreateSSTableParam param;
   prepare_sstable_param(tablet_id, table_schema, param);
   void *buff = nullptr;
-  if (OB_FAIL(create_tablet_schema.init(schema_allocator, table_schema,
-      false/*skip_column_info*/, cal_version(1, 0, 0, 0)))) {
+  if (OB_FAIL(create_tablet_schema.init(schema_allocator, table_schema, compat_mode,
+      false/*skip_column_info*/, DATA_VERSION_1_0_0_0))) {
     STORAGE_LOG(WARN, "failed to init storage schema", KR(ret), K(table_schema));
   } else if (OB_FAIL(ObSSTableMergeRes::fill_column_checksum_for_empty_major(param.column_cnt_, param.column_checksums_))) {
     STORAGE_LOG(WARN, "fill column checksum failed", K(ret), K(param));
   } else {
     const int64_t snapshot_version = 1;
-    ObFreezer *freezer = ls->get_freezer();
+    const share::ObLSID &ls_id = ls_handle.get_ls()->get_ls_id();
+    ObFreezer *freezer = ls_handle.get_ls()->get_freezer();
     ObTabletHandle tablet_handle;
-    const ObTabletMapKey key(tablet_id);
+    const ObTabletMapKey key(ls_id, tablet_id);
     const bool need_create_empty_major_sstable =
       !(create_tablet_schema.is_user_hidden_table() || (create_tablet_schema.is_index_table() && !create_tablet_schema.can_read_index()));
-    if (OB_FAIL(t3m->create_msd_tablet(WashTabletPriority::WTP_HIGH, key, ls, tablet_handle))) {
-      STORAGE_LOG(WARN, "t3m acquire tablet failed", K(ret), K(tablet_id));
+    const bool need_generate_cs_replica_cg_array = 
+      ls_handle.get_ls()->is_cs_replica() && create_tablet_schema.is_row_store() && create_tablet_schema.is_user_data_table();
+    if (OB_FAIL(t3m->create_msd_tablet(WashTabletPriority::WTP_HIGH, key, ls_handle, tablet_handle))) {
+      STORAGE_LOG(WARN, "t3m acquire tablet failed", K(ret), K(ls_id), K(tablet_id));
     } else if (OB_FAIL(tablet_handle.get_obj()->init_for_first_time_creation(
         *tablet_handle.get_allocator(),
-        tablet_id, tablet_id, share::SCN::base_scn(),
+        ls_id, tablet_id, tablet_id, share::SCN::base_scn(),
         snapshot_version, create_tablet_schema, need_create_empty_major_sstable, share::SCN::invalid_scn()/*clog_checkpoint_scn*/,
-        share::SCN::invalid_scn()/*mds_checkpoint_scn*/, false/*micro_index_clustered*/, freezer))){
-      STORAGE_LOG(WARN, "failed to init tablet", K(ret), K(tablet_id));
+        share::SCN::invalid_scn()/*mds_checkpoint_scn*/, false/*is_split_dest_tablet*/, ObTabletID()/*split_src_tablet_id*/,
+        false/*micro_index_clustered*/, need_generate_cs_replica_cg_array, false/*has_cs_replica*/, freezer))){
+      STORAGE_LOG(WARN, "failed to init tablet", K(ret), K(ls_id), K(tablet_id));
     } else if (ObTabletStatus::Status::MAX != tablet_status) {
       ObTabletCreateDeleteMdsUserData data;
       data.tablet_status_ = tablet_status;
       data.create_commit_scn_ = create_commit_scn;
       data.create_commit_version_ = create_commit_scn.get_val_for_tx();
-      if (tablet_status == ObTabletStatus::Status::DELETED) {
+      if (tablet_status == ObTabletStatus::Status::DELETED || tablet_status == ObTabletStatus::Status::RESERVED_6) {
         data.delete_commit_scn_ = share::SCN::plus(create_commit_scn, 100);
         data.delete_commit_version_ = data.delete_commit_scn_.get_val_for_tx();
       }
@@ -166,7 +175,7 @@ inline int TestTabletHelper::create_tablet(
     if (FAILEDx(tablet_handle.get_obj()->get_updating_tablet_pointer_param(param))) {
       STORAGE_LOG(WARN, "fail to get updating tablet pointer parameters", K(ret), K(tablet_handle));
     } else if (OB_FAIL(t3m->compare_and_swap_tablet(key, tablet_handle, tablet_handle, param))) {
-      STORAGE_LOG(WARN, "failed to compare and swap tablet", K(ret), K(tablet_id), K(param));
+      STORAGE_LOG(WARN, "failed to compare and swap tablet", K(ret), K(ls_id), K(tablet_id), K(param));
     } else if (OB_FAIL(ls_tablet_svr->tablet_id_set_.set(tablet_id))){
       STORAGE_LOG(WARN, "set tablet id failed", K(ret), K(tablet_id));
     } else {
@@ -177,7 +186,7 @@ inline int TestTabletHelper::create_tablet(
 }
 
 inline int TestTabletHelper::create_tablet(
-    ObLS *ls,
+    ObLSHandle &ls_handle,
     const common::ObTabletID &tablet_id,
     const share::schema::ObTableSchema &table_schema,
     common::ObArenaAllocator &allocator,
@@ -187,21 +196,22 @@ inline int TestTabletHelper::create_tablet(
   int ret = OB_SUCCESS;
   ObTabletHandle tablet_handle;
 
-  if (OB_FAIL(create_tablet(ls, tablet_id, table_schema, allocator, tablet_status, create_commit_scn, tablet_handle))) {
+  if (OB_FAIL(create_tablet(ls_handle, tablet_id, table_schema, allocator, tablet_status, create_commit_scn, tablet_handle))) {
     STORAGE_LOG(WARN, "failed to create tablet", K(ret), K(tablet_id));
   }
 
   return ret;
 }
 
-inline int TestTabletHelper::remove_tablet(ObLS *ls, const ObTabletID &tablet_id)
+inline int TestTabletHelper::remove_tablet(const ObLSHandle &ls_handle, const ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
 
   ObTabletHandle tablet_handle;
-  ls->get_tablet(tablet_id, tablet_handle);
+  ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle);
+  const share::ObLSID &ls_id = ls_handle.get_ls()->get_ls_id();
 
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   ObTabletCreateDeleteMdsUserData data;
   ObTabletStatus status(ObTabletStatus::DELETING);
   data.tablet_status_ = status;
@@ -214,8 +224,8 @@ inline int TestTabletHelper::remove_tablet(ObLS *ls, const ObTabletID &tablet_id
     if (OB_FAIL(tablet_handle.get_obj()->get_updating_tablet_pointer_param(param))) {
       STORAGE_LOG(WARN, "fail to get updating tablet pointer parameters", K(ret), K(tablet_handle));
     } else if(OB_FAIL(t3m->compare_and_swap_tablet(
-            ObTabletMapKey(tablet_id), tablet_handle, tablet_handle, param))) {
-      STORAGE_LOG(WARN, "failed to compare and swap tablet", K(ret), K(tablet_id), K(disk_addr));
+            ObTabletMapKey(ls_id, tablet_id), tablet_handle, tablet_handle, param))) {
+      STORAGE_LOG(WARN, "failed to compare and swap tablet", K(ret), K(ls_id), K(tablet_id), K(disk_addr));
     }
   }
 

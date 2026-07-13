@@ -36,6 +36,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/profile/ob_trace_id.h"
+#include "lib/task/ob_timer.h"
 
 namespace oceanbase
 {
@@ -365,32 +366,34 @@ private:
   class DDLScanTask : public common::ObTimerTask
   {
   public:
-    explicit DDLScanTask(ObDDLScheduler &ddl_scheduler): ddl_scheduler_(ddl_scheduler), tg_id_(-1) {}
+    explicit DDLScanTask(ObDDLScheduler &ddl_scheduler): ddl_scheduler_(ddl_scheduler), timer_() {}
     virtual ~DDLScanTask() {};
     int init();
     int schedule();
     void mtl_thread_wait();
     void mtl_thread_stop();
     void destroy();
-    int get_tg_id() const { return tg_id_; }
+    bool task_exist() { return timer_.task_exist(*this); }
+    int cancel() { return timer_.inited() ? timer_.cancel(*this) : OB_SUCCESS; }
   private:
     void runTimerTask() override;
   private:
     ObDDLScheduler &ddl_scheduler_;
-    int tg_id_;
+    common::ObTimer timer_;
   };
 
   class HeartBeatCheckTask : public common::ObTimerTask
   {
   public:
-    explicit HeartBeatCheckTask(ObDDLScheduler &ddl_scheduler): ddl_scheduler_(ddl_scheduler), tg_id_(-1) {}
+    explicit HeartBeatCheckTask(ObDDLScheduler &ddl_scheduler): ddl_scheduler_(ddl_scheduler), timer_() {}
     virtual ~HeartBeatCheckTask() {};
     int init();
     int schedule();
     void mtl_thread_wait();
     void mtl_thread_stop();
     void destroy();
-    int get_tg_id() const { return tg_id_; }
+    bool task_exist() { return timer_.task_exist(*this); }
+    int cancel() { return timer_.inited() ? timer_.cancel(*this) : OB_SUCCESS; }
   private:
     void runTimerTask() override;
   private:
@@ -400,7 +403,7 @@ private:
     static const int64_t DDL_TASK_CHECK_PERIOD = 30 * 1000L * 1000L; // 30s
 #endif
     ObDDLScheduler &ddl_scheduler_;
-    int tg_id_;
+    common::ObTimer timer_;
   };
 private:
   int insert_task_record(

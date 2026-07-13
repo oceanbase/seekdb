@@ -36,7 +36,7 @@ struct ObBlockInfo;
 struct ObSSTableBasicMeta;
 class ObSSTableMacroInfo;
 class ObSSTableMeta;
-class ObSSTableCloneParam;
+class ObMigrationSSTableParam;
 class ObSSTable;
 class ObSSTableIndexBuilder;
 }
@@ -65,7 +65,9 @@ public:
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_empty_major_sstable(const ObTabletID &tablet_id,
                                    const ObStorageSchema &storage_schema,
-                                   const int64_t snapshot_version);
+                                   const int64_t snapshot_version,
+                                   const int64_t column_group_idx,
+                                   const bool has_all_column_group);
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_small_sstable(const blocksstable::ObSSTableMergeRes &res,
@@ -75,7 +77,9 @@ public:
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_merge(const compaction::ObBasicTabletMergeCtx &ctx,
-                     const blocksstable::ObSSTableMergeRes &res);
+                     const blocksstable::ObSSTableMergeRes &res,
+                     const ObStorageColumnGroupSchema *cg_schema,
+                     const int64_t column_group_idx);
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_ddl(blocksstable::ObSSTableIndexBuilder *sstable_index_builder,
@@ -93,7 +97,13 @@ public:
                        ObBlockMetaTree &block_meta_tree);
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
-  int init_for_fork(const ObTabletID &dst_tablet_id,
+  int init_for_ss_ddl(blocksstable::ObSSTableMergeRes &res,
+                      const ObITable::TableKey &table_key,
+                      const ObStorageSchema &storage_schema,
+                      const int64_t create_schema_version_on_tablet);
+
+  // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
+  int init_for_split(const ObTabletID &dst_tablet_id,
                      const ObITable::TableKey &src_table_key,
                      const blocksstable::ObSSTableBasicMeta &basic_meta,
                      const int64_t schema_version,
@@ -101,10 +111,10 @@ public:
                      const share::SCN &max_end_scn);
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
-  int init_for_empty_minor_sstable(const ObTabletID &tablet_id,
-                                   const share::SCN &start_scn,
-                                   const share::SCN &end_scn,
-                                   const blocksstable::ObSSTableBasicMeta &basic_meta);
+  int init_for_split_empty_minor_sstable(const ObTabletID &tablet_id,
+                                         const share::SCN &start_scn,
+                                         const share::SCN &end_scn,
+                                         const blocksstable::ObSSTableBasicMeta &basic_meta);
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_lob_split(const ObTabletID &new_tablet_id,
@@ -117,12 +127,20 @@ public:
                          const int64_t sstable_logic_seq,
                          const blocksstable::ObSSTableMergeRes &res);
 
-  int init_for_fork(const blocksstable::ObSSTableCloneParam &sstable_param,
+  int init_for_fork(const blocksstable::ObMigrationSSTableParam &sstable_param,
                     const ObTabletID &dst_tablet_id,
                     const ObITable::TableKey &src_table_key,
                     const blocksstable::ObSSTableMeta &sstable_meta,
                     const share::SCN &max_end_scn = share::SCN());
 
+  // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
+  int init_for_ha(const blocksstable::ObMigrationSSTableParam &migration_param,
+                  const blocksstable::ObSSTableMergeRes &res);
+
+  // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
+  int init_for_ha(const blocksstable::ObMigrationSSTableParam &migration_param);
+
+  // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_mds(const compaction::ObBasicTabletMergeCtx &ctx,
                    const blocksstable::ObSSTableMergeRes &res,
                    const ObStorageSchema &mds_schema);
@@ -131,6 +149,10 @@ public:
   inline bool is_ready_for_read() const { return is_ready_for_read_; }
   inline int64_t data_blocks_cnt() const { return data_blocks_cnt_; }
   inline share::SCN filled_tx_scn() const { return filled_tx_scn_; }
+  inline int32_t co_base_type() const { return co_base_type_; }
+  inline bool is_co_table_without_cgs() const { return is_co_table_without_cgs_; }
+  inline int64_t column_group_cnt() const { return column_group_cnt_; }
+  inline int64_t full_column_cnt() const { return full_column_cnt_; }
 
   // TODO: delete this interface
   // ObTabletMergeInfo::record_start_tx_scn_for_tx_data
@@ -157,8 +179,11 @@ public:
       K_(micro_block_cnt),
       K_(use_old_macro_block_count),
       K_(row_count),
+      K_(column_group_cnt),
+      K_(co_base_type),
       K_(rowkey_column_cnt),
       K_(column_cnt),
+      K_(full_column_cnt),
       K_(column_checksums),
       K_(data_checksum),
       K_(occupy_size),
@@ -167,25 +192,33 @@ public:
       K_(ddl_scn),
       K_(filled_tx_scn),
       K_(tx_data_recycle_scn),
+      K_(is_co_table_without_cgs),
       K_(contain_uncommitted_row),
       K_(is_meta_root),
       K_(compressor_type),
+      K_(encrypt_id),
+      K_(master_key_id),
       K_(recycle_version),
+      K_(root_macro_seq),
       K_(nested_offset),
       K_(nested_size),
-      K_(root_macro_seq),
+      KPHEX_(encrypt_key, sizeof(encrypt_key_)),
       K_(table_backup_flag),
-      K_(uncommitted_tx_id));
+      K_(table_shared_flag),
+      K_(uncommitted_tx_id),
+      K_(co_base_snapshot_version));
 private:
   static const int64_t DEFAULT_MACRO_BLOCK_CNT = 64;
   int inner_init_with_merge_res(const blocksstable::ObSSTableMergeRes &res);
-  int inner_init_with_embedded_meta(const blocksstable::ObSSTableCloneParam &sstable_param,
-                                    const common::ObIArray<blocksstable::MacroBlockId> &data_block_ids,
-                                    const common::ObIArray<blocksstable::MacroBlockId> &other_block_ids);
+  int inner_init_with_shared_sstable(const blocksstable::ObMigrationSSTableParam &migration_param);
+  int inner_init_with_shared_sstable(const blocksstable::ObMigrationSSTableParam &sstable_param,
+                                     const common::ObIArray<blocksstable::MacroBlockId> &data_block_ids,
+                                     const common::ObIArray<blocksstable::MacroBlockId> &other_block_ids);
   int collect_macro_block_ids_from_meta(
       const blocksstable::ObSSTableMacroInfo &macro_info,
       common::ObIArray<blocksstable::MacroBlockId> &data_block_ids,
       common::ObIArray<blocksstable::MacroBlockId> &other_block_ids);
+  void set_init_value_for_column_store_();
 private:
   friend class blocksstable::ObSSTableMeta;
   friend class blocksstable::ObSSTableMacroInfo;
@@ -211,8 +244,11 @@ public:
   int64_t micro_block_cnt_;
   int64_t use_old_macro_block_count_;
   int64_t row_count_;
+  int64_t column_group_cnt_; // only used for column_store
+  int32_t co_base_type_; // used for co sstable 
   int64_t rowkey_column_cnt_;
   int64_t column_cnt_;
+  int64_t full_column_cnt_;
   common::ObSEArray<int64_t, common::OB_ROW_DEFAULT_COLUMNS_COUNT> column_checksums_;
   int64_t data_checksum_;
   int64_t occupy_size_;
@@ -221,17 +257,23 @@ public:
   share::SCN ddl_scn_; // saved into sstable meta
   share::SCN filled_tx_scn_;
   share::SCN tx_data_recycle_scn_;
+  bool is_co_table_without_cgs_; // only used for creating co sstable without cg sstables
   bool contain_uncommitted_row_;
   bool is_meta_root_;
   common::ObCompressorType compressor_type_;
+  int64_t encrypt_id_;
+  int64_t master_key_id_;
   int64_t recycle_version_;
   int64_t nested_offset_;
   int64_t nested_size_;
   int64_t root_macro_seq_;
+  char encrypt_key_[share::OB_MAX_TABLESPACE_ENCRYPT_KEY_LENGTH];
   common::ObSEArray<blocksstable::MacroBlockId, DEFAULT_MACRO_BLOCK_CNT> data_block_ids_;
   common::ObSEArray<blocksstable::MacroBlockId, DEFAULT_MACRO_BLOCK_CNT> other_block_ids_;
   storage::ObTableBackupFlag table_backup_flag_; //ObTableBackupFlag will be updated by ObSSTableMergeRes
+  storage::ObTableSharedFlag table_shared_flag_; //ObTableSharedFlag will be updated by ObTabletCreateSSTableParam
   int64_t uncommitted_tx_id_;
+  int64_t co_base_snapshot_version_;
 };
 
 } // namespace storage

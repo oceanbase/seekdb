@@ -17,24 +17,25 @@
 #define OCEANBASE_STORAGE_META_STORE_OB_SERVER_STORAGE_META_PERSISTER_H_
 
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"
-#include "share/resource/ob_server_runtime_config.h"
+#include "share/ob_unit_getter.h"
 
 namespace oceanbase
 {
 namespace omt
 {
-class ObServerRuntimeMeta;
+class ObTenantMeta;
 }
 
 namespace storage
 {
 class ObStorageLogger;
-class ObServerRuntimeSuperBlock;
+class ObTenantSuperBlock;
 class ObServerStorageMetaPersister
 {
 public:
   ObServerStorageMetaPersister()
-    : is_inited_(false), server_slogger_(nullptr) {}
+    : is_inited_(false), is_shared_storage_(false),
+      server_slogger_(nullptr) {}
   ObServerStorageMetaPersister(const ObServerStorageMetaPersister &) = delete;
   ObServerStorageMetaPersister &operator=(const ObServerStorageMetaPersister &) = delete;
       
@@ -43,23 +44,27 @@ public:
   void stop();
   void wait();
   void destroy();
-  int prepare_create_runtime(const omt::ObServerRuntimeMeta &meta);
-  int commit_create_runtime();
-  int abort_create_runtime();
-  int update_runtime_super_block(const ObServerRuntimeSuperBlock &super_block);
-  int update_server_resources(const share::ObServerRuntimeConfig &runtime_config);
-  int clear_runtime_log_dirs();
+  int prepare_create_tenant(const omt::ObTenantMeta &meta, int64_t &epoch);
+  int commit_create_tenant(const int64_t epoch);
+  int abort_create_tenant(const int64_t epoch);
+  int commit_delete_tenant(const int64_t epoch);
+  int update_tenant_super_block(const int64_t tenant_epoch, const ObTenantSuperBlock &super_block);
+  int update_tenant_unit(const int64_t epoch, const share::ObUnitInfoGetter::ObTenantConfig &unit);
+  int clear_tenant_log_dir();
   
 private:
-  int write_prepare_create_runtime_slog_(const omt::ObServerRuntimeMeta &meta);
-  int write_abort_create_runtime_slog_();
-  int write_commit_create_runtime_slog_();
-  int write_update_runtime_super_block_slog_(const ObServerRuntimeSuperBlock &super_block);
-  int write_update_server_resources_slog_(const share::ObServerRuntimeConfig &runtime_config);
+  int write_prepare_create_tenant_slog_(const omt::ObTenantMeta &meta);
+  int write_abort_create_tenant_slog_();
+  int write_commit_create_tenant_slog_();
+  int write_prepare_delete_tenant_slog_();
+  int write_commit_delete_tenant_slog_();
+  int write_update_tenant_super_block_slog_(const ObTenantSuperBlock &super_block);
+  int write_update_tenant_unit_slog_(const share::ObUnitInfoGetter::ObTenantConfig &unit);
 
 
 private:
   bool is_inited_;
+  bool is_shared_storage_;
   storage::ObStorageLogger *server_slogger_;
   common::ObConcurrentFIFOAllocator allocator_;
   

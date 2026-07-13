@@ -49,12 +49,10 @@ int ObTxLoopWorker::start()
   int ret = OB_SUCCESS;
 
   TRANS_LOG(INFO, "[Tx Loop Worker] start");
-  if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TxLoopWorkerTimer, timer_tg_id_))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] create timer failed", K(ret), K_(timer_tg_id));
-  } else if (OB_FAIL(TG_START(timer_tg_id_))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] start timer failed", K(ret), K_(timer_tg_id));
-  } else if (OB_FAIL(TG_SCHEDULE(timer_tg_id_, *this, LOOP_INTERVAL, true/*is_repeat*/))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] schedule timer failed", K(ret), K_(timer_tg_id));
+  if (OB_FAIL(timer_.init("TxLoopWorkerTimer", ObMemAttr("TxLoopWorker")))) {
+    TRANS_LOG(WARN, "[Tx Loop Worker] init timer failed", K(ret));
+  } else if (OB_FAIL(timer_.schedule(*this, LOOP_INTERVAL, true/*is_repeat*/))) {
+    TRANS_LOG(WARN, "[Tx Loop Worker] schedule timer failed", K(ret));
   } else {
     stop_flag_ = false;
     // TRANS_LOG(INFO, "[Tx Loop Worker] start keep alive thread succeed", K(ret));
@@ -66,8 +64,8 @@ int ObTxLoopWorker::start()
 void ObTxLoopWorker::stop()
 {
   TRANS_LOG(INFO, "[Tx Loop Worker] stop");
-  if (!stop_flag_ && timer_tg_id_ != -1) {
-    TG_STOP(timer_tg_id_);
+  if (!stop_flag_) {
+    timer_.stop();
     stop_flag_ = true;
   }
 }
@@ -75,18 +73,13 @@ void ObTxLoopWorker::stop()
 void ObTxLoopWorker::wait()
 {
   TRANS_LOG(INFO, "[Tx Loop Worker] wait");
-  if (timer_tg_id_ != -1) {
-    TG_WAIT(timer_tg_id_);
-  }
+  timer_.wait();
 }
 
 void ObTxLoopWorker::destroy()
 {
   TRANS_LOG(INFO, "[Tx Loop Worker] destroy");
-  if (timer_tg_id_ != -1) {
-    TG_DESTROY(timer_tg_id_);
-    timer_tg_id_ = -1;
-  }
+  timer_.destroy();
   reset();
 }
 
@@ -97,7 +90,6 @@ void ObTxLoopWorker::reset()
   last_check_start_working_retry_ts_ = 0;
   last_log_cb_pool_adjust_ts_ = 0;
   last_tenant_config_refresh_ts_ = 0;
-  timer_tg_id_ = -1;
   stop_flag_ = true;
 }
 

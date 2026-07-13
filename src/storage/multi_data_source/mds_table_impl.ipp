@@ -585,7 +585,7 @@ int MdsTableImpl<MdsTableType>::get_latest(int64_t unit_id,
   return ret;
 }
 
-// Only normal mds table supports tablet status node inspection.
+// Only normal mds table supports this compatibility method.
 template <typename MdsTableType>
 int MdsTableImpl<MdsTableType>::get_tablet_status_node(ObFunction<int(void *)> &op, const int64_t read_seq) const
 {
@@ -1260,7 +1260,7 @@ template <typename DUMP_OP,
                                                             int(const MdsDumpKV &)), bool>::type>
 int MdsTableImpl<MdsTableType>::scan_all_nodes_to_dump(DUMP_OP &&for_each_op,
                                                        const int64_t mds_construct_sequence,
-                                                       /*false is used by non-flush dump paths to copy mds data*/
+                                                       /* false scans active nodes in addition to flush nodes */
                                                        const bool for_flush,
                                                        const ScanRowOrder scan_row_order,
                                                        const ScanNodeOrder scan_node_order) {

@@ -357,8 +357,7 @@ int ObTenantStorageCheckpointWriter::persist_and_copy_tablet(
   slog.ls_id_ = tablet_key.ls_id_;
   slog.tablet_id_ = tablet_key.tablet_id_;
   bool has_slog = false;
-  int64_t transfer_seq = 0; // useless in shared_nothing
-  const ObTabletPersisterParam param(tablet_key.ls_id_, 0, tablet_key.tablet_id_, transfer_seq);
+  const ObTabletPersisterParam param(tablet_key.ls_id_, 0, tablet_key.tablet_id_);
 
   if (OB_FAIL(OB_E(EventTable::EN_SLOG_CKPT_ERROR) OB_SUCCESS)) {
   } else if (OB_FAIL(ckpt_slog_handler_->check_slog(tablet_key, has_slog))) {
@@ -433,8 +432,7 @@ int ObTenantStorageCheckpointWriter::copy_tablet(
   slog.ls_id_ = tablet_key.ls_id_;
   slog.tablet_id_ = tablet_key.tablet_id_;
   ObMetaDiskAddr old_addr;
-  int64_t transfer_seq = 0; // useless in shared_nothing
-  const ObTabletPersisterParam param(tablet_key.ls_id_, 0, tablet_key.tablet_id_, transfer_seq);
+  const ObTabletPersisterParam param(tablet_key.ls_id_, 0, tablet_key.tablet_id_);
   
   if (OB_FAIL(share::g_mp->tenant_meta_mem_mgr()->get_tablet_with_allocator(WashTabletPriority::WTP_LOW, tablet_key, allocator, tablet_handle))) {
     if (OB_ENTRY_NOT_EXIST == ret) {

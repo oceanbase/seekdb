@@ -63,7 +63,8 @@ public:
       || is_stop_state(ret_code)
       || is_not_exist(ret_code)
       || is_retry(ret_code)
-      || is_timeout(ret_code);
+      || is_timeout(ret_code)
+      || is_location_service_renew_error(ret_code);
   }
   static bool in_ddl_retry_black_list(const int ret_code)
   {
@@ -72,7 +73,7 @@ public:
   }
   static bool is_ddl_force_no_more_process(const int ret_code)
   {
-    return common::OB_STANDBY_DATABASE_READ_ONLY == ret_code;
+    return common::OB_STANDBY_READ_ONLY == ret_code;
   }
 private:
   static bool is_timeout(const int ret_code) {
@@ -94,8 +95,8 @@ private:
         || common::OB_EXCEED_MEM_LIMIT == ret_code || common::OB_INACTIVE_SQL_CLIENT == ret_code || common::OB_INACTIVE_RPC_PROXY == ret_code || common::OB_LS_OFFLINE == ret_code;
   }
   static bool is_not_exist(const int ret_code) {
-    return common::OB_LS_NOT_EXIST == ret_code || common::OB_TABLET_NOT_EXIST == ret_code || common::OB_RUNTIME_SCHEMA_NOT_READY == ret_code
-        || common::OB_SERVER_RUNTIME_NOT_READY == ret_code;
+    return common::OB_LS_NOT_EXIST == ret_code || common::OB_TABLET_NOT_EXIST == ret_code || common::OB_TENANT_NOT_EXIST == ret_code
+        || common::OB_TENANT_NOT_IN_SERVER == ret_code;
   }
   static bool is_stop_state(const int ret_code) {
     return common::OB_IN_STOP_STATE == ret_code || common::OB_SERVER_IS_INIT == ret_code || common::OB_SERVER_IS_STOPPING == ret_code
@@ -179,16 +180,16 @@ int ObDDLTaskExecutor::push_task(const T &task)
 
 class ObAsyncTask;
 
-class ObDDLLocalBuilder
+class ObDDLReplicaBuilder
 {
 public:
-  ObDDLLocalBuilder();
-  ~ObDDLLocalBuilder();
+  ObDDLReplicaBuilder();
+  ~ObDDLReplicaBuilder();
   int init();
   int start();
   void stop();
-  void server_module_thread_stop();
-  void server_module_thread_wait();
+  void mtl_thread_stop();
+  void mtl_thread_wait();
   void destroy();
   int push_task(ObAsyncTask &task);
 

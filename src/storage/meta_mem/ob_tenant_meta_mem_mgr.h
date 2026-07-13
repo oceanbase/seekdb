@@ -25,6 +25,7 @@
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/queue/ob_link_queue.h"
+#include "lib/task/ob_timer.h"
 #include "share/ob_ls_id.h"
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"
 #include "storage/blocksstable/ob_macro_block_id.h"
@@ -271,10 +272,9 @@ public:
   int get_current_version_for_tablet(
       const share::ObLSID &ls_id, 
       const ObTabletID &tablet_id, 
-      int64_t &tablet_version, 
-      int64_t &tablet_transfer_seq,
+      int64_t &tablet_version,
       bool &allow_tablet_version_gc);
-  int check_allow_tablet_gc(const ObTabletID &tablet_id, const int64_t transfer_seq, bool &allow);
+  int check_allow_tablet_gc(const ObTabletID &tablet_id, bool &allow);
   int get_tablet_buffer_infos(ObIArray<ObTabletBufferInfo> &buffer_infos);
   int get_tablet_addr(const ObTabletMapKey &key, ObMetaDiskAddr &addr);
   int has_tablet(const ObTabletMapKey &key, bool &is_exist);
@@ -314,8 +314,8 @@ public:
 
   int inc_ref_in_leak_checker(const int32_t index);
   int dec_ref_in_leak_checker(const int32_t index);
-  int inc_external_tablet_cnt(const uint64_t tablet_id, const int64_t tablet_transfer_seq);
-  int dec_external_tablet_cnt(const uint64_t tablet_id, const int64_t tablet_transfer_seq);
+  int inc_external_tablet_cnt(const uint64_t tablet_id);
+  int dec_external_tablet_cnt(const uint64_t tablet_id);
   int schedule_load_bloomfilter(const storage::ObITable::TableKey &sstable_key,
                                 const share::ObLSID &ls_id,
                                 const MacroBlockId &macro_id,
@@ -547,8 +547,7 @@ private:
   ObTabletPointerMap tablet_map_;
   ObFlyingTabletPointerMap flying_tablet_map_;
   ObExternalTabletCntMap external_tablet_cnt_map_;
-  int tg_id_;
-  int persist_tg_id_; // since persist task may cost too much time, we use another thread to exec.
+  common::ObTimer gc_timer_;
   TableGCTask table_gc_task_;
   RefreshConfigTask refresh_config_task_;
   TabletGCTask tablet_gc_task_;
@@ -576,8 +575,8 @@ private:
   int64_t last_access_tenant_config_ts_;
   ObT3MResourceLimitCalculatorHandler t3m_limit_calculator_;
 
-  // For some compelling reason, we can only place persistent bloom filter load tg in t3m.
-  ObMacroBlockBloomFilterLoadTG bf_load_tg_;
+  // For some compelling reason, we can only place persistent bloom filter load thread in t3m.
+  ObMacroBlockBloomFilterLoadThread bf_load_thread_;
 
   bool is_tablet_leak_checker_enabled_;
   bool is_inited_;

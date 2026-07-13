@@ -28,7 +28,7 @@ namespace oceanbase
 
 namespace obcall
 {
-  class ObRuntimeConfigArg;
+  class ObTenantConfigArg;
 }
 
 namespace common
@@ -64,8 +64,8 @@ public:
   int save_config(
       const char *config_name,
       const char *value);
-  int add_extra_config(const obcall::ObRuntimeConfigArg &arg);
-  int init_runtime_config(const obcall::ObRuntimeConfigArg &arg);
+  int add_extra_config(const obcall::ObTenantConfigArg &arg);
+  int init_tenant_config(const obcall::ObTenantConfigArg &arg);
   void enable_static_effect() { enable_static_effect_ = true; }
 private:
   // whitout lock, only used inner
@@ -76,7 +76,7 @@ private:
   ObSystemConfig system_config_;
   ObServerConfig &server_config_;
   ObReloadConfig &reload_config_func_;
-  ObConfigStorage storage_;
+  ObConfigStorage storage_;  // Will be initialized with shared storage from ObServer
   bool enable_static_effect_;
   DISALLOW_COPY_AND_ASSIGN(ObConfigManager);
 };

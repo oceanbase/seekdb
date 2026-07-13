@@ -23,7 +23,7 @@
 #include "ob_vector_index_util.h"
 #include "storage/vector_type/ob_vector_l2_distance.h"
 #include "storage/vector_type/ob_vector_common_util.h"
-#include "storage/allocator/ob_vector_allocator.h"
+#include "storage/allocator/ob_tenant_vector_allocator.h"
 
 namespace oceanbase {
 namespace storage

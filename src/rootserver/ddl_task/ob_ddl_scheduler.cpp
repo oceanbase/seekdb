@@ -773,55 +773,50 @@ int ObPrepareAlterTableArgParam::set_nls_formats(const common::ObString *nls_for
 int ObDDLScheduler::DDLScanTask::init()
 {
   int ret = OB_SUCCESS;
-  FLOG_INFO("[DDLScanTask] begin init ddl scan task", K(tg_id_));
-  if (OB_UNLIKELY(-1 != tg_id_)) {
+  FLOG_INFO("[DDLScanTask] begin init ddl scan task");
+  if (OB_UNLIKELY(timer_.inited())) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl scan task already inited", KR(ret), K(tg_id_));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::DDLScanTask, tg_id_))) {
-    LOG_ERROR("create tg failed", KR(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("ddl scan task start failed", KR(ret), K(tg_id_));
+    LOG_WARN("ddl scan task already inited", KR(ret));
+  } else if (OB_FAIL(timer_.init("DDLScanTask", common::ObMemAttr("DDLScanTask")))) {
+    LOG_ERROR("init timer failed", KR(ret));
   }
-  FLOG_INFO("[DDLScanTask] finish init ddl scan task", KR(ret), K(tg_id_));
+  FLOG_INFO("[DDLScanTask] finish init ddl scan task", KR(ret));
   return ret;
 }
 
 void ObDDLScheduler::DDLScanTask::mtl_thread_wait()
 {
-  FLOG_INFO("[DDLScanTask] begin to mtl_thread_wait", K(tg_id_));
-  if (-1 != tg_id_) {
-    TG_WAIT(tg_id_);
+  FLOG_INFO("[DDLScanTask] begin to mtl_thread_wait");
+  if (timer_.inited()) {
+    timer_.wait();
   }
-  FLOG_INFO("[DDLScanTask] finish mtl_thread_wait", K(tg_id_));
+  FLOG_INFO("[DDLScanTask] finish mtl_thread_wait");
 }
 
 void ObDDLScheduler::DDLScanTask::mtl_thread_stop()
 {
-  FLOG_INFO("[DDLScanTask] begin to mtl_thread_stop", K(tg_id_));
-  if (-1 != tg_id_) {
-    TG_STOP(tg_id_);
+  FLOG_INFO("[DDLScanTask] begin to mtl_thread_stop");
+  if (timer_.inited()) {
+    timer_.stop();
   }
-  FLOG_INFO("[DDLScanTask] finish mtl_thread_stop", K(tg_id_));
+  FLOG_INFO("[DDLScanTask] finish mtl_thread_stop");
 }
 
 void ObDDLScheduler::DDLScanTask::destroy()
 {
-  FLOG_INFO("[DDLScanTask] begin to destroy", K(tg_id_));
-  if (-1 != tg_id_) {
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
-  }
-  FLOG_INFO("[DDLScanTask] finish destroy", K(tg_id_));
+  FLOG_INFO("[DDLScanTask] begin to destroy");
+  timer_.destroy();
+  FLOG_INFO("[DDLScanTask] finish destroy");
 }
 
 int ObDDLScheduler::DDLScanTask::schedule()
 {
   int ret = OB_SUCCESS;
-  if (-1 == tg_id_) {
+  if (!timer_.inited()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl scan task not inited", KR(ret), K(tg_id_));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, *this, DDL_TASK_SCAN_PERIOD, true))) {
-    LOG_WARN("fail to schedule ddl scan task", KR(ret), K(tg_id_));
+    LOG_WARN("ddl scan task not inited", KR(ret));
+  } else if (OB_FAIL(timer_.schedule(*this, DDL_TASK_SCAN_PERIOD, true))) {
+    LOG_WARN("fail to schedule ddl scan task", KR(ret));
   }
   return ret;
 }
@@ -847,55 +842,50 @@ void ObDDLScheduler::DDLScanTask::runTimerTask()
 int ObDDLScheduler::HeartBeatCheckTask::init()
 {
   int ret = OB_SUCCESS;
-  FLOG_INFO("[HeartBeatCheckTask] begin init heart beat check task", K(tg_id_));
-  if (OB_UNLIKELY(-1 != tg_id_)) {
+  FLOG_INFO("[HeartBeatCheckTask] begin init heart beat check task");
+  if (OB_UNLIKELY(timer_.inited())) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("heart beat check task already inited", KR(ret), K(tg_id_));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::HeartBeatCheckTask, tg_id_))) {
-    LOG_ERROR("create tg failed", KR(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("heart beat check task start failed", KR(ret), K(tg_id_));
+    LOG_WARN("heart beat check task already inited", KR(ret));
+  } else if (OB_FAIL(timer_.init("HeartBeatCheck", common::ObMemAttr("HeartBeatCheck")))) {
+    LOG_ERROR("init timer failed", KR(ret));
   }
-  FLOG_INFO("[HeartBeatCheckTask] finish init heart beat check task", KR(ret), K(tg_id_));
+  FLOG_INFO("[HeartBeatCheckTask] finish init heart beat check task", KR(ret));
   return ret;
 }
 
 void ObDDLScheduler::HeartBeatCheckTask::mtl_thread_wait()
 {
-  FLOG_INFO("[HeartBeatCheckTask] begin to mtl_thread_wait", K(tg_id_));
-  if (-1 != tg_id_) {
-    TG_WAIT(tg_id_);
+  FLOG_INFO("[HeartBeatCheckTask] begin to mtl_thread_wait");
+  if (timer_.inited()) {
+    timer_.wait();
   }
-  FLOG_INFO("[HeartBeatCheckTask] finish mtl_thread_wait", K(tg_id_));
+  FLOG_INFO("[HeartBeatCheckTask] finish mtl_thread_wait");
 }
 
 void ObDDLScheduler::HeartBeatCheckTask::mtl_thread_stop()
 {
-  FLOG_INFO("[HeartBeatCheckTask] begin to mtl_thread_stop", K(tg_id_));
-  if (-1 != tg_id_) {
-    TG_STOP(tg_id_);
+  FLOG_INFO("[HeartBeatCheckTask] begin to mtl_thread_stop");
+  if (timer_.inited()) {
+    timer_.stop();
   }
-  FLOG_INFO("[HeartBeatCheckTask] finish mtl_thread_stop", K(tg_id_));
+  FLOG_INFO("[HeartBeatCheckTask] finish mtl_thread_stop");
 }
 
 void ObDDLScheduler::HeartBeatCheckTask::destroy()
 {
-  FLOG_INFO("[HeartBeatCheckTask] begin to destroy", K(tg_id_));
-  if (-1 != tg_id_) {
-    TG_DESTROY(tg_id_);
-    tg_id_ = -1;
-  }
-  FLOG_INFO("[HeartBeatCheckTask] finish destroy", K(tg_id_));
+  FLOG_INFO("[HeartBeatCheckTask] begin to destroy");
+  timer_.destroy();
+  FLOG_INFO("[HeartBeatCheckTask] finish destroy");
 }
 
 int ObDDLScheduler::HeartBeatCheckTask::schedule()
 {
   int ret = OB_SUCCESS;
-  if (-1 == tg_id_) {
+  if (!timer_.inited()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("heart beat check task not inited", KR(ret), K(tg_id_));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, *this, DDL_TASK_CHECK_PERIOD, true))) {
-    LOG_WARN("fail to schedule heart beat check task", KR(ret), K(tg_id_));
+    LOG_WARN("heart beat check task not inited", KR(ret));
+  } else if (OB_FAIL(timer_.schedule(*this, DDL_TASK_CHECK_PERIOD, true))) {
+    LOG_WARN("fail to schedule heart beat check task", KR(ret));
   }
   return ret;
 }
@@ -980,8 +970,7 @@ int ObDDLScheduler::switch_to_leader()
   } else {
     // try schedule ddl scan task
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(TG_TASK_EXIST(scan_task_.get_tg_id(), scan_task_, scan_timer_task_exist))) {
-      LOG_WARN("failed to check scan task exist", KR(ret), "tg_id", scan_task_.get_tg_id());
+    } else if (FALSE_IT(scan_timer_task_exist = scan_task_.task_exist())) {
     } else if (scan_timer_task_exist) {
       FLOG_INFO("scan task already exist, no need to push again", K(scan_timer_task_exist));
     } else if (OB_FAIL(scan_task_.schedule())) {
@@ -992,8 +981,7 @@ int ObDDLScheduler::switch_to_leader()
 
     // try schedule heart beat check task
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(TG_TASK_EXIST(heart_beat_check_task_.get_tg_id(), heart_beat_check_task_, heart_beat_check_timer_task_exist))) {
-      LOG_WARN("failed to check scan task exist", KR(ret), "tg_id", heart_beat_check_task_.get_tg_id());
+    } else if (FALSE_IT(heart_beat_check_timer_task_exist = heart_beat_check_task_.task_exist())) {
     } else if (heart_beat_check_timer_task_exist) {
       LOG_INFO("scan task already exist, no need to push again", K(heart_beat_check_timer_task_exist));
     } else if (OB_FAIL(heart_beat_check_task_.schedule())) {
@@ -1068,7 +1056,7 @@ int ObDDLScheduler::init()
   } else if (OB_FAIL(manager_reg_heart_beat_task_.init())) {
     LOG_WARN("init manager register heart beat task failed", K(ret));
   } else if (OB_FAIL(ObTenantThreadHelper::create("DDLTaskExecutor",
-             lib::TGDefIDs::DDLTaskExecutor3, *this))) {
+             lib::is_mini_mode() ? 2 : 8, *this))) {
     LOG_WARN("failed to create thread", KR(ret));
   } else if (OB_FAIL(ddl_builder_.init())) {
     LOG_WARN("fail to create ddl replica builder thread", KR(ret));
@@ -1095,10 +1083,10 @@ void ObDDLScheduler::stop()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("sys ddl scheduler is not inited", KR(ret), K(is_inited_));
-  } else if (OB_FAIL(TG_CANCEL_R(scan_task_.get_tg_id(), scan_task_))) {
-    LOG_WARN("fail to cancel ddl scan task", KR(ret), "tg_id", scan_task_.get_tg_id());
-  } else if (OB_FAIL(TG_CANCEL_R(heart_beat_check_task_.get_tg_id(), heart_beat_check_task_))) {
-    LOG_WARN("fail to cancel heartbeat check task", KR(ret), "tg_id", heart_beat_check_task_.get_tg_id());
+  } else if (OB_FAIL(scan_task_.cancel())) {
+    LOG_WARN("fail to cancel ddl scan task", KR(ret));
+  } else if (OB_FAIL(heart_beat_check_task_.cancel())) {
+    LOG_WARN("fail to cancel heartbeat check task", KR(ret));
   } else {
     ObTenantThreadHelper::stop();
     task_queue_.set_stop(true);
@@ -1135,7 +1123,7 @@ void ObDDLScheduler::do_work()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    const int64_t thread_cnt = TG_GET_THREAD_CNT(lib::TGDefIDs::DDLTaskExecutor3);
+    const int64_t thread_cnt = ObTenantThreadHelper::get_thread_count();
     int ret = OB_SUCCESS;
     ObDDLTask *task = nullptr;
     ObDDLTask *first_retry_task = nullptr;

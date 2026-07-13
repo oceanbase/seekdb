@@ -72,6 +72,7 @@ public:
   void resume();
 
   int set_handle(const ObStorageMetaHandle &table_store_handle);
+  int alloc_split_extra_table_store_handle(ObStorageMetaHandle *&meta_handle);
 
   ObITable *get_last_memtable();
   int get_next(ObITable *&table);
@@ -80,10 +81,12 @@ public:
   int set_retire_check();
 
   int add_table(ObITable *table);
+  int add_ddl_co_table(ObTableHandleV2 &ddl_co_sstable_handle, ObITable *co_table);
   int add_tables(
       const ObSSTableArray &sstable_array,
       const int64_t start_pos = 0,
-      const int64_t count = 1);
+      const int64_t count = 1,
+      const bool unpack_co_table = false);
   void set_fork_infos(const ObIArray<share::ObForkTabletInfo> *fork_infos) { fork_infos_ = fork_infos; }
   const ObIArray<share::ObForkTabletInfo> *get_fork_infos() const { return fork_infos_; }
   // Get fork snapshot SCN for given tablet_id, returns invalid SCN if not found
@@ -93,13 +96,18 @@ public:
     return (NULL == memstore_retired_) ? false : ATOMIC_LOAD(memstore_retired_);
   }
   TO_STRING_KV(K_(table_ptr_array), K_(sstable_handle_array), K_(pos), K_(step), K_(memstore_retired),
-      K_(need_load_sstable), K_(table_store_handle), KP_(fork_infos));
+      K_(need_load_sstable), K_(table_store_handle), K_(split_extra_table_store_handles),
+      KP_(fork_infos));
 private:
   int inner_move_idx_to_next();
   int get_table_ptr_with_meta_handle(
       const blocksstable::ObSSTable *table,
       TablePtr &table_ptr);
   int add_tables(const ObMemtableArray &memtable_array, const int64_t start_pos = 0);
+  int add_cg_tables(
+      const ObSSTableArray &sstable_array,
+      const bool is_loaded_co_table,
+      const blocksstable::ObSSTableMetaHandle &co_meta_handle);
   int get_ith_table(const int64_t pos, ObITable *&table);
 private:
   friend class ObTablet; // TODO: remove this friend class when possible
@@ -111,6 +119,8 @@ private:
   int64_t pos_;
   int64_t step_;
   bool * memstore_retired_;
+  ObSEArray<ObStorageMetaHandle, 1> split_extra_table_store_handles_;
+  ObTableHandleV2 *ddl_co_sstable_handle_;
   const ObIArray<share::ObForkTabletInfo> *fork_infos_;  // pointer to fork infos from ObTabletTableIterator
   DISALLOW_COPY_AND_ASSIGN(ObTableStoreIterator);
 };

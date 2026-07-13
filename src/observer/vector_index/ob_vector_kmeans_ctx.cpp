@@ -1061,18 +1061,18 @@ int64_t ObIvfBuildHelper::get_free_vector_mem_size()
 {
   int ret = OB_SUCCESS;
   int64_t free_vector_mem_size = 0;
-  int64_t memory_limit_size = 0;
+  int64_t tenant_mem_size = 0;
   int64_t curr_used = 0;
   if (OB_ISNULL(ivf_build_mem_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("mem ctx is null", K(ret));
   } else if (OB_FALSE_IT(curr_used = ATOMIC_LOAD(ivf_build_mem_ctx_->get_all_vsag_use_mem()))) {
-  } else if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(memory_limit_size))) {
+  } else if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(tenant_mem_size))) {
     LOG_WARN("failed to get vector mem limit size.", K(ret));
-  } else if (memory_limit_size > curr_used) {
-    free_vector_mem_size = memory_limit_size - curr_used;
+  } else if (tenant_mem_size > curr_used) {
+    free_vector_mem_size = tenant_mem_size - curr_used;
   }
-  LOG_INFO("free vector mem limit size.", K(ret), K(free_vector_mem_size), K(memory_limit_size), K(curr_used));
+  LOG_INFO("free vector mem limit size.", K(ret), K(free_vector_mem_size), K(tenant_mem_size), K(curr_used));
   return free_vector_mem_size;
 }
 
@@ -1306,7 +1306,7 @@ bool ObIvfPqBuildHelper::can_use_parallel()
 {
   int ret = OB_SUCCESS;
   bool res = false;
-  int64_t max_thread_cnt = share::server_cpu_count() * ObKmeansBuildTaskHandler::THREAD_FACTOR;
+  int64_t max_thread_cnt = MTL_CPU_COUNT() * ObKmeansBuildTaskHandler::THREAD_FACTOR;
   max_thread_cnt = OB_MAX(max_thread_cnt, ObKmeansBuildTaskHandler::MIN_THREAD_COUNT);
   uint64_t parallel_need_max_mem = 0;
   int64_t vector_free_mem = 0;
@@ -1344,7 +1344,7 @@ int ObKmeansBuildTaskHandler::start()
 {
   int ret = OB_SUCCESS;
   bool thread_pool_inited = is_inited_;
-  int64_t max_thread_cnt = share::server_cpu_count() * THREAD_FACTOR;
+  int64_t max_thread_cnt = MTL_CPU_COUNT() * THREAD_FACTOR;
   max_thread_cnt = OB_MAX(max_thread_cnt, MIN_THREAD_COUNT);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;

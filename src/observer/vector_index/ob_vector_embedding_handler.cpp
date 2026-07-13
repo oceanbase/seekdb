@@ -1167,7 +1167,7 @@ int ObEmbeddingTaskHandler::start()
 {
   int ret = OB_SUCCESS;
   bool thread_pool_inited = false;
-  int64_t max_thread_cnt = share::server_cpu_count() * THREAD_FACTOR;
+  int64_t max_thread_cnt = MTL_CPU_COUNT() * THREAD_FACTOR;
   max_thread_cnt = OB_MAX(max_thread_cnt, MIN_THREAD_COUNT);
   if (OB_FAIL(common::ObSimpleThreadPool::init(MIN_THREAD_COUNT, MAX_QUEUE_SIZE, "VectorTaskPool"))) {
     LOG_WARN("init embedding thread pool failed", KR(ret));

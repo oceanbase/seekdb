@@ -1,0 +1,142 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_ts_worker.h"
+#include "lib/ob_running_mode.h"
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
+#include "ob_ts_response_handler.h"
+#include "ob_ts_mgr.h"
+#include "observer/omt/ob_tenant.h"
+
+namespace oceanbase
+{
+using namespace common;
+using namespace omt;
+using namespace observer;
+
+namespace transaction
+{
+int64_t ObTsWorker::get_thread_count_() const
+{
+  return lib::is_mini_mode() ? 1 : MAX(common::get_cpu_count() / 12, 1L);
+}
+
+int ObTsWorker::init(ObTsMgr *ts_mgr, const bool use_local_worker)
+{
+  int ret = OB_SUCCESS;
+  if (is_inited_) {
+    ret = OB_INIT_TWICE;
+    TRANS_LOG(WARN, "init twice", KR(ret));
+  } else if (NULL == ts_mgr) {
+    ret = OB_INVALID_ARGUMENT;
+    TRANS_LOG(WARN, "invalid argument", KR(ret), KP(ts_mgr));
+  } else if (use_local_worker && OB_FAIL(common::ObSimpleThreadPool::init(get_thread_count_(),
+                                                                          MAX_TASK_NUM,
+                                                                          "TSWorker"))) {
+    TRANS_LOG(WARN, "ts worker thread pool init failed", K(ret), K(get_thread_count_()));
+  } else {
+    TRANS_LOG(INFO, "ts worker thread pool init success", K(use_local_worker), K(get_thread_count_()));
+  }
+  if (OB_SUCCESS == ret) {
+    use_local_worker_ = use_local_worker;
+    ts_mgr_ = ts_mgr;
+    is_inited_ = true;
+    TRANS_LOG(INFO, "ts worker init success", KP(this), KP(ts_mgr), K(use_local_worker));
+  } else {
+    TRANS_LOG(WARN, "ts worker init failed", KR(ret), KP(this), KP(ts_mgr), K(use_local_worker));
+  }
+  return ret;
+}
+
+void ObTsWorker::stop()
+{
+  if (is_inited_ && use_local_worker_) {
+    common::ObSimpleThreadPool::stop();
+  }
+}
+
+void ObTsWorker::wait()
+{
+  if (is_inited_ && use_local_worker_) {
+    common::ObSimpleThreadPool::wait();
+  }
+}
+
+void ObTsWorker::destroy()
+{
+  stop();
+  wait();
+  if (is_inited_ && use_local_worker_) {
+    common::ObSimpleThreadPool::destroy();
+  }
+  is_inited_ = false;
+  use_local_worker_ = false;
+  ts_mgr_ = NULL;
+}
+
+int ObTsWorker::push_task(ObTsResponseTask *task)
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+    TRANS_LOG(WARN, "ts worker not init", KR(ret));
+  } else if (!true || NULL == task) {
+    ret = OB_INVALID_ARGUMENT;
+    TRANS_LOG(WARN, "invalid argument", KR(ret), KP(task));
+  } else if (use_local_worker_) {
+    if (OB_FAIL(common::ObSimpleThreadPool::push(task))) {
+      TRANS_LOG(WARN, "push task to local worker failed", K(ret), KP(task));
+    }
+  } else {
+    ObMultiTenant *omt = GCTX.omt_;
+    if (NULL == omt) {
+      ret = OB_ERR_UNEXPECTED;
+      TRANS_LOG(ERROR, "unexpected error, omt is null", KR(ret), KP(omt));
+    } else {
+      ObTenant *tenant = nullptr;
+      if (OB_FAIL(omt->get_tenant(tenant))) {
+        TRANS_LOG(WARN, "get tenant failed", KR(ret));
+      } else if (OB_ISNULL(tenant)) {
+        ret = OB_ERR_UNEXPECTED;
+        TRANS_LOG(WARN, "tenant is null", KR(ret));
+      } else if (OB_FAIL(tenant->recv_request(*task))) {
+        TRANS_LOG(WARN, "recv request failed", KR(ret), KP(task));
+      }
+    }
+  }
+  return ret;
+}
+
+void ObTsWorker::handle(void *task)
+{
+  int ret = OB_SUCCESS;
+  if (NULL != task) {
+    ObTsResponseTask *ts_task = reinterpret_cast<ObTsResponseTask *>(task);
+    if (NULL == ts_mgr_) {
+      TRANS_LOG(WARN, "ts mgr is NULL", KP_(ts_mgr));
+    } else if (OB_FAIL(ts_mgr_->handle_gts_result(ts_task->get_arg1(),
+                                                  ts_task->get_ts_type()))) {
+      TRANS_LOG(WARN, "handle gts result failed", KR(ret), K(*ts_task));
+    } else {
+      TRANS_LOG(DEBUG, "handle gts result success", K(*ts_task));
+    }
+    ObTsResponseTaskFactory::free(ts_task);
+    ts_task = NULL;
+  }
+}
+
+} // transaction
+} // oceanbase

@@ -1,0 +1,679 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SHARE
+
+#include "ob_unit_getter.h"
+#include "share/ob_server_struct.h"
+#include "share/unit/ob_unit_config.h"
+
+namespace oceanbase
+{
+using namespace common;
+using namespace common::sqlclient;
+namespace share
+{
+
+OB_SERIALIZE_MEMBER(ObUnitInfoGetter::ObTenantConfig,
+                    
+                    unit_id_,
+                    unit_status_,
+                    config_,
+                    mode_,
+                    create_timestamp_,
+                    has_memstore_,
+                    is_removed_,
+                    hidden_sys_data_disk_config_size_,
+                    actual_data_disk_size_);
+
+const char* ObUnitInfoGetter::unit_status_strs_[] = {
+    "NORMAL",
+    "MIGRATE IN",
+    "MIGRATE OUT",
+    "MARK DELETING",
+    "WAIT GC",
+    "DELETING",
+    "ERROR"
+};
+
+ObUnitInfoGetter::ObTenantConfig::ObTenantConfig()
+  : unit_id_(common::OB_INVALID_ID),
+    unit_status_(UNIT_ERROR_STAT),
+    config_(),
+    mode_(lib::Worker::CompatMode::INVALID),
+    create_timestamp_(0),
+    has_memstore_(true),
+    is_removed_(false),
+    hidden_sys_data_disk_config_size_(0),
+    actual_data_disk_size_(0)
+{}
+
+int ObUnitInfoGetter::ObTenantConfig::init(
+    const uint64_t unit_id,
+    const ObUnitStatus unit_status,
+    const ObUnitConfig &config,
+    lib::Worker::CompatMode compat_mode,
+    const int64_t create_timestamp,
+    const bool has_memstore,
+    const bool is_remove,
+    const int64_t hidden_sys_data_disk_config_size,
+    const int64_t actual_data_disk_size)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(config_.assign(config))) {
+    LOG_WARN("fail to assign config", KR(ret), K(config));
+  } else {
+    
+    unit_id_ = unit_id;
+    unit_status_ = unit_status;
+    mode_ = compat_mode;
+    create_timestamp_ = create_timestamp;
+    has_memstore_ = has_memstore;
+    is_removed_ = is_remove;
+    hidden_sys_data_disk_config_size_ = hidden_sys_data_disk_config_size;
+    actual_data_disk_size_ = actual_data_disk_size;
+  }
+  return ret;
+}
+
+
+int ObUnitInfoGetter::ObTenantConfig::divide_meta_tenant(ObTenantConfig& meta_tenant_config)
+{
+  int ret = OB_SUCCESS;
+  ObUnitResource meta_resource;
+  ObUnitConfig meta_config;
+  ObUnitResource self_resource = config_.unit_resource(); // get a copy
+
+  if (OB_UNLIKELY(! is_valid())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not valid tenant config, can't divide meta tenant", KR(ret), KPC(this));
+  } else if (OB_FAIL(self_resource.divide_meta_tenant(meta_resource))) {
+    LOG_WARN("divide meta tenant resource fail", KR(ret), K(config_));
+  } else if (OB_FAIL(meta_config.init(
+      config_.unit_config_id(),
+      config_.name(),
+      meta_resource))) {
+    LOG_WARN("init meta config fail", KR(ret), K(config_), K(meta_resource));
+  } else if (OB_FAIL(meta_tenant_config.init(
+      unit_id_,
+      unit_status_,
+      meta_config,
+      lib::Worker::CompatMode::MYSQL,       // always MYSQL mode
+      create_timestamp_,
+      has_memstore_,
+      is_removed_,
+      hidden_sys_data_disk_config_size_,
+      ObUnitResource::gen_meta_tenant_data_disk_size(actual_data_disk_size_)))) {
+    LOG_WARN("init meta tenant config fail", KR(ret), KPC(this), K(meta_config));
+  }
+  // update self unit resource
+  else if (OB_FAIL(config_.update_unit_resource(self_resource))) {
+    LOG_WARN("update unit resource fail", KR(ret), K(self_resource), K(config_));
+  } else {
+    actual_data_disk_size_ = actual_data_disk_size_ - meta_tenant_config.actual_data_disk_size_;
+  }
+
+  LOG_INFO("divide meta tenant finish", KR(ret), K(meta_tenant_config), "user_config", *this);
+  return ret;
+}
+
+void ObUnitInfoGetter::ObTenantConfig::reset()
+{
+  
+  unit_id_ = common::OB_INVALID_ID;
+  config_.reset();
+  mode_ = lib::Worker::CompatMode::INVALID;
+  create_timestamp_ = 0;
+  is_removed_ = false;
+  hidden_sys_data_disk_config_size_ = 0;
+  actual_data_disk_size_ = 0;
+}
+
+bool ObUnitInfoGetter::ObTenantConfig::operator==(const ObTenantConfig &other) const
+{
+  return (true &&
+          unit_id_ == other.unit_id_ &&
+          unit_status_ == other.unit_status_ &&
+          config_ == other.config_ &&
+          mode_ == other.mode_ &&
+          create_timestamp_ == other.create_timestamp_ &&
+          has_memstore_ == other.has_memstore_ &&
+          is_removed_ == other.is_removed_ &&
+          hidden_sys_data_disk_config_size_ == other.hidden_sys_data_disk_config_size_ &&
+          actual_data_disk_size_ == other.actual_data_disk_size_);
+}
+
+int ObUnitInfoGetter::ObTenantConfig::assign(const ObUnitInfoGetter::ObTenantConfig &other)
+{
+  int ret = OB_SUCCESS;
+  if (this == &other) {
+    // skip
+  } else if (OB_FAIL(config_.assign(other.config_))) {
+    LOG_WARN("fail to assign config", KR(ret), K(other));
+  } else {
+    
+    unit_id_ = other.unit_id_;
+    unit_status_ = other.unit_status_;
+    mode_ = other.mode_;
+    create_timestamp_ = other.create_timestamp_;
+    has_memstore_ = other.has_memstore_;
+    is_removed_ = other.is_removed_;
+    hidden_sys_data_disk_config_size_ = other.hidden_sys_data_disk_config_size_;
+    actual_data_disk_size_ = other.actual_data_disk_size_;
+  }
+  return ret;
+}
+
+// this function is for calculating default init value for actual_data_disk_size_ of USER tenant
+int64_t ObUnitInfoGetter::ObTenantConfig::gen_init_actual_data_disk_size(
+    const share::ObUnitConfig &config) const
+{
+  int64_t init_data_disk_size = 0;
+  return init_data_disk_size;
+}
+
+ObUnitInfoGetter::ObUnitInfoGetter()
+  : inited_(false)
+{
+}
+
+ObUnitInfoGetter::~ObUnitInfoGetter()
+{
+}
+
+int ObUnitInfoGetter::init(ObMySQLProxy &proxy, common::ObServerConfig *config)
+{
+  int ret = OB_SUCCESS;
+  if (inited_) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", K(ret));
+  } else {
+    inited_ = true;
+  }
+  return ret;
+}
+
+int ObUnitInfoGetter::get_tenants(common::ObIArray<uint64_t> &tenants)
+{
+  int ret = OB_SUCCESS;
+  // single-tenant: one logical tenant slot; value is a non-tenant slot marker (unconsumed)
+  if (OB_FAIL(tenants.push_back(0/*slot marker*/))) {
+    LOG_WARN("fail to push back tenant slot marker", K(ret));
+  }
+  return ret;
+}
+
+// only used by ObTenantNodeBalancer
+int ObUnitInfoGetter::get_server_tenant_configs(const common::ObAddr &server,
+                                                common::ObIArray<ObTenantConfig> &tenant_configs)
+{
+  int ret = OB_SUCCESS;
+  tenant_configs.reuse();
+
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", KR(ret));
+  } else if (!server.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid server", K(server), KR(ret));
+  } else {
+    // Mock: For single machine, single sys tenant, single unit scenario
+    // Hardcode sys tenant config, no table query needed
+    ObTenantConfig tenant_config;
+    ObUnitConfig unit_config;
+    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
+    
+    const uint64_t unit_id = 1;  // Single unit with ID 1
+    const int64_t create_timestamp = 0;
+    const bool has_memstore = true;
+    int64_t hidden_sys_data_disk_config_size = 0;
+
+
+    // Generate default sys tenant unit config
+    int64_t log_disk_size = 0;
+    if (OB_ISNULL(GCTX.config_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("GCTX.config_ is null", KR(ret));
+    } else {
+      log_disk_size = GCTX.config_->log_disk_size;
+      if (OB_FAIL(unit_config.gen_sys_tenant_unit_config(false /*is_hidden_sys*/, log_disk_size))) {
+        LOG_WARN("gen_sys_tenant_unit_config failed", KR(ret), K(log_disk_size));
+      } else if (OB_FAIL(tenant_config.init(unit_id,
+                                             ObUnitInfoGetter::ObUnitStatus::UNIT_NORMAL,
+                                             unit_config,
+                                             compat_mode,
+                                             create_timestamp,
+                                             has_memstore,
+                                             false /*is_removed*/,
+                                             hidden_sys_data_disk_config_size,
+                                             tenant_config.gen_init_actual_data_disk_size(unit_config)))) {
+        LOG_WARN("tenant_config init failed", KR(ret), K(unit_config));
+      } else if (OB_FAIL(tenant_configs.push_back(tenant_config))) {
+        LOG_WARN("push_back failed", KR(ret));
+      } else {
+        LOG_INFO("get_server_tenant_configs (mocked for single sys tenant)",
+                 K(server), K(tenant_config), K(unit_config));
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObUnitInfoGetter::get_tenant_server_configs(ObIArray<ObServerConfig> &server_configs)
+{
+  int ret = OB_SUCCESS;
+  ObArray<ObUnit> units;
+  ObArray<ObUnitConfig> configs;
+  ObArray<ObResourcePool> pools;
+  ObArray<ObUnitInfo> unit_infos;
+  server_configs.reuse();
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (OB_FAIL(get_pools_of_tenant(pools))) {
+    LOG_WARN("get_pools_of_tenant failed", K(ret));
+  } else if (OB_FAIL(get_units_of_pools(pools, units))) {
+    LOG_WARN("get_units_of_pools failed", K(pools), K(ret));
+  } else if (OB_FAIL(get_configs_of_pools(pools, configs))) {
+    LOG_WARN("get_configs_of_pools failed", K(pools), K(ret));
+  } else if (OB_FAIL(build_unit_infos(units, configs, pools, unit_infos))) {
+    LOG_WARN("build_unit_infos failed", K(units), K(configs), K(pools), K(ret));
+  } else {
+    ObServerConfig server_config;
+    ObServerConfig migrate_from_server_config;
+    for (int64_t i = 0; OB_SUCC(ret) && i < unit_infos.count(); ++i) {
+      server_config.reset();
+      server_config.server_ = unit_infos.at(i).unit_.server_;
+      server_config.config_ = unit_infos.at(i).config_;
+      if (OB_FAIL(add_server_config(server_config, server_configs))) {
+        LOG_WARN("add_server_config failed", K(server_config), K(ret));
+      } else {
+        if (unit_infos.at(i).unit_.migrate_from_server_.is_valid()) {
+          migrate_from_server_config.reset();
+          migrate_from_server_config.server_ = unit_infos.at(i).unit_.migrate_from_server_;
+          migrate_from_server_config.config_ = unit_infos.at(i).config_;
+          if (OB_FAIL(add_server_config(migrate_from_server_config, server_configs))) {
+            LOG_WARN("add_server_config failed", K(migrate_from_server_config), K(ret));
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObUnitInfoGetter::get_tenant_servers(ObIArray<ObAddr> &servers)
+{
+  int ret = OB_SUCCESS;
+  ObArray<ObUnit> units;
+  ObArray<ObResourcePool> pools;
+  servers.reuse();
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (OB_FAIL(get_pools_of_tenant(pools))) {
+    LOG_WARN("get_pools_of_tenant failed", K(ret));
+  } else if (OB_FAIL(get_units_of_pools(pools, units))) {
+    LOG_WARN("get_units_of_pools failed", K(pools), K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < units.count(); ++i) {
+      const ObUnit &unit = units.at(i);
+      bool server_exist = has_exist_in_array(servers, unit.server_);
+      if (!server_exist) {
+        if (OB_FAIL(servers.push_back(unit.server_))) {
+          LOG_WARN("push_back failed", K(ret));
+        }
+      }
+
+      if (OB_SUCCESS == ret && unit.migrate_from_server_.is_valid()) {
+        server_exist = has_exist_in_array(servers, unit.migrate_from_server_);
+        if (!server_exist) {
+          if (OB_FAIL(servers.push_back(unit.migrate_from_server_))) {
+            LOG_WARN("push_back failed", K(ret));
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObUnitInfoGetter::check_tenant_small(bool &small_tenant)
+{
+  int ret = OB_SUCCESS;
+  small_tenant = true;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else {
+    ObArray<ObResourcePool> pools;
+    if (OB_FAIL(get_pools_of_tenant(pools))) {
+      LOG_WARN("get_pools_of_tenant failed", K(ret));
+    } else if (pools.count() <= 0) {
+      ret = OB_TENANT_NOT_EXIST;
+      LOG_WARN("pools of tenant not exist", K(ret));
+    } else if (1 == pools.count()) {
+      if (pools.at(0).unit_count_ < 1) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("find pool's unit_count small than one", "pool", pools.at(0), K(ret));
+      } else {
+        small_tenant = (1 == pools.at(0).unit_count_);
+      }
+    } else {
+      small_tenant = false;
+    }
+  }
+  return ret;
+}
+
+int ObUnitInfoGetter::get_sys_unit_count(int64_t &sys_unit_cnt)
+{
+  int ret = OB_SUCCESS;
+  sys_unit_cnt = 1;
+  return ret;
+}
+
+int ObUnitInfoGetter::get_units_of_server(const ObAddr &server,
+                                          ObIArray<ObUnit> &units)
+{
+  int ret = OB_SUCCESS;
+  units.reuse();
+  ObUnit unit;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (!server.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid server", K(server), K(ret));
+  } else if (OB_FAIL(ObShareUtil::gen_sys_unit(unit))) {
+    LOG_WARN("fail to generate sys unit", KR(ret));
+  } else if (OB_FAIL(units.push_back(unit))) {
+    LOG_WARN("fail to push back unit", KR(ret), K(unit));
+  }
+  return ret;
+}
+
+int ObUnitInfoGetter::get_pools_of_units(const ObIArray<ObUnit> &units,
+                                         ObIArray<ObResourcePool> &pools)
+{
+  int ret = OB_SUCCESS;
+  pools.reuse();
+  ObResourcePool resource_pool;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (units.count() <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("units is empty", K(units), K(ret));
+  } else if (OB_FAIL(ObShareUtil::gen_sys_resource_pool(resource_pool))) {
+    LOG_WARN("fail to generate sys resource pool", KR(ret));
+  } else if (OB_FAIL(pools.push_back(resource_pool))) {
+    LOG_WARN("fail to push back resource pool", KR(ret), K(resource_pool));
+  }
+  return ret;
+}
+
+// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
+
+int ObUnitInfoGetter::get_pools_of_tenant(ObIArray<ObResourcePool> &pools)
+{
+  int ret = OB_SUCCESS;
+  pools.reuse();
+  ObResourcePool resource_pool;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (OB_FAIL(ObShareUtil::gen_sys_resource_pool(resource_pool))) {
+    LOG_WARN("fail to generate sys resource pool", KR(ret));
+  } else if (OB_FAIL(pools.push_back(resource_pool))) {
+    LOG_WARN("fail to push back resource pool", KR(ret), K(resource_pool));
+  }
+  return ret;
+}
+
+int ObUnitInfoGetter::get_units_of_pools(const ObIArray<ObResourcePool> &pools,
+                                         ObIArray<ObUnit> &units)
+{
+  int ret = OB_SUCCESS;
+  units.reuse();
+  ObUnit unit;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (pools.count() <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("pools is empty", K(pools), K(ret));
+  } else if (OB_FAIL(ObShareUtil::gen_sys_unit(unit))) {
+    LOG_WARN("fail to generate sys unit", KR(ret));
+  } else if (OB_FAIL(units.push_back(unit))) {
+    LOG_WARN("fail to push back unit", KR(ret), K(unit));
+  }
+  return ret;
+}
+
+int ObUnitInfoGetter::build_unit_infos(const ObIArray<ObUnit> &units,
+                                       const ObIArray<ObUnitConfig> &configs,
+                                       const ObIArray<ObResourcePool> &pools,
+                                       ObIArray<ObUnitInfo> &unit_infos) const
+{
+  int ret = OB_SUCCESS;
+  unit_infos.reuse();
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (units.count() <= 0 || configs.count() <= 0 || pools.count() <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(units), K(configs), K(pools), K(ret));
+  } else {
+    ObUnitInfo info;
+    for (int64_t i = 0; OB_SUCC(ret) && i < units.count(); ++i) {
+      int64_t pool_index = OB_INVALID_INDEX;
+      int64_t config_index = OB_INVALID_INDEX;
+      if (OB_FAIL(find_pool_idx(pools, units.at(i).resource_pool_id_, pool_index))) {
+        LOG_WARN("find_pool_idx failed", K(pools), "resource_pool_id",
+            units.at(i).resource_pool_id_, K(ret));
+      } else if (OB_INVALID_INDEX == pool_index) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("pool_index is invalid", K(pool_index), K(ret));
+      } else if (OB_FAIL(find_config_idx(configs,
+          pools.at(pool_index).unit_config_id_, config_index))) {
+        LOG_WARN("find_config_idx", K(configs), "unit_config_id",
+            pools.at(pool_index).unit_config_id_, K(ret));
+      } else if (OB_INVALID_INDEX == config_index) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("config_index is invalid", K(config_index), K(ret));
+      } else if (OB_INVALID_ID == 1UL) {
+        // ignore unit not grant to any tenant
+        continue;
+      } else {
+        info.reset();
+        info.unit_ = units.at(i);
+        info.config_ = configs.at(config_index);
+        if (OB_FAIL(info.pool_.assign(pools.at(pool_index)))) {
+          LOG_WARN("failed to assign info.pool_", K(ret));
+        } else if (OB_FAIL(unit_infos.push_back(info))) {
+          LOG_WARN("push_back failed", K(ret));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObUnitInfoGetter::add_server_config(const ObServerConfig &server_config,
+                                        ObIArray<ObServerConfig> &server_configs)
+{
+  int ret = OB_SUCCESS;
+  int64_t idx = OB_INVALID_INDEX;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (!server_config.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid server_config", K(server_config), K(ret));
+  } else if (OB_FAIL(find_server_config_idx(server_configs, server_config.server_, idx))) {
+    if (OB_ENTRY_NOT_EXIST != ret) {
+      LOG_WARN("find_server_config_idx failed", K(server_configs),
+          "server", server_config.server_, K(ret));
+    } else {
+      ret = OB_SUCCESS;
+      if (OB_FAIL(server_configs.push_back(server_config))) {
+        LOG_WARN("push_back failed", K(ret));
+      }
+    }
+  } else if (OB_INVALID_INDEX == idx) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid index", K(idx), K(ret));
+  } else {
+    server_configs.at(idx).config_ += server_config.config_;
+  }
+  return ret;
+}
+
+int ObUnitInfoGetter::find_pool_idx(const ObIArray<ObResourcePool> &pools,
+                                    const uint64_t pool_id, int64_t &index) const
+{
+  int ret = OB_SUCCESS;
+  index = OB_INVALID_INDEX;
+  // pools can be empty
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (OB_INVALID_ID == pool_id) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(pool_id), K(ret));
+  } else {
+    bool found = false;
+    for (int64_t i = 0; !found && i < pools.count(); ++i) {
+      if (pools.at(i).resource_pool_id_ == pool_id) {
+        index = i;
+        found = true;
+      }
+    }
+    if (!found) {
+      ret = OB_ENTRY_NOT_EXIST;
+    }
+  }
+  return ret;
+}
+
+int ObUnitInfoGetter::find_config_idx(const ObIArray<ObUnitConfig> &configs,
+                                      const uint64_t config_id, int64_t &index) const
+{
+  int ret = OB_SUCCESS;
+  index = OB_INVALID_INDEX;
+  // configs can be empty
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (OB_INVALID_ID == config_id) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(config_id), K(ret));
+  } else {
+    bool found = false;
+    for (int64_t i = 0; !found && i < configs.count(); ++i) {
+      if (configs.at(i).unit_config_id() == config_id) {
+        index = i;
+        found = true;
+      }
+    }
+    if (!found) {
+      ret = OB_ENTRY_NOT_EXIST;
+    }
+  }
+  return ret;
+}
+
+int ObUnitInfoGetter::find_tenant_config_idx(const ObIArray<ObTenantConfig> &tenant_configs, int64_t &index) const
+{
+  int ret = OB_SUCCESS;
+  index = OB_INVALID_INDEX;
+  // tenant_configs can be empty
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else {
+    bool found = false;
+    for (int64_t i = 0; !found && i < tenant_configs.count(); ++i) {
+      {
+        index = i;
+        found = true;
+      }
+    }
+    if (!found) {
+      ret = OB_ENTRY_NOT_EXIST;
+    }
+  }
+  return ret;
+}
+
+int ObUnitInfoGetter::find_server_config_idx(const ObIArray<ObServerConfig> &server_configs,
+                                             const ObAddr &server, int64_t &index) const
+{
+  int ret = OB_SUCCESS;
+  index = OB_INVALID_INDEX;
+  // server_configs can be empty
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (!server.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(server), K(ret));
+  } else {
+    bool found = false;
+    for (int64_t i = 0; !found && i < server_configs.count(); ++i) {
+      if (server_configs.at(i).server_ == server) {
+        index = i;
+        found = true;
+      }
+    }
+    if (!found) {
+      ret = OB_ENTRY_NOT_EXIST;
+    }
+  }
+  return ret;
+}
+
+void ObUnitInfoGetter::build_unit_stat(const ObAddr &server,
+                                       const ObUnit &unit,
+                                       ObUnitStatus &unit_stat) const
+{
+  unit_stat = UNIT_NORMAL;
+  if (unit.migrate_from_server_.is_valid()) {
+    if (server == unit.server_) {
+      unit_stat = UNIT_MIGRATE_IN;
+    } else if (server == unit.migrate_from_server_) {
+      unit_stat = UNIT_MIGRATE_OUT;
+    } else {
+      unit_stat = UNIT_ERROR_STAT;
+    }
+  } else if (ObUnit::UNIT_STATUS_DELETING == unit.status_) {
+    unit_stat = UNIT_MARK_DELETING;
+  }
+}
+
+int ObUnitInfoGetter::get_compat_mode(lib::Worker::CompatMode &compat_mode) const
+{
+  int ret = OB_SUCCESS;
+  {
+    compat_mode = lib::Worker::CompatMode::MYSQL;
+  }
+  return ret;
+}
+
+}//end namespace share
+}//end namespace oceanbase

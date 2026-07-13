@@ -30,11 +30,11 @@ namespace oceanbase
 namespace share
 {
 class SCN;
+class ObLSID;
 }
 
 namespace storage
 {
-class ObLS;
 namespace mds
 {
 class MdsCtx;
@@ -57,7 +57,7 @@ public:
   // @return OB_TABLET_NOT_EXIST, the tablet is not exist.
   // @return OB_NO_NEED_UPDATE, this log needs to be ignored.
   // @return other error codes, failed to replay.
-  int execute(const share::SCN &scn, const common::ObTabletID &tablet_id);
+  int execute(const share::SCN &scn, const share::ObLSID &ls_id, const common::ObTabletID &tablet_id);
 
   // check restore status before replay
   // @return OB_SUCCESS, need replay.
@@ -68,7 +68,14 @@ public:
 
 
 protected:
-  // Check whether replay updates tablet create/delete/split MDS status.
+  // Check if this replay operation will update the tablet status(ObTabletCreateDeleteMdsUserData), for example, the following
+  // 6 types of ObTabletMdsUserDataType need return TRUE.
+  // 1. CREATE_TABLET
+  // 2. REMOVE_TABLET
+  // 3. RESERVED_3
+  // 4. RESERVED_4
+  // 5. RESERVED_5
+  // 6. RESERVED_6
   virtual bool is_replay_update_tablet_status_() const = 0;
 
   // replay to the tablet
@@ -111,17 +118,20 @@ protected:
       storage::ObTabletHandle &tablet_handle,
       const ObTabletCreateDeleteMdsUserData &mds,
       storage::mds::MdsCtx &ctx,
-      const share::SCN &scn);
+      const share::SCN &scn,
+      const bool for_old_mds = false);
   int replay_to_mds_table_(
       storage::ObTabletHandle &tablet_handle,
       const ObTabletDDLCompleteMdsUserData &mds,
       storage::mds::MdsCtx &ctx,
-      const share::SCN &scn);
+      const share::SCN &scn,
+      const bool for_old_mds);
   int replay_to_mds_table_(
       storage::ObTabletHandle &tablet_handle,
       const ObTabletBindingMdsUserData &mds,
       storage::mds::MdsCtx &ctx,
-      const share::SCN &scn);
+      const share::SCN &scn,
+      const bool for_old_mds = false);
   template <typename K, typename V>
   int replay_to_mds_table_(
       storage::ObTabletHandle &tablet_handle,
@@ -143,12 +153,12 @@ private:
       bool &can_skip);
   //  The replay of multi-source log modified by ObTabletCreateDeleteMdsUserData needs to be filtered by tablet_change_checkpoint_scn
   int check_can_skip_replay_(
-      storage::ObLS *ls,
+      const storage::ObLSHandle &ls_handle,
       const share::SCN &scn,
       bool &can_skip);
 
   int replay_get_tablet_(
-      storage::ObLS *ls,
+      const storage::ObLSHandle &ls_handle,
       const common::ObTabletID &tablet_id,
       const share::SCN &scn,
       storage::ObTabletHandle &tablet_handle);

@@ -131,7 +131,7 @@ int ObTmpFilePageCacheController::free_swap_job_(ObTmpFileSwapJob *swap_job)
   return ret;
 }
 
-// Refresh the temporary-file disk limit from runtime configuration with a 10 ms timeout.
+// refresh tmp file disk usage limit from tenant config with timeout 10ms
 void ObTmpFilePageCacheController::refresh_disk_usage_limit()
 {
   int ret = OB_SUCCESS;
@@ -139,9 +139,13 @@ void ObTmpFilePageCacheController::refresh_disk_usage_limit()
     ret = OB_NOT_INIT;
     LOG_WARN("tmp file page cache controller is not inited", KR(ret));
   } else {
-    const int64_t max_disk_usage = GCONF.temporary_file_max_disk_size;
-    int64_t disk_limit = max_disk_usage > 0 ? max_disk_usage : 0;
-    ATOMIC_SET(&disk_usage_limit_, disk_limit);
+    if (!true) {
+      // do nothing
+    } else {
+      const int64_t max_disk_usage = GCONF.temporary_file_max_disk_size;
+      int64_t disk_limit = max_disk_usage > 0 ? max_disk_usage : 0;
+      ATOMIC_SET(&disk_usage_limit_, disk_limit);
+    }
   }
 }
 

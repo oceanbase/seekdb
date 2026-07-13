@@ -103,6 +103,7 @@ int ObKVCacheIterator::init(const int64_t cache_id, ObKVCacheMap * const map)
 //TODO bucket num level map should be system parameter
 const int64_t ObKVGlobalCache::bucket_num_array_[MAX_BUCKET_NUM_LEVEL] =
     {
+#ifdef OB_BUILD_EMBED_MODE
       196613l,      // more than 2G, 1.5M kvcache meta
       393241l,      // more than 4G, 3M kvcache meta
       786433l,      // more than 8G, 6M kvcache meta
@@ -113,6 +114,18 @@ const int64_t ObKVGlobalCache::bucket_num_array_[MAX_BUCKET_NUM_LEVEL] =
       25165843l,    // more than 256G, 200M kvcache meta
       50331653l,    // more than 512G, 500M kvcache meta
       100663319l,   // more than 1024G, 1G kvcache meta
+#else
+      786433l,      // more than 2G, 6M kvcache meta
+      1572869l,     // more than 4G, 12M kvcache meta
+      3145739l,     // more than 8G, 25M kvcache meta
+      6291469l,     // more than 16G, 50M kvcache meta
+      12582917l,    // more than 32G, 100M kvcache meta
+      25165843l,    // more than 64G, 200M kvcache meta
+      50331653l,   // more than 128G, 500M kvcache meta
+      100663319l,   // more than 256G, 1G kvcache meta
+      201326611l,   // more than 512G, 2G kvcache meta
+      402653189ll   // more than 1024G, 4G kvcache meta
+#endif
     };
 
 ObKVGlobalCache::ObKVGlobalCache()
@@ -172,7 +185,7 @@ int ObKVGlobalCache::get_suitable_bucket_num(int64_t& bucket_num)
 }
 
 int ObKVGlobalCache::init(
-    ObIServerMemLimitGetter *mem_limit_getter,
+    ObITenantMemLimitGetter *mem_limit_getter,
     const int64_t bucket_num,
     const int64_t max_cache_size,
     const int64_t block_size,
@@ -432,7 +445,7 @@ int ObKVGlobalCache::erase_cache()
   return ret;
 }
 
-int ObKVGlobalCache::sync_flush()
+int ObKVGlobalCache::sync_flush_tenant()
 {
   int ret = OB_SUCCESS;
 
@@ -442,20 +455,20 @@ int ObKVGlobalCache::sync_flush()
   } else if (OB_ISNULL(mem_limit_getter_)) {
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "Unexpected null mem limit getter", K(ret), KP(mem_limit_getter_));
-  } else if (mem_limit_getter_->has_memory_limit()) {
+  } else if (mem_limit_getter_->has_tenant()) {  // check tenant
     ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "The server memory limit is still active", K(ret));
-  } else if (OB_FAIL(insts_.mark_all_delete())) {
-    COMMON_LOG(WARN, "Fail to mark cache instances for deletion", K(ret));
+    COMMON_LOG(WARN, "The tenant is still existed", K(ret));
+  } else if (OB_FAIL(insts_.mark_tenant_delete())) {
+    COMMON_LOG(WARN, "Fail to mark tenant cache inst delete", K(ret));
   } else if (OB_FAIL(store_.flush_washable_mbs(true /* force flush */))) {
-    COMMON_LOG(WARN, "Fail to flush cache blocks from store", K(ret));
-  } else if (OB_FAIL(map_.erase_all())) {
+    COMMON_LOG(WARN, "Fail to erase tenant from store", K(ret));
+  } else if (OB_FAIL(map_.erase_tenant(true /* force_erase */))) {
     COMMON_LOG(WARN, "Fail to retire cache node from map", K(ret));
-  } else if (OB_FAIL(insts_.erase_all())) {
-    COMMON_LOG(WARN, "Fail to erase cache instances", K(ret));
+  } else if (OB_FAIL(insts_.erase_tenant())) {
+    COMMON_LOG(WARN, "Fail to erase tenant from insts", K(ret));
   }
 
-  COMMON_LOG(INFO, "flush cache details", K(ret));
+  COMMON_LOG(INFO, "erase tenant cache details", K(ret));
 
   return ret;
 }
@@ -632,7 +645,7 @@ int ObKVGlobalCache::get_washable_size(int64_t &washable_size)
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(store_.get_washable_size(washable_size))) {
-    COMMON_LOG(WARN, "get washable size failed", K(ret), K(washable_size));
+    COMMON_LOG(WARN, "get tenant washable size failed", K(ret), K(washable_size));
   }
   return ret;
 }
