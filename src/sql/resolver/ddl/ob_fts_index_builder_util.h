@@ -105,12 +105,14 @@ public:
       const share::schema::ObTableSchema &data_schema,
       const obcall::ObCreateIndexArg &index_arg,
       ObIAllocator *allocator,
-      ObIArray<obcall::ObCreateIndexArg> &index_arg_list);
+      ObIArray<obcall::ObCreateIndexArg> &index_arg_list,
+      ObSchemaGetterGuard *schema_guard = nullptr);
   static int append_fts_doc_word_arg(
       const share::schema::ObTableSchema &data_schema,
       const obcall::ObCreateIndexArg &index_arg,
       ObIAllocator *allocator,
-      ObIArray<obcall::ObCreateIndexArg> &index_arg_list);
+      ObIArray<obcall::ObCreateIndexArg> &index_arg_list,
+      ObSchemaGetterGuard *schema_guard = nullptr);
   static int generate_fts_aux_index_name(
       obcall::ObCreateIndexArg &arg,
       ObIAllocator *allocator);
@@ -151,6 +153,13 @@ public:
       obcall::ObCreateIndexArg &arg,
       ObIAllocator *allocator,
       ObSchemaGetterGuard *schema_guard = nullptr);
+  static bool is_builtin_ik_dict_table(const ObString &table_name);
+  static int normalize_fulltext_dict_table_name(
+      const ObString &default_database_name,
+      ObIAllocator &allocator,
+      const ObString &configured_table_name,
+      ObString &normalized_table_name,
+      bool &is_custom_table);
   static int check_fulltext_dict_table_referenced(
       const common::ObString &database_name,
       const common::ObString &table_name,

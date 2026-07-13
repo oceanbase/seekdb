@@ -196,7 +196,8 @@ public:
       bool &fts_common_aux_table_exist,
       ObIArray<ObPartitionResolveResult> &resolve_results,
       ObIArray<obcall::ObCreateIndexArg> &index_arg_list,
-      ObIAllocator *allocator);
+      ObIAllocator *allocator,
+      share::schema::ObSchemaGetterGuard *schema_guard = nullptr);
   static int append_multivalue_args(
       const share::schema::ObTableSchema &data_schema,
       const ObPartitionResolveResult &resolve_result,

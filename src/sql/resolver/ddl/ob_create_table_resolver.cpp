@@ -2317,7 +2317,10 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
                                                        have_generate_fts_arg_,
                                                        resolve_results,
                                                        index_arg_list,
-                                                       allocator_))) {
+                                                       allocator_,
+                                                       OB_ISNULL(schema_checker_)
+                                                           ? nullptr
+                                                           : schema_checker_->get_schema_guard()))) {
               LOG_WARN("failed to append fts args", K(ret));
             } else {
               has_fts_index_ = true;
