@@ -1409,9 +1409,6 @@ int ObDynamicSamplingUtils::get_valid_dynamic_sampling_level(const ObSQLSessionI
     LOG_WARN("failed to get opt dynamic sampling level", K(ret));
   } else if (session_ds_level == ObDynamicSamplingLevel::BASIC_DYNAMIC_SAMPLING) {
     ds_level = session_ds_level;
-  } else if (!session_info->is_user_session() && table_type == MATERIALIZED_VIEW_LOG) {
-    ds_level = ObDynamicSamplingLevel::BASIC_DYNAMIC_SAMPLING;
-    specify_ds = true;
   }
   LOG_TRACE("get valid dynamic sampling level", KPC(table_ds_hint), K(global_ds_level), K(specify_ds),
                                                 K(session_ds_level), K(ds_level), K(sample_block_cnt));

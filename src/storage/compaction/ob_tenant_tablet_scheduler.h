@@ -18,6 +18,7 @@
 #define STORAGE_OB_TENANT_TABLET_SCHEDULER_H_
 
 #include "lib/thread/ob_dedup_queue.h"
+#include "share/ob_ls_id.h"
 #include "share/tablet/ob_tablet_info.h"
 #include "storage/ob_i_store.h"
 #include "storage/compaction/ob_tablet_merge_task.h"
@@ -118,7 +119,7 @@ public:
   virtual int schedule_merge(const int64_t broadcast_version) override;
   int update_upper_trans_version_and_gc_sstable();
   int try_update_upper_trans_version_and_gc_sstable(ObLS &ls, ObCompactionScheduleIterator &iter);
-  int check_ls_compaction_finish();
+  int check_ls_compaction_finish(const share::ObLSID &ls_id);
   int schedule_all_tablets_minor();
 
   int gc_info();
@@ -140,45 +141,48 @@ public:
       compaction::ObTabletMergeDagParam &param);
   template <class T>
   static int schedule_tablet_minor_merge(
-      ObLS *ls,
+      ObLSHandle &ls_handle,
       ObTabletHandle &tablet_handle);
   template <class T>
   static int schedule_tablet_minor_merge(
       const ObMergeType &merge_type,
-      ObLS *ls,
+      ObLSHandle &ls_handle,
       ObTabletHandle &tablet_handle);
   static int schedule_tablet_meta_merge(
-      ObLS *ls,
+      ObLSHandle &ls_handle,
       ObTabletHandle &tablet_handle,
       bool &has_created_dag);
   template <class T>
   static int schedule_merge_execute_dag(
       const compaction::ObTabletMergeDagParam &param,
-      ObLS *ls,
+      ObLSHandle &ls_handle,
       ObTabletHandle &tablet_handle,
       const ObGetMergeTablesResult &result);
   // Check whether major/medium compaction can be scheduled.
   static int check_ready_for_major_merge(
+      const ObLSID &ls_id,
       const storage::ObTablet &tablet,
       const ObMergeType merge_type);
   static int schedule_merge_dag(
+      const share::ObLSID &ls_id,
       const storage::ObTablet &tablet,
       const ObMergeType merge_type,
       const int64_t &merge_snapshot_version,
       const ObExecMode exec_mode,
       const ObDagId *dag_net_id = nullptr);
   static int schedule_tablet_ddl_major_merge(
-      ObLS *ls,
+      ObLSHandle &ls_handle,
       ObTabletHandle &tablet_handle);
 #ifdef ERRSIM
   static void errsim_after_mini_schedule_adaptive(
+    const ObLSID &ls_id,
     const ObTabletID &tablet_id,
     const ObAdaptiveMergePolicy::AdaptiveCompactionEvent &event,
     bool &medium_is_cooling_down,
     ObAdaptiveMergePolicy::AdaptiveMergeReason &reason);
 #endif
   static int try_schedule_adaptive_merge(
-    ObLS *ls,
+    ObLSHandle &ls_handle,
     ObTabletHandle &tablet_handle,
     const ObAdaptiveMergePolicy::AdaptiveCompactionEvent &event,
     const int64_t update_row_cnt,
@@ -186,6 +190,7 @@ public:
     bool &create_dag);
   int get_min_dependent_schema_version(int64_t &min_schema_version);
   int user_request_schedule_medium_merge(
+    const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id);
   OB_INLINE int64_t get_schedule_batch_size() const { return batch_size_mgr_.get_schedule_batch_size(); }
   OB_INLINE int64_t get_checker_batch_size() const { return batch_size_mgr_.get_checker_batch_size(); }
@@ -193,14 +198,14 @@ private:
   friend struct ObTenantTabletSchedulerTaskMgr;
   bool need_fast_medium_loop() const;
   int schedule_all_tablets_medium();
-  int schedule_minor_merge(ObLS *ls);
+  int schedule_ls_minor_merge(ObLSHandle &ls_handle);
   OB_INLINE int schedule_tablet_minor(
-    ObLS *ls,
+    ObLSHandle &ls_handle,
     ObTabletHandle tablet_handle,
     bool &schedule_minor_flag,
     bool &need_fast_freeze_flag);
   int schedule_ddl_tablet_merge(
-    ObLS *ls,
+    ObLSHandle &ls_handle,
     ObTabletHandle &tablet_handle);
 public:
   typedef common::ObSEArray<ObGetMergeTablesResult, compaction::ObPartitionMergePolicy::OB_MINOR_PARALLEL_INFO_ARRAY_SIZE> MinorParallelResultArray;
@@ -221,7 +226,7 @@ private:
   bool is_inited_;
   common::ObDedupQueue bf_queue_;
   ObFastFreezeChecker fast_freeze_checker_;
-  ObCompactionScheduleIterator minor_tablet_iter_;
+  ObCompactionScheduleIterator minor_ls_tablet_iter_;
   ObCompactionScheduleIterator gc_sst_tablet_iter_;
   ObTenantTabletSchedulerTaskMgr timer_task_mgr_;
   ObScheduleBatchSizeMgr batch_size_mgr_;

@@ -399,8 +399,6 @@ public:
                                                  get_aggr_item_size() > 0; }
 
   inline bool has_recursive_cte() const { return is_recursive_cte_; }
-  inline void set_expanded_mview(bool is_expanded_mview) { is_expanded_mview_ = is_expanded_mview; }
-  inline bool is_expanded_mview() const { return is_expanded_mview_; }
   // return single row
   inline bool is_single_set_query() const { return get_aggr_item_size() > 0 &&
                                                    group_exprs_.empty() &&
@@ -597,7 +595,6 @@ private:
   bool children_swapped_;
   share::schema::ViewCheckOption check_option_;
   bool contain_ab_param_;
-  bool is_expanded_mview_;
   //denote if the query option 'STRAIGHT_JOIN' has been specified
   bool is_select_straight_join_;
   // denote if the duplicate value of this stmt will not change the query result

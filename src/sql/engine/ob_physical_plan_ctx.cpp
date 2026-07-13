@@ -110,8 +110,6 @@ ObPhysicalPlanCtx::ObPhysicalPlanCtx(common::ObIAllocator &allocator)
       subschema_ctx_(allocator_),
       enable_rich_format_(false),
       all_local_session_vars_(allocator),
-      mview_ids_(allocator),
-      last_refresh_scns_(allocator),
       total_memstore_read_row_count_(0),
       total_ssstore_read_row_count_(0),
       is_direct_insert_plan_(false),
@@ -665,8 +663,6 @@ OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
       OB_UNIS_ENCODE(*all_local_session_vars_.at(i).get_local_vars());
     }
   }
-  OB_UNIS_ENCODE(mview_ids_);
-  OB_UNIS_ENCODE(last_refresh_scns_);
   OB_UNIS_ENCODE(is_direct_insert_plan_);
   OB_UNIS_ENCODE(check_pdml_affected_rows_);
   return ret;
@@ -765,8 +761,6 @@ OB_DEF_SERIALIZE_SIZE(ObPhysicalPlanCtx)
       OB_UNIS_ADD_LEN(*all_local_session_vars_.at(i).get_local_vars());
     }
   }
-  OB_UNIS_ADD_LEN(mview_ids_);
-  OB_UNIS_ADD_LEN(last_refresh_scns_);
   OB_UNIS_ADD_LEN(is_direct_insert_plan_);
   OB_UNIS_ADD_LEN(check_pdml_affected_rows_);
   return len;
@@ -890,8 +884,6 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
       LOG_WARN("failed to deserialize param store", K(ret));
     }
   }
-  OB_UNIS_DECODE(mview_ids_);
-  OB_UNIS_DECODE(last_refresh_scns_);
   OB_UNIS_DECODE(is_direct_insert_plan_);
   OB_UNIS_DECODE(check_pdml_affected_rows_);
   return ret;
@@ -1336,17 +1328,6 @@ int ObPhysicalPlanCtx::init_param_store_after_deserialize()
     }
   }
   return ret;
-}
-
-uint64_t ObPhysicalPlanCtx::get_last_refresh_scn(uint64_t mview_id) const
-{
-  uint64_t last_refresh_scn = OB_INVALID_SCN_VAL;
-  for (int64_t i = 0; OB_INVALID_SCN_VAL == last_refresh_scn && i < mview_ids_.count(); ++i) {
-    if (mview_id == mview_ids_.at(i)) {
-      last_refresh_scn = last_refresh_scns_.at(i);
-    }
-  }
-  return last_refresh_scn;
 }
 
 } //sql

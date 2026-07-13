@@ -70,6 +70,9 @@
   #include "src/share/ob_tablet_autoincrement_param.h"
   #include "src/storage/compaction/ob_medium_compaction_info.h"
   #include "src/storage/multi_data_source/ob_tablet_create_mds_ctx.h"
+  #include "src/share/ob_standby_upgrade.h"
+  #include "src/storage/multi_data_source/ob_tablet_create_mds_ctx.h"
+  #include "src/share/ob_standby_upgrade.h"
   #include "src/storage/truncate_info/ob_truncate_info.h"
   #include "src/storage/truncate_info/ob_truncate_info_mds_helper.h"
   #include "src/storage/tablet/ob_tablet_ddl_complete_mds_helper.h"
@@ -80,7 +83,7 @@
 /**********************generate mds frame code with multi source transaction***********************/
 // GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION(HELPER_CLASS, BUFFER_CTX_TYPE, ID, ENUM_NAME) is an
 // interface MACRO to transfer necessary information to MDS FRAME to generate codes in transaction
-// layer, mostly in ob_multi_data_source.cpp and ob_tx_ctx.cpp.
+// layer, mostly in ob_multi_data_source.cpp and ob_trans_part_ctx.cpp.
 //
 // @param HELPER_CLASS the class must has two static method signatures(or COMPILE ERROR):
 //                     1. static int on_register(const char* buf,
@@ -134,6 +137,10 @@ _GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION_(HELPER_CLASS, BUFFER_CTX_TYPE, ID, ENU
                                            ::oceanbase::storage::mds::MdsCtx,\
                                            31,\
                                            TABLET_SPLIT)
+  GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION(::oceanbase::share::ObUpgradeDataVersionMDSHelper, \
+                                          ::oceanbase::storage::mds::MdsCtx, \
+                                          33,\
+                                          STANDBY_UPGRADE_DATA_VERSION)
   GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION(::oceanbase::storage::ObTabletBindingMdsHelper,\
                                           ::oceanbase::storage::mds::MdsCtx,\
                                           34,\

@@ -953,9 +953,6 @@ protected:
   // while create table can garentee some table info is behind the index arg, which will not be
   // reset
   void reset_index();
-  int get_mv_container_table(const uint64_t mv_container_table_id,
-                             const share::schema::ObTableSchema *&mv_container_table_schema,
-                             common::ObString &mv_container_table_name);
   static int trim_space_for_default_value(
       const bool is_mysql_mode,
       const bool is_char_type,
@@ -1040,7 +1037,6 @@ protected:
   common::ObBitSet<> mocked_external_table_column_ids_;
   common::ObString index_params_;
   ObTableOrganizationType table_organization_;
-  int64_t mv_refresh_dop_;
   common::ObString vec_column_name_;
   ObIndexType vec_index_type_;
   bool enable_macro_block_bloom_filter_;

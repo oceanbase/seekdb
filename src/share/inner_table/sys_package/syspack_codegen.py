@@ -195,8 +195,6 @@ syspack_config = [
     SysPackConfig(SysPackGroup.MYSQL, "dbms_xplan", "dbms_xplan_mysql.sql", "dbms_xplan_mysql_body.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_udr", "dbms_udr_mysql.sql", "dbms_udr_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_workload_repository", "dbms_workload_repository_mysql.sql", "dbms_workload_repository_body_mysql.sql"),
-    SysPackConfig(SysPackGroup.MYSQL, "dbms_mview", "dbms_mview_mysql.sql", "dbms_mview_body_mysql.sql"),
-    SysPackConfig(SysPackGroup.MYSQL, "dbms_mview_stats", "dbms_mview_stats_mysql.sql", "dbms_mview_stats_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_trusted_certificate_manager", "dbms_trusted_certificate_manager_mysql.sql", "dbms_trusted_certificate_manager_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_ob_limit_calculator", "dbms_ob_limit_calculator_mysql.sql", "dbms_ob_limit_calculator_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_vector", "dbms_vector_mysql.sql", "dbms_vector_body_mysql.sql"),

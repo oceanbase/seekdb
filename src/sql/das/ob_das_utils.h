@@ -17,6 +17,7 @@
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_UTILS_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_UTILS_H_
 #include "share/ob_define.h"
+#include "share/ob_ls_id.h"
 #include "share/location_cache/ob_location_struct.h"
 #include "common/ob_tablet_id.h"
 #include "sql/dtl/ob_dtl_task.h"

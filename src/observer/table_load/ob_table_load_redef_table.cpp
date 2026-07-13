@@ -177,6 +177,8 @@ int ObTableLoadRedefTable::finish(const ObTableLoadRedefTableFinishArg &arg,
       build_single_replica_response_arg.dest_schema_id_      = arg.dest_table_id_;
       build_single_replica_response_arg.schema_version_      = arg.schema_version_;
       build_single_replica_response_arg.dest_schema_version_ = arg.schema_version_;
+      build_single_replica_response_arg.ls_id_               = share::ObLSID(1);
+      build_single_replica_response_arg.dest_ls_id_          = share::ObLSID(1);
       build_single_replica_response_arg.tablet_id_           = ObTableID(-1);
       build_single_replica_response_arg.snapshot_version_    = 1;
       build_single_replica_response_arg.execution_id_        = 1;

@@ -44,7 +44,7 @@ public:
     : tmp_allocator_(nullptr), allocator_(nullptr),
       tx_desc_(nullptr), snapshot_(), tx_id_(),
       sql_mode_(SMO_DEFAULT), dml_base_param_(nullptr), 
-      tablet_id_(), lob_meta_tablet_id_(), lob_piece_tablet_id_(),
+      ls_id_(), tablet_id_(), lob_meta_tablet_id_(), lob_piece_tablet_id_(),
       coll_type_(), lob_locator_(nullptr), lob_common_(nullptr),
       lob_data_(nullptr), byte_size_(0), handle_size_(0), timeout_(0),
       fb_snapshot_(), offset_(0), len_(0),
@@ -118,7 +118,7 @@ public:
 
   bool skip_flush_redo() const { return !try_flush_redo_; }
 
-  TO_STRING_KV(KP(this), K_(tablet_id), K_(lob_meta_tablet_id), K_(lob_piece_tablet_id),
+  TO_STRING_KV(KP(this), K_(ls_id), K_(tablet_id), K_(lob_meta_tablet_id), K_(lob_piece_tablet_id),
     KPC_(lob_locator), KPC_(lob_common), KPC_(lob_data), K_(byte_size), K_(handle_size), K_(timeout), KP_(allocator), KP_(tmp_allocator),
     K_(coll_type), K_(scan_backward), K_(offset), K_(len), K_(parent_seq_no), K_(seq_no_st), K_(used_seq_cnt), K_(total_seq_cnt), K_(checksum),
     K_(update_len), K_(op_type), K_(is_fill_zero), K_(from_rpc), K_(snapshot), K_(fb_snapshot), K_(tx_id), K_(read_latest), K_(is_total_quantity_log),
@@ -140,6 +140,7 @@ public:
   // some lob manager func will access other lob for data
   // other lob can read from other tenant
   
+  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   common::ObTabletID lob_meta_tablet_id_;
   common::ObTabletID lob_piece_tablet_id_;

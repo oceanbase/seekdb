@@ -43,6 +43,7 @@
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "share/location_cache/ob_location_service.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
@@ -54,6 +55,44 @@ using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::obcall;
 using namespace oceanbase::sql;
+
+int ObDDLUtil::get_sys_log_handler_role_and_proposal_id(
+    common::ObRole &role,
+    int64_t &proposal_id)
+{
+  int ret = OB_SUCCESS;
+  role = FOLLOWER;
+  proposal_id = 0;
+  if (OB_ISNULL(GCTX.omt_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), KP(GCTX.omt_));
+  } else if (OB_UNLIKELY(!GCTX.omt_->has_tenant())) {
+    ret = OB_TENANT_NOT_EXIST;
+    LOG_WARN("local server does not have SYS tenant resource", KR(ret));
+  } else {
+    MOD_SCOPE {
+      ObLSService *ls_svr = share::g_mp->ls_service();
+      ObLS *ls = NULL;
+      ObLSHandle handle;
+      logservice::ObLogHandler *log_handler = NULL;
+      if (OB_ISNULL(ls_svr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("mtl ObLSService should not be null", KR(ret), KP(ls_svr));
+      } else if (OB_FAIL(ls_svr->get_ls(SYS_LS, handle, ObLSGetMod::OBSERVER_MOD))) {
+        LOG_WARN("get ls failed", KR(ret));
+      } else if (OB_ISNULL(ls = handle.get_ls())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("ls should not be null", KR(ret));
+      } else if (OB_ISNULL(log_handler = ls->get_log_handler())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("log_handler is null", KR(ret), KP(log_handler));
+      } else if (OB_FAIL(log_handler->get_role(role, proposal_id))) {
+        LOG_WARN("fail to get role and epoch", KR(ret));
+      }
+    }
+  }
+  return ret;
+}
 
 int ObDDLUtil::hold_snapshot(
     common::ObMySQLTransaction &trans,
@@ -871,6 +910,7 @@ int ObDDLUtil::calc_snapshot_with_gts(
   int ret = OB_SUCCESS;
   snapshot = 0;
   SCN curr_ts;
+  bool is_external_consistent = false;
   const int64_t timeout_us = ObDDLUtil::get_default_ddl_rpc_timeout();
   ObFreezeInfoProxy freeze_info_proxy{};
   ObFreezeInfo frozen_status;
@@ -883,9 +923,13 @@ int ObDDLUtil::calc_snapshot_with_gts(
   } else {
     {
       MAKE_TENANT_SWITCH_SCOPE_GUARD(tenant_guard);
+      // ignore return, MTL is only used in get_ts_sync, which will handle switch failure.
+      // for performance, everywhere calls get_ts_sync should ensure using correct tenant ctx
       tenant_guard.switch_to();
-      if (OB_FAIL(OB_TS_MGR.get_gts_sync(timeout_us, curr_ts))) {
-        LOG_WARN("fail to get gts sync", K(ret), K(timeout_us), K(curr_ts));
+      if (OB_FAIL(OB_TS_MGR.get_ts_sync(timeout_us,
+                                        curr_ts,
+                                        is_external_consistent))) {
+        LOG_WARN("fail to get gts sync", K(ret), K(timeout_us), K(curr_ts), K(is_external_consistent));
       }
     }
     if (OB_SUCC(ret)) {
@@ -1033,12 +1077,19 @@ int ObDDLUtil::check_and_cancel_single_replica_dag(
 {
   int ret = OB_SUCCESS;
   all_dag_exit = false;
+  const bool force_renew = true;
+  bool is_cache_hit = false;
+  const int64_t expire_renew_time = force_renew ? INT64_MAX : 0;
+  share::ObLocationService *location_service = GCTX.location_service_;
   if (OB_ISNULL(task)) {
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_UNLIKELY(!task->is_inited())) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
+  } else if (OB_ISNULL(location_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), KP(location_service));
   } else if (OB_UNLIKELY(!check_dag_exit_tablets_map.created())) {
     const int64_t CHECK_DAG_EXIT_BUCKET_NUM = 64;
     common::ObArray<common::ObTabletID> src_tablet_ids;
@@ -1061,17 +1112,31 @@ int ObDDLUtil::check_and_cancel_single_replica_dag(
   }
   if (OB_SUCC(ret)) {
     int saved_ret = OB_SUCCESS;
+    ObAddr unused_leader_addr;
+    const int64_t timeout_us = ObDDLUtil::get_default_ddl_rpc_timeout();
     common::hash::ObHashMap<common::ObTabletID, common::ObTabletID> ::const_iterator iter =
       check_dag_exit_tablets_map.begin();
     ObArray<common::ObTabletID> dag_not_exist_tablets;
 
 
     for (; OB_SUCC(ret) && iter != check_dag_exit_tablets_map.end(); iter++) {
+      ObLSID src_ls_id;
+      ObLSID dst_ls_id;
       const common::ObTabletID &src_tablet_id = iter->first;
       const common::ObTabletID &dst_tablet_id = iter->second;
-      {
+      int64_t paxos_member_count = 0;
+      common::ObArray<ObAddr> paxos_server_list;
+      if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(location_service, src_tablet_id, timeout_us, src_ls_id, unused_leader_addr))) {
+        LOG_WARN("get src tablet leader addr failed", K(ret));
+      } else if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(location_service, dst_tablet_id, timeout_us, dst_ls_id, unused_leader_addr))) {
+        LOG_WARN("get dst tablet leader addr failed", K(ret));
+      } else if (OB_FAIL(ObDDLUtil::get_tablet_paxos_member_list(dst_tablet_id, paxos_server_list, paxos_member_count))) {
+        LOG_WARN("get tablet paxos member list failed", K(ret));
+      } else {
         bool is_tablet_dag_exist = false;
         obcall::ObDDLBuildSingleReplicaRequestArg arg;
+        arg.ls_id_ = src_ls_id;
+        arg.dest_ls_id_ = dst_ls_id;
 
 
 
@@ -1088,22 +1153,24 @@ int ObDDLUtil::check_and_cancel_single_replica_dag(
         arg.execution_id_ = 1; // to ensure arg valid only.
         arg.data_format_version_ = data_format_version; // to ensure arg valid only.
         arg.tablet_task_id_ = 1; // to ensure arg valid only.
-        int tmp_ret = OB_SUCCESS;
-        bool is_replica_dag_exist = true;
-        if (is_complement_data_dag && OB_TMP_FAIL(
-            GCTX.ob_service_->check_and_cancel_ddl_complement_data_dag(arg, is_replica_dag_exist))) {
-          saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
-          is_tablet_dag_exist = true;
-          LOG_WARN("check and cancel ddl complement dag failed", K(tmp_ret), K(arg));
-        } else if (!is_complement_data_dag && OB_TMP_FAIL(
-            GCTX.ob_service_->check_and_cancel_delete_lob_meta_row_dag(arg, is_replica_dag_exist))) {
-          saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
-          is_tablet_dag_exist = true;
-          LOG_WARN("check and cancel delete lob meta row dag failed", K(tmp_ret), K(arg));
-        } else if (is_replica_dag_exist) {
-          is_tablet_dag_exist = true;
-          if (REACH_COUNT_INTERVAL(1000L)) {
-            LOG_INFO("wait local dag exit", K(arg));
+        for (int64_t j = 0; OB_SUCC(ret) && j < paxos_server_list.count(); j++) {
+          int tmp_ret = OB_SUCCESS;
+          obcall::Bool is_replica_dag_exist(true);
+          if (is_complement_data_dag && OB_TMP_FAIL(ex_rpc::sync_call(ObDDLUtil::get_default_ddl_rpc_timeout(), [&]() -> int { bool b = is_replica_dag_exist; int r = GCTX.ob_service_->check_and_cancel_ddl_complement_data_dag(arg, b); is_replica_dag_exist = b; return r; }))) {
+            // consider as dag does exist in this server.
+            saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
+            is_tablet_dag_exist = true;
+            LOG_WARN("check and cancel ddl complement dag failed", K(ret), K(tmp_ret), K(arg));
+          } else if (!is_complement_data_dag && OB_TMP_FAIL(ex_rpc::sync_call(ObDDLUtil::get_default_ddl_rpc_timeout(), [&]() -> int { bool b = is_replica_dag_exist; int r = GCTX.ob_service_->check_and_cancel_delete_lob_meta_row_dag(arg, b); is_replica_dag_exist = b; return r; }))) {
+            // consider as dag does exist in this server.
+            saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
+            is_tablet_dag_exist = true;
+            LOG_WARN("check and cancel ddl complement dag failed", K(ret), K(tmp_ret), K(arg));
+          } else if (is_replica_dag_exist) {
+            is_tablet_dag_exist = true;
+            if (REACH_COUNT_INTERVAL(1000L)) {
+              LOG_INFO("wait dag exist", "addr", paxos_server_list.at(j), K(arg));
+            }
           }
         }
         if (OB_SUCC(ret) && !is_tablet_dag_exist) {
@@ -1124,7 +1191,7 @@ int ObDDLUtil::check_and_cancel_single_replica_dag(
   }
   if (OB_SUCC(ret)) {
     all_dag_exit = check_dag_exit_tablets_map.empty() ? true : false;
-    task->set_delay_schedule_time(3000L * 1000L);
+    task->set_delay_schedule_time(3000L * 1000L); // 3s, to avoid sending too many rpcs to the same replica frequently if retry.
   } else if (OB_TABLE_NOT_EXIST == ret
       || OB_TENANT_NOT_EXIST == ret
       || (++check_dag_exit_retry_cnt >= 10 /*MAX RETRY COUNT IF FAILED*/)) {
@@ -1371,45 +1438,65 @@ int64_t ObDDLUtil::get_real_parallelism(const int64_t parallelism)
 
 int ObCheckTabletDataComplementOp::do_check_tablets_merge_status(const int64_t snapshot_version,
   const ObIArray<ObTabletID> &tablet_ids,
+  const ObLSID &ls_id,
+  hash::ObHashMap<ObAddr, ObArray<ObTabletID>> &ip_tablets_map,
   hash::ObHashMap<ObTabletID, int32_t> &tablets_commited_map,
   int64_t &tablet_build_succ_count)
 {
   int ret = OB_SUCCESS;
+  ip_tablets_map.reuse();
   tablets_commited_map.reuse();
 
   tablet_build_succ_count = 0;
 
-  if (OB_UNLIKELY(tablet_ids.count() <= 0 || OB_INVALID_TIMESTAMP == snapshot_version)) {
+  if (OB_UNLIKELY(tablet_ids.count() < 0 || false || OB_INVALID_TIMESTAMP == snapshot_version)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_ids.count()), K(snapshot_version));
   } else {
     obcall::ObDDLCheckTabletMergeStatusArg arg;
 
+    arg.ls_id_ = ls_id;
     arg.snapshot_version_ = snapshot_version;
 
-    if (OB_FAIL(arg.tablet_ids_.assign(tablet_ids))) {
-      LOG_WARN("fail to assign tablet ids", K(ret), K(tablet_ids));
-    } else {
-      obcall::ObDDLCheckTabletMergeStatusResult cur_result;
-      int return_ret = GCTX.ob_service_->check_ddl_tablet_merge_status(arg, cur_result);
-      if (OB_SUCCESS == return_ret) {
-        const common::ObSArray<bool> &tablet_rsp_array = cur_result.merge_status_;
-        if (tablet_ids.count() != tablet_rsp_array.count()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("tablet req count is not equal to tablet rsp count", K(ret), K(tablet_ids), K(tablet_rsp_array));
-        } else {
-          for (int64_t idx = 0; OB_SUCC(ret) && idx < tablet_rsp_array.count(); ++idx) {
-            const common::ObTabletID &tablet_id = tablet_ids.at(idx);
-            const bool tablet_status = tablet_rsp_array.at(idx);
-            if (OB_FAIL(update_replica_merge_status(tablet_id, tablet_status, tablets_commited_map))) {
-              LOG_WARN("fail to update replica merge status", K(ret), K(tablet_id));
-            } else {
-              LOG_INFO("succ to update replica merge status", K(tablet_id), K(tablet_status));
+    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
+      const ObTabletID &tablet_id = tablet_ids.at(i);
+      if (OB_FAIL(construct_tablet_ip_map(tablet_id, ip_tablets_map))) {
+        LOG_WARN("fail to get tablet ip addr", K(ret), K(tablet_id));
+      }
+    }
+    // Direct calls to local service (seekdb has no remote servers).
+    for (hash::ObHashMap<ObAddr, ObArray<ObTabletID>>::const_iterator ip_iter = ip_tablets_map.begin();
+      OB_SUCC(ret) && ip_iter != ip_tablets_map.end(); ++ip_iter) {
+      const ObAddr & dest_ip = ip_iter->first;
+      UNUSED(dest_ip);
+      const ObArray<ObTabletID> &tablet_array = ip_iter->second;
+      if (OB_FAIL(arg.tablet_ids_.assign(tablet_array))) {
+        LOG_WARN("fail to get tablet ip addr", K(ret), K(tablet_array));
+      } else {
+        obcall::ObDDLCheckTabletMergeStatusResult cur_result;
+        int return_ret = GCTX.ob_service_->check_ddl_tablet_merge_status(arg, cur_result);
+        if (OB_SUCCESS == return_ret) {
+          common::ObSArray<bool> tablet_rsp_array;
+          common::ObArray<ObTabletID> tablet_req_array;
+          if (FALSE_IT(tablet_rsp_array = cur_result.merge_status_)) {
+          } else if (FALSE_IT(tablet_req_array = tablet_array)) {
+          } else if (tablet_req_array.count() != tablet_rsp_array.count()) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("tablet req count is not equal to tablet rsp count", K(ret), K(tablet_req_array), K(tablet_rsp_array));
+          } else {
+            for (int64_t idx = 0; OB_SUCC(ret) && idx < tablet_rsp_array.count(); ++idx) {
+              const common::ObTabletID &tablet_id = tablet_req_array.at(idx);
+              const bool tablet_status = tablet_rsp_array.at(idx);
+              if (OB_FAIL(update_replica_merge_status(tablet_id, tablet_status, tablets_commited_map))) {
+                LOG_WARN("fail to update replica merge status", K(ret), K(tablet_id), K(dest_ip));
+              } else {
+                LOG_INFO("succ to update replica merge status", K(dest_ip), K(tablet_id), K(tablet_status));
+              }
             }
           }
+        } else {
+          LOG_WARN("check ddl tablet merge status failed.", K(return_ret));
         }
-      } else {
-        LOG_WARN("check ddl tablet merge status failed.", K(return_ret));
       }
     }
     // 3. check any commit tablet

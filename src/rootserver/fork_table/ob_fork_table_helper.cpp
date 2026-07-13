@@ -27,12 +27,11 @@
 #include "rootserver/fork_table/ob_fork_table_util.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "share/schema/ob_schema_utils.h"
-#include "share/tablet/ob_tablet_mapping_operator.h"
+#include "share/tablet/ob_tablet_to_ls_operator.h"
 #include "storage/tablet/ob_tablet_fork_mds_helper.h"
 #include "storage/truncate_info/ob_truncate_info.h"
 #include "storage/truncate_info/ob_truncate_info_array.h"
 #include "storage/tx/ob_ts_mgr.h"
-#include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase {
@@ -289,6 +288,7 @@ int ObForkTableHelper::copy_tablet_autoinc_seq_info_()
     obcall::ObBatchSetTabletAutoincSeqArg arg;
     
     
+    arg.ls_id_ = SYS_LS;
     arg.is_tablet_creating_ = true;
 
     for (int64_t i = 0; OB_SUCC(ret) && i < src_tablet_ids_.count(); ++i) {
@@ -321,14 +321,15 @@ int ObForkTableHelper::copy_tablet_autoinc_seq_info_()
     if (OB_SUCC(ret)) {
       storage::ObTabletForkMdsArg fork_mds_arg;
       
+      fork_mds_arg.ls_id_ = SYS_LS;
       if (OB_FAIL(fork_mds_arg.set_autoinc_seq_arg(arg))) {
         LOG_WARN("failed to set autoinc seq arg", K(ret), K(arg));
       } else if (OB_FAIL(storage::ObTabletForkMdsHelper::register_mds(
                      fork_mds_arg, false, trans_))) {
-        LOG_WARN("failed to register fork mds", K(ret));
+        LOG_WARN("failed to register fork mds", K(ret), K(SYS_LS));
       } else {
         LOG_INFO("fork table: successfully registered fork mds for autoinc seq",
-                 K(arg.autoinc_params_.count()));
+                 K(SYS_LS), K(arg.autoinc_params_.count()));
       }
     }
   }
@@ -351,7 +352,7 @@ int ObForkTableHelper::copy_tablet_truncate_info_()
     int64_t empty_cnt = 0;
     int64_t registered_cnt = 0;
 
-    if (OB_FAIL(OB_TS_MGR.get_gts_sync(GCONF.rpc_timeout,
+    if (OB_FAIL(OB_TS_MGR.get_ts_sync(GCONF.rpc_timeout,
                                       max_readable_scn))) {
       LOG_WARN("failed to get gts", K(ret));
     }
@@ -388,7 +389,9 @@ int ObForkTableHelper::copy_tablet_truncate_info_()
       } else {
         storage::ObTabletForkMdsArg fork_mds_arg;
         
+        fork_mds_arg.ls_id_ = SYS_LS;
         rootserver::ObTruncateTabletArg truncate_arg;
+        truncate_arg.ls_id_ = SYS_LS;
         truncate_arg.index_tablet_id_ = dst_tablet_id;
         if (OB_FAIL(truncate_arg.truncate_info_.assign(
                 allocator, *latest_truncate_info))) {
@@ -402,7 +405,7 @@ int ObForkTableHelper::copy_tablet_truncate_info_()
         } else if (OB_FAIL(storage::ObTabletForkMdsHelper::register_mds(
                        fork_mds_arg, false /*need_flush_redo*/, trans_))) {
           LOG_WARN("failed to register fork mds for truncate info", K(ret),
-                   K(dst_tablet_id));
+                   K(SYS_LS), K(dst_tablet_id));
         } else {
           ++registered_cnt;
           LOG_DEBUG(
@@ -631,11 +634,21 @@ int ObForkTableHelper::get_tablet_handle_(
     storage::ObTabletHandle &tablet_handle) const
 {
   int ret = OB_SUCCESS;
+  ObLSService *ls_service = nullptr;
   ObLS *ls = nullptr;
+  ObLSHandle ls_handle;
 
   MOD_SCOPE {
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
-      LOG_WARN("get ls failed", K(ret));
+    if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ls service is null", K(ret));
+    } else if (OB_FAIL(ls_service->get_ls(SYS_LS, ls_handle,
+                                          ObLSGetMod::DDL_MOD))) {
+      LOG_WARN("get ls failed", K(ret), K(SYS_LS));
+    } else if (FALSE_IT(ls = ls_handle.get_ls())) {
+    } else if (OB_ISNULL(ls)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ls is null", K(ret), K(SYS_LS));
     } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle))) {
       LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
     }

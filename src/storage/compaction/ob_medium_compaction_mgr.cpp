@@ -95,6 +95,7 @@ ObTabletMediumCompactionInfoRecorder::ObTabletMediumCompactionInfoRecorder()
   : ObIStorageClogRecorder(),
     is_inited_(false),
     ignore_medium_(false),
+    ls_id_(),
     tablet_id_(),
     tablet_handle_ptr_(nullptr),
     medium_info_(nullptr),
@@ -117,11 +118,13 @@ void ObTabletMediumCompactionInfoRecorder::destroy()
   ignore_medium_ = false;
   ObIStorageClogRecorder::destroy();
   free_allocated_info();
+  ls_id_.reset();
   tablet_id_.reset();
 }
 
 
 int ObTabletMediumCompactionInfoRecorder::init(
+    const share::ObLSID &ls_id,
     const ObTabletID &tablet_id,
     const int64_t max_saved_version,
     logservice::ObLogHandler *log_handler)
@@ -138,9 +141,10 @@ int ObTabletMediumCompactionInfoRecorder::init(
     LOG_WARN("failed to init ObIStorageClogRecorder", K(ret), K(log_handler));
   } else {
     ignore_medium_ = tablet_id.is_special_merge_tablet();
+    ls_id_ = ls_id;
     tablet_id_ = tablet_id;
     is_inited_ = true;
-    LOG_INFO("success to init medium clog recorder", K(ret), K_(tablet_id), K(max_saved_version));
+    LOG_INFO("success to init medium clog recorder", K(ret), K_(ls_id), K_(tablet_id), K(max_saved_version));
   }
   return ret;
 }
@@ -161,7 +165,7 @@ int ObTabletMediumCompactionInfoRecorder::submit_medium_compaction_info(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(medium_info));
   } else if (FALSE_IT(medium_info_ = &medium_info)) {
-  } else if (OB_FAIL(try_update(medium_info.medium_snapshot_, &allocator))) {
+  } else if (OB_FAIL(try_update_for_leader(medium_info.medium_snapshot_, &allocator))) {
     LOG_WARN("failed to update for leader", K(ret), K(medium_info));
   }
   medium_info_ = nullptr;
@@ -206,9 +210,9 @@ int ObTabletMediumCompactionInfoRecorder::replay_medium_compaction_log(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support to replay medium compaction clog", K(ret), K_(tablet_id));
   } else if (OB_FAIL(serialization::decode_i64(buf, size, pos, &update_version))) {
-    LOG_WARN("fail to deserialize table_version", K(ret), K_(tablet_id));
+    LOG_WARN("fail to deserialize table_version", K(ret), K_(ls_id), K_(tablet_id));
   } else if (OB_FAIL(ObIStorageClogRecorder::replay_clog(update_version, scn, buf, size, pos))) {
-    LOG_WARN("failed to replay clog", K(ret), K(scn), K_(tablet_id), K(update_version));
+    LOG_WARN("failed to replay clog", K(ret), K(scn), K_(ls_id), K_(tablet_id), K(update_version));
   }
   return ret;
 }
@@ -233,7 +237,7 @@ int ObTabletMediumCompactionInfoRecorder::inner_replay_clog(
     ObTabletMediumClogReplayExecutor replay_executor(replay_medium_info);
     if (OB_FAIL(replay_executor.init(scn))) {
       LOG_WARN("failed to init replay executor", K(ret), K(scn));
-    } else if (OB_FAIL(replay_executor.execute(scn, tablet_id_))) {
+    } else if (OB_FAIL(replay_executor.execute(scn, ls_id_, tablet_id_))) {
       if (OB_TABLET_NOT_EXIST == ret || OB_NO_NEED_UPDATE == ret) {
         ret = OB_SUCCESS;
         LOG_INFO("skip reply medium info", KR(ret), K(replay_medium_info));
@@ -241,14 +245,14 @@ int ObTabletMediumCompactionInfoRecorder::inner_replay_clog(
         LOG_ERROR("failed to replay medium info", K(ret), K(replay_medium_info));
       }
     } else {
-      FLOG_INFO("success to save medium info", K(ret), K_(tablet_id), K(scn), K(replay_medium_info), K(max_saved_version_));
+      FLOG_INFO("success to save medium info", K(ret), K_(tablet_id), K_(ls_id), K(scn), K(replay_medium_info), K(max_saved_version_));
     }
   }
 
   return ret;
 }
 
-int ObTabletMediumCompactionInfoRecorder::on_sync_clog_success(const int64_t update_version)
+int ObTabletMediumCompactionInfoRecorder::sync_clog_succ_for_leader(const int64_t update_version)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(medium_info_)) {
@@ -260,13 +264,13 @@ int ObTabletMediumCompactionInfoRecorder::on_sync_clog_success(const int64_t upd
   } else if (OB_FAIL(submit_trans_on_mds_table(true/*is_commit*/))) {
     LOG_WARN("failed to dec ref on memtable", K(ret), K_(tablet_id), KPC(medium_info_));
   } else {
-    LOG_TRACE("success to save medium info for leader", K(ret), K_(tablet_id), KPC(medium_info_),
+    LOG_TRACE("success to save medium info for leader", K(ret), K_(ls_id), K_(tablet_id), KPC(medium_info_),
         K(max_saved_version_), K_(clog_scn));
   }
   return ret;
 }
 
-void ObTabletMediumCompactionInfoRecorder::on_sync_clog_failure()
+void ObTabletMediumCompactionInfoRecorder::sync_clog_failed_for_leader()
 {
   submit_trans_on_mds_table(false/*is_commit*/);
 }
@@ -279,7 +283,7 @@ int ObTabletMediumCompactionInfoRecorder::submit_trans_on_mds_table(const bool i
       || !tablet_handle_ptr_->is_valid()
       || nullptr == mds_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("medium info or tablet handle is unexpected null", K(ret), K_(tablet_id),
+    LOG_WARN("medium info or tablet handle is unexpected null", K(ret), K_(ls_id), K_(tablet_id),
         KP_(medium_info), K_(tablet_handle_ptr), KPC_(mds_ctx));
   } else if (is_commit) {
     mds_ctx_->single_log_commit(clog_scn_, clog_scn_);
@@ -354,8 +358,8 @@ int ObTabletMediumCompactionInfoRecorder::prepare_struct_in_lock(
     alloc_clog_buf = static_cast<char*>(buf) + alloc_buf_offset;
   }
 
-  if (FAILEDx(get_tablet_handle(tablet_id_, *tablet_handle_ptr_))) {
-    LOG_WARN("failed to get tablet handle", K(ret), K_(tablet_id));
+  if (FAILEDx(get_tablet_handle(ls_id_, tablet_id_, *tablet_handle_ptr_))) {
+    LOG_WARN("failed to get tablet handle", K(ret), K_(ls_id), K_(tablet_id));
   } else if (OB_FAIL(log_header.serialize(alloc_clog_buf, buf_len, pos))) {
     LOG_WARN("failed to serialize log header", K(ret));
   } else if (OB_FAIL(tablet_id_.serialize(alloc_clog_buf, buf_len, pos))) {
@@ -398,10 +402,10 @@ int ObTabletMediumCompactionInfoRecorder::submit_log(
     LOG_ERROR("fail to submit log", K(ret), K_(tablet_id), K(medium_info_));
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(submit_trans_on_mds_table(false))) {
-      LOG_ERROR("failed to dec ref on memtable", K(tmp_ret), K_(tablet_id));
+      LOG_ERROR("failed to dec ref on memtable", K(tmp_ret), K_(ls_id), K_(tablet_id));
     }
   } else {
-    LOG_INFO("success to submit medium log", K(ret), K_(tablet_id), K(medium_info_),
+    LOG_INFO("success to submit medium log", K(ret), K_(ls_id), K_(tablet_id), K(medium_info_),
       K_(clog_scn), "max_saved_version", get_max_saved_version());
   }
 

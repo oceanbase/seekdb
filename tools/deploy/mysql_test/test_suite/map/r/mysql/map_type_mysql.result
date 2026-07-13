@@ -550,10 +550,6 @@ select max(m) from t1;
 ERROR HY000: Invalid argument
 select min(m) from t1;
 ERROR HY000: Invalid argument
-drop materialized view if exists mv1, mv2;
-create materialized view mv1 parallel 2 refresh complete on demand  as select * from t1;
-create materialized view mv2 parallel 2 refresh complete on demand  as select * from t2;
-drop materialized view mv1, mv2;
 drop table t1, t2, t3, t4;
 select map(1,1) =  1;
 ERROR 22000: Invalid data type for the operation
@@ -903,42 +899,11 @@ drop table t1;
 create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
 insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
 insert into t1 values (2, '[]', '{}', 0, '{}');
-create materialized view mv1 refresh complete on demand  as select id,c1,c2,c3,c4 from t1 ;
-CREATE INDEX idx ON mv1 (c3);
-CREATE INDEX idx ON mv1 (c2);
-ERROR 0A000: create index on vector or array column is not supported
-CREATE VECTOR INDEX idx ON mv1 (c2);
-ERROR 0A000: Not supported feature or function
-desc mv1;
-Field	Type	Null	Key	Default	Extra
-id	int(11)	YES		NULL	
-c1	ARRAY(INT)	YES		NULL	
-c2	MAP(INT,INT)	YES		NULL	
-c3	float	YES	MUL	NULL	
-c4	json	YES		NULL	
-select * from mv1;
-id	c1	c2	c3	c4
-1	[1,2]	{1:11,2:22}	1.1	{"1": 11, "2": 22}
-2	[]	{}	0	{}
 drop table t1;
-drop  materialized view mv1;
 create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
 insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
 insert into t1 values (2, '[]', '{}', 0, '{}');
-create materialized view mv1(primary key(c2)) refresh complete on demand  as select c1,c2 from t1 ;
-ERROR 42000: The used storage engine can't index column 'c2'
-create materialized view mv1(primary key(id)) refresh complete on demand  as select id,c1,c2 from t1 ;
-desc mv1;
-Field	Type	Null	Key	Default	Extra
-id	int(11)	NO	PRI	NULL	
-c1	ARRAY(INT)	YES		NULL	
-c2	MAP(INT,INT)	YES		NULL	
-select * from mv1;
-id	c1	c2
-1	[1,2]	{1:11,2:22}
-2	[]	{}
 drop table t1;
-drop  materialized view mv1;
 create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
 create view v1 as select * from t1;
 insert into v1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');

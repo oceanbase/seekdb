@@ -45,6 +45,7 @@
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/ob_sql_context.h"
 #include "sql/ob_sql_trans_util.h"
+#include "share/partition_table/ob_partition_location.h"
 #include "common/sql_mode/ob_sql_mode_utils.h"
 #include "sql/parser/ob_parser_utils.h"
 
@@ -1408,6 +1409,7 @@ public:
   bool has_explicit_start_trans() const { return tx_desc_ != NULL && tx_desc_->is_explicit(); }
   bool is_in_transaction() const { return tx_desc_ != NULL && tx_desc_->is_in_tx(); }
   bool has_active_autocommit_trans(transaction::ObTransID &trans_id);
+  bool is_dup_ls_modified() const { return tx_desc_ != NULL && tx_desc_->is_dup_ls_modified(); }
   bool get_in_transaction() const { return is_in_transaction(); }
   uint64_t get_trans_flags() const { return trans_flags_.get_flags(); }
   void set_has_exec_inner_dml(bool value) { trans_flags_.set_has_exec_inner_dml(value); }

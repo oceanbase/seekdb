@@ -53,6 +53,7 @@
 #include "ob_lob_meta_builder.h"
 #include "ob_lob_piece_builder.h"
 #include "storage/ddl/ob_ddl_lock.h"
+#include "storage/tx_storage/ob_ls_map.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "storage/compaction/ob_compaction_schedule_util.h"
@@ -71,7 +72,8 @@
 #include "rootserver/ob_alter_table_constraint_checker.h"
 #include "rootserver/ob_domain_index_builder_util.h"
 #include "rootserver/ob_objpriv_mysql_ddl_service.h"
-#include "share/tablet/ob_tablet_mapping_operator.h"
+#include "share/location_cache/ob_location_service.h"
+#include "share/tablet/ob_tablet_to_ls_operator.h"
 #include "share/ob_autoincrement_service.h"
 #include "storage/ob_micro_block_format_version_helper.h"
 #include "rootserver/ob_create_index_on_empty_table_helper.h"
@@ -1525,9 +1527,12 @@ int ObDDLService::create_tablets_in_trans_(ObIArray<ObTableSchema> &table_schema
     LOG_WARN("failed to get frozen status for create tablet", KR(ret));
   } else {
     ObTableCreator table_creator(frozen_scn, trans);
+    common::ObArray<share::ObLSID> ls_id_array;
     const ObTablegroupSchema *data_tablegroup_schema = NULL; // keep NULL if no tablegroup
 
-    if (fork_table_info.is_valid()) {
+    if (OB_FAIL(ls_id_array.push_back(ObLSID(SYS_LS)))) {
+      LOG_WARN("fail to push back sys ls", KR(ret));
+    } else if (fork_table_info.is_valid()) {
       common::ObArray<uint64_t> dest_table_ids;
       for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
         const uint64_t table_id = table_schemas.at(i).get_table_id();
@@ -1577,6 +1582,7 @@ int ObDDLService::create_tablets_in_trans_(ObIArray<ObTableSchema> &table_schema
       } else {
         if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(
             this_table,
+            ls_id_array,
             tenant_data_version,
             need_create_empty_major /*need_create_empty_major_sstable*/,
             &schema_guard))) {
@@ -1600,6 +1606,7 @@ int ObDDLService::create_tablets_in_trans_(ObIArray<ObTableSchema> &table_schema
       // virtual tablet and view skip
     } else if (OB_FAIL(table_creator.add_create_tablets_of_tables_arg(
             schemas,
+            ls_id_array,
             tenant_data_version,
             need_create_empty_majors,
             &schema_guard))) {
@@ -4959,8 +4966,9 @@ int ObDDLService::delete_auto_increment_attribute(
     LOG_INFO("begin to clear all auto-increment cache",
         K(table_id), K(part_num),
         K(orig_table_schema->get_autoinc_column_id()));
-    if (OB_FAIL(autoinc_service.clear_autoinc_cache(
-        table_id, orig_table_schema->get_autoinc_column_id()))) {
+    if (OB_FAIL(autoinc_service.clear_autoinc_cache_all(table_id,
+        orig_table_schema->get_autoinc_column_id(),
+        orig_table_schema->is_order_auto_increment_mode()))) {
       LOG_WARN("failed to clear auto-increment cache", K(table_id));
     }
   }
@@ -4970,7 +4978,7 @@ int ObDDLService::delete_auto_increment_attribute(
     if (new_table_schema.get_autoinc_column_id() > 0 && auto_increment > 0) {
       LOG_INFO("begin to sync auto_increment",
           K(table_id), K(part_num), K(auto_increment));
-      if (OB_FAIL(autoinc_service.refresh_auto_increment_cache(
+      if (OB_FAIL(autoinc_service.sync_auto_increment_all(
           table_id,
           new_table_schema.get_autoinc_column_id(),
           0 == auto_increment ? 0 : auto_increment - 1))) {
@@ -6037,6 +6045,7 @@ int ObDDLService::create_index_tablet(const ObTableSchema &index_schema,
     ObTableCreator table_creator(
                    frozen_scn,
                    trans);
+    common::ObArray<share::ObLSID> ls_id_array;
     const uint64_t data_table_id = index_schema.get_data_table_id();
     const ObTableSchema *data_table_schema = NULL;
     const ObTablegroupSchema *data_tablegroup_schema = NULL; // keep NULL if no tablegroup
@@ -6044,6 +6053,8 @@ int ObDDLService::create_index_tablet(const ObTableSchema &index_schema,
 
     if (OB_FAIL(table_creator.init(need_check_tablet_cnt))) {
       LOG_WARN("fail to init table creator", KR(ret));
+    } else if (OB_FAIL(ls_id_array.push_back(ObLSID(SYS_LS)))) {
+      LOG_WARN("fail to push back sys ls", KR(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id, data_table_schema))) {
       LOG_WARN("failed to get table schema", KR(ret), K(data_table_id));
     } else if (OB_ISNULL(data_table_schema)) {
@@ -6074,6 +6085,7 @@ int ObDDLService::create_index_tablet(const ObTableSchema &index_schema,
       } else if (OB_FAIL(table_creator.add_create_tablets_of_local_aux_tables_arg(
               schemas,
               data_table_schema,
+              ls_id_array,
               tenant_data_version,
               need_create_empty_majors /* add_index, need_create_empty_major_sstable*/))) {
         LOG_WARN("create table tablet failed", KR(ret), K(index_schema));
@@ -6081,6 +6093,7 @@ int ObDDLService::create_index_tablet(const ObTableSchema &index_schema,
     } else {
       if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(
             index_schema,
+            ls_id_array,
             tenant_data_version,
             is_table_empty /*need_create_empty_major_sstable*/))) {
         LOG_WARN("create table tablet failed", KR(ret), K(index_schema));
@@ -10412,8 +10425,11 @@ int ObDDLService::create_aux_lob_table_if_need(ObTableSchema &data_table_schema,
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(table_creator.add_create_tablets_of_local_aux_tables_arg(
-          schemas, &data_table_schema, tenant_data_version,
+      common::ObArray<share::ObLSID> ls_id_array;
+      if (OB_FAIL(ls_id_array.push_back(ObLSID(SYS_LS)))) {
+        LOG_WARN("fail to push back sys ls", KR(ret));
+      } else if (OB_FAIL(table_creator.add_create_tablets_of_local_aux_tables_arg(
+          schemas, &data_table_schema, ls_id_array, tenant_data_version,
           need_create_empty_majors /*online_ddl, need_create_empty_major_sstable*/))) {
         LOG_WARN("create table partitions failed", KR(ret), K(last_schema_version));
       } else if (OB_FAIL(table_creator.execute())) {
@@ -10631,7 +10647,9 @@ int ObDDLService::alter_table_auto_increment(
       // column. all new auto_inc request will be based on the auto_increment value in the table
       // schema.
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(auto_inc_service.clear_autoinc_cache(table_id, column_id))) {
+      } else if (OB_FAIL(auto_inc_service.clear_autoinc_cache_all(table_id,
+                                                                  column_id, is_order_mode,
+                                                                  false /* ignore_rpc_errors */))) {
         LOG_WARN("fail to clear autoinc cache all", K(ret));
       } else if (OB_FAIL(ddl_operator.reinit_autoinc_row(new_table_schema, trans))) {
         LOG_WARN("fail to reinit autoinc row", K(ret));
@@ -13265,6 +13283,7 @@ int ObDDLService::alter_table_in_trans(obcall::ObAlterTableArg &alter_table_arg,
             } else {
               ObTableCreator table_creator(frozen_scn,
                                            trans);
+              common::ObArray<share::ObLSID> ls_id_array;
               const ObTableSchema *tmp_table_schema = inc_table_schema_ptrs.at(0);
               const ObTablegroupSchema *tablegroup_schema = NULL; // keep NULL if no tablegroup
               if (OB_ISNULL(tmp_table_schema)) {
@@ -13272,6 +13291,8 @@ int ObDDLService::alter_table_in_trans(obcall::ObAlterTableArg &alter_table_arg,
                 LOG_WARN("table schema is null", KR(ret), K(inc_table_schema_ptrs));
               } else if (OB_FAIL(table_creator.init(need_check_tablet_cnt))) {
                 LOG_WARN("fail to init table creator", KR(ret));
+              } else if (OB_FAIL(ls_id_array.push_back(ObLSID(SYS_LS)))) {
+                LOG_WARN("fail to push back sys ls", KR(ret));
 	      } else if (OB_INVALID_ID != tmp_table_schema->get_tablegroup_id()) {
                 if (OB_FAIL(schema_guard.get_tablegroup_schema(
                     tmp_table_schema->get_tablegroup_id(),
@@ -13285,6 +13306,7 @@ int ObDDLService::alter_table_in_trans(obcall::ObAlterTableArg &alter_table_arg,
               if (OB_FAIL(ret)) {
               } else if (OB_FAIL(table_creator.add_create_tablets_of_tables_arg(
                       inc_table_schema_ptrs,
+                      ls_id_array,
                       tenant_data_version,
                       need_create_empty_majors/*need_create_empty_majors*/))) {
                 LOG_WARN("create table partitions failed", KR(ret), K(alter_table_schema),
@@ -13323,8 +13345,9 @@ int ObDDLService::alter_table_in_trans(obcall::ObAlterTableArg &alter_table_arg,
              alter_table_schema.alter_option_bitset_.has_member(ObAlterTableArg::INCREMENT_MODE) &&
              0 != orig_table_schema->get_autoinc_column_id()) {
           ObAutoincrementService &autoinc_service = ObAutoincrementService::get_instance();
-          if (OB_FAIL(autoinc_service.clear_autoinc_cache(orig_table_schema->get_table_id(),
-                        orig_table_schema->get_autoinc_column_id()))) {
+          if (OB_FAIL(autoinc_service.clear_autoinc_cache_all(orig_table_schema->get_table_id(),
+                        orig_table_schema->get_autoinc_column_id(),
+                        orig_table_schema->is_order_auto_increment_mode()))) {
             LOG_WARN("fail to clear autoinc cache", K(ret));
           }
         }
@@ -14717,7 +14740,7 @@ int ObDDLService::get_and_check_table_schema(
  *    whether the merge has started according to whether the __all_zone version numbers are consistent
  * to standalone, It is impossible to make the DDL of the primary cluster and the merge of standalone library
  *    to be mutually exclusive, so this solution is only to reduce the probability of bad cases.
- *    When the merge checksum is inconsistent in the standalone cluster, it needs manual tablet metadata repair.
+ *    When the merge checksum is inconsistent in the standalone cluster, it can be corrected by drop replica
  * >= 3.3, allow drop column when doing major freeze
  */
 int ObDDLService::check_can_alter_column(
@@ -16972,11 +16995,14 @@ int ObDDLService::truncate_table_in_trans(const obcall::ObTruncateTableArg &arg,
       } else {
         ObTableCreator table_creator(frozen_scn,
                                      trans);
+        common::ObArray<share::ObLSID> ls_id_array;
         const ObTablegroupSchema *data_tablegroup_schema = NULL; // keep NULL if no tablegroup
         const ObTableSchema &data_table_schema = table_schemas.at(0);
 
         if (OB_FAIL(table_creator.init(false/*need_check_tablet_cnt*/))) {
           LOG_WARN("fail to init table creator", KR(ret));
+        } else if (OB_FAIL(ls_id_array.push_back(ObLSID(SYS_LS)))) {
+          LOG_WARN("fail to push back sys ls", KR(ret));
         } else if (OB_INVALID_ID != data_table_schema.get_tablegroup_id()) {
           if (OB_FAIL(schema_guard.get_tablegroup_schema(
               data_table_schema.get_tablegroup_id(),
@@ -17003,6 +17029,7 @@ int ObDDLService::truncate_table_in_trans(const obcall::ObTruncateTableArg &arg,
           } else {
             if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(
                 this_table,
+                ls_id_array,
                 tenant_data_version,
                 true /*need_create_empty_major_sstable*/))) {
               LOG_WARN("create table partitions failed", KR(ret), K(this_table));
@@ -17025,6 +17052,7 @@ int ObDDLService::truncate_table_in_trans(const obcall::ObTruncateTableArg &arg,
         else if (schemas.count() <= 0) {
         } else if (OB_FAIL(table_creator.add_create_tablets_of_tables_arg(
                 schemas,
+                ls_id_array,
                 tenant_data_version,
                 need_create_empty_majors/*need_create_empty_major_sstable*/))) {
           LOG_WARN("create table partitions failed", KR(ret), K(orig_table_schema),
@@ -17617,9 +17645,12 @@ int ObDDLService::create_user_hidden_table(const ObTableSchema &orig_table_schem
     ObTableCreator table_creator(
                    frozen_scn,
                    trans);
+    common::ObArray<share::ObLSID> ls_id_array;
     const ObTablegroupSchema *tablegroup_schema = NULL; // keep NULL if no tablegroup
     if (OB_FAIL(table_creator.init(false/*need_tablet_cnt_check*/))) {
       LOG_WARN("fail to init table creator", KR(ret));
+    } else if (OB_FAIL(ls_id_array.push_back(ObLSID(SYS_LS)))) {
+      LOG_WARN("fail to push back sys ls", KR(ret));
     } else if (OB_INVALID_ID != hidden_table_schema.get_tablegroup_id()) {
       if (OB_FAIL(dst_tenant_schema_guard.get_tablegroup_schema(
           hidden_table_schema.get_tablegroup_id(),
@@ -17669,18 +17700,21 @@ int ObDDLService::create_user_hidden_table(const ObTableSchema &orig_table_schem
     if (OB_SUCC(ret) && hidden_table_schema.has_tablet()) {
       if (!bind_tablets && OB_FAIL(table_creator.add_create_tablets_of_tables_arg(
               schemas,
+              ls_id_array,
               tenant_data_version,
               need_create_empty_majors/*need_create_empty_major_sstable*/))) {
         LOG_WARN("create table tablets failed", K(ret), K(hidden_table_schema));
       } else if (bind_tablets && OB_FAIL(table_creator.add_create_bind_tablets_of_hidden_table_arg(
               orig_table_schema,
               hidden_table_schema,
+              ls_id_array,
               tenant_data_version))) {
         LOG_WARN("failed to add arg", K(ret), K(hidden_table_schema));
       } else if (bind_tablets && schemas.count() > 0 &&
               OB_FAIL(table_creator.add_create_tablets_of_local_aux_tables_arg(
               schemas,
               &hidden_table_schema,
+              ls_id_array,
               tenant_data_version,
               need_create_empty_majors/*need_create_empty_major_sstable*/))) {
         LOG_WARN("failed to add arg", K(ret), K(aux_table_schemas), K(hidden_table_schema));
@@ -19459,22 +19493,68 @@ int ObDDLService::get_orig_and_hidden_table_schema(
 
 int ObDDLService::get_tablets(
     const ObArray<common::ObTabletID> &tablet_ids,
-    ObIArray<common::ObTabletID> &tablets,
+    ObIArray<LSTabletID> &tablets,
     ObDDLSQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  ObArray<ObTabletTablePair> tablet_infos;
-  if (OB_FAIL(ObTabletMappingTableOperator::batch_get(trans, tablet_ids, tablet_infos))) {
-    LOG_WARN("failed to batch get tablet info", K(ret), K(tablet_ids));
-  } else if (OB_UNLIKELY(tablet_ids.count() != tablet_infos.count())) {
+  ObArray<ObLSID> ls_ids;
+  if (OB_FAIL(ObTabletToLSTableOperator::batch_get_ls(trans, tablet_ids, ls_ids))) {
+    LOG_WARN("failed to batch get ls", K(ret));
+  } else if (OB_UNLIKELY(tablet_ids.count() != ls_ids.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tablet info count", K(ret), K(tablet_ids), K(tablet_infos));
+    LOG_WARN("invalid tablet ids ls ids", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
-    if (OB_FAIL(tablets.push_back(tablet_ids.at(i)))) {
-      LOG_WARN("failed to push back tablet id", K(ret));
+    if (OB_FAIL(tablets.push_back({ls_ids[i], tablet_ids[i]}))) {
+      LOG_WARN("failed to push back tablet id and ls id", K(ret));
     }
   }
+  return ret;
+}
+
+int ObDDLService::build_modify_tablet_binding_args(const ObArray<ObTabletID> &tablet_ids,
+    const bool is_hidden_tablets,
+    const int64_t schema_version,
+    ObIArray<ObBatchUnbindTabletArg> &modify_args,
+    ObDDLSQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+  ObArray<LSTabletID> tablets;
+  if (OB_FAIL(get_tablets(tablet_ids, tablets, trans))) {
+    LOG_WARN("failed to get tablet ids of orig table", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < tablets.count(); i++) {
+    const ObLSID &ls_id = tablets[i].first;
+    int64_t j = 0;
+    for (; j < modify_args.count(); j++) {
+      if (modify_args.at(j).ls_id_ == ls_id) {
+        break;
+      }
+    }
+    if (j == modify_args.count()) {
+      ObBatchUnbindTabletArg modify_arg;
+      
+      modify_arg.ls_id_ = ls_id;
+      modify_arg.schema_version_ = schema_version;
+      if (OB_FAIL(modify_args.push_back(modify_arg))) {
+        LOG_WARN("failed to push back modify arg", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ObBatchUnbindTabletArg &modify_arg = modify_args.at(j);
+      const ObTabletID &tablet_id = tablets[i].second;
+      if (is_hidden_tablets) {
+        if (OB_FAIL(modify_arg.hidden_tablet_ids_.push_back(tablet_id))) {
+          LOG_WARN("failed to push back", K(ret));
+        }
+      } else {
+        if (OB_FAIL(modify_arg.orig_tablet_ids_.push_back(tablet_id))) {
+          LOG_WARN("failed to push back", K(ret));
+        }
+      }
+    }
+  }
+  LOG_DEBUG("build modify tablet binding args", K(ret), K(modify_args));
   return ret;
 }
 
@@ -19509,32 +19589,50 @@ int ObDDLService::write_ddl_barrier(
   int ret = OB_SUCCESS;
   
   ObArray<ObTabletID> tablet_ids;
-  ObArray<ObTabletID> hidden_tablets;
+  ObArray<LSTabletID> hidden_tablets;
   if (OB_FAIL(hidden_table_schema.get_tablet_ids(tablet_ids))) {
     LOG_WARN("failed to get tablets", K(ret));
   } else if (OB_FAIL(get_tablets(tablet_ids, hidden_tablets, trans))) {
     LOG_WARN("failed to get tablet", K(ret));
   } else {
     ObArenaAllocator allocator("DDLSrvBarrier");
-    ObDDLBarrierLog log;
+    ObArray<ObDDLBarrierLog> logs;
     for (int64_t i = 0; OB_SUCC(ret) && i < hidden_tablets.count(); i++) {
-      if (OB_FAIL(log.hidden_tablet_ids_.push_back(hidden_tablets.at(i)))) {
-        LOG_WARN("failed to push back hidden tablet", K(ret));
+      const ObLSID &ls_id = hidden_tablets[i].first;
+      const ObTabletID &tablet_id = hidden_tablets[i].second;
+      int64_t j = 0;
+      for (; j < logs.count(); j++) {
+        if (logs[j].ls_id_ == ls_id) {
+          break;
+        }
+      }
+      if (j == logs.count()) {
+        ObDDLBarrierLog log;
+        log.ls_id_ = ls_id;
+        if (OB_FAIL(logs.push_back(log))) {
+          LOG_WARN("failed to push back log", K(ret));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(logs[j].hidden_tablet_ids_.push_back(tablet_id))) {
+          LOG_WARN("failed to push back hidden tablet", K(ret));
+        }
       }
     }
-    if (OB_SUCC(ret) && !hidden_tablets.empty()) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < logs.count(); i++) {
       int64_t pos = 0;
-      int64_t size = log.get_serialize_size();
+      int64_t size = logs[i].get_serialize_size();
       char *buf = nullptr;
-      if (OB_UNLIKELY(!log.is_valid())) {
+      allocator.reuse();
+      if (OB_UNLIKELY(!logs[i].is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid ddl barrier log", K(ret), K(log));
+        LOG_WARN("invalid ddl barrier log", K(ret), K(logs[i]));
       } else if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate", K(ret));
-      } else if (OB_FAIL(log.serialize(buf, size, pos))) {
+      } else if (OB_FAIL(logs[i].serialize(buf, size, pos))) {
         LOG_WARN("failed to serialize arg", K(ret));
-      } else if (OB_FAIL(trans.register_tx_data(transaction::ObTxDataSourceType::DDL_BARRIER, buf, pos))) {
+      } else if (OB_FAIL(trans.register_tx_data(logs[i].ls_id_, transaction::ObTxDataSourceType::DDL_BARRIER, buf, pos))) {
         LOG_WARN("failed to register tx data", K(ret));
       }
     }
@@ -19542,7 +19640,8 @@ int ObDDLService::write_ddl_barrier(
   return ret;
 }
 
-int ObDDLSQLTransaction::register_tx_data(const transaction::ObTxDataSourceType &type,
+int ObDDLSQLTransaction::register_tx_data(const share::ObLSID &ls_id,
+    const transaction::ObTxDataSourceType &type,
     const char *buf,
     const int64_t buf_len)
 {
@@ -19553,7 +19652,7 @@ int ObDDLSQLTransaction::register_tx_data(const transaction::ObTxDataSourceType 
     LOG_WARN("invalid connection", K(ret));
   } else {
     observer::ObInnerSQLConnection *conn = static_cast<observer::ObInnerSQLConnection *>(isql_conn);
-    if (OB_FAIL(conn->register_multi_data_source(type, buf, buf_len))) {
+    if (OB_FAIL(conn->register_multi_data_source(ls_id, type, buf, buf_len))) {
       LOG_WARN("failed to register tx data", K(ret));
     }
   }
@@ -20946,6 +21045,7 @@ int ObDDLService::inner_drop_and_create_tablet_(const int64_t &schema_version,
                                                 ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
+  common::ObArray<share::ObLSID> orig_ls_id_array;
   const ObTableSchema *tmp_table_schema = NULL;
   int64_t del_tablet_count = orig_table_schemas.count();
   int64_t create_table_count = new_table_schemas.count();
@@ -20974,9 +21074,12 @@ int ObDDLService::inner_drop_and_create_tablet_(const int64_t &schema_version,
     // drop tablet
     if (FAILEDx(tablet_drop.init())) {
       LOG_WARN("fail to init tablet_drop", KR(ret));
+    // get old ls
+    } else if (OB_FAIL(tablet_drop.get_ls_from_table(*orig_table_schemas.at(0),  false /*is_include_hidden*/, orig_ls_id_array))) {
+      LOG_WARN("failed to get drop tablet's ls", KR(ret));
     } else if (OB_FAIL(tablet_drop.add_drop_tablets_of_table_arg(orig_table_schemas))) {
       LOG_WARN("fail to add drop tablets table args", KR(ret));
-    // delete tablet mapping / insert into all_tablet_to_table_history
+    // delete all_tablet_to_ls/insert into all_tablet_to_table_history
     } else if (OB_FAIL(tablet_drop.execute())) {
       LOG_WARN("failed to execute tablet drop", KR(ret));
     }
@@ -21008,11 +21111,11 @@ int ObDDLService::inner_drop_and_create_tablet_(const int64_t &schema_version,
         if (OB_FAIL(table_creator.init(true/*need_check_tablet_cnt*/))) {
           LOG_WARN("table_creator init failed", KR(ret));
         } else if (1 == create_table_count && create_table_schema_ptrs.at(0)->is_global_index_table()) {
-          if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(*create_table_schema_ptrs.at(0),
+          if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(*create_table_schema_ptrs.at(0), orig_ls_id_array,
               tenant_data_version, true/*need_create_empty_major_sstable*/))) {
             LOG_WARN("fail to add_create_tablets_of_tables_arg", KR(ret));
           }
-        } else if (OB_FAIL(table_creator.add_create_tablets_of_tables_arg(create_table_schema_ptrs,
+        } else if (OB_FAIL(table_creator.add_create_tablets_of_tables_arg(create_table_schema_ptrs, orig_ls_id_array,
             tenant_data_version, need_create_empty_majors/*need_create_empty_major_sstable*/))) {
           LOG_WARN("fail to add_create_tablets_of_tables_arg", KR(ret));
         }
@@ -29440,7 +29543,8 @@ int ObDDLSQLTransaction::serialize_inc_schemas_(
   // Upstream serializes full incremental schema dict here (via ObDataDictStorage),
   // but SeekDB only needs the MDS type signal, not the data content.
   char dummy = '\0';
-  if (OB_FAIL(register_tx_data(transaction::ObTxDataSourceType::DDL_TRANS,
+  if (OB_FAIL(register_tx_data(SYS_LS,
+      transaction::ObTxDataSourceType::DDL_TRANS,
       &dummy,
       sizeof(dummy)))) {
     LOG_WARN("register DDL_TRANS MDS failed", KR(ret));
@@ -29543,7 +29647,7 @@ int ObDDLSQLTransaction::lock_all_ddl_operation(
       if (OB_FAIL(schema_service_->get_ddl_epoch_mgr().get_ddl_epoch(ddl_epoch_tmp))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
           ret = OB_SUCCESS;
-          if (OB_FAIL(ObDDLUtil::check_local_sys_tenant())) {
+          if (OB_FAIL(ObDDLUtil::check_local_is_sys_leader())) {
             LOG_WARN("fail to check whether local is sys tenant leader", KR(ret));
           } else if (OB_FAIL(schema_service_->get_ddl_epoch_mgr().promote_ddl_epoch( ctx.get_timeout(), ddl_epoch_tmp))) {
             LOG_WARN("promote epoch fail", K(ret));
@@ -31604,36 +31708,67 @@ int ObDDLService:: get_tablets_with_table_id_(const ObArray<TTableSchema *> &tab
   return ret;
 }
 
+int ObDDLService::build_unbind_lob_args(const ObArray<ObTabletID> &tablet_ids,
+    ObIArray<ObBatchUnbindLobTabletArg> &args,
+    ObDDLSQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+  ObArray<LSTabletID> tablets;
+  if (OB_FAIL(get_tablets(tablet_ids, tablets, trans))) {
+    LOG_WARN("failed to get tablet ids of orig table", KR(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < tablets.count(); i++) {
+    const ObLSID &ls_id = tablets[i].first;
+    int64_t j = 0;
+    for (; j < args.count(); j++) {
+      if (args.at(j).ls_id_ == ls_id) {
+        break;
+      }
+    }
+    if (j == args.count()) {
+      ObBatchUnbindLobTabletArg arg;
+      
+      arg.ls_id_ = ls_id;
+      if (OB_FAIL(args.push_back(arg))) {
+        LOG_WARN("failed to push back modify arg", KR(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ObBatchUnbindLobTabletArg &arg = args.at(j);
+      const ObTabletID &tablet_id = tablets[i].second;
+      if (OB_FAIL(arg.data_tablet_ids_.push_back(tablet_id))) {
+        LOG_WARN("failed to push back", KR(ret));
+      }
+    }
+  }
+  LOG_DEBUG("build modify tablet binding args", KR(ret), K(args));
+  return ret;
+}
+
 int ObDDLService::unbind_lob_tablets(
     const ObTableSchema &data_table_schema,
     ObDDLSQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
+  
   ObArray<ObTabletID> data_tablet_ids;
-  ObArray<ObTabletID> tablets;
+  ObArray<ObBatchUnbindLobTabletArg> args;
   if (OB_FAIL(data_table_schema.get_tablet_ids(data_tablet_ids))) {
     LOG_WARN("get tablet ids failed", K(ret));
-  } else if (OB_FAIL(get_tablets(data_tablet_ids, tablets, trans))) {
-    LOG_WARN("failed to get tablet ids of data table", KR(ret));
+  } else if (OB_FAIL(build_unbind_lob_args(data_tablet_ids, args, trans))) {
+    LOG_WARN("failed to build reuse index args", KR(ret));
   }
-
-  if (OB_SUCC(ret) && !tablets.empty()) {
-    ObBatchUnbindLobTabletArg arg;
-    if (OB_FAIL(arg.data_tablet_ids_.assign(tablets))) {
-      LOG_WARN("failed to assign data tablet ids", KR(ret), K(tablets));
-    } else {
-      ObArenaAllocator allocator("DropLob");
-      int64_t pos = 0;
-      int64_t size = arg.get_serialize_size();
-      char *buf = nullptr;
-      if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(size)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate", K(ret));
-      } else if (OB_FAIL(arg.serialize(buf, size, pos))) {
-        LOG_WARN("failed to serialize arg", KR(ret));
-      } else if (OB_FAIL(trans.register_tx_data(transaction::ObTxDataSourceType::UNBIND_LOB_TABLET, buf, pos))) {
-        LOG_WARN("failed to register tx data", KR(ret));
-      }
+  for (int64_t i = 0; OB_SUCC(ret) && i < args.count(); i++) {
+    int64_t pos = 0;
+    int64_t size = args[i].get_serialize_size();
+    ObArenaAllocator allocator("DropLob");
+    char *buf = nullptr;
+    if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(size)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate", K(ret));
+      LOG_WARN("failed to serialize arg", KR(ret));
+    } else if (OB_FAIL(trans.register_tx_data(args[i].ls_id_, transaction::ObTxDataSourceType::UNBIND_LOB_TABLET, buf, pos))) {
+      LOG_WARN("failed to register tx data", KR(ret));
     }
   }
   return ret;
@@ -31746,15 +31881,22 @@ namespace oceanbase
 namespace share
 {
 
-int ObDDLUtil::check_local_sys_tenant()
+int ObDDLUtil::check_local_is_sys_leader()
 {
   int ret = OB_SUCCESS;
+  common::ObRole role;
+  int64_t proposal_id = 0;
   if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.omt_));
   } else if (OB_UNLIKELY(!GCTX.omt_->has_tenant())) {
     ret = OB_TENANT_NOT_EXIST;
     LOG_WARN("local server does not have SYS tenant resource", KR(ret));
+  } else if (OB_FAIL(get_sys_log_handler_role_and_proposal_id(role, proposal_id))) {
+    LOG_WARN("fail to get role and proposal id", KR(ret), K(role), K(proposal_id));
+  } else if (!is_strong_leader(role)) {
+    ret = OB_LS_NOT_LEADER;
+    LOG_WARN("current server not leader of SYS tenant", KR(ret), K(role));
   }
   return ret;
 }

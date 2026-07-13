@@ -88,6 +88,13 @@ public:
   TO_STRING_KV(K_(is_inited), K_(is_synced), K_(orig_src_tablet_ids), K_(src_tablet_ids),
                K_(dest_tablet_ids), K_(autoinc_params));
 private:
+  int build_ls_to_tablet_map(
+      share::ObLocationService *location_service,
+      const common::ObIArray<share::ObMigrateTabletAutoincSeqParam> &tablet_ids,
+      const int64_t timeout,
+      const bool force_renew,
+      const bool by_src_tablet,
+      common::hash::ObHashMap<share::ObLSID, common::ObSEArray<share::ObMigrateTabletAutoincSeqParam, 1>> &map);
   int call_and_process_all_tablet_autoinc_seqs(const bool is_get);
   bool is_error_need_retry(const int ret_code) const
   {
@@ -95,8 +102,10 @@ private:
            common::OB_EAGAIN == ret_code;
   }
 private:
+  static const int64_t MAP_BUCKET_NUM = 1024;
   bool is_inited_;
   bool is_synced_;
+  bool need_renew_location_;
   ObSEArray<ObTabletID, 1> orig_src_tablet_ids_;
   ObSEArray<ObTabletID, 1> src_tablet_ids_;
   ObSEArray<ObTabletID, 1> dest_tablet_ids_;

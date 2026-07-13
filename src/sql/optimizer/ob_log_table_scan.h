@@ -404,7 +404,6 @@ public:
         is_tsc_with_vid_(false),
         rowkey_vid_tid_(common::OB_INVALID_ID),
         index_prefix_(-1),
-        mr_mv_scan_(common::ObQueryFlag::NormalMode),
         is_scan_resumable_(false)
   {
   }
@@ -1036,18 +1035,6 @@ public:
                               const ObColumnRefRawExpr *col_expr,
                               PushdownFilterMonotonicity &mono,
                               ObIArray<ObRawExpr *> &assist_exprs) const;
-  void set_mr_mv_scan(const uint64_t mr_mv_flags)
-  {
-    if (mr_mv_flags & ObQueryFlag::MRMVScanMode::RefreshMode) {
-      mr_mv_scan_ = ObQueryFlag::MRMVScanMode::RefreshMode;
-    } else if (mr_mv_flags & ObQueryFlag::MRMVScanMode::RealTimeMode) {
-      mr_mv_scan_ = ObQueryFlag::MRMVScanMode::RealTimeMode;
-    } else {
-      mr_mv_scan_ = ObQueryFlag::MRMVScanMode::NormalMode;
-    }
-  }
-  common::ObQueryFlag::MRMVScanMode get_mr_mv_scan() const { return mr_mv_scan_; }
-
   bool use_index_merge() const;
   const ObIArray<ObRawExpr*> &get_full_filters() const { return full_filters_; }
   const ObIArray<ObRawExpr*> &get_index_range_conds(int64_t idx) const { return index_range_conds_.at(idx); }
@@ -1287,7 +1274,6 @@ protected: // memeber variables
   // end for table scan with domain id
 
   int64_t index_prefix_;
-  common::ObQueryFlag::MRMVScanMode mr_mv_scan_; // used for major refresh mview fast refresh and real-time mview
   bool is_scan_resumable_;
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> pseudo_columnref_exprs_;
 

@@ -182,6 +182,7 @@ public:
 public:
   uint64_t table_id_;
   common::ObTabletID tablet_id_;
+  share::ObLSID ls_id_;
   const ObITableReadInfo *read_info_;
   const ObITableReadInfo *rowkey_read_info_;
   const ObTabletHandle *tablet_handle_; //for ddl merge_query

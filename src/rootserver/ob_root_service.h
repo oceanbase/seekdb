@@ -24,6 +24,7 @@
 #include "share/object_storage/ob_object_storage_struct.h"
 #include "share/ob_schema_version_info.h"
 #include "share/ob_unit_replica_counter.h"
+#include "share/ob_ls_id.h"
 #include "share/ob_max_id_cache.h"
 
 #include "rpc/ob_packet.h"
@@ -393,6 +394,9 @@ private:
   int check_parallel_ddl_conflict(
       share::schema::ObSchemaGetterGuard &schema_guard,
       const obcall::ObDDLArg &arg);
+  int increase_rs_epoch_and_get_proposal_id_(
+      int64_t &new_rs_epoch,
+      int64_t &proposal_id_to_check);
   // create system table in mysql backend for debugging mode.
   int init_debug_database();
   int do_restart();

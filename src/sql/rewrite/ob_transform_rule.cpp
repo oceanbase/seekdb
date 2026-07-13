@@ -65,8 +65,6 @@ void ObTransformerCtx::reset()
   is_force_materialize_ = false;
   push_down_filters_.reset();
   iteration_level_ = 0;
-  mv_infos_.reset();
-  mv_stmt_gen_count_ = 0;
   cbqt_policy_ = TransPolicy::DISABLE_TRANS;
   complex_cbqt_table_num_ = 0;
   max_table_num_ = 0;
@@ -142,7 +140,6 @@ const char* ObTransformerCtx::get_trans_type_string(uint64_t trans_type)
     TRANS_TYPE_TO_STR(SELECT_EXPR_PULLUP)
     TRANS_TYPE_TO_STR(DECORRELATE)
     TRANS_TYPE_TO_STR(CONDITIONAL_AGGR_COALESCE)
-    TRANS_TYPE_TO_STR(MV_REWRITE)
     TRANS_TYPE_TO_STR(LATE_MATERIALIZATION)
     TRANS_TYPE_TO_STR(DISTINCT_AGGREGATE)
     default:  return NULL;

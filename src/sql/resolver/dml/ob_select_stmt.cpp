@@ -236,7 +236,6 @@ int ObSelectStmt::assign(const ObSelectStmt &other)
     children_swapped_ = other.children_swapped_;
     check_option_ = other.check_option_;
     contain_ab_param_ = other.contain_ab_param_;
-    is_expanded_mview_ = other.is_expanded_mview_;
     is_select_straight_join_ = other.is_select_straight_join_;
     is_implicit_distinct_ = false; // it is a property from upper stmt, do not copy
   }
@@ -292,7 +291,6 @@ int ObSelectStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
     is_fetch_with_ties_ = other.is_fetch_with_ties_;
     check_option_ = other.check_option_;
     contain_ab_param_ = other.contain_ab_param_;
-    is_expanded_mview_ = other.is_expanded_mview_;
     is_select_straight_join_ = other.is_select_straight_join_;
     is_implicit_distinct_ = false; // it is a property from upper stmt, do not copy
     // copy insert into statement
@@ -442,7 +440,6 @@ ObSelectStmt::ObSelectStmt()
   children_swapped_ = false;
   check_option_ = VIEW_CHECK_OPTION_NONE;
   contain_ab_param_ = false;
-  is_expanded_mview_ = false;
   is_select_straight_join_ = false;
   is_implicit_distinct_ = false;
 }
@@ -592,7 +589,6 @@ int ObSelectStmt::do_to_string(char *buf, const int64_t buf_len, int64_t &pos) c
            //K_(win_func_exprs),
            K(child_stmts),
            K_(check_option),
-           K_(is_expanded_mview),
            K_(is_implicit_distinct)
              );
     }

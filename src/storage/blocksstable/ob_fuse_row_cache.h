@@ -129,44 +129,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObFuseRowCache);
 };
 
-class ObMultiVersionFuseRowCacheKey : public common::ObIKVCacheKey
-{
-public:
-  ObMultiVersionFuseRowCacheKey();
-  ObMultiVersionFuseRowCacheKey(
-      const int64_t begin_version,
-      const int64_t end_version,
-      const ObTabletID &tablet_id,
-      const ObDatumRowkey &rowkey,
-      const int64_t schema_column_count,
-      const ObStorageDatumUtils &datum_utils);
-  virtual ~ObMultiVersionFuseRowCacheKey() = default;
-  virtual int equal(const ObIKVCacheKey &other, bool &equal) const override;
-  virtual int hash(uint64_t &hash_value) const override;
-  
-  virtual int64_t size() const override;
-  virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const override;
-  bool is_valid() const;
-  TO_STRING_KV(K_(base), K_(begin_version), K_(end_version));
-private:
-  ObFuseRowCacheKeyBase base_;
-  // (begin_version_, end_version]
-  int64_t begin_version_;
-  int64_t end_version_;
-  DISALLOW_COPY_AND_ASSIGN(ObMultiVersionFuseRowCacheKey);
-};
-
-class ObMultiVersionFuseRowCache : public common::ObKVCache<ObMultiVersionFuseRowCacheKey, ObFuseRowCacheValue>
-{
-public:
-  ObMultiVersionFuseRowCache() = default;
-  virtual ~ObMultiVersionFuseRowCache() = default;
-  int get_row(const ObMultiVersionFuseRowCacheKey &key, ObFuseRowValueHandle &handle);
-  int put_row(const ObMultiVersionFuseRowCacheKey &key, const ObFuseRowCacheValue &value);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObMultiVersionFuseRowCache);
-};
-
 }  // end namespace storage
 }  // end namespace oceanbase
 

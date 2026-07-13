@@ -230,7 +230,6 @@ int ObDbmsStatsUtils::check_is_stat_table(share::schema::ObSchemaGetterGuard &sc
     //do nothing
   } else {//check user table
     is_valid = table_schema->is_user_table()
-               || table_schema->is_mlog_table()
                || (need_index_table && table_schema->is_index_table());
   }
   return ret;
@@ -1998,7 +1997,6 @@ int ObDbmsStatsUtils::get_table_index_infos(share::schema::ObSchemaGetterGuard *
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(table_id,
                                                             index_tid_arr,
                                                             index_count,
-                                                            false, /*with_mv*/
                                                             true, /*with_global_index*/
                                                             false /*domain index*/))) {
     LOG_WARN("failed to get can read index", K(ret));

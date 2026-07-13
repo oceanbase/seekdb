@@ -36,8 +36,7 @@ const char *ObSnapshotInfo::ObSnapShotTypeStr[] = {
     "SNAPSHOT_FOR_CREATE_INDEX",
     "SNAPSHOT_FOR_MULTI_VERSION",
     "SNAPSHOT_FOR_RESTORE_POINT",
-    "SNAPSHOT_FOR_BACKUP_POINT",
-    "SNAPSHOT_FOR_MAJOR_REFRESH_MV" };
+    "SNAPSHOT_FOR_BACKUP_POINT" };
 
 ObSnapshotInfo::ObSnapshotInfo()
 {
@@ -741,29 +740,6 @@ int ObSnapshotTableProxy::get_snapshot_count(
       }
     }
   }
-  return ret;
-}
-
-int ObSnapshotTableProxy::push_snapshot_for_major_refresh_mv(common::ObISQLClient &proxy,
-                                                             const share::SCN &new_snapshot_scn)
-{
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObSqlString sql;
-  uint64_t snapshot_scn_val = new_snapshot_scn.get_val_for_inner_table_field();
-
-  if (OB_FAIL(sql.assign_fmt(
-          "UPDATE %s SET snapshot_scn = %ld WHERE snapshot_type = %d AND snapshot_scn < %ld",
-          OB_ALL_ACQUIRED_SNAPSHOT_TNAME, snapshot_scn_val, SNAPSHOT_FOR_MAJOR_REFRESH_MV,
-          snapshot_scn_val))) {
-    LOG_WARN("fail to assign sql", KR(ret), K(snapshot_scn_val));
-  } else if (OB_FAIL(proxy.write(sql.ptr(), affected_rows))) {
-    LOG_WARN("fail to write", KR(ret), K(sql));
-  } else if (affected_rows < 0) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected affected rows", KR(ret), K(affected_rows));
-  }
-
   return ret;
 }
 

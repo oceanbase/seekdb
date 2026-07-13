@@ -316,7 +316,7 @@ END_P SET_VAR DELIMITER
 
         LAG LANGUAGE LAST LAST_VALUE LATERAL LEAD LEADER LEAVES LESS LEAK LEAK_MOD LEAK_RATE LIB LINESTRING LIST_
         LISTAGG LOB_INROW_THRESHOLD LOCAL LOCALITY LOCATION LOCKED LOCKS LOGFILE LOGONLY_REPLICA_NUM LOGS LOCK_ LOGICAL_READS
-        LEVEL LN LOG LINK LOG_RESTORE_SOURCE LINE_DELIMITER LOCATIONS
+        LEVEL LN LOG LS LINK LOG_RESTORE_SOURCE LINE_DELIMITER LOCATIONS
 
         MAJOR MAP MANHATTAN MANUAL MASTER MASTER_AUTO_POSITION MASTER_CONNECT_RETRY MASTER_DELAY MASTER_HEARTBEAT_PERIOD
         MASTER_HOST MASTER_LOG_FILE MASTER_LOG_POS MASTER_PASSWORD MASTER_PORT MASTER_RETRY_COUNT
@@ -348,7 +348,7 @@ END_P SET_VAR DELIMITER
         RELAY_LOG_FILE RELAY_LOG_POS RELAY_THREAD RELOAD REMAP REMOVE REORGANIZE REPAIR REPEATABLE REPLICA
         REPLICA_NUM REPLICA_TYPE REPLICATION RESET RESOURCE RESOURCE_POOL RESOURCE_POOL_LIST RESPECT RESTART
         RESTORE RESUME RETURNED_SQLSTATE RETURNS RETURNING REVERSE REWRITE ROLLBACK ROLLUP ROOT
-        ROARINGBITMAP ROOTTABLE ROOTSERVICE_LIST ROUTINE ROW ROLLING ROWID ROW_COUNT ROW_FORMAT ROW_INDEX_STRIDE ROWS RTREE RUN
+        ROARINGBITMAP ROOTTABLE ROOTSERVICE_LIST ROUTINE ROW ROLLING ROWID ROW_COUNT ROW_FORMAT ROW_GROUP_SIZE ROW_INDEX_STRIDE ROWS RTREE RUN
         RECYCLEBIN ROTATE ROW_NUMBER RUDUNDANT RECURSIVE RANDOM REDO_TRANSPORT_OPTIONS REMOTE_OSS RT
         RANK READ_ONLY RECOVERY REJECT ROLE
 
@@ -481,7 +481,7 @@ END_P SET_VAR DELIMITER
 %type <node> create_view_stmt view_name opt_column_list opt_table_id opt_tablet_id view_select_stmt opt_check_option opt_tablet_id_no_empty
 %type <node> name_list
 %type <node> zone_desc opt_zone_desc server_or_zone opt_server_or_zone opt_partitions opt_subpartitions
-%type <node> opt_tenant_list_or_tablet_id
+%type <node> ls opt_tenant_list_or_ls_or_tablet_id
 %type <node> opt_tenant_list_v2
 %type <node> suspend_or_resume tenant_name opt_tenant_name cache_name opt_cache_name file_id opt_file_id cancel_task_type
 %type <node> sql_id_or_schema_id_expr opt_sql_id_or_schema_id outline_type
@@ -8264,6 +8264,10 @@ TYPE COMP_EQ STRING_VALUE
 | EMPTY_FIELD_AS_NULL COMP_EQ BOOL_VALUE
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_EMPTY_FIELD_AS_NULL, 1, $3);
+}
+| ROW_GROUP_SIZE COMP_EQ file_size_const
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ROW_GROUP_SIZE, 1, $3);
 }
 | COMPRESSION COMP_EQ compression_name
 {
@@ -17410,7 +17414,7 @@ alter_with_opt_hint SYSTEM CANCEL cancel_task_type TASK STRING_VALUE
   malloc_non_terminal_node($$, result->malloc_pool_, T_CANCEL_TASK, 2, $4, $6);
 }
 |
-alter_with_opt_hint SYSTEM MAJOR FREEZE opt_tenant_list_or_tablet_id
+alter_with_opt_hint SYSTEM MAJOR FREEZE opt_tenant_list_or_ls_or_tablet_id
 {
   (void)($1);
   ParseNode *type = NULL;
@@ -17428,7 +17432,7 @@ alter_with_opt_hint SYSTEM CHECKPOINT
   malloc_non_terminal_node($$, result->malloc_pool_, T_FREEZE, 3, type, NULL, NULL);
 }
 |
-alter_with_opt_hint SYSTEM MINOR FREEZE opt_tenant_list_or_tablet_id
+alter_with_opt_hint SYSTEM MINOR FREEZE opt_tenant_list_or_ls_or_tablet_id
 {
   (void)($1);
   ParseNode *type = NULL;
@@ -17984,10 +17988,22 @@ server_or_zone
 }
 ;
 
-opt_tenant_list_or_tablet_id:
+ls:
+LS opt_equal_mark INTNUM
+{
+  (void)($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LS, 1, $3);
+}
+;
+
+opt_tenant_list_or_ls_or_tablet_id:
 tenant_list_tuple opt_tablet_id
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_TENANT_TABLET, 2, $1, $2);
+}
+| tenant_list_tuple ls opt_tablet_id
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_TENANT_LS_TABLET, 3, $1, $2, $3);
 }
 | opt_tablet_id_no_empty
 {
@@ -21474,6 +21490,7 @@ ACCESS_INFO
 |       PARTIAL_UPDATE
 |       PARTITION_ID
 |       PATH
+|       LS
 |       PARTITIONING
 |       PARTITIONS
 |       PARTITION_TYPE
@@ -21536,6 +21553,7 @@ ACCESS_INFO
 |       RECYCLEBIN
 |       ROTATE
 |       ROW_NUMBER
+|       ROW_GROUP_SIZE
 |       ROW_INDEX_STRIDE
 |       REDO_BUFFER_SIZE
 |       REDOFILE

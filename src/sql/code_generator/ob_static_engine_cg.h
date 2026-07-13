@@ -597,12 +597,7 @@ private:
   int generate_sort_exprs(const bool is_store_sortkey_separately, ObLogSort &op, ObSortVecSpec &spec,
                           ObIArray<OrderItem> &sk_keys);
 
-  int extract_all_mview_ids(const ObIArray<ObRawExpr *> &exprs);
-  int extract_all_mview_ids(const ObRawExpr *expr);
   int check_is_insert_overwrite_stmt(const ObLogPlan *plan, bool &is_insert_overwrite);
-  int check_refreshing_mview_session_var(ObSchemaGetterGuard &schema_guard,
-                                         ObSQLSessionInfo &session,
-                                         const ObDMLStmt *dml_stmt);
 private:
   struct BatchExecParamCache {
     BatchExecParamCache(ObExecParamRawExpr* expr, ObOpSpec* spec, bool is_left)
@@ -639,7 +634,6 @@ private:
   ObTscCgService tsc_cg_service_;
   uint64_t cur_cluster_version_;
   common::ObSEArray<BatchExecParamCache, 8> batch_exec_param_caches_;
-  common::ObSEArray<uint64_t, 4> mview_ids_;
 
 };
 

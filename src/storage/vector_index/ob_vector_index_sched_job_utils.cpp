@@ -80,7 +80,7 @@ int ObVectorIndexSchedJobUtils::add_vector_index_refresh_job(
   int64_t job_id = OB_INVALID_ID;
   common::ObObj start_date;
   start_date.set_null();
-  if (OB_FAIL(ObMViewSchedJobUtils::generate_job_id(job_id))) {
+  if (OB_FAIL(ObDBMSSchedJobUtils::generate_job_id(job_id))) {
     LOG_WARN("failed to generate vector index refresh job id", K(ret));
   } else {
     ObSqlString job_action;
@@ -132,7 +132,7 @@ int ObVectorIndexSchedJobUtils::add_vector_index_rebuild_job(common::ObISQLClien
   int64_t job_id = OB_INVALID_ID;
   common::ObObj start_date;
   start_date.set_null();
-  if (OB_FAIL(ObMViewSchedJobUtils::generate_job_id(job_id))) {
+  if (OB_FAIL(ObDBMSSchedJobUtils::generate_job_id(job_id))) {
     LOG_WARN("failed to generate vector index refresh job id", K(ret));
   } else {
     ObSqlString job_action;

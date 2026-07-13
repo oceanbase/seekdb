@@ -18,7 +18,6 @@
 #include "sql/printer/ob_schema_printer.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"  // previously hidden behind the q external_table_utils include chain,make the dependency explicit
 
-#include "share/schema/ob_mview_info.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "rootserver/ob_dynamic_partition_manager.h"
 #include "sql/resolver/ddl/ob_storage_cache_ddl_util.h"
@@ -1454,7 +1453,7 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
 
   if (OB_SUCCESS == ret && !table_schema.is_external_table() && !is_index_tbl && !is_for_table_status
       && !is_no_field_options(sql_mode) && !is_no_table_options(sql_mode)) {
-    if (!strict_compat_ && !table_schema.mv_container_table()) {
+    if (!strict_compat_) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, "ORGANIZATION %s ",
                                   table_schema.is_heap_organized_table() ? "HEAP" : "INDEX"))) {
         SHARE_SCHEMA_LOG(WARN, "fail to print default charset", K(ret), K(table_schema));
@@ -2579,195 +2578,6 @@ int ObSchemaPrinter::print_view_definiton(const uint64_t table_id,
   }
   return ret;
 }
-int ObSchemaPrinter::print_materialized_view_definition(const uint64_t table_id,
-    char *buf,
-    const int64_t &buf_len,
-    int64_t &pos,
-    const ObTimeZoneInfo *tz_info,
-    bool agent_mode,
-    ObSQLMode sql_mode) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(buf)) {
-    ret = OB_ERR_UNEXPECTED;
-    SHARE_SCHEMA_LOG(WARN, "buf is null", KR(ret));
-  } else if (buf_len <= 0) {
-    ret = OB_ERR_UNEXPECTED;
-    SHARE_SCHEMA_LOG(WARN, "buf_len should bigger than 0", KR(ret));
-  } else {
-    const ObTableSchema *table_schema = nullptr;
-    const ObTableSchema *container_table_schema = nullptr;
-    uint64_t container_table_id = OB_INVALID_ID;
-    ObMViewInfo mview_info;
-    bool need_print_column_list = false;
-    common::ObSEArray<uint64_t, 16> column_ids;
-    if (OB_FAIL(schema_guard_.get_table_schema( table_id, table_schema))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to get table schema", KR(ret), K(table_id));
-    } else if (OB_ISNULL(table_schema)) {
-      ret = OB_TABLE_NOT_EXIST;
-      SHARE_SCHEMA_LOG(WARN, "Unknow table", KR(ret), K(table_id));
-    } else if (OB_INVALID_ID == (container_table_id = table_schema->get_data_table_id())) {
-      ret = OB_ERR_UNEXPECTED;
-      SHARE_SCHEMA_LOG(WARN, "fail to get container_table_id", KR(ret), K(table_id));
-    } else if (OB_FAIL(schema_guard_.get_table_schema( container_table_id, container_table_schema))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to get container_table_schema", KR(ret), K(table_id), K(container_table_id));
-    } else if (OB_ISNULL(container_table_schema)) {
-      ret = OB_TABLE_NOT_EXIST;
-      SHARE_SCHEMA_LOG(WARN, "Unknow container table", KR(ret), K(table_id), K(container_table_id));
-    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "CREATE MATERIALIZED VIEW "))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to print materialized view definition", KR(ret));
-    } else if (OB_FAIL(print_identifier(buf, buf_len, pos, table_schema->get_table_name()))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to print materialized view name", KR(ret));
-    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, " "))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to print space", KR(ret));
-    } else if (FALSE_IT(need_print_column_list = false)) {
-
-    } else if (need_print_column_list && OB_FAIL(databuff_printf(buf, buf_len, pos, "("))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to print view definition", K(ret));
-    } else if (need_print_column_list && OB_FAIL(table_schema->get_column_ids(column_ids))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to print view definition", K(ret));
-    } else if (need_print_column_list
-              && OB_FAIL(print_column_list(*table_schema, column_ids, buf, buf_len, pos))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to print view definition", K(ret));
-    } else if (need_print_column_list && OB_FAIL(databuff_printf(buf, buf_len, pos, ") "))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to print view definition", K(ret));
-    } else if (!strict_compat_) {
-      const ObRowkeyInfo &rowkey_info = container_table_schema->get_rowkey_info();
-      bool is_first_col = true;
-      for (int64_t j = 0; OB_SUCC(ret) && j < rowkey_info.get_size(); ++j) {
-        const ObColumnSchemaV2 *col = nullptr;
-        if (OB_ISNULL(rowkey_info.get_column(j))) {
-          ret = OB_ERR_UNEXPECTED;
-          SHARE_SCHEMA_LOG(WARN, "fail to get column", KR(ret));
-        } else if (OB_ISNULL(col = schema_guard_.get_column_schema( 
-                                                    container_table_id, 
-                                                    rowkey_info.get_column(j)->column_id_))) {
-          ret = OB_ERR_UNEXPECTED;
-          SHARE_SCHEMA_LOG(WARN, "fail to get column schema", KR(ret),
-                       "column_id", rowkey_info.get_column(j)->column_id_);
-        } else if (OB_SUCC(ret) 
-                   && col->get_column_id() != OB_HIDDEN_SESSION_ID_COLUMN_ID
-                   && !col->is_shadow_column() 
-                   && !col->is_hidden()) {
-          if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%s%.*s%s", 
-                                      is_first_col ? "(PRIMARY KEY (" : "",
-                                      col->get_column_name_str().length(),
-                                      col->get_column_name_str().ptr(),
-                                      j < rowkey_info.get_size() - 1 ? ", " : ""))) {
-            SHARE_SCHEMA_LOG(WARN, "fail to print primary key", KR(ret), K(col->get_column_name()));
-          } 
-          is_first_col = false;
-          if (OB_SUCC(ret) && rowkey_info.get_size() - 1 == j 
-              && OB_FAIL(databuff_printf(buf, buf_len, pos, ")) "))) {
-            SHARE_SCHEMA_LOG(WARN, "fail to print materialized view rowkey", KR(ret));
-          }
-        }
-      }
-    } 
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(print_table_definition_table_options(*container_table_schema, 
-                                                       buf, 
-                                                       buf_len, 
-                                                       pos, 
-                                                       false, 
-                                                       agent_mode, 
-                                                       sql_mode))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to print table options", KR(ret), K(*container_table_schema));
-      } else if (!strict_compat_ && OB_FAIL(print_table_definition_partition_options(*container_table_schema, 
-                                                                  buf, 
-                                                                  buf_len, 
-                                                                  pos, 
-                                                                  agent_mode, 
-                                                                  tz_info))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to print partition options", KR(ret), K(*container_table_schema));
-      } else if (OB_FAIL(ObMViewInfo::fetch_mview_info(*GCTX.sql_proxy_, table_id, mview_info))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to fecth materialized view info", KR(ret), K(table_id));
-      } else if (!strict_compat_) {
-        switch (mview_info.get_refresh_method()) {
-          case ObMVRefreshMethod::NEVER:
-            if (OB_FAIL(databuff_printf(buf, buf_len, pos, " NEVER REFRESH "))) {
-              SHARE_SCHEMA_LOG(WARN, "fail to print refresh method never", KR(ret));
-            }
-            break;
-          case ObMVRefreshMethod::COMPLETE:
-            if (OB_FAIL(databuff_printf(buf, buf_len, pos, " REFRESH COMPLETE "))) {
-              SHARE_SCHEMA_LOG(WARN, "fail to print refresh method complete", KR(ret));
-            }
-            break;
-          case ObMVRefreshMethod::FAST:
-            if (OB_FAIL(databuff_printf(buf, buf_len, pos, " REFRESH FAST "))) {
-              SHARE_SCHEMA_LOG(WARN, "fail to print refresh method fast", KR(ret));
-            }
-            break;
-          case ObMVRefreshMethod::FORCE:
-            if (OB_FAIL(databuff_printf(buf, buf_len, pos, " REFRESH FORCE "))) {
-              SHARE_SCHEMA_LOG(WARN, "fail to print refresh method force", KR(ret));
-            }
-            break;
-          default:
-            ret = OB_NOT_SUPPORTED;
-            SHARE_SCHEMA_LOG(WARN, "unsupported refresh method", KR(ret));
-            break;
-        }
-        if (OB_SUCC(ret)) {
-          switch (mview_info.get_refresh_mode()) {
-            case ObMVRefreshMode::NEVER:
-              // nothing to print
-              break;
-            case ObMVRefreshMode::DEMAND:
-            default:
-              if (OB_FAIL(databuff_printf(buf, buf_len, pos, "ON DEMAND "))) {
-                SHARE_SCHEMA_LOG(WARN, "fail to print refresh mode", KR(ret));
-              }        
-              break;
-          } 
-        }
-      }
-    }
-    if (!strict_compat_ && OB_SUCC(ret)) { 
-      if (OB_NOT_NULL(mview_info.get_refresh_next().ptr())) {
-        if (OB_FAIL(databuff_printf(buf, buf_len, pos, 
-                                           "START WITH sysdate%s",
-                                           "()"))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to print materialized view refresh start", KR(ret));
-        } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, " NEXT %.*s ", 
-                                            mview_info.get_refresh_next().length(),                                
-                                            mview_info.get_refresh_next().ptr()))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to print mv refresh next", KR(ret));                                  
-        }
-      }
-      if (OB_SUCC(ret)) {
-        if (table_schema->mv_enable_query_rewrite() 
-                        && OB_FAIL(databuff_printf(buf, buf_len, pos, 
-                                                  "ENABLE QUERY REWRITE "))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to print materialized view enable qurey rewrite", KR(ret));
-        } else if (table_schema->mv_on_query_computation()
-                  && OB_FAIL(databuff_printf(buf, buf_len, pos, 
-                                            "ENABLE ON QUERY COMPUTATION "))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to print materialized view on query computation", KR(ret));
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(databuff_printf(buf, buf_len, pos, " AS "))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to print view definition", K(ret));
-      } else if (OB_FAIL(print_view_define_str(buf, buf_len, pos,
-                                              table_schema->get_view_schema().get_view_definition_str()))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to print view definition", K(ret));
-      } else if (VIEW_CHECK_OPTION_CASCADED == table_schema->get_view_schema().get_view_check_option()) {
-        if (OB_FAIL(databuff_printf(buf, buf_len, pos, " WITH CHECK OPTION"))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to print view definition with check option", K(ret));
-        }
-      } else if (VIEW_CHECK_OPTION_LOCAL == table_schema->get_view_schema().get_view_check_option()) {
-        if (OB_FAIL(databuff_printf(buf, buf_len, pos, " WITH LOCAL CHECK OPTION"))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to print view definition with local check option", K(ret));
-        }
-      }
-    }
-  } 
-  return ret;
-}
-
 int ObSchemaPrinter::print_tablegroup_definition(const uint64_t tablegroup_id,
     char* buf,
     const int64_t& buf_len,

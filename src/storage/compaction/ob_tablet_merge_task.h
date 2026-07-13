@@ -21,6 +21,7 @@
 #include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/ob_i_table.h"
 #include "storage/blocksstable/ob_datum_range.h"
+#include "storage/tx_storage/ob_ls_handle.h"
 #include "storage/compaction/ob_i_compaction_filter.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "storage/ob_storage_struct.h"
@@ -32,7 +33,6 @@ namespace oceanbase
 namespace storage
 {
 class ObITable;
-class ObLS;
 class ObTablet;
 class ObTabletHandle;
 }
@@ -65,7 +65,7 @@ struct ObMergeParameter {
   const ObStorageSchema *get_schema() const;
   bool is_full_merge() const;
   bool is_delete_insert_merge() const;
-  bool is_restore_complete() const;
+  bool is_ha_compeleted() const;
 
   const ObStaticMergeParam &static_param_;
   /* rest variables are different for MergeTask */
@@ -107,10 +107,11 @@ struct ObTabletMergeDagParam : public share::ObIDagInitParam
   ObTabletMergeDagParam();
   ObTabletMergeDagParam(
     const compaction::ObMergeType merge_type,
+    const share::ObLSID &ls_id,
     const ObTabletID &tablet_id);
   virtual bool is_valid() const override;
   VIRTUAL_TO_STRING_KV(K_(skip_get_tablet), "merge_type", merge_type_to_str(merge_type_), K_(merge_version),
-     K_(tablet_id), "exec_mode", exec_mode_to_str(exec_mode_),
+     K_(ls_id), K_(tablet_id), "exec_mode", exec_mode_to_str(exec_mode_),
      K_(need_swap_tablet_flag), K_(is_reserve_mode));
 
   bool skip_get_tablet_;
@@ -119,6 +120,7 @@ struct ObTabletMergeDagParam : public share::ObIDagInitParam
   ObExecMode exec_mode_;
   compaction::ObMergeType merge_type_;
   int64_t merge_version_;
+  share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   ObCompactionParam compaction_param_; // used for adaptive compaction dag scheduling
 };
@@ -159,6 +161,7 @@ class ObMergeDagHash
 public:
   ObMergeDagHash()
    : merge_type_(compaction::ObMergeType::INVALID_MERGE_TYPE),
+     ls_id_(),
      tablet_id_()
   {}
   virtual ~ObMergeDagHash() {}
@@ -166,15 +169,16 @@ public:
   bool is_valid() const
   {
     return merge_type_ > INVALID_MERGE_TYPE && merge_type_ < MERGE_TYPE_MAX
-        && tablet_id_.is_valid();
+        && ls_id_.is_valid() && tablet_id_.is_valid();
   }
 
   virtual uint64_t inner_hash() const;
   bool belong_to_same_tablet(const ObMergeDagHash *other) const;
 
-  TO_STRING_KV("merge_type", merge_type_to_str(merge_type_), K_(tablet_id));
+  TO_STRING_KV("merge_type", merge_type_to_str(merge_type_), K_(ls_id), K_(tablet_id));
 
   compaction::ObMergeType merge_type_;
+  share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
 };
 
@@ -188,6 +192,7 @@ public:
   virtual ObBasicTabletMergeCtx *get_ctx() { return ctx_; }
   ObTabletMergeDagParam &get_param() { return param_; }
   const ObTabletMergeDagParam &get_param() const { return param_; }
+  virtual const share::ObLSID & get_ls_id() const { return param_.ls_id_; }
   bool is_reserve_mode() const { return param_.is_reserve_mode_; }
   void set_reserve_mode() { param_.is_reserve_mode_ = true; }
   virtual bool operator == (const ObIDag &other) const override;
@@ -249,7 +254,7 @@ public:
       const ObTabletMergeDagParam &param,
       const lib::Worker::CompatMode compat_mode,
       const ObGetMergeTablesResult &result,
-      storage::ObLS *ls);
+      storage::ObLSHandle &ls_handle);
   virtual bool operator == (const ObIDag &other) const override;
   const share::ObScnRange& get_merge_range() const { return result_.scn_range_; }
   const ObGetMergeTablesResult& get_result() const { return result_; }

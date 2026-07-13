@@ -152,8 +152,7 @@ public:
 
 	int get_schema_version(int64_t &schema_version) const;
 
-	/*
-   * with_mv: if index_tid_array contains ematerialized view.
+  /*
    * with_global_index: if index_tid_array contains global index.
    * with_domain_index: if index_tid_array contains domain index.
    */
@@ -161,14 +160,10 @@ public:
       const uint64_t table_id,
       uint64_t *index_tid_array,
       int64_t &size,
-      bool with_mv,
       bool with_global_index = true,
       bool with_domain_index = true,
       bool with_spatial_index = true,
       bool with_vector_index = true);
-  int get_table_mlog_schema(
-                            const uint64_t data_table_id,
-                            const ObTableSchema *&mlog_schema);
   int check_has_local_unique_index(const uint64_t table_id,
       bool &has_local_unique_index);
 	/*
@@ -351,8 +346,7 @@ public:
   int get_can_write_index_array(const uint64_t table_id,
                                 uint64_t *index_tid_array,
                                 int64_t &size,
-                                bool only_global = false,
-                                bool with_mlog = false);
+                                bool only_global = false);
 
   // for readonly
   int verify_read_only(const ObStmtNeedPrivs &stmt_need_privs);

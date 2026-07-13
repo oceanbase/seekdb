@@ -28,7 +28,7 @@ namespace compaction
 const static char * ObLSStateStr[] = {
     "CAN_MERGE",
     "WEAK_READ_TS_NOT_READY",
-    "OFFLINE",
+    "OFFLINE_OR_DELETED",
     "STATE_MAX"
 };
 
@@ -45,38 +45,44 @@ const char * ObLSStatusCache::ls_state_to_str(const ObLSStatusCache::LSState &st
 }
 /*
 * check_list
-* ls is offline
+* ls is deleted / offline
 * weak_read_ts
 */
 int ObLSStatusCache::init_for_major(
   const int64_t merge_version,
-  ObLS *ls)
+  ObLSHandle &ls_handle)
 {
   int ret = OB_SUCCESS;
   reset(); // reset before init
-  if (OB_UNLIKELY(merge_version < 0 || OB_ISNULL(ls))) {
+  ObLS *ls = nullptr;
+  if (OB_UNLIKELY(merge_version < 0 || !ls_handle.is_valid() || nullptr == (ls = ls_handle.get_ls()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(merge_version), KP(ls));
-  } else {
-    check_ls_state(*ls, state_);
-    if (can_merge()) {
-      weak_read_ts_ = ls->get_ls_wrs_handler()->get_ls_weak_read_ts();
-      if (OB_UNLIKELY(!weak_read_ts_.is_valid())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid weak read ts", KR(ret), K_(weak_read_ts));
-      } else if (merge_version > 0 && weak_read_ts_.get_val_for_tx() < merge_version) {
-        state_ = WEAK_READ_TS_NOT_READY;
-      }
+    LOG_WARN("invalid argument", KR(ret), K(merge_version), K(ls_handle));
+  } else if (FALSE_IT(ls_id_ = ls->get_ls_id())) {
+  } else if (FALSE_IT(check_ls_state(*ls, state_))) {
+  } else if (!can_merge()) {
+    // do nothing
+  } else if (FALSE_IT(weak_read_ts_ = ls->get_ls_wrs_handler()->get_ls_weak_read_ts())) {
+  } else if (OB_UNLIKELY(!weak_read_ts_.is_valid())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid weak read ts", KR(ret), K_(weak_read_ts));
+  } else if (merge_version > 0 && weak_read_ts_.get_val_for_tx() < merge_version) {
+    state_ = WEAK_READ_TS_NOT_READY;
+  } else if (can_merge() && OB_FAIL(ObMediumCompactionScheduleFunc::is_election_leader(ls_id_, is_leader_))) {
+    is_leader_ = false;
+    if (OB_LS_NOT_EXIST != ret) {
+      LOG_WARN("failed to get palf handle role", K(ret), K_(ls_id));
     }
   }
   if (OB_SUCC(ret)) {
-    ls_ = ls;
+    ls_handle_ = ls_handle;
     if (!can_merge()) {
-      ADD_COMMON_SUSPECT_INFO(MAJOR_MERGE,
-                              ObDiagnoseTabletType::TYPE_MEDIUM_MERGE,
-                              ObSuspectInfoType::SUSPECT_LS_CANT_MERGE,
-                              weak_read_ts_.is_valid() ? weak_read_ts_.get_val_for_tx() : -1,
-                              "ls_status", *this);
+      ADD_SUSPECT_LS_INFO(MAJOR_MERGE,
+                        ObDiagnoseTabletType::TYPE_MEDIUM_MERGE,
+                        ls_id_,
+                        ObSuspectInfoType::SUSPECT_LS_CANT_MERGE,
+                        weak_read_ts_.is_valid() ? weak_read_ts_.get_val_for_tx() : -1,
+                        "ls_status", *this);
       if (REACH_THREAD_TIME_INTERVAL(PRINT_LOG_INVERVAL)) {
         LOG_INFO("ls is not ready for compaction", KPC(this));
       }
@@ -87,17 +93,19 @@ int ObLSStatusCache::init_for_major(
 
 void ObLSStatusCache::reset()
 {
+  ls_id_.reset();
   weak_read_ts_.reset();
+  is_leader_ = false;
   state_ = STATE_MAX;
-  ls_ = nullptr;
+  ls_handle_.reset();
 }
 
 void ObLSStatusCache::check_ls_state(ObLS &ls, LSState &state)
 {
-  if (ls.is_offline()) {
-    state = OFFLINE;
+  if (ls.is_deleted() || ls.is_offline()) {
+    state = OFFLINE_OR_DELETED;
     if (REACH_THREAD_TIME_INTERVAL(PRINT_LOG_INVERVAL)) {
-      LOG_INFO("ls is offline", K(ls), K(ls.is_offline()));
+      LOG_INFO("ls is deleted or offline", K(ls), K(ls.is_deleted()), K(ls.is_offline()));
     }
   } else {
     state = CAN_MERGE;
@@ -113,7 +121,7 @@ bool ObLSStatusCache::check_weak_read_ts_ready(
 
   if (weak_read_scn.get_val_for_tx() < merge_version) {
     FLOG_INFO("current slave_read_ts is smaller than freeze_ts, try later",
-              K(merge_version), K(weak_read_scn));
+              "ls_id", ls.get_ls_id(), K(merge_version), K(weak_read_scn));
   } else {
     is_ready_for_compaction = true;
   }
@@ -144,7 +152,7 @@ const char * ObTabletStatusCache::tablet_execute_state_to_str(const ObTabletStat
 
 const static char * ObTabletScheduleNewRoundStateStr[] = {
     "CAN_SCHEDULE_NEW_ROUND",
-    "RESERVED_STATUS_BLOCKED",
+    "RESERVED_STATE",
     "DURING_SPLIT",
     "NEED_CHECK_LAST_MEDIUM_CKM",
     "EXIST_UNFINISH_MEDIUM",
@@ -176,13 +184,14 @@ int ObTabletStatusCache::init_for_major(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret), KPC(this));
   } else {
+    const ObLSID &ls_id = ls.get_ls_id();
     const ObTabletID &tablet_id = tablet.get_tablet_id();
     if (OB_FAIL(inner_init_state(merge_version, tablet, is_skip_merge_tenant))) {
-      LOG_WARN("failed to init state", KR(ret), K(merge_version), K(tablet_id));
+      LOG_WARN("failed to init state", KR(ret), K(merge_version), K(ls_id), K(tablet_id));
     } else if (OB_FAIL(update_tablet_report_status(ls, tablet))) {
-      LOG_WARN("failed to update tablet report status", KR(ret), K(tablet_id));
+      LOG_WARN("failed to update tablet report status", KR(ret), K(ls_id), K(tablet_id));
     } else {
-      inner_init_could_schedule_new_round(tablet,
+      inner_init_could_schedule_new_round(ls_id, tablet,
                                           ls_could_schedule_new_round,
                                           true /*normal_schedule*/);
     }
@@ -213,7 +222,7 @@ int ObTabletStatusCache::init_for_diagnose(
     if (OB_FAIL(inner_init_state(merge_version, tablet, false/*is_skip_merge_tenant*/))) {
       LOG_WARN("failed to init state", KR(ret), K(merge_version), K(tablet_id));
     } else {
-      inner_init_could_schedule_new_round(tablet,
+      inner_init_could_schedule_new_round(ls.get_ls_id(), tablet,
                                           true /*ls_could_schedule_new_round*/,
                                           false /*normal_schedule*/);
     }
@@ -262,6 +271,7 @@ int ObTabletStatusCache::inner_init_state(
 }
 
 void ObTabletStatusCache::inner_init_could_schedule_new_round(
+  const ObLSID &ls_id,
   const ObTablet &tablet,
   const bool ls_could_schedule_new_round,
   const bool normal_schedule)
@@ -275,11 +285,11 @@ void ObTabletStatusCache::inner_init_could_schedule_new_round(
   new_round_state_ = NEW_ROUND_STATE_MAX;
   if (OB_FAIL(tablet.ObITabletMdsInterface::get_latest_tablet_status(user_data, writer, trans_stat, trans_version))) {
     LOG_WARN("failed to get tablet status", K(ret), K(tablet), K(user_data));
-  } else if (ObTabletStatus::RESERVED_STATUS_4 == user_data.tablet_status_
-    || ObTabletStatus::RESERVED_STATUS_6 == user_data.tablet_status_) {
-    new_round_state_ = RESERVED_STATUS_BLOCKED;
+  } else if (ObTabletStatus::RESERVED_4 == user_data.tablet_status_
+    || ObTabletStatus::RESERVED_6 == user_data.tablet_status_) {
+    new_round_state_ = RESERVED_STATE;
     if (REACH_THREAD_TIME_INTERVAL(PRINT_LOG_INVERVAL)) {
-      LOG_INFO("reserved tablet status, merging is not allowed", K(user_data), K(tablet));
+      LOG_INFO("tablet status is reserved, merging is not allowed", K(user_data), K(tablet));
     }
   } else if (ObTabletStatus::SPLIT_SRC == user_data.tablet_status_
     || ObTabletStatus::SPLIT_SRC_DELETED == user_data.tablet_status_) {
@@ -287,15 +297,15 @@ void ObTabletStatusCache::inner_init_could_schedule_new_round(
     if (REACH_THREAD_TIME_INTERVAL(PRINT_LOG_INVERVAL)) {
       LOG_INFO("tablet status is split, merging is not allowed", K(user_data), K(tablet));
     }
-  } else if (OB_FAIL(check_medium_list(tablet, normal_schedule))) {
+  } else if (OB_FAIL(check_medium_list(ls_id, tablet, normal_schedule))) {
     // call medium_list_->need_check_finish even if ls_could_schedule_new_round=false
-    LOG_WARN("failed to check medium list", K(ret), K(tablet_id));
+    LOG_WARN("failed to check medium list", K(ret), K(ls_id), K(tablet_id));
   } else if (!ls_could_schedule_new_round || NEW_ROUND_STATE_MAX != new_round_state_) {
     // do nothing
   } else if (normal_schedule) {
     if (OB_FAIL(register_map(tablet))) {
       // register_map must be the last step
-      LOG_WARN("failed to add tablet", K(ret), K(tablet_id));
+      LOG_WARN("failed to add tablet", K(ret), K(ls_id), K(tablet_id));
     }
   } else { // for diagnose
     new_round_state_ = DIAGNOSE_NORMAL;
@@ -318,6 +328,7 @@ void ObTabletStatusCache::inner_destroy()
 }
 
 int ObTabletStatusCache::check_medium_list(
+  const ObLSID &ls_id,
   const ObTablet &tablet,
   const bool normal_schedule)
 {
@@ -331,11 +342,11 @@ int ObTabletStatusCache::check_medium_list(
     new_round_state_ = NEED_CHECK_LAST_MEDIUM_CKM;
     if (normal_schedule) {
       int tmp_ret = OB_SUCCESS;
-      if (OB_TMP_FAIL(share::g_mp->tenant_medium_checker()->add_tablet(
-          tablet_id, medium_list_->get_wait_check_medium_scn()))) {
-        LOG_WARN("failed to add tablet", K(tmp_ret), K(tablet_id));
+      if (OB_TMP_FAIL(share::g_mp->tenant_medium_checker()->add_tablet_ls(
+          tablet_id, ls_id, medium_list_->get_wait_check_medium_scn()))) {
+        LOG_WARN("failed to add tablet", K(tmp_ret), K(ls_id), K(tablet_id));
       } else {
-        LOG_TRACE("success to add tablet into checker", KR(ret), K(tablet_id));
+        LOG_TRACE("success to add tablet into checker", KR(ret), K(ls_id), K(tablet_id));
       }
     }
   } else if (!medium_list_->could_schedule_next_round(tablet.get_last_major_snapshot_version())) {
@@ -369,10 +380,11 @@ int ObTabletStatusCache::update_tablet_report_status(
   int ret = OB_SUCCESS;
   if (tablet_merge_finish_) {
     int tmp_ret = OB_SUCCESS;
+    const ObLSID &ls_id = ls.get_ls_id();
     const ObTabletID &tablet_id = tablet.get_tablet_id();
     if (tablet.get_tablet_meta().report_status_.need_report()) {
-      if (OB_TMP_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(tablet_id, true/*need_diagnose*/))) {
-        LOG_WARN("failed to submit tablet update task to report", K(tmp_ret), K(tablet_id));
+      if (OB_TMP_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(ls_id, tablet_id, true/*need_diagnose*/))) {
+        LOG_WARN("failed to submit tablet update task to report", K(tmp_ret), K(tablet_id), K(ls_id));
       } else if (OB_TMP_FAIL(ls.get_tablet_svr()->update_tablet_report_status(tablet_id))) {
         LOG_WARN("failed to update tablet report status", K(tmp_ret), K(tablet_id));
       }
@@ -396,6 +408,7 @@ int ObTabletStatusCache::check_could_execute(const ObMergeType merge_type, const
       && !is_medium_merge(merge_type)) {
     need_merge = true;
   } else {
+    const share::ObLSID &ls_id = tablet.get_tablet_meta().ls_id_;
     const common::ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
     bool is_empty_shell = tablet.is_empty_shell();
     if (is_minor_merge(merge_type) || is_mini_merge(merge_type)) {
@@ -407,7 +420,7 @@ int ObTabletStatusCache::check_could_execute(const ObMergeType merge_type, const
     if (OB_FAIL(ret)) {
     } else if (!need_merge) {
       ret = OB_NO_NEED_MERGE;
-      LOG_INFO("tablet has no need to merge", K(ret), K(tablet_id),
+      LOG_INFO("tablet has no need to merge", K(ret), K(ls_id), K(tablet_id),
           "merge_type", merge_type_to_str(merge_type), K(is_empty_shell));
     }
   }

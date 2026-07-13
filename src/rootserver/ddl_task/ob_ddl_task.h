@@ -114,11 +114,13 @@ struct ObDDLTaskInfo final
 public:
   ObDDLTaskInfo() : row_scanned_(0), row_inserted_(0), physical_row_count_(0) {}
   ~ObDDLTaskInfo() {}
-  TO_STRING_KV(K_(row_scanned), K_(row_inserted), K_(physical_row_count), K_(partition_ids));
+  TO_STRING_KV(K_(row_scanned), K_(row_inserted), K_(physical_row_count), K_(ls_id), K_(ls_leader_addr), K_(partition_ids));
 public:
   int64_t row_scanned_;
   int64_t row_inserted_;
   int64_t physical_row_count_;
+  share::ObLSID ls_id_;
+  common::ObAddr ls_leader_addr_;
   ObArray<ObTabletID> partition_ids_;
 };
 
@@ -556,12 +558,14 @@ private:
       const common::ObIArray<common::ObTabletID> &tablet_ids,
       common::ObIArray<int> &ret_array,
       common::ObIArray<int64_t> &snapshot_array,
+      share::ObLocationService *location_service,
       const bool need_wait_trans_end,
       const bool need_write_defensive);
 
   // check if all transactions before a timestamp have ended
    int check_sstable_trans_end(const int64_t sstable_exist_ts,
       const common::ObIArray<common::ObTabletID> &tablet_ids,
+      share::ObLocationService *location_service,
       common::ObIArray<int> &ret_array,
       common::ObIArray<int64_t> &snapshot_array);
 

@@ -3207,10 +3207,6 @@ int ObRawExprPrinter::print(ObSysFunRawExpr *expr)
         PRINT_EXPR(expr->get_param_expr(2));
         break;
       }
-      case T_FUN_SYS_LAST_REFRESH_SCN: {
-        DATA_PRINTF("%.*s(%ld)", LEN_AND_PTR(func_name), expr->get_mview_id());
-        break;
-      }
       case T_FUNC_SYS_ARRAY_MAP: {
         OZ(print_array_map(expr, N_ARRAY_MAP));
         break;
@@ -3802,16 +3798,6 @@ int ObRawExprPrinter::print(ObPseudoColumnRawExpr *expr)
     ObString symbol("");
     ObItemType type = expr->get_expr_type();
     switch (type) {
-      case T_PSEUDO_OLD_NEW_COL : {
-        SET_SYMBOL_IF_EMPTY("old_new$$");
-        if (0 != expr->get_param_count()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("expr param count should be 0", K(ret), K(expr->get_param_count()));
-        } else {
-          DATA_PRINTF("%.*s", LEN_AND_PTR(symbol));
-        }
-        break;
-      }
       case T_PSEUDO_PARTITION_LIST_COL:
       case T_PSEUDO_EXTERNAL_FILE_URL:
       case T_PSEUDO_EXTERNAL_FILE_ROW:

@@ -789,8 +789,6 @@ public:
                             ObObjParam &obj_param,
                             bool &is_param,
                             const bool enable_decimal_int);
-  static int check_allowed_alter_operations_for_mlog(const obcall::ObAlterTableArg &arg,
-                                                  const share::schema::ObTableSchema &table_schema);
   static int fast_get_param_type(const ParseNode &parse_node,
                                  const ParamStore *param_store,
                                  const ObCollationType connect_collation,
@@ -809,7 +807,6 @@ public:
                                        ObValuesTableDef *table_def);
 
   static int64_t get_mysql_max_partition_num();
-  static int check_schema_valid_for_mview(const share::schema::ObTableSchema &table_schema);
   static int generate_subschema_id(ObSQLSessionInfo &session_info, 
                                    const common::ObIArray<common::ObString> &extended_type_info,
                                    uint16_t &subschema_id);

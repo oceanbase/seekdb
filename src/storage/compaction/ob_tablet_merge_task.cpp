@@ -127,9 +127,9 @@ bool ObMergeParameter::is_delete_insert_merge() const
   return static_param_.is_delete_insert_merge_;
 }
 
-bool ObMergeParameter::is_restore_complete() const
+bool ObMergeParameter::is_ha_compeleted() const
 {
-  return static_param_.is_restore_complete_;
+  return static_param_.is_ha_compeleted_;
 }
 
 int64_t ObMergeParameter::to_string(char* buf, const int64_t buf_len) const
@@ -191,12 +191,14 @@ ObTabletMergeDagParam::ObTabletMergeDagParam()
      exec_mode_(ObExecMode::EXEC_MODE_LOCAL),
      merge_type_(INVALID_MERGE_TYPE),
      merge_version_(0),
+     ls_id_(),
      tablet_id_()
 {
 }
 
 ObTabletMergeDagParam::ObTabletMergeDagParam(
     const compaction::ObMergeType merge_type,
+    const share::ObLSID &ls_id,
     const ObTabletID &tablet_id)
   :  skip_get_tablet_(false),
      need_swap_tablet_flag_(false),
@@ -204,13 +206,15 @@ ObTabletMergeDagParam::ObTabletMergeDagParam(
      exec_mode_(ObExecMode::EXEC_MODE_LOCAL),
      merge_type_(merge_type),
      merge_version_(0),
+     ls_id_(ls_id),
      tablet_id_(tablet_id)
 {
 }
 
 bool ObTabletMergeDagParam::is_valid() const
 {
-  return tablet_id_.is_valid()
+  return ls_id_.is_valid()
+         && tablet_id_.is_valid()
          && is_valid_merge_type(merge_type_)
          && (!is_multi_version_merge(merge_type_) || merge_version_ >= 0)
          && is_valid_exec_mode(exec_mode_);
@@ -248,13 +252,13 @@ int ObTabletMergeDag::get_tablet_and_compat_mode()
   int ret = OB_SUCCESS;
   // can't get tablet_handle now! because this func is called in create dag,
   // the last compaction dag is not finished yet, tablet is in old version
-  ObLS *ls = nullptr;
+  ObLSHandle tmp_ls_handle;
   ObTabletHandle tmp_tablet_handle;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
-    LOG_WARN("failed to get single log stream", K(ret));
-  } else if (OB_FAIL(ls->get_tablet_svr()->get_tablet(
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, tmp_ls_handle, ObLSGetMod::COMPACT_MODE))) {
+    LOG_WARN("failed to get log stream", K(ret), K(ls_id_));
+  } else if (OB_FAIL(tmp_ls_handle.get_ls()->get_tablet_svr()->get_tablet(
       tablet_id_, tmp_tablet_handle, 0/*timeout_us*/, storage::ObMDSGetTabletMode::READ_ALL_COMMITED))) {
-    LOG_WARN("failed to get tablet", K(ret), K(tablet_id_));
+    LOG_WARN("failed to get tablet", K(ret), K(ls_id_), K(tablet_id_));
   } else if (OB_FAIL(ObTabletStatusCache::check_could_execute(merge_type_, *tmp_tablet_handle.get_obj()))) {
     if (OB_NO_NEED_MERGE != ret) {
       LOG_WARN("failed to check need merge", K(ret));
@@ -269,7 +273,7 @@ int ObTabletMergeDag::get_tablet_and_compat_mode()
     } else if (ObPartitionMergePolicy::is_sstable_count_not_safe(inc_sstable_cnt)) {
       ret = OB_TOO_MANY_SSTABLE;
       LOG_ERROR("Too many sstables in tablet, cannot schdule mini compaction, retry later",
-            K(ret), K_(tablet_id), K(inc_sstable_cnt), K(tmp_tablet_handle.get_obj()));
+            K(ret), K_(ls_id), K_(tablet_id), K(inc_sstable_cnt), K(tmp_tablet_handle.get_obj()));
       ObPartitionMergePolicy::diagnose_table_count_unsafe(MINI_MERGE, ObDiagnoseTabletType::TYPE_MINI_MERGE,
           *tmp_tablet_handle.get_obj());
     }
@@ -323,6 +327,7 @@ int ObTabletMergeDag::inner_init(const ObTabletMergeDagParam *param)
   } else {
     param_ = *param;
     merge_type_ = param->merge_type_;
+    ls_id_ = param->ls_id_;
     tablet_id_ = param->tablet_id_;
     if (param->skip_get_tablet_) {
     } else if (OB_FAIL(get_tablet_and_compat_mode())) {
@@ -345,6 +350,7 @@ bool ObTabletMergeDag::operator == (const ObIDag &other) const
   } else {
     const ObTabletMergeDag &other_merge_dag = static_cast<const ObTabletMergeDag &>(other);
     if (merge_type_ != other_merge_dag.merge_type_
+        || ls_id_ != other_merge_dag.ls_id_
         || tablet_id_ != other_merge_dag.tablet_id_) {
       is_same = false;
     }
@@ -357,6 +363,7 @@ uint64_t ObMergeDagHash::inner_hash() const
   uint64_t hash_value = 0;
   // make two merge type same
   hash_value = common::murmurhash(&merge_type_, sizeof(merge_type_), hash_value);
+  hash_value = common::murmurhash(&ls_id_, sizeof(ls_id_), hash_value);
   hash_value = common::murmurhash(&tablet_id_, sizeof(tablet_id_), hash_value);
   return hash_value;
 }
@@ -365,7 +372,8 @@ bool ObMergeDagHash::belong_to_same_tablet(const ObMergeDagHash *other) const
 {
   bool bret = false;
   if (nullptr != other) {
-    bret = tablet_id_ == other->tablet_id_;
+    bret = ls_id_ == other->ls_id_
+        && tablet_id_ == other->tablet_id_;
   }
   return bret;
 }
@@ -398,6 +406,7 @@ int ObTabletMergeDag::fill_info_param(compaction::ObIBasicInfoParam *&out_param,
   } else {
     const int64_t concurrent_cnt = OB_ISNULL(ctx_) ? 0 : ctx_->get_concurrent_cnt();
     if (OB_FAIL(ADD_DAG_WARN_INFO_PARAM(out_param, allocator, get_type(),
+                                  ls_id_.id(),
                                   static_cast<int64_t>(tablet_id_.id()),
                                   param_.merge_version_,
                                   "exec_mode", exec_mode_to_str(param_.exec_mode_),
@@ -411,8 +420,8 @@ int ObTabletMergeDag::fill_info_param(compaction::ObIBasicInfoParam *&out_param,
 int ObTabletMergeDag::fill_dag_key(char *buf, const int64_t buf_len) const
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(databuff_printf(buf, buf_len, "tablet_id=%ld", tablet_id_.id()))) {
-    LOG_WARN("failed to fill dag key", K(ret), K_(tablet_id));
+  if (OB_FAIL(databuff_printf(buf, buf_len, "ls_id=%ld tablet_id=%ld", ls_id_.id(), tablet_id_.id()))) {
+    LOG_WARN("failed to fill dag key", K(ret), K_(ls_id), K_(tablet_id));
   }
   return ret;
 }
@@ -461,6 +470,7 @@ void ObTabletMergeDag::fill_compaction_progress(
   progress.merge_type_ = ctx.get_inner_table_merge_type();
   progress.merge_version_ = ctx.get_merge_version();
   progress.status_ = get_dag_status();
+  progress.ls_id_ = ctx.get_ls_id().id();
   progress.tablet_id_ = ctx.get_tablet_id().id();
   progress.dag_id_ = get_dag_id();
   progress.create_time_ = add_time_;
@@ -593,10 +603,9 @@ int ObTabletMergeExecuteDag::prepare_init(
     const ObTabletMergeDagParam &param,
     const lib::Worker::CompatMode compat_mode,
     const ObGetMergeTablesResult &result,
-    ObLS *ls)
+    ObLSHandle &ls_handle)
 {
   int ret = OB_SUCCESS;
-  UNUSED(ls);
   if (OB_UNLIKELY((!is_minor_merge_type(param.merge_type_)
       && !is_meta_major_merge(param.merge_type_) && !is_mds_minor_merge(param.merge_type_))
       || !result.is_valid())) {
@@ -605,6 +614,7 @@ int ObTabletMergeExecuteDag::prepare_init(
   } else {
     param_ = param;
     merge_type_ = param.merge_type_;
+    ls_id_ = param.ls_id_;
     tablet_id_ = param.tablet_id_;
     compat_mode_ = compat_mode;
     if (OB_FAIL(result_.assign(result))) {

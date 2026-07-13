@@ -54,14 +54,10 @@ struct ObExprExtraSerializeInfo
 public:
   ObExprExtraSerializeInfo() :
     current_time_(nullptr),
-    last_trace_id_(nullptr),
-    mview_ids_(nullptr),
-    last_refresh_scns_(nullptr)
+    last_trace_id_(nullptr)
     { }
   common::ObObj *current_time_;
   common::ObCurTraceId::TraceId *last_trace_id_;
-  common::ObFixedArray<uint64_t, common::ObIAllocator> *mview_ids_;
-  common::ObFixedArray<uint64_t, common::ObIAllocator> *last_refresh_scns_;
 };
 
 class ObBaseOrderMap
@@ -438,8 +434,6 @@ public:
     ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
     expr_info.current_time_ = &plan_ctx->get_cur_time();
     expr_info.last_trace_id_ = &plan_ctx->get_last_trace_id();
-    expr_info.mview_ids_ = &plan_ctx->get_mview_ids();
-    expr_info.last_refresh_scns_ = &plan_ctx->get_last_refresh_scns();
     if (OB_SUCC(ret) && OB_FAIL(expr_info.serialize(buf, buf_len, pos))) {
       SQL_LOG(WARN, "fail to serialize expr extra info", K(ret));
     }
@@ -601,8 +595,6 @@ public:
     ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
     expr_info.current_time_ = &plan_ctx->get_cur_time();
     expr_info.last_trace_id_ = &plan_ctx->get_last_trace_id();
-    expr_info.mview_ids_ = &plan_ctx->get_mview_ids();
-    expr_info.last_refresh_scns_ = &plan_ctx->get_last_refresh_scns();
     if (OB_SUCC(ret) && OB_FAIL(expr_info.deserialize(buf, data_len, pos))) {
       SQL_LOG(WARN, "fail to deserialize expr extra info", K(ret));
     }
@@ -794,8 +786,6 @@ public:
     ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
     expr_info.current_time_ = &plan_ctx->get_cur_time();
     expr_info.last_trace_id_ = &plan_ctx->get_last_trace_id();
-    expr_info.mview_ids_ = &plan_ctx->get_mview_ids();
-    expr_info.last_refresh_scns_ = &plan_ctx->get_last_refresh_scns();
     len += expr_info.get_serialize_size();
 
     if (SERIALIZE_PLAN_PART) {

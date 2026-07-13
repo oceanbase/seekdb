@@ -1820,7 +1820,6 @@ struct ObRawExprExtraInfo
     };
     int64_t array_param_group_id_; // T_QUESTIONMARK
     uint64_t operator_id_;
-    uint64_t mview_id_;    // T_FUN_SYS_LAST_REFRESH_SCN
     ObSubQueryKey subquery_key_; // IS_SUBQUERY_COMPARISON_OP(op)
     struct {
       ObExprCalcType calc_meta_;
@@ -4050,8 +4049,6 @@ public:
   int get_autoinc_nextval_name(char *buf, int64_t buf_len, int64_t &pos) const;
   void set_op_id(int64_t operator_id) { extra_.operator_id_ = operator_id; }
   int64_t get_op_id() const { return extra_.operator_id_; }
-  void set_mview_id(uint64_t mview_id) { extra_.mview_id_ = mview_id; }
-  uint64_t get_mview_id() const { return extra_.mview_id_; }
   int get_type_demotion_name(char *buf, int64_t buf_len, int64_t &pos, ExplainType type) const;
 
   VIRTUAL_TO_STRING_KV_CHECK_STACK_OVERFLOW(N_ITEM_TYPE, type_,

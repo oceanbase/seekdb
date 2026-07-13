@@ -406,7 +406,6 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
 
       aux_vp_tid_array_ = src_schema.aux_vp_tid_array_;
 
-      base_table_ids_ = src_schema.base_table_ids_;
       depend_table_ids_ = src_schema.depend_table_ids_;
       depend_mock_fk_parent_table_ids_ = src_schema.depend_mock_fk_parent_table_ids_;
 
@@ -415,7 +414,6 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
 
       aux_lob_meta_tid_ = src_schema.aux_lob_meta_tid_;
       aux_lob_piece_tid_ = src_schema.aux_lob_piece_tid_;
-      mlog_tid_ = src_schema.mlog_tid_;
     }
 
     if (OB_SUCC(ret)) {
@@ -510,9 +508,6 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
   }
   if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.storage_cache_policy_, storage_cache_policy_))) {
     LOG_WARN("Fail to deep copy storage_cache_policy string", K(ret));
-  }
-  if (FAILEDx(mv_mode_.assign(src_schema.mv_mode_))) {
-    LOG_WARN("fail to assign mv_mode", K(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.index_params_, index_params_))) {
     LOG_WARN("Fail to deep copy vector index param string", K(ret));

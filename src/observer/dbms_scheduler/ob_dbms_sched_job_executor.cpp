@@ -113,17 +113,7 @@ int ObDBMSSchedJobExecutor::init_session(
     OX (session.set_shadow(false));
   }
   if (OB_SUCC(ret)) {
-    if (job_info.is_mview_job()) {
-      // set larger timeout for mview scheduler jobs
-      const int64_t QUERY_TIMEOUT_US = (24 * 60 * 60 * 1000000L); // 24hours
-      const int64_t TRX_TIMEOUT_US = (24 * 60 * 60 * 1000000L); // 24hours
-      ObObj query_timeout_obj;
-      ObObj trx_timeout_obj;
-      query_timeout_obj.set_int(QUERY_TIMEOUT_US);
-      trx_timeout_obj.set_int(TRX_TIMEOUT_US);
-      OZ (session.update_sys_variable(SYS_VAR_OB_QUERY_TIMEOUT, query_timeout_obj));
-      OZ (session.update_sys_variable(SYS_VAR_OB_TRX_TIMEOUT, trx_timeout_obj));
-    } else if (job_info.is_olap_async_job()) {
+    if (job_info.is_olap_async_job()) {
       const int64_t QUERY_TIMEOUT_US = ((job_info.get_max_run_duration() - OLAP_ASYNC_JOB_DEVIATION_SECOND) * 1000000L);
       const int64_t TRX_TIMEOUT_US = ((job_info.get_max_run_duration() - OLAP_ASYNC_JOB_DEVIATION_SECOND) * 1000000L);
       ObObj query_timeout_obj;

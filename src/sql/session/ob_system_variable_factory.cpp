@@ -151,17 +151,6 @@ const char *ObSysVarCardinalityEstimationModel::CARDINALITY_ESTIMATION_MODEL_NAM
   "FULL",
   0
 };
-const char *ObSysVarQueryRewriteEnabled::QUERY_REWRITE_ENABLED_NAMES[] = {
-  "FALSE",
-  "TRUE",
-  "FORCE",
-  0
-};
-const char *ObSysVarQueryRewriteIntegrity::QUERY_REWRITE_INTEGRITY_NAMES[] = {
-  "ENFORCED",
-  "STALE_TOLERATED",
-  0
-};
 const char *ObSysVarFlush::FLUSH_NAMES[] = {
   "OFF",
   "ON",
@@ -875,8 +864,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarObCompatibilityVersion)
         + sizeof(ObSysVarObSecurityVersion)
         + sizeof(ObSysVarCardinalityEstimationModel)
-        + sizeof(ObSysVarQueryRewriteEnabled)
-        + sizeof(ObSysVarQueryRewriteIntegrity)
         + sizeof(ObSysVarFlush)
         + sizeof(ObSysVarFlushTime)
         + sizeof(ObSysVarInnodbAdaptiveFlushing)
@@ -1439,7 +1426,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarPidFile)
         + sizeof(ObSysVarPort)
         + sizeof(ObSysVarSocket)
-        + sizeof(ObSysVarMviewRefreshDop)
         + sizeof(ObSysVarEnableOptimizerRowgoal)
         + sizeof(ObSysVarObIvfNprobes)
         + sizeof(ObSysVarCurrentDefaultCatalog)
@@ -3586,24 +3572,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_CARDINALITY_ESTIMATION_MODEL))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarCardinalityEstimationModel));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarQueryRewriteEnabled())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarQueryRewriteEnabled", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_QUERY_REWRITE_ENABLED))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarQueryRewriteEnabled));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarQueryRewriteIntegrity())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarQueryRewriteIntegrity", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_QUERY_REWRITE_INTEGRITY))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarQueryRewriteIntegrity));
       }
     }
     if (OB_SUCC(ret)) {
@@ -8665,15 +8633,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarMviewRefreshDop())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarMviewRefreshDop", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_MVIEW_REFRESH_DOP))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarMviewRefreshDop));
-      }
-    }
-    if (OB_SUCC(ret)) {
       if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarEnableOptimizerRowgoal())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("fail to new ObSysVarEnableOptimizerRowgoal", K(ret));
@@ -9707,14 +9666,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR_CARDINALITY_ESTIMATION_MODEL: {
       ret = create_one_sys_var<ObSysVarCardinalityEstimationModel>(allocator_, sys_var_ptr, "ObSysVarCardinalityEstimationModel");
-      break;
-    }
-    case share::SYS_VAR_QUERY_REWRITE_ENABLED: {
-      ret = create_one_sys_var<ObSysVarQueryRewriteEnabled>(allocator_, sys_var_ptr, "ObSysVarQueryRewriteEnabled");
-      break;
-    }
-    case share::SYS_VAR_QUERY_REWRITE_INTEGRITY: {
-      ret = create_one_sys_var<ObSysVarQueryRewriteIntegrity>(allocator_, sys_var_ptr, "ObSysVarQueryRewriteIntegrity");
       break;
     }
     case share::SYS_VAR_FLUSH: {
@@ -11963,10 +11914,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR_SOCKET: {
       ret = create_one_sys_var<ObSysVarSocket>(allocator_, sys_var_ptr, "ObSysVarSocket");
-      break;
-    }
-    case share::SYS_VAR_MVIEW_REFRESH_DOP: {
-      ret = create_one_sys_var<ObSysVarMviewRefreshDop>(allocator_, sys_var_ptr, "ObSysVarMviewRefreshDop");
       break;
     }
     case share::SYS_VAR_ENABLE_OPTIMIZER_ROWGOAL: {

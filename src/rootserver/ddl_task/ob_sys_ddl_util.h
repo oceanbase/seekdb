@@ -35,7 +35,7 @@ namespace rootserver
     } else if (OB_UNLIKELY(!GCTX.omt_->has_tenant())) {                   \
       ret = OB_TENANT_NOT_EXIST;                                                          \
       LOG_WARN("local server does not have SYS tenant resource", KR(ret));                \
-    } else if (OB_FAIL(ObDDLUtil::check_local_sys_tenant())) {                           \
+    } else if (OB_FAIL(ObDDLUtil::check_local_is_sys_leader())) {                         \
       LOG_WARN("local is not sys tenant leader", KR(ret));                                \
     } else {                                                                              \
       MOD_SCOPE {                                                      \

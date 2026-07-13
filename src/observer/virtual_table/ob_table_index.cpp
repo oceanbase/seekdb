@@ -224,8 +224,7 @@ int ObTableIndex::add_database_indexes(const ObDatabaseSchema &database_schema,
           ret = OB_TABLE_NOT_EXIST;
           SERVER_LOG(WARN, "table schema not exist", K(ret));
         } else if(table_schema->is_index_table()
-            || table_schema->is_aux_lob_table()
-            || table_schema->is_mlog_table()) {
+            || table_schema->is_aux_lob_table()) {
           is_sub_end = true;
         } else if (OB_FAIL(add_table_indexes(*table_schema,
                                              database_schema.get_database_name_str(),
@@ -306,7 +305,7 @@ int ObTableIndex::get_rowkey_index_column(const ObTableSchema &table_schema,
     rowkey_info_idx_ = OB_INVALID_ID;
   } else {
     is_column_visible = false;
-    if (table_schema.is_view_table() && !table_schema.is_materialized_view()) {
+    if (table_schema.is_view_table()) {
       is_end = true;
       rowkey_info_idx_ = OB_INVALID_ID;
     } else if (table_schema.is_table_with_pk()
@@ -346,21 +345,6 @@ int ObTableIndex::add_rowkey_indexes(const ObTableSchema &table_schema,
     const ObColumnSchemaV2 *column_schema = NULL;
     bool is_column_visible = false;
     const ObTableSchema *real_table_schema = &table_schema;
-    if (table_schema.is_materialized_view()) {
-      // a mview's indexes are built upon its container table
-      const ObTableSchema *container_table_schema = nullptr;
-      if (OB_FAIL(schema_guard_->get_table_schema(
-          table_schema.get_data_table_id(), container_table_schema))) {
-        SERVER_LOG(WARN, "failed to get table schema", KR(ret), K(table_schema));
-      } else if (OB_ISNULL(container_table_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "invalid container table id", KR(ret),
-            "container table id", table_schema.get_data_table_id());
-      } else {
-        real_table_schema = container_table_schema;
-      }
-    }
-
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(real_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -526,22 +510,7 @@ int ObTableIndex::add_normal_indexes(const ObTableSchema &table_schema,
     SERVER_LOG(WARN, "schema guard is not init", KR(ret), KP(schema_guard_));
   } else if (OB_INVALID_ID == static_cast<uint64_t>(index_tid_array_idx_)) {
     simple_index_infos_.reset();
-    if (table_schema.mv_container_table()) {
-      // bypass
-    } else if (table_schema.is_materialized_view()) {
-      // a mview's indexes are built upon its container table
-      const ObTableSchema *container_table_schema = nullptr;
-      if (OB_FAIL(schema_guard_->get_table_schema(
-          table_schema.get_data_table_id(), container_table_schema))) {
-        SERVER_LOG(WARN, "failed to get table schema", KR(ret), K(table_schema));
-      } else if (OB_ISNULL(container_table_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "invalid container table id", KR(ret),
-            "container table id", table_schema.get_data_table_id());
-      } else if (OB_FAIL(container_table_schema->get_simple_index_infos(simple_index_infos_))) {
-        SERVER_LOG(WARN, "cannot get index list", KR(ret));
-      }
-    } else if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos_))) {
+    if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos_))) {
       SERVER_LOG(WARN, "cannot get index list", KR(ret));
     }
 
@@ -776,21 +745,6 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
     const ObColumnSchemaV2 *column_schema = NULL;
     bool is_column_visible;
     const ObTableSchema *real_table_schema = &table_schema;
-    if (table_schema.is_materialized_view()) {
-      // a mview's indexes are built upon its container table
-      const ObTableSchema *container_table_schema = nullptr;
-      if (OB_FAIL(schema_guard_->get_table_schema(
-          table_schema.get_data_table_id(), container_table_schema))) {
-        SERVER_LOG(WARN, "failed to get table schema", KR(ret), K(table_schema));
-      } else if (OB_ISNULL(container_table_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "invalid container table id", KR(ret),
-            "container table id", table_schema.get_data_table_id());
-      } else {
-        real_table_schema = container_table_schema;
-      }
-    }
-
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(real_table_schema)) {
       ret = OB_ERR_UNEXPECTED;

@@ -425,13 +425,8 @@ select max(m) from t1;
 --error 1210
 select min(m) from t1;
 
-# materialized view 
 --disable_warnings
-drop materialized view if exists mv1, mv2;
 --enable_warnings
-create materialized view mv1 parallel 2 refresh complete on demand  as select * from t1;
-create materialized view mv2 parallel 2 refresh complete on demand  as select * from t2;
-drop materialized view mv1, mv2;
 
 drop table t1, t2, t3, t4;
 
@@ -611,35 +606,17 @@ alter table t1 partition by range(c1) (partition p3 values less than (10000));
 insert into t1 value (4000, [4,4,4], '4', 4, '{4:4}', '{"4":4}');
 select * from t1;
 
-# 10. MVIEW/VIEW
 drop table t1;
 create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
 insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
 insert into t1 values (2, '[]', '{}', 0, '{}');
-create materialized view mv1 refresh complete on demand  as select id,c1,c2,c3,c4 from t1 ;
-CREATE INDEX idx ON mv1 (c3);
---error 1235
-CREATE INDEX idx ON mv1 (c2);
---error 1235
-CREATE VECTOR INDEX idx ON mv1 (c2);
-desc mv1;
---sorted_result
-select * from mv1;
 
 drop table t1;
-drop  materialized view mv1;
 create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
 insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
 insert into t1 values (2, '[]', '{}', 0, '{}');
---error 1167
-create materialized view mv1(primary key(c2)) refresh complete on demand  as select c1,c2 from t1 ;
-create materialized view mv1(primary key(id)) refresh complete on demand  as select id,c1,c2 from t1 ;
-desc mv1;
---sorted_result
-select * from mv1;
 
 drop table t1;
-drop  materialized view mv1;
 create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
 create view v1 as select * from t1;
 insert into v1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');

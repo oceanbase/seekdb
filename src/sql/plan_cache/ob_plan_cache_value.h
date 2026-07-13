@@ -67,7 +67,6 @@ struct PCVSchemaObj
   bool is_tmp_table_;
   bool is_explicit_db_name_;
   common::ObIAllocator *inner_alloc_;
-  bool is_mv_container_table_;
 
   PCVSchemaObj():
   database_id_(common::OB_INVALID_ID),
@@ -77,8 +76,7 @@ struct PCVSchemaObj
   table_type_(share::schema::MAX_TABLE_TYPE),
   is_tmp_table_(false),
   is_explicit_db_name_(false),
-  inner_alloc_(nullptr),
-  is_mv_container_table_(false) {}
+  inner_alloc_(nullptr) {}
 
   explicit PCVSchemaObj(ObIAllocator *alloc):
     database_id_(common::OB_INVALID_ID),
@@ -88,8 +86,7 @@ struct PCVSchemaObj
     table_type_(share::schema::MAX_TABLE_TYPE),
     is_tmp_table_(false),
     is_explicit_db_name_(false),
-    inner_alloc_(alloc),
-    is_mv_container_table_(false) {}
+    inner_alloc_(alloc) {}
 
   int init(const share::schema::ObTableSchema *schema);
   int init_with_version_obj(const share::schema::ObSchemaObjVersion &schema_obj_version);
@@ -136,8 +133,7 @@ struct PCVSchemaObj
                K_(table_type),
                K_(table_name),
                K_(is_tmp_table),
-               K_(is_explicit_db_name),
-               K_(is_mv_container_table));
+               K_(is_explicit_db_name));
 };
 
 class ObPlanCacheValue :public common::ObDLinkBase<ObPlanCacheValue>
@@ -333,9 +329,6 @@ private:
 
   int check_dep_schema_version(const common::ObIArray<PCVSchemaObj> &schema_array,
                                bool &is_old_version);
-
-  int remove_mv_schema(const common::ObIArray<PCVSchemaObj> &schema_array,
-                       common::ObIArray<PCVSchemaObj*> &stored_schema_objs);
 
   int match_dep_schema(const ObPlanCacheCtx &pc_ctx,
                        const common::ObIArray<PCVSchemaObj> &schema_array,

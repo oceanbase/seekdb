@@ -102,10 +102,6 @@ public:
 
   static int select_ddl_epoch_for_update(common::ObISQLClient &sql_client,
                                                int64_t &ddl_epoch);
-  // for major refresh mv
-  int update_major_refresh_mv_merge_scn(const share::SCN &scn, bool is_incremental = true);
-  int get_major_refresh_mv_merge_scn(const bool for_update, share::SCN &scn);
-
   // for change stream async index
   static int advance_change_stream_refresh_scn(common::ObISQLClient &sql_client,
                                                const SCN &refresh_scn,

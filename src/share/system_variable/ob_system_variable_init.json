@@ -3420,41 +3420,6 @@
     "background_cn": "",
     "ref_url": ""
   },
-  "query_rewrite_enabled": {
-    "id": 10179,
-    "name": "query_rewrite_enabled",
-    "default_value": "0",
-    "base_value": "0",
-    "data_type": "enum",
-    "info": "Whether to enable the materialized view rewriting",
-    "flags": "GLOBAL | SESSION | NEED_SERIALIZE | INFLUENCE_PLAN",
-    "enum_names": [
-      "FALSE",
-      "TRUE",
-      "FORCE"
-    ],
-    "publish_version": "431",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": ""
-  },
-  "query_rewrite_integrity": {
-    "id": 10180,
-    "name": "query_rewrite_integrity",
-    "default_value": "0",
-    "base_value": "0",
-    "data_type": "enum",
-    "info": "Control the data integrity of materialized view rewriting",
-    "flags": "GLOBAL | SESSION | NEED_SERIALIZE | INFLUENCE_PLAN",
-    "enum_names": [
-      "ENFORCED",
-      "STALE_TOLERATED"
-    ],
-    "publish_version": "431",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": ""
-  },
   "flush": {
     "id": 10181,
     "name": "flush",
@@ -11282,20 +11247,6 @@
     "info_cn": "",
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html"
-  },
-  "mview_refresh_dop": {
-    "id": 10746,
-    "name": "mview_refresh_dop",
-    "default_value": "4",
-    "base_value": "4",
-    "data_type": "uint",
-    "info": "The default refresh parallelism of materialized view",
-    "flags": "GLOBAL | SESSION ",
-    "publish_version": "435",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": "",
-    "placeholder": false
   },
   "enable_optimizer_rowgoal": {
     "id": 10747,

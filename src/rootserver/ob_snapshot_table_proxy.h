@@ -40,7 +40,6 @@ enum ObSnapShotType
   SNAPSHOT_FOR_MULTI_VERSION = 2,
   SNAPSHOT_FOR_RESTORE_POINT = 3,
   SNAPSHOT_FOR_BACKUP_POINT = 4,
-  SNAPSHOT_FOR_MAJOR_REFRESH_MV = 5,
   MAX_SNAPSHOT_TYPE,
 };
 
@@ -134,7 +133,6 @@ public:
   int get_snapshot_count(common::ObISQLClient &proxy,
                          ObSnapShotType snapshot_type,
                          int64_t &count);
-  int push_snapshot_for_major_refresh_mv(common::ObISQLClient &proxy, const share::SCN &new_snapshot_scn);
 private:
   int gen_event_ts(int64_t &event_ts);
   int check_snapshot_valid(const SCN &snapshot_gc_scn,

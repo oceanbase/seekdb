@@ -780,7 +780,6 @@ private:
   ObCCLRuleMgr ccl_rule_mgr_;
   int64_t timestamp_in_slot_; // when schema mgr put in slot, we will set the timestamp
   int64_t allocator_idx_;
-  TableInfos mlog_infos_;
   ObAiModelMgr ai_model_mgr_;
   ObLocationMgr location_mgr_;
 };

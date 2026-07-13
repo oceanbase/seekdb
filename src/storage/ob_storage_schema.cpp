@@ -185,7 +185,6 @@ ObStorageSchema::ObStorageSchema()
     column_array_(),
     skip_idx_attr_array_(),
     store_column_cnt_(0),
-    mv_mode_(),
     merge_engine_type_(ObMergeEngineType::OB_MERGE_ENGINE_PARTIAL_UPDATE),
     semistruct_encoding_type_(),
     is_inited_(false)
@@ -402,7 +401,6 @@ void ObStorageSchema::reset()
   info_ = 0;
   table_type_ = MAX_TABLE_TYPE;
   table_mode_.reset();
-  mv_mode_.reset();
   index_type_ = INDEX_TYPE_IS_NOT;
   row_store_type_ = ObStoreFormat::get_default_row_store_type();
   schema_version_ = OB_INVALID_VERSION;
@@ -442,7 +440,6 @@ bool ObStorageSchema::is_valid() const
       || pctfree_ < 0
       || table_type_ >= MAX_TABLE_TYPE
       || !table_mode_.is_valid()
-      || !mv_mode_.is_valid()
       || index_type_ >= INDEX_TYPE_MAX
       || !check_column_array_valid(rowkey_array_)
       || !check_column_array_valid(column_array_)
@@ -512,7 +509,6 @@ int ObStorageSchema::serialize(char *buf, const int64_t buf_len, int64_t &pos) c
     } else if (OB_FAIL(serialize_schema_array(buf, buf_len, pos, skip_idx_attr_array_))){
       STORAGE_LOG(WARN, "failed to serialize skip idx attr array", K_(skip_idx_attr_array));
     } else {
-      OB_UNIS_ENCODE(mv_mode_);
       OB_UNIS_ENCODE(merge_engine_type_);
       OB_UNIS_ENCODE(semistruct_encoding_type_);
     }
@@ -600,7 +596,6 @@ int ObStorageSchema::deserialize(
     } else if (OB_FAIL(deserialize_skip_idx_attr_array(buf, data_len, pos))) {
       STORAGE_LOG(WARN, "failed to deserialize skip idx attr array", K(ret));
     } else {
-      OB_UNIS_DECODE(mv_mode_);
       OB_UNIS_DECODE(merge_engine_type_);
       OB_UNIS_DECODE(semistruct_encoding_type_);
     }
@@ -761,7 +756,6 @@ int64_t ObStorageSchema::get_serialize_size() const
   }
   len += serialization::encoded_length_i64(store_column_cnt_);
   len += get_array_serialize_length(skip_idx_attr_array_);
-  OB_UNIS_ADD_LEN(mv_mode_);
   OB_UNIS_ADD_LEN(merge_engine_type_);
   OB_UNIS_ADD_LEN(semistruct_encoding_type_);
   return len;
@@ -1243,9 +1237,7 @@ int ObStorageSchema::copy_from(const share::schema::ObMergeSchema &input_schema)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(input_schema.get_mv_mode_struct(mv_mode_))) {
-    STORAGE_LOG(WARN, "Fail to get mv mode struct", K(ret));
-  } else if (OB_FAIL(input_schema.get_semistruct_encoding_type(semistruct_encoding_type_))) {
+  if (OB_FAIL(input_schema.get_semistruct_encoding_type(semistruct_encoding_type_))) {
     STORAGE_LOG(WARN, "Fail to get semistruct encoding options", K(ret));
   } else {
     is_use_bloomfilter_ = input_schema.is_use_bloomfilter();

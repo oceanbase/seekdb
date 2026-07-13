@@ -1599,7 +1599,7 @@ int ObDMLService::init_dml_param(const ObDASDMLBaseCtDef &base_ctdef,
                                  ObIAllocator &das_alloc,
                                  storage::ObStoreCtxGuard &store_ctx_gurad,
                                  storage::ObDMLBaseParam &dml_param,
-                                 bool use_snapshot_opt)
+                                 bool is_insert_up_gts_opt)
 {
   int ret = OB_SUCCESS;
   dml_param.timeout_ = base_rtdef.timeout_ts_;
@@ -1627,14 +1627,14 @@ int ObDMLService::init_dml_param(const ObDASDMLBaseCtDef &base_ctdef,
   }
   dml_param.branch_id_ = write_branch_id;
   dml_param.store_ctx_guard_ = &store_ctx_gurad;
-  init_dml_write_flag(base_ctdef, base_rtdef, dml_param.write_flag_, use_snapshot_opt);
+  init_dml_write_flag(base_ctdef, base_rtdef, dml_param.write_flag_, is_insert_up_gts_opt);
   return ret;
 }
 
 void ObDMLService::init_dml_write_flag(const ObDASDMLBaseCtDef &base_ctdef,
                                        ObDASDMLBaseRtDef &base_rtdef,
                                        concurrent_control::ObWriteFlag &write_flag,
-                                       bool use_snapshot_opt)
+                                       bool is_insert_up_gts_opt)
 {
   if (base_ctdef.is_batch_stmt_) {
     write_flag.set_is_dml_batch_opt();
@@ -1661,8 +1661,8 @@ void ObDMLService::init_dml_write_flag(const ObDASDMLBaseCtDef &base_ctdef,
   if (base_rtdef.is_immediate_row_conflict_check_ && base_ctdef.is_update_pk_) {
     write_flag.set_immediate_row_check();
   }
-  if (use_snapshot_opt) {
-    write_flag.set_snapshot_opt();
+  if (is_insert_up_gts_opt) {
+    write_flag.set_plain_insert_gts_opt();
   }
 }
 
@@ -2536,7 +2536,7 @@ int ObDMLService::rollback_local_savepoint(ObTxDesc &tx_desc, const transaction:
 {
   int ret = OB_SUCCESS;
   ObTransService *tx = share::g_mp->trans_service();
-  if (OB_FAIL(tx->rollback_to_implicit_savepoint(tx_desc, savepoint, expire_ts, false))) {
+  if (OB_FAIL(tx->rollback_to_implicit_savepoint(tx_desc, savepoint, expire_ts, nullptr))) {
     LOG_WARN("rollback to implicit local savepoint failed", K(ret));
   }
   return ret;

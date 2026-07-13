@@ -427,12 +427,10 @@ public:
   int get_can_read_index_array(uint64_t table_id,
                                uint64_t *index_tid_array,
                                int64_t &size,
-                               bool with_mv,
                                bool with_global_index = true,
                                bool with_domain_index = true,
                                bool with_spatial_index = true,
                                bool with_vector_index = true);
-  int get_table_mlog_schema(const uint64_t table_id, const ObTableSchema *&mlog_schema);
   uint64_t get_next_mocked_schema_id() { return ++mocked_schema_id_counter_; }
   int get_mocked_table_schema(uint64_t ref_table_id, const share::schema::ObTableSchema *&table_schema) const;
   int add_mocked_table_schema(const share::schema::ObTableSchema &table_schema);

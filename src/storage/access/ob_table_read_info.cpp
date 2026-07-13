@@ -281,7 +281,6 @@ ObTableReadInfo::ObTableReadInfo()
   : ObReadInfoStruct(false/*rowkey_mode*/),
     trans_col_index_(OB_INVALID_INDEX),
     group_idx_col_index_(OB_INVALID_INDEX),
-    mview_old_new_col_index_(OB_INVALID_INDEX),
     seq_read_column_count_(0),
     max_col_index_(-1),
     cols_param_(),
@@ -389,9 +388,6 @@ void ObTableReadInfo::inner_gene_cols_index_by_col_descs(
       } else if (common::OB_HIDDEN_GROUP_IDX_COLUMN_ID == cols_desc.at(i).col_id_) {
         group_idx_col_index_ = i;
         col_index = -1;
-      } else if (common::OB_MAJOR_REFRESH_MVIEW_OLD_NEW_COLUMN_ID == cols_desc.at(i).col_id_) {
-         mview_old_new_col_index_ = i;
-         col_index = -1;
       } else {
         col_index = -1;
       }
@@ -453,7 +449,6 @@ void ObTableReadInfo::reset()
   ObReadInfoStruct::reset();
   trans_col_index_ = OB_INVALID_INDEX;
   group_idx_col_index_ = OB_INVALID_INDEX;
-  mview_old_new_col_index_ = OB_INVALID_INDEX;
   seq_read_column_count_ = 0;
   max_col_index_ = -1;
   cols_param_.reset();
@@ -500,11 +495,6 @@ int ObTableReadInfo::serialize(
 
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_ENCODE, cols_extend_);
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, mview_old_new_col_index_))) {
-      LOG_WARN("Fail to encode mview old new col index", K(ret));
-    }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(serialization::encode_bool(buf, buf_len, pos, need_truncate_filter_))) {
@@ -578,11 +568,6 @@ int ObTableReadInfo::deserialize(
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &mview_old_new_col_index_))) {
-      LOG_WARN("Fail to decode mview old new col index", K(ret));
-    }
-  }
-  if (OB_SUCC(ret)) {
     if (OB_FAIL(serialization::decode_bool(buf, data_len, pos, &need_truncate_filter_))) {
       LOG_WARN("Fail to decode need truncate filter", K(ret));
     }
@@ -643,9 +628,6 @@ int64_t ObTableReadInfo::get_serialize_size() const
     LST_DO_CODE(OB_UNIS_ADD_LEN, cols_extend_);
   }
   if (OB_SUCC(ret)) {
-    len += serialization::encoded_length_vi64(mview_old_new_col_index_);
-  }
-  if (OB_SUCC(ret)) {
     len += serialization::encoded_length_bool(need_truncate_filter_);
   }
   return len;
@@ -661,7 +643,6 @@ int64_t ObTableReadInfo::to_string(char *buf, const int64_t buf_len) const
         K_(schema_rowkey_cnt),
         K_(rowkey_cnt),
         K_(trans_col_index),
-        K_(mview_old_new_col_index),
         K_(group_idx_col_index),
         K_(seq_read_column_count),
         K_(max_col_index),

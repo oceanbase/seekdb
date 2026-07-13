@@ -406,18 +406,23 @@ int ObBlockStatIterator::refresh_tablet_iter()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet iter is invalid", K(ret), K(get_table_param_.tablet_iter_));
   } else {
-    ObLS *tenant_ls = nullptr;
+    ObLSHandle ls_handle;
+    ObLS *ls = nullptr;
     rowkey_read_info_ = nullptr;
     main_table_param_.iter_param_.rowkey_read_info_ = nullptr;
     const int64_t remain_timeout = THIS_WORKER.get_timeout_remain();
+    const share::ObLSID &ls_id = main_table_ctx_.ls_id_;
     const common::ObTabletID &tablet_id = get_table_param_.tablet_iter_.get_tablet()->get_tablet_meta().tablet_id_;
     const int64_t snapshot_version = main_table_ctx_.store_ctx_->mvcc_acc_ctx_.get_snapshot_version().get_val_for_tx();
     if (OB_UNLIKELY(remain_timeout <= 0)) {
       ret = OB_TIMEOUT;
-      LOG_WARN("timeout", K(ret), K(tablet_id), K(remain_timeout));
-    } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
-      LOG_WARN("failed to get ls", K(ret));
-    } else if (OB_FAIL(tenant_ls->get_tablet_svr()->get_read_tables(
+      LOG_WARN("timeout", K(ret), K(ls_id), K(tablet_id), K(remain_timeout));
+    } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+      LOG_WARN("failed to get ls", K(ret), K(ls_id));
+    } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null ptr to ls", K(ret), K(ls_handle));
+    } else if (OB_FAIL(ls->get_tablet_svr()->get_read_tables(
         tablet_id,
         remain_timeout,
         snapshot_version,
@@ -426,7 +431,7 @@ int ObBlockStatIterator::refresh_tablet_iter()
         false/*allow_not_ready*/,
         false/*need_split_src_table*/,
         false/*need_split_dst_table*/))) {
-      LOG_WARN("failed to refresh tablet iterator", K(ret), K_(get_table_param));
+      LOG_WARN("failed to refresh tablet iterator", K(ret), K(ls_id), K_(get_table_param));
     } else {
       rowkey_read_info_ = &get_table_param_.tablet_iter_.get_tablet_handle().get_obj()->get_rowkey_read_info();
       main_table_param_.iter_param_.rowkey_read_info_ = rowkey_read_info_;

@@ -26,8 +26,6 @@
 #include "pl/sys_package/ob_dbms_xplan.h"
 #include "pl/sys_package/ob_dbms_session.h"
 #include "pl/sys_package/ob_dbms_space.h"
-#include "pl/sys_package/ob_dbms_mview_mysql.h"
-#include "pl/sys_package/ob_dbms_mview_stats_mysql.h"
 #include "pl/sys_package/ob_dbms_limit_calculator_mysql.h"
 #include "pl/sys_package/ob_dbms_vector_mysql.h"
 #include "pl/sys_package/ob_dbms_hybrid_vector_mysql.h"
@@ -145,28 +143,6 @@
   INTERFACE_DEF(INTERFACE_DBMS_SPACE_CREATE_INDEX_COST, "CREATE_INDEX_COST", (ObDbmsSpace::create_index_cost))
   // end of dbms_space
 
-
-
-  // start of dbms_mview_mysql
-#define DEFINE_DBMS_MVIEW_MYSQL_INTERFACE(symbol, func) \
-  INTERFACE_DEF(INTERFACE_##symbol, #symbol, (func))
-
-  DEFINE_DBMS_MVIEW_MYSQL_INTERFACE(DBMS_MVIEW_MYSQL_PURGE_LOG, ObDBMSMViewMysql::purge_log)
-  DEFINE_DBMS_MVIEW_MYSQL_INTERFACE(DBMS_MVIEW_MYSQL_REFRESH, ObDBMSMViewMysql::refresh)
-
-#undef DEFINE_DBMS_MVIEW_MYSQL_INTERFACE
-  // end of dbms_mview_mysql
-
-  // start of dbms_mview_stats_mysql
-#define DEFINE_DBMS_MVIEW_STATS_MYSQL_INTERFACE(symbol, func) \
-  INTERFACE_DEF(INTERFACE_##symbol, #symbol, (func))
-
-  DEFINE_DBMS_MVIEW_STATS_MYSQL_INTERFACE(DBMS_MVIEW_STATS_MYSQL_SET_SYS_DEFAULT, ObDBMSMViewStatsMysql::set_system_default)
-  DEFINE_DBMS_MVIEW_STATS_MYSQL_INTERFACE(DBMS_MVIEW_STATS_MYSQL_SET_MVREF_STATS_PARAMS, ObDBMSMViewStatsMysql::set_mvref_stats_params)
-  DEFINE_DBMS_MVIEW_STATS_MYSQL_INTERFACE(DBMS_MVIEW_STATS_MYSQL_PURGE_REFRESH_STATS, ObDBMSMViewStatsMysql::purge_refresh_stats)
-
-#undef DEFINE_DBMS_MVIEW_STATS_MYSQL_INTERFACE
-  // end of dbms_mview_stats_mysql
 
 
     // start of dbms_vector_mysql

@@ -3938,6 +3938,7 @@ int ObVectorIndexUtil::get_vector_index_type(
 
 void ObVecIdxSnapshotDataWriteCtx::reset()
 {
+  ls_id_.reset();
   data_tablet_id_.reset();
   lob_meta_tablet_id_.reset();
   lob_piece_tablet_id_.reset();

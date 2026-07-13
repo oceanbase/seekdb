@@ -168,9 +168,10 @@ struct ObTabletPersisterParam final
 public:
   // private tablet meta persistence
   ObTabletPersisterParam(
+      const share::ObLSID ls_id,
       const int64_t ls_epoch,
       const ObTabletID tablet_id)
-    : ls_epoch_(ls_epoch), tablet_id_(tablet_id),
+    : ls_id_(ls_id), ls_epoch_(ls_epoch), tablet_id_(tablet_id),
       snapshot_version_(0), start_macro_seq_(0),
       ddl_redo_callback_(nullptr), ddl_finish_callback_(nullptr)
     {}
@@ -182,7 +183,7 @@ public:
       const int64_t start_macro_seq,
       blocksstable::ObIMacroBlockFlushCallback *ddl_redo_callback = nullptr,
       blocksstable::ObIMacroBlockFlushCallback *ddl_finish_callback = nullptr)
-  : ls_epoch_(0), tablet_id_(tablet_id),
+  : ls_id_(), ls_epoch_(0), tablet_id_(tablet_id),
     snapshot_version_(snapshot_version), start_macro_seq_(start_macro_seq),
     ddl_redo_callback_(ddl_redo_callback), ddl_finish_callback_(ddl_finish_callback)
   {}
@@ -192,9 +193,10 @@ public:
 
   bool is_shared_object() const { return snapshot_version_ > 0; }
 
-  TO_STRING_KV(K_(ls_epoch), K_(tablet_id),
+  TO_STRING_KV(K_(ls_id), K_(ls_epoch), K_(tablet_id),
    K_(snapshot_version), K_(start_macro_seq), KP_(ddl_redo_callback), KP_(ddl_finish_callback));
 
+  share::ObLSID ls_id_;
   int64_t ls_epoch_;
   ObTabletID tablet_id_;
   int64_t snapshot_version_;

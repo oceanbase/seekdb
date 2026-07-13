@@ -186,10 +186,6 @@ int ObSetCommentHelper::check_table_legitimacy_()
   } else if (OB_ISNULL(orig_table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig_table_schema_ is nullptr", KR(ret), K_(table_id));
-  } else if (OB_UNLIKELY(orig_table_schema_->is_materialized_view())) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("alter materialized view is not supported", KR(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter materialized view is");
   } else if (OB_UNLIKELY(orig_table_schema_->is_ctas_tmp_table())) {
     ret = OB_ERR_WRONG_OBJECT;
     ObCStringHelper helper;

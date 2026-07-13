@@ -1023,7 +1023,6 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, progressive_merge_round, table_schema, int64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, storage_format_version, table_schema, int64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, table_mode, table_schema, int32_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, mv_mode, table_schema, int64_t, true, true, 0);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(table_schema.set_expire_info(expire_info))) {
         SHARE_SCHEMA_LOG(WARN, "set expire info failed", K(ret));
@@ -1159,18 +1158,6 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
       result, external_properties, table_schema, true/*skip null*/, true/*ignore column error*/, empty_str);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
       result, index_params, table_schema, true, ignore_column_error, "");
-    if (OB_SUCC(ret) && table_schema.is_materialized_view()) {
-      bool skip_null_error = true;
-      bool skip_column_error = true;
-      ObString local_session_var;
-      ObString default_session_var(""); //default value is empty string
-      EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "local_session_vars", local_session_var,
-                                                    skip_null_error, skip_column_error, default_session_var);
-      if (OB_SUCC(ret) && !local_session_var.empty()
-          && OB_FAIL(table_schema.get_local_session_var().fill_local_session_var_from_str(local_session_var))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to deserialize mview_session_var", K(ret));
-      }
-    }
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, semistruct_encoding_type, table_schema,
         int64_t, true/*skip null error*/, ignore_column_error, 0);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
@@ -3581,22 +3568,16 @@ int ObSchemaRetrieveUtils::retrieve_aux_tables(T &result,
     uint64_t table_id = OB_INVALID_ID;
     ObTableType table_type = MAX_TABLE_TYPE;
     ObIndexType index_type = INDEX_TYPE_MAX;
-    ObString table_name;
-
     EXTRACT_INT_FIELD_MYSQL(result, "table_type", table_type, ObTableType);
 
     if (USER_INDEX == table_type
         || AUX_VERTIAL_PARTITION_TABLE == table_type
         || AUX_LOB_META == table_type
-        || AUX_LOB_PIECE == table_type
-        || MATERIALIZED_VIEW_LOG == table_type) {
+        || AUX_LOB_PIECE == table_type) {
 
       EXTRACT_INT_FIELD_MYSQL(result, "table_id", table_id, int64_t);
       EXTRACT_INT_FIELD_MYSQL(result, "index_type", index_type, ObIndexType);
-      EXTRACT_VARCHAR_FIELD_MYSQL(result, "table_name", table_name);
-      const bool is_tmp_mlog = ObSimpleTableSchemaV2::is_tmp_mlog_table(table_type, table_name);
-
-      ObAuxTableMetaInfo aux_table_meta(table_id, table_type, index_type, is_tmp_mlog);
+      ObAuxTableMetaInfo aux_table_meta(table_id, table_type, index_type);
       if (FAILEDx(aux_tables.push_back(aux_table_meta))) {
         SHARE_SCHEMA_LOG(WARN, "fail to push back aux table", KR(ret), K(aux_table_meta));
       }

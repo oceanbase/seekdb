@@ -1720,7 +1720,7 @@ int ObExpandAggregateUtils::expand_avg_expr(ObAggFunRawExpr *aggr_expr,
         if (OB_FAIL(add_aggr_item(new_aggr_items, count_expr))) {
           LOG_WARN("failed to push back aggr item");
         } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
-                                                                      expand_for_mv_ ? T_OP_DIV : T_OP_AGG_DIV,
+                                                                      T_OP_AGG_DIV,
                                                                       sum_expr,
                                                                       count_expr,
                                                                       div_expr))) {
@@ -1771,7 +1771,7 @@ int ObExpandAggregateUtils::expand_mysql_variance_expr(ObAggFunRawExpr *aggr_exp
     result_type.set_scale(ObAccuracy(PRECISION_UNKNOWN_YET, SCALE_UNKNOWN_YET).get_scale());
     result_type.set_precision(ObAccuracy(PRECISION_UNKNOWN_YET, SCALE_UNKNOWN_YET).get_precision());
     if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
-                                                            expand_for_mv_ ? T_OP_MUL : T_OP_AGG_MUL,
+                                                            T_OP_AGG_MUL,
                                                             parma_expr,
                                                             parma_expr,
                                                             multi_expr))) {
@@ -1813,31 +1813,31 @@ int ObExpandAggregateUtils::expand_mysql_variance_expr(ObAggFunRawExpr *aggr_exp
     } else if (OB_FAIL(add_aggr_item(new_aggr_items, count_product_expr))) {
       LOG_WARN("failed to push back aggr item");
     } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
-                                                            expand_for_mv_ ? T_OP_MUL : T_OP_AGG_MUL,
+                                                            T_OP_AGG_MUL,
                                                             cast_sum_expr,
                                                             cast_sum_expr,
                                                             multi_sum_expr))) {
       LOG_WARN("failed to build common binary op expr", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
-                                                                   expand_for_mv_ ? T_OP_MUL : T_OP_AGG_MUL,
+                                                                   T_OP_AGG_MUL,
                                                                    count_expr,
                                                                    count_expr,
                                                                    multi_count_expr))) {
       LOG_WARN("failed to build common binary op expr", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
-                                                                   expand_for_mv_ ? T_OP_DIV : T_OP_AGG_DIV,
+                                                                   T_OP_AGG_DIV,
                                                                    multi_sum_expr,
                                                                    multi_count_expr,
                                                                    div_expr))) {
       LOG_WARN("failed to build common binary op expr", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
-                                                                   expand_for_mv_ ? T_OP_DIV : T_OP_AGG_DIV,
+                                                                   T_OP_AGG_DIV,
                                                                    cast_sum_product_expr,
                                                                    count_product_expr,
                                                                    div_multi_expr))) {
       LOG_WARN("failed to build common binary op expr", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(expr_factory_,
-                                                                   expand_for_mv_ ? T_OP_MINUS : T_OP_AGG_MINUS,
+                                                                   T_OP_AGG_MINUS,
                                                                    div_multi_expr,
                                                                    div_expr,
                                                                    minus_expr))) {
@@ -2164,4 +2164,3 @@ int ObExpandAggregateUtils::add_win_exprs(ObSelectStmt *select_stmt,
 
 } // namespace sql
 } // namespace oceanbase
-

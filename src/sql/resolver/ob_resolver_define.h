@@ -336,7 +336,6 @@ struct ObResolverParams
        is_from_show_resolver_(false),
        is_restore_(false),
        is_from_create_view_(false),
-       is_from_create_mview_(false),
        is_from_create_table_(false),
        is_prepare_protocol_(false),
        is_mock_prepare_(false),
@@ -373,7 +372,6 @@ struct ObResolverParams
        is_resolve_lateral_derived_table_(false),
        package_guard_(NULL),
        star_expansion_infos_(),
-       is_for_rt_mv_(false),
        is_resolve_fake_cte_table_(false),
        is_returning_(false),
        is_in_view_(false)
@@ -404,7 +402,6 @@ public:
   // Query table creation, creating views cannot include temporary tables;
   // The former is an implementation issue, the latter is for MySQL compatibility;
   bool is_from_create_view_;
-  bool is_from_create_mview_;
   bool is_from_create_table_;
   bool is_prepare_protocol_;
   bool is_mock_prepare_;
@@ -446,7 +443,6 @@ public:
   bool is_resolve_lateral_derived_table_; // used to mark resolve lateral derived table.
   pl::ObPLPackageGuard *package_guard_;
   common::ObArray<ObStarExpansionInfo> star_expansion_infos_;
-  bool is_for_rt_mv_; // call resolve in transformation for expanding inline real-time materialized view
   bool is_resolve_fake_cte_table_;
   bool is_returning_;
   bool is_in_view_;

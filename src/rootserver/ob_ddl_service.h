@@ -31,6 +31,7 @@
 #include "rootserver/ddl_task/ob_ddl_task.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "lib/container/ob_iarray.h"
+#include "storage/tablet/ob_tablet_binding_helper.h"
 #include "storage/ddl/ob_ddl_clog.h"
 #include "share/ob_lonely_table_clean_rpc_struct.h" // for ObForceDropLonelyLobAuxTableArg
 #include "share/ob_freeze_info_proxy.h"
@@ -92,6 +93,8 @@ struct ObTruncateInfoService;
 class ObPLDDLService;
 class ObDDLService
 {
+public:
+  typedef std::pair<share::ObLSID, common::ObTabletID> LSTabletID;
 public:
   friend class ObTableGroupHelp;
   friend class ObStandbyClusterSchemaProcessor;
@@ -440,7 +443,12 @@ public:
 
   int get_tablets(
       const ObArray<common::ObTabletID> &tablet_ids,
-      common::ObIArray<common::ObTabletID> &tablets,
+      common::ObIArray<LSTabletID> &tablets,
+      ObDDLSQLTransaction &trans);
+  int build_modify_tablet_binding_args(const ObArray<common::ObTabletID> &tablet_ids,
+      const bool is_hidden_tablets,
+      const int64_t schema_version,
+      common::ObIArray<storage::ObBatchUnbindTabletArg> &args,
       ObDDLSQLTransaction &trans);
   int unbind_hidden_tablets(
       const share::schema::ObTableSchema &orig_table_schema,
@@ -1913,6 +1921,9 @@ public:
 
   int drop_lob(const obcall::ObDropLobArg &arg);
   int force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonelyLobAuxTableArg &arg);
+  int build_unbind_lob_args(const common::ObArray<ObTabletID> &tablet_ids,
+      common::ObIArray<ObBatchUnbindLobTabletArg> &args,
+      ObDDLSQLTransaction &trans);
   int unbind_lob_tablets(const share::schema::ObTableSchema &data_table_schema,
       ObDDLSQLTransaction &trans);
   int submit_drop_lob_task_(ObMySQLTransaction &trans,
@@ -2357,7 +2368,8 @@ public:
   int lock_all_ddl_operation(
       common::ObMySQLTransaction &trans,
       const bool enable_ddl_parallel);
-  int register_tx_data(const transaction::ObTxDataSourceType &type,
+  int register_tx_data(const share::ObLSID &ls_id,
+                       const transaction::ObTxDataSourceType &type,
                        const char *buf,
                        const int64_t buf_len);
   void disable_serialize_inc_schemas() { trans_start_schema_version_ = 0; }

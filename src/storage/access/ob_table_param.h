@@ -100,7 +100,7 @@ class ColumnMap
       SHADOW_COLUMN_ID_OFFSET + MAX_ARRAY_SIZE - 1;
 
   typedef common::ObFixedArray<int32_t, common::ObIAllocator> ColumnArray;
-  #define IS_SHADOW_COLUMN(column_id) ((column_id >= OB_MIN_SHADOW_COLUMN_ID) && !common::is_mlog_special_column(column_id))
+  #define IS_SHADOW_COLUMN(column_id) (column_id >= OB_MIN_SHADOW_COLUMN_ID)
 
 public:
   ColumnMap(common::ObIAllocator &allocator)
@@ -258,8 +258,6 @@ public:
                   const common::ObIArray<uint64_t> &aggregate_column_ids,
                   const common::ObIArray<uint64_t> &group_by_column_ids,
                   const sql::ObStoragePushdownFlag &pd_pushdown_flag);
-  // convert right table scan parameter of join MV scan.
-  // (right table index back not supported)
   inline uint64_t get_table_id() const { return table_id_; }
   inline int64_t is_spatial_index() const { return is_spatial_index_; }
   inline void set_is_spatial_index(bool is_spatial_index) { is_spatial_index_ = is_spatial_index; }
@@ -269,8 +267,6 @@ public:
   inline void set_is_multivalue_index(bool is_multivalue_index) { is_multivalue_index_ = is_multivalue_index; } 
   inline bool is_vec_index() const { return is_vec_index_; }
   inline void set_is_vec_index(const bool is_vec_index) { is_vec_index_ = is_vec_index; }
-  inline bool is_mlog_table() const { return is_mlog_table_; }
-  inline void set_is_mlog_table(const bool is_mlog_table) { is_mlog_table_ = is_mlog_table; }
   inline int64_t is_partition_table() const { return is_partition_table_; }
   inline void set_is_partition_table(bool is_partition_table) { is_partition_table_ = is_partition_table; }
   inline bool use_lob_locator() const { return use_lob_locator_; }
@@ -361,8 +357,6 @@ private:
   bool is_multivalue_index_;
   bool is_vec_index_;
   bool is_partition_table_;
-  // for read time query check of mview
-  bool is_mlog_table_;
   bool is_enable_semistruct_encoding_;
   bool is_safe_filter_with_di_;
   int8_t access_virtual_col_cnt_;

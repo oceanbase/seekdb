@@ -287,9 +287,6 @@ public:
             // index
             || stmt_type == stmt::T_CREATE_INDEX
             || stmt_type == stmt::T_DROP_INDEX
-            // materialized view log
-            || stmt_type == stmt::T_CREATE_MLOG
-            || stmt_type == stmt::T_DROP_MLOG
             // recyclebin restore
             || stmt_type == stmt::T_RECYCLEBIN_RESTORE_DATABASE
             || stmt_type == stmt::T_RECYCLEBIN_RESTORE_TABLE
@@ -406,9 +403,6 @@ public:
         // index
         // || stmt_type == stmt::T_CREATE_INDEX
         // || stmt_type == stmt::T_DROP_INDEX
-        // materialized view log
-        // || stmt_type == stmt::T_CREATE_MLOG
-        // || stmt_type == stmt::T_DROP_MLOG
         // recyclebin restore
         // || stmt_type == stmt::T_RECYCLEBIN_RESTORE_DATABASE
         // || stmt_type == stmt::T_RECYCLEBIN_RESTORE_TABLE

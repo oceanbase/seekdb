@@ -34,7 +34,6 @@
 #include "sql/engine/expr/ob_expr_cast.h"
 #include "sql/engine/expr/ob_expr_sql_udt_construct.h"
 #include "sql/engine/expr/ob_expr_lrpad.h"
-#include "sql/engine/expr/ob_expr_last_refresh_scn.h"
 #include "sql/engine/expr/ob_expr_json_schema_valid.h"
 #include "sql/engine/expr/ob_expr_json_utils.h"
 #include "sql/engine/expr/ob_expr_get_path.h"
@@ -110,7 +109,6 @@ void ObExprExtraInfoFactory::register_expr_extra_infos()
   REG_EXTRA_INFO(T_FUN_SYS_PRIV_SQL_UDT_CONSTRUCT, ObExprUdtConstructInfo);
   REG_EXTRA_INFO(T_FUN_SYS_LPAD, ObExprLRpadInfo);
   REG_EXTRA_INFO(T_FUN_SYS_RPAD, ObExprLRpadInfo);
-  REG_EXTRA_INFO(T_FUN_SYS_LAST_REFRESH_SCN, ObExprLastRefreshScn::LastRefreshScnExtraInfo);
   REG_EXTRA_INFO(T_FUN_SYS_JSON_SCHEMA_VALID, ObExprJsonSchemaValidInfo);
   REG_EXTRA_INFO(T_FUN_SYS_JSON_SCHEMA_VALIDATION_REPORT, ObExprJsonSchemaValidInfo);
   REG_EXTRA_INFO(T_FUN_SYS_JSON_VALUE, ObExprJsonQueryParamInfo);

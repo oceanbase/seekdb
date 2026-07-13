@@ -24,7 +24,6 @@
  #include "share/schema/ob_priv_sql_service.h"
  #include "rootserver/ddl_task/ob_ddl_scheduler.h"
  #include "storage/compaction/ob_compaction_schedule_util.h"
- #include "storage/mview/ob_mview_sched_job_utils.h"
  #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
  #include "share/ob_rpc_struct.h"
  #include "pl/ob_pl_persistent.h"
@@ -65,8 +64,7 @@ ObCreateViewHelper::~ObCreateViewHelper()
    int ret = OB_SUCCESS;
    if (OB_FAIL(check_inner_stat_())) {
      LOG_WARN("fail to check inner stat", KR(ret));
-   } else if (OB_UNLIKELY((USER_VIEW != arg_.schema_.get_table_type())
-                          && (MATERIALIZED_VIEW != arg_.schema_.get_table_type()))) {
+   } else if (OB_UNLIKELY(USER_VIEW != arg_.schema_.get_table_type())) {
      ret = OB_NOT_SUPPORTED;
      LOG_WARN("not support table type", KR(ret), K(arg_.schema_.get_table_type()));
    } else if (OB_UNLIKELY(OB_INVALID_ID != arg_.schema_.get_table_id())) {
@@ -538,9 +536,8 @@ int ObCreateViewHelper::print_view_expanded_definition_()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("database schema is null", KR(ret), K(arg_.schema_.get_database_id()));
     } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-               "CREATE%s %sVIEW `%s`.`%s` AS %.*s;",
+               "CREATE%s VIEW `%s`.`%s` AS %.*s;",
                arg_.if_not_exist_ ? " OR REPLACE" : "",
-               new_view_schema_->is_materialized_view() ? "MATERIALIZED " : "",
                database_schema_->get_database_name(),
                new_view_schema_->get_table_name(),
                new_view_schema_->get_view_schema().get_view_definition_str().length(),

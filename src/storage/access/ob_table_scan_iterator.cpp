@@ -753,6 +753,19 @@ int ObTableScanIterator::get_next_rows(int64_t &count, int64_t capacity)
   return ret;
 }
 
+int ObTableScanIterator::check_ls_offline_after_read()
+{
+  int ret = OB_SUCCESS;
+
+  memtable::ObMvccAccessCtx &acc_ctx = ctx_guard_.get_store_ctx().mvcc_acc_ctx_;
+
+  if (acc_ctx.tx_table_guards_.check_ls_offline()) {
+    ret = OB_LS_OFFLINE;
+    STORAGE_LOG(WARN, "ls offline during the read operation", K(ret), K(acc_ctx.snapshot_));
+  }
+  return ret;
+}
+
 int ObTableScanIterator::check_txn_status_if_read_uncommitted_()
 {
   int ret = OB_SUCCESS;

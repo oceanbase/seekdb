@@ -23,8 +23,6 @@
 #include "sql/resolver/ddl/ob_drop_index_stmt.h"
 #include "sql/resolver/ddl/ob_drop_table_stmt.h"
 #include "sql/resolver/ddl/ob_drop_index_stmt.h"
-#include "sql/resolver/ddl/ob_create_mlog_stmt.h"
-#include "sql/resolver/ddl/ob_drop_mlog_stmt.h"
 #include "sql/resolver/ddl/ob_alter_database_stmt.h"
 #include "sql/resolver/ddl/ob_drop_database_stmt.h"
 #include "sql/resolver/ddl/ob_create_database_stmt.h"
@@ -94,7 +92,6 @@
 #include "sql/engine/cmd/ob_database_executor.h"
 #include "sql/engine/cmd/ob_table_executor.h"
 #include "sql/engine/cmd/ob_index_executor.h"
-#include "sql/engine/cmd/ob_mlog_executor.h"
 #include "sql/engine/cmd/ob_kill_executor.h"
 #include "sql/engine/cmd/ob_user_cmd_executor.h"
 #include "sql/engine/cmd/ob_outline_executor.h"
@@ -325,14 +322,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       }
       case stmt::T_DROP_INDEX: {
         DEFINE_EXECUTE_CMD(ObDropIndexStmt, ObDropIndexExecutor);
-        break;
-      }
-      case stmt::T_CREATE_MLOG: {
-        DEFINE_EXECUTE_CMD(ObCreateMLogStmt, ObCreateMLogExecutor);
-        break;
-      }
-      case stmt::T_DROP_MLOG: {
-        DEFINE_EXECUTE_CMD(ObDropMLogStmt, ObDropMLogExecutor);
         break;
       }
       case stmt::T_ALTER_VIEW: {

@@ -218,8 +218,8 @@ public:
   //                      const bool is_index_table,
   //                      bool &is_rowkey_column) const;
   //int check_is_index_table(uint64_t table_id, bool &is_index_table) const;
-  int get_can_read_index_array(uint64_t table_id, uint64_t *index_tid_array, int64_t &size, bool with_mv) const;
-  int get_can_write_index_array(uint64_t table_id, uint64_t *index_tid_array, int64_t &size, bool only_global = false, bool with_mlog = false) const;
+  int get_can_read_index_array(uint64_t table_id, uint64_t *index_tid_array, int64_t &size) const;
+  int get_can_write_index_array(uint64_t table_id, uint64_t *index_tid_array, int64_t &size, bool only_global = false) const;
   // tenant
   int get_tenant_info(const share::schema::ObTenantSchema *&tenant_schema);
   int get_database_schema(

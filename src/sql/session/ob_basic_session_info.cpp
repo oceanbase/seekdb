@@ -3646,16 +3646,6 @@ int ObBasicSessionInfo::is_transformation_enabled(bool &transformation_enabled) 
   return get_bool_sys_var(SYS_VAR_OB_ENABLE_TRANSFORMATION, transformation_enabled);
 }
 
-int ObBasicSessionInfo::get_query_rewrite_enabled(int64_t &query_rewrite_enabled) const
-{
-  return get_int64_sys_var(SYS_VAR_QUERY_REWRITE_ENABLED, query_rewrite_enabled);
-}
-
-int ObBasicSessionInfo::get_query_rewrite_integrity(int64_t &query_rewrite_integrity) const
-{
-  return get_int64_sys_var(SYS_VAR_QUERY_REWRITE_INTEGRITY, query_rewrite_integrity);
-}
-
 int ObBasicSessionInfo::is_serial_set_order_forced(bool &force_set_order) const
 {
   int ret = OB_SUCCESS;
@@ -5512,11 +5502,6 @@ int ObBasicSessionInfo::get_regexp_session_vars(ObExprRegexpSessionVariables &va
 int ObBasicSessionInfo::get_activate_all_role_on_login(bool &v) const
 {
   return get_bool_sys_var(SYS_VAR_ACTIVATE_ALL_ROLES_ON_LOGIN, v);
-}
-
-int ObBasicSessionInfo::get_mview_refresh_dop(uint64_t &v) const
-{
-  return get_uint64_sys_var(SYS_VAR_MVIEW_REFRESH_DOP, v);
 }
 
 void ObBasicSessionInfo::reset_tx_variable(bool reset_next_scope)

@@ -143,9 +143,10 @@ int ObTableAccessContext::build_lob_locator_helper(ObTableScanParam &scan_param,
   } else if (FALSE_IT(lob_locator_helper_ = new (buf) ObLobLocatorHelper())) {
   } else if (OB_FAIL(lob_locator_helper_->init(scan_param,
                                                ctx,
+                                               scan_param.ls_id_,
                                                trans_version_range.snapshot_version_))) {
     STORAGE_LOG(WARN, "Failed to init lob locator helper",
-      K(ret), KPC(scan_param.table_param_), K(trans_version_range));
+      K(ret), KPC(scan_param.table_param_), K(scan_param.ls_id_), K(trans_version_range));
     reset_lob_locator_helper();
   } else {
     STORAGE_LOG(DEBUG, "succ to init lob locator helper", KPC(lob_locator_helper_));
@@ -170,8 +171,9 @@ int ObTableAccessContext::build_lob_locator_helper(const ObStoreCtx &ctx,
   } else if (OB_FAIL(lob_locator_helper_->init(tablet_id_.id(),
                                                tablet_id_.id(),
                                                ctx,
+                                               ls_id_,
                                                trans_version_range.snapshot_version_))) {
-    STORAGE_LOG(WARN, "Failed to init lob locator helper limit", K(ret), K(trans_version_range));
+    STORAGE_LOG(WARN, "Failed to init lob locator helper limit", K(ret), K(ls_id_), K(trans_version_range));
     reset_lob_locator_helper();
   } else {
     STORAGE_LOG(DEBUG, "succ to init lob locator helper", KPC(lob_locator_helper_));
@@ -196,6 +198,7 @@ int ObTableAccessContext::init(ObTableScanParam &scan_param,
     stmt_allocator_ = scan_param.allocator_;
     cached_iter_node_ = cached_iter_node;
     range_allocator_ = nullptr;
+    ls_id_ = scan_param.ls_id_;
     tablet_id_ = scan_param.tablet_id_;
     query_flag_ = scan_param.scan_flag_;
     sql_mode_ = scan_param.sql_mode_;
@@ -260,6 +263,7 @@ int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
     stmt_allocator_ = &stmt_allocator;
     range_allocator_ = nullptr;
     trans_version_range_ = trans_version_range;
+    ls_id_ = ctx.ls_id_;
     tablet_id_ = ctx.tablet_id_;
     // handle lob types without ObTableScanParam:
     // 1. use lob locator instead of full lob data
@@ -310,6 +314,7 @@ int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
     stmt_allocator_ = &allocator;
     range_allocator_ = nullptr;
     trans_version_range_ = trans_version_range;
+    ls_id_ = ctx.ls_id_;
     tablet_id_ = ctx.tablet_id_;
     lob_locator_helper_ = nullptr;
     cached_iter_node_ = cached_iter_node;
@@ -343,6 +348,7 @@ int ObTableAccessContext::init_for_fork(ObTableAccessContext &other,
   allocator_ = other.allocator_;
   cached_iter_node_ = other.cached_iter_node_;
   range_allocator_ = other.range_allocator_;
+  ls_id_ = other.ls_id_;
   tablet_id_ = other.tablet_id_;
   query_flag_ = other.query_flag_;
   // disable row cache for fork
@@ -443,6 +449,7 @@ void ObTableAccessContext::reset()
   }
   is_inited_ = false;
   timeout_ = 0;
+  ls_id_.reset();
   tablet_id_.reset();
   query_flag_.reset();
   sql_mode_ = 0;
@@ -495,6 +502,7 @@ int ObTableAccessContext::rescan_reuse(ObTableScanParam &scan_param)
 void ObTableAccessContext::reuse()
 {
   timeout_ = 0;
+  ls_id_.reset();
   tablet_id_.reset();
   query_flag_.reset();
   sql_mode_ = 0;

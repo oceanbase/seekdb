@@ -182,10 +182,6 @@ private:
     ObTenantFreezeInfoMgr &mgr_;
   };
 
-  void check_tenant_in_restore_with_mv_(
-       bool &need_check_mview,
-       share::ObSchemaGetterGuard &schema_guard,
-       const share::schema::ObSimpleTenantSchema *&tenant_schema);
 private:
   ReloadTask reload_task_;
   UpdateLSResvSnapshotTask update_reserved_snapshot_task_;

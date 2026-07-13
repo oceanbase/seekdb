@@ -60,6 +60,7 @@ namespace storage
 {
 struct ObColumnSchemaItem;
 class ObTabletHandle;
+class ObLSHandle;
 class ObDDLIndependentDag;
 class ObDDLMacroBlockWriter;
 class ObLobMacroBlockWriter;
@@ -97,6 +98,7 @@ using storage::ObITabletSliceWriter;
 using storage::ObDDLWriteStat;
 using storage::ObLS;
 using common::ObIVector;
+class ObLocationService;
 enum ObDDLType
 {
   DDL_INVALID = 0,
@@ -503,7 +505,7 @@ static inline bool is_ddl_stmt_packet_retry_err(const int ret)
 {
   return OB_EAGAIN == ret || OB_SNAPSHOT_DISCARDED == ret || OB_ERR_PARALLEL_DDL_CONFLICT == ret
       || OB_TRANS_KILLED == ret || OB_TRANS_ROLLBACKED == ret // table lock doesn't support leader switch
-      || OB_PARTITION_IS_BLOCKED == ret // when LS is blocking transaction writes
+      || OB_PARTITION_IS_BLOCKED == ret // when LS blocks tx
       || OB_TRANS_NEED_ROLLBACK == ret // transaction killed by leader switch
       || OB_ERR_DDL_RESOURCE_NOT_ENOUGH == ret // tenant ddl resource not enough
       ;
@@ -512,8 +514,12 @@ static inline bool is_ddl_stmt_packet_retry_err(const int ret)
 static inline bool is_direct_load_retry_err(const int ret)
 {
   return is_ddl_stmt_packet_retry_err(ret)
+    || is_location_service_renew_error(ret)
     || ret == OB_TABLET_NOT_EXIST
+    || ret == OB_LS_NOT_EXIST
+    || ret == OB_NOT_MASTER
     || ret == OB_TASK_EXPIRED
+    || ret == OB_REPLICA_NOT_READABLE
     || ret == OB_TRANS_CTX_NOT_EXIST
     || ret == OB_SCHEMA_ERROR
     || ret == OB_SCHEMA_EAGAIN
@@ -1075,7 +1081,10 @@ public:
     common::ObAddr addr_;
   };
 
-  static int check_local_sys_tenant();
+  static int check_local_is_sys_leader();
+  static int get_sys_log_handler_role_and_proposal_id(
+      common::ObRole &role,
+      int64_t &proposal_id);
 
   // get all tablets of a table by table_id
   static int get_tablets(
@@ -1118,6 +1127,12 @@ public:
       const ObString &partition_names,
       ObSqlString &sql_string);
 
+  static int get_tablet_leader_addr(
+      share::ObLocationService *location_service,
+      const common::ObTabletID &tablet_id,
+      const int64_t timeout,
+      share::ObLSID &ls_id,
+      common::ObAddr &leader_addr);
 
   static int refresh_alter_table_arg(const int64_t orig_table_id,
       const uint64_t foreign_key_id,
@@ -1129,7 +1144,7 @@ public:
       ObSqlString &sql_string);
 
   static int ddl_get_tablet(
-      storage::ObLS *ls,
+      const storage::ObLSHandle &ls_handle,
       const ObTabletID &tablet_id,
       storage::ObTabletHandle &tablet_handle,
       const storage::ObMDSGetTabletMode mode = storage::ObMDSGetTabletMode::READ_WITHOUT_CHECK);
@@ -1142,12 +1157,34 @@ public:
            || OB_EAGAIN == ret || OB_LS_LOCATION_LEADER_NOT_EXIST == ret || OB_TRANS_CTX_NOT_EXIST == ret;
   }
 
+  static bool need_remote_write(const int ret_code);
+
   static int check_can_convert_character(const ObObjMeta &obj_meta, const bool is_domain_index, const bool is_string_lob)
   {
     return (obj_meta.is_string_type() || obj_meta.is_enum_or_set()) &&
             (is_string_lob || (CS_TYPE_BINARY != obj_meta.get_collation_type() && !is_domain_index));
   }
 
+  static int get_sys_ls_leader_addr(
+    const uint64_t cluster_id,
+    common::ObAddr &leader_addr);
+
+  static int get_tablet_paxos_member_list(const common::ObTabletID &tablet_id,
+    common::ObIArray<common::ObAddr> &paxos_server_list,
+    int64_t &paxos_member_count);
+
+  static int get_tablet_replica_location(const common::ObTabletID &tablet_id,
+    ObLSID &ls_id,
+    ObLSLocation &location);
+  static int get_split_replicas_addrs(const share::ObLSID &ls_id,
+    ObIArray<ObAddr> &member_addrs_array,
+    ObIArray<ObAddr> &learner_addrs_array);
+  static int get_split_replicas_addrs(const share::ObLSID &ls_id,
+    ObIArray<ObAddr> &replica_addr_array);
+  static int construct_ls_tablet_id_map(
+    const share::ObLSID &ls_id,
+    const common::ObTabletID &tablet_id,
+    hash::ObHashMap<ObLSID, ObArray<ObTabletID>> &ls_tablet_id_map);
   static int get_index_table_batch_partition_names(
     const int64_t &data_table_id,
     const int64_t &index_table_id,
@@ -1156,11 +1193,15 @@ public:
     ObIArray<ObString> &partition_names);
   static int get_tablet_data_size(
     const common::ObTabletID &tablet_id,
+    const share::ObLSID &ls_id,
     int64_t &data_size);
   static int get_tablet_data_row_cnt(
     const common::ObTabletID &tablet_id,
+    const share::ObLSID &ls_id,
     int64_t &data_row_cnt);
   static int get_ls_host_left_disk_space(
+    const share::ObLSID &ls_id,
+    const common::ObAddr &leader_addr,
     uint64_t &left_space_size);
   static int generate_partition_names(
     const ObIArray<ObString> &partition_names_array,
@@ -1239,6 +1280,7 @@ public:
       share::schema::ObSchemaGetterGuard *&src_tenant_schema_guard,
       share::schema::ObSchemaGetterGuard *&dst_tenant_schema_guard);
   static int get_tablet_physical_row_cnt(
+      const share::ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const bool calc_sstable,
       const bool calc_memtable,
@@ -1251,12 +1293,12 @@ public:
       bool &is_table_empty);
   static int check_schema_version_refreshed(const int64_t target_schema_version);
   static bool reach_time_interval(const int64_t i, volatile int64_t &last_time);
-  static int is_major_exist(const common::ObTabletID &tablet_id, bool &is_exist);
+  static int is_major_exist(const ObLSID &ls_id, const common::ObTabletID &tablet_id, bool &is_exist);
 #ifdef OB_BUILD_SHARED_STORAGE
   static int upload_block_for_ss(const char* buf, const int64_t len, const blocksstable::MacroBlockId &macro_block_id);
   static int update_tablet_gc_info(const ObTabletID &tablet_id, const int64_t pre_snapshot_version, const int64_t new_snapshot_version);
 #endif
-  static int set_tablet_autoinc_seq(const ObTabletID &tablet_id, const int64_t seq_value);
+  static int set_tablet_autoinc_seq(const ObLSID &ls_id, const ObTabletID &tablet_id, const int64_t seq_value);
   static int check_table_compaction_checksum_error(const uint64_t table_id);
   static int get_temp_store_compress_type(const ObCompressorType schema_compr_type,
                                           const int64_t parallel,
@@ -1383,12 +1425,14 @@ public:
 
   static bool need_reshape(const ObObjMeta &col_type);
   static int report_ddl_checksum_from_major_sstable(
+      const ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const uint64_t table_id,
       const int64_t execution_id,
       const int64_t ddl_task_id,
       const int64_t tenant_data_version);
   static int report_ddl_sstable_checksum(
+      const ObLSID &ls_id,
       const ObTabletID &tablet_id,
       const uint64_t target_table_id,
       const int64_t execution_id,
@@ -1442,6 +1486,7 @@ public:
       ObWriteMacroParam &param);
   static int get_task_ranges(
       const int64_t task_id,
+      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const int64_t tablet_size,
       const int64_t hint_parallelism,
@@ -1458,6 +1503,7 @@ public:
       const int64_t range_interval,
       const int64_t slice_row_idx);
 
+  static int is_ls_leader(ObLS &ls, bool &is_leader);
   static int alloc_storage_macro_block_writer(
       const ObWriteMacroParam &param,
       ObIAllocator &allocator,
@@ -1539,6 +1585,8 @@ private:
 
   static int do_check_tablets_merge_status(const int64_t snapshot_version,
       const ObIArray<ObTabletID> &tablet_ids,
+      const ObLSID &ls_id,
+      hash::ObHashMap<ObAddr, ObArray<ObTabletID>> &ip_tablets_map,
       hash::ObHashMap<ObTabletID, int32_t> &tablets_commited_map,
       int64_t &tablet_commit_count);
 
@@ -1556,6 +1604,11 @@ private:
       hash::ObHashMap<ObTabletID, int32_t> &tablets_commited_map,
       int64_t &commit_succ_count);
 
+  static int construct_ls_tablet_map(const common::ObTabletID &tablet_id,
+      hash::ObHashMap<ObLSID, ObArray<ObTabletID>> &ls_tablets_map);
+
+  static int construct_tablet_ip_map(const ObTabletID &tablet_id,
+      hash::ObHashMap<ObAddr, ObArray<ObTabletID>> &ip_tablets_map);
 };
 
 class ObSplitUtil

@@ -2063,8 +2063,6 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
     //not resolve, so add column item to dml stmt
     const ObColumnSchemaV2 *col_schema = NULL;
     const ObTableSchema *table_schema = NULL;
-    //for materialized view, should use materialized view id to resolve column,
-    //and its schema id saved in table_item.table_id_
     uint64_t tid = table_item.ref_id_;
     if (!include_hidden) {
       if (!ObCharset::case_insensitive_equal(column_name, OB_HIDDEN_PK_INCREMENT_COLUMN_NAME)) {
@@ -2825,9 +2823,6 @@ int ObDMLResolver::resolve_basic_table_without_cte(const ParseNode &parse_tree, 
       } else if (params_.is_from_create_view_ && table_schema->is_mysql_tmp_table()) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "View/Table's column refers to a temporary table");
-      } else if (params_.is_from_create_mview_
-                 && OB_FAIL(check_is_table_supported_for_mview(*table_item, *table_schema))) {
-        LOG_WARN("failed to check is table supported for mview", K(ret));
       } else if (OB_FAIL(resolve_table_partition_expr(*table_item, *table_schema))) {
         LOG_WARN("resolve table partition expr failed", K(ret), K(table_name));
       } else if (OB_FAIL(resolve_generated_column_expr_temp(table_item))) {
@@ -2898,40 +2893,6 @@ int ObDMLResolver::resolve_basic_table_without_cte(const ParseNode &parse_tree, 
     }
   }
   LOG_DEBUG("finish resolve_basic_table", K(ret), KPC(table_item));
-  return ret;
-}
-
-int ObDMLResolver::check_is_table_supported_for_mview(const TableItem &table_item,
-                                                      const ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!table_item.synonym_name_.empty())) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("unsupported synonym in materialized view", K(ret), K(table_schema), K(table_item));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "synonym in materialized view is");
-  } else if (OB_UNLIKELY(!(table_schema.is_user_table()
-                           || table_schema.is_materialized_view()
-                           || table_schema.is_user_view()))) {
-    ret = OB_ERR_MVIEW_INVALID_TABLE_TYPE;
-    LOG_WARN("Table type is not valid, the materialized view definition can only reference user "
-             "tables or other materialized views",
-             K(ret), K(table_schema), K(table_item));
-    LOG_USER_ERROR(OB_ERR_MVIEW_INVALID_TABLE_TYPE);
-  }
-  return ret;
-}
-
-int ObDMLResolver::check_is_table_supported_for_mview(const ObItemType table_node_type)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(T_RELATION_FACTOR != table_node_type
-                  && T_SELECT != table_node_type
-                  && T_JOINED_TABLE != table_node_type
-                  && T_JSON_TABLE_EXPRESSION != table_node_type)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("unsupported table type in materialized view", K(ret), K(get_type_name(table_node_type)));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "non-user table in materialized view is");
-  }
   return ret;
 }
 
@@ -3138,9 +3099,6 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
     if (!stmt->is_select_stmt() && OB_NOT_NULL(time_node)) {
       ret = OB_ERR_SNAPSHOT_QUERY_WITH_UPDATE;
       LOG_WARN("snapshot expression not allowed here", K(ret));
-    } else if (params_.is_from_create_mview_ &&
-              OB_FAIL(check_is_table_supported_for_mview(table_node->type_))) {
-      LOG_WARN("failed to check is table supported for mview", K(ret));
     } else {
       switch (table_node->type_) {
       case T_RELATION_FACTOR: {
@@ -3169,7 +3127,7 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
         }
 
         if (OB_FAIL(ret)) {
-        } else if (!stmt->is_select_stmt() && !is_update_for_mv_fast_refresh(*stmt) &&
+        } else if (!stmt->is_select_stmt() &&
                   OB_FAIL(check_stmt_has_snapshot_query(table_item->ref_query_, false, has_snapshot_query))) {
           LOG_WARN("failed to find stmt refer to snapshot query", K(ret));
         } else if (has_snapshot_query) {
@@ -3262,23 +3220,6 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
   }
 
   return ret;
-}
-
-//  allowed snapshot query in mview fast refresh update/insert operator in mysql mode.
-//  specific update stmt is used as below:
-//  update mv1, (... inline view use snapshot query, mv1 is not used in this view ...) v1
-//  set mv1.cnt = mv1.cnt + v.cnt
-//  where mv1.c1 = v.c1;
-bool ObDMLResolver::is_update_for_mv_fast_refresh(const ObDMLStmt &stmt)
-{
-  bool is_refresh_stmt = false;
-  if (stmt.is_update_stmt() && 2 == stmt.get_table_size()) {
-    const TableItem *table1 = stmt.get_table_item(0);
-    const TableItem *table2 = stmt.get_table_item(1);
-    is_refresh_stmt = (NULL != table1 && NULL != table2 && MATERIALIZED_VIEW == table1->table_type_
-                      && table2->is_generated_table());
-  }
-  return is_refresh_stmt;
 }
 
 int ObDMLResolver::check_table_item_with_gen_col_using_udf(const TableItem *table_item, bool &ans)
@@ -5094,7 +5035,7 @@ int ObDMLResolver::resolve_base_or_alias_table_item_normal(const uint64_t catalo
             item->table_type_ = tschema->get_table_type();
           }
         }
-      } else if (tschema->is_index_table() || tschema->is_materialized_view()) {
+      } else if (tschema->is_index_table()) {
         //feature: select * from index_name where... rewrite to select index_col1, index_col2... from data_table_name where...
         //the feature only use in mysqtest case, not open for user
         const ObTableSchema *tab_schema = NULL;
@@ -5105,21 +5046,10 @@ int ObDMLResolver::resolve_base_or_alias_table_item_normal(const uint64_t catalo
         if (OB_FAIL(schema_checker_->get_table_schema( tschema->get_data_table_id(), tab_schema))) {
           LOG_WARN("get data table schema failed", K(ret), K_(item->ref_id));
         } else {
-          if (tschema->is_materialized_view()) {
-            item->ref_id_ = tschema->get_data_table_id();
-            item->mview_id_ = tschema->get_table_id();
-            item->table_type_ = tschema->get_table_type();
-            item->need_expand_rt_mv_ = !params_.is_for_rt_mv_ && tschema->mv_on_query_computation();
-            item->table_name_ = tschema->get_table_name_str();
-            item->alias_name_ = alias_name.empty() ? tschema->get_table_name_str() : alias_name;
-            LOG_DEBUG("resolve mv table", K(ret), K(tschema->get_table_name()), K(params_.is_for_rt_mv_),
-                    K(tschema->mv_enable_query_rewrite()), K(tschema->mv_on_query_computation()));
-          } else {
-            item->ref_id_ = tschema->get_table_id();
-            item->table_name_ = tab_schema->get_table_name_str(); // the name of the main table
-            // Use the index name as the alias name of the main table
-            item->alias_name_ = alias_name.empty() ? tschema->get_table_name_str() : alias_name;
-          }
+          item->ref_id_ = tschema->get_table_id();
+          item->table_name_ = tab_schema->get_table_name_str(); // the name of the main table
+          // Use the index name as the alias name of the main table
+          item->alias_name_ = alias_name.empty() ? tschema->get_table_name_str() : alias_name;
           // If it is an index table lookup, the dependencies of the main table also need to be added to the plan
           ObSchemaObjVersion table_version;
           table_version.object_id_ = tab_schema->get_table_id();
@@ -10142,10 +10072,6 @@ int ObDMLResolver::resolve_pseudo_column(
     if (OB_FAIL(resolve_ora_rowscn_pseudo_column(q_name, real_ref_expr))) {
       LOG_WARN("resolve ora_rowscn pseudo column failed", K(ret));
     }
-  } else if (0 == q_name.col_name_.case_compare(OB_MLOG_OLD_NEW_COLUMN_NAME)) {
-    if (OB_FAIL(resolve_old_new_pseudo_column(q_name, real_ref_expr))) {
-      LOG_WARN("resolve old_new pseudo column failed", K(ret));
-    }
   } else if (GCONF._enable_pseudo_partition_id
           && ObResolverUtils::is_pseudo_partition_column_name(q_name.col_name_)) {
     if (OB_FAIL(resolve_part_id_ref_column(q_name, real_ref_expr))) {
@@ -10248,56 +10174,6 @@ int ObDMLResolver::resolve_part_id_ref_column(
     LOG_WARN("real_ref_expr is null", K(ret), K(real_ref_expr));
   }
   can_resolve_pseudo_column_ref_with_empty_tablename_ = false;
-  return ret;
-}
-
-int ObDMLResolver::resolve_old_new_pseudo_column(const ObQualifiedName &q_name,
-                                                 ObRawExpr *&real_ref_expr)
-{
-  int ret = OB_SUCCESS;
-  ObPseudoColumnRawExpr *pseudo_column_expr = NULL;
-  const TableItem *table_item = NULL;
-  if (OB_ISNULL(get_stmt()) || OB_ISNULL(params_.expr_factory_) || OB_ISNULL(session_info_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(get_stmt()), K_(params_.expr_factory), K(session_info_));
-  } else if (OB_FAIL(column_namespace_checker_.check_table_column_namespace(q_name, table_item))) {
-    LOG_WARN("check rowscn table colum namespace failed", K(ret));
-  } else if (OB_ISNULL(table_item)) {
-    ret = OB_ERR_BAD_FIELD_ERROR;
-    LOG_WARN("OBE_ROWSCN pseudo column only avaliable in basic table", K(ret));
-  } else if (OB_FAIL(get_stmt()->get_target_pseudo_column(T_PSEUDO_OLD_NEW_COL,
-                                                          table_item->table_id_,
-                                                          pseudo_column_expr))) {
-      LOG_WARN("failed to get old_new column", K(ret), K(table_item));
-  } else if (pseudo_column_expr != NULL) {
-    //this type of pseudo_column_expr has been add
-    real_ref_expr = pseudo_column_expr;
-  } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_PSEUDO_OLD_NEW_COL, pseudo_column_expr))) {
-    LOG_WARN("create rowscn pseudo column expr failed", K(ret));
-  } else if (OB_ISNULL(pseudo_column_expr) ) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pseudo column expr is null", K(ret));
-  } else if (OB_FAIL(pseudo_column_expr->add_relation_id(get_stmt()->get_table_bit_index(table_item->table_id_)))) {
-    LOG_WARN("failed to add relation id", K(ret));
-  } else if (OB_FAIL(get_stmt()->get_pseudo_column_like_exprs().push_back(pseudo_column_expr))) {
-    LOG_WARN("fail to push back", K(ret));
-  } else {
-    ObRawExprResType result_type;
-    result_type.set_varchar();
-    result_type.set_length(1);
-    result_type.set_collation_type(ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI);
-    result_type.set_collation_level(CS_LEVEL_IMPLICIT);
-    pseudo_column_expr->set_result_type(result_type);
-    pseudo_column_expr->set_table_id(table_item->table_id_);
-    real_ref_expr = pseudo_column_expr;
-    LOG_DEBUG("old_new_expr build success", K(*pseudo_column_expr));
-  }
-
-  if (OB_SUCC(ret) && T_NONE_SCOPE == params_.hidden_column_scope_
-      && !(params_.is_for_rt_mv_ || session_info_->get_ddl_info().is_major_refreshing_mview())) {
-    params_.hidden_column_scope_ = current_scope_;
-    params_.hidden_column_name_ = OB_MLOG_OLD_NEW_COLUMN_NAME;
-  }
   return ret;
 }
 
@@ -11214,13 +11090,6 @@ int ObDMLResolver::resolve_transform_hint(const ParseNode &hint_node,
     case T_NO_PLACE_GROUP_BY: {
       if (OB_FAIL(resolve_place_group_by_hint(hint_node, trans_hint))) {
         LOG_WARN("failed to resolve place group by hint", K(ret));
-      }
-      break;
-    }
-    case T_MV_REWRITE:
-    case T_MV_NO_REWRITE: {
-      if (OB_FAIL(resolve_mv_rewrite_hint(hint_node, trans_hint))) {
-        LOG_WARN("failed to resolve mv rewrite hint", K(ret));
       }
       break;
     }
@@ -12309,32 +12178,6 @@ int ObDMLResolver::resolve_coalesce_aggr_hint(const ParseNode &hint_node,
   coalesce_aggr_hint->set_qb_name(qb_name);
   hint = coalesce_aggr_hint;
   LOG_DEBUG("show coalesce_aggr_hint hint", K(*coalesce_aggr_hint));
-  return ret;
-}
-
-int ObDMLResolver::resolve_mv_rewrite_hint(const ParseNode &hint_node,
-                                           ObTransHint *&hint)
-{
-  int ret = OB_SUCCESS;
-  hint = NULL;
-  ObMVRewriteHint *mv_rewrite_hint = NULL;
-  ObString qb_name;
-  if (OB_UNLIKELY(1 != hint_node.num_child_ && 2 != hint_node.num_child_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected mv rewrite hint", K(ret), K(hint_node.num_child_));
-  } else if (OB_FAIL(ObQueryHint::create_hint(allocator_, hint_node.type_, mv_rewrite_hint))) {
-    LOG_WARN("failed to create eliminate join hint", K(ret));
-  } else if (OB_FAIL(resolve_qb_name_node(hint_node.children_[0], qb_name))) {
-    LOG_WARN("Failed to resolve qb name node", K(ret));
-  } else if (2 == hint_node.num_child_ && NULL != hint_node.children_[1] &&
-             OB_FAIL(resolve_simple_table_list_in_hint(hint_node.children_[1],
-                                                       mv_rewrite_hint->get_mv_list()))) {
-    LOG_WARN("failed to resovle simple table list in hint", K(ret));
-  } else {
-    mv_rewrite_hint->set_qb_name(qb_name);
-    hint = mv_rewrite_hint;
-    LOG_DEBUG("show mv_rewrite_hint hint", KPC(mv_rewrite_hint));
-  }
   return ret;
 }
 

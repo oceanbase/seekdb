@@ -660,19 +660,27 @@ int ObTenantFreezeInfoMgr::try_update_reserved_snapshot()
     }
   } // end of lock
 
-  // Try to update the reserved snapshot on the log stream.
+  // loop all ls, try update reserved snapshot
+  ObSharedGuard<ObLSIterator> ls_iter_guard;
   ObLS *ls = nullptr;
   if (OB_FAIL(ret) || reserved_snapshot <= 0) {
-  } else if (OB_ISNULL(share::g_mp->ls_service())) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "ls service is null", K(ret));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
-    LOG_WARN("failed to get single log stream", K(ret));
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard, ObLSGetMod::COMPACT_MODE))) {
+    LOG_WARN("failed to get ls iterator", K(ret));
   } else {
     int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(ls->try_sync_reserved_snapshot(reserved_snapshot, true/*update_flag*/))) {
-      LOG_WARN("failed to update min reserved snapshot", K(tmp_ret), KPC(ls), K(reserved_snapshot));
-    }
+    while (OB_SUCC(ret)) {
+      if (OB_FAIL(ls_iter_guard.get_ptr()->get_next(ls))) {
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+          break;
+        }
+      } else if (OB_ISNULL(ls)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("ls is null", K(ret), KP(ls));
+      } else if (OB_TMP_FAIL(ls->try_sync_reserved_snapshot(reserved_snapshot, true/*update_flag*/))) {
+        LOG_WARN("failed to update min reserved snapshot", K(tmp_ret), KPC(ls), K(reserved_snapshot));
+      }
+    } // end of while
   }
   cost_ts = ObTimeUtility::fast_current_time() - cost_ts;
   STORAGE_LOG(INFO, "update reserved snapshot finished", K(cost_ts), K(reserved_snapshot));

@@ -3653,6 +3653,15 @@ static const _error _error_OB_SERVER_MIGRATE_IN_DENIED = {
       .str_error             = "server migrate in denied",
       .str_user_error        = "server migrate in denied"
 };
+static const _error _error_OB_REBALANCE_TASK_CANT_EXEC = {
+      .error_name            = "OB_REBALANCE_TASK_CANT_EXEC",
+      .error_cause           = "Internal Error",
+      .error_solution        = "Contact OceanBase Support",
+      .mysql_errno           = -1,
+      .sqlstate              = "HY000",
+      .str_error             = "rebalance task can not executing now",
+      .str_user_error        = "rebalance task can not executing now"
+};
 static const _error _error_OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT = {
       .error_name            = "OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT",
       .error_cause           = "Internal Error",
@@ -3661,6 +3670,15 @@ static const _error _error_OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT = {
       .sqlstate              = "HY000",
       .str_error             = "rootserver can not hold more partition",
       .str_user_error        = "rootserver can not hold more partition"
+};
+static const _error _error_OB_REBALANCE_TASK_NOT_IN_PROGRESS = {
+      .error_name            = "OB_REBALANCE_TASK_NOT_IN_PROGRESS",
+      .error_cause           = "Internal Error",
+      .error_solution        = "Contact OceanBase Support",
+      .mysql_errno           = -1,
+      .sqlstate              = "HY000",
+      .str_error             = "rebalance task not in progress on seekdb",
+      .str_user_error        = "rebalance task not in progress on seekdb"
 };
 static const _error _error_OB_DATA_SOURCE_NOT_EXIST = {
       .error_name            = "OB_DATA_SOURCE_NOT_EXIST",
@@ -4580,6 +4598,15 @@ static const _error _error_OB_LEADER_COORDINATOR_NEED_RETRY = {
       .str_error             = "leader coordinator needs retry",
       .str_user_error        = "leader coordinator needs retry"
 };
+static const _error _error_OB_REBALANCE_TASK_NEED_RETRY = {
+      .error_name            = "OB_REBALANCE_TASK_NEED_RETRY",
+      .error_cause           = "Internal Error",
+      .error_solution        = "Contact OceanBase Support",
+      .mysql_errno           = -1,
+      .sqlstate              = "HY000",
+      .str_error             = "rebalance task needs retry",
+      .str_user_error        = "rebalance task needs retry"
+};
 static const _error _error_OB_LS_NOT_EXIST = {
       .error_name            = "OB_LS_NOT_EXIST",
       .error_cause           = "Internal Error",
@@ -4588,6 +4615,15 @@ static const _error _error_OB_LS_NOT_EXIST = {
       .sqlstate              = "HY000",
       .str_error             = "log stream does not exist",
       .str_user_error        = "log stream does not exist"
+};
+static const _error _error_OB_TOO_MANY_TENANT_LS = {
+      .error_name            = "OB_TOO_MANY_TENANT_LS",
+      .error_cause           = "Internal Error",
+      .error_solution        = "Contact OceanBase Support",
+      .mysql_errno           = -1,
+      .sqlstate              = "HY000",
+      .str_error             = "too many log streams were defined for this tenant",
+      .str_user_error        = "too many log streams were defined for this tenant"
 };
 static const _error _error_OB_LS_LOCATION_NOT_EXIST = {
       .error_name            = "OB_LS_LOCATION_NOT_EXIST",
@@ -4759,6 +4795,15 @@ static const _error _error_OB_DEVICE_NOT_EXIST = {
       .sqlstate              = "HY000",
       .str_error             = "Device does not exist",
       .str_user_error        = "Device does not exist"
+};
+static const _error _error_OB_LS_REPLICA_TASK_RESULT_UNCERTAIN = {
+      .error_name            = "OB_LS_REPLICA_TASK_RESULT_UNCERTAIN",
+      .error_cause           = "Internal Error",
+      .error_solution        = "Contact OceanBase Support",
+      .mysql_errno           = -1,
+      .sqlstate              = "HY000",
+      .str_error             = "log stream replica task result is uncertain",
+      .str_user_error        = "log stream replica task result is uncertain"
 };
 static const _error _error_OB_WAIT_REPLAY_TIMEOUT = {
       .error_name            = "OB_WAIT_REPLAY_TIMEOUT",
@@ -14390,6 +14435,15 @@ static const _error _error_OB_TRANS_COMMIT_TOO_MUCH_TIME = {
       .str_error             = "Transaction commit cost too much",
       .str_user_error        = "Transaction commit cost too much"
 };
+static const _error _error_OB_TRANS_TOO_MANY_PARTICIPANTS = {
+      .error_name            = "OB_TRANS_TOO_MANY_PARTICIPANTS",
+      .error_cause           = "Internal Error",
+      .error_solution        = "Contact OceanBase Support",
+      .mysql_errno           = 6002,
+      .sqlstate              = "40000",
+      .str_error             = "too many transaction participants",
+      .str_user_error        = "too many transaction participants"
+};
 static const _error _error_OB_LOG_ALREADY_SPLIT = {
       .error_name            = "OB_LOG_ALREADY_SPLIT",
       .error_cause           = "Internal Error",
@@ -16738,6 +16792,15 @@ static const _error _error_OB_INVALID_LOG_ARCHIVE_STATUS = {
       .sqlstate              = "HY000",
       .str_error             = "log archive status is not valid",
       .str_user_error        = "log archive status is not valid"
+};
+static const _error _error_OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST = {
+      .error_name            = "OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST",
+      .error_cause           = "Internal Error",
+      .error_solution        = "Contact OceanBase Support",
+      .mysql_errno           = -1,
+      .sqlstate              = "HY000",
+      .str_error             = "Cannot add replica during set member list in restore",
+      .str_user_error        = "Cannot add replica during set member list in restore"
 };
 static const _error _error_OB_LOG_ARCHIVE_LEADER_CHANGED = {
       .error_name            = "OB_LOG_ARCHIVE_LEADER_CHANGED",
@@ -21792,7 +21855,9 @@ struct ObStrErrorInit
     _errors[-OB_ROOTSERVICE_EXIST] = &_error_OB_ROOTSERVICE_EXIST;
     _errors[-OB_RS_SHUTDOWN] = &_error_OB_RS_SHUTDOWN;
     _errors[-OB_SERVER_MIGRATE_IN_DENIED] = &_error_OB_SERVER_MIGRATE_IN_DENIED;
+    _errors[-OB_REBALANCE_TASK_CANT_EXEC] = &_error_OB_REBALANCE_TASK_CANT_EXEC;
     _errors[-OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT] = &_error_OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT;
+    _errors[-OB_REBALANCE_TASK_NOT_IN_PROGRESS] = &_error_OB_REBALANCE_TASK_NOT_IN_PROGRESS;
     _errors[-OB_DATA_SOURCE_NOT_EXIST] = &_error_OB_DATA_SOURCE_NOT_EXIST;
     _errors[-OB_DATA_SOURCE_TABLE_NOT_EXIST] = &_error_OB_DATA_SOURCE_TABLE_NOT_EXIST;
     _errors[-OB_DATA_SOURCE_RANGE_NOT_EXIST] = &_error_OB_DATA_SOURCE_RANGE_NOT_EXIST;
@@ -21895,7 +21960,9 @@ struct ObStrErrorInit
     _errors[-OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX] = &_error_OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX;
     _errors[-OB_ERR_ATLER_TABLE_ILLEGAL_FK] = &_error_OB_ERR_ATLER_TABLE_ILLEGAL_FK;
     _errors[-OB_LEADER_COORDINATOR_NEED_RETRY] = &_error_OB_LEADER_COORDINATOR_NEED_RETRY;
+    _errors[-OB_REBALANCE_TASK_NEED_RETRY] = &_error_OB_REBALANCE_TASK_NEED_RETRY;
     _errors[-OB_LS_NOT_EXIST] = &_error_OB_LS_NOT_EXIST;
+    _errors[-OB_TOO_MANY_TENANT_LS] = &_error_OB_TOO_MANY_TENANT_LS;
     _errors[-OB_LS_LOCATION_NOT_EXIST] = &_error_OB_LS_LOCATION_NOT_EXIST;
     _errors[-OB_LS_LOCATION_LEADER_NOT_EXIST] = &_error_OB_LS_LOCATION_LEADER_NOT_EXIST;
     _errors[-OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST] = &_error_OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST;
@@ -21915,6 +21982,7 @@ struct ObStrErrorInit
     _errors[-OB_LS_EXIST] = &_error_OB_LS_EXIST;
     _errors[-OB_DEVICE_EXIST] = &_error_OB_DEVICE_EXIST;
     _errors[-OB_DEVICE_NOT_EXIST] = &_error_OB_DEVICE_NOT_EXIST;
+    _errors[-OB_LS_REPLICA_TASK_RESULT_UNCERTAIN] = &_error_OB_LS_REPLICA_TASK_RESULT_UNCERTAIN;
     _errors[-OB_WAIT_REPLAY_TIMEOUT] = &_error_OB_WAIT_REPLAY_TIMEOUT;
     _errors[-OB_WAIT_TABLET_READY_TIMEOUT] = &_error_OB_WAIT_TABLET_READY_TIMEOUT;
     _errors[-OB_FREEZE_SERVICE_EPOCH_MISMATCH] = &_error_OB_FREEZE_SERVICE_EPOCH_MISMATCH;
@@ -22985,6 +23053,7 @@ struct ObStrErrorInit
     _errors[-OB_TRANS_FREE_ROUTE_NOT_SUPPORTED] = &_error_OB_TRANS_FREE_ROUTE_NOT_SUPPORTED;
     _errors[-OB_TRANS_LIVE_TOO_MUCH_TIME] = &_error_OB_TRANS_LIVE_TOO_MUCH_TIME;
     _errors[-OB_TRANS_COMMIT_TOO_MUCH_TIME] = &_error_OB_TRANS_COMMIT_TOO_MUCH_TIME;
+    _errors[-OB_TRANS_TOO_MANY_PARTICIPANTS] = &_error_OB_TRANS_TOO_MANY_PARTICIPANTS;
     _errors[-OB_LOG_ALREADY_SPLIT] = &_error_OB_LOG_ALREADY_SPLIT;
     _errors[-OB_ERR_UNSUPPROTED_REF_IN_JSON_SCHEMA] = &_error_OB_ERR_UNSUPPROTED_REF_IN_JSON_SCHEMA;
     _errors[-OB_ERR_TYPE_OF_JSON_SCHEMA] = &_error_OB_ERR_TYPE_OF_JSON_SCHEMA;
@@ -23246,6 +23315,7 @@ struct ObStrErrorInit
     _errors[-OB_RESTORE_INDEX_FAILED] = &_error_OB_RESTORE_INDEX_FAILED;
     _errors[-OB_BACKUP_IN_PROGRESS] = &_error_OB_BACKUP_IN_PROGRESS;
     _errors[-OB_INVALID_LOG_ARCHIVE_STATUS] = &_error_OB_INVALID_LOG_ARCHIVE_STATUS;
+    _errors[-OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST] = &_error_OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST;
     _errors[-OB_LOG_ARCHIVE_LEADER_CHANGED] = &_error_OB_LOG_ARCHIVE_LEADER_CHANGED;
     _errors[-OB_BACKUP_CAN_NOT_START] = &_error_OB_BACKUP_CAN_NOT_START;
     _errors[-OB_CANCEL_BACKUP_NOT_ALLOWED] = &_error_OB_CANCEL_BACKUP_NOT_ALLOWED;

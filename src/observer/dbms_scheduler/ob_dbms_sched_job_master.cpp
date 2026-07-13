@@ -20,7 +20,6 @@
 #include "ob_dbms_sched_job_executor.h"
 #include "share/ob_ex_rpc.h"
 #include "rootserver/ob_root_service.h"
-#include "storage/mview/ob_mview_sched_job_utils.h"
 #include "sql/session/ob_basic_session_info.h"
 #define TO_TS(second) (1000000L * second)
 namespace oceanbase
@@ -32,7 +31,6 @@ using namespace share::schema;
 using namespace rootserver;
 using namespace obutil;
 using namespace obcall;
-using namespace storage;
 
 namespace dbms_scheduler
 {
@@ -102,19 +100,7 @@ int64_t ObDBMSSchedJobMaster::calc_next_date(ObDBMSSchedJobInfo &job_info)
 {
   int64_t ret = 0;
   int64_t next_date = 0;
-  if (job_info.is_mview_job()
-      && !job_info.get_interval().empty()
-      && (0 != job_info.get_interval().case_compare("null"))) {
-    int64_t next_date_ts = 0;
-    int ret = OB_SUCCESS;
-    if (OB_FAIL(ObMViewSchedJobUtils::calc_date_expression(job_info, next_date_ts))) {
-      LOG_WARN("failed to calc date expression", KR(ret), K(job_info));
-      // error code is ignored
-      next_date = ObDBMSSchedJobInfo::DEFAULT_MAX_END_DATE;
-    } else {
-      next_date = next_date_ts;
-    }
-  } else if (OB_FAIL(ObDBMSSchedJobUtils::calc_dbms_sched_repeat_expr(job_info, next_date))) {
+  if (OB_FAIL(ObDBMSSchedJobUtils::calc_dbms_sched_repeat_expr(job_info, next_date))) {
     next_date = ObDBMSSchedJobInfo::DEFAULT_MAX_END_DATE;
     LOG_WARN("failed to calc next date", KR(ret), K(job_info));
   }

@@ -257,8 +257,6 @@ namespace share
   static const char* const OB_SV_COMPATIBILITY_VERSION = "ob_compatibility_version";
   static const char* const OB_SV_SECURITY_VERSION = "ob_security_version";
   static const char* const OB_SV_CARDINALITY_ESTIMATION_MODEL = "cardinality_estimation_model";
-  static const char* const OB_SV_QUERY_REWRITE_ENABLED = "query_rewrite_enabled";
-  static const char* const OB_SV_QUERY_REWRITE_INTEGRITY = "query_rewrite_integrity";
   static const char* const OB_SV_FLUSH = "flush";
   static const char* const OB_SV_FLUSH_TIME = "flush_time";
   static const char* const OB_SV_INNODB_ADAPTIVE_FLUSHING = "innodb_adaptive_flushing";
@@ -821,7 +819,6 @@ namespace share
   static const char* const OB_SV_PID_FILE = "pid_file";
   static const char* const OB_SV_PORT = "port";
   static const char* const OB_SV_SOCKET = "socket";
-  static const char* const OB_SV_MVIEW_REFRESH_DOP = "mview_refresh_dop";
   static const char* const OB_SV_ENABLE_OPTIMIZER_ROWGOAL = "enable_optimizer_rowgoal";
   static const char* const OB_SV_IVF_NPROBES = "ob_ivf_nprobes";
   static const char* const OB_SV__CURRENT_DEFAULT_CATALOG = "_current_default_catalog";

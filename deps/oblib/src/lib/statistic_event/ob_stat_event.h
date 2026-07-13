@@ -71,7 +71,7 @@ STAT_EVENT_ADD_DEF(TRANS_ROLLBACK_TIME, "trans rollback time", ObStatClassIds::T
 STAT_EVENT_ADD_DEF(TRANS_TIMEOUT_COUNT, "trans timeout count", ObStatClassIds::TRANS, 30011, false, true, true)
 STAT_EVENT_ADD_DEF(TRANS_LOCAL_COUNT, "trans local trans count", ObStatClassIds::TRANS, 30012, false, true, true)
 STAT_EVENT_ADD_DEF(TRANS_DIST_COUNT, "trans distribute trans count", ObStatClassIds::TRANS, 30013, false, true, true)
-STAT_EVENT_ADD_DEF(TRANS_READONLY_COUNT, "trans without write participant count", ObStatClassIds::TRANS, 30017, false, true, true)
+STAT_EVENT_ADD_DEF(TRANS_READONLY_COUNT, "trans without participant count", ObStatClassIds::TRANS, 30017, false, true, true)
 STAT_EVENT_ADD_DEF(REDO_LOG_REPLAY_COUNT, "redo log replay count", ObStatClassIds::TRANS, 30018, false, true, true)
 STAT_EVENT_ADD_DEF(REDO_LOG_REPLAY_TIME, "redo log replay time", ObStatClassIds::TRANS, 30019, false, true, true)
 STAT_EVENT_ADD_DEF(PREPARE_LOG_REPLAY_COUNT, "prepare log replay count", ObStatClassIds::TRANS, 30020, false, true, true)
@@ -223,6 +223,8 @@ STAT_EVENT_ADD_DEF(FUSE_ROW_CACHE_HIT, "fuse row cache hit", ObStatClassIds::CAC
 STAT_EVENT_ADD_DEF(FUSE_ROW_CACHE_MISS, "fuse row cache miss", ObStatClassIds::CACHE, 50034, true, true, true)
 STAT_EVENT_ADD_DEF(SCHEMA_CACHE_HIT, "schema cache hit", ObStatClassIds::CACHE, 50035, false, true, true)
 STAT_EVENT_ADD_DEF(SCHEMA_CACHE_MISS, "schema cache miss", ObStatClassIds::CACHE, 50036, false, true, true)
+STAT_EVENT_ADD_DEF(TABLET_LS_CACHE_HIT, "tablet ls cache hit", ObStatClassIds::CACHE, 50037, false, true, true)
+STAT_EVENT_ADD_DEF(TABLET_LS_CACHE_MISS, "tablet ls cache miss", ObStatClassIds::CACHE, 50038, false, true, true)
 // obsoleted part from INDEX_CLOG_CACHE_HIT to USER_TABLE_STAT_CACHE_MISS
 STAT_EVENT_ADD_DEF(INDEX_CLOG_CACHE_HIT, "index clog cache hit", ObStatClassIds::CACHE, 50039, false, true, true)
 STAT_EVENT_ADD_DEF(INDEX_CLOG_CACHE_MISS, "index clog cache miss", ObStatClassIds::CACHE, 50040, false, true, true)
@@ -503,6 +505,7 @@ STAT_EVENT_SET_DEF(STANDBY_FETCH_LOG_BANDWIDTH_LIMIT, "standby fetch log bandwid
 // SQL
 
 // CACHE
+STAT_EVENT_SET_DEF(TABLET_LS_CACHE_SIZE, "tablet ls cache size", ObStatClassIds::CACHE, 120001, false, true, true)
 STAT_EVENT_SET_DEF(OPT_TAB_STAT_CACHE_SIZE, "table stat cache size", ObStatClassIds::CACHE, 120002, false, true, true)
 STAT_EVENT_SET_DEF(OPT_TAB_COL_STAT_CACHE_SIZE, "table col stat cache size", ObStatClassIds::CACHE, 120003, false, true, true)
 STAT_EVENT_SET_DEF(INDEX_BLOCK_CACHE_SIZE, "index block cache size", ObStatClassIds::CACHE, 120004, false, true, true)

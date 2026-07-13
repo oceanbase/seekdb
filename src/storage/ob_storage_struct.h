@@ -31,7 +31,7 @@
 #include "storage/compaction/ob_compaction_util.h"
 #include "storage/compaction/ob_medium_compaction_mgr.h"
 #include "storage/ddl/ob_ddl_struct.h"
-#include "storage/ob_tablet_restore_state.h"
+#include "storage/ob_tablet_ha_status.h"
 #include "storage/blocksstable/ob_major_checksum_info.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
 
@@ -50,6 +50,7 @@ struct ObDiagnoseLocation;
 namespace storage
 {
 class ObStorageSchema;
+struct ObMigrationTabletParam;
 
 typedef common::ObSEArray<common::ObStoreRowkey, common::OB_DEFAULT_MULTI_GET_ROWKEY_NUM> GetRowkeyArray;
 typedef common::ObSEArray<common::ObStoreRange, common::OB_DEFAULT_MULTI_GET_ROWKEY_NUM> ScanRangeArray;
@@ -133,6 +134,49 @@ inline bool is_migrate_status_in_service(const ObMigrateStatus migrate_status)
       ||  OB_MIGRATE_STATUS_CHANGE == migrate_status
       ||  OB_MIGRATE_STATUS_COPY_GLOBAL_INDEX == migrate_status
       ||  OB_MIGRATE_STATUS_COPY_LOCAL_INDEX == migrate_status;
+}
+
+enum ObReplicaOpType
+{
+  ADD_REPLICA_OP = 1,
+  MIGRATE_REPLICA_OP = 2,
+  REBUILD_REPLICA_OP = 3,
+  CHANGE_REPLICA_OP = 4,
+  REMOVE_REPLICA_OP = 5,
+  RESTORE_REPLICA_OP = 6,
+  COPY_GLOBAL_INDEX_OP = 7,
+  COPY_LOCAL_INDEX_OP = 8,
+  RESTORE_FOLLOWER_REPLICA_OP = 9,
+  BACKUP_REPLICA_OP = 10,
+  RESTORE_STANDBY_OP = 11,
+  VALIDATE_BACKUP_OP = 12,
+  FAST_MIGRATE_REPLICA_OP = 13,
+  LINK_SHARE_MAJOR_OP = 14, //share major only for read-only replica in ofs-mode.
+  BACKUP_BACKUPSET_OP = 15,
+  BACKUP_ARCHIVELOG_OP = 16,
+  UNKNOWN_REPLICA_OP,
+};
+
+inline bool is_replica_op_valid(const ObReplicaOpType replica_op)
+{
+  return replica_op >= ADD_REPLICA_OP && replica_op < UNKNOWN_REPLICA_OP;
+}
+
+inline bool need_copy_split_state(const ObReplicaOpType replica_op)
+{
+  return COPY_GLOBAL_INDEX_OP != replica_op && COPY_LOCAL_INDEX_OP != replica_op;
+}
+
+inline bool need_migrate_trans_table(const ObReplicaOpType replica_op)
+{
+  return REBUILD_REPLICA_OP == replica_op
+      || CHANGE_REPLICA_OP == replica_op
+      || ADD_REPLICA_OP == replica_op
+      || MIGRATE_REPLICA_OP == replica_op
+      || FAST_MIGRATE_REPLICA_OP == replica_op
+      || RESTORE_REPLICA_OP == replica_op
+      || RESTORE_FOLLOWER_REPLICA_OP == replica_op
+      || RESTORE_STANDBY_OP == replica_op;
 }
 
 struct ObTabletReportStatus
@@ -366,6 +410,7 @@ struct ObUpdateTableStoreParam
     const int64_t snapshot_version,
     const int64_t multi_version_start,
     const ObStorageSchema *storage_schema,
+    const int64_t rebuild_seq,
     const blocksstable::ObSSTable *sstable = NULL,
     const bool allow_duplicate_sstable = false,
     const bool need_wait_check_flag = true);
@@ -373,6 +418,7 @@ struct ObUpdateTableStoreParam
     const int64_t snapshot_version,
     const int64_t multi_version_start,
     const ObStorageSchema *storage_schema,
+    const int64_t rebuild_seq,
     const UpdateUpperTransParam upper_trans_param);
   int init_with_compaction_info(
     const ObCompactionTableStoreParam &comp_param,
@@ -396,7 +442,7 @@ struct ObUpdateTableStoreParam
   #undef HA_PARAM_FUNC
   #undef PARAM_DEFINE_FUNC
   TO_STRING_KV(KP_(sstable), K_(snapshot_version), K_(multi_version_start),
-               KPC_(storage_schema),
+               KPC_(storage_schema), K_(rebuild_seq),
                K_(compaction_info), K_(ha_info),
                K_(ddl_info), K_(allow_duplicate_sstable), K_(upper_trans_param));
   ObCompactionTableStoreParam compaction_info_;
@@ -406,6 +452,7 @@ struct ObUpdateTableStoreParam
   int64_t snapshot_version_;
   int64_t multi_version_start_;
   const ObStorageSchema *storage_schema_;
+  int64_t rebuild_seq_;
   const blocksstable::ObSSTable *sstable_;
   bool allow_duplicate_sstable_;
   UpdateUpperTransParam upper_trans_param_; // set upper_trans_param_ only when update upper_trans_version
@@ -451,16 +498,21 @@ struct ObBatchUpdateTableStoreParam final
   bool is_valid() const;
   void reset();
 
-  TO_STRING_KV(K_(tables_handle),
-      KP_(storage_schema), K_(tablet_split_param), K_(tablet_fork_param), K_(release_mds_scn));
+  TO_STRING_KV(K_(tables_handle), K_(rebuild_seq),
+      K_(start_scn), KP_(tablet_meta), K_(restore_status), K_(tablet_split_param),
+      K_(tablet_fork_param), K_(need_replace_remote_sstable), K_(release_mds_scn));
 
   ObTablesHandleArray tables_handle_;
 #ifdef ERRSIM
   ObErrsimBackfillPoint errsim_point_info_;
 #endif
-  const ObStorageSchema *storage_schema_;
+  int64_t rebuild_seq_;
+  share::SCN start_scn_;
+  const ObMigrationTabletParam *tablet_meta_;
+  ObTabletRestoreStatus::STATUS restore_status_;
   ObSplitTableStoreParam tablet_split_param_;
   ObForkTableStoreParam tablet_fork_param_;
+  bool need_replace_remote_sstable_;
   share::SCN release_mds_scn_;
 
   DISALLOW_COPY_AND_ASSIGN(ObBatchUpdateTableStoreParam);

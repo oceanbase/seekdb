@@ -699,9 +699,6 @@ int ObSchemaChecker::get_table_schema( const ObString &database_name,
              && OB_INVALID_ID != schema_mgr_->get_session_id()) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(database_name), helper.convert(table_name));
-  } else if (table->is_materialized_view() && !(table->mv_available())) {
-    ret = OB_TABLE_NOT_EXIST;
-    LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(database_name), helper.convert(table_name));
   } else {
     table_schema = table;
   }
@@ -791,19 +788,6 @@ int ObSchemaChecker::get_table_schema(
         LOG_USER_ERROR(OB_TABLE_NOT_EXIST, db_schema->get_database_name(),
             helper.convert(table_name));
       }
-    } else if (table->is_materialized_view() && !(table->mv_available())) {
-      const ObDatabaseSchema *db_schema = NULL;
-      if (OB_FAIL(schema_mgr_->get_database_schema( database_id, db_schema))) {
-        LOG_WARN("get database schema failed", K(database_id), K(ret));
-      } else if (NULL == db_schema) {
-        ret = OB_ERR_BAD_DATABASE;
-        LOG_WARN("fail to get database schema", K(database_id), K(ret));
-      } else {
-        ret = OB_TABLE_NOT_EXIST;
-        ObCStringHelper helper;
-        LOG_USER_ERROR(OB_TABLE_NOT_EXIST, db_schema->get_database_name(),
-                       helper.convert(table_name));
-      }
     } else {
       table_schema = table;
     }
@@ -892,8 +876,7 @@ int ObSchemaChecker::check_if_partition_key(uint64_t table_id, uint64_t column_i
 int ObSchemaChecker::get_can_read_index_array(
     uint64_t table_id,
     uint64_t *index_tid_array,
-    int64_t &size,
-    bool with_mv) const
+    int64_t &size) const
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
@@ -904,13 +887,13 @@ int ObSchemaChecker::get_can_read_index_array(
     LOG_WARN("invalid arguments", K(table_id), K(size), K(index_tid_array), K(ret));
   } else if (OB_NOT_NULL(sql_schema_mgr_)) {
     if (OB_FAIL(sql_schema_mgr_->get_can_read_index_array(
-                table_id, index_tid_array, size, with_mv,
+                table_id, index_tid_array, size,
                 true /* with_global_index*/, true /* with_domin_index*/, false /* with_spatial_index*/))) {
       LOG_WARN("failed to get_can_read_index_array", K(table_id), K(ret));
     }
   } else {
     if (OB_FAIL(schema_mgr_->get_can_read_index_array(
-        table_id, index_tid_array, size, with_mv))) {
+        table_id, index_tid_array, size))) {
       LOG_WARN("failed to get_can_read_index_array", K(table_id), K(ret));
     }
   }
@@ -920,8 +903,7 @@ int ObSchemaChecker::get_can_read_index_array(
 int ObSchemaChecker::get_can_write_index_array(uint64_t table_id,
                                                uint64_t *index_tid_array,
                                                int64_t &size,
-                                               bool only_global,
-                                               bool with_mlog) const
+                                               bool only_global) const
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
@@ -930,7 +912,7 @@ int ObSchemaChecker::get_can_write_index_array(uint64_t table_id,
   } else if (OB_UNLIKELY(OB_INVALID_ID == table_id || size <= 0) || OB_ISNULL(index_tid_array)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(table_id), K(size), K(index_tid_array), K(ret));
-  } else if (OB_FAIL(schema_mgr_->get_can_write_index_array(table_id, index_tid_array, size, only_global, with_mlog))) {
+  } else if (OB_FAIL(schema_mgr_->get_can_write_index_array(table_id, index_tid_array, size, only_global))) {
     LOG_WARN("failed to get_can_write_index_array", K(table_id), K(ret));
   } else {}
   return ret;
@@ -1010,7 +992,7 @@ int ObSchemaChecker::check_column_has_index(uint64_t table_id, uint64_t column_i
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("schema checker is not inited", K(is_inited_), K(ret));
-  } else if (OB_FAIL(get_can_read_index_array(table_id, index_tid_array, index_cnt, true))) {
+  } else if (OB_FAIL(get_can_read_index_array(table_id, index_tid_array, index_cnt))) {
     LOG_WARN("get table schema failed", K(table_id));
   }
   for (int64_t i = 0; OB_SUCC(ret) && !has_index && i < index_cnt; ++i) {

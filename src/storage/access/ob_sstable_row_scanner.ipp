@@ -131,7 +131,6 @@ inline bool ObSSTableRowScanner<PrefetchType>::can_batch_scan() const
   return can_blockscan() &&
       !block_row_store_->is_disabled() &&
       micro_scanner_->is_filter_applied() &&
-      !access_ctx_->is_mview_query() &&
       // can batch scan when only enable_pd_aggregate, as it uses own datum buffer and only return aggregated result
       (iter_param_->vectorized_enabled_ || iter_param_->enable_pd_aggregate());
 }

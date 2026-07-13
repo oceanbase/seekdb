@@ -113,7 +113,6 @@ ObDDLResolver::ObDDLResolver(ObResolverParams &params)
     mocked_external_table_column_ids_(),
     index_params_(),
     table_organization_(ObTableOrganizationType::OB_ORGANIZATION_INVALID),
-    mv_refresh_dop_(0),
     vec_column_name_(),
     vec_index_type_(INDEX_TYPE_MAX),
     enable_macro_block_bloom_filter_(false),
@@ -262,31 +261,6 @@ int ObDDLResolver::get_part_str_with_type(
                                          func_str.ptr()))) {
     LOG_WARN("Failed to append part str", K(ret));
   } else { }//do nothing
-  return ret;
-}
-
-int ObDDLResolver::get_mv_container_table(
-    const uint64_t mv_container_table_id,
-    const share::schema::ObTableSchema *&mv_container_table_schema,
-    common::ObString &mv_container_table_name)
-{
-  int ret = OB_SUCCESS;
-  mv_container_table_schema = nullptr;
-  mv_container_table_name.reset();
-  if (OB_UNLIKELY(OB_INVALID_ID == mv_container_table_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(mv_container_table_id));
-  } else if (OB_UNLIKELY(nullptr == schema_checker_ || nullptr == allocator_)) {
-    ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("schema checker or allocator can not be NULL", KR(ret), KP(schema_checker_), KP(allocator_));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(mv_container_table_id, mv_container_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(mv_container_table_id));
-  } else if (OB_ISNULL(mv_container_table_schema)) {
-    ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table schema is NULL", KR(ret), K(mv_container_table_id));
-  } else if (OB_FAIL(ob_write_string(*allocator_, mv_container_table_schema->get_table_name(), mv_container_table_name))) {
-    LOG_WARN("fail to deep copy table name", KR(ret));
-  }
   return ret;
 }
 
@@ -2282,7 +2256,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
                 K(ret));
           } else {
             table_dop_ = table_dop;
-            mv_refresh_dop_ = table_dop;
           }
         }
         if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
@@ -4273,7 +4246,6 @@ void ObDDLResolver::reset() {
   lob_inrow_threshold_ = OB_DEFAULT_LOB_INROW_THRESHOLD;
   auto_increment_cache_size_ = 0;
   index_params_.reset();
-  mv_refresh_dop_ = 0;
   enable_macro_block_bloom_filter_ = false;
   semistruct_encoding_type_.reset();
   dynamic_partition_policy_.reset();

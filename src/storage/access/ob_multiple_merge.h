@@ -70,7 +70,6 @@ public:
   virtual void reuse();
   // used for global cached query iterator
   virtual void reclaim();
-  // used for mview table scan
   virtual int open(ObTableScanRange &table_scan_range) { return OB_NOT_SUPPORTED; }
 
   void disable_padding() { need_padding_ = false; }
@@ -175,8 +174,8 @@ protected:
   int64_t di_base_curr_scan_index_;
   int64_t major_table_version_;
   bool need_padding_;
-  bool need_fill_default_; // disabled by join mv scan
-  bool need_fill_virtual_columns_; // disabled by join mv scan
+  bool need_fill_default_;
+  bool need_fill_virtual_columns_;
   bool need_output_row_with_nop_; // for sampling increment data
   bool inited_;
   bool iter_del_row_;

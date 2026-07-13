@@ -170,14 +170,6 @@ int ObDirectLoadOptimizerCtx::init_direct_load_ctx(
       }
       if (OB_FAIL(ret)) {
       } else if (load_method_ != ObDirectLoadMethod::INVALID_METHOD) {
-        if (session_info->get_ddl_info().is_mview_complete_refresh()) {
-          if (insert_mode_ == ObDirectLoadInsertMode::INC_REPLACE) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected mview complete refresh enable inc replace", K(ret));
-          } else {
-            insert_mode_ = ObDirectLoadInsertMode::OVERWRITE;
-          }
-        }
         if (OB_SUCC(ret)) {
           const TableItem *table_item = stmt.get_table_item(0);
           if (OB_ISNULL(table_item)) {
@@ -214,11 +206,7 @@ int ObDirectLoadOptimizerCtx::init_direct_load_ctx(
       }
       if (OB_SUCC(ret)) {
         if (!can_use_direct_load()) {
-          if (session_info->get_ddl_info().is_mview_complete_refresh()) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "mview complete refresh using non-direct insert is");
-            LOG_WARN("mview complete refresh using non-direct insert is not support", KR(ret));
-          } else if (stmt.is_normal_table_overwrite()) {
+          if (stmt.is_normal_table_overwrite()) {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "normal table overwrite using non-direct insert is");
             LOG_WARN("normal table overwrite using non-direct insert is not support", KR(ret));
@@ -400,8 +388,6 @@ int ObDirectLoadOptimizerCtx::check_direct_load_allow_fallback(
   if (OB_ISNULL(session_info = exec_ctx->get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected session info is null", K(ret));
-  } else if (session_info->get_ddl_info().is_mview_complete_refresh()) {
-    allow_fallback = false;
   } else if (optimize_ctx.is_insert_overwrite()) {
     allow_fallback = false;
   } else {

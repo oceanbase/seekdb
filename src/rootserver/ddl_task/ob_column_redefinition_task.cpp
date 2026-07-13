@@ -199,8 +199,8 @@ int ObColumnRedefinitionTask::copy_table_indexes()
     if (has_rebuild_index_) {
     } else if (OB_ISNULL(GCTX.sql_proxy_) ) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(ObDDLTaskRecordOperator::get_create_index_or_mlog_task_cnt(*GCTX.sql_proxy_, target_object_id_, active_task_cnt))) {
-      LOG_WARN("failed to check index or mlog task cnt", K(ret));
+    } else if (OB_FAIL(ObDDLTaskRecordOperator::get_create_index_task_cnt(*GCTX.sql_proxy_, target_object_id_, active_task_cnt))) {
+      LOG_WARN("failed to check index task cnt", K(ret));
     } else if (active_task_cnt >= MAX_ACTIVE_TASK_CNT) {
       ret = OB_EAGAIN;
     } else {
@@ -738,7 +738,7 @@ int ObColumnRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
                                     MAX_LONG_OPS_MESSAGE_LENGTH,
                                     pos,
                                     "STATUS: REPLICA BUILD, PARALLELISM: %ld, INITIALIZING",
-                                    ObDDLUtil::get_real_parallelism(parallelism_, false/*is mv refresh*/)))) {
+                                    ObDDLUtil::get_real_parallelism(parallelism_)))) {
           LOG_WARN("failed to print", K(ret));
         }
       } else if (OB_FAIL(replica_builder_.get_progress(row_inserted, physical_row_count_, percent))) {
@@ -747,7 +747,7 @@ int ObColumnRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
                                   MAX_LONG_OPS_MESSAGE_LENGTH,
                                   pos,
                                   "STATUS: REPLICA BUILD, PARALLELISM: %ld, ESTIMATED_TOTAL_ROWS: %ld, ROW_PROCESSED: %ld, PROGRESS: %0.2lf%%",
-                                  ObDDLUtil::get_real_parallelism(parallelism_, false/*is mv refresh*/),
+                                  ObDDLUtil::get_real_parallelism(parallelism_),
                                   physical_row_count_,
                                   row_inserted,
                                   percent))) {

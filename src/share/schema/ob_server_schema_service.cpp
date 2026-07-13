@@ -3695,11 +3695,9 @@ bool ObServerSchemaService::need_construct_aux_infos_(
 {
   bool bret = true;
   if (table_schema.is_index_table()
-      || (table_schema.is_view_table()
-           && !table_schema.is_materialized_view())
-       || table_schema.is_aux_vp_table()
-       || table_schema.is_aux_lob_table()
-       || table_schema.is_mlog_table()) {
+      || table_schema.is_view_table()
+      || table_schema.is_aux_vp_table()
+      || table_schema.is_aux_lob_table()) {
     bret = false;
   }
   return bret;
@@ -3738,12 +3736,6 @@ int ObServerSchemaService::construct_aux_infos_(
       } else if (AUX_VERTIAL_PARTITION_TABLE == aux_table_meta.table_type_) {
         if (OB_FAIL(table_schema.add_aux_vp_tid(aux_table_meta.table_id_))) {
           LOG_WARN("add aux vp table id failed", KR(ret), K(aux_table_meta));
-        }
-      } else if (MATERIALIZED_VIEW_LOG == aux_table_meta.table_type_) {
-        if (aux_table_meta.is_tmp_mlog_) {
-          table_schema.set_tmp_mlog_tid(aux_table_meta.table_id_);
-        } else {
-          table_schema.set_mlog_tid(aux_table_meta.table_id_);
         }
       }
     } // end FOREACH_CNT_X

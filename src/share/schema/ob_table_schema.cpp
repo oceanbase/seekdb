@@ -95,31 +95,6 @@ bool ObTableMode::is_valid() const
 OB_SERIALIZE_MEMBER_SIMPLE(ObTableMode,
                            mode_);
 
-bool ObMvMode::is_valid() const
-{
-  bool bret = true;
-  // reserve for new flags
-  return bret;
-}
-
-int ObMvMode::assign(const ObMvMode &other)
-{
-  int ret = OB_SUCCESS;
-  mode_ = other.mode_;
-  return ret;
-}
-
-ObMvMode & ObMvMode::operator=(const ObMvMode &other)
-{
-  if (this != &other) {
-    mode_ = other.mode_;
-  }
-  return *this;
-}
-
-OB_SERIALIZE_MEMBER_SIMPLE(ObMvMode,
-                           mode_);
-
 OB_SERIALIZE_MEMBER_SIMPLE(ObSemiStructEncodingType,
                            flags_);
 
@@ -386,8 +361,7 @@ bool ObSimpleTableSchemaV2::is_valid() const
       LOG_WARN("invalid argument", K(table_id_), K(schema_version_), K(database_id_), K(table_name_));
     } else if (is_index_table()
         || is_aux_vp_table()
-        || is_aux_lob_table()
-        || is_mlog_table()) {
+        || is_aux_lob_table()) {
       if (OB_INVALID_ID == data_table_id_) {
         ret = false;
         LOG_WARN("invalid data table_id", K(ret), K(data_table_id_));
@@ -1298,8 +1272,7 @@ int ObSimpleTableSchemaV2::check_if_tablet_exists(const ObTabletID &tablet_id, b
 
 ObTableSchema::ObTableSchema()
     : ObSimpleTableSchemaV2(),
-      parser_properties_(),
-      local_session_vars_(get_allocator())
+      parser_properties_()
 {
   reset();
 }
@@ -1308,7 +1281,6 @@ ObTableSchema::ObTableSchema(ObIAllocator *allocator)
   : ObSimpleTableSchemaV2(allocator),
     parser_properties_(),
     view_schema_(allocator),
-    base_table_ids_(SCHEMA_SMALL_MALLOC_BLOCK_SIZE, ModulePageAllocator(*allocator)),
     depend_table_ids_(SCHEMA_SMALL_MALLOC_BLOCK_SIZE, ModulePageAllocator(*allocator)),
     simple_index_infos_(SCHEMA_MID_MALLOC_BLOCK_SIZE, ModulePageAllocator(*allocator)),
     aux_vp_tid_array_(SCHEMA_SMALL_MALLOC_BLOCK_SIZE, ModulePageAllocator(*allocator)),
@@ -1325,7 +1297,6 @@ ObTableSchema::ObTableSchema(ObIAllocator *allocator)
     micro_block_format_version_(storage::ObMicroBlockFormatVersionHelper::DEFAULT_VERSION),
     micro_index_clustered_(false),
     enable_macro_block_bloom_filter_(false),
-    local_session_vars_(allocator),
     index_params_(),
     exec_env_(),
     storage_cache_policy_(),
@@ -1408,11 +1379,9 @@ int ObTableSchema::assign(const ObTableSchema &src_schema)
       auto_increment_cache_size_ = src_schema.auto_increment_cache_size_;
       micro_index_clustered_ = src_schema.micro_index_clustered_;
       enable_macro_block_bloom_filter_ = src_schema.enable_macro_block_bloom_filter_;
-      mlog_tid_ = src_schema.mlog_tid_;
       catalog_id_ = src_schema.catalog_id_;
       merge_engine_type_ = src_schema.merge_engine_type_;
       external_location_id_ = src_schema.external_location_id_;
-      tmp_mlog_tid_ = src_schema.tmp_mlog_tid_;
       if (OB_FAIL(deep_copy_str(src_schema.tablegroup_name_, tablegroup_name_))) {
         LOG_WARN("Fail to deep copy tablegroup_name", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
@@ -1445,16 +1414,10 @@ int ObTableSchema::assign(const ObTableSchema &src_schema)
         view_schema_ = src_schema.view_schema_;
         if (OB_FAIL(view_schema_.get_err_ret())) {
           LOG_WARN("fail to assign view schema", K(ret), K_(view_schema), K(src_schema.view_schema_));
-        } else if (OB_FAIL(local_session_vars_.deep_copy(src_schema.local_session_vars_))) {
-          LOG_WARN("fail to deep copy sys var info", K(ret));
         }
       }
 
       if (FAILEDx(aux_vp_tid_array_.assign(src_schema.aux_vp_tid_array_))) {
-        LOG_WARN("fail to assign array", K(ret));
-      }
-
-      if (FAILEDx(base_table_ids_.assign(src_schema.base_table_ids_))) {
         LOG_WARN("fail to assign array", K(ret));
       }
 
@@ -1464,10 +1427,6 @@ int ObTableSchema::assign(const ObTableSchema &src_schema)
 
       if (FAILEDx(depend_mock_fk_parent_table_ids_.assign(src_schema.depend_mock_fk_parent_table_ids_))) {
         LOG_WARN("fail to assign depend_mock_fk_parent_table_ids_ array", K(ret));
-      }
-
-      if (FAILEDx(mv_mode_.assign(src_schema.mv_mode_))) {
-        LOG_WARN("fail to assign mv_mode", K(ret));
       }
 
       //copy columns
@@ -1722,7 +1681,6 @@ int ObTableSchema::check_valid(const bool count_varchar_size_by_byte) const
 
   if (OB_FAIL(ret) || is_view_table()) {
     // no need checking other options for view
-    // XIYU: TODO for materialized view
   } else {
     if (is_virtual_table(table_id_) && 0 > rowkey_column_num_) {
       ret = OB_INVALID_ERROR;
@@ -2770,16 +2728,6 @@ const ObColumnSchemaV2 *ObTableSchema::get_column_schema(const uint64_t column_i
   return column;
 }
 
-const ObColumnSchemaV2 *ObTableSchema::get_column_schema(uint64_t table_id, uint64_t column_id) const
-{
-  uint64_t col_id = column_id;
-  if (has_depend_table(table_id)) {
-    col_id = gen_materialized_view_column_id(column_id);
-  }
-  const ObColumnSchemaV2 *column = get_column_schema_by_id_internal(ObColumnIdKey(col_id));
-  return column;
-}
-
 ObColumnSchemaV2 *ObTableSchema::get_column_schema(const uint64_t column_id)
 {
   ObColumnSchemaV2 *column = get_column_schema_by_id_internal(ObColumnIdKey(column_id));
@@ -2879,35 +2827,6 @@ const ObColumnSchemaV2 *ObTableSchema::get_column_schema_by_prev_next_id(
 }
 
 
-uint64_t ObTableSchema::gen_materialized_view_column_id(uint64_t column_id)
-{
-  uint64_t mv_col_id = column_id + OB_MIN_MV_COLUMN_ID;
-  return mv_col_id;
-}
-
-
-uint64_t ObTableSchema::gen_mlog_col_id_from_ref_col_id(const uint64_t column_id)
-{
-  uint64_t mlog_col_id = column_id;
-  if (OB_HIDDEN_PK_INCREMENT_COLUMN_ID == column_id) {
-    mlog_col_id = OB_MLOG_ROWID_COLUMN_ID;
-  }
-  return mlog_col_id;
-}
-
-uint64_t ObTableSchema::gen_ref_col_id_from_mlog_col_id(const uint64_t column_id)
-{
-  uint64_t ref_col_id = column_id;
-  if (OB_MLOG_ROWID_COLUMN_ID == column_id) {
-    ref_col_id = OB_HIDDEN_PK_INCREMENT_COLUMN_ID;
-  }
-  return ref_col_id;
-}
-
-//
-//  for mv, check it contains tabile_id in it's view define
-//
-
 bool ObTableSchema::is_drop_index() const {
   return 0 != (index_attributes_set_ & ((uint64_t)(1) << INDEX_DROP_INDEX));
 }
@@ -2924,38 +2843,6 @@ bool ObTableSchema::is_invisible_before() const {
 void ObTableSchema::set_invisible_before(const uint64_t invisible_before) {
   index_attributes_set_ &= ~((uint64_t)(1) << INDEX_VISIBILITY_SET_BEFORE);
   index_attributes_set_ |= invisible_before << INDEX_VISIBILITY_SET_BEFORE;
-}
-
-bool ObTableSchema::has_depend_table(uint64_t table_id) const
-{
-  bool has = false;
-  for (int64_t i = 0; i < depend_table_ids_.count() && !has; i++) {
-    if (table_id == depend_table_ids_.at(i)) {
-      has = true;
-    }
-  }
-  return has;
-}
-
-// for baihua:
-// Convert columns to dependent table columns
-// For a given column,
-// - If the table does not have mv, the returned table_id is the table_id of the table, and col_id is the incoming col_id,
-// - If the table has mv, but the given column is a non-dependent table column, the returned table_id is the table_id of this table,
-//  and the col_id is the passed col_id
-// - If the table has mv, and the given column is a dependent column, the returned table_id is the column of the dependent table,
-//  and col_id is the original column of the dependent table mapping
-
-bool ObTableSchema::is_depend_column(uint64_t column_id) const
-{
-  bool is_depend = false;
-  if (is_materialized_view() &&
-      column_id > OB_MIN_MV_COLUMN_ID &&
-      column_id < OB_MIN_SHADOW_COLUMN_ID &&
-      get_column_schema_by_id_internal(column_id)) {
-    is_depend = true;
-  }
-  return is_depend;
 }
 
 const ObColumnSchemaV2 *ObTableSchema::get_fulltext_column(const ColumnReferenceSet &column_set) const
@@ -3008,7 +2895,6 @@ int64_t ObTableSchema::get_convert_size() const
   convert_size += parser_properties_.length() + 1;
   convert_size += view_schema_.get_convert_size() - sizeof(view_schema_);
   convert_size += aux_vp_tid_array_.get_data_size();
-  convert_size += base_table_ids_.get_data_size();
   convert_size += depend_table_ids_.get_data_size();
   convert_size += depend_mock_fk_parent_table_ids_.get_data_size();
   convert_size += rowkey_info_.get_convert_size() - sizeof(rowkey_info_);
@@ -3048,7 +2934,6 @@ int64_t ObTableSchema::get_convert_size() const
   convert_size += ttl_definition_.length() + 1;
   convert_size += index_params_.length() + 1;
 
-  convert_size += local_session_vars_.get_deep_copy_size();
   convert_size += external_properties_.length() + 1;
   convert_size += storage_cache_policy_.length() + 1;
   convert_size += semistruct_encoding_type_.get_deep_copy_size();
@@ -3101,7 +2986,6 @@ void ObTableSchema::reset()
 
   aux_vp_tid_array_.reset();
 
-  base_table_ids_.reset();
   depend_table_ids_.reset();
   depend_mock_fk_parent_table_ids_.reset();
 
@@ -3144,10 +3028,6 @@ void ObTableSchema::reset()
   lob_inrow_threshold_ = OB_DEFAULT_LOB_INROW_THRESHOLD;
   auto_increment_cache_size_ = 0;
 
-  mlog_tid_ = OB_INVALID_ID;
-  tmp_mlog_tid_ = OB_INVALID_ID;
-  local_session_vars_.reset();
-  mv_mode_.reset();
   storage_cache_policy_.reset();
   semistruct_encoding_type_.reset();
   dynamic_partition_policy_.reset();
@@ -5841,18 +5721,6 @@ int ObSimpleTableSchemaV2::generate_origin_index_name()
   return ret;
 }
 
-int ObSimpleTableSchemaV2::get_mlog_name(ObString &mlog_name) const
-{
-  int ret = OB_SUCCESS;
-  if (!is_mlog_table()) {
-    ret = OB_SCHEMA_ERROR;
-    LOG_WARN("table is not materialized view log", KR(ret));
-  } else {
-    mlog_name = table_name_;
-  }
-  return ret;
-}
-
 int ObTableSchema::get_generated_column_by_define(const ObString &col_def,
                                                   const bool only_hidden_column,
                                                   ObColumnSchemaV2 *&gen_col)
@@ -5919,7 +5787,6 @@ int64_t ObTableSchema::to_string(char *buf, const int64_t buf_len) const
     K_(auto_increment),
     K_(read_only),
     K_(simple_index_infos),
-    K_(base_table_ids),
     //K_(depend_table_ids),
     //K_(join_types),
     //K_(join_conds),
@@ -5936,9 +5803,7 @@ int64_t ObTableSchema::to_string(char *buf, const int64_t buf_len) const
     K_(aux_lob_piece_tid),
     K_(name_generated_type),
     K_(lob_inrow_threshold),
-    K_(mlog_tid),
     K_(auto_increment_cache_size),
-    K_(local_session_vars),
     K_(index_params),
     K_(exec_env),
     K_(storage_cache_policy),
@@ -5993,7 +5858,6 @@ bool ObTableSchema::same_subpartitions(const ObTableSchema &other) const
 OB_DEF_SERIALIZE(ObTableSchema)
 {
   int ret = OB_SUCCESS;
-  ObSArray<int64_t> mv_table_ids;
   int64_t aux_vp_tid_array_count = aux_vp_tid_array_.count();
 
   // !!! begin static check
@@ -6047,7 +5911,6 @@ OB_DEF_SERIALIZE(ObTableSchema)
   OB_UNIS_ENCODE(index_attributes_set_);
   OB_UNIS_ENCODE(parser_name_);
   OB_UNIS_ENCODE(depend_table_ids_);
-  OB_UNIS_ENCODE(mv_table_ids); // mv_cnt_ is removed, encode 0 for compatibility
   OB_UNIS_ENCODE(tablet_size_);
   OB_UNIS_ENCODE(pctfree_);
   OB_UNIS_ENCODE(foreign_key_infos_);
@@ -6088,14 +5951,11 @@ OB_DEF_SERIALIZE(ObTableSchema)
   OB_UNIS_ENCODE(ttl_definition_);
   OB_UNIS_ENCODE(name_generated_type_);
   OB_UNIS_ENCODE(lob_inrow_threshold_);
-  OB_UNIS_ENCODE(mlog_tid_);
   OB_UNIS_ENCODE(auto_increment_cache_size_);
   OB_UNIS_ENCODE(external_properties_);
-  OB_UNIS_ENCODE(local_session_vars_);
   OB_UNIS_ENCODE(duplicate_read_consistency_);
   OB_UNIS_ENCODE(index_params_);
   OB_UNIS_ENCODE(micro_index_clustered_);
-  OB_UNIS_ENCODE(mv_mode_);
   OB_UNIS_ENCODE(enable_macro_block_bloom_filter_);
   OB_UNIS_ENCODE(parser_properties_);
   OB_UNIS_ENCODE(storage_cache_policy_type_);
@@ -6106,7 +5966,6 @@ OB_DEF_SERIALIZE(ObTableSchema)
   OB_UNIS_ENCODE(external_location_id_);
   OB_UNIS_ENCODE(external_sub_path_);
   OB_UNIS_ENCODE(micro_block_format_version_);
-  OB_UNIS_ENCODE(tmp_mlog_tid_);
   // !!! end static check
   /*
    * Add deserialized members before this end static check comment
@@ -6206,7 +6065,6 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   int ret = OB_SUCCESS;
   reset();
 
-  ObSArray<int64_t> mv_table_ids;
   int64_t aux_vp_tid_array_count = 0;
   // !!! begin static check
   OB_UNIS_DECODE(database_id_);
@@ -6259,7 +6117,6 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   OB_UNIS_DECODE(index_attributes_set_);
   OB_UNIS_DECODE_AND_FUNC(parser_name_, deep_copy_str);
   OB_UNIS_DECODE(depend_table_ids_);
-  OB_UNIS_DECODE(mv_table_ids);
   OB_UNIS_DECODE(tablet_size_);
   OB_UNIS_DECODE(pctfree_);
   OB_UNIS_DECODE(foreign_key_infos_);
@@ -6326,14 +6183,11 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   OB_UNIS_DECODE_AND_FUNC(ttl_definition_, deep_copy_str);
   OB_UNIS_DECODE(name_generated_type_);
   OB_UNIS_DECODE(lob_inrow_threshold_);
-  OB_UNIS_DECODE(mlog_tid_);
   OB_UNIS_DECODE(auto_increment_cache_size_);
   OB_UNIS_DECODE_AND_FUNC(external_properties_, deep_copy_str);
-  OB_UNIS_DECODE(local_session_vars_);
   OB_UNIS_DECODE(duplicate_read_consistency_);
   OB_UNIS_DECODE_AND_FUNC(index_params_, deep_copy_str);
   OB_UNIS_DECODE(micro_index_clustered_);
-  OB_UNIS_DECODE(mv_mode_);
   OB_UNIS_DECODE(enable_macro_block_bloom_filter_);
   OB_UNIS_DECODE_AND_FUNC(parser_properties_, deep_copy_str);
   OB_UNIS_DECODE(storage_cache_policy_type_);
@@ -6344,7 +6198,6 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   OB_UNIS_DECODE(external_location_id_);
   OB_UNIS_DECODE_AND_FUNC(external_sub_path_, deep_copy_str);
   OB_UNIS_DECODE(micro_block_format_version_);
-  OB_UNIS_DECODE(tmp_mlog_tid_);
   // !!! end static check
   /*
    * Add deserialized members before this end static check comment
@@ -6375,7 +6228,6 @@ OB_DEF_DESERIALIZE(ObTableSchema)
 OB_DEF_SERIALIZE_SIZE(ObTableSchema)
 {
   int64_t len = 0;
-  ObSArray<int64_t> mv_table_ids;
   int64_t aux_vp_tid_array_count = aux_vp_tid_array_.count();
 
   // !!! begin static check
@@ -6423,7 +6275,6 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
   OB_UNIS_ADD_LEN(index_attributes_set_);
   OB_UNIS_ADD_LEN(parser_name_);
   OB_UNIS_ADD_LEN(depend_table_ids_);
-  OB_UNIS_ADD_LEN(mv_table_ids); //mv_tid compatiable
   OB_UNIS_ADD_LEN(tablet_size_);
   OB_UNIS_ADD_LEN(pctfree_);
   OB_UNIS_ADD_LEN(foreign_key_infos_);
@@ -6464,14 +6315,11 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
   OB_UNIS_ADD_LEN(ttl_definition_);
   OB_UNIS_ADD_LEN(name_generated_type_);
   OB_UNIS_ADD_LEN(lob_inrow_threshold_);
-  OB_UNIS_ADD_LEN(mlog_tid_);
   OB_UNIS_ADD_LEN(auto_increment_cache_size_);
   OB_UNIS_ADD_LEN(external_properties_);
-  OB_UNIS_ADD_LEN(local_session_vars_);
   OB_UNIS_ADD_LEN(duplicate_read_consistency_);
   OB_UNIS_ADD_LEN(index_params_);
   OB_UNIS_ADD_LEN(micro_index_clustered_);
-  OB_UNIS_ADD_LEN(mv_mode_);
   OB_UNIS_ADD_LEN(enable_macro_block_bloom_filter_);
   OB_UNIS_ADD_LEN(parser_properties_);
   OB_UNIS_ADD_LEN(storage_cache_policy_type_);
@@ -6482,7 +6330,6 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
   OB_UNIS_ADD_LEN(external_location_id_);
   OB_UNIS_ADD_LEN(external_sub_path_);
   OB_UNIS_ADD_LEN(micro_block_format_version_);
-  OB_UNIS_ADD_LEN(tmp_mlog_tid_);
   // !!! end static check
   /*
    * Add deserialized members before this end static check comment
@@ -6667,11 +6514,7 @@ int ObTableSchema::check_enable_split_partition(bool is_auto_partitioning) const
   } else { // !is_user_table()
     // 1. manual partition split is only supported for user-table
     // 2. auto partition split is supported for user-table and global index
-    if (is_materialized_view() || is_mlog_table()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support to split a partition of materialized view or materialized view log table", KR(ret), KPC(this));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "materialized view or materialized view log table is");
-    } else if (is_index_table() && is_fts_index()) {
+    if (is_index_table() && is_fts_index()) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("not support to split a partition of fulltext index table", KR(ret), KPC(this));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "fulltext index table is");
@@ -8504,10 +8347,8 @@ int64_t ObPrintableTableSchema::to_string(char *buf, const int64_t buf_len) cons
     K_(auto_increment),
     K_(read_only),
     "aux_vp_tid_array", aux_vp_tid_array_,
-    K_(base_table_ids),
     K_(aux_lob_meta_tid),
     K_(aux_lob_piece_tid),
-    K_(mlog_tid),
     K_(duplicate_read_consistency)
   );
   J_OBJ_END();

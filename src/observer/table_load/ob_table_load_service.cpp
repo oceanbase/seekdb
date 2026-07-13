@@ -696,20 +696,20 @@ int ObTableLoadService::remove_ctx(ObTableLoadTableCtx *table_ctx)
   } else {
     int tmp_ret = OB_SUCCESS;
     ObDirectLoadResourceReleaseArg release_arg;
+    
     release_arg.task_key_ = ObTableLoadUniqueKey(table_ctx->param_.table_id_, table_ctx->ddl_param_.task_id_);
     if (OB_FAIL(service->get_manager().remove_table_ctx(release_arg.task_key_, table_ctx))) {
       LOG_WARN("fail to remove_table_ctx", KR(ret), K(release_arg.task_key_));
     } else {
       if (table_ctx->is_assigned_memory()) {
-        if (OB_TMP_FAIL(service->assigned_memory_manager_.recycle_memory(
-          table_ctx->param_.task_need_sort_, table_ctx->param_.avail_memory_))) {
-          LOG_WARN("fail to recycle memory", KR(tmp_ret), K(release_arg.task_key_));
+        if (OB_TMP_FAIL(service->assigned_memory_manager_.recycle_memory(table_ctx->param_.task_need_sort_, table_ctx->param_.avail_memory_))) {
+          LOG_WARN("fail to recycle_memory", KR(tmp_ret), K(release_arg.task_key_));
         }
         table_ctx->reset_assigned_memory();
-      }
+      } 
       if (table_ctx->is_assigned_resource()) {
-        if (OB_TMP_FAIL(ObTableLoadResourceService::release_resource(release_arg))) {
-          LOG_WARN("fail to release assigned resource", KR(tmp_ret), K(release_arg));
+        if (OB_TMP_FAIL(ObTableLoadService::delete_assigned_task(release_arg))) {
+          LOG_WARN("fail to delete assigned task", KR(tmp_ret), K(release_arg));
         }
         table_ctx->reset_assigned_resource();
       }
@@ -764,6 +764,8 @@ int ObTableLoadService::init()
     LOG_WARN("fail to init table ctx manager", KR(ret));
   } else if (OB_FAIL(assigned_memory_manager_.init())) {
     LOG_WARN("fail to init assigned memory manager", KR(ret));
+  } else if (OB_FAIL(assigned_task_manager_.init())) {
+    LOG_WARN("fail to init assigned task manager", KR(ret));
   } else {
     is_inited_ = true;
   }
@@ -920,6 +922,38 @@ int ObTableLoadService::get_memory_limit(int64_t &memory_limit)
   return ret;
 }
 
+int ObTableLoadService::add_assigned_task(ObDirectLoadResourceApplyArg &arg)
+{
+  int ret = OB_SUCCESS;
+  ObTableLoadService *service = nullptr;
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("null table load service", KR(ret));
+  } else {
+    ret = service->assigned_task_manager_.add_assigned_task(arg);
+  }
+  return ret;
+}
+
+int ObTableLoadService::delete_assigned_task(ObDirectLoadResourceReleaseArg &arg)
+{
+  int ret = OB_SUCCESS;
+  ObTableLoadService *service = nullptr;
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("null table load service", KR(ret));
+  } else {
+    if (OB_FAIL(service->assigned_task_manager_.delete_assigned_task(arg.task_key_))) {
+      LOG_WARN("fail to delete_assigned_task", KR(ret), K(arg.task_key_));
+    } else if (OB_FAIL(ObTableLoadResourceService::release_resource(arg))) {
+      LOG_WARN("fail to release resource", KR(ret));
+      ret = OB_SUCCESS;   // Allow failure, the resource management module can reclaim
+    }
+  }
+
+  return ret;
+}
+
 int ObTableLoadService::assign_memory(bool is_sort, int64_t assign_memory)
 {
   int ret = OB_SUCCESS;
@@ -947,19 +981,6 @@ int ObTableLoadService::recycle_memory(bool is_sort, int64_t assign_memory)
   return ret;
 }
 
-int ObTableLoadService::refresh_avail_memory(int64_t avail_memory)
-{
-  int ret = OB_SUCCESS;
-  ObTableLoadService *service = nullptr;
-  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("null table load service", KR(ret));
-  } else {
-    ret = service->assigned_memory_manager_.refresh_avail_memory(avail_memory);
-  }
-  return ret;
-}
-
 int ObTableLoadService::get_sort_memory(int64_t &sort_memory)
 {
   int ret = OB_SUCCESS;
@@ -969,6 +990,24 @@ int ObTableLoadService::get_sort_memory(int64_t &sort_memory)
     LOG_WARN("null table load service", KR(ret));
   } else {
     ret = service->assigned_memory_manager_.get_sort_memory(sort_memory);
+  }
+  return ret;
+}
+
+int ObTableLoadService::refresh_and_check_resource(ObDirectLoadResourceCheckArg &arg, ObDirectLoadResourceOpRes &res)
+{
+  int ret = OB_SUCCESS;
+  ObTableLoadService *service = nullptr;
+  if (OB_ISNULL(service = share::g_mp->table_load_service())) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("null table load service", KR(ret));
+  } else {
+    res.avail_memory_ = service->assigned_memory_manager_.get_avail_memory();
+    if (!arg.first_check_ && OB_FAIL(service->assigned_memory_manager_.refresh_avail_memory(arg.avail_memory_))) {
+      LOG_WARN("fail to refresh_avail_memory", KR(ret));
+    } else if (OB_FAIL(service->assigned_task_manager_.get_assigned_tasks(res.assigned_array_))) {
+      LOG_WARN("fail to get_assigned_tasks", KR(ret));
+    }
   }
   return ret;
 }

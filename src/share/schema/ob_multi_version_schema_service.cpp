@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
-// for materialized view
 #include "ob_multi_version_schema_service.h"
 #include "share/rc/ob_tenant_base.h"
 #include "share/rc/ob_context.h"  // CREATE_WITH_TEMP_ENTITY_P/RESOURCE_OWNER(previously hidden behind a transitive include)
@@ -535,8 +534,6 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
               LOG_WARN("get aux lob meta table schemas failed", K(ret), KPC(table_schema));
             } else if (OB_FAIL(add_aux_schema_from_mgr(*mgr, *table_schema, AUX_LOB_PIECE))) {
               LOG_WARN("get aux lob data table schemas failed", K(ret), KPC(table_schema));
-            } else if (OB_FAIL(add_aux_schema_from_mgr(*mgr, *table_schema, MATERIALIZED_VIEW_LOG))) {
-              LOG_WARN("get materialized view log schemas failed", K(ret), KPC(table_schema));
             }
           }
         }
@@ -657,10 +654,6 @@ int ObMultiVersionSchemaService::add_aux_schema_from_mgr(
           table_schema.set_aux_lob_meta_tid(simple_aux_table->get_table_id());
         } else if (simple_aux_table->is_aux_lob_piece_table()) {
           table_schema.set_aux_lob_piece_tid(simple_aux_table->get_table_id());
-        } else if (simple_aux_table->is_tmp_mlog_table()) {
-          table_schema.set_tmp_mlog_tid(simple_aux_table->get_table_id());
-        } else if (simple_aux_table->is_mlog_table()) {
-          table_schema.set_mlog_tid(simple_aux_table->get_table_id());
         } else {
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("unexpected", K(ret));

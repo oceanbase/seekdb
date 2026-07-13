@@ -135,7 +135,7 @@ bool ObTabletPersisterParam::is_valid() const
   } else if (is_shared_object()) { // shared
     valid = 0 == ls_epoch_ && start_macro_seq_ >= 0;
   } else { // private
-    valid = ls_epoch_ >= 0 && 0 == start_macro_seq_;
+    valid = ls_id_.is_valid() && ls_epoch_ >= 0 && 0 == start_macro_seq_;
   }
   return valid;
 }
@@ -404,7 +404,7 @@ int ObTabletPersister::modify_and_fill_tablet(
 {
   int ret = OB_SUCCESS;
   const ObTabletMeta &tablet_meta = old_tablet.get_tablet_meta();
-  const ObTabletMapKey key(tablet_meta.tablet_id_);
+  const ObTabletMapKey key(tablet_meta.ls_id_, tablet_meta.tablet_id_);
   const char* buf = reinterpret_cast<const char *>(&old_tablet);
   const bool try_smaller_pool = old_tablet.get_try_cache_size() > ObTenantMetaMemMgr::NORMAL_TABLET_POOL_SIZE
                                 ? false : true;
@@ -449,7 +449,7 @@ int ObTabletPersister::modify_and_fill_tablet(
     LOG_WARN("old tablet doesn't hold ref cnt", K(ret), K(old_tablet));
   } else {
     const ObTabletMeta &tablet_meta = old_tablet.get_tablet_meta();
-    const ObTabletMapKey key(tablet_meta.tablet_id_);
+    const ObTabletMapKey key(tablet_meta.ls_id_, tablet_meta.tablet_id_);
     const char* buf = reinterpret_cast<const char *>(&old_tablet);
     const bool try_smaller_pool = old_tablet.get_try_cache_size() > ObTenantMetaMemMgr::NORMAL_TABLET_POOL_SIZE
                                   ? false : true;
@@ -579,7 +579,7 @@ int ObTabletPersister::persist_and_fill_tablet(
   ObMultiTimeStats::TimeStats *time_stats = nullptr;
 
   const ObTabletMeta &tablet_meta = old_tablet.get_tablet_meta();
-  const ObTabletMapKey key(tablet_meta.tablet_id_);
+  const ObTabletMapKey key(tablet_meta.ls_id_, tablet_meta.tablet_id_);
   ObTabletPoolType type = ObTabletPoolType::TP_NORMAL;
   bool try_smaller_pool = true;
 

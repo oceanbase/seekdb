@@ -312,7 +312,9 @@ constexpr int OB_MERGE_ALREADY_STARTED = -4548;
 constexpr int OB_ROOTSERVICE_EXIST = -4549;
 constexpr int OB_RS_SHUTDOWN = -4550;
 constexpr int OB_SERVER_MIGRATE_IN_DENIED = -4551;
+constexpr int OB_REBALANCE_TASK_CANT_EXEC = -4552;
 constexpr int OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT = -4553;
+constexpr int OB_REBALANCE_TASK_NOT_IN_PROGRESS = -4554;
 constexpr int OB_DATA_SOURCE_NOT_EXIST = -4600;
 constexpr int OB_DATA_SOURCE_TABLE_NOT_EXIST = -4601;
 constexpr int OB_DATA_SOURCE_RANGE_NOT_EXIST = -4602;
@@ -415,7 +417,9 @@ constexpr int OB_TENANT_RESOURCE_UNIT_EXIST = -4712;
 constexpr int OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX = -4713;
 constexpr int OB_ERR_ATLER_TABLE_ILLEGAL_FK = -4714;
 constexpr int OB_LEADER_COORDINATOR_NEED_RETRY = -4716;
+constexpr int OB_REBALANCE_TASK_NEED_RETRY = -4717;
 constexpr int OB_LS_NOT_EXIST = -4719;
+constexpr int OB_TOO_MANY_TENANT_LS = -4720;
 constexpr int OB_LS_LOCATION_NOT_EXIST = -4721;
 constexpr int OB_LS_LOCATION_LEADER_NOT_EXIST = -4722;
 constexpr int OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST = -4723;
@@ -433,6 +437,7 @@ constexpr int OB_RESOURCE_UNIT_VALUE_INVALID = -4736;
 constexpr int OB_LS_EXIST = -4737;
 constexpr int OB_DEVICE_EXIST = -4738;
 constexpr int OB_DEVICE_NOT_EXIST = -4739;
+constexpr int OB_LS_REPLICA_TASK_RESULT_UNCERTAIN = -4740;
 constexpr int OB_WAIT_REPLAY_TIMEOUT = -4741;
 constexpr int OB_WAIT_TABLET_READY_TIMEOUT = -4742;
 constexpr int OB_FREEZE_SERVICE_EPOCH_MISMATCH = -4743;
@@ -1370,6 +1375,7 @@ constexpr int OB_TRANS_IDLE_TIMEOUT = -6278;
 constexpr int OB_TRANS_FREE_ROUTE_NOT_SUPPORTED = -6279;
 constexpr int OB_TRANS_LIVE_TOO_MUCH_TIME = -6280;
 constexpr int OB_TRANS_COMMIT_TOO_MUCH_TIME = -6281;
+constexpr int OB_TRANS_TOO_MANY_PARTICIPANTS = -6282;
 constexpr int OB_LOG_ALREADY_SPLIT = -6283;
 constexpr int INCORRECT_ARGUMENTS_TO_URL_DECODE = -6286;
 constexpr int OB_TX_PENDING_LOG_OVERFLOW = -6288;
@@ -1516,6 +1522,7 @@ constexpr int OB_LOG_ARCHIVE_ALREADY_STOPPED = -9034;
 constexpr int OB_RESTORE_INDEX_FAILED = -9035;
 constexpr int OB_BACKUP_IN_PROGRESS = -9036;
 constexpr int OB_INVALID_LOG_ARCHIVE_STATUS = -9037;
+constexpr int OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST = -9038;
 constexpr int OB_LOG_ARCHIVE_LEADER_CHANGED = -9039;
 constexpr int OB_BACKUP_CAN_NOT_START = -9040;
 constexpr int OB_CANCEL_BACKUP_NOT_ALLOWED = -9041;
@@ -2350,7 +2357,9 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ROOTSERVICE_EXIST__USER_ERROR_MSG "rootservice already exist"
 #define OB_RS_SHUTDOWN__USER_ERROR_MSG "rootservice is shutdown"
 #define OB_SERVER_MIGRATE_IN_DENIED__USER_ERROR_MSG "server migrate in denied"
+#define OB_REBALANCE_TASK_CANT_EXEC__USER_ERROR_MSG "rebalance task can not executing now"
 #define OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT__USER_ERROR_MSG "rootserver can not hold more partition"
+#define OB_REBALANCE_TASK_NOT_IN_PROGRESS__USER_ERROR_MSG "rebalance task not in progress on seekdb"
 #define OB_DATA_SOURCE_NOT_EXIST__USER_ERROR_MSG "Data source not exist"
 #define OB_DATA_SOURCE_TABLE_NOT_EXIST__USER_ERROR_MSG "Data source table not exist"
 #define OB_DATA_SOURCE_RANGE_NOT_EXIST__USER_ERROR_MSG "Data source range not exist"
@@ -2453,7 +2462,9 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX__USER_ERROR_MSG "rebuild global index:'%.*s' failed when drop/truncate partitions"
 #define OB_ERR_ATLER_TABLE_ILLEGAL_FK__USER_ERROR_MSG "unique/primary keys in table referenced by enabled foreign keys"
 #define OB_LEADER_COORDINATOR_NEED_RETRY__USER_ERROR_MSG "leader coordinator needs retry"
+#define OB_REBALANCE_TASK_NEED_RETRY__USER_ERROR_MSG "rebalance task needs retry"
 #define OB_LS_NOT_EXIST__USER_ERROR_MSG "log stream does not exist"
+#define OB_TOO_MANY_TENANT_LS__USER_ERROR_MSG "too many log streams were defined for this tenant"
 #define OB_LS_LOCATION_NOT_EXIST__USER_ERROR_MSG "log stream location does not exist"
 #define OB_LS_LOCATION_LEADER_NOT_EXIST__USER_ERROR_MSG "log stream location leader does not exist"
 #define OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST__USER_ERROR_MSG "mapping between tablet and log stream does not exist"
@@ -2473,6 +2484,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_LS_EXIST__USER_ERROR_MSG "log stream already exist"
 #define OB_DEVICE_EXIST__USER_ERROR_MSG "Unexpected device existence"
 #define OB_DEVICE_NOT_EXIST__USER_ERROR_MSG "Device does not exist"
+#define OB_LS_REPLICA_TASK_RESULT_UNCERTAIN__USER_ERROR_MSG "log stream replica task result is uncertain"
 #define OB_WAIT_REPLAY_TIMEOUT__USER_ERROR_MSG "log stream wait log replay timeout"
 #define OB_WAIT_TABLET_READY_TIMEOUT__USER_ERROR_MSG "log stream wait tablet ready timeout"
 #define OB_FREEZE_SERVICE_EPOCH_MISMATCH__USER_ERROR_MSG "freeze service epoch is not expected"
@@ -3543,6 +3555,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_TRANS_FREE_ROUTE_NOT_SUPPORTED__USER_ERROR_MSG "Query is not supported to be executed on txn temporary node"
 #define OB_TRANS_LIVE_TOO_MUCH_TIME__USER_ERROR_MSG "Transaction cost too much without commit or rollback"
 #define OB_TRANS_COMMIT_TOO_MUCH_TIME__USER_ERROR_MSG "Transaction commit cost too much"
+#define OB_TRANS_TOO_MANY_PARTICIPANTS__USER_ERROR_MSG "too many transaction participants"
 #define OB_LOG_ALREADY_SPLIT__USER_ERROR_MSG "The big log entry has been split into multiple part"
 #define OB_ERR_UNSUPPROTED_REF_IN_JSON_SCHEMA__USER_ERROR_MSG "This version doesn't yet support 'references in JSON Schema."
 #define OB_ERR_TYPE_OF_JSON_SCHEMA__USER_ERROR_MSG "Invalid JSON type in argument, should be object."
@@ -3804,6 +3817,7 @@ constexpr int OB_ERR_INVALID_DATE_MSG_FMT_V2 = -4219;
 #define OB_RESTORE_INDEX_FAILED__USER_ERROR_MSG "restore index failed"
 #define OB_BACKUP_IN_PROGRESS__USER_ERROR_MSG "Backup is in progress"
 #define OB_INVALID_LOG_ARCHIVE_STATUS__USER_ERROR_MSG "log archive status is not valid"
+#define OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST__USER_ERROR_MSG "Cannot add replica during set member list in restore"
 #define OB_LOG_ARCHIVE_LEADER_CHANGED__USER_ERROR_MSG "pg log archive leader changed"
 #define OB_BACKUP_CAN_NOT_START__USER_ERROR_MSG "backup can not start, because %s"
 #define OB_CANCEL_BACKUP_NOT_ALLOWED__USER_ERROR_MSG "cancel backup do not allow"

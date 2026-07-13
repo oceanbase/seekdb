@@ -101,7 +101,7 @@ int ObDropIndexTask::init(
     ret_code_ = task_record.ret_code_;
     
     dst_schema_version_ = schema_version_;
-    task_type_ = task_record.ddl_type_; // could be drop index / mlog
+    task_type_ = task_record.ddl_type_;
     if (nullptr != task_record.message_.ptr()) {
       int64_t pos = 0;
       if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(), task_record.message_.length(), pos))) {
@@ -215,7 +215,6 @@ int ObDropIndexTask::drop_index_impl()
   bool is_index_exist = false;
   ObString index_name;
   const ObTableSchema *index_schema = nullptr;
-  const bool is_mlog = (obcall::ObIndexArg::DROP_MLOG == drop_index_arg_.index_action_type_);
   if (OB_ISNULL(GCTX.schema_service_) ) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
@@ -229,10 +228,7 @@ int ObDropIndexTask::drop_index_impl()
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("index schema is null", K(ret), K(target_object_id_));
-  } else if (is_mlog && OB_FAIL(index_schema->get_mlog_name(index_name))) {
-    LOG_WARN("failed to get materialized view log name",
-        KR(ret), K(index_schema->get_table_type()), KPC(index_schema));
-  } else if (!is_mlog && OB_FAIL(index_schema->get_index_name(index_name))) {
+  } else if (OB_FAIL(index_schema->get_index_name(index_name))) {
     LOG_WARN("get index name failed", K(ret), K(index_schema->get_table_type()), KPC(index_schema));
   } else if (OB_FAIL(schema_guard.get_database_schema( index_schema->get_database_id(), database_schema))) {
     LOG_WARN("get database schema failed", K(ret), K(index_schema->get_database_id()));

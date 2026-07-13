@@ -168,14 +168,6 @@ int ObDropTableHelper::check_legitimacy_()
       } else if (has_conflict_ddl) {
         ret = OB_EAGAIN;
         LOG_ERROR("failed to drop table that has conflict ddl", KR(ret), K(table_schema->get_table_id()));
-      } else if (table_schema->has_mlog_table()) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("drop table with materialized view log is not supported", KR(ret));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "drop table with materialized view log is");
-      } else if (table_schema->table_referenced_by_fast_lsm_mv()) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("drop table required by materialized view is not supported", KR(ret));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "drop table required by materialized view is");
       }
     }
   }
@@ -666,12 +658,6 @@ int ObDropTableHelper::prefetch_table_schemas_()
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table schema is null", KR(ret), K(table_id));
-      } else if (table_schema->mv_container_table()) {
-        // skip
-        LOG_WARN("this type of table should be invisable for drop table", KR(ret), KPC(table_schema));
-        if (OB_FAIL(log_table_not_exist_msg_(table_items_.at(i)))) {
-          LOG_WARN("fail to log table not exsit msg", KR(ret));
-        }
       } else if (OB_FAIL(drop_table_ids_.set_refactored(table_id))) {
         LOG_WARN("fail to set table id", KR(ret), K(table_id));
       } else if (OB_FAIL(table_schemas_.push_back(table_schema))) {
@@ -1138,7 +1124,6 @@ int ObDropTableHelper::calc_schema_version_cnt_for_table_(
       }
 
       // sync version for cascade table
-      schema_version_cnt_ += table_schema.get_base_table_ids().count();
       schema_version_cnt_ += table_schema.get_depend_table_ids().count();
       
       // sync version for cascade mock fk parent table
@@ -1401,8 +1386,7 @@ int ObDropTableHelper::drop_table_(const ObTableSchema &table_schema, const ObSt
                        NULL/*schema_guard*/,
                        &drop_table_ids_))) {
       LOG_WARN("fail to drop table", KR(ret), K(table_schema));
-    } else if (OB_FAIL(ddl_operator.sync_version_for_cascade_table(table_schema.get_base_table_ids(), get_trans_())
-               || OB_FAIL(ddl_operator.sync_version_for_cascade_table(table_schema.get_depend_table_ids(), get_trans_())))) {
+    } else if (OB_FAIL(ddl_operator.sync_version_for_cascade_table(table_schema.get_depend_table_ids(), get_trans_()))) {
       LOG_WARN("fail to sync version for cascade tables", KR(ret));
     } else if (OB_FAIL(sync_version_for_cascade_mock_fk_parent_table_(table_schema.get_depend_mock_fk_parent_table_ids()))) {
       LOG_WARN("fail to sync version for cascade mock fk parent table", KR(ret));
@@ -1918,8 +1902,7 @@ int ObDropTableHelper::sync_version_for_cascade_mock_fk_parent_table_(const ObIA
 
 bool ObDropTableHelper::is_to_recyclebin_(const ObTableSchema &table_schema)
 {
-  return arg_.to_recyclebin_ 
-         && !table_schema.is_materialized_view()
+  return arg_.to_recyclebin_
          && !table_schema.is_tmp_table()
          && !table_schema.is_aux_table()
          && !is_inner_table(table_schema.get_table_id());

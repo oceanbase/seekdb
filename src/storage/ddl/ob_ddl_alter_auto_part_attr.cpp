@@ -474,14 +474,6 @@ int ObAlterAutoPartAttrOp::sync_aux_tables_partition_option(
       LOG_WARN("fail to push back lob piece tid", KR(ret), K(ptid));
     }
   }
-  if (OB_SUCC(ret)) {
-    const uint64_t mlog_tid = data_table_schema.get_mlog_tid();
-    if ((OB_INVALID_ID != mlog_tid)
-        && OB_FAIL(aux_table_ids.push_back(mlog_tid))) {
-      LOG_WARN("failed to push back materialized view log tid", KR(ret), K(mlog_tid));
-    }
-  }
-
   // 2. update inner table
   for (int64_t i = 0; OB_SUCC(ret) && i < aux_table_ids.count(); ++i) {
     const uint64_t aux_table_id = aux_table_ids.at(i);
@@ -493,8 +485,7 @@ int ObAlterAutoPartAttrOp::sync_aux_tables_partition_option(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table schema is null", K(ret), K(aux_table_id));
     } else if ((aux_table_schema->is_index_local_storage() && !(common::is_contain(modified_index_type_ids, aux_table_id)))
-        || aux_table_schema->is_aux_lob_table()
-        || aux_table_schema->is_mlog_table()) {
+        || aux_table_schema->is_aux_lob_table()) {
       HEAP_VAR(ObTableSchema, new_aux_table_schema) {
         if (OB_FAIL(new_aux_table_schema.assign(*aux_table_schema))) {
           LOG_WARN("assign index_schema failed", K(ret));
@@ -758,7 +749,6 @@ int ObAlterAutoPartAttrOp::check_auto_part_table_unique_index(
   }
   return ret;
 }
-
 
 
 

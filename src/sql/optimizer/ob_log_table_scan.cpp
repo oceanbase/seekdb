@@ -698,8 +698,7 @@ int ObLogTableScan::generate_access_exprs()
         LOG_WARN("get unexpected null", K(ret));
       } else if (static_cast<ObPseudoColumnRawExpr*>(expr)->get_table_id() != table_id_) {
         /* do nothing */
-      } else if (T_ORA_ROWSCN != expr->get_expr_type()
-                 && T_PSEUDO_OLD_NEW_COL != expr->get_expr_type()) {
+      } else if (T_ORA_ROWSCN != expr->get_expr_type()) {
         /* do nothing */
       } else if (OB_FAIL(access_exprs_.push_back(expr))) {
         LOG_WARN("fail to push back expr", K(ret));
@@ -1114,8 +1113,7 @@ int ObLogTableScan::generate_ddl_output_column_ids()
   } else {
     ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
     if (opt_ctx.is_online_ddl() &&
-        stmt::T_INSERT == opt_ctx.get_session_info()->get_stmt_type() &&
-        !opt_ctx.get_session_info()->get_ddl_info().is_mview_complete_refresh()) {
+        stmt::T_INSERT == opt_ctx.get_session_info()->get_stmt_type()) {
       for (int64_t i = 0; OB_SUCC(ret) && i < get_output_exprs().count(); ++i) {
         const ObRawExpr *output_expr = get_output_exprs().at(i);
         if (OB_ISNULL(output_expr)) {
@@ -1297,8 +1295,7 @@ int ObLogTableScan::index_back_check()
         column_found = false;
       } else if (ob_is_geometry_tc(expr->get_data_type())) { // Mark as need index_back here, whether it is actually needed needs to be determined in combination with the predicate.
         column_found = false;
-      } else if (T_PSEUDO_GROUP_ID == expr->get_expr_type() ||
-                 T_PSEUDO_OLD_NEW_COL == expr->get_expr_type()) {
+      } else if (T_PSEUDO_GROUP_ID == expr->get_expr_type()) {
         // do nothing
       } else if (OB_UNLIKELY(!expr->is_column_ref_expr())) {
         ret = OB_ERR_UNEXPECTED;

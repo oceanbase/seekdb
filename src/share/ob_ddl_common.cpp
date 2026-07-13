@@ -20,6 +20,7 @@
 #include "ob_ddl_common.h"
 #include "common/datum/ob_datum.h"  // ObDatum complete type(previously hidden behind the block_sstable_struct include chain)
 #include "share/ob_rpc_struct.h"
+#include "share/location_cache/ob_location_service.h"
 #include "share/system_variable/ob_system_variable_alias.h"
 #include "lib/worker.h"
 #include "share/ob_ddl_checksum.h"
@@ -764,6 +765,41 @@ int ObDDLUtil::append_multivalue_extra_column(const ObTableSchema &dest_table_sc
   }
   return ret;
 }
+
+
+
+
+int ObDDLUtil::get_tablet_leader_addr(
+    share::ObLocationService *location_service,
+    const ObTabletID &tablet_id,
+    const int64_t timeout,
+    ObLSID &ls_id,
+    ObAddr &leader_addr)
+{
+  int ret = OB_SUCCESS;
+  const bool force_renew = true;
+  bool is_cache_hit = false;
+  leader_addr.reset();
+  const int64_t expire_renew_time = force_renew ? INT64_MAX : 0;
+  ObTimeoutCtx timeout_ctx;
+  if (nullptr == location_service || !tablet_id.is_valid() || timeout <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KP(location_service), K(tablet_id), K(timeout));
+  } else if (OB_FAIL(timeout_ctx.set_trx_timeout_us(timeout))) {
+    LOG_WARN("set trx timeout failed", K(ret));
+  } else if (OB_FAIL(timeout_ctx.set_timeout(timeout))) {
+    LOG_WARN("set timeout failed", K(ret));
+  } else if (OB_FAIL(location_service->get(tablet_id, expire_renew_time, is_cache_hit, ls_id))) {
+    LOG_WARN("fail to get log stream id", K(ret), K(tablet_id));
+  } else if (OB_FAIL(location_service->get_leader(GCONF.cluster_id,
+          ls_id,
+          force_renew,
+          leader_addr))) {
+    LOG_WARN("get leader failed", K(ret), K(ls_id));
+  }
+  return ret;
+}
+
 // Used in offline ddl to delete all checksum record in __all_ddl_checksum
 // DELETE FROM __all_ddl_checksum WHERE
 
@@ -918,6 +954,143 @@ int ObDDLUtil::get_table_lob_col_idx(const ObTableSchema &table_schema, ObIArray
 
 
 
+bool ObDDLUtil::need_remote_write(const int ret_code)
+{
+  return ObTenantRole::PRIMARY_TENANT == MTL_GET_TENANT_ROLE_CACHE()
+    && (OB_NOT_MASTER == ret_code
+        || OB_NOT_RUNNING == ret_code
+        || OB_LS_LOCATION_LEADER_NOT_EXIST == ret_code
+        || OB_EAGAIN == ret_code);
+}
+
+
+
+int ObDDLUtil::get_tablet_paxos_member_list(const common::ObTabletID &tablet_id,
+  common::ObIArray<common::ObAddr> &paxos_server_list,
+  int64_t &paxos_member_count)
+{
+  int ret = OB_SUCCESS;
+  ObLSLocation location;
+  paxos_member_count = 0;
+  share::ObLSID unused_ls_id;
+  if (false || !tablet_id.is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to get tablet replica location, invalid id", K(ret), K(tablet_id));
+  } else if (OB_FAIL(get_tablet_replica_location(tablet_id, unused_ls_id, location))) {
+    LOG_WARN("fail to get tablet replica location", K(tablet_id), K(ret));
+  } else {
+    const ObIArray<ObLSReplicaLocation> &ls_locations = location.get_replica_locations();
+    for (int64_t i = 0; i < ls_locations.count() && OB_SUCC(ret); ++i) {
+      common::ObReplicaType replica_type  = ls_locations.at(i).get_replica_type();
+      if (REPLICA_TYPE_FULL != replica_type && REPLICA_TYPE_LOGONLY != replica_type) {
+        continue;
+      }
+      paxos_member_count++;
+      if (REPLICA_TYPE_FULL == replica_type) {  // paxos replica
+        const ObAddr &server = ls_locations.at(i).get_server();
+        if (!has_exist_in_array(paxos_server_list, server) && OB_FAIL(paxos_server_list.push_back(server))) {
+          LOG_WARN("fail to push back addr", K(ret), K(server));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDDLUtil::get_tablet_replica_location(const common::ObTabletID &tablet_id,
+    ObLSID &ls_id,
+    ObLSLocation &location)
+{
+  int ret = OB_SUCCESS;
+  const int64_t cluster_id = GCONF.cluster_id;
+  int64_t expire_renew_time = INT64_MAX;
+  bool is_cache_hit = false;
+  ls_id.reset();
+  if (OB_UNLIKELY(nullptr == GCTX.location_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("location service ptr is null", K(ret));
+  } else if (false || !tablet_id.is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to get tablet replica location, invalid id", K(ret), K(tablet_id));
+  } else if (OB_FAIL(GCTX.location_service_->get(tablet_id,
+                                                 INT64_MAX,
+                                                 is_cache_hit,
+                                                 ls_id))) {
+    LOG_WARN("fail to get ls id according to tablet_id", K(ret), K(tablet_id));
+  } else if (OB_FAIL(GCTX.location_service_->get(cluster_id,
+                                                 ls_id,
+                                                 expire_renew_time,
+                                                 is_cache_hit,
+                                                 location))) {
+    LOG_WARN("fail to get ls location", K(ret), K(cluster_id), K(ls_id), K(tablet_id));
+  }
+  return ret;
+}
+
+// filter offline replica and arbitration one.
+int ObDDLUtil::get_split_replicas_addrs(const share::ObLSID &ls_id,
+    ObIArray<ObAddr> &member_addrs_array,
+    ObIArray<ObAddr> &learner_addrs_array)
+{
+  int ret = OB_SUCCESS;
+  member_addrs_array.reset();
+  learner_addrs_array.reset();
+  if (OB_UNLIKELY(false || !ls_id.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arg", K(ret), K(ls_id));
+  } else if (OB_FAIL(member_addrs_array.push_back(GCTX.self_addr()))) {
+    LOG_WARN("fail to push back addr", KR(ret));
+  }
+  return ret;
+}
+
+int ObDDLUtil::get_split_replicas_addrs(const share::ObLSID &ls_id,
+    ObIArray<ObAddr> &replica_addr_array)
+{
+  int ret = OB_SUCCESS;
+  replica_addr_array.reset();
+  ObArray<ObAddr> member_addrs_array;
+  ObArray<ObAddr> learners_addr_array;
+  if (OB_FAIL(get_split_replicas_addrs(ls_id, member_addrs_array, learners_addr_array))) {
+    LOG_WARN("get addrs failed", K(ret), K(ls_id));
+  } else if (OB_FAIL(append(replica_addr_array/*dst*/, member_addrs_array/*src*/))) {
+    LOG_WARN("append failed", K(ret));
+  } else if (OB_FAIL(append(replica_addr_array/*dst*/, learners_addr_array/*src*/))) {
+    LOG_WARN("append failed", K(ret));
+  }
+  return ret;
+}
+
+int ObDDLUtil::construct_ls_tablet_id_map(
+  const share::ObLSID &ls_id,
+  const common::ObTabletID &tablet_id,
+  hash::ObHashMap<ObLSID, ObArray<ObTabletID>> &ls_tablet_id_map)
+{
+  int ret = OB_SUCCESS;
+  bool is_cache_hit = false;
+  ObArray<ObTabletID> tablet_id_array;
+  if (!ls_id.is_valid() || !tablet_id.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id));
+  } else if (OB_FAIL(ls_tablet_id_map.get_refactored(ls_id, tablet_id_array))) {
+    if (OB_HASH_NOT_EXIST == ret) { // first time
+      ret = OB_SUCCESS;
+      if (OB_FAIL(tablet_id_array.push_back(tablet_id))) {
+        LOG_WARN("fail to push back to array", K(ret), K(tablet_id), K(tablet_id_array));
+      } else if (OB_FAIL(ls_tablet_id_map.set_refactored(ls_id, tablet_id_array, true /* overwrite */))) {
+        LOG_WARN("ls tablets map set fail", K(ret), K(ls_id), K(tablet_id_array));
+      }
+    } else {
+      LOG_WARN("ls tablets map get fail", K(ret), K(ls_id), K(tablet_id_array));
+    }
+  } else if (OB_FAIL(tablet_id_array.push_back(tablet_id))) {
+    LOG_WARN("fail to push back to array", K(ret), K(tablet_id_array), K(tablet_id));
+  } else if (OB_FAIL(ls_tablet_id_map.set_refactored(ls_id, tablet_id_array, true /* overwrite */))) {
+    LOG_WARN("ls tablets map set fail", K(ret), K(ls_id), K(tablet_id_array));
+  }
+  return ret;
+}
+
 int ObDDLUtil::get_index_table_batch_partition_names(
     const int64_t &data_table_id,
     const int64_t &index_table_id,
@@ -1003,11 +1176,12 @@ int ObDDLUtil::get_index_table_batch_partition_names(
 
 int ObDDLUtil::get_tablet_data_size(
     const common::ObTabletID &tablet_id,
+    const share::ObLSID &ls_id,
     int64_t &data_size)
 {
   int ret = OB_SUCCESS;
   data_size = 0;
-  if (!tablet_id.is_valid()) {
+  if (!tablet_id.is_valid() || !ls_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id));
   } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
@@ -1017,8 +1191,8 @@ int ObDDLUtil::get_tablet_data_size(
     ObTabletMetaTableStorage storage;
     if (OB_FAIL(storage.init(GCTX.meta_db_pool_))) {
       LOG_WARN("failed to init storage", K(ret));
-    } else if (OB_FAIL(storage.get_max_data_size(tablet_id, data_size))) {
-      LOG_WARN("failed to get max data size", K(ret), K(tablet_id));
+    } else if (OB_FAIL(storage.get_max_data_size(tablet_id, ls_id, data_size))) {
+      LOG_WARN("failed to get max data size", K(ret), K(tablet_id), K(ls_id));
     }
   }
   return ret;
@@ -1026,11 +1200,12 @@ int ObDDLUtil::get_tablet_data_size(
 
 int ObDDLUtil::get_tablet_data_row_cnt(
     const common::ObTabletID &tablet_id,
+    const share::ObLSID &ls_id,
     int64_t &data_row_cnt)
 {
   int ret = OB_SUCCESS;
   data_row_cnt = 0;
-  if (!tablet_id.is_valid()) {
+  if (!tablet_id.is_valid() || !ls_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id));
   } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
@@ -1040,42 +1215,79 @@ int ObDDLUtil::get_tablet_data_row_cnt(
     ObTabletReplicaChecksumTableStorage storage;
     if (OB_FAIL(storage.init(GCTX.meta_db_pool_))) {
       LOG_WARN("failed to init storage", K(ret));
-    } else if (OB_FAIL(storage.get_max_row_count(tablet_id, data_row_cnt))) {
-      LOG_WARN("failed to get max row count from storage", K(ret), K(tablet_id));
+    } else if (OB_FAIL(storage.get_max_row_count(tablet_id, ls_id, data_row_cnt))) {
+      LOG_WARN("failed to get max row count from storage", K(ret), K(tablet_id), K(ls_id));
     }
   }
   return ret;
 }
 
-int ObDDLUtil::get_ls_host_left_disk_space(uint64_t &left_space_size)
+int ObDDLUtil::get_ls_host_left_disk_space(
+    const share::ObLSID &ls_id,
+    const common::ObAddr &leader_addr,
+    uint64_t &left_space_size)
 {
   int ret = OB_SUCCESS;
   left_space_size = 0;
-  SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-    ObSqlString query_string;
-    sqlclient::ObMySQLResult *result = NULL;
-    if (OB_FAIL(query_string.assign_fmt("SELECT free_size FROM %s LIMIT 1",
-        OB_ALL_VIRTUAL_DISK_STAT_TNAME))) {
-      LOG_WARN("assign sql string failed", K(ret), K(OB_ALL_VIRTUAL_DISK_STAT_TNAME));
-    } else if (OB_FAIL(GCTX.sql_proxy_->read(res, query_string.ptr()))) {
-      LOG_WARN("read record failed", K(ret), K(query_string));
-    } else if (OB_ISNULL(result = res.get_result())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get sql result", K(ret), K(query_string));
-    } else if (OB_FAIL(result->next())) {
-      if (OB_ITER_END == ret) {
-        ret = OB_SUCCESS;
-      } else {
-        LOG_WARN("fail to get next", K(ret), K(query_string));
+  if (!ls_id.is_valid() || !leader_addr.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(ls_id), K(leader_addr));
+  } else {
+    UNUSED(leader_addr);  // vtable is local, no need to filter by server
+    {
+      SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+        ObSqlString query_string;
+        sqlclient::ObMySQLResult *result = NULL;
+        if (OB_FAIL(query_string.assign_fmt("SELECT free_size FROM %s LIMIT 1",
+            OB_ALL_VIRTUAL_DISK_STAT_TNAME))) {
+          LOG_WARN("assign sql string failed", K(ret), K(OB_ALL_VIRTUAL_DISK_STAT_TNAME));
+        } else if (OB_FAIL(GCTX.sql_proxy_->read(res, query_string.ptr()))) {
+          LOG_WARN("read record failed", K(ret), K(ls_id), K(leader_addr), K(query_string));
+        } else if (OB_ISNULL(result = res.get_result())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("fail to get sql result", K(ret), K(ls_id), K(leader_addr), K(query_string));
+        } else if (OB_FAIL(result->next())) {
+          if (OB_ITER_END == ret) {
+            ret = OB_SUCCESS;
+          } else {
+            LOG_WARN("fail to get next", K(ret), K(ls_id), K(leader_addr), K(query_string));
+          }
+        } else {
+          EXTRACT_INT_FIELD_MYSQL(*result, "free_size", left_space_size, uint64_t);
+        }
       }
-    } else {
-      EXTRACT_INT_FIELD_MYSQL(*result, "free_size", left_space_size, uint64_t);
     }
   }
   return ret;
 }
 
 
+
+int ObDDLUtil::get_sys_ls_leader_addr(
+    const uint64_t cluster_id,
+    common::ObAddr &leader_addr)
+{
+  int ret = OB_SUCCESS;
+  bool force_renew = false;
+  share::ObLocationService *location_service = nullptr;
+  share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
+
+  if (OB_ISNULL(location_service = GCTX.location_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to check and wait old completement, null pointer. ", K(ret));
+  } else if (OB_FAIL(location_service->get_leader(cluster_id,
+                                                  ls_id,
+                                                  force_renew,
+                                                  leader_addr))) {
+    LOG_WARN("failed to get ls_leader", K(ret));
+  } else if (OB_UNLIKELY(!leader_addr.is_valid())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("leader addr is invalid", K(ret), K(leader_addr), K(cluster_id));
+  } else {
+    LOG_INFO("succ to get ls leader addr", K(cluster_id), K(leader_addr));
+  }
+  return ret;
+}
 
 int ObDDLUtil::check_table_exist(
     const uint64_t table_id,
@@ -2444,11 +2656,92 @@ int ObCheckTabletDataComplementOp::update_replica_merge_status(
 }
 
 
+// only get un-merge tablet replica ip addr
+int ObCheckTabletDataComplementOp::construct_tablet_ip_map(const ObTabletID &tablet_id,
+    hash::ObHashMap<ObAddr, ObArray<ObTabletID>> &ip_tablets_map)
+{
+  int ret = OB_SUCCESS;
+  common::ObArray<ObAddr> paxos_server_list;
+  common::ObArray<ObAddr> unfinished_replica_addrs;
+  common::ObArray<ObTabletID> tablet_array;
+  int64_t paxos_member_count; // unused, but need
+
+  if (!tablet_id.is_valid() || false) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(tablet_id));
+  } else if (OB_FAIL(ObDDLUtil::get_tablet_paxos_member_list(tablet_id, paxos_server_list, paxos_member_count))) {
+    LOG_WARN("fail to get tablet replica location!", K(ret), K(tablet_id));
+  } else {
+    // classify un-merge tablet addr and tablet ids
+    for (int64_t i = 0; OB_SUCC(ret) && i < paxos_server_list.count(); ++i) {
+      tablet_array.reset();
+      const ObAddr & addr = paxos_server_list.at(i);
+      if (OB_FAIL(ip_tablets_map.get_refactored(addr, tablet_array))) {
+        if (OB_HASH_NOT_EXIST == ret) { // first time
+          ret = OB_SUCCESS;
+          if (OB_FAIL(tablet_array.push_back(tablet_id))) {
+            LOG_WARN("fail to push back to array", K(ret), K(tablet_id));
+          } else if (OB_FAIL(ip_tablets_map.set_refactored(addr, tablet_array, true/* overwrite */))) {
+            LOG_WARN("set ip tablet map fail.", K(ret), K(tablet_id), K(addr));
+          }
+        } else {
+          LOG_WARN("get ip tablet from map fail.", K(ret), K(tablet_id), K(addr));
+        }
+      } else if (OB_FAIL(tablet_array.push_back(tablet_id))) {
+        LOG_WARN("fail to push back to array", K(ret), K(tablet_id));
+      } else if (OB_FAIL(ip_tablets_map.set_refactored(addr, tablet_array, true/* overwrite */))) {
+        LOG_WARN("set ip tablet map fail.", K(ret), K(tablet_id), K(addr));
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObCheckTabletDataComplementOp::construct_ls_tablet_map(const common::ObTabletID &tablet_id,
+  hash::ObHashMap<ObLSID, ObArray<ObTabletID>> &ls_tablets_map)
+{
+  int ret = OB_SUCCESS;
+  bool is_cache_hit = false;
+  share::ObLSID ls_id;
+  common::ObArray<ObTabletID> tablet_array;
+
+  if (!tablet_id.is_valid() || false) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(tablet_id));
+  } else if (OB_FAIL(GCTX.location_service_->get(tablet_id,
+                                                 INT64_MAX,
+                                                 is_cache_hit, /*is_cache_hit*/
+                                                 ls_id))) {
+    LOG_WARN("fail to get ls id according to tablet_id", K(ret), K(tablet_id));
+  } else if (OB_FAIL(ls_tablets_map.get_refactored(ls_id, tablet_array))) {
+    if (OB_HASH_NOT_EXIST == ret) { // first time
+      ret = OB_SUCCESS;
+      if (OB_FAIL(tablet_array.push_back(tablet_id))) {
+        LOG_WARN("fail to push back to array", K(ret), K(tablet_id));
+      } else if (OB_FAIL(ls_tablets_map.set_refactored(ls_id, tablet_array, false))) {
+        LOG_WARN("ls_tablets_map set fail", K(ret), K(tablet_id), K(ls_id));
+      }
+    } else {
+      LOG_WARN("ls_tablets_map get fail", K(ret), K(tablet_id), K(ls_id));
+    }
+  } else if (OB_FAIL(tablet_array.push_back(tablet_id))) {
+    LOG_WARN("fail to push back to array", K(ret), K(tablet_id));
+  } else if (OB_FAIL(ls_tablets_map.set_refactored(ls_id, tablet_array, true /* overwrite */))) {
+    LOG_WARN("ls_tablets_map set fail", K(ret), K(tablet_id), K(ls_id));
+  }
+
+  return ret;
+}
+
 int ObCheckTabletDataComplementOp::calculate_build_finish(const common::ObIArray<common::ObTabletID> &tablet_ids,
   hash::ObHashMap<ObTabletID, int32_t> &tablets_commited_map,
   int64_t &build_succ_count)
 {
   int ret = OB_SUCCESS;
+  common::ObArray<common::ObAddr> paxos_server_list;  // unused
+  int64_t paxos_member_count = 0;
+
   build_succ_count = 0;
 
   if (OB_UNLIKELY(false)) {
@@ -2460,9 +2753,18 @@ int ObCheckTabletDataComplementOp::calculate_build_finish(const common::ObIArray
     int commited_count = 0;
     for (int64_t tablet_idx = 0; OB_SUCC(ret) && tablet_idx < tablet_ids.count(); ++tablet_idx) {
       common::ObTabletID tablet_id = tablet_ids.at(tablet_idx);
-      if (OB_FAIL(tablets_commited_map.get_refactored(tablet_id, commited_count))){
+      if (OB_FAIL(ObDDLUtil::get_tablet_paxos_member_list(tablet_id,
+                                                paxos_server_list,
+                                                paxos_member_count))) {
+        LOG_WARN("fail to get tablet paxos member list.",
+          K(ret), K(tablet_id), K(paxos_server_list), K(paxos_member_count));
+      } else if (paxos_member_count == 0) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fail to check task tablet, unexpected!",
+          K(ret), K(paxos_member_count), K(tablet_id));
+      } else if (OB_FAIL(tablets_commited_map.get_refactored(tablet_id, commited_count))){
         LOG_WARN("fail to get tablet commited map, unexpected!", K(ret), K(tablet_id));
-      } else if (commited_count < 1) {
+      } else if (commited_count < ((paxos_member_count >> 1) + 1)) {  // not finished majority
         // do nothing
       } else {
         build_succ_count++;
@@ -2483,33 +2785,47 @@ int ObCheckTabletDataComplementOp::check_tablet_merge_status(const ObIArray<comm
   int ret = OB_SUCCESS;
   is_all_tablets_commited = false;
 
+  hash::ObHashMap<ObAddr, ObArray<ObTabletID>> ip_tablets_map; // use for classify tablet replica addr
+  hash::ObHashMap<ObLSID, ObArray<ObTabletID>> ls_tablets_map; // use for classify tablet ls
   hash::ObHashMap<ObTabletID, int32_t> tablets_commited_map;
 
-  const int64_t max_map_hash_bucket = tablet_ids.count();
+  const static int64_t max_map_hash_bucket = tablet_ids.count();
 
   if (OB_UNLIKELY( tablet_ids.count() <= 0 || OB_INVALID_TIMESTAMP == snapshot_version)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_ids.count()), K(snapshot_version));
+  } else if (OB_FAIL(ip_tablets_map.create(max_map_hash_bucket, "DdlTablet"))) {
+    LOG_WARN("fail to create ip_tablets_map", K(ret));
+  } else if (OB_FAIL(ls_tablets_map.create(max_map_hash_bucket, "DdlTablet"))) {
+    LOG_WARN("fail to create ls_tablets_map", K(ret));
   } else if (OB_FAIL(tablets_commited_map.create(max_map_hash_bucket, "DdlTablet"))){
     LOG_WARN("fail to create tablets_commited_map", K(ret));
   } else {
     const static int64_t batch_size = 100;  // batch tablet number
     int64_t total_build_succ_count = 0;
     int64_t one_batch_build_succ_count = 0;
-    ObArray<ObTabletID> batch_tablet_ids;
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
       const ObTabletID &tablet_id = tablet_ids.at(i);
-      if (OB_FAIL(batch_tablet_ids.push_back(tablet_id))) {
-        LOG_WARN("fail to push back tablet id", K(ret), K(tablet_id));
-      } else if (batch_tablet_ids.count() >= batch_size || i == tablet_ids.count() - 1) {
-        if (OB_FAIL(do_check_tablets_merge_status(snapshot_version,
-                                                  batch_tablet_ids,
-                                                  tablets_commited_map,
-                                                  one_batch_build_succ_count))) {
-          LOG_WARN("do check tablets merge status fail", K(ret), K(batch_tablet_ids));
-        } else {
-          total_build_succ_count += one_batch_build_succ_count;
-          batch_tablet_ids.reuse();
+      if (OB_FAIL(construct_ls_tablet_map(tablet_id, ls_tablets_map))) {
+        LOG_WARN("construct_tablet_ls_map fail", K(ret), K(tablet_id));
+      } else {
+        if ((i != 0 && i % batch_size == 0) /* reach batch size */ || i == tablet_ids.count() - 1 /* reach end */) {
+          for (hash::ObHashMap<ObLSID, ObArray<ObTabletID>>::const_iterator ls_iter = ls_tablets_map.begin();
+            ls_iter != ls_tablets_map.end() && OB_SUCC(ret); ++ls_iter) {
+            const ObLSID &ls_id = ls_iter->first;
+            const ObArray<ObTabletID> &tablet_array = ls_iter->second;
+            if (OB_FAIL(do_check_tablets_merge_status(snapshot_version,
+                                                      tablet_array,
+                                                      ls_id,
+                                                      ip_tablets_map,
+                                                      tablets_commited_map,
+                                                      one_batch_build_succ_count))) {
+              LOG_WARN("do check tablets merge status fail", K(ret));
+            } else {
+              total_build_succ_count += one_batch_build_succ_count;
+            }
+          }
+          ls_tablets_map.reuse(); // reuse map
         }
       }
     }
@@ -2522,6 +2838,8 @@ int ObCheckTabletDataComplementOp::check_tablet_merge_status(const ObIArray<comm
     }
   }
 
+  ip_tablets_map.destroy();
+  ls_tablets_map.destroy();
   tablets_commited_map.destroy();
 
   return ret;
@@ -2594,9 +2912,10 @@ int ObCheckTabletDataComplementOp::check_tablet_checksum_update_status(const uin
 }
 
 /*
- * 1. Get tablets for the index table.
- * 2. Check tablet merge status on the single local log stream.
- * 3. Check tablet checksum report status after all SSTables are built.
+ * 1. get a batch of tablets and construct a tmp ls_tablet_map
+ * 2. get tablet_ip_map and send async batch rpc and get results
+ * 3. push every tablet result to tablet_result_array
+ * 4. check result and find finished tablets
  */
 int ObCheckTabletDataComplementOp::check_all_tablet_sstable_status(const uint64_t index_table_id,
     const int64_t snapshot_version,

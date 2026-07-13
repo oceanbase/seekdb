@@ -22,7 +22,6 @@
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/session/ob_local_session_var.h"
-#include "sql/resolver/mv/ob_alter_mview_utils.h"
 #include "share/table/ob_ttl_util.h"
 #include "rootserver/ob_partition_exchange.h"
 #include "observer/vector_index/ob_vector_index_util.h"
@@ -185,12 +184,6 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
         LOG_USER_ERROR(OB_OP_NOT_ALLOW, "alter table localiy and tablegroup at the same time");
       } else if (OB_FAIL(set_table_options())) {
         SQL_RESV_LOG(WARN, "failed to set table options.", K(ret));
-      } else if ((table_schema_->required_by_mview_refresh() || table_schema_->is_mlog_table())
-          && !alter_table_stmt->get_alter_table_arg().is_alter_mlog_attributes_
-          && OB_FAIL(ObResolverUtils::check_allowed_alter_operations_for_mlog(
-              alter_table_stmt->get_alter_table_arg(),
-              *table_schema_))) {
-        LOG_WARN("failed to check allowed alter operations for mlog", KR(ret));
       } else if (OB_FAIL(check_semistruct_encoding_type(*table_schema_, alter_table_stmt->get_alter_table_schema()))) {
         LOG_WARN("failed to check semistruct encoding options", KR(ret));
       } else {
@@ -541,10 +534,6 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table schema should not be null", K(ret));
-      } else if (index_table_schema->is_materialized_view()) {
-        // bug: 
-        // index_tid_array: contains index and mv, here we only need to process the index
-        // so do-nothing for mv
       } else if (index_table_schema->is_built_in_fts_index()) {
         // skip built-in fts index
       } else if (OB_FAIL(index_table_schema->get_index_name(index_name))) {
@@ -575,9 +564,6 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
         ret = OB_ERR_UNEXPECTED;
         SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
       } else if (FALSE_IT(alter_table_stmt->inc_alter_table_action_count())) {
-      } else if (OB_FAIL(ObAlterMviewUtils::check_action_node_for_mlog_master(
-                     *table_schema_, action_node->type_))) {
-        LOG_WARN("mlog master is not supported", KR(ret));
       } else {
         switch (action_node->type_) {
         //deal with alter table option
@@ -819,25 +805,6 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
           }
           break;
         }
-        case T_MV_OPTIONS: {
-          alter_table_stmt->set_alter_mview_attributes();
-          if (OB_FAIL(ObAlterMviewUtils::resolve_mv_options(*action_node, session_info_,
-                                                            alter_table_stmt, table_schema_,
-                                                            schema_checker_->get_schema_guard(),
-                                                            allocator_,
-                                                            params_))) {
-            LOG_WARN("failed to resolve mv options", KR(ret));
-          }
-          break;
-        }
-        case T_ALTER_MLOG_OPTIONS: {
-          alter_table_stmt->set_alter_mlog_attributes();
-          if (OB_FAIL(ObAlterMviewUtils::resolve_mlog_options(
-                  *action_node, session_info_, alter_table_stmt, allocator_, params_))) {
-            LOG_WARN("failed to resolve mv options", KR(ret));
-          }
-          break;
-        }
         default: {
             ret = OB_ERR_UNEXPECTED;
             SQL_RESV_LOG(WARN, "Unknown alter table action %d", K_(action_node->type), K(ret));
@@ -1072,9 +1039,6 @@ int ObAlterTableResolver::resolve_column_options(const ParseNode &node,
       if (OB_ISNULL(column_node)) {
         ret = OB_ERR_UNEXPECTED;
         SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
-      } else if (OB_FAIL(ObAlterMviewUtils::check_column_option_for_mlog_master(
-                     *table_schema_, column_node->type_))) {
-        LOG_WARN("mlog master is not supported", KR(ret));
       } else {
         switch(column_node->type_) {
         //add column
@@ -1281,10 +1245,6 @@ int ObAlterTableResolver::resolve_index_column_list(const ParseNode &node,
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("experimental feature: build multivalue index afterward is experimental feature", K(ret));
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "build multivalue index afterward");
-          } else if (table_schema_->is_materialized_view()) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("create fulltext/multivalue/vector index on materialized view not supported", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "create fulltext/multivalue/vector index on materialized view");
           }
         } else if (index_keyname_ == FTS_KEY) {
           if (OB_ISNULL(session_info_)) {
@@ -1294,10 +1254,6 @@ int ObAlterTableResolver::resolve_index_column_list(const ParseNode &node,
                                                           sort_item.column_name_,
                                                           index_name_value))) {
             SQL_RESV_LOG(WARN, "check fts index constraint fail", K(ret), K(sort_item.column_name_));
-          } else if (table_schema_->is_materialized_view()) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("create fulltext/multivalue/vector index on materialized view not supported", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "create fulltext/multivalue/vector index on materialized view");
           }
         } else if (index_keyname_ == VEC_KEY) {
           // TODO@xiajin
@@ -3764,10 +3720,6 @@ int ObAlterTableResolver::resolve_partition_options(const ParseNode &node)
     if (OB_ISNULL(alter_table_stmt)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_RESV_LOG(WARN, "alter table stmt should not be null", K(ret));
-    } else if (table_schema_->is_materialized_view()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("alter partition of materialized view is not supported", KR(ret));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter partition of materialized view is");
     }
 
     if (OB_SUCC(ret)) {

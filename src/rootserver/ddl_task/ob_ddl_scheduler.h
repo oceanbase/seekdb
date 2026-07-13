@@ -271,8 +271,10 @@ public:
     return OB_SUCCESS;
   }
   // for role change
-  void deactivate() override;
-  int activate() override;
+  virtual void switch_to_follower_forcedly() override;
+  virtual int switch_to_leader() override;
+  virtual int switch_to_follower_gracefully() override;
+  virtual int resume_leader() override;
 
   // mtl_functions
   static int mtl_init(ObDDLScheduler *&ddl_scheduler);

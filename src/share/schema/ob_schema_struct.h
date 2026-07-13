@@ -326,7 +326,7 @@ const int64_t OB_MAX_AUX_TABLE_PER_MAIN_TABLE = OB_MAX_INDEX_PER_TABLE * OB_MAX_
                                            OB_MAX_SHARED_TABLE_CNT_PER_INDEX_TYPE + OB_AUX_LOB_TABLE_CNT;
 
 //       If the new index has multiple aux tables, you need to make sure that OB_MAX_AUX_TABLE_PER_MAIN_TABLE is correct and
-//       verify that a partition with max aux tables can be processed.
+//       max aux tables can be created.
 enum ObIndexType
 {
   INDEX_TYPE_IS_NOT = 0,//is not index table

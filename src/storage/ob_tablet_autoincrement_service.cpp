@@ -19,6 +19,7 @@
 #include "ob_tablet_autoincrement_service.h"
 #include "storage/ob_storage_rpc.h"
 #include "share/rc/ob_module_provider.h"
+#include "logservice/ob_log_service.h"
 #include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
 
 namespace oceanbase
@@ -125,19 +126,34 @@ int ObTabletAutoincMgr::fetch_new_range(const ObTabletAutoincParam &param,
                                         ObTabletCacheNode &node)
 {
   int ret = OB_SUCCESS;
+  share::ObLocationService *location_service = nullptr;
+  ObAddr leader_addr;
+  bool is_cache_hit = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("tablet auto increment service is not inited", K(ret), K(param), K(tablet_id));
+  } else if (OB_ISNULL(location_service = GCTX.location_service_)) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("location_cache is null", K(ret), KP(location_service));
   } else {
     obcall::ObFetchTabletSeqArg arg;
     obcall::ObFetchTabletSeqRes res;
     arg.cache_size_ = MAX(cache_size_, param.auto_increment_cache_size_); // TODO(shuangcan): confirm this
+    
     arg.tablet_id_ = tablet_id;
+    // arg.ls_id_ will be filled by location_service->get
 
     bool finish = false;
     for (int64_t retry_times = 0; OB_SUCC(ret) && !finish; retry_times++) {
       const int64_t rpc_timeout = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : OB_DEFAULT_RPC_TIMEOUT;
-      if (OB_FAIL(ObTabletAutoincSeqRpcHandler::get_instance().fetch_tablet_autoinc_seq_cache(arg, res))) {
+      if (OB_FAIL(location_service->get(tablet_id, 0/*expire_renew_time*/, is_cache_hit, arg.ls_id_))) {
+        LOG_WARN("fail to get log stream id", K(ret), K(tablet_id));
+      } else if (OB_FAIL(location_service->get_leader(GCONF.cluster_id,
+                                                      arg.ls_id_,
+                                                      false,/*force_renew*/
+                                                      leader_addr))) {
+        LOG_WARN("get leader failed", K(ret), K(arg.ls_id_));
+      } else if (OB_FAIL(ObTabletAutoincSeqRpcHandler::get_instance().fetch_tablet_autoinc_seq_cache(arg, res))) {
         LOG_WARN("fail to fetch autoinc cache for tablets", K(ret), K(retry_times), K(arg), K(rpc_timeout));
       }
       if (OB_SUCC(ret)) {
@@ -422,6 +438,7 @@ int ObTabletAutoincCacheCleaner::commit(const int64_t timeout_us)
   common::ObSEArray<common::ObAddr, 8> server_list;
   ObUnitInfoGetter ui_getter;
   obcall::ObClearTabletAutoincSeqCacheArg arg;
+  const ObLSID unused_ls_id = SYS_LS;
   int64_t abs_timeout_us = ObTimeUtility::current_time() + timeout_us;
   const ObTimeoutCtx &ctx = ObTimeoutCtx::get_ctx();
   if (THIS_WORKER.is_timeout_ts_valid()) {
@@ -441,7 +458,7 @@ int ObTabletAutoincCacheCleaner::commit(const int64_t timeout_us)
     LOG_WARN("init unit info getter failed", K(ret));
   } else if (OB_FAIL(ui_getter.get_tenant_servers(server_list))) {
     LOG_WARN("get tenant servers failed", K(ret));
-  } else if (OB_FAIL(arg.init(tablet_ids_))) {
+  } else if (OB_FAIL(arg.init(tablet_ids_, unused_ls_id))) {
     LOG_WARN("failed to init clear tablet autoinc arg", K(ret));
   } else {
     // seekdb: all servers are local, call handler directly.

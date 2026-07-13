@@ -214,6 +214,7 @@ ob_set_subtarget(ob_storage slog
   slog/ob_storage_log.cpp
   slog/ob_storage_log_write_buffer.cpp
   slog/ob_storage_log_writer.cpp
+  slog/ob_storage_logger_manager.cpp
   slog/ob_storage_logger.cpp
 )
 
@@ -335,13 +336,24 @@ ob_set_subtarget(ob_storage tablet
 
 ob_set_subtarget(ob_storage tx
   tx/ob_ctx_tx_data.cpp
+  tx/ob_gti_rpc.cpp
   tx/ob_gti_source.cpp
+  tx/ob_gts_local_cache.cpp
+  tx/ob_gts_msg.cpp
+  tx/ob_gts_rpc.cpp
+  tx/ob_gts_source.cpp
+  tx/ob_gts_task_queue.cpp
+  tx/ob_ts_response_handler.cpp
+  tx/ob_ts_worker.cpp
   tx/ob_id_service.cpp
   tx/ob_keep_alive_ls_handler.cpp
   tx/ob_tx_loop_worker.cpp
+  tx/ob_tx_ls_state_mgr.cpp
   tx/ob_tx_log_cb_define.cpp
   tx/ob_tx_log_cb_mgr.cpp
   tx/ob_tx_ctx_log_cb_helper.cpp
+  tx/ob_location_adapter.cpp
+  tx/ob_tablet_to_ls_cache.cpp
   tx/ob_timestamp_access.cpp
   tx/ob_timestamp_service.cpp
   tx/ob_weak_read_util.cpp
@@ -358,9 +370,10 @@ ob_set_subtarget(ob_storage tx
   tx/ob_trans_factory.cpp
   tx/ob_trans_id_service.cpp
   tx/ob_trans_memory_stat.cpp
-  tx/ob_tx_ctx.cpp
+  tx/ob_trans_part_ctx.cpp
   tx/ob_defensive_check_mgr.cpp
   tx/ob_trans_result.cpp
+  tx/ob_trans_rpc.cpp
   tx/ob_tx_result_struct.cpp
   tx/ob_trans_service.cpp
   tx/ob_trans_service_v4.cpp
@@ -376,14 +389,15 @@ ob_set_subtarget(ob_storage tx
   tx/ob_trans_timer.cpp
   tx/ob_trans_version_mgr.cpp
   tx/ob_ts_mgr.cpp
-  tx/ob_tx_timestamp_waiter.cpp
   tx/ob_tx_data_define.cpp
   tx/ob_tx_data_op.cpp
   tx/ob_tx_data_functor.cpp
-  tx/ob_tx_print_time_guard.cpp
+  tx/ob_tx_serialization.cpp
   tx/ob_tx_log.cpp
   tx/ob_tx_log_adapter.cpp
   tx/ob_tx_big_segment_buf.cpp
+  tx/ob_tx_ls_log_writer.cpp
+  tx/ob_tx_msg.cpp
   tx/ob_tx_on_demand_print.cpp
   tx/ob_tx_replay_executor.cpp
   tx/ob_xa_define.cpp
@@ -413,7 +427,11 @@ ob_set_subtarget(ob_storage tx_storage
   tx_storage/ob_access_service.cpp
   tx_storage/ob_checkpoint_service.cpp
   tx_storage/ob_ls_freeze_thread.cpp
+  tx_storage/ob_ls_handle.cpp
+  tx_storage/ob_ls_map.cpp
+  tx_storage/ob_ls_safe_destroy_task.cpp
   tx_storage/ob_ls_service.cpp
+  tx_storage/ob_safe_destroy_handler.cpp
   tx_storage/ob_tenant_freezer.cpp
   tx_storage/ob_tenant_freezer_common.cpp
   tx_storage/ob_tenant_freezer_rpc.cpp
@@ -446,6 +464,8 @@ ob_set_subtarget(ob_storage ls
   ls/ob_ls_ddl_log_handler.cpp
   ls/ob_ls_lock.cpp
   ls/ob_ls_meta.cpp
+  ls/ob_ls_meta_package.cpp
+  ls/ob_ls_role_handler.cpp
   ls/ob_ls_state.cpp
   ls/ob_ls_sync_tablet_seq_handler.cpp
   ls/ob_ls_switch_checker.cpp
@@ -591,7 +611,7 @@ ob_set_subtarget(ob_storage common
   ob_storage_schema_recorder.cpp
   ob_storage_clog_recorder.cpp
   ob_storage_struct.cpp
-  ob_tablet_restore_state.cpp
+  ob_tablet_ha_status.cpp
   ob_storage_ha_struct.cpp
   ob_storage_table_guard.cpp
   ob_storage_util.cpp
@@ -697,6 +717,7 @@ ob_set_subtarget(ob_storage memtable
   memtable/ob_memtable_block_row_scanner.cpp
   memtable/ob_memtable_compact_writer.cpp
   memtable/ob_memtable_context.cpp
+  memtable/ob_memtable_interface.cpp
   memtable/ob_memtable_iterator.cpp
   memtable/ob_memtable_mutator.cpp
   memtable/ob_memtable_read_row_util.cpp

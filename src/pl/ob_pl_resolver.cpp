@@ -1536,7 +1536,7 @@ int ObPLResolver::collect_dep_info_by_schema(const ObPLResolveCtx &ctx,
   CK (OB_NOT_NULL(table_schema));
 
   if (OB_SUCC(ret)) {
-    if (table_schema->is_view_table() && !table_schema->is_materialized_view()) {
+    if (table_schema->is_view_table()) {
       OZ (collect_dep_info_by_view_schema(ctx, table_schema, dependency_objects));
     } else {
       ObSchemaObjVersion version(table_schema->get_table_id(),
@@ -1573,7 +1573,7 @@ int ObPLResolver::build_record_type_by_schema(
     }
   }
   if (OB_SUCC(ret)) {
-    if (table_schema->is_view_table() && !table_schema->is_materialized_view()) {
+    if (table_schema->is_view_table()) {
       OZ (build_record_type_by_view_schema(
         resolve_ctx, table_schema, record_type));
     } else {

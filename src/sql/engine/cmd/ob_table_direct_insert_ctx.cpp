@@ -66,9 +66,6 @@ int ObTableDirectInsertCtx::init(
   } else if (OB_ISNULL(schema_guard = exec_ctx->get_sql_ctx()->schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected schema guard is null", KR(ret));
-  } else if (OB_UNLIKELY(session_info->get_ddl_info().is_mview_complete_refresh() && enable_inc_replace)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected mview complete refresh enable inc replace", KR(ret));
   } else if (OB_UNLIKELY(phy_plan.is_vectorized() &&
                          phy_plan.get_batch_size() > ObTableLoadParam::MAX_BATCH_SIZE)) {
     ret = OB_NOT_SUPPORTED;
@@ -89,7 +86,7 @@ int ObTableDirectInsertCtx::init(
       ObCompressorType compressor_type = ObCompressorType::NONE_COMPRESSOR;
       ObDirectLoadMethod::Type method = (is_incremental ? ObDirectLoadMethod::INCREMENTAL : ObDirectLoadMethod::FULL);
       ObDirectLoadInsertMode::Type insert_mode = ObDirectLoadInsertMode::INVALID_INSERT_MODE;
-      if (session_info->get_ddl_info().is_mview_complete_refresh() || is_insert_overwrite) {
+      if (is_insert_overwrite) {
         insert_mode = ObDirectLoadInsertMode::OVERWRITE;
       } else if (enable_inc_replace) {
         insert_mode = ObDirectLoadInsertMode::INC_REPLACE;

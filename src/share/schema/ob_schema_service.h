@@ -123,14 +123,11 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_TRUNCATE_TABLE, = 59)                               \
   ACT(OB_DDL_RENAME_PARTITION, = 60)                             \
   ACT(OB_DDL_RENAME_SUB_PARTITION, = 61)                         \
-  ACT(OB_DDL_MODIFY_MATERIALIZED_VIEW_STATUS, = 62)              \
   ACT(OB_DDL_EXCHANGE_PARTITION, = 65)                           \
-  ACT(OB_DDL_MODIFY_MVIEW_REFERENCE_TABLE_STATUS, = 66)          \
   ACT(OB_DDL_MODIFY_INDEX_TYPE, = 67)                            \
   ACT(OB_DDL_RECOVER_TABLE_END, = 68)                            \
   ACT(OB_DDL_ALTER_PARTITION_POLICY, = 69)                       \
   ACT(OB_DDL_ALTER_SUBPARTITION_POLICY, = 70)                    \
-  ACT(OB_DDL_MODIFY_MLOG_STATUS, = 71)                           \
   ACT(OB_DDL_TABLE_OPERATION_END, = 100)                         \
   ACT(OB_DDL_TENANT_OPERATION_BEGIN, = 101)                      \
   ACT(OB_DDL_ADD_TENANT,)                                        \

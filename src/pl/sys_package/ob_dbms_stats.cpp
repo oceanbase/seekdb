@@ -3629,7 +3629,6 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
   } else if (OB_FAIL(schema_guard.get_can_read_index_array(table_schema.get_table_id(),
                                                            tids,
                                                            index_aux_count,
-                                                           false, /*with_mv*/
                                                            true, /*with_global_index*/
                                                            false /*domain index*/))) {
     LOG_WARN("failed to get can read index", K(table_schema.get_table_id()), K(ret));
@@ -3959,10 +3958,6 @@ int ObDbmsStats::parse_table_info(ObExecContext &ctx,
                                                  is_index,
                                                  table_schema))) {
         LOG_WARN("failed to get table schema", K(ret), K(param.db_name_), K(param.tab_name_));
-      } else if (nullptr != table_schema && table_schema->is_materialized_view()) {
-        if (OB_FAIL(schema_guard->get_table_schema( table_schema->get_data_table_id(), table_schema))) {
-          LOG_WARN("fail to get mview container table schema", KR(ret), K(table_schema->get_data_table_id()));
-        }
       }
     } else {
       if (OB_FAIL(schema_guard->get_idx_schema_by_origin_idx_name(param.db_id_,

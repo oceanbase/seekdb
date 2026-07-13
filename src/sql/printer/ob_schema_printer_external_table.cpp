@@ -18,7 +18,6 @@
 #include "sql/printer/ob_schema_printer.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"  // ObDataInFileStruct(previously hidden behind the ext_utils include chain)
 
-#include "share/schema/ob_mview_info.h"
 #include "rootserver/ob_dynamic_partition_manager.h"
 #include "share/external_table/ob_external_file_location_basic.h"
 
@@ -30,7 +29,6 @@ namespace schema
 {
 using namespace std;
 using namespace common;
-using namespace sql;
 
 int ObSchemaPrinter::print_external_table_file_info(const ObTableSchema &table_schema,
                                                     ObIAllocator& allocator,
@@ -101,8 +99,7 @@ int ObSchemaPrinter::print_external_table_file_info(const ObTableSchema &table_s
     } else if (OB_FAIL(format.load_from_string(table_format_or_properties, allocator))) {
       SHARE_SCHEMA_LOG(WARN, "fail to load from json string", K(ret));
     } else if (!(format.format_type_ > ObExternalFileFormat::INVALID_FORMAT
-                 && format.format_type_ < ObExternalFileFormat::MAX_FORMAT
-                 && OB_NOT_NULL(ObExternalFileFormat::FORMAT_TYPE_STR[format.format_type_]))) {
+                 && format.format_type_ < ObExternalFileFormat::MAX_FORMAT)) {
       ret = OB_NOT_SUPPORTED;
       SHARE_SCHEMA_LOG(WARN, "unsupported to print file format", K(ret), K(format.format_type_));
     } else if (!is_odps_external_table && OB_FAIL(databuff_printf(buf, buf_len, pos, "\nFORMAT (\n"))) {
@@ -235,6 +232,14 @@ int ObSchemaPrinter::print_external_table_file_info(const ObTableSchema &table_s
       }
     } else if (OB_SUCC(ret) && ObExternalFileFormat::ORC_FORMAT == format.format_type_) {
       ret = OB_NOT_SUPPORTED;
+    } else if (OB_SUCC(ret) && ObExternalFileFormat::PARQUET_FORMAT == format.format_type_) {
+      const ObParquetGeneralFormat &parquet = format.parquet_format_;
+      const char *column_index_type = column_index_type_to_string(parquet.column_index_type_);
+      if (sql::ColumnIndexType::NAME != parquet.column_index_type_ &&
+        OB_FAIL(databuff_printf(buf, buf_len, pos, "\n  COLUMN_INDEX_TYPE = '%.*s',",
+                                static_cast<int>(STRLEN(column_index_type)), column_index_type))) {
+        SHARE_SCHEMA_LOG(WARN, "fail to print column index type", K(ret));
+      }
     }
     if (OB_SUCC(ret)) {
       --pos;

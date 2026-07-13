@@ -24,7 +24,6 @@
 #include "storage/ob_common_id_utils.h"
 #include "sql/session/ob_sql_session_mgr.h"
 #include "share/ob_ex_rpc.h"
-#include "storage/mview/ob_mview_sched_job_utils.h"
 
 namespace oceanbase
 {
@@ -302,8 +301,6 @@ ObDBMSSchedFuncType ObDBMSSchedJobInfo::get_func_type() const
   if (func_type == ObDBMSSchedFuncType::USER_JOB) { // update old inner job func type
     if (ObDbmsStatsMaintenanceWindow::is_stats_job(job_name_)) {
       func_type = ObDBMSSchedFuncType::STAT_MAINTENANCE_JOB;
-    } else if (!!(scheduler_flags_ & JOB_SCHEDULER_FLAG_DATE_EXPRESSION_JOB_CLASS)) {
-      func_type = ObDBMSSchedFuncType::MVIEW_JOB;
     } else if (0 == job_class_.case_compare("MYSQL_EVENT_JOB_CLASS")) {
       func_type = ObDBMSSchedFuncType::MYSQL_EVENT_JOB;
     } else if (0 == job_class_.case_compare("OLAP_ASYNC_JOB_CLASS")) {
@@ -516,7 +513,7 @@ int ObDBMSSchedJobUtils::create_dbms_sched_job(
   } else if (0 == job_info.job_type_.case_compare("STORED_PROCEDURE") && OB_FAIL(check_is_valid_name(job_info.program_name_))) {
     ret = OB_INVALID_ARGUMENT;
   //check repeat_interval
-  } else if (!job_info.repeat_interval_.empty() && !job_info.is_mview_job() && OB_FAIL(check_is_valid_repeat_interval(job_info.repeat_interval_))) {
+  } else if (!job_info.repeat_interval_.empty() && OB_FAIL(check_is_valid_repeat_interval(job_info.repeat_interval_))) {
     ret = OB_INVALID_ARGUMENT;
   //check argument
   } else if (OB_FAIL(check_is_valid_argument_num(job_info.number_of_argument_))) {

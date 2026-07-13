@@ -290,32 +290,6 @@ void ObDASDMLIterator::set_ctdef(const ObDASDMLBaseCtDef *das_ctdef)
   }
 }
 
-int ObDASMLogDMLIterator::get_next_row(blocksstable::ObDatumRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(row_iter_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dml iterator cannot be null", KR(ret), K_(row_iter));
-  } else if (OB_FAIL(row_iter_->get_next_row(row))) {
-    LOG_WARN("failed to get next row from dml iterator", KR(ret));
-  } else if (OB_ISNULL(row)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row cannot be null", KR(ret), KP(row));
-  } else {
-    if (OB_FAIL(ObDASUtils::generate_mlog_row(ls_id_,
-                                              tablet_id_,
-                                              dml_param_,
-                                              *row,
-                                              op_type_,
-                                              is_old_row_))) {
-      LOG_WARN("failed to generate mlog rows", KR(ret));
-    } else if (DAS_OP_TABLE_UPDATE == op_type_) {
-      is_old_row_ = !is_old_row_;
-    }
-  }
-  return ret;
-}
-
 int ObDASWriteBuffer::DmlShadowRow::init(ObIAllocator &allocator,
                                          int64_t datum_cnt,
                                          bool strip_lob_locator)

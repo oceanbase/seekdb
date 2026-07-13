@@ -30,6 +30,7 @@ namespace storage
 ObTableIterParam::ObTableIterParam()
     : table_id_(0),
       tablet_id_(),
+      ls_id_(),
       read_info_(nullptr),
       rowkey_read_info_(nullptr),
       tablet_handle_(nullptr),
@@ -83,6 +84,7 @@ void ObTableIterParam::reset()
 {
   table_id_ = 0;
   tablet_id_.reset();
+  ls_id_.reset();
   read_info_ = nullptr;
   rowkey_read_info_ = nullptr;
   tablet_handle_ = nullptr;
@@ -176,6 +178,7 @@ DEF_TO_STRING(ObTableIterParam)
   J_OBJ_START();
   J_KV(K_(table_id),
        K_(tablet_id),
+       K_(ls_id),
        KPC_(read_info),
        KPC_(rowkey_read_info),
        KPC_(out_cols_project),
@@ -267,6 +270,7 @@ int ObTableAccessParam::init(
     const share::schema::ObTableParam &table_param = *scan_param.table_param_;
     iter_param_.table_id_ = table_param.get_table_id();
     iter_param_.tablet_id_ = scan_param.tablet_id_;
+    iter_param_.ls_id_ = scan_param.ls_id_;
     iter_param_.read_info_ = &table_param.get_read_info();
 
     if (nullptr == tablet_handle) {
@@ -313,6 +317,7 @@ int ObTableAccessParam::init(
       iter_param_.table_scan_opt_.storage_rowsets_size_ = 1;
     }
     iter_param_.pushdown_filter_ = scan_param.pd_storage_filters_;
+    iter_param_.ls_id_ = scan_param.ls_id_;
      // disable blockscan if scan order is KeepOrder
      // disable blockscan if use index skip scan as no large range to scan
     if (OB_UNLIKELY(ObQueryFlag::KeepOrder == scan_param.scan_flag_.scan_order_ ||
@@ -431,6 +436,7 @@ int ObTableAccessParam::init_dml_access_param(
     iter_param_.table_id_ = table.get_table_id();
     iter_param_.tablet_id_ = table.get_tablet_id();
     if (nullptr != table.tablet_iter_.get_tablet()) {
+      iter_param_.ls_id_ = table.tablet_iter_.get_tablet()->get_tablet_meta().ls_id_;
     }
     iter_param_.read_info_ = &schema_param.get_read_info();
     iter_param_.rowkey_read_info_ = &rowkey_read_info;

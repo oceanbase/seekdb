@@ -17,7 +17,6 @@
 #pragma once
 
 #include "lib/ob_define.h"
-#include "storage/mview/ob_mview_sched_job_utils.h"
 
 namespace oceanbase {
 namespace share {
@@ -39,7 +38,7 @@ namespace dbms_scheduler {
 class ObDBMSSchedJobInfo;
 }
 namespace storage {
-class ObVectorIndexSchedJobUtils : public ObMViewSchedJobUtils {
+class ObVectorIndexSchedJobUtils {
 public:
   static constexpr int64_t DEFAULT_REFRESH_INTERVAL_TS =
       10L * 60 * 1000000; // 10min
@@ -51,7 +50,7 @@ public:
 #endif
   static constexpr int64_t DEFAULT_REFRESH_TRIGGER_THRESHOLD = 10000;
   static constexpr double DEFAULT_REBUILD_TRIGGER_THRESHOLD = 0.2;
-  ObVectorIndexSchedJobUtils() : ObMViewSchedJobUtils() {}
+  ObVectorIndexSchedJobUtils() = default;
   virtual ~ObVectorIndexSchedJobUtils() {}
 
   static int add_scheduler_job(common::ObISQLClient &sql_client, const int64_t job_id,

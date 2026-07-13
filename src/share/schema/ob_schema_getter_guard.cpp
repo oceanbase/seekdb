@@ -236,7 +236,6 @@ int ObSchemaGetterGuard::get_can_read_index_array(
     const uint64_t table_id,
     uint64_t *index_tid_array,
     int64_t &size,
-    bool with_mv,
     bool with_global_index /* =true */,
     bool with_domain_index /*=true*/,
     bool with_spatial_index /*=true*/,
@@ -279,9 +278,7 @@ int ObSchemaGetterGuard::get_can_read_index_array(
         }
       }
       if (OB_SUCC(ret)) {
-        if (!with_mv && index_schema->is_mlog_table()) {
-          // skip
-        } else if (!with_global_index && index_schema->is_global_index_table()) {
+        if (!with_global_index && index_schema->is_global_index_table()) {
           // skip
         } else if (!with_domain_index && index_schema->is_fts_index()) {
           // does not need domain index, skip it
@@ -299,36 +296,6 @@ int ObSchemaGetterGuard::get_can_read_index_array(
     size = can_read_count;
   }
 
-  return ret;
-}
-
-// For SQL only
-int ObSchemaGetterGuard::get_table_mlog_schema(
-                                               const uint64_t data_table_id,
-                                               const ObTableSchema *&mlog_schema)
-{
-  int ret = OB_SUCCESS;
-  mlog_schema = NULL;
-  const ObTableSchema *table_schema = NULL;
-  uint64_t mlog_table_id = OB_INVALID_ID;
-  if (OB_FAIL(check_tenant_schema_guard())) {
-    LOG_WARN("fail to check tenant schema guard", KR(ret));
-  } else if (OB_FAIL(get_table_schema( data_table_id, table_schema))) {
-    LOG_TRACE("cannot get table schema for table", KR(ret), K(data_table_id));
-  } else if (OB_ISNULL(table_schema)) {
-    ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("cannot get table schema for table ", KR(ret), K(data_table_id));
-  } else if (!table_schema->has_mlog_table()) {
-    ret = OB_ERR_TABLE_NO_MLOG;
-    LOG_WARN("table schema does not has materialized view log", KR(ret), K(data_table_id));
-  } else if (FALSE_IT(mlog_table_id = table_schema->get_mlog_tid())) {
-  } else if (OB_FAIL(get_table_schema( mlog_table_id, mlog_schema))) {
-    LOG_WARN("cannot get table schema for table", KR(ret), K(mlog_table_id));
-  } else if (OB_ISNULL(mlog_schema)) {
-    ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("cannot get table schema for mlog table ",
-        KR(ret), K(data_table_id), K(mlog_table_id));
-  }
   return ret;
 }
 
@@ -838,8 +805,7 @@ int ObSchemaGetterGuard::get_catalog_schema_by_id(const uint64_t catalog_id,
 int ObSchemaGetterGuard::get_can_write_index_array(const uint64_t table_id,
     uint64_t *index_tid_array,
     int64_t &size,
-    bool only_global,
-    bool with_mlog)
+    bool only_global)
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = NULL;
@@ -853,26 +819,6 @@ int ObSchemaGetterGuard::get_can_write_index_array(const uint64_t table_id,
     LOG_WARN("cannot get table schema for table ", KR(ret), K(table_id));
   } else if (OB_FAIL(table_schema->get_simple_index_infos(simple_index_infos))) {
     LOG_WARN("get simple_index_infos failed", KR(ret), K(table_id));
-  } else if (with_mlog) {
-    if (table_schema->has_mlog_table()) {
-      ObAuxTableMetaInfo mlog_meta_info;
-      mlog_meta_info.table_id_ = table_schema->get_mlog_tid();
-      mlog_meta_info.table_type_ = MATERIALIZED_VIEW_LOG;
-      if (OB_FAIL(simple_index_infos.push_back(mlog_meta_info))) {
-        LOG_WARN("failed to push back mlog meta info to simple index infos", KR(ret),
-                 K(mlog_meta_info));
-      }
-    }
-    if (OB_SUCC(ret) && table_schema->has_tmp_mlog_table()) {
-      ObAuxTableMetaInfo mlog_meta_info;
-      mlog_meta_info.table_id_ = table_schema->get_tmp_mlog_tid();
-      mlog_meta_info.table_type_ = MATERIALIZED_VIEW_LOG;
-      mlog_meta_info.is_tmp_mlog_ = true;
-      if (OB_FAIL(simple_index_infos.push_back(mlog_meta_info))) {
-        LOG_WARN("failed to push back tmp mlog meta info to simple index infos", KR(ret),
-                 K(mlog_meta_info));
-      }
-    }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
     const uint64_t index_id = simple_index_infos.at(i).table_id_;
@@ -886,10 +832,7 @@ int ObSchemaGetterGuard::get_can_write_index_array(const uint64_t table_id,
     } else if (OB_MAX_AUX_TABLE_PER_MAIN_TABLE <= can_write_count) {
       ret = OB_ERR_TOO_MANY_KEYS;
       LOG_USER_ERROR(OB_ERR_TOO_MANY_KEYS, OB_MAX_INDEX_PER_TABLE);
-      LOG_WARN("too many index, index aux or mlog for table!", K(can_write_count), K(OB_MAX_AUX_TABLE_PER_MAIN_TABLE));
-    } else if (index_schema->is_mlog_table()) {
-      index_tid_array[can_write_count] = simple_index_infos.at(i).table_id_;
-      ++can_write_count;
+      LOG_WARN("too many indexes or index auxiliary tables", K(can_write_count), K(OB_MAX_AUX_TABLE_PER_MAIN_TABLE));
     } else if (!only_global) {
       index_tid_array[can_write_count] = simple_index_infos.at(i).table_id_;
       ++can_write_count;

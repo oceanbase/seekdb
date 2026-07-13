@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-FUNCTION_TYPE(MVIEW_JOB) //materialized view
 FUNCTION_TYPE(STAT_MAINTENANCE_JOB, SHADOW) //Statistics information
 FUNCTION_TYPE(OLAP_ASYNC_JOB) //olap asynchronous job
 FUNCTION_TYPE(MYSQL_EVENT_JOB) //mysql_event

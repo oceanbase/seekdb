@@ -489,7 +489,9 @@ DEFINE_ERROR(OB_MERGE_ALREADY_STARTED, -4548, -1, "HY000", "merge already starte
 DEFINE_ERROR(OB_ROOTSERVICE_EXIST, -4549, -1, "HY000", "rootservice already exist");
 DEFINE_ERROR(OB_RS_SHUTDOWN, -4550, -1, "HY000", "rootservice is shutdown");
 DEFINE_ERROR(OB_SERVER_MIGRATE_IN_DENIED, -4551, -1, "HY000", "server migrate in denied");
+DEFINE_ERROR(OB_REBALANCE_TASK_CANT_EXEC, -4552, -1, "HY000", "rebalance task can not executing now");
 DEFINE_ERROR(OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT, -4553, -1, "HY000", "rootserver can not hold more partition");
+DEFINE_ERROR(OB_REBALANCE_TASK_NOT_IN_PROGRESS, -4554, -1, "HY000", "rebalance task not in progress on seekdb");
 DEFINE_ERROR(OB_DATA_SOURCE_NOT_EXIST, -4600, -1, "HY000", "Data source not exist");
 DEFINE_ERROR(OB_DATA_SOURCE_TABLE_NOT_EXIST, -4601, -1, "HY000", "Data source table not exist");
 DEFINE_ERROR(OB_DATA_SOURCE_RANGE_NOT_EXIST, -4602, -1, "HY000", "Data source range not exist");
@@ -593,9 +595,11 @@ DEFINE_ERROR_EXT(OB_TENANT_RESOURCE_UNIT_EXIST, -4712, -1, "HY000", "tenant alre
 DEFINE_ERROR_EXT(OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX, -4713, -1, "HY000", "rebuild global index failed when drop/truncate partitions", "rebuild global index:'%.*s' failed when drop/truncate partitions");
 DEFINE_ERROR(OB_ERR_ATLER_TABLE_ILLEGAL_FK, -4714, -1, "HY000", "unique/primary keys in table referenced by enabled foreign keys");
 DEFINE_ERROR(OB_LEADER_COORDINATOR_NEED_RETRY, -4716, -1, "HY000", "leader coordinator needs retry");
+DEFINE_ERROR(OB_REBALANCE_TASK_NEED_RETRY, -4717, -1, "HY000", "rebalance task needs retry");
 
 // for log stream and tablet
 DEFINE_ERROR(OB_LS_NOT_EXIST, -4719, -1, "HY000", "log stream does not exist");
+DEFINE_ERROR(OB_TOO_MANY_TENANT_LS, -4720, -1, "HY000", "too many log streams were defined for this tenant");
 DEFINE_ERROR(OB_LS_LOCATION_NOT_EXIST, -4721, -1, "HY000", "log stream location does not exist");
 DEFINE_ERROR(OB_LS_LOCATION_LEADER_NOT_EXIST, -4722, -1, "HY000", "log stream location leader does not exist");
 DEFINE_ERROR(OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST, -4723, -1, "HY000", "mapping between tablet and log stream does not exist");
@@ -616,6 +620,7 @@ DEFINE_ERROR(OB_RESOURCE_UNIT_VALUE_INVALID, -4736, -1, "HY000", "resource unit 
 DEFINE_ERROR(OB_LS_EXIST, -4737, -1, "HY000", "log stream already exist");
 DEFINE_ERROR(OB_DEVICE_EXIST, -4738, -1, "HY000", "Unexpected device existence");
 DEFINE_ERROR(OB_DEVICE_NOT_EXIST, -4739, -1, "HY000", "Device does not exist");
+DEFINE_ERROR(OB_LS_REPLICA_TASK_RESULT_UNCERTAIN, -4740, -1, "HY000", "log stream replica task result is uncertain");
 DEFINE_ERROR(OB_WAIT_REPLAY_TIMEOUT, -4741, -1, "HY000", "log stream wait log replay timeout");
 DEFINE_ERROR(OB_WAIT_TABLET_READY_TIMEOUT, -4742, -1, "HY000", "log stream wait tablet ready timeout");
 DEFINE_ERROR(OB_FREEZE_SERVICE_EPOCH_MISMATCH, -4743, -1, "HY000", "freeze service epoch is not expected");
@@ -1773,6 +1778,7 @@ DEFINE_ERROR(OB_TRANS_FREE_ROUTE_NOT_SUPPORTED, -6279, 6279, "HY000", "Query is 
 
 DEFINE_ERROR(OB_TRANS_LIVE_TOO_MUCH_TIME, -6280, -1, "HY000", "Transaction cost too much without commit or rollback");
 DEFINE_ERROR(OB_TRANS_COMMIT_TOO_MUCH_TIME, -6281, -1, "HY000", "Transaction commit cost too much");
+DEFINE_ERROR(OB_TRANS_TOO_MANY_PARTICIPANTS, -6282, 6002, "40000", "too many transaction participants");
 
 DEFINE_ERROR(OB_LOG_ALREADY_SPLIT, -6283, -1, "HY000", "The big log entry has been split into multiple part");
 // for json schema
@@ -2171,6 +2177,7 @@ DEFINE_ERROR(OB_LOG_ARCHIVE_ALREADY_STOPPED, -9034, -1, "HY000", "log archive al
 DEFINE_ERROR(OB_RESTORE_INDEX_FAILED, -9035, -1, "HY000", "restore index failed");
 DEFINE_ERROR(OB_BACKUP_IN_PROGRESS, -9036, -1, "HY000", "Backup is in progress");
 DEFINE_ERROR(OB_INVALID_LOG_ARCHIVE_STATUS, -9037, -1, "HY000", "log archive status is not valid");
+DEFINE_ERROR(OB_CANNOT_ADD_REPLICA_DURING_SET_MEMBER_LIST, -9038, -1, "HY000", "Cannot add replica during set member list in restore");
 DEFINE_ERROR(OB_LOG_ARCHIVE_LEADER_CHANGED, -9039, -1, "HY000", "pg log archive leader changed");
 DEFINE_ERROR_EXT(OB_BACKUP_CAN_NOT_START, -9040, -1, "HY000", "backup can not start", "backup can not start, because %s");
 DEFINE_ERROR(OB_CANCEL_BACKUP_NOT_ALLOWED, -9041, -1, "HY000", "cancel backup do not allow");

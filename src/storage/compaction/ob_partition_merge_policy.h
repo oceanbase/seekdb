@@ -173,6 +173,7 @@ private:
   // diagnose part
   static int diagnose_minor_dag(
       compaction::ObMergeType merge_type,
+      const share::ObLSID ls_id,
       const common::ObTabletID tablet_id,
       char *buf,
       const int64_t buf_len);
@@ -209,6 +210,7 @@ struct ObMinorExecuteRangeMgr
   }
 
   int get_merge_ranges(
+      const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id);
   bool in_execute_range(const storage::ObITable *table) const;
   int sort_ranges();

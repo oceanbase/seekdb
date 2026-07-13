@@ -180,6 +180,10 @@ ob_set_subtarget(ob_server table_load
   table_load/dag/ob_table_load_dag.cpp
   table_load/dag/ob_table_load_empty_insert_dag.cpp
   table_load/resource/ob_table_load_resource_manager.cpp
+  table_load/resource/ob_table_load_resource_processor.cpp
+  table_load/resource/ob_table_load_resource_rpc_executor.cpp
+  table_load/resource/ob_table_load_resource_rpc.cpp
+  table_load/resource/ob_table_load_resource_rpc_struct.cpp
   table_load/resource/ob_table_load_resource_service.cpp
   table_load/plan/ob_table_load_data_channel.cpp
   table_load/plan/ob_table_load_data_table_row_handler.cpp
@@ -200,6 +204,7 @@ ob_set_subtarget(ob_server table_load
   table_load/plan/ob_table_load_unique_index_table_row_handler.cpp
   table_load/plan/ob_table_load_write_op.cpp
   table_load/ob_table_load_assigned_memory_manager.cpp
+  table_load/ob_table_load_assigned_task_manager.cpp
   table_load/ob_table_load_autoinc_nextval.cpp
   table_load/ob_table_load_bucket.cpp
   table_load/ob_table_load_client_service.cpp
@@ -425,6 +430,7 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_session_ps_info.cpp
   virtual_table/ob_all_virtual_sql_stat.cpp
   virtual_table/ob_all_virtual_tmp_file.cpp
+  virtual_table/ob_all_virtual_log_transport_dest_stat.cpp
   virtual_table/ob_all_virtual_plugin_info.cpp
   virtual_table/ob_all_virtual_change_stream_refresh_stat.cpp
   virtual_table/ob_all_virtual_dynamic_partition_table.cpp
@@ -618,3 +624,5 @@ else()
 endif()
 
 configure_file(../share/ob_version.cpp.in ob_version.cpp)
+
+add_subdirectory(embed)

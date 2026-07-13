@@ -537,9 +537,6 @@ public:
   ObIArray<ObArrayParamGroup> &get_array_param_groups() { return array_param_groups_; }
   int set_all_local_session_vars(ObIArray<ObLocalSessionVar> &all_local_session_vars);
   int get_local_session_vars(int64_t idx, const ObSolidifiedVarsContext *&local_vars);
-  common::ObFixedArray<uint64_t, common::ObIAllocator> &get_mview_ids() {  return mview_ids_; }
-  common::ObFixedArray<uint64_t, common::ObIAllocator> &get_last_refresh_scns() {  return last_refresh_scns_; }
-  uint64_t get_last_refresh_scn(uint64_t mview_id) const;
   inline void set_is_direct_insert_plan(const bool is_direct_insert_plan)
   {
     is_direct_insert_plan_ = is_direct_insert_plan;
@@ -691,9 +688,6 @@ private:
   bool enable_rich_format_;
   // for dependant exprs of generated columns
   common::ObFixedArray<ObSolidifiedVarsContext, common::ObIAllocator> all_local_session_vars_;
-  // for last_refresh_scn expr to get last_refresh_scn for rt mview used in query
-  common::ObFixedArray<uint64_t, common::ObIAllocator> mview_ids_;
-  common::ObFixedArray<uint64_t, common::ObIAllocator> last_refresh_scns_;
   int64_t total_memstore_read_row_count_;
   int64_t total_ssstore_read_row_count_;
   bool is_direct_insert_plan_; // for direct load: insert into/overwrite select

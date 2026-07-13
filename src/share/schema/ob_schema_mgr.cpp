@@ -411,7 +411,6 @@ ObSchemaMgr::ObSchemaMgr()
       ccl_rule_mgr_(allocator_),
       timestamp_in_slot_(0),
       allocator_idx_(OB_INVALID_INDEX),
-      mlog_infos_(0, NULL, SET_USE_500(ObModIds::OB_SCHEMA_MLOG_INFO_VEC, ObCtxIds::SCHEMA_SERVICE)),
       ai_model_mgr_(allocator_),
       location_mgr_(allocator_)
 {
@@ -454,7 +453,6 @@ ObSchemaMgr::ObSchemaMgr(ObIAllocator &allocator)
       ccl_rule_mgr_(allocator_),
       timestamp_in_slot_(0),
       allocator_idx_(OB_INVALID_INDEX),
-      mlog_infos_(0, NULL, SET_USE_500(ObModIds::OB_SCHEMA_MLOG_INFO_VEC, ObCtxIds::SCHEMA_SERVICE)),
       ai_model_mgr_(allocator_),
       location_mgr_(allocator_)
 {
@@ -568,7 +566,6 @@ void ObSchemaMgr::reset()
     built_in_index_name_map_.clear();
     context_mgr_.reset();
     mock_fk_parent_table_mgr_.reset();
-    mlog_infos_.clear();
     ai_model_mgr_.reset();
     location_mgr_.reset();
   }
@@ -621,7 +618,6 @@ int ObSchemaMgr::assign(const ObSchemaMgr &other)
     ASSIGN_FIELD(foreign_key_name_map_);
     ASSIGN_FIELD(constraint_name_map_);
     ASSIGN_FIELD(hidden_table_name_map_);
-    ASSIGN_FIELD(mlog_infos_);
     ASSIGN_FIELD(built_in_index_name_map_);
     #undef ASSIGN_FIELD
     if (OB_SUCC(ret)) {
@@ -1736,7 +1732,6 @@ int ObSchemaMgr::reserved_mem_for_tables_(
   int64_t lob_meta_cnt = 0;
   int64_t lob_piece_cnt = 0;
   int64_t hidden_table_cnt = 0;
-  int64_t mlog_cnt = 0;
   int64_t other_table_cnt = 0;
   int64_t fk_cnt = 0;
   int64_t cst_cnt = 0;
@@ -1765,8 +1760,6 @@ int ObSchemaMgr::reserved_mem_for_tables_(
           lob_piece_cnt++;
         } else if (table->is_user_hidden_table()) {
           hidden_table_cnt++;
-        } else if (table->is_mlog_table()) {
-          mlog_cnt++;
         } else {
           other_table_cnt++;
         }
@@ -1812,12 +1805,6 @@ int ObSchemaMgr::reserved_mem_for_tables_(
       }
     }
 
-    if (OB_SUCC(ret) && mlog_cnt > 0) {
-      if (OB_FAIL(mlog_infos_.reserve(mlog_cnt))) {
-        LOG_WARN("fail to reserved array", KR(ret), K(mlog_cnt));
-      }
-    }
-
     if (OB_SUCC(ret) && other_table_cnt > 0) {
       //(void) table_name_map_.set_sub_map_mem_size(other_table_cnt * OBJECT_SIZE);
     }
@@ -1834,7 +1821,7 @@ int ObSchemaMgr::reserved_mem_for_tables_(
   FLOG_INFO("reserve mem", KR(ret),
             K(table_cnt), K(index_cnt), K(vp_cnt),
             K(lob_meta_cnt), K(lob_piece_cnt),
-            K(hidden_table_cnt), K(mlog_cnt),
+            K(hidden_table_cnt),
             K(other_table_cnt), K(fk_cnt), K(cst_cnt),
             "cost", ObTimeUtility::current_time() - start_time);
   return ret;
@@ -1940,15 +1927,6 @@ int ObSchemaMgr::add_table(
                                          equal_table,
                                          replaced_lob_piece_table))) {
       LOG_WARN("failed to add lob piece schema", K(ret));
-    }
-  } else if (new_table_schema->is_mlog_table()) {
-    ObSimpleTableSchemaV2 *replaced_mlog_table = NULL;
-    if (OB_FAIL(mlog_infos_.replace(new_table_schema,
-                                    iter,
-                                    compare_aux_table,
-                                    equal_table,
-                                    replaced_mlog_table))) {
-      LOG_WARN("failed to add mlog schema", KR(ret));
     }
   }
   if (OB_NOT_NULL(cost_array) && idx < cost_array->count()) {
@@ -2643,10 +2621,6 @@ int ObSchemaMgr::del_table(const ObTenantTableId table)
       if (OB_FAIL(remove_aux_table(*schema_to_del))) {
         LOG_WARN("failed to remove aux table schema", K(ret), K(*schema_to_del));
       }
-    } else if (schema_to_del->is_mlog_table()) {
-      if (OB_FAIL(remove_aux_table(*schema_to_del))) {
-        LOG_WARN("failed to remove mlog table schema", KR(ret), K(*schema_to_del));
-      }
     }
   }
   if (OB_SUCC(ret)) {
@@ -2815,8 +2789,6 @@ int ObSchemaMgr::remove_aux_table(const ObSimpleTableSchemaV2 &schema_to_del)
     infos = &lob_meta_infos_;
   } else if (schema_to_del.is_aux_lob_piece_table()) {
     infos = &lob_piece_infos_;
-  } else if (schema_to_del.is_mlog_table()) {
-    infos = &mlog_infos_;
   } else {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Invalid table type.", K(ret), K(schema_to_del.get_table_type()));
@@ -3417,14 +3389,11 @@ int ObSchemaMgr::get_aux_schemas(
       infos = &lob_meta_infos_;
     } else if (table_type == AUX_LOB_PIECE) {
       infos = &lob_piece_infos_;
-    } else if (table_type == MATERIALIZED_VIEW_LOG) {
-      infos = &mlog_infos_;
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Invalid table type.", K(ret), K(table_type));
     }
     if (OB_SUCC(ret)) {
-      // TODO: make aux_vp_infos_ added for mv
       ObTenantTableId tenant_data_table_id(data_table_id);
       TableIterator iter = infos->lower_bound(tenant_data_table_id, compare_with_tenant_data_table_id);
       const ObSimpleTableSchemaV2 *aux_schema = NULL;
@@ -3488,8 +3457,7 @@ int ObSchemaMgr::get_schema_count(int64_t &schema_count) const
     int64_t tenant_schema_count = (tenant_info_ != NULL ? 1 : 0);
     schema_count = tenant_schema_count + user_infos_.size() + database_infos_.size()
                    + tablegroup_infos_.size() + table_infos_.size() + index_infos_.size()
-                   + aux_vp_infos_.size() + lob_meta_infos_.size() + lob_piece_infos_.size()
-                   + mlog_infos_.size();
+                   + aux_vp_infos_.size() + lob_meta_infos_.size() + lob_piece_infos_.size();
     int64_t outline_schema_count = 0;
     int64_t routine_schema_count = 0;
     int64_t priv_schema_count = 0;
@@ -4337,7 +4305,7 @@ int ObSchemaMgr::get_table_statistics(ObSchemaStatisticsInfo &schema_info) const
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    schema_info.count_ = table_infos_.size() + index_infos_.size() + aux_vp_infos_.size() + lob_meta_infos_.size() + lob_piece_infos_.size() + mlog_infos_.size();
+    schema_info.count_ = table_infos_.size() + index_infos_.size() + aux_vp_infos_.size() + lob_meta_infos_.size() + lob_piece_infos_.size();
     for (ConstTableIterator it = table_infos_.begin(); OB_SUCC(ret) && it != table_infos_.end(); it++) {
       if (OB_ISNULL(*it)) {
         ret = OB_ERR_UNEXPECTED;
@@ -4371,14 +4339,6 @@ int ObSchemaMgr::get_table_statistics(ObSchemaStatisticsInfo &schema_info) const
       }
     }
     for (ConstTableIterator it = lob_piece_infos_.begin(); OB_SUCC(ret) && it != lob_piece_infos_.end(); it++) {
-      if (OB_ISNULL(*it)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("schema is null", K(ret));
-      } else {
-        schema_info.size_ += (*it)->get_convert_size();
-      }
-    }
-    for (ConstTableIterator it = mlog_infos_.begin(); OB_SUCC(ret) && it != mlog_infos_.end(); it++) {
       if (OB_ISNULL(*it)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("schema is null", K(ret));

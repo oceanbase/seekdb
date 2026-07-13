@@ -48,7 +48,6 @@ public:
     : ObSelectResolver(params),
       parent_view_resolver_(NULL),
       is_create_view_(false),
-      materialized_(false),
       auto_name_id_(1),
       view_db_name_(view_db_name),
       view_name_(view_name),
@@ -74,8 +73,6 @@ public:
   { parent_view_resolver_ = parent_view_resolver; }
   virtual int check_in_sysview(bool &in_sysview) const override;
   void set_is_create_view(bool is_create_view) { is_create_view_ = is_create_view; }
-  void set_materialized(bool materialized) { materialized_ = materialized; }
-  bool get_materialized() { return materialized_; }
   void set_auto_name_id(uint64_t auto_name_id) { auto_name_id_ = auto_name_id; }
   uint64_t get_auto_name_id() const { return auto_name_id_; }
 
@@ -99,7 +96,6 @@ protected:
   ObViewTableResolver *parent_view_resolver_;
   //ObViewTableResolver was called by create view stmt
   bool is_create_view_;
-  bool materialized_;
   uint64_t auto_name_id_;
   const ObString view_db_name_;
   const ObString view_name_;

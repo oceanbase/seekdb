@@ -281,7 +281,7 @@ int ObColumnNamespaceChecker::check_column_exists(const TableItem &table_item, c
     LOG_WARN("params_.session_info_ is null", K(ret));
   } else if (table_item.is_basic_table()) {
     //check column name in schema checker
-    if (0 == col_name.case_compare("ORA_ROWSCN") || 0 == col_name.case_compare(OB_MLOG_OLD_NEW_COLUMN_NAME)) {
+    if (0 == col_name.case_compare("ORA_ROWSCN")) {
       //only basic table has ora_rowscn
       is_exist = true;
     } else if (OB_FAIL(params_.schema_checker_->check_column_exists(table_id,

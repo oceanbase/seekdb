@@ -45,7 +45,8 @@ using namespace share;
 namespace sql
 {
 template <>
-int ObDASIndexDMLAdaptor<DAS_OP_TABLE_INSERT, ObDASDMLIterator>::write_rows(const ObTabletID &tablet_id,
+int ObDASIndexDMLAdaptor<DAS_OP_TABLE_INSERT, ObDASDMLIterator>::write_rows(const ObLSID &ls_id,
+                                                                            const ObTabletID &tablet_id,
                                                                             const CtDefType &ctdef,
                                                                             RtDefType &rtdef,
                                                                             ObDASDMLIterator &iter,
@@ -54,14 +55,16 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_INSERT, ObDASDMLIterator>::write_rows(cons
   int ret = OB_SUCCESS;
   ObAccessService *as = share::g_mp->access_service();
   if (rtdef.use_put_) {
-    ret = as->put_rows(tablet_id,
+    ret = as->put_rows(ls_id,
+                       tablet_id,
                        *tx_desc_,
                        dml_param_,
                        ctdef.column_ids_,
                        &iter,
                        affected_rows);
   } else {
-    ret = as->insert_rows(tablet_id,
+    ret = as->insert_rows(ls_id,
+                          tablet_id,
                           *tx_desc_,
                           dml_param_,
                           ctdef.column_ids_,
@@ -94,7 +97,7 @@ int ObDASInsertOp::open_op()
 {
   int ret = OB_SUCCESS;
   if (ins_rtdef_->need_fetch_conflict_ && OB_FAIL(insert_row_with_fetch())) {
-    LOG_WARN("fail to do insert with conflict fetch", K(ret), K(das_snapshot_opt_info_));
+    LOG_WARN("fail to do insert with conflict fetch", K(ret), K(das_gts_opt_info_));
   } else if (!ins_rtdef_->need_fetch_conflict_ && OB_FAIL(insert_rows())) {
     LOG_WARN("fail to do insert", K(ret));
   }
@@ -116,8 +119,9 @@ int ObDASInsertOp::insert_rows()
   ins_adaptor.related_ctdefs_ = &related_ctdefs_;
   ins_adaptor.related_rtdefs_ = &related_rtdefs_;
   ins_adaptor.tablet_id_ = tablet_id_;
+  ins_adaptor.ls_id_ = ls_id_;
   ins_adaptor.related_tablet_ids_ = &related_tablet_ids_;
-  ins_adaptor.use_snapshot_opt_ = das_snapshot_opt_info_.use_specify_snapshot_;
+  ins_adaptor.is_do_gts_opt_ = das_gts_opt_info_.use_specify_snapshot_;
   ins_adaptor.das_allocator_ = &op_alloc_;
   if (OB_FAIL(ins_adaptor.write_tablet(dml_iter, affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
@@ -149,9 +153,10 @@ int ObDASInsertOp::insert_index_with_fetch(ObDMLBaseParam &dml_param,
                                            op_alloc_,
                                            store_ctx_guard,
                                            dml_param,
-                                           das_snapshot_opt_info_.use_specify_snapshot_))) {
+                                           das_gts_opt_info_.use_specify_snapshot_))) {
     LOG_WARN("init index dml param failed", K(ret), KPC(ins_ctdef), KPC(ins_rtdef));
-  } else if (OB_FAIL(as->insert_rows_with_fetch_dup(tablet_id,
+  } else if (OB_FAIL(as->insert_rows_with_fetch_dup(ls_id_,
+                                                    tablet_id,
                                                     *trans_desc_,
                                                     dml_param,
                                                     ins_ctdef->column_ids_,
@@ -198,23 +203,24 @@ int ObDASInsertOp::insert_row_with_fetch()
   transaction::ObTxReadSnapshot *snapshot = snapshot_;
 
   // write_flag should be inited before get store ctx, as it will be used in the call function
-  (void)ObDMLService::init_dml_write_flag(*ins_ctdef_, *ins_rtdef_, write_flag, das_snapshot_opt_info_.use_specify_snapshot_);
-  if (das_snapshot_opt_info_.get_specify_snapshot()) {
+  (void)ObDMLService::init_dml_write_flag(*ins_ctdef_, *ins_rtdef_, write_flag, das_gts_opt_info_.use_specify_snapshot_);
+  if (das_gts_opt_info_.get_specify_snapshot()) {
     transaction::ObTransService *txs = nullptr;
-    if (das_snapshot_opt_info_.isolation_level_ != transaction::ObTxIsolationLevel::RC) {
+    if (das_gts_opt_info_.isolation_level_ != transaction::ObTxIsolationLevel::RC) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected isolation_level", K(ret), K(das_snapshot_opt_info_));
+      LOG_WARN("unexpected isolation_level", K(ret), K(das_gts_opt_info_));
     } else if (OB_ISNULL(txs = MTL_WITH_CHECK(transaction::ObTransService*))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("get_tx_service", K(ret));
-    } else if (OB_FAIL(txs->get_read_snapshot(*trans_desc_,
-                                              das_snapshot_opt_info_.isolation_level_,
-                                              THIS_WORKER.get_timeout_ts(),
-                                              *das_snapshot_opt_info_.get_response_snapshot()))) {
-      LOG_WARN("fail to get read snapshot", K(ret), K(THIS_WORKER.get_timeout_ts()));
+    } else if (OB_FAIL(txs->get_ls_read_snapshot(*trans_desc_,
+                                                 das_gts_opt_info_.isolation_level_,
+                                                 ls_id_,
+                                                 THIS_WORKER.get_timeout_ts(),
+                                                 *das_gts_opt_info_.get_response_snapshot()))) {
+      LOG_WARN("fail to get ls read_snapshot", K(ret), K(ls_id_), K(THIS_WORKER.get_timeout_ts()));
     } else {
-      snapshot = das_snapshot_opt_info_.get_response_snapshot();
-      LOG_TRACE("succ get read snapshot", K(tablet_id_), KPC(snapshot));
+      snapshot = das_gts_opt_info_.get_response_snapshot();
+      LOG_TRACE("succ get ls snaoshot", K(ls_id_), K(tablet_id_), KPC(snapshot));
     }
   }
 
@@ -223,13 +229,14 @@ int ObDASInsertOp::insert_row_with_fetch()
   } else if (ins_ctdef_->table_rowkey_types_.empty()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table_rowkey_types is invalid", K(ret));
-  } else if (OB_FAIL(as->get_write_store_ctx_guard(ins_rtdef_->timeout_ts_,
+  } else if (OB_FAIL(as->get_write_store_ctx_guard(ls_id_,
+                                                   ins_rtdef_->timeout_ts_,
                                                    *trans_desc_,
                                                    *snapshot,
                                                    write_branch_id_,
                                                    write_flag,
                                                    store_ctx_guard))) {
-    LOG_WARN("fail to get_write_store_ctx_guard", K(ret));
+    LOG_WARN("fail to get_write_store_ctx_guard", K(ret), K(ls_id_));
   } else if (OB_ISNULL(buf = op_alloc_.alloc(sizeof(ObDASConflictIterator)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate ObDASConflictIterator", K(ret));
@@ -395,8 +402,8 @@ int ObDASInsertOp::decode_task_result(ObIDASTaskResult *task_result)
         result_ = insert_result;
         affected_rows_ = insert_result->get_affected_rows();
         is_duplicated_ = insert_result->is_duplicated();
-        if (das_snapshot_opt_info_.get_specify_snapshot()) {
-          if (OB_FAIL(das_snapshot_opt_info_.get_response_snapshot()->assign(insert_result->get_response_snapshot()))) {
+        if (das_gts_opt_info_.get_specify_snapshot()) {
+          if (OB_FAIL(das_gts_opt_info_.get_response_snapshot()->assign(insert_result->get_response_snapshot()))) {
             LOG_WARN("fail to assign snapshot", K(ret));
           }
         }
@@ -428,8 +435,8 @@ int ObDASInsertOp::fill_task_result(ObIDASTaskResult &task_result, bool &has_mor
         ins_result.set_is_duplicated(is_duplicated_);
         has_more = false;
         memory_limit -= ins_result.get_result_buffer().get_mem_used();
-        if (das_snapshot_opt_info_.get_specify_snapshot()) {
-          if (OB_FAIL(ins_result.get_response_snapshot().assign(*das_snapshot_opt_info_.get_response_snapshot()))) {
+        if (das_gts_opt_info_.get_specify_snapshot()) {
+          if (OB_FAIL(ins_result.get_response_snapshot().assign(*das_gts_opt_info_.get_response_snapshot()))) {
             LOG_WARN("fail to assign snapshot", K(ret));
           }
         }

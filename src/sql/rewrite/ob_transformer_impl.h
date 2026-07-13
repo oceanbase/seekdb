@@ -75,7 +75,6 @@ public:
   int transform(ObDMLStmt *&stmt);
   int do_transform(ObDMLStmt *&stmt);
   int do_transform_pre_precessing(ObDMLStmt *&stmt);
-  int do_prepare_mv_rewrite(const ObDMLStmt *stmt);
   int transform_heuristic_rule(ObDMLStmt *&stmt);
   int transform_rule_set(ObDMLStmt *&stmt,
                          uint64_t needed_types,

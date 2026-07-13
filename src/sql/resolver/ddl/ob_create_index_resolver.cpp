@@ -229,10 +229,6 @@ int ObCreateIndexResolver::resolve_index_column_node(
                                                         sort_item.column_name_,
                                                         index_keyname_value))) {
           SQL_RESV_LOG(WARN, "check fts index constraint fail", K(ret), K(sort_item.column_name_));
-        } else if (OB_UNLIKELY(tbl_schema->mv_container_table())) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("create fulltext index on materialized view not supported", K(ret));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "create fulltext index on materialized view");
         }
       } else if (index_keyname_ == INDEX_KEYNAME::VEC_KEY) {
         if (sort_item.is_func_index_) {
@@ -295,14 +291,6 @@ int ObCreateIndexResolver::resolve_index_column_node(
         LOG_WARN("fail to set vec column name", K(ret));
       } else if (OB_FAIL(set_table_name(tbl_schema->get_table_name()))) {
         LOG_WARN("fail to set data table name");
-      }
-    }
-
-    if (OB_SUCC(ret) && cnt_func_index) {
-      if (OB_UNLIKELY(tbl_schema->mv_container_table())) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("use functional index on materialized view not supported", K(ret), KPC(tbl_schema));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "use functional index on materialized view");
       }
     }
 
@@ -494,38 +482,7 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(tbl_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table schema is NULL", K(ret));
-  } else if (tbl_schema->is_mlog_table()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("create index on materialized view log is not supported",
-        KR(ret), K(tbl_schema->get_table_name()));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "create index on materialized view log is");
-  } else if (tbl_schema->is_materialized_view()) {
-    
-    const uint64_t mv_container_table_id = tbl_schema->get_data_table_id();
-    const ObTableSchema *mv_container_table_schema = nullptr;
-    ObString mv_container_table_name;
-    if (OB_FAIL(get_mv_container_table(mv_container_table_id,
-                                       mv_container_table_schema,
-                                       mv_container_table_name))) {
-      LOG_WARN("fail to get mv container table", KR(ret), K(1UL), K(mv_container_table_id));
-      if (OB_TABLE_NOT_EXIST == ret) {
-        ret = OB_ERR_UNEXPECTED; // rewrite errno
-      }
-    } else if (mv_container_table_schema->mv_major_refresh()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("create index on major refresh materialized view is not supported", KR(ret),
-               K(tbl_schema->get_table_name()));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "create index on major refresh materialized view is");
-    } else {
-      ObTableSchema &index_schema = crt_idx_stmt->get_create_index_arg().index_schema_;
-      
-      crt_idx_stmt->set_table_id(mv_container_table_schema->get_table_id());
-      crt_idx_stmt->set_table_name(mv_container_table_name);
-      data_tbl_schema = mv_container_table_schema;
-    }
   } else {
-    ObTableSchema &index_schema = crt_idx_stmt->get_create_index_arg().index_schema_;
-    
     crt_idx_stmt->set_table_id(tbl_schema->get_table_id());
     data_tbl_schema = tbl_schema;
   }

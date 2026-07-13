@@ -199,7 +199,6 @@ private:
                                  const ParseNode *expr_node,
                                  ObRawExpr *&expr);
   int process_sql_udt_construct_node(const ParseNode *node, ObRawExpr *&expr);
-  int process_last_refresh_scn_node(const ParseNode *expr_node, ObRawExpr *&expr);
   int process_array_contains_node(const ParseNode *node, ObRawExpr *&expr);
   void get_special_func_ident_name(ObString &ident_name, ObItemType func_type);
   int process_xml_element_node(const ParseNode *node, ObRawExpr *&expr);

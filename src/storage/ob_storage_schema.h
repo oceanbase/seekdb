@@ -152,24 +152,6 @@ public:
   {
     return share::schema::is_index_table(table_type_);
   }
-  inline bool is_materialized_view() const { return share::schema::ObTableSchema::is_materialized_view(table_type_); }
-  inline bool is_mv_container_table() const
-  {
-    return share::schema::IS_MV_CONTAINER_TABLE == (enum share::schema::ObMVContainerTableFlag)table_mode_.mv_container_table_flag_;
-  }
-  inline bool is_mv_major_refresh() const
-  {
-    return share::schema::IS_MV_MAJOR_REFRESH == (enum share::schema::ObMVMajorRefreshFlag)mv_mode_.mv_major_refresh_flag_;
-  }
-  inline bool is_tablet_referenced_by_collect_mv() const 
-  {
-    return share::schema::IS_REFERENCED_BY_FAST_LSM_MV == (enum share::schema::ObTableReferencedByFastLSMMVFlag)mv_mode_.table_referenced_by_fast_lsm_mv_flag_;
-  }
-  inline bool is_mv_major_refresh_table() const
-  {
-    return is_mv_container_table() && is_mv_major_refresh();
-  }
-  inline bool is_mlog_table() const { return share::schema::ObTableSchema::is_mlog_table(table_type_); }
   inline bool is_fts_index() const { return share::schema::is_fts_index(index_type_); }
   inline bool is_vec_index() const { return share::schema::is_vec_index(index_type_); }
   inline bool is_user_data_table() const { return share::schema::ObTableSchema::is_user_data_table(table_type_); }
@@ -190,11 +172,6 @@ public:
   virtual inline share::schema::ObTableModeFlag get_table_mode_flag() const override
   { return (share::schema::ObTableModeFlag)table_mode_.mode_flag_; }
   virtual inline share::schema::ObTableMode get_table_mode_struct() const override { return table_mode_; }
-  virtual inline int get_mv_mode_struct(share::schema::ObMvMode &mv_mode) const override
-  { 
-    mv_mode = mv_mode_;
-    return OB_SUCCESS;
-  }
   const share::schema::ObSemiStructEncodingType& get_semistruct_encoding_type() const { return semistruct_encoding_type_; }
   virtual int get_semistruct_encoding_type(share::schema::ObSemiStructEncodingType& type) const
   {
@@ -245,7 +222,7 @@ private:
   int copy_from(const share::schema::ObMergeSchema &input_schema);
   int deep_copy_str(const ObString &src, ObString &dest);
   int truncate_column_array(const int64_t stored_column_count);
-  inline bool is_view_table() const { return share::schema::ObTableType::USER_VIEW == table_type_ || share::schema::ObTableType::SYSTEM_VIEW == table_type_ || share::schema::ObTableType::MATERIALIZED_VIEW == table_type_; }
+  inline bool is_view_table() const { return share::schema::ObTableType::USER_VIEW == table_type_ || share::schema::ObTableType::SYSTEM_VIEW == table_type_; }
 
   int generate_str(const share::schema::ObTableSchema &input_schema);
   int generate_column_array(const share::schema::ObTableSchema &input_schema);
@@ -312,7 +289,6 @@ public:
   common::ObFixedArray<ObStorageColumnSchema, common::ObIAllocator> column_array_; // column schema, including virtual column
   common::ObFixedArray<share::schema::ObSkipIndexAttrWithId, common::ObIAllocator> skip_idx_attr_array_;
   int64_t store_column_cnt_; // NOT include virtual generated column
-  share::schema::ObMvMode mv_mode_;
   ObMergeEngineType merge_engine_type_;
   share::schema::ObSemiStructEncodingType semistruct_encoding_type_;
   bool is_inited_;

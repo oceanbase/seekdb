@@ -97,22 +97,6 @@ int ObTruncateTableResolver::resolve(const ParseNode &parser_tree)
         is_mysql_tmp_table = true; 
       }
 
-      if (orig_table_schema->is_mlog_table()) {
-        ret = OB_NOT_SUPPORTED;
-        SQL_RESV_LOG(WARN, "truncate materialized view log is not supported",
-            KR(ret), K(orig_table_schema->get_table_name()));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "truncate materialized view log is");
-      } else if (orig_table_schema->has_mlog_table()) {
-        ret = OB_NOT_SUPPORTED;
-        SQL_RESV_LOG(WARN, "truncate table with materialized view log is not supported", KR(ret),
-                     K(orig_table_schema->get_table_name()));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "truncate table with materialized view log is");
-      } else if (orig_table_schema->table_referenced_by_fast_lsm_mv()) {
-        ret = OB_NOT_SUPPORTED;
-        SQL_RESV_LOG(WARN, "truncate table required by materialized view is not supported",
-            KR(ret), K(orig_table_schema->get_table_name()));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "truncate table required by materialized view is");
-      }
     }
   }
 

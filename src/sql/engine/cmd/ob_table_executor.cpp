@@ -534,6 +534,7 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
     LOG_WARN("get first statement failed", K(ret));
   } else if (table_schema.is_duplicate_table()) {
 
+  // TODO@jingyu_cr: make sure whether sys log stream have to be duplicated
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "create duplicate table under sys or meta tenant");
     LOG_WARN("create dup table not supported", KR(ret), K(table_schema));

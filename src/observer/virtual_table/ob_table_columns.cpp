@@ -217,7 +217,7 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
       if (OB_FAIL(ret)) {
       } else {
         bool throw_error = true;
-        if (table_schema->is_view_table() && !table_schema->is_materialized_view()) {
+        if (table_schema->is_view_table()) {
           ObString view_definition;
           ObSelectStmt *select_stmt = NULL;
           ObSelectStmt *real_stmt = NULL;

@@ -43,58 +43,6 @@ class ObCodeGeneratorImpl;
 class ObLogPlan;
 class StmtUniqueKeyProvider;
 
-struct MvInfo {
-  MvInfo() : mv_id_(common::OB_INVALID_ID),
-             data_table_id_(common::OB_INVALID_ID),
-             mv_schema_(NULL),
-             data_table_schema_(NULL),
-             db_schema_(NULL),
-             view_stmt_(NULL),
-             select_mv_stmt_(NULL),
-             mv_intersect_tbl_num_(0) {}
-  
-  MvInfo(uint64_t mv_id,
-          uint64_t data_table_id,
-          const ObTableSchema *mv_schema,
-          const ObTableSchema *data_table_schema,
-          const ObDatabaseSchema *db_schema,
-          ObSelectStmt *view_stmt,
-          ObSelectStmt *select_mv_stmt,
-          uint64_t mv_intersect_tbl_num)
-        : mv_id_(mv_id),
-          data_table_id_(data_table_id),
-          mv_schema_(mv_schema),
-          data_table_schema_(data_table_schema),
-          db_schema_(db_schema),
-          view_stmt_(view_stmt),
-          select_mv_stmt_(select_mv_stmt),
-          mv_intersect_tbl_num_(mv_intersect_tbl_num) {}
-
-  TO_STRING_KV(
-    K_(mv_id),
-    K_(data_table_id),
-    K_(mv_schema),
-    K_(data_table_schema),
-    K_(db_schema),
-    K_(view_stmt),
-    K_(select_mv_stmt),
-    K_(mv_intersect_tbl_num)
-  );
-
-  bool operator<(const MvInfo &other) {
-    return mv_intersect_tbl_num_ > other.mv_intersect_tbl_num_;
-  }
-
-  uint64_t mv_id_;
-  uint64_t data_table_id_;
-  const ObTableSchema *mv_schema_;          // schema of mv table
-  const ObTableSchema *data_table_schema_;  // schema of mv container table
-  const ObDatabaseSchema *db_schema_;
-  ObSelectStmt *view_stmt_;            // stmt of mv's definition
-  ObSelectStmt *select_mv_stmt_;       // stmt of "SELECT * FROM mv;"
-  uint64_t mv_intersect_tbl_num_;      // number of tables that appear in both mv and origin query, used for sort mv info
-};
-
 enum TransPolicy
 {
   DISABLE_TRANS = 0,
@@ -136,7 +84,6 @@ struct ObTransformerCtx
     is_force_materialize_(false),
     push_down_filters_(),
     iteration_level_(0),
-    mv_stmt_gen_count_(0),
     cbqt_policy_(TransPolicy::DISABLE_TRANS),
     complex_cbqt_table_num_(0),
     max_table_num_(0),
@@ -210,8 +157,6 @@ struct ObTransformerCtx
 
   ObSEArray<ObRawExpr*, 8, common::ModulePageAllocator, true> push_down_filters_;
   uint64_t iteration_level_;
-  ObSEArray<MvInfo, 4, common::ModulePageAllocator, true> mv_infos_; // used to perform mv rewrite
-  int64_t mv_stmt_gen_count_;
   // used for cost based query transformation control
   TransPolicy cbqt_policy_;
   int64_t complex_cbqt_table_num_;
@@ -270,7 +215,6 @@ enum TRANSFORM_TYPE {
   SELECT_EXPR_PULLUP            ,
   DECORRELATE                   ,
   CONDITIONAL_AGGR_COALESCE     ,
-  MV_REWRITE                    ,
   LATE_MATERIALIZATION          ,
   DISTINCT_AGGREGATE            ,
   TRANSFORM_TYPE_COUNT_PLUS_ONE ,
@@ -387,7 +331,6 @@ public:
       (1LL << SUBQUERY_COALESCE) |
       (1LL << SEMI_TO_INNER) |
       (1LL << TEMP_TABLE_OPTIMIZATION) |
-      (1LL << MV_REWRITE) |
       (1LL << LATE_MATERIALIZATION);
   
   static const uint64_t ALL_EXPR_LEVEL_HEURISTICS_RULES =

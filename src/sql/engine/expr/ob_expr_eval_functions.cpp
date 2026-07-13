@@ -270,7 +270,6 @@
 #include "ob_expr_extract_cert_expired_time.h"
 #include "ob_expr_transaction_id.h"
 #include "ob_expr_inner_row_cmp_val.h"
-#include "ob_expr_last_refresh_scn.h"
 #include "ob_expr_sql_udt_construct.h"
 #include "ob_expr_priv_st_numinteriorrings.h"
 #include "ob_expr_priv_st_iscollection.h"
@@ -1164,7 +1163,6 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprGTIDSubtract::eval_subtract,                                  /* 687 */
   ObExprWaitForExecutedGTIDSet::eval_wait_for_executed_gtid_set,      /* 688 */
   ObExprWaitUntilSQLThreadAfterGTIDs::eval_wait_until_sql_thread_after_gtids, /* 689 */
-  ObExprLastRefreshScn::eval_last_refresh_scn,                        /* 690 */
   ObExprDocLength::generate_doc_length,                               /* 691 */
   ObExprTopNFilter::eval_topn_filter,                                 /* 692 */
   ObExprIsEnabledRole::eval_is_enabled_role,                          /* 693 */

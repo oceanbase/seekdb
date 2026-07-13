@@ -64,8 +64,8 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
 
     if (OB_FAIL(ret)) {
     } else if (T_DROP_TABLE == parse_tree.type_) {
-      if (NULL != parse_tree.children_[MATERIALIZED_NODE]
-          && T_TEMPORARY == parse_tree.children_[MATERIALIZED_NODE]->type_) {
+      if (NULL != parse_tree.children_[TEMPORARY_NODE]
+          && T_TEMPORARY == parse_tree.children_[TEMPORARY_NODE]->type_) {
         // mysql temporary table special usage
         drop_table_arg.table_type_ = share::schema::TMP_TABLE;
       } else {
@@ -73,10 +73,6 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
       }
     } else if (T_DROP_VIEW == parse_tree.type_) {
       drop_table_arg.table_type_ = share::schema::USER_VIEW; //xiyu@TODO: SYSTEM_VIEW???
-      if (parse_tree.children_[MATERIALIZED_NODE]) {
-        // transfer to materiaized view, RS will drop such view table
-        drop_table_arg.table_type_ = share::schema::MATERIALIZED_VIEW;
-      }
     } else {
       ret = OB_ERR_UNEXPECTED;
       SQL_RESV_LOG(WARN, "Unknown parse tree type", K_(parse_tree.type), K(ret));

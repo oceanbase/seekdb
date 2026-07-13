@@ -28,7 +28,6 @@
 #include "sql/engine/expr/ob_expr_regexp_context.h"
 #include "sql/engine/expr/ob_json_param_type.h"
 #include "sql/parser/ob_parser_utils.h"
-#include "sql/resolver/mv/ob_major_refresh_mjv_printer.h"
 
 #include "sql/executor/ob_memory_tracker.h"
 namespace oceanbase
@@ -1115,11 +1114,6 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
     }
   }
 
-  if (OB_SUCC(ret) && session_info_->get_ddl_info().is_major_refreshing_mview()
-      && !is_substmt() && !is_in_set_query() && !is_in_exists_subquery()
-      && OB_FAIL(ObMajorRefreshMJVPrinter::set_refresh_table_scan_flag_for_mr_mv(*select_stmt))) {
-    LOG_WARN("failed to set refresh table scan flag for mr mv", K(ret));
-  }
   return ret;
 }
 
@@ -3501,6 +3495,7 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
     }
   }
   if (OB_SUCC(ret) && node->num_child_ > 2 && NULL != (format_node = node->children_[2])) { // format
+    // TODO(bitao): handle other parquet property
     ObResolverUtils::FileFormatContext ff_ctx;
     for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
       if (OB_ISNULL(option_node = format_node->children_[i])) {
@@ -3520,9 +3515,11 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("should set file format type", K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "format without type");
-    } else if (ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
+    } else if (ObExternalFileFormat::PARQUET_FORMAT != external_format.format_type_
+               && ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("select into only supports csv format type", K(ret), K(external_format.format_type_));
+      LOG_WARN("select into only support parquet/orc/csv format type now", K(ret),
+               K(external_format.format_type_));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "this format type");
     } else if (ObExternalFileFormat::CSV_FORMAT == external_format.format_type_) {
       ObCollationType file_cs_type = has_cs_type

@@ -37,7 +37,7 @@ case ERR_CODE: {                                                \
   break;                                                        \
 }                                                               \
 
-OB_SERIALIZE_MEMBER(ObExprExtraSerializeInfo, *current_time_, *last_trace_id_, *mview_ids_, *last_refresh_scns_);
+OB_SERIALIZE_MEMBER(ObExprExtraSerializeInfo, *current_time_, *last_trace_id_);
 
 ObBaseOrderMap::~ObBaseOrderMap()
 {

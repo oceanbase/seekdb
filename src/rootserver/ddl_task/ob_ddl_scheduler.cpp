@@ -942,7 +942,7 @@ void ObDDLScheduler::mtl_wait(ObDDLScheduler *&ddl_scheduler)
   FLOG_INFO("finish mtl_wait for ddl scheduler", KR(ret));
 }
 
-int ObDDLScheduler::activate()
+int ObDDLScheduler::switch_to_leader()
 {
   int ret = OB_SUCCESS;
   bool scan_timer_task_exist = false;
@@ -952,7 +952,7 @@ int ObDDLScheduler::activate()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K_(is_inited));
-  } else if (OB_FAIL(rootserver::ObTenantThreadHelper::activate())) {
+  } else if (OB_FAIL(rootserver::ObTenantThreadHelper::switch_to_leader())) {
     LOG_WARN("new ddl scheduler start thread failed", KR(ret));
   } else if (OB_FAIL(ddl_builder_.start())) {
     LOG_WARN("fail to start new ddl builder", KR(ret));
@@ -991,12 +991,40 @@ int ObDDLScheduler::activate()
   return ret;
 }
 
-void ObDDLScheduler::deactivate()
+int ObDDLScheduler::resume_leader()
 {
-  if (is_inited_) {
-    ObTenantThreadHelper::deactivate();
+  int ret = OB_SUCCESS;
+  FLOG_INFO("[SYS_DDL_SCHEDULER] ObDDLScheduler resume leader begin",
+            KR(ret),  K_(is_inited), K_(is_stop));
+  if (OB_FAIL(switch_to_leader())) {
+    LOG_WARN("resume leader failed", KR(ret));
+  }
+  FLOG_INFO("[SYS_DDL_SCHEDULER] ObDDLScheduler resume leader finish",
+            KR(ret),  K_(is_inited), K_(is_stop));
+  return ret;
+}
+
+void ObDDLScheduler::switch_to_follower_forcedly()
+{
+  switch_to_follower_gracefully();
+}
+
+int ObDDLScheduler::switch_to_follower_gracefully()
+{
+  int ret = OB_SUCCESS;
+  FLOG_INFO("[SYS_DDL_SCHEDULER] ObDDLScheduler switch follower begin",
+            KR(ret),  K_(is_inited), K_(is_stop));
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("sys ddl scheduler is not inited", KR(ret), K(is_inited_));
+  } else if (OB_FAIL(ObTenantThreadHelper::switch_to_follower_gracefully())) {
+    LOG_WARN("fail to switch to follower", KR(ret));
+  } else {
     stop();
   }
+  FLOG_INFO("[SYS_DDL_SCHEDULER] ObDDLScheduler switch follower finish",
+            KR(ret),  K_(is_inited), K_(is_stop));
+  return ret;
 }
 
 int ObDDLScheduler::init()
@@ -1622,6 +1650,7 @@ int ObDDLScheduler::cache_auto_split_task(const obcall::ObAutoSplitTabletBatchAr
       const obcall::ObAutoSplitTabletArg &single_arg = single_arg_array.at(i);
       task.reset();
       task.auto_split_tablet_size_ = single_arg.auto_split_tablet_size_;
+      task.ls_id_ = single_arg.ls_id_;
       task.tablet_id_ = single_arg.tablet_id_;
       
       
@@ -1688,7 +1717,7 @@ int ObDDLScheduler::schedule_auto_split_task()
         tmp_ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(tmp_ret), K(task));
       } else if (FALSE_IT(single_arg = new (buf) obcall::ObAlterTableArg())) {
-      } else if (OB_TMP_FAIL(split_helper.build_arg(task.tablet_id_,
+      } else if (OB_TMP_FAIL(split_helper.build_arg( task.ls_id_, task.tablet_id_,
           task.auto_split_tablet_size_, task.used_disk_space_, *single_arg))) {
         LOG_WARN("fail to build arg", K(tmp_ret), K(task));
       } else if (!single_arg->is_auto_split_partition()) {

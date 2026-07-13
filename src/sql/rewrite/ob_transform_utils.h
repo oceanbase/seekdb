@@ -1811,17 +1811,6 @@ public:
   static int add_aggr_winfun_expr(ObSelectStmt *stmt,
                                   ObRawExpr *expr,
                                   bool need_strict_check = true);
-  static int expand_mview_table(ObTransformerCtx *ctx, ObDMLStmt *upper_stmt, TableItem *rt_mv_table);
-  static int adjust_col_and_sel_for_expand_mview(ObTransformerCtx *ctx,
-                                                 ObIArray<ColumnItem> &uppper_col_items,
-                                                 ObIArray<SelectItem> &view_sel_items,
-                                                 uint64_t mv_table_id);
-
-  static int generate_view_stmt_from_query_string(const ObString &expand_view,
-                                                  ObTransformerCtx *ctx,
-                                                  ObSelectStmt *&view_stmt);
-  static int set_expand_mview_flag(ObSelectStmt *view_stmt);
-
   static int is_where_subquery_correlated(const ObIArray<ObExecParamRawExpr *> &exec_params,
                                           const ObSelectStmt &subquery, 
                                           bool &is_correlated);

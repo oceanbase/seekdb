@@ -40,12 +40,7 @@ int ObPartitionExecutorUtils::calc_values_exprs(
   if (OB_FAIL(table_schema_array.push_back(&(stmt.get_create_table_arg().schema_)))) {
     LOG_WARN("fail to push back schema", KR(ret));
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < stmt.get_create_table_arg().mv_ainfo_.count(); i ++) {
-    if (OB_FAIL(table_schema_array.push_back(&(stmt.get_create_table_arg().mv_ainfo_.at(i).container_table_schema_)))) {
-      LOG_WARN("fail to push back schema", KR(ret));
-    }
-  }
-  
+
   for (int64_t i = 0; OB_SUCC(ret) && i < table_schema_array.count(); i ++) {
     ObTableSchema &table_schema = *(table_schema_array.at(i));
     ObPartitionLevel level = table_schema.get_part_level();

@@ -18,6 +18,7 @@
 #define  OCEANBASE_DICT_SERVICE_META_DICT_STRUCT_
 
 #include "common/ob_tablet_id.h"
+#include "share/ob_ls_id.h" // share::ObLSID
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_table_schema.h"
 #include "share/scn.h"
@@ -122,7 +123,12 @@ public:
   ObDictTenantMeta &operator=(const ObDictTenantMeta &src_schema) = delete;
 
 public:
+  // For schema_service (without ls_info)
   int init(const share::schema::ObTenantSchema &tenant_schema);
+  // For data_dict_service
+  int init_with_ls_info(
+      const share::schema::ObTenantSchema &tenant_schema,
+      const share::ObLSArray &ls_array);
   // For incremental data update
   int incremental_data_update(const ObDictTenantMeta &new_tenant_meta);
 
@@ -147,13 +153,16 @@ public:
   OB_INLINE common::ObCharsetType get_charset_type() const { return charset_type_; }
   OB_INLINE common::ObCollationType get_collation_type() const { return collation_type_; }
   OB_INLINE bool is_in_recyclebin() const { return in_recyclebin_; }
+  OB_INLINE const share::ObLSArray &get_ls_array() const { return ls_arr_; }
+
   NEED_SERIALIZE_AND_DESERIALIZE_DICT;
   TO_STRING_KV(
       
       K_(schema_version),
       K_(tenant_name),
       K_(tenant_status),
-      K_(in_recyclebin));
+      K_(in_recyclebin),
+      K_(ls_arr));
 
 private:
   ObIAllocator *allocator_;
@@ -169,6 +178,7 @@ private:
   common::ObCharsetType charset_type_;
   common::ObCollationType collation_type_;
   bool in_recyclebin_;
+  share::ObLSArray ls_arr_;
 }; // end of ObDictTenantMeta
 
 class ObDictDatabaseMeta

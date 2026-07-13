@@ -494,6 +494,11 @@ int ObRootService::start_service()
   } else {
     sql_proxy_.set_active();
     tenant_ddl_service_.restart();
+#ifndef OB_BUILD_LITE
+    if (OB_FAIL(hb_checker_.start())) {
+      FLOG_WARN("hb checker start failed", KR(ret));
+      } else
+#endif
     if (OB_FAIL(restart_task_timer_.start())) {
       FLOG_WARN("restart task timer start failed", KR(ret));
     } else if (OB_FAIL(load_ddl_task_timer_.start())) {
@@ -2942,6 +2947,72 @@ int ObRootService::check_parallel_ddl_conflict(
   return ddl_service_.check_parallel_ddl_conflict(schema_guard, arg);
 }
 
+int ObRootService::increase_rs_epoch_and_get_proposal_id_(
+    int64_t &new_rs_epoch,
+    int64_t &proposal_id_to_check)
+{
+  int ret = OB_SUCCESS;
+  ObMySQLTransaction trans;
+  if (OB_UNLIKELY(!inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", KR(ret));
+  } else if (OB_ISNULL(schema_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("schema_service is null", KR(ret), K(schema_service_));
+  } else if (OB_FAIL(trans.start(&sql_proxy_))) {
+    LOG_WARN("trans start failed", K(ret));
+  } else {
+    ObGlobalStatProxy proxy(trans);
+    ObSchemaService *schema_service = schema_service_->get_schema_service();
+    int64_t schema_version = OB_INVALID_VERSION;
+    ObRefreshSchemaInfo schema_info;
+    common::ObRole role = FOLLOWER;
+    int64_t proposal_id_double_check = 0;
+    // 1. get role and proposal id from PALF to make sure local is leader
+    // ATTENTION:
+    //   start_ddl_service will check ObDDLServiceLauncher::is_ddl_service_started_
+    //   to decide whether start ddl service with old logic
+    //   we can ensure that RS try start ddl service after __all_core_table be readable
+    //   because operations like unit_manager_.load() can make sure sys leader's
+    //   switch_to_leader() successfully called.
+    //   In other words, sys leader's switch_to_leader() must before RS start_ddl_service()
+    //   Based on this reason, we can make sure RS can start with old logic by checking
+    //   ObDDLServiceLauncher::is_ddl_service_started_
+    //   So we have to check log handle leader here
+    if (OB_FAIL(ObDDLUtil::get_sys_log_handler_role_and_proposal_id(
+                    role, proposal_id_to_check))) {
+      LOG_WARN("fail to get sys log handler role and proposal id", KR(ret));
+    } else if (OB_UNLIKELY(!is_strong_leader(role))) {
+      ret = OB_LS_NOT_LEADER;
+      LOG_WARN("local is not sys tenant leader", KR(ret), K(role), K(proposal_id_to_check));
+    // 2. increase rootservice_epoch in __all_core_table and make sure it is valid
+    } else if (OB_FAIL(proxy.inc_rootservice_epoch())) {
+      LOG_WARN("fail to increase rootservice_epoch", KR(ret));
+    } else if (OB_FAIL(proxy.get_rootservice_epoch(new_rs_epoch))) {
+      LOG_WARN("fail to get rootservice start times", KR(ret), K(new_rs_epoch));
+    } else if (new_rs_epoch <= 0) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid rootservice_epoch", KR(ret), K(new_rs_epoch));
+    // 3. double check local is still leader and proposal id not changed before commit
+    //    it's ok to remove double check here, we just want to let it fail as soon as possible
+    } else if (OB_FAIL(ObDDLUtil::get_sys_log_handler_role_and_proposal_id(
+                       role, proposal_id_double_check))) {
+      LOG_WARN("fail to get sys log handler role and proposal id", KR(ret));
+    } else if (OB_UNLIKELY(!is_strong_leader(role))
+               || OB_UNLIKELY(proposal_id_double_check != proposal_id_to_check)) {
+      ret = OB_LS_NOT_LEADER;
+      LOG_WARN("local is not sys tenant leader now", KR(ret), K(role), K(proposal_id_double_check));
+    }
+    // 4. commit transation
+    int temp_ret = OB_SUCCESS;
+    if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCCESS == ret))) {
+      LOG_ERROR("trans end failed", "commit", OB_SUCCESS == ret, K(temp_ret));
+      ret = (OB_SUCCESS == ret) ? temp_ret : ret;
+    }
+  }
+  return ret;
+}
+
 ERRSIM_POINT_DEF(ERROR_EVENT_TABLE_CLEAR_INTERVAL);
 int ObRootService::start_timer_tasks()
 {
@@ -3860,7 +3931,7 @@ int ObRootService::admin_set_tracepoint(const obcall::ObAdminSetTPArg &arg)
     } else {
       ObAdminSetTP admin_util(ctx, arg);
       if (OB_FAIL(admin_util.execute(arg))) {
-        LOG_WARN("execute set tracepoint failed", K(arg), K(ret));
+        LOG_WARN("execute report replica failed", K(arg), K(ret));
       }
     }
   }
@@ -4709,7 +4780,7 @@ int ObRootService::start_ddl_service_()
         if (OB_ISNULL(ddl_service_launcher)) {
           ret = OB_ERR_UNEXPECTED;
           FLOG_WARN("ddl service is null", KR(ret), KP(ddl_service_launcher));
-        } else if (OB_FAIL(ddl_service_launcher->activate())) {
+        } else if (OB_FAIL(ddl_service_launcher->switch_to_leader())) {
           FLOG_WARN("fail to start ddl service", KR(ret));
         } else {
           FLOG_INFO("success to start ddl service", KR(ret));

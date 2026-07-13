@@ -44,7 +44,8 @@ using namespace share;
 namespace sql
 {
 template <>
-int ObDASIndexDMLAdaptor<DAS_OP_TABLE_DELETE, ObDASDMLIterator>::write_rows(const ObTabletID &tablet_id,
+int ObDASIndexDMLAdaptor<DAS_OP_TABLE_DELETE, ObDASDMLIterator>::write_rows(const ObLSID &ls_id,
+                                                                            const ObTabletID &tablet_id,
                                                                             const CtDefType &ctdef,
                                                                             RtDefType &rtdef,
                                                                             ObDASDMLIterator &iter,
@@ -55,10 +56,10 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_DELETE, ObDASDMLIterator>::write_rows(cons
   if (OB_UNLIKELY(ctdef.table_param_.get_data_table().is_vector_delta_buffer() &&
                   !ctdef.is_access_main_table_)) {
     // for vector delta buffer, only do insert when DML with main table
-    if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_param_,
+    if (OB_FAIL(as->insert_rows(ls_id, tablet_id, *tx_desc_, dml_param_,
                                 ctdef.column_ids_, &iter, affected_rows))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_WARN("insert rows to access service failed", K(ret), K(tablet_id));
+        LOG_WARN("insert rows to access service failed", K(ret), K(ls_id), K(tablet_id));
       }
     }
   } else if (ctdef.table_param_.get_data_table().is_hybrid_vector_index() &&
@@ -66,20 +67,21 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_DELETE, ObDASDMLIterator>::write_rows(cons
     // For hybrid vector index, check if it's embedded table
     if (share::schema::is_hybrid_vec_index_embedded_type(ctdef.table_param_.get_data_table().get_index_type())) {
       // For embedded table, perform actual delete operation
-      if (OB_FAIL(as->delete_rows(tablet_id, *tx_desc_, dml_param_, ctdef.column_ids_, &iter, affected_rows))) {
+      if (OB_FAIL(as->delete_rows(ls_id, tablet_id, *tx_desc_, dml_param_, ctdef.column_ids_, &iter, affected_rows))) {
         if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-          LOG_WARN("delete rows to access service failed", K(ret), K(tablet_id));
+          LOG_WARN("delete rows to access service failed", K(ret), K(ls_id), K(tablet_id));
         }
       }
     } else if (share::schema::is_hybrid_vec_index_log_type(ctdef.table_param_.get_data_table().get_index_type())) {
       // For other hybrid vector index tables (like log table), perform insert to record delete mark
-      if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_param_, ctdef.column_ids_, &iter, affected_rows))) {
+      if (OB_FAIL(as->insert_rows(ls_id, tablet_id, *tx_desc_, dml_param_, ctdef.column_ids_, &iter, affected_rows))) {
         if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-          LOG_WARN("insert rows to access service failed", K(ret), K(tablet_id));
+          LOG_WARN("insert rows to access service failed", K(ret), K(ls_id), K(tablet_id));
         }
       }
     }
-  } else if (OB_FAIL(as->delete_rows(tablet_id,
+  } else if (OB_FAIL(as->delete_rows(ls_id,
+                              tablet_id,
                               *tx_desc_,
                               dml_param_,
                               ctdef.column_ids_,
@@ -122,13 +124,14 @@ int ObDASDeleteOp::open_op()
   del_adaptor.related_ctdefs_ = &related_ctdefs_;
   del_adaptor.related_rtdefs_ = &related_rtdefs_;
   del_adaptor.tablet_id_ = tablet_id_;
+  del_adaptor.ls_id_ = ls_id_;
   del_adaptor.related_tablet_ids_ = &related_tablet_ids_;
-  del_adaptor.use_snapshot_opt_ = das_snapshot_opt_info_.use_specify_snapshot_;
+  del_adaptor.is_do_gts_opt_ = das_gts_opt_info_.use_specify_snapshot_;
   del_adaptor.das_allocator_ = &op_alloc_;
   del_adaptor.ft_doc_word_infos_ = &doc_word_infos;
-  if (OB_FAIL(ObDASDomainUtils::build_ft_doc_word_infos(trans_desc_, snapshot_, related_ctdefs_, related_tablet_ids_,
+  if (OB_FAIL(ObDASDomainUtils::build_ft_doc_word_infos(ls_id_, trans_desc_, snapshot_, related_ctdefs_, related_tablet_ids_,
           del_ctdef_->is_main_table_in_fts_ddl_, doc_word_infos))) {
-    LOG_WARN("fail to build fulltext doc word infos", K(ret), KPC(snapshot_), K(related_ctdefs_),
+    LOG_WARN("fail to build fulltext doc word infos", K(ret), K(ls_id_), KPC(snapshot_), K(related_ctdefs_),
         K(related_tablet_ids_));
   } else if (OB_FAIL(del_adaptor.write_tablet(dml_iter, affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {

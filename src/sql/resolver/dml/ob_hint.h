@@ -220,6 +220,7 @@ struct ObOptParamHint
     DEF(PRESERVE_ORDER_FOR_GROUPBY,)                \
     DEF(ENABLE_PDML_INSERT_UP,)                     \
     DEF(ENABLE_PARTIAL_LIMIT_PUSHDOWN,)             \
+    DEF(PARQUET_FILTER_PUSHDOWN_LEVEL,)             \
     DEF(ORC_FILTER_PUSHDOWN_LEVEL,)                 \
     DEF(ENABLE_INDEX_MERGE,)                        \
     DEF(ENABLE_PARTIAL_GROUP_BY_PUSHDOWN,)          \
@@ -600,7 +601,6 @@ public:
       HINT_GROUPBY_PLACEMENT,
       HINT_WIN_MAGIC,
       HINT_COALESCE_AGGR,
-      HINT_MV_REWRITE,
       // optimize hint below
       HINT_OPTIMIZE,    // normal optimize hint
       HINT_ACCESS_PATH,
@@ -1004,31 +1004,6 @@ class ObCoalesceSqHint : public ObTransHint
 private:
   bool has_qb_name_list(const ObIArray<ObString> & qb_names) const;
   common::ObSEArray<QbNameList, 2, common::ModulePageAllocator, true> qb_name_list_;
-};
-
-class ObMVRewriteHint : public ObTransHint
-{
-public:
-  ObMVRewriteHint(ObItemType hint_type)
-    : ObTransHint(hint_type),
-      mv_list_()
-  {
-    set_hint_class(HINT_MV_REWRITE);
-  }
-  virtual ~ObMVRewriteHint() {}
-
-  virtual int print_hint_desc(PlanText &plan_text) const override;
-  common::ObIArray<ObTableInHint> &get_mv_list() { return mv_list_; }
-  const common::ObIArray<ObTableInHint> &get_mv_list() const { return mv_list_; }
-  int check_mv_match_hint(ObCollationType cs_type,
-                          const ObTableSchema *mv_schema,
-                          const ObDatabaseSchema *db_schema,
-                          bool &is_match) const;
-
-  INHERIT_TO_STRING_KV("ObHint", ObHint, K_(mv_list));
-
-private:
-  common::ObSEArray<ObTableInHint, 1, common::ModulePageAllocator, true> mv_list_;
 };
 
 class ObIndexHint : public ObOptHint
