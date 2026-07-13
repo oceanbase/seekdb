@@ -34,6 +34,9 @@
 #include "sql/engine/cmd/ob_redis_importer.h"
 #include "sql/engine/cmd/ob_timezone_importer.h"
 #include "sql/engine/cmd/ob_srs_importer.h"
+#include "storage/fts/dict/ob_ft_cache_container.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
 #include "share/ob_internal_table_change_notifier.h"
 
 namespace oceanbase
@@ -485,6 +488,53 @@ int ObWashMemFragmentationExecutor::execute(ObExecContext &ctx, ObWashMemFragmen
   } else if (OB_FAIL(GCTX.root_service_->admin_wash_memory_fragmentation(
                          stmt.get_rpc_arg()))) {
     LOG_WARN("wash memory fragmentation failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  }
+  return ret;
+}
+
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx, ObRefreshFulltextDictStmt &stmt)
+{
+  UNUSED(ctx);
+  int ret = OB_SUCCESS;
+  storage::ObFTDictHub *hub = nullptr;
+  common::ObArenaAllocator allocator(lib::ObMemAttr("RefreshFTDict"));
+  storage::ObFTCacheRangeContainer container(allocator);
+  char full_name_buf[common::OB_MAX_DATABASE_NAME_LENGTH + common::OB_MAX_TABLE_NAME_LENGTH + 2] = {0};
+  const ObString database_name = stmt.get_database_name();
+  const ObString table_name = stmt.get_table_name();
+  const int64_t full_name_len = snprintf(full_name_buf,
+                                         sizeof(full_name_buf),
+                                         "%.*s.%.*s",
+                                         static_cast<int>(database_name.length()),
+                                         database_name.ptr(),
+                                         static_cast<int>(table_name.length()),
+                                         table_name.ptr());
+  if (OB_UNLIKELY(full_name_len <= 0 || full_name_len >= static_cast<int64_t>(sizeof(full_name_buf)))) {
+    ret = OB_BUF_NOT_ENOUGH;
+    LOG_WARN("failed to format dict table name", K(ret), K(database_name), K(table_name), K(full_name_len));
+  } else if (OB_FAIL(storage::ObFTParsePluginData::instance().get_dict_hub(hub))) {
+    LOG_WARN("failed to get fulltext dict hub", K(ret));
+  } else if (OB_ISNULL(hub)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fulltext dict hub is null", K(ret));
+  } else {
+    const ObString full_name(static_cast<int32_t>(full_name_len), full_name_buf);
+    const storage::ObFTDictType dict_types[] = {
+        storage::ObFTDictType::DICT_IK_MAIN,
+        storage::ObFTDictType::DICT_IK_QUAN,
+        storage::ObFTDictType::DICT_IK_STOP,
+    };
+    for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(dict_types); ++i) {
+      storage::ObFTDictDesc desc(full_name,
+                                 dict_types[i],
+                                 common::ObCharsetType::CHARSET_UTF8MB4,
+                                 common::ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI);
+      if (OB_FAIL(hub->refresh_cache(desc, container))) {
+        LOG_WARN("failed to refresh fulltext dict cache", K(ret), K(full_name), K(i));
+      } else {
+        container.reset();
+      }
+    }
   }
   return ret;
 }

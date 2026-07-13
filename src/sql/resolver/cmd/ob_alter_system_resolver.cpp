@@ -1145,6 +1145,85 @@ int ObRefreshMemStatResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObRefreshFulltextDictStmt *stmt = nullptr;
+  ObString database_name;
+  ObString table_name;
+  const ObTableSchema *table_schema = nullptr;
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_REFRESH_FULLTEXT_DICT", "type", get_type_name(parse_tree.type_));
+  } else if (OB_ISNULL(stmt = create_stmt<ObRefreshFulltextDictStmt>())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("create ObRefreshFulltextDictStmt failed");
+  } else if (FALSE_IT(stmt_ = stmt)) {
+  } else if (OB_UNLIKELY(NULL == parse_tree.children_ || 1 != parse_tree.num_child_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("parse tree children is invalid", K(ret), K(parse_tree.num_child_));
+  } else if (OB_ISNULL(parse_tree.children_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("dict table node is null", K(ret));
+  } else {
+    const ParseNode *dict_table_node = parse_tree.children_[0];
+    if (T_RELATION_FACTOR == dict_table_node->type_) {
+      if (OB_FAIL(resolve_table_relation_node(dict_table_node, table_name, database_name))) {
+        LOG_WARN("failed to resolve dict table relation", K(ret));
+      }
+    } else if (T_VARCHAR == dict_table_node->type_) {
+      ObString name_str(static_cast<int32_t>(dict_table_node->str_len_), dict_table_node->str_value_);
+      const char *dot_pos = name_str.find('.');
+      if (OB_NOT_NULL(dot_pos)) {
+        database_name = name_str.split_on(dot_pos).trim();
+        table_name = name_str.trim();
+      } else if (OB_ISNULL(session_info_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("session info is null", K(ret));
+      } else if (session_info_->get_database_name().empty()) {
+        ret = OB_ERR_NO_DB_SELECTED;
+        LOG_WARN("No database selected", K(ret));
+      } else {
+        database_name = session_info_->get_database_name();
+        table_name = name_str.trim();
+      }
+      if (OB_SUCC(ret)) {
+        if (database_name.empty() || table_name.empty()) {
+          ret = OB_WRONG_TABLE_NAME;
+          LOG_WARN("dict table name is empty", K(ret), K(database_name), K(table_name));
+        } else if (OB_FAIL(normalize_table_or_database_names(database_name))) {
+          LOG_WARN("failed to normalize database name", K(ret), K(database_name));
+        } else if (OB_FAIL(normalize_table_or_database_names(table_name))) {
+          LOG_WARN("failed to normalize table name", K(ret), K(table_name));
+        }
+      }
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid dict table node type", K(ret), "type", get_type_name(dict_table_node->type_));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_ISNULL(schema_checker_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("schema checker is null", K(ret));
+    } else if (OB_FAIL(schema_checker_->get_table_schema(database_name, table_name, false, table_schema))) {
+      LOG_WARN("failed to get dict table schema", K(ret), K(database_name), K(table_name));
+    } else if (OB_ISNULL(table_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("dict table schema is null", K(ret), K(database_name), K(table_name));
+    } else if (!table_schema->is_fulltext_dict_table()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("refresh non fulltext dict table is not supported", K(ret), K(database_name), K(table_name));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "refresh non FULLTEXT_DICT table");
+    } else if (OB_FAIL(stmt->set_database_name(database_name))) {
+      LOG_WARN("failed to set database name", K(ret), K(database_name));
+    } else if (OB_FAIL(stmt->set_table_name(table_name))) {
+      LOG_WARN("failed to set table name", K(ret), K(table_name));
+    }
+  }
+  return ret;
+}
+
 int ObWashMemFragmentationResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;

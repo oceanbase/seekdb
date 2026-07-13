@@ -117,6 +117,8 @@ public:
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
+  int refresh_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
+
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
 
