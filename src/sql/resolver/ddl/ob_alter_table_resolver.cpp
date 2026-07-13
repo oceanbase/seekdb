@@ -1609,7 +1609,12 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
                 ret = OB_NOT_SUPPORTED;
                 LOG_USER_ERROR(OB_NOT_SUPPORTED, "spatial global index");
               } else if (share::schema::is_fts_index(create_index_arg->index_type_)
-                  && OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(*table_schema_, *create_index_arg, allocator_))) {
+                  && OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(*table_schema_,
+                                                                                          *create_index_arg,
+                                                                                          allocator_,
+                                                                                          OB_ISNULL(schema_checker_)
+                                                                                              ? nullptr
+                                                                                              : schema_checker_->get_schema_guard()))) {
                 LOG_WARN("failed to generate fts parser name", K(ret));
               } else {
                 create_index_arg->index_schema_.set_table_type(USER_INDEX);
