@@ -162,8 +162,7 @@ int ObTabletCreateDeleteHelper::check_status_for_new_mds(
     const ObTabletStatus::Status &status = user_data.tablet_status_.get_status();
     switch (status) {
       case ObTabletStatus::NORMAL:
-      case ObTabletStatus::SPLIT_DST:
-        ret = check_read_snapshot_for_normal_or_split_dst(tablet, snapshot_version, user_data, writer, trans_state, trans_version);
+        ret = check_read_snapshot_for_normal(tablet, snapshot_version, user_data, writer, trans_state, trans_version);
         break;
       case ObTabletStatus::DELETED:
         ret = check_read_snapshot_for_deleted(tablet, snapshot_version, user_data, writer, trans_state, trans_version);
@@ -174,12 +173,6 @@ int ObTabletCreateDeleteHelper::check_status_for_new_mds(
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("reserved tablet transfer status is not supported", K(ret), K(tablet_id), K(user_data));
         break;
-      case ObTabletStatus::SPLIT_SRC:
-        ret = check_read_snapshot_for_split_src(tablet, snapshot_version, user_data, trans_state);
-        break;
-      case ObTabletStatus::SPLIT_SRC_DELETED:
-        ret = check_read_snapshot_for_split_src_deleted(tablet, user_data, trans_state);
-        break;
       default:
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected tablet status", K(ret), K(tablet_id), K(user_data));
@@ -187,7 +180,7 @@ int ObTabletCreateDeleteHelper::check_status_for_new_mds(
 
     if (OB_FAIL(ret)) {
     } else if (mds::TwoPhaseCommitState::ON_COMMIT == trans_state &&
-        (ObTabletStatus::NORMAL == user_data.tablet_status_ || ObTabletStatus::SPLIT_DST == user_data.tablet_status_)) {
+        ObTabletStatus::NORMAL == user_data.tablet_status_) {
       tablet_status_cache.set_value(user_data);
       LOG_INFO("refresh tablet status cache", K(ret), K(tablet_id), K(tablet_status_cache), K(snapshot_version));
     }
@@ -233,7 +226,7 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_by_commit_version(
   }
 
   if (OB_FAIL(ret)) {
-  } else if (ObTabletStatus::NORMAL == tablet_status || ObTabletStatus::SPLIT_DST == tablet_status) {
+  } else if (ObTabletStatus::NORMAL == tablet_status) {
     if (OB_UNLIKELY(tablet.is_empty_shell())) {
       ret = OB_TABLET_NOT_EXIST;
       LOG_WARN("tablet is empty shell", K(ret), K(tablet_id), K(snapshot_version), K(create_commit_version));
@@ -245,7 +238,7 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_by_commit_version(
   return ret;
 }
 
-int ObTabletCreateDeleteHelper::check_read_snapshot_for_normal_or_split_dst(
+int ObTabletCreateDeleteHelper::check_read_snapshot_for_normal(
     const ObTablet &tablet,
     const int64_t snapshot_version,
     const ObTabletCreateDeleteMdsUserData &user_data,
@@ -258,7 +251,7 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_normal_or_split_dst(
   const ObTabletStatus &tablet_status = user_data.tablet_status_;
   share::SCN read_snapshot;
 
-  if (OB_UNLIKELY(ObTabletStatus::NORMAL != tablet_status && ObTabletStatus::SPLIT_DST != tablet_status)) {
+  if (OB_UNLIKELY(ObTabletStatus::NORMAL != tablet_status)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(tablet_id), K(user_data));
   } else if (user_data.create_commit_version_ == ObTransVersion::MAX_TRANS_VERSION) {
@@ -383,53 +376,6 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_deleted(
       LOG_WARN("read snapshot is no smaller than delete transaction commit version",
           K(ret), K(tablet_id), K(read_snapshot), K(trans_version));
     }
-  }
-
-  return ret;
-}
-
-int ObTabletCreateDeleteHelper::check_read_snapshot_for_split_src(
-    const ObTablet &tablet,
-    const int64_t snapshot_version,
-    const ObTabletCreateDeleteMdsUserData &user_data,
-    const mds::TwoPhaseCommitState &trans_state)
-{
-  int ret = OB_SUCCESS;
-  const common::ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
-  const ObTabletStatus &tablet_status = user_data.tablet_status_;
-
-  if (OB_UNLIKELY(ObTabletStatus::SPLIT_SRC != tablet_status)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(tablet_id), K(user_data));
-  } else if (mds::TwoPhaseCommitState::ON_COMMIT == trans_state) {
-    if (snapshot_version < user_data.create_commit_version_) {
-      ret = OB_SNAPSHOT_DISCARDED;
-      LOG_WARN("read snapshot smaller than create commit version",
-          K(ret), K(tablet_id), K(snapshot_version), K(user_data));
-    } else {
-      ret = OB_TABLET_IS_SPLIT_SRC;
-      LOG_WARN("tablet is split src", K(ret), K(tablet_id), K(common::lbt()));
-    }
-  }
-
-  return ret;
-}
-
-int ObTabletCreateDeleteHelper::check_read_snapshot_for_split_src_deleted(
-    const ObTablet &tablet,
-    const ObTabletCreateDeleteMdsUserData &user_data,
-    const mds::TwoPhaseCommitState &trans_state)
-{
-  int ret = OB_SUCCESS;
-  const common::ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
-  const ObTabletStatus &tablet_status = user_data.tablet_status_;
-
-  if (OB_UNLIKELY(ObTabletStatus::SPLIT_SRC_DELETED != tablet_status)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(tablet_id), K(user_data));
-  } else if (mds::TwoPhaseCommitState::ON_COMMIT == trans_state) {
-    ret = OB_TABLET_NOT_EXIST;
-    LOG_WARN("split src deleted", K(ret), K(tablet_id), K(common::lbt()));
   }
 
   return ret;

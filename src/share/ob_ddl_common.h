@@ -35,7 +35,6 @@ namespace oceanbase
 namespace obcall
 {
 class ObSrvRpcProxy;
-struct ObPartitionSplitArg;
 struct ObAlterTableArg;
 struct ObDropDatabaseArg;
 struct ObDropTableArg;
@@ -126,11 +125,6 @@ enum ObDDLType
   DDL_DROP_VEC_SPIV_INDEX = 24,
   DDL_CREATE_VEC_SPIV_INDEX = 26, // placeholder of spiv post build
 
-  ///< @note tablet split.
-  DDL_AUTO_SPLIT_BY_RANGE = 100,
-  DDL_AUTO_SPLIT_NON_RANGE = 101,
-  DDL_MANUAL_SPLIT_BY_RANGE = 102,
-  DDL_MANUAL_SPLIT_NON_RANGE = 103,
   ///< @note Drop schema, and refuse concurrent trans.
   DDL_DROP_SCHEMA_AVOID_CONCURRENT_TRANS = 500,
   DDL_DROP_DATABASE = 501,
@@ -161,14 +155,12 @@ enum ObDDLType
   // 1013 was used by removed table restore DDL. Do not reuse.
   // 1016 is reserved. Do not reuse.
   DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION = 1017,
-  DDL_PARTITION_SPLIT_RECOVERY_TABLE_REDEFINITION = 1018,
 
   // @note new normal ddl type to be defined here !!!
   DDL_NORMAL_TYPE = 10001,
   DDL_ADD_COLUMN_ONLINE = 10002, // only add trailing columns
   DDL_CHANGE_COLUMN_NAME = 10003,
   DDL_DROP_COLUMN_INSTANT = 10004,
-  DDL_ALTER_PARTITION_AUTO_SPLIT_ATTRIBUTE = 10005, // auto table auto partition // online
   DDL_ADD_COLUMN_INSTANT = 10006, // add after/before column
   DDL_COMPOUND_INSTANT = 10007,
   // 10008 is reserved. Do not reuse.
@@ -195,8 +187,6 @@ enum ObDDLTaskType
   CANCEL_DDL_TASK = 10,
   MODIFY_NOT_NULL_COLUMN_STATE_TASK = 11,
   // 12 was used by removed recover restore table DDL. Do not reuse.
-  PARTITION_SPLIT_RECOVERY_TASK = 13,
-  PARTITION_SPLIT_RECOVERY_CLEANUP_GARBAGE_TASK = 14,
   SWITCH_VEC_INDEX_NAME_TASK = 15
 };
 
@@ -221,10 +211,6 @@ enum ObDDLTaskStatus { // FARM COMPAT WHITELIST
   REPENDING = 17,
   WAIT_FROZE_END = 19,
   WAIT_COMPACTION_END = 20,
-  WAIT_DATA_TABLE_SPLIT_END = 21,
-  WAIT_LOCAL_INDEX_SPLIT_END = 22,
-  WAIT_LOB_TABLE_SPLIT_END = 23,
-  WAIT_PARTITION_SPLIT_RECOVERY_TASK_FINISH = 24,
   GENERATE_ROWKEY_DOC_SCHEMA = 25,
   WAIT_ROWKEY_DOC_TABLE_COMPLEMENT = 26,
   GENERATE_DOC_AUX_SCHEMA = 27,
@@ -237,7 +223,6 @@ enum ObDDLTaskStatus { // FARM COMPAT WHITELIST
   WAIT_VID_ROWKEY_TABLE_COMPLEMENT = 34,
   REBUILD_SCHEMA = 35,
   SWITCH_INDEX_NAME = 36,
-  WRITE_SPLIT_START_LOG = 37,
   DROP_AUX_INDEX_TABLE = 38,
   DROP_LOB_META_ROW = 39,
   GENERATE_SQ_META_TABLE_SCHEMA = 40,
@@ -270,13 +255,6 @@ enum SortCompactLevel
   SORT_COMPRESSION_LEVEL = 3,
   SORT_COMPRESSION_COMPACT_LEVEL = 4,
   SORT_COMPRESSION_ENCODE_LEVEL = 5
-};
-
-enum ObSplitSSTableType
-{
-  SPLIT_BOTH = 0, // Major and Minor
-  SPLIT_MAJOR = 1,
-  SPLIT_MINOR = 2
 };
 
 static const char* ddl_task_status_to_str(const ObDDLTaskStatus &task_status) {
@@ -342,18 +320,6 @@ static const char* ddl_task_status_to_str(const ObDDLTaskStatus &task_status) {
     case ObDDLTaskStatus::WAIT_COMPACTION_END:
       str = "WAIT_COMPACTION_END";
       break;
-    case ObDDLTaskStatus::WAIT_DATA_TABLE_SPLIT_END:
-      str = "WAIT_DATA_TABLE_SPLIT_END";
-      break;
-    case ObDDLTaskStatus::WAIT_LOCAL_INDEX_SPLIT_END:
-      str = "WAIT_LOCAL_INDEX_SPLIT_END";
-      break;
-    case ObDDLTaskStatus::WAIT_LOB_TABLE_SPLIT_END:
-      str = "WAIT_LOB_TABLE_SPLIT_END";
-      break;
-    case ObDDLTaskStatus::WAIT_PARTITION_SPLIT_RECOVERY_TASK_FINISH:
-      str = "WAIT_PARTITION_SPLIT_RECOVERY_TASK_FINISH";
-      break;
     case ObDDLTaskStatus::GENERATE_ROWKEY_DOC_SCHEMA:
       str = "GENERATE_ROWKEY_DOC_SCHEMA";
       break;
@@ -393,9 +359,6 @@ static const char* ddl_task_status_to_str(const ObDDLTaskStatus &task_status) {
     case ObDDLTaskStatus::SWITCH_INDEX_NAME:
       str = "SWITCH_INDEX_NAME";
       break;
-    case ObDDLTaskStatus::WRITE_SPLIT_START_LOG:
-      str = "WRITE_SPLIT_START_LOG";
-      break;
     case ObDDLTaskStatus::DROP_AUX_INDEX_TABLE:
       str = "DROP_AUX_INDEX_TABLE";
       break;
@@ -434,22 +397,6 @@ static const char* ddl_task_status_to_str(const ObDDLTaskStatus &task_status) {
       break;
   }
   return str;
-}
-
-static bool is_partition_split_recovery_table_redefinition(const ObDDLType ddl_type) {
-  return ddl_type == DDL_PARTITION_SPLIT_RECOVERY_TABLE_REDEFINITION;
-}
-
-static bool is_tablet_split(const ObDDLType ddl_type) {
-  return ddl_type >= DDL_AUTO_SPLIT_BY_RANGE && ddl_type <= DDL_MANUAL_SPLIT_NON_RANGE;
-}
-
-static bool is_range_split(const ObDDLType ddl_type) {
-  return DDL_AUTO_SPLIT_BY_RANGE == ddl_type || DDL_MANUAL_SPLIT_BY_RANGE == ddl_type;
-}
-
-static bool is_auto_split(const ObDDLType ddl_type) {
-  return DDL_AUTO_SPLIT_BY_RANGE == ddl_type || DDL_AUTO_SPLIT_NON_RANGE == ddl_type;
 }
 
 static inline bool is_simple_table_long_running_ddl(const ObDDLType type)
@@ -522,17 +469,6 @@ static inline bool is_direct_load_retry_err(const int ret)
     || ret == OB_ERR_REMOTE_SCHEMA_NOT_FULL
     || ret == OB_SQL_RETRY_SPM
     ;
-}
-
-static inline bool is_supported_pre_split_ddl_type(const ObDDLType type)
-{
-  return DDL_MODIFY_COLUMN == type
-      || DDL_ADD_PRIMARY_KEY == type
-      || DDL_DROP_PRIMARY_KEY == type
-      || DDL_ALTER_PRIMARY_KEY == type
-      || DDL_CONVERT_TO_CHARACTER == type
-      || DDL_TABLE_REDEFINITION == type
-      || DDL_ALTER_PARTITION_BY == type;
 }
 
 static inline bool is_column_redifinition_like_ddl_type(const ObDDLType type)
@@ -1284,10 +1220,6 @@ public:
       case DDL_CREATE_FTS_INDEX:
       case DDL_CREATE_VEC_INDEX:
       case DDL_CREATE_PARTITIONED_LOCAL_INDEX:
-      case DDL_AUTO_SPLIT_BY_RANGE:
-      case DDL_AUTO_SPLIT_NON_RANGE:
-      case DDL_MANUAL_SPLIT_BY_RANGE:
-      case DDL_MANUAL_SPLIT_NON_RANGE:
       case DDL_CHECK_CONSTRAINT:
       case DDL_FOREIGN_KEY_CONSTRAINT:
       case DDL_ADD_NOT_NULL_COLUMN:
@@ -1556,41 +1488,6 @@ private:
       hash::ObHashMap<ObTabletID, int32_t> &tablets_commited_map,
       int64_t &commit_succ_count);
 
-};
-
-class ObSplitUtil
-{
-public:
-  static int deserializ_parallel_datum_rowkey(
-      common::ObIAllocator &rowkey_allocator,
-      const char *buf, const int64_t data_len, int64_t &pos,
-      ObIArray<blocksstable::ObDatumRowkey> &parallel_datum_rowkey_list);
-};
-
-class ObSplitTabletInfo final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObSplitTabletInfo() : split_info_(0), split_src_tablet_id_() { }
-  ~ObSplitTabletInfo() { reset(); }
-  void reset() { split_info_ = 0; split_src_tablet_id_.reset(); }
-  void set_data_incomplete(const bool is_data_incomplete) { is_data_incomplete_ = is_data_incomplete; }
-  void set_split_src_tablet_id(const ObTabletID &split_src_tablet_id) { split_src_tablet_id_ = split_src_tablet_id; }
-  bool is_data_incomplete() const { return is_data_incomplete_; }
-  const ObTabletID &get_split_src_tablet_id() const { return split_src_tablet_id_; }
-  TO_STRING_KV(K_(split_info), K_(split_src_tablet_id));
-private:
-  union {
-    uint32_t split_info_;
-    struct {
-      uint32_t is_data_incomplete_: 1; // whether the data of split dest tablet is complete.
-      uint32_t can_reuse_macro_block_: 1;
-      uint32_t cant_execute_ss_minor_: 1; // can not execute ss minor compaction? default = 0(can execute ss minor).
-      uint32_t cant_gc_macro_blks_: 1; // can not gc macro blocks when gc tablet? default = 0(can gc them).
-      uint32_t reserved: 28;
-    };
-  };
-  ObTabletID split_src_tablet_id_;
 };
 
 typedef common::ObCurTraceId::TraceId DDLTraceId;

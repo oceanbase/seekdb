@@ -187,12 +187,6 @@ public:
   int get_recycle_version(const int64_t multi_version_start, int64_t &recycle_version) const;
   int check_ready_for_read(const ObTablet &tablet);
   int64_t to_string(char *buf, const int64_t buf_len) const;
-  // ddl-split
-  int build_split_new_table_store(
-      common::ObArenaAllocator &allocator,
-      ObTablet &tablet,
-      const ObBatchUpdateTableStoreParam &param,
-      const ObTabletTableStore &old_store);
   int build_fork_new_table_store(
       common::ObArenaAllocator &allocator,
       ObTablet &tablet,
@@ -315,16 +309,6 @@ private:
   OB_INLINE int check_major_sstable_empty(const share::SCN &ddl_commit_scn, const ObTablet &tablet, bool &is_major_sstable_empty) const;
   OB_INLINE int check_ddl_complete(const ObTablet &tablet, bool &is_empty) const;
   int get_ddl_major_sstables(ObIArray<ObITable *> &ddl_major_sstables) const;
-  // ddl-split
-  int check_skip_split_tables_exist_(
-      const ObBatchUpdateTableStoreParam &param,
-      const ObTabletTableStore &old_store,
-      const ObTablet &tablet);
-  int build_split_new_table_store_(
-      common::ObArenaAllocator &allocator,
-      const ObTablet &tablet,
-      const ObBatchUpdateTableStoreParam &param,
-      const ObTabletTableStore &old_store);
   int build_fork_new_table_store_(
       common::ObArenaAllocator &allocator,
       const ObTablet &tablet,
@@ -336,13 +320,6 @@ private:
       const ObBatchUpdateTableStoreParam &param,
       const ObTabletTableStore &dst_store,
       const ObIArray<ObITable *> &tables_array);
-  int build_split_minor_tables_(
-      common::ObArenaAllocator &allocator,
-      const ObTabletTableStore &old_store,
-      const ObIArray<ObITable *> &tables_array,
-      const int64_t inc_base_snapshot_version,
-      const ObTabletRestoreState &restore_state);
-
   int replace_sstables(
       common::ObArenaAllocator &allocator,
       const ObIArray<ObITable *> *replace_sstable_array,

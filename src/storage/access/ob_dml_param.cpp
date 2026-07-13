@@ -250,7 +250,6 @@ DEF_TO_STRING(ObDMLBaseParam)
        K_(direct_insert_task_id),
        K_(check_schema_version),
        K_(ddl_task_id),
-       KPC_(data_row_for_lob),
        K_(is_main_table_in_fts_ddl),
        K_(has_async_index));
   J_OBJ_END();
@@ -312,8 +311,6 @@ DEF_TO_STRING(ObTableScanParam)
        K_(need_switch_param),
        K_(is_mds_query),
        K_(tx_seq_base),
-       K_(auto_split_filter_type),
-       K_(is_tablet_spliting),
        K_(need_update_tablet_param),
        KPC_(mds_collector));
   J_OBJ_END();

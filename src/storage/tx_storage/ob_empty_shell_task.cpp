@@ -93,7 +93,6 @@ ObTabletEmptyShellHandler::ObTabletEmptyShellHandler()
   : ls_(NULL),
     is_trigger_(true),
     stopped_(false),
-    ddl_empty_shell_checker_(),
     is_inited_(false)
 {
 }
@@ -108,7 +107,6 @@ void ObTabletEmptyShellHandler::reset()
   ls_ = NULL;
   is_trigger_ = true;
   stopped_ = false;
-  ddl_empty_shell_checker_.reset();
   is_inited_ = false;
 }
 
@@ -121,8 +119,6 @@ int ObTabletEmptyShellHandler::init(ObLS *ls)
   } else if (OB_ISNULL(ls)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", KR(ret));
-  } else if (OB_FAIL(ddl_empty_shell_checker_.init(ls))) {
-    STORAGE_LOG(WARN, "create ddl tablet checker failed", K(ret));
   } else {
     ls_ = ls;
     is_inited_ = true;
@@ -193,8 +189,6 @@ int ObTabletEmptyShellHandler::update_tablets_to_empty_shell(ObLS *ls, const com
     const ObTabletID &tablet_id = tablet_ids.at(i);
     if (OB_FAIL(ls->get_tablet_svr()->update_tablet_to_empty_shell(tablet_id))) {
       STORAGE_LOG(WARN, "failed to update tablet to shell", K(ret), K(tablet_id));
-    } else if (OB_FAIL(ddl_empty_shell_checker_.erase_tablet_record(tablet_id))) {
-      STORAGE_LOG(WARN, "erase ddl tablet record failed", K(ret));
     } else {
     #ifdef ERRSIM
       SERVER_EVENT_ADD("gc", "turn_into_empty_shell",  "tablet_id", tablet_id);

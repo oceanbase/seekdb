@@ -13,11 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include "ob_tablet_pointer.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/ls/ob_ls.h"
-
 #define USING_LOG_PREFIX STORAGE
 
 using namespace oceanbase::common;
@@ -44,8 +42,7 @@ ObTabletPointer::ObTabletPointer()
     mds_lock_(),
     mds_table_handler_(),
     old_version_chain_(nullptr),
-    attr_(),
-    auto_part_size_(OB_INVALID_SIZE)
+    attr_()
 {
 #if defined(__x86_64__) && !defined(ENABLE_OBJ_LEAK_CHECK)
   static_assert(sizeof(ObTabletPointer) == 344, "The size of ObTabletPointer will affect the meta memory manager, and the necessity of adding new fields needs to be considered.");
@@ -65,8 +62,7 @@ ObTabletPointer::ObTabletPointer(
     ddl_kv_mgr_lock_(),
     mds_table_handler_(),
     old_version_chain_(nullptr),
-    attr_(),
-    auto_part_size_(OB_INVALID_SIZE)
+    attr_()
 {
 }
 
@@ -89,7 +85,6 @@ void ObTabletPointer::reset()
   reset_obj();
   phy_addr_.reset();
   ls_ = nullptr;
-  auto_part_size_ = OB_INVALID_SIZE;
   flying_ = false;
 }
 
@@ -708,16 +703,6 @@ int ObTabletPointer::set_tablet_attr(const ObTabletAttr &attr)
   return ret;
 }
 
-int64_t ObTabletPointer::get_auto_part_size() const
-{
-  return ATOMIC_LOAD(&auto_part_size_);
-}
-
-void ObTabletPointer::set_auto_part_size(const int64_t auto_part_size)
-{
-  ATOMIC_STORE(&auto_part_size_, auto_part_size);
-}
-
 int64_t ObITabletFilterOp::total_skip_cnt_ = 0;
 int64_t ObITabletFilterOp::total_tablet_cnt_ = 0;
 int64_t ObITabletFilterOp::not_in_mem_tablet_cnt_ = 0;
@@ -766,13 +751,11 @@ ScanAllVersionTabletsOp::GetMaxMdsCkptScnOp::GetMaxMdsCkptScnOp(share::SCN &max_
 {
   max_mds_ckpt_scn_.set_min();
 }
-
 int ScanAllVersionTabletsOp::GetMaxMdsCkptScnOp::operator()(ObTablet &tablet)
 {
   int ret = OB_SUCCESS;
   max_mds_ckpt_scn_ = MAX(max_mds_ckpt_scn_, tablet.get_mds_checkpoint_scn());
   return ret;
 }
-
 } // namespace storage
 } // namespace oceanbase

@@ -1723,8 +1723,7 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
 
 static int print_partition_func(const ObTableSchema &table_schema,
                                 ObSqlString &disp_part_str,
-                                bool is_subpart,
-                                bool strict_compat)
+                                bool is_subpart)
 {
   int ret = OB_SUCCESS;
   const ObPartitionOption &part_opt = table_schema.get_part_option();
@@ -1737,39 +1736,6 @@ static int print_partition_func(const ObTableSchema &table_schema,
   } 
 
   if (OB_FAIL(ret)) {
-  } else if (part_opt.get_auto_part() && part_opt.is_range_part() && !part_opt.is_interval_part()) {
-    // is auto partition table
-    // do not support show index table auto part info, because now we do not support index auto split sql grammar
-    if (!table_schema.is_index_table()) {
-      if (!strict_compat) {
-        int64_t auto_split_size = part_opt.get_auto_part_size();
-        auto_split_size = auto_split_size >> 20; // MB
-        if (OB_FAIL(disp_part_str.append_fmt("partition by %.*s(%.*s) size (\'%ldMB\')",
-                                            type_str.length(),
-                                            type_str.ptr(),
-                                            func_expr.length(),
-                                            func_expr.ptr(),
-                                            auto_split_size))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to append display auto split expr", K(ret));
-        }
-      } else if (OB_FAIL(disp_part_str.append_fmt("partition by %.*s(%.*s)",
-                                              type_str.length(),
-                                              type_str.ptr(),
-                                              func_expr.length(),
-                                              func_expr.ptr()))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to append display partition expr", K(ret), K(type_str), K(func_expr));
-      }
-    } else {
-      if (OB_ISNULL(table_schema.get_part_array())) {
-        // do not show partition func expr of auto split none partition table 
-      } else if (OB_FAIL(disp_part_str.append_fmt("partition by %.*s(%.*s)",
-                                              type_str.length(),
-                                              type_str.ptr(),
-                                              func_expr.length(),
-                                              func_expr.ptr()))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to append display partition expr", K(ret), K(type_str), K(func_expr));
-      }
-    }
   } else {
     if (OB_FAIL(disp_part_str.append_fmt("partition by %.*s(%.*s)",
                                               type_str.length(),
@@ -1830,7 +1796,7 @@ int ObSchemaPrinter::print_table_definition_partition_options(const ObTableSchem
                                                               const ObTimeZoneInfo *tz_info) const
 {
   int ret = OB_SUCCESS;
-  if ((table_schema.is_partitioned_table() || table_schema.is_auto_partitioned_table())
+  if (table_schema.is_partitioned_table()
       && !table_schema.is_index_local_storage()) {
     ObString disp_part_fun_expr_str;
     ObSqlString disp_part_str;
@@ -1844,7 +1810,7 @@ int ObSchemaPrinter::print_table_definition_partition_options(const ObTableSchem
     }
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, "\n"))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print enter", K(ret));
-    } else if (OB_FAIL(print_partition_func(table_schema, disp_part_str, is_subpart, strict_compat_))) {
+    } else if (OB_FAIL(print_partition_func(table_schema, disp_part_str, is_subpart))) {
       SHARE_SCHEMA_LOG(WARN, "failed to print part func", K(ret));
     } else if (FALSE_IT(disp_part_fun_expr_str = disp_part_str.string())) {
       // will not reach here
@@ -2932,9 +2898,6 @@ int ObSchemaPrinter::print_range_partition_elements(const ObPartitionSchema *&sc
   if (OB_ISNULL(schema)) {
     ret = OB_INVALID_ARGUMENT;
     SHARE_SCHEMA_LOG(WARN, "schema is null", K(ret));
-  } else if (schema->get_part_option().get_auto_part() 
-    && OB_ISNULL(schema->get_part_array())) {
-    // in auto partition mode, part array is empty is possible. here no need to print partition element
   } else {
     ObPartition **part_array = schema->get_part_array();
     if (OB_ISNULL(part_array)) {

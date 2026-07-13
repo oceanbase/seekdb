@@ -117,5 +117,3 @@ replace into test values(1,2);
 insert ignore into test values(1,2);
 insert ignore into test values(1,2) on duplicate key update c2 = c1 + 1;
 update ignore tt set c1 = 1;
-create table t1(c1 int primary key) partition by range(c1) partition size auto partition auto;
-create table t1(c1 int) partition by range() partition size 10000 partition auto;

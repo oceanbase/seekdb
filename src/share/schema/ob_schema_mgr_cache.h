@@ -73,15 +73,14 @@ struct ObSchemaMgrItem
     MOD_REMOTE_EXE           = 5,
     MOD_CACHED_GUARD         = 6,
     MOD_UNIQ_CHECK           = 7,
-    MOD_SSTABLE_SPLIT_CTX    = 8,
-    MOD_RELATIVE_TABLE       = 9,
-    MOD_VIRTUAL_TABLE        = 10,
-    MOD_DAS_CTX              = 11,
-    MOD_SCHEMA_RECORDER      = 12,
-    MOD_SPI_RESULT_SET       = 13,
-    MOD_PL_PREPARE_RESULT    = 14,
-    MOD_PARTITION_BALANCE    = 15,
-    MOD_RS_MAJOR_CHECK       = 16,
+    MOD_RELATIVE_TABLE       = 8,
+    MOD_VIRTUAL_TABLE        = 9,
+    MOD_DAS_CTX              = 10,
+    MOD_SCHEMA_RECORDER      = 11,
+    MOD_SPI_RESULT_SET       = 12,
+    MOD_PL_PREPARE_RESULT    = 13,
+    MOD_PARTITION_BALANCE    = 14,
+    MOD_RS_MAJOR_CHECK       = 15,
     MOD_MAX
   };
   ObSchemaMgrItem()

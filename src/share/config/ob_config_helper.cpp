@@ -1277,30 +1277,6 @@ bool ObConfigJniTransDataParamsChecker::check(const ObConfigItem &t) const
   return bret;
 }
 
-bool ObConfigEnableAutoSplitChecker::check(const ObConfigItem &t) const
-{
-  bool is_valid = false;
-  bool enable_auto_split = ObConfigBoolParser::get(t.str(), is_valid);
-  return is_valid && !(enable_auto_split);
-}
-
-bool ObConfigAutoSplitTabletSizeChecker::check(const ObConfigItem &t) const
-{
-  bool is_valid = false;
-  int64_t value = ObConfigCapacityParser::get(t.str(), is_valid);
-  return is_valid;
-}
-
-bool ObConfigGlobalIndexAutoSplitPolicyChecker::check(const ObConfigItem &t) const
-{
-  bool bret = false;
-  common::ObString tmp_str(t.str());
-  bret = (0 == tmp_str.case_compare("DISTRIBUTED")
-          || 0 == tmp_str.case_compare("ALL")
-          || 0 == tmp_str.case_compare("OFF"));
-  return bret;
-}
-
 bool ObHNSWIterFilterScanNumChecker::check(const ObConfigItem &t) const
 {
   bool is_valid = false;

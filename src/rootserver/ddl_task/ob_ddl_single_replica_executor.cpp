@@ -37,11 +37,8 @@ int ObSingleReplicaBuildCtx::init(
     const int64_t src_schema_version,
     const int64_t dest_schema_version,
     const int64_t tablet_task_id,
-    const int64_t compaction_scn,
     const ObTabletID &src_tablet_id,
-    const ObTabletID &dest_tablet_id,
-    const bool can_reuse_macro_block,
-    const ObIArray<blocksstable::ObDatumRowkey> &parallel_datum_rowkey_list)
+    const ObTabletID &dest_tablet_id)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
@@ -52,14 +49,10 @@ int ObSingleReplicaBuildCtx::init(
              dest_table_id == OB_INVALID_ID ||
              tablet_task_id == 0 ||
              !src_tablet_id.is_valid() ||
-             !dest_tablet_id.is_valid() ||
-             (is_tablet_split(ddl_type) && (compaction_scn == 0 || parallel_datum_rowkey_list.empty()))) {
+             !dest_tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(addr), K(src_table_id), K(dest_table_id),
-                                 K(tablet_task_id), K(src_tablet_id), K(dest_tablet_id),
-                                 K(ddl_type), K(compaction_scn), K(parallel_datum_rowkey_list));
-  } else if (OB_FAIL(parallel_datum_rowkey_list_.assign(parallel_datum_rowkey_list))) { // shallow copy.
-    LOG_WARN("assign failed", K(ret), K(parallel_datum_rowkey_list));
+                                 K(tablet_task_id), K(src_tablet_id), K(dest_tablet_id), K(ddl_type));
   } else {
     addr_ = addr;
     ddl_type_ = ddl_type;
@@ -68,10 +61,8 @@ int ObSingleReplicaBuildCtx::init(
     src_schema_version_ = src_schema_version;
     dest_schema_version_ = dest_schema_version;
     tablet_task_id_ = tablet_task_id;
-    compaction_scn_ = compaction_scn;
     src_tablet_id_ = src_tablet_id;
     dest_tablet_id_ = dest_tablet_id;
-    can_reuse_macro_block_ = can_reuse_macro_block;
     reset_build_stat();
     is_inited_ = true;
   }
@@ -94,18 +85,13 @@ bool ObSingleReplicaBuildCtx::is_valid() const
                 dest_table_id_ != OB_INVALID_ID && src_schema_version_ != 0 &&
                 dest_schema_version_ != 0 && tablet_task_id_ != 0 &&
                 src_tablet_id_.is_valid() && dest_tablet_id_.is_valid();
-  if (is_tablet_split(ddl_type_)) {
-    valid &= (compaction_scn_ != 0 && !parallel_datum_rowkey_list_.empty());
-  }
   return valid;
 }
 
 int ObSingleReplicaBuildCtx::assign(const ObSingleReplicaBuildCtx &other)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(parallel_datum_rowkey_list_.assign(other.parallel_datum_rowkey_list_))) {
-    LOG_WARN("assign failed", K(ret));
-  } else {
+  {
     is_inited_ = other.is_inited_;
     addr_ = other.addr_;
     ddl_type_ = other.ddl_type_;
@@ -114,9 +100,7 @@ int ObSingleReplicaBuildCtx::assign(const ObSingleReplicaBuildCtx &other)
     src_schema_version_ = other.src_schema_version_;
     dest_schema_version_ = other.dest_schema_version_;
     tablet_task_id_ = other.tablet_task_id_;
-    compaction_scn_ = other.compaction_scn_;
     src_tablet_id_ = other.src_tablet_id_;
-    can_reuse_macro_block_ = other.can_reuse_macro_block_;
     stat_ = other.stat_;
     ret_code_ = other.ret_code_;
     heart_beat_time_ = other.heart_beat_time_;
@@ -164,7 +148,6 @@ int ObDDLReplicaBuildExecutor::build(const ObDDLReplicaBuildExecutorParam &param
     parallelism_ = param.parallelism_;
     execution_id_ = param.execution_id_;
     data_format_version_ = param.data_format_version_;
-    min_split_start_scn_ = param.min_split_start_scn_;
     is_no_logging_ = param.is_no_logging_;
     ObArray<ObSingleReplicaBuildCtx> replica_build_ctxs;
     if (OB_FAIL(construct_replica_build_ctxs(param, replica_build_ctxs))) {
@@ -345,7 +328,7 @@ int ObDDLReplicaBuildExecutor::check_build_end(const bool need_checksum, bool &i
     is_end = true;
     ret_code = ret;
     LOG_INFO("all replica build finished", K(succ_cnt), K(total_cnt));
-    if (!share::is_tablet_split(ddl_type_) && need_checksum) {
+    if (need_checksum) {
       if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(dest_table_id, execution_id_, ddl_task_id_))) {
         LOG_WARN("fail to check sstable checksum_report_finish", 
             K(ret), K(dest_table_id), K(execution_id_), K(ddl_task_id_));
@@ -457,15 +440,10 @@ int ObDDLReplicaBuildExecutor::construct_rpc_arg(
     arg.execution_id_ = execution_id_;
     arg.tablet_task_id_ = replica_build_ctx.tablet_task_id_;
     arg.data_format_version_ = data_format_version_;
-    arg.compaction_scn_ = replica_build_ctx.compaction_scn_;
-    arg.can_reuse_macro_block_ = replica_build_ctx.can_reuse_macro_block_;
-    arg.min_split_start_scn_   = min_split_start_scn_;
     arg.parallelism_ = parallelism_;
     arg.is_no_logging_ = is_no_logging_;
     if (OB_FAIL(arg.lob_col_idxs_.assign(lob_col_idxs_))) {
       LOG_WARN("failed to assign to lob col idxs", K(ret));
-    } else if (OB_FAIL(arg.parallel_datum_rowkey_list_.assign(replica_build_ctx.parallel_datum_rowkey_list_))) {
-      LOG_WARN("failed to assign split ranges", K(ret));
     }
   }
   return ret;
@@ -540,7 +518,6 @@ int ObDDLReplicaBuildExecutor::construct_replica_build_ctxs(
 {
   int ret = OB_SUCCESS;
   replica_build_ctxs.reuse();
-  const bool is_tablet_split_task = is_tablet_split(param.ddl_type_);
   if (!param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(param));
@@ -553,31 +530,14 @@ int ObDDLReplicaBuildExecutor::construct_replica_build_ctxs(
       const int64_t dest_table_id = param.dest_table_ids_.at(i);
       const int64_t src_schema_version = param.source_schema_versions_.at(i);
       const int64_t dest_schema_version = param.dest_schema_versions_.at(i);
-      int64_t tablet_task_id = i + 1;
-      int64_t compaction_scn = is_tablet_split_task ? param.compaction_scns_.at(i) : 0;
-      const bool can_reuse_macro_block = is_tablet_split_task ? param.can_reuse_macro_blocks_.at(i) : false;
-      ObSEArray<blocksstable::ObDatumRowkey, 8> unused_empty_rowkey_list; // placeholder only.
-      const ObIArray<blocksstable::ObDatumRowkey> &parallel_datum_rowkey_list = is_tablet_split_task ?
-          param.parallel_datum_rowkey_list_.at(i) : unused_empty_rowkey_list;
-      if (is_tablet_split_task) {
-        ObSingleReplicaBuildCtx replica_build_ctx;
-        if (OB_FAIL(replica_build_ctx.init(GCTX.self_addr(), ddl_type_,
-                src_table_id, dest_table_id, src_schema_version,
-                dest_schema_version, tablet_task_id, compaction_scn,
-                src_tablet_id, dest_tablet_id, can_reuse_macro_block, parallel_datum_rowkey_list))) {
-          LOG_WARN("failed to init replica build ctx", K(ret));
-        } else if (OB_FAIL(replica_build_ctxs.push_back(replica_build_ctx))) {
-          LOG_WARN("failed to push back replica build ctx", K(ret));
-        }
-      } else {
-        ObSingleReplicaBuildCtx replica_build_ctx;
-        if (OB_FAIL(replica_build_ctx.init(GCTX.self_addr(), ddl_type_,
-                src_table_id, dest_table_id, src_schema_version, dest_schema_version,
-                tablet_task_id, compaction_scn, src_tablet_id, dest_tablet_id, can_reuse_macro_block, parallel_datum_rowkey_list))) {
-          LOG_WARN("failed to init replica build ctx", K(ret), K(src_tablet_id));
-        } else if (OB_FAIL(replica_build_ctxs.push_back(replica_build_ctx))) {
-          LOG_WARN("failed to push back replica build ctx", K(ret));
-        }
+      const int64_t tablet_task_id = i + 1;
+      ObSingleReplicaBuildCtx replica_build_ctx;
+      if (OB_FAIL(replica_build_ctx.init(GCTX.self_addr(), ddl_type_,
+              src_table_id, dest_table_id, src_schema_version, dest_schema_version,
+              tablet_task_id, src_tablet_id, dest_tablet_id))) {
+        LOG_WARN("failed to init replica build ctx", K(ret), K(src_tablet_id));
+      } else if (OB_FAIL(replica_build_ctxs.push_back(replica_build_ctx))) {
+        LOG_WARN("failed to push back replica build ctx", K(ret));
       }
     }
   }

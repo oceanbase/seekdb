@@ -1261,12 +1261,6 @@ public:
    static int row_cmp(const ObExpr &expr, ObDatum &expr_datum,
                       ObExpr **l_row, ObEvalCtx &l_ctx, ObExpr **r_row, ObEvalCtx &r_ctx);
 
-   // for auto split local index query
-   static int min_max_row_eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datm);
-   static int min_max_row_cmp(const ObExpr &expr, ObDatum &expr_datum,
-                      ObExpr **l_row, ObEvalCtx &l_ctx, ObExpr **r_row, ObEvalCtx &r_ctx);
-   static int get_min_max_cmp_ret(const ObDatum *left, const ObDatum *right, int &cmp_ret);
-
    template <bool IS_LEFT>
    static int try_get_inner_row_cmp_ret(const int ret_code, int &cmp_ret);
 
@@ -1304,11 +1298,6 @@ public:
                       const common::ObCmpOp cmp_op);
 
   static int eval_pl_udt_compare(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-
-  // for auto split query
-  static int eval_min_max_compare(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int eval_batch_min_max_compare(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
-  static int eval_vector_min_max_compare(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound);
 
   // get_const_cast_mode returns cast_mode for const/calculated params when compares with decimal type column
   // col is defined as number(10, 3)

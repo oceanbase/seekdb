@@ -682,30 +682,6 @@ int ObLockTable::get_lock_op_iter(const ObLockID &lock_id,
   return ret;
 }
 
-int ObLockTable::replay(const void *buffer,
-                        const int64_t nbytes,
-                        const palf::LSN &lsn,
-                        const share::SCN &scn)
-{
-  int ret = OB_SUCCESS;
-  ObTableHandleV2 handle;
-  ObLockMemtable *memtable = nullptr;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    TABLELOCK_LOG(WARN, "ObLockTable not inited", K(ret));
-  } else if (OB_FAIL(get_lock_memtable(handle))) {
-    TABLELOCK_LOG(WARN, "get lock memtable failed", K(ret));
-  } else if (OB_FAIL(handle.get_lock_memtable(memtable))) {
-    TABLELOCK_LOG(ERROR, "get lock memtable from lock handle failed", K(ret));
-  } else if (OB_FAIL(memtable->replay_split_log(buffer,
-                                                nbytes,
-                                                lsn,
-                                                scn))) {
-    TABLELOCK_LOG(WARN, "ObLockTable::replay failed", K(ret));                                    
-  }
-  return ret;
-}
-
 int ObLockTable::admin_remove_lock_op(const ObTableLockOp &op_info)
 {
   int ret = OB_SUCCESS;

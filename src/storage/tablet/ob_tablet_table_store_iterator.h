@@ -72,7 +72,6 @@ public:
   void resume();
 
   int set_handle(const ObStorageMetaHandle &table_store_handle);
-  int alloc_split_extra_table_store_handle(ObStorageMetaHandle *&meta_handle);
 
   ObITable *get_last_memtable();
   int get_next(ObITable *&table);
@@ -94,7 +93,7 @@ public:
     return (NULL == memstore_retired_) ? false : ATOMIC_LOAD(memstore_retired_);
   }
   TO_STRING_KV(K_(table_ptr_array), K_(sstable_handle_array), K_(pos), K_(step), K_(memstore_retired),
-      K_(need_load_sstable), K_(table_store_handle), K_(split_extra_table_store_handles), KP_(fork_infos));
+      K_(need_load_sstable), K_(table_store_handle), KP_(fork_infos));
 private:
   int inner_move_idx_to_next();
   int get_table_ptr_with_meta_handle(
@@ -112,7 +111,6 @@ private:
   int64_t pos_;
   int64_t step_;
   bool * memstore_retired_;
-  ObSEArray<ObStorageMetaHandle, 1> split_extra_table_store_handles_;
   const ObIArray<share::ObForkTabletInfo> *fork_infos_;  // pointer to fork infos from ObTabletTableIterator
   DISALLOW_COPY_AND_ASSIGN(ObTableStoreIterator);
 };

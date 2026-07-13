@@ -416,9 +416,6 @@ public:
                                                   const common::ObIArray<uint64_t> &index_columns,
                                                   const common::ObPartitionKeyInfo &partition_info,
                                                   const bool is_heap_table_primary_key);
-  static int unique_idx_covered_presetting_partition_columns(const share::schema::ObTableSchema &table_schema,
-                                                             const common::ObIArray<uint64_t> &index_columns,
-                                                             const bool is_heap_table_primary_key);
 
   static int get_collation_type_of_names(const ObSQLSessionInfo *session_info,
                                          const ObNameTypeClass type_class,

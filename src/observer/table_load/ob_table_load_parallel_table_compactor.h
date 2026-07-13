@@ -91,7 +91,7 @@ private:
   int construct_merge_range_task(ObTableLoadParallelCompactTabletCtx *tablet_ctx,
                                  int64_t range_idx);
   int construct_compact_sstable_task(ObTableLoadParallelCompactTabletCtx *tablet_ctx);
-  int handle_tablet_split_range_finish(ObTableLoadParallelCompactTabletCtx *tablet_ctx);
+  int handle_range_split_finish(ObTableLoadParallelCompactTabletCtx *tablet_ctx);
   int handle_tablet_range_merge_finish(ObTableLoadParallelCompactTabletCtx *tablet_ctx);
   int handle_tablet_compact_sstable_finish(ObTableLoadParallelCompactTabletCtx *tablet_ctx);
   int handle_task_finish(int64_t thread_idx, int ret_code);

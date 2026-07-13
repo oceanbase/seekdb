@@ -306,10 +306,6 @@ int ObDASScanOp::init_scan_param()
   scan_param_.pd_storage_flag_ = scan_ctdef_->pd_expr_spec_.pd_storage_flag_.pd_flag_;
   scan_param_.table_scan_opt_ = scan_ctdef_->table_scan_opt_;
   scan_param_.fb_snapshot_ = scan_rtdef_->fb_snapshot_;
-  scan_param_.auto_split_filter_type_ = scan_ctdef_->pd_expr_spec_.auto_split_filter_type_;
-  scan_param_.auto_split_filter_ = scan_ctdef_->pd_expr_spec_.auto_split_expr_;
-  scan_param_.auto_split_params_ = const_cast<ExprFixedArray *>(&(scan_ctdef_->pd_expr_spec_.auto_split_params_));
-  
   scan_param_.is_mds_query_ = false;
   scan_param_.main_table_scan_stat_.tsc_monitor_info_ = scan_rtdef_->tsc_monitor_info_;
   scan_param_.in_row_cache_threshold_ = scan_rtdef_->in_row_cache_threshold_;

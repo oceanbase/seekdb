@@ -18,6 +18,7 @@
 
 #include "share/ob_global_stat_proxy.h"
 #include "share/ob_dml_sql_splicer.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_share_util.h" // ObShareUtil::get_rs_default_timeout_ctx
 #include "common/ob_timeout_ctx.h" // ObTimeoutCtx
 

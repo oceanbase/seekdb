@@ -125,7 +125,6 @@ ob_set_subtarget(ob_server change_stream
 ob_set_subtarget(ob_server scheduler
   scheduler/ob_dag_warning_history_mgr.cpp
   scheduler/ob_independent_dag.cpp
-  scheduler/ob_partition_auto_split_helper.cpp
   scheduler/ob_scheduled_manage_dynamic_partition.cpp
   scheduler/ob_sys_task_stat.cpp
   scheduler/ob_tenant_dag_scheduler.cpp

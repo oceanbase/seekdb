@@ -1696,32 +1696,6 @@ DEF_PARAM(_enable_inner_session_mgr, BOOL, OB_CLUSTER_PARAMETER, "True", "enable
 DEF_PARAM(_enable_trace_tablet_leak, BOOL, OB_CLUSTER_PARAMETER, "False", 
         "enable t3m tablet leak checker. The default value is False",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE));
-DEF_PARAM(enable_auto_split, BOOL_WITH_CHECKER, OB_CLUSTER_PARAMETER, "False",
-         common::ObConfigEnableAutoSplitChecker,
-         "if the auto-partition clause is not used"
-         "this config judge whether to enable auto-partition for creating table.",
-         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(auto_split_tablet_size, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "2GB", common::ObConfigAutoSplitTabletSizeChecker, "[128M,)",
-        "when create an auto-partitioned table in \"create table\" syntax or "
-        "modify a table as an auto-partitioned table in \"alter table\" syntax,"
-        "if the splitting threshold of tablet size is not setted,"
-        "this config will be setted as the threshold of the table."
-        "Note that the modification of this config will not affect the created auto-partitioned table."
-        "Range: [128M, +∞)",
-        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-#ifdef OB_BUILD_CLOSE_MODULES
-DEF_PARAM(global_index_auto_split_policy, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "DISTRIBUTED",
-#else
-DEF_PARAM(global_index_auto_split_policy, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "ALL",
-#endif
-         common::ObConfigGlobalIndexAutoSplitPolicyChecker,
-         "if the auto-partition clause is not used"
-         "this config judge whether to enable auto-partition for creating global index."\
-         "DISTRIBUTED: enable auto-partition for creating global index if tenant has multiple nodes, e.g., multiple primary zones or multiple units;"\
-         "ALL: enable auto-partition for creating all global index;"\
-         "OFF: disable auto-partition for creating all global index.",
-         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
-         "DISTRIBUTED, ALL, OFF");
 DEF_PARAM(_inlist_rewrite_threshold, INT, OB_CLUSTER_PARAMETER, "1000", "[1, 2147483647]"
         "specifies transform how much const params in IN list to values table",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

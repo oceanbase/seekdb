@@ -61,7 +61,6 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "storage/tablelock/ob_table_lock_rpc_client.h"
 #include "share/catalog/ob_cached_catalog_meta_getter.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h" // for ObOptStatManager
-#include "observer/scheduler/ob_partition_auto_split_helper.h"
 #include "share/longops_mgr/ob_longops_mgr.h"
 #include "share/ob_ddl_sim_point.h"
 #include "storage/ddl/ob_ddl_redo_log_writer.h"
@@ -423,8 +422,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init opt stat manager failed", KR(ret));
     } else if (OB_FAIL(ObSysTaskStatMgr::get_instance().set_self_addr(self_addr_))) {
       LOG_ERROR("set sys task status self addr failed", KR(ret));
-    } else if (OB_FAIL(ObServerAutoSplitScheduler::get_instance().init())) {
-      LOG_ERROR("init auto split scheduler failed", KR(ret));
     } else if (OB_FAIL(ObTimerMonitor::get_instance().init())) {
       LOG_ERROR("init timer monitor failed", KR(ret));
     } else if (OB_FAIL(PX_P2P_DH.init())) {

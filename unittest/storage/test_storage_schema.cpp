@@ -281,7 +281,7 @@ TEST_F(TestStorageSchema, test_update_tablet_store_schema)
   ObStorageSchemaUtil::free_storage_schema(allocator_, result_storage_schema);
 }
 
-TEST_F(TestStorageSchema, test_clipped_schema_for_tablet_split)
+TEST_F(TestStorageSchema, test_clipped_schema_for_tablet_fork)
 {
   share::schema::ObTableSchema table_schema;
   ObStorageSchema storage_schema1;

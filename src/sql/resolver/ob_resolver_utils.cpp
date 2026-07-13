@@ -4602,10 +4602,6 @@ int ObResolverUtils::build_partition_key_expr(ObResolverParams &params,
     if (!column_schema.is_original_rowkey_column() || column_schema.is_hidden()) {
       //parition by key() use primary key to create partition key not hidden auto_increment primary key
       continue;
-    } else if (column_schema.is_autoincrement()) {
-      ret = OB_ERR_AUTO_PARTITION_KEY;
-      LOG_USER_ERROR(OB_ERR_AUTO_PARTITION_KEY, column_schema.get_column_name_str().length(),
-                     column_schema.get_column_name_str().ptr());
     } else {
       ObColumnRefRawExpr *column_expr = NULL;
       if (OB_FAIL(ObRawExprUtils::build_column_expr(*params.expr_factory_, column_schema,
@@ -4665,7 +4661,7 @@ int ObResolverUtils::check_unique_index_cover_partition_column(const ObTableSche
                                                                const ObCreateIndexArg &arg)
 {
   int ret = OB_SUCCESS;
-  if (!(table_schema.is_partitioned_table() || table_schema.is_auto_partitioned_table())
+  if (!table_schema.is_partitioned_table()
       //todo@lanyi see if it can be abstracted into a unified function
       || (INDEX_TYPE_PRIMARY != arg.index_type_
           && INDEX_TYPE_UNIQUE_LOCAL != arg.index_type_
@@ -4681,10 +4677,6 @@ int ObResolverUtils::check_unique_index_cover_partition_column(const ObTableSche
     if (OB_FAIL(get_index_column_ids(table_schema, arg.index_columns_, idx_col_ids))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Failed to get index column ids", K(ret), K(table_schema), K(arg.index_columns_));
-    } else if (table_schema.is_auto_partitioned_table() && !table_schema.is_partitioned_table()) {
-      if (OB_FAIL(unique_idx_covered_presetting_partition_columns(table_schema, idx_col_ids, is_heap_table_primary_key))) {
-        LOG_WARN("Unique index covered presetting partition columns failed", KR(ret));
-      }
     } else {
       if (OB_FAIL(unique_idx_covered_partition_columns(table_schema, idx_col_ids, partition_info, is_heap_table_primary_key))) {
         LOG_WARN("Unique index covered partition columns failed", KR(ret));
@@ -4711,32 +4703,6 @@ int ObResolverUtils::get_index_column_ids(
       LOG_WARN("Failed to add column id", K(ret));
     } else { }//do nothing
   }
-  return ret;
-}
-
-int ObResolverUtils::unique_idx_covered_presetting_partition_columns(const share::schema::ObTableSchema &table_schema,
-                                                                     const common::ObIArray<uint64_t> &index_columns,
-                                                                     const bool is_heap_table_primary_key)
-{
-  int ret = OB_SUCCESS;
-  const ObColumnSchemaV2 *column_schema = NULL;
-  ObArray<uint64_t> presetting_partition_column_ids;
-
-  if (OB_FAIL(table_schema.get_presetting_partition_keys(presetting_partition_column_ids))) {
-    LOG_WARN("fail to get presetting partition key columns", KR(ret), K(table_schema), K(index_columns));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < presetting_partition_column_ids.count(); i++) {
-      uint64_t column_id = presetting_partition_column_ids.at(i);
-      if (!has_exist_in_array(index_columns, column_id)) {
-        ret = OB_EER_UNIQUE_KEY_NEED_ALL_FIELDS_IN_PF;
-        LOG_WARN("unique key does not include all presetting partition key", KR(ret),
-                                                                             K(presetting_partition_column_ids),
-                                                                             K(index_columns));
-        LOG_USER_ERROR(OB_EER_UNIQUE_KEY_NEED_ALL_FIELDS_IN_PF, is_heap_table_primary_key ? "PRIMARY KEY" : "UNIQUE INDEX");
-      }
-    } // end for
-  }
-
   return ret;
 }
 

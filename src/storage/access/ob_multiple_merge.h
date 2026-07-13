@@ -131,7 +131,9 @@ private:
   int project2output_exprs(blocksstable::ObDatumRow &unprojected_row, blocksstable::ObDatumRow &cur_row);
   int prepare_read_tables(bool refresh = false);
   int prepare_mds_tables(bool refresh);
-  int prepare_tables_from_iterator(ObTableStoreIterator &table_iter, const bool has_split_extra_tables, const common::SampleInfo *sample_info = nullptr);
+  int prepare_tables_from_iterator(
+      ObTableStoreIterator &table_iter,
+      const common::SampleInfo *sample_info = nullptr);
   int refresh_table_on_demand();
   int refresh_tablet_iter();
   OB_INLINE int check_need_refresh_table(bool &need_refresh);
@@ -151,7 +153,6 @@ private:
   void report_tablet_stat();
   int update_and_report_tablet_stat();
   void inner_reset();
-  int refresh_filter_params_on_demand(const bool is_open);
   int prepare_truncate_filter();
   void reset_extra_access_ctx();
 

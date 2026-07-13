@@ -411,22 +411,6 @@ struct ObUpdateTableStoreParam
   UpdateUpperTransParam upper_trans_param_; // set upper_trans_param_ only when update upper_trans_version
 };
 
-struct ObSplitTableStoreParam final
-{
-public:
-  ObSplitTableStoreParam();
-  ~ObSplitTableStoreParam();
-  bool is_valid() const;
-  void reset();
-  TO_STRING_KV(K_(snapshot_version), K_(multi_version_start), K_(merge_type), K_(skip_split_keys));
-
-public:
-  int64_t snapshot_version_;
-  int64_t multi_version_start_;
-  compaction::ObMergeType merge_type_;
-  ObSEArray<ObITable::TableKey, MAX_SSTABLE_CNT_IN_STORAGE> skip_split_keys_;
-};
-
 struct ObForkTableStoreParam final
 {
 public:
@@ -452,14 +436,13 @@ struct ObBatchUpdateTableStoreParam final
   void reset();
 
   TO_STRING_KV(K_(tables_handle),
-      KP_(storage_schema), K_(tablet_split_param), K_(tablet_fork_param), K_(release_mds_scn));
+      KP_(storage_schema), K_(tablet_fork_param), K_(release_mds_scn));
 
   ObTablesHandleArray tables_handle_;
 #ifdef ERRSIM
   ObErrsimBackfillPoint errsim_point_info_;
 #endif
   const ObStorageSchema *storage_schema_;
-  ObSplitTableStoreParam tablet_split_param_;
   ObForkTableStoreParam tablet_fork_param_;
   share::SCN release_mds_scn_;
 
@@ -561,35 +544,6 @@ public:
   // whether the partition is in rebuild
 private:
   transaction::ObLSTxCtxMgr& ls_tx_ctx_mgr_;
-};
-
-
-enum class ObTabletSplitType : int64_t {
-  RANGE,
-  NONE_RANGE,
-  MAX_TYPE,
-};
-
-struct ObTabletSplitTscInfo final
-{
-public:
-  ObTabletSplitTscInfo();
-  ~ObTabletSplitTscInfo() = default;
-
-  bool is_split_dst_with_partkey() const;
-  bool is_split_dst_without_partkey() const;
-  void reset();
-
-  TO_STRING_KV(K_(start_partkey), 
-    K_(end_partkey), K_(is_split_dst), K_(split_type), K_(split_cnt), K_(partkey_is_rowkey_prefix));
-
-public:
-  blocksstable::ObDatumRowkey start_partkey_;
-  blocksstable::ObDatumRowkey end_partkey_;
-  bool is_split_dst_;
-  int64_t split_cnt_;
-  ObTabletSplitType split_type_;
-  bool partkey_is_rowkey_prefix_;
 };
 
 

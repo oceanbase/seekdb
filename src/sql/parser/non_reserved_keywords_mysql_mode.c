@@ -793,7 +793,6 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"remap", REMAP},
   {"remove", REMOVE},
   {"rename", RENAME},
-  {"reorganize", REORGANIZE},
   {"repair", REPAIR},
   {"repeat", REPEAT},
   {"repeatable", REPEATABLE},

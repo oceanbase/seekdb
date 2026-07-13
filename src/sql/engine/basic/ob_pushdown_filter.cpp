@@ -393,13 +393,6 @@ int ObPushdownFilterConstructor::is_white_mode(const ObRawExpr* raw_expr, bool &
         break;
     }
   }
-  // for auto split local index query filter
-  if (OB_SUCC(ret)) {
-    if (raw_expr->has_flag(IS_AUTO_PART_EXPR)) {
-      is_white = false;
-      LOG_DEBUG("has flag: is_auto_part_expr, dont go white filter");
-    }
-  }
   return ret;
 }
 
@@ -2695,9 +2688,6 @@ ObPushdownExprSpec::ObPushdownExprSpec(ObIAllocator &alloc)
     ext_file_column_exprs_(alloc),
     ext_column_convert_exprs_(alloc),
     trans_info_expr_(nullptr),
-    auto_split_filter_type_(OB_INVALID_ID),
-    auto_split_expr_(nullptr),
-    auto_split_params_(alloc),
     ext_tbl_filter_pd_level_(0)
 {
 }
@@ -2720,9 +2710,6 @@ OB_DEF_SERIALIZE(ObPushdownExprSpec)
               ext_file_column_exprs_,
               ext_column_convert_exprs_,
               trans_info_expr_,
-              auto_split_filter_type_,
-              auto_split_expr_,
-              auto_split_params_,
               ext_tbl_filter_pd_level_);
   return ret;
 }
@@ -2745,9 +2732,6 @@ OB_DEF_DESERIALIZE(ObPushdownExprSpec)
               ext_file_column_exprs_,
               ext_column_convert_exprs_,
               trans_info_expr_,
-              auto_split_filter_type_,
-              auto_split_expr_,
-              auto_split_params_,
               ext_tbl_filter_pd_level_);
   return ret;
 }
@@ -2770,9 +2754,6 @@ OB_DEF_SERIALIZE_SIZE(ObPushdownExprSpec)
               ext_file_column_exprs_,
               ext_column_convert_exprs_,
               trans_info_expr_,
-              auto_split_filter_type_,
-              auto_split_expr_,
-              auto_split_params_,
               ext_tbl_filter_pd_level_);
   return len;
 }

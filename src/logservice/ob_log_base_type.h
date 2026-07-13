@@ -116,9 +116,6 @@ enum ObLogBaseType
   // for vector index
   VEC_INDEX_LOG_BASE_TYPE = 48,
 
-  // for table lock split
-  TABLE_LOCK_LOG_BASE_TYPE = 49,
-
   // for DBMS_SCHEDULER GC
   DBMS_SCHEDULER_GC_LOG_BASE_TYPE = 50,
 
@@ -214,12 +211,8 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str ,"SNAPSHOT_SCHEDULER", str_len);
   } else if (log_type == CLONE_SCHEDULER_LOG_BASE_TYPE) {
     strncpy(str ,"CLONE_SCHEDULER", str_len);
-  } else if (log_type == TABLE_LOCK_LOG_BASE_TYPE) {
-    strncpy(str ,"TABLE_LOCK", str_len);
   } else if (log_type == SHARED_STORAGE_PRE_WARM_LOG_BASE_TYPE) {
     strncpy(str ,"SHARED_STORAGE_PRE_WARM_LOG_BASE_TYPE", str_len);
-  } else if (log_type == TABLE_LOCK_LOG_BASE_TYPE) {
-    strncpy(str, "TABLE_LOCK_LOG_BASE_TYPE", str_len);
   } else if (log_type == VEC_INDEX_LOG_BASE_TYPE) {
     strncpy(str ,"VEC_INDEX_SERVICE", str_len);
   } else if (log_type == DBMS_SCHEDULER_LOG_BASE_TYPE) {

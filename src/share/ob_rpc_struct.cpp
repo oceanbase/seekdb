@@ -821,10 +821,7 @@ bool ObAlterTablegroupArg::is_valid() const
 bool ObAlterTablegroupArg::is_alter_partitions() const
 {
   return alter_option_bitset_.has_member(ADD_PARTITION)
-         || alter_option_bitset_.has_member(DROP_PARTITION)
-         || alter_option_bitset_.has_member(PARTITIONED_TABLE)
-         || alter_option_bitset_.has_member(REORGANIZE_PARTITION)
-         || alter_option_bitset_.has_member(SPLIT_PARTITION);
+         || alter_option_bitset_.has_member(DROP_PARTITION);
 }
 
 bool ObAlterTablegroupArg::is_allow_when_disable_ddl() const
@@ -1525,7 +1522,6 @@ OB_DEF_SERIALIZE(ObAlterTableArg)
               inner_sql_exec_addr_,
               local_session_var_,
               alter_algorithm_,
-              alter_auto_partition_attr_,
               rebuild_index_arg_list_,
               client_session_id_,
               client_session_create_ts_,
@@ -1632,7 +1628,6 @@ OB_DEF_DESERIALIZE(ObAlterTableArg)
               inner_sql_exec_addr_,
               local_session_var_,
               alter_algorithm_,
-              alter_auto_partition_attr_,
               rebuild_index_arg_list_,
               client_session_id_,
               client_session_create_ts_,
@@ -1692,7 +1687,6 @@ OB_DEF_SERIALIZE_SIZE(ObAlterTableArg)
                 inner_sql_exec_addr_,
                 local_session_var_,
                 alter_algorithm_,
-                alter_auto_partition_attr_,
                 rebuild_index_arg_list_,
                 client_session_id_,
                 client_session_create_ts_,
@@ -3613,8 +3607,6 @@ DEF_TO_STRING(ObForceCreateSysTableArg)
 
 OB_SERIALIZE_MEMBER(ObForceCreateSysTableArg, table_id_, last_replay_log_id_);
 
-OB_SERIALIZE_MEMBER(ObSplitPartitionArg, split_info_);
-
 DEF_TO_STRING(ObUpdateStatCacheArg)
 {
   int64_t pos = 0;
@@ -3899,7 +3891,6 @@ OB_SERIALIZE_MEMBER(ObDDLBuildSingleReplicaResponseArg, tablet_id_,
                     server_addr_, physical_row_count_);
 
 
-// === Functions for tablet split start. ===
 
 
 
@@ -3916,51 +3907,6 @@ OB_SERIALIZE_MEMBER(ObDDLBuildSingleReplicaResponseArg, tablet_id_,
 
 
 
-int ObAutoSplitTabletArg::assign(const ObAutoSplitTabletArg &other)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!other.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(other));
-  } else {
-    tablet_id_ = other.tablet_id_;
-    
-    auto_split_tablet_size_ = other.auto_split_tablet_size_;
-    used_disk_space_ = other.used_disk_space_;
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObAutoSplitTabletArg, tablet_id_,
-    auto_split_tablet_size_, used_disk_space_);
-
-
-bool ObAutoSplitTabletBatchArg::is_valid() const
-{
-  bool valid = (args_.count() > 0);
-  for (int64_t i = 0; valid && i < args_.count(); ++i)
-  {
-    valid = args_.at(i).is_valid();
-  }
-  return valid;
-}
-
-OB_SERIALIZE_MEMBER(ObAutoSplitTabletBatchArg, args_);
-
-bool ObAutoSplitTabletBatchRes::is_valid() const
-{
-  return (rets_.count() > 0) && (suggested_next_valid_time_ != OB_INVALID_TIMESTAMP);
-}
-
-OB_SERIALIZE_MEMBER(ObAutoSplitTabletBatchRes, rets_, suggested_next_valid_time_);
-
-
-OB_SERIALIZE_MEMBER(ObFetchSplitTabletInfoArg, tablet_ids_);
-
-
-OB_SERIALIZE_MEMBER(ObFetchSplitTabletInfoRes, tablet_sizes_, create_commit_versions_);
-
-// === Functions for tablet split end. ===
 
 
 OB_SERIALIZE_MEMBER((ObCreateDirectoryArg, ObDDLArg), or_replace_, user_id_, schema_);
@@ -4028,63 +3974,6 @@ OB_DEF_SERIALIZE_SIZE(ObBatchRemoveTabletArg)
   return len;
 }
 
-
-OB_SERIALIZE_MEMBER((ObPartitionSplitArg, ObDDLArg),
-                    src_tablet_id_,
-                    dest_tablet_ids_,
-                    local_index_table_ids_,
-                    local_index_schema_versions_,
-                    src_local_index_tablet_ids_,
-                    dest_local_index_tablet_ids_,
-                    lob_table_ids_,
-                    lob_schema_versions_,
-                    src_lob_tablet_ids_,
-                    dest_lob_tablet_ids_,
-                    task_type_);
-
-OB_SERIALIZE_MEMBER(ObCleanSplittedTabletArg,
-                    
-                    table_id_,
-                    task_id_,
-                    local_index_table_ids_,
-                    lob_table_ids_,
-                    src_table_tablet_id_,
-                    dest_tablet_ids_,
-                    src_local_index_tablet_ids_,
-                    dest_local_index_tablet_ids_,
-                    src_lob_tablet_ids_,
-                    dest_lob_tablet_ids_,
-                    is_auto_split_);
-
-int ObCheckMemtableCntArg::assign(const ObCheckMemtableCntArg &other)
-{
-  int ret = OB_SUCCESS;
-  
-  tablet_id_ = other.tablet_id_;
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObCheckMemtableCntArg,
-                    tablet_id_);
-
-
-OB_SERIALIZE_MEMBER(ObCheckMemtableCntResult,
-                    memtable_cnt_);
-
-int ObCheckMediumCompactionInfoListArg::assign(const ObCheckMediumCompactionInfoListArg &other)
-{
-  int ret = OB_SUCCESS;
-  
-  tablet_id_ = other.tablet_id_;
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObCheckMediumCompactionInfoListArg,
-                    tablet_id_);
-
-OB_SERIALIZE_MEMBER(ObCheckMediumCompactionInfoListResult,
-                    info_list_cnt_,
-                    primary_compaction_scn_);
 
 OB_DEF_DESERIALIZE(ObBatchRemoveTabletArg)
 {
@@ -4219,20 +4108,18 @@ OB_SERIALIZE_MEMBER(ObCreateTabletInfo, tablet_ids_, data_tablet_id_, table_sche
 
 int ObCreateTabletExtraInfo::init(const uint64_t tenant_data_version,
                                   const bool need_create_empty_major,
-                                  const bool micro_index_clustered,
-                                  const ObTabletID &split_src_tablet_id)
+                                  const bool micro_index_clustered)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(tenant_data_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg",
              K(ret), K(tenant_data_version), K(need_create_empty_major),
-             K(micro_index_clustered), K(split_src_tablet_id));
+             K(micro_index_clustered));
   } else {
     tenant_data_version_ = tenant_data_version;
     need_create_empty_major_ = need_create_empty_major;
     micro_index_clustered_ = micro_index_clustered;
-    split_src_tablet_id_ = split_src_tablet_id;
   }
   return ret;
 }
@@ -4242,8 +4129,6 @@ void ObCreateTabletExtraInfo::reset()
   need_create_empty_major_ = true;
   tenant_data_version_ = 0;
   micro_index_clustered_ = false;
-  split_src_tablet_id_.reset();
-  split_can_reuse_macro_block_ = false;
 }
 
 int ObCreateTabletExtraInfo::assign(const ObCreateTabletExtraInfo &other)
@@ -4252,17 +4137,13 @@ int ObCreateTabletExtraInfo::assign(const ObCreateTabletExtraInfo &other)
   tenant_data_version_ = other.tenant_data_version_;
   need_create_empty_major_ = other.need_create_empty_major_;
   micro_index_clustered_ = other.micro_index_clustered_;
-  split_src_tablet_id_ = other.split_src_tablet_id_;
-  split_can_reuse_macro_block_ = other.split_can_reuse_macro_block_;
   return ret;
 }
 
 OB_SERIALIZE_MEMBER(ObCreateTabletExtraInfo,
                     tenant_data_version_,
                     need_create_empty_major_,
-                    micro_index_clustered_,
-                    split_src_tablet_id_,
-                    split_can_reuse_macro_block_);
+                    micro_index_clustered_);
 
 // ObBatchCreateTabletArg implementation moved to storage/tablet/ob_batch_create_tablet_arg.cpp
 
@@ -4492,28 +4373,6 @@ int ObBatchGetTabletBindingArg::init(const ObIArray<ObTabletID> &tablet_ids, con
   return ret;
 }
 
-
-
-OB_SERIALIZE_MEMBER(ObBatchGetTabletSplitArg, tablet_ids_, check_committed_);
-
-
-int ObBatchGetTabletSplitArg::init(const ObIArray<ObTabletID> &tablet_ids, const bool check_committed)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(tablet_ids.empty())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_ids), K(check_committed));
-  } else if (OB_FAIL(tablet_ids_.assign(tablet_ids))) {
-    LOG_WARN("failed to assign", K(ret));
-  } else {
-    check_committed_ = check_committed;
-  }
-  if (OB_SUCC(ret) && OB_UNLIKELY(!is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(*this));
-  }
-  return ret;
-}
 
 
 OB_SERIALIZE_MEMBER(ObSessInfoVerifyArg, sess_id_, proxy_sess_id_);

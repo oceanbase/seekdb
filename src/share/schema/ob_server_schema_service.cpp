@@ -756,10 +756,6 @@ int ObServerSchemaService::get_increment_tablegroup_keys(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to add new tablegroup id", K(hash_ret), KR(ret));
       } else if (OB_DDL_ALTER_TABLEGROUP_PARTITION == schema_operation.op_type_
-                 || OB_DDL_SPLIT_TABLEGROUP_PARTITION == schema_operation.op_type_
-                 || OB_DDL_PARTITIONED_TABLEGROUP_TABLE == schema_operation.op_type_
-                 || OB_DDL_FINISH_SPLIT_TABLEGROUP == schema_operation.op_type_
-                 || OB_DDL_FINISH_LOGICAL_SPLIT_TABLEGROUP == schema_operation.op_type_
                  || OB_DDL_DELAY_DELETE_TABLEGROUP_PARTITION == schema_operation.op_type_) {
         // alter tablegroup partition is a batch operation, which needs to trigger the schema refresh of
         // the table under the same tablegroup
@@ -822,11 +818,7 @@ int ObServerSchemaService::get_increment_tablegroup_keys_reversely(
       if (OB_FAIL(REPLAY_OP(schema_key, schema_keys.del_tablegroup_keys_,
           schema_keys.new_tablegroup_keys_, is_delete, is_exist))) {
         LOG_WARN("replay operation failed", KR(ret));
-      } else if (OB_DDL_ALTER_TABLEGROUP_PARTITION == schema_operation.op_type_
-                 || OB_DDL_SPLIT_TABLEGROUP_PARTITION == schema_operation.op_type_
-                 || OB_DDL_PARTITIONED_TABLEGROUP_TABLE == schema_operation.op_type_
-                 || OB_DDL_FINISH_SPLIT_TABLEGROUP == schema_operation.op_type_
-                 || OB_DDL_FINISH_LOGICAL_SPLIT_TABLEGROUP == schema_operation.op_type_) {
+      } else if (OB_DDL_ALTER_TABLEGROUP_PARTITION == schema_operation.op_type_) {
         // alter tablegroup partition is a batch operation, which needs to trigger the schema refresh of
         // the table under the same tablegroup
         ObArray<const ObSimpleTableSchemaV2 *> table_schemas;

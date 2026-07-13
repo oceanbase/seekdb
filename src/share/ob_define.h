@@ -288,11 +288,6 @@ inline bool is_has_no_readable_replica_err(int err)
   return OB_NO_READABLE_REPLICA == err;
 }
 
-inline bool is_partition_splitting(const int err)
-{
-  return OB_PARTITION_IS_SPLITTING == err;
-}
-
 inline bool is_id_not_ready_err(const int err)
 {
   return OB_GTS_NOT_READY == err || OB_GTI_NOT_READY == err;

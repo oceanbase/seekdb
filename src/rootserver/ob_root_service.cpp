@@ -26,7 +26,6 @@
 #include "sql/resolver/ddl/ob_index_builder_util.h"
 #include "observer/ob_server_event_history_table_operator.h"
 #include "storage/deadlock/ob_deadlock_inner_table_service.h"
-#include "observer/scheduler/ob_partition_auto_split_helper.h"
 
 #include "sql/engine/cmd/ob_user_cmd_executor.h"
 #include "src/sql/engine/px/ob_dfo.h"
@@ -410,8 +409,6 @@ int ObRootService::init(ObServerConfig &config,
     FLOG_WARN("init rootservice event history failed", KR(ret));
   } else if (OB_FAIL(THE_RS_JOB_TABLE.init())) {
     FLOG_WARN("init THE_RS_JOB_TABLE failed", KR(ret));
-  } else if (OB_FAIL(ObRsAutoSplitScheduler::get_instance().init())) {
-    FLOG_WARN("init auto split task scheduler failed", K(ret));
   } else if (OB_FAIL(schema_history_recycler_.init(*schema_service_,
                                                    sql_proxy_))) {
     FLOG_WARN("fail to init schema history recycler failed", KR(ret));
@@ -1353,7 +1350,7 @@ int ObRootService::execute_ddl_task(const obcall::ObAlterTableArg &arg,
         break;
       }
       case share::CLEANUP_GARBAGE_TASK:
-      case share::PARTITION_SPLIT_RECOVERY_CLEANUP_GARBAGE_TASK: {
+      {
         if (OB_FAIL(ddl_service_.cleanup_garbage(
             const_cast<obcall::ObAlterTableArg &>(arg)))) {
           LOG_WARN("failed to cleanup garbage", K(ret));
@@ -1390,12 +1387,6 @@ int ObRootService::execute_ddl_task(const obcall::ObAlterTableArg &arg,
       case share::MODIFY_NOT_NULL_COLUMN_STATE_TASK: {
         if (OB_FAIL(ddl_service_.modify_hidden_table_not_null_column_state(arg))) {
           LOG_WARN("failed to modify hidden table cst state", K(ret));
-        }
-        break;
-      }
-      case share::PARTITION_SPLIT_RECOVERY_TASK: {
-        if (OB_FAIL(ddl_service_.restore_the_table_to_split_completed_state(const_cast<ObAlterTableArg &>(arg)))) {
-          LOG_WARN("failed to restore the table to split completed state", K(ret));
         }
         break;
       }
@@ -2189,10 +2180,6 @@ int ObRootService::alter_tablegroup(const obcall::ObAlterTablegroupArg &arg)
   } else if (OB_ISNULL(tablegroup_schema)) {
     ret = OB_TABLEGROUP_NOT_EXIST;
     LOG_WARN("get invalid tablegroup schema", K(ret));
-  } else if (tablegroup_schema->is_in_splitting()) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("tablegroup is splitting, refuse to alter now", K(ret), K(tablegroup_id));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "tablegroup is splitting, alter tablegroup");
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ddl_service_.alter_tablegroup(arg))) {
@@ -2294,73 +2281,6 @@ int ObRootService::force_drop_lonely_lob_aux_table(const ObForceDropLonelyLobAux
   return ret;
 }
 
-
-int ObRootService::send_auto_split_tablet_task_request(const obcall::ObAutoSplitTabletBatchArg &arg,
-                                                       obcall::ObAutoSplitTabletBatchRes &res)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret), K(inited_));
-  } else if (OB_UNLIKELY(!arg.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_FAIL(ObSysDDLSchedulerUtil::cache_auto_split_task(arg, res))) {
-    LOG_WARN("fail to cache auto split task", K(ret), K(arg), K(res));
-  }
-  return ret;
-}
-
-int ObRootService::split_global_index_tablet(const obcall::ObAlterTableArg &arg)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaGetterGuard schema_guard;
-  ObAlterTableArg &nonconst_arg = const_cast<ObAlterTableArg &>(arg);
-  obcall::ObAlterTableRes res;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(!arg.is_valid()) || arg.is_add_to_scheduler_ || !arg.alter_table_schema_.is_global_index_table()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg), K(arg.is_add_to_scheduler_), K(arg.alter_table_schema_.is_global_index_table()));
-  } else {
-    if (OB_FAIL(ddl_service_.get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
-      LOG_WARN("get schema guard in inner table failed", K(ret));
-    } else if (OB_FAIL(check_parallel_ddl_conflict(schema_guard, arg))) {
-      LOG_WARN("check parallel ddl conflict failed", K(ret));
-    } else if (OB_FAIL(table_allow_ddl_operation(arg))) {
-      LOG_WARN("table can't do ddl now", K(ret));
-    } else if (OB_FAIL(ddl_service_.split_global_index_partitions(nonconst_arg, res))) {
-      LOG_WARN("split global index failed", K(arg), K(ret));
-    }
-  }
-  char table_id_buffer[256];
-  snprintf(table_id_buffer, sizeof(table_id_buffer), "table_id:%ld, hidden_table_id:%ld",
-            arg.table_id_, arg.hidden_table_id_);
-  ROOTSERVICE_EVENT_ADD("ddl scheduler", "split global index",
-                        "ret", ret,
-                        "trace_id", *ObCurTraceId::get_trace_id(),
-                        "task_id", res.task_id_,
-                        "table_id", table_id_buffer,
-                        "schema_version", res.schema_version_);
-  LOG_INFO("finish split global index tablet ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo());
-  return ret;
-}
-
-int ObRootService::clean_splitted_tablet(const obcall::ObCleanSplittedTabletArg &arg)
-{
-  int ret = OB_SUCCESS;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
-  } else if (!arg.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(arg));
-  } else if (OB_FAIL(ddl_service_.clean_splitted_tablet(arg))) {
-    LOG_WARN("ddl_service clean splitted tablet failed", KR(ret), K(arg));
-  }
-  return ret;
-}
 
 int ObRootService::purge_index(const ObPurgeIndexArg &arg)
 {

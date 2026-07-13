@@ -198,8 +198,6 @@ public:
       const bool need_create_empty_major_sstable,
       const share::SCN &clog_checkpoint_scn,
       const share::SCN &mds_checkpoint_scn,
-      const bool is_split_dest_tablet,
-      const ObTabletID &split_src_tablet_id,
       const bool micro_index_clustered,
       ObFreezer *freezer,
       const share::ObForkTabletInfo &fork_info = share::ObForkTabletInfo());
@@ -498,8 +496,7 @@ public:
   int check_snapshot_readable_with_cache(
       const int64_t snapshot_version,
       const int64_t schema_version,
-      const int64_t timeout,
-      bool &need_split_dst_table);
+      const int64_t timeout);
   int set_tablet_status(
       const ObTabletCreateDeleteMdsUserData &tablet_status,
       mds::MdsCtx &ctx);
@@ -678,19 +675,14 @@ private:
   int get_read_tables(
       const int64_t snapshot_version,
       ObTabletTableIterator &iter,
-      const bool allow_no_ready_read,
-      const bool need_split_src_table,
-      const bool need_split_dst_table);
+      const bool allow_no_ready_read);
   int get_read_major_sstable(
       const int64_t &major_snapshot_version,
-      ObTabletTableIterator &iter,
-      const bool need_split_src_table);
+      ObTabletTableIterator &iter);
   int auto_get_read_tables(
       const int64_t snapshot_version,
       ObTabletTableIterator &iter,
-      const bool allow_no_ready_read,
-      const bool need_split_src_table,
-      const bool need_split_dst_table);
+      const bool allow_no_ready_read);
   int get_read_tables_(
       const int64_t snapshot_version,
       ObTableStoreIterator &iter,
@@ -699,17 +691,6 @@ private:
   int get_read_major_sstable(
       const int64_t &major_snapshot_version,
       ObTableStoreIterator &iter) const;
-  int get_split_src_major_table_if_need(
-      const int64_t &major_snapshot_version,
-      ObTabletTableIterator &iter);
-  int get_split_src_read_table_if_need(
-      const int64_t snapshot_version,
-      ObTabletTableIterator &iter,
-      bool &succ_get_split_src_tables);
-  int get_split_dst_read_table(
-      const int64_t snapshot_version,
-      ObTabletTableIterator &iter,
-      bool &succ_get_split_dst_tables);
   int get_fork_src_read_tables_(
       ObTabletTableIterator &iter,
       const bool allow_no_ready_read);
@@ -794,7 +775,6 @@ private:
   int mark_mds_table_switched_to_empty_shell_();
 
   // DDL.
-  int update_restore_status_for_split_(const ObTabletTableStore &table_store);
 
   // NOTICE:
   // - Because the `calc_tablet_attr()` may has I/O operations, you can bypass it if wantn't to update it.
@@ -823,7 +803,6 @@ private:
       common::ObIAllocator &allocator,
       storage::ObMetaDiskAddr &addr,
       char *&buf) const;
-  int get_kept_snapshot_for_split(int64_t &min_split_snapshot) const;
   int start_direct_load_task_for_idem(ObLS *tenant_ls);
 public:
   static constexpr int32_t VERSION_V1 = 1;

@@ -55,7 +55,6 @@ class ObSysDDLSchedulerUtil
 {
 public:
   SYS_DDL_SCHEDULER_FUNC(abort_redef_table);
-  SYS_DDL_SCHEDULER_FUNC(cache_auto_split_task);
   SYS_DDL_SCHEDULER_FUNC(copy_table_dependents);
   SYS_DDL_SCHEDULER_FUNC(create_ddl_task);
   SYS_DDL_SCHEDULER_FUNC(destroy_task);
@@ -69,7 +68,6 @@ public:
   SYS_DDL_SCHEDULER_FUNC(prepare_alter_table_arg);
   SYS_DDL_SCHEDULER_FUNC(recover_task);
   SYS_DDL_SCHEDULER_FUNC(remove_inactive_ddl_task);
-  SYS_DDL_SCHEDULER_FUNC(schedule_auto_split_task);
   SYS_DDL_SCHEDULER_FUNC(schedule_ddl_task);
   SYS_DDL_SCHEDULER_FUNC(start_redef_table);
   SYS_DDL_SCHEDULER_FUNC(update_ddl_task_active_time);

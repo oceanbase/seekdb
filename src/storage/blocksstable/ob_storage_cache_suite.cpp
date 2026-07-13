@@ -30,7 +30,6 @@ ObStorageCacheSuite::ObStorageCacheSuite()
     fuse_row_cache_(),
     storage_meta_cache_(),
     truncate_info_cache_(),
-    tablet_split_cache_(),
     is_inited_(false)
 {
 }
@@ -68,8 +67,6 @@ int ObStorageCacheSuite::init(const int64_t bf_cache_miss_count_threshold)
     STORAGE_LOG(ERROR, "fail to init storage meta cache", K(ret));
   } else if (OB_FAIL(truncate_info_cache_.init("truncate_info_cache"))) {
     STORAGE_LOG(ERROR, "fail to init truncate info cache", K(ret));
-  } else if (OB_FAIL(tablet_split_cache_.init("tablet_split_cache"))) {
-    STORAGE_LOG(ERROR, "fail to init truncate info cache", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -98,7 +95,6 @@ void ObStorageCacheSuite::destroy()
   fuse_row_cache_.destroy();
   storage_meta_cache_.destory();
   truncate_info_cache_.destroy();
-  tablet_split_cache_.destroy();
   is_inited_ = false;
 }
 

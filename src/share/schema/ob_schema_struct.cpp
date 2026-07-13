@@ -33,9 +33,7 @@ using namespace rootserver;
 
 bool is_hidden_partition(const PartitionType partition_type)
 {
-  return PARTITION_TYPE_SPLIT_SOURCE == partition_type
-         || PARTITION_TYPE_SPLIT_DESTINATION == partition_type
-         || PARTITION_TYPE_MERGE_SOURCE == partition_type
+  return PARTITION_TYPE_MERGE_SOURCE == partition_type
          || PARTITION_TYPE_MERGE_DESTINATION == partition_type;
 }
 
@@ -2690,26 +2688,6 @@ int ObPartitionSchema::get_max_part_idx(int64_t &part_idx, const bool skip_exter
   return ret;
 }
 
-bool ObPartitionSchema::is_in_splitting() const
-{
-  int ret = OB_SUCCESS;
-  bool is_splitting = false;
-
-  if (hidden_partition_array_ != nullptr) {
-    for (int64_t i = 0; OB_SUCC(ret) && !is_splitting && i < hidden_partition_num_; ++i) {
-      ObPartition *part = hidden_partition_array_[i];
-
-      if (OB_ISNULL(part)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("part array is null", K(ret), K(i), K(hidden_partition_num_));
-      } else if (part->is_in_splitting()) {
-        is_splitting = true;
-      }
-    }
-  }
-  return is_splitting;
-}
-
 bool ObPartitionSchema::is_valid() const
 {
   return ObSchema::is_valid();
@@ -3463,7 +3441,7 @@ int ObPartitionSchema::get_partition_index_by_id(
   } else if (0 == partition_schema_version_
              && is_hash_like_part()
              && check_normal_partition(check_partition_mode)) {
-    // Here is an optimizition, hash like part/subpart doesn't support reorganize yet, and parition_id will be allocated continuously.
+    // Hash-like partition IDs are allocated continuously, so use the direct lookup path.
     int64_t part_idx = OB_INVALID_INDEX;
     if (OB_ISNULL(partition_array_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -3790,10 +3768,7 @@ ObTablegroupSchema::ObTablegroupSchema()
       comment_(),
       sharding_(),
       part_func_expr_num_(OB_INVALID_INDEX),
-      sub_part_func_expr_num_(OB_INVALID_INDEX),
-      split_partition_name_(),
-      split_high_bound_val_(),
-      split_list_row_values_()
+      sub_part_func_expr_num_(OB_INVALID_INDEX)
 {
   ObIAllocator *allocator = get_allocator();
 }
@@ -3806,10 +3781,7 @@ ObTablegroupSchema::ObTablegroupSchema(common::ObIAllocator *allocator)
       comment_(),
       sharding_(),
       part_func_expr_num_(OB_INVALID_INDEX),
-      sub_part_func_expr_num_(OB_INVALID_INDEX),
-      split_partition_name_(),
-      split_high_bound_val_(),
-      split_list_row_values_()
+      sub_part_func_expr_num_(OB_INVALID_INDEX)
 {
 }
 
@@ -3821,10 +3793,7 @@ ObTablegroupSchema::ObTablegroupSchema(const ObTablegroupSchema &other)
       comment_(),
       sharding_(),
       part_func_expr_num_(OB_INVALID_INDEX),
-      sub_part_func_expr_num_(OB_INVALID_INDEX),
-      split_partition_name_(),
-      split_high_bound_val_(),
-      split_list_row_values_()
+      sub_part_func_expr_num_(OB_INVALID_INDEX)
 {
   if (this != &other) {
     ObIAllocator *allocator = get_allocator();
@@ -3871,14 +3840,8 @@ ObTablegroupSchema &ObTablegroupSchema::operator =(const ObTablegroupSchema &src
         LOG_WARN("Fail to deep copy tablegroup name, ", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
         LOG_WARN("Fail to deep copy comment, ", K(ret));
-      } else if (OB_FAIL(deep_copy_str(src_schema.split_partition_name_, split_partition_name_))) {
-        LOG_WARN("fail to deep copy split partition name", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.sharding_, sharding_))) {
-        LOG_WARN("fail to deep copy split partition name", K(ret));
-      } else if (OB_FAIL(src_schema.split_high_bound_val_.deep_copy(split_high_bound_val_, *get_allocator()))) {
-        LOG_WARN("fail to deep copy split row key", K(ret));
-      } else if (OB_FAIL(src_schema.split_list_row_values_.deep_copy(split_list_row_values_, *get_allocator()))) {
-        LOG_WARN("failed to deep copy split list value", K(ret));
+        LOG_WARN("fail to deep copy sharding", K(ret));
       }
       if (OB_FAIL(ret)) {
         error_ret_ = ret;
@@ -3896,7 +3859,6 @@ int64_t ObTablegroupSchema::get_convert_size() const
   convert_size += sharding_.length() + 1;
   convert_size += part_option_.get_convert_size() - sizeof(part_option_);
   convert_size += sub_part_option_.get_convert_size() - sizeof(sub_part_option_);
-  convert_size += split_partition_name_.length() + 1;
   convert_size += ObSchemaUtils::get_partition_array_convert_size(
                   partition_array_, partition_num_);
   convert_size += ObSchemaUtils::get_partition_array_convert_size(
@@ -3923,9 +3885,6 @@ void ObTablegroupSchema::reset()
   comment_.reset();
   part_func_expr_num_ = OB_INVALID_INDEX;
   sub_part_func_expr_num_ = OB_INVALID_INDEX;
-  split_partition_name_.reset();
-  split_high_bound_val_.reset();
-  split_list_row_values_.reset();
   sharding_.reset();
   ObPartitionSchema::reset();
 }
@@ -3945,8 +3904,7 @@ OB_DEF_SERIALIZE(ObTablegroupSchema)
               part_func_expr_num_,
               sub_part_func_expr_num_,
               partition_schema_version_,
-              partition_status_,
-              split_partition_name_);
+              partition_status_);
 
   if (OB_SUCC(ret)) {
     if (PARTITION_LEVEL_ONE <= part_level_) {
@@ -4003,8 +3961,7 @@ OB_DEF_SERIALIZE_SIZE(ObTablegroupSchema)
               part_func_expr_num_,
               sub_part_func_expr_num_,
               partition_schema_version_,
-              partition_status_,
-              split_partition_name_);
+              partition_status_);
 
   if (PARTITION_LEVEL_ONE <= part_level_) {
     len += ObSchemaUtils::get_partition_array_serialize_size(
@@ -4030,7 +3987,6 @@ OB_DEF_DESERIALIZE(ObTablegroupSchema)
   int ret = OB_SUCCESS;
   ObString tablegroup_name;
   ObString comment;
-  ObString split_partition_name;
 
   LST_DO_CODE(OB_UNIS_DECODE,
               
@@ -4044,8 +4000,7 @@ OB_DEF_DESERIALIZE(ObTablegroupSchema)
               part_func_expr_num_,
               sub_part_func_expr_num_,
               partition_schema_version_,
-              partition_status_,
-              split_partition_name);
+              partition_status_);
 
   if (OB_SUCC(ret)) {
     if (PARTITION_LEVEL_ONE <= part_level_) {
@@ -4068,8 +4023,6 @@ OB_DEF_DESERIALIZE(ObTablegroupSchema)
     LOG_WARN("Fail to deep copy tablegroup name, ", K(ret));
   } else if (OB_FAIL(deep_copy_str(comment, comment_))) {
     LOG_WARN("Fail to deep copy comment, ", K(ret));
-  } else if (OB_FAIL(deep_copy_str(split_partition_name, split_partition_name_))) {
-    LOG_WARN("fail to deep copy split partition name", K(ret), K(split_partition_name));
   }
   if (OB_SUCC(ret)) {
     LST_DO_CODE(OB_UNIS_DECODE,
@@ -4113,8 +4066,6 @@ int64_t ObTablegroupSchema::to_string(char *buf, const int64_t buf_len) const
        "def_subpartition_array", ObArrayWrap<ObSubPartition *>(def_subpartition_array_, def_subpartition_num_),
        "hidden_partition_array",
        ObArrayWrap<ObPartition *>(hidden_partition_array_, hidden_partition_num_),
-       K_(split_high_bound_val),
-       K_(split_list_row_values),
        K_(sub_part_template_flags),
        K_(sharding));
   J_OBJ_END();
@@ -4160,9 +4111,7 @@ ObPartitionOption::ObPartitionOption()
     : ObSchema(),
       part_func_type_(PARTITION_FUNC_TYPE_HASH),
       part_func_expr_(),
-      part_num_(1),
-      auto_part_(false),
-      auto_part_size_(-1)
+      part_num_(1)
 {
 }
 
@@ -4170,9 +4119,7 @@ ObPartitionOption::ObPartitionOption(ObIAllocator *allocator)
     : ObSchema(allocator),
       part_func_type_(PARTITION_FUNC_TYPE_HASH),
       part_func_expr_(),
-      part_num_(1),
-      auto_part_(false),
-      auto_part_size_(-1)
+      part_num_(1)
 {
 }
 
@@ -4181,8 +4128,7 @@ ObPartitionOption::~ObPartitionOption()
 }
 
 ObPartitionOption::ObPartitionOption(const ObPartitionOption &expr)
-    : ObSchema(), part_func_type_(PARTITION_FUNC_TYPE_HASH), part_num_(1),
-      auto_part_(false), auto_part_size_(-1)
+    : ObSchema(), part_func_type_(PARTITION_FUNC_TYPE_HASH), part_num_(1)
 {
   *this = expr;
 }
@@ -4195,8 +4141,6 @@ ObPartitionOption &ObPartitionOption::operator =(const ObPartitionOption &expr)
 
     part_num_ = expr.part_num_;
     part_func_type_ = expr.part_func_type_;
-    auto_part_ = expr.auto_part_;
-    auto_part_size_ = expr.auto_part_size_;
     if (OB_FAIL(deep_copy_str(expr.part_func_expr_, part_func_expr_))) {
       LOG_WARN("Fail to deep copy part func expr, ", K(ret));
     }
@@ -4221,9 +4165,7 @@ bool ObPartitionOption::operator ==(const ObPartitionOption &expr) const
 {
   return (part_func_type_ == expr.part_func_type_)
       && (part_num_ == expr.part_num_)
-      && (part_func_expr_ == expr.part_func_expr_)
-      && (auto_part_ == expr.auto_part_)
-      && (auto_part_size_ == expr.auto_part_size_);
+      && (part_func_expr_ == expr.part_func_expr_);
 }
 
 
@@ -4234,8 +4176,6 @@ void ObPartitionOption::reset()
   reset_string(part_func_expr_);
   reset_string(interval_start_);
   reset_string(part_interval_);
-  auto_part_ = false;
-  auto_part_size_ = -1;
   ObSchema::reset();
 }
 
@@ -4246,8 +4186,6 @@ void ObPartitionOption::reuse()
   reset_string(part_func_expr_);
   reset_string(interval_start_);
   reset_string(part_interval_);
-  auto_part_ = false;
-  auto_part_size_ = 0;
   ObSchema::reset();
 }
 
@@ -4261,75 +4199,11 @@ bool ObPartitionOption::is_valid() const
   return ObSchema::is_valid() && part_num_ > 0;
 }
 
-void ObPartitionOption::assign_auto_partition_attr(const ObPartitionOption & src)
-{
-  auto_part_ = src.auto_part_;
-  auto_part_size_ = src.auto_part_size_;
-}
-
-int ObPartitionOption::enable_auto_partition(const int64_t auto_part_size)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_UNLIKELY(!is_valid_split_part_type())) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("invalid part type for split partition", KR(ret), K(part_func_type_));
-  } else if (OB_FAIL(enable_auto_partition_(auto_part_size))) {
-    LOG_WARN("fail to enable auto_partition", KR(ret), K(auto_part_size));
-  }
-
-  return ret;
-}
-
-int ObPartitionOption::enable_auto_partition(const int64_t auto_part_size,
-                                             const ObPartitionFuncType part_func_type)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_UNLIKELY(!is_valid_split_part_type(part_func_type))) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("invalid part type for split partition", KR(ret), K(part_func_type));
-  } else if (OB_FAIL(enable_auto_partition_(auto_part_size))) {
-    LOG_WARN("fail to enable auto_partition", KR(ret), K(auto_part_size));
-  } else {
-    part_func_type_ = part_func_type;
-  }
-
-  return ret;
-}
-
-int ObPartitionOption::enable_auto_partition_(const int64_t auto_part_size)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_UNLIKELY(auto_part_size < ObPartitionOption::MIN_AUTO_PART_SIZE)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_WARN(OB_NOT_SUPPORTED, "auto partition size less than 128MB is");
-    LOG_WARN("auto partition size is less than MIN_AUTO_PART_SIZE", K(ret), K(auto_part_size));
-  } else {
-    auto_part_ = true;
-    auto_part_size_ = auto_part_size;
-  }
-
-  return ret;
-}
-
-void ObPartitionOption::forbid_auto_partition(const bool is_partitioned_table)
-{
-  if (!is_partitioned_table) {
-    part_func_type_ = PARTITION_FUNC_TYPE_HASH;
-    reset_string(part_func_expr_);
-  }
-  auto_part_ = false;
-  auto_part_size_ = -1;
-}
-
 OB_DEF_SERIALIZE(ObPartitionOption)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE, part_func_type_,
-              part_func_expr_, part_num_,
-              auto_part_, auto_part_size_);
+              part_func_expr_, part_num_);
   return ret;
 }
 
@@ -4339,8 +4213,7 @@ OB_DEF_DESERIALIZE(ObPartitionOption)
   ObString part_func_expr;
 
   LST_DO_CODE(OB_UNIS_DECODE, part_func_type_,
-              part_func_expr, part_num_,
-              auto_part_, auto_part_size_);
+              part_func_expr, part_num_);
 
   if (OB_FAIL(ret)) {
     LOG_WARN("Fail to deserialize data, ", K(ret));
@@ -4355,8 +4228,7 @@ OB_DEF_SERIALIZE_SIZE(ObPartitionOption)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN, part_func_type_,
-              part_func_expr_, part_num_,
-              auto_part_, auto_part_size_);
+              part_func_expr_, part_num_);
   return len;
 }
 
@@ -4438,7 +4310,6 @@ ObBasePartition::ObBasePartition()
     low_bound_val_(),
     tablet_id_(),
     external_location_(),
-    split_source_tablet_id_(),
     part_storage_cache_policy_type_(storage::ObStorageCachePolicyType::MAX_POLICY)
 { }
 
@@ -4459,7 +4330,6 @@ ObBasePartition::ObBasePartition(common::ObIAllocator *allocator)
     low_bound_val_(),
     tablet_id_(),
     external_location_(),
-    split_source_tablet_id_(),
     part_storage_cache_policy_type_()
 { }
 
@@ -4469,7 +4339,6 @@ void ObBasePartition::reset()
   table_id_ = OB_INVALID_ID;
   part_id_ = -1;
   tablet_id_.reset();
-  split_source_tablet_id_.reset();
   schema_version_ = OB_INVALID_VERSION;
   status_ = PARTITION_STATUS_ACTIVE;
   projector_ = NULL;
@@ -4495,7 +4364,6 @@ int ObBasePartition::assign(const ObBasePartition & src_part)
     
     table_id_ = src_part.table_id_;
     tablet_id_ = src_part.tablet_id_;
-    split_source_tablet_id_ = src_part.split_source_tablet_id_;
     part_id_ = src_part.part_id_;
     schema_version_ = src_part.schema_version_;
     status_ = src_part.status_;
@@ -4750,7 +4618,6 @@ OB_DEF_SERIALIZE(ObBasePartition)
               low_bound_val_,
               tablet_id_,
               external_location_,
-              split_source_tablet_id_,
               part_storage_cache_policy_type_);
   return ret;
 }
@@ -4807,7 +4674,6 @@ OB_DEF_DESERIALIZE(ObBasePartition)
   LST_DO_CODE(OB_UNIS_DECODE,
               tablet_id_,
               external_location,
-              split_source_tablet_id_,
               part_storage_cache_policy_type_);
   if (OB_SUCC(ret) && OB_FAIL(set_low_bound_val(low_bound_val))) {
     LOG_WARN("Fail to deep copy low_bound_val", K(ret), K(low_bound_val));
@@ -4824,7 +4690,7 @@ OB_DEF_SERIALIZE_SIZE(ObBasePartition)
       schema_version_, name_, high_bound_val_, status_, list_row_values_,
       part_idx_, is_empty_partition_name_,
       partition_type_, low_bound_val_, tablet_id_,
-      external_location_, split_source_tablet_id_, part_storage_cache_policy_type_);
+      external_location_, part_storage_cache_policy_type_);
   return len;
 }
 
@@ -8339,13 +8205,6 @@ bool is_aux_lob_piece_table(const ObTableType table_type)
 bool is_aux_lob_table(const ObTableType table_type)
 {
   return is_aux_lob_meta_table(table_type) || is_aux_lob_piece_table(table_type);
-}
-
-bool is_support_split_index_type(const ObIndexType index_type)
-{
-  return INDEX_TYPE_NORMAL_LOCAL == index_type || INDEX_TYPE_UNIQUE_LOCAL == index_type
-      || INDEX_TYPE_NORMAL_GLOBAL == index_type || INDEX_TYPE_UNIQUE_GLOBAL == index_type
-      || INDEX_TYPE_NORMAL_GLOBAL_LOCAL_STORAGE == index_type || INDEX_TYPE_UNIQUE_GLOBAL_LOCAL_STORAGE == index_type;
 }
 
 const char *schema_type_str(const ObSchemaType schema_type)

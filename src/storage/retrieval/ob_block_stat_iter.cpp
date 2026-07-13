@@ -330,15 +330,9 @@ int ObBlockStatIterator::advance_to(const ObDatumRowkey &advance_key, const bool
 int ObBlockStatIterator::init_scan_range(const ObTabletHandle &tablet_handle, ObBlockStatScanParam &scan_param)
 {
   int ret = OB_SUCCESS;
-  bool is_tablet_splitting = false;
   if (scan_param.force_scan_whole_range()) {
     curr_scan_range_.set_whole_range();
-  } else if (OB_FAIL(ObTabletSplitMdsHelper::get_is_spliting(*tablet_handle.get_obj(), is_tablet_splitting))) {
-    LOG_WARN("failed to get is tablet splitting", K(ret));
-  } else if (OB_UNLIKELY(is_tablet_splitting)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("splitting tablet not supported for block stat iterator", K(ret));
-  } else if (OB_FAIL(scan_range_.init(*scan_param.get_scan_param(), *tablet_handle.get_obj(), is_tablet_splitting))) {
+  } else if (OB_FAIL(scan_range_.init(*scan_param.get_scan_param()))) {
     LOG_WARN("failed to init scan range", K(ret));
   } else if (OB_UNLIKELY(scan_range_.get_ranges().empty())) {
     ret = OB_ERR_UNEXPECTED;
@@ -423,9 +417,7 @@ int ObBlockStatIterator::refresh_tablet_iter()
         snapshot_version,
         snapshot_version,
         get_table_param_.tablet_iter_,
-        false/*allow_not_ready*/,
-        false/*need_split_src_table*/,
-        false/*need_split_dst_table*/))) {
+        false/*allow_not_ready*/))) {
       LOG_WARN("failed to refresh tablet iterator", K(ret), K_(get_table_param));
     } else {
       rowkey_read_info_ = &get_table_param_.tablet_iter_.get_tablet_handle().get_obj()->get_rowkey_read_info();
@@ -444,9 +436,6 @@ int ObBlockStatIterator::prepare_scan_tables()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status before prepare  scan tables", K(ret), K(scan_tables_.count()),
         K_(main_table_param), K_(main_table_ctx));
-  } else if (OB_UNLIKELY(main_table_param_.iter_param_.is_tablet_spliting())) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("splitting tablet not supported for block stat iterator", K(ret));
   } else {
     const bool query_with_frozen_version = get_table_param_.frozen_version_ != -1;
     const int64_t query_version = query_with_frozen_version
@@ -456,9 +445,7 @@ int ObBlockStatIterator::prepare_scan_tables()
     if (OB_FAIL(get_table_param_.tablet_iter_.refresh_read_tables_from_tablet(
         query_version,
         false/*allow_not_ready*/,
-        major_sstable_only,
-        false/*need_split_src_table*/,
-        false/*need_split_dst_table*/))) {
+        major_sstable_only))) {
       LOG_WARN("failed to get read tables from tablet", K(ret), K(query_version),
           K(major_sstable_only), K(get_table_param_), K_(main_table_param), K_(main_table_ctx));
     }

@@ -84,8 +84,8 @@ int ObLobPieceBuilder::generate_aux_lob_piece_schema(
       }
     }
     if (OB_FAIL(ret)) {
-    } else if ((data_schema.is_partitioned_table() || data_schema.is_auto_partitioned_table())
-               && OB_FAIL(aux_lob_piece_schema.assign_partition_schema_without_auto_part_attr(data_schema))) {
+    } else if (data_schema.is_partitioned_table()
+               && OB_FAIL(aux_lob_piece_schema.assign_partition_schema(data_schema))) {
       LOG_WARN("fail to assign partition schema", K(aux_lob_piece_schema), K(ret));
     } else if (need_generate_id) {
       if (OB_FAIL(ddl_service_.generate_object_id_for_partition_schema(aux_lob_piece_schema))) {

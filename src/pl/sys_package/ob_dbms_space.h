@@ -96,7 +96,6 @@ public:
                                sql::ParamStore &params,
                                common::ObObj &result);
 
-  // interface for auto_split
   /* in param:
    *  info table_id_; // data table's table id;
    *  info.part_ids_; // the part id(data table) we need to calc.

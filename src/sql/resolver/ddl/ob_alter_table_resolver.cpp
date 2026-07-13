@@ -2059,13 +2059,6 @@ int ObAlterTableResolver::generate_index_arg(obcall::ObCreateIndexArg &index_arg
       if (NOT_SPECIFIED == index_scope_) {
         // Default index mode is local.
         global_ = false;
-        if (!global_) {
-          if (nullptr != table_schema_) {
-            if (OB_FAIL(get_suggest_index_scope(table_schema_->get_table_id(), index_arg, index_keyname_, global_))) {
-              LOG_WARN("get suggest index scope failed", K(ret));
-            }
-          }
-        }
       } else {
         global_ = (GLOBAL_INDEX == index_scope_);
       }
@@ -3545,70 +3538,6 @@ int ObAlterTableResolver::resolve_modify_check_constraint_state_mysql(const Pars
   return ret;
 }
 
-// "alter table ... split partition" sql allow to omit the definition of last split partition.
-// we should fill the high bound value of it with origin schema
-int ObAlterTableResolver::fill_high_bound_val_for_split_partition(const AlterTableSchema &alter_table_schema, ObPartition& split_part)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaGetterGuard schema_guard;
-  
-  const ObString &origin_database_name = alter_table_schema.get_origin_database_name();
-  const ObString &origin_table_name = alter_table_schema.get_origin_table_name();
-  const share::schema::ObTableSchema *orig_table_schema = NULL;
-  ObTabletID source_tablet_id = split_part.get_split_source_tablet_id();
-  ObPartition **orig_part_array = nullptr;
-
-  CK (!origin_database_name.empty() && !origin_table_name.empty());
-  OZ (ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard));
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(schema_guard.get_table_schema(
-                                                   origin_database_name,
-                                                   origin_table_name,
-                                                   false/*is_index*/,
-                                                   orig_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(origin_database_name), K(origin_table_name));
-  } else if (OB_ISNULL(orig_table_schema)) {
-    ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("fail to find table", K(ret));
-  } else if (OB_UNLIKELY(orig_table_schema->get_part_level() != PARTITION_LEVEL_ONE)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid part level", K(ret), KPC(orig_table_schema));
-  } else if (FALSE_IT(orig_part_array = orig_table_schema->get_part_array())) {
-  } else if (OB_ISNULL(orig_part_array)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null ptr", K(ret));
-  } else if (!orig_table_schema->is_valid_split_part_type()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("only support to split range partition", K(ret));
-  } else {
-    ObTabletID source_tablet_id = split_part.get_split_source_tablet_id();
-    const ObPartition *ori_part = NULL;
-    bool find = false;
-
-    for (int64_t i = 0; !find && OB_SUCC(ret) && i < orig_table_schema->get_partition_num(); ++i) {
-      ori_part = orig_part_array[i];
-      if (OB_ISNULL(ori_part)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(ret));
-      } else if (ori_part->get_tablet_id() == source_tablet_id) {
-        find = true;
-        const ObRowkey &value = ori_part->get_high_bound_val();
-        if (OB_FAIL(split_part.set_high_bound_val(value))) {
-          LOG_WARN("failed to set high boundary", K(ret));
-        }
-      }
-    } // end for
-    if (OB_FAIL(ret)) {
-    } else if (OB_UNLIKELY(!find)) {
-      ret = OB_TABLET_NOT_EXIST;
-      LOG_WARN("source_tablet_id not exists in origin table", K(ret), K(source_tablet_id), KPC(orig_table_schema));
-    }
-  }
-
-  return ret;
-}
-
 int ObAlterTableResolver::check_dup_foreign_keys_exist(
     share::schema::ObSchemaGetterGuard *schema_guard,
     const obcall::ObCreateForeignKeyArg &foreign_key_arg)
@@ -3723,18 +3652,11 @@ int ObAlterTableResolver::resolve_partition_options(const ParseNode &node)
     }
 
     if (OB_SUCC(ret)) {
-      bool is_only_modify_auto_part_attr = false;
-      ParseNode *partition_node = node.children_[0];
       const ObPartitionLevel part_level = table_schema_->get_part_level();
       if (T_ALTER_PARTITION_PARTITIONED != node.children_[0]->type_
           && PARTITION_LEVEL_ZERO == part_level) {
         ret = OB_ERR_PARTITION_MGMT_ON_NONPARTITIONED;
         LOG_WARN("unsupport add/drop management on non-partition table", K(ret));
-      } else if (T_ALTER_PARTITION_PARTITIONED == node.children_[0]->type_
-                 && OB_FAIL(check_only_modify_auto_partition_attr(alter_table_stmt, partition_node->children_[0],
-                                                      alter_table_stmt->get_alter_table_arg().alter_table_schema_,
-                                                      is_only_modify_auto_part_attr))) {
-        LOG_WARN("fail to check only modify auto_part attr", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -3800,38 +3722,10 @@ int ObAlterTableResolver::resolve_partition_options(const ParseNode &node)
           break;
         }
         case T_ALTER_PARTITION_PARTITIONED: {
-          bool enable_split_partition = false;
-          const ObPartitionLevel part_level = table_schema_->get_part_level();
           alter_table_stmt->get_alter_table_arg().alter_part_type_ =
             ObAlterTableArg::REPARTITION_TABLE;
-          if (OB_FAIL(get_enable_split_partition(enable_split_partition))) {
-            LOG_WARN("failed to get enable split partition config", K(ret));
-          } else if (!enable_split_partition
-                    && ObAlterTableArg::PARTITIONED_TABLE ==
-                    alter_table_stmt->get_alter_table_arg().alter_part_type_) {
-            ret = OB_OP_NOT_ALLOW;
-            LOG_WARN("partitioned table not allow", K(ret));
-            LOG_USER_ERROR(OB_OP_NOT_ALLOW, "partitioned table");
-          } else if (OB_FAIL(resolve_partitioned_partition(partition_node, *table_schema_))) {
+          if (OB_FAIL(resolve_partitioned_partition(partition_node, *table_schema_))) {
             LOG_WARN("fail to resolve partition option", K(ret));
-          }
-          break;
-        }
-        case T_ALTER_PARTITION_REORGANIZE: {
-          if (OB_FAIL(resolve_reorganize_partition(partition_node, *table_schema_))) {
-            LOG_WARN("fail to resolve reorganize partition", K(ret));
-          } else {
-            alter_table_stmt->get_alter_table_arg().alter_part_type_ =
-              ObAlterTableArg::REORGANIZE_PARTITION;
-          }
-          break;
-        }
-        case T_ALTER_PARTITION_SPLIT: {
-          if (OB_FAIL(resolve_split_partition(partition_node, *table_schema_))) {
-            LOG_WARN("fail to resolve reorganize partition", K(ret));
-          } else {
-            alter_table_stmt->get_alter_table_arg().alter_part_type_ =
-                ObAlterTableArg::SPLIT_PARTITION;
           }
           break;
         }
@@ -3919,8 +3813,6 @@ int ObAlterTableResolver::resolve_partitioned_partition(const ParseNode *node,
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(resolve_partition_node(alter_table_stmt, node->children_[0], table_schema))) {
       LOG_WARN("failed to resolve partition option", K(ret));
-    } else if (OB_FAIL(resolve_auto_partition(alter_table_stmt, node->children_[0], table_schema))) {
-      LOG_WARN("failed to resolve auto partition option", K(ret));
     } else if (OB_FAIL(table_schema.check_primary_key_cover_partition_column())) {
       LOG_WARN("fail to check primary key cover partition column", K(ret));
     } else if (OB_FAIL(table_schema.set_origin_table_name(origin_table_name))) {
@@ -3928,310 +3820,10 @@ int ObAlterTableResolver::resolve_partitioned_partition(const ParseNode *node,
     } else if (OB_FAIL(table_schema.set_origin_database_name(origin_database_name))) {
       LOG_WARN("fail to set origin database name", K(ret), K(origin_database_name));
     }
-    if (OB_FAIL(ret)) {
-    } else if (alter_table_stmt->use_auto_partition_clause()) {
-      alter_table_stmt->get_alter_table_arg().alter_auto_partition_attr_ = true;
-      alter_table_stmt->get_alter_table_arg().is_alter_partitions_ = false;
-    }
   }
   return ret;
 }
 
-int ObAlterTableResolver::resolve_split_partition(const ParseNode *node,
-                                                  const share::schema::ObTableSchema &origin_table_schema)
-{
-  int ret = OB_SUCCESS;
-  ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
-  ObArenaAllocator alloc;
-  ObString origin_table_name;
-  ObString origin_database_name;
-  if (OB_ISNULL(node)
-      || T_ALTER_PARTITION_SPLIT != node->type_
-      || 2 != node->num_child_
-      || OB_ISNULL(node->children_[0])
-      || OB_ISNULL(node->children_[1])
-      || T_SPLIT_ACTION != node->children_[1]->type_) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(node));
-  } else if (OB_ISNULL(alter_table_stmt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("alter table stmt should not be null", K(ret));
-  } else if (OB_FAIL(origin_table_schema.check_can_do_manual_split_partition())) {
-    LOG_WARN("fail to check split partition", K(ret));
-  } else {
-    ParseNode *name_list = node->children_[0];
-    AlterTableSchema &alter_table_schema =
-        alter_table_stmt->get_alter_table_arg().alter_table_schema_;
-    // Save original table_name before assign
-    if (OB_FAIL(ob_write_string(alloc,
-                                alter_table_schema.get_origin_table_name(),
-                                origin_table_name))) {
-      LOG_WARN("fail to wirte string", K(ret));
-    } else if (OB_FAIL(ob_write_string(alloc,
-                                       alter_table_schema.get_origin_database_name(),
-                                       origin_database_name))) {
-      LOG_WARN("fail to wirte string", K(ret));
-    } else if (OB_FAIL(alter_table_schema.assign(origin_table_schema))) {
-      LOG_WARN("failed to assign table schema", K(ret), K(alter_table_schema));
-    } else {
-      alter_table_schema.reset_partition_schema();
-    }
-
-    if (OB_SUCC(ret)) {
-      // Parse the split partition name
-      if (OB_ISNULL(name_list)) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", K(ret), K(node));
-      } else {
-        ObString partition_name(static_cast<int32_t>(name_list->str_len_),
-                                name_list->str_value_);
-        if (OB_FAIL(alter_table_schema.set_split_partition_name(partition_name))) {
-          LOG_WARN("failed to set split partition name", K(ret));
-        }
-      }
-    }
-
-    int64_t expr_count = OB_INVALID_PARTITION_ID;
-    const ParseNode *split_node = node->children_[1];
-    ParseNode *part_func_node = NULL;
-    PartitionInfo part_info;
-    int64_t expr_num = OB_INVALID_COUNT;
-    if (OB_FAIL(mock_part_func_node(origin_table_schema, false/*is_sub_part*/, part_func_node))) {
-      LOG_WARN("mock part func node failed", K(ret));
-    } else if (OB_FAIL(resolve_part_func(params_,
-                                         part_func_node,
-                                         origin_table_schema.get_part_option().get_part_func_type(),
-                                         origin_table_schema,
-                                         part_info.part_func_exprs_,
-                                         part_info.part_keys_))) {
-      LOG_WARN("resolve part func failed", K(ret));
-    } else if (origin_table_schema.get_part_option().is_range_part()) {
-      if (OB_FAIL(alter_table_stmt->get_part_fun_exprs().assign(part_info.part_func_exprs_))) {
-        LOG_WARN("failed to assign func expr", K(ret));
-      }
-    } else if (origin_table_schema.get_part_option().is_list_part()) {
-      if (OB_FAIL(alter_table_stmt->get_part_fun_exprs().assign(part_info.part_func_exprs_))) {
-        LOG_WARN("failed to assign func expr", K(ret));
-      }
-    }
-    LOG_DEBUG("succ to resolve_part_func", KPC(alter_table_stmt), K(part_info.part_func_exprs_), K(ret));
-
-    /*T_SPLIT_ACTION
-     *  - T_PARTITION_LIST
-     *  - T_EXPR_LIST
-     *  - T_SPLIT_LIST/T_SPLIT_RANGE(must have a mark)
-     * */
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(check_split_type_valid(split_node,
-                                              origin_table_schema.get_part_option().get_part_func_type()))) {
-      LOG_WARN("failed to check split type valid", K(ret), K(origin_table_schema));
-    } else if (OB_NOT_NULL(split_node->children_[AT_VALUES_NODE])
-               && OB_NOT_NULL(split_node->children_[SPLIT_PARTITION_TYPE_NODE])) {
-      // split at [into ()]
-      expr_count = 1;
-      if (OB_FAIL(resolve_split_at_partition(alter_table_stmt,
-                                             split_node,
-                                             origin_table_schema.get_part_option().get_part_func_type(),
-                                             part_info.part_func_exprs_,
-                                             alter_table_schema,
-                                             expr_num))) {
-        LOG_WARN("failed to resolve split at partition", K(ret));
-      }
-    } else if (OB_NOT_NULL(split_node->children_[PARTITION_DEFINE_NODE])
-               && OB_NOT_NULL(split_node->children_[SPLIT_PARTITION_TYPE_NODE])
-               && OB_NOT_NULL(split_node->children_[PARTITION_DEFINE_NODE]->children_[0])) {
-      // split into ()
-      const ParseNode *range_element_node = split_node->children_[PARTITION_DEFINE_NODE]->children_[0];
-      if (OB_FAIL(resolve_split_into_partition(alter_table_stmt,
-                                               range_element_node,
-                                               origin_table_schema.get_part_option().get_part_func_type(),
-                                               part_info.part_func_exprs_,
-                                               expr_count,
-                                               expr_num,
-                                               alter_table_schema))) {
-        LOG_WARN("failed to resolve split at partition", K(ret));
-      }
-    } else {
-      // Cannot be that there is neither at nor partition specified
-      ret = OB_ERR_MISS_AT_VALUES;
-      LOG_WARN("miss at and less than values", K(ret));
-      LOG_USER_ERROR(OB_ERR_MISS_AT_VALUES);
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(alter_table_schema.set_origin_table_name(origin_table_name))) {
-      LOG_WARN("fail to set origin table name", K(ret), K(origin_table_name));
-    } else if (OB_FAIL(alter_table_schema.set_origin_database_name(origin_database_name))) {
-      LOG_WARN("fail to set origin database name", K(ret), K(origin_database_name));
-    } else if (OB_UNLIKELY(1 == alter_table_schema.get_partition_num())) {
-      ret = OB_ERR_SPLIT_INTO_ONE_PARTITION;
-      LOG_USER_ERROR(OB_ERR_SPLIT_INTO_ONE_PARTITION);
-      LOG_WARN("can not split partition into one partition", K(ret), K(alter_table_schema));
-    } else if (OB_UNLIKELY(0 == alter_table_schema.get_partition_num())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid part_num", K(ret), K(alter_table_schema.get_partition_num()));
-    } else if (OB_FAIL(fill_split_source_tablet_id(alter_table_schema.get_split_partition_name(),
-                                                   origin_table_schema, alter_table_schema))) {
-      LOG_WARN("fail to fill source split tablet id", KR(ret));
-    } else if (OB_UNLIKELY(!origin_table_schema.get_part_option().is_range_part())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid partition type", KR(ret), K(origin_table_schema));
-    } else { // range part
-      // The last split partition cannot be defined with PARTITION_ELEMENT; its
-      // high bound value should always be the same as the original partition.
-      if (OB_UNLIKELY(expr_count == alter_table_schema.get_partition_num())) {
-        ret = OB_ERR_SPLIT_LIST_LESS_VALUE;
-        LOG_WARN("last partition contain bounds is not supported", KR(ret), K(expr_count),
-                                                                   K(alter_table_schema));
-      } else if (OB_UNLIKELY(expr_count != alter_table_schema.get_partition_num() - 1)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid expr_count", KR(ret), K(expr_count), K(alter_table_schema));
-      } else {
-        ObPartition **part_array = alter_table_schema.get_part_array();
-        ObPartition *last_part = nullptr;
-        if (OB_ISNULL(part_array)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("null ptr", K(ret));
-        } else if (FALSE_IT(last_part = part_array[alter_table_schema.get_partition_num() - 1])) {
-        } else if (OB_ISNULL(last_part)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("null ptr", K(ret));
-        } else if (OB_FAIL(fill_high_bound_val_for_split_partition(alter_table_schema, *last_part))) {
-          LOG_WARN("fail to fill last split partition", KR(ret));
-        }
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      alter_table_schema.set_part_level(origin_table_schema.get_part_level());
-      alter_table_schema.get_part_option() = origin_table_schema.get_part_option();
-      // "expr_count" means the number of split partitions defined with PARTITION_ELEMENT.
-      // in executor, we only need to casting expression value for these "expr_count" partitions.
-      // thus, we will set part_num as "expr_count" at first.
-      // after executor casting expression value, it will be corrected with alter_table_schema's partition_num
-      alter_table_schema.get_part_option().set_part_num(expr_count);
-    }
-  }
-  return ret;
-}
-
-int ObAlterTableResolver::resolve_reorganize_partition(const ParseNode *node,
-                                                       const share::schema::ObTableSchema &origin_table_schema)
-{
-  int ret = OB_SUCCESS;
-  ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
-  ObArenaAllocator alloc;
-  ObString origin_table_name;
-  ObString origin_database_name;
-  if (OB_ISNULL(node)
-      || T_ALTER_PARTITION_REORGANIZE != node->type_
-      || 2 != node->num_child_
-      || OB_ISNULL(node->children_[0])
-      || OB_ISNULL(node->children_[1])) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(node));
-  } else if (OB_FAIL(origin_table_schema.check_can_do_manual_split_partition())) {
-    LOG_WARN("fail to check split partition", K(ret));
-  } else {
-    if (OB_ISNULL(alter_table_stmt)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "alter table stmt should not be null", K(ret));
-    } else {
-      // Process the first node as the partition after split
-      ParseNode *name_list = node->children_[1];
-      AlterTableSchema &alter_table_schema =
-        alter_table_stmt->get_alter_table_arg().alter_table_schema_;
-      // Save original table_name before assign
-      if (OB_FAIL(ob_write_string(alloc,
-                                  alter_table_schema.get_origin_table_name(),
-                                  origin_table_name))) {
-        LOG_WARN("fail to wirte string", K(ret));
-      } else if (OB_FAIL(ob_write_string(alloc,
-                                         alter_table_schema.get_origin_database_name(),
-                                         origin_database_name))) {
-        LOG_WARN("fail to wirte string", K(ret));
-      } else if (OB_FAIL(alter_table_schema.assign(origin_table_schema))) {
-        LOG_WARN("failed to assign table schema", K(ret), K(alter_table_schema));
-      } else {
-        alter_table_schema.reset_partition_schema();
-      }
-      // Parse the added node
-      if (OB_SUCC(ret)) {
-        // Parse the split partition name
-        if (OB_ISNULL(name_list)) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(ret), K(node));
-        } else if (name_list->num_child_ != 1) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("alter table reorganize multi partition not supported now", K(ret));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "Alter table reorganize multiple partitions");
-        } else {
-          ObPartition part;
-          ObString partition_name(static_cast<int32_t>(name_list->children_[0]->str_len_),
-                                  name_list->children_[0]->str_value_);
-          if (OB_FAIL(alter_table_schema.set_split_partition_name(partition_name))) {
-            LOG_WARN("failed to set split partition name", K(ret));
-          }
-        }
-      }
-      if (OB_FAIL(ret)) {
-        //nothing
-      } else if (OB_FAIL(resolve_add_partition(*node, origin_table_schema))) {
-        LOG_WARN("failed to add partition", K(ret), K(origin_table_name));
-      } else if (OB_FAIL(alter_table_schema.set_origin_table_name(origin_table_name))) {
-        LOG_WARN("fail to set origin table name", K(ret), K(origin_table_name));
-      } else if (OB_FAIL(alter_table_schema.set_origin_database_name(origin_database_name))) {
-        LOG_WARN("fail to set origin database name", K(ret), K(origin_database_name));
-      } else if (1 == alter_table_schema.get_partition_num()) {
-        ret = OB_ERR_SPLIT_INTO_ONE_PARTITION;
-        LOG_USER_ERROR(OB_ERR_SPLIT_INTO_ONE_PARTITION);
-        LOG_WARN("can not split partition into one partition", K(ret), K(alter_table_schema));
-      } else if (OB_FAIL(fill_split_source_tablet_id(alter_table_schema.get_split_partition_name(),
-                                                     origin_table_schema, alter_table_schema))) {
-        LOG_WARN("fail to fill source split tablet id", KR(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObAlterTableResolver::fill_split_source_tablet_id(const ObString& source_part_name,
-                                                      const share::schema::ObTableSchema &origin_table_schema,
-                                                      share::schema::AlterTableSchema &alter_table_schema)
-{
-  int ret = OB_SUCCESS;
-  ObPartition** ori_part_array = origin_table_schema.get_part_array();
-  ObPartition** inc_part_array = alter_table_schema.get_part_array();
-  int64_t ori_part_num = origin_table_schema.get_partition_num();
-  int64_t inc_part_num = alter_table_schema.get_partition_num();
-
-  const ObPartition* source_part = nullptr;
-  for (int64_t i = 0; OB_SUCC(ret) && source_part == nullptr && i < ori_part_num; i++) {
-    if (OB_ISNULL(ori_part_array[i])) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("partition is null", K(ret), K(origin_table_schema));
-    } else if (ObCharset::case_insensitive_equal(ori_part_array[i]->get_part_name(),
-                                                 source_part_name)) {
-      source_part = ori_part_array[i];
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(source_part)) {
-    ret = OB_UNKNOWN_PARTITION;
-    LOG_WARN("the partition does not exist", K(ret));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < inc_part_num; i++) {
-      if (OB_ISNULL(inc_part_array[i])) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("partition is null", K(ret), K(alter_table_schema));
-      } else {
-        inc_part_array[i]->set_split_source_tablet_id(source_part->get_tablet_id());
-      }
-    }
-  }
-  return ret;
-}
 int ObAlterTableResolver::resolve_convert_to_character(const ParseNode &node)
 {
   int ret = OB_SUCCESS;
@@ -4733,7 +4325,7 @@ int ObAlterTableResolver::check_column_in_part_key(const ObTableSchema &table_sc
                                                                dst_col_schema,
                                                                is_same))) {
     LOG_WARN("check same type alter failed", K(ret));
-  } else if ((table_schema.is_partitioned_table() || table_schema.is_auto_partitioned_table())
+  } else if (table_schema.is_partitioned_table()
              && OB_FAIL(check_table_schemas.push_back(&table_schema))) {
     LOG_WARN("push back schema failed", K(ret));
   } else if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
@@ -4748,7 +4340,7 @@ int ObAlterTableResolver::check_column_in_part_key(const ObTableSchema &table_sc
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null index schema", K(ret), K(simple_index_infos.at(i)));
-      } else if ((index_schema->is_partitioned_table() || index_schema->is_auto_partitioned_table())
+      } else if (index_schema->is_partitioned_table()
                  && OB_FAIL(check_table_schemas.push_back(index_schema))) {
         LOG_WARN("push back related index schema failed", K(ret));
       }
@@ -4765,15 +4357,11 @@ int ObAlterTableResolver::check_column_in_part_key(const ObTableSchema &table_sc
       const ObString &part_func_str = part_option.get_part_func_expr_str();
       bool is_partition_key = false;
       bool is_subpartition_key = false;
-      if (part_option.is_range_part() && part_func_str.empty()/*if true then we got system-defined part key*/) {
-        //do nothing
-      } else if (OB_ISNULL(column_schema = cur_table_schema.get_column_schema(alter_column_name))) {
+      if (OB_ISNULL(column_schema = cur_table_schema.get_column_schema(alter_column_name))) {
         // do nothing, because the column does not exist in the schema.
-      } else if (OB_FAIL(cur_table_schema.is_partition_key(*column_schema, is_partition_key,
-                                                           false /* ignore_presetting_key */))) {
+      } else if (OB_FAIL(cur_table_schema.is_partition_key(*column_schema, is_partition_key))) {
         LOG_WARN("fail to check partition key", KR(ret), K(cur_table_schema), KPC(column_schema));
-      } else if (!is_partition_key && OB_FAIL(cur_table_schema.is_subpartition_key(*column_schema, is_subpartition_key,
-                                                                                   false /* ignore_presetting_key */))) {
+      } else if (!is_partition_key && OB_FAIL(cur_table_schema.is_subpartition_key(*column_schema, is_subpartition_key))) {
         LOG_WARN("fail to check subpartition key", KR(ret), K(cur_table_schema), KPC(column_schema));
       } else if (is_partition_key || is_subpartition_key) {
         if (cur_table_schema.is_global_index_table() && !is_same) {
@@ -4855,9 +4443,9 @@ int ObAlterTableResolver::check_alter_part_key_allowed(const ObTableSchema &tabl
       ObString part_str;
       part_type = table_schema.get_part_option().get_part_func_type();
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(table_schema.get_part_func_expr_str(part_str, alloc,
-                                                             true/*using_auto_partitioned_mode*/))) {
-        LOG_WARN("fail to get part func expr str", KR(ret));
+      } else if (OB_FAIL(ob_write_string(alloc, table_schema.get_part_option().get_part_func_expr_str(),
+                                         part_str, true /* c_style */))) {
+        LOG_WARN("fail to copy part func expr str", KR(ret));
       } else if (OB_FAIL(delete_resolver.resolve_partition_expr(table_item, table_schema,
                                                                 part_type, part_str, part_expr))) {
         LOG_WARN("fail to resolve partition expr", KR(ret));

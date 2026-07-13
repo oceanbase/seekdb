@@ -152,7 +152,6 @@ ObDDLTaskSerializeField::ObDDLTaskSerializeField(const int64_t task_version,
                                                  const int32_t sub_task_trace_id,
                                                  const bool is_unique_index,
                                                  const bool is_global_index,
-                                                 const bool is_pre_split,
                                                  const bool is_no_logging)
 {
   task_version_ = task_version;
@@ -163,7 +162,6 @@ ObDDLTaskSerializeField::ObDDLTaskSerializeField(const int64_t task_version,
   is_no_logging_ = is_no_logging;
   is_unique_index_ = is_unique_index;
   is_global_index_ = is_global_index;
-  is_pre_split_ = is_pre_split;
 }
 
 void ObDDLTaskSerializeField::reset()
@@ -175,7 +173,6 @@ void ObDDLTaskSerializeField::reset()
   sub_task_trace_id_ = 0;
   is_unique_index_ = false;
   is_global_index_ = false;
-  is_pre_split_ = false;
   is_no_logging_ = false;
 }
 
@@ -187,7 +184,6 @@ OB_SERIALIZE_MEMBER(ObDDLTaskSerializeField,
                     sub_task_trace_id_,
                     is_unique_index_,
                     is_global_index_,
-                    is_pre_split_,
                     is_no_logging_);
 
 ObCreateDDLTaskParam::ObCreateDDLTaskParam()
@@ -197,7 +193,7 @@ ObCreateDDLTaskParam::ObCreateDDLTaskParam()
     aux_rowkey_doc_schema_(nullptr), aux_doc_rowkey_schema_(nullptr), fts_index_aux_schema_(nullptr), aux_doc_word_schema_(nullptr),
     vec_rowkey_vid_schema_(nullptr), vec_vid_rowkey_schema_(nullptr), vec_domain_index_schema_(nullptr), vec_index_id_schema_(nullptr), vec_snapshot_data_schema_(nullptr),
     vec_centroid_schema_(nullptr), vec_cid_vector_schema_(nullptr), vec_rowkey_cid_schema_(nullptr), vec_sq_meta_schema_(nullptr), vec_pq_centroid_schema_(nullptr), vec_pq_code_schema_(nullptr),
-    hybrid_vec_embedded_schema_(nullptr), tenant_data_version_(0), ddl_need_retry_at_executor_(false), is_pre_split_(false)
+    hybrid_vec_embedded_schema_(nullptr), tenant_data_version_(0), ddl_need_retry_at_executor_(false)
 {
 }
 
@@ -219,7 +215,7 @@ ObCreateDDLTaskParam::ObCreateDDLTaskParam(const share::ObDDLType &type,
     vec_rowkey_vid_schema_(nullptr), vec_vid_rowkey_schema_(nullptr), vec_domain_index_schema_(nullptr), vec_index_id_schema_(nullptr), vec_snapshot_data_schema_(nullptr), 
     vec_centroid_schema_(nullptr), vec_cid_vector_schema_(nullptr), vec_rowkey_cid_schema_(nullptr), vec_sq_meta_schema_(nullptr), vec_pq_centroid_schema_(nullptr), vec_pq_code_schema_(nullptr), 
     hybrid_vec_embedded_schema_(nullptr), tenant_data_version_(0),
-    ddl_need_retry_at_executor_(ddl_need_retry_at_executor), is_pre_split_(false), new_snapshot_version_(0)
+    ddl_need_retry_at_executor_(ddl_need_retry_at_executor), new_snapshot_version_(0)
 {
 }
 
@@ -393,23 +389,8 @@ int ObDDLTask::get_ddl_type_str(const int64_t ddl_type, const char *&ddl_type_st
     case DDL_DROP_VEC_IVFPQ_INDEX:
       ddl_type_str = "drop vec index";
       break;
-    case DDL_AUTO_SPLIT_BY_RANGE:
-      ddl_type_str = "auto split by range";
-      break;
-    case DDL_AUTO_SPLIT_NON_RANGE:
-      ddl_type_str = "auto split non range";
-      break;
-    case DDL_MANUAL_SPLIT_BY_RANGE:
-      ddl_type_str = "manual split by range";
-      break;
-    case DDL_MANUAL_SPLIT_NON_RANGE:
-      ddl_type_str = "manual split non range";
-      break;
     case DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION:
       ddl_type_str = "modify auto increment column with redefinition";
-      break;
-    case DDL_PARTITION_SPLIT_RECOVERY_TABLE_REDEFINITION:
-      ddl_type_str = "partition split recovery table redefinition";
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
@@ -517,7 +498,7 @@ int ObDDLTask::serialize_params_to_message(char *buf, const int64_t buf_size, in
 {
   int ret = OB_SUCCESS;
   ObDDLTaskSerializeField serialize_field(task_version_, parallelism_, data_format_version_, is_abort_,
-                                          sub_task_trace_id_, is_unique_index_, is_global_index_, is_pre_split_, is_no_logging_);
+                                          sub_task_trace_id_, is_unique_index_, is_global_index_, is_no_logging_);
   
   if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -547,7 +528,6 @@ int ObDDLTask::deserialize_params_from_message(const char *buf, const int64_t bu
     sub_task_trace_id_ = serialize_field.sub_task_trace_id_;
     is_unique_index_ = serialize_field.is_unique_index_;
     is_global_index_ = serialize_field.is_global_index_;
-    is_pre_split_ = serialize_field.is_pre_split_;
     is_no_logging_ = serialize_field.is_no_logging_;
   }
   return ret;
@@ -556,7 +536,7 @@ int ObDDLTask::deserialize_params_from_message(const char *buf, const int64_t bu
 int64_t ObDDLTask::get_serialize_param_size() const
 {
   ObDDLTaskSerializeField serialize_field(task_version_, parallelism_, data_format_version_, is_abort_,
-                                          sub_task_trace_id_, is_unique_index_, is_global_index_, is_pre_split_, is_no_logging_);
+                                          sub_task_trace_id_, is_unique_index_, is_global_index_, is_no_logging_);
   return serialize_field.get_serialize_size(); 
 }
 
@@ -659,7 +639,7 @@ int ObDDLTask::switch_status(const ObDDLTaskStatus new_status, const bool enable
   ObDDLTaskStatus real_new_status = new_status;
   const ObDDLTaskStatus old_status = task_status_;
   const bool error_need_retry = OB_SUCCESS != ret_code && is_error_need_retry(ret_code);
-  if (!is_partition_split_recovery_table_redefinition(task_type_) && OB_TMP_FAIL(check_ddl_task_is_cancel(trace_id_, is_cancel))) {
+  if (OB_TMP_FAIL(check_ddl_task_is_cancel(trace_id_, is_cancel))) {
     LOG_WARN("check ddl task is cancel failed", K(tmp_ret), K(task_id_), K(parent_task_id_), K_(trace_id));
   }
   if (is_cancel) {
@@ -673,11 +653,7 @@ int ObDDLTask::switch_status(const ObDDLTaskStatus new_status, const bool enable
     real_ret_code = OB_SUCCESS;
   }
   ret_code_ = OB_SUCCESS == ret_code_ ? real_ret_code : ret_code_;
-  if (is_tablet_split(task_type_)) {
-    real_new_status = OB_SUCCESS != real_ret_code ? WAIT_PARTITION_SPLIT_RECOVERY_TASK_FINISH : real_new_status;
-  } else {
-    real_new_status = OB_SUCCESS != real_ret_code ? FAIL : real_new_status;
-  }
+  real_new_status = OB_SUCCESS != real_ret_code ? FAIL : real_new_status;
   ObMySQLTransaction trans;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -3104,7 +3080,6 @@ int ObDDLTaskRecordOperator::check_has_conflict_ddl(
               case ObDDLType::DDL_TABLE_REDEFINITION:
               case ObDDLType::DDL_DIRECT_LOAD:
               case ObDDLType::DDL_DIRECT_LOAD_INSERT:
-              case ObDDLType::DDL_PARTITION_SPLIT_RECOVERY_TABLE_REDEFINITION:
                 has_conflict_ddl = true;
                 break;
               default:
@@ -3684,58 +3659,6 @@ int ObDDLTaskRecordOperator::kill_inner_sql(
   } else if (OB_UNLIKELY(affected_rows < 0)) {  // kill session affected_rows is 0
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected affected_rows", K(ret), K(affected_rows));
-  }
-  return ret;
-}
-
-int ObDDLTaskRecordOperator::get_partition_split_task_ids(
-    common::ObISQLClient &proxy,
-    const ObIArray<uint64_t> &table_ids,
-    ObIArray<int64_t> &task_ids)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString sql_table_ids;
-  ObSqlString sql_string;
-  task_ids.reset();
-  if (OB_UNLIKELY(table_ids.count() < 1)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_ids.count()));
-  } else {
-    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      sqlclient::ObMySQLResult *result = NULL;
-      for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count(); i++) {
-        if (OB_FAIL(sql_table_ids.append_fmt("%s %lu", 0 == i ? "" : ", ", table_ids.at(i)))) {
-          LOG_WARN("append sql failed", K(ret));
-        }
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(sql_string.assign_fmt("SELECT task_id FROM %s WHERE object_id in (%.*s) AND ddl_type >= %u AND ddl_type <= %u",
-                    OB_ALL_DDL_TASK_STATUS_TNAME, static_cast<int>(sql_table_ids.length()), sql_table_ids.ptr(), ObDDLType::DDL_AUTO_SPLIT_BY_RANGE, ObDDLType::DDL_MANUAL_SPLIT_NON_RANGE))) {
-          LOG_WARN("assign sql string failed", K(ret));
-        } else if (OB_FAIL(proxy.read(res, sql_string.ptr()))) {
-          LOG_WARN("query task_ids task failed", K(ret), K(sql_string));
-        } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to get sql result", K(ret));
-        } else {
-          while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-            int64_t task_id = OB_INVALID_ID;
-            EXTRACT_INT_FIELD_MYSQL(*result, "task_id", task_id, int64_t);
-            if (OB_FAIL(ret)) {
-            } else if (OB_FAIL(task_ids.push_back(task_id))) {
-              LOG_WARN("failed to push bakc into task_ids", K(ret), K(task_ids));
-            }
-          }
-
-          if (OB_ITER_END == ret) {
-            //overwrite ret
-            ret = OB_SUCCESS;
-          } else {
-            LOG_WARN("fail to iter result", K(ret));
-          }
-        }
-      }
-    }
   }
   return ret;
 }

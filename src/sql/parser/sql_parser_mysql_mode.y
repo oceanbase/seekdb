@@ -345,7 +345,7 @@ END_P SET_VAR DELIMITER
         QUANTIFIER_TABLE QUARTER QUERY QUERY_RESPONSE_TIME QUEUE_TIME QUICK QUOTA_NAME
 
         RB_AND_AGG RB_AND_CARDINALITY_AGG RB_BUILD_AGG RB_ITERATE RB_OR_AGG RB_OR_CARDINALITY_AGG REBUILD RECOVER RECOVERY_WINDOW REDO_BUFFER_SIZE REDOFILE REDUNDANCY REDUNDANT REFRESH REGION RELAY RELAYLOG
-        RELAY_LOG_FILE RELAY_LOG_POS RELAY_THREAD RELOAD REMAP REMOVE REORGANIZE REPAIR REPEATABLE REPLICA
+        RELAY_LOG_FILE RELAY_LOG_POS RELAY_THREAD RELOAD REMAP REMOVE REPAIR REPEATABLE REPLICA
         REPLICA_NUM REPLICA_TYPE REPLICATION RESET RESOURCE RESOURCE_POOL RESOURCE_POOL_LIST RESPECT RESTART
         RESTORE RESUME RETURNED_SQLSTATE RETURNS RETURNING REVERSE REWRITE ROLLBACK ROLLUP ROOT
         ROARINGBITMAP ROOTTABLE ROOTSERVICE_LIST ROUTINE ROW ROLLING ROWID ROW_COUNT ROW_FORMAT ROW_INDEX_STRIDE ROWS RTREE RUN
@@ -396,7 +396,7 @@ END_P SET_VAR DELIMITER
 %type <node> create_database_stmt drop_database_stmt alter_database_stmt use_database_stmt
 %type <node> opt_database_name database_option database_option_list opt_database_option_list database_factor databases_expr database_with_catalog_factor opt_databases
 %type <node> cur_timestamp_func cur_time_func cur_date_func now_synonyms_func utc_timestamp_func utc_time_func utc_date_func sys_interval_func sysdate_func cur_user_func
-%type <node> opt_range_partition_info opt_auto_split_tablet_size_option auto_split_tablet_size_option opt_partition_option partition_option hash_partition_option key_partition_option opt_use_partition use_partition range_partition_option subpartition_option opt_range_partition_list opt_range_subpartition_list range_partition_list range_subpartition_list range_partition_element range_subpartition_element range_partition_expr range_expr_list range_expr opt_part_id sample_clause opt_block seed sample_percent opt_sample_scope modify_partition_info modify_tg_partition_info opt_partition_range_or_list auto_partition_option auto_range_type partition_size auto_partition_type use_snapshot partition_options partition_num opt_subpartition_range_or_list
+%type <node> opt_range_partition_info opt_partition_option partition_option hash_partition_option key_partition_option opt_use_partition use_partition range_partition_option subpartition_option opt_range_partition_list opt_range_subpartition_list range_partition_list range_subpartition_list range_partition_element range_subpartition_element range_partition_expr range_expr_list range_expr opt_part_id sample_clause opt_block seed sample_percent opt_sample_scope modify_partition_info modify_tg_partition_info opt_partition_range_or_list use_snapshot partition_options partition_num opt_subpartition_range_or_list
 %type <node> subpartition_template_option subpartition_individual_option opt_hash_partition_list hash_partition_list hash_partition_element opt_hash_subpartition_list hash_subpartition_list hash_subpartition_element opt_subpartition_list opt_engine_option
 %type <node> date_unit date_params timestamp_params
 %type <node> drop_table_stmt table_list drop_view_stmt table_or_tables
@@ -7294,56 +7294,7 @@ partition_option
 {
   $$ = NULL;
 }
-| auto_partition_option
-{
-  $$ = $1;
-}
 ;
-auto_partition_option:
-auto_partition_type PARTITION SIZE partition_size PARTITIONS AUTO
-{
- malloc_non_terminal_node($$, result->malloc_pool_, T_AUTO_PARTITION, 2, $1, $4);
-}
-;
-
-partition_size:
-conf_const
-{
-  $$ = $1;
-}
-| AUTO
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_AUTO);
-}
-;
-
-auto_partition_type:
-auto_range_type
-{
-  $$ = $1;
-}
-;
-
-auto_range_type:
-PARTITION BY RANGE '('')'
-{
-  ParseNode *params = NULL;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_RANGE_PARTITION, 1, params);
-}
-| PARTITION BY RANGE '(' expr ')'
-{
-  ParseNode *params = NULL;
-  malloc_non_terminal_node(params, result->malloc_pool_, T_EXPR_LIST, 1, $5);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_RANGE_PARTITION, 1, params);
-  dup_expr_string($$, result, @5.first_column, @5.last_column);
-}
-| PARTITION BY RANGE COLUMNS'(' column_name_list ')'
-{
-  ParseNode *params = NULL;
-  merge_nodes(params, result, T_EXPR_LIST, $6);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_RANGE_COLUMNS_PARTITION, 1, params);
-  dup_expr_string($$, result, @6.first_column, @6.last_column);
-};
 
 hash_partition_option:
 PARTITION BY HASH '(' expr ')' partition_options %prec LOWER_PARENS
@@ -7425,77 +7376,31 @@ PARTITION BY KEY '(' column_name_list ')' partition_options %prec LOWER_PARENS
 ;
 
 range_partition_option:
-PARTITION BY RANGE '(' ')' opt_partitions opt_auto_split_tablet_size_option
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_RANGE_COLUMNS_PARTITION, 7, NULL, NULL, NULL, $6, NULL, NULL, $7);
-}
-|
 PARTITION BY RANGE '(' expr ')' partition_options opt_range_partition_info
 {
   ParseNode *params = NULL;
   malloc_non_terminal_node(params, result->malloc_pool_, T_EXPR_LIST, 1, $5);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_RANGE_PARTITION, 7, params, $8->children_[1], $7->children_[0], $7->children_[1], NULL, NULL, $8->children_[0]);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_RANGE_PARTITION, 6, params, $8, $7->children_[0], $7->children_[1], NULL, NULL);
   dup_expr_string($$, result, @5.first_column, @5.last_column);
-}
-|
-PARTITION BY RANGE COLUMNS'(' ')' opt_partitions opt_auto_split_tablet_size_option
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_RANGE_COLUMNS_PARTITION, 7, NULL, NULL, NULL, $7, NULL, NULL, $8);
 }
 |
 PARTITION BY RANGE COLUMNS '(' column_name_list ')' partition_options opt_range_partition_info
 {
   ParseNode *params = NULL;
   merge_nodes(params, result, T_EXPR_LIST, $6);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_RANGE_COLUMNS_PARTITION, 7, params, $9->children_[1], $8->children_[0], $8->children_[1], NULL, NULL, $9->children_[0]);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_RANGE_COLUMNS_PARTITION, 6, params, $9, $8->children_[0], $8->children_[1], NULL, NULL);
   dup_expr_string($$, result, @6.first_column, @6.last_column);
-}
-;
-
-opt_auto_split_tablet_size_option:
-/* EMPTY */
-{
-  $$ = NULL;
-}
-|
-auto_split_tablet_size_option
-{
-  $$ = $1;
-}
-;
-
-auto_split_tablet_size_option:
-SIZE '(' STRING_VALUE ')'
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_AUTO_SPLIT_TABLET_SIZE);
-  $$->str_value_ = $3->str_value_;
-  $$->str_len_ = $3->str_len_;
 }
 ;
 
 opt_range_partition_info:
 %prec LOWER_PARENS /* EMPTY */
 {
-   malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, NULL, NULL);
-}
-|
-auto_split_tablet_size_option '(' range_partition_list ')'
-{
-  ParseNode *partition_list = NULL;
-  merge_nodes(partition_list, result, T_PARTITION_LIST, $3);
-
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, partition_list);
-}
-| %prec LOWER_PARENS auto_split_tablet_size_option
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, NULL);
+   $$ = NULL;
 }
 |'(' range_partition_list ')'
 {
-  ParseNode *partition_list = NULL;
-  merge_nodes(partition_list, result, T_PARTITION_LIST, $2);
-
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, NULL, partition_list);
+  merge_nodes($$, result, T_PARTITION_LIST, $2);
 }
 ;
 
@@ -8749,16 +8654,6 @@ column_name opt_sort_column_key_length opt_asc_desc opt_column_id
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_SORT_COLUMN_KEY, 4, $1, $2, $3, $4);
 }
-/*
-  'split key' is abandoned from 1.0
-
-  | SPLIT KEY '(' column_list ')'
-  {
-  ParseNode *col_list= NULL;
-  merge_nodes(col_list, result->malloc_pool_, T_COLUMN_LIST, $4);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SPLIT_KEY, 1, col_list);
-  }
-*/
 | '(' index_expr ')' opt_asc_desc opt_column_id
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_SORT_COLUMN_KEY, 4, $2, NULL, $4, $5);
@@ -16673,14 +16568,6 @@ ADD PARTITION opt_partition_range_or_list
   merge_nodes(subpartition_names, result, T_NAME_LIST, $3);
   malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_SUBPARTITION_STORAGE_CACHE_POLICY, 2, subpartition_names, $6);
 }
-| REORGANIZE PARTITION name_list INTO opt_partition_range_or_list
-{
-  ParseNode *partition_names = NULL;
-  merge_nodes(partition_names, result, T_NAME_LIST, $3);
-  ParseNode *partition_node = NULL;
-  merge_nodes(partition_node, result, T_PARTITION_LIST, $5);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_PARTITION_REORGANIZE, 2, partition_node, partition_names);
-}
 | TRUNCATE PARTITION name_list %prec LOWER_COMMA
 {
   merge_nodes($$, result, T_NAME_LIST, $3);
@@ -16742,14 +16629,6 @@ ADD PARTITION opt_partition_range_or_list
 | modify_tg_partition_info
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_PARTITION_PARTITIONED, 1, $1);
-}
-| REORGANIZE PARTITION name_list INTO opt_partition_range_or_list
-{
-  ParseNode *partition_names = NULL;
-  merge_nodes(partition_names, result, T_NAME_LIST, $3);
-  ParseNode *partition_node = NULL;
-  merge_nodes(partition_node, result, T_PARTITION_LIST, $5);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_PARTITION_REORGANIZE, 2, partition_node, partition_names);
 }
 | TRUNCATE PARTITION name_list %prec LOWER_COMMA
 {
@@ -21551,7 +21430,6 @@ ACCESS_INFO
 |       RELAY_THREAD
 |       REMAP
 |       REMOVE
-|       REORGANIZE
 |       REPAIR
 |       REPEATABLE
 |       REPLICA

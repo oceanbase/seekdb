@@ -393,11 +393,7 @@ ObVTableScanParam() :
       row2exprs_projector_(NULL),
       table_scan_opt_(),
       external_object_ctx_(NULL),
-      schema_guard_(NULL),
-      auto_split_filter_type_(OB_INVALID_ID),
-      auto_split_filter_(NULL),
-      auto_split_params_(NULL),
-      is_tablet_spliting_(false)
+      schema_guard_(NULL)
   { }
 
   virtual ~ObVTableScanParam()
@@ -509,11 +505,6 @@ private:
   share::schema::ObSchemaGetterGuard *schema_guard_;
   char schema_guard_buf_[sizeof(share::schema::ObSchemaGetterGuard)];
 
-public:
-  uint64_t auto_split_filter_type_;
-  const sql::ObExpr *auto_split_filter_;
-  sql::ExprFixedArray *auto_split_params_;
-  bool is_tablet_spliting_;
 };
 
 class ObITabletScan

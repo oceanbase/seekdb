@@ -88,7 +88,6 @@ public:
   ObBatchCreateTabletHelper()
     : batch_arg_(),
       table_schemas_map_(), 
-      auto_part_size_arr_(),
       result_(common::OB_NOT_MASTER), 
       next_(NULL)
   {}
@@ -104,15 +103,12 @@ public:
   {
     batch_arg_.reset();
     table_schemas_map_.clear();
-    auto_part_size_arr_.reset();
     result_ = common::OB_NOT_MASTER;
   }
   DECLARE_TO_STRING;
   obcall::ObBatchCreateTabletArg batch_arg_;
   //table_id : index of table_schems_ in arg
   common::hash::ObHashMap<int64_t, int64_t> table_schemas_map_;
-  // if non-empty, auto_part_size_arr_[i] = auto_part_size of batch_arg_.table_schemas_[i]
-  ObArray<int64_t> auto_part_size_arr_;
   //the result of create tablet
   int result_;
   ObBatchCreateTabletHelper *next_;
@@ -146,10 +142,6 @@ const static int64_t BATCH_ARG_SIZE = 1024 * 1024;  // 1M
   int init(const bool need_check_tablet_cnt);
   int execute();
   int add_create_tablet_arg(const ObTabletCreatorArg &arg);
-  int modify_batch_args(const storage::ObTabletMdsUserDataType &create_type,
-                        const share::SCN &clog_checkpoint_scn,
-                        const share::SCN &mds_checkpoint_scn,
-                        const bool clear_auto_part_size);
   void reset();
 private:
   const share::SCN major_frozen_scn_;

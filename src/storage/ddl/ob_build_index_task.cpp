@@ -149,9 +149,7 @@ int ObUniqueIndexChecker::scan_table_with_column_checksum(
                                                                                ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US,
                                                                                param.snapshot_version_,
                                                                                param.snapshot_version_,
-                                                                               iterator, allow_not_ready,
-                                                                               false/*need_split_src_table*/,
-                                                                               false/*need_split_dst_table*/))) {
+                                                                               iterator, allow_not_ready))) {
         if (OB_REPLICA_NOT_READABLE == ret) {
           ret = OB_EAGAIN;
         } else {

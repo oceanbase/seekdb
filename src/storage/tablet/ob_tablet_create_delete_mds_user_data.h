@@ -40,15 +40,6 @@ enum class ObTabletMdsUserDataType : int64_t
   RESERVED_MDS_TYPE_5 = 5,
   RESERVED_MDS_TYPE_6 = 6,
   RESERVED_MDS_TYPE_7 = 7,
-  // for start split src
-  START_SPLIT_SRC = 8,
-  // for start split dst
-  START_SPLIT_DST = 9,
-  // for finish split src
-  FINISH_SPLIT_SRC = 10,
-  // for finish split dst
-  FINISH_SPLIT_DST = 11,
-
   MAX_TYPE,
 };
 
@@ -78,14 +69,11 @@ public:
       K_(data_type),
       K_(create_commit_scn), K_(create_commit_version),
       K_(delete_commit_scn), K_(delete_commit_version),
-      K_(reserved_commit_version), K_(start_split_commit_version));
+      K_(reserved_commit_version));
 private:
   void create_tablet_on_commit_(const share::SCN &commit_version, const share::SCN &commit_scn);
   void delete_tablet_on_commit_(const share::SCN &commit_version, const share::SCN &commit_scn);
 
-  void start_split_src_on_commit_(const share::SCN &commit_version);
-  void start_split_dst_on_commit_(const share::SCN &commit_version);
-  void finish_split_src_on_commit_(const share::SCN &commit_version, const share::SCN &commit_scn);
 public:
   ObTabletStatus tablet_status_;
   share::SCN reserved_scn_;
@@ -97,7 +85,6 @@ public:
   share::SCN delete_commit_scn_; // delete tx commit log scn
   int64_t delete_commit_version_; // delete tx commit trans version
   int64_t reserved_commit_version_;
-  int64_t start_split_commit_version_; // start split commit trans version
 };
 
 inline bool ObTabletCreateDeleteMdsUserData::is_valid() const

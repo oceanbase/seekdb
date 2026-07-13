@@ -106,8 +106,6 @@ int ObMediumCompactionScheduleFunc::find_valid_freeze_info(
   force_schedule_medium_merge = false;
   ObTablet &tablet = *tablet_handle_.get_obj();
   const ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
-  const bool is_create_as_split_dst = tablet.get_tablet_meta().split_info_.get_split_src_tablet_id().is_valid();
-  const int64_t create_schema_version = tablet.get_tablet_meta().create_schema_version_;
   int64_t schedule_snapshot = 0;
   bool schedule_with_newer_info = false;
   const int64_t scheduler_frozen_version = MERGE_SCHEDULER_PTR->get_frozen_version();
@@ -151,12 +149,6 @@ int ObMediumCompactionScheduleFunc::find_valid_freeze_info(
       force_schedule_medium_merge = true;
       FLOG_INFO("schema version in freeze info is too small, try to schedule medium compaction instead", K(ret),
                 K(tablet_id), K(last_sstable_schema_version), K(freeze_info));
-      break;
-    } else if (OB_UNLIKELY(is_create_as_split_dst && freeze_info.schema_version_ < create_schema_version)) {
-      medium_info.is_skip_tenant_major_ = true;
-      force_schedule_medium_merge = true;
-      FLOG_INFO("schema version in freeze info is smaller than split dst tablet create schema version, skip", K(ret), K(tablet_id),
-          K(create_schema_version), K(freeze_info));
       break;
     } else if (OB_FAIL(get_table_schema_to_merge(*schema_service,
                                                  tablet,
@@ -1387,7 +1379,7 @@ int ObMediumCompactionScheduleFunc::fill_mds_filter_info(ObMediumCompactionInfo 
   ObMdsInfoDistinctMgr mds_info_mgr;
   ObVersionRange read_version_range(medium_info.last_medium_snapshot_, medium_info.medium_snapshot_);
   if (medium_info.storage_schema_.is_global_index_table()
-      && OB_FAIL(mds_info_mgr.init(allocator_, *tablet_handle_.get_obj(), nullptr/*split_extra_tablet_handles_ptr*/, read_version_range, false/*for_access*/))) {
+      && OB_FAIL(mds_info_mgr.init(allocator_, *tablet_handle_.get_obj(), read_version_range, false/*for_access*/))) {
     LOG_WARN("failed to init mds filter info mgr", KR(ret), K(read_version_range));
   } else if (mds_info_mgr.empty()) {
     medium_info.contain_mds_filter_info_ = false;

@@ -236,8 +236,6 @@ public:
     partition_schema_version_ = schema_version;
   }
   int64_t get_partition_schema_version() const { return partition_schema_version_; }
-  bool is_in_splitting() const { return  partition_status_ == PARTITION_STATUS_LOGICAL_SPLITTING
-                                         || partition_status_ == PARTITION_STATUS_PHYSICAL_SPLITTING; }
   bool has_self_partition() const { return false; }
 
   bool is_sharding_none() const { return sharding_ == OB_PARTITION_SHARDING_NONE; }

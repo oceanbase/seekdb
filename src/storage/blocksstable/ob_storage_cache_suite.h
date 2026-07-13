@@ -24,7 +24,6 @@
 #include "ob_fuse_row_cache.h"
 #include "ob_bloom_filter_cache.h"
 #include "storage/truncate_info/ob_truncate_info_kv_cache.h"
-#include "storage/ddl/ob_tablet_split_cache.h"
 
 #define OB_STORE_CACHE oceanbase::blocksstable::ObStorageCacheSuite::get_instance()
 
@@ -49,7 +48,6 @@ public:
   ObFuseRowCache &get_fuse_row_cache() { return fuse_row_cache_; }
   ObStorageMetaCache &get_storage_meta_cache() { return storage_meta_cache_; }
   storage::ObTruncateInfoKVCache &get_truncate_info_cache() { return truncate_info_cache_; }
-  storage::ObTabletSplitCache &get_tablet_split_cache() { return tablet_split_cache_; }
   void destroy();
   inline bool is_inited() const { return is_inited_; }
   TO_STRING_KV(K(is_inited_));
@@ -63,7 +61,6 @@ private:
   ObFuseRowCache fuse_row_cache_;
   ObStorageMetaCache storage_meta_cache_;
   storage::ObTruncateInfoKVCache truncate_info_cache_;
-  ObTabletSplitCache tablet_split_cache_;
   bool is_inited_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObStorageCacheSuite);

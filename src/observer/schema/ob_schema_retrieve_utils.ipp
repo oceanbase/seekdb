@@ -1091,9 +1091,6 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
                 ObCollationType, true /* skip null error*/,
                 ignore_column_error,
                 CS_TYPE_INVALID);
-    EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, auto_part, partition_option, true, ignore_column_error, false);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, auto_part_size, partition_option, int64_t, true, ignore_column_error, -1);
-
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_AND_DEFAULT_VALUE(result, association_table_id,
     table_schema, true, ignore_column_error, common::OB_INVALID_ID);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_AND_DEFAULT_VALUE(result, define_user_id,
@@ -3124,8 +3121,6 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
         table_schema.get_sub_part_option().set_part_num(0);
         table_schema.set_def_sub_part_num(0);
       }
-      EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, auto_part, partition_option, true, ignore_column_error, false);
-      EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, auto_part_size, partition_option, int64_t, true, ignore_column_error, -1);
       EXTRACT_INT_FIELD_TO_CLASS_MYSQL_AND_DEFAULT_VALUE(result, association_table_id,
       table_schema, true, ignore_column_error, common::OB_INVALID_ID);
 

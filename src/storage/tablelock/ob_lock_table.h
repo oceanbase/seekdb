@@ -71,8 +71,7 @@ class ObTableLockOp;
 class ObLockMemtable;
 class ObLockMemtableMgr;
 
-class ObLockTable : public logservice::ObIReplaySubHandler,
-                    public logservice::ObILocalLogHandler,
+class ObLockTable : public logservice::ObILocalLogHandler,
                     public logservice::ObICheckpointSubHandler
 {
 public:
@@ -155,11 +154,6 @@ public:
   // See the ObLockMemtable::check_and_clear_obj_lock for deatails.
   int check_and_clear_obj_lock(const bool force_compact);
   int add_lock_into_queue(storage::ObStoreCtx &ctx, const ObLockParam &lock_param);
-  // for replay
-  int replay(const void *buffer,
-             const int64_t nbytes,
-             const palf::LSN &lsn,
-             const share::SCN &scn) override;
   // for checkpoint
   share::SCN get_rec_scn() override;
   int flush(share::SCN &rec_scn) override;

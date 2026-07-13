@@ -21,6 +21,7 @@
 #include "share/storage/ob_tablet_replica_checksum_table_storage.h"
 #include "share/storage/ob_sqlite_connection.h"
 #include "share/ob_server_struct.h"
+#include "share/ob_freeze_info_proxy.h"
 namespace oceanbase
 {
 namespace share

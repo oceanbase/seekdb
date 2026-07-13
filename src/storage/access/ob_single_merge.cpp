@@ -257,9 +257,7 @@ int ObSingleMerge::inner_get_next_row(ObDatumRow &row)
     const bool enable_fuse_row_cache = access_ctx_->use_fuse_row_cache_ &&
                                        access_param_->iter_param_.enable_fuse_row_cache(access_ctx_->query_flag_) &&
                                        read_snapshot_version >= tablet_meta.snapshot_version_ &&
-                                       OB_ISNULL(get_table_param_->tablet_iter_.get_split_extra_tablet_handles_ptr()) &&
-                                       OB_ISNULL(get_table_param_->tablet_iter_.get_fork_infos()) &&
-                                       !(!tablet_meta.table_store_flag_.with_major_sstable() && tablet_meta.split_info_.get_split_src_tablet_id().is_valid()); // not split dst tablet
+                                       OB_ISNULL(get_table_param_->tablet_iter_.get_fork_infos());
     bool need_update_fuse_cache = false;
     access_ctx_->query_flag_.set_not_use_row_cache();
     nop_pos_.reset();

@@ -72,7 +72,6 @@
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
-#include "observer/scheduler/ob_partition_auto_split_helper.h"
 #include "observer/mysql/ob_query_response_time.h" //ObTenantQueryRespTimeCollector
 #include "lib/resource/ob_affinity_ctrl.h"
 #include "sql/ob_sql_ccl_rule_manager.h"
@@ -2015,7 +2014,6 @@ int ObServer::obs_construct_modules()
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_global_iterator_pool_))) { SERVER_LOG(WARN, "mods_global_iterator_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_rb_mem_mgr_))) { SERVER_LOG(WARN, "mods_rb_mem_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_plugin_vector_index_service_))) { SERVER_LOG(WARN, "mods_plugin_vector_index_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_auto_split_task_cache_))) { SERVER_LOG(WARN, "mods_auto_split_task_cache_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_tenant_query_resp_time_collector_))) { SERVER_LOG(WARN, "mods_tenant_query_resp_time_collector_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_ddl_service_launcher_))) { SERVER_LOG(WARN, "mods_ddl_service_launcher_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_sys_tenant_load_sys_package_service_))) { SERVER_LOG(WARN, "mods_sys_tenant_load_sys_package_service_ fail", KR(ret)); }
@@ -2097,7 +2095,6 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObGlobalIteratorPool::mtl_init(mods_global_iterator_pool_))) { SERVER_LOG(WARN, "mods_global_iterator_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(common::ObRbMemMgr::mtl_init(mods_rb_mem_mgr_))) { SERVER_LOG(WARN, "mods_rb_mem_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObPluginVectorIndexService::mtl_init(mods_plugin_vector_index_service_))) { SERVER_LOG(WARN, "mods_plugin_vector_index_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObAutoSplitTaskCache::mtl_init(mods_auto_split_task_cache_))) { SERVER_LOG(WARN, "mods_auto_split_task_cache_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(observer::ObTenantQueryRespTimeCollector::mtl_init(mods_tenant_query_resp_time_collector_))) { SERVER_LOG(WARN, "mods_tenant_query_resp_time_collector_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDDLServiceLauncher::mtl_init(mods_ddl_service_launcher_))) { SERVER_LOG(WARN, "mods_ddl_service_launcher_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObSysTenantLoadSysPackageService::mtl_init(mods_sys_tenant_load_sys_package_service_))) { SERVER_LOG(WARN, "mods_sys_tenant_load_sys_package_service_ fail", KR(ret)); }
@@ -2256,7 +2253,6 @@ void ObServer::obs_destroy_modules()
   mtl_destroy_default(mods_sys_tenant_load_sys_package_service_);
   mtl_destroy_default(mods_ddl_service_launcher_);
   observer::ObTenantQueryRespTimeCollector::mtl_destroy(mods_tenant_query_resp_time_collector_);
-  mtl_destroy_default(mods_auto_split_task_cache_);
   mtl_destroy_default(mods_plugin_vector_index_service_);
   mtl_destroy_default(mods_rb_mem_mgr_);
   ObGlobalIteratorPool::mtl_destroy(mods_global_iterator_pool_);

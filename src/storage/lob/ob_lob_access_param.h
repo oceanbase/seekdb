@@ -54,7 +54,7 @@ public:
       inrow_read_nocopy_(false), is_store_char_len_(true), need_read_latest_(false), no_need_retry_(false), try_flush_redo_(false),
       main_table_rowkey_col_(false), is_index_table_(false), enable_remote_retry_(false),
       inrow_threshold_(OB_DEFAULT_LOB_INROW_THRESHOLD), schema_chunk_size_(OB_DEFAULT_LOB_CHUNK_SIZE), 
-      access_ctx_(nullptr), addr_(), lob_id_geneator_(nullptr), data_row_(nullptr)
+      access_ctx_(nullptr), addr_(), lob_id_geneator_(nullptr)
   {}
   ~ObLobAccessParam();
 
@@ -123,7 +123,7 @@ public:
     K_(coll_type), K_(scan_backward), K_(offset), K_(len), K_(parent_seq_no), K_(seq_no_st), K_(used_seq_cnt), K_(total_seq_cnt), K_(checksum),
     K_(update_len), K_(op_type), K_(is_fill_zero), K_(from_rpc), K_(snapshot), K_(fb_snapshot), K_(tx_id), K_(read_latest), K_(is_total_quantity_log),
     K_(inrow_read_nocopy), K_(schema_chunk_size), K_(inrow_threshold), K_(is_store_char_len), K_(need_read_latest), K(no_need_retry_), K_(try_flush_redo),
-    K_(main_table_rowkey_col), K_(is_index_table), K_(enable_remote_retry), KP_(access_ctx), K_(addr), KPC_(lob_id_geneator), KPC_(data_row));
+    K_(main_table_rowkey_col), K_(is_index_table), K_(enable_remote_retry), KP_(access_ctx), K_(addr), KPC_(lob_id_geneator));
 
 private:
   ObIAllocator *tmp_allocator_;
@@ -210,7 +210,6 @@ public:
   ObLobAccessCtx *access_ctx_;
   ObAddr addr_;
   share::ObTabletCacheInterval *lob_id_geneator_;
-  const blocksstable::ObDatumRow *data_row_; // for tablet split
 };
 
 
@@ -265,4 +264,3 @@ struct ObLobStorageParam
 }  // end namespace oceanbase
 
 #endif  // OCEANBASE_STORAGE_OB_LOB_ACCESS_PARAM_H_
-

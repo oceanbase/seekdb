@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX RS
 #include "ob_tablet_creator.h"
 #include "storage/tx/ob_trans_service.h"
-#include "rootserver/ob_split_partition_helper.h"
 #include "observer/ob_inner_sql_connection.h"
 #include "storage/tx/ob_tx_log.h"
 #include "storage/tablet/ob_tablet_ddl_complete_mds_helper.h"
@@ -123,7 +122,6 @@ int ObBatchCreateTabletHelper::init(
 {
   int ret = OB_SUCCESS;
   const int64_t bucket_count = hash::cal_next_prime(100);
-  auto_part_size_arr_.reset();
   if (OB_FAIL(batch_arg_.init_create_tablet(major_frozen_scn, need_check_tablet_cnt))) {
     LOG_WARN("failed to init create tablet", KR(ret), K(major_frozen_scn));
   } else if (OB_FAIL(table_schemas_map_.create(bucket_count, "CreateTablet", "CreateTablet"))) {
@@ -196,7 +194,6 @@ int ObBatchCreateTabletHelper::add_table_schema_(
     ObCreateTabletSchema *create_tablet_schema = NULL;
     void *create_tablet_schema_ptr = batch_arg_.allocator_.alloc(sizeof(ObCreateTabletSchema));
     obcall::ObCreateTabletExtraInfo create_tablet_extr_info;
-    ObTabletID split_src_tablet_id;
     if (OB_ISNULL(create_tablet_schema_ptr)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate storage schema", KR(ret), K(table_schema));
@@ -207,17 +204,12 @@ int ObBatchCreateTabletHelper::add_table_schema_(
       LOG_WARN("failed to init storage schema", KR(ret), K(table_schema));
     } else if (OB_FAIL(batch_arg_.create_tablet_schemas_.push_back(create_tablet_schema))) {
       LOG_WARN("failed to push back table schema", KR(ret), K(table_schema));
-    } else if (OB_FAIL(ObSplitPartitionHelper::get_split_src_tablet_id_if_any(table_schema, split_src_tablet_id))) {
-      LOG_WARN("failed to get split src tablet id", K(ret), K(table_schema));
     } else if (OB_FAIL(create_tablet_extr_info.init(tenant_data_version, 
                                                     need_create_empty_major, 
-                                                    table_schema.get_micro_index_clustered(),
-                                                    split_src_tablet_id))) {
+                                                    table_schema.get_micro_index_clustered()))) {
       LOG_WARN("init create table extra info failed", K(ret), K(tenant_data_version), K(need_create_empty_major), K(table_schema));
     } else if (OB_FAIL(batch_arg_.tablet_extra_infos_.push_back(create_tablet_extr_info))) {
       LOG_WARN("failed to push back tablet extra infos", K(ret), K(create_tablet_extr_info));
-    } else if (OB_FAIL(auto_part_size_arr_.push_back(table_schema.is_auto_partitioned_table() ? table_schema.get_auto_part_size() : OB_INVALID_SIZE))) {
-      LOG_WARN("failed to push back", KR(ret));
     }
   }
   }
@@ -343,31 +335,6 @@ int ObTabletCreator::add_create_tablet_arg(const ObTabletCreatorArg &arg)
   return ret;
 }
 
-int ObTabletCreator::modify_batch_args(
-    const storage::ObTabletMdsUserDataType &create_type,
-    const SCN &clog_checkpoint_scn,
-    const SCN &mds_checkpoint_scn,
-    const bool clear_auto_part_size)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(single_batch_arg_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("batch arg count is invalid", KR(ret));
-  } else {
-    ObBatchCreateTabletHelper *batch_arg = single_batch_arg_;
-    while (OB_SUCC(ret) && OB_NOT_NULL(batch_arg)) {
-      batch_arg->batch_arg_.clog_checkpoint_scn_ = clog_checkpoint_scn;
-      batch_arg->batch_arg_.mds_checkpoint_scn_ = mds_checkpoint_scn;
-      batch_arg->batch_arg_.create_type_ = create_type;
-      if (clear_auto_part_size) {
-        batch_arg->auto_part_size_arr_.reset();
-      }
-      batch_arg = batch_arg->next_;
-    }
-  }
-  return ret;
-}
-
 int ObTabletCreator::execute()
 {
   int ret = OB_SUCCESS;
@@ -415,15 +382,6 @@ int ObTabletCreator::execute()
           }
           const int64_t end_time = ObTimeUtility::current_time();
           LOG_INFO("modify binding for create", KR(ret), K(buf_len), K(batch_arg->batch_arg_.tablets_.count()),
-                                                "cost_ts", end_time - start_time);
-        }
-        if (OB_SUCC(ret)) {
-          const int64_t start_time = ObTimeUtility::current_time();
-          if (OB_FAIL(ObTabletSplitMdsHelper::set_auto_part_size_for_create(batch_arg->batch_arg_, batch_arg->auto_part_size_arr_, ctx.get_abs_timeout(), trans_))) {
-            LOG_WARN("failed to set auto part size for create", K(ret));
-          }
-          const int64_t end_time = ObTimeUtility::current_time();
-          LOG_INFO("set auto part size for create", KR(ret), K(buf_len), K(batch_arg->batch_arg_.tablets_.count()),
                                                 "cost_ts", end_time - start_time);
         }
       }

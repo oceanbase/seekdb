@@ -57,10 +57,6 @@ ObTableIterParam::ObTableIterParam()
       ss_rowkey_prefix_cnt_(0),
       pd_storage_flag_(),
       table_scan_opt_(),
-      auto_split_filter_type_(OB_INVALID_ID),
-      auto_split_filter_(nullptr),
-      auto_split_params_(nullptr),
-      is_tablet_spliting_(false),
       is_delete_insert_(false),
       need_update_tablet_param_(nullptr)
 {}
@@ -112,10 +108,6 @@ void ObTableIterParam::reset()
   is_non_unique_local_index_ = false;
   is_advance_skip_scan_ = false;
   table_scan_opt_.reset();
-  auto_split_filter_type_ = OB_INVALID_ID;
-  auto_split_filter_ = nullptr;
-  auto_split_params_ = nullptr;
-  is_tablet_spliting_ = false;
   is_delete_insert_ = false;
   ObSSTableIndexFilterFactory::destroy_sstable_index_filter(sstable_index_filter_);
   need_update_tablet_param_ = nullptr;
@@ -201,10 +193,6 @@ DEF_TO_STRING(ObTableIterParam)
        K_(is_advance_skip_scan),
        K_(ss_rowkey_prefix_cnt),
        K_(table_scan_opt),
-       K_(auto_split_filter_type),
-       KP_(auto_split_filter),
-       KPC_(auto_split_params),
-       K_(is_tablet_spliting),
        K_(is_delete_insert),
        KP_(need_update_tablet_param));
   J_OBJ_END();
@@ -320,10 +308,6 @@ int ObTableAccessParam::init(
                     !scan_param.scan_flag_.is_use_block_cache())) {
       iter_param_.disable_blockscan();
     }
-    iter_param_.auto_split_filter_type_ = scan_param.auto_split_filter_type_;
-    iter_param_.auto_split_filter_ = scan_param.auto_split_filter_;
-    iter_param_.auto_split_params_ = scan_param.auto_split_params_;
-    iter_param_.is_tablet_spliting_ = scan_param.is_tablet_spliting_;
     iter_param_.has_virtual_columns_ = table_param.has_virtual_column();
     // vectorize requires blockscan is enabled(_pushdown_storage_level > 0)
     iter_param_.vectorized_enabled_ = nullptr != get_op() && get_op()->is_vectorized();

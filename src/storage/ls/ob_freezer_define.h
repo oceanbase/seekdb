@@ -47,8 +47,7 @@ enum class ObFreezeSourceFlag : int64_t
   DIRECT_INC_FREEZE   = 11,
   GC_RETAIN_CTX       = 12, // deprecated
   TEST_MODE           = 13, // used for test only
-  TABLET_SPLIT        = 14,
-  MAX_SOURCE          = 15,
+  MAX_SOURCE          = 14,
 };
 
 static const int64_t MAX_FREEZE_SOURCE_TYPE_COUNT = static_cast<int64_t>(ObFreezeSourceFlag::MAX_SOURCE);
@@ -104,9 +103,6 @@ inline const char *obj_to_cstring(const ObFreezeSourceFlag type)
     break;
   case ObFreezeSourceFlag::TEST_MODE:
     ret = "TEST_MODE";
-    break;
-  case ObFreezeSourceFlag::TABLET_SPLIT:
-    ret = "TABLET_SPLIT";
     break;
   case ObFreezeSourceFlag::MAX_SOURCE:
     ret = "MAX_SOURCE";

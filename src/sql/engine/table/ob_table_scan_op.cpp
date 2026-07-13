@@ -4295,10 +4295,7 @@ DEF_TO_STRING(ObVTableScanParam)
        K_(pd_storage_flag),
        KPC_(output_exprs),
        KPC_(op_filters),
-       K_(table_scan_opt),
-       K_(auto_split_filter),
-       K_(auto_split_params),
-       K_(is_tablet_spliting));
+       K_(table_scan_opt));
   J_OBJ_END();
   return pos;
 }

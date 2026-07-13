@@ -30,7 +30,6 @@
 #include "share/ob_ddl_common.h"
 #include "sql/resolver/ob_stmt_type.h"  // pure enum X-macro header, conf L2(base_stmt_type)
 #include "share/ob_debug_sync.h"
-#include "share/ob_partition_modify.h"
 #include "share/ob_server_status.h"
 #include "share/ob_simple_batch.h"
 #include "share/ob_schema_version_info.h"
@@ -1634,10 +1633,6 @@ public:
   {
     ADD_PARTITION = -1,
     DROP_PARTITION,
-    PARTITIONED_TABLE,
-    PARTITIONED_PARTITION,
-    REORGANIZE_PARTITION,
-    SPLIT_PARTITION,
     TRUNCATE_PARTITION,
     ADD_SUB_PARTITION,
     DROP_SUB_PARTITION,
@@ -1650,7 +1645,6 @@ public:
     INTERVAL_TO_RANGE,
     RENAME_PARTITION,
     RENAME_SUB_PARTITION,
-    AUTO_SPLIT_PARTITION,
     EXCHANGE_PARTITION,
     ALTER_PARTITION_STORAGE_CACHE_POLICY,
     ALTER_SUBPARTITION_STORAGE_CACHE_POLICY,
@@ -1701,7 +1695,6 @@ public:
       inner_sql_exec_addr_(),
       local_session_var_(&allocator_),
       alter_algorithm_(INPLACE),
-      alter_auto_partition_attr_(false),
       rebuild_index_arg_list_(),
       client_session_id_(0),
       client_session_create_ts_(0),
@@ -1736,19 +1729,6 @@ public:
         || alter_table_schema_.alter_option_bitset_.has_member(PROGRESSIVE_MERGE_ROUND)
         || alter_table_schema_.alter_option_bitset_.has_member(PROGRESSIVE_MERGE_NUM)
         || alter_table_schema_.alter_option_bitset_.has_member(ENABLE_MACRO_BLOCK_BLOOM_FILTER);
-  }
-  bool is_split_partition() const {
-    return is_manual_split_partition() ||
-           is_auto_split_partition();
-  }
-
-  bool is_manual_split_partition() const {
-    return alter_part_type_ == REORGANIZE_PARTITION ||
-           alter_part_type_ == SPLIT_PARTITION;
-  }
-
-  bool is_auto_split_partition() const {
-    return alter_part_type_ == AUTO_SPLIT_PARTITION;
   }
   bool is_only_alter_column() const {
     return is_alter_columns_ && foreign_key_checks_
@@ -1820,7 +1800,6 @@ public:
                K_(inner_sql_exec_addr),
                K_(local_session_var),
                K_(alter_algorithm),
-               K_(alter_auto_partition_attr),
                K_(rebuild_index_arg_list),
                K_(client_session_id),
                K_(client_session_create_ts),
@@ -1861,8 +1840,7 @@ public:
   common::ObAddr inner_sql_exec_addr_;
   share::ObLocalSessionVar local_session_var_;
   AlterAlgorithm alter_algorithm_;
-  bool alter_auto_partition_attr_;
-  common::ObSArray<ObTableSchema> rebuild_index_arg_list_;  // pre split
+  common::ObSArray<ObTableSchema> rebuild_index_arg_list_;
   uint32_t client_session_id_;
   int64_t client_session_create_ts_;
   transaction::tablelock::ObTableLockPriority lock_priority_;
@@ -1978,10 +1956,6 @@ public:
     PRIMARY_ZONE,
     ADD_PARTITION,
     DROP_PARTITION,
-    PARTITIONED_TABLE,
-    PARTITIONED_PARTITION,
-    REORGANIZE_PARTITION,
-    SPLIT_PARTITION,
     FORCE_LOCALITY,
     SHARDING,
     MAX_OPTION,
@@ -2446,220 +2420,6 @@ public:
 
 typedef ObCreateIndexArg ObAlterPrimaryArg;
 
-struct ObPartitionSplitArg : public ObDDLArg
-{
-  OB_UNIS_VERSION(2);
-public:
-  ObPartitionSplitArg()
-    : ObDDLArg(),
-      src_tablet_id_(common::ObTabletID::INVALID_TABLET_ID),
-      dest_tablet_ids_(),
-      local_index_table_ids_(),
-      local_index_schema_versions_(),
-      src_local_index_tablet_ids_(),
-      dest_local_index_tablet_ids_(),
-      lob_table_ids_(),
-      lob_schema_versions_(),
-      src_lob_tablet_ids_(),
-      dest_lob_tablet_ids_(),
-      task_type_(share::ObDDLType::DDL_INVALID)
-  {}
-  virtual ~ObPartitionSplitArg() {}
-  bool is_valid() const
-  {
-    return src_tablet_id_.is_valid()
-           && local_index_table_ids_.count() == src_local_index_tablet_ids_.count()
-           && local_index_schema_versions_.count() == src_local_index_tablet_ids_.count()
-           && src_local_index_tablet_ids_.count() == dest_local_index_tablet_ids_.count()
-           && lob_table_ids_.count() == src_lob_tablet_ids_.count()
-           && lob_schema_versions_.count() == src_lob_tablet_ids_.count()
-           && src_lob_tablet_ids_.count() == dest_lob_tablet_ids_.count()
-           && task_type_ > share::ObDDLType::DDL_INVALID
-           && task_type_ < share::ObDDLType::DDL_MAX;
-  }
-  void reset()
-  {
-    dest_tablet_ids_.reset();
-    src_tablet_id_ = common::ObTabletID::INVALID_TABLET_ID;
-    local_index_table_ids_.reset();
-    local_index_schema_versions_.reset();
-    src_local_index_tablet_ids_.reset();
-    dest_local_index_tablet_ids_.reset();
-    lob_table_ids_.reset();
-    lob_schema_versions_.reset();
-    src_lob_tablet_ids_.reset();
-    dest_lob_tablet_ids_.reset();
-    task_type_ = share::ObDDLType::DDL_INVALID;
-    ObDDLArg::reset();
-  }
-  INHERIT_TO_STRING_KV("ObDDLArg", ObDDLArg,
-      K(src_tablet_id_), K(dest_tablet_ids_), K(local_index_table_ids_),
-      K(local_index_schema_versions_), K(src_local_index_tablet_ids_),
-      K(dest_local_index_tablet_ids_), K(lob_table_ids_), K(lob_schema_versions_),
-      K(src_lob_tablet_ids_), K(dest_lob_tablet_ids_),
-      K(task_type_));
-public:
-  ObTabletID src_tablet_id_;
-  ObSArray<ObTabletID> dest_tablet_ids_;
-  ObSArray<uint64_t> local_index_table_ids_;
-  ObSArray<uint64_t> local_index_schema_versions_;
-  ObSArray<ObTabletID> src_local_index_tablet_ids_;
-  ObSArray<ObSArray<ObTabletID>> dest_local_index_tablet_ids_;
-  ObSArray<uint64_t> lob_table_ids_;
-  ObSArray<uint64_t> lob_schema_versions_;
-  ObSArray<ObTabletID> src_lob_tablet_ids_;
-  ObSArray<ObSArray<ObTabletID>> dest_lob_tablet_ids_;
-  share::ObDDLType task_type_;
-};
-
-struct ObCleanSplittedTabletArg final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObCleanSplittedTabletArg()
-    : table_id_(common::OB_INVALID_ID),
-      task_id_(0),
-      local_index_table_ids_(),
-      lob_table_ids_(),
-      src_table_tablet_id_(),
-      dest_tablet_ids_(),
-      src_local_index_tablet_ids_(),
-      dest_local_index_tablet_ids_(),
-      src_lob_tablet_ids_(),
-      dest_lob_tablet_ids_(),
-      is_auto_split_(false)
-  {}
-  ~ObCleanSplittedTabletArg() = default;
-  bool is_valid() const
-  {
-    bool valid = true &&
-                 table_id_ != OB_INVALID_ID &&
-                 task_id_ != 0 &&
-                 src_table_tablet_id_.is_valid() &&
-                 local_index_table_ids_.count() == src_local_index_tablet_ids_.count() &&
-                 lob_table_ids_.count() == src_lob_tablet_ids_.count() &&
-                 src_local_index_tablet_ids_.count() == dest_local_index_tablet_ids_.count() &&
-                 src_lob_tablet_ids_.count() == dest_lob_tablet_ids_.count();
-    for (int64_t i = 0; valid && i < local_index_table_ids_.count(); i++) {
-      valid = local_index_table_ids_.at(i) != OB_INVALID_ID &&
-              src_local_index_tablet_ids_.at(i).is_valid();
-    }
-    for (int64_t i = 0; valid && i < lob_table_ids_.count(); i++) {
-      valid = lob_table_ids_.at(i) != OB_INVALID_ID &&
-              src_lob_tablet_ids_.at(i).is_valid();
-    }
-    return valid;
-  }
-  void reset()
-  {
-    
-    table_id_ = OB_INVALID_ID;
-    task_id_ = 0;
-    local_index_table_ids_.reset();
-    lob_table_ids_.reset();
-    src_table_tablet_id_ = common::ObTabletID::INVALID_TABLET_ID;
-    dest_tablet_ids_.reset();
-    src_local_index_tablet_ids_.reset();
-    dest_local_index_tablet_ids_.reset();
-    src_lob_tablet_ids_.reset();
-    dest_lob_tablet_ids_.reset();
-    is_auto_split_ = false;
-  }
-  TO_STRING_KV(
-               K_(table_id),
-               K_(task_id),
-               K_(local_index_table_ids),
-               K_(lob_table_ids),
-               K_(src_table_tablet_id),
-               K_(dest_tablet_ids),
-               K_(src_local_index_tablet_ids),
-               K_(dest_local_index_tablet_ids),
-               K_(src_lob_tablet_ids),
-               K_(dest_lob_tablet_ids),
-               K_(is_auto_split));
-public:
-  
-  uint64_t table_id_;
-  int64_t task_id_;
-  ObSArray<uint64_t> local_index_table_ids_;
-  ObSArray<uint64_t> lob_table_ids_;
-  ObTabletID src_table_tablet_id_;
-  ObSArray<ObTabletID> dest_tablet_ids_;
-  ObSArray<ObTabletID> src_local_index_tablet_ids_;
-  ObSArray<ObSArray<ObTabletID>> dest_local_index_tablet_ids_;
-  ObSArray<ObTabletID> src_lob_tablet_ids_;
-  ObSArray<ObSArray<ObTabletID>> dest_lob_tablet_ids_;
-
-  bool is_auto_split_;
-};
-
-struct ObCheckMemtableCntArg final
-{
-  OB_UNIS_VERSION(2);
-public:
-  ObCheckMemtableCntArg()
-    : tablet_id_(common::ObTabletID::INVALID_TABLET_ID)
-  {}
-  ~ObCheckMemtableCntArg() {}
-  bool is_valid() const
-  {
-    return tablet_id_.is_valid();
-  }
-  int assign(const ObCheckMemtableCntArg &other);
-  TO_STRING_KV(K(tablet_id_));
-public:
-  
-  ObTabletID tablet_id_;
-};
-
-struct ObCheckMemtableCntResult final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObCheckMemtableCntResult()
-    : memtable_cnt_(-1) {}
-  ~ObCheckMemtableCntResult() {}
-  TO_STRING_KV(K_(memtable_cnt));
-public:
-  int64_t memtable_cnt_;
-};
-
-struct ObCheckMediumCompactionInfoListArg final
-{
-  OB_UNIS_VERSION(2);
-public:
-  ObCheckMediumCompactionInfoListArg()
-    : tablet_id_(common::ObTabletID::INVALID_TABLET_ID)
-  {}
-  ~ObCheckMediumCompactionInfoListArg() {}
-  bool is_valid() const
-  {
-    return tablet_id_.is_valid();
-  }
-  int assign(const ObCheckMediumCompactionInfoListArg &other);
-  TO_STRING_KV(K(tablet_id_));
-public:
-  
-  ObTabletID tablet_id_;
-};
-
-struct ObCheckMediumCompactionInfoListResult final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObCheckMediumCompactionInfoListResult()
-    : info_list_cnt_(-1),
-      primary_compaction_scn_(-1)
-  {}
-  ~ObCheckMediumCompactionInfoListResult() {}
-  TO_STRING_KV(K(info_list_cnt_), K_(primary_compaction_scn));
-public:
-  int64_t info_list_cnt_;
-  int64_t primary_compaction_scn_;
-};
-
-
-
 struct ObDropForeignKeyArg : public ObIndexArg
 {
   OB_UNIS_VERSION_V(1);
@@ -2908,21 +2668,16 @@ public:
   ~ObCreateTabletExtraInfo() { reset(); }
   int init(const uint64_t tenant_data_version,
            const bool need_create_empty_major,
-           const bool micro_index_clustered,
-           const ObTabletID &split_src_tablet_id);
+           const bool micro_index_clustered);
   void reset();
   int assign(const ObCreateTabletExtraInfo &other);
 public:
   uint64_t tenant_data_version_;
   bool need_create_empty_major_;
   bool micro_index_clustered_;
-  ObTabletID split_src_tablet_id_;
-  bool split_can_reuse_macro_block_;
   TO_STRING_KV(K_(tenant_data_version),
                K_(need_create_empty_major),
-               K_(micro_index_clustered),
-               K_(split_src_tablet_id),
-               K_(split_can_reuse_macro_block));
+               K_(micro_index_clustered));
 };
 
 // ObBatchCreateTabletArg moved definition to storage/tablet/ob_batch_create_tablet_arg.h
@@ -4545,21 +4300,6 @@ public:
   uint64_t last_replay_log_id_;
 };
 
-struct ObSplitPartitionArg
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObSplitPartitionArg(): split_info_() {}
-  ~ObSplitPartitionArg() {}
-  TO_STRING_KV(K_(split_info));
-  bool is_valid() const { return split_info_.is_valid(); }
-  void reset() { split_info_.reset(); }
-public:
-  share::ObSplitPartition split_info_;
-};
-
-
-
 
 
 
@@ -5169,7 +4909,6 @@ public:
   int64_t physical_row_count_;
 };
 
-// === RPC for tablet split start. ===
 
 
 
@@ -5177,85 +4916,6 @@ public:
 
 
 
-struct ObAutoSplitTabletArg final
-{
-  OB_UNIS_VERSION(2);
-public:
-  ObAutoSplitTabletArg()
-    : tablet_id_(),
-      auto_split_tablet_size_(OB_INVALID_SIZE), used_disk_space_(OB_INVALID_SIZE)
-    {}
-  ~ObAutoSplitTabletArg() = default;
-  int assign(const ObAutoSplitTabletArg &other);
-  bool is_valid() const
-  {
-    return tablet_id_.is_valid()
-        && OB_INVALID_SIZE != auto_split_tablet_size_ && OB_INVALID_SIZE != used_disk_space_;
-  };
-  TO_STRING_KV(K_(tablet_id), K_(auto_split_tablet_size), K_(used_disk_space));
-public:
-  ObTabletID tablet_id_;
-  
-  int64_t auto_split_tablet_size_;
-  int64_t used_disk_space_;
-};
-
-struct ObAutoSplitTabletBatchArg final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObAutoSplitTabletBatchArg()
-    : args_()
-    {}
-  ~ObAutoSplitTabletBatchArg() = default;
-  bool is_valid() const;
-  TO_STRING_KV(K_(args));
-public:
-  ObSArray<ObAutoSplitTabletArg> args_;
-};
-
-struct ObAutoSplitTabletBatchRes final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObAutoSplitTabletBatchRes()
-    : rets_(), suggested_next_valid_time_(OB_INVALID_TIMESTAMP)
-    {}
-  ~ObAutoSplitTabletBatchRes() = default;
-  bool is_valid() const;
-  TO_STRING_KV(K_(rets), K_(suggested_next_valid_time));
-public:
-  ObSArray<int64_t> rets_;
-  int64_t suggested_next_valid_time_;
-};
-
-struct ObFetchSplitTabletInfoArg final
-{
-  OB_UNIS_VERSION(2);
-public:
-  ObFetchSplitTabletInfoArg() : tablet_ids_() {}
-  ~ObFetchSplitTabletInfoArg() = default;
-  bool is_valid() const { return !tablet_ids_.empty(); }
-  TO_STRING_KV(K_(tablet_ids));
-public:
-  common::ObSArray<ObTabletID> tablet_ids_;
-};
-
-struct ObFetchSplitTabletInfoRes final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObFetchSplitTabletInfoRes() : tablet_sizes_(), create_commit_versions_() {}
-  ~ObFetchSplitTabletInfoRes() = default;
-  bool is_valid() const { return !create_commit_versions_.empty() && !tablet_sizes_.empty(); }
-  TO_STRING_KV(K_(tablet_sizes), K_(create_commit_versions));
-public:
-  common::ObSArray<int64_t> tablet_sizes_;
-  common::ObSArray<int64_t> create_commit_versions_;
-};
-
-
-// === RPC for tablet split end. ===
 
 
 
@@ -5536,26 +5196,6 @@ public:
   common::ObSArray<common::ObTabletID> tablet_ids_;
   bool check_committed_;
 };
-
-
-struct ObBatchGetTabletSplitArg final
-{
-  OB_UNIS_VERSION(2);
-public:
-  ObBatchGetTabletSplitArg()
-    : tablet_ids_(), check_committed_(false)
-  {}
-  ~ObBatchGetTabletSplitArg() {}
-public:
-  bool is_valid() const { return tablet_ids_.count() > 0; }
-  int init(const common::ObIArray<common::ObTabletID> &tablet_ids, const bool check_committed);
-  TO_STRING_KV(K_(tablet_ids), K_(check_committed));
-public:
-  common::ObSArray<common::ObTabletID> tablet_ids_;
-  bool check_committed_;
-};
-
-
 
 
 struct ObInitTenantConfigArg

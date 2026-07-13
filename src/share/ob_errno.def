@@ -869,7 +869,6 @@ DEFINE_ERROR_EXT(OB_ERR_NONUNIQ_TABLE, -5208, ER_NONUNIQ_TABLE, "42000", "Not un
 DEFINE_ERROR_EXT(OB_ERR_CANT_DROP_FIELD_OR_KEY, -5209, ER_CANT_DROP_FIELD_OR_KEY, "42000", "Can't DROP Column; check that column/key exists", "Can't DROP '%.*s'; check that column/key exists");
 DEFINE_ERROR(OB_ERR_MULTIPLE_PRI_KEY, -5210, ER_MULTIPLE_PRI_KEY, "42000", "Multiple primary key defined");
 DEFINE_ERROR_EXT(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, -5211, ER_KEY_COLUMN_DOES_NOT_EXITS, "42000", "Key column doesn't exist in table", "Key column '%.*s' doesn't exist in table");
-DEFINE_ERROR_EXT(OB_ERR_AUTO_PARTITION_KEY, -5212, -1, "42000", "auto-increment column should not be part of partition key", "auto-increment column '%.*s' should not be part of partition key");
 DEFINE_ERROR_EXT(OB_ERR_CANT_USE_OPTION_HERE, -5213, ER_CANT_USE_OPTION_HERE, "42000", "Incorrect usage/placement", "Incorrect usage/placement of '%s'");
 DEFINE_ERROR_EXT(OB_ERR_WRONG_OBJECT, -5214, ER_WRONG_OBJECT, "HY000", "Wrong object", "\'%s.%s\' is not %s");
 DEFINE_ERROR_EXT(OB_ERR_ON_RENAME, -5215, ER_ERROR_ON_RENAME, "HY000", "Error on rename table", "Error on rename of \'%s.%s\' to \'%s.%s\'");
@@ -1215,14 +1214,11 @@ DEFINE_ERROR_EXT(OB_ERR_CONSTRAINT_DUPLICATE, -5562, -1, "HY000", "Duplicate con
 DEFINE_ERROR(OB_ERR_CONTRAINT_NOT_FOUND, -5563, -1, "HY000", "Constraint not found");
 DEFINE_ERROR_EXT(OB_ERR_ALTER_TABLE_ALTER_DUPLICATED_INDEX, -5564, -1, "HY000", "Duplicate alter index operations", "Duplicate alter index operations on column \'%.*s\'");
 DEFINE_ERROR(OB_EER_INVALID_ARGUMENT_FOR_LOGARITHM, -5565, ER_INVALID_ARGUMENT_FOR_LOGARITHM, "2201E", "Invalid argument for logarithm");
-DEFINE_ERROR(OB_ERR_REORGANIZE_OUTSIDE_RANGE, -5566, ER_REORG_OUTSIDE_RANGE, "HY000", "Reorganize of range partitions cannot change total ranges except for last partition where it can extend the range");
 DEFINE_ERROR_EXT(OB_ER_SP_RECURSION_LIMIT, -5567, ER_SP_RECURSION_LIMIT, "HY000", "Recursive limit was exceeded", "Recursive limit %ld (as set by the max_sp_recursion_depth variable) was exceeded for routine");
 DEFINE_ERROR(OB_ER_UNSUPPORTED_PS, -5568, ER_UNSUPPORTED_PS, "HY000", "This command is not supported in the prepared statement protocol yet");
 DEFINE_ERROR_EXT(OB_ER_STMT_NOT_ALLOWED_IN_SF_OR_TRG, -5569, ER_STMT_NOT_ALLOWED_IN_SF_OR_TRG, "0A000", "stmt is not allowed in stored function or trigger", "%s is not allowed in stored function or trigger");
 DEFINE_ERROR(OB_ER_SP_NO_RECURSION, -5570, ER_SP_NO_RECURSION, "HY000", "Recursive stored functions are not allowed.");
 DEFINE_ERROR(OB_ER_SP_CASE_NOT_FOUND, -5571, ER_SP_CASE_NOT_FOUND, "20000", "Case not found for CASE statement");
-DEFINE_ERROR(OB_ERR_INVALID_SPLIT_COUNT, -5572, -1, "HY000", "a partition may be split into exactly two new partitions");
-DEFINE_ERROR(OB_ERR_INVALID_SPLIT_GRAMMAR, -5573, -1, "HY000", "this physical attribute may not be specified for a table partition");
 DEFINE_ERROR(OB_ERR_MISS_VALUES, -5574, -1, "HY000", "missing VALUES keyword");
 DEFINE_ERROR(OB_ERR_MISS_AT_VALUES, -5575, -1, "HY000", "missing AT or VALUES keyword");
 DEFINE_ERROR(OB_ER_COMMIT_NOT_ALLOWED_IN_SF_OR_TRG, -5576, ER_COMMIT_NOT_ALLOWED_IN_SF_OR_TRG, "HY000", "Explicit or implicit commit is not allowed in stored function or trigger.");
@@ -1246,9 +1242,7 @@ DEFINE_ERROR_EXT(OB_ER_SP_LILABEL_MISMATCH, -5593, ER_SP_LILABEL_MISMATCH, "4200
 DEFINE_ERROR_EXT(OB_ERR_TRUNCATE_ILLEGAL_FK, -5594, ER_TRUNCATE_ILLEGAL_FK, "42000", "Cannot truncate a table referenced in a foreign key constraint", "Cannot truncate a table referenced in a foreign key constraint %.*s");
 DEFINE_ERROR_EXT(OB_ERR_DUP_KEY, -5595, ER_DUP_KEY, "23000", "Can't write; duplicate key in table", "Can't write; duplicate key in table \'%.*s\'");
 DEFINE_ERROR(OB_ER_INVALID_USE_OF_NULL, -5596, ER_INVALID_USE_OF_NULL, "22004", "Invalid use of NULL value");
-DEFINE_ERROR(OB_ERR_SPLIT_LIST_LESS_VALUE, -5597, -1, "HY000", "last resulting partition cannot contain bounds");
 DEFINE_ERROR(OB_ERR_ADD_PARTITION_TO_DEFAULT_LIST, -5598, -1, "HY000", "cannot add partition when DEFAULT partition exists");
-DEFINE_ERROR(OB_ERR_SPLIT_INTO_ONE_PARTITION, -5599, -1, "HY000", "cannot split partition into one partition, use rename instead");
 DEFINE_ERROR_EXT(OB_ERR_NO_TENANT_PRIVILEGE, -5600, -1, "HY000", "can not create user in sys tenant", "can not create user %s in sys tenant, name %.*s");
 DEFINE_ERROR(OB_ERR_INVALID_PERCENTAGE, -5601, -1, "HY000", "Percentage should between 1 and 99");
 DEFINE_ERROR(OB_ERR_COLLECT_HISTOGRAM, -5602, -1, "HY000", "Should collect histogram after major freeze");
@@ -1715,7 +1709,6 @@ DEFINE_ERROR(OB_PARTITION_IS_STOPPED, -6228, -1, "HY000", "Partition has been st
 DEFINE_ERROR(OB_PARTITION_IS_BLOCKED, -6229, -1, "HY000", "Partition has been blocked");
 DEFINE_ERROR(OB_TRANS_RPC_TIMEOUT, -6230, 4012, "25000", "transaction rpc timeout");
 DEFINE_ERROR(OB_REPLICA_NOT_READABLE, -6231, -1, "HY000", "replica is not readable");
-DEFINE_ERROR(OB_PARTITION_IS_SPLITTING, -6232, -1, "HY000", "Partition is splitting");
 DEFINE_ERROR(OB_TRANS_COMMITED, -6233, -1, "HY000", "Transaction has been commited");
 DEFINE_ERROR(OB_TRANS_CTX_COUNT_REACH_LIMIT, -6234, 6002, "25000", "transaction context count reach limit");
 DEFINE_ERROR(OB_TRANS_CANNOT_SERIALIZE, -6235, -1, "25000", "can't serialize access for this transaction");
@@ -1811,9 +1804,6 @@ DEFINE_ERROR(OB_CLOG_SLIDE_TIMEOUT, -6322, -1, "HY000", "ob clog slide timeout")
 DEFINE_ERROR(OB_LOG_REPLAY_ERROR, -6323, -1, "HY000", "log replay error");
 DEFINE_ERROR(OB_TRY_LOCK_CONFIG_CHANGE_CONFLICT, -6324, -1, "HY000", "ob trying to lock config change conflicts");
 DEFINE_ERROR(OB_CLOG_DISK_HANG, -6325, -1, "HY000", "ob clog disk hang");
-DEFINE_ERROR(OB_TABLE_LOCK_SPLIT_TWICE, -6326, -1, "HY000", "table lock has been splitted before, can not be splitted again")
-DEFINE_ERROR(OB_TABLE_LOCK_IS_SPLITTING, -6327, -1, "HY000", "table lock is being splitted, can not be splitted again")
-DEFINE_ERROR(OB_TABLE_LOCK_SPLIT_FAIL, -6328, -1, "HY000", "table lock splitting failed")
 DEFINE_ERROR(OB_SEQ_NO_REORDER_UNDER_PDML, -6329, -1, "HY000", "pdml sql need retry under sequence number reorder")
 DEFINE_ERROR(OB_USER_OUTOF_DATA_DISK_SPACE, -6330, -1, "HY000", "user data disk is almost full")
 DEFINE_ERROR(OB_ARB_DEGRADE, -6331, -1, "HY000", "logstream has been degraded due to error")
@@ -2266,11 +2256,9 @@ DEFINE_ERROR_EXT_DEP(OB_RESTORE_SOURCE_NOT_ENOUGH, -9119, -1, "HY000", "do not h
 DEFINE_ERROR_DEP(OB_OBJECT_NOT_EXIST, -9120, -1, "HY000", "cannot find object on object storage");
 DEFINE_ERROR_DEP(OB_S2_REUSE_VERSION_MISMATCH, -9121, -1, "HY000", "reuse_version of mem_block or phy_block is not mismatched with micro_meta in s2 micro_cache");
 DEFINE_ERROR_DEP(OB_S2_ENTRY_NOT_EXIST, -9122, -1, "HY000", "entry not exist in s2 micro_cache");
-DEFINE_ERROR(OB_TABLET_IS_SPLIT_SRC, -9123, -1, "HY000", "cannot write to split src tablet");
 DEFINE_ERROR_DEP(OB_ALLOCATE_TMP_FILE_PAGE_FAILED, -9124, -1, "HY000", "fail to allocate a tmp file page");
 DEFINE_ERROR_DEP(OB_SS_MICRO_CACHE_DISABLED, -9125, -1, "HY000", "ss_micro_cache is disabled");
 DEFINE_ERROR_DEP(OB_SS_CACHE_REACH_MEM_LIMIT, -9126, -1, "HY000", "ss_micro_cache has reached memory limit");
-DEFINE_ERROR(OB_TABLET_STATUS_NO_NEED_TO_SPLIT, -9127, -1, "HY000", "no need to split due to current tablet status");
 DEFINE_ERROR(OB_FILE_DELETE_FAILED, -9128, -1, "HY000", "fail to delete file");
 
 DEFINE_ERROR_DEP(OB_OBJECT_STORAGE_IO_ERROR, -9129, -1, "HY000", "object storage io error");

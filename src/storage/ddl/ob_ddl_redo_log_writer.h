@@ -241,11 +241,6 @@ public:
       share::SCN &commit_scn,
       uint32_t &lock_tid);
   template <typename T>
-  static int write_auto_split_log(const ObDDLClogType &clog_type,
-                                  const logservice::ObReplayBarrierType &replay_barrier_type,
-                                  const T &log,
-                                  SCN &scn);
-  template <typename T>
   static int write_auto_fork_log(const ObDDLClogType &clog_type,
                                   const logservice::ObReplayBarrierType &replay_barrier_type,
                                   const T &log,

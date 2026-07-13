@@ -171,61 +171,6 @@ int ObITabletMdsInterface::get_autoinc_seq(
   #undef PRINT_WRAPPER
 }
 
-int ObITabletMdsInterface::get_split_data(
-    ObTabletSplitMdsUserData &data,
-    const int64_t timeout) const
-{
-  #define PRINT_WRAPPER KR(ret), K(data), K(timeout)
-  MDS_TG(10_ms);
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!check_is_inited_())) {
-    ret = OB_NOT_INIT;
-    MDS_LOG_GET(WARN, "not inited");
-  } else {
-    // TODO(lihongqin.lhq): use get_latest_committed and block during 2pc
-    const share::SCN snapshot = share::SCN::max_scn();
-    if (CLICK_FAIL((get_snapshot<mds::DummyKey, ObTabletSplitMdsUserData>(mds::DummyKey(),
-        ReadSplitDataOp(data), snapshot, timeout)))) {
-      if (OB_EMPTY_RESULT != ret) {
-        MDS_LOG_GET(WARN, "fail to get snapshot", K(lbt()));
-      } else {
-        data.reset(); // use default value
-        ret = OB_SUCCESS;
-      }
-    }
-  }
-
-  return ret;
-  #undef PRINT_WRAPPER
-}
-
-int ObITabletMdsInterface::split_partkey_compare(const blocksstable::ObDatumRowkey &rowkey,
-                                                 const ObITableReadInfo &rowkey_read_info,
-                                                 const ObIArray<uint64_t> &partkey_projector,
-                                                 int &cmp_ret,
-                                                 const int64_t timeout) const
-{
-  #define PRINT_WRAPPER KR(ret), K(rowkey), K(rowkey_read_info)
-  MDS_TG(10_ms);
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!check_is_inited_())) {
-    ret = OB_NOT_INIT;
-    MDS_LOG_GET(WARN, "not inited");
-  } else {
-    // TODO(lihongqin.lhq): use get_latest_committed and block during 2pc
-    const share::SCN snapshot = share::SCN::max_scn();
-    if (CLICK_FAIL((get_snapshot<mds::DummyKey, ObTabletSplitMdsUserData>(mds::DummyKey(),
-        ReadSplitDataPartkeyCompareOp(rowkey, rowkey_read_info, partkey_projector, cmp_ret), snapshot, timeout)))) {
-      if (OB_EMPTY_RESULT != ret) {
-        MDS_LOG_GET(WARN, "fail to get snapshot", K(ret), K(lbt()));
-      }
-    }
-  }
-
-  return ret;
-  #undef PRINT_WRAPPER 
-}
-
 int ObITabletMdsInterface::read_raw_data(
     common::ObIAllocator &allocator,
     const uint8_t mds_unit_id,

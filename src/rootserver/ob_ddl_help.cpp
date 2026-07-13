@@ -218,10 +218,6 @@ int ObTableGroupHelp::check_table_partition_in_tablegroup(const ObTableSchema *f
   } else if (OB_ISNULL(tablegroup_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablegroup schema is null", KR(ret), KT(tablegroup_id));
-  } else if (table.is_in_splitting() || tablegroup_schema->is_in_splitting()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("table or tablegroup is splitting", KR(ret), K(table), KPC(tablegroup_schema));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "add table to tablegroup while either object is splitting");
   } else {
     // sort partition info in order, to prevent same value not in order from being misjudged
     if (OB_FAIL(ObSchemaServiceSQLImpl::sort_table_partition_info_v2(table))) {
@@ -332,7 +328,7 @@ int ObTableGroupHelp::check_table_partition_option(const ObTableSchema *table_sc
  * 1.For hash partition, the number of partitions must be the same
  * 2.For key partition, the number of partitions must be the same and the column_list_num must match
  * 3.For range/range column or list/list column partition,
- *   the number of partition expressions partitions/partition split point are required to be same
+ *   the number of partition expressions and partitions are required to be same
  */
 
 int ObTableGroupHelp::check_partition_option(

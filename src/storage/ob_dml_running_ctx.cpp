@@ -131,7 +131,6 @@ int ObDMLRunningCtx::prepare_relative_table(
     const SCN &read_snapshot)
 {
   int ret = OB_SUCCESS;
-  bool need_get_src_split_tables = false;
   is_delete_insert_table_ = false;
   if (OB_FAIL(relative_table_.init(&schema, tablet_handle.get_obj()->get_tablet_meta().tablet_id_,
       schema.is_storage_index_table() && !schema.can_read_index()))) {
@@ -143,9 +142,7 @@ int ObDMLRunningCtx::prepare_relative_table(
   } else if (OB_FAIL(relative_table_.tablet_iter_.refresh_read_tables_from_tablet(
       read_snapshot.get_val_for_tx(), 
       relative_table_.allow_not_ready(), 
-      false/*major_sstable_only*/,
-      true/*need_split_src_table*/,
-      false/*need_split_dst_table*/))) {
+      false/*major_sstable_only*/))) {
     LOG_WARN("failed to get relative table read tables", K(ret));
   } else if (schema.get_read_info().need_truncate_filter() &&
       OB_FAIL(relative_table_.prepare_truncate_part_filter(allocator_, read_snapshot.get_val_for_tx()))) {
@@ -289,24 +286,6 @@ int ObDMLRunningCtx::check_schema_version(
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("failed to get schema", K(ret));
-  } else if (table_schema->is_auto_partitioned_table()) {
-    // Online partition split allows dml with old schema to continue executing,
-    // so checkings must be done case by case.
-    if (table_version > table_schema->get_schema_version()) {
-      ret = OB_SCHEMA_EAGAIN;
-      LOG_WARN("table version mismatch", K(ret), K(table_id), K(table_version), K(table_schema->get_schema_version()));
-    } else if (table_version < table_schema->get_schema_version()) {
-      // 1. check for wait trans end's check_schema_version_elapsed
-      int64_t data_max_schema_version = 0;
-      if (OB_FAIL(tablet_handle.get_obj()->get_max_schema_version(data_max_schema_version))) {
-        LOG_WARN("failed to get max schema version", K(ret));
-      } else if (table_version < data_max_schema_version) {
-        ret = OB_SCHEMA_EAGAIN;
-        LOG_WARN("table version mismatch", K(ret), K(table_id), K(table_version), K(data_max_schema_version), K(table_schema->get_schema_version()));
-      } else {
-        FLOG_INFO("allow table version mismatch", K(table_id), K(table_version), K(data_max_schema_version), K(table_schema->get_schema_version()));
-      }
-    }
   } else if (table_version != table_schema->get_schema_version()) {
     ret = OB_SCHEMA_EAGAIN;
     LOG_WARN("table version mismatch", K(ret), K(table_id), K(table_version), K(table_schema->get_schema_version()));

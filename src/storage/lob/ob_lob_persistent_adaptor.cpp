@@ -13,9 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #define USING_LOG_PREFIX STORAGE
-
 #include "ob_lob_persistent_adaptor.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/access/ob_table_scan_iterator.h"
@@ -193,38 +191,6 @@ int ObPersistentLobApator::fetch_lob_id(ObLobAccessParam& param, uint64_t &lob_i
       LOG_DEBUG("get lob_id succ", K(lob_id), K(param));
     }
 
-    if (OB_TABLET_IS_SPLIT_SRC == ret) {
-      if (OB_FAIL(fetch_lob_id_for_split_src(param, param.lob_meta_tablet_id_, lob_id))) {
-        LOG_WARN("get lob_id for split src fail", K(ret), K(param.lob_meta_tablet_id_));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObPersistentLobApator::fetch_lob_id_for_split_src(const ObLobAccessParam& param, const ObTabletID &lob_tablet_id, uint64_t &lob_id)
-{
-  int ret = OB_SUCCESS;
-  
-  ObLS *tenant_ls = nullptr;
-  ObTabletHandle tablet_handle;
-  ObTabletID dst_tablet_id;
-  share::ObTabletAutoincrementService &auto_inc = share::ObTabletAutoincrementService::get_instance();
-  if (OB_ISNULL(param.data_row_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid data row", K(ret), K(lob_tablet_id));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
-    LOG_WARN("failed to get log stream", K(ret));
-  } else if (OB_FAIL(tenant_ls->get_tablet_with_timeout(lob_tablet_id,
-                                                                 tablet_handle,
-                                                                 param.timeout_,
-                                                                 ObMDSGetTabletMode::READ_ALL_COMMITED,
-                                                                 share::SCN::max_scn()))) {
-    LOG_WARN("fail to get tablet handle", K(ret), K(lob_tablet_id), K(param));
-  } else if (OB_FAIL(ObTabletSplitMdsHelper::calc_split_dst_lob(*tenant_ls, *tablet_handle.get_obj(), *param.data_row_, param.timeout_, dst_tablet_id))) {
-    LOG_WARN("failed to calc split dst tablet", K(ret));
-  } else if (OB_FAIL(auto_inc.get_autoinc_seq(dst_tablet_id, lob_id, share::ObTabletAutoincrementService::LOB_CACHE_SIZE))) {
-    LOG_WARN("get lob_id fail", K(ret), K(dst_tablet_id));
   }
   return ret;
 }
@@ -281,7 +247,6 @@ int ObPersistentLobApator::build_lob_meta_table_dml(
   dml_base_param.tz_info_ = NULL;
   dml_base_param.sql_mode_ = SMO_DEFAULT;
   dml_base_param.check_schema_version_ = false; // lob tablet should not check schema version
-  dml_base_param.data_row_for_lob_ = param.data_row_;
   dml_base_param.schema_version_ = 0;
   dml_base_param.store_ctx_guard_ = store_ctx_guard;
   dml_base_param.write_flag_.reset();
@@ -422,21 +387,11 @@ int ObPersistentLobApator::inner_get_tablet(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tenant_ls->get_tablet_with_timeout(tablet_id,
-                                                                 handle,
-                                                                 param.timeout_,
-                                                                 ObMDSGetTabletMode::READ_READABLE_COMMITED,
-                                                                 param.snapshot_.core_.version_))) {
-    if (OB_TABLET_IS_SPLIT_SRC == ret) {
-      if (OB_FAIL(tenant_ls->get_tablet_with_timeout(tablet_id,
-                                                              handle,
-                                                              param.timeout_,
-                                                              ObMDSGetTabletMode::READ_ALL_COMMITED,
-                                                              share::SCN::max_scn()))) {
-        LOG_WARN("fail to get tablet handle", K(ret), K(tablet_id), K(param));
-      }
-    } else {
-      LOG_WARN("fail to get tablet handle", K(ret), K(tablet_id), K(param));
-    }
+                                                 handle,
+                                                 param.timeout_,
+                                                 ObMDSGetTabletMode::READ_READABLE_COMMITED,
+                                                 param.snapshot_.core_.version_))) {
+    LOG_WARN("fail to get tablet handle", K(ret), K(tablet_id), K(param));
   }
   return ret;
 }
@@ -761,6 +716,5 @@ int ObPersistentLobApator::update_lob_meta(ObLobAccessParam& param, ObLobMetaInf
   }
   return ret;
 }
-
 } // storage
 } // oceanbase

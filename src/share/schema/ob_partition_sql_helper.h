@@ -368,28 +368,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObUpdatePartHelper);
 };
 
-// split partition
-class ObAddSplitIncPartHelper
-{
-public:
-  ObAddSplitIncPartHelper(const ObPartitionSchema *ori_table,
-                          const ObPartitionSchema *inc_table,
-                          const int64_t schema_version,
-                          common::ObISQLClient &sql_client)
-      : ori_table_(ori_table),
-        inc_table_(inc_table),
-        schema_version_(schema_version),
-        sql_client_(sql_client) {}
-  virtual ~ObAddSplitIncPartHelper() {}
-  int add_split_partition_info();
-private:
-  const ObPartitionSchema *ori_table_;
-  const ObPartitionSchema *inc_table_;
-  int64_t schema_version_;
-  common::ObISQLClient &sql_client_;
-  DISALLOW_COPY_AND_ASSIGN(ObAddSplitIncPartHelper);
-};
-
 // add/truncate partition
 class ObAddIncPartHelper
 {

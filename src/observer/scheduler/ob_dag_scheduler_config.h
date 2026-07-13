@@ -70,10 +70,6 @@ DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_DDL_KV_MERGE, ObDagPrio::DAG_PRIO_DDL_HIGH, 
     true, 2, {"tablet_id", "rec_scn"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_DDL_DEL_LOB_META, ObDagPrio::DAG_PRIO_DDL, ObSysTaskType::DDL_TASK, "DDL_DEL_LOB_META", "DROP_VEC_INDEX",
     true, 5, {"table_id", "tablet_id", "dest_tablet_id", "schema_version", "snapshot_version"})
-DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_TABLET_SPLIT, ObDagPrio::DAG_PRIO_DDL, ObSysTaskType::DDL_TABLET_SPLIT, "DDL_TABLET_SPLIT", "DDL",
-    true, 1, {"source_tablet_id"})
-DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_LOB_SPLIT, ObDagPrio::DAG_PRIO_DDL, ObSysTaskType::DDL_TABLET_SPLIT, "DDL_TABLET_SPLIT", "DDL",
-    true, 1, {"source_tablet_id"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_FORK_TABLE, ObDagPrio::DAG_PRIO_DDL, ObSysTaskType::DDL_TASK, "DDL_FORK_TABLE", "DDL",
   true, 1, {"source_tablet_id"})
 

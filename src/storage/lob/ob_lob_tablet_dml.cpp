@@ -65,7 +65,6 @@ int ObLobTabletDmlHelper::build_common_lob_param_for_dml(
   lob_param.timeout_ = run_ctx.dml_param_.timeout_;
   lob_param.scan_backward_ = false;
   lob_param.offset_ = 0;
-  lob_param.data_row_ = &data_row;
   lob_param.is_index_table_ = run_ctx.relative_table_.is_index_table();
   lob_param.main_table_rowkey_col_ = run_ctx.is_main_table_rowkey_col(col_idx) ||
     (!run_ctx.relative_table_.is_index_table() && col_idx < run_ctx.relative_table_.get_rowkey_column_num());

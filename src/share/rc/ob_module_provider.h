@@ -120,7 +120,6 @@ public:
   virtual storage::ObGlobalIteratorPool * global_iterator_pool() { return nullptr; }
   virtual common::ObRbMemMgr * rb_mem_mgr() { return nullptr; }
   virtual share::ObPluginVectorIndexService * plugin_vector_index_service() { return nullptr; }
-  virtual share::ObAutoSplitTaskCache * auto_split_task_cache() { return nullptr; }
   virtual observer::ObTenantQueryRespTimeCollector * tenant_query_resp_time_collector() { return nullptr; }
   virtual table::ObTableGroupCommitMgr * table_group_commit_mgr() { return nullptr; }
   virtual observer::ObTableQueryASyncMgr * table_query_a_sync_mgr() { return nullptr; }

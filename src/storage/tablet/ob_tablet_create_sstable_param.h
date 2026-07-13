@@ -99,7 +99,7 @@ public:
                       const int64_t create_schema_version_on_tablet);
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
-  int init_for_split(const ObTabletID &dst_tablet_id,
+  int init_for_fork(const ObTabletID &dst_tablet_id,
                      const ObITable::TableKey &src_table_key,
                      const blocksstable::ObSSTableBasicMeta &basic_meta,
                      const int64_t schema_version,
@@ -107,21 +107,10 @@ public:
                      const share::SCN &max_end_scn);
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
-  int init_for_split_empty_minor_sstable(const ObTabletID &tablet_id,
-                                         const share::SCN &start_scn,
-                                         const share::SCN &end_scn,
-                                         const blocksstable::ObSSTableBasicMeta &basic_meta);
-
-  // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
-  int init_for_lob_split(const ObTabletID &new_tablet_id,
-                         const ObITable::TableKey &table_key,
-                         const blocksstable::ObSSTableBasicMeta &basic_meta,
-                         const compaction::ObMergeType &merge_type,
-                         const int64_t schema_version,
-                         const int64_t dst_major_snapshot_version,
-                         const int64_t uncommitted_tx_id,
-                         const int64_t sstable_logic_seq,
-                         const blocksstable::ObSSTableMergeRes &res);
+  int init_for_empty_minor_sstable(const ObTabletID &tablet_id,
+                                   const share::SCN &start_scn,
+                                   const share::SCN &end_scn,
+                                   const blocksstable::ObSSTableBasicMeta &basic_meta);
 
   int init_for_fork(const blocksstable::ObForkSSTableParam &sstable_param,
                     const ObTabletID &dst_tablet_id,

@@ -518,13 +518,11 @@ public:
   void reset()
   {
     is_micro_index_clustered_ = false;
-    reorganization_scn_.reset();
     storage_schema_ = nullptr;
   }
-  TO_STRING_KV(K_(is_micro_index_clustered), K_(reorganization_scn), KP_(storage_schema));
+  TO_STRING_KV(K_(is_micro_index_clustered), KP_(storage_schema));
 public:
   bool is_micro_index_clustered_; // get from tablet meta
-  share::SCN reorganization_scn_; // get from tablet meta
   ObStorageSchema *storage_schema_; // references to ObDDLTableSchema
 };
 

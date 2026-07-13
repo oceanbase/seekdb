@@ -471,7 +471,6 @@ public:
   storage::ObGlobalIteratorPool * global_iterator_pool() override { return mods_global_iterator_pool_; }
   common::ObRbMemMgr * rb_mem_mgr() override { return mods_rb_mem_mgr_; }
   share::ObPluginVectorIndexService * plugin_vector_index_service() override { return mods_plugin_vector_index_service_; }
-  share::ObAutoSplitTaskCache * auto_split_task_cache() override { return mods_auto_split_task_cache_; }
   observer::ObTenantQueryRespTimeCollector * tenant_query_resp_time_collector() override { return mods_tenant_query_resp_time_collector_; }
   table::ObTableGroupCommitMgr * table_group_commit_mgr() override { return mods_table_group_commit_mgr_; }
   observer::ObTableQueryASyncMgr * table_query_a_sync_mgr() override { return mods_table_query_a_sync_mgr_; }
@@ -573,7 +572,6 @@ private:
   storage::ObGlobalIteratorPool * mods_global_iterator_pool_ = nullptr;
   common::ObRbMemMgr * mods_rb_mem_mgr_ = nullptr;
   share::ObPluginVectorIndexService * mods_plugin_vector_index_service_ = nullptr;
-  share::ObAutoSplitTaskCache * mods_auto_split_task_cache_ = nullptr;
   observer::ObTenantQueryRespTimeCollector * mods_tenant_query_resp_time_collector_ = nullptr;
   table::ObTableGroupCommitMgr * mods_table_group_commit_mgr_ = nullptr;
   observer::ObTableQueryASyncMgr * mods_table_query_a_sync_mgr_ = nullptr;

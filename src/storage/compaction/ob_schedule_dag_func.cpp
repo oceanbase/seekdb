@@ -19,7 +19,6 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag_param.h"
-#include "storage/ddl/ob_tablet_lob_split_task.h"
 #include "storage/ddl/ob_tablet_fork_task.h"
 #include "storage/compaction/ob_batch_freeze_tablets_dag.h"
 
@@ -43,16 +42,6 @@ namespace compaction
     LOG_DEBUG("success to schedule tablet merge dag", K(ret), K(param));       \
   }
 
-#define CREATE_AND_GET_DAG(T, dag) \
-  { \
-    if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->create_dag<T>(&param, dag))) { \
-      if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) { \
-        LOG_WARN("failed to create merge dag", K(ret), K(param)); \
-      } \
-    } else { \
-      LOG_DEBUG("success to create and get dag", K(ret), K(param)); \
-    } \
-  }
 int ObScheduleDagFunc::schedule_tx_table_merge_dag(
     ObTabletMergeDagParam &param,
     const bool is_emergency)
@@ -83,43 +72,6 @@ int ObScheduleDagFunc::schedule_ddl_table_merge_dag(
 {
   int ret = OB_SUCCESS;
   CREATE_DAG(ObDDLTableMergeDag);
-  return ret;
-}
-
-int ObScheduleDagFunc::schedule_tablet_split_dag(
-    ObTabletSplitParam &param,
-    const bool is_emergency)
-{
-  int ret = OB_SUCCESS;
-  CREATE_DAG(ObTabletSplitDag);
-  return ret;
-}
-int ObScheduleDagFunc::schedule_and_get_tablet_split_dag(
-    storage::ObTabletSplitParam &param,
-    storage::ObTabletSplitDag *&dag,
-    const bool is_emergency)
-{
-  int ret = OB_SUCCESS;
-  CREATE_AND_GET_DAG(ObTabletSplitDag, dag);
-  return ret;
-}
-
-int ObScheduleDagFunc::schedule_lob_tablet_split_dag(
-    ObLobSplitParam &param,
-    const bool is_emergency)
-{
-  int ret = OB_SUCCESS;
-  CREATE_DAG(ObTabletLobSplitDag);
-  return ret;
-}
-
-int ObScheduleDagFunc::schedule_and_get_lob_tablet_split_dag(
-    storage::ObLobSplitParam &param,
-    storage::ObTabletLobSplitDag *&dag,
-    const bool is_emergency)
-{
-  int ret = OB_SUCCESS;
-  CREATE_AND_GET_DAG(ObTabletLobSplitDag, dag);
   return ret;
 }
 

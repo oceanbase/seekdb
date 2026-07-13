@@ -37,8 +37,6 @@ struct ObStorageEnv;
 
 namespace share
 {
-class ObSplitPartition;
-class ObSplitPartitionPair;
 class ObServerLocality;
 }
 

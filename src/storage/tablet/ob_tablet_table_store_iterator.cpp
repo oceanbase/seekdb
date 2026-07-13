@@ -34,7 +34,6 @@ ObTableStoreIterator::ObTableStoreIterator(const bool reverse, const bool need_l
     table_ptr_array_(),
     pos_(INT64_MAX),
     memstore_retired_(nullptr),
-    split_extra_table_store_handles_(),
     fork_infos_(nullptr)
 {
   step_ = reverse ? -1 : 1;
@@ -70,10 +69,7 @@ int ObTableStoreIterator::assign(const ObTableStoreIterator& other)
       memstore_retired_ = other.memstore_retired_;
     }
 
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(split_extra_table_store_handles_.assign(other.split_extra_table_store_handles_))) {
-      LOG_WARN("failed to assign split extra table store handles", K(ret));
-    } else {
+    if (OB_SUCC(ret)) {
       fork_infos_ = other.fork_infos_;
     }
   }
@@ -91,7 +87,6 @@ void ObTableStoreIterator::reset()
   sstable_handle_array_.reset();
   table_store_handle_.reset();
   
-  split_extra_table_store_handles_.reset();
   pos_ = INT64_MAX;
   memstore_retired_ = nullptr;
   fork_infos_ = nullptr;
@@ -120,10 +115,7 @@ int ObTableStoreIterator::get_next(ObTableHandleV2 &table_handle)
   int ret = OB_SUCCESS;
   table_handle.reset();
   ObITable *table = nullptr;
-  if (OB_UNLIKELY(!split_extra_table_store_handles_.empty())) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("doesn't support cross tablet get table handle", K(ret), K(split_extra_table_store_handles_));
-  } else if (OB_FAIL(inner_move_idx_to_next())) {
+  if (OB_FAIL(inner_move_idx_to_next())) {
   } else {
     if (OB_FAIL(get_ith_table(pos_, table))) {
       LOG_WARN("fail to get ith table", K(ret), K(pos_));
@@ -197,17 +189,6 @@ int ObTableStoreIterator::set_handle(const ObStorageMetaHandle &table_store_hand
     LOG_WARN("invalid table store handle", K(ret), K(table_store_handle));
   } else {
     table_store_handle_ = table_store_handle;
-  }
-  return ret;
-}
-
-int ObTableStoreIterator::alloc_split_extra_table_store_handle(ObStorageMetaHandle *&meta_handle)
-{
-  int ret = OB_SUCCESS;
-  meta_handle = nullptr;
-  if (OB_ISNULL(meta_handle = split_extra_table_store_handles_.alloc_place_holder())) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocator memory for handle", K(ret));
   }
   return ret;
 }

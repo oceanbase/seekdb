@@ -531,12 +531,6 @@ int ObTscCgService::generate_tsc_filter(const ObLogTableScan &op, ObTableScanSpe
   ObDASScanCtDef *lookup_ctdef = spec.tsc_ctdef_.get_lookup_ctdef();
   ObSqlSchemaGuard *schema_guard = nullptr;
   const ObTableSchema *scan_table_schema = nullptr;
-  if (OB_NOT_NULL(op.get_auto_split_filter())) {
-    ObRawExpr *auto_split_expr = const_cast<ObRawExpr *>(op.get_auto_split_filter());
-    if (OB_FAIL(scan_pushdown_filters.push_back(auto_split_expr))) {
-      LOG_WARN("fail to push back auto split filter", K(ret));
-    }
-  }
   if (OB_FAIL(ret)) {
   } else if (op.use_index_merge()) {
     // full filters is used for final check when in index merge
@@ -898,19 +892,6 @@ int ObTscCgService::extract_das_access_exprs(const ObLogTableScan &op,
       LOG_WARN("failed to extract column exprs", K(ret));
     } else if (OB_FAIL(append_array_no_dup(access_exprs, filter_columns))) {
       LOG_WARN("failed to append filter columns", K(ret));
-    }
-  }
-  // extrace auto split filter column expr if need
-  if (OB_SUCC(ret)) {
-    if (OB_NOT_NULL(op.get_auto_split_filter())) {
-      ObArray<ObRawExpr *> auto_split_filter_columns;
-      ObRawExpr *auto_split_expr = const_cast<ObRawExpr *>(op.get_auto_split_filter());
-      if (OB_FAIL(ObRawExprUtils::extract_column_exprs(auto_split_expr,
-                                                       auto_split_filter_columns))) {
-        LOG_WARN("extract column exprs failed", K(ret));
-      } else if (OB_FAIL(append_array_no_dup(access_exprs, auto_split_filter_columns))) {
-        LOG_WARN("append filter column to access exprs failed", K(ret));
-      }
     }
   }
   // store group_id_expr when use group id
@@ -1300,22 +1281,6 @@ int ObTscCgService::generate_das_scan_ctdef(const ObLogTableScan &op,
       if (OB_FAIL(cg_.generate_rt_expr(*op.get_trans_info_expr(),
                                        scan_ctdef.pd_expr_spec_.trans_info_expr_))) {
         LOG_WARN("generate trans info expr failed", K(ret));
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    ObRawExpr *auto_split_expr = const_cast<ObRawExpr*>(op.get_auto_split_filter());
-    const uint64_t auto_split_filter_type = op.get_auto_split_filter_type();
-    if (OB_NOT_NULL(auto_split_expr) && OB_INVALID_ID != auto_split_filter_type) {
-      if (OB_FAIL(cg_.generate_rt_expr(*auto_split_expr,
-                                       scan_ctdef.pd_expr_spec_.auto_split_expr_))) {
-        LOG_WARN("generate auto split filter expr failed", K(ret));
-      } else if (OB_FAIL(cg_.generate_rt_exprs(op.get_auto_split_params(),
-                                               scan_ctdef.pd_expr_spec_.auto_split_params_))) {
-        LOG_WARN("generate auto split params failed", K(ret));
-      } else {
-        scan_ctdef.pd_expr_spec_.auto_split_filter_type_ = auto_split_filter_type;
       }
     }
   }

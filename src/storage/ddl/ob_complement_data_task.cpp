@@ -30,7 +30,6 @@
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/access/ob_multiple_scan_merge.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
-#include "storage/ddl/ob_tablet_split_task.h"
 #include "observer/ob_server_event_history_table_operator.h"
 #include "share/ob_tenant_timezone_mgr.h"
 #include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
@@ -1254,7 +1253,7 @@ int ObComplementWriteTask::do_local_scan()
       LOG_WARN("ddl sim failure", K(ret), KPC(param_));
     } else if (OB_FAIL(ls->get_tablet_svr()->get_read_tables(param_->orig_tablet_id_,
         ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US,
-        param_->snapshot_version_, param_->snapshot_version_, iterator, allow_not_ready, false/*need_split_src_table*/, false/*need_split_dst_table*/))) {
+        param_->snapshot_version_, param_->snapshot_version_, iterator, allow_not_ready))) {
       if (OB_REPLICA_NOT_READABLE == ret) {
         ret = OB_EAGAIN;
       } else {

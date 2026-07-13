@@ -144,7 +144,7 @@ int ObTabletRebuildUtil::build_create_empty_sstable_param(
   if (OB_UNLIKELY(!meta.is_valid() || !table_key.is_valid() || !dst_tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(meta), K(table_key), K(dst_tablet_id));
-  } else if (OB_FAIL(create_sstable_param.init_for_split_empty_minor_sstable(
+  } else if (OB_FAIL(create_sstable_param.init_for_empty_minor_sstable(
       dst_tablet_id,
       table_key.get_end_scn()/*start_scn*/,
       end_scn,

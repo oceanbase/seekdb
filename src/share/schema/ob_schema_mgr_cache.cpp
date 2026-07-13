@@ -342,7 +342,6 @@ static const char* ref_info_type_strs[] = {
   "REMOTE_EXE",
   "CACHED_GUARD",
   "UNIQ_CHECK",
-  "SSTABLE_SPLIT_CTX",
   "RELATIVE_TABLE",
   "VIRTUAL_TABLE",
   "DAS_CTX",

@@ -190,7 +190,6 @@ class ObIndexUsageInfoMgr;
 class ObResourceLimitCalculator;
 
 class ObPluginVectorIndexService;
-class ObAutoSplitTaskCache;
 class ObChangeStreamMgr;
 namespace schema
 {
@@ -312,7 +311,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       storage::ObGlobalIteratorPool*,                \
       common::ObRbMemMgr*,                           \
       share::ObPluginVectorIndexService*,            \
-      share::ObAutoSplitTaskCache*    ,              \
       observer::ObTenantQueryRespTimeCollector*,     \
       table::ObTableGroupCommitMgr*,                 \
       observer::ObTableQueryASyncMgr*,               \

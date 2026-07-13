@@ -26,7 +26,6 @@ all_server_list
 arbitration_degradation_policy
 arbitration_timeout
 autoinc_cache_refresh_interval
-auto_split_tablet_size
 backup_data_file_size
 bf_cache_miss_count_threshold
 bf_cache_priority
@@ -75,7 +74,6 @@ dtl_buffer_size
 dump_data_dictionary_to_log_interval
 enable_adaptive_plan_cache
 enable_async_syslog
-enable_auto_split
 enable_ddl
 enable_early_lock_release
 enable_kv_ttl
@@ -100,7 +98,6 @@ enable_upgrade_mode
 enable_user_defined_rewrite_rules
 freeze_trigger_percentage
 fuse_row_cache_priority
-global_index_auto_split_policy
 ha_high_thread_score
 ha_info
 ha_low_thread_score

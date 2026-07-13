@@ -2953,8 +2953,6 @@ int ObTableSqlService::gen_table_dml_without_check(
       || OB_FAIL(dml.add_column("dop", table.get_dop()))
       || OB_FAIL(dml.add_column("character_set_client", table.get_view_schema().get_character_set_client()))
       || OB_FAIL(dml.add_column("collation_connection", table.get_view_schema().get_collation_connection()))
-      || OB_FAIL(dml.add_column("auto_part", table.get_part_option().get_auto_part()))
-      || OB_FAIL(dml.add_column("auto_part_size", table.get_part_option().get_auto_part_size()))
       || OB_FAIL(dml.add_column("association_table_id", ObSchemaUtils::get_extract_schema_id(
               table.get_association_table_id())))
       || OB_FAIL(dml.add_column("define_user_id", ObSchemaUtils::get_extract_schema_id(
@@ -3111,8 +3109,6 @@ int ObTableSqlService::gen_partition_option_dml(const ObTableSchema &table, ObDM
       || OB_FAIL(dml.add_column("partition_status", table.get_partition_status()))
       || OB_FAIL(dml.add_column("partition_schema_version", table.get_partition_schema_version()))
       || OB_FAIL(dml.add_column("sub_part_template_flags", table.get_sub_part_template_flags()))
-      || OB_FAIL(dml.add_column("auto_part", table.get_part_option().get_auto_part()))
-      || OB_FAIL(dml.add_column("auto_part_size", table.get_part_option().get_auto_part_size()))
       || OB_FAIL(dml.add_gmt_create())
       || (table.is_interval_part() && OB_FAIL(add_transition_point_val(dml, table)))
       || (table.is_interval_part() && OB_FAIL(add_interval_range_val(dml, table)))
@@ -3167,39 +3163,6 @@ int ObTableSqlService::update_partition_option(ObISQLClient &sql_client,
     LOG_WARN("fail to gen dml", KR(ret));
   } else if (OB_FAIL(update_partition_option_(sql_client, table, dml))) {
     LOG_WARN("fail to update partition option", KR(ret), K(table));
-  }
-  return ret;
-}
-
-int ObTableSqlService::update_splitting_partition_option(ObISQLClient &sql_client,
-                                                         const ObTableSchema &table)
-{
-  int ret = OB_SUCCESS;
-  ObDMLSqlSplicer dml;
-
-  if (OB_FAIL(check_ddl_allowed(table))) {
-    LOG_WARN("check ddl allowd failed", KR(ret), K(table));
-  } else if (OB_FAIL(gen_partition_option_dml(table, dml))) {
-    LOG_WARN("fail to gen dml", KR(ret));
-  } else if (OB_FAIL(dml.add_column("tablet_id", table.get_tablet_id().id()))) {
-    // when first auto partitions non-partitioned table,
-    // the tablet_id record should be set as INVALID_TABLET_ID like partitioned_table
-    LOG_WARN("add column failed", KR(ret));
-  } else if (OB_FAIL(update_partition_option_(sql_client, table, dml))) {
-    LOG_WARN("fail to update partition option", KR(ret), K(table));
-  }
-
-  if (OB_SUCC(ret)) {
-    ObSchemaOperation opt;
-    
-    opt.database_id_ = table.get_database_id();
-    opt.tablegroup_id_ = table.get_tablegroup_id();
-    opt.table_id_ = table.get_table_id();
-    opt.op_type_ = OB_DDL_SPLIT_PARTITION;
-    opt.schema_version_ = table.get_schema_version();
-    if (OB_FAIL(log_operation_wrapper(opt, sql_client))) {
-      LOG_WARN("log operation failed", K(opt), KR(ret));
-    }
   }
   return ret;
 }
@@ -4282,29 +4245,6 @@ int ObTableSqlService::add_inc_part_info(ObISQLClient &sql_client,
   return ret;
 }
 
-int ObTableSqlService::add_split_inc_part_info(ObISQLClient &sql_client,
-                                               const ObTableSchema &ori_table,
-                                               const ObTableSchema &inc_table,
-                                               const int64_t schema_version)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_ddl_allowed(ori_table))) {
-    LOG_WARN("check ddl allowd failed", KR(ret), K(ori_table));
-  } else if (OB_UNLIKELY(is_inner_table(ori_table.get_table_id()))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid table type", KR(ret), K(ori_table));
-  } else {
-    ObAddSplitIncPartHelper part_helper(&ori_table,
-                                        &inc_table,
-                                        schema_version,
-                                        sql_client);
-    if (OB_FAIL(part_helper.add_split_partition_info())) {
-      LOG_WARN("add split partition info failed", KR(ret));
-    }
-  }
-  return ret;
-}
-
 int ObTableSqlService::update_part_info(ObISQLClient &sql_client,
                                         const ObTableSchema &ori_table,
                                         const ObTableSchema &upd_table,
@@ -4315,14 +4255,14 @@ int ObTableSqlService::update_part_info(ObISQLClient &sql_client,
     LOG_WARN("check ddl allowd failed", K(ret), K(ori_table));
   } else if (is_inner_table(ori_table.get_table_id())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to update split partition info of a inner table", K(ret), K(ori_table.get_table_id()));
+    LOG_WARN("fail to update partition info of an inner table", K(ret), K(ori_table.get_table_id()));
   } else {
     const ObPartitionSchema *ori_table_schema = &ori_table;
     const ObPartitionSchema *upd_table_schema = &upd_table;
     ObUpdatePartHelper part_helper(ori_table_schema, upd_table_schema,
                                    schema_version, sql_client);
     if (OB_FAIL(part_helper.update_partition_info())) {
-      LOG_WARN("update split partition info failed", K(ret));
+      LOG_WARN("update partition info failed", K(ret));
     }
   }
   return ret;

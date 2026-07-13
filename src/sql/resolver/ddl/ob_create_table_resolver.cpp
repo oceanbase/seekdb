@@ -478,40 +478,6 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
           } else { /* do nothing */ }
         }
 
-        if (OB_SUCC(ret)) {
-          ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-          ParseNode *partition_node = create_table_node->children_[5];
-          if (table_schema.is_user_table()) {
-            if (nullptr != partition_node) {
-              // acquire partition_node with similar logic like resolve_partition_option()
-              const bool is_partition_option_node_with_opt = !is_mysql_mode || 1 != create_table_node->reserved_;
-              if (!is_partition_option_node_with_opt) {
-                // current node is partition node
-              } else if (T_VERTICAL_COLUMNS_PARTITION == partition_node->type_) {
-                // no need to resolve, partition node doesn't exist
-                partition_node = nullptr;
-              } else if (T_PARTITION_OPTION != partition_node->type_) {
-                ret = OB_INVALID_ARGUMENT;
-                SQL_RESV_LOG(WARN, "node type is invalid.", K(ret), K(partition_node->type_));
-              } else if (OB_UNLIKELY(partition_node->num_child_ < 1 || partition_node->num_child_ > 2)) {
-                ret = OB_INVALID_ARGUMENT;
-                SQL_RESV_LOG(WARN, "node number is invalid.", K(ret), K(partition_node->num_child_));
-              } else if (OB_ISNULL(partition_node->children_[0])) {
-                ret = OB_ERR_UNEXPECTED;
-                SQL_RESV_LOG(WARN, "partition node is null.", K(ret));
-              } else {
-                partition_node = partition_node->children_[0];
-              }
-            }
-
-            if (FAILEDx(resolve_auto_partition_with_tenant_config(create_table_stmt,
-                                                                  partition_node,
-                                                                  table_schema))) {
-              LOG_WARN("fail to resolve auto partition with tenant config",
-                                                  KR(ret), KPC(create_table_stmt), K(create_table_node));
-            }
-          }
-        }
       }
     }
     if (OB_SUCC(ret)){

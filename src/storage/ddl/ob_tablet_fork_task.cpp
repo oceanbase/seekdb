@@ -1037,7 +1037,7 @@ int ObTabletForkRewriteTask::process()
         share::SCN max_end_scn;
         if (OB_FAIL(max_end_scn.convert_for_tx(param_->fork_snapshot_version_))) {
           LOG_WARN("failed to convert fork snapshot version to scn", K(ret), KPC(param_), K(param_->fork_snapshot_version_));
-        } else if (OB_FAIL(create_param.init_for_split(param_->dest_tablet_id_, src_table_key, basic_meta,
+        } else if (OB_FAIL(create_param.init_for_fork(param_->dest_tablet_id_, src_table_key, basic_meta,
             basic_meta.schema_version_, merge_res, max_end_scn))) {
           LOG_WARN("init create param failed", K(ret), K(max_end_scn));
         } else if (OB_FAIL(context_->create_sstable(create_param, table_handle))) {

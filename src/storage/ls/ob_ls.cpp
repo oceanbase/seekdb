@@ -676,7 +676,6 @@ int ObLS::register_common_service()
   REGISTER_TO_LOGSERVICE(KEEP_ALIVE_LOG_BASE_TYPE, &keep_alive_ls_handler_);
   REGISTER_TO_LOGSERVICE(RESERVED_SNAPSHOT_LOG_BASE_TYPE, &reserved_snapshot_clog_handler_);
   REGISTER_TO_LOGSERVICE(MEDIUM_COMPACTION_LOG_BASE_TYPE, &medium_compaction_clog_handler_);
-  REGISTER_TO_LOGSERVICE(TABLE_LOCK_LOG_BASE_TYPE, &lock_table_);
 
   REGISTER_REPLAY_CHECKPOINT_HANDLER(TIMESTAMP_LOG_BASE_TYPE, share::g_mp->timestamp_service());
   REGISTER_REPLAY_CHECKPOINT_HANDLER(TRANS_ID_LOG_BASE_TYPE, share::g_mp->trans_id_service());
@@ -771,7 +770,6 @@ void ObLS::unregister_common_service_()
   UNREGISTER_FROM_LOGSERVICE(KEEP_ALIVE_LOG_BASE_TYPE, &keep_alive_ls_handler_);
   UNREGISTER_FROM_LOGSERVICE(RESERVED_SNAPSHOT_LOG_BASE_TYPE, &reserved_snapshot_clog_handler_);
   UNREGISTER_FROM_LOGSERVICE(MEDIUM_COMPACTION_LOG_BASE_TYPE, &medium_compaction_clog_handler_);
-  UNREGISTER_FROM_LOGSERVICE(TABLE_LOCK_LOG_BASE_TYPE, &lock_table_);
   UNREGISTER_REPLAY_CHECKPOINT_HANDLER(TIMESTAMP_LOG_BASE_TYPE);
   UNREGISTER_REPLAY_CHECKPOINT_HANDLER(TRANS_ID_LOG_BASE_TYPE);
   UNREGISTER_FROM_LOGSERVICE(MAJOR_FREEZE_LOG_BASE_TYPE, nullptr);
@@ -1231,8 +1229,8 @@ int ObLS::replay_get_tablet(
         LOG_WARN("failed to get latest tablet status", K(ret), KPC(tablet));
       }
     } else if (mds::TwoPhaseCommitState::ON_COMMIT != trans_stat) {
-      if ((ObTabletStatus::NORMAL == data.tablet_status_ && data.create_commit_version_ == ObTransVersion::INVALID_TRANS_VERSION)
-          || ObTabletStatus::SPLIT_DST == data.tablet_status_) {
+      if (ObTabletStatus::NORMAL == data.tablet_status_
+          && data.create_commit_version_ == ObTransVersion::INVALID_TRANS_VERSION) {
         ret = OB_EAGAIN;
         LOG_INFO("latest transaction has not committed yet, should retry", KR(ret), K(tablet_id),
             K(scn), "clog_checkpoint_scn", tablet->get_clog_checkpoint_scn(), K(data));

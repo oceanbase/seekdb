@@ -28,6 +28,7 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_spin_rwlock.h"
 #include "lib/queue/ob_link_queue.h"
+#include "lib/string/ob_sql_string.h"
 #include "lib/thread/ob_thread_lease.h"
 #include "lib/utility/ob_print_utils.h"
 #include "share/ob_define.h"

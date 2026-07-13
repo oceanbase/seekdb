@@ -60,9 +60,7 @@ int check_exist(const ObLockTaskBatchRequest<T> &arg,
       LOG_WARN("failed to get latest tablet status", KR(ret), K(tablet_id));
     }
   } else if (FALSE_IT(tablet_status = data.get_tablet_status())) {
-  } else if (ObTabletStatus::NORMAL == tablet_status
-             || ObTabletStatus::SPLIT_SRC == tablet_status
-             || ObTabletStatus::SPLIT_DST == tablet_status) {
+  } else if (ObTabletStatus::NORMAL == tablet_status) {
     // do nothing
   } else if (ObTabletStatus::RESERVED_STATUS_4 == tablet_status
              || ObTabletStatus::RESERVED_STATUS_5 == tablet_status

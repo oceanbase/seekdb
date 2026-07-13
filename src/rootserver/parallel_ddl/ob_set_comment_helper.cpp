@@ -205,9 +205,6 @@ int ObSetCommentHelper::check_table_legitimacy_()
   } else if (OB_UNLIKELY(orig_table_schema_->is_in_recyclebin())) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
     LOG_WARN("can not comment table in recyclebin", KR(ret), K(orig_table_schema_->is_in_recyclebin()));
-  } else if (OB_UNLIKELY(orig_table_schema_->is_in_splitting())) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("table is physical or logical split can not split", KR(ret), KPC(orig_table_schema_));
   } else {
     // not support parallel comment on mysql mode right now
     ret = OB_NOT_SUPPORTED;

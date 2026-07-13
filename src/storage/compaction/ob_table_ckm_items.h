@@ -128,7 +128,6 @@ public:
     common::ObMySQLProxy &sql_proxy,
     share::schema::ObSchemaGetterGuard &schema_guard);
   int build_column_ckm_sum_array(
-    const bool is_data_table,
     const share::SCN &compaction_scn,
     const share::schema::ObTableSchema &table_schema,
     int64_t &row_cnt);
@@ -166,10 +165,6 @@ private:
     const uint64_t table_id,
     share::schema::ObSchemaGetterGuard &schema_guard,
     common::ObIArray<common::ObTabletID> &tablet_id_array);
-  int check_tail_column_checksums_legal(
-    const bool is_data_table,
-    const ObIArray<int64_t> &base_column_checksums,
-    const ObIArray<int64_t> &check_column_checksums);
   static int check_schema_change_after_major_freeze(
     const share::ObFreezeInfo &freeze_info,
     ObTableCkmItems &data_ckm,

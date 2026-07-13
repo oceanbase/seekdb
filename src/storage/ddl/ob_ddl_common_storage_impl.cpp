@@ -928,39 +928,6 @@ int oceanbase::storage::ObDDLStorageWriteUtil::get_ddl_write_stat(
 
 // get_parallel_idx moved to ob_ddl_common_storage_impl.cpp end of file (ObDDLStorageUtil)
 
-int ObSplitUtil::deserializ_parallel_datum_rowkey(
-      common::ObIAllocator &rowkey_allocator,
-      const char *buf, const int64_t data_len, int64_t &pos,
-      ObIArray<blocksstable::ObDatumRowkey> &parallel_datum_rowkey_list)
-{
-  int ret = OB_SUCCESS;
-  parallel_datum_rowkey_list.reset();
-  if (pos == data_len) {
-    LOG_INFO("no parallel info", K(pos), K(data_len), KP(buf));
-  } else if (OB_UNLIKELY(nullptr == buf || pos > data_len)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), KP(buf), K(pos), K(data_len));
-  } else {
-    int64_t rowkey_arr_cnt = 0;
-    LST_DO_CODE(OB_UNIS_DECODE, rowkey_arr_cnt);
-    if (FAILEDx(parallel_datum_rowkey_list.prepare_allocate(rowkey_arr_cnt))) {
-      LOG_WARN("reserve failed", K(ret), K(rowkey_arr_cnt));
-    } else {
-      ObStorageDatum tmp_storage_datum[OB_INNER_MAX_ROWKEY_COLUMN_NUMBER];
-      ObDatumRowkey tmp_datum_rowkey;
-      tmp_datum_rowkey.assign(tmp_storage_datum, OB_INNER_MAX_ROWKEY_COLUMN_NUMBER);
-      for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_arr_cnt; i++) {
-        if (OB_FAIL(tmp_datum_rowkey.deserialize(buf, data_len, pos))) {
-          LOG_WARN("failed to decode concurrent cnt", K(ret), K(i), K(rowkey_arr_cnt), K(data_len), K(pos));
-        } else if (OB_FAIL(tmp_datum_rowkey.deep_copy(parallel_datum_rowkey_list.at(i), rowkey_allocator))) {
-          LOG_WARN("failed to deep copy end key", K(ret), K(i), K(tmp_datum_rowkey));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 // ===== storage-clean static methods from ObDDLUtil demoted to storage::ObDDLStorageUtil members (A-set member-split cleanup)=====
 #include "storage/ddl/ob_ddl_storage_util.h"
 int ObDDLUtil::set_tablet_autoinc_seq(const ObTabletID &tablet_id, const int64_t seq_value)

@@ -144,7 +144,6 @@ public:
     RANGE_PARTITION_NUM_NODE = 3,
     RANGE_TEMPLATE_MARK = 4,
     RANGE_INTERVAL_NODE = 5,
-    RANGE_AUTO_SPLIT_TABLET_SIZE = 6,
   };
   enum ElementsNode {
     PARTITION_NAME_NODE = 0,
@@ -168,11 +167,6 @@ public:
     HASH_SUBPARTITIOPPN_NODE = 3,
     HASH_TEMPLATE_MARK = 4,
     HASH_TABLESPACE_NODE = 5
-  };
-  enum SplitActionNode {
-    PARTITION_DEFINE_NODE = 0,
-    AT_VALUES_NODE = 1,
-    SPLIT_PARTITION_TYPE_NODE = 2
   };
   enum ObTableOrganizationType : uint8_t {
     OB_ORGANIZATION_INVALID = 0,
@@ -382,8 +376,6 @@ public:
   static int check_text_column_length_and_promote(share::schema::ObColumnSchemaV2 &column,
                                                   int64_t table_id,
                                                   const bool is_byte_length = false);
-  static int get_enable_split_partition(bool &enable_split_partition);
-
   // this func is for compatibility, the row_store_type of OB_STORE_FORMAT_COMPRESSED_MYSQL
   static int get_row_store_type(const ObStoreFormatType store_format, ObRowStoreType &row_store_type);
 
@@ -410,32 +402,6 @@ public:
                                       common::ObIArray<share::schema::ObPartition> &partitions,
                                       common::ObIArray<share::schema::ObSubPartition> &subpartitions,
                                       const bool &in_tablegroup = false);
-  int resolve_split_partition_range_element(const ParseNode *node,
-                                            const share::schema::ObPartitionFuncType part_type,
-                                            const ObIArray<ObRawExpr *> &part_func_exprs,
-                                            common::ObIArray<ObRawExpr *> &range_value_exprs,
-                                            const bool &in_tablegroup = false);
-  int resolve_split_partition_list_value(const ParseNode *node,
-                                         const share::schema::ObPartitionFuncType part_type,
-                                         const ObIArray<ObRawExpr *> &part_func_exprs,
-                                         ObDDLStmt::array_t &list_value_exprs,
-                                         int64_t &expr_num,
-                                         const bool &in_tablegroup);
-  template <typename STMT>
-  int resolve_split_at_partition(STMT *stmt, const ParseNode *node,
-                                 const share::schema::ObPartitionFuncType part_type,
-                                 const ObIArray<ObRawExpr *> &part_func_exprs,
-                                 share::schema::ObPartitionSchema &t_schema,
-                                 int64_t &expr_num,
-                                 const bool &in_tablegroup = false);
-  template <typename STMT>
-  int resolve_split_into_partition(STMT *stmt, const ParseNode *node,
-                                   const share::schema::ObPartitionFuncType part_type,
-                                   const ObIArray<ObRawExpr *> &part_func_exprs,
-                                   int64_t &part_num,
-                                   int64_t &expr_num,
-                                   share::schema::ObPartitionSchema &t_schema,
-                                   const bool &in_tablegroup = false);
   //}
   int check_column_in_foreign_key(const share::schema::ObTableSchema &table_schema,
                                   const common::ObString &column_name,
@@ -661,17 +627,6 @@ protected:
       ParseNode *node,
       share::schema::ObTableSchema &table_schema,
       common::ObSEArray<ObRawExpr*, 8> &range_exprs);
-  int resolve_auto_partition_with_tenant_config(ObCreateTableStmt *stmt, ParseNode *node,
-                                                ObTableSchema &table_schema);
-  int resolve_auto_partition(ObPartitionedStmt *stmt, ParseNode *node,
-                             ObTableSchema &table_schema);
-  int resolve_presetting_partition_key(ParseNode *node, share::schema::ObTableSchema &table_schema);
-  int try_set_auto_partition_by_config(const ParseNode *node,
-                                       common::ObIArray<obcall::ObCreateIndexArg> &index_arg_list,
-                                       ObTableSchema &table_schema);
-  int check_only_modify_auto_partition_attr(ObPartitionedStmt *stmt, ParseNode *node, 
-                                            ObTableSchema &table_schema, bool &is_only_modify_auto_part_attr);
-  
   static int resolve_interval_node(
       ObResolverParams &params,
       ParseNode *interval_node,
@@ -749,8 +704,6 @@ protected:
   int resolve_pk_constraint_node(const ParseNode &cst_node,
                                  common::ObString pk_name,
                                  common::ObSEArray<share::schema::ObConstraint, 4> &csts);
-  int check_split_type_valid(const ParseNode *split_node,
-                             const share::schema::ObPartitionFuncType part_type);
   int resolve_foreign_key(const ParseNode *node, common::ObArray<int> &node_position_list);
   int resolve_foreign_key_node(
       const ParseNode *node,
@@ -958,15 +911,6 @@ protected:
       const bool is_char_type,
       const ObCollationType &collation_type,
       ObObj &default_value, ObString &str);
-  int get_suggest_index_scope(const uint64_t data_table_id,
-      const ObCreateIndexArg &index_arg,
-      const INDEX_KEYNAME key,
-      bool &global);
-  int check_primary_key_prefix_of_index_columns(
-      const ObTableSchema &table_schema,
-      const ObCreateIndexArg &index_arg,
-      bool &is_prefix);
-  bool is_support_split_index_key(const INDEX_KEYNAME index_keyname);
   bool is_organization_set_to_heap() { return table_organization_ == ObTableOrganizationType::OB_HEAP_ORGANIZATION; }
   int64_t block_size_;
   int64_t consistency_level_;
@@ -1047,208 +991,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObDDLResolver);
 };
 //FIXME:support non-template secondary partitioning
-template <typename STMT>
-int ObDDLResolver::resolve_split_at_partition(STMT *stmt, const ParseNode *node,
-                                              const share::schema::ObPartitionFuncType part_type,
-                                              const ObIArray<ObRawExpr *> &part_func_exprs,
-                                              share::schema::ObPartitionSchema &t_schema,
-                                              int64_t &expr_num,
-                                              const bool &in_tablegroup)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(node)
-      || T_SPLIT_ACTION != node->type_
-      || 3 != node->num_child_
-      || OB_ISNULL(node->children_[AT_VALUES_NODE])
-      || OB_ISNULL(node->children_[SPLIT_PARTITION_TYPE_NODE])
-      || OB_ISNULL(stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(node), "node num", node->num_child_,
-                 "children[1]", node->children_[AT_VALUES_NODE], KP(stmt));
-  } else if (share::schema::is_range_part(part_type)) {
-    if (OB_FAIL(resolve_split_partition_range_element(node->children_[AT_VALUES_NODE],
-                                                      part_type,
-                                                      part_func_exprs,
-                                                      stmt->get_part_values_exprs(),
-                                                      in_tablegroup))) {
-      SQL_RESV_LOG(WARN, "failed to resolve expr_list", K(ret));
-    } else {
-      expr_num = node->children_[1]->num_child_;
-    }
-  } else if (share::schema::is_list_part(part_type)) {
-    if (OB_FAIL(resolve_split_partition_list_value(node->children_[AT_VALUES_NODE],
-                                                   part_type,
-                                                   part_func_exprs,
-                                                   stmt->get_part_values_exprs(),
-                                                   expr_num,
-                                                   in_tablegroup))) {
-      SQL_RESV_LOG(WARN, "failed to resolve expr_list", K(ret));
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else {
-    share::schema::ObPartition first_part;
-    share::schema::ObPartition second_part;
-    ParseNode *part_name_node = NULL;
-    bool check_part_name = false;
-    if (OB_NOT_NULL(node->children_[PARTITION_DEFINE_NODE])
-        && OB_NOT_NULL(node->children_[PARTITION_DEFINE_NODE]->children_[0])) {
-      // If into (partition) is not empty, there must be two
-      const ParseNode *part_node = node->children_[PARTITION_DEFINE_NODE]->children_[0];
-      if (part_node->num_child_ != 2
-          || OB_ISNULL(part_node->children_[0])
-          || OB_ISNULL(part_node->children_[1])) {
-        ret = OB_ERR_INVALID_SPLIT_COUNT;
-        SQL_RESV_LOG(WARN,"split at two exactly partition", K(ret), "partition_num", part_node->num_child_);
-        LOG_USER_ERROR(OB_ERR_INVALID_SPLIT_COUNT);
-      } else if (OB_NOT_NULL(part_node->children_[0]->children_[ObResolverUtils::PARTITION_ELEMENT_NODE])
-                 || OB_NOT_NULL(part_node->children_[1]->children_[ObResolverUtils::PARTITION_ELEMENT_NODE])) {
-        // in the syntax of at, it is not allowed to explicitly specify the maximum value
-        ret = OB_ERR_INVALID_SPLIT_GRAMMAR;
-        SQL_RESV_LOG(WARN,"split at no need specify less than values", K(ret));
-        LOG_USER_ERROR(OB_ERR_INVALID_SPLIT_GRAMMAR);
-      } else if (OB_NOT_NULL(part_node->children_[0]->children_[ObResolverUtils::PARTITION_NAME_NODE])) {
-        // Partition name is not empty, it is necessary to determine whether to check for partition name conflicts
-        check_part_name = true;
-        part_name_node = part_node->children_[0]->children_[ObResolverUtils::PARTITION_NAME_NODE];
-        ObString part_name(static_cast<int32_t>(part_name_node->str_len_),
-                           part_name_node->str_value_);
-        if (OB_FAIL(first_part.set_part_name(part_name))) {
-          SQL_RESV_LOG(WARN,"failed to set partition_name", K(ret), K(part_name));
-        }
-      } else {
-        first_part.set_is_empty_partition_name(true);
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_NOT_NULL(part_node->children_[1]->children_[ObResolverUtils::PARTITION_NAME_NODE])) {
-        check_part_name = true;
-        part_name_node = part_node->children_[1]->children_[ObResolverUtils::PARTITION_NAME_NODE];
-        ObString part_name(static_cast<int32_t>(part_name_node->str_len_),
-                           part_name_node->str_value_);
-        if (OB_FAIL(second_part.set_part_name(part_name))) {
-          SQL_RESV_LOG(WARN,"failed to set partition_name", K(ret), K(part_name));
-        }
-      } else {
-        second_part.set_is_empty_partition_name(true);
-      }
-    } else {
-      first_part.set_is_empty_partition_name(true);
-      second_part.set_is_empty_partition_name(true);
-    }
-    if (OB_SUCC(ret) && check_part_name) {
-      if (OB_FAIL(t_schema.check_part_name(first_part))) {
-        SQL_RESV_LOG(WARN,"failed to check part name", K(ret), K(first_part), K(t_schema));
-      } else if (OB_FAIL(t_schema.check_part_name(second_part))) {
-        SQL_RESV_LOG(WARN,"failed to check part name", K(ret), K(second_part), K(t_schema));
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(t_schema.add_partition(first_part))) {
-      SQL_RESV_LOG(WARN,"failed to add partition", K(ret), K(first_part), K(t_schema));
-    } else if (OB_FAIL(t_schema.add_partition(second_part))) {
-      SQL_RESV_LOG(WARN,"failed to add partition", K(ret), K(second_part), K(t_schema));
-    }
-  }
-  return ret;
-}
-
-template <typename STMT>
-int ObDDLResolver::resolve_split_into_partition(STMT *stmt, const ParseNode *node,
-                                                const share::schema::ObPartitionFuncType part_type,
-                                                const ObIArray<ObRawExpr *> &part_func_exprs,
-                                                int64_t &part_num,
-                                                int64_t &expr_num,
-                                                share::schema::ObPartitionSchema &t_schema,
-                                                const bool &in_tablegroup)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(node)
-      || 0 == node->num_child_
-      || OB_ISNULL(stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN,"invalid argument", K(ret), K(node), "node num", node->num_child_, K(stmt));
-  } else {
-    ParseNode *part_node = NULL;
-    bool check_part_name = false;
-    part_num = node->num_child_;
-    expr_num = OB_INVALID_COUNT;
-    if (1 == node->num_child_) {
-      ret = OB_ERR_SPLIT_INTO_ONE_PARTITION;
-      LOG_USER_ERROR(OB_ERR_SPLIT_INTO_ONE_PARTITION);
-      SQL_RESV_LOG(WARN, "cannot split partition into one partition", K(ret));
-    }
-    for (int i = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
-      check_part_name = false;
-      part_node = node->children_[i];
-      share::schema::ObPartition part;
-      if (OB_ISNULL(part_node) ||
-          (T_PARTITION_ELEMENT != part_node->type_ &&
-           T_PARTITION_HASH_ELEMENT != part_node->type_ &&
-           T_PARTITION_LIST_ELEMENT != part_node->type_ &&
-           T_PARTITION_RANGE_ELEMENT != part_node->type_)) {
-        ret = OB_INVALID_ARGUMENT;
-        SQL_RESV_LOG(WARN,"invalid argument", K(ret), K(part_node), "node type", part_node->type_);
-      } else if (OB_NOT_NULL(part_node->children_[ObDDLResolver::PART_ID_NODE])) {
-        ret = OB_ERR_PARSE_SQL;
-        SQL_RESV_LOG(WARN,"only support create table with part_id", K(ret));
-      } else if (OB_ISNULL(part_node->children_[ObDDLResolver::PARTITION_ELEMENT_NODE])) {
-        if (i == (node->num_child_ - 1)) {
-          part_num--;
-        } else {
-          ret = OB_ERR_MISS_VALUES;
-          SQL_RESV_LOG(WARN, "miss vales less than", K(ret), K(i), "node num", node->num_child_);
-          LOG_USER_ERROR(OB_ERR_MISS_VALUES);
-        }
-      } else if (share::schema::is_range_part(part_type)) {
-        if (OB_INVALID_COUNT != expr_num &&
-            expr_num != part_node->children_[ObDDLResolver::PARTITION_ELEMENT_NODE]->num_child_) {
-          ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "expr values num must equal", K(ret), K(expr_num),
-                       "expr values num", part_node->children_[ObDDLResolver::PARTITION_ELEMENT_NODE]->num_child_,
-                       "index", i);
-        } else if (OB_FAIL(resolve_split_partition_range_element(part_node->children_[ObDDLResolver::PARTITION_ELEMENT_NODE],
-                                                                 part_type,
-                                                                 part_func_exprs,
-                                                                 stmt->get_part_values_exprs(),
-                                                                 in_tablegroup))) {
-          SQL_RESV_LOG(WARN, "failed to resolve expr_list", K(ret));
-        } else {
-          expr_num = part_node->children_[ObDDLResolver::PARTITION_ELEMENT_NODE]->num_child_;
-        }
-      } else if (share::schema::is_list_part(part_type)) {
-        if (OB_FAIL(resolve_split_partition_list_value(part_node->children_[ObDDLResolver::PARTITION_ELEMENT_NODE],
-                                                       part_type,
-                                                       part_func_exprs,
-                                                       stmt->get_part_values_exprs(),
-                                                       expr_num,
-                                                       in_tablegroup))) {
-          SQL_RESV_LOG(WARN, "failed to resolve expr_list", K(ret));
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_NOT_NULL(part_node->children_[ObDDLResolver::PARTITION_NAME_NODE])) {
-        check_part_name = true;
-        ObString part_name(static_cast<int32_t>(part_node->children_[ObDDLResolver::PARTITION_NAME_NODE]->str_len_),
-                           part_node->children_[ObDDLResolver::PARTITION_NAME_NODE]->str_value_);
-        if (OB_FAIL(part.set_part_name(part_name))) {
-          SQL_RESV_LOG(WARN,"failed to set partition name", K(ret), K(part_name));
-        }
-      } else {
-        part.set_is_empty_partition_name(true);
-      }
-      if (OB_SUCC(ret) && check_part_name) {
-        if (OB_FAIL(t_schema.check_part_name(part))) {
-          SQL_RESV_LOG(WARN,"failed to check part name", K(ret), K(part), K(t_schema));
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(t_schema.add_partition(part))) {
-        SQL_RESV_LOG(WARN,"failed to add partition", K(ret), K(part), K(t_schema));
-      }
-    }//end for
-  }
-  return  ret;
-}
 
 /**
  * @brief create_name_for_empty_partition

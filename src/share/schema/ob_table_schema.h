@@ -1125,18 +1125,6 @@ public:
   void reset_column_part_key_info();
   int assign(const ObTableSchema &src_schema);
   int get_view_column_comment(ObIArray<ObString> &column_comments);
-  //part splitting filter is needed during physical splitting
-  bool need_part_filter() const
-  {
-    // At present, the conditions for supporting partition split are OLD tables without primary key, and user tables,
-    // and do not include check constraints
-    //is_in_physical_split() The interface does not take effect temporarily, please comment it out first
-    return is_user_table()
-           && !has_check_constraint()
-           && is_partitioned_table()
-           && is_in_splitting()
-           /*&& is_in_physical_split()*/;
-  }
   //set methods
   inline void set_max_used_column_id(const uint64_t id)  { max_used_column_id_ = id; }
   inline void set_sess_active_time(const int64_t t)  { sess_active_time_ = t; }
@@ -1240,12 +1228,7 @@ public:
   int delete_constraint(const common::ObString &constraint_name);
   // Copy all constraint information in src_schema
   int assign_constraint(const ObTableSchema &other);
-  int assign_partition_schema_without_auto_part_attr(const ObTableSchema &other);
-  int enable_auto_partition(const int64_t auto_part_size, const ObPartitionFuncType &part_func_type);
-  int detect_auto_part_func_type(ObPartitionFuncType &part_func_type);
-
   int is_range_col_part_type(bool &is_range_column_type) const;
-  void forbid_auto_partition();
   void clear_constraint();
   int set_ttl_definition(const common::ObString &ttl_definition) { return deep_copy_str(ttl_definition, ttl_definition_); }
   int set_index_params(const common::ObString &index_params) { return deep_copy_str(index_params, index_params_); }
@@ -1535,16 +1518,8 @@ public:
 
   virtual int alloc_partition(const ObPartition *&partition);
   virtual int alloc_partition(const ObSubPartition *&subpartition);
-  int check_enable_split_partition(bool is_auto_partitioning) const;
-  int check_validity_for_auto_partition() const;
-  int check_can_do_manual_split_partition() const;
-  int get_target_part_level_for_auto_partitioned_table(ObPartitionLevel &target_part_level) const;
-  int get_part_func_expr_str(ObString &part_func_expr, common::ObIAllocator &allocator,
-                             const bool using_auto_partitioned_mode) const;
-  int get_presetting_partition_keys(common::ObIArray<uint64_t> &partition_key_ids) const;
   int get_partition_keys_by_part_func_expr(const common::ObString &part_func_expr_str, common::ObIArray<uint64_t> &partition_key_ids) const;
   int extract_actual_index_rowkey_columns_name(ObIArray<ObString> &rowkey_columns_name) const;
-  int is_presetting_partition_key(const uint64_t partition_key_id, bool &is_presetting_partition_key) const;
   int check_primary_key_cover_partition_column();
   int check_rowkey_cover_partition_keys(const common::ObPartitionKeyInfo &part_key);
   int check_index_table_cover_partition_keys(const common::ObPartitionKeyInfo &part_key) const;
@@ -1556,19 +1531,13 @@ public:
   virtual int calc_subpart_func_expr_num(int64_t &subpart_func_expr_num) const;
 
   // checking the column is partition key or subpartition key.
-  // if the ignore_presetting_key == true, the following functions are equal to that of ObColumnSchemaV2,
-  // otherwise, they will check whether the column is presetting key.
-  int is_tbl_partition_key(const uint64_t column_id, bool &result,
-                           const bool ignore_presetting_key=true) const;
+  int is_tbl_partition_key(const uint64_t column_id, bool &result) const;
   int is_tbl_partition_key(const share::schema::ObColumnSchemaV2 &orig_column_schema,
-                           bool& result,
-                           const bool ignore_presetting_key=true) const;
+                           bool& result) const;
   int is_partition_key(const share::schema::ObColumnSchemaV2 &orig_column_schema,
-                       bool& result,
-                       const bool ignore_presetting_key=true) const;
+                       bool& result) const;
   int is_subpartition_key(const share::schema::ObColumnSchemaV2 &orig_column_schema,
-                          bool& result,
-                          const bool ignore_presetting_key=true) const;
+                          bool& result) const;
   inline void reset_simple_index_infos() { simple_index_infos_.reset(); }
   inline const common::ObIArray<ObAuxTableMetaInfo> &get_simple_index_infos() const
   {
@@ -1618,9 +1587,6 @@ public:
 
   // only for size_size test
   virtual int get_column_encodings(common::ObIArray<int64_t> &col_encodings) const override;
-
-  int is_partition_key_match_rowkey_prefix(bool &is_prefix) const;
-  int is_presetting_partition_key_match_rowkey_prefix(bool &is_prefix) const;
 
   int get_all_column_ids(ObIArray<uint64_t> &column_ids) const;
   virtual int init_column_meta_array(

@@ -521,8 +521,6 @@ all_table_def = dict(
       ("dop", 'int', 'false', '1'),
       ('character_set_client', 'int', 'false', '0'),
       ('collation_connection', 'int', 'false', '0'),
-      ('auto_part_size', 'int', 'false', '-1'),
-      ('auto_part', 'bool', 'false', 'false'),
       ('association_table_id', 'int', 'false', '-1'),
       ('tablet_id', 'bigint', 'false', 'ObTabletID::INVALID_TABLET_ID'),
       ('max_dependency_version', 'int', 'false', '-1'),
@@ -2930,7 +2928,6 @@ def_table_schema(
 
 # 445: __all_cluster_event_history # migrated to SQLite, see gen_sqlite_table_def above
 # 447 : legacy ls log restore stat table
-# 449 : __all_wait_for_partition_split_tablet
 
 # 450: __all_external_table_file # abandoned in seekdb
 
@@ -3054,26 +3051,6 @@ def_table_schema(
 # 479: __all_import_table_task # abandoned
 # 480: __all_import_table_task_history # abandoned
 # 481 : __all_import_stmt_exec_history
-
-def_table_schema(
-    owner = 'hanxuan.gzh',
-    table_name = '__all_tablet_reorganize_history',
-    table_id      = '482',
-    table_type = 'SYSTEM_TABLE',
-    gm_columns = [],
-    rowkey_columns = [
-        ('src_tablet_id', 'int'),
-        ('dest_tablet_id', 'int')
-  ],
-    is_cluster_private = False,
-    in_tenant_space = True,
-
-    normal_columns = [
-      ('type', 'int'),
-      ('create_time', 'timestamp'),
-      ('finish_time', 'timestamp')
-  ]
-  )
 
 # 485: __all_clone_job (abandoned)
 # 486: __all_clone_job_history (abandoned)
@@ -7368,7 +7345,6 @@ def_table_schema(
 # 12366: __all_virtual_archive_dest_status (removed: backup/restore/log-archive deleted)
 
 # 12367: __all_virtual_kv_hotkey_stat
-# 12370: __all_virtual_wait_for_partition_split_tablet
 
 # 12371: __all_virtual_external_table_file # abandoned in seekdb
 
@@ -7869,7 +7845,6 @@ def_table_schema(
   ]
   )
 
-# 12478: __all_virtual_tablet_reorganize_history # removed (single-tenant: iterate VT mechanism deleted)
 
 # 12479: __all_virtual_res_mgr_directive # removed (single-tenant: iterate VT mechanism deleted)
 
@@ -8732,10 +8707,6 @@ def_table_schema(
                     cast(NULL as char(255)) as CREATE_OPTIONS,
                     cast(case when a.table_type = 4 then 'VIEW'
                              else a.comment end as char(2048)) as TABLE_COMMENT,
-                    cast(case when a.auto_part = 1 then 'TRUE'
-                              else 'FALSE' end as char(16)) as AUTO_SPLIT,
-                    cast(case when a.auto_part = 1 then a.auto_part_size
-                              else 0 end as unsigned) as AUTO_SPLIT_TABLET_SIZE,
                     cast(case when a.table_mode >> 30 = 1 then 'HEAP'
                               else 'INDEX' end as char(12)) as ORGANIZATION
                     from
@@ -8749,13 +8720,11 @@ def_table_schema(
                            usec_to_time(d.schema_version) as gmt_modified,
                            c.comment,
                            c.store_format,
-                           c.auto_part,
-                           c.auto_part_size,
                            c.table_mode
-                    from (select 201001 as database_id, 1 as table_id, '__all_core_table' as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as auto_part, 0 as auto_part_size, 0 as table_mode
-                union all select 201001 as database_id, 3 as table_id, '__all_table'      as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as auto_part, 0 as auto_part_size, 0 as table_mode
-                union all select 201001 as database_id, 4 as table_id, '__all_column'     as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as auto_part, 0 as auto_part_size, 0 as table_mode
-                union all select 201001 as database_id, 5 as table_id, '__all_ddl_operation'     as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as auto_part, 0 as auto_part_size, 0 as table_mode) c
+                    from (select 201001 as database_id, 1 as table_id, '__all_core_table' as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as table_mode
+                union all select 201001 as database_id, 3 as table_id, '__all_table'      as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as table_mode
+                union all select 201001 as database_id, 4 as table_id, '__all_column'     as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as table_mode
+                union all select 201001 as database_id, 5 as table_id, '__all_ddl_operation'     as table_name, 45 as collation_type, 0 as table_type, '' as comment, 'DYNAMIC' as store_format, 0 as table_mode) c
                     join oceanbase.__all_virtual_core_all_table d
                       on d.table_name = '__all_core_table'
                     where 1 = 1
@@ -8769,8 +8738,6 @@ def_table_schema(
                            gmt_modified,
                            comment,
                            store_format,
-                           auto_part,
-                           auto_part_size,
                            table_mode
                     from oceanbase.__all_table where table_mode >> 12 & 15 in (0,1) and index_attributes_set & 16 = 0) a
                     join oceanbase.__all_database b
@@ -17879,14 +17846,6 @@ def_sys_index_table(
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
   keywords = all_def_keywords['__all_dbms_lock_allocated'])
 
-def_sys_index_table(
-  index_name = 'idx_tablet_his_table_id_src',
-  index_table_id = 101092,
-  index_columns = ['src_tablet_id'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tablet_reorganize_history'])
-
 # 101093: idx_kv_ttl_task_table_id (abandoned)
 # 101094: idx_kv_ttl_task_history_upd_time (abandoned)
 
@@ -18066,14 +18025,6 @@ def_sys_index_table(
 #       * # 100001: idx_data_table_id
 #       * # 100001: __all_table
 ################################################################################
-
-def_sys_index_table(
-  index_name = 'idx_tablet_his_table_id_dest',
-  index_table_id = 101104,
-  index_columns = ['dest_tablet_id'],
-  index_using_type = 'USING_BTREE',
-  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tablet_reorganize_history'])
 
 ################################################################################
 # Agent table Index

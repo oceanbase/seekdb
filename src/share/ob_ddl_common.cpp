@@ -92,18 +92,6 @@ const char *oceanbase::share::get_ddl_type(ObDDLType ddl_type)
     case ObDDLType::DDL_REBUILD_INDEX:
       ret_name = "DDL_REBUILD_INDEX";
       break;
-    case ObDDLType::DDL_AUTO_SPLIT_BY_RANGE:
-      ret_name = "DDL_AUTO_SPLIT_BY_RANGE";
-      break;
-    case ObDDLType::DDL_AUTO_SPLIT_NON_RANGE:
-      ret_name = "DDL_AUTO_SPLIT_NON_RANGE";
-      break;
-    case ObDDLType::DDL_MANUAL_SPLIT_BY_RANGE:
-      ret_name = "DDL_MANUAL_SPLIT_BY_RANGE";
-      break;
-    case ObDDLType::DDL_MANUAL_SPLIT_NON_RANGE:
-      ret_name = "DDL_MANUAL_SPLIT_NON_RANGE";
-      break;
     case ObDDLType::DDL_DROP_SCHEMA_AVOID_CONCURRENT_TRANS:
       ret_name = "DDL_DROP_SCHEMA_AVOID_CONCURRENT_TRANS";
       break;
@@ -175,9 +163,6 @@ const char *oceanbase::share::get_ddl_type(ObDDLType ddl_type)
     case ObDDLType::DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION:
       ret_name = "DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION";
       break;
-    case ObDDLType::DDL_PARTITION_SPLIT_RECOVERY_TABLE_REDEFINITION:
-      ret_name = "DDL_PARTITION_SPLIT_RECOVERY_TABLE_REDEFINITION";
-      break;
     case ObDDLType::DDL_NORMAL_TYPE:
       ret_name = "DDL_NORMAL_TYPE";
       break;
@@ -189,9 +174,6 @@ const char *oceanbase::share::get_ddl_type(ObDDLType ddl_type)
       break;
     case ObDDLType::DDL_DROP_COLUMN_INSTANT:
       ret_name = "DDL_DROP_COLUMN_INSTANT";
-      break;
-    case ObDDLType::DDL_ALTER_PARTITION_AUTO_SPLIT_ATTRIBUTE:
-      ret_name = "DDL_ALTER_PARTITION_AUTO_SPLIT_ATTRIBUTE";
       break;
     case ObDDLType::DDL_ADD_COLUMN_INSTANT:
       ret_name = "DDL_ADD_COLUMN_INSTANT";
@@ -2721,10 +2703,6 @@ int ObCheckTabletDataComplementOp::check_and_wait_old_complement_task(const uint
   }
   return ret;
 }
-
-// for partition split.
-// moved definition to storage/ddl/ob_ddl_common_storage_impl.cpp(accesses storage/blocksstable members)
-OB_SERIALIZE_MEMBER(ObSplitTabletInfo, split_info_, split_src_tablet_id_);
 
 //record trace_id
 ObDDLEventInfo::ObDDLEventInfo()

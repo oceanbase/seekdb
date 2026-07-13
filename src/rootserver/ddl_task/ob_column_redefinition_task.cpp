@@ -230,7 +230,7 @@ int ObColumnRedefinitionTask::copy_table_indexes()
         } else {
           int64_t rpc_timeout = 0;
           int64_t all_tablet_count = 0;
-          if (OB_FAIL(generate_rebuild_index_arg_list(object_id_, schema_guard, alter_table_arg_))) { // for pre split index
+          if (OB_FAIL(generate_rebuild_index_arg_list(object_id_, schema_guard, alter_table_arg_))) {
             LOG_WARN("fail to generate rebuild index arg list", K(ret), K(object_id_));
           } else if (OB_FAIL(get_orig_all_index_tablet_count(schema_guard, all_tablet_count))) {
             LOG_WARN("get all tablet count failed", K(ret));

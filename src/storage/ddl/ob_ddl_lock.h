@@ -65,36 +65,6 @@ public:
       const transaction::tablelock::ObTableLockOwnerID lock_owner,
       ObMySQLTransaction &trans);
 
-  static int lock_src_and_dst_for_split_partition(
-      const share::schema::ObTableSchema &table_schema,
-      const ObIArray<ObTabletID> &src_tablet_ids,
-      const ObIArray<ObTabletID> &dst_tablet_ids,
-      const transaction::tablelock::ObTableLockOwnerID lock_owner,
-      ObMySQLTransaction &trans);
-  static int lock_dst_for_split_partition(
-      const share::schema::ObTableSchema &table_schema,
-      const ObIArray<ObTabletID> &dst_tablet_ids,
-      const transaction::tablelock::ObTableLockOwnerID lock_owner,
-      ObMySQLTransaction &trans);
-  static int unlock_for_split_partition(
-      const share::schema::ObTableSchema &table_schema,
-      const ObIArray<ObTabletID> &src_tablet_ids,
-      const ObIArray<ObTabletID> &dst_tablet_ids,
-      const transaction::tablelock::ObTableLockOwnerID lock_owner,
-      ObMySQLTransaction &trans);
-  static int replace_table_lock_for_split(
-    const share::schema::ObTableSchema &table_schema,
-    const ObIArray<transaction::tablelock::ObTableLockOwnerID> &global_idx_lock_owners,
-    const ObIArray<transaction::tablelock::ObTableLockOwnerID> &old_lock_owners,
-    const transaction::tablelock::ObTableLockOwnerID new_lock_owner,
-    ObMySQLTransaction &trans);
-  static int replace_tablet_lock_for_split(const ObTableSchema &table_schema,
-    const ObIArray<ObTabletID> &tablet_ids,
-    const transaction::tablelock::ObTableLockOwnerID &lock_owner,
-    const transaction::tablelock::ObTableLockOwnerID new_lock_owner,
-    const bool is_global_idx,
-    ObMySQLTransaction &trans);
-
   static int lock_for_modify_auto_part_size_in_trans(const uint64_t data_table_id,
       const ObIArray<uint64_t> &global_index_table_ids,
       ObMySQLTransaction &trans);

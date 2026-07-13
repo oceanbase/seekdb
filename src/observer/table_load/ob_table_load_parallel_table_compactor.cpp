@@ -246,8 +246,8 @@ public:
                                                           tablet_ctx_->ranges_.count()))) {
           LOG_WARN("fail to set parallel merge param", KR(ret));
         } else if (OB_FAIL(
-                     parallel_table_compactor_->handle_tablet_split_range_finish(tablet_ctx_))) {
-          LOG_WARN("fail to handle tablet split range finish", KR(ret));
+                     parallel_table_compactor_->handle_range_split_finish(tablet_ctx_))) {
+          LOG_WARN("fail to handle range split finish", KR(ret));
         }
       }
     }
@@ -795,7 +795,7 @@ int ObTableLoadParallelTableCompactor::construct_compact_sstable_task(
   return ret;
 }
 
-int ObTableLoadParallelTableCompactor::handle_tablet_split_range_finish(
+int ObTableLoadParallelTableCompactor::handle_range_split_finish(
   ObTableLoadParallelCompactTabletCtx *tablet_ctx)
 {
   int ret = OB_SUCCESS;

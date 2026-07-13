@@ -255,7 +255,6 @@ struct ObDMLBaseParam
         check_schema_version_(true),
         ddl_task_id_(0),
         lob_allocator_(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE),
-        data_row_for_lob_(nullptr),
         is_main_table_in_fts_ddl_(false),
         has_async_index_(false)
   {
@@ -290,7 +289,6 @@ struct ObDMLBaseParam
   bool check_schema_version_;
   int64_t ddl_task_id_;
   mutable ObArenaAllocator lob_allocator_;
-  const blocksstable::ObDatumRow *data_row_for_lob_; // for tablet split
   bool is_main_table_in_fts_ddl_; // whether the main table is in fts ddl when dml is executed
   // Set by DAS layer when the table has async-mode indexes (e.g. sync_mode=async HNSW).
   // Propagated to ObTxCtx::has_async_index_redo_ -> ObTxLogBlockHeader::HAS_ASYNC_INDEX

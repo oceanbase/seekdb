@@ -393,8 +393,6 @@ public:
         vector_index_info_(),
         das_keep_ordering_(false),
         filter_monotonicity_(),
-        auto_split_filter_type_(OB_INVALID_ID),
-        auto_split_filter_(NULL),
         is_tsc_with_doc_id_(false),
         rowkey_doc_tid_(common::OB_INVALID_ID),
         is_skip_rowkey_doc_(false),
@@ -832,12 +830,6 @@ public:
                                       uint64_t scan_table_id);
   int adjust_print_access_info(ObIArray<ObRawExpr*> &access_exprs);
   static int replace_gen_column(ObLogPlan *plan, ObRawExpr *part_expr, ObRawExpr *&new_part_expr);
-  int generate_auto_split_filter();
-  int construct_table_split_range_filter(ObSQLSessionInfo *session, const int64_t filter_type);
-  int create_exec_param_for_auto_split(const ObRawExprResType &type, ObRawExpr *&expr);
-  uint64_t get_auto_split_filter_type() const { return auto_split_filter_type_; };
-  const ObRawExpr *get_auto_split_filter() const { return auto_split_filter_; };
-  const ObIArray<ObRawExpr *> &get_auto_split_params() const { return auto_split_params_; };
   bool is_tsc_with_doc_id() const;
   inline bool is_tsc_with_domain_id() const { return with_domain_types_.size() > 0; }
   inline bool is_text_retrieval_scan() const { return is_index_scan() && NULL != text_retrieval_info_.match_expr_; }
@@ -1069,9 +1061,6 @@ private: // member functions
   int add_mapping_columns_for_vt(ObIArray<ObRawExpr*> &access_exprs);
   int get_mbr_column_exprs(const uint64_t table_id, ObIArray<ObRawExpr *> &mbr_exprs);
   int allocate_lookup_trans_info_expr();
-  static int check_need_table_split_range_filter(share::schema::ObSchemaGetterGuard &schema_guard,
-                                                 const share::schema::ObTableSchema &table_schema,
-                                                 bool &need_filter);
   int allocate_group_id_expr();
   int extract_vec_idx_access_expr(ObIArray<ObRawExpr *> &exprs);
   int get_vec_idx_calc_exprs(ObIArray<ObRawExpr *> &all_exprs);
@@ -1175,11 +1164,7 @@ protected: // memeber variables
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> pushdown_groupby_columns_;
   // whether a filter can be evaluated before index back
   common::ObSEArray<bool, 4, common::ModulePageAllocator, true> filter_before_index_back_;
-// // removal these in cg layer, up to opt layer.
   common::ObSEArray<uint64_t, 4, common::ModulePageAllocator, true> ddl_output_column_ids_;
-  // auto split param
-  common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> auto_split_params_;
-// removal these in cg layer, up to opt layer end.
   // table partition locations
   ObTablePartitionInfo *table_partition_info_; //this member is not in copy_without_child,
                                                //because its used in EXCHANGE stage, and
@@ -1251,8 +1236,6 @@ protected: // memeber variables
   typedef common::ObSEArray<ObRawFilterMonotonicity, 4, common::ModulePageAllocator, true> FilterMonotonicity;
   FilterMonotonicity filter_monotonicity_;
 
-  uint64_t auto_split_filter_type_;
-  ObRawExpr *auto_split_filter_;
   // begin for table scan with doc id
   bool is_tsc_with_doc_id_;
   uint64_t rowkey_doc_tid_;

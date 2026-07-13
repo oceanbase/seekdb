@@ -24,7 +24,6 @@
 #include "lib/string/ob_sql_string.h"
 #include "share/schema/ob_ddl_sql_service.h"
 #include "share/config/ob_server_config.h"
-#include "share/ob_partition_modify.h"
 #include "share/ob_rpc_struct.h"
 
 namespace oceanbase
@@ -32,7 +31,6 @@ namespace oceanbase
 namespace obcall
 {
 class ObAccountArg;
-class ObSplitPartitionArg;
 class ObAlterTablegroupArg;
 class ObSetPasswdArg;
 class ObAlterIndexParallelArg;
@@ -58,7 +56,6 @@ class ObSchemaChecker;
 
 namespace share
 {
-class ObSplitInfo;
 namespace schema
 {
 class ObMultiVersionSchemaService;
@@ -191,14 +188,6 @@ public:
                               share::schema::ObTableSchema &inc_table_schema,
                               share::schema::ObTableSchema &new_table_schema,
                               common::ObMySQLTransaction &trans);
-  int split_table_partitions(const share::schema::ObTableSchema &orig_table_schema,
-                             share::schema::ObTableSchema &inc_table_schema,
-                             share::schema::ObTableSchema &new_table_schema,
-                             share::schema::ObTableSchema &upd_table_schema,
-                             common::ObMySQLTransaction &trans);
-  int drop_table_splitted_partitions(const share::schema::ObTableSchema &orig_table_schema,
-                                     share::schema::ObTableSchema &inc_table_schema,
-                                     common::ObMySQLTransaction &trans);
   int drop_table_partitions(const share::schema::ObTableSchema &orig_table_schema,
                             share::schema::ObTableSchema &inc_table_schema,
                             share::schema::ObTableSchema &new_table_schema,

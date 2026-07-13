@@ -195,8 +195,6 @@ public:
   int abort_redef_table(const obcall::ObAbortRedefTableArg &arg);
   int update_ddl_task_active_time(const obcall::ObUpdateDDLTaskActiveTimeArg &arg);
   int create_hidden_table(const obcall::ObCreateHiddenTableArg &arg, obcall::ObCreateHiddenTableRes &res);
-  int send_auto_split_tablet_task_request(const obcall::ObAutoSplitTabletBatchArg &arg, obcall::ObAutoSplitTabletBatchRes &res);
-  int split_global_index_tablet(const obcall::ObAlterTableArg &arg);
   int execute_ddl_task(const obcall::ObAlterTableArg &arg, common::ObSArray<uint64_t> &obj_ids);
   int cancel_ddl_task(const obcall::ObCancelDDLTaskArg &arg);
   int alter_tablegroup(const obcall::ObAlterTablegroupArg &arg);
@@ -221,8 +219,6 @@ public:
   int force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonelyLobAuxTableArg &drop_table_arg);
   int rebuild_vec_index(const obcall::ObRebuildIndexArg &arg, obcall::ObAlterTableRes &res);
 
-  // the interface only for gc splitted source tablet
-  int clean_splitted_tablet(const obcall::ObCleanSplittedTabletArg &arg);
 
   //the interface only for switchover: execute skip check enable_ddl
   int purge_index(const obcall::ObPurgeIndexArg &arg);
@@ -411,13 +407,6 @@ private:
                               share::schema::ObSchemaGetterGuard &schema_guard);
   int check_database_config(bool &db_config_ok,
                             share::schema::ObSchemaGetterGuard &schema_guard);
-  int check_table_config(bool &table_config_ok, bool &table_split_ok,
-                         share::schema::ObSchemaGetterGuard &schema_guard,
-                         const int64_t snapshot_schema_version);
-  int check_tablegroup_config(bool &tablegroup_config_ok,
-                              bool &tablegroup_split_ok,
-                              share::schema::ObSchemaGetterGuard &schema_guard,
-                              const int64_t snapshot_schema_version);
   int get_tenants_created_after_snapshot(const int64_t snapshot_schema_version,
                                          ObArray<uint64_t> &batch_ids);
   int query_ddl_table_after_major_freeze(int &row_cnt, int64_t &schema_version_cursor,

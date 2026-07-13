@@ -128,9 +128,7 @@ int ObStorageTableGuard::refresh_and_protect_memtable_for_write(ObRelativeTable 
         // snapshot_for_tables filters the tables during get_read_tables
         store_ctx_.mvcc_acc_ctx_.get_snapshot_version().get_val_for_tx(),
         iter,
-        relative_table.allow_not_ready(),
-        true/*need_split_src_table*/,
-        false/*need_split_dst_table*/))) {
+        relative_table.allow_not_ready()))) {
       LOG_WARN("fail to get read tables", K(ret), K(remain_timeout),
            "table_id", relative_table.get_table_id());
     } else {
@@ -428,9 +426,7 @@ bool ObStorageTableGuard::need_to_refresh_table(ObTableStoreIterator &iter)
   }
 
   if (OB_SUCC(ret) && !need_create_memtable) {
-    // Inserts on split dst tablet may find last memtable is src tablet's,
-    // which may be active if leader switch after split start trans,
-    // so always create new memtable here to avoid writing to src tablet.
+    // A stale memtable may belong to another tablet, so create a new one when IDs differ.
     const ObTabletID &tablet_id = memtable->get_tablet_id();
     if (OB_UNLIKELY(!tablet_id.is_valid())) {
       ret = OB_ERR_UNEXPECTED;

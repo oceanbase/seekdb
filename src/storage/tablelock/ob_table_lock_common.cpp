@@ -503,9 +503,7 @@ void ObTableLockOp::set(
 bool ObTableLockOp::is_valid() const
 {
   bool is_valid = false;
-  if (TABLET_SPLIT == op_type_) {
-    is_valid = commit_scn_.is_valid() && !commit_scn_.is_min() && lock_id_.is_valid();
-  } else if (is_out_trans_lock_op() && owner_id_.id() == 0) {
+  if (is_out_trans_lock_op() && owner_id_.id() == 0) {
     is_valid = false;
     LOG_ERROR_RET(OB_INVALID_ARGUMENT, "owner_id should not be 0 in out_trans lock", K_(owner_id));
   } else {

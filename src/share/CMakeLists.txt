@@ -96,7 +96,6 @@ ob_set_subtarget(ob_share common
   ob_scheduled_job_utils.cpp
   ob_ddl_common.cpp
   ob_ddl_error_message_table_operator.cpp
-  ob_tablet_reorganize_history_table_operator.cpp
   ob_ddl_task_executor.cpp
   ob_debug_sync.cpp
   ob_debug_sync_point.cpp
@@ -126,7 +125,6 @@ ob_set_subtarget(ob_share common
   ob_max_id_fetcher.cpp
   ob_max_id_cache.cpp
   ob_occam_time_guard.cpp
-  ob_partition_modify.cpp
   ob_priv_common.cpp
   ob_proposal_id.cpp
   ob_plugin_helper.cpp

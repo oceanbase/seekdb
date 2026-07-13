@@ -73,7 +73,6 @@ public:
       const int64_t create_schema_version,
       const share::SCN &clog_checkpoint_scn,
       const share::SCN &mds_checkpoint_scn,
-      const share::ObSplitTabletInfo &split_info,
       const bool micro_index_clustered,
       const bool has_truncate_info,
       const share::ObForkTabletInfo &fork_info = share::ObForkTabletInfo());
@@ -82,7 +81,6 @@ public:
       const int64_t snapshot_version,
       const int64_t multi_version_start,
       const int64_t max_sync_storage_schema_version,
-      const share::ObSplitTabletInfo &split_info,
       const share::SCN clog_checkpoint_scn = share::SCN::min_scn(),
       const ObDDLTableStoreParam &ddl_info = ObDDLTableStoreParam(),
       const bool has_truncate_info = false);
@@ -155,7 +153,6 @@ public:
                K_(create_schema_version),
                K_(space_usage),
                K_(micro_index_clustered),
-               K_(split_info),
                K_(fork_info),
                K_(has_truncate_info));
 
@@ -196,7 +193,6 @@ public:
   bool has_next_tablet_; // alignment: 1B, size: 2B
   bool is_empty_shell_; // alignment: 1B, size: 2B
   bool micro_index_clustered_; // alignment: 1B, size: 2B
-  share::ObSplitTabletInfo split_info_; // alignment: 8B, size: 16B
   share::ObForkTabletInfo fork_info_; // alignment: 8B, size: 24B
   bool has_truncate_info_; // be True after first major with truncate info
 private:

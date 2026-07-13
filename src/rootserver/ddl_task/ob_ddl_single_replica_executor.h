@@ -44,11 +44,7 @@ public:
       parallelism_(0),
       execution_id_(-1),
       data_format_version_(0),
-      compaction_scns_(),
       lob_col_idxs_(),
-      can_reuse_macro_blocks_(),
-      parallel_datum_rowkey_list_(),
-      min_split_start_scn_(),
       is_no_logging_(false)
   {}
   ~ObDDLReplicaBuildExecutorParam () = default;
@@ -64,13 +60,6 @@ public:
                      task_id_ > 0 &&
                      execution_id_ >= 0 &&
                      data_format_version_ > 0;
-    if (is_tablet_split(ddl_type_)) {
-      is_valid = is_valid && compaction_scns_.count() == source_tablet_ids_.count()
-                          && can_reuse_macro_blocks_.count() == source_tablet_ids_.count()
-                          && min_split_start_scn_.is_valid_and_not_min();
-    } else {
-      is_valid = (is_valid && compaction_scns_.count() == 0);
-    }
     return is_valid;
   }
 
@@ -78,8 +67,7 @@ public:
                K_(dest_tablet_ids), K_(source_table_ids), K_(dest_table_ids),
                K_(source_schema_versions), K_(dest_schema_versions), K_(snapshot_version),
                K_(task_id), K_(parallelism), K_(execution_id), 
-               K_(data_format_version), K_(can_reuse_macro_blocks),
-               K_(parallel_datum_rowkey_list), K(min_split_start_scn_), K_(is_no_logging));
+               K_(data_format_version), K_(is_no_logging));
 public:
   
   share::ObDDLType ddl_type_;
@@ -94,11 +82,7 @@ public:
   int64_t parallelism_;
   int64_t execution_id_;
   int64_t data_format_version_;
-  ObSArray<int64_t> compaction_scns_;
   ObSArray<uint64_t> lob_col_idxs_;
-  ObSArray<bool> can_reuse_macro_blocks_;
-  common::ObSEArray<common::ObSEArray<blocksstable::ObDatumRowkey, 8>, 8> parallel_datum_rowkey_list_;
-  share::SCN min_split_start_scn_;
   int64_t is_no_logging_;
 };
 
@@ -124,11 +108,8 @@ public:
       src_schema_version_(0),
       dest_schema_version_(0),
       tablet_task_id_(0),
-      compaction_scn_(0),
       src_tablet_id_(ObTabletID::INVALID_TABLET_ID),
       dest_tablet_id_(),
-      can_reuse_macro_block_(false),
-      parallel_datum_rowkey_list_(),
       stat_(ObReplicaBuildStat::BUILD_INIT),
       ret_code_(OB_SUCCESS),
       heart_beat_time_(0),
@@ -145,20 +126,16 @@ public:
            const int64_t src_schema_version,
            const int64_t dest_schema_version,
            const int64_t tablet_task_id,
-           const int64_t compaction_scn,
            const ObTabletID &src_tablet_id,
-           const ObTabletID &dest_tablet_ids,
-           const bool can_reuse_macro_block,
-           const ObIArray<blocksstable::ObDatumRowkey> &parallel_datum_rowkey_list);
+           const ObTabletID &dest_tablet_ids);
   void reset_build_stat();
   bool is_valid() const;
   int assign(const ObSingleReplicaBuildCtx &other);
   int check_need_schedule(bool &need_schedule) const;
   TO_STRING_KV(K(is_inited_), K(addr_), K(ddl_type_), K(src_table_id_),
                K(src_schema_version_), K(dest_schema_version_),
-               K(dest_table_id_), K(tablet_task_id_), K(compaction_scn_),
-               K(src_tablet_id_), K(dest_tablet_id_), K_(can_reuse_macro_block), 
-               K(parallel_datum_rowkey_list_), K(stat_), K(ret_code_),
+               K(dest_table_id_), K(tablet_task_id_),
+               K(src_tablet_id_), K(dest_tablet_id_), K(stat_), K(ret_code_),
                K(heart_beat_time_), K(row_inserted_), K(row_scanned_), K(physical_row_count_),
                K(sess_not_found_times_));
 
@@ -171,11 +148,8 @@ public:
   int64_t src_schema_version_;
   int64_t dest_schema_version_;
   int64_t tablet_task_id_;
-  int64_t compaction_scn_;
   ObTabletID src_tablet_id_;
   ObTabletID dest_tablet_id_;
-  bool can_reuse_macro_block_;
-  common::ObSEArray<blocksstable::ObDatumRowkey, 8> parallel_datum_rowkey_list_;
   ObReplicaBuildStat stat_;
   int64_t ret_code_;
   int64_t heart_beat_time_;
@@ -202,7 +176,6 @@ public:
       src_tablet_ids_(),
       dest_tablet_ids_(),
       replica_build_ctxs_(),
-      min_split_start_scn_(),
       lock_()
   {}
   ~ObDDLReplicaBuildExecutor() = default;
@@ -220,7 +193,7 @@ public:
                K(ddl_task_id_), K(snapshot_version_), K(parallelism_),
                K(execution_id_), K(data_format_version_),
                K(lob_col_idxs_), K(src_tablet_ids_), K(dest_tablet_ids_),
-               K(replica_build_ctxs_), K(min_split_start_scn_));
+               K(replica_build_ctxs_));
 private:
   int schedule_task();
   int process_rpc_results(
@@ -265,7 +238,6 @@ private:
   ObArray<ObTabletID> src_tablet_ids_;
   ObSArray<ObTabletID> dest_tablet_ids_;
   ObArray<ObSingleReplicaBuildCtx> replica_build_ctxs_; // NOTE hold lock before access
-  share::SCN min_split_start_scn_;
   ObSpinLock lock_; // NOTE keep rpc send out of lock scope
   bool is_no_logging_;
 };

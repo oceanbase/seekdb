@@ -441,7 +441,6 @@ alter table alter_table1 add column nc3 int null default 0
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -587,7 +586,6 @@ alter table alter_table1 add (nc3 int null default 0, nc4 varchar(11))
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -741,7 +739,6 @@ alter table alter_table1 add key(c2)
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -1045,7 +1042,6 @@ alter table alter_table1 add index(c2)
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -1349,7 +1345,6 @@ alter table alter_table1 add index idx2(c2 DESC)
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -1653,7 +1648,6 @@ alter table alter_table1 add index idx1(c1,c2)
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -1963,7 +1957,6 @@ alter table alter_table1 add index idx1(c1,c2 DESC)
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -2273,7 +2266,6 @@ alter table alter_table1 add index idx1(c1 ASC, c2 DESC)
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -2585,7 +2577,6 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE 1
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -2891,7 +2882,6 @@ alter table alter_table1 add index idx1(c1) GLOBAL COMMENT 'string' BLOCK_SIZE =
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -3197,7 +3187,6 @@ alter table alter_table1 add unique index uidx1(c1)
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -3501,7 +3490,6 @@ alter table alter_table1 add unique uidx1(c1)
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -3797,7 +3785,6 @@ alter table alter_table1 alter column c3 set default 13
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -3943,7 +3930,6 @@ alter table alter_table1 alter column c3 drop default
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -4089,7 +4075,6 @@ alter table alter_table1 change column c4 nc4 char(20)
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -4235,7 +4220,6 @@ alter table alter_table1 modify c3 tinyint default 33
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -4381,7 +4365,6 @@ alter table alter_table1 drop column c3
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -4539,7 +4522,6 @@ alter table alter_table1 rename index idx_c1 to idx_2
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -4697,7 +4679,6 @@ alter table alter_table1 rename index idx_2 to idx_c1
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -4843,7 +4824,6 @@ alter table alter_table1 rename to alter_t1
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -4989,7 +4969,6 @@ alter table alter_table1 set comment = 'hahaha'
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -5135,7 +5114,6 @@ alter table alter_table1 set compression = 'none'
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -5281,7 +5259,6 @@ ALTER TABLE test SET EXPIRE_INFO (c1 > 9)
       "origin_table_name":"test",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -5427,7 +5404,6 @@ alter table alter_table1 replica_num = 3
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -5573,7 +5549,6 @@ alter table alter_table1 set block_size = 16384
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -5719,7 +5694,6 @@ alter table alter_table1 set use_bloom_filter = true
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -5865,7 +5839,6 @@ alter table alter_table1 set progressive_merge_num = 1
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -6011,7 +5984,6 @@ alter table alter_table1 tablegroup = 'tp1'
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -6157,7 +6129,6 @@ alter table alter_table1 drop tablegroup
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -6303,7 +6274,6 @@ alter table alter_table1 primary_zone = 'z1'
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -6449,7 +6419,6 @@ alter table alter_table1 auto_increment = 1
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -6595,7 +6564,6 @@ alter table alter_table1 drop tablegroup
       "origin_table_name":"alter_table1",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -6757,7 +6725,6 @@ alter table test add index using btree(c1) using hash;
       "origin_table_name":"test",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -7061,7 +7028,6 @@ alter table test add unique index using btree(c1) using hash;
       "origin_table_name":"test",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -7370,7 +7336,6 @@ alter table wang_01 add constraint unique key(c2);
       "origin_table_name":"wang_01",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -7674,7 +7639,6 @@ alter table wang_01 add constraint const_name unique key(c3);
       "origin_table_name":"wang_01",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -7978,7 +7942,6 @@ alter table wang_01 add constraint const_name unique key uk_name_1(c4);
       "origin_table_name":"wang_01",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -8282,7 +8245,6 @@ alter table wang_01 add constraint cons_name_1 unique key(c5);
       "origin_table_name":"wang_01",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -8586,7 +8548,6 @@ alter table wang_01 add constraint unique key uk_name_2(c6);
       "origin_table_name":"wang_01",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -8890,7 +8851,6 @@ alter table wang_01 add constraint cons_name unique key uk_name_3(c7);
       "origin_table_name":"wang_01",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,
@@ -9194,7 +9154,6 @@ alter table wang_01 add constraint unique key uk_name_4(c8);
       "origin_table_name":"wang_01",
       "new_database_name":"altertable",
       "origin_database_name":"altertable",
-      "split_partition_name":"",
       "alter_table_schema": {
         "simple_table_schema": {
           "tenant_id":1,

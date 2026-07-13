@@ -79,7 +79,6 @@ ObTruncatePartitionFilter::~ObTruncatePartitionFilter()
 
 int ObTruncatePartitionFilter::init(
     ObTablet &tablet,
-    const ObIArray<ObTabletHandle> *split_extra_tablet_handles,
     const ObIArray<ObColDesc> &cols_desc,
     const ObIArray<ObColumnParam *> *cols_param,
     const ObVersionRange &read_version_range,
@@ -96,7 +95,7 @@ int ObTruncatePartitionFilter::init(
   } else if (has_truncate_flag && !has_truncate_info) {
     filter_type_ = ObTruncateFilterType::BASE_VERSION_FILTER;
     is_inited_ = true;
-  } else if (OB_FAIL(mds_info_mgr_.init(truncate_info_allocator_, tablet, split_extra_tablet_handles, read_version_range, true/*for_access*/))) {
+  } else if (OB_FAIL(mds_info_mgr_.init(truncate_info_allocator_, tablet, read_version_range, true/*for_access*/))) {
     LOG_WARN("failed to init mds filter info mgr", KR(ret), K(read_version_range));
   } else if (mds_info_mgr_.empty()) {
     filter_type_ = has_truncate_flag ? ObTruncateFilterType::BASE_VERSION_FILTER : ObTruncateFilterType::EMPTY_FILTER;
@@ -139,7 +138,6 @@ int ObTruncatePartitionFilter::init(
 
 int ObTruncatePartitionFilter::switch_info(
     ObTablet &tablet,
-    const ObIArray<ObTabletHandle> *split_extra_tablet_handles,
     const ObIArray<ObColDesc> &cols_desc,
     const ObIArray<ObColumnParam *> *cols_param,
     const ObVersionRange &read_version_range,
@@ -152,7 +150,7 @@ int ObTruncatePartitionFilter::switch_info(
     LOG_WARN("not init", K(ret));
   } else if (has_truncate_flag && !has_truncate_info) {
     filter_type_ = ObTruncateFilterType::BASE_VERSION_FILTER;
-  } else if (OB_FAIL(mds_info_mgr_.init(truncate_info_allocator_, tablet, split_extra_tablet_handles, read_version_range, true/*for_access*/))) {
+  } else if (OB_FAIL(mds_info_mgr_.init(truncate_info_allocator_, tablet, read_version_range, true/*for_access*/))) {
     LOG_WARN("failed to init mds filter info mgr", KR(ret), K(read_version_range));
   } else if (mds_info_mgr_.empty()) {
     filter_type_ = has_truncate_flag ? ObTruncateFilterType::BASE_VERSION_FILTER : ObTruncateFilterType::EMPTY_FILTER;
@@ -367,7 +365,6 @@ int ObTruncatePartitionFilter::init_column_idxs(const ObPartKeyIdxArray &key_idx
 
 int ObTruncatePartitionFilterFactory::build_truncate_partition_filter(
     ObTablet &tablet,
-    const ObIArray<ObTabletHandle> *split_extra_tablet_handles,
     const ObIArray<ObColDesc> &cols_desc,
     const ObIArray<ObColumnParam *> *cols_param,
     const ObVersionRange &read_version_range,
@@ -391,7 +388,7 @@ int ObTruncatePartitionFilterFactory::build_truncate_partition_filter(
     if (OB_ISNULL(truncate_part_filter = OB_NEWx(ObTruncatePartitionFilter, outer_allocator))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "failed to alloc memory", K(ret));
-    } else if (OB_FAIL(truncate_part_filter->init(tablet, split_extra_tablet_handles, cols_desc, cols_param, read_version_range,
+    } else if (OB_FAIL(truncate_part_filter->init(tablet, cols_desc, cols_param, read_version_range,
                                                   has_truncate_flag, has_truncate_info, *outer_allocator))) {
       LOG_WARN("failed to init filter wrapper", K(ret));
     }
@@ -401,7 +398,7 @@ int ObTruncatePartitionFilterFactory::build_truncate_partition_filter(
       truncate_part_filter = nullptr;
     }
   } else if (FALSE_IT(truncate_part_filter->reuse())) {
-  } else if (OB_FAIL(truncate_part_filter->switch_info(tablet, split_extra_tablet_handles, cols_desc, cols_param, read_version_range,
+  } else if (OB_FAIL(truncate_part_filter->switch_info(tablet, cols_desc, cols_param, read_version_range,
                                                        has_truncate_flag, has_truncate_info))) {
     LOG_WARN("failed to switch info", K(ret));
   }

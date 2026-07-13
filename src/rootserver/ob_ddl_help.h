@@ -20,7 +20,6 @@
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_part_mgr_util.h"
 #include "share/ob_rpc_struct.h"
-#include "share/ob_partition_modify.h"
 namespace oceanbase
 {
 namespace common
@@ -29,7 +28,6 @@ class ObMySQLProxy;
 }
 namespace share
 {
-class ObSplitInfo;
 namespace schema
 {
 class ObMultiVersionSchemaService;
@@ -104,5 +102,3 @@ private:
 } //namespace rootserver
 } //namespace oceanbase
 #endif
-
-

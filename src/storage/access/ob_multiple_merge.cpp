@@ -27,7 +27,6 @@
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/concurrency_control/ob_data_validation_service.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
-#include "storage/ob_partition_split_query.h"
 #include "sql/engine/px/ob_granule_iterator_op.h"
 
 namespace oceanbase
@@ -219,9 +218,7 @@ int ObMultipleMerge::build_extra_access_ctx()
         KP(access_ctx_ ? access_ctx_->store_ctx_ : nullptr));
   } else {
     const ObIArray<ObForkTabletInfo> *fork_infos = get_table_param_->tablet_iter_.get_fork_infos();
-    const ObIArray<ObTabletHandle> *split_infos = get_table_param_->tablet_iter_.get_split_extra_tablet_handles_ptr();
-    const int64_t total_cnt = (OB_NOT_NULL(fork_infos) ? fork_infos->count() : 0)
-                            + (OB_NOT_NULL(split_infos) ? split_infos->count() : 0);
+    const int64_t total_cnt = OB_NOT_NULL(fork_infos) ? fork_infos->count() : 0;
     if (0 == total_cnt) {
       LOG_DEBUG("skip build_extra_access_ctx", K(total_cnt), K(access_ctx_->tablet_id_));
     } else if (!extra_access_ctx_.created() && OB_FAIL(extra_access_ctx_.create(total_cnt * 2, "EAccessCtx"))) {
@@ -277,29 +274,6 @@ int ObMultipleMerge::build_extra_access_ctx()
         }
       }
 
-      for (int64_t i = 0; OB_NOT_NULL(split_infos) && OB_SUCC(ret)  && i < split_infos->count(); i++) {
-        const ObTabletHandle &tablet_handle = split_infos->at(i);
-        const ObTablet *tablet = tablet_handle.get_obj();
-        if (OB_ISNULL(tablet)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("split tablet is null", KR(ret), K(i), KP(tablet));
-        } else {
-          const ObTabletID split_tablet_id = tablet->get_tablet_id();
-          ObTableAccessContext *tmp_ctx = nullptr;
-          int tmp_ret = extra_access_ctx_.get_refactored(split_tablet_id, tmp_ctx);
-          if (OB_SUCCESS == tmp_ret) {
-            // already exists, do nothing
-          } else if (OB_HASH_NOT_EXIST == tmp_ret) {
-            if (OB_FAIL(extra_access_ctx_.set_refactored(split_tablet_id, nullptr, true))) {
-              LOG_WARN("fail to set split access ctx placeholder", KR(ret), K(split_tablet_id));
-            }
-          } else {
-            ret = tmp_ret;
-            LOG_WARN("fail to get split access ctx placeholder", KR(ret), K(split_tablet_id));
-          }
-        }
-      }
-
       LOG_DEBUG("build_extra_access_ctx finished", K(extra_access_ctx_.size()), K(access_ctx_->tablet_id_));
     }
   }
@@ -316,7 +290,7 @@ int ObMultipleMerge::get_access_ctx(ObTabletID tablet_id, ObTableAccessContext *
   if (tablet_id == access_ctx_->tablet_id_) {
     access_ctx = access_ctx_;
   } else if (!extra_access_ctx_.created()) {
-    // extra_access_ctx_ is only created when fork/split info exists.
+    // extra_access_ctx_ is only created when fork info exists.
     // Fall back to the main access_ctx_ to avoid OB_NOT_INIT from hash map.
     access_ctx = access_ctx_;
   } else {
@@ -325,7 +299,7 @@ int ObMultipleMerge::get_access_ctx(ObTabletID tablet_id, ObTableAccessContext *
       // fork scenario: found a specific access_ctx for this tablet_id
       LOG_DEBUG("get access_ctx for fork", K(tablet_id), K(access_ctx_->tablet_id_), KP(access_ctx));
     } else if (OB_SUCCESS == tmp_ret || OB_HASH_NOT_EXIST == tmp_ret) {
-      // found nullptr (split scenario) or not found, fallback to access_ctx_
+      // A missing entry falls back to the main access context.
       access_ctx = access_ctx_;
     } else {
       ret = tmp_ret;
@@ -601,8 +575,6 @@ int ObMultipleMerge::get_next_row(ObDatumRow *&row)
   } else if (FALSE_IT(not_using_static_engine = (nullptr == access_param_->output_exprs_))) {
   } else if (access_param_->iter_param_.enable_pd_aggregate()) {
     ret = get_next_aggregate_row(row);
-  } else if (OB_FAIL(refresh_filter_params_on_demand(false/*is_open*/))) {
-    LOG_WARN("failed to refresh split params on demand", K(ret));
   } else {
     row = nullptr;
     if (need_padding_) {
@@ -740,8 +712,6 @@ int ObMultipleMerge::get_next_normal_rows(int64_t &count, int64_t capacity)
     LOG_WARN("unexpect pushdown operator in vectorized", K(ret), K(access_param_->iter_param_.pd_storage_flag_),
              K(access_param_->get_op()), K(access_param_->get_op()->is_vectorized()), KP(block_row_store_),
              K(access_param_->iter_param_.vectorized_enabled_));
-  } else if (OB_FAIL(refresh_filter_params_on_demand(false/*is_open*/))) {
-    LOG_WARN("failed to refresh split params on demand", K(ret));
   } else if (OB_FAIL(refresh_table_on_demand())) {
     LOG_WARN("fail to refresh table on demand", K(ret), K_(scan_state), K_(is_unprojected_row_valid),
              K(tables_.count()), K(iters_.count()), K(di_base_iters_.count()), KPC_(access_param));
@@ -933,8 +903,6 @@ int ObMultipleMerge::get_next_aggregate_row(ObDatumRow *&row)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect aggregate pushdown status", K(ret),
              K(access_ctx_->range_array_pos_->count()));
-  } else if (OB_FAIL(refresh_filter_params_on_demand(false/*is_open*/))) {
-    LOG_WARN("failed to refersh split params on demand", K(ret));
   } else {
     ObBlockBatchedRowStore *batch_row_store = static_cast<ObBlockBatchedRowStore *>(block_row_store_);
     if (OB_NOT_NULL(access_param_->get_op())) {
@@ -1336,7 +1304,7 @@ void ObMultipleMerge::reset_extra_access_ctx()
          ++it) {
       ObTableAccessContext *access_ctx = it->second;
       if (OB_ISNULL(access_ctx)) {
-        // split scenario: placeholder entry
+        // nothing to release
       } else if (access_ctx == access_ctx_) {
         // extra map should not own the main access ctx
       } else {
@@ -1452,11 +1420,6 @@ int ObMultipleMerge::open()
       LOG_WARN("Failed to init iter pool", K(ret));
     } else {
       stmt_iter_pool_ = access_ctx_->get_stmt_iter_pool();
-    }
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(refresh_filter_params_on_demand(true/*is_open*/))) {
-      LOG_WARN("fail to fill split params", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1713,34 +1676,6 @@ int ObMultipleMerge::check_filtered(const ObDatumRow &row, bool &filtered)
   return ret;
 }
 
-int ObMultipleMerge::refresh_filter_params_on_demand(const bool is_open)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "ObMultipleMerge has not been inited", K(ret));
-  } else {
-    const ObTableIterParam &iter_param = access_param_->iter_param_;
-    const int64_t table_id = iter_param.table_id_;
-    const bool has_split_filter = OB_NOT_NULL(iter_param.auto_split_filter_)
-        && iter_param.auto_split_filter_type_ < static_cast<uint64_t>(ObTabletSplitType::MAX_TYPE);
-    if (has_split_filter && (is_open || (OB_NOT_NULL(iter_param.need_update_tablet_param_) && *iter_param.need_update_tablet_param_))) {
-      const bool is_split_dst = iter_param.is_tablet_spliting();
-      ObTablet *tablet = get_table_param_->tablet_iter_.get_tablet_handle().get_obj();
-      ObPartitionSplitQuery split_query;
-      if (OB_ISNULL(tablet)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tablet is null", K(ret), K(table_id), K(iter_param));
-      } else if (OB_FAIL(split_query.fill_auto_split_params(*tablet, is_split_dst,
-          iter_param.op_, iter_param.auto_split_filter_type_, iter_param.auto_split_params_, *access_ctx_->stmt_allocator_))) {
-        LOG_WARN("fail to fill split params.", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-
 const ObTableIterParam * ObMultipleMerge::get_actual_iter_param(const ObITable *table) const
 {
   const ObTableIterParam *ptr = NULL;
@@ -1766,19 +1701,16 @@ int ObMultipleMerge::prepare_read_tables(bool refresh)
     table_store_iter->reset();
     if (OB_FAIL(prepare_mds_tables(refresh))) {
       LOG_WARN("fail to prepare mds tables", K(ret), K(refresh), K_(get_table_param), KPC_(access_param));
-    } else if (OB_FAIL(prepare_tables_from_iterator(*table_store_iter, false/*has_split_extra_tables*/, &get_table_param_->sample_info_))) {
+    } else if (OB_FAIL(prepare_tables_from_iterator(*table_store_iter, &get_table_param_->sample_info_))) {
       LOG_WARN("failed to prepare tables from iter", K(ret), KPC(table_store_iter));
     }
   } else if (!refresh && get_table_param_->tablet_iter_.table_iter()->is_valid()) {
     if (OB_FAIL(prepare_tables_from_iterator(
-        *get_table_param_->tablet_iter_.table_iter(),
-        nullptr != get_table_param_->tablet_iter_.get_split_extra_tablet_handles_ptr()))) {
+        *get_table_param_->tablet_iter_.table_iter()))) {
       LOG_WARN("prepare tables fail", K(ret), K(get_table_param_->tablet_iter_.table_iter()));
     }
   } else if (FALSE_IT(get_table_param_->tablet_iter_.table_iter()->reset())) {
   } else {
-    const bool need_split_src_table = access_param_->iter_param_.is_tablet_spliting();
-    const bool need_split_dst_table = refresh ? true : get_table_param_->need_split_dst_table_;
     if (OB_UNLIKELY(get_table_param_->frozen_version_ != -1)) {
       if (!get_table_param_->sample_info_.is_no_sample()) {
         ret = OB_NOT_SUPPORTED;
@@ -1786,24 +1718,19 @@ int ObMultipleMerge::prepare_read_tables(bool refresh)
       } else if (OB_FAIL(get_table_param_->tablet_iter_.refresh_read_tables_from_tablet(
           get_table_param_->frozen_version_,
           false/*allow_not_ready*/,
-          true/*major_sstable_only*/,
-          need_split_src_table,
-          need_split_dst_table))) {
+          true/*major_sstable_only*/))) {
         LOG_WARN("get table iterator fail", K(ret), K_(get_table_param), KP_(access_param));
       }
     } else if (OB_FAIL(get_table_param_->tablet_iter_.refresh_read_tables_from_tablet(
         generate_read_tables_version(),
         false/*allow_not_ready*/,
-        false/*major_sstable_only*/,
-        need_split_src_table,
-        need_split_dst_table))) {
+        false/*major_sstable_only*/))) {
       LOG_WARN("get table iterator fail", K(ret), K_(get_table_param), KP_(access_param));
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(prepare_tables_from_iterator(
           *get_table_param_->tablet_iter_.table_iter(),
-          nullptr != get_table_param_->tablet_iter_.get_split_extra_tablet_handles_ptr(),
           &get_table_param_->sample_info_))) {
         LOG_WARN("failed to prepare tables from iter", K(ret), K(get_table_param_->tablet_iter_.table_iter()));
       }
@@ -1837,7 +1764,9 @@ int ObMultipleMerge::prepare_mds_tables(bool refresh)
   return ret;
 }
 
-int ObMultipleMerge::prepare_tables_from_iterator(ObTableStoreIterator &table_iter, const bool has_split_extra_tables, const common::SampleInfo *sample_info)
+int ObMultipleMerge::prepare_tables_from_iterator(
+    ObTableStoreIterator &table_iter,
+    const common::SampleInfo *sample_info)
 {
   int ret = OB_SUCCESS;
   table_iter.resume();
@@ -1893,12 +1822,7 @@ int ObMultipleMerge::prepare_tables_from_iterator(ObTableStoreIterator &table_it
     ret = OB_SUCCESS;
   }
   if (OB_SUCC(ret)) {
-    if (has_split_extra_tables) {
-      if (tables_.count() > 2*common::MAX_TABLE_CNT_IN_STORAGE) {
-        ret = OB_SCHEMA_EAGAIN;
-        LOG_WARN("too many tables for split src, retry on split dst", K(ret), K(memtable_cnt), K(tables_.count()), K(table_iter), K(tables_));
-      }
-    } else if (tables_.count() > common::MAX_TABLE_CNT_IN_STORAGE) {
+    if (tables_.count() > common::MAX_TABLE_CNT_IN_STORAGE) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected table cnt", K(ret), K(memtable_cnt), K(tables_.count()), K(table_iter), K(tables_));
     }
@@ -2010,9 +1934,7 @@ int ObMultipleMerge::refresh_tablet_iter()
         snapshot_version,
         snapshot_version,
         get_table_param_->tablet_iter_,
-        false/*allow_not_ready*/,
-        true/*need_split_src_table*/,
-        true/*need_split_dst_table*/))) {
+        false/*allow_not_ready*/))) {
       LOG_WARN("failed to refresh tablet iterator", K(ret), K_(get_table_param), KP_(access_param));
     } else {
       get_table_param_->refreshed_merge_ = this;
@@ -2334,11 +2256,9 @@ int ObMultipleMerge::prepare_truncate_filter()
   if (nullptr != access_param_ && nullptr != access_ctx_ &&
       access_param_->iter_param_.need_truncate_filter() &&
       tables_.count() > 0) {
-    const bool need_split_src_table = access_param_->iter_param_.is_tablet_spliting();
     ObVersionRange read_version_range(major_table_version_, access_ctx_->trans_version_range_.snapshot_version_);
     if (OB_FAIL(ObTruncatePartitionFilterFactory::build_truncate_partition_filter(
           *get_table_param_->tablet_iter_.get_tablet(),
-          need_split_src_table ? get_table_param_->tablet_iter_.get_split_extra_tablet_handles_ptr() : nullptr,
           access_param_->iter_param_.get_read_info()->get_columns_desc(),
           access_param_->iter_param_.get_read_info()->get_columns(),
           read_version_range,

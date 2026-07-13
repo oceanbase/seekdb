@@ -805,8 +805,6 @@ inline int ObITabletMdsInterface::fill_virtual_info(ObIArray<mds::MdsNodeInfoFor
     MDS_LOG_GET(WARN, "fail to fill seq from disk");
   } else if (CLICK_FAIL((fill_virtual_info_from_mds_sstable<mds::DummyKey, ObTabletBindingMdsUserData>(mds_node_info_array)))) {
     MDS_LOG_GET(WARN, "fail to fill aux_tablet_info_");
-  } else if (CLICK_FAIL((fill_virtual_info_from_mds_sstable<mds::DummyKey, ObTabletSplitMdsUserData>(mds_node_info_array)))) {
-    MDS_LOG_GET(WARN, "fail to fill tablet_split_data_");
   } else if (CLICK_FAIL((fill_virtual_info_from_mds_sstable<compaction::ObMediumCompactionInfoKey, compaction::ObMediumCompactionInfo>(mds_node_info_array)))) {
     MDS_LOG_GET(WARN, "fail to fill medium compaction info");
   } else if (CLICK_FAIL((fill_virtual_info_from_mds_sstable<ObTruncateInfoKey, ObTruncateInfo>(mds_node_info_array)))) {

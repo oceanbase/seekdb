@@ -24,7 +24,6 @@
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_sim_point.h"
 #include "pl/sys_package/ob_dbms_stats.h"
-#include "storage/ob_partition_pre_split.h"
 #include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
 #include "share/ob_ex_rpc.h"
 
@@ -1135,11 +1134,7 @@ int ObDDLRedefinitionTask::finish()
   ObSArray<uint64_t> objs;
   int64_t rpc_timeout = 0;
   int64_t all_orig_index_tablet_count = 0;
-  if (ObDDLType::DDL_PARTITION_SPLIT_RECOVERY_TABLE_REDEFINITION == task_type_) {
-    alter_table_arg_.ddl_task_type_ = share::PARTITION_SPLIT_RECOVERY_CLEANUP_GARBAGE_TASK;
-  } else {
-    alter_table_arg_.ddl_task_type_ = share::CLEANUP_GARBAGE_TASK;
-  }
+  alter_table_arg_.ddl_task_type_ = share::CLEANUP_GARBAGE_TASK;
   alter_table_arg_.table_id_ = object_id_;
   alter_table_arg_.hidden_table_id_ = target_object_id_;
   alter_table_arg_.task_id_ = task_id_;
@@ -1648,22 +1643,10 @@ int ObDDLRedefinitionTask::sync_part_stats_info_accross_tenant(common::ObMySQLTr
         int64_t target_partition_id = 0;
         target_part_stat->set_table_id(target_object_id_);
         target_part_stat->set_last_analyzed(0);
-        bool is_hidden_partition = false;
-        /* The auto split feature will create hidden partition(an intermediate state), so part_stats may contain hidden and normal partition stats.
-         * Recover table will not restore the hidden partition, hidden partition don't have a corresponding partition in the target table, so we skip
-         * partition statistics synchronization for hidden partition.
-         * And src_partition_ids which get from data_table_schema only have normal partition. */
         if (OB_FAIL(part_ids_map.get_refactored(src_partition_id, target_partition_id))) {
-          if (OB_HASH_NOT_EXIST == ret) {
-            is_hidden_partition = true;
-            ret = OB_SUCCESS;
-          } else {
-            LOG_WARN("failed to get part_ids_map", K(ret));
-          }
+          LOG_WARN("failed to get part_ids_map", K(ret));
         }
         if (OB_FAIL(ret)) {
-        } else if (is_hidden_partition) {
-          LOG_INFO("skip partition statistics synchronization for hidden partition", K(part_stat), K(is_hidden_partition));
         } else if (FALSE_IT(target_part_stat->set_partition_id(target_partition_id))) {
         } else if (OB_FAIL(target_part_stats.push_back(target_part_stat))) {
           LOG_WARN("failed to push back partition stat", K(ret));
@@ -2276,13 +2259,9 @@ int ObDDLRedefinitionTask::generate_rebuild_index_arg_list(
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = nullptr;
-  ObRootService *root_service = GCTX.root_service_;
   if (table_id == OB_INVALID_ID) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(table_id));
-  } else if (OB_ISNULL(root_service)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("error sys, root service must not be nullptr", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     LOG_WARN("fail to get table schema", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
@@ -2291,12 +2270,8 @@ int ObDDLRedefinitionTask::generate_rebuild_index_arg_list(
   } else {
     const common::ObIArray<ObAuxTableMetaInfo> &index_infos = table_schema->get_simple_index_infos();
     if (index_infos.count() > 0) {
-      AlterTableSchema &alter_table_schema = const_cast<AlterTableSchema &>(alter_table_arg.alter_table_schema_);
-      const ObString database_name = alter_table_schema.get_origin_database_name();
-      ObPartitionPreSplit pre_split(root_service->get_ddl_service());
       for (int64_t i = 0; OB_SUCC(ret) && i < index_infos.count(); ++i) {
         const ObTableSchema *index_schema = nullptr;
-        ObTableSchema new_index_schema;
         const int64_t index_id = index_infos.at(i).table_id_;
         if (is_vec_index(index_infos.at(i).index_type_) && !is_vec_delta_buffer_type(index_infos.at(i).index_type_)) {
         } else if (is_fts_index(index_infos.at(i).index_type_) && !is_fts_index_aux(index_infos.at(i).index_type_)) {
@@ -2307,16 +2282,7 @@ int ObDDLRedefinitionTask::generate_rebuild_index_arg_list(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected schema nullptr", K(ret), KP(index_schema));
         } else if (!index_schema->is_global_index_table()) { // skip
-        } else if (OB_FAIL(new_index_schema.assign(*index_schema))) {
-          LOG_WARN("fail to assign schema", K(ret));
-        } else if (OB_FAIL(pre_split.do_table_pre_split_if_need(database_name, ObDDLType::DDL_CREATE_INDEX, false, *table_schema, *index_schema, new_index_schema))) {
-          LOG_WARN("fail to pre split index partition", K(ret), K(index_id));
-          //overwrite ret code
-          ret = OB_SUCCESS;
-          if (OB_FAIL(alter_table_arg.rebuild_index_arg_list_.push_back(*index_schema))) {
-            LOG_WARN("fail to push back index schema", K(ret));
-          }
-        } else if (OB_FAIL(alter_table_arg.rebuild_index_arg_list_.push_back(new_index_schema))) {
+        } else if (OB_FAIL(alter_table_arg.rebuild_index_arg_list_.push_back(*index_schema))) {
           LOG_WARN("fail to push back index schema", K(ret));
         }
       }

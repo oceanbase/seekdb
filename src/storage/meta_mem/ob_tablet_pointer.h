@@ -167,8 +167,6 @@ public:
   int set_tablet_attr(const ObTabletAttr &attr);
   bool is_old_version_chain_empty() const { return OB_ISNULL(old_version_chain_); }
   bool is_attr_valid() const { return attr_.is_valid(); }
-  int64_t get_auto_part_size() const;
-  void set_auto_part_size(const int64_t auto_part_size);
 private:
   int scan_all_tablets_on_chain(const ObFunction<int(ObTablet &)> &op);// must be called under t3m bucket lock's protection
   int wash_obj();

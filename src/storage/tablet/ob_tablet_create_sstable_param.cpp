@@ -252,10 +252,10 @@ int ObTabletCreateSSTableParam::init_for_empty_major_sstable(const ObTabletID &t
   return ret;
 }
 
-int ObTabletCreateSSTableParam::init_for_split_empty_minor_sstable(const ObTabletID &tablet_id,
-                                                                   const share::SCN &start_scn,
-                                                                   const share::SCN &end_scn,
-                                                                   const blocksstable::ObSSTableBasicMeta &basic_meta)
+int ObTabletCreateSSTableParam::init_for_empty_minor_sstable(const ObTabletID &tablet_id,
+                                                             const share::SCN &start_scn,
+                                                             const share::SCN &end_scn,
+                                                             const blocksstable::ObSSTableBasicMeta &basic_meta)
 {
   int ret = OB_SUCCESS;
   table_key_.table_type_ = ObITable::TableType::MINOR_SSTABLE;
@@ -654,7 +654,7 @@ int ObTabletCreateSSTableParam::init_for_ss_ddl(blocksstable::ObSSTableMergeRes 
   return ret;
 }
 
-int ObTabletCreateSSTableParam::init_for_split(const ObTabletID &dst_tablet_id,
+int ObTabletCreateSSTableParam::init_for_fork(const ObTabletID &dst_tablet_id,
                                                const ObITable::TableKey &src_table_key,
                                                const blocksstable::ObSSTableBasicMeta &basic_meta,
                                                const int64_t schema_version,
@@ -698,60 +698,6 @@ int ObTabletCreateSSTableParam::init_for_split(const ObTabletID &dst_tablet_id,
   }
   return ret;
 }                                          
-
-int ObTabletCreateSSTableParam::init_for_lob_split(const ObTabletID &new_tablet_id,
-                                                   const ObITable::TableKey &table_key,
-                                                   const blocksstable::ObSSTableBasicMeta &basic_meta,
-                                                   const compaction::ObMergeType &merge_type,
-                                                   const int64_t schema_version,
-                                                   const int64_t dst_major_snapshot_version,
-                                                   const int64_t uncommitted_tx_id,
-                                                   const int64_t sstable_logic_seq,
-                                                   const blocksstable::ObSSTableMergeRes &res)
-{
-  int ret = OB_SUCCESS;
-  table_key_ = table_key;
-  table_key_.tablet_id_ = new_tablet_id;
-  if (is_major_merge(merge_type)) {
-    table_key_.version_range_.snapshot_version_ = dst_major_snapshot_version;
-  }
-  uncommitted_tx_id_ = uncommitted_tx_id;
-  schema_version_ = schema_version;
-
-  // init from basic_meta
-  table_mode_ = basic_meta.table_mode_;
-  index_type_ = static_cast<share::schema::ObIndexType>(basic_meta.index_type_);
-  rowkey_column_cnt_ = basic_meta.rowkey_column_count_;
-
-  create_snapshot_version_ = is_major_merge(merge_type) ? dst_major_snapshot_version : basic_meta.create_snapshot_version_;
-
-  sstable_logic_seq_ = sstable_logic_seq;
-  filled_tx_scn_ = basic_meta.filled_tx_scn_;
-  latest_row_store_type_ = basic_meta.latest_row_store_type_;
-  recycle_version_ = basic_meta.recycle_version_;
-  ddl_scn_ = basic_meta.ddl_scn_;
-  progressive_merge_round_ = basic_meta.progressive_merge_round_;
-  progressive_merge_step_ = basic_meta.progressive_merge_step_;
-
-  ddl_scn_.set_min();
-
-  // init from merge_res
-  column_cnt_ = res.data_column_cnt_;
-  max_merged_trans_version_ = res.max_merged_trans_version_;
-  nested_size_ = res.nested_size_;
-  nested_offset_ = res.nested_offset_;
-  tx_data_recycle_scn_.set_min();
-
-  if (OB_FAIL(inner_init_with_merge_res(res))) {
-    LOG_WARN("fail to inner init with merge res", K(ret), K(res));
-  } 
-  if (OB_SUCC(ret) && table_key.is_major_sstable()) {
-    if (OB_FAIL(column_checksums_.assign(res.data_column_checksums_))) {
-      LOG_WARN("fill column checksum failed", K(ret), K(res));
-    }
-  }
-  return ret;
-}
 
 
 

@@ -1215,7 +1215,7 @@ int ObBasicTabletMergeCtx::alloc_mds_info_compaction_filter()
   if (OB_UNLIKELY(nullptr == static_param_.rowkey_read_info_ || static_param_.multi_version_column_descs_.empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected not ready static param", KR(ret), KP_(static_param_.rowkey_read_info));
-  } else if (OB_FAIL(mds_info_mgr.init(tmp_allocator, *get_tablet(), nullptr/*split_extra_tablet_handles_ptr*/, read_version_range, false/*for_access*/))) {
+  } else if (OB_FAIL(mds_info_mgr.init(tmp_allocator, *get_tablet(), read_version_range, false/*for_access*/))) {
     LOG_WARN("failed to init mds filter info mgr", KR(ret), K(read_version_range));
   } else if (OB_FAIL(mds_info_mgr.check_mds_filter_info(filter_ctx_.mds_filter_info_))) {
     LOG_WARN("failed to check mds filter info", KR(ret), K(read_version_range));

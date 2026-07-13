@@ -81,7 +81,7 @@ public:
       const int64_t delete_commit_version,
       const int64_t snapshot_version,
       const ObTabletStatus &tablet_status);
-  static int check_read_snapshot_for_normal_or_split_dst(
+  static int check_read_snapshot_for_normal(
       const ObTablet &tablet,
       const int64_t snapshot_version,
       const ObTabletCreateDeleteMdsUserData &user_data,
@@ -95,15 +95,6 @@ public:
       const mds::MdsWriter &writer,
       const mds::TwoPhaseCommitState &trans_state,
       const share::SCN &trans_version);
-  static int check_read_snapshot_for_split_src(
-      const ObTablet &tablet,
-      const int64_t snapshot_version,
-      const ObTabletCreateDeleteMdsUserData &user_data,
-      const mds::TwoPhaseCommitState &trans_state);
-  static int check_read_snapshot_for_split_src_deleted(
-      const ObTablet &tablet,
-      const ObTabletCreateDeleteMdsUserData &user_data,
-      const mds::TwoPhaseCommitState &trans_state);
   static int check_read_snapshot_by_commit_version(
       const int64_t snapshot_version,
       const ObTabletCreateDeleteMdsUserData &user_data);

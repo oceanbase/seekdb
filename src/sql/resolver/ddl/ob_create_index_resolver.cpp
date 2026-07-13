@@ -660,11 +660,6 @@ int ObCreateIndexResolver::set_table_option_to_stmt(
     if (NOT_SPECIFIED == index_scope_) {
       // Partitioned index must be global; otherwise the default index mode is local.
       global_ = is_partitioned;
-      if (!global_) {
-        if (OB_FAIL(get_suggest_index_scope(data_table_id, index_arg, index_keyname_, global_))) {
-          LOG_WARN("get suggest index type failed", K(ret), K(index_arg));
-        }
-      }
     } else {
       global_ = (GLOBAL_INDEX == index_scope_);
     }

@@ -108,9 +108,6 @@ public:
   // ObCallSwitchSchemaP @RS DDL
   int switch_schema(const obcall::ObSwitchSchemaArg &arg, obcall::ObSwitchSchemaResult &result);
   int calc_column_checksum_request(const obcall::ObCalcColumnChecksumRequestArg &arg, obcall::ObCalcColumnChecksumRequestRes &res);
-  int build_split_tablet_data_start_request(const obcall::ObTabletSplitStartArg &arg, obcall::ObTabletSplitStartResult &res);
-  int build_split_tablet_data_finish_request(const obcall::ObTabletSplitFinishArg &arg, obcall::ObTabletSplitFinishResult &res);
-  int fetch_split_tablet_info(const obcall::ObFetchSplitTabletInfoArg &arg, obcall::ObFetchSplitTabletInfoRes &res, const int64_t abs_timeout_us);
   int build_ddl_single_replica_request(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
   int build_ddl_single_replica_request(const obcall::ObDDLBuildSingleReplicaRequestArg &arg, obcall::ObDDLBuildSingleReplicaRequestResult &res);
   int check_and_cancel_ddl_complement_data_dag(const obcall::ObDDLBuildSingleReplicaRequestArg &arg, bool &is_dag_exist);
@@ -138,18 +135,6 @@ public:
       const obcall::ObCheckSchemaVersionElapsedArg &arg,
       obcall::ObCheckSchemaVersionElapsedResult &result);
   // ObCallGetChecksumCalSnapshotP
-
-  // ObCallCheckMemtableCntP
-  int check_memtable_cnt(
-      const obcall::ObCheckMemtableCntArg &arg,
-      obcall::ObCheckMemtableCntResult &result);
-  // ObCallCheckMediumCompactionInfoListP
-  int check_medium_compaction_info_list_cnt(
-      const obcall::ObCheckMediumCompactionInfoListArg &arg,
-      obcall::ObCheckMediumCompactionInfoListResult &result);
-  int prepare_tablet_split_task_ranges(
-      const obcall::ObPrepareSplitRangesArg &arg,
-      obcall::ObPrepareSplitRangesRes &result);
 
   int check_modify_time_elapsed(
       const obcall::ObCheckModifyTimeElapsedArg &arg,

@@ -501,7 +501,6 @@ ObBatchUpdateTableStoreParam::ObBatchUpdateTableStoreParam()
     errsim_point_info_(),
 #endif
     storage_schema_(nullptr),
-    tablet_split_param_(),
     tablet_fork_param_(),
     release_mds_scn_()
 {
@@ -511,7 +510,6 @@ void ObBatchUpdateTableStoreParam::reset()
 {
   tables_handle_.reset();
   storage_schema_ = nullptr;
-  tablet_split_param_.reset();
   tablet_fork_param_.reset();
   release_mds_scn_.reset();
 }
@@ -519,38 +517,10 @@ void ObBatchUpdateTableStoreParam::reset()
 bool ObBatchUpdateTableStoreParam::is_valid() const
 {
   return release_mds_scn_.is_valid()
-      && (tablet_split_param_.is_valid() != tablet_fork_param_.is_valid());
+      && tablet_fork_param_.is_valid();
 }
 
 
-
-ObSplitTableStoreParam::ObSplitTableStoreParam()
-  : snapshot_version_(-1),
-    multi_version_start_(-1),
-    merge_type_(INVALID_MERGE_TYPE),
-    skip_split_keys_()
-{
-}
-
-ObSplitTableStoreParam::~ObSplitTableStoreParam()
-{
-  reset();
-}
-
-bool ObSplitTableStoreParam::is_valid() const
-{
-  return snapshot_version_ > -1
-    && multi_version_start_ >= 0
-    && is_valid_merge_type(merge_type_);
-}
-
-void ObSplitTableStoreParam::reset()
-{
-  snapshot_version_ = -1;
-  multi_version_start_ = -1;
-  merge_type_ = INVALID_MERGE_TYPE;
-  skip_split_keys_.reset();
-}
 
 ObForkTableStoreParam::ObForkTableStoreParam()
   : snapshot_version_(-1),
@@ -599,44 +569,6 @@ ObPartitionReadableInfo::~ObPartitionReadableInfo()
 }
 
 
-
-
-ObTabletSplitTscInfo::ObTabletSplitTscInfo()
-  : start_partkey_(),
-    end_partkey_(),
-    is_split_dst_(),
-    split_cnt_(0),
-    split_type_(ObTabletSplitType::MAX_TYPE),
-    partkey_is_rowkey_prefix_(false)
-{
-}
-
-bool ObTabletSplitTscInfo::is_split_dst_with_partkey() const
-{
-  return start_partkey_.is_valid() 
-      && end_partkey_.is_valid()
-      && is_split_dst_
-      && split_type_ < ObTabletSplitType::MAX_TYPE;
-}
-
-// e.g., lob split dst tablet
-bool ObTabletSplitTscInfo::is_split_dst_without_partkey() const
-{
-  return !start_partkey_.is_valid()
-      && !end_partkey_.is_valid()
-      && is_split_dst_
-      && split_type_ < ObTabletSplitType::MAX_TYPE;
-}
-
-void ObTabletSplitTscInfo::reset()
-{
-  start_partkey_.reset();
-  end_partkey_.reset();
-  is_split_dst_ = false;
-  split_type_ = ObTabletSplitType::MAX_TYPE;
-  split_cnt_ = 0;
-  partkey_is_rowkey_prefix_ = false;
-}
 
 
 ObRebuildListener::ObRebuildListener(transaction::ObLSTxCtxMgr &mgr)

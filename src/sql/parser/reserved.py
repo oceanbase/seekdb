@@ -1132,7 +1132,6 @@ class SqlKeywords:
          RELAY_THREAD
          RELOAD
          REMOVE
-         REORGANIZE
          REPAIR
          REPEATABLE
          REPLICATION
@@ -1810,7 +1809,6 @@ class SqlKeywords:
          RELAY_THREAD
          RELOAD
          REMOVE
-         REORGANIZE
          REPAIR
          REPEATABLE
          REPLICA

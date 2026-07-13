@@ -93,8 +93,6 @@ public:
   int update_all_part_for_subpart(ObISQLClient &sql_client,
                                   const ObTableSchema &table,
                                   const ObIArray<ObPartition*> &update_part_array);
-  int update_splitting_partition_option(common::ObISQLClient &sql_client,
-                                        const ObTableSchema &table);
 
   virtual int drop_table(const ObTableSchema &table_schema,
                          const int64_t new_schema_version,
@@ -183,10 +181,6 @@ public:
                         const ObTableSchema &inc_table,
                         const int64_t schema_version,
                         bool ignore_log_operation);
-  int add_split_inc_part_info(common::ObISQLClient &sql_client,
-                              const ObTableSchema &ori_table,
-                              const ObTableSchema &inc_table,
-                              const int64_t schema_version);
   int add_inc_subpart_info(common::ObISQLClient &sql_client,
                            const ObTableSchema &ori_table,
                            const ObTableSchema &inc_table,
