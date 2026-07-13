@@ -399,6 +399,8 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
               SQL_RESV_LOG(WARN, "resolve table options failed", K(ret));
             } else if (OB_FAIL(set_table_option_to_schema(table_schema))) {
               SQL_RESV_LOG(WARN, "set table option to schema failed", K(ret));
+            } else if (OB_FAIL(check_fulltext_dict_table_schema(table_schema))) {
+              SQL_RESV_LOG(WARN, "check fulltext dict table schema failed", K(ret));
             } else if (OB_FAIL(check_max_row_data_length(table_schema))) {
               SQL_RESV_LOG(WARN, "check max row data length failed", K(ret));
             } else {
@@ -606,6 +608,46 @@ int ObCreateTableResolver::check_generated_partition_column(ObTableSchema &table
     } else { }//do nothing
   }
 
+  return ret;
+}
+
+int ObCreateTableResolver::check_fulltext_dict_table_schema(const ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  if (!table_schema.is_fulltext_dict_table()) {
+    // do nothing
+  } else {
+    const ObColumnSchemaV2 *word_col = table_schema.get_column_schema(ObString::make_string("word"));
+    if (1 != table_schema.get_column_count()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT table with multiple columns");
+      SQL_RESV_LOG(WARN, "fulltext dict table must have only one column", K(ret), K(table_schema));
+    } else if (OB_ISNULL(word_col)) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT table without word column");
+      SQL_RESV_LOG(WARN, "fulltext dict table must have word column", K(ret), K(table_schema));
+    } else if (ObVarcharType != word_col->get_data_type()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT table word column with non-varchar type");
+      SQL_RESV_LOG(WARN, "fulltext dict word column must be varchar", K(ret), KPC(word_col));
+    } else if (word_col->get_data_length() <= 0 || word_col->get_data_length() > 500) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT table word column length outside 1..500");
+      SQL_RESV_LOG(WARN, "fulltext dict word column length is invalid", K(ret), KPC(word_col));
+    } else if (CHARSET_UTF8MB4 != word_col->get_charset_type() || CHARSET_UTF8MB4 != table_schema.get_charset_type()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT table with non-utf8mb4 charset");
+      SQL_RESV_LOG(WARN, "fulltext dict table must use utf8mb4 charset", K(ret), K(table_schema), KPC(word_col));
+    } else if (1 != table_schema.get_rowkey_column_num() || !word_col->is_rowkey_column()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT table without word primary key");
+      SQL_RESV_LOG(WARN, "fulltext dict table must use word as primary key", K(ret), K(table_schema), KPC(word_col));
+    } else if (!table_schema.is_index_organized_table()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT table without ORGANIZATION INDEX");
+      SQL_RESV_LOG(WARN, "fulltext dict table must be index organized", K(ret), K(table_schema));
+    }
+  }
   return ret;
 }
 

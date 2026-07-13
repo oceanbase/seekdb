@@ -1581,6 +1581,11 @@ public:
   inline ObNameGeneratedType get_name_generated_type() const { return name_generated_type_; }
   bool is_sys_generated_name(bool check_unknown) const;
   inline bool is_user_specified_partition_for_external_table() const { return (table_flags_ & EXTERNAL_TABLE_USER_SPECIFIED_PARTITION_FLAG) != 0; }
+  inline void set_fulltext_dict_table(const bool flag)
+  {
+    flag ? add_table_flag(FULLTEXT_DICT_TABLE_FLAG) : del_table_flag(FULLTEXT_DICT_TABLE_FLAG);
+  }
+  inline bool is_fulltext_dict_table() const { return 0 != (table_flags_ & FULLTEXT_DICT_TABLE_FLAG); }
   inline bool is_index_visible() const
   {
     return 0 == (index_attributes_set_ & ((uint64_t)(1) << INDEX_VISIBILITY));

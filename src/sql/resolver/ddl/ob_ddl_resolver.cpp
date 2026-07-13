@@ -117,6 +117,7 @@ ObDDLResolver::ObDDLResolver(ObResolverParams &params)
     vec_column_name_(),
     vec_index_type_(INDEX_TYPE_MAX),
     enable_macro_block_bloom_filter_(false),
+    is_fulltext_dict_table_(false),
     semistruct_encoding_type_(),
     dynamic_partition_policy_()
 {
@@ -2394,6 +2395,26 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
+      case T_FULLTEXT_DICT: {
+        if (is_index_option) {
+          ret = OB_ERR_PARSE_SQL;
+          SQL_RESV_LOG(WARN, "fulltext dict can not be specified in index option", K(ret));
+        } else if (OB_ISNULL(option_node->children_) || OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "option_node child is null", K(ret));
+        } else {
+          ObString value(static_cast<int32_t>(option_node->children_[0]->str_len_),
+                         option_node->children_[0]->str_value_);
+          if (0 == value.case_compare("Y")) {
+            is_fulltext_dict_table_ = true;
+          } else {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT only supports 'Y'");
+            SQL_RESV_LOG(WARN, "invalid fulltext dict option", K(ret), K(value));
+          }
+        }
+        break;
+      }
       case T_SEMISTRUCT_ENCODING_TYPE: {
         ret = resolve_semistruct_encoding_type(option_node, is_index_option);
         break;
@@ -4278,6 +4299,7 @@ void ObDDLResolver::reset() {
   index_params_.reset();
   mv_refresh_dop_ = 0;
   enable_macro_block_bloom_filter_ = false;
+  is_fulltext_dict_table_ = false;
   semistruct_encoding_type_.reset();
   dynamic_partition_policy_.reset();
 }
