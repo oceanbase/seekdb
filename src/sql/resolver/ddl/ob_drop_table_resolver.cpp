@@ -15,11 +15,13 @@
  */
 
 #include "sql/resolver/ddl/ob_drop_table_resolver.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 namespace oceanbase
 {
 using namespace common;
 using common::hash::ObPlacementHashSet;
 using obcall::ObTableItem;
+using share::ObFtsIndexBuilderUtil;
 namespace sql
 {
 ObDropTableResolver::ObDropTableResolver(ObResolverParams &params)
@@ -116,6 +118,31 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
                                                   db_name))) {
             SQL_RESV_LOG(WARN, "failed to resolve table relation node!", K(ret));
           } else {
+            const share::schema::ObTableSchema *table_schema = nullptr;
+            int tmp_ret = schema_checker_->get_table_schema(db_name, table_name, false, table_schema);
+            if (OB_SUCCESS == tmp_ret && OB_NOT_NULL(table_schema) && table_schema->is_fulltext_dict_table()) {
+              bool referenced = false;
+              if (OB_ISNULL(schema_checker_->get_schema_guard())) {
+                ret = OB_ERR_UNEXPECTED;
+                SQL_RESV_LOG(WARN, "schema guard is null", K(ret));
+              } else if (OB_FAIL(ObFtsIndexBuilderUtil::check_fulltext_dict_table_referenced(
+                         db_name,
+                         table_name,
+                         *schema_checker_->get_schema_guard(),
+                         referenced))) {
+                SQL_RESV_LOG(WARN, "failed to check fulltext dict table reference", K(ret), K(db_name), K(table_name));
+              } else if (referenced) {
+                ret = OB_OP_NOT_ALLOW;
+                LOG_USER_ERROR(OB_OP_NOT_ALLOW, "drop referenced FULLTEXT_DICT table");
+              }
+            } else if (OB_TABLE_NOT_EXIST == tmp_ret) {
+              tmp_ret = OB_SUCCESS;
+            } else if (OB_SUCCESS != tmp_ret) {
+              ret = tmp_ret;
+              SQL_RESV_LOG(WARN, "failed to get table schema", K(ret), K(db_name), K(table_name));
+            }
+          }
+          if (OB_SUCC(ret)) {
             table_item.reset();
             if (OB_FAIL(session_info_->get_name_case_mode(table_item.mode_))) {
               SQL_RESV_LOG(WARN, "failed to get name case mode!", K(ret));

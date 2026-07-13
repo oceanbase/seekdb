@@ -91,6 +91,85 @@ bool is_cast_as_array_expr(const ObString &expr_string)
       && contains_keyword_ci(args, ObString::make_string("as"))
       && args.trim().suffix_match_ci(ObString::make_string("array"));
 }
+
+bool fulltext_dict_table_name_match(const ObString &configured_table_name,
+                                    const ObString &default_database_name,
+                                    const ObString &target_database_name,
+                                    const ObString &target_table_name)
+{
+  bool matched = false;
+  ObString dict_database_name;
+  ObString dict_table_name;
+  ObString tmp_name = configured_table_name.trim();
+  const char *dot_pos = tmp_name.find('.');
+  if (tmp_name.empty()) {
+  } else if (OB_NOT_NULL(dot_pos)) {
+    dict_database_name = tmp_name.split_on(dot_pos).trim();
+    dict_table_name = tmp_name.trim();
+  } else {
+    dict_database_name = default_database_name;
+    dict_table_name = tmp_name;
+  }
+  if (!dict_database_name.empty() && !dict_table_name.empty()) {
+    matched = (0 == dict_database_name.case_compare(target_database_name)
+               && 0 == dict_table_name.case_compare(target_table_name));
+  }
+  return matched;
+}
+
+int check_fulltext_dict_table_ref_in_property(const ObTableSchema &index_schema,
+                                              ObSchemaGetterGuard &schema_guard,
+                                              const ObString &target_database_name,
+                                              const ObString &target_table_name,
+                                              bool &referenced)
+{
+  int ret = OB_SUCCESS;
+  storage::ObFTParser parser;
+  storage::ObFTParserJsonProps parser_properties;
+  const ObDatabaseSchema *database_schema = nullptr;
+  ObString real_parser_name;
+  ObString dict_table;
+  ObString stopword_table;
+  ObString quantifier_table;
+  referenced = false;
+  if (index_schema.get_parser_name_str().empty() || index_schema.get_parser_property_str().empty()) {
+  } else if (OB_FAIL(parser.parse_from_str(index_schema.get_parser_name_str().ptr(),
+                                           index_schema.get_parser_name_str().length()))) {
+    LOG_WARN("fail to parse parser name", K(ret), K(index_schema.get_parser_name_str()));
+  } else if (FALSE_IT(real_parser_name = ObString(parser.get_parser_name().len(), parser.get_parser_name().str()))) {
+  } else if (!ObFtsIndexBuilderUtil::is_need_dictionary(real_parser_name)) {
+  } else if (OB_FAIL(schema_guard.get_database_schema(index_schema.get_database_id(), database_schema))) {
+    LOG_WARN("fail to get fts index database schema", K(ret), K(index_schema));
+  } else if (OB_ISNULL(database_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fts index database schema is null", K(ret), K(index_schema));
+  } else if (OB_FAIL(parser_properties.init())) {
+    LOG_WARN("fail to init parser properties", K(ret));
+  } else if (OB_FAIL(parser_properties.parse_from_valid_str(index_schema.get_parser_property_str()))) {
+    LOG_WARN("fail to parse parser properties", K(ret), K(index_schema.get_parser_property_str()));
+  } else if (OB_FAIL(parser_properties.config_get_dict_table(dict_table))) {
+    LOG_WARN("fail to get dict_table parser property", K(ret));
+  } else if (OB_FAIL(parser_properties.config_get_stopword_table(stopword_table))) {
+    LOG_WARN("fail to get stopword_table parser property", K(ret));
+  } else if (OB_FAIL(parser_properties.config_get_quantifier_table(quantifier_table))) {
+    LOG_WARN("fail to get quantifier_table parser property", K(ret));
+  } else {
+    const ObString default_database_name = database_schema->get_database_name_str();
+    referenced = fulltext_dict_table_name_match(dict_table,
+                                                default_database_name,
+                                                target_database_name,
+                                                target_table_name)
+                 || fulltext_dict_table_name_match(stopword_table,
+                                                   default_database_name,
+                                                   target_database_name,
+                                                   target_table_name)
+                 || fulltext_dict_table_name_match(quantifier_table,
+                                                   default_database_name,
+                                                   target_database_name,
+                                                   target_table_name);
+  }
+  return ret;
+}
 } // namespace
 
 int ObFtsIndexBuilderUtil::determine_docid_type(const ObTableSchema &table_schema, ObDocIDType &doc_id_type)
@@ -2128,6 +2207,42 @@ int ObFtsIndexBuilderUtil::generate_fts_parser_property(
     } else if (OB_FAIL(json_props.to_format_json(allocator,
                                                  arg.index_option_.parser_properties_))) {
       LOG_WARN("fail to to format json", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObFtsIndexBuilderUtil::check_fulltext_dict_table_referenced(
+    const ObString &database_name,
+    const ObString &table_name,
+    ObSchemaGetterGuard &schema_guard,
+    bool &referenced)
+{
+  int ret = OB_SUCCESS;
+  ObArray<const ObTableSchema *> table_schemas;
+  referenced = false;
+  if (database_name.empty() || table_name.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid dict table name", K(ret), K(database_name), K(table_name));
+  } else if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(table_schemas))) {
+    LOG_WARN("fail to get table schemas in tenant", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && !referenced && i < table_schemas.count(); ++i) {
+      const ObTableSchema *table_schema = table_schemas.at(i);
+      bool cur_referenced = false;
+      if (OB_ISNULL(table_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("table schema is null", K(ret), K(i));
+      } else if (!table_schema->is_fts_index_aux() && !table_schema->is_fts_doc_word_aux()) {
+      } else if (OB_FAIL(check_fulltext_dict_table_ref_in_property(*table_schema,
+                                                                   schema_guard,
+                                                                   database_name,
+                                                                   table_name,
+                                                                   cur_referenced))) {
+        LOG_WARN("fail to check fts dict table reference", K(ret), KPC(table_schema));
+      } else {
+        referenced = cur_referenced;
+      }
     }
   }
   return ret;
