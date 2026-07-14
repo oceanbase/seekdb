@@ -125,6 +125,8 @@ public:
       = 0;
 
   virtual void reuse() = 0;
+
+  VIRTUAL_TO_STRING_KV(KP(this));
 };
 
 } // namespace storage

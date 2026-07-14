@@ -456,7 +456,7 @@ void ObIKFTParser::reset()
       metadata_alloc_.free(segmenter);
     }
   }
-  segmenters_.clear();
+  segmenters_.reset();
 
   cache_main_.reset();
   cache_quan_.reset();
