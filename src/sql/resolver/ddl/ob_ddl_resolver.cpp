@@ -29,7 +29,6 @@
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 #include "sql/resolver/ddl/ob_fts_parser_resolver.h"
 #include "sql/session/ob_local_session_var.h"
-#include "rootserver/ob_dynamic_partition_manager.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "share/schema/ob_table_schema.h"  // relocated-definition owner
 
@@ -116,8 +115,7 @@ ObDDLResolver::ObDDLResolver(ObResolverParams &params)
     vec_column_name_(),
     vec_index_type_(INDEX_TYPE_MAX),
     enable_macro_block_bloom_filter_(false),
-    semistruct_encoding_type_(),
-    dynamic_partition_policy_()
+    semistruct_encoding_type_()
 {
   table_mode_.reset();
 }
@@ -2399,33 +2397,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
-      case T_DYNAMIC_PARTITION_POLICY: {
-        if (is_index_option) {
-          ret = OB_NOT_SUPPORTED;
-          SQL_RESV_LOG(WARN, "index option should not specify dynamic partition policy", KR(ret));
-        } else if (OB_ISNULL(option_node->children_)
-                   || 0 == option_node->num_child_
-                   || OB_ISNULL(option_node->str_value_)) {
-          ret = OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "invalid dynamic partition policy arg", KR(ret), "num_child", option_node->num_child_);
-        } else {
-          ObString tmp_str;
-          tmp_str.assign_ptr(const_cast<char *>(option_node->str_value_),
-                             static_cast<int32_t>(option_node->str_len_));
-          if (OB_FAIL(ob_write_string(*allocator_, tmp_str, dynamic_partition_policy_))) {
-            SQL_RESV_LOG(WARN, "write string failed", KR(ret));
-          } else if (OB_FAIL(ObDynamicPartitionManager::format_dynamic_partition_policy_str(*allocator_, dynamic_partition_policy_, dynamic_partition_policy_))) {
-            SQL_RESV_LOG(WARN, "fail to format dynamic partition policy str", KR(ret));
-          } else if (stmt::T_CREATE_TABLE == stmt_->get_stmt_type()
-                     && OB_FAIL(ObDynamicPartitionManager::fill_default_value(*allocator_, dynamic_partition_policy_, dynamic_partition_policy_))) {
-            SQL_RESV_LOG(WARN, "fail to fill default value", KR(ret), K_(dynamic_partition_policy));
-          } else if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()
-                     && OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::DYNAMIC_PARTITION_POLICY))) {
-            SQL_RESV_LOG(WARN, "failed to add member to bitset", KR(ret));
-          }
-        }
-        break;
-      }
       default: {
         /* won't be here */
         ret = OB_ERR_UNEXPECTED;
@@ -4248,7 +4219,6 @@ void ObDDLResolver::reset() {
   index_params_.reset();
   enable_macro_block_bloom_filter_ = false;
   semistruct_encoding_type_.reset();
-  dynamic_partition_policy_.reset();
 }
 
 void ObDDLResolver::reset_index()

@@ -98,9 +98,8 @@ id	field	type	length	precision	nullable
 101	storage_cache_policy	22	1048576	-1	0
 102	merge_engine_type	5	0	20	0
 103	semistruct_encoding_type	5	0	20	0
-104	dynamic_partition_policy	22	4096	-1	0
-105	external_location_id	5	0	20	0
-106	external_sub_path	22	1048576	-1	1
+104	external_location_id	5	0	20	0
+105	external_sub_path	22	1048576	-1	1
 table oceanbase.__all_column column_count 34 table_id 4
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_core_column_table where table_id=4 order by column_id;
 id	field	type	length	precision	nullable
@@ -491,9 +490,8 @@ id	field	type	length	precision	nullable
 102	storage_cache_policy	22	1048576	-1	1
 103	merge_engine_type	5	0	20	1
 104	semistruct_encoding_type	5	0	20	1
-105	dynamic_partition_policy	22	4096	-1	1
-106	external_location_id	5	0	20	1
-107	external_sub_path	22	1048576	-1	1
+105	external_location_id	5	0	20	1
+106	external_sub_path	22	1048576	-1	1
 table oceanbase.__all_column_history column_count 35 table_id 115
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=115 order by column_id;
 id	field	type	length	precision	nullable
@@ -3056,9 +3054,8 @@ id	field	type	length	precision	nullable
 99	storage_cache_policy	22	1048576	-1	0
 100	merge_engine_type	5	0	20	0
 101	semistruct_encoding_type	5	0	20	0
-102	dynamic_partition_policy	22	4096	-1	0
-103	external_location_id	5	0	20	0
-104	external_sub_path	22	1048576	-1	1
+102	external_location_id	5	0	20	0
+103	external_sub_path	22	1048576	-1	1
 table oceanbase.__all_virtual_core_column_table column_count 32 table_id 11036
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11036 order by column_id;
 id	field	type	length	precision	nullable
@@ -4954,20 +4951,6 @@ id	field	type	length	precision	nullable
 17	format_sqlid	22	32	-1	0
 18	current_concurrency	5	0	20	0
 19	max_concurrency	5	0	20	0
-table oceanbase.__all_virtual_dynamic_partition_table column_count 11 table_id 12536
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12536 order by column_id;
-id	field	type	length	precision	nullable
-16	tenant_schema_version	5	0	20	0
-17	database_name	22	128	-1	0
-18	table_name	22	256	-1	0
-19	table_id	5	0	20	0
-20	max_high_bound_val	22	4096	-1	0
-21	enable	22	1024	-1	0
-22	time_unit	22	1024	-1	0
-23	precreate_time	22	1024	-1	0
-24	expire_time	22	1024	-1	0
-25	time_zone	22	1024	-1	0
-26	bigint_precision	22	1024	-1	0
 table oceanbase.__all_virtual_vector_mem_info column_count 7 table_id 12550
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12550 order by column_id;
 id	field	type	length	precision	nullable

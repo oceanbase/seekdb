@@ -154,7 +154,6 @@ int ObSimpleTableSchemaV2::assign(const ObSimpleTableSchemaV2 &other)
       is_force_view_ = other.is_force_view_;
       truncate_version_ = other.truncate_version_;
       storage_cache_policy_type_ = other.storage_cache_policy_type_;
-      with_dynamic_partition_policy_ = other.with_dynamic_partition_policy_;
       if (OB_FAIL(table_mode_.assign(other.table_mode_))) {
         LOG_WARN("Fail to assign table mode", K(ret), K(other.table_mode_));
       } else if (OB_FAIL(deep_copy_str(other.table_name_, table_name_))) {
@@ -219,7 +218,6 @@ void ObSimpleTableSchemaV2::reset()
   duplicate_read_consistency_ = ObDuplicateReadConsistency::STRONG;
   simple_constraint_info_array_.reset();
   truncate_version_ = OB_INVALID_VERSION;
-  with_dynamic_partition_policy_ = false;
   ObPartitionSchema::reset();
   storage_cache_policy_type_ = storage::ObStorageCachePolicyType::MAX_POLICY;
 }
@@ -630,8 +628,7 @@ int64_t ObSimpleTableSchemaV2::to_string(char *buf, const int64_t buf_len) const
     K_(is_force_view),
     K_(truncate_version),
     K_(duplicate_read_consistency),
-    K_(storage_cache_policy_type),
-    K_(with_dynamic_partition_policy)
+    K_(storage_cache_policy_type)
 );
   J_OBJ_END();
 
@@ -1300,8 +1297,7 @@ ObTableSchema::ObTableSchema(ObIAllocator *allocator)
     index_params_(),
     exec_env_(),
     storage_cache_policy_(),
-    semistruct_encoding_type_(),
-    dynamic_partition_policy_()
+    semistruct_encoding_type_()
 {
   reset();
 }
@@ -1539,10 +1535,6 @@ int ObTableSchema::assign(const ObTableSchema &src_schema)
   }
   if (OB_SUCC(ret)) {
     semistruct_encoding_type_ = src_schema.semistruct_encoding_type_;
-  }
-
-  if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.dynamic_partition_policy_, dynamic_partition_policy_))) {
-    LOG_WARN("fail to deep copy dynamic partition policy string", KR(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -2877,7 +2869,6 @@ int64_t ObTableSchema::get_convert_size() const
   convert_size += external_properties_.length() + 1;
   convert_size += storage_cache_policy_.length() + 1;
   convert_size += semistruct_encoding_type_.get_deep_copy_size();
-  convert_size += dynamic_partition_policy_.length() + 1;
   convert_size += external_sub_path_.length() + 1;
   return convert_size;
 }
@@ -2970,7 +2961,6 @@ void ObTableSchema::reset()
 
   storage_cache_policy_.reset();
   semistruct_encoding_type_.reset();
-  dynamic_partition_policy_.reset();
   external_location_id_ = OB_INVALID_ID;
   external_sub_path_.reset();
   ObSimpleTableSchemaV2::reset();
@@ -5748,8 +5738,7 @@ int64_t ObTableSchema::to_string(char *buf, const int64_t buf_len) const
     K_(exec_env),
     K_(storage_cache_policy),
     K_(merge_engine_type),
-    K_(semistruct_encoding_type),
-    K_(dynamic_partition_policy));
+    K_(semistruct_encoding_type));
   J_OBJ_END();
 
   return pos;
@@ -5902,7 +5891,6 @@ OB_DEF_SERIALIZE(ObTableSchema)
   OB_UNIS_ENCODE(storage_cache_policy_);
   OB_UNIS_ENCODE(merge_engine_type_);
   OB_UNIS_ENCODE(semistruct_encoding_type_);
-  OB_UNIS_ENCODE(dynamic_partition_policy_);
   OB_UNIS_ENCODE(external_location_id_);
   OB_UNIS_ENCODE(external_sub_path_);
   OB_UNIS_ENCODE(micro_block_format_version_);
@@ -6134,7 +6122,6 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   OB_UNIS_DECODE_AND_FUNC(storage_cache_policy_, deep_copy_str);
   OB_UNIS_DECODE(merge_engine_type_);
   OB_UNIS_DECODE(semistruct_encoding_type_);
-  OB_UNIS_DECODE_AND_FUNC(dynamic_partition_policy_, deep_copy_str);
   OB_UNIS_DECODE(external_location_id_);
   OB_UNIS_DECODE_AND_FUNC(external_sub_path_, deep_copy_str);
   OB_UNIS_DECODE(micro_block_format_version_);
@@ -6266,7 +6253,6 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
   OB_UNIS_ADD_LEN(storage_cache_policy_);
   OB_UNIS_ADD_LEN(merge_engine_type_);
   OB_UNIS_ADD_LEN(semistruct_encoding_type_);
-  OB_UNIS_ADD_LEN(dynamic_partition_policy_);
   OB_UNIS_ADD_LEN(external_location_id_);
   OB_UNIS_ADD_LEN(external_sub_path_);
   OB_UNIS_ADD_LEN(micro_block_format_version_);
@@ -7439,38 +7425,6 @@ DEFINE_CHECK_HAS_INDEX_FUNC(spatial_index);
 DEFINE_CHECK_HAS_INDEX_FUNC(multivalue_index_aux);
 
 #undef DEFINE_CHECK_HAS_INDEX_FUNC
-
-int ObTableSchema::get_part_key_column_type(const int64_t index, ObObjType &type) const
-{
-  int ret = OB_SUCCESS;
-  uint64_t col_id = OB_INVALID_ID;
-  const ObColumnSchemaV2 *column_schema = NULL;
-  if (OB_FAIL(partition_key_info_.get_column_id(index, col_id))) {
-    LOG_WARN("fail to get column id", KR(ret), K(index));
-  } else if (OB_ISNULL(column_schema = get_column_schema(col_id))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column schema is null", KR(ret), K(col_id));
-  } else {
-    type = column_schema->get_data_type();
-  }
-  return ret;
-}
-
-int ObTableSchema::get_part_key_column_name(const int64_t index, ObString &name) const
-{
-  int ret = OB_SUCCESS;
-  uint64_t col_id = OB_INVALID_ID;
-  const ObColumnSchemaV2 *column_schema = NULL;
-  if (OB_FAIL(partition_key_info_.get_column_id(index, col_id))) {
-    LOG_WARN("fail to get column id", KR(ret), K(index));
-  } else if (OB_ISNULL(column_schema = get_column_schema(col_id))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column schema is null", KR(ret), K(col_id));
-  } else {
-    name = column_schema->get_column_name_str();
-  }
-  return ret;
-}
 
 int ObTableSchema::get_spatial_index_column_ids(common::ObIArray<uint64_t> &column_ids) const
 {

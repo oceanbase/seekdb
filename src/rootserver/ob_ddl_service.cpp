@@ -63,7 +63,6 @@
 #include "rootserver/truncate_info/ob_truncate_info_service.h"
 #include "share/truncate_info/ob_truncate_info_util.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
-#include "rootserver/ob_dynamic_partition_manager.h"
 #include "sql/resolver/ddl/ob_storage_cache_ddl_util.h"
 #include "share/storage_cache_policy/ob_storage_cache_common.h"
 #include "rootserver/ob_alter_table_constraint_checker.h"
@@ -2281,22 +2280,6 @@ int ObDDLService::set_raw_table_options(
         }
         case ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE: {
           new_table_schema.set_semistruct_encoding_type(alter_table_schema.get_semistruct_encoding_type());
-          break;
-        }
-        case ObAlterTableArg::DYNAMIC_PARTITION_POLICY: {
-          ObArenaAllocator allocator;
-          const ObString &orig_policy_str = new_table_schema.get_dynamic_partition_policy();
-          const ObString &alter_policy_str = alter_table_schema.get_dynamic_partition_policy();
-          ObString new_policy_str;
-          if (OB_FAIL(ObDynamicPartitionManager::update_dynamic_partition_policy_str(allocator, orig_policy_str, alter_policy_str, new_policy_str))) {
-            LOG_WARN("fail to update dynamic partition policy str", KR(ret), K(orig_policy_str), K(alter_policy_str));
-          } else if (OB_FAIL(new_table_schema.set_dynamic_partition_policy(new_policy_str))) {
-            LOG_WARN("fail to set dynamic partition policy", KR(ret), K(new_policy_str));
-          } else if (OB_FAIL(ObDynamicPartitionManager::check_is_supported(new_table_schema))) {
-            LOG_WARN("fail to check dynamic partition is supported", KR(ret), K(new_table_schema));
-          } else if (OB_FAIL(ObDynamicPartitionManager::check_is_valid(new_table_schema))) {
-            LOG_WARN("fail to check dynamic partition policy is valid", KR(ret), K(new_table_schema));
-          }
           break;
         }
         default: {
@@ -18827,8 +18810,6 @@ int ObDDLService::check_hidden_table_constraint_exist(
 int ObDDLService::swap_orig_and_hidden_table_state(obcall::ObAlterTableArg &alter_table_arg)
 {
   int ret = OB_SUCCESS;
-  DEBUG_SYNC(BEFORE_SWAP_ORIG_AND_HIDDEN_TABLE_STATE);
-
   AlterTableSchema &alter_table_schema = alter_table_arg.alter_table_schema_;
   
   if (OB_FAIL(check_inner_stat())) {

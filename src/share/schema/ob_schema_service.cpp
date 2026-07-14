@@ -506,10 +506,6 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
   if (OB_SUCC(ret)) {
     semistruct_encoding_type_ = src_schema.semistruct_encoding_type_;
   }
-  if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.dynamic_partition_policy_, dynamic_partition_policy_))) {
-    LOG_WARN("fail to deep copy dynamic partition policy string", KR(ret));
-  }
-
   return ret;
 }
 

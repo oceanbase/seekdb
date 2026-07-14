@@ -985,7 +985,6 @@ protected:
   ObIndexType vec_index_type_;
   bool enable_macro_block_bloom_filter_;
   ObSemiStructEncodingType semistruct_encoding_type_;
-  common::ObString dynamic_partition_policy_;
 private:
   template <typename STMT>
   DISALLOW_COPY_AND_ASSIGN(ObDDLResolver);

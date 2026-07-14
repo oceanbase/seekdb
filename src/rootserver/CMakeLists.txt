@@ -21,7 +21,6 @@ ob_set_subtarget(ob_rootserver common
   ob_partition_creator.cpp
   ob_root_minor_freeze.cpp
   ob_root_utils.cpp
-  ob_dynamic_partition_manager.cpp
   ob_root_inspection.cpp
   ob_rs_event_history_table_operator.cpp
   ob_tenant_event_history_table_operator.cpp

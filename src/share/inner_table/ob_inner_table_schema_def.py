@@ -550,7 +550,6 @@ all_table_def = dict(
       ('storage_cache_policy', 'varchar:OB_MAX_VARCHAR_LENGTH', 'false', r'{\"GLOBAL\":\"AUTO\"}'),
       ('merge_engine_type', 'int', 'false', '0'),
       ('semistruct_encoding_type', 'int', 'false', '0'),
-      ('dynamic_partition_policy', 'varchar:OB_MAX_DYNAMIC_PARTITION_POLICY_LENGTH', 'false', ''),
       ('external_location_id', 'int', 'false', 'OB_INVALID_ID'),
       ('external_sub_path', 'varbinary:OB_MAX_VARCHAR_LENGTH', 'true')
   ]
@@ -8167,28 +8166,6 @@ def_table_schema(
   ],  vtable_route_policy = 'local'
   )
 
-def_table_schema(
-  owner             = 'zhaoziqian.zzq',
-  table_name        = '__all_virtual_dynamic_partition_table',
-  table_id          = '12536',
-  table_type        = 'VIRTUAL_TABLE',
-  gm_columns        = [],
-  rowkey_columns    = [],
-  in_tenant_space   = True,
-  normal_columns    = [
-    ('tenant_schema_version', 'int'),
-    ('database_name', 'varchar:OB_MAX_DATABASE_NAME_LENGTH'),
-    ('table_name', 'varchar:OB_MAX_TABLE_NAME_LENGTH'),
-    ('table_id', 'int'),
-    ('max_high_bound_val', 'varchar:OB_MAX_PARTITION_EXPR_LENGTH'),
-    ('enable', 'varchar:1024'),
-    ('time_unit', 'varchar:1024'),
-    ('precreate_time', 'varchar:1024'),
-    ('expire_time', 'varchar:1024'),
-    ('time_zone', 'varchar:1024'),
-    ('bigint_precision', 'varchar:1024')
-  ]
-  )
 
 # 12537: __all_virtual_ls_migration_task
 # 12538 __all_virtual_ss_notify_tasks_stat
@@ -17097,82 +17074,7 @@ def_table_schema(
   )
 
 
-def_table_schema(
-  owner           = 'zhaoziqian.zzq',
-  table_name      = 'DBA_OB_DYNAMIC_PARTITION_TABLES',
-  table_id        = '21655',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    D.DATABASE_NAME AS DATABASE_NAME,
-    A.TABLE_NAME AS TABLE_NAME,
-    A.TABLE_ID AS TABLE_ID,
-    B.HIGH_BOUND_VAL AS MAX_HIGH_BOUND_VAL,
-    SUBSTRING_INDEX(SUBSTRING_INDEX(A.DYNAMIC_PARTITION_POLICY, ',', 1), '=', -1) AS ENABLE,
-    SUBSTRING_INDEX(SUBSTRING_INDEX(A.DYNAMIC_PARTITION_POLICY, ',', 2), '=', -1) AS TIME_UNIT,
-    SUBSTRING_INDEX(SUBSTRING_INDEX(A.DYNAMIC_PARTITION_POLICY, ',', 3), '=', -1) AS PRECREATE_TIME,
-    SUBSTRING_INDEX(SUBSTRING_INDEX(A.DYNAMIC_PARTITION_POLICY, ',', 4), '=', -1) AS EXPIRE_TIME,
-    SUBSTRING_INDEX(SUBSTRING_INDEX(A.DYNAMIC_PARTITION_POLICY, ',', 5), '=', -1) AS TIME_ZONE,
-    SUBSTRING_INDEX(SUBSTRING_INDEX(A.DYNAMIC_PARTITION_POLICY, ',', 6), '=', -1) AS BIGINT_PRECISION
-  FROM
-    oceanbase.__all_table A
-  JOIN
-    oceanbase.__all_part B
-  ON
-    A.TABLE_ID = B.TABLE_ID
-  JOIN
-    (
-      SELECT
-        TABLE_ID,
-        MAX(PART_IDX) AS MAX_PART_IDX
-      FROM oceanbase.__all_part
-      GROUP BY
-        TABLE_ID
-    ) C
-  ON
-    B.TABLE_ID = C.TABLE_ID
-    AND
-    B.PART_IDX = C.MAX_PART_IDX
-  JOIN
-    oceanbase.__all_database D
-  ON
-    A.DATABASE_ID = D.DATABASE_ID
-  WHERE
-    A.DYNAMIC_PARTITION_POLICY != ''
-    AND D.DATABASE_NAME != '__recyclebin'
-    AND D.IN_RECYCLEBIN = 0;
-""".replace("\n", " ")
-)
 
-def_table_schema(
-  owner           = 'zhaoziqian.zzq',
-  table_name      = 'V$OB_DYNAMIC_PARTITION_TABLES',
-  table_id        = '21657',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    TENANT_SCHEMA_VERSION,
-    DATABASE_NAME,
-    TABLE_NAME,
-    TABLE_ID,
-    MAX_HIGH_BOUND_VAL,
-    ENABLE,
-    TIME_UNIT,
-    PRECREATE_TIME,
-    EXPIRE_TIME,
-    TIME_ZONE,
-    BIGINT_PRECISION
-  FROM oceanbase.__all_virtual_dynamic_partition_table;
-""".replace("\n", " ")
-)
 
 # 21661: GV$OB_VECTOR_MEMORY # removed (single-tenant GV/V collapse; folded into V$OB_VECTOR_MEMORY)
 

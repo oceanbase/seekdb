@@ -28,7 +28,6 @@
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
 #include "rootserver/ob_location_ddl_service.h"
-#include "rootserver/ob_dynamic_partition_manager.h"
 #include "share/schema/ob_table_sql_service.h"
 #include "share/schema/ob_sequence_sql_service.h"
 #include "share/schema/ob_multi_version_schema_service.h"
@@ -746,16 +745,6 @@ int ObTableHelper::inner_generate_table_schema_(const ObCreateTableArg &arg, ObT
       LOG_WARN("fail to set storage_cache_policy", K(ret), K(arg.schema_.get_storage_cache_policy()));
     }
   }
-
-  if (OB_SUCC(ret) && !new_table.get_dynamic_partition_policy().empty()) {
-    bool is_supported = false;
-    if (OB_FAIL(ObDynamicPartitionManager::check_is_supported(new_table))) {
-      LOG_WARN("fail to check dynamic partition is supported", KR(ret), K(new_table));
-    } else if (OB_FAIL(ObDynamicPartitionManager::check_is_valid(new_table))) {
-      LOG_WARN("fail to check dynamic partition is valid", KR(ret), K(new_table));
-    }
-  }
-
 
   return ret;
 }

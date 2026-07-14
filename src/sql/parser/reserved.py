@@ -1503,7 +1503,6 @@ class SqlKeywords:
          AVG_ROW_LENGTH
          BACKUP
          BEGIN
-         BIGINT_PRECISION
          BINLOG
          BIT
          BLOCK
@@ -1587,7 +1586,6 @@ class SqlKeywords:
          DUMPFILE
          DUPLICATE
          DYNAMIC
-         DYNAMIC_PARTITION_POLICY
          EFFECTIVE
          ENABLE
          END
@@ -1609,7 +1607,6 @@ class SqlKeywords:
          EXPANSION
          EXPIRE
          EXPIRE_INFO
-         EXPIRE_TIME
          EXPORT
          EXTENDED
          EXTENT_SIZE
@@ -1780,7 +1777,6 @@ class SqlKeywords:
          POLYGON
          POOL
          PORT
-         PRECREATE_TIME
          PREPARE
          PRESERVE
          PREV

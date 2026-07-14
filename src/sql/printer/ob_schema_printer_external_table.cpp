@@ -18,7 +18,6 @@
 #include "sql/printer/ob_schema_printer.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"  // ObDataInFileStruct(previously hidden behind the ext_utils include chain)
 
-#include "rootserver/ob_dynamic_partition_manager.h"
 #include "share/external_table/ob_external_file_location_basic.h"
 
 namespace oceanbase

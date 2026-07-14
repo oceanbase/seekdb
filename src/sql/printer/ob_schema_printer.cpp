@@ -19,7 +19,6 @@
 #include "sql/resolver/expr/ob_raw_expr_util.h"  // previously hidden behind the q external_table_utils include chain,make the dependency explicit
 
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
-#include "rootserver/ob_dynamic_partition_manager.h"
 #include "sql/resolver/ddl/ob_storage_cache_ddl_util.h"
 #include "lib/restore/ob_storage_info.h"
 
@@ -1705,12 +1704,6 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
   if (OB_SUCC(ret) && !strict_compat_ && !is_index_tbl) {
     if (OB_FAIL(print_semistruct_encodng_options(table_schema, buf, buf_len, pos))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print semistruct encodng options", K(ret), K(table_schema));
-    }
-  }
-
-  if (OB_SUCC(ret) && !strict_compat_ && !is_index_tbl && table_schema.with_dynamic_partition_policy()) {
-    if (OB_FAIL(print_dynamic_partition_policy(table_schema, buf, buf_len, pos))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to print store format", K(ret), K(table_schema));
     }
   }
 
@@ -4729,26 +4722,6 @@ int ObSchemaPrinter::print_semistruct_encodng_options(const ObTableSchema &table
     }
   }
     return ret;
-}
-
-int ObSchemaPrinter::print_dynamic_partition_policy(
-  const ObTableSchema &table_schema,
-  char* buf,
-  const int64_t& buf_len,
-  int64_t& pos) const
-{
-  int ret = OB_SUCCESS;
-  
-
-  if (OB_FAIL(databuff_printf(buf, buf_len, pos, "DYNAMIC_PARTITION_POLICY = ("))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to do databuff printf", KR(ret));
-  } else if (OB_FAIL(ObDynamicPartitionManager::print_dynamic_partition_policy(table_schema, buf, buf_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to print dynamic partition policy", KR(ret), K(table_schema));
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, ") "))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to do databuff printf", KR(ret));
-  }
-
-  return ret;
 }
 
 void ObSchemaPrinter::set_sql_schema_guard(ObSqlSchemaGuard *sql_schema_guard)

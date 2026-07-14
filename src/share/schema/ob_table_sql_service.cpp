@@ -2883,8 +2883,6 @@ int ObTableSqlService::gen_table_dml_without_check(
       storage::OB_DEFAULT_STORAGE_CACHE_POLICY_STR : table.get_storage_cache_policy().ptr();
   ObString index_params = table.get_index_params().empty() ? empty_str : table.get_index_params();
   const ObString parser_properties = table.get_parser_property_str().empty() ? empty_str : table.get_parser_property_str();
-  const char *dynamic_partition_policy = table.get_dynamic_partition_policy().empty() ? 
-      "" : table.get_dynamic_partition_policy().ptr();
   ObArenaAllocator allocator(ObModIds::OB_SCHEMA_OB_SCHEMA_ARENA);
   if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
             table.get_table_id())))
@@ -2980,7 +2978,6 @@ int ObTableSqlService::gen_table_dml_without_check(
       || (OB_FAIL(dml.add_column("enable_macro_block_bloom_filter", table.get_enable_macro_block_bloom_filter())))
       || (OB_FAIL(dml.add_column("storage_cache_policy", ObHexEscapeSqlStr(storage_cache_policy))))
       || (OB_FAIL(dml.add_column("semistruct_encoding_type", table.get_semistruct_encoding_flags())))
-      || (OB_FAIL(dml.add_column("dynamic_partition_policy", ObHexEscapeSqlStr(dynamic_partition_policy))))
       || (OB_FAIL(dml.add_column("merge_engine_type", table.get_merge_engine_type())))
       || (OB_FAIL(dml.add_column("external_location_id", table.get_external_location_id())))
       || (OB_FAIL(dml.add_column("external_sub_path", ObHexEscapeSqlStr(table.get_external_sub_path()))))

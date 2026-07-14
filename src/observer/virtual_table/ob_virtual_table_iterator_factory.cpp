@@ -177,7 +177,6 @@
 #include "observer/virtual_table/ob_all_virtual_plugin_info.h"
 #include "observer/virtual_table/ob_all_virtual_ddl_diagnose_info.h"
 #include "observer/virtual_table/ob_all_virtual_change_stream_refresh_stat.h"
-#include "observer/virtual_table/ob_all_virtual_dynamic_partition_table.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_vector_mem_info.h"
 #include "observer/virtual_table/ob_all_virtual_ccl_status.h"
 #include "observer/virtual_table/ob_show_create_location.h"
@@ -2085,18 +2084,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               vt_iter = static_cast<ObVirtualTableIterator *>(plugin_info_table);
             }
           } break;
-          case OB_ALL_VIRTUAL_DYNAMIC_PARTITION_TABLE_TID:
-          {
-            ObAllVirtualDynamicPartitionTable *all_virtual_dynamic_partition_table = NULL;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualDynamicPartitionTable, all_virtual_dynamic_partition_table))) {
-              SERVER_LOG(ERROR, "ObAllVirtualDynamicPartitionTable construct failed", KR(ret));
-            } else if (OB_FAIL(all_virtual_dynamic_partition_table->init(GCTX.schema_service_))) {
-              LOG_WARN("fail to init all virtual dynamic partition table", KR(ret));
-            } else {
-              vt_iter = static_cast<ObVirtualTableIterator *>(all_virtual_dynamic_partition_table);
-            }
-            break;
-          }
           case OB_ALL_VIRTUAL_VECTOR_MEM_INFO_TID:
           {
             ObAllVirtualTenantVectorMemInfo *gv_tenant_vector_mem_info = NULL;

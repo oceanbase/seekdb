@@ -26,7 +26,6 @@
 #include "share/schema/ob_table_sql_service.h"
 #include "share/schema/ob_sequence_sql_service.h"
 #include "observer/vector_index/ob_vector_index_util.h"
-#include "rootserver/ob_dynamic_partition_manager.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "rootserver/ob_location_ddl_service.h"
