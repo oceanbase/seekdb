@@ -39,6 +39,7 @@ struct SplitUnit
 {
   SplitUnit() : start_(0), end_(0) {}
   SplitUnit(int64_t start, int64_t end) : start_(start), end_(end) {}
+  TO_STRING_KV(K_(start), K_(end));
   int64_t start_;
   int64_t end_;
 };

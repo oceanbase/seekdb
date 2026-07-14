@@ -149,8 +149,10 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
 {
   int ret = OB_SUCCESS;
   // proces by char with all segmenters
-  for (int64_t i = 0; OB_SUCC(ret) && i < segmenters_.count(); ++i) {
-    if (OB_FAIL(segmenters_.at(i)->do_process(ctx, ch, char_len, type))) {
+  for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
+       OB_SUCC(ret) && iter != segmenters_.end();
+       ++iter) {
+    if (OB_FAIL((*iter)->do_process(ctx, ch, char_len, type))) {
       LOG_WARN("Failed to process segmenter", K(ret));
     }
   }
