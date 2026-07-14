@@ -475,6 +475,13 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
   return ret;
 }
 
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx, ObRefreshFulltextDictStmt &stmt)
+{
+  UNUSED(ctx);
+  UNUSED(stmt);
+  return OB_SUCCESS;
+}
+
 int ObWashMemFragmentationExecutor::execute(ObExecContext &ctx, ObWashMemFragmentationStmt &stmt)
 {
   int ret = OB_SUCCESS;

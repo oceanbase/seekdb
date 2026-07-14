@@ -103,7 +103,10 @@ int ObTextWhitespaceTokenizer::get_next(ObDatum &next_token, int64_t &token_freq
     int64_t token_len = 0;
     // to next non-whitespace pos
     while (OB_SUCC(ret) && found_delimiter()) {
-      const int64_t c_len = ob_mbcharlen_ptr(cs_, doc + trav_pos_, doc + doc_len);
+      const unsigned char first_byte = static_cast<unsigned char>(doc[trav_pos_]);
+      const int64_t c_len = first_byte < 0x80
+          ? 1
+          : ob_mbcharlen_ptr(cs_, doc + trav_pos_, doc + doc_len);
       trav_pos_ += c_len;
       if (trav_pos_ >= doc_len || 0 == c_len) {// if char is invalid, just skip the rest of document
         iter_end_ = true;
@@ -117,7 +120,10 @@ int ObTextWhitespaceTokenizer::get_next(ObDatum &next_token, int64_t &token_freq
 
     // to next whitespace pos
     while (OB_SUCC(ret) && !found_delimiter()) {
-      const int64_t c_len = ob_mbcharlen_ptr(cs_, doc + trav_pos_, doc + doc_len);
+      const unsigned char first_byte = static_cast<unsigned char>(doc[trav_pos_]);
+      const int64_t c_len = first_byte < 0x80
+          ? 1
+          : ob_mbcharlen_ptr(cs_, doc + trav_pos_, doc + doc_len);
       trav_pos_ += c_len;
       token_len += c_len;
       if (trav_pos_ >= doc_len || 0 == c_len) {
@@ -141,10 +147,14 @@ int ObTextWhitespaceTokenizer::get_next(ObDatum &next_token, int64_t &token_freq
 
 bool ObTextWhitespaceTokenizer::found_delimiter()
 {
-  bool found = false;
   const char *curr_char = input_doc_->ptr_ + trav_pos_;
-  found = ob_isspace(cs_, *curr_char) || ob_iscntrl(cs_, *curr_char) || ob_ispunct(cs_, *curr_char);
-  return found;
+  const unsigned char first_byte = static_cast<unsigned char>(*curr_char);
+  if (first_byte < 0x80) {
+    return !((first_byte >= '0' && first_byte <= '9')
+        || (first_byte >= 'A' && first_byte <= 'Z')
+        || (first_byte >= 'a' && first_byte <= 'z'));
+  }
+  return ob_isspace(cs_, *curr_char) || ob_iscntrl(cs_, *curr_char) || ob_ispunct(cs_, *curr_char);
 }
 
 ObTokenNormalizer::ObTokenNormalizer()
@@ -256,7 +266,6 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
   } else {
     next_token.reset();
     token_freq = 0;
-    norm_allocator_.reuse();
     ObDatum tmp_datum;
     bool found_alnum = false;
     uint32_t norm_token_len = 0;
@@ -308,12 +317,35 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected unfounded alnum in token", K(ret), K(tmp_datum));
     } else {
-      ObString norm_alnum_token(norm_token_len, norm_token_ptr);
-      ObString norm_lower_token;
-      if (OB_FAIL(ObCharset::tolower(cs_, norm_alnum_token, norm_lower_token, norm_allocator_))) {
-        LOG_WARN("norm token to lower case failed", K(ret), K_(cs), K(norm_alnum_token));
+      bool is_ascii = true;
+      bool has_upper = false;
+      for (uint32_t i = 0; is_ascii && i < norm_token_len; ++i) {
+        const unsigned char ch = static_cast<unsigned char>(norm_token_ptr[i]);
+        is_ascii = ch < 0x80;
+        has_upper = has_upper || (ch >= 'A' && ch <= 'Z');
+      }
+      if (is_ascii && !has_upper) {
+        next_token.set_string(norm_token_ptr, norm_token_len);
+      } else if (is_ascii) {
+        char *lower_token = static_cast<char *>(norm_allocator_.alloc(norm_token_len));
+        if (OB_ISNULL(lower_token)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to allocate normalized token", K(ret), K(norm_token_len));
+        } else {
+          for (uint32_t i = 0; i < norm_token_len; ++i) {
+            const unsigned char ch = static_cast<unsigned char>(norm_token_ptr[i]);
+            lower_token[i] = ch >= 'A' && ch <= 'Z' ? static_cast<char>(ch + ('a' - 'A')) : ch;
+          }
+          next_token.set_string(lower_token, norm_token_len);
+        }
       } else {
-        next_token.set_string(norm_lower_token);
+        ObString norm_alnum_token(norm_token_len, norm_token_ptr);
+        ObString norm_lower_token;
+        if (OB_FAIL(ObCharset::tolower(cs_, norm_alnum_token, norm_lower_token, norm_allocator_))) {
+          LOG_WARN("norm token to lower case failed", K(ret), K_(cs), K(norm_alnum_token));
+        } else {
+          next_token.set_string(norm_lower_token);
+        }
       }
     }
   }

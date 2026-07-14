@@ -2394,6 +2394,27 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
+      case T_FULLTEXT_DICT: {
+        if (stmt::T_CREATE_TABLE != stmt_->get_stmt_type()) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter fulltext dictionary table option");
+        } else if (OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("fulltext dict option value is null", K(ret));
+        } else {
+          const ObString value(static_cast<int32_t>(option_node->children_[0]->str_len_),
+                               option_node->children_[0]->str_value_);
+          if (0 != value.case_compare("Y")) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT only supports 'Y'");
+          } else {
+            ObCreateTableArg &arg = static_cast<ObCreateTableStmt *>(stmt_)->get_create_table_arg();
+            arg.schema_.set_fulltext_dict(true);
+            table_mode_.set_fulltext_dict(true);
+          }
+        }
+        break;
+      }
       case T_SEMISTRUCT_ENCODING_TYPE: {
         ret = resolve_semistruct_encoding_type(option_node, is_index_option);
         break;

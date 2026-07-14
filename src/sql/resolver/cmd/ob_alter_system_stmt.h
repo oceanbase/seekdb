@@ -169,6 +169,14 @@ private:
   obcall::ObAdminRefreshMemStatArg rpc_arg_;
 };
 
+class ObRefreshFulltextDictStmt : public ObSystemCmdStmt
+{
+public:
+  ObRefreshFulltextDictStmt() : ObSystemCmdStmt(stmt::T_REFRESH_FULLTEXT_DICT) {}
+  virtual ~ObRefreshFulltextDictStmt() {}
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_));
+};
+
 class ObWashMemFragmentationStmt : public ObSystemCmdStmt
 {
 public:

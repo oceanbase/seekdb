@@ -467,7 +467,12 @@ int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer
   int ret = OB_SUCCESS;
 
   ObString table_name;
-  switch (desc.type_) {
+  const bool is_custom = (ObFTDictType::DICT_IK_MAIN == desc.type_ && desc.name_ != "main_dict")
+                      || (ObFTDictType::DICT_IK_QUAN == desc.type_ && desc.name_ != "quan_dict")
+                      || (ObFTDictType::DICT_IK_STOP == desc.type_ && desc.name_ != "stopword");
+  if (is_custom) {
+    table_name = desc.name_;
+  } else switch (desc.type_) {
   case ObFTDictType::DICT_IK_MAIN: {
     table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
   } break;
@@ -502,7 +507,7 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
                                   ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-  uint64_t name = static_cast<uint64_t>(desc.type_);
+  uint64_t name = desc.name_.hash();
 
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
     ObDictCacheKey key(name, desc.type_, i);

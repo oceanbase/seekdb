@@ -24,6 +24,7 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/utility.h"
 #include "storage/fts/ob_fts_struct.h"
+#include "storage/fts/ob_fts_literal.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
@@ -103,10 +104,10 @@ int ObIKFTParser::get_next_token(const char *&word,
         }
       } else {
         bool is_stop = false;
-        // if (!OB_ISNULL(dict_stop_)
-        //     && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
-        //   LOG_WARN("Failed to match stopwords", K(ret));
-        // } else
+        if (!OB_ISNULL(dict_stop_)
+            && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
+          LOG_WARN("Failed to match stopwords", K(ret));
+        }
         if (!is_stop) {
           word = output_word + offset;
           word_len = len;
@@ -148,10 +149,8 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
 {
   int ret = OB_SUCCESS;
   // proces by char with all segmenters
-  for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
-       OB_SUCC(ret) && iter != segmenters_.end();
-       iter++) {
-    if (OB_FAIL((*iter)->process(ctx))) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < segmenters_.count(); ++i) {
+    if (OB_FAIL(segmenters_.at(i)->do_process(ctx, ch, char_len, type))) {
       LOG_WARN("Failed to process segmenter", K(ret));
     }
   }
@@ -277,21 +276,31 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
     LOG_WARN("Dict hub is not inited", K(ret));
   }
 
+  const bool use_builtin_main = param.ik_param_.main_dict_.empty()
+      || param.ik_param_.main_dict_ == ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE;
+  const bool use_builtin_quan = param.ik_param_.quan_dict_.empty()
+      || param.ik_param_.quan_dict_ == ObFTSLiteral::FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE;
+  const bool use_builtin_stop = param.ik_param_.stopword_dict_.empty()
+      || param.ik_param_.stopword_dict_ == ObFTSLiteral::FT_DEFAULT_IK_STOPWORD_UTF8_TABLE;
   ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
+  ObFTDictDesc main_dict_desc(use_builtin_main ? ObString("main_dict") : param.ik_param_.main_dict_,
                               ObFTDictType::DICT_IK_MAIN,
                               ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
+                              use_builtin_main ? ObCollationType::CS_TYPE_UTF8MB4_BIN
+                                               : ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI);
 
-  ObFTDictDesc quan_dict_desc("quan_dict",
+  ObFTDictDesc quan_dict_desc(use_builtin_quan ? ObString("quan_dict") : param.ik_param_.quan_dict_,
                               ObFTDictType::DICT_IK_QUAN,
                               ObCharsetType::CHARSET_UTF8MB4,
-                              ObCollationType::CS_TYPE_UTF8MB4_BIN);
+                              use_builtin_quan ? ObCollationType::CS_TYPE_UTF8MB4_BIN
+                                               : ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI);
 
-  ObFTDictDesc stopword_dict_desc("stopword",
+  ObFTDictDesc stopword_dict_desc(use_builtin_stop ? ObString("stopword")
+                                                   : param.ik_param_.stopword_dict_,
                                   ObFTDictType::DICT_IK_STOP,
                                   ObCharsetType::CHARSET_UTF8MB4,
-                                  ObCollationType::CS_TYPE_UTF8MB4_BIN);
+                                  use_builtin_stop ? ObCollationType::CS_TYPE_UTF8MB4_BIN
+                                                   : ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI);
 
   if (should_read_newest_table()) {
     // clear dict cache, always false now
@@ -321,7 +330,12 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
 int ObIKFTParser::init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &container)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(hub_->load_cache(desc, container))) {
+  const bool is_builtin = desc.name_ == "main_dict" || desc.name_ == "quan_dict" || desc.name_ == "stopword";
+  if (!is_builtin) {
+    if (OB_FAIL(ObFTRangeDict::build_cache(desc, container))) {
+      LOG_WARN("Failed to build custom dictionary cache", K(ret), K(desc.name_), K(desc.type_));
+    }
+  } else if (OB_FAIL(hub_->load_cache(desc, container))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       if (OB_FAIL(hub_->build_cache(desc, container))) {
         LOG_WARN("Failed to read newest main table", K(ret));

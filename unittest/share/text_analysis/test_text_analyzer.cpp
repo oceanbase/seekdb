@@ -217,6 +217,28 @@ TEST_F(TestTextAnalyzer, test_basic_english_analyzer)
   analyze_test(analyzer, doc_8, doc_len_8, tokens_8, tokens_len_8, tokens_freq_8, token_cnt_8);
 }
 
+TEST_F(TestTextAnalyzer, test_basic_english_token_lifetime)
+{
+  ObEnglishTextAnalyzer analyzer;
+  analysis_ctx_.need_grouping_ = false;
+  ASSERT_EQ(OB_SUCCESS, analyzer.init(analysis_ctx_, allocator_));
+
+  const char document[] = "FIRST SECOND third";
+  ObDatum doc_datum;
+  doc_datum.set_string(document, sizeof(document) - 1);
+  ObITokenStream *token_stream = nullptr;
+  ASSERT_EQ(OB_SUCCESS, analyzer.analyze(doc_datum, token_stream));
+  ASSERT_NE(nullptr, token_stream);
+
+  ObDatum first_token;
+  ObDatum second_token;
+  int64_t token_freq = 0;
+  ASSERT_EQ(OB_SUCCESS, token_stream->get_next(first_token, token_freq));
+  ASSERT_EQ(OB_SUCCESS, token_stream->get_next(second_token, token_freq));
+  ASSERT_EQ(ObString("first"), first_token.get_string());
+  ASSERT_EQ(ObString("second"), second_token.get_string());
+}
+
 }; // namespace share
 }; // namespace oceanbase
 
