@@ -274,7 +274,7 @@ END_P SET_VAR DELIMITER
 //-----------------------------reserved keyword end-------------------------------------------------
 %token <non_reserved_keyword>
 //-----------------------------non_reserved keyword begin-------------------------------------------
-        ACCESS ACCESS_INFO ACCESSID ACCESSKEY ACCESSTYPE ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE AI ALGORITHM ALL_META ALL_USER ALWAYS ALLOW ANALYSE ANY
+        ACCESS ACCESS_INFO ACCESSID ACCESSKEY ACCESSTYPE ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE AI AI_SPLIT_DOCUMENT ALGORITHM ALL_META ALL_USER ALWAYS ALLOW ANALYSE ANY
         APPID APPROX_COUNT_DISTINCT APPROX_COUNT_DISTINCT_SYNOPSIS APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE
         ARRAY ASCII ASIS AT ATTRIBUTE AUTHORS AUTO AUTOEXTEND_SIZE AUTO_INCREMENT AUTO_INCREMENT_MODE AUTO_INCREMENT_CACHE_SIZE
         AVG AVG_ROW_LENGTH ACTIVATE AVAILABILITY ARCHIVELOG ASYNCHRONOUS AUDIT ADMIN AUTO_REFRESH API_MODE APPROX APPROXIMATE ARRAY_AGG ARRAY_FILTER ARRAY_FIRST ARRAY_MAP ARRAY_SORTBY 
@@ -21048,56 +21048,47 @@ JSON_TABLE '(' simple_expr ',' literal mock_jt_on_error_on_empty COLUMNS '(' jt_
 ;
 
 ai_split_document_expr:
-NAME_OB '(' opt_expr_as_list ')'
+AI_SPLIT_DOCUMENT '(' opt_expr_as_list ')'
 {
   ParseNode *params = NULL;
   ParseNode *function = NULL;
-  if (0 != strcasecmp($1->str_value_, "ai_split_document")) {
-    yyerror(&@1, result, "unsupported direct table function");
-    YYERROR;
+  ParseNode *function_name = NULL;
+  make_name_node(function_name, result->malloc_pool_, "ai_split_document");
+  if (NULL != $3) {
+    merge_nodes(params, result, T_EXPR_LIST, $3);
+    malloc_non_terminal_node(function, result->malloc_pool_, T_FUN_SYS, 2, function_name, params);
   } else {
-    if (NULL != $3) {
-      merge_nodes(params, result, T_EXPR_LIST, $3);
-      malloc_non_terminal_node(function, result->malloc_pool_, T_FUN_SYS, 2, $1, params);
-    } else {
-      malloc_non_terminal_node(function, result->malloc_pool_, T_FUN_SYS, 1, $1);
-    }
-    malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 2, function, NULL);
+    malloc_non_terminal_node(function, result->malloc_pool_, T_FUN_SYS, 1, function_name);
   }
+  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 2, function, NULL);
 }
-| NAME_OB '(' opt_expr_as_list ')' relation_name
+| AI_SPLIT_DOCUMENT '(' opt_expr_as_list ')' relation_name
 {
   ParseNode *params = NULL;
   ParseNode *function = NULL;
-  if (0 != strcasecmp($1->str_value_, "ai_split_document")) {
-    yyerror(&@1, result, "unsupported direct table function");
-    YYERROR;
+  ParseNode *function_name = NULL;
+  make_name_node(function_name, result->malloc_pool_, "ai_split_document");
+  if (NULL != $3) {
+    merge_nodes(params, result, T_EXPR_LIST, $3);
+    malloc_non_terminal_node(function, result->malloc_pool_, T_FUN_SYS, 2, function_name, params);
   } else {
-    if (NULL != $3) {
-      merge_nodes(params, result, T_EXPR_LIST, $3);
-      malloc_non_terminal_node(function, result->malloc_pool_, T_FUN_SYS, 2, $1, params);
-    } else {
-      malloc_non_terminal_node(function, result->malloc_pool_, T_FUN_SYS, 1, $1);
-    }
-    malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 2, function, $5);
+    malloc_non_terminal_node(function, result->malloc_pool_, T_FUN_SYS, 1, function_name);
   }
+  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 2, function, $5);
 }
-| NAME_OB '(' opt_expr_as_list ')' AS relation_name
+| AI_SPLIT_DOCUMENT '(' opt_expr_as_list ')' AS relation_name
 {
   ParseNode *params = NULL;
   ParseNode *function = NULL;
-  if (0 != strcasecmp($1->str_value_, "ai_split_document")) {
-    yyerror(&@1, result, "unsupported direct table function");
-    YYERROR;
+  ParseNode *function_name = NULL;
+  make_name_node(function_name, result->malloc_pool_, "ai_split_document");
+  if (NULL != $3) {
+    merge_nodes(params, result, T_EXPR_LIST, $3);
+    malloc_non_terminal_node(function, result->malloc_pool_, T_FUN_SYS, 2, function_name, params);
   } else {
-    if (NULL != $3) {
-      merge_nodes(params, result, T_EXPR_LIST, $3);
-      malloc_non_terminal_node(function, result->malloc_pool_, T_FUN_SYS, 2, $1, params);
-    } else {
-      malloc_non_terminal_node(function, result->malloc_pool_, T_FUN_SYS, 1, $1);
-    }
-    malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 2, function, $6);
+    malloc_non_terminal_node(function, result->malloc_pool_, T_FUN_SYS, 1, function_name);
   }
+  malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_COLLECTION_EXPRESSION, 2, function, $6);
 }
 ;
 
@@ -22081,6 +22072,7 @@ ACCESS_INFO
 |       ADMIN
 |       AFTER
 |       AI
+|       AI_SPLIT_DOCUMENT
 |       AGAINST
 |       AGGREGATE
 |       ALGORITHM
