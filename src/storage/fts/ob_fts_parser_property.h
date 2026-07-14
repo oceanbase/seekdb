@@ -23,6 +23,7 @@
 #include "common/json_type/ob_json_base.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
+#include "lib/string/ob_fixed_length_string.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/ob_fts_literal.h"
 
@@ -164,9 +165,9 @@ public:
   int64_t max_token_size_;
   int64_t ngram_token_size_;
   bool ik_mode_smart_;
-  common::ObString stopword_table_;
-  common::ObString dict_table_;
-  common::ObString quantifier_table_;
+  common::ObFixedLengthString<512> stopword_table_;
+  common::ObFixedLengthString<512> dict_table_;
+  common::ObFixedLengthString<512> quantifier_table_;
   int64_t min_ngram_token_size_;
   int64_t max_ngram_token_size_;
 };

@@ -103,11 +103,10 @@ int ObIKFTParser::get_next_token(const char *&word,
         }
       } else {
         bool is_stop = false;
-        // if (!OB_ISNULL(dict_stop_)
-        //     && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
-        //   LOG_WARN("Failed to match stopwords", K(ret));
-        // } else
-        if (!is_stop) {
+        if (!OB_ISNULL(dict_stop_)
+            && OB_FAIL(dict_stop_->match(ObString(len, output_word + offset), is_stop))) {
+          LOG_WARN("Failed to match stopwords", K(ret));
+        } else if (!is_stop) {
           word = output_word + offset;
           word_len = len;
           char_cnt = cnt;
@@ -278,17 +277,26 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   }
 
   ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
+  const ObString main_dict_name = param.ik_param_.main_dict_.empty()
+                                      ? ObString("main_dict")
+                                      : param.ik_param_.main_dict_;
+  const ObString quan_dict_name = param.ik_param_.quan_dict_.empty()
+                                      ? ObString("quan_dict")
+                                      : param.ik_param_.quan_dict_;
+  const ObString stop_dict_name = param.ik_param_.stopword_dict_.empty()
+                                      ? ObString("stopword")
+                                      : param.ik_param_.stopword_dict_;
+  ObFTDictDesc main_dict_desc(main_dict_name,
                               ObFTDictType::DICT_IK_MAIN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc quan_dict_desc("quan_dict",
+  ObFTDictDesc quan_dict_desc(quan_dict_name,
                               ObFTDictType::DICT_IK_QUAN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
-  ObFTDictDesc stopword_dict_desc("stopword",
+  ObFTDictDesc stopword_dict_desc(stop_dict_name,
                                   ObFTDictType::DICT_IK_STOP,
                                   ObCharsetType::CHARSET_UTF8MB4,
                                   ObCollationType::CS_TYPE_UTF8MB4_BIN);
@@ -296,11 +304,25 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   if (should_read_newest_table()) {
     // clear dict cache, always false now
   } else {
-    if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
+    if (!param.ik_param_.main_dict_.empty()
+        && OB_FAIL(init_custom_dict(main_dict_desc, param.ik_param_.main_dict_, cache_main_))) {
+      LOG_WARN("Failed to init custom main dict", K(ret), K(param.ik_param_.main_dict_));
+    } else if (param.ik_param_.main_dict_.empty()
+               && OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
       LOG_WARN("Failed to init main dict", K(ret));
-    } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
+    } else if (!param.ik_param_.quan_dict_.empty()
+               && OB_FAIL(init_custom_dict(quan_dict_desc, param.ik_param_.quan_dict_, cache_quan_))) {
+      LOG_WARN("Failed to init custom quantifier dict", K(ret), K(param.ik_param_.quan_dict_));
+    } else if (param.ik_param_.quan_dict_.empty()
+               && OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
       LOG_WARN("Failed to init quantifier dict", K(ret));
-    } else if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
+    } else if (!param.ik_param_.stopword_dict_.empty()
+               && OB_FAIL(init_custom_dict(stopword_dict_desc,
+                                           param.ik_param_.stopword_dict_,
+                                           cache_stop_))) {
+      LOG_WARN("Failed to init custom stopword dict", K(ret), K(param.ik_param_.stopword_dict_));
+    } else if (param.ik_param_.stopword_dict_.empty()
+               && OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
       LOG_WARN("Failed to init stopword dict", K(ret));
     }
   }
@@ -328,6 +350,23 @@ int ObIKFTParser::init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &c
       }
     } else {
       LOG_WARN("Failed to load cache", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObIKFTParser::init_custom_dict(const ObFTDictDesc &desc,
+                                   const ObString &table_name,
+                                   ObFTCacheRangeContainer &container)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(hub_->load_cache(desc, container))) {
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      if (OB_FAIL(hub_->build_custom_cache(desc, table_name, container))) {
+        LOG_WARN("Failed to build custom dictionary cache", K(ret), K(table_name));
+      }
+    } else {
+      LOG_WARN("Failed to load custom dictionary cache", K(ret), K(table_name));
     }
   }
   return ret;

@@ -76,6 +76,23 @@ int ObFTRangeDict::build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheR
   return ret;
 }
 
+int ObFTRangeDict::build_cache_from_table(const ObFTDictDesc &desc,
+                                          const ObString &table_name,
+                                          ObFTCacheRangeContainer &range_container)
+{
+  int ret = OB_SUCCESS;
+  SMART_VAR(ObISQLClient::ReadResult, result)
+  {
+    ObFTDictTableIter iter_table(result);
+    if (OB_FAIL(iter_table.init(table_name))) {
+      LOG_WARN("Failed to init custom dictionary iterator", K(ret), K(table_name));
+    } else if (OB_FAIL(build_ranges_concurrently_thread_pool(desc, iter_table, range_container))) {
+      LOG_WARN("Failed to build custom dictionary ranges", K(ret), K(table_name));
+    }
+  }
+  return ret;
+}
+
 // Thread pool for building DATs concurrently
 class DATBuilderThreadPool : public lib::Threads
 {
@@ -502,7 +519,7 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
                                   ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-  uint64_t name = static_cast<uint64_t>(desc.type_);
+  uint64_t name = desc.name_.empty() ? static_cast<uint64_t>(desc.type_) : desc.name_.hash();
 
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
     ObDictCacheKey key(name, desc.type_, i);

@@ -76,6 +76,10 @@ private:
 
   int init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &container);
 
+  int init_custom_dict(const ObFTDictDesc &desc,
+                       const ObString &table_name,
+                       ObFTCacheRangeContainer &container);
+
   int init_segmenter(const plugin::ObFTParserParam &param);
 
   int init_ctx(const plugin::ObFTParserParam &param);
