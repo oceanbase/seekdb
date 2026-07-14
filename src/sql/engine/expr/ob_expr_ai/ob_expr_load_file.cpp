@@ -11,6 +11,7 @@
 #include "lib/utility/utility.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_location_schema_struct.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
@@ -100,19 +101,28 @@ int read_whole_file_to_datum(const ObExpr &expr,
   } else if (st.st_size < 0) {
     ret = OB_IO_ERROR;
     LOG_WARN("invalid file size", K(ret), K(st.st_size));
+  } else if (st.st_size > OB_MAX_LONGTEXT_LENGTH) {
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("file is too large for load_file result", K(ret), K(st.st_size));
   } else {
     const int64_t file_size = st.st_size;
-    char *buf = expr.get_str_res_mem(ctx, file_size);
+    char *buf = NULL;
+    int64_t buf_size = 0;
+    ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &res);
 
-    if (OB_ISNULL(buf) && file_size > 0) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate result buffer", K(ret), K(file_size));
+    if (OB_FAIL(output_result.init(file_size))) {
+      LOG_WARN("failed to init load_file lob result", K(ret), K(file_size));
+    } else if (OB_FAIL(output_result.get_reserved_buffer(buf, buf_size))) {
+      LOG_WARN("failed to get load_file lob buffer", K(ret), K(file_size));
+    } else if (OB_UNLIKELY(buf_size < file_size)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("load_file lob buffer is too small", K(ret), K(buf_size), K(file_size));
     } else {
       int64_t total_read = 0;
 
       while (OB_SUCC(ret) && total_read < file_size) {
-        const ssize_t read_size =
-            ::read(fd, buf + total_read, file_size - total_read);
+        const size_t bytes_to_read = static_cast<size_t>(file_size - total_read);
+        const ssize_t read_size = ::read(fd, buf + total_read, bytes_to_read);
 
         if (read_size > 0) {
           total_read += read_size;
@@ -126,8 +136,10 @@ int read_whole_file_to_datum(const ObExpr &expr,
         }
       }
 
-      if (OB_SUCC(ret)) {
-        res.set_string(buf, total_read);
+      if (OB_SUCC(ret) && OB_FAIL(output_result.lseek(total_read, 0))) {
+        LOG_WARN("failed to set load_file lob result length", K(ret), K(total_read));
+      } else if (OB_SUCC(ret)) {
+        output_result.set_result();
       }
     }
   }
@@ -145,7 +157,7 @@ ObExprLoadFile::ObExprLoadFile(common::ObIAllocator &alloc)
     : ObFuncExprOperator(alloc,
                          T_FUN_SYS_LOAD_FILE,
                          N_LOAD_FILE,
-                         2,
+                         MORE_THAN_ZERO,
                          NOT_VALID_FOR_GENERATED_COL,
                          NOT_ROW_DIMENSION)
 {
@@ -167,13 +179,9 @@ int ObExprLoadFile::calc_result_typeN(ObExprResType &type,
   if (OB_UNLIKELY(param_num != 2)) {
     ret = OB_ERR_PARAM_SIZE;
     LOG_WARN("load_file requires two arguments", K(ret), K(param_num));
-  } else if (!ob_is_string_tc(types_stack[0].get_type())
-             || !ob_is_string_tc(types_stack[1].get_type())) {
-    ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid argument type",
-             K(ret),
-             K(types_stack[0].get_type()),
-             K(types_stack[1].get_type()));
+  } else if (OB_ISNULL(types_stack)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("types stack is null", K(ret));
   } else {
     types_stack[0].set_calc_type(ObVarcharType);
     types_stack[0].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
@@ -181,9 +189,10 @@ int ObExprLoadFile::calc_result_typeN(ObExprResType &type,
     types_stack[1].set_calc_type(ObVarcharType);
     types_stack[1].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
 
-    type.set_varchar();
+    type.set_blob();
     type.set_collation_type(CS_TYPE_BINARY);
     type.set_calc_collation_type(CS_TYPE_BINARY);
+    type.set_collation_level(CS_LEVEL_IMPLICIT);
     type.set_length(OB_MAX_LONGTEXT_LENGTH);
   }
 
@@ -212,16 +221,16 @@ int ObExprLoadFile::eval_load_file(const ObExpr &expr,
     const ObString location_name = location_datum->get_string();
     const ObString file_name = file_datum->get_string();
 
-    ObSchemaGetterGuard *schema_guard = NULL;
+    ObSchemaGetterGuard schema_guard;
     const ObLocationSchema *location_schema = NULL;
 
-    if (OB_ISNULL(ctx.exec_ctx_.get_sql_ctx())
-        || OB_ISNULL(ctx.exec_ctx_.get_sql_ctx()->schema_guard_)) {
+    if (OB_ISNULL(GCTX.schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema guard is null", K(ret));
-    } else if (FALSE_IT(schema_guard = ctx.exec_ctx_.get_sql_ctx()->schema_guard_)) {
-    } else if (OB_FAIL(schema_guard->get_location_schema_by_name(location_name,
-                                                                 location_schema))) {
+      LOG_WARN("schema service is null", K(ret));
+    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("failed to get tenant schema guard", K(ret));
+    } else if (OB_FAIL(schema_guard.get_location_schema_by_name(location_name,
+                                                                location_schema))) {
       LOG_WARN("failed to get location schema by name",
                K(ret), K(location_name));
     } else if (OB_ISNULL(location_schema)) {
