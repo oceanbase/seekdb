@@ -1302,9 +1302,7 @@ int AiSplitDocumentTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx,
       ObString params_str;
       bool is_null = false;
       MultimodeAlloctor tmp_allocator(ctx.row_alloc_, T_AI_SPLIT_DOCUMENT_EXPRESSION, ret);
-      if (params_type == ObNCharType
-          || !(params_type == ObJsonType || params_type == ObRawType
-               || ob_is_string_type(params_type))) {
+      if (!(params_type == ObJsonType || ob_is_string_type(params_type))) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
         LOG_WARN("invalid ai_split_document parameters type", K(ret), K(params_type));
       } else if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(
