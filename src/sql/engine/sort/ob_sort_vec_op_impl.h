@@ -29,6 +29,10 @@
 #include "sql/engine/sort/ob_sort_key_fetcher_vec_op.h"
 #include "sql/engine/sort/ob_sort_vec_op_eager_filter.h"
 #include "sql/engine/sort/ob_sort_vec_op_store_row_factory.h"
+#include "sql/engine/sort/ob_sort_vec_strategy.h"
+#include "sql/engine/sort/ob_sort_vec_dump_strategy.h"
+#include "sql/engine/sort/ob_sql_sort_resource_manager.h"
+#include "sql/engine/sort/ob_external_merge_sorter.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "share/config/ob_tenant_config_mgr.h"
 #include "sql/engine/sort/ob_pd_topn_sort_filter.h"
@@ -48,6 +52,8 @@ template <typename Compare, typename Store_Row, bool has_addon>
 class ObSortVecOpImpl : public ObISortVecOpImpl
 {
   using SortVecOpChunk = ObSortVecOpChunk<Store_Row, has_addon>;
+  using ThisType = ObSortVecOpImpl<Compare, Store_Row, has_addon>;
+  using ExternalMergeSorter = ObExternalMergeSorter<Compare, Store_Row, has_addon>;
 
 public:
   explicit ObSortVecOpImpl(ObMonitorNode &op_monitor_info, lib::MemoryContext &mem_context) :
@@ -59,7 +65,7 @@ public:
     all_exprs_(allocator_), sk_vec_ptrs_(allocator_), addon_vec_ptrs_(allocator_),
     eval_ctx_(nullptr), comp_(allocator_), sk_store_(&allocator_), addon_store_(&allocator_),
     inmem_row_size_(0), mem_check_interval_mask_(1), row_idx_(0), quick_sort_array_(),
-    heap_iter_begin_(false), imms_heap_(nullptr), ems_heap_(nullptr),
+    heap_iter_begin_(false), imms_heap_(nullptr), external_sorter_(nullptr),
     next_stored_row_func_(&ObSortVecOpImpl::array_next_stored_row), exec_ctx_(nullptr),
     sk_rows_(nullptr), addon_rows_(nullptr), buckets_(nullptr), max_bucket_cnt_(0),
     part_hash_nodes_(nullptr), max_node_cnt_(0), part_cnt_(0), topn_cnt_(INT64_MAX),
@@ -190,13 +196,19 @@ public:
   };
 
 protected:
+  template <typename SortImpl> friend class ObFullSortStrategy;
+  template <typename SortImpl> friend class ObPartitionSortStrategy;
+  template <typename SortImpl> friend class ObPartitionTopNSortStrategy;
+
   typedef int (ObSortVecOpImpl::*NextStoredRowFunc)(const Store_Row *&sr);
+  int do_full_sort_strategy(const int64_t begin);
+  int do_partition_sort_strategy(const int64_t begin);
+  int do_partition_topn_sort_strategy(const int64_t begin);
   int sort_inmem_data();
   int do_dump();
   int build_ems_heap(int64_t &merge_ways);
   template <typename Heap, typename NextFunc, typename Item>
   int heap_next(Heap &heap, const NextFunc &func, Item &item);
-  int ems_heap_next(SortVecOpChunk *&chunk);
   int imms_heap_next(const Store_Row *&sk_row);
   int array_next_stored_row(const Store_Row *&sk_row);
   int imms_heap_next_stored_row(const Store_Row *&sr);
@@ -422,7 +434,6 @@ protected:
   static const int64_t MAX_MERGE_WAYS = 256;
   static const int64_t INMEMORY_MERGE_SORT_WARN_WAYS = 10000;
   typedef common::ObBinaryHeap<Store_Row **, Compare, 16> IMMSHeap;
-  typedef common::ObBinaryHeap<SortVecOpChunk *, Compare, MAX_MERGE_WAYS> EMSHeap;
   typedef common::ObBinaryHeap<Store_Row *, Compare> TopnHeap;
 
   union
@@ -466,8 +477,8 @@ protected:
   bool heap_iter_begin_;
   // heap for in-memory merge sort local order rows
   IMMSHeap *imms_heap_;
-  // heap for external merge sort
-  EMSHeap *ems_heap_;
+  // external merge sorter for dumped chunks
+  ExternalMergeSorter *external_sorter_;
   NextStoredRowFunc next_stored_row_func_;
   ObExecContext *exec_ctx_;
   Store_Row **sk_rows_;

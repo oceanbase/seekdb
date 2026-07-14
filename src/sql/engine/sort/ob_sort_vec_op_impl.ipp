@@ -55,10 +55,10 @@ void ObSortVecOpImpl<Compare, Store_Row, has_addon>::reset()
       mem_context_->get_malloc_allocator().free(imms_heap_);
       imms_heap_ = nullptr;
     }
-    if (nullptr != ems_heap_) {
-      ems_heap_->~EMSHeap();
-      mem_context_->get_malloc_allocator().free(ems_heap_);
-      ems_heap_ = nullptr;
+    if (nullptr != external_sorter_) {
+      external_sorter_->~ExternalMergeSorter();
+      mem_context_->get_malloc_allocator().free(external_sorter_);
+      external_sorter_ = nullptr;
     }
     if (nullptr != sk_rows_) {
       mem_context_->get_malloc_allocator().free(sk_rows_);
@@ -146,8 +146,8 @@ void ObSortVecOpImpl<Compare, Store_Row, has_addon>::reuse()
     imms_heap_->reset();
   }
   heap_iter_begin_ = false;
-  if (nullptr != ems_heap_) {
-    ems_heap_->reset();
+  if (nullptr != external_sorter_) {
+    external_sorter_->reset();
   }
   if (nullptr != topn_heap_) {
     for (int64_t i = 0; i < topn_heap_->count(); ++i) {
@@ -1144,7 +1144,12 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::update_max_available_mem_siz
   if (!got_first_row_) {
     got_first_row_ = true;
     // heap sort will extend rowsize twice to reuse the space
-    int64_t size = OB_INVALID_ID == input_rows_ ? 0 : input_rows_ * input_width_ * 2;
+    const int64_t heap_input_width = OB_INVALID_ID == input_width_ ? input_width_ : input_width_ * 2;
+    const bool is_ddl_sort = OB_NOT_NULL(eval_ctx_)
+                             && OB_NOT_NULL(eval_ctx_->exec_ctx_.get_my_session())
+                             && eval_ctx_->exec_ctx_.get_my_session()->get_ddl_info().is_ddl();
+    const int64_t size = ObSQLSortResourceManager::calc_sql_initial_cache_size(
+      input_rows_, heap_input_width, is_ddl_sort, is_topn_sort(), topn_cnt_);
     if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), size,
                                         op_monitor_info_.op_type_, op_monitor_info_.op_id_,
                                         &eval_ctx_->exec_ctx_))) {
@@ -1152,11 +1157,10 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::update_max_available_mem_siz
     }
   } else {
     bool updated = false;
-    if (OB_FAIL(sql_mem_processor_.update_max_available_mem_size_periodically(
-          &mem_context_->get_malloc_allocator(),
-          [&](int64_t cur_cnt) { return topn_heap_->count() > cur_cnt; }, updated))) {
+    if (OB_FAIL(ObSortResourceManager::update_max_available_mem_size_periodically(
+          sql_mem_processor_, mem_context_, topn_heap_->count(), updated))) {
       SQL_ENG_LOG(WARN, "failed to get max available memory size", K(ret));
-    } else if (updated && OB_FAIL(sql_mem_processor_.update_used_mem_size(mem_context_->used()))) {
+    } else if (updated && OB_FAIL(sql_mem_processor_.update_used_mem_size(get_total_used_size()))) {
       SQL_ENG_LOG(WARN, "failed to update used memory size", K(ret));
     }
   }
@@ -1218,58 +1222,12 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::preprocess_dump(bool &dumped
 {
   int ret = OB_SUCCESS;
   dumped = false;
-  if (OB_FAIL(sql_mem_processor_.get_max_available_mem_size(&mem_context_->get_malloc_allocator()))) {
-    SQL_ENG_LOG(WARN, "failed to get max available memory size", K(ret));
-  } else if (OB_FAIL(sql_mem_processor_.update_used_mem_size(get_total_used_size()))) {
-    SQL_ENG_LOG(WARN, "failed to update used memory size", K(ret));
-  } else {
-    dumped = need_dump();
-    if (dumped) {
-      if (!sql_mem_processor_.is_auto_mgr()) {
-        // 如果dump在非auto管理模式也需要注册到workarea
-        if (OB_FAIL(sql_mem_processor_.extend_max_memory_size(&mem_context_->get_malloc_allocator(),
-                                                              [&](int64_t max_memory_size) {
-                                                                UNUSED(max_memory_size);
-                                                                return need_dump();
-                                                              },
-                                                              dumped, mem_context_->used()))) {
-          SQL_ENG_LOG(WARN, "failed to extend memory size", K(ret));
-        }
-      } else if (profile_.get_cache_size() < profile_.get_global_bound_size()) {
-        // in-memory：所有数据都可以缓存，即global bound
-        // size比较大，则继续看是否有更多内存可用
-        if (OB_FAIL(sql_mem_processor_.extend_max_memory_size(&mem_context_->get_malloc_allocator(),
-                                                              [&](int64_t max_memory_size) {
-                                                                UNUSED(max_memory_size);
-                                                                return need_dump();
-                                                              },
-                                                              dumped, get_total_used_size()))) {
-          SQL_ENG_LOG(WARN, "failed to extend memory size", K(ret));
-        }
-        LOG_TRACE("trace sort need dump", K(dumped), K(get_total_used_size()), K(get_memory_limit()),
-                  K(profile_.get_cache_size()), K(profile_.get_expect_size()));
-      } else {
-        // one-pass
-        if (profile_.get_cache_size() <= sk_store_.get_mem_hold() + sk_store_.get_file_size()
-                                           + addon_store_.get_mem_hold()
-                                           + addon_store_.get_file_size()) {
-          // 总体数据量超过cache
-          // size，说明估算的cache不准确，需要重新估算one-pass
-          // size，按照2*cache_size处理
-          if (OB_FAIL(sql_mem_processor_.update_cache_size(&mem_context_->get_malloc_allocator(),
-                                                           profile_.get_cache_size()
-                                                             * EXTEND_MULTIPLE))) {
-            SQL_ENG_LOG(WARN, "failed to update cache size", K(ret), K(profile_.get_cache_size()));
-          } else {
-            dumped = need_dump();
-          }
-        } else {
-        }
-      }
-      SQL_ENG_LOG(INFO, "trace sort need dump", K(dumped), K(mem_context_->used()),
-                  K(get_memory_limit()), K(profile_.get_cache_size()),
-                  K(profile_.get_expect_size()), K(sql_mem_processor_.get_data_size()));
-    }
+  if (OB_FAIL(ObSortResourceManager::preprocess_dump(
+        sql_mem_processor_, profile_, mem_context_, get_total_used_size(),
+        sk_store_.get_mem_hold() + sk_store_.get_file_size()
+          + addon_store_.get_mem_hold() + addon_store_.get_file_size(),
+        [this]() { return this->need_dump(); }, dumped))) {
+    SQL_ENG_LOG(WARN, "failed to preprocess sort dump", K(ret));
   }
   if (OB_SUCC(ret) && dumped && OB_NOT_NULL(rows_) && rows_->empty()) {
     dumped = false; //no data to dump, try to add a batch of data directly
@@ -1487,6 +1445,49 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::do_partition_sort(
 }
 
 template <typename Compare, typename Store_Row, bool has_addon>
+int ObSortVecOpImpl<Compare, Store_Row, has_addon>::do_full_sort_strategy(const int64_t begin)
+{
+  int ret = OB_SUCCESS;
+  if (enable_encode_sortkey_) {
+    if (is_fixed_key_sort_enabled_) {
+      if (OB_FAIL(do_fixed_key_sort(begin))) {
+        SQL_ENG_LOG(WARN, "failed to do fixed key sort", K(ret));
+      }
+    } else {
+      bool can_encode = true;
+      ObAdaptiveQS<Store_Row> aqs(*rows_, *sk_row_meta_, mem_context_->get_malloc_allocator());
+      if (OB_FAIL(aqs.init(*rows_, mem_context_->get_malloc_allocator(), begin, rows_->count(),
+                           can_encode))) {
+        SQL_ENG_LOG(WARN, "failed to init aqs", K(ret));
+      } else if (can_encode) {
+        aqs.sort(begin, rows_->count());
+      } else {
+        enable_encode_sortkey_ = false;
+        comp_.fallback_to_disable_encode_sortkey();
+        lib::ob_sort(&rows_->at(begin), &rows_->at(0) + rows_->count(), CopyableComparer(comp_));
+      }
+    }
+  } else {
+    lib::ob_sort(&rows_->at(begin), &rows_->at(0) + rows_->count(), CopyableComparer(comp_));
+  }
+  return ret;
+}
+
+template <typename Compare, typename Store_Row, bool has_addon>
+int ObSortVecOpImpl<Compare, Store_Row, has_addon>::do_partition_sort_strategy(const int64_t begin)
+{
+  return do_partition_sort(*sk_row_meta_, *rows_, begin, rows_->count());
+}
+
+template <typename Compare, typename Store_Row, bool has_addon>
+int ObSortVecOpImpl<Compare, Store_Row, has_addon>::do_partition_topn_sort_strategy(const int64_t begin)
+{
+  // The legacy vector path keeps partition TopN in heap-sort code. Until that path is
+  // selected explicitly, partition sort is the safe strategy fallback.
+  return do_partition_sort_strategy(begin);
+}
+
+template <typename Compare, typename Store_Row, bool has_addon>
 int ObSortVecOpImpl<Compare, Store_Row, has_addon>::sort_inmem_data()
 {
   int ret = OB_SUCCESS;
@@ -1509,28 +1510,11 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::sort_inmem_data()
         }
       }
       if (part_cnt_ > 0) {
-        OZ(do_partition_sort(*sk_row_meta_, *rows_, begin, rows_->count()));
-      } else if (enable_encode_sortkey_) {
-          if (is_fixed_key_sort_enabled_) {
-            if (OB_FAIL(do_fixed_key_sort(begin))) {
-              SQL_ENG_LOG(WARN, "failed to do fixed key sort", K(ret));
-            }
-          } else {
-            bool can_encode = true;
-            ObAdaptiveQS<Store_Row> aqs(*rows_, *sk_row_meta_, mem_context_->get_malloc_allocator());
-            if (OB_FAIL(aqs.init(*rows_, mem_context_->get_malloc_allocator(), begin, rows_->count(),
-                              can_encode))) {
-              SQL_ENG_LOG(WARN, "failed to init aqs", K(ret));
-            } else if (can_encode) {
-              aqs.sort(begin, rows_->count());
-            } else {
-              enable_encode_sortkey_ = false;
-              comp_.fallback_to_disable_encode_sortkey();
-              lib::ob_sort(&rows_->at(begin), &rows_->at(0) + rows_->count(), CopyableComparer(comp_));
-            }
-          }
+        ObPartitionSortStrategy<ThisType> strategy;
+        OZ(strategy.sort(*this, begin));
       } else {
-        lib::ob_sort(&rows_->at(begin), &rows_->at(0) + rows_->count(), CopyableComparer(comp_));
+        ObFullSortStrategy<ThisType> strategy;
+        OZ(strategy.sort(*this, begin));
       }
       if (OB_SUCCESS != comp_.ret_) {
         ret = comp_.ret_;
@@ -1652,47 +1636,19 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::do_dump()
   } else {
     const int64_t level = 0;
     if (!need_imms()) {
-      int64_t row_pos = 0;
-      int64_t ties_array_pos = 0;
-      auto input = [&](const Store_Row *&sk_row, const Store_Row *&addon_row) {
-        int ret = OB_SUCCESS;
-        if (row_pos >= rows_->count() && ties_array_pos >= ties_array_.count()) {
-          ret = OB_ITER_END;
-        } else if (row_pos < rows_->count()) {
-          sk_row = rows_->at(row_pos);
-          if (has_addon) {
-            addon_row = sk_row->get_addon_ptr(*sk_row_meta_);
-          }
-          row_pos += 1;
-        } else {
-          sk_row = ties_array_.at(ties_array_pos);
-          if (has_addon) {
-            addon_row = sk_row->get_addon_ptr(*sk_row_meta_);
-          }
-          ties_array_pos += 1;
-        }
-        return ret;
-      };
+      ObNormalDumpStrategy<Store_Row, has_addon> input(*rows_, ties_array_, *sk_row_meta_);
       if (OB_FAIL(build_chunk(level, input))) {
         SQL_ENG_LOG(WARN, "build chunk failed");
       } else if (OB_FAIL(eager_topn_filter(rows_))) {
         SQL_ENG_LOG(WARN, "eager_topn_filter failed", K(ret));
       }
     } else {
-      auto input = [&](const Store_Row *&sk_row, const Store_Row *&addon_row) {
-        int ret = OB_SUCCESS;
-        if (OB_FAIL(imms_heap_next(sk_row))) {
-          if (OB_ITER_END != ret) {
-            SQL_ENG_LOG(WARN, "get row from memory heap failed", K(ret));
-          }
-        } else if (has_addon) {
-          addon_row = sk_row->get_addon_ptr(*sk_row_meta_);
-        }
-        if (OB_SUCC(ret) && is_topn_sort() && is_topn_filter_enabled()) {
-          sorted_dumped_rows_ptrs_.push_back(SK_RC_DOWNCAST_P(sk_row));
-        }
-        return ret;
+      auto heap_next = [this](const Store_Row *&sk_row) {
+        return this->imms_heap_next(sk_row);
       };
+      ObIMMSDumpStrategy<Store_Row, has_addon, decltype(heap_next)> input(
+        std::move(heap_next), *sk_row_meta_, sorted_dumped_rows_ptrs_,
+        is_topn_sort(), is_topn_filter_enabled());
       if (OB_FAIL(build_chunk(level, input))) {
         SQL_ENG_LOG(WARN, "build chunk failed", K(ret));
       } else if (OB_FAIL(eager_topn_filter(&sorted_dumped_rows_ptrs_))) {
@@ -1762,7 +1718,11 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::before_add_row()
       SQL_ENG_LOG(WARN, "init compare failed", K(ret));
     } else {
       got_first_row_ = true;
-      int64_t size = OB_INVALID_ID == input_rows_ ? 0 : input_rows_ * input_width_;
+      const bool is_ddl_sort = OB_NOT_NULL(exec_ctx_)
+                               && OB_NOT_NULL(exec_ctx_->get_my_session())
+                               && exec_ctx_->get_my_session()->get_ddl_info().is_ddl();
+      const int64_t size = ObSQLSortResourceManager::calc_sql_initial_cache_size(
+        input_rows_, input_width_, is_ddl_sort, is_topn_sort(), topn_cnt_);
       if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), size,
                                           op_monitor_info_.op_type_, op_monitor_info_.op_id_,
                                           exec_ctx_))) {
@@ -1786,9 +1746,8 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::before_add_row()
     }
   } else if (!rows_->empty()) {
     bool updated = false;
-    if (OB_FAIL(sql_mem_processor_.update_max_available_mem_size_periodically(
-          &mem_context_->get_malloc_allocator(),
-          [&](int64_t cur_cnt) { return rows_->count() > cur_cnt; }, updated))) {
+    if (OB_FAIL(ObSortResourceManager::update_max_available_mem_size_periodically(
+          sql_mem_processor_, mem_context_, rows_->count(), updated))) {
       SQL_ENG_LOG(WARN, "failed to update max available mem size periodically", K(ret));
     } else if (updated && OB_FAIL(sql_mem_processor_.update_used_mem_size(mem_context_->used()))) {
       SQL_ENG_LOG(WARN, "failed to update used memory size", K(ret));
@@ -1836,9 +1795,6 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::build_ems_heap(int64_t &merg
   } else if (sort_chunks_.get_size() < 2) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "empty or one way, merge sort not needed", K(ret));
-  } else if (OB_FAIL(sql_mem_processor_.get_max_available_mem_size(
-               &mem_context_->get_malloc_allocator()))) {
-    SQL_ENG_LOG(WARN, "failed to get max available memory size", K(ret));
   } else {
     SortVecOpChunk *first = sort_chunks_.get_first();
     if (first->level_ != first->get_next()->level_) {
@@ -1853,53 +1809,31 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::build_ems_heap(int64_t &merg
       max_ways += 1;
       c = c->get_next();
     }
-  
-    if (nullptr == ems_heap_) {
-      if (OB_ISNULL(ems_heap_ = OB_NEWx(EMSHeap, (&mem_context_->get_malloc_allocator()), comp_,
-                                        &mem_context_->get_malloc_allocator()))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        SQL_ENG_LOG(WARN, "allocate memory failed", K(ret));
-      }
+
+    if (OB_FAIL(ObSortResourceManager::calc_merge_ways(sql_mem_processor_, mem_context_,
+                                                       max_ways, merge_ways))) {
+      SQL_ENG_LOG(WARN, "failed to calc merge ways", K(ret), K(max_ways));
     } else {
-      ems_heap_->reset();
-    }
-    if (OB_SUCC(ret)) {
-      merge_ways = get_memory_limit() / ObTempBlockStore::BLOCK_SIZE;
-      merge_ways = std::max(static_cast<int64_t>(2), merge_ways);
-      if (merge_ways < max_ways) {
-        bool dumped = false;
-        int64_t need_size = max_ways * ObTempBlockStore::BLOCK_SIZE;
-        if (OB_FAIL(sql_mem_processor_.extend_max_memory_size(
-              &mem_context_->get_malloc_allocator(),
-              [&](int64_t max_memory_size) { return max_memory_size < need_size; }, dumped,
-              mem_context_->used()))) {
-          SQL_ENG_LOG(WARN, "failed to extend memory size", K(ret));
-        }
-        merge_ways = std::max(merge_ways, get_memory_limit() / ObTempBlockStore::BLOCK_SIZE);
-      }
-      merge_ways = std::min(merge_ways, max_ways);
       LOG_TRACE("do merge sort ", K(first->level_), K(merge_ways), K(sort_chunks_.get_size()),
                 K(get_memory_limit()), K(sql_mem_processor_.get_profile()));
     }
 
     if (OB_SUCC(ret)) {
-      SortVecOpChunk *chunk = sort_chunks_.get_first();
-      for (int64_t i = 0; i < merge_ways && OB_SUCC(ret); i++) {
-        chunk->reset_row_iter();
-        if (OB_FAIL(chunk->init_row_iter())) {
-          SQL_ENG_LOG(WARN, "init iterator failed", K(ret));
-        } else if (OB_FAIL(chunk->get_next_row()) || nullptr == chunk->sk_row_) {
-          if (OB_ITER_END == ret || OB_SUCCESS == ret) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_ENG_LOG(WARN, "row store is not empty, iterate end is unexpected", K(ret),
-                        KP(chunk->sk_row_));
-          }
-          SQL_ENG_LOG(WARN, "get next row failed", K(ret));
-        } else if (OB_FAIL(ems_heap_->push(chunk))) {
-          SQL_ENG_LOG(WARN, "heap push failed", K(ret));
-        } else {
-          chunk = chunk->get_next();
+      if (nullptr == external_sorter_) {
+        if (OB_ISNULL(external_sorter_ = OB_NEWx(ExternalMergeSorter,
+                                                (&mem_context_->get_malloc_allocator()),
+                                                mem_context_->get_malloc_allocator(), comp_))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          SQL_ENG_LOG(WARN, "allocate memory failed", K(ret));
         }
+      } else {
+        external_sorter_->reset();
+      }
+    }
+
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(external_sorter_->init(sort_chunks_, merge_ways))) {
+        SQL_ENG_LOG(WARN, "init external merge sorter failed", K(ret), K(merge_ways));
       }
     }
   }
@@ -1952,24 +1886,6 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::heap_next(Heap &heap, const 
 }
 
 template <typename Compare, typename Store_Row, bool has_addon>
-int ObSortVecOpImpl<Compare, Store_Row, has_addon>::ems_heap_next(SortVecOpChunk *&chunk)
-{
-  const auto f = [](SortVecOpChunk *&c, bool &is_end) {
-    int ret = OB_SUCCESS;
-    if (OB_FAIL(c->get_next_row())) {
-      if (OB_ITER_END == ret) {
-        is_end = true;
-        ret = OB_SUCCESS;
-      } else {
-        SQL_ENG_LOG(WARN, "get next row failed", K(ret));
-      }
-    }
-    return ret;
-  };
-  return heap_next(*ems_heap_, f, chunk);
-}
-
-template <typename Compare, typename Store_Row, bool has_addon>
 int ObSortVecOpImpl<Compare, Store_Row, has_addon>::rewind()
 {
   int ret = OB_SUCCESS;
@@ -1991,7 +1907,6 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::rewind()
   }
   return ret;
 }
-
 template <typename Compare, typename Store_Row, bool has_addon>
 int ObSortVecOpImpl<Compare, Store_Row, has_addon>::imms_heap_next_stored_row(const Store_Row *&sr)
 {
@@ -2002,16 +1917,14 @@ template <typename Compare, typename Store_Row, bool has_addon>
 int ObSortVecOpImpl<Compare, Store_Row, has_addon>::ems_heap_next_stored_row(const Store_Row *&sr)
 {
   int ret = OB_SUCCESS;
-  SortVecOpChunk *chunk = nullptr;
-  if (OB_FAIL(ems_heap_next(chunk))) {
+  const Store_Row *addon_row = nullptr;
+  if (OB_ISNULL(external_sorter_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_ENG_LOG(WARN, "external sorter is null", K(ret));
+  } else if (OB_FAIL(external_sorter_->get_next_row(sr, addon_row))) {
     if (OB_ITER_END != ret) {
       SQL_ENG_LOG(WARN, "get next heap row failed", K(ret));
     }
-  } else if (nullptr == chunk || nullptr == chunk->sk_row_) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(WARN, "nullptr chunk or store row", K(ret));
-  } else {
-    sr = chunk->sk_row_;
   }
   return ret;
 }
@@ -2079,18 +1992,12 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::sort()
         }
         auto input = [&](const Store_Row *&sk_row, const Store_Row *&addon_row) {
           int ret = OB_SUCCESS;
-          SortVecOpChunk *chunk = nullptr;
-          if (OB_FAIL(ems_heap_next(chunk))) {
+          if (OB_ISNULL(external_sorter_)) {
+            ret = OB_ERR_UNEXPECTED;
+            SQL_ENG_LOG(WARN, "external sorter is null", K(ret));
+          } else if (OB_FAIL(external_sorter_->get_next_row(sk_row, addon_row))) {
             if (OB_ITER_END != ret) {
               SQL_ENG_LOG(WARN, "get next heap row failed", K(ret));
-            }
-          } else if (nullptr == chunk) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_ENG_LOG(WARN, "get chunk from heap is nullptr", K(ret));
-          } else {
-            sk_row = chunk->sk_row_;
-            if (has_addon) {
-              addon_row = chunk->addon_row_;
             }
           }
           return ret;
