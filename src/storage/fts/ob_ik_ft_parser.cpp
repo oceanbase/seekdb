@@ -127,7 +127,8 @@ int ObIKFTParser::produce()
 {
   int ret = OB_SUCCESS;
   // Loop until end or has data to output
-  while (OB_SUCC(ret) && ctx_->result_list().empty() && !ctx_->iter_end()) {
+  // Task4 Op1：分块结果通过消费下标判断是否需要生成下一批。
+  while (OB_SUCC(ret) && ctx_->is_results_exhaust() && !ctx_->iter_end()) {
     if (OB_FAIL(process_next_batch())) {
       if (OB_ITER_END == ret) {
         // ok

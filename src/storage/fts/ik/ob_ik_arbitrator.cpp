@@ -36,7 +36,8 @@ int ObIKArbitrator::process(TokenizeContext &ctx)
 {
   int ret = OB_SUCCESS;
 
-  ObList<ObIKToken, ObIAllocator> &tokens = ctx.token_list().tokens();
+  // Task4 Op1：仲裁器直接消费节点池化的主 token 链。
+  ObFastList<ObIKToken, HANDLE_SIZE_LIMIT> &tokens = ctx.token_list().tokens();
   ObIKTokenChain *chain_need_arbitrate = nullptr;
   bool use_smart = ctx.is_smart();
   if (OB_FAIL(prepare(ctx))) {
@@ -52,7 +53,7 @@ int ObIKArbitrator::process(TokenizeContext &ctx)
       } else if (OB_FAIL(chain_need_arbitrate->add_token_if_conflict(token, is_add))) {
         LOG_WARN("add token if conflict failed", K(ret));
       } else if (!is_add) {
-        ObFTSortList::CellIter iter = chain_need_arbitrate->list().tokens().begin();
+        ObFTLightSortList::CellIter iter = chain_need_arbitrate->list().tokens().begin();
         ObIKTokenChain *judge_result = nullptr;
         if (chain_need_arbitrate->list().tokens().size() == 1 || !use_smart) {
           if (OB_FAIL(add_chain(chain_need_arbitrate))) {
@@ -152,7 +153,7 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
         bool is_ignore = false;
         if (ObFTCharUtil::CharType::CHINESE == type) {
           token.type_ = ObIKTokenType::IK_CHINESE_TOKEN;
-          if (OB_FAIL(ctx.result_list().push_back(token))) {
+          if (OB_FAIL(ctx.get_results().push_back(token))) {
             LOG_WARN("Failed to output result to ctx", K(ret));
           }
         } else if (ObFTCharUtil::CharType::OTHER_CJK == type) {
@@ -162,7 +163,7 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
                                                          is_ignore))) {
             LOG_WARN("Failed to check ignore", K(ret));
           } else if (!is_ignore && !FALSE_IT(token.type_ = ObIKTokenType::IK_OTHER_CJK_TOKEN)
-                     && OB_FAIL(ctx.result_list().push_back(token))) {
+                     && OB_FAIL(ctx.get_results().push_back(token))) {
             LOG_WARN("Failed to add token to ctx result", K(ret));
           } else {
             // ignore
@@ -195,7 +196,7 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
               bool is_ignore = false;
               if (ObFTCharUtil::CharType::CHINESE == type) {
                 token.type_ = ObIKTokenType::IK_CHINESE_TOKEN;
-                ctx.result_list().push_back(token);
+                ctx.get_results().push_back(token);
               } else if (ObFTCharUtil::CharType::OTHER_CJK == type) {
                 if (OB_FAIL(ObFTCharUtil::is_ignore_single_cjk(ctx.collation(),
                                                                ctx.fulltext() + current,
@@ -204,7 +205,7 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
                   LOG_WARN("Failed to check ignore", K(ret));
                 } else if (!is_ignore) {
                   token.type_ = ObIKTokenType::IK_OTHER_CJK_TOKEN;
-                  ctx.result_list().push_back(token);
+                  ctx.get_results().push_back(token);
                 } else {
                 }
               }
@@ -214,7 +215,7 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
         }
 
         if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(ctx.result_list().push_back(token))) {
+        } else if (OB_FAIL(ctx.get_results().push_back(token))) {
           LOG_WARN("Failed to add token to ctx result", K(ret));
         } else
           // output the token
@@ -233,14 +234,14 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
 
 int ObIKArbitrator::optimize(TokenizeContext &ctx,
                              ObIKTokenChain *chain,
-                             ObFTSortList::CellIter iter,
+                             ObFTLightSortList::CellIter iter,
                              int64_t fulltext_len,
                              ObIKTokenChain *&best)
 {
   int ret = OB_SUCCESS;
 
   ObIKTokenChain *option = nullptr;
-  ObList<ObFTSortList::CellIter, ObIAllocator> conflict_stack(alloc_);
+  ObList<ObFTLightSortList::CellIter, ObIAllocator> conflict_stack(alloc_);
 
   if (OB_ISNULL(option = OB_NEWx(ObIKTokenChain, &alloc_, alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -254,7 +255,7 @@ int ObIKArbitrator::optimize(TokenizeContext &ctx,
     LOG_WARN("Copy best option failed", K(ret));
   } else {
     while (OB_SUCC(ret) && !conflict_stack.empty()) {
-      ObFTSortList::CellIter iter = conflict_stack.get_last();
+      ObFTLightSortList::CellIter iter = conflict_stack.get_last();
       conflict_stack.pop_back();
       if (OB_FAIL(remove_conflict(*iter, option))) {
         LOG_WARN("Failed to remove conflict", K(ret));
@@ -286,10 +287,10 @@ int ObIKArbitrator::optimize(TokenizeContext &ctx,
 }
 
 int ObIKArbitrator::try_add_next_words(ObIKTokenChain *chain,
-                                       ObFTSortList::CellIter iter,
+                                       ObFTLightSortList::CellIter iter,
                                        ObIKTokenChain *option,
                                        bool need_conflict,
-                                       ObList<ObFTSortList::CellIter, ObIAllocator> &conflict_stack)
+                                       ObList<ObFTLightSortList::CellIter, ObIAllocator> &conflict_stack)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(chain) || OB_ISNULL(option)) {

@@ -69,7 +69,8 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                 : charset_info_->cset->well_formed_len),
       fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
       next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
-      result_list_(allocator)
+      // Task4 Op1：结果数组与消费下标在上下文生命周期内复用。
+      results_(allocator), result_idx_(0)
 {
 }
 
@@ -89,8 +90,10 @@ int TokenizeContext::init()
 int TokenizeContext::reset_resource()
 {
   handle_size_ = 0;
-  result_list_.reset();
-  token_list_.reset();
+  // Task4 Op1：保留已申请的 token 块，仅重置逻辑长度。
+  results_.reuse();
+  result_idx_ = 0;
+  token_list_.reuse();
   return OB_SUCCESS;
 }
 
@@ -195,6 +198,9 @@ bool TokenizeContext::iter_end() const { return cursor_ >= fulltext_len_; }
 
 bool TokenizeContext::is_smart() const { return is_smart_; }
 
+// Task4 Op1：分块数组使用下标消费，避免 pop_front 修改链表节点。
+bool TokenizeContext::is_results_exhaust() const { return result_idx_ >= results_.count(); }
+
 int TokenizeContext::add_token(const char *fulltext,
                                int64_t offset,
                                int64_t length,
@@ -217,7 +223,7 @@ int TokenizeContext::add_token(const char *fulltext,
 TokenizeContext::~TokenizeContext()
 {
   token_list_.reset();
-  result_list_.reset();
+  results_.reset();
 }
 
 int TokenizeContext::get_next_token(const char *&word,
@@ -226,10 +232,10 @@ int TokenizeContext::get_next_token(const char *&word,
                                     int64_t &char_cnt)
 {
   int ret = OB_SUCCESS;
-  if (!result_list_.empty()) {
-    ObIKToken &token = result_list_.get_first();
-    result_list_.pop_front();
-    if (!result_list_.empty()) {
+  // Task4 Op1：按下标顺序读取分块结果，消除逐 token 节点释放。
+  if (result_idx_ < results_.count()) {
+    ObIKToken &token = results_.at(result_idx_++);
+    if (result_idx_ < results_.count()) {
       if (OB_FAIL(compound(token))) {
         LOG_WARN("Failed to compound", K(ret));
       } else {
@@ -251,11 +257,12 @@ int TokenizeContext::get_next_token(const char *&word,
 int TokenizeContext::compound(ObIKToken &token)
 {
   int ret = OB_SUCCESS;
-  ObList<ObIKToken, ObIAllocator> &list = result_list_;
+  // Task4 Op1：复合词通过结果下标前移完成消费。
+  ObFastSegmentArray<ObIKToken> &list = results_;
   if (is_smart_) {
-    if (!list.empty()) {
+    if (result_idx_ < list.count()) {
       if (ObIKTokenType::IK_ARABIC_TOKEN == token.type_) {
-        ObIKToken &next = list.get_first();
+        ObIKToken &next = list.at(result_idx_);
         bool append = false;
 
         if (ObIKTokenType::IK_CNNUM_TOKEN == next.type_) {
@@ -278,12 +285,12 @@ int TokenizeContext::compound(ObIKToken &token)
           // pass
         }
         if (append) {
-          list.pop_front();
+          ++result_idx_;
         }
       }
       // There may be another round of append
-      if (OB_SUCC(ret)) {
-        ObIKToken next = list.get_first();
+      if (OB_SUCC(ret) && result_idx_ < list.count()) {
+        ObIKToken &next = list.at(result_idx_);
         bool append = false;
         if (ObIKTokenType::IK_COUNT_TOKEN == next.type_) {
           if (token.offset_ + token.length_ == next.offset_) {
@@ -293,7 +300,7 @@ int TokenizeContext::compound(ObIKToken &token)
           }
         }
         if (append) {
-          list.pop_front();
+          ++result_idx_;
         }
       }
     }
