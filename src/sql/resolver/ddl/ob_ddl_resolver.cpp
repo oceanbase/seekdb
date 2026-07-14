@@ -117,6 +117,7 @@ ObDDLResolver::ObDDLResolver(ObResolverParams &params)
     vec_column_name_(),
     vec_index_type_(INDEX_TYPE_MAX),
     enable_macro_block_bloom_filter_(false),
+    is_fulltext_dict_table_(false),
     semistruct_encoding_type_(),
     dynamic_partition_policy_()
 {
@@ -133,7 +134,8 @@ int ObDDLResolver::append_fts_args(const share::schema::ObTableSchema &data_sche
                                    bool &fts_common_aux_table_exist,
                                    ObIArray<ObPartitionResolveResult> &resolve_results,
                                    ObIArray<ObCreateIndexArg> &index_arg_list,
-                                   ObIAllocator *allocator)
+                                   ObIAllocator *allocator,
+                                   ObSchemaGetterGuard *schema_guard)
 {
   int ret = OB_SUCCESS;
   ObDocIDType doc_id_type = ObDocIDType::INVALID;
@@ -148,7 +150,8 @@ int ObDDLResolver::append_fts_args(const share::schema::ObTableSchema &data_sche
     if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_index_arg(data_schema,
                                                             index_arg,
                                                             allocator,
-                                                            index_arg_list))) {
+                                                            index_arg_list,
+                                                            schema_guard))) {
       LOG_WARN("failed to append fts_index arg", K(ret));
     } else if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_rowkey_doc_arg(index_arg,
                                                                         allocator,
@@ -161,7 +164,8 @@ int ObDDLResolver::append_fts_args(const share::schema::ObTableSchema &data_sche
     } else if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_doc_word_arg(data_schema,
                                                                       index_arg,
                                                                       allocator,
-                                                                      index_arg_list))) {
+                                                                      index_arg_list,
+                                                                      schema_guard))) {
       LOG_WARN("failed to append fts_doc_word arg", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < num_fts_args; ++i) {
@@ -177,12 +181,14 @@ int ObDDLResolver::append_fts_args(const share::schema::ObTableSchema &data_sche
     if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_index_arg(data_schema,
                                                             index_arg,
                                                             allocator,
-                                                            index_arg_list))) {
+                                                            index_arg_list,
+                                                            schema_guard))) {
       LOG_WARN("failed to append fts_index arg", K(ret));
     } else if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_doc_word_arg(data_schema,
                                                                       index_arg,
                                                                       allocator,
-                                                                      index_arg_list))) {
+                                                                      index_arg_list,
+                                                                      schema_guard))) {
       LOG_WARN("failed to append fts_doc_word arg", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < num_fts_args; ++i) {
@@ -1917,7 +1923,7 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
               LOG_WARN("Failed to check check_sync_ddl_user", K(ret));
             } else if (is_sync_ddl_user) {
               ret = OB_IGNORE_SQL_IN_RESTORE;
-              LOG_WARN("Cannot support for sync ddl user to alter primary zone", K(ret), K(session_info_->get_user_name()));
+              LOG_ERROR("Cannot support for sync ddl user to alter primary zone", K(ret), K(session_info_->get_user_name()));
             } else if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::PRIMARY_ZONE))) {
               SQL_RESV_LOG(WARN, "failed to add member to bitset!", K(ret));
             }
@@ -2240,7 +2246,7 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             LOG_WARN("Failed to check sync_dll_user", K(ret));
           } else if (is_sync_ddl_user) {
             ret = OB_IGNORE_SQL_IN_RESTORE;
-            LOG_WARN("Cannot support for sync ddl user to alter locality",
+            LOG_ERROR("Cannot support for sync ddl user to alter locality",
                      K(ret), K(session_info_->get_user_name()));
           } else if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::LOCALITY))) {
             SQL_RESV_LOG(WARN, "fail to add member to bitset!", K(ret));
@@ -2391,6 +2397,26 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "organization in the alter table statement");
         } else {
           // do nothing
+        }
+        break;
+      }
+      case T_FULLTEXT_DICT: {
+        if (is_index_option) {
+          ret = OB_ERR_PARSE_SQL;
+          SQL_RESV_LOG(WARN, "fulltext dict can not be specified in index option", K(ret));
+        } else if (OB_ISNULL(option_node->children_) || OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "option_node child is null", K(ret));
+        } else {
+          ObString value(static_cast<int32_t>(option_node->children_[0]->str_len_),
+                         option_node->children_[0]->str_value_);
+          if (0 == value.case_compare("Y")) {
+            is_fulltext_dict_table_ = true;
+          } else {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT only supports 'Y'");
+            SQL_RESV_LOG(WARN, "invalid fulltext dict option", K(ret), K(value));
+          }
         }
         break;
       }
@@ -4278,6 +4304,7 @@ void ObDDLResolver::reset() {
   index_params_.reset();
   mv_refresh_dop_ = 0;
   enable_macro_block_bloom_filter_ = false;
+  is_fulltext_dict_table_ = false;
   semistruct_encoding_type_.reset();
   dynamic_partition_policy_.reset();
 }
@@ -5746,7 +5773,7 @@ int ObDDLResolver::resolve_range_partition_elements(ParseNode *node,
           LOG_WARN("expr_list_node->type_ is not T_EXPR_LIST", K(ret));
         } else if (expr_num != expr_list_node->num_child_) {
           ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-          LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret), K(expr_num), "num_child", expr_list_node->num_child_);
+          LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret), K(expr_num), "num_child", expr_list_node->num_child_);
         } else {
           if (OB_NOT_NULL(element_node->children_[PART_ID_NODE])) {
             // PART_ID is deprecated in 4.0, we just ignore and show warnings here.
@@ -6323,7 +6350,7 @@ int ObDDLResolver::resolve_list_partition_elements(ParseNode *node,
               } else if ((is_all_expr_list && expr_list_node->children_[j]->type_ != T_EXPR_LIST) ||
                          (!is_all_expr_list && expr_list_node->children_[j]->type_ == T_EXPR_LIST)) {
                 ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-                LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret));
+                LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
               } else if (OB_FAIL(ObResolverUtils::resolve_partition_list_value_expr(params_,
                                                                                     *(expr_list_node->children_[j]),
                                                                                     partition_name,
@@ -6372,7 +6399,7 @@ int ObDDLResolver::resolve_list_partition_elements(ParseNode *node,
               if (expr_num > 1 && !is_all_expr_list) {
                 if (row_expr->get_param_count() != expr_num) {
                   ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-                  LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret), K(expr_num));
+                  LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret), K(expr_num));
                 }
               }
             }
@@ -6862,7 +6889,12 @@ int ObDDLResolver::generate_global_index_schema(
               my_create_index_arg, new_table_schema, *allocator_, gen_columns))) {
         LOG_WARN("fail to adjust expr index args", K(ret));
       } else if (share::schema::is_fts_index(my_create_index_arg.index_type_) &&
-                 OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(*table_schema, my_create_index_arg, allocator_))) {
+                 OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(*table_schema,
+                                                                                      my_create_index_arg,
+                                                                                      allocator_,
+                                                                                      OB_ISNULL(schema_checker_)
+                                                                                          ? nullptr
+                                                                                          : schema_checker_->get_schema_guard()))) {
         LOG_WARN("failed to genearte fts parser name", K(ret));
       } else if (share::schema::is_vec_index(my_create_index_arg.index_type_) &&
                  OB_FAIL((ObVecIndexBuilderUtil::generate_vec_index_name(allocator_, my_create_index_arg.index_type_,
@@ -7304,7 +7336,7 @@ int ObDDLResolver::resolve_split_partition_list_value(const ParseNode *node,
       } else if ((is_all_expr_list && node->children_[j]->type_ != T_EXPR_LIST) ||
                  (!is_all_expr_list && node->children_[j]->type_ == T_EXPR_LIST)) {
         ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-        LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret));
+        LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
       } else if (!in_tablegroup && OB_FAIL(ObResolverUtils::resolve_partition_list_value_expr(params_,
                                                                                               *(node->children_[j]),
                                                                                               part_name,
@@ -7336,7 +7368,7 @@ int ObDDLResolver::resolve_split_partition_list_value(const ParseNode *node,
     } else if (part_func_exprs.count() > 1 && !is_all_expr_list) {
       if (row_expr->get_param_count() != part_func_exprs.count()) {
         ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-        LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret));
+        LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
       }
     }
 
@@ -9867,7 +9899,7 @@ int ObDDLResolver::resolve_range_partition_elements(ObPartitionedStmt *stmt,
         LOG_WARN("get unexpected node", K(expr_list_node));
       } else if (part_func_exprs.count() != expr_list_node->num_child_) {
         ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-        LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret));
+        LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
       } else if (OB_FAIL(resolve_partition_name(element_node->children_[PARTITION_NAME_NODE],
                                                 partition_name, partition))) {
         LOG_WARN("failed to resolve partition name", K(ret));
@@ -9946,7 +9978,7 @@ int ObDDLResolver::resolve_range_subpartition_elements(ObPartitionedStmt *stmt,
         LOG_WARN("get unexpected node", K(ret), K(element_node), K(expr_list_node));
       } else if (part_func_exprs.count() != expr_list_node->num_child_) {
         ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-        LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret));
+        LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
       } else if (OB_FAIL(resolve_partition_name(element_node->children_[PARTITION_NAME_NODE],
                                                 partition_name, subpartition))) {
         LOG_WARN("failed to resolve partition name", K(ret));
@@ -10248,7 +10280,7 @@ int ObDDLResolver::resolve_list_partition_value_node(ParseNode &expr_list_node,
         if ((is_all_expr_list && expr_list_node.children_[i]->type_ != T_EXPR_LIST) ||
             (!is_all_expr_list && expr_list_node.children_[i]->type_ == T_EXPR_LIST)) {
           ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-          LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret));
+          LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
         } else if (OB_ISNULL(expr_list_node.children_[i])) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("node is null", K(ret));
@@ -10277,7 +10309,7 @@ int ObDDLResolver::resolve_list_partition_value_node(ParseNode &expr_list_node,
       if (part_func_exprs.count() > 1 && !is_all_expr_list) {
         if (row_expr->get_param_count() != part_func_exprs.count()) {
           ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-          LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret));
+          LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
         }
       }
     }

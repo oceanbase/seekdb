@@ -1409,7 +1409,7 @@ int ObLogHandler::get_max_decided_scn(SCN &scn)
     if (OB_STATE_NOT_MATCH != ret) {
       CLOG_LOG(WARN, "failed to get_max_replayed_scn", K(ret), K(id));
     } else if (palf_reach_time_interval(1000 * 1000, get_max_decided_scn_debug_time_)) {
-      CLOG_LOG(WARN, "failed to get_max_replayed_scn, replay status is not enabled", K(ret), K(id));
+      CLOG_LOG(ERROR, "failed to get_max_replayed_scn, replay status is not enabled", K(ret), K(id));
     }
     if (OB_STATE_NOT_MATCH == ret && max_applied_scn.is_valid()) {
       //Replay is not enabled, but the maximum consecutive callback point obtained in the apply service is valid

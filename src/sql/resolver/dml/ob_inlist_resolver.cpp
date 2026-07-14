@@ -276,7 +276,7 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
           rewrite_info.param_types_.at(col_idx) = cur_param_type;
         } else {
           rewrite_info.is_valid_as_values_table_ = false;
-          LOG_WARN("get inconsistent param types in big inlist", K(column_cnt), K(row_cnt), K(i),
+          LOG_ERROR("get inconsistent param types in big inlist", K(column_cnt), K(row_cnt), K(i),
                    K(col_idx), K(cur_param_type), K(rewrite_info.param_types_.at(col_idx)));
         }
       }

@@ -1149,7 +1149,7 @@ int ObTabletDDLUtil::create_ddl_sstable(ObTablet &tablet,
       LOG_WARN("prepare data store desc failed", K(ret), K(ddl_param));
     } else if (FALSE_IT(macro_block_column_count = meta_array.empty() ? 0 : meta_array.at(0).block_meta_->get_meta_val().column_count_)) {
     } else if (meta_array.count() > 0 && OB_FAIL(data_desc.get_col_desc().mock_valid_col_default_checksum_array(macro_block_column_count))) {
-      LOG_WARN("mock valid column default checksum failed", K(ret), "firt_macro_block_meta", meta_array.at(0), K(ddl_param));
+      LOG_ERROR("mock valid column default checksum failed", K(ret), "firt_macro_block_meta", meta_array.at(0), K(ddl_param));
     } else if (OB_FAIL(sstable_index_builder.init(data_desc.get_desc(),
                                                    ddl_param.table_key_.is_major_sstable() ? ObSSTableIndexBuilder::ENABLE : ObSSTableIndexBuilder::DISABLE))) {
       LOG_WARN("init sstable index builder failed", K(ret), K(data_desc));
@@ -2172,7 +2172,7 @@ int ObTabletDDLUtil::report_ddl_checksum(
     if (OB_SUCC(ret)) {
       ret = OB_E(EventTable::EN_DDL_REPORT_CHECKSUM_FAIL) OB_SUCCESS;
       if (OB_FAIL(ret)) {
-        LOG_WARN("errsim report checksum failed", KR(ret));
+        LOG_ERROR("errsim report checksum failed", KR(ret));
       }
     }
 #endif

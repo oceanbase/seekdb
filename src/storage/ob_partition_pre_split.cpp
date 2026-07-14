@@ -665,7 +665,7 @@ int ObPartitionPreSplit::build_table_pre_split_schema(
             inc_partition_schema))) {
           LOG_WARN("[PRE_SPLIT] fail to build one split tablet part schema",  K(ret), K(tablet_id));
         } else if (split_ranges_.count() > 0 && OB_FAIL(split_tablet_ids.push_back(tablet_id))) {
-          LOG_WARN("[PRE_SPLIT] fail to push split tablet id to array", K(ret), K(tablet_id));
+          LOG_ERROR("[PRE_SPLIT] fail to push split tablet id to array", K(ret), K(tablet_id));
         } else {
           LOG_DEBUG("[PRE_SPLIT] pre split info", 
             K(ret), K(tablet_id), K(physical_size), K(split_size), K(split_num), K(split_ranges_), K(inc_partition_schema));
@@ -1003,7 +1003,7 @@ int ObPartitionPreSplit::build_split_tablet_partition_schema(
       const ObRowkey& high_bound_val = split_ranges_.at(idx).get_end_key();
       if (low_bound_val > high_bound_val) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("[PRE_SPLIT] fail to build split table schema", K(ret), K(low_bound_val), K(high_bound_val));
+        LOG_ERROR("[PRE_SPLIT] fail to build split table schema", K(ret), K(low_bound_val), K(high_bound_val));
       } else if (OB_FAIL(new_partition.set_high_bound_val(high_bound_val))) {
         LOG_WARN("[PRE_SPLIT] failed to set high_bound_val", K(ret));
       } else if (OB_FAIL(new_partition.set_low_bound_val(low_bound_val))) {

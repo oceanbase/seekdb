@@ -1085,10 +1085,10 @@ int ObTabletSplitMdsHelper::set_tablet_split_mds(
   } else {
     ObTabletSplitReplayExecutor replay_executor;
     if (CLICK_FAIL(replay_executor.init(ctx, replay_scn, data))) {
-      LOG_WARN("failed to init replay executor", K(ret));
+      LOG_ERROR("failed to init replay executor", K(ret));
     } else if (CLICK_FAIL(replay_executor.execute(replay_scn, ls_id, tablet_id))) {
       if (OB_EAGAIN != ret) {
-        LOG_WARN("failed to replay mds", K(ret));
+        LOG_ERROR("failed to replay mds", K(ret));
       }
     }
   }

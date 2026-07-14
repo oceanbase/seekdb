@@ -791,7 +791,7 @@ int ObServerAutoSplitScheduler::push_task(const storage::ObTabletHandle &tablet_
     LOG_WARN("invalid argument", K(ret), K(tablet_handle));
   } else if (OB_FAIL(check_and_fetch_tablet_split_info(tablet_handle, ls, can_split, task))) {
     if (OB_UNLIKELY(OB_NOT_SUPPORTED != ret)) {
-      LOG_WARN("failed to check and fetch tablet split info", K(ret), K(task));
+      LOG_ERROR("failed to check and fetch tablet split info", K(ret), K(task));
     }
   } else if (can_split && OB_FAIL(task_array.push_back(task))) {
     LOG_WARN("task_array push back failed" , K(ret), K(task_array));

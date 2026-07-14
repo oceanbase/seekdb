@@ -169,7 +169,7 @@ int ObLocationMgr::add_location(const ObLocationSchema &schema, const ObNameCase
   }
   if ((location_infos_.count() != location_name_map_.item_count()
       || location_infos_.count() != location_id_map_.item_count())) {
-    LOG_WARN("schema is inconsistent with its map", K(ret),
+    LOG_ERROR("schema is inconsistent with its map", K(ret),
             K(location_infos_.count()),
             K(location_name_map_.item_count()),
             K(location_id_map_.item_count()));
@@ -202,7 +202,7 @@ int ObLocationMgr::del_location(const ObTenantLocationId &id)
       ret = OB_SUCCESS;
       LOG_INFO("failed to remove location schema, item may not exist", K(ret));
     } else {
-      LOG_WARN("failed to remove location schema", K(ret));
+      LOG_ERROR("failed to remove location schema", K(ret));
     }
   } else if (OB_ISNULL(schema)) {
     // if item can be found, schema should not be null

@@ -269,7 +269,7 @@ int ObDirectLoadInsertTableBatchRowDirectWriter::before_flush_batch(ObBatchDatum
   int ret = OB_SUCCESS;
   if (write_ctx_.pk_interval_.remain_count() < datum_rows.row_count_ &&
       OB_FAIL(switch_sstable_slice())) {
-    LOG_WARN("fail to switch sstable slice", KR(ret));
+    LOG_ERROR("fail to switch sstable slice", KR(ret));
   } else if (OB_FAIL(ObDirectLoadVectorUtils::batch_fill_hidden_pk(datum_rows.vectors_.at(0),
                                                                    0 /*start*/,
                                                                    datum_rows.row_count_,

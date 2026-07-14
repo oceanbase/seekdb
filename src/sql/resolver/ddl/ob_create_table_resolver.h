@@ -110,6 +110,7 @@ private:
                                const bool is_partition_option_node_with_opt);
   //check generated column whether valid
   int check_generated_partition_column(share::schema::ObTableSchema &table_schema);
+  int check_fulltext_dict_table_schema(const share::schema::ObTableSchema &table_schema);
   ObRawExpr* find_gen_col_expr(const uint64_t column_id);
   int get_resolve_stats_from_table_schema(const share::schema::ObTableSchema &table_schema,
                                           ObArray<ObColumnResolveStat> &stats);

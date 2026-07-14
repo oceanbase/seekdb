@@ -165,7 +165,7 @@ int ObCatalogMgr::add_catalog(const ObCatalogSchema &schema,
   if (OB_SUCC(ret) && (schema_infos_.count() != name_map_.item_count()
                        || schema_infos_.count() != id_map_.item_count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema is inconsistent with its map", K(ret),
+    LOG_ERROR("schema is inconsistent with its map", K(ret),
              K(schema_infos_.count()),
              K(name_map_.item_count()),
              K(id_map_.item_count()));

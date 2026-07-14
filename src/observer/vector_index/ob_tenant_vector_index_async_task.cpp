@@ -82,7 +82,7 @@ int ObVectorIndexHistoryTask::clear_history_task()
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("fail to commit trans", KR(ret), K(tmp_ret));
+      LOG_ERROR("fail to commit trans", KR(ret), K(tmp_ret));
       ret = OB_SUCC(ret) ? tmp_ret : ret;
     }
   }
@@ -113,7 +113,7 @@ int ObVectorIndexHistoryTask::move_task_to_history_table()
       if (trans.is_started()) {
         int tmp_ret = OB_SUCCESS;
         if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-          LOG_WARN("fail to commit trans", KR(ret), K(tmp_ret));
+          LOG_ERROR("fail to commit trans", KR(ret), K(tmp_ret));
           ret = OB_SUCC(ret) ? tmp_ret : ret;
         }
       }

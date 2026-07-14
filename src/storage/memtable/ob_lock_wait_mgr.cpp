@@ -211,7 +211,7 @@ bool ObLockWaitMgr::post_process(bool need_retry, bool& need_wait)
           if (OB_UNLIKELY(OB_SUCCESS != (tmp_ret = register_to_deadlock_detector_(self_tx_id,
                                                                                   blocked_tx_id,
                                                                                   node)))) {
-            DETECT_LOG_RET(WARN, tmp_ret, "register to deadlock detector failed", K(tmp_ret), K(*node));
+            DETECT_LOG_RET(ERROR, tmp_ret, "register to deadlock detector failed", K(tmp_ret), K(*node));
           } else {
             DETECT_LOG(TRACE, "register to deadlock detector success", K(tmp_ret), K(*node));
           }

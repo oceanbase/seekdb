@@ -47,6 +47,12 @@
     </a>
 </p>
 
+<p align="center">
+    <a href="https://trendshift.io/repositories/15659" target="_blank">
+        <img src="https://trendshift.io/api/badge/repositories/15659" alt="oceanbase%2Fseekdb | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/>
+    </a>
+</p>
+
 MySQL-compatible · Embedded or Server · Hybrid Vector + Full-text Search · COW Sandbox
 
 ⚡ 1,523 QPS streaming write+search (10× Milvus, 3× Elasticsearch)<br>

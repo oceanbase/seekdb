@@ -242,7 +242,7 @@ int ObStorageObjectHandle::sn_async_write(const ObStorageObjectWriteInfo &write_
     } else {
       int tmp_ret = OB_SUCCESS;
       if (macro_id_.is_id_mode_local() && OB_TMP_FAIL(OB_SERVER_BLOCK_MGR.update_write_time(macro_id_))) {
-        LOG_WARN("fail to update write time for macro block", K(tmp_ret), K(macro_id_));
+        LOG_ERROR("fail to update write time for macro block", K(tmp_ret), K(macro_id_));
       }
       FLOG_INFO("Async write macro block", K(macro_id_));
     }

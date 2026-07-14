@@ -679,7 +679,7 @@ int ObDropFTSIndexTask::cleanup_impl()
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN("fail to commit trans", KR(ret), KR(tmp_ret));
+        LOG_ERROR("fail to commit trans", KR(ret), KR(tmp_ret));
         ret = OB_SUCC(ret) ? tmp_ret : ret;
       }
     }

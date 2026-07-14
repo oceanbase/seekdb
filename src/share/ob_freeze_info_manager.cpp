@@ -102,7 +102,7 @@ int ObFreezeInfoList::get_freeze_info(
       freeze_info = frozen_statuses_.at(idx);
     } else {
       ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("can not found freeze_info", KR(ret), KPC(this), K(frozen_scn));
+      LOG_ERROR("can not found freeze_info", KR(ret), KPC(this), K(frozen_scn));
     }
   }
   return ret;
@@ -411,7 +411,7 @@ int ObFreezeInfoManager::get_neighbour_frozen_status(
           ret = OB_ENTRY_NOT_EXIST;
           if (REACH_THREAD_TIME_INTERVAL(60L * 1000L * 1000L)) {
             // ignore ret
-            LOG_WARN("cannot get neighbour major freeze before bootstrap", K(ret),
+            LOG_ERROR("cannot get neighbour major freeze before bootstrap", K(ret),
               K(snapshot_version), K(next_info));
           }
         } else {

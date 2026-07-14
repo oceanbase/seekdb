@@ -271,7 +271,7 @@ int ObMajorFreezeHelper::do_major_freeze(
       if (OB_FAIL(do_one_tenant_major_freeze(freeze_reason, freeze_info_array.at(i)))) {
         if ((OB_MAJOR_FREEZE_NOT_FINISHED != ret) && (OB_FROZEN_INFO_ALREADY_EXIST != ret)) {
           final_ret = ret;
-          LOG_WARN("fail do tenant major freeze", KR(ret), K(tenant_count),
+          LOG_ERROR("fail do tenant major freeze", KR(ret), K(tenant_count),
             "freeze_reason", major_freeze_reason_to_str(freeze_reason),
             "freeze_info", freeze_info_array.at(i));
         }
@@ -331,7 +331,7 @@ int ObMajorFreezeHelper::do_one_tenant_major_freeze(
           }
         } else {
           ret = OB_MAJOR_FREEZE_NOT_ALLOW;
-          LOG_WARN("fail to launch_major_freeze, forbidden in restore_major_freeze_service",
+          LOG_ERROR("fail to launch_major_freeze, forbidden in restore_major_freeze_service",
               KR(ret), K(freeze_info), K(is_primary_service));
         }
       }

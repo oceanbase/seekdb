@@ -1698,10 +1698,10 @@ void ObIDagNet::diagnose_dag(common::ObIArray<compaction::ObDiagnoseTabletCompPr
     ObDagRecord *dag_record = iter->second;
     compaction::ObDiagnoseTabletCompProgress progress;
     if (OB_TMP_FAIL(dag_record->dag_ptr_->diagnose_compaction_info(progress))) {
-      LOG_WARN_RET(tmp_ret, "failed to diagnose compaction info");
+      LOG_ERROR_RET(tmp_ret, "failed to diagnose compaction info");
     } else if (progress.is_valid()) {
       if (OB_TMP_FAIL(progress_list.push_back(progress))) {
-        LOG_WARN_RET(tmp_ret, "failed to add compaction progress");
+        LOG_ERROR_RET(tmp_ret, "failed to add compaction progress");
       }
     }
   }
@@ -2686,7 +2686,7 @@ int ObDagPrioScheduler::pop_task_from_ready_list_(ObITask *&task)
 
   // adaptive compaction scheduling
   if (is_compaction_dag_prio() && OB_TMP_FAIL(rank_compaction_dags_())) {
-    COMMON_LOG(WARN, "[ADAPTIVE_SCHED] Failed to rank compaction dags", K(tmp_ret), K_(priority));
+    COMMON_LOG(ERROR, "[ADAPTIVE_SCHED] Failed to rank compaction dags", K(tmp_ret), K_(priority));
   }
 
   if (!dag_list_[READY_DAG_LIST].is_empty()) {
@@ -2894,7 +2894,7 @@ int ObDagPrioScheduler::finish_dag_(
         } else if (OB_TMP_FAIL(share::g_mp->diagnose_tablet_mgr()->delete_diagnose_tablet(
               merge_dag.ls_id_, merge_dag.tablet_id_, ObIDag::get_diagnose_tablet_type(dag->get_type())))) {
           if (OB_HASH_NOT_EXIST != tmp_ret) {
-            COMMON_LOG(WARN, "failed to delete diagnose tablet", K(tmp_ret),
+            COMMON_LOG(ERROR, "failed to delete diagnose tablet", K(tmp_ret),
               "ls_id", merge_dag.ls_id_, "tablet_id", merge_dag.tablet_id_);
           }
         }
@@ -3254,7 +3254,7 @@ void ObDagPrioScheduler::add_compaction_info(
     while (head != cur && idx < total_cnt && prio_cnt < MAX_SHOW_DAG_CNT) {
       if (OB_UNLIKELY(OB_TMP_FAIL(cur->gene_compaction_info(progress[idx])))) {
         if (OB_EAGAIN != tmp_ret) {
-          COMMON_LOG_RET(WARN, tmp_ret, "failed to generate compaction dag info", KPC(cur));
+          COMMON_LOG_RET(ERROR, tmp_ret, "failed to generate compaction dag info", KPC(cur));
         }
       } else {
         (void)progress_array.push_back(&progress[idx++]);

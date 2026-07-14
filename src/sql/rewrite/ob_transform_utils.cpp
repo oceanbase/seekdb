@@ -15297,7 +15297,7 @@ int ObTransformUtils::prepare_trans_any_all_as_exists(ObTransformerCtx *ctx,
   if (OB_ISNULL(right_hand) || OB_ISNULL(ctx) ||
       OB_ISNULL(trans_stmt = right_hand->get_ref_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to prepare trans any all as exists", K(ret));
+    LOG_ERROR("failed to prepare trans any all as exists", K(ret));
   } else if (trans_stmt->is_spj()) {
   } else if (OB_FAIL(ObTransformUtils::create_stmt_with_generated_table(ctx,
                                                                         trans_stmt,

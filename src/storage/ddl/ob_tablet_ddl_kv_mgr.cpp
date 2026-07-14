@@ -555,7 +555,7 @@ int ObTabletDDLKvMgr::freeze_ddl_kv(
       LOG_WARN("ddl kv is null", K(ret), KP(kv), K(kv_handle));
     } else if (OB_FAIL(kv->freeze(freeze_scn))) {
       if (OB_EAGAIN != ret) {
-        LOG_WARN("fail to freeze active ddl kv", K(ret));
+        LOG_ERROR("fail to freeze active ddl kv", K(ret));
       }
     } else {
       max_freeze_scn_ = SCN::max(max_freeze_scn_, kv->get_freeze_scn());
@@ -998,7 +998,7 @@ int ObDDLMacroIdemChecker::check_block_exist(const ObDDLMacroBlockType block_typ
     LOG_WARN("failed to init key value", K(ret), K(block_id), K(logic_id), K(table_type));
   } else if (!checksum_map_.created())  {
     ret = OB_TASK_EXPIRED;
-    LOG_WARN("macro block checksum map not created", K(ret), K(checksum_map_.created()));
+    LOG_ERROR("macro block checksum map not created", K(ret), K(checksum_map_.created()));
   } else {
     int64_t prev_checksum = 0;
     if (OB_FAIL(checksum_map_.get_refactored(key, prev_checksum))) {

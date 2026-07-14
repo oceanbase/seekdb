@@ -176,12 +176,12 @@ int ObMySQLConnection::start_transaction(bool with_snap_shot/* = false*/)
   } else if (with_snap_shot) {
     if (0 != mysql_real_query(&mysql_, "START TRANSACTION WITH CONSISTENT SNAPSHOT", 42)) {
       ret = -mysql_errno(&mysql_);
-      LOG_WARN("fail to start transaction", "info", mysql_error(&mysql_), K(ret));
+      LOG_ERROR("fail to start transaction", "info", mysql_error(&mysql_), K(ret));
     }
   } else {
     if (0 != mysql_real_query(&mysql_, "START TRANSACTION", 17)) {
       ret = -mysql_errno(&mysql_);
-      LOG_WARN("fail to start transaction", "info", mysql_error(&mysql_), K(ret));
+      LOG_ERROR("fail to start transaction", "info", mysql_error(&mysql_), K(ret));
     }
   }
   return ret;

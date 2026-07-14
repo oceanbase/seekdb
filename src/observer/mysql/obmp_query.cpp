@@ -744,7 +744,7 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
                                          force_sync_resp,
                                          stmt_type))) {
         need_response_error = true;
-        LOG_WARN("fail to execute trans ctrl cmd", KR(ret), K(sql));
+        LOG_ERROR("fail to execute trans ctrl cmd", KR(ret), K(sql));
       }
       // If there is no asynchronous submission, and the execution is successful, then send an ok packet to the client
       if (!async_resp_used && OB_SUCC(ret)) {

@@ -109,7 +109,7 @@ int ObLockContext::destroy(ObExecContext &ctx,
   } else {
     if (has_autonomous_tx_) {
       if (OB_TMP_FAIL(implicit_end_trans_(*session_info, ctx, is_rollback))) {
-        LOG_WARN("failed to rollback trans", K(tmp_ret));
+        LOG_ERROR("failed to rollback trans", K(tmp_ret));
         ret = COVER_SUCC(tmp_ret);
       }
     }
@@ -119,7 +119,7 @@ int ObLockContext::destroy(ObExecContext &ctx,
     }
     if (have_saved_session_) {
       if (OB_TMP_FAIL(session_info->end_autonomous_session(saved_session_))) {
-        LOG_WARN("failed to switch trans", K(tmp_ret));
+        LOG_ERROR("failed to switch trans", K(tmp_ret));
         ret = COVER_SUCC(tmp_ret);
       }
     }
@@ -216,7 +216,7 @@ void ObLockContext::register_for_deadlock_(ObSQLSessionInfo &session_info,
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not register to deadlock", K(ret), K(parent_tx_id), K(child_tx_id));
+    LOG_ERROR("not register to deadlock", K(ret), K(parent_tx_id), K(child_tx_id));
   }
 }
 

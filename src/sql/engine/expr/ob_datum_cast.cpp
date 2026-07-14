@@ -2847,7 +2847,7 @@ int cast_inconsistent_types(const sql::ObExpr &expr,
   UNUSED(res_datum);
   ObObjType in_type = expr.args_[0]->datum_meta_.type_;
   ObObjType out_type = expr.datum_meta_.type_;
-  LOG_WARN("inconsistent datatypes", K(ret), K(in_type), K(out_type), K(expr.extra_));
+  LOG_ERROR("inconsistent datatypes", K(ret), K(in_type), K(out_type), K(expr.extra_));
   return ret;
 }
 
@@ -2864,7 +2864,7 @@ int cast_inconsistent_types_json(const sql::ObExpr &expr,
     ret = OB_ERR_INVALID_INPUT;
     LOG_WARN("invalid input in implicit cast", K(ret));
   } else {
-    LOG_WARN("inconsistent datatypes", K(ret), K(in_type), K(out_type), K(expr.extra_));
+    LOG_ERROR("inconsistent datatypes", K(ret), K(in_type), K(out_type), K(expr.extra_));
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
   }
   return ret;

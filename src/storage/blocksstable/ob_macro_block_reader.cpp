@@ -604,7 +604,7 @@ int ObSSTableDataBlockReader::check_macro_crc_(const char *data, const int64_t s
     const int32_t calculated_checksum = static_cast<int32_t>(ob_crc64(payload_buf, payload_size));
     if (OB_UNLIKELY(calculated_checksum != common_header_.get_payload_checksum())) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("macro block checksum inconsistant", K(ret), K(calculated_checksum), K_(common_header));
+      LOG_ERROR("macro block checksum inconsistant", K(ret), K(calculated_checksum), K_(common_header));
     }
   }
   return ret;

@@ -867,7 +867,7 @@ int ObSSTable::set_upper_trans_version(
   const int64_t old_val = meta_cache_.upper_trans_version_;
   // make sure meta_ is loaded, otherwise make meta and shell inconsistency.
   if (!is_loaded() && OB_FAIL(bypass_load_meta(allocator))) {
-    LOG_WARN("failed to load sstable meta", K(ret), K(key_));
+    LOG_ERROR("failed to load sstable meta", K(ret), K(key_));
   }
   if (OB_SUCC(ret) && is_loaded()) {
     (void) meta_->basic_meta_.set_upper_trans_version(upper_trans_version);
@@ -889,7 +889,7 @@ int ObSSTable::backfill_commit_version(
   const SCN &old_filled_tx_scn = meta_cache_.filled_tx_scn_;
 
   if (!is_loaded() && OB_FAIL(bypass_load_meta(allocator))) {
-    LOG_WARN("failed to load sstable meta", K(ret), K(key_));
+    LOG_ERROR("failed to load sstable meta", K(ret), K(key_));
   }
   if (OB_SUCC(ret) && is_loaded()) {
     (void) meta_->basic_meta_.set_upper_trans_version(commit_version);
@@ -1607,7 +1607,7 @@ int ObSSTable::get_index_tree_root(
     LOG_WARN("SSTable is empty", K(ret));
   } else if (OB_UNLIKELY(!is_loaded())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("can not get index tree rot from an unloaded sstable", K(ret));
+    LOG_ERROR("can not get index tree rot from an unloaded sstable", K(ret));
   } else if (is_ddl_merge_empty_sstable()) {
     // mock here, skip valid_check
     index_data.reset();

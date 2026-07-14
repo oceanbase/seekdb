@@ -66,7 +66,7 @@ int ObObjPrivMysqlDDLService::grant_object(
       if (trans.is_started()) {
         int temp_ret = OB_SUCCESS;
         if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCC(ret)))) {
-          LOG_WARN("trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
+          LOG_ERROR("trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
           ret = (OB_SUCC(ret)) ? temp_ret : ret;
         }
       }
@@ -117,7 +117,7 @@ int ObObjPrivMysqlDDLService::revoke_object(
       if (trans.is_started()) {
         int temp_ret = OB_SUCCESS;
         if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCC(ret)))) {
-          LOG_WARN("trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
+          LOG_ERROR("trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
           ret = (OB_SUCC(ret)) ? temp_ret : ret;
         }
       }

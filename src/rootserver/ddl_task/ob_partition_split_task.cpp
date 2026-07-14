@@ -145,7 +145,7 @@ int ObPartitionSplitTask::init_freeze_progress_map()
     } else if (!freeze_progress_map_.created() &&
                OB_FAIL(freeze_progress_map_.create(all_src_tablet_ids_.count(),
                                                    lib::ObLabel("DDLSplitTask")))) {
-      LOG_WARN("failed to create freeze progress map", K(ret));
+      LOG_ERROR("failed to create freeze progress map", K(ret));
     }
     TCWLockGuard guard(lock_);
     for (int64_t i = 0; OB_SUCC(ret) && i < all_src_tablet_ids_.count(); ++i) {
@@ -194,7 +194,7 @@ int ObPartitionSplitTask::init_compaction_scn_map()
   int ret = OB_SUCCESS;
   if (!tablet_compaction_scn_map_.created() &&
       OB_FAIL(tablet_compaction_scn_map_.create(10, lib::ObLabel("DDLSplitTask")))) {
-    LOG_WARN("failed to create tablet compaction scn map", K(ret));
+    LOG_ERROR("failed to create tablet compaction scn map", K(ret));
   }
   if (OB_FAIL(ret)) {
     (void)tablet_compaction_scn_map_.destroy();
@@ -772,7 +772,7 @@ int ObPartitionSplitTask::check_compaction_progress(
     ret = OB_ERR_SYS;
     LOG_WARN("unexpected null tablet ids", K(ret), KPC(this));
   } else if (!compaction_progress_map_.created() && OB_FAIL(compaction_progress_map_.create(all_src_tablet_ids_.count(), lib::ObLabel("DDLWaitCompact")))) {
-    LOG_WARN("failed to create compaction progress map", K(ret));
+    LOG_ERROR("failed to create compaction progress map", K(ret));
   } else {
     int64_t compaction_end_number = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < split_replica_addrs.count(); i++) {
@@ -1434,7 +1434,7 @@ int ObPartitionSplitTask::send_split_rpc(
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(target_split_info_array.count() < resp_ret_codes.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mismatched rpc request and response count", K(ret), K(target_split_info_array), K(resp_ret_codes));
+    LOG_ERROR("mismatched rpc request and response count", K(ret), K(target_split_info_array), K(resp_ret_codes));
   } else if (!resp_ret_codes.empty()) {
     if (OB_UNLIKELY(resp_ret_codes.count() > target_split_info_array.count())) {
       ret = OB_ERR_UNEXPECTED;
@@ -2572,7 +2572,7 @@ int ObPartitionSplitTask::prepare_tablet_split_ranges(
     } else if (ObDDLTaskStatus::WAIT_LOCAL_INDEX_SPLIT_END == task_status_) {
       if (OB_UNLIKELY(source_index_tablets_cnt != index_tablet_parallel_rowkey_list_.count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("mismatched datum rowkey list", K(ret), K(source_index_tablets_cnt), K(index_tablet_parallel_rowkey_list_));
+        LOG_ERROR("mismatched datum rowkey list", K(ret), K(source_index_tablets_cnt), K(index_tablet_parallel_rowkey_list_));
       } else if (OB_FAIL(parallel_datum_rowkey_list.assign(index_tablet_parallel_rowkey_list_))) {
         LOG_WARN("assign failed", K(ret));
       }

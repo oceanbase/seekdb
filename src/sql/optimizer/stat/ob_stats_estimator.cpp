@@ -480,7 +480,7 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
     }
     int tmp_ret = OB_SUCCESS;
     if (session_value != NULL && OB_SUCCESS != (tmp_ret = session->restore_session(*session_value))) {
-      LOG_WARN("failed to restore session", K(tmp_ret));
+      LOG_ERROR("failed to restore session", K(tmp_ret));
       ret = COVER_SUCC(tmp_ret);
     }
     if (OB_NOT_NULL(session_value)) {

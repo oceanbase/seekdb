@@ -176,7 +176,7 @@ int ObExprToTemporalBase::calc_result_typeN(ObExprResType &type,
           || input_char.is_datetime();
       if (OB_UNLIKELY(!accept_input_type)) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("inconsistent type", K(ret), K(input_char));
+        LOG_ERROR("inconsistent type", K(ret), K(input_char));
       } else {
         input_char.set_calc_type(ObVarcharType);
         input_char.set_calc_collation_type(nls_collation);
@@ -188,7 +188,7 @@ int ObExprToTemporalBase::calc_result_typeN(ObExprResType &type,
       bool accept_fmt_type = fmt.is_null() || fmt.is_string_type();
       if (OB_UNLIKELY(!accept_fmt_type)) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("inconsistent type", K(ret), K(fmt));
+        LOG_ERROR("inconsistent type", K(ret), K(fmt));
       } else {
         fmt.set_calc_type(ObVarcharType);
         fmt.set_calc_collation_type(nls_collation);
@@ -200,7 +200,7 @@ int ObExprToTemporalBase::calc_result_typeN(ObExprResType &type,
       bool accept_nlsparam_type = nlsparam.is_null() || nlsparam.is_string_type();
       if (OB_UNLIKELY(!accept_nlsparam_type)) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("inconsistent type", K(ret), K(nlsparam));
+        LOG_ERROR("inconsistent type", K(ret), K(nlsparam));
       } else {
         nlsparam.set_calc_type(ObVarcharType);
         nlsparam.set_calc_collation_type(nls_collation);

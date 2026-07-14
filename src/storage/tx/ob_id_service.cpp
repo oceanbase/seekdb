@@ -54,7 +54,7 @@ int ObIDService::submit_log_with_lock_(const int64_t last_id, const int64_t limi
       }
     } else {
       if (REACH_TIME_INTERVAL(100 * 1000)) {
-        TRANS_LOG(WARN, "submit log fail", K(ret), K(service_type_), K(last_id), K(limited_id));
+        TRANS_LOG(ERROR, "submit log fail", K(ret), K(service_type_), K(last_id), K(limited_id));
       }
     }
   } else {
@@ -110,7 +110,7 @@ int ObIDService::submit_log_(const int64_t last_id, const int64_t limited_id)
     } else if (ObTimeUtility::current_time() - submit_log_ts_ > SUBMIT_LOG_ALARM_INTERVAL) {
       if (log_interval_.reach()) {
         // ignore ret
-        TRANS_LOG(WARN, "submit log callback use too mush time", K_(submit_log_ts), K_(cb), K_(service_type), K_(latest_log_ts), K_(self));
+        TRANS_LOG(ERROR, "submit log callback use too mush time", K_(submit_log_ts), K_(cb), K_(service_type), K_(latest_log_ts), K_(self));
       }
     }
   } else if (last_id < 0 || limited_id < 0) {

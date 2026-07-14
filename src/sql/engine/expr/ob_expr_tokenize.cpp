@@ -28,6 +28,7 @@
 #include "object/ob_object.h"
 #include "plugin/sys/ob_plugin_helper.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "sql/session/ob_basic_session_info.h"
 #include "share/ob_json_access_utils.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "storage/fts/ob_fts_parser_property.h"
@@ -239,6 +240,11 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
     LOG_WARN("Fail to parse parser params.", K(ret));
   } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
     LOG_WARN("Fail to reform parser params.", K(ret));
+  } else if (OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info is null", K(ret));
+  } else if (OB_FAIL(param.normalize_ik_dict_table_names(ctx.exec_ctx_.get_my_session()->get_database_name()))) {
+    LOG_WARN("Fail to normalize ik dict table names.", K(ret));
   } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
     LOG_WARN("fail to try load dictionary for ik", K(ret));
   }
@@ -436,13 +442,76 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
   return ret;
 }
 
+int ObExprTokenize::TokenizeParam::normalize_ik_dict_table_names(const ObString &default_database_name)
+{
+  int ret = OB_SUCCESS;
+  bool need_to_load_dic = false;
+  storage::ObFTParserJsonProps parser_properties;
+  ObString dict_table;
+  ObString stopword_table;
+  ObString quantifier_table;
+  ObString normalized_table;
+  bool is_custom_table = false;
+  bool has_custom_table = false;
+
+  if (OB_FAIL(share::ObFtsIndexBuilderUtil::check_need_to_load_dic(parser_name_, need_to_load_dic))) {
+    LOG_WARN("fail to check need to load dic", K(ret), K(parser_name_));
+  } else if (!need_to_load_dic) {
+  } else if (OB_FAIL(parser_properties.init())) {
+    LOG_WARN("fail to init parser properties", K(ret));
+  } else if (OB_FAIL(parser_properties.parse_from_valid_str(properties_))) {
+    LOG_WARN("fail to parse parser properties", K(ret), K(properties_));
+  } else if (OB_FAIL(parser_properties.config_get_dict_table(dict_table))) {
+    LOG_WARN("fail to get dict_table parser property", K(ret));
+  } else if (OB_FAIL(share::ObFtsIndexBuilderUtil::normalize_fulltext_dict_table_name(default_database_name,
+                                                                                      allocator_,
+                                                                                      dict_table,
+                                                                                      normalized_table,
+                                                                                      is_custom_table))) {
+    LOG_WARN("fail to normalize dict_table parser property", K(ret), K(dict_table));
+  } else if (is_custom_table
+             && OB_FAIL(parser_properties.config_set_dict_table(normalized_table))) {
+    LOG_WARN("fail to set normalized dict_table parser property", K(ret), K(normalized_table));
+  } else if (FALSE_IT(has_custom_table = has_custom_table || is_custom_table)) {
+  } else if (OB_FAIL(parser_properties.config_get_stopword_table(stopword_table))) {
+    LOG_WARN("fail to get stopword_table parser property", K(ret));
+  } else if (OB_FAIL(share::ObFtsIndexBuilderUtil::normalize_fulltext_dict_table_name(default_database_name,
+                                                                                      allocator_,
+                                                                                      stopword_table,
+                                                                                      normalized_table,
+                                                                                      is_custom_table))) {
+    LOG_WARN("fail to normalize stopword_table parser property", K(ret), K(stopword_table));
+  } else if (is_custom_table
+             && OB_FAIL(parser_properties.config_set_stopword_table(normalized_table))) {
+    LOG_WARN("fail to set normalized stopword_table parser property", K(ret), K(normalized_table));
+  } else if (FALSE_IT(has_custom_table = has_custom_table || is_custom_table)) {
+  } else if (OB_FAIL(parser_properties.config_get_quantifier_table(quantifier_table))) {
+    LOG_WARN("fail to get quantifier_table parser property", K(ret));
+  } else if (OB_FAIL(share::ObFtsIndexBuilderUtil::normalize_fulltext_dict_table_name(default_database_name,
+                                                                                      allocator_,
+                                                                                      quantifier_table,
+                                                                                      normalized_table,
+                                                                                      is_custom_table))) {
+    LOG_WARN("fail to normalize quantifier_table parser property", K(ret), K(quantifier_table));
+  } else if (is_custom_table
+             && OB_FAIL(parser_properties.config_set_quantifier_table(normalized_table))) {
+    LOG_WARN("fail to set normalized quantifier_table parser property", K(ret), K(normalized_table));
+  } else if (FALSE_IT(has_custom_table = has_custom_table || is_custom_table)) {
+  } else if (has_custom_table
+             && OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
+    LOG_WARN("fail to serialize normalized parser properties", K(ret), K(parser_properties));
+  }
+
+  return ret;
+}
+
 int ObExprTokenize::TokenizeParam::try_load_dictionary_for_ik()
 {
   int ret = OB_SUCCESS;
   bool need_to_load_dic = false;
   ObTenantDicLoaderHandle dic_loader_handle;
-  if (OB_FAIL(ObFtsIndexBuilderUtil::check_need_to_load_dic(parser_name_,
-                                                            need_to_load_dic))) {
+  if (OB_FAIL(share::ObFtsIndexBuilderUtil::check_need_to_load_dic(parser_name_,
+                                                                   need_to_load_dic))) {
     LOG_WARN("fail to check need to load dic",
         K(ret), K(parser_name_), K(need_to_load_dic));
   } else if (need_to_load_dic) {

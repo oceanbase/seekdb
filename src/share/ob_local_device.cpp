@@ -976,7 +976,7 @@ int ObLocalDevice::pwrite(
       ret = OB_INVALID_ARGUMENT;
       SHARE_LOG(WARN, "super block write offset must be 0", K(ret), K(offset));
     } else if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, 0, write_size))) {
-        SHARE_LOG(WARN, "Fail to write main superblock, try backup", K(ret), K(write_size), K(offset), K(size), KP(buf));
+        SHARE_LOG(ERROR, "Fail to write main superblock, try backup", K(ret), K(write_size), K(offset), K(size), KP(buf));
         if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, block_size_, write_size))) {
           SHARE_LOG(WARN, "Neither main nor backup superblock write success!!!", K(ret), K(write_size), K(offset), K(size), KP(buf));
         }

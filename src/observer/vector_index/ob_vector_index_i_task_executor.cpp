@@ -241,7 +241,7 @@ int ObVecITaskExecutor::update_status_and_ret_code(ObVecIndexAsyncTaskCtx *task_
       if (trans.is_started()) {
         int tmp_ret = OB_SUCCESS;
         if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-          LOG_WARN("fail to commit trans", KR(ret), K(tmp_ret));
+          LOG_ERROR("fail to commit trans", KR(ret), K(tmp_ret));
           ret = OB_SUCC(ret) ? tmp_ret : ret;
         }
       }
@@ -378,7 +378,7 @@ int ObVecITaskExecutor::insert_new_task(ObVecIndexTaskCtxArray &task_ctx_array)
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN("fail to commit trans", KR(ret), K(tmp_ret));
+        LOG_ERROR("fail to commit trans", KR(ret), K(tmp_ret));
         ret = OB_SUCC(ret) ? tmp_ret : ret;
       }
     }

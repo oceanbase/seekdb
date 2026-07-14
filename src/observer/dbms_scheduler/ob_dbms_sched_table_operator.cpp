@@ -253,7 +253,7 @@ int ObDBMSSchedTableOperator::update_for_missed(ObDBMSSchedJobInfo &job_info)
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+      LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
       ret = OB_SUCC(ret) ? tmp_ret : ret;
     }
   }
@@ -282,7 +282,7 @@ int ObDBMSSchedTableOperator::update_for_zone_not_exist(ObDBMSSchedJobInfo &job_
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+      LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
       ret = OB_SUCC(ret) ? tmp_ret : ret;
     }
   }
@@ -320,7 +320,7 @@ int ObDBMSSchedTableOperator::update_for_rollback(ObDBMSSchedJobInfo &job_info)
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+      LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
       ret = OB_SUCC(ret) ? tmp_ret : ret;
     }
   }
@@ -395,7 +395,7 @@ int ObDBMSSchedTableOperator::update_for_end(ObDBMSSchedJobInfo &job_info, int e
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+      LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
       ret = OB_SUCC(ret) ? tmp_ret : ret;
     }
   }
@@ -429,7 +429,7 @@ int ObDBMSSchedTableOperator::update_for_kill(ObDBMSSchedJobInfo &job_info)
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+      LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
       ret = OB_SUCC(ret) ? tmp_ret : ret;
     }
   }
@@ -468,7 +468,7 @@ int ObDBMSSchedTableOperator::update_for_mysql_event_database_not_exist(ObDBMSSc
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
+      LOG_ERROR("failed to commit trans", KR(ret), KR(tmp_ret));
       ret = OB_SUCC(ret) ? tmp_ret : ret;
     }
   }  

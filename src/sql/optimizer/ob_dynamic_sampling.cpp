@@ -591,7 +591,7 @@ int ObDynamicSampling::estimte_rowcount(int64_t max_ds_timeout,
                                                  last_query_retry_err))) {
       throw_ds_error = true;//here we must throw error, because the session may be unavailable.
       ret = COVER_SUCC(tmp_ret);
-      LOG_WARN("failed to restore session", K(tmp_ret));
+      LOG_ERROR("failed to restore session", K(tmp_ret));
     }
     if (OB_NOT_NULL(session_value)) {
       session_value->reset();
