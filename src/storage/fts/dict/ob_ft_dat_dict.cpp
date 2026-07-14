@@ -39,7 +39,7 @@ int ObFTDATBuilder<DATA_TYPE>::init(ObFTTrie<DATA_TYPE> &trie)
     ret = OB_INIT_TWICE;
     LOG_WARN("Builder has already inited", K(ret));
   } else {
-    size_t map_size = ObArrayHashMap::estimate_size(trie.node_num());
+    size_t map_size = ObFTArrayHashMap::estimate_size(trie.node_num());
     size_t array_size = trie.node_num() * 6; // by experience.
     size_t base_size = array_size * sizeof(int32_t);
     size_t check_size = base_size;
@@ -305,9 +305,9 @@ int ObFTDATReader<DATA_TYPE>::match_with_hit(const ObString &ft_char,
 template class ObFTDATBuilder<void>;
 template class ObFTDATReader<void>;
 
-ObArrayHashMap *ObFTDAT::get_map() { return reinterpret_cast<ObArrayHashMap *>(buff); }
+ObFTArrayHashMap *ObFTDAT::get_map() { return reinterpret_cast<ObFTArrayHashMap *>(buff); }
 
-int ObArrayHashMap::find(const ObFTSingleWord &word, ObFTWordCode &code) const
+int ObFTArrayHashMap::find(const ObFTSingleWord &word, ObFTWordCode &code) const
 {
   int ret = OB_ENTRY_NOT_EXIST;
   uint64_t hash = word.get_word().hash();
@@ -324,7 +324,7 @@ int ObArrayHashMap::find(const ObFTSingleWord &word, ObFTWordCode &code) const
   return ret;
 }
 
-int ObArrayHashMap::insert(const ObString &key, ObFTWordCode code)
+int ObFTArrayHashMap::insert(const ObString &key, ObFTWordCode code)
 {
   int ret = OB_SUCCESS;
   uint64_t hash = key.hash();
@@ -340,7 +340,7 @@ int ObArrayHashMap::insert(const ObString &key, ObFTWordCode code)
   return ret;
 }
 
-int ObArrayHashMap::init(size_t word_num)
+int ObFTArrayHashMap::init(size_t word_num)
 {
   int ret = OB_SUCCESS;
   size_t capacity = estimate_capacity(word_num);
@@ -353,14 +353,14 @@ int ObArrayHashMap::init(size_t word_num)
   return OB_SUCCESS;
 }
 
-size_t ObArrayHashMap::estimate_size(size_t word_num)
+size_t ObFTArrayHashMap::estimate_size(size_t word_num)
 {
   size_t capacity = estimate_capacity(word_num);
   size_t size = sizeof(Header) + capacity * sizeof(Entry);
   return size;
 }
 
-size_t ObArrayHashMap::estimate_capacity(size_t word_num)
+size_t ObFTArrayHashMap::estimate_capacity(size_t word_num)
 {
   constexpr size_t MIN_CAPACITY = 101;                   // prime
   size_t capacity = MAX(word_num * 4 / 3, MIN_CAPACITY); // 75%

@@ -166,6 +166,10 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
         } else if (1 == parse_tree.value_ && OB_ISNULL(index_schema_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("table schema is NULL", K(ret));
+        } else if (table_schema_->is_fulltext_dict()) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter fulltext dictionary table structure is");
+          LOG_WARN("alter fulltext dictionary table is not supported", K(ret), KPC(table_schema_));
         }
       }
     }

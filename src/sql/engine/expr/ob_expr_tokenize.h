@@ -60,7 +60,9 @@ private:
   public:
     TokenizeParam();
 
-    int parse_json_param(const ObIJsonBase *obj);
+    int parse_json_param(const ObIJsonBase *obj,
+                         const ObString &database_name,
+                         const uint64_t tenant_id);
 
     // check and reform parser properties to standard format
     int reform_parser_properties(const ObString &properties);
@@ -89,6 +91,8 @@ private:
   static int parse_fulltext(const ObExpr &expr, ObEvalCtx &ctx, TokenizeParam &param);
   static int parse_parser_name(const ObExpr &expr, ObEvalCtx &ctx, TokenizeParam &param);
   static int parse_parser_properties(const ObExpr &expr,
+                                     const ObString &database_name,
+                                     const uint64_t tenant_id,
                                      ObEvalCtx &ctx,
                                      MultimodeAlloctor &mm_alloc,
                                      TokenizeParam &param);

@@ -51,6 +51,9 @@ public:
   int config_set_stopword_table(const ObString &str);
   int config_set_dict_table(const ObString &str);
   int config_set_quantifier_table(const ObString &str);
+  int config_set_stopword_table_id(const uint64_t table_id);
+  int config_set_dict_table_id(const uint64_t table_id);
+  int config_set_quantifier_table_id(const uint64_t table_id);
   int config_set_ik_mode(const ObString &ik_mode);
   int config_set_min_ngram_token_size(const int64_t size);
   int config_set_max_ngram_token_size(const int64_t size);
@@ -61,6 +64,9 @@ public:
   int config_get_stopword_table(ObString &str) const;
   int config_get_dict_table(ObString &str) const;
   int config_get_quantifier_table(ObString &str) const;
+  int config_get_stopword_table_id(uint64_t &table_id) const;
+  int config_get_dict_table_id(uint64_t &table_id) const;
+  int config_get_quantifier_table_id(uint64_t &table_id) const;
   int config_get_ik_mode(ObString &ik_mode) const;
   int config_get_min_ngram_token_size(int64_t &size) const;
   int config_get_max_ngram_token_size(int64_t &size) const;
@@ -108,6 +114,11 @@ public:
   static int tokenize_array_to_props_json(ObIAllocator &allocator,
                                           ObIJsonBase *array,
                                           ObString &json_str);
+  static int tokenize_array_to_props_json(ObIAllocator &allocator,
+                                          ObIJsonBase *array,
+                                          const ObString &database_name,
+                                          const uint64_t tenant_id,
+                                          ObString &json_str);
 
   static int show_parser_properties(const ObFTParserJsonProps &properties,
                                     char *buf,
@@ -117,6 +128,8 @@ public:
   TO_STRING_KV(K_(is_inited));
 
 private:
+  int config_set_table_id(const char *config_name, const uint64_t table_id);
+  int config_get_table_id(const char *config_name, uint64_t &table_id) const;
   int ik_rebuild_props_for_ddl(bool log_to_user);
   int ngram_rebuild_props_for_ddl(bool log_to_user);
   int space_rebuild_props_for_ddl(bool log_to_user);
@@ -137,7 +150,9 @@ struct ObFTParserProperty final
 public:
   ObFTParserProperty();
   ~ObFTParserProperty() = default;
-  int parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str);
+  int parse_for_parser_helper(const ObFTParser &parser,
+                              const ObString &json_str,
+                              common::ObIAllocator &allocator);
 
   bool is_equal(const ObFTParserProperty &other) const
   {
@@ -145,6 +160,9 @@ public:
            && ngram_token_size_ == other.ngram_token_size_ && ik_mode_smart_ == other.ik_mode_smart_
            && stopword_table_ == other.stopword_table_ && dict_table_ == other.dict_table_
            && quantifier_table_ == other.quantifier_table_
+           && stopword_table_id_ == other.stopword_table_id_
+           && dict_table_id_ == other.dict_table_id_
+           && quantifier_table_id_ == other.quantifier_table_id_
            && min_ngram_token_size_ == other.min_ngram_token_size_
            && max_ngram_token_size_ == other.max_ngram_token_size_;
   }
@@ -155,6 +173,9 @@ public:
                K_(stopword_table),
                K_(dict_table),
                K_(quantifier_table),
+               K_(stopword_table_id),
+               K_(dict_table_id),
+               K_(quantifier_table_id),
                K_(min_ngram_token_size),
                K_(max_ngram_token_size),
                K_(ik_mode_smart));
@@ -167,6 +188,9 @@ public:
   common::ObString stopword_table_;
   common::ObString dict_table_;
   common::ObString quantifier_table_;
+  uint64_t stopword_table_id_;
+  uint64_t dict_table_id_;
+  uint64_t quantifier_table_id_;
   int64_t min_ngram_token_size_;
   int64_t max_ngram_token_size_;
 };

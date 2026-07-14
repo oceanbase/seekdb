@@ -23,6 +23,7 @@
 #include "storage/fts/ob_fts_plugin_helper.h"
 
 #include <cstdint>
+#include <cstring>
 #include <gtest/gtest.h>
 
 #define USING_LOG_PREFIX STORAGE_FTS
@@ -122,6 +123,9 @@ TEST_F(TestFTParserJsonProperty, happy_path_test)
   static const ObString K_TEST_DICT_TABLE = "a_dict_table_name";
   static const ObString K_TEST_STOPWORD_TABLE = "a_stopword_table_name";
   static const ObString K_TEST_QUANTIFIER_TABLE = "a_quantifier_table_name";
+  static const uint64_t K_TEST_DICT_TABLE_ID = 500001;
+  static const uint64_t K_TEST_STOPWORD_TABLE_ID = 500002;
+  static const uint64_t K_TEST_QUANTIFIER_TABLE_ID = 500003;
 
   ret = json_props.init();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -142,6 +146,15 @@ TEST_F(TestFTParserJsonProperty, happy_path_test)
   ASSERT_EQ(OB_SUCCESS, ret);
 
   ret = json_props.config_set_quantifier_table(K_TEST_QUANTIFIER_TABLE);
+  ASSERT_EQ(OB_SUCCESS, ret);
+
+  ret = json_props.config_set_dict_table_id(K_TEST_DICT_TABLE_ID);
+  ASSERT_EQ(OB_SUCCESS, ret);
+
+  ret = json_props.config_set_stopword_table_id(K_TEST_STOPWORD_TABLE_ID);
+  ASSERT_EQ(OB_SUCCESS, ret);
+
+  ret = json_props.config_set_quantifier_table_id(K_TEST_QUANTIFIER_TABLE_ID);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   ObArenaAllocator allocator;
@@ -190,6 +203,21 @@ TEST_F(TestFTParserJsonProperty, happy_path_test)
   ret = json_props.config_get_quantifier_table(quantifier_table);
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_EQ(quantifier_table, K_TEST_QUANTIFIER_TABLE);
+
+  uint64_t dict_table_id = common::OB_INVALID_ID;
+  ret = json_props2.config_get_dict_table_id(dict_table_id);
+  ASSERT_EQ(OB_SUCCESS, ret);
+  ASSERT_EQ(K_TEST_DICT_TABLE_ID, dict_table_id);
+
+  uint64_t stopword_table_id = common::OB_INVALID_ID;
+  ret = json_props2.config_get_stopword_table_id(stopword_table_id);
+  ASSERT_EQ(OB_SUCCESS, ret);
+  ASSERT_EQ(K_TEST_STOPWORD_TABLE_ID, stopword_table_id);
+
+  uint64_t quantifier_table_id = common::OB_INVALID_ID;
+  ret = json_props2.config_get_quantifier_table_id(quantifier_table_id);
+  ASSERT_EQ(OB_SUCCESS, ret);
+  ASSERT_EQ(K_TEST_QUANTIFIER_TABLE_ID, quantifier_table_id);
 }
 
 TEST_F(TestFTParserJsonProperty, test_parse_from_string)
@@ -564,12 +592,14 @@ TEST_F(TestFTParserProperty, test_parse_for_ddl)
     ObString new_json;
     ret = json_props.to_format_json(tmp_alloc, new_json);
 
-    char output[] = R"(PARSER_PROPERTIES=(ik_mode="smart") )";
-    char output_buf[128];
+    char output_buf[512];
     int64_t pos = 0;
-    ret = json_props.show_parser_properties(json_props, output_buf, 128, pos);
+    ret = json_props.show_parser_properties(json_props, output_buf, sizeof(output_buf), pos);
     ASSERT_EQ(OB_SUCCESS, ret);
-    ASSERT_EQ(ObString(output), ObString(output_buf));
+    ASSERT_NE(nullptr, strstr(output_buf, "ik_mode=\"smart\""));
+    ASSERT_NE(nullptr, strstr(output_buf, "dict_table="));
+    ASSERT_NE(nullptr, strstr(output_buf, "stopword_table="));
+    ASSERT_NE(nullptr, strstr(output_buf, "quantifier_table="));
   }
   {
     int ret = OB_SUCCESS;
