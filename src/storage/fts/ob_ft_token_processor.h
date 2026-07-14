@@ -82,7 +82,7 @@ private:
   int64_t min_token_size_;
   int64_t max_token_size_;
   ObProcessTokenFlag flag_;
-  sql::ObExprHashFuncType hash_func_;
+  ObDatumHashFuncType hash_func_;
   ObDatumCmpFuncType cmp_func_;
   ObStopTokenChecker stop_token_checker_;
   ObIAllocator &scratch_allocator_;

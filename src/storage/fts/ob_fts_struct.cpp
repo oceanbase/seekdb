@@ -20,7 +20,7 @@ int ObFTToken::init(
     const char *ptr,
     const int64_t length,
     const ObObjMeta &meta,
-    const sql::ObExprHashFuncType hash_func,
+    const ObDatumHashFuncType hash_func,
     const ObDatumCmpFuncType cmp_func)
 {
   int ret = OB_SUCCESS;
@@ -45,7 +45,7 @@ int ObFTToken::hash(uint64_t &hash_val) const
   if (is_calc_hash_val_) {
     hash_val = hash_val_;
   } else {
-    sql::ObExprHashFuncType hash_func = nullptr;
+    ObDatumHashFuncType hash_func = nullptr;
     if (OB_UNLIKELY(nullptr == hash_func_)) {
       sql::ObExprBasicFuncs *funcs = ObDatumFuncs::get_basic_func(meta_.get_type(), meta_.get_collation_type());
       if (OB_UNLIKELY(nullptr == funcs)) {

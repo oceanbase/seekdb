@@ -24,7 +24,7 @@ public:
   int init(const char *ptr,
            const int64_t length,
            const ObObjMeta &meta,
-           const sql::ObExprHashFuncType hash_func,
+           const ObDatumHashFuncType hash_func,
            const ObDatumCmpFuncType cmp_func);
   OB_INLINE const ObDatum &get_token() const { return token_; }
   OB_INLINE ObCollationType get_collation_type() const { return meta_.get_collation_type(); }
@@ -41,7 +41,7 @@ private:
 private:
   mutable bool is_calc_hash_val_;
   mutable uint64_t hash_val_;
-  sql::ObExprHashFuncType hash_func_; 
+  ObDatumHashFuncType hash_func_;
   ObDatumCmpFuncType cmp_func_;
   ObObjMeta meta_;
   ObDatum token_;
