@@ -100,6 +100,7 @@ ObDDLResolver::ObDDLResolver(ObResolverParams &params)
     table_dop_(DEFAULT_TABLE_DOP),
     hash_subpart_num_(-1),
     is_external_table_(false),
+    is_fulltext_dict_table_(false),
     ttl_definition_(),
     storage_cache_policy_(),
     name_generated_type_(GENERATED_TYPE_UNKNOWN),
@@ -2449,6 +2450,26 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
           } else if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()
                      && OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::DYNAMIC_PARTITION_POLICY))) {
             SQL_RESV_LOG(WARN, "failed to add member to bitset", KR(ret));
+          }
+        }
+        break;
+      }
+      case T_FULLTEXT_DICT: {
+        if (OB_UNLIKELY(stmt::T_CREATE_TABLE != stmt_->get_stmt_type())) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT option on non-create-table statement");
+        } else if (OB_ISNULL(option_node->children_) || OB_ISNULL(option_node->children_[0])
+                   || 1 != option_node->num_child_) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "invalid FULLTEXT_DICT option node", K(ret), K(option_node));
+        } else {
+          ObString value(static_cast<int32_t>(option_node->children_[0]->str_len_),
+                         option_node->children_[0]->str_value_);
+          if (0 != value.case_compare("Y") && 0 != value.case_compare("N")) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "FULLTEXT_DICT value other than 'Y' or 'N'");
+          } else {
+            is_fulltext_dict_table_ = (0 == value.case_compare("Y"));
           }
         }
         break;
