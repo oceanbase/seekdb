@@ -1,0 +1,583 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SHARE_SCHEMA
+#include "ob_inner_table_schema.h"
+
+#include "share/schema/ob_schema_macro_define.h"
+#include "share/schema/ob_table_schema.h"
+#include "share/scn.h"
+
+namespace oceanbase
+{
+using namespace share::schema;
+using namespace common;
+namespace share
+{
+
+int ObInnerTableSchema::check_constraints_schema(ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  uint64_t column_id = OB_APP_MIN_COLUMN_ID - 1;
+
+  //generated fields:
+  table_schema.set_tablegroup_id(OB_INVALID_ID);
+  table_schema.set_database_id(OB_INFORMATION_SCHEMA_ID);
+  table_schema.set_table_id(OB_CHECK_CONSTRAINTS_TID);
+  table_schema.set_rowkey_split_pos(0);
+  table_schema.set_is_use_bloomfilter(false);
+  table_schema.set_progressive_merge_num(0);
+  table_schema.set_rowkey_column_num(0);
+  table_schema.set_load_type(TABLE_LOAD_TYPE_IN_DISK);
+  table_schema.set_table_type(SYSTEM_VIEW);
+  table_schema.set_index_type(INDEX_TYPE_IS_NOT);
+  table_schema.set_def_type(TABLE_DEF_TYPE_INTERNAL);
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_table_name(OB_CHECK_CONSTRAINTS_TNAME))) {
+      LOG_ERROR("fail to set table_name", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_compress_func_name(OB_DEFAULT_COMPRESS_FUNC_NAME))) {
+      LOG_ERROR("fail to set compress_func_name", K(ret));
+    }
+  }
+  table_schema.set_part_level(PARTITION_LEVEL_ZERO);
+  table_schema.set_charset_type(ObCharset::get_default_charset());
+  table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT CAST('def' AS CHAR(64)) AS CONSTRAINT_CATALOG,            CAST(d.database_name AS CHAR(128)) collate utf8mb4_name_case AS CONSTRAINT_SCHEMA,            CAST(c.constraint_name AS CHAR(64)) AS CONSTRAINT_NAME,            CAST(c.check_expr AS CHAR(2048)) AS CHECK_CLAUSE     FROM oceanbase.__all_database d     JOIN oceanbase.__all_table t ON d.database_id = t.database_id     JOIN oceanbase.__all_constraint c ON t.table_id = c.table_id     WHERE d.database_id > 500000 and d.in_recyclebin = 0       AND t.table_type = 3       AND c.constraint_type = 3       AND t.table_mode >> 12 & 15 in (0,1)       and t.index_attributes_set & 16 = 0       AND (0 = sys_privilege_check('table_acc', 1)            OR 0 = sys_privilege_check('table_acc', 1, d.database_name, t.table_name))   )__"))) {
+      LOG_ERROR("fail to set view_definition", K(ret));
+    }
+  }
+  table_schema.set_index_using_type(USING_BTREE);
+  table_schema.set_row_store_type(ENCODING_ROW_STORE);
+  table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
+  table_schema.set_progressive_merge_round(1);
+  table_schema.set_storage_format_version(3);
+  table_schema.set_tablet_id(0);
+  table_schema.set_micro_index_clustered(false);
+
+  table_schema.set_max_used_column_id(column_id);
+  return ret;
+}
+
+int ObInnerTableSchema::referential_constraints_schema(ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  uint64_t column_id = OB_APP_MIN_COLUMN_ID - 1;
+
+  //generated fields:
+  table_schema.set_tablegroup_id(OB_INVALID_ID);
+  table_schema.set_database_id(OB_INFORMATION_SCHEMA_ID);
+  table_schema.set_table_id(OB_REFERENTIAL_CONSTRAINTS_TID);
+  table_schema.set_rowkey_split_pos(0);
+  table_schema.set_is_use_bloomfilter(false);
+  table_schema.set_progressive_merge_num(0);
+  table_schema.set_rowkey_column_num(0);
+  table_schema.set_load_type(TABLE_LOAD_TYPE_IN_DISK);
+  table_schema.set_table_type(SYSTEM_VIEW);
+  table_schema.set_index_type(INDEX_TYPE_IS_NOT);
+  table_schema.set_def_type(TABLE_DEF_TYPE_INTERNAL);
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_table_name(OB_REFERENTIAL_CONSTRAINTS_TNAME))) {
+      LOG_ERROR("fail to set table_name", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_compress_func_name(OB_DEFAULT_COMPRESS_FUNC_NAME))) {
+      LOG_ERROR("fail to set compress_func_name", K(ret));
+    }
+  }
+  table_schema.set_part_level(PARTITION_LEVEL_ZERO);
+  table_schema.set_charset_type(ObCharset::get_default_charset());
+  table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(      select     CAST('def' AS CHAR(64)) AS CONSTRAINT_CATALOG,     CAST(cd.database_name AS CHAR(128)) collate utf8mb4_name_case AS CONSTRAINT_SCHEMA,     CAST(f.foreign_key_name AS CHAR(128)) AS CONSTRAINT_NAME,     CAST('def' AS CHAR(64)) AS UNIQUE_CONSTRAINT_CATALOG,     CAST(pd.database_name AS CHAR(128)) collate utf8mb4_name_case AS UNIQUE_CONSTRAINT_SCHEMA,     CAST(CASE WHEN f.ref_cst_type = 1 THEN 'PRIMARY'          ELSE NULL END AS CHAR(128)) AS UNIQUE_CONSTRAINT_NAME,     CAST('NONE' AS CHAR(64)) AS MATCH_OPTION,     CAST(CASE WHEN f.update_action = 1 THEN 'RESTRICT'               WHEN f.update_action = 2 THEN 'CASCADE'               WHEN f.update_action = 3 THEN 'SET NULL'               WHEN f.update_action = 4 THEN 'NO ACTION'               WHEN f.update_action = 5 THEN 'SET_DEFAULT'          ELSE NULL END AS CHAR(64)) AS UPDATE_RULE,     CAST(CASE WHEN f.delete_action = 1 THEN 'RESTRICT'               WHEN f.delete_action = 2 THEN 'CASCADE'               WHEN f.delete_action = 3 THEN 'SET NULL'               WHEN f.delete_action = 4 THEN 'NO ACTION'               WHEN f.delete_action = 5 THEN 'SET_DEFAULT'          ELSE NULL END AS CHAR(64)) AS DELETE_RULE,     CAST(ct.table_name AS CHAR(256)) AS TABLE_NAME,     CAST(pt.table_name AS CHAR(256)) AS REFERENCED_TABLE_NAME     FROM oceanbase.__all_foreign_key f     JOIN oceanbase.__all_table ct on f.child_table_id = ct.table_id and f.is_parent_table_mock = 0 and f.ref_cst_type = 1     JOIN oceanbase.__all_database cd on ct.database_id = cd.database_id     JOIN oceanbase.__all_table pt on f.parent_table_id = pt.table_id     JOIN oceanbase.__all_database pd on pt.database_id = pd.database_id     WHERE cd.database_id > 500000 and cd.in_recyclebin = 0       AND ct.table_type = 3       AND ct.table_mode >> 12 & 15 in (0,1)       AND ct.index_attributes_set & 16 = 0       AND (0 = sys_privilege_check('table_acc', 1)            OR 0 = sys_privilege_check('table_acc', 1, cd.database_name, ct.table_name))      union all      select     CAST('def' AS CHAR(64)) AS CONSTRAINT_CATALOG,     CAST(cd.database_name AS CHAR(128)) collate utf8mb4_name_case AS CONSTRAINT_SCHEMA,     CAST(f.foreign_key_name AS CHAR(128)) AS CONSTRAINT_NAME,     CAST('def' AS CHAR(64)) AS UNIQUE_CONSTRAINT_CATALOG,     CAST(pd.database_name AS CHAR(128)) AS UNIQUE_CONSTRAINT_SCHEMA,     CAST(CASE WHEN it.table_type = 3 THEN 'PRIMARY'               WHEN it.index_type in (2, 4, 8) THEN SUBSTR(it.table_name, 7 + INSTR(SUBSTR(it.table_name, 7), '_'))          ELSE NULL END AS CHAR(128)) AS UNIQUE_CONSTRAINT_NAME,     CAST('NONE' AS CHAR(64)) AS MATCH_OPTION,     CAST(CASE WHEN f.update_action = 1 THEN 'RESTRICT'               WHEN f.update_action = 2 THEN 'CASCADE'               WHEN f.update_action = 3 THEN 'SET NULL'               WHEN f.update_action = 4 THEN 'NO ACTION'               WHEN f.update_action = 5 THEN 'SET_DEFAULT'          ELSE NULL END AS CHAR(64)) AS UPDATE_RULE,     CAST(CASE WHEN f.delete_action = 1 THEN 'RESTRICT'               WHEN f.delete_action = 2 THEN 'CASCADE'               WHEN f.delete_action = 3 THEN 'SET NULL'               WHEN f.delete_action = 4 THEN 'NO ACTION'               WHEN f.delete_action = 5 THEN 'SET_DEFAULT'          ELSE NULL END AS CHAR(64)) AS DELETE_RULE,     CAST(ct.table_name AS CHAR(256)) AS TABLE_NAME,     CAST(pt.table_name AS CHAR(256)) AS REFERENCED_TABLE_NAME     FROM oceanbase.__all_foreign_key f     JOIN oceanbase.__all_table ct on f.child_table_id = ct.table_id and f.is_parent_table_mock = 0 and f.ref_cst_type in (2, 5)     JOIN oceanbase.__all_database cd on ct.database_id = cd.database_id     JOIN oceanbase.__all_table pt on f.parent_table_id = pt.table_id     JOIN oceanbase.__all_database pd on pt.database_id = pd.database_id     JOIN oceanbase.__all_table it on f.ref_cst_id = it.table_id     WHERE cd.database_id > 500000 and cd.in_recyclebin = 0       AND ct.table_type = 3       AND (0 = sys_privilege_check('table_acc', 1)            OR 0 = sys_privilege_check('table_acc', 1, cd.database_name, ct.table_name))      union all      select     CAST('def' AS CHAR(64)) AS CONSTRAINT_CATALOG,     CAST(cd.database_name AS CHAR(128)) collate utf8mb4_name_case AS CONSTRAINT_SCHEMA,     CAST(f.foreign_key_name AS CHAR(128)) AS CONSTRAINT_NAME,     CAST('def' AS CHAR(64)) AS UNIQUE_CONSTRAINT_CATALOG,     CAST(pd.database_name AS CHAR(128)) collate utf8mb4_name_case AS UNIQUE_CONSTRAINT_SCHEMA,     CAST(NULL AS CHAR(128)) AS UNIQUE_CONSTRAINT_NAME,     CAST('NONE' AS CHAR(64)) AS MATCH_OPTION,     CAST(CASE WHEN f.update_action = 1 THEN 'RESTRICT'               WHEN f.update_action = 2 THEN 'CASCADE'               WHEN f.update_action = 3 THEN 'SET NULL'               WHEN f.update_action = 4 THEN 'NO ACTION'               WHEN f.update_action = 5 THEN 'SET_DEFAULT'          ELSE NULL END AS CHAR(64)) AS UPDATE_RULE,     CAST(CASE WHEN f.delete_action = 1 THEN 'RESTRICT'               WHEN f.delete_action = 2 THEN 'CASCADE'               WHEN f.delete_action = 3 THEN 'SET NULL'               WHEN f.delete_action = 4 THEN 'NO ACTION'               WHEN f.delete_action = 5 THEN 'SET_DEFAULT'          ELSE NULL END AS CHAR(64)) AS DELETE_RULE,     CAST(ct.table_name AS CHAR(256)) AS TABLE_NAME,     CAST(pt.mock_fk_parent_table_name AS CHAR(256)) AS REFERENCED_TABLE_NAME     FROM oceanbase.__all_foreign_key f     JOIN oceanbase.__all_table ct on f.child_table_id = ct.table_id and f.is_parent_table_mock = 1     JOIN oceanbase.__all_database cd on ct.database_id = cd.database_id     JOIN oceanbase.__all_mock_fk_parent_table pt on f.parent_table_id = pt.mock_fk_parent_table_id     JOIN oceanbase.__all_database pd on pt.database_id = pd.database_id     WHERE cd.database_id > 500000 and cd.in_recyclebin = 0       AND ct.table_type = 3       AND (0 = sys_privilege_check('table_acc', 1)            OR 0 = sys_privilege_check('table_acc', 1, cd.database_name, ct.table_name))   )__"))) {
+      LOG_ERROR("fail to set view_definition", K(ret));
+    }
+  }
+  table_schema.set_index_using_type(USING_BTREE);
+  table_schema.set_row_store_type(ENCODING_ROW_STORE);
+  table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
+  table_schema.set_progressive_merge_round(1);
+  table_schema.set_storage_format_version(3);
+  table_schema.set_tablet_id(0);
+  table_schema.set_micro_index_clustered(false);
+
+  table_schema.set_max_used_column_id(column_id);
+  return ret;
+}
+
+int ObInnerTableSchema::table_constraints_schema(ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  uint64_t column_id = OB_APP_MIN_COLUMN_ID - 1;
+
+  //generated fields:
+  table_schema.set_tablegroup_id(OB_INVALID_ID);
+  table_schema.set_database_id(OB_INFORMATION_SCHEMA_ID);
+  table_schema.set_table_id(OB_TABLE_CONSTRAINTS_TID);
+  table_schema.set_rowkey_split_pos(0);
+  table_schema.set_is_use_bloomfilter(false);
+  table_schema.set_progressive_merge_num(0);
+  table_schema.set_rowkey_column_num(0);
+  table_schema.set_load_type(TABLE_LOAD_TYPE_IN_DISK);
+  table_schema.set_table_type(SYSTEM_VIEW);
+  table_schema.set_index_type(INDEX_TYPE_IS_NOT);
+  table_schema.set_def_type(TABLE_DEF_TYPE_INTERNAL);
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_table_name(OB_TABLE_CONSTRAINTS_TNAME))) {
+      LOG_ERROR("fail to set table_name", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_compress_func_name(OB_DEFAULT_COMPRESS_FUNC_NAME))) {
+      LOG_ERROR("fail to set compress_func_name", K(ret));
+    }
+  }
+  table_schema.set_part_level(PARTITION_LEVEL_ZERO);
+  table_schema.set_charset_type(ObCharset::get_default_charset());
+  table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(      SELECT            CAST('def' AS CHAR(64)) AS CONSTRAINT_CATALOG,            CAST(d.database_name AS CHAR(128)) collate utf8mb4_name_case AS CONSTRAINT_SCHEMA,            CAST('PRIMARY' AS CHAR(256)) AS CONSTRAINT_NAME,            CAST(d.database_name AS CHAR(128)) collate utf8mb4_name_case AS TABLE_SCHEMA,            CAST(t.table_name AS CHAR(256)) collate utf8mb4_name_case AS TABLE_NAME,            CAST('PRIMARY KEY' AS CHAR(11)) AS CONSTRAINT_TYPE,            CAST('YES' AS CHAR(3)) AS ENFORCED     FROM oceanbase.__all_database d     JOIN oceanbase.__all_table t ON d.database_id = t.database_id     WHERE (d.database_id = 201003 OR d.database_id > 500000) AND d.in_recyclebin = 0       AND t.table_type = 3       AND t.table_mode >> 16 & 1 = 0       AND t.table_mode >> 12 & 15 in (0,1)       AND t.index_attributes_set & 16 = 0       AND (0 = sys_privilege_check('table_acc', 1)            OR 0 = sys_privilege_check('table_acc', 1, d.database_name, t.table_name))      union all      SELECT            CAST('def' AS CHAR(64)) AS CONSTRAINT_CATALOG,            CAST(d.database_name AS CHAR(128)) collate utf8mb4_name_case AS CONSTRAINT_SCHEMA,            CAST(SUBSTR(it.table_name, 7 + INSTR(SUBSTR(it.table_name, 7), '_')) AS CHAR(256)) AS CONSTRAINT_NAME,            CAST(d.database_name AS CHAR(128)) collate utf8mb4_name_case AS TABLE_SCHEMA,            CAST(ut.table_name AS CHAR(256)) collate utf8mb4_name_case AS TABLE_NAME,            CAST(CASE WHEN it.index_type = 41 THEN 'PRIMARY KEY'                 ELSE 'UNIQUE' END AS CHAR(11)) AS CONSTRAINT_TYPE,            CAST('YES' AS CHAR(3)) AS ENFORCED     FROM oceanbase.__all_database d     JOIN oceanbase.__all_table it ON d.database_id = it.database_id     JOIN oceanbase.__all_table ut ON it.data_table_id = ut.table_id     WHERE d.database_id > 500000 AND d.in_recyclebin = 0       AND it.table_type = 5       AND it.index_type IN (2, 4, 8, 41)       AND (0 = sys_privilege_check('table_acc', 1)            OR 0 = sys_privilege_check('table_acc', 1, d.database_name, ut.table_name))      union all      SELECT            CAST('def' AS CHAR(64)) AS CONSTRAINT_CATALOG,            CAST(d.database_name AS CHAR(128)) collate utf8mb4_name_case AS CONSTRAINT_SCHEMA,            CAST(c.constraint_name AS CHAR(256)) AS CONSTRAINT_NAME,            CAST(d.database_name AS CHAR(128)) collate utf8mb4_name_case AS TABLE_SCHEMA,            CAST(t.table_name AS CHAR(256)) collate utf8mb4_name_case AS TABLE_NAME,            CAST('CHECK' AS CHAR(11)) AS CONSTRAINT_TYPE,            CAST(CASE WHEN c.enable_flag = 1 THEN 'YES'                 ELSE 'NO' END AS CHAR(3)) AS ENFORCED     FROM oceanbase.__all_database d     JOIN oceanbase.__all_table t ON d.database_id = t.database_id     JOIN oceanbase.__all_constraint c ON t.table_id = c.table_id     WHERE d.database_id > 500000 AND d.in_recyclebin = 0       AND t.table_type = 3       AND c.constraint_type = 3       AND (0 = sys_privilege_check('table_acc', 1)            OR 0 = sys_privilege_check('table_acc', 1, d.database_name, t.table_name))      union all      SELECT            CAST('def' AS CHAR(64)) AS CONSTRAINT_CATALOG,            CAST(f.constraint_schema AS CHAR(128)) collate utf8mb4_name_case AS CONSTRAINT_SCHEMA,            CAST(f.constraint_name AS CHAR(256)) AS CONSTRAINT_NAME,            CAST(f.constraint_schema AS CHAR(128)) collate utf8mb4_name_case AS TABLE_SCHEMA,            CAST(f.table_name AS CHAR(256)) collate utf8mb4_name_case AS TABLE_NAME,            CAST('FOREIGN KEY' AS CHAR(11)) AS CONSTRAINT_TYPE,            CAST('YES' AS CHAR(3)) AS ENFORCED     FROM information_schema.REFERENTIAL_CONSTRAINTS f    )__"))) {
+      LOG_ERROR("fail to set view_definition", K(ret));
+    }
+  }
+  table_schema.set_index_using_type(USING_BTREE);
+  table_schema.set_row_store_type(ENCODING_ROW_STORE);
+  table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
+  table_schema.set_progressive_merge_round(1);
+  table_schema.set_storage_format_version(3);
+  table_schema.set_tablet_id(0);
+  table_schema.set_micro_index_clustered(false);
+
+  table_schema.set_max_used_column_id(column_id);
+  return ret;
+}
+
+int ObInnerTableSchema::v_ob_transaction_schedulers_schema(ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  uint64_t column_id = OB_APP_MIN_COLUMN_ID - 1;
+
+  //generated fields:
+  table_schema.set_tablegroup_id(OB_INVALID_ID);
+  table_schema.set_database_id(OB_SYS_DATABASE_ID);
+  table_schema.set_table_id(OB_V_OB_TRANSACTION_SCHEDULERS_TID);
+  table_schema.set_rowkey_split_pos(0);
+  table_schema.set_is_use_bloomfilter(false);
+  table_schema.set_progressive_merge_num(0);
+  table_schema.set_rowkey_column_num(0);
+  table_schema.set_load_type(TABLE_LOAD_TYPE_IN_DISK);
+  table_schema.set_table_type(SYSTEM_VIEW);
+  table_schema.set_index_type(INDEX_TYPE_IS_NOT);
+  table_schema.set_def_type(TABLE_DEF_TYPE_INTERNAL);
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_table_name(OB_V_OB_TRANSACTION_SCHEDULERS_TNAME))) {
+      LOG_ERROR("fail to set table_name", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_compress_func_name(OB_DEFAULT_COMPRESS_FUNC_NAME))) {
+      LOG_ERROR("fail to set compress_func_name", K(ret));
+    }
+  }
+  table_schema.set_part_level(PARTITION_LEVEL_ZERO);
+  table_schema.set_charset_type(ObCharset::get_default_charset());
+  table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(SELECT     session_id AS SESSION_ID,     trans_id AS TX_ID,     CASE       WHEN state = 0 THEN 'INVALID'       WHEN state = 1 THEN 'IDLE'       WHEN state = 2 THEN 'EXPLICIT_ACTIVE'       WHEN state = 3 THEN 'IMPLICIT_ACTIVE'       WHEN state = 4 THEN 'ROLLBACK_SAVEPOINT'       WHEN state = 5 THEN 'IN_TERMINATE'       WHEN state = 6 THEN 'ABORTED'       WHEN state = 7 THEN 'ROLLED_BACK'       WHEN state = 8 THEN 'COMMIT_TIMEOUT'       WHEN state = 9 THEN 'COMMIT_UNKNOWN'       WHEN state = 10 THEN 'COMMITTED'       WHEN state = 11 THEN 'SUB_PREPARING'       WHEN state = 12 THEN 'SUB_PREPARED'       WHEN state = 13 THEN 'SUB_COMMITTING'       WHEN state = 14 THEN 'SUB_COMMITTED'       WHEN state = 15 THEN 'SUB_ROLLBACKING'       WHEN state = 16 THEN 'SUB_ROLLBACKED'       ELSE 'UNKNOWN'       END AS STATE,     cluster_id AS CLUSTER_ID,     coordinator AS COORDINATOR,     participants AS PARTICIPANTS,     CASE       WHEN isolation_level = -1 THEN 'INVALID'       WHEN isolation_level = 0 THEN 'READ UNCOMMITTED'       WHEN isolation_level = 1 THEN 'READ COMMITTED'       WHEN isolation_level = 2 THEN 'REPEATABLE READ'       WHEN isolation_level = 3 THEN 'SERIALIZABLE'       ELSE 'UNKNOWN'       END AS ISOLATION_LEVEL,     snapshot_version AS SNAPSHOT_VERSION,     CASE       WHEN access_mode = -1 THEN 'INVALID'       WHEN access_mode = 0 THEN 'READ_WRITE'       WHEN access_mode = 1 THEN 'READ_ONLY'       ELSE 'UNKNOWN'       END AS ACCESS_MODE,     tx_op_sn AS TX_OP_SN,     active_time AS ACTIVE_TIME,     expire_time AS EXPIRE_TIME,     CASE       WHEN can_early_lock_release = 0 THEN 'FALSE'       WHEN can_early_lock_release = 1 THEN 'TRUE'       ELSE 'UNKNOWN'       END AS CAN_EARLY_LOCK_RELEASE,     format_id AS FORMATID,     HEX(gtrid) AS GLOBALID,     HEX(bqual) AS BRANCHID     FROM oceanbase.__all_virtual_trans_scheduler )__"))) {
+      LOG_ERROR("fail to set view_definition", K(ret));
+    }
+  }
+  table_schema.set_index_using_type(USING_BTREE);
+  table_schema.set_row_store_type(ENCODING_ROW_STORE);
+  table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
+  table_schema.set_progressive_merge_round(1);
+  table_schema.set_storage_format_version(3);
+  table_schema.set_tablet_id(0);
+  table_schema.set_micro_index_clustered(false);
+
+  table_schema.set_max_used_column_id(column_id);
+  return ret;
+}
+
+int ObInnerTableSchema::triggers_schema(ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  uint64_t column_id = OB_APP_MIN_COLUMN_ID - 1;
+
+  //generated fields:
+  table_schema.set_tablegroup_id(OB_INVALID_ID);
+  table_schema.set_database_id(OB_INFORMATION_SCHEMA_ID);
+  table_schema.set_table_id(OB_TRIGGERS_TID);
+  table_schema.set_rowkey_split_pos(0);
+  table_schema.set_is_use_bloomfilter(false);
+  table_schema.set_progressive_merge_num(0);
+  table_schema.set_rowkey_column_num(0);
+  table_schema.set_load_type(TABLE_LOAD_TYPE_IN_DISK);
+  table_schema.set_table_type(SYSTEM_VIEW);
+  table_schema.set_index_type(INDEX_TYPE_IS_NOT);
+  table_schema.set_def_type(TABLE_DEF_TYPE_INTERNAL);
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_table_name(OB_TRIGGERS_TNAME))) {
+      LOG_ERROR("fail to set table_name", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_compress_func_name(OB_DEFAULT_COMPRESS_FUNC_NAME))) {
+      LOG_ERROR("fail to set compress_func_name", K(ret));
+    }
+  }
+  table_schema.set_part_level(PARTITION_LEVEL_ZERO);
+  table_schema.set_charset_type(ObCharset::get_default_charset());
+  table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(SELECT CAST('def' AS CHAR(512)) AS TRIGGER_CATALOG,       CAST(db.database_name AS CHAR(64)) collate utf8mb4_name_case AS TRIGGER_SCHEMA,       CAST(trg.trigger_name AS CHAR(64)) AS TRIGGER_NAME,       CAST((case when trg.trigger_events=1 then 'INSERT'                 when trg.trigger_events=2 then 'UPDATE'                 when trg.trigger_events=4 then 'DELETE' end)             AS CHAR(6)) AS EVENT_MANIPULATION,       CAST('def' AS CHAR(512)) AS EVENT_OBJECT_CATALOG,       CAST(db.database_name AS CHAR(64)) collate utf8mb4_name_case AS EVENT_OBJECT_SCHEMA,       CAST(t.table_name AS CHAR(64)) collate utf8mb4_name_case AS EVENT_OBJECT_TABLE,       CAST(trg.action_order AS SIGNED) AS ACTION_ORDER,       CAST(NULL AS CHAR(4194304)) AS ACTION_CONDITION,       CAST(NVL(trg.trigger_body, trg.trigger_body_v2) AS CHAR(4194304)) AS ACTION_STATEMENT,       CAST('ROW' AS CHAR(9)) AS ACTION_ORIENTATION,       CAST((case when trg.TIMING_POINTS=4 then 'BEFORE'                 when trg.TIMING_POINTS=8 then 'AFTER' end)             AS CHAR(6)) AS ACTION_TIMING,       CAST(NULL AS CHAR(64)) AS ACTION_REFERENCE_OLD_TABLE,       CAST(NULL AS CHAR(64)) AS ACTION_REFERENCE_NEW_TABLE,       CAST('OLD' AS CHAR(3)) AS ACTION_REFERENCE_OLD_ROW,       CAST('NEW' AS CHAR(3)) AS ACTION_REFERENCE_NEW_ROW,       CAST(trg.gmt_create AS DATETIME(2)) AS CREATED,       CAST(sql_mode_convert(trg.sql_mode) AS CHAR(8192)) AS SQL_MODE,       CAST(trg.trigger_priv_user AS CHAR(93)) AS DEFINER,       CAST((select charset from oceanbase.__all_virtual_collation           where id = substring_index(substring_index(trg.package_exec_env, ',', 2), ',', -1)) AS CHAR(32)             ) AS CHARACTER_SET_CLIENT,       CAST((select collation from oceanbase.__all_virtual_collation             where collation_type = substring_index(substring_index(trg.package_exec_env, ',', 3), ',', -1)) AS CHAR(32)             ) AS COLLATION_CONNECTION,       CAST((select collation from oceanbase.__all_virtual_collation             where collation_type = substring_index(substring_index(trg.package_exec_env, ',', 4), ',', -1)) AS CHAR(32)             ) AS DATABASE_COLLATION       FROM oceanbase.__all_trigger trg           JOIN oceanbase.__all_database db on trg.database_id = db.database_id           JOIN oceanbase.__all_table t on trg.base_object_id = t.table_id       WHERE db.database_name != '__recyclebin' and db.in_recyclebin = 0       and t.table_mode >> 12 & 15 in (0,1)       and can_access_trigger(db.database_name, t.table_name)       and t.index_attributes_set & 16 = 0 )__"))) {
+      LOG_ERROR("fail to set view_definition", K(ret));
+    }
+  }
+  table_schema.set_index_using_type(USING_BTREE);
+  table_schema.set_row_store_type(ENCODING_ROW_STORE);
+  table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
+  table_schema.set_progressive_merge_round(1);
+  table_schema.set_storage_format_version(3);
+  table_schema.set_tablet_id(0);
+  table_schema.set_micro_index_clustered(false);
+
+  table_schema.set_max_used_column_id(column_id);
+  return ret;
+}
+
+int ObInnerTableSchema::partitions_schema(ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  uint64_t column_id = OB_APP_MIN_COLUMN_ID - 1;
+
+  //generated fields:
+  table_schema.set_tablegroup_id(OB_INVALID_ID);
+  table_schema.set_database_id(OB_INFORMATION_SCHEMA_ID);
+  table_schema.set_table_id(OB_PARTITIONS_TID);
+  table_schema.set_rowkey_split_pos(0);
+  table_schema.set_is_use_bloomfilter(false);
+  table_schema.set_progressive_merge_num(0);
+  table_schema.set_rowkey_column_num(0);
+  table_schema.set_load_type(TABLE_LOAD_TYPE_IN_DISK);
+  table_schema.set_table_type(SYSTEM_VIEW);
+  table_schema.set_index_type(INDEX_TYPE_IS_NOT);
+  table_schema.set_def_type(TABLE_DEF_TYPE_INTERNAL);
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_table_name(OB_PARTITIONS_TNAME))) {
+      LOG_ERROR("fail to set table_name", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_compress_func_name(OB_DEFAULT_COMPRESS_FUNC_NAME))) {
+      LOG_ERROR("fail to set compress_func_name", K(ret));
+    }
+  }
+  table_schema.set_part_level(PARTITION_LEVEL_ZERO);
+  table_schema.set_charset_type(ObCharset::get_default_charset());
+  table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(SELECT   CAST('def' as CHAR(4096)) AS TABLE_CATALOG,   DB.DATABASE_NAME collate utf8mb4_name_case AS TABLE_SCHEMA,   T.TABLE_NAME collate utf8mb4_name_case AS TABLE_NAME,   P.PART_NAME AS PARTITION_NAME,   SP.SUB_PART_NAME AS SUBPARTITION_NAME,   CAST(PART_POSITION AS UNSIGNED) AS PARTITION_ORDINAL_POSITION,   CAST(SUB_PART_POSITION AS UNSIGNED) AS SUBPARTITION_ORDINAL_POSITION,   CAST(CASE WHEN T.PART_LEVEL = 0             THEN NULL             ELSE (CASE T.PART_FUNC_TYPE                     WHEN 0 THEN 'HASH'                     WHEN 1 THEN 'KEY'                     WHEN 2 THEN 'KEY'                     WHEN 3 THEN 'RANGE'                     WHEN 4 THEN 'RANGE COLUMNS'                     WHEN 5 THEN 'LIST'                     WHEN 6 THEN 'LIST COLUMNS'                     WHEN 7 THEN 'RANGE'                   END)        END AS CHAR(13)) PARTITION_METHOD,   CAST(CASE WHEN (T.PART_LEVEL = 0 OR T.PART_LEVEL = 1)             THEN NULL             ELSE (CASE T.SUB_PART_FUNC_TYPE                     WHEN 0 THEN 'HASH'                     WHEN 1 THEN 'KEY'                     WHEN 2 THEN 'KEY'                     WHEN 3 THEN 'RANGE'                     WHEN 4 THEN 'RANGE COLUMNS'                     WHEN 5 THEN 'LIST'                     WHEN 6 THEN 'LIST COLUMNS'                     WHEN 7 THEN 'RANGE'                   END)        END AS CHAR(13)) SUBPARTITION_METHOD,   CAST(CASE WHEN (T.PART_LEVEL = 0)             THEN NULL             ELSE T.PART_FUNC_EXPR        END AS CHAR(2048)) PARTITION_EXPRESSION,   CAST(CASE WHEN (T.PART_LEVEL = 0 OR T.PART_LEVEL = 1)             THEN NULL             ELSE T.SUB_PART_FUNC_EXPR        END AS CHAR(2048)) SUBPARTITION_EXPRESSION,   CAST(CASE WHEN (T.PART_LEVEL = 0)             THEN NULL             ELSE (CASE WHEN LENGTH(P.HIGH_BOUND_VAL) > 0                        THEN P.HIGH_BOUND_VAL                        ELSE P.LIST_VAL                   END)        END AS CHAR(4096)) AS PARTITION_DESCRIPTION,   CAST(CASE WHEN (T.PART_LEVEL = 0 OR T.PART_LEVEL = 1)             THEN NULL             ELSE (CASE WHEN LENGTH(SP.HIGH_BOUND_VAL) > 0                        THEN SP.HIGH_BOUND_VAL                        ELSE SP.LIST_VAL                   END)        END AS CHAR(4096)) AS SUBPARTITION_DESCRIPTION,   CAST(TS.ROW_CNT AS UNSIGNED) AS TABLE_ROWS,   CAST(TS.AVG_ROW_LEN AS UNSIGNED) AS AVG_ROW_LENGTH,   CAST(COALESCE(TS.MACRO_BLK_CNT * 2 * 1024 * 1024, 0) AS UNSIGNED) AS DATA_LENGTH,   CAST(NULL AS UNSIGNED) AS MAX_DATA_LENGTH,   CAST(COALESCE((     SELECT       SUM(G.MACRO_BLK_CNT * 2 * 1024 * 1024) AS INDEX_LENGTH     FROM       OCEANBASE.__ALL_TABLE E       LEFT JOIN OCEANBASE.__ALL_PART F ON F.PART_NAME = P.PART_NAME       AND E.TABLE_ID = F.TABLE_ID       LEFT JOIN OCEANBASE.__ALL_SUB_PART SF ON SF.SUB_PART_NAME = SP.SUB_PART_NAME       AND E.TABLE_ID = SF.TABLE_ID       AND F.PART_ID = SF.PART_ID       JOIN OCEANBASE.__ALL_TABLE_STAT G ON E.TABLE_ID = G.TABLE_ID       AND G.PARTITION_ID = CASE E.PART_LEVEL         WHEN 0 THEN E.TABLE_ID         WHEN 1 THEN F.PART_ID         WHEN 2 THEN SF.SUB_PART_ID       END     WHERE       E.INDEX_TYPE in (1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12)       AND E.TABLE_TYPE = 5       AND E.DATA_TABLE_ID = T.TABLE_ID   ), 0) AS UNSIGNED) AS INDEX_LENGTH,   CAST(NULL AS UNSIGNED) AS DATA_FREE,   CASE T.PART_LEVEL     WHEN 0 THEN T.GMT_CREATE     WHEN 1 THEN P.GMT_CREATE     WHEN 2 THEN SP.GMT_CREATE   END AS CREATE_TIME,   CAST(NULL AS DATETIME) AS UPDATE_TIME,   CAST(NULL AS DATETIME) AS CHECK_TIME,   CAST(NULL AS SIGNED) AS CHECKSUM,   CAST(CASE T.PART_LEVEL          WHEN 0 THEN NULL          WHEN 1 THEN P.COMMENT          WHEN 2 THEN SP.COMMENT        END AS CHAR(1024)) AS PARTITION_COMMENT,   CAST('default' AS CHAR(256)) NODEGROUP,   CAST(NULL AS CHAR(268)) AS TABLESPACE_NAME FROM   OCEANBASE.__ALL_TABLE T   JOIN OCEANBASE.__ALL_DATABASE DB ON T.DATABASE_ID = DB.DATABASE_ID     AND T.TABLE_MODE >> 12 & 15 in (0,1)     AND T.INDEX_ATTRIBUTES_SET & 16 = 0   LEFT JOIN (       SELECT         TABLE_ID,         PART_ID,         PART_NAME,         HIGH_BOUND_VAL,         LIST_VAL,         TABLESPACE_ID,         GMT_CREATE,         COMMENT,         PARTITION_TYPE,         ROW_NUMBER() OVER(PARTITION BY TABLE_ID ORDER BY PART_IDX) AS PART_POSITION       FROM OCEANBASE.__ALL_PART   ) P ON T.TABLE_ID = P.TABLE_ID   LEFT JOIN (     SELECT         TABLE_ID,         PART_ID,         SUB_PART_ID,         SUB_PART_NAME,         HIGH_BOUND_VAL,         LIST_VAL,         TABLESPACE_ID,         GMT_CREATE,         COMMENT,         PARTITION_TYPE,         ROW_NUMBER() OVER(PARTITION BY TABLE_ID,PART_ID ORDER BY SUB_PART_IDX) AS SUB_PART_POSITION     FROM OCEANBASE.__ALL_SUB_PART   ) SP ON T.TABLE_ID = SP.TABLE_ID AND P.PART_ID = SP.PART_ID   LEFT JOIN OCEANBASE.__ALL_TABLE_STAT TS ON TS.TABLE_ID = T.TABLE_ID AND TS.PARTITION_ID = CASE T.PART_LEVEL WHEN 0 THEN T.TABLE_ID WHEN 1 THEN P.PART_ID WHEN 2 THEN SP.SUB_PART_ID END WHERE T.TABLE_TYPE IN (3,6,8,9,14,15)       AND (P.PARTITION_TYPE = 0 OR P.PARTITION_TYPE is NULL)       AND (SP.PARTITION_TYPE = 0 OR SP.PARTITION_TYPE is NULL)       AND (0 = sys_privilege_check('table_acc', 1)            OR 0 = sys_privilege_check('table_acc', 1, DB.DATABASE_NAME, T.TABLE_NAME))   )__"))) {
+      LOG_ERROR("fail to set view_definition", K(ret));
+    }
+  }
+  table_schema.set_index_using_type(USING_BTREE);
+  table_schema.set_row_store_type(ENCODING_ROW_STORE);
+  table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
+  table_schema.set_progressive_merge_round(1);
+  table_schema.set_storage_format_version(3);
+  table_schema.set_tablet_id(0);
+  table_schema.set_micro_index_clustered(false);
+
+  table_schema.set_max_used_column_id(column_id);
+  return ret;
+}
+
+int ObInnerTableSchema::dba_ob_rsrc_io_directives_schema(ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  uint64_t column_id = OB_APP_MIN_COLUMN_ID - 1;
+
+  //generated fields:
+  table_schema.set_tablegroup_id(OB_INVALID_ID);
+  table_schema.set_database_id(OB_SYS_DATABASE_ID);
+  table_schema.set_table_id(OB_DBA_OB_RSRC_IO_DIRECTIVES_TID);
+  table_schema.set_rowkey_split_pos(0);
+  table_schema.set_is_use_bloomfilter(false);
+  table_schema.set_progressive_merge_num(0);
+  table_schema.set_rowkey_column_num(0);
+  table_schema.set_load_type(TABLE_LOAD_TYPE_IN_DISK);
+  table_schema.set_table_type(SYSTEM_VIEW);
+  table_schema.set_index_type(INDEX_TYPE_IS_NOT);
+  table_schema.set_def_type(TABLE_DEF_TYPE_INTERNAL);
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_table_name(OB_DBA_OB_RSRC_IO_DIRECTIVES_TNAME))) {
+      LOG_ERROR("fail to set table_name", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_compress_func_name(OB_DEFAULT_COMPRESS_FUNC_NAME))) {
+      LOG_ERROR("fail to set compress_func_name", K(ret));
+    }
+  }
+  table_schema.set_part_level(PARTITION_LEVEL_ZERO);
+  table_schema.set_charset_type(ObCharset::get_default_charset());
+  table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT       PLAN,       GROUP_OR_SUBPLAN,       COMMENTS,       MIN_IOPS,       MAX_IOPS,       WEIGHT_IOPS     FROM        oceanbase.__all_res_mgr_directive )__"))) {
+      LOG_ERROR("fail to set view_definition", K(ret));
+    }
+  }
+  table_schema.set_index_using_type(USING_BTREE);
+  table_schema.set_row_store_type(ENCODING_ROW_STORE);
+  table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
+  table_schema.set_progressive_merge_round(1);
+  table_schema.set_storage_format_version(3);
+  table_schema.set_tablet_id(0);
+  table_schema.set_micro_index_clustered(false);
+
+  table_schema.set_max_used_column_id(column_id);
+  return ret;
+}
+
+int ObInnerTableSchema::dba_ob_data_dictionary_in_log_schema(ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  uint64_t column_id = OB_APP_MIN_COLUMN_ID - 1;
+
+  //generated fields:
+  table_schema.set_tablegroup_id(OB_INVALID_ID);
+  table_schema.set_database_id(OB_SYS_DATABASE_ID);
+  table_schema.set_table_id(OB_DBA_OB_DATA_DICTIONARY_IN_LOG_TID);
+  table_schema.set_rowkey_split_pos(0);
+  table_schema.set_is_use_bloomfilter(false);
+  table_schema.set_progressive_merge_num(0);
+  table_schema.set_rowkey_column_num(0);
+  table_schema.set_load_type(TABLE_LOAD_TYPE_IN_DISK);
+  table_schema.set_table_type(SYSTEM_VIEW);
+  table_schema.set_index_type(INDEX_TYPE_IS_NOT);
+  table_schema.set_def_type(TABLE_DEF_TYPE_INTERNAL);
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_table_name(OB_DBA_OB_DATA_DICTIONARY_IN_LOG_TNAME))) {
+      LOG_ERROR("fail to set table_name", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_compress_func_name(OB_DEFAULT_COMPRESS_FUNC_NAME))) {
+      LOG_ERROR("fail to set compress_func_name", K(ret));
+    }
+  }
+  table_schema.set_part_level(PARTITION_LEVEL_ZERO);
+  table_schema.set_charset_type(ObCharset::get_default_charset());
+  table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT         SNAPSHOT_SCN,         GMT_CREATE AS REPORT_TIME,         START_LSN,         END_LSN     FROM OCEANBASE.__ALL_DATA_DICTIONARY_IN_LOG   )__"))) {
+      LOG_ERROR("fail to set view_definition", K(ret));
+    }
+  }
+  table_schema.set_index_using_type(USING_BTREE);
+  table_schema.set_row_store_type(ENCODING_ROW_STORE);
+  table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
+  table_schema.set_progressive_merge_round(1);
+  table_schema.set_storage_format_version(3);
+  table_schema.set_tablet_id(0);
+  table_schema.set_micro_index_clustered(false);
+
+  table_schema.set_max_used_column_id(column_id);
+  return ret;
+}
+
+int ObInnerTableSchema::v_ob_opt_stat_gather_monitor_schema(ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  uint64_t column_id = OB_APP_MIN_COLUMN_ID - 1;
+
+  //generated fields:
+  table_schema.set_tablegroup_id(OB_INVALID_ID);
+  table_schema.set_database_id(OB_SYS_DATABASE_ID);
+  table_schema.set_table_id(OB_V_OB_OPT_STAT_GATHER_MONITOR_TID);
+  table_schema.set_rowkey_split_pos(0);
+  table_schema.set_is_use_bloomfilter(false);
+  table_schema.set_progressive_merge_num(0);
+  table_schema.set_rowkey_column_num(0);
+  table_schema.set_load_type(TABLE_LOAD_TYPE_IN_DISK);
+  table_schema.set_table_type(SYSTEM_VIEW);
+  table_schema.set_index_type(INDEX_TYPE_IS_NOT);
+  table_schema.set_def_type(TABLE_DEF_TYPE_INTERNAL);
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_table_name(OB_V_OB_OPT_STAT_GATHER_MONITOR_TNAME))) {
+      LOG_ERROR("fail to set table_name", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_compress_func_name(OB_DEFAULT_COMPRESS_FUNC_NAME))) {
+      LOG_ERROR("fail to set compress_func_name", K(ret));
+    }
+  }
+  table_schema.set_part_level(PARTITION_LEVEL_ZERO);
+  table_schema.set_charset_type(ObCharset::get_default_charset());
+  table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(SELECT           CAST(SESSION_ID AS SIGNED) AS SESSION_ID,           CAST(TRACE_ID AS CHAR(64)) AS TRACE_ID,           CAST(TASK_ID AS CHAR(36)) AS TASK_ID,           CAST((CASE WHEN TYPE = 0 THEN 'MANUAL GATHER' ELSE                 (CASE WHEN TYPE = 1 THEN 'AUTO GATHER' ELSE                   (CASE WHEN TYPE = 2 THEN 'ASYNC GATHER' ELSE 'UNDEFINED GATHER' END) END) END) AS CHAR(16)) AS TYPE,           CAST(TASK_START_TIME AS DATETIME(6)) AS TASK_START_TIME,           CAST(TASK_DURATION_TIME AS SIGNED) AS TASK_DURATION_TIME,           CAST(TASK_TABLE_COUNT AS SIGNED) AS TASK_TABLE_COUNT,           CAST(COMPLETED_TABLE_COUNT AS SIGNED) AS COMPLETED_TABLE_COUNT,           CAST(RUNNING_TABLE_OWNER AS CHAR(128)) AS RUNNING_TABLE_OWNER,           CAST(RUNNING_TABLE_NAME AS CHAR(256)) AS RUNNING_TABLE_NAME,           CAST(RUNNING_TABLE_DURATION_TIME AS SIGNED) AS RUNNING_TABLE_DURATION_TIME,           CAST(SPARE2 AS CHAR(256)) AS RUNNING_TABLE_PROGRESS           FROM oceanbase.__all_virtual_opt_stat_gather_monitor )__"))) {
+      LOG_ERROR("fail to set view_definition", K(ret));
+    }
+  }
+  table_schema.set_index_using_type(USING_BTREE);
+  table_schema.set_row_store_type(ENCODING_ROW_STORE);
+  table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
+  table_schema.set_progressive_merge_round(1);
+  table_schema.set_storage_format_version(3);
+  table_schema.set_tablet_id(0);
+  table_schema.set_micro_index_clustered(false);
+
+  table_schema.set_max_used_column_id(column_id);
+  return ret;
+}
+
+int ObInnerTableSchema::dba_ob_task_opt_stat_gather_history_schema(ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  uint64_t column_id = OB_APP_MIN_COLUMN_ID - 1;
+
+  //generated fields:
+  table_schema.set_tablegroup_id(OB_INVALID_ID);
+  table_schema.set_database_id(OB_SYS_DATABASE_ID);
+  table_schema.set_table_id(OB_DBA_OB_TASK_OPT_STAT_GATHER_HISTORY_TID);
+  table_schema.set_rowkey_split_pos(0);
+  table_schema.set_is_use_bloomfilter(false);
+  table_schema.set_progressive_merge_num(0);
+  table_schema.set_rowkey_column_num(0);
+  table_schema.set_load_type(TABLE_LOAD_TYPE_IN_DISK);
+  table_schema.set_table_type(SYSTEM_VIEW);
+  table_schema.set_index_type(INDEX_TYPE_IS_NOT);
+  table_schema.set_def_type(TABLE_DEF_TYPE_INTERNAL);
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_table_name(OB_DBA_OB_TASK_OPT_STAT_GATHER_HISTORY_TNAME))) {
+      LOG_ERROR("fail to set table_name", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_compress_func_name(OB_DEFAULT_COMPRESS_FUNC_NAME))) {
+      LOG_ERROR("fail to set compress_func_name", K(ret));
+    }
+  }
+  table_schema.set_part_level(PARTITION_LEVEL_ZERO);
+  table_schema.set_charset_type(ObCharset::get_default_charset());
+  table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT         CAST(TASK_ID             AS     CHAR(36)) AS TASK_ID,         CAST((CASE  WHEN type = 0 THEN 'MANUAL GATHER'                ELSE (CASE  WHEN type = 1 THEN 'AUTO GATHER'                       ELSE (CASE  WHEN type = 2 THEN 'ASYNC GATHER'                          ELSE (CASE  WHEN type IS NULL THEN NULL                                   ELSE 'UNDEFINED GATHER' END )END ) END ) END) AS CHAR(16)) AS TYPE,         CAST((CASE WHEN RET_CODE = 0 THEN 'SUCCESS'                 ELSE (CASE WHEN RET_CODE IS NULL THEN NULL                       ELSE (CASE WHEN RET_CODE = -5065 THEN 'CANCELED' ELSE 'FAILED' END) END) END) AS CHAR(8)) AS STATUS,         CAST(TABLE_COUNT         AS     SIGNED) AS TABLE_COUNT,         CAST(FAILED_COUNT        AS     SIGNED) AS FAILED_COUNT,         CAST(START_TIME          AS     DATETIME(6)) AS START_TIME,         CAST(END_TIME            AS     DATETIME(6)) AS END_TIME     FROM         oceanbase.__all_task_opt_stat_gather_history )__"))) {
+      LOG_ERROR("fail to set view_definition", K(ret));
+    }
+  }
+  table_schema.set_index_using_type(USING_BTREE);
+  table_schema.set_row_store_type(ENCODING_ROW_STORE);
+  table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
+  table_schema.set_progressive_merge_round(1);
+  table_schema.set_storage_format_version(3);
+  table_schema.set_tablet_id(0);
+  table_schema.set_micro_index_clustered(false);
+
+  table_schema.set_max_used_column_id(column_id);
+  return ret;
+}
+
+int ObInnerTableSchema::dba_ob_table_opt_stat_gather_history_schema(ObTableSchema &table_schema)
+{
+  int ret = OB_SUCCESS;
+  uint64_t column_id = OB_APP_MIN_COLUMN_ID - 1;
+
+  //generated fields:
+  table_schema.set_tablegroup_id(OB_INVALID_ID);
+  table_schema.set_database_id(OB_SYS_DATABASE_ID);
+  table_schema.set_table_id(OB_DBA_OB_TABLE_OPT_STAT_GATHER_HISTORY_TID);
+  table_schema.set_rowkey_split_pos(0);
+  table_schema.set_is_use_bloomfilter(false);
+  table_schema.set_progressive_merge_num(0);
+  table_schema.set_rowkey_column_num(0);
+  table_schema.set_load_type(TABLE_LOAD_TYPE_IN_DISK);
+  table_schema.set_table_type(SYSTEM_VIEW);
+  table_schema.set_index_type(INDEX_TYPE_IS_NOT);
+  table_schema.set_def_type(TABLE_DEF_TYPE_INTERNAL);
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_table_name(OB_DBA_OB_TABLE_OPT_STAT_GATHER_HISTORY_TNAME))) {
+      LOG_ERROR("fail to set table_name", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_compress_func_name(OB_DEFAULT_COMPRESS_FUNC_NAME))) {
+      LOG_ERROR("fail to set compress_func_name", K(ret));
+    }
+  }
+  table_schema.set_part_level(PARTITION_LEVEL_ZERO);
+  table_schema.set_charset_type(ObCharset::get_default_charset());
+  table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(         SELECT         CAST(DB.DATABASE_NAME         AS     CHAR(128)) AS OWNER,         CAST(V.TABLE_NAME             AS     CHAR(256)) AS TABLE_NAME,         CAST(STAT.TASK_ID             AS     CHAR(36)) AS TASK_ID,         CAST((CASE WHEN RET_CODE = 0 THEN 'SUCCESS'                 ELSE (CASE WHEN RET_CODE IS NULL THEN NULL                       ELSE (CASE WHEN RET_CODE = -5065 THEN 'CANCELED' ELSE 'FAILED' END) END) END) AS CHAR(8)) AS STATUS,         CAST(STAT.START_TIME          AS     DATETIME(6)) AS START_TIME,         CAST(STAT.END_TIME            AS     DATETIME(6)) AS END_TIME,         CAST(STAT.MEMORY_USED         AS     SIGNED) AS MEMORY_USED,         CAST(STAT.STAT_REFRESH_FAILED_LIST      AS     CHAR(4096)) AS STAT_REFRESH_FAILED_LIST,         CAST(STAT.PROPERTIES       AS     CHAR(4096)) AS PROPERTIES         FROM         (           (SELECT DATABASE_ID,                   TABLE_ID,                   TABLE_NAME               FROM                 OCEANBASE.__ALL_VIRTUAL_CORE_ALL_TABLE             UNION ALL             SELECT DATABASE_ID,                   TABLE_ID,                   TABLE_NAME             FROM                 oceanbase.__all_table T             WHERE T.TABLE_TYPE IN (0,2,3,6)             AND T.TABLE_MODE >> 12 & 15 in (0,1)             AND T.INDEX_ATTRIBUTES_SET & 16 = 0)         ) V         JOIN             oceanbase.__all_database DB             ON DB.DATABASE_ID = V.DATABASE_ID         LEFT JOIN             oceanbase.__all_table_opt_stat_gather_history STAT             ON V.TABLE_ID = STAT.TABLE_ID )__"))) {
+      LOG_ERROR("fail to set view_definition", K(ret));
+    }
+  }
+  table_schema.set_index_using_type(USING_BTREE);
+  table_schema.set_row_store_type(ENCODING_ROW_STORE);
+  table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
+  table_schema.set_progressive_merge_round(1);
+  table_schema.set_storage_format_version(3);
+  table_schema.set_tablet_id(0);
+  table_schema.set_micro_index_clustered(false);
+
+  table_schema.set_max_used_column_id(column_id);
+  return ret;
+}
+
+
+} // end namespace share
+} // end namespace oceanbase
