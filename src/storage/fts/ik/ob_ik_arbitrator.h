@@ -38,6 +38,9 @@ public:
 
   int output_result(TokenizeContext &ctx);
 
+  // Task4：清理单批次状态并保留哈希桶和内存页，供下一批次复用。
+  int reuse();
+
 private:
   int prepare(TokenizeContext &ctx);
 

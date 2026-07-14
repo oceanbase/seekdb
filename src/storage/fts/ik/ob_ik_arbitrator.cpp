@@ -330,13 +330,27 @@ int ObIKArbitrator::prepare(TokenizeContext &ctx)
 
   int cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
   cal_bucket_num = MIN(cal_bucket_num, 100);
-  if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
+  // Task4：首批次创建哈希桶，后续批次复用已创建的桶数组。
+  if (!chains_.created()
+      && OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
     LOG_WARN("create chain map failed", K(ret));
   }
   return ret;
 }
 
 ObIKArbitrator::ObIKArbitrator() : alloc_(lib::ObMemAttr("IK Arbitrator")) {}
+
+// Task4：先释放哈希节点，再复用链对象所在的 Arena 页面，避免悬空访问。
+int ObIKArbitrator::reuse()
+{
+  int ret = OB_SUCCESS;
+  if (chains_.created() && OB_FAIL(chains_.reuse())) {
+    LOG_WARN("reuse chain map failed", K(ret));
+  } else {
+    alloc_.reuse();
+  }
+  return ret;
+}
 
 int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
 {

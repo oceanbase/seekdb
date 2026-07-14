@@ -39,14 +39,22 @@ int ObIIKProcessor::process(TokenizeContext &ctx)
   const char *ch = nullptr;
   uint8_t char_len = 0;
 
-  if (OB_FAIL(ctx.current_char_type(type))) {
-    LOG_WARN("fail to get current char type", K(ret));
-  } else if (OB_FAIL(ctx.current_char(ch, char_len))) {
-    LOG_WARN("Fail to get current char", K(ret));
-  } else if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
+  // Task4：兼容旧调用方式，但只对上下文执行一次边界检查。
+  if (OB_FAIL(ctx.current_char_and_type(ch, char_len, type))) {
+    LOG_WARN("Fail to get current char and type", K(ret));
+  } else if (OB_FAIL(process(ctx, ch, char_len, type))) {
     LOG_WARN("Failed to do process char", K(ret));
   }
   return ret;
+}
+
+// Task4：供解析器热路径直接传入已读取的字符信息。
+int ObIIKProcessor::process(TokenizeContext &ctx,
+                            const char *ch,
+                            const uint8_t char_len,
+                            const ObFTCharUtil::CharType type)
+{
+  return do_process(ctx, ch, char_len, type);
 }
 
 TokenizeContext::TokenizeContext(ObCollationType coll_type,
@@ -54,7 +62,12 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  const char *fulltext,
                                  int64_t fulltext_len,
                                  bool is_smart)
-    : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
+    // Task4：字符集对象和 well_formed_len 函数指针只解析一次。
+    : coll_type_(coll_type), charset_info_(ObCharset::get_charset(coll_type)),
+      well_formed_len_func_(nullptr == charset_info_ || nullptr == charset_info_->cset
+                                ? nullptr
+                                : charset_info_->cset->well_formed_len),
+      fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
       next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
       result_list_(allocator)
 {
@@ -64,7 +77,8 @@ int TokenizeContext::init()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
+  if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0 || OB_ISNULL(charset_info_)
+      || OB_ISNULL(well_formed_len_func_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(prepare_next_char())) {
     LOG_WARN("Failed to prepare next char", K(ret));
@@ -103,14 +117,35 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
   return ret;
 }
 
+// Task4：合并原先 current_char 和 current_char_type 的重复边界判断。
+int TokenizeContext::current_char_and_type(const char *&ch,
+                                            uint8_t &char_len,
+                                            ObFTCharUtil::CharType &type)
+{
+  int ret = OB_SUCCESS;
+  if (cursor_ >= fulltext_len_) {
+    ret = OB_ITER_END;
+  } else {
+    ch = fulltext_ + cursor_;
+    char_len = next_char_len_;
+    type = next_char_type_;
+  }
+  return ret;
+}
+
 int TokenizeContext::prepare_next_char()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
-                                          fulltext_ + cursor_,
-                                          fulltext_len_ - cursor_,
-                                          next_char_len_))) {
-    LOG_WARN("Failed to get first valid char, ", K(ret));
+  int well_formed_error = 0;
+  // Task4：直接调用初始化时缓存的字符集函数，消除逐字符的 collation 查表和分支校验。
+  next_char_len_ = static_cast<int64_t>(well_formed_len_func_(charset_info_,
+                                                              fulltext_ + cursor_,
+                                                              fulltext_ + fulltext_len_,
+                                                              1,
+                                                              &well_formed_error));
+  if (OB_UNLIKELY(0 != well_formed_error || next_char_len_ <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Failed to get first valid char", K(ret), K(well_formed_error), K(next_char_len_));
   } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
                                                        fulltext_ + cursor_,
                                                        next_char_len_,
