@@ -569,7 +569,7 @@ char *speedtest1_once(const char *zFormat, ...){
       fatal_error("SQL error: %s\n", sqlite3_errmsg(g.db));
     }
     if( g.pScript ){
-      const char *z = sqlite3_expanded_sql(pStmt);
+      char *z = sqlite3_expanded_sql(pStmt);
       fprintf(g.pScript,"%s\n",z);
       sqlite3_free(z);
     }
@@ -611,7 +611,7 @@ void speedtest1_run(void){
   assert( g.pStmt );
   g.nResult = 0;
   if( g.pScript ){
-    const char *z = sqlite3_expanded_sql(g.pStmt);
+    char *z = sqlite3_expanded_sql(g.pStmt);
     fprintf(g.pScript,"%s\n",z);
     sqlite3_free(z);
   }
