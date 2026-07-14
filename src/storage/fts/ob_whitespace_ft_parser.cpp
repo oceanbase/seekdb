@@ -54,6 +54,24 @@ void ObSpaceFTParser::reset()
   is_inited_ = false;
 }
 
+// Task4 Op2：新文档只需重设扫描指针。
+int ObSpaceFTParser::reuse_parser(const char *fulltext, const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("space parser has not been initialized", K(ret));
+  } else if (OB_UNLIKELY(nullptr == fulltext || fulltext_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid fulltext for space parser reuse", K(ret), KP(fulltext), K(fulltext_len));
+  } else {
+    start_ = fulltext;
+    next_ = start_;
+    end_ = start_ + fulltext_len;
+  }
+  return ret;
+}
+
 int ObSpaceFTParser::init(ObFTParserParam *param)
 {
   int ret = OB_SUCCESS;

@@ -47,6 +47,8 @@ public:
   ~TokenizeContext();
 
   int init();
+  // Task4 Op2：为下一文档重置游标和临时 token，保留字典及已申请容器块。
+  int reuse_context(const char *fulltext, int64_t fulltext_len);
   int reset_resource();
 
   int get_next_token(const char *&word, int64_t &word_len, int64_t &offset, int64_t &char_cnt);
@@ -135,6 +137,9 @@ public:
                          const uint8_t char_len,
                          const ObFTCharUtil::CharType type)
       = 0;
+
+  // Task4 Op2：解析器复用时清理具体处理器的跨字符状态。
+  virtual void reuse() = 0;
 };
 
 } // namespace storage

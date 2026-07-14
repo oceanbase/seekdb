@@ -123,6 +123,28 @@ int ObIKFTParser::get_next_token(const char *&word,
   return ret;
 }
 
+// Task4 Op2：避免为每个文档重新加载字典并构造 IK 处理器。
+int ObIKFTParser::reuse_parser(const char *fulltext, const int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("IK parser has not been initialized", K(ret));
+  } else if (OB_UNLIKELY(nullptr == fulltext || fulltext_len <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid fulltext for IK parser reuse", K(ret), KP(fulltext), K(fulltext_len));
+  } else if (OB_FAIL(ctx_->reuse_context(fulltext, fulltext_len))) {
+    LOG_WARN("Failed to reuse IK tokenize context", K(ret));
+  } else {
+    for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
+         iter != segmenters_.end();
+         ++iter) {
+      (*iter)->reuse();
+    }
+  }
+  return ret;
+}
+
 int ObIKFTParser::produce()
 {
   int ret = OB_SUCCESS;

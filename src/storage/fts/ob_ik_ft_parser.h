@@ -61,6 +61,9 @@ public:
                      int64_t &char_cnt,
                      int64_t &word_freq) override;
 
+  // Task4 Op2：复用字典、处理器及 Fast 容器，仅切换输入文档。
+  int reuse_parser(const char *fulltext, const int64_t fulltext_len) override;
+
   VIRTUAL_TO_STRING_KV(K(is_inited_));
 
 private:

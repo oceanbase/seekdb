@@ -87,6 +87,26 @@ int TokenizeContext::init()
   return ret;
 }
 
+// Task4 Op2：上下文复用只替换文档并重置短生命周期状态。
+int TokenizeContext::reuse_context(const char *fulltext, int64_t fulltext_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(fulltext) || fulltext_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid fulltext for context reuse", K(ret), KP(fulltext), K(fulltext_len));
+  } else {
+    fulltext_ = fulltext;
+    fulltext_len_ = fulltext_len;
+    cursor_ = 0;
+    if (OB_FAIL(reset_resource())) {
+      LOG_WARN("Failed to reset tokenize context", K(ret));
+    } else if (OB_FAIL(prepare_next_char())) {
+      LOG_WARN("Failed to prepare reused context", K(ret));
+    }
+  }
+  return ret;
+}
+
 int TokenizeContext::reset_resource()
 {
   handle_size_ = 0;

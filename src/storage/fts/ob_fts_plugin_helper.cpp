@@ -237,7 +237,7 @@ int ObFTParseHelper::segment(
     const char *ft,
     const int64_t ft_len,
     common::ObIAllocator &allocator,
-    ObAddWord &add_word)
+    ObAddWord &add_word) const
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(parser_version < 0 || nullptr == parser_desc || nullptr == cs || nullptr == ft || 0 >= ft_len)) {
@@ -245,7 +245,7 @@ int ObFTParseHelper::segment(
     LOG_WARN("invalid arguments", K(ret), K(parser_version), KP(parser_desc), KP(cs), K(ft), K(ft_len));
   } else {
     ObFTParserParam param;
-    ObITokenIterator *iter = nullptr;
+    ObITokenIterator *iter = cached_iter_;
     param.allocator_ = &allocator;
     param.cs_ = cs;
     param.fulltext_ = ft;
@@ -261,7 +261,23 @@ int ObFTParseHelper::segment(
     param.min_ngram_size_ = property.min_ngram_token_size_;
     param.max_ngram_size_ = property.max_ngram_token_size_;
 
-    if (OB_FAIL(parser_desc->segment(&param, iter))) {
+    // Task4 Op2：优先复用同字符集解析器；复用失败或字符集变化时安全退回重建。
+    if (nullptr != iter && cached_cs_ == cs) {
+      int reuse_ret = iter->reuse_parser(ft, ft_len);
+      if (OB_SUCCESS != reuse_ret) {
+        parser_desc->free_token_iter(&param, iter);
+        iter = nullptr;
+        cached_iter_ = nullptr;
+        cached_cs_ = nullptr;
+      }
+    } else if (nullptr != iter) {
+      parser_desc->free_token_iter(&param, iter);
+      iter = nullptr;
+      cached_iter_ = nullptr;
+      cached_cs_ = nullptr;
+    }
+
+    if (nullptr == iter && OB_FAIL(parser_desc->segment(&param, iter))) {
       LOG_WARN("fail to segment", K(ret), K(param));
     } else if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
@@ -284,9 +300,13 @@ int ObFTParseHelper::segment(
         ret = OB_SUCCESS;
       }
     }
-    if (OB_NOT_NULL(iter)) {
+    if (OB_SUCC(ret) && OB_NOT_NULL(iter)) {
+      cached_iter_ = iter;
+      cached_cs_ = cs;
+    } else if (OB_NOT_NULL(iter)) {
       parser_desc->free_token_iter(&param, iter);
-      iter = nullptr;
+      cached_iter_ = nullptr;
+      cached_cs_ = nullptr;
     }
   }
   return ret;
@@ -299,6 +319,8 @@ ObFTParseHelper::ObFTParseHelper()
     parser_name_(),
     add_word_flag_(),
     parser_property_(),
+    cached_iter_(nullptr),
+    cached_cs_(nullptr),
     is_inited_(false)
 {
 }
@@ -349,6 +371,14 @@ int ObFTParseHelper::init(
 
 void ObFTParseHelper::reset()
 {
+  // Task4 Op2：helper 结束时统一释放缓存解析器。
+  if (OB_NOT_NULL(cached_iter_) && OB_NOT_NULL(parser_desc_) && OB_NOT_NULL(allocator_)) {
+    ObFTParserParam param;
+    param.allocator_ = allocator_;
+    parser_desc_->free_token_iter(&param, cached_iter_);
+  }
+  cached_iter_ = nullptr;
+  cached_cs_ = nullptr;
   parser_desc_ = nullptr;
   plugin_param_ = nullptr;
   allocator_ = nullptr;
