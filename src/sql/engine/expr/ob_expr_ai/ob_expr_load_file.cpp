@@ -2,6 +2,7 @@
 
 #include "ob_expr_load_file.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -92,13 +93,13 @@ int read_whole_file_to_datum(const ObExpr &expr,
 
   if ((fd = ::open(file_path.c_str(), O_RDONLY)) < 0) {
     ret = OB_FILE_NOT_EXIST;
-    LOG_WARN("failed to open file", K(ret), K(file_path), KERRMSG);
+    LOG_WARN("failed to open file", K(ret), KERRMSG);
   } else if (0 != ::fstat(fd, &st)) {
     ret = OB_IO_ERROR;
-    LOG_WARN("failed to stat file", K(ret), K(file_path), KERRMSG);
+    LOG_WARN("failed to stat file", K(ret), KERRMSG);
   } else if (st.st_size < 0) {
     ret = OB_IO_ERROR;
-    LOG_WARN("invalid file size", K(ret), K(file_path), K(st.st_size));
+    LOG_WARN("invalid file size", K(ret), K(st.st_size));
   } else {
     const int64_t file_size = st.st_size;
     char *buf = expr.get_str_res_mem(ctx, file_size);
@@ -117,11 +118,11 @@ int read_whole_file_to_datum(const ObExpr &expr,
           total_read += read_size;
         } else if (read_size == 0) {
           ret = OB_IO_ERROR;
-          LOG_WARN("unexpected end of file", K(ret), K(file_path),
-                   K(total_read), K(file_size));
+          LOG_WARN("unexpected end of file",
+                   K(ret), K(total_read), K(file_size));
         } else if (errno != EINTR) {
           ret = OB_IO_ERROR;
-          LOG_WARN("failed to read file", K(ret), K(file_path), KERRMSG);
+          LOG_WARN("failed to read file", K(ret), KERRMSG);
         }
       }
 
@@ -234,7 +235,7 @@ int ObExprLoadFile::eval_load_file(const ObExpr &expr,
         LOG_WARN("failed to build local file path",
                  K(ret), K(location_url), K(file_name));
       } else if (OB_FAIL(read_whole_file_to_datum(expr, ctx, file_path, res))) {
-        LOG_WARN("failed to read file", K(ret), K(file_path));
+        LOG_WARN("failed to read file", K(ret));
       }
     }
   }
